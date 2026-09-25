@@ -8950,3 +8950,45 @@
   description:
     - "Update SGLang image from v0.5.19-cu130 to v0.5.20-cu130 and pass --cuda-graph-max-bs-decode after the alias removal."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3334
+
+- config-keys:
+  - qwen3.5-fp8-b300-sglang
+  scenario-type:
+  - fixed-seq-len
+  description:
+  - Preserve Qwen3.5 FP8 b300 coverage and require validated power; include the article
+    ladder where missing.
+  - 保留现有覆盖并要求通过验证的功耗，补齐缺失的文章并发梯度。
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3379
+
+- config-keys:
+  - qwen3.5-fp8-b300-sglang
+  scenario-type:
+  - fixed-seq-len
+  description:
+  - Route Qwen3.5 FP8 STP through the existing B300 batch allocation path, retaining
+    its serving settings and measurements; the batch container step uses PMIx.
+  - 将 Qwen3.5 FP8 STP 接入现有 B300 batch 分配路径，保留服务参数和测量设置；batch 容器步骤使用 PMIx。
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3379
+
+- config-keys:
+  - qwen3.5-fp8-b300-sglang
+  scenario-type:
+  - fixed-seq-len
+  description:
+  - Disable JIT DeepGEMM for Qwen3.5 FP8 B300 to validate the native Blackwell
+    scale-format accuracy warning with the existing FlashInfer fallback.
+  - 在 Qwen3.5 FP8 B300 上关闭 JIT DeepGEMM，以现有 FlashInfer 回退路径验证 Blackwell
+    scale-format 精度警告；保留模型、评测输入与准确率门槛。
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3379
+
+- config-keys:
+  - qwen3.5-fp8-b300-sglang
+  scenario-type:
+  - fixed-seq-len
+  description:
+  - Preserve the validated DeepGEMM-off Qwen B300 recipe, chat-template workload,
+    PMIx launch and c1-c256 power coverage through the native SRT launcher.
+  - 在原生 SRT 启动路径中保留 Qwen B300 关闭 DeepGEMM 的配方、聊天模板、
+    PMIx 和 c1-c256 功耗覆盖。
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3379

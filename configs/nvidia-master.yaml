@@ -1309,10 +1309,11 @@ qwen3.5-fp8-b300-sglang:
     fixed-seq-len:
     - isl: 8192
       osl: 1024
+      require-power: true
       search-space:
       - tp: 4
         ep: 1
-        conc-start: 4
+        conc-start: 1
         conc-end: 256
         srt-recipe: benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/b300-fp8/8k1k.yaml
 

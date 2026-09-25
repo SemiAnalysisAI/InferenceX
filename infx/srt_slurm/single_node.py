@@ -69,6 +69,17 @@ def select_recipe(config: str, environment: Mapping[str, str]) -> tuple[str, dic
     return matches[0]
 
 
+def _qwen35_b300_fp8(recipe: dict[str, Any], environment: Mapping[str, str]) -> bool:
+    """Preserve the established Qwen B300 workload and diagnostic settings."""
+    return (
+        recipe["model"]["path"] == "hf:Qwen/Qwen3.5-397B-A17B-FP8"
+        and recipe["model"]["precision"] == "fp8"
+        and recipe["resources"].get("gpu_type") == "b300"
+        and environment["FRAMEWORK"] == "sglang"
+        and environment["SPEC_DECODING"] == "none"
+    )
+
+
 def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> None:
     """Reject metadata mismatches without overwriting recipe-owned server settings."""
     role = recipe["roles"]["agg"]
@@ -96,7 +107,10 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
         "benchmark type": (benchmark["type"], "custom"),
         "benchmark MODEL": (workload["MODEL"], environment["MODEL"]),
         "SPEC_DECODING": (speculation, environment["SPEC_DECODING"]),
-        "USE_CHAT_TEMPLATE": (workload["USE_CHAT_TEMPLATE"], "true" if spec else "false"),
+        "USE_CHAT_TEMPLATE": (
+            workload["USE_CHAT_TEMPLATE"],
+            "true" if spec or _qwen35_b300_fp8(recipe, environment) else "false",
+        ),
     }
     if "CONC" in workload:
         expected["CONC"] = (str(workload["CONC"]), environment["CONC"])
@@ -168,6 +182,17 @@ def runtime_arguments(config: str, environment: Mapping[str, str]) -> list[str]:
         }[environment["FRAMEWORK"]]
         for key in context_keys:
             overrides += ["--set", f"roles.agg.args.{key}={context}"]
+        if _qwen35_b300_fp8(recipe, environment) and environment["CONC"] == "256":
+            overrides += [
+                "--set",
+                "roles.agg.args.log-requests=true",
+                "--set",
+                "roles.agg.args.log-requests-level=3",
+                "--set",
+                'roles.agg.args.log-requests-format="json"',
+                "--set",
+                'roles.agg.env.SGLANG_LOG_REQUEST_EXCEEDED_MS="0"',
+            ]
     return [*overrides, "--set", 'benchmark.env.RESULT_DIR="/logs"']
 
 

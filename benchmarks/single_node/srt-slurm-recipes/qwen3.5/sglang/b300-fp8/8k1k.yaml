@@ -8,6 +8,8 @@ base:
   resources:
     gpu_type: b300
     gpus_per_node: 8
+  srun_options:
+    mpi: pmix
   frontend:
     type: sglang
     enable_multiple_frontends: false
@@ -43,11 +45,12 @@ base:
         stream-interval: 50
         scheduler-recv-interval: 10
         tokenizer-worker-num: 6
-        tokenizer-path: Qwen/Qwen3.5-397B-A17B-FP8
+        tokenizer-path: /model
         context-length: 9236
         enable-metrics: false
       env:
         PYTHONNOUSERSITE: '1'
+        SGLANG_ENABLE_JIT_DEEPGEMM: '0'
   benchmark:
     type: custom
     command: bash /infmax-workspace/benchmarks/single_node/srt_fixed_sequence.sh
@@ -56,13 +59,13 @@ base:
       ISL: '8192'
       OSL: '1024'
       RANDOM_RANGE_RATIO: '0.8'
-      USE_CHAT_TEMPLATE: 'false'
+      USE_CHAT_TEMPLATE: 'true'
 zip_override_concurrency:
   roles:
     agg:
       args:
-        cuda-graph-max-bs: [4, 8, 16, 32, 64, 128, 256]
-        max-running-requests: [4, 8, 16, 32, 64, 128, 256]
+        cuda-graph-max-bs: [1, 2, 4, 8, 16, 32, 64, 128, 256]
+        max-running-requests: [1, 2, 4, 8, 16, 32, 64, 128, 256]
   benchmark:
     env:
-      CONC: ['4', '8', '16', '32', '64', '128', '256']
+      CONC: ['1', '2', '4', '8', '16', '32', '64', '128', '256']

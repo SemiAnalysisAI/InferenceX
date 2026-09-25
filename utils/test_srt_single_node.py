@@ -453,3 +453,57 @@ def test_b300_keeps_agentic_and_explicit_collector_dispatch(tmp_path, collector)
     assert calls[-1][-2:] == ["bash", expected]
     assert "--jobid=42" in calls[-1]
     assert (tmp_path / "cancelled").read_text() == "42\n"
+
+
+@pytest.mark.parametrize("eval_only,conc,capture", [
+    ("false", "256", False), ("true", "128", False), ("true", "256", True),
+])
+def test_qwen_b300_keeps_chat_template_and_eval_capture(point, eval_only, conc, capture):
+    path, recipe, env = point
+    model = "Qwen/Qwen3.5-397B-A17B-FP8"
+    recipe["model"]["path"] = f"hf:{model}"
+    recipe["resources"]["gpu_type"] = "b300"
+    recipe["benchmark"]["env"].update(MODEL=model, USE_CHAT_TEMPLATE="true")
+    path.write_text(yaml.safe_dump({"base": recipe}))
+    env = {**env, "MODEL": model, "CONC": conc, "EVAL_ONLY": eval_only,
+           "MAX_MODEL_LEN": "9472"}
+    argv = runtime_arguments(f"{path}:base", env)
+    actual = copy.deepcopy(recipe)
+    apply_overrides_to_recipe(actual, parse_overrides(argv[1::2], []))
+    assert actual["benchmark"]["env"]["USE_CHAT_TEMPLATE"] == "true"
+    args = actual["roles"]["agg"]["args"]
+    assert args.get("log-requests", False) is capture
+    if capture:
+        assert args["log-requests-level"] == 3
+        assert args["log-requests-format"] == "json"
+        assert actual["roles"]["agg"]["env"]["SGLANG_LOG_REQUEST_EXCEEDED_MS"] == "0"
+        assert args["context-length"] == 9472
+    else:
+        assert "SGLANG_LOG_REQUEST_EXCEEDED_MS" not in actual["roles"]["agg"].get("env", {})
+    recipe["benchmark"]["env"]["USE_CHAT_TEMPLATE"] = "false"
+    path.write_text(yaml.safe_dump({"base": recipe}))
+    with pytest.raises(ValueError, match="USE_CHAT_TEMPLATE"):
+        runtime_arguments(f"{path}:base", env)
+
+
+@pytest.mark.parametrize("change", ["hardware", "model", "precision"])
+def test_qwen_chat_template_exception_does_not_change_neighbor_profiles(point, change):
+    path, recipe, env = point
+    model = "Qwen/Qwen3.5-397B-A17B-FP8"
+    recipe["model"]["path"] = f"hf:{model}"
+    recipe["resources"]["gpu_type"] = "b300"
+    recipe["benchmark"]["env"]["MODEL"] = model
+    env = {**env, "MODEL": model, "CONC": "256", "EVAL_ONLY": "true", "MAX_MODEL_LEN": "9472"}
+    if change == "hardware":
+        recipe["resources"]["gpu_type"] = "b200"
+    elif change == "model":
+        recipe["model"]["path"] = "hf:test/other"
+        recipe["benchmark"]["env"]["MODEL"] = env["MODEL"] = "test/other"
+    else:
+        recipe["model"]["precision"] = env["PRECISION"] = "fp4"
+    path.write_text(yaml.safe_dump({"base": recipe}))
+    argv = runtime_arguments(f"{path}:base", env)
+    actual = copy.deepcopy(recipe)
+    apply_overrides_to_recipe(actual, parse_overrides(argv[1::2], []))
+    assert actual["benchmark"]["env"]["USE_CHAT_TEMPLATE"] == "false"
+    assert "log-requests" not in actual["roles"]["agg"]["args"]
