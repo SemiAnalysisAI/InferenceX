@@ -138,10 +138,8 @@ elif [[ $MODEL_PREFIX == "kimik3" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/scratch/models/Kimi-K3"
     export SRT_SLURM_MODEL_PREFIX="kimik3"
 elif [[ $MODEL_PREFIX == "qwen3.8next" && $PRECISION == "fp4" ]]; then
-    check_env_vars MODEL_PATH
-    if [[ -n "${MODEL_PATH}" && -d "$MODEL_PATH" ]]; then
-        :
-    else
+    # No pool setting names this checkpoint; default to the node-local copy.
+    if [[ -z "${MODEL_PATH:-}" || ! -d "$MODEL_PATH" ]]; then
         export MODEL_PATH="/scratch/models/Qwen3.8-Flash-Next-NVFP4"
     fi
     export SRT_SLURM_MODEL_PREFIX="qwen3.8next-fp4"
