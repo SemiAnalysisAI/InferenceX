@@ -77,10 +77,12 @@ override_tp8_c6_dram:
   services:
     - name: mooncake-master
       type: mooncake-master
+      # The in-container install outlasts the default 120 s readiness window.
+      readiness: {port: 8700, timeout_seconds: 900}
       preamble: >-
         pip_install=(python3 -m pip install);
         python3 -m pip install --help 2>/dev/null | grep -q -- --break-system-packages && pip_install+=(--break-system-packages);
-        "${pip_install[@]}" --quiet --no-cache-dir --no-deps --force-reinstall mooncake-transfer-engine-cuda13==0.3.11.post1
+        "${pip_install[@]}" --no-cache-dir --no-deps --force-reinstall mooncake-transfer-engine-cuda13==0.3.11.post1
       args: ['--eviction_high_watermark_ratio=0.80', '--eviction_ratio=0.10']
       options:
         store_config:
@@ -113,10 +115,12 @@ override_tp8_c8_dram:
   services:
     - name: mooncake-master
       type: mooncake-master
+      # The in-container install outlasts the default 120 s readiness window.
+      readiness: {port: 8700, timeout_seconds: 900}
       preamble: >-
         pip_install=(python3 -m pip install);
         python3 -m pip install --help 2>/dev/null | grep -q -- --break-system-packages && pip_install+=(--break-system-packages);
-        "${pip_install[@]}" --quiet --no-cache-dir --no-deps --force-reinstall mooncake-transfer-engine-cuda13==0.3.11.post1
+        "${pip_install[@]}" --no-cache-dir --no-deps --force-reinstall mooncake-transfer-engine-cuda13==0.3.11.post1
       args: ['--eviction_high_watermark_ratio=0.80', '--eviction_ratio=0.10']
       options:
         store_config:
