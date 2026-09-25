@@ -16,6 +16,11 @@ eval_args=()
 if [[ "$IS_AGENTIC" != 1 ]]; then
     check_env_vars MAX_MODEL_LEN
     eval_args=(--framework lm-eval)
+elif [[ "${MODEL_PREFIX:-}" == glm5.2 ]]; then
+    # GLM-5.2's template defaults to maximum reasoning effort without
+    # chat_template_kwargs, which mini-swe-agent never passes; the heavy thinking
+    # exhausts the shared step budget. The recipe env does not reach post-eval.
+    export SWEBENCH_AGENT_STEP_LIMIT=150
 fi
 export PORT="${1##*:}"
 if [[ ! "$PORT" =~ ^[1-9][0-9]*$ || "$IS_MULTINODE" != false ]]; then
