@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import io
+from contextlib import suppress
 import os
 from pathlib import Path
 import re
@@ -67,13 +68,16 @@ class SlurmAllocation:
         return self.job_id
 
     def step(self, options: dict, argv: list[str], path: Path, *,
-             timeout: int | None = None, stdin: bytes | None = None) -> int:
+             timeout: int | None = None, stdin: bytes | None = None,
+             kill_after: int | None = 30) -> int:
         """Run a step through simple-slurm, retaining literal Pyxis and boolean options.
 
         simple-slurm 0.3.6 drops empty-valued srun flags and models sbatch's option set.
         Pass bare flags and plugin options through its command tail. Quote all data before
         its shell-string API; a real executable fixture tests spaces and shell metacharacters.
         """
+        if not self.job_id or not re.fullmatch(r"[1-9][0-9]*", self.job_id):
+            raise ValueError("a job step requires an existing allocation")
         env = dict(self.env)
         # The library constructs a queue helper even for srun. Our queue queries always use
         # an explicit format, so an unrelated inherited SQUEUE_FORMAT must not affect steps.
@@ -94,7 +98,8 @@ class SlurmAllocation:
                     extra.append(f"--{key.replace('_', '-')}={value}")
             executable = ["srun"]
             if timeout is not None:
-                executable = ["timeout", "-k", "30", str(timeout), *executable]
+                kill = ["-k", str(kill_after)] if kill_after is not None else []
+                executable = ["timeout", *kill, str(timeout), *executable]
             return slurm.srun(shlex.join([*extra, *map(str, argv)]), srun_cmd=shlex.join(executable))
 
     def host(self, nodes: int, command: list[str], path: Path, **options) -> int:
@@ -123,10 +128,15 @@ class SlurmAllocation:
             return
         if not re.fullmatch(r"[1-9][0-9]*", job_id):
             raise RuntimeError("invalid cleanup allocation")
-        run(["scancel", job_id], env=self.env, check=False)
+        with suppress(OSError, subprocess.SubprocessError):
+            run(["scancel", job_id], env=self.env, check=False)
         for _ in range(30):
-            state = run(["squeue", "-h", "-j", job_id, "-o", "%A"], env=self.env, check=False)
-            if state.returncode == 0 and not state.stdout.strip():
+            try:
+                state = run(["squeue", "-h", "-j", job_id, "-o", "%A"], env=self.env, check=False)
+                finished = state.returncode == 0 and not state.stdout.strip()
+            except (OSError, subprocess.SubprocessError):
+                finished = False
+            if finished:
                 record.unlink(missing_ok=True)
                 self.job_id = None
                 return

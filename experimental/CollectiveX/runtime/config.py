@@ -84,7 +84,8 @@ def _network_overlay(runner: str) -> dict[str, object]:
     return {key: value for key, value in block.items() if key in NETWORK_FIELDS}
 
 
-def operator_config(path: str, runner: str) -> None:
+def operator_values(path: str, runner: str) -> dict:
+    """Resolve registry, operator overrides, and tracked network selectors as data."""
     try:
         platform = _platforms()[runner]
         # The registry's tracked per-SKU `operator` block is the baseline
@@ -119,10 +120,15 @@ def operator_config(path: str, runner: str) -> None:
         if any(not isinstance(value, (str, int)) or "\0" in str(value) for value in selected.values()):
             raise ValueError
         selected.update(image=platform["image"], image_platform=platform["image_platform"])
-        emit(selected)
+        return selected
     except (KeyError, OSError, TypeError, ValueError, json.JSONDecodeError):
         print("validation-invalid-config", file=sys.stderr)
         raise SystemExit(1)
+
+
+def operator_config(path: str, runner: str) -> None:
+    """Retain the diagnostic CLI while Python orchestration imports operator_values."""
+    emit(operator_values(path, runner))
 
 
 def load(path: str) -> dict:
@@ -134,8 +140,8 @@ def case_count(path: str) -> None:
     print(len(load(path)["cases"]), end="")
 
 
-def _emit_argv(case: dict, version: object, runner: str, ts: str, index: int) -> None:
-    """Emit one null-delimited run_ep.py argv — the only case-to-invocation codec."""
+def case_argv(case: dict, version: object, runner: str, ts: str, index: int) -> list[str]:
+    """Build the benchmark argument list without a temporary file or shell decoder."""
     get = lambda key, default="": str(case.get(key) or default)
     argv = [
         "--backend", str(case["backend"]),
@@ -170,6 +176,12 @@ def _emit_argv(case: dict, version: object, runner: str, ts: str, index: int) ->
     # ts + the per-shard case index disambiguate legs that share one results/ directory.
     out = f"results/{case['case_id']}_{ts}-c{index:03d}.json"
     argv += ["--out", out]
+    return argv
+
+
+def _emit_argv(case: dict, version: object, runner: str, ts: str, index: int) -> None:
+    """Compatibility CLI for inspecting historical shard controls."""
+    argv = case_argv(case, version, runner, ts, index)
     sys.stdout.buffer.write(b"\0".join(part.encode() for part in argv) + b"\0")
 
 

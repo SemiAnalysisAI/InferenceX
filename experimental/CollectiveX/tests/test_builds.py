@@ -4,55 +4,42 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import subprocess
+import shutil
+import sys
 import tempfile
 import unittest
+from unittest import mock
 
 
-RUNTIME = Path(__file__).resolve().parents[1] / "runtime"
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from runtime import build
 
 
 class BackendBuilds(unittest.TestCase):
-    def _shell(self, directory, script, **environment):
-        """Run the real sourced helpers with isolated logs, git settings, and cache paths."""
-        return subprocess.run(
-            ["bash", "-c", 'source "$RUNTIME/common.sh"; source "$RUNTIME/build_common.sh"\n' + script],
-            text=True, capture_output=True,
-            env={
-                **os.environ,
-                "RUNTIME": str(RUNTIME),
-                "TEST_ROOT": str(directory),
-                "COLLX_JOB_ROOT": str(directory / "job"),
-                "GIT_CONFIG_GLOBAL": str(directory / "gitconfig"),
-                **environment,
-            },
-        )
-
     def test_cache_reuse_rebuild_and_failed_install_keep_the_ready_contract(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            binary = root / "bin"
-            binary.mkdir()
-            # The external lock operation is stubbed; cache creation and readiness are real.
-            flock = binary / "flock"
-            flock.write_text("#!/bin/sh\nexit 0\n")
-            flock.chmod(0o755)
-            result = self._shell(root, '''
-install() {
-  printf 'installed\\n' >> "$TEST_ROOT/installations"
-  mkdir -p "$1/site"
-  touch "$1/.ready"
-}
-install_backend_cache test "$TEST_ROOT/cache" site install || exit 10
-install_backend_cache test "$TEST_ROOT/cache" site install || exit 11
-rm -r "$TEST_ROOT/cache/site"
-install_backend_cache test "$TEST_ROOT/cache" site install || exit 12
-fail_install() { mkdir -p "$1/site"; return 17; }
-install_backend_cache test "$TEST_ROOT/incomplete" site fail_install && exit 13
-backend_cache_ready "$TEST_ROOT/incomplete" site && exit 14
-exit 0
-''', PATH=f"{binary}:{os.environ['PATH']}")
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual((root / "installations").read_text(), "installed\ninstalled\n")
+            installations = root / "installations"
+
+            def install(cache):
+                with installations.open("a") as stream:
+                    stream.write("installed\n")
+                (cache / "site").mkdir(parents=True)
+                (cache / ".ready").touch()
+
+            build.install_cached(root / "cache", "site", install)
+            build.install_cached(root / "cache", "site", install)
+            shutil.rmtree(root / "cache/site")
+            build.install_cached(root / "cache", "site", install)
+
+            def fail_install(cache):
+                (cache / "site").mkdir(parents=True)
+                raise RuntimeError("install failed")
+
+            with self.assertRaisesRegex(RuntimeError, "install failed"):
+                build.install_cached(root / "incomplete", "site", fail_install)
+            self.assertFalse(build.cache_ready(root / "incomplete", "site"))
+            self.assertEqual(installations.read_text(), "installed\ninstalled\n")
             self.assertTrue((root / "cache/.ready").is_file())
             self.assertFalse((root / "incomplete/.ready").exists())
 
@@ -60,12 +47,8 @@ exit 0
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / "cache.lock").symlink_to(root / "untouched")
-            result = self._shell(root, '''
-install() { touch "$TEST_ROOT/installed"; }
-install_backend_cache test "$TEST_ROOT/cache" site install
-''')
-            self.assertEqual(result.returncode, 1)
-            self.assertIn("test cache lock is unsafe", result.stderr)
+            with self.assertRaisesRegex(RuntimeError, "cache lock is unsafe"):
+                build.install_cached(root / "cache", "site", lambda cache: (root / "installed").touch())
             self.assertFalse((root / "installed").exists())
             self.assertFalse((root / "untouched").exists())
 
@@ -83,18 +66,13 @@ install_backend_cache test "$TEST_ROOT/cache" site install
             revision = subprocess.check_output(
                 ["git", "-C", str(repository), "rev-parse", "HEAD"], text=True,
             ).strip()
-            result = self._shell(root, '''
-COLLX_UCCL_REPO="$TEST_ROOT/upstream"
-COLLX_UCCL_COMMIT="$REVISION"
-collx_prepare_uccl_source "$TEST_ROOT/stage" || exit 10
-COLLX_UCCL_REPO="$TEST_ROOT/no-such-repository"
-collx_prepare_uccl_source "$TEST_ROOT/stage" || exit 11
-COLLX_BACKEND_SOURCE_ROOT="$TEST_ROOT/stage/experimental/CollectiveX/.collx_sources"
-collx_materialize_uccl_source "$TEST_ROOT/build" || exit 12
-printf 'build change\\n' > "$TEST_ROOT/build/payload"
-''', REVISION=revision)
-            self.assertEqual(result.returncode, 0, result.stderr)
-            staged = root / "stage/experimental/CollectiveX/.collx_sources" / f"uccl-{revision}"
+            destination = root / "stage/experimental/CollectiveX/.collx_sources"
+            with mock.patch.dict(os.environ, {"GIT_CONFIG_GLOBAL": str(root / "gitconfig")}):
+                staged = build.stage_source(destination, "uccl", str(repository), revision, (), root / "git.log")
+                build.stage_source(destination, "uccl", str(root / "absent"), revision, (), root / "git.log")
+            with mock.patch.dict(build.SOURCES, {"uccl-ep": ("uccl", str(repository), revision, ())}):
+                build.materialize_source(root / "build", "uccl-ep", {"COLLX_BACKEND_SOURCE_ROOT": str(destination)})
+            (root / "build/payload").write_text("build change\n")
             self.assertEqual((staged / "payload").read_text(), "pinned source\n")
             self.assertEqual((root / "build/payload").read_text(), "build change\n")
 
