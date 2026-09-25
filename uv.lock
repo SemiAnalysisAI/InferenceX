@@ -873,6 +873,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+collectivex = [
+    { name = "simple-slurm" },
+]
 results = [
     { name = "psycopg2-binary" },
     { name = "tabulate" },
@@ -912,9 +915,10 @@ requires-dist = [
     { name = "psycopg2-binary", marker = "extra == 'results'", specifier = ">=2,<3" },
     { name = "pydantic", specifier = ">=2.10,<3" },
     { name = "pyyaml", specifier = ">=6,<7" },
+    { name = "simple-slurm", marker = "extra == 'collectivex'", specifier = "==0.3.6" },
     { name = "tabulate", marker = "extra == 'results'", specifier = ">=0.10,<0.11" },
 ]
-provides-extras = ["workflows", "results"]
+provides-extras = ["workflows", "results", "collectivex"]
 
 [package.metadata.requires-dev]
 mcp = [
@@ -2328,6 +2332,15 @@ wheels = [
 ]
 
 [[package]]
+name = "simple-slurm"
+version = "0.3.6"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/da/44/5766806362384bab6153df22f77eea21c9f8757a869e91868b98c8c328eb/simple_slurm-0.3.6.tar.gz", hash = "sha256:0f88cac96b39d7d7e34c5a124919cebb41eb8a8ef2ff4fb65c363d940ff8551e", size = 31405, upload-time = "2025-05-14T15:05:55.437Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5a/82/a706a7256cce3c3813badd0521d71794a21ce422b21b45a84c74fa9837ba/simple_slurm-0.3.6-py3-none-any.whl", hash = "sha256:d40bcca57cce034d7765a132c38c1c90ae6219f02e2ddae8d64b57c4e8256a1f", size = 30234, upload-time = "2025-05-14T15:05:54.329Z" },
+]
+
+[[package]]
 name = "six"
 version = "1.17.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2428,13 +2441,13 @@ resolution-markers = [
     "python_full_version < '3.14' and sys_platform == 'darwin'",
 ]
 dependencies = [
-    { name = "filelock" },
-    { name = "fsspec" },
-    { name = "jinja2" },
-    { name = "networkx" },
-    { name = "setuptools" },
-    { name = "sympy" },
-    { name = "typing-extensions" },
+    { name = "filelock", marker = "sys_platform == 'darwin'" },
+    { name = "fsspec", marker = "sys_platform == 'darwin'" },
+    { name = "jinja2", marker = "sys_platform == 'darwin'" },
+    { name = "networkx", marker = "sys_platform == 'darwin'" },
+    { name = "setuptools", marker = "sys_platform == 'darwin'" },
+    { name = "sympy", marker = "sys_platform == 'darwin'" },
+    { name = "typing-extensions", marker = "sys_platform == 'darwin'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/17/76/bb4770f56cf6d8971671dbcbb7493e5a6a15ad2825f4e359b02c27c38297/torch-2.14.0-cp312-cp312-macosx_14_0_arm64.whl", hash = "sha256:c1f844f1c750e87df4b68bc3afbc0e2b0c7ef19d7b8f666e48bdcf6a0c4f0056", size = 127303200, upload-time = "2026-09-02T13:43:20.311Z" },
@@ -2454,13 +2467,13 @@ resolution-markers = [
     "python_full_version < '3.14' and sys_platform != 'darwin' and sys_platform != 'win32'",
 ]
 dependencies = [
-    { name = "filelock" },
-    { name = "fsspec" },
-    { name = "jinja2" },
-    { name = "networkx" },
-    { name = "setuptools" },
-    { name = "sympy" },
-    { name = "typing-extensions" },
+    { name = "filelock", marker = "sys_platform != 'darwin'" },
+    { name = "fsspec", marker = "sys_platform != 'darwin'" },
+    { name = "jinja2", marker = "sys_platform != 'darwin'" },
+    { name = "networkx", marker = "sys_platform != 'darwin'" },
+    { name = "setuptools", marker = "sys_platform != 'darwin'" },
+    { name = "sympy", marker = "sys_platform != 'darwin'" },
+    { name = "typing-extensions", marker = "sys_platform != 'darwin'" },
 ]
 wheels = [
     { url = "https://download-r2.pytorch.org/whl/cpu/torch-2.14.0%2Bcpu-cp312-cp312-linux_s390x.whl", hash = "sha256:07aefe1a437b6f1b41b0cba15e16583e2f43549ec9d062fcea8e7981a78e014a", upload-time = "2026-09-02T18:31:32Z" },
