@@ -1,0 +1,1391 @@
+diff --git a/docs/config-reference.md b/docs/config-reference.md
+index f1f68472..1d592602 100644
+--- a/docs/config-reference.md
++++ b/docs/config-reference.md
+@@ -266,8 +266,22 @@ and `default_sbatch_directives: {gres: "gpu:8"}`.
+ Set `visible_devices_env: ROCR_VISIBLE_DEVICES` in the cluster profile for ROCm
+ workers. GPU subsets then use only that mask, without applying a second mask to
+ already-renumbered devices. Set `default_gpu_exporter: null` to disable the
+-NVIDIA GPU exporter, or configure an exporter image, port, and command once for
+-the cluster. Other telemetry is unchanged; an explicit recipe exporter wins.
++NVIDIA GPU exporter, or configure an exporter image, port, command and
++`power_profile` once for the cluster. Other telemetry is unchanged; an explicit
++recipe exporter wins.
++
++```yaml
++visible_devices_env: ROCR_VISIBLE_DEVICES
++default_gpu_exporter:
++  container_image: "docker://rocm/device-metrics-exporter:v1.5.2"
++  command: "/home/amd/tools/entrypoint.sh"
++  port: 5000
++  power_profile: amd-device-metrics
++```
++
++With this block a recipe that sets `telemetry: {enabled: true}` and nothing else
++under `telemetry` collects GPU power from the AMD exporter; see
++[GPU power telemetry](power-telemetry.md#exporter-profiles).
+ 
+ For vLLM builds without `--device-ids`, set `engine.set_visible_devices: true`.
+ This is one explicit boolean, not automatic vLLM version detection. The default
+@@ -1515,7 +1529,7 @@ observability:
+ | `node_exporter` | object/null | built-in | Defaults to `quay.io#prometheus/node-exporter:v1.8.2` on port 9101 with the `cpu`, `infiniband`, `meminfo`, `processes`, `stat`, `vmstat`, `pressure` and `meminfo_numa` collectors on worker nodes. Includes major faults and page-reclaim counters; retains process-state and NUMA-node identity. An explicit block overrides |
+ | `process_exporter` | object/null | built-in | Defaults to the **host-native** `configs/process-exporter` binary (ncabatoff/process-exporter 0.8.7, installed by `make setup` for the compute arch, like `configs/nats-server` and `configs/etcd`) on port 9256, launched with plain `srun` (no container) on every allocated node (the `process-exporter` service, `placement.node: all`). Reads the host `/proc` and publishes per-process-group CPU seconds by mode, thread count, per-thread-name CPU and count (`-threads=true`), context switches, RSS and open fds. The passthrough filter retains metric names and labels, including summary sum/count suffixes, and attaches hostname and run metadata to raw rows. Groups (frontend, `dynamo_trtllm` / `dynamo_sglang` / `dynamo_vllm` handlers, `trtllm_engine` children, launcher, client, infra daemons) come from `<log_dir>/process-exporter.yml`, written at launch. If the binary is missing the leg is skipped with a warning (submit warns too). An explicit block may set `binary` (absolute, or relative to the srtctl checkout) or instead a `container_image` with `binary` unset to run it containerized; the upstream `FROM scratch` image is not used by default because pyxis/enroot on some clusters cannot start shell-less images |
+ 
+-Every exporter block accepts `container_image`, `port`, `command` and `binary`. `binary` selects host-native launch (the executable runs directly under `srun`, `container_image` is ignored and may be `""`); without it the exporter runs from `container_image`. One of the two must be set.
++Every exporter block accepts `container_image`, `port`, `command`, `binary` and `power_profile`. `binary` selects host-native launch (the executable runs directly under `srun`, `container_image` is ignored and may be `""`); without it the exporter runs from `container_image`. One of the two must be set. `power_profile` matters only to GPU power telemetry (`telemetry.dcgm_exporter` and the cluster `default_gpu_exporter` it inherits from): `dcgm` (the default) or `amd-device-metrics`.
+ 
+ `make setup ARCH=<compute_arch>` downloads and checksum-verifies the matching Tachometer binary from the latest srt-slurm release and installs the process-exporter binary for the same arch. The scraper and the process exporter run as native `srun` processes; the DCGM and node exporters remain containerized on worker nodes. Run `make tachometer-scraper` to build the scraper from source instead. The process-exporter passthrough filter and node process-state/NUMA-label preservation require a scraper built from this revision or a release containing it; rebuild the scraper when using an older downloaded binary.
+ 
+@@ -1529,7 +1543,7 @@ The scraper runs as a best-effort process: if it dies (or the binary is missing
+ 
+ ## telemetry
+ 
+-`telemetry` is reserved for DCGM power measurement. It can run alongside `observability.tachometer`; it does not start Tachometer itself.
++`telemetry` is GPU power measurement (the `dcgm-power` artifact producer). It can run alongside `observability.tachometer`; it does not start Tachometer itself. The exporter that supplies the watts is not tied to DCGM: the exporter block's `power_profile` selects the metric and label mapping (see [GPU power telemetry](power-telemetry.md#exporter-profiles)).
+ 
+ When both are enabled, `telemetry.dcgm_exporter` is shared with Tachometer. Do not also configure `observability.tachometer.dcgm_exporter`; Tachometer can still launch an optional node exporter from its own block.
+ 
+@@ -1549,8 +1563,8 @@ telemetry:
+ 
+ | Field | Type | Default | Description |
+ | ----- | ---- | ------- | ----------- |
+-| `enabled` | bool | `false` | Enable DCGM power collection |
+-| `dcgm_exporter` | object/null | `null` | DCGM exporter image, port, and optional command; required when enabled |
++| `enabled` | bool | `false` | Enable GPU power collection |
++| `dcgm_exporter` | object/null | `null` | GPU power exporter image, port, optional command and `power_profile`. When enabled with no `dcgm_exporter` and no CPU leg, the cluster's `default_gpu_exporter` is used |
+ | `collect_interval_ms` | int | `1000` | Milliseconds between collector cycles (shared by the DCGM and CPU legs); must be at most `3000` (replaces the retired `default_frequency`, which was seconds despite its name) |
+ | `storage_subdir` | string | `power` | Output directory below the run log directory |
+ | `required` | bool | `false` | Fail the benchmark when publishable DCGM power artifacts cannot be produced (CPU power is always best-effort; see below) |
+diff --git a/docs/power-telemetry.md b/docs/power-telemetry.md
+index 07becffb..31255109 100644
+--- a/docs/power-telemetry.md
++++ b/docs/power-telemetry.md
+@@ -5,17 +5,20 @@ allocated worker node, the topology needed to map each GPU to a `prefill`,
+ `decode`, or `agg` role, and the exact formal benchmark window for every
+ measured concurrency. It never integrates power into energy and never branches
+ on model, precision, or recipe; consumers integrate watts over the recorded
+-window themselves.
++window themselves. The provider name is historical: the exporter that supplies
++the watts is selected per cluster or recipe (see [Exporter profiles](#exporter-profiles)).
+ 
+ ## How it works
+ 
+-- One DCGM exporter task runs on each allocated worker node, launched through
+-  the normal SLURM/process-registry path (one `srun` per heterogeneous group).
++- One GPU power exporter task runs on each allocated worker node, launched
++  through the normal SLURM/process-registry path (one `srun` per heterogeneous
++  group).
+ - A collector thread inside the orchestrator polls every exporter concurrently
+   from the physical head node, so all sample timestamps and benchmark
+   boundaries come from one clock.
+-- Only `DCGM_FI_DEV_POWER_USAGE` is parsed. Device identity comes from the
+-  `gpu` and `UUID` labels.
++- Only the profile's power metric is parsed (`DCGM_FI_DEV_POWER_USAGE` for
++  DCGM). Device identity comes from the profile's index and identity labels
++  (`gpu` and `UUID` for DCGM).
+ - **No in-tree benchmark stamps measurement windows yet**, so every run is
+   currently unpublishable: it records `MEASUREMENT_WINDOW` reason codes, and
+   `required: true` exits non-zero. The adapter belongs with the benchmark
+@@ -50,7 +53,10 @@ telemetry:
+     port: 9401
+ ```
+ 
+-`dcgm-power` needs **only** `dcgm_exporter`. Unlike `provider: scraper` it does
++`dcgm-power` needs **only** `dcgm_exporter`. A recipe that sets
++`telemetry.enabled: true` with no `dcgm_exporter` and no CPU leg inherits the
++cluster's `default_gpu_exporter` block from `srtslurm.yaml`, so one recipe can
++measure power on clusters with different GPUs. Unlike `provider: scraper` it does
+ not require the top-level `container_image` or a `node_exporter`, because the
+ collector runs inside srtctl. Config loading validates the block and rejects
+ inconsistent values with actionable messages; in particular
+@@ -61,6 +67,69 @@ The collector join timeout must exceed two complete request-cycle budgets
+ (`2 * (2 * request_timeout_seconds + 1 second)`), covering a scrape already in
+ flight when shutdown starts plus the final bracketing scrape.
+ 
++## Exporter profiles
++
++The collector, parser, manifest and validator do not know which GPU vendor they
++are measuring. Every exporter the collector can scrape is one row of
++`POWER_PROFILES` in `srtctl/core/power/profile.py`, selected by the
++`power_profile` field of the exporter block (`telemetry.dcgm_exporter`, or the
++cluster `default_gpu_exporter` it inherits). A row names:
++
++- the Prometheus metric carrying watts, and the `power_scope` recorded in the manifest;
++- the label carrying the node-local GPU index (must match the index srt-slurm
++  allocates by) and the label carrying a stable per-device identity (fills the
++  `gpu_uuid` column);
++- optional utilization riders mapped onto the fixed `gpu_util_pct` and
++  `sm_active` columns (a row may fill fewer columns; the rest stay empty);
++- labels that mark logical sub-devices (MIG instances, partitions) the artifact
++  cannot represent;
++- the default launch command and how tachometer filters the same endpoint.
++
++| `power_profile` | Exporter | Power metric | Index / identity labels | Utilization |
++| --- | --- | --- | --- | --- |
++| `dcgm` (default) | NVIDIA dcgm-exporter | `DCGM_FI_DEV_POWER_USAGE` | `gpu` / `UUID` | `DCGM_FI_DEV_GPU_UTIL`, `DCGM_FI_PROF_SM_ACTIVE` |
++| `amd-device-metrics` | [rocm/device-metrics-exporter](https://github.com/ROCm/device-metrics-exporter) | `gpu_power_usage` | `gpu_id` / `serial_number` | `gpu_gfx_activity` |
++
++The artifact layout is identical for every row. `manifest.json` records the
++row as `power_profile`, and `source_metric` / `power_scope` /
++`utilization_metrics` describe that row's measurement, so a consumer can tell
++the boundaries apart without config. `srtctl-validate-power` checks those keys
++against the named row.
++
++### AMD (`amd-device-metrics`)
++
++The exporter is AMD's Prometheus exporter container, the direct analog of
++dcgm-exporter. Cluster-level configuration, so that recipes need not change:
++
++```yaml
++# srtslurm.yaml
++visible_devices_env: ROCR_VISIBLE_DEVICES
++default_gpu_exporter:
++  container_image: "docker://rocm/device-metrics-exporter:v1.5.2"
++  command: "/home/amd/tools/entrypoint.sh"
++  port: 5000
++  power_profile: amd-device-metrics
++```
++
++The same block works under `telemetry.dcgm_exporter` in a recipe. Notes:
++
++- Pyxis runs the given command, not the image `ENTRYPOINT`; the entrypoint
++  script starts the `gpuagent` daemon the exporter reads from and then execs
++  the exporter, so it is the command (also the profile's default when
++  `command` is omitted).
++- The exporter has no port flag. It listens on 5000 unless a
++  `/etc/metrics/config.json` sets `ServerPort`; keep `port: 5000` unless the
++  command mounts such a file.
++- It needs `/dev/kfd` and `/dev/dri` inside the container, the same devices the
++  ROCm engine containers need; the launch uses the run's container mounts.
++- Metric and label names are lowercase in this exporter. `gpu_uuid` is not
++  exported by default, so the row identifies devices by `serial_number`.
++- `gpu_power_usage` is the per-device draw on bare metal (MI2xx/MI3xx). Compute
++  partitions share one serial number and report 0 W beyond the first partition;
++  a partitioned node fails device validation (`gpu_uuid_changed`), like MIG on
++  NVIDIA. Socket-level figures (`gpu_package_power`) are a different boundary
++  and are not used.
++
+ ## Artifacts
+ 
+ ```text
+@@ -78,7 +147,7 @@ never interpolated, averaged, or role-attributed — role and heterogeneous
+ group live once in the manifest topology.
+ 
+ `manifest.json` records producer identity (version, git commit, exporter image
+-and its SHA-256), the sample interval, expected and observed device sets, the
++and its SHA-256, `power_profile`), the sample interval, expected and observed device sets, the
+ topology mapping, the expected window list, the SHA-256 of the finalized
+ `samples.csv` bytes, terminal status, per-window coverage validation, and
+ reason codes. `status` is the lifecycle outcome;
+diff --git a/docs/schema-reference.md b/docs/schema-reference.md
+index b175af9f..19c76fa9 100644
+--- a/docs/schema-reference.md
++++ b/docs/schema-reference.md
+@@ -421,6 +421,7 @@ Configuration for a metrics exporter deployed on worker nodes.
+ | `port` | int | required |  |
+ | `command` | str \| None | `None` |  |
+ | `binary` | str \| None | `None` |  |
++| `power_profile` | str \| None | `None` | GPU power telemetry only: which ``srtctl.core.power.profile`` row describes this exporter's power metric and device labels (``dcgm`` when unset; ``amd-device-metrics`` for rocm/device-metrics-exporter). Also supplies the default ``command``. |
+ 
+ ### CpuPowerExporterConfig
+ 
+diff --git a/src/srtctl/cli/mixins/telemetry_stage.py b/src/srtctl/cli/mixins/telemetry_stage.py
+index c1c648a9..476ccb85 100644
+--- a/src/srtctl/cli/mixins/telemetry_stage.py
++++ b/src/srtctl/cli/mixins/telemetry_stage.py
+@@ -19,6 +19,7 @@ from srtctl.core.git_state import head_commit
+ from srtctl.core.power.contract import Reason
+ from srtctl.core.power.cpu_session import CpuPowerCollector, CpuPowerSessionSettings
+ from srtctl.core.power.manifest import ExpectedWindow
++from srtctl.core.power.profile import DCGM_EXPORTER_COMMAND_TEMPLATE, get_power_profile
+ from srtctl.core.power.session import PowerSessionSettings, PowerTelemetrySession
+ from srtctl.core.power.topology import build_expected_devices
+ from srtctl.core.processes import ManagedProcess, ProcessRegistry
+@@ -33,9 +34,9 @@ if TYPE_CHECKING:
+ 
+ logger = logging.getLogger(__name__)
+ 
+-# Power telemetry's template: 100ms NVML sampling is its purpose (dense power
+-# curves inside sa-bench measurement windows). Never used for tachometer.
+-DCGM_EXPORTER_COMMAND_TEMPLATE = "dcgm-exporter --collect-interval=100 --address :{port}"
++# DCGM_EXPORTER_COMMAND_TEMPLATE is re-exported from srtctl.core.power.profile,
++# where every power exporter's default command lives next to its metric mapping.
++__all__ = ["DCGM_EXPORTER_COMMAND_TEMPLATE", "TelemetryStageMixin", "read_producer_commit", "resolve_exporter_command"]
+ # Time tachometer gets after SIGTERM to compact its in-memory arrow rows to parquet.
+ TACHOMETER_STEP_NAME = "tachometer"
+ 
+@@ -168,7 +169,11 @@ class TelemetryStageMixin:
+         return managed
+ 
+     def start_power_telemetry(self, registry: ProcessRegistry) -> PowerTelemetrySession | None:
+-        """Start DCGM power telemetry when it is enabled.
++        """Start GPU power telemetry when it is enabled.
++
++        The exporter block's ``power_profile`` row (DCGM by default) supplies
++        the default launch command and tells the collector which metric and
++        labels to read; nothing here depends on the GPU vendor.
+ 
+         Every provider-originated startup failure becomes session state once the
+         session exists, so the orchestrator can still finalize artifacts and
+@@ -182,9 +187,10 @@ class TelemetryStageMixin:
+         if exporter_config is None:
+             return None
+ 
++        profile = get_power_profile(exporter_config.power_profile)
+         worker_nodes = self._telemetry_nodes()
+         power_dir = self.runtime.log_dir / telemetry.storage_subdir
+-        command = resolve_exporter_command(exporter_config, DCGM_EXPORTER_COMMAND_TEMPLATE)
++        command = resolve_exporter_command(exporter_config, profile.default_command_template)
+ 
+         session = PowerTelemetrySession(
+             settings=PowerSessionSettings(
+@@ -202,6 +208,7 @@ class TelemetryStageMixin:
+                 exporter_command=command,
+                 network_interface=self.runtime.network_interface,
+                 producer_git_commit=read_producer_commit(),
++                profile=profile,
+             ),
+             expected_devices=build_expected_devices(self.backend_processes),
+             expected_windows=[
+@@ -214,7 +221,7 @@ class TelemetryStageMixin:
+         self._power_session = session
+         self._power_telemetry_ready = False
+         session.initialize()
+-        logger.info("Starting DCGM power telemetry (artifacts under %s)", power_dir)
++        logger.info("Starting GPU power telemetry (profile %s, artifacts under %s)", profile.name, power_dir)
+ 
+         def own(process: ManagedProcess) -> None:
+             registry.add_process(process)
+@@ -226,13 +233,13 @@ class TelemetryStageMixin:
+                 name="telemetry_dcgm_exporter",
+                 nodelist=worker_nodes,
+                 log_file=self.runtime.log_dir / "telemetry_dcgm_exporter.out",
+-                default_command_template=DCGM_EXPORTER_COMMAND_TEMPLATE,
++                default_command_template=profile.default_command_template,
+                 use_bash_wrapper=False,  # distroless exporter images have no shell
+                 critical=False,  # an exit is telemetry invalidity, not a sweep-critical failure
+                 on_started=own,
+             )
+         except Exception:
+-            logger.exception("DCGM exporter launch failed")
++            logger.exception("GPU power exporter launch failed")
+             session.record_reason(Reason.EXPORTER_LAUNCH_FAILED)
+             return session
+ 
+@@ -588,20 +595,25 @@ class TelemetryStageMixin:
+                     )
+         return targets
+ 
+-    def _power_dcgm_targets(self) -> list[ServiceMetricsTarget]:
+-        """DCGM targets when power telemetry runs its own exporter (no implied dcgm-exporter service)."""
++    def _power_exporter_targets(self) -> list[ServiceMetricsTarget]:
++        """Tachometer targets for the exporter power telemetry runs itself (no implied dcgm-exporter service).
++
++        The profile row says how tachometer should filter the body; DCGM rows
++        keep the ``dcgm`` filter and per-GPU worker labels, other exporters pass through.
++        """
+         power = self.config.telemetry
+         if not (power.enabled and power.dcgm_exporter is not None):
+             return []
++        profile = get_power_profile(power.dcgm_exporter.power_profile)
+         nodes = sorted({process.node for process in self.backend_processes})
+         return [
+             ServiceMetricsTarget(
+                 service="dcgm-exporter",
+                 node=node,
+                 url=f"http://{node}:{power.dcgm_exporter.port}/metrics",
+-                filter="dcgm",
+-                endpoint="dcgm",
+-                gpu_metadata=True,
++                filter=profile.tachometer_filter,
++                endpoint=profile.name,
++                gpu_metadata=profile.tachometer_gpu_metadata,
+             )
+             for node in nodes
+         ]
+@@ -627,7 +639,7 @@ class TelemetryStageMixin:
+                 tachometer=tachometer,
+                 frontend_type=self.config.frontend.type,
+                 frontend_metrics_port=self._frontend_metrics_port(),
+-                service_targets=[*self._service_metrics_targets(), *self._power_dcgm_targets()],
++                service_targets=[*self._service_metrics_targets(), *self._power_exporter_targets()],
+             )
+         )
+ 
+diff --git a/src/srtctl/cli/submit.py b/src/srtctl/cli/submit.py
+index 6b1cebab..2c6117a7 100755
+--- a/src/srtctl/cli/submit.py
++++ b/src/srtctl/cli/submit.py
+@@ -58,6 +58,7 @@ from srtctl.core.git_state import (
+     write_git_state_snapshot,
+ )
+ from srtctl.core.lockfile import load_lockfile_fingerprints
++from srtctl.core.power.profile import get_power_profile
+ from srtctl.core.runtime import Nodes
+ from srtctl.core.schema import SrtConfig, installs_dynamo
+ from srtctl.core.status import create_job_record
+@@ -733,6 +734,7 @@ def show_config_details(config: SrtConfig) -> None:
+             details.add_row("telemetry", "artifacts", f"<log_dir>/{config.telemetry.storage_subdir}")
+             if exporter is not None:
+                 details.add_row("telemetry", "dcgm_exporter", f"{exporter.container_image} (port {exporter.port})")
++                details.add_row("telemetry", "power_profile", get_power_profile(exporter.power_profile).name)
+ 
+             cpu_exporter = config.telemetry.cpu_power_exporter
+             if cpu_exporter is not None:
+diff --git a/src/srtctl/core/config.py b/src/srtctl/core/config.py
+index f6aec0ab..74523888 100755
+--- a/src/srtctl/core/config.py
++++ b/src/srtctl/core/config.py
+@@ -258,6 +258,22 @@ def resolve_config_with_defaults(user_config: dict[str, Any], cluster_config: di
+         tachometer = config.setdefault("observability", {}).setdefault("tachometer", {})
+         tachometer.setdefault("default_gpu_exporter", copy.deepcopy(cluster_config["default_gpu_exporter"]))
+ 
++    # The same cluster exporter serves GPU power telemetry: a recipe that enables
++    # telemetry without naming any collector inherits it (image, port, command and
++    # power_profile), so one recipe measures power on NVIDIA and AMD clusters alike.
++    # Recipes that name a GPU exporter, or that enable only a CPU leg, are untouched;
++    # without this the inherited case was the "nothing to collect" validation error.
++    telemetry = config.get("telemetry")
++    cluster_gpu_exporter = cluster_config.get("default_gpu_exporter")
++    if (
++        isinstance(telemetry, dict)
++        and telemetry.get("enabled")
++        and isinstance(cluster_gpu_exporter, dict)
++        and not any(key in telemetry for key in ("dcgm_exporter", "cpu_power_exporter", "cpu_power"))
++    ):
++        telemetry["dcgm_exporter"] = copy.deepcopy(cluster_gpu_exporter)
++        logger.debug("Applied cluster default_gpu_exporter to telemetry.dcgm_exporter")
++
+     # Resolve every container alias in one pass (model.container,
+     # frontend.container_image / nginx_container, benchmark.container_image,
+     # exporter images, mooncake_kv_store.container, services, ...).
+diff --git a/src/srtctl/core/power/__init__.py b/src/srtctl/core/power/__init__.py
+index 5f12a0d9..ef68d46a 100644
+--- a/src/srtctl/core/power/__init__.py
++++ b/src/srtctl/core/power/__init__.py
+@@ -4,8 +4,11 @@
+ """Raw multinode GPU power artifacts for the ``dcgm-power`` telemetry provider.
+ 
+ The provider records watts per allocated GPU, optional utilization when the
+-exporter reports it (``DCGM_FI_DEV_GPU_UTIL``, ``DCGM_FI_PROF_SM_ACTIVE``), the
+-srt-slurm topology needed to map devices to ``prefill``/``decode``/``agg``, and
+-the exact formal benchmark window. It never integrates power into energy or
+-aggregates utilization; that belongs to consumers of the artifact contract.
++exporter reports it, the srt-slurm topology needed to map devices to
++``prefill``/``decode``/``agg``, and the exact formal benchmark window. Which
++Prometheus exporter supplies the watts, and under which metric and labels, is
++one row of ``profile.POWER_PROFILES`` (DCGM by default, rocm/device-metrics-exporter
++for AMD); the artifact layout is the same for every row. It never integrates
++power into energy or aggregates utilization; that belongs to consumers of the
++artifact contract.
+ """
+diff --git a/src/srtctl/core/power/manifest.py b/src/srtctl/core/power/manifest.py
+index 1a1adce5..7e2becda 100644
+--- a/src/srtctl/core/power/manifest.py
++++ b/src/srtctl/core/power/manifest.py
+@@ -11,15 +11,13 @@ from typing import Any
+ from srtctl import __version__ as PRODUCER_VERSION
+ from srtctl.core.power.contract import (
+     CLOCK_SOURCE,
+-    POWER_METRIC,
+-    POWER_SCOPE,
+     POWER_UNIT,
+     PRODUCER,
+     SAMPLES_SCHEMA_VERSION,
+     SCHEMA_VERSION,
+-    UTILIZATION_METRICS,
+     dedupe,
+ )
++from srtctl.core.power.profile import DEFAULT_POWER_PROFILE, PowerMetricProfile
+ from srtctl.core.power.samples import ObservedDevice
+ from srtctl.core.power.topology import ExpectedDevice
+ 
+@@ -36,6 +34,9 @@ TERMINAL_STATUSES = (STATUS_COMPLETE, STATUS_INCOMPLETE, STATUS_FAILED)
+ class DcgmExporterIdentity:
+     """Exactly which exporter image produced the samples.
+ 
++    Serialized under the historical ``dcgm_exporter`` manifest key for every
++    profile; the profile itself is recorded separately as ``power_profile``.
++
+     ``container_image_sha256`` is ``None`` when the resolved image is not a
+     regular file (for example a registry URI pulled at srun time).
+     """
+@@ -116,6 +117,7 @@ class PowerManifest:
+     expected_devices: list[ExpectedDevice]
+     expected_windows: list[ExpectedWindow]
+     producer_git_commit: str | None = None
++    profile: PowerMetricProfile = DEFAULT_POWER_PROFILE
+     status: str = STATUS_STARTING
+     stopped_at_unix: float | None = None
+     publication_valid: bool | None = None
+@@ -146,13 +148,14 @@ class PowerManifest:
+             "producer": PRODUCER,
+             "producer_version": PRODUCER_VERSION,
+             "producer_git_commit": self.producer_git_commit,
+-            "source_metric": POWER_METRIC,
++            "power_profile": self.profile.name,
++            "source_metric": self.profile.power_metric,
+             "unit": POWER_UNIT,
+-            "power_scope": POWER_SCOPE,
++            "power_scope": self.profile.power_scope,
+             "samples_schema_version": SAMPLES_SCHEMA_VERSION,
+             "utilization_metrics": [
+                 {"column": metric.column, "source_metric": metric.metric, "unit": metric.unit}
+-                for metric in UTILIZATION_METRICS
++                for metric in self.profile.utilization_metrics
+             ],
+             "timestamp_source": CLOCK_SOURCE,
+             "job_id": self.job_id,
+diff --git a/src/srtctl/core/power/parser.py b/src/srtctl/core/power/parser.py
+index 1009e969..e1235558 100644
+--- a/src/srtctl/core/power/parser.py
++++ b/src/srtctl/core/power/parser.py
+@@ -1,14 +1,15 @@
+ # SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ # SPDX-License-Identifier: Apache-2.0
+ 
+-"""Strict DCGM exporter power parsing.
+-
+-``DCGM_FI_DEV_POWER_USAGE`` is mandatory and decides which GPUs produce a
+-reading. The utilization fields listed in ``UTILIZATION_METRICS`` are optional
+-riders: they attach to a GPU's power reading when present and valid, and are
+-dropped silently otherwise. Device identity comes from the ``gpu`` and
+-``UUID`` labels; the optional ``Hostname`` label is deliberately ignored
+-because the collector already knows which allocated node it polled.
++"""Strict, profile-driven exporter power parsing.
++
++The profile's power metric is mandatory and decides which GPUs produce a
++reading. The profile's utilization metrics are optional riders: they attach to a
++GPU's power reading when present and valid, and are dropped silently otherwise.
++Device identity comes from the profile's index and identity labels; any
++exporter hostname label is deliberately ignored because the collector already
++knows which allocated node it polled. Samples carrying one of the profile's
++instance labels (MIG instances, partitions) are unsupported and dropped.
+ """
+ 
+ from __future__ import annotations
+@@ -18,10 +19,8 @@ from dataclasses import dataclass
+ 
+ from prometheus_client.parser import text_string_to_metric_families
+ 
+-from srtctl.core.power.contract import POWER_METRIC, UTILIZATION_METRICS, Reason, dedupe
+-
+-_MIG_LABELS = ("GPU_I_ID", "GPU_I_PROFILE")
+-_UTILIZATION_BY_METRIC = {metric.metric: metric for metric in UTILIZATION_METRICS}
++from srtctl.core.power.contract import Reason, dedupe
++from srtctl.core.power.profile import DEFAULT_POWER_PROFILE, PowerMetricProfile
+ 
+ 
+ @dataclass(frozen=True)
+@@ -43,7 +42,7 @@ class ParsedScrape:
+     reason_codes: tuple[str, ...] = ()
+ 
+ 
+-def parse_power_scrape(text: str) -> ParsedScrape:
++def parse_power_scrape(text: str, profile: PowerMetricProfile = DEFAULT_POWER_PROFILE) -> ParsedScrape:
+     """Parse one exporter ``/metrics`` body into publishable power readings."""
+     reasons: list[str] = []
+     try:
+@@ -58,17 +57,18 @@ def parse_power_scrape(text: str) -> ParsedScrape:
+     power_by_index: dict[int, tuple[str, float]] = {}
+     duplicated_power: set[int] = set()
+     saw_power_sample = False
++    utilization_by_metric = {metric.metric: metric for metric in profile.utilization_metrics}
+     # column -> gpu_index -> value; a duplicate poisons that (column, gpu) pair.
+-    utilization: dict[str, dict[int, float]] = {metric.column: {} for metric in UTILIZATION_METRICS}
+-    duplicated_utilization: dict[str, set[int]] = {metric.column: set() for metric in UTILIZATION_METRICS}
++    utilization: dict[str, dict[int, float]] = {metric.column: {} for metric in profile.utilization_metrics}
++    duplicated_utilization: dict[str, set[int]] = {metric.column: set() for metric in profile.utilization_metrics}
+ 
+     for family in families:
+         for sample in family.samples:
+-            if sample.name == POWER_METRIC:
++            if sample.name == profile.power_metric:
+                 saw_power_sample = True
+-                _collect_power(sample.labels, sample.value, power_by_index, duplicated_power, reasons)
++                _collect_power(sample.labels, sample.value, power_by_index, duplicated_power, reasons, profile)
+                 continue
+-            spec = _UTILIZATION_BY_METRIC.get(sample.name)
++            spec = utilization_by_metric.get(sample.name)
+             if spec is None:
+                 continue
+             _collect_utilization(
+@@ -77,6 +77,7 @@ def parse_power_scrape(text: str) -> ParsedScrape:
+                 spec.max_value,
+                 utilization[spec.column],
+                 duplicated_utilization[spec.column],
++                profile,
+             )
+ 
+     if duplicated_power:
+@@ -105,17 +106,18 @@ def _collect_power(
+     by_index: dict[int, tuple[str, float]],
+     duplicated: set[int],
+     reasons: list[str],
++    profile: PowerMetricProfile,
+ ) -> None:
+-    if any(labels.get(label) for label in _MIG_LABELS):
++    if any(labels.get(label) for label in profile.instance_labels):
+         reasons.append(Reason.MIG_INSTANCE_UNSUPPORTED)
+         return
+ 
+-    gpu_index = _parse_index(labels.get("gpu"))
++    gpu_index = _parse_index(labels.get(profile.gpu_index_label))
+     if gpu_index is None:
+         reasons.append(Reason.GPU_INDEX_MISSING)
+         return
+ 
+-    gpu_uuid = (labels.get("UUID") or "").strip()
++    gpu_uuid = (labels.get(profile.gpu_identity_label) or "").strip()
+     if not gpu_uuid:
+         reasons.append(Reason.GPU_UUID_MISSING)
+         return
+@@ -136,11 +138,12 @@ def _collect_utilization(
+     max_value: float,
+     by_index: dict[int, float],
+     duplicated: set[int],
++    profile: PowerMetricProfile,
+ ) -> None:
+     """Optional metric: every rejection is silent, so no reason list is threaded through."""
+-    if any(labels.get(label) for label in _MIG_LABELS):
++    if any(labels.get(label) for label in profile.instance_labels):
+         return
+-    gpu_index = _parse_index(labels.get("gpu"))
++    gpu_index = _parse_index(labels.get(profile.gpu_index_label))
+     if gpu_index is None:
+         return
+     if not math.isfinite(value) or value < 0 or value > max_value:
+diff --git a/src/srtctl/core/power/profile.py b/src/srtctl/core/power/profile.py
+new file mode 100644
+index 00000000..55123aa6
+--- /dev/null
++++ b/src/srtctl/core/power/profile.py
+@@ -0,0 +1,127 @@
++# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
++# SPDX-License-Identifier: Apache-2.0
++
++"""GPU power exporter profiles: which Prometheus metric and labels carry a GPU's watts.
++
++The power collector is exporter-agnostic. Every exporter it can scrape is one
++row in :data:`POWER_PROFILES`, keyed by the ``power_profile`` name a cluster or
++recipe puts on its exporter block. A row names the power metric, the labels
++that identify a device, the optional utilization riders, and the launch and
++tachometer defaults for that exporter. The parser, session, manifest,
++validator, and telemetry stage read the row; none of them compares a vendor or
++exporter name.
++
++Adding an exporter is adding a row. The artifact contract (``samples.csv``
++columns, manifest keys, reason codes) does not change per row; the manifest
++records the row's name, metric, and scope so a reader can interpret the watts.
++"""
++
++from __future__ import annotations
++
++from dataclasses import dataclass
++
++from srtctl.core.power.contract import POWER_METRIC, POWER_SCOPE, UTILIZATION_METRICS, UtilizationMetric
++
++# Power telemetry's DCGM template: 100ms NVML sampling is its purpose (dense power
++# curves inside sa-bench measurement windows). Never used for tachometer.
++DCGM_EXPORTER_COMMAND_TEMPLATE = "dcgm-exporter --collect-interval=100 --address :{port}"
++
++# The rocm/device-metrics-exporter image's ENTRYPOINT starts the ``gpuagent``
++# daemon the exporter reads from and then execs the exporter. Pyxis runs the
++# command it is given rather than the image entrypoint, so the entrypoint script
++# is the command. The exporter takes no port flag: it listens on 5000 unless a
++# ``/etc/metrics/config.json`` sets ``ServerPort``.
++AMD_DEVICE_METRICS_EXPORTER_COMMAND_TEMPLATE = "/home/amd/tools/entrypoint.sh"
++
++
++@dataclass(frozen=True)
++class PowerMetricProfile:
++    """One exporter's mapping onto the fixed GPU power artifact.
++
++    ``gpu_index_label`` must carry the node-local device index srt-slurm
++    allocates by (the same index the worker sees in its visible-devices mask).
++    ``gpu_identity_label`` must be stable for one physical device across the run
++    and distinct between devices; it fills the ``gpu_uuid`` column.
++    ``instance_labels`` mark samples for logical sub-devices (MIG instances,
++    partitions) that the artifact cannot represent; such samples are dropped
++    with ``mig_instance_unsupported``. ``utilization_metrics`` must be a subset
++    of the contract's columns.
++    """
++
++    name: str
++    power_metric: str
++    power_scope: str
++    gpu_index_label: str
++    gpu_identity_label: str
++    default_command_template: str
++    utilization_metrics: tuple[UtilizationMetric, ...] = ()
++    instance_labels: tuple[str, ...] = ()
++    # What tachometer applies when it also scrapes this exporter alongside the
++    # power collector (``TelemetryStageMixin._power_exporter_targets``).
++    tachometer_filter: str = "passthrough"
++    tachometer_gpu_metadata: bool = False
++
++    def __post_init__(self) -> None:
++        contract_columns = {metric.column: metric for metric in UTILIZATION_METRICS}
++        for metric in self.utilization_metrics:
++            spec = contract_columns.get(metric.column)
++            if spec is None:
++                raise ValueError(f"power profile {self.name!r} maps unknown artifact column {metric.column!r}")
++            if (metric.unit, metric.max_value) != (spec.unit, spec.max_value):
++                raise ValueError(f"power profile {self.name!r} changes the contract of column {metric.column!r}")
++        columns = [metric.column for metric in self.utilization_metrics]
++        metrics = [self.power_metric, *(metric.metric for metric in self.utilization_metrics)]
++        if len(set(columns)) != len(columns) or len(set(metrics)) != len(metrics):
++            raise ValueError(f"power profile {self.name!r} repeats a column or metric")
++        if self.gpu_index_label == self.gpu_identity_label:
++            raise ValueError(f"power profile {self.name!r} needs distinct index and identity labels")
++
++
++DCGM_POWER_PROFILE = PowerMetricProfile(
++    name="dcgm",
++    power_metric=POWER_METRIC,
++    power_scope=POWER_SCOPE,
++    gpu_index_label="gpu",
++    gpu_identity_label="UUID",
++    default_command_template=DCGM_EXPORTER_COMMAND_TEMPLATE,
++    utilization_metrics=UTILIZATION_METRICS,
++    instance_labels=("GPU_I_ID", "GPU_I_PROFILE"),
++    tachometer_filter="dcgm",
++    tachometer_gpu_metadata=True,
++)
++
++# rocm/device-metrics-exporter (https://github.com/ROCm/device-metrics-exporter).
++# Metric and label names are lowercase in its exposition. ``gpu_power_usage`` is
++# the per-device draw the exporter reports for MI2xx/MI3xx on bare metal; the
++# socket figures (``gpu_package_power``) are a different boundary and not used.
++# ``serial_number`` is exported by default; ``gpu_uuid`` is not, so the serial is
++# the device identity. Partitioned GPUs share one serial and report 0 W past the
++# first partition, which surfaces as ``gpu_uuid_changed``: partitioning is not
++# supported by this profile, just as MIG is not by the DCGM one.
++AMD_DEVICE_METRICS_POWER_PROFILE = PowerMetricProfile(
++    name="amd-device-metrics",
++    power_metric="gpu_power_usage",
++    power_scope="gpu_device_power_as_reported_by_amd_device_metrics_exporter",
++    gpu_index_label="gpu_id",
++    gpu_identity_label="serial_number",
++    default_command_template=AMD_DEVICE_METRICS_EXPORTER_COMMAND_TEMPLATE,
++    utilization_metrics=(
++        UtilizationMetric(column="gpu_util_pct", metric="gpu_gfx_activity", unit="percent", max_value=100.0),
++    ),
++)
++
++POWER_PROFILES: dict[str, PowerMetricProfile] = {
++    profile.name: profile for profile in (DCGM_POWER_PROFILE, AMD_DEVICE_METRICS_POWER_PROFILE)
++}
++DEFAULT_POWER_PROFILE = DCGM_POWER_PROFILE
++
++
++def get_power_profile(name: str | None) -> PowerMetricProfile:
++    """The profile an exporter block names, or the DCGM default when it names none."""
++    if name is None:
++        return DEFAULT_POWER_PROFILE
++    try:
++        return POWER_PROFILES[name]
++    except KeyError:
++        known = ", ".join(sorted(POWER_PROFILES))
++        raise ValueError(f"unknown power_profile {name!r}; known profiles: {known}") from None
+diff --git a/src/srtctl/core/power/session.py b/src/srtctl/core/power/session.py
+index 93effb6a..86e2e6b6 100644
+--- a/src/srtctl/core/power/session.py
++++ b/src/srtctl/core/power/session.py
+@@ -46,6 +46,7 @@ from srtctl.core.power.manifest import (
+     PowerManifest,
+ )
+ from srtctl.core.power.parser import parse_power_scrape
++from srtctl.core.power.profile import DEFAULT_POWER_PROFILE, PowerMetricProfile
+ from srtctl.core.power.samples import SampleRow, SampleWriter, derive_observed_devices, read_samples
+ from srtctl.core.power.topology import ExpectedDevice, validate_devices
+ from srtctl.core.power.windows import convert_running_windows, validate_expected_windows
+@@ -81,6 +82,8 @@ class PowerSessionSettings:
+     network_interface: str | None = None
+     producer_git_commit: str | None = None
+     log_dir: Path | None = None
++    # Which metric and labels the exporter's ``/metrics`` body carries the watts in.
++    profile: PowerMetricProfile = DEFAULT_POWER_PROFILE
+ 
+     @property
+     def result_root(self) -> Path:
+@@ -151,6 +154,7 @@ class PowerTelemetrySession:
+             required=settings.required,
+             started_at_unix=time.time(),
+             producer_git_commit=settings.producer_git_commit,
++            profile=settings.profile,
+             dcgm_exporter=_exporter_identity(settings),
+             expected_devices=expected_device_list,
+             expected_windows=list(expected_windows),
+@@ -330,7 +334,7 @@ class PowerTelemetrySession:
+         settled_monotonic = time.perf_counter()
+         settled_unix = time.time()
+ 
+-        scrape = parse_power_scrape(body)
++        scrape = parse_power_scrape(body, self._settings.profile)
+         timestamp_unix = (started_unix + settled_unix) / 2
+         rows = [
+             SampleRow(
+@@ -372,7 +376,7 @@ class PowerTelemetrySession:
+             return any(not process.is_running for process in self._exporters)
+ 
+     def _check_exporters(self) -> None:
+-        """A DCGM exporter exit during collection invalidates the run."""
++        """An exporter exit during collection invalidates the run."""
+         if self._stop.is_set():
+             return
+         if self._any_exporter_exited():
+diff --git a/src/srtctl/core/power/validate_artifacts.py b/src/srtctl/core/power/validate_artifacts.py
+index bcf68506..53d7c41f 100644
+--- a/src/srtctl/core/power/validate_artifacts.py
++++ b/src/srtctl/core/power/validate_artifacts.py
+@@ -27,8 +27,6 @@ from srtctl.core.power.contract import (
+     FATAL_LIFECYCLE_REASONS,
+     MANIFEST_FILENAME,
+     MAX_SAMPLE_GAP_SECONDS,
+-    POWER_METRIC,
+-    POWER_SCOPE,
+     POWER_UNIT,
+     PRODUCER,
+     SAMPLES_FILENAME,
+@@ -39,6 +37,7 @@ from srtctl.core.power.contract import (
+     sha256_file,
+ )
+ from srtctl.core.power.manifest import STATUS_COMPLETE, ArtifactError, ExpectedWindow, WindowValidation
++from srtctl.core.power.profile import POWER_PROFILES
+ from srtctl.core.power.samples import ObservedDevice, SampleRow, derive_observed_devices, read_samples
+ from srtctl.core.power.topology import (
+     WORKER_ROLES,
+@@ -264,13 +263,20 @@ def _check_wire_contract(manifest: dict[str, Any]) -> list[str]:
+     if not isinstance(schema_version, int) or isinstance(schema_version, bool) or schema_version != SCHEMA_VERSION:
+         failures.append(f"schema_version is {schema_version!r}, expected {SCHEMA_VERSION!r}")
+ 
+-    for key, expected in (
++    # Manifests written before profiles existed carry no ``power_profile`` and are DCGM.
++    profile_name = manifest.get("power_profile", "dcgm")
++    profile = POWER_PROFILES.get(profile_name) if isinstance(profile_name, str) else None
++    if profile is None:
++        known = ", ".join(sorted(POWER_PROFILES))
++        failures.append(f"power_profile is {profile_name!r}, expected one of: {known}")
++    expectations: list[tuple[str, Any]] = [
+         ("producer", PRODUCER),
+-        ("source_metric", POWER_METRIC),
+         ("unit", POWER_UNIT),
+-        ("power_scope", POWER_SCOPE),
+         ("timestamp_source", CLOCK_SOURCE),
+-    ):
++    ]
++    if profile is not None:
++        expectations.extend((("source_metric", profile.power_metric), ("power_scope", profile.power_scope)))
++    for key, expected in expectations:
+         if manifest.get(key) != expected:
+             failures.append(f"{key} is {manifest.get(key)!r}, expected {expected!r}")
+ 
+diff --git a/src/srtctl/core/schema.py b/src/srtctl/core/schema.py
+index a01ded5b..5c4e9a87 100755
+--- a/src/srtctl/core/schema.py
++++ b/src/srtctl/core/schema.py
+@@ -48,8 +48,9 @@ from srtctl.core.formatting import (
+     FormattablePathField,
+ )
+ 
+-# Leaf module (stdlib-only imports), so this cannot cycle back into schema.
++# Leaf modules (stdlib and prometheus-free imports), so these cannot cycle back into schema.
+ from srtctl.core.power.contract import CONTAINER_LOG_DIR
++from srtctl.core.power.profile import POWER_PROFILES
+ from srtctl.core.source import DynamoSourceConfig, is_commit_sha
+ from srtctl.ports import DYNAMO_SIDECAR_GRPC_PORT
+ from srtctl.services.config import ServiceConfig
+@@ -1260,6 +1261,11 @@ class TelemetryExporterConfig:
+     port: int
+     command: str | None = None
+     binary: str | None = None
++    # GPU power telemetry only: which ``srtctl.core.power.profile`` row describes
++    # this exporter's power metric and device labels (``dcgm`` when unset;
++    # ``amd-device-metrics`` for rocm/device-metrics-exporter). Also supplies the
++    # default ``command``.
++    power_profile: str | None = None
+ 
+     Schema: ClassVar[type[Schema]] = Schema
+ 
+@@ -2957,6 +2963,11 @@ class SrtConfig:
+             raise ValidationError("telemetry.dcgm_exporter.container_image must be non-empty")
+         if not 1 <= exporter.port <= 65535:
+             raise ValidationError("telemetry.dcgm_exporter.port must be in 1..65535")
++        if exporter.power_profile is not None and exporter.power_profile not in POWER_PROFILES:
++            known = ", ".join(sorted(POWER_PROFILES))
++            raise ValidationError(
++                f"telemetry.dcgm_exporter.power_profile={exporter.power_profile!r} is unknown; known profiles: {known}"
++            )
+ 
+         for name in ("startup_timeout_seconds",):
+             if not _is_finite_positive(getattr(telemetry, name)):
+diff --git a/srtslurm.yaml.example b/srtslurm.yaml.example
+index 22d43cd8..400753e7 100644
+--- a/srtslurm.yaml.example
++++ b/srtslurm.yaml.example
+@@ -15,11 +15,16 @@ default_time_limit: "04:00:00"
+ # On ROCm/Linux, select one visibility mask and omit the NVIDIA exporter:
+ # visible_devices_env: ROCR_VISIBLE_DEVICES
+ # default_gpu_exporter: null
+-# Or configure your cluster's exporter (recipe exporter settings still win):
++# Or configure your cluster's exporter once; tachometer scrapes it and
++# `telemetry: {enabled: true}` recipes measure GPU power with it (recipe
++# exporter settings still win). `power_profile` names the row in
++# srtctl.core.power.profile that says which metric and labels carry the watts:
++# `dcgm` (default) or `amd-device-metrics` for rocm/device-metrics-exporter.
+ # default_gpu_exporter:
+-#   container_image: "your-gpu-exporter:image"
+-#   command: "your-gpu-exporter --port {port}"
+-#   port: 9401
++#   container_image: "docker://rocm/device-metrics-exporter:v1.5.2"
++#   command: "/home/amd/tools/entrypoint.sh"   # the image entrypoint; pyxis runs the command, not ENTRYPOINT
++#   port: 5000                                  # the exporter's fixed default; it takes no port flag
++#   power_profile: amd-device-metrics
+ 
+ # Some clusters see intermittent git smart-HTTP failures negotiating HTTP/2
+ # against github.com (stalls, or truncated responses git misreports as
+diff --git a/tests/test_power_profile.py b/tests/test_power_profile.py
+new file mode 100644
+index 00000000..0a2f6492
+--- /dev/null
++++ b/tests/test_power_profile.py
+@@ -0,0 +1,525 @@
++# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
++# SPDX-License-Identifier: Apache-2.0
++
++"""GPU power exporter profiles: the table that makes the power collector exporter-agnostic.
++
++The DCGM row must reproduce the pre-profile contract byte for byte on the wire
++keys it owns; the AMD row (rocm/device-metrics-exporter) exercises every place
++that used to hard-code a DCGM metric or label.
++"""
++
++from __future__ import annotations
++
++import dataclasses
++import json
++from pathlib import Path
++from unittest.mock import MagicMock, patch
++
++import pytest
++from marshmallow import ValidationError
++
++from srtctl.cli.mixins import telemetry_stage
++from srtctl.cli.mixins.telemetry_stage import TelemetryStageMixin, resolve_exporter_command
++from srtctl.core.config import resolve_config_with_defaults
++from srtctl.core.power.contract import MANIFEST_FILENAME, UTILIZATION_METRICS, Reason, UtilizationMetric
++from srtctl.core.power.manifest import DcgmExporterIdentity, ExpectedWindow, PowerManifest
++from srtctl.core.power.parser import parse_power_scrape
++from srtctl.core.power.profile import (
++    AMD_DEVICE_METRICS_POWER_PROFILE,
++    DCGM_EXPORTER_COMMAND_TEMPLATE,
++    DCGM_POWER_PROFILE,
++    DEFAULT_POWER_PROFILE,
++    POWER_PROFILES,
++    PowerMetricProfile,
++    get_power_profile,
++)
++from srtctl.core.power.samples import SampleRow, read_samples
++from srtctl.core.power.session import PowerEndpoint, PowerSessionSettings, PowerTelemetrySession
++from srtctl.core.power.topology import build_expected_devices
++from srtctl.core.power.validate_artifacts import validate_power_artifacts
++from srtctl.core.processes import ProcessRegistry
++from srtctl.core.schema import (
++    BenchmarkConfig,
++    ModelConfig,
++    ResourceConfig,
++    SrtConfig,
++    TelemetryConfig,
++    TelemetryExporterConfig,
++)
++from srtctl.core.topology import Process
++
++AMD = AMD_DEVICE_METRICS_POWER_PROFILE
++AMD_IMAGE = "docker://rocm/device-metrics-exporter:v1.5.2"
++
++
++def _amd_body(count=4, watts=500.0, *, utilization=False, serial="SN", partition="NA"):
++    """One rocm/device-metrics-exporter scrape: lowercase names, default label set, no gpu_uuid."""
++    lines = ["# HELP gpu_power_usage GPU Power usage in Watts", "# TYPE gpu_power_usage gauge"]
++    for index in range(count):
++        lines.append(
++            f'gpu_power_usage{{gpu_id="{index}",serial_number="{serial}{index}",card_model="MI355X",'
++            f'gpu_partition_id="{partition}",gpu_compute_partition_type="SPX",hostname="exporter-lies"}} '
++            f"{watts + index}"
++        )
++    if utilization:
++        lines.append("# TYPE gpu_gfx_activity gauge")
++        for index in range(count):
++            lines.append(f'gpu_gfx_activity{{gpu_id="{index}",serial_number="{serial}{index}"}} {10 * index}')
++    return "\n".join(lines) + "\n"
++
++
++def _dcgm_body(count=4, watts=400.0):
++    lines = ["# TYPE DCGM_FI_DEV_POWER_USAGE gauge"]
++    for index in range(count):
++        lines.append(
++            f'DCGM_FI_DEV_POWER_USAGE{{gpu="{index}",UUID="GPU-{index}",device="nvidia{index}"}} {watts + index}'
++        )
++    return "\n".join(lines) + "\n"
++
++
++def _worker(node="node-a", gpus=range(4), mode="agg", index=0):
++    return Process(
++        node=node,
++        gpu_indices=frozenset(gpus),
++        sys_port=8081,
++        http_port=30000,
++        endpoint_mode=mode,
++        endpoint_index=index,
++        node_rank=0,
++        het_group=None,
++    )
++
++
++class TestProfileTable:
++    def test_rows_are_keyed_by_their_own_name_and_dcgm_is_the_default(self):
++        assert {name: profile.name for name, profile in POWER_PROFILES.items()} == {
++            name: name for name in POWER_PROFILES
++        }
++        assert DEFAULT_POWER_PROFILE is DCGM_POWER_PROFILE
++        assert get_power_profile(None) is DCGM_POWER_PROFILE
++        assert get_power_profile("amd-device-metrics") is AMD
++
++    def test_unknown_name_lists_the_known_rows(self):
++        with pytest.raises(ValueError, match="unknown power_profile 'nvml'.*amd-device-metrics.*dcgm"):
++            get_power_profile("nvml")
++
++    def test_dcgm_row_pins_the_pre_profile_contract(self):
++        """The NVIDIA path must be unchanged: same metric, labels, riders and launch command."""
++        assert DCGM_POWER_PROFILE.power_metric == "DCGM_FI_DEV_POWER_USAGE"
++        assert DCGM_POWER_PROFILE.power_scope == "gpu_device_board_as_reported_by_dcgm"
++        assert (DCGM_POWER_PROFILE.gpu_index_label, DCGM_POWER_PROFILE.gpu_identity_label) == ("gpu", "UUID")
++        assert DCGM_POWER_PROFILE.utilization_metrics == UTILIZATION_METRICS
++        assert DCGM_POWER_PROFILE.instance_labels == ("GPU_I_ID", "GPU_I_PROFILE")
++        assert DCGM_POWER_PROFILE.default_command_template == "dcgm-exporter --collect-interval=100 --address :{port}"
++        assert telemetry_stage.DCGM_EXPORTER_COMMAND_TEMPLATE == DCGM_EXPORTER_COMMAND_TEMPLATE
++        assert (DCGM_POWER_PROFILE.tachometer_filter, DCGM_POWER_PROFILE.tachometer_gpu_metadata) == ("dcgm", True)
++
++    def test_amd_row_matches_the_device_metrics_exporter_exposition(self):
++        assert AMD.power_metric == "gpu_power_usage"
++        assert (AMD.gpu_index_label, AMD.gpu_identity_label) == ("gpu_id", "serial_number")
++        assert [(m.column, m.metric) for m in AMD.utilization_metrics] == [("gpu_util_pct", "gpu_gfx_activity")]
++        assert AMD.instance_labels == ()
++        assert AMD.default_command_template == "/home/amd/tools/entrypoint.sh"
++        assert (AMD.tachometer_filter, AMD.tachometer_gpu_metadata) == ("passthrough", False)
++
++    def test_every_row_fills_only_contract_columns_with_contract_semantics(self):
++        contract = {metric.column: metric for metric in UTILIZATION_METRICS}
++        row_fields = {field.name for field in dataclasses.fields(SampleRow)}
++        for profile in POWER_PROFILES.values():
++            for metric in profile.utilization_metrics:
++                assert metric.column in contract and metric.column in row_fields
++                assert (metric.unit, metric.max_value) == (
++                    contract[metric.column].unit,
++                    contract[metric.column].max_value,
++                )
++
++    @pytest.mark.parametrize(
++        ("utilization", "identity", "match"),
++        [
++            ((UtilizationMetric("gpu_temp", "x", "celsius", 200.0),), "UUID", "unknown artifact column"),
++            ((UtilizationMetric("gpu_util_pct", "x", "fraction", 1.0),), "UUID", "changes the contract"),
++            (UTILIZATION_METRICS + (UtilizationMetric("gpu_util_pct", "y", "percent", 100.0),), "UUID", "repeats"),
++            ((), "gpu", "distinct index and identity"),
++        ],
++    )
++    def test_a_row_cannot_bend_the_artifact_contract(self, utilization, identity, match):
++        with pytest.raises(ValueError, match=match):
++            PowerMetricProfile(
++                name="bad",
++                power_metric="watts",
++                power_scope="scope",
++                gpu_index_label="gpu",
++                gpu_identity_label=identity,
++                default_command_template="exporter",
++                utilization_metrics=utilization,
++            )
++
++
++class TestParsingByProfile:
++    def test_amd_scrape_yields_serial_identified_readings_with_gfx_activity(self):
++        scrape = parse_power_scrape(_amd_body(count=2, utilization=True), AMD)
++
++        assert scrape.reason_codes == ()
++        assert [(r.gpu_index, r.gpu_uuid, r.power_w, r.gpu_util_pct, r.sm_active) for r in scrape.readings] == [
++            (0, "SN0", 500.0, 0.0, None),
++            (1, "SN1", 501.0, 10.0, None),
++        ]
++
++    def test_amd_scrape_without_utilization_leaves_the_riders_empty(self):
++        scrape = parse_power_scrape(_amd_body(count=1), AMD)
++        assert scrape.readings[0].gpu_util_pct is None and scrape.readings[0].sm_active is None
++
++    @pytest.mark.parametrize(
++        ("body", "profile"),
++        [(_dcgm_body(), AMD), (_amd_body(), DCGM_POWER_PROFILE)],
++        ids=["dcgm-body-under-amd-row", "amd-body-under-dcgm-row"],
++    )
++    def test_a_body_from_another_exporter_is_a_missing_power_metric_not_a_reading(self, body, profile):
++        scrape = parse_power_scrape(body, profile)
++        assert scrape.readings == ()
++        assert scrape.reason_codes == (Reason.POWER_METRIC_MISSING,)
++
++    def test_default_profile_still_parses_dcgm(self):
++        scrape = parse_power_scrape(_dcgm_body(count=2))
++        assert [(r.gpu_index, r.gpu_uuid) for r in scrape.readings] == [(0, "GPU-0"), (1, "GPU-1")]
++
++    def test_missing_identity_label_is_reported_under_the_uuid_reason(self):
++        body = '# TYPE gpu_power_usage gauge\ngpu_power_usage{gpu_id="0",serial_number=""} 500\n'
++        scrape = parse_power_scrape(body, AMD)
++        assert scrape.readings == () and Reason.GPU_UUID_MISSING in scrape.reason_codes
++
++    def test_instance_labels_are_the_dcgm_rows_concern(self):
++        """A MIG label means nothing to a row that declares no instance labels."""
++        body = '# TYPE gpu_power_usage gauge\ngpu_power_usage{gpu_id="0",serial_number="SN0",GPU_I_ID="1"} 500\n'
++        assert parse_power_scrape(body, AMD).readings[0].gpu_uuid == "SN0"
++        dcgm = '# TYPE DCGM_FI_DEV_POWER_USAGE gauge\nDCGM_FI_DEV_POWER_USAGE{gpu="0",UUID="GPU-0",GPU_I_ID="1"} 500\n'
++        assert Reason.MIG_INSTANCE_UNSUPPORTED in parse_power_scrape(dcgm).reason_codes
++
++
++def _manifest(profile=None):
++    fields = {
++        "job_id": "12345",
++        "run_name": "recipe_12345",
++        "sample_interval_seconds": 1.0,
++        "request_timeout_seconds": 2.0,
++        "required": True,
++        "started_at_unix": 1785168000.0,
++        "dcgm_exporter": DcgmExporterIdentity(AMD_IMAGE, None, 5000, "/home/amd/tools/entrypoint.sh"),
++        "expected_devices": build_expected_devices([_worker(gpus=[0])]),
++        "expected_windows": [ExpectedWindow("sa-bench", 4)],
++    }
++    if profile is not None:
++        fields["profile"] = profile
++    return PowerManifest(**fields)
++
++
++class TestManifestProvenance:
++    def test_default_manifest_keeps_the_dcgm_wire_values_and_names_its_row(self):
++        payload = _manifest().to_dict()
++        assert payload["power_profile"] == "dcgm"
++        assert payload["source_metric"] == "DCGM_FI_DEV_POWER_USAGE"
++        assert payload["power_scope"] == "gpu_device_board_as_reported_by_dcgm"
++        assert [m["source_metric"] for m in payload["utilization_metrics"]] == [
++            "DCGM_FI_DEV_GPU_UTIL",
++            "DCGM_FI_PROF_SM_ACTIVE",
++        ]
++
++    def test_amd_manifest_describes_the_amd_measurement(self):
++        payload = _manifest(AMD).to_dict()
++        assert payload["producer"] == "srt-slurm.dcgm-power"  # the artifact producer, not the exporter
++        assert payload["power_profile"] == "amd-device-metrics"
++        assert payload["source_metric"] == "gpu_power_usage"
++        assert payload["power_scope"] == AMD.power_scope
++        assert payload["utilization_metrics"] == [
++            {"column": "gpu_util_pct", "source_metric": "gpu_gfx_activity", "unit": "percent"}
++        ]
++        assert payload["dcgm_exporter"]["container_image_resolved"] == AMD_IMAGE
++
++
++class _FakeResponse:
++    def __init__(self, body):
++        self.text = body
++
++    def raise_for_status(self):
++        return None
++
++
++class TestSessionWithAmdExporter:
++    def _session(self, tmp_path, body):
++        settings = PowerSessionSettings(
++            power_dir=tmp_path / "logs" / "power",
++            log_dir=tmp_path / "logs",
++            job_id="12345",
++            run_name="recipe_12345",
++            sample_interval_seconds=0.05,
++            startup_timeout_seconds=2.0,
++            request_timeout_seconds=0.5,
++            collector_join_timeout_seconds=5.0,
++            required=True,
++            exporter_port=5000,
++            exporter_image=AMD_IMAGE,
++            exporter_command="/home/amd/tools/entrypoint.sh",
++            profile=AMD,
++        )
++        session = PowerTelemetrySession(
++            settings=settings,
++            expected_devices=build_expected_devices([_worker(gpus=range(2))]),
++            expected_windows=[ExpectedWindow("sa-bench", 4)],
++            nodes=["node-a"],
++            endpoints=[PowerEndpoint("node-a", "http://node-a:5000/metrics")],
++        )
++        session.initialize()
++        with patch("srtctl.core.power.session.requests.get", return_value=_FakeResponse(body)):
++            session.collect_once()
++        return session
++
++    def test_samples_carry_the_serial_as_identity_and_the_manifest_names_the_row(self, tmp_path):
++        session = self._session(tmp_path, _amd_body(count=2, utilization=True))
++        session.stop_and_finalize()
++
++        rows, reasons = read_samples(session.samples_path)
++        assert reasons == ()
++        assert [(r.hostname, r.gpu_index, r.gpu_uuid, r.power_w, r.gpu_util_pct, r.sm_active) for r in rows] == [
++            ("node-a", 0, "SN0", 500.0, 0.0, None),
++            ("node-a", 1, "SN1", 501.0, 10.0, None),
++        ]
++        manifest = json.loads((session.power_dir / MANIFEST_FILENAME).read_text())
++        assert manifest["power_profile"] == "amd-device-metrics"
++        assert manifest["source_metric"] == "gpu_power_usage"
++        assert [d["gpu_uuids"] for d in manifest["observed_devices"]] == [["SN0"], ["SN1"]]
++        assert Reason.GPU_UUID_CHANGED not in manifest["reason_codes"]
++
++    def test_partitioned_gpus_sharing_a_serial_fail_device_identity(self, tmp_path):
++        """Compute partitions report the parent's serial, so identity is no longer 1:1 with the index."""
++        session = self._session(tmp_path, _amd_body(count=2, serial="SN", partition="0").replace("SN1", "SN0"))
++        outcome = session.stop_and_finalize()
++        assert Reason.GPU_UUID_CHANGED in outcome.reason_codes
++        assert outcome.publication_valid is False
++
++    def test_offline_validator_checks_the_wire_keys_against_the_named_row(self, tmp_path):
++        session = self._session(tmp_path, _amd_body(count=2))
++        session.stop_and_finalize()
++
++        report = validate_power_artifacts(power_dir=session.power_dir, result_root=tmp_path / "logs")
++        wire_failures = [
++            f for f in report.failures if f.split(" is ")[0] in ("source_metric", "power_scope", "power_profile")
++        ]
++        assert wire_failures == [], report.failures
++
++        manifest_path = session.power_dir / MANIFEST_FILENAME
++        manifest = json.loads(manifest_path.read_text())
++        manifest["power_profile"] = "nvml"
++        manifest_path.write_text(json.dumps(manifest))
++        report = validate_power_artifacts(power_dir=session.power_dir, result_root=tmp_path / "logs")
++        assert any(f.startswith("power_profile is 'nvml'") for f in report.failures)
++
++    def test_a_manifest_written_before_profiles_is_read_as_dcgm(self, tmp_path):
++        session = self._session(tmp_path, _amd_body(count=2))
++        session.stop_and_finalize()
++        manifest_path = session.power_dir / MANIFEST_FILENAME
++        manifest = json.loads(manifest_path.read_text())
++        del manifest["power_profile"]
++        manifest_path.write_text(json.dumps(manifest))
++
++        report = validate_power_artifacts(power_dir=session.power_dir, result_root=tmp_path / "logs")
++        assert any(
++            f.startswith("source_metric is 'gpu_power_usage', expected 'DCGM_FI_DEV_POWER_USAGE'")
++            for f in report.failures
++        )
++
++
++def _srt_config(exporter: TelemetryExporterConfig) -> SrtConfig:
++    return SrtConfig(
++        name="test",
++        model=ModelConfig(path="/model", container="/image", precision="fp8"),
++        resources=ResourceConfig(gpu_type="mi355x"),
++        benchmark=BenchmarkConfig(type="sa-bench", concurrencies=[4], client_placement="head"),
++        telemetry=TelemetryConfig(enabled=True, dcgm_exporter=exporter),
++    )
++
++
++class TestSchema:
++    def test_exporter_block_accepts_a_known_profile(self):
++        exporter = TelemetryExporterConfig.Schema().load(
++            {"container_image": AMD_IMAGE, "port": 5000, "power_profile": "amd-device-metrics"}
++        )
++        config = _srt_config(exporter)
++        assert config.telemetry.dcgm_exporter.power_profile == "amd-device-metrics"
++
++    def test_unset_profile_is_the_dcgm_row(self):
++        exporter = TelemetryExporterConfig.Schema().load({"container_image": "dcgm-exporter", "port": 9401})
++        assert exporter.power_profile is None
++        assert get_power_profile(exporter.power_profile) is DCGM_POWER_PROFILE
++
++    def test_unknown_profile_is_rejected_with_the_known_rows(self):
++        with pytest.raises(
++            ValidationError, match="power_profile='nvml' is unknown; known profiles: amd-device-metrics, dcgm"
++        ):
++            _srt_config(TelemetryExporterConfig(container_image="x", port=5000, power_profile="nvml"))
++
++
++AMD_CLUSTER_EXPORTER = {
++    "container_image": "amd-exporter",
++    "command": "/home/amd/tools/entrypoint.sh",
++    "port": 5000,
++    "power_profile": "amd-device-metrics",
++}
++
++
++def _recipe(telemetry):
++    return {
++        "name": "test",
++        "model": {"path": "/model", "container": "/image", "precision": "bf16"},
++        "resources": {"gpu_type": "mi355x", "agg_nodes": 1},
++        "benchmark": {"type": "sa-bench", "concurrencies": [4]},
++        "telemetry": telemetry,
++    }
++
++
++class TestClusterDefaultFlowsIntoPowerTelemetry:
++    def test_enabling_telemetry_alone_inherits_the_cluster_exporter_with_its_profile(self):
++        resolved = resolve_config_with_defaults(
++            _recipe({"enabled": True}),
++            {"default_gpu_exporter": AMD_CLUSTER_EXPORTER, "containers": {"amd-exporter": AMD_IMAGE}},
++        )
++        config = SrtConfig.Schema().load(resolved)
++        exporter = config.telemetry.dcgm_exporter
++        assert (exporter.container_image, exporter.port, exporter.command, exporter.power_profile) == (
++            AMD_IMAGE,  # the alias resolved, exactly like a recipe exporter
++            5000,
++            "/home/amd/tools/entrypoint.sh",
++            "amd-device-metrics",
++        )
++        # The tachometer copy is the same row, untouched by the power copy.
++        assert config.observability.tachometer.default_gpu_exporter.power_profile == "amd-device-metrics"
++
++    def test_a_recipe_exporter_wins(self):
++        recipe_exporter = {"container_image": "dcgm-exporter", "port": 9401}
++        resolved = resolve_config_with_defaults(
++            _recipe({"enabled": True, "dcgm_exporter": recipe_exporter}),
++            {"default_gpu_exporter": AMD_CLUSTER_EXPORTER},
++        )
++        assert resolved["telemetry"]["dcgm_exporter"] == recipe_exporter
++
++    @pytest.mark.parametrize(
++        "telemetry",
++        [
++            {"enabled": True, "cpu_power_exporter": {"port": 9405}},
++            {"enabled": True, "cpu_power": {"enabled": True}},
++            {"enabled": False},
++        ],
++        ids=["cpu-exporter-leg", "cpu-host-leg", "disabled"],
++    )
++    def test_cpu_only_and_disabled_telemetry_are_untouched(self, telemetry):
++        resolved = resolve_config_with_defaults(_recipe(telemetry), {"default_gpu_exporter": AMD_CLUSTER_EXPORTER})
++        assert "dcgm_exporter" not in resolved["telemetry"]
++
++    def test_a_cluster_without_a_gpu_exporter_leaves_the_original_validation_error(self):
++        resolved = resolve_config_with_defaults(_recipe({"enabled": True}), {"default_gpu_exporter": None})
++        with pytest.raises(ValidationError, match="nothing to collect"):
++            SrtConfig.Schema().load(resolved)
++
++
++def _harness(tmp_path, exporter, processes):
++    class Harness(TelemetryStageMixin):
++        def __init__(self):
++            self.config = SrtConfig(
++                name="test",
++                model=ModelConfig(path="/model", container="/image", precision="fp8"),
++                resources=ResourceConfig(gpu_type="mi355x"),
++                benchmark=BenchmarkConfig(type="sa-bench", concurrencies=[4], client_placement="head"),
++                telemetry=TelemetryConfig(
++                    enabled=True,
++                    dcgm_exporter=exporter,
++                    startup_timeout_seconds=0.2,
++                    request_timeout_seconds=0.1,
++                    collector_join_timeout_seconds=3.0,
++                ),
++            )
++            self.runtime = MagicMock()
++            self.runtime.log_dir = Path(tmp_path)
++            self.runtime.job_id = "12345"
++            self.runtime.run_name = "recipe_12345"
++            self.runtime.network_interface = "eth0"
++            self.runtime.nodes.head = "node-a"
++            self.runtime.nodes.het = False
++            self.runtime.nodes.compute = ()
++            self.runtime.srun_options = {}
++            self.runtime.container_mounts = {Path(tmp_path): Path("/logs")}
++
++        @property
++        def backend_processes(self):
++            return processes
++
++    return Harness()
++
++
++class TestTelemetryStage:
++    def test_default_command_comes_from_the_row(self):
++        amd = TelemetryExporterConfig(container_image=AMD_IMAGE, port=5000, power_profile="amd-device-metrics")
++        dcgm = TelemetryExporterConfig(container_image="dcgm-exporter", port=9401)
++        assert resolve_exporter_command(amd, AMD.default_command_template) == "/home/amd/tools/entrypoint.sh"
++        assert resolve_exporter_command(dcgm, get_power_profile(dcgm.power_profile).default_command_template) == (
++            "dcgm-exporter --collect-interval=100 --address :9401"
++        )
++
++    @patch("srtctl.cli.mixins.telemetry_stage.start_srun_process")
++    def test_amd_exporter_launches_with_the_row_command_and_the_session_parses_its_metric(self, mock_srun, tmp_path):
++        popen = MagicMock()
++        popen.poll.return_value = None
++        mock_srun.return_value = popen
++        exporter = TelemetryExporterConfig(container_image=AMD_IMAGE, port=5000, power_profile="amd-device-metrics")
++        harness = _harness(tmp_path, exporter, [_worker(gpus=range(2))])
++
++        with patch("srtctl.core.power.session.requests.get", return_value=_FakeResponse(_amd_body(count=2))):
++            session = harness.start_power_telemetry(ProcessRegistry(job_id="12345"))
++            assert session is not None
++            ready = harness._power_telemetry_ready
++            session.stop_and_finalize()
++
++        kwargs = mock_srun.call_args.kwargs
++        assert kwargs["command"] == ["/home/amd/tools/entrypoint.sh"]
++        assert kwargs["container_image"] == AMD_IMAGE
++        assert ready is True, "readiness needs every expected GPU parsed from the AMD metric"
++        manifest = json.loads((tmp_path / "power" / MANIFEST_FILENAME).read_text())
++        assert manifest["power_profile"] == "amd-device-metrics"
++        assert manifest["dcgm_exporter"]["command"] == "/home/amd/tools/entrypoint.sh"
++        rows, _ = read_samples(tmp_path / "power" / "samples.csv")
++        assert {row.gpu_uuid for row in rows} == {"SN0", "SN1"}
++
++    def test_tachometer_target_filter_follows_the_row(self, tmp_path):
++        processes = [_worker(gpus=range(2))]
++        amd = _harness(
++            tmp_path,
++            TelemetryExporterConfig(container_image=AMD_IMAGE, port=5000, power_profile="amd-device-metrics"),
++            processes,
++        )
++        dcgm = _harness(tmp_path, TelemetryExporterConfig(container_image="dcgm-exporter", port=9401), processes)
++
++        (amd_target,) = amd._power_exporter_targets()
++        (dcgm_target,) = dcgm._power_exporter_targets()
++        assert (amd_target.endpoint_name, amd_target.url, amd_target.filter, amd_target.gpu_metadata) == (
++            "amd-device-metrics_node-a",
++            "http://node-a:5000/metrics",
++            "passthrough",
++            False,
++        )
++        assert (dcgm_target.endpoint_name, dcgm_target.filter, dcgm_target.gpu_metadata) == (
++            "dcgm_node-a",
++            "dcgm",
++            True,
++        )
++
++
++def test_dry_run_names_the_profile(capsys):
++    from srtctl.cli.submit import show_config_details
++
++    config = _srt_config(
++        TelemetryExporterConfig(container_image=AMD_IMAGE, port=5000, power_profile="amd-device-metrics")
++    )
++    show_config_details(config)
++    out = capsys.readouterr().out
++    assert "power_profile" in out and "amd-device-metrics" in out
++    config = _srt_config(TelemetryExporterConfig(container_image="dcgm-exporter", port=9401))
++    show_config_details(config)
++    assert "power_profile" in capsys.readouterr().out
+diff --git a/tests/test_service_metrics.py b/tests/test_service_metrics.py
+index bd553dee..3073a705 100644
+--- a/tests/test_service_metrics.py
++++ b/tests/test_service_metrics.py
+@@ -223,7 +223,7 @@ def test_power_telemetry_owning_dcgm_replaces_the_implied_exporter(tmp_path: Pat
+     with patch.object(
+         SweepOrchestrator, "backend_processes", [Process("node1", frozenset({0}), 8081, 30000, "agg", 0, 0)]
+     ):
+-        power = orchestrator._power_dcgm_targets()
++        power = orchestrator._power_exporter_targets()
+     assert [(t.endpoint_name, t.url, t.gpu_metadata) for t in power] == [
+         ("dcgm_node1", "http://node1:9400/metrics", True)
+     ]
