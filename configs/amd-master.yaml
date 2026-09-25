@@ -1312,9 +1312,9 @@ glm5.2-fp4-mi355x-atom-agentic-mtp:
     # Only the DCP4 arm offloads; the other two are GPU-resident.
     - dram-utilization: 0.171
       search-space:
-       - { tp: 4, kv-offloading: none, conc-list: [2, 4, 8, 10], spec-decoding: mtp }
+       - { tp: 4, kv-offloading: none, conc-list: [2, 4, 8, 10], spec-decoding: mtp, srt-recipe: benchmarks/single_node/srt-slurm-recipes/glm5.2/atom/mi355x-fp4-mtp/agentic.yaml }
        - { tp: 4, dcp-size: 4, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.4.5" }, conc-list: [16, 24, 32, 40, 48], spec-decoding: mtp }
-       - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4], spec-decoding: mtp }
+       - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4], spec-decoding: mtp, srt-recipe: benchmarks/single_node/srt-slurm-recipes/glm5.2/atom/mi355x-fp4-mtp/agentic.yaml }
 
 dsv4-fp4-mi355x-sglang-agentic-mtp:
   image: lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260914

@@ -1,0 +1,59 @@
+# GLM-5.2 MXFP4 AgentX on MI355X with ATOM MTP, TP-only with GPU-resident KV.
+# The DCP4 LMCache band stays on the legacy script: srtctl reserves ATOM's
+# kv-transfer-config for disaggregated workers.
+base:
+  schema: 2
+  name: glm5.2-fp4-mi355x-atom-agentic
+  model:
+    path: hf:amd/GLM-5.2-MXFP4
+    container: rocm/atom-dev:nightly_202609211553
+    precision: fp4
+  resources:
+    gpu_type: mi355x
+    gpus_per_node: 8
+  frontend:
+    type: atomesh
+    container_image: rocm/atom-dev@sha256:f00a9dc588a380038fdad54cd57a956043cb316ddda54ebb1b62a24f8caa343b
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: atom
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      args:
+        served-model-name: amd/GLM-5.2-MXFP4
+        gpu-memory-utilization: 0.95
+        enable_prefix_caching: true
+        # model.layers.78 is the MTP head, shipped in BF16; excluding it keeps
+        # online ptpc_fp8 quantization off the draft while experts stay MXFP4.
+        online_quant_config: '{"global_quant_config":"ptpc_fp8","exclude_layer":["lm_head","model.embed_tokens","*.mlp.gate","model.layers.[0-9].mlp.*expert*","model.layers.[1-6][0-9].mlp.*expert*","model.layers.7[0-7].mlp.*expert*","model.layers.78.*"]}'
+        max-num-batched-tokens: 16384
+        kv_cache_dtype: fp8
+        index_cache_dtype: fp4
+        block-size: 64
+        method: mtp
+      env:
+        PYTHONNOUSERSITE: '1'
+        AITER_QUICK_REDUCE_QUANTIZATION: INT4
+        AITER_USE_FLYDSL_MOE_SORTING: '1'
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
+    env:
+      MODEL: amd/GLM-5.2-MXFP4
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'atom:'
+      AIPERF_APPLY_CHAT_TEMPLATE: 'true'
+
+# One variant per point. Admission is 2x CONC with graphs captured up to it. The
+# draft is five tokens through concurrency 8 and four above it.
+override_tp4_c2: {roles: {agg: {gpus: 4, args: {max-num-seqs: 4, cudagraph-capture-sizes: '[1,2,4]', num-speculative-tokens: 5}}}, benchmark: {env: {CONC: '2'}}}
+override_tp4_c4: {roles: {agg: {gpus: 4, args: {max-num-seqs: 8, cudagraph-capture-sizes: '[1,2,4,8]', num-speculative-tokens: 5}}}, benchmark: {env: {CONC: '4'}}}
+override_tp4_c8: {roles: {agg: {gpus: 4, args: {max-num-seqs: 16, cudagraph-capture-sizes: '[1,2,4,8,12,16]', num-speculative-tokens: 5}}}, benchmark: {env: {CONC: '8'}}}
+override_tp4_c10: {roles: {agg: {gpus: 4, args: {max-num-seqs: 20, cudagraph-capture-sizes: '[1,2,4,8,12,16,20]', num-speculative-tokens: 4}}}, benchmark: {env: {CONC: '10'}}}
+override_tp8_c1: {roles: {agg: {gpus: 8, args: {max-num-seqs: 2, cudagraph-capture-sizes: '[1,2]', num-speculative-tokens: 5}}}, benchmark: {env: {CONC: '1'}}}
+override_tp8_c2: {roles: {agg: {gpus: 8, args: {max-num-seqs: 4, cudagraph-capture-sizes: '[1,2,4]', num-speculative-tokens: 5}}}, benchmark: {env: {CONC: '2'}}}
+override_tp8_c4: {roles: {agg: {gpus: 8, args: {max-num-seqs: 8, cudagraph-capture-sizes: '[1,2,4,8]', num-speculative-tokens: 5}}}, benchmark: {env: {CONC: '4'}}}
