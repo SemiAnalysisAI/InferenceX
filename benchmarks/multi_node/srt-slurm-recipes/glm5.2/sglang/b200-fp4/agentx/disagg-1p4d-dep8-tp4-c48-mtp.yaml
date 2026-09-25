@@ -169,6 +169,9 @@ telemetry:
   dcgm_exporter:
     container_image: dcgm-exporter
     port: 9401
+    command: >-
+      dcgm-exporter --collect-interval=100 --address :{port}
+      --collectors /infmax-workspace/benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/b200-fp4/agentx/power-counters.csv
 benchmark:
   type: custom
   command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh

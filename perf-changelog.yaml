@@ -8932,3 +8932,12 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3400
   scenario-type:
   - agentic-coding
+
+- config-keys:
+    - glm5.2-fp4-b200-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Select GPU power and utilization counters for GLM-5.2 B200 disaggregated PowerX collection to avoid optional profiling-watch repair stalls; preserve sampling and acceptance thresholds."
+    - "GLM-5.2 B200 分离式 PowerX 仅采集 GPU 功耗和利用率，避免可选 profiling watch 修复阻塞；保留采样及验收阈值。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3400

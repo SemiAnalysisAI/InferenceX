@@ -157,6 +157,8 @@ B200 Nscale 的 GLM-5.1 可用 `MODEL_PATH` 指定已有共享权重，覆盖默
 
 GLM-5.2 FP4 MTP AgentX 恢复路径在调用方覆盖生效后解析选定的原生配方，包括变体选择。性能点要求共享的 AgentX 测量窗口与结果契约、`telemetry.required: true` 及 `dcgm-exporter` 容器别名。基准并发和必需功耗设置一起传递；eval-only 保留真实验证，不采集性能功耗。
 
+B200 分离式配方从挂载的仓库中选择 `power-counters.csv`，采集 GPU 板卡功耗和 GPU 利用率，不启用可能因 watch 修复而阻塞 exporter endpoint 的可选 profiling 计数器。exporter 与 collector 的采样间隔及三秒最大采样缺口保持不变，仍须通过实际运行的功耗验证。
+
 显式启用的安装器应用 `runners/srt-slurm/glm52-local-version-compute-setup.patch`，在本地磁盘计算 Hatch 的实际版本，并传给登录节点和计算节点安装过程。安装失败会停止提交。该补丁位于自动应用的补丁目录之外，其他模型和 launcher 路径保留现有安装与功耗行为。
 
 ## 注册 srt-slurm 配方
