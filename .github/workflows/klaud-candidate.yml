@@ -83,7 +83,7 @@ jobs:
               }
             }
           claude_args: >-
-            --model 'claude-opus-5-5'
+            --model 'claude-fable-5-1'
             --max-turns 500
             --json-schema '${{ steps.context.outputs.outcome-schema }}'
             --add-dir '${{ runner.temp }}/klaud'
