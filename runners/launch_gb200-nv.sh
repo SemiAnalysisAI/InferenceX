@@ -75,7 +75,7 @@ import_squash() {
             echo "Squash file already exists and is valid, skipping import: $squash"
         else
             local enroot_runtime
-            enroot_runtime=$(mktemp -d "${TMPDIR:-/tmp}/enroot-import.XXXXXX") || exit 1
+            enroot_runtime=$(mktemp -d /tmp/enroot-import.XXXXXX) || exit 1
             trap 'rm -rf -- "$enroot_runtime"' EXIT
             export ENROOT_RUNTIME_PATH="$enroot_runtime"
 
@@ -131,7 +131,10 @@ if [[ "$MODEL_PREFIX" == "dsv41flash" && ( "$FRAMEWORK" == "vllm" || "$FRAMEWORK
 fi
 
 if [[ "$FRAMEWORK" == "llmd-vllm" ]]; then
-    if [[ "$MODEL_PREFIX" == "dsv4" && "$PRECISION" == "fp4" ]]; then
+    if [[ "$MODEL_PREFIX" == "dsv4" && "$PRECISION" == "fp4" && "$MODEL" == *-0813 ]]; then
+        export MODEL_PATH="/mnt/lustre01/users-public/sa-shared/models/DeepSeek-V4-Pro-0813"
+        export MODEL_NAME="$MODEL"
+    elif [[ "$MODEL_PREFIX" == "dsv4" && "$PRECISION" == "fp4" ]]; then
         export MODEL_PATH="/mnt/numa1/models/DeepSeek-V4-Pro"
         export MODEL_NAME="deepseek-ai/DeepSeek-V4-Pro"
     else
@@ -148,14 +151,18 @@ if [[ "$FRAMEWORK" == "llmd-vllm" ]]; then
     export BENCHMARK_LOGS_DIR="$GITHUB_WORKSPACE/benchmark_logs"
     mkdir -p "$BENCHMARK_LOGS_DIR"
 
-    SCRIPT_NAME="${EXP_NAME%%_*}_${PRECISION}_gb200_llmd-vllm-disagg.sh"
+    if [[ "$DISAGG" == "true" ]]; then
+        SCRIPT_NAME="${EXP_NAME%%_*}_${PRECISION}_gb200_llmd-vllm-disagg.sh"
+    else
+        SCRIPT_NAME="${EXP_NAME%%_*}_${PRECISION}_gb200_llmd-vllm-agg.sh"
+    fi
     BENCH_SCRIPT="benchmarks/multi_node/${SCRIPT_NAME}"
     if [[ ! -f "$BENCH_SCRIPT" ]]; then
         echo "Error: llm-d wrapper not found: $BENCH_SCRIPT" >&2
         exit 1
     fi
 
-    JOB_ID=$(bash "$BENCH_SCRIPT")
+    JOB_ID=$(bash "$BENCH_SCRIPT") || exit 1
     if [[ -z "$JOB_ID" ]]; then
         echo "Error: failed to submit llm-d job" >&2
         exit 1
@@ -170,6 +177,11 @@ if [[ "$FRAMEWORK" == "llmd-vllm" ]]; then
     while IFS= read -r -d '' result_file; do
         copy_to_workspace "$result_file" "$GITHUB_WORKSPACE/$(basename "$result_file")" || exit 1
     done < <(find "$BENCHMARK_LOGS_DIR" -name "${RESULT_FILENAME}*.json" -print0 2>/dev/null)
+
+    if [[ "$IS_AGENTIC" == "1" && "$EVAL_ONLY" != "true" ]]; then
+        mkdir -p "$GITHUB_WORKSPACE/LOGS/agentic"
+        cp -R "$BENCHMARK_LOGS_DIR/agentic/." "$GITHUB_WORKSPACE/LOGS/agentic/" || exit 1
+    fi
 
     if [[ "${RUN_EVAL}" == "true" ]]; then
         EVAL_DIR=$(find "$BENCHMARK_LOGS_DIR" -type d -name eval_results -print -quit 2>/dev/null)

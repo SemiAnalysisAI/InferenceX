@@ -8567,6 +8567,102 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3321
 
 - config-keys:
+    - dsv4-fp4-gb200-llmd-vllm-agentx
+    - dsv4-fp4-gb200-llmd-vllm-agentx-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add DeepSeek-V4-Pro-0813 FP4/FP8-KV on GB200: 8-GPU TP8/DEP8 aggregation, 16-GPU NIXL DEP8 1P/1D, and llm-d 0.10.0 prefix/token-load routing. GPU-memory budgets: TP8 0.85, DEP8 0.88. P/D KV leases last 1800s to cover long-context decode stalls."
+    - "Use fixed-K DSpark golden AL: K=5/AL=3.61 for aggregated/decode; K=1/AL=1.84 for P/D prefill. Adaptive verification is disabled."
+    - "Mooncake variants use DRAM offload at 0.60 utilization, one job-local master, and IB HCAs mlx5_0,1,3,4; no SSD offload. Plain TP8/DEP8 has no offload. Scrape vLLM nodes directly without duplicate frontend counters."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2719
+
+- config-keys:
+    - dsv4-fp4-gb200-llmd-vllm-agentx
+    - dsv4-fp4-gb200-llmd-vllm-agentx-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Switch DEP8 llm-d wide-EP from hybrid LB to multi-port external LB: register one EPP endpoint per DP rank, open multi-port pd-sidecar on decode, probe DP supervisor /health on 8100, use Nixl-only decode KV, and scrape per-rank vLLM metrics in AgentX."
+    - "将 DEP8 llm-d 宽 EP 从 hybrid LB 切换为多端口外部 LB：按 DP rank 注册 EPP 端点，decode 侧启用多端口 pd-sidecar，在 8100 探测 DP supervisor /health，decode 仅保留 Nixl KV，并在 AgentX 中按 rank 抓取 vLLM 指标。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2719
+
+- config-keys:
+    - dsv4-fp4-gb200-llmd-vllm-agentx
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Re-remove archived dsv4-fp4-gb200-llmd-vllm 8k1k master key reintroduced by the upstream merge and restore the thin GB200 llmd-vllm disagg wrapper for AgentX P/D launches."
+    - "重新移除 upstream 合并误带回的已归档 dsv4-fp4-gb200-llmd-vllm 8k1k 主配置项，并恢复供 AgentX P/D 启动使用的 GB200 llmd-vllm disagg 精简 wrapper。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2719
+
+- config-keys:
+    - dsv4-fp4-gb200-llmd-vllm-agentx
+    - dsv4-fp4-gb200-llmd-vllm-agentx-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Raise llm-d vLLM logging to DEBUG on GB200 DSpark AgentX recipes to capture worker-death diagnostics during external-LB DEP8 bring-up."
+    - "将 GB200 DSpark AgentX llm-d 配方的 vLLM 日志级别提升至 DEBUG，以便在外部 LB DEP8 启动阶段捕获 worker 异常退出诊断信息。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2719
+
+- config-keys:
+    - dsv4-fp4-gb200-llmd-vllm-agentx
+    - dsv4-fp4-gb200-llmd-vllm-agentx-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Lower GB200 DSpark AgentX Mooncake embedded segment budget from 60% to 45% node DRAM utilization and restore default vLLM INFO logging after unhelpful DEBUG bring-up."
+    - "将 GB200 DSpark AgentX Mooncake 嵌入式段预算从节点 DRAM 利用率的 60% 降至 45%，并在 DEBUG 启动诊断无效后恢复默认 vLLM INFO 日志级别。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2719
+
+- config-keys:
+    - dsv4-fp4-gb200-llmd-vllm-agentx
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add 2P1D DEP8/DEP8 (conc 192/256, 6 nodes) and 3P1D DEP8/DEP16 (conc 256/320, 10 nodes) AgentX sweep arms with agentX long EPP routing; per-engine vLLM flags unchanged from 1P1D."
+    - "新增 2P1D DEP8/DEP8（并发 192/256，6 节点）与 3P1D DEP8/DEP16（并发 256/320，10 节点）AgentX 扫描臂，采用 agentX long EPP 路由；单引擎 vLLM 参数与 1P1D 保持一致。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2719
+
+- config-keys:
+    - dsv4-fp4-gb200-llmd-vllm-agentx
+    - dsv4-fp4-gb200-llmd-vllm-agentx-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Route DeepGEMM MegaMoE symmetric-memory traffic over the GB200 NVLink fabric by disabling NVSHMEM remote/IBGDA transport, enabling CUDA fabric/VMM handles, pinning NCCL P2P to NVL, and enabling UCX CUDA IPC over MNNVL."
+    - "通过禁用 NVSHMEM 远程/IBGDA 传输、启用 CUDA fabric/VMM 句柄、将 NCCL P2P 固定为 NVL，并在 MNNVL 上启用 UCX CUDA IPC，使 DeepGEMM MegaMoE 对称内存流量经由 GB200 NVLink fabric。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2719
+
+- config-keys:
+    - dsv4-fp4-gb200-llmd-vllm-agentx
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Use the validated 1P1D EPP plugin and scoring profile unchanged for the 2P1D and 3P1D multi-prefill sweep arms."
+    - "2P1D 和 3P1D 多预填充扫描臂不作修改地复用已验证的 1P1D EPP 插件与评分配置。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2719
+
+- config-keys:
+    - dsv4-fp4-gb200-llmd-vllm-agentx
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Reuse the 1P1D DSpark recipe directly for the 2P1D and 3P1D sweep arms and remove the now-identical multi-prefill recipe file; topology remains caller-supplied."
+    - "2P1D 和 3P1D 扫描臂直接复用 1P1D DSpark 配方，并删除现已完全相同的多预填充配方文件；拓扑仍由调用方提供。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2719
+
+- config-keys:
+    - dsv4-fp4-gb200-llmd-vllm-agentx
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Switch DSpark decode to K=3 with adaptive verification (no golden AL, matching agentX local runs); 1P1D sweeps to c256, 2P1D uses DEP16 decode at c256/c384, and drop 3P1D."
+    - "将 DSpark 解码切换为 K=3，启用自适应验证（不使用 golden AL，与 agentX 本地运行一致）；1P1D 扫描至 c256，2P1D 在 c256/c384 使用 DEP16 解码，并移除 3P1D。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2719
+
+- config-keys:
   - qwen3.5-fp8-b300-dynamo-sglang-agentic-disagg
   scenario-type:
   - agentic-coding
@@ -8887,3 +8983,21 @@
     - "Add DeepSeek-V4-Pro-0813 golden AL for draft lengths 4, 5, 7 and 8 (3.36 / 3.61 / 3.73 / 3.47)."
     - "Agentic PD router: pin --decode-policy round_robin so decode no longer inherits the prefill --policy (consistent_hashing)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3256
+
+- config-keys:
+    - dsv4-fp4-gb200-llmd-vllm-agentx
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Extend the decode-coordinator PREFILL_WAIT_DEADLINE from 300s to 600s so multi-prefill 2P1D bring-up has a 10-minute explicit /health poll after decode/Envoy are ready (prefill still warms in parallel from job start; failed runs 26257/26308 timed out with connection refused on :8100 while KV caches were still registering)."
+    - "将 decode 协调器的 PREFILL_WAIT_DEADLINE 从 300 秒延长至 600 秒，使多预填充 2P1D 在 decode/Envoy 就绪后有 10 分钟的显式 /health 轮询（prefill 自作业启动起并行预热；失败作业 26257/26308 在 KV 缓存仍在注册时因 :8100 连接被拒绝而超时）。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2719
+
+- config-keys:
+    - dsv4-fp4-gb200-llmd-vllm-agentx-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Enable DSpark adaptive verification on aggregated DEP8 recipes (with and without Mooncake); disagg DEP8 already had it enabled."
+    - "在聚合 DEP8 配方（含 Mooncake 与无 Mooncake）上启用 DSpark 自适应验证；分离式 DEP8 此前已启用。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2719
