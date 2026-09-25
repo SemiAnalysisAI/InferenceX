@@ -29,5 +29,8 @@ fi
 
 eval_rc=0
 run_eval "${eval_args[@]}" --port "$PORT" || eval_rc=$?
-append_lm_eval_summary || eval_rc=1
+# AgentX eval-only run_eval already staged and removed its results.
+if [[ "$IS_AGENTIC" != 1 ]]; then
+    append_lm_eval_summary || eval_rc=1
+fi
 exit "$eval_rc"
