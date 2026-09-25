@@ -115,16 +115,19 @@ health_check:
   max_attempts: 360
   interval_seconds: 10
 
-# The first container step on an H100 node spends ~8 minutes setting up the job
-# image, and etcd/NATS are that first step; the 300s default times out.
+# etcd and NATS are static binaries from /configs; run them in the small nginx
+# image instead of a ~40 GB copy of the job image each on the head node. The
+# first container step on an H100 node can still take minutes to set up.
 services:
   - name: etcd
     type: etcd
+    container: nginx-sqsh
     readiness:
       port: 2379
       timeout_seconds: 1200
   - name: nats
     type: nats
+    container: nginx-sqsh
     readiness:
       port: 4222
       timeout_seconds: 1200
