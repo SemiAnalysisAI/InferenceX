@@ -600,12 +600,14 @@ index 8ac09dbf..a8445543 100644
                  logical_endpoints = self._logical_worker_endpoints()
              # Sidecars use native worker commands, so publish_metrics does not
 diff --git a/src/srtctl/cli/mixins/worker_stage.py b/src/srtctl/cli/mixins/worker_stage.py
-index 0a441438..de98804d 100644
+index 0a441438..44a80251 100644
 --- a/src/srtctl/cli/mixins/worker_stage.py
 +++ b/src/srtctl/cli/mixins/worker_stage.py
-@@ -9,10 +9,12 @@ Handles starting backend worker processes (prefill/decode/agg).
+@@ -8,11 +8,14 @@ Handles starting backend worker processes (prefill/decode/agg).
+ """
  
  import logging
++import os
  import shlex
 +import subprocess
  from collections import defaultdict
@@ -616,7 +618,7 @@ index 0a441438..de98804d 100644
  from srtctl.backends.vllm import VLLMFailoverConfig, VLLMProtocol
  from srtctl.core.fingerprint import generate_capture_script
  from srtctl.core.health import wait_for_health
-@@ -23,6 +25,7 @@ from srtctl.core.slurm import CONTAINER_REMAP_ROOT_EXPORT, get_hostname_ip, star
+@@ -23,6 +26,7 @@ from srtctl.core.slurm import CONTAINER_REMAP_ROOT_EXPORT, get_hostname_ip, star
  from srtctl.services.implicit import discovery_env
  
  if TYPE_CHECKING:
@@ -624,7 +626,7 @@ index 0a441438..de98804d 100644
      from srtctl.core.runtime import RuntimeContext
      from srtctl.core.schema import SrtConfig
      from srtctl.core.topology import Endpoint, Process
-@@ -206,6 +209,58 @@ class WorkerStageMixin:
+@@ -206,6 +210,62 @@ class WorkerStageMixin:
              environment.setdefault("SGLANG_PYSPY_DUMP_BEFORE_CRASH", "0")
          return environment
  
@@ -639,6 +641,10 @@ index 0a441438..de98804d 100644
 +        """Convert TileRT weights once, as a Slurm step on the decode node, before workers start."""
 +        if not isinstance(self.backend, TileRTProtocol):
 +            return
++        # The TileRT image sets no NVIDIA_VISIBLE_DEVICES, and enroot's NVIDIA hook needs it in the
++        # srun environment at container creation to mount the driver. Every later step inherits it.
++        os.environ.setdefault("NVIDIA_VISIBLE_DEVICES", "all")
++        os.environ.setdefault("NVIDIA_DRIVER_CAPABILITIES", "compute,utility")
 +        preparation = self.backend.get_preparation(self.runtime, self.backend_processes)
 +        process = next(
 +            item
@@ -683,7 +689,7 @@ index 0a441438..de98804d 100644
      def _profiling_selects_process(self, process: "Process") -> bool:
          """Whether this physical process should be wrapped for profiling.
  
-@@ -381,7 +436,7 @@ class WorkerStageMixin:
+@@ -381,7 +441,7 @@ class WorkerStageMixin:
              command=cmd,
              nodelist=[process.node],
              output=str(worker_log),
