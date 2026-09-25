@@ -1075,7 +1075,7 @@ minimaxm3-fp8-mi325x-vllm-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.20
       search-space:
-      - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 8, 10, 12, 14, 16, 18] }
+      - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 8, 10, 12, 14, 16, 18], srt-recipe: benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/mi325x-fp8-mtp/agentic.yaml }
 
 # DeepSeek-V4.1-Flash AgentX on MI325X (gfx942), a copy of the validated MI355X vLLM
 # arm (run 34710937012) on the same ROCm nightly. gfx942 is not in the upstream
