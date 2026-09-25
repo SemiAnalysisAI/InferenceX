@@ -1145,6 +1145,22 @@ dsv4-fp4-b300-sglang-agentic-hicache-mtp:
   # Both paths share DSpark K=6 (1 step, 7 draft tokens) and
   # max-running-requests 2*CONC.
 
+dsv4-fp4-b300-sglang-agentic-hicache-eagle:
+  image: lmsysorg/sglang:dev-cu13-nightly-09242@sha256:c47bbe7448050608b4e08669c742df4835a45a95bf6b19f2c4e51a7f6609e9d5
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: cluster:b300-dsxe
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.95
+      search-space:
+      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32] }
+      - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32] }
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: mtp, conc-list: [64, 128, 256, 384, 512], router: { name: sglang-router, version: "0.3.2" } }
+
 qwen3.5-fp8-b200-sglang:
   image: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
   model: Qwen/Qwen3.5-397B-A17B-FP8
