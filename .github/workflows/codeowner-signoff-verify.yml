@@ -112,7 +112,7 @@ jobs:
             {"fastMode": true}
 
           claude_args: |
-            --model 'claude-opus-5-5'
+            --model 'claude-fable-5-1'
             --mcp-config .github/mcp-ci.json '{"mcpServers": {"fetch": {"command": "npx", "args": ["-y", "@anthropic-ai/mcp-server-fetch@latest"]}}}'
             --allowedTools "Read,Write,Glob,Grep,WebFetch,mcp__github__*,mcp__github_ci__*,mcp__fetch__*,mcp__inferencemax-repos__*,Bash"
           prompt: |
