@@ -88,8 +88,8 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
     if environment["FRAMEWORK"] not in {"sglang", "trt", "atom", "vllm"}:
         raise ValueError(f"Unsupported single-node framework: {environment['FRAMEWORK']!r}")
     spec = spec_parameters(role, engine)
-    if spec and spec["method"] not in {"eagle", "nextn", "mtp", "dspark"}:
-        raise ValueError("Single-node SRT supports only native MTP, DSpark or no speculation")
+    if spec and spec["method"] not in {"eagle", "eagle3", "nextn", "mtp", "dspark"}:
+        raise ValueError("Single-node SRT supports only native MTP, EAGLE3, DSpark or no speculation")
     speculation = "mtp" if spec else "none"
     agentic = environment["IS_AGENTIC"] == "1"
     expected = {
