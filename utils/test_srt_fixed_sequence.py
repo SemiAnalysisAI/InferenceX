@@ -143,6 +143,30 @@ def test_invalid_runtime_inputs_fail_before_the_client(
     assert not Path(env["CAPTURE"]).exists()
 
 
+def test_native_client_writes_measured_power_window(client_environment, tmp_path):
+    windows = tmp_path / "power" / "windows"
+    windows.mkdir(parents=True)
+    env = {**client_environment, "SRT_MEASUREMENT_WINDOW_DIR": str(windows)}
+    (tmp_path / "bin" / "python3").write_text(
+        f"#!{sys.executable}\n"
+        "import json, os, pathlib, sys\n"
+        "if sys.argv[2] == 'infx.results.power.window':\n"
+        f"    os.execv({sys.executable!r}, [{sys.executable!r}, *sys.argv[1:]])\n"
+        "result = pathlib.Path(os.environ['RESULT_DIR']) / 'test-result.json'\n"
+        "result.write_text(json.dumps({'benchmark_start_time_unix': 100.0, "
+        "'benchmark_end_time_unix': 102.5, 'duration': 2.5}))\n"
+    )
+    result = subprocess.run(["bash", str(CLIENT)], env=env, capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout + result.stderr
+    window = json.loads((windows / "test-result.json").read_text())
+    assert window == {
+        "result_path": "test-result.json", "concurrency": 3,
+        "benchmark_start_time_unix": 100.0, "benchmark_end_time_unix": 102.5,
+        "duration": 2.5, "schema_version": 1, "benchmark_type": "custom",
+        "clock_source": "head_node_unix_clock", "status": "completed", "reason": None,
+    }
+
+
 def test_legacy_client_keeps_its_local_endpoint(client_environment):
     env = client_environment
     result = subprocess.run(
