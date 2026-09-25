@@ -8944,3 +8944,10 @@
   description:
     - "Update the vLLM ROCm image from v0.29.0 to v0.30.0; benchmark configuration unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3361
+
+- config-keys:
+    - qwen3.5-fp4-b300-sglang
+    - qwen3.5-fp4-b300-sglang-mtp
+  description:
+    - "Update SGLang image to nightly-dev-cu13-20260925-8ca82118 (latest nightly; base from v0.5.14-cu130, mtp from v0.5.19-cu130); rename cuda-graph-max-bs to cuda-graph-max-bs-decode; drop mamba-scheduler-strategy (removed in this nightly)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3441
