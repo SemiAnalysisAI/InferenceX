@@ -480,6 +480,15 @@ fi
 PREFILL_SERVER_CONFIG=$(build_server_config "prefill" "$MODEL_NAME" "$PREFILL_TP_SIZE" "$PREFILL_ENABLE_EP" "$PREFILL_ENABLE_DP" "$DECODE_MTP_SIZE")
 DECODE_SERVER_CONFIG=$(build_server_config "decode" "$MODEL_NAME" "$DECODE_TP_SIZE" "$DECODE_ENABLE_EP" "$DECODE_ENABLE_DP" "$DECODE_MTP_SIZE")
 
+# Optimistic prefill (sgl-project/sglang#38978), prefill only. Whitelisted to
+# umbp-linker: sglang silently resets it to 0 for most HiCache shapes.
+if [[ "$KV_OFFLOADING" != "none" && "${KV_OFFLOAD_BACKEND:-}" == umbp-linker* ]]; then
+    PREFILL_SERVER_CONFIG="$PREFILL_SERVER_CONFIG --optimistic-prefill-attempts 2"
+    echo "[OPT-PREFILL] prefill --optimistic-prefill-attempts 2 (decode does not read this)"
+else
+    echo "[OPT-PREFILL] not enabled: only wired for umbp-linker (KV_OFFLOAD_BACKEND='${KV_OFFLOAD_BACKEND:-none}')"
+fi
+
 if [[ "${ENABLE_METRICS}" == "1" ]]; then
     [[ "$PREFILL_SERVER_CONFIG" != *"--enable-metrics"* ]] && PREFILL_SERVER_CONFIG="$PREFILL_SERVER_CONFIG --enable-metrics"
     [[ "$DECODE_SERVER_CONFIG" != *"--enable-metrics"* ]] && DECODE_SERVER_CONFIG="$DECODE_SERVER_CONFIG --enable-metrics"
@@ -588,18 +597,9 @@ elif [[ "$KV_OFFLOADING" != "none" && "$KV_OFFLOAD_BACKEND" == umbp-linker* ]]; 
     # (that branch sets HICACHE_PAGE_SIZE and has to restate it).
     # =========================================================================
 
-    # DP-ONLY ON PURPOSE, same refusal the single-node recipe carries. Under
-    # pure TP the linker's object keys carry a per-rank suffix and MLA KV is
-    # replicated across TP, so a TP8 prefill worker yields EIGHT keyspaces and
-    # the tier holds eight copies of the same tokens -- its effective
-    # distinct-token capacity is an eighth of what the byte budget suggests.
-    # Under DP attention the keys collapse to tp0 and the tier is one shared
-    # keyspace. Refuse rather than silently measure a derated tier: a result
-    # file from the derated arm is indistinguishable from a real one.
-    if [[ "$PREFILL_ENABLE_DP" != "true" ]]; then
-        echo "Error: KV_OFFLOAD_BACKEND '$KV_OFFLOAD_BACKEND' is supported only with prefill dp-attn: true. Under pure TP the linker keyspace is per rank, so the tier holds TP copies of the same tokens and the arm measures a different system than the DP one." >&2
-        exit 1
-    fi
+    # Pure-TP prefill is allowed, but its keys are per rank, so a TP-N worker
+    # stores N copies and gets 1/N of the tier's capacity. DP-attn keys share
+    # one keyspace. Don't compare the two at the same UMBP_DRAM_BYTES.
 
     # Multi-node prefill workers are not supported here. The tier is a
     # per-node process and each node would hold its own keyspace, so a prefill
@@ -636,13 +636,19 @@ elif [[ "$KV_OFFLOADING" != "none" && "$KV_OFFLOAD_BACKEND" == umbp-linker* ]]; 
     # (FORCE_HICACHE_RATIO=1 makes it size by ratio instead). The guard that
     # matters is the box's own memory: the 806 GB checkpoint's page cache, the
     # sglang ranks and the co-located AIPerf client all live in what is left,
-    # so refuse a tier above half of MemTotal.
+    # so the tier is refused above UMBP_DRAM_CEILING_GB (default MemTotal/2).
     UMBP_DRAM_BYTES="${UMBP_DRAM_BYTES:-1500000000000}"
     UMBP_DRAM_GB=$((UMBP_DRAM_BYTES / 1000000000))
     UMBP_HOST_MEMTOTAL_GB=$(awk '/^MemTotal:/ {printf "%d", $2 / 1000000}' /proc/meminfo)
-    echo "[UMBP] tier sizing: ${UMBP_DRAM_GB} GB requested, host MemTotal ${UMBP_HOST_MEMTOTAL_GB} GB, ceiling $((UMBP_HOST_MEMTOTAL_GB / 2)) GB (TOTAL_CPU_DRAM_GB=${TOTAL_CPU_DRAM_GB:-unset} is the HiCache budget and does not bound this arm)"
-    if [[ "$UMBP_DRAM_GB" -gt "$((UMBP_HOST_MEMTOTAL_GB / 2))" ]]; then
-        echo "Error: UMBP tier ${UMBP_DRAM_GB} GB exceeds half of the host's ${UMBP_HOST_MEMTOTAL_GB} GB MemTotal; the checkpoint's page cache and the server's working set need the rest. Lower UMBP_DRAM_BYTES." >&2
+    # The ceiling can be raised, but never to MemTotal or above.
+    UMBP_DRAM_CEILING_GB="${UMBP_DRAM_CEILING_GB:-$((UMBP_HOST_MEMTOTAL_GB / 2))}"
+    if [[ "$UMBP_DRAM_CEILING_GB" -ge "$UMBP_HOST_MEMTOTAL_GB" ]]; then
+        echo "Error: UMBP_DRAM_CEILING_GB=${UMBP_DRAM_CEILING_GB} is at or above the host's ${UMBP_HOST_MEMTOTAL_GB} GB MemTotal; nothing would be left for the model or the page cache." >&2
+        exit 1
+    fi
+    echo "[UMBP] tier sizing: ${UMBP_DRAM_GB} GB requested, host MemTotal ${UMBP_HOST_MEMTOTAL_GB} GB, ceiling ${UMBP_DRAM_CEILING_GB} GB (default would be $((UMBP_HOST_MEMTOTAL_GB / 2)) GB) (TOTAL_CPU_DRAM_GB=${TOTAL_CPU_DRAM_GB:-unset} is the HiCache budget and does not bound this arm)"
+    if [[ "$UMBP_DRAM_GB" -gt "$UMBP_DRAM_CEILING_GB" ]]; then
+        echo "Error: UMBP tier ${UMBP_DRAM_GB} GB exceeds the ${UMBP_DRAM_CEILING_GB} GB ceiling on this ${UMBP_HOST_MEMTOTAL_GB} GB host; the checkpoint's page cache and the server's working set need the rest. Lower UMBP_DRAM_BYTES or raise UMBP_DRAM_CEILING_GB." >&2
         exit 1
     fi
     # These nodes run with HugePages_Total=0 and the allocator silently demotes
@@ -719,6 +725,27 @@ elif [[ "$KV_OFFLOADING" != "none" && "$KV_OFFLOAD_BACKEND" == umbp-linker* ]]; 
         [[ "$UMBP_SA_READY" == "true" ]] || { echo "Error: UMBP standalone server never bound $UMBP_SA_SOCK within ${UMBP_SA_WAIT_SECONDS} s" >&2; cat "$UMBP_SA_LOG" >&2 || true; exit 1; }
         echo "[UMBP] bound $UMBP_SA_SOCK after $((SECONDS - UMBP_SA_T0)) s"
 
+        # 1b. If hugepages were requested, fail on UMBP's MAP_HUGETLB fallback
+        # warning: it silently continues on 4 KiB pages while still reporting
+        # hugepages=true. The allocator runs before the socket is bound, so the
+        # warning is already in the log here.
+        if [[ "$UMBP_DRAM_USE_HUGEPAGES" == "1" ]]; then
+            if grep -q "MAP_HUGETLB allocation failed" "$UMBP_SA_LOG" 2>/dev/null; then
+                echo "Error: UMBP_DRAM_USE_HUGEPAGES=1 but the tier fell back to 4 KiB anonymous pages; this run would be labelled 'hugepages' while measuring small pages." >&2
+                grep -m1 "MAP_HUGETLB allocation failed" "$UMBP_SA_LOG" >&2 || true
+                echo "Hint: the host reservation did not cover this tier. Check HugePages_Total on this node against UMBP_DRAM_BYTES / Hugepagesize, and that the container can reach the hugetlb pool." >&2
+                exit 1
+            fi
+            if grep -q "invalid hugepage_size" "$UMBP_SA_LOG" 2>/dev/null; then
+                echo "Error: UMBP rejected the requested hugepage size and fell back to small pages." >&2
+                grep -m1 "invalid hugepage_size" "$UMBP_SA_LOG" >&2 || true
+                exit 1
+            fi
+            # Log the host pool counters for reference only; Free/Rsvd depend
+            # on fault-in timing, so they can't be asserted on.
+            echo "[UMBP] hugepages verified: no MAP_HUGETLB fallback in $(basename "$UMBP_SA_LOG"); host pool now $(awk '/^HugePages_(Total|Free|Rsvd):/ {printf "%s%s ", $1, $2}' /proc/meminfo)"
+        fi
+
         # 2. But the socket is bound before the server can serve: the DRAM tier
         # still has to register its host memory. sglang launched into that
         # window dies at linker construction with
@@ -793,7 +820,11 @@ elif [[ "$KV_OFFLOADING" != "none" && "$KV_OFFLOAD_BACKEND" == umbp-linker* ]]; 
     # config is empty. It is still passed because the linker reads the flag.
     # Single-quoted so it survives the later `eval` of the launch command as
     # one argument, matching build_storage_flags() above.
-    PREFILL_SERVER_CONFIG="$PREFILL_SERVER_CONFIG ${UMBP_LINKER_FLAGS} ${UMBP_POOL_FLAGS} --hicache-storage-backend-extra-config '{}' --enable-cache-report"
+    # standalone_startup_timeout_ms bounds each rank's client READY probe (not
+    # server startup). The probe can stall for ~30 s, right at the 30 s client
+    # default, so it is raised to 120 s. Keep the JSON free of spaces so it
+    # survives the later eval as one argument.
+    PREFILL_SERVER_CONFIG="$PREFILL_SERVER_CONFIG ${UMBP_LINKER_FLAGS} ${UMBP_POOL_FLAGS} --hicache-storage-backend-extra-config '{\"standalone_startup_timeout_ms\":120000}' --enable-cache-report"
 
     echo "[UMBP] direct linker on prefill: tier=${UMBP_DRAM_GB} GB, address=${UMBP_STANDALONE_ADDRESS:-<decode node, none>}, prefill tp=${PREFILL_TP_SIZE} dp-attn=${PREFILL_ENABLE_DP}, device pool=${UMBP_MAX_TOTAL_TOKENS:-profiled}, no host cache tier"
     echo "[UMBP] flags: ${UMBP_LINKER_FLAGS} ${UMBP_POOL_FLAGS}"
@@ -986,7 +1017,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
     if [[ "${IS_AGENTIC}" == "1" || "${IS_AGENTIC:-}" == "true" ]]; then
         check_env_vars ROUTER_RESILIENCE_FLAGS
         ROUTER_PREFILL_POLICY="${PREFILL_ROUTER_POLICY}"
-        ROUTER_POLICY_FLAGS="${ROUTER_POLICY_FLAGS:---policy ${ROUTER_PREFILL_POLICY} --dp-aware --cache-threshold ${ROUTER_CACHE_THRESHOLD} --balance-abs-threshold ${ROUTER_BALANCE_ABS_THRESHOLD} --balance-rel-threshold ${ROUTER_BALANCE_REL_THRESHOLD}}"
+        ROUTER_POLICY_FLAGS="${ROUTER_POLICY_FLAGS:---policy ${ROUTER_PREFILL_POLICY} --dp-aware --decode-policy round_robin --cache-threshold ${ROUTER_CACHE_THRESHOLD} --balance-abs-threshold ${ROUTER_BALANCE_ABS_THRESHOLD} --balance-rel-threshold ${ROUTER_BALANCE_REL_THRESHOLD}}"
     else
         check_env_vars ROUTER_DEFAULT_POLICY_FLAGS
         ROUTER_POLICY_FLAGS="${ROUTER_POLICY_FLAGS:-$ROUTER_DEFAULT_POLICY_FLAGS}"
@@ -1104,14 +1135,8 @@ if [ "$NODE_RANK" -eq 0 ]; then
             $MODEL_DIR $MODEL_NAME $BENCH_MAX_CONCURRENCY /run_logs/slurm_job-${SLURM_JOB_ID}"
         echo "Benchmark runner: trace_replay.sh (agentic, KV_OFFLOADING=${KV_OFFLOADING}, backend=${KV_OFFLOAD_BACKEND:-none}, CONC=${BENCH_MAX_CONCURRENCY})"
     else
-        # bench.sh signature:
-        # n_prefill n_decode prefill_gpus decode_gpus model_dir model_name log_path
-        # isl osl concurrency_list req_rate random_range_ratio num_prompts_multiplier
-        BENCH_CMD="bash $SGLANG_WS_PATH/bench.sh ${xP} ${yD} $((PREFILL_TP_SIZE*xP)) $((DECODE_TP_SIZE*yD)) \
-            $MODEL_DIR $MODEL_NAME /run_logs/slurm_job-${SLURM_JOB_ID} ${BENCH_INPUT_LEN} \
-            ${BENCH_OUTPUT_LEN} \"${BENCH_MAX_CONCURRENCY}\" ${BENCH_REQUEST_RATE} \
-            ${BENCH_RANDOM_RANGE_RATIO} ${BENCH_NUM_PROMPTS_MULTIPLIER}"
-        echo "Benchmark runner: bench.sh (fixed-seq-len)"
+        echo "ERROR: fixed-sequence runs use srt-slurm recipes, not amd_utils" >&2
+        exit 1
     fi
 
     IS_AGENTIC_RUN=0
@@ -1412,6 +1437,11 @@ else
                 DeepSeek-V4-Pro-0813:1) DSV4_GOLDEN_AL=1.84 ;;
                 DeepSeek-V4-Pro-0813:2) DSV4_GOLDEN_AL=2.51 ;;
                 DeepSeek-V4-Pro-0813:3) DSV4_GOLDEN_AL=3.01 ;;
+                DeepSeek-V4-Pro-0813:4) DSV4_GOLDEN_AL=3.36 ;;
+                DeepSeek-V4-Pro-0813:5) DSV4_GOLDEN_AL=3.61 ;;
+                DeepSeek-V4-Pro-0813:6) DSV4_GOLDEN_AL=3.77 ;;
+                DeepSeek-V4-Pro-0813:7) DSV4_GOLDEN_AL=3.73 ;;
+                DeepSeek-V4-Pro-0813:8) DSV4_GOLDEN_AL=3.47 ;;
                 DeepSeek-V4-Pro-0813:*)
                     echo "ERROR: Pro-0813 draft length ${DECODE_MTP_SIZE} has no golden AL wired here; refusing to use the original V4 curve." >&2
                     exit 1

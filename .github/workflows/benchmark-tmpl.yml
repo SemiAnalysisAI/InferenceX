@@ -110,6 +110,7 @@ env:
   HF_HUB_CACHE: '/mnt/hf_hub_cache/'
   EXP_NAME: ${{ fromJSON(inputs.config).exp-name }}
   RECIPE_FINGERPRINT: ${{ fromJSON(inputs.config).recipe-fingerprint || '' }}
+  SRT_RECIPE: ${{ fromJSON(inputs.config).srt-recipe || '' }}
   MODEL: ${{ fromJSON(inputs.config).model }}
   THINKING_MODE: thinking_on
   MODEL_PREFIX: ${{ fromJSON(inputs.config).model-prefix }}
@@ -284,7 +285,7 @@ jobs:
       - name: Prepare result-processing Python
         if: ${{ !inputs.eval-only }}
         run: |
-          uv python install --no-bin 3.12
+          uv python install --quiet --no-bin 3.12
           result_python=$(uv python find --system 3.12)
           "$result_python" --version
           echo "INFERENCEX_RESULTS_PYTHON=$result_python" >> "$GITHUB_ENV"
@@ -399,6 +400,10 @@ jobs:
             server.log
             results/*.log
             results/*_config.json
+            srt-single-node-logs.tar.gz
+            srt-single-node-submission.json
+            srt-slurm-sha.txt
+            srt-setup.log
           if-no-files-found: ignore
 
       - name: Upload GPU metrics

@@ -21,7 +21,10 @@ health_check:
 resources:
   gpu_type: gb300
   gpus_per_node: 4
-engine: trtllm
+engine:
+  type: trtllm
+  # Dynamo builds before ai-dynamo/dynamo#12162 reject --publish-metrics.
+  publish_metrics: false
 roles:
   prefill:
     nodes: 1
@@ -127,10 +130,9 @@ frontend:
     DYN_TOKENIZER: "fastokens"
 
 benchmark:
-  type: sa-bench
-  isl: 8192
-  osl: 1024
-  concurrencies:
-    - 12
-  req_rate: inf
-  num_prompts_mult: 16
+  type: custom
+  command: bash /infmax-workspace/benchmarks/multi_node/srt_fixed_sequence.sh
+  env:
+    TOKENIZER: /model
+    ISL: '8192'
+    OSL: '1024'

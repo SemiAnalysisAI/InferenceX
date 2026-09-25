@@ -35,6 +35,15 @@ git submodule update --init
 
 To upgrade, fetch and check out the desired commit inside the relevant submodule, then commit the updated submodule pointer in InferenceX. Benchmark workflows already initialize submodules. Slurm launchers make a local Git clone for each job so recipe staging and runtime writes do not modify the submodule, and record the actual commit for result provenance. NVIDIA setup clones locally; TileRT setup fetches its pinned fork commit over the network.
 
+Single-node fixed-sequence recipes use NVIDIA upstream srt-slurm. ATOM recipes use
+the native `atomesh` frontend with one aggregate worker and
+`enable_multiple_frontends: false`. The router's pinned official image belongs in
+`frontend.container_image`: older benchmark worker images do not include AToMesh.
+Keep `model.container` aligned with the master config's worker `image`; changing the
+router image does not require changing the worker image. TRT-LLM recipes use native
+`engine.served_model_name`, without duplicating that flag in `roles.agg.extra_args`.
+The former fork's direct ATOM frontend is not required.
+
 ### Cluster profiles
 
 Launchers that use srt-slurm keep their cluster configuration in
@@ -55,6 +64,32 @@ parsed YAML scalars so quotes and punctuation remain data, not YAML or shell syn
 
 Keep model selection, cache preparation, and workload-dependent time limits in the
 launcher. Do not add profiles for non-srt-slurm launchers or change their routing here.
+
+Put per-allocation host checks and setup in
+`runners/srt-slurm/hooks/<cluster>/setup.sh`, with cluster-specific helpers beside it.
+The directory name matches the cluster profile's filename stem. Invoke the script
+explicitly through `default_host_setup.commands` in that profile; scripts are not
+auto-discovered. srt-slurm runs them on the selected allocated nodes, outside containers,
+before starting services and workers. A failed check stops startup by default.
+Pass configuration explicitly from the profile. If setup needs an undo step, keep it
+in `teardown.sh` beside `setup.sh` and register it in `default_host_setup.teardown`.
+These are job-owned hooks, not administrator-installed Slurm Prolog/Epilog scripts.
+Only add hooks for clusters that need them; do not add empty scripts for every profile.
+
+Put reusable host-check functions in `runners/srt-slurm/hooks/common.sh`; keep
+cluster-only helpers beside `setup.sh`. The common file only defines functions:
+sourcing it must not run checks, change environment variables, or initialize
+benchmarks. Both setup hooks and benchmark scripts can reuse these functions
+without importing benchmark initialization into host setup.
+
+Hooks inject **cluster-specific host prerequisites only**, such as fabric checks or
+required host-state preparation. Keep them small, workload-independent, and safe to
+run repeatedly. Prefer native srt-slurm settings over shell code where possible.
+Benchmark execution, model selection, engine flags, concurrency tuning, evaluation,
+result collection, and job orchestration do not belong here. Do not patch engines or
+containers, bypass failed checks, or hide runtime bugs with retries and ad hoc
+workarounds; fix the owning component instead. Limit host changes to allocated nodes
+and preserve resources used by other jobs.
 
 ## Procedure index
 
