@@ -76,9 +76,9 @@ elif [[ "$EXECUTION_PATH" == multinode ]]; then
     export PATH="$UV_INSTALL_DIR:$PATH"
     source $UV_INSTALL_DIR/env
 
-    uv venv
+    uv venv --quiet
     source .venv/bin/activate
-    uv pip install -e .
+    uv pip install --quiet -e .
 
     if ! command -v srtctl &> /dev/null; then
         echo "Error: Failed to install srtctl"
@@ -104,8 +104,7 @@ elif [[ "$EXECUTION_PATH" == multinode ]]; then
     echo "Generated srtslurm.yaml:"
     cat srtslurm.yaml
 
-    echo "Running make setup..."
-    make setup ARCH=x86_64
+    run_srt_setup ARCH=x86_64
 
     # Read by srt-slurm's post-benchmark eval.
     export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"

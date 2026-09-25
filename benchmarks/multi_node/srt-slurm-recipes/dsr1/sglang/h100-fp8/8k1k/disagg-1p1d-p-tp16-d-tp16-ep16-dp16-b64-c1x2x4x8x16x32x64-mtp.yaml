@@ -117,8 +117,40 @@ roles:
       speculative-num-draft-tokens: 3
 
 benchmark:
-  type: "sa-bench"
-  isl: 8192
-  osl: 1024
-  concurrencies: "1x2x4x8x16x32x64"
-  req_rate: "inf"
+  type: custom
+  command: bash /infmax-workspace/benchmarks/multi_node/srt_fixed_sequence.sh
+  env:
+    TOKENIZER: /model
+    ISL: '8192'
+    OSL: '1024'
+
+# Container setup plus loading the weights over NFS outlasts the 30-minute default.
+health_check:
+  max_attempts: 360
+  interval_seconds: 10
+
+# etcd and NATS are static binaries from /configs; run them in the small nginx
+# image instead of a ~40 GB copy of the job image each on the head node. The
+# first container step on an H100 node can still take minutes to set up.
+services:
+  - name: etcd
+    type: etcd
+    container: nginx-sqsh
+    readiness:
+      port: 2379
+      timeout_seconds: 1200
+  - name: nats
+    type: nats
+    container: nginx-sqsh
+    readiness:
+      port: 4222
+      timeout_seconds: 1200
+
+# SGLang fails when one TP rank finishes loading 480 s before another. Weights
+# come over NFS and a node reused from an earlier run loads from page cache, so
+# read them into every worker's cache first to even out the load.
+host_setup:
+  nodes: workers
+  timeout_seconds: 3600
+  commands:
+    - find /mnt/nfs/lustre/models/dsr1-fp8 -name '*.safetensors' -print0 | xargs -0 -P 16 -n 1 cat > /dev/null

@@ -402,12 +402,12 @@ source $HOME/.local/bin/env
 # SRT_REPO_DIR; a uv-managed python under a head-node-only path leaves
 # .venv/bin/python3 a broken symlink there, so pin /usr/bin/python3.
 if uses_watchtower_shared_fs && [[ -x /usr/bin/python3 ]]; then
-    uv venv --seed --python /usr/bin/python3
+    uv venv --quiet --seed --python /usr/bin/python3
 else
-    uv venv --seed
+    uv venv --quiet --seed
 fi
 source .venv/bin/activate
-uv pip install -e .
+uv pip install --quiet -e .
 
 if ! command -v srtctl &> /dev/null; then
     echo "Error: Failed to install srtctl"
@@ -450,8 +450,7 @@ write_srt_cluster_config gb200-nv srtslurm.yaml "$USES_DCGM_POWER" \
 echo "Generated srtslurm.yaml:"
 cat srtslurm.yaml
 
-echo "Running make setup..."
-make setup ARCH=aarch64 || exit 1
+run_srt_setup ARCH=aarch64 || exit 1
 
 # Read by srt-slurm's post-benchmark eval. Watchtower runners keep
 # GITHUB_WORKSPACE on Lustre, so compute nodes mount it directly; staging
@@ -496,7 +495,7 @@ if command -v squeue >/dev/null 2>&1; then
 fi
 sed -i "s/^name:.*/name: \"${SRT_SLURM_JOB_NAME}\"/" "$CONFIG_PATH"
 
-if [[ "$USES_AGENTX_POWER" == "1" ]]; then
+if [[ "$USES_DCGM_POWER" == "1" ]]; then
     read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
     python3 "$GITHUB_WORKSPACE/runners/inject_srt_power_concurrencies.py" \
         "$CONFIG_PATH" "${POWER_CONCURRENCIES[@]}" || exit 1
