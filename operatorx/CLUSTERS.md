@@ -95,7 +95,7 @@ No SLURM is available. Run `python -m operatorx` directly on the TPU VM. Access 
 
 | Cluster id | Topology | Chips | ws range | Use for                                             |
 |------------|----------|-------|----------|-----------------------------------------------------|
-| `v6e_1x`   | 1×1      | 1     | 1        | Single-chip tests (gemm, moe_gemm). No collectives. |
+| `v6e_1x`   | 1×1      | 1     | 1        | Single-chip tests (gemm, moe). No collectives. |
 | `v6e_4x`   | 2×2      | 4     | 1–4      | Collectives + MoE-EP up to ws=4.                    |
 | `v6e_pod`  | pod      | pod   | auto     | Multi-host v6e pod slice. Device count is auto-detected. |
 
