@@ -3,7 +3,7 @@ base:
   name: qwen3.5-fp8-mi325x-sglang-mtp-8k1k
   model:
     path: hf:Qwen/Qwen3.5-397B-A17B-FP8
-    container: lmsysorg/sglang:v0.5.12-rocm720-mi30x
+    container: lmsysorg/sglang:v0.5.20-rocm720-mi30x
     precision: fp8
   resources:
     gpu_type: mi325x
@@ -28,7 +28,7 @@ base:
         trust-remote-code: true
         tokenizer-worker-num: 6
         enable-aiter-allreduce-fusion: true
-        cuda-graph-max-bs: 4
+        cuda-graph-max-bs-decode: 4
         disable-radix-cache: true
         max-prefill-tokens: 32768
         scheduler-recv-interval: 30
@@ -54,7 +54,7 @@ zip_override_concurrency:
   roles:
     agg:
       args:
-        cuda-graph-max-bs: [4, 8, 16, 32, 64]
+        cuda-graph-max-bs-decode: [4, 8, 16, 32, 64]
   benchmark:
     env:
       CONC: ['4', '8', '16', '32', '64']
