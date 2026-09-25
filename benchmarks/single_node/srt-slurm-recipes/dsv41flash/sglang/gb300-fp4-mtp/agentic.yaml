@@ -47,6 +47,11 @@ base:
         SGLANG_DEFAULT_THINKING: '1'
         SGLANG_DSV41_REASONING_EFFORT: high
         SGLANG_DSPARK_OPT_MARKOV_W2_BF16: 'True'
+  # Cold weight loads from the shared HF cache plus graph capture outlast
+  # srt-slurm's 1800 s default, as they did the legacy one-hour deadline.
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 5
   benchmark:
     type: custom
     command: bash /infmax-workspace/benchmarks/srt_agentic.sh
