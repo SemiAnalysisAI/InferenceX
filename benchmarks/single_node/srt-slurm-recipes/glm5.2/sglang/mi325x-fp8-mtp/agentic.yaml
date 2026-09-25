@@ -1,0 +1,80 @@
+# GLM-5.2 FP8 AgentX on MI325X with SGLang native EAGLE MTP. The KV cache is
+# GPU-resident.
+base:
+  schema: 2
+  name: glm5.2-fp8-mi325x-sglang-agentic
+  model:
+    path: hf:zai-org/GLM-5.2-FP8
+    container: lmsysorg/sglang:v0.5.19-rocm720-mi30x
+    precision: fp8
+  resources:
+    gpu_type: mi325x
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  # Loading plus first-request kernel tuning outlasts the 1800 s default:
+  # MI300X Qwen3.5 was ready after ~27 minutes (run 36160403972).
+  health_check:
+    interval_seconds: 10
+    max_attempts: 360
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        served-model-name: zai-org/GLM-5.2-FP8
+        trust-remote-code: true
+        tensor-parallel-size: 8
+        expert-parallel-size: 1
+        dsa-prefill-backend: tilelang
+        dsa-decode-backend: tilelang
+        dsa-topk-backend: torch
+        kv-cache-dtype: bfloat16
+        tool-call-parser: glm47
+        reasoning-parser: glm45
+        context-length: 1048576
+        max-total-tokens: 1048576
+        chunked-prefill-size: 131072
+        mem-fraction-static: 0.85
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 3
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 4
+        watchdog-timeout: 1800
+        enable-metrics: true
+        enable-cache-report: true
+      env:
+        PYTHONNOUSERSITE: '1'
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        # The MI30X image's DSA top-k v2 JIT includes CUDA-only headers when
+        # compiled for gfx942. Use the portable Torch path, no fused top-k.
+        SGLANG_DSA_FUSE_TOPK: 'false'
+        SGLANG_OPT_USE_TOPK_V2: 'false'
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
+    env:
+      MODEL: zai-org/GLM-5.2-FP8
+      # GLM-5.2 natively supports 1M context, so replay the complete corpus.
+      WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+      # Long responses admitted near the end of the measurement window can take
+      # minutes to finish; bound their drain without extending admission.
+      AIPERF_BENCHMARK_GRACE_PERIOD: '1800'
+
+# One variant per point. Admission and the decode graph batch are 2x CONC.
+override_tp8_c1: {roles: {agg: {args: {max-running-requests: 2, cuda-graph-max-bs: 2}}}, benchmark: {env: {CONC: '1'}}}
+override_tp8_c2: {roles: {agg: {args: {max-running-requests: 4, cuda-graph-max-bs: 4}}}, benchmark: {env: {CONC: '2'}}}
+override_tp8_c3: {roles: {agg: {args: {max-running-requests: 6, cuda-graph-max-bs: 6}}}, benchmark: {env: {CONC: '3'}}}
+override_tp8_c4: {roles: {agg: {args: {max-running-requests: 8, cuda-graph-max-bs: 8}}}, benchmark: {env: {CONC: '4'}}}
+override_tp8_c5: {roles: {agg: {args: {max-running-requests: 10, cuda-graph-max-bs: 10}}}, benchmark: {env: {CONC: '5'}}}
+override_tp8_c6: {roles: {agg: {args: {max-running-requests: 12, cuda-graph-max-bs: 12}}}, benchmark: {env: {CONC: '6'}}}
+override_tp8_c8: {roles: {agg: {args: {max-running-requests: 16, cuda-graph-max-bs: 16}}}, benchmark: {env: {CONC: '8'}}}
