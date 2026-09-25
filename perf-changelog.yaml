@@ -8894,7 +8894,7 @@
     - agentic-coding
   description:
     - "Re-sweep the MI355X DeepSeek-V4.1-Flash vLLM AgentX arm on the next ROCm 10.0 nightly, replacing nightly-rocm100-7f1a5398. Only the image changes: the TP=4 and TP=2 rows keep concurrency 1, 2, 4, 8, 16, 32, 64 and 128, and every recipe setting is unchanged, including Engram placement per TP and concurrency, the prefill chunk and sequence cap ladder, graph capture, and five-token DSpark with golden acceptance 3.51 for throughput and real block verification for evals."
-    - "The previous pin was qualified by the sweep on PR #3404 and is one day old. This entry records the follow-on refresh; the exact tag, its publication time and digest, and the upstream changes the new range carries are filled in when the nightly publishes."
+    - "The pin is mainly for vllm-project/vllm#58510, which computes the MXFP8 GEMM on native 32x32 block scales for gfx950. This arm serves a checkpoint whose non-routed weights are MXFP8 on exactly that architecture, so the target image is the first nightly whose commit contains that merge rather than simply the next one published. The exact tag, its publication time and digest are filled in once that build exists."
     - "在下一个 ROCm 10.0 nightly 上重新扫描 MI355X DeepSeek-V4.1-Flash vLLM AgentX 臂，替换 nightly-rocm100-7f1a5398。本次仅更换镜像：TP=4 与 TP=2 两行保持并发 1、2、4、8、16、32、64 与 128，其余 recipe 设置全部不变，包括按 TP 与并发决定的 Engram 放置、prefill 分块与序列上限阶梯、图捕获，以及吞吐用黄金接受长度 3.51、评测用真实分块验证的五 token DSpark。"
-    - "上一个镜像由 PR #3404 的 sweep 完成资格验证，至今一天。本条目记录后续的镜像刷新；具体标签、发布时间与摘要，以及新区间所包含的上游改动，将在 nightly 发布后补充。"
+    - "此次固定主要是为了 vllm-project/vllm#58510：它在 gfx950 上使用原生 32x32 block scale 计算 MXFP8 GEMM。本臂所服务的 checkpoint 其非 routed 权重正是该架构上的 MXFP8，因此目标镜像是第一个其提交包含该合并的 nightly，而非简单地取下一个发布的 nightly。具体标签、发布时间与摘要将在该构建出现后补充。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3420
