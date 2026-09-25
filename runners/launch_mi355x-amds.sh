@@ -15,6 +15,17 @@ if [[ "$EXECUTION_PATH" == native-single-node ]]; then
     check_env_vars GITHUB_WORKSPACE MODEL IMAGE
     source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh" || exit 1
     export HF_HUB_CACHE_MOUNT=/var/lib/hf-hub-cache/
+    # AgentX checkpoints the legacy scripts read from the shared NFS cache.
+    if [[ "$IS_AGENTIC" == 1 ]]; then
+        case "$MODEL" in
+            MiniMaxAI/MiniMax-M3*|amd/MiniMax-M3*|zai-org/GLM-5.2-FP8|deepseek-ai/DeepSeek-V4.1-Flash)
+                export HF_HUB_CACHE_MOUNT=/it-share/hf-hub-cache/ ;;
+            deepseek-ai/DeepSeek-V4-Pro|deepseek-ai/DeepSeek-V4-Pro-0813)
+                if [[ "$FRAMEWORK" == vllm || "$FRAMEWORK" == atom ]]; then
+                    export HF_HUB_CACHE_MOUNT=/it-share/hf-hub-cache/
+                fi ;;
+        esac
+    fi
     export SRT_MODEL_PATH="hf:$MODEL"
     export SALLOC_TIME_LIMIT=500
     export SRT_SRUN_OPTIONS='{"container-remap-root":"", "container-writable":""}'
