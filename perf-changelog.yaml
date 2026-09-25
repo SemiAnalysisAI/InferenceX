@@ -8944,3 +8944,9 @@
   description:
     - "Update the vLLM ROCm image from v0.29.0 to v0.30.0; benchmark configuration unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3361
+
+- config-keys:
+    - dsv4-fp4-b200-sglang-agentic-hicache-mtp
+  description:
+    - "Update SGLang image from v0.5.19-cu130 to v0.5.20-cu130 and pass --cuda-graph-max-bs-decode after the alias removal."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3334
