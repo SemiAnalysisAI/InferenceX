@@ -197,6 +197,20 @@ class DeepEPV2Backend(EPBackend):
             return not getattr(self, "_normal_cpu_sync", True)
         return super().cuda_graph_supported
 
+    def _dispatch_capacity(self, tokens):
+        """Per-call `num_max_tokens_per_rank`.
+
+        With the host sync the receive is sized exactly, so the buffer maximum is only a bound.
+        Without it DeepEP allocates `num_max_tokens_per_rank * num_ranks` receive rows
+        (elastic/buffer.hpp "allocate with the worst case"), so passing the ladder maximum made a
+        T=1 dispatch receive 4096 rows at EP8 and the FP8 stage dequantize all of them (stage
+        59 -> 212us, b200 EP8). vLLM's graphed decode (prepare_finalize/deepep_v2.py) passes the
+        next power of two of the batch, which bounds both the receive and the JIT variants.
+        """
+        if self._normal_cpu_sync:
+            return self.max_tokens
+        return min(self.max_tokens, 1 << max(0, int(tokens) - 1).bit_length())
+
     def buffer_cap(self, args):
         if self.mode == "low-latency":
             # LL pre-allocates a fixed [num_local_experts, cap * num_ranks, hidden] receive
@@ -388,7 +402,7 @@ class DeepEPV2Backend(EPBackend):
             topk_idx=p.topk_idx,
             topk_weights=p.topk_weights,
             num_experts=self.args.experts,
-            num_max_tokens_per_rank=self.max_tokens,
+            num_max_tokens_per_rank=self._dispatch_capacity(p.T),
             expert_alignment=1,
             num_sms=self.num_sms,
             num_qps=self.num_qps,

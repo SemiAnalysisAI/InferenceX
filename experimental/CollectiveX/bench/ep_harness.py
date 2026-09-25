@@ -213,6 +213,20 @@ CHAIN_FLOOR_ORIGIN = "chained-cross-rank-min"
 CUDA_GRAPH_ORIGIN = "cuda-graph-replay"
 
 
+def _published_tails(percentiles, graph_replay):
+    """Fresh-entry percentiles as published: under graph replay only the median.
+
+    A graphed fresh-entry sample starts behind the alignment barrier, but a rank whose host is
+    late to launch its replay still stalls the others, and those stalls own the tail (gb200
+    flashinfer T=1: roundtrip p99 858us against a 30us combine p99). Until that alignment is
+    clean, the p90/p95/p99 of these series describe host jitter, so they are withheld (null)
+    rather than published as operation tails. The chained family is unaffected.
+    """
+    if not graph_replay or percentiles is None:
+        return percentiles
+    return {key: (value if key == "p50" else None) for key, value in percentiles.items()}
+
+
 def _component(percentiles, count, *, derived=False, origin=None):
     """One component block: availability, the reduction behind it, percentiles, sample count.
 
@@ -1183,7 +1197,9 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     # stand-in is decoupled from each pair's dispatch, so chained and drained are not
     # comparable -- see the call site for the measurement that established this.
     chain_output_applicable = not backend.stage_excluded_from_roundtrip
-    cuda_graph_output_applicable = cuda_graph and not backend.stage_excluded_from_roundtrip
+    # Every graphed row is value-checked: `graph_replay_output` stages inside its own capture, so
+    # the comparison is defined even where the timed captures hoist staging.
+    cuda_graph_output_applicable = cuda_graph
 
     # ---- Pass 2: every backend uses the same rotated point order.
     # Per-iteration cross-rank MAX samples are pooled across trials. ----
@@ -1230,20 +1246,20 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                 samples[T].dispatch_min += _reduce_vec(torch, dist, device, measured["dispatch"], MIN)
                 samples[T].combine_min += _reduce_vec(torch, dist, device, measured["combine"], MIN)
 
-    # The existing roundtrip measurement is graph replay in graph mode. Verify that a replay
-    # overwrote its poisoned output, and, where staging was not hoisted, compare that output with
-    # an ordinary drained pair. These checks are untimed and add no parallel measurement path.
+    # Graph mode: verify that the timed replays overwrote their poisoned output, then value-check
+    # replay itself -- a capture with staging inside it, dispatch outputs and result poisoned
+    # before its only replay -- against an ordinary drained pair. Untimed; collective in ladder
+    # order on every rank.
     if cuda_graph:
         for T in ladder:
             problem = problems[T]
             rewritten = bool(getattr(problem, "_cuda_graph_output_rewritten", False))
             gate[T]["cuda_graph_output_rewritten"] &= int(rewritten)
             if cuda_graph_output_applicable:
+                replayed = backend.graph_replay_output(problem)
                 drained = backend.run_roundtrip(problem)
                 torch.cuda.synchronize()
-                output_ok, output_error = _chain_output_matches(
-                    problem._cuda_graph_output, drained
-                )
+                output_ok, output_error = _chain_output_matches(replayed, drained)
                 gate[T]["cuda_graph_output_local_ok"] &= int(output_ok)
                 gate[T]["cuda_graph_output_error"] = max(
                     gate[T]["cuda_graph_output_error"], output_error
@@ -1389,6 +1405,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         rstats = g["rstats"]
         d, s, c, rt = samples[T].dispatch, samples[T].stage, samples[T].combine, samples[T].roundtrip
         dp, sp, cp, rtp = _pcts(d), _pcts(s), _pcts(c), _pcts(rt)
+        pub = lambda pcts: _published_tails(pcts, cuda_graph)  # noqa: E731
         # isolated_sum = SUM of the isolated dispatch+stage+combine percentiles. Stage contributes
         # zero when it is explicitly not applicable. This is NOT a measured chained operation
         # (can't reveal shared sync / launch amortization / overlap) — do NOT use for throughput
@@ -1438,8 +1455,8 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         max_rel = _reduce_vec(torch, dist, device, [g["max_rel"]], MAX)[0]
         point_ok = bool(global_ok) and recv_total > 0
         throughput = {
-            percentile_name: gt / (latency_us * 1e-6)
-            for percentile_name, latency_us in rtp.items()
+            percentile_name: (gt / (latency_us * 1e-6) if latency_us is not None else None)
+            for percentile_name, latency_us in pub(rtp).items()
         }
         # Canonical LOGICAL payload bytes come from the routing trace (NOT backend recv
         # tensors): one copy per unique (token, dest-rank) pair. Dispatch carries the
@@ -1494,18 +1511,18 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         rows.append({
             "components": {
                 "combine": _component(
-                    cp, len(c), origin=CUDA_GRAPH_ORIGIN if cuda_graph else None
+                    pub(cp), len(c), origin=CUDA_GRAPH_ORIGIN if cuda_graph else None
                 ),
                 "dispatch": _component(
-                    dp, len(d), origin=CUDA_GRAPH_ORIGIN if cuda_graph else None
+                    pub(dp), len(d), origin=CUDA_GRAPH_ORIGIN if cuda_graph else None
                 ),
-                "isolated_sum": _component(isum, 0, derived=True),
+                "isolated_sum": _component(pub(isum), 0, derived=True),
                 # What a serving decode loop pays per MoE layer: the steady-state period of
                 # back-to-back dispatch->combine pairs, every backend, cross-rank median. Not
                 # `roundtrip` (drained around every pair, an idle-pipeline latency). Do not sum it.
                 "pair_period": _component(chainp, len(chain), origin=CHAIN_PERIOD_ORIGIN),
                 "roundtrip": _component(
-                    rtp, len(rt), origin=CUDA_GRAPH_ORIGIN if cuda_graph else None
+                    pub(rtp), len(rt), origin=CUDA_GRAPH_ORIGIN if cuda_graph else None
                 ),
                 "stage": _component(sp, len(s)),
             },
@@ -1531,15 +1548,15 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             # never the operation getting faster.
             "cross_rank_min_us": {
                 "combine": _component(
-                    _pcts(samples[T].combine_min), len(samples[T].combine_min),
+                    pub(_pcts(samples[T].combine_min)), len(samples[T].combine_min),
                     origin=CUDA_GRAPH_ORIGIN if cuda_graph else None,
                 ),
                 "dispatch": _component(
-                    _pcts(samples[T].dispatch_min), len(samples[T].dispatch_min),
+                    pub(_pcts(samples[T].dispatch_min)), len(samples[T].dispatch_min),
                     origin=CUDA_GRAPH_ORIGIN if cuda_graph else None,
                 ),
                 "roundtrip": _component(
-                    _pcts(samples[T].roundtrip_min), len(samples[T].roundtrip_min),
+                    pub(_pcts(samples[T].roundtrip_min)), len(samples[T].roundtrip_min),
                     origin=CUDA_GRAPH_ORIGIN if cuda_graph else None,
                 ),
             },
@@ -1774,6 +1791,8 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             percentiles = row["components"]["dispatch"]["percentiles_us"]
             if not percentiles:
                 return f"T={row['tokens_per_rank']}:n/a{period_summary}"
+            if percentiles.get("p99") is None:
+                return f"T={row['tokens_per_rank']}:disp_p50={percentiles['p50']:.1f}us{period_summary}"
             return (f"T={row['tokens_per_rank']}:disp_p99={percentiles['p99']:.1f}us"
                     f"{period_summary}")
 

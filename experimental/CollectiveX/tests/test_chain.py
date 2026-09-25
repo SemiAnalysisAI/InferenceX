@@ -119,6 +119,7 @@ def trace_torch(clock, log):
             ),
         ),
         distributed=dist,
+        version=types.SimpleNamespace(hip=None, cuda="13.0"),
         zeros=tensor, ones=tensor, empty=tensor, full=tensor, tensor=tensor,
         float32="float32", float64="float64", bfloat16="bfloat16", int32="int32",
         isfinite=lambda _value: types.SimpleNamespace(
@@ -356,7 +357,11 @@ class CudaGraphRoundtrip(unittest.TestCase):
             )
         # Each graph replays once untimed, then once behind the barrier.
         self.assertEqual(backend.calls.count("graph_replay"), 4)
-        self.assertEqual(backend.calls.count("align_spin"), 2)
+        aligned = [
+            i for i, call in enumerate(backend.calls)
+            if call == "graph_replay" and backend.calls[i - 2:i] == ["all_reduce", "align_spin"]
+        ]
+        self.assertEqual(len(aligned), 2)
         for key in ("pair", "dispatch", "combine"):
             self.assertEqual(len(series[key]), iters - drop)
         self.assertEqual(len(series["start_to_start"]), iters - drop - 1)
@@ -377,6 +382,51 @@ class CudaGraphRoundtrip(unittest.TestCase):
         with mock.patch.dict(os.environ, {"COLLX_CUDA_GRAPH": "maybe"}, clear=True), \
                 self.assertRaisesRegex(ValueError, "COLLX_CUDA_GRAPH"):
             backend.timed_components()
+
+
+class GraphAlignmentAndValueCheck(unittest.TestCase):
+    def test_the_alignment_spin_is_sized_to_wall_time_not_a_cycle_count(self):
+        # A GPU spinning twice as fast (the probe spin takes half the time) must be handed twice
+        # the cycles, so every rank releases after the same wall time whatever its SM clock.
+        spins = []
+        fake = types.SimpleNamespace(cuda=types.SimpleNamespace(
+            _sleep=spins.append, synchronize=lambda: None,
+            Event=lambda **kwargs: types.SimpleNamespace(
+                record=lambda: None, elapsed_time=lambda other: probe_ms,
+            ),
+        ))
+        backend = _ChainBackend()
+        results = {}
+        for probe_ms in (0.1, 0.05):  # the 200k-cycle probe took 100us, then 50us
+            with mock.patch.dict(sys.modules, {"torch": fake}):
+                backend._calibrate_align_spin()
+            results[probe_ms] = backend._graph_align_cycles
+        target = ep_backend.EPBackend._GRAPH_ALIGN_SPIN_US
+        self.assertEqual(results[0.1], int(200_000 * target / 100.0))
+        self.assertEqual(results[0.05], 2 * results[0.1])
+
+    def test_the_replay_value_check_poisons_what_dispatch_wrote_before_replaying(self):
+        backend = _ChainBackend(stage_device_work=True, fp8_consume="native", precision="fp8")
+        order = []
+        handle = types.SimpleNamespace(recv_x="recv", recv_scales=None, combine_input=None)
+        combined = _Combined(1.0)
+        graph = types.SimpleNamespace(replay=lambda: order.append("replay"))
+        backend.warm = lambda problem, count: order.append("warm")
+        backend._capture_pairs = lambda problem, staged, pairs, marks: (
+            order.append(("capture", staged, marks)) or (graph, {}, combined, handle)
+        )
+        backend._poison = lambda tensor: order.append(("poison", tensor))
+        fake = types.SimpleNamespace(cuda=types.SimpleNamespace(synchronize=lambda: None))
+        with mock.patch.dict(sys.modules, {"torch": fake}):
+            result = backend.graph_replay_output(new_problem())
+        # Staging runs INSIDE the capture (staged=None), and the poison lands between the upload
+        # replay and the replay whose output is returned.
+        self.assertEqual(order[1], ("capture", None, ()))
+        first, last = order.index("replay"), len(order) - 1 - order[::-1].index("replay")
+        poisoned = [entry for entry in order[first:last] if isinstance(entry, tuple)]
+        self.assertIn(("poison", "recv"), poisoned)
+        self.assertIn(("poison", combined), poisoned)
+        self.assertTrue(result.cloned)
 
 
 class EventPlacement(unittest.TestCase):
@@ -665,6 +715,10 @@ class _SweepBackend(ep_backend.EPBackend):
 class _GraphSweepBackend(_SweepBackend):
     CUDA_GRAPH_MODES = ("normal",)
 
+    def graph_replay_output(self, problem):
+        self.events.append(("graph-value-check", problem.T))
+        return f"graph-{problem.T}"
+
     def benchmark_component(self, component, problem, warmup, iters):
         self.events.append(("graph", component, problem.T))
         problem._cuda_graph_output = f"graph-{problem.T}"
@@ -921,6 +975,15 @@ class CudaGraphPublication(unittest.TestCase):
                 self.assertIs(row["correctness"]["cuda_graph_output_rewritten"], True)
                 self.assertIs(row["correctness"]["cuda_graph_last_output_passed"], True)
                 self.assertIs(row["correctness"]["post_chain_state_passed"], True)
+                # Graphed fresh-entry tails are withheld; the chained period keeps its tails.
+                for name in ("roundtrip", "dispatch", "combine", "isolated_sum"):
+                    tails = row["components"][name]["percentiles_us"]
+                    self.assertIsNotNone(tails["p50"])
+                    self.assertEqual([tails[k] for k in ("p90", "p95", "p99")], [None] * 3)
+                self.assertIsNone(row["cross_rank_min_us"]["roundtrip"]["percentiles_us"]["p99"])
+                self.assertIsNotNone(row["components"]["pair_period"]["percentiles_us"]["p99"])
+        checked = [event[1] for event in self.swept.events if event[0] == "graph-value-check"]
+        self.assertEqual(sorted(checked), sorted(LADDER))
 
     def test_a_replay_that_does_not_rewrite_its_output_reds_the_case(self):
         swept = drive(backend_factory=_BrokenGraphSweepBackend)

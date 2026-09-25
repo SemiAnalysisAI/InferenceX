@@ -28,6 +28,7 @@ is preserved, not loosened.
 """
 from __future__ import annotations
 
+import os
 import sys
 import types
 
@@ -142,6 +143,25 @@ class UCCLEPBackend(EPBackend):
     requires_fresh_pair = False
     receive_layout = "token-rank"
     combine_weight_semantics = "unweighted-rank-sum"
+
+    # (product, precision) cases measured faster eager than graphed: b200 FP8 low-latency pair
+    # period 0.98x baseline eager vs 1.04x graphed, every rung (runs 36114371399, 36113759089).
+    _EAGER_CASES = frozenset({("b200", "fp8")})
+
+    @property
+    def cuda_graph_supported(self) -> bool:
+        if not super().cuda_graph_supported:
+            return False
+        args = self.args
+        # Intranode only: at EP8 the LL kernels take the IPC path. Scale-out LL runs through the
+        # CPU proxy, which a replay reaches only via GPU-written queues -- never validated under
+        # capture -- and whose adaptive sleeper is woken only by a host call replay skips.
+        if self.world_size > int(getattr(args, "scale_up_domain", self.world_size)):
+            return False
+        if os.environ.get("UCCL_RDMA_ADAPTIVE_SLEEP", "0") not in ("", "0"):
+            return False
+        product = str(getattr(args, "runner", "")).split("-")[0]
+        return (product, self.precision) not in self._EAGER_CASES
 
     def __init__(self, args, rank, world_size, local_rank, device):
         super().__init__(args, rank, world_size, local_rank, device)

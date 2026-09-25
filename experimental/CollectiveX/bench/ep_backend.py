@@ -395,10 +395,30 @@ class EPBackend(abc.ABC):
 
     # ---- CUDA graph capture ----------------------------------------------------------------
 
-    # Spin after the alignment all-reduce so every rank's host has enqueued its replay before the
-    # stream reaches it; ~50us at 2GHz, far above a graph launch, so the replay start is set by
-    # the barrier release on every rank rather than by host launch latency.
-    _GRAPH_ALIGN_SPIN_CYCLES = 100_000
+    # Wall time the stream spins after the alignment all-reduce, so every rank's host has enqueued
+    # its replay before the stream reaches it and the replay start is set by the barrier release,
+    # not by host launch latency. Converted to cycles per GPU by `_calibrate_align_spin`:
+    # `torch.cuda._sleep` counts SM cycles, so a fixed cycle count spun 48-70us across the clock
+    # range and left ~15us of cross-rank skew on gb200 (a fast-clocked rank released early).
+    _GRAPH_ALIGN_SPIN_US = 100.0
+    # Attributes of a dispatch handle that hold what dispatch wrote; the replay check poisons them
+    # so a replay that skipped (or stalely reused) the dispatch cannot reproduce a valid output.
+    _DISPATCH_OUTPUT_FIELDS = ("recv_x", "recv_scales", "dispatch_output")
+
+    def _calibrate_align_spin(self):
+        """Measure this GPU's current spin rate and size the alignment spin to a wall time."""
+        import torch
+
+        probe = 200_000
+        start = torch.cuda.Event(enable_timing=True)
+        end = torch.cuda.Event(enable_timing=True)
+        torch.cuda._sleep(probe // 10)  # ramp clocks before the measured spin
+        start.record()
+        torch.cuda._sleep(probe)
+        end.record()
+        torch.cuda.synchronize()
+        elapsed_us = max(start.elapsed_time(end) * 1000.0, 1e-3)
+        self._graph_align_cycles = max(1, int(probe * self._GRAPH_ALIGN_SPIN_US / elapsed_us))
 
     def _graph_align(self):
         """Enqueue a device-side rank barrier on the current stream, without a host sync."""
@@ -408,33 +428,94 @@ class EPBackend(abc.ABC):
         token = getattr(self, "_graph_align_token", None)
         if token is None:
             token = self._graph_align_token = torch.zeros(1, device=self.device)
+        if getattr(self, "_graph_align_cycles", None) is None:
+            self._calibrate_align_spin()
         dist.all_reduce(token)
-        torch.cuda._sleep(self._GRAPH_ALIGN_SPIN_CYCLES)
+        torch.cuda._sleep(self._graph_align_cycles)
+
+    def _graph_event(self):
+        """A timing event whose record() can become a node of a graph being captured.
+
+        CUDA torch does this with `external=True`. ROCm torch before 2.13 rejects external events
+        ("External events are disallowed in rocm") although HIP >= 7 supports them, so there the
+        event is created normally, recorded once outside capture so it exists and counts as
+        recorded, and captured with `hipEventRecordWithFlags(..., hipEventRecordExternal)` --
+        the call torch 2.13 itself makes (pytorch#178264).
+        """
+        import torch
+
+        if not getattr(torch.version, "hip", None):
+            return torch.cuda.Event(enable_timing=True, external=True)
+        event = torch.cuda.Event(enable_timing=True)
+        event.record()
+        event._collx_hip_external = True
+        return event
+
+    @staticmethod
+    def _record_graph_event(event):
+        import torch
+
+        if not getattr(event, "_collx_hip_external", False):
+            event.record()
+            return
+        import ctypes
+
+        hip = EPBackend._hip_runtime()
+        rc = hip.hipEventRecordWithFlags(
+            ctypes.c_void_p(event.cuda_event),
+            ctypes.c_void_p(torch.cuda.current_stream().cuda_stream),
+            ctypes.c_uint(0x1),  # hipEventRecordExternal
+        )
+        if rc != 0:
+            raise RuntimeError(f"hipEventRecordWithFlags(external) failed with hipError {rc}")
+
+    @staticmethod
+    def _hip_runtime():
+        lib = getattr(EPBackend, "_hip_lib", None)
+        if lib is None:
+            import ctypes
+            import os as _os
+
+            import torch
+
+            candidates = ["libamdhip64.so", _os.path.join(_os.path.dirname(torch.__file__), "lib",
+                                                          "libamdhip64.so")]
+            for name in candidates:
+                try:
+                    lib = ctypes.CDLL(name)
+                    break
+                except OSError:
+                    continue
+            if lib is None:
+                raise RuntimeError("libamdhip64.so not loadable for graph event capture")
+            lib.hipEventRecordWithFlags.restype = ctypes.c_int
+            EPBackend._hip_lib = lib
+        return lib
 
     def _capture_pairs(self, problem, staged, pairs, marks):
         """Capture `pairs` back-to-back dispatch -> combine pairs into one graph.
 
-        `marks` selects which windows get external event nodes: "pair" (the whole pair),
-        "dispatch", "combine". Event records are graph nodes, so they cost the stream nothing on
-        the host -- the six-events-per-pair defect the eager chain splits around does not exist
-        here. Returns (graph, {mark: (starts, ends)}, last combined output).
+        `marks` selects which windows get event nodes: "pair" (the whole pair), "dispatch",
+        "combine". Event records are graph nodes, so they cost the stream nothing on the host --
+        the six-events-per-pair defect the eager chain splits around does not exist here.
+        Returns (graph, {mark: (starts, ends)}, last combined output, last dispatch handle).
         """
         import torch
         import torch.distributed as dist
 
         def events():
-            return [torch.cuda.Event(enable_timing=True, external=True) for _ in range(pairs)]
+            return [self._graph_event() for _ in range(pairs)]
 
         stamps = {mark: (events(), events()) for mark in marks}
 
         def record(mark, edge, i):
             if mark in stamps:
-                stamps[mark][edge][i].record()
+                self._record_graph_event(stamps[mark][edge][i])
 
         dist.barrier()
         torch.cuda.synchronize()
         graph = torch.cuda.CUDAGraph()
-        combined = None
+        combined = handle = None
         with torch.cuda.graph(graph, capture_error_mode="relaxed"):
             for i in range(pairs):
                 record("pair", 0, i)
@@ -450,7 +531,48 @@ class EPBackend(abc.ABC):
                 record("combine", 1, i)
                 record("pair", 1, i)
         torch.cuda.synchronize()
-        return graph, stamps, combined
+        return graph, stamps, combined, handle
+
+    @staticmethod
+    def _poison(tensor):
+        """Overwrite a tensor with 0xFF bytes: NaN for bf16/fp16/fp32/fp8-e4m3, -1 for ints."""
+        import torch
+
+        if tensor is None:
+            return
+        if isinstance(tensor, (tuple, list)):
+            for part in tensor:
+                EPBackend._poison(part)
+            return
+        if not isinstance(tensor, torch.Tensor) or not tensor.numel():
+            return
+        try:
+            tensor.view(torch.uint8).fill_(0xFF)
+        except RuntimeError:
+            tensor.fill_(float("nan") if tensor.is_floating_point() else -1)
+
+    def graph_replay_output(self, problem):
+        """The value check for graph replay: one untimed capture with `stage` INSIDE the graph.
+
+        The timed captures hoist staging where `stage` does device work, so their output never
+        depends on that replay's dispatch and a stale replay would still look correct. This one
+        stages per pair, then poisons what dispatch wrote and the combined output before its only
+        replay: the result is valid only if the replay itself re-ran dispatch, stage and combine.
+        The caller compares it with an eager drained pair through the same code path.
+        """
+        import torch
+
+        self.warm(problem, 1)
+        graph, _, combined, handle = self._capture_pairs(problem, None, 1, ())
+        graph.replay()  # first launch uploads the graph; its output is discarded
+        torch.cuda.synchronize()
+        for field in self._DISPATCH_OUTPUT_FIELDS:
+            self._poison(getattr(handle, field, None))
+        self._poison(combined)
+        torch.cuda.synchronize()
+        graph.replay()
+        torch.cuda.synchronize()
+        return combined.clone()
 
     # ---- Timing template methods -----------------------------------------------------
 
@@ -619,10 +741,13 @@ class EPBackend(abc.ABC):
         """
         import torch
 
-        floors, floor_stamps, _ = self._capture_pairs(
+        floors, floor_stamps, _, _ = self._capture_pairs(
             problem, staged, iters, ("dispatch", "combine")
         )
-        period, period_stamps, combined = self._capture_pairs(problem, staged, iters, ("pair",))
+        period, period_stamps, combined, _ = self._capture_pairs(
+            problem, staged, iters, ("pair",)
+        )
+        self._calibrate_align_spin()
         for graph in (floors, period):
             graph.replay()
             torch.cuda.synchronize()
@@ -684,7 +809,9 @@ class EPBackend(abc.ABC):
             # and its warm-up are excluded; each timed replay starts behind a device-side rank
             # barrier (`_graph_align`) so the cross-rank MAX is the operation, not launch skew.
             mark = "pair" if graph_component == "roundtrip" else graph_component
-            graph, stamps, combined = self._capture_pairs(problem, staged, 1, (mark,))
+            graph, stamps, combined, _ = self._capture_pairs(problem, staged, 1, (mark,))
+            # Re-measure the spin rate per timed series: clocks move with load and temperature.
+            self._calibrate_align_spin()
             starts, ends = stamps[mark]
             samples = time_cuda_graph_phase_us(
                 torch, graph.replay, warmup, iters, (starts[0], ends[0]),

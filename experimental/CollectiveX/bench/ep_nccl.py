@@ -95,7 +95,9 @@ class NCCLEPBackend(EPBackend):
     # per-row discriminator that change lacked. "v02" marks the nccl-extensions v0.2 mover
     # (new kernels: LL combine fence, B200 EP16 fix, HT gains) so pre-upgrade rows never
     # pool with post-upgrade rows.
-    kernel_generation = "nccl-ep-v02-ht-routed-zc"
+    # "-static" marks the combine input bound to the full static receive plane (see
+    # `_bind_ht_recv_count`); "-zc" rows before it sliced that input to the received count.
+    kernel_generation = "nccl-ep-v02-ht-routed-zc-static"
     SUPPORTED_MODES = ("normal", "low-latency")
     SUPPORTED_PRECISIONS = ("bf16",)
     # LL replays; HT stays eager. Graphed zero-copy HT failed the combine oracle intermittently
@@ -135,7 +137,9 @@ class NCCLEPBackend(EPBackend):
         if self._ll_expert_major:
             # Weighted source-side combine over a per-expert padded receive: deepep-v2 LL's
             # contract, so this is the like-for-like row against the DeepEP-API backends.
-            self.kernel_generation = "nccl-ep-v02-ll"
+            # "-em" separates this from the pre-#3370 "nccl-ep-v02-ll" rows, whose timed windows
+            # also carried a handle.complete() per op; v0.2 needs complete() only after send_only.
+            self.kernel_generation = "nccl-ep-v02-ll-em"
             self.receive_layout = "token-expert"
             self.combine_weight_semantics = "weighted-kernel-sum"
         elif self._ll:
@@ -407,18 +411,19 @@ class NCCLEPBackend(EPBackend):
         return h
 
     def _bind_ht_recv_count(self, h):
-        """Read HT's received-token count and pre-wrap the combine input at that size.
+        """Read HT's received-token count and bind the combine input to the full receive plane.
 
-        Upstream sizes the combine staging copy from the tensor it is handed (`num_tokens =
-        x->sizes[0]`), not from the group's buffer, so handing it the whole ladder-max plane put a
-        rung-independent floor under HT combine -- ~470-1295us on a prefill leg (ladder max 8192).
-        Slicing is a free leading-dim view and matches upstream's own ep_test. Both callers are
-        untimed (handle creation and rebind), so the `.item()` read never lands in a window.
+        The FLAT contract (ep_enums.h, NCCL_EP_LAYOUT_FLAT) gives combine the SAME
+        `[num_recv_slots, hidden]` shape as the dispatch output, static at the group's
+        `max_recv_tokens_per_rank` -- "Required under CUDA Graph capture"; sizing it to the
+        received count is only valid for a group created with `max_recv_tokens_per_rank =
+        NCCL_EP_AUTO`, which this one is not. An earlier revision sliced it to the count, which
+        broke that contract in both regimes. The slice existed to dodge a whole-plane staging
+        copy (~470-1295us on prefill); zero-copy HT elides that staging, so the full plane costs
+        nothing. The count is still read here (untimed) for `recv_tokens` and the oracle.
         """
         h.count = int(h.recv_total.item())
-        # A rank that received nothing still needs a non-empty tensor for the shape checks; the
-        # routing map decides what combine reads, so the extra row cannot reach the output.
-        h.combine_in_t = self._window_t(self._recv_x[: max(h.count, 1)])
+        h.combine_in_t = self._recv_x_t
 
     def _rebind(self, h):
         """Point the single handle at h's routing (collective; untimed callers only).
