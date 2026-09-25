@@ -74,9 +74,67 @@ base:
 
 # One variant per point. Admission is 2x CONC. The DRAM point splits its
 # 1298 GB budget into one LMCache L1 shard per TP rank (1298 / 8 = 162 GB).
-override_tp8_c2: {roles: {agg: {args: {max-num-seqs: 4}}}, benchmark: {env: {CONC: '2', KV_OFFLOADING: 'none'}}}
-override_tp8_c4: {roles: {agg: {args: {max-num-seqs: 8}}}, benchmark: {env: {CONC: '4', KV_OFFLOADING: 'none'}}}
-override_tp8_c6: {roles: {agg: {args: {max-num-seqs: 12}}}, benchmark: {env: {CONC: '6', KV_OFFLOADING: 'none'}}}
-override_tp8_c8: {roles: {agg: {args: {max-num-seqs: 16}}}, benchmark: {env: {CONC: '8', KV_OFFLOADING: 'none'}}}
-override_tp8_c10: {roles: {agg: {args: {max-num-seqs: 20}}}, benchmark: {env: {CONC: '10', KV_OFFLOADING: 'none'}}}
-override_tp8_c16_lmcache: {roles: {agg: {args: {max-num-seqs: 32, kv-transfer-config: '{"kv_connector":"LMCacheMPConnector","kv_connector_module_path":"lmcache.integration.vllm.lmcache_mp_connector","kv_role":"kv_both","kv_connector_extra_config":{"lmcache.mp.server_urls":"tcp://127.0.0.1:5555,tcp://127.0.0.1:5556,tcp://127.0.0.1:5557,tcp://127.0.0.1:5558,tcp://127.0.0.1:5559,tcp://127.0.0.1:5560,tcp://127.0.0.1:5561,tcp://127.0.0.1:5562","lmcache.mp.mq_timeout":6000.0}}'}, env: {LMCACHE_SHARDS: '8', LMCACHE_L1_SHARD_GB: '162'}}}, benchmark: {env: {CONC: '16', KV_OFFLOADING: 'dram', TOTAL_CPU_DRAM_GB: '1298'}}}
+override_tp8_c2:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 4
+  benchmark:
+    env:
+      CONC: '2'
+      KV_OFFLOADING: 'none'
+
+override_tp8_c4:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 8
+  benchmark:
+    env:
+      CONC: '4'
+      KV_OFFLOADING: 'none'
+
+override_tp8_c6:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 12
+  benchmark:
+    env:
+      CONC: '6'
+      KV_OFFLOADING: 'none'
+
+override_tp8_c8:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 16
+  benchmark:
+    env:
+      CONC: '8'
+      KV_OFFLOADING: 'none'
+
+override_tp8_c10:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 20
+  benchmark:
+    env:
+      CONC: '10'
+      KV_OFFLOADING: 'none'
+
+override_tp8_c16_lmcache:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 32
+        kv-transfer-config: '{"kv_connector":"LMCacheMPConnector","kv_connector_module_path":"lmcache.integration.vllm.lmcache_mp_connector","kv_role":"kv_both","kv_connector_extra_config":{"lmcache.mp.server_urls":"tcp://127.0.0.1:5555,tcp://127.0.0.1:5556,tcp://127.0.0.1:5557,tcp://127.0.0.1:5558,tcp://127.0.0.1:5559,tcp://127.0.0.1:5560,tcp://127.0.0.1:5561,tcp://127.0.0.1:5562","lmcache.mp.mq_timeout":6000.0}}'
+      env:
+        LMCACHE_SHARDS: '8'
+        LMCACHE_L1_SHARD_GB: '162'
+  benchmark:
+    env:
+      CONC: '16'
+      KV_OFFLOADING: 'dram'
+      TOTAL_CPU_DRAM_GB: '1298'

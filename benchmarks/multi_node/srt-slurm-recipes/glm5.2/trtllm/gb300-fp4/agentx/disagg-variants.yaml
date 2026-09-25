@@ -213,7 +213,8 @@ override_1p1d_tp8_c1_b1_mtp5:
       gpus: 8
       args:
         cuda_graph_config:
-          batch_sizes: [1]
+          batch_sizes:
+            - 1
         max_batch_size: 1
         moe_expert_parallel_size: 1
         sparse_attention_config:
@@ -237,7 +238,11 @@ override_1p1d_tep8_c20_b5_mtp5:
       gpus: 8
       args:
         cuda_graph_config:
-          batch_sizes: [1, 2, 4, 5]
+          batch_sizes:
+            - 1
+            - 2
+            - 4
+            - 5
         max_batch_size: 5
         moe_expert_parallel_size: 8
         enable_iter_perf_stats: true
@@ -266,7 +271,9 @@ override_1p4d_tep4_c30_b2_mtp5:
       gpus: 4
       args:
         cuda_graph_config:
-          batch_sizes: [1, 2]
+          batch_sizes:
+            - 1
+            - 2
         max_batch_size: 2
         moe_expert_parallel_size: 4
         enable_iter_perf_stats: true
@@ -295,7 +302,11 @@ override_3p4d_tep4_c60_b5_mtp5:
       gpus: 4
       args:
         cuda_graph_config:
-          batch_sizes: [1, 2, 4, 5]
+          batch_sizes:
+            - 1
+            - 2
+            - 4
+            - 5
         max_batch_size: 5
         moe_expert_parallel_size: 4
         enable_iter_perf_stats: true
@@ -325,7 +336,12 @@ override_4p1d_dep8_c227_b16_mtp3:
       gpus: 8
       args:
         cuda_graph_config:
-          batch_sizes: [1, 2, 4, 8, 16]
+          batch_sizes:
+            - 1
+            - 2
+            - 4
+            - 8
+            - 16
         enable_attention_dp: true
         enable_lm_head_tp_in_adp: false
         kv_cache_config:
@@ -362,7 +378,12 @@ override_5p1d_dep16_c260_b16_mtp3:
       gpus: 16
       args:
         cuda_graph_config:
-          batch_sizes: [1, 2, 4, 8, 16]
+          batch_sizes:
+            - 1
+            - 2
+            - 4
+            - 8
+            - 16
         enable_attention_dp: true
         enable_lm_head_tp_in_adp: false
         kv_cache_config:

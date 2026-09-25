@@ -61,13 +61,167 @@ base:
 # One variant per point. Admission is 2x CONC. KV is BF16 through concurrency 16
 # and FP8 in the DEP band. DEP pins sessions to one DP-attention rank so later
 # turns reach their prefix KV, and captures every small per-rank decode batch.
-override_tp8_c1: {roles: {agg: {args: {max-num-seqs: 2, kv-cache-dtype: bf16}}}, benchmark: {env: {CONC: '1'}}}
-override_tp8_c2: {roles: {agg: {args: {max-num-seqs: 4, kv-cache-dtype: bf16}}}, benchmark: {env: {CONC: '2'}}}
-override_tp8_c4: {roles: {agg: {args: {max-num-seqs: 8, kv-cache-dtype: bf16}}}, benchmark: {env: {CONC: '4'}}}
-override_tp8_c8: {roles: {agg: {args: {max-num-seqs: 16, kv-cache-dtype: bf16}}}, benchmark: {env: {CONC: '8'}}}
-override_tp8_c16: {roles: {agg: {args: {max-num-seqs: 32, kv-cache-dtype: bf16}}}, benchmark: {env: {CONC: '16'}}}
-override_tp8_c48_dep: {roles: {agg: {args: {max-num-seqs: 96, kv-cache-dtype: fp8, enable-expert-parallel: true, enable-dp-attention: true, all2all-backend: rccl, dp-load-balance: least_tokens, moe-backend: standard, cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,32,48,64,128]'}, env: {ATOM_DP_SESSION_AFFINITY: '1', ATOM_DP_LB_REQ_EQUIV: '512', ATOM_ENABLE_PREFILL_DELAYER: '1', ATOM_PREFILL_DECODE_INTERVAL: '10'}}}, benchmark: {env: {CONC: '48', AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: '1', AGENTIC_WARMUP_GRACE_PERIOD: '3600'}}}
-override_tp8_c64_dep: {roles: {agg: {args: {max-num-seqs: 128, kv-cache-dtype: fp8, enable-expert-parallel: true, enable-dp-attention: true, all2all-backend: rccl, dp-load-balance: least_tokens, moe-backend: standard, cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,32,48,64,128]'}, env: {ATOM_DP_SESSION_AFFINITY: '1', ATOM_DP_LB_REQ_EQUIV: '512', ATOM_ENABLE_PREFILL_DELAYER: '1', ATOM_PREFILL_DECODE_INTERVAL: '10'}}}, benchmark: {env: {CONC: '64', AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: '1', AGENTIC_WARMUP_GRACE_PERIOD: '3600'}}}
-override_tp8_c96_dep: {roles: {agg: {args: {max-num-seqs: 192, kv-cache-dtype: fp8, enable-expert-parallel: true, enable-dp-attention: true, all2all-backend: rccl, dp-load-balance: least_tokens, moe-backend: standard, cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,32,48,64,128,256,512]'}, env: {ATOM_DP_SESSION_AFFINITY: '1', ATOM_DP_LB_REQ_EQUIV: '512', ATOM_ENABLE_PREFILL_DELAYER: '1', ATOM_PREFILL_DECODE_INTERVAL: '10'}}}, benchmark: {env: {CONC: '96', AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: '1', AGENTIC_WARMUP_GRACE_PERIOD: '3600'}}}
-override_tp8_c128_dep: {roles: {agg: {args: {max-num-seqs: 256, kv-cache-dtype: fp8, enable-expert-parallel: true, enable-dp-attention: true, all2all-backend: rccl, dp-load-balance: least_tokens, moe-backend: standard, cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,32,48,64,128,256,512]'}, env: {ATOM_DP_SESSION_AFFINITY: '1', ATOM_DP_LB_REQ_EQUIV: '512', ATOM_ENABLE_PREFILL_DELAYER: '1', ATOM_PREFILL_DECODE_INTERVAL: '10'}}}, benchmark: {env: {CONC: '128', AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: '1', AGENTIC_WARMUP_GRACE_PERIOD: '3600'}}}
-override_tp8_c256_dep: {roles: {agg: {args: {max-num-seqs: 512, kv-cache-dtype: fp8, enable-expert-parallel: true, enable-dp-attention: true, all2all-backend: rccl, dp-load-balance: least_tokens, moe-backend: standard, cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,32,48,64,128,256,512]'}, env: {ATOM_DP_SESSION_AFFINITY: '1', ATOM_DP_LB_REQ_EQUIV: '512', ATOM_ENABLE_PREFILL_DELAYER: '1', ATOM_PREFILL_DECODE_INTERVAL: '10'}}}, benchmark: {env: {CONC: '256', AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: '1', AGENTIC_WARMUP_GRACE_PERIOD: '3600'}}}
+override_tp8_c1:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 2
+        kv-cache-dtype: bf16
+  benchmark:
+    env:
+      CONC: '1'
+
+override_tp8_c2:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 4
+        kv-cache-dtype: bf16
+  benchmark:
+    env:
+      CONC: '2'
+
+override_tp8_c4:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 8
+        kv-cache-dtype: bf16
+  benchmark:
+    env:
+      CONC: '4'
+
+override_tp8_c8:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 16
+        kv-cache-dtype: bf16
+  benchmark:
+    env:
+      CONC: '8'
+
+override_tp8_c16:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 32
+        kv-cache-dtype: bf16
+  benchmark:
+    env:
+      CONC: '16'
+
+override_tp8_c48_dep:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 96
+        kv-cache-dtype: fp8
+        enable-expert-parallel: true
+        enable-dp-attention: true
+        all2all-backend: rccl
+        dp-load-balance: least_tokens
+        moe-backend: standard
+        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,32,48,64,128]'
+      env:
+        ATOM_DP_SESSION_AFFINITY: '1'
+        ATOM_DP_LB_REQ_EQUIV: '512'
+        ATOM_ENABLE_PREFILL_DELAYER: '1'
+        ATOM_PREFILL_DECODE_INTERVAL: '10'
+  benchmark:
+    env:
+      CONC: '48'
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: '1'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+
+override_tp8_c64_dep:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 128
+        kv-cache-dtype: fp8
+        enable-expert-parallel: true
+        enable-dp-attention: true
+        all2all-backend: rccl
+        dp-load-balance: least_tokens
+        moe-backend: standard
+        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,32,48,64,128]'
+      env:
+        ATOM_DP_SESSION_AFFINITY: '1'
+        ATOM_DP_LB_REQ_EQUIV: '512'
+        ATOM_ENABLE_PREFILL_DELAYER: '1'
+        ATOM_PREFILL_DECODE_INTERVAL: '10'
+  benchmark:
+    env:
+      CONC: '64'
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: '1'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+
+override_tp8_c96_dep:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 192
+        kv-cache-dtype: fp8
+        enable-expert-parallel: true
+        enable-dp-attention: true
+        all2all-backend: rccl
+        dp-load-balance: least_tokens
+        moe-backend: standard
+        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,32,48,64,128,256,512]'
+      env:
+        ATOM_DP_SESSION_AFFINITY: '1'
+        ATOM_DP_LB_REQ_EQUIV: '512'
+        ATOM_ENABLE_PREFILL_DELAYER: '1'
+        ATOM_PREFILL_DECODE_INTERVAL: '10'
+  benchmark:
+    env:
+      CONC: '96'
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: '1'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+
+override_tp8_c128_dep:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 256
+        kv-cache-dtype: fp8
+        enable-expert-parallel: true
+        enable-dp-attention: true
+        all2all-backend: rccl
+        dp-load-balance: least_tokens
+        moe-backend: standard
+        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,32,48,64,128,256,512]'
+      env:
+        ATOM_DP_SESSION_AFFINITY: '1'
+        ATOM_DP_LB_REQ_EQUIV: '512'
+        ATOM_ENABLE_PREFILL_DELAYER: '1'
+        ATOM_PREFILL_DECODE_INTERVAL: '10'
+  benchmark:
+    env:
+      CONC: '128'
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: '1'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+
+override_tp8_c256_dep:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 512
+        kv-cache-dtype: fp8
+        enable-expert-parallel: true
+        enable-dp-attention: true
+        all2all-backend: rccl
+        dp-load-balance: least_tokens
+        moe-backend: standard
+        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,32,48,64,128,256,512]'
+      env:
+        ATOM_DP_SESSION_AFFINITY: '1'
+        ATOM_DP_LB_REQ_EQUIV: '512'
+        ATOM_ENABLE_PREFILL_DELAYER: '1'
+        ATOM_PREFILL_DECODE_INTERVAL: '10'
+  benchmark:
+    env:
+      CONC: '256'
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: '1'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'

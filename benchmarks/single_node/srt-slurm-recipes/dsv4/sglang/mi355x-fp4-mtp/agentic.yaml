@@ -85,10 +85,158 @@ base:
 # up to 128. HiCache pins 1.5x the device KV pool per rank. DP attention keeps
 # 8192 prefill tokens per rank, and the router pins each AIPerf session to the
 # rank holding its prefix. Saturation points get a longer warmup drain.
-override_tp8_c1: {roles: {agg: {args: {max-running-requests: 2, cuda-graph-max-bs-decode: 2}}}, benchmark: {env: {CONC: '1', KV_OFFLOADING: none}}}
-override_tp8_c4: {roles: {agg: {args: {max-running-requests: 8, cuda-graph-max-bs-decode: 8}}}, benchmark: {env: {CONC: '4', KV_OFFLOADING: none}}}
-override_tp8_c16: {roles: {agg: {args: {max-running-requests: 32, cuda-graph-max-bs-decode: 32}}}, benchmark: {env: {CONC: '16', KV_OFFLOADING: none}}}
-override_tp8_c32_hicache: {roles: {agg: {args: {max-running-requests: 64, cuda-graph-max-bs-decode: 64, enable-hierarchical-cache: true, hicache-ratio: 1.5, hicache-write-policy: write_through, hicache-io-backend: direct, hicache-mem-layout: page_first_direct}}}, benchmark: {env: {CONC: '32', KV_OFFLOADING: dram, AGENTIC_WARMUP_GRACE_PERIOD: '3600'}}}
-override_tp8_c48_hicache: {roles: {agg: {args: {max-running-requests: 96, cuda-graph-max-bs-decode: 96, enable-hierarchical-cache: true, hicache-ratio: 1.5, hicache-write-policy: write_through, hicache-io-backend: direct, hicache-mem-layout: page_first_direct}}}, benchmark: {env: {CONC: '48', KV_OFFLOADING: dram, AGENTIC_WARMUP_GRACE_PERIOD: '3600'}}}
-override_tp8_c128_dp_hicache: {frontend: {type: sglang-router, args: {policy: cache_aware, request-id-headers: x-correlation-id, dp-aware: true, connect-timeout-secs: 900, request-timeout-secs: 14400, disable-health-check: true, disable-retries: true}}, roles: {agg: {args: {max-running-requests: 256, cuda-graph-max-bs-decode: 128, enable-hierarchical-cache: true, hicache-ratio: 1.5, hicache-write-policy: write_through, hicache-io-backend: direct, hicache-mem-layout: page_first_direct, data-parallel-size: 8, enable-dp-attention: true, enable-dp-lm-head: true, enable-prefill-delayer: true, enable-dp-attention-local-control-broadcast: true, tokenizer-worker-num: 8, stream-interval: 20, prefill-delayer-token-usage-low-watermark: 0.7, chunked-prefill-size: 65536, mem-fraction-static: 0.92}, env: {SGLANG_SHARED_EXPERT_TP1: '1', SGLANG_DP_SHARED_EXPERT_LOCAL: '1', SGLANG_DP_USE_GATHERV: '1', SGLANG_DP_USE_REDUCE_SCATTER: '1', GPU_MAX_HW_QUEUES: '5'}}}, benchmark: {env: {CONC: '128', KV_OFFLOADING: dram, AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true', AGENTIC_WARMUP_GRACE_PERIOD: '3600'}}}
-override_tp8_c256_dp_hicache: {frontend: {type: sglang-router, args: {policy: cache_aware, balance-abs-threshold: 32, request-id-headers: x-correlation-id, dp-aware: true, connect-timeout-secs: 900, request-timeout-secs: 14400, disable-health-check: true, disable-retries: true}}, roles: {agg: {args: {max-running-requests: 512, cuda-graph-max-bs-decode: 128, enable-hierarchical-cache: true, hicache-ratio: 1.5, hicache-write-policy: write_through, hicache-io-backend: direct, hicache-mem-layout: page_first_direct, data-parallel-size: 8, enable-dp-attention: true, enable-dp-lm-head: true, enable-prefill-delayer: true, enable-dp-attention-local-control-broadcast: true, tokenizer-worker-num: 8, stream-interval: 20, prefill-delayer-token-usage-low-watermark: 0.7, chunked-prefill-size: 65536, mem-fraction-static: 0.92}, env: {SGLANG_SHARED_EXPERT_TP1: '1', SGLANG_DP_SHARED_EXPERT_LOCAL: '1', SGLANG_DP_USE_GATHERV: '1', SGLANG_DP_USE_REDUCE_SCATTER: '1', GPU_MAX_HW_QUEUES: '5'}}}, benchmark: {env: {CONC: '256', KV_OFFLOADING: dram, AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true', AGENTIC_WARMUP_GRACE_PERIOD: '3600'}}}
+override_tp8_c1:
+  roles:
+    agg:
+      args:
+        max-running-requests: 2
+        cuda-graph-max-bs-decode: 2
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: none
+
+override_tp8_c4:
+  roles:
+    agg:
+      args:
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
+  benchmark:
+    env:
+      CONC: '4'
+      KV_OFFLOADING: none
+
+override_tp8_c16:
+  roles:
+    agg:
+      args:
+        max-running-requests: 32
+        cuda-graph-max-bs-decode: 32
+  benchmark:
+    env:
+      CONC: '16'
+      KV_OFFLOADING: none
+
+override_tp8_c32_hicache:
+  roles:
+    agg:
+      args:
+        max-running-requests: 64
+        cuda-graph-max-bs-decode: 64
+        enable-hierarchical-cache: true
+        hicache-ratio: 1.5
+        hicache-write-policy: write_through
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
+  benchmark:
+    env:
+      CONC: '32'
+      KV_OFFLOADING: dram
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+
+override_tp8_c48_hicache:
+  roles:
+    agg:
+      args:
+        max-running-requests: 96
+        cuda-graph-max-bs-decode: 96
+        enable-hierarchical-cache: true
+        hicache-ratio: 1.5
+        hicache-write-policy: write_through
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
+  benchmark:
+    env:
+      CONC: '48'
+      KV_OFFLOADING: dram
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+
+override_tp8_c128_dp_hicache:
+  frontend:
+    type: sglang-router
+    args:
+      policy: cache_aware
+      request-id-headers: x-correlation-id
+      dp-aware: true
+      connect-timeout-secs: 900
+      request-timeout-secs: 14400
+      disable-health-check: true
+      disable-retries: true
+  roles:
+    agg:
+      args:
+        max-running-requests: 256
+        cuda-graph-max-bs-decode: 128
+        enable-hierarchical-cache: true
+        hicache-ratio: 1.5
+        hicache-write-policy: write_through
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
+        data-parallel-size: 8
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        enable-prefill-delayer: true
+        enable-dp-attention-local-control-broadcast: true
+        tokenizer-worker-num: 8
+        stream-interval: 20
+        prefill-delayer-token-usage-low-watermark: 0.7
+        chunked-prefill-size: 65536
+        mem-fraction-static: 0.92
+      env:
+        SGLANG_SHARED_EXPERT_TP1: '1'
+        SGLANG_DP_SHARED_EXPERT_LOCAL: '1'
+        SGLANG_DP_USE_GATHERV: '1'
+        SGLANG_DP_USE_REDUCE_SCATTER: '1'
+        GPU_MAX_HW_QUEUES: '5'
+  benchmark:
+    env:
+      CONC: '128'
+      KV_OFFLOADING: dram
+      AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+
+override_tp8_c256_dp_hicache:
+  frontend:
+    type: sglang-router
+    args:
+      policy: cache_aware
+      balance-abs-threshold: 32
+      request-id-headers: x-correlation-id
+      dp-aware: true
+      connect-timeout-secs: 900
+      request-timeout-secs: 14400
+      disable-health-check: true
+      disable-retries: true
+  roles:
+    agg:
+      args:
+        max-running-requests: 512
+        cuda-graph-max-bs-decode: 128
+        enable-hierarchical-cache: true
+        hicache-ratio: 1.5
+        hicache-write-policy: write_through
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
+        data-parallel-size: 8
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        enable-prefill-delayer: true
+        enable-dp-attention-local-control-broadcast: true
+        tokenizer-worker-num: 8
+        stream-interval: 20
+        prefill-delayer-token-usage-low-watermark: 0.7
+        chunked-prefill-size: 65536
+        mem-fraction-static: 0.92
+      env:
+        SGLANG_SHARED_EXPERT_TP1: '1'
+        SGLANG_DP_SHARED_EXPERT_LOCAL: '1'
+        SGLANG_DP_USE_GATHERV: '1'
+        SGLANG_DP_USE_REDUCE_SCATTER: '1'
+        GPU_MAX_HW_QUEUES: '5'
+  benchmark:
+    env:
+      CONC: '256'
+      KV_OFFLOADING: dram
+      AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'

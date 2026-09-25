@@ -65,19 +65,280 @@ base:
 # prefix tails are 64x CONC up to 4096 from c2. TP2 keeps row-sharded Engram
 # tables in host DRAM (TP4 fits them in HBM) and doubles the prefill chunk from
 # c64. Saturation points get a longer warmup drain.
-override_tp2_c1: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, expert-parallel-size: 2, chunked-prefill-size: 4096, max-running-requests: 2}, env: {SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1', SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank}}}, benchmark: {env: {CONC: '1', AGENTIC_WARMUP_GRACE_PERIOD: '1800'}}}
-override_tp2_c2: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, expert-parallel-size: 2, chunked-prefill-size: 4096, swa-prefix-tails: 128, max-running-requests: 4}, env: {SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1', SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank}}}, benchmark: {env: {CONC: '2', AGENTIC_WARMUP_GRACE_PERIOD: '1800'}}}
-override_tp2_c4: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, expert-parallel-size: 2, chunked-prefill-size: 4096, swa-prefix-tails: 256, max-running-requests: 8}, env: {SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1', SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank}}}, benchmark: {env: {CONC: '4', AGENTIC_WARMUP_GRACE_PERIOD: '1800'}}}
-override_tp2_c8: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, expert-parallel-size: 2, chunked-prefill-size: 4096, swa-prefix-tails: 512, max-running-requests: 16}, env: {SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1', SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank}}}, benchmark: {env: {CONC: '8', AGENTIC_WARMUP_GRACE_PERIOD: '1800'}}}
-override_tp2_c16: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, expert-parallel-size: 2, chunked-prefill-size: 4096, swa-prefix-tails: 1024, max-running-requests: 32}, env: {SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1', SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank}}}, benchmark: {env: {CONC: '16', AGENTIC_WARMUP_GRACE_PERIOD: '1800'}}}
-override_tp2_c32: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, expert-parallel-size: 2, chunked-prefill-size: 4096, swa-prefix-tails: 2048, max-running-requests: 64}, env: {SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1', SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank}}}, benchmark: {env: {CONC: '32', AGENTIC_WARMUP_GRACE_PERIOD: '3600'}}}
-override_tp2_c64: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, expert-parallel-size: 2, chunked-prefill-size: 8192, swa-prefix-tails: 4096, max-running-requests: 64}, env: {SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1', SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank}}}, benchmark: {env: {CONC: '64', AGENTIC_WARMUP_GRACE_PERIOD: '3600'}}}
-override_tp2_c128: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, expert-parallel-size: 2, chunked-prefill-size: 8192, swa-prefix-tails: 4096, max-running-requests: 64}, env: {SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1', SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank}}}, benchmark: {env: {CONC: '128', AGENTIC_WARMUP_GRACE_PERIOD: '3600'}}}
-override_tp4_c1: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, expert-parallel-size: 4, chunked-prefill-size: 4096, max-running-requests: 2}, env: {SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '0'}}}, benchmark: {env: {CONC: '1', AGENTIC_WARMUP_GRACE_PERIOD: '1800'}}}
-override_tp4_c2: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, expert-parallel-size: 4, chunked-prefill-size: 4096, swa-prefix-tails: 128, max-running-requests: 4}, env: {SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '0'}}}, benchmark: {env: {CONC: '2', AGENTIC_WARMUP_GRACE_PERIOD: '1800'}}}
-override_tp4_c4: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, expert-parallel-size: 4, chunked-prefill-size: 4096, swa-prefix-tails: 256, max-running-requests: 8}, env: {SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '0'}}}, benchmark: {env: {CONC: '4', AGENTIC_WARMUP_GRACE_PERIOD: '1800'}}}
-override_tp4_c8: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, expert-parallel-size: 4, chunked-prefill-size: 4096, swa-prefix-tails: 512, max-running-requests: 16}, env: {SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '0'}}}, benchmark: {env: {CONC: '8', AGENTIC_WARMUP_GRACE_PERIOD: '1800'}}}
-override_tp4_c16: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, expert-parallel-size: 4, chunked-prefill-size: 4096, swa-prefix-tails: 1024, max-running-requests: 32}, env: {SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '0'}}}, benchmark: {env: {CONC: '16', AGENTIC_WARMUP_GRACE_PERIOD: '1800'}}}
-override_tp4_c32: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, expert-parallel-size: 4, chunked-prefill-size: 4096, swa-prefix-tails: 2048, max-running-requests: 64}, env: {SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '0'}}}, benchmark: {env: {CONC: '32', AGENTIC_WARMUP_GRACE_PERIOD: '3600'}}}
-override_tp4_c64: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, expert-parallel-size: 4, chunked-prefill-size: 4096, swa-prefix-tails: 4096, max-running-requests: 64}, env: {SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '0'}}}, benchmark: {env: {CONC: '64', AGENTIC_WARMUP_GRACE_PERIOD: '3600'}}}
-override_tp4_c128: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, expert-parallel-size: 4, chunked-prefill-size: 4096, swa-prefix-tails: 4096, max-running-requests: 64}, env: {SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '0'}}}, benchmark: {env: {CONC: '128', AGENTIC_WARMUP_GRACE_PERIOD: '3600'}}}
+override_tp2_c1:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        chunked-prefill-size: 4096
+        max-running-requests: 2
+      env:
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1'
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
+  benchmark:
+    env:
+      CONC: '1'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+
+override_tp2_c2:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        chunked-prefill-size: 4096
+        swa-prefix-tails: 128
+        max-running-requests: 4
+      env:
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1'
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
+  benchmark:
+    env:
+      CONC: '2'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+
+override_tp2_c4:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        chunked-prefill-size: 4096
+        swa-prefix-tails: 256
+        max-running-requests: 8
+      env:
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1'
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
+  benchmark:
+    env:
+      CONC: '4'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+
+override_tp2_c8:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        chunked-prefill-size: 4096
+        swa-prefix-tails: 512
+        max-running-requests: 16
+      env:
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1'
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
+  benchmark:
+    env:
+      CONC: '8'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+
+override_tp2_c16:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        chunked-prefill-size: 4096
+        swa-prefix-tails: 1024
+        max-running-requests: 32
+      env:
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1'
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
+  benchmark:
+    env:
+      CONC: '16'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+
+override_tp2_c32:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        chunked-prefill-size: 4096
+        swa-prefix-tails: 2048
+        max-running-requests: 64
+      env:
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1'
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
+  benchmark:
+    env:
+      CONC: '32'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+
+override_tp2_c64:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        chunked-prefill-size: 8192
+        swa-prefix-tails: 4096
+        max-running-requests: 64
+      env:
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1'
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
+  benchmark:
+    env:
+      CONC: '64'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+
+override_tp2_c128:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        chunked-prefill-size: 8192
+        swa-prefix-tails: 4096
+        max-running-requests: 64
+      env:
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1'
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
+  benchmark:
+    env:
+      CONC: '128'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+
+override_tp4_c1:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        chunked-prefill-size: 4096
+        max-running-requests: 2
+      env:
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '0'
+  benchmark:
+    env:
+      CONC: '1'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+
+override_tp4_c2:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        chunked-prefill-size: 4096
+        swa-prefix-tails: 128
+        max-running-requests: 4
+      env:
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '0'
+  benchmark:
+    env:
+      CONC: '2'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+
+override_tp4_c4:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        chunked-prefill-size: 4096
+        swa-prefix-tails: 256
+        max-running-requests: 8
+      env:
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '0'
+  benchmark:
+    env:
+      CONC: '4'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+
+override_tp4_c8:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        chunked-prefill-size: 4096
+        swa-prefix-tails: 512
+        max-running-requests: 16
+      env:
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '0'
+  benchmark:
+    env:
+      CONC: '8'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+
+override_tp4_c16:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        chunked-prefill-size: 4096
+        swa-prefix-tails: 1024
+        max-running-requests: 32
+      env:
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '0'
+  benchmark:
+    env:
+      CONC: '16'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+
+override_tp4_c32:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        chunked-prefill-size: 4096
+        swa-prefix-tails: 2048
+        max-running-requests: 64
+      env:
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '0'
+  benchmark:
+    env:
+      CONC: '32'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+
+override_tp4_c64:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        chunked-prefill-size: 4096
+        swa-prefix-tails: 4096
+        max-running-requests: 64
+      env:
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '0'
+  benchmark:
+    env:
+      CONC: '64'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+
+override_tp4_c128:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        chunked-prefill-size: 4096
+        swa-prefix-tails: 4096
+        max-running-requests: 64
+      env:
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '0'
+  benchmark:
+    env:
+      CONC: '128'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'

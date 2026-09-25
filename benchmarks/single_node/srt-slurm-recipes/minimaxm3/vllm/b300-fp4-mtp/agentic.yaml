@@ -63,11 +63,100 @@ base:
 # One variant per point. DRAM points patch vLLM's SimpleCPUOffload worker for
 # heterogeneous layer regions and give it the whole host budget
 # (TOTAL_CPU_DRAM_GB GiB) with lazy offload.
-override_tp8_c1: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8}}}, benchmark: {env: {CONC: '1', KV_OFFLOADING: none}}}
-override_tp4_c1: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4}}}, benchmark: {env: {CONC: '1', KV_OFFLOADING: none}}}
-override_tp4_c5: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4}}}, benchmark: {env: {CONC: '5', KV_OFFLOADING: none}}}
-override_tp4_c10: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4}}}, benchmark: {env: {CONC: '10', KV_OFFLOADING: none}}}
-override_tp4_c15: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4}}}, benchmark: {env: {CONC: '15', KV_OFFLOADING: none}}}
-override_tp4_c20: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4}}}, benchmark: {env: {CONC: '20', KV_OFFLOADING: none}}}
-override_tp4_c30_dram: {setup_script: vllm-simple-kv-offload.sh, roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1099511627776,"lazy_offload":true}}'}, env: {VLLM_USE_SIMPLE_KV_OFFLOAD: '1'}}}, benchmark: {env: {CONC: '30', KV_OFFLOADING: dram, TOTAL_CPU_DRAM_GB: '1024'}}}
-override_tp2_c24_dram: {setup_script: vllm-simple-kv-offload.sh, roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":804232626176,"lazy_offload":true}}'}, env: {VLLM_USE_SIMPLE_KV_OFFLOAD: '1'}}}, benchmark: {env: {CONC: '24', KV_OFFLOADING: dram, TOTAL_CPU_DRAM_GB: '749'}}}
+override_tp8_c1:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: none
+
+override_tp4_c1:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: none
+
+override_tp4_c5:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+  benchmark:
+    env:
+      CONC: '5'
+      KV_OFFLOADING: none
+
+override_tp4_c10:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+  benchmark:
+    env:
+      CONC: '10'
+      KV_OFFLOADING: none
+
+override_tp4_c15:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+  benchmark:
+    env:
+      CONC: '15'
+      KV_OFFLOADING: none
+
+override_tp4_c20:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+  benchmark:
+    env:
+      CONC: '20'
+      KV_OFFLOADING: none
+
+override_tp4_c30_dram:
+  setup_script: vllm-simple-kv-offload.sh
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1099511627776,"lazy_offload":true}}'
+      env:
+        VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
+  benchmark:
+    env:
+      CONC: '30'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1024'
+
+override_tp2_c24_dram:
+  setup_script: vllm-simple-kv-offload.sh
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":804232626176,"lazy_offload":true}}'
+      env:
+        VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
+  benchmark:
+    env:
+      CONC: '24'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '749'

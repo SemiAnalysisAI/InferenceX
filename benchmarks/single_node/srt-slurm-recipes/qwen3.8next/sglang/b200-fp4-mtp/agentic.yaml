@@ -64,7 +64,47 @@ base:
 # One variant per point. NEXTN resets an unset admission cap to 48, so it is
 # explicit: 2x CONC, with the graph batch equal to it. C16 needs a larger
 # static fraction and a bounded Mamba cache.
-override_c1: {roles: {agg: {args: {max-running-requests: 2, cuda-graph-max-bs: 2, mem-fraction-static: 0.8}}}, benchmark: {env: {CONC: '1'}}}
-override_c4: {roles: {agg: {args: {max-running-requests: 8, cuda-graph-max-bs: 8, mem-fraction-static: 0.8}}}, benchmark: {env: {CONC: '4'}}}
-override_c8: {roles: {agg: {args: {max-running-requests: 16, cuda-graph-max-bs: 16, mem-fraction-static: 0.8}}}, benchmark: {env: {CONC: '8'}}}
-override_c16: {roles: {agg: {args: {max-running-requests: 32, cuda-graph-max-bs: 32, mem-fraction-static: 0.9, max-mamba-cache-size: 160}}}, benchmark: {env: {CONC: '16'}}}
+override_c1:
+  roles:
+    agg:
+      args:
+        max-running-requests: 2
+        cuda-graph-max-bs: 2
+        mem-fraction-static: 0.8
+  benchmark:
+    env:
+      CONC: '1'
+
+override_c4:
+  roles:
+    agg:
+      args:
+        max-running-requests: 8
+        cuda-graph-max-bs: 8
+        mem-fraction-static: 0.8
+  benchmark:
+    env:
+      CONC: '4'
+
+override_c8:
+  roles:
+    agg:
+      args:
+        max-running-requests: 16
+        cuda-graph-max-bs: 16
+        mem-fraction-static: 0.8
+  benchmark:
+    env:
+      CONC: '8'
+
+override_c16:
+  roles:
+    agg:
+      args:
+        max-running-requests: 32
+        cuda-graph-max-bs: 32
+        mem-fraction-static: 0.9
+        max-mamba-cache-size: 160
+  benchmark:
+    env:
+      CONC: '16'

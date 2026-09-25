@@ -57,17 +57,152 @@ base:
 
 # One variant per point. Admission is 2x CONC. TP4 shards the indexer across
 # ranks at the measured points (15, 20, 24, 28, 32).
-override_tp4_c1: {roles: {agg: {gpus: 4, args: {max-num-seqs: 2}}}, benchmark: {env: {CONC: '1'}}}
-override_tp4_c2: {roles: {agg: {gpus: 4, args: {max-num-seqs: 4}}}, benchmark: {env: {CONC: '2'}}}
-override_tp4_c4: {roles: {agg: {gpus: 4, args: {max-num-seqs: 8}}}, benchmark: {env: {CONC: '4'}}}
-override_tp4_c5: {roles: {agg: {gpus: 4, args: {max-num-seqs: 10}}}, benchmark: {env: {CONC: '5'}}}
-override_tp4_c8: {roles: {agg: {gpus: 4, args: {max-num-seqs: 16}}}, benchmark: {env: {CONC: '8'}}}
-override_tp4_c10: {roles: {agg: {gpus: 4, args: {max-num-seqs: 20}}}, benchmark: {env: {CONC: '10'}}}
-override_tp4_c12: {roles: {agg: {gpus: 4, args: {max-num-seqs: 24}}}, benchmark: {env: {CONC: '12'}}}
-override_tp4_c15: {roles: {agg: {gpus: 4, args: {max-num-seqs: 30}, env: {ATOM_M3_INDEXER_CP: '1'}}}, benchmark: {env: {CONC: '15'}}}
-override_tp4_c20: {roles: {agg: {gpus: 4, args: {max-num-seqs: 40}, env: {ATOM_M3_INDEXER_CP: '1'}}}, benchmark: {env: {CONC: '20'}}}
-override_tp4_c24: {roles: {agg: {gpus: 4, args: {max-num-seqs: 48}, env: {ATOM_M3_INDEXER_CP: '1'}}}, benchmark: {env: {CONC: '24'}}}
-override_tp4_c28: {roles: {agg: {gpus: 4, args: {max-num-seqs: 56}, env: {ATOM_M3_INDEXER_CP: '1'}}}, benchmark: {env: {CONC: '28'}}}
-override_tp4_c32: {roles: {agg: {gpus: 4, args: {max-num-seqs: 64}, env: {ATOM_M3_INDEXER_CP: '1'}}}, benchmark: {env: {CONC: '32'}}}
-override_tp2_c1: {roles: {agg: {gpus: 2, args: {max-num-seqs: 2}}}, benchmark: {env: {CONC: '1'}}}
-override_tp2_c2: {roles: {agg: {gpus: 2, args: {max-num-seqs: 4}}}, benchmark: {env: {CONC: '2'}}}
+override_tp4_c1:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        max-num-seqs: 2
+  benchmark:
+    env:
+      CONC: '1'
+
+override_tp4_c2:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        max-num-seqs: 4
+  benchmark:
+    env:
+      CONC: '2'
+
+override_tp4_c4:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        max-num-seqs: 8
+  benchmark:
+    env:
+      CONC: '4'
+
+override_tp4_c5:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        max-num-seqs: 10
+  benchmark:
+    env:
+      CONC: '5'
+
+override_tp4_c8:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        max-num-seqs: 16
+  benchmark:
+    env:
+      CONC: '8'
+
+override_tp4_c10:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        max-num-seqs: 20
+  benchmark:
+    env:
+      CONC: '10'
+
+override_tp4_c12:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        max-num-seqs: 24
+  benchmark:
+    env:
+      CONC: '12'
+
+override_tp4_c15:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        max-num-seqs: 30
+      env:
+        ATOM_M3_INDEXER_CP: '1'
+  benchmark:
+    env:
+      CONC: '15'
+
+override_tp4_c20:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        max-num-seqs: 40
+      env:
+        ATOM_M3_INDEXER_CP: '1'
+  benchmark:
+    env:
+      CONC: '20'
+
+override_tp4_c24:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        max-num-seqs: 48
+      env:
+        ATOM_M3_INDEXER_CP: '1'
+  benchmark:
+    env:
+      CONC: '24'
+
+override_tp4_c28:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        max-num-seqs: 56
+      env:
+        ATOM_M3_INDEXER_CP: '1'
+  benchmark:
+    env:
+      CONC: '28'
+
+override_tp4_c32:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        max-num-seqs: 64
+      env:
+        ATOM_M3_INDEXER_CP: '1'
+  benchmark:
+    env:
+      CONC: '32'
+
+override_tp2_c1:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        max-num-seqs: 2
+  benchmark:
+    env:
+      CONC: '1'
+
+override_tp2_c2:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        max-num-seqs: 4
+  benchmark:
+    env:
+      CONC: '2'

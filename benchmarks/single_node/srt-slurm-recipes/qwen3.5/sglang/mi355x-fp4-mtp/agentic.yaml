@@ -66,20 +66,258 @@ base:
 
 # One variant per point. Admission is 2x CONC and the decode graph batch follows
 # it up to 128; TP4 adds tokenizer workers. HiCache holds 1.5x the device KV pool.
-override_tp4_c1: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, tokenizer-worker-num: 6, max-running-requests: 2, cuda-graph-max-bs-decode: 2}}}, benchmark: {env: {CONC: '1', KV_OFFLOADING: none}}}
-override_tp4_c4: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, tokenizer-worker-num: 6, max-running-requests: 8, cuda-graph-max-bs-decode: 8}}}, benchmark: {env: {CONC: '4', KV_OFFLOADING: none}}}
-override_tp4_c8: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, tokenizer-worker-num: 6, max-running-requests: 16, cuda-graph-max-bs-decode: 16}}}, benchmark: {env: {CONC: '8', KV_OFFLOADING: none}}}
-override_tp4_c12: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, tokenizer-worker-num: 6, max-running-requests: 24, cuda-graph-max-bs-decode: 24}}}, benchmark: {env: {CONC: '12', KV_OFFLOADING: none}}}
-override_tp4_c16: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, tokenizer-worker-num: 6, max-running-requests: 32, cuda-graph-max-bs-decode: 32}}}, benchmark: {env: {CONC: '16', KV_OFFLOADING: none}}}
-override_tp2_c1: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, max-running-requests: 2, cuda-graph-max-bs-decode: 2}}}, benchmark: {env: {CONC: '1', KV_OFFLOADING: none}}}
-override_tp2_c4: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, max-running-requests: 8, cuda-graph-max-bs-decode: 8}}}, benchmark: {env: {CONC: '4', KV_OFFLOADING: none}}}
-override_tp2_c8: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, max-running-requests: 16, cuda-graph-max-bs-decode: 16}}}, benchmark: {env: {CONC: '8', KV_OFFLOADING: none}}}
-override_tp2_c12: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, max-running-requests: 24, cuda-graph-max-bs-decode: 24}}}, benchmark: {env: {CONC: '12', KV_OFFLOADING: none}}}
-override_tp2_c16: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, max-running-requests: 32, cuda-graph-max-bs-decode: 32}}}, benchmark: {env: {CONC: '16', KV_OFFLOADING: none}}}
-override_tp2_c20: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, max-running-requests: 40, cuda-graph-max-bs-decode: 40}}}, benchmark: {env: {CONC: '20', KV_OFFLOADING: none}}}
-override_tp2_c20_hicache: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, max-running-requests: 40, cuda-graph-max-bs-decode: 40, enable-hierarchical-cache: true, hicache-ratio: 1.5, hicache-write-policy: write_through, hicache-io-backend: kernel, hicache-mem-layout: page_first}}}, benchmark: {env: {CONC: '20', KV_OFFLOADING: dram}}}
-override_tp2_c24_hicache: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, max-running-requests: 48, cuda-graph-max-bs-decode: 48, enable-hierarchical-cache: true, hicache-ratio: 1.5, hicache-write-policy: write_through, hicache-io-backend: kernel, hicache-mem-layout: page_first}}}, benchmark: {env: {CONC: '24', KV_OFFLOADING: dram}}}
-override_tp2_c28_hicache: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, max-running-requests: 56, cuda-graph-max-bs-decode: 56, enable-hierarchical-cache: true, hicache-ratio: 1.5, hicache-write-policy: write_through, hicache-io-backend: kernel, hicache-mem-layout: page_first}}}, benchmark: {env: {CONC: '28', KV_OFFLOADING: dram}}}
-override_tp2_c32_hicache: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, max-running-requests: 64, cuda-graph-max-bs-decode: 64, enable-hierarchical-cache: true, hicache-ratio: 1.5, hicache-write-policy: write_through, hicache-io-backend: kernel, hicache-mem-layout: page_first}}}, benchmark: {env: {CONC: '32', KV_OFFLOADING: dram}}}
-override_tp2_c36_hicache: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, max-running-requests: 72, cuda-graph-max-bs-decode: 72, enable-hierarchical-cache: true, hicache-ratio: 1.5, hicache-write-policy: write_through, hicache-io-backend: kernel, hicache-mem-layout: page_first}}}, benchmark: {env: {CONC: '36', KV_OFFLOADING: dram}}}
-override_tp2_c40_hicache: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, max-running-requests: 80, cuda-graph-max-bs-decode: 80, enable-hierarchical-cache: true, hicache-ratio: 1.5, hicache-write-policy: write_through, hicache-io-backend: kernel, hicache-mem-layout: page_first}}}, benchmark: {env: {CONC: '40', KV_OFFLOADING: dram}}}
+override_tp4_c1:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        tokenizer-worker-num: 6
+        max-running-requests: 2
+        cuda-graph-max-bs-decode: 2
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: none
+
+override_tp4_c4:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        tokenizer-worker-num: 6
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
+  benchmark:
+    env:
+      CONC: '4'
+      KV_OFFLOADING: none
+
+override_tp4_c8:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        tokenizer-worker-num: 6
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 16
+  benchmark:
+    env:
+      CONC: '8'
+      KV_OFFLOADING: none
+
+override_tp4_c12:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        tokenizer-worker-num: 6
+        max-running-requests: 24
+        cuda-graph-max-bs-decode: 24
+  benchmark:
+    env:
+      CONC: '12'
+      KV_OFFLOADING: none
+
+override_tp4_c16:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        tokenizer-worker-num: 6
+        max-running-requests: 32
+        cuda-graph-max-bs-decode: 32
+  benchmark:
+    env:
+      CONC: '16'
+      KV_OFFLOADING: none
+
+override_tp2_c1:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        max-running-requests: 2
+        cuda-graph-max-bs-decode: 2
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: none
+
+override_tp2_c4:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
+  benchmark:
+    env:
+      CONC: '4'
+      KV_OFFLOADING: none
+
+override_tp2_c8:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 16
+  benchmark:
+    env:
+      CONC: '8'
+      KV_OFFLOADING: none
+
+override_tp2_c12:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        max-running-requests: 24
+        cuda-graph-max-bs-decode: 24
+  benchmark:
+    env:
+      CONC: '12'
+      KV_OFFLOADING: none
+
+override_tp2_c16:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        max-running-requests: 32
+        cuda-graph-max-bs-decode: 32
+  benchmark:
+    env:
+      CONC: '16'
+      KV_OFFLOADING: none
+
+override_tp2_c20:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        max-running-requests: 40
+        cuda-graph-max-bs-decode: 40
+  benchmark:
+    env:
+      CONC: '20'
+      KV_OFFLOADING: none
+
+override_tp2_c20_hicache:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        max-running-requests: 40
+        cuda-graph-max-bs-decode: 40
+        enable-hierarchical-cache: true
+        hicache-ratio: 1.5
+        hicache-write-policy: write_through
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+  benchmark:
+    env:
+      CONC: '20'
+      KV_OFFLOADING: dram
+
+override_tp2_c24_hicache:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        max-running-requests: 48
+        cuda-graph-max-bs-decode: 48
+        enable-hierarchical-cache: true
+        hicache-ratio: 1.5
+        hicache-write-policy: write_through
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+  benchmark:
+    env:
+      CONC: '24'
+      KV_OFFLOADING: dram
+
+override_tp2_c28_hicache:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        max-running-requests: 56
+        cuda-graph-max-bs-decode: 56
+        enable-hierarchical-cache: true
+        hicache-ratio: 1.5
+        hicache-write-policy: write_through
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+  benchmark:
+    env:
+      CONC: '28'
+      KV_OFFLOADING: dram
+
+override_tp2_c32_hicache:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        max-running-requests: 64
+        cuda-graph-max-bs-decode: 64
+        enable-hierarchical-cache: true
+        hicache-ratio: 1.5
+        hicache-write-policy: write_through
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+  benchmark:
+    env:
+      CONC: '32'
+      KV_OFFLOADING: dram
+
+override_tp2_c36_hicache:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        max-running-requests: 72
+        cuda-graph-max-bs-decode: 72
+        enable-hierarchical-cache: true
+        hicache-ratio: 1.5
+        hicache-write-policy: write_through
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+  benchmark:
+    env:
+      CONC: '36'
+      KV_OFFLOADING: dram
+
+override_tp2_c40_hicache:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        max-running-requests: 80
+        cuda-graph-max-bs-decode: 80
+        enable-hierarchical-cache: true
+        hicache-ratio: 1.5
+        hicache-write-policy: write_through
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+  benchmark:
+    env:
+      CONC: '40'
+      KV_OFFLOADING: dram

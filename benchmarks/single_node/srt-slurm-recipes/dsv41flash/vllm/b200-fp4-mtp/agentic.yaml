@@ -58,19 +58,194 @@ base:
 # rank, so it caps batched tokens at 4096 (the indexer's 1M-wide logits buffer),
 # bounds the scheduler at 2x CONC within [16, 256] (FlashInfer autotune fails
 # below 16) and stops capturing above 512 tokens.
-override_tp4_c1: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, max-cudagraph-capture-size: 64}}}, benchmark: {env: {CONC: '1'}}}
-override_tp4_c2: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, max-cudagraph-capture-size: 64}}}, benchmark: {env: {CONC: '2'}}}
-override_tp4_c4: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, max-cudagraph-capture-size: 64}}}, benchmark: {env: {CONC: '4'}}}
-override_tp4_c8: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, max-cudagraph-capture-size: 64}}}, benchmark: {env: {CONC: '8'}}}
-override_tp4_c16: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, max-cudagraph-capture-size: 128}}}, benchmark: {env: {CONC: '16'}}}
-override_tp4_c32: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, max-cudagraph-capture-size: 256}}}, benchmark: {env: {CONC: '32'}}}
-override_tp4_c64: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, max-cudagraph-capture-size: 512}}}, benchmark: {env: {CONC: '64'}}}
-override_tp4_c128: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, max-cudagraph-capture-size: 1024}}}, benchmark: {env: {CONC: '128'}}}
-override_tp2_c1: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, max-cudagraph-capture-size: 64, max-num-batched-tokens: 4096, max-num-seqs: 16}}}, benchmark: {env: {CONC: '1'}}}
-override_tp2_c2: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, max-cudagraph-capture-size: 64, max-num-batched-tokens: 4096, max-num-seqs: 16}}}, benchmark: {env: {CONC: '2'}}}
-override_tp2_c4: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, max-cudagraph-capture-size: 64, max-num-batched-tokens: 4096, max-num-seqs: 16}}}, benchmark: {env: {CONC: '4'}}}
-override_tp2_c8: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, max-cudagraph-capture-size: 64, max-num-batched-tokens: 4096, max-num-seqs: 16}}}, benchmark: {env: {CONC: '8'}}}
-override_tp2_c16: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, max-cudagraph-capture-size: 128, max-num-batched-tokens: 4096, max-num-seqs: 32}}}, benchmark: {env: {CONC: '16'}}}
-override_tp2_c32: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, max-cudagraph-capture-size: 256, max-num-batched-tokens: 4096, max-num-seqs: 64}}}, benchmark: {env: {CONC: '32'}}}
-override_tp2_c64: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, max-cudagraph-capture-size: 512, max-num-batched-tokens: 4096, max-num-seqs: 128}}}, benchmark: {env: {CONC: '64'}}}
-override_tp2_c128: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, max-cudagraph-capture-size: 512, max-num-batched-tokens: 4096, max-num-seqs: 256}}}, benchmark: {env: {CONC: '128'}}}
+override_tp4_c1:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-cudagraph-capture-size: 64
+  benchmark:
+    env:
+      CONC: '1'
+
+override_tp4_c2:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-cudagraph-capture-size: 64
+  benchmark:
+    env:
+      CONC: '2'
+
+override_tp4_c4:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-cudagraph-capture-size: 64
+  benchmark:
+    env:
+      CONC: '4'
+
+override_tp4_c8:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-cudagraph-capture-size: 64
+  benchmark:
+    env:
+      CONC: '8'
+
+override_tp4_c16:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-cudagraph-capture-size: 128
+  benchmark:
+    env:
+      CONC: '16'
+
+override_tp4_c32:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-cudagraph-capture-size: 256
+  benchmark:
+    env:
+      CONC: '32'
+
+override_tp4_c64:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-cudagraph-capture-size: 512
+  benchmark:
+    env:
+      CONC: '64'
+
+override_tp4_c128:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-cudagraph-capture-size: 1024
+  benchmark:
+    env:
+      CONC: '128'
+
+override_tp2_c1:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        max-cudagraph-capture-size: 64
+        max-num-batched-tokens: 4096
+        max-num-seqs: 16
+  benchmark:
+    env:
+      CONC: '1'
+
+override_tp2_c2:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        max-cudagraph-capture-size: 64
+        max-num-batched-tokens: 4096
+        max-num-seqs: 16
+  benchmark:
+    env:
+      CONC: '2'
+
+override_tp2_c4:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        max-cudagraph-capture-size: 64
+        max-num-batched-tokens: 4096
+        max-num-seqs: 16
+  benchmark:
+    env:
+      CONC: '4'
+
+override_tp2_c8:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        max-cudagraph-capture-size: 64
+        max-num-batched-tokens: 4096
+        max-num-seqs: 16
+  benchmark:
+    env:
+      CONC: '8'
+
+override_tp2_c16:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        max-cudagraph-capture-size: 128
+        max-num-batched-tokens: 4096
+        max-num-seqs: 32
+  benchmark:
+    env:
+      CONC: '16'
+
+override_tp2_c32:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        max-cudagraph-capture-size: 256
+        max-num-batched-tokens: 4096
+        max-num-seqs: 64
+  benchmark:
+    env:
+      CONC: '32'
+
+override_tp2_c64:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        max-cudagraph-capture-size: 512
+        max-num-batched-tokens: 4096
+        max-num-seqs: 128
+  benchmark:
+    env:
+      CONC: '64'
+
+override_tp2_c128:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        max-cudagraph-capture-size: 512
+        max-num-batched-tokens: 4096
+        max-num-seqs: 256
+  benchmark:
+    env:
+      CONC: '128'

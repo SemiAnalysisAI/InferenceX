@@ -50,10 +50,86 @@ base:
 
 # One variant per point. Admission is 2x CONC with graphs captured up to it. The
 # draft is five tokens through concurrency 8 and four above it.
-override_tp4_c2: {roles: {agg: {gpus: 4, args: {max-num-seqs: 4, cudagraph-capture-sizes: '[1,2,4]', num-speculative-tokens: 5}}}, benchmark: {env: {CONC: '2'}}}
-override_tp4_c4: {roles: {agg: {gpus: 4, args: {max-num-seqs: 8, cudagraph-capture-sizes: '[1,2,4,8]', num-speculative-tokens: 5}}}, benchmark: {env: {CONC: '4'}}}
-override_tp4_c8: {roles: {agg: {gpus: 4, args: {max-num-seqs: 16, cudagraph-capture-sizes: '[1,2,4,8,12,16]', num-speculative-tokens: 5}}}, benchmark: {env: {CONC: '8'}}}
-override_tp4_c10: {roles: {agg: {gpus: 4, args: {max-num-seqs: 20, cudagraph-capture-sizes: '[1,2,4,8,12,16,20]', num-speculative-tokens: 4}}}, benchmark: {env: {CONC: '10'}}}
-override_tp8_c1: {roles: {agg: {gpus: 8, args: {max-num-seqs: 2, cudagraph-capture-sizes: '[1,2]', num-speculative-tokens: 5}}}, benchmark: {env: {CONC: '1'}}}
-override_tp8_c2: {roles: {agg: {gpus: 8, args: {max-num-seqs: 4, cudagraph-capture-sizes: '[1,2,4]', num-speculative-tokens: 5}}}, benchmark: {env: {CONC: '2'}}}
-override_tp8_c4: {roles: {agg: {gpus: 8, args: {max-num-seqs: 8, cudagraph-capture-sizes: '[1,2,4,8]', num-speculative-tokens: 5}}}, benchmark: {env: {CONC: '4'}}}
+override_tp4_c2:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        max-num-seqs: 4
+        cudagraph-capture-sizes: '[1,2,4]'
+        num-speculative-tokens: 5
+  benchmark:
+    env:
+      CONC: '2'
+
+override_tp4_c4:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        max-num-seqs: 8
+        cudagraph-capture-sizes: '[1,2,4,8]'
+        num-speculative-tokens: 5
+  benchmark:
+    env:
+      CONC: '4'
+
+override_tp4_c8:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        max-num-seqs: 16
+        cudagraph-capture-sizes: '[1,2,4,8,12,16]'
+        num-speculative-tokens: 5
+  benchmark:
+    env:
+      CONC: '8'
+
+override_tp4_c10:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        max-num-seqs: 20
+        cudagraph-capture-sizes: '[1,2,4,8,12,16,20]'
+        num-speculative-tokens: 4
+  benchmark:
+    env:
+      CONC: '10'
+
+override_tp8_c1:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        max-num-seqs: 2
+        cudagraph-capture-sizes: '[1,2]'
+        num-speculative-tokens: 5
+  benchmark:
+    env:
+      CONC: '1'
+
+override_tp8_c2:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        max-num-seqs: 4
+        cudagraph-capture-sizes: '[1,2,4]'
+        num-speculative-tokens: 5
+  benchmark:
+    env:
+      CONC: '2'
+
+override_tp8_c4:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        max-num-seqs: 8
+        cudagraph-capture-sizes: '[1,2,4,8]'
+        num-speculative-tokens: 5
+  benchmark:
+    env:
+      CONC: '4'

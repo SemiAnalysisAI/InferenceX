@@ -70,18 +70,409 @@ base:
 # offload so block hashes agree across ranks. DEP8 takes a larger prefill
 # budget and more memory headroom. DRAM points split TOTAL_CPU_DRAM_GB GB
 # across the ranks.
-override_tp8_c1: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, data-parallel-size: 1, disable-custom-all-reduce: true, gpu-memory-utilization: 0.95, max-num-seqs: 2, compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[4,8],"mode":0}'}, env: {VLLM_ALLREDUCE_USE_FLASHINFER: '1', VLLM_FLASHINFER_ALLREDUCE_BACKEND: 'auto'}}}, benchmark: {env: {CONC: '1', KV_OFFLOADING: none}}}
-override_tp8_c4: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, data-parallel-size: 1, disable-custom-all-reduce: true, gpu-memory-utilization: 0.95, max-num-seqs: 8, compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[4,8,12,16,20,24,28,32],"mode":0}'}, env: {VLLM_ALLREDUCE_USE_FLASHINFER: '1', VLLM_FLASHINFER_ALLREDUCE_BACKEND: 'auto'}}}, benchmark: {env: {CONC: '4', KV_OFFLOADING: none}}}
-override_tp4_c1: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, data-parallel-size: 1, disable-custom-all-reduce: true, gpu-memory-utilization: 0.95, max-num-seqs: 2, compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[4,8],"mode":0}'}, env: {VLLM_ALLREDUCE_USE_FLASHINFER: '1', VLLM_FLASHINFER_ALLREDUCE_BACKEND: 'auto'}}}, benchmark: {env: {CONC: '1', KV_OFFLOADING: none}}}
-override_tp4_c2: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, data-parallel-size: 1, disable-custom-all-reduce: true, gpu-memory-utilization: 0.95, max-num-seqs: 4, compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[4,8,12,16],"mode":0}'}, env: {VLLM_ALLREDUCE_USE_FLASHINFER: '1', VLLM_FLASHINFER_ALLREDUCE_BACKEND: 'auto'}}}, benchmark: {env: {CONC: '2', KV_OFFLOADING: none}}}
-override_tp4_c4: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, data-parallel-size: 1, disable-custom-all-reduce: true, gpu-memory-utilization: 0.95, max-num-seqs: 8, compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[4,8,12,16,20,24,28,32],"mode":0}'}, env: {VLLM_ALLREDUCE_USE_FLASHINFER: '1', VLLM_FLASHINFER_ALLREDUCE_BACKEND: 'auto'}}}, benchmark: {env: {CONC: '4', KV_OFFLOADING: none}}}
-override_tp4_c6: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, data-parallel-size: 1, disable-custom-all-reduce: true, gpu-memory-utilization: 0.95, max-num-seqs: 12, compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,36,40,44,48],"mode":0}'}, env: {VLLM_ALLREDUCE_USE_FLASHINFER: '1', VLLM_FLASHINFER_ALLREDUCE_BACKEND: 'auto'}}}, benchmark: {env: {CONC: '6', KV_OFFLOADING: none}}}
-override_tp4_c8: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, data-parallel-size: 1, disable-custom-all-reduce: true, gpu-memory-utilization: 0.95, max-num-seqs: 16, compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64],"mode":0}'}, env: {VLLM_ALLREDUCE_USE_FLASHINFER: '1', VLLM_FLASHINFER_ALLREDUCE_BACKEND: 'auto'}}}, benchmark: {env: {CONC: '8', KV_OFFLOADING: none}}}
-override_tp4_c16: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, data-parallel-size: 1, disable-custom-all-reduce: true, gpu-memory-utilization: 0.95, max-num-seqs: 32, compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128],"mode":0}', kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":356000000000,"enable_cross_layers_blocks":"true","lazy_offload":true}}'}, env: {VLLM_ALLREDUCE_USE_FLASHINFER: '1', VLLM_FLASHINFER_ALLREDUCE_BACKEND: 'auto', PYTHONHASHSEED: '42'}}}, benchmark: {env: {CONC: '16', KV_OFFLOADING: dram, TOTAL_CPU_DRAM_GB: '1424'}}}
-override_dep4_c48: {frontend: {type: vllm-router, args: {policy: consistent_hash, prometheus-host: 127.0.0.1, prometheus-port: 18000, request-timeout-secs: 14400, disable-retries: true}}, setup_script: vllm-router-0.1.14.sh, roles: {agg: {gpus: 4, args: {tensor-parallel-size: 1, data-parallel-size: 4, enable-expert-parallel: true, enable-ep-weight-filter: true, moe-backend: deep_gemm_amxf4_mega_moe, prefill-schedule-interval: 8, long-prefill-token-threshold: 512, max-num-batched-tokens: 8192, gpu-memory-utilization: 0.95, max-num-seqs: 24, compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96],"mode":0}', kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":356000000000,"enable_cross_layers_blocks":"true","lazy_offload":false}}'}, env: {PYTORCH_ALLOC_CONF: 'expandable_segments:True', PYTHONHASHSEED: '42'}}}, benchmark: {env: {CONC: '48', KV_OFFLOADING: dram, TOTAL_CPU_DRAM_GB: '1424', AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: '1'}}}
-override_dep4_c64: {frontend: {type: vllm-router, args: {policy: consistent_hash, prometheus-host: 127.0.0.1, prometheus-port: 18000, request-timeout-secs: 14400, disable-retries: true}}, setup_script: vllm-router-0.1.14.sh, roles: {agg: {gpus: 4, args: {tensor-parallel-size: 1, data-parallel-size: 4, enable-expert-parallel: true, enable-ep-weight-filter: true, moe-backend: deep_gemm_amxf4_mega_moe, prefill-schedule-interval: 8, long-prefill-token-threshold: 512, max-num-batched-tokens: 8192, gpu-memory-utilization: 0.95, max-num-seqs: 32, compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128],"mode":0}', kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":356000000000,"enable_cross_layers_blocks":"true","lazy_offload":false}}'}, env: {PYTORCH_ALLOC_CONF: 'expandable_segments:True', PYTHONHASHSEED: '42'}}}, benchmark: {env: {CONC: '64', KV_OFFLOADING: dram, TOTAL_CPU_DRAM_GB: '1424', AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: '1'}}}
-override_dep8_c128: {frontend: {type: vllm-router, args: {policy: consistent_hash, prometheus-host: 127.0.0.1, prometheus-port: 18000, request-timeout-secs: 14400, disable-retries: true}}, setup_script: vllm-router-0.1.14.sh, roles: {agg: {gpus: 8, args: {tensor-parallel-size: 1, data-parallel-size: 8, enable-expert-parallel: true, enable-ep-weight-filter: true, moe-backend: deep_gemm_amxf4_mega_moe, prefill-schedule-interval: 8, long-prefill-token-threshold: 512, max-num-batched-tokens: 16384, gpu-memory-utilization: 0.92, max-num-seqs: 32, compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128],"mode":0}', kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":356125000000,"enable_cross_layers_blocks":"true","lazy_offload":false}}'}, env: {PYTORCH_ALLOC_CONF: 'expandable_segments:True', PYTHONHASHSEED: '42'}}}, benchmark: {env: {CONC: '128', KV_OFFLOADING: dram, TOTAL_CPU_DRAM_GB: '2849', AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: '1'}}}
-override_dep8_c256: {frontend: {type: vllm-router, args: {policy: consistent_hash, prometheus-host: 127.0.0.1, prometheus-port: 18000, request-timeout-secs: 14400, disable-retries: true}}, setup_script: vllm-router-0.1.14.sh, roles: {agg: {gpus: 8, args: {tensor-parallel-size: 1, data-parallel-size: 8, enable-expert-parallel: true, enable-ep-weight-filter: true, moe-backend: deep_gemm_amxf4_mega_moe, prefill-schedule-interval: 8, long-prefill-token-threshold: 512, max-num-batched-tokens: 16384, gpu-memory-utilization: 0.92, max-num-seqs: 64, compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,148,152,156,160,164,168,172,176,180,184,188,192,196,200,204,208,212,216,220,224,228,232,236,240,244,248,252,256],"mode":0}', kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":356125000000,"enable_cross_layers_blocks":"true","lazy_offload":false}}'}, env: {PYTORCH_ALLOC_CONF: 'expandable_segments:True', PYTHONHASHSEED: '42'}}}, benchmark: {env: {CONC: '256', KV_OFFLOADING: dram, TOTAL_CPU_DRAM_GB: '2849', AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: '1'}}}
-override_dep8_c384: {frontend: {type: vllm-router, args: {policy: consistent_hash, prometheus-host: 127.0.0.1, prometheus-port: 18000, request-timeout-secs: 14400, disable-retries: true}}, setup_script: vllm-router-0.1.14.sh, roles: {agg: {gpus: 8, args: {tensor-parallel-size: 1, data-parallel-size: 8, enable-expert-parallel: true, enable-ep-weight-filter: true, moe-backend: deep_gemm_amxf4_mega_moe, prefill-schedule-interval: 8, long-prefill-token-threshold: 512, max-num-batched-tokens: 16384, gpu-memory-utilization: 0.92, max-num-seqs: 96, compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,148,152,156,160,164,168,172,176,180,184,188,192,196,200,204,208,212,216,220,224,228,232,236,240,244,248,252,256,260,264,268,272,276,280,284,288,292,296,300,304,308,312,316,320,324,328,332,336,340,344,348,352,356,360,364,368,372,376,380,384],"mode":0}', kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":356125000000,"enable_cross_layers_blocks":"true","lazy_offload":false}}'}, env: {PYTORCH_ALLOC_CONF: 'expandable_segments:True', PYTHONHASHSEED: '42'}}}, benchmark: {env: {CONC: '384', KV_OFFLOADING: dram, TOTAL_CPU_DRAM_GB: '2849', AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: '1'}}}
-override_dep8_c512: {frontend: {type: vllm-router, args: {policy: consistent_hash, prometheus-host: 127.0.0.1, prometheus-port: 18000, request-timeout-secs: 14400, disable-retries: true}}, setup_script: vllm-router-0.1.14.sh, roles: {agg: {gpus: 8, args: {tensor-parallel-size: 1, data-parallel-size: 8, enable-expert-parallel: true, enable-ep-weight-filter: true, moe-backend: deep_gemm_amxf4_mega_moe, prefill-schedule-interval: 8, long-prefill-token-threshold: 512, max-num-batched-tokens: 16384, gpu-memory-utilization: 0.92, max-num-seqs: 128, compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,148,152,156,160,164,168,172,176,180,184,188,192,196,200,204,208,212,216,220,224,228,232,236,240,244,248,252,256,260,264,268,272,276,280,284,288,292,296,300,304,308,312,316,320,324,328,332,336,340,344,348,352,356,360,364,368,372,376,380,384,388,392,396,400,404,408,412,416,420,424,428,432,436,440,444,448,452,456,460,464,468,472,476,480,484,488,492,496,500,504,508,512],"mode":0}', kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":356125000000,"enable_cross_layers_blocks":"true","lazy_offload":false}}'}, env: {PYTORCH_ALLOC_CONF: 'expandable_segments:True', PYTHONHASHSEED: '42'}}}, benchmark: {env: {CONC: '512', KV_OFFLOADING: dram, TOTAL_CPU_DRAM_GB: '2849', AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: '1'}}}
-override_dep8_c576: {frontend: {type: vllm-router, args: {policy: consistent_hash, prometheus-host: 127.0.0.1, prometheus-port: 18000, request-timeout-secs: 14400, disable-retries: true}}, setup_script: vllm-router-0.1.14.sh, roles: {agg: {gpus: 8, args: {tensor-parallel-size: 1, data-parallel-size: 8, enable-expert-parallel: true, enable-ep-weight-filter: true, moe-backend: deep_gemm_amxf4_mega_moe, prefill-schedule-interval: 8, long-prefill-token-threshold: 512, max-num-batched-tokens: 16384, gpu-memory-utilization: 0.92, max-num-seqs: 144, compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,148,152,156,160,164,168,172,176,180,184,188,192,196,200,204,208,212,216,220,224,228,232,236,240,244,248,252,256,260,264,268,272,276,280,284,288,292,296,300,304,308,312,316,320,324,328,332,336,340,344,348,352,356,360,364,368,372,376,380,384,388,392,396,400,404,408,412,416,420,424,428,432,436,440,444,448,452,456,460,464,468,472,476,480,484,488,492,496,500,504,508,512,516,520,524,528,532,536,540,544,548,552,556,560,564,568,572,576],"mode":0}', kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":356125000000,"enable_cross_layers_blocks":"true","lazy_offload":false}}'}, env: {PYTORCH_ALLOC_CONF: 'expandable_segments:True', PYTHONHASHSEED: '42'}}}, benchmark: {env: {CONC: '576', KV_OFFLOADING: dram, TOTAL_CPU_DRAM_GB: '2849', AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: '1'}}}
+override_tp8_c1:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        data-parallel-size: 1
+        disable-custom-all-reduce: true
+        gpu-memory-utilization: 0.95
+        max-num-seqs: 2
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[4,8],"mode":0}'
+      env:
+        VLLM_ALLREDUCE_USE_FLASHINFER: '1'
+        VLLM_FLASHINFER_ALLREDUCE_BACKEND: 'auto'
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: none
+
+override_tp8_c4:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        data-parallel-size: 1
+        disable-custom-all-reduce: true
+        gpu-memory-utilization: 0.95
+        max-num-seqs: 8
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[4,8,12,16,20,24,28,32],"mode":0}'
+      env:
+        VLLM_ALLREDUCE_USE_FLASHINFER: '1'
+        VLLM_FLASHINFER_ALLREDUCE_BACKEND: 'auto'
+  benchmark:
+    env:
+      CONC: '4'
+      KV_OFFLOADING: none
+
+override_tp4_c1:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        data-parallel-size: 1
+        disable-custom-all-reduce: true
+        gpu-memory-utilization: 0.95
+        max-num-seqs: 2
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[4,8],"mode":0}'
+      env:
+        VLLM_ALLREDUCE_USE_FLASHINFER: '1'
+        VLLM_FLASHINFER_ALLREDUCE_BACKEND: 'auto'
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: none
+
+override_tp4_c2:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        data-parallel-size: 1
+        disable-custom-all-reduce: true
+        gpu-memory-utilization: 0.95
+        max-num-seqs: 4
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[4,8,12,16],"mode":0}'
+      env:
+        VLLM_ALLREDUCE_USE_FLASHINFER: '1'
+        VLLM_FLASHINFER_ALLREDUCE_BACKEND: 'auto'
+  benchmark:
+    env:
+      CONC: '2'
+      KV_OFFLOADING: none
+
+override_tp4_c4:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        data-parallel-size: 1
+        disable-custom-all-reduce: true
+        gpu-memory-utilization: 0.95
+        max-num-seqs: 8
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[4,8,12,16,20,24,28,32],"mode":0}'
+      env:
+        VLLM_ALLREDUCE_USE_FLASHINFER: '1'
+        VLLM_FLASHINFER_ALLREDUCE_BACKEND: 'auto'
+  benchmark:
+    env:
+      CONC: '4'
+      KV_OFFLOADING: none
+
+override_tp4_c6:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        data-parallel-size: 1
+        disable-custom-all-reduce: true
+        gpu-memory-utilization: 0.95
+        max-num-seqs: 12
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,36,40,44,48],"mode":0}'
+      env:
+        VLLM_ALLREDUCE_USE_FLASHINFER: '1'
+        VLLM_FLASHINFER_ALLREDUCE_BACKEND: 'auto'
+  benchmark:
+    env:
+      CONC: '6'
+      KV_OFFLOADING: none
+
+override_tp4_c8:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        data-parallel-size: 1
+        disable-custom-all-reduce: true
+        gpu-memory-utilization: 0.95
+        max-num-seqs: 16
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64],"mode":0}'
+      env:
+        VLLM_ALLREDUCE_USE_FLASHINFER: '1'
+        VLLM_FLASHINFER_ALLREDUCE_BACKEND: 'auto'
+  benchmark:
+    env:
+      CONC: '8'
+      KV_OFFLOADING: none
+
+override_tp4_c16:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        data-parallel-size: 1
+        disable-custom-all-reduce: true
+        gpu-memory-utilization: 0.95
+        max-num-seqs: 32
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128],"mode":0}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":356000000000,"enable_cross_layers_blocks":"true","lazy_offload":true}}'
+      env:
+        VLLM_ALLREDUCE_USE_FLASHINFER: '1'
+        VLLM_FLASHINFER_ALLREDUCE_BACKEND: 'auto'
+        PYTHONHASHSEED: '42'
+  benchmark:
+    env:
+      CONC: '16'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1424'
+
+override_dep4_c48:
+  frontend:
+    type: vllm-router
+    args:
+      policy: consistent_hash
+      prometheus-host: 127.0.0.1
+      prometheus-port: 18000
+      request-timeout-secs: 14400
+      disable-retries: true
+  setup_script: vllm-router-0.1.14.sh
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 1
+        data-parallel-size: 4
+        enable-expert-parallel: true
+        enable-ep-weight-filter: true
+        moe-backend: deep_gemm_amxf4_mega_moe
+        prefill-schedule-interval: 8
+        long-prefill-token-threshold: 512
+        max-num-batched-tokens: 8192
+        gpu-memory-utilization: 0.95
+        max-num-seqs: 24
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96],"mode":0}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":356000000000,"enable_cross_layers_blocks":"true","lazy_offload":false}}'
+      env:
+        PYTORCH_ALLOC_CONF: 'expandable_segments:True'
+        PYTHONHASHSEED: '42'
+  benchmark:
+    env:
+      CONC: '48'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1424'
+      AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: '1'
+
+override_dep4_c64:
+  frontend:
+    type: vllm-router
+    args:
+      policy: consistent_hash
+      prometheus-host: 127.0.0.1
+      prometheus-port: 18000
+      request-timeout-secs: 14400
+      disable-retries: true
+  setup_script: vllm-router-0.1.14.sh
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 1
+        data-parallel-size: 4
+        enable-expert-parallel: true
+        enable-ep-weight-filter: true
+        moe-backend: deep_gemm_amxf4_mega_moe
+        prefill-schedule-interval: 8
+        long-prefill-token-threshold: 512
+        max-num-batched-tokens: 8192
+        gpu-memory-utilization: 0.95
+        max-num-seqs: 32
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128],"mode":0}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":356000000000,"enable_cross_layers_blocks":"true","lazy_offload":false}}'
+      env:
+        PYTORCH_ALLOC_CONF: 'expandable_segments:True'
+        PYTHONHASHSEED: '42'
+  benchmark:
+    env:
+      CONC: '64'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1424'
+      AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: '1'
+
+override_dep8_c128:
+  frontend:
+    type: vllm-router
+    args:
+      policy: consistent_hash
+      prometheus-host: 127.0.0.1
+      prometheus-port: 18000
+      request-timeout-secs: 14400
+      disable-retries: true
+  setup_script: vllm-router-0.1.14.sh
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 1
+        data-parallel-size: 8
+        enable-expert-parallel: true
+        enable-ep-weight-filter: true
+        moe-backend: deep_gemm_amxf4_mega_moe
+        prefill-schedule-interval: 8
+        long-prefill-token-threshold: 512
+        max-num-batched-tokens: 16384
+        gpu-memory-utilization: 0.92
+        max-num-seqs: 32
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128],"mode":0}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":356125000000,"enable_cross_layers_blocks":"true","lazy_offload":false}}'
+      env:
+        PYTORCH_ALLOC_CONF: 'expandable_segments:True'
+        PYTHONHASHSEED: '42'
+  benchmark:
+    env:
+      CONC: '128'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '2849'
+      AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: '1'
+
+override_dep8_c256:
+  frontend:
+    type: vllm-router
+    args:
+      policy: consistent_hash
+      prometheus-host: 127.0.0.1
+      prometheus-port: 18000
+      request-timeout-secs: 14400
+      disable-retries: true
+  setup_script: vllm-router-0.1.14.sh
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 1
+        data-parallel-size: 8
+        enable-expert-parallel: true
+        enable-ep-weight-filter: true
+        moe-backend: deep_gemm_amxf4_mega_moe
+        prefill-schedule-interval: 8
+        long-prefill-token-threshold: 512
+        max-num-batched-tokens: 16384
+        gpu-memory-utilization: 0.92
+        max-num-seqs: 64
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,148,152,156,160,164,168,172,176,180,184,188,192,196,200,204,208,212,216,220,224,228,232,236,240,244,248,252,256],"mode":0}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":356125000000,"enable_cross_layers_blocks":"true","lazy_offload":false}}'
+      env:
+        PYTORCH_ALLOC_CONF: 'expandable_segments:True'
+        PYTHONHASHSEED: '42'
+  benchmark:
+    env:
+      CONC: '256'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '2849'
+      AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: '1'
+
+override_dep8_c384:
+  frontend:
+    type: vllm-router
+    args:
+      policy: consistent_hash
+      prometheus-host: 127.0.0.1
+      prometheus-port: 18000
+      request-timeout-secs: 14400
+      disable-retries: true
+  setup_script: vllm-router-0.1.14.sh
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 1
+        data-parallel-size: 8
+        enable-expert-parallel: true
+        enable-ep-weight-filter: true
+        moe-backend: deep_gemm_amxf4_mega_moe
+        prefill-schedule-interval: 8
+        long-prefill-token-threshold: 512
+        max-num-batched-tokens: 16384
+        gpu-memory-utilization: 0.92
+        max-num-seqs: 96
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,148,152,156,160,164,168,172,176,180,184,188,192,196,200,204,208,212,216,220,224,228,232,236,240,244,248,252,256,260,264,268,272,276,280,284,288,292,296,300,304,308,312,316,320,324,328,332,336,340,344,348,352,356,360,364,368,372,376,380,384],"mode":0}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":356125000000,"enable_cross_layers_blocks":"true","lazy_offload":false}}'
+      env:
+        PYTORCH_ALLOC_CONF: 'expandable_segments:True'
+        PYTHONHASHSEED: '42'
+  benchmark:
+    env:
+      CONC: '384'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '2849'
+      AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: '1'
+
+override_dep8_c512:
+  frontend:
+    type: vllm-router
+    args:
+      policy: consistent_hash
+      prometheus-host: 127.0.0.1
+      prometheus-port: 18000
+      request-timeout-secs: 14400
+      disable-retries: true
+  setup_script: vllm-router-0.1.14.sh
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 1
+        data-parallel-size: 8
+        enable-expert-parallel: true
+        enable-ep-weight-filter: true
+        moe-backend: deep_gemm_amxf4_mega_moe
+        prefill-schedule-interval: 8
+        long-prefill-token-threshold: 512
+        max-num-batched-tokens: 16384
+        gpu-memory-utilization: 0.92
+        max-num-seqs: 128
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,148,152,156,160,164,168,172,176,180,184,188,192,196,200,204,208,212,216,220,224,228,232,236,240,244,248,252,256,260,264,268,272,276,280,284,288,292,296,300,304,308,312,316,320,324,328,332,336,340,344,348,352,356,360,364,368,372,376,380,384,388,392,396,400,404,408,412,416,420,424,428,432,436,440,444,448,452,456,460,464,468,472,476,480,484,488,492,496,500,504,508,512],"mode":0}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":356125000000,"enable_cross_layers_blocks":"true","lazy_offload":false}}'
+      env:
+        PYTORCH_ALLOC_CONF: 'expandable_segments:True'
+        PYTHONHASHSEED: '42'
+  benchmark:
+    env:
+      CONC: '512'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '2849'
+      AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: '1'
+
+override_dep8_c576:
+  frontend:
+    type: vllm-router
+    args:
+      policy: consistent_hash
+      prometheus-host: 127.0.0.1
+      prometheus-port: 18000
+      request-timeout-secs: 14400
+      disable-retries: true
+  setup_script: vllm-router-0.1.14.sh
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 1
+        data-parallel-size: 8
+        enable-expert-parallel: true
+        enable-ep-weight-filter: true
+        moe-backend: deep_gemm_amxf4_mega_moe
+        prefill-schedule-interval: 8
+        long-prefill-token-threshold: 512
+        max-num-batched-tokens: 16384
+        gpu-memory-utilization: 0.92
+        max-num-seqs: 144
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,148,152,156,160,164,168,172,176,180,184,188,192,196,200,204,208,212,216,220,224,228,232,236,240,244,248,252,256,260,264,268,272,276,280,284,288,292,296,300,304,308,312,316,320,324,328,332,336,340,344,348,352,356,360,364,368,372,376,380,384,388,392,396,400,404,408,412,416,420,424,428,432,436,440,444,448,452,456,460,464,468,472,476,480,484,488,492,496,500,504,508,512,516,520,524,528,532,536,540,544,548,552,556,560,564,568,572,576],"mode":0}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":356125000000,"enable_cross_layers_blocks":"true","lazy_offload":false}}'
+      env:
+        PYTORCH_ALLOC_CONF: 'expandable_segments:True'
+        PYTHONHASHSEED: '42'
+  benchmark:
+    env:
+      CONC: '576'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '2849'
+      AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: '1'

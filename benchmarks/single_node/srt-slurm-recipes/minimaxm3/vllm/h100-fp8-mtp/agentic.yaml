@@ -65,11 +65,61 @@ base:
 
 # One variant per point. The scheduler batch is 2x CONC and graph capture covers
 # it at four tokens per sequence (three drafts).
-override_tp8_c1: {roles: {agg: {args: {max-num-seqs: 2, max-cudagraph-capture-size: 8}}}, benchmark: {env: {CONC: '1', KV_OFFLOADING: none}}}
-override_tp8_c2: {roles: {agg: {args: {max-num-seqs: 4, max-cudagraph-capture-size: 16}}}, benchmark: {env: {CONC: '2', KV_OFFLOADING: none}}}
-override_tp8_c3: {roles: {agg: {args: {max-num-seqs: 6, max-cudagraph-capture-size: 24}}}, benchmark: {env: {CONC: '3', KV_OFFLOADING: none}}}
-override_tp8_c4: {roles: {agg: {args: {max-num-seqs: 8, max-cudagraph-capture-size: 32}}}, benchmark: {env: {CONC: '4', KV_OFFLOADING: none}}}
-override_tp8_c5: {roles: {agg: {args: {max-num-seqs: 10, max-cudagraph-capture-size: 40}}}, benchmark: {env: {CONC: '5', KV_OFFLOADING: none}}}
+override_tp8_c1:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 2
+        max-cudagraph-capture-size: 8
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: none
+
+override_tp8_c2:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 4
+        max-cudagraph-capture-size: 16
+  benchmark:
+    env:
+      CONC: '2'
+      KV_OFFLOADING: none
+
+override_tp8_c3:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 6
+        max-cudagraph-capture-size: 24
+  benchmark:
+    env:
+      CONC: '3'
+      KV_OFFLOADING: none
+
+override_tp8_c4:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 8
+        max-cudagraph-capture-size: 32
+  benchmark:
+    env:
+      CONC: '4'
+      KV_OFFLOADING: none
+
+override_tp8_c5:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 10
+        max-cudagraph-capture-size: 40
+  benchmark:
+    env:
+      CONC: '5'
+      KV_OFFLOADING: none
+
 # DRAM points offload KV to an embedded Mooncake store. Per rank: the host budget
 # (1731 GB = 1612 GiB) less the 414 GiB checkpoint page cache, over TP8, less the
 # 26 GiB CPU weight offload and the 4 GiB local buffer = 119 GB.
@@ -80,12 +130,16 @@ override_tp8_c6_dram:
     - name: mooncake-master
       type: mooncake-master
       # The in-container install outlasts the default 120 s readiness window.
-      readiness: {port: 8700, timeout_seconds: 900}
+      readiness:
+        port: 8700
+        timeout_seconds: 900
       preamble: >-
         pip_install=(python3 -m pip install);
         python3 -m pip install --help 2>/dev/null | grep -q -- --break-system-packages && pip_install+=(--break-system-packages);
         "${pip_install[@]}" --no-cache-dir --no-deps --force-reinstall mooncake-transfer-engine-cuda13==0.3.11.post1
-      args: ['--eviction_high_watermark_ratio=0.80', '--eviction_ratio=0.10']
+      args:
+        - '--eviction_high_watermark_ratio=0.80'
+        - '--eviction_ratio=0.10'
       options:
         store_config:
           mode: embedded
@@ -111,6 +165,7 @@ override_tp8_c6_dram:
       CONC: '6'
       KV_OFFLOADING: dram
       TOTAL_CPU_DRAM_GB: '1731'
+
 override_tp8_c8_dram:
   # The worker's Mooncake client and the master run the same pinned release.
   setup_script: vllm-mooncake-0.3.11.sh
@@ -118,12 +173,16 @@ override_tp8_c8_dram:
     - name: mooncake-master
       type: mooncake-master
       # The in-container install outlasts the default 120 s readiness window.
-      readiness: {port: 8700, timeout_seconds: 900}
+      readiness:
+        port: 8700
+        timeout_seconds: 900
       preamble: >-
         pip_install=(python3 -m pip install);
         python3 -m pip install --help 2>/dev/null | grep -q -- --break-system-packages && pip_install+=(--break-system-packages);
         "${pip_install[@]}" --no-cache-dir --no-deps --force-reinstall mooncake-transfer-engine-cuda13==0.3.11.post1
-      args: ['--eviction_high_watermark_ratio=0.80', '--eviction_ratio=0.10']
+      args:
+        - '--eviction_high_watermark_ratio=0.80'
+        - '--eviction_ratio=0.10'
       options:
         store_config:
           mode: embedded

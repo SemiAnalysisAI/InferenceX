@@ -73,35 +73,479 @@ base:
 # SGLang reserves 15% of the static budget for the draft model: TP2 needs 0.95
 # (an effective 0.8075) to fit weights, hybrid state and KV; TP4/TP8 use 0.80.
 # Tokenizer workers run only from TP4.
-override_tp2_ep2_c1: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, expert-parallel-size: 2, mem-fraction-static: 0.95, cuda-graph-max-bs: 1, max-running-requests: 2}}}, benchmark: {env: {CONC: '1'}}}
-override_tp2_ep2_c4: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, expert-parallel-size: 2, mem-fraction-static: 0.95, cuda-graph-max-bs: 4, max-running-requests: 8}}}, benchmark: {env: {CONC: '4'}}}
-override_tp2_ep2_c6: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, expert-parallel-size: 2, mem-fraction-static: 0.95, cuda-graph-max-bs: 6, max-running-requests: 12}}}, benchmark: {env: {CONC: '6'}}}
-override_tp4_ep1_c1: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, expert-parallel-size: 1, mem-fraction-static: 0.8, tokenizer-worker-num: 6, cuda-graph-max-bs: 1, max-running-requests: 2}}}, benchmark: {env: {CONC: '1'}}}
-override_tp4_ep1_c8: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, expert-parallel-size: 1, mem-fraction-static: 0.8, tokenizer-worker-num: 6, cuda-graph-max-bs: 8, max-running-requests: 16}}}, benchmark: {env: {CONC: '8'}}}
-override_tp4_ep1_c16: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, expert-parallel-size: 1, mem-fraction-static: 0.8, tokenizer-worker-num: 6, cuda-graph-max-bs: 16, max-running-requests: 32}}}, benchmark: {env: {CONC: '16'}}}
-override_tp4_ep1_c32: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, expert-parallel-size: 1, mem-fraction-static: 0.8, tokenizer-worker-num: 6, cuda-graph-max-bs: 32, max-running-requests: 64}}}, benchmark: {env: {CONC: '32'}}}
-override_tp4_ep1_c40: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, expert-parallel-size: 1, mem-fraction-static: 0.8, tokenizer-worker-num: 6, cuda-graph-max-bs: 40, max-running-requests: 80}}}, benchmark: {env: {CONC: '40'}}}
-override_tp4_ep1_c48: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, expert-parallel-size: 1, mem-fraction-static: 0.8, tokenizer-worker-num: 6, cuda-graph-max-bs: 48, max-running-requests: 96}}}, benchmark: {env: {CONC: '48'}}}
-override_tp4_ep4_c4: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, expert-parallel-size: 4, mem-fraction-static: 0.8, tokenizer-worker-num: 6, cuda-graph-max-bs: 4, max-running-requests: 8}}}, benchmark: {env: {CONC: '4'}}}
-override_tp4_ep4_c16: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, expert-parallel-size: 4, mem-fraction-static: 0.8, tokenizer-worker-num: 6, cuda-graph-max-bs: 16, max-running-requests: 32}}}, benchmark: {env: {CONC: '16'}}}
-override_tp4_ep4_c32: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, expert-parallel-size: 4, mem-fraction-static: 0.8, tokenizer-worker-num: 6, cuda-graph-max-bs: 32, max-running-requests: 64}}}, benchmark: {env: {CONC: '32'}}}
-override_tp4_ep4_c40: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, expert-parallel-size: 4, mem-fraction-static: 0.8, tokenizer-worker-num: 6, cuda-graph-max-bs: 40, max-running-requests: 80}}}, benchmark: {env: {CONC: '40'}}}
-override_tp4_ep4_c48: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, expert-parallel-size: 4, mem-fraction-static: 0.8, tokenizer-worker-num: 6, cuda-graph-max-bs: 48, max-running-requests: 96}}}, benchmark: {env: {CONC: '48'}}}
-override_tp8_ep1_c1: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, expert-parallel-size: 1, mem-fraction-static: 0.8, tokenizer-worker-num: 6, cuda-graph-max-bs: 1, max-running-requests: 2}}}, benchmark: {env: {CONC: '1'}}}
-override_tp8_ep1_c4: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, expert-parallel-size: 1, mem-fraction-static: 0.8, tokenizer-worker-num: 6, cuda-graph-max-bs: 4, max-running-requests: 8}}}, benchmark: {env: {CONC: '4'}}}
-override_tp8_ep1_c8: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, expert-parallel-size: 1, mem-fraction-static: 0.8, tokenizer-worker-num: 6, cuda-graph-max-bs: 8, max-running-requests: 16}}}, benchmark: {env: {CONC: '8'}}}
-override_tp8_ep1_c12: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, expert-parallel-size: 1, mem-fraction-static: 0.8, tokenizer-worker-num: 6, cuda-graph-max-bs: 12, max-running-requests: 24}}}, benchmark: {env: {CONC: '12'}}}
-override_tp8_ep1_c16: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, expert-parallel-size: 1, mem-fraction-static: 0.8, tokenizer-worker-num: 6, cuda-graph-max-bs: 16, max-running-requests: 32}}}, benchmark: {env: {CONC: '16'}}}
-override_tp8_ep1_c24: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, expert-parallel-size: 1, mem-fraction-static: 0.8, tokenizer-worker-num: 6, cuda-graph-max-bs: 24, max-running-requests: 48}}}, benchmark: {env: {CONC: '24'}}}
-override_tp8_ep1_c32: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, expert-parallel-size: 1, mem-fraction-static: 0.8, tokenizer-worker-num: 6, cuda-graph-max-bs: 32, max-running-requests: 64}}}, benchmark: {env: {CONC: '32'}}}
-override_tp8_ep1_c40: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, expert-parallel-size: 1, mem-fraction-static: 0.8, tokenizer-worker-num: 6, cuda-graph-max-bs: 40, max-running-requests: 80}}}, benchmark: {env: {CONC: '40'}}}
-override_tp8_ep1_c48: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, expert-parallel-size: 1, mem-fraction-static: 0.8, tokenizer-worker-num: 6, cuda-graph-max-bs: 48, max-running-requests: 96}}}, benchmark: {env: {CONC: '48'}}}
-override_tp8_ep1_c64: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, expert-parallel-size: 1, mem-fraction-static: 0.8, tokenizer-worker-num: 6, cuda-graph-max-bs: 64, max-running-requests: 128}}}, benchmark: {env: {CONC: '64'}}}
-override_tp8_ep1_c80: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, expert-parallel-size: 1, mem-fraction-static: 0.8, tokenizer-worker-num: 6, cuda-graph-max-bs: 64, max-running-requests: 160}}}, benchmark: {env: {CONC: '80'}}}
-override_tp8_ep8_c4: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, expert-parallel-size: 8, mem-fraction-static: 0.8, tokenizer-worker-num: 6, cuda-graph-max-bs: 4, max-running-requests: 8}}}, benchmark: {env: {CONC: '4'}}}
-override_tp8_ep8_c16: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, expert-parallel-size: 8, mem-fraction-static: 0.8, tokenizer-worker-num: 6, cuda-graph-max-bs: 16, max-running-requests: 32}}}, benchmark: {env: {CONC: '16'}}}
-override_tp8_ep8_c24: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, expert-parallel-size: 8, mem-fraction-static: 0.8, tokenizer-worker-num: 6, cuda-graph-max-bs: 24, max-running-requests: 48}}}, benchmark: {env: {CONC: '24'}}}
-override_tp8_ep8_c32: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, expert-parallel-size: 8, mem-fraction-static: 0.8, tokenizer-worker-num: 6, cuda-graph-max-bs: 32, max-running-requests: 64}}}, benchmark: {env: {CONC: '32'}}}
-override_tp8_ep8_c40: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, expert-parallel-size: 8, mem-fraction-static: 0.8, tokenizer-worker-num: 6, cuda-graph-max-bs: 40, max-running-requests: 80}}}, benchmark: {env: {CONC: '40'}}}
-override_tp8_ep8_c48: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, expert-parallel-size: 8, mem-fraction-static: 0.8, tokenizer-worker-num: 6, cuda-graph-max-bs: 48, max-running-requests: 96}}}, benchmark: {env: {CONC: '48'}}}
-override_tp8_ep8_c64: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, expert-parallel-size: 8, mem-fraction-static: 0.8, tokenizer-worker-num: 6, cuda-graph-max-bs: 64, max-running-requests: 128}}}, benchmark: {env: {CONC: '64'}}}
+override_tp2_ep2_c1:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        mem-fraction-static: 0.95
+        cuda-graph-max-bs: 1
+        max-running-requests: 2
+  benchmark:
+    env:
+      CONC: '1'
+
+override_tp2_ep2_c4:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        mem-fraction-static: 0.95
+        cuda-graph-max-bs: 4
+        max-running-requests: 8
+  benchmark:
+    env:
+      CONC: '4'
+
+override_tp2_ep2_c6:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        mem-fraction-static: 0.95
+        cuda-graph-max-bs: 6
+        max-running-requests: 12
+  benchmark:
+    env:
+      CONC: '6'
+
+override_tp4_ep1_c1:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 1
+        mem-fraction-static: 0.8
+        tokenizer-worker-num: 6
+        cuda-graph-max-bs: 1
+        max-running-requests: 2
+  benchmark:
+    env:
+      CONC: '1'
+
+override_tp4_ep1_c8:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 1
+        mem-fraction-static: 0.8
+        tokenizer-worker-num: 6
+        cuda-graph-max-bs: 8
+        max-running-requests: 16
+  benchmark:
+    env:
+      CONC: '8'
+
+override_tp4_ep1_c16:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 1
+        mem-fraction-static: 0.8
+        tokenizer-worker-num: 6
+        cuda-graph-max-bs: 16
+        max-running-requests: 32
+  benchmark:
+    env:
+      CONC: '16'
+
+override_tp4_ep1_c32:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 1
+        mem-fraction-static: 0.8
+        tokenizer-worker-num: 6
+        cuda-graph-max-bs: 32
+        max-running-requests: 64
+  benchmark:
+    env:
+      CONC: '32'
+
+override_tp4_ep1_c40:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 1
+        mem-fraction-static: 0.8
+        tokenizer-worker-num: 6
+        cuda-graph-max-bs: 40
+        max-running-requests: 80
+  benchmark:
+    env:
+      CONC: '40'
+
+override_tp4_ep1_c48:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 1
+        mem-fraction-static: 0.8
+        tokenizer-worker-num: 6
+        cuda-graph-max-bs: 48
+        max-running-requests: 96
+  benchmark:
+    env:
+      CONC: '48'
+
+override_tp4_ep4_c4:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        mem-fraction-static: 0.8
+        tokenizer-worker-num: 6
+        cuda-graph-max-bs: 4
+        max-running-requests: 8
+  benchmark:
+    env:
+      CONC: '4'
+
+override_tp4_ep4_c16:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        mem-fraction-static: 0.8
+        tokenizer-worker-num: 6
+        cuda-graph-max-bs: 16
+        max-running-requests: 32
+  benchmark:
+    env:
+      CONC: '16'
+
+override_tp4_ep4_c32:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        mem-fraction-static: 0.8
+        tokenizer-worker-num: 6
+        cuda-graph-max-bs: 32
+        max-running-requests: 64
+  benchmark:
+    env:
+      CONC: '32'
+
+override_tp4_ep4_c40:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        mem-fraction-static: 0.8
+        tokenizer-worker-num: 6
+        cuda-graph-max-bs: 40
+        max-running-requests: 80
+  benchmark:
+    env:
+      CONC: '40'
+
+override_tp4_ep4_c48:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        mem-fraction-static: 0.8
+        tokenizer-worker-num: 6
+        cuda-graph-max-bs: 48
+        max-running-requests: 96
+  benchmark:
+    env:
+      CONC: '48'
+
+override_tp8_ep1_c1:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 1
+        mem-fraction-static: 0.8
+        tokenizer-worker-num: 6
+        cuda-graph-max-bs: 1
+        max-running-requests: 2
+  benchmark:
+    env:
+      CONC: '1'
+
+override_tp8_ep1_c4:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 1
+        mem-fraction-static: 0.8
+        tokenizer-worker-num: 6
+        cuda-graph-max-bs: 4
+        max-running-requests: 8
+  benchmark:
+    env:
+      CONC: '4'
+
+override_tp8_ep1_c8:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 1
+        mem-fraction-static: 0.8
+        tokenizer-worker-num: 6
+        cuda-graph-max-bs: 8
+        max-running-requests: 16
+  benchmark:
+    env:
+      CONC: '8'
+
+override_tp8_ep1_c12:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 1
+        mem-fraction-static: 0.8
+        tokenizer-worker-num: 6
+        cuda-graph-max-bs: 12
+        max-running-requests: 24
+  benchmark:
+    env:
+      CONC: '12'
+
+override_tp8_ep1_c16:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 1
+        mem-fraction-static: 0.8
+        tokenizer-worker-num: 6
+        cuda-graph-max-bs: 16
+        max-running-requests: 32
+  benchmark:
+    env:
+      CONC: '16'
+
+override_tp8_ep1_c24:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 1
+        mem-fraction-static: 0.8
+        tokenizer-worker-num: 6
+        cuda-graph-max-bs: 24
+        max-running-requests: 48
+  benchmark:
+    env:
+      CONC: '24'
+
+override_tp8_ep1_c32:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 1
+        mem-fraction-static: 0.8
+        tokenizer-worker-num: 6
+        cuda-graph-max-bs: 32
+        max-running-requests: 64
+  benchmark:
+    env:
+      CONC: '32'
+
+override_tp8_ep1_c40:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 1
+        mem-fraction-static: 0.8
+        tokenizer-worker-num: 6
+        cuda-graph-max-bs: 40
+        max-running-requests: 80
+  benchmark:
+    env:
+      CONC: '40'
+
+override_tp8_ep1_c48:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 1
+        mem-fraction-static: 0.8
+        tokenizer-worker-num: 6
+        cuda-graph-max-bs: 48
+        max-running-requests: 96
+  benchmark:
+    env:
+      CONC: '48'
+
+override_tp8_ep1_c64:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 1
+        mem-fraction-static: 0.8
+        tokenizer-worker-num: 6
+        cuda-graph-max-bs: 64
+        max-running-requests: 128
+  benchmark:
+    env:
+      CONC: '64'
+
+override_tp8_ep1_c80:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 1
+        mem-fraction-static: 0.8
+        tokenizer-worker-num: 6
+        cuda-graph-max-bs: 64
+        max-running-requests: 160
+  benchmark:
+    env:
+      CONC: '80'
+
+override_tp8_ep8_c4:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 8
+        mem-fraction-static: 0.8
+        tokenizer-worker-num: 6
+        cuda-graph-max-bs: 4
+        max-running-requests: 8
+  benchmark:
+    env:
+      CONC: '4'
+
+override_tp8_ep8_c16:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 8
+        mem-fraction-static: 0.8
+        tokenizer-worker-num: 6
+        cuda-graph-max-bs: 16
+        max-running-requests: 32
+  benchmark:
+    env:
+      CONC: '16'
+
+override_tp8_ep8_c24:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 8
+        mem-fraction-static: 0.8
+        tokenizer-worker-num: 6
+        cuda-graph-max-bs: 24
+        max-running-requests: 48
+  benchmark:
+    env:
+      CONC: '24'
+
+override_tp8_ep8_c32:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 8
+        mem-fraction-static: 0.8
+        tokenizer-worker-num: 6
+        cuda-graph-max-bs: 32
+        max-running-requests: 64
+  benchmark:
+    env:
+      CONC: '32'
+
+override_tp8_ep8_c40:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 8
+        mem-fraction-static: 0.8
+        tokenizer-worker-num: 6
+        cuda-graph-max-bs: 40
+        max-running-requests: 80
+  benchmark:
+    env:
+      CONC: '40'
+
+override_tp8_ep8_c48:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 8
+        mem-fraction-static: 0.8
+        tokenizer-worker-num: 6
+        cuda-graph-max-bs: 48
+        max-running-requests: 96
+  benchmark:
+    env:
+      CONC: '48'
+
+override_tp8_ep8_c64:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 8
+        mem-fraction-static: 0.8
+        tokenizer-worker-num: 6
+        cuda-graph-max-bs: 64
+        max-running-requests: 128
+  benchmark:
+    env:
+      CONC: '64'

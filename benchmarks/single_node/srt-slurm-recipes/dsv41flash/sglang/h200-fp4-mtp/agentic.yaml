@@ -83,19 +83,226 @@ base:
 # One variant per point. Admission is 2x CONC, capped at the decode graph batch;
 # saturation points carry a larger in-flight working set than the 30-minute
 # warmup drain allows.
-override_tp4_c1: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, max-running-requests: 2}, env: {DSV41_BLOCK32_TP: '4'}}}, benchmark: {env: {CONC: '1', AGENTIC_WARMUP_GRACE_PERIOD: '1800'}}}
-override_tp4_c2: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, max-running-requests: 4}, env: {DSV41_BLOCK32_TP: '4'}}}, benchmark: {env: {CONC: '2', AGENTIC_WARMUP_GRACE_PERIOD: '1800'}}}
-override_tp4_c4: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, max-running-requests: 8}, env: {DSV41_BLOCK32_TP: '4'}}}, benchmark: {env: {CONC: '4', AGENTIC_WARMUP_GRACE_PERIOD: '1800'}}}
-override_tp4_c8: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, max-running-requests: 16}, env: {DSV41_BLOCK32_TP: '4'}}}, benchmark: {env: {CONC: '8', AGENTIC_WARMUP_GRACE_PERIOD: '1800'}}}
-override_tp4_c16: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, max-running-requests: 32}, env: {DSV41_BLOCK32_TP: '4'}}}, benchmark: {env: {CONC: '16', AGENTIC_WARMUP_GRACE_PERIOD: '1800'}}}
-override_tp4_c32: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, max-running-requests: 64}, env: {DSV41_BLOCK32_TP: '4'}}}, benchmark: {env: {CONC: '32', AGENTIC_WARMUP_GRACE_PERIOD: '3600'}}}
-override_tp4_c64: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, max-running-requests: 64}, env: {DSV41_BLOCK32_TP: '4'}}}, benchmark: {env: {CONC: '64', AGENTIC_WARMUP_GRACE_PERIOD: '3600'}}}
-override_tp4_c128: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, max-running-requests: 64}, env: {DSV41_BLOCK32_TP: '4'}}}, benchmark: {env: {CONC: '128', AGENTIC_WARMUP_GRACE_PERIOD: '3600'}}}
-override_tp8_c1: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, max-running-requests: 2}, env: {DSV41_BLOCK32_TP: '8'}}}, benchmark: {env: {CONC: '1', AGENTIC_WARMUP_GRACE_PERIOD: '1800'}}}
-override_tp8_c2: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, max-running-requests: 4}, env: {DSV41_BLOCK32_TP: '8'}}}, benchmark: {env: {CONC: '2', AGENTIC_WARMUP_GRACE_PERIOD: '1800'}}}
-override_tp8_c4: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, max-running-requests: 8}, env: {DSV41_BLOCK32_TP: '8'}}}, benchmark: {env: {CONC: '4', AGENTIC_WARMUP_GRACE_PERIOD: '1800'}}}
-override_tp8_c8: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, max-running-requests: 16}, env: {DSV41_BLOCK32_TP: '8'}}}, benchmark: {env: {CONC: '8', AGENTIC_WARMUP_GRACE_PERIOD: '1800'}}}
-override_tp8_c16: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, max-running-requests: 32}, env: {DSV41_BLOCK32_TP: '8'}}}, benchmark: {env: {CONC: '16', AGENTIC_WARMUP_GRACE_PERIOD: '1800'}}}
-override_tp8_c32: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, max-running-requests: 64}, env: {DSV41_BLOCK32_TP: '8'}}}, benchmark: {env: {CONC: '32', AGENTIC_WARMUP_GRACE_PERIOD: '3600'}}}
-override_tp8_c64: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, max-running-requests: 64}, env: {DSV41_BLOCK32_TP: '8'}}}, benchmark: {env: {CONC: '64', AGENTIC_WARMUP_GRACE_PERIOD: '3600'}}}
-override_tp8_c128: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, max-running-requests: 64}, env: {DSV41_BLOCK32_TP: '8'}}}, benchmark: {env: {CONC: '128', AGENTIC_WARMUP_GRACE_PERIOD: '3600'}}}
+override_tp4_c1:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-running-requests: 2
+      env:
+        DSV41_BLOCK32_TP: '4'
+  benchmark:
+    env:
+      CONC: '1'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+
+override_tp4_c2:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-running-requests: 4
+      env:
+        DSV41_BLOCK32_TP: '4'
+  benchmark:
+    env:
+      CONC: '2'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+
+override_tp4_c4:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-running-requests: 8
+      env:
+        DSV41_BLOCK32_TP: '4'
+  benchmark:
+    env:
+      CONC: '4'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+
+override_tp4_c8:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-running-requests: 16
+      env:
+        DSV41_BLOCK32_TP: '4'
+  benchmark:
+    env:
+      CONC: '8'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+
+override_tp4_c16:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-running-requests: 32
+      env:
+        DSV41_BLOCK32_TP: '4'
+  benchmark:
+    env:
+      CONC: '16'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+
+override_tp4_c32:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-running-requests: 64
+      env:
+        DSV41_BLOCK32_TP: '4'
+  benchmark:
+    env:
+      CONC: '32'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+
+override_tp4_c64:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-running-requests: 64
+      env:
+        DSV41_BLOCK32_TP: '4'
+  benchmark:
+    env:
+      CONC: '64'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+
+override_tp4_c128:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-running-requests: 64
+      env:
+        DSV41_BLOCK32_TP: '4'
+  benchmark:
+    env:
+      CONC: '128'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+
+override_tp8_c1:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        max-running-requests: 2
+      env:
+        DSV41_BLOCK32_TP: '8'
+  benchmark:
+    env:
+      CONC: '1'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+
+override_tp8_c2:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        max-running-requests: 4
+      env:
+        DSV41_BLOCK32_TP: '8'
+  benchmark:
+    env:
+      CONC: '2'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+
+override_tp8_c4:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        max-running-requests: 8
+      env:
+        DSV41_BLOCK32_TP: '8'
+  benchmark:
+    env:
+      CONC: '4'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+
+override_tp8_c8:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        max-running-requests: 16
+      env:
+        DSV41_BLOCK32_TP: '8'
+  benchmark:
+    env:
+      CONC: '8'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+
+override_tp8_c16:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        max-running-requests: 32
+      env:
+        DSV41_BLOCK32_TP: '8'
+  benchmark:
+    env:
+      CONC: '16'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+
+override_tp8_c32:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        max-running-requests: 64
+      env:
+        DSV41_BLOCK32_TP: '8'
+  benchmark:
+    env:
+      CONC: '32'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+
+override_tp8_c64:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        max-running-requests: 64
+      env:
+        DSV41_BLOCK32_TP: '8'
+  benchmark:
+    env:
+      CONC: '64'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+
+override_tp8_c128:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        max-running-requests: 64
+      env:
+        DSV41_BLOCK32_TP: '8'
+  benchmark:
+    env:
+      CONC: '128'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'

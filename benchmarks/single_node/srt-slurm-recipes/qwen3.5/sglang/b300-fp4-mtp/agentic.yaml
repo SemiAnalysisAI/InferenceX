@@ -69,31 +69,431 @@ base:
 # race with HiCache shared-memory initialization. HiCache sizes the target KV
 # and Mamba host pools independently, and the NEXTN draft adds 1/15 of the
 # target: (599 GB - 1 GB/rank) * 15 / TP2 / 31 = 144 GB per pool.
-override_tp4_c1: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, expert-parallel-size: 1, tokenizer-worker-num: 6, max-running-requests: 2, cuda-graph-max-bs: 1}}}, benchmark: {env: {CONC: '1', KV_OFFLOADING: 'none'}}}
-override_tp4_c4: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, expert-parallel-size: 1, tokenizer-worker-num: 6, max-running-requests: 8, cuda-graph-max-bs: 4}}}, benchmark: {env: {CONC: '4', KV_OFFLOADING: 'none'}}}
-override_tp4_c8: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, expert-parallel-size: 1, tokenizer-worker-num: 6, max-running-requests: 16, cuda-graph-max-bs: 8}}}, benchmark: {env: {CONC: '8', KV_OFFLOADING: 'none'}}}
-override_tp4_c12: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, expert-parallel-size: 1, tokenizer-worker-num: 6, max-running-requests: 24, cuda-graph-max-bs: 12}}}, benchmark: {env: {CONC: '12', KV_OFFLOADING: 'none'}}}
-override_tp4_c16: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, expert-parallel-size: 1, tokenizer-worker-num: 6, max-running-requests: 32, cuda-graph-max-bs: 16}}}, benchmark: {env: {CONC: '16', KV_OFFLOADING: 'none'}}}
-override_tp4_c20: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, expert-parallel-size: 1, tokenizer-worker-num: 6, max-running-requests: 40, cuda-graph-max-bs: 20}}}, benchmark: {env: {CONC: '20', KV_OFFLOADING: 'none'}}}
-override_tp4_c24: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, expert-parallel-size: 1, tokenizer-worker-num: 6, max-running-requests: 48, cuda-graph-max-bs: 24}}}, benchmark: {env: {CONC: '24', KV_OFFLOADING: 'none'}}}
-override_tp4_c28: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, expert-parallel-size: 1, tokenizer-worker-num: 6, max-running-requests: 56, cuda-graph-max-bs: 28}}}, benchmark: {env: {CONC: '28', KV_OFFLOADING: 'none'}}}
-override_tp4_c32: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, expert-parallel-size: 1, tokenizer-worker-num: 6, max-running-requests: 64, cuda-graph-max-bs: 32}}}, benchmark: {env: {CONC: '32', KV_OFFLOADING: 'none'}}}
-override_tp4_c40: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, expert-parallel-size: 1, tokenizer-worker-num: 6, max-running-requests: 80, cuda-graph-max-bs: 40}}}, benchmark: {env: {CONC: '40', KV_OFFLOADING: 'none'}}}
-override_tp4_c48: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, expert-parallel-size: 1, tokenizer-worker-num: 6, max-running-requests: 96, cuda-graph-max-bs: 48}}}, benchmark: {env: {CONC: '48', KV_OFFLOADING: 'none'}}}
-override_tp4_c56: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, expert-parallel-size: 1, tokenizer-worker-num: 6, max-running-requests: 112, cuda-graph-max-bs: 56}}}, benchmark: {env: {CONC: '56', KV_OFFLOADING: 'none'}}}
-override_tp4_c60: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, expert-parallel-size: 1, tokenizer-worker-num: 6, max-running-requests: 120, cuda-graph-max-bs: 60}}}, benchmark: {env: {CONC: '60', KV_OFFLOADING: 'none'}}}
-override_tp4_c64: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, expert-parallel-size: 1, tokenizer-worker-num: 6, max-running-requests: 128, cuda-graph-max-bs: 64}}}, benchmark: {env: {CONC: '64', KV_OFFLOADING: 'none'}}}
-override_tp4_c68: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, expert-parallel-size: 1, tokenizer-worker-num: 6, max-running-requests: 136, cuda-graph-max-bs: 64}}}, benchmark: {env: {CONC: '68', KV_OFFLOADING: 'none'}}}
-override_tp4_c72: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, expert-parallel-size: 1, tokenizer-worker-num: 6, max-running-requests: 144, cuda-graph-max-bs: 64}}}, benchmark: {env: {CONC: '72', KV_OFFLOADING: 'none'}}}
-override_tp2_c1: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, expert-parallel-size: 2, max-running-requests: 2, cuda-graph-max-bs: 1}}}, benchmark: {env: {CONC: '1', KV_OFFLOADING: 'none'}}}
-override_tp2_c4: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, expert-parallel-size: 2, max-running-requests: 8, cuda-graph-max-bs: 4}}}, benchmark: {env: {CONC: '4', KV_OFFLOADING: 'none'}}}
-override_tp2_c8: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, expert-parallel-size: 2, max-running-requests: 16, cuda-graph-max-bs: 8}}}, benchmark: {env: {CONC: '8', KV_OFFLOADING: 'none'}}}
-override_tp2_c12: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, expert-parallel-size: 2, max-running-requests: 24, cuda-graph-max-bs: 12}}}, benchmark: {env: {CONC: '12', KV_OFFLOADING: 'none'}}}
-override_tp2_c16: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, expert-parallel-size: 2, max-running-requests: 32, cuda-graph-max-bs: 16}}}, benchmark: {env: {CONC: '16', KV_OFFLOADING: 'none'}}}
-override_tp2_c20: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, expert-parallel-size: 2, max-running-requests: 40, cuda-graph-max-bs: 20}}}, benchmark: {env: {CONC: '20', KV_OFFLOADING: 'none'}}}
-override_tp2_c24: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, expert-parallel-size: 2, max-running-requests: 48, cuda-graph-max-bs: 24}}}, benchmark: {env: {CONC: '24', KV_OFFLOADING: 'none'}}}
-override_tp2_c28: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, expert-parallel-size: 2, max-running-requests: 56, cuda-graph-max-bs: 28}}}, benchmark: {env: {CONC: '28', KV_OFFLOADING: 'none'}}}
-override_tp2_c32: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, expert-parallel-size: 2, max-running-requests: 64, cuda-graph-max-bs: 32}}}, benchmark: {env: {CONC: '32', KV_OFFLOADING: 'none'}}}
-override_tp2_c36_hicache: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, expert-parallel-size: 2, max-running-requests: 72, cuda-graph-max-bs: 36, page-size: 64, enable-hierarchical-cache: true, hicache-size: 144, hicache-io-backend: 'kernel', hicache-mem-layout: 'page_first', hicache-write-policy: 'write_through_selective'}}}, benchmark: {env: {CONC: '36', KV_OFFLOADING: 'dram', TOTAL_CPU_DRAM_GB: '599'}}}
-override_tp2_c44_hicache: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, expert-parallel-size: 2, max-running-requests: 88, cuda-graph-max-bs: 44, page-size: 64, enable-hierarchical-cache: true, hicache-size: 144, hicache-io-backend: 'kernel', hicache-mem-layout: 'page_first', hicache-write-policy: 'write_through_selective'}}}, benchmark: {env: {CONC: '44', KV_OFFLOADING: 'dram', TOTAL_CPU_DRAM_GB: '599'}}}
-override_tp2_c52_hicache: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, expert-parallel-size: 2, max-running-requests: 104, cuda-graph-max-bs: 52, page-size: 64, enable-hierarchical-cache: true, hicache-size: 144, hicache-io-backend: 'kernel', hicache-mem-layout: 'page_first', hicache-write-policy: 'write_through_selective'}}}, benchmark: {env: {CONC: '52', KV_OFFLOADING: 'dram', TOTAL_CPU_DRAM_GB: '599'}}}
+override_tp4_c1:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 1
+        tokenizer-worker-num: 6
+        max-running-requests: 2
+        cuda-graph-max-bs: 1
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: 'none'
+
+override_tp4_c4:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 1
+        tokenizer-worker-num: 6
+        max-running-requests: 8
+        cuda-graph-max-bs: 4
+  benchmark:
+    env:
+      CONC: '4'
+      KV_OFFLOADING: 'none'
+
+override_tp4_c8:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 1
+        tokenizer-worker-num: 6
+        max-running-requests: 16
+        cuda-graph-max-bs: 8
+  benchmark:
+    env:
+      CONC: '8'
+      KV_OFFLOADING: 'none'
+
+override_tp4_c12:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 1
+        tokenizer-worker-num: 6
+        max-running-requests: 24
+        cuda-graph-max-bs: 12
+  benchmark:
+    env:
+      CONC: '12'
+      KV_OFFLOADING: 'none'
+
+override_tp4_c16:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 1
+        tokenizer-worker-num: 6
+        max-running-requests: 32
+        cuda-graph-max-bs: 16
+  benchmark:
+    env:
+      CONC: '16'
+      KV_OFFLOADING: 'none'
+
+override_tp4_c20:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 1
+        tokenizer-worker-num: 6
+        max-running-requests: 40
+        cuda-graph-max-bs: 20
+  benchmark:
+    env:
+      CONC: '20'
+      KV_OFFLOADING: 'none'
+
+override_tp4_c24:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 1
+        tokenizer-worker-num: 6
+        max-running-requests: 48
+        cuda-graph-max-bs: 24
+  benchmark:
+    env:
+      CONC: '24'
+      KV_OFFLOADING: 'none'
+
+override_tp4_c28:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 1
+        tokenizer-worker-num: 6
+        max-running-requests: 56
+        cuda-graph-max-bs: 28
+  benchmark:
+    env:
+      CONC: '28'
+      KV_OFFLOADING: 'none'
+
+override_tp4_c32:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 1
+        tokenizer-worker-num: 6
+        max-running-requests: 64
+        cuda-graph-max-bs: 32
+  benchmark:
+    env:
+      CONC: '32'
+      KV_OFFLOADING: 'none'
+
+override_tp4_c40:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 1
+        tokenizer-worker-num: 6
+        max-running-requests: 80
+        cuda-graph-max-bs: 40
+  benchmark:
+    env:
+      CONC: '40'
+      KV_OFFLOADING: 'none'
+
+override_tp4_c48:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 1
+        tokenizer-worker-num: 6
+        max-running-requests: 96
+        cuda-graph-max-bs: 48
+  benchmark:
+    env:
+      CONC: '48'
+      KV_OFFLOADING: 'none'
+
+override_tp4_c56:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 1
+        tokenizer-worker-num: 6
+        max-running-requests: 112
+        cuda-graph-max-bs: 56
+  benchmark:
+    env:
+      CONC: '56'
+      KV_OFFLOADING: 'none'
+
+override_tp4_c60:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 1
+        tokenizer-worker-num: 6
+        max-running-requests: 120
+        cuda-graph-max-bs: 60
+  benchmark:
+    env:
+      CONC: '60'
+      KV_OFFLOADING: 'none'
+
+override_tp4_c64:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 1
+        tokenizer-worker-num: 6
+        max-running-requests: 128
+        cuda-graph-max-bs: 64
+  benchmark:
+    env:
+      CONC: '64'
+      KV_OFFLOADING: 'none'
+
+override_tp4_c68:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 1
+        tokenizer-worker-num: 6
+        max-running-requests: 136
+        cuda-graph-max-bs: 64
+  benchmark:
+    env:
+      CONC: '68'
+      KV_OFFLOADING: 'none'
+
+override_tp4_c72:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 1
+        tokenizer-worker-num: 6
+        max-running-requests: 144
+        cuda-graph-max-bs: 64
+  benchmark:
+    env:
+      CONC: '72'
+      KV_OFFLOADING: 'none'
+
+override_tp2_c1:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        max-running-requests: 2
+        cuda-graph-max-bs: 1
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: 'none'
+
+override_tp2_c4:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        max-running-requests: 8
+        cuda-graph-max-bs: 4
+  benchmark:
+    env:
+      CONC: '4'
+      KV_OFFLOADING: 'none'
+
+override_tp2_c8:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        max-running-requests: 16
+        cuda-graph-max-bs: 8
+  benchmark:
+    env:
+      CONC: '8'
+      KV_OFFLOADING: 'none'
+
+override_tp2_c12:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        max-running-requests: 24
+        cuda-graph-max-bs: 12
+  benchmark:
+    env:
+      CONC: '12'
+      KV_OFFLOADING: 'none'
+
+override_tp2_c16:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        max-running-requests: 32
+        cuda-graph-max-bs: 16
+  benchmark:
+    env:
+      CONC: '16'
+      KV_OFFLOADING: 'none'
+
+override_tp2_c20:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        max-running-requests: 40
+        cuda-graph-max-bs: 20
+  benchmark:
+    env:
+      CONC: '20'
+      KV_OFFLOADING: 'none'
+
+override_tp2_c24:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        max-running-requests: 48
+        cuda-graph-max-bs: 24
+  benchmark:
+    env:
+      CONC: '24'
+      KV_OFFLOADING: 'none'
+
+override_tp2_c28:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        max-running-requests: 56
+        cuda-graph-max-bs: 28
+  benchmark:
+    env:
+      CONC: '28'
+      KV_OFFLOADING: 'none'
+
+override_tp2_c32:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        max-running-requests: 64
+        cuda-graph-max-bs: 32
+  benchmark:
+    env:
+      CONC: '32'
+      KV_OFFLOADING: 'none'
+
+override_tp2_c36_hicache:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        max-running-requests: 72
+        cuda-graph-max-bs: 36
+        page-size: 64
+        enable-hierarchical-cache: true
+        hicache-size: 144
+        hicache-io-backend: 'kernel'
+        hicache-mem-layout: 'page_first'
+        hicache-write-policy: 'write_through_selective'
+  benchmark:
+    env:
+      CONC: '36'
+      KV_OFFLOADING: 'dram'
+      TOTAL_CPU_DRAM_GB: '599'
+
+override_tp2_c44_hicache:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        max-running-requests: 88
+        cuda-graph-max-bs: 44
+        page-size: 64
+        enable-hierarchical-cache: true
+        hicache-size: 144
+        hicache-io-backend: 'kernel'
+        hicache-mem-layout: 'page_first'
+        hicache-write-policy: 'write_through_selective'
+  benchmark:
+    env:
+      CONC: '44'
+      KV_OFFLOADING: 'dram'
+      TOTAL_CPU_DRAM_GB: '599'
+
+override_tp2_c52_hicache:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        max-running-requests: 104
+        cuda-graph-max-bs: 52
+        page-size: 64
+        enable-hierarchical-cache: true
+        hicache-size: 144
+        hicache-io-backend: 'kernel'
+        hicache-mem-layout: 'page_first'
+        hicache-write-policy: 'write_through_selective'
+  benchmark:
+    env:
+      CONC: '52'
+      KV_OFFLOADING: 'dram'
+      TOTAL_CPU_DRAM_GB: '599'
