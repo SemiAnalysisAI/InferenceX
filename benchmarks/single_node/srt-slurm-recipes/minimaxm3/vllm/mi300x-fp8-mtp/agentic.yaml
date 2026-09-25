@@ -1,0 +1,82 @@
+# MiniMax-M3 MXFP8 AgentX on MI300X with vLLM EAGLE3 (GQA draft). The KV cache
+# is GPU-resident, or backed by LMCache MP DRAM servers at the offload point.
+base:
+  schema: 2
+  name: minimaxm3-fp8-mi300x-vllm-agentic
+  model:
+    path: hf:MiniMaxAI/MiniMax-M3-MXFP8
+    container: vllm/vllm-openai-rocm:v0.29.0
+    precision: fp8
+  resources:
+    gpu_type: mi300x
+    gpus_per_node: 8
+  frontend:
+    type: vllm
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine:
+    type: vllm
+    connector: null
+  # The engine may take the full VLLM_ENGINE_READY_TIMEOUT_S to become ready.
+  health_check:
+    interval_seconds: 10
+    max_attempts: 360
+  # Starts the LMCache servers for the variant that sets LMCACHE_SHARDS.
+  setup_script: lmcache-mp-rocm.sh
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        served-model-name: MiniMaxAI/MiniMax-M3-MXFP8
+        tensor-parallel-size: 8
+        trust-remote-code: true
+        block-size: 128
+        gpu-memory-utilization: 0.90
+        # MiniMaxM3SparseForConditionalGeneration is not torch-compiled, so
+        # without breakable graphs the default FULL_AND_PIECEWISE mode aborts.
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY"}'
+        enable-chunked-prefill: true
+        max-num-batched-tokens: 16384
+        language-model-only: true
+        enable-prefix-caching: true
+        attention-backend: TRITON_ATTN
+        kv-cache-dtype: fp8
+        tool-call-parser: minimax_m3
+        reasoning-parser: minimax_m3
+        enable-auto-tool-choice: true
+        default-chat-template-kwargs: '{"thinking_mode":"enabled"}'
+        stream-interval: 20
+        # Three-token EAGLE3; throughput runs replace verification with the
+        # golden acceptance length.
+        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"TRITON_ATTN"}'
+      env:
+        PYTHONNOUSERSITE: '1'
+        VLLM_ENGINE_READY_TIMEOUT_S: '3600'
+        VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: '1800'
+        VLLM_USE_BREAKABLE_CUDAGRAPH: '0'
+        VLLM_ROCM_USE_AITER: '1'
+        VLLM_ROCM_USE_AITER_MHA: '0'
+        TORCH_BLAS_PREFER_HIPBLASLT: '1'
+        NCCL_MIN_NCHANNELS: '112'
+        GPU_MAX_HW_QUEUES: '2'
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
+    env:
+      MODEL: MiniMaxAI/MiniMax-M3-MXFP8
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
+      AIPERF_APPLY_CHAT_TEMPLATE: 'true'
+
+# One variant per point. Admission is 2x CONC. The DRAM point splits its
+# 1298 GB budget into one LMCache L1 shard per TP rank (1298 / 8 = 162 GB).
+override_tp8_c2: {roles: {agg: {args: {max-num-seqs: 4}}}, benchmark: {env: {CONC: '2', KV_OFFLOADING: 'none'}}}
+override_tp8_c4: {roles: {agg: {args: {max-num-seqs: 8}}}, benchmark: {env: {CONC: '4', KV_OFFLOADING: 'none'}}}
+override_tp8_c6: {roles: {agg: {args: {max-num-seqs: 12}}}, benchmark: {env: {CONC: '6', KV_OFFLOADING: 'none'}}}
+override_tp8_c8: {roles: {agg: {args: {max-num-seqs: 16}}}, benchmark: {env: {CONC: '8', KV_OFFLOADING: 'none'}}}
+override_tp8_c10: {roles: {agg: {args: {max-num-seqs: 20}}}, benchmark: {env: {CONC: '10', KV_OFFLOADING: 'none'}}}
+override_tp8_c16_lmcache: {roles: {agg: {args: {max-num-seqs: 32, kv-transfer-config: '{"kv_connector":"LMCacheMPConnector","kv_connector_module_path":"lmcache.integration.vllm.lmcache_mp_connector","kv_role":"kv_both","kv_connector_extra_config":{"lmcache.mp.server_urls":"tcp://127.0.0.1:5555,tcp://127.0.0.1:5556,tcp://127.0.0.1:5557,tcp://127.0.0.1:5558,tcp://127.0.0.1:5559,tcp://127.0.0.1:5560,tcp://127.0.0.1:5561,tcp://127.0.0.1:5562","lmcache.mp.mq_timeout":6000.0}}'}, env: {LMCACHE_SHARDS: '8', LMCACHE_L1_SHARD_GB: '162'}}}, benchmark: {env: {CONC: '16', KV_OFFLOADING: 'dram', TOTAL_CPU_DRAM_GB: '1298'}}}
