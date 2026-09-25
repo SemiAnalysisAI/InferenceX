@@ -423,5 +423,63 @@ class TestSingleHandle(unittest.TestCase):
         self.assertEqual(h.combine_in_t, list(range(7)))
         self.assertLess(len(h.combine_in_t), len(b._recv_x))
 
+def _legacy_module():
+    """BF16 adapter tests need tensor arithmetic, but do not compile a GPU dequantizer."""
+    import torch
+
+    with mock.patch.object(torch, "compile", return_value=lambda function: function):
+        import ep_legacy
+    return ep_legacy
+
+
+class LegacyBufferContract(unittest.TestCase):
+    def test_padded_receive_is_compacted_and_scattered_to_its_original_slots(self):
+        import torch
+        ep_legacy = _legacy_module()
+
+        backend = ep_legacy.LegacyBufferOperations()
+        backend._fp8 = False
+        backend.rank, backend.num_local_experts = 2, 2
+        backend.max_tokens = 3
+        backend.args = types.SimpleNamespace(experts=8)
+        received = torch.tensor(
+            [[[1, 2], [99, 99], [99, 99]], [[3, 4], [5, 6], [99, 99]]],
+            dtype=torch.bfloat16,
+        )
+        counts = torch.tensor([1, 2])
+        combined_inputs = []
+
+        def combine(values, indices, weights, handle):
+            combined_inputs.append(values.clone())
+            return values.sum(dim=0), None, None
+
+        backend.buffer = types.SimpleNamespace(
+            low_latency_dispatch=lambda *args, **kwargs: (received, counts, object(), None, None),
+            low_latency_combine=combine,
+        )
+        point = types.SimpleNamespace(T=2, dispatch_x=None, topk_idx=None, topk_weights=None)
+        with mock.patch.object(ep_legacy, "torch", torch):
+            handle = backend._ll_dispatch(point)
+            view = backend._ll_inspect_dispatch(point, handle)
+            self.assertEqual(view.payload.tolist(), [[1, 2], [3, 4], [5, 6]])
+            self.assertEqual(view.expert_ids.tolist(), [4, 5, 5])
+            transformed = torch.tensor([[10, 20], [30, 40], [50, 60]])
+            output = backend._ll_combine_transformed(point, handle, transformed)
+        self.assertEqual(output.tolist(), [[40, 60], [50, 60]])
+        self.assertEqual(
+            combined_inputs[0].tolist(),
+            [[[10, 20], [0, 0], [0, 0]], [[30, 40], [50, 60], [0, 0]]],
+        )
+
+    def test_teardown_reports_a_destroy_failure(self):
+        ep_legacy = _legacy_module()
+
+        backend = ep_legacy.LegacyBufferOperations()
+        backend.buffer = types.SimpleNamespace(destroy=mock.Mock(side_effect=OSError("busy")))
+        distributed = types.SimpleNamespace(barrier=lambda: None)
+        with mock.patch.object(ep_legacy, "dist", distributed):
+            self.assertEqual(backend.finalize(0), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

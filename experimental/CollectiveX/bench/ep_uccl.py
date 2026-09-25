@@ -84,20 +84,8 @@ def per_token_cast_back(x_fp8: "torch.Tensor", x_scales: "torch.Tensor"):
     return (x_fp32 * x_scales).view(x_fp8.shape).to(torch.bfloat16)
 
 
-@torch.compile(dynamic=False)
-def _ll_dequant_static(fp8, scales):
-    """Static-shape FP32-accumulate dequant of the padded low-latency FP8 recv to BF16.
-
-    Mirror of ep_deepep_v2._ll_dequant_static: the low-latency padded recv shape
-    ``[num_local_experts, cap*num_ranks, hidden]`` is constant per dispatch, so a static
-    (dynamic=False) compile fuses to one FP32 pass and stays inside the wall-clock budget that
-    deep_ep's dynamic-shape per_token_cast_back would overrun. Padding slots decode to NaN
-    (FP8 padding bytes) — harmless because combine is handle-indexed and never reads padding.
-    """
-    e, s, h = fp8.shape
-    values = fp8.to(torch.float32).view(e, s, h // 128, 128)
-    block_scales = scales.to(torch.float32).view(e, s, h // 128, 1)
-    return (values * block_scales).to(torch.bfloat16).view(e, s, h)
+# Keep compiler setup after vendor imports, at the original dequantizer initialization point.
+from ep_legacy import LegacyBufferOperations  # noqa: E402
 
 
 # Normal-mode legacy Config launch parameters (DeepEP-legacy Config(num_sms, chunk, nvl_buffer)).
@@ -124,7 +112,7 @@ def _normal_num_sms() -> int:
     return 24 if torch.version.cuda else 64
 
 
-class UCCLEPBackend(EPBackend):
+class UCCLEPBackend(LegacyBufferOperations, EPBackend):
     name = "uccl-ep"
     maturity = "candidate"  # no engine exposes a UCCL-EP all-to-all selector
     # One legacy Buffer under two modes, selected by args.mode:
@@ -148,6 +136,8 @@ class UCCLEPBackend(EPBackend):
         # BF16 combine sends — real device work, hence a separately-timed stage component.
         self.stage_device_work = self._fp8
         self._fp8_dtype = None
+        self._to_fp8 = per_token_cast_to_fp8
+        self._cast_back = per_token_cast_back
         if self._fp8:
             self._fp8_dtype = _fp8_e4m3_dtype()
             self.dispatch_dtype = (
@@ -270,48 +260,7 @@ class UCCLEPBackend(EPBackend):
 
     # ---- FP8 encode/dequant hooks ----------------------------------------------------------
 
-    def _topk_idx_dtype(self):
-        return torch.int64
-
-    def semantic_payload(self, x):
-        if not self._fp8:
-            return x
-        # Same callable the wire uses, so sender and oracle cannot disagree by construction.
-        return per_token_cast_back(*self._quant(x))
-
-    def _validate_quantizer(self, x):
-        # Low-latency keeps the eager quantize; nothing to cross-check there.
-        if self._fp8 and self.mode != "low-latency":
-            self.assert_quantize_identity(per_token_cast_to_fp8, self._quant, x)
-
-    def _ll_recv_bf16(self, recv_x):
-        """The padded per-expert receive as BF16 [num_local_experts, cap*num_ranks, hidden].
-
-        BF16 dispatch already returns that tensor; FP8 returns an (e4m3, per-128-block scale)
-        tuple, dequantized here with the static-shape compile (the LL fp8 scales come back
-        column-major / non-contiguous for TMA, so they are made contiguous before the per-block
-        view). Mirror of ep_deepep_v2._ll_recv_bf16.
-        """
-        if not self._fp8:
-            return recv_x
-        fp8, scales = recv_x
-        return _ll_dequant_static(fp8, scales.contiguous())
-
     # ---- transport contract ----------------------------------------------------------------
-
-    def _ll_dispatch(self, p):
-        recv_x, recv_count, ll_handle, _event, _hook = self.buffer.low_latency_dispatch(
-            p.dispatch_x,
-            p.topk_idx,
-            self.max_tokens,
-            self.args.experts,
-            use_fp8=self._fp8,
-        )
-        return types.SimpleNamespace(
-            recv_x=recv_x,
-            recv_count=recv_count,
-            ll_handle=ll_handle,
-        )
 
     def dispatch(self, p):
         if self.mode == "low-latency":
@@ -347,17 +296,6 @@ class UCCLEPBackend(EPBackend):
             handle=handle,
         )
 
-    def stage(self, p, h):
-        if self.mode == "low-latency":
-            # The timed combine sends the padded per-expert receive back as BF16 (dequant under
-            # FP8). Value correctness is exercised by the oracle's combine_transformed path.
-            h.combine_input = self._ll_recv_bf16(h.recv_x)
-            return
-        if self._fp8:
-            h.combine_input = per_token_cast_back(h.recv_x[0], h.recv_x[1])
-        else:
-            h.combine_input = h.recv_x
-
     def combine(self, p, h):
         if self.mode == "low-latency":
             combined_x, _event, _hook = self.buffer.low_latency_combine(
@@ -376,25 +314,6 @@ class UCCLEPBackend(EPBackend):
         return combined_x
 
     # ---- correctness-oracle views ----------------------------------------------------------
-
-    def _ll_inspect_dispatch(self, p, h):
-        """Flat per-slot view over the padded per-expert LL receive (mirror of
-        ep_deepep_v2._ll_inspect_dispatch)."""
-        recv_bf16 = self._ll_recv_bf16(h.recv_x)  # [E, S, hidden] BF16
-        num_slots = recv_bf16.shape[1]
-        counts = h.recv_count.to(torch.int64)  # [E]
-        slot_valid = (
-            torch.arange(num_slots, device=recv_bf16.device).unsqueeze(0) < counts.unsqueeze(1)
-        )
-        slot_expert, slot_j = slot_valid.nonzero(as_tuple=True)
-        h.slot_expert = slot_expert
-        h.slot_j = slot_j
-        local_lo = self.rank * self.num_local_experts
-        return types.SimpleNamespace(
-            payload=recv_bf16[slot_expert, slot_j],
-            expert_ids=local_lo + slot_expert.to(torch.int64),
-            local_expert_counts=counts,
-        )
 
     def _normal_recv_payload(self, h):
         """The received tokens as BF16 [num_recv_tokens, hidden] (dequant under FP8)."""
@@ -426,21 +345,6 @@ class UCCLEPBackend(EPBackend):
             ),
         )
 
-    def _ll_combine_transformed(self, p, h, transformed):
-        """Scatter the oracle-transformed rows back into a zeroed padded combine buffer at the
-        exact (expert, slot) coordinates inspect read them from, then run the weighted LL combine
-        (mirror of ep_deepep_v2._ll_combine_transformed)."""
-        if self._fp8:
-            fp8 = h.recv_x[0]
-            combine_buf = torch.zeros(fp8.shape, dtype=torch.bfloat16, device=fp8.device)
-        else:
-            combine_buf = torch.zeros_like(h.recv_x)
-        combine_buf[h.slot_expert, h.slot_j] = transformed.to(combine_buf.dtype)
-        combined_x, _event, _hook = self.buffer.low_latency_combine(
-            combine_buf, p.topk_idx, p.topk_weights, h.ll_handle
-        )
-        return combined_x[: p.T]
-
     def combine_transformed(self, p, h, transformed):
         if self.mode == "low-latency":
             return self._ll_combine_transformed(p, h, transformed)
@@ -460,13 +364,3 @@ class UCCLEPBackend(EPBackend):
             return int(h.recv_count.sum().item())
         recv = h.recv_x[0] if self._fp8 else h.recv_x
         return int(recv.shape[0])
-
-    def finalize(self, rc):
-        try:
-            dist.barrier()
-            self.buffer.destroy()  # tears the CPU proxies down via destroy_uccl internally
-            dist.barrier()
-            dist.destroy_process_group()
-        except Exception:
-            return 1
-        return rc

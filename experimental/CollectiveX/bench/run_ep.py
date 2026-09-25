@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+from importlib import import_module
 import os
 import sys
 
@@ -14,6 +15,15 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path[:0] = [HERE, os.path.dirname(HERE)]
 
 import ep_harness  # noqa: E402  (stdlib-only; safe before torch)
+
+
+BACKENDS = {
+    "deepep-v2": ("ep_deepep_v2", "DeepEPV2Backend"),
+    "mori": ("ep_mori", "MoRIBackend"),
+    "uccl-ep": ("ep_uccl", "UCCLEPBackend"),
+    "nccl-ep": ("ep_nccl", "NCCLEPBackend"),
+    "flashinfer-ep": ("ep_flashinfer", "FlashInferEPBackend"),
+}
 
 
 def _loaded_collective_version() -> str | None:
@@ -50,8 +60,7 @@ def _runtime_info(torch, *, vendor: str) -> dict:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="CollectiveX EP dispatch/combine sweep")
-    ap.add_argument("--backend", required=True,
-                    choices=["deepep-v2", "mori", "uccl-ep", "nccl-ep", "flashinfer-ep"])
+    ap.add_argument("--backend", required=True, choices=list(BACKENDS))
     ep_harness.add_common_args(ap)
     args = ap.parse_args()
 
@@ -89,16 +98,8 @@ def main() -> int:
 
     # Import the backend class only after torch initializes. The selected mode is an
     # explicit case dimension; adapters do not infer it from the token ladder.
-    if args.backend == "mori":
-        from ep_mori import MoRIBackend as Backend
-    elif args.backend == "uccl-ep":
-        from ep_uccl import UCCLEPBackend as Backend
-    elif args.backend == "nccl-ep":
-        from ep_nccl import NCCLEPBackend as Backend
-    elif args.backend == "flashinfer-ep":
-        from ep_flashinfer import FlashInferEPBackend as Backend
-    else:
-        from ep_deepep_v2 import DeepEPV2Backend as Backend
+    module_name, class_name = BACKENDS[args.backend]
+    Backend = getattr(import_module(module_name), class_name)
 
     # MoRI registers the default GPU process group with its SHMEM runtime. Keep that
     # group device-only so scale-out does not also depend on a host Gloo fabric.
