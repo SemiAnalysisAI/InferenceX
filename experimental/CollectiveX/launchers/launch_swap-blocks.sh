@@ -36,7 +36,7 @@ collx_select_image "$COLLX_SWAP_IMAGE"
 read -r -a block_bytes <<< "$COLLX_SWAP_BLOCK_BYTES"
 read -r -a num_blocks <<< "$COLLX_SWAP_NUM_BLOCKS"
 case "$COLLX_SHARD_SKU" in
-  mi300x-tw|mi325x-tw)
+  mi325x-tw)
     docker_cmd=(docker)
     if ! docker ps >/dev/null 2>&1; then
       sudo -n docker ps >/dev/null 2>&1 || collx_die "Docker is unavailable"
