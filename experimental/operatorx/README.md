@@ -50,17 +50,6 @@ OPERATORX_CLUSTER=v6e_4x   python -m operatorx   # TPU     (default tpu cluster)
 OPERATORX_CLUSTER=trn3_16x python -m operatorx   # Trainium (default trainium cluster)
 ```
 
-The TPU `maxtext` backend depends on Google's MaxText library. Install it
-once per TPU VM (the `jax` backend works without it):
-
-```bash
-git clone https://github.com/AI-Hypercomputer/maxtext ~/maxtext
-pip install -e ~/maxtext
-```
-
-If MaxText isn't installed, `moe_forward` on TPU emits `unsupported` rows
-rather than running our old single-device dense fallback.
-
 ## Env vars honored by `submit_run.py`
 
 | Var | Default | Notes |

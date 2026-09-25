@@ -211,37 +211,25 @@ def plan(
             if ws not in world_sizes:
                 excluded += 1
                 continue
-            moe = (
-                tuple(
-                    args.get(key, 1)
-                    for key in (
-                        "expert_parallel_size",
-                        "routed_tensor_parallel_size",
-                        "shared_tensor_parallel_size",
-                    )
-                )
-                if shape["type"] == "moe_forward"
-                else ()
-            )
             # an entry naming an InferenceX recipe for this hardware runs with that recipe's
             # image and launch env, in its own shard
             recipe = next((k for k in shape.get("recipes", ()) if recipes and k in recipes
                            and recipes[k]["hardware"] == family(pool)
                            and recipes[k]["framework"] in backends), None)
-            groups[(ws, moe, recipe or "")].append({"testlist": name, "shape": shape})
+            groups[(ws, recipe or "")].append({"testlist": name, "shape": shape})
     image_groups = defaultdict(list)
     for backend in sorted(set(backends)):
         image_groups[images[backend]["image"]].append(backend)
     cells = []
     shards = []
-    for (ws, moe, recipe), cases in sorted(groups.items()):
+    for (ws, recipe), cases in sorted(groups.items()):
         if recipe:
             r = recipes[recipe]
-            shards.append((r["image"], [r["framework"]], ws, moe, cases,
+            shards.append((r["image"], [r["framework"]], ws, cases,
                            {"recipe": recipe, "recipe_script": r["script"], "env": r["env"]}))
         else:
-            shards += [(image, selected, ws, moe, cases, {}) for image, selected in sorted(image_groups.items())]
-    for image, selected, ws, moe, cases, extra in shards:
+            shards += [(image, selected, ws, cases, {}) for image, selected in sorted(image_groups.items())]
+    for image, selected, ws, cases, extra in shards:
             for offset in range(0, len(cases), chunk_size):
                 cell = {
                     "pool": pool,
@@ -250,7 +238,6 @@ def plan(
                     "gpus_per_node": gpus,
                     "image_platform": image_platform,
                     "world_size": ws,
-                    "moe": moe,
                     "image": image,
                     "mode": mode,
                     "backends": selected,
@@ -590,7 +577,6 @@ def execute(args) -> None:
         command(import_command, root / "import.log", env=import_env)
         key = image_key(cell["image"], cell["digest"], image_platform)
         env = dict(os.environ)
-        env.pop("OPERATORX_MOE_PARALLELISM", None)
         env.update(
             OPERATORX_CLUSTER=cell["cluster"],
             OPERATORX_CONTAINER_IMAGE=cell["image"],
@@ -614,8 +600,6 @@ def execute(args) -> None:
             MASTER_PORT="29500",
         )
         env.update(cell.get("env", {}))  # the InferenceX recipe's launch env
-        if cell["moe"]:
-            env["OPERATORX_MOE_PARALLELISM"] = ":".join(map(str, cell["moe"]))
         mounts = f"{stage}:/opx"
         # NVIDIA images carry no Nsight Compute; counters runs mount the node's newest.
         if cell.get("mode") == "counters" and cell["pool"] not in AMD_POOLS:

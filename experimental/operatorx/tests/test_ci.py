@@ -21,24 +21,24 @@ def platforms(pool="h100-dgxc", gpus=8, architecture="linux/amd64"):
     return {pool: {"gpus_per_node": gpus, "image_platform": architecture}}
 
 
-def test_plan_chunks_and_preserves_moe_groups():
+def test_plan_chunks_by_world_size():
     ordinary = {"type": "gemm", "args": {"m": 2}}
-    moe = {"type": "moe_forward", "args": {"world_size": 4, "expert_parallel_size": 2}}
-    multi = {"type": "allreduce", "args": {"world_size": 16}}
+    wide = {"type": "gemm", "args": {"m": 2, "world_size": 4}}
+    multi = {"type": "gemm", "args": {"m": 2, "world_size": 16}}
     result = ci.plan(
         "h100-dgxc",
         ["a", "b"],
-        {"small": [ordinary, ordinary, moe, multi]},
+        {"small": [ordinary, ordinary, wide, multi]},
         {"a": {"image": "same:1"}, "b": {"image": "same:1"}},
         [1, 4],
         1,
         platforms(),
     )
     cells = result["include"]
-    assert [(c["world_size"], c["moe"], len(c["cases"])) for c in cells] == [
-        (1, (), 1),
-        (1, (), 1),
-        (4, (2, 1, 1), 1),
+    assert [(c["world_size"], len(c["cases"])) for c in cells] == [
+        (1, 1),
+        (1, 1),
+        (4, 1),
     ]
     assert result["excluded_shapes"] == 1
     assert cells[2]["backends"] == ["a", "b"]
@@ -240,7 +240,6 @@ def test_strict_benchmark_writes_actual_status(
     monkeypatch.setitem(sys.modules, runner.__name__, runner)
     monkeypatch.setenv("WORLD_SIZE", "1")
     monkeypatch.setenv("RANK", "0")
-    monkeypatch.delenv("OPERATORX_MOE_PARALLELISM", raising=False)
     (tmp_path / "tiny.json").write_text(
         json.dumps([{"type": "gemm", "args": {"m": 2}}])
     )
