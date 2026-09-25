@@ -42,11 +42,13 @@ class MoRIBackend(EPBackend):
     maturity = "production"  # vLLM --all2all-backend mori_*; SGLang --moe-a2a-backend mori
     SUPPORTED_MODES = ("normal", "low-latency")
     SUPPORTED_PRECISIONS = ("bf16", "fp8")
-    # Both kernel families launch with host-built args only (no per-call host read of counts;
-    # the reset moved on-device in ROCm/mori#86 for vLLM's graphs), and SGLang captures AsyncLL
-    # decode split-phase inside its decode graph. `stage` slices by the untimed, per-rung
-    # `recv_tokens`, which is fixed for a rung's routing and so safe to bake into a capture.
-    CUDA_GRAPH_MODES = ("normal", "low-latency")
+    # Normal-mode kernels launch with host-built args only (no per-call host read of counts; the
+    # reset moved on-device in ROCm/mori#86 for vLLM's graphs). `stage` slices by the untimed,
+    # per-rung `recv_tokens`, fixed for a rung's routing and so safe to bake into a capture.
+    # AsyncLL stays eager: captured, its recv-copy kernel trips `(pe >= 0) && (pe < worldSize)`
+    # (low_latency_async.cpp:375) on mi300x-tw at bf16 and fp8, and upstream has no AsyncLL graph
+    # test to say what state the split phase expects between replays.
+    CUDA_GRAPH_MODES = ("normal",)
     requires_fresh_pair = True
 
     def __init__(self, args, rank, world_size, local_rank, device):

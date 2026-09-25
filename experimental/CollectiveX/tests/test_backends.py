@@ -251,6 +251,39 @@ class NcclLowLatencyLadderSizing(unittest.TestCase):
         self.assertEqual(ll.combine_reduction, "rank-fp32")
         self.assertEqual(getattr(ht, "combine_reduction", "domain-fp32"), "domain-fp32")
 
+    def test_ll_layout_selector_restores_the_expert_major_contract(self):
+        module = self._module()
+        module.dist.group = types.SimpleNamespace(WORLD=object())
+
+        def base_init(instance, options, rank, world_size, local_rank, device):
+            instance.args = options
+            instance.mode = options.mode
+
+        common = dict(experts=384, hidden=7168, topk=6, scale_up_domain=8)
+        with mock.patch.object(module.EPBackend, "__init__", base_init):
+            with mock.patch.dict(os.environ, {"COLLX_NCCL_LL_LAYOUT": "expert-major"}):
+                em = module.NCCLEPBackend(
+                    types.SimpleNamespace(mode="low-latency", **common), 0, 8, 0, "cuda:0"
+                )
+            rm = module.NCCLEPBackend(
+                types.SimpleNamespace(mode="low-latency", **common), 0, 8, 0, "cuda:0"
+            )
+            with mock.patch.dict(os.environ, {"COLLX_NCCL_LL_LAYOUT": "flat"}), \
+                    self.assertRaisesRegex(ValueError, "COLLX_NCCL_LL_LAYOUT"):
+                module.NCCLEPBackend(
+                    types.SimpleNamespace(mode="low-latency", **common), 0, 8, 0, "cuda:0"
+                )
+
+        self.assertEqual(em._layout, module.Layout.EXPERT_MAJOR)
+        self.assertEqual(
+            (em.kernel_generation, em.receive_layout, em.combine_weight_semantics),
+            ("nccl-ep-v02-ll", "token-expert", "weighted-kernel-sum"),
+        )
+        self.assertFalse(em.zero_copy)
+        self.assertEqual(getattr(em, "combine_reduction", "domain-fp32"), "domain-fp32")
+        self.assertEqual(rm._layout, module.Layout.RANK_MAJOR)
+        self.assertEqual(rm.combine_reduction, "rank-fp32")
+
     def test_ladder_cap_drops_only_oversized_measurement_points(self):
         module = self._module()
         backend = self._backend(module, low_latency=True)
