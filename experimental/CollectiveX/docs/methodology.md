@@ -310,12 +310,13 @@ rather than per-operation costs. The paired roundtrip is the comparable quantity
 
 Serving engines capture their decode step, so graph-compatible backend/mode pairs are measured
 under `CUDAGraph.replay()` by default. The graphed set follows what each library supports without
-changing its contract: nccl-ep (both modes), flashinfer-ep (normal), MoRI (both modes), uccl-ep
-(low-latency), and deepep-v2 low-latency plus normal-mode **decode**, which runs ElasticBuffer as
+changing its contract: nccl-ep (both modes), flashinfer-ep (normal), uccl-ep (low-latency), and
+deepep-v2 low-latency plus normal-mode **decode**, which runs ElasticBuffer as
 vLLM's graphed `deepep_v2` decode does (`do_cpu_sync=False`, worst-case receive, valid prefix read
 from the handle on device; kernel generation `v2-elastic-buffer-nosync`). deepep-v2 normal prefill
 keeps the host sync that sizes its receive exactly and stays eager, as does uccl-ep normal mode,
-whose dispatch host-syncs unless padded to `num_worst_tokens`.
+whose dispatch host-syncs unless padded to `num_worst_tokens`. MoRI stays eager in both modes:
+ROCm torch rejects the external events the replay windows are recorded with.
 
 Every family keeps its eager meaning under replay; only the launch mechanism changes:
 

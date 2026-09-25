@@ -42,13 +42,11 @@ class MoRIBackend(EPBackend):
     maturity = "production"  # vLLM --all2all-backend mori_*; SGLang --moe-a2a-backend mori
     SUPPORTED_MODES = ("normal", "low-latency")
     SUPPORTED_PRECISIONS = ("bf16", "fp8")
-    # Normal-mode kernels launch with host-built args only (no per-call host read of counts; the
-    # reset moved on-device in ROCm/mori#86 for vLLM's graphs). `stage` slices by the untimed,
-    # per-rung `recv_tokens`, fixed for a rung's routing and so safe to bake into a capture.
-    # AsyncLL stays eager: captured, its recv-copy kernel trips `(pe >= 0) && (pe < worldSize)`
-    # (low_latency_async.cpp:375) on mi300x-tw at bf16 and fp8, and upstream has no AsyncLL graph
-    # test to say what state the split phase expects between replays.
-    CUDA_GRAPH_MODES = ("normal",)
+    # Eager in both modes. The kernels themselves are capturable (host-built args only; the reset
+    # moved on-device in ROCm/mori#86 for vLLM's graphs), but ROCm torch rejects the external
+    # events the graph timing records as graph nodes ("External events are disallowed in rocm"),
+    # so replay could not be timed with the same windows as every CUDA backend.
+    CUDA_GRAPH_MODES = ()
     requires_fresh_pair = True
 
     def __init__(self, args, rank, world_size, local_rank, device):
