@@ -5472,7 +5472,7 @@ qwen3.8next-fp4-b200-sglang-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.8
       search-space:
-      - { tp: 1, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 16] }
+      - { tp: 1, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 16], srt-recipe: benchmarks/single_node/srt-slurm-recipes/qwen3.8next/sglang/b200-fp4-mtp/agentic.yaml }
 qwen3.5-fp4-gb200-dynamo-sglang-agentic-mtp:
   image: lmsysorg/sglang:nightly-dev-20260818-c0b6474b
   model: nvidia/Qwen3.5-397B-A17B-NVFP4-V2
