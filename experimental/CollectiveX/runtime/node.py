@@ -203,7 +203,10 @@ def main(argv: list[str] | None = None) -> int:
             lambda expected: probe.validate_cuda_context(int(expected)),
             ("expected",),
         ),
-        "address": (address, ("interface",)),
+        "address": (
+            lambda interface: f"[collectivex-private] rendezvous={address(interface)}",
+            ("interface",),
+        ),
         "cuda-arch": (cuda_arch, ()),
         "package-root": (package_root, ("package", "component")),
         "check-backend": (lambda backend: CHECKS[backend](), ("backend",)),

@@ -155,9 +155,12 @@ def rendezvous(allocation: SlurmAllocation, plan: Plan) -> None:
     interface = plan.env.get("COLLX_SOCKET_IFNAME", "")
     selected = interface if re.fullmatch(probe.INTERFACE, interface) else ""
     allocation.host(1, ["address", selected], path, relative=0)
-    address = path.read_text().splitlines()[0]
+    # srun diagnostics share the private log; they must never become MASTER_ADDR.
+    matches = re.findall(r"^\[collectivex-private\] rendezvous=(.+)$", path.read_text(), re.M)
+    address = matches[0] if len(matches) == 1 else ""
     pattern = r"([0-9]{1,3}\.){3}[0-9]{1,3}" if selected else r"[A-Za-z0-9][A-Za-z0-9._-]*"
     if not re.fullmatch(pattern, address):
+        log_tail(path)
         raise RuntimeError("could not resolve the allocated primary node/interface")
     port = plan.env.get("COLLX_MASTER_PORT") or "29551"
     if not re.fullmatch(r"[1-9][0-9]*", port) or int(port) > 65535:
