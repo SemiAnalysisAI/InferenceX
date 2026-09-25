@@ -1101,13 +1101,13 @@ dsv41flash-fp4-mi325x-vllm-agentic-dspark:
       # the tables would not fit beside the checkpoint share on a 256 GB card.
       # vllm-project/vllm#57491 widened the two is_cuda() gates to
       # is_cuda_alike(), so engram_config resolves on gfx942 in this image.
-      - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32] }
+      - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/mi325x-fp4-mtp/agentic.yaml }
       # TP4 halves the GPUs per server. With the Engram tables in pinned host
       # memory the resident weights are ~81 GiB per rank.
-      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32] }
+      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/mi325x-fp4-mtp/agentic.yaml }
       # TP2 quarters them. Resident weights rise to ~145 GiB per rank, so the
       # recipe halves the indexer buffer and caps the scheduler here.
-      - { tp: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32] }
+      - { tp: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/mi325x-fp4-mtp/agentic.yaml }
 
 dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark:
   image: lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260923
