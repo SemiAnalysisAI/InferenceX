@@ -18,6 +18,11 @@ base:
     tachometer:
       enabled: false
   engine: sglang
+  # Loading plus first-request kernel tuning outlasts the 1800 s default:
+  # MI300X Qwen3.5 was ready after ~27 minutes (run 36160403972).
+  health_check:
+    interval_seconds: 10
+    max_attempts: 360
   roles:
     agg:
       nodes: 1
