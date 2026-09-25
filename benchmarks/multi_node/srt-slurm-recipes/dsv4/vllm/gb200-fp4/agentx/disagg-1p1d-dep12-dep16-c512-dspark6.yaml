@@ -1,12 +1,13 @@
 schema: 2
 name: dsv4-vllm-disagg-gb200-p12-d16-c512-dspark6-agentic
 model:
-  path: deepseek-v4-pro
+  path: /mnt/lustre01/users-public/sa-shared/models/DeepSeek-V4-Pro-0813
   container: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-20ebb28
   precision: fp4
 identity:
   model:
-    repo: deepseek-ai/DeepSeek-V4-Pro-DSpark
+    repo: deepseek-ai/DeepSeek-V4-Pro-0813
+    revision: 72e1d3230f6c080a530b0a1d46f8eb4602340597
   container:
     image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-20ebb28
   frameworks:
@@ -107,7 +108,7 @@ roles:
       MC_TE_METRIC: '0'
     args:
       kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_cross_layers_blocks":false,"enable_offload":false}}]}}'
-      served-model-name: deepseek-ai/DeepSeek-V4-Pro-DSpark
+      served-model-name: deepseek-ai/DeepSeek-V4-Pro-0813
       kv-cache-dtype: fp8
       tensor-parallel-size: 1
       pipeline-parallel-size: 1
@@ -170,7 +171,7 @@ roles:
       MC_TE_METRIC: '0'
     args:
       kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_consumer","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_consumer","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_consumer","kv_connector_extra_config":{"load_async":true,"lookup_async":false,"enable_lookup":false,"enable_cross_layers_blocks":false,"enable_offload":false}}]}}'
-      served-model-name: deepseek-ai/DeepSeek-V4-Pro-DSpark
+      served-model-name: deepseek-ai/DeepSeek-V4-Pro-0813
       kv-cache-dtype: fp8
       tensor-parallel-size: 1
       pipeline-parallel-size: 1

@@ -9018,7 +9018,7 @@ dsv41flash-fp4-gb300-sglang-agentic-dspark:
 
 dsv4-fp4-gb200-dynamo-vllm-agentic-dspark-agg:
   image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-20ebb28
-  model: deepseek-ai/DeepSeek-V4-Pro-DSpark
+  model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
   runner: cluster:gb200-nv
   precision: fp4
@@ -9066,7 +9066,7 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-dspark-agg:
           - CONFIG_FILE=recipes/dsv4/vllm/gb200-fp4/agentx/agg-tp8-c8-dspark5.yaml
 dsv4-fp4-gb200-dynamo-vllm-agentic-dspark-disagg:
   image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-20ebb28
-  model: deepseek-ai/DeepSeek-V4-Pro-DSpark
+  model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
   runner: cluster:gb200-nv
   precision: fp4
