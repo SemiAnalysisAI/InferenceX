@@ -62,14 +62,22 @@ jobs:
           rm -r "$RUNNER_TEMP/plan"
           outcome_schema=$(uv run --project .infx-tooling --locked python -P -m infx.klaud outcome-schema)
           echo "outcome-schema=$outcome_schema" >> "$GITHUB_OUTPUT"
+      - name: Install Claude Code 2.1.282
+        id: claude_cli
+        run: | # zizmor: ignore[adhoc-packages] Claude CLI and its native packages are pinned to 2.1.282
+          npm install --prefix "$RUNNER_TEMP/claude-code" --no-audit --no-fund @anthropic-ai/claude-code@2.1.282
+          claude_cli="$RUNNER_TEMP/claude-code/node_modules/.bin/claude"
+          test "$("$claude_cli" --version)" = "2.1.282 (Claude Code)"
+          echo "path=$claude_cli" >> "$GITHUB_OUTPUT"
       - name: Let Klaud Cold own the candidate PR
         id: claude
         continue-on-error: true
-        uses: anthropics/claude-code-action@0d0e0876d3eaa933f45dc692f7a4312c83caf36f # v1.0.218
+        uses: anthropics/claude-code-action@9171db3e57d6a3140a37ddc2ba92788584e0ead6 # v1.0.234
         env:
           GH_TOKEN: ${{ secrets.AGENT_PAT }}
           KLAUD_DASHBOARD_API_KEY: ${{ secrets.DASH_API_KEY }}
         with:
+          path_to_claude_code_executable: ${{ steps.claude_cli.outputs.path }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.AGENT_PAT }}
           settings: |
@@ -83,7 +91,7 @@ jobs:
               }
             }
           claude_args: >-
-            --model 'claude-fable-5-1'
+            --model 'claude-opus-5-5'
             --max-turns 500
             --json-schema '${{ steps.context.outputs.outcome-schema }}'
             --add-dir '${{ runner.temp }}/klaud'
