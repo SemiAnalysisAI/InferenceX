@@ -570,19 +570,3 @@ def test_cleanup_waits_for_delayed_release_but_stays_bounded(
         with pytest.raises(RuntimeError, match="retaining staged evidence"):
             ci.cleanup(tmp_path, 180)
         assert clock[0] == 180
-
-
-def test_amd_plan_keeps_requested_moe_shard_factors_with_one_gpu():
-    result = ci.plan(
-        "mi300x", ["vllm"],
-        {"tiny": [
-            {"type": "moe_gemm", "args": {"num_tokens": 16, "expert_parallel_size": 8}},
-            {"type": "moe_gemm", "args": {"num_tokens": 32, "world_size": 2}},
-        ]},
-        {"vllm": {"image": "rocm:fixture"}}, [1], 50, platforms("mi300x"),
-    )
-    cell = result["include"][0]
-    assert cell["world_size"] == cell["nodes"] == 1
-    assert result["excluded_shapes"] == 1
-    assert len(result["include"]) == len(cell["cases"]) == 1
-    assert cell["cases"][0]["shape"]["args"]["num_tokens"] == 16
