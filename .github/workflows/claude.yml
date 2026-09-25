@@ -63,7 +63,7 @@ jobs:
             {"fastMode": true}
 
           claude_args: |
-            --model 'claude-fable-5-1'
+            --model 'claude-opus-5-5'
             --mcp-config .github/mcp-ci.json '{"mcpServers": {"fetch": {"command": "npx", "args": ["-y", "@anthropic-ai/mcp-server-fetch@latest"]}}}'
             --allowedTools "Write,Edit,Read,Glob,Grep,WebFetch,mcp__github__*,mcp__github_inline_comment__create_inline_comment,mcp__github_ci__*,mcp__fetch__*,mcp__inferencemax-repos__*,Bash"
           prompt: |
@@ -329,7 +329,7 @@ jobs:
             {"fastMode": true}
 
           claude_args: |
-            --model 'claude-fable-5-1'
+            --model 'claude-opus-5-5'
             --mcp-config .github/mcp-ci.json
             --allowedTools "mcp__github_inline_comment__create_inline_comment,mcp__inferencemax-repos__*,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
           prompt: |

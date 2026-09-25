@@ -80,6 +80,22 @@ def time_us(torch, fn, warmup: int, iters: int, pre=None, post=None) -> list[flo
     return [sample() for _ in range(iters)]
 
 
+def time_cuda_graph_phase_us(
+    torch, fn, warmup: int, iters: int, interval
+) -> list[float]:
+    """Time one event-record interval captured inside graph replay."""
+    for _ in range(max(0, warmup)):
+        fn()
+        torch.cuda.synchronize()
+    samples = []
+    for _ in range(iters):
+        fn()
+        torch.cuda.synchronize()
+        samples.append(interval[0].elapsed_time(interval[1]) * 1000.0)
+    return samples
+
+
+
 def _reduce_vec(torch, dist, device, vals, op):
     t = torch.tensor(vals, device=device, dtype=torch.float64)
     dist.all_reduce(t, op=op)
@@ -172,7 +188,7 @@ class EPTiming:
         """Components measured for this backend: roundtrip, dispatch and combine
         always; stage only when it launches device work."""
         components = ["roundtrip", "dispatch", "combine"]
-        if self.stage_device_work:
+        if self.stage_device_work and not self.cuda_graph_enabled:
             components.append("stage")
         return components
 
@@ -322,6 +338,10 @@ class EPTiming:
 
     def benchmark_component(self, component, problem, warmup, iters):
         """Measure one named component; every component gets the same warm-up first."""
+        if self.cuda_graph_enabled:
+            # Re-capture the roundtrip for each component, adding timing nodes only
+            # around that phase so roundtrip replay stays uninstrumented.
+            return self.benchmark_roundtrip(problem, warmup, iters, component)
         if component == "roundtrip":
             return self.benchmark_roundtrip(problem, warmup, iters)
         if component == "dispatch":
@@ -332,7 +352,7 @@ class EPTiming:
             return self.benchmark_combine(problem, warmup, iters)
         raise RuntimeError(f"unknown timed component {component!r}")
 
-    def benchmark_roundtrip(self, problem, warmup, iters):
+    def benchmark_roundtrip(self, problem, warmup, iters, graph_component="roundtrip"):
         import torch
 
         self.warm(problem, warmup)
@@ -350,6 +370,55 @@ class EPTiming:
             staged = handle.combine_input
             self.combine(problem, handle)  # drain the pair backends require
             torch.cuda.synchronize()
+        if self.cuda_graph_enabled:
+            # Capture replaces the existing roundtrip callable in place. Capture and its warmup
+            # are excluded; the ordinary time_us event pipeline measures replay directly.
+            import torch.distributed as dist
+
+            dist.barrier()
+            torch.cuda.synchronize()
+            graph = torch.cuda.CUDAGraph()
+            interval = (
+                (
+                    torch.cuda.Event(enable_timing=True, external=True),
+                    torch.cuda.Event(enable_timing=True, external=True),
+                )
+                if graph_component != "roundtrip" else None
+            )
+            with torch.cuda.graph(graph, capture_error_mode="relaxed"):
+                if graph_component == "dispatch":
+                    interval[0].record()
+                handle = self.dispatch(problem)
+                if graph_component == "dispatch":
+                    interval[1].record()
+                if staged is None:
+                    self.stage(problem, handle)
+                else:
+                    handle.combine_input = staged
+                if graph_component == "combine":
+                    interval[0].record()
+                combined = self.combine(problem, handle)
+                if graph_component == "combine":
+                    interval[1].record()
+            torch.cuda.synchronize()
+            if interval is None:
+                samples = time_us(torch, graph.replay, warmup, iters)
+            else:
+                samples = time_cuda_graph_phase_us(
+                    torch, graph.replay, warmup, iters, interval
+                )
+
+            # Prove replay, rather than capture, writes the output used by the correctness gate.
+            combined.fill_(float("nan"))
+            torch.cuda.synchronize()
+            graph.replay()
+            torch.cuda.synchronize()
+            replayed = combined.clone()
+            problem._cuda_graph_output = replayed
+            problem._cuda_graph_output_rewritten = bool(
+                torch.isfinite(replayed).all().item()
+            )
+            return samples
         return time_us(torch, lambda p=problem: self.run_roundtrip(p, staged), 0, iters)
 
     def benchmark_dispatch(self, problem, warmup, iters):

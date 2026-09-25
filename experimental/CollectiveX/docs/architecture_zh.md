@@ -17,7 +17,7 @@ CollectiveX 包含两条执行路径：分布式专家并行(EP)通信，以及�
    启动一个 `run_ep.py` 进程；台湾 Docker 运行器池使用 `torchrun`。分片内的用例顺序执行。
 3. [run_ep.py](../bench/run_ep.py) 初始化 GPU，根据 `BACKENDS` 延迟导入适配器模块，再建立
    进程组、构造适配器，最后调用 [ep_harness.run_sweep](../bench/ep_harness.py)。
-4. 测试驱动准备输入、校验正确性、测量独立组件与连续调用周期，然后再次校验正确性。
+4. 测试驱动准备输入、校验正确性、在支持的模式下测量 graph 回放（其他模式测独立组件与连续调用周期），然后再次校验正确性。
    [ep_results.py](../bench/ep_results.py) 归约样本，由 rank 0 写入 case-attempt JSON，
    并在各 rank 间统一退出状态。
 5. 启动器收集 JSON 文件。工作流生成延迟和带宽摘要，并上传 `cxshard-*` 产物。
@@ -30,7 +30,7 @@ CollectiveX 包含两条执行路径：分布式专家并行(EP)通信，以及�
 | --- | --- |
 | [run_ep.py](../bench/run_ep.py) | CLI 输入、按需后端分派、运行时初始化和版本记录 |
 | [ep_backend.py](../bench/ep_backend.py) | 抽象通信接口、`RankInputs`、`WorkloadSpec`、确定性输入和 FP8 不变量 |
-| [ep_measurement.py](../bench/ep_measurement.py) | `EPTiming` 预热与计时模板、CUDA event、跨 rank 归约、分位数和 `PointSamples` |
+| [ep_measurement.py](../bench/ep_measurement.py) | `EPTiming` 预热与 graph/eager 计时模板、CUDA event、跨 rank 归约、分位数和 `PointSamples` |
 | [ep_oracle.py](../bench/ep_oracle.py) | 独立参考计算、各接收布局的校验，以及共用的清理和合并结果校验 |
 | [ep_results.py](../bench/ep_results.py) | 用例身份、字节数计算、产物格式、原子写入和结果日志 |
 | [ep_harness.py](../bench/ep_harness.py) | 单个用例中按既定顺序执行的正确性校验与测量阶段 |

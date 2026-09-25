@@ -17,6 +17,7 @@ CONDITIONING_ROUNDS_PER_SHAPE = 8
 def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) -> int:
     """Drive the source-tokens-per-rank sweep for one fully-specified line."""
     mode = args.mode
+    cuda_graph = bool(getattr(backend, "cuda_graph_enabled", False))
     if mode not in MODE_ALLOWED_SEMANTICS:
         if rank == 0:
             print(f"ERROR: unknown CollectiveX case mode {mode!r}")
@@ -31,8 +32,8 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     # `chain_health` as "unavailable", indistinguishable from a backend that cannot be chained.
     # Requiring two kept pairs here is what lets Pass 2b compute the health scalars
     # unconditionally and Pass 3 assert the chained oracle ran.
-    if (min(args.chain_iters, args.chain_trials) <= 0
-            or not 0 <= args.chain_drop <= args.chain_iters - 2):
+    if (not cuda_graph and (min(args.chain_iters, args.chain_trials) <= 0
+            or not 0 <= args.chain_drop <= args.chain_iters - 2)):
         if rank == 0:
             print(f"ERROR: chain iters/trials must be positive and 0 <= drop <= iters - 2; got "
                   f"{args.chain_iters}:{args.chain_trials}:{args.chain_drop}")
@@ -154,6 +155,9 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             # verdict passes: a magnitude creeping toward the tolerance is the early warning a
             # bool cannot give, and the only way to tell a real corruption from a tight gate.
             "chain_output_error": 0.0,
+            "cuda_graph_output_local_ok": 1,
+            "cuda_graph_output_error": 0.0,
+            "cuda_graph_output_rewritten": 1,
             "pre_input_unchanged": pre_input_unchanged,
         }
 
@@ -161,7 +165,8 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     # (every FP8 adapter by default, since stage_device_work IS the fp8 flag) the staged
     # stand-in is decoupled from each pair's dispatch, so chained and drained are not
     # comparable -- see the call site for the measurement that established this.
-    chain_output_applicable = not backend.stage_excluded_from_roundtrip
+    chain_output_applicable = not cuda_graph and not backend.stage_excluded_from_roundtrip
+    cuda_graph_output_applicable = cuda_graph and not backend.stage_excluded_from_roundtrip
 
     # ---- Pass 2: every backend uses the same rotated point order.
     # Per-iteration cross-rank MAX samples are pooled across trials. ----
@@ -208,11 +213,30 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                 samples[T].dispatch_min += _reduce_vec(torch, dist, device, measured["dispatch"], MIN)
                 samples[T].combine_min += _reduce_vec(torch, dist, device, measured["combine"], MIN)
 
+    # The existing roundtrip measurement is graph replay in graph mode. Verify that a replay
+    # overwrote its poisoned output, and, where staging was not hoisted, compare that output with
+    # an ordinary drained pair. These checks are untimed and add no parallel measurement path.
+    if cuda_graph:
+        for T in ladder:
+            problem = problems[T]
+            rewritten = bool(getattr(problem, "_cuda_graph_output_rewritten", False))
+            gate[T]["cuda_graph_output_rewritten"] &= int(rewritten)
+            if cuda_graph_output_applicable:
+                drained = backend.run_roundtrip(problem)
+                torch.cuda.synchronize()
+                output_ok, output_error = _chain_output_matches(
+                    problem._cuda_graph_output, drained
+                )
+                gate[T]["cuda_graph_output_local_ok"] &= int(output_ok)
+                gate[T]["cuda_graph_output_error"] = max(
+                    gate[T]["cuda_graph_output_error"], output_error
+                )
+
     # ---- Pass 2b: the chained family, on its own trial count. A separate loop because one call
     # already yields chain_iters free-running pairs, so a handful of trials out-samples the
     # fresh-entry components' 256 for a fraction of the wall clock. Ladder order still rotates
     # per trial, as above. ----
-    for trial_index in range(args.chain_trials):
+    for trial_index in range(0 if cuda_graph else args.chain_trials):
         final_chain_trial = trial_index == args.chain_trials - 1
         for T in trial_order(list(ladder), trial_index):
             chained = backend.benchmark_chain(
@@ -300,12 +324,15 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             scale_up_domain, args.seed,
         )
         pre = gate[T]["oracle_pre"]
-        # The chained ORACLE is ANDed in like the other two, so a chained-regime failure reds the
-        # leg. The budget gate rejects chain_trials=0 up front, so a missing chained oracle is a
-        # harness bug, not a configuration.
         chain_oracle = gate[T]["oracle_chain"]
-        assert chain_oracle is not None, "chained oracle missing despite a validated budget"
-        chain_ok = bool(chain_oracle["passed"])
+        if cuda_graph:
+            chain_ok = True
+            chain_max_rel = 0.0
+        else:
+            # The eager chained oracle is required whenever that pipeline was measured.
+            assert chain_oracle is not None, "chained oracle missing despite a validated budget"
+            chain_ok = bool(chain_oracle["passed"])
+            chain_max_rel = chain_oracle["max_elementwise_relative_error"] or 0.0
         # The chained-OUTPUT check gates again, on a measured magnitude rather than a verdict.
         # It was briefly demoted on the theory its tolerance was too tight for FP8; probe
         # 31180411148 (h100, deepep-v2, EP8, low-latency) falsified that:
@@ -318,21 +345,27 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         # disagree with a drained pair, and a leg that cannot reproduce its own chained result
         # should not publish a period from it.
         chain_output_ok = bool(gate[T]["chain_output_local_ok"])
+        cuda_graph_ok = bool(gate[T]["cuda_graph_output_rewritten"]) and (
+            bool(gate[T]["cuda_graph_output_local_ok"])
+            or not cuda_graph_output_applicable
+        )
         gate[T].update({
             "local_ok": int(
                 pre["passed"] and post["passed"] and chain_ok and input_unchanged
                 and (chain_output_ok or not chain_output_applicable)
+                and cuda_graph_ok
             ),
             "chain_local_ok": int(chain_ok),
+            "cuda_graph_local_ok": int(cuda_graph_ok),
             "max_rel": max(
                 pre["max_elementwise_relative_error"] or 0.0,
                 post["max_elementwise_relative_error"] or 0.0,
-                chain_oracle["max_elementwise_relative_error"] or 0.0,
+                chain_max_rel,
             ),
         })
 
 
     return write_results(
         args, backend, torch, dist, device, rank, world_size, spec, samples, gate,
-        routing_consistent, chain_output_applicable,
+        routing_consistent, chain_output_applicable, cuda_graph, cuda_graph_output_applicable,
     )

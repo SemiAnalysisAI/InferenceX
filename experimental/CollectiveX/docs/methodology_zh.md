@@ -68,7 +68,7 @@ FlashInfer EP 是 TensorRT-LLM 单边 MNNVL `MoeAlltoAll`，直接写对端 work
 
 `low-latency` 增加各后端解码内核。DeepEP 使用旧版 `deep_ep.Buffer` LL API，按专家填充接收，源端按 top-k 权重合并；EP8 使用 `allow_nvlink_for_low_latency_mode`，NVSHMEM/IBGDA 和 `/dev/gdrdrv` 仅在 EP16 scale-out 承载线上载荷，H200 无 gdrdrv 的 EP8 已验证。本文该模式段落记录的 MoRI `IntraNodeLL` 是单调用纯节点内解码内核，保留紧凑、按 rank 去重布局和无权 rank 求和；分阶段 `AsyncLL` 不符合该单调用约定。LL 仅解码，依据 `ll_backends` 逐组合启用，不能由 normal 支持情况推断。
 
-DeepEP V2 LL 启用 H100/H200 EP8，B200 nscale 裸机和 GB200/GB300 EP8/EP16；MoRI 为 MI300X/MI325X/MI355X EP8；UCCL-EP 为 H100/H200/B200 EP8，传 `is_intranode` 后使用 `cudaIpc`、不启动代理。AMD LL 因上游在 pin 前六天把 `kNumMaxTopK` 从 9 改 16，host assert 在 16 warp groups 上无法成立而关闭。NCCL EP 为 H100/H200/B300 EP8 和 B200/GB200/GB300 EP8/EP16，`LOW_LATENCY` 使用 EXPERT_MAJOR 接收、源端加权合并。
+DeepEP V2 LL 启用 H100/H200 EP8，B200 nscale 裸机和 GB200/GB300 EP8/EP16；MoRI 为 MI300X/MI325X/MI355X EP8；UCCL-EP 为 H100/H200/B200 EP8，传 `is_intranode` 后使用 `cudaIpc`、不启动代理。AMD LL 因上游在 pin 前六天把 `kNumMaxTopK` 从 9 改 16，host assert 在 16 warp groups 上无法成立而关闭。NCCL EP 为 H100/H200/B300 EP8 和 B200/GB200/GB300 EP8/EP16，`LOW_LATENCY` 使用推理引擎的 rank-major 接收约定：调用方先做门控加权专家归约，再执行无权 rank 求和合并；单个 LSA/MNNVL 域内直接零复制接收，scale-out 使用暂存路径。
 
 NCCL v0.1 复用了 DeepEP 修复前代码，缺 #642 的 `fence.proxy.async.shared::cta`；GB300 EP8 T=256 五次中一次错误 0.47（正常 0.0039），各梯度都有竞态。临时 T≤128 只减少暴露，并非安全边界，绿色截断结果也不可发布。v0.2 在 `ll_ep.cuh` 的 `emptyBarriers` arrive 前加入 `fence_view_async_shared`，满足恢复条件，启用完整缓冲梯度，仍由 oracle 把关。更早的旧 peer signal 卡死 [NVIDIA/nccl#2303](https://github.com/NVIDIA/nccl/issues/2303) 已由单 handle 修复。本文记录 B300 的 NCCL EP 为 `candidate` LL 覆盖。是否尝试由能力决定，是否成功以产物为准。
 
@@ -91,13 +91,21 @@ FP8 的 `stage` 是测试辅助工作，不是推理服务独立阶段：把接�
 
 `implementation.stage_excluded_from_roundtrip` 表示“存在设备 staging 且已外提”。`false` 不等于往返包含 staging：`stage` 不存在时只是指针传递（NCCL EP 和直接把接收缓冲交给 combine 的 BF16 行）；`stage` 存在且该值为 false，才表示 dequant 将转换放回链内。仅凭 false 去减 stage 会减掉从未支付的成本。每个组件声明可用性、来源和样本数；仅支持配对的 API 独立组件为 null，`isolated_sum` 为推导值。
 
-主延迟为 `components.pair_period`；旧行缺该字段时为逐迭代跨 rank MAX 的 roundtrip p99。主指标切换曾等待六事件链缺陷修复，2026-08-06 在手工参考与双链全平台产物核对后放开（31092783122、31089556516）。两种口径均输出 p50/p99，汇总也都展示。fresh-entry 使用 MAX，因为层要等最慢 rank 完成；它也把进入错位计入对应组件。相同 H200 LL 解码中，DeepEP/UCCL BF16 每迭代跨度约 9.3µs，NCCL 约 2.6µs；前两者 FP8 内核量化较重、自然对齐，跨度降到约 2.8µs。没有合理方法统一减掉这一项，MAX 对不同路径的额外成本并不相同。
+默认 CUDA graph 行的主延迟为 `components.roundtrip`；eager 行存在 `components.pair_period` 时用链式配对周期。此前 eager 主指标切换曾等待六事件链缺陷修复，2026-08-06 在手工参考与双链全平台产物核对后放开（31092783122、31089556516）。两种口径均输出 p50/p99，汇总也都展示。fresh-entry 使用 MAX，因为层要等最慢 rank 完成；它也把进入错位计入对应组件。相同 H200 LL 解码中，DeepEP/UCCL BF16 每迭代跨度约 9.3µs，NCCL 约 2.6µs；前两者 FP8 内核量化较重、自然对齐，跨度降到约 2.8µs。没有合理方法统一减掉这一项，MAX 对不同路径的额外成本并不相同。
 
 因此每行还输出 `cross_rank_min_us`（MIN，排除错位的下限）和 `cross_rank_spread_us`（每迭代 MAX−MIN）。MAX/MIN 构成区间；若两个单元 MAX 差距小于较大跨度，数据不足以区分。按 roundtrip p50 排序，只有 MAX/MIN 顺序一致才判优。多节点解码不要按 MAX 的 p99 排名，它往往被最差 rank 停顿主导；旁边 MIN 的 p99 才是同步成本尾部。独立组件继承前一操作退出错位，主要用于残余等待诊断，可比较量是配对往返。
 
+### CUDA Graph 回放
+
+支持 graph 的后端/模式默认捕获既有固定 shape 的 dispatch→stage→combine 往返，测量 `CUDAGraph.replay()`，排除捕获和回放预热时间。结果直接写入 `components.roundtrip`，origin 为 `cuda-graph-replay`，该图内部没有计时节点。dispatch/combine 各自重新捕获完整往返，仅在所需阶段两端放一对 event，从而保留原有组件字段，又不把组件插桩计入 roundtrip。
+
+不增加 `graph_*` 组件或另一条输出路径。graph 模式的 stage、pair_period、chain floors、chain health 均不可用，延迟字段全部来自 graph；isolated_sum 仍是 dispatch 与 combine 的推导和。回放样本仍使用普通跨 rank MAX/MIN/spread 归约。
+
+`COLLX_CUDA_GRAPH=0` 恢复原有 eager 流程，包括独立组件和下文链式周期。适配器未声明支持 graph 的模式继续使用 eager。每份捕获输出在计时后写入非有限值，再回放一次；有限值重写作为正确性门禁，staging 未外提时还与不计时的排空配对比较。产物记录 `implementation.cuda_graph_replay`、`cuda_graph_supported`、`chained_period`，组件 origin 在行级标明测量模式。
+
 ### 链式配对周期
 
-前面的 fresh-entry 在每个窗口前后排空，样本从空闲流水线开始，rank 每次重新错位。解码循环连续运行，支付的是每个 MOE 层的稳态**周期**。`benchmark_chain` 连续提交 dispatch→combine 对，把 CUDA event 入 stream，**循环内不做主机同步**。每点 4 轮，每轮 128 对，丢弃前 16 对填充；梯度与 Pass 2 一样逐轮旋转。配对与 `run_roundtrip` 完全相同：dispatch、已准备的 combine 输入（dequant 模式才内联 stage）、combine；配对 API 保持约定，stage 排除规则与 roundtrip 一致。
+eager 流程的 fresh-entry 在每个窗口前后排空，样本从空闲流水线开始，rank 每次重新错位。解码循环连续运行，支付的是每个 MOE 层的稳态**周期**。每个 eager 行通过 `benchmark_chain` 连续提交 dispatch→combine 对，把 CUDA event 入 stream，**循环内不做主机同步**。每点 4 轮，每轮 128 对，丢弃前 16 对填充；梯度与 Pass 2 一样逐轮旋转。配对与 `run_roundtrip` 完全相同：dispatch、已准备的 combine 输入（dequant 模式才内联 stage）、combine；配对 API 保持约定，stage 排除规则与 roundtrip 一致。
 
 每轮有两条配套链，避免统计量承担自身采集成本。最初每对六次 `record()`；在设备比主机提交更快的小 T 区间，事件随提交立即执行，窗口退化为主机耗时，四个内部事件和胶水逻辑混入发布周期。全平台表现为不随 T 变化的 10–30µs，T=1 高出 20%–38%。现在先运行仅含四个操作窗口事件的 floors 链，再运行仅含两外层事件的 period 链，两个 collective 中间无插桩；两个 record 的主机成本落在配对间隙。仍有 eager 启动下限，CUDA graphs 解码每对的主机成本会更低。
 
@@ -111,11 +119,11 @@ FP8 的 `stage` 是测试辅助工作，不是推理服务独立阶段：把接�
 
 **不发布链式单操作中位数或 p99。** 无主机同步时，不同 rank 在不同操作窗口内等待。一个 rank 上数字稳定，但跨 rank 任意：rank 3 的 dispatch 长，可能正对应 rank 5 的 combine 长；相同配置跨运行可双稳态，配对和却守恒。单操作中位数只反映该次等待落在哪里。MIN 才能去掉它，p99 会把同样噪声重新引入尾部。
 
-fresh-entry 的 `roundtrip`、`dispatch`、`combine`、`stage`、`isolated_sum`、`cross_rank_min_us`、`cross_rank_spread_us` 保持原义和 256×8 采样。存量行不重新解释/测量。检查 `components.pair_period` 是否存在；缺失表示早于链式测量，不能在主指标列直接与新行排名。汇总混合两者时有脚注。
+`COLLX_CUDA_GRAPH=0` 时，fresh-entry 的 `roundtrip`、`dispatch`、`combine`、`stage`、`isolated_sum`、`cross_rank_min_us`、`cross_rank_spread_us` 保持原义和 256×8 采样。
 
 **发布周期始终指自由连续运行。** rank 最多漂移约一次迭代，要求接收平面能容忍：后端按 dispatch 双缓冲、严格配对，或每个操作在可复用 handle 上完成。此前未审计的 DeepEP V2 normal 在 2026-08-06、pin `01dc3aaa`、当时 dgxc RoCE/GIN 上手工跑了 T=128、EP8/EP16、两种精度的 256 对无同步链；全部通过、输出有限、输入不变、跨 rank 周期差小于 1µs。链与同步对照：EP8 BF16 105.4/125.4µs，FP8 216.6/272.3µs；EP16 838/863µs 和 820/897µs。不能自由运行的后端应修复，而非增加测量变体：每对重新对齐会加约 10µs，并去掉要测的跨对重叠，不能与自由周期共列。
 
-所有 HT 被测 dispatch 都包含路由工作。NCCL `ncclEpUpdateHandle` 是准备当前 top-k 路由的逐 step collective，生产每层都改变路由，且按 handle 全容量更新。旧版和 NVIDIA `ep_bench` 一样把 update 放在窗口外，理由是引入与梯度最大容量相关的成本；这恰是生产实际承担的成本。现在计入窗口，`kernel_generation` 为 `nccl-ep-v02-ht-routed`（LL 为 `nccl-ep-v02-ll`），v02 区分 `nccl-extensions` mover；早期 `nccl-ep-ht`/`nccl-ep-ht-routed` 属于不同口径或实现。LL update 立即返回，内核在计时 dispatch 内读缓存路由。其他后端已经包含此成本：UCCL dispatch 内调用 `get_dispatch_layout`，DeepEP/MoRI/FlashInfer 每次传路由。
+所有 HT 被测 dispatch 都包含路由工作。NCCL `ncclEpUpdateHandle` 是准备当前 top-k 路由的逐 step collective，生产每层都改变路由，且按 handle 全容量更新。旧版和 NVIDIA `ep_bench` 一样把 update 放在窗口外，理由是引入与梯度最大容量相关的成本；这恰是生产实际承担的成本。现在计入窗口，`kernel_generation` 为 `nccl-ep-v02-ht-routed-zc`（LL scale-up 为 `nccl-ep-v02-ll-rm-zc`，scale-out 为 `nccl-ep-v02-ll-rm`），v02 区分 `nccl-extensions` mover；早期 `nccl-ep-ht`/`nccl-ep-ht-routed` 属于不同口径或实现。HT 使用零复制；LL 为 rank-major 预归约约定，仅在一个 LSA/MNNVL 域内零复制。LL update 立即返回，内核在计时 dispatch 内读缓存路由。其他后端已经包含此成本：UCCL dispatch 内调用 `get_dispatch_layout`，DeepEP/MoRI/FlashInfer 每次传路由。
 
 统一计时配置定义在 `configs/sweep.json` 并写入各用例：
 
@@ -181,13 +189,13 @@ LL 的源端加权合并由内核给每个专家消息乘 top-k 权重，适配�
 - `identity`：`case_id`、`attempt_ordinal`、`case_factors`（SKU、后端、EP、模式、精度、阶段、suite、工作负载、拓扑）、`allocation_factors`（run id、attempt、源码 SHA）。
 - `workload`：`cross_rank_consistent`，是否证明跨 rank 路由一致。
 - `measurement`：实际分发/合并 dtype、语义、`payload_unit`（`token-rank`）、`sampling`、逐点 `rows`。合并 BF16，分发 BF16 或 SKU 对应 FP8。
-- `implementation`：后端、kernel generation、`maturity`。`production` 表示 vLLM `--all2all-backend` 或 SGLang `--moe-a2a-backend` 可选，`candidate` 表示真实库但没有引擎选择项，数字描述库而非可部署配置；registry 的 `backend_maturity` 相同。另含 `fp8_consume`、`combine_reduction`、`library_version`、`stage_excluded_from_roundtrip`、`chained_period`，分别记录消费模型、oracle 归约/库版本及 staging/链式世代。
+- `implementation`：后端、kernel generation、`maturity`。`production` 表示 vLLM `--all2all-backend` 或 SGLang `--moe-a2a-backend` 可选，`candidate` 表示真实库但没有引擎选择项，数字描述库而非可部署配置；registry 的 `backend_maturity` 相同。另含 `fp8_consume`、`combine_reduction`、`library_version`、`stage_excluded_from_roundtrip`、`chained_period`、`cuda_graph_supported`、`cuda_graph_replay`，分别记录消费模型、oracle 归约/库版本、staging/eager 链式世代，以及该模式是否支持和实际使用 graph 回放。
 - `topology`：SKU/产品、放置、`gpus_per_node`、节点、scale-up 域、scope、topology_class、world size，及 `scale_up_transport`、`scale_out_transport` 两组件和合成的 `transport`（如 `nvlink`、`nvlink-rdma`）。
 - `runtime`：vendor、framework（torch 版本）、accelerator_runtime（torch 构建 CUDA/HIP 版本）、collective_library（进程实际加载的 NCCL/RCCL 及版本）。
 - `provenance`：挂载镜像 tag、源码 SHA。
 - `outcome`：status（success/invalid）和 reasons。
 
-每个 rows 项包含 fresh-entry components、`components.pair_period`、`chain_floor_us`、`chain_health`、字节统计、token 速率、正确性、负载和 fanout；逐点统计原地汇总，不拆成文档。每个实际执行用例只写一份原始结果，不支持/未运行组合不生成合成记录。
+每个 rows 项包含逐点延迟（支持时默认在 `components.roundtrip` 中记录 graph 回放，否则为 eager components、`components.pair_period`、`chain_floor_us`、`chain_health`）、字节统计、token 速率、正确性、负载和 fanout；逐点统计原地汇总，不拆成文档。每个实际执行用例只写一份原始结果，不支持/未运行组合不生成合成记录。
 
 ## 身份
 

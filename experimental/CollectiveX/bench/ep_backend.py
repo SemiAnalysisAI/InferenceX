@@ -85,6 +85,9 @@ class EPBackend(EPTiming, abc.ABC):
     # adapter that also sends an FP8-quantized dispatch payload widens this.
     SUPPORTED_PRECISIONS: tuple = ("bf16",)
     stage_device_work = False
+    # Modes whose fixed-shape dispatch -> stage -> combine roundtrip is safe to capture and
+    # replay. Graph-capable modes use replay by default; COLLX_CUDA_GRAPH=0 restores eager timing.
+    CUDA_GRAPH_MODES: tuple = ()
     # Dispatch and combine form a single-use pair: every timed combine needs a fresh
     # dispatch and every timed dispatch must be drained by a combine (double-buffered
     # low-latency result tensors; MoRI/FlashInfer phase asserts). One flag, because a
@@ -173,6 +176,19 @@ class EPBackend(EPTiming, abc.ABC):
         if not self.stage_device_work:
             return False
         return not (self.precision == "fp8" and self.fp8_consume == "dequant")
+
+    @property
+    def cuda_graph_supported(self) -> bool:
+        """Whether this realized backend/mode has a graph-safe fixed-shape roundtrip."""
+        return self.mode in self.CUDA_GRAPH_MODES
+
+    @property
+    def cuda_graph_enabled(self) -> bool:
+        """Use CUDA graph replay unless the external eager switch disables it."""
+        setting = os.environ.get("COLLX_CUDA_GRAPH", "1")
+        if setting not in ("0", "1"):
+            raise ValueError(f"COLLX_CUDA_GRAPH must be '0' or '1', got {setting!r}")
+        return self.cuda_graph_supported and setting == "1"
 
     def fused_quantize(self, eager):
         """The fp8 quantize the TIMED dispatch should call, keyed on mode.

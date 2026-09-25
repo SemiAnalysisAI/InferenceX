@@ -66,6 +66,7 @@ def logical_byte_provenance(
 # `components.pair_period` carrying exactly CHAIN_PERIOD_ORIGIN, so a typo fails silently.
 CHAIN_PERIOD_ORIGIN = "chained-median"
 CHAIN_FLOOR_ORIGIN = "chained-cross-rank-min"
+CUDA_GRAPH_ORIGIN = "cuda-graph-replay"
 
 
 def _component(percentiles, count, *, derived=False, origin=None):
@@ -126,7 +127,8 @@ def kernel_generation(backend) -> str:
 
 
 def write_results(args, backend, torch, dist, device, rank, world_size,
-                  spec, samples, gate, routing_consistent, chain_output_applicable):
+                  spec, samples, gate, routing_consistent, chain_output_applicable,
+                  cuda_graph, cuda_graph_output_applicable):
     """Reduce each point, write the case artifact on rank zero, and agree the exit status."""
     ladder, dropped, cap = spec.ladder, spec.dropped, spec.cap
     ep_size = world_size
@@ -154,24 +156,39 @@ def write_results(args, backend, torch, dist, device, rank, world_size,
         recv_max = _reduce_int(torch, dist, device, g["recv_local"], MAX)
         recv_min = _reduce_int(torch, dist, device, g["recv_local"], MIN)
         global_ok = _reduce_int(torch, dist, device, g["local_ok"], MIN)
-        # Agreed across ranks like `passed`, not rank 0's local view.
-        post_chain_state_passed = bool(
-            _reduce_int(torch, dist, device, g["chain_local_ok"], MIN)
-        )
-        # null where the check does not apply (staging hoisted): the artifact says "not
-        # asked", never a bare False that a reader would mistake for a failed comparison.
-        # The reduce still runs on every rank so the collective stays aligned.
-        chain_last_output_passed = bool(
-            _reduce_int(torch, dist, device, g["chain_output_local_ok"], MIN)
-        )
-        # Published whether or not the verdict passed. Without it the artifact records THAT the
-        # chained output differed but never BY HOW MUCH, which is the difference between a
-        # transport corruption and a tolerance set too tight for a backend's accumulator.
-        chain_output_error = _reduce_vec(
-            torch, dist, device, [g["chain_output_error"]], MAX
-        )[0]
-        if not chain_output_applicable:
-            chain_last_output_passed, chain_output_error = None, None
+        if cuda_graph:
+            post_chain_state_passed = None
+            chain_last_output_passed = None
+            chain_output_error = None
+        else:
+            # Agreed across ranks like `passed`, not rank 0's local view.
+            post_chain_state_passed = bool(
+                _reduce_int(torch, dist, device, g["chain_local_ok"], MIN)
+            )
+            chain_last_output_passed = bool(
+                _reduce_int(torch, dist, device, g["chain_output_local_ok"], MIN)
+            )
+            chain_output_error = _reduce_vec(
+                torch, dist, device, [g["chain_output_error"]], MAX
+            )[0]
+            if not chain_output_applicable:
+                chain_last_output_passed, chain_output_error = None, None
+        if cuda_graph:
+            cuda_graph_output_rewritten = bool(
+                _reduce_int(torch, dist, device, g["cuda_graph_output_rewritten"], MIN)
+            )
+            cuda_graph_last_output_passed = bool(
+                _reduce_int(torch, dist, device, g["cuda_graph_output_local_ok"], MIN)
+            )
+            cuda_graph_output_error = _reduce_vec(
+                torch, dist, device, [g["cuda_graph_output_error"]], MAX
+            )[0]
+            if not cuda_graph_output_applicable:
+                cuda_graph_last_output_passed, cuda_graph_output_error = None, None
+        else:
+            cuda_graph_output_rewritten = None
+            cuda_graph_last_output_passed = None
+            cuda_graph_output_error = None
         max_rel = _reduce_vec(torch, dist, device, [g["max_rel"]], MAX)[0]
         point_ok = bool(global_ok) and recv_total > 0
         throughput = {
@@ -230,14 +247,20 @@ def write_results(args, backend, torch, dist, device, rank, world_size,
         chainp = _pcts(chain)
         rows.append({
             "components": {
-                "combine": _component(cp, len(c)),
-                "dispatch": _component(dp, len(d)),
+                "combine": _component(
+                    cp, len(c), origin=CUDA_GRAPH_ORIGIN if cuda_graph else None
+                ),
+                "dispatch": _component(
+                    dp, len(d), origin=CUDA_GRAPH_ORIGIN if cuda_graph else None
+                ),
                 "isolated_sum": _component(isum, 0, derived=True),
                 # What a serving decode loop pays per MoE layer: the steady-state period of
                 # back-to-back dispatch->combine pairs, every backend, cross-rank median. Not
                 # `roundtrip` (drained around every pair, an idle-pipeline latency). Do not sum it.
                 "pair_period": _component(chainp, len(chain), origin=CHAIN_PERIOD_ORIGIN),
-                "roundtrip": _component(rtp, len(rt)),
+                "roundtrip": _component(
+                    rtp, len(rt), origin=CUDA_GRAPH_ORIGIN if cuda_graph else None
+                ),
                 "stage": _component(sp, len(s)),
             },
             # Per-op floors from the FLOORS sibling chain: cross-rank MINIMUM of each op's window,
@@ -261,9 +284,18 @@ def write_results(args, backend, torch, dist, device, rank, world_size,
             # operation and how much is rank stagger; a curve that dips in MAX but not in MIN was
             # never the operation getting faster.
             "cross_rank_min_us": {
-                "combine": _component(_pcts(samples[T].combine_min), len(samples[T].combine_min)),
-                "dispatch": _component(_pcts(samples[T].dispatch_min), len(samples[T].dispatch_min)),
-                "roundtrip": _component(_pcts(samples[T].roundtrip_min), len(samples[T].roundtrip_min)),
+                "combine": _component(
+                    _pcts(samples[T].combine_min), len(samples[T].combine_min),
+                    origin=CUDA_GRAPH_ORIGIN if cuda_graph else None,
+                ),
+                "dispatch": _component(
+                    _pcts(samples[T].dispatch_min), len(samples[T].dispatch_min),
+                    origin=CUDA_GRAPH_ORIGIN if cuda_graph else None,
+                ),
+                "roundtrip": _component(
+                    _pcts(samples[T].roundtrip_min), len(samples[T].roundtrip_min),
+                    origin=CUDA_GRAPH_ORIGIN if cuda_graph else None,
+                ),
             },
             # Diagnostic, NOT a latency: per-iteration cross-rank (max-min) of the round trip.
             # Small => ranks entered together and the reported MAX is the operation's cost.
@@ -292,6 +324,9 @@ def write_results(args, backend, torch, dist, device, rank, world_size,
                 # and `null` there meant the chain never ran (a state the budget gate has since
                 # made impossible). Folded into `passed`.
                 "post_chain_state_passed": post_chain_state_passed,
+                "cuda_graph_output_rewritten": cuda_graph_output_rewritten,
+                "cuda_graph_last_output_passed": cuda_graph_last_output_passed,
+                "cuda_graph_last_output_error": cuda_graph_output_error,
                 # Max elementwise relative error (COMBINE_MAG_FLOOR-clamped)
                 # against the BF16-faithful expected combine.
                 "max_relative_error": max_rel,
@@ -442,9 +477,13 @@ def write_results(args, backend, torch, dist, device, rank, world_size,
             "stage_excluded_from_roundtrip": bool(
                 getattr(backend, "stage_excluded_from_roundtrip", False)
             ),
-            # Whether this document's rows carry the chained family. Consumers key the headline on
-            # presence, as for `stage_excluded_from_roundtrip`; the sweep `version` does not move.
-            "chained_period": True,
+            # Graph mode replaces the eager component/chain pipeline in place. Existing component
+            # fields contain replay samples; no parallel graph component exists.
+            "chained_period": not cuda_graph,
+            "cuda_graph_replay": cuda_graph,
+            "cuda_graph_supported": bool(
+                getattr(backend, "cuda_graph_supported", False)
+            ),
             # See EPBackend.maturity: a "candidate" row measures the library, not a deployment.
             "maturity": getattr(backend, "maturity", None) or "unknown",
             "name": backend.name,

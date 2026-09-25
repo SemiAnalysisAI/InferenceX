@@ -106,6 +106,7 @@ class FlashInferEPBackend(EPBackend):
     # of the 0.6.16+ combine-quant API is needed. vLLM accepts only nvfp4/mxfp8/bf16 on this
     # transport, so an fp8 row measures the transport off-path; `dispatch_dtype` records that.
     SUPPORTED_PRECISIONS = ("bf16", "fp8")
+    CUDA_GRAPH_MODES = ("normal",)
     kernel_generation = "flashinfer-mnnvl-one-sided"
     # stage() copies the received payload into the workspace combine region.
     stage_device_work = True

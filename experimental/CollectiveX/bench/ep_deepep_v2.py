@@ -117,6 +117,9 @@ class DeepEPV2Backend(LegacyBufferOperations, EPBackend):
     kernel_generation = "v2-elastic-buffer"
     SUPPORTED_MODES = ("normal", "low-latency")
     SUPPORTED_PRECISIONS = ("bf16", "fp8")
+    # ElasticBuffer normal dispatch performs a host synchronization; the legacy decode kernels
+    # are explicitly graph compatible.
+    CUDA_GRAPH_MODES = ("low-latency",)
     stage_device_work = False
     requires_fresh_pair = False
     receive_layout = "token-rank"

@@ -21,8 +21,8 @@ artifact names, and exit statuses form the contracts between those layers.
 3. [run_ep.py](../bench/run_ep.py) initializes the GPU, lazily imports the adapter selected
    by `BACKENDS`, forms the process group, constructs the adapter, and calls
    [ep_harness.run_sweep](../bench/ep_harness.py).
-4. The harness prepares inputs, checks correctness, measures isolated components and
-   free-running pairs, then checks correctness again. [ep_results.py](../bench/ep_results.py)
+4. The harness prepares inputs, checks correctness, measures graph replay for supported modes (eager components and
+   free-running pairs otherwise), then checks correctness again. [ep_results.py](../bench/ep_results.py)
    reduces the samples, writes the rank-zero case-attempt JSON, and agrees the exit status.
 5. The launcher collects the JSON files. The workflow renders latency and bandwidth
    summaries and uploads `cxshard-*` artifacts. Cleanup releases the allocation, including
@@ -35,7 +35,7 @@ artifact names, and exit statuses form the contracts between those layers.
 | --- | --- |
 | [run_ep.py](../bench/run_ep.py) | CLI inputs, lazy backend dispatch, runtime initialization and version reporting |
 | [ep_backend.py](../bench/ep_backend.py) | Abstract transport contract, `RankInputs`, `WorkloadSpec`, deterministic inputs, FP8 invariants |
-| [ep_measurement.py](../bench/ep_measurement.py) | `EPTiming` warmup and timing templates, CUDA events, rank reductions, percentiles, and `PointSamples` |
+| [ep_measurement.py](../bench/ep_measurement.py) | `EPTiming` warmup, graph/eager timing templates, CUDA events, rank reductions, percentiles, and `PointSamples` |
 | [ep_oracle.py](../bench/ep_oracle.py) | Independent reference arithmetic, layout-specific receive checks, shared cleanup and combine verification |
 | [ep_results.py](../bench/ep_results.py) | Case identity, byte accounting, artifact schema, atomic writes, and result logging |
 | [ep_harness.py](../bench/ep_harness.py) | The ordered correctness and measurement passes for one case |

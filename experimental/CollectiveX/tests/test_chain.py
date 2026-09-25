@@ -75,6 +75,15 @@ class _TraceEvent:
         return True
 
 
+class _TraceGraph:
+    def __init__(self, clock, log):
+        self.clock, self.log = clock, log
+
+    def replay(self):
+        self.log.append("graph_replay")
+        self.clock.advance(DISPATCH_MS + COMBINE_MS)
+
+
 class _TraceTensor:
     """Absorbs whatever a tensor is asked to do."""
 
@@ -94,9 +103,19 @@ def trace_torch(clock, log):
         get_world_size=lambda *args, **kwargs: 2,
         ReduceOp=types.SimpleNamespace(SUM="sum", MAX="max", MIN="min"),
     )
+    @contextlib.contextmanager
+    def graph_context(_graph, **kwargs):
+        if kwargs.get("capture_error_mode") != "relaxed":
+            raise AssertionError("graph capture must use relaxed mode")
+        log.append("capture_begin")
+        yield
+        log.append("capture_end")
+
     torch = types.SimpleNamespace(
         cuda=types.SimpleNamespace(
             Event=lambda *args, **kwargs: _TraceEvent(clock, log),
+            CUDAGraph=lambda: _TraceGraph(clock, log),
+            graph=graph_context,
             synchronize=lambda *args, **kwargs: log.append("sync"),
             current_stream=lambda *args, **kwargs: types.SimpleNamespace(
                 synchronize=lambda: log.append("sync")
@@ -105,6 +124,9 @@ def trace_torch(clock, log):
         distributed=dist,
         zeros=tensor, ones=tensor, empty=tensor, full=tensor, tensor=tensor,
         float32="float32", float64="float64", bfloat16="bfloat16", int32="int32",
+        isfinite=lambda _value: types.SimpleNamespace(
+            all=lambda: types.SimpleNamespace(item=lambda: True)
+        ),
     )
     with mock.patch.dict(sys.modules, {"torch": torch, "torch.distributed": dist}):
         yield torch
@@ -116,6 +138,10 @@ class _Combined:
     def __init__(self, value):
         self.value = value
         self.cloned = False
+
+    def fill_(self, value):
+        self.value = value
+        return self
 
     def clone(self):
         detached = _Combined(self.value)
@@ -271,6 +297,48 @@ class ChainedPairPeriod(unittest.TestCase):
             self.assertAlmostEqual(value, 3000.0)
         for value in series["pair"]:
             self.assertAlmostEqual(value, 15000.0)  # 3ms dispatch + 7ms stage + 5ms combine
+
+
+class CudaGraphRoundtrip(unittest.TestCase):
+    def test_each_graph_component_uses_its_own_capture(self):
+        backend = _ChainBackend(
+            stage_device_work=True, fp8_consume="native", precision="bf16"
+        )
+        backend.mode = "normal"
+        backend.CUDA_GRAPH_MODES = ("normal",)
+        problem = new_problem()
+        samples = {}
+        with mock.patch.dict(os.environ, {}, clear=True), \
+                trace_torch(backend.clock, backend.calls):
+            for component in ("roundtrip", "dispatch", "combine"):
+                samples[component] = backend.benchmark_component(
+                    component, problem, warmup=1, iters=4
+                )
+
+        self.assertEqual(samples["roundtrip"], [8000.0] * 4)
+        self.assertEqual(samples["dispatch"], [3000.0] * 4)
+        self.assertEqual(samples["combine"], [5000.0] * 4)
+        self.assertEqual(backend.calls.count("capture_begin"), 3)
+        self.assertEqual(backend.calls.count("capture_end"), 3)
+        self.assertEqual(backend.calls.count("graph_replay"), 18)
+        self.assertTrue(problem._cuda_graph_output.cloned)
+        self.assertTrue(problem._cuda_graph_output_rewritten)
+
+    def test_external_switch_restores_the_eager_component_pipeline(self):
+        backend = _ChainBackend()
+        backend.mode = "normal"
+        backend.CUDA_GRAPH_MODES = ("normal",)
+        with mock.patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(
+                backend.timed_components(), ["roundtrip", "dispatch", "combine"]
+            )
+        with mock.patch.dict(os.environ, {"COLLX_CUDA_GRAPH": "0"}, clear=True):
+            self.assertEqual(
+                backend.timed_components(), ["roundtrip", "dispatch", "combine", "stage"]
+            )
+        with mock.patch.dict(os.environ, {"COLLX_CUDA_GRAPH": "maybe"}, clear=True), \
+                self.assertRaisesRegex(ValueError, "COLLX_CUDA_GRAPH"):
+            backend.timed_components()
 
 
 class EventPlacement(unittest.TestCase):
@@ -556,6 +624,24 @@ class _SweepBackend(ep_backend.EPBackend):
         return transformed
 
 
+class _GraphSweepBackend(_SweepBackend):
+    CUDA_GRAPH_MODES = ("normal",)
+
+    def benchmark_component(self, component, problem, warmup, iters):
+        self.events.append(("graph", component, problem.T))
+        problem._cuda_graph_output = f"graph-{problem.T}"
+        problem._cuda_graph_output_rewritten = True
+        latency = {"roundtrip": 30.0, "dispatch": 11.0, "combine": 13.0}[component]
+        return [latency] * iters
+
+
+class _BrokenGraphSweepBackend(_GraphSweepBackend):
+    def benchmark_component(self, component, problem, warmup, iters):
+        samples = super().benchmark_component(component, problem, warmup, iters)
+        problem._cuda_graph_output_rewritten = False
+        return samples
+
+
 def make_args(out):
     return SimpleNamespace(
         mode="normal", precision="bf16", phase="decode",
@@ -768,6 +854,42 @@ class ChainedPublication(unittest.TestCase):
         self.assertEqual(sampling["chain_drop"], CHAIN_DROP)
         self.assertIn("period=", self.swept.stdout)
         self.assertNotIn("period=n/a", self.swept.stdout)
+
+
+class CudaGraphPublication(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.swept = drive(backend_factory=_GraphSweepBackend)
+
+    def test_existing_component_fields_carry_graph_measurements(self):
+        self.assertEqual(self.swept.rc, 0)
+        self.assertIs(self.swept.doc["implementation"]["cuda_graph_replay"], True)
+        self.assertIs(self.swept.doc["implementation"]["chained_period"], False)
+        self.assertFalse(any(event[0] == "chain" for event in self.swept.events))
+        for row in self.swept.rows:
+            with self.subTest(tokens=row["tokens_per_rank"]):
+                roundtrip = row["components"]["roundtrip"]
+                self.assertEqual(roundtrip["percentiles_us"]["p50"], 30.0)
+                self.assertEqual(roundtrip["origin"], "cuda-graph-replay")
+                self.assertEqual(roundtrip["sample_count"], 8)
+                self.assertEqual(row["components"]["dispatch"]["percentiles_us"]["p50"], 11.0)
+                self.assertEqual(row["components"]["combine"]["percentiles_us"]["p50"], 13.0)
+                self.assertEqual(row["components"]["dispatch"]["origin"], "cuda-graph-replay")
+                self.assertEqual(row["components"]["combine"]["origin"], "cuda-graph-replay")
+                self.assertEqual(row["components"]["isolated_sum"]["percentiles_us"]["p50"], 24.0)
+                for name in ("stage", "pair_period"):
+                    self.assertIsNone(row["components"][name]["percentiles_us"])
+                self.assertIs(row["correctness"]["cuda_graph_output_rewritten"], True)
+                self.assertIs(row["correctness"]["cuda_graph_last_output_passed"], True)
+                self.assertIsNone(row["correctness"]["post_chain_state_passed"])
+
+    def test_a_replay_that_does_not_rewrite_its_output_reds_the_case(self):
+        swept = drive(backend_factory=_BrokenGraphSweepBackend)
+        self.assertEqual(swept.rc, 3)
+        self.assertEqual(swept.doc["outcome"]["status"], "invalid")
+        for row in swept.rows:
+            self.assertIs(row["correctness"]["cuda_graph_output_rewritten"], False)
+            self.assertIs(row["correctness"]["passed"], False)
 
 
 class _DriftingBackend(_SweepBackend):
