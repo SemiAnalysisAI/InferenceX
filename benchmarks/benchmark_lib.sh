@@ -425,6 +425,24 @@ GPU_METRICS_CSV="${GPU_METRICS_CSV:-gpu_metrics.csv}"
 NVIDIA_GPU_MONITOR_QUERY="timestamp,index,power.draw,temperature.gpu,clocks.current.sm,clocks.current.memory,utilization.gpu,utilization.memory"
 export GPU_METRICS_CSV
 
+# Keep one AMD CSV header and forward each complete row immediately. Some awk
+# implementations buffer pipe input even with fflush(), losing the final ticks
+# when the monitor stops.
+_filter_amd_smi_metrics() {
+    local line header_seen=false
+    while IFS= read -r line; do
+        if [[ "$line" == timestamp,* ]]; then
+            if [[ "$header_seen" == true ]]; then
+                continue
+            fi
+            header_seen=true
+        fi
+        if [[ "$header_seen" == true ]]; then
+            printf '%s\n' "$line"
+        fi
+    done
+}
+
 # Background nvidia-smi/amd-smi sampler writing CSV.
 # Usage: start_gpu_monitor [--output /path/to/output.csv] [--interval 1]
 start_gpu_monitor() {
@@ -457,10 +475,9 @@ start_gpu_monitor() {
     elif command -v amd-smi &>/dev/null; then
         GPU_MONITOR_VENDOR="amd"
         # amd-smi is Python and block-buffers stdout; without PYTHONUNBUFFERED the
-        # trailing ticks were lost at kill (measured on MI355X). awk keeps the first
-        # CSV header, drops repeated ones, and flushes every row for the same reason.
+        # trailing ticks were lost at kill (measured on MI355X).
         PYTHONUNBUFFERED=1 amd-smi metric -p -c -t -u -w "$interval" --csv 2>/dev/null \
-            | awk '/^timestamp,/{if(!h){print;h=1};next} h{print;fflush()}' > "$output" &
+            | _filter_amd_smi_metrics > "$output" &
         GPU_MONITOR_PID=$!
         # Hardware energy-accumulator + identity snapshots; the end-side twin in
         # stop_gpu_monitor lets auditors cross-check the integrated energy
@@ -541,33 +558,8 @@ _write_amd_smi_sidecar() {
     fi
 }
 
-# Poll rocm-smi VRAM% every 10s for up to 15 min until the busiest GPU is at or
-# below the threshold percent (default 10); return 1 otherwise so the caller
-# aborts instead of starting on GPUs still draining the previous job.
-# Pass a stricter threshold when the run sizes its KV cache from device-wide free
-# memory (torch.cuda.mem_get_info): on 288 GB parts the 10% gate admits ~28.8 GB
-# of residual, which the engine folds into non_torch and subtracts from the KV
-# pool, so the pool drifts run to run.
-wait_for_amd_gpu_clean() {
-    local threshold="${1:-10}"
-    local gpu_clean=false vram_max i
-    for i in $(seq 1 90); do
-        vram_max=$(rocm-smi --showmemuse 2>/dev/null \
-            | grep -oE "GPU Memory Allocated \(VRAM%\): [0-9]+" \
-            | awk '{if ($NF > m) m = $NF} END {print m+0}')
-        if [ "${vram_max:-0}" -le "$threshold" ]; then
-            echo "GPUs clean (vram%max=$vram_max <= $threshold after $((i * 10))s)"
-            gpu_clean=true
-            break
-        fi
-        echo "waiting for prior-job GPU memory reclaim: vram%max=$vram_max (target <= $threshold)"
-        sleep 10
-    done
-    if [ "$gpu_clean" != "true" ]; then
-        echo "Error: GPUs still draining prior job's memory after 15min" >&2
-        return 1
-    fi
-}
+# shellcheck source=runners/srt-slurm/hooks/common.sh
+source "$(dirname "${BASH_SOURCE[0]}")/../runners/srt-slurm/hooks/common.sh" || return 1
 
 # Return success only while a PID exists and is not a zombie waiting to be
 # reaped. `kill -0` alone treats zombies as live processes.
@@ -800,6 +792,7 @@ run_benchmark_serving() {
     local model=""
     local port=""
     local backend=""
+    local base_url=""
     local endpoint=""
     local input_len=""
     local output_len=""
@@ -832,6 +825,10 @@ run_benchmark_serving() {
                 ;;
             --endpoint)
                 endpoint="$2"
+                shift 2
+                ;;
+            --base-url)
+                base_url="$2"
                 shift 2
                 ;;
             --input-len)
@@ -954,12 +951,16 @@ run_benchmark_serving() {
         num_prompts="$max_concurrency"
     fi
 
+    if [[ -z "$base_url" ]]; then
+        base_url="http://0.0.0.0:$port"
+    fi
+
     local benchmark_cmd=(
         env PYTHONPATH="$workspace_dir${PYTHONPATH:+:$PYTHONPATH}"
         python3 -m infx.bench_serving.benchmark_serving
         --model "$model"
         --backend "$backend"
-        --base-url "http://0.0.0.0:$port"
+        --base-url "$base_url"
         --dataset-name random
         --random-input-len "$input_len"
         --random-output-len "$output_len"
@@ -3162,7 +3163,7 @@ resolve_trace_source() {
     # corpus; 1M-context families take the unfiltered variant, others 256k.
     local default_loader
     case "${MODEL_PREFIX:-}" in
-        dsv4*|glm5.2*|minimaxm3*|kimik3*)
+        dsv4*|glm5.2*|glm5.3*|minimaxm3*|kimik3*)
             default_loader="semianalysis_cc_traces_weka_062126"
             ;;
         *)

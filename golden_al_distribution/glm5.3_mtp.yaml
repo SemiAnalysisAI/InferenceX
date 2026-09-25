@@ -1,0 +1,19 @@
+# PROVISIONAL — copied from glm5.2_mtp.yaml; NOT measured on GLM-5.3.
+#
+# GLM-5.3 shares GLM-5.2's base and layer topology (its config.json differs only
+# by the fp8 quantization block), so the GLM-5.2 curve is the closest committed
+# reference. Only the K=3 cell is carried over, because the ROCm TileRT GLM
+# profile builds MTP at draft depth 3 and no other cell can be exercised.
+# Replace this file with a SPEED-Bench run on glm-5.3-fp8 when one exists.
+#
+# Inherited value provenance (GLM-5.2, unchanged):
+#   Source GitHub Actions run: https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28058352479
+#   Acceptance Length (AL) reference values measured with SPEED-Bench.
+#   dataset: coding | temperature: 1.0 | top_p: 0.95 | output_len: 4096
+#   thinking_on chat_template_kwargs: {"enable_thinking": true}
+#   Measured on glm-5.2-fp8 (B300, vLLM MTP), per num_speculative_tokens.
+#
+# key = num_speculative_tokens (MTP level); value = golden AL
+glm-5.3-fp8:
+  thinking_on:
+    3: 2.99

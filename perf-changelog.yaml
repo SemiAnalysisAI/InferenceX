@@ -8485,6 +8485,29 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3274
 
 - config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add a TP=2 search space alongside TP=4 for MI355X DSv4.1-Flash AgentX, and extend both to concurrency 128. TP=2 is feasible now that the Engram tables can live in host memory on ROCm rather than costing 47.2 GiB of device memory per rank, which previously forced four GPUs per server."
+    - "Offload the Engram tables only where the KV pool is short, not everywhere. vllm-project/vllm#57491 widened the two ROCm is_cuda() gates to is_cuda_alike(), so this image resolves an Engram config on gfx950 and the recipe sets the value explicitly instead of relying on the default. TP=2 always offloads: the tables cost 94.4 GiB per rank there against a 288 GiB card. TP=4 keeps them resident through c64, exactly as the validated concurrency 1-32 run measured, and offloads only at c128, where resident would leave 14.83M KV tokens, 116K per concurrent request, below the 122K at which TP=2 c64 collapsed. Offloaded lookups go to pinned host memory over UVA, so that cost is paid only where it buys KV room."
+    - "Trade prefill chunk size for KV room only above c32: --max-num-batched-tokens drops from the upstream 16384 to 8192 at TP=2 c64 and TP=4 c128, and to 4096 at TP=2 c128. The sparse-attention indexer and its companion per-rank buffers scale at roughly 4.4 MiB per batched token. KV tokens per concurrent request, which is what decides whether the prefix cache holds, rises from 116K to 388K at TP=4 c128, from 122K to 386K at TP=2 c64 and from 23.6K to 260K at TP=2 c128. Concurrency 1-32 keeps the upstream chunk untouched, where TP=2 measured 245K per request and TP=4 463K. B300 runs 8192 at TP=4 and the Blackwell TP=2 arms run 4096 (#3320, #3321)."
+    - "Cap --max-num-seqs at the graph-capture shape wherever the chunk falls below six times the MI355X API-server default of 1024 sequences, which is TP=2 c128 alone. DSpark verifies 1+5 tokens per sequence, so a decode batch of max_num_seqs needs six times that many token slots; at 4096 against 1024 sequences only four remain and the engram projection faults during profiling with HSA_STATUS_ERROR_EXCEPTION at M=1024, N=129280, K=256, reproduced on two separate GPU pairs. The same probes show why c128 never completed before: at the upstream 16384 with capture at 2048, TP=2 c128 held just 7.72 GiB, 3.02M KV tokens, 23.6K per request."
+    - "Sweep the full concurrency range 1 through 128 on both TP arms, sixteen points. The changes above leave concurrency 1-32 on the upstream settings, so the recipe there is unchanged, but its only measured points come from run 34710937012 on the superseded nightly-eed1f3d0 pin. Re-measuring them puts the whole MI355X AgentX curve on one image, and TP=2 has no measured point below c64 at all."
+    - "Move the image from vllm/vllm-openai-rocm:nightly-eed1f3d0c6043bd494424a22443ee198dd56f657 on the plain ROCm nightly channel to vllm/vllm-openai-rocm:nightly-rocm100-3df4ae153eb385e27b52f26c81f8edb9e20b9984 on the ROCm 10.0 nightly channel, published 2026-09-21T05:50:03Z with digest sha256:eccb72b74b8c04ce7406d9212e200b129f58e24be642795a857f755a94fdb3a1. kimik3-fp4-mi355x-vllm-agentic-mtp already runs that channel on this cluster. This sweep is the qualification for the new image; the previous green run is not evidence for it."
+    - "Drop the fixed max_num_seqs of 128 and use vLLM's MI355X API-server default of 1024, since a fixed 128 caps in-flight sequences at the outer concurrency once the sweep reaches c128. The CUDA graph ceiling stays at 1024 through c64 and rises to 2048 at c128, covering twice the outer concurrency. Supersedes PR #3111."
+    - "Pass --no-swa-bounded-replay. vllm-project/vllm#56227 added SWA bounded replay, default on, between the eed1f3d0 pin and this one. The window clamp it relies on landed in the FlashInfer and FlashMLA kernels, while the ROCm sparse SWA path only gained the replay_start kwarg, so on gfx950 the replayed tokens' slots are padded but the prefill kernels never stop at replay_start. Every TP=2 and TP=4 point of run 35567570539 died with HSA_STATUS_ERROR_MEMORY_FAULT at the first prefix hit carrying a replay start. Prefix caching itself stays on; drop this once ROCm clamps too."
+    - "为 MI355X DSv4.1-Flash AgentX 在 TP=4 之外新增 TP=2 搜索空间，并将两者的并发扩展到 128。ROCm 上 Engram 表现在可以驻留主机内存，不再占用每 rank 47.2 GiB 设备内存（此前这迫使每个服务器使用四张 GPU），因此 TP=2 可行。"
+    - "仅在 KV 池吃紧处下放 Engram 表，而非全面下放。vllm-project/vllm#57491 将 ROCm 上的两处 is_cuda() 判断放宽为 is_cuda_alike()，因此该镜像在 gfx950 上会解析 Engram 配置，recipe 显式设置该值而不再依赖默认行为。TP=2 始终下放：此时表每 rank 需 94.4 GiB，而单卡仅 288 GiB。TP=4 在 c64 及以下保持常驻，与已验证的并发 1-32 运行完全一致，仅在 c128 下放：此时若保持常驻只有 14.83M KV token，即每并发请求 116K，低于 TP=2 c64 崩溃时的 122K。下放后的查表经 UVA 访问锁页主机内存，因此只在能换来 KV 空间处才付出该代价。"
+    - "仅在并发高于 c32 时用 prefill 分块大小换取 KV 空间：--max-num-batched-tokens 从上游的 16384 降至 TP=2 c64 与 TP=4 c128 的 8192，以及 TP=2 c128 的 4096。稀疏注意力 indexer 及其配套的每 rank 缓冲区按每个批量 token 约 4.4 MiB 增长。决定前缀缓存能否维持的每并发请求 KV token 数随之提升：TP=4 c128 从 116K 升至 388K，TP=2 c64 从 122K 升至 386K，TP=2 c128 从 23.6K 升至 260K。并发 1-32 完全保留上游分块大小，实测 TP=2 每请求 245K、TP=4 463K。B300 在 TP=4 使用 8192，Blackwell 的 TP=2 搜索空间使用 4096（#3320、#3321）。"
+    - "当分块大小低于 MI355X API server 默认 1024 序列所需的六倍时，将 --max-num-seqs 限制为 CUDA graph 捕获的规模，实际只影响 TP=2 c128。DSpark 每个序列验证 1+5 个 token，因此 max_num_seqs 规模的 decode 批次需要六倍的 token 槽位；4096 对 1024 序列仅剩四个槽位，profiling 阶段 engram 投影会在 M=1024、N=129280、K=256 处以 HSA_STATUS_ERROR_EXCEPTION 崩溃，并在两组不同 GPU 上复现。同一批探测也解释了此前 c128 始终无法完成的原因：在上游的 16384 且捕获上限为 2048 时，TP=2 c128 仅有 7.72 GiB、3.02M KV token，即每请求 23.6K。"
+    - "在两个 TP 分支上完整扫描并发 1 至 128，共十六个点。上述改动在并发 1-32 区间保留上游设置，recipe 本身没有变化，但该区间仅有的实测点来自运行 34710937012，使用的是已被取代的 nightly-eed1f3d0 镜像。重新测量这些点可使整条 MI355X AgentX 曲线落在同一镜像上；此外 TP=2 在 c64 以下完全没有实测点。"
+    - "镜像从 plain ROCm nightly 渠道的 vllm/vllm-openai-rocm:nightly-eed1f3d0c6043bd494424a22443ee198dd56f657 切换到 ROCm 10.0 nightly 渠道的 vllm/vllm-openai-rocm:nightly-rocm100-3df4ae153eb385e27b52f26c81f8edb9e20b9984，该镜像于 2026-09-21T05:50:03Z 发布，digest 为 sha256:eccb72b74b8c04ce7406d9212e200b129f58e24be642795a857f755a94fdb3a1。本集群上的 kimik3-fp4-mi355x-vllm-agentic-mtp 已在使用该渠道。本次 sweep 即为新镜像的验证；此前的绿色运行不能作为其证据。"
+    - "移除固定的 max_num_seqs 128，改用 vLLM 在 MI355X API server 上的默认值 1024：扫描到 c128 时，固定 128 会把在途序列数限制在外层并发上。CUDA graph 上限在 c64 及以下保持 1024，c128 提升至 2048，以覆盖两倍外层并发。本 PR 取代 PR #3111。"
+    - "传入 --no-swa-bounded-replay。vllm-project/vllm#56227 在 eed1f3d0 与本次固定的镜像之间引入了默认开启的 SWA bounded replay。它所依赖的窗口钳制只落在 FlashInfer 与 FlashMLA 内核中，而 ROCm 稀疏 SWA 路径仅新增了 replay_start 参数，因此在 gfx950 上被重放 token 的 slot 会被填充，但 prefill 内核并不会在 replay_start 处停下。运行 35567570539 的所有 TP=2 与 TP=4 数据点都在首次带 replay start 的前缀命中时以 HSA_STATUS_ERROR_MEMORY_FAULT 崩溃。前缀缓存本身保持开启；待 ROCm 同样实现钳制后即可移除。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3326
+
+- config-keys:
     - dsv41flash-fp4-h200-vllm-agentic-dspark
   scenario-type:
     - agentic-coding
@@ -8587,6 +8610,334 @@
     - "将镜像从已失效的 nightly-eed1f3d0 重新固定到 vllm/vllm-openai-rocm:nightly-rocm100-3df4ae153eb385e27b52f26c81f8edb9e20b9984（与 MI355X 臂在 SemiAnalysisAI/InferenceX#3326 中所用相同 commit 的 ROCm 10.0 nightly 渠道构建）；该镜像包含 vllm-project/vllm#57491，将两处 is_cuda() 判定放宽为 is_cuda_alike()，使 engram_config 在 gfx942 上可解析；由于 cpu_offload 现通过 VLLM_PLE_CPU_OFFLOAD 默认开启，配方按 TP 显式设置该值"
     - "新增 --no-swa-bounded-replay：vllm-project/vllm#56227 在两个 pin 之间将 SWA bounded replay 默认开启，其依赖的 window clamp 在 ROCm sparse SWA 路径中缺失，曾使所有 gfx950 数据点以 HSA_STATUS_ERROR_MEMORY_FAULT 崩溃；gfx942 使用同一路径。prefix caching 保持开启"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3337
+
+- config-keys:
+    - dsv4-fp4-b200-dynamo-sglang-agentic-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add B200 Dynamo+SGLang AgentX TP8 aggregate HiCache recipes at concurrency 1, 4, and 8."
+    - "Use lmsysorg/sglang:nightly-dev-20260916-c9a8fba9 with bundled DSpark K=6, full-node CPU/DRAM allocation, and per-point request/CUDA-graph limits."
+    - "Map the exact DeepSeek-V4-Pro-0813 recipe alias to the pre-staged NScale checkpoint."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3257
+
+- config-keys:
+    - dsv41flash-fp4-mi300x-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add TP4 and TP2 arms with Engram CPU offload to the MI300X vLLM DeepSeek-V4.1-Flash AgentX recipe, keeping the existing TP8 arm with the 183 GiB of tables GPU-resident. With the tables in pinned host memory the resident weights are ~81 GiB per rank at TP4 and ~145 GiB per rank at TP2, against 192 GB per card"
+    - "Cap the scheduler at TP2 only: halve the sparse-attention indexer buffer to 4096 batched tokens (8 GiB rather than 16 GiB of a [batched-tokens, 1M] fp8 logits allocation), scale max-num-seqs to 2*CONC clamped to [16, 256] and cap cudagraph capture at 512. Same cap set the Blackwell TP2 arms validated on B200, GB200 and GB300. TP2 concurrency stops at 8 because ~145 GiB of weights leaves the smallest KV pool of any arm here"
+    - "Repin the image from the expired nightly-eed1f3d0 tag to vllm/vllm-openai-rocm:nightly-rocm100-3df4ae153eb385e27b52f26c81f8edb9e20b9984, the ROCm 10.0 nightly channel build of the same commit the MI355X arm moved to in SemiAnalysisAI/InferenceX#3326 (digest sha256:eccb72b74b8c04ce7406d9212e200b129f58e24be642795a857f755a94fdb3a1, published 2026-09-21T05:50:03Z); it carries vllm-project/vllm#57491, which widened the two is_cuda() gates to is_cuda_alike() so engram_config resolves on gfx942, and because cpu_offload now defaults on via VLLM_PLE_CPU_OFFLOAD the recipe sets it explicitly per TP"
+    - "Add --no-swa-bounded-replay: vllm-project/vllm#56227 turned SWA bounded replay on by default between the two pins and relies on a window clamp the ROCm sparse SWA path does not have, which crashed every gfx950 point with HSA_STATUS_ERROR_MEMORY_FAULT; gfx942 runs the same path. Prefix caching stays on"
+    - "为 MI300X vLLM DeepSeek-V4.1-Flash AgentX 配方新增启用 Engram CPU 卸载的 TP4 与 TP2 臂，同时保留 183 GiB Engram 表驻留 GPU 的现有 TP8 臂；表移至固定页主机内存后，TP4 每 rank 常驻权重约 81 GiB，TP2 约 145 GiB，而每张卡为 192 GB"
+    - "仅在 TP2 收紧调度器：将稀疏注意力 indexer 缓冲区减半至 4096 batched tokens（[batched-tokens, 1M] fp8 logits 分配由 16 GiB 降至 8 GiB），max-num-seqs 取 2*CONC 并夹在 [16, 256]，cudagraph capture 上限 512。该组参数与 Blackwell TP2 臂在 B200、GB200、GB300 上验证过的一致。TP2 并发止于 8，因为约 145 GiB 权重使其 KV 池为本配方中最小"
+    - "将镜像从已失效的 nightly-eed1f3d0 重新固定到 vllm/vllm-openai-rocm:nightly-rocm100-3df4ae153eb385e27b52f26c81f8edb9e20b9984（与 MI355X 臂在 SemiAnalysisAI/InferenceX#3326 中所用相同 commit 的 ROCm 10.0 nightly 渠道构建）；该镜像包含 vllm-project/vllm#57491，将两处 is_cuda() 判定放宽为 is_cuda_alike()，使 engram_config 在 gfx942 上可解析；由于 cpu_offload 现通过 VLLM_PLE_CPU_OFFLOAD 默认开启，配方按 TP 显式设置该值"
+    - "新增 --no-swa-bounded-replay：vllm-project/vllm#56227 在两个 pin 之间将 SWA bounded replay 默认开启，其依赖的 window clamp 在 ROCm sparse SWA 路径中缺失，曾使所有 gfx950 数据点以 HSA_STATUS_ERROR_MEMORY_FAULT 崩溃；gfx942 使用同一路径。prefix caching 保持开启"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3336
+- config-keys:
+    - dsv41flash-fp4-mi300x-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Drop the TP2 arm from the MI300X vLLM DeepSeek-V4.1-Flash AgentX recipe: measured infeasible. In Actions run 35671005506 the TP2 concurrency-1 point reported \"Available KV cache memory: -13.51 GiB\" and the engine refused to start with \"No available memory for the cache blocks\", even with the sparse-attention indexer buffer already halved to 4096 batched tokens. At TP2 the Engram-offloaded resident weights are ~145 GiB per rank, which a 192 GB card cannot hold alongside a usable 1M-context KV pool. Raising gpu-memory-utilization to 0.95 recovers ~9 GiB and halving the buffer again ~4 GiB, which still leaves effectively no KV, so the arm is removed rather than tuned. MI325X runs the same TP2 configuration on 256 GB per card"
+    - "The TP8 and TP4 arms are unaffected and stay. TP4 passed at concurrency 1 and 32 in the same run with the tables offloaded, at ~81 GiB per rank"
+    - "从 MI300X vLLM DeepSeek-V4.1-Flash AgentX 配方中移除 TP2 臂：经实测不可行。在 Actions 运行 35671005506 中，TP2 并发 1 数据点报告 \"Available KV cache memory: -13.51 GiB\"，引擎以 \"No available memory for the cache blocks\" 拒绝启动，且此时稀疏注意力 indexer 缓冲区已减半至 4096 batched tokens。TP2 下经 Engram 卸载后每 rank 常驻权重约 145 GiB，192 GB 的卡无法在容纳该权重的同时保留可用的 1M 上下文 KV 池。将 gpu-memory-utilization 提高到 0.95 可回收约 9 GiB，再次将缓冲区减半可回收约 4 GiB，仍几乎不剩 KV，因此选择移除该臂而非调参。MI325X 以每卡 256 GB 运行相同的 TP2 配置"
+    - "TP8 与 TP4 臂不受影响并保留。TP4 在同一运行中以每 rank 约 81 GiB 在并发 1 与 32 通过"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3336
+
+- config-keys:
+    - dsv41flash-fp4-b200-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Pin B200 DeepSeek-V4.1 Flash to SGLang nightly-dev-cu13-20260922-582389ce by digest and preserve shipped DSpark precision with the committed five-token golden acceptance curve"
+    - "Use per-rank host Engram shards, interval 16, and concurrency-scaled SWA prefix capacity: TP4 C1-128 uses static fraction 0.80, chunk 4096, and 128-4096 tails; TP2 C1-8 uses static fraction 0.92, chunk 2048, and 128 tails per session"
+    - "Test TP2 loading with the unmodified pinned stock loader and expandable CUDA allocator segments alone; preserve tensor payloads, layouts, and computation"
+    - "Resolve local model snapshots, retain robust AgentX HTTP timeouts, and normalize digest-pinned images for the installed Enroot parser with immediate import failure handling"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3346
+
+- config-keys:
+  - dsv41flash-fp4-b300-sglang-agentic-dspark
+  scenario-type:
+  - agentic-coding
+  description:
+  - Add B300 SGLang DeepSeek-V4.1-Flash AgentX TP4/EP4 with the newest official CUDA 13 nightly (20260922-582389ce), pinned amd64 digest, native DSpark5, measured thinking-on AL 3.51 for throughput and real verification for evals.
+  - Keep automatic backends, host Engram tables, GPU-resident KV, bounded prefill and decode graphs; route the B300 SGLang runtime through /ix.
+  - Use per-rank anonymous host Engram tables to allow transparent huge pages without changing host settings; preserve native FP8 table payload and automatic backend selection.
+  - "Use the default MTP/DSpark precision shipped by the official nightly, without custom draft quantization or precision patches."
+  - "Add DSpark TP2/EP2 alongside TP4/EP4 to explore the vLLM parallelism frontier, keeping native host Engram tables and GPU KV; interleave 16 decode batches between prefill chunks to test long-context responsiveness."
+  - "Submit this SGLang AgentX lane through a Slurm batch allocation and launch its steps from the compute node, avoiding failed interactive allocation notifications on the runner login host while preserving GPU reservations and terminal-status checks."
+  - "Test retained SWA tails at 64 times concurrency, bounded to 128–4096; use static memory 0.80 for TP2 C16 and 0.85 at C32 and above after measuring its smaller KV budget and 43.59 GiB of post-graph headroom at C64, otherwise retain 0.70. Prefetch checkpoints for shared Lustre loading. Test prefill/decode interval 4 at TP2 C32 and above against the interval-16 baseline; keep other points at 16."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3342
+
+- config-keys:
+    - minimaxm3-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Raise ATOM GPU memory utilization from 0.90 to 0.95 and declare a fine-grained CUDA graph ladder (capture sizes 1-64) sized for the observed AgentX running batch, which is 22-41% of CONC; ModelRunner trims it to min(2*CONC, 8192). A controlled TP4 C24 A/B improved throughput by 9.2% and interactivity by 50.7% with unchanged estimated graph memory."
+    - "Enable ATOM_M3_INDEXER_CP for TP4 C15/C20/C24/C28/C32/C40/C48, where MiniMax-M3's four index query heads can context-parallelize the replicated single index-K head; the TP-size gate (tp_size == sparse_num_index_heads == 4) keeps it disabled for the TP2 C20 offload point. Same-commit A/B pairs at TP4 C15/C24/C28 improved interactivity by 3.7%/12.3%/16.7% and ISL-normalized throughput by 0.67%/0.24%/2.7%; C20 is interpolated between measured C15 and C24. Restore EAGLE3 K3 with golden AL 2.78 at C40/C48 instead of disabling speculative decoding."
+    - "Collapse the per-band capacity knobs into a single case statement, add the measured TP2 LMCache DRAM-offload curve at C20/C25/C30 on the chunk-256 ATOM_SLRU tier, size LMCACHE_MAX_LOCAL_CPU_SIZE as TOTAL_CPU_DRAM_GB/TP, and derive LMCACHE_LOOKUP_SERVER_WORKER_IDS from TP so every rank is covered. Remove the TP2 C5 point and the unreachable hybrid/state-offload (STATE_OFFLOAD/OFFLOAD_STATE) and C56 branches."
+    - "Spread offload ranks across NUMA nodes by selecting GPUs 0,4 for TP2 and 0,1,4,5 for TP4 when the caller has not pinned devices, cutting TP2 host-memory pinning from 45 minutes to 21 seconds at unchanged throughput. Move to rocm/atom-dev:nightly_202609171455 and record LMCache 0.5.5rc3+rocm7.2.4 for both offload arms."
+    - "Set dram-utilization to 0.687 so the recorded budget matches the real per-rank pinning: LMCACHE_MAX_LOCAL_CPU_SIZE = TOTAL_CPU_DRAM_GB/TP resolves to ~256 GB per rank on both offload arms (512 GB total at TP2, 1,024 GB at TP4), independent of TP. This replaces the earlier 0.20 metadata that under-described the allocation."
+    - "Verified against ATOM commit b6e2a39433d73b586c366ca90e661f098eb463e3 that --online_quant_config ptpc_fp8 does not change the Inferact/MiniMax-M3-EAGLE3-GQA draft precision: atom/models/eagle3_llama.py builds every draft linear (qkv_proj, o_proj, gate_up_proj, down_proj, fc) with no quant_config, so should_stream_online_quant short-circuits to False and OnlineQuantStreamer.maybe_create finds no streaming candidates. The EAGLE3 draft loads and runs at its native bf16 checkpoint precision; only the target MiniMax-M3 weights are online-quantized to ptpc_fp8, and the exclude_layer list applies to the target alone."
+    - "将 MiniMax-M3 ATOM AgentX 的 GPU 显存利用率提高到 0.95，并按真实运行 batch（约为 CONC 的 22-41%）声明细粒度 CUDA graph（capture 档 1-64，运行时裁剪为 min(2*CONC, 8192)）；TP4 在 C15/C20/C24/C28/C32/C40/C48 启用 indexer-only CP，TP2 C20 由 TP-size gate 保持关闭，C40/C48 恢复 EAGLE3。将分档容量参数合并为单一 case，新增 TP2 C20/C25/C30 的 LMCache SLRU offload 曲线，LMCACHE_MAX_LOCAL_CPU_SIZE 取 TOTAL_CPU_DRAM_GB/TP，lookup worker 覆盖全部 rank，并将 offload GPU 跨 NUMA 节点放置（TP2 用 0,4；TP4 用 0,1,4,5），把 TP2 主机内存 pinning 从 45 分钟缩短到 21 秒；更新到 20260917 rocm7 ATOM 镜像 nightly_202609171455 与 LMCache 0.5.5rc3。dram-utilization 改为 0.687，使记录预算与每 rank 约 256 GB 的真实固定一致（与 TP 无关），取代此前 0.20 的元数据。已在 ATOM commit b6e2a394 验证 online_quant（ptpc_fp8）不改变 EAGLE3-GQA 草稿模型精度：eagle3_llama.py 的各 draft 线性层不带 quant_config，should_stream_online_quant 直接返回 False，草稿以原生 bf16 运行，仅目标 MiniMax-M3 权重在线量化为 ptpc_fp8。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3189
+
+- config-keys:
+    - glm5.2-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Track the updated GLM-5.2 standalone recipe (ROCm/ATOM PR 2345) on the MI355X ATOM AgentX config."
+    - "Bump the image from rocm/atom-dev:nightly_202609151450 to rocm/atom-dev:nightly_202609211553, which carries ROCm/ATOM PR 2345."
+    - "Drop the LMCache DRAM offload from the small-concurrency TP4 arm: conc [2, 4, 8, 10] moves from kv-offloading dram with the lmcache 0.4.5 backend to kv-offloading none, so those points serve off the native GPU prefix cache alone and no longer start an LMCache CPU tier. The TP4+DCP4 arm at conc [16, 24, 32, 40, 48] keeps LMCache at 256 GiB per rank (dram-utilization 0.171 unchanged), and the TP8 arm stays GPU-resident as before."
+    - "Add --index_cache_dtype fp4 and --block-size 64 to the ATOM server launch on every point. Neither flag was set before, so both took the ATOM default."
+    - "Drop ATOM_USE_FLYDSL_GATHER_KV_B_PROJ=0, which pinned gather_kv_b_proj to the Triton path on the DCP prefill-context and MTP verify paths; the updated recipe no longer sets it."
+    - "The MTP block data precision is not touched by --online_quant_config: the exclude_layer list adds \"model.layers.78.*\" so layer 78 (the GLM-5.2 MTP head) is skipped by online quantization and stays in native BF16, as it ships unquantized in amd/GLM-5.2-MXFP4. The expert excludes only reach layers 0-77, so without this exclude the whole MTP block would be online-quantized to ptpc_fp8 while the target's experts stay MXFP4."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3359  
+
+- config-keys:
+    - glm5.2-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the GLM-5.2 MXFP4 MI355X SGLang AgentX image from lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260917 to lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260920, whose SGLang commit c610c40399 contains sgl-project/sglang#37152: the ROCm HiCache JIT gains copy rounds narrower than 128 B, which is what lets GLM's 576 B MLA fp8 row reach the transfer kernels instead of falling back."
+    - "Remove the explicit direct/page_first_direct HiCache overrides so the TP4/EP4 HiCache arm runs SGLang's default kernel/page_first path; the dormant DP-attention and Mooncake branches drop the same two overrides. sgl-project/sglang#35233 is what makes that path correct on ROCm, by handing the transfer kernels the device-accessible alias of the registered host pool; upstream measured kernel/page_first at 338 tok/s against 291 tok/s for direct/page_first_direct at concurrency 14 on this same TP4/EP4 MXFP4 MI355X arm."
+    - "Raise dram-utilization from 0.80 to 0.85 and replace the TP4/EP4 arm's ratio-1.0 host KV pool (~115.19 GB/rank measured) with a fixed 180 GB/rank pool; the DSA indexer scales to ~41.25 GB/rank, leaving ~125 GB of startup headroom under the 1,274 GB SA budget. Set that arm's sweep to concurrency 4, 8, 10, 12, 14, and 16, and limit the TP8/EP1 GPU-resident arm to 1, 2, and 4."
+    - "将 GLM-5.2 MXFP4 MI355X SGLang AgentX 镜像从 lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260917 更新到 lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260920；该镜像的 SGLang commit c610c40399 已包含 sgl-project/sglang#37152：ROCm HiCache JIT 新增了窄于 128 B 的 copy round，GLM 的 576 B MLA fp8 行因此能够走 transfer kernel 而不再回退。"
+    - "删除显式的 direct/page_first_direct HiCache 覆盖，使 TP4/EP4 HiCache arm 运行 SGLang 默认的 kernel/page_first 路径；处于休眠状态的 DP-attention 与 Mooncake 分支同样删除这两个覆盖。该路径在 ROCm 上的正确性来自 sgl-project/sglang#35233——它把 registered host pool 的 device-accessible alias 交给 transfer kernel；上游在同一个 TP4/EP4 MXFP4 MI355X arm 上实测并发 14 时 kernel/page_first 为 338 tok/s，direct/page_first_direct 为 291 tok/s。"
+    - "将 dram-utilization 从 0.80 提升到 0.85，并把 TP4/EP4 arm 的 ratio-1.0 host KV pool（实测约 115.19 GB/rank）改为固定 180 GB/rank；DSA indexer 同比扩展到约 41.25 GB/rank，在 SA 的 1,274 GB 预算内保留约 125 GB 启动余量。该 arm 的并发 sweep 为 4、8、10、12、14、16，TP8/EP1 GPU-resident arm 仅保留 1、2、4。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3329
+
+- config-keys:
+    - glm5.3-fp8-mi355x-tilert-agentic
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GLM-5.3 FP8 MI355X AgentX (agentic-coding) via TileRT prefill/decode disaggregation with MTP, 1 prefill node (TP8) + 1 decode node (TP8), concurrency [1], mirroring the B200 glm5.1-fp8-b200-tilert-agentic entry on the amd_utils orchestration."
+    - "Two images per job, both first-party and neither carrying the TileRT wheel: the decode rank runs ghcr.io/tile-ai/tilert-rocm-decode:0.1.6 (ROCm PyTorch runtime plus the mooncake ROCm transfer engine built from source) and the prefill rank runs ghcr.io/tile-ai/tilert-rocm-prefill:0.1.6 (the upstream vllm/vllm-openai-rocm release image plus that same transfer engine, with vLLM itself unpatched and no file inside it modified), selected per rank via PREFILL_IMAGE in prefill.additional-settings. setup_deps.sh pip-installs the official tilert==0.1.6 wheel into both ranks at container start (full install plus the fastapi/uvicorn/httpx router deps on decode, --no-deps connector plugin on prefill, whose vLLM image already ships those), so neither image is pinned to a wheel version; this mirrors the B200 glm5.1-fp8-b200-tilert pattern of a first-party TileRT decode image. The transfer engine is built from source because the published mooncake ROCm wheels are compiled without ENABLE_MULTI_PROTOCOL, which leaves the cross-host locality gate (kvcache-ai/Mooncake#2753) out of the binary so every cross-node KV transfer is treated as node-local and fails in hipIpcOpenMemHandle."
+    - "KV moves P->D over mooncake (kv-p2p-transfer: mooncake); both roles use a bf16 MLA KV cache (prefill --kv-cache-dtype bfloat16, decode bf16). This is the only layout TileRT 0.1.6 can consume from vLLM on ROCm: TileRT infers the layout from the cache tensor stride and accepts 1152 B/token (bf16) or 656 B/token (fp8_ds_mla); vLLM's ROCM_AITER_MLA_SPARSE backend has no fp8_ds_mla and its plain fp8 writes a flat 576 B/token row that the connector rejects at register_kv_caches. max-model-len 1048576 on both roles (GLM-5.3's full context window); MTP wired via spec-decoding=mtp: TileRT decode drafts at depth 3 (DECODE_MTP_SIZE, the only depth the ROCm GLM profile builds, and the key the golden acceptance curve is read at), while the vLLM prefill rank only materialises the MTP layer's KV and runs speculative-config mtp with 1 draft token. TileRT decode is bs=1 only, so conc-list is [1]; topology 1 prefill node (TP8) + 1 decode node (TP8)."
+    - "Orchestration: runners/launch_mi355x-amds.sh dispatches framework=tilert through the existing amd_utils chain (submit.sh -> job.slurm -> server.sh -> new server_tilert.sh); job.slurm selects the image per rank and a tilert env block, setup_deps.sh gains a per-role tilert install branch, models_tilert.yaml holds the GLM-5.3 prefill environment (the VLLM_ROCM_USE_AITER* block) and extra-flag hooks. TileRT decode weights are converted once from the HF checkpoint under a flock and cached next to it on the shared model volume. Cross-node teardown uses the amd_utils router-port-close barrier."
+    - "The pd_router runs with --parser none and a 1800-second queue timeout so requests wait on the bs=1 decode engine instead of failing fast; AgentX traces are filtered at the 1048576-token full GLM context both roles are launched with; AIPerf scrapes only the vLLM prefill Prometheus endpoint (TileRT decode exposes no /metrics route)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3330
+
+- config-keys:
+    - glm5.3-fp8-mi355x-tilert-agentic
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Set RDMAV_FORK_SAFE=1 on both TileRT ranks for AgentX, preventing silent RDMA-to-TCP fallback that degrades KV-transfer latency and TTFT; TPOT is unaffected."
+    - "为 AgentX 的 TileRT 两侧设置 RDMAV_FORK_SAFE=1，避免静默从 RDMA 回退到 TCP 导致 KV 传输延迟和 TTFT 恶化；TPOT 不受影响。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3330
+
+- config-keys:
+    - glm5.3-fp8-mi355x-tilert-agentic
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Serve GLM-5.3's full 1048576-token context on both TileRT ranks with the bf16 MLA wire layout, gpu-memory-utilization 0.85 on the vLLM prefill, and the container-creation barrier timeout taken from CONTAINER_BARRIER_TIMEOUT (5400s) instead of a hardcoded 1800s. bf16 is the only layout TileRT 0.1.6 can consume from vLLM on ROCm: TileRT infers the layout from the cache tensor stride and accepts 1152 B/token (bf16) or 656 B/token (fp8_ds_mla), while ROCM_AITER_MLA_SPARSE has no fp8_ds_mla and its plain fp8 writes a flat 576 B/token row that the connector rejects at register_kv_caches. Per rank at this context (287.98 GiB MI355X): decode holds 90.72 GiB of weights, a 93.25 GiB engine cache window and a 99.06 GiB PD receive buffer; prefill holds 90.45 GiB of weights, 40.3 GiB of profiling/non-torch memory, 91.71 GiB of vLLM KV and a 99.06 GiB PD staging buffer on TP rank 0 outside vLLM's budget. Both PD buffers are dense in max_seq_len and must live in pinned host memory for this context to start: on the GPU the decode side is node-marginal (torch.OutOfMemoryError on one node, 99.06 GiB requested with 95.94 GiB free; served on another) and the prefill side cannot fit at any utilization. setup_deps.sh therefore applies patches/tilert-0.1.6-pd-buffers-in-dram.patch to the pip-installed tilert 0.1.6 at container start on both ranks (engine-patch waiver docs/waiver/3330.md; vLLM stays unpatched), placing both PD buffers in 2 MiB-backed pinned host memory behind TILERT_PD_BUFFER_DEVICE=cpu. The backing is verified before registration because the ionic RDMA VFs cap 4 KiB-page registrations at ~3.9 GiB per HCA (a ~2^20 page-table-entry budget), while 2 MiB-backed regions of 100 GiB register and take cross-node mooncake writes at ~21 GiB/s. The patch is removed when a TileRT release carries DRAM PD buffers. The barrier change covers cold image pulls: each rank pulls its own ~32 GB image, and the decode image alone took about 25 minutes of the old 30-minute budget on an uncached node. The launcher also passes sync.py --grace 60: the barrier's post-pass port-hold defaults to max(60, timeout/2) seconds in the foreground, which at 5400s was a 45-minute idle sleep on every rank (jobs 45373/45374)."
+    - "以 bf16 MLA 线上布局在两侧 TileRT rank 提供 GLM-5.3 完整的 1048576 上下文，vLLM prefill 的 gpu-memory-utilization 设为 0.85，容器创建屏障超时改为由 CONTAINER_BARRIER_TIMEOUT（5400 秒）提供而非硬编码 1800 秒。bf16 是 TileRT 0.1.6 在 ROCm 上唯一能从 vLLM 读取的布局：TileRT 依据缓存张量步长推断布局，只接受每 token 1152 字节（bf16）或 656 字节（fp8_ds_mla），而 ROCM_AITER_MLA_SPARSE 没有 fp8_ds_mla，其普通 fp8 写出每 token 576 字节的扁平行，会在 register_kv_caches 被 connector 拒绝。该上下文下每 rank（287.98 GiB 的 MI355X）：decode 侧含 90.72 GiB 权重、93.25 GiB 引擎缓存窗口和 99.06 GiB 的 PD 接收缓冲；prefill 侧含 90.45 GiB 权重、40.3 GiB 分析/非 torch 内存、91.71 GiB vLLM KV，以及 TP rank 0 上位于 vLLM 预算之外的 99.06 GiB PD 暂存缓冲。两个 PD 缓冲均按 max_seq_len 密集分配，必须放在锁页主机内存中该上下文才能启动：放在 GPU 上时 decode 侧处于节点边缘（一节点 OOM，请求 99.06 GiB 而仅剩 95.94 GiB；另一节点可服务），prefill 侧在任何利用率下都放不下。因此 setup_deps.sh 在两侧容器启动时对 pip 安装的 tilert 0.1.6 应用 patches/tilert-0.1.6-pd-buffers-in-dram.patch（引擎补丁豁免 docs/waiver/3330.md；vLLM 未改动），在 TILERT_PD_BUFFER_DEVICE=cpu 下将两个 PD 缓冲放入 2 MiB 大页支撑的锁页主机内存。注册前会校验大页覆盖：ionic RDMA VF 对 4 KiB 页的注册上限约为每 HCA 3.9 GiB（约 2^20 条页表项），而 2 MiB 大页区域可注册 100 GiB 并以约 21 GiB/s 接收跨节点 mooncake 写入。TileRT 发布自带 DRAM PD 缓冲的版本后移除该补丁。屏障改动用于覆盖镜像冷拉取：每个 rank 各拉取约 32 GB 的镜像，仅 decode 镜像在未缓存节点上就实测约占旧 30 分钟预算的 25 分钟。启动脚本同时向 sync.py 传入 --grace 60：屏障通过后默认在前台保持端口 max(60, timeout/2) 秒，在 5400 秒下即每个 rank 空转 45 分钟（作业 45373/45374）。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3330
+
+- config-keys:
+    - glm5.3-fp8-mi355x-tilert-agentic
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add glm5.3* to resolve_trace_source's 1M-context model pattern so GLM-5.3 AgentX uses the unfiltered semianalysis_cc_traces_weka_062126 corpus instead of the 256k-filtered variant. Explicit WEKA_LOADER_OVERRIDE behavior is unchanged."
+    - "将 glm5.3* 加入 resolve_trace_source 的 1M 上下文模型匹配分支，使 GLM-5.3 AgentX 默认使用未截断的 semianalysis_cc_traces_weka_062126 语料，而非 256k 过滤版本。显式 WEKA_LOADER_OVERRIDE 的行为保持不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3330
+
+- config-keys:
+    - glm5.3-fp8-mi355x-tilert-agentic
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Replace the PD-buffers-in-DRAM route with tilert==0.1.6.post1 on both TileRT ranks (PyPI, 2026-09-22): the shipped wheel shards the mooncake receive buffer (decode, receive_server.py) and the connector staging buffer (prefill TP rank 0, prefill_connector.py) by layer across the eight devices (TILERT_PD_SHARDS, default 8, capped at device_count; layer lid on device lid % 8; the glm5_2 profile has 79 layers, so the heaviest shard holds 10 of them: 99.06 GiB x 10/79 = 12.54 GiB per card) instead of one dense 99.06 GiB buffer per role, and both fit on the GPU at the full 1048576-token context without host memory. Each shard is registered with mooncake on its own device, hello_layout carries per-shard bases and rdma_plan writes layer by layer into the matching remote shard, so the KV path is device-to-device again (81 GB in 751 ms = 108 GB/s on 2x8 MI350X per CrimsonDump/InferenceX@56a1e5a, against the 20.9 GiB/s measured for the host-to-host hop) and mla_nsa.convert() dequantises each layer on the shard that received it rather than on cuda:0. patches/tilert-0.1.6-pd-buffers-in-dram.patch, docs/waiver/3330.md and TILERT_PD_BUFFER_DEVICE (the AgentX recipe, server_tilert.sh, job.slurm, setup_deps.sh, including the 0.1.6 pin guard and the patch apt package) are removed; neither image is modified. Router metadata 0.1.6 -> 0.1.6.post1: pd_router.py is one of the six files post1 changes, its fixed 600 s request timeouts to vLLM and decode become TILERT_PD_HTTP_TIMEOUT_S (default 3600). GPU_MEM_UTIL stays 0.85; the 12.54 GiB staging shard sits outside vLLM's budget next to the ~6.3 GiB non-torch baseline. server_tilert.sh now honours EVAL_ONLY/RUN_EVAL on the AgentX path (GSM8K on the same router instead of an unconditional trace replay) and exports PORT for benchmark_lib's run_lm_eval; evals run with real MTP verification since simulated acceptance is already disabled under those flags. Measured by CrimsonDump on 2x8 MI350X at this context with bf16 KV, 3600 s AgentX at concurrency 1: submission_valid true, 239 successful requests, 0 errors, TTFT p50 5711.8 ms, ITL p50 2.18 ms, peak device memory 202.1 GiB per decode card and 269.2 GiB per prefill card of 287.69 GiB."
+    - "在两侧 TileRT rank 上以 tilert==0.1.6.post1（PyPI，2026-09-22）取代 PD 缓冲进 DRAM 的方案：正式 wheel 把 mooncake 接收缓冲（decode，receive_server.py）与 connector 暂存缓冲（prefill TP rank 0，prefill_connector.py）按层分片到 8 张卡（TILERT_PD_SHARDS，默认 8，以 device_count 为上限；第 lid 层落在第 lid % 8 张卡；glm5_2 profile 共 79 层，最重分片含 10 层：99.06 GiB x 10/79 = 每卡 12.54 GiB），不再是每个角色一块致密的 99.06 GiB 缓冲，于是在完整 1048576 上下文下两者都能放进 GPU，无需主机内存。各分片在所在卡上向 mooncake 注册，hello_layout 携带各分片基址，rdma_plan 逐层写入对应的远端分片，KV 通路重回设备到设备（2x8 MI350X 上 81 GB / 751 ms = 108 GB/s，见 CrimsonDump/InferenceX@56a1e5a；对比主机到主机实测 20.9 GiB/s），mla_nsa.convert() 在收到该层的分片上反量化而非集中于 cuda:0。移除 patches/tilert-0.1.6-pd-buffers-in-dram.patch、docs/waiver/3330.md 与 TILERT_PD_BUFFER_DEVICE（AgentX 配方、server_tilert.sh、job.slurm、setup_deps.sh，含 0.1.6 版本锁定检查与 patch apt 包）；两侧镜像均无改动。router 元数据 0.1.6 -> 0.1.6.post1：pd_router.py 是 post1 改动的六个文件之一，其对 vLLM 与 decode 固定的 600 秒请求超时改为 TILERT_PD_HTTP_TIMEOUT_S（默认 3600）。GPU_MEM_UTIL 保持 0.85；12.54 GiB 暂存分片与约 6.3 GiB 非 torch 基线同在 vLLM 预算之外。server_tilert.sh 现在在 AgentX 路径也遵循 EVAL_ONLY/RUN_EVAL（在同一 router 上跑 GSM8K，而非无条件回放轨迹），并为 benchmark_lib 的 run_lm_eval 导出 PORT；这些标志下模拟接受已关闭，评测使用真实 MTP 验证。CrimsonDump 在 2x8 MI350X、该上下文、bf16 KV 下实测 3600 秒 AgentX 并发 1：submission_valid true、239 条成功、0 错误、TTFT p50 5711.8 ms、ITL p50 2.18 ms，decode 每卡峰值 202.1 GiB、prefill 每卡 269.2 GiB（卡容量 287.69 GiB）。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3366
+
+- config-keys:
+    - dsv41flash-fp4-gb300-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GB300 SGLang DeepSeek-V4.1-Flash AgentX TP2/EP2 and TP4/EP4 candidates on official nightly-dev-cu13-20260922-582389ce, digest sha256:0e1b14e302619a42ef5581b87db6804651d4f946301cf543d74a3a1eb1c33b40."
+    - "The DSpark arm keeps canonical thinking-on five-token AL 3.51 and real eval verification, using the official nightly shipped draft precision and KV layout without custom precision patches; full-model evaluation uses real verification."
+    - "Keep original Engram tables in GPU memory on TP4 to avoid measured host huge-page fragmentation; TP2 uses per-rank anonymous host tables and local checkpoint paths for file-scoped cache advice without host sysctl changes. Keep GPU KV cache, 0.80 static memory fraction, request/graph cap 64 and automatic backends. Select 8192-token prefill chunks only at TP2 C64/C128; retain 4096 at C32 and all other points."
+    - "Prioritize DSpark across the full AgentX concurrency curve and test 16 decode steps between prefill chunks with unchanged shipped precision and canonical acceptance; remove the STP sweep arm because measured DSpark points dominate its completed diagnostics."
+    - "Reserve 64 SWA prefix tails per concurrency at C2 and above, capped at 4096, within the existing static memory budget. The 1024-tail TP4 C16 test improved throughput 4.32x over the matched default-tail baseline while preserving checkpoint math and precision."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3344
+
+- config-keys:
+    - glm5.3-fp8-mi355x-tilert-agentic
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump tilert 0.1.6.post1 -> 0.1.6.post2 (PyPI, 2026-09-23) on both TileRT ranks; router metadata follows. post2 changes six pd_vllm files: the ROCm decode inject (glm5_rocm_engine.py) now broadcasts each layer's KV to all eight rank caches with grouped RCCL ncclBroadcast (TILERT_INJECT_MODE, default rccl, falling back to per-source-device rotating streams, then the old serial copy) instead of serial default-stream copy_ calls, and the prefill extract (mla_nsa.py) gathers each layer with one index_select per device on side streams (TILERT_EXTRACT_MODE, default fast). The ROCm fp8 KV layout, multi-sender staging (TILERT_PD_SENDERS) and host-resident PD buffers (TILERT_PD_BUFFER_DEVICE) are new but opt-in and left off, so the 1M-context bf16 KV, layer-sharded on-GPU buffer configuration is otherwise unchanged. TileRT reports AgentX TTFT p50 5.7 s -> 2.2 s at concurrency 1. No patches, images unchanged."
+    - "两侧 TileRT rank 上 tilert 由 0.1.6.post1 升级到 0.1.6.post2（PyPI，2026-09-23），router 元数据随之更新。post2 修改了 pd_vllm 的六个文件：ROCm decode 注入（glm5_rocm_engine.py）改为用分组 RCCL ncclBroadcast 把每层 KV 广播到全部 8 个 rank 的缓存（TILERT_INJECT_MODE，默认 rccl，失败时回退到按源设备轮转的多流拷贝，再回退到旧的串行拷贝），不再在默认流上串行 copy_；prefill 提取（mla_nsa.py）在各设备的旁路流上每层一次 index_select 完成收集（TILERT_EXTRACT_MODE，默认 fast）。ROCm fp8 KV 布局、多发送端暂存（TILERT_PD_SENDERS）与主机内存 PD 缓冲（TILERT_PD_BUFFER_DEVICE）为新增的可选项，默认关闭，因此 1M 上下文、bf16 KV、按层分片的 GPU 缓冲配置其余不变。TileRT 报告并发 1 下 AgentX TTFT p50 由 5.7 秒降至 2.2 秒。无补丁，镜像不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3389
+
+- config-keys:
+    - dsv41flash-fp4-h200-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Qualify DeepSeek-V4.1-Flash H200 SGLang on the latest official September 22 CUDA 13 nightly, matching the published vLLM starting topologies TP4/EP1 and TP8/EP1 at concurrency 1, 2, 4, 8, 16, 32, 64 and 128."
+    - "Use native Marlin MXFP4 MoE for both EP1 topologies: tensor-sharded expert widths 576 and 288 require supported padding, while the shipped SM90 CUTLASS method rejects these dimensions. Preserve shipped-default target and DSpark precision."
+    - "Retain per-rank anonymous Engram host tables, GPU-resident KV, memory fraction 0.70, prefill chunk 4096, prefill/decode interval 16 and 1024 SWA prefix tails for the exact-topology baseline."
+    - "Retain validated H200 dense-GEMM launch configurations without changing kernel code or precision; keep five-token DSpark, golden acceptance for performance and real verification for full GSM8K."
+    - "Run a new canonical full sweep with 16 performance and 16 full-evaluation cells. Earlier EP4/EP8 and DP8 measurements remain historical evidence and do not qualify the EP1 grid."
+    - "Extend only H200 SGLang AgentX performance cells at C64/C128 to 24-hour Slurm allocations and 24.5-hour GitHub jobs after the original eight-hour allocation expired during progressing warmup. Preserve normal warmup, the full 3600-second profile, image, model, precision and topology."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3341
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Use the user-selected official lmsysorg/sglang:dev-dsv41-mi35x model preview, pinned to sha256:c609f74f01b206af9664fb66da8ebef47642a7328a2478eabeebb352e014661a, with the native MI350X TP4/EP4 DSpark5 recipe, GPU Engram and native decode graphs."
+    - "Keep radix caching enabled for AgentX and bound prefill chunks to the 4096-token bound after native FP4 prefill scratch exhausted HBM with the 16384-token default in five canonical cells. Reserve additional native scratch headroom with static memory fraction 0.70 after C32 still exhausted HBM at 0.80 with 4096-token chunks. Enable native allocator garbage collection at threshold 0.8 with process fraction 0.99 after physical HBM still filled during long prefill at static fraction 0.70. Cap server admission at 32 after native C32 warmup reached 63 running requests and failed with HIP illegal access; preserve all client fanout as queued work. Disable native prefill graphs after the admission-capped C32 test still failed with HIP illegal access during breakable prefill; keep decode graphs and treat this as a bounded runtime correction pending qualification. Cap the full KV pool at 3145728 tokens after the pinned native compressed-cache store and its compiled gfx950 code showed signed int32 byte offsets that overflow for large full-token locations. This supported capacity limit keeps ratio-1 storage below 2 GiB without patching kernels or reducing the model context limit; validate canonical C32 and full GSM before selection. Scheduler cadence remains at the official default. Preserve full 1M context, shipped-default DSpark precision, canonical thinking-on AL3.51 throughput and real full1319 GSM verification."
+    - "Use image-native attention, dense FP8 and MoE kernels, allocator defaults and EP4 tuning data; remove the downstream nightly compatibility installer, source payload, tuning copy, hash checks and obsolete waiver documentation. The model-preview image explicitly supersedes the earlier latest-nightly selection for this lane."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3343
+
+- config-keys:
+  - dsv41flash-fp4-gb200-sglang-agentic-dspark
+  scenario-type:
+  - agentic-coding
+  description:
+  - Move GB200 DeepSeek-V4.1-Flash DSpark from dev-dsv41 to official CUDA 13 nightly-dev-cu13-20260923-06008c17, pinned at multi-architecture manifest sha256:5921361fcf358cdde4df1968c941c14157f418613b099ad7f3e5aeed6427ae15 (ARM64 sha256:d49261d2edd82fed2dd6254c33e68871ccf7a399498e059ec91dc4453a5808c3); match TP2/EP1 and TP4/EP1 with native DSpark precision and golden acceptance policy
+  - 'Use the upstream per_rank Engram host-table layout on GB200: anonymous row-sharded mappings can obtain 512 MiB huge pages on the measured madvise/never anonymous/shared THP policy; preserve original FP8 table weights and restore the two TP all-reduces'
+  - "Use the default MTP/DSpark precision shipped by the official nightly, without custom draft quantization or precision patches."
+  - Keep the sweep DSpark-only; remove the unmeasured STP entry and alias.
+  - Retain min(64*concurrency, 1024) SWA prefix tails within the measured GB200 KV budget; select prefill/decode interval 16 only at TP4 C16 after canonical performance and full GSM8K qualification.
+  - "Match the published vLLM grid exactly: TP2/EP1 and TP4/EP1, each C1/2/4/8/16/32/64/128. Use stock DSpark precision; TP2 uses static memory 0.92, chunk 2048, graph/running cap 16, interval 16, expandable allocator and min(128*CONC,1024) SWA tails. Requalify all 16 performance and full GSM8K points. Avoid deadline-only failures with the supported 12-hour partition maximum for C64/C128 performance while preserving complete warmup and 3600-second scoring."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3347
+
+- config-keys:
+    - dsv41flash-fp4-h200-sglang-agentic-dspark
+  description:
+    - "Enable official decoder SWA bounded replay for H200 DeepSeek V4.1 Flash native DSpark"
+    - "Pin SGLang nightly-dev-cu13-20260923-06008c17; qualify TP4/EP1 and TP8/EP1 C1-128 with unchanged shipped draft precision"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3392
+
+- config-keys:
+    - dsv41flash-fp4-h100-sglang-agentic-dspark
+    - dsv41flash-fp4-h100-sglang-agentic-dspark-dpa
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Move H100 DeepSeek-V4.1-Flash DSpark from dev-dsv41 to upstream SGLang nightly-dev-cu13-20260922-582389ce and retain automatic attention selection from the current cookbook."
+    - "Use stock nightly DSpark precision and kernels, with row-sharded anonymous host Engram tables and a resolved local snapshot for upstream file-scoped page-cache eviction and huge-page backing."
+    - "Retain TP8/EP8, GPU-resident KV, 4096-token prefill chunks, static memory fraction 0.70, the shipped draft precision defaults, and the existing AgentX acceptance and real-verification eval behavior."
+    - "Use DSpark across the full AgentX concurrency curve with 16 decode steps between prefill chunks, unchanged shipped precision and canonical acceptance; completed STP diagnostics did not contribute a measured frontier point."
+    - "Install H100-specific block32 FP8 GEMM tiling configurations for six shapes, adding independently validated draft N512/K5120 and N1280/K5120 choices while retaining stock settings above batch320 and batch190 respectively, including supported SPLIT_K/SWAP_AB small-batch choices for N1792/K5120 and N576/K5120; retain previous large-batch settings and default tiling for the regressing N5120/K288 batch-64 case; preserve stock weights, scales and output precision and record the resolved config hashes."
+    - "Use expandable CUDA allocator segments to reduce fragmentation from long-context indexer masks without changing checkpoint precision or the static KV budget."
+    - "Select the supported native MXFP4 Marlin MoE backend on Hopper, retaining BF16 activations and the nightly's shipped draft precision."
+    - "Retain 8 SWA prefix tails per concurrency at C1/C2 after rejecting the 128-tail floor in matched canonical testing; use 32 per concurrency at C4 and above, reaching 640 at C20 within the static cache budget."
+    - "Qualify supported DP8 attention and DP LM-head at C4/C8/C16/C20 with consistent-hash session routing and 64 SWA tails per rank; retain the complete plain TP8 curve and unchanged shipped precision, static budget and native context."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3345
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Re-sweep the MI355X DeepSeek-V4.1-Flash vLLM AgentX arm on the ROCm 10.0 nightly nightly-rocm100-7f1a5398e9610d96c473931a26c0e12bbe0d0423 (published 2026-09-24T05:45:09Z, digest sha256:5df261803a5b4e8c4d6bbe58a32c9cd597140b6fdfa7358c0ef0d0211c33ab32), replacing nightly-rocm100-3df4ae15. Only the image changes: the TP=4 and TP=2 rows keep concurrency 1, 2, 4, 8, 16, 32, 64 and 128, and every recipe setting is unchanged, including Engram placement per TP and concurrency, the prefill chunk and sequence cap ladder, graph capture, and five-token DSpark with golden acceptance 3.51 for throughput and real block verification for evals."
+    - "The pin is mainly for vllm-project/vllm#57435, which fuses the inverse RoPE into the sparse decode reduce on the DSv4.1 ROCm path. It merged on 2026-09-22, after nightly-rocm100-3df4ae15 was cut on 2026-09-21, so no point on the current curve carries it. The new pin is 176 commits ahead of the old one and carries the change."
+    - "在 ROCm 10.0 nightly nightly-rocm100-7f1a5398e9610d96c473931a26c0e12bbe0d0423（发布于 2026-09-24T05:45:09Z，摘要 sha256:5df261803a5b4e8c4d6bbe58a32c9cd597140b6fdfa7358c0ef0d0211c33ab32）上重新扫描 MI355X DeepSeek-V4.1-Flash vLLM AgentX 臂，替换 nightly-rocm100-3df4ae15。本次仅更换镜像：TP=4 与 TP=2 两行保持并发 1、2、4、8、16、32、64 与 128，其余 recipe 设置全部不变，包括按 TP 与并发决定的 Engram 放置、prefill 分块与序列上限阶梯、图捕获，以及吞吐用黄金接受长度 3.51、评测用真实分块验证的五 token DSpark。"
+    - "此次固定主要是为了 vllm-project/vllm#57435：它在 DSv4.1 的 ROCm 路径上将 inverse RoPE 融合进 sparse decode 的 reduce。该 PR 于 2026-09-22 合并，晚于 2026-09-21 切出的 nightly-rocm100-3df4ae15，因此当前曲线上的任何数据点都不包含该改动。新镜像比旧镜像领先 176 个提交，已包含该改动。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3404
+
+- config-keys:
+    - dsv4-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Switch the MI355X vLLM DeepSeek-V4-Pro AgentX sweep from MTP K3 to DSpark K6, using DeepSeek-V4-Pro-0813 revision 72e1d3230f6c080a530b0a1d46f8eb4602340597, probabilistic drafting, thinking-on golden acceptance length 3.77 for throughput, and real target verification for eval."
+    - "Update the image to the latest published and locally tested vllm/vllm-openai-rocm:nightly-e9757321527ca1ecd514c07c1418dd2c53da3d19 while preserving the existing TP8/EP1, DP-attention, router, KV-offload, concurrency, and duration settings."
+    - "Local 8x MI355X DPA-TP8/EP1 concurrency-4 validation improved P90 interactivity from 59.72 to 97.36 tok/s/user and total throughput per GPU from 2,261.58 to 2,742.19 tok/s versus MTP K3, with zero request errors."
+    - "This PR does not change the data types of the DeepSeek-V4-Pro-0813 draft layers; it only touches the benchmark launcher and config to switch the speculative-decoding method from MTP K3 to DSpark K6, keeping the checkpoint's shipped FP4 draft precision and the vLLM image dtype defaults unchanged."
+    - "将 MI355X vLLM DeepSeek-V4-Pro AgentX 扫描从 MTP K3 切换为 DSpark K6，使用 DeepSeek-V4-Pro-0813 revision 72e1d3230f6c080a530b0a1d46f8eb4602340597、概率式 drafting、吞吐测试 thinking-on golden acceptance length 3.77，以及评估时的真实 target verification。"
+    - "将镜像更新至当前最新且已完成本机实测的 vllm/vllm-openai-rocm:nightly-e9757321527ca1ecd514c07c1418dd2c53da3d19，同时保持现有 TP8/EP1、DP attention、router、KV offload、并发列表和运行时长不变。"
+    - "本地 8x MI355X DPA-TP8/EP1 并发 4 验证中，相比 MTP K3，P90 交互速度从 59.72 提升至 97.36 tok/s/user，单卡总吞吐量从 2,261.58 提升至 2,742.19 tok/s，且无请求错误。"
+    - "本 PR 不改变 DeepSeek-V4-Pro-0813 draft 层的数据类型；仅修改基准测试启动脚本与配置，将投机解码方式从 MTP K3 切换为 DSpark K6，保持 checkpoint 自带的 FP4 draft 精度与 vLLM 镜像的 dtype 默认设置不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3406
+
+- config-keys:
+    - glm5.2-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the GLM-5.2 MXFP4 MI355X SGLang AgentX image from lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260920 to lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260923 (digest sha256:59eeb83aea8fb5dff4a0c8964da2adf690af9494b2b3271ea13a54018adbaa39); keep all serving flags, HiCache settings, and sweep points unchanged."
+    - "将 GLM-5.2 MXFP4 MI355X SGLang AgentX 镜像从 lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260920 更新到 lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260923（digest sha256:59eeb83aea8fb5dff4a0c8964da2adf690af9494b2b3271ea13a54018adbaa39）；其余服务参数、HiCache 设置与 sweep 点保持不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3399
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Move all six points (c4, c16, c32, c48, c192, c256) onto the UMBP linker; c128 dropped. c4/c16 were no-offload and c32/48 were HiCache; c16 and c32/48 prefill go TP8 -> TP4. DSpark gamma 6 at c4/c16, 3 above."
+    - "Bump to image lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260923."
+    - "UMBP tier on 2 MiB hugepages by default: job.slurm reserves them on prefill nodes and releases them on every exit path, hugepage_sanity.sh fails a short grow, and server_sglang.sh refuses a run that fell back to 4 KiB pages."
+    - "Allow pure-TP prefill on the linker, add --optimistic-prefill-attempts 2 on umbp-linker prefill, raise the UMBP client ready probe to 120 s, derive CONTAINER_BARRIER_TIMEOUT from UMBP_SA_WAIT_SECONDS + 600, and wire UMBP_DRAM_CEILING_GB through."
+    - "Add DeepSeek-V4-Pro-0813 golden AL for draft lengths 4, 5, 7 and 8 (3.36 / 3.61 / 3.73 / 3.47)."
+    - "Agentic PD router: pin --decode-policy round_robin so decode no longer inherits the prefill --policy (consistent_hashing)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3256
+
+- config-keys:
+    - dsv4-fp4-mi355x-atom-disagg-agentic-lmcache-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add DeepSeek-V4-Pro-0813 MXFP4 ATOM PD-disaggregated AgentX on MI355X (cluster:mi355x-amds, image rocm/atom-dev:nightly_202609221542), the ATOM counterpart to dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp; 1P1D TP8, mooncake RDMA KV transfer, atomesh PD router."
+    - "Search space: conc 1 and 16 on plain TP8 and conc 64 and 128 with DP attention, all four on MTP with GPU-resident KV at dram-utilization 0.80; plus conc 256 with DP attention, the DSpark draft model and the lmcache host KV tier (multi connector, max_pending_saves 8, slot_sidecar_staging_slots 4, LRU, 256-token chunks) at dram-utilization 0.50 with dp-sticky idx2idx routing. conc 1/16/64 keep the shape run 35643358891 used and change only the image."
+    - "conc-128 on this image (run 35810485934, 3627 s, 13917 of 15339 requests profiled, 0 errors): 464105 total tok/s (29007 tok/s/GPU over 16 GPUs), 3934 output tok/s (246 tok/s/GPU), TTFT mean 9.75 s / p50 8.70 / p90 15.89, TPOT mean 12.98 ms / p90 14.43, interactivity mean 77.0 / p90 69.3, e2e mean 23.01 s, 3.84 QPS, 96.6% theoretical prefix-cache hit rate."
+    - "conc-256 on this image (run 35825955863, 3630 s, 21317 of 24162 requests profiled, 0 errors): 776348 total tok/s (48522 tok/s/GPU), 5794 output tok/s (362 tok/s/GPU), TTFT mean 18.10 s / p50 12.62 / p90 32.78, TPOT mean 15.95 ms / p90 17.57, interactivity mean 62.7 / p90 56.9, e2e mean 33.89 s, 5.88 QPS, 96.8% theoretical prefix-cache hit rate. Not a clean scaling comparison against conc-128: this tier also swaps MTP for the DSpark draft model and adds the lmcache host KV tier."
+    - "Accuracy on the conc-128 DP-attention cell (run 35851118405, lm-eval gsm8k 5-shot, eval concurrency 128, n=1319): em_strict 0.9719 +/- 0.0045, em_flexible 0.9712 +/- 0.0046. conc 1, 16 and 64 are unmeasured on this image."
+    - "online_quant is not used on this arm: server_atom.sh only emits --online_quant_config when models_atom.yaml sets online_quant_config/online_quant_dpa_config (read at server_atom.sh:65-66, assembled at :156-172, injected into the prefill/decode server commands at :317/561/652), and the DeepSeek-V4-Pro-AgentX entry and its -0813-AgentX alias set neither, so ONLINE_QUANT_ARG stays empty and the flag is never passed. The served DeepSeek-V4-Pro-0813 checkpoint is already offline MXFP4, so runtime quantization is unnecessary (online_quant targets BF16/unquantized checkpoints, e.g. the ptpc_fp8 configs in deprecated/models_atom.yaml). DSpark accuracy is therefore not touched by online_quant: no target layer is re-quantized at runtime, so acceptance length and the gsm8k numbers above reflect the offline MXFP4 target plus the DSpark draft head only."
+    - "server_atom.sh exports PORT before sourcing benchmark_lib.sh on the eval path. run_lm_eval's check_env_vars guard runs before it parses --port and job.slurm's docker -e allowlist forwards ROUTER_PORT but never PORT, so every multi-node lm-eval cell aborted 8 s in; because check_env_vars exits rather than returning, node 0 also skipped its router teardown and the decode node hung in 'Waiting until router closes...' until the job was cancelled (run 35643358891)."
+    - "Per ATOM DeepSeek-V4-Agentic-PD-Max recipe: prefix caching on, FP8 KV and index cache, block-size 256, TBO on prefill only, max-num-seqs = 2x concurrency."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3158
+
+- config-keys:
+    - qwen3.5-fp8-mi355x-sglang
+    - qwen3.5-fp8-mi355x-sglang-mtp
+  description:
+    - "Update SGLang ROCm image from v0.5.18-rocm720-mi35x-20260828 to v0.5.20-rocm720-mi35x-20260924 (latest nightly)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3423
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Re-sweep the MI355X DeepSeek-V4.1-Flash vLLM AgentX arm on the next ROCm 10.0 nightly, replacing nightly-rocm100-7f1a5398. Only the image changes: the TP=4 and TP=2 rows keep concurrency 1, 2, 4, 8, 16, 32, 64 and 128, and every recipe setting is unchanged, including Engram placement per TP and concurrency, the prefill chunk and sequence cap ladder, graph capture, and five-token DSpark with golden acceptance 3.51 for throughput and real block verification for evals."
+    - "The pin is mainly for vllm-project/vllm#58510, which computes the MXFP8 GEMM on native 32x32 block scales for gfx950. This arm serves a checkpoint whose non-routed weights are MXFP8 on exactly that architecture, so the target image is the first nightly whose commit contains that merge rather than simply the next one published. The exact tag, its publication time and digest are filled in once that build exists."
+    - "在下一个 ROCm 10.0 nightly 上重新扫描 MI355X DeepSeek-V4.1-Flash vLLM AgentX 臂，替换 nightly-rocm100-7f1a5398。本次仅更换镜像：TP=4 与 TP=2 两行保持并发 1、2、4、8、16、32、64 与 128，其余 recipe 设置全部不变，包括按 TP 与并发决定的 Engram 放置、prefill 分块与序列上限阶梯、图捕获，以及吞吐用黄金接受长度 3.51、评测用真实分块验证的五 token DSpark。"
+    - "此次固定主要是为了 vllm-project/vllm#58510：它在 gfx950 上使用原生 32x32 block scale 计算 MXFP8 GEMM。本臂所服务的 checkpoint 其非 routed 权重正是该架构上的 MXFP8，因此目标镜像是第一个其提交包含该合并的 nightly，而非简单地取下一个发布的 nightly。具体标签、发布时间与摘要将在该构建出现后补充。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3420
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-atom-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add DeepSeek-V4.1-Flash FP4 ATOM AgentX on MI355X following the upstream TP2 / TP4 recipe: TP2 concurrency [1, 2, 8, 16, 32, 64], TP4 concurrency [2, 8, 16, 32, 64], no expert parallelism or KV offload."
+    - "Use rocm/atom-dev:nightly_202609250902 (digest sha256:9aaeed59d78decfc51eaabda072ba095c1d64d6cfbdb64ecb28ea74cf3deb18a), BF16 KV, FP8 index cache, max-num-seqs 128, 16K batching/prefill chunks, prefix caching with block size 16, 8K state checkpoints, level 3 and FULL graphs with dense capture sizes through 32 at concurrency 32."
+    - "Use five-token DSpark with thinking_on golden AL 3.51 for throughput and real acceptance for eval, the shipped draft, and dsml_v41 tool parsing. Replay semianalysis_cc_traces_weka_062126 for 3600 seconds per point with five warmup requests per lane."
+    - "DSpark draft layers 37-39 keep their checkpoint precision: the recipe passes no --online_quant_config, so online_quant_config resolves to None and make_v4_quant_config builds the same per-layer quant spec for the drafter as for the target. The MTP weights (mtp.0/1/2) load inline from the same checkpoint with spec_decode=True, and config.get_layer_quant_config has no mtp.* special case, so layers 37-39 are neither re-quantized nor up/down-cast by ATOM and retain their on-disk dtype. --kv_cache_dtype bf16 and --index-cache-dtype fp8 touch cache storage only, not draft/MTP weights."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3387
+
+- config-keys:
+    - glm5.2-fp8-mi325x-sglang-agentic-mtp
+  description:
+    - "Update SGLang ROCm image to v0.5.20-rocm720-mi30x; replace retired --cuda-graph-max-bs with --cuda-graph-max-bs-decode."
+    - "将 SGLang ROCm 镜像更新至 v0.5.20-rocm720-mi30x，并以 --cuda-graph-max-bs-decode 替换已移除的 --cuda-graph-max-bs。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3362
 
 - config-keys:
     - minimaxm3-fp8-mi300x-vllm-agentic-mtp
