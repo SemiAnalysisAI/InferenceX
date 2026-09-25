@@ -125,6 +125,21 @@ def test_mtp_binding_uses_real_verification_and_preserves_expert_parallelism(poi
         runtime_arguments(f"{path}:base", env)
 
 
+def test_dspark_accepts_draft_model_label_only_for_dspark(point):
+    path, recipe, env = point
+    recipe["roles"]["agg"]["args"].update({
+        "speculative-algorithm": "DSPARK", "speculative-dspark-block-size": 6,
+    })
+    recipe["benchmark"]["env"]["USE_CHAT_TEMPLATE"] = "true"
+    path.write_text(yaml.safe_dump({"base": recipe}))
+    runtime_arguments(f"{path}:base", {**env, "SPEC_DECODING": "draft_model"})
+    recipe["roles"]["agg"]["args"]["speculative-algorithm"] = "EAGLE"
+    recipe["roles"]["agg"]["args"]["speculative-num-steps"] = 3
+    path.write_text(yaml.safe_dump({"base": recipe}))
+    with pytest.raises(ValueError, match="SPEC_DECODING"):
+        runtime_arguments(f"{path}:base", {**env, "SPEC_DECODING": "draft_model"})
+
+
 def test_concurrency_selector_keeps_graph_capture_coupled_to_client(point):
     path, recipe, env = point
     path.write_text(yaml.safe_dump({"base": recipe, "zip_override_conc": {

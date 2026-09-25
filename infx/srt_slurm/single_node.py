@@ -91,6 +91,9 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
     if spec and spec["method"] not in {"eagle", "nextn", "mtp", "dspark"}:
         raise ValueError("Single-node SRT supports only native MTP, DSpark or no speculation")
     speculation = "mtp" if spec else "none"
+    # Some DSpark configs label the checkpoint's bundled draft as draft_model.
+    if spec and spec["method"] == "dspark" and environment["SPEC_DECODING"] == "draft_model":
+        speculation = "draft_model"
     agentic = environment["IS_AGENTIC"] == "1"
     expected = {
         "engine": (engine, SINGLE_NODE_ENGINES[environment["FRAMEWORK"]]),
