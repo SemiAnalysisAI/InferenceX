@@ -7155,7 +7155,7 @@ glm5.2-fp4-b200-sglang-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [1, 4, 8, 12, 16] }
+      - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [1, 4, 8, 12, 16], srt-recipe: benchmarks/single_node/srt-slurm-recipes/glm5.2/sglang/b200-fp4-mtp/agentic.yaml }
 
 # First GLM-5.2 FP8 AgentX recipe on B200, the FP8 precision sibling of
 # glm5.2-fp4-b200-sglang-agentic-mtp. Same spec-decode-only shape per the AgentX
