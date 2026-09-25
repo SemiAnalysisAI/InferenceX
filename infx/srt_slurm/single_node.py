@@ -104,7 +104,8 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
         "roles": (set(recipe["roles"]), {"agg"}),
         "benchmark type": (benchmark["type"], "custom"),
         "benchmark MODEL": (workload["MODEL"], environment["MODEL"]),
-        "SPEC_DECODING": (speculation, environment["SPEC_DECODING"]),
+        # Matrices label a native DSpark drafter either mtp or draft_model.
+        "SPEC_DECODING": (speculation, environment["SPEC_DECODING"].replace("draft_model", "mtp")),
         "AgentX client": (benchmark.get("command", "").endswith("srt_agentic.sh"), agentic),
     }
     if not agentic:
