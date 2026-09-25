@@ -402,3 +402,21 @@ are skipped, and registry `/` and enroot `#` image spellings are normalized for 
 historical identity matching and point backfill. A transient or malformed baseline for
 one candidate defers that candidate and continues through the reviewed pool; it does
 not consume or block later candidate slots.
+
+### 7.8 Selected candidates can still stop in the baseline phase
+
+**Symptom:** a parent workflow and candidate wrapper jobs succeed, but sanitized
+candidate outcomes say `failed` / `baseline`, with no validation runs. A draft PR
+may have been created and then closed. The wrapper status only means the agent
+reported and cleaned up; it does not mean the image update worked.
+
+**Diagnosis:** planner preflight already reconstructed the public benchmark roster.
+The selected candidate now receives that typed roster in `baseline-preflight.json`.
+`prepare-baseline` verifies its candidate/base/source/model binding and reuses it,
+then the agent still verifies additional eval/dataset evidence before publication.
+Read the fixed `reason-code` in `candidate-diagnostics.json`, the job summary or
+the completion receipt to identify the first verified blocker. An absent code on
+an older run means the exact cause was not recorded; do not infer one from the phase.
+Never publish raw API responses, agent transcripts or private telemetry to fill
+that gap. A preflight mismatch must stop rather than silently refetching another
+roster or shrinking coverage.
