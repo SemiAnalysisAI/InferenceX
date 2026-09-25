@@ -1327,7 +1327,7 @@ dsv4-fp4-mi355x-sglang-agentic-mtp:
 # decides whether DSv4.1-Flash is throughput- or interactivity-bound here.
 dsv41flash-fp4-mi355x-vllm-agentic-dspark:
   # ROCm 10.0 nightly channel, shared with kimik3-fp4-mi355x-vllm-agentic-mtp.
-  image: TBD
+  image: vllm/vllm-openai-rocm:nightly-rocm100-29468dde8b515031dc6d4d9d06bf0a2fa0442098
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:mi355x-amds
