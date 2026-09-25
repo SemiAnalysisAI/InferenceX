@@ -46,4 +46,6 @@ def write_window(result: Path, concurrency: int, windows: Path) -> None:
 
 
 if __name__ == "__main__":
-    write_window(Path(sys.argv[1]), int(sys.argv[2]), Path(os.environ["SRT_MEASUREMENT_WINDOW_DIR"]))
+    write_window(
+        Path(sys.argv[1]), int(sys.argv[2]), Path(os.environ["SRT_MEASUREMENT_WINDOW_DIR"])
+    )
