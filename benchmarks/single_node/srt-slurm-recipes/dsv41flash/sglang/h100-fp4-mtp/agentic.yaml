@@ -24,6 +24,11 @@ base:
     tachometer:
       enabled: false
   engine: sglang
+  # Cold loads of the checkpoint and host Engram tables from shared NFS outlast
+  # the default 1800 s health window (c20 was still loading at 1800 s).
+  health_check:
+    interval_seconds: 10
+    max_attempts: 360
   # Hardware-specific tiling only; checkpoint data, scales and dtypes are unchanged.
   setup_script: dsv41flash-h100-block32.sh
   roles:
