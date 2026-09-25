@@ -163,7 +163,7 @@ def test_kimi_curve_requires_an_explicit_supported_sampler(
     ("framework", "args", "environment", "expected"),
     [
         (
-            "dynamo-sglang",
+            "sglang-disagg",
             {
                 "speculative-algorithm": "DSpark",
                 "speculative-dspark-block-size": 3,
@@ -229,7 +229,7 @@ def test_engine_token_selection_and_environment(
     "environment",
     [{"EVAL_ONLY": "true"}, {"IS_AGENTIC": "0"}, {"SPEC_DECODING": "none"}],
 )
-@pytest.mark.parametrize("framework", ["vllm", "dynamo-sglang", "trt"])
+@pytest.mark.parametrize("framework", ["vllm", "vllm-disagg", "sglang", "dynamo-sglang", "trt"])
 def test_real_runs_clear_synthetic_without_a_curve(
     tmp_path: Path, framework: str, environment: dict[str, str]
 ) -> None:
@@ -251,7 +251,7 @@ def test_real_runs_clear_synthetic_without_a_curve(
         build_overrides(recipe, framework, env, golden_dir=tmp_path / "absent"),
     )
     role = result["roles"]["agg"]
-    if framework == "vllm":
+    if framework in {"vllm", "vllm-disagg"}:
         assert json.loads(role["args"]["speculative-config"]) == {
             "method": "dspark",
             "num_speculative_tokens": 3,

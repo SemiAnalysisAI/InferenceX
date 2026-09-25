@@ -20,6 +20,8 @@ import yaml
 GOLDEN_DIR = Path(__file__).resolve().parents[2] / "golden_al_distribution"
 ENGINES = {
     "sglang": "sglang",
+    "sglang-disagg": "sglang",
+    "vllm-disagg": "vllm",
     "vllm": "vllm",
     "dynamo-vllm": "vllm",
     "dynamo-sglang": "sglang",

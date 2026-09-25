@@ -9,7 +9,7 @@
 # --output and --error are set by submit.sh via BENCHMARK_LOGS_DIR
 
 source "$(pwd)/../../benchmark_lib.sh" --validation-only
-check_env_vars INFERENCEX_RUNTIME_ENV_VARS VLLM_ROUTER_IMAGE SKIP_RDMA_CHECK SKIP_GPU_SANITY
+check_env_vars INFERENCEX_RUNTIME_ENV_VARS SKIP_RDMA_CHECK SKIP_GPU_SANITY
 check_env_vars \
     ENGINE MODEL_NAME MODEL_DIR xP yD \
     BENCH_INPUT_LEN BENCH_OUTPUT_LEN BENCH_RANDOM_RANGE_RATIO BENCH_NUM_PROMPTS_MULTIPLIER BENCH_MAX_CONCURRENCY \
@@ -34,9 +34,7 @@ echo ""
 
 # Use $(pwd) not BASH_SOURCE — sbatch copies the script to /var/spool/slurmd/
 # at runtime, but the CWD remains the submit-time directory (amd_utils/).
-if [[ "$ENGINE" == "vllm-disagg" ]]; then
-    MODELS_YAML="$(pwd)/models_vllm.yaml"
-elif [[ "$ENGINE" == "atom-disagg" ]]; then
+if [[ "$ENGINE" == "atom-disagg" ]]; then
     MODELS_YAML="$(pwd)/models_atom.yaml"
 elif [[ "$ENGINE" == "tilert" ]]; then
     MODELS_YAML="$(pwd)/models_tilert.yaml"
@@ -99,123 +97,77 @@ export DI_REPO_DIR=$(cd "$(pwd)/../../.." && pwd)
 
 export MODEL_DIR
 
-if [[ "$ENGINE" == "vllm-disagg" ]]; then
-    # vLLM: Extract hf_dir from models.yaml, search multiple paths, resolve HF cache snapshots
-    DISK_DIR_NAME=$(awk '/^'"$MODEL_NAME"':/{found=1; next}
-        found && /^[^ ]/{exit}
-        found && /hf_dir:/{gsub(/[" ]/, "", $2); print $2; exit}' "$MODELS_YAML")
-    DISK_DIR_NAME="${DISK_DIR_NAME:-$MODEL_NAME}"
-    echo "Looking for model: $MODEL_NAME (disk dir: $DISK_DIR_NAME)"
+# SGLang: Validate model path across all allocated nodes
+echo "Looking for model: $MODEL_NAME"
+echo "Checking model availability across all allocated nodes..."
 
-    resolve_hf_cache_path() {
-        local base_path=$1
-        if [[ -d "${base_path}/snapshots" ]]; then
-            local snapshot=$(ls -1 "${base_path}/snapshots" 2>/dev/null | head -1)
-            if [[ -n "$snapshot" ]]; then
-                echo "${base_path}/snapshots/${snapshot}"
-                return 0
-            fi
-        fi
-        echo "$base_path"
-        return 1
-    }
+ALL_NODES=$(scontrol show hostnames "$SLURM_JOB_NODELIST")
+TOTAL_NODES=$(echo "$ALL_NODES" | wc -l)
+echo "Total allocated nodes: $TOTAL_NODES"
+echo "Nodes: $(echo "$ALL_NODES" | tr '\n' ' ')"
 
-    MODEL_PATH=""
-    SEARCH_PATHS=(
-        "${MODEL_DIR}/${DISK_DIR_NAME}"
-        "${MODEL_DIR}/${MODEL_NAME}"
-        "/nfsdata/hf_hub_cache-0/${DISK_DIR_NAME}"
-        "/nfsdata/hf_hub_cache-0/${MODEL_NAME}"
-    )
-
-    for search_path in "${SEARCH_PATHS[@]}"; do
-        if [[ -d "$search_path" ]]; then
-            RESOLVED=$(resolve_hf_cache_path "$search_path")
-            MODEL_PATH="$RESOLVED"
-            echo "Found MODEL_PATH: $MODEL_PATH"
-            break
-        fi
-    done
-
-    if [[ -z "$MODEL_PATH" ]]; then
-        echo "FATAL: Model '$MODEL_NAME' not found. Searched:"
-        for p in "${SEARCH_PATHS[@]}"; do echo "  - $p"; done
-        exit 1
-    fi
-    echo "Final MODEL_PATH: $MODEL_PATH"
-else
-    # SGLang: Validate model path across all allocated nodes
-    echo "Looking for model: $MODEL_NAME"
-    echo "Checking model availability across all allocated nodes..."
-
-    ALL_NODES=$(scontrol show hostnames "$SLURM_JOB_NODELIST")
-    TOTAL_NODES=$(echo "$ALL_NODES" | wc -l)
-    echo "Total allocated nodes: $TOTAL_NODES"
-    echo "Nodes: $(echo "$ALL_NODES" | tr '\n' ' ')"
-
-    check_model_path() {
-        local path=$1
-        local check_name=$2
-        echo "Checking $check_name: $path"
-        srun --nodes=$SLURM_NNODES --ntasks=$SLURM_NNODES /bin/bash -c "
-            if [ -d '$path' ]; then
-                echo \"\$(hostname): Found $path\"
-                exit 0
-            else
-                echo \"\$(hostname): Missing $path\"
-                exit 1
-            fi
-        "
-        local exit_code=$?
-        if [ $exit_code -eq 0 ]; then
-            echo "$check_name available on ALL nodes"
-            return 0
+check_model_path() {
+    local path=$1
+    local check_name=$2
+    echo "Checking $check_name: $path"
+    srun --nodes=$SLURM_NNODES --ntasks=$SLURM_NNODES /bin/bash -c "
+        if [ -d '$path' ]; then
+            echo \"\$(hostname): Found $path\"
+            exit 0
         else
-            echo "$check_name NOT available on all nodes"
-            return 1
-        fi
-    }
-
-    # Extract hf_dir from models.yaml (same as vllm-disagg path above)
-    SGL_DISK_DIR_NAME=$(awk '/^'"$MODEL_NAME"':/{found=1; next}
-        found && /^[^ ]/{exit}
-        found && /hf_dir:/{gsub(/[" ]/, "", $2); print $2; exit}' "$MODELS_YAML")
-    SGL_DISK_DIR_NAME="${SGL_DISK_DIR_NAME:-$MODEL_NAME}"
-
-    # Prefer the caller-supplied MODEL_PATH (recipe scripts set this explicitly);
-    # fall back to MODEL_DIR/hf_dir then MODEL_DIR/MODEL_NAME.
-    if [[ -n "${MODEL_PATH:-}" && "$MODEL_PATH" != "$MODEL_DIR" ]]; then
-        # Caller already resolved the path (e.g. MODEL_PATH=/it-share/hf_cache/models--...)
-        # Use it directly if it exists on all nodes, otherwise try subdirectory combos.
-        if check_model_path "$MODEL_PATH" "MODEL_PATH (caller-supplied)"; then
-            echo "Selected MODEL_PATH: $MODEL_PATH (caller-supplied, available on all nodes)"
-        elif check_model_path "$MODEL_PATH/$SGL_DISK_DIR_NAME" "$MODEL_PATH/$SGL_DISK_DIR_NAME"; then
-            MODEL_PATH="$MODEL_PATH/$SGL_DISK_DIR_NAME"
-            echo "Selected MODEL_PATH: $MODEL_PATH (available on all nodes)"
-        elif check_model_path "$MODEL_PATH/$MODEL_NAME" "$MODEL_PATH/$MODEL_NAME"; then
-            MODEL_PATH="$MODEL_PATH/$MODEL_NAME"
-            echo "Selected MODEL_PATH: $MODEL_PATH (available on all nodes)"
-        else
-            echo "FATAL ERROR: Model '$MODEL_NAME' not found on ALL allocated nodes in:"
-            echo "  - $MODEL_PATH"
-            echo "  - $MODEL_PATH/$SGL_DISK_DIR_NAME"
-            echo "  - $MODEL_PATH/$MODEL_NAME"
+            echo \"\$(hostname): Missing $path\"
             exit 1
         fi
-    elif check_model_path "$MODEL_DIR/$SGL_DISK_DIR_NAME" "$MODEL_DIR/$SGL_DISK_DIR_NAME"; then
-        MODEL_PATH="$MODEL_DIR/$SGL_DISK_DIR_NAME"
+    "
+    local exit_code=$?
+    if [ $exit_code -eq 0 ]; then
+        echo "$check_name available on ALL nodes"
+        return 0
+    else
+        echo "$check_name NOT available on all nodes"
+        return 1
+    fi
+}
+
+# Extract hf_dir from models.yaml
+SGL_DISK_DIR_NAME=$(awk '/^'"$MODEL_NAME"':/{found=1; next}
+    found && /^[^ ]/{exit}
+    found && /hf_dir:/{gsub(/[" ]/, "", $2); print $2; exit}' "$MODELS_YAML")
+SGL_DISK_DIR_NAME="${SGL_DISK_DIR_NAME:-$MODEL_NAME}"
+
+# Prefer the caller-supplied MODEL_PATH (recipe scripts set this explicitly);
+# fall back to MODEL_DIR/hf_dir then MODEL_DIR/MODEL_NAME.
+if [[ -n "${MODEL_PATH:-}" && "$MODEL_PATH" != "$MODEL_DIR" ]]; then
+    # Caller already resolved the path (e.g. MODEL_PATH=/it-share/hf_cache/models--...)
+    # Use it directly if it exists on all nodes, otherwise try subdirectory combos.
+    if check_model_path "$MODEL_PATH" "MODEL_PATH (caller-supplied)"; then
+        echo "Selected MODEL_PATH: $MODEL_PATH (caller-supplied, available on all nodes)"
+    elif check_model_path "$MODEL_PATH/$SGL_DISK_DIR_NAME" "$MODEL_PATH/$SGL_DISK_DIR_NAME"; then
+        MODEL_PATH="$MODEL_PATH/$SGL_DISK_DIR_NAME"
         echo "Selected MODEL_PATH: $MODEL_PATH (available on all nodes)"
-    elif check_model_path "$MODEL_DIR/$MODEL_NAME" "$MODEL_DIR"; then
-        MODEL_PATH="$MODEL_DIR/$MODEL_NAME"
+    elif check_model_path "$MODEL_PATH/$MODEL_NAME" "$MODEL_PATH/$MODEL_NAME"; then
+        MODEL_PATH="$MODEL_PATH/$MODEL_NAME"
         echo "Selected MODEL_PATH: $MODEL_PATH (available on all nodes)"
     else
         echo "FATAL ERROR: Model '$MODEL_NAME' not found on ALL allocated nodes in:"
-        echo "  - $MODEL_DIR/$SGL_DISK_DIR_NAME"
-        echo "  - $MODEL_DIR/$MODEL_NAME"
+        echo "  - $MODEL_PATH"
+        echo "  - $MODEL_PATH/$SGL_DISK_DIR_NAME"
+        echo "  - $MODEL_PATH/$MODEL_NAME"
         exit 1
     fi
-    echo "Final MODEL_PATH: $MODEL_PATH"
+elif check_model_path "$MODEL_DIR/$SGL_DISK_DIR_NAME" "$MODEL_DIR/$SGL_DISK_DIR_NAME"; then
+    MODEL_PATH="$MODEL_DIR/$SGL_DISK_DIR_NAME"
+    echo "Selected MODEL_PATH: $MODEL_PATH (available on all nodes)"
+elif check_model_path "$MODEL_DIR/$MODEL_NAME" "$MODEL_DIR"; then
+    MODEL_PATH="$MODEL_DIR/$MODEL_NAME"
+    echo "Selected MODEL_PATH: $MODEL_PATH (available on all nodes)"
+else
+    echo "FATAL ERROR: Model '$MODEL_NAME' not found on ALL allocated nodes in:"
+    echo "  - $MODEL_DIR/$SGL_DISK_DIR_NAME"
+    echo "  - $MODEL_DIR/$MODEL_NAME"
+    exit 1
 fi
+echo "Final MODEL_PATH: $MODEL_PATH"
 
 # =============================================================================
 # Node Selection
@@ -327,10 +279,6 @@ export EVAL_LIMIT="${EVAL_LIMIT:-}"
 SANITIZED_USER=$(echo "$USER_NAME" | tr -c 'a-zA-Z0-9_.-' '_')
 export DOCKER_CONT_NAME="container_${ENGINE}_${SANITIZED_USER}_${MODEL_NAME}_${SLURM_JOB_ID}"
 
-# vLLM external router container.
-# NOTE: vllm/vllm-router only retains ~16 recent nightlies on Docker Hub; older
-# dated tags are garbage-collected (manifest unknown)
-ROUTER_CONT_NAME="router_vllm_${SANITIZED_USER}_${SLURM_JOB_ID}"
 # Separate agentic benchmark-client container (see CLIENT_IMAGE handling below).
 CLIENT_CONT_NAME="container_${ENGINE}_${SANITIZED_USER}_client_${SLURM_JOB_ID}"
 export RUN_FILE_FULL="$WS_PATH/${RUN_FILE}"
@@ -597,21 +545,7 @@ DOCKER_ENV_COMMON=(
 )
 
 # Engine-specific env vars
-if [[ "$ENGINE" == "vllm-disagg" ]]; then
-    DOCKER_ENV_ENGINE=(
-        -e VLLM_WS_PATH=${WS_PATH}
-        -e UCX_TLS=tcp,self,shm,rocm_ipc,rocm_copy,cma
-        -e UCX_SOCKADDR_TLS_PRIORITY=tcp
-        -e UCX_MEMTYPE_CACHE=y
-        -e UCX_RNDV_SCHEME=get_zcopy
-        -e UCX_RNDV_THRESH=4k
-        -e UCX_ROCM_IPC_MIN_ZCOPY=0
-        -e UCX_LOG_LEVEL=warn
-        -e HSA_ENABLE_SDMA=1
-        -e PROXY_STREAM_IDLE_TIMEOUT=\${PROXY_STREAM_IDLE_TIMEOUT}
-        -e PYTHONPYCACHEPREFIX=/tmp/pycache
-    )
-elif [[ "$ENGINE" == "atom-disagg" ]]; then
+if [[ "$ENGINE" == "atom-disagg" ]]; then
     check_env_vars \
         PREFILL_PORT DECODE_PORT HANDSHAKE_PORT MEM_FRAC_STATIC KV_CACHE_DTYPE \
         BLOCK_SIZE MAX_NUM_SEQS
@@ -817,43 +751,13 @@ else
 fi
 fi  # end: if ENGINE == atom-disagg
 
-# Start vLLM external router container on node 0
-if [[ \"$ENGINE\" == \"vllm-disagg\" && \"$ROUTER_TYPE\" == \"vllm-router\" && \"\$SLURM_PROCID\" == \"0\" ]]; then
-    \$DOCKER_CMD rm -f \"$ROUTER_CONT_NAME\" 2>/dev/null || true
-    \$DOCKER_CMD run -d \
-        --name \"$ROUTER_CONT_NAME\" \
-        --network host \
-        --ulimit nofile=1048576:1048576 \
-        -v /tmp:/run_logs \
-        \"$VLLM_ROUTER_IMAGE\" \
-        bash -lc \"mkdir -p /run_logs/slurm_job-${SLURM_JOB_ID} && exec vllm-router \
-            --vllm-pd-disaggregation \
-            --kv-connector moriio \
-            --vllm-discovery-address 0.0.0.0:${PROXY_PING_PORT} \
-            --port ${ROUTER_PORT} \
-            --host 0.0.0.0 \
-            --policy consistent_hash \
-            --prefill-policy consistent_hash \
-            --decode-policy consistent_hash \
-            --log-level info 2>&1 | tee /run_logs/slurm_job-${SLURM_JOB_ID}/vllm_router_\$(hostname).log \"
-fi
-
-# Skip exec on vllm-disagg rank 0 so we can stop the router after the main
-# container exits.  Without this, decode nodes block forever waiting for the
-# router port to close (the router is a separate container).
-MAYBE_EXEC=exec
-if [[ \"$ENGINE\" == \"vllm-disagg\" && \"$ROUTER_TYPE\" == \"vllm-router\" && \"\$SLURM_PROCID\" == \"0\" ]]; then
-    MAYBE_EXEC=
-    set +e
-fi
-
 RANK_IMAGE=
 if [[ \"$ENGINE\" == \"tilert\" && \"\$SLURM_PROCID\" -lt \"$xP\" ]]; then
     RANK_IMAGE=\"$PREFILL_IMAGE\"
     echo \"[tilert] rank \$SLURM_PROCID is a prefill rank; using PREFILL_IMAGE=\$RANK_IMAGE\"
 fi
 
-\$MAYBE_EXEC \$DOCKER_CMD run \
+exec \$DOCKER_CMD run \
     --init \
     --stop-timeout 10 \
     --device /dev/dri \
@@ -899,24 +803,11 @@ fi
         mkdir -p /run_logs/slurm_job-'\"\$SLURM_JOB_ID\"'
         '"$RUN_FILE_FULL"' 2>&1 | tee /run_logs/slurm_job-'\"\$SLURM_JOB_ID\"'/server_\$(hostname).log
     '
-
-# Only reached when exec was skipped (vllm-disagg rank 0)
-DOCKER_EXIT_CODE=\$?
-echo \"[rank 0] Main container exited (rc=\$DOCKER_EXIT_CODE). Stopping vllm-router...\"
-\$DOCKER_CMD rm -f \"$ROUTER_CONT_NAME\" 2>/dev/null || true
-exit \$DOCKER_EXIT_CODE
 "
 SERVER_SRUN_RC=$?
 
 if [[ "${KEEP_CONTAINERS}" != "1" ]]; then
     srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c 'eval "$DOCKER_CMD_DETECT"; $DOCKER_CMD rm -f '"$DOCKER_CONT_NAME"' '"$CLIENT_CONT_NAME"' 2>/dev/null || true'
-
-    # Clean up vLLM external router container on node 0
-    if [[ "$ENGINE" == "vllm-disagg" && "$ROUTER_TYPE" == "vllm-router" ]]; then
-        srun --nodes=1 --ntasks=1 --nodelist="$MASTER_NODE" bash -c '
-            eval "$DOCKER_CMD_DETECT"; $DOCKER_CMD rm -f '"$ROUTER_CONT_NAME"' 2>/dev/null || true
-        '
-    fi
 fi
 
 # /run_logs is backed by each compute node's local /tmp, so the node-0 copy
