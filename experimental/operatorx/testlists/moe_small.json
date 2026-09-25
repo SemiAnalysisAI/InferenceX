@@ -1,6 +1,6 @@
 [
   {
-    "type": "moe_layer",
+    "type": "moe",
     "args": {
       "tokens": 1,
       "hidden": 7168,
@@ -119,7 +119,7 @@
     "name": "deepseek-ai/DeepSeek-R1-0528"
   },
   {
-    "type": "moe_layer",
+    "type": "moe",
     "args": {
       "tokens": 1,
       "hidden": 7168,
@@ -294,7 +294,7 @@
     "name": "nvidia/DeepSeek-R1-0528-NVFP4-v2"
   },
   {
-    "type": "moe_layer",
+    "type": "moe",
     "args": {
       "tokens": 1,
       "hidden": 7168,
@@ -413,7 +413,7 @@
     "name": "amd/DeepSeek-R1-0528-MXFP4"
   },
   {
-    "type": "moe_layer",
+    "type": "moe",
     "args": {
       "tokens": 1,
       "hidden": 7168,
@@ -532,7 +532,7 @@
     "name": "deepseek-ai/DeepSeek-V4-Pro"
   },
   {
-    "type": "moe_layer",
+    "type": "moe",
     "args": {
       "tokens": 1,
       "hidden": 7168,
@@ -652,7 +652,7 @@
     "name": "deepseek-ai/DeepSeek-V4-Pro:hash-layer"
   },
   {
-    "type": "moe_layer",
+    "type": "moe",
     "args": {
       "tokens": 1,
       "hidden": 5120,
@@ -771,7 +771,7 @@
     "name": "deepseek-ai/DeepSeek-V4.1-Flash"
   },
   {
-    "type": "moe_layer",
+    "type": "moe",
     "args": {
       "tokens": 1,
       "hidden": 4096,
@@ -887,7 +887,7 @@
     "name": "Qwen/Qwen3.5-397B-A17B-FP8"
   },
   {
-    "type": "moe_layer",
+    "type": "moe",
     "args": {
       "tokens": 1,
       "hidden": 4096,
@@ -1011,7 +1011,7 @@
     "name": "nvidia/Qwen3.5-397B-A17B-NVFP4"
   },
   {
-    "type": "moe_layer",
+    "type": "moe",
     "args": {
       "tokens": 1,
       "hidden": 4096,
@@ -1159,7 +1159,7 @@
     "name": "nvidia/Qwen3.5-397B-A17B-NVFP4-V2"
   },
   {
-    "type": "moe_layer",
+    "type": "moe",
     "args": {
       "tokens": 1,
       "hidden": 4096,
@@ -1251,7 +1251,7 @@
     "name": "amd/Qwen3.5-397B-A17B-MXFP4"
   },
   {
-    "type": "moe_layer",
+    "type": "moe",
     "args": {
       "tokens": 1,
       "hidden": 4096,
@@ -1367,7 +1367,7 @@
     "name": "amd/Qwen3.5-397B-A17B-MXFP4-AttnFP8-V2"
   },
   {
-    "type": "moe_layer",
+    "type": "moe",
     "args": {
       "tokens": 1,
       "hidden": 2560,
@@ -1459,7 +1459,7 @@
     "name": "Qwen/Qwen3.8-Flash-Next-FP8"
   },
   {
-    "type": "moe_layer",
+    "type": "moe",
     "args": {
       "tokens": 1,
       "hidden": 2560,
@@ -1583,7 +1583,7 @@
     "name": "RadixArk/Qwen3.8-Flash-Next-NVFP4"
   },
   {
-    "type": "moe_layer",
+    "type": "moe",
     "args": {
       "tokens": 1,
       "hidden": 6144,
@@ -1703,7 +1703,7 @@
     "name": "zai-org/GLM-5.2-FP8"
   },
   {
-    "type": "moe_layer",
+    "type": "moe",
     "args": {
       "tokens": 1,
       "hidden": 6144,
@@ -1831,7 +1831,7 @@
     "name": "nvidia/GLM-5.2-NVFP4"
   },
   {
-    "type": "moe_layer",
+    "type": "moe",
     "args": {
       "tokens": 1,
       "hidden": 6144,
@@ -1951,7 +1951,7 @@
     "name": "amd/GLM-5.2-MXFP4"
   },
   {
-    "type": "moe_layer",
+    "type": "moe",
     "args": {
       "tokens": 1,
       "hidden": 7168,
@@ -2038,7 +2038,7 @@
     ]
   },
   {
-    "type": "moe_layer",
+    "type": "moe",
     "args": {
       "tokens": 1,
       "hidden": 6144,
@@ -2158,7 +2158,7 @@
     "name": "MiniMaxAI/MiniMax-M3-MXFP8"
   },
   {
-    "type": "moe_layer",
+    "type": "moe",
     "args": {
       "tokens": 1,
       "hidden": 6144,
@@ -2310,7 +2310,7 @@
     "name": "nvidia/MiniMax-M3-NVFP4"
   },
   {
-    "type": "moe_layer",
+    "type": "moe",
     "args": {
       "tokens": 1,
       "hidden": 6144,
@@ -2430,7 +2430,7 @@
     "name": "amd/MiniMax-M3-MXFP4"
   },
   {
-    "type": "moe_layer",
+    "type": "moe",
     "args": {
       "tokens": 256,
       "hidden": 7168,
@@ -2549,7 +2549,7 @@
     "name": "deepseek-ai/DeepSeek-R1-0528:tokens256:natural"
   },
   {
-    "type": "moe_layer",
+    "type": "moe",
     "args": {
       "tokens": 256,
       "hidden": 7168,
@@ -2668,7 +2668,7 @@
     "name": "deepseek-ai/DeepSeek-R1-0528:tokens256:balanced"
   },
   {
-    "type": "moe_layer",
+    "type": "moe",
     "args": {
       "tokens": 256,
       "hidden": 7168,
@@ -2790,7 +2790,7 @@
     "name": "deepseek-ai/DeepSeek-R1-0528:tokens256:zipf1.2"
   },
   {
-    "type": "moe_layer",
+    "type": "moe",
     "args": {
       "tokens": 256,
       "hidden": 7168,
@@ -2909,7 +2909,7 @@
     "name": "deepseek-ai/DeepSeek-R1-0528:tokens256:single_hot"
   },
   {
-    "type": "moe_layer",
+    "type": "moe",
     "args": {
       "tokens": 256,
       "hidden": 4096,
@@ -3025,7 +3025,7 @@
     "name": "Qwen/Qwen3.5-397B-A17B-FP8:tokens256:natural"
   },
   {
-    "type": "moe_layer",
+    "type": "moe",
     "args": {
       "tokens": 256,
       "hidden": 4096,
@@ -3141,7 +3141,7 @@
     "name": "Qwen/Qwen3.5-397B-A17B-FP8:tokens256:balanced"
   },
   {
-    "type": "moe_layer",
+    "type": "moe",
     "args": {
       "tokens": 256,
       "hidden": 4096,
@@ -3260,7 +3260,7 @@
     "name": "Qwen/Qwen3.5-397B-A17B-FP8:tokens256:zipf1.2"
   },
   {
-    "type": "moe_layer",
+    "type": "moe",
     "args": {
       "tokens": 256,
       "hidden": 4096,

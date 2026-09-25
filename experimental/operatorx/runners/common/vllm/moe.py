@@ -386,4 +386,4 @@ def _kernel_moe(ctx: dict) -> None:
     ctx["out"] = ctx["layer"](ctx["x"])
 
 
-IMPLS = [BackendImpl(op_type="moe_layer", prepare=_prepare_moe, kernel=_kernel_moe, launcher=_launcher)]
+IMPLS = [BackendImpl(op_type="moe", prepare=_prepare_moe, kernel=_kernel_moe, launcher=_launcher)]

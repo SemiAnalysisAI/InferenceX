@@ -172,9 +172,9 @@ kernel classes, parameter dtypes before and after loading, and the vLLM env.
 Emulation-only paths are reported unsupported. AMD enables AITER, as
 InferenceX's ROCm launches do.
 
-## MoE layer
+## MoE
 
-`moe_layer` (`ops/moe.py`) describes one MoE layer from the router GEMM on
+`moe` (`ops/moe.py`) describes one MoE layer from the router GEMM on
 normed hidden states to the combined output: shape (`tokens`, `hidden`),
 routed `experts` (count, top-k, intermediate size, optional biases / latent width /
 zero experts, and gemm operand descriptors for `x`, `w13`, `w2`, `a2`), `router`
@@ -184,13 +184,15 @@ Execution (expert kernels, dispatch, shared-expert fusion or stream overlap, gra
 is the backend's choice. The `vllm` backend (`runners/common/vllm/moe.py`) builds
 vLLM's router (`GateLinear`), routed experts (`FusedMoEFactory`) and shared-expert
 MLP under the quant configs the descriptors imply and times the block; vLLM picks the
-expert kernels, shared-expert fusion and streams. Latent experts, hash routing, zero
-experts and forced expert-load distributions are reported unsupported for now.
+expert kernels, shared-expert fusion and streams. A forced expert-load distribution
+(`balanced`, `zipf`, `single_hot`) replaces the router's expert choice and keeps its
+weights; zero experts are reported unsupported for now.
 
-`testlists/moe_layer_small.json` holds one full-size routed MoE layer per InferenceX
+`testlists/moe_small.json` holds one full-size routed MoE layer per InferenceX
 MoE checkpoint scheme (DeepSeek-R1, DeepSeek-V4-Pro/V4.1-Flash, Qwen3.5, Qwen3.8-Flash-Next,
 GLM-5.2, Kimi-K3, MiniMax-M3 in their FP8/NVFP4/MXFP4/MXFP8 variants) at `tokens=1`,
-20 cases. Each layer's weights fit on one GPU.
+plus `tokens=256` layers under each expert-load distribution, 28 cases. Each layer's
+weights fit on one GPU.
 
 Experimental operator changes are recorded in the adjacent `perf-changelog.yaml`,
 separately from the root inference-recipe changelog's config-key schema.
