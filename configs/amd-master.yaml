@@ -1328,9 +1328,9 @@ dsv4-fp4-mi355x-sglang-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, conc-list: [1, 4, 16], spec-decoding: draft_model }
-      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [32, 48], spec-decoding: draft_model }
-      - { tp: 8, ep: 1, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [128, 256], spec-decoding: draft_model }
+      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, conc-list: [1, 4, 16], spec-decoding: draft_model, srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv4/sglang/mi355x-fp4-mtp/agentic.yaml }
+      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [32, 48], spec-decoding: draft_model, srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv4/sglang/mi355x-fp4-mtp/agentic.yaml }
+      - { tp: 8, ep: 1, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [128, 256], spec-decoding: draft_model, srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv4/sglang/mi355x-fp4-mtp/agentic.yaml }
 
 # Upstream ROCm nightly rather than the deepseekv41-flash-0909 release tag: that
 # tag predates vllm-project/vllm#56503, which moves the mHC delayed pre block off
