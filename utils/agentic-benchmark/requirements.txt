@@ -7,3 +7,4 @@ tqdm>=4.66
 datasets
 tiktoken
 matplotlib
+sqlalchemy<2.1

@@ -1,8 +1,8 @@
 schema: 2
-name: "disagg-gb300-2p4d-dep8-dep16-c480-mtp-kvoffload"
+name: "disagg-gb300-2p1d-dep8-dep16-c480-mtp-kvoffload"
 
 # Agentic-coding SGLang disaggregated Pareto recipe for DeepSeek-V4-Pro on GB300
-# (2P x DEP8 / 4D x DEP16, DSpark K=6 + hierarchical-cache KV offload), tuned for concurrency 480.
+# (2P x DEP8 / 1D x DEP16, DSpark K=6 + hierarchical-cache KV offload), tuned for concurrency 480.
 #
 # Uses the flat single-variant srtctl schema the agentic CI flow expects;
 # resources + backend (prefill/decode env + sglang_config) are normalized
@@ -11,22 +11,19 @@ name: "disagg-gb300-2p4d-dep8-dep16-c480-mtp-kvoffload"
 
 model:
   path: "deepseek-v4-pro-0813"
-  container: "dynamo-sglang"
+  container: "lmsysorg/sglang:nightly-dev-20260916-c9a8fba9"
   precision: "fp4"
 
 identity:
   model:
     repo: "deepseek-ai/DeepSeek-V4-Pro-0813"
   container:
-    image: "lmsysorg/sglang:nightly-dev-cu13-20260829-89816a21"
+    image: "lmsysorg/sglang:nightly-dev-20260916-c9a8fba9"
 
 dynamo:
   install: true
   source:
-    wheel: "1.5.0.dev20260902"
-
-slurm:
-  time_limit: "8:00:00"
+    wheel: "1.5.0.dev20260914"
 
 health_check:
   max_attempts: 1440
@@ -64,8 +61,8 @@ frontend:
 engine: sglang
 roles:
   prefill:
-    nodes: 2
-    workers: 1
+    nodes: 4
+    workers: 2
     gpus: 8
     env:
       SGLANG_ENABLE_PREFILL_WAR_READ_DONE: "1"
@@ -124,8 +121,8 @@ roles:
       mem-fraction-static: 0.85
       page-size: 256
       swa-full-tokens-ratio: 0.02
-      max-running-requests: 256
-      cuda-graph-max-bs: 256
+      max-running-requests: 512
+      cuda-graph-max-bs-decode: 256
       chunked-prefill-size: 65536
       disable-flashinfer-autotune: true
       model-loader-extra-config: '{"enable_multithread_load":true,"num_threads":8}'
@@ -199,8 +196,8 @@ roles:
       mem-fraction-static: 0.9
       page-size: 256
       swa-full-tokens-ratio: 0.02
-      max-running-requests: 3072
-      cuda-graph-max-bs: 256
+      max-running-requests: 1024
+      cuda-graph-max-bs-decode: 256
       disable-flashinfer-autotune: true
       model-loader-extra-config: '{"enable_multithread_load":true,"num_threads":8}'
       kv-events-config: '{"publisher":"zmq","topic":"kv-events","endpoint":"tcp://*:5567"}'
