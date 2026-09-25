@@ -151,7 +151,7 @@ jobs:
           vars.NODE_SLOT_SCHEDULER_ENABLED == 'true' &&
           format(
             '["self-hosted",{0},{1},{2},{3}]',
-            toJSON(matrix.sku),
+            toJSON(matrix.sku == 'mi325x' && 'cluster:mi325x-amds' || matrix.sku),
             toJSON(format('nodes:{0}', matrix.nodes)),
             toJSON(format(
               'ci-job-{0}-{1}',
@@ -162,7 +162,7 @@ jobs:
           ) ||
           format(
             '["self-hosted",{0},{1},{2},{3}]',
-            toJSON(matrix.sku),
+            toJSON(matrix.sku == 'mi325x' && 'cluster:mi325x-amds' || matrix.sku),
             toJSON(format('nodes:{0}', matrix.nodes)),
             toJSON(format(
               'ci-job-{0}-{1}',
@@ -172,7 +172,7 @@ jobs:
             toJSON(format('ci-attempt-{0}', github.run_attempt))
           )
         ) ||
-        format('[{0}]', toJSON(matrix.sku))
+        format('[{0}]', toJSON(matrix.sku == 'mi325x' && 'cluster:mi325x-amds' || matrix.sku))
       ) }}
     name: p${{ needs.setup.outputs.priority }} | ${{ matrix.sku }} ${{ matrix.backend }} shard ${{ matrix.id }}
     timeout-minutes: 350
