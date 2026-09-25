@@ -653,7 +653,7 @@ def test_no_evals_preserves_throughput_and_other_entries(changelog_run, skip):
     assert output["changelog_metadata"]["entries"][0]["no-evals"] is skip
 
 
-@pytest.mark.parametrize("flags", [{"evals-only": True}, {"all-evals": True}, {"eval-min-prefill-ep": 2}, {"eval-concs": [32]}])
+@pytest.mark.parametrize("flags", [{"evals-only": True}, {"all-evals": True}, {"eval-min-prefill-ep": 2}])
 def test_no_evals_rejects_conflicting_entry_options(changelog_run, flags):
     with pytest.raises(ValueError, match="no-evals cannot be combined"):
         changelog_run([{"no-evals": True, **flags}])
@@ -675,7 +675,6 @@ def test_append_only_rejects_cli_eval_modifiers_before_generation(changelog_run,
 @pytest.mark.parametrize("entries", [
     [{"append-only": True}, {}], [{"append-only": True, "all-evals": True}],
     [{"append-only": True, "evals-only": True}], [{"append-only": True, "eval-min-prefill-ep": 2}],
-    [{"append-only": True, "eval-concs": [32]}],
 ])
 def test_append_only_rejects_mixed_or_entry_eval_modes(changelog_run, entries):
     with pytest.raises(ValueError, match="append-only"):
@@ -737,39 +736,6 @@ def test_eval_prefill_ep_filter_preserves_single_node_and_order(threshold, expec
         {"label": "invalid", "prefill": {"ep": "bad"}},
     ]
     assert [row["label"] for row in process_changelog.filter_eval_rows_by_prefill_ep(rows, threshold)] == expected
-
-
-def test_eval_concs_keeps_one_vendor_eval_in_the_throughput_plan(planning_repo, changelog_run):
-    root, master, _ = planning_repo
-    master["single"]["model-prefix"] = "minimaxm3"
-    (root / "configs/nvidia-master.yaml").write_text(yaml.safe_dump(master))
-    output = changelog_run([{"scenario-type": ["agentic-coding"], "eval-concs": [32]}])
-    assert [r["conc"] for r in output["single_node"]["agentic"]] == [16, 32]
-    assert [(r["conc"], r["eval-framework"], r["eval-suite"]) for r in output["agentic_evals"]] == [
-        (32, "minimax-vendor", "minimax_m3_full"),
-    ]
-    assert output["evals"] == []
-
-
-def test_eval_concs_filters_multinode_all_evals_without_changing_throughput(changelog_run):
-    output = changelog_run([
-        {"config-keys": ["multi"], "scenario-type": ["fixed-seq-len"], "eval-concs": [32]},
-    ], ["--all-evals"])
-    assert [r["conc"] for r in output["multi_node"]["8k1k"]] == [[16, 32, 64]]
-    assert [(r["conc"], r["eval-conc"], r["eval-all-concs"]) for r in output["multinode_evals"]] == [
-        ([32], 32, True),
-    ]
-
-
-def test_eval_concs_does_not_retarget_a_selected_multinode_eval(changelog_run):
-    with pytest.raises(ValueError, match="matched no selected evals"):
-        changelog_run([{"config-keys": ["multi"], "scenario-type": ["fixed-seq-len"], "eval-concs": [16]}])
-
-
-@pytest.mark.parametrize("concs", [[], [0], [-1], [True], ["32"]])
-def test_eval_concs_rejects_invalid_selections(changelog_run, concs):
-    with pytest.raises(ValueError, match="eval-concs"):
-        changelog_run([{"eval-concs": concs}])
 
 
 def test_current_plan_loads_inputs_once_and_uses_no_generator_process(planning_repo, monkeypatch):
