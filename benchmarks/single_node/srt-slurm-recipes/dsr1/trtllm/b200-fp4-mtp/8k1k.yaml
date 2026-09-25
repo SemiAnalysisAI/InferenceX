@@ -3,7 +3,7 @@ base:
   name: dsr1-fp4-b200-trt-mtp-8k1k
   model:
     path: hf:nvidia/DeepSeek-R1-0528-FP4-V2
-    container: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
+    container: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc28
     precision: fp4
   resources:
     gpu_type: b200
