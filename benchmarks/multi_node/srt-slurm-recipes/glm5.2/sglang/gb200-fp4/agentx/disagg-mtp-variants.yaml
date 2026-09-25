@@ -1,6 +1,7 @@
 schema: 2
 base:
   name: gb200-fp4-glm5.2-agentx
+  setup_script: glm52-gb200-nixl-prefill.sh
   model:
     path: glm-5.2-fp4
     container: dynamo-sglang
@@ -24,6 +25,7 @@ base:
     enable_multiple_frontends: true
     env:
       PIP_BREAK_SYSTEM_PACKAGES: '1'
+      INFX_GLM52_NIXL_SYNC_PATCH: '0'
     args:
       router-mode: kv
       router-kv-events: true
@@ -41,6 +43,7 @@ base:
   roles:
     prefill:
       env:
+        INFX_GLM52_NIXL_SYNC_PATCH: '1'
         TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
         SGLANG_TIMEOUT_KEEP_ALIVE: '900'
         PYTHONUNBUFFERED: '1'
@@ -114,6 +117,7 @@ base:
       kv_events: true
     decode:
       env:
+        INFX_GLM52_NIXL_SYNC_PATCH: '0'
         TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
         SGLANG_TIMEOUT_KEEP_ALIVE: '900'
         PYTHONUNBUFFERED: '1'

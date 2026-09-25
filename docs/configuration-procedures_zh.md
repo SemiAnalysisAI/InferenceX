@@ -159,6 +159,8 @@ GLM-5.2 FP4 MTP AgentX 恢复路径在调用方覆盖生效后解析选定的原
 
 显式启用的安装器应用 `runners/srt-slurm/glm52-local-version-compute-setup.patch`，在本地磁盘计算 Hatch 的实际版本，并传给登录节点和计算节点安装过程。安装失败会停止提交。该补丁位于自动应用的补丁目录之外，其他模型和 launcher 路径保留现有安装与功耗行为。
 
+GLM-5.2 GB200 v0.5.17 TP4 分离式配方仅为 prefill 角色启用带源码哈希保护的同步 NIXL 候选修复。它同时关闭 agent 后台推进线程和显式创建的 UCX 线程池，保留严格同步，并在调用线程推进传输前绑定该 rank 的 GPU。未知源码哈希会终止安装。允许的输入哈希来自上游发布源码；镜像内文件是否匹配、真实传输能否完成仍待验证。推进方式可能影响吞吐，因此 C10、C12 都需要对应运行时的测量。
+
 ## 注册 srt-slurm 配方
 
 映射来源：[`benchmarks/multi_node/srt-slurm-recipes/RECIPES.md`](../benchmarks/multi_node/srt-slurm-recipes/RECIPES.md)。检入的配方：[`benchmarks/multi_node/srt-slurm-recipes/`](../benchmarks/multi_node/srt-slurm-recipes/)。

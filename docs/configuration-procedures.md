@@ -210,6 +210,8 @@ The GLM-5.2 FP4 MTP AgentX recovery path resolves the selected native recipe aft
 
 The opted-in installer applies `runners/srt-slurm/glm52-local-version-compute-setup.patch`, derives Hatch's actual version on local disk and passes it to login and compute installation. Setup errors stop submission. The patch is outside the automatically applied patch directory; other model and launcher paths retain their existing setup and power behavior.
 
+The GLM-5.2 GB200 v0.5.17 TP4 disaggregated recipe opts its prefill role into a source-guarded synchronous NIXL candidate. It disables both the agent progress thread and the explicitly created UCX thread pool, retains strict synchronization, and binds the transfer worker to its rank GPU before caller-driven progress. Unknown source hashes stop setup. The accepted input hash is from the upstream release source; the installed-image match and real transfer progress remain unverified. C10 and C12 both need affected-runtime measurement because progress scheduling can change throughput.
+
 ## Register an srt-slurm recipe
 
 Mapping source: [`benchmarks/multi_node/srt-slurm-recipes/RECIPES.md`](../benchmarks/multi_node/srt-slurm-recipes/RECIPES.md). Checked-in recipes: [`benchmarks/multi_node/srt-slurm-recipes/`](../benchmarks/multi_node/srt-slurm-recipes/).
