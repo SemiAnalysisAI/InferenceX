@@ -116,7 +116,12 @@
         "seed": 0
       }
     },
-    "name": "deepseek-ai/DeepSeek-R1-0528"
+    "sources": [
+      "deepseek-ai/DeepSeek-R1-0528"
+    ],
+    "name": [
+      "mlp"
+    ]
   },
   {
     "type": "moe",
@@ -291,7 +296,12 @@
         "seed": 0
       }
     },
-    "name": "nvidia/DeepSeek-R1-0528-NVFP4-v2"
+    "sources": [
+      "nvidia/DeepSeek-R1-0528-NVFP4-v2"
+    ],
+    "name": [
+      "mlp"
+    ]
   },
   {
     "type": "moe",
@@ -410,7 +420,12 @@
         "seed": 0
       }
     },
-    "name": "amd/DeepSeek-R1-0528-MXFP4"
+    "sources": [
+      "amd/DeepSeek-R1-0528-MXFP4"
+    ],
+    "name": [
+      "mlp"
+    ]
   },
   {
     "type": "moe",
@@ -529,7 +544,12 @@
         "seed": 0
       }
     },
-    "name": "deepseek-ai/DeepSeek-V4-Pro"
+    "sources": [
+      "deepseek-ai/DeepSeek-V4-Pro"
+    ],
+    "name": [
+      "mlp"
+    ]
   },
   {
     "type": "moe",
@@ -649,7 +669,12 @@
         "seed": 0
       }
     },
-    "name": "deepseek-ai/DeepSeek-V4-Pro:hash-layer"
+    "sources": [
+      "deepseek-ai/DeepSeek-V4-Pro"
+    ],
+    "name": [
+      "mlp"
+    ]
   },
   {
     "type": "moe",
@@ -768,7 +793,12 @@
         "seed": 0
       }
     },
-    "name": "deepseek-ai/DeepSeek-V4.1-Flash"
+    "sources": [
+      "deepseek-ai/DeepSeek-V4.1-Flash"
+    ],
+    "name": [
+      "mlp"
+    ]
   },
   {
     "type": "moe",
@@ -884,7 +914,12 @@
         "seed": 0
       }
     },
-    "name": "Qwen/Qwen3.5-397B-A17B-FP8"
+    "sources": [
+      "Qwen/Qwen3.5-397B-A17B-FP8"
+    ],
+    "name": [
+      "mlp"
+    ]
   },
   {
     "type": "moe",
@@ -1008,7 +1043,12 @@
         "seed": 0
       }
     },
-    "name": "nvidia/Qwen3.5-397B-A17B-NVFP4"
+    "sources": [
+      "nvidia/Qwen3.5-397B-A17B-NVFP4"
+    ],
+    "name": [
+      "mlp"
+    ]
   },
   {
     "type": "moe",
@@ -1156,7 +1196,12 @@
         "seed": 0
       }
     },
-    "name": "nvidia/Qwen3.5-397B-A17B-NVFP4-V2"
+    "sources": [
+      "nvidia/Qwen3.5-397B-A17B-NVFP4-V2"
+    ],
+    "name": [
+      "mlp"
+    ]
   },
   {
     "type": "moe",
@@ -1248,7 +1293,12 @@
         "seed": 0
       }
     },
-    "name": "amd/Qwen3.5-397B-A17B-MXFP4"
+    "sources": [
+      "amd/Qwen3.5-397B-A17B-MXFP4"
+    ],
+    "name": [
+      "mlp"
+    ]
   },
   {
     "type": "moe",
@@ -1364,7 +1414,12 @@
         "seed": 0
       }
     },
-    "name": "amd/Qwen3.5-397B-A17B-MXFP4-AttnFP8-V2"
+    "sources": [
+      "amd/Qwen3.5-397B-A17B-MXFP4-AttnFP8-V2"
+    ],
+    "name": [
+      "mlp"
+    ]
   },
   {
     "type": "moe",
@@ -1456,7 +1511,12 @@
         "seed": 0
       }
     },
-    "name": "Qwen/Qwen3.8-Flash-Next-FP8"
+    "sources": [
+      "Qwen/Qwen3.8-Flash-Next-FP8"
+    ],
+    "name": [
+      "mlp"
+    ]
   },
   {
     "type": "moe",
@@ -1580,7 +1640,12 @@
         "seed": 0
       }
     },
-    "name": "RadixArk/Qwen3.8-Flash-Next-NVFP4"
+    "sources": [
+      "RadixArk/Qwen3.8-Flash-Next-NVFP4"
+    ],
+    "name": [
+      "mlp"
+    ]
   },
   {
     "type": "moe",
@@ -1700,7 +1765,12 @@
         "seed": 0
       }
     },
-    "name": "zai-org/GLM-5.2-FP8"
+    "sources": [
+      "zai-org/GLM-5.2-FP8"
+    ],
+    "name": [
+      "mlp"
+    ]
   },
   {
     "type": "moe",
@@ -1828,7 +1898,12 @@
         "seed": 0
       }
     },
-    "name": "nvidia/GLM-5.2-NVFP4"
+    "sources": [
+      "nvidia/GLM-5.2-NVFP4"
+    ],
+    "name": [
+      "mlp"
+    ]
   },
   {
     "type": "moe",
@@ -1948,7 +2023,12 @@
         "seed": 0
       }
     },
-    "name": "amd/GLM-5.2-MXFP4"
+    "sources": [
+      "amd/GLM-5.2-MXFP4"
+    ],
+    "name": [
+      "mlp"
+    ]
   },
   {
     "type": "moe",
@@ -2032,7 +2112,12 @@
         "seed": 0
       }
     },
-    "name": "moonshotai/Kimi-K3",
+    "sources": [
+      "moonshotai/Kimi-K3"
+    ],
+    "name": [
+      "mlp"
+    ],
     "recipes": [
       "kimik3-fp4-mi355x-vllm-agentic-mtp"
     ]
@@ -2155,7 +2240,12 @@
         "seed": 0
       }
     },
-    "name": "MiniMaxAI/MiniMax-M3-MXFP8"
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8"
+    ],
+    "name": [
+      "mlp"
+    ]
   },
   {
     "type": "moe",
@@ -2307,7 +2397,12 @@
         "seed": 0
       }
     },
-    "name": "nvidia/MiniMax-M3-NVFP4"
+    "sources": [
+      "nvidia/MiniMax-M3-NVFP4"
+    ],
+    "name": [
+      "mlp"
+    ]
   },
   {
     "type": "moe",
@@ -2427,7 +2522,12 @@
         "seed": 0
       }
     },
-    "name": "amd/MiniMax-M3-MXFP4"
+    "sources": [
+      "amd/MiniMax-M3-MXFP4"
+    ],
+    "name": [
+      "mlp"
+    ]
   },
   {
     "type": "moe",
@@ -2546,7 +2646,12 @@
         "seed": 0
       }
     },
-    "name": "deepseek-ai/DeepSeek-R1-0528:tokens256:natural"
+    "sources": [
+      "deepseek-ai/DeepSeek-R1-0528"
+    ],
+    "name": [
+      "mlp"
+    ]
   },
   {
     "type": "moe",
@@ -2665,7 +2770,12 @@
         "seed": 0
       }
     },
-    "name": "deepseek-ai/DeepSeek-R1-0528:tokens256:balanced"
+    "sources": [
+      "deepseek-ai/DeepSeek-R1-0528"
+    ],
+    "name": [
+      "mlp"
+    ]
   },
   {
     "type": "moe",
@@ -2787,7 +2897,12 @@
         "seed": 0
       }
     },
-    "name": "deepseek-ai/DeepSeek-R1-0528:tokens256:zipf1.2"
+    "sources": [
+      "deepseek-ai/DeepSeek-R1-0528"
+    ],
+    "name": [
+      "mlp"
+    ]
   },
   {
     "type": "moe",
@@ -2906,7 +3021,12 @@
         "seed": 0
       }
     },
-    "name": "deepseek-ai/DeepSeek-R1-0528:tokens256:single_hot"
+    "sources": [
+      "deepseek-ai/DeepSeek-R1-0528"
+    ],
+    "name": [
+      "mlp"
+    ]
   },
   {
     "type": "moe",
@@ -3022,7 +3142,12 @@
         "seed": 0
       }
     },
-    "name": "Qwen/Qwen3.5-397B-A17B-FP8:tokens256:natural"
+    "sources": [
+      "Qwen/Qwen3.5-397B-A17B-FP8"
+    ],
+    "name": [
+      "mlp"
+    ]
   },
   {
     "type": "moe",
@@ -3138,7 +3263,12 @@
         "seed": 0
       }
     },
-    "name": "Qwen/Qwen3.5-397B-A17B-FP8:tokens256:balanced"
+    "sources": [
+      "Qwen/Qwen3.5-397B-A17B-FP8"
+    ],
+    "name": [
+      "mlp"
+    ]
   },
   {
     "type": "moe",
@@ -3257,7 +3387,12 @@
         "seed": 0
       }
     },
-    "name": "Qwen/Qwen3.5-397B-A17B-FP8:tokens256:zipf1.2"
+    "sources": [
+      "Qwen/Qwen3.5-397B-A17B-FP8"
+    ],
+    "name": [
+      "mlp"
+    ]
   },
   {
     "type": "moe",
@@ -3373,6 +3508,11 @@
         "seed": 0
       }
     },
-    "name": "Qwen/Qwen3.5-397B-A17B-FP8:tokens256:single_hot"
+    "sources": [
+      "Qwen/Qwen3.5-397B-A17B-FP8"
+    ],
+    "name": [
+      "mlp"
+    ]
   }
 ]
