@@ -2,31 +2,33 @@
 
 **English** | [中文](CI_zh.md)
 
-[OperatorX Sweep](../../.github/workflows/operatorx-sweep.yml) runs manually on
-`h100-dgxc` (default), `h200-dgxc`, `b200-nscale`, `b300`, `gb200`, `gb300`,
-`mi300x`, `mi325x`, or `mi355x`.
+[OperatorX Sweep](../../.github/workflows/operatorx-sweep.yml) runs manually on the
+self-hosted runners carrying one of these labels, the labels InferenceX's benchmark
+workflows use: `cluster:h100-dgxc` (default), `cluster:h200-dgxc`, `cluster:b200-nscale`,
+`cluster:b300-dsxe`, `cluster:gb200-nv`, `cluster:gb300-nv`, `cluster:mi300x-amd`,
+`cluster:mi325x-amds` or `cluster:mi355x-amds`.
 Pull requests only run the hosted planner; GPU work requires `workflow_dispatch`.
 
-| GPU | Pool | GPUs per physical node | Image platform | Result cluster |
+| GPU | Runner label | GPUs per physical node | Image platform | Result cluster |
 | --- | --- | ---: | --- | --- |
-| H100 | `h100-dgxc` | 8 | `linux/amd64` | `h100_dgxc_8x` |
-| H200 | `h200-dgxc` | 8 | `linux/amd64` | `h200_dgxc_8x` |
-| B200 | `b200-nscale` | 8 | `linux/amd64` | `b200_nscale_8x` |
-| B300 | `b300` | 8 | `linux/amd64` | `b300_dsxe_8x` |
-| GB200 | `gb200` | 4 | `linux/arm64` | `gb200_nvl72_4x` |
-| GB300 | `gb300` | 4 | `linux/arm64` | `gb300_nvl72_4x` |
-| MI300X | `mi300x` | 8 | `linux/amd64` | `mi300x_amds_8x` |
-| MI325X | `mi325x` | 8 | `linux/amd64` | `mi325x_amds_8x` |
-| MI355X | `mi355x` | 8 | `linux/amd64` | `mi355x_8x` |
+| H100 | `cluster:h100-dgxc` | 8 | `linux/amd64` | `h100_dgxc_8x` |
+| H200 | `cluster:h200-dgxc` | 8 | `linux/amd64` | `h200_dgxc_8x` |
+| B200 | `cluster:b200-nscale` | 8 | `linux/amd64` | `b200_nscale_8x` |
+| B300 | `cluster:b300-dsxe` | 8 | `linux/amd64` | `b300_dsxe_8x` |
+| GB200 | `cluster:gb200-nv` | 4 | `linux/arm64` | `gb200_nvl72_4x` |
+| GB300 | `cluster:gb300-nv` | 4 | `linux/arm64` | `gb300_nvl72_4x` |
+| MI300X | `cluster:mi300x-amd` | 8 | `linux/amd64` | `mi300x_amds_8x` |
+| MI325X | `cluster:mi325x-amds` | 8 | `linux/amd64` | `mi325x_amds_8x` |
+| MI355X | `cluster:mi355x-amds` | 8 | `linux/amd64` | `mi355x_8x` |
 
 GB200/GB300 runs use one four-GPU tray, not the full NVL72 rack. Dense GEMM uses
-`world_sizes=1` on every pool; reported TFLOPS remains per GPU. Hardware facts come
+`world_sizes=1` on every runner; reported TFLOPS remains per GPU. Hardware facts come
 from CollectiveX's platform registry, and both planning and execution validate them.
 
 ## Dispatch
 
 Once GitHub has registered the workflow, select **OperatorX Sweep → Run workflow**,
-choose the source branch, and keep the initial defaults: `pool=h100-dgxc`,
+choose the source branch, and keep the initial defaults: `runner=cluster:h100-dgxc`,
 `backends=vllm`, `testlists=gemm`, `world_sizes=1`, `chunk_size=500`.
 This schedules the complete checked-in GEMM catalog in bounded shards (currently
 5,416 cases in 11 shards). The catalog includes formats unsupported by a selected
@@ -37,7 +39,7 @@ may need to reach the default branch before GitHub accepts manual dispatch.
 
 ```bash
 gh workflow run operatorx-sweep.yml --repo SemiAnalysisAI/InferenceX \
-  --ref <branch> -f pool=h100-dgxc -f backends=vllm \
+  --ref <branch> -f runner=cluster:h100-dgxc -f backends=vllm \
   -f testlists=gemm -f world_sizes=1 -f chunk_size=500
 ```
 
@@ -80,12 +82,12 @@ Do not infer that Blackwell-specific FP4 kernels work on Hopper.
   CPU architecture and run inside their allocation. B300 follows the inference
   launcher's compute-node import because its submit host lacks extraction space
   for this image. Enroot and GNU parallel use private temporary directories;
-  Enroot uses explicit registry URLs and any pool-configured cache path. Allocation
-  forwards account, QoS, and quarantined nodes; B300/GB pools retain their existing
+  Enroot uses explicit registry URLs and any platform-configured cache path. Allocation
+  forwards account, QoS, and quarantined nodes; B300/GB nodes retain their existing
   remap-root and memory settings. B300 leaves QoS selection to its partition/account,
   matching the inference launcher; the former `batch_1_qos` override is rejected
   by the current cluster. Its former excluded node names also do not exist in
-  this pool and have been removed; Slurm still honors drained nodes. GB300 retains
+  this cluster and have been removed; Slurm still honors drained nodes. GB300 retains
   its configured QoS and exclusions.
 - The launcher remains active through allocation, import, and execution. The
   allocation time limit is 45 minutes; Actions permits 70 minutes including
@@ -123,7 +125,7 @@ uv run --no-project --python 3.12 --with pytest --with pyyaml --with torch --wit
   python -m pytest experimental/operatorx/tests/ -q
 ```
 
-Real acceptance additionally requires a smoke run with artifacts on each selected pool, a
+Real acceptance additionally requires a smoke run with artifacts on each selected runner, a
 failed-shard rerun, and cancellation with confirmed allocation release. CPU
 checks alone do not establish GPU compatibility or cluster storage visibility.
 
@@ -133,9 +135,9 @@ is missing or failed. Its summary separates requested shapes from result rows
 (one shape may run on multiple backends).
 
 If cleanup failed, a single-shard dispatch can set `recovery_run_id` to the recent
-OperatorX run from the same pool. It downloads the execution artifacts and retries
+OperatorX run from the same runner. It downloads the execution artifacts and retries
 allocation/staging cleanup before allocating a new node. Recovery checks the run,
-pool, and private staging parent; do not select unrelated or old Slurm executions.
+runner, and private staging parent; do not select unrelated or old Slurm executions.
 
 `cleanup.log` records the active-job query used to confirm allocation release.
 It queries the current user’s job list because querying a removed job ID directly
@@ -143,7 +145,7 @@ can return a Slurm error even after that allocation has terminated.
 
 ## AMD execution
 
-`platforms.json` overlays the CollectiveX registry with the AMDS Slurm pools.
+`platforms.json` overlays the CollectiveX registry, per runner label, with the AMDS Slurm clusters.
 AMD accepts single-GPU `torch`/`vllm` GEMM. ROCm PyTorch uses HIP events through
 `torch.cuda`; FP8 selects FNUZ on gfx942 and OCP on gfx950. Unsupported formats
 remain explicit. Staging lives outside `_work`, below the shared runner root

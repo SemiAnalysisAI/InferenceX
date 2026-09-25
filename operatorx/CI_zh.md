@@ -2,31 +2,32 @@
 
 [English](CI.md) | **中文**
 
-[OperatorX Sweep](../../.github/workflows/operatorx-sweep.yml) 支持手动选择
-`h100-dgxc`（默认）、`h200-dgxc`、`b200-nscale`、`b300`、`gb200`、`gb300`、
-`mi300x`、`mi325x` 或 `mi355x`。
+[OperatorX Sweep](../../.github/workflows/operatorx-sweep.yml) 在带有以下标签之一的自托管运行器上手动运行（与 InferenceX 基准工作流使用的标签一致）：
+`cluster:h100-dgxc`（默认）、`cluster:h200-dgxc`、`cluster:b200-nscale`、
+`cluster:b300-dsxe`、`cluster:gb200-nv`、`cluster:gb300-nv`、`cluster:mi300x-amd`、
+`cluster:mi325x-amds` 或 `cluster:mi355x-amds`。
 PR 只在 GitHub 托管运行器上生成执行计划；GPU 执行必须通过 `workflow_dispatch` 触发。
 
-| GPU | 运行器池 | 每个物理节点的 GPU 数 | 镜像平台 | 结果集群标识 |
+| GPU | 运行器标签 | 每个物理节点的 GPU 数 | 镜像平台 | 结果集群标识 |
 | --- | --- | ---: | --- | --- |
-| H100 | `h100-dgxc` | 8 | `linux/amd64` | `h100_dgxc_8x` |
-| H200 | `h200-dgxc` | 8 | `linux/amd64` | `h200_dgxc_8x` |
-| B200 | `b200-nscale` | 8 | `linux/amd64` | `b200_nscale_8x` |
-| B300 | `b300` | 8 | `linux/amd64` | `b300_dsxe_8x` |
-| GB200 | `gb200` | 4 | `linux/arm64` | `gb200_nvl72_4x` |
-| GB300 | `gb300` | 4 | `linux/arm64` | `gb300_nvl72_4x` |
-| MI300X | `mi300x` | 8 | `linux/amd64` | `mi300x_amds_8x` |
-| MI325X | `mi325x` | 8 | `linux/amd64` | `mi325x_amds_8x` |
-| MI355X | `mi355x` | 8 | `linux/amd64` | `mi355x_8x` |
+| H100 | `cluster:h100-dgxc` | 8 | `linux/amd64` | `h100_dgxc_8x` |
+| H200 | `cluster:h200-dgxc` | 8 | `linux/amd64` | `h200_dgxc_8x` |
+| B200 | `cluster:b200-nscale` | 8 | `linux/amd64` | `b200_nscale_8x` |
+| B300 | `cluster:b300-dsxe` | 8 | `linux/amd64` | `b300_dsxe_8x` |
+| GB200 | `cluster:gb200-nv` | 4 | `linux/arm64` | `gb200_nvl72_4x` |
+| GB300 | `cluster:gb300-nv` | 4 | `linux/arm64` | `gb300_nvl72_4x` |
+| MI300X | `cluster:mi300x-amd` | 8 | `linux/amd64` | `mi300x_amds_8x` |
+| MI325X | `cluster:mi325x-amds` | 8 | `linux/amd64` | `mi325x_amds_8x` |
+| MI355X | `cluster:mi355x-amds` | 8 | `linux/amd64` | `mi355x_8x` |
 
-GB200/GB300 每次使用一个四卡计算托盘，不会占用整个 NVL72 机架。所有运行器池的
+GB200/GB300 每次使用一个四卡计算托盘，不会占用整个 NVL72 机架。所有运行器的
 稠密 GEMM 都使用 `world_sizes=1`，TFLOPS 始终按单卡计算。硬件信息来自 CollectiveX
 平台配置，并在规划和执行阶段分别校验。
 
 ## 触发运行
 
 GitHub 注册该工作流后，选择 **OperatorX Sweep → Run workflow**，指定源码分支，
-并保留初始默认值：`pool=h100-dgxc`、`backends=vllm`、`testlists=gemm`、
+并保留初始默认值：`runner=cluster:h100-dgxc`、`backends=vllm`、`testlists=gemm`、
 `world_sizes=1`、`chunk_size=500`。这会将完整的 GEMM 测试列表拆分为有界分片（目前为 5,416 个测试、11 个分片）。
 列表中包含所选后端不支持的精度，以及可能超出设备显存的形状。不支持的测试会保留
 在结果中；实际的内核和显存分配错误仍会使 CI 失败。运行完整列表不代表其中每个
@@ -35,7 +36,7 @@ GitHub 注册该工作流后，选择 **OperatorX Sweep → Run workflow**，指
 
 ```bash
 gh workflow run operatorx-sweep.yml --repo SemiAnalysisAI/InferenceX \
-  --ref <branch> -f pool=h100-dgxc -f backends=vllm \
+  --ref <branch> -f runner=cluster:h100-dgxc -f backends=vllm \
   -f testlists=gemm -f world_sizes=1 -f chunk_size=500
 ```
 
@@ -64,11 +65,11 @@ gh workflow run operatorx-sweep.yml --repo SemiAnalysisAI/InferenceX \
   digest。标签发生变化或无法解析时运行失败，避免错误标注测量所用镜像。
   规划和导入主机都必须能匿名读取镜像。导入前校验主机 CPU 架构，并在已分配的计算节点
   上执行。B300 提交主机缺少该镜像所需的解压空间，因此沿用推理启动器的计算节点导入方式。
-  Enroot 和 GNU parallel 使用私有临时目录；Enroot 使用显式 registry 地址及运行器池指定的
+  Enroot 和 GNU parallel 使用私有临时目录；Enroot 使用显式 registry 地址及平台配置指定的
   缓存路径。分配请求保留 account、QoS 和隔离节点
   列表，并沿用 B300/GB 平台的 remap-root 与内存设置。B300 与推理启动器一致，由
   partition/account 选择 QoS；原来的 `batch_1_qos` 覆盖值会被当前集群拒绝。
-  原配置中的隔离节点名称也不存在于该运行器池，已移除；Slurm 仍会遵循节点的 drain
+  原配置中的隔离节点名称也不存在于该集群，已移除；Slurm 仍会遵循节点的 drain
   状态。GB300 继续使用其配置的 QoS 和隔离节点列表。
 - 启动器等待分配、导入和执行完成。Slurm 分配限时 45 分钟；Actions 允许 70 分钟，
   包含排队与清理时间。Slurm 作业名与 Actions 运行器名称一致。
@@ -100,23 +101,23 @@ uv run --no-project --python 3.12 --with pytest --with pyyaml --with torch --wit
   python -m pytest experimental/operatorx/tests/ -q
 ```
 
-实际验收还需要在每个所选运行器池上执行带产物的 smoke 运行、失败分片重跑，以及确认释放分配的取消测试。
+实际验收还需要在每个所选运行器上执行带产物的 smoke 运行、失败分片重跑，以及确认释放分配的取消测试。
 CPU 检查不能证明 GPU 兼容性或集群存储可见性。
 
 最终覆盖汇总为每个请求分片选择最新产物尝试，保留此前尝试中已成功的分片，
 并在任一分片缺失或失败时报告失败。汇总区分请求形状数和结果行数，
 因为一个形状可能在多个后端上执行。
 
-清理失败后，可在单分片触发中将 `recovery_run_id` 设为同一运行器池中近期的 OperatorX
+清理失败后，可在单分片触发中将 `recovery_run_id` 设为同一运行器上近期的 OperatorX
 运行 ID。工作流下载执行产物，在申请新节点前重试分配与暂存清理。恢复流程校验运行、
-运行器池和私有暂存父目录；不要选择无关或过旧的 Slurm 执行。
+运行器和私有暂存父目录；不要选择无关或过旧的 Slurm 执行。
 
 `cleanup.log` 记录用于确认分配已释放的活动作业查询。查询使用当前用户的作业列表，
 因为直接查询已删除的作业 ID，即使分配已终止，也可能返回 Slurm 错误。
 
 ## AMD 执行
 
-`platforms.json` 在 CollectiveX 配置之上补充 AMDS Slurm 运行器池。
+`platforms.json` 在 CollectiveX 配置之上按运行器标签补充 AMDS Slurm 集群。
 AMD 接受单卡 `torch`/`vllm` GEMM。ROCm PyTorch 通过 `torch.cuda` 使用 HIP 事件计时；
 FP8 在 gfx942 上选择 FNUZ，在 gfx950 上选择 OCP。不支持的格式会明确记录。
 暂存目录由 `RUNNER_TEMP` 推导，位于共享运行器根目录下、`_work` 之外。容器不写入
