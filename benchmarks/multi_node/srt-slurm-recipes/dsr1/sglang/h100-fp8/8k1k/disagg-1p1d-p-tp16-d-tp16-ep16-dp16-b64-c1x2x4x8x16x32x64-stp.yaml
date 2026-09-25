@@ -108,3 +108,12 @@ benchmark:
   osl: 1024
   concurrencies: "1x2x4x8x16x32x64"
   req_rate: "inf"
+
+# SGLang fails when one TP rank finishes loading 480 s before another. Weights
+# come over NFS and a node reused from an earlier run loads from page cache, so
+# read them into every worker's cache first to even out the load.
+host_setup:
+  nodes: workers
+  timeout_seconds: 3600
+  commands:
+    - find /mnt/nfs/lustre/models/dsr1-fp8 -name '*.safetensors' -print0 | xargs -0 -P 16 -n 1 cat > /dev/null

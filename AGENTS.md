@@ -66,6 +66,15 @@ check_env_vars IS_MULTINODE MODEL_NAME PRECISION
 - Do not add launcher-name aliases to `runners/runtime_settings.sh` or elsewhere for scripts that no runner resolves to. A launcher without a pool is dead code; a pool without a launcher fails at job start.
 - When a pool is retired, delete its launcher in the same PR rather than keeping it as a fallback for another pool.
 
+## SRT Slurm cluster hooks
+
+- Put reusable host-check functions in `runners/srt-slurm/hooks/common.sh`. Sourcing it must only define functions, without running checks, changing environment variables, or initializing benchmarks. Cluster-only helpers stay beside their setup script.
+- Keep cluster-specific host prerequisites in `runners/srt-slurm/hooks/<cluster>/setup.sh`, invoked explicitly by the matching cluster profile's `default_host_setup`. These run after allocation, before services and workers start.
+- Hooks are only for checks and setup required by that cluster's hosts or fabric. Keep them small, workload-independent, and safe to run repeatedly. Prefer native srt-slurm configuration whenever it can express the requirement.
+- Do not put benchmark execution, model selection, engine flags, concurrency tuning, evaluation, result collection, or job orchestration in hooks. Those belong in recipes, benchmark scripts, or the existing orchestration layer.
+- Do not use hooks to patch engines or containers, bypass failed checks, or hide runtime bugs behind retries and ad hoc workarounds. Fix problems in the component that owns them.
+- Pass settings explicitly from the cluster profile. Scope mutations to the allocated nodes, preserve other jobs' resources, and register teardown for temporary state that needs restoring. See [cluster profiles](docs/configuration-procedures.md#cluster-profiles).
+
 ## SRT Slurm synthetic acceptance
 
 - **Do not hard-code synthetic acceptance lengths in SRT recipes, master configs, or launchers.** InferenceX automatically selects the measured value from [`golden_al_distribution/`](golden_al_distribution/) for speculative AgentX throughput runs. Do not add manual `SYNTHETIC_ACCEPTANCE_LENGTH`, vLLM `synthetic_acceptance_length`, SGLang `SGLANG_SIMULATE_ACC_LEN`, or TRT-LLM `TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS` settings.

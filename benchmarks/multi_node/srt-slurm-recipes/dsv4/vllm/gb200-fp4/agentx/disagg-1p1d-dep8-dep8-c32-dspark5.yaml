@@ -125,7 +125,7 @@ roles:
       no-enable-flashinfer-autotune: true
       block-size: 256
       max-cudagraph-capture-size: 384
-      gpu-memory-utilization: 0.9
+      gpu-memory-utilization: 0.85
       no-disable-hybrid-kv-cache-manager: true
       tokenizer-mode: deepseek_v4
       attention-config: '{"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true,"indexer_kv_dtype":"mxfp4"}'
