@@ -8921,3 +8921,12 @@
   description:
     - "Use BF16 EAGLE3 draft KV cache to avoid the FA4 FP8 descale startup failure."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3435
+
+- config-keys:
+    - minimaxm3-fp4-b200-vllm-agentic-mtp
+    - minimaxm3-fp4-b300-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Use FlashInfer with FP8 EAGLE3 draft KV cache on B200 and B300."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3435
