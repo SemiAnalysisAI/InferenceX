@@ -1,4 +1,4 @@
-"""Bind a native single-node SRT recipe to one fixed-sequence matrix point."""
+"""Bind a native single-node SRT recipe to one fixed-sequence or AgentX matrix point."""
 
 from __future__ import annotations
 
@@ -80,9 +80,10 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
     if environment["FRAMEWORK"] not in {"sglang", "trt", "atom"}:
         raise ValueError(f"Unsupported single-node framework: {environment['FRAMEWORK']!r}")
     spec = spec_parameters(role, engine)
-    if spec and spec["method"] not in {"eagle", "nextn", "mtp"}:
-        raise ValueError("Single-node SRT supports only native MTP or no speculation")
+    if spec and spec["method"] not in {"eagle", "nextn", "mtp", "dspark"}:
+        raise ValueError("Single-node SRT supports only native MTP, DSpark or no speculation")
     speculation = "mtp" if spec else "none"
+    agentic = environment["IS_AGENTIC"] == "1"
     expected = {
         "engine": (engine, SINGLE_NODE_ENGINES[environment["FRAMEWORK"]]),
         "model": (recipe["model"]["path"], f"hf:{environment['MODEL']}"),
@@ -96,22 +97,20 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
         "benchmark type": (benchmark["type"], "custom"),
         "benchmark MODEL": (workload["MODEL"], environment["MODEL"]),
         "SPEC_DECODING": (speculation, environment["SPEC_DECODING"]),
-        "USE_CHAT_TEMPLATE": (workload["USE_CHAT_TEMPLATE"], "true" if spec else "false"),
+        "AgentX client": (benchmark.get("command", "").endswith("srt_agentic.sh"), agentic),
     }
-    if "CONC" in workload:
-        expected["CONC"] = (str(workload["CONC"]), environment["CONC"])
+    if not agentic:
+        expected["USE_CHAT_TEMPLATE"] = (workload["USE_CHAT_TEMPLATE"], "true" if spec else "false")
+        for name in ("ISL", "OSL", "RANDOM_RANGE_RATIO"):
+            expected[name] = (str(workload[name]), environment[name])
+    # A variant that names its point, or the host budget it sizes, must match the matrix.
+    for name in ("CONC", "KV_OFFLOADING", "TOTAL_CPU_DRAM_GB"):
+        if name in workload:
+            expected[name] = (str(workload[name]), environment[name])
     if engine == "atom":
         # Native ATOM derives -tp from the aggregate worker's GPU allocation.
         expected["ATOM TP"] = (role["gpus"], int(environment["TP"]))
-    for name in ("ISL", "OSL", "RANDOM_RANGE_RATIO"):
-        expected[name] = (str(workload[name]), environment[name])
-    # Multi-node and AgentX workloads use their existing connector.
-    for name, value in {
-        "PP_SIZE": "1",
-        "DCP_SIZE": "1",
-        "PCP_SIZE": "1",
-        "IS_AGENTIC": "0",
-    }.items():
+    for name, value in {"PP_SIZE": "1", "DCP_SIZE": "1", "PCP_SIZE": "1"}.items():
         expected[name] = (environment[name], value)
     for name, (actual, wanted) in expected.items():
         if actual != wanted:
@@ -141,14 +140,18 @@ def runtime_arguments(config: str, environment: Mapping[str, str]) -> list[str]:
         # flags. Runtime option mappings therefore need individual leaf sets.
         for key, value in options.items():
             overrides += ["--set", f"srun_options.{key}={json.dumps(value)}"]
-    for name in (
+    agentic = environment["IS_AGENTIC"] == "1"
+    names = [
         "CONC",
         "RESULT_FILENAME",
         "GPU_MONITOR_INTERVAL",
         "RUN_EVAL",
         "EVAL_ONLY",
         "FRAMEWORK",
-    ):
+    ]
+    if agentic:
+        names += ["MODEL_PREFIX", "PRECISION", "DURATION", "TP", "PP_SIZE", "PCP_SIZE"]
+    for name in names:
         value = environment[name]
         if not value:
             raise ValueError(f"Missing runtime input: {name}")
@@ -157,6 +160,10 @@ def runtime_arguments(config: str, environment: Mapping[str, str]) -> list[str]:
         if name == "CONC" and name in recipe["benchmark"]["env"]:
             continue
         overrides += ["--set", f"benchmark.env.{name}={json.dumps(value)}"]
+    if agentic:
+        # The aggregated result lands where fixed-sequence results do.
+        overrides += ["--set", 'benchmark.env.AGENTIC_OUTPUT_DIR="/logs"']
+        return [*overrides, "--set", 'benchmark.env.RESULT_DIR="/logs/agentic"']
     if environment["EVAL_ONLY"] == "true":
         context = int(environment["MAX_MODEL_LEN"])
         if context <= 0:

@@ -2,12 +2,20 @@
 set -eo pipefail
 set -x
 
-# Client-only agentic trace replay for srt-slurm multinode jobs.
+# Client-only AgentX trace replay for single- and multi-node srt-slurm jobs.
 # srt-slurm owns server startup; this script runs as benchmark.type=custom
-# against the already-ready frontend on the head node.
+# against the already-ready frontend. Multi-node batches replay each CONC_LIST
+# point in turn; a single-node job replays its one CONC point.
 
-source "$(dirname "${BASH_SOURCE[0]}")/../benchmark_lib.sh" --validation-only
-check_env_vars INFMAX_CONTAINER_WORKSPACE RESULT_DIR EVAL_ONLY AIPERF_DRAIN_TIMEOUT_SECONDS AIPERF_DRAIN_POLL_SECONDS
+# Jobs inherit the legacy scripts' /workspace, which srt-slurm does not mount;
+# fall back to the repo mount this client runs from.
+if [[ ! -f "${INFMAX_CONTAINER_WORKSPACE:-}/benchmarks/benchmark_lib.sh" ]]; then
+    INFMAX_CONTAINER_WORKSPACE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+fi
+: "${IS_MULTINODE:=false}" "${PORT:=8000}"
+export INFMAX_CONTAINER_WORKSPACE IS_MULTINODE PORT
+source "$INFMAX_CONTAINER_WORKSPACE/benchmarks/benchmark_lib.sh" --validation-only
+check_env_vars RESULT_DIR EVAL_ONLY
 source "$INFMAX_CONTAINER_WORKSPACE/benchmarks/benchmark_lib.sh"
 
 if [[ -n "${SRT_FRONTEND_HOST:-}" ]]; then
@@ -41,9 +49,21 @@ if [[ -z "${AIPERF_SERVER_URL:-}" ]]; then
 fi
 echo "Using srt-slurm frontend endpoint: $AIPERF_SERVER_URL"
 
+# A router frontend does not re-export engine metrics; read them from each worker.
+if [[ -z "${AIPERF_SERVER_METRICS_URLS:-}" && "${SRTCTL_FRONTEND_TYPE:-}" != dynamo ]]; then
+    endpoints="${SRT_AGG_ENDPOINTS:-${SRT_PREFILL_ENDPOINTS:+$SRT_PREFILL_ENDPOINTS,}${SRT_DECODE_ENDPOINTS:-}}"
+    if [[ -n "${endpoints%,}" ]]; then
+        AIPERF_SERVER_METRICS_URLS=$(sed -E 's#([^,]+)#http://\1/metrics#g' <<< "${endpoints%,}")
+        export AIPERF_SERVER_METRICS_URLS
+    fi
+fi
+
 BASE_RESULT_DIR="${RESULT_DIR}"
 BASE_RESULT_FILENAME="$RESULT_FILENAME"
 read -r -a CONCURRENCIES <<< "${CONC_LIST:-$CONC}"
+if (( ${#CONCURRENCIES[@]} > 1 )); then
+    check_env_vars AIPERF_DRAIN_TIMEOUT_SECONDS AIPERF_DRAIN_POLL_SECONDS
+fi
 
 if [ "${#CONCURRENCIES[@]}" -eq 0 ]; then
     echo "ERROR: CONC_LIST must contain at least one concurrency" >&2
@@ -138,8 +158,11 @@ PY
 for index in "${!CONCURRENCIES[@]}"; do
     concurrency="${CONCURRENCIES[$index]}"
     export CONC="$concurrency"
-    export RESULT_FILENAME="${BASE_RESULT_FILENAME}_conc${concurrency}"
-    RESULT_DIR="${BASE_RESULT_DIR}/conc_${concurrency}"
+    # Multi-node collection expects per-point names; a single-node job keeps the workflow's.
+    if [[ -n "${CONC_LIST:-}" ]]; then
+        export RESULT_FILENAME="${BASE_RESULT_FILENAME}_conc${concurrency}"
+        RESULT_DIR="${BASE_RESULT_DIR}/conc_${concurrency}"
+    fi
 
     mkdir -p "$RESULT_DIR"
 

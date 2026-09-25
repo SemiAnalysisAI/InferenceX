@@ -150,7 +150,7 @@ apply_srt_recipe() {
         "$config" "$framework" -- "$@"
 }
 
-# One native submission per fixed-sequence matrix point, shared across Slurm pools.
+# One native submission per fixed-sequence or AgentX matrix point, shared across Slurm pools.
 launch_srt_single_node() {
     set -eo pipefail
     local profile="$1"
@@ -216,6 +216,10 @@ launch_srt_single_node() {
                 [[ -f "$artifact" ]] || continue
                 copy_to_workspace "$artifact" "$GITHUB_WORKSPACE/$(basename "$artifact")" || rc=1
             done
+            # AgentX uploads its raw replay artifacts and power window from results/.
+            if [[ -d "$SRT_JOB_OUTPUT/logs/agentic" ]]; then
+                cp -r "$SRT_JOB_OUTPUT/logs/agentic" "$GITHUB_WORKSPACE/results" || rc=1
+            fi
         fi
         exit "$rc"
     }

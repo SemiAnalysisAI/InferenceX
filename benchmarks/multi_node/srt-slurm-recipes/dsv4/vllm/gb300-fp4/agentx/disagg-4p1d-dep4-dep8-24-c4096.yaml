@@ -7,7 +7,7 @@ name: "svf-vllm-disagg-gb300-4p1d-dep4-dep8-24-c4096-agentic"
 # node. Sized for concurrency 4096 with deep_gemm_mega_moe on both workers.
 #
 # Divergence vs the 8k1k sibling:
-#   - benchmark.type:        sa-bench -> custom (hands off to agentic_srt.sh)
+#   - benchmark.type:        sa-bench -> custom (hands off to srt_agentic.sh)
 #   - max-model-len:         removed (let vLLM derive from model config; agentic
 #                              trajectories blow past any small explicit cap)
 #   - no-enable-prefix-caching: dropped (prefix caching MUST be on for
@@ -163,7 +163,7 @@ srun_options:
   mem: "0"
   # gb300-nv: pyxis maps the calling user (sa-shared) into the container as
   # uid 345200007. dpkg refuses to run without EUID 0 even though
-  # ENROOT_ROOTFS_WRITABLE=1 makes the rootfs writable, so the agentic_srt
+  # ENROOT_ROOTFS_WRITABLE=1 makes the rootfs writable, so the srt_agentic
   # apt-get install git step fails. --container-remap-root asks pyxis to
   # remap us to uid 0 inside the container. srt-slurm renders empty-string
   # values as flag-only srun args (see core/slurm.py:250).
@@ -171,7 +171,7 @@ srun_options:
 
 benchmark:
   type: custom
-  command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
+  command: bash /infmax-workspace/benchmarks/srt_agentic.sh
   env:
     INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
     RESULT_DIR: /logs/agentic

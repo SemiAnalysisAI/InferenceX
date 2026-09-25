@@ -7,7 +7,7 @@ name: "disagg-gb300-8p4d-dep8-dep16-c1920-mtp-kvoffload"
 # Uses the flat single-variant srtctl schema the agentic CI flow expects;
 # resources + backend (prefill/decode env + sglang_config) are normalized
 # from the Pareto run.
-# Concurrency is exported into agentic_srt.sh from the master-config conc-list.
+# Concurrency is exported into srt_agentic.sh from the master-config conc-list.
 
 model:
   path: "deepseek-v4-pro-0813"
@@ -225,7 +225,7 @@ srun_options:
 
 benchmark:
   type: custom
-  command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
+  command: bash /infmax-workspace/benchmarks/srt_agentic.sh
   env:
     INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
     RESULT_DIR: /logs/agentic

@@ -968,6 +968,8 @@ def _agentic_entries(
                     Fields.CONC.value: conc,
                 }
             )
+            if benchmark.get(Fields.SRT_RECIPE.value) is not None:
+                entry[Fields.SRT_RECIPE.value] = benchmark[Fields.SRT_RECIPE.value]
             exp_name = (
                 f"{model_code}_tp{tp}_conc{conc}_"
                 f"{agentic_kv_offload_suffix(kv_offloading, kv_offload_backend)}"

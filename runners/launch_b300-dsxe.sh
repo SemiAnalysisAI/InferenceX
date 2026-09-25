@@ -127,7 +127,7 @@ if [[ "$IS_MULTINODE" == true ]]; then
 elif [[ -n "${BENCH_SCRIPT_OVERRIDE:-}" ]]; then
     # SPEED-Bench collectors explicitly supply their script outside this migration.
     EXECUTION_PATH=script
-elif [[ "$IS_AGENTIC" == 0 ]]; then
+elif [[ "$IS_AGENTIC" == 0 || -n "${SRT_RECIPE:-}" ]]; then
     check_env_vars SRT_RECIPE
     EXECUTION_PATH=native-single-node
 fi

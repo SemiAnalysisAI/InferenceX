@@ -1,7 +1,7 @@
 # Agentic-coding SGLang aggregated recipe for GLM-5.2-NVFP4 on B200 at concurrency 4.
 #
 # One TP8 worker serves prefill and decode on a single node. The sweep matrix
-# supplies the concurrency list; agentic_srt.sh replays every point against
+# supplies the concurrency list; srt_agentic.sh replays every point against
 # this one server. Acceptance is pinned to the golden thinking-on AL for three
 # speculative tokens (golden_al_distribution/glm5.2_mtp.yaml).
 schema: 2
@@ -83,7 +83,7 @@ roles:
       enable-cache-report: true
 benchmark:
   type: custom
-  command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
+  command: bash /infmax-workspace/benchmarks/srt_agentic.sh
   env:
     INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
     RESULT_DIR: /logs/agentic

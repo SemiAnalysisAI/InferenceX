@@ -7,7 +7,7 @@ check_env_vars EVAL_ONLY IS_AGENTIC IS_MULTINODE KEEP_LOGS RUN_EVAL
 EXECUTION_PATH=agentic
 if [[ "$IS_MULTINODE" == true ]]; then
     EXECUTION_PATH=multinode
-elif [[ "$IS_AGENTIC" == 0 ]]; then
+elif [[ "$IS_AGENTIC" == 0 || -n "${SRT_RECIPE:-}" ]]; then
     check_env_vars SRT_RECIPE
     EXECUTION_PATH=native-single-node
 fi
