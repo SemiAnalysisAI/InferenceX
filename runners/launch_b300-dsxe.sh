@@ -212,7 +212,7 @@ export OSL="$OSL"
 SRTCTL_ROOT="${GITHUB_WORKSPACE}/${SRT_REPO_DIR}"
 echo "Creating srtslurm.yaml configuration..."
 write_srt_cluster_config b300-dsxe srtslurm.yaml "$USES_DCGM_POWER" \
-    --var MODEL_ROOT "$MODEL_ROOT" || exit 1
+    --var MODEL_ROOT "$MODEL_ROOT" --var SRT_DEFAULT_TIME_LIMIT "$SALLOC_TIME_LIMIT" || exit 1
 
 echo "Generated srtslurm.yaml:"
 cat srtslurm.yaml
