@@ -66,15 +66,24 @@ jobs:
           --directory "$RUNNER_TEMP/klaud"
           --review-batch-size "$REVIEW_BATCH_SIZE"
           --cooldown-hours "$CANDIDATE_COOLDOWN_HOURS"
+      - name: Install Claude Code 2.1.282
+        id: claude_cli
+        if: steps.prepare.outputs.has_candidates == 'true'
+        run: | # zizmor: ignore[adhoc-packages] Claude CLI and its native packages are pinned to 2.1.282
+          npm install --prefix "$RUNNER_TEMP/claude-code" --no-audit --no-fund @anthropic-ai/claude-code@2.1.282
+          claude_cli="$RUNNER_TEMP/claude-code/node_modules/.bin/claude"
+          test "$("$claude_cli" --version)" = "2.1.282 (Claude Code)"
+          echo "path=$claude_cli" >> "$GITHUB_OUTPUT"
       - name: Check for overlapping open PRs
         id: review
         if: steps.prepare.outputs.has_candidates == 'true'
         continue-on-error: true
-        uses: anthropics/claude-code-action@0d0e0876d3eaa933f45dc692f7a4312c83caf36f # v1.0.218
+        uses: anthropics/claude-code-action@9171db3e57d6a3140a37ddc2ba92788584e0ead6 # v1.0.234
         env:
           GH_TOKEN: ${{ github.token }}
           KLAUD_EVIDENCE: ${{ runner.temp }}/klaud
         with:
+          path_to_claude_code_executable: ${{ steps.claude_cli.outputs.path }}
           # Repository automation credential; the planner runs only on main.
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }} # zizmor: ignore[secrets-outside-env]
           github_token: ${{ github.token }}
