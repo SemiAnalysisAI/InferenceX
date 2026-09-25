@@ -8976,3 +8976,23 @@
     - "Resolve srtctl package versions on local disk for those pools and stop native compute setup on dependency-sync failure; shared runtime scope is retained for qualification."
     - "B200、GB200 和 GB300 根据选定原生配方启用必需功耗，保留回放并发和严格功耗审计；在本地磁盘解析包版本，原生计算节点依赖安装失败即停止。验收范围保留共享 runtime 的影响。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3429
+
+- config-keys:
+    - glm5.2-fp4-b200-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-b200-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Disable the opt-in FP8 NextN MoE conversion for GLM-5.2 NVFP4 AgentX on B200; rerun existing configurations with unchanged images and topology."
+    - "关闭 B200 GLM-5.2 NVFP4 AgentX 的可选 FP8 NextN MoE 转换，保留镜像和拓扑并重跑现有配置。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3400
+
+- config-keys:
+    - glm5.2-fp4-b200-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-b200-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Require native PowerX on every selected GLM-5.2 B200 AgentX performance cell, retaining flag 0, existing images, topology, concurrency and golden acceptance."
+    - "为 GLM-5.2 B200 所有选定 AgentX 性能点启用必需的原生 PowerX；保留 flag 0、镜像、拓扑、并发和 golden 验收。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3400

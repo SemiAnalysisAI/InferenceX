@@ -43,7 +43,7 @@ roles:
       SGLANG_HICACHE_DEBUG_LOG: '1'
       SGLANG_HICACHE_DEBUG_SAMPLE_RATE: '16384'
       SGLANG_MOE_NVFP4_DISPATCH: '1'
-      SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '1'
+      SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '0'
       SGLANG_CLIP_MAX_NEW_TOKENS_ESTIMATION: '8'
       PIP_BREAK_SYSTEM_PACKAGES: '1'
     args:
@@ -81,6 +81,17 @@ roles:
       watchdog-timeout: 1800
       enable-metrics: true
       enable-cache-report: true
+telemetry:
+  enabled: true
+  collect_interval_ms: 1000
+  storage_subdir: power
+  required: true
+  startup_timeout_seconds: 120
+  request_timeout_seconds: 2
+  collector_join_timeout_seconds: 12
+  dcgm_exporter:
+    container_image: dcgm-exporter
+    port: 9401
 benchmark:
   type: custom
   command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
