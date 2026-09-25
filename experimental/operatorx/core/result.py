@@ -27,8 +27,8 @@ def to_dict(r: Result) -> dict:
         "args": dict(r.op.args),
         "backend": r.op.backend,
     }
-    if r.op.name is not None:
-        op_dict["name"] = r.op.name
+    op_dict["name"] = list(r.op.name)
+    op_dict["sources"] = list(r.op.sources)
     out: dict = {
         "op": op_dict,
         "metrics": dict(r.metrics),
@@ -46,7 +46,8 @@ def _result_from_dict(d: dict) -> Result:
         type=d["op"]["type"],
         args=d["op"]["args"],
         backend=d["op"]["backend"],
-        name=d["op"].get("name"),
+        name=d["op"].get("name", ()),
+        sources=d["op"].get("sources", ()),
     )
     return Result(
         op=op,

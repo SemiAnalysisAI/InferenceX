@@ -241,7 +241,7 @@ def test_strict_benchmark_writes_actual_status(
     monkeypatch.setenv("WORLD_SIZE", "1")
     monkeypatch.setenv("RANK", "0")
     (tmp_path / "tiny.json").write_text(
-        json.dumps([{"type": "gemm", "args": {"m": 2}}])
+        json.dumps([{"type": "gemm", "args": {"m": 2}, "sources": [], "name": []}])
     )
     monkeypatch.setattr(
         sys,
@@ -270,10 +270,13 @@ def test_strict_benchmark_writes_actual_status(
 
 
 def test_testlist_loading_and_unknown_selection(tmp_path):
-    (tmp_path / "one.json").write_text('[{"type":"gemm","args":{"m":7}}]')
+    (tmp_path / "one.json").write_text('[{"type":"gemm","args":{"m":7},"sources":[],"name":[]}]')
     assert benchmark._load_testlists(["one"], tmp_path) == {
-        "one": [{"type": "gemm", "args": {"m": 7}}]
+        "one": [{"type": "gemm", "args": {"m": 7}, "sources": [], "name": []}]
     }
+    (tmp_path / "bare.json").write_text('[{"type":"gemm","args":{"m":7}}]')
+    with pytest.raises(SystemExit, match="'sources' list"):
+        benchmark._load_testlists(["bare"], tmp_path)
     with pytest.raises(SystemExit, match="unknown testlist"):
         benchmark._load_testlists(["two"], tmp_path)
 
