@@ -96,19 +96,11 @@ No SLURM is available. Run `python -m operatorx` directly on the TPU VM. Access 
 | Cluster id | Topology | Chips | ws range | Use for                                             |
 |------------|----------|-------|----------|-----------------------------------------------------|
 | `v6e_1x`   | 1×1      | 1     | 1        | Single-chip tests (gemm, moe). No collectives. |
-| `v6e_4x`   | 2×2      | 4     | 1–4      | Collectives + MoE-EP up to ws=4.                    |
+| `v6e_4x`   | 2×2      | 4     | 1–4      | Collectives up to ws=4.                             |
 | `v6e_pod`  | pod      | pod   | auto     | Multi-host v6e pod slice. Device count is auto-detected. |
 
 ```bash
 OPERATORX_CLUSTER=v6e_4x python -m operatorx
-```
-
-`moe_forward` on TPU emits `unsupported` unless Google's MaxText is installed
-on the VM (the `jax` backend works without it):
-
-```bash
-git clone https://github.com/AI-Hypercomputer/maxtext ~/maxtext
-pip install -e ~/maxtext
 ```
 
 ## Trainium — `trn3_16x`

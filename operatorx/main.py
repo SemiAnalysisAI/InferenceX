@@ -170,18 +170,6 @@ def main() -> int:
         args.testlist_dir,
     )
 
-    # submit_run.py fans out one job per (ep, routed_tp, shared_tp) MoE combo
-    # plus one job per ws for non-MoE ops, since sglang's group state is
-    # process-global. OPERATORX_MOE_PARALLELISM scopes a job to one combo;
-    # absence scopes it to non-MoE ops only.
-    moe_par_env = os.environ.get("OPERATORX_MOE_PARALLELISM")
-    moe_filter: tuple[int, int, int] | None = None
-    if moe_par_env:
-        parts = moe_par_env.split(":")
-        if len(parts) != 3:
-            raise SystemExit(f"OPERATORX_MOE_PARALLELISM must be ep:routed_tp:shared_tp; got {moe_par_env!r}")
-        moe_filter = (int(parts[0]), int(parts[1]), int(parts[2]))
-
     # Load runner
     runner_mod = importlib.import_module(f"operatorx.runners.{platform}.runner")
 
@@ -198,21 +186,6 @@ def main() -> int:
                 if ws != 1:
                     continue
             elif int(shape_ws) != ws:
-                continue
-            # Combo job (moe_filter set): only moe_forward shapes matching the
-            # parallelism triple. Non-combo job: everything except moe_forward.
-            if moe_filter is not None:
-                if shape["type"] != "moe_forward":
-                    continue
-                a = shape["args"]
-                triple = (
-                    a.get("expert_parallel_size", 1),
-                    a.get("routed_tensor_parallel_size", 1),
-                    a.get("shared_tensor_parallel_size", 1),
-                )
-                if triple != moe_filter:
-                    continue
-            elif shape["type"] == "moe_forward":
                 continue
             for backend in backends:
                 if not args.strict and shape["type"] not in backend_ops.get(backend, set()):
