@@ -54,6 +54,11 @@ base:
         SGLANG_ENABLE_FLASHINFER_GEMM: 'true'
         # Outlast AIPerf's 300 s client connection pool.
         SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
+  # The checkpoint loads from the shared HF cache on Lustre, which took over
+  # 30 minutes on a cold node.
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 5
   benchmark:
     type: custom
     command: bash /infmax-workspace/benchmarks/srt_agentic.sh
