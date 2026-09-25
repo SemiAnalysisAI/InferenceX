@@ -82,7 +82,7 @@ index 00000000..63776d64
 +        ;;
 +esac
 diff --git a/src/srtctl/backends/__init__.py b/src/srtctl/backends/__init__.py
-index f184d8f0..70a72ed3 100644
+index f184d8f0..d1bbca09 100644
 --- a/src/srtctl/backends/__init__.py
 +++ b/src/srtctl/backends/__init__.py
 @@ -13,11 +13,12 @@ from .atom import AtomProtocol, AtomServerConfig
@@ -99,18 +99,18 @@ index f184d8f0..70a72ed3 100644
  
  __all__ = [
      # ATOM
-@@ -35,6 +36,9 @@ __all__ = [
-     "SGLangProtocol",
-     "SGLangServerConfig",
-     "SrunConfig",
-+    # TileRT
-+    "TileRTProtocol",
-+    "TileRTServerConfig",
+@@ -38,6 +39,9 @@ __all__ = [
      # TRTLLM
      "TRTLLMProtocol",
      "TRTLLMServerConfig",
++    # TileRT
++    "TileRTProtocol",
++    "TileRTServerConfig",
+     # vLLM
+     "VLLMFailoverConfig",
+     "VLLMMooncakeKVStoreConfig",
 diff --git a/src/srtctl/backends/base.py b/src/srtctl/backends/base.py
-index 991fcd10..731bc763 100644
+index 991fcd10..39804243 100644
 --- a/src/srtctl/backends/base.py
 +++ b/src/srtctl/backends/base.py
 @@ -30,6 +30,7 @@ class BackendType(str, Enum):
@@ -121,7 +121,7 @@ index 991fcd10..731bc763 100644
  
  
  @dataclass
-@@ -54,6 +55,18 @@ class SrunConfig:
+@@ -54,6 +55,17 @@ class SrunConfig:
      sequential_node_start: int = 0
  
  
@@ -134,7 +134,6 @@ index 991fcd10..731bc763 100644
 +    mode: str
 +    log_name: str
 +    timeout_seconds: int = 21600
-+    gpus_per_task: int | None = None
 +
 +
  class BackendProtocol(Protocol):
@@ -142,10 +141,10 @@ index 991fcd10..731bc763 100644
  
 diff --git a/src/srtctl/backends/tilert.py b/src/srtctl/backends/tilert.py
 new file mode 100644
-index 00000000..55ecf82f
+index 00000000..03b5a9e3
 --- /dev/null
 +++ b/src/srtctl/backends/tilert.py
-@@ -0,0 +1,428 @@
+@@ -0,0 +1,427 @@
 +# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 +# SPDX-License-Identifier: Apache-2.0
 +
@@ -339,7 +338,6 @@ index 00000000..55ecf82f
 +            node=decode_leaders[0].node,
 +            mode="decode",
 +            log_name="tilert_weight_conversion.out",
-+            gpus_per_task=1,
 +        )
 +
 +    def allocate_endpoints(
@@ -602,7 +600,7 @@ index 8ac09dbf..a8445543 100644
                  logical_endpoints = self._logical_worker_endpoints()
              # Sidecars use native worker commands, so publish_metrics does not
 diff --git a/src/srtctl/cli/mixins/worker_stage.py b/src/srtctl/cli/mixins/worker_stage.py
-index 0a441438..d78fc681 100644
+index 0a441438..de98804d 100644
 --- a/src/srtctl/cli/mixins/worker_stage.py
 +++ b/src/srtctl/cli/mixins/worker_stage.py
 @@ -9,10 +9,12 @@ Handles starting backend worker processes (prefill/decode/agg).
@@ -626,7 +624,7 @@ index 0a441438..d78fc681 100644
      from srtctl.core.runtime import RuntimeContext
      from srtctl.core.schema import SrtConfig
      from srtctl.core.topology import Endpoint, Process
-@@ -206,6 +209,60 @@ class WorkerStageMixin:
+@@ -206,6 +209,58 @@ class WorkerStageMixin:
              environment.setdefault("SGLANG_PYSPY_DUMP_BEFORE_CRASH", "0")
          return environment
  
@@ -650,9 +648,6 @@ index 0a441438..d78fc681 100644
 +        environment = self._get_worker_environment_for_mode(preparation.mode)
 +        environment.update(self.runtime.environment)
 +        environment.update(self.backend.get_process_environment(process))
-+        options = dict(self.runtime.srun_options)
-+        if preparation.gpus_per_task is not None:
-+            options["gpus-per-task"] = str(preparation.gpus_per_task)
 +        log_path = self.runtime.log_dir / preparation.log_name
 +        step_name = "backend_preparation"
 +        proc = start_srun_process(
@@ -663,7 +658,8 @@ index 0a441438..d78fc681 100644
 +            container_mounts=self.runtime.container_mounts,
 +            env_to_set=environment,
 +            bash_preamble=self._build_worker_preamble(),
-+            srun_options=options,
++            # Like a worker step, the conversion inherits the node's GPUs.
++            srun_options=self.runtime.srun_options,
 +            het_group=process.het_group,
 +            step_name=step_name,
 +        )
@@ -687,7 +683,7 @@ index 0a441438..d78fc681 100644
      def _profiling_selects_process(self, process: "Process") -> bool:
          """Whether this physical process should be wrapped for profiling.
  
-@@ -381,7 +438,7 @@ class WorkerStageMixin:
+@@ -381,7 +436,7 @@ class WorkerStageMixin:
              command=cmd,
              nodelist=[process.node],
              output=str(worker_log),
