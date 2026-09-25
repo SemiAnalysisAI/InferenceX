@@ -8351,7 +8351,7 @@ dsv41flash-fp4-h100-sglang-agentic-dspark:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, ep: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 20] }
+      - { tp: 8, ep: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 20], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/sglang/h100-fp4-mtp/agentic.yaml }
 
 # Sweep supported DP8 attention alongside the retained plain TP8 curve.
 dsv41flash-fp4-h100-sglang-agentic-dspark-dpa:
@@ -8366,7 +8366,7 @@ dsv41flash-fp4-h100-sglang-agentic-dspark-dpa:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [4, 8, 16, 20] }
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [4, 8, 16, 20], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/sglang/h100-fp4-mtp/agentic.yaml }
 
 dsv41flash-fp4-gb200-vllm-agentic-dspark:
   image: vllm/vllm-openai:nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3
