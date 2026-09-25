@@ -44,6 +44,11 @@ base:
         # Row-sharded host Engram tables free HBM for the 1M-context working set.
         SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1'
         SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
+  # Cold weight loads from the shared HF cache plus graph capture outlast
+  # srt-slurm's 1800 s default, as they did the legacy one-hour deadline.
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 5
   benchmark:
     type: custom
     command: bash /infmax-workspace/benchmarks/srt_agentic.sh
