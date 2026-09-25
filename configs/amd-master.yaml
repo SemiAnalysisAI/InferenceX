@@ -1094,9 +1094,11 @@ qwen3.5-fp8-mi325x-sglang-mtp:
         spec-decoding: mtp
         srt-recipe: benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/mi325x-fp8-mtp/8k1k.yaml
 
+# DeepSeek-V4-Pro-0813 FP4 AgentX on one MI355X node using vLLM DSpark K6.
+# Keep the historical config key for changelog compatibility.
 dsv4-fp4-mi355x-vllm-agentic-mtp:
-  image: vllm/vllm-openai-rocm:nightly-eed1f3d0c6043bd494424a22443ee198dd56f657
-  model: deepseek-ai/DeepSeek-V4-Pro
+  image: vllm/vllm-openai-rocm:nightly-e9757321527ca1ecd514c07c1418dd2c53da3d19
+  model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
   runner: cluster:mi355x-amds
   precision: fp4
@@ -1106,13 +1108,14 @@ dsv4-fp4-mi355x-vllm-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.60
       search-space:
-      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4, 8, 16, 32, 40, 48, 56, 64] }
+      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 4, 8, 16, 32, 40, 48, 56, 64] }
       # Single-node validation found c128 to be the DPA throughput peak among
       # c64/c128/c256. Add c192 to locate the knee before the c256 regression.
-      - { tp: 8, ep: 1, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [64, 128, 192], router: { name: vllm-router, version: "0.1.14" } }
+      - { tp: 8, ep: 1, dp-attn: true, kv-offloading: none, spec-decoding: draft_model, conc-list: [64, 128, 192], router: { name: vllm-router, version: "0.1.14" } }
       # LMCache invalid-block recovery currently assumes one KV-cache group,
-      # while MTP creates two. Restore these points after the upstream hybrid
-      # KV recovery fix lands: https://github.com/vllm-project/vllm/pull/45497
+      # while speculative decoding creates two. Restore these points after the
+      # upstream hybrid KV recovery fix lands:
+      # https://github.com/vllm-project/vllm/pull/45497
 
 # DeepSeek-V4-Pro-0813 FP4 AgentX on one MI355X node using ATOM DSpark K6.
 # Both throughput bands use thinking_on golden AL 3.77; eval uses real
@@ -1375,14 +1378,7 @@ dsv41flash-fp4-mi325x-vllm-agentic-dspark:
       - { tp: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32] }
 
 dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark:
-  # Renamed from dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp when this arm
-  # moved from EAGLE/MTP to DSpark; earlier perf-changelog entries are recorded
-  # under the old key.
-  # 20260913 rather than 20260911: it is the first tag carrying the DSpark
-  # optimizations, which is the whole point of this arm. CLIENT_IMAGE stays at
-  # 20260907 -- that container only runs the load generator, so the
-  # server-side DSpark work does not reach it.
-  image: lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260913
+  image: lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260923
   model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
   runner: cluster:mi355x-amds
@@ -1395,9 +1391,11 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
+      # All arms use umbp-linker. DSpark gamma 6 at c4/c16 (golden AL peak), 3 above.
       - spec-decoding: "draft_model"
         conc-list: [ 4 ]
-        kv-offloading: none
+        kv-offloading: dram
+        kv-offload-backend: { name: umbp-linker }
         prefill:
           num-worker: 1
           tp: 4
@@ -1413,13 +1411,14 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark:
           dp-attn: false
           additional-settings:
           - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=3"
+          - "DECODE_MTP_SIZE=6"
       - spec-decoding: "draft_model"
         conc-list: [ 16 ]
-        kv-offloading: none
+        kv-offloading: dram
+        kv-offload-backend: { name: umbp-linker }
         prefill:
           num-worker: 1
-          tp: 8
+          tp: 4
           ep: 1
           dp-attn: false
           additional-settings:
@@ -1432,19 +1431,18 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark:
           dp-attn: false
           additional-settings:
           - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=3"
+          - "DECODE_MTP_SIZE=6"
       - spec-decoding: "draft_model"
         conc-list: [ 32, 48 ]
         kv-offloading: dram
-        kv-offload-backend: { name: hicache }
+        kv-offload-backend: { name: umbp-linker }
         prefill:
           num-worker: 1
-          tp: 8
+          tp: 4
           ep: 1
           dp-attn: false
           additional-settings:
           - "PREFILL_NODES=1"
-          - "HICACHE_RATIO=2.5"
           - "CLIENT_IMAGE=lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260907"
         decode:
           num-worker: 1
@@ -1455,7 +1453,7 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark:
           - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=3"
       - spec-decoding: "draft_model"
-        conc-list: [ 128, 192, 256 ]
+        conc-list: [ 192, 256 ]
         kv-offloading: dram
         kv-offload-backend: { name: umbp-linker }
         prefill:
@@ -1466,12 +1464,6 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark:
           additional-settings:
           - "PREFILL_NODES=1"
           - "PREFILL_ROUTER_POLICY=consistent_hashing"
-          # Rank 0 opens the barrier port only after umbp_standalone_server has
-          # registered the 1.5 TB tier for GPU access; that took 305.7s on n08-25
-          # but had not finished after 780s on n09-29, which killed job 29871 at
-          # the 900s default. Sit above UMBP_SA_WAIT_SECONDS (1800) so UMBP's own
-          # wait is the binding one rather than the barrier.
-          - "CONTAINER_BARRIER_TIMEOUT=2400"
           - "CLIENT_IMAGE=lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260907"
         decode:
           num-worker: 1
@@ -1507,7 +1499,7 @@ minimaxm3-fp4-mi355x-vllm-agentic-mtp:
 #     c4 intentionally overlaps both arms to compare the topology crossover.
 # SA selects the Pareto-optimal arm per concurrency point.
 glm5.2-fp4-mi355x-sglang-agentic-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260920
+  image: lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260923
   model: amd/GLM-5.2-MXFP4
   model-prefix: glm5.2
   runner: cluster:mi355x-amds
