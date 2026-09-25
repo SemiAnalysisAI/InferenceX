@@ -110,7 +110,7 @@ intersected with the current node inventory: retired names cannot invalidate the
 allocation, while exclusions of existing nodes are preserved. B300/GB300 use the
 partition default QoS, matching their serving launchers.
 
-`mi300x-tw` and `mi325x-tw` remain explicitly selectable legacy Docker pools,
-subject to runner availability. They bypass the Slurm priority scheduler because
+`mi325x-tw` remains an explicitly selectable legacy Docker pool,
+subject to runner availability. It bypasses the Slurm priority scheduler because
 Docker-only hosts cannot advertise Slurm node capacity. The default sweep uses
 the current `mi300x` and `mi325x` Slurm pools; their EP backend registries remain empty.
