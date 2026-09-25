@@ -85,7 +85,10 @@ apply() {
     fi
 }
 
-if ! apply; then
+# Capture apply's own status: under `if ! apply`, $? is the negation's 0.
+if apply; then
+    :
+else
     RC=$?
     if [[ $RC -eq 127 ]]; then
         log_warn "cannot adjust nr_hugepages (no root and no passwordless sudo)"
