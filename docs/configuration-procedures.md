@@ -25,7 +25,7 @@ Archive deprecated entries in [`configs/deprecated/amd-master.yaml`](../configs/
 
 ## Dependency submodules
 
-Git records the exact dependency commits. [`.gitmodules`](../.gitmodules) defines the repositories: AIPerf at `utils/aiperf`, NVIDIA srt-slurm at `utils/srt-slurm`. TileRT is a documented manual fork checkout in `setup_srt_slurm()`, not a separate submodule.
+Git records the exact dependency commits. [`.gitmodules`](../.gitmodules) defines the repositories: AIPerf at `utils/aiperf`, NVIDIA srt-slurm at `utils/srt-slurm`. Every srt-slurm job, TileRT included, applies the patches in [`runners/srt-slurm/patches/`](../runners/srt-slurm/patches/) on top of that pin.
 
 Initialize them before running benchmarks locally:
 

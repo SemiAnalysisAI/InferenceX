@@ -29,7 +29,7 @@ Shared runtime assets stay under `configs/` beside the model directories; they a
 
 ## TileRT exception
 
-For `FRAMEWORK=tilert`, `setup_srt_slurm()` fetches the SemiAnalysisAI/srt-slurm fork directly at `6bc3f306bdafa1edfb5dded2fcda8f1ccede1bde` into the job checkout. This is the schema-2 TileRT port in [SemiAnalysisAI/srt-slurm#13](https://github.com/SemiAnalysisAI/srt-slurm/pull/13). It is the only alternate checkout; its pin lives in that helper because the TileRT backend and router are absent from the NVIDIA pin. TileRT uses the same schema-2 recipe layout and native post-eval dispatch as NVIDIA. TileRT jobs need network access to the fork at setup time. Remove the fork exception once those features are available upstream.
+TileRT (`FRAMEWORK=tilert`) uses the same pinned NVIDIA checkout as every other framework. The TileRT backend and `tilert-router` frontend are absent from the NVIDIA pin, so [`runners/srt-slurm/patches/tilert-backend-router.patch`](../../../runners/srt-slurm/patches/tilert-backend-router.patch) adds them, ported from the SemiAnalysisAI/srt-slurm fork ([SemiAnalysisAI/srt-slurm#13](https://github.com/SemiAnalysisAI/srt-slurm/pull/13)). Remove the patch once those features are available upstream.
 
 ## Schema 2 and master configuration
 

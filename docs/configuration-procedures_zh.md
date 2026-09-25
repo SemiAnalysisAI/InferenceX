@@ -25,7 +25,7 @@
 
 ## 依赖子模块
 
-Git 记录依赖的精确提交版本。[`.gitmodules`](../.gitmodules) 定义各仓库：AIPerf 位于 `utils/aiperf`，NVIDIA srt-slurm 位于 `utils/srt-slurm`。TileRT 由 `setup_srt_slurm()` 手动检出已记录的分支仓库，不是独立子模块。
+Git 记录依赖的精确提交版本。[`.gitmodules`](../.gitmodules) 定义各仓库：AIPerf 位于 `utils/aiperf`，NVIDIA srt-slurm 位于 `utils/srt-slurm`。所有 srt-slurm 作业（包括 TileRT）都会在该固定版本之上应用 [`runners/srt-slurm/patches/`](../runners/srt-slurm/patches/) 中的补丁。
 
 本地运行基准测试前，先初始化子模块：
 

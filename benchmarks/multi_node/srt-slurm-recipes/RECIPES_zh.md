@@ -29,7 +29,7 @@ qwen3.5/trtllm/gb300-fp4/agentx/disagg-1p7d-dep4-tep8-c7-b1-mtp-kvoffload.yaml
 
 ## TileRT 例外
 
-当 `FRAMEWORK=tilert` 时，`setup_srt_slurm()` 直接从 SemiAnalysisAI/srt-slurm 分支仓库获取提交 `6bc3f306bdafa1edfb5dded2fcda8f1ccede1bde`，检出到作业目录。该版本为 [SemiAnalysisAI/srt-slurm#13](https://github.com/SemiAnalysisAI/srt-slurm/pull/13) 中支持 schema 2 的 TileRT 移植。这是唯一的备用检出路径；由于统一的 NVIDIA 版本尚未包含 TileRT 后端和路由器，该例外的固定提交在共享函数中指定。TileRT 使用与 NVIDIA 相同的 schema 2 配置结构和原生评估调度。TileRT 作业在准备阶段需要通过网络访问分支仓库。上游支持这些功能后，应删除此分支仓库例外。
+TileRT（`FRAMEWORK=tilert`）与其他框架使用相同的固定 NVIDIA 检出版本。固定的 NVIDIA 版本尚未包含 TileRT 后端和 `tilert-router` 前端，因此由 [`runners/srt-slurm/patches/tilert-backend-router.patch`](../../../runners/srt-slurm/patches/tilert-backend-router.patch) 添加，该补丁移植自 SemiAnalysisAI/srt-slurm 分支仓库（[SemiAnalysisAI/srt-slurm#13](https://github.com/SemiAnalysisAI/srt-slurm/pull/13)）。上游支持这些功能后，应删除此补丁。
 
 ## Schema 2 与主配置
 
