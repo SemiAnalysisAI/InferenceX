@@ -360,6 +360,98 @@ else
     echo "[WARN] $RDMA_CHECK_SCRIPT not found; skipping RDMA QoS/DCQCN pre-flight check"
 fi
 
+# =============================================================================
+# Hugepage Pre-flight
+# =============================================================================
+# Reclaim idle hugepages left reserved before starting containers (pages still
+# in use are kept); a leftover reservation can make HiCache host-pool sizing
+# fail at startup.
+# SKIP_HUGEPAGE_CHECK=1 to bypass. See hugepage_sanity.sh.
+HUGEPAGE_CHECK_SCRIPT="$(pwd)/helpers/hugepage_sanity.sh"
+if [[ "${SKIP_HUGEPAGE_CHECK:-0}" == "1" ]]; then
+    echo "[INFO] SKIP_HUGEPAGE_CHECK=1 set; skipping hugepage pre-flight check"
+elif [[ -f "$HUGEPAGE_CHECK_SCRIPT" ]]; then
+    echo "Checking hugepage reservations on all $NUM_NODES allocated node(s)..."
+    srun --nodelist="$SELECTED_NODELIST_SRUN" --ntasks=$NUM_NODES bash "$HUGEPAGE_CHECK_SCRIPT"
+    HUGEPAGE_CHECK_RC=$?
+    if [[ $HUGEPAGE_CHECK_RC -ne 0 ]]; then
+        echo "FATAL: hugepage pre-flight failed on one or more nodes (see [hugepage] lines above)."
+        echo "       Set SKIP_HUGEPAGE_CHECK=1 to bypass (HiCache host-pool sizing will likely fail later)."
+        exit 1
+    fi
+    echo "Hugepage pre-flight passed on all $NUM_NODES node(s)"
+else
+    echo "[WARN] $HUGEPAGE_CHECK_SCRIPT not found; skipping hugepage pre-flight check"
+fi
+
+# =============================================================================
+# UMBP DRAM-tier Hugepage Reservation (prefill nodes only)
+# =============================================================================
+# UMBP_DRAM_USE_HUGEPAGES=1 needs hugepages reserved on the host. Only prefill
+# nodes (the first PREFILL_NODES_PER_WORKER * xP of SELECTED_NODES, i.e.
+# NODE_RANK < NODE_OFFSET) run the UMBP tier, so decode nodes get none.
+UMBP_HUGEPAGE_NODELIST=""
+UMBP_HUGEPAGE_NODE_COUNT=0
+
+# Release this job's reservation; a no-op if nothing was reserved. Errors are
+# ignored, and the next job's pre-flight reclaims anything left behind.
+release_umbp_hugepages() {
+    if [[ -n "$UMBP_HUGEPAGE_NODELIST" ]]; then
+        echo "[${SLURM_JOB_ID}] releasing UMBP DRAM-tier hugepages on: $UMBP_HUGEPAGE_NODELIST"
+        srun --nodelist="$UMBP_HUGEPAGE_NODELIST" --ntasks="$UMBP_HUGEPAGE_NODE_COUNT" \
+            env HUGEPAGES_TARGET=0 bash "$HUGEPAGE_CHECK_SCRIPT" 2>/dev/null || true
+    fi
+}
+
+if [[ "${UMBP_DRAM_USE_HUGEPAGES:-0}" == "1" ]]; then
+    PREFILL_NODES_PER_WORKER=$(( (PREFILL_TP_SIZE + GPUS_PER_NODE - 1) / GPUS_PER_NODE ))
+    UMBP_NODE_OFFSET=$(( PREFILL_NODES_PER_WORKER * xP ))
+    if [[ "$UMBP_NODE_OFFSET" -lt 1 || "$UMBP_NODE_OFFSET" -gt "$NUM_NODES" ]]; then
+        echo "FATAL: computed prefill node count ($UMBP_NODE_OFFSET) for UMBP hugepage reservation is out of range (NUM_NODES=$NUM_NODES)." >&2
+        exit 1
+    fi
+    UMBP_PREFILL_NODES=$(echo "$SELECTED_NODES" | head -n "$UMBP_NODE_OFFSET")
+    UMBP_HUGEPAGE_NODELIST=$(echo "$UMBP_PREFILL_NODES" | paste -sd,)
+    UMBP_HUGEPAGE_NODE_COUNT="$UMBP_NODE_OFFSET"
+
+    # Same default as server_sglang.sh.
+    UMBP_TARGET_BYTES="${UMBP_DRAM_BYTES:-1500000000000}"
+
+    # Read Hugepagesize from a target node rather than assuming 2 MiB.
+    UMBP_FIRST_PREFILL_NODE=$(echo "$UMBP_PREFILL_NODES" | head -n 1)
+    UMBP_HUGEPAGESIZE_KB=$(srun --nodelist="$UMBP_FIRST_PREFILL_NODE" --ntasks=1 \
+        bash -c "awk '/^Hugepagesize:/{print \$2; exit}' /proc/meminfo")
+    if [[ -z "$UMBP_HUGEPAGESIZE_KB" || "$UMBP_HUGEPAGESIZE_KB" -le 0 ]]; then
+        echo "FATAL: could not read Hugepagesize from /proc/meminfo on $UMBP_FIRST_PREFILL_NODE." >&2
+        exit 1
+    fi
+
+    UMBP_PAGE_BYTES=$(( UMBP_HUGEPAGESIZE_KB * 1024 ))
+    UMBP_PAGES_NEEDED=$(( (UMBP_TARGET_BYTES + UMBP_PAGE_BYTES - 1) / UMBP_PAGE_BYTES ))
+    # +2% margin for UMBP allocator rounding/alignment.
+    UMBP_HUGEPAGE_MARGIN_PCT="${UMBP_HUGEPAGE_MARGIN_PCT:-2}"
+    UMBP_PAGES_TARGET=$(( (UMBP_PAGES_NEEDED * (100 + UMBP_HUGEPAGE_MARGIN_PCT) + 99) / 100 ))
+
+    echo "Reserving $UMBP_PAGES_TARGET hugepages (~$(( UMBP_PAGES_TARGET * UMBP_PAGE_BYTES / 1000 / 1000 / 1000 )) GB @ ${UMBP_HUGEPAGESIZE_KB} kB pages) for the UMBP DRAM tier on prefill node(s): $UMBP_HUGEPAGE_NODELIST"
+    # Grow tolerance is half the margin so the accepted floor stays above
+    # UMBP_PAGES_NEEDED; at equal percentages it would sink below it.
+    UMBP_HUGEPAGE_TOLERANCE_PCT=$(( UMBP_HUGEPAGE_MARGIN_PCT / 2 ))
+    [[ "$UMBP_HUGEPAGE_TOLERANCE_PCT" -lt 1 ]] && UMBP_HUGEPAGE_TOLERANCE_PCT=1
+    srun --nodelist="$UMBP_HUGEPAGE_NODELIST" --ntasks="$UMBP_HUGEPAGE_NODE_COUNT" \
+        env HUGEPAGES_TARGET="$UMBP_PAGES_TARGET" \
+            HUGEPAGE_GROW_TOLERANCE_PCT="$UMBP_HUGEPAGE_TOLERANCE_PCT" \
+            bash "$HUGEPAGE_CHECK_SCRIPT"
+    UMBP_HUGEPAGE_RC=$?
+    if [[ $UMBP_HUGEPAGE_RC -ne 0 ]]; then
+        echo "FATAL: could not reserve $UMBP_PAGES_TARGET hugepages for the UMBP DRAM tier on $UMBP_HUGEPAGE_NODELIST (see [hugepage] lines above)." >&2
+        echo "       Proceeding would silently demote UMBP to 4 KiB pages -- refusing rather than producing a mismatched result." >&2
+        # A short grow still leaves a partial reservation; release it.
+        release_umbp_hugepages
+        exit 1
+    fi
+    echo "UMBP hugepage reservation satisfied on $UMBP_HUGEPAGE_NODELIST"
+fi
+
 cleanup() {
   echo "[${SLURM_JOB_ID}] termination received on $(hostname); cleaning up container + stale logs..."
   # Backstop: on scancel/timeout/step-hang the foreground `exec docker run`
@@ -370,6 +462,8 @@ cleanup() {
   srun --nodelist="$SELECTED_NODELIST_SRUN" \
     bash -c 'eval "$DOCKER_CMD_DETECT"; $DOCKER_CMD rm -f '"$DOCKER_CONT_NAME"' 2>/dev/null || true' 2>/dev/null || true
   rm -rf ${SLURM_SUBMIT_DIR}/logs 2>/dev/null || true
+  release_umbp_hugepages
+
   echo "[${SLURM_JOB_ID}] cleanup done."
 }
 
@@ -469,6 +563,7 @@ DOCKER_ENV_COMMON=(
     # need a route in. Empty for every other arm, and server_sglang.sh only
     # reads them on the umbp-linker branch, so this is inert elsewhere.
     -e UMBP_DRAM_BYTES=\${UMBP_DRAM_BYTES:-}
+    -e UMBP_DRAM_CEILING_GB=\${UMBP_DRAM_CEILING_GB:-}
     -e UMBP_DRAM_USE_HUGEPAGES=\${UMBP_DRAM_USE_HUGEPAGES:-}
     -e UMBP_MAX_TOTAL_TOKENS=\${UMBP_MAX_TOTAL_TOKENS:-}
     -e UMBP_SA_WAIT_SECONDS=\${UMBP_SA_WAIT_SECONDS:-}
@@ -847,5 +942,8 @@ if [[ -d "$SHARED_JOB_LOGS" ]]; then
     sudo chown -R "$(id -u):$(id -g)" "$SHARED_JOB_LOGS" 2>/dev/null || true
     chmod -R a+rwX "$SHARED_JOB_LOGS" 2>/dev/null || true
 fi
+
+# cleanup() only runs on INT/TERM/HUP, so release here on normal exit.
+release_umbp_hugepages
 
 exit "$SERVER_SRUN_RC"
