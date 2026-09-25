@@ -19,6 +19,9 @@ import yaml
 
 GOLDEN_DIR = Path(__file__).resolve().parents[2] / "golden_al_distribution"
 ENGINES = {
+    "sglang": "sglang",
+    "sglang-disagg": "sglang",
+    "vllm-disagg": "vllm",
     "vllm": "vllm",
     "dynamo-vllm": "vllm",
     "dynamo-sglang": "sglang",
@@ -35,6 +38,14 @@ TRT_VARIABLE = "TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS"
 
 def spec_parameters(role: Mapping[str, Any], engine: str) -> dict[str, Any]:
     args = role.get("args", {})
+    if engine == "atom":
+        method = args.get("method")
+        if not method:
+            return {}
+        return {
+            "method": str(method).lower(),
+            "num_speculative_tokens": args.get("num-speculative-tokens"),
+        }
     if engine == "vllm":
         raw = args.get("speculative-config")
         if raw is None:
@@ -226,7 +237,7 @@ def plan_commands(
     """Build native arguments for every selected variant before submitting jobs."""
     command = ["srtctl", "apply", *arguments]
     if framework not in ENGINES:
-        return [command]
+        return [[*command, "--file", config]]
     from srtctl.core.overrides import apply_overrides_to_recipe, parse_overrides
 
     path, _, selector = config.partition(":")
