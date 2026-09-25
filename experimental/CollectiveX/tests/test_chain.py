@@ -27,6 +27,10 @@ import ep_harness  # noqa: E402
 import summarize  # noqa: E402
 
 
+import ep_oracle  # noqa: E402
+
+import ep_results  # noqa: E402
+
 # ---- from test_chain_period.py ----------------------------------------------------
 # Per-operation device cost in the stub clock (ms). Distinct primes so that any window
 # reports a sum unique to the operations it actually brackets.
@@ -343,14 +347,14 @@ class ChainComponentContract(unittest.TestCase):
         # Every pre-chain row also flows through `_component`, so omitting the override must
         # reproduce the old strings exactly or the chain reclassifies unrelated rows.
         percentiles = {"p50": 1.0, "p90": 2.0, "p95": 3.0, "p99": 4.0}
-        self.assertEqual(ep_harness._component(percentiles, 3)["origin"], "measured")
+        self.assertEqual(ep_results._component(percentiles, 3)["origin"], "measured")
         self.assertEqual(
-            ep_harness._component(percentiles, 0, derived=True)["origin"],
+            ep_results._component(percentiles, 0, derived=True)["origin"],
             "derived-percentile-sum",
         )
-        self.assertIsNone(ep_harness._component(None, 0)["origin"])
+        self.assertIsNone(ep_results._component(None, 0)["origin"])
 
-        overridden = ep_harness._component(percentiles, 3, origin="chained-median")
+        overridden = ep_results._component(percentiles, 3, origin="chained-median")
         self.assertEqual(overridden["origin"], "chained-median")
         self.assertEqual(overridden["availability"], "measured")
         self.assertEqual(overridden["percentiles_us"], percentiles)
@@ -590,11 +594,11 @@ def _sweep(fail_indices, error_indices, chain_error, backend_factory=None,
         events.append(("oracle", problem.T))
         oracle_calls.append((index, problem.T, (problem, *rest)))
         passed = index not in fail_indices
-        return ep_harness._oracle_report(
+        return ep_oracle._oracle_report(
             passed=passed,
             receive_count=8,
             max_elementwise_relative_error=chain_error if index in error_indices else 0.0,
-            checks=dict.fromkeys(ep_harness._ORACLE_CHECKS, passed),
+            checks=dict.fromkeys(ep_oracle._ORACLE_CHECKS, passed),
         )
 
     def fake_output_match(chained, drained):

@@ -14,6 +14,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path[:0] = [HERE, os.path.dirname(HERE)]
 
+import ep_case  # noqa: E402
 import ep_harness  # noqa: E402  (stdlib-only; safe before torch)
 
 
@@ -41,7 +42,7 @@ def _loaded_collective_version() -> str | None:
         library = ctypes.CDLL(paths.pop())
         if library.ncclGetVersion(ctypes.byref(version)) != 0:
             return None
-        return ep_harness.format_collective_version(version.value)
+        return ep_case.format_collective_version(version.value)
     except (AttributeError, OSError):
         return None
 
@@ -61,10 +62,10 @@ def _runtime_info(torch, *, vendor: str) -> dict:
 def main() -> int:
     ap = argparse.ArgumentParser(description="CollectiveX EP dispatch/combine sweep")
     ap.add_argument("--backend", required=True, choices=list(BACKENDS))
-    ep_harness.add_common_args(ap)
+    ep_case.add_common_args(ap)
     args = ap.parse_args()
 
-    if not ep_harness.is_case_id(args.case_id):
+    if not ep_case.is_case_id(args.case_id):
         print(f"ERROR: invalid native case ID {args.case_id!r}", file=sys.stderr)
         return 2
     # Seed and timing arrive baked into the case argv from the single

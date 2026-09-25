@@ -423,6 +423,75 @@ class TestSingleHandle(unittest.TestCase):
         self.assertEqual(h.combine_in_t, list(range(7)))
         self.assertLess(len(h.combine_in_t), len(b._recv_x))
 
+class OracleCombineAdapters(unittest.TestCase):
+    def test_legacy_oracle_preserves_each_normal_transport_shape(self):
+        import importlib
+        import torch
+
+        _legacy_module()
+        vendor = types.ModuleType("deep_ep")
+        vendor.Buffer = vendor.Config = vendor.ElasticBuffer = type("Buffer", (), {})
+        transformed = torch.tensor([[1, 2], [3, 4]], dtype=torch.float32)
+        for name, class_name, expected in (
+            ("ep_deepep_v2", "DeepEPV2Backend", [[1, 2], [3, 4], [0, 0]]),
+            ("ep_uccl", "UCCLEPBackend", [[1, 2], [3, 4]]),
+        ):
+            with self.subTest(backend=name), mock.patch.dict(sys.modules, {"deep_ep": vendor}):
+                module = importlib.import_module(name)
+                adapter = getattr(module, class_name).__new__(getattr(module, class_name))
+                adapter.mode, adapter._fp8 = "normal", False
+                adapter.num_sms, adapter.num_qps, adapter.combine_config = 8, 3, object()
+
+                def combine(*args, **kwargs):
+                    values = args[0] if args else kwargs["x"]
+                    return values.clone(), None, None
+
+                adapter.buffer = types.SimpleNamespace(combine=combine)
+                handle = types.SimpleNamespace(
+                    recv_x=torch.full((3, 2), 99, dtype=torch.bfloat16), handle=object(),
+                )
+                with mock.patch.object(module, "torch", torch):
+                    output = adapter.combine_transformed(object(), handle, transformed)
+                self.assertEqual(output.tolist(), expected)
+                self.assertEqual(output.dtype, torch.bfloat16)
+
+    def test_nccl_oracle_keeps_the_workspace_and_completion_contract(self):
+        import torch
+
+        for low_latency in (False, True):
+            with self.subTest(low_latency=low_latency):
+                adapter = ep_nccl.NCCLEPBackend.__new__(ep_nccl.NCCLEPBackend)
+                adapter._ll, adapter._combine_cfg = low_latency, object()
+                adapter._stream, adapter._t = lambda: 0, lambda tensor: tensor
+                adapter._recv_x = torch.full((3, 2), 99, dtype=torch.bfloat16)
+                adapter._combine_scratch = torch.full((2, 2, 2), 99, dtype=torch.bfloat16)
+                output = torch.empty((2, 2), dtype=torch.bfloat16)
+                completed = []
+
+                def combine(inputs, outputs, **kwargs):
+                    values = inputs.tokens.sum(dim=0) if low_latency else inputs.tokens
+                    outputs.tokens.copy_(values)
+
+                handle = types.SimpleNamespace(
+                    slot_expert=torch.tensor([0, 1]), slot_j=torch.tensor([0, 1]),
+                    combine_in_t=adapter._recv_x[:2], combine_weights_t=object(),
+                    out=output, out_t=output,
+                    handle=types.SimpleNamespace(
+                        combine=combine, complete=lambda **kwargs: completed.append(True),
+                    ),
+                )
+                with mock.patch.object(ep_nccl, "torch", torch), \
+                        mock.patch.object(ep_nccl, "CombineInputs", types.SimpleNamespace), \
+                        mock.patch.object(ep_nccl, "CombineOutputs", types.SimpleNamespace):
+                    result = adapter.combine_transformed(
+                        types.SimpleNamespace(T=2), handle, torch.tensor([[1, 2], [3, 4]]),
+                    )
+                self.assertEqual(result.tolist(), [[1, 2], [3, 4]])
+                self.assertEqual(completed, [True])
+                unused = adapter._combine_scratch[0, 1] if low_latency else adapter._recv_x[2]
+                self.assertEqual(unused.tolist(), [0, 0])
+
+
 def _legacy_module():
     """BF16 adapter tests need tensor arithmetic, but do not compile a GPU dequantizer."""
     import torch

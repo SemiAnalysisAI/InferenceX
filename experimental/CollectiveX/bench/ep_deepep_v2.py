@@ -368,14 +368,8 @@ class DeepEPV2Backend(LegacyBufferOperations, EPBackend):
         else:
             combine_input = torch.zeros_like(h.recv_x)
         combine_input[: transformed.shape[0]].copy_(transformed.to(combine_input.dtype))
-        combined, _, _ = self.buffer.combine(
-            combine_input,
-            handle=h.handle,
-            num_sms=self.num_sms,
-            num_qps=self.num_qps,
-            async_with_compute_stream=False,
-        )
-        return combined
+        h.combine_input = combine_input
+        return self.combine(p, h)
 
     def recv_tokens(self, h):
         if self.mode == "low-latency":

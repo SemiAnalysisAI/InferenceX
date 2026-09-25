@@ -40,7 +40,6 @@ phase is still covered — `normal` runs the full decode and prefill ladders.
 """
 from __future__ import annotations
 
-import re
 import types
 
 import torch

@@ -258,8 +258,6 @@ class UCCLEPBackend(LegacyBufferOperations, EPBackend):
             is_intranode=not self._internode,
         )
 
-    # ---- FP8 encode/dequant hooks ----------------------------------------------------------
-
     # ---- transport contract ----------------------------------------------------------------
 
     def dispatch(self, p):
@@ -351,13 +349,8 @@ class UCCLEPBackend(LegacyBufferOperations, EPBackend):
         # `transformed` is the oracle's per-received-token combine input [num_recv, hidden]
         # (already summed over the top-k axis) — exactly the per-token buffer legacy combine
         # consumes; combine then sums those per-token aggregates across ranks (unweighted).
-        combined, _weights, _event = self.buffer.combine(
-            x=transformed.to(torch.bfloat16),
-            handle=h.handle,
-            config=self.combine_config,
-            async_finish=False,
-        )
-        return combined
+        h.combine_input = transformed.to(torch.bfloat16)
+        return self.combine(p, h)
 
     def recv_tokens(self, h):
         if self.mode == "low-latency":

@@ -525,15 +525,8 @@ class NCCLEPBackend(EPBackend):
         combine_buf = self._combine_scratch
         combine_buf.zero_()
         combine_buf[h.slot_expert, h.slot_j] = transformed.to(combine_buf.dtype)
-        stream = self._stream()
-        h.handle.combine(
-            CombineInputs(tokens=self._t(combine_buf)),
-            CombineOutputs(tokens=h.out_t, topk_weights=h.combine_weights_t),
-            config=self._combine_cfg,
-            stream=stream,
-        )
-        self._finish(h, stream)
-        return h.out[: p.T]
+        h.combine_input = self._t(combine_buf)
+        return self.combine(p, h)[: p.T]
 
     def combine_transformed(self, p, h, transformed):
         if self._ll:
@@ -546,16 +539,9 @@ class NCCLEPBackend(EPBackend):
         # destination ranks back to each token's home rank.
         self._recv_x.zero_()
         self._recv_x[: transformed.shape[0]].copy_(transformed.to(self._recv_x.dtype))
-        stream = self._stream()
-        h.handle.combine(
-            # Same sliced input the timed path uses, so the two cannot diverge in shape.
-            CombineInputs(tokens=h.combine_in_t),
-            CombineOutputs(tokens=h.out_t),
-            config=self._combine_cfg,
-            stream=stream,
-        )
-        self._finish(h, stream)
-        return h.out
+        # Same sliced input the timed path uses, so the two cannot diverge in shape.
+        h.combine_input = h.combine_in_t
+        return self.combine(p, h)
 
     def finalize(self, rc):
         """Clean teardown: NCCL EP's Device-API objects tear down without MoRI's post-

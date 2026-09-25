@@ -15,13 +15,14 @@ sys.path[:0] = [str(Path(__file__).resolve().parents[1])]
 import bandwidth  # noqa: E402
 
 
+import ep_oracle  # noqa: E402
+
 # ---- from test_ll_oracle.py -------------------------------------------------------
 try:
     import torch as _torch
 except Exception:  # torch is absent in the plain CPU test image; runs on GPU CI
     _torch = None
 
-import ep_harness  # noqa: E402  (stdlib-only at import)
 
 
 class _FakeLLBackend:
@@ -105,7 +106,7 @@ class LowLatencyOracleEndToEnd(unittest.TestCase):
             transformed[i] for i in range(int(h.slot_token.numel()))
         )  # wrong shape/values on purpose
         with mock.patch.object(torch.cuda, "synchronize", lambda *a, **k: None):
-            report = ep_harness._run_ll_expert_oracle(
+            report = ep_oracle._run_ll_expert_oracle(
                 torch, routing, backend, problem, idx_g, w_g,
                 rank=0, experts_per_rank=experts, scale_up_domain=1, seed=67,
             )
@@ -164,7 +165,7 @@ class SharedOracleLifecycle(unittest.TestCase):
         backend.inspect_dispatch = inspect
         backend.stage, backend.combine = stage, combine
         with mock.patch.object(torch.cuda, "synchronize", lambda: None):
-            report = ep_harness._run_expert_oracle(
+            report = ep_oracle._run_expert_oracle(
                 torch, routing, backend, problem, indices, weights,
                 rank=0, experts_per_rank=3, scale_up_domain=1, seed=67,
             )

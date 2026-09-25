@@ -1,22 +1,15 @@
 """Coordinate input validation, correctness passes, and EP measurements."""
 from __future__ import annotations
 
-# Keep the existing import surface for callers while the implementation lives with its owner.
-from ep_case import add_common_args, case_id, format_collective_version, is_case_id, token_ladder
 from ep_measurement import (
-    PointSamples, _gather_scalar, _pcts, _reduce_int, _reduce_vec,
-    _reduce_vec_median_spread, _same_tensors_across_ranks, percentile, time_us, trial_order,
+    PointSamples, _gather_scalar, _pcts, _reduce_vec, _reduce_vec_median_spread,
+    _same_tensors_across_ranks, trial_order,
 )
 from ep_oracle import (
-    COMBINE_MAG_FLOOR, COMBINE_REL_TOL, MODE_ALLOWED_SEMANTICS, ORACLE_MODELED_CONTRACTS,
-    _ORACLE_CHECKS, _chain_output_matches, _expected_transformed_combine,
-    _expert_transform, _oracle_report, _run_expert_oracle, _run_ll_expert_oracle,
-    _topk_slot_tree_combine,
+    MODE_ALLOWED_SEMANTICS, ORACLE_MODELED_CONTRACTS, _chain_output_matches,
+    _run_expert_oracle,
 )
-from ep_results import (
-    CHAIN_FLOOR_ORIGIN, CHAIN_PERIOD_ORIGIN, _component, kernel_generation,
-    logical_byte_provenance, write_results,
-)
+from ep_results import write_results
 
 # Workload and timing values arrive from configs/sweep.json through the matrix.
 CONDITIONING_ROUNDS_PER_SHAPE = 8
@@ -326,7 +319,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         # should not publish a period from it.
         chain_output_ok = bool(gate[T]["chain_output_local_ok"])
         gate[T].update({
-            "input_unchanged": input_unchanged,
             "local_ok": int(
                 pre["passed"] and post["passed"] and chain_ok and input_unchanged
                 and (chain_output_ok or not chain_output_applicable)
@@ -337,7 +329,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                 post["max_elementwise_relative_error"] or 0.0,
                 chain_oracle["max_elementwise_relative_error"] or 0.0,
             ),
-            "oracle_post": post,
         })
 
 

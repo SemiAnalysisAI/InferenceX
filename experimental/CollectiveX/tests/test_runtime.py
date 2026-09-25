@@ -27,7 +27,10 @@ sys.path.insert(0, str(BENCH))
 import probe  # noqa: E402
 import config  # noqa: E402
 import stage  # noqa: E402
-import ep_harness  # noqa: E402  (stdlib-only at module top)
+import ep_oracle  # noqa: E402
+
+import ep_results  # noqa: E402
+
 import ep_backend  # noqa: E402  (torch is imported lazily inside its methods)
 
 
@@ -594,10 +597,10 @@ class CaseArgvContract(unittest.TestCase):
 # per-direction byte counts), so its arithmetic and guards are pinned here on CPU.
 class LogicalByteProvenanceTests(unittest.TestCase):
     def test_fp8_dispatch_and_bf16_combine_have_different_byte_counts(self) -> None:
-        dispatch = ep_harness.logical_byte_provenance(
+        dispatch = ep_results.logical_byte_provenance(
             logical_copies=10, hidden=128, value_bytes=1, scale_bytes_per_copy=8,
         )
-        combine = ep_harness.logical_byte_provenance(logical_copies=10, hidden=128)
+        combine = ep_results.logical_byte_provenance(logical_copies=10, hidden=128)
         self.assertEqual(dispatch, {
             "activation_data_bytes": 1280, "scale_bytes": 80, "total_logical_bytes": 1360,
         })
@@ -614,7 +617,7 @@ class LogicalByteProvenanceTests(unittest.TestCase):
             {"logical_copies": 1, "hidden": 8, "scale_bytes_per_copy": -1},
         ):
             with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
-                ep_harness.logical_byte_provenance(**kwargs)
+                ep_results.logical_byte_provenance(**kwargs)
 
 
 try:
@@ -640,10 +643,10 @@ class WeightedCombineSemanticsTests(unittest.TestCase):
         torch = _torch
         payload = torch.randn(3, 64, dtype=torch.bfloat16)
         ids = torch.tensor([[2, -1], [5, -1], [7, -1]], dtype=torch.int64)
-        low = ep_harness._expert_transform(
+        low = ep_oracle._expert_transform(
             torch, payload, ids, torch.full((3, 2), 0.2), "unweighted-rank-sum"
         )
-        high = ep_harness._expert_transform(
+        high = ep_oracle._expert_transform(
             torch, payload, ids, torch.full((3, 2), 0.9), "unweighted-rank-sum"
         )
         # The gate IS in the transform here, so a larger weight changes the staged value.
@@ -652,7 +655,7 @@ class WeightedCombineSemanticsTests(unittest.TestCase):
     def test_unknown_semantics_fail_closed(self):
         torch = _torch
         with self.assertRaises(ValueError):
-            ep_harness._expected_transformed_combine(
+            ep_oracle._expected_transformed_combine(
                 torch, self._problem(), 4, 8, "made-up"
             )
 
@@ -672,7 +675,7 @@ class TopkSlotTreeReductionTests(unittest.TestCase):
         slots = [torch.full((1, 1), v, dtype=torch.float32) for v in values]
         destination = torch.arange(len(values)).unsqueeze(0)
         messages = torch.stack(slots)
-        return ep_harness._topk_slot_tree_combine(
+        return ep_oracle._topk_slot_tree_combine(
             torch, destination, torch.ones_like(destination, dtype=torch.bool),
             messages, torch.bfloat16,
         ).item()
