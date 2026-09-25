@@ -568,14 +568,14 @@ PY
     # mismatch is visible even on a run that eventually succeeds.
     echo "[diag] coordinator $(hostname 2>/dev/null) local-ips: $(hostname -I 2>/dev/null); prefill targets: ${_prefill_ips[*]}:${_PREFILL_HEALTH_PORT}"
     echo "Waiting for prefill vLLM /health on ${#_prefill_ips[@]} node(s) (port ${_PREFILL_HEALTH_PORT}): ${_prefill_ips[*]}"
-    PREFILL_WAIT_DEADLINE=$(( $(date +%s) + 300 ))
+    PREFILL_WAIT_DEADLINE=$(( $(date +%s) + 600 ))
     for _pidx in "${!_prefill_ips[@]}"; do
         _pip="${_prefill_ips[$_pidx]}"
         until curl --output /dev/null --silent --fail \
                 --connect-timeout 5 --max-time 10 \
                 "http://$_pip:${_PREFILL_HEALTH_PORT}/health"; do
             if [[ "$(date +%s)" -ge "$PREFILL_WAIT_DEADLINE" ]]; then
-                echo "ERROR: prefill vLLM at $_pip:${_PREFILL_HEALTH_PORT} not ready within 5 min" >&2
+                echo "ERROR: prefill vLLM at $_pip:${_PREFILL_HEALTH_PORT} not ready within 10 min" >&2
                 _diag_prefill_endpoint "$_pip" "$_PREFILL_HEALTH_PORT"
                 exit 1
             fi
