@@ -282,9 +282,9 @@ run_native_srt_lane() {
     export UV_INSTALL_DIR="$GITHUB_WORKSPACE/.local/bin"
     curl -LsSf https://astral.sh/uv/install.sh | sh
     export PATH="$UV_INSTALL_DIR:$PATH"
-    uv venv "$GITHUB_WORKSPACE/.venv"
+    uv venv --quiet "$GITHUB_WORKSPACE/.venv"
     source "$GITHUB_WORKSPACE/.venv/bin/activate"
-    uv pip install -e .
+    uv pip install --quiet -e .
 
     if ! command -v srtctl &> /dev/null; then
         echo "Error: Failed to install srtctl" >&2
@@ -352,8 +352,7 @@ run_native_srt_lane() {
     echo "Generated srtslurm.yaml:"
     cat srtslurm.yaml
 
-    echo "Running make setup..."
-    make setup ARCH=x86_64
+    run_srt_setup ARCH=x86_64
 
     # Read by srt-slurm's post-benchmark eval.
     export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
@@ -584,9 +583,9 @@ run_multinode_srt() {
     curl -LsSf https://astral.sh/uv/install.sh | sh
     export PATH="$UV_INSTALL_DIR:$PATH"
 
-    uv venv "$GITHUB_WORKSPACE/.venv"
+    uv venv --quiet "$GITHUB_WORKSPACE/.venv"
     source "$GITHUB_WORKSPACE/.venv/bin/activate"
-    uv pip install -e .
+    uv pip install --quiet -e .
 
     if ! command -v srtctl &> /dev/null; then
         echo "Error: Failed to install srtctl"
@@ -643,8 +642,7 @@ run_multinode_srt() {
     echo "Generated srtslurm.yaml:"
     cat srtslurm.yaml
 
-    echo "Running make setup..."
-    make setup ARCH=x86_64
+    run_srt_setup ARCH=x86_64
 
     # Read by srt-slurm's post-benchmark eval.
     export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
