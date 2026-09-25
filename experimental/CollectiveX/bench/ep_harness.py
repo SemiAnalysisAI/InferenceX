@@ -1418,6 +1418,14 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         recv_max = _reduce_int(torch, dist, device, g["recv_local"], MAX)
         recv_min = _reduce_int(torch, dist, device, g["recv_local"], MIN)
         global_ok = _reduce_int(torch, dist, device, g["local_ok"], MIN)
+        # Which oracle pass failed, agreed across ranks. `max_relative_error` folds all three, so
+        # without these a failure cannot be placed before (Pass 1, before any timing or capture)
+        # or after the measured regimes -- the distinction that attributes it to them or not.
+        oracle_verdicts = {
+            name: bool(_reduce_int(torch, dist, device, int(bool(g[key]["passed"])), MIN))
+            for name, key in (("pre", "oracle_pre"), ("chained", "oracle_chain"),
+                              ("post", "oracle_post"))
+        }
         # Agreed across ranks like `passed`, not rank 0's local view.
         post_chain_state_passed = bool(
             _reduce_int(torch, dist, device, g["chain_local_ok"], MIN)
@@ -1593,6 +1601,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                 # Max elementwise relative error (COMBINE_MAG_FLOOR-clamped)
                 # against the BF16-faithful expected combine.
                 "max_relative_error": max_rel,
+                "oracle_passed": oracle_verdicts,
                 "passed": point_ok,
             },
             "global_tokens": gt,

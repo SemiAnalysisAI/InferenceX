@@ -855,6 +855,11 @@ class ChainedRegimeOracleGate(unittest.TestCase):
                     self.assertIs(row["correctness"]["passed"], False)
                     self.assertIs(row["correctness"]["post_chain_state_passed"], True)
                     self.assertIs(row["correctness"]["chain_last_output_passed"], True)
+                    # The per-pass verdicts place the failure in the pass that produced it.
+                    self.assertEqual(
+                        row["correctness"]["oracle_passed"],
+                        {"pre": phase != "pre", "chained": True, "post": phase != "post"},
+                    )
 
     def test_the_output_check_is_skipped_where_staging_is_hoisted(self):
         # Under the hoist the chain captures one warm-up dispatch's staged stand-in and reuses
