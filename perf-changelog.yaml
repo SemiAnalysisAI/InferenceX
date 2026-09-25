@@ -8934,3 +8934,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3402
   scenario-type:
   - agentic-coding
+
+- config-keys:
+    - glm5.2-fp4-gb300-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Move required GLM-5.2 GB300 PowerX telemetry to port 19401, matching existing GB300 recipes after exporter startup collided on port 9401; retain workload and acceptance settings."
+    - "GLM-5.2 GB300 必需 PowerX 的 exporter 启动在 9401 端口冲突，改用现有 GB300 配方的 19401 端口；保留工作负载及验收设置。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3402
