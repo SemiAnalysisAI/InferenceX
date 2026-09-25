@@ -60,8 +60,7 @@ base:
       MODEL: nvidia/MiniMax-M3-NVFP4
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
 
-# One variant per point. DRAM points patch vLLM's SimpleCPUOffload worker for
-# heterogeneous layer regions and give it the whole host budget
+# One variant per point. DRAM points give SimpleCPUOffload the whole host budget
 # (TOTAL_CPU_DRAM_GB GiB) with lazy offload.
 override_tp8_c1:
   roles:
@@ -130,7 +129,6 @@ override_tp4_c20:
       KV_OFFLOADING: none
 
 override_tp4_c30_dram:
-  setup_script: vllm-simple-kv-offload.sh
   roles:
     agg:
       gpus: 4
@@ -146,7 +144,6 @@ override_tp4_c30_dram:
       TOTAL_CPU_DRAM_GB: '1024'
 
 override_tp2_c24_dram:
-  setup_script: vllm-simple-kv-offload.sh
   roles:
     agg:
       gpus: 2
