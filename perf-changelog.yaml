@@ -8946,6 +8946,12 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3361
 
 - config-keys:
+    - dsv4-fp4-b200-sglang-agentic-hicache-mtp
+  description:
+    - "Update SGLang image from v0.5.19-cu130 to v0.5.20-cu130 and pass --cuda-graph-max-bs-decode after the alias removal."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3334
+
+- config-keys:
     - kimik3-fp4-mi355x-vllm-agentic-mtp
   scenario-type:
     - agentic-coding
