@@ -193,7 +193,7 @@ launch_srt_single_node() {
         --var SRT_DEFAULT_TIME_LIMIT "$SALLOC_TIME_LIMIT" \
         --model "hf:$MODEL" "$SRT_MODEL_PATH" --container "$IMAGE" "$SRT_CONTAINER" \
         --mount "$HF_HUB_CACHE_MOUNT" "$HF_HUB_CACHE" --exclusive "$@"
-    run_srt_setup ARCH=x86_64
+    run_srt_setup "ARCH=${SRT_SETUP_ARCH:-x86_64}"
 
     SRT_JOB_ID=""
     SRT_JOB_OUTPUT=""
