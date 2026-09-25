@@ -8887,3 +8887,11 @@
     - "Add DeepSeek-V4-Pro-0813 golden AL for draft lengths 4, 5, 7 and 8 (3.36 / 3.61 / 3.73 / 3.47)."
     - "Agentic PD router: pin --decode-policy round_robin so decode no longer inherits the prefill --policy (consistent_hashing)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3256
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Pin B200 DeepSeek-V4.1-Flash vLLM to the 2026-09-22 nightly 0961bbae and opt in from its launcher to Blackwell sparse indexer logits, MXFP4 indexer KV, and fp8 KV cache; use FlashInfer sparse attention at TP2 and MegaAttention at TP4."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3393

@@ -77,6 +77,15 @@ if (( TP == 2 || (TP < 8 && GPU_MEM_MIB < 150000) )); then
     LOW_TP_ARGS=(--max-num-batched-tokens 4096 --max-num-seqs "$MAX_NUM_SEQS")
 fi
 
+# The SKU launcher opts into the Blackwell sparse indexer settings only
+# with an image that contains these backends. This script also serves H200.
+# TP2 and TP4 use FlashInfer sparse attention; fp8 resolves the backend KV layout.
+ATTENTION_ARGS=()
+if [[ "${DSV41_BLACKWELL_ATTENTION:-}" == true ]]; then
+    ATTENTION_CONFIG='{"backend":"FLASHINFER_MLA_SPARSE_DSV41","indexer_kv_dtype":"mxfp4","indexer_sparse_logits":true}'
+    ATTENTION_ARGS=(--attention-config "$ATTENTION_CONFIG" --kv-cache-dtype fp8)
+fi
+
 # Pyxis shares the host network; port 8888 can already belong to a host service.
 select_available_server_port
 export AIPERF_SERVER_URL="http://localhost:${PORT}"
@@ -99,6 +108,7 @@ VLLM_CMD=(
     --tool-call-parser deepseek_v41 --enable-auto-tool-choice
     --reasoning-parser deepseek_v41
     --engram-config '{"cpu_offload":true}'
+    "${ATTENTION_ARGS[@]}"
     --speculative-config "$SPEC_CONFIG"
     --max-model-len 1048576
     --max-cudagraph-capture-size "$CAPTURE_SIZE"

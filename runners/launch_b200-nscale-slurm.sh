@@ -804,6 +804,10 @@ run_agentic() {
     if [[ "$MODEL_PREFIX" == "dsv41flash" ]]; then
         # Cover DSpark5 verification for concurrent AgentX subagents at c1/c2/c4.
         export DSV41_MIN_CUDAGRAPH_CAPTURE_SIZE=64
+        export VLLM_ENGINE_READY_TIMEOUT_S=7200
+        if [[ "$FRAMEWORK" == "vllm" ]]; then
+            export DSV41_BLACKWELL_ATTENTION=true
+        fi
         CONTAINER_MOUNT_DIR=/ix
         export INFMAX_CONTAINER_WORKSPACE=/ix
         export RESULT_DIR=/ix/results
