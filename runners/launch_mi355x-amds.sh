@@ -29,7 +29,8 @@ if [[ "$EXECUTION_PATH" == native-single-node ]]; then
     export SRT_MODEL_PATH="hf:$MODEL"
     export SALLOC_TIME_LIMIT=500
     export SRT_SRUN_OPTIONS='{"container-remap-root":"", "container-writable":""}'
-    SRT_SQUASH_FILE="/var/lib/squash/$(printf '%s' "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    # A squash staged on shared storage survives the registry pruning nightly tags.
+    SRT_SQUASH_FILE="/it-share/gharunners2/srt-slurm/containers/$(printf '%s' "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
     launch_srt_single_node mi355x-amds --var GITHUB_WORKSPACE "$GITHUB_WORKSPACE"
     exit $?
 fi
