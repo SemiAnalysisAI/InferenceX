@@ -157,50 +157,15 @@ base:
     interval_seconds: 5
   benchmark:
     type: custom
-    command: |
-      set -eo pipefail
-      source /infmax-workspace/benchmarks/benchmark_lib.sh --validation-only
-      check_env_vars SRT_FRONTEND_HOST SRT_FRONTEND_PORT CONC_LIST PREFILL_NUM_WORKERS PREFILL_TP DECODE_NUM_WORKERS DECODE_TP USE_CHAT_TEMPLATE BENCHMARK_VARIANT
-      result_dir=/logs/sa-bench_isl_8192_osl_1024
-      mkdir -p "${result_dir}"
-      ctx=$((PREFILL_NUM_WORKERS * PREFILL_TP))
-      gen=$((DECODE_NUM_WORKERS * DECODE_TP))
-      chat_args=()
-      if [[ "${USE_CHAT_TEMPLATE}" == "1" ]]; then
-        chat_args+=(--use-chat-template)
-      fi
-      for concurrency in ${CONC_LIST}; do
-        num_prompts=$((concurrency * 10))
-        if (( num_prompts < 16 )); then num_prompts=16; fi
-        python3 /infmax-workspace/utils/bench_serving/benchmark_serving.py \
-          --backend openai \
-          --base-url "http://${SRT_FRONTEND_HOST}:${SRT_FRONTEND_PORT}" \
-          --endpoint /v1/completions \
-          --model amd/DeepSeek-R1-0528-MXFP4-v2 \
-          --tokenizer /model \
-          --trust-remote-code \
-          --dataset-name random \
-          --random-input-len 8192 \
-          --random-output-len 1024 \
-          --random-range-ratio 1.0 \
-          --random-num-workers 1 \
-          "${chat_args[@]}" \
-          --num-warmups "$((concurrency * 2))" \
-          --num-prompts "${num_prompts}" \
-          --max-concurrency "${concurrency}" \
-          --request-rate inf \
-          --ignore-eos \
-          --disable-tqdm \
-          --save-result \
-          --result-dir "${result_dir}" \
-          --result-filename "results_concurrency_${concurrency}_gpus_$((ctx + gen))_ctx_${ctx}_gen_${gen}.json"
-      done
+    command: bash /infmax-workspace/benchmarks/multi_node/srt_fixed_sequence.sh
     env:
+      TOKENIZER: /model
+      ISL: '8192'
+      OSL: '1024'
       HF_HOME: /hf_hub_cache
       HF_HUB_CACHE: /hf_hub_cache/hub
       HUGGINGFACE_HUB_CACHE: /hf_hub_cache/hub
       BENCHMARK_VARIANT: stp-1p1d-tp8
-      USE_CHAT_TEMPLATE: '0'
 override_stp_1p1d_tp8:
   name: mi355x-dsr1-fp4-stp-1p1d-tp8-fixed-seq
   benchmark:
@@ -395,7 +360,6 @@ override_mtp3_1p1d_tp8:
   benchmark:
     env:
       BENCHMARK_VARIANT: mtp3-1p1d-tp8
-      USE_CHAT_TEMPLATE: '1'
 override_mtp3_1p2d_tp8_wide:
   name: mi355x-dsr1-fp4-mtp3-1p2d-tp8-wide-fixed-seq
   resources: {}
@@ -425,7 +389,6 @@ override_mtp3_1p2d_tp8_wide:
   benchmark:
     env:
       BENCHMARK_VARIANT: mtp3-1p2d-tp8-wide
-      USE_CHAT_TEMPLATE: '1'
 override_mtp3_1p2d_tp8_narrow:
   name: mi355x-dsr1-fp4-mtp3-1p2d-tp8-narrow-fixed-seq
   resources: {}
@@ -455,7 +418,6 @@ override_mtp3_1p2d_tp8_narrow:
   benchmark:
     env:
       BENCHMARK_VARIANT: mtp3-1p2d-tp8-narrow
-      USE_CHAT_TEMPLATE: '1'
 override_mtp2_1p2d_tp8:
   name: mi355x-dsr1-fp4-mtp2-1p2d-tp8-fixed-seq
   resources: {}
@@ -485,7 +447,6 @@ override_mtp2_1p2d_tp8:
   benchmark:
     env:
       BENCHMARK_VARIANT: mtp2-1p2d-tp8
-      USE_CHAT_TEMPLATE: '1'
 override_mtp3_1p1d_dep8:
   name: mi355x-dsr1-fp4-mtp3-1p1d-dep8-fixed-seq
   roles:
@@ -563,7 +524,6 @@ override_mtp3_1p1d_dep8:
   benchmark:
     env:
       BENCHMARK_VARIANT: mtp3-1p1d-dep8
-      USE_CHAT_TEMPLATE: '1'
 override_mtp1_1p1d_dep8:
   name: mi355x-dsr1-fp4-mtp1-1p1d-dep8-fixed-seq
   roles:
@@ -641,7 +601,6 @@ override_mtp1_1p1d_dep8:
   benchmark:
     env:
       BENCHMARK_VARIANT: mtp1-1p1d-dep8
-      USE_CHAT_TEMPLATE: '1'
 override_mtp1_2p1d_dep8:
   name: mi355x-dsr1-fp4-mtp1-2p1d-dep8-fixed-seq
   resources: {}
@@ -724,4 +683,3 @@ override_mtp1_2p1d_dep8:
   benchmark:
     env:
       BENCHMARK_VARIANT: mtp1-2p1d-dep8
-      USE_CHAT_TEMPLATE: '1'
