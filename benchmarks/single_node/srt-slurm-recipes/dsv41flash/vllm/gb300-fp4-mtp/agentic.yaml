@@ -21,10 +21,10 @@ base:
   engine:
     type: vllm
     connector: null
-  # The engine may take the full VLLM_ENGINE_READY_TIMEOUT_S to become ready.
+  # Cold loads of the shared-cache checkpoint run past half an hour.
   health_check:
-    interval_seconds: 10
-    max_attempts: 720
+    interval_seconds: 5
+    max_attempts: 1440
   roles:
     agg:
       nodes: 1
