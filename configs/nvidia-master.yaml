@@ -5421,8 +5421,8 @@ minimaxm3-fp8-h100-vllm-agentic-mtp:
     # The fast sweep places the resident HBM cliff between c5 and c6.
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 3, 4, 5] }
-      - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [6, 8] }
+      - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 3, 4, 5], srt-recipe: benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/h100-fp8-mtp/agentic.yaml }
+      - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [6, 8], srt-recipe: benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/h100-fp8-mtp/agentic.yaml }
 
 minimaxm3-fp8-h200-vllm-agentic-mtp:
   image: vllm/vllm-openai:nightly-d9105ea8001e0a6d77a96327d17515bb5791fb36
@@ -5437,8 +5437,8 @@ minimaxm3-fp8-h200-vllm-agentic-mtp:
     # Keep the resident c1-c10 points and the Mooncake DRAM-offload c12 point.
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 6, 8, 10] }
-      - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [12] }
+      - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 6, 8, 10], srt-recipe: benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/h200-fp8-mtp/agentic.yaml }
+      - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [12], srt-recipe: benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/h200-fp8-mtp/agentic.yaml }
 
 qwen3.5-fp4-b200-sglang-agentic-mtp:
   image: lmsysorg/sglang:v0.5.16-cu130

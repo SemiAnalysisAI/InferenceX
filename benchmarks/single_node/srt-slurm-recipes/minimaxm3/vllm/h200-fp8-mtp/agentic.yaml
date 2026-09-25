@@ -1,0 +1,112 @@
+# MiniMax-M3 MXFP8 AgentX on H200 with vLLM EAGLE3 (the GQA draft head) and
+# optional Mooncake DRAM KV offload.
+base:
+  schema: 2
+  name: minimaxm3-fp8-h200-vllm-agentic
+  model:
+    path: hf:MiniMaxAI/MiniMax-M3-MXFP8
+    container: vllm/vllm-openai:nightly-d9105ea8001e0a6d77a96327d17515bb5791fb36
+    precision: fp8
+  resources:
+    gpu_type: h200
+    gpus_per_node: 8
+  frontend:
+    type: vllm
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine:
+    type: vllm
+    connector: null
+  # The engine may take the full VLLM_ENGINE_READY_TIMEOUT_S to become ready.
+  health_check:
+    interval_seconds: 10
+    max_attempts: 360
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        served-model-name: MiniMaxAI/MiniMax-M3-MXFP8
+        tensor-parallel-size: 8
+        data-parallel-size: 1
+        attention-backend: FLASH_ATTN
+        # Humming for dense MXFP8 linear layers.
+        linear-backend: humming
+        kv-cache-dtype: fp8
+        block-size: 128
+        language-model-only: true
+        enable-prefix-caching: true
+        enable-prompt-tokens-details: true
+        default-chat-template-kwargs: '{"thinking_mode":"enabled"}'
+        # Three-token EAGLE3 with the GQA draft head. Throughput runs switch to
+        # synthetic rejection at the golden acceptance length.
+        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASH_ATTN"}'
+        tool-call-parser: minimax_m3
+        reasoning-parser: minimax_m3
+        enable-auto-tool-choice: true
+        trust-remote-code: true
+      env:
+        PYTHONNOUSERSITE: '1'
+        VLLM_ENGINE_READY_TIMEOUT_S: '3600'
+        # Atomic reduction for the Marlin MXFP8 MoE path.
+        VLLM_MARLIN_USE_ATOMIC_ADD: '1'
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
+    env:
+      MODEL: MiniMaxAI/MiniMax-M3-MXFP8
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
+      WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126
+
+# One variant per point. The scheduler batch is 2x CONC and graph capture covers
+# it at four tokens per sequence (three drafts).
+override_tp8_c1: {roles: {agg: {args: {max-num-seqs: 2, max-cudagraph-capture-size: 8, gpu-memory-utilization: 0.95}}}, benchmark: {env: {CONC: '1', KV_OFFLOADING: none}}}
+override_tp8_c2: {roles: {agg: {args: {max-num-seqs: 4, max-cudagraph-capture-size: 16, gpu-memory-utilization: 0.95}}}, benchmark: {env: {CONC: '2', KV_OFFLOADING: none}}}
+override_tp8_c4: {roles: {agg: {args: {max-num-seqs: 8, max-cudagraph-capture-size: 32, gpu-memory-utilization: 0.95}}}, benchmark: {env: {CONC: '4', KV_OFFLOADING: none}}}
+override_tp8_c6: {roles: {agg: {args: {max-num-seqs: 12, max-cudagraph-capture-size: 48, gpu-memory-utilization: 0.95}}}, benchmark: {env: {CONC: '6', KV_OFFLOADING: none}}}
+override_tp8_c8: {roles: {agg: {args: {max-num-seqs: 16, max-cudagraph-capture-size: 64, gpu-memory-utilization: 0.95}}}, benchmark: {env: {CONC: '8', KV_OFFLOADING: none}}}
+override_tp8_c10: {roles: {agg: {args: {max-num-seqs: 20, max-cudagraph-capture-size: 80, gpu-memory-utilization: 0.95}}}, benchmark: {env: {CONC: '10', KV_OFFLOADING: none}}}
+# The DRAM point offloads KV to an embedded Mooncake store, leaving HBM headroom
+# at 0.90. Per rank: the host budget (1234 GB = 1149 GiB) less the 414 GiB
+# checkpoint page cache, over TP8, less the 4 GiB local buffer = 87 GB.
+override_tp8_c12_dram:
+  # The worker's Mooncake client and the master run the same pinned release.
+  setup_script: vllm-mooncake-0.3.11.sh
+  services:
+    - name: mooncake-master
+      type: mooncake-master
+      preamble: >-
+        pip_install=(python3 -m pip install);
+        python3 -m pip install --help 2>/dev/null | grep -q -- --break-system-packages && pip_install+=(--break-system-packages);
+        "${pip_install[@]}" --quiet --no-cache-dir --no-deps --force-reinstall mooncake-transfer-engine-cuda13==0.3.11.post1
+      args: ['--eviction_high_watermark_ratio=0.80', '--eviction_ratio=0.10']
+      options:
+        store_config:
+          mode: embedded
+          metadata_server: P2PHANDSHAKE
+          global_segment_size: 87GB
+          local_buffer_size: 4GB
+          protocol: rdma
+          device_name: ''
+          enable_offload: false
+  roles:
+    agg:
+      args:
+        gpu-memory-utilization: 0.9
+        max-num-seqs: 24
+        max-cudagraph-capture-size: 96
+        kv-transfer-config: '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"load_async":true}}'
+      env:
+        PYTHONHASHSEED: '0'
+        MC_SLICE_SIZE: '1048576'
+        MC_WORKERS_PER_CTX: '4'
+        MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
+  benchmark:
+    env:
+      CONC: '12'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1234'
