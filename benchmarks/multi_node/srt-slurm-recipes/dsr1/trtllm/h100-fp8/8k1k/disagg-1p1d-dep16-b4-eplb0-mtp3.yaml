@@ -109,6 +109,11 @@ dynamo:
   # Use NATS for a recipe prior to Dynamo commit 39d2a68.
   request_plane: "nats"
 
+# Container setup plus loading the weights over NFS outlasts the 30-minute default.
+health_check:
+  max_attempts: 360
+  interval_seconds: 10
+
 # The first container step on an H100 node spends ~8 minutes setting up the job
 # image, and etcd/NATS are that first step; the 300s default times out.
 services:
