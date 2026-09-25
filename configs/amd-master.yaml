@@ -904,10 +904,10 @@ dsv4-fp4-mi355x-vllm-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.60
       search-space:
-      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 4, 8, 16, 32, 40, 48, 56, 64] }
+      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 4, 8, 16, 32, 40, 48, 56, 64], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv4/vllm/mi355x-fp4-mtp/agentic.yaml }
       # Single-node validation found c128 to be the DPA throughput peak among
       # c64/c128/c256. Add c192 to locate the knee before the c256 regression.
-      - { tp: 8, ep: 1, dp-attn: true, kv-offloading: none, spec-decoding: draft_model, conc-list: [64, 128, 192], router: { name: vllm-router, version: "0.1.14" } }
+      - { tp: 8, ep: 1, dp-attn: true, kv-offloading: none, spec-decoding: draft_model, conc-list: [64, 128, 192], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv4/vllm/mi355x-fp4-mtp/agentic.yaml }
       # LMCache invalid-block recovery currently assumes one KV-cache group,
       # while speculative decoding creates two. Restore these points after the
       # upstream hybrid KV recovery fix lands:
