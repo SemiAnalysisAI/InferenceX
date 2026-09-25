@@ -34,7 +34,9 @@ echo ""
 
 # Use $(pwd) not BASH_SOURCE — sbatch copies the script to /var/spool/slurmd/
 # at runtime, but the CWD remains the submit-time directory (amd_utils/).
-if [[ "$ENGINE" == "tilert" ]]; then
+if [[ "$ENGINE" == "atom-disagg" ]]; then
+    MODELS_YAML="$(pwd)/models_atom.yaml"
+elif [[ "$ENGINE" == "tilert" ]]; then
     MODELS_YAML="$(pwd)/models_tilert.yaml"
 else
     MODELS_YAML="$(pwd)/models.yaml"
@@ -543,7 +545,26 @@ DOCKER_ENV_COMMON=(
 )
 
 # Engine-specific env vars
-if [[ "$ENGINE" == "tilert" ]]; then
+if [[ "$ENGINE" == "atom-disagg" ]]; then
+    check_env_vars \
+        PREFILL_PORT DECODE_PORT HANDSHAKE_PORT MEM_FRAC_STATIC KV_CACHE_DTYPE \
+        BLOCK_SIZE MAX_NUM_SEQS
+    DOCKER_ENV_ENGINE=(
+        -e ATOM_WS_PATH=${WS_PATH}
+        -e PREFILL_PORT=${PREFILL_PORT}
+        -e DECODE_PORT=${DECODE_PORT}
+        -e ROUTER_PORT=${ROUTER_PORT}
+        -e HANDSHAKE_PORT=${HANDSHAKE_PORT}
+        -e MEM_FRAC_STATIC=${MEM_FRAC_STATIC}
+        -e KV_CACHE_DTYPE=${KV_CACHE_DTYPE}
+        -e BLOCK_SIZE=${BLOCK_SIZE}
+        -e MAX_NUM_SEQS=${MAX_NUM_SEQS}
+        -e MAX_MODEL_LEN=${MAX_MODEL_LEN:-}
+        -e MAX_NUM_BATCHED_TOKENS=${MAX_NUM_BATCHED_TOKENS:-}
+        -e EXTRA_SERVER_ARGS=\${EXTRA_SERVER_ARGS:-}
+        -e IBDEVICES=${IBDEVICES:-}
+    )
+elif [[ "$ENGINE" == "tilert" ]]; then
     DOCKER_ENV_ENGINE=(
         -e MODEL_PATH=$DOCKER_MODEL_PATH
         -e PREFILL_IMAGE=${PREFILL_IMAGE}
@@ -652,6 +673,84 @@ echo \"Rank \$SLURM_PROCID on \$(hostname)\"
 eval \"\$DOCKER_CMD_DETECT\"
 echo \"[docker-detect] rank \$SLURM_PROCID: DOCKER_CMD=\$DOCKER_CMD\"
 
+# Enable out-of-tree RDMA library mounts for atom-disagg (mooncake requires host RDMA stack)
+RDMA_MOUNTS=()
+if [[ "$ENGINE" == "atom-disagg" ]]; then
+
+# When the container base OS differs from the host (e.g. Ubuntu 24.04 image
+# on a 22.04 host), the container's bundled libibverbs/libionic may be
+# ABI-incompatible with the host kernel drivers.  Detect the NIC type and
+# bind-mount the host's out-of-tree RDMA userspace libraries into the
+# container so the RDMA stack always matches the running kernel.
+_detect_nic_type() {
+    if [[ -n \"\${MORI_NIC_TYPE:-}\" ]]; then echo \"\$MORI_NIC_TYPE\"; return; fi
+    local bnxt=0 mlx5=0 ionic=0
+    if [[ -d /sys/class/infiniband ]]; then
+        for dev in /sys/class/infiniband/*; do
+            local name; name=\$(basename \"\$dev\")
+            case \"\$name\" in
+                bnxt_re*) ((bnxt++)) ;; mlx5*) ((mlx5++)) ;; ionic*) ((ionic++)) ;;
+                *)
+                    local drv; drv=\$(basename \"\$(readlink -f \"\$dev/device/driver\" 2>/dev/null)\" 2>/dev/null || true)
+                    case \"\$drv\" in bnxt*) ((bnxt++)) ;; mlx5*) ((mlx5++)) ;; ionic*) ((ionic++)) ;; esac ;;
+            esac
+        done
+    fi
+    if (( bnxt >= mlx5 && bnxt >= ionic && bnxt > 0 )); then echo bnxt
+    elif (( ionic >= mlx5 && ionic > 0 )); then echo ionic
+    else echo mlx5; fi
+}
+
+_find_host_ibverbs() {
+    for c in /usr/lib64/libibverbs.so.1 /lib/x86_64-linux-gnu/libibverbs.so.1 /usr/lib/x86_64-linux-gnu/libibverbs.so.1.14.39.0 /usr/lib/x86_64-linux-gnu/libibverbs.so.1; do
+        local r; r=\$(readlink -f \"\$c\" 2>/dev/null || true)
+        [[ \"\$r\" == *libibverbs.so.1.14.57.0 ]] && continue
+        if [[ -f \"\$r\" ]]; then echo \"\$r\"; return; fi
+    done
+}
+
+_NIC_TYPE=\$(_detect_nic_type)
+echo \"[rdma] NIC type: \${_NIC_TYPE} on \$(hostname)\"
+
+if [[ \"\$_NIC_TYPE\" == \"ionic\" || \"\$_NIC_TYPE\" == \"bnxt\" ]]; then
+    _host_ibv=\$(_find_host_ibverbs)
+    if [[ -n \"\$_host_ibv\" ]]; then
+        RDMA_MOUNTS+=(-v \"\$_host_ibv:/lib/x86_64-linux-gnu/libibverbs.so.1\")
+    fi
+fi
+
+if [[ \"\$_NIC_TYPE\" == \"ionic\" ]]; then
+    for _dir in /usr/local/lib /usr/lib/x86_64-linux-gnu; do
+        for _lib in \"\$_dir\"/libionic*.so; do
+            [[ -f \"\$_lib\" ]] || continue
+            _real=\$(readlink -f \"\$_lib\")
+            [[ -f \"\$_real\" ]] && RDMA_MOUNTS+=(-v \"\$_real:\$_real\")
+            RDMA_MOUNTS+=(-v \"\$_lib:/usr/lib/x86_64-linux-gnu/\$(basename \"\$_lib\")\")
+        done
+    done
+    if [[ -d /usr/lib/x86_64-linux-gnu/libibverbs ]]; then
+        for _lib in /usr/lib/x86_64-linux-gnu/libibverbs/libionic-rdmav*.so; do
+            [[ -f \"\$_lib\" ]] && RDMA_MOUNTS+=(-v \"\$_lib:\$_lib\")
+        done
+    fi
+    [[ -d /etc/libibverbs.d ]] && RDMA_MOUNTS+=(-v /etc/libibverbs.d:/etc/libibverbs.d:ro)
+elif [[ \"\$_NIC_TYPE\" == \"bnxt\" ]]; then
+    for _lib in /usr/local/lib/libbnxt_re-rdmav*.so; do
+        [[ -f \"\$_lib\" ]] && RDMA_MOUNTS+=(-v \"\$_lib:/usr/lib/x86_64-linux-gnu/libibverbs/\$(basename \"\$_lib\")\")
+    done
+    for _lib in /usr/local/lib/libbnxt_re.so; do
+        [[ -f \"\$_lib\" ]] && RDMA_MOUNTS+=(-v \"\$_lib:/usr/lib/x86_64-linux-gnu/\$(basename \"\$_lib\")\")
+    done
+    [[ -d /etc/libibverbs.d ]] && RDMA_MOUNTS+=(-v /etc/libibverbs.d:/etc/libibverbs.d:ro)
+fi
+
+if [[ \${#RDMA_MOUNTS[@]} -gt 0 ]]; then
+    echo \"[rdma] bind-mounts: \${RDMA_MOUNTS[*]}\"
+else
+    echo \"[rdma] no out-of-tree RDMA mounts needed\"
+fi
+fi  # end: if ENGINE == atom-disagg
+
 RANK_IMAGE=
 if [[ \"$ENGINE\" == \"tilert\" && \"\$SLURM_PROCID\" -lt \"$xP\" ]]; then
     RANK_IMAGE=\"$PREFILL_IMAGE\"
@@ -693,6 +792,7 @@ exec \$DOCKER_CMD run \
     -v ${HICACHE_MC_CONFIG}:/config/hicache_mc.env:ro \
     ${EXTRA_DOCKER_MOUNTS:-} \
     ${CLIENT_DOCKER_MOUNTS} \
+    \${RDMA_MOUNTS[@]+"\${RDMA_MOUNTS[@]}"} \
     ${DOCKER_ENV_COMMON[*]} \
     ${DOCKER_ENV_ENGINE[*]} \
     ${CLIENT_DOCKER_ENV} \

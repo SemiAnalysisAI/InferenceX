@@ -4,6 +4,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/../../benchmark_lib.sh" --validation-only
 # Multi-Engine Disaggregated Server Dispatcher
 # Dispatches to the engine-specific server launcher based on ENGINE env var.
 #   ENGINE=sglang-disagg (default) -> server_sglang.sh (SGLang + MoRI)
+#   ENGINE=atom-disagg             -> server_atom.sh (ATOM + mooncake)
 #   ENGINE=tilert                  -> server_tilert.sh (vLLM prefill + TileRT decode)
 
 check_env_vars ENGINE WS_PATH
@@ -16,7 +17,10 @@ export WS_PATH ENGINE
 
 echo "[DISPATCHER] ENGINE=$ENGINE  WS_PATH=$WS_PATH"
 
-if [[ "$ENGINE" == "tilert" ]]; then
+if [[ "$ENGINE" == "atom-disagg" ]]; then
+    export ATOM_WS_PATH="$WS_PATH"
+    source "$WS_PATH/server_atom.sh"
+elif [[ "$ENGINE" == "tilert" ]]; then
     source "$WS_PATH/server_tilert.sh"
 else
     source "$WS_PATH/server_sglang.sh"
