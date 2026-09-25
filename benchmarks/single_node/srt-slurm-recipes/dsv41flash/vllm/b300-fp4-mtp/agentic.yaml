@@ -1,0 +1,76 @@
+# DeepSeek-V4.1-Flash AgentX on B300 with vLLM native DSpark
+# (https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4.1-Flash). Engram weights use
+# UVA DRAM; the KV cache is GPU-resident.
+base:
+  schema: 2
+  name: dsv41flash-fp4-b300-vllm-agentic
+  model:
+    path: hf:deepseek-ai/DeepSeek-V4.1-Flash
+    container: vllm/vllm-openai:deepseekv41-flash-0909
+    precision: fp4
+  resources:
+    gpu_type: b300
+    gpus_per_node: 8
+  frontend:
+    type: vllm
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine:
+    type: vllm
+    connector: null
+  # The engine may take the full VLLM_ENGINE_READY_TIMEOUT_S to become ready.
+  health_check:
+    interval_seconds: 10
+    max_attempts: 360
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      args:
+        served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
+        language-model-only: true
+        tokenizer-mode: deepseek_v41
+        tool-call-parser: deepseek_v41
+        enable-auto-tool-choice: true
+        reasoning-parser: deepseek_v41
+        engram-config: '{"cpu_offload":true}'
+        # Five-token DSpark with probabilistic drafting. Throughput runs replace
+        # block rejection with the golden acceptance length.
+        speculative-config: '{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block","enable_adaptive_verification":false}'
+        max-model-len: 1048576
+        max-num-seqs: 256
+        disable-uvicorn-access-log: true
+      env:
+        VLLM_USE_RUST_FRONTEND: '1'
+        PYTHONUNBUFFERED: '1'
+        VLLM_ENGINE_READY_TIMEOUT_S: '3600'
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
+    env:
+      MODEL: deepseek-ai/DeepSeek-V4.1-Flash
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
+
+# One variant per point. Piecewise graph capture sizes are multiples of the
+# six-token DSpark verification block, denser for small batches, and each
+# batched-token limit matches the largest captured graph: CONC <= 4 and TP2
+# CONC 128 capture up to 2046 tokens (the latter at 0.97 memory utilization),
+# every other point up to 8190.
+override_tp4_c1: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, compilation-config: '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046]}', max-cudagraph-capture-size: 2046, max-num-batched-tokens: 2048}}}, benchmark: {env: {CONC: '1'}}}
+override_tp4_c2: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, compilation-config: '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046]}', max-cudagraph-capture-size: 2046, max-num-batched-tokens: 2048}}}, benchmark: {env: {CONC: '2'}}}
+override_tp4_c4: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, compilation-config: '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046]}', max-cudagraph-capture-size: 2046, max-num-batched-tokens: 2048}}}, benchmark: {env: {CONC: '4'}}}
+override_tp4_c8: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, compilation-config: '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092,6144,8190]}', max-cudagraph-capture-size: 8190, max-num-batched-tokens: 8192}}}, benchmark: {env: {CONC: '8'}}}
+override_tp4_c16: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, compilation-config: '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092,6144,8190]}', max-cudagraph-capture-size: 8190, max-num-batched-tokens: 8192}}}, benchmark: {env: {CONC: '16'}}}
+override_tp4_c32: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, compilation-config: '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092,6144,8190]}', max-cudagraph-capture-size: 8190, max-num-batched-tokens: 8192}}}, benchmark: {env: {CONC: '32'}}}
+override_tp4_c64: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, compilation-config: '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092,6144,8190]}', max-cudagraph-capture-size: 8190, max-num-batched-tokens: 8192}}}, benchmark: {env: {CONC: '64'}}}
+override_tp4_c128: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, compilation-config: '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092,6144,8190]}', max-cudagraph-capture-size: 8190, max-num-batched-tokens: 8192}}}, benchmark: {env: {CONC: '128'}}}
+override_tp2_c2: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, compilation-config: '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046]}', max-cudagraph-capture-size: 2046, max-num-batched-tokens: 2048}}}, benchmark: {env: {CONC: '2'}}}
+override_tp2_c4: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, compilation-config: '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046]}', max-cudagraph-capture-size: 2046, max-num-batched-tokens: 2048}}}, benchmark: {env: {CONC: '4'}}}
+override_tp2_c8: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, compilation-config: '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092,6144,8190]}', max-cudagraph-capture-size: 8190, max-num-batched-tokens: 8192}}}, benchmark: {env: {CONC: '8'}}}
+override_tp2_c16: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, compilation-config: '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092,6144,8190]}', max-cudagraph-capture-size: 8190, max-num-batched-tokens: 8192}}}, benchmark: {env: {CONC: '16'}}}
+override_tp2_c32: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, compilation-config: '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092,6144,8190]}', max-cudagraph-capture-size: 8190, max-num-batched-tokens: 8192}}}, benchmark: {env: {CONC: '32'}}}
+override_tp2_c64: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, compilation-config: '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092,6144,8190]}', max-cudagraph-capture-size: 8190, max-num-batched-tokens: 8192}}}, benchmark: {env: {CONC: '64'}}}
+override_tp2_c128: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, compilation-config: '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046]}', max-cudagraph-capture-size: 2046, max-num-batched-tokens: 2048, gpu-memory-utilization: 0.97}}}, benchmark: {env: {CONC: '128'}}}
