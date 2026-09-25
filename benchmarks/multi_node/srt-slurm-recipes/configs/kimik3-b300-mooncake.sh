@@ -22,6 +22,9 @@ for device in mlx5_0 mlx5_1 mlx5_2 mlx5_3 mlx5_4 mlx5_5 mlx5_8 mlx5_9 \
 done
 if [[ -z "$rail" ]]; then
     echo "Error: no active RDMA rail on $(hostname); Mooncake cannot initialise" >&2
+    for state in /sys/class/infiniband/*/ports/*/state; do
+        echo "$state: $(cat "$state" 2>&1)" >&2
+    done
     exit 1
 fi
 config="${MOONCAKE_CONFIG_PATH:-/logs/mooncake_store_config.json}"
