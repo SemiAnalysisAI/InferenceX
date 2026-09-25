@@ -8907,3 +8907,13 @@
     - "Require native PowerX on every selected GLM-5.2 B200 AgentX performance cell, retaining flag 0, existing images, topology, concurrency and golden acceptance."
     - "为 GLM-5.2 B200 所有选定 AgentX 性能点启用必需的原生 PowerX；保留 flag 0、镜像、拓扑、并发和 golden 验收。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3400
+
+- config-keys:
+  - glm5.2-fp4-b200-dynamo-sglang-agentic-agg
+  - glm5.2-fp4-b200-dynamo-sglang-agentic-disagg
+  description:
+  - Include GLM-5.2 B200 installation and required PowerX runtime fixes in the SKU PR; preserve other model paths.
+  - 在 B200 PR 内包含 GLM-5.2 安装及必需 PowerX 运行时修复，保留其他模型路径。
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3400
+  scenario-type:
+  - agentic-coding

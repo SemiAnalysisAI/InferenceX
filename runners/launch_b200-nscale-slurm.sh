@@ -58,6 +58,14 @@ else
 fi
 echo "B200 Nscale launch path: $LAUNCH_PATH"
 
+check_env_vars MODEL_PREFIX FRAMEWORK PRECISION SPEC_DECODING
+USES_GLM52_RECOVERY=0
+if [[ "$LAUNCH_PATH" == "native-srt" && "$IS_AGENTIC" == "1" &&
+    "$MODEL_PREFIX" == "glm5.2" && "$FRAMEWORK" == "dynamo-sglang" &&
+    "$PRECISION" == "fp4" && "$SPEC_DECODING" == "mtp" ]]; then
+    USES_GLM52_RECOVERY=1
+fi
+
 # ---------------------------------------------------------------------------
 # Model resolution
 # ---------------------------------------------------------------------------
@@ -243,32 +251,39 @@ run_native_srt_lane() {
 
     USES_DCGM_POWER=0
     USES_AGENTX_POWER=0
-    _POWER_CONFIG_FILE="${CONFIG_FILE:-}"
-    if [[ "${EVAL_ONLY}" == "true" && -n "${EVAL_CONFIG_FILE:-}" ]]; then
-        _POWER_CONFIG_FILE="$EVAL_CONFIG_FILE"
-    fi
-    _RECIPE_REL="${_POWER_CONFIG_FILE%%:*}"
-    _RECIPE_SRC="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/${_RECIPE_REL#recipes/}"
-    if [[ -n "$_POWER_CONFIG_FILE" && -f "$_RECIPE_SRC" ]] && awk '
-        /^telemetry:/ { t = 1; next }
-        t && /^[^ ]/  { t = 0 }
-        t && /^  dcgm_exporter:/ { p = 1 }
-        t && /^  enabled: true$/        { e = 1 }
-        END { exit !(p && e) }
-    ' "$_RECIPE_SRC"; then
-        USES_DCGM_POWER=1
-    fi
-    if [[ "$USES_DCGM_POWER" == "1" && "$IS_AGENTIC" == "1" &&
-        "$MODEL_PREFIX" == "kimik3" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-vllm" ]]; then
-        USES_AGENTX_POWER=1
-    elif [[ "$USES_DCGM_POWER" == "1" && (
-        "${IS_AGENTIC}" == "1" ||
-        "$PRECISION" != "fp4" ||
-        ( "$MODEL_PREFIX" == "dsv4" && "$FRAMEWORK" != "dynamo-sglang" && "$FRAMEWORK" != "dynamo-vllm" ) ||
-        "$MODEL_PREFIX" != "dsv4"
-    ) ]]; then
-        echo "Error: B200 nscale dcgm-power requires a supported fixed-sequence lane or Kimi-K3 AgentX vLLM" >&2
-        exit 1
+    if [[ "$USES_GLM52_RECOVERY" == "1" ]]; then
+        if [[ "$EVAL_ONLY" == "true" && -n "${EVAL_CONFIG_FILE:-}" ]]; then
+            CONFIG_FILE="$EVAL_CONFIG_FILE"
+        fi
+        check_env_vars CONFIG_FILE
+    else
+        _POWER_CONFIG_FILE="${CONFIG_FILE:-}"
+        if [[ "${EVAL_ONLY}" == "true" && -n "${EVAL_CONFIG_FILE:-}" ]]; then
+            _POWER_CONFIG_FILE="$EVAL_CONFIG_FILE"
+        fi
+        _RECIPE_REL="${_POWER_CONFIG_FILE%%:*}"
+        _RECIPE_SRC="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/${_RECIPE_REL#recipes/}"
+        if [[ -n "$_POWER_CONFIG_FILE" && -f "$_RECIPE_SRC" ]] && awk '
+            /^telemetry:/ { t = 1; next }
+            t && /^[^ ]/  { t = 0 }
+            t && /^  dcgm_exporter:/ { p = 1 }
+            t && /^  enabled: true$/        { e = 1 }
+            END { exit !(p && e) }
+        ' "$_RECIPE_SRC"; then
+            USES_DCGM_POWER=1
+        fi
+        if [[ "$USES_DCGM_POWER" == "1" && "$IS_AGENTIC" == "1" &&
+            "$MODEL_PREFIX" == "kimik3" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-vllm" ]]; then
+            USES_AGENTX_POWER=1
+        elif [[ "$USES_DCGM_POWER" == "1" && (
+            "${IS_AGENTIC}" == "1" ||
+            "$PRECISION" != "fp4" ||
+            ( "$MODEL_PREFIX" == "dsv4" && "$FRAMEWORK" != "dynamo-sglang" && "$FRAMEWORK" != "dynamo-vllm" ) ||
+            "$MODEL_PREFIX" != "dsv4"
+        ) ]]; then
+            echo "Error: B200 nscale dcgm-power requires a supported fixed-sequence lane or Kimi-K3 AgentX vLLM" >&2
+            exit 1
+        fi
     fi
 
     export SERVED_MODEL_NAME=$MODEL
@@ -282,13 +297,23 @@ run_native_srt_lane() {
     export UV_INSTALL_DIR="$GITHUB_WORKSPACE/.local/bin"
     curl -LsSf https://astral.sh/uv/install.sh | sh
     export PATH="$UV_INSTALL_DIR:$PATH"
-    uv venv --quiet "$GITHUB_WORKSPACE/.venv"
-    source "$GITHUB_WORKSPACE/.venv/bin/activate"
-    uv pip install --quiet -e .
+    if [[ "$USES_GLM52_RECOVERY" == "1" ]]; then
+        install_srt_slurm "$GITHUB_WORKSPACE/.venv" || exit 1
+    else
+        uv venv --quiet "$GITHUB_WORKSPACE/.venv"
+        source "$GITHUB_WORKSPACE/.venv/bin/activate"
+        uv pip install --quiet -e .
+    fi
 
     if ! command -v srtctl &> /dev/null; then
         echo "Error: Failed to install srtctl" >&2
         exit 1
+    fi
+
+    if [[ "$USES_GLM52_RECOVERY" == "1" ]]; then
+        prepare_srt_power "$CONFIG_FILE" "$FRAMEWORK" || exit 1
+    else
+        SRTCTL_RECIPE_ARGS=("${SRTCTL_EVAL_ARGS[@]}")
     fi
 
     NGINX_IMAGE="nginx:1.27.4"
@@ -352,7 +377,11 @@ run_native_srt_lane() {
     echo "Generated srtslurm.yaml:"
     cat srtslurm.yaml
 
-    run_srt_setup ARCH=x86_64
+    if [[ "$USES_GLM52_RECOVERY" == "1" ]]; then
+        run_srt_setup ARCH=x86_64 || exit 1
+    else
+        run_srt_setup ARCH=x86_64
+    fi
 
     # Read by srt-slurm's post-benchmark eval.
     export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
@@ -384,7 +413,7 @@ run_native_srt_lane() {
         sed -i 's/^  max_attempts: [0-9]*/  max_attempts: 720/' "$CONFIG_PATH"
     fi
 
-    if [[ "$USES_DCGM_POWER" == "1" ]]; then
+    if [[ "$USES_DCGM_POWER" == "1" && ( "$USES_GLM52_RECOVERY" != "1" || "$USES_AGENTX_POWER" != "1" ) ]]; then
         read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
         python "$GITHUB_WORKSPACE/runners/inject_srt_power_concurrencies.py" \
             "$CONFIG_PATH" "${POWER_CONCURRENCIES[@]}" || exit 1
@@ -398,7 +427,7 @@ run_native_srt_lane() {
         SRTCTL_PREFLIGHT_ARGS+=(--no-preflight)
     fi
 
-    SRTCTL_OUTPUT=$(apply_srt_recipe "$CONFIG_FILE" "$FRAMEWORK" "${SRTCTL_EVAL_ARGS[@]}" -f "$CONFIG_FILE" "${SRTCTL_PREFLIGHT_ARGS[@]}" --tags "b200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
+    SRTCTL_OUTPUT=$(apply_srt_recipe "$CONFIG_FILE" "$FRAMEWORK" "${SRTCTL_RECIPE_ARGS[@]}" -f "$CONFIG_FILE" "${SRTCTL_PREFLIGHT_ARGS[@]}" --tags "b200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
     echo "$SRTCTL_OUTPUT"
 
     JOB_ID=$(echo "$SRTCTL_OUTPUT" | grep -oP '✅ Job \K[0-9]+' || echo "$SRTCTL_OUTPUT" | grep -oP 'Job \K[0-9]+')
