@@ -45,8 +45,7 @@ export INFMAX_CONTAINER_WORKSPACE=/workspace
 source /workspace/benchmarks/benchmark_lib.sh
 
 # Model-specific engine environment (not caller configuration): the prefill
-# vLLM env block lives with the model, exactly as models_atom.yaml carries the
-# ATOM `env` string. Everything else is passed in by the recipe.
+# vLLM env block lives with the model. Everything else is passed in by the recipe.
 MODELS_YAML="${WS_PATH}/models_tilert.yaml"
 eval "$("$PY" - "$MODELS_YAML" "$MODEL_NAME" <<'PYEOF'
 import shlex, sys, yaml
