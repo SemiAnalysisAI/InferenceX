@@ -8887,3 +8887,43 @@
     - "Add DeepSeek-V4-Pro-0813 golden AL for draft lengths 4, 5, 7 and 8 (3.36 / 3.61 / 3.73 / 3.47)."
     - "Agentic PD router: pin --decode-policy round_robin so decode no longer inherits the prefill --policy (consistent_hashing)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3256
+
+- config-keys:
+  - dsv4-fp4-gb200-dynamo-vllm-agentic-dspark-agg
+  - dsv4-fp4-gb200-dynamo-vllm-agentic-dspark-disagg
+  scenario-type:
+  - agentic-coding
+  all-evals: true
+  description:
+  - Add GB200 vLLM DSpark AgentX recipes on 20ebb28, including C32 and C64.
+  - 新增使用 20ebb28 的 GB200 vLLM DSpark AgentX 配置，包含 C32 和 C64。
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3416
+
+- config-keys:
+  - dsv4-fp4-gb200-dynamo-vllm-agentic-dspark-agg
+  - dsv4-fp4-gb200-dynamo-vllm-agentic-dspark-disagg
+  scenario-type:
+  - agentic-coding
+  description:
+  - Include throughput runs for the GB200 DSpark AgentX recipes.
+  - 为 GB200 DSpark AgentX 配置添加吞吐量测试。
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3416
+
+- config-keys:
+  - dsv4-fp4-gb200-dynamo-vllm-agentic-dspark-agg
+  - dsv4-fp4-gb200-dynamo-vllm-agentic-dspark-disagg
+  scenario-type:
+  - agentic-coding
+  description:
+  - Select the staged DeepSeek-V4-Pro-0813 checkpoint for GB200 DSpark recipes.
+  - 为 GB200 DSpark 配置选择已部署的 DeepSeek-V4-Pro-0813 检查点。
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3416
+
+- config-keys:
+  - dsv4-fp4-gb200-dynamo-vllm-agentic-dspark-disagg
+  scenario-type:
+  - agentic-coding
+  description:
+  - Adjust C32 prefill memory headroom.
+  - 调整 C32 prefill 显存预留。
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3416
