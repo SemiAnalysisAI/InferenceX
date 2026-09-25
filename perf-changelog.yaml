@@ -8950,3 +8950,12 @@
   description:
     - "Update SGLang image from v0.5.19-cu130 to v0.5.20-cu130 and pass --cuda-graph-max-bs-decode after the alias removal."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3334
+
+- config-keys:
+    - dsv4-fp4-b300-sglang-agentic-hicache-eagle
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update B300 DSV4 performance."
+    - "更新 B300 DSV4 性能。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX

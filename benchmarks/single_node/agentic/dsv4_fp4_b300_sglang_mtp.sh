@@ -2,7 +2,7 @@
 set -eo pipefail
 set -x
 
-# DeepSeek-V4-Pro-0813 FP4 on B300 with SGLang DSpark K=6.
+# DeepSeek-V4-Pro FP4 with EAGLE, or Pro-0813 with DSpark K=6, on B300.
 # KV_OFFLOADING=dram requires KV_OFFLOAD_BACKEND=hicache.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -68,6 +68,9 @@ if require_agentic_kv_offload_backend hicache; then
     else
         HICACHE_RATIO=8
     fi
+    if [ "$MODEL" = "deepseek-ai/DeepSeek-V4-Pro" ]; then
+        HICACHE_RATIO=2
+    fi
     HICACHE_WRITE_POLICY="write_back"
     HICACHE_IO_BACKEND="direct"
     HICACHE_MEM_LAYOUT="page_first_direct"
@@ -81,12 +84,13 @@ if require_agentic_kv_offload_backend hicache; then
     # AIPerf owns the AgentX warmup; SGLang's per-DP warmup can time out after
     # the API is already healthy.
     WARMUP_ARGS=(--skip-server-warmup)
-    echo "HiCache DSv4 CPU tier: ratio=$HICACHE_RATIO, capacity=${TOTAL_CPU_DRAM_GB} GB, write_policy=$HICACHE_WRITE_POLICY, io_backend=$HICACHE_IO_BACKEND, mem_layout=$HICACHE_MEM_LAYOUT"
+    echo "HiCache DSv4 CPU tier: ratio=$HICACHE_RATIO, cpu_budget=${TOTAL_CPU_DRAM_GB} GB, write_policy=$HICACHE_WRITE_POLICY, io_backend=$HICACHE_IO_BACKEND, mem_layout=$HICACHE_MEM_LAYOUT"
 fi
 
 USE_SGLANG_ROUTER=false
 SGLANG_BACKEND_PORT="$PORT"
 ROUTER_LOG="$RESULT_DIR/router.log"
+ROUTER_ARGS=()
 if [ "$DP_ATTENTION" = "true" ]; then
     USE_SGLANG_ROUTER=true
     export AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID=true
@@ -100,13 +104,16 @@ METRICS_ARGS=(--enable-metrics --enable-cache-report)
 MEM_FRACTION_STATIC=0.88
 CHUNKED_PREFILL_SIZE=8192
 if [ "$DP_ATTENTION" = "true" ]; then
+    PREFILL_DECODE_INTERVAL=20
+    if [ "$MODEL" = "deepseek-ai/DeepSeek-V4-Pro" ]; then
+        PREFILL_DECODE_INTERVAL=32
+    fi
     PARALLEL_ARGS+=(
         --dp "$TP"
         --tokenizer-worker-num "$TP"
         --enable-prefill-delayer
-        --prefill-decode-interval 20
+        --prefill-decode-interval "$PREFILL_DECODE_INTERVAL"
         --enable-dp-attention
-        --enable-dp-lm-head
         --enable-dp-attention-local-control-broadcast
         --incremental-streaming-output
         --stream-interval 20
@@ -140,6 +147,14 @@ if [ "$DP_ATTENTION" = "true" ]; then
     # Scale it so every DEP shape gets 8192 per rank; 16384/rank exceeds
     # MegaMoE's per-rank token cap (startup ValueError).
     CHUNKED_PREFILL_SIZE=$((8192 * TP))
+    if [ "$MODEL" = "deepseek-ai/DeepSeek-V4-Pro" ]; then
+        MEM_FRACTION_STATIC=0.84
+        PARALLEL_ARGS+=(--enable-mixed-chunk --schedule-policy shortest-prefill-first)
+        export SGLANG_ENABLE_DP_SPEC_PREFILL_COORDINATION=1
+        ROUTER_ARGS+=(--disable-circuit-breaker)
+    else
+        PARALLEL_ARGS+=(--enable-dp-lm-head)
+    fi
 else
     PARALLEL_ARGS+=(
         --moe-runner-backend flashinfer_mxfp4
@@ -152,6 +167,9 @@ MODEL_ARGS=(
     --page-size 256
     --disable-shared-experts-fusion
 )
+if [ "$MODEL" = "deepseek-ai/DeepSeek-V4-Pro" ]; then
+    MODEL_ARGS=(--attention-backend dsv4 --page-size 256 --disable-shared-experts-fusion)
+fi
 
 # AgentX concurrency counts live session trees, not individual requests.
 # Allow subagent fan-out to exceed CONC without clipping request bursts.
@@ -192,8 +210,25 @@ if [ "$DP_ATTENTION" = "true" ]; then
     # extra 128 is headroom over the exact-fit boundary.
     export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=8320
 fi
+SPEC_ARGS=(
+    --speculative-algorithm DSPARK
+    --speculative-dspark-block-size 6
+    --speculative-num-steps 1
+    --speculative-eagle-topk 1
+    --speculative-num-draft-tokens 7
+)
+SYNTHETIC_ACC_LEN=3.77
+if [ "$MODEL" = "deepseek-ai/DeepSeek-V4-Pro" ]; then
+    SPEC_ARGS=(
+        --speculative-algorithm EAGLE
+        --speculative-num-steps 3
+        --speculative-eagle-topk 1
+        --speculative-num-draft-tokens 4
+    )
+    SYNTHETIC_ACC_LEN=2.49
+fi
 if [ "${EVAL_ONLY}" != "true" ]; then
-    export SGLANG_SIMULATE_ACC_LEN=3.77
+    export SGLANG_SIMULATE_ACC_LEN="$SYNTHETIC_ACC_LEN"
     export SGLANG_SIMULATE_ACC_METHOD=match-expected
     export SGLANG_SIMULATE_ACC_TOKEN_MODE=real-draft-token
 fi
@@ -224,11 +259,7 @@ SGLANG_CMD=(
     --reasoning-parser deepseek-v4
     --chat-template "$SCRIPT_DIR/../chat_templates/deepseek_v4_thinking.jinja"
     --watchdog-timeout 1800
-    --speculative-algorithm DSPARK
-    --speculative-dspark-block-size 6
-    --speculative-num-steps 1
-    --speculative-eagle-topk 1
-    --speculative-num-draft-tokens 7
+    "${SPEC_ARGS[@]}"
     "${MODEL_ARGS[@]}"
     "${METRICS_ARGS[@]}"
     "${CACHE_ARGS[@]}"
@@ -277,6 +308,7 @@ if [ "$USE_SGLANG_ROUTER" = "true" ]; then
         --connect-timeout-secs 900 \
         --request-timeout-secs 14400 \
         --disable-health-check \
+        "${ROUTER_ARGS[@]}" \
         `# A single transient router->engine send failure would otherwise` \
         `# surface as a 500, and AgentX aborts the whole run when a root` \
         `# warmup request fails ("ProfileAborted"). Measured at conc 512:` \
