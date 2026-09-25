@@ -34,7 +34,6 @@ roles:
       UCX_RNDV_SCHEME: "put_zcopy"
       OMPI_MCA_btl: "tcp,self"
       OMPI_MCA_pml: "ob1"
-      TRTLLM_UCX_INTERFACE: "mlx5_0:1,mlx5_1:1,mlx5_10:1,mlx5_11:1,mlx5_16:1,mlx5_17:1,mlx5_20:1,mlx5_21:1,mlx5_22:1,mlx5_23:1,mlx5_4:1,mlx5_5:1,mlx5_8:1,mlx5_9:1,mlx5_2:1,mlx5_3:1"
 
     args:
       max_batch_size: 2
@@ -76,7 +75,6 @@ roles:
       UCX_RNDV_SCHEME: "put_zcopy"
       OMPI_MCA_btl: "tcp,self"
       OMPI_MCA_pml: "ob1"
-      TRTLLM_UCX_INTERFACE: "mlx5_0:1,mlx5_1:1,mlx5_10:1,mlx5_11:1,mlx5_16:1,mlx5_17:1,mlx5_20:1,mlx5_21:1,mlx5_22:1,mlx5_23:1,mlx5_4:1,mlx5_5:1,mlx5_8:1,mlx5_9:1,mlx5_2:1,mlx5_3:1"
 
 
     args:
