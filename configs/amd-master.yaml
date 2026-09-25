@@ -1424,4 +1424,4 @@ dsv41flash-fp4-mi355x-sglang-agentic-dspark:
     agentic-coding:
     - dram-utilization: 0.60
       search-space:
-      - { tp: 4, ep: 4, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32] }
+      - { tp: 4, ep: 4, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/sglang/mi355x-fp4-mtp/agentic.yaml }
