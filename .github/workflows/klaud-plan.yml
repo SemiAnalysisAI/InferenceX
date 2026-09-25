@@ -69,7 +69,7 @@ jobs:
       - name: Install Claude Code 2.1.282
         id: claude_cli
         if: steps.prepare.outputs.has_candidates == 'true'
-        run: |
+        run: | # zizmor: ignore[adhoc-packages] Claude CLI and its native packages are pinned to 2.1.282
           npm install --prefix "$RUNNER_TEMP/claude-code" --no-audit --no-fund @anthropic-ai/claude-code@2.1.282
           claude_cli="$RUNNER_TEMP/claude-code/node_modules/.bin/claude"
           test "$("$claude_cli" --version)" = "2.1.282 (Claude Code)"
