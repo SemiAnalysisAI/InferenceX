@@ -70,7 +70,15 @@ def _load_testlists(names: list[str] | None, directory: Path = TESTLIST_DIR) -> 
             raise SystemExit(f"unknown testlist(s): {missing}; available: {sorted(available)}")
     else:
         wanted = available
-    return {name: json.loads(path.read_text()) for name, path in wanted.items()}
+    lists = {name: json.loads(path.read_text()) for name, path in wanted.items()}
+    for name, entries in lists.items():
+        for i, entry in enumerate(entries):
+            for field, what in (("sources", "checkpoint ids"), ("name", "roles in those checkpoints")):
+                v = entry.get(field)
+                if not isinstance(v, list) or not all(isinstance(s, str) and s for s in v):
+                    raise SystemExit(f"{name}[{i}]: every testlist entry needs a '{field}' list of {what} "
+                                     f"(empty for a shape from no model)")
+    return lists
 
 
 def _backend_supported_ops(platform: str, backends: list[str], strict: bool = False) -> dict[str, set[str]]:
@@ -192,7 +200,7 @@ def main() -> int:
                     continue  # Strict CI retains unsupported backend/operator pairs.
                 entries.append((
                     Op(type=shape["type"], args=shape["args"], backend=backend,
-                       name=shape.get("name")),
+                       name=shape["name"], sources=shape["sources"]),
                     tl_name,
                 ))
 
