@@ -153,6 +153,12 @@ B200 Nscale 的 GLM-5.1 可用 `MODEL_PATH` 指定已有共享权重，覆盖默
 
 仅固定 8192/1024 的 `glm5.1-fp8-b200-tilert` 要求原生功耗。TileRT 在 `salloc` 返回的分配内运行，保留两个角色的退出码，并在保存审计数据前等待采集器排空。每个角色仅支持一个物理节点。其他序列长度、AgentX 和 eval-only 不启用此采集器。硬件资格验证与发布仍待完成。
 
+## 限定 GLM-5.2 的 PowerX 恢复
+
+GLM-5.2 FP4 MTP AgentX 恢复路径在调用方覆盖生效后解析选定的原生配方，包括变体选择。性能点要求共享的 AgentX 测量窗口与结果契约、`telemetry.required: true` 及 `dcgm-exporter` 容器别名。基准并发和必需功耗设置一起传递；eval-only 保留真实验证，不采集性能功耗。
+
+显式启用的安装器应用 `runners/srt-slurm/glm52-local-version-compute-setup.patch`，在本地磁盘计算 Hatch 的实际版本，并传给登录节点和计算节点安装过程。安装失败会停止提交。该补丁位于自动应用的补丁目录之外，其他模型和 launcher 路径保留现有安装与功耗行为。
+
 ## 注册 srt-slurm 配方
 
 映射来源：[`benchmarks/multi_node/srt-slurm-recipes/RECIPES.md`](../benchmarks/multi_node/srt-slurm-recipes/RECIPES.md)。检入的配方：[`benchmarks/multi_node/srt-slurm-recipes/`](../benchmarks/multi_node/srt-slurm-recipes/)。

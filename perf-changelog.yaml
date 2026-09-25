@@ -8909,3 +8909,13 @@
     - "Add a source-hash-guarded direct HiCache load-enqueue candidate only to C48 1P4D prefill, with waiver docs/waiver/3402.md; CPU ordering tests pass, exact-runtime and GPU validation remain pending."
     - "仅为 C48 1P4D prefill 增加带源码哈希校验的 direct HiCache load-enqueue 候选修复，豁免见 docs/waiver/3402.md；CPU 顺序测试通过，精确运行环境及 GPU 验证仍待完成。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3402
+
+- config-keys:
+  - glm5.2-fp4-gb300-dynamo-sglang-agentic-agg
+  - glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg
+  description:
+  - Include GLM-5.2 GB300 installation and required PowerX runtime fixes in the SKU PR; preserve other model paths.
+  - 在 GB300 PR 内包含 GLM-5.2 安装及必需 PowerX 运行时修复，保留其他模型路径。
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3402
+  scenario-type:
+  - agentic-coding
