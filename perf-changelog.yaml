@@ -8931,3 +8931,10 @@
     - "Use five-token DSpark with thinking_on golden AL 3.51 for throughput and real acceptance for eval, the shipped draft, and dsml_v41 tool parsing. Replay semianalysis_cc_traces_weka_062126 for 3600 seconds per point with five warmup requests per lane."
     - "DSpark draft layers 37-39 keep their checkpoint precision: the recipe passes no --online_quant_config, so online_quant_config resolves to None and make_v4_quant_config builds the same per-layer quant spec for the drafter as for the target. The MTP weights (mtp.0/1/2) load inline from the same checkpoint with spec_decode=True, and config.get_layer_quant_config has no mtp.* special case, so layers 37-39 are neither re-quantized nor up/down-cast by ATOM and retain their on-disk dtype. --kv_cache_dtype bf16 and --index-cache-dtype fp8 touch cache storage only, not draft/MTP weights."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3387
+
+- config-keys:
+    - glm5.2-fp8-mi325x-sglang-agentic-mtp
+  description:
+    - "Update SGLang ROCm image to v0.5.20-rocm720-mi30x; replace retired --cuda-graph-max-bs with --cuda-graph-max-bs-decode."
+    - "将 SGLang ROCm 镜像更新至 v0.5.20-rocm720-mi30x，并以 --cuda-graph-max-bs-decode 替换已移除的 --cuda-graph-max-bs。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3362
