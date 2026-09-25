@@ -3,7 +3,7 @@ base:
   name: qwen3.5-fp4-mi355x-sglang-mtp-8k1k
   model:
     path: hf:amd/Qwen3.5-397B-A17B-MXFP4-AttnFP8-V2
-    container: lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260913
+    container: lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260924
     precision: fp4
   resources:
     gpu_type: mi355x
