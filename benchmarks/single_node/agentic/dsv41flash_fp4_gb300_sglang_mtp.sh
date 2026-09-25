@@ -45,10 +45,13 @@ export SGLANG_TIMEOUT_KEEP_ALIVE=900
 export SGLANG_DEFAULT_THINKING=1
 export SGLANG_DSV41_REASONING_EFFORT=high
 
-# Retain TP2's anonymous host-table layout and use the same placement on TP4
-# to leave HBM for the larger prefill workspace and cached prefixes.
+# C1/C2 TP4 keep Engram on GPU; only C1 has matched local measurements.
+# Other points retain host tables for prefill workspace and cached prefixes.
 export SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1
 export SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank
+if (( TP == 4 && CONC <= 2 )); then
+    export SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=0
+fi
 
 # The bundled Markov embedding/head weights are natively BF16. Preserve the
 # nightly default that keeps W2 BF16 instead of converting it to FP32.
@@ -128,14 +131,17 @@ if (( TP == 2 && CONC >= 64 )); then
 fi
 
 # Matched one-hour C64 runs favor 16K chunks without delaying prefills.
-# Keep this TP4 candidate fixed across the sweep; TP2 retains its recipe above.
+# C1/C2 use 4K/interval16; C1 keeps automatic SWA tails and C2 reserves 128.
+# TP2 retains its recipe above; the caller selects EP in the master config.
 if (( TP == 4 )); then
-    CHUNKED_PREFILL_SIZE=16384
-    SCHEDULING_ARGS=(--prefill-decode-interval 0)
-    CACHE_ARGS=(--swa-prefix-tails 4096)
-    MAX_RUNNING_REQUESTS=128
-    CUDA_GRAPH_MAX_BS=128
     export SGLANG_RAGGED_VERIFY_MODE=static
+    if (( CONC > 2 )); then
+        CHUNKED_PREFILL_SIZE=16384
+        SCHEDULING_ARGS=(--prefill-decode-interval 0)
+        CACHE_ARGS=(--swa-prefix-tails 4096)
+        MAX_RUNNING_REQUESTS=128
+        CUDA_GRAPH_MAX_BS=128
+    fi
 fi
 
 SGLANG_CMD=(

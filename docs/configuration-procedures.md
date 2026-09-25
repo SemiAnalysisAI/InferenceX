@@ -410,12 +410,20 @@ Source: [upstream recipe](https://github.com/vllm-project/recipes/blob/main/mode
 
 The GB300 candidate pins `lmsysorg/sglang:dev-cu13-nightly-0924` by digest, built from
 `6a14b801417adeb844ff690e8ebe314c126eeb97` in [run 36045441324](https://github.com/sgl-project/sglang/actions/runs/36045441324).
-TP2/EP2 launch settings are unchanged. TP4/EP4 uses 16,384-token prefill chunks,
+TP2/EP2 launch settings are unchanged. TP4 C1 uses pure TP (EP1), GPU Engram,
+4,096-token chunks, prefill/decode interval 16, request cap 2 and decode graph cap
+64; automatic SWA sizing resolves to 8 tails on this image. A matched local
+30-minute C1 pair measured median per-user output speeds of about 450 tok/s for
+EP1 versus 433 tok/s for EP4, with essentially tied aggregate throughput and
+slightly worse EP1 TTFT. This is limited evidence, not a full sweep qualification.
+C2 is an untested pure-TP4/EP1 candidate using the same GPU Engram, 4K chunk and
+interval 16, with request cap 4, graph cap 64 and 128 SWA prefix tails.
+TP4/EP4 at C4 and above retains 16,384-token prefill chunks,
 prefill/decode interval 0, per-rank host Engram, 4,096 SWA prefix tails, static
 ragged verification, and running-request/decode-graph caps of 128; mixed chunk
 prefill remains disabled. Both retain static memory fraction 0.80, native context
 and backend defaults, DSpark block size 5, and AL 3.51 for performance only.
-Accuracy evaluations use real verification. Both topologies retain C1/2/4/8/16/32/64/128
+Accuracy evaluations use real verification. Both TP sizes retain C1/2/4/8/16/32/64/128
 and 3,600-second profiles. Matched local C64 runs on the older `4cbf290f` image
 support the TP4 choice; they do not qualify the new image or the other concurrency
 points. Require a fresh full performance and accuracy sweep before accepting the curve.

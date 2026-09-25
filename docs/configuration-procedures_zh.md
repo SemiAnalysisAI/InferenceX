@@ -356,7 +356,14 @@ Maximum concurrency for 1,048,576 tokens per request: 6.70x
 
 GB300 候选配方通过 digest 固定 `lmsysorg/sglang:dev-cu13-nightly-0924`，来自
 [run 36045441324](https://github.com/sgl-project/sglang/actions/runs/36045441324)，源码提交为
-`6a14b801417adeb844ff690e8ebe314c126eeb97`。TP2/EP2 启动设置不变。TP4/EP4 使用
+`6a14b801417adeb844ff690e8ebe314c126eeb97`。TP2/EP2 启动设置不变。TP4 的 C1 点使用
+纯 TP（EP1）、GPU Engram、4,096-token chunk、prefill/decode interval 16、运行请求
+上限 2 和 decode graph 上限 64；该镜像的自动 SWA 配置解析为 8 个尾部。相同条件下的
+本地 30 分钟 C1 对比中，EP1 与 EP4 的每用户输出速度中位数分别约为 450 和 433 tok/s，
+总吞吐量基本持平，EP1 的 TTFT 略差。这只是有限证据，不能替代全量 sweep 验收。
+C2 是尚未实测的纯 TP4/EP1 候选点，使用相同的 GPU Engram、4K chunk 和 interval 16，
+请求上限为 4、graph 上限为 64，并保留 128 个 SWA 前缀尾部。
+TP4/EP4 在 C4 及以上保留
 16,384-token prefill chunk、prefill/decode interval 0、per-rank 主机 Engram、
 4,096 个 SWA 前缀尾部、static ragged verification，以及均为 128 的运行请求与 decode
 graph 上限；不启用 mixed chunk prefill。两种拓扑均保留静态显存比例 0.80、原生上下文与
