@@ -561,6 +561,7 @@ class EPBackend(abc.ABC):
         The caller compares it with an eager drained pair through the same code path.
         """
         import torch
+        import torch.distributed as dist
 
         self.warm(problem, 1)
         graph, _, combined, handle = self._capture_pairs(problem, None, 1, ())
@@ -569,6 +570,12 @@ class EPBackend(abc.ABC):
         for field in self._DISPATCH_OUTPUT_FIELDS:
             self._poison(getattr(handle, field, None))
         self._poison(combined)
+        torch.cuda.synchronize()
+        # Every rank must finish poisoning before ANY rank replays: zero-copy and RDMA transports
+        # write straight into peers' receive buffers, so a fast rank's replay would otherwise land
+        # its payload in a slow peer's buffer before that peer poisoned it, and the poison would
+        # overwrite fresh data (seen as NaN output on nccl-ep LL-zc EP8 and MoRI EP16).
+        dist.barrier()
         torch.cuda.synchronize()
         graph.replay()
         torch.cuda.synchronize()

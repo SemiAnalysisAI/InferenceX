@@ -725,6 +725,10 @@ def _chain_output_matches(chained, drained):
     error = (chained.float() - drained.float()).abs()
     relative = error / drained.float().abs().clamp_min(COMBINE_MAG_FLOOR)
     worst = float(relative.max().item())
+    # torch.max propagates NaN, so a non-finite element lands here. Report it as inf: NaN would
+    # vanish from the cross-rank MAX and publish a failed check beside an error of 0.0.
+    if not math.isfinite(worst):
+        return False, float("inf")
     return worst < COMBINE_REL_TOL, worst
 
 

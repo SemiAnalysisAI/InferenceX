@@ -416,8 +416,11 @@ class GraphAlignmentAndValueCheck(unittest.TestCase):
             order.append(("capture", staged, marks)) or (graph, {}, combined, handle)
         )
         backend._poison = lambda tensor: order.append(("poison", tensor))
-        fake = types.SimpleNamespace(cuda=types.SimpleNamespace(synchronize=lambda: None))
-        with mock.patch.dict(sys.modules, {"torch": fake}):
+        dist = types.SimpleNamespace(barrier=lambda: order.append("barrier"))
+        fake = types.SimpleNamespace(
+            cuda=types.SimpleNamespace(synchronize=lambda: None), distributed=dist,
+        )
+        with mock.patch.dict(sys.modules, {"torch": fake, "torch.distributed": dist}):
             result = backend.graph_replay_output(new_problem())
         # Staging runs INSIDE the capture (staged=None), and the poison lands between the upload
         # replay and the replay whose output is returned.
@@ -426,6 +429,11 @@ class GraphAlignmentAndValueCheck(unittest.TestCase):
         poisoned = [entry for entry in order[first:last] if isinstance(entry, tuple)]
         self.assertIn(("poison", "recv"), poisoned)
         self.assertIn(("poison", combined), poisoned)
+        # Every rank finishes poisoning before any rank replays: peers write into each other's
+        # receive buffers, so an unbarriered replay races a slow peer's poison.
+        last_poison = max(i for i, entry in enumerate(order) if isinstance(entry, tuple)
+                          and entry[0] == "poison")
+        self.assertIn("barrier", order[last_poison:last])
         self.assertTrue(result.cloned)
 
 
@@ -1090,6 +1098,12 @@ class ChainOutputCheck(unittest.TestCase):
                 got, error = ep_harness._chain_output_matches(_Vec(chained), _Vec(drained))
                 self.assertIs(got, ok)
                 self.assertAlmostEqual(error, expected_error)
+
+    def test_a_non_finite_output_is_an_unbounded_mismatch_not_zero_error(self):
+        # NaN would vanish from the cross-rank MAX and publish "failed, error 0.0".
+        got, error = ep_harness._chain_output_matches(_Vec([float("nan"), 1.0]), _Vec([1.0, 1.0]))
+        self.assertIs(got, False)
+        self.assertEqual(error, float("inf"))
 
     def test_near_zero_elements_are_judged_against_the_magnitude_floor(self):
         # Relative error against a denominator of 1e-6 would be huge; the floor keeps
