@@ -3,7 +3,7 @@ base:
   name: qwen3.5-fp8-b200-sglang-8k1k
   model:
     path: hf:Qwen/Qwen3.5-397B-A17B-FP8
-    container: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
+    container: lmsysorg/sglang:nightly-dev-cu13-20260925-8ca82118
     precision: fp8
   resources:
     gpu_type: b200

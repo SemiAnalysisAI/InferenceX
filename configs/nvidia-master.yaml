@@ -1146,7 +1146,7 @@ dsv4-fp4-b300-sglang-agentic-hicache-mtp:
   # max-running-requests 2*CONC.
 
 qwen3.5-fp8-b200-sglang:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
+  image: lmsysorg/sglang:nightly-dev-cu13-20260925-8ca82118
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: cluster:b200-nscale
@@ -1252,7 +1252,7 @@ qwen3.5-fp4-b200-sglang-mtp:
         srt-recipe: benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/b200-fp4-mtp/8k1k.yaml
 
 qwen3.5-fp8-b200-sglang-mtp:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
+  image: lmsysorg/sglang:nightly-dev-cu13-20260925-8ca82118
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: cluster:b200-nscale
