@@ -8975,4 +8975,4 @@
     - "Resolve required AgentX power from selected native recipes on B200, GB200 and GB300; preserve replay concurrency and strict power audits."
     - "Resolve srtctl package versions on local disk for those pools and stop native compute setup on dependency-sync failure; shared runtime scope is retained for qualification."
     - "B200、GB200 和 GB300 根据选定原生配方启用必需功耗，保留回放并发和严格功耗审计；在本地磁盘解析包版本，原生计算节点依赖安装失败即停止。验收范围保留共享 runtime 的影响。"
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3429
