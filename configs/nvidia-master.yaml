@@ -7126,7 +7126,7 @@ glm5.2-fp8-b300-sglang-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [1, 4, 8, 12, 16] }
+      - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [1, 4, 8, 12, 16], srt-recipe: benchmarks/single_node/srt-slurm-recipes/glm5.2/sglang/b300-fp8-mtp/agentic.yaml }
 
 # First GLM-5.2 AgentX recipe on B200, shipped spec-decode-only per the AgentX
 # policy that agentic arms enable speculative decoding rather than running a
