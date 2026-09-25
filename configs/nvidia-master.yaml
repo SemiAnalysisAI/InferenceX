@@ -5747,8 +5747,8 @@ minimaxm3-fp4-b200-trtllm-agentic-mtp:
     # does not size the pool.
     - dram-utilization: 0.8
       search-space:
-      - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: native }, conc-list: [5, 10, 15, 20, 25, 30, 35, 40, 45] }
-      - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: native }, conc-list: [1, 5] }
+      - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: native }, conc-list: [5, 10, 15, 20, 25, 30, 35, 40, 45], srt-recipe: benchmarks/single_node/srt-slurm-recipes/minimaxm3/trtllm/b200-fp4-mtp/agentic.yaml }
+      - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: native }, conc-list: [1, 5], srt-recipe: benchmarks/single_node/srt-slurm-recipes/minimaxm3/trtllm/b200-fp4-mtp/agentic.yaml }
 # Run the GB200 aggregate configuration with TP4 resident, TP8 resident across
 # two NVL4 nodes, and TP4 lazy SimpleCPU KV offload variants. The pinned
 # runtime uses Dynamo-native MiniMax parsing on the worker without the vLLM
