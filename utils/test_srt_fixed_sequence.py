@@ -172,6 +172,9 @@ def test_native_post_eval_preserves_results_topology_and_failure(client_environm
     scripts = workspace / "benchmarks/single_node"
     scripts.mkdir(parents=True)
     shutil.copyfile(ROOT / "benchmarks/benchmark_lib.sh", scripts.parent / "benchmark_lib.sh")
+    hooks = workspace / "runners/srt-slurm/hooks"
+    hooks.mkdir(parents=True)
+    shutil.copyfile(ROOT / "runners/srt-slurm/hooks/common.sh", hooks / "common.sh")
     shutil.copyfile(ROOT / "benchmarks/single_node/srt_eval.sh", scripts / "srt_eval.sh")
     python = tmp_path / "bin/python3"
     python.write_text(

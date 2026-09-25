@@ -9,7 +9,7 @@
 # --output and --error are set by submit.sh via BENCHMARK_LOGS_DIR
 
 source "$(pwd)/../../benchmark_lib.sh" --validation-only
-check_env_vars INFERENCEX_RUNTIME_ENV_VARS VLLM_ROUTER_IMAGE SKIP_RDMA_CHECK SKIP_GPU_SANITY
+check_env_vars INFERENCEX_RUNTIME_ENV_VARS SKIP_RDMA_CHECK SKIP_GPU_SANITY
 check_env_vars \
     ENGINE MODEL_NAME MODEL_DIR xP yD \
     BENCH_INPUT_LEN BENCH_OUTPUT_LEN BENCH_RANDOM_RANGE_RATIO BENCH_NUM_PROMPTS_MULTIPLIER BENCH_MAX_CONCURRENCY \
@@ -34,9 +34,7 @@ echo ""
 
 # Use $(pwd) not BASH_SOURCE — sbatch copies the script to /var/spool/slurmd/
 # at runtime, but the CWD remains the submit-time directory (amd_utils/).
-if [[ "$ENGINE" == "vllm-disagg" ]]; then
-    MODELS_YAML="$(pwd)/models_vllm.yaml"
-elif [[ "$ENGINE" == "atom-disagg" ]]; then
+if [[ "$ENGINE" == "atom-disagg" ]]; then
     MODELS_YAML="$(pwd)/models_atom.yaml"
 elif [[ "$ENGINE" == "tilert" ]]; then
     MODELS_YAML="$(pwd)/models_tilert.yaml"
@@ -99,123 +97,77 @@ export DI_REPO_DIR=$(cd "$(pwd)/../../.." && pwd)
 
 export MODEL_DIR
 
-if [[ "$ENGINE" == "vllm-disagg" ]]; then
-    # vLLM: Extract hf_dir from models.yaml, search multiple paths, resolve HF cache snapshots
-    DISK_DIR_NAME=$(awk '/^'"$MODEL_NAME"':/{found=1; next}
-        found && /^[^ ]/{exit}
-        found && /hf_dir:/{gsub(/[" ]/, "", $2); print $2; exit}' "$MODELS_YAML")
-    DISK_DIR_NAME="${DISK_DIR_NAME:-$MODEL_NAME}"
-    echo "Looking for model: $MODEL_NAME (disk dir: $DISK_DIR_NAME)"
+# SGLang: Validate model path across all allocated nodes
+echo "Looking for model: $MODEL_NAME"
+echo "Checking model availability across all allocated nodes..."
 
-    resolve_hf_cache_path() {
-        local base_path=$1
-        if [[ -d "${base_path}/snapshots" ]]; then
-            local snapshot=$(ls -1 "${base_path}/snapshots" 2>/dev/null | head -1)
-            if [[ -n "$snapshot" ]]; then
-                echo "${base_path}/snapshots/${snapshot}"
-                return 0
-            fi
-        fi
-        echo "$base_path"
-        return 1
-    }
+ALL_NODES=$(scontrol show hostnames "$SLURM_JOB_NODELIST")
+TOTAL_NODES=$(echo "$ALL_NODES" | wc -l)
+echo "Total allocated nodes: $TOTAL_NODES"
+echo "Nodes: $(echo "$ALL_NODES" | tr '\n' ' ')"
 
-    MODEL_PATH=""
-    SEARCH_PATHS=(
-        "${MODEL_DIR}/${DISK_DIR_NAME}"
-        "${MODEL_DIR}/${MODEL_NAME}"
-        "/nfsdata/hf_hub_cache-0/${DISK_DIR_NAME}"
-        "/nfsdata/hf_hub_cache-0/${MODEL_NAME}"
-    )
-
-    for search_path in "${SEARCH_PATHS[@]}"; do
-        if [[ -d "$search_path" ]]; then
-            RESOLVED=$(resolve_hf_cache_path "$search_path")
-            MODEL_PATH="$RESOLVED"
-            echo "Found MODEL_PATH: $MODEL_PATH"
-            break
-        fi
-    done
-
-    if [[ -z "$MODEL_PATH" ]]; then
-        echo "FATAL: Model '$MODEL_NAME' not found. Searched:"
-        for p in "${SEARCH_PATHS[@]}"; do echo "  - $p"; done
-        exit 1
-    fi
-    echo "Final MODEL_PATH: $MODEL_PATH"
-else
-    # SGLang: Validate model path across all allocated nodes
-    echo "Looking for model: $MODEL_NAME"
-    echo "Checking model availability across all allocated nodes..."
-
-    ALL_NODES=$(scontrol show hostnames "$SLURM_JOB_NODELIST")
-    TOTAL_NODES=$(echo "$ALL_NODES" | wc -l)
-    echo "Total allocated nodes: $TOTAL_NODES"
-    echo "Nodes: $(echo "$ALL_NODES" | tr '\n' ' ')"
-
-    check_model_path() {
-        local path=$1
-        local check_name=$2
-        echo "Checking $check_name: $path"
-        srun --nodes=$SLURM_NNODES --ntasks=$SLURM_NNODES /bin/bash -c "
-            if [ -d '$path' ]; then
-                echo \"\$(hostname): Found $path\"
-                exit 0
-            else
-                echo \"\$(hostname): Missing $path\"
-                exit 1
-            fi
-        "
-        local exit_code=$?
-        if [ $exit_code -eq 0 ]; then
-            echo "$check_name available on ALL nodes"
-            return 0
+check_model_path() {
+    local path=$1
+    local check_name=$2
+    echo "Checking $check_name: $path"
+    srun --nodes=$SLURM_NNODES --ntasks=$SLURM_NNODES /bin/bash -c "
+        if [ -d '$path' ]; then
+            echo \"\$(hostname): Found $path\"
+            exit 0
         else
-            echo "$check_name NOT available on all nodes"
-            return 1
-        fi
-    }
-
-    # Extract hf_dir from models.yaml (same as vllm-disagg path above)
-    SGL_DISK_DIR_NAME=$(awk '/^'"$MODEL_NAME"':/{found=1; next}
-        found && /^[^ ]/{exit}
-        found && /hf_dir:/{gsub(/[" ]/, "", $2); print $2; exit}' "$MODELS_YAML")
-    SGL_DISK_DIR_NAME="${SGL_DISK_DIR_NAME:-$MODEL_NAME}"
-
-    # Prefer the caller-supplied MODEL_PATH (recipe scripts set this explicitly);
-    # fall back to MODEL_DIR/hf_dir then MODEL_DIR/MODEL_NAME.
-    if [[ -n "${MODEL_PATH:-}" && "$MODEL_PATH" != "$MODEL_DIR" ]]; then
-        # Caller already resolved the path (e.g. MODEL_PATH=/it-share/hf_cache/models--...)
-        # Use it directly if it exists on all nodes, otherwise try subdirectory combos.
-        if check_model_path "$MODEL_PATH" "MODEL_PATH (caller-supplied)"; then
-            echo "Selected MODEL_PATH: $MODEL_PATH (caller-supplied, available on all nodes)"
-        elif check_model_path "$MODEL_PATH/$SGL_DISK_DIR_NAME" "$MODEL_PATH/$SGL_DISK_DIR_NAME"; then
-            MODEL_PATH="$MODEL_PATH/$SGL_DISK_DIR_NAME"
-            echo "Selected MODEL_PATH: $MODEL_PATH (available on all nodes)"
-        elif check_model_path "$MODEL_PATH/$MODEL_NAME" "$MODEL_PATH/$MODEL_NAME"; then
-            MODEL_PATH="$MODEL_PATH/$MODEL_NAME"
-            echo "Selected MODEL_PATH: $MODEL_PATH (available on all nodes)"
-        else
-            echo "FATAL ERROR: Model '$MODEL_NAME' not found on ALL allocated nodes in:"
-            echo "  - $MODEL_PATH"
-            echo "  - $MODEL_PATH/$SGL_DISK_DIR_NAME"
-            echo "  - $MODEL_PATH/$MODEL_NAME"
+            echo \"\$(hostname): Missing $path\"
             exit 1
         fi
-    elif check_model_path "$MODEL_DIR/$SGL_DISK_DIR_NAME" "$MODEL_DIR/$SGL_DISK_DIR_NAME"; then
-        MODEL_PATH="$MODEL_DIR/$SGL_DISK_DIR_NAME"
+    "
+    local exit_code=$?
+    if [ $exit_code -eq 0 ]; then
+        echo "$check_name available on ALL nodes"
+        return 0
+    else
+        echo "$check_name NOT available on all nodes"
+        return 1
+    fi
+}
+
+# Extract hf_dir from models.yaml
+SGL_DISK_DIR_NAME=$(awk '/^'"$MODEL_NAME"':/{found=1; next}
+    found && /^[^ ]/{exit}
+    found && /hf_dir:/{gsub(/[" ]/, "", $2); print $2; exit}' "$MODELS_YAML")
+SGL_DISK_DIR_NAME="${SGL_DISK_DIR_NAME:-$MODEL_NAME}"
+
+# Prefer the caller-supplied MODEL_PATH (recipe scripts set this explicitly);
+# fall back to MODEL_DIR/hf_dir then MODEL_DIR/MODEL_NAME.
+if [[ -n "${MODEL_PATH:-}" && "$MODEL_PATH" != "$MODEL_DIR" ]]; then
+    # Caller already resolved the path (e.g. MODEL_PATH=/it-share/hf_cache/models--...)
+    # Use it directly if it exists on all nodes, otherwise try subdirectory combos.
+    if check_model_path "$MODEL_PATH" "MODEL_PATH (caller-supplied)"; then
+        echo "Selected MODEL_PATH: $MODEL_PATH (caller-supplied, available on all nodes)"
+    elif check_model_path "$MODEL_PATH/$SGL_DISK_DIR_NAME" "$MODEL_PATH/$SGL_DISK_DIR_NAME"; then
+        MODEL_PATH="$MODEL_PATH/$SGL_DISK_DIR_NAME"
         echo "Selected MODEL_PATH: $MODEL_PATH (available on all nodes)"
-    elif check_model_path "$MODEL_DIR/$MODEL_NAME" "$MODEL_DIR"; then
-        MODEL_PATH="$MODEL_DIR/$MODEL_NAME"
+    elif check_model_path "$MODEL_PATH/$MODEL_NAME" "$MODEL_PATH/$MODEL_NAME"; then
+        MODEL_PATH="$MODEL_PATH/$MODEL_NAME"
         echo "Selected MODEL_PATH: $MODEL_PATH (available on all nodes)"
     else
         echo "FATAL ERROR: Model '$MODEL_NAME' not found on ALL allocated nodes in:"
-        echo "  - $MODEL_DIR/$SGL_DISK_DIR_NAME"
-        echo "  - $MODEL_DIR/$MODEL_NAME"
+        echo "  - $MODEL_PATH"
+        echo "  - $MODEL_PATH/$SGL_DISK_DIR_NAME"
+        echo "  - $MODEL_PATH/$MODEL_NAME"
         exit 1
     fi
-    echo "Final MODEL_PATH: $MODEL_PATH"
+elif check_model_path "$MODEL_DIR/$SGL_DISK_DIR_NAME" "$MODEL_DIR/$SGL_DISK_DIR_NAME"; then
+    MODEL_PATH="$MODEL_DIR/$SGL_DISK_DIR_NAME"
+    echo "Selected MODEL_PATH: $MODEL_PATH (available on all nodes)"
+elif check_model_path "$MODEL_DIR/$MODEL_NAME" "$MODEL_DIR"; then
+    MODEL_PATH="$MODEL_DIR/$MODEL_NAME"
+    echo "Selected MODEL_PATH: $MODEL_PATH (available on all nodes)"
+else
+    echo "FATAL ERROR: Model '$MODEL_NAME' not found on ALL allocated nodes in:"
+    echo "  - $MODEL_DIR/$SGL_DISK_DIR_NAME"
+    echo "  - $MODEL_DIR/$MODEL_NAME"
+    exit 1
 fi
+echo "Final MODEL_PATH: $MODEL_PATH"
 
 # =============================================================================
 # Node Selection
@@ -327,10 +279,6 @@ export EVAL_LIMIT="${EVAL_LIMIT:-}"
 SANITIZED_USER=$(echo "$USER_NAME" | tr -c 'a-zA-Z0-9_.-' '_')
 export DOCKER_CONT_NAME="container_${ENGINE}_${SANITIZED_USER}_${MODEL_NAME}_${SLURM_JOB_ID}"
 
-# vLLM external router container.
-# NOTE: vllm/vllm-router only retains ~16 recent nightlies on Docker Hub; older
-# dated tags are garbage-collected (manifest unknown)
-ROUTER_CONT_NAME="router_vllm_${SANITIZED_USER}_${SLURM_JOB_ID}"
 # Separate agentic benchmark-client container (see CLIENT_IMAGE handling below).
 CLIENT_CONT_NAME="container_${ENGINE}_${SANITIZED_USER}_client_${SLURM_JOB_ID}"
 export RUN_FILE_FULL="$WS_PATH/${RUN_FILE}"
@@ -360,6 +308,98 @@ else
     echo "[WARN] $RDMA_CHECK_SCRIPT not found; skipping RDMA QoS/DCQCN pre-flight check"
 fi
 
+# =============================================================================
+# Hugepage Pre-flight
+# =============================================================================
+# Reclaim idle hugepages left reserved before starting containers (pages still
+# in use are kept); a leftover reservation can make HiCache host-pool sizing
+# fail at startup.
+# SKIP_HUGEPAGE_CHECK=1 to bypass. See hugepage_sanity.sh.
+HUGEPAGE_CHECK_SCRIPT="$(pwd)/helpers/hugepage_sanity.sh"
+if [[ "${SKIP_HUGEPAGE_CHECK:-0}" == "1" ]]; then
+    echo "[INFO] SKIP_HUGEPAGE_CHECK=1 set; skipping hugepage pre-flight check"
+elif [[ -f "$HUGEPAGE_CHECK_SCRIPT" ]]; then
+    echo "Checking hugepage reservations on all $NUM_NODES allocated node(s)..."
+    srun --nodelist="$SELECTED_NODELIST_SRUN" --ntasks=$NUM_NODES bash "$HUGEPAGE_CHECK_SCRIPT"
+    HUGEPAGE_CHECK_RC=$?
+    if [[ $HUGEPAGE_CHECK_RC -ne 0 ]]; then
+        echo "FATAL: hugepage pre-flight failed on one or more nodes (see [hugepage] lines above)."
+        echo "       Set SKIP_HUGEPAGE_CHECK=1 to bypass (HiCache host-pool sizing will likely fail later)."
+        exit 1
+    fi
+    echo "Hugepage pre-flight passed on all $NUM_NODES node(s)"
+else
+    echo "[WARN] $HUGEPAGE_CHECK_SCRIPT not found; skipping hugepage pre-flight check"
+fi
+
+# =============================================================================
+# UMBP DRAM-tier Hugepage Reservation (prefill nodes only)
+# =============================================================================
+# UMBP_DRAM_USE_HUGEPAGES=1 needs hugepages reserved on the host. Only prefill
+# nodes (the first PREFILL_NODES_PER_WORKER * xP of SELECTED_NODES, i.e.
+# NODE_RANK < NODE_OFFSET) run the UMBP tier, so decode nodes get none.
+UMBP_HUGEPAGE_NODELIST=""
+UMBP_HUGEPAGE_NODE_COUNT=0
+
+# Release this job's reservation; a no-op if nothing was reserved. Errors are
+# ignored, and the next job's pre-flight reclaims anything left behind.
+release_umbp_hugepages() {
+    if [[ -n "$UMBP_HUGEPAGE_NODELIST" ]]; then
+        echo "[${SLURM_JOB_ID}] releasing UMBP DRAM-tier hugepages on: $UMBP_HUGEPAGE_NODELIST"
+        srun --nodelist="$UMBP_HUGEPAGE_NODELIST" --ntasks="$UMBP_HUGEPAGE_NODE_COUNT" \
+            env HUGEPAGES_TARGET=0 bash "$HUGEPAGE_CHECK_SCRIPT" 2>/dev/null || true
+    fi
+}
+
+if [[ "${UMBP_DRAM_USE_HUGEPAGES:-0}" == "1" ]]; then
+    PREFILL_NODES_PER_WORKER=$(( (PREFILL_TP_SIZE + GPUS_PER_NODE - 1) / GPUS_PER_NODE ))
+    UMBP_NODE_OFFSET=$(( PREFILL_NODES_PER_WORKER * xP ))
+    if [[ "$UMBP_NODE_OFFSET" -lt 1 || "$UMBP_NODE_OFFSET" -gt "$NUM_NODES" ]]; then
+        echo "FATAL: computed prefill node count ($UMBP_NODE_OFFSET) for UMBP hugepage reservation is out of range (NUM_NODES=$NUM_NODES)." >&2
+        exit 1
+    fi
+    UMBP_PREFILL_NODES=$(echo "$SELECTED_NODES" | head -n "$UMBP_NODE_OFFSET")
+    UMBP_HUGEPAGE_NODELIST=$(echo "$UMBP_PREFILL_NODES" | paste -sd,)
+    UMBP_HUGEPAGE_NODE_COUNT="$UMBP_NODE_OFFSET"
+
+    # Same default as server_sglang.sh.
+    UMBP_TARGET_BYTES="${UMBP_DRAM_BYTES:-1500000000000}"
+
+    # Read Hugepagesize from a target node rather than assuming 2 MiB.
+    UMBP_FIRST_PREFILL_NODE=$(echo "$UMBP_PREFILL_NODES" | head -n 1)
+    UMBP_HUGEPAGESIZE_KB=$(srun --nodelist="$UMBP_FIRST_PREFILL_NODE" --ntasks=1 \
+        bash -c "awk '/^Hugepagesize:/{print \$2; exit}' /proc/meminfo")
+    if [[ -z "$UMBP_HUGEPAGESIZE_KB" || "$UMBP_HUGEPAGESIZE_KB" -le 0 ]]; then
+        echo "FATAL: could not read Hugepagesize from /proc/meminfo on $UMBP_FIRST_PREFILL_NODE." >&2
+        exit 1
+    fi
+
+    UMBP_PAGE_BYTES=$(( UMBP_HUGEPAGESIZE_KB * 1024 ))
+    UMBP_PAGES_NEEDED=$(( (UMBP_TARGET_BYTES + UMBP_PAGE_BYTES - 1) / UMBP_PAGE_BYTES ))
+    # +2% margin for UMBP allocator rounding/alignment.
+    UMBP_HUGEPAGE_MARGIN_PCT="${UMBP_HUGEPAGE_MARGIN_PCT:-2}"
+    UMBP_PAGES_TARGET=$(( (UMBP_PAGES_NEEDED * (100 + UMBP_HUGEPAGE_MARGIN_PCT) + 99) / 100 ))
+
+    echo "Reserving $UMBP_PAGES_TARGET hugepages (~$(( UMBP_PAGES_TARGET * UMBP_PAGE_BYTES / 1000 / 1000 / 1000 )) GB @ ${UMBP_HUGEPAGESIZE_KB} kB pages) for the UMBP DRAM tier on prefill node(s): $UMBP_HUGEPAGE_NODELIST"
+    # Grow tolerance is half the margin so the accepted floor stays above
+    # UMBP_PAGES_NEEDED; at equal percentages it would sink below it.
+    UMBP_HUGEPAGE_TOLERANCE_PCT=$(( UMBP_HUGEPAGE_MARGIN_PCT / 2 ))
+    [[ "$UMBP_HUGEPAGE_TOLERANCE_PCT" -lt 1 ]] && UMBP_HUGEPAGE_TOLERANCE_PCT=1
+    srun --nodelist="$UMBP_HUGEPAGE_NODELIST" --ntasks="$UMBP_HUGEPAGE_NODE_COUNT" \
+        env HUGEPAGES_TARGET="$UMBP_PAGES_TARGET" \
+            HUGEPAGE_GROW_TOLERANCE_PCT="$UMBP_HUGEPAGE_TOLERANCE_PCT" \
+            bash "$HUGEPAGE_CHECK_SCRIPT"
+    UMBP_HUGEPAGE_RC=$?
+    if [[ $UMBP_HUGEPAGE_RC -ne 0 ]]; then
+        echo "FATAL: could not reserve $UMBP_PAGES_TARGET hugepages for the UMBP DRAM tier on $UMBP_HUGEPAGE_NODELIST (see [hugepage] lines above)." >&2
+        echo "       Proceeding would silently demote UMBP to 4 KiB pages -- refusing rather than producing a mismatched result." >&2
+        # A short grow still leaves a partial reservation; release it.
+        release_umbp_hugepages
+        exit 1
+    fi
+    echo "UMBP hugepage reservation satisfied on $UMBP_HUGEPAGE_NODELIST"
+fi
+
 cleanup() {
   echo "[${SLURM_JOB_ID}] termination received on $(hostname); cleaning up container + stale logs..."
   # Backstop: on scancel/timeout/step-hang the foreground `exec docker run`
@@ -370,6 +410,8 @@ cleanup() {
   srun --nodelist="$SELECTED_NODELIST_SRUN" \
     bash -c 'eval "$DOCKER_CMD_DETECT"; $DOCKER_CMD rm -f '"$DOCKER_CONT_NAME"' 2>/dev/null || true' 2>/dev/null || true
   rm -rf ${SLURM_SUBMIT_DIR}/logs 2>/dev/null || true
+  release_umbp_hugepages
+
   echo "[${SLURM_JOB_ID}] cleanup done."
 }
 
@@ -469,6 +511,7 @@ DOCKER_ENV_COMMON=(
     # need a route in. Empty for every other arm, and server_sglang.sh only
     # reads them on the umbp-linker branch, so this is inert elsewhere.
     -e UMBP_DRAM_BYTES=\${UMBP_DRAM_BYTES:-}
+    -e UMBP_DRAM_CEILING_GB=\${UMBP_DRAM_CEILING_GB:-}
     -e UMBP_DRAM_USE_HUGEPAGES=\${UMBP_DRAM_USE_HUGEPAGES:-}
     -e UMBP_MAX_TOTAL_TOKENS=\${UMBP_MAX_TOTAL_TOKENS:-}
     -e UMBP_SA_WAIT_SECONDS=\${UMBP_SA_WAIT_SECONDS:-}
@@ -502,21 +545,7 @@ DOCKER_ENV_COMMON=(
 )
 
 # Engine-specific env vars
-if [[ "$ENGINE" == "vllm-disagg" ]]; then
-    DOCKER_ENV_ENGINE=(
-        -e VLLM_WS_PATH=${WS_PATH}
-        -e UCX_TLS=tcp,self,shm,rocm_ipc,rocm_copy,cma
-        -e UCX_SOCKADDR_TLS_PRIORITY=tcp
-        -e UCX_MEMTYPE_CACHE=y
-        -e UCX_RNDV_SCHEME=get_zcopy
-        -e UCX_RNDV_THRESH=4k
-        -e UCX_ROCM_IPC_MIN_ZCOPY=0
-        -e UCX_LOG_LEVEL=warn
-        -e HSA_ENABLE_SDMA=1
-        -e PROXY_STREAM_IDLE_TIMEOUT=\${PROXY_STREAM_IDLE_TIMEOUT}
-        -e PYTHONPYCACHEPREFIX=/tmp/pycache
-    )
-elif [[ "$ENGINE" == "atom-disagg" ]]; then
+if [[ "$ENGINE" == "atom-disagg" ]]; then
     check_env_vars \
         PREFILL_PORT DECODE_PORT HANDSHAKE_PORT MEM_FRAC_STATIC KV_CACHE_DTYPE \
         BLOCK_SIZE MAX_NUM_SEQS
@@ -722,43 +751,13 @@ else
 fi
 fi  # end: if ENGINE == atom-disagg
 
-# Start vLLM external router container on node 0
-if [[ \"$ENGINE\" == \"vllm-disagg\" && \"$ROUTER_TYPE\" == \"vllm-router\" && \"\$SLURM_PROCID\" == \"0\" ]]; then
-    \$DOCKER_CMD rm -f \"$ROUTER_CONT_NAME\" 2>/dev/null || true
-    \$DOCKER_CMD run -d \
-        --name \"$ROUTER_CONT_NAME\" \
-        --network host \
-        --ulimit nofile=1048576:1048576 \
-        -v /tmp:/run_logs \
-        \"$VLLM_ROUTER_IMAGE\" \
-        bash -lc \"mkdir -p /run_logs/slurm_job-${SLURM_JOB_ID} && exec vllm-router \
-            --vllm-pd-disaggregation \
-            --kv-connector moriio \
-            --vllm-discovery-address 0.0.0.0:${PROXY_PING_PORT} \
-            --port ${ROUTER_PORT} \
-            --host 0.0.0.0 \
-            --policy consistent_hash \
-            --prefill-policy consistent_hash \
-            --decode-policy consistent_hash \
-            --log-level info 2>&1 | tee /run_logs/slurm_job-${SLURM_JOB_ID}/vllm_router_\$(hostname).log \"
-fi
-
-# Skip exec on vllm-disagg rank 0 so we can stop the router after the main
-# container exits.  Without this, decode nodes block forever waiting for the
-# router port to close (the router is a separate container).
-MAYBE_EXEC=exec
-if [[ \"$ENGINE\" == \"vllm-disagg\" && \"$ROUTER_TYPE\" == \"vllm-router\" && \"\$SLURM_PROCID\" == \"0\" ]]; then
-    MAYBE_EXEC=
-    set +e
-fi
-
 RANK_IMAGE=
 if [[ \"$ENGINE\" == \"tilert\" && \"\$SLURM_PROCID\" -lt \"$xP\" ]]; then
     RANK_IMAGE=\"$PREFILL_IMAGE\"
     echo \"[tilert] rank \$SLURM_PROCID is a prefill rank; using PREFILL_IMAGE=\$RANK_IMAGE\"
 fi
 
-\$MAYBE_EXEC \$DOCKER_CMD run \
+exec \$DOCKER_CMD run \
     --init \
     --stop-timeout 10 \
     --device /dev/dri \
@@ -804,24 +803,11 @@ fi
         mkdir -p /run_logs/slurm_job-'\"\$SLURM_JOB_ID\"'
         '"$RUN_FILE_FULL"' 2>&1 | tee /run_logs/slurm_job-'\"\$SLURM_JOB_ID\"'/server_\$(hostname).log
     '
-
-# Only reached when exec was skipped (vllm-disagg rank 0)
-DOCKER_EXIT_CODE=\$?
-echo \"[rank 0] Main container exited (rc=\$DOCKER_EXIT_CODE). Stopping vllm-router...\"
-\$DOCKER_CMD rm -f \"$ROUTER_CONT_NAME\" 2>/dev/null || true
-exit \$DOCKER_EXIT_CODE
 "
 SERVER_SRUN_RC=$?
 
 if [[ "${KEEP_CONTAINERS}" != "1" ]]; then
     srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c 'eval "$DOCKER_CMD_DETECT"; $DOCKER_CMD rm -f '"$DOCKER_CONT_NAME"' '"$CLIENT_CONT_NAME"' 2>/dev/null || true'
-
-    # Clean up vLLM external router container on node 0
-    if [[ "$ENGINE" == "vllm-disagg" && "$ROUTER_TYPE" == "vllm-router" ]]; then
-        srun --nodes=1 --ntasks=1 --nodelist="$MASTER_NODE" bash -c '
-            eval "$DOCKER_CMD_DETECT"; $DOCKER_CMD rm -f '"$ROUTER_CONT_NAME"' 2>/dev/null || true
-        '
-    fi
 fi
 
 # /run_logs is backed by each compute node's local /tmp, so the node-0 copy
@@ -847,5 +833,8 @@ if [[ -d "$SHARED_JOB_LOGS" ]]; then
     sudo chown -R "$(id -u):$(id -g)" "$SHARED_JOB_LOGS" 2>/dev/null || true
     chmod -R a+rwX "$SHARED_JOB_LOGS" 2>/dev/null || true
 fi
+
+# cleanup() only runs on INT/TERM/HUP, so release here on normal exit.
+release_umbp_hugepages
 
 exit "$SERVER_SRUN_RC"
