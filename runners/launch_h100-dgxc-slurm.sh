@@ -27,7 +27,8 @@ if [[ "$EXECUTION_PATH" == native-single-node ]]; then
     SRT_MODEL_PATH="hf:$MODEL"
     SRT_SQUASH_FILE="/mnt/nfs/lustre/containers/$(printf '%s' "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
     # The job's host-side orchestrator cannot write the compute node's home.
-    export UV_CACHE_DIR="/mnt/nfs/sa-shared/.uv/cache"
+    # One cache per runner: concurrent builds in a shared NFS cache race.
+    export UV_CACHE_DIR="/mnt/nfs/sa-shared/.uv/cache-${RUNNER_NAME:?}"
     export UV_PYTHON_INSTALL_DIR="/mnt/nfs/sa-shared/.uv/python"
     launch_srt_single_node h100-dgxc-slurm \
         --var SLURM_ACCOUNT "$SLURM_ACCOUNT" --var SLURM_PARTITION "$SLURM_PARTITION" \
