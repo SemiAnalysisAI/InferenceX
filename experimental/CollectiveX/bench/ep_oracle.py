@@ -295,6 +295,147 @@ def _chain_output_matches(chained, drained):
     return worst < COMBINE_REL_TOL, worst
 
 
+def _check_rank_dispatch(torch, view, source_ids, source_range, problem,
+                         global_idx, global_weights, rank, experts_per_rank):
+    """Check the unique source tokens and local expert metadata of a token-rank receive."""
+    receive_count = int(view.payload.shape[0])
+    shape_ok = (
+        view.payload.ndim == 2
+        and view.expert_ids.shape == (receive_count, problem.topk_idx.shape[1])
+        and view.weights.shape == view.expert_ids.shape
+    )
+    if source_range:
+        expected_idx = global_idx.to(problem.x.device).index_select(0, source_ids)
+        expected_weights = global_weights.to(problem.x.device).index_select(0, source_ids)
+        local = (expected_idx // experts_per_rank) == rank
+        expected_ids = torch.where(local, expected_idx, torch.full_like(expected_idx, -1))
+        expected_weights = expected_weights.masked_fill(~local, 0)
+    else:
+        expected_ids = torch.full_like(view.expert_ids, -1)
+        expected_weights = torch.zeros_like(view.weights)
+    actual_ids, actual_weights = _normalized_expert_metadata(
+        torch, view.expert_ids, view.weights
+    )
+    expected_ids, expected_weights = _normalized_expert_metadata(
+        torch, expected_ids, expected_weights
+    )
+    expected_sources = (
+        ((global_idx // experts_per_rank) == rank).any(dim=1).nonzero(as_tuple=True)[0]
+    ).to(problem.x.device)
+    source_set_ok = (
+        source_range
+        and source_ids.numel() == torch.unique(source_ids).numel()
+        and torch.equal(torch.sort(source_ids).values, expected_sources)
+    )
+    metadata_ok = shape_ok and torch.equal(actual_ids, expected_ids)
+    max_weight_error = (
+        float((actual_weights - expected_weights).abs().max().item())
+        if actual_weights.numel()
+        else 0.0
+    )
+    weights_ok = max_weight_error == 0.0
+    valid_expected = expected_ids >= 0
+    expected_local = expected_ids[valid_expected] - rank * experts_per_rank
+    expected_counts = torch.bincount(expected_local, minlength=experts_per_rank)
+    counts_ok = torch.equal(
+        view.local_expert_counts.to(torch.int64), expected_counts.to(torch.int64)
+    )
+    multiplicity_ok = torch.equal(
+        (actual_ids >= 0).sum(dim=1), (expected_ids >= 0).sum(dim=1)
+    )
+    return actual_ids, actual_weights, max_weight_error, {
+        "counts": counts_ok,
+        "metadata": metadata_ok,
+        "multiplicity": multiplicity_ok,
+        "source_set": source_set_ok,
+        "weights": weights_ok,
+    }
+
+
+def _check_expert_dispatch(torch, view, source_ids, source_range, problem,
+                           global_idx, global_weights, rank, experts_per_rank):
+    """Correctness oracle for the low-latency per-expert-slot dispatch/combine layout.
+
+    Normal mode delivers a rank-deduplicated payload: one row per source token per rank,
+    carrying every one of that token's experts that live on the rank, combined by an
+    unweighted rank-sum. The low-latency decode kernels instead deliver one row per
+    (source token, expert) ASSIGNMENT — a token routed to two experts on this rank
+    appears in two rows — and the combine kernel applies the top-k gate weights itself.
+
+    The adapter's low-latency ``inspect_dispatch`` therefore exposes a flat per-slot view:
+      * ``payload``            [N, hidden]  activations of each slot's source token
+      * ``expert_ids``         [N]          global expert id owning the slot (from the
+                                            padded layout's leading dimension)
+      * ``local_expert_counts``[experts_per_rank]
+    Source identity is decoded from the payload bytes. The low-latency dispatch does NOT
+    transport per-slot gate weights — the combine kernel applies the top-k weights at the
+    source — so there is no receive-side weight to check here; weight correctness is
+    covered end-to-end by the combine-values comparison. The staged combine input is the
+    UNWEIGHTED per-expert transform (the kernel multiplies by the gate), so the expected
+    combine sums the gate-scaled per-expert BF16 messages (see
+    _expected_transformed_combine's weighted-kernel-sum branch)."""
+    device = problem.x.device
+    count = int(view.payload.shape[0])
+    expert_ids = view.expert_ids.to(torch.int64).reshape(-1)
+    local_lo = rank * experts_per_rank
+    shape_ok = view.payload.ndim == 2 and tuple(expert_ids.shape) == (count,)
+    expert_range = bool(
+        count == 0
+        or ((expert_ids >= local_lo) & (expert_ids < local_lo + experts_per_rank)).all().item()
+    )
+    # Every (source, local-expert) assignment the global trace routes to this rank —
+    # the exact multiset the per-slot dispatch must deliver.
+    local_assignment = (global_idx.to(device) // experts_per_rank) == rank
+    exp_source, exp_slot = local_assignment.nonzero(as_tuple=True)
+    expected_expert = global_idx.to(device)[exp_source, exp_slot]
+
+    # Compare the delivered (source, expert) pairs against the expected assignment
+    # multiset, and the per-slot gate weight against the trace. A 20-bit expert shift is
+    # safe: total experts stay far below 2^20.
+    if (
+        source_range and expert_range
+        and count == int(expected_expert.numel())
+    ):
+        got_key = source_ids.to(torch.int64) * (1 << 20) + expert_ids
+        want_key = exp_source.to(torch.int64) * (1 << 20) + expected_expert
+        source_set_ok = bool(
+            torch.equal(torch.sort(got_key).values, torch.sort(want_key).values)
+        )
+    else:
+        source_set_ok = False
+    # No receive-side weight is transported under low latency (the combine applies the
+    # gate at the source), so there is nothing to check here; weight correctness is
+    # verified by combine_values below. Report a zero weight error so the artifact field
+    # stays populated and comparable with normal mode.
+
+    actual_counts = view.local_expert_counts.to(torch.int64)
+    if source_range and expert_range:
+        expected_counts = torch.bincount(
+            (expected_expert - local_lo), minlength=experts_per_rank
+        ).to(torch.int64)
+        counts_ok = tuple(actual_counts.shape) == (experts_per_rank,) and torch.equal(
+            actual_counts, expected_counts
+        )
+    else:
+        counts_ok = False
+    metadata_ok = shape_ok and source_range and expert_range
+    # Each source token must appear once per local expert it routes to; source_set_ok
+    # already verified the exact (source, expert) multiset, so multiplicity rides on it.
+    multiplicity_ok = source_set_ok
+
+    # Per-slot unweighted transform: one valid expert per row, unit coefficient (the
+    # kernel applies the gate). weights arg is unused under weighted-kernel-sum.
+    slot_expert = expert_ids.reshape(count, 1)
+    slot_weight = torch.ones((count, 1), dtype=torch.float32, device=device)
+    return slot_expert, slot_weight, 0.0, {
+        "counts": counts_ok,
+        "metadata": metadata_ok,
+        "multiplicity": multiplicity_ok,
+        "source_set": source_set_ok,
+        "weights": True,
+    }
+
+
 def _run_expert_oracle(
     torch,
     routing,
@@ -306,17 +447,17 @@ def _run_expert_oracle(
     experts_per_rank: int,
     scale_up_domain: int,
     seed: int,
+    *,
+    receive_layout: str | None = None,
 ):
     """Verify one real dispatch/transform/combine without entering a timed region."""
     # A per-(source, expert) slot receive breaks this oracle's rank-deduplicated
     # assumptions. Route those layouts to the dedicated per-slot oracle; keying on the
     # declared receive layout -- not the combine weighting, which is an independent
     # declaration -- keeps the token-rank path below untouched.
-    if getattr(backend, "receive_layout", "token-rank") == "token-expert":
-        return _run_ll_expert_oracle(
-            torch, routing, backend, problem, global_idx, global_weights,
-            rank, experts_per_rank, scale_up_domain, seed,
-        )
+    layout = receive_layout or getattr(backend, "receive_layout", "token-rank")
+    # Preserve the token-rank fallback; run_sweep validates declared contracts before entry.
+    per_expert = layout == "token-expert"
     handle = backend.dispatch(problem)
     torch.cuda.synchronize()
     try:
@@ -339,72 +480,35 @@ def _run_expert_oracle(
         )
 
     receive_count = int(view.payload.shape[0])
-    shape_ok = (
-        view.payload.ndim == 2
-        and view.expert_ids.shape == (receive_count, problem.topk_idx.shape[1])
-        and view.weights.shape == view.expert_ids.shape
-    )
     source_range = bool(
         receive_count == 0
         or ((source_ids >= 0) & (source_ids < global_idx.shape[0])).all().item()
     )
+    check_dispatch = _check_expert_dispatch if per_expert else _check_rank_dispatch
+    expert_ids, weights, max_weight_error, checks = check_dispatch(
+        torch, view, source_ids, source_range, problem, global_idx, global_weights,
+        rank, experts_per_rank,
+    )
+    payload_ok = False
     if source_range:
-        expected_idx = global_idx.to(problem.x.device).index_select(0, source_ids)
-        expected_weights = global_weights.to(problem.x.device).index_select(0, source_ids)
-        local = (expected_idx // experts_per_rank) == rank
-        expected_ids = torch.where(local, expected_idx, torch.full_like(expected_idx, -1))
-        expected_weights = expected_weights.masked_fill(~local, 0)
         expected_payload = backend.semantic_payload(
             routing.activations_for_source_ids(
                 source_ids, problem.x.shape[1], seed, problem.x.dtype
             )
         )
-    else:
-        expected_ids = torch.full_like(view.expert_ids, -1)
-        expected_weights = torch.zeros_like(view.weights)
-        expected_payload = torch.empty_like(view.payload)
-    actual_ids, actual_weights = _normalized_expert_metadata(
-        torch, view.expert_ids, view.weights
-    )
-    expected_ids, expected_weights = _normalized_expert_metadata(
-        torch, expected_ids, expected_weights
-    )
-    expected_sources = (
-        ((global_idx // experts_per_rank) == rank).any(dim=1).nonzero(as_tuple=True)[0]
-    ).to(problem.x.device)
-    source_set_ok = (
-        source_range
-        and source_ids.numel() == torch.unique(source_ids).numel()
-        and torch.equal(torch.sort(source_ids).values, expected_sources)
-    )
-    payload_ok = source_range and torch.equal(view.payload, expected_payload)
-    metadata_ok = shape_ok and torch.equal(actual_ids, expected_ids)
-    max_weight_error = (
-        float((actual_weights - expected_weights).abs().max().item())
-        if actual_weights.numel()
-        else 0.0
-    )
-    weights_ok = max_weight_error == 0.0
-    valid_expected = expected_ids >= 0
-    expected_local = expected_ids[valid_expected] - rank * experts_per_rank
-    expected_counts = torch.bincount(expected_local, minlength=experts_per_rank)
-    counts_ok = torch.equal(
-        view.local_expert_counts.to(torch.int64), expected_counts.to(torch.int64)
-    )
-    multiplicity_ok = torch.equal(
-        (actual_ids >= 0).sum(dim=1), (expected_ids >= 0).sum(dim=1)
-    )
+        payload_ok = torch.equal(view.payload, expected_payload)
+
     problem.recv_tokens = receive_count
     combine_weight_semantics = backend.combine_weight_semantics
     transformed = _expert_transform(
-        torch, view.payload, actual_ids, actual_weights, combine_weight_semantics
+        torch, view.payload, expert_ids, weights, combine_weight_semantics
     )
     view.combine_input = transformed
     combined = backend.combine_transformed(problem, handle, transformed)
     torch.cuda.synchronize()
     expected_combined = _expected_transformed_combine(
         torch, problem, experts_per_rank, scale_up_domain, combine_weight_semantics,
-        getattr(backend, "combine_reduction", "domain-fp32"),
+        "domain-fp32" if per_expert else getattr(backend, "combine_reduction", "domain-fp32"),
     )
     if combined.shape == expected_combined.shape:
         # Zero errors stand when the rank legitimately combined nothing.
@@ -423,12 +527,12 @@ def _run_expert_oracle(
         combine_values_ok = False
     checks = {
         "combine_values": combine_values_ok,
-        "counts": counts_ok,
-        "metadata": metadata_ok,
-        "multiplicity": multiplicity_ok,
+        "counts": checks["counts"],
+        "metadata": checks["metadata"],
+        "multiplicity": checks["multiplicity"],
         "payload": payload_ok,
-        "source_set": source_set_ok,
-        "weights": weights_ok,
+        "source_set": checks["source_set"],
+        "weights": checks["weights"],
     }
     return _oracle_report(
         passed=all(checks.values()),
@@ -441,168 +545,10 @@ def _run_expert_oracle(
     )
 
 
-def _run_ll_expert_oracle(
-    torch,
-    routing,
-    backend,
-    problem,
-    global_idx,
-    global_weights,
-    rank: int,
-    experts_per_rank: int,
-    scale_up_domain: int,
-    seed: int,
-):
-    """Correctness oracle for the low-latency per-expert-slot dispatch/combine layout.
-
-    Normal mode delivers a rank-deduplicated payload: one row per source token per rank,
-    carrying every one of that token's experts that live on the rank, combined by an
-    unweighted rank-sum. The low-latency decode kernels instead deliver one row per
-    (source token, expert) ASSIGNMENT — a token routed to two experts on this rank
-    appears in two rows — and the combine kernel applies the top-k gate weights itself.
-
-    The adapter's low-latency ``inspect_dispatch`` therefore exposes a flat per-slot view:
-      * ``payload``            [N, hidden]  activations of each slot's source token
-      * ``expert_ids``         [N]          global expert id owning the slot (from the
-                                            padded layout's leading dimension)
-      * ``local_expert_counts``[experts_per_rank]
-    Source identity is decoded from the payload bytes. The low-latency dispatch does NOT
-    transport per-slot gate weights — the combine kernel applies the top-k weights at the
-    source — so there is no receive-side weight to check here; weight correctness is
-    covered end-to-end by the combine-values comparison. The staged combine input is the
-    UNWEIGHTED per-expert transform (the kernel multiplies by the gate), so the expected
-    combine sums the gate-scaled per-expert BF16 messages (see
-    _expected_transformed_combine's weighted-kernel-sum branch)."""
-    handle = backend.dispatch(problem)
-    torch.cuda.synchronize()
-    try:
-        view = backend.inspect_dispatch(problem, handle)
-        source_ids = routing.decode_source_ids(view.payload, seed)
-    except Exception as inspection_error:
-        # Drain the in-flight dispatch before reporting (an abandoned handle would
-        # deadlock the peer ranks), mirroring the normal-mode oracle's fail-soft path.
-        try:
-            problem.recv_tokens = backend.recv_tokens(handle)
-            backend.stage(problem, handle)
-            backend.combine(problem, handle)
-            torch.cuda.synchronize()
-        except Exception as cleanup_error:
-            raise inspection_error from cleanup_error
-        return _oracle_report(
-            combine_weight_semantics=getattr(
-                backend, "combine_weight_semantics", "undeclared"
-            ),
-        )
-
-    device = problem.x.device
-    count = int(view.payload.shape[0])
-    expert_ids = view.expert_ids.to(torch.int64).reshape(-1)
-    local_lo = rank * experts_per_rank
-    shape_ok = view.payload.ndim == 2 and tuple(expert_ids.shape) == (count,)
-    source_range = bool(
-        count == 0
-        or ((source_ids >= 0) & (source_ids < global_idx.shape[0])).all().item()
-    )
-    expert_range = bool(
-        count == 0
-        or ((expert_ids >= local_lo) & (expert_ids < local_lo + experts_per_rank)).all().item()
-    )
-    # Every (source, local-expert) assignment the global trace routes to this rank —
-    # the exact multiset the per-slot dispatch must deliver.
-    local_assignment = (global_idx.to(device) // experts_per_rank) == rank
-    exp_source, exp_slot = local_assignment.nonzero(as_tuple=True)
-    expected_expert = global_idx.to(device)[exp_source, exp_slot]
-
-    if source_range:
-        expected_payload = backend.semantic_payload(
-            routing.activations_for_source_ids(
-                source_ids, problem.x.shape[1], seed, problem.x.dtype
-            )
-        )
-        payload_ok = torch.equal(view.payload, expected_payload)
-    else:
-        payload_ok = False
-
-    # Compare the delivered (source, expert) pairs against the expected assignment
-    # multiset, and the per-slot gate weight against the trace. A 20-bit expert shift is
-    # safe: total experts stay far below 2^20.
-    if (
-        source_range and expert_range
-        and count == int(expected_expert.numel())
-    ):
-        got_key = source_ids.to(torch.int64) * (1 << 20) + expert_ids
-        want_key = exp_source.to(torch.int64) * (1 << 20) + expected_expert
-        source_set_ok = bool(
-            torch.equal(torch.sort(got_key).values, torch.sort(want_key).values)
-        )
-    else:
-        source_set_ok = False
-    # No receive-side weight is transported under low latency (the combine applies the
-    # gate at the source), so there is nothing to check here; weight correctness is
-    # verified by combine_values below. Report a zero weight error so the artifact field
-    # stays populated and comparable with normal mode.
-    weights_ok = True
-    max_weight_error = 0.0
-
-    actual_counts = view.local_expert_counts.to(torch.int64)
-    if source_range and expert_range:
-        expected_counts = torch.bincount(
-            (expected_expert - local_lo), minlength=experts_per_rank
-        ).to(torch.int64)
-        counts_ok = tuple(actual_counts.shape) == (experts_per_rank,) and torch.equal(
-            actual_counts, expected_counts
-        )
-    else:
-        counts_ok = False
-    metadata_ok = shape_ok and source_range and expert_range
-    # Each source token must appear once per local expert it routes to; source_set_ok
-    # already verified the exact (source, expert) multiset, so multiplicity rides on it.
-    multiplicity_ok = source_set_ok
-
-    problem.recv_tokens = count
-    combine_weight_semantics = backend.combine_weight_semantics
-    # Per-slot unweighted transform: one valid expert per row, unit coefficient (the
-    # kernel applies the gate). weights arg is unused under weighted-kernel-sum.
-    slot_expert = expert_ids.reshape(count, 1)
-    slot_weight = torch.ones((count, 1), dtype=torch.float32, device=device)
-    transformed = _expert_transform(
-        torch, view.payload, slot_expert, slot_weight, combine_weight_semantics
-    )
-    view.combine_input = transformed
-    combined = backend.combine_transformed(problem, handle, transformed)
-    torch.cuda.synchronize()
-    expected_combined = _expected_transformed_combine(
-        torch, problem, experts_per_rank, scale_up_domain, combine_weight_semantics,
-    )
-    if combined.shape == expected_combined.shape:
-        max_absolute_error = max_elementwise_relative_error = 0.0
-        combine_values_ok = True
-        if combined.numel():
-            absolute_error = (combined.float() - expected_combined).abs()
-            max_absolute_error = float(absolute_error.max().item())
-            max_elementwise_relative_error = float(
-                (absolute_error / expected_combined.abs().clamp_min(COMBINE_MAG_FLOOR))
-                .max().item()
-            )
-            combine_values_ok = max_elementwise_relative_error < COMBINE_REL_TOL
-    else:
-        max_absolute_error = max_elementwise_relative_error = None
-        combine_values_ok = False
-    checks = {
-        "combine_values": combine_values_ok,
-        "counts": counts_ok,
-        "metadata": metadata_ok,
-        "multiplicity": multiplicity_ok,
-        "payload": payload_ok,
-        "source_set": source_set_ok,
-        "weights": weights_ok,
-    }
-    return _oracle_report(
-        passed=all(checks.values()),
-        combine_weight_semantics=combine_weight_semantics,
-        receive_count=count,
-        max_absolute_error=max_absolute_error,
-        max_elementwise_relative_error=max_elementwise_relative_error,
-        max_weight_error=max_weight_error,
-        checks=checks,
+def _run_ll_expert_oracle(torch, routing, backend, problem, global_idx, global_weights,
+                          rank, experts_per_rank, scale_up_domain, seed):
+    """Explicit token-expert entry point retained for callers of the original oracle."""
+    return _run_expert_oracle(
+        torch, routing, backend, problem, global_idx, global_weights,
+        rank, experts_per_rank, scale_up_domain, seed, receive_layout="token-expert",
     )

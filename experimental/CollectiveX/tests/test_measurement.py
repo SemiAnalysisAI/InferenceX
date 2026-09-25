@@ -112,6 +112,95 @@ class LowLatencyOracleEndToEnd(unittest.TestCase):
         self.assertFalse(report["checks"]["combine_values"])
 
 
+@unittest.skipUnless(_torch is not None, "oracle checks require CPU torch")
+class SharedOracleLifecycle(unittest.TestCase):
+    """Both layouts preserve the same payload gate and drain an unusable dispatch."""
+
+    def _run(self, layout, *, corrupt_payload=False, inspection_error=None, cleanup_error=None):
+        import routing
+
+        torch = _torch
+        indices = torch.tensor([[0, 1], [1, 2]], dtype=torch.int64)
+        weights = torch.tensor([[0.25, 0.75], [0.5, 0.5]], dtype=torch.float32)
+        problem = types.SimpleNamespace(
+            x=routing.activations_for_source_ids(torch.arange(2), 64, 67),
+            topk_idx=indices,
+            topk_weights=weights,
+        )
+        calls = []
+        backend = _FakeLLBackend(3, 67)
+        backend.receive_layout = layout
+        backend.combine_weight_semantics = (
+            "weighted-kernel-sum" if layout == "token-expert" else "unweighted-rank-sum"
+        )
+        if layout == "token-rank":
+            backend.dispatch = lambda p: object()
+            backend.inspect_dispatch = lambda p, h: types.SimpleNamespace(
+                payload=p.x.clone(), expert_ids=indices.clone(), weights=weights.clone(),
+                local_expert_counts=torch.tensor([1, 2, 1]),
+            )
+            backend.combine_transformed = lambda p, h, transformed: transformed
+            backend.recv_tokens = lambda h: 2
+        original_inspect = backend.inspect_dispatch
+
+        def inspect(p, h):
+            calls.append("inspect")
+            if inspection_error is not None:
+                raise inspection_error
+            view = original_inspect(p, h)
+            if corrupt_payload:
+                # Preserve the source-ID prefix so only the independent payload gate fails.
+                view.payload[:, 40] += 1
+            return view
+
+        def stage(p, h):
+            calls.append(("stage", p.recv_tokens))
+
+        def combine(p, h):
+            calls.append("combine")
+            if cleanup_error is not None:
+                raise cleanup_error
+
+        backend.inspect_dispatch = inspect
+        backend.stage, backend.combine = stage, combine
+        with mock.patch.object(torch.cuda, "synchronize", lambda: None):
+            report = ep_harness._run_expert_oracle(
+                torch, routing, backend, problem, indices, weights,
+                rank=0, experts_per_rank=3, scale_up_domain=1, seed=67,
+            )
+        return report, calls
+
+    def test_each_layout_passes_and_detects_corrupted_payload(self):
+        for layout, count in (("token-rank", 2), ("token-expert", 4)):
+            with self.subTest(layout=layout):
+                report, _ = self._run(layout)
+                self.assertTrue(report["passed"])
+                self.assertEqual(report["receive_count"], count)
+                self.assertEqual(report["max_weight_error"], 0.0)
+                corrupt, _ = self._run(layout, corrupt_payload=True)
+                self.assertFalse(corrupt["passed"])
+                self.assertFalse(corrupt["checks"]["payload"])
+                self.assertTrue(corrupt["checks"]["source_set"])
+
+    def test_inspection_failure_drains_the_pair_before_reporting_failure(self):
+        for layout, count in (("token-rank", 2), ("token-expert", 4)):
+            with self.subTest(layout=layout):
+                report, calls = self._run(layout, inspection_error=ValueError("bad receive"))
+                self.assertEqual(calls, ["inspect", ("stage", count), "combine"])
+                self.assertFalse(report["passed"])
+                self.assertEqual(report["receive_count"], 0)
+                self.assertFalse(any(report["checks"].values()))
+
+    def test_cleanup_failure_preserves_both_exceptions(self):
+        for layout in ("token-rank", "token-expert"):
+            inspection_error = ValueError("bad receive")
+            cleanup_error = RuntimeError("combine failed")
+            with self.subTest(layout=layout), self.assertRaises(ValueError) as caught:
+                self._run(layout, inspection_error=inspection_error, cleanup_error=cleanup_error)
+            self.assertIs(caught.exception, inspection_error)
+            self.assertIs(caught.exception.__cause__, cleanup_error)
+
+
 # ---- from test_bandwidth.py -------------------------------------------------------
 COMPONENTS = bandwidth.COMPONENTS
 
