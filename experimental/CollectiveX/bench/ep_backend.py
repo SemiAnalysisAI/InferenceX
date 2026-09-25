@@ -178,7 +178,7 @@ class EPBackend(abc.ABC):
     @property
     def cuda_graph_enabled(self) -> bool:
         """Use CUDA graph replay unless the external eager switch disables it."""
-        setting = os.environ.get("COLLX_CUDA_GRAPH", "1")
+        setting = os.environ.get("COLLX_CUDA_GRAPH", "0")
         if setting not in ("0", "1"):
             raise ValueError(f"COLLX_CUDA_GRAPH must be '0' or '1', got {setting!r}")
         return self.cuda_graph_supported and setting == "1"
