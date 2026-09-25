@@ -8907,7 +8907,6 @@
     - minimaxm3-fp4-mi355x-atom-agentic-mtp
   scenario-type:
     - agentic-coding
-  no-evals: true
   description:
     - "Update MiniMax-M3 ATOM AgentX from rocm/atom-dev:nightly_202609171455 to nightly_202609231248 (digest sha256:80f2c66579704aba933a9ff2a6e22e1dc61917c0fe6a2b0a0166816cd6d0100a), containing ROCm/ATOM#2366. Enable ATOM_PA_FLYDSL=1 and ATOM_PA_FLYDSL_PLAN=1 for FlyDSL paged decode and context-length-aware dense-decode work planning."
     - "Use only ROCR_VISIBLE_DEVICES for automatically selected NUMA-spread GPUs and remove the inherited ROCR-to-HIP double mask. Preserve explicit ROCR allocations and HIP-only allocations; retain all 19 TP2/TP4 resident/offload points, EAGLE3 K3, golden AL 2.78, indexer CP and CPU memory budgets."
