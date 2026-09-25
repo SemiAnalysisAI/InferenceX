@@ -8902,3 +8902,10 @@
     - "server_atom.sh exports PORT before sourcing benchmark_lib.sh on the eval path. run_lm_eval's check_env_vars guard runs before it parses --port and job.slurm's docker -e allowlist forwards ROUTER_PORT but never PORT, so every multi-node lm-eval cell aborted 8 s in; because check_env_vars exits rather than returning, node 0 also skipped its router teardown and the decode node hung in 'Waiting until router closes...' until the job was cancelled (run 35643358891)."
     - "Per ATOM DeepSeek-V4-Agentic-PD-Max recipe: prefix caching on, FP8 KV and index cache, block-size 256, TBO on prefill only, max-num-seqs = 2x concurrency."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3158
+
+- config-keys:
+    - qwen3.5-fp8-mi355x-sglang
+    - qwen3.5-fp8-mi355x-sglang-mtp
+  description:
+    - "Update SGLang ROCm image from v0.5.18-rocm720-mi35x-20260828 to v0.5.20-rocm720-mi35x-20260924 (latest nightly)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3423
