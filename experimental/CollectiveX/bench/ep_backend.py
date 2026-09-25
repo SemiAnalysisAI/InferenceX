@@ -11,10 +11,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import torch
 
-from ep_harness import (
-    time_us,
-    token_ladder,
-)
+from ep_case import token_ladder
+from ep_measurement import time_us
 
 
 @dataclass
