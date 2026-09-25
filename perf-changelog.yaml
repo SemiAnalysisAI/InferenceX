@@ -8887,3 +8887,12 @@
     - "Add DeepSeek-V4-Pro-0813 golden AL for draft lengths 4, 5, 7 and 8 (3.36 / 3.61 / 3.73 / 3.47)."
     - "Agentic PD router: pin --decode-policy round_robin so decode no longer inherits the prefill --policy (consistent_hashing)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3256
+
+- config-keys:
+    - dsv41flash-fp4-gb300-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the GB300 DeepSeek-V4.1-Flash SGLang curve to dev-cu13-nightly-0924: pure TP4 at C1/C2 and tuned TP4/EP4 at C4+; keep TP2 unchanged."
+    - "更新 GB300 DeepSeek-V4.1-Flash SGLang 曲线至 dev-cu13-nightly-0924：C1/C2 使用纯 TP4，C4+ 使用调优后的 TP4/EP4；TP2 不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX

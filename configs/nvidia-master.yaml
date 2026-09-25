@@ -9000,9 +9000,9 @@ dsv41flash-fp4-b300-sglang-agentic-dspark:
       - { tp: 4, ep: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
       - { tp: 2, ep: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
 
-# Official SGLang nightly; Engram weights in host DRAM, native DSpark draft.
+# Official SGLang nightly; TP4 C1/C2 use GPU Engram, other points use host DRAM.
 dsv41flash-fp4-gb300-sglang-agentic-dspark:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260922-582389ce@sha256:0e1b14e302619a42ef5581b87db6804651d4f946301cf543d74a3a1eb1c33b40
+  image: lmsysorg/sglang:dev-cu13-nightly-0924@sha256:d2c9929f8cc9889326203f6cbc46da48b69de42891b167592c9c76cc803d246e
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:gb300-nv
@@ -9014,4 +9014,5 @@ dsv41flash-fp4-gb300-sglang-agentic-dspark:
     - dram-utilization: 0.80
       search-space:
       - { tp: 2, ep: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
-      - { tp: 4, ep: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+      - { tp: 4, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2] }
+      - { tp: 4, ep: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [4, 8, 16, 32, 64, 128] }
