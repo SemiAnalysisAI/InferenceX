@@ -139,9 +139,9 @@ if [[ "$EXECUTION_PATH" == native-single-node ]]; then
     if [[ "$MODEL" == nvidia/DeepSeek-R1-0528-FP4-V2 ]]; then
         SRT_MODEL_PATH="$MODEL_ROOT/DeepSeek-R1-0528-NVFP4-v2"
     fi
-    # Not staged on node-local NVMe; the legacy AgentX path downloaded it here.
+    # Not staged on node-local NVMe: the engine downloads it into the shared HF cache.
     if [[ "$MODEL" == RadixArk/Qwen3.8-Flash-Next-NVFP4 ]]; then
-        SRT_MODEL_PATH="$WRITABLE_MODELS_DIR/${MODEL##*/}"
+        SRT_MODEL_PATH="hf:$MODEL"
     fi
     SRT_SQUASH_FILE="$SQUASH_DIR/$(printf '%s' "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
     launch_srt_single_node b300-dsxe \
