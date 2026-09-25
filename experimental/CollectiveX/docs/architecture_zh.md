@@ -34,11 +34,11 @@ CollectiveX 包含两条执行路径：分布式专家并行(EP)通信，以及�
 | [ep_oracle.py](../bench/ep_oracle.py) | 独立参考计算、各接收布局的校验，以及共用的清理和合并结果校验 |
 | [ep_results.py](../bench/ep_results.py) | 用例身份、字节数计算、产物格式、原子写入和结果日志 |
 | [ep_harness.py](../bench/ep_harness.py) | 单个用例中按既定顺序执行的正确性校验与测量阶段 |
-| [ep_legacy.py](../bench/ep_legacy.py) | DeepEP 与 UCCL 兼容的 legacy Buffer API 所共用的操作 |
+| [ep_buffer.py](../bench/ep_buffer.py) | DeepEP 与 UCCL 兼容的 Buffer API 所共用的操作 |
 | `ep_deepep_v2.py`、`ep_uccl.py`、`ep_mori.py`、`ep_nccl.py`、`ep_flashinfer.py` | 各厂商库特有的构造、通信、接收视图和清理逻辑 |
 | [routing.py](../bench/routing.py) | 确定性路由、激活值、源 token 身份和局部性统计 |
 
-`EPBackend` 从 `EPTiming` 继承计时实现。DeepEP 和 UCCL 还继承 `LegacyBufferOperations`，
+`EPBackend` 从 `EPTiming` 继承计时实现。DeepEP 和 UCCL 还继承 `BufferOperations`，
 但普通模式的通信实现和各库的量化器仍位于各自适配器中。在 API 一致的路径上，经过参考
 变换的校验输入复用适配器的常规合并操作。后端库仍在 GPU 初始化之后延迟导入。
 

@@ -48,7 +48,7 @@ def _fp8_cast_helpers():
 
 
 # Keep compiler setup after vendor imports, at the original dequantizer initialization point.
-from ep_legacy import LegacyBufferOperations  # noqa: E402
+from ep_buffer import BufferOperations  # noqa: E402
 
 
 def _jit_cache_directory(
@@ -104,7 +104,7 @@ def _require_runtime() -> None:
         raise RuntimeError("invalid DeepEP V2 runtime: deep_ep.ElasticBuffer is absent")
 
 
-class DeepEPV2Backend(LegacyBufferOperations, EPBackend):
+class DeepEPV2Backend(BufferOperations, EPBackend):
     name = "deepep-v2"
     maturity = "production"  # vLLM --all2all-backend deepep_v2; SGLang --moe-a2a-backend deepep
     # Two kernel families under one adapter, selected by mode:

@@ -551,11 +551,11 @@ class TestSingleHandle(unittest.TestCase):
         self.assertLess(len(h.combine_in_t), len(b._recv_x))
 
 class OracleCombineAdapters(unittest.TestCase):
-    def test_legacy_oracle_preserves_each_normal_transport_shape(self):
+    def test_buffer_oracle_preserves_each_normal_transport_shape(self):
         import importlib
         import torch
 
-        _legacy_module()
+        _buffer_module()
         vendor = types.ModuleType("deep_ep")
         vendor.Buffer = vendor.Config = vendor.ElasticBuffer = type("Buffer", (), {})
         transformed = torch.tensor([[1, 2], [3, 4]], dtype=torch.float32)
@@ -620,21 +620,21 @@ class OracleCombineAdapters(unittest.TestCase):
                 self.assertEqual(unused.tolist(), [0, 0])
 
 
-def _legacy_module():
+def _buffer_module():
     """BF16 adapter tests need tensor arithmetic, but do not compile a GPU dequantizer."""
     import torch
 
     with mock.patch.object(torch, "compile", return_value=lambda function: function):
-        import ep_legacy
-    return ep_legacy
+        import ep_buffer
+    return ep_buffer
 
 
-class LegacyBufferContract(unittest.TestCase):
+class BufferContract(unittest.TestCase):
     def test_padded_receive_is_compacted_and_scattered_to_its_original_slots(self):
         import torch
-        ep_legacy = _legacy_module()
+        ep_buffer = _buffer_module()
 
-        backend = ep_legacy.LegacyBufferOperations()
+        backend = ep_buffer.BufferOperations()
         backend._fp8 = False
         backend.rank, backend.num_local_experts = 2, 2
         backend.max_tokens = 3
@@ -655,7 +655,7 @@ class LegacyBufferContract(unittest.TestCase):
             low_latency_combine=combine,
         )
         point = types.SimpleNamespace(T=2, dispatch_x=None, topk_idx=None, topk_weights=None)
-        with mock.patch.object(ep_legacy, "torch", torch):
+        with mock.patch.object(ep_buffer, "torch", torch):
             handle = backend._ll_dispatch(point)
             view = backend._ll_inspect_dispatch(point, handle)
             self.assertEqual(view.payload.tolist(), [[1, 2], [3, 4], [5, 6]])
@@ -669,12 +669,12 @@ class LegacyBufferContract(unittest.TestCase):
         )
 
     def test_teardown_reports_a_destroy_failure(self):
-        ep_legacy = _legacy_module()
+        ep_buffer = _buffer_module()
 
-        backend = ep_legacy.LegacyBufferOperations()
+        backend = ep_buffer.BufferOperations()
         backend.buffer = types.SimpleNamespace(destroy=mock.Mock(side_effect=OSError("busy")))
         distributed = types.SimpleNamespace(barrier=lambda: None)
-        with mock.patch.object(ep_legacy, "dist", distributed):
+        with mock.patch.object(ep_buffer, "dist", distributed):
             self.assertEqual(backend.finalize(0), 1)
 
 

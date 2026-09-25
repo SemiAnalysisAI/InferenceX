@@ -39,12 +39,12 @@ artifact names, and exit statuses form the contracts between those layers.
 | [ep_oracle.py](../bench/ep_oracle.py) | Independent reference arithmetic, layout-specific receive checks, shared cleanup and combine verification |
 | [ep_results.py](../bench/ep_results.py) | Case identity, byte accounting, artifact schema, atomic writes, and result logging |
 | [ep_harness.py](../bench/ep_harness.py) | The ordered correctness and measurement passes for one case |
-| [ep_legacy.py](../bench/ep_legacy.py) | Operations shared by DeepEP and UCCL's compatible legacy Buffer APIs |
+| [ep_buffer.py](../bench/ep_buffer.py) | Operations shared by DeepEP and UCCL's compatible Buffer APIs |
 | `ep_deepep_v2.py`, `ep_uccl.py`, `ep_mori.py`, `ep_nccl.py`, `ep_flashinfer.py` | Vendor construction, transport, receive views, and teardown differences |
 | [routing.py](../bench/routing.py) | Deterministic routing, activations, source identity, and locality statistics |
 
 `EPBackend` inherits the timing implementation from `EPTiming`. DeepEP and UCCL additionally
-inherit `LegacyBufferOperations`; their normal transports and vendor quantizers remain in
+inherit `BufferOperations`; their normal transports and vendor quantizers remain in
 their adapters. Oracle-transformed inputs use the adapter's ordinary combine operation
 where the API is identical. Backend imports remain lazy and occur after GPU initialization.
 

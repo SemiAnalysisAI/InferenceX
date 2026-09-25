@@ -85,7 +85,7 @@ def per_token_cast_back(x_fp8: "torch.Tensor", x_scales: "torch.Tensor"):
 
 
 # Keep compiler setup after vendor imports, at the original dequantizer initialization point.
-from ep_legacy import LegacyBufferOperations  # noqa: E402
+from ep_buffer import BufferOperations  # noqa: E402
 
 
 # Normal-mode legacy Config launch parameters (DeepEP-legacy Config(num_sms, chunk, nvl_buffer)).
@@ -112,7 +112,7 @@ def _normal_num_sms() -> int:
     return 24 if torch.version.cuda else 64
 
 
-class UCCLEPBackend(LegacyBufferOperations, EPBackend):
+class UCCLEPBackend(BufferOperations, EPBackend):
     name = "uccl-ep"
     maturity = "candidate"  # no engine exposes a UCCL-EP all-to-all selector
     # One legacy Buffer under two modes, selected by args.mode:

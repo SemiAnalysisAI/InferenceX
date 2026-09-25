@@ -1,4 +1,4 @@
-"""Operations shared by DeepEP and its API-compatible UCCL legacy Buffer.
+"""Buffer operations shared by the DeepEP and UCCL adapters.
 
 Vendor construction, normal-mode transport, and quantizers stay in their adapters. Shared
 methods retain the same dispatch/stage/combine call depth inside the measured windows.
@@ -35,8 +35,8 @@ def _ll_dequant_static(fp8, scales):
     return (values * block_scales).to(torch.bfloat16).view(e, s, h)
 
 
-class LegacyBufferOperations:
-    """Legacy Buffer low-latency operations and FP8 staging for both library adapters."""
+class BufferOperations:
+    """Shared Buffer low-latency operations and FP8 staging for both adapters."""
 
     def _ll_recv_bf16(self, recv_x):
         """The padded per-expert receive as BF16 `[num_local_experts, cap*num_ranks, hidden]`.
