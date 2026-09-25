@@ -7,10 +7,11 @@ set -x
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
-check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
+check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION PORT EVAL_ONLY
 
 DRAFT_MODEL="Inferact/MiniMax-M3-EAGLE3-GQA"
 NUM_SPEC_TOKENS=3
+TOKENS_PER_SEQ=$((1 + NUM_SPEC_TOKENS))
 # Golden AL for the GQA draft head: golden_al_distribution/minimaxm3_eagle3_gqa.yaml
 # minimax-m3.thinking_on[3]. The non-GQA curve (minimaxm3_eagle3.yaml) reads 2.83.
 SYNTHETIC_ACCEPT_LEN=2.78
@@ -40,8 +41,8 @@ install_agentic_deps
 
 OFFLOAD_ARGS=()
 if require_agentic_kv_offload_backend vllm-simple; then
-    python3 "$(dirname "$0")/../../../runners/patch_vllm_simple_kv_offload.py"
-    CPU_OFFLOAD_BYTES=$((TOTAL_CPU_DRAM_GB * 1024 * 1024 * 1024))
+    # The matrix emits decimal GB; SimpleCPUOffloadConnector expects bytes.
+    CPU_OFFLOAD_BYTES=$((TOTAL_CPU_DRAM_GB * 1000 * 1000 * 1000))
     export VLLM_USE_SIMPLE_KV_OFFLOAD=1
     OFFLOAD_CONFIG=$(printf \
         '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":%d,"lazy_offload":true}}' \
@@ -53,6 +54,14 @@ export PYTHONNOUSERSITE=1
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 export VLLM_FLOAT32_MATMUL_PRECISION=high
 export VLLM_FLASHINFER_ALLREDUCE_BACKEND=trtllm
+export AIPERF_SERVER_METRICS_URLS="http://localhost:${PORT}/metrics"
+export AIPERF_REQUIRED_SERVER_METRIC_PREFIX="vllm:"
+
+MAX_NUM_SEQS=$((2 * CONC))
+MAX_CUDAGRAPH_CAPTURE_SIZE=$((TOKENS_PER_SEQ * MAX_NUM_SEQS))
+if (( MAX_CUDAGRAPH_CAPTURE_SIZE > 512 )); then
+    MAX_CUDAGRAPH_CAPTURE_SIZE=512
+fi
 
 SERVER_LOG="$RESULT_DIR/server.log"
 mkdir -p "$RESULT_DIR"
@@ -86,10 +95,11 @@ VLLM_CMD=(
     --host 0.0.0.0
     --port "$PORT"
     --tensor-parallel-size "$TP"
-    --gpu-memory-utilization 0.9
+    --gpu-memory-utilization 0.95
     --block-size 128
     --language-model-only
     --enable-prefix-caching
+    --enable-chunked-prefill
     --no-enable-flashinfer-autotune
     --reasoning-parser minimax_m3
     --tool-call-parser minimax_m3
@@ -97,8 +107,9 @@ VLLM_CMD=(
     --default-chat-template-kwargs '{"thinking_mode":"enabled"}'
     --attention-config '{"backend":"FLASHINFER","use_trtllm_attention":true,"indexer_kv_dtype":"fp8"}'
     --kv-cache-dtype fp8
-    --max-cudagraph-capture-size 512
-    --max-num-batched-tokens 16384
+    --max-cudagraph-capture-size "$MAX_CUDAGRAPH_CAPTURE_SIZE"
+    --max-num-seqs "$MAX_NUM_SEQS"
+    --max-num-batched-tokens 32768
     --stream-interval 20
     --trust-remote-code
     --speculative-config "$SPEC_CONFIG"

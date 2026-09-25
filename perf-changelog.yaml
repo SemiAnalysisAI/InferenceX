@@ -8902,3 +8902,13 @@
     - "server_atom.sh exports PORT before sourcing benchmark_lib.sh on the eval path. run_lm_eval's check_env_vars guard runs before it parses --port and job.slurm's docker -e allowlist forwards ROUTER_PORT but never PORT, so every multi-node lm-eval cell aborted 8 s in; because check_env_vars exits rather than returning, node 0 also skipped its router teardown and the decode node hung in 'Waiting until router closes...' until the job was cancelled (run 35643358891)."
     - "Per ATOM DeepSeek-V4-Agentic-PD-Max recipe: prefix caching on, FP8 KV and index cache, block-size 256, TBO on prefill only, max-num-seqs = 2x concurrency."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3158
+
+- config-keys:
+    - minimaxm3-fp4-b200-vllm-agentic-mtp
+    - minimaxm3-fp4-b300-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Pin MiniMax-M3 B200/B300 AgentX to vLLM nightly-29468dde8b515031dc6d4d9d06bf0a2fa0442098 and remove the obsolete SimpleCPU KV patch."
+    - "Increase HBM and B300 host KV budgets, tune serving limits, expand the B300 sweep, and correct host-capacity units."
+  pr-link: XXX
