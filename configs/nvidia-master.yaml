@@ -1317,7 +1317,7 @@ qwen3.5-fp8-b300-sglang:
         srt-recipe: benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/b300-fp8/8k1k.yaml
 
 qwen3.5-fp4-b300-sglang:
-  image: lmsysorg/sglang:v0.5.14-cu130
+  image: lmsysorg/sglang:nightly-dev-cu13-20260925-8ca82118
   model: nvidia/Qwen3.5-397B-A17B-NVFP4-V2
   model-prefix: qwen3.5
   runner: b300
@@ -1341,7 +1341,7 @@ qwen3.5-fp4-b300-sglang:
         srt-recipe: benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/b300-fp4/8k1k.yaml
 
 qwen3.5-fp4-b300-sglang-mtp:
-  image: lmsysorg/sglang:v0.5.19-cu130
+  image: lmsysorg/sglang:nightly-dev-cu13-20260925-8ca82118
   model: nvidia/Qwen3.5-397B-A17B-NVFP4-V2
   model-prefix: qwen3.5
   runner: b300
