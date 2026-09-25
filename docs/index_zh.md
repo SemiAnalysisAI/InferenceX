@@ -26,6 +26,7 @@
 | [`documentation-procedures.md`](./documentation-procedures.md) / [`documentation-procedures_zh.md`](./documentation-procedures_zh.md) | 新增、翻译、索引、审阅与维护文档 |
 | [`PR_REVIEW_CHECKLIST.md`](./PR_REVIEW_CHECKLIST.md) / [`PR_REVIEW_CHECKLIST_zh.md`](./PR_REVIEW_CHECKLIST_zh.md) | CODEOWNER 审阅与精确签署要求 |
 | [`DOCUMENTATION_PLAN.md`](./DOCUMENTATION_PLAN.md) / [`DOCUMENTATION_PLAN_zh.md`](./DOCUMENTATION_PLAN_zh.md) | 剩余文档缺口、目标信息架构与落地计划 |
+| [Mooncake 传输跟踪](../experimental/mooncake-transfer-traces/README_zh.md) / [English](../experimental/mooncake-transfer-traces/README.md) | 复现双节点 H100 传输实验并理解跟踪事件丢失 |
 
 ## 权威参考
 

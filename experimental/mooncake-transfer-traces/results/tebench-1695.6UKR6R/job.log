@@ -1,0 +1,10 @@
+Results: /mnt/home/kimbo/networkx/Mooncake/benchmark-results/tebench-1695.6UKR6R
+Initiator: slurm-h100-206-025; target: slurm-h100-206-035; RDMA VRAM
+Transfer event traces: /mnt/home/kimbo/networkx/Mooncake/benchmark-results/tebench-1695.6UKR6R/events
+Sweep: read, repeat 1/3, 4096..67108864 bytes
+Sweep: write, repeat 1/3, 4096..67108864 bytes
+Sweep: read, repeat 2/3, 4096..67108864 bytes
+Sweep: write, repeat 2/3, 4096..67108864 bytes
+Sweep: read, repeat 3/3, 4096..67108864 bytes
+Sweep: write, repeat 3/3, 4096..67108864 bytes
+Completed all sweeps. JSON results and logs: /mnt/home/kimbo/networkx/Mooncake/benchmark-results/tebench-1695.6UKR6R

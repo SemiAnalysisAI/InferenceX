@@ -26,6 +26,7 @@ This is the mandatory low-context router for InferenceX work. Pick the one page 
 | [`documentation-procedures.md`](./documentation-procedures.md) / [`documentation-procedures_zh.md`](./documentation-procedures_zh.md) | Adding, translating, indexing, reviewing, and maintaining documentation |
 | [`PR_REVIEW_CHECKLIST.md`](./PR_REVIEW_CHECKLIST.md) / [`PR_REVIEW_CHECKLIST_zh.md`](./PR_REVIEW_CHECKLIST_zh.md) | CODEOWNER review and exact sign-off requirements |
 | [`DOCUMENTATION_PLAN.md`](./DOCUMENTATION_PLAN.md) / [`DOCUMENTATION_PLAN_zh.md`](./DOCUMENTATION_PLAN_zh.md) | Remaining documentation gaps, target information architecture, and rollout |
+| [Mooncake transfer tracing](../experimental/mooncake-transfer-traces/README.md) / [中文](../experimental/mooncake-transfer-traces/README_zh.md) | Reproducing the experimental two-node H100 transfer sweep and interpreting trace loss |
 
 ## Authoritative references
 

@@ -1,0 +1,4 @@
+initiator=slurm-h100-206-025
+target=slurm-h100-206-035
+seg_type=VRAM
+CUDA_VISIBLE_DEVICES is assigned by Slurm per node

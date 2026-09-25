@@ -1,0 +1,6 @@
+read-3 done Counter({'submit': 4407813, 'complete': 4407813}) drops 276006
+write-1 done Counter({'submit': 4361484, 'complete': 4361484}) drops 505420
+read-2 done Counter({'submit': 4389126, 'complete': 4389126}) drops 417592
+read-1 done Counter({'submit': 4426938, 'complete': 4426938}) drops 312506
+write-2 done Counter({'submit': 4346500, 'complete': 4346500}) drops 593004
+write-3 done Counter({'submit': 4424285, 'complete': 4424283}) drops 378892

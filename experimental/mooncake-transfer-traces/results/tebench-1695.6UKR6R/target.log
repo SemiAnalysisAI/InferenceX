@@ -1,0 +1,41 @@
+WARNING: Logging before InitGoogleLogging() is written to STDERR
+I0924 19:09:31.005136 1960042 transport_selector.cpp:129] No 'policy' configured, using default transport selection
+I0924 19:09:31.005209 1960042 ibv_loader.cpp:40] libibverbs lacks optional symbol ibv_query_port_speed; the fallback path will be used
+I0924 19:09:31.005609 1960042 ibv_loader.cpp:123] IbvLoader: libibverbs loaded successfully, devices=8
+W0924 19:09:31.010011 1960042 context.cpp:270] No network-attached GID found on ibp0, using non-network GID[0]
+I0924 19:09:31.010017 1960042 context.cpp:938] Resolved GID index 0 for device ibp0: fe:80:00:00:00:00:00:00:a0:88:c2:03:00:84:a3:a6
+I0924 19:09:31.013412 1960042 context.cpp:408] [RDMA] Relaxed ordering is supported and enabled for ibp0
+W0924 19:09:31.017927 1960042 context.cpp:270] No network-attached GID found on ibp1, using non-network GID[0]
+I0924 19:09:31.017933 1960042 context.cpp:938] Resolved GID index 0 for device ibp1: fe:80:00:00:00:00:00:00:a0:88:c2:03:00:84:9f:56
+I0924 19:09:31.021441 1960042 context.cpp:408] [RDMA] Relaxed ordering is supported and enabled for ibp1
+W0924 19:09:31.025939 1960042 context.cpp:270] No network-attached GID found on ibp2, using non-network GID[0]
+I0924 19:09:31.025945 1960042 context.cpp:938] Resolved GID index 0 for device ibp2: fe:80:00:00:00:00:00:00:a0:88:c2:03:00:84:f5:1e
+I0924 19:09:31.029448 1960042 context.cpp:408] [RDMA] Relaxed ordering is supported and enabled for ibp2
+W0924 19:09:31.034026 1960042 context.cpp:270] No network-attached GID found on ibp3, using non-network GID[0]
+I0924 19:09:31.034039 1960042 context.cpp:938] Resolved GID index 0 for device ibp3: fe:80:00:00:00:00:00:00:a0:88:c2:03:00:84:a8:a6
+I0924 19:09:31.037528 1960042 context.cpp:408] [RDMA] Relaxed ordering is supported and enabled for ibp3
+W0924 19:09:31.042197 1960042 context.cpp:270] No network-attached GID found on ibp4, using non-network GID[0]
+I0924 19:09:31.042204 1960042 context.cpp:938] Resolved GID index 0 for device ibp4: fe:80:00:00:00:00:00:00:a0:88:c2:03:00:7e:69:42
+I0924 19:09:31.045702 1960042 context.cpp:408] [RDMA] Relaxed ordering is supported and enabled for ibp4
+W0924 19:09:31.050282 1960042 context.cpp:270] No network-attached GID found on ibp5, using non-network GID[0]
+I0924 19:09:31.050288 1960042 context.cpp:938] Resolved GID index 0 for device ibp5: fe:80:00:00:00:00:00:00:a0:88:c2:03:00:84:f5:de
+I0924 19:09:31.053797 1960042 context.cpp:408] [RDMA] Relaxed ordering is supported and enabled for ibp5
+W0924 19:09:31.058367 1960042 context.cpp:270] No network-attached GID found on ibp6, using non-network GID[0]
+I0924 19:09:31.058374 1960042 context.cpp:938] Resolved GID index 0 for device ibp6: fe:80:00:00:00:00:00:00:a0:88:c2:03:00:84:aa:ce
+I0924 19:09:31.061882 1960042 context.cpp:408] [RDMA] Relaxed ordering is supported and enabled for ibp6
+W0924 19:09:31.066494 1960042 context.cpp:270] No network-attached GID found on ibp7, using non-network GID[0]
+I0924 19:09:31.066502 1960042 context.cpp:938] Resolved GID index 0 for device ibp7: fe:80:00:00:00:00:00:00:a0:88:c2:03:00:84:a4:3e
+I0924 19:09:31.070029 1960042 context.cpp:408] [RDMA] Relaxed ordering is supported and enabled for ibp7
+TENT transfer events: /mnt/home/kimbo/networkx/Mooncake/benchmark-results/tebench-1695.6UKR6R/events/tent-events-slurm-h100-206-035-1960042-VuDlgX.jsonl
+I0924 19:09:31.082217 1960042 tent_metrics.cpp:789] TENT metrics disabled at compile time (TENT_METRICS_ENABLED=0)
+I0924 19:09:31.082224 1960042 transfer_engine_impl.cpp:560] TENT Metrics system initialized
+I0924 19:09:31.082227 1960042 transfer_engine_impl.cpp:577] Transfer Engine 10.0.3.49:15309 started successfully
+I0924 19:09:31.226130 1960042 tent_backend.cpp:281] Allocated 268435456 bytes across 1 buffers (1 seg_types) in 140.843 ms, registered in 3.04691 ms
+[33mTo start initiators, run 
+  ./tebench --target_seg_name=10.0.3.49:15309 --seg_type=VRAM --backend=tent
+Press Ctrl-C to terminate[0m
+srun: forcing job termination
+srun: Job step aborted: Waiting up to 32 seconds for job step to finish.
+[2026-09-24T19:18:55.319] error: *** STEP 1695.1 ON slurm-h100-206-035 CANCELLED AT 2026-09-24T19:18:55 DUE to SIGNAL Killed ***
+srun: error: slurm-h100-206-035: task 0: Killed
+srun: Terminating StepId=1695.1

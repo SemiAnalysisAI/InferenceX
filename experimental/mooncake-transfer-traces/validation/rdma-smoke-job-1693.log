@@ -1,0 +1,7 @@
+Results: /mnt/home/kimbo/networkx/Mooncake/benchmark-results/tebench-1693.zlYY3h
+Initiator: slurm-h100-206-025; target: slurm-h100-206-035; RDMA VRAM
+Compute-node container build log: /mnt/home/kimbo/networkx/Mooncake/benchmark-results/tebench-1693.zlYY3h/build.log
+Transfer event traces: /mnt/home/kimbo/networkx/Mooncake/benchmark-results/tebench-1693.zlYY3h/events
+Sweep: read, repeat 1/1, 8388608..8388608 bytes
+Sweep: write, repeat 1/1, 8388608..8388608 bytes
+Completed all sweeps. JSON results and logs: /mnt/home/kimbo/networkx/Mooncake/benchmark-results/tebench-1693.zlYY3h
