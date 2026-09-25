@@ -1,0 +1,90 @@
+# DeepSeek-V4.1-Flash AgentX on MI355X with SGLang native DSpark, following the
+# cookbook's MI350X TP4/EP4 cell with radix caching enabled for AgentX prefix
+# reuse. The KV cache and TP4 Engram tables are GPU-resident.
+# https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1
+base:
+  schema: 2
+  name: dsv41flash-fp4-mi355x-sglang-agentic
+  model:
+    path: hf:deepseek-ai/DeepSeek-V4.1-Flash
+    container: lmsysorg/sglang:dev-dsv41-mi35x@sha256:c609f74f01b206af9664fb66da8ebef47642a7328a2478eabeebb352e014661a
+    precision: fp4
+  resources:
+    gpu_type: mi355x
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      args:
+        served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
+        trust-remote-code: true
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        # C32 still exhausted HBM at 0.80 with 4096-token chunks; reserve
+        # another 10% of physical HBM for native long-prefill scratch.
+        mem-fraction-static: 0.7
+        # Native FP4 prefill scratch scales with query tokens times context.
+        chunked-prefill-size: 4096
+        # The compressed-KV store computes byte offsets in signed int32. Keep
+        # ratio-1 pages below 2 GiB without reducing the 1M context limit.
+        max-total-tokens: 3145728
+        # C32 fanout reached 63 running requests before a native HIP illegal
+        # access. Bound admission; additional client requests remain queued.
+        max-running-requests: 32
+        # DSpark is the checkpoint's bundled draft; the block size is its only knob.
+        speculative-algorithm: DSPARK
+        speculative-dspark-block-size: 5
+        cuda-graph-max-bs-decode: 64
+        # Breakable prefill hit HIP illegal access; prefill runs eagerly.
+        cuda-graph-backend-prefill: disabled
+        reasoning-parser: auto
+        tool-call-parser: auto
+        # Draft passes under long-context load outlast the 1800 s default watchdog.
+        watchdog-timeout: 3600
+        enable-metrics: true
+      env:
+        PYTHONNOUSERSITE: '1'
+        PYTHONUNBUFFERED: '1'
+        # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        # AgentX measures thinking on, the regime of the golden acceptance curve.
+        SGLANG_DEFAULT_THINKING: '1'
+        SGLANG_DSV41_REASONING_EFFORT: high
+        # The preview image's native kernels, allocator and tuning CSV; TP4
+        # Engram stays GPU-resident as in the official MI350X recipe.
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '0'
+        SGLANG_USE_AITER: '1'
+        SGLANG_MOE_PADDING: '1'
+        AITER_FLYDSL_FORCE_REDUCE: '1'
+        ROCM_QUICK_REDUCE_QUANTIZATION: NONE
+        # The allocator only garbage-collects below a 1.0 memory fraction;
+        # reclaim unused long-prefill blocks for HIP/RCCL at 80% of 99%.
+        PYTORCH_HIP_ALLOC_CONF: garbage_collection_threshold:0.8,per_process_memory_fraction:0.99
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
+    env:
+      MODEL: deepseek-ai/DeepSeek-V4.1-Flash
+      # Full-context corpus for this 1M-context recipe.
+      WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126
+      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+
+# One variant per point; the saturation point gets a longer warmup drain.
+override_tp4_c1: {benchmark: {env: {CONC: '1'}}}
+override_tp4_c2: {benchmark: {env: {CONC: '2'}}}
+override_tp4_c4: {benchmark: {env: {CONC: '4'}}}
+override_tp4_c8: {benchmark: {env: {CONC: '8'}}}
+override_tp4_c16: {benchmark: {env: {CONC: '16'}}}
+override_tp4_c32: {benchmark: {env: {CONC: '32', AGENTIC_WARMUP_GRACE_PERIOD: '3600'}}}

@@ -1,0 +1,73 @@
+# DeepSeek-V4-Pro-0813 AgentX on MI355X with ATOM DSpark K6 (six draft tokens,
+# a verify window of 7). Low concurrency is TP-only; the wide band runs DP
+# attention with native RCCL expert parallelism. The KV cache is GPU-resident.
+base:
+  schema: 2
+  name: dsv4-fp4-mi355x-atom-agentic
+  model:
+    path: hf:deepseek-ai/DeepSeek-V4-Pro-0813
+    container: rocm/atom-dev:nightly_202609161445
+    precision: fp4
+  resources:
+    gpu_type: mi355x
+    gpus_per_node: 8
+  frontend:
+    type: atomesh
+    container_image: rocm/atom-dev@sha256:f00a9dc588a380038fdad54cd57a956043cb316ddda54ebb1b62a24f8caa343b
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: atom
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        served-model-name: deepseek-ai/DeepSeek-V4-Pro-0813
+        # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
+        timeout-keep-alive: 900
+        data-parallel-size: 1
+        index-cache-dtype: fp4
+        enable-prefix-caching: true
+        gpu-memory-utilization: 0.9
+        max-num-batched-tokens: 16384
+        attn-prefill-chunk-size: 16384
+        state-checkpoint-interval-tokens: 8192
+        level: 3
+        cudagraph-mode: FULL
+        method: dspark
+        num-speculative-tokens: 6
+      env:
+        AITER_BF16_FP8_MOE_BOUND: '0'
+        AITER_LOG_LEVEL: WARNING
+        ATOM_MOE_GU_ITLV: '1'
+        ATOM_DISABLE_MMAP: 'true'
+        ATOM_DEBUG_PREFIX_HITS: '1'
+        ATOM_PROFILER_MORE: '0'
+        ATOM_PROFILER_TIMEOUT: '1200'
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
+    env:
+      MODEL: deepseek-ai/DeepSeek-V4-Pro-0813
+      # Long AgentX stalls exceed AIPerf's 30 s TCP_USER_TIMEOUT default.
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_TIMING_CANCEL_DRAIN_TIMEOUT: '300'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'atom:'
+
+# One variant per point. Admission is 2x CONC. KV is BF16 through concurrency 16
+# and FP8 in the DEP band. DEP pins sessions to one DP-attention rank so later
+# turns reach their prefix KV, and captures every small per-rank decode batch.
+override_tp8_c1: {roles: {agg: {args: {max-num-seqs: 2, kv-cache-dtype: bf16}}}, benchmark: {env: {CONC: '1'}}}
+override_tp8_c2: {roles: {agg: {args: {max-num-seqs: 4, kv-cache-dtype: bf16}}}, benchmark: {env: {CONC: '2'}}}
+override_tp8_c4: {roles: {agg: {args: {max-num-seqs: 8, kv-cache-dtype: bf16}}}, benchmark: {env: {CONC: '4'}}}
+override_tp8_c8: {roles: {agg: {args: {max-num-seqs: 16, kv-cache-dtype: bf16}}}, benchmark: {env: {CONC: '8'}}}
+override_tp8_c16: {roles: {agg: {args: {max-num-seqs: 32, kv-cache-dtype: bf16}}}, benchmark: {env: {CONC: '16'}}}
+override_tp8_c48_dep: {roles: {agg: {args: {max-num-seqs: 96, kv-cache-dtype: fp8, enable-expert-parallel: true, enable-dp-attention: true, all2all-backend: rccl, dp-load-balance: least_tokens, moe-backend: standard, cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,32,48,64,128]'}, env: {ATOM_DP_SESSION_AFFINITY: '1', ATOM_DP_LB_REQ_EQUIV: '512', ATOM_ENABLE_PREFILL_DELAYER: '1', ATOM_PREFILL_DECODE_INTERVAL: '10'}}}, benchmark: {env: {CONC: '48', AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: '1', AGENTIC_WARMUP_GRACE_PERIOD: '3600'}}}
+override_tp8_c64_dep: {roles: {agg: {args: {max-num-seqs: 128, kv-cache-dtype: fp8, enable-expert-parallel: true, enable-dp-attention: true, all2all-backend: rccl, dp-load-balance: least_tokens, moe-backend: standard, cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,32,48,64,128]'}, env: {ATOM_DP_SESSION_AFFINITY: '1', ATOM_DP_LB_REQ_EQUIV: '512', ATOM_ENABLE_PREFILL_DELAYER: '1', ATOM_PREFILL_DECODE_INTERVAL: '10'}}}, benchmark: {env: {CONC: '64', AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: '1', AGENTIC_WARMUP_GRACE_PERIOD: '3600'}}}
+override_tp8_c96_dep: {roles: {agg: {args: {max-num-seqs: 192, kv-cache-dtype: fp8, enable-expert-parallel: true, enable-dp-attention: true, all2all-backend: rccl, dp-load-balance: least_tokens, moe-backend: standard, cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,32,48,64,128,256,512]'}, env: {ATOM_DP_SESSION_AFFINITY: '1', ATOM_DP_LB_REQ_EQUIV: '512', ATOM_ENABLE_PREFILL_DELAYER: '1', ATOM_PREFILL_DECODE_INTERVAL: '10'}}}, benchmark: {env: {CONC: '96', AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: '1', AGENTIC_WARMUP_GRACE_PERIOD: '3600'}}}
+override_tp8_c128_dep: {roles: {agg: {args: {max-num-seqs: 256, kv-cache-dtype: fp8, enable-expert-parallel: true, enable-dp-attention: true, all2all-backend: rccl, dp-load-balance: least_tokens, moe-backend: standard, cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,32,48,64,128,256,512]'}, env: {ATOM_DP_SESSION_AFFINITY: '1', ATOM_DP_LB_REQ_EQUIV: '512', ATOM_ENABLE_PREFILL_DELAYER: '1', ATOM_PREFILL_DECODE_INTERVAL: '10'}}}, benchmark: {env: {CONC: '128', AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: '1', AGENTIC_WARMUP_GRACE_PERIOD: '3600'}}}
+override_tp8_c256_dep: {roles: {agg: {args: {max-num-seqs: 512, kv-cache-dtype: fp8, enable-expert-parallel: true, enable-dp-attention: true, all2all-backend: rccl, dp-load-balance: least_tokens, moe-backend: standard, cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,32,48,64,128,256,512]'}, env: {ATOM_DP_SESSION_AFFINITY: '1', ATOM_DP_LB_REQ_EQUIV: '512', ATOM_ENABLE_PREFILL_DELAYER: '1', ATOM_PREFILL_DECODE_INTERVAL: '10'}}}, benchmark: {env: {CONC: '256', AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: '1', AGENTIC_WARMUP_GRACE_PERIOD: '3600'}}}
