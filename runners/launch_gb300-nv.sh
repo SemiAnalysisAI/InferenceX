@@ -271,7 +271,7 @@ sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
 # Throughput recipes opt into synthetic acceptance via the master config;
 # eval-only jobs strip it so tokens get real target-model verification.
 
-if [[ "$USES_AGENTX_POWER" == "1" ]]; then
+if [[ "$USES_DCGM_POWER" == "1" ]]; then
     read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
     python3 "$GITHUB_WORKSPACE/runners/inject_srt_power_concurrencies.py" \
         "$CONFIG_PATH" "${POWER_CONCURRENCIES[@]}" || exit 1
