@@ -550,5 +550,58 @@ class TestSingleHandle(unittest.TestCase):
         self.assertEqual(h.combine_in_t, list(range(7)))
         self.assertLess(len(h.combine_in_t), len(b._recv_x))
 
+
+def _deepep_v2_stubs():
+    """Fake torch / deep_ep so `import ep_deepep_v2` succeeds without the benchmark image."""
+    torch = types.ModuleType("torch")
+    torch.compile = lambda *a, **k: (lambda fn: fn)
+    dist = types.ModuleType("torch.distributed")
+    dist.group = types.SimpleNamespace(WORLD="world")
+    torch.distributed = dist
+    deep_ep = types.ModuleType("deep_ep")
+    deep_ep.ElasticBuffer = type("ElasticBuffer", (), {})
+    deep_ep.Buffer = type("Buffer", (), {})
+    return {"torch": torch, "torch.distributed": dist, "deep_ep": deep_ep}
+
+
+class DeepEPV2GraphContract(unittest.TestCase):
+    """Normal-mode decode drops ElasticBuffer's host sync -- vLLM's graphed deepep_v2 decode
+    contract -- and only that makes it graph-capturable; prefill keeps the exact-size sync."""
+
+    def _backend(self, **updates):
+        with mock.patch.dict(sys.modules, _deepep_v2_stubs()):
+            sys.modules.pop("ep_deepep_v2", None)
+            import ep_deepep_v2
+            sys.modules.pop("ep_deepep_v2", None)
+            return ep_deepep_v2.DeepEPV2Backend(args(**updates), 0, 8, 0, "cpu")
+
+    def _dispatched_cpu_sync(self, backend):
+        calls = []
+
+        def dispatch(*_args, **kwargs):
+            calls.append(kwargs["do_cpu_sync"])
+            return "recv_x", "recv_idx", "recv_w", "handle", None
+
+        backend.buffer = types.SimpleNamespace(dispatch=dispatch)
+        backend.max_tokens, backend.num_sms, backend.num_qps = 8, 1, 1
+        backend.dispatch(types.SimpleNamespace(dispatch_x="x", topk_idx="i", topk_weights="w"))
+        return calls[0]
+
+    def test_normal_decode_is_the_no_sync_graphed_contract(self):
+        backend = self._backend(mode="normal", phase="decode")
+        self.assertIs(self._dispatched_cpu_sync(backend), False)
+        self.assertTrue(backend.cuda_graph_supported)
+        self.assertEqual(backend.kernel_generation, "v2-elastic-buffer-nosync")
+
+    def test_normal_prefill_keeps_the_host_sync_and_stays_eager(self):
+        backend = self._backend(mode="normal", phase="prefill")
+        self.assertIs(self._dispatched_cpu_sync(backend), True)
+        self.assertFalse(backend.cuda_graph_supported)
+        self.assertEqual(backend.kernel_generation, "v2-elastic-buffer")
+
+    def test_low_latency_stays_graphed(self):
+        backend = self._backend(mode="low-latency", phase="decode")
+        self.assertTrue(backend.cuda_graph_supported)
+
 if __name__ == "__main__":
     unittest.main()

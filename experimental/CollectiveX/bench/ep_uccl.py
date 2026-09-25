@@ -133,6 +133,11 @@ class UCCLEPBackend(EPBackend):
     kernel_generation = "uccl-legacy-buffer"
     SUPPORTED_MODES = ("normal", "low-latency")
     SUPPORTED_PRECISIONS = ("bf16", "fp8")
+    # The low-latency kernels are plain launches whose only host state is the double-buffer
+    # toggle, baked into a capture exactly as in DeepEP; every capture holds whole pairs (an even
+    # call count), so the toggle lands where it started. Normal mode host-syncs on its receive
+    # counters unless dispatched with `num_worst_tokens`, which this adapter does not do.
+    CUDA_GRAPH_MODES = ("low-latency",)
     stage_device_work = False
     requires_fresh_pair = False
     receive_layout = "token-rank"

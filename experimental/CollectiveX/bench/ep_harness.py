@@ -318,14 +318,24 @@ def time_us(torch, fn, warmup: int, iters: int, pre=None, post=None) -> list[flo
 
 
 def time_cuda_graph_phase_us(
-    torch, fn, warmup: int, iters: int, interval
+    torch, fn, warmup: int, iters: int, interval, align=None
 ) -> list[float]:
-    """Time one event-record interval captured inside graph replay."""
+    """Time one event-record interval captured inside graph replay.
+
+    `interval` is a pair of external events recorded as graph nodes, so the host's replay launch
+    never lands in the window. `align()` runs before each replay with no host sync between the
+    two: it enqueues a device-side rank barrier, so every rank's replay starts when that barrier
+    releases instead of when its own host got round to launching the graph. Without it each
+    sample restarts from the preceding synchronize and ranks enter ~75us apart across nodes
+    (b200 EP16), which the cross-rank MAX then reports as latency.
+    """
     for _ in range(max(0, warmup)):
         fn()
         torch.cuda.synchronize()
     samples = []
     for _ in range(iters):
+        if align is not None:
+            align()
         fn()
         torch.cuda.synchronize()
         samples.append(interval[0].elapsed_time(interval[1]) * 1000.0)
@@ -333,8 +343,16 @@ def time_cuda_graph_phase_us(
 
 
 def kernel_generation(backend) -> str:
-    """Return the adapter's declared kernel family."""
-    return getattr(backend, "kernel_generation", None) or "n-a"
+    """Return the adapter's declared kernel family, suffixed when timed under graph replay.
+
+    Replay removes launch overhead that eager timing pays, so the two regimes are different
+    series: the suffix keeps the durable store from pooling a graphed row with the eager rows
+    published under the same kernel family.
+    """
+    family = getattr(backend, "kernel_generation", None) or "n-a"
+    if getattr(backend, "cuda_graph_enabled", False):
+        return f"{family}-cudagraph"
+    return family
 
 
 def _reduce_vec(torch, dist, device, vals, op):
@@ -1027,8 +1045,8 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     # `chain_health` as "unavailable", indistinguishable from a backend that cannot be chained.
     # Requiring two kept pairs here is what lets Pass 2b compute the health scalars
     # unconditionally and Pass 3 assert the chained oracle ran.
-    if (not cuda_graph and (min(args.chain_iters, args.chain_trials) <= 0
-            or not 0 <= args.chain_drop <= args.chain_iters - 2)):
+    if (min(args.chain_iters, args.chain_trials) <= 0
+            or not 0 <= args.chain_drop <= args.chain_iters - 2):
         if rank == 0:
             print(f"ERROR: chain iters/trials must be positive and 0 <= drop <= iters - 2; got "
                   f"{args.chain_iters}:{args.chain_trials}:{args.chain_drop}")
@@ -1164,7 +1182,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     # (every FP8 adapter by default, since stage_device_work IS the fp8 flag) the staged
     # stand-in is decoupled from each pair's dispatch, so chained and drained are not
     # comparable -- see the call site for the measurement that established this.
-    chain_output_applicable = not cuda_graph and not backend.stage_excluded_from_roundtrip
+    chain_output_applicable = not backend.stage_excluded_from_roundtrip
     cuda_graph_output_applicable = cuda_graph and not backend.stage_excluded_from_roundtrip
 
     # ---- Pass 2: every backend uses the same rotated point order.
@@ -1235,7 +1253,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     # already yields chain_iters free-running pairs, so a handful of trials out-samples the
     # fresh-entry components' 256 for a fraction of the wall clock. Ladder order still rotates
     # per trial, as above. ----
-    for trial_index in range(0 if cuda_graph else args.chain_trials):
+    for trial_index in range(args.chain_trials):
         final_chain_trial = trial_index == args.chain_trials - 1
         for T in trial_order(list(ladder), trial_index):
             chained = backend.benchmark_chain(
@@ -1324,14 +1342,12 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         )
         pre = gate[T]["oracle_pre"]
         chain_oracle = gate[T]["oracle_chain"]
-        if cuda_graph:
-            chain_ok = True
-            chain_max_rel = 0.0
-        else:
-            # The eager chained oracle is required whenever that pipeline was measured.
-            assert chain_oracle is not None, "chained oracle missing despite a validated budget"
-            chain_ok = bool(chain_oracle["passed"])
-            chain_max_rel = chain_oracle["max_elementwise_relative_error"] or 0.0
+        # The chained ORACLE is ANDed in like the other two, so a chained-regime failure reds the
+        # leg. The budget gate rejects chain_trials=0 up front, so a missing chained oracle is a
+        # harness bug, not a configuration.
+        assert chain_oracle is not None, "chained oracle missing despite a validated budget"
+        chain_ok = bool(chain_oracle["passed"])
+        chain_max_rel = chain_oracle["max_elementwise_relative_error"] or 0.0
         # The chained-OUTPUT check gates again, on a measured magnitude rather than a verdict.
         # It was briefly demoted on the theory its tolerance was too tight for FP8; probe
         # 31180411148 (h100, deepep-v2, EP8, low-latency) falsified that:
@@ -1385,23 +1401,24 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         recv_max = _reduce_int(torch, dist, device, g["recv_local"], MAX)
         recv_min = _reduce_int(torch, dist, device, g["recv_local"], MIN)
         global_ok = _reduce_int(torch, dist, device, g["local_ok"], MIN)
-        if cuda_graph:
-            post_chain_state_passed = None
-            chain_last_output_passed = None
-            chain_output_error = None
-        else:
-            # Agreed across ranks like `passed`, not rank 0's local view.
-            post_chain_state_passed = bool(
-                _reduce_int(torch, dist, device, g["chain_local_ok"], MIN)
-            )
-            chain_last_output_passed = bool(
-                _reduce_int(torch, dist, device, g["chain_output_local_ok"], MIN)
-            )
-            chain_output_error = _reduce_vec(
-                torch, dist, device, [g["chain_output_error"]], MAX
-            )[0]
-            if not chain_output_applicable:
-                chain_last_output_passed, chain_output_error = None, None
+        # Agreed across ranks like `passed`, not rank 0's local view.
+        post_chain_state_passed = bool(
+            _reduce_int(torch, dist, device, g["chain_local_ok"], MIN)
+        )
+        # null where the check does not apply (staging hoisted): the artifact says "not
+        # asked", never a bare False that a reader would mistake for a failed comparison.
+        # The reduce still runs on every rank so the collective stays aligned.
+        chain_last_output_passed = bool(
+            _reduce_int(torch, dist, device, g["chain_output_local_ok"], MIN)
+        )
+        # Published whether or not the verdict passed. Without it the artifact records THAT the
+        # chained output differed but never BY HOW MUCH, which is the difference between a
+        # transport corruption and a tolerance set too tight for a backend's accumulator.
+        chain_output_error = _reduce_vec(
+            torch, dist, device, [g["chain_output_error"]], MAX
+        )[0]
+        if not chain_output_applicable:
+            chain_last_output_passed, chain_output_error = None, None
         if cuda_graph:
             cuda_graph_output_rewritten = bool(
                 _reduce_int(torch, dist, device, g["cuda_graph_output_rewritten"], MIN)
@@ -1706,9 +1723,10 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             "stage_excluded_from_roundtrip": bool(
                 getattr(backend, "stage_excluded_from_roundtrip", False)
             ),
-            # Graph mode replaces the eager component/chain pipeline in place. Existing component
-            # fields contain replay samples; no parallel graph component exists.
-            "chained_period": not cuda_graph,
+            # Whether this document's rows carry the chained family. Consumers key the headline on
+            # presence, as for `stage_excluded_from_roundtrip`. Graph mode keeps it: the chain is
+            # captured as one graph of unrolled pairs (EPBackend._benchmark_chain_graph).
+            "chained_period": True,
             "cuda_graph_replay": cuda_graph,
             "cuda_graph_supported": bool(
                 getattr(backend, "cuda_graph_supported", False)

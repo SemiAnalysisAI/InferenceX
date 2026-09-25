@@ -137,8 +137,9 @@ class DeepEPV2Backend(EPBackend):
     kernel_generation = "v2-elastic-buffer"
     SUPPORTED_MODES = ("normal", "low-latency")
     SUPPORTED_PRECISIONS = ("bf16", "fp8")
-    # ElasticBuffer normal dispatch performs a host synchronization; the legacy decode kernels
-    # are explicitly graph compatible.
+    # The legacy decode kernels are explicitly graph compatible. ElasticBuffer normal mode is
+    # graph compatible only without its host sync, which this adapter drops for the decode phase
+    # alone (see `_normal_cpu_sync` and `cuda_graph_supported`).
     CUDA_GRAPH_MODES = ("low-latency",)
     stage_device_work = False
     requires_fresh_pair = False
@@ -168,6 +169,16 @@ class DeepEPV2Backend(EPBackend):
             # Normal/HT quantises inside the timed dispatch with the compiled form; low-latency
             # keeps the eager helper, whose bits its in-kernel quantise matches. See fused_quantize.
             self._quant = self.fused_quantize(self._to_fp8)
+        # Normal-mode decode runs ElasticBuffer the way vLLM's deepep_v2 decode path does
+        # (prepare_finalize/deepep_v2.py, use_cudagraph=True): do_expand=False, do_cpu_sync=False,
+        # receive sized to the worst case (num_max_tokens_per_rank * num_ranks) with the valid
+        # prefix read from the handle's device-side psum. That is the graph-capturable contract,
+        # and it lands one row per (token, destination rank) with an unweighted rank-sum combine:
+        # the rank-major shape. Prefill keeps the host sync that sizes the receive exactly, as
+        # vLLM's (uncaptured) prefill does.
+        self._normal_cpu_sync = self.mode == "normal" and args.phase != "decode"
+        if self.mode == "normal" and not self._normal_cpu_sync:
+            self.kernel_generation = "v2-elastic-buffer-nosync"
         if self.mode == "low-latency":
             # Legacy Buffer IBGDA decode path: a distinct kernel family whose combine
             # multiplies by the gate at the source (weighted), not an unweighted rank sum.
@@ -179,6 +190,12 @@ class DeepEPV2Backend(EPBackend):
             # moment"), so every timed combine needs a fresh dispatch and every timed
             # dispatch must be drained by its combine.
             self.requires_fresh_pair = True
+
+    @property
+    def cuda_graph_supported(self) -> bool:
+        if self.mode == "normal":
+            return not getattr(self, "_normal_cpu_sync", True)
+        return super().cuda_graph_supported
 
     def buffer_cap(self, args):
         if self.mode == "low-latency":
@@ -377,7 +394,7 @@ class DeepEPV2Backend(EPBackend):
             num_qps=self.num_qps,
             async_with_compute_stream=False,
             do_handle_copy=True,
-            do_cpu_sync=True,
+            do_cpu_sync=self._normal_cpu_sync,
             do_expand=False,
         )
         return types.SimpleNamespace(

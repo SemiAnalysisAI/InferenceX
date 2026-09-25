@@ -282,9 +282,8 @@ Reading `false` alone as "roundtrip includes staging" subtracts a cost the row n
 availability, origin, and sample count. A paired-only API reports null isolated components.
 `isolated_sum` is derived.
 
-Headline latency is `components.roundtrip` for default CUDA-graph rows and the **chained pair
-period** (`components.pair_period`, defined under Chained Pair Period below) for eager rows that
-carry one. The earlier eager flip shipped **held** while the
+Headline latency is the **chained pair period** (`components.pair_period`, defined under Chained
+Pair Period below) for every row that carries one, graph-replayed or eager. The earlier eager flip shipped **held** while the
 six-events-per-pair chain described below, whose inner records inflated small-T periods
 fleet-wide, was replaced by the two-pass chain, and was released on 2026-08-06 once the b200, h200
 and gb200 hand references were confirmed against two-pass fleet artifacts (runs 31092783122 and
@@ -309,23 +308,35 @@ rather than per-operation costs. The paired roundtrip is the comparable quantity
 
 ### CUDA Graph Replay
 
-Graph-compatible backend/mode pairs capture the existing fixed-shape
-dispatch→stage→combine roundtrip and measure `CUDAGraph.replay()` by default. Capture and replay
-warmup are excluded. The result is published directly as `components.roundtrip`, with origin
-`cuda-graph-replay`. Its capture has no internal timing nodes. Separate dispatch and combine
-invocations each recapture the roundtrip with one event pair around only the requested phase,
-preserving those existing component fields without charging their instrumentation to roundtrip.
-There is no `graph_*` component or separate graph output path. `stage`, `pair_period`, chain
-floors, and chain health are unavailable, so a graph-mode document contains only graph-derived
-latency values. `isolated_sum` remains the derived sum of dispatch and combine. The ordinary
-cross-rank MAX/MIN/spread reductions still apply to the replay samples.
+Serving engines capture their decode step, so graph-compatible backend/mode pairs are measured
+under `CUDAGraph.replay()` by default. The graphed set follows what each library supports without
+changing its contract: nccl-ep (both modes), flashinfer-ep (normal), MoRI (both modes), uccl-ep
+(low-latency), and deepep-v2 low-latency plus normal-mode **decode**, which runs ElasticBuffer as
+vLLM's graphed `deepep_v2` decode does (`do_cpu_sync=False`, worst-case receive, valid prefix read
+from the handle on device; kernel generation `v2-elastic-buffer-nosync`). deepep-v2 normal prefill
+keeps the host sync that sizes its receive exactly and stays eager, as does uccl-ep normal mode,
+whose dispatch host-syncs unless padded to `num_worst_tokens`.
 
-`COLLX_CUDA_GRAPH=0` restores the eager pipeline unchanged, including isolated components and the
-chained pair period below. Modes not declared graph-compatible by their adapter also remain eager.
+Every family keeps its eager meaning under replay; only the launch mechanism changes:
+
+- **Fresh-entry components** (`roundtrip`, `dispatch`, `combine`) capture one pair with external
+  event nodes around the timed window, so host launch cost never enters it. Each timed replay
+  starts behind a device-side rank barrier (an all-reduce followed by a fixed spin, with no host
+  sync before the replay), so ranks enter together instead of from their own host's last
+  synchronize: without it, b200 EP16 ranks entered ~75 µs apart and the cross-rank MAX reported
+  the stagger as latency. Component origin is `cuda-graph-replay`.
+- **The chained family** (`pair_period`, chain floors, chain health) captures each sibling chain as
+  ONE graph of `chain_iters` unrolled pairs, the shape a decode graph has, and replays it once
+  untimed and once behind the barrier. Event records are graph nodes and cost the host nothing,
+  so the floors sibling carries op windows without the eager six-events-per-pair defect. The
+  chained oracle and the chained-output check apply unchanged.
+
+`stage` is not separately timed under replay. `COLLX_CUDA_GRAPH=0` restores the eager pipeline.
 Every captured output is poisoned after timing and replayed once more; a finite rewrite gates the
 case, and where staging is not hoisted that replay is also compared with an untimed drained pair.
-The artifact records `implementation.cuda_graph_replay`, `cuda_graph_supported`, and
-`chained_period`, while the component origin makes the measurement visible at row granularity.
+A graphed row's `kernel_generation` carries a `-cudagraph` suffix, so the durable store never
+pools graph-replayed and eager samples of one kernel family into a single series. The artifact
+also records `implementation.cuda_graph_replay` and `cuda_graph_supported`.
 
 ### Chained Pair Period
 
@@ -647,7 +658,7 @@ One raw case document carries `record_type: "case-attempt"`, the single `version
   `combine_reduction` and `library_version` (which reduction the oracle held the kernel to, and
   the installed library that selected it), and two generation discriminators:
   `stage_excluded_from_roundtrip` (whether `roundtrip` excludes expert-output staging, discussed
-  above), `chained_period` (whether this document's rows carry the eager chained family),
+  above), `chained_period` (whether this document's rows carry the chained family),
   `cuda_graph_supported` (whether the adapter declares this mode graph-safe), and
   `cuda_graph_replay` (whether the existing measurement pipeline used replay).
 - `topology`: requested SKU/product, placement, `gpus_per_node`, nodes, scale-up domain, `scope`,
@@ -660,9 +671,8 @@ One raw case document carries `record_type: "case-attempt"`, the single `version
 - `provenance`: the mounted image tag and source SHA, and
 - `outcome`: `status` (`success` or `invalid`) and `reasons`.
 
-Each `rows` entry carries point latency (graph replay in `components.roundtrip` by default where
-supported, otherwise the eager `components` plus `components.pair_period`, `chain_floor_us` and
-`chain_health` (see Chained Pair Period)), byte
+Each `rows` entry carries point latency (`components`, graph-replayed by default where supported,
+plus `components.pair_period`, `chain_floor_us` and `chain_health` (see Chained Pair Period)), byte
 accounting, token rate, correctness, load, and fanout, while
 per-point statistics are summarized in place, not emitted as separate documents. Each dispatched
 case writes exactly this one raw result document, while unsupported or never-run cells produce no

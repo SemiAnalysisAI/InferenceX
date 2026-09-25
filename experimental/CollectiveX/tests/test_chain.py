@@ -113,6 +113,7 @@ def trace_torch(clock, log):
             CUDAGraph=lambda: _TraceGraph(clock, log),
             graph=graph_context,
             synchronize=lambda *args, **kwargs: log.append("sync"),
+            _sleep=lambda *args, **kwargs: log.append("align_spin"),
             current_stream=lambda *args, **kwargs: types.SimpleNamespace(
                 synchronize=lambda: log.append("sync")
             ),
@@ -319,6 +320,47 @@ class CudaGraphRoundtrip(unittest.TestCase):
         self.assertEqual(backend.calls.count("graph_replay"), 18)
         self.assertTrue(problem._cuda_graph_output.cloned)
         self.assertTrue(problem._cuda_graph_output_rewritten)
+
+    def test_every_timed_replay_starts_behind_a_device_side_rank_barrier(self):
+        # Without the barrier each replay restarts from the preceding synchronize and ranks enter
+        # ~75us apart across nodes; the barrier must sit between the sync and the replay, with no
+        # host sync in between, on every timed replay and on none of the warm-ups.
+        backend = _ChainBackend(stage_device_work=False, fp8_consume="native", precision="bf16")
+        backend.mode = "normal"
+        backend.CUDA_GRAPH_MODES = ("normal",)
+        with mock.patch.dict(os.environ, {}, clear=True), \
+                trace_torch(backend.clock, backend.calls):
+            backend.benchmark_component("roundtrip", new_problem(), warmup=2, iters=3)
+        replays = [i for i, call in enumerate(backend.calls) if call == "graph_replay"]
+        warmups, timed = replays[:2], replays[2:5]
+        for index in warmups:
+            self.assertNotEqual(backend.calls[index - 1], "align_spin")
+        for index in timed:
+            self.assertEqual(backend.calls[index - 2:index], ["all_reduce", "align_spin"])
+
+    def test_the_graph_chain_is_one_capture_of_unrolled_pairs_per_sibling(self):
+        iters, drop = 5, 1
+        backend = _ChainBackend(stage_device_work=False, fp8_consume="native", precision="bf16")
+        backend.mode = "normal"
+        backend.CUDA_GRAPH_MODES = ("normal",)
+        with mock.patch.dict(os.environ, {}, clear=True), \
+                trace_torch(backend.clock, backend.calls):
+            series = backend.benchmark_chain(new_problem(), 0, iters, drop)
+        # Floors and period siblings: one capture each, holding every pair of the chain.
+        self.assertEqual(backend.calls.count("capture_begin"), 2)
+        begin = [i for i, call in enumerate(backend.calls) if call == "capture_begin"]
+        end = [i for i, call in enumerate(backend.calls) if call == "capture_end"]
+        for lo, hi in zip(begin, end):
+            self.assertEqual(
+                ops_only(backend.calls[lo:hi]), ["dispatch", "stage", "combine"] * iters
+            )
+        # Each graph replays once untimed, then once behind the barrier.
+        self.assertEqual(backend.calls.count("graph_replay"), 4)
+        self.assertEqual(backend.calls.count("align_spin"), 2)
+        for key in ("pair", "dispatch", "combine"):
+            self.assertEqual(len(series[key]), iters - drop)
+        self.assertEqual(len(series["start_to_start"]), iters - drop - 1)
+        self.assertTrue(series["combined"].cloned)
 
     def test_external_switch_restores_the_eager_component_pipeline(self):
         backend = _ChainBackend()
@@ -860,8 +902,9 @@ class CudaGraphPublication(unittest.TestCase):
     def test_existing_component_fields_carry_graph_measurements(self):
         self.assertEqual(self.swept.rc, 0)
         self.assertIs(self.swept.doc["implementation"]["cuda_graph_replay"], True)
-        self.assertIs(self.swept.doc["implementation"]["chained_period"], False)
-        self.assertFalse(any(event[0] == "chain" for event in self.swept.events))
+        # Graph mode keeps the chained family: the chain is captured, not dropped.
+        self.assertIs(self.swept.doc["implementation"]["chained_period"], True)
+        self.assertTrue(any(event[0] == "chain" for event in self.swept.events))
         for row in self.swept.rows:
             with self.subTest(tokens=row["tokens_per_rank"]):
                 roundtrip = row["components"]["roundtrip"]
@@ -873,11 +916,11 @@ class CudaGraphPublication(unittest.TestCase):
                 self.assertEqual(row["components"]["dispatch"]["origin"], "cuda-graph-replay")
                 self.assertEqual(row["components"]["combine"]["origin"], "cuda-graph-replay")
                 self.assertEqual(row["components"]["isolated_sum"]["percentiles_us"]["p50"], 24.0)
-                for name in ("stage", "pair_period"):
-                    self.assertIsNone(row["components"][name]["percentiles_us"])
+                self.assertIsNone(row["components"]["stage"]["percentiles_us"])
+                self.assertIsNotNone(row["components"]["pair_period"]["percentiles_us"])
                 self.assertIs(row["correctness"]["cuda_graph_output_rewritten"], True)
                 self.assertIs(row["correctness"]["cuda_graph_last_output_passed"], True)
-                self.assertIsNone(row["correctness"]["post_chain_state_passed"])
+                self.assertIs(row["correctness"]["post_chain_state_passed"], True)
 
     def test_a_replay_that_does_not_rewrite_its_output_reds_the_case(self):
         swept = drive(backend_factory=_BrokenGraphSweepBackend)

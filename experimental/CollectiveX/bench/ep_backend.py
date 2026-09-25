@@ -173,7 +173,7 @@ class EPBackend(abc.ABC):
     @property
     def cuda_graph_supported(self) -> bool:
         """Whether this realized backend/mode has a graph-safe fixed-shape roundtrip."""
-        return self.mode in self.CUDA_GRAPH_MODES
+        return getattr(self, "mode", None) in self.CUDA_GRAPH_MODES
 
     @property
     def cuda_graph_enabled(self) -> bool:
@@ -393,6 +393,65 @@ class EPBackend(abc.ABC):
         import torch
         return torch.int64
 
+    # ---- CUDA graph capture ----------------------------------------------------------------
+
+    # Spin after the alignment all-reduce so every rank's host has enqueued its replay before the
+    # stream reaches it; ~50us at 2GHz, far above a graph launch, so the replay start is set by
+    # the barrier release on every rank rather than by host launch latency.
+    _GRAPH_ALIGN_SPIN_CYCLES = 100_000
+
+    def _graph_align(self):
+        """Enqueue a device-side rank barrier on the current stream, without a host sync."""
+        import torch
+        import torch.distributed as dist
+
+        token = getattr(self, "_graph_align_token", None)
+        if token is None:
+            token = self._graph_align_token = torch.zeros(1, device=self.device)
+        dist.all_reduce(token)
+        torch.cuda._sleep(self._GRAPH_ALIGN_SPIN_CYCLES)
+
+    def _capture_pairs(self, problem, staged, pairs, marks):
+        """Capture `pairs` back-to-back dispatch -> combine pairs into one graph.
+
+        `marks` selects which windows get external event nodes: "pair" (the whole pair),
+        "dispatch", "combine". Event records are graph nodes, so they cost the stream nothing on
+        the host -- the six-events-per-pair defect the eager chain splits around does not exist
+        here. Returns (graph, {mark: (starts, ends)}, last combined output).
+        """
+        import torch
+        import torch.distributed as dist
+
+        def events():
+            return [torch.cuda.Event(enable_timing=True, external=True) for _ in range(pairs)]
+
+        stamps = {mark: (events(), events()) for mark in marks}
+
+        def record(mark, edge, i):
+            if mark in stamps:
+                stamps[mark][edge][i].record()
+
+        dist.barrier()
+        torch.cuda.synchronize()
+        graph = torch.cuda.CUDAGraph()
+        combined = None
+        with torch.cuda.graph(graph, capture_error_mode="relaxed"):
+            for i in range(pairs):
+                record("pair", 0, i)
+                record("dispatch", 0, i)
+                handle = self.dispatch(problem)
+                record("dispatch", 1, i)
+                if staged is None:
+                    self.stage(problem, handle)
+                else:
+                    handle.combine_input = staged
+                record("combine", 0, i)
+                combined = self.combine(problem, handle)
+                record("combine", 1, i)
+                record("pair", 1, i)
+        torch.cuda.synchronize()
+        return graph, stamps, combined
+
     # ---- Timing template methods -----------------------------------------------------
 
     def timed_components(self):
@@ -494,6 +553,8 @@ class EPBackend(abc.ABC):
             staged = handle.combine_input
             self.combine(problem, handle)  # drain the pair backends require
             torch.cuda.synchronize()
+        if self.cuda_graph_enabled:
+            return self._benchmark_chain_graph(problem, staged, iters, drop)
         # Events are allocated BEFORE the loops: an allocation between two record() calls is host
         # work inside a window meant to belong to the stream, a measurable fraction of the period
         # at the bottom of the ladder.
@@ -547,6 +608,43 @@ class EPBackend(abc.ABC):
             "combined": combined.clone(),
         }
 
+    def _benchmark_chain_graph(self, problem, staged, iters, drop):
+        """The chained family under capture: each chain is ONE graph of `iters` unrolled pairs.
+
+        That is the shape a serving decode graph has -- every layer's dispatch -> combine back to
+        back inside a single replay -- so the period keeps its eager meaning (free-running pairs,
+        entry skew amortised across the chain) with launch overhead removed. Same two siblings as
+        the eager chain and the same returned series, so `run_sweep` reduces both identically.
+        Each graph replays once untimed (first-launch upload), then once aligned and timed.
+        """
+        import torch
+
+        floors, floor_stamps, _ = self._capture_pairs(
+            problem, staged, iters, ("dispatch", "combine")
+        )
+        period, period_stamps, combined = self._capture_pairs(problem, staged, iters, ("pair",))
+        for graph in (floors, period):
+            graph.replay()
+            torch.cuda.synchronize()
+            self._graph_align()
+            graph.replay()
+            torch.cuda.synchronize()
+
+        def series(starts, ends):
+            return [
+                start.elapsed_time(end) * 1000.0  # ms -> us
+                for start, end in zip(starts[drop:], ends[drop:])
+            ]
+
+        pair_start, pair_end = period_stamps["pair"]
+        return {
+            "pair": series(pair_start, pair_end),
+            "start_to_start": series(pair_start[:-1], pair_start[1:]),
+            "dispatch": series(*floor_stamps["dispatch"]),
+            "combine": series(*floor_stamps["combine"]),
+            "combined": combined.clone(),
+        }
+
     def benchmark_component(self, component, problem, warmup, iters):
         """Measure one named component; every component gets the same warm-up first."""
         if self.cuda_graph_enabled:
@@ -582,42 +680,16 @@ class EPBackend(abc.ABC):
             self.combine(problem, handle)  # drain the pair backends require
             torch.cuda.synchronize()
         if self.cuda_graph_enabled:
-            # Capture replaces the existing roundtrip callable in place. Capture and its warmup
-            # are excluded; the ordinary time_us event pipeline measures replay directly.
-            import torch.distributed as dist
-
-            dist.barrier()
-            torch.cuda.synchronize()
-            graph = torch.cuda.CUDAGraph()
-            interval = (
-                (
-                    torch.cuda.Event(enable_timing=True, external=True),
-                    torch.cuda.Event(enable_timing=True, external=True),
-                )
-                if graph_component != "roundtrip" else None
+            # One captured pair, bracketed by external events for the timed component. Capture
+            # and its warm-up are excluded; each timed replay starts behind a device-side rank
+            # barrier (`_graph_align`) so the cross-rank MAX is the operation, not launch skew.
+            mark = "pair" if graph_component == "roundtrip" else graph_component
+            graph, stamps, combined = self._capture_pairs(problem, staged, 1, (mark,))
+            starts, ends = stamps[mark]
+            samples = time_cuda_graph_phase_us(
+                torch, graph.replay, warmup, iters, (starts[0], ends[0]),
+                align=self._graph_align,
             )
-            with torch.cuda.graph(graph, capture_error_mode="relaxed"):
-                if graph_component == "dispatch":
-                    interval[0].record()
-                handle = self.dispatch(problem)
-                if graph_component == "dispatch":
-                    interval[1].record()
-                if staged is None:
-                    self.stage(problem, handle)
-                else:
-                    handle.combine_input = staged
-                if graph_component == "combine":
-                    interval[0].record()
-                combined = self.combine(problem, handle)
-                if graph_component == "combine":
-                    interval[1].record()
-            torch.cuda.synchronize()
-            if interval is None:
-                samples = time_us(torch, graph.replay, warmup, iters)
-            else:
-                samples = time_cuda_graph_phase_us(
-                    torch, graph.replay, warmup, iters, interval
-                )
 
             # Prove replay, rather than capture, writes the output used by the correctness gate.
             combined.fill_(float("nan"))
