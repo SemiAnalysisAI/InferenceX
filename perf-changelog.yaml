@@ -8938,3 +8938,9 @@
     - "Update SGLang ROCm image to v0.5.20-rocm720-mi30x; replace retired --cuda-graph-max-bs with --cuda-graph-max-bs-decode."
     - "将 SGLang ROCm 镜像更新至 v0.5.20-rocm720-mi30x，并以 --cuda-graph-max-bs-decode 替换已移除的 --cuda-graph-max-bs。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3362
+
+- config-keys:
+    - minimaxm3-fp8-mi300x-vllm-agentic-mtp
+  description:
+    - "Update the vLLM ROCm image from v0.29.0 to v0.30.0; benchmark configuration unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3361
