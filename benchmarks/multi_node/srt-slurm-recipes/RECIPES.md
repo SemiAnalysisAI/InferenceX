@@ -15,14 +15,14 @@ Store every recipe at `<model-prefix>/<engine>/<gpu>-<precision>/<workload>/<rec
 ```text
 dsr1/sglang/b200-fp4/8k1k/disagg-stp-mtp-variants.yaml
 glm5.2/sglang/h200-fp8/agentx/disagg-1p1d-pcp8-tp8-dp8-mtp6-hicache.yaml
-qwen3.5/trtllm/gb300-fp4/agentx/disagg-1p7d-dep4-tep8-c7-b1-mtp-kvoffload.yaml
+qwen3.5/trtllm/gb300-fp4/agentx/disagg-variants.yaml
 ```
 
 - Use the master config's `model-prefix` and `precision` labels. Engines are `sglang`, `vllm`, `trtllm`, and `tilert`; frontend selection remains explicit inside the recipe. Hardware directories use GPU types such as `b200` and `gb300`, rather than cluster names.
 - Workloads are `1k1k`, `8k1k`, or `agentx`. Existing bundles spanning several fixed sequence lengths use `fixed-seq-len`; keep their override selectors intact.
 - Use lowercase, hyphen-separated filenames beginning with `agg` or `disagg`. Include topology and the settings that distinguish sibling recipes, such as parallelism, batch size, concurrency, MTP, offload, or cache configuration. Avoid dates, numbered latency/throughput labels, and repeating the model or hardware already in the path.
 - In topology names, `1p4d` denotes prefill/decode worker counts, not necessarily physical nodes. Role-qualified `p-tp4` and `d-tp8` identify prefill/decode TP; `b` denotes batch size and `c` concurrency. The YAML is authoritative for runtime settings.
-- Name override bundles `*-variants.yaml`. Keep distinct sweep entry files separate even when their contents match: recipe paths participate in eval grouping. The Qwen3.5 `*-stp-sweep.yaml` and `*-mtp-sweep.yaml` pair preserves that existing distinction.
+- Name override bundles `*-variants.yaml`. Multi-node AgentX recipes that differ only per configuration share one bundle per master-config entry, usually `agg-variants.yaml` or `disagg-variants.yaml`: `base` holds the shared settings and each former recipe becomes a named `override_<name>` block holding only its differences (plain overrides, not `zip_override_*`). Master entries select one with `CONFIG_FILE=recipes/<dir>/<bundle>.yaml:override_<name>`. Recipes read as text by a launcher, such as power recipes with top-level `telemetry:`, stay standalone. Keep distinct sweep entry files separate even when their contents match: recipe paths participate in eval grouping. The Qwen3.5 `*-stp-sweep.yaml` and `*-mtp-sweep.yaml` pair preserves that existing distinction.
 - Update `CONFIG_FILE` and `EVAL_CONFIG_FILE` references in active and deprecated master configs, launcher path rules, workflow filters, and local documentation together when moving a file. Preserve upstream source URLs as provenance and leave historical performance-changelog entries unchanged. No aliases for the old layout are provided.
 
 Shared runtime assets stay under `configs/` beside the model directories; they are not standalone recipes. The four files in `configs/dsv4-moe-load-balancer-configs/` are copied verbatim from NVIDIA/srt-slurm commit `deb1dfd9934398664f92d194169c183e009da83b`, preserving the EPLB initial expert assignments used by 17 DSV4 TRT recipes. `setup_srt_slurm()` stages them into the job checkout's `configs/` directory for the recipes' bind mounts. Keeping a recipe in this tree does not activate it; the master configs determine the benchmark matrix.

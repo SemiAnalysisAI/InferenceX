@@ -88,9 +88,10 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
     if environment["FRAMEWORK"] not in {"sglang", "trt", "atom", "vllm"}:
         raise ValueError(f"Unsupported single-node framework: {environment['FRAMEWORK']!r}")
     spec = spec_parameters(role, engine)
-    if spec and spec["method"] not in {"eagle", "nextn", "mtp", "dspark"}:
-        raise ValueError("Single-node SRT supports only native MTP, DSpark or no speculation")
-    speculation = "mtp" if spec else "none"
+    if spec and spec["method"] not in {"eagle", "eagle3", "nextn", "mtp", "dspark"}:
+        raise ValueError("Single-node SRT supports only native MTP, EAGLE3, DSpark or no speculation")
+    # A point that stops drafting may keep its matrix label.
+    speculation = "mtp" if spec else workload.get("SPEC_DECODING", "none")
     agentic = environment["IS_AGENTIC"] == "1"
     expected = {
         "engine": (engine, SINGLE_NODE_ENGINES[environment["FRAMEWORK"]]),
@@ -104,7 +105,11 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
         "roles": (set(recipe["roles"]), {"agg"}),
         "benchmark type": (benchmark["type"], "custom"),
         "benchmark MODEL": (workload["MODEL"], environment["MODEL"]),
-        "SPEC_DECODING": (speculation, environment["SPEC_DECODING"]),
+        # draft_model names a bundled or separate draft; its recipes speculate natively.
+        "SPEC_DECODING": (
+            speculation,
+            "mtp" if environment["SPEC_DECODING"] == "draft_model" else environment["SPEC_DECODING"],
+        ),
         "AgentX client": (benchmark.get("command", "").endswith("srt_agentic.sh"), agentic),
     }
     if not agentic:
@@ -118,7 +123,9 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
     if engine == "atom":
         # Native ATOM derives -tp from the aggregate worker's GPU allocation.
         expected["ATOM TP"] = (role["gpus"], int(environment["TP"]))
-    for name, value in {"PP_SIZE": "1", "DCP_SIZE": "1", "PCP_SIZE": "1"}.items():
+    # vLLM shards decode KV across its tensor-parallel ranks.
+    dcp = str(args.get("decode-context-parallel-size", 1)) if engine == "vllm" else "1"
+    for name, value in {"PP_SIZE": "1", "DCP_SIZE": dcp, "PCP_SIZE": "1"}.items():
         expected[name] = (environment[name], value)
     for name, (actual, wanted) in expected.items():
         if actual != wanted:

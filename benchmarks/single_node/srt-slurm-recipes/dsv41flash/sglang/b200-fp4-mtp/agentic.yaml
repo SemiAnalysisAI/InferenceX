@@ -62,15 +62,202 @@ base:
 # needs a larger static fraction and a smaller prefill chunk to fit, and
 # expandable segments against fragmentation. Saturation points get a longer
 # warmup drain.
-override_tp4_c1: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, expert-parallel-size: 4, mem-fraction-static: 0.8, chunked-prefill-size: 4096, swa-prefix-tails: 128, max-running-requests: 2}, }}, benchmark: {env: {CONC: '1', AGENTIC_WARMUP_GRACE_PERIOD: '1800'}}}
-override_tp4_c2: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, expert-parallel-size: 4, mem-fraction-static: 0.8, chunked-prefill-size: 4096, swa-prefix-tails: 128, max-running-requests: 4}, }}, benchmark: {env: {CONC: '2', AGENTIC_WARMUP_GRACE_PERIOD: '1800'}}}
-override_tp4_c4: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, expert-parallel-size: 4, mem-fraction-static: 0.8, chunked-prefill-size: 4096, swa-prefix-tails: 256, max-running-requests: 8}, }}, benchmark: {env: {CONC: '4', AGENTIC_WARMUP_GRACE_PERIOD: '1800'}}}
-override_tp4_c8: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, expert-parallel-size: 4, mem-fraction-static: 0.8, chunked-prefill-size: 4096, swa-prefix-tails: 512, max-running-requests: 16}, }}, benchmark: {env: {CONC: '8', AGENTIC_WARMUP_GRACE_PERIOD: '1800'}}}
-override_tp4_c16: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, expert-parallel-size: 4, mem-fraction-static: 0.8, chunked-prefill-size: 4096, swa-prefix-tails: 1024, max-running-requests: 32}, }}, benchmark: {env: {CONC: '16', AGENTIC_WARMUP_GRACE_PERIOD: '1800'}}}
-override_tp4_c32: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, expert-parallel-size: 4, mem-fraction-static: 0.8, chunked-prefill-size: 4096, swa-prefix-tails: 2048, max-running-requests: 64}, }}, benchmark: {env: {CONC: '32', AGENTIC_WARMUP_GRACE_PERIOD: '3600'}}}
-override_tp4_c64: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, expert-parallel-size: 4, mem-fraction-static: 0.8, chunked-prefill-size: 4096, swa-prefix-tails: 4096, max-running-requests: 64}, }}, benchmark: {env: {CONC: '64', AGENTIC_WARMUP_GRACE_PERIOD: '3600'}}}
-override_tp4_c128: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, expert-parallel-size: 4, mem-fraction-static: 0.8, chunked-prefill-size: 4096, swa-prefix-tails: 4096, max-running-requests: 64}, }}, benchmark: {env: {CONC: '128', AGENTIC_WARMUP_GRACE_PERIOD: '3600'}}}
-override_tp2_c1: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, expert-parallel-size: 2, mem-fraction-static: 0.92, chunked-prefill-size: 2048, swa-prefix-tails: 128, max-running-requests: 2}, env: {PYTORCH_CUDA_ALLOC_CONF: 'expandable_segments:True'}, }}, benchmark: {env: {CONC: '1', AGENTIC_WARMUP_GRACE_PERIOD: '1800'}}}
-override_tp2_c2: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, expert-parallel-size: 2, mem-fraction-static: 0.92, chunked-prefill-size: 2048, swa-prefix-tails: 256, max-running-requests: 4}, env: {PYTORCH_CUDA_ALLOC_CONF: 'expandable_segments:True'}, }}, benchmark: {env: {CONC: '2', AGENTIC_WARMUP_GRACE_PERIOD: '1800'}}}
-override_tp2_c4: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, expert-parallel-size: 2, mem-fraction-static: 0.92, chunked-prefill-size: 2048, swa-prefix-tails: 512, max-running-requests: 8}, env: {PYTORCH_CUDA_ALLOC_CONF: 'expandable_segments:True'}, }}, benchmark: {env: {CONC: '4', AGENTIC_WARMUP_GRACE_PERIOD: '1800'}}}
-override_tp2_c8: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, expert-parallel-size: 2, mem-fraction-static: 0.92, chunked-prefill-size: 2048, swa-prefix-tails: 1024, max-running-requests: 16}, env: {PYTORCH_CUDA_ALLOC_CONF: 'expandable_segments:True'}, }}, benchmark: {env: {CONC: '8', AGENTIC_WARMUP_GRACE_PERIOD: '1800'}}}
+override_tp4_c1:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        mem-fraction-static: 0.8
+        chunked-prefill-size: 4096
+        swa-prefix-tails: 128
+        max-running-requests: 2
+  benchmark:
+    env:
+      CONC: '1'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+
+override_tp4_c2:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        mem-fraction-static: 0.8
+        chunked-prefill-size: 4096
+        swa-prefix-tails: 128
+        max-running-requests: 4
+  benchmark:
+    env:
+      CONC: '2'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+
+override_tp4_c4:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        mem-fraction-static: 0.8
+        chunked-prefill-size: 4096
+        swa-prefix-tails: 256
+        max-running-requests: 8
+  benchmark:
+    env:
+      CONC: '4'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+
+override_tp4_c8:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        mem-fraction-static: 0.8
+        chunked-prefill-size: 4096
+        swa-prefix-tails: 512
+        max-running-requests: 16
+  benchmark:
+    env:
+      CONC: '8'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+
+override_tp4_c16:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        mem-fraction-static: 0.8
+        chunked-prefill-size: 4096
+        swa-prefix-tails: 1024
+        max-running-requests: 32
+  benchmark:
+    env:
+      CONC: '16'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+
+override_tp4_c32:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        mem-fraction-static: 0.8
+        chunked-prefill-size: 4096
+        swa-prefix-tails: 2048
+        max-running-requests: 64
+  benchmark:
+    env:
+      CONC: '32'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+
+override_tp4_c64:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        mem-fraction-static: 0.8
+        chunked-prefill-size: 4096
+        swa-prefix-tails: 4096
+        max-running-requests: 64
+  benchmark:
+    env:
+      CONC: '64'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+
+override_tp4_c128:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        mem-fraction-static: 0.8
+        chunked-prefill-size: 4096
+        swa-prefix-tails: 4096
+        max-running-requests: 64
+  benchmark:
+    env:
+      CONC: '128'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+
+override_tp2_c1:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        mem-fraction-static: 0.92
+        chunked-prefill-size: 2048
+        swa-prefix-tails: 128
+        max-running-requests: 2
+      env:
+        PYTORCH_CUDA_ALLOC_CONF: 'expandable_segments:True'
+  benchmark:
+    env:
+      CONC: '1'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+
+override_tp2_c2:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        mem-fraction-static: 0.92
+        chunked-prefill-size: 2048
+        swa-prefix-tails: 256
+        max-running-requests: 4
+      env:
+        PYTORCH_CUDA_ALLOC_CONF: 'expandable_segments:True'
+  benchmark:
+    env:
+      CONC: '2'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+
+override_tp2_c4:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        mem-fraction-static: 0.92
+        chunked-prefill-size: 2048
+        swa-prefix-tails: 512
+        max-running-requests: 8
+      env:
+        PYTORCH_CUDA_ALLOC_CONF: 'expandable_segments:True'
+  benchmark:
+    env:
+      CONC: '4'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+
+override_tp2_c8:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        mem-fraction-static: 0.92
+        chunked-prefill-size: 2048
+        swa-prefix-tails: 1024
+        max-running-requests: 16
+      env:
+        PYTORCH_CUDA_ALLOC_CONF: 'expandable_segments:True'
+  benchmark:
+    env:
+      CONC: '8'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
