@@ -81,15 +81,134 @@ base:
 
 # One variant per point. There is no TP2 arm: a 192 GB card measured negative KV
 # memory at TP2 (run 35671005506).
-override_tp8_c1: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, engram-config: '{"cpu_offload":false}'}}}, benchmark: {env: {CONC: '1'}}}
-override_tp8_c2: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, engram-config: '{"cpu_offload":false}'}}}, benchmark: {env: {CONC: '2'}}}
-override_tp8_c4: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, engram-config: '{"cpu_offload":false}'}}}, benchmark: {env: {CONC: '4'}}}
-override_tp8_c8: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, engram-config: '{"cpu_offload":false}'}}}, benchmark: {env: {CONC: '8'}}}
-override_tp8_c16: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, engram-config: '{"cpu_offload":false}'}}}, benchmark: {env: {CONC: '16'}}}
-override_tp8_c32: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, engram-config: '{"cpu_offload":false}'}}}, benchmark: {env: {CONC: '32'}}}
-override_tp4_c1: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, engram-config: '{"cpu_offload":true}'}}}, benchmark: {env: {CONC: '1'}}}
-override_tp4_c2: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, engram-config: '{"cpu_offload":true}'}}}, benchmark: {env: {CONC: '2'}}}
-override_tp4_c4: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, engram-config: '{"cpu_offload":true}'}}}, benchmark: {env: {CONC: '4'}}}
-override_tp4_c8: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, engram-config: '{"cpu_offload":true}'}}}, benchmark: {env: {CONC: '8'}}}
-override_tp4_c16: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, engram-config: '{"cpu_offload":true}'}}}, benchmark: {env: {CONC: '16'}}}
-override_tp4_c32: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, engram-config: '{"cpu_offload":true}'}}}, benchmark: {env: {CONC: '32'}}}
+override_tp8_c1:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        engram-config: '{"cpu_offload":false}'
+  benchmark:
+    env:
+      CONC: '1'
+
+override_tp8_c2:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        engram-config: '{"cpu_offload":false}'
+  benchmark:
+    env:
+      CONC: '2'
+
+override_tp8_c4:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        engram-config: '{"cpu_offload":false}'
+  benchmark:
+    env:
+      CONC: '4'
+
+override_tp8_c8:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        engram-config: '{"cpu_offload":false}'
+  benchmark:
+    env:
+      CONC: '8'
+
+override_tp8_c16:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        engram-config: '{"cpu_offload":false}'
+  benchmark:
+    env:
+      CONC: '16'
+
+override_tp8_c32:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        engram-config: '{"cpu_offload":false}'
+  benchmark:
+    env:
+      CONC: '32'
+
+override_tp4_c1:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        engram-config: '{"cpu_offload":true}'
+  benchmark:
+    env:
+      CONC: '1'
+
+override_tp4_c2:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        engram-config: '{"cpu_offload":true}'
+  benchmark:
+    env:
+      CONC: '2'
+
+override_tp4_c4:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        engram-config: '{"cpu_offload":true}'
+  benchmark:
+    env:
+      CONC: '4'
+
+override_tp4_c8:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        engram-config: '{"cpu_offload":true}'
+  benchmark:
+    env:
+      CONC: '8'
+
+override_tp4_c16:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        engram-config: '{"cpu_offload":true}'
+  benchmark:
+    env:
+      CONC: '16'
+
+override_tp4_c32:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        engram-config: '{"cpu_offload":true}'
+  benchmark:
+    env:
+      CONC: '32'

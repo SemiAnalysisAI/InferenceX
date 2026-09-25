@@ -100,14 +100,334 @@ base:
 # One variant per point. The batch limit is CONC with graphs captured at every
 # size to 20 and a thinned ladder at 25 and 30. The host pool is 288 GiB at TP8
 # and about 362 GiB below.
-override_tp2_c20: {roles: {agg: {gpus: 2, args: {tensor_parallel_size: 2, max_batch_size: 20, cuda_graph_config: {batch_sizes: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]}, kv_cache_config: {host_cache_size: 388554555392}}}}, benchmark: {env: {CONC: '20', TOTAL_CPU_DRAM_GB: '599'}}}
-override_tp2_c25: {roles: {agg: {gpus: 2, args: {tensor_parallel_size: 2, max_batch_size: 25, cuda_graph_config: {batch_sizes: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 17, 19, 21, 23, 25]}, kv_cache_config: {host_cache_size: 388554555392}}}}, benchmark: {env: {CONC: '25', TOTAL_CPU_DRAM_GB: '599'}}}
-override_tp2_c30: {roles: {agg: {gpus: 2, args: {tensor_parallel_size: 2, max_batch_size: 30, cuda_graph_config: {batch_sizes: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 27, 30]}, kv_cache_config: {host_cache_size: 388554555392}}}}, benchmark: {env: {CONC: '30', TOTAL_CPU_DRAM_GB: '599'}}}
-override_tp4_c5: {roles: {agg: {gpus: 4, args: {tensor_parallel_size: 4, max_batch_size: 5, cuda_graph_config: {batch_sizes: [1, 2, 3, 4, 5]}, kv_cache_config: {host_cache_size: 388554555392}}}}, benchmark: {env: {CONC: '5', TOTAL_CPU_DRAM_GB: '1199'}}}
-override_tp4_c10: {roles: {agg: {gpus: 4, args: {tensor_parallel_size: 4, max_batch_size: 10, cuda_graph_config: {batch_sizes: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]}, kv_cache_config: {host_cache_size: 388554555392}}}}, benchmark: {env: {CONC: '10', TOTAL_CPU_DRAM_GB: '1199'}}}
-override_tp4_c15: {roles: {agg: {gpus: 4, args: {tensor_parallel_size: 4, max_batch_size: 15, cuda_graph_config: {batch_sizes: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]}, kv_cache_config: {host_cache_size: 388554555392}}}}, benchmark: {env: {CONC: '15', TOTAL_CPU_DRAM_GB: '1199'}}}
-override_tp4_c20: {roles: {agg: {gpus: 4, args: {tensor_parallel_size: 4, max_batch_size: 20, cuda_graph_config: {batch_sizes: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]}, kv_cache_config: {host_cache_size: 388554555392}}}}, benchmark: {env: {CONC: '20', TOTAL_CPU_DRAM_GB: '1199'}}}
-override_tp4_c25: {roles: {agg: {gpus: 4, args: {tensor_parallel_size: 4, max_batch_size: 25, cuda_graph_config: {batch_sizes: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 17, 19, 21, 23, 25]}, kv_cache_config: {host_cache_size: 388554555392}}}}, benchmark: {env: {CONC: '25', TOTAL_CPU_DRAM_GB: '1199'}}}
-override_tp4_c30: {roles: {agg: {gpus: 4, args: {tensor_parallel_size: 4, max_batch_size: 30, cuda_graph_config: {batch_sizes: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 27, 30]}, kv_cache_config: {host_cache_size: 388554555392}}}}, benchmark: {env: {CONC: '30', TOTAL_CPU_DRAM_GB: '1199'}}}
-override_tp8_c1: {roles: {agg: {gpus: 8, args: {tensor_parallel_size: 8, max_batch_size: 1, cuda_graph_config: {batch_sizes: [1]}, kv_cache_config: {host_cache_size: 309237645312}}}}, benchmark: {env: {CONC: '1', TOTAL_CPU_DRAM_GB: '2399'}}}
-override_tp8_c5: {roles: {agg: {gpus: 8, args: {tensor_parallel_size: 8, max_batch_size: 5, cuda_graph_config: {batch_sizes: [1, 2, 3, 4, 5]}, kv_cache_config: {host_cache_size: 309237645312}}}}, benchmark: {env: {CONC: '5', TOTAL_CPU_DRAM_GB: '2399'}}}
+override_tp2_c20:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor_parallel_size: 2
+        max_batch_size: 20
+        cuda_graph_config:
+          batch_sizes:
+            - 1
+            - 2
+            - 3
+            - 4
+            - 5
+            - 6
+            - 7
+            - 8
+            - 9
+            - 10
+            - 11
+            - 12
+            - 13
+            - 14
+            - 15
+            - 16
+            - 17
+            - 18
+            - 19
+            - 20
+        kv_cache_config:
+          host_cache_size: 388554555392
+  benchmark:
+    env:
+      CONC: '20'
+      TOTAL_CPU_DRAM_GB: '599'
+
+override_tp2_c25:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor_parallel_size: 2
+        max_batch_size: 25
+        cuda_graph_config:
+          batch_sizes:
+            - 1
+            - 2
+            - 3
+            - 4
+            - 5
+            - 6
+            - 7
+            - 8
+            - 9
+            - 10
+            - 11
+            - 12
+            - 13
+            - 14
+            - 15
+            - 17
+            - 19
+            - 21
+            - 23
+            - 25
+        kv_cache_config:
+          host_cache_size: 388554555392
+  benchmark:
+    env:
+      CONC: '25'
+      TOTAL_CPU_DRAM_GB: '599'
+
+override_tp2_c30:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor_parallel_size: 2
+        max_batch_size: 30
+        cuda_graph_config:
+          batch_sizes:
+            - 1
+            - 2
+            - 3
+            - 4
+            - 5
+            - 6
+            - 7
+            - 8
+            - 9
+            - 10
+            - 11
+            - 12
+            - 14
+            - 16
+            - 18
+            - 20
+            - 22
+            - 24
+            - 27
+            - 30
+        kv_cache_config:
+          host_cache_size: 388554555392
+  benchmark:
+    env:
+      CONC: '30'
+      TOTAL_CPU_DRAM_GB: '599'
+
+override_tp4_c5:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor_parallel_size: 4
+        max_batch_size: 5
+        cuda_graph_config:
+          batch_sizes:
+            - 1
+            - 2
+            - 3
+            - 4
+            - 5
+        kv_cache_config:
+          host_cache_size: 388554555392
+  benchmark:
+    env:
+      CONC: '5'
+      TOTAL_CPU_DRAM_GB: '1199'
+
+override_tp4_c10:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor_parallel_size: 4
+        max_batch_size: 10
+        cuda_graph_config:
+          batch_sizes:
+            - 1
+            - 2
+            - 3
+            - 4
+            - 5
+            - 6
+            - 7
+            - 8
+            - 9
+            - 10
+        kv_cache_config:
+          host_cache_size: 388554555392
+  benchmark:
+    env:
+      CONC: '10'
+      TOTAL_CPU_DRAM_GB: '1199'
+
+override_tp4_c15:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor_parallel_size: 4
+        max_batch_size: 15
+        cuda_graph_config:
+          batch_sizes:
+            - 1
+            - 2
+            - 3
+            - 4
+            - 5
+            - 6
+            - 7
+            - 8
+            - 9
+            - 10
+            - 11
+            - 12
+            - 13
+            - 14
+            - 15
+        kv_cache_config:
+          host_cache_size: 388554555392
+  benchmark:
+    env:
+      CONC: '15'
+      TOTAL_CPU_DRAM_GB: '1199'
+
+override_tp4_c20:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor_parallel_size: 4
+        max_batch_size: 20
+        cuda_graph_config:
+          batch_sizes:
+            - 1
+            - 2
+            - 3
+            - 4
+            - 5
+            - 6
+            - 7
+            - 8
+            - 9
+            - 10
+            - 11
+            - 12
+            - 13
+            - 14
+            - 15
+            - 16
+            - 17
+            - 18
+            - 19
+            - 20
+        kv_cache_config:
+          host_cache_size: 388554555392
+  benchmark:
+    env:
+      CONC: '20'
+      TOTAL_CPU_DRAM_GB: '1199'
+
+override_tp4_c25:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor_parallel_size: 4
+        max_batch_size: 25
+        cuda_graph_config:
+          batch_sizes:
+            - 1
+            - 2
+            - 3
+            - 4
+            - 5
+            - 6
+            - 7
+            - 8
+            - 9
+            - 10
+            - 11
+            - 12
+            - 13
+            - 14
+            - 15
+            - 17
+            - 19
+            - 21
+            - 23
+            - 25
+        kv_cache_config:
+          host_cache_size: 388554555392
+  benchmark:
+    env:
+      CONC: '25'
+      TOTAL_CPU_DRAM_GB: '1199'
+
+override_tp4_c30:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor_parallel_size: 4
+        max_batch_size: 30
+        cuda_graph_config:
+          batch_sizes:
+            - 1
+            - 2
+            - 3
+            - 4
+            - 5
+            - 6
+            - 7
+            - 8
+            - 9
+            - 10
+            - 11
+            - 12
+            - 14
+            - 16
+            - 18
+            - 20
+            - 22
+            - 24
+            - 27
+            - 30
+        kv_cache_config:
+          host_cache_size: 388554555392
+  benchmark:
+    env:
+      CONC: '30'
+      TOTAL_CPU_DRAM_GB: '1199'
+
+override_tp8_c1:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor_parallel_size: 8
+        max_batch_size: 1
+        cuda_graph_config:
+          batch_sizes:
+            - 1
+        kv_cache_config:
+          host_cache_size: 309237645312
+  benchmark:
+    env:
+      CONC: '1'
+      TOTAL_CPU_DRAM_GB: '2399'
+
+override_tp8_c5:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor_parallel_size: 8
+        max_batch_size: 5
+        cuda_graph_config:
+          batch_sizes:
+            - 1
+            - 2
+            - 3
+            - 4
+            - 5
+        kv_cache_config:
+          host_cache_size: 309237645312
+  benchmark:
+    env:
+      CONC: '5'
+      TOTAL_CPU_DRAM_GB: '2399'

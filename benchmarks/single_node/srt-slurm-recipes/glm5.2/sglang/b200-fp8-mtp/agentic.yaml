@@ -72,8 +72,57 @@ base:
 # capped at 64. MLA ranks hold complete per-token KV, so ratio 0.75 gives too
 # few host slots past C8; C12/C16 pin a 169 GB/rank pool (~1,662 GB across TP8
 # with the DSA indexer, within the 1,731 GB budget).
-override_c1: {roles: {agg: {args: {max-running-requests: 2, cuda-graph-max-bs: 2, hicache-ratio: 0.75}}}, benchmark: {env: {CONC: '1'}}}
-override_c4: {roles: {agg: {args: {max-running-requests: 8, cuda-graph-max-bs: 8, hicache-ratio: 0.75}}}, benchmark: {env: {CONC: '4'}}}
-override_c8: {roles: {agg: {args: {max-running-requests: 16, cuda-graph-max-bs: 16, hicache-ratio: 0.75}}}, benchmark: {env: {CONC: '8'}}}
-override_c12: {roles: {agg: {args: {max-running-requests: 24, cuda-graph-max-bs: 24, hicache-size: 169}}}, benchmark: {env: {CONC: '12'}}}
-override_c16: {roles: {agg: {args: {max-running-requests: 32, cuda-graph-max-bs: 32, hicache-size: 169}}}, benchmark: {env: {CONC: '16'}}}
+override_c1:
+  roles:
+    agg:
+      args:
+        max-running-requests: 2
+        cuda-graph-max-bs: 2
+        hicache-ratio: 0.75
+  benchmark:
+    env:
+      CONC: '1'
+
+override_c4:
+  roles:
+    agg:
+      args:
+        max-running-requests: 8
+        cuda-graph-max-bs: 8
+        hicache-ratio: 0.75
+  benchmark:
+    env:
+      CONC: '4'
+
+override_c8:
+  roles:
+    agg:
+      args:
+        max-running-requests: 16
+        cuda-graph-max-bs: 16
+        hicache-ratio: 0.75
+  benchmark:
+    env:
+      CONC: '8'
+
+override_c12:
+  roles:
+    agg:
+      args:
+        max-running-requests: 24
+        cuda-graph-max-bs: 24
+        hicache-size: 169
+  benchmark:
+    env:
+      CONC: '12'
+
+override_c16:
+  roles:
+    agg:
+      args:
+        max-running-requests: 32
+        cuda-graph-max-bs: 32
+        hicache-size: 169
+  benchmark:
+    env:
+      CONC: '16'

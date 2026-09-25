@@ -64,12 +64,78 @@ base:
 
 # One variant per point. The scheduler batch is 2x CONC and graph capture covers
 # it at four tokens per sequence (three drafts).
-override_tp8_c1: {roles: {agg: {args: {max-num-seqs: 2, max-cudagraph-capture-size: 8, gpu-memory-utilization: 0.95}}}, benchmark: {env: {CONC: '1', KV_OFFLOADING: none}}}
-override_tp8_c2: {roles: {agg: {args: {max-num-seqs: 4, max-cudagraph-capture-size: 16, gpu-memory-utilization: 0.95}}}, benchmark: {env: {CONC: '2', KV_OFFLOADING: none}}}
-override_tp8_c4: {roles: {agg: {args: {max-num-seqs: 8, max-cudagraph-capture-size: 32, gpu-memory-utilization: 0.95}}}, benchmark: {env: {CONC: '4', KV_OFFLOADING: none}}}
-override_tp8_c6: {roles: {agg: {args: {max-num-seqs: 12, max-cudagraph-capture-size: 48, gpu-memory-utilization: 0.95}}}, benchmark: {env: {CONC: '6', KV_OFFLOADING: none}}}
-override_tp8_c8: {roles: {agg: {args: {max-num-seqs: 16, max-cudagraph-capture-size: 64, gpu-memory-utilization: 0.95}}}, benchmark: {env: {CONC: '8', KV_OFFLOADING: none}}}
-override_tp8_c10: {roles: {agg: {args: {max-num-seqs: 20, max-cudagraph-capture-size: 80, gpu-memory-utilization: 0.95}}}, benchmark: {env: {CONC: '10', KV_OFFLOADING: none}}}
+override_tp8_c1:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 2
+        max-cudagraph-capture-size: 8
+        gpu-memory-utilization: 0.95
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: none
+
+override_tp8_c2:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 4
+        max-cudagraph-capture-size: 16
+        gpu-memory-utilization: 0.95
+  benchmark:
+    env:
+      CONC: '2'
+      KV_OFFLOADING: none
+
+override_tp8_c4:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 8
+        max-cudagraph-capture-size: 32
+        gpu-memory-utilization: 0.95
+  benchmark:
+    env:
+      CONC: '4'
+      KV_OFFLOADING: none
+
+override_tp8_c6:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 12
+        max-cudagraph-capture-size: 48
+        gpu-memory-utilization: 0.95
+  benchmark:
+    env:
+      CONC: '6'
+      KV_OFFLOADING: none
+
+override_tp8_c8:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 16
+        max-cudagraph-capture-size: 64
+        gpu-memory-utilization: 0.95
+  benchmark:
+    env:
+      CONC: '8'
+      KV_OFFLOADING: none
+
+override_tp8_c10:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 20
+        max-cudagraph-capture-size: 80
+        gpu-memory-utilization: 0.95
+  benchmark:
+    env:
+      CONC: '10'
+      KV_OFFLOADING: none
+
 # The DRAM point offloads KV to an embedded Mooncake store, leaving HBM headroom
 # at 0.90. Per rank: the host budget (1234 GB = 1149 GiB) less the 414 GiB
 # checkpoint page cache, over TP8, less the 4 GiB local buffer = 87 GB.
@@ -80,12 +146,16 @@ override_tp8_c12_dram:
     - name: mooncake-master
       type: mooncake-master
       # The in-container install outlasts the default 120 s readiness window.
-      readiness: {port: 8700, timeout_seconds: 900}
+      readiness:
+        port: 8700
+        timeout_seconds: 900
       preamble: >-
         pip_install=(python3 -m pip install);
         python3 -m pip install --help 2>/dev/null | grep -q -- --break-system-packages && pip_install+=(--break-system-packages);
         "${pip_install[@]}" --no-cache-dir --no-deps --force-reinstall mooncake-transfer-engine-cuda13==0.3.11.post1
-      args: ['--eviction_high_watermark_ratio=0.80', '--eviction_ratio=0.10']
+      args:
+        - '--eviction_high_watermark_ratio=0.80'
+        - '--eviction_ratio=0.10'
       options:
         store_config:
           mode: embedded

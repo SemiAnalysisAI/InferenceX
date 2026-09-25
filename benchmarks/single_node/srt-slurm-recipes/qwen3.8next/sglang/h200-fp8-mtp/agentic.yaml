@@ -54,8 +54,52 @@ base:
       WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_with_subagents_256k
 
 # One variant per point: admission is 2x CONC and the graph batch is CONC.
-override_c1: {roles: {agg: {args: {max-running-requests: 2, cuda-graph-max-bs: 1}}}, benchmark: {env: {CONC: '1'}}}
-override_c4: {roles: {agg: {args: {max-running-requests: 8, cuda-graph-max-bs: 4}}}, benchmark: {env: {CONC: '4'}}}
-override_c8: {roles: {agg: {args: {max-running-requests: 16, cuda-graph-max-bs: 8}}}, benchmark: {env: {CONC: '8'}}}
-override_c12: {roles: {agg: {args: {max-running-requests: 24, cuda-graph-max-bs: 12}}}, benchmark: {env: {CONC: '12'}}}
-override_c16: {roles: {agg: {args: {max-running-requests: 32, cuda-graph-max-bs: 16}}}, benchmark: {env: {CONC: '16'}}}
+override_c1:
+  roles:
+    agg:
+      args:
+        max-running-requests: 2
+        cuda-graph-max-bs: 1
+  benchmark:
+    env:
+      CONC: '1'
+
+override_c4:
+  roles:
+    agg:
+      args:
+        max-running-requests: 8
+        cuda-graph-max-bs: 4
+  benchmark:
+    env:
+      CONC: '4'
+
+override_c8:
+  roles:
+    agg:
+      args:
+        max-running-requests: 16
+        cuda-graph-max-bs: 8
+  benchmark:
+    env:
+      CONC: '8'
+
+override_c12:
+  roles:
+    agg:
+      args:
+        max-running-requests: 24
+        cuda-graph-max-bs: 12
+  benchmark:
+    env:
+      CONC: '12'
+
+override_c16:
+  roles:
+    agg:
+      args:
+        max-running-requests: 32
+        cuda-graph-max-bs: 16
+  benchmark:
+    env:
+      CONC: '16'

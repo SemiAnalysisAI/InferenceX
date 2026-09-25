@@ -83,15 +83,149 @@ base:
 # interleaves prefill every 8 steps with a 16k long-prefill threshold, and
 # routes each conversation to one rank: the Router hashes X-Session-ID, which
 # AIPerf aliases from its stable X-Correlation-ID.
-override_tp8_c1: {roles: {agg: {args: {max-num-seqs: 2}}}, benchmark: {env: {CONC: '1'}}}
-override_tp8_c4: {roles: {agg: {args: {max-num-seqs: 8}}}, benchmark: {env: {CONC: '4'}}}
-override_tp8_c8: {roles: {agg: {args: {max-num-seqs: 16}}}, benchmark: {env: {CONC: '8'}}}
-override_tp8_c16: {roles: {agg: {args: {max-num-seqs: 32}}}, benchmark: {env: {CONC: '16'}}}
-override_tp8_c32: {roles: {agg: {args: {max-num-seqs: 64}}}, benchmark: {env: {CONC: '32'}}}
-override_tp8_c40: {roles: {agg: {args: {max-num-seqs: 80}}}, benchmark: {env: {CONC: '40'}}}
-override_tp8_c48: {roles: {agg: {args: {max-num-seqs: 96}}}, benchmark: {env: {CONC: '48'}}}
-override_tp8_c56: {roles: {agg: {args: {max-num-seqs: 112}}}, benchmark: {env: {CONC: '56'}}}
-override_tp8_c64: {roles: {agg: {args: {max-num-seqs: 128}}}, benchmark: {env: {CONC: '64'}}}
-override_dep8_c64: {frontend: {type: vllm-router, args: {policy: consistent_hash, request-timeout-secs: 14400, disable-retries: true}, env: {SETUP_PIP_PACKAGES: 'vllm-router==0.1.14'}}, roles: {agg: {args: {tensor-parallel-size: 1, data-parallel-size: 8, prefill-schedule-interval: 8, long-prefill-token-threshold: 16384, max-num-seqs: 64}}}, benchmark: {env: {CONC: '64', AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: '1'}}}
-override_dep8_c128: {frontend: {type: vllm-router, args: {policy: consistent_hash, request-timeout-secs: 14400, disable-retries: true}, env: {SETUP_PIP_PACKAGES: 'vllm-router==0.1.14'}}, roles: {agg: {args: {tensor-parallel-size: 1, data-parallel-size: 8, prefill-schedule-interval: 8, long-prefill-token-threshold: 16384, max-num-seqs: 128}}}, benchmark: {env: {CONC: '128', AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: '1'}}}
-override_dep8_c192: {frontend: {type: vllm-router, args: {policy: consistent_hash, request-timeout-secs: 14400, disable-retries: true}, env: {SETUP_PIP_PACKAGES: 'vllm-router==0.1.14'}}, roles: {agg: {args: {tensor-parallel-size: 1, data-parallel-size: 8, prefill-schedule-interval: 8, long-prefill-token-threshold: 16384, max-num-seqs: 192}}}, benchmark: {env: {CONC: '192', AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: '1'}}}
+override_tp8_c1:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 2
+  benchmark:
+    env:
+      CONC: '1'
+
+override_tp8_c4:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 8
+  benchmark:
+    env:
+      CONC: '4'
+
+override_tp8_c8:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 16
+  benchmark:
+    env:
+      CONC: '8'
+
+override_tp8_c16:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 32
+  benchmark:
+    env:
+      CONC: '16'
+
+override_tp8_c32:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 64
+  benchmark:
+    env:
+      CONC: '32'
+
+override_tp8_c40:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 80
+  benchmark:
+    env:
+      CONC: '40'
+
+override_tp8_c48:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 96
+  benchmark:
+    env:
+      CONC: '48'
+
+override_tp8_c56:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 112
+  benchmark:
+    env:
+      CONC: '56'
+
+override_tp8_c64:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 128
+  benchmark:
+    env:
+      CONC: '64'
+
+override_dep8_c64:
+  frontend:
+    type: vllm-router
+    args:
+      policy: consistent_hash
+      request-timeout-secs: 14400
+      disable-retries: true
+    env:
+      SETUP_PIP_PACKAGES: 'vllm-router==0.1.14'
+  roles:
+    agg:
+      args:
+        tensor-parallel-size: 1
+        data-parallel-size: 8
+        prefill-schedule-interval: 8
+        long-prefill-token-threshold: 16384
+        max-num-seqs: 64
+  benchmark:
+    env:
+      CONC: '64'
+      AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: '1'
+
+override_dep8_c128:
+  frontend:
+    type: vllm-router
+    args:
+      policy: consistent_hash
+      request-timeout-secs: 14400
+      disable-retries: true
+    env:
+      SETUP_PIP_PACKAGES: 'vllm-router==0.1.14'
+  roles:
+    agg:
+      args:
+        tensor-parallel-size: 1
+        data-parallel-size: 8
+        prefill-schedule-interval: 8
+        long-prefill-token-threshold: 16384
+        max-num-seqs: 128
+  benchmark:
+    env:
+      CONC: '128'
+      AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: '1'
+
+override_dep8_c192:
+  frontend:
+    type: vllm-router
+    args:
+      policy: consistent_hash
+      request-timeout-secs: 14400
+      disable-retries: true
+    env:
+      SETUP_PIP_PACKAGES: 'vllm-router==0.1.14'
+  roles:
+    agg:
+      args:
+        tensor-parallel-size: 1
+        data-parallel-size: 8
+        prefill-schedule-interval: 8
+        long-prefill-token-threshold: 16384
+        max-num-seqs: 192
+  benchmark:
+    env:
+      CONC: '192'
+      AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: '1'

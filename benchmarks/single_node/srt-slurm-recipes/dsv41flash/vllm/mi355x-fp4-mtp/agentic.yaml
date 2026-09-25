@@ -75,19 +75,211 @@ base:
 # 2x CONC (at least 128 sequences) x (1 + 5 drafts), up to 2048 tokens. The
 # prefill chunk shrinks at TP2 from c64 and at c128 to buy KV room, and where
 # it drops below 1024 x 6 slots the scheduler is capped at the captured shape.
-override_tp4_c1: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, engram-config: '{"cpu_offload":false}', max-cudagraph-capture-size: 1024, max-num-batched-tokens: 16384}}}, benchmark: {env: {CONC: '1'}}}
-override_tp4_c2: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, engram-config: '{"cpu_offload":false}', max-cudagraph-capture-size: 1024, max-num-batched-tokens: 16384}}}, benchmark: {env: {CONC: '2'}}}
-override_tp4_c4: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, engram-config: '{"cpu_offload":false}', max-cudagraph-capture-size: 1024, max-num-batched-tokens: 16384}}}, benchmark: {env: {CONC: '4'}}}
-override_tp4_c8: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, engram-config: '{"cpu_offload":false}', max-cudagraph-capture-size: 1024, max-num-batched-tokens: 16384}}}, benchmark: {env: {CONC: '8'}}}
-override_tp4_c16: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, engram-config: '{"cpu_offload":false}', max-cudagraph-capture-size: 1024, max-num-batched-tokens: 16384}}}, benchmark: {env: {CONC: '16'}}}
-override_tp4_c32: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, engram-config: '{"cpu_offload":false}', max-cudagraph-capture-size: 1024, max-num-batched-tokens: 16384}}}, benchmark: {env: {CONC: '32'}}}
-override_tp4_c64: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, engram-config: '{"cpu_offload":false}', max-cudagraph-capture-size: 1024, max-num-batched-tokens: 16384}}}, benchmark: {env: {CONC: '64'}}}
-override_tp4_c128: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, engram-config: '{"cpu_offload":true}', max-cudagraph-capture-size: 2048, max-num-batched-tokens: 8192}}}, benchmark: {env: {CONC: '128'}}}
-override_tp2_c1: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, engram-config: '{"cpu_offload":true}', max-cudagraph-capture-size: 1024, max-num-batched-tokens: 16384}}}, benchmark: {env: {CONC: '1'}}}
-override_tp2_c2: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, engram-config: '{"cpu_offload":true}', max-cudagraph-capture-size: 1024, max-num-batched-tokens: 16384}}}, benchmark: {env: {CONC: '2'}}}
-override_tp2_c4: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, engram-config: '{"cpu_offload":true}', max-cudagraph-capture-size: 1024, max-num-batched-tokens: 16384}}}, benchmark: {env: {CONC: '4'}}}
-override_tp2_c8: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, engram-config: '{"cpu_offload":true}', max-cudagraph-capture-size: 1024, max-num-batched-tokens: 16384}}}, benchmark: {env: {CONC: '8'}}}
-override_tp2_c16: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, engram-config: '{"cpu_offload":true}', max-cudagraph-capture-size: 1024, max-num-batched-tokens: 16384}}}, benchmark: {env: {CONC: '16'}}}
-override_tp2_c32: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, engram-config: '{"cpu_offload":true}', max-cudagraph-capture-size: 1024, max-num-batched-tokens: 16384}}}, benchmark: {env: {CONC: '32'}}}
-override_tp2_c64: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, engram-config: '{"cpu_offload":true}', max-cudagraph-capture-size: 1024, max-num-batched-tokens: 8192}}}, benchmark: {env: {CONC: '64'}}}
-override_tp2_c128: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, engram-config: '{"cpu_offload":true}', max-cudagraph-capture-size: 2048, max-num-batched-tokens: 4096, max-num-seqs: 256}}}, benchmark: {env: {CONC: '128'}}}
+override_tp4_c1:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        engram-config: '{"cpu_offload":false}'
+        max-cudagraph-capture-size: 1024
+        max-num-batched-tokens: 16384
+  benchmark:
+    env:
+      CONC: '1'
+
+override_tp4_c2:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        engram-config: '{"cpu_offload":false}'
+        max-cudagraph-capture-size: 1024
+        max-num-batched-tokens: 16384
+  benchmark:
+    env:
+      CONC: '2'
+
+override_tp4_c4:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        engram-config: '{"cpu_offload":false}'
+        max-cudagraph-capture-size: 1024
+        max-num-batched-tokens: 16384
+  benchmark:
+    env:
+      CONC: '4'
+
+override_tp4_c8:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        engram-config: '{"cpu_offload":false}'
+        max-cudagraph-capture-size: 1024
+        max-num-batched-tokens: 16384
+  benchmark:
+    env:
+      CONC: '8'
+
+override_tp4_c16:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        engram-config: '{"cpu_offload":false}'
+        max-cudagraph-capture-size: 1024
+        max-num-batched-tokens: 16384
+  benchmark:
+    env:
+      CONC: '16'
+
+override_tp4_c32:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        engram-config: '{"cpu_offload":false}'
+        max-cudagraph-capture-size: 1024
+        max-num-batched-tokens: 16384
+  benchmark:
+    env:
+      CONC: '32'
+
+override_tp4_c64:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        engram-config: '{"cpu_offload":false}'
+        max-cudagraph-capture-size: 1024
+        max-num-batched-tokens: 16384
+  benchmark:
+    env:
+      CONC: '64'
+
+override_tp4_c128:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        engram-config: '{"cpu_offload":true}'
+        max-cudagraph-capture-size: 2048
+        max-num-batched-tokens: 8192
+  benchmark:
+    env:
+      CONC: '128'
+
+override_tp2_c1:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        engram-config: '{"cpu_offload":true}'
+        max-cudagraph-capture-size: 1024
+        max-num-batched-tokens: 16384
+  benchmark:
+    env:
+      CONC: '1'
+
+override_tp2_c2:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        engram-config: '{"cpu_offload":true}'
+        max-cudagraph-capture-size: 1024
+        max-num-batched-tokens: 16384
+  benchmark:
+    env:
+      CONC: '2'
+
+override_tp2_c4:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        engram-config: '{"cpu_offload":true}'
+        max-cudagraph-capture-size: 1024
+        max-num-batched-tokens: 16384
+  benchmark:
+    env:
+      CONC: '4'
+
+override_tp2_c8:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        engram-config: '{"cpu_offload":true}'
+        max-cudagraph-capture-size: 1024
+        max-num-batched-tokens: 16384
+  benchmark:
+    env:
+      CONC: '8'
+
+override_tp2_c16:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        engram-config: '{"cpu_offload":true}'
+        max-cudagraph-capture-size: 1024
+        max-num-batched-tokens: 16384
+  benchmark:
+    env:
+      CONC: '16'
+
+override_tp2_c32:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        engram-config: '{"cpu_offload":true}'
+        max-cudagraph-capture-size: 1024
+        max-num-batched-tokens: 16384
+  benchmark:
+    env:
+      CONC: '32'
+
+override_tp2_c64:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        engram-config: '{"cpu_offload":true}'
+        max-cudagraph-capture-size: 1024
+        max-num-batched-tokens: 8192
+  benchmark:
+    env:
+      CONC: '64'
+
+override_tp2_c128:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        engram-config: '{"cpu_offload":true}'
+        max-cudagraph-capture-size: 2048
+        max-num-batched-tokens: 4096
+        max-num-seqs: 256
+  benchmark:
+    env:
+      CONC: '128'

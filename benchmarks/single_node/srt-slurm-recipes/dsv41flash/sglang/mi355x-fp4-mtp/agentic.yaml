@@ -82,9 +82,33 @@ base:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
 
 # One variant per point; the saturation point gets a longer warmup drain.
-override_tp4_c1: {benchmark: {env: {CONC: '1'}}}
-override_tp4_c2: {benchmark: {env: {CONC: '2'}}}
-override_tp4_c4: {benchmark: {env: {CONC: '4'}}}
-override_tp4_c8: {benchmark: {env: {CONC: '8'}}}
-override_tp4_c16: {benchmark: {env: {CONC: '16'}}}
-override_tp4_c32: {benchmark: {env: {CONC: '32', AGENTIC_WARMUP_GRACE_PERIOD: '3600'}}}
+override_tp4_c1:
+  benchmark:
+    env:
+      CONC: '1'
+
+override_tp4_c2:
+  benchmark:
+    env:
+      CONC: '2'
+
+override_tp4_c4:
+  benchmark:
+    env:
+      CONC: '4'
+
+override_tp4_c8:
+  benchmark:
+    env:
+      CONC: '8'
+
+override_tp4_c16:
+  benchmark:
+    env:
+      CONC: '16'
+
+override_tp4_c32:
+  benchmark:
+    env:
+      CONC: '32'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'

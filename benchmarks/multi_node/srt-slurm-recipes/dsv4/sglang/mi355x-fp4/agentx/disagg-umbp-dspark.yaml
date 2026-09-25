@@ -212,20 +212,515 @@ base:
 # rank under DP attention. DSpark draft length is 6 at c4/c16 (the golden AL
 # peak) and 3 above; MoRI decode dispatch scales with it (64 x (draft + 1)).
 override_c4:
-  roles: {prefill: {gpus: 4, args: {tp-size: 4, mem-fraction-static: 0.86, chunked-prefill-size: 16384, max-running-requests: 8, speculative-dspark-block-size: 6, speculative-num-draft-tokens: 7}}, decode: {gpus: 4, env: {MORI_MAX_DISPATCH_TOKENS_DECODE: "448"}, args: {tp-size: 4, mem-fraction-static: 0.86, max-running-requests: 8, cuda-graph-bs-decode: [1, 2, 3, 4, 5, 6, 7, 8], speculative-dspark-block-size: 6, speculative-num-draft-tokens: 7}}}
-  benchmark: {env: {CONC: '4'}}
+  roles:
+    prefill:
+      gpus: 4
+      args:
+        tp-size: 4
+        mem-fraction-static: 0.86
+        chunked-prefill-size: 16384
+        max-running-requests: 8
+        speculative-dspark-block-size: 6
+        speculative-num-draft-tokens: 7
+    decode:
+      gpus: 4
+      env:
+        MORI_MAX_DISPATCH_TOKENS_DECODE: "448"
+      args:
+        tp-size: 4
+        mem-fraction-static: 0.86
+        max-running-requests: 8
+        cuda-graph-bs-decode:
+          - 1
+          - 2
+          - 3
+          - 4
+          - 5
+          - 6
+          - 7
+          - 8
+        speculative-dspark-block-size: 6
+        speculative-num-draft-tokens: 7
+  benchmark:
+    env:
+      CONC: '4'
+
 override_c16:
-  roles: {prefill: {gpus: 4, args: {tp-size: 4, mem-fraction-static: 0.86, chunked-prefill-size: 16384, max-running-requests: 32, speculative-dspark-block-size: 6, speculative-num-draft-tokens: 7}}, decode: {gpus: 8, env: {MORI_MAX_DISPATCH_TOKENS_DECODE: "448"}, args: {tp-size: 8, mem-fraction-static: 0.86, max-running-requests: 32, cuda-graph-bs-decode: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32], speculative-dspark-block-size: 6, speculative-num-draft-tokens: 7}}}
-  benchmark: {env: {CONC: '16'}}
+  roles:
+    prefill:
+      gpus: 4
+      args:
+        tp-size: 4
+        mem-fraction-static: 0.86
+        chunked-prefill-size: 16384
+        max-running-requests: 32
+        speculative-dspark-block-size: 6
+        speculative-num-draft-tokens: 7
+    decode:
+      gpus: 8
+      env:
+        MORI_MAX_DISPATCH_TOKENS_DECODE: "448"
+      args:
+        tp-size: 8
+        mem-fraction-static: 0.86
+        max-running-requests: 32
+        cuda-graph-bs-decode:
+          - 1
+          - 2
+          - 3
+          - 4
+          - 5
+          - 6
+          - 7
+          - 8
+          - 9
+          - 10
+          - 11
+          - 12
+          - 13
+          - 14
+          - 15
+          - 16
+          - 17
+          - 18
+          - 19
+          - 20
+          - 21
+          - 22
+          - 23
+          - 24
+          - 25
+          - 26
+          - 27
+          - 28
+          - 29
+          - 30
+          - 31
+          - 32
+        speculative-dspark-block-size: 6
+        speculative-num-draft-tokens: 7
+  benchmark:
+    env:
+      CONC: '16'
+
 override_c32:
-  roles: {prefill: {gpus: 4, args: {tp-size: 4, mem-fraction-static: 0.86, chunked-prefill-size: 16384, max-running-requests: 64, speculative-dspark-block-size: 3, speculative-num-draft-tokens: 4}}, decode: {gpus: 8, env: {MORI_MAX_DISPATCH_TOKENS_DECODE: "256"}, args: {tp-size: 8, mem-fraction-static: 0.86, max-running-requests: 64, cuda-graph-bs-decode: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64], speculative-dspark-block-size: 3, speculative-num-draft-tokens: 4}}}
-  benchmark: {env: {CONC: '32'}}
+  roles:
+    prefill:
+      gpus: 4
+      args:
+        tp-size: 4
+        mem-fraction-static: 0.86
+        chunked-prefill-size: 16384
+        max-running-requests: 64
+        speculative-dspark-block-size: 3
+        speculative-num-draft-tokens: 4
+    decode:
+      gpus: 8
+      env:
+        MORI_MAX_DISPATCH_TOKENS_DECODE: "256"
+      args:
+        tp-size: 8
+        mem-fraction-static: 0.86
+        max-running-requests: 64
+        cuda-graph-bs-decode:
+          - 1
+          - 2
+          - 3
+          - 4
+          - 5
+          - 6
+          - 7
+          - 8
+          - 9
+          - 10
+          - 11
+          - 12
+          - 13
+          - 14
+          - 15
+          - 16
+          - 17
+          - 18
+          - 19
+          - 20
+          - 21
+          - 22
+          - 23
+          - 24
+          - 25
+          - 26
+          - 27
+          - 28
+          - 29
+          - 30
+          - 31
+          - 32
+          - 33
+          - 34
+          - 35
+          - 36
+          - 37
+          - 38
+          - 39
+          - 40
+          - 41
+          - 42
+          - 43
+          - 44
+          - 45
+          - 46
+          - 47
+          - 48
+          - 49
+          - 50
+          - 51
+          - 52
+          - 53
+          - 54
+          - 55
+          - 56
+          - 57
+          - 58
+          - 59
+          - 60
+          - 61
+          - 62
+          - 63
+          - 64
+        speculative-dspark-block-size: 3
+        speculative-num-draft-tokens: 4
+  benchmark:
+    env:
+      CONC: '32'
+
 override_c48:
-  roles: {prefill: {gpus: 4, args: {tp-size: 4, mem-fraction-static: 0.86, chunked-prefill-size: 16384, max-running-requests: 96, speculative-dspark-block-size: 3, speculative-num-draft-tokens: 4}}, decode: {gpus: 8, env: {MORI_MAX_DISPATCH_TOKENS_DECODE: "256"}, args: {tp-size: 8, mem-fraction-static: 0.86, max-running-requests: 96, cuda-graph-bs-decode: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96], speculative-dspark-block-size: 3, speculative-num-draft-tokens: 4}}}
-  benchmark: {env: {CONC: '48'}}
+  roles:
+    prefill:
+      gpus: 4
+      args:
+        tp-size: 4
+        mem-fraction-static: 0.86
+        chunked-prefill-size: 16384
+        max-running-requests: 96
+        speculative-dspark-block-size: 3
+        speculative-num-draft-tokens: 4
+    decode:
+      gpus: 8
+      env:
+        MORI_MAX_DISPATCH_TOKENS_DECODE: "256"
+      args:
+        tp-size: 8
+        mem-fraction-static: 0.86
+        max-running-requests: 96
+        cuda-graph-bs-decode:
+          - 1
+          - 2
+          - 3
+          - 4
+          - 5
+          - 6
+          - 7
+          - 8
+          - 9
+          - 10
+          - 11
+          - 12
+          - 13
+          - 14
+          - 15
+          - 16
+          - 17
+          - 18
+          - 19
+          - 20
+          - 21
+          - 22
+          - 23
+          - 24
+          - 25
+          - 26
+          - 27
+          - 28
+          - 29
+          - 30
+          - 31
+          - 32
+          - 33
+          - 34
+          - 35
+          - 36
+          - 37
+          - 38
+          - 39
+          - 40
+          - 41
+          - 42
+          - 43
+          - 44
+          - 45
+          - 46
+          - 47
+          - 48
+          - 49
+          - 50
+          - 51
+          - 52
+          - 53
+          - 54
+          - 55
+          - 56
+          - 57
+          - 58
+          - 59
+          - 60
+          - 61
+          - 62
+          - 63
+          - 64
+          - 65
+          - 66
+          - 67
+          - 68
+          - 69
+          - 70
+          - 71
+          - 72
+          - 73
+          - 74
+          - 75
+          - 76
+          - 77
+          - 78
+          - 79
+          - 80
+          - 81
+          - 82
+          - 83
+          - 84
+          - 85
+          - 86
+          - 87
+          - 88
+          - 89
+          - 90
+          - 91
+          - 92
+          - 93
+          - 94
+          - 95
+          - 96
+        speculative-dspark-block-size: 3
+        speculative-num-draft-tokens: 4
+  benchmark:
+    env:
+      CONC: '48'
+
 override_c192:
-  roles: {prefill: {gpus: 8, env: {GPU_MAX_HW_QUEUES: "5", SGLANG_SHARED_EXPERT_TP1: "1", SGLANG_DP_SHARED_EXPERT_LOCAL: "1", SGLANG_DP_USE_GATHERV: "1", SGLANG_DP_USE_REDUCE_SCATTER: "1", }, args: {tp-size: 8, dp-size: 8, enable-dp-attention: true, enable-dp-lm-head: true, enable-dp-attention-local-control-broadcast: true, swa-full-tokens-ratio: 0.15, mem-fraction-static: 0.92, chunked-prefill-size: 65536, enable-two-batch-overlap: false, max-running-requests: 384, speculative-dspark-block-size: 3, speculative-num-draft-tokens: 4}}, decode: {gpus: 8, env: {GPU_MAX_HW_QUEUES: "5", SGLANG_SHARED_EXPERT_TP1: "1", SGLANG_DP_SHARED_EXPERT_LOCAL: "1", SGLANG_DP_USE_GATHERV: "1", SGLANG_DP_USE_REDUCE_SCATTER: "1", MORI_MAX_DISPATCH_TOKENS_DECODE: "256"}, args: {tp-size: 8, dp-size: 8, enable-dp-attention: true, enable-dp-lm-head: true, enable-dp-attention-local-control-broadcast: true, swa-full-tokens-ratio: 0.15, mem-fraction-static: 0.92, max-running-requests: 384, cuda-graph-bs-decode: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48], speculative-dspark-block-size: 3, speculative-num-draft-tokens: 4}}}
-  benchmark: {env: {CONC: '192', AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'}}
+  roles:
+    prefill:
+      gpus: 8
+      env:
+        GPU_MAX_HW_QUEUES: "5"
+        SGLANG_SHARED_EXPERT_TP1: "1"
+        SGLANG_DP_SHARED_EXPERT_LOCAL: "1"
+        SGLANG_DP_USE_GATHERV: "1"
+        SGLANG_DP_USE_REDUCE_SCATTER: "1"
+      args:
+        tp-size: 8
+        dp-size: 8
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        enable-dp-attention-local-control-broadcast: true
+        swa-full-tokens-ratio: 0.15
+        mem-fraction-static: 0.92
+        chunked-prefill-size: 65536
+        enable-two-batch-overlap: false
+        max-running-requests: 384
+        speculative-dspark-block-size: 3
+        speculative-num-draft-tokens: 4
+    decode:
+      gpus: 8
+      env:
+        GPU_MAX_HW_QUEUES: "5"
+        SGLANG_SHARED_EXPERT_TP1: "1"
+        SGLANG_DP_SHARED_EXPERT_LOCAL: "1"
+        SGLANG_DP_USE_GATHERV: "1"
+        SGLANG_DP_USE_REDUCE_SCATTER: "1"
+        MORI_MAX_DISPATCH_TOKENS_DECODE: "256"
+      args:
+        tp-size: 8
+        dp-size: 8
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        enable-dp-attention-local-control-broadcast: true
+        swa-full-tokens-ratio: 0.15
+        mem-fraction-static: 0.92
+        max-running-requests: 384
+        cuda-graph-bs-decode:
+          - 1
+          - 2
+          - 3
+          - 4
+          - 5
+          - 6
+          - 7
+          - 8
+          - 9
+          - 10
+          - 11
+          - 12
+          - 13
+          - 14
+          - 15
+          - 16
+          - 17
+          - 18
+          - 19
+          - 20
+          - 21
+          - 22
+          - 23
+          - 24
+          - 25
+          - 26
+          - 27
+          - 28
+          - 29
+          - 30
+          - 31
+          - 32
+          - 33
+          - 34
+          - 35
+          - 36
+          - 37
+          - 38
+          - 39
+          - 40
+          - 41
+          - 42
+          - 43
+          - 44
+          - 45
+          - 46
+          - 47
+          - 48
+        speculative-dspark-block-size: 3
+        speculative-num-draft-tokens: 4
+  benchmark:
+    env:
+      CONC: '192'
+      AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
+
 override_c256:
-  roles: {prefill: {gpus: 8, env: {GPU_MAX_HW_QUEUES: "5", SGLANG_SHARED_EXPERT_TP1: "1", SGLANG_DP_SHARED_EXPERT_LOCAL: "1", SGLANG_DP_USE_GATHERV: "1", SGLANG_DP_USE_REDUCE_SCATTER: "1", }, args: {tp-size: 8, dp-size: 8, enable-dp-attention: true, enable-dp-lm-head: true, enable-dp-attention-local-control-broadcast: true, swa-full-tokens-ratio: 0.15, mem-fraction-static: 0.92, chunked-prefill-size: 65536, enable-two-batch-overlap: false, max-running-requests: 512, speculative-dspark-block-size: 3, speculative-num-draft-tokens: 4}}, decode: {gpus: 8, env: {GPU_MAX_HW_QUEUES: "5", SGLANG_SHARED_EXPERT_TP1: "1", SGLANG_DP_SHARED_EXPERT_LOCAL: "1", SGLANG_DP_USE_GATHERV: "1", SGLANG_DP_USE_REDUCE_SCATTER: "1", MORI_MAX_DISPATCH_TOKENS_DECODE: "256"}, args: {tp-size: 8, dp-size: 8, enable-dp-attention: true, enable-dp-lm-head: true, enable-dp-attention-local-control-broadcast: true, swa-full-tokens-ratio: 0.15, mem-fraction-static: 0.92, max-running-requests: 512, cuda-graph-bs-decode: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64], speculative-dspark-block-size: 3, speculative-num-draft-tokens: 4}}}
-  benchmark: {env: {CONC: '256', AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'}}
+  roles:
+    prefill:
+      gpus: 8
+      env:
+        GPU_MAX_HW_QUEUES: "5"
+        SGLANG_SHARED_EXPERT_TP1: "1"
+        SGLANG_DP_SHARED_EXPERT_LOCAL: "1"
+        SGLANG_DP_USE_GATHERV: "1"
+        SGLANG_DP_USE_REDUCE_SCATTER: "1"
+      args:
+        tp-size: 8
+        dp-size: 8
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        enable-dp-attention-local-control-broadcast: true
+        swa-full-tokens-ratio: 0.15
+        mem-fraction-static: 0.92
+        chunked-prefill-size: 65536
+        enable-two-batch-overlap: false
+        max-running-requests: 512
+        speculative-dspark-block-size: 3
+        speculative-num-draft-tokens: 4
+    decode:
+      gpus: 8
+      env:
+        GPU_MAX_HW_QUEUES: "5"
+        SGLANG_SHARED_EXPERT_TP1: "1"
+        SGLANG_DP_SHARED_EXPERT_LOCAL: "1"
+        SGLANG_DP_USE_GATHERV: "1"
+        SGLANG_DP_USE_REDUCE_SCATTER: "1"
+        MORI_MAX_DISPATCH_TOKENS_DECODE: "256"
+      args:
+        tp-size: 8
+        dp-size: 8
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        enable-dp-attention-local-control-broadcast: true
+        swa-full-tokens-ratio: 0.15
+        mem-fraction-static: 0.92
+        max-running-requests: 512
+        cuda-graph-bs-decode:
+          - 1
+          - 2
+          - 3
+          - 4
+          - 5
+          - 6
+          - 7
+          - 8
+          - 9
+          - 10
+          - 11
+          - 12
+          - 13
+          - 14
+          - 15
+          - 16
+          - 17
+          - 18
+          - 19
+          - 20
+          - 21
+          - 22
+          - 23
+          - 24
+          - 25
+          - 26
+          - 27
+          - 28
+          - 29
+          - 30
+          - 31
+          - 32
+          - 33
+          - 34
+          - 35
+          - 36
+          - 37
+          - 38
+          - 39
+          - 40
+          - 41
+          - 42
+          - 43
+          - 44
+          - 45
+          - 46
+          - 47
+          - 48
+          - 49
+          - 50
+          - 51
+          - 52
+          - 53
+          - 54
+          - 55
+          - 56
+          - 57
+          - 58
+          - 59
+          - 60
+          - 61
+          - 62
+          - 63
+          - 64
+        speculative-dspark-block-size: 3
+        speculative-num-draft-tokens: 4
+  benchmark:
+    env:
+      CONC: '256'
+      AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'

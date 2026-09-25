@@ -74,11 +74,60 @@ base:
 
 # One variant per point. TP8: admission is 2x CONC and the graph batch 4x
 # CONC, capped at 64.
-override_tp8_c1: {roles: {agg: {args: {max-running-requests: 2, cuda-graph-max-bs: 4}}}, benchmark: {env: {CONC: '1', KV_OFFLOADING: none}}}
-override_tp8_c4: {roles: {agg: {args: {max-running-requests: 8, cuda-graph-max-bs: 16}}}, benchmark: {env: {CONC: '4', KV_OFFLOADING: none}}}
-override_tp8_c8: {roles: {agg: {args: {max-running-requests: 16, cuda-graph-max-bs: 32}}}, benchmark: {env: {CONC: '8', KV_OFFLOADING: none}}}
-override_tp8_c16: {roles: {agg: {args: {max-running-requests: 32, cuda-graph-max-bs: 64}}}, benchmark: {env: {CONC: '16', KV_OFFLOADING: none}}}
-override_tp8_c32: {roles: {agg: {args: {max-running-requests: 64, cuda-graph-max-bs: 64}}}, benchmark: {env: {CONC: '32', KV_OFFLOADING: none}}}
+override_tp8_c1:
+  roles:
+    agg:
+      args:
+        max-running-requests: 2
+        cuda-graph-max-bs: 4
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: none
+
+override_tp8_c4:
+  roles:
+    agg:
+      args:
+        max-running-requests: 8
+        cuda-graph-max-bs: 16
+  benchmark:
+    env:
+      CONC: '4'
+      KV_OFFLOADING: none
+
+override_tp8_c8:
+  roles:
+    agg:
+      args:
+        max-running-requests: 16
+        cuda-graph-max-bs: 32
+  benchmark:
+    env:
+      CONC: '8'
+      KV_OFFLOADING: none
+
+override_tp8_c16:
+  roles:
+    agg:
+      args:
+        max-running-requests: 32
+        cuda-graph-max-bs: 64
+  benchmark:
+    env:
+      CONC: '16'
+      KV_OFFLOADING: none
+
+override_tp8_c32:
+  roles:
+    agg:
+      args:
+        max-running-requests: 64
+        cuda-graph-max-bs: 64
+  benchmark:
+    env:
+      CONC: '32'
+      KV_OFFLOADING: none
 
 # DEP8 replaces the TP8 MoE path: the router keeps each session on the DP rank
 # holding its radix prefix, the global prefill chunk is 8192 per rank, decode
@@ -140,9 +189,86 @@ override_dep8_c32:
         KV_OFFLOADING: dram
         TOTAL_CPU_DRAM_GB: '2849'
       CONC: '32'
-override_dep8_c64: {frontend: *dep8_frontend, roles: {agg: {args: {<<: *dep8_args, max-running-requests: 128, mem-fraction-static: 0.9}, env: *dep8_env}}, benchmark: {env: {<<: *dep8_client, CONC: '64'}}}
-override_dep8_c128: {frontend: *dep8_frontend, roles: {agg: {args: {<<: *dep8_args, max-running-requests: 256, mem-fraction-static: 0.9}, env: *dep8_env}}, benchmark: {env: {<<: *dep8_client, CONC: '128'}}}
-override_dep8_c256: {frontend: *dep8_frontend, roles: {agg: {args: {<<: *dep8_args, max-running-requests: 512, mem-fraction-static: 0.9}, env: *dep8_env}}, benchmark: {env: {<<: *dep8_client, CONC: '256'}}}
-override_dep8_c384: {frontend: *dep8_frontend, roles: {agg: {args: {<<: *dep8_args, max-running-requests: 768, mem-fraction-static: 0.88}, env: *dep8_env}}, benchmark: {env: {<<: *dep8_client, CONC: '384'}}}
-override_dep8_c512: {frontend: *dep8_frontend, roles: {agg: {args: {<<: *dep8_args, max-running-requests: 1024, mem-fraction-static: 0.86}, env: *dep8_env}}, benchmark: {env: {<<: *dep8_client, CONC: '512'}}}
-override_dep8_c576: {frontend: *dep8_frontend, roles: {agg: {args: {<<: *dep8_args, max-running-requests: 1152, mem-fraction-static: 0.86}, env: *dep8_env}}, benchmark: {env: {<<: *dep8_client, CONC: '576'}}}
+override_dep8_c64:
+  frontend: *dep8_frontend
+  roles:
+    agg:
+      args:
+        <<: *dep8_args
+        max-running-requests: 128
+        mem-fraction-static: 0.9
+      env: *dep8_env
+  benchmark:
+    env:
+      <<: *dep8_client
+      CONC: '64'
+
+override_dep8_c128:
+  frontend: *dep8_frontend
+  roles:
+    agg:
+      args:
+        <<: *dep8_args
+        max-running-requests: 256
+        mem-fraction-static: 0.9
+      env: *dep8_env
+  benchmark:
+    env:
+      <<: *dep8_client
+      CONC: '128'
+
+override_dep8_c256:
+  frontend: *dep8_frontend
+  roles:
+    agg:
+      args:
+        <<: *dep8_args
+        max-running-requests: 512
+        mem-fraction-static: 0.9
+      env: *dep8_env
+  benchmark:
+    env:
+      <<: *dep8_client
+      CONC: '256'
+
+override_dep8_c384:
+  frontend: *dep8_frontend
+  roles:
+    agg:
+      args:
+        <<: *dep8_args
+        max-running-requests: 768
+        mem-fraction-static: 0.88
+      env: *dep8_env
+  benchmark:
+    env:
+      <<: *dep8_client
+      CONC: '384'
+
+override_dep8_c512:
+  frontend: *dep8_frontend
+  roles:
+    agg:
+      args:
+        <<: *dep8_args
+        max-running-requests: 1024
+        mem-fraction-static: 0.86
+      env: *dep8_env
+  benchmark:
+    env:
+      <<: *dep8_client
+      CONC: '512'
+
+override_dep8_c576:
+  frontend: *dep8_frontend
+  roles:
+    agg:
+      args:
+        <<: *dep8_args
+        max-running-requests: 1152
+        mem-fraction-static: 0.86
+      env: *dep8_env
+  benchmark:
+    env:
+      <<: *dep8_client
+      CONC: '576'

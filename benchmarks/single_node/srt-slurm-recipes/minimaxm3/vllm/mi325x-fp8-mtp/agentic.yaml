@@ -63,12 +63,83 @@ base:
       AIPERF_APPLY_CHAT_TEMPLATE: 'true'
 
 # One variant per point. Admission is 2x CONC.
-override_tp8_c1: {roles: {agg: {args: {max-num-seqs: 2}}}, benchmark: {env: {CONC: '1'}}}
-override_tp8_c2: {roles: {agg: {args: {max-num-seqs: 4}}}, benchmark: {env: {CONC: '2'}}}
-override_tp8_c4: {roles: {agg: {args: {max-num-seqs: 8}}}, benchmark: {env: {CONC: '4'}}}
-override_tp8_c8: {roles: {agg: {args: {max-num-seqs: 16}}}, benchmark: {env: {CONC: '8'}}}
-override_tp8_c10: {roles: {agg: {args: {max-num-seqs: 20}}}, benchmark: {env: {CONC: '10'}}}
-override_tp8_c12: {roles: {agg: {args: {max-num-seqs: 24}}}, benchmark: {env: {CONC: '12'}}}
-override_tp8_c14: {roles: {agg: {args: {max-num-seqs: 28}}}, benchmark: {env: {CONC: '14'}}}
-override_tp8_c16: {roles: {agg: {args: {max-num-seqs: 32}}}, benchmark: {env: {CONC: '16'}}}
-override_tp8_c18: {roles: {agg: {args: {max-num-seqs: 36}}}, benchmark: {env: {CONC: '18'}}}
+override_tp8_c1:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 2
+  benchmark:
+    env:
+      CONC: '1'
+
+override_tp8_c2:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 4
+  benchmark:
+    env:
+      CONC: '2'
+
+override_tp8_c4:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 8
+  benchmark:
+    env:
+      CONC: '4'
+
+override_tp8_c8:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 16
+  benchmark:
+    env:
+      CONC: '8'
+
+override_tp8_c10:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 20
+  benchmark:
+    env:
+      CONC: '10'
+
+override_tp8_c12:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 24
+  benchmark:
+    env:
+      CONC: '12'
+
+override_tp8_c14:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 28
+  benchmark:
+    env:
+      CONC: '14'
+
+override_tp8_c16:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 32
+  benchmark:
+    env:
+      CONC: '16'
+
+override_tp8_c18:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 36
+  benchmark:
+    env:
+      CONC: '18'

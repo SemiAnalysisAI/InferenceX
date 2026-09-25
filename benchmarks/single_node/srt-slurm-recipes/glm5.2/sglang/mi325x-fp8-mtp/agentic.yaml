@@ -71,10 +71,72 @@ base:
       AIPERF_BENCHMARK_GRACE_PERIOD: '1800'
 
 # One variant per point. Admission and the decode graph batch are 2x CONC.
-override_tp8_c1: {roles: {agg: {args: {max-running-requests: 2, cuda-graph-max-bs: 2}}}, benchmark: {env: {CONC: '1'}}}
-override_tp8_c2: {roles: {agg: {args: {max-running-requests: 4, cuda-graph-max-bs: 4}}}, benchmark: {env: {CONC: '2'}}}
-override_tp8_c3: {roles: {agg: {args: {max-running-requests: 6, cuda-graph-max-bs: 6}}}, benchmark: {env: {CONC: '3'}}}
-override_tp8_c4: {roles: {agg: {args: {max-running-requests: 8, cuda-graph-max-bs: 8}}}, benchmark: {env: {CONC: '4'}}}
-override_tp8_c5: {roles: {agg: {args: {max-running-requests: 10, cuda-graph-max-bs: 10}}}, benchmark: {env: {CONC: '5'}}}
-override_tp8_c6: {roles: {agg: {args: {max-running-requests: 12, cuda-graph-max-bs: 12}}}, benchmark: {env: {CONC: '6'}}}
-override_tp8_c8: {roles: {agg: {args: {max-running-requests: 16, cuda-graph-max-bs: 16}}}, benchmark: {env: {CONC: '8'}}}
+override_tp8_c1:
+  roles:
+    agg:
+      args:
+        max-running-requests: 2
+        cuda-graph-max-bs: 2
+  benchmark:
+    env:
+      CONC: '1'
+
+override_tp8_c2:
+  roles:
+    agg:
+      args:
+        max-running-requests: 4
+        cuda-graph-max-bs: 4
+  benchmark:
+    env:
+      CONC: '2'
+
+override_tp8_c3:
+  roles:
+    agg:
+      args:
+        max-running-requests: 6
+        cuda-graph-max-bs: 6
+  benchmark:
+    env:
+      CONC: '3'
+
+override_tp8_c4:
+  roles:
+    agg:
+      args:
+        max-running-requests: 8
+        cuda-graph-max-bs: 8
+  benchmark:
+    env:
+      CONC: '4'
+
+override_tp8_c5:
+  roles:
+    agg:
+      args:
+        max-running-requests: 10
+        cuda-graph-max-bs: 10
+  benchmark:
+    env:
+      CONC: '5'
+
+override_tp8_c6:
+  roles:
+    agg:
+      args:
+        max-running-requests: 12
+        cuda-graph-max-bs: 12
+  benchmark:
+    env:
+      CONC: '6'
+
+override_tp8_c8:
+  roles:
+    agg:
+      args:
+        max-running-requests: 16
+        cuda-graph-max-bs: 16
+  benchmark:
+    env:
+      CONC: '8'

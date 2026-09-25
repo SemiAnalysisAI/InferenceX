@@ -87,16 +87,171 @@ base:
 # with decode graphs clamped to 64-128. The TP SWA tail reserve is 32x CONC from
 # c4 (8x below); the DP pool is per rank, and 64 tails/rank keeps the C16 TP
 # aggregate 512-tail reserve.
-override_tp8_c1: {roles: {agg: {args: {max-running-requests: 2, cuda-graph-max-bs-decode: 64, swa-prefix-tails: 8}}}, benchmark: {env: {CONC: '1'}}}
-override_tp8_c2: {roles: {agg: {args: {max-running-requests: 4, cuda-graph-max-bs-decode: 64, swa-prefix-tails: 16}}}, benchmark: {env: {CONC: '2'}}}
-override_tp8_c4: {roles: {agg: {args: {max-running-requests: 8, cuda-graph-max-bs-decode: 64, swa-prefix-tails: 128}}}, benchmark: {env: {CONC: '4'}}}
-override_tp8_c8: {roles: {agg: {args: {max-running-requests: 16, cuda-graph-max-bs-decode: 64, swa-prefix-tails: 256}}}, benchmark: {env: {CONC: '8'}}}
-override_tp8_c16: {roles: {agg: {args: {max-running-requests: 32, cuda-graph-max-bs-decode: 64, swa-prefix-tails: 512}}}, benchmark: {env: {CONC: '16'}}}
-override_tp8_c20: {roles: {agg: {args: {max-running-requests: 40, cuda-graph-max-bs-decode: 64, swa-prefix-tails: 640}}}, benchmark: {env: {CONC: '20'}}}
+override_tp8_c1:
+  roles:
+    agg:
+      args:
+        max-running-requests: 2
+        cuda-graph-max-bs-decode: 64
+        swa-prefix-tails: 8
+  benchmark:
+    env:
+      CONC: '1'
+
+override_tp8_c2:
+  roles:
+    agg:
+      args:
+        max-running-requests: 4
+        cuda-graph-max-bs-decode: 64
+        swa-prefix-tails: 16
+  benchmark:
+    env:
+      CONC: '2'
+
+override_tp8_c4:
+  roles:
+    agg:
+      args:
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 64
+        swa-prefix-tails: 128
+  benchmark:
+    env:
+      CONC: '4'
+
+override_tp8_c8:
+  roles:
+    agg:
+      args:
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 64
+        swa-prefix-tails: 256
+  benchmark:
+    env:
+      CONC: '8'
+
+override_tp8_c16:
+  roles:
+    agg:
+      args:
+        max-running-requests: 32
+        cuda-graph-max-bs-decode: 64
+        swa-prefix-tails: 512
+  benchmark:
+    env:
+      CONC: '16'
+
+override_tp8_c20:
+  roles:
+    agg:
+      args:
+        max-running-requests: 40
+        cuda-graph-max-bs-decode: 64
+        swa-prefix-tails: 640
+  benchmark:
+    env:
+      CONC: '20'
+
 # DP8 attention: the shipped MoE DSpark worker requires attn_tp=1. SGLang divides
 # the engine-wide 4096-token chunk by DP (512 tokens/rank). The DP-aware router
 # hashes AIPerf's per-session correlation ID so prefixes stay on one rank.
-override_dp8_c4: {frontend: {type: sglang-router, args: {policy: consistent_hashing, request-id-headers: x-correlation-id, dp-aware: true, connect-timeout-secs: 900, request-timeout-secs: 14400, disable-health-check: true, disable-retries: true}}, roles: {agg: {args: {data-parallel-size: 8, enable-dp-attention: true, enable-dp-lm-head: true, max-running-requests: 8, cuda-graph-max-bs-decode: 64, swa-prefix-tails: 64}}}, benchmark: {env: {CONC: '4', AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'}}}
-override_dp8_c8: {frontend: {type: sglang-router, args: {policy: consistent_hashing, request-id-headers: x-correlation-id, dp-aware: true, connect-timeout-secs: 900, request-timeout-secs: 14400, disable-health-check: true, disable-retries: true}}, roles: {agg: {args: {data-parallel-size: 8, enable-dp-attention: true, enable-dp-lm-head: true, max-running-requests: 16, cuda-graph-max-bs-decode: 64, swa-prefix-tails: 64}}}, benchmark: {env: {CONC: '8', AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'}}}
-override_dp8_c16: {frontend: {type: sglang-router, args: {policy: consistent_hashing, request-id-headers: x-correlation-id, dp-aware: true, connect-timeout-secs: 900, request-timeout-secs: 14400, disable-health-check: true, disable-retries: true}}, roles: {agg: {args: {data-parallel-size: 8, enable-dp-attention: true, enable-dp-lm-head: true, max-running-requests: 32, cuda-graph-max-bs-decode: 64, swa-prefix-tails: 64}}}, benchmark: {env: {CONC: '16', AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'}}}
-override_dp8_c20: {frontend: {type: sglang-router, args: {policy: consistent_hashing, request-id-headers: x-correlation-id, dp-aware: true, connect-timeout-secs: 900, request-timeout-secs: 14400, disable-health-check: true, disable-retries: true}}, roles: {agg: {args: {data-parallel-size: 8, enable-dp-attention: true, enable-dp-lm-head: true, max-running-requests: 40, cuda-graph-max-bs-decode: 64, swa-prefix-tails: 64}}}, benchmark: {env: {CONC: '20', AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'}}}
+override_dp8_c4:
+  frontend:
+    type: sglang-router
+    args:
+      policy: consistent_hashing
+      request-id-headers: x-correlation-id
+      dp-aware: true
+      connect-timeout-secs: 900
+      request-timeout-secs: 14400
+      disable-health-check: true
+      disable-retries: true
+  roles:
+    agg:
+      args:
+        data-parallel-size: 8
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 64
+        swa-prefix-tails: 64
+  benchmark:
+    env:
+      CONC: '4'
+      AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
+
+override_dp8_c8:
+  frontend:
+    type: sglang-router
+    args:
+      policy: consistent_hashing
+      request-id-headers: x-correlation-id
+      dp-aware: true
+      connect-timeout-secs: 900
+      request-timeout-secs: 14400
+      disable-health-check: true
+      disable-retries: true
+  roles:
+    agg:
+      args:
+        data-parallel-size: 8
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 64
+        swa-prefix-tails: 64
+  benchmark:
+    env:
+      CONC: '8'
+      AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
+
+override_dp8_c16:
+  frontend:
+    type: sglang-router
+    args:
+      policy: consistent_hashing
+      request-id-headers: x-correlation-id
+      dp-aware: true
+      connect-timeout-secs: 900
+      request-timeout-secs: 14400
+      disable-health-check: true
+      disable-retries: true
+  roles:
+    agg:
+      args:
+        data-parallel-size: 8
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        max-running-requests: 32
+        cuda-graph-max-bs-decode: 64
+        swa-prefix-tails: 64
+  benchmark:
+    env:
+      CONC: '16'
+      AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
+
+override_dp8_c20:
+  frontend:
+    type: sglang-router
+    args:
+      policy: consistent_hashing
+      request-id-headers: x-correlation-id
+      dp-aware: true
+      connect-timeout-secs: 900
+      request-timeout-secs: 14400
+      disable-health-check: true
+      disable-retries: true
+  roles:
+    agg:
+      args:
+        data-parallel-size: 8
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        max-running-requests: 40
+        cuda-graph-max-bs-decode: 64
+        swa-prefix-tails: 64
+  benchmark:
+    env:
+      CONC: '20'
+      AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'

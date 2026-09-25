@@ -64,13 +64,112 @@ base:
 
 # One variant per point. AgentX concurrency counts live session trees, so
 # admission is 2x CONC; the graph batch is CONC, capped at 64.
-override_tp8_ep1_c4: {roles: {agg: {args: {expert-parallel-size: 1, cuda-graph-max-bs: 4, max-running-requests: 8}}}, benchmark: {env: {CONC: '4'}}}
-override_tp8_ep1_c16: {roles: {agg: {args: {expert-parallel-size: 1, cuda-graph-max-bs: 16, max-running-requests: 32}}}, benchmark: {env: {CONC: '16'}}}
-override_tp8_ep1_c20: {roles: {agg: {args: {expert-parallel-size: 1, cuda-graph-max-bs: 20, max-running-requests: 40}}}, benchmark: {env: {CONC: '20'}}}
-override_tp8_ep1_c24: {roles: {agg: {args: {expert-parallel-size: 1, cuda-graph-max-bs: 24, max-running-requests: 48}}}, benchmark: {env: {CONC: '24'}}}
-override_tp8_ep1_c32: {roles: {agg: {args: {expert-parallel-size: 1, cuda-graph-max-bs: 32, max-running-requests: 64}}}, benchmark: {env: {CONC: '32'}}}
-override_tp8_ep8_c4: {roles: {agg: {args: {expert-parallel-size: 8, cuda-graph-max-bs: 4, max-running-requests: 8}}}, benchmark: {env: {CONC: '4'}}}
-override_tp8_ep8_c16: {roles: {agg: {args: {expert-parallel-size: 8, cuda-graph-max-bs: 16, max-running-requests: 32}}}, benchmark: {env: {CONC: '16'}}}
-override_tp8_ep8_c20: {roles: {agg: {args: {expert-parallel-size: 8, cuda-graph-max-bs: 20, max-running-requests: 40}}}, benchmark: {env: {CONC: '20'}}}
-override_tp8_ep8_c24: {roles: {agg: {args: {expert-parallel-size: 8, cuda-graph-max-bs: 24, max-running-requests: 48}}}, benchmark: {env: {CONC: '24'}}}
-override_tp8_ep8_c32: {roles: {agg: {args: {expert-parallel-size: 8, cuda-graph-max-bs: 32, max-running-requests: 64}}}, benchmark: {env: {CONC: '32'}}}
+override_tp8_ep1_c4:
+  roles:
+    agg:
+      args:
+        expert-parallel-size: 1
+        cuda-graph-max-bs: 4
+        max-running-requests: 8
+  benchmark:
+    env:
+      CONC: '4'
+
+override_tp8_ep1_c16:
+  roles:
+    agg:
+      args:
+        expert-parallel-size: 1
+        cuda-graph-max-bs: 16
+        max-running-requests: 32
+  benchmark:
+    env:
+      CONC: '16'
+
+override_tp8_ep1_c20:
+  roles:
+    agg:
+      args:
+        expert-parallel-size: 1
+        cuda-graph-max-bs: 20
+        max-running-requests: 40
+  benchmark:
+    env:
+      CONC: '20'
+
+override_tp8_ep1_c24:
+  roles:
+    agg:
+      args:
+        expert-parallel-size: 1
+        cuda-graph-max-bs: 24
+        max-running-requests: 48
+  benchmark:
+    env:
+      CONC: '24'
+
+override_tp8_ep1_c32:
+  roles:
+    agg:
+      args:
+        expert-parallel-size: 1
+        cuda-graph-max-bs: 32
+        max-running-requests: 64
+  benchmark:
+    env:
+      CONC: '32'
+
+override_tp8_ep8_c4:
+  roles:
+    agg:
+      args:
+        expert-parallel-size: 8
+        cuda-graph-max-bs: 4
+        max-running-requests: 8
+  benchmark:
+    env:
+      CONC: '4'
+
+override_tp8_ep8_c16:
+  roles:
+    agg:
+      args:
+        expert-parallel-size: 8
+        cuda-graph-max-bs: 16
+        max-running-requests: 32
+  benchmark:
+    env:
+      CONC: '16'
+
+override_tp8_ep8_c20:
+  roles:
+    agg:
+      args:
+        expert-parallel-size: 8
+        cuda-graph-max-bs: 20
+        max-running-requests: 40
+  benchmark:
+    env:
+      CONC: '20'
+
+override_tp8_ep8_c24:
+  roles:
+    agg:
+      args:
+        expert-parallel-size: 8
+        cuda-graph-max-bs: 24
+        max-running-requests: 48
+  benchmark:
+    env:
+      CONC: '24'
+
+override_tp8_ep8_c32:
+  roles:
+    agg:
+      args:
+        expert-parallel-size: 8
+        cuda-graph-max-bs: 32
+        max-running-requests: 64
+  benchmark:
+    env:
+      CONC: '32'
