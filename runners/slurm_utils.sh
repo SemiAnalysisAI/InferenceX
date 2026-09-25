@@ -39,9 +39,8 @@ setup_srt_slurm() {
         return 1
     fi
     local destination="$1" framework="$2" uses_power="$3"
-    check_env_vars INFERENCEX_RUNTIME_ENV_VARS AIPERF_DRAIN_TIMEOUT_SECONDS AIPERF_DRAIN_POLL_SECONDS EVAL_ONLY
-    local eval_passthrough
-    eval_passthrough=$(python3 - <<'PYENV'
+    check_env_vars INFERENCEX_RUNTIME_ENV_VARS EVAL_ONLY
+    SRT_EVAL_PASSTHROUGH=$(python3 - <<'PYENV'
 import json
 import os
 
@@ -49,32 +48,41 @@ names = [
     "EVAL_FRAMEWORK", "EVAL_CONC", "EVAL_LIMIT", "EVAL_SUITE",
     "SWEBENCH_GEN_MODE", "SWEBENCH_USE_MODAL", "MODAL_TOKEN_ID",
     "MODAL_TOKEN_SECRET", "IS_AGENTIC", "SCENARIO_TYPE",
+    "TP", "EP_SIZE", "DP_ATTENTION", "PP_SIZE", "DCP_SIZE", "PCP_SIZE", "CONC",
 ]
 print(json.dumps(names + os.environ["INFERENCEX_RUNTIME_ENV_VARS"].split()))
 PYENV
     ) || return 1
-    SRTCTL_EVAL_ARGS+=(--set "post_eval.passthrough_env=$eval_passthrough")
+    SRTCTL_EVAL_ARGS+=(--set "post_eval.passthrough_env=$SRT_EVAL_PASSTHROUGH")
     # Custom benchmarks inherit exported workflow settings through sbatch/srun;
     # native recipe environment and benchmark.env retain their override priority.
     local source="$INFERENCEX_SLURM_UTILS_DIR/../utils/srt-slurm"
     if [[ "$framework" == "tilert" ]]; then
-        # Sole fork exception until NVIDIA supports the TileRT backend and router.
+        # TileRT still needs its legacy runtime until the native backend and router land.
         SRT_SLURM_COMMIT=6bc3f306bdafa1edfb5dded2fcda8f1ccede1bde
-        git init "$destination" || return 1
+        git init --quiet "$destination" || return 1
         git -C "$destination" remote add origin https://github.com/SemiAnalysisAI/srt-slurm.git || return 1
-        git -C "$destination" fetch --depth=1 origin "$SRT_SLURM_COMMIT" || return 1
-        git -C "$destination" checkout --detach "$SRT_SLURM_COMMIT" || return 1
+        git -C "$destination" fetch --quiet --depth=1 origin "$SRT_SLURM_COMMIT" || return 1
+        git -C "$destination" checkout --quiet --detach "$SRT_SLURM_COMMIT" || return 1
     else
         if [[ ! -e "$source/.git" ]]; then
             echo "Missing srt-slurm submodule; run git submodule update --init before launching." >&2
             return 1
         fi
         SRT_SLURM_COMMIT=$(git -C "$source" rev-parse HEAD) || return 1
+        SRTCTL_EVAL_ARGS+=(--set benchmark.stream_output=true)
         # A local clone keeps job writes isolated and preserves upstream Git provenance.
-        git clone --no-hardlinks "$source" "$destination" || return 1
+        git -c advice.detachedHead=false clone --quiet --no-hardlinks "$source" "$destination" || return 1
+        # Temporary fixes awaiting upstream merge; see runners/srt-slurm/patches/README.md.
+        local patch
+        for patch in "$GITHUB_WORKSPACE"/runners/srt-slurm/patches/*.patch; do
+            [[ -e "$patch" ]] || continue
+            git -C "$destination" apply "$patch" || return 1
+        done
     fi
     cd "$destination" || return 1
     [[ "$(git rev-parse HEAD)" == "$SRT_SLURM_COMMIT" ]] || return 1
+    echo "Using srt-slurm revision $SRT_SLURM_COMMIT"
     git rev-parse HEAD > "$GITHUB_WORKSPACE/srt-slurm-sha.txt" || return 1
     if [[ "$uses_power" == "1" ]]; then
         cp "$GITHUB_WORKSPACE/srt-slurm-sha.txt" "$GITHUB_WORKSPACE/power-producer-sha.txt" || return 1
@@ -84,6 +92,20 @@ PYENV
     # Both CONFIG_FILE spellings currently occur in master configs.
     ln -s ../../recipes benchmarks/multi_node/srt-slurm-recipes || return 1
     cp -R "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs/." configs/ || return 1
+}
+
+# Keep installer output in the artifacts, but print diagnostics on failure.
+run_srt_setup() {
+    check_env_vars GITHUB_WORKSPACE
+    local setup_log="$GITHUB_WORKSPACE/srt-setup.log" status
+    echo "Setting up srt-slurm (details: srt-setup.log)"
+    if make setup "$@" >> "$setup_log" 2>&1; then
+        echo "srt-slurm setup complete"
+    else
+        status=$?
+        cat "$setup_log" >&2
+        return "$status"
+    fi
 }
 
 # Use the requested image's cache identity, never a convenient older squash file.
@@ -122,9 +144,109 @@ apply_srt_recipe() {
     fi
     local config="$1" framework="$2"
     shift 2
+    # Slurm creates a separate compute venv; do not inherit the login venv marker.
     PYTHONPATH="$INFERENCEX_SLURM_UTILS_DIR/..${PYTHONPATH:+:$PYTHONPATH}" \
-        python3 -m infx.srt_slurm.synthetic_acceptance \
+        env -u VIRTUAL_ENV python3 -m infx.srt_slurm.synthetic_acceptance \
         "$config" "$framework" -- "$@"
+}
+
+# One native submission per fixed-sequence matrix point, shared across Slurm pools.
+launch_srt_single_node() {
+    set -eo pipefail
+    local profile="$1"
+    shift
+    check_env_vars GITHUB_WORKSPACE SRT_RECIPE FRAMEWORK MODEL MODEL_PREFIX IMAGE PRECISION \
+        TP PP_SIZE DCP_SIZE PCP_SIZE EP_SIZE DP_ATTENTION GPU_COUNT IS_AGENTIC SPEC_DECODING \
+        CONC ISL OSL RANDOM_RANGE_RATIO RESULT_FILENAME GPU_MONITOR_INTERVAL SRT_MODEL_PATH \
+        HF_HUB_CACHE_MOUNT HF_HUB_CACHE SALLOC_TIME_LIMIT
+    SRT_SINGLE_NODE_ROOT=$(mktemp -d "$GITHUB_WORKSPACE/srt-single.XXXXXX")
+    SRTCTL_ROOT="$SRT_SINGLE_NODE_ROOT/checkout"
+    export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
+    setup_srt_slurm "$SRTCTL_ROOT" "$FRAMEWORK" 0
+    if ! command -v uv >/dev/null; then
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        source "$HOME/.local/bin/env"
+    fi
+    uv venv --quiet .venv
+    source .venv/bin/activate
+    uv pip install --quiet -e .
+    export PYTHONPATH="$GITHUB_WORKSPACE${PYTHONPATH:+:$PYTHONPATH}"
+
+    python3 -m infx.srt_slurm.single_node prepare "$GITHUB_WORKSPACE/$SRT_RECIPE" "$SRT_SINGLE_NODE_ROOT/arguments"
+    mapfile -d '' -t SRT_RUNTIME_ARGS < "$SRT_SINGLE_NODE_ROOT/arguments"
+    SRT_SELECTED_RECIPE="${SRT_RUNTIME_ARGS[0]}"
+    SRT_RUNTIME_ARGS=("${SRT_RUNTIME_ARGS[@]:1}")
+    SRT_RUNTIME_ARGS+=(
+        --set 'post_eval.command=["bash", "{infmax_workspace}/benchmarks/single_node/srt_eval.sh", "{endpoint}", "/logs/infx-eval-exit-code"]'
+        --set "post_eval.passthrough_env=$SRT_EVAL_PASSTHROUGH"
+    )
+    # Reuse only a valid cache for this exact image. Missing caches are imported
+    # by native Pyxis inside the same benchmark allocation.
+    SRT_CONTAINER="$IMAGE"
+    if [[ -n "${SRT_SQUASH_FILE:-}" && -r "$SRT_SQUASH_FILE" ]] && unsquashfs -s "$SRT_SQUASH_FILE" >/dev/null 2>&1; then
+        SRT_CONTAINER="$SRT_SQUASH_FILE"
+    fi
+    python3 -m infx.srt_slurm.cluster_config \
+        "$INFERENCEX_SLURM_UTILS_DIR/srt-slurm/${profile}.yaml" srtslurm.yaml \
+        --var SRTCTL_ROOT "$SRTCTL_ROOT" --var SQUASH_FILE "$SRT_CONTAINER" \
+        --var IMAGE "$IMAGE" --var NGINX_SQUASH_FILE nginx:1.27.4 \
+        --var SRT_DEFAULT_TIME_LIMIT "$SALLOC_TIME_LIMIT" \
+        --model "hf:$MODEL" "$SRT_MODEL_PATH" --container "$IMAGE" "$SRT_CONTAINER" \
+        --mount "$HF_HUB_CACHE_MOUNT" "$HF_HUB_CACHE" --exclusive "$@"
+    run_srt_setup ARCH=x86_64
+
+    SRT_JOB_ID=""
+    SRT_JOB_OUTPUT=""
+    finish_native_single_node() {
+        local rc=$? artifact
+        trap - EXIT
+        # Submission may succeed immediately before cancellation or a client error.
+        if [[ -z "$SRT_JOB_ID" ]] && python3 -m infx.srt_slurm.single_node submission \
+            "$GITHUB_WORKSPACE/srt-single-node-submission.json" > "$SRT_SINGLE_NODE_ROOT/submission-fields" 2>/dev/null; then
+            mapfile -t SRT_SUBMISSION < "$SRT_SINGLE_NODE_ROOT/submission-fields"
+            SRT_JOB_ID="${SRT_SUBMISSION[0]}"
+            SRT_JOB_OUTPUT="${SRT_SUBMISSION[1]}"
+        fi
+        if [[ -n "$SRT_JOB_ID" ]] && slurm_job_is_active "$SRT_JOB_ID"; then
+            scancel "$SRT_JOB_ID" || true
+        fi
+        if [[ -n "$SRT_JOB_OUTPUT" && -d "$SRT_JOB_OUTPUT" ]]; then
+            bundle_server_logs "$SRT_JOB_OUTPUT" "$GITHUB_WORKSPACE/srt-single-node-logs.tar.gz"
+            for artifact in "$SRT_JOB_OUTPUT/logs/$RESULT_FILENAME.json" "$SRT_JOB_OUTPUT"/logs/gpu_metrics*; do
+                [[ -f "$artifact" ]] || continue
+                copy_to_workspace "$artifact" "$GITHUB_WORKSPACE/$(basename "$artifact")" || rc=1
+            done
+        fi
+        exit "$rc"
+    }
+    trap finish_native_single_node EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    local submission_rc=0
+    apply_srt_recipe "$SRT_SELECTED_RECIPE" "$FRAMEWORK" \
+        --json --yes --output "$SRT_SINGLE_NODE_ROOT/outputs" "${SRT_RUNTIME_ARGS[@]}" \
+        > "$GITHUB_WORKSPACE/srt-single-node-submission.json" || submission_rc=$?
+    if (( submission_rc != 0 )); then
+        cat "$GITHUB_WORKSPACE/srt-single-node-submission.json" >&2
+        return "$submission_rc"
+    fi
+    python3 -m infx.srt_slurm.single_node submission "$GITHUB_WORKSPACE/srt-single-node-submission.json" \
+        > "$SRT_SINGLE_NODE_ROOT/submission-fields"
+    mapfile -t SRT_SUBMISSION < "$SRT_SINGLE_NODE_ROOT/submission-fields"
+    SRT_JOB_ID="${SRT_SUBMISSION[0]}"
+    SRT_JOB_OUTPUT="${SRT_SUBMISSION[1]}"
+    stream_slurm_job_log "$SRT_JOB_ID" "$SRT_JOB_OUTPUT/logs/sweep_${SRT_JOB_ID}.log"
+    verify_slurm_job_status "$SRT_JOB_ID"
+    # Native SRT treats post-throughput eval failure as non-fatal. InferenceX
+    # requires every requested eval to finish successfully, including staging.
+    if [[ "$RUN_EVAL" == true || "$EVAL_ONLY" == true ]]; then
+        test -f "$SRT_JOB_OUTPUT/logs/infx-eval-exit-code"
+        test "$(cat "$SRT_JOB_OUTPUT/logs/infx-eval-exit-code")" = 0
+    fi
+    if [[ "$EVAL_ONLY" != true ]]; then
+        test -s "$SRT_JOB_OUTPUT/logs/$RESULT_FILENAME.json"
+    fi
+
 }
 
 slurm_job_is_active() {
@@ -161,10 +283,29 @@ verify_slurm_job_status() {
     local job_id="$1"
     # Disappearing from squeue means terminal, not successful. Accounting can
     # lag briefly; inspect only the allocation, never successful service steps.
-    local attempt accounting state exit_code
+    local attempt accounting state exit_code controller field controller_job_id
+    local -a controller_fields
     for attempt in {1..10}; do
         accounting=$(sacct -X -n -P -j "$job_id" --format=State,ExitCode 2>/dev/null) || accounting=""
         IFS='|' read -r state exit_code <<< "$accounting"
+        if [[ -z "$state" ]]; then
+            # Some pools do not expose slurmdbd. The controller retains recent
+            # terminal allocations; require its state and exit code, too.
+            controller=$(scontrol show job -o "$job_id" 2>/dev/null) || controller=""
+            controller_job_id=""
+            read -r -a controller_fields <<< "$controller"
+            for field in "${controller_fields[@]}"; do
+                case "$field" in
+                    JobId=*) controller_job_id="${field#JobId=}" ;;
+                    JobState=*) state="${field#JobState=}" ;;
+                    ExitCode=*) exit_code="${field#ExitCode=}" ;;
+                esac
+            done
+            if [[ "$controller_job_id" != "$job_id" ]]; then
+                state=""
+                exit_code=""
+            fi
+        fi
         case "$state" in
             COMPLETED)
                 if [[ "$exit_code" == "0:0" ]]; then
@@ -305,8 +446,9 @@ collect_agentic_power_results() {
     copy_agentic_results "$source_dir" "$workspace" "$result_filename" || rc=$?
     for concurrency in "$@"; do
         (
+            check_env_vars INFERENCEX_RESULTS_PYTHON
             cd "$workspace" || exit 1
-            PYTHONPATH="$INFERENCEX_SLURM_UTILS_DIR/..${PYTHONPATH:+:$PYTHONPATH}" python3 -m infx.results.agentic.power_adapter \
+            PYTHONPATH="$INFERENCEX_SLURM_UTILS_DIR/..${PYTHONPATH:+:$PYTHONPATH}" "$INFERENCEX_RESULTS_PYTHON" -m infx.results.agentic.power_adapter \
                 --result-dir "$logs_dir/agentic/conc_${concurrency}" \
                 --agg-result "$workspace/${result_filename}_conc${concurrency}.json" \
                 --power-dir "$logs_dir/power" \

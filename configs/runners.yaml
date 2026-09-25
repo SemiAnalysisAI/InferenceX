@@ -25,16 +25,16 @@ labels:
   h200:
     - h200-cw_00
     - h200-cw_01
-    - h200-dgxc-slurm_0
-    - h200-dgxc-slurm_1
-    - h200-dgxc-slurm_2
-    - h200-dgxc-slurm_3
-    - h200-dgxc-slurm_4
-    - h200-dgxc-slurm_5
-    - h200-dgxc-slurm_6
-    - h200-dgxc-slurm_7
-    - h200-dgxc-slurm_8
-    - h200-dgxc-slurm_9
+    - h200-dgxc-slurm_00
+    - h200-dgxc-slurm_01
+    - h200-dgxc-slurm_02
+    - h200-dgxc-slurm_03
+    - h200-dgxc-slurm_04
+    - h200-dgxc-slurm_05
+    - h200-dgxc-slurm_06
+    - h200-dgxc-slurm_07
+    - h200-dgxc-slurm_08
+    - h200-dgxc-slurm_09
     - h200-dgxc-slurm_10
     - h200-dgxc-slurm_11
     - h200-dgxc-slurm_12
@@ -96,6 +96,7 @@ labels:
     - mi355x-amds_06
     - mi355x-amds_07
     - mi355x-amds_08
+    - mi355x-amds_09
   gb200:
     - gb200-nv_0
     - gb200-nv_1
@@ -138,10 +139,6 @@ labels:
     - gb300-nv_15
     - gb300-nv_16
     - gb300-nv_17
-  rtx6000pro:
-    - rtx6000pro-lat_00
-  rtx6000pro-lat:
-    - rtx6000pro-lat_00
   cluster:h100-cw:
     - h100-cw_00
     - h100-cw_01
@@ -170,16 +167,16 @@ labels:
     - h200-cw_00
     - h200-cw_01
   cluster:h200-dgxc:
-    - h200-dgxc-slurm_0
-    - h200-dgxc-slurm_1
-    - h200-dgxc-slurm_2
-    - h200-dgxc-slurm_3
-    - h200-dgxc-slurm_4
-    - h200-dgxc-slurm_5
-    - h200-dgxc-slurm_6
-    - h200-dgxc-slurm_7
-    - h200-dgxc-slurm_8
-    - h200-dgxc-slurm_9
+    - h200-dgxc-slurm_00
+    - h200-dgxc-slurm_01
+    - h200-dgxc-slurm_02
+    - h200-dgxc-slurm_03
+    - h200-dgxc-slurm_04
+    - h200-dgxc-slurm_05
+    - h200-dgxc-slurm_06
+    - h200-dgxc-slurm_07
+    - h200-dgxc-slurm_08
+    - h200-dgxc-slurm_09
     - h200-dgxc-slurm_10
     - h200-dgxc-slurm_11
     - h200-dgxc-slurm_12
@@ -239,8 +236,6 @@ labels:
     - gb300-nv_15
     - gb300-nv_16
     - gb300-nv_17
-  cluster:rtx6000pro-lat:
-    - rtx6000pro-lat_00
   cluster:mi300x-amd:
     - mi300x-amd_00
     - mi300x-amd_01
@@ -250,9 +245,6 @@ labels:
     - mi300x-amd_05
     - mi300x-amd_06
     - mi300x-amd_07
-  cluster:mi300x-tw:
-    - mi300x-tw_00
-    - mi300x-tw_01
   cluster:mi325x-amds:
     - mi325x-amds_00
     - mi325x-amds_01
@@ -274,6 +266,7 @@ labels:
     - mi355x-amds_06
     - mi355x-amds_07
     - mi355x-amds_08
+    - mi355x-amds_09
 hardware:
   cluster:h100-dgxc:
     available-cpu-dram-mib: 2_063_837
@@ -299,14 +292,8 @@ hardware:
   cluster:gb300-nv:
     available-cpu-dram-mib: 860_160
     gpus-per-node: 4
-  cluster:rtx6000pro-lat:
-    available-cpu-dram-mib: 1_500_000
-    gpus-per-node: 8
   cluster:mi300x-amd:
     available-cpu-dram-mib: 1_547_820
-    gpus-per-node: 8
-  cluster:mi300x-tw:
-    available-cpu-dram-mib: 2_322_328
     gpus-per-node: 8
   cluster:mi325x-amds:
     available-cpu-dram-mib: 3_091_589

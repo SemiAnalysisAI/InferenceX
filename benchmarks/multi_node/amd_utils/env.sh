@@ -1,13 +1,21 @@
 #!/bin/bash
 
 source "$(dirname "${BASH_SOURCE[0]}")/../../benchmark_lib.sh" --validation-only
-check_env_vars \
-    MORI_IO_SQ_BACKOFF_TIMEOUT_US MORI_IO_QP_MAX_SEND_WR MORI_IO_QP_MAX_CQE MORI_IO_QP_MAX_SGE MORI_IO_TC_DISABLE \
-    UCX_IB_GID_INDEX MORI_APP_LOG_LEVEL SGLANG_ROUTER_STDOUT_LOGS TORCH_NCCL_BLOCKING_WAIT NCCL_BLOCKING_WAIT \
-    SGLANG_OPT_USE_AITER_INDEXER
+check_env_vars ENGINE
+# MoRI-IO queue-pair tuning, the UCX RoCE GID index, SGLang router logging and the
+# SGLang decode cuda-graph NCCL workaround. Only the SGLang MoRI KV path
+# below reads these. ENGINE=tilert moves KV over mooncake and starts no SGLang
+# router, so it is neither given nor reads them: validating them there would force
+# the recipe to invent MoRI tuning for a transport it never uses.
+if [[ "$ENGINE" != "tilert" ]]; then
+    check_env_vars \
+        MORI_IO_SQ_BACKOFF_TIMEOUT_US MORI_IO_QP_MAX_SEND_WR MORI_IO_QP_MAX_CQE MORI_IO_QP_MAX_SGE MORI_IO_TC_DISABLE \
+        UCX_IB_GID_INDEX MORI_APP_LOG_LEVEL SGLANG_ROUTER_STDOUT_LOGS TORCH_NCCL_BLOCKING_WAIT NCCL_BLOCKING_WAIT \
+        SGLANG_OPT_USE_AITER_INDEXER
+fi
 # Dual-engine environment setup for multi-node disaggregated serving.
 #
-# ENGINE=sglang-disagg or vllm-disagg selects the engine-specific block.
+# ENGINE=sglang-disagg or tilert selects the engine-specific block.
 #
 # REQUIRED ENVIRONMENT VARIABLES:
 #   IBDEVICES - RDMA/InfiniBand device names (e.g., ionic_0,ionic_1,... or mlx5_0,mlx5_1,...)
@@ -111,74 +119,8 @@ else
     fi
 fi
 
-if [[ "$ENGINE" == "vllm-disagg" ]]; then
-    export VLLM_USE_V1=1
-    export VLLM_SERVER_DEV_MODE=0
-    export VLLM_DISABLE_REQUEST_ID_RANDOMIZATION=1
-
-    set -x
-
-    # UCX_NET_DEVICES: Use the first tw-eth interface for UCX TCP transport
-    if [[ -z "$UCX_NET_DEVICES" ]]; then
-        UCX_NET_DEV=$(ip -o link show 2>/dev/null | awk -F': ' '/tw-eth/{print $2}' | head -1)
-        if [[ -n "$UCX_NET_DEV" ]]; then
-            export UCX_NET_DEVICES="$UCX_NET_DEV"
-        else
-            FIRST_IB=$(echo "$IBDEVICES" | cut -d',' -f1)
-            if [[ -n "$FIRST_IB" ]]; then
-                export UCX_NET_DEVICES="${FIRST_IB}:1"
-            fi
-        fi
-        echo "[INFO] Auto-set UCX_NET_DEVICES=$UCX_NET_DEVICES"
-    else
-        echo "[INFO] Using UCX_NET_DEVICES=$UCX_NET_DEVICES (set by environment)"
-    fi
-
-    # RoCEv2: use IPv4-mapped GID (index 1) for inter-node RDMA routing
-    export UCX_IB_GID_INDEX
-
-    if [[ -n "$UCX_IB_TRAFFIC_CLASS" ]]; then
-        echo "[INFO] Using UCX_IB_TRAFFIC_CLASS=$UCX_IB_TRAFFIC_CLASS (set by environment)"
-    elif command -v nicctl &> /dev/null; then
-        ND_PRIO=$(nicctl show qos 2>/dev/null | awk '/PFC no-drop priorities/ {print $NF; exit}')
-        ND_DSCP=$(nicctl show qos 2>/dev/null | awk -v p="$ND_PRIO" '
-$1 == "DSCP" && $2 == ":" && $NF == p {
-    print $3; exit
-}')
-        # nicctl may emit trailing commas (e.g. "24,"); keep the leading integer so the
-        # arithmetic can't choke and unparseable output falls back to hostname detection.
-        ND_PRIO="${ND_PRIO%%,*}"; ND_PRIO="${ND_PRIO//[!0-9]/}"
-        ND_DSCP="${ND_DSCP%%,*}"; ND_DSCP="${ND_DSCP//[!0-9]/}"
-        if [[ "$ND_DSCP" =~ ^[0-9]+$ ]] && [[ "$ND_PRIO" =~ ^[0-9]+$ ]]; then
-            export UCX_IB_TRAFFIC_CLASS=$(( 4 * ND_DSCP ))
-            export UCX_IB_SL=$ND_PRIO
-            echo "[INFO] Detected QoS from nicctl: UCX_IB_TRAFFIC_CLASS=$UCX_IB_TRAFFIC_CLASS, UCX_IB_SL=$UCX_IB_SL"
-        else
-            echo "[WARN] nicctl available but QoS data unavailable; trying hostname detection."
-            NODENAME=$(hostname -s)
-            if [[ $NODENAME == GPU* ]] || [[ $NODENAME == smci355-ccs-aus* ]]; then
-                export UCX_IB_TRAFFIC_CLASS=96
-                echo "[INFO] Auto-detected UCX_IB_TRAFFIC_CLASS=$UCX_IB_TRAFFIC_CLASS from hostname $NODENAME"
-            elif [[ $NODENAME == mia1* ]]; then
-                export UCX_IB_TRAFFIC_CLASS=104
-                echo "[INFO] Auto-detected UCX_IB_TRAFFIC_CLASS=$UCX_IB_TRAFFIC_CLASS from hostname $NODENAME"
-            fi
-        fi
-    else
-        NODENAME=$(hostname -s)
-        if [[ $NODENAME == GPU* ]] || [[ $NODENAME == smci355-ccs-aus* ]]; then
-            export UCX_IB_TRAFFIC_CLASS=96
-            echo "[INFO] Auto-detected UCX_IB_TRAFFIC_CLASS=$UCX_IB_TRAFFIC_CLASS from hostname $NODENAME"
-        elif [[ $NODENAME == mia1* ]]; then
-            export UCX_IB_TRAFFIC_CLASS=104
-            echo "[INFO] Auto-detected UCX_IB_TRAFFIC_CLASS=$UCX_IB_TRAFFIC_CLASS from hostname $NODENAME"
-        else
-            echo "[INFO] No nicctl and unable to detect from hostname. Skipping QoS configuration."
-        fi
-    fi
-
-    set +x
-    echo "[INFO] IBDEVICES=$IBDEVICES  UCX_NET_DEVICES=$UCX_NET_DEVICES  NCCL_SOCKET_IFNAME=$NCCL_SOCKET_IFNAME  UCX_IB_GID_INDEX=$UCX_IB_GID_INDEX  UCX_IB_TRAFFIC_CLASS=${UCX_IB_TRAFFIC_CLASS:-unset}"
+if [[ "$ENGINE" == "tilert" ]]; then
+    echo "[INFO] tilert: IBDEVICES=$IBDEVICES  NCCL_SOCKET_IFNAME=$NCCL_SOCKET_IFNAME  NCCL_IB_HCA=$NCCL_IB_HCA"
 
 else
 

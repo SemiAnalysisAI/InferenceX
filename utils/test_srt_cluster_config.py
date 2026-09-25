@@ -13,6 +13,20 @@ from infx.srt_slurm.cluster_config import render_cluster_config
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def test_exclusive_allocation_override(tmp_path):
+    profile = tmp_path / "profile.yaml"
+    output = tmp_path / "cluster.yaml"
+    profile.write_text("use_exclusive_sbatch_directive: false\ndefault_partition: test\n")
+    result = subprocess.run(
+        [sys.executable, "-m", "infx.srt_slurm.cluster_config", str(profile), str(output), "--exclusive"],
+        cwd=ROOT, capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert yaml.safe_load(output.read_text()) == {
+        "use_exclusive_sbatch_directive": True, "default_partition": "test",
+    }
+
+
 @pytest.mark.parametrize("power", ["0", "1", "missing-exporter"])
 def test_launcher_writes_job_local_cluster_config(tmp_path: Path, power: str) -> None:
     runner_dir = tmp_path / "runners"

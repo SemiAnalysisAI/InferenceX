@@ -58,6 +58,15 @@ Allowed (this is the baseline, not an exception):
 
 Forbidden (submission-side precision hacking of the draft):
 
+- Enabling `SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE` (`=1` or any other enabling
+  value recognized by the pinned implementation) is explicitly prohibited going
+  forward, including inherited environment, launcher, container, or image defaults.
+  The baseline allowances above do not exempt this flag. Reviewers must verify
+  that it is disabled in the effective recipe; an unset value or `=0` is acceptable
+  only when the pinned implementation confirms it is disabled. Historical runs
+  are not precedent or an exception for submissions under review, including
+  image-only bumps and re-enabled recipes. This rule does not retroactively
+  invalidate runs that predate it.
 - Online or offline quantization of draft weights, activations, or computation below
   the shipped precision, whether through a flag, environment variable, config file, or
   conversion step. This includes `--speculative-draft-model-quantization quark_mxfp4`
@@ -107,7 +116,7 @@ methodology.
 
 ## The PR Review Checklist (CODEOWNER sign-off)
 
-Automated CODEOWNER verification is advisory for now. The workflow checks submitted checklists and posts a new verdict comment for each verification without publishing commit statuses. GitHub's separate Core-team and CODEOWNER approval requirements remain in effect unless bypassed by an authorized maintainer.
+Automated CODEOWNER verification is advisory for now. The workflow checks submitted and edited checklists and associates one verdict comment with each sign-off resource without publishing commit statuses. GitHub's separate Core-team and CODEOWNER approval requirements remain in effect unless bypassed by an authorized maintainer.
 
 Sign-off is required only when a changed file has a CODEOWNER other than a repository admin or `@SemiAnalysisAI/core`. Ownership comes from the current tip of the PR target branch, resolved once and pinned to the same SHA for CODEOWNERS validation and content reads, using the last matching rule; renames check both old and new paths. The PR head and its potentially stale recorded base SHA do not supply ownership rules. A matching core owner does not exempt another owner on the same file. Individual admins must have both repository `permission: admin` and `role_name: admin`; other teams and email owners require sign-off. Missing ownership data or failed permission lookups cannot grant an exemption. Changes without a qualifying owner skip verification.
 
@@ -124,13 +133,13 @@ A friendly reminder. Please follow the latest checklist template **correctly**:
 
   Our CI verification workflow, [`codeowner-signoff-verify.yml`](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/workflows/codeowner-signoff-verify.yml), triggers on exactly this phrase. **If your approval comment omits that phrase, the workflow will not verify the checklist.**
 - The sign-off can be posted as a regular conversation comment, a review summary, or an inline review comment. All three trigger verification.
-- Submit a new checklist when the PR is open and ready. Edits, pushes, reopening, and leaving draft do not trigger verification. If a review event was missed during a merge conflict, retry after resolving it using manual dispatch.
+- Submit a new checklist when the PR is open and ready. Editing that checklist triggers verification again. Pushes, reopening, and leaving draft do not trigger verification. If a review event was missed during a merge conflict, retry after resolving it using manual dispatch.
 - Starting Claude requires an eligible human actor with repository write access.
 - Fill in the "Additional detail section" with the links the checklist asks for (validation/eval workflow runs, the corresponding [vLLM recipe](https://github.com/vllm-project/recipes) / [SGLang cookbook](https://github.com/sgl-project/sglang/tree/main/docs_new) PR, and any exception reasoning).
 
-Once the sign-off is posted, CI independently re-verifies the review checklist claims, including CODEOWNER status, a green sweep and evals on a commit in the PR, the linked recipe, the reuse command, use of the latest checklist template, upstream [vLLM](https://hub.docker.com/u/vllm)/[SGLang](https://hub.docker.com/u/lmsysorg) images, no architecture-changing benchmark hacks, chat-template usage for speculative decoding, and unchanged draft-model/head weights and precision. It then creates a new verdict comment for the PR on every verification, even when the verdict is unchanged, including the SHA actually assessed. Failing criteria stay visible; passing and N/A criteria appear together in a collapsed section. Earlier verdict comments remain unchanged as assessment history; use the latest verdict for the assessed commit. Checkmarks are not taken on trust, so please only check items you have actually verified.
+Once the sign-off is posted, CI independently re-verifies the review checklist claims, including CODEOWNER status, a green sweep and evals on a commit in the PR, the linked recipe, the reuse command, use of the latest checklist template, upstream [vLLM](https://hub.docker.com/u/vllm)/[SGLang](https://hub.docker.com/u/lmsysorg) images, no architecture-changing benchmark hacks, chat-template usage for speculative decoding, and unchanged draft-model/head weights and precision. It creates one verdict comment for that sign-off resource, including the SHA actually assessed. Editing the same checklist updates only its associated verdict. A replacement or additional checklist receives a separate verdict, and verdicts associated with older sign-offs remain unchanged. Failing criteria stay visible; passing and N/A criteria appear together in a collapsed section. Checkmarks are not taken on trust, so please only check items you have actually verified.
 
-The verdict records only the commit actually assessed; it does not carry approval forward to later commits. To request a new assessment after correcting the existing checklist as needed, an authorized collaborator dispatches `codeowner-signoff-verify.yml` with `pr-number` and its `comment_url` (both must identify the same PR). Each assessment posts a new verdict comment.
+The verdict records only the commit actually assessed; it does not carry approval forward to later commits. To request a new assessment after correcting the existing checklist as needed, an authorized collaborator dispatches `codeowner-signoff-verify.yml` with `pr-number` and its `comment_url` (both must identify the same PR). Manual reassessment updates the verdict associated with that sign-off resource.
 
 ## Reusing your PR's green sweep at merge with `/use`
 
@@ -141,6 +150,7 @@ A full benchmark sweep is expensive GPU time, and the runners are shared by ever
 - The merge-to-`main` run then validates and ingests the PR sweep's artifacts instead of re-running the whole sweep on `main`.
 - **This reduces CI queue time for everyone.** Each reused merge frees hours of GPU runner time for other PRs, so please prefer the reuse path over merging without it. A green sweep alone is not enough. The reuse command must be on record (the sign-off verification checks for it), otherwise `main` silently re-runs the full sweep.
 - Reuse does not require retaining a sweep label. The bot reacts to the command with 👍 when accepted or 👎 when rejected, with details in the Actions run summary; source artifacts are revalidated at merge.
+- A missing authorized reuse command produces a Check 4 **WARN**, not a rejection. The warning stays visible in the sign-off verdict; posting an authorized command is still required to reuse artifacts.
 - `utils/merge_with_reuse.sh <pr-number>` is the supported merge path. It posts the command, syncs the branch with `main`, waits for checks, and squash-merges. See the [workflows README](.github/workflows/README.md#reusing-an-approved-pr-full-sweep) for eligibility details.
 
 ## Adding points to the latest curve with `append-only`
