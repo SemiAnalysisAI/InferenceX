@@ -9168,3 +9168,14 @@
     - "Relevant ATOM changes in the range: V4 decode reuses the sparse prefill ASM (ROCm/ATOM#2271), greedy sampler picks via aiter.topk_select (ROCm/ATOM#2244), and FP8 block scales declared scale_fmt ue8m0 are now stored as E8M0 on gfx950 by default (ROCm/ATOM#2419; previously FP32 unless ATOM_FP8_BLOCKSCALE_USE_E8M0_SCALE=1). The upstream DeepSeek-V4 recipes are unchanged across the range, and every recipe flag and choice (all2all-backend rccl, dp-load-balance least_tokens, moe-backend standard) remains valid."
     - "No data-type or precision change to the DeepSeek-V4-Pro-0813 DSpark draft: no online quantization is configured, so it keeps its checkpoint precision; the E8M0 scale storage represents the checkpoint's power-of-two block scales exactly. kv-cache-dtype and index-cache-dtype touch cache storage only."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3605
+
+- config-keys:
+    - kimik3-fp4-h200-vllm-agentic-latency
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Use profiling-free DCGM counters for Kimi-K3 H200 latency power telemetry to avoid synchronous profiling-watch recovery stalls. Retain power and GPU utilization; omit profiling metrics."
+    - "Keep the stock exporter image, 100 ms watch interval, 1 s scrape interval, 2 s timeout, and strict power validation unchanged."
+    - "Kimi-K3 H200 latency 功耗遥测改用无 profiling 的 DCGM counters，避免同步恢复 profiling watch 导致采样卡顿；保留功耗和 GPU 利用率，省略 profiling 指标。"
+    - "保持原 exporter 镜像、100 ms watch 间隔、1 s 抓取间隔、2 s 超时与严格功耗校验不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3550
