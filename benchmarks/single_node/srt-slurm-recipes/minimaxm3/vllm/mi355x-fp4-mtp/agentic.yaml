@@ -1,0 +1,85 @@
+# MiniMax-M3 MXFP4 AgentX on MI355X with vLLM EAGLE3 (GQA draft). The KV cache
+# is GPU-resident.
+base:
+  schema: 2
+  name: minimaxm3-fp4-mi355x-vllm-agentic
+  model:
+    path: hf:amd/MiniMax-M3-MXFP4
+    container: vllm/vllm-openai-rocm:nightly-2a02f6efe319c885e3ccbcecde402e0028f9ec1e
+    precision: fp4
+  resources:
+    gpu_type: mi355x
+    gpus_per_node: 8
+  frontend:
+    type: vllm
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine:
+    type: vllm
+    connector: null
+  # The engine may take the full VLLM_ENGINE_READY_TIMEOUT_S to become ready.
+  health_check:
+    interval_seconds: 10
+    max_attempts: 360
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      args:
+        served-model-name: amd/MiniMax-M3-MXFP4
+        trust-remote-code: true
+        block-size: 128
+        gpu-memory-utilization: 0.90
+        enable-chunked-prefill: true
+        max-num-batched-tokens: 32768
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY", "cudagraph_capture_sizes": [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,20,22,24,26,28,30,32,34,36,48,64,72,80,88,96,104,112,120,128]}'
+        language-model-only: true
+        enable-prefix-caching: true
+        attention-backend: ROCM_AITER_UNIFIED_ATTN
+        moe-backend: aiter
+        kv-cache-dtype: fp8
+        attention-config: '{"indexer_kv_dtype": "fp8"}'
+        tool-call-parser: minimax_m3
+        reasoning-parser: minimax_m3
+        enable-auto-tool-choice: true
+        default-chat-template-kwargs: '{"thinking_mode":"enabled"}'
+        stream-interval: 20
+        # Three-token EAGLE3; throughput runs replace verification with the
+        # golden acceptance length.
+        speculative-config: '{"method": "eagle3", "model": "Inferact/MiniMax-M3-EAGLE3-GQA", "num_speculative_tokens": 3, "attention_backend": "ROCM_AITER_UNIFIED_ATTN"}'
+      env:
+        PYTHONNOUSERSITE: '1'
+        VLLM_ENGINE_READY_TIMEOUT_S: '3600'
+        VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: '1800'
+        VLLM_USE_BREAKABLE_CUDAGRAPH: '0'
+        VLLM_ROCM_USE_AITER: '1'
+        VLLM_ROCM_USE_AITER_MOE: '1'
+        VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS: '1'
+        VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT: '1'
+        VLLM_ROCM_QUICK_REDUCE_QUANTIZATION: INT4
+        VLLM_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16: '0'
+        VLLM_ROCM_QUICK_REDUCE_QUANTIZATION_MIN_SIZE_KB: '256'
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
+    env:
+      MODEL: amd/MiniMax-M3-MXFP4
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
+      AIPERF_APPLY_CHAT_TEMPLATE: 'true'
+
+# One variant per point. Admission is 2x CONC.
+override_tp4_c1: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, max-num-seqs: 2}}}, benchmark: {env: {CONC: '1'}}}
+override_tp4_c4: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, max-num-seqs: 8}}}, benchmark: {env: {CONC: '4'}}}
+override_tp4_c5: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, max-num-seqs: 10}}}, benchmark: {env: {CONC: '5'}}}
+override_tp4_c8: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, max-num-seqs: 16}}}, benchmark: {env: {CONC: '8'}}}
+override_tp4_c10: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, max-num-seqs: 20}}}, benchmark: {env: {CONC: '10'}}}
+override_tp4_c12: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, max-num-seqs: 24}}}, benchmark: {env: {CONC: '12'}}}
+override_tp4_c15: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, max-num-seqs: 30}}}, benchmark: {env: {CONC: '15'}}}
+override_tp4_c20: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, max-num-seqs: 40}}}, benchmark: {env: {CONC: '20'}}}
+override_tp4_c24: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, max-num-seqs: 48}}}, benchmark: {env: {CONC: '24'}}}
+override_tp4_c32: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, max-num-seqs: 64}}}, benchmark: {env: {CONC: '32'}}}
+override_tp2_c1: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, max-num-seqs: 2}}}, benchmark: {env: {CONC: '1'}}}
+override_tp2_c2: {roles: {agg: {gpus: 2, args: {tensor-parallel-size: 2, max-num-seqs: 4}}}, benchmark: {env: {CONC: '2'}}}
