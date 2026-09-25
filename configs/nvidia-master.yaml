@@ -1157,6 +1157,7 @@ dsv4-fp4-b300-sglang-agentic-hicache-eagle:
     agentic-coding:
     - dram-utilization: 0.95
       search-space:
+      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32] }
       - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32] }
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: mtp, conc-list: [64, 128, 256, 384, 512], router: { name: sglang-router, version: "0.3.2" } }
 

@@ -8959,3 +8959,12 @@
     - "Update B300 DSV4 performance."
     - "更新 B300 DSV4 性能。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
+    - dsv4-fp4-b300-sglang-agentic-hicache-eagle
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add B300 DSV4 TP4 low-latency points."
+    - "添加 B300 DSV4 TP4 低延迟测试点。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3426
