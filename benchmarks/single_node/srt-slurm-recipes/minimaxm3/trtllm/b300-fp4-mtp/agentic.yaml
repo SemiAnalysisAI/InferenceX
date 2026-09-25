@@ -87,6 +87,11 @@ base:
         PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
         TRTLLM_SERVE_ENABLE_MSGSPEC: '1'
         TRTLLM_TORCH_COMPILE_CONTEXT_ONLY: '1'
+  # Piecewise graph capture and autotuning took 22 minutes at TP4 c5; larger
+  # batch ladders and TP8 outlast srt-slurm's 1800 s default.
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 5
   benchmark:
     type: custom
     command: bash /infmax-workspace/benchmarks/srt_agentic.sh
