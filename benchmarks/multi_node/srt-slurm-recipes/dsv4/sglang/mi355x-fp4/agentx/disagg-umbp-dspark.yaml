@@ -163,7 +163,6 @@ base:
         context-length: 1048576
         enable-metrics: true
         disable-cuda-graph: true
-        disable-cuda-graph: true
         enable-unified-cache-external-linker: true
         unified-cache-external-linker-backend: mori
         hicache-storage-backend-extra-config: '{"standalone_startup_timeout_ms":120000}'
