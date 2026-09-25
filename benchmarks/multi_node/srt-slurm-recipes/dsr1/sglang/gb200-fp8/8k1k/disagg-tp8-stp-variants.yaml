@@ -109,11 +109,12 @@ base:
         disaggregation-transfer-backend: nixl
 
   benchmark:
-    type: "sa-bench"
-    isl: 8192
-    osl: 1024
-    concurrencies: "4x8x16"
-    req_rate: "inf"
+    type: custom
+    command: bash /infmax-workspace/benchmarks/multi_node/srt_fixed_sequence.sh
+    env:
+      TOKENIZER: /model
+      ISL: '8192'
+      OSL: '1024'
 
 zip_override_lowlat:
   resources: {}
@@ -131,5 +132,3 @@ zip_override_lowlat:
       workers: [7, 7, 3]
       args:
         max-running-requests: [1, 4, 16]
-  benchmark:
-    concurrencies: ["8", "16x32", "64"]

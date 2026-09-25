@@ -149,6 +149,7 @@ SGLANG_CMD=(
     --chunked-prefill-size 4096
     # Keep active decode requests progressing while long prefixes are queued.
     --prefill-decode-interval 16
+    --enable-decoder-swa-bounded-replay
     # The default 4*max-running-requests retains too few SWA prefix tails:
     # C16 exhausted its 94,976-slot SWA pool while millions of full-pool
     # slots remained free. Rebalance the existing KV budget toward reusable

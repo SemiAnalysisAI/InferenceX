@@ -8772,6 +8772,15 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3344
 
 - config-keys:
+    - glm5.3-fp8-mi355x-tilert-agentic
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump tilert 0.1.6.post1 -> 0.1.6.post2 (PyPI, 2026-09-23) on both TileRT ranks; router metadata follows. post2 changes six pd_vllm files: the ROCm decode inject (glm5_rocm_engine.py) now broadcasts each layer's KV to all eight rank caches with grouped RCCL ncclBroadcast (TILERT_INJECT_MODE, default rccl, falling back to per-source-device rotating streams, then the old serial copy) instead of serial default-stream copy_ calls, and the prefill extract (mla_nsa.py) gathers each layer with one index_select per device on side streams (TILERT_EXTRACT_MODE, default fast). The ROCm fp8 KV layout, multi-sender staging (TILERT_PD_SENDERS) and host-resident PD buffers (TILERT_PD_BUFFER_DEVICE) are new but opt-in and left off, so the 1M-context bf16 KV, layer-sharded on-GPU buffer configuration is otherwise unchanged. TileRT reports AgentX TTFT p50 5.7 s -> 2.2 s at concurrency 1. No patches, images unchanged."
+    - "两侧 TileRT rank 上 tilert 由 0.1.6.post1 升级到 0.1.6.post2（PyPI，2026-09-23），router 元数据随之更新。post2 修改了 pd_vllm 的六个文件：ROCm decode 注入（glm5_rocm_engine.py）改为用分组 RCCL ncclBroadcast 把每层 KV 广播到全部 8 个 rank 的缓存（TILERT_INJECT_MODE，默认 rccl，失败时回退到按源设备轮转的多流拷贝，再回退到旧的串行拷贝），不再在默认流上串行 copy_；prefill 提取（mla_nsa.py）在各设备的旁路流上每层一次 index_select 完成收集（TILERT_EXTRACT_MODE，默认 fast）。ROCm fp8 KV 布局、多发送端暂存（TILERT_PD_SENDERS）与主机内存 PD 缓冲（TILERT_PD_BUFFER_DEVICE）为新增的可选项，默认关闭，因此 1M 上下文、bf16 KV、按层分片的 GPU 缓冲配置其余不变。TileRT 报告并发 1 下 AgentX TTFT p50 由 5.7 秒降至 2.2 秒。无补丁，镜像不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3389
+
+- config-keys:
     - dsv41flash-fp4-h200-sglang-agentic-dspark
   scenario-type:
     - agentic-coding
@@ -8783,6 +8792,101 @@
     - "Run a new canonical full sweep with 16 performance and 16 full-evaluation cells. Earlier EP4/EP8 and DP8 measurements remain historical evidence and do not qualify the EP1 grid."
     - "Extend only H200 SGLang AgentX performance cells at C64/C128 to 24-hour Slurm allocations and 24.5-hour GitHub jobs after the original eight-hour allocation expired during progressing warmup. Preserve normal warmup, the full 3600-second profile, image, model, precision and topology."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3341
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Use the user-selected official lmsysorg/sglang:dev-dsv41-mi35x model preview, pinned to sha256:c609f74f01b206af9664fb66da8ebef47642a7328a2478eabeebb352e014661a, with the native MI350X TP4/EP4 DSpark5 recipe, GPU Engram and native decode graphs."
+    - "Keep radix caching enabled for AgentX and bound prefill chunks to the 4096-token bound after native FP4 prefill scratch exhausted HBM with the 16384-token default in five canonical cells. Reserve additional native scratch headroom with static memory fraction 0.70 after C32 still exhausted HBM at 0.80 with 4096-token chunks. Enable native allocator garbage collection at threshold 0.8 with process fraction 0.99 after physical HBM still filled during long prefill at static fraction 0.70. Cap server admission at 32 after native C32 warmup reached 63 running requests and failed with HIP illegal access; preserve all client fanout as queued work. Disable native prefill graphs after the admission-capped C32 test still failed with HIP illegal access during breakable prefill; keep decode graphs and treat this as a bounded runtime correction pending qualification. Cap the full KV pool at 3145728 tokens after the pinned native compressed-cache store and its compiled gfx950 code showed signed int32 byte offsets that overflow for large full-token locations. This supported capacity limit keeps ratio-1 storage below 2 GiB without patching kernels or reducing the model context limit; validate canonical C32 and full GSM before selection. Scheduler cadence remains at the official default. Preserve full 1M context, shipped-default DSpark precision, canonical thinking-on AL3.51 throughput and real full1319 GSM verification."
+    - "Use image-native attention, dense FP8 and MoE kernels, allocator defaults and EP4 tuning data; remove the downstream nightly compatibility installer, source payload, tuning copy, hash checks and obsolete waiver documentation. The model-preview image explicitly supersedes the earlier latest-nightly selection for this lane."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3343
+
+- config-keys:
+  - dsv41flash-fp4-gb200-sglang-agentic-dspark
+  scenario-type:
+  - agentic-coding
+  description:
+  - Move GB200 DeepSeek-V4.1-Flash DSpark from dev-dsv41 to official CUDA 13 nightly-dev-cu13-20260923-06008c17, pinned at multi-architecture manifest sha256:5921361fcf358cdde4df1968c941c14157f418613b099ad7f3e5aeed6427ae15 (ARM64 sha256:d49261d2edd82fed2dd6254c33e68871ccf7a399498e059ec91dc4453a5808c3); match TP2/EP1 and TP4/EP1 with native DSpark precision and golden acceptance policy
+  - 'Use the upstream per_rank Engram host-table layout on GB200: anonymous row-sharded mappings can obtain 512 MiB huge pages on the measured madvise/never anonymous/shared THP policy; preserve original FP8 table weights and restore the two TP all-reduces'
+  - "Use the default MTP/DSpark precision shipped by the official nightly, without custom draft quantization or precision patches."
+  - Keep the sweep DSpark-only; remove the unmeasured STP entry and alias.
+  - Retain min(64*concurrency, 1024) SWA prefix tails within the measured GB200 KV budget; select prefill/decode interval 16 only at TP4 C16 after canonical performance and full GSM8K qualification.
+  - "Match the published vLLM grid exactly: TP2/EP1 and TP4/EP1, each C1/2/4/8/16/32/64/128. Use stock DSpark precision; TP2 uses static memory 0.92, chunk 2048, graph/running cap 16, interval 16, expandable allocator and min(128*CONC,1024) SWA tails. Requalify all 16 performance and full GSM8K points. Avoid deadline-only failures with the supported 12-hour partition maximum for C64/C128 performance while preserving complete warmup and 3600-second scoring."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3347
+
+- config-keys:
+    - dsv41flash-fp4-h200-sglang-agentic-dspark
+  description:
+    - "Enable official decoder SWA bounded replay for H200 DeepSeek V4.1 Flash native DSpark"
+    - "Pin SGLang nightly-dev-cu13-20260923-06008c17; qualify TP4/EP1 and TP8/EP1 C1-128 with unchanged shipped draft precision"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3392
+
+- config-keys:
+    - dsv41flash-fp4-h100-sglang-agentic-dspark
+    - dsv41flash-fp4-h100-sglang-agentic-dspark-dpa
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Move H100 DeepSeek-V4.1-Flash DSpark from dev-dsv41 to upstream SGLang nightly-dev-cu13-20260922-582389ce and retain automatic attention selection from the current cookbook."
+    - "Use stock nightly DSpark precision and kernels, with row-sharded anonymous host Engram tables and a resolved local snapshot for upstream file-scoped page-cache eviction and huge-page backing."
+    - "Retain TP8/EP8, GPU-resident KV, 4096-token prefill chunks, static memory fraction 0.70, the shipped draft precision defaults, and the existing AgentX acceptance and real-verification eval behavior."
+    - "Use DSpark across the full AgentX concurrency curve with 16 decode steps between prefill chunks, unchanged shipped precision and canonical acceptance; completed STP diagnostics did not contribute a measured frontier point."
+    - "Install H100-specific block32 FP8 GEMM tiling configurations for six shapes, adding independently validated draft N512/K5120 and N1280/K5120 choices while retaining stock settings above batch320 and batch190 respectively, including supported SPLIT_K/SWAP_AB small-batch choices for N1792/K5120 and N576/K5120; retain previous large-batch settings and default tiling for the regressing N5120/K288 batch-64 case; preserve stock weights, scales and output precision and record the resolved config hashes."
+    - "Use expandable CUDA allocator segments to reduce fragmentation from long-context indexer masks without changing checkpoint precision or the static KV budget."
+    - "Select the supported native MXFP4 Marlin MoE backend on Hopper, retaining BF16 activations and the nightly's shipped draft precision."
+    - "Retain 8 SWA prefix tails per concurrency at C1/C2 after rejecting the 128-tail floor in matched canonical testing; use 32 per concurrency at C4 and above, reaching 640 at C20 within the static cache budget."
+    - "Qualify supported DP8 attention and DP LM-head at C4/C8/C16/C20 with consistent-hash session routing and 64 SWA tails per rank; retain the complete plain TP8 curve and unchanged shipped precision, static budget and native context."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3345
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Re-sweep the MI355X DeepSeek-V4.1-Flash vLLM AgentX arm on the ROCm 10.0 nightly nightly-rocm100-7f1a5398e9610d96c473931a26c0e12bbe0d0423 (published 2026-09-24T05:45:09Z, digest sha256:5df261803a5b4e8c4d6bbe58a32c9cd597140b6fdfa7358c0ef0d0211c33ab32), replacing nightly-rocm100-3df4ae15. Only the image changes: the TP=4 and TP=2 rows keep concurrency 1, 2, 4, 8, 16, 32, 64 and 128, and every recipe setting is unchanged, including Engram placement per TP and concurrency, the prefill chunk and sequence cap ladder, graph capture, and five-token DSpark with golden acceptance 3.51 for throughput and real block verification for evals."
+    - "The pin is mainly for vllm-project/vllm#57435, which fuses the inverse RoPE into the sparse decode reduce on the DSv4.1 ROCm path. It merged on 2026-09-22, after nightly-rocm100-3df4ae15 was cut on 2026-09-21, so no point on the current curve carries it. The new pin is 176 commits ahead of the old one and carries the change."
+    - "在 ROCm 10.0 nightly nightly-rocm100-7f1a5398e9610d96c473931a26c0e12bbe0d0423（发布于 2026-09-24T05:45:09Z，摘要 sha256:5df261803a5b4e8c4d6bbe58a32c9cd597140b6fdfa7358c0ef0d0211c33ab32）上重新扫描 MI355X DeepSeek-V4.1-Flash vLLM AgentX 臂，替换 nightly-rocm100-3df4ae15。本次仅更换镜像：TP=4 与 TP=2 两行保持并发 1、2、4、8、16、32、64 与 128，其余 recipe 设置全部不变，包括按 TP 与并发决定的 Engram 放置、prefill 分块与序列上限阶梯、图捕获，以及吞吐用黄金接受长度 3.51、评测用真实分块验证的五 token DSpark。"
+    - "此次固定主要是为了 vllm-project/vllm#57435：它在 DSv4.1 的 ROCm 路径上将 inverse RoPE 融合进 sparse decode 的 reduce。该 PR 于 2026-09-22 合并，晚于 2026-09-21 切出的 nightly-rocm100-3df4ae15，因此当前曲线上的任何数据点都不包含该改动。新镜像比旧镜像领先 176 个提交，已包含该改动。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3404
+
+- config-keys:
+    - dsv4-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Switch the MI355X vLLM DeepSeek-V4-Pro AgentX sweep from MTP K3 to DSpark K6, using DeepSeek-V4-Pro-0813 revision 72e1d3230f6c080a530b0a1d46f8eb4602340597, probabilistic drafting, thinking-on golden acceptance length 3.77 for throughput, and real target verification for eval."
+    - "Update the image to the latest published and locally tested vllm/vllm-openai-rocm:nightly-e9757321527ca1ecd514c07c1418dd2c53da3d19 while preserving the existing TP8/EP1, DP-attention, router, KV-offload, concurrency, and duration settings."
+    - "Local 8x MI355X DPA-TP8/EP1 concurrency-4 validation improved P90 interactivity from 59.72 to 97.36 tok/s/user and total throughput per GPU from 2,261.58 to 2,742.19 tok/s versus MTP K3, with zero request errors."
+    - "This PR does not change the data types of the DeepSeek-V4-Pro-0813 draft layers; it only touches the benchmark launcher and config to switch the speculative-decoding method from MTP K3 to DSpark K6, keeping the checkpoint's shipped FP4 draft precision and the vLLM image dtype defaults unchanged."
+    - "将 MI355X vLLM DeepSeek-V4-Pro AgentX 扫描从 MTP K3 切换为 DSpark K6，使用 DeepSeek-V4-Pro-0813 revision 72e1d3230f6c080a530b0a1d46f8eb4602340597、概率式 drafting、吞吐测试 thinking-on golden acceptance length 3.77，以及评估时的真实 target verification。"
+    - "将镜像更新至当前最新且已完成本机实测的 vllm/vllm-openai-rocm:nightly-e9757321527ca1ecd514c07c1418dd2c53da3d19，同时保持现有 TP8/EP1、DP attention、router、KV offload、并发列表和运行时长不变。"
+    - "本地 8x MI355X DPA-TP8/EP1 并发 4 验证中，相比 MTP K3，P90 交互速度从 59.72 提升至 97.36 tok/s/user，单卡总吞吐量从 2,261.58 提升至 2,742.19 tok/s，且无请求错误。"
+    - "本 PR 不改变 DeepSeek-V4-Pro-0813 draft 层的数据类型；仅修改基准测试启动脚本与配置，将投机解码方式从 MTP K3 切换为 DSpark K6，保持 checkpoint 自带的 FP4 draft 精度与 vLLM 镜像的 dtype 默认设置不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3406
+
+- config-keys:
+    - glm5.2-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the GLM-5.2 MXFP4 MI355X SGLang AgentX image from lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260920 to lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260923 (digest sha256:59eeb83aea8fb5dff4a0c8964da2adf690af9494b2b3271ea13a54018adbaa39); keep all serving flags, HiCache settings, and sweep points unchanged."
+    - "将 GLM-5.2 MXFP4 MI355X SGLang AgentX 镜像从 lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260920 更新到 lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260923（digest sha256:59eeb83aea8fb5dff4a0c8964da2adf690af9494b2b3271ea13a54018adbaa39）；其余服务参数、HiCache 设置与 sweep 点保持不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3399
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Move all six points (c4, c16, c32, c48, c192, c256) onto the UMBP linker; c128 dropped. c4/c16 were no-offload and c32/48 were HiCache; c16 and c32/48 prefill go TP8 -> TP4. DSpark gamma 6 at c4/c16, 3 above."
+    - "Bump to image lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260923."
+    - "UMBP tier on 2 MiB hugepages by default: job.slurm reserves them on prefill nodes and releases them on every exit path, hugepage_sanity.sh fails a short grow, and server_sglang.sh refuses a run that fell back to 4 KiB pages."
+    - "Allow pure-TP prefill on the linker, add --optimistic-prefill-attempts 2 on umbp-linker prefill, raise the UMBP client ready probe to 120 s, derive CONTAINER_BARRIER_TIMEOUT from UMBP_SA_WAIT_SECONDS + 600, and wire UMBP_DRAM_CEILING_GB through."
+    - "Add DeepSeek-V4-Pro-0813 golden AL for draft lengths 4, 5, 7 and 8 (3.36 / 3.61 / 3.73 / 3.47)."
+    - "Agentic PD router: pin --decode-policy round_robin so decode no longer inherits the prefill --policy (consistent_hashing)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3256
 
 - config-keys:
     - glm5.2-fp4-gb300-dynamo-sglang-agentic-agg

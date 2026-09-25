@@ -140,16 +140,20 @@ the #642 low-latency combine fence. Scale-up cases
 request NCCL Device API LSA and fail closed unless the realized LSA team covers the full EP world.
 x86 EP16 scale-out uses the hybrid path with GIN and requires two logical scale-out domains
 represented by two physical RDMA ranks, with eight scale-up ranks per domain. GB EP16 remains MNNVL
-scale-up and uses LSA. MoRI EP8 uses the direct IntraNode kernel on every CDNA SKU. Its EP16 InterNodeV1 path is
-configured but unsupported and never dispatched: `combine()` takes the rank's own routing tensor,
-not dispatch's returned recv-slot indices (part of the ROCm/mori#475 corruption was that
-caller-side mix-up, guarded upstream by ROCm/mori#546), and with the corrected call single-shot
-combine is clean through T=512 — but a residual stochastic corruption remains from T~128 under
-repeated execution and at prefill token counts, independent of per-pair drains (not a
-buffer-reuse race; suspected driver-level, ionic 25.11 vs upstream's non-reproducing 26.03).
-The tw pairs additionally have no cross-node GPU fabric. mi355x EP16 currently has no
-publishable transport: UCCL-EP's CPU-proxy RDMA is functional on the Pollara fabric but roughly
-13x under its upstream-documented bandwidth (~6 GB/s vs 82 GB/s), unchanged by GPU-memory
+scale-up and uses LSA. MoRI EP8 uses the direct IntraNode kernel on every CDNA SKU. MoRI EP16 runs the InterNodeV1
+kernel on mi355x over the Pollara RoCE rails with MoRI's default STATIC_HEAP symmetric heap.
+Two defects had to be removed before that row could publish. `combine()` takes the rank's own
+routing tensor, not dispatch's returned recv-slot indices (part of the ROCm/mori#475 corruption
+was that caller-side mix-up, guarded upstream by ROCm/mori#546). The residual stochastic
+corruption from T~64 up, near-certain at prefill token counts, was this adapter forcing
+`MORI_SHMEM_MODE=VMM_HEAP` for scale-out: on ROCm 7.2 the HIP runtime leaves VMM allocations
+requested uncached in the cached pool, so cross-node combine partials read stale lines
+(ROCm/mori#610). A same-branch CI A/B on mi355x settled it — STATIC_HEAP is correct on every
+bf16 and fp8 rung, decode 1..512 and prefill 1024..8192 (run 34939333022), while VMM_HEAP
+reproduces the corruption (run 34941185534) — and the adapter now fails closed if the heap mode
+is anything but STATIC_HEAP. The tw pairs stay unsupported at EP16: they have no cross-node GPU
+fabric. UCCL-EP EP16 stays off mi355x: its CPU-proxy RDMA is functional on the Pollara fabric but
+roughly 13x under its upstream-documented bandwidth (~6 GB/s vs 82 GB/s), unchanged by GPU-memory
 registration mode (DMA-BUF vs peer-memory) or traffic class — an ionic-driver-level suspect.
 UCCL-EP EP16 is registered on b200-nscale, where it runs at full health on bare-metal IB.
 MoRI runs under its MANUAL launch mode with a pinned launch config, because that is what the engines
@@ -214,8 +218,10 @@ EP8 on MI300X/MI325X/MI355X, and UCCL-EP EP8 on H100/H200/B200 only (the legacy
 because the adapter passes `is_intranode` and UCCL then never starts its proxies. The AMD SKUs drop
 LL: upstream raised `kNumMaxTopK` 9 -> 16 six days before our pin, and the resulting host assert
 cannot hold on AMD's 16 warp groups), and NCCL EP at EP8 on H100/H200/B300 and at EP8 and EP16 on
-B200/GB200/GB300. NCCL EP's `LOW_LATENCY` algorithm is the DeepEP-derived decode path, EXPERT_MAJOR
-receive with a source-side weighted-kernel-sum combine. These rows were held while v0.1's combine
+B200/GB200/GB300. NCCL EP's `LOW_LATENCY` algorithm uses rank-major receive with caller-side
+weighted expert pre-reduction and an unweighted rank-sum combine, as used by inference frameworks.
+Its direct zero-copy receive is enabled within one LSA/MNNVL domain and staged for scale-out.
+These rows were held while v0.1's combine
 recv pipeline — a port of DeepEP's PRE-FIX code, missing the `fence.proxy.async.shared::cta` DeepEP
 added in #642 — raced on every rung (observed 1-in-5 bimodal corruption at T=256 on gb300 EP8,
 error 0.47 vs 0.0039; the interim T<=128 ladder clamp reduced exposure but was never a safety
@@ -276,9 +282,9 @@ Reading `false` alone as "roundtrip includes staging" subtracts a cost the row n
 availability, origin, and sample count. A paired-only API reports null isolated components.
 `isolated_sum` is derived.
 
-Headline latency is the **chained pair period** (`components.pair_period`, defined under Chained
-Pair Period below) for every row that carries one, and the p99 of the per-iteration cross-rank MAX
-of `roundtrip` for rows measured before that field existed. The flip shipped **held** while the
+Headline latency is `components.roundtrip` for default CUDA-graph rows and the **chained pair
+period** (`components.pair_period`, defined under Chained Pair Period below) for eager rows that
+carry one. The earlier eager flip shipped **held** while the
 six-events-per-pair chain described below, whose inner records inflated small-T periods
 fleet-wide, was replaced by the two-pass chain, and was released on 2026-08-06 once the b200, h200
 and gb200 hand references were confirmed against two-pass fleet artifacts (runs 31092783122 and
@@ -301,12 +307,32 @@ rather than transport, while p99 of MIN is the synchronized-cost tail beside it.
 inherit the preceding operation's per-rank exit stagger, so treat them as residual-wait diagnostics
 rather than per-operation costs. The paired roundtrip is the comparable quantity.
 
+### CUDA Graph Replay
+
+Graph-compatible backend/mode pairs capture the existing fixed-shape
+dispatch→stage→combine roundtrip and measure `CUDAGraph.replay()` by default. Capture and replay
+warmup are excluded. The result is published directly as `components.roundtrip`, with origin
+`cuda-graph-replay`. Its capture has no internal timing nodes. Separate dispatch and combine
+invocations each recapture the roundtrip with one event pair around only the requested phase,
+preserving those existing component fields without charging their instrumentation to roundtrip.
+There is no `graph_*` component or separate graph output path. `stage`, `pair_period`, chain
+floors, and chain health are unavailable, so a graph-mode document contains only graph-derived
+latency values. `isolated_sum` remains the derived sum of dispatch and combine. The ordinary
+cross-rank MAX/MIN/spread reductions still apply to the replay samples.
+
+`COLLX_CUDA_GRAPH=0` restores the eager pipeline unchanged, including isolated components and the
+chained pair period below. Modes not declared graph-compatible by their adapter also remain eager.
+Every captured output is poisoned after timing and replayed once more; a finite rewrite gates the
+case, and where staging is not hoisted that replay is also compared with an untimed drained pair.
+The artifact records `implementation.cuda_graph_replay`, `cuda_graph_supported`, and
+`chained_period`, while the component origin makes the measurement visible at row granularity.
+
 ### Chained Pair Period
 
-Everything above measures **fresh entry**: drained around each timed window, so every
+The eager pipeline measures **fresh entry**: drained around each timed window, so every
 sample starts from an idle pipeline and the ranks re-stagger before each one. A decode loop never
-stops, and what it pays per MoE layer is the pipeline's steady-state **period**. Every row therefore
-carries the chained family, measured by `benchmark_chain`: dispatch→combine pairs issued
+stops, and what it pays per MoE layer is the pipeline's steady-state **period**. Every eager row
+therefore carries the chained family, measured by `benchmark_chain`: dispatch→combine pairs issued
 back-to-back with CUDA events enqueued on-stream and **no host synchronization inside the loop**,
 the first `chain_drop` (16) pairs discarded as pipeline fill, pooled over `chain_trials` (4) per
 point on the same rotated ladder order as the rest of Pass 2. The pairing is exactly
@@ -375,12 +401,9 @@ operation cost. The cross-rank MIN is the one reduction that removes it, which i
 published and the medians are not. A p99 of a chained window would mix the same noise back in
 through the tail.
 
-The fresh-entry family keeps its meaning exactly: `components.roundtrip`, `dispatch`, `combine`,
-`stage`, `isolated_sum`, `cross_rank_min_us` and `cross_rank_spread_us` are measured and reduced
-as they always were, at the same 256×8 sampling, and no stored row was re-meant or re-measured. A
-consumer keys on the presence of `components.pair_period`. A row without it predates the chain.
-Never rank a chained cell against a pre-chain one on the headline column. `summarize.py` footnotes
-its table whenever both appear in it.
+With `COLLX_CUDA_GRAPH=0`, the fresh-entry family keeps its prior meaning:
+`components.roundtrip`, `dispatch`, `combine`, `stage`, `isolated_sum`, `cross_rank_min_us` and
+`cross_rank_spread_us` are measured and reduced as before, at the same 256×8 sampling.
 
 **The published period always means one thing: free-running.** The chain lets ranks drift by up to
 about one iteration, which is only sound where the receive plane tolerates it: every backend
@@ -403,11 +426,15 @@ it (as NVIDIA's own `ep_bench` does: CUDA events around dispatch and combine onl
 outside the loop) on the argument that its capacity-proportional cost would import a ladder-max
 term into dispatch; that argument describes exactly what production pays, since engines size the
 handle to their max token capacity and update it per step. The timed window now includes the
-update; rows carry `kernel_generation` `nccl-ep-v02-ht-routed` (`nccl-ep-v02-ll` in low-latency
-mode) — the `v02` component discriminates the `nccl-extensions` v0.2 mover from earlier wheels, and
+update; rows carry `kernel_generation` `nccl-ep-v02-ht-routed-zc`
+(`nccl-ep-v02-ll-rm-zc` for scale-up low-latency and `nccl-ep-v02-ll-rm` for scale-out).
+The `v02` component discriminates the `nccl-extensions` v0.2 mover from earlier wheels, and
 pre-change `nccl-ep-ht`/`nccl-ep-ht-routed` rows are a different measurement contract or mover —
-the per-row discriminator the earliest NCCL changes lacked. Low-latency
-mode has nothing to include: `ncclEpUpdateHandle` returns immediately there and the kernel reads
+the per-row discriminator the earliest NCCL changes lacked. HT uses zero-copy. LL uses the
+rank-major, pre-reduced inference-framework contract; zero-copy applies only within one LSA/MNNVL
+domain.
+Low-latency mode has nothing to include: `ncclEpUpdateHandle` returns immediately there and the
+kernel reads
 the cached routing inside the timed dispatch. The other backends already carried this cost --
 uccl-ep calls `get_dispatch_layout` inside dispatch, while deepep-v2, MoRI and FlashInfer pass
 routing on every call.
@@ -620,7 +647,9 @@ One raw case document carries `record_type: "case-attempt"`, the single `version
   `combine_reduction` and `library_version` (which reduction the oracle held the kernel to, and
   the installed library that selected it), and two generation discriminators:
   `stage_excluded_from_roundtrip` (whether `roundtrip` excludes expert-output staging, discussed
-  above) and `chained_period` (whether this document's rows carry the chained family at all).
+  above), `chained_period` (whether this document's rows carry the eager chained family),
+  `cuda_graph_supported` (whether the adapter declares this mode graph-safe), and
+  `cuda_graph_replay` (whether the existing measurement pipeline used replay).
 - `topology`: requested SKU/product, placement, `gpus_per_node`, nodes, scale-up domain, `scope`,
   `topology_class`, world size, and three distinct transport fields, `scale_up_transport` and
   `scale_out_transport` (the components), plus `transport`, the derived summary that folds them
@@ -631,8 +660,9 @@ One raw case document carries `record_type: "case-attempt"`, the single `version
 - `provenance`: the mounted image tag and source SHA, and
 - `outcome`: `status` (`success` or `invalid`) and `reasons`.
 
-Each `rows` entry carries point latency (the fresh-entry `components` plus the chained
-`components.pair_period`, `chain_floor_us` and `chain_health` (see Chained Pair Period)), byte
+Each `rows` entry carries point latency (graph replay in `components.roundtrip` by default where
+supported, otherwise the eager `components` plus `components.pair_period`, `chain_floor_us` and
+`chain_health` (see Chained Pair Period)), byte
 accounting, token rate, correctness, load, and fanout, while
 per-point statistics are summarized in place, not emitted as separate documents. Each dispatched
 case writes exactly this one raw result document, while unsupported or never-run cells produce no

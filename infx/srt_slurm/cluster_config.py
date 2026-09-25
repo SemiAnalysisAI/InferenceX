@@ -37,6 +37,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("profile", type=Path)
     parser.add_argument("output", type=Path)
+    parser.add_argument("--exclusive", action="store_true", help="Request exclusive Slurm nodes")
     parser.add_argument("--var", nargs=2, action="append", default=[], metavar=("NAME", "VALUE"))
     parser.add_argument("--model", nargs=2, action="append", default=[], metavar=("ALIAS", "PATH"))
     parser.add_argument(
@@ -55,6 +56,8 @@ def main() -> None:
             dict(args.var),
             {"model_paths": args.model, "containers": args.container, "default_mounts": args.mount},
         )
+        if args.exclusive:
+            config["use_exclusive_sbatch_directive"] = True
         args.output.write_text(yaml.safe_dump(config, sort_keys=False))
     except (OSError, ValueError, KeyError, yaml.YAMLError) as exc:
         parser.error(str(exc))
