@@ -21,9 +21,11 @@ base:
     type: vllm
     connector: null
   # The engine may take the full VLLM_ENGINE_READY_TIMEOUT_S to become ready.
+  # Lazy loads of the 31 shards from shared NFS ran at ~105 s/shard, past the
+  # script's 3600 s, so both windows are two hours.
   health_check:
     interval_seconds: 10
-    max_attempts: 360
+    max_attempts: 720
   roles:
     agg:
       nodes: 1
@@ -52,7 +54,7 @@ base:
         trust-remote-code: true
       env:
         PYTHONNOUSERSITE: '1'
-        VLLM_ENGINE_READY_TIMEOUT_S: '3600'
+        VLLM_ENGINE_READY_TIMEOUT_S: '7200'
   benchmark:
     type: custom
     command: bash /infmax-workspace/benchmarks/srt_agentic.sh
