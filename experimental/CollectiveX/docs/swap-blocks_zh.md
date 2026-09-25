@@ -99,6 +99,6 @@ H100 首先检查 `/mnt/nfs/lustre/containers` 中由运维预置的推理镜像
 每个任务的临时导入目录在退出时清理。Slurm 排除列表与当前节点清单取交集，忽略已退役
 名称，同时保留对现有节点的排除。B300/GB300 与推理启动器保持一致，使用分区默认 QoS。
 
-旧版 `mi300x-tw` 和 `mi325x-tw` Docker 池仍可显式选择，能否运行取决于 runner
+旧版 `mi325x-tw` Docker 池仍可显式选择，能否运行取决于 runner
 是否在线。Docker 主机无法报告 Slurm 节点容量，因此不进入 Slurm 优先级调度器。
 默认扫描使用当前的 `mi300x` 和 `mi325x` Slurm 池；这两个新增平台未启用 EP 后端。

@@ -10,7 +10,10 @@ resources:
   gpu_type: "b200"
   gpus_per_node: 8
 
-engine: trtllm
+engine:
+  type: trtllm
+  # Dynamo builds before ai-dynamo/dynamo#12162 reject --publish-metrics.
+  publish_metrics: false
 roles:
   prefill:
     nodes: 1
@@ -104,11 +107,12 @@ roles:
 
 
 benchmark:
-  type: "sa-bench"
-  isl: 8192
-  osl: 1024
-  concurrencies: [8]
-  req_rate: "inf"
+  type: custom
+  command: bash /infmax-workspace/benchmarks/multi_node/srt_fixed_sequence.sh
+  env:
+    TOKENIZER: /model
+    ISL: '8192'
+    OSL: '1024'
 
 frontend:
   type: "dynamo"
