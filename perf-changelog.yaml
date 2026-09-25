@@ -8950,3 +8950,15 @@
   description:
     - "Update SGLang image from v0.5.19-cu130 to v0.5.20-cu130 and pass --cuda-graph-max-bs-decode after the alias removal."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3334
+
+- config-keys:
+    - minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp
+    - minimaxm3-fp4-gb200-dynamo-vllm-agentic-disagg-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add MiniMax-M3 GB200 aggregate TP4 SimpleCPU recipe variants with separate scheduler caps, and replace the disaggregated search space with DEP4 prefill plus TP2 decode pools."
+    - "Pin each checked-in recipe to its declared vLLM, Dynamo, and Mooncake runtime, using the shipped EAGLE3 draft precision and real verification for evals."
+    - "新增 MiniMax-M3 GB200 聚合 TP4 SimpleCPU 配方变体，并分别设置调度上限；同时将分离部署搜索空间调整为 DEP4 prefill 与 TP2 decode 池。"
+    - "每个已检入配方固定其声明的 vLLM、Dynamo 与 Mooncake 运行时，使用 EAGLE3 草稿模型随附精度，并在评测中保留真实验证。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3424
