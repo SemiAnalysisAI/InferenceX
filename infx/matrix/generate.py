@@ -223,6 +223,19 @@ def _worker_node_override(worker: dict, setting_name: str) -> int | None:
     return values[0]
 
 
+def _merge_recipe(base: dict, override: dict) -> dict:
+    """Deep-merge an srt-slurm override variant over its base, as srtctl does."""
+    merged = dict(base)
+    for key, value in override.items():
+        if value is None:
+            merged.pop(key, None)
+        elif isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = _merge_recipe(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
 def recipe_node_count(prefill: dict, decode: dict) -> int | None:
     """Read the authoritative node count from a checked-in srt-slurm recipe."""
     config_files = {
@@ -236,7 +249,7 @@ def recipe_node_count(prefill: dict, decode: dict) -> int | None:
     if len(config_files) != 1:
         raise ValueError(f"Conflicting CONFIG_FILE settings: {sorted(config_files)}")
 
-    config_file = config_files.pop()
+    config_file, _, selector = config_files.pop().partition(":")
     repo_root = repository_root()
     recipe_root = repo_root / "benchmarks" / "multi_node" / "srt-slurm-recipes"
     if config_file.startswith("benchmarks/multi_node/srt-slurm-recipes/"):
@@ -249,12 +262,20 @@ def recipe_node_count(prefill: dict, decode: dict) -> int | None:
         return None
 
     recipe = yaml.safe_load(recipe_path.read_text())
+    if "base" in recipe:
+        # srtctl merges a named variant over base (null deletes a key) and
+        # carries a top-level schema into it. Zip groups and non-schema-2
+        # variant files have no authoritative count here; the selected master
+        # topology supplies the estimate.
+        if not (selector == "base" or (selector.startswith("override_") and selector in recipe)):
+            return None
+        schema = recipe.get("schema")
+        recipe = _merge_recipe(recipe["base"], recipe.get(selector) or {})
+        recipe.setdefault("schema", schema)
+        if recipe.get("schema") != 2:
+            return None
     if recipe.get("schema") != 2:
         raise ValueError(f"srt-slurm recipes must declare schema: 2: {recipe_path}")
-    if "base" in recipe:
-        # A file with several override variants has no single authoritative
-        # node count. The selected master topology supplies the estimate.
-        return None
     roles = recipe.get("roles")
     if roles:
         # Schema 2 groups node allocations by role. A colocated decode role
