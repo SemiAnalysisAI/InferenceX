@@ -268,6 +268,28 @@ def test_real_runs_clear_synthetic_without_a_curve(
 
 
 @pytest.mark.parametrize(
+    ("prefix", "args", "expected"),
+    [
+        ("dsv4", {"method": "dspark"}, 2.7),
+        ("kimik3", {"method": "dspark", "draft-model": "Inferact/Kimi-K3-DSpark"}, 2.9),
+        ("minimaxm3", {"method": "eagle3", "draft-model": "Inferact/MiniMax-M3-EAGLE3-GQA"}, 2.6),
+    ],
+)
+def test_atom_forces_golden_acceptance_by_server_flag(
+    golden_dir: Path, prefix: str, args: dict[str, Any], expected: float
+) -> None:
+    recipe = {"roles": {"agg": {"args": {**args, "num-speculative-tokens": 3}, "env": {}}}}
+    env = {**ENV, "MODEL_PREFIX": prefix}
+    result = apply_native(recipe, build_overrides(recipe, "atom", env, golden_dir=golden_dir))
+    assert result["roles"]["agg"]["args"]["spec-decode-acceptance-length"] == expected
+    # Evals verify real drafts, so a recipe-pinned acceptance length is removed.
+    evaluated = apply_native(
+        result, build_overrides(result, "atom", {**env, "EVAL_ONLY": "true"}, golden_dir=golden_dir)
+    )
+    assert "spec-decode-acceptance-length" not in evaluated["roles"]["agg"]["args"]
+
+
+@pytest.mark.parametrize(
     "curve",
     [
         None,
