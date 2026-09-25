@@ -86,9 +86,6 @@ export VLLM_USE_DIRECT_DCP_KV_GATHER=1
 # ~1.5 TB of MXFP4 shards loads well past the default readiness window.
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 export VLLM_RPC_TIMEOUT=600000
-# A Mooncake load blocks inside execute_model, which VLLM_RPC_TIMEOUT does not
-# cover; its own cap defaults to 300s and the offload stall tail reaches 240s.
-export VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS=1800
 export VLLM_PREFIX_CACHE_RETENTION_INTERVAL=0
 export VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0
 export PYTHONNOUSERSITE=1
@@ -162,10 +159,18 @@ EOF
         export WITH_NVIDIA_PEERMEM=0
         export VLLM_MOONCAKE_LOAD_RECV_THREADS=4
 
+        # Mooncake's default 5s read lease is shorter than the observed get
+        # latency at concurrency >= 32 (interval p90 of 10-30s), so the client
+        # discarded 60-75% of the keys it had already transferred as
+        # LEASE_EXPIRED and vLLM recomputed them. The client caps each transfer
+        # at 60s, so a 60s lease only lapses on a transfer that already failed.
+        MOONCAKE_KV_LEASE_TTL=60000
+
         echo "Starting Mooncake master on port $MOONCAKE_MASTER_PORT..."
         mooncake_master --port "$MOONCAKE_MASTER_PORT" \
             --eviction_high_watermark_ratio=0.95 \
             --eviction_ratio=0.10 \
+            --default_kv_lease_ttl="$MOONCAKE_KV_LEASE_TTL" \
             > "$MOONCAKE_MASTER_LOG" 2>&1 &
         MOONCAKE_MASTER_PID=$!
         sleep 2
