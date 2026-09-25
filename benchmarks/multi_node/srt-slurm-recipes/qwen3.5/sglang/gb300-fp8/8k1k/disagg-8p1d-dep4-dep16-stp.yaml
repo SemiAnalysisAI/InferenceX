@@ -159,9 +159,9 @@ roles:
       stream-interval: 50
 
 benchmark:
-  type: "sa-bench"
-  isl: 8192
-  osl: 1024
-  req_rate: "inf"
-  random_range_ratio: 0.8
-  concurrencies: "2048x4096"
+  type: custom
+  command: bash /infmax-workspace/benchmarks/multi_node/srt_fixed_sequence.sh
+  env:
+    TOKENIZER: /model
+    ISL: '8192'
+    OSL: '1024'

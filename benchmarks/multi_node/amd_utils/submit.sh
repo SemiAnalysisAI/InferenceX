@@ -88,10 +88,6 @@ export MODEL_DIR=$MODEL_PATH
 export DOCKER_IMAGE_NAME=$CONTAINER_IMAGE
 export PROFILER_ARGS=$profiler_args
 
-if [[ "$ENGINE" == "vllm-disagg" ]]; then
-    check_env_vars PROXY_STREAM_IDLE_TIMEOUT
-    export PROXY_STREAM_IDLE_TIMEOUT
-fi
 # xP = prefill workers, yD = decode workers (may span multiple nodes)
 export xP=$PREFILL_WORKERS
 export yD=$DECODE_WORKERS

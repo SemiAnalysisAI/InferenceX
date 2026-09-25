@@ -1,7 +1,7 @@
 #!/usr/bin/bash
 
 source "$(dirname "${BASH_SOURCE[0]}")/../benchmarks/benchmark_lib.sh" --validation-only || exit 1
-check_env_vars EVAL_ONLY IS_MULTINODE RUN_EVAL SALLOC_TIME_LIMIT
+check_env_vars EVAL_ONLY IS_MULTINODE RUN_EVAL SALLOC_TIME_LIMIT IS_AGENTIC
 set -e
 
 # shellcheck source=runners/slurm_utils.sh
@@ -14,7 +14,22 @@ SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
 
 set -x
 
-if [[ "$IS_MULTINODE" == "true" ]]; then
+EXECUTION_PATH=agentic
+if [[ "$IS_MULTINODE" == true ]]; then
+    EXECUTION_PATH=multinode
+elif [[ "$IS_AGENTIC" == 0 ]]; then
+    check_env_vars SRT_RECIPE
+    EXECUTION_PATH=native-single-node
+fi
+
+if [[ "$EXECUTION_PATH" == native-single-node ]]; then
+    HF_HUB_CACHE_MOUNT=/mnt/nfs/sa-shared/gharunners/hf-hub-cache
+    SRT_MODEL_PATH="hf:$MODEL"
+    SRT_SQUASH_FILE="/mnt/nfs/lustre/containers/$(printf '%s' "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    launch_srt_single_node h100-dgxc-slurm \
+        --var SLURM_ACCOUNT "$SLURM_ACCOUNT" --var SLURM_PARTITION "$SLURM_PARTITION" \
+        --var CONTAINER_KEY "$IMAGE"
+elif [[ "$EXECUTION_PATH" == multinode ]]; then
 
     # Recipes name HF model IDs; resolve them to pre-staged paths so the shared
     # cluster does not re-download. SRT_SLURM_MODEL_PREFIX must match the
@@ -61,9 +76,9 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     export PATH="$UV_INSTALL_DIR:$PATH"
     source $UV_INSTALL_DIR/env
 
-    uv venv
+    uv venv --quiet
     source .venv/bin/activate
-    uv pip install -e .
+    uv pip install --quiet -e .
 
     if ! command -v srtctl &> /dev/null; then
         echo "Error: Failed to install srtctl"
@@ -89,8 +104,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     echo "Generated srtslurm.yaml:"
     cat srtslurm.yaml
 
-    echo "Running make setup..."
-    make setup ARCH=x86_64
+    run_srt_setup ARCH=x86_64
 
     # Read by srt-slurm's post-benchmark eval.
     export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"

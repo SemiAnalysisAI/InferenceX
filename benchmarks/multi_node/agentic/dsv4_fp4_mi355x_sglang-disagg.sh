@@ -125,7 +125,8 @@ fi
 #   UMBP_DRAM_BYTES      NODE total for the tier, on the prefill node only.
 #                        1.5 TB matches the single-node linker arms, so a PD
 #                        number can be read against them directly. Guarded in
-#                        server_sglang.sh against half of the host's MemTotal.
+#                        server_sglang.sh against UMBP_DRAM_CEILING_GB.
+#   UMBP_DRAM_CEILING_GB tier-size ceiling; defaults to half of MemTotal.
 #   UMBP_MAX_TOTAL_TOKENS  optional device KV pool cap. UNSET on purpose: the
 #                        linker is compared against the HiCache control at an
 #                        IDENTICAL profiled pool, not at a capped one.
@@ -133,12 +134,19 @@ fi
 #                        (socket -> data plane -> host memory registered for
 #                        GPU access). A 1.5 TB tier can take many minutes to
 #                        register on a node holding a lot of page cache.
+#   UMBP_DRAM_USE_HUGEPAGES  on by default; 2 MiB pages keep tier registration
+#                        time predictable. The run fails rather than falling
+#                        back to 4 KiB pages. Set 0 to opt out.
 if [[ "$KV_OFFLOADING" != "none" && "${KV_OFFLOAD_BACKEND:-}" == umbp-linker* ]]; then
   export UMBP_DRAM_BYTES="${UMBP_DRAM_BYTES:-1500000000000}"
-  export UMBP_DRAM_USE_HUGEPAGES="${UMBP_DRAM_USE_HUGEPAGES:-0}"
+  export UMBP_DRAM_CEILING_GB="${UMBP_DRAM_CEILING_GB:-}"
+  export UMBP_DRAM_USE_HUGEPAGES="${UMBP_DRAM_USE_HUGEPAGES:-1}"
   export UMBP_SA_WAIT_SECONDS="${UMBP_SA_WAIT_SECONDS:-1800}"
   export UMBP_SA_WAIT_REGISTERED="${UMBP_SA_WAIT_REGISTERED:-1}"
   export MORI_UMBP_LOG_LEVEL="${MORI_UMBP_LOG_LEVEL:-info}"
+  # Rank 0 opens the barrier only after the UMBP tier is registered, so the
+  # barrier must outlast UMBP_SA_WAIT_SECONDS.
+  export CONTAINER_BARRIER_TIMEOUT="${CONTAINER_BARRIER_TIMEOUT:-$((UMBP_SA_WAIT_SECONDS + 600))}"
 fi
 
 # ── MoRIIO RDMA Send Queue tuning ──

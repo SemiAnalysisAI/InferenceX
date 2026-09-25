@@ -110,6 +110,7 @@ env:
   HF_HUB_CACHE: '/mnt/hf_hub_cache/'
   EXP_NAME: ${{ fromJSON(inputs.config).exp-name }}
   RECIPE_FINGERPRINT: ${{ fromJSON(inputs.config).recipe-fingerprint || '' }}
+  SRT_RECIPE: ${{ fromJSON(inputs.config).srt-recipe || '' }}
   MODEL: ${{ fromJSON(inputs.config).model }}
   THINKING_MODE: thinking_on
   MODEL_PREFIX: ${{ fromJSON(inputs.config).model-prefix }}
@@ -203,7 +204,7 @@ jobs:
         ) ||
         format('[{0}]', toJSON(inputs.runner))
       ) }}
-    timeout-minutes: ${{ inputs.runner == 'cluster:h200-dgxc' && fromJSON(inputs.config).model-prefix == 'dsv41flash' && fromJSON(inputs.config).framework == 'sglang' && inputs.scenario-type == 'agentic-coding' && !inputs.eval-only && fromJSON(inputs.config).conc >= 64 && 1470 || 500 }}
+    timeout-minutes: ${{ inputs.runner == 'cluster:h200-dgxc' && fromJSON(inputs.config).model-prefix == 'dsv41flash' && fromJSON(inputs.config).framework == 'sglang' && inputs.scenario-type == 'agentic-coding' && !inputs.eval-only && fromJSON(inputs.config).conc >= 64 && 1470 || inputs.runner == 'cluster:gb200-nv' && fromJSON(inputs.config).model-prefix == 'dsv41flash' && fromJSON(inputs.config).framework == 'sglang' && inputs.scenario-type == 'agentic-coding' && !inputs.eval-only && fromJSON(inputs.config).conc >= 64 && 750 || 500 }}
     name: >-
       ${{ inputs.klaud-run && 'klaud | ' || '' }}p${{ inputs.priority }} | ${{ fromJSON(inputs.config).model-prefix }} ${{ fromJSON(inputs.config).precision }} ${{ inputs.runner }} ${{ fromJSON(inputs.config).framework == 'sglang' && 'sgl' || fromJSON(inputs.config).framework == 'dynamo-sglang' && 'dyn-sgl' || fromJSON(inputs.config).framework == 'sglang-disagg' && 'sgl-disagg' || fromJSON(inputs.config).framework }}
       TP${{ fromJSON(inputs.config).tp }}${{ format('{0}', fromJSON(inputs.config).pp) != '' && format('{0}', fromJSON(inputs.config).pp) != '1' && format('/PP{0}', fromJSON(inputs.config).pp) || '' }}${{ format('{0}', fromJSON(inputs.config).dcp-size) != '' && format('{0}', fromJSON(inputs.config).dcp-size) != '1' && format('/DCP{0}', fromJSON(inputs.config).dcp-size) || '' }}${{ format('{0}', fromJSON(inputs.config).pcp-size) != '' && format('{0}', fromJSON(inputs.config).pcp-size) != '1' && format('/PCP{0}', fromJSON(inputs.config).pcp-size) || '' }}${{ format('{0}', fromJSON(inputs.config).ep) != '' && format('{0}', fromJSON(inputs.config).ep) != '1' && format('/EP{0}', fromJSON(inputs.config).ep) || '' }}${{ inputs.dp-attn && '/DPA' || '' }}
@@ -284,7 +285,7 @@ jobs:
       - name: Prepare result-processing Python
         if: ${{ !inputs.eval-only }}
         run: |
-          uv python install --no-bin 3.12
+          uv python install --quiet --no-bin 3.12
           result_python=$(uv python find --system 3.12)
           "$result_python" --version
           echo "INFERENCEX_RESULTS_PYTHON=$result_python" >> "$GITHUB_ENV"
@@ -399,6 +400,10 @@ jobs:
             server.log
             results/*.log
             results/*_config.json
+            srt-single-node-logs.tar.gz
+            srt-single-node-submission.json
+            srt-slurm-sha.txt
+            srt-setup.log
           if-no-files-found: ignore
 
       - name: Upload GPU metrics
