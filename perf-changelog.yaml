@@ -8904,6 +8904,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3158
 
 - config-keys:
+    - qwen3.5-fp8-mi355x-sglang
+    - qwen3.5-fp8-mi355x-sglang-mtp
+  description:
+    - "Update SGLang ROCm image from v0.5.18-rocm720-mi35x-20260828 to v0.5.20-rocm720-mi35x-20260924 (latest nightly)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3423
+
+- config-keys:
     - dsv41flash-fp4-mi355x-vllm-agentic-dspark
   scenario-type:
     - agentic-coding
