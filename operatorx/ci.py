@@ -31,6 +31,20 @@ POOLS = {
     "mi325x": "mi325x_amds_8x",
     "mi355x": "mi355x_8x",
 }
+# The self-hosted runner label each pool's runners carry, as InferenceX's benchmark
+# workflows request them. GB200/GB300 runners carry no bare pool label, and the bare
+# mi300x label also matches runners at a site OperatorX is not set up for.
+RUNNERS = {
+    "h100-dgxc": "cluster:h100-dgxc",
+    "h200-dgxc": "cluster:h200-dgxc",
+    "b200-nscale": "cluster:b200-nscale",
+    "b300": "cluster:b300-dsxe",
+    "gb200": "cluster:gb200-nv",
+    "gb300": "cluster:gb300-nv",
+    "mi300x": "cluster:mi300x-amd",
+    "mi325x": "cluster:mi325x-amds",
+    "mi355x": "cluster:mi355x-amds",
+}
 AMD_POOLS = {"mi300x", "mi325x", "mi355x"}
 MODES = ("timing", "counters")
 # Hardware counters per kernel. Latencies from a counters run are perturbed by the profiler.
@@ -865,7 +879,7 @@ def main() -> None:
         write_json(args.out, result)
         slim = {
             "include": [
-                {k: c[k] for k in ("id", "pool", "nodes", "queue-token")}
+                {**{k: c[k] for k in ("id", "pool", "nodes", "queue-token")}, "runner": RUNNERS[c["pool"]]}
                 for c in result["include"]
             ]
         }
