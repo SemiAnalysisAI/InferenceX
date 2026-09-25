@@ -1,0 +1,70 @@
+# Qwen3.8-Flash-Next NVFP4 AgentX on B200 via SGLang with native NEXTN MTP.
+# The 126 GiB checkpoint fits on one GPU, so the cookbook command is TP1.
+base:
+  schema: 2
+  name: qwen3.8next-fp4-b200-sglang-agentic
+  model:
+    path: hf:RadixArk/Qwen3.8-Flash-Next-NVFP4
+    container: lmsysorg/sglang:qwen38flashnext
+    precision: fp4
+  resources:
+    gpu_type: b200
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 1
+      args:
+        served-model-name: RadixArk/Qwen3.8-Flash-Next-NVFP4
+        trust-remote-code: true
+        tensor-parallel-size: 1
+        data-parallel-size: 1
+        expert-parallel-size: 1
+        # Quantization is read from the checkpoint.
+        linear-attn-prefill-backend: flashinfer
+        linear-attn-decode-backend: flashinfer
+        # Flashinfer linear-attn decode on SM100+ requires a bfloat16 state.
+        mamba-ssm-dtype: bfloat16
+        speculative-algorithm: NEXTN
+        speculative-num-steps: 3
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 4
+        reasoning-parser: auto
+        stream-interval: 50
+        scheduler-recv-interval: 10
+        tokenizer-worker-num: 6
+        enable-metrics: true
+        enable-cache-report: true
+      env:
+        TORCH_CUDA_ARCH_LIST: '10.0'
+        PYTHONNOUSERSITE: '1'
+        NCCL_NVLS_ENABLE: '1'
+        SGL_ENABLE_JIT_DEEPGEMM: 'false'
+        SGLANG_ENABLE_FLASHINFER_GEMM: 'true'
+        # Outlast AIPerf's 300 s client connection pool.
+        SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
+    env:
+      MODEL: RadixArk/Qwen3.8-Flash-Next-NVFP4
+      # 256k-capped corpus, within this model's context.
+      WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126_256k
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+
+# One variant per point. NEXTN resets an unset admission cap to 48, so it is
+# explicit: 2x CONC, with the graph batch equal to it. C16 needs a larger
+# static fraction and a bounded Mamba cache.
+override_c1: {roles: {agg: {args: {max-running-requests: 2, cuda-graph-max-bs: 2, mem-fraction-static: 0.8}}}, benchmark: {env: {CONC: '1'}}}
+override_c4: {roles: {agg: {args: {max-running-requests: 8, cuda-graph-max-bs: 8, mem-fraction-static: 0.8}}}, benchmark: {env: {CONC: '4'}}}
+override_c8: {roles: {agg: {args: {max-running-requests: 16, cuda-graph-max-bs: 16, mem-fraction-static: 0.8}}}, benchmark: {env: {CONC: '8'}}}
+override_c16: {roles: {agg: {args: {max-running-requests: 32, cuda-graph-max-bs: 32, mem-fraction-static: 0.9, max-mamba-cache-size: 160}}}, benchmark: {env: {CONC: '16'}}}

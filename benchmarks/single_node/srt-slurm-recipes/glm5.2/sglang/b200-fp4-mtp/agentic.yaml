@@ -1,0 +1,79 @@
+# GLM-5.2 NVFP4 AgentX on B200 with SGLang EAGLE MTP off the checkpoint's nextn
+# head: the TP8 low-latency arm (fp8 KV, cutedsl bf16 GEMM) with HiCache
+# host-DRAM offload at every point.
+base:
+  schema: 2
+  name: glm5.2-fp4-b200-sglang-agentic
+  model:
+    path: hf:nvidia/GLM-5.2-NVFP4
+    container: lmsysorg/sglang:nightly-dev-cu13-20260901-07c8f729
+    precision: fp4
+  resources:
+    gpu_type: b200
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        served-model-name: nvidia/GLM-5.2-NVFP4
+        trust-remote-code: true
+        tensor-parallel-size: 8
+        expert-parallel-size: 1
+        kv-cache-dtype: fp8_e4m3
+        bf16-gemm-backend: cutedsl
+        max-prefill-tokens: 8192
+        quantization: modelopt_fp4
+        # GLM-5.2 emits the GLM-4.7 tool-call format; glm45 leaves calls as raw text.
+        tool-call-parser: glm47
+        reasoning-parser: glm45
+        chunked-prefill-size: 8192
+        # B200 HBM leaves ~31 GB outside the static share for EAGLE verification,
+        # graph capture and DSA indexer temporaries.
+        mem-fraction-static: 0.83
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 3
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 4
+        enable-hierarchical-cache: true
+        hicache-write-policy: write_back
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
+        watchdog-timeout: 1800
+        enable-metrics: true
+      env:
+        PYTHONNOUSERSITE: '1'
+        TORCH_CUDA_ARCH_LIST: '10.0'
+        # Keep FlashInfer/Triton/Inductor/JIT caches off the shared home.
+        SGLANG_CACHE_DIR: /tmp/sglang-cache
+        # Outlast AIPerf's pooled keep-alive connections.
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
+    env:
+      MODEL: nvidia/GLM-5.2-NVFP4
+      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1731'
+
+# One variant per point. Admission is 2x CONC and the graph batch matches it,
+# capped at 64. MLA ranks hold complete per-token KV, so ratio 0.75 gives too
+# few host slots past C8; C12/C16 pin a 169 GB/rank pool (~1,662 GB across TP8
+# with the DSA indexer, within the 1,731 GB budget).
+override_c1: {roles: {agg: {args: {max-running-requests: 2, cuda-graph-max-bs: 2, hicache-ratio: 0.75}}}, benchmark: {env: {CONC: '1'}}}
+override_c4: {roles: {agg: {args: {max-running-requests: 8, cuda-graph-max-bs: 8, hicache-ratio: 0.75}}}, benchmark: {env: {CONC: '4'}}}
+override_c8: {roles: {agg: {args: {max-running-requests: 16, cuda-graph-max-bs: 16, hicache-ratio: 0.75}}}, benchmark: {env: {CONC: '8'}}}
+override_c12: {roles: {agg: {args: {max-running-requests: 24, cuda-graph-max-bs: 24, hicache-size: 169}}}, benchmark: {env: {CONC: '12'}}}
+override_c16: {roles: {agg: {args: {max-running-requests: 32, cuda-graph-max-bs: 32, hicache-size: 169}}}, benchmark: {env: {CONC: '16'}}}
