@@ -872,8 +872,17 @@ dsr1-fp4-b200-sglang:
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 4, ep: 1, conc-start: 1, conc-end: 32 }
-      - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 256 }
+      - tp: 4
+        ep: 1
+        conc-start: 1
+        conc-end: 32
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsr1/sglang/b200-fp4/8k1k.yaml
+      - tp: 4
+        ep: 4
+        dp-attn: true
+        conc-start: 64
+        conc-end: 256
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsr1/sglang/b200-fp4/8k1k.yaml
     # agentic-coding: temporarily disabled — blocked by e2e-tests.yml artifact
     # name mismatch (downloads `agentic_*` but benchmark-tmpl.yml uploads as
     # `bmk_agentic_*`). Re-enable once that workflow is aligned.
@@ -896,8 +905,19 @@ dsr1-fp4-b200-sglang-mtp:
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 4, ep: 1, conc-start: 1, conc-end: 32, spec-decoding: mtp }
-      - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 256, spec-decoding: mtp }
+      - tp: 4
+        ep: 1
+        conc-start: 1
+        conc-end: 32
+        spec-decoding: mtp
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsr1/sglang/b200-fp4-mtp/8k1k.yaml
+      - tp: 4
+        ep: 4
+        dp-attn: true
+        conc-start: 64
+        conc-end: 256
+        spec-decoding: mtp
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsr1/sglang/b200-fp4-mtp/8k1k.yaml
 
 dsv4-fp4-b200-sglang-agentic-hicache-mtp:
   image: lmsysorg/sglang:v0.5.19-cu130
@@ -948,8 +968,16 @@ dsr1-fp4-b300-sglang:
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 4, ep: 4, conc-start: 1, conc-end: 128 }
-      - { tp: 8, ep: 8, conc-start: 1, conc-end: 16 }
+      - tp: 4
+        ep: 4
+        conc-start: 1
+        conc-end: 128
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsr1/sglang/b300-fp4/8k1k.yaml
+      - tp: 8
+        ep: 8
+        conc-start: 1
+        conc-end: 16
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsr1/sglang/b300-fp4/8k1k.yaml
 
 dsr1-fp4-b200-trt:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
@@ -967,11 +995,31 @@ dsr1-fp4-b200-trt:
       # low concurrency cases use TP only
       # concurrency 32 uses TP & EP
       # high concurrency cases use TP & EP & DP-ATTN
-      - { tp: 4, conc-start: 4, conc-end: 32 }
-      - { tp: 4, ep: 4, conc-start: 32, conc-end: 32 }
-      - { tp: 4, ep: 4, dp-attn: true, conc-start: 256, conc-end: 256 }
-      - { tp: 8, conc-start: 4, conc-end: 4 }
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 128, conc-end: 256 }
+      - tp: 4
+        conc-start: 4
+        conc-end: 32
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsr1/trtllm/b200-fp4/8k1k.yaml
+      - tp: 4
+        ep: 4
+        conc-start: 32
+        conc-end: 32
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsr1/trtllm/b200-fp4/8k1k.yaml
+      - tp: 4
+        ep: 4
+        dp-attn: true
+        conc-start: 256
+        conc-end: 256
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsr1/trtllm/b200-fp4/8k1k.yaml
+      - tp: 8
+        conc-start: 4
+        conc-end: 4
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsr1/trtllm/b200-fp4/8k1k.yaml
+      - tp: 8
+        ep: 8
+        dp-attn: true
+        conc-start: 128
+        conc-end: 256
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsr1/trtllm/b200-fp4/8k1k.yaml
 
 dsr1-fp4-b200-trt-mtp:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
@@ -987,12 +1035,37 @@ dsr1-fp4-b200-trt-mtp:
       osl: 1024
       search-space:
         # TP=4 configurations
-      - { tp: 4, conc-start: 4, conc-end: 16, spec-decoding: mtp }
-      - { tp: 4, ep: 4, conc-start: 32, conc-end: 32, spec-decoding: mtp }
-      - { tp: 4, ep: 4, dp-attn: true, conc-start: 256, conc-end: 256, spec-decoding: mtp }
+      - tp: 4
+        conc-start: 4
+        conc-end: 16
+        spec-decoding: mtp
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsr1/trtllm/b200-fp4-mtp/8k1k.yaml
+      - tp: 4
+        ep: 4
+        conc-start: 32
+        conc-end: 32
+        spec-decoding: mtp
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsr1/trtllm/b200-fp4-mtp/8k1k.yaml
+      - tp: 4
+        ep: 4
+        dp-attn: true
+        conc-start: 256
+        conc-end: 256
+        spec-decoding: mtp
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsr1/trtllm/b200-fp4-mtp/8k1k.yaml
         # TP=8 configurations
-      - { tp: 8, conc-start: 4, conc-end: 4, spec-decoding: mtp }
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 256, spec-decoding: mtp }
+      - tp: 8
+        conc-start: 4
+        conc-end: 4
+        spec-decoding: mtp
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsr1/trtllm/b200-fp4-mtp/8k1k.yaml
+      - tp: 8
+        ep: 8
+        dp-attn: true
+        conc-start: 64
+        conc-end: 256
+        spec-decoding: mtp
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsr1/trtllm/b200-fp4-mtp/8k1k.yaml
 
 dsr1-fp8-b200-sglang:
   image: lmsysorg/sglang:v0.5.12-cu130
@@ -1007,8 +1080,16 @@ dsr1-fp8-b200-sglang:
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 1, conc-end: 4 }
-      - { tp: 4, ep: 1, conc-start: 1, conc-end: 32 }
+      - tp: 8
+        ep: 1
+        conc-start: 1
+        conc-end: 4
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsr1/sglang/b200-fp8/8k1k.yaml
+      - tp: 4
+        ep: 1
+        conc-start: 1
+        conc-end: 32
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsr1/sglang/b200-fp8/8k1k.yaml
 
   # NOTE: At the time of submission, https://cookbook.sglang.io/autoregressive/DeepSeek/DeepSeek-R1
   # does not have a B300-specific recipe, so this config reuses the existing DSR1 FP8
@@ -1026,8 +1107,16 @@ dsr1-fp8-b300-sglang:
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 1, conc-end: 4 }
-      - { tp: 4, ep: 1, conc-start: 1, conc-end: 32 }
+      - tp: 8
+        ep: 1
+        conc-start: 1
+        conc-end: 4
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsr1/sglang/b300-fp8/8k1k.yaml
+      - tp: 4
+        ep: 1
+        conc-start: 1
+        conc-end: 32
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsr1/sglang/b300-fp8/8k1k.yaml
 
 dsv4-fp4-b300-sglang-agentic-hicache-mtp:
   image: lmsysorg/sglang:nightly-dev-20260901-07c8f729
@@ -1069,9 +1158,23 @@ qwen3.5-fp8-b200-sglang:
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 1, conc-end: 4 }
-      - { tp: 4, ep: 1, conc-start: 2, conc-end: 512 }
-      - { tp: 4, ep: 1, conc-list: [320, 384, 448, 640] }
+      - tp: 8
+        conc-start: 1
+        conc-end: 4
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/b200-fp8/8k1k.yaml
+      - tp: 4
+        ep: 1
+        conc-start: 2
+        conc-end: 512
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/b200-fp8/8k1k.yaml
+      - tp: 4
+        ep: 1
+        conc-list:
+        - 320
+        - 384
+        - 448
+        - 640
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/b200-fp8/8k1k.yaml
 
 qwen3.5-fp8-b200-sglang-agentic-mtp:
   image: lmsysorg/sglang:nightly-dev-cu13-20260914-4358a161
@@ -1103,8 +1206,16 @@ qwen3.5-fp4-b200-sglang:
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 4, ep: 1, conc-start: 4, conc-end: 4 }
-      - { tp: 2, ep: 1, conc-start: 4, conc-end: 128 }
+      - tp: 4
+        ep: 1
+        conc-start: 4
+        conc-end: 4
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/b200-fp4/8k1k.yaml
+      - tp: 2
+        ep: 1
+        conc-start: 4
+        conc-end: 128
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/b200-fp4/8k1k.yaml
 
 qwen3.5-fp4-b200-sglang-mtp:
   image: lmsysorg/sglang:v0.5.14-cu130
@@ -1119,9 +1230,26 @@ qwen3.5-fp4-b200-sglang-mtp:
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 4, ep: 1, conc-start: 4, conc-end: 4, spec-decoding: mtp }
-      - { tp: 2, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
-      - { tp: 2, ep: 2, conc-list: [16, 32, 64], spec-decoding: mtp }
+      - tp: 4
+        ep: 1
+        conc-start: 4
+        conc-end: 4
+        spec-decoding: mtp
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/b200-fp4-mtp/8k1k.yaml
+      - tp: 2
+        ep: 1
+        conc-start: 4
+        conc-end: 64
+        spec-decoding: mtp
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/b200-fp4-mtp/8k1k.yaml
+      - tp: 2
+        ep: 2
+        conc-list:
+        - 16
+        - 32
+        - 64
+        spec-decoding: mtp
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/b200-fp4-mtp/8k1k.yaml
 
 qwen3.5-fp8-b200-sglang-mtp:
   image: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
@@ -1136,8 +1264,18 @@ qwen3.5-fp8-b200-sglang-mtp:
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 4, spec-decoding: mtp }
-      - { tp: 4, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
+      - tp: 8
+        ep: 1
+        conc-start: 4
+        conc-end: 4
+        spec-decoding: mtp
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/b200-fp8-mtp/8k1k.yaml
+      - tp: 4
+        ep: 1
+        conc-start: 4
+        conc-end: 256
+        spec-decoding: mtp
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/b200-fp8-mtp/8k1k.yaml
 
 qwen3.5-fp8-b300-sglang-mtp:
   image: lmsysorg/sglang:v0.5.12-cu130
@@ -1152,7 +1290,12 @@ qwen3.5-fp8-b300-sglang-mtp:
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 4, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
+      - tp: 4
+        ep: 1
+        conc-start: 4
+        conc-end: 256
+        spec-decoding: mtp
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/b300-fp8-mtp/8k1k.yaml
 
 qwen3.5-fp8-b300-sglang:
   image: lmsysorg/sglang:v0.5.12-cu130
@@ -1167,7 +1310,11 @@ qwen3.5-fp8-b300-sglang:
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 4, ep: 1, conc-start: 4, conc-end: 256 }
+      - tp: 4
+        ep: 1
+        conc-start: 4
+        conc-end: 256
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/b300-fp8/8k1k.yaml
 
 qwen3.5-fp4-b300-sglang:
   image: lmsysorg/sglang:v0.5.14-cu130
@@ -1182,44 +1329,16 @@ qwen3.5-fp4-b300-sglang:
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 4, ep: 1, conc-start: 4, conc-end: 128 }
-      - { tp: 2, ep: 2, conc-start: 4, conc-end: 128 }
-
-# Qwen3.5-397B-A17B NVFP4 single-node SGLang sweep using 4 of 8 RTX PRO
-# 6000 Blackwell GPUs. Both arms use ordinary NCCL collectives on PCIe.
-qwen3.5-fp4-rtx6000pro-sglang:
-  image: lmsysorg/sglang:v0.5.16-cu130
-  model: nvidia/Qwen3.5-397B-A17B-NVFP4
-  model-prefix: qwen3.5
-  runner: rtx6000pro-lat
-  precision: fp4
-  framework: sglang
-  multinode: false
-  scenarios:
-    fixed-seq-len:
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - { tp: 4, conc-list: [1, 4, 16, 64] }
-      - { tp: 4, ep: 4, conc-list: [1, 4, 16, 64] }
-
-# Same sweep with the built-in MTP draft head driven through SGLang's EAGLE
-# speculative path.
-qwen3.5-fp4-rtx6000pro-sglang-mtp:
-  image: lmsysorg/sglang:v0.5.16-cu130
-  model: nvidia/Qwen3.5-397B-A17B-NVFP4
-  model-prefix: qwen3.5
-  runner: rtx6000pro-lat
-  precision: fp4
-  framework: sglang
-  multinode: false
-  scenarios:
-    fixed-seq-len:
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - { tp: 4, conc-list: [1, 4, 16, 64], spec-decoding: mtp }
-      - { tp: 4, ep: 4, conc-list: [1, 4, 16, 64], spec-decoding: mtp }
+      - tp: 4
+        ep: 1
+        conc-start: 4
+        conc-end: 128
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/b300-fp4/8k1k.yaml
+      - tp: 2
+        ep: 2
+        conc-start: 4
+        conc-end: 128
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/b300-fp4/8k1k.yaml
 
 qwen3.5-fp4-b300-sglang-mtp:
   image: lmsysorg/sglang:v0.5.19-cu130
@@ -1234,8 +1353,18 @@ qwen3.5-fp4-b300-sglang-mtp:
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 4, ep: 1, conc-start: 4, conc-end: 128, spec-decoding: mtp }
-      - { tp: 2, ep: 2, conc-start: 4, conc-end: 128, spec-decoding: mtp }
+      - tp: 4
+        ep: 1
+        conc-start: 4
+        conc-end: 128
+        spec-decoding: mtp
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/b300-fp4-mtp/8k1k.yaml
+      - tp: 2
+        ep: 2
+        conc-start: 4
+        conc-end: 128
+        spec-decoding: mtp
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/b300-fp4-mtp/8k1k.yaml
 
 # Kimi K3 is a 2.8T MXFP4 MoE served on H200 nodes.
 # These are the three aggregated strategy classes from the official H200
@@ -1343,7 +1472,12 @@ dsr1-fp8-b200-sglang-mtp:
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 1, conc-end: 512, spec-decoding: mtp }
+      - tp: 8
+        ep: 1
+        conc-start: 1
+        conc-end: 512
+        spec-decoding: mtp
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsr1/sglang/b200-fp8-mtp/8k1k.yaml
 
   # NOTE: At the time of submission, https://cookbook.sglang.io/autoregressive/DeepSeek/DeepSeek-R1
   # does not have a B300-specific recipe, so this config reuses the existing DSR1 FP8
@@ -1361,7 +1495,12 @@ dsr1-fp8-b300-sglang-mtp:
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 1, conc-end: 512, spec-decoding: mtp }
+      - tp: 8
+        ep: 1
+        conc-start: 1
+        conc-end: 512
+        spec-decoding: mtp
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsr1/sglang/b300-fp8-mtp/8k1k.yaml
 
 kimik3-fp4-b300-vllm-agentic-dspark:
   # TP8 x DCP8 with Mooncake as the external KV tier. The recipe drafts with
@@ -1405,9 +1544,21 @@ dsr1-fp8-b200-trt:
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 64, conc-end: 256 }
-      - { tp: 4, ep: 1, conc-start: 8, conc-end: 32 }
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 8 }
+      - tp: 8
+        ep: 1
+        conc-start: 64
+        conc-end: 256
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsr1/trtllm/b200-fp8/8k1k.yaml
+      - tp: 4
+        ep: 1
+        conc-start: 8
+        conc-end: 32
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsr1/trtllm/b200-fp8/8k1k.yaml
+      - tp: 8
+        ep: 1
+        conc-start: 4
+        conc-end: 8
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsr1/trtllm/b200-fp8/8k1k.yaml
 
 dsr1-fp8-b200-trt-mtp:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
@@ -1423,7 +1574,12 @@ dsr1-fp8-b200-trt-mtp:
       osl: 1024
       search-space:
       # TP8 for all points
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
+      - tp: 8
+        ep: 1
+        conc-start: 4
+        conc-end: 256
+        spec-decoding: mtp
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsr1/trtllm/b200-fp8-mtp/8k1k.yaml
 
 dsr1-fp8-h200-sglang:
   image: lmsysorg/sglang:v0.5.12-cu130
@@ -1438,7 +1594,10 @@ dsr1-fp8-h200-sglang:
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64 }
+      - tp: 8
+        conc-start: 4
+        conc-end: 64
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsr1/sglang/h200-fp8/8k1k.yaml
 
 dsr1-fp8-h200-sglang-mtp:
   image: lmsysorg/sglang:v0.5.19-cu130
@@ -1453,7 +1612,12 @@ dsr1-fp8-h200-sglang-mtp:
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
+      - tp: 8
+        ep: 1
+        conc-start: 4
+        conc-end: 64
+        spec-decoding: mtp
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsr1/sglang/h200-fp8-mtp/8k1k.yaml
 
 # DeepSeek-V4-Pro AgentX on one aggregated TP8 H200 worker. Keep the serving
 # topology fixed and sweep only concurrency to produce the Pareto curve.
@@ -1519,7 +1683,11 @@ qwen3.5-fp8-h200-sglang:
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
+      - tp: 8
+        ep: 8
+        conc-start: 4
+        conc-end: 64
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/h200-fp8/8k1k.yaml
 
 qwen3.5-fp8-h200-sglang-mtp:
   image: lmsysorg/sglang:v0.5.14-cu130
@@ -1534,7 +1702,12 @@ qwen3.5-fp8-h200-sglang-mtp:
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, ep: 8, conc-start: 4, conc-end: 128, spec-decoding: mtp }
+      - tp: 8
+        ep: 8
+        conc-start: 4
+        conc-end: 128
+        spec-decoding: mtp
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/h200-fp8-mtp/8k1k.yaml
 
 dsr1-fp8-h200-trt:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
@@ -1551,8 +1724,17 @@ dsr1-fp8-h200-trt:
       osl: 1024
       # If CONC > 32, then DP_ATTN=true
       search-space:
-      - { tp: 8, ep: 8, conc-start: 4, conc-end: 32 }
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 64 }
+      - tp: 8
+        ep: 8
+        conc-start: 4
+        conc-end: 32
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsr1/trtllm/h200-fp8/8k1k.yaml
+      - tp: 8
+        ep: 8
+        dp-attn: true
+        conc-start: 64
+        conc-end: 64
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsr1/trtllm/h200-fp8/8k1k.yaml
 
 dsr1-fp8-h200-trt-mtp:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
@@ -1569,8 +1751,19 @@ dsr1-fp8-h200-trt-mtp:
       osl: 1024
       search-space:
       # If CONC >= 64, then DP_ATTN=true, MTP=1
-      - { tp: 8, ep: 8, conc-start: 4, conc-end: 32, spec-decoding: mtp }
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 256, spec-decoding: mtp }
+      - tp: 8
+        ep: 8
+        conc-start: 4
+        conc-end: 32
+        spec-decoding: mtp
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsr1/trtllm/h200-fp8-mtp/8k1k.yaml
+      - tp: 8
+        ep: 8
+        dp-attn: true
+        conc-start: 64
+        conc-end: 256
+        spec-decoding: mtp
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsr1/trtllm/h200-fp8-mtp/8k1k.yaml
 
 dsr1-fp8-h200-dynamo-trt:
   image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post1
@@ -3950,8 +4143,16 @@ qwen3.5-fp8-h100-sglang:
       osl: 1024
       require-power: true
       search-space:
-      - { tp: 8, ep: 1, conc-start: 1, conc-end: 8 }
-      - { tp: 8, ep: 8, conc-start: 16, conc-end: 256 }
+      - tp: 8
+        ep: 1
+        conc-start: 1
+        conc-end: 8
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/h100-fp8/8k1k.yaml
+      - tp: 8
+        ep: 8
+        conc-start: 16
+        conc-end: 256
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/h100-fp8/8k1k.yaml
 
 qwen3.5-fp8-h100-sglang-mtp:
   image: lmsysorg/sglang:v0.5.19-cu130
@@ -3967,7 +4168,12 @@ qwen3.5-fp8-h100-sglang-mtp:
       osl: 1024
       require-power: true
       search-space:
-      - { tp: 8, ep: 8, conc-start: 4, conc-end: 32, spec-decoding: mtp }
+      - tp: 8
+        ep: 8
+        conc-start: 4
+        conc-end: 32
+        spec-decoding: mtp
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/h100-fp8-mtp/8k1k.yaml
 
 qwen3.5-fp4-gb300-dynamo-sglang:
   image: lmsysorg/sglang:v0.5.14-cu130
@@ -5117,12 +5323,42 @@ qwen3.5-fp4-b200-trt:
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 2, ep: 1, conc-list: [4, 16] }
-      - { tp: 4, ep: 1, conc-list: [4] }
-      - { tp: 2, ep: 2, conc-list: [8, 32] }
-      - { tp: 8, ep: 8, conc-list: [4] }
-      - { tp: 4, ep: 4, dp-attn: true, conc-list: [1024] }
-      - { tp: 8, ep: 8, dp-attn: true, conc-list: [256, 512, 1024] }
+      - tp: 2
+        ep: 1
+        conc-list:
+        - 4
+        - 16
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/qwen3.5/trtllm/b200-fp4/8k1k.yaml
+      - tp: 4
+        ep: 1
+        conc-list:
+        - 4
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/qwen3.5/trtllm/b200-fp4/8k1k.yaml
+      - tp: 2
+        ep: 2
+        conc-list:
+        - 8
+        - 32
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/qwen3.5/trtllm/b200-fp4/8k1k.yaml
+      - tp: 8
+        ep: 8
+        conc-list:
+        - 4
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/qwen3.5/trtllm/b200-fp4/8k1k.yaml
+      - tp: 4
+        ep: 4
+        dp-attn: true
+        conc-list:
+        - 1024
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/qwen3.5/trtllm/b200-fp4/8k1k.yaml
+      - tp: 8
+        ep: 8
+        dp-attn: true
+        conc-list:
+        - 256
+        - 512
+        - 1024
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/qwen3.5/trtllm/b200-fp4/8k1k.yaml
 
 qwen3.5-fp4-b200-trt-mtp:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc18
@@ -5137,11 +5373,40 @@ qwen3.5-fp4-b200-trt-mtp:
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 2, ep: 1, spec-decoding: "mtp", conc-list: [4] }
-      - { tp: 2, ep: 2, spec-decoding: "mtp", conc-list: [8, 16] }
-      - { tp: 4, ep: 4, spec-decoding: "mtp", conc-list: [4] }
-      - { tp: 8, ep: 8, spec-decoding: "mtp", conc-list: [4] }
-      - { tp: 8, ep: 8, dp-attn: true, spec-decoding: "mtp", conc-list: [128, 256, 1024] }
+      - tp: 2
+        ep: 1
+        spec-decoding: mtp
+        conc-list:
+        - 4
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/qwen3.5/trtllm/b200-fp4-mtp/8k1k.yaml
+      - tp: 2
+        ep: 2
+        spec-decoding: mtp
+        conc-list:
+        - 8
+        - 16
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/qwen3.5/trtllm/b200-fp4-mtp/8k1k.yaml
+      - tp: 4
+        ep: 4
+        spec-decoding: mtp
+        conc-list:
+        - 4
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/qwen3.5/trtllm/b200-fp4-mtp/8k1k.yaml
+      - tp: 8
+        ep: 8
+        spec-decoding: mtp
+        conc-list:
+        - 4
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/qwen3.5/trtllm/b200-fp4-mtp/8k1k.yaml
+      - tp: 8
+        ep: 8
+        dp-attn: true
+        spec-decoding: mtp
+        conc-list:
+        - 128
+        - 256
+        - 1024
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/qwen3.5/trtllm/b200-fp4-mtp/8k1k.yaml
 
 minimaxm3-fp8-h100-vllm-agentic-mtp:
   image: vllm/vllm-openai:v0.27.1
@@ -8065,18 +8330,17 @@ dsv41flash-fp4-h100-vllm-agentic-dspark:
 
 # SGLang arm for DeepSeek-V4.1-Flash AgentX on H100, from the SGLang cookbook
 # (https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1).
-# DSv4.1 Flash support has not shipped in an SGLang release; this uses the
-# preview build lmsysorg/sglang:dev-dsv41, digest
-# sha256:4a5d132a06a77c8331e15845f2e925adc788b00105097ad55409afa3f4fa4860 (2026-09-11, amd64 + arm64).
+# Latest upstream CUDA 13 nightly, verified 2026-09-22. Manifest digest:
+# sha256:0e1b14e302619a42ef5581b87db6804651d4f946301cf543d74a3a1eb1c33b40.
 # Native five-token DSpark (--speculative-algorithm DSPARK
 # --speculative-dspark-block-size 5), thinking on, golden AL 3.51 for
 # throughput, real verification for evals. The KV cache stays GPU-resident.
 # H100 is not in the cookbook's hardware table. The script moves the Engram
-# tables to one shared host copy (SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1) and
-# halves the prefill chunk so weights, indexer buffers and a KV pool fit 80 GB.
-# Concurrency stops at 8 until the KV ceiling is measured.
+# tables to per-rank anonymous host shards and uses 4096-token prefill chunks
+# so weights, indexer buffers and the KV pool fit 80 GB.
+# Concurrency 1 through 20 is subject to full canonical qualification.
 dsv41flash-fp4-h100-sglang-agentic-dspark:
-  image: lmsysorg/sglang:dev-dsv41
+  image: lmsysorg/sglang:nightly-dev-cu13-20260922-582389ce@sha256:0e1b14e302619a42ef5581b87db6804651d4f946301cf543d74a3a1eb1c33b40
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:h100-dgxc
@@ -8087,7 +8351,22 @@ dsv41flash-fp4-h100-sglang-agentic-dspark:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, ep: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8] }
+      - { tp: 8, ep: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 20] }
+
+# Sweep supported DP8 attention alongside the retained plain TP8 curve.
+dsv41flash-fp4-h100-sglang-agentic-dspark-dpa:
+  image: lmsysorg/sglang:nightly-dev-cu13-20260922-582389ce@sha256:0e1b14e302619a42ef5581b87db6804651d4f946301cf543d74a3a1eb1c33b40
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:h100-dgxc
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [4, 8, 16, 20] }
 
 dsv41flash-fp4-gb200-vllm-agentic-dspark:
   image: vllm/vllm-openai:nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3
@@ -8112,16 +8391,16 @@ dsv41flash-fp4-gb200-vllm-agentic-dspark:
 
 # SGLang arm for DeepSeek-V4.1-Flash AgentX on GB200, from the SGLang cookbook
 # (https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1).
-# DSv4.1 Flash support has not shipped in an SGLang release; this uses the
-# preview build lmsysorg/sglang:dev-dsv41, digest
-# sha256:4a5d132a06a77c8331e15845f2e925adc788b00105097ad55409afa3f4fa4860 (2026-09-11, amd64 + arm64).
+# Official CUDA 13 nightly, verified 2026-09-23 (amd64 + arm64):
+# manifest sha256:5921361fcf358cdde4df1968c941c14157f418613b099ad7f3e5aeed6427ae15
+# arm64 sha256:d49261d2edd82fed2dd6254c33e68871ccf7a399498e059ec91dc4453a5808c3.
 # Native five-token DSpark (--speculative-algorithm DSPARK
 # --speculative-dspark-block-size 5), thinking on, golden AL 3.51 for
 # throughput, real verification for evals. The KV cache stays GPU-resident.
-# Follows the cookbook's verified Blackwell TP4/EP4 low-latency cell; backends
+# Match published vLLM TP2/EP1 and TP4/EP1 across C1-128; native backends
 # resolve automatically (dsv4 / flashinfer_mxfp4 / flashinfer_cutedsl).
 dsv41flash-fp4-gb200-sglang-agentic-dspark:
-  image: lmsysorg/sglang:dev-dsv41
+  image: lmsysorg/sglang:nightly-dev-cu13-20260923-06008c17@sha256:5921361fcf358cdde4df1968c941c14157f418613b099ad7f3e5aeed6427ae15
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:gb200-nv
@@ -8132,7 +8411,8 @@ dsv41flash-fp4-gb200-sglang-agentic-dspark:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 4, ep: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+      - { tp: 4, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+      - { tp: 2, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
 
 dsv41flash-fp4-b300-vllm-agentic-dspark:
   image: vllm/vllm-openai:deepseekv41-flash-0909
@@ -8245,16 +8525,15 @@ dsv41flash-fp4-h200-vllm-agentic-dspark:
 
 # SGLang arm for DeepSeek-V4.1-Flash AgentX on H200, from the SGLang cookbook
 # (https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1).
-# DSv4.1 Flash support has not shipped in an SGLang release; this uses the
-# preview build lmsysorg/sglang:dev-dsv41, digest
-# sha256:4a5d132a06a77c8331e15845f2e925adc788b00105097ad55409afa3f4fa4860 (2026-09-11, amd64 + arm64).
+# Latest official CUDA 13 nightly as of 2026-09-22; multiarch digest
+# sha256:0e1b14e302619a42ef5581b87db6804651d4f946301cf543d74a3a1eb1c33b40.
 # Native five-token DSpark (--speculative-algorithm DSPARK
 # --speculative-dspark-block-size 5), thinking on, golden AL 3.51 for
 # throughput, real verification for evals. The KV cache stays GPU-resident.
-# Hopper follows the cookbook's verified H200 TP8/EP8 cell, which pins the dsv4
-# attention backend and the flashinfer_mxfp4 MoE runner.
+# Match published vLLM TP4/EP1 and TP8/EP1 using dsv4 attention and the nightly's
+# native MXFP4 x BF16 Marlin MoE runner.
 dsv41flash-fp4-h200-sglang-agentic-dspark:
-  image: lmsysorg/sglang:dev-dsv41
+  image: lmsysorg/sglang:nightly-dev-cu13-20260923-06008c17
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:h200-dgxc
@@ -8265,7 +8544,8 @@ dsv41flash-fp4-h200-sglang-agentic-dspark:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, ep: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16] }
+      - { tp: 4, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+      - { tp: 8, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
 
 dsv4-fp4-b200-dynamo-sglang-agentic-agg:
   image: lmsysorg/sglang:nightly-dev-20260916-c9a8fba9
@@ -8719,3 +8999,19 @@ dsv41flash-fp4-b300-sglang-agentic-dspark:
       search-space:
       - { tp: 4, ep: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
       - { tp: 2, ep: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+
+# Official SGLang nightly; Engram weights in host DRAM, native DSpark draft.
+dsv41flash-fp4-gb300-sglang-agentic-dspark:
+  image: lmsysorg/sglang:nightly-dev-cu13-20260922-582389ce@sha256:0e1b14e302619a42ef5581b87db6804651d4f946301cf543d74a3a1eb1c33b40
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 2, ep: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+      - { tp: 4, ep: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }

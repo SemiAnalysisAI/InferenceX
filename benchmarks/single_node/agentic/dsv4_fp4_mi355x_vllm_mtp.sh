@@ -2,9 +2,11 @@
 set -eo pipefail
 set -x
 
-# DeepSeek-V4-Pro FP4 on MI355X with vLLM MTP and golden synthetic acceptance.
+# DeepSeek-V4-Pro-0813 FP4 on MI355X with vLLM DSpark K6 and golden synthetic
+# acceptance. The script retains MTP K3 support for historical and ad hoc runs.
 # Pure TP (DP_ATTENTION=false), TP+EP (EP_SIZE>1), and DEP (DP_ATTENTION=true)
-# arms. https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4-Pro?hardware=mi355x
+# arms are supported.
+# https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4-Pro?hardware=mi355x
 #
 # Required env vars:
 #   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
@@ -22,13 +24,42 @@ if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
 fi
 
+DSV4_MODEL_REVISION=""
+if [[ "$MODEL" == "deepseek-ai/DeepSeek-V4-Pro-0813" ]]; then
+    DSV4_MODEL_REVISION=72e1d3230f6c080a530b0a1d46f8eb4602340597
+fi
+if [[ "$SPEC_DECODING" == "draft_model" && -z "$DSV4_MODEL_REVISION" ]]; then
+    echo "ERROR: DSpark requires the DeepSeek-V4-Pro-0813 checkpoint, got $MODEL" >&2
+    exit 1
+fi
+
 if [[ -n "${MODEL_PATH:-}" ]]; then
     if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
-        hf download "$MODEL" --local-dir "$MODEL_PATH"
+        if [[ -n "$DSV4_MODEL_REVISION" ]]; then
+            hf download "$MODEL" --revision "$DSV4_MODEL_REVISION" --local-dir "$MODEL_PATH"
+        else
+            hf download "$MODEL" --local-dir "$MODEL_PATH"
+        fi
     fi
+elif [[ -n "$DSV4_MODEL_REVISION" ]]; then
+    MODEL_PATH=$(python3 - "$MODEL" "$DSV4_MODEL_REVISION" <<'PY'
+import sys
+from huggingface_hub import snapshot_download
+print(snapshot_download(repo_id=sys.argv[1], revision=sys.argv[2]))
+PY
+    )
+    export MODEL_PATH
 else
     hf download "$MODEL"
     export MODEL_PATH="$MODEL"
+fi
+
+if [[ -n "$DSV4_MODEL_REVISION" ]]; then
+    export AGENTIC_TOKENIZER_PATH="$MODEL_PATH"
+    mkdir -p "$RESULT_DIR"
+    python3 "$(dirname "$0")/check_dsv4_dspark_checkpoint.py" \
+        --model-path "$MODEL_PATH" --revision "$DSV4_MODEL_REVISION" \
+        --output "$RESULT_DIR/checkpoint_preflight.json"
 fi
 
 if [ -n "${ROCR_VISIBLE_DEVICES:-}" ]; then
@@ -260,15 +291,34 @@ if [ "$DP_ATTENTION" = "true" ]; then
     MAX_NUM_SEQS="$CONC"
 fi
 
-# Golden AL 2.49: committed thinking-on curve for a three-token MTP draft.
-# Eval-only runs use real target verification.
-NUM_SPEC_TOKENS=3
-SYNTHETIC_ACCEPT_LEN=2.49
-if [ "${EVAL_ONLY}" = "true" ]; then
-    SPEC_CONFIG="{\"method\": \"mtp\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS}"
-else
-    SPEC_CONFIG="{\"method\": \"mtp\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
-fi
+# MTP K3 uses the committed thinking-on AL 2.49. DSpark K6 uses the
+# DeepSeek-V4-Pro-0813 thinking-on AL 3.77. Eval-only runs always use real
+# target verification.
+case "$SPEC_DECODING" in
+    mtp)
+        NUM_SPEC_TOKENS=3
+        SYNTHETIC_ACCEPT_LEN=2.49
+        if [ "${EVAL_ONLY}" = "true" ]; then
+            SPEC_CONFIG="{\"method\": \"mtp\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS}"
+        else
+            SPEC_CONFIG="{\"method\": \"mtp\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
+        fi
+        ;;
+    draft_model)
+        export VLLM_USE_V2_MODEL_RUNNER=1
+        NUM_SPEC_TOKENS=6
+        SYNTHETIC_ACCEPT_LEN=3.77
+        if [ "${EVAL_ONLY}" = "true" ]; then
+            SPEC_CONFIG="{\"method\": \"dspark\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"draft_sample_method\": \"probabilistic\"}"
+        else
+            SPEC_CONFIG="{\"method\": \"dspark\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"draft_sample_method\": \"probabilistic\", \"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
+        fi
+        ;;
+    *)
+        echo "Error: unsupported SPEC_DECODING='$SPEC_DECODING' for this recipe" >&2
+        exit 1
+        ;;
+esac
 
 echo "Starting vllm server..."
 set -x

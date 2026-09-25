@@ -9,8 +9,8 @@ import types
 # MoRI reads the symmetric-heap size when the heap is created (at shmem init,
 # once a process group exists — see create_buffer). The pinned upstream
 # inter-node benchmark uses 6 GiB for its InterNodeV1 staging and signal
-# buffers. STATIC is the shipped mode (VMM_HEAP is inter-node only), so this is
-# 6 GiB really allocated per rank against a worst-case EP8 need near 2 GiB.
+# buffers. STATIC_HEAP is the shipped mode on every path, so this is 6 GiB
+# really allocated (uncached) per rank against a worst-case EP8 need near 2 GiB.
 os.environ["MORI_SHMEM_HEAP_SIZE"] = "6G"
 
 import torch
@@ -146,17 +146,23 @@ class MoRIBackend(EPBackend):
 
         world_group = torch.distributed.group.WORLD
         torch._C._distributed_c10d._register_process_group("default", world_group)
-        # Scale-out EP16 registers the symmetric heap over the AMD AI NIC. The
-        # default STATIC_HEAP registers it as one contiguous MR; on the Ionic
-        # stack that registration fails during InterNodeV1 init (an EINVAL that
-        # is a firmware command failure, not an MR-size violation — the NIC
-        # advertises multi-GiB max_mr_size). VMM_HEAP backs the same reservation
-        # with on-demand 64 MiB DMA-BUF chunks, the supported inter-node path
-        # (MoRI PR #155, validated on MI355X + AI NIC). Read at heap init below,
-        # so it must precede shmem_torch_process_group_init. Scale-up EP8 is
-        # intranode (no RDMA registration) and keeps the default heap.
-        if self._inter_node:
-            os.environ["MORI_SHMEM_MODE"] = "VMM_HEAP"
+        # Every path, scale-out EP16 included, runs MoRI's default STATIC_HEAP: one
+        # contiguous uncached allocation registered as a single MR. This adapter used to
+        # force VMM_HEAP for scale-out after a 2026-07 EINVAL registering the 6 GiB static
+        # heap on the Ionic stack; that registration succeeds on the current firmware
+        # (1.117.5), and VMM_HEAP was itself the cause of the residual EP16 combine
+        # corruption: ROCm 7.2's clr leaves VMM allocations requested uncached in the
+        # cached pool, so cross-node partials landed in stale lines (ROCm/mori#610).
+        # CI A/B on the same branch, same nodes pool and harness: STATIC_HEAP all-green
+        # on bf16+fp8 decode 1..512 and prefill 1024..8192 (run 34939333022); VMM_HEAP
+        # corrupts (run 34941185534). Nothing is set here so the mode stays whatever
+        # MoRI ships as default; the guard below fails closed if that ever changes.
+        heap_mode = os.environ.get("MORI_SHMEM_MODE", "STATIC_HEAP").upper()
+        if self._inter_node and heap_mode != "STATIC_HEAP":
+            raise RuntimeError(
+                "MoRI scale-out requires STATIC_HEAP; VMM_HEAP corrupts InterNodeV1 combine on "
+                "ROCm 7.2 (ROCm/mori#610)"
+            )
         mori.shmem.shmem_torch_process_group_init("default")
         realized_qps = int(mori.shmem.shmem_num_qp_per_pe())
         if realized_qps < self.num_qps:
@@ -195,8 +201,8 @@ class MoRIBackend(EPBackend):
         }
         if self._kernel_type is not None:
             config_kwargs["kernel_type"] = self._kernel_type
-        # Only InterNodeV1 carries explicit launch/topology fields (and the VMM_HEAP + realized-
-        # config asserts below). IntraNodeLL follows the IntraNode path unchanged: base config
+        # Only InterNodeV1 carries explicit launch/topology fields (and the heap-mode + realized-
+        # config asserts). IntraNodeLL follows the IntraNode path unchanged: base config
         # plus kernel_type, the registered staging buffer, the default STATIC heap, and the
         # per-call block/warp launch args.
         if self._inter_node:

@@ -58,6 +58,15 @@ Allowed (this is the baseline, not an exception):
 
 Forbidden (submission-side precision hacking of the draft):
 
+- Enabling `SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE` (`=1` or any other enabling
+  value recognized by the pinned implementation) is explicitly prohibited going
+  forward, including inherited environment, launcher, container, or image defaults.
+  The baseline allowances above do not exempt this flag. Reviewers must verify
+  that it is disabled in the effective recipe; an unset value or `=0` is acceptable
+  only when the pinned implementation confirms it is disabled. Historical runs
+  are not precedent or an exception for submissions under review, including
+  image-only bumps and re-enabled recipes. This rule does not retroactively
+  invalidate runs that predate it.
 - Online or offline quantization of draft weights, activations, or computation below
   the shipped precision, whether through a flag, environment variable, config file, or
   conversion step. This includes `--speculative-draft-model-quantization quark_mxfp4`
