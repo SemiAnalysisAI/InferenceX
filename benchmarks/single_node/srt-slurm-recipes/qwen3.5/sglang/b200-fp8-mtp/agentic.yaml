@@ -1,0 +1,104 @@
+# Qwen3.5-397B-A17B FP8 AgentX on B200 with SGLang native NEXTN MTP. The KV
+# cache is GPU-resident or extends to host DRAM through HiCache.
+base:
+  schema: 2
+  name: qwen3.5-fp8-b200-sglang-agentic
+  model:
+    path: hf:Qwen/Qwen3.5-397B-A17B-FP8
+    container: lmsysorg/sglang:nightly-dev-cu13-20260914-4358a161
+    precision: fp8
+  resources:
+    gpu_type: b200
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      args:
+        served-model-name: Qwen/Qwen3.5-397B-A17B-FP8
+        trust-remote-code: true
+        data-parallel-size: 1
+        expert-parallel-size: 1
+        enable-symm-mem: true
+        quantization: fp8
+        kv-cache-dtype: fp8_e4m3
+        mamba-ssm-dtype: bfloat16
+        attention-backend: trtllm_mha
+        moe-runner-backend: flashinfer_trtllm
+        max-prefill-tokens: 16384
+        chunked-prefill-size: 16384
+        mem-fraction-static: 0.8
+        stream-interval: 50
+        scheduler-recv-interval: 10
+        # Parallel tokenization keeps 256k warmups within the client timeout.
+        tokenizer-worker-num: 6
+        reasoning-parser: qwen3
+        tool-call-parser: qwen3_coder
+        speculative-algorithm: NEXTN
+        speculative-num-steps: 3
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 4
+        enable-metrics: true
+        enable-cache-report: true
+      env:
+        TORCH_CUDA_ARCH_LIST: '10.0'
+        PYTHONNOUSERSITE: '1'
+        NCCL_NVLS_ENABLE: '1'
+        SGL_ENABLE_JIT_DEEPGEMM: 'false'
+        SGLANG_ENABLE_FLASHINFER_GEMM: 'true'
+        # Outlast AIPerf's 300 s client connection pool.
+        SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
+    env:
+      MODEL: Qwen/Qwen3.5-397B-A17B-FP8
+      # 256k-capped corpus, within this model's context.
+      WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126_256k
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+
+# One variant per point. Admission is 2x CONC and the decode graph batch is
+# CONC, capped at 64. HiCache sizes each of the target KV and Mamba host pools
+# per rank with a 1 GB/rank alignment reserve and the 1/15 NEXTN draft pool:
+# (DRAM - TP) * 15 / TP / 31 GB.
+override_tp8_c1: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, max-running-requests: 2, cuda-graph-max-bs-decode: 1}}}, benchmark: {env: {CONC: '1', KV_OFFLOADING: none}}}
+override_tp8_c4: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, max-running-requests: 8, cuda-graph-max-bs-decode: 4}}}, benchmark: {env: {CONC: '4', KV_OFFLOADING: none}}}
+override_tp8_c8: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, max-running-requests: 16, cuda-graph-max-bs-decode: 8}}}, benchmark: {env: {CONC: '8', KV_OFFLOADING: none}}}
+override_tp8_c12: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, max-running-requests: 24, cuda-graph-max-bs-decode: 12}}}, benchmark: {env: {CONC: '12', KV_OFFLOADING: none}}}
+override_tp8_c16: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, max-running-requests: 32, cuda-graph-max-bs-decode: 16}}}, benchmark: {env: {CONC: '16', KV_OFFLOADING: none}}}
+override_tp8_c20: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, max-running-requests: 40, cuda-graph-max-bs-decode: 20}}}, benchmark: {env: {CONC: '20', KV_OFFLOADING: none}}}
+override_tp8_c24: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, max-running-requests: 48, cuda-graph-max-bs-decode: 24}}}, benchmark: {env: {CONC: '24', KV_OFFLOADING: none}}}
+override_tp8_c28: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, max-running-requests: 56, cuda-graph-max-bs-decode: 28}}}, benchmark: {env: {CONC: '28', KV_OFFLOADING: none}}}
+override_tp8_c32: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, max-running-requests: 64, cuda-graph-max-bs-decode: 32}}}, benchmark: {env: {CONC: '32', KV_OFFLOADING: none}}}
+override_tp8_c40: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, max-running-requests: 80, cuda-graph-max-bs-decode: 40}}}, benchmark: {env: {CONC: '40', KV_OFFLOADING: none}}}
+override_tp8_c48: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, max-running-requests: 96, cuda-graph-max-bs-decode: 48}}}, benchmark: {env: {CONC: '48', KV_OFFLOADING: none}}}
+override_tp8_c56: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, max-running-requests: 112, cuda-graph-max-bs-decode: 56}}}, benchmark: {env: {CONC: '56', KV_OFFLOADING: none}}}
+override_tp8_c60: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, max-running-requests: 120, cuda-graph-max-bs-decode: 60}}}, benchmark: {env: {CONC: '60', KV_OFFLOADING: none}}}
+override_tp8_c62: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, max-running-requests: 124, cuda-graph-max-bs-decode: 62}}}, benchmark: {env: {CONC: '62', KV_OFFLOADING: none}}}
+override_tp8_c64: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, max-running-requests: 128, cuda-graph-max-bs-decode: 64}}}, benchmark: {env: {CONC: '64', KV_OFFLOADING: none}}}
+override_tp8_hicache_c64: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, max-running-requests: 128, cuda-graph-max-bs-decode: 64, page-size: 64, enable-hierarchical-cache: true, hicache-size: 104, hicache-io-backend: kernel, hicache-mem-layout: page_first, hicache-write-policy: write_through_selective}}}, benchmark: {env: {CONC: '64', KV_OFFLOADING: dram, TOTAL_CPU_DRAM_GB: '1731'}}}
+override_tp8_hicache_c66: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, max-running-requests: 132, cuda-graph-max-bs-decode: 64, page-size: 64, enable-hierarchical-cache: true, hicache-size: 104, hicache-io-backend: kernel, hicache-mem-layout: page_first, hicache-write-policy: write_through_selective}}}, benchmark: {env: {CONC: '66', KV_OFFLOADING: dram, TOTAL_CPU_DRAM_GB: '1731'}}}
+override_tp8_hicache_c68: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, max-running-requests: 136, cuda-graph-max-bs-decode: 64, page-size: 64, enable-hierarchical-cache: true, hicache-size: 104, hicache-io-backend: kernel, hicache-mem-layout: page_first, hicache-write-policy: write_through_selective}}}, benchmark: {env: {CONC: '68', KV_OFFLOADING: dram, TOTAL_CPU_DRAM_GB: '1731'}}}
+override_tp8_hicache_c70: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, max-running-requests: 140, cuda-graph-max-bs-decode: 64, page-size: 64, enable-hierarchical-cache: true, hicache-size: 104, hicache-io-backend: kernel, hicache-mem-layout: page_first, hicache-write-policy: write_through_selective}}}, benchmark: {env: {CONC: '70', KV_OFFLOADING: dram, TOTAL_CPU_DRAM_GB: '1731'}}}
+override_tp8_hicache_c72: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, max-running-requests: 144, cuda-graph-max-bs-decode: 64, page-size: 64, enable-hierarchical-cache: true, hicache-size: 104, hicache-io-backend: kernel, hicache-mem-layout: page_first, hicache-write-policy: write_through_selective}}}, benchmark: {env: {CONC: '72', KV_OFFLOADING: dram, TOTAL_CPU_DRAM_GB: '1731'}}}
+override_tp8_hicache_c76: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, max-running-requests: 152, cuda-graph-max-bs-decode: 64, page-size: 64, enable-hierarchical-cache: true, hicache-size: 104, hicache-io-backend: kernel, hicache-mem-layout: page_first, hicache-write-policy: write_through_selective}}}, benchmark: {env: {CONC: '76', KV_OFFLOADING: dram, TOTAL_CPU_DRAM_GB: '1731'}}}
+override_tp4_c1: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, max-running-requests: 2, cuda-graph-max-bs-decode: 1}}}, benchmark: {env: {CONC: '1', KV_OFFLOADING: none}}}
+override_tp4_c4: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, max-running-requests: 8, cuda-graph-max-bs-decode: 4}}}, benchmark: {env: {CONC: '4', KV_OFFLOADING: none}}}
+override_tp4_c8: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, max-running-requests: 16, cuda-graph-max-bs-decode: 8}}}, benchmark: {env: {CONC: '8', KV_OFFLOADING: none}}}
+override_tp4_c12: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, max-running-requests: 24, cuda-graph-max-bs-decode: 12}}}, benchmark: {env: {CONC: '12', KV_OFFLOADING: none}}}
+override_tp4_c14: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, max-running-requests: 28, cuda-graph-max-bs-decode: 14}}}, benchmark: {env: {CONC: '14', KV_OFFLOADING: none}}}
+override_tp4_hicache_c16: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, max-running-requests: 32, cuda-graph-max-bs-decode: 16, page-size: 64, enable-hierarchical-cache: true, hicache-size: 104, hicache-io-backend: kernel, hicache-mem-layout: page_first, hicache-write-policy: write_through_selective}}}, benchmark: {env: {CONC: '16', KV_OFFLOADING: dram, TOTAL_CPU_DRAM_GB: '865'}}}
+override_tp4_hicache_c18: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, max-running-requests: 36, cuda-graph-max-bs-decode: 18, page-size: 64, enable-hierarchical-cache: true, hicache-size: 104, hicache-io-backend: kernel, hicache-mem-layout: page_first, hicache-write-policy: write_through_selective}}}, benchmark: {env: {CONC: '18', KV_OFFLOADING: dram, TOTAL_CPU_DRAM_GB: '865'}}}
+override_tp4_hicache_c20: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, max-running-requests: 40, cuda-graph-max-bs-decode: 20, page-size: 64, enable-hierarchical-cache: true, hicache-size: 104, hicache-io-backend: kernel, hicache-mem-layout: page_first, hicache-write-policy: write_through_selective}}}, benchmark: {env: {CONC: '20', KV_OFFLOADING: dram, TOTAL_CPU_DRAM_GB: '865'}}}
+override_tp4_hicache_c22: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, max-running-requests: 44, cuda-graph-max-bs-decode: 22, page-size: 64, enable-hierarchical-cache: true, hicache-size: 104, hicache-io-backend: kernel, hicache-mem-layout: page_first, hicache-write-policy: write_through_selective}}}, benchmark: {env: {CONC: '22', KV_OFFLOADING: dram, TOTAL_CPU_DRAM_GB: '865'}}}
+override_tp4_hicache_c24: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, max-running-requests: 48, cuda-graph-max-bs-decode: 24, page-size: 64, enable-hierarchical-cache: true, hicache-size: 104, hicache-io-backend: kernel, hicache-mem-layout: page_first, hicache-write-policy: write_through_selective}}}, benchmark: {env: {CONC: '24', KV_OFFLOADING: dram, TOTAL_CPU_DRAM_GB: '865'}}}
+override_tp4_hicache_c28: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, max-running-requests: 56, cuda-graph-max-bs-decode: 28, page-size: 64, enable-hierarchical-cache: true, hicache-size: 104, hicache-io-backend: kernel, hicache-mem-layout: page_first, hicache-write-policy: write_through_selective}}}, benchmark: {env: {CONC: '28', KV_OFFLOADING: dram, TOTAL_CPU_DRAM_GB: '865'}}}
+override_tp4_hicache_c32: {roles: {agg: {gpus: 4, args: {tensor-parallel-size: 4, max-running-requests: 64, cuda-graph-max-bs-decode: 32, page-size: 64, enable-hierarchical-cache: true, hicache-size: 104, hicache-io-backend: kernel, hicache-mem-layout: page_first, hicache-write-policy: write_through_selective}}}, benchmark: {env: {CONC: '32', KV_OFFLOADING: dram, TOTAL_CPU_DRAM_GB: '865'}}}
