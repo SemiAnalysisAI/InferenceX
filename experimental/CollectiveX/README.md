@@ -1,3 +1,5 @@
+**English** | [中文](README_zh.md)
+
 # CollectiveX
 
 CollectiveX is an experimental MoE expert-parallel communication benchmark. It measures dispatch,
@@ -249,7 +251,7 @@ validated compute-visible account home. Backend preparation runs from that stage
 
 Enroot imports the configured image tag into a per-run-scoped squash keyed by image tag and image
 platform, so one run never reuses another run's imported filesystem. The image tag and platform are
-per-SKU registry fields. The DeepEP V2 source pin lives in `runtime/common.sh` and its build is
+per-SKU registry fields. The DeepEP V2 source pin lives in `runtime/build.py` and its build is
 fetched and verified at the pinned commit, checked for `ElasticBuffer`, and cached in a
 cluster-local build cache keyed by architecture, image, and commit. Only the fixed `/cx-cache` mount
 reaches the container.
@@ -257,10 +259,12 @@ reaches the container.
 ## Local Checks
 
 ```bash
-python3 -m unittest discover experimental/CollectiveX/tests -p 'test_*.py'
+uv sync --locked --all-extras --group test
+.venv/bin/python -m pytest experimental/CollectiveX/tests experimental/operatorx/tests -q
 python3 experimental/CollectiveX/sweep_matrix.py --backend all --out /tmp/cx-matrix.json >/dev/null
-bash -n experimental/CollectiveX/runtime/*.sh experimental/CollectiveX/launchers/*.sh
 ```
 
-Core paths are `configs/`, `sweep_matrix.py`, `summarize.py`, `bench/`, `runtime/`, `launchers/`,
-and `tests/`.
+Core paths are `configs/`, `sweep_matrix.py`, `summarize.py`, `bench/`, `runtime/`, `ci.py`, and `tests/`.
+The [implementation map](docs/architecture.md) explains the call flow, classes, and module boundaries.
+Workflow execution is Python throughout; job steps use the pinned `simple-slurm` dependency in
+the `collectivex` extra. Slurm allocations retain the existing `salloc`/`squeue`/`scancel` lifecycle.

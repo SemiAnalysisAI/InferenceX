@@ -1,3 +1,5 @@
+**English** | [中文](methodology_zh.md)
+
 # CollectiveX EP Benchmark Methodology
 
 CollectiveX schedules expert-parallel (EP) communication benchmarks, executes them on real
@@ -650,7 +652,7 @@ Identifiers are readable factor strings:
   slug-normalized, and
 - `attempt_ordinal`: a positive integer distinguishing repeat executions of one `case_id`.
 
-Backend source pins live in `runtime/common.sh` and are enforced by exact fetched-commit comparison, and
+Backend source pins live in `runtime/build.py` and are enforced by exact fetched-commit comparison, and
 the loaded DeepEP V2 build is checked for the required `ElasticBuffer` API.
 
 These IDs let a consumer group matched configurations and separate distinct ones. The backend does

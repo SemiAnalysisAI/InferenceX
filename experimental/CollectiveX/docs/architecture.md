@@ -14,7 +14,8 @@ artifact names, and exit statuses form the contracts between those layers.
    A shard groups cases by GPU pool, backend, mode, node count, and precision; each case
    contains its complete token ladder. Unsupported requested cases remain recorded but
    are excluded from execution.
-2. A [launcher](../launchers/) allocates the hardware and stages an isolated source tree.
+2. [ci.py](../ci.py) calls the Python [execution controller](../runtime/execution.py), which
+   allocates the hardware and stages an isolated source tree.
    Slurm pools execute one `run_ep.py` process per GPU; the Taiwan Docker pools use
    `torchrun`. Cases execute sequentially within the shard.
 3. [run_ep.py](../bench/run_ep.py) initializes the GPU, lazily imports the adapter selected
@@ -32,12 +33,11 @@ artifact names, and exit statuses form the contracts between those layers.
 
 | Module | Responsibility |
 | --- | --- |
-| [ep_case.py](../bench/ep_case.py) | Case IDs, CLI inputs, token ladders, runtime version formatting; no vendor imports |
+| [run_ep.py](../bench/run_ep.py) | CLI inputs, lazy backend dispatch, runtime initialization and version reporting |
 | [ep_backend.py](../bench/ep_backend.py) | Abstract transport contract, `RankInputs`, `WorkloadSpec`, deterministic inputs, FP8 invariants |
-| [ep_timing.py](../bench/ep_timing.py) | `EPTiming`: warmup, fresh-pair rules, isolated windows, and sibling timing chains |
-| [ep_measurement.py](../bench/ep_measurement.py) | CUDA-event timing, rank reductions, percentiles, and `PointSamples` |
+| [ep_measurement.py](../bench/ep_measurement.py) | `EPTiming` warmup and timing templates, CUDA events, rank reductions, percentiles, and `PointSamples` |
 | [ep_oracle.py](../bench/ep_oracle.py) | Independent reference arithmetic, layout-specific receive checks, shared cleanup and combine verification |
-| [ep_results.py](../bench/ep_results.py) | Byte accounting, artifact schema, atomic writes, and result logging |
+| [ep_results.py](../bench/ep_results.py) | Case identity, byte accounting, artifact schema, atomic writes, and result logging |
 | [ep_harness.py](../bench/ep_harness.py) | The ordered correctness and measurement passes for one case |
 | [ep_legacy.py](../bench/ep_legacy.py) | Operations shared by DeepEP and UCCL's compatible legacy Buffer APIs |
 | `ep_deepep_v2.py`, `ep_uccl.py`, `ep_mori.py`, `ep_nccl.py`, `ep_flashinfer.py` | Vendor construction, transport, receive views, and teardown differences |
@@ -50,29 +50,42 @@ where the API is identical. Backend imports remain lazy and occur after GPU init
 
 ## Runtime module responsibilities
 
-[runtime/common.sh](../runtime/common.sh) is the supported sourcing entry point. It owns
-logging and operator configuration, then loads these modules into the same shell:
+[ci.py](../ci.py) is the workflow and manual entry point. `matrix`, `extract`, `execute`,
+`finalize`, and `cleanup` keep Actions responsible for scheduling and artifact upload while
+Python owns the execution lifecycle. Workflow steps invoke the host venv interpreter directly,
+so its `PATH` and `VIRTUAL_ENV` do not replace the pinned image's Python in worker containers.
 
 | Module | Responsibility |
 | --- | --- |
-| [network.sh](../runtime/network.sh) | Fabric selectors, link-layer rules, and network validation |
-| [slurm.sh](../runtime/slurm.sh) | Allocations, rendezvous, rank identity, health checks, and allocation cleanup |
-| [images.sh](../runtime/images.sh) | Image identity, import locks, cache reuse, and import retries |
-| [sources.sh](../runtime/sources.sh) | Backend source/version pins, exact-commit staging, and cache mounts |
-| [staging.sh](../runtime/staging.sh) | Compute-visible source isolation, result collection, and stage cleanup |
-| [execution.sh](../runtime/execution.sh) | Case execution, backend preparation, and launcher cleanup traps |
+| [config.py](../runtime/config.py) | Pool resource requests, settings precedence, container options, and case/block-copy arguments |
+| [scheduler.py](../runtime/scheduler.py) | `simple-slurm` steps, allocation lifecycle, subprocesses, private logs, locks, and signals |
+| [probe.py](../runtime/probe.py) | Hardware/network probes, fabric selectors, link-layer rules, and image digest lookup |
+| [storage.py](../runtime/storage.py) | Image-cache identity/imports and isolated source staging/collection |
+| [build.py](../runtime/build.py) | Exact source/dependency pins, preparation, guarded build caches, and backend environments |
+| [node.py](../runtime/node.py) | Stdlib host utilities, per-node setup, and rank environment loading before `exec` |
+| [execution.py](../runtime/execution.py) | Allocation retries, preparation, sequential cases, and recoverable cleanup |
+| [docker.py](../runtime/docker.py) | Slurm-less pool execution, Docker build caches, and owned-container cleanup |
 
-[prepare_backend.sh](../runtime/prepare_backend.sh) validates the container network and
-writes the rank environment. It loads [build_common.sh](../runtime/build_common.sh) for
-toolchain discovery and guarded cache installation, plus the individual
-[backend build modules](../runtime/backends/). The launcher stages pinned source trees before
-allocation; each node prepares its backend before any GPU rank starts. Keep cache identity,
-readiness checks, and error handling together when changing an installer.
+The host uses [simple-slurm](https://github.com/amq92/simple_slurm), pinned in the `collectivex`
+extra. `salloc --no-shell` and targeted `squeue`/`scancel` calls preserve the existing allocation
+lifecycle. The library executes `srun`; its shell-string API receives quoted arguments, with
+bare flags and Pyxis options passed explicitly. No repository-owned Bash launcher remains.
+
+Compute-host utilities are streamed as a stdlib zipapp before shared storage or a container is
+available. Backend setup runs once per node and writes a private, allowlisted JSON environment.
+Rank bootstrap applies it, derives rank identity from Slurm, and executes the unchanged benchmark.
+Case arguments are ordinary Python lists: there are no NUL-delimited argument files or generated
+shell environment scripts.
+
+`execution.json` and `jobid` retain resource ownership for the independent workflow finalizer.
+Cleanup stops the allocation before collecting or deleting staging; an unconfirmed stop retains
+its recovery record. Signal exits preserve `128 + signal`. Partial results are collected after
+failure, and only containers recorded for the current execution enter its final cleanup.
 
 ## Separate block-copy path
 
 `backend=swap-blocks` selects [swap_matrix.py](../swap_matrix.py),
-[launch_swap-blocks.sh](../launchers/launch_swap-blocks.sh), and
+the execution controller (Slurm) or Docker executor, and
 [run_swap_blocks.py](../bench/run_swap_blocks.py). This path uses functions and callbacks,
 one GPU, its own wall-clock timing, and the `collectivex-swap-blocks-v1` schema. Its
 measurement contract is documented in [swap-blocks.md](swap-blocks.md).
