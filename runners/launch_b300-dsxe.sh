@@ -384,6 +384,7 @@ else
         export RESULT_DIR=/ix/results
         # Cover DSpark5 verification for concurrent AgentX subagents at c1/c2/c4.
         export DSV41_MIN_CUDAGRAPH_CAPTURE_SIZE=64
+        export VLLM_ENGINE_READY_TIMEOUT_S=7200
     fi
 
     import_squash_image "$IMAGE" "$SQUASH_FILE"

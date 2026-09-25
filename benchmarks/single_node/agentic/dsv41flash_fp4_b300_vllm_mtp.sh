@@ -5,6 +5,7 @@ set -eo pipefail
 # https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4.1-Flash
 source "$(dirname "$0")/../../benchmark_lib.sh"
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
+check_env_vars EVAL_ONLY VLLM_ENGINE_READY_TIMEOUT_S
 require_agentic_kv_offload_none
 export GPU_COUNT="$TP"
 
@@ -21,7 +22,6 @@ resolve_trace_source
 install_agentic_deps
 mkdir -p "$RESULT_DIR"
 SERVER_LOG="$RESULT_DIR/server.log"
-export VLLM_ENGINE_READY_TIMEOUT_S="${VLLM_ENGINE_READY_TIMEOUT_S:-3600}"
 export VLLM_USE_RUST_FRONTEND=1
 export PYTHONUNBUFFERED=1
 
@@ -46,6 +46,9 @@ MAX_NUM_SEQS=256
 CAPTURE_SIZE="${GRAPH_SIZES##*,}"
 COMPILATION_CONFIG="{\"mode\":\"VLLM_COMPILE\",\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"cudagraph_capture_sizes\":[${GRAPH_SIZES}]}"
 
+# Use FlashInfer sparse attention for both tensor-parallel sizes.
+ATTENTION_CONFIG='{"backend":"FLASHINFER_MLA_SPARSE_DSV41","indexer_kv_dtype":"mxfp4","indexer_sparse_logits":true}'
+
 # Pyxis shares the host network; port 8888 can already belong to a host service.
 select_available_server_port
 export AIPERF_SERVER_URL="http://localhost:${PORT}"
@@ -55,7 +58,7 @@ echo "Using vLLM endpoint ${AIPERF_SERVER_URL}"
 
 # Golden AL: golden_al_distribution/dsv41flash_dspark.yaml, thinking_on, five draft tokens.
 # Accuracy evals keep real block rejection; other runs use synthetic acceptance at AL 3.51.
-if [[ "${EVAL_ONLY:-false}" == true ]]; then
+if [[ "${EVAL_ONLY}" == true ]]; then
     SPEC_CONFIG='{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block","enable_adaptive_verification":true}'
 else
     SPEC_CONFIG='{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"synthetic","synthetic_acceptance_length":3.51,"enable_adaptive_verification":false}'
@@ -68,6 +71,8 @@ VLLM_CMD=(
     --tool-call-parser deepseek_v41 --enable-auto-tool-choice
     --reasoning-parser deepseek_v41
     --engram-config '{"cpu_offload":true}'
+    --attention-config "$ATTENTION_CONFIG"
+    --kv-cache-dtype fp8
     --speculative-config "$SPEC_CONFIG"
     --max-model-len 1048576
     --compilation-config "$COMPILATION_CONFIG"
@@ -85,7 +90,7 @@ printf '\n' | tee -a "$RESULT_DIR/vllm_command.txt"
 SERVER_PID=$!
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
-if [[ "${EVAL_ONLY:-false}" == true ]]; then
+if [[ "${EVAL_ONLY}" == true ]]; then
     run_eval --port "$PORT"
 else
     build_replay_cmd "$RESULT_DIR"
