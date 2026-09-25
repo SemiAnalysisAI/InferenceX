@@ -179,9 +179,10 @@ MAX_RUNNING_REQUESTS=$((2 * CONC))
 CUDA_GRAPH_MAX_BS=$((CONC * 4))
 [ "$CUDA_GRAPH_MAX_BS" -gt 64 ] && CUDA_GRAPH_MAX_BS=64
 
-# --cuda-graph-max-bs is an alias whose dest is cuda_graph_max_bs_decode, so the
-# two forms below are the same knob and must not both be passed.
 CUDA_GRAPH_ARGS=(--cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS")
+if [ "$MODEL" = "deepseek-ai/DeepSeek-V4-Pro" ]; then
+    CUDA_GRAPH_ARGS=(--cuda-graph-max-bs-decode "$CUDA_GRAPH_MAX_BS")
+fi
 SWA_FULL_TOKENS_RATIO=0.1
 if [ "$DP_ATTENTION" = "true" ]; then
     # Decode graphs must cover the padded speculative batch across all DP ranks, which
