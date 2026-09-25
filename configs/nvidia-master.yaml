@@ -8381,13 +8381,13 @@ dsv41flash-fp4-gb200-vllm-agentic-dspark:
     - dram-utilization: 0.80
       search-space:
       # Engram weights use UVA DRAM; the KV cache stays GPU-resident.
-      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/gb200-fp4-mtp/agentic.yaml }
       # TP2 halves the GPU count per replica. Weights rise to ~145 GiB on each
       # 256 GiB GPU with the Engram tables in pinned host DRAM, so the arm
       # takes the same caps as the B200 TP2 arm: batched tokens 4096 (the
       # indexer's logits buffer is 32 GiB at the upstream 16384) and graph
       # capture stopped at 512, leaving ~49 GiB of KV per GPU.
-      - { tp: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+      - { tp: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/gb200-fp4-mtp/agentic.yaml }
 
 # SGLang arm for DeepSeek-V4.1-Flash AgentX on GB200, from the SGLang cookbook
 # (https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1).
@@ -8485,13 +8485,13 @@ dsv41flash-fp4-gb300-vllm-agentic-dspark:
     - dram-utilization: 0.80
       search-space:
       # Engram weights use UVA DRAM; the KV cache stays GPU-resident.
-      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/gb300-fp4-mtp/agentic.yaml }
       # TP2 halves the GPU count per replica. Weights rise to ~175 GiB on each
       # 277 GiB GPU with the Engram tables in pinned host DRAM, so the arm
       # takes the same caps as the B200 TP2 arm: batched tokens 4096 (the
       # indexer's logits buffer is 32 GiB at the upstream 16384) and graph
       # capture stopped at 512, leaving ~36 GiB of KV per GPU.
-      - { tp: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+      - { tp: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/gb300-fp4-mtp/agentic.yaml }
 
 # H200 AgentX arm for DeepSeek-V4.1-Flash. Upstream marks h200 verified and says
 # the GB200 NVL4 TP4 layout becomes TP8 on 8-GPU nodes, so this is TP8.
