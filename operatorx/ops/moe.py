@@ -119,7 +119,7 @@ def _check_routing(r: Any) -> None:
 
 
 @dataclass(frozen=True)
-class MoeLayerArgs:
+class MoeArgs:
     """y[T,H] = shared(x) + sum over the selected experts e of w_e * expert_e(x).
 
     The op starts at the router GEMM on normed hidden states x [T, H] and ends at
@@ -172,10 +172,10 @@ class MoeLayerArgs:
             raise ValueError(f"out {self.out!r} not in {sorted(ELEMENT_DTYPES)}")
 
 
-MOE_LAYER = OpSpec(
-    type="moe_layer",
-    arg_schema=MoeLayerArgs,
+MOE = OpSpec(
+    type="moe",
+    arg_schema=MoeArgs,
     description="y = shared(x) + sum_{e in topk(route(x))} w_e * expert_e(x)",
 )
 
-register(MOE_LAYER)
+register(MOE)
