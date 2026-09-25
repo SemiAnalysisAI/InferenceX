@@ -24,6 +24,10 @@ base:
   # Keep Prometheus without rc23's per-step timing collector and accept BFCL's
   # store=false field.
   setup_script: minimaxm3-trtllm-rc23.sh
+  # TP8 loads, autotunes and captures graphs past the 30-minute default.
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 5
   roles:
     agg:
       nodes: 1
