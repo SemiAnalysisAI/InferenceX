@@ -1,0 +1,941 @@
+diff --git a/configs/tilert_setup.sh b/configs/tilert_setup.sh
+new file mode 100644
+index 00000000..63776d64
+--- /dev/null
++++ b/configs/tilert_setup.sh
+@@ -0,0 +1,77 @@
++#!/usr/bin/env bash
++# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
++# SPDX-License-Identifier: Apache-2.0
++
++set -euo pipefail
++
++readonly TILERT_VERSION="${TILERT_VERSION:-0.1.5.post3}"
++readonly NIXL_VERSION="${TILERT_NIXL_VERSION:-1.3.1}"
++readonly FASTAPI_VERSION="${TILERT_FASTAPI_VERSION:-0.141.1}"
++readonly UVICORN_VERSION="${TILERT_UVICORN_VERSION:-0.52.4}"
++readonly TRANSFORMERS_VERSION="${TILERT_TRANSFORMERS_VERSION:-5.16.1}"
++
++if [[ -d /opt/conda/envs/tilert/bin ]]; then
++    export PATH="/opt/conda/envs/tilert/bin:${PATH}"
++fi
++
++PYTHON="$(command -v python || command -v python3)"
++readonly PYTHON
++
++installed_version() {
++    "${PYTHON}" - "$1" <<'PY'
++import sys
++from importlib.metadata import PackageNotFoundError, version
++
++try:
++    print(version(sys.argv[1]))
++except PackageNotFoundError:
++    pass
++PY
++}
++
++install_exact() {
++    local package="$1"
++    local version="$2"
++    shift 2
++    if [[ "$(installed_version "${package}")" == "${version}" ]]; then
++        return
++    fi
++    "${PYTHON}" -m pip install --no-cache-dir "$@" "${package}==${version}"
++}
++
++case "${TILERT_ROLE:-}" in
++    decode)
++        install_exact tilert "${TILERT_VERSION}"
++        install_exact nixl "${NIXL_VERSION}"
++        # TileRT's wheel does not declare the HTTP service dependencies used
++        # by its native decode server.  Install them explicitly before the
++        # import preflight so the image is made runnable deterministically.
++        install_exact fastapi "${FASTAPI_VERSION}"
++        install_exact uvicorn "${UVICORN_VERSION}"
++        "${PYTHON}" -c 'import tilert.pd_vllm.decode_server'
++        ;;
++    prefill)
++        "${PYTHON}" -c 'import vllm'
++        install_exact tilert "${TILERT_VERSION}" --no-deps
++        install_exact nixl "${NIXL_VERSION}"
++        "${PYTHON}" -c 'import tilert.pd_vllm.prefill_connector'
++        ;;
++    router)
++        install_exact tilert "${TILERT_VERSION}"
++        # GLM-5.1 tokenizer metadata names the Transformers v5
++        # TokenizersBackend class.  TileRT's broad >=4.46.3 dependency leaves
++        # its native router on the image's incompatible 4.x release unless we
++        # make the router-side tokenizer contract explicit.
++        install_exact transformers "${TRANSFORMERS_VERSION}"
++        # The native router uses the same undeclared FastAPI/Uvicorn stack as
++        # the decode server and must be self-contained on the frontend host.
++        install_exact fastapi "${FASTAPI_VERSION}"
++        install_exact uvicorn "${UVICORN_VERSION}"
++        "${PYTHON}" -c 'from transformers import TokenizersBackend'
++        "${PYTHON}" -c 'import tilert.pd_vllm.pd_router'
++        ;;
++    *)
++        echo "TILERT_ROLE must be prefill, decode, or router (got ${TILERT_ROLE:-unset})" >&2
++        exit 1
++        ;;
++esac
+diff --git a/src/srtctl/backends/__init__.py b/src/srtctl/backends/__init__.py
+index f184d8f0..d1bbca09 100644
+--- a/src/srtctl/backends/__init__.py
++++ b/src/srtctl/backends/__init__.py
+@@ -13,11 +13,12 @@ from .atom import AtomProtocol, AtomServerConfig
+ from .base import BackendProtocol, BackendType, SrunConfig
+ from .mocker import MockerProtocol, MockerServerConfig
+ from .sglang import MooncakeKVStoreConfig, SGLangProtocol, SGLangServerConfig
++from .tilert import TileRTProtocol, TileRTServerConfig
+ from .trtllm import TRTLLMProtocol, TRTLLMServerConfig
+ from .vllm import VLLMFailoverConfig, VLLMMooncakeKVStoreConfig, VLLMProtocol, VLLMServerConfig
+ 
+ # Union type for all backend configs
+-BackendConfig = AtomProtocol | SGLangProtocol | TRTLLMProtocol | VLLMProtocol | MockerProtocol
++BackendConfig = AtomProtocol | SGLangProtocol | TRTLLMProtocol | VLLMProtocol | MockerProtocol | TileRTProtocol
+ 
+ __all__ = [
+     # ATOM
+@@ -38,6 +39,9 @@ __all__ = [
+     # TRTLLM
+     "TRTLLMProtocol",
+     "TRTLLMServerConfig",
++    # TileRT
++    "TileRTProtocol",
++    "TileRTServerConfig",
+     # vLLM
+     "VLLMFailoverConfig",
+     "VLLMMooncakeKVStoreConfig",
+diff --git a/src/srtctl/backends/base.py b/src/srtctl/backends/base.py
+index 991fcd10..39804243 100644
+--- a/src/srtctl/backends/base.py
++++ b/src/srtctl/backends/base.py
+@@ -30,6 +30,7 @@ class BackendType(str, Enum):
+     VLLM = "vllm"
+     MOCKER = "mocker"
+     ATOM = "atom"
++    TILERT = "tilert"
+ 
+ 
+ @dataclass
+@@ -54,6 +55,17 @@ class SrunConfig:
+     sequential_node_start: int = 0
+ 
+ 
++@dataclass(frozen=True)
++class BackendPreparation:
++    """One synchronous backend-owned preparation step before worker launch."""
++
++    command: list[str]
++    node: str
++    mode: str
++    log_name: str
++    timeout_seconds: int = 21600
++
++
+ class BackendProtocol(Protocol):
+     """Protocol that all backend configurations must implement.
+ 
+diff --git a/src/srtctl/backends/tilert.py b/src/srtctl/backends/tilert.py
+new file mode 100644
+index 00000000..03b5a9e3
+--- /dev/null
++++ b/src/srtctl/backends/tilert.py
+@@ -0,0 +1,427 @@
++# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
++# SPDX-License-Identifier: Apache-2.0
++
++"""TileRT decode with vLLM prefill for native P/D disaggregation."""
++
++from __future__ import annotations
++
++import builtins
++import json
++from collections.abc import Sequence
++from dataclasses import field
++from pathlib import Path
++from typing import TYPE_CHECKING, Any, ClassVar, Literal
++
++from marshmallow import Schema, ValidationError
++from marshmallow_dataclass import dataclass
++
++from srtctl.ports import DYN_SYSTEM_PORT_BASE
++
++if TYPE_CHECKING:
++    from srtctl.backends.base import BackendPreparation, SrunConfig
++    from srtctl.core.runtime import RuntimeContext
++    from srtctl.core.schema import ProfilingConfig
++    from srtctl.core.topology import Endpoint, NodePortAllocator, Process
++
++WorkerMode = Literal["prefill", "decode", "agg"]
++
++_PREFILL_MANAGED_ARGS = {
++    "host",
++    "port",
++    "served-model-name",
++    "tensor-parallel-size",
++    "max-model-len",
++    "return-tokens-as-token-ids",
++    "kv-cache-dtype",
++    "kv-transfer-config",
++    "speculative-config",
++}
++
++_DECODE_MANAGED_ARGS = {
++    "engine",
++    "model",
++    "model-weights-dir",
++    "max-seq-len",
++    "kv-cache-dtype",
++    "transport",
++    "ctrl-port",
++    "http-port",
++    "with-mtp",
++}
++
++
++@dataclass(frozen=True)
++class TileRTServerConfig:
++    """Role-specific CLI arguments not owned by the topology adapter."""
++
++    prefill: dict[str, Any] | None = None
++    decode: dict[str, Any] | None = None
++
++    Schema: ClassVar[type[Schema]] = Schema
++
++
++@dataclass(frozen=True)
++class TileRTProtocol:
++    """Run vLLM prefill workers and TileRT decode workers without Dynamo.
++
++    TileRT's public P/D implementation intentionally uses different runtime
++    images for the two roles. ``model.container`` remains the decode image;
++    ``prefill_container`` selects the vLLM image used only for prefill sruns.
++    """
++
++    type: Literal["tilert"] = "tilert"
++    # OpenAI model name; defaults to the final component of model.path.
++    served_model_name: str | None = None
++    # vLLM image or cluster container alias for prefill workers only.
++    prefill_container: str | None = None
++    prefill_environment: dict[str, str] = field(default_factory=dict)
++    decode_environment: dict[str, str] = field(default_factory=dict)
++    aggregated_environment: dict[str, str] = field(default_factory=dict)
++    tilert_config: TileRTServerConfig | None = None
++    # TileRT P/D model profile (for example glm5).
++    model_profile: str = "glm5"
++    # Model type passed to the TileRT weight converter.
++    weight_model_type: str = "glm-5"
++    # Dedicated shared converted-weight directory, mounted at this path in all decode containers.
++    weights_dir: str = "/tilert_weights/converted"
++    # Maximum sequence length shared by prefill and decode.
++    max_seq_len: int = 202752
++    # TileRT decode KV cache dtype.
++    kv_cache_dtype: str = "fp8"
++    # vLLM KV cache dtype; must be wire-compatible with the decode dtype.
++    prefill_kv_cache_dtype: str = "fp8_ds_mla"
++    # KV transfer transport (the adapter supports NIXL).
++    transport: Literal["nixl"] = "nixl"
++    # Enable MTP on both sides of the P/D transfer.
++    with_mtp: bool = True
++    # Number of speculative tokens advertised by vLLM prefill.
++    speculative_tokens: int = 1
++
++    Schema: ClassVar[builtins.type[Schema]] = Schema
++
++    def validate_recipe(self, config: Any) -> None:
++        """Reject unsupported topology and adapter overrides before allocating Slurm nodes."""
++        resources = config.resources
++        if config.frontend.type != "tilert-router":
++            raise ValidationError("engine.type: tilert requires frontend.type: tilert-router")
++        if config.frontend.enable_multiple_frontends:
++            raise ValidationError("TileRT requires frontend.enable_multiple_frontends: false")
++        if resources.num_agg or resources.num_prefill != 1 or resources.num_decode < 1:
++            raise ValidationError("TileRT requires exactly one prefill worker and at least one decode worker")
++        if max(resources.gpus_per_prefill, resources.gpus_per_decode) > resources.gpus_per_node:
++            raise ValidationError("Each TileRT prefill and decode worker must fit on one node")
++        if self.model_profile in {"glm5", "glm_5", "glm-5"} and resources.gpus_per_decode != 8:
++            raise ValidationError("TileRT GLM-5 decode kernels require exactly 8 GPUs per worker")
++        if not self.prefill_container:
++            raise ValidationError("engine.prefill_container must select the vLLM prefill image")
++        if not Path(self.weights_dir).is_absolute() or self.weights_dir == "/":
++            raise ValidationError("engine.weights_dir must be an absolute, dedicated converted-weight directory")
++        if self.max_seq_len < 1 or self.speculative_tokens < 1:
++            raise ValidationError("TileRT max_seq_len and speculative_tokens must be positive")
++        if config.profiling.is_torch:
++            raise ValidationError("TileRT does not support torch profiling; use nsys")
++        # Command builders own these flags even when supplied through roles.*.args.
++        for mode, reserved in (("prefill", _PREFILL_MANAGED_ARGS), ("decode", _DECODE_MANAGED_ARGS)):
++            try:
++                _reject_managed_args(self.get_config_for_mode(mode), reserved)
++            except ValueError as error:
++                raise ValidationError(str(error)) from error
++
++    def get_srun_config(self) -> SrunConfig:
++        from srtctl.backends.base import SrunConfig
++
++        return SrunConfig(mpi=None, oversubscribe=False, launch_per_endpoint=False)
++
++    def get_config_for_mode(self, mode: WorkerMode) -> dict[str, Any]:
++        if self.tilert_config is None:
++            return {}
++        values = {"prefill": self.tilert_config.prefill, "decode": self.tilert_config.decode}
++        return dict(values.get(mode) or {})
++
++    def get_environment_for_mode(self, mode: WorkerMode) -> dict[str, str]:
++        values = {"prefill": self.prefill_environment, "decode": self.decode_environment}
++        return dict(values.get(mode) or {})
++
++    def get_process_environment(self, process: Process) -> dict[str, str]:
++        return {"TILERT_ROLE": process.endpoint_mode}
++
++    def get_container_image_for_mode(self, mode: WorkerMode, default: str) -> str:
++        if mode == "prefill" and self.prefill_container:
++            return self.prefill_container
++        return default
++
++    def get_served_model_name(self, default: str) -> str:
++        return self.served_model_name or default
++
++    @property
++    def mooncake_kv_store(self) -> None:
++        return None
++
++    @property
++    def failover(self) -> None:
++        return None
++
++    def get_mooncake_worker_env(self, infra_node_ip: str, local_hostname: str) -> dict[str, str]:
++        return {}
++
++    def get_failover_environment(self, process: Process, job_id: str) -> dict[str, str]:
++        return {}
++
++    def should_set_visible_devices(self) -> bool:
++        return True
++
++    def get_preparation(self, runtime: RuntimeContext, processes: list[Process]) -> BackendPreparation:
++        """Materialize converted TileRT weights once under a shared lock."""
++        from srtctl.backends.base import BackendPreparation
++
++        decode_leaders = [process for process in processes if process.endpoint_mode == "decode" and process.is_leader]
++        if not decode_leaders:
++            raise ValueError("TileRT model preparation requires a decode worker")
++        source = str(runtime.model_path) if runtime.is_hf_model else runtime.worker_model_arg
++        if not runtime.is_hf_model and Path(source) == Path(self.weights_dir):
++            raise ValueError("TileRT weights_dir must differ from the source model directory")
++        script = _weight_preparation_script(
++            source=source,
++            is_hf_model=runtime.is_hf_model,
++            weights_dir=self.weights_dir,
++            weight_model_type=self.weight_model_type,
++        )
++        return BackendPreparation(
++            command=["bash", "-ceu", script],
++            node=decode_leaders[0].node,
++            mode="decode",
++            log_name="tilert_weight_conversion.out",
++        )
++
++    def allocate_endpoints(
++        self,
++        num_prefill: int,
++        num_decode: int,
++        num_agg: int,
++        gpus_per_prefill: int,
++        gpus_per_decode: int,
++        gpus_per_agg: int,
++        gpus_per_node: int,
++        available_nodes: Sequence[str],
++        spread_workers: bool = False,
++    ) -> list[Endpoint]:
++        if num_agg:
++            raise ValueError("TileRT supports prefill/decode topology only")
++        from srtctl.core.topology import allocate_endpoints
++
++        return allocate_endpoints(
++            num_prefill=num_prefill,
++            num_decode=num_decode,
++            num_agg=num_agg,
++            gpus_per_prefill=gpus_per_prefill,
++            gpus_per_decode=gpus_per_decode,
++            gpus_per_agg=gpus_per_agg,
++            gpus_per_node=gpus_per_node,
++            available_nodes=available_nodes,
++            spread_workers=spread_workers,
++        )
++
++    def endpoints_to_processes(
++        self,
++        endpoints: list[Endpoint],
++        base_sys_port: int = DYN_SYSTEM_PORT_BASE,
++        port_allocator: NodePortAllocator | None = None,
++        frontend_type: str = "tilert-router",
++        dynamo_sidecar: bool = False,
++    ) -> list[Process]:
++        if dynamo_sidecar:
++            raise ValueError("TileRT does not support Dynamo sidecars")
++        if frontend_type != "tilert-router":
++            raise ValueError(f"backend.type: tilert requires frontend.type: tilert-router (got {frontend_type!r})")
++        from srtctl.core.topology import endpoints_to_processes
++
++        return endpoints_to_processes(endpoints, base_sys_port=base_sys_port, port_allocator=port_allocator)
++
++    def build_worker_command(
++        self,
++        process: Process,
++        endpoint_processes: list[Process],
++        runtime: RuntimeContext,
++        frontend_type: str = "tilert-router",
++        nsys_prefix: list[str] | None = None,
++        dump_config_path: Path | None = None,
++        profiling: ProfilingConfig | None = None,
++    ) -> list[str]:
++        del dump_config_path, profiling
++        if frontend_type != "tilert-router":
++            raise ValueError(f"backend.type: tilert requires frontend.type: tilert-router (got {frontend_type!r})")
++        if len({item.node for item in endpoint_processes}) != 1:
++            raise ValueError("TileRT currently requires every prefill and decode endpoint to fit on one node")
++        if process.endpoint_mode not in {"prefill", "decode"}:
++            raise ValueError("TileRT supports prefill/decode workers only")
++
++        config = self.get_config_for_mode(process.endpoint_mode)
++        if process.endpoint_mode == "decode":
++            _reject_managed_args(config, _DECODE_MANAGED_ARGS)
++            command = [*(nsys_prefix or []), "python", "-m", "tilert.pd_vllm.decode_server"]
++            command.extend(
++                [
++                    "--engine",
++                    "tilert",
++                    "--model",
++                    self.model_profile,
++                    "--model-weights-dir",
++                    self.weights_dir,
++                    "--max-seq-len",
++                    str(self.max_seq_len),
++                    "--kv-cache-dtype",
++                    self.kv_cache_dtype,
++                    "--transport",
++                    self.transport,
++                    "--ctrl-port",
++                    str(process.sys_port),
++                    "--http-port",
++                    str(process.http_port),
++                ]
++            )
++            if self.with_mtp:
++                command.append("--with-mtp")
++            command.extend(_config_to_cli_args(config))
++            return command
++
++        _reject_managed_args(config, _PREFILL_MANAGED_ARGS)
++        transfer = {
++            "kv_connector": "TileRTConnector",
++            "kv_connector_module_path": "tilert.pd_vllm.prefill_connector",
++            "kv_role": "kv_producer",
++            "kv_connector_extra_config": {
++                "tilert_ctrl_port": process.sys_port,
++                "tilert_model": self.model_profile,
++                "tilert_max_seq_len": self.max_seq_len,
++                "tilert_transport": self.transport,
++            },
++        }
++        speculative = {"method": "mtp", "num_speculative_tokens": self.speculative_tokens}
++        command = [*(nsys_prefix or []), "vllm", "serve", runtime.worker_model_arg]
++        command.extend(
++            [
++                "--served-model-name",
++                self.get_served_model_name(Path(str(runtime.model_path)).name),
++                "--host",
++                "0.0.0.0",
++                "--port",
++                str(process.http_port),
++                "--tensor-parallel-size",
++                str(len(process.gpu_indices)),
++                "--max-model-len",
++                str(self.max_seq_len),
++                "--return-tokens-as-token-ids",
++                "--kv-cache-dtype",
++                self.prefill_kv_cache_dtype,
++                "--kv-transfer-config",
++                json.dumps(transfer, separators=(",", ":")),
++            ]
++        )
++        if self.with_mtp:
++            command.extend(["--speculative-config", json.dumps(speculative, separators=(",", ":"))])
++        command.extend(_config_to_cli_args(config))
++        return command
++
++
++def _config_to_cli_args(config: dict[str, Any]) -> list[str]:
++    args: list[str] = []
++    for key, value in config.items():
++        flag = key if key.startswith("-") else f"--{key.replace('_', '-')}"
++        if value is True:
++            args.append(flag)
++        elif value is False or value is None:
++            continue
++        elif isinstance(value, list):
++            for item in value:
++                args.extend([flag, str(item)])
++        else:
++            args.extend([flag, str(value)])
++    return args
++
++
++def _reject_managed_args(config: dict[str, Any], reserved: set[str]) -> None:
++    overlap = {key.lstrip("-").replace("_", "-") for key in config}.intersection(reserved)
++    if overlap:
++        raise ValueError(f"TileRT config cannot override srtctl-managed argument(s): {sorted(overlap)}")
++
++
++def _weight_preparation_script(*, source: str, is_hf_model: bool, weights_dir: str, weight_model_type: str) -> str:
++    """Build a lock-safe, atomic TileRT conversion command."""
++    # Backend preparation is the final completeness boundary before conversion.
++    # The best-effort orchestrator pre-download may time out, and
++    # ``local_files_only=True`` can still resolve a partially populated snapshot.
++    # Let snapshot_download resume missing files here under its normal HF cache
++    # locks; a complete cache remains a metadata-only fast path.
++    resolve_source = (
++        f"from huggingface_hub import snapshot_download; source = snapshot_download({source!r})"
++        if is_hf_model
++        else f"source = {source!r}"
++    )
++    python = f"""
++import fcntl
++import json
++import os
++import shutil
++import subprocess
++from pathlib import Path
++
++{resolve_source}
++source_path = Path(source)
++target = Path({weights_dir!r})
++target.parent.mkdir(parents=True, exist_ok=True)
++lock_path = target.parent / f".{{target.name}}.convert.lock"
++with lock_path.open("w") as lock:
++    fcntl.flock(lock, fcntl.LOCK_EX)
++    def complete(path):
++        index = path / "model.safetensors.index.json"
++        if not index.is_file() or not (path / "chat_template.jinja").is_file():
++            return False
++        if not ((path / "tokenizer.json").is_file() or (path / "tokenizer_config.json").is_file()):
++            return False
++        try:
++            shards = set(json.loads(index.read_text())["weight_map"].values())
++            return bool(shards) and all((path / shard).is_file() for shard in shards)
++        except (ValueError, KeyError, TypeError):
++            return False
++
++    if complete(target):
++        print(f"TileRT weight cache hit: {{target}}", flush=True)
++        raise SystemExit(0)
++    tmp = target.parent / f".{{target.name}}.tmp.{{os.environ.get('SLURM_JOB_ID', os.getpid())}}"
++    shutil.rmtree(tmp, ignore_errors=True)
++    try:
++        subprocess.run(
++            [
++                "python",
++                "-m",
++                "tilert.models.preprocess.weight_converter",
++                "--model_type",
++                {weight_model_type!r},
++                "--model_dir",
++                str(source_path),
++                "--save_dir",
++                str(tmp),
++            ],
++            check=True,
++        )
++        for item in source_path.iterdir():
++            if not item.is_file() or item.suffix == ".safetensors" or item.name == "model.safetensors.index.json":
++                continue
++            shutil.copy2(item, tmp / item.name)
++        converted_index = tmp / "model.safetensors.index.json"
++        if not converted_index.is_file():
++            raise RuntimeError(f"TileRT conversion produced no index: {{converted_index}}")
++        if not (tmp / "chat_template.jinja").is_file():
++            raise RuntimeError(f"TileRT conversion produced no chat template: {{tmp}}")
++        if not ((tmp / "tokenizer.json").is_file() or (tmp / "tokenizer_config.json").is_file()):
++            raise RuntimeError(f"TileRT conversion produced no tokenizer metadata: {{tmp}}")
++        if not complete(tmp):
++            raise RuntimeError(f"TileRT conversion produced incomplete shards: {{tmp}}")
++        if target.exists():
++            shutil.rmtree(target)
++        os.replace(tmp, target)
++        print(f"TileRT weight cache ready: {{target}}", flush=True)
++    finally:
++        shutil.rmtree(tmp, ignore_errors=True)
++"""
++    return f"python - <<'PY'\n{python}PY\n"
+diff --git a/src/srtctl/cli/do_sweep.py b/src/srtctl/cli/do_sweep.py
+index ceba6ad6..78be7362 100644
+--- a/src/srtctl/cli/do_sweep.py
++++ b/src/srtctl/cli/do_sweep.py
+@@ -678,6 +678,8 @@ class SweepOrchestrator(
+             if self.runtime.staged_model_path is not None:
+                 self._stage_model()
+ 
++            self.prepare_backend(registry)
++
+             # Stage 2: Workers
+             reporter.report(JobStatus.WORKERS, JobStage.WORKERS, "Starting workers")
+             worker_procs = self.start_all_workers()
+diff --git a/src/srtctl/cli/mixins/benchmark_stage.py b/src/srtctl/cli/mixins/benchmark_stage.py
+index 8ac09dbf..a8445543 100644
+--- a/src/srtctl/cli/mixins/benchmark_stage.py
++++ b/src/srtctl/cli/mixins/benchmark_stage.py
+@@ -741,7 +741,8 @@ class BenchmarkStageMixin:
+             )
+         )
+         metrics_path = frontend.metrics_path
+-        if logical_workers_only:
++        # TileRT decode serves no /metrics; its frontend's per-rank view names only vLLM prefill.
++        if logical_workers_only and self.config.backend_type != "tilert":
+             if logical_endpoints is None:
+                 logical_endpoints = self._logical_worker_endpoints()
+             # Sidecars use native worker commands, so publish_metrics does not
+diff --git a/src/srtctl/cli/mixins/worker_stage.py b/src/srtctl/cli/mixins/worker_stage.py
+index 0a441438..44a80251 100644
+--- a/src/srtctl/cli/mixins/worker_stage.py
++++ b/src/srtctl/cli/mixins/worker_stage.py
+@@ -8,11 +8,14 @@ Handles starting backend worker processes (prefill/decode/agg).
+ """
+ 
+ import logging
++import os
+ import shlex
++import subprocess
+ from collections import defaultdict
+ from concurrent.futures import ThreadPoolExecutor, as_completed
+ from typing import TYPE_CHECKING, Any
+ 
++from srtctl.backends.tilert import TileRTProtocol
+ from srtctl.backends.vllm import VLLMFailoverConfig, VLLMProtocol
+ from srtctl.core.fingerprint import generate_capture_script
+ from srtctl.core.health import wait_for_health
+@@ -23,6 +26,7 @@ from srtctl.core.slurm import CONTAINER_REMAP_ROOT_EXPORT, get_hostname_ip, star
+ from srtctl.services.implicit import discovery_env
+ 
+ if TYPE_CHECKING:
++    from srtctl.core.processes import ProcessRegistry
+     from srtctl.core.runtime import RuntimeContext
+     from srtctl.core.schema import SrtConfig
+     from srtctl.core.topology import Endpoint, Process
+@@ -206,6 +210,62 @@ class WorkerStageMixin:
+             environment.setdefault("SGLANG_PYSPY_DUMP_BEFORE_CRASH", "0")
+         return environment
+ 
++    def _worker_container(self, mode: str) -> str:
++        """TileRT selects a separate vLLM image for prefill; other backends use model.container."""
++        default = str(self.runtime.container_image)
++        if isinstance(self.backend, TileRTProtocol):
++            return self.backend.get_container_image_for_mode(mode, default)
++        return default
++
++    def prepare_backend(self, registry: "ProcessRegistry") -> None:
++        """Convert TileRT weights once, as a Slurm step on the decode node, before workers start."""
++        if not isinstance(self.backend, TileRTProtocol):
++            return
++        # The TileRT image sets no NVIDIA_VISIBLE_DEVICES, and enroot's NVIDIA hook needs it in the
++        # srun environment at container creation to mount the driver. Every later step inherits it.
++        os.environ.setdefault("NVIDIA_VISIBLE_DEVICES", "all")
++        os.environ.setdefault("NVIDIA_DRIVER_CAPABILITIES", "compute,utility")
++        preparation = self.backend.get_preparation(self.runtime, self.backend_processes)
++        process = next(
++            item
++            for item in self.backend_processes
++            if item.node == preparation.node and item.endpoint_mode == preparation.mode
++        )
++        environment = self._get_worker_environment_for_mode(preparation.mode)
++        environment.update(self.runtime.environment)
++        environment.update(self.backend.get_process_environment(process))
++        log_path = self.runtime.log_dir / preparation.log_name
++        step_name = "backend_preparation"
++        proc = start_srun_process(
++            command=preparation.command,
++            nodelist=[preparation.node],
++            output=str(log_path),
++            container_image=self._worker_container(preparation.mode),
++            container_mounts=self.runtime.container_mounts,
++            env_to_set=environment,
++            bash_preamble=self._build_worker_preamble(),
++            # Like a worker step, the conversion inherits the node's GPUs.
++            srun_options=self.runtime.srun_options,
++            het_group=process.het_group,
++            step_name=step_name,
++        )
++        managed = ManagedProcess(
++            name=step_name,
++            popen=proc,
++            log_file=log_path,
++            node=preparation.node,
++            critical=True,
++            step_name=step_name,
++        )
++        registry.add_process(managed)
++        try:
++            return_code = proc.wait(timeout=preparation.timeout_seconds)
++        except subprocess.TimeoutExpired as error:
++            managed.terminate()
++            raise RuntimeError(f"Backend preparation timed out; see {log_path}") from error
++        if return_code != 0:
++            raise RuntimeError(f"Backend preparation failed with exit code {return_code}; see {log_path}")
++
+     def _profiling_selects_process(self, process: "Process") -> bool:
+         """Whether this physical process should be wrapped for profiling.
+ 
+@@ -381,7 +441,7 @@ class WorkerStageMixin:
+             command=cmd,
+             nodelist=[process.node],
+             output=str(worker_log),
+-            container_image=str(self.runtime.container_image),
++            container_image=self._worker_container(mode),
+             container_mounts=self.runtime.container_mounts,
+             env_to_set=env_to_set,
+             env_to_unset=env_to_unset,
+diff --git a/src/srtctl/core/config.py b/src/srtctl/core/config.py
+index f6aec0ab..d96f95c3 100755
+--- a/src/srtctl/core/config.py
++++ b/src/srtctl/core/config.py
+@@ -81,7 +81,9 @@ def load_cluster_config() -> dict[str, Any] | None:
+ 
+ # Keys whose string values name a container image. Any such leaf anywhere in a
+ # recipe resolves against the cluster `containers:` alias map.
+-CONTAINER_ALIAS_KEYS: frozenset[str] = frozenset({"container", "container_image", "image", "nginx_container"})
++CONTAINER_ALIAS_KEYS: frozenset[str] = frozenset(
++    {"container", "container_image", "image", "nginx_container", "prefill_container"}
++)
+ 
+ # Sub-trees the alias walker never enters: `identity` declares the pullable image a
+ # run *should* be using (verification only, never an alias); the rest are free-form
+@@ -108,6 +110,7 @@ _CONTAINER_ALIAS_SKIP_KEYS: frozenset[str] = frozenset(
+         "vllm_config",
+         "trtllm_config",
+         "mocker_config",
++        "tilert_config",
+         "store_config",
+     }
+ )
+diff --git a/src/srtctl/core/fingerprint.py b/src/srtctl/core/fingerprint.py
+index 2fa0feec..5776d40e 100644
+--- a/src/srtctl/core/fingerprint.py
++++ b/src/srtctl/core/fingerprint.py
+@@ -46,6 +46,8 @@ UNAVAILABLE = "unavailable"
+ # Used in both native Python probes and the bash capture script.
+ FRAMEWORK_PACKAGES: dict[str, str] = {
+     "vllm": "vllm",
++    "tilert": "tilert",
++    "nixl": "nixl",
+     "sglang": "sglang",
+     "sglang-router": "sglang-router",
+     "amd-mori": "amd_mori",
+diff --git a/src/srtctl/core/roles.py b/src/srtctl/core/roles.py
+index 57c643e6..5e54b752 100644
+--- a/src/srtctl/core/roles.py
++++ b/src/srtctl/core/roles.py
+@@ -59,6 +59,7 @@ ENGINE_CONFIG_KEY: dict[str, str] = {
+     "vllm": "vllm_config",
+     "trtllm": "trtllm_config",
+     "mocker": "mocker_config",
++    "tilert": "tilert_config",
+ }
+ _ALL_ENGINE_CONFIG_KEYS = frozenset(ENGINE_CONFIG_KEY.values())
+ 
+diff --git a/src/srtctl/core/schema.py b/src/srtctl/core/schema.py
+index d7edba04..233d438f 100755
+--- a/src/srtctl/core/schema.py
++++ b/src/srtctl/core/schema.py
+@@ -39,6 +39,7 @@ from srtctl.backends import (
+     BackendConfig,
+     MockerProtocol,
+     SGLangProtocol,
++    TileRTProtocol,
+     TRTLLMProtocol,
+     VLLMMooncakeKVStoreConfig,
+     VLLMProtocol,
+@@ -446,7 +447,9 @@ class BackendConfigField(fields.Field):
+             # Default to SGLang
+             return SGLangProtocol()
+ 
+-        if isinstance(value, AtomProtocol | SGLangProtocol | TRTLLMProtocol | VLLMProtocol | MockerProtocol):
++        if isinstance(
++            value, AtomProtocol | SGLangProtocol | TRTLLMProtocol | VLLMProtocol | MockerProtocol | TileRTProtocol
++        ):
+             return value
+ 
+         if not isinstance(value, dict):
+@@ -469,9 +472,11 @@ class BackendConfigField(fields.Field):
+         elif backend_type == "mocker":
+             schema = MockerProtocol.Schema()
+             return schema.load(value)
++        elif backend_type == "tilert":
++            return TileRTProtocol.Schema().load(value)
+         else:
+             raise ValidationError(
+-                f"Unknown backend type: {backend_type!r}. Supported types: atom, sglang, trtllm, vllm, mocker"
++                f"Unknown backend type: {backend_type!r}. Supported types: atom, sglang, trtllm, vllm, mocker, tilert"
+             )
+ 
+     def _serialize(self, value: Any | None, attr: str | None, obj: Any, **kwargs) -> Any:
+@@ -488,6 +493,8 @@ class BackendConfigField(fields.Field):
+             return VLLMProtocol.Schema().dump(value)
+         if isinstance(value, MockerProtocol):
+             return MockerProtocol.Schema().dump(value)
++        if isinstance(value, TileRTProtocol):
++            return TileRTProtocol.Schema().dump(value)
+         return value
+ 
+ 
+@@ -2325,6 +2332,8 @@ class SrtConfig:
+         self._validate_colocated_decode()
+         self._validate_dedicated_node_placement()
+         self._validate_frontend()
++        if isinstance(self.backend, TileRTProtocol):
++            self.backend.validate_recipe(self)
+         self._validate_dynamo_sidecar()
+         self._validate_vllm_failover()
+         self._validate_vllm_discovery_connector()
+diff --git a/src/srtctl/core/telemetry.py b/src/srtctl/core/telemetry.py
+index 5fd64a54..6665791d 100644
+--- a/src/srtctl/core/telemetry.py
++++ b/src/srtctl/core/telemetry.py
+@@ -152,7 +152,7 @@ def generate_tachometer_config(
+     # or SGLang) has no separate process either: the endpoint is the aggregate
+     # leader's node, which may differ from the orchestrator head in FrontendTopology.
+     frontend_nodes: list[str] = []
+-    if frontend is not None:
++    if frontend is not None and getattr(frontend, "has_metrics", True):
+         frontend_nodes = frontend.direct_endpoint_nodes(processes) or list(frontend_topology.frontend_nodes)
+ 
+     for frontend_index, node in enumerate(frontend_nodes):
+diff --git a/src/srtctl/frontends/__init__.py b/src/srtctl/frontends/__init__.py
+index b5e462cf..40d697c5 100644
+--- a/src/srtctl/frontends/__init__.py
++++ b/src/srtctl/frontends/__init__.py
+@@ -29,6 +29,7 @@ from srtctl.frontends.dynamic_frontend import DynamicFrontend
+ from srtctl.frontends.dynamo import DynamoFrontend
+ from srtctl.frontends.sglang import SGLangRouterFrontend
+ from srtctl.frontends.sglang_direct import SGLangFrontend
++from srtctl.frontends.tilert_router import TileRTRouterFrontend
+ from srtctl.frontends.trtllm_serve import TRTLLMServeFrontend
+ from srtctl.frontends.vllm import VLLMFrontend
+ from srtctl.frontends.vllm_router import VLLMRouterFrontend
+@@ -42,6 +43,7 @@ __all__ = [
+     "SGLangFrontend",
+     "SGLangRouterFrontend",
+     "TRTLLMServeFrontend",
++    "TileRTRouterFrontend",
+     "VLLMFrontend",
+     "VLLMRouterFrontend",
+     "get_frontend",
+diff --git a/src/srtctl/frontends/tilert_router.py b/src/srtctl/frontends/tilert_router.py
+new file mode 100644
+index 00000000..36c8f5cc
+--- /dev/null
++++ b/src/srtctl/frontends/tilert_router.py
+@@ -0,0 +1,100 @@
++# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
++# SPDX-License-Identifier: Apache-2.0
++
++"""TileRT's native vLLM-prefill/TileRT-decode router frontend."""
++
++from __future__ import annotations
++
++from typing import TYPE_CHECKING, Any, ClassVar
++from urllib.parse import urlsplit
++
++from srtctl.core.health import WorkerHealthResult
++from srtctl.frontends.base import register_frontend
++from srtctl.frontends.static_router import RouterWorker, StaticRouterFrontend
++from srtctl.frontends.vllm_router import VLLMRouterFrontend
++
++if TYPE_CHECKING:
++    from srtctl.core.runtime import RuntimeContext
++    from srtctl.core.topology import Process
++
++
++@register_frontend("tilert-router")
++class TileRTRouterFrontend(StaticRouterFrontend):
++    """Launch ``tilert.pd_vllm.pd_router`` from an explicit worker topology."""
++
++    type: ClassVar[str] = "tilert-router"
++    required_backend: ClassVar[str | None] = "tilert"
++    executable: ClassVar[tuple[str, ...]] = ("python", "-m", "tilert.pd_vllm.pd_router")
++    pd_flag: ClassVar[str] = ""
++    process_name: ClassVar[str] = "tilert_router"
++    # The router serves no Prometheus /metrics endpoint.
++    has_metrics: ClassVar[bool] = False
++    # TileRT's router connects to its workers during startup.
++    wait_for_workers_before_start: ClassVar[bool] = True
++
++    def validate(self, config: Any) -> None:
++        self.get_managed_frontend_args(config, config.backend, [])
++
++    def worker_metrics_port(self, process: Process, runtime: RuntimeContext) -> int | None:
++        """Only the vLLM prefill API serves Prometheus; TileRT decode has no /metrics handler."""
++        return process.http_port if process.endpoint_mode == "prefill" else None
++
++    def build_bash_preamble(self, config: Any) -> str | None:
++        """Apply the recipe setup script in the router image with its role selected."""
++        setup = VLLMRouterFrontend.build_bash_preamble(self, config)
++        return f"export TILERT_ROLE=router && {setup}" if setup else None
++
++    @property
++    def health_endpoint(self) -> str:
++        return "/health"
++
++    def parse_health(
++        self,
++        response_json: dict,
++        expected_prefill: int,
++        expected_decode: int,
++    ) -> WorkerHealthResult:
++        ready = response_json.get("status") == "ok"
++        return WorkerHealthResult(
++            ready=ready,
++            message="TileRT P/D router healthy" if ready else "TileRT P/D router not ready",
++            prefill_ready=expected_prefill if ready else 0,
++            prefill_expected=expected_prefill,
++            decode_ready=expected_decode if ready else 0,
++            decode_expected=expected_decode,
++        )
++
++    def worker_bootstrap_port(self, backend: Any, process: Process) -> int | None:
++        del backend
++        return process.sys_port if process.endpoint_mode == "decode" else None
++
++    def build_router_command(self, workers: list[RouterWorker], host: str, port: int, backend: Any) -> list[str]:
++        prefills = [worker for worker in workers if worker.mode == "prefill"]
++        decodes = [worker for worker in workers if worker.mode == "decode"]
++        aggregate = [worker for worker in workers if worker.mode == "agg"]
++        if aggregate or len(prefills) != 1 or not decodes:
++            raise ValueError("TileRT router requires exactly one prefill worker and at least one decode worker")
++
++        command = [*self.executable, "--vllm-url", prefills[0].url]
++        for worker in decodes:
++            parsed = urlsplit(worker.url)
++            if parsed.hostname is None or parsed.port is None or worker.bootstrap_port is None:
++                raise ValueError(f"Incomplete TileRT decode endpoint: {worker}")
++            command.extend(["--decode", f"{parsed.hostname}:{worker.bootstrap_port}:{parsed.port}"])
++        command.extend(["--host", host, "--port", str(port)])
++        return command
++
++    def get_managed_frontend_args(
++        self,
++        config: Any,
++        backend: Any,
++        backend_processes: list[Process],
++    ) -> list[str]:
++        del backend_processes
++        normalized = {str(key).lstrip("-").replace("_", "-") for key in (config.frontend.args or {})}
++        reserved = {"vllm-url", "decode", "host", "port", "model-path"}
++        overlap = normalized.intersection(reserved)
++        if overlap:
++            raise ValueError(f"frontend.args cannot override srtctl-managed TileRT argument(s): {sorted(overlap)}")
++        # Conversion copied tokenizer metadata into the shared decode-weight mount.
++        return ["--model-path", backend.weights_dir]

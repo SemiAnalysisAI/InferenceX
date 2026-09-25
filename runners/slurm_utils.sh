@@ -38,7 +38,7 @@ setup_srt_slurm() {
         echo "Usage: setup_srt_slurm destination framework uses_power (0 or 1)" >&2
         return 1
     fi
-    local destination="$1" framework="$2" uses_power="$3"
+    local destination="$1" uses_power="$3"
     check_env_vars INFERENCEX_RUNTIME_ENV_VARS EVAL_ONLY
     SRT_EVAL_PASSTHROUGH=$(python3 - <<'PYENV'
 import json
@@ -57,29 +57,20 @@ PYENV
     # Custom benchmarks inherit exported workflow settings through sbatch/srun;
     # native recipe environment and benchmark.env retain their override priority.
     local source="$INFERENCEX_SLURM_UTILS_DIR/../utils/srt-slurm"
-    if [[ "$framework" == "tilert" ]]; then
-        # TileRT still needs its legacy runtime until the native backend and router land.
-        SRT_SLURM_COMMIT=6bc3f306bdafa1edfb5dded2fcda8f1ccede1bde
-        git init --quiet "$destination" || return 1
-        git -C "$destination" remote add origin https://github.com/SemiAnalysisAI/srt-slurm.git || return 1
-        git -C "$destination" fetch --quiet --depth=1 origin "$SRT_SLURM_COMMIT" || return 1
-        git -C "$destination" checkout --quiet --detach "$SRT_SLURM_COMMIT" || return 1
-    else
-        if [[ ! -e "$source/.git" ]]; then
-            echo "Missing srt-slurm submodule; run git submodule update --init before launching." >&2
-            return 1
-        fi
-        SRT_SLURM_COMMIT=$(git -C "$source" rev-parse HEAD) || return 1
-        SRTCTL_EVAL_ARGS+=(--set benchmark.stream_output=true)
-        # A local clone keeps job writes isolated and preserves upstream Git provenance.
-        git -c advice.detachedHead=false clone --quiet --no-hardlinks "$source" "$destination" || return 1
-        # Temporary fixes awaiting upstream merge; see runners/srt-slurm/patches/README.md.
-        local patch
-        for patch in "$GITHUB_WORKSPACE"/runners/srt-slurm/patches/*.patch; do
-            [[ -e "$patch" ]] || continue
-            git -C "$destination" apply "$patch" || return 1
-        done
+    if [[ ! -e "$source/.git" ]]; then
+        echo "Missing srt-slurm submodule; run git submodule update --init before launching." >&2
+        return 1
     fi
+    SRT_SLURM_COMMIT=$(git -C "$source" rev-parse HEAD) || return 1
+    SRTCTL_EVAL_ARGS+=(--set benchmark.stream_output=true)
+    # A local clone keeps job writes isolated and preserves upstream Git provenance.
+    git -c advice.detachedHead=false clone --quiet --no-hardlinks "$source" "$destination" || return 1
+    # Fixes and features awaiting upstream merge; see runners/srt-slurm/patches/README.md.
+    local patch
+    for patch in "$GITHUB_WORKSPACE"/runners/srt-slurm/patches/*.patch; do
+        [[ -e "$patch" ]] || continue
+        git -C "$destination" apply "$patch" || return 1
+    done
     cd "$destination" || return 1
     [[ "$(git rev-parse HEAD)" == "$SRT_SLURM_COMMIT" ]] || return 1
     echo "Using srt-slurm revision $SRT_SLURM_COMMIT"

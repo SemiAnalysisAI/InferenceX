@@ -38,6 +38,8 @@ frontend:
 
 engine:
   type: tilert
+  # The AgentX client requests the HF model ID; vLLM prefill must serve that name.
+  served_model_name: "zai-org/GLM-5.1-FP8"
   prefill_container: "tilert-prefill"
   model_profile: "glm5"
   weight_model_type: "glm-5"
