@@ -1,0 +1,73 @@
+# MiniMax-M3 MXFP4 AgentX on MI355X with ATOM EAGLE3 (GQA draft, three tokens)
+# and GPU-resident KV at TP2 and TP4. The LMCache bands stay on the legacy
+# script: srtctl reserves ATOM's kv-transfer-config for disaggregated workers.
+base:
+  schema: 2
+  name: minimaxm3-fp4-mi355x-atom-agentic
+  model:
+    path: hf:amd/MiniMax-M3-MXFP4
+    container: rocm/atom-dev:nightly_202609171455
+    precision: fp4
+  resources:
+    gpu_type: mi355x
+    gpus_per_node: 8
+  frontend:
+    type: atomesh
+    container_image: rocm/atom-dev@sha256:f00a9dc588a380038fdad54cd57a956043cb316ddda54ebb1b62a24f8caa343b
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: atom
+  setup_script: minimaxm3-atom-eagle3-deps.sh
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      args:
+        served-model-name: amd/MiniMax-M3-MXFP4
+        trust-remote-code: true
+        kv_cache_dtype: fp8
+        block-size: 128
+        max-num-batched-tokens: 32768
+        gpu-memory-utilization: 0.95
+        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,20,22,24,26,28,30,32,34,36,40,48,56,64]'
+        index-cache-dtype: fp8
+        online_quant_config: '{"global_quant_config":"ptpc_fp8","exclude_layer":["lm_head","model.embed_tokens","vision_tower","multi_modal_projector","patch_merge_mlp","*block_sparse_moe"]}'
+        default-chat-template-kwargs: '{"thinking_mode":"enabled"}'
+        method: eagle3
+        draft-model: Inferact/MiniMax-M3-EAGLE3-GQA
+        num-speculative-tokens: 3
+      env:
+        PYTHONNOUSERSITE: '1'
+        AITER_LOG_LEVEL: WARNING
+        AITER_SITUV2_A4W4: '1'
+        AITER_QUICK_REDUCE_QUANTIZATION: INT4
+        AITER_FLYDSL_STAGE2_FP8: '1'
+        ATOM_FORCE_ATTN_TRITON: '1'
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
+    env:
+      MODEL: amd/MiniMax-M3-MXFP4
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'atom:'
+      AIPERF_APPLY_CHAT_TEMPLATE: 'true'
+
+# One variant per point. Admission is 2x CONC. TP4 shards the indexer across
+# ranks at the measured points (15, 20, 24, 28, 32).
+override_tp4_c1: {roles: {agg: {gpus: 4, args: {max-num-seqs: 2}}}, benchmark: {env: {CONC: '1'}}}
+override_tp4_c2: {roles: {agg: {gpus: 4, args: {max-num-seqs: 4}}}, benchmark: {env: {CONC: '2'}}}
+override_tp4_c4: {roles: {agg: {gpus: 4, args: {max-num-seqs: 8}}}, benchmark: {env: {CONC: '4'}}}
+override_tp4_c5: {roles: {agg: {gpus: 4, args: {max-num-seqs: 10}}}, benchmark: {env: {CONC: '5'}}}
+override_tp4_c8: {roles: {agg: {gpus: 4, args: {max-num-seqs: 16}}}, benchmark: {env: {CONC: '8'}}}
+override_tp4_c10: {roles: {agg: {gpus: 4, args: {max-num-seqs: 20}}}, benchmark: {env: {CONC: '10'}}}
+override_tp4_c12: {roles: {agg: {gpus: 4, args: {max-num-seqs: 24}}}, benchmark: {env: {CONC: '12'}}}
+override_tp4_c15: {roles: {agg: {gpus: 4, args: {max-num-seqs: 30}, env: {ATOM_M3_INDEXER_CP: '1'}}}, benchmark: {env: {CONC: '15'}}}
+override_tp4_c20: {roles: {agg: {gpus: 4, args: {max-num-seqs: 40}, env: {ATOM_M3_INDEXER_CP: '1'}}}, benchmark: {env: {CONC: '20'}}}
+override_tp4_c24: {roles: {agg: {gpus: 4, args: {max-num-seqs: 48}, env: {ATOM_M3_INDEXER_CP: '1'}}}, benchmark: {env: {CONC: '24'}}}
+override_tp4_c28: {roles: {agg: {gpus: 4, args: {max-num-seqs: 56}, env: {ATOM_M3_INDEXER_CP: '1'}}}, benchmark: {env: {CONC: '28'}}}
+override_tp4_c32: {roles: {agg: {gpus: 4, args: {max-num-seqs: 64}, env: {ATOM_M3_INDEXER_CP: '1'}}}, benchmark: {env: {CONC: '32'}}}
+override_tp2_c1: {roles: {agg: {gpus: 2, args: {max-num-seqs: 2}}}, benchmark: {env: {CONC: '1'}}}
+override_tp2_c2: {roles: {agg: {gpus: 2, args: {max-num-seqs: 4}}}, benchmark: {env: {CONC: '2'}}}
