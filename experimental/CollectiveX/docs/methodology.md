@@ -140,16 +140,20 @@ the #642 low-latency combine fence. Scale-up cases
 request NCCL Device API LSA and fail closed unless the realized LSA team covers the full EP world.
 x86 EP16 scale-out uses the hybrid path with GIN and requires two logical scale-out domains
 represented by two physical RDMA ranks, with eight scale-up ranks per domain. GB EP16 remains MNNVL
-scale-up and uses LSA. MoRI EP8 uses the direct IntraNode kernel on every CDNA SKU. Its EP16 InterNodeV1 path is
-configured but unsupported and never dispatched: `combine()` takes the rank's own routing tensor,
-not dispatch's returned recv-slot indices (part of the ROCm/mori#475 corruption was that
-caller-side mix-up, guarded upstream by ROCm/mori#546), and with the corrected call single-shot
-combine is clean through T=512 — but a residual stochastic corruption remains from T~128 under
-repeated execution and at prefill token counts, independent of per-pair drains (not a
-buffer-reuse race; suspected driver-level, ionic 25.11 vs upstream's non-reproducing 26.03).
-The tw pairs additionally have no cross-node GPU fabric. mi355x EP16 currently has no
-publishable transport: UCCL-EP's CPU-proxy RDMA is functional on the Pollara fabric but roughly
-13x under its upstream-documented bandwidth (~6 GB/s vs 82 GB/s), unchanged by GPU-memory
+scale-up and uses LSA. MoRI EP8 uses the direct IntraNode kernel on every CDNA SKU. MoRI EP16 runs the InterNodeV1
+kernel on mi355x over the Pollara RoCE rails with MoRI's default STATIC_HEAP symmetric heap.
+Two defects had to be removed before that row could publish. `combine()` takes the rank's own
+routing tensor, not dispatch's returned recv-slot indices (part of the ROCm/mori#475 corruption
+was that caller-side mix-up, guarded upstream by ROCm/mori#546). The residual stochastic
+corruption from T~64 up, near-certain at prefill token counts, was this adapter forcing
+`MORI_SHMEM_MODE=VMM_HEAP` for scale-out: on ROCm 7.2 the HIP runtime leaves VMM allocations
+requested uncached in the cached pool, so cross-node combine partials read stale lines
+(ROCm/mori#610). A same-branch CI A/B on mi355x settled it — STATIC_HEAP is correct on every
+bf16 and fp8 rung, decode 1..512 and prefill 1024..8192 (run 34939333022), while VMM_HEAP
+reproduces the corruption (run 34941185534) — and the adapter now fails closed if the heap mode
+is anything but STATIC_HEAP. The tw pairs stay unsupported at EP16: they have no cross-node GPU
+fabric. UCCL-EP EP16 stays off mi355x: its CPU-proxy RDMA is functional on the Pollara fabric but
+roughly 13x under its upstream-documented bandwidth (~6 GB/s vs 82 GB/s), unchanged by GPU-memory
 registration mode (DMA-BUF vs peer-memory) or traffic class — an ionic-driver-level suspect.
 UCCL-EP EP16 is registered on b200-nscale, where it runs at full health on bare-metal IB.
 MoRI runs under its MANUAL launch mode with a pinned launch config, because that is what the engines
