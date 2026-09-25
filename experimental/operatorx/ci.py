@@ -20,32 +20,20 @@ from collections import defaultdict
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-POOLS = {
-    "h100-dgxc": "h100_dgxc_8x",
-    "h200-dgxc": "h200_dgxc_8x",
-    "b200-nscale": "b200_nscale_8x",
-    "b300": "b300_dsxe_8x",
-    "gb200": "gb200_nvl72_4x",
-    "gb300": "gb300_nvl72_4x",
-    "mi300x": "mi300x_amds_8x",
-    "mi325x": "mi325x_amds_8x",
-    "mi355x": "mi355x_8x",
-}
-# The self-hosted runner label each pool's runners carry, as InferenceX's benchmark
-# workflows request them. GB200/GB300 runners carry no bare pool label, and the bare
-# mi300x label also matches runners at a site OperatorX is not set up for.
+# Each shard runs on the self-hosted runners that carry this label - the labels
+# InferenceX's benchmark workflows request - mapped to its Slurm cluster id and the
+# CollectiveX platform profile (configs/platform_config.json) its Slurm settings come from.
 RUNNERS = {
-    "h100-dgxc": "cluster:h100-dgxc",
-    "h200-dgxc": "cluster:h200-dgxc",
-    "b200-nscale": "cluster:b200-nscale",
-    "b300": "cluster:b300-dsxe",
-    "gb200": "cluster:gb200-nv",
-    "gb300": "cluster:gb300-nv",
-    "mi300x": "cluster:mi300x-amd",
-    "mi325x": "cluster:mi325x-amds",
-    "mi355x": "cluster:mi355x-amds",
+    "cluster:h100-dgxc": ("h100_dgxc_8x", "h100-dgxc"),
+    "cluster:h200-dgxc": ("h200_dgxc_8x", "h200-dgxc"),
+    "cluster:b200-nscale": ("b200_nscale_8x", "b200-nscale"),
+    "cluster:b300-dsxe": ("b300_dsxe_8x", "b300"),
+    "cluster:gb200-nv": ("gb200_nvl72_4x", "gb200"),
+    "cluster:gb300-nv": ("gb300_nvl72_4x", "gb300"),
+    "cluster:mi300x-amd": ("mi300x_amds_8x", "mi300x"),
+    "cluster:mi325x-amds": ("mi325x_amds_8x", "mi325x"),
+    "cluster:mi355x-amds": ("mi355x_8x", "mi355x"),
 }
-AMD_POOLS = {"mi300x", "mi325x", "mi355x"}
 MODES = ("timing", "counters")
 # Hardware counters per kernel. Latencies from a counters run are perturbed by the profiler.
 NCU_METRICS = ",".join((
@@ -110,13 +98,17 @@ ROCPROF_PASSES = {
 
 
 def load_platforms(path: Path) -> dict:
+    """Hardware and Slurm settings per runner label: the CollectiveX profile the label
+    maps to, overlaid with this file's own entry for the label."""
     document = json.loads(path.read_text())
-    platforms = {}
+    base = {}
     if "base" in document:
-        base = path.parent / document["base"]
-        platforms.update(json.loads(base.read_text())["platforms"])
-    for pool, hardware in document["platforms"].items():
-        platforms[pool] = {**platforms.get(pool, {}), **hardware}
+        base = json.loads((path.parent / document["base"]).read_text())["platforms"]
+    platforms = {}
+    for runner, (_, profile) in RUNNERS.items():
+        merged = {**base.get(profile, {}), **document["platforms"].get(runner, {})}
+        if merged:
+            platforms[runner] = merged
     return platforms
 
 
@@ -126,8 +118,12 @@ _RECIPE_ENV_SKIP = re.compile(r"^(AIPERF_|HF_|MODEL|PORT|RESULT|SERVER|LMCACHE|P
 
 
 def family(name: str) -> str:
-    """Hardware family of a pool or recipe runner: 'cluster:mi355x-amds' / 'mi355x' -> 'mi355x'."""
+    """Hardware family of a runner label: 'cluster:mi355x-amds' -> 'mi355x'."""
     return name.removeprefix("cluster:").split("-")[0]
+
+
+def is_amd(runner: str) -> bool:
+    return family(runner).startswith("mi")
 
 
 def recipe_env(script: Path) -> dict[str, str]:
@@ -173,7 +169,7 @@ def write_json(path: Path, value: object) -> None:
 
 
 def plan(
-    pool: str,
+    runner: str,
     backends: list[str],
     testlists: dict[str, list[dict]],
     images: dict[str, dict],
@@ -183,20 +179,20 @@ def plan(
     mode: str = "timing",
     recipes: dict[str, dict] | None = None,
 ) -> dict:
-    if pool not in POOLS:
-        raise ValueError(f"unsupported pool: {pool}")
+    if runner not in RUNNERS:
+        raise ValueError(f"unsupported runner: {runner}")
     if mode not in MODES:
         raise ValueError(f"mode must be one of {', '.join(MODES)}")
-    hardware = platforms[pool]
+    hardware = platforms[runner]
     gpus = hardware["gpus_per_node"]
     image_platform = hardware["image_platform"]
     if type(gpus) is not int or gpus not in (4, 8):
-        raise ValueError("pool must supply four or eight GPUs per physical node")
+        raise ValueError("runner must supply four or eight GPUs per physical node")
     if image_platform not in ("linux/amd64", "linux/arm64"):
         raise ValueError("unsupported image platform")
     if not backends or set(backends) - images.keys():
         raise ValueError("select at least one registered backend for this GPU platform")
-    if pool in AMD_POOLS and (
+    if is_amd(runner) and (
         set(backends) - {"torch", "vllm"}
         or world_sizes != [1]
         or any(
@@ -211,7 +207,7 @@ def plan(
     if not world_sizes or set(world_sizes) - {1, 2, 4, 8}:
         raise ValueError("world sizes must be selected from 1,2,4,8 (single node)")
     if any(ws > gpus for ws in world_sizes):
-        raise ValueError(f"world size exceeds the pool's {gpus}-GPU physical node")
+        raise ValueError(f"world size exceeds the runner's {gpus}-GPU physical node")
     if not 1 <= chunk_size <= 500:
         raise ValueError("chunk size must be between 1 and 500")
     groups = defaultdict(list)
@@ -228,7 +224,7 @@ def plan(
             # an entry naming an InferenceX recipe for this hardware runs with that recipe's
             # image and launch env, in its own shard
             recipe = next((k for k in shape.get("recipes", ()) if recipes and k in recipes
-                           and recipes[k]["hardware"] == family(pool)
+                           and recipes[k]["hardware"] == family(runner)
                            and recipes[k]["framework"] in backends), None)
             groups[(ws, recipe or "")].append({"testlist": name, "shape": shape})
     image_groups = defaultdict(list)
@@ -246,8 +242,8 @@ def plan(
     for image, selected, ws, cases, extra in shards:
             for offset in range(0, len(cases), chunk_size):
                 cell = {
-                    "pool": pool,
-                    "cluster": POOLS[pool],
+                    "runner": runner,
+                    "cluster": RUNNERS[runner][0],
                     "nodes": 1,
                     "gpus_per_node": gpus,
                     "image_platform": image_platform,
@@ -262,7 +258,7 @@ def plan(
                 identity = hashlib.sha256(
                     json.dumps(cell, sort_keys=True).encode()
                 ).hexdigest()[:16]
-                cells.append({"id": f"{pool}-{identity}", **cell})
+                cells.append({"id": f"{runner.removeprefix('cluster:')}-{identity}", **cell})
     if not cells:
         raise ValueError("selection contains no runnable shapes")
     if len(cells) > 256:
@@ -344,11 +340,11 @@ def image_key(image: str, digest: str, image_platform: str) -> str:
     return hashlib.sha256((image + digest + suffix).encode()).hexdigest()
 
 
-def shared_base(profile: dict, pool: str) -> Path:
-    """Resolve the pool's configured/shared account storage, never temporary HOME."""
+def shared_base(profile: dict, runner: str) -> Path:
+    """Resolve the runner's configured/shared account storage, never temporary HOME."""
     if profile.get("stage_dir"):
         roots = [Path(profile["stage_dir"])]
-    elif pool in AMD_POOLS:
+    elif is_amd(runner):
         runner_temp = Path(os.environ["RUNNER_TEMP"])
         if (
             runner_temp.parts[-2:] != ("_work", "_temp")
@@ -356,8 +352,8 @@ def shared_base(profile: dict, pool: str) -> Path:
         ):
             raise ValueError("AMD staging requires the shared runner _work/_temp path")
         roots = [runner_temp.parent.parent]
-    elif pool == "b300":
-        # CollectiveX uses the compute-visible account home on this pool.
+    elif family(runner) == "b300":
+        # CollectiveX uses the compute-visible account home on these nodes.
         # The shared squash parent is not writable by the GHA service account.
         roots = [Path(pwd.getpwuid(os.getuid()).pw_dir)]
     elif profile.get("squash_dir"):
@@ -367,7 +363,7 @@ def shared_base(profile: dict, pool: str) -> Path:
     for root in roots:
         if root.is_dir() and os.access(root, os.W_OK | os.X_OK):
             return root / f".operatorx-{os.getuid()}"
-    raise ValueError("no writable shared storage root configured for this pool")
+    raise ValueError("no writable shared storage root configured for this runner")
 
 
 def import_image(args) -> None:
@@ -453,18 +449,18 @@ def finalize(root: Path, cleanup_seconds: int) -> None:
 
 
 def recover(
-    artifacts: Path, run_id: str, pool: str, platform_config: Path, cleanup_seconds: int
+    artifacts: Path, run_id: str, runner: str, platform_config: Path, cleanup_seconds: int
 ) -> None:
-    profile = load_platforms(platform_config)[pool]["operator"]
-    base = shared_base(profile, pool).resolve()
+    profile = load_platforms(platform_config)[runner]["operator"]
+    base = shared_base(profile, runner).resolve()
     recovered = 0
     for execution in artifacts.rglob("execution.json"):
         data = json.loads(execution.read_text())
-        if data["run_id"] != run_id or data["cell"]["pool"] != pool:
-            raise ValueError("recovery artifact does not match requested run/pool")
+        if data["run_id"] != run_id or data["cell"]["runner"] != runner:
+            raise ValueError("recovery artifact does not match requested run/runner")
         stage = Path(data["stage"])
         if stage.parent.resolve() != base:
-            raise ValueError("recovery stage does not belong to this pool/user")
+            raise ValueError("recovery stage does not belong to this runner/user")
         finalize(execution.parent, cleanup_seconds)
         recovered += 1
     if not recovered:
@@ -480,7 +476,7 @@ def execute(args) -> None:
         raise ValueError("manifest source/run mismatch")
     cells = manifest["include"]
     cell = next(c for c in cells if c["id"] == args.shard)
-    hardware = load_platforms(args.platform_config)[cell["pool"]]
+    hardware = load_platforms(args.platform_config)[cell["runner"]]
     profile = hardware["operator"]
     gpus = hardware["gpus_per_node"]
     image_platform = hardware["image_platform"]
@@ -489,8 +485,8 @@ def execute(args) -> None:
         or cell["image_platform"] != image_platform
         or cell["world_size"] > gpus
     ):
-        raise ValueError("manifest hardware differs from the selected pool")
-    base = shared_base(profile, cell["pool"])
+        raise ValueError("manifest hardware differs from the selected runner")
+    base = shared_base(profile, cell["runner"])
     base.mkdir(mode=0o700, exist_ok=True)
     if (
         base.is_symlink()
@@ -552,11 +548,12 @@ def execute(args) -> None:
         ):
             if profile.get(field):
                 allocation.append(f"--{flag}={profile[field]}")
-        if cell["pool"] in ("b200-nscale", "b300", "gb200", "gb300"):
+        hw = family(cell["runner"])
+        if hw in ("b200", "b300", "gb200", "gb300"):
             allocation.append("--mem=0")
-        if cell["pool"] in ("gb200", "gb300"):
+        if hw in ("gb200", "gb300"):
             allocation.append("--cpus-per-task=35")
-        if cell["pool"] in AMD_POOLS:
+        if is_amd(cell["runner"]):
             allocation.append(f"--cpus-per-task={profile['cpus_per_node'] // gpus}")
         command(allocation, root / "allocation.log")
         jobs = allocation_ids(root)
@@ -616,7 +613,7 @@ def execute(args) -> None:
         env.update(cell.get("env", {}))  # the InferenceX recipe's launch env
         mounts = f"{stage}:/opx"
         # NVIDIA images carry no Nsight Compute; counters runs mount the node's newest.
-        if cell.get("mode") == "counters" and cell["pool"] not in AMD_POOLS:
+        if cell.get("mode") == "counters" and not is_amd(cell["runner"]):
             found = subprocess.run(
                 ["srun", f"--jobid={job}", "--nodes=1", "--ntasks=1", "bash", "-c", NCU_SEARCH],
                 capture_output=True, text=True, timeout=120,
@@ -628,7 +625,7 @@ def execute(args) -> None:
                 # whole install tree at the same path
                 mounts += f",{ncu.parent.parent}:{ncu.parent.parent}"
                 env["OPERATORX_NCU"] = str(ncu)
-        if cell["pool"] in ("mi300x", "mi325x"):
+        if hw in ("mi300x", "mi325x"):
             mounts += ",/dev/kfd:/dev/kfd,/dev/dri:/dev/dri"
         run = [
             "srun",
@@ -646,9 +643,9 @@ def execute(args) -> None:
             "--container-writable",
             "--export=ALL",
         ]
-        if cell["pool"] in {"h200-dgxc", "b300", "gb200", "gb300"} | AMD_POOLS:
+        if hw in ("h200", "b300", "gb200", "gb300") or is_amd(cell["runner"]):
             run.append("--container-remap-root")
-        if cell["pool"] == "b300":
+        if hw == "b300":
             run.append("--mpi=none")
         # The Python entrypoint preserves the allocated GPU mask without a shell. Run it
         # by path: an image's own PYTHONPATH (ROCm images set one) replaces the host's.
@@ -782,7 +779,7 @@ def main() -> None:
     sub = parser.add_subparsers(dest="command", required=True)
     p = sub.add_parser("plan")
     for name in (
-        "pool",
+        "runner",
         "backends",
         "testlists",
         "world-sizes",
@@ -822,7 +819,7 @@ def main() -> None:
     p.add_argument("--cleanup-seconds", required=True, type=int)
     p.add_argument("--artifacts", required=True, type=Path)
     p.add_argument("--run-id", required=True)
-    p.add_argument("--pool", required=True, choices=tuple(POOLS))
+    p.add_argument("--runner", required=True, choices=tuple(RUNNERS))
     p.add_argument("--platform-config", required=True, type=Path)
     args = parser.parse_args()
     if args.command == "plan":
@@ -834,7 +831,7 @@ def main() -> None:
         lists = {
             n: json.loads((ROOT / "testlists" / f"{n}.json").read_text()) for n in names
         }
-        vendor = "amd" if args.pool in AMD_POOLS else "nvidia"
+        vendor = "amd" if is_amd(args.runner) else "nvidia"
         images = tomllib.loads((ROOT / "containers.toml").read_text())[vendor]
         # Fail here, before any node is allocated, for a backend with no module.
         missing = [
@@ -844,7 +841,7 @@ def main() -> None:
         if missing:
             raise ValueError(f"no {vendor} backend module for: {', '.join(missing)}")
         result = plan(
-            args.pool,
+            args.runner,
             args.backends.split(","),
             lists,
             images,
@@ -879,7 +876,7 @@ def main() -> None:
         write_json(args.out, result)
         slim = {
             "include": [
-                {**{k: c[k] for k in ("id", "pool", "nodes", "queue-token")}, "runner": RUNNERS[c["pool"]]}
+                {k: c[k] for k in ("id", "runner", "nodes", "queue-token")}
                 for c in result["include"]
             ]
         }
@@ -902,7 +899,7 @@ def main() -> None:
         recover(
             args.artifacts,
             args.run_id,
-            args.pool,
+            args.runner,
             args.platform_config,
             args.cleanup_seconds,
         )

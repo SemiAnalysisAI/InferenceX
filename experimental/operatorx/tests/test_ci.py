@@ -17,8 +17,8 @@ from operatorx import main as benchmark
 from operatorx.core import Result, UnsupportedOpError
 
 
-def platforms(pool="h100-dgxc", gpus=8, architecture="linux/amd64"):
-    return {pool: {"gpus_per_node": gpus, "image_platform": architecture}}
+def platforms(runner="cluster:h100-dgxc", gpus=8, architecture="linux/amd64"):
+    return {runner: {"gpus_per_node": gpus, "image_platform": architecture}}
 
 
 def test_plan_chunks_by_world_size():
@@ -26,7 +26,7 @@ def test_plan_chunks_by_world_size():
     wide = {"type": "gemm", "args": {"m": 2, "world_size": 4}}
     multi = {"type": "gemm", "args": {"m": 2, "world_size": 16}}
     result = ci.plan(
-        "h100-dgxc",
+        "cluster:h100-dgxc",
         ["a", "b"],
         {"small": [ordinary, ordinary, wide, multi]},
         {"a": {"image": "same:1"}, "b": {"image": "same:1"}},
@@ -46,19 +46,19 @@ def test_plan_chunks_by_world_size():
 
 
 @pytest.mark.parametrize(
-    "pool,backends,worlds,shapes,chunk",
+    "runner,backends,worlds,shapes,chunk",
     [
-        ("b200", ["a"], [1], [{"type": "gemm", "args": {}}], 1),
-        ("h100-dgxc", ["missing"], [1], [{"type": "gemm", "args": {}}], 1),
-        ("h100-dgxc", ["a"], [16], [{"type": "gemm", "args": {}}], 1),
-        ("h100-dgxc", ["a"], [1], [], 1),
-        ("h100-dgxc", ["a"], [1], [{"type": "gemm", "args": {}}] * 257, 1),
+        ("cluster:b200", ["a"], [1], [{"type": "gemm", "args": {}}], 1),
+        ("cluster:h100-dgxc", ["missing"], [1], [{"type": "gemm", "args": {}}], 1),
+        ("cluster:h100-dgxc", ["a"], [16], [{"type": "gemm", "args": {}}], 1),
+        ("cluster:h100-dgxc", ["a"], [1], [], 1),
+        ("cluster:h100-dgxc", ["a"], [1], [{"type": "gemm", "args": {}}] * 257, 1),
     ],
 )
-def test_plan_rejects_unexecutable_selection(pool, backends, worlds, shapes, chunk):
+def test_plan_rejects_unexecutable_selection(runner, backends, worlds, shapes, chunk):
     with pytest.raises(ValueError):
         ci.plan(
-            pool,
+            runner,
             backends,
             {"tiny": shapes},
             {"a": {"image": "image:1"}},
@@ -75,9 +75,9 @@ def test_plan_bounds_world_size_to_physical_arm_node():
             {"type": "allreduce", "args": {"world_size": 8}},
         ]
     }
-    hardware = platforms("gb200", 4, "linux/arm64")
+    hardware = platforms("cluster:gb200-nv", 4, "linux/arm64")
     result = ci.plan(
-        "gb200", ["torch"], shapes, {"torch": {"image": "image:1"}}, [1], 50, hardware
+        "cluster:gb200-nv", ["torch"], shapes, {"torch": {"image": "image:1"}}, [1], 50, hardware
     )
     assert result["excluded_shapes"] == 1
     assert result["include"][0]["cases"] == [
@@ -86,7 +86,7 @@ def test_plan_bounds_world_size_to_physical_arm_node():
     assert result["include"][0]["image_platform"] == "linux/arm64"
     with pytest.raises(ValueError, match="4-GPU"):
         ci.plan(
-            "gb200",
+            "cluster:gb200-nv",
             ["torch"],
             shapes,
             {"torch": {"image": "image:1"}},
@@ -151,15 +151,15 @@ def test_shared_storage_uses_only_configured_writable_roots(tmp_path, monkeypatc
     shared = tmp_path / "shared"
     shared.mkdir()
     assert ci.shared_base(
-        {"storage_roots": [str(tmp_path / "absent"), str(shared)]}, "gb200"
+        {"storage_roots": [str(tmp_path / "absent"), str(shared)]}, "cluster:gb200-nv"
     ) == (shared / f".operatorx-{os.getuid()}")
     monkeypatch.setenv("HOME", str(tmp_path / "runner-local-sandbox"))
     monkeypatch.setattr(
         ci.pwd, "getpwuid", lambda uid: types.SimpleNamespace(pw_dir=str(shared))
     )
-    assert ci.shared_base({}, "b300") == shared / f".operatorx-{os.getuid()}"
+    assert ci.shared_base({}, "cluster:b300-dsxe") == shared / f".operatorx-{os.getuid()}"
     with pytest.raises(ValueError, match="shared storage"):
-        ci.shared_base({"storage_roots": [str(tmp_path / "absent")]}, "gb200")
+        ci.shared_base({"storage_roots": [str(tmp_path / "absent")]}, "cluster:gb200-nv")
 
 
 def test_amd_staging_uses_shared_runner_root(tmp_path, monkeypatch):
@@ -167,10 +167,10 @@ def test_amd_staging_uses_shared_runner_root(tmp_path, monkeypatch):
     (runner / "_work/_temp").mkdir(parents=True)
     monkeypatch.setenv("RUNNER_TEMP", str(runner / "_work/_temp"))
     monkeypatch.setenv("HOME", str(tmp_path / "private-home"))
-    assert ci.shared_base({}, "mi300x") == runner / f".operatorx-{os.getuid()}"
+    assert ci.shared_base({}, "cluster:mi300x-amd") == runner / f".operatorx-{os.getuid()}"
     monkeypatch.setenv("RUNNER_TEMP", str(tmp_path / "unrelated"))
     with pytest.raises(ValueError, match="shared runner"):
-        ci.shared_base({}, "mi355x")
+        ci.shared_base({}, "cluster:mi355x-amds")
 
 
 def test_platform_overlay_preserves_base_and_replaces_explicit_profile(tmp_path):
@@ -179,7 +179,7 @@ def test_platform_overlay_preserves_base_and_replaces_explicit_profile(tmp_path)
         base,
         {
             "platforms": {
-                "fixture": {"gpus_per_node": 4, "operator": {"partition": "old"}}
+                "mi300x": {"gpus_per_node": 4, "operator": {"partition": "old"}}
             }
         },
     )
@@ -188,11 +188,11 @@ def test_platform_overlay_preserves_base_and_replaces_explicit_profile(tmp_path)
         child,
         {
             "base": "base.json",
-            "platforms": {"fixture": {"operator": {"partition": "new"}}},
+            "platforms": {"cluster:mi300x-amd": {"operator": {"partition": "new"}}},
         },
     )
     assert ci.load_platforms(child) == {
-        "fixture": {"gpus_per_node": 4, "operator": {"partition": "new"}}
+        "cluster:mi300x-amd": {"gpus_per_node": 4, "operator": {"partition": "new"}}
     }
 
 
@@ -203,13 +203,13 @@ def test_platform_overlay_preserves_base_and_replaces_explicit_profile(tmp_path)
 def test_amd_plan_rejects_unimplemented_execution(backend, worlds, kind):
     with pytest.raises(ValueError, match="single-GPU torch/vllm GEMM"):
         ci.plan(
-            "mi300x",
+            "cluster:mi300x-amd",
             [backend],
             {"tiny": [{"type": kind, "args": {}}]},
             {backend: {"image": "rocm:1"}},
             worlds,
             50,
-            platforms("mi300x"),
+            platforms("cluster:mi300x-amd"),
         )
 
 
@@ -279,21 +279,21 @@ def test_testlist_loading_and_unknown_selection(tmp_path):
 
 
 @pytest.mark.parametrize(
-    "exit_code,cancel,pool,gpus,architecture",
+    "exit_code,cancel,runner,gpus,architecture",
     [
-        (0, False, "h100-dgxc", 8, "linux/amd64"),
-        (3, False, "h100-dgxc", 8, "linux/amd64"),
-        (0, True, "h100-dgxc", 8, "linux/amd64"),
-        (0, "queued", "h100-dgxc", 8, "linux/amd64"),
-        (0, False, "gb200", 4, "linux/arm64"),
-        (0, False, "gb300", 4, "linux/arm64"),
-        (0, False, "b300", 8, "linux/amd64"),
-        (0, False, "mi300x", 8, "linux/amd64"),
-        (0, False, "mi355x", 8, "linux/amd64"),
+        (0, False, "cluster:h100-dgxc", 8, "linux/amd64"),
+        (3, False, "cluster:h100-dgxc", 8, "linux/amd64"),
+        (0, True, "cluster:h100-dgxc", 8, "linux/amd64"),
+        (0, "queued", "cluster:h100-dgxc", 8, "linux/amd64"),
+        (0, False, "cluster:gb200-nv", 4, "linux/arm64"),
+        (0, False, "cluster:gb300-nv", 4, "linux/arm64"),
+        (0, False, "cluster:b300-dsxe", 8, "linux/amd64"),
+        (0, False, "cluster:mi300x-amd", 8, "linux/amd64"),
+        (0, False, "cluster:mi355x-amds", 8, "linux/amd64"),
     ],
 )
 def test_allocation_completion_failure_and_cancellation(
-    tmp_path, exit_code, cancel, pool, gpus, architecture
+    tmp_path, exit_code, cancel, runner, gpus, architecture
 ):
     binaries = tmp_path / "bin"
     binaries.mkdir()
@@ -335,7 +335,7 @@ if name == 'srun' and sys.argv[-1] == 'rank':
         json.dumps(
             {
                 "platforms": {
-                    pool: {
+                    runner: {
                         "gpus_per_node": gpus,
                         "image_platform": architecture,
                         "operator": {
@@ -343,12 +343,12 @@ if name == 'srun' and sys.argv[-1] == 'rank':
                             "stage_dir": str(tmp_path / "shared"),
                             "account": "fixture",
                             "cpus_per_node": 128,
-                            **({"qos": "fixture-qos"} if pool != "b300" else {}),
+                            **({"qos": "fixture-qos"} if runner != "cluster:b300-dsxe" else {}),
                             "exclude_nodes": "quarantined",
                             "enroot_cache_path": str(tmp_path / "shared/enroot"),
                             **(
                                 {"storage_roots": [str(tmp_path / "shared")]}
-                                if pool == "gb200"
+                                if runner == "cluster:gb200-nv"
                                 else {"squash_dir": str(tmp_path / "shared/squash")}
                             ),
                         },
@@ -359,13 +359,13 @@ if name == 'srun' and sys.argv[-1] == 'rank':
     )
     manifest = tmp_path / "manifest.json"
     control = ci.plan(
-        pool,
+        runner,
         ["torch"],
         {"tiny": [{"type": "gemm", "args": {"m": 2}}]},
         {"torch": {"image": "image:1"}},
         [1],
         1,
-        platforms(pool, gpus, architecture),
+        platforms(runner, gpus, architecture),
     )
     control.update(source_sha="abc", run_id="12")
     control["include"][0]["digest"] = "sha256:" + "a" * 64
@@ -442,12 +442,12 @@ if name == 'srun' and sys.argv[-1] == 'rank':
     assert f"--gres=gpu:{gpus}" in allocation
     assert "--nodes=1" in allocation
     assert "--account=fixture" in allocation
-    if pool == "b300":
+    if runner == "cluster:b300-dsxe":
         assert not any(arg.startswith("--qos=") for arg in allocation)
     else:
         assert "--qos=fixture-qos" in allocation
     assert "--exclude=quarantined" in allocation
-    if pool in {"mi300x", "mi355x"}:
+    if runner in {"cluster:mi300x-amd", "cluster:mi355x-amds"}:
         assert "--cpus-per-task=16" in allocation
     if not cancel:
         imported = next(c for c in calls if "import" in c["argv"])
@@ -456,9 +456,9 @@ if name == 'srun' and sys.argv[-1] == 'rank':
         assert Path(imported["argv"][0]).name == "srun"
         launched = next(c["argv"] for c in calls if c["argv"][-1] == "rank")
         assert "--ntasks=1" in launched
-        if pool in ("gb200", "gb300", "b300", "mi300x", "mi355x"):
+        if runner in ("cluster:gb200-nv", "cluster:gb300-nv", "cluster:b300-dsxe", "cluster:mi300x-amd", "cluster:mi355x-amds"):
             assert "--container-remap-root" in launched
-        if pool == "mi300x":
+        if runner == "cluster:mi300x-amd":
             mounts = next(
                 arg for arg in launched if arg.startswith("--container-mounts=")
             )
@@ -523,7 +523,7 @@ def test_recovery_refuses_unrelated_pool_or_storage(tmp_path):
         profile,
         {
             "platforms": {
-                "h100-dgxc": {
+                "cluster:h100-dgxc": {
                     "operator": {"squash_dir": str(tmp_path / "shared/squash")}
                 }
             }
@@ -531,16 +531,16 @@ def test_recovery_refuses_unrelated_pool_or_storage(tmp_path):
     )
     data = {
         "run_id": "12",
-        "cell": {"pool": "h200-dgxc"},
+        "cell": {"runner": "cluster:h200-dgxc"},
         "stage": str(tmp_path / "unrelated"),
     }
     ci.write_json(artifacts / "execution.json", data)
-    with pytest.raises(ValueError, match="run/pool"):
-        ci.recover(artifacts, "12", "h100-dgxc", profile, 2)
-    data["cell"]["pool"] = "h100-dgxc"
+    with pytest.raises(ValueError, match="run/runner"):
+        ci.recover(artifacts, "12", "cluster:h100-dgxc", profile, 2)
+    data["cell"]["runner"] = "cluster:h100-dgxc"
     ci.write_json(artifacts / "execution.json", data)
-    with pytest.raises(ValueError, match="pool/user"):
-        ci.recover(artifacts, "12", "h100-dgxc", profile, 2)
+    with pytest.raises(ValueError, match="runner/user"):
+        ci.recover(artifacts, "12", "cluster:h100-dgxc", profile, 2)
 
 
 @pytest.mark.parametrize("release", [True, False])
