@@ -104,7 +104,11 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
         "roles": (set(recipe["roles"]), {"agg"}),
         "benchmark type": (benchmark["type"], "custom"),
         "benchmark MODEL": (workload["MODEL"], environment["MODEL"]),
-        "SPEC_DECODING": (speculation, environment["SPEC_DECODING"]),
+        # draft_model names a bundled or separate draft; its recipes speculate natively.
+        "SPEC_DECODING": (
+            speculation,
+            "mtp" if environment["SPEC_DECODING"] == "draft_model" else environment["SPEC_DECODING"],
+        ),
         "AgentX client": (benchmark.get("command", "").endswith("srt_agentic.sh"), agentic),
     }
     if not agentic:
