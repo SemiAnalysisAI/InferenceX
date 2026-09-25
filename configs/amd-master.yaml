@@ -927,8 +927,8 @@ dsv4-fp4-mi355x-atom-agentic-mtp:
   scenarios:
     agentic-coding:
     - search-space:
-      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 2, 4, 8, 16] }
-      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none, spec-decoding: draft_model, conc-list: [48, 64, 96, 128, 256] }
+      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 2, 4, 8, 16], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv4/atom/mi355x-fp4-mtp/agentic.yaml }
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none, spec-decoding: draft_model, conc-list: [48, 64, 96, 128, 256], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv4/atom/mi355x-fp4-mtp/agentic.yaml }
 
 dsr1-fp4-mi355x-sglang-disagg-mtp:
   image: lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260809
