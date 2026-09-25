@@ -29,7 +29,6 @@ base:
         expert-parallel-size: 1
         reasoning-parser: qwen3
         tool-call-parser: qwen3_coder
-        mamba-scheduler-strategy: no_buffer
         quantization: modelopt_fp4
         fp4-gemm-backend: flashinfer_cutlass
         kv-cache-dtype: fp8_e4m3
