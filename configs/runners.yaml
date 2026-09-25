@@ -245,9 +245,6 @@ labels:
     - mi300x-amd_05
     - mi300x-amd_06
     - mi300x-amd_07
-  cluster:mi300x-tw:
-    - mi300x-tw_00
-    - mi300x-tw_01
   cluster:mi325x-amds:
     - mi325x-amds_00
     - mi325x-amds_01
@@ -297,9 +294,6 @@ hardware:
     gpus-per-node: 4
   cluster:mi300x-amd:
     available-cpu-dram-mib: 1_547_820
-    gpus-per-node: 8
-  cluster:mi300x-tw:
-    available-cpu-dram-mib: 2_322_328
     gpus-per-node: 8
   cluster:mi325x-amds:
     available-cpu-dram-mib: 3_091_589
