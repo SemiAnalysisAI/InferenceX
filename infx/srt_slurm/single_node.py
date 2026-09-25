@@ -88,13 +88,9 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
     if environment["FRAMEWORK"] not in {"sglang", "trt", "atom", "vllm"}:
         raise ValueError(f"Unsupported single-node framework: {environment['FRAMEWORK']!r}")
     spec = spec_parameters(role, engine)
-    # EAGLE3 covers AgentX configs whose golden curve is the EAGLE3 draft head.
     if spec and spec["method"] not in {"eagle", "eagle3", "nextn", "mtp", "dspark"}:
         raise ValueError("Single-node SRT supports only native MTP, EAGLE3, DSpark or no speculation")
     speculation = "mtp" if spec else "none"
-    # Some DSpark configs label the checkpoint's bundled draft as draft_model.
-    if spec and spec["method"] == "dspark" and environment["SPEC_DECODING"] == "draft_model":
-        speculation = "draft_model"
     agentic = environment["IS_AGENTIC"] == "1"
     expected = {
         "engine": (engine, SINGLE_NODE_ENGINES[environment["FRAMEWORK"]]),
@@ -108,7 +104,11 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
         "roles": (set(recipe["roles"]), {"agg"}),
         "benchmark type": (benchmark["type"], "custom"),
         "benchmark MODEL": (workload["MODEL"], environment["MODEL"]),
-        "SPEC_DECODING": (speculation, environment["SPEC_DECODING"]),
+        # draft_model names a bundled or separate draft; its recipes speculate natively.
+        "SPEC_DECODING": (
+            speculation,
+            "mtp" if environment["SPEC_DECODING"] == "draft_model" else environment["SPEC_DECODING"],
+        ),
         "AgentX client": (benchmark.get("command", "").endswith("srt_agentic.sh"), agentic),
     }
     if not agentic:

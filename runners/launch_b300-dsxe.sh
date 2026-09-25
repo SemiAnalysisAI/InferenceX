@@ -138,6 +138,13 @@ if [[ "$EXECUTION_PATH" == native-single-node ]]; then
     SRT_MODEL_PATH="$MODEL_ROOT/${MODEL##*/}"
     if [[ "$MODEL" == nvidia/DeepSeek-R1-0528-FP4-V2 ]]; then
         SRT_MODEL_PATH="$MODEL_ROOT/DeepSeek-R1-0528-NVFP4-v2"
+    elif [[ " ${STAGED_MODELS[*]} " != *" ${MODEL##*/} "* || "${MODEL##*/}" == DeepSeek-V4-Pro-0813 ]]; then
+        # Not staged on every node's NVMe; read the shared copy.
+        SRT_MODEL_PATH="$SHARED_MODEL_ROOT/${MODEL##*/}"
+    fi
+    # Not staged on node-local NVMe: the engine downloads it into the shared HF cache.
+    if [[ "$MODEL" == RadixArk/Qwen3.8-Flash-Next-NVFP4 ]]; then
+        SRT_MODEL_PATH="hf:$MODEL"
     fi
     SRT_SQUASH_FILE="$SQUASH_DIR/$(printf '%s' "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
     launch_srt_single_node b300-dsxe \
@@ -212,7 +219,7 @@ export OSL="$OSL"
 SRTCTL_ROOT="${GITHUB_WORKSPACE}/${SRT_REPO_DIR}"
 echo "Creating srtslurm.yaml configuration..."
 write_srt_cluster_config b300-dsxe srtslurm.yaml "$USES_DCGM_POWER" \
-    --var MODEL_ROOT "$MODEL_ROOT" || exit 1
+    --var MODEL_ROOT "$MODEL_ROOT" --var SRT_DEFAULT_TIME_LIMIT "$SALLOC_TIME_LIMIT" || exit 1
 
 echo "Generated srtslurm.yaml:"
 cat srtslurm.yaml

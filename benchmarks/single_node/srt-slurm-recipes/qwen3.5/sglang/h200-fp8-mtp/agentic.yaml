@@ -75,3 +75,21 @@ override_hicache:
     env:
       KV_OFFLOADING: dram
       TOTAL_CPU_DRAM_GB: '1234'
+# The same HiCache arm with the experts TP-sharded (EP1) on a later nightly.
+override_hicache_ep1:
+  model:
+    container: lmsysorg/sglang:nightly-dev-cu13-20260916-c9a8fba9
+  roles:
+    agg:
+      args:
+        expert-parallel-size: 1
+        page-size: 64
+        enable-hierarchical-cache: true
+        hicache-size: 77
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+        hicache-write-policy: write_through_selective
+  benchmark:
+    env:
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1234'
