@@ -60,10 +60,10 @@ PYENV
     if [[ "$framework" == "tilert" ]]; then
         # TileRT still needs its legacy runtime until the native backend and router land.
         SRT_SLURM_COMMIT=6bc3f306bdafa1edfb5dded2fcda8f1ccede1bde
-        git init "$destination" || return 1
+        git init --quiet "$destination" || return 1
         git -C "$destination" remote add origin https://github.com/SemiAnalysisAI/srt-slurm.git || return 1
-        git -C "$destination" fetch --depth=1 origin "$SRT_SLURM_COMMIT" || return 1
-        git -C "$destination" checkout --detach "$SRT_SLURM_COMMIT" || return 1
+        git -C "$destination" fetch --quiet --depth=1 origin "$SRT_SLURM_COMMIT" || return 1
+        git -C "$destination" checkout --quiet --detach "$SRT_SLURM_COMMIT" || return 1
     else
         if [[ ! -e "$source/.git" ]]; then
             echo "Missing srt-slurm submodule; run git submodule update --init before launching." >&2
@@ -72,7 +72,7 @@ PYENV
         SRT_SLURM_COMMIT=$(git -C "$source" rev-parse HEAD) || return 1
         SRTCTL_EVAL_ARGS+=(--set benchmark.stream_output=true)
         # A local clone keeps job writes isolated and preserves upstream Git provenance.
-        git clone --no-hardlinks "$source" "$destination" || return 1
+        git -c advice.detachedHead=false clone --quiet --no-hardlinks "$source" "$destination" || return 1
         # Temporary fixes awaiting upstream merge; see runners/srt-slurm/patches/README.md.
         local patch
         for patch in "$GITHUB_WORKSPACE"/runners/srt-slurm/patches/*.patch; do
@@ -82,6 +82,7 @@ PYENV
     fi
     cd "$destination" || return 1
     [[ "$(git rev-parse HEAD)" == "$SRT_SLURM_COMMIT" ]] || return 1
+    echo "Using srt-slurm revision $SRT_SLURM_COMMIT"
     git rev-parse HEAD > "$GITHUB_WORKSPACE/srt-slurm-sha.txt" || return 1
     if [[ "$uses_power" == "1" ]]; then
         cp "$GITHUB_WORKSPACE/srt-slurm-sha.txt" "$GITHUB_WORKSPACE/power-producer-sha.txt" || return 1
@@ -91,6 +92,20 @@ PYENV
     # Both CONFIG_FILE spellings currently occur in master configs.
     ln -s ../../recipes benchmarks/multi_node/srt-slurm-recipes || return 1
     cp -R "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs/." configs/ || return 1
+}
+
+# Keep installer output in the artifacts, but print diagnostics on failure.
+run_srt_setup() {
+    check_env_vars GITHUB_WORKSPACE
+    local setup_log="$GITHUB_WORKSPACE/srt-setup.log" status
+    echo "Setting up srt-slurm (details: srt-setup.log)"
+    if make setup "$@" >> "$setup_log" 2>&1; then
+        echo "srt-slurm setup complete"
+    else
+        status=$?
+        cat "$setup_log" >&2
+        return "$status"
+    fi
 }
 
 # Use the requested image's cache identity, never a convenient older squash file.
@@ -129,8 +144,9 @@ apply_srt_recipe() {
     fi
     local config="$1" framework="$2"
     shift 2
+    # Slurm creates a separate compute venv; do not inherit the login venv marker.
     PYTHONPATH="$INFERENCEX_SLURM_UTILS_DIR/..${PYTHONPATH:+:$PYTHONPATH}" \
-        python3 -m infx.srt_slurm.synthetic_acceptance \
+        env -u VIRTUAL_ENV python3 -m infx.srt_slurm.synthetic_acceptance \
         "$config" "$framework" -- "$@"
 }
 
@@ -151,9 +167,9 @@ launch_srt_single_node() {
         curl -LsSf https://astral.sh/uv/install.sh | sh
         source "$HOME/.local/bin/env"
     fi
-    uv venv .venv
+    uv venv --quiet .venv
     source .venv/bin/activate
-    uv pip install -e .
+    uv pip install --quiet -e .
     export PYTHONPATH="$GITHUB_WORKSPACE${PYTHONPATH:+:$PYTHONPATH}"
 
     python3 -m infx.srt_slurm.single_node prepare "$GITHUB_WORKSPACE/$SRT_RECIPE" "$SRT_SINGLE_NODE_ROOT/arguments"
@@ -177,7 +193,7 @@ launch_srt_single_node() {
         --var SRT_DEFAULT_TIME_LIMIT "$SALLOC_TIME_LIMIT" \
         --model "hf:$MODEL" "$SRT_MODEL_PATH" --container "$IMAGE" "$SRT_CONTAINER" \
         --mount "$HF_HUB_CACHE_MOUNT" "$HF_HUB_CACHE" --exclusive "$@"
-    make setup ARCH=x86_64
+    run_srt_setup ARCH=x86_64
 
     SRT_JOB_ID=""
     SRT_JOB_OUTPUT=""
