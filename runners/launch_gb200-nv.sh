@@ -95,6 +95,17 @@ import_squash() {
     ) || exit 1
 }
 
+# Single-tray points with an srt-slurm recipe run natively on the aarch64 trays.
+if [[ "$IS_MULTINODE" != true && -n "${SRT_RECIPE:-}" ]]; then
+    HF_HUB_CACHE_MOUNT="/mnt/lustre01/users-public/sa-shared/hf-hub-cache"
+    SRT_MODEL_PATH="hf:$MODEL"
+    SRT_SQUASH_FILE="$SQUASH_DIR/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    import_squash "$SRT_SQUASH_FILE" "$IMAGE"
+    SRT_SETUP_ARCH=aarch64 launch_srt_single_node gb200-nv \
+        --var SLURM_ACCOUNT "$SLURM_ACCOUNT" --var SLURM_PARTITION "$SLURM_PARTITION"
+    exit $?
+fi
+
 # Direct single-tray AgentX uses the existing shared image and HF caches.
 if [[ "$MODEL_PREFIX" == "dsv41flash" && ( "$FRAMEWORK" == "vllm" || "$FRAMEWORK" == "sglang" ) && "${IS_MULTINODE}" != "true" ]]; then
     check_env_vars SPEC_DECODING
