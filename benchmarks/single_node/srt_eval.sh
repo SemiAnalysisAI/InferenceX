@@ -10,7 +10,11 @@ SRT_EVAL_STATUS_FILE="$2"
 trap 'rc=$?; printf "%s\n" "$rc" > "$SRT_EVAL_STATUS_FILE"' EXIT
 
 source "$(dirname "${BASH_SOURCE[0]}")/../benchmark_lib.sh"
-check_env_vars MODEL MODEL_NAME CONC TP EP_SIZE DP_ATTENTION IS_MULTINODE MAX_MODEL_LEN
+check_env_vars MODEL MODEL_NAME CONC TP EP_SIZE DP_ATTENTION IS_MULTINODE
+# benchmark_lib clears MAX_MODEL_LEN for AgentX, whose eval uses the native context.
+if [[ "${IS_AGENTIC:-0}" != 1 ]]; then
+    check_env_vars MAX_MODEL_LEN
+fi
 export PORT="${1##*:}"
 if [[ ! "$PORT" =~ ^[1-9][0-9]*$ || "$IS_MULTINODE" != false ]]; then
     echo "ERROR: single-node eval requires a local endpoint and single-node metadata" >&2
