@@ -228,7 +228,7 @@ Fast 结果只能作为 bring-up 证据，绝不能替代 canonical candidate。
 
 ## 8. 保留 trace 与运行 provenance
 
-AgentX 默认 replay 已记录的 assistant response。实时服务输出会被测量，但构造后续 turn 时会丢弃。只有在明确要进行不同的 live-assistant 实验时，才设置 `AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES=1`。除非用 `WEKA_LOADER_OVERRIDE` 固定，否则所选 trace corpus 依赖模型 family；resolver 会同时记录 loader 与 Hugging Face dataset（[trace 解析](../benchmarks/benchmark_lib.sh#L2023-L2102)、[replay 语义](../benchmarks/benchmark_lib.sh#L2104-L2270)）。
+在试点固定的客户端版本 `754356e9a39acc6cc6afb242d123bb57c3fb6f75` 中，AgentX 始终使用已记录的 assistant response 增量构造后续轮次。实时服务输出会被测量；`AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES` 不会改变此 loader 的行为。不同的回放方法需要单独验证。旧版 resolver 会根据模型系列选择语料，除非用 `WEKA_LOADER_OVERRIDE` 固定。预先准备的 H100 客户端明确使用 `semianalysis_cc_traces_weka_062126`、393 条记录，并且不按上下文长度过滤回放数据（[Python 客户端](../infx/benchmarks/agentx.py)）。
 
 立即记录 orchestration provenance：
 
