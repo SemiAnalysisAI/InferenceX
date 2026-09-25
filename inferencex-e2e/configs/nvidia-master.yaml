@@ -1407,6 +1407,7 @@ kimik3-fp4-h200-vllm-agentic-latency:
     - dram-utilization: 0.80
       search-space:
       # Latency-oriented: TP16 x DP2 with EP32 across four H200 nodes.
+      # Power telemetry omits DCGM profiling counters to avoid watch-repair stalls.
       - spec-decoding: mtp
         kv-offloading: none
         conc-list: [1, 2, 3, 4, 5, 6, 7, 8, 10, 12]
