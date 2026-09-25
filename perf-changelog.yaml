@@ -8887,3 +8887,92 @@
     - "Add DeepSeek-V4-Pro-0813 golden AL for draft lengths 4, 5, 7 and 8 (3.36 / 3.61 / 3.73 / 3.47)."
     - "Agentic PD router: pin --decode-policy round_robin so decode no longer inherits the prefill --policy (consistent_hashing)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3256
+
+- config-keys:
+    - dsr1-fp4-b200-dynamo-trt
+    - dsr1-fp8-b200-dynamo-trt
+    - dsr1-fp4-b300-dynamo-trt
+    - dsr1-fp8-b300-dynamo-trt
+    - kimik3-fp4-h200-vllm-agentic-latency
+    - kimik3-fp4-h200-vllm-agentic-balanced
+    - kimik3-fp4-h200-vllm-agentic-simple
+    - dsv4-fp8-h200-dynamo-sglang-agentic-agg
+    - dsr1-fp8-h200-dynamo-trt
+    - dsr1-fp8-h100-dynamo-trt
+    - dsr1-fp8-h100-dynamo-sglang
+    - dsr1-fp4-gb200-dynamo-trt
+    - dsr1-fp8-gb200-dynamo-trt
+    - dsr1-fp8-gb200-dynamo-sglang
+    - dsr1-fp8-gb300-dynamo-sglang
+    - dsr1-fp4-gb200-dynamo-sglang
+    - dsr1-fp4-gb300-dynamo-trt
+    - dsr1-fp4-gb300-dynamo-sglang
+    - dsr1-fp8-gb300-dynamo-trt
+    - dsr1-fp8-h200-dynamo-sglang
+    - dsr1-fp4-b200-dynamo-sglang
+    - dsr1-fp8-b200-dynamo-sglang
+    - dsr1-fp8-b200-dynamo-sglang-mtp
+    - dsr1-fp4-b200-dynamo-sglang-mtp
+    - qwen3.5-fp8-gb200-dynamo-sglang
+    - qwen3.5-fp4-gb300-dynamo-sglang
+    - qwen3.5-fp4-gb300-dynamo-trt
+    - qwen3.5-fp4-gb300-dynamo-trt-mtp
+    - qwen3.5-fp4-gb300-dynamo-trt-agentic-disagg
+    - qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg
+    - qwen3.5-fp4-gb300-dynamo-sglang-agentic-disagg
+    - qwen3.5-fp4-gb300-dynamo-sglang-agentic-pp-pareto
+    - qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg-pareto
+    - dsv4-fp4-gb300-dynamo-vllm-agentic
+    - qwen3.5-fp4-gb200-dynamo-sglang-agentic-mtp
+    - minimaxm3-fp4-gb300-dynamo-vllm-agentic-mtp-disagg
+    - minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp
+    - minimaxm3-fp4-gb200-dynamo-vllm-agentic-disagg-mtp
+    - minimaxm3-fp4-gb200-dynamo-trt-agentic-agg-mtp
+    - dsv4-fp4-gb200-dynamo-vllm-agentic-mtp-agg
+    - dsv4-fp4-gb200-dynamo-vllm-agentic-mtp-disagg
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-agg
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg
+    - dsv4-fp4-gb200-dynamo-vllm-agentic-mtp2-agg
+    - dsv4-fp4-gb200-dynamo-vllm-agentic-mtp2-disagg
+    - kimik3-fp4-gb200-dynamo-vllm-agentic
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-agg
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-mooncake-dcp16-agg
+    - dsv4-fp4-gb300-dynamo-trt-agentx
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2
+    - dsv4-fp4-gb300-dynamo-sglang-agentic-agg
+    - dsv4-fp4-gb300-dynamo-sglang-agentic-disagg
+    - qwen3.5-fp8-gb300-dynamo-sglang
+    - glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-2p2d
+    - glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-1p1d-hicache
+    - glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-agg
+    - glm5.2-fp4-b200-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-b200-dynamo-sglang-agentic-disagg
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-disagg
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-mtp
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-mtp-agg
+    - glm5.2-fp4-gb300-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg
+    - glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp
+    - qwen3.5-fp8-gb200-dynamo-sglang-mtp
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg
+    - kimik3-fp4-b200-dynamo-vllm-agentic-dspark
+    - qwen3.5-fp8-gb300-dynamo-sglang-mtp
+    - glm5.1-fp8-b200-tilert-agentic
+    - dsv4-fp4-b200-dynamo-sglang-agentic-agg
+    - dsv4-fp4-b200-dynamo-sglang-agentic-disagg
+    - qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp
+    - qwen3.5-fp8-b300-dynamo-sglang-agentic-disagg
+    - qwen3.5-fp8-mi355x-sglang-disagg
+    - qwen3.5-fp4-mi355x-sglang-disagg
+    - dsr1-fp8-mi355x-sglang-disagg
+    - dsr1-fp8-mi355x-sglang-disagg-mtp
+    - dsr1-fp4-mi355x-sglang-disagg
+    - dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp
+    - dsr1-fp4-mi355x-sglang-disagg-mtp
+  description:
+    - "Resolve required AgentX power from selected native recipes on B200, GB200 and GB300; preserve replay concurrency and strict power audits."
+    - "Resolve srtctl package versions on local disk for those pools and stop native compute setup on dependency-sync failure; shared runtime scope is retained for qualification."
+    - "B200、GB200 和 GB300 根据选定原生配方启用必需功耗，保留回放并发和严格功耗审计；在本地磁盘解析包版本，原生计算节点依赖安装失败即停止。验收范围保留共享 runtime 的影响。"
+  pr-link: TBD

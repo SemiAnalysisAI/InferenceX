@@ -35,6 +35,8 @@ git submodule update --init
 
 To upgrade, fetch and check out the desired commit inside the relevant submodule, then commit the updated submodule pointer in InferenceX. Benchmark workflows already initialize submodules. Slurm launchers make a local Git clone for each job so recipe staging and runtime writes do not modify the submodule, and record the actual commit for result provenance. NVIDIA setup clones locally; TileRT setup fetches its pinned fork commit over the network.
 
+B200, GB200, and GB300 resolve the job checkout's actual Hatch package version on local disk before installing it. This avoids repeated `git describe --dirty` scans of shared storage. The launcher preserves that version for both login and compute editable builds, uses a Python 3.12 login environment, and stops on environment or installation failures. The version is retained in `srt-slurm-version.txt` and the uploaded `srt-setup.log`; it supplements the pinned `srt-slurm-sha.txt` and does not replace source or patch provenance. Native compute jobs without a preserved version keep their existing version lookup.
+
 Single-node fixed-sequence recipes use NVIDIA upstream srt-slurm. ATOM recipes use
 the native `atomesh` frontend with one aggregate worker and
 `enable_multiple_frontends: false`. The router's pinned official image belongs in
@@ -159,6 +161,20 @@ Sources: [`configs/CONFIGS.md`](../configs/CONFIGS.md), [`validation.py`](../uti
 7. Append the trigger entry, generate only the affected key first, and inspect every emitted point.
 
 Fixed-sequence `8192/1024` scenarios may set `require-power: true` to opt into validated measured power. The matrix passes this flag to standard sweeps and manual E2E throughput jobs; eval-only and AgentX rows do not inherit it. Omit the field to preserve existing behavior. Enable it only alongside the corresponding runtime and result adapter, then qualify the complete selected scope.
+
+For native AgentX on B200 Nscale, GB200 and GB300, enable `telemetry.enabled` and
+`telemetry.required` in the SRT recipe, use `storage_subdir: power` and the
+`dcgm-exporter` container alias. The launchers inspect the selected recipe after
+native overrides, require the shared `agentic_srt.sh` window/result contract and
+forward the matrix concurrency to both replay and power validation. An invalid
+enabled contract fails before submission. Eval-only jobs retain real verification
+and do not produce performance power results.
+
+Qualification requires the strict power adapter to accept the recorded serving
+window, all participating GPUs identified by hostname and UUID, samples bracketing
+both boundaries and no adjacent sample gap over three seconds. Retain the raw
+telemetry, window and configuration audit plus producer SHA. Recipe enablement or
+passing local checks alone does not qualify measured power or publish results.
 
 ## Register and set up a runner
 

@@ -35,6 +35,8 @@ git submodule update --init
 
 升级时，在对应子模块中获取并检出目标提交，再将更新后的子模块指针提交到 InferenceX。基准测试工作流已配置为自动初始化子模块。Slurm 启动器为每个作业创建本地 Git 克隆，避免配方准备和运行时写入修改子模块，并记录实际提交以供结果溯源。NVIDIA 启动器使用本地克隆；TileRT 启动器通过网络获取固定的分支提交。
 
+B200、GB200 和 GB300 在本地磁盘上解析作业检出副本的实际 Hatch 包版本，再安装运行环境，避免在共享存储上反复执行 `git describe --dirty` 扫描。启动器为登录节点和计算节点的可编辑构建保留同一版本，登录环境使用 Python 3.12；环境创建或安装失败时立即停止。版本写入 `srt-slurm-version.txt` 和上传的 `srt-setup.log`，作为固定 `srt-slurm-sha.txt` 的补充，不替代源码或补丁来源记录。没有保留版本文件的原生计算作业继续使用原有版本解析方式。
+
 单节点固定序列长度配方使用 NVIDIA 上游 srt-slurm。ATOM 配方使用原生 `atomesh`
 frontend、一个聚合 worker，并设置 `enable_multiple_frontends: false`。旧版基准 worker
 镜像不包含 AToMesh，因此通过 `frontend.container_image` 单独固定路由器的官方镜像。
@@ -110,6 +112,16 @@ STP（Single Token Prediction，单 Token 预测）是每次前向传播生成�
 7. 追加触发条目，先只生成受影响的 key，并检查每个生成点。
 
 固定序列 `8192/1024` 场景可设置 `require-power: true`，要求经过验证的实测功耗。矩阵将此标记传递给标准 sweep 和手动 E2E 吞吐作业；eval-only 和 AgentX 行不继承该标记。省略此字段可保留现有行为。仅在对应 runtime 和结果适配器同时交付时启用，然后验证完整选定范围。
+
+对于 B200 Nscale、GB200 和 GB300 的原生 AgentX，在 SRT 配方中启用
+`telemetry.enabled` 和 `telemetry.required`，设置 `storage_subdir: power`，并使用
+`dcgm-exporter` 容器别名。launcher 在应用原生覆盖项后检查选定配方，要求使用共享
+`agentic_srt.sh` 的测量窗口和结果契约，并将矩阵并发同时传给回放和功耗验证。
+已启用但不符合契约的配置会在提交前失败。eval-only 作业保留真实验证，不生成性能功耗结果。
+
+验收要求严格功耗适配器接受记录的服务窗口，按 hostname 和 UUID 标识所有参与 GPU，
+采样覆盖窗口两端，且相邻样本间隔不超过三秒。保留原始遥测、窗口、配置审计和
+producer SHA。仅启用配方或通过本地检查不代表实测功耗合格，也不代表结果已发布。
 
 ## 注册并设置 runner
 

@@ -94,6 +94,43 @@ PYENV
     cp -R "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs/." configs/ || return 1
 }
 
+# Resolve Hatch's actual version on local disk: git describe --dirty otherwise
+# scans the shared filesystem during every editable build, including on compute.
+# Call before venv creation to avoid copying build caches.
+srt_slurm_version() (
+    local version_root
+    version_root=$(mktemp -d /tmp/infx-srt-version.XXXXXX) || exit 1
+    trap 'rm -rf "$version_root"' EXIT
+    cp -R . "$version_root/source" || exit 1
+    cd "$version_root/source" || exit 1
+    env -u SETUPTOOLS_SCM_PRETEND_VERSION -u SETUPTOOLS_SCM_PRETEND_VERSION_FOR_SRTCTL \
+        -u VCS_VERSIONING_PRETEND_VERSION -u VCS_VERSIONING_PRETEND_VERSION_FOR_SRTCTL \
+        uv tool run --python 3.12 --from hatchling --with hatch-vcs hatchling version
+)
+
+install_srt_slurm() {
+    if [[ $# -ne 1 || -z "$1" ]]; then
+        echo "Usage: install_srt_slurm venv_path" >&2
+        return 1
+    fi
+    check_env_vars GITHUB_WORKSPACE
+    local version
+    version=$(srt_slurm_version) || return 1
+    if [[ -z "$version" || "$version" == *$'\n'* ]]; then
+        echo "Error: srt-slurm did not produce one package version" >&2
+        return 1
+    fi
+    printf '%s\n' "$version" > .infx-srt-version || return 1
+    cp .infx-srt-version "$GITHUB_WORKSPACE/srt-slurm-version.txt" || return 1
+    export SETUPTOOLS_SCM_PRETEND_VERSION_FOR_SRTCTL="$version"
+    printf 'srtctl package version: %s\n' "$version" >> "$GITHUB_WORKSPACE/srt-setup.log" || return 1
+    # Login and compute use separate venvs. InferenceX's power adapter needs 3.12;
+    # compute creates its own architecture-compatible Python through native uv.
+    uv venv --quiet --seed --python 3.12 "$1" || return 1
+    source "$1/bin/activate" || return 1
+    uv pip install --quiet -e .
+}
+
 # Keep installer output in the artifacts, but print diagnostics on failure.
 run_srt_setup() {
     check_env_vars GITHUB_WORKSPACE
@@ -148,6 +185,54 @@ apply_srt_recipe() {
     PYTHONPATH="$INFERENCEX_SLURM_UTILS_DIR/..${PYTHONPATH:+:$PYTHONPATH}" \
         env -u VIRTUAL_ENV python3 -m infx.srt_slurm.synthetic_acceptance \
         "$config" "$framework" -- "$@"
+}
+
+prepare_srt_power() {
+    check_env_vars IS_AGENTIC EVAL_ONLY
+    # Keep inspection and submission on the same native overrides. The benchmark
+    # client and the collector must expect the same matrix concurrency windows.
+    local config="$1" framework="$2" concurrency power_mode concurrency_json
+    SRTCTL_RECIPE_ARGS=("${SRTCTL_EVAL_ARGS[@]}")
+    if [[ "$IS_AGENTIC" == "1" ]]; then
+        check_env_vars CONC_LIST
+        local -a power_concurrencies
+        read -r -a power_concurrencies <<< "$CONC_LIST"
+        for concurrency in "${power_concurrencies[@]}"; do
+            [[ "$concurrency" =~ ^[1-9][0-9]*$ ]] || {
+                echo "Error: invalid AgentX concurrency: $concurrency" >&2
+                return 1
+            }
+        done
+        concurrency_json=$(IFS=,; echo "[${power_concurrencies[*]}]")
+        SRTCTL_RECIPE_ARGS+=(
+            --set "benchmark.concurrencies=$concurrency_json"
+            --set "benchmark.env.CONC_LIST=\"${power_concurrencies[*]}\""
+        )
+    fi
+    power_mode=$(PYTHONPATH="$INFERENCEX_SLURM_UTILS_DIR/..${PYTHONPATH:+:$PYTHONPATH}" \
+        python3 -m infx.srt_slurm.synthetic_acceptance --inspect-power \
+        "$config" "$framework" -- "${SRTCTL_RECIPE_ARGS[@]}") || return 1
+    USES_DCGM_POWER=0
+    USES_AGENTX_POWER=0
+    case "$power_mode" in
+        agentx)
+            USES_DCGM_POWER=1
+            USES_AGENTX_POWER=1
+            SRTCTL_RECIPE_ARGS+=(
+                --set 'benchmark.env.ENABLE_AGENTX_POWER="1"'
+                --set 'benchmark.env.REQUIRE_POWER="1"'
+            )
+            ;;
+        dcgm)
+            USES_DCGM_POWER=1
+            ;;
+        none) ;;
+        *) echo "Error: unknown recipe power mode: $power_mode" >&2; return 1 ;;
+    esac
+    if [[ "$USES_DCGM_POWER" == "1" ]]; then
+        check_env_vars GITHUB_WORKSPACE
+        cp "$GITHUB_WORKSPACE/srt-slurm-sha.txt" "$GITHUB_WORKSPACE/power-producer-sha.txt" || return 1
+    fi
 }
 
 # One native submission per fixed-sequence matrix point, shared across Slurm pools.

@@ -241,53 +241,41 @@ run_native_srt_lane() {
     # Importing the vLLM image over this cluster's shared home can take a while.
     SQUASH_LOCK_TIMEOUT=3600
 
-    USES_DCGM_POWER=0
-    USES_AGENTX_POWER=0
-    _POWER_CONFIG_FILE="${CONFIG_FILE:-}"
-    if [[ "${EVAL_ONLY}" == "true" && -n "${EVAL_CONFIG_FILE:-}" ]]; then
-        _POWER_CONFIG_FILE="$EVAL_CONFIG_FILE"
+    if [[ "$EVAL_ONLY" == "true" && -n "${EVAL_CONFIG_FILE:-}" ]]; then
+        CONFIG_FILE="$EVAL_CONFIG_FILE"
     fi
-    _RECIPE_REL="${_POWER_CONFIG_FILE%%:*}"
-    _RECIPE_SRC="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/${_RECIPE_REL#recipes/}"
-    if [[ -n "$_POWER_CONFIG_FILE" && -f "$_RECIPE_SRC" ]] && awk '
-        /^telemetry:/ { t = 1; next }
-        t && /^[^ ]/  { t = 0 }
-        t && /^  dcgm_exporter:/ { p = 1 }
-        t && /^  enabled: true$/        { e = 1 }
-        END { exit !(p && e) }
-    ' "$_RECIPE_SRC"; then
-        USES_DCGM_POWER=1
-    fi
-    if [[ "$USES_DCGM_POWER" == "1" && "$IS_AGENTIC" == "1" &&
-        "$MODEL_PREFIX" == "kimik3" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-vllm" ]]; then
-        USES_AGENTX_POWER=1
-    elif [[ "$USES_DCGM_POWER" == "1" && (
-        "${IS_AGENTIC}" == "1" ||
-        "$PRECISION" != "fp4" ||
-        ( "$MODEL_PREFIX" == "dsv4" && "$FRAMEWORK" != "dynamo-sglang" && "$FRAMEWORK" != "dynamo-vllm" ) ||
-        "$MODEL_PREFIX" != "dsv4"
-    ) ]]; then
-        echo "Error: B200 nscale dcgm-power requires a supported fixed-sequence lane or Kimi-K3 AgentX vLLM" >&2
-        exit 1
-    fi
+    check_env_vars CONFIG_FILE
 
     export SERVED_MODEL_NAME=$MODEL
 
     echo "Preparing job-local srt-slurm checkout..."
     SRT_REPO_DIR="srt-slurm"
     rm -rf "$SRT_REPO_DIR"
-    setup_srt_slurm "$SRT_REPO_DIR" "$FRAMEWORK" "$USES_DCGM_POWER" || exit 1
+    setup_srt_slurm "$SRT_REPO_DIR" "$FRAMEWORK" 0 || exit 1
 
     echo "Installing srtctl..."
     export UV_INSTALL_DIR="$GITHUB_WORKSPACE/.local/bin"
     curl -LsSf https://astral.sh/uv/install.sh | sh
     export PATH="$UV_INSTALL_DIR:$PATH"
-    uv venv --quiet "$GITHUB_WORKSPACE/.venv"
-    source "$GITHUB_WORKSPACE/.venv/bin/activate"
-    uv pip install --quiet -e .
+    install_srt_slurm "$GITHUB_WORKSPACE/.venv" || exit 1
 
     if ! command -v srtctl &> /dev/null; then
         echo "Error: Failed to install srtctl" >&2
+        exit 1
+    fi
+
+    # TileRT uses the retained legacy SRT API without native DCGM telemetry.
+    USES_DCGM_POWER=0
+    USES_AGENTX_POWER=0
+    SRTCTL_RECIPE_ARGS=("${SRTCTL_EVAL_ARGS[@]}")
+    if [[ "$FRAMEWORK" != "tilert" ]]; then
+        prepare_srt_power "$CONFIG_FILE" "$FRAMEWORK" || exit 1
+    fi
+    if [[ "$USES_DCGM_POWER" == "1" && "$USES_AGENTX_POWER" != "1" && (
+        "$PRECISION" != "fp4" || "$MODEL_PREFIX" != "dsv4" ||
+        ( "$FRAMEWORK" != "dynamo-sglang" && "$FRAMEWORK" != "dynamo-vllm" )
+    ) ]]; then
+        echo "Error: unsupported B200 fixed-sequence DCGM lane" >&2
         exit 1
     fi
 
@@ -352,7 +340,7 @@ run_native_srt_lane() {
     echo "Generated srtslurm.yaml:"
     cat srtslurm.yaml
 
-    run_srt_setup ARCH=x86_64
+    run_srt_setup ARCH=x86_64 || exit 1
 
     # Read by srt-slurm's post-benchmark eval.
     export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
@@ -384,7 +372,7 @@ run_native_srt_lane() {
         sed -i 's/^  max_attempts: [0-9]*/  max_attempts: 720/' "$CONFIG_PATH"
     fi
 
-    if [[ "$USES_DCGM_POWER" == "1" ]]; then
+    if [[ "$USES_DCGM_POWER" == "1" && "$USES_AGENTX_POWER" != "1" ]]; then
         read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
         python "$GITHUB_WORKSPACE/runners/inject_srt_power_concurrencies.py" \
             "$CONFIG_PATH" "${POWER_CONCURRENCIES[@]}" || exit 1
@@ -398,7 +386,7 @@ run_native_srt_lane() {
         SRTCTL_PREFLIGHT_ARGS+=(--no-preflight)
     fi
 
-    SRTCTL_OUTPUT=$(apply_srt_recipe "$CONFIG_FILE" "$FRAMEWORK" "${SRTCTL_EVAL_ARGS[@]}" -f "$CONFIG_FILE" "${SRTCTL_PREFLIGHT_ARGS[@]}" --tags "b200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
+    SRTCTL_OUTPUT=$(apply_srt_recipe "$CONFIG_FILE" "$FRAMEWORK" "${SRTCTL_RECIPE_ARGS[@]}" -f "$CONFIG_FILE" "${SRTCTL_PREFLIGHT_ARGS[@]}" --tags "b200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
     echo "$SRTCTL_OUTPUT"
 
     JOB_ID=$(echo "$SRTCTL_OUTPUT" | grep -oP '✅ Job \K[0-9]+' || echo "$SRTCTL_OUTPUT" | grep -oP 'Job \K[0-9]+')
@@ -537,35 +525,10 @@ run_multinode_srt() {
         exit 1
     fi
 
-    USES_DCGM_POWER=0
-    USES_AGENTX_POWER=0
-    _POWER_CONFIG_FILE="${CONFIG_FILE:-}"
-    if [[ "${EVAL_ONLY}" == "true" && -n "${EVAL_CONFIG_FILE:-}" ]]; then
-        _POWER_CONFIG_FILE="$EVAL_CONFIG_FILE"
+    if [[ "$EVAL_ONLY" == "true" && -n "${EVAL_CONFIG_FILE:-}" ]]; then
+        CONFIG_FILE="$EVAL_CONFIG_FILE"
     fi
-    _RECIPE_REL="${_POWER_CONFIG_FILE%%:*}"
-    _RECIPE_SRC="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/${_RECIPE_REL#recipes/}"
-    if [[ -n "$_POWER_CONFIG_FILE" && -f "$_RECIPE_SRC" ]] && awk '
-        /^telemetry:/ { t = 1; next }
-        t && /^[^ ]/  { t = 0 }
-        t && /^  dcgm_exporter:/ { p = 1 }
-        t && /^  enabled: true$/        { e = 1 }
-        END { exit !(p && e) }
-    ' "$_RECIPE_SRC"; then
-        USES_DCGM_POWER=1
-    fi
-    if [[ "$USES_DCGM_POWER" == "1" && "$IS_AGENTIC" == "1" &&
-        "$MODEL_PREFIX" == "qwen3.5" && "$PRECISION" == "fp8" && "$FRAMEWORK" == "dynamo-sglang" ]]; then
-        USES_AGENTX_POWER=1
-    elif [[ "$USES_DCGM_POWER" == "1" && (
-        "${IS_AGENTIC}" == "1" ||
-        "$MODEL_PREFIX" != "dsv4" ||
-        "$PRECISION" != "fp4" ||
-        "$FRAMEWORK" != "dynamo-vllm"
-    ) ]]; then
-        echo "Error: B200 Nscale dcgm-power requires fixed-sequence DSV4 FP4 dynamo-vllm or Qwen3.5 FP8 AgentX dynamo-sglang" >&2
-        exit 1
-    fi
+    check_env_vars CONFIG_FILE
 
     export SERVED_MODEL_NAME=$MODEL
 
@@ -576,19 +539,25 @@ run_multinode_srt() {
         rm -rf "$SRT_REPO_DIR"
     fi
 
-    setup_srt_slurm "$SRT_REPO_DIR" "$FRAMEWORK" "$USES_DCGM_POWER" || exit 1
+    setup_srt_slurm "$SRT_REPO_DIR" "$FRAMEWORK" 0 || exit 1
 
     echo "Installing srtctl..."
     export UV_INSTALL_DIR="$GITHUB_WORKSPACE/.local/bin"
     curl -LsSf https://astral.sh/uv/install.sh | sh
     export PATH="$UV_INSTALL_DIR:$PATH"
 
-    uv venv --quiet "$GITHUB_WORKSPACE/.venv"
-    source "$GITHUB_WORKSPACE/.venv/bin/activate"
-    uv pip install --quiet -e .
+    install_srt_slurm "$GITHUB_WORKSPACE/.venv" || exit 1
 
     if ! command -v srtctl &> /dev/null; then
         echo "Error: Failed to install srtctl"
+        exit 1
+    fi
+
+    prepare_srt_power "$CONFIG_FILE" "$FRAMEWORK" || exit 1
+    if [[ "$USES_DCGM_POWER" == "1" && "$USES_AGENTX_POWER" != "1" && (
+        "$MODEL_PREFIX" != "dsv4" || "$PRECISION" != "fp4" || "$FRAMEWORK" != "dynamo-vllm"
+    ) ]]; then
+        echo "Error: unsupported B200 fixed-sequence DCGM lane" >&2
         exit 1
     fi
 
@@ -642,7 +611,7 @@ run_multinode_srt() {
     echo "Generated srtslurm.yaml:"
     cat srtslurm.yaml
 
-    run_srt_setup ARCH=x86_64
+    run_srt_setup ARCH=x86_64 || exit 1
 
     # Read by srt-slurm's post-benchmark eval.
     export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
@@ -676,7 +645,7 @@ run_multinode_srt() {
         SRTCTL_PREFLIGHT_ARGS+=(--no-preflight)
     fi
 
-    SRTCTL_OUTPUT=$(apply_srt_recipe "$CONFIG_FILE" "$FRAMEWORK" "${SRTCTL_EVAL_ARGS[@]}" -f "$CONFIG_FILE" "${SRTCTL_PREFLIGHT_ARGS[@]}" --tags "b200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
+    SRTCTL_OUTPUT=$(apply_srt_recipe "$CONFIG_FILE" "$FRAMEWORK" "${SRTCTL_RECIPE_ARGS[@]}" -f "$CONFIG_FILE" "${SRTCTL_PREFLIGHT_ARGS[@]}" --tags "b200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
     echo "$SRTCTL_OUTPUT"
 
     JOB_ID=$(echo "$SRTCTL_OUTPUT" | grep -oP '✅ Job \K[0-9]+' || echo "$SRTCTL_OUTPUT" | grep -oP 'Job \K[0-9]+')
