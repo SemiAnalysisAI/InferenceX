@@ -1,0 +1,40 @@
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -55,6 +55,8 @@
+ source = "vcs"
+
+ [tool.hatch.version.raw-options]
++# Honor the distribution-scoped version preserved by the submitting launcher.
++dist_name = "srtctl"
+ # 2.0.0 at the tag, 2.0.0.post3+g<sha> three commits later (not a guessed 2.0.1.dev3).
+ version_scheme = "post-release"
+ fallback_version = "0.0.0+unknown"
+--- a/src/srtctl/templates/job_script_minimal.j2
++++ b/src/srtctl/templates/job_script_minimal.j2
+@@ -139,6 +139,17 @@
+     exit 1
+ fi
+
++# InferenceX resolves the actual Hatch VCS version on local disk before staging
++# this job. Reuse it instead of scanning Lustre for git describe --dirty.
++if [[ -f "${SRTCTL_SOURCE}/.infx-srt-version" ]]; then
++    read -r SETUPTOOLS_SCM_PRETEND_VERSION_FOR_SRTCTL < "${SRTCTL_SOURCE}/.infx-srt-version"
++    if [[ -z "$SETUPTOOLS_SCM_PRETEND_VERSION_FOR_SRTCTL" ]]; then
++        echo "ERROR: staged srtctl package version is empty"
++        exit 1
++    fi
++    export SETUPTOOLS_SCM_PRETEND_VERSION_FOR_SRTCTL
++fi
++
+ echo "Using uv $(uv --version)..."
+
+ if [ -n "${DYNAMO_WHEEL_NAME:-}" ] || [ "${SRTCTL_PREFETCH_AI_DYNAMO:-0}" = "1" ]; then
+@@ -170,7 +181,7 @@
+ # "Directory not empty" / "Failed to spawn 'python -m'" / missing CACHEDIR.TAG
+ # errors. The flock serializes only the venv init; the lock is released
+ # before the actual sweep so jobs still run in parallel.
+-flock -x "${SRTCTL_SOURCE}/.venv-compute.lock" uv sync --python 3.12 --no-dev
++flock -x "${SRTCTL_SOURCE}/.venv-compute.lock" uv sync --python 3.12 --no-dev || exit $?
+ uv run --python 3.12 --no-dev --no-sync -m srtctl.cli.do_sweep "${OUTPUT_DIR}/{{ runtime_config_filename }}"{% if serve_only %} --serve-only{% endif %}
+ EXIT_CODE=$?
+ set -e  # Re-enable exit-on-error

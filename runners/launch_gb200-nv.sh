@@ -1,7 +1,13 @@
 #!/usr/bin/bash
 
 source "$(dirname "${BASH_SOURCE[0]}")/../benchmarks/benchmark_lib.sh" --validation-only || exit 1
-check_env_vars EVAL_ONLY IS_AGENTIC IS_MULTINODE RUN_EVAL SALLOC_TIME_LIMIT
+check_env_vars EVAL_ONLY IS_AGENTIC IS_MULTINODE RUN_EVAL SALLOC_TIME_LIMIT MODEL_PREFIX FRAMEWORK PRECISION SPEC_DECODING
+
+USES_GLM52_RECOVERY=0
+if [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "glm5.2" && "$FRAMEWORK" == "dynamo-sglang" &&
+    "$PRECISION" == "fp4" && "$SPEC_DECODING" == "mtp" ]]; then
+    USES_GLM52_RECOVERY=1
+fi
 
 
 set -x
@@ -273,49 +279,51 @@ NGINX_SQUASH_FILE="${SQUASH_DIR}/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sq
 import_squash "$SQUASH_FILE" "$IMAGE"
 import_squash "$NGINX_SQUASH_FILE" "$NGINX_IMAGE"
 
-# The power lane is on iff the resolved recipe carries an enabled dcgm-power
-# telemetry block. Read the workspace mirror; it overlays the srt-slurm clone later.
 USES_DCGM_POWER=0
-_RECIPE_REL="${CONFIG_FILE%%:*}"
-_RECIPE_SRC="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/${_RECIPE_REL#recipes/}"
-# Scoped match: a stray "enabled: true" outside the telemetry block must not flip the lane.
-if [[ -n "$CONFIG_FILE" && -f "$_RECIPE_SRC" ]] && awk '
-    /^telemetry:/ { t = 1; next }
-    t && /^[^ ]/  { t = 0 }
-    t && /^  dcgm_exporter:/ { p = 1 }
-    t && /^  enabled: true$/        { e = 1 }
-    END { exit !(p && e) }
-' "$_RECIPE_SRC"; then
-    USES_DCGM_POWER=1
-fi
-
 USES_AGENTX_POWER=0
-if [[ "$USES_DCGM_POWER" == "1" && "$IS_AGENTIC" == "1" ]]; then
-    if [[ "$MODEL_PREFIX" == "glm5.2" && "$PRECISION" == "fp4" &&
-        "$FRAMEWORK" == "dynamo-sglang" &&
-        "$_RECIPE_REL" == "recipes/glm5.2/sglang/gb200-fp4/agentx/agg.yaml" ]]; then
-        USES_AGENTX_POWER=1
-    elif [[ "$MODEL_PREFIX" == "kimik3" && "$PRECISION" == "fp4" &&
-        "$FRAMEWORK" == "dynamo-vllm" &&
-        "$_RECIPE_REL" == recipes/kimik3/vllm/gb200-fp4/agentx/* ]]; then
-        USES_AGENTX_POWER=1
-    else
-        echo "Error: AgentX dcgm-power requires the GLM-5.2 aggregate or supported Kimi-K3 recipe" >&2
+if [[ "$USES_GLM52_RECOVERY" != "1" ]]; then
+    # The power lane is on iff the resolved recipe carries an enabled dcgm-power
+    # telemetry block. Read the workspace mirror; it overlays the srt-slurm clone later.
+    _RECIPE_REL="${CONFIG_FILE%%:*}"
+    _RECIPE_SRC="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/${_RECIPE_REL#recipes/}"
+    # Scoped match: a stray "enabled: true" outside the telemetry block must not flip the lane.
+    if [[ -n "$CONFIG_FILE" && -f "$_RECIPE_SRC" ]] && awk '
+        /^telemetry:/ { t = 1; next }
+        t && /^[^ ]/  { t = 0 }
+        t && /^  dcgm_exporter:/ { p = 1 }
+        t && /^  enabled: true$/        { e = 1 }
+        END { exit !(p && e) }
+    ' "$_RECIPE_SRC"; then
+        USES_DCGM_POWER=1
+    fi
+
+    if [[ "$USES_DCGM_POWER" == "1" && "$IS_AGENTIC" == "1" ]]; then
+        if [[ "$MODEL_PREFIX" == "glm5.2" && "$PRECISION" == "fp4" &&
+            "$FRAMEWORK" == "dynamo-sglang" &&
+            "$_RECIPE_REL" == "recipes/glm5.2/sglang/gb200-fp4/agentx/agg.yaml" ]]; then
+            USES_AGENTX_POWER=1
+        elif [[ "$MODEL_PREFIX" == "kimik3" && "$PRECISION" == "fp4" &&
+            "$FRAMEWORK" == "dynamo-vllm" &&
+            "$_RECIPE_REL" == recipes/kimik3/vllm/gb200-fp4/agentx/* ]]; then
+            USES_AGENTX_POWER=1
+        else
+            echo "Error: AgentX dcgm-power requires the GLM-5.2 aggregate or supported Kimi-K3 recipe" >&2
+            exit 1
+        fi
+    fi
+    if [[ "$USES_DCGM_POWER" == "1" && "$FRAMEWORK" != "dynamo-sglang" && "$USES_AGENTX_POWER" != "1" ]]; then
+        echo "Error: dcgm-power requires dynamo-sglang or the supported Kimi-K3 AgentX route" >&2
         exit 1
     fi
-fi
-if [[ "$USES_DCGM_POWER" == "1" && "$FRAMEWORK" != "dynamo-sglang" && "$USES_AGENTX_POWER" != "1" ]]; then
-    echo "Error: dcgm-power requires dynamo-sglang or the supported Kimi-K3 AgentX route" >&2
-    exit 1
-fi
 
-if [[ "$USES_DCGM_POWER" == "1" ]]; then
-    DCGM_EXPORTER_IMAGE="nvcr.io/nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless"
-    DCGM_EXPORTER_SQSH="${SQUASH_DIR}/$(echo "$DCGM_EXPORTER_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-    import_squash "$DCGM_EXPORTER_SQSH" "$DCGM_EXPORTER_IMAGE"
-    test -r "$DCGM_EXPORTER_SQSH" || { echo "Error: DCGM exporter squash not readable: $DCGM_EXPORTER_SQSH" >&2; exit 1; }
-    unsquashfs -l "$DCGM_EXPORTER_SQSH" > /dev/null || { echo "Error: DCGM exporter squash invalid: $DCGM_EXPORTER_SQSH" >&2; exit 1; }
-    sha256sum "$DCGM_EXPORTER_SQSH" > "$GITHUB_WORKSPACE/exporter-image.sha256"
+    if [[ "$USES_DCGM_POWER" == "1" ]]; then
+        DCGM_EXPORTER_IMAGE="nvcr.io/nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless"
+        DCGM_EXPORTER_SQSH="${SQUASH_DIR}/$(echo "$DCGM_EXPORTER_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+        import_squash "$DCGM_EXPORTER_SQSH" "$DCGM_EXPORTER_IMAGE"
+        test -r "$DCGM_EXPORTER_SQSH" || { echo "Error: DCGM exporter squash not readable: $DCGM_EXPORTER_SQSH" >&2; exit 1; }
+        unsquashfs -l "$DCGM_EXPORTER_SQSH" > /dev/null || { echo "Error: DCGM exporter squash invalid: $DCGM_EXPORTER_SQSH" >&2; exit 1; }
+        sha256sum "$DCGM_EXPORTER_SQSH" > "$GITHUB_WORKSPACE/exporter-image.sha256"
+    fi
 fi
 
 
@@ -398,20 +406,38 @@ echo "Installing srtctl..."
 curl -LsSf https://astral.sh/uv/install.sh | sh
 source $HOME/.local/bin/env
 
-# On watchtower compute nodes inherit the activated .venv through the shared-FS
-# SRT_REPO_DIR; a uv-managed python under a head-node-only path leaves
-# .venv/bin/python3 a broken symlink there, so pin /usr/bin/python3.
-if uses_watchtower_shared_fs && [[ -x /usr/bin/python3 ]]; then
-    uv venv --quiet --seed --python /usr/bin/python3
+if [[ "$USES_GLM52_RECOVERY" == "1" ]]; then
+    install_srt_slurm .venv || exit 1
 else
-    uv venv --quiet --seed
+    # On watchtower compute nodes inherit the activated .venv through the shared-FS
+    # SRT_REPO_DIR; a uv-managed python under a head-node-only path leaves
+    # .venv/bin/python3 a broken symlink there, so pin /usr/bin/python3.
+    if uses_watchtower_shared_fs && [[ -x /usr/bin/python3 ]]; then
+        uv venv --quiet --seed --python /usr/bin/python3
+    else
+        uv venv --quiet --seed
+    fi
+    source .venv/bin/activate
+    uv pip install --quiet -e .
 fi
-source .venv/bin/activate
-uv pip install --quiet -e .
 
 if ! command -v srtctl &> /dev/null; then
     echo "Error: Failed to install srtctl"
     exit 1
+fi
+
+if [[ "$USES_GLM52_RECOVERY" == "1" ]]; then
+    prepare_srt_power "$CONFIG_FILE" "$FRAMEWORK" || exit 1
+    if [[ "$USES_DCGM_POWER" == "1" ]]; then
+        DCGM_EXPORTER_IMAGE="nvcr.io/nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless"
+        DCGM_EXPORTER_SQSH="${SQUASH_DIR}/$(echo "$DCGM_EXPORTER_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+        import_squash "$DCGM_EXPORTER_SQSH" "$DCGM_EXPORTER_IMAGE"
+        test -r "$DCGM_EXPORTER_SQSH" || { echo "Error: DCGM exporter squash not readable: $DCGM_EXPORTER_SQSH" >&2; exit 1; }
+        unsquashfs -l "$DCGM_EXPORTER_SQSH" > /dev/null || { echo "Error: DCGM exporter squash invalid: $DCGM_EXPORTER_SQSH" >&2; exit 1; }
+        sha256sum "$DCGM_EXPORTER_SQSH" > "$GITHUB_WORKSPACE/exporter-image.sha256"
+    fi
+else
+    SRTCTL_RECIPE_ARGS=("${SRTCTL_EVAL_ARGS[@]}")
 fi
 
 echo "Configs available at: $SRT_REPO_DIR/"
@@ -495,7 +521,7 @@ if command -v squeue >/dev/null 2>&1; then
 fi
 sed -i "s/^name:.*/name: \"${SRT_SLURM_JOB_NAME}\"/" "$CONFIG_PATH"
 
-if [[ "$USES_DCGM_POWER" == "1" ]]; then
+if [[ "$USES_DCGM_POWER" == "1" && ( "$USES_GLM52_RECOVERY" != "1" || "$USES_AGENTX_POWER" != "1" ) ]]; then
     read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
     python3 "$GITHUB_WORKSPACE/runners/inject_srt_power_concurrencies.py" \
         "$CONFIG_PATH" "${POWER_CONCURRENCIES[@]}" || exit 1
@@ -524,7 +550,7 @@ if [[ "$FRAMEWORK" == "dynamo-sglang" ]]; then
 fi
 # srtctl gives RUNNER_NAME precedence over config.name; override it for the
 # submission so the #SBATCH job name keeps the namespace used above.
-SRTCTL_OUTPUT=$(RUNNER_NAME="$SRT_SLURM_JOB_NAME" apply_srt_recipe "$CONFIG_FILE" "$FRAMEWORK" "${SRTCTL_EVAL_ARGS[@]}" "${SRTCTL_APPLY_ARGS[@]}" 2>&1)
+SRTCTL_OUTPUT=$(RUNNER_NAME="$SRT_SLURM_JOB_NAME" apply_srt_recipe "$CONFIG_FILE" "$FRAMEWORK" "${SRTCTL_RECIPE_ARGS[@]}" "${SRTCTL_APPLY_ARGS[@]}" 2>&1)
 echo "$SRTCTL_OUTPUT"
 
 JOB_ID=$(echo "$SRTCTL_OUTPUT" | grep -oP '✅ Job \K[0-9]+' || echo "$SRTCTL_OUTPUT" | grep -oP 'Job \K[0-9]+')
