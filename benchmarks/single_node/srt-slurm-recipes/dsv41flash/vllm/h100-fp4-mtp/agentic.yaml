@@ -1,0 +1,78 @@
+# DeepSeek-V4.1-Flash AgentX on H100 with vLLM native DSpark
+# (https://github.com/vllm-project/recipes/blob/main/models/deepseek-ai/DeepSeek-V4.1-Flash.yaml).
+# At 1M context the sparse-attention indexer allocates a [max-num-batched-tokens,
+# max-model-len] fp8 logits buffer during startup profiling (8192 x 1048576 x 2 B =
+# 16 GiB), which OOMs next to ~36 GiB/GPU of weights on 80 GB cards. Capping
+# batched tokens shrinks it; capping max-model-len would force the 256k-capped
+# corpus onto a 1M-context model. Engram weights use UVA DRAM; the KV cache is
+# GPU-resident.
+base:
+  schema: 2
+  name: dsv41flash-fp4-h100-vllm-agentic
+  model:
+    path: hf:deepseek-ai/DeepSeek-V4.1-Flash
+    container: vllm/vllm-openai:nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3
+    precision: fp4
+  resources:
+    gpu_type: h100
+    gpus_per_node: 8
+  frontend:
+    type: vllm
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine:
+    type: vllm
+    connector: null
+  # The engine may take the full VLLM_ENGINE_READY_TIMEOUT_S to become ready.
+  health_check:
+    interval_seconds: 10
+    max_attempts: 360
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      args:
+        served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
+        language-model-only: true
+        tokenizer-mode: deepseek_v41
+        tool-call-parser: deepseek_v41
+        enable-auto-tool-choice: true
+        reasoning-parser: deepseek_v41
+        engram-config: '{"cpu_offload":true}'
+        # Five-token DSpark with probabilistic drafting. Throughput runs replace
+        # block rejection with the golden acceptance length.
+        speculative-config: '{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block","enable_adaptive_verification":false}'
+        max-model-len: 1048576
+        # The indexer buffer scales linearly with batched tokens: 4096 puts it at
+        # 8 GiB, and anything larger did not fit next to the weights on this SKU.
+        max-num-batched-tokens: 4096
+        gpu-memory-utilization: 0.92
+        disable-uvicorn-access-log: true
+      env:
+        VLLM_ENGINE_READY_TIMEOUT_S: '3600'
+        VLLM_USE_RUST_FRONTEND: '1'
+        VLLM_USE_V2_MODEL_RUNNER: '1'
+        # The indexer buffer is large enough that allocator fragmentation costs a KV block.
+        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+        PYTHONUNBUFFERED: '1'
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
+    env:
+      MODEL: deepseek-ai/DeepSeek-V4.1-Flash
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
+
+# One variant per point. The scheduler batch is 2x CONC (AgentX subagent
+# fan-out) instead of vLLM's 1024 default; graph capture is the smallest power of
+# two covering that batch x (1 + 5 drafts), up to 2048.
+override_tp8_c1: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, max-num-seqs: 2, max-cudagraph-capture-size: 16}}}, benchmark: {env: {CONC: '1'}}}
+override_tp8_c2: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, max-num-seqs: 4, max-cudagraph-capture-size: 32}}}, benchmark: {env: {CONC: '2'}}}
+override_tp8_c4: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, max-num-seqs: 8, max-cudagraph-capture-size: 64}}}, benchmark: {env: {CONC: '4'}}}
+override_tp8_c8: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, max-num-seqs: 16, max-cudagraph-capture-size: 128}}}, benchmark: {env: {CONC: '8'}}}
+override_tp8_c16: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, max-num-seqs: 32, max-cudagraph-capture-size: 256}}}, benchmark: {env: {CONC: '16'}}}
+override_tp8_c20: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, max-num-seqs: 40, max-cudagraph-capture-size: 256}}}, benchmark: {env: {CONC: '20'}}}
+override_tp8_c24: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, max-num-seqs: 48, max-cudagraph-capture-size: 512}}}, benchmark: {env: {CONC: '24'}}}
+override_tp8_c28: {roles: {agg: {gpus: 8, args: {tensor-parallel-size: 8, max-num-seqs: 56, max-cudagraph-capture-size: 512}}}, benchmark: {env: {CONC: '28'}}}
