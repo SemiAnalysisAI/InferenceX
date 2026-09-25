@@ -8911,4 +8911,4 @@
   description:
     - "Pin MiniMax-M3 B200/B300 AgentX to vLLM nightly-29468dde8b515031dc6d4d9d06bf0a2fa0442098 and remove the obsolete SimpleCPU KV patch."
     - "Increase HBM and B300 host KV budgets, tune serving limits, expand the B300 sweep, and correct host-capacity units."
-  pr-link: XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3435
