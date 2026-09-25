@@ -109,10 +109,10 @@ jobs:
     runs-on: >-
       ${{ fromJSON(vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
         format('["self-hosted",{0},"nodes:1",{1},{2}]',
-          toJSON(matrix.pool),
+          toJSON(matrix.runner),
           toJSON(format('ci-job-{0}-{1}', needs.setup.outputs.priority, matrix.queue-token)),
           toJSON(format('ci-attempt-{0}', github.run_attempt))) ||
-        format('["self-hosted",{0}]', toJSON(matrix.pool))) }}
+        format('["self-hosted",{0}]', toJSON(matrix.runner))) }}
     name: p${{ needs.setup.outputs.priority }} | OperatorX ${{ matrix.id }}
     env:
       OPERATORX_SHARD: ${{ matrix.id }}
