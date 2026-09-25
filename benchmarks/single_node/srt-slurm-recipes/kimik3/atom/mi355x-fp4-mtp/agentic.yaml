@@ -1,0 +1,89 @@
+# Kimi-K3 MXFP4 AgentX on MI355X with ATOM DSpark: the interactive band, TP8
+# with GPU-resident KV and the deepest published draft (seven tokens). The
+# 1.56 TB checkpoint only fits at TP8. The DCP8 LMCache bands stay on the legacy
+# script: srtctl reserves ATOM's kv-transfer-config for disaggregated workers.
+base:
+  schema: 2
+  name: kimik3-fp4-mi355x-atom-agentic
+  model:
+    path: hf:moonshotai/Kimi-K3
+    container: rocm/atom-dev:ubuntu24.04_py3.12_pytorch_release_2.10.0_kimi_k3_agentic_0911
+    precision: fp4
+  resources:
+    gpu_type: mi355x
+    gpus_per_node: 8
+  frontend:
+    type: atomesh
+    container_image: rocm/atom-dev@sha256:f00a9dc588a380038fdad54cd57a956043cb316ddda54ebb1b62a24f8caa343b
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: atom
+  setup_script: kimik3-atom-dspark-draft.sh
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        served-model-name: moonshotai/Kimi-K3
+        trust-remote-code: true
+        # Fails closed if the chat template stops rendering a tools payload.
+        tool-call-parser: kimi_k3
+        decode-context-parallel-size: 1
+        kv_cache_dtype: fp8
+        block-size: 128
+        max-num-seqs: 32
+        max-num-batched-tokens: 8192
+        gpu-memory-utilization: 0.9
+        enable_prefix_caching: true
+        # -1 keeps the prompt-end checkpoint anchor without the fixed-interval grid.
+        state-checkpoint-interval-tokens: -1
+        level: 3
+        cudagraph-mode: FULL
+        # Global ptpc_fp8 online quantization; the trailing entries keep the BF16
+        # draft (unprefixed layers.* and context_proj) unquantized.
+        online_quant_config: '{"global_quant_config":"ptpc_fp8","exclude_layer":["lm_head","model.embed_tokens","*self_attn.[qkv]_conv1d*","*block_sparse_moe.experts*","*block_sparse_moe.routed_expert_*","*vision_tower*","*mm_projector*","layers.*.self_attn.fused_qkv_a_proj","layers.*.self_attn.q_b_proj","layers.*.self_attn.kv_b_proj","layers.*.self_attn.o_proj","layers.*.mlp.gate_up_proj","layers.*.mlp.down_proj","context_proj"]}'
+        method: dspark
+        draft-model: Inferact/Kimi-K3-DSpark
+        num-speculative-tokens: 7
+      env:
+        # The image bakes in a build-host proxy that nothing serves on a node.
+        HTTP_PROXY: ''
+        HTTPS_PROXY: ''
+        http_proxy: ''
+        https_proxy: ''
+        NO_PROXY: localhost,127.0.0.1,::1
+        no_proxy: localhost,127.0.0.1,::1
+        PYTHONNOUSERSITE: '1'
+        ATOM_ENABLE_REPLAYSSM: '0'
+        AITER_REUSE_IDENTICAL_COMM_GROUPS: '0'
+        AITER_LOG_LEVEL: WARNING
+        AITER_SITUV2_A4W4: '1'
+        AITER_QUICK_REDUCE_QUANTIZATION: INT4
+        AITER_FLYDSL_STAGE2_FP8: '1'
+        # Anchor-only state checkpointing.
+        ATOM_STATE_CHECKPOINT_DEMAND: '0'
+        ATOM_GDN_SSM_DTYPE: fp16
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
+    env:
+      MODEL: moonshotai/Kimi-K3
+      HTTP_PROXY: ''
+      HTTPS_PROXY: ''
+      http_proxy: ''
+      https_proxy: ''
+      NO_PROXY: localhost,127.0.0.1,::1
+      no_proxy: localhost,127.0.0.1,::1
+      # Long agentic turns against a 1M context are prefill-bound on the server.
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'atom:'
+      AIPERF_APPLY_CHAT_TEMPLATE: 'true'
+
+# One variant per point. Full graphs cover every verify batch up to 2x CONC
+# times the eight-token verify window.
+override_tp8_c1: {roles: {agg: {args: {cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]'}}}, benchmark: {env: {CONC: '1'}}}
+override_tp8_c4: {roles: {agg: {args: {cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64]'}}}, benchmark: {env: {CONC: '4'}}}
