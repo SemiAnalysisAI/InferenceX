@@ -156,7 +156,7 @@ InferenceX 支持 SGLang 和 vLLM 双方的维护者，并响应 AI 实验室和
 
 | 模型架构类别 | 前缀 | 加入日期 | 启用场景 | 已弃用场景 |
 |---|---|---|---|---|
-| DeepSeek-V4.1-Flash | `dsv41flash` | 2026-09-10 | 智能体编码（DSpark、Engram UVA 卸载；GPU 待验证） | |
+| DeepSeek-V4.1-Flash | `dsv41flash` | 2026-09-10 | 智能体编码（vLLM：DSpark、Engram UVA 卸载；SGLang：自 2026-09-17 起按 SKU 添加 DSpark 配置；ATOM：2026-09-23 添加 MI355X TP2/TP4 DSpark；GPU 待验证） | |
 | GLM-5.3 | `glm5.3` | 2026-09-22（[#3366](https://github.com/SemiAnalysisAI/InferenceX/pull/3366)） | 智能体编码（仅 MTP，见弃用公告） | 单轮 1k1k（在本模型加入前已对所有模型弃用，从未运行） |
 | Qwen3.8-Flash-Next | `qwen3.8next` | 2026-08-26（[#2742](https://github.com/SemiAnalysisAI/InferenceX/pull/2742)） | 智能体编码 | |
 | Kimi-K3 | `kimik3` | 2026-07-27 ([#2391](https://github.com/SemiAnalysisAI/InferenceX/pull/2391)) | 智能体编码（可关闭 DSpark 以获得更优帕累托点） | 独立非 DSpark A/B 基线（自第 0 天起即不要求） |

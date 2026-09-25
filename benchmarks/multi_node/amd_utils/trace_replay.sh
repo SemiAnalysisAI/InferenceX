@@ -13,12 +13,7 @@ fi
 model_path=$1
 model_name=$2
 concurrency_list=${3}
-# vllm-disagg uses --served-model-name MODEL_NAME; sglang defaults to MODEL_PATH
-if [[ "$ENGINE" == "vllm-disagg" ]]; then
-    MODEL="${MODEL_NAME}"
-else
-    MODEL="${MODEL_PATH}"
-fi
+MODEL="${MODEL_PATH}"
 log_path=${4}
 
 IFS='x' read -r -a chosen_concurrencies <<< "${concurrency_list}"

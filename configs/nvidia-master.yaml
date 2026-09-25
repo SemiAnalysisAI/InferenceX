@@ -920,7 +920,7 @@ dsr1-fp4-b200-sglang-mtp:
         srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsr1/sglang/b200-fp4-mtp/8k1k.yaml
 
 dsv4-fp4-b200-sglang-agentic-hicache-mtp:
-  image: lmsysorg/sglang:v0.5.19-cu130
+  image: lmsysorg/sglang:v0.5.20-cu130
   model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
   runner: cluster:b200-nscale

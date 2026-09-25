@@ -65,6 +65,32 @@ parsed YAML scalars so quotes and punctuation remain data, not YAML or shell syn
 Keep model selection, cache preparation, and workload-dependent time limits in the
 launcher. Do not add profiles for non-srt-slurm launchers or change their routing here.
 
+Put per-allocation host checks and setup in
+`runners/srt-slurm/hooks/<cluster>/setup.sh`, with cluster-specific helpers beside it.
+The directory name matches the cluster profile's filename stem. Invoke the script
+explicitly through `default_host_setup.commands` in that profile; scripts are not
+auto-discovered. srt-slurm runs them on the selected allocated nodes, outside containers,
+before starting services and workers. A failed check stops startup by default.
+Pass configuration explicitly from the profile. If setup needs an undo step, keep it
+in `teardown.sh` beside `setup.sh` and register it in `default_host_setup.teardown`.
+These are job-owned hooks, not administrator-installed Slurm Prolog/Epilog scripts.
+Only add hooks for clusters that need them; do not add empty scripts for every profile.
+
+Put reusable host-check functions in `runners/srt-slurm/hooks/common.sh`; keep
+cluster-only helpers beside `setup.sh`. The common file only defines functions:
+sourcing it must not run checks, change environment variables, or initialize
+benchmarks. Both setup hooks and benchmark scripts can reuse these functions
+without importing benchmark initialization into host setup.
+
+Hooks inject **cluster-specific host prerequisites only**, such as fabric checks or
+required host-state preparation. Keep them small, workload-independent, and safe to
+run repeatedly. Prefer native srt-slurm settings over shell code where possible.
+Benchmark execution, model selection, engine flags, concurrency tuning, evaluation,
+result collection, and job orchestration do not belong here. Do not patch engines or
+containers, bypass failed checks, or hide runtime bugs with retries and ad hoc
+workarounds; fix the owning component instead. Limit host changes to allocated nodes
+and preserve resources used by other jobs.
+
 ## Procedure index
 
 1. [Prepare a worktree](#prepare-a-worktree)
@@ -304,6 +330,26 @@ The GB300 launcher allows 7200 seconds for engine readiness. In [run 34504969146
 GPU sweep and eval evidence is required before calling any recipe validated.
 
 Source: [upstream recipe](https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4.1-Flash).
+
+### DeepSeek-V4.1-Flash DSpark on ATOM
+
+`dsv41flash-fp4-mi355x-atom-agentic-dspark` follows the
+[upstream ATOM recipe](https://github.com/ROCm/ATOM/blob/53b11c9a665e786798785acbedfdfd4da3fb87c4/recipes/DeepSeek-V4.1-Flash-Agentic.md)
+with `rocm/atom-dev:nightly_202609250902`. TP2 covers concurrency
+`[1, 2, 8, 16, 32, 64]`; TP4 covers `[2, 8, 16, 32, 64]`, without expert
+parallelism or KV offload. Every point uses BF16 KV, FP8 index cache, 128 maximum
+sequences, 16K batched-token/prefill chunks, prefix caching with block size 16,
+8K state checkpoints, compilation level 3 and FULL graphs. Concurrency 32 captures
+every size from 1 through 32 plus 48, 64 and 128; other points use the upstream
+sparse list. Five-token DSpark uses golden AL 3.51 for throughput and real
+acceptance for eval, with the checkpoint's shipped draft and `dsml_v41` parser.
+
+The existing MI355X launcher mounts this model's shared cache and the repository
+at `/ix`, preserves Slurm's GPU allocation and routes `draft_model` to the new
+`dsv41flash_fp4_mi355x_atom_mtp.sh` script. Canonical AgentX runs use the uncapped
+`semianalysis_cc_traces_weka_062126` corpus, 3600 seconds per point and five warmup
+requests per lane. Workflow duration overrides and `agentx-fast` remain available
+for diagnostics. GPU sweep and eval validation is pending.
 
 ### DeepSeek-V4.1-Flash DSpark on H200
 
