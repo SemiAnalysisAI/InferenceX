@@ -156,7 +156,7 @@ Other offloading tiers, including NVMe KV cache offloading, are outside the init
 
 | Model architecture class | Prefix | Date added | Active scenarios | Deprecated scenarios |
 |---|---|---|---|---|
-| DeepSeek-V4.1-Flash | `dsv41flash` | 2026-09-10 | Agentic coding (vLLM: DSpark, Engram UVA offload; SGLang: DSpark arms added per SKU from 2026-09-17; GPU validation pending) | |
+| DeepSeek-V4.1-Flash | `dsv41flash` | 2026-09-10 | Agentic coding (vLLM: DSpark, Engram UVA offload; SGLang: DSpark arms added per SKU from 2026-09-17; ATOM: MI355X TP2/TP4 DSpark added 2026-09-23; GPU validation pending) | |
 | GLM-5.3 | `glm5.3` | 2026-09-22 ([#3366](https://github.com/SemiAnalysisAI/InferenceX/pull/3366)) | Agentic coding (MTP only, per the Deprecation Notice) | Single-turn 1k1k (deprecated for all models before this model was added; never run) |
 | Qwen3.8-Flash-Next | `qwen3.8next` | 2026-08-26 ([#2742](https://github.com/SemiAnalysisAI/InferenceX/pull/2742)) | Agentic coding | |
 | Kimi-K3 | `kimik3` | 2026-07-27 ([#2391](https://github.com/SemiAnalysisAI/InferenceX/pull/2391)) | Agentic coding (DSpark may be disabled for better Pareto points) | Standalone non-DSpark A/B baseline (not required from day 0) |
