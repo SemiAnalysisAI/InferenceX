@@ -6385,7 +6385,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "CONFIG_FILE=recipes/kimik3/vllm/gb200-fp4/agentx/agg-tp16-latency.yaml"
+          - "CONFIG_FILE=recipes/kimik3/vllm/gb200-fp4/agentx/agg-variants.yaml:override_tp16_latency"
       # Balanced: multi_node_tep strategy, TEP16 across four GB200 nodes.
       # https://recipes.vllm.ai/moonshotai/Kimi-K3?hardware=gb200&nodes=4&strategy=multi_node_tep
       - spec-decoding: mtp
@@ -6397,7 +6397,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic:
           ep: 16
           dp-attn: false
           additional-settings:
-          - "CONFIG_FILE=recipes/kimik3/vllm/gb200-fp4/agentx/agg-tep16-balanced.yaml"
+          - "CONFIG_FILE=recipes/kimik3/vllm/gb200-fp4/agentx/agg-variants.yaml:override_tep16_balanced"
       # Throughput oriented: official multi_node_dep strategy, DEP16 across
       # four GB200 nodes (TP4 x DP4 = EP16, one local DP rank per node).
       # The recipe allows up to 3600s for full-context saturation warmup to drain.
@@ -6411,7 +6411,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic:
           ep: 16
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/kimik3/vllm/gb200-fp4/agentx/agg-dep16.yaml"
+          - "CONFIG_FILE=recipes/kimik3/vllm/gb200-fp4/agentx/agg-variants.yaml:override_dep16"
       # High-concurrency DEP16 with vLLM Simple CPU KV offloading. c384
       # exercises 384 of the 393 AgentX trajectories and remains below the
       # aggregate max-num-seqs capacity of 512 (128 per DP rank).
@@ -6426,7 +6426,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic:
           ep: 16
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/kimik3/vllm/gb200-fp4/agentx/agg-dep16-vllm-simple-offload.yaml"
+          - "CONFIG_FILE=recipes/kimik3/vllm/gb200-fp4/agentx/agg-variants.yaml:override_dep16_vllm_simple_offload"
 # Kimi-K3 GB200 TP16/DCP16 profiles using Mooncake DRAM offload.
 kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-agg:
   image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-75c2eef
