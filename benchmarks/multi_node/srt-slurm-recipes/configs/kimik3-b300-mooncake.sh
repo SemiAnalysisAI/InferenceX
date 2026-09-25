@@ -11,10 +11,12 @@ python3 -c "from mooncake.store import MooncakeDistributedStore" >/dev/null
 
 # Rail-isolated nodes: two RNICs cannot reach each other even within a node, so
 # every rank uses one rail. mlx5_0 is down on some nodes, and topology discovery
-# then finds no HCA, so take the first active rail at runtime.
+# then finds no HCA, so take the first active rail at runtime. DSXE nodes name
+# their rails rdmap*.
 rail=""
 for device in mlx5_0 mlx5_1 mlx5_2 mlx5_3 mlx5_4 mlx5_5 mlx5_8 mlx5_9 \
-              mlx5_10 mlx5_11 mlx5_16 mlx5_17 mlx5_20 mlx5_21 mlx5_22 mlx5_23; do
+              mlx5_10 mlx5_11 mlx5_16 mlx5_17 mlx5_20 mlx5_21 mlx5_22 mlx5_23 \
+              $(ls /sys/class/infiniband 2>/dev/null | grep '^rdmap' | sort -V); do
     if grep -q ACTIVE "/sys/class/infiniband/$device/ports/1/state" 2>/dev/null; then
         rail="$device"
         break
