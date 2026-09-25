@@ -168,6 +168,10 @@ for index in "${!CONCURRENCIES[@]}"; do
 
     echo "Running agentic concurrency $concurrency of: ${CONCURRENCIES[*]}"
     build_replay_cmd "$RESULT_DIR"
+    # Recipes whose legacy launch rendered prompts client-side opt in here.
+    if [[ "${AIPERF_APPLY_CHAT_TEMPLATE:-}" == true ]]; then
+        REPLAY_CMD+=" --apply-chat-template"
+    fi
     run_agentic_replay_and_write_outputs "$RESULT_DIR"
 
     if [ "$index" -lt "$(( ${#CONCURRENCIES[@]} - 1 ))" ]; then
