@@ -26,30 +26,28 @@ import contextlib
 import logging
 import os
 import re
-import subprocess
 import sys
 import time
 from typing import TYPE_CHECKING
 
+from infx.github.client import (
+    PYGITHUB_AVAILABLE,
+    GithubException,
+    is_transient_error,
+    make_client,
+    resolve_token,
+    retry_delay,
+)
+
 try:
     import git as gitpython
-
-    from github import Github, GithubException
 except ImportError:
     gitpython = None  # type: ignore[assignment]
-    Github = None  # type: ignore[assignment, misc]
 
-    class GithubException(Exception):  # type: ignore[no-redef]  # noqa: N818
-        """Stub when PyGithub is not installed."""
-
-        status = 0
-        data: object = None
-        headers: dict = {}  # type: ignore[type-arg]  # noqa: RUF012
-
-
-_WORKFLOWS_AVAILABLE = gitpython is not None
+_WORKFLOWS_AVAILABLE = gitpython is not None and PYGITHUB_AVAILABLE
 
 if TYPE_CHECKING:
+    from github import Github
     from github.PullRequest import PullRequest
     from github.Repository import Repository
 
@@ -118,161 +116,27 @@ def die(msg: str) -> int:
 
 
 # ---------------------------------------------------------------------------
-# Auth
+# Auth / transient-error / GitPython helpers are in infx.github.client and
+# infx.git.repo.  Keep thin aliases for backward compatibility with tests.
 # ---------------------------------------------------------------------------
 
+_resolve_token = resolve_token
+_make_github = make_client
+_is_transient_error = is_transient_error
+_retry_delay = retry_delay
 
-def _resolve_token() -> str:
-    """Resolve the GitHub token from the environment, falling back to ``gh auth token``.
+# Re-export GitRepo as GitOps for backward compatibility with existing tests
+# and the merge_pr flow.
+if _WORKFLOWS_AVAILABLE:
+    from infx.git.repo import GitRepo as GitOps
+else:
 
-    Precedence: GH_TOKEN > GITHUB_TOKEN > ``gh auth token`` (a single
-    bootstrap subprocess call -- the only subprocess in this module).
-    """
-    token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN") or ""
-    if token:
-        return token
-    # Last-resort fallback: ask the gh CLI for its stored credential.
-    try:
-        result = subprocess.run(
-            ["gh", "auth", "token"],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        return result.stdout.strip()
-    except (FileNotFoundError, subprocess.CalledProcessError):
-        return ""
+    class GitOps:  # type: ignore[no-redef]
+        """Placeholder when GitPython is not installed."""
 
-
-def _make_github(token: str) -> Github:
-    """Build a PyGithub ``Github`` client, respecting ``GITHUB_API_URL``."""
-    base_url = os.environ.get("GITHUB_API_URL") or "https://api.github.com"
-    return Github(login_or_token=token, base_url=base_url)
-
-
-# ---------------------------------------------------------------------------
-# Transient error handling for API polling
-# ---------------------------------------------------------------------------
-
-_TRANSIENT_HTTP_STATUSES = frozenset({403, 429, 500, 502, 503, 504})
-
-
-def _is_transient_error(exc: Exception) -> bool:
-    """Return True for API errors safe to retry during check polling.
-
-    Covers server errors (5xx), rate limits (403/429), and connection-level
-    failures from requests/urllib3.
-    """
-    if isinstance(exc, GithubException):
-        return exc.status in _TRANSIENT_HTTP_STATUSES
-    # Connection/timeout at any level (builtin, requests, urllib3).
-    # builtins.ConnectionError covers ConnectionRefused/Reset/Aborted/BrokenPipe.
-    # requests.ConnectionError and urllib3 errors inherit from OSError.
-    return isinstance(exc, (ConnectionError, TimeoutError))
-
-
-def _retry_delay(exc: Exception) -> float:
-    """Extract Retry-After from a rate-limited response, default 10s, capped at 60s."""
-    if isinstance(exc, GithubException):
-        headers = getattr(exc, "headers", None) or {}
-        if isinstance(headers, dict):
-            raw = headers.get("Retry-After") or headers.get("retry-after")
-            if raw:
-                try:
-                    return min(max(float(raw), 1.0), 60.0)
-                except (ValueError, TypeError):
-                    pass
-    return 10.0
-
-
-# ---------------------------------------------------------------------------
-# GitPython wrapper
-# ---------------------------------------------------------------------------
-
-
-class GitOps:
-    """Thin wrapper around GitPython for the operations this workflow needs.
-
-    All git operations go through this class so tests can supply a
-    ``gitpython.Repo`` backed by a temporary directory instead of the real
-    checkout.
-    """
-
-    def __init__(self, repo: gitpython.Repo | None = None) -> None:
-        self.repo = repo or gitpython.Repo(".")
-
-    # -- queries --
-
-    def is_clean(self) -> bool:
-        return not self.repo.is_dirty(untracked_files=True)
-
-    def current_ref(self) -> str:
-        if self.repo.head.is_detached:
-            return self.repo.head.commit.hexsha
-        return self.repo.active_branch.name
-
-    def rev_parse(self, ref: str = "HEAD") -> str:
-        return self.repo.rev_parse(ref).hexsha
-
-    def diff_name_only_unmerged(self) -> str:
-        """Return newline-joined list of unmerged paths (like ``git diff --name-only --diff-filter=U``)."""
-        return self.repo.git.diff("--name-only", "--diff-filter=U")
-
-    def diff_quiet(self, *args: str) -> bool:
-        """Return True if ``git diff --quiet`` exits 0 (no changes)."""
-        try:
-            self.repo.git.diff("--quiet", *args)
-            return True
-        except gitpython.GitCommandError:
-            return False
-
-    def show_stage(self, stage: int, path: str) -> bytes:
-        """Read a file from a given git index stage during a merge conflict.
-
-        Returns raw bytes identical to ``git show :<stage>:<path>``.
-        ``repo.git.show()`` returns str by default and strips the trailing
-        newline, which breaks ``parse_changelog``'s newline requirement.
-        ``stdout_as_string=False`` and ``strip_newline_in_stdout=False``
-        preserve the exact bytes.
-        """
-        return self.repo.git.show(
-            f":{stage}:{path}",
-            stdout_as_string=False,
-            strip_newline_in_stdout=False,
-        )
-
-    # -- mutations --
-
-    def fetch(self, *args: str) -> None:
-        self.repo.git.fetch(*args)
-
-    def checkout(self, *args: str) -> None:
-        self.repo.git.checkout(*args)
-
-    def merge(self, *args: str) -> int:
-        """Run ``git merge`` and return the exit code (0 or non-zero for conflicts)."""
-        try:
-            self.repo.git.merge(*args)
-            return 0
-        except gitpython.GitCommandError as exc:
-            return exc.status or 1
-
-    def add(self, *paths: str) -> None:
-        self.repo.git.add(*paths)
-
-    def commit(self, *args: str) -> None:
-        self.repo.git.commit(*args)
-
-    def push(self, *args: str) -> None:
-        self.repo.git.push(*args)
-
-    def branch_delete(self, name: str) -> None:
-        with contextlib.suppress(gitpython.GitCommandError):
-            self.repo.git.branch("-D", name)
-
-    def merge_abort(self) -> None:
-        with contextlib.suppress(gitpython.GitCommandError):
-            self.repo.git.merge("--abort")
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            msg = "GitPython is required but not installed"
+            raise ImportError(msg)
 
 
 # ---------------------------------------------------------------------------
@@ -520,9 +384,18 @@ def resolve_changelog_conflict(pr: int, repo: str, git_ops: GitOps) -> bool:
             f.write(resolved)
         print(f"Prepared {CHANGELOG} for PR #{pr}")
         return True
-    except (ChangelogValidationError, OSError, gitpython.GitCommandError) as exc:
+    except (ChangelogValidationError, OSError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return False
+    except Exception as exc:
+        # GitPython's GitCommandError when git show fails during conflict
+        # resolution.  The function only runs when gitpython is installed, but
+        # we avoid referencing gitpython.GitCommandError at module level since
+        # the module must be importable without GitPython.
+        if gitpython is not None and isinstance(exc, gitpython.GitCommandError):
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return False
+        raise
 
 
 def canonicalize_changelog(pr: int, repo: str) -> None:

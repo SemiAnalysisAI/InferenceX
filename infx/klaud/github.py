@@ -56,6 +56,8 @@ def download_json(repository: str, artifact: dict, destination: Path) -> None:
     limit = 256 * 1024 * 1024
     if artifact["expired"] or not 0 < artifact["size_in_bytes"] <= limit:
         raise VerificationError("Artifact unavailable or too large")
+    # Binary download via gh -- infx.github.api() expects JSON responses,
+    # so we use subprocess directly for this raw-bytes endpoint.
     archive = subprocess.check_output(
         [
             "gh",

@@ -17,6 +17,7 @@ import sys
 from typing import Any
 
 from infx import github
+from infx.github.client import require_token
 
 from .sweep_runs import (
     REUSABLE_AGGREGATE_ARTIFACTS as REUSABLE_AGGREGATE_ARTIFACTS,
@@ -285,9 +286,7 @@ def main() -> int:
     parser.add_argument("--github-output", default=os.environ.get("GITHUB_OUTPUT"))
     args = parser.parse_args()
 
-    token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
-    if not token:
-        raise RuntimeError("GH_TOKEN or GITHUB_TOKEN is required")
+    token = require_token()
     allowed_author_associations = {
         value.strip() for value in args.allowed_author_associations.split(",") if value.strip()
     }

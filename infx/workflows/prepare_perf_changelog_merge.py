@@ -5,11 +5,13 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+from infx.git import show_stage as _git_show_stage
+from infx.git.repo import GitError
 
 from .validate_perf_changelog import (
     PR_LINK_PLACEHOLDERS,
@@ -228,15 +230,12 @@ def resolve_conflict_bytes(
 
 def read_stage(stage: int, path: str) -> bytes:
     """Read a conflicted file from the git index."""
-    result = subprocess.run(
-        ["git", "show", f":{stage}:{path}"],
-        check=False,
-        capture_output=True,
-    )
-    if result.returncode != 0:
-        detail = result.stderr.decode("utf-8", errors="replace").strip()
-        raise ChangelogValidationError(f"could not read stage {stage} for {path}: {detail}")
-    return result.stdout
+    try:
+        return _git_show_stage(stage, path)
+    except GitError as exc:
+        raise ChangelogValidationError(
+            f"could not read stage {stage} for {path}: {exc}"
+        ) from exc
 
 
 def main() -> int:

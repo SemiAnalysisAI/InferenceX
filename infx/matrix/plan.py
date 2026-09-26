@@ -3,9 +3,7 @@
 import argparse
 import copy
 import hashlib
-import io
 import json
-import os
 import re
 import subprocess
 import tempfile
@@ -19,6 +17,7 @@ from pathlib import Path
 import yaml
 
 from infx.config import GENERATE_SWEEPS_PY_SCRIPT, MASTER_CONFIGS, RUNNER_CONFIG
+from infx.git import diff_added_lines, ls_tree_batch_read
 
 from .generate import (
     EvalMode,
@@ -45,31 +44,7 @@ class GenerationInputs:
 
 
 def get_added_lines(base_ref: str, head_ref: str, filepath: str) -> str:
-    result = subprocess.run(
-        ["git", "diff", base_ref, head_ref, "--", filepath],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-
-    added_lines = []
-    for line in result.stdout.split("\n"):
-        if line.startswith("-") and not line.startswith("---"):
-            deleted_content = line[1:]
-            # Allow whitespace-only or empty line deletions
-            if deleted_content.strip():
-                # Don't allow deletions in the changelog
-                # By convention, it should act as a running log of performance changes,
-                # so we only want to see additions
-                raise ValueError(
-                    f"Deletions are not allowed in {filepath}. "
-                    f"Only additions to the changelog are permitted. "
-                    f"Found deleted line: {deleted_content}"
-                )
-        elif line.startswith("+") and not line.startswith("+++"):
-            added_lines.append(line[1:])
-
-    return "\n".join(added_lines)
+    return diff_added_lines(base_ref, head_ref, filepath)
 
 
 def filter_eval_rows_by_prefill_ep(eval_rows: list[dict], min_prefill_ep: int | None) -> list[dict]:
@@ -113,26 +88,10 @@ def get_config_keys_from_master(config_keys: list[str], master_config: dict) -> 
 def generation_inputs_at_ref(ref: str) -> Iterator[GenerationInputs]:
     """Materialize config and generator inputs from one repository revision."""
     with tempfile.TemporaryDirectory(prefix="inferencex-append-only-") as temp_dir:
-        files_result = subprocess.run(
-            [
-                "git",
-                "ls-tree",
-                "-r",
-                "-z",
-                ref,
-                "--",
-                "utils/matrix_logic",
-                "infx",
-                *MASTER_CONFIGS,
-                "configs/runners.yaml",
-            ],
-            capture_output=True,
-            check=True,
+        repo_files = ls_tree_batch_read(
+            ref,
+            ["utils/matrix_logic", "infx", *MASTER_CONFIGS, "configs/runners.yaml"],
         )
-        repo_files = {}
-        for entry in files_result.stdout.split(b"\0")[:-1]:
-            metadata, path = entry.split(b"\t", 1)
-            repo_files[os.fsdecode(path)] = metadata.split()[2]
         required_paths = {
             *MASTER_CONFIGS,
             "configs/runners.yaml",
@@ -144,20 +103,7 @@ def generation_inputs_at_ref(ref: str) -> Iterator[GenerationInputs]:
                 f"append-only base revision is missing generation inputs: {sorted(missing_paths)}"
             )
 
-        result = subprocess.run(
-            ["git", "cat-file", "--batch"],
-            input=b"\n".join(repo_files.values()) + b"\n",
-            capture_output=True,
-            check=True,
-        )
-        blobs = io.BytesIO(result.stdout)
-        for repo_path in repo_files:
-            header = blobs.readline().split()
-            if len(header) != 3 or header[1] != b"blob":
-                raise ValueError(f"Could not read {repo_path!r} at {ref!r}: {header!r}")
-            content = blobs.read(int(header[2]))
-            if blobs.read(1) != b"\n":
-                raise ValueError(f"Incomplete Git blob for {repo_path!r} at {ref!r}")
+        for repo_path, content in repo_files.items():
             destination = Path(temp_dir) / repo_path
             destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_bytes(content)

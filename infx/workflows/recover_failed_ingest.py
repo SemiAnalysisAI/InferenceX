@@ -15,6 +15,8 @@ from typing import Any
 import yaml
 
 from infx import github
+from infx.git import rev_parse as _git_rev_parse, run_git, show_file as _git_show_file
+from infx.git.repo import GitError
 
 from .validate_perf_changelog import (
     CANONICAL_PR_LINK,
@@ -43,7 +45,22 @@ def run_command(
     env: dict[str, str] | None = None,
     input_text: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    """Run a command and raise a concise recovery error on failure."""
+    """Run a command and raise a concise recovery error on failure.
+
+    For git commands, prefer ``infx.git.run_git`` which wraps ``subprocess``
+    with ``GitError``.  This helper remains for non-git subprocesses and
+    legacy callers that pass full command lists.
+    """
+    if command and command[0] == "git":
+        try:
+            return run_git(
+                *command[1:],
+                cwd=cwd,
+                env=env,
+                input_text=input_text,
+            )
+        except GitError as exc:
+            raise RecoveryError(str(exc)) from exc
     result = subprocess.run(
         command,
         check=False,
@@ -61,16 +78,10 @@ def run_command(
 
 def read_git_file_from(worktree: Path, ref: str, path: str) -> bytes:
     """Read an exact blob through a specific repository worktree."""
-    result = subprocess.run(
-        ["git", "show", f"{ref}:{path}"],
-        check=False,
-        cwd=worktree,
-        capture_output=True,
-    )
-    if result.returncode != 0:
-        detail = result.stderr.decode("utf-8", errors="replace").strip()
-        raise RecoveryError(f"could not read {path} at {ref}: {detail}")
-    return result.stdout
+    try:
+        return _git_show_file(ref, path, cwd=worktree)
+    except GitError as exc:
+        raise RecoveryError(str(exc)) from exc
 
 
 def parse_target_url(url: str) -> tuple[str, int, int | None]:
@@ -179,15 +190,11 @@ def inspect_target(
     if len(candidates) != 1:
         raise RecoveryError(f"target merge SHA maps to {len(candidates)} exact merged PRs")
 
+    import contextlib
+
     base_sha = ""
-    rev_parse = subprocess.run(
-        ["git", "rev-parse", f"{merge_sha}^"],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if rev_parse.returncode == 0:
-        base_sha = rev_parse.stdout.strip()
+    with contextlib.suppress(GitError):
+        base_sha = _git_rev_parse(f"{merge_sha}^")
 
     pr = candidates[0]
     return {

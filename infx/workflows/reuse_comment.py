@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from infx import github
+from infx.github.client import require_token
 
 from . import reuse
 
@@ -78,9 +79,7 @@ def acknowledge(repo: str, event: dict[str, Any], token: str) -> int:
 
 
 def main() -> int:
-    token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
-    if not token:
-        raise RuntimeError("GH_TOKEN or GITHUB_TOKEN is required")
+    token = require_token()
     event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text(encoding="utf-8"))
     return acknowledge(os.environ["GITHUB_REPOSITORY"], event, token)
 

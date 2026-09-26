@@ -15,6 +15,8 @@ import yaml
 from yaml.constructor import ConstructorError
 from yaml.resolver import BaseResolver
 
+from infx.git import show_file as _git_show_file
+from infx.git.repo import GitError
 from infx.matrix.validation import ChangelogEntry
 
 CANONICAL_PR_LINK = re.compile(r"https://github\.com/SemiAnalysisAI/InferenceX/pull/\d+")
@@ -69,15 +71,10 @@ UniqueKeyLoader.add_constructor(
 
 def read_git_file(ref: str, path: str) -> bytes:
     """Read a repository file exactly as stored at a git ref."""
-    result = subprocess.run(
-        ["git", "show", f"{ref}:{path}"],
-        check=False,
-        capture_output=True,
-    )
-    if result.returncode != 0:
-        detail = result.stderr.decode("utf-8", errors="replace").strip()
-        raise ChangelogValidationError(f"could not read {path} at {ref}: {detail}")
-    return result.stdout
+    try:
+        return _git_show_file(ref, path)
+    except GitError as exc:
+        raise ChangelogValidationError(str(exc)) from exc
 
 
 def parse_changelog(raw: bytes, label: str) -> list[dict[str, Any]]:

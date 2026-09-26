@@ -200,9 +200,9 @@ def plan(root: Path, directory: Path, review_batch_size: int, cooldown_hours: in
 
     policy = Policy()
     repository = os.environ["GITHUB_REPOSITORY"]
-    base = subprocess.check_output(
-        ["git", "-C", str(root), "rev-parse", "HEAD"], text=True, timeout=30
-    ).strip()
+    from infx.git import rev_parse as _git_rev_parse
+
+    base = _git_rev_parse("HEAD", cwd=root)
     items, issues = fetch_catalog(policy)
     if issues:
         raise ReadError("public-feed-invalid: " + ", ".join(issues))

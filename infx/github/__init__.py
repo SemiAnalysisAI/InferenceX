@@ -1,4 +1,9 @@
-"""GitHub REST and comment-reaction primitives for internal automation."""
+"""GitHub REST and comment-reaction primitives for internal automation.
+
+The ``gh`` CLI wrapper (``api``, ``paginate``, ``set_comment_reaction``) works
+without PyGithub and is safe to use from any install context.  PyGithub helpers
+live in ``infx.github.client`` (requires the ``workflows`` extra).
+"""
 
 from __future__ import annotations
 
