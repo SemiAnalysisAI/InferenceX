@@ -8950,3 +8950,9 @@
   description:
     - "Update SGLang image from v0.5.19-cu130 to v0.5.20-cu130 and pass --cuda-graph-max-bs-decode after the alias removal."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3334
+
+- config-keys:
+    - qwen3.5-fp4-b300-sglang-agentic-mtp
+  description:
+    - "Update SGLang image from v0.5.16-cu130 to nightly-dev-cu13-20260925-8ca82118 (latest nightly); rename cuda-graph-max-bs to cuda-graph-max-bs-decode"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3454
