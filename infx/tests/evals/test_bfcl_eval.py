@@ -10,8 +10,6 @@ from typing import Any
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-
 import infx.evals.bfcl_adapter as be
 import infx.evals.validate_scores as vs
 
