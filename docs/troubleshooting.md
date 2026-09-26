@@ -23,7 +23,7 @@ Classify a failure by the first layer that did not establish its contract. Prese
 
 ## Sources of truth
 
-- [`KLAUD_DEBUG.md`](../KLAUD_DEBUG.md) records recurring Klaud-Cold/image-bump incidents and their observed signatures. It is incident knowledge, not a substitute for current workflow or review policy.
+- [`KLAUD_DEBUG.md`](KLAUD_DEBUG.md) records recurring Klaud-Cold/image-bump incidents and their observed signatures. It is incident knowledge, not a substitute for current workflow or review policy.
 - [`run-sweep.yml`](../.github/workflows/run-sweep.yml), [`benchmark-tmpl.yml`](../.github/workflows/benchmark-tmpl.yml), and [`benchmarks/benchmark_lib.sh`](../benchmarks/benchmark_lib.sh) define orchestration, artifact upload, server readiness, benchmark, and eval behavior.
 - [`validate_perf_changelog.py`](../infx/workflows/validate_perf_changelog.py), [`generate_sweep_configs.py`](../utils/matrix_logic/generate_sweep_configs.py), and [`validation.py`](../infx/matrix/validation.py) own changelog, matrix, and schema failures.
 - [`utils/runner_setup/RUNNER_SETUP.md`](../utils/runner_setup/RUNNER_SETUP.md) and [`runners/`](../runners/) own provisioning and launcher routing. [`CONTRIBUTING.md`](../CONTRIBUTING.md#amd-cluster-never-leave-root-owned-files-in-runner-workspaces) owns AMD workspace safety.
@@ -58,7 +58,7 @@ Do not rerun first: reruns can replace logs, change runner/node placement, or ma
 
 ### Changelog
 
-A setup-stage deletion error usually means a stale branch or whitespace-changing merge made historical bytes appear deleted. Follow the canonical repair in [`KLAUD_DEBUG.md` §1.1](../KLAUD_DEBUG.md#11-perf-changelogyaml-deletion-not-allowed): take the current main version verbatim, then append only this PR's entry at the tail. Validate against the real base and head with [`validate_perf_changelog.py`](../infx/workflows/validate_perf_changelog.py).
+A setup-stage deletion error usually means a stale branch or whitespace-changing merge made historical bytes appear deleted. Follow the canonical repair in [`KLAUD_DEBUG.md` §1.1](KLAUD_DEBUG.md#11-perf-changelogyaml-deletion-not-allowed): take the current main version verbatim, then append only this PR's entry at the tail. Validate against the real base and head with [`validate_perf_changelog.py`](../infx/workflows/validate_perf_changelog.py).
 
 Do not 3-way merge or normalize `perf-changelog.yaml`. Stop if the intended config keys, eval flags, scenario scope, or historical delta is ambiguous. Changelog additions and permitted `pr-link` correction behavior are enforced by the validator, not by a visually valid YAML parse.
 
@@ -79,7 +79,7 @@ Classify queue/allocation failures before reading server logs:
 - Rerun only after the runner is healthy. Do not change model parallelism, memory flags, or image merely to escape a bad node.
 - Escalate access, drained-node, socket, storage, and permanent Slurm configuration changes to cluster operators.
 
-[`KLAUD_DEBUG.md` §5](../KLAUD_DEBUG.md#5-cluster-infrastructure-amd-mi355x--mi300x--mi325x) lists known AMD node, Docker socket, disk, and port incidents. Treat named-node state as historical until current node evidence confirms it.
+[`KLAUD_DEBUG.md` §5](KLAUD_DEBUG.md#5-cluster-infrastructure-amd-mi355x--mi300x--mi325x) lists known AMD node, Docker socket, disk, and port incidents. Treat named-node state as historical until current node evidence confirms it.
 
 ### AMD root-owned workspace files
 
@@ -101,7 +101,7 @@ Client dependency setup uses uv's bounded HTTP retries and a 120-second read tim
 
 Use the earliest specific signature:
 
-- **Image pull/tag failure:** verify the exact registry tag or digest exists before touching runtime flags. [`KLAUD_DEBUG.md` §6](../KLAUD_DEBUG.md#6-docker-image-tag-gotchas) warns against deriving release tags from dated nightlies.
+- **Image pull/tag failure:** verify the exact registry tag or digest exists before touching runtime flags. [`KLAUD_DEBUG.md` §6](KLAUD_DEBUG.md#6-docker-image-tag-gotchas) warns against deriving release tags from dated nightlies.
 - **Weight/KV/CUDA-graph OOM:** capture free memory, configured utilization, per-rank concurrency, graph limits, and where startup failed. Apply only the setting supported by the matching known case. Confirm startup and workload afterward.
 - **Kernel/architecture assertion or illegal address:** preserve the complete stack and GPU architecture. Prefer a fixed/pinned upstream image or supported backend over an unreviewed local engine patch.
 - **Address in use:** identify the owning process and cluster owner before terminating it. Do not kill an unverified PID or unrelated service.
@@ -142,20 +142,20 @@ Stop recovery if the source run or artifacts are ineligible, source ancestry can
 
 ## Known KLAUD cases
 
-Use [`KLAUD_DEBUG.md`](../KLAUD_DEBUG.md) to recognize an exact signature, then verify it against the current image, recipe, hardware, and policy before applying its remediation.
+Use [`KLAUD_DEBUG.md`](KLAUD_DEBUG.md) to recognize an exact signature, then verify it against the current image, recipe, hardware, and policy before applying its remediation.
 
 | Signature | Known case and safe boundary |
 | --- | --- |
-| Setup says changelog history was deleted | [§1.1](../KLAUD_DEBUG.md#11-perf-changelogyaml-deletion-not-allowed): restore main bytes and append only the PR entry. Never 3-way merge history |
-| vLLM weight load/KV allocation OOM | [§2](../KLAUD_DEBUG.md#2-vllm-v021x--v020x-gpu-oom-at-model-load): confirm the memory-profiler signature before reducing utilization or using the recorded profiler setting |
-| DEP decoder fails during large CUDA-graph capture | [§2.1](../KLAUD_DEBUG.md#21-dep-cuda-graph-capture-oom-on-gb300): size sequence/graph limits from per-DP-rank load, not global concurrency |
-| DSV4 works on custom digest but OOMs on generic SGLang | [§3](../KLAUD_DEBUG.md#3-custom-dsv4-image--generic-v0512-ooms): generic release was not a drop-in. Retain or return to a proven compatible image |
-| B300 DeepGemm illegal address, EAGLE trtllm GEMM failure, or flash-attn architecture assertion | [§4](../KLAUD_DEBUG.md#4-upstream-sglang-v0512-b300-regressions): distinguish the three stacks. Use a supported backend/cap or fixed/pinned upstream image |
-| AMD drained/Pyxis, Docker socket, disk-full, or occupied port | [§5](../KLAUD_DEBUG.md#5-cluster-infrastructure-amd-mi355x--mi300x--mi325x): confirm current node state and escalate infrastructure. There is no recipe-level fix for unhealthy infrastructure |
-| `dpkg-deb` or `tar` rejects a freshly downloaded srt-slurm dependency archive | [§1.2](../KLAUD_DEBUG.md#12-truncated-natsetcd-dependency-archives): preserve the first setup error. H200 retries only when a NATS/etcd archive fails an integrity check, deletes only that invalid archive, and stops immediately for unrelated setup failures |
-| Guessed Docker tag returns 404 | [§6](../KLAUD_DEBUG.md#6-docker-image-tag-gotchas): verify the exact tag at the registry. Do not infer naming patterns |
-| `gh run rerun --failed` is refused | [§7](../KLAUD_DEBUG.md#7-ci-rerun-mechanics): inspect run status/conclusion. Only completed failures support failed-only rerun, while cancelled runs require a full rerun |
-| MiniMax M3 B300 MSA says `q2k_indices` is non-contiguous | [§11](../KLAUD_DEBUG.md#11-minimax-m3-b300-msa-top-k-slice-is-non-contiguous): recognize TP1/data-parallel-attention exposure and prefer an upstream-fixed image. Shipping the recorded engine patch requires current checklist/waiver compliance |
+| Setup says changelog history was deleted | [§1.1](KLAUD_DEBUG.md#11-perf-changelogyaml-deletion-not-allowed): restore main bytes and append only the PR entry. Never 3-way merge history |
+| vLLM weight load/KV allocation OOM | [§2](KLAUD_DEBUG.md#2-vllm-v021x--v020x-gpu-oom-at-model-load): confirm the memory-profiler signature before reducing utilization or using the recorded profiler setting |
+| DEP decoder fails during large CUDA-graph capture | [§2.1](KLAUD_DEBUG.md#21-dep-cuda-graph-capture-oom-on-gb300): size sequence/graph limits from per-DP-rank load, not global concurrency |
+| DSV4 works on custom digest but OOMs on generic SGLang | [§3](KLAUD_DEBUG.md#3-custom-dsv4-image--generic-v0512-ooms): generic release was not a drop-in. Retain or return to a proven compatible image |
+| B300 DeepGemm illegal address, EAGLE trtllm GEMM failure, or flash-attn architecture assertion | [§4](KLAUD_DEBUG.md#4-upstream-sglang-v0512-b300-regressions): distinguish the three stacks. Use a supported backend/cap or fixed/pinned upstream image |
+| AMD drained/Pyxis, Docker socket, disk-full, or occupied port | [§5](KLAUD_DEBUG.md#5-cluster-infrastructure-amd-mi355x--mi300x--mi325x): confirm current node state and escalate infrastructure. There is no recipe-level fix for unhealthy infrastructure |
+| `dpkg-deb` or `tar` rejects a freshly downloaded srt-slurm dependency archive | [§1.2](KLAUD_DEBUG.md#12-truncated-natsetcd-dependency-archives): preserve the first setup error. H200 retries only when a NATS/etcd archive fails an integrity check, deletes only that invalid archive, and stops immediately for unrelated setup failures |
+| Guessed Docker tag returns 404 | [§6](KLAUD_DEBUG.md#6-docker-image-tag-gotchas): verify the exact tag at the registry. Do not infer naming patterns |
+| `gh run rerun --failed` is refused | [§7](KLAUD_DEBUG.md#7-ci-rerun-mechanics): inspect run status/conclusion. Only completed failures support failed-only rerun, while cancelled runs require a full rerun |
+| MiniMax M3 B300 MSA says `q2k_indices` is non-contiguous | [§11](KLAUD_DEBUG.md#11-minimax-m3-b300-msa-top-k-slice-is-non-contiguous): recognize TP1/data-parallel-attention exposure and prefer an upstream-fixed image. Shipping the recorded engine patch requires current checklist/waiver compliance |
 
 Historical KLAUD label or merge advice does not override the current [sweep-label policy](../.github/AGENT_OPERATIONS.md#sweep-labels-and-reuse), [`CONTRIBUTING.md`](../CONTRIBUTING.md), or the [PR checklist](./PR_REVIEW_CHECKLIST.md).
 

@@ -246,16 +246,16 @@ and read its `framework:`, `runner:`, and `image:` fields.
 - N/A if the PR changes no master-config entries (state that in one line).
 
 ## Check 7 — No submissions for deprecated models or scenarios
-Read the current `MODELS.md` in the checked-out default branch. It is the source of
+Read the current `docs/MODELS.md` in the checked-out default branch. It is the source of
 truth for active and deprecated models, scenarios, and model-scenario combinations.
 For every benchmark configuration or recipe that the PR adds, changes, or re-enables,
 identify its model prefix and scenario, including fixed-sequence, agentic, single-node,
 and multi-node entries.
 - Use `date -u +%F` to establish the review date. Honor an effective date in
-  `MODELS.md`, so a scheduled future deprecation is allowed until its stated date.
+  `docs/MODELS.md`, so a scheduled future deprecation is allowed until its stated date.
 - FAIL if the PR submits a model that is retired on the review date, a deprecated
   scenario, or a deprecated model-scenario combination. Name the model prefix,
-  scenario, and the `MODELS.md` row or notice that prohibits it.
+  scenario, and the `docs/MODELS.md` row or notice that prohibits it.
 - N/A if the PR adds, changes, or re-enables no benchmark configurations or recipes.
 
 ## Check 8 — No benchmark hacks that change the model architecture

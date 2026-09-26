@@ -290,7 +290,7 @@ are skipped; dispatch a new autosweep so recovery checks the old session first.
 ## 9. PR conventions for this repo
 
 - Image-bump / new-recipe PRs I open on behalf of the user (or that the user creates) get the **`[Klaud Cold]`** title prefix.
-- Klaud Cold keeps targeted attempts draft and unlabeled; final validation keeps the PR draft with `full-sweep-enabled` as its sole sweep label; `finish` publishes verified results before readiness. Wait for successful completion on the exact head and reusable artifacts. See [the current Klaud guide](docs/klaud.md); generic manual-sweep recommendations do not override this flow.
+- Klaud Cold keeps targeted attempts draft and unlabeled; final validation keeps the PR draft with `full-sweep-enabled` as its sole sweep label; `finish` publishes verified results before readiness. Wait for successful completion on the exact head and reusable artifacts. See [the current Klaud guide](klaud.md); generic manual-sweep recommendations do not override this flow.
 - After any code change that shifts a PR's scope (drops a recipe, changes an image tag), **update the PR title AND body in the same step** and **verify** with `gh pr view <N> --json title,body`. `gh pr edit` silently fails (see §8).
 - `utils/merge_with_reuse.sh <N>` is the merge entrypoint. It handles the `perf-changelog.yaml` auto-append.
 
@@ -368,8 +368,8 @@ verified lifecycle receipts take precedence over missing SDK output. Recovery
 publishes the artifact-derived final comparison before readiness. Completed but
 uncertifiable work closes for inspection and releases its branch, not as invented
 image incompatibility.
-See [workflow operation](docs/klaud.md#workflow-operation-and-credentials),
-[reporting](docs/klaud-reporting.md) and [中文报告指南](docs/klaud-reporting_zh.md).
+See [workflow operation](klaud.md#workflow-operation-and-credentials),
+[reporting](klaud-reporting.md) and [中文报告指南](klaud-reporting_zh.md).
 
 ### 7.6 Successful agent action without a verifiable lifecycle outcome
 

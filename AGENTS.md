@@ -7,7 +7,7 @@ Guidance for AI agents working with InferenceX.
 1. **Start every task with [`docs/index.md`](docs/index.md).** Choose the one focused guide that matches the task. Do not load every documentation page.
 2. Repository source, schemas, workflows, launchers, and collectors are authoritative. If documentation disagrees with implementation, follow the implementation and update the nearest English guide plus its Chinese counterpart.
 3. Read [`CONTRIBUTING.md`](CONTRIBUTING.md) before opening or reviewing a PR or changing review, sweep, or merge policy.
-4. Read [`KLAUD_DEBUG.md`](KLAUD_DEBUG.md) before debugging a Klaud-Cold or `claude/*` image-bump PR.
+4. Read [`docs/KLAUD_DEBUG.md`](docs/KLAUD_DEBUG.md) before debugging a Klaud-Cold or `claude/*` image-bump PR.
 
 ## Agent-specific policy
 
@@ -53,7 +53,7 @@ check_env_vars IS_MULTINODE MODEL_NAME PRECISION
 ## Deprecating benchmark configs
 
 - Delete retired entries from the active master config; do not archive them. Git history and `perf-changelog.yaml` are the record of past settings. For a partial deprecation, remove only the retired scenarios and retain the supported scenarios in the active entry.
-- Check retirement statements in [`MODELS.md`](MODELS.md) against active configs and script routing in the same PR, and update `MODELS.md` plus `MODELS_zh.md` together. Preserve explicitly documented exceptions and conditional retirement policies; do not treat planned retirement as completed.
+- Check retirement statements in [`docs/MODELS.md`](docs/MODELS.md) against active configs and script routing in the same PR, and update `docs/MODELS.md` plus `docs/MODELS_zh.md` together. Preserve explicitly documented exceptions and conditional retirement policies; do not treat planned retirement as completed.
 - Remove unused retired-model branches from launchers and runtime settings, and update workflow/agent guidance that still recommends retired coverage. Audit callers before removing shared helpers; retained SPEED-Bench collectors and historical result readers may still need model-specific support.
 - Delete recipes, setup scripts and other assets that no active config uses any more rather than moving them to a `deprecated/` directory.
 

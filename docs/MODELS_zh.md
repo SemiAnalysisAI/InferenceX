@@ -34,7 +34,7 @@ InferenceX-e2e 运行在数量固定且有限的 GPU 资源池上，并由一支
 
 **状态：基线下线尚未执行。** 只有受影响的模型、硬件与引擎具备替代覆盖后，才能下线冗余基线。对帕累托前沿有贡献的非投机解码配置仍需保留；仅有对应的投机解码分支，不足以成为移除它们的理由。
 
-**今后我们不再仅为 A/B 对照而分别维护非投机解码与投机解码两条赛道。** 当初保留非投机解码分支，是把它当作中立基线。那时接受长度（AL）完全取决于提交方草稿头（draft head）的实际水平，导致各家投机解码数据之间无法横向比较。这一问题现已解决。[`infx/golden_al_distribution/`](infx/golden_al_distribution/) 为每个模型、thinking 模式与草稿长度各提交了一条黄金 AL 曲线，均在 SPEED-Bench `coding` 类别上测得。启用投机解码时，AgentX 通过合成接受（synthetic acceptance）将提交锁定到该曲线（vLLM 用 `synthetic_acceptance_length`，SGLang 用 `SGLANG_SIMULATE_ACC_LEN`，TensorRT-LLM 用 `TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS`，等等）。既然已有公平且与引擎无关的接受目标，投机解码结果本身即可直接横向比较，独立的非投机解码基线已属冗余。包括 Kimi-K3 在内的新模型，自第 0 天起即不要求维护该独立基线。
+**今后我们不再仅为 A/B 对照而分别维护非投机解码与投机解码两条赛道。** 当初保留非投机解码分支，是把它当作中立基线。那时接受长度（AL）完全取决于提交方草稿头（draft head）的实际水平，导致各家投机解码数据之间无法横向比较。这一问题现已解决。[`infx/golden_al_distribution/`](../infx/golden_al_distribution/) 为每个模型、thinking 模式与草稿长度各提交了一条黄金 AL 曲线，均在 SPEED-Bench `coding` 类别上测得。启用投机解码时，AgentX 通过合成接受（synthetic acceptance）将提交锁定到该曲线（vLLM 用 `synthetic_acceptance_length`，SGLang 用 `SGLANG_SIMULATE_ACC_LEN`，TensorRT-LLM 用 `TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS`，等等）。既然已有公平且与引擎无关的接受目标，投机解码结果本身即可直接横向比较，独立的非投机解码基线已属冗余。包括 Kimi-K3 在内的新模型，自第 0 天起即不要求维护该独立基线。
 
 **无论是否启用投机解码，都发布最优的帕累托点。** 若关闭 MTP、EAGLE/EAGLE3、DSpark 或其他草稿方法能得到更优的运行点，例如高吞吐量场景，配方可以关闭投机解码。有效的非投机解码结果仍可按相同的[北极星帕累托策略](#北极星帕累托策略)参与发布。因此，同一条前沿可以同时包含投机解码和非投机解码数据点。
 
@@ -64,7 +64,7 @@ InferenceX-e2e 运行在数量固定且有限的 GPU 资源池上，并由一支
 
 | 场景 | ISL/OSL | 状态 |
 |---|---|---|
-| 智能体编码（agentic coding） | 长上下文、多轮真实流量的轨迹回放，含子智能体（sub agents） | 启用。此场景采用基于轨迹回放的智能体编码基准测试（见 [`benchmarks/single_node/srt-slurm-recipes/`](benchmarks/single_node/srt-slurm-recipes/) 下的 srt-slurm 配方与共享客户端 [`benchmarks/srt_agentic.sh`](benchmarks/srt_agentic.sh)）。今后新模型预计将仅以智能体编码场景接入。可开启或关闭投机解码以获得最优帕累托点；不要求独立的非投机解码 A/B 基线（见[弃用公告](#弃用公告)）。 |
+| 智能体编码（agentic coding） | 长上下文、多轮真实流量的轨迹回放，含子智能体（sub agents） | 启用。此场景采用基于轨迹回放的智能体编码基准测试（见 [`benchmarks/single_node/srt-slurm-recipes/`](../benchmarks/single_node/srt-slurm-recipes/) 下的 srt-slurm 配方与共享客户端 [`benchmarks/srt_agentic.sh`](../benchmarks/srt_agentic.sh)）。今后新模型预计将仅以智能体编码场景接入。可开启或关闭投机解码以获得最优帕累托点；不要求独立的非投机解码 A/B 基线（见[弃用公告](#弃用公告)）。 |
 | 单轮 8k1k | 8192 / 1024 | 启用。当前主要的固定序列长度（fixed-seq-len）场景。 |
 | 单轮 1k1k | 1024 / 1024 | 自 2026-07-17 起弃用（[#2263](https://github.com/SemiAnalysisAI/InferenceX/pull/2263)），以便将 GPU 集群时间留给优先级更高的真实场景智能体编码基准测试与新的前沿模型。归档配置曾位于 `configs/deprecated/`，该目录已在 #3464 中删除，请查阅 Git 历史。后续由 [#2533](https://github.com/SemiAnalysisAI/InferenceX/pull/2533) 加入的 GLM-5.1 B200 TileRT 测试点仍启用。 |
 | 单轮 1k8k | 1024 / 8192 | **对所有模型均已弃用**，自 2026-03-27 起（[#911](https://github.com/SemiAnalysisAI/InferenceX/pull/911)），以便将 GPU 集群时间留给优先级更高的真实场景智能体编码基准测试与新的前沿模型。相关配置已删除，未归档。 |
@@ -131,7 +131,7 @@ InferenceX 支持 SGLang 和 vLLM 双方的维护者，并响应 AI 实验室和
 | MiniMax-M3（`minimaxm3`） | 原生/上游 vLLM 引擎 | `Inferact/MiniMax-M3-EAGLE3` 和/或 `Inferact/MiniMax-M3-EAGLE3-GQA` | 无 | 按照上述提交顺序指南及例外处理的其他非 vLLM/SGLang 引擎 |
 | GLM-5.2（`glm5.2`） | 原生/上游 SGLang 引擎 | 原生 MTP | 无 | 按照上述提交顺序指南及例外处理的其他非 vLLM/SGLang 引擎 |
 | Qwen3.5-397B-A17B（`qwen3.5`） | 原生/上游 SGLang 引擎 | 原生 MTP | 无 | 按照上述提交顺序指南及例外处理的其他非 vLLM/SGLang 引擎 |
-| Qwen3.8-Flash-Next（`qwen3.8next`） | 原生/上游 SGLang 引擎 | 待定 | 原生 MTP（内置 4B 多步预测模块；黄金 AL 采集脚本：[`qwen3.8next_fp4_b300_vllm.sh`](benchmarks/single_node/speedbench/qwen3.8next_fp4_b300_vllm.sh)） | 按照上述提交顺序指南及例外处理的其他非 vLLM/SGLang 引擎 |
+| Qwen3.8-Flash-Next（`qwen3.8next`） | 原生/上游 SGLang 引擎 | 待定 | 原生 MTP（内置 4B 多步预测模块；黄金 AL 采集脚本：[`qwen3.8next_fp4_b300_vllm.sh`](../benchmarks/single_node/speedbench/qwen3.8next_fp4_b300_vllm.sh)） | 按照上述提交顺序指南及例外处理的其他非 vLLM/SGLang 引擎 |
 
 ### KV 缓存卸载策略
 
@@ -179,4 +179,4 @@ InferenceX 支持 SGLang 和 vLLM 双方的维护者，并响应 AI 实验室和
 - 「退役」指该模型已无任何启用场景。退役模型的配置直接从主配置中删除；原 `configs/deprecated/` 归档目录已在 #3464 中删除，历史设置保留在 Git 历史与 `perf-changelog.yaml` 中。
 - 弃用某一精度（如 Qwen3.5 bf16）或 A/B 对照中的某一分支（如非 MTP），只是收窄该模型的配方覆盖范围，并不等于模型退役；只要仍有一个场景在运行，该模型即继续列为启用状态。
 - `dsr1` 最初以 DeepSeek-V3 workflow 模板的形式随仓库首次导入，2025-08-13 切换为 DeepSeek-R1 基准测试（2025-08-20 将 `dsv3` 重命名为 `dsr1`）。
-- 新增模型时，请按[添加模型 + 硬件配方](docs/configuration-procedures_zh.md#添加模型--硬件配方)流程操作，并在同一 PR 中同时更新本文件与 [`MODELS.md`](MODELS.md) 的表格。
+- 新增模型时，请按[添加模型 + 硬件配方](configuration-procedures_zh.md#添加模型--硬件配方)流程操作，并在同一 PR 中同时更新本文件与 [`MODELS.md`](MODELS.md) 的表格。
