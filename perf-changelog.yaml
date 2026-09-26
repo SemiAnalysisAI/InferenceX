@@ -8941,3 +8941,12 @@
     - "Select GPU power and utilization counters for GLM-5.2 B200 disaggregated PowerX collection to avoid optional profiling-watch repair stalls; preserve sampling and acceptance thresholds."
     - "GLM-5.2 B200 分离式 PowerX 仅采集 GPU 功耗和利用率，避免可选 profiling watch 修复阻塞；保留采样及验收阈值。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3400
+
+- config-keys:
+    - glm5.2-fp4-b200-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Contain failed GLM-5.2 B200 C48 prefill transfers with source-guarded native runtime setup, registered-request cancellation and worker-lifetime buffer quarantine; fail requests after 1800 seconds without shortening the benchmark or relaxing required PowerX."
+    - "为 GLM-5.2 B200 C48 的 prefill 传输失败启用源码校验的原生运行时、已注册请求取消和工作进程生命周期内的缓冲区隔离；请求超过 1800 秒按失败处理，不缩短基准测试或放宽必需 PowerX。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3400

@@ -1,0 +1,92 @@
+[
+  {
+    "tree": "Dynamo",
+    "path": "lib/llm/src/kv_router/prefill_router/mod.rs",
+    "base_sha256": "72946250e3a311fec9df26d13eb1835af518f41b531c06f785a69b008267c69f",
+    "candidate_sha256": "07ef55628b6aa7e54892e0ec7b824c0aa17c0165120f9fd3cca4127a351379a3"
+  },
+  {
+    "tree": "Dynamo",
+    "path": "lib/llm/src/kv_router/prefill_router/admission.rs",
+    "base_sha256": "ee5ebd7d12af2ccfbcb239fe65328a93c0bfd5ee05c99e6b0515cde0899b1087",
+    "candidate_sha256": "e011c9d2b7bfb372c70e7857a76b7f71761d7e4d75b80a7b973ecbf600391968"
+  },
+  {
+    "tree": "Dynamo",
+    "path": "lib/llm/src/kv_router/prefill_router/failure.rs",
+    "base_sha256": null,
+    "candidate_sha256": "4d7a5693fdc94bbd2bccab6cf4cc8676cb97e888cc80c588c61db1832f6d3659"
+  },
+  {
+    "tree": "Dynamo",
+    "path": "components/src/dynamo/sglang/request_handlers/handler_base.py",
+    "base_sha256": "42d32a259d730b83c14f8114af270321d59b87ccb7f4539b1f432d5f46f2d926",
+    "candidate_sha256": "777709d86c9aeb6eacf9b255e7f09f1087c09b06c028a302a1fd294de12731f6"
+  },
+  {
+    "tree": "Dynamo",
+    "path": "components/src/dynamo/sglang/request_handlers/llm/prefill_handler.py",
+    "base_sha256": "ed6ce10fd85328543d129293aac1edd1023576341ea943f4de46a7d8aa6672ec",
+    "candidate_sha256": "c43c9a605e794054d9c1d7138ab72e5716fa48bab9f4a9b6722c689ca651d491"
+  },
+  {
+    "tree": "Dynamo",
+    "path": "components/src/dynamo/sglang/request_handlers/llm/decode_handler.py",
+    "base_sha256": "758773900cec5f87bbd1a05b24b5d6657817ce68804b6c93b12909f7ff331871",
+    "candidate_sha256": "e8a0d221f26aa3a66724ea06d92b96d5d8a2e05d6d188b5db45ff1ee0bbacdb5"
+  },
+  {
+    "tree": "Dynamo",
+    "path": "components/src/dynamo/sglang/request_handlers/ordered_cancellation.py",
+    "base_sha256": null,
+    "candidate_sha256": "4443b2e2a11fd725e427ed1fdc6d6c9ef5a47aeec5c5047ad6b66546200a5e7e"
+  },
+  {
+    "tree": "Dynamo",
+    "path": "Cargo.lock",
+    "sha256": "da63c7122ce574541f99cb978ac8020b12c440071e6f354a66ce4897a48f88cb",
+    "unchanged": true
+  },
+  {
+    "tree": "Dynamo",
+    "path": "lib/bindings/python/Cargo.lock",
+    "sha256": "999f462052b4b604e3c8cc0129588af45c8ddcf9fd2d4a8b1d9c92aaeed3884b",
+    "unchanged": true
+  },
+  {
+    "tree": "SGLang",
+    "path": "python/sglang/srt/disaggregation/abort_quarantine.py",
+    "base_sha256": null,
+    "candidate_sha256": "ce3e8b03c40f625cdd018e235739930ae301638207f77d50bc490e76f9a3585a"
+  },
+  {
+    "tree": "SGLang",
+    "path": "python/sglang/srt/disaggregation/common/conn.py",
+    "base_sha256": "fbe0b603d683d5557dcd013eabad78ef116bb07b6046c5eb4cf75ced048f63c5",
+    "candidate_sha256": "ca34ab7975e55d92701fb08c315fd3bcbdd8a8d0c9905ce15ec1b2ccb14544c3"
+  },
+  {
+    "tree": "SGLang",
+    "path": "python/sglang/srt/disaggregation/decode.py",
+    "base_sha256": "35a95618d49f64166780d01ecbd87b3fc660aa40d1201b73e4ead4bae659db37",
+    "candidate_sha256": "3c1107c29dd99ad6177bf16256595838ad157554a3445e95bc093427f47c1a8a"
+  },
+  {
+    "tree": "SGLang",
+    "path": "python/sglang/srt/disaggregation/prefill.py",
+    "base_sha256": "1cdf11c99fc4f54d6330cc2a1c60f94f2ca1bb5bb22db196594d25afe00538e5",
+    "candidate_sha256": "6253130af314154de1c390d55785fea1c6967fde2cd9c7394595911e6bf6a3ba"
+  },
+  {
+    "tree": "SGLang",
+    "path": "python/sglang/srt/managers/scheduler.py",
+    "base_sha256": "25fd1681f71e1b8d044f37c012ba8f3343bc9520bb904402101ea9a3bcfdc33b",
+    "candidate_sha256": "9a02466580d1147632de6795b96f95fad83fec73fa3551821a6d6e8c37770780"
+  },
+  {
+    "tree": "SGLang",
+    "path": "python/sglang/srt/mem_cache/common.py",
+    "base_sha256": "5b362d6cd7cfd7590e35f6924df2968339b044f27e1df94d88f9f8b205cbb1fd",
+    "candidate_sha256": "3e35d60be674b2e506c23d5c35dff945967563ff688bf83cd7ab03d5eac985e8"
+  }
+]

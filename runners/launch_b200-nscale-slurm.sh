@@ -66,6 +66,42 @@ if [[ "$LAUNCH_PATH" == "native-srt" && "$IS_AGENTIC" == "1" &&
     USES_GLM52_RECOVERY=1
 fi
 
+USES_GLM52_C48_CONTAINMENT=0
+if [[ "$USES_GLM52_RECOVERY" == "1" && "$EVAL_ONLY" != "true" &&
+    "${CONFIG_FILE%%:*}" == "recipes/glm5.2/sglang/b200-fp4/agentx/disagg-1p4d-dep8-tp4-c48-mtp.yaml" ]]; then
+    USES_GLM52_C48_CONTAINMENT=1
+    if [[ -z "${GLM52_CONTAINMENT_PAYLOAD+x}" ]]; then
+        GLM52_CONTAINMENT_PAYLOAD="${HOME}/.cache/inferencex/glm52-b200-c48/27aa9a6eb223616d956dd7d507c0e26839cadcfb84339179898ff3a502ccbcba"
+    fi
+    echo "GLM-5.2 C48 containment payload: $GLM52_CONTAINMENT_PAYLOAD"
+    if [[ "$GLM52_CONTAINMENT_PAYLOAD" != /* || "$GLM52_CONTAINMENT_PAYLOAD" == *[:,[:space:]]* ]]; then
+        echo "Error: GLM52_CONTAINMENT_PAYLOAD must be an absolute path without whitespace, colons or commas" >&2
+        exit 1
+    fi
+    for required in \
+        "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs/glm52-b200-c48-containment.sh" \
+        "$GITHUB_WORKSPACE/runners/watch_glm52_b200_c48_cleanup.py" \
+        "$GLM52_CONTAINMENT_PAYLOAD/install_native_containment.py" \
+        "$GLM52_CONTAINMENT_PAYLOAD/inputs/integrated-candidate-file-hashes.json" \
+        "$GLM52_CONTAINMENT_PAYLOAD/wheels/build-output-receipt.json" \
+        "$GLM52_CONTAINMENT_PAYLOAD/wheels/ai_dynamo-1.5.0.dev20260909-py3-none-any.whl" \
+        "$GLM52_CONTAINMENT_PAYLOAD/wheels/ai_dynamo_runtime-1.5.0.dev20260909-cp310-abi3-manylinux_2_39_x86_64.whl"; do
+        if [[ ! -r "$required" ]]; then
+            echo "Error: required GLM-5.2 C48 containment input is missing: $required" >&2
+            exit 1
+        fi
+    done
+    # Reject an incomplete or foreign payload before reserving GPU resources.
+    (cd "$GLM52_CONTAINMENT_PAYLOAD" && sha256sum --check --status <<'PAYLOAD_SHA256'
+327f68b33957358b5a80c52817e2e4e924311a4abfc699af8093c9f48da311a0  install_native_containment.py
+5b7ea883d3f7b6188318ec83f96e88fb459dd784b05359c70925515962f7f7de  inputs/integrated-candidate-file-hashes.json
+27aa9a6eb223616d956dd7d507c0e26839cadcfb84339179898ff3a502ccbcba  wheels/build-output-receipt.json
+fa638cb209c6391e598c641a331839be6cd8551e9831e539d84ee172cb77554f  wheels/ai_dynamo-1.5.0.dev20260909-py3-none-any.whl
+5523aa8f7dcb2c5d5bd94043a758ad5fac204c2f40f54762ecea9080aa2b29b4  wheels/ai_dynamo_runtime-1.5.0.dev20260909-cp310-abi3-manylinux_2_39_x86_64.whl
+PAYLOAD_SHA256
+    ) || { echo "Error: GLM-5.2 C48 containment payload hash mismatch" >&2; exit 1; }
+fi
+
 # ---------------------------------------------------------------------------
 # Model resolution
 # ---------------------------------------------------------------------------
@@ -327,6 +363,9 @@ run_native_srt_lane() {
 
     PREFILL_SQUASH_FILE=""
     SRT_CLUSTER_ARGS=()
+    if [[ "$USES_GLM52_C48_CONTAINMENT" == "1" ]]; then
+        SRT_CLUSTER_ARGS+=(--mount "$GLM52_CONTAINMENT_PAYLOAD" /glm52-containment:ro)
+    fi
     if [[ $FRAMEWORK == "tilert" ]]; then
         : "${PREFILL_IMAGE:?PREFILL_IMAGE is required for TileRT prefill}"
         PREFILL_SQUASH_FILE="$SQUASH_DIR/$(echo "$PREFILL_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
@@ -420,6 +459,19 @@ run_native_srt_lane() {
     fi
 
     SRTCTL_PREFLIGHT_ARGS=()
+    if [[ "$USES_GLM52_C48_CONTAINMENT" == "1" ]]; then
+        # Setup exports cannot activate their parent worker/frontend process.
+        SRTCTL_PREFLIGHT_ARGS+=(
+            --setup-script glm52-b200-c48-containment.sh
+            --set 'dynamo.install=false'
+            --set 'frontend.env.DYN_GLM52_PREFILL_FAILURE_CONTAINMENT="1"'
+            --set 'roles.prefill.env.DYN_GLM52_PREFILL_FAILURE_CONTAINMENT="1"'
+            --set 'roles.decode.env.DYN_GLM52_PREFILL_FAILURE_CONTAINMENT="1"'
+            --set 'roles.prefill.env.SGLANG_DISAGGREGATION_DEFERRED_DECODE_KV_RELEASE="1"'
+            --set 'roles.decode.env.SGLANG_DISAGGREGATION_DEFERRED_DECODE_KV_RELEASE="1"'
+            --set 'benchmark.env.AIPERF_REQUEST_TIMEOUT_SECONDS="1800"'
+        )
+    fi
     # These weights are staged on the Slurm compute nodes, not the login node.
     if [[ $MODEL_PREFIX == "kimik3" ]] ||
        [[ $MODEL_PREFIX == "glm5.2" ]] ||
@@ -445,7 +497,12 @@ run_native_srt_lane() {
     LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
 
     SRT_JOB_RC=0
-    stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || SRT_JOB_RC=$?
+    if [[ "$USES_GLM52_C48_CONTAINMENT" == "1" ]]; then
+        python3 "$GITHUB_WORKSPACE/runners/watch_glm52_b200_c48_cleanup.py" \
+            "$JOB_ID" "$LOG_FILE" "$RUNNER_NAME" || SRT_JOB_RC=$?
+    else
+        stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || SRT_JOB_RC=$?
+    fi
     if [[ "$SRT_JOB_RC" != "0" && "$USES_AGENTX_POWER" != "1" ]]; then
         exit "$SRT_JOB_RC"
     fi

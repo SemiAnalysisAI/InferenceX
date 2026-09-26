@@ -1,0 +1,350 @@
+--- a/lib/llm/src/kv_router/prefill_router/mod.rs
++++ b/lib/llm/src/kv_router/prefill_router/mod.rs
+@@ -44,6 +44,7 @@
+ mod activation;
+ mod admission;
+ mod conditional_bypass;
++mod failure;
+ mod query;
+ pub use query::PrefillReservation;
+ 
+@@ -458,12 +459,20 @@
+ 
+         let router = &binding.router;
+         let endpoint_id = &binding.endpoint_id;
++        let mut prefill_failure = None;
+         let prefill_result: Result<(PrefillOutcome, Option<RoutingConstraints>)> = async {
+             let (prepared, prefill_stream) = router
+                 .select_and_dispatch_prefill(prefill_context, |request, target| {
+                     self.prepare_prefill_dispatch(request, target, endpoint_id)
+                 })
+                 .await?;
++            let prefill_stream = if failure::enabled() {
++                let (stream, receiver) = failure::observe(prefill_stream, engine_ctx.clone());
++                prefill_failure = Some(receiver);
++                stream
++            } else {
++                prefill_stream
++            };
+             let topology_constraints = prepared.topology_constraints;
+             let outcome = if let Some(bootstrap_info) = prepared.bootstrap_info {
+                 self.spawn_prefill_task(prefill_stream, tracker, prefill_phase_barrier);
+@@ -576,7 +585,11 @@
+             self.conditional_disagg_policy.is_enabled(),
+         ));
+ 
+-        next.generate(context.map(|_| decode_req)).await
++        let response = next.generate(context.map(|_| decode_req)).await?;
++        Ok(match prefill_failure {
++            Some(receiver) => failure::forward(response, receiver),
++            None => response,
++        })
+     }
+ }
+ 
+--- a/lib/llm/src/kv_router/prefill_router/admission.rs
++++ b/lib/llm/src/kv_router/prefill_router/admission.rs
+@@ -195,6 +195,28 @@
+     }
+ 
+     #[tokio::test]
++    async fn bootstrap_tail_failure_reaches_original_decode_context() {
++        use dynamo_runtime::engine::AsyncEngineContext;
++        let original: Arc<dyn AsyncEngineContext> = Arc::new(Controller::default());
++        let first = Annotated::from_data(LLMEngineOutput {
++            disaggregated_params: Some(json!({
++                "bootstrap_host": "host", "bootstrap_port": 1, "bootstrap_room": 42
++            })),
++            ..Default::default()
++        });
++        let (stream, receiver) = super::super::failure::observe(
++            prefill_stream(vec![first, Annotated::from_error("tail transfer error")]),
++            original.clone(),
++        );
++        PrefillRouter::<DefaultWorkerSelector>::consume_prefill_stream(stream, None, None)
++            .await.unwrap();
++        let error = tokio::time::timeout(std::time::Duration::from_secs(1), receiver)
++            .await.unwrap().unwrap();
++        assert!(error.to_string().contains("tail transfer error"));
++        assert!(original.is_stopped());
++    }
++
++    #[tokio::test]
+     async fn bootstrap_drain_retains_teardown_guard_until_stream_finishes() {
+         let first = Annotated::from_data(LLMEngineOutput {
+             disaggregated_params: Some(json!({
+--- /dev/null
++++ b/lib/llm/src/kv_router/prefill_router/failure.rs
+@@ -0,0 +1,130 @@
++// SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
++// SPDX-License-Identifier: Apache-2.0
++
++use crate::protocols::common::llm_backend::LLMEngineOutput;
++use dynamo_runtime::{
++    engine::AsyncEngineContext,
++    error::DynamoError,
++    pipeline::{ManyOut, ResponseStream},
++    protocols::{annotated::Annotated, maybe_error::MaybeError},
++};
++use futures::StreamExt;
++use std::sync::Arc;
++use tokio::sync::oneshot;
++
++pub(super) fn enabled() -> bool {
++    std::env::var("DYN_GLM52_PREFILL_FAILURE_CONTAINMENT").as_deref() == Ok("1")
++}
++
++// Observe before either foreground consumption or the bootstrap tail drain.
++// The prefill stream's context is distinct from the original decode context.
++pub(super) fn observe(
++    response: ManyOut<Annotated<LLMEngineOutput>>,
++    decode_context: Arc<dyn AsyncEngineContext>,
++) -> (
++    ManyOut<Annotated<LLMEngineOutput>>,
++    oneshot::Receiver<DynamoError>,
++) {
++    let context = response.context();
++    let (sender, receiver) = oneshot::channel();
++    let mut sender = Some(sender);
++    let response = response.inspect(move |item| {
++        if let Some(error) = item.err() {
++            decode_context.stop_generating();
++            if let Some(sender) = sender.take() {
++                let _ = sender.send(error);
++            }
++        }
++    });
++    (ResponseStream::new(Box::pin(response), context), receiver)
++}
++
++// Call only after decode dispatch: staged KV still needs its receiver and the
++// worker's ordered AbortReq cleanup even when prefill failed during dispatch.
++pub(super) fn forward(
++    mut decode: ManyOut<Annotated<LLMEngineOutput>>,
++    mut failure: oneshot::Receiver<DynamoError>,
++) -> ManyOut<Annotated<LLMEngineOutput>> {
++    let context = decode.context();
++    let response = async_stream::stream! {
++        let mut watching = true;
++        loop {
++            tokio::select! {
++                biased;
++                result = &mut failure, if watching => {
++                    watching = false;
++                    if let Ok(error) = result {
++                        yield Annotated::from_err(error);
++                        break;
++                    }
++                }
++                output = decode.next() => {
++                    match output {
++                        Some(output) => yield output,
++                        None => break,
++                    }
++                }
++            }
++        }
++    };
++    ResponseStream::new(Box::pin(response), context)
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    use dynamo_runtime::pipeline::context::Controller;
++    use futures::stream;
++
++    fn stream(items: Vec<Annotated<LLMEngineOutput>>) -> ManyOut<Annotated<LLMEngineOutput>> {
++        ResponseStream::new(
++            Box::pin(stream::iter(items)),
++            Arc::new(Controller::default()),
++        )
++    }
++
++    #[tokio::test]
++    async fn late_prefill_error_stops_original_context_and_reaches_decode() {
++        let original: Arc<dyn AsyncEngineContext> = Arc::new(Controller::default());
++        let (mut prefill, failure) = observe(
++            stream(vec![
++                Annotated::from_data(LLMEngineOutput::default()),
++                Annotated::from_error("prefill transfer failed"),
++            ]),
++            original.clone(),
++        );
++        assert!(prefill.next().await.unwrap().err().is_none());
++        assert!(!original.is_stopped());
++        assert!(prefill.next().await.unwrap().err().is_some());
++        assert!(original.is_stopped());
++        let decode = ResponseStream::new(Box::pin(stream::pending()), original);
++        let mut output = forward(decode, failure);
++        assert!(
++            output
++                .next()
++                .await
++                .unwrap()
++                .err()
++                .unwrap()
++                .to_string()
++                .contains("prefill transfer failed")
++        );
++        assert!(output.next().await.is_none());
++    }
++
++    #[tokio::test]
++    async fn healthy_prefill_keeps_decode_unchanged() {
++        let original: Arc<dyn AsyncEngineContext> = Arc::new(Controller::default());
++        let (prefill, failure) = observe(stream(vec![]), original.clone());
++        drop(prefill);
++        let output = forward(
++            stream(vec![Annotated::from_data(LLMEngineOutput::default())]),
++            failure,
++        )
++        .collect::<Vec<_>>()
++        .await;
++        assert_eq!(output.len(), 1);
++        assert!(output[0].err().is_none());
++        assert!(!original.is_stopped());
++    }
++}
+--- a/components/src/dynamo/sglang/request_handlers/handler_base.py
++++ b/components/src/dynamo/sglang/request_handlers/handler_base.py
+@@ -1348,6 +1348,17 @@
+         Yields:
+             asyncio.Task: The cancellation monitoring task being managed
+         """
++        from dynamo.sglang.request_handlers import ordered_cancellation
++
++        if ordered_cancellation.enabled():
++            async with ordered_cancellation.monitor(
++                self.engine.tokenizer_manager, context.id(), context, self.shutdown_event
++            ) as task:
++                yield task
++            if self.shutdown_event and self.shutdown_event.is_set():
++                raise EngineShutdown("Engine was shut down during token generation")
++            return
++
+         logging.debug(f"Creating cancellation monitor task for Context: {context.id()}")
+ 
+         # Start the cancellation monitoring task
+--- a/components/src/dynamo/sglang/request_handlers/llm/prefill_handler.py
++++ b/components/src/dynamo/sglang/request_handlers/llm/prefill_handler.py
+@@ -86,7 +86,9 @@
+         """
+         validate_disagg_parallel_sampling(request)
+         logging.debug(f"New Request ID: {context.id()}")
+-        trace_id = context.trace_id
++        from dynamo.sglang.request_handlers import ordered_cancellation
++
++        trace_id = ordered_cancellation.request_id(request, context)
+ 
+         if "request" in request:
+             # DisaggPreprocessedRequest format
+@@ -245,6 +247,14 @@
+                         request_id_future.set_result(sglang_request_id)
+                         logging.debug(f"New Prefill Request ID: {sglang_request_id}")
+ 
++                from dynamo.sglang.request_handlers import ordered_cancellation
++
++                finish = res.get("meta_info", {}).get("finish_reason") or {}
++                if ordered_cancellation.enabled() and finish.get("type") == "abort":
++                    raise RuntimeError(
++                        f"SGLang prefill aborted: {finish.get('message', finish)}"
++                    )
++
+                 # Note: No explicit cancellation checks needed here.
+                 # When abort_request is called by the cancellation monitor,
+                 # SGLang will terminate this async generator automatically.
+--- a/components/src/dynamo/sglang/request_handlers/llm/decode_handler.py
++++ b/components/src/dynamo/sglang/request_handlers/llm/decode_handler.py
+@@ -470,7 +470,9 @@
+         if self._first_token_source is not None:
+             self._first_token_source.bind(context, routing.get("dp_rank"))
+         _raise_if_conditional_disagg_bypass(request)
+-        trace_id = context.trace_id
++        from dynamo.sglang.request_handlers import ordered_cancellation
++
++        trace_id = ordered_cancellation.request_id(request, context)
+         input_param = self._get_input_param(request)
+         priority = (request.get("routing") or {}).get("priority")
+         native_payload = native_generate_payload(request)
+--- /dev/null
++++ b/components/src/dynamo/sglang/request_handlers/ordered_cancellation.py
+@@ -0,0 +1,78 @@
++# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
++# SPDX-License-Identifier: Apache-2.0
++"""Scoped cancellation for the pinned SGLang single-request P/D route."""
++
++import asyncio
++import os
++from contextlib import asynccontextmanager
++
++
++def enabled():
++    return os.environ.get("DYN_GLM52_PREFILL_FAILURE_CONTAINMENT") == "1"
++
++
++def check_request(request):
++    # Check both the canonical request and DisaggPreprocessedRequest wrapper.
++    inner = request.get("request", request)
++    for candidate in (request, inner):
++        extra_args = candidate.get("extra_args") or {}
++        n = (candidate.get("sampling_options") or {}).get("n", 1)
++        if isinstance(extra_args.get("sglang_tito"), dict) or n not in (None, 1):
++            raise ValueError("GLM52 containment supports regular single-request P/D only")
++    n = (request.get("sampling_params") or {}).get("n", 1)
++    if n not in (None, 1):
++        raise ValueError("GLM52 containment supports regular single-request P/D only")
++    if os.environ.get("SGLANG_DISAGGREGATION_DEFERRED_DECODE_KV_RELEASE", "").lower() not in ("1", "true"):
++        raise RuntimeError("GLM52 containment requires deferred KV release on both worker roles")
++
++
++def request_id(request, context):
++    if not enabled():
++        return context.trace_id
++    check_request(request)
++    return context.id()
++
++
++def abort_dispatched(manager, rid):
++    state = manager.rid_to_state.get(rid)
++    if state is not None and state.dispatched and not state.finished:
++        # No await between the registration check and AbortReq. Both execute on
++        # the tokenizer event loop, so AbortReq cannot overtake GenerateReq.
++        manager.abort_request(rid=rid, abort_all=False)
++        return True
++    return False
++
++
++@asynccontextmanager
++async def monitor(manager, rid, context, shutdown_event=None):
++    async def watch():
++        stopped = asyncio.ensure_future(context.async_killed_or_stopped())
++        shutdown = asyncio.create_task(shutdown_event.wait()) if shutdown_event else None
++        tasks = [stopped] + ([shutdown] if shutdown else [])
++        try:
++            await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
++            while True:
++                state = manager.rid_to_state.get(rid)
++                if state is not None and state.finished:
++                    return
++                if abort_dispatched(manager, rid):
++                    return
++                # async_generate is lazy. Cancellation may arrive before the
++                # registration or scheduler dispatch; retain ownership until it
++                # is ordered or the generator's scope closes below.
++                await asyncio.sleep(0.01)
++        finally:
++            for task in tasks:
++                if not task.done():
++                    task.cancel()
++            await asyncio.gather(*tasks, return_exceptions=True)
++
++    watcher = asyncio.create_task(watch())
++    try:
++        yield watcher
++    finally:
++        # Closing the output stream is cancellation too. Do not discard a
++        # registered, live request when stopping the monitor before first output.
++        abort_dispatched(manager, rid)
++        watcher.cancel()
++        await asyncio.gather(watcher, return_exceptions=True)
