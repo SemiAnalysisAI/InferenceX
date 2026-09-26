@@ -27,7 +27,7 @@
 - [`run-sweep.yml`](../.github/workflows/run-sweep.yml)、[`benchmark-tmpl.yml`](../.github/workflows/benchmark-tmpl.yml) 和 [`benchmarks/benchmark_lib.sh`](../benchmarks/benchmark_lib.sh) 定义编排、制品上传、服务器就绪、基准测试和评测行为。
 - [`validate_perf_changelog.py`](../infx/workflows/validate_perf_changelog.py)、[`generate.py`](../infx/matrix/generate.py) 和 [`validation.py`](../infx/matrix/validation.py) 分别负责 changelog、矩阵和模式失败。
 - [`utils/runner_setup/RUNNER_SETUP.md`](../utils/runner_setup/RUNNER_SETUP.md) 与 [`runners/`](../runners/) 负责预置和启动器路由。[`CONTRIBUTING.md`](../CONTRIBUTING.md#amd-cluster-never-leave-root-owned-files-in-runner-workspaces) 负责 AMD 工作区安全规则。
-- [`utils/evals/EVALS.md`](../utils/evals/EVALS.md)、[`validate_scores.py`](../infx/evals/validate_scores.py) 和 [`collect_eval_results.py`](../infx/results/collect_eval_results.py) 分别负责评测执行、验证和收集。
+- [`infx/evals/EVALS.md`](../infx/evals/EVALS.md)、[`validate_scores.py`](../infx/evals/validate_scores.py) 和 [`collect_eval_results.py`](../infx/results/collect_eval_results.py) 分别负责评测执行、验证和收集。
 - [失败摄取恢复命令](../.claude/commands/recover-failed-ingest.md)是带防护的恢复流程。下游事实来源是 InferenceX-app 的 [`ingest-results.yml`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/main/.github/workflows/ingest-results.yml)、[`prepare-ci-artifacts.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/main/packages/db/src/prepare-ci-artifacts.ts)、[`ingest-ci-run.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/main/packages/db/src/ingest-ci-run.ts) 和 [`benchmark-mapper.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/main/packages/db/src/etl/benchmark-mapper.ts)。
 
 ## 修复前的证据
@@ -113,7 +113,7 @@ Setup 阶段的删除错误通常意味着陈旧分支或改变空白的合并�
 
 ### 评测
 
-阅读单个 `eval /` 任务，不要只看 `collect-evals`。对每个预期并发检查 `meta_env.json`、完成/失败元数据及其 `results*.json`。[`validate_scores.py`](../infx/evals/validate_scores.py) 会拒绝缺失结果文件、低于阈值的分数和零个已检查指标的运行。存在预期并发元数据时，它还会拒绝无效 manifest、重复/意外/缺失并发和失败批次。由于工作流调用时没有传入 `--expected-concs`，应单独检查非批处理的 `meta_env.json`；即使分数验证器成功退出，缺失或无效元数据仍然属于失败。
+阅读单个 `eval /` 任务，不要只看 `collect-evals`。对每个预期并发检查 `meta_env.json`、完成/失败元数据及其 `results*.json`。[`validate_scores.py`](../infx/evals/validate_scores.py) 会拒绝缺失结果文件、低于阈值的分数和零个已检查指标的运行。存在预期并发元数据时，它还会拒绝无效 manifest、重复/意外/缺失并发和失败批次。由于单节点工作流调用时没有传入 `--expected-concs`，应单独检查非批处理的 `meta_env.json`；即使分数验证器成功退出，缺失或无效元数据仍然属于失败。
 
 确认任务与镜像匹配生成配置。如果服务器在评测中失败，返回服务器层级。如果任务、阈值或 manifest 错误，修复其事实来源并重跑精确评测。不要接受结果被跳过、为空或不匹配的绿色任务。
 

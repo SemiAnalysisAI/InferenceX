@@ -36,7 +36,7 @@ Default selection is scenario-aware. Single-node fixed-sequence evals use the me
 
 Kimi K3 automatically runs `kimi-vendor` / `kimi_tool_call_schema_full` on AMD and NVIDIA, for single-node and multi-node recipes. This runs 204 unique schema cases in streaming and non-streaming modes, producing 408 checks. An explicit `eval-framework=kimi-vendor` and `eval-suite=kimi_tool_call_schema` workflow override retains the one-case, two-check smoke for fast diagnosis. `--trim-conc` trims deployment points, not the suite's case count. MiniMax M3 automatically runs `minimax-vendor` / `minimax_m3_full` across both vendors, covering all 102 provider cases. Its one-case `minimax_m3_smoke` is available through an explicit override. Fixed-sequence GSM8K selection is unchanged.
 
-Read the task name and `n_eff` with the score: `kimi_tool_call_schema = 1.0, n_eff = 2` means one schema case passed both modes. It is not a full-suite result or a GSM8K score. Historical smoke artifacts retain their original identity. Full Kimi results remain diagnostic with a `0.0` quality threshold; missing checks, setup failures, and integration errors still fail the job. [Suite definitions and artifact contract](../utils/evals/EVALS.md#how).
+Read the task name and `n_eff` with the score: `kimi_tool_call_schema = 1.0, n_eff = 2` means one schema case passed both modes. It is not a full-suite result or a GSM8K score. Historical smoke artifacts retain their original identity. Full Kimi results remain diagnostic with a `0.0` quality threshold; missing checks, setup failures, and integration errors still fail the job. [Suite definitions and artifact contract](../infx/evals/EVALS.md#how).
 
 The full Kimi vendor suite has no adapter-level whole-process timeout. Stock request timeouts, engine readiness deadlines, and workflow/scheduler allocation limits still apply. The smoke keeps its 900-second deadline; a direct Python adapter invocation can impose an explicit positive `--timeout-seconds` override on either suite.
 
@@ -226,7 +226,7 @@ gh workflow run e2e-tests.yml --repo SemiAnalysisAI/InferenceX --ref "$REF" \
   -f swebench-gen-mode='agentic'
 ```
 
-For a publishable SWE-bench score, omit `eval-limit`. Do not use `single-shot`, which is only a debugging escape hatch. SWE-bench generation/scoring controls and its `0.50` full-split threshold are documented next to the implementation in [`utils/evals/EVALS.md`](../utils/evals/EVALS.md#swe-bench-lite---framework-swebench).
+For a publishable SWE-bench score, omit `eval-limit`. Do not use `single-shot`, which is only a debugging escape hatch. SWE-bench generation/scoring controls and its `0.50` full-split threshold are documented next to the implementation in [`infx/evals/EVALS.md`](../infx/evals/EVALS.md#swe-bench-lite---framework-swebench).
 
 Treat fast results as bring-up evidence, never as a replacement for the canonical candidate. A duration below 900 seconds or `AIPERF_UNSAFE_OVERRIDE=true` adds AIPerf's `--unsafe-override` and flags the submission invalid. Use it only for smoke diagnosis ([source](../benchmarks/benchmark_lib.sh#L2266-L2268)). After a fast run is healthy, run the exact candidate canonically before claiming benchmark success.
 

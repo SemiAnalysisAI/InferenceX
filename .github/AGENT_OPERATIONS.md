@@ -78,7 +78,7 @@ The dispatch POST returns no body or run ID.
 
 ## Evaluation selection
 
-Full details live in `utils/evals/EVALS.md`.
+Full details live in `infx/evals/EVALS.md`.
 
 `mark_eval_entries()` in `infx/matrix/generate.py` selects evals, which default to the 8k1k subset and run separately from throughput with `EVAL_ONLY=true`.
 
