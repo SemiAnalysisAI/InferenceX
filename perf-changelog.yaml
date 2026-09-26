@@ -8973,4 +8973,4 @@
     - "Rerun vLLM PR56318 at bd57138f9b98eb64c44ea6a0f10d08c8f639820e with the four proven DeepSeek-V4-Pro hybrid cache-source points: B200 TP8 MTP3 native DRAM c8, Simple NVMe c14, and native DRAM+NVMe c14; GB300 MTP3 NIXL plus Mooncake c256."
     - "Preserve B200 GPU utilization 0.85, native DRAM utilization 0.0592, the dedicated 1 TB Simple NVMe budget, 3600-second AgentX profiles, and disabled evals. GB300 is one DEP4 prefill worker on one node plus one DEP16 decode worker across four nodes: five nodes and twenty GPUs total."
     - "Keep existing benchmark curves unchanged. Adapt the isolated old-Pro validation recipes to current InferenceX paths and current vLLM flag names, use the Python frontend, and collect all raw backend metrics with the cached-prompt source counter required."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3491
