@@ -324,7 +324,7 @@ speculative decoding. From the PR diff, identify configs that are BOTH:
   downloads, or config names containing `-mtp` / `eagle`.
 Agentic replay does not reproduce real-world token-by-token traffic, so measured
 acceptance there is not representative. Per the AgentX fairness guidelines
-in `golden_al_distribution/README.md` on the checked-out default branch, such configs
+in `infx/golden_al_distribution/README.md` on the checked-out default branch, such configs
 must instead SIMULATE acceptance at the committed golden acceptance length (AL).
 Verify BOTH:
 - (a) SIMULATED ACCEPTANCE ENABLED. The launch config must pin a simulated/synthetic
@@ -343,7 +343,7 @@ Verify BOTH:
   FAIL if an agentic spec-decode config runs real (unsimulated) acceptance.
   Name the config/script and line.
 - (b) AL VALUE MATCHES THE GOLDEN CURVE. Read the committed golden AL YAML for the
-  model in `golden_al_distribution/` on the default-branch checkout. Examples include
+  model in `infx/golden_al_distribution/` on the default-branch checkout. Examples include
   `qwen3.5_mtp.yaml` and `minimaxm3_eagle3.yaml`. Confirm the pinned AL equals the golden value for that
   model, thinking mode, and the config's `num_speculative_tokens` / MTP level (e.g.
   qwen3.5 thinking_on with 3 speculative tokens -> 3.39). For TRT-LLM configs, compare

@@ -74,10 +74,10 @@ This policy follows the same broad principle as MLPerf Inference: prescribe the 
 
 ## How a golden AL curve is collected
 
-The push-button [`speedbench-al.yml`](../.github/workflows/speedbench-al.yml) workflow, introduced in [InferenceX#1650](https://github.com/SemiAnalysisAI/InferenceX/pull/1650) and extended to additional MTP and EAGLE3 models in [InferenceX#1706](https://github.com/SemiAnalysisAI/InferenceX/pull/1706), performs the following process. It superseded the early manually assembled reference in [InferenceX#1592](https://github.com/SemiAnalysisAI/InferenceX/pull/1592), making the exact commands, logs, outputs, and generated YAML auditable from one run.
+The push-button [`speedbench-al.yml`](../../.github/workflows/speedbench-al.yml) workflow, introduced in [InferenceX#1650](https://github.com/SemiAnalysisAI/InferenceX/pull/1650) and extended to additional MTP and EAGLE3 models in [InferenceX#1706](https://github.com/SemiAnalysisAI/InferenceX/pull/1706), performs the following process. It superseded the early manually assembled reference in [InferenceX#1592](https://github.com/SemiAnalysisAI/InferenceX/pull/1592), making the exact commands, logs, outputs, and generated YAML auditable from one run.
 
 1. A maintainer dispatches the workflow with a model, model prefix, vLLM image, draft lengths (normally 1–8), thinking modes, `category=coding`, and `output-len=4096`.
-2. The workflow launches the model on a B300 runner and selects the matching collector under [`benchmarks/single_node/speedbench/`](../benchmarks/single_node/speedbench/).
+2. The workflow launches the model on a B300 runner and selects the matching collector under [`benchmarks/single_node/speedbench/`](../../benchmarks/single_node/speedbench/).
 3. For every `(thinking mode, draft length)` cell, the collector starts a clean vLLM server with real MTP or EAGLE3 decoding and the model's production sampling/chat-template settings.
 4. The collector snapshots vLLM's cumulative accepted-token and verification-draft counters, runs every prompt in the SPEED-Bench Qualitative `coding` category through `vllm bench serve`, and snapshots the counters again.
 5. It computes the mean acceptance length as:
@@ -146,7 +146,7 @@ Before accepting an updated curve, reviewers should verify:
 - [vLLM synthetic acceptance support](https://github.com/vllm-project/vllm/pull/40662)
 - [ATOM forced acceptance-length support](https://github.com/ROCm/ATOM/pull/1948)
 - [InferenceX synthetic-acceptance tracking issue](https://github.com/SemiAnalysisAI/InferenceX/issues/1651)
-- [InferenceX SPEED-Bench workflow](../.github/workflows/speedbench-al.yml)
+- [InferenceX SPEED-Bench workflow](../../.github/workflows/speedbench-al.yml)
 - [InferenceX early reference-alignment PR](https://github.com/SemiAnalysisAI/InferenceX/pull/1592)
 - [InferenceX initial AL collector PR](https://github.com/SemiAnalysisAI/InferenceX/pull/1650)
 - [InferenceX multi-model AL collectors PR](https://github.com/SemiAnalysisAI/InferenceX/pull/1706)

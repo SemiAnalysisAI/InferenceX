@@ -17,7 +17,7 @@ from typing import Any
 
 import yaml
 
-GOLDEN_DIR = Path(__file__).resolve().parents[2] / "golden_al_distribution"
+GOLDEN_DIR = Path(__file__).resolve().parents[1] / "golden_al_distribution"
 ENGINES = {
     "sglang": "sglang",
     "sglang-disagg": "sglang",

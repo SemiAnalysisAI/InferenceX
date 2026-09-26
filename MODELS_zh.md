@@ -34,7 +34,7 @@ InferenceX-e2e 运行在数量固定且有限的 GPU 资源池上，并由一支
 
 **状态：基线下线尚未执行。** 只有受影响的模型、硬件与引擎具备替代覆盖后，才能下线冗余基线。对帕累托前沿有贡献的非投机解码配置仍需保留；仅有对应的投机解码分支，不足以成为移除它们的理由。
 
-**今后我们不再仅为 A/B 对照而分别维护非投机解码与投机解码两条赛道。** 当初保留非投机解码分支，是把它当作中立基线。那时接受长度（AL）完全取决于提交方草稿头（draft head）的实际水平，导致各家投机解码数据之间无法横向比较。这一问题现已解决。[`golden_al_distribution/`](golden_al_distribution/) 为每个模型、thinking 模式与草稿长度各提交了一条黄金 AL 曲线，均在 SPEED-Bench `coding` 类别上测得。启用投机解码时，AgentX 通过合成接受（synthetic acceptance）将提交锁定到该曲线（vLLM 用 `synthetic_acceptance_length`，SGLang 用 `SGLANG_SIMULATE_ACC_LEN`，TensorRT-LLM 用 `TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS`，等等）。既然已有公平且与引擎无关的接受目标，投机解码结果本身即可直接横向比较，独立的非投机解码基线已属冗余。包括 Kimi-K3 在内的新模型，自第 0 天起即不要求维护该独立基线。
+**今后我们不再仅为 A/B 对照而分别维护非投机解码与投机解码两条赛道。** 当初保留非投机解码分支，是把它当作中立基线。那时接受长度（AL）完全取决于提交方草稿头（draft head）的实际水平，导致各家投机解码数据之间无法横向比较。这一问题现已解决。[`infx/golden_al_distribution/`](infx/golden_al_distribution/) 为每个模型、thinking 模式与草稿长度各提交了一条黄金 AL 曲线，均在 SPEED-Bench `coding` 类别上测得。启用投机解码时，AgentX 通过合成接受（synthetic acceptance）将提交锁定到该曲线（vLLM 用 `synthetic_acceptance_length`，SGLang 用 `SGLANG_SIMULATE_ACC_LEN`，TensorRT-LLM 用 `TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS`，等等）。既然已有公平且与引擎无关的接受目标，投机解码结果本身即可直接横向比较，独立的非投机解码基线已属冗余。包括 Kimi-K3 在内的新模型，自第 0 天起即不要求维护该独立基线。
 
 **无论是否启用投机解码，都发布最优的帕累托点。** 若关闭 MTP、EAGLE/EAGLE3、DSpark 或其他草稿方法能得到更优的运行点，例如高吞吐量场景，配方可以关闭投机解码。有效的非投机解码结果仍可按相同的[北极星帕累托策略](#北极星帕累托策略)参与发布。因此，同一条前沿可以同时包含投机解码和非投机解码数据点。
 

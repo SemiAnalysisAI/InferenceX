@@ -12,6 +12,7 @@ import pytest
 import yaml
 
 from infx.srt_slurm.synthetic_acceptance import (
+    GOLDEN_DIR,
     build_overrides,
     plan_commands,
     selected_recipes,
@@ -535,3 +536,9 @@ def test_sglang_conflicting_algorithm_aliases_fail(golden_dir: Path) -> None:
     }
     with pytest.raises(ValueError, match="Conflicting speculative-algorithm and speculative-algo"):
         build_overrides(recipe, "dynamo-sglang", ENV, golden_dir=golden_dir)
+
+
+def test_default_golden_dir_holds_committed_curves() -> None:
+    # Launchers rely on the default; the tests above all pass a temp directory.
+    assert GOLDEN_DIR == ROOT / "infx/golden_al_distribution"
+    assert (GOLDEN_DIR / "qwen3.5_mtp.yaml").is_file()
