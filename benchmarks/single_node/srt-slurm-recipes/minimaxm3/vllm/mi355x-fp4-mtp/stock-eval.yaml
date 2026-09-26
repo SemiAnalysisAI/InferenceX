@@ -1,0 +1,87 @@
+# Diagnostic stock vLLM evaluation. Disable all external engine plugins.
+# Engine dependencies must already be present in the published image.
+base:
+  schema: 2
+  name: minimaxm3-fp4-mi355x-vllm-stock-eval
+  model:
+    path: hf:amd/MiniMax-M3-MXFP4
+    container: rocm/atom-dev:vllm-v0.28.0-nightly_20260926
+    precision: fp4
+  resources:
+    gpu_type: mi355x
+    gpus_per_node: 8
+  frontend:
+    type: vllm
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine:
+    type: vllm
+    connector: null
+  health_check:
+    interval_seconds: 10
+    max_attempts: 360
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      args:
+        served-model-name: amd/MiniMax-M3-MXFP4
+        trust-remote-code: true
+        block-size: 128
+        gpu-memory-utilization: 0.9
+        enable-chunked-prefill: true
+        max-num-batched-tokens: 32768
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY", "cudagraph_capture_sizes": [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,20,22,24,26,28,30,32,34,36,48,64,72,80,88,96,104,112,120,128]}'
+        language-model-only: true
+        enable-prefix-caching: true
+        attention-backend: ROCM_AITER_UNIFIED_ATTN
+        moe-backend: aiter
+        kv-cache-dtype: fp8
+        attention-config: '{"indexer_kv_dtype": "fp8"}'
+        tool-call-parser: minimax_m3
+        reasoning-parser: minimax_m3
+        enable-auto-tool-choice: true
+        default-chat-template-kwargs: '{"thinking_mode":"enabled"}'
+        stream-interval: 20
+        speculative-config: '{"method": "eagle3", "model": "Inferact/MiniMax-M3-EAGLE3-GQA", "num_speculative_tokens": 3, "attention_backend": "ROCM_AITER_UNIFIED_ATTN"}'
+        max-model-len: 65536
+      env:
+        PYTHONNOUSERSITE: '1'
+        VLLM_ENGINE_READY_TIMEOUT_S: '3600'
+        VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: '1800'
+        VLLM_USE_BREAKABLE_CUDAGRAPH: '0'
+        VLLM_ROCM_USE_AITER: '1'
+        VLLM_ROCM_USE_AITER_MOE: '1'
+        VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS: '1'
+        VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT: '1'
+        VLLM_ROCM_QUICK_REDUCE_QUANTIZATION: INT4
+        VLLM_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16: '0'
+        VLLM_ROCM_QUICK_REDUCE_QUANTIZATION_MIN_SIZE_KB: '256'
+        VLLM_PLUGINS: ''
+        ATOM_DISABLE_VLLM_PLUGIN: '1'
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
+    env:
+      MODEL: amd/MiniMax-M3-MXFP4
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
+      AIPERF_APPLY_CHAT_TEMPLATE: 'true'
+  host_setup:
+    timeout_seconds: 1200
+    nodes: all
+    commands:
+    - IBDEVICES=rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7 bash "$GITHUB_WORKSPACE"/runners/srt-slurm/hooks/mi355x-amds/check-rdma.sh
+    - bash -c 'source "$GITHUB_WORKSPACE"/runners/srt-slurm/hooks/common.sh; wait_for_amd_gpu_clean'
+override_tp4_c1:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-num-seqs: 2
+  benchmark:
+    env:
+      CONC: '1'

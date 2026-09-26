@@ -1485,3 +1485,18 @@ dsv41flash-fp4-mi355x-sglang-agentic-dspark:
     - dram-utilization: 0.60
       search-space:
       - { tp: 4, ep: 4, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/sglang/mi355x-fp4-mtp/agentic.yaml }
+
+# Isolated stock-image diagnostic; one deployment point and eval-only dispatch.
+minimaxm3-fp4-mi355x-vllm-stock-eval-mtp:
+  image: rocm/atom-dev:vllm-v0.28.0-nightly_20260926
+  model: amd/MiniMax-M3-MXFP4
+  model-prefix: minimaxm3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.687
+      search-space:
+      - { tp: 4, kv-offloading: none, conc-list: [1], spec-decoding: mtp, srt-recipe: benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/mi355x-fp4-mtp/stock-eval.yaml }
