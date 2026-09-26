@@ -1,5 +1,7 @@
 target-version = "py312"
 line-length = 100
+# Tests follow the repository test style, not the package ruleset.
+extend-exclude = ["tests"]
 
 [lint]
 select = ["ALL"]

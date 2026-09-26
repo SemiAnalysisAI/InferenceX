@@ -16,7 +16,7 @@ def _run_batched_eval(
     failing_conc: str = "",
 ) -> dict:
     benchmark_lib = (
-        Path(__file__).resolve().parents[2] / "benchmarks" / "benchmark_lib.sh"
+        Path(__file__).resolve().parents[3] / "benchmarks" / "benchmark_lib.sh"
     )
     trace_path = tmp_path / "eval_concs.txt"
     env = {

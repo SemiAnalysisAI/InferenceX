@@ -33,7 +33,7 @@ from infx.results.agentic import (
 from infx.results.agentic.server_metrics import compute_server_metrics
 
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+REPO_ROOT = Path(__file__).resolve().parents[4]
 
 AGG_TOP_LEVEL_KEYS = {
     "infmax_model_prefix",

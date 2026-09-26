@@ -513,7 +513,7 @@ uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with p
 如果修改了 schema 或生成器行为，运行其聚焦测试：
 
 ```bash
-python -m pytest tests/matrix/ -v
+python -m pytest infx/tests/matrix/ -v
 ```
 
 对 srt-slurm，还要运行该配方文档指定的上游 recipe checker/`srtctl` 命令。对 llm-d，要验证配方 YAML 并在目标 Slurm fleet 上实际检查 allocation/discovery 路径；本地矩阵生成无法证明 endpoint discovery。
