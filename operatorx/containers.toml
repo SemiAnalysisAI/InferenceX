@@ -6,9 +6,3 @@ image = "vllm/vllm-openai-rocm:v0.19.0"
 
 [amd.vllm]
 image = "vllm/vllm-openai-rocm:nightly-rocm100-3df4ae153eb385e27b52f26c81f8edb9e20b9984"
-
-[tpu.jax]
-image = "us-central1-docker.pkg.dev/jax-image-build/jax-tpu/jax-tpu:latest"
-
-[trainium.neuronx]
-image = "public.ecr.aws/neuron/pytorch-training-neuronx:2.5.1-neuronx-py310-sdk2.21.0-ubuntu22.04"

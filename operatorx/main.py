@@ -13,8 +13,7 @@ as ``status="unsupported"``. Other exceptions become ``status="error"``.
 
 Platform is detected from ``$OPERATORX_CLUSTER`` → ``CLUSTERS[id].platform``, or
 overridden with ``--platform``. Backend filter via ``--backends`` (CSV) or env
-``OPERATORX_BACKENDS``. World size from ``WORLD_SIZE`` env (set by torchrun, or
-manually for TPU); auto-detected for TPU when unset.
+``OPERATORX_BACKENDS``. World size from ``WORLD_SIZE`` env (set by torchrun).
 """
 from __future__ import annotations
 
@@ -135,12 +134,6 @@ def _resolve_world_size(platform: str) -> int:
     ws = os.environ.get("WORLD_SIZE")
     if ws:
         return int(ws)
-    if platform == "tpu":
-        try:
-            import jax
-            return jax.device_count()
-        except Exception:
-            pass
     return 1
 
 
@@ -268,7 +261,7 @@ def main() -> int:
         write_run_result(out_path, run, results)
         print(f"\n[run_smoke] {counts} -> {out_path}")
 
-    # Multi-rank cleanup (torch.distributed used by NVIDIA + Trainium)
+    # Multi-rank cleanup (torch.distributed)
     if ws > 1:
         try:
             import torch.distributed as dist
