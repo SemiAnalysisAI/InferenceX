@@ -22,6 +22,7 @@ import importlib
 import json
 import os
 import pkgutil
+import re
 import sys
 from pathlib import Path
 
@@ -30,6 +31,9 @@ from operatorx.core import op_registry
 from operatorx import Op, Result, UnsupportedOpError, write_run_result
 from operatorx.clusters import CLUSTER_PLATFORMS
 from operatorx.runtime import runtime_snapshot, utc_now_iso
+
+# a testlist source: the checkpoint id ("org/model") and the op's role in it
+_SOURCE = re.compile(r"[^/\s]+/[^/\s]+/[^/\s]+")
 
 
 # Package directory contains the checked-in testlists and local results.
@@ -73,11 +77,12 @@ def _load_testlists(names: list[str] | None, directory: Path = TESTLIST_DIR) -> 
     lists = {name: json.loads(path.read_text()) for name, path in wanted.items()}
     for name, entries in lists.items():
         for i, entry in enumerate(entries):
-            for field, what in (("sources", "checkpoint ids"), ("name", "roles in those checkpoints")):
-                v = entry.get(field)
-                if not isinstance(v, list) or not all(isinstance(s, str) and s for s in v):
-                    raise SystemExit(f"{name}[{i}]: every testlist entry needs a '{field}' list of {what} "
-                                     f"(empty for a shape from no model)")
+            v = entry.get("sources")
+            if not isinstance(v, list) or not all(isinstance(s, str) and _SOURCE.fullmatch(s) for s in v):
+                raise SystemExit(f"{name}[{i}]: every testlist entry needs a 'sources' list of "
+                                 f"'<org>/<model>/<role>' strings (empty for a shape from no model)")
+            if "name" in entry:
+                raise SystemExit(f"{name}[{i}]: 'name' is gone; the role is the last part of each source")
     return lists
 
 
@@ -194,7 +199,7 @@ def main() -> int:
                     continue  # Strict CI retains unsupported backend/operator pairs.
                 entries.append((
                     Op(type=shape["type"], args=shape["args"], backend=backend,
-                       name=shape["name"], sources=shape["sources"]),
+                       sources=shape["sources"]),
                     tl_name,
                 ))
 

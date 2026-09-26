@@ -241,7 +241,7 @@ def test_strict_benchmark_writes_actual_status(
     monkeypatch.setenv("WORLD_SIZE", "1")
     monkeypatch.setenv("RANK", "0")
     (tmp_path / "tiny.json").write_text(
-        json.dumps([{"type": "gemm", "sources": [], "name": [],
+        json.dumps([{"type": "gemm", "sources": ["org/model/q_proj"],
                      "args": {"m": 2, "n": 64, "k": 64, "a": {"dtype": "bf16"},
                               "b": {"dtype": "bf16"}, "out": "bf16"}}])
     )
@@ -272,9 +272,9 @@ def test_strict_benchmark_writes_actual_status(
 
 
 def test_testlist_loading_and_unknown_selection(tmp_path):
-    (tmp_path / "one.json").write_text('[{"type":"gemm","args":{"m":7},"sources":[],"name":[]}]')
+    (tmp_path / "one.json").write_text('[{"type":"gemm","args":{"m":7},"sources":["org/model/o_proj"]}]')
     assert benchmark._load_testlists(["one"], tmp_path) == {
-        "one": [{"type": "gemm", "args": {"m": 7}, "sources": [], "name": []}]
+        "one": [{"type": "gemm", "args": {"m": 7}, "sources": ["org/model/o_proj"]}]
     }
     (tmp_path / "bare.json").write_text('[{"type":"gemm","args":{"m":7}}]')
     with pytest.raises(SystemExit, match="'sources' list"):

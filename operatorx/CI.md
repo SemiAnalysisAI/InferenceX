@@ -196,12 +196,13 @@ GLM-5.2, Kimi-K3, MiniMax-M3 in their FP8/NVFP4/MXFP4/MXFP8 variants) at `tokens
 plus `tokens=256` layers under each expert-load distribution, 28 cases. Each layer's
 weights fit on one GPU.
 
-Every testlist entry says where it comes from: `sources` is the list of checkpoint
-ids whose layers run that case (several when models share a shape), and `name` the
-list of its roles in them (`q_proj`, `kv_a_proj_with_mqa`, `gate_up_proj`, `mlp`, ...;
-one shape can be a `q_proj` in one model and an `o_proj` in another). Both are empty
-for a shape from no model. The loader rejects entries without them, and both are
-carried into each result's `op`; neither is part of the op's identity.
+Every testlist entry says where it comes from: `sources` lists one
+`<checkpoint>/<role>` per layer that runs the case, e.g.
+`deepseek-ai/DeepSeek-V4-Pro/attn.wq_b` or `zai-org/GLM-5-FP8/mlp`. A checkpoint id is
+`org/model`, so the role is what follows the last `/`. A shape shared by several models,
+or by several layers of one model, lists every pair, so each role stays tied to its
+model. The list is empty for a shape from no model. The loader rejects an entry without
+it, and it is carried into each result's `op`; it is not part of the op's identity.
 
 Experimental operator changes are recorded in the adjacent `perf-changelog.yaml`,
 separately from the root inference-recipe changelog's config-key schema.
