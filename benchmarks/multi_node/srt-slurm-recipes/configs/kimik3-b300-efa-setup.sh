@@ -8,6 +8,7 @@ printf '%s  %s\n' fa6dff8593d866866c13cb4640d9059835cd4efa427971f100ab40c97bef28
 mkdir -p /tmp/efa
 tar -xzf /tmp/aws-efa-installer-1.50.0.tar.gz -C /tmp/efa
 if [ -d /etc/libibverbs.d ] && [ ! -w /etc/libibverbs.d ]; then
+  findmnt -T /etc/libibverbs.d -no TARGET,FSTYPE,OPTIONS || true
   [ -f /etc/libibverbs.d/efa.driver ] || { echo 'EFA driver descriptor missing from read-only mount' >&2; exit 1; }
   mkdir -p /etc/dpkg/dpkg.cfg.d
   [ ! -e /etc/dpkg/dpkg.cfg.d/efa-ro-ibverbs ]
@@ -16,6 +17,8 @@ if [ -d /etc/libibverbs.d ] && [ ! -w /etc/libibverbs.d ]; then
 fi
 efa_installer_flags=()
 if [ -d /opt/amazon/efa/lib ] && [ ! -w /opt/amazon/efa/lib ]; then
+  findmnt -T /opt/amazon/efa/lib -no TARGET,FSTYPE,OPTIONS || true
+  ls -la /opt/amazon/efa/lib
   dpkg-deb -x /tmp/efa/aws-efa-installer/DEBS/UBUNTU2404/x86_64/libfabric1-aws_2.6.0amzn1.0_amd64.deb /tmp/efa/reference
   dpkg-deb -x /tmp/efa/aws-efa-installer/DEBS/UBUNTU2404/x86_64/libfabric-aws-bin_2.6.0amzn1.0_amd64.deb /tmp/efa/reference
   cmp /tmp/efa/reference/opt/amazon/efa/lib/libfabric.so.1.32.0 /opt/amazon/efa/lib/libfabric.so.1.32.0
