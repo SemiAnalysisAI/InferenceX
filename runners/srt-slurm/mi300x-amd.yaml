@@ -3,8 +3,13 @@ default_time_limit: ${SRT_DEFAULT_TIME_LIMIT}
 gpus_per_node: 8
 network_interface: ''
 visible_devices_env: ROCR_VISIBLE_DEVICES
+default_gpu_exporter:
+  container_image: docker://rocm/device-metrics-exporter:v1.5.2
+  port: 19500
+  power_profile: amd-device-metrics
 srtctl_root: ${SRTCTL_ROOT}
 default_mounts:
+  ${GITHUB_WORKSPACE}/runners/srt-slurm/exporters/amd-power.json: /etc/metrics/config.json
   /dev/kfd: /dev/kfd
   /dev/dri: /dev/dri
 default_sbatch_directives:

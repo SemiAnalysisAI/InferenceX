@@ -10,7 +10,10 @@ srtctl_root: ${SRTCTL_ROOT}
 
 gpus_per_node: 8
 visible_devices_env: ROCR_VISIBLE_DEVICES
-default_gpu_exporter: null
+default_gpu_exporter:
+  container_image: docker://rocm/device-metrics-exporter:v1.5.2
+  port: 19500
+  power_profile: amd-device-metrics
 network_interface: eno0
 
 use_gpus_per_node_directive: true
@@ -26,6 +29,7 @@ model_paths:
   Qwen3.5-397B-A17B-FP8: /it-share/data/Qwen3.5-397B-A17B-FP8
 
 default_mounts:
+  ${GITHUB_WORKSPACE}/runners/srt-slurm/exporters/amd-power.json: /etc/metrics/config.json
   /dev/kfd: /dev/kfd
   /dev/dri: /dev/dri
   # This host directory is already the Hub cache, not HF_HOME.

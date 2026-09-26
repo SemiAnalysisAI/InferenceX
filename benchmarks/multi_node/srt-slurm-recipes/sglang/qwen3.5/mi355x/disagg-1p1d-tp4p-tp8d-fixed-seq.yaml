@@ -45,7 +45,7 @@ roles:
   prefill:
     nodes: 1
     workers: 1
-    gpus: 4
+    gpus: 8
     env: &common_environment
       HF_HOME: "/hf_hub_cache"
     # Hugging Face stores hub snapshots under $HF_HOME/hub. Keep the explicit
@@ -75,7 +75,7 @@ roles:
       SGLANG_HEALTH_CHECK_TIMEOUT: "600"
     args: &common_config
       served-model-name: "Qwen/Qwen3.5-397B-A17B-FP8"
-      tensor-parallel-size: 4
+      tensor-parallel-size: 8
       disaggregation-transfer-backend: mori
       disaggregation-ib-device: "rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7"
       kv-cache-dtype: "fp8_e4m3"
@@ -112,8 +112,14 @@ health_check:
   max_attempts: 720
   interval_seconds: 5
 
+telemetry:
+  enabled: true
+  required: true
+  startup_timeout_seconds: 180
+
 benchmark:
   type: custom
+  concurrencies: [8]
   command: bash /infmax-workspace/benchmarks/multi_node/srt_fixed_sequence.sh
   env:
     ISL: '8192'
