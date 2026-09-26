@@ -94,7 +94,7 @@ def golden_length(model: str, spec: Mapping[str, Any], thinking: str, golden_dir
     method = str(spec.get("method", "")).lower()
     # SGLang calls native model MTP EAGLE/NEXTN; the curve describes the model's head.
     if method in ("eagle", "nextn"):
-        method = "eagle3" if model in ("kimik2.5", "minimaxm3") else "mtp"
+        method = "eagle3" if model == "minimaxm3" else "mtp"
     curve = f"{model}_{method}"
     if model in ("dsv4", "dsv4dspark", "dsv4dsparkprob") and method == "dspark":
         curve = "dsv4-pro-0813-dspark"

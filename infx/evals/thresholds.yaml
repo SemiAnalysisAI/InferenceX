@@ -51,9 +51,6 @@
     "gptoss": {
       "gsm8k": 0.91
     },
-    "kimik2.5": {
-      "gsm8k": 0.90
-    },
     "minimaxm2.5": {
       "gsm8k": 0.92
     },

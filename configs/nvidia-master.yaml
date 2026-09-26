@@ -1455,9 +1455,6 @@ kimik3-fp4-h200-vllm-agentic-simple:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/kimik3/vllm/h200-fp4/agentx/agg-tp8dp4ep32-vllm-simple.yaml"
-# NOTE: At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/moonshotai/Kimi-K2.5.html
-# does not have a B300-specific recipe, so this config reuses the existing
-# Kimi-K2.5 FP4 B200 vLLM recipe as-is until B300-specific tuning is available.
 
 dsr1-fp8-b200-sglang-mtp:
   image: lmsysorg/sglang:v0.5.12-cu130
