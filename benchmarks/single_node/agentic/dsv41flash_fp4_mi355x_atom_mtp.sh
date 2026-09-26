@@ -9,8 +9,8 @@ source "$(dirname "$0")/../../benchmark_lib.sh"
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
 check_env_vars EP_SIZE DP_ATTENTION EVAL_ONLY PORT
 
-if [[ "$TP" != 2 && "$TP" != 4 ]] || [[ "$EP_SIZE" != 1 || "$DP_ATTENTION" != false ]]; then
-    echo "ERROR: this recipe requires TP=2 or TP=4, EP_SIZE=1, and DP_ATTENTION=false" >&2
+if [[ "$EP_SIZE" != 1 || "$DP_ATTENTION" != false ]]; then
+    echo "ERROR: this recipe requires EP_SIZE=1, and DP_ATTENTION=false" >&2
     exit 1
 fi
 require_agentic_kv_offload_none
