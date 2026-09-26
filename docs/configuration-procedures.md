@@ -212,6 +212,8 @@ The opted-in installer applies `runners/srt-slurm/glm52-local-version-compute-se
 
 The GLM-5.2 GB200 v0.5.17 TP4 disaggregated recipe opts its prefill role into a source-guarded synchronous NIXL candidate. It disables both the agent progress thread and the explicitly created UCX thread pool, retains strict synchronization, and binds the transfer worker to its rank GPU before caller-driven progress. Unknown source hashes stop setup. The accepted input hash is from the upstream release source; the installed-image match and real transfer progress remain unverified. C10 and C12 both need affected-runtime measurement because progress scheduling can change throughput.
 
+For that recipe's performance jobs, the GB200 launcher selects the composite setup script explicitly: the native `--setup-script` option overrides `setup_script` in the recipe. The composite runs the existing torchao installer first and then the prefill-only NIXL patch; either failure stops setup. Eval-only jobs and other recipes keep the torchao-only path. Check the submitted setup override and worker setup log as well as the rendered recipe before counting the patch as executed.
+
 ## Register an srt-slurm recipe
 
 Mapping source: [`benchmarks/multi_node/srt-slurm-recipes/RECIPES.md`](../benchmarks/multi_node/srt-slurm-recipes/RECIPES.md). Checked-in recipes: [`benchmarks/multi_node/srt-slurm-recipes/`](../benchmarks/multi_node/srt-slurm-recipes/).

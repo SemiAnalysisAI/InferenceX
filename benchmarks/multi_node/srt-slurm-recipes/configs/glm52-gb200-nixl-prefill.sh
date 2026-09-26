@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -eo pipefail
 
+# Preserve the GB200 launcher's dependency setup before applying the role patch.
+bash "$(dirname "${BASH_SOURCE[0]}")/install-torchao.sh"
+
 # SRT invokes setup in frontend and worker containers; the recipe selects prefill.
 source /infmax-workspace/benchmarks/benchmark_lib.sh --validation-only
 check_env_vars INFX_GLM52_NIXL_SYNC_PATCH

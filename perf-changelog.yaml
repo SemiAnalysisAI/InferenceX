@@ -8995,3 +8995,12 @@
   - Use source-guarded caller-driven NIXL progress for GLM-5.2 GB200 TP4 disaggregated prefill after a native UCX shared-thread crash; retain image, topology, concurrency, flag 0 and required PowerX.
   - GLM-5.2 GB200 TP4 分离式 prefill 遇到 UCX 后台线程崩溃后，通过源码哈希保护启用调用线程推进 NIXL；保留镜像、拓扑、并发、flag 0 和必需 PowerX。
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3401
+
+- config-keys:
+  - glm5.2-fp4-gb200-dynamo-sglang-agentic-disagg
+  scenario-type:
+  - agentic-coding
+  description:
+  - Select the composite torchao and prefill NIXL setup in the GB200 launcher for GLM-5.2 TP4 disaggregated performance jobs; preserve eval-only and other recipe setup paths.
+  - 为 GLM-5.2 TP4 分离式性能任务在 GB200 启动器中选择 torchao 与 prefill NIXL 组合安装脚本，保留仅评测及其他配方的安装路径。
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3401
