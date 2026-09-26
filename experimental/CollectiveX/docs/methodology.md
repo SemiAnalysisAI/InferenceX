@@ -282,9 +282,8 @@ Reading `false` alone as "roundtrip includes staging" subtracts a cost the row n
 availability, origin, and sample count. A paired-only API reports null isolated components.
 `isolated_sum` is derived.
 
-Headline latency is `components.roundtrip` for default CUDA-graph rows and the **chained pair
-period** (`components.pair_period`, defined under Chained Pair Period below) for eager rows that
-carry one. The earlier eager flip shipped **held** while the
+Headline latency is the **chained pair period** (`components.pair_period`, defined under Chained
+Pair Period below) for every row that carries one, graph-replayed or eager. The earlier eager flip shipped **held** while the
 six-events-per-pair chain described below, whose inner records inflated small-T periods
 fleet-wide, was replaced by the two-pass chain, and was released on 2026-08-06 once the b200, h200
 and gb200 hand references were confirmed against two-pass fleet artifacts (runs 31092783122 and
@@ -309,23 +308,66 @@ rather than per-operation costs. The paired roundtrip is the comparable quantity
 
 ### CUDA Graph Replay
 
-Graph-compatible backend/mode pairs capture the existing fixed-shape
-dispatch→stage→combine roundtrip and measure `CUDAGraph.replay()` by default. Capture and replay
-warmup are excluded. The result is published directly as `components.roundtrip`, with origin
-`cuda-graph-replay`. Its capture has no internal timing nodes. Separate dispatch and combine
-invocations each recapture the roundtrip with one event pair around only the requested phase,
-preserving those existing component fields without charging their instrumentation to roundtrip.
-There is no `graph_*` component or separate graph output path. `stage`, `pair_period`, chain
-floors, and chain health are unavailable, so a graph-mode document contains only graph-derived
-latency values. `isolated_sum` remains the derived sum of dispatch and combine. The ordinary
-cross-rank MAX/MIN/spread reductions still apply to the replay samples.
+Serving engines capture their decode step, so graph-compatible backend/mode pairs are measured
+under `CUDAGraph.replay()` by default. The graphed set is each library's best measured
+configuration that passed every check, without changing its contract. The one exception is nccl-ep HT
+decode, below:
 
-`COLLX_CUDA_GRAPH=0` restores the eager pipeline unchanged, including isolated components and the
-chained pair period below. Modes not declared graph-compatible by their adapter also remain eager.
-Every captured output is poisoned after timing and replayed once more; a finite rewrite gates the
-case, and where staging is not hoisted that replay is also compared with an untimed drained pair.
-The artifact records `implementation.cuda_graph_replay`, `cuda_graph_supported`, and
-`chained_period`, while the component origin makes the measurement visible at row granularity.
+- **nccl-ep** low-latency and HT **decode**. HT decode replays because a captured decode step
+  would run it that way, although it measures 3-11% slower than eager on h100/h200 EP16: captured,
+  the per-step routing `ncclAllGather` is a cross-node collective driven by NCCL's proxy, which
+  NCCL fronts with a host-callback node on every replay (about +50us of dispatch at EP16, nothing
+  within one node). HT prefill stays eager, as engines run prefill uncaptured. (HT's earlier graphed
+  oracle failures were the oracle writing its combine input into the zero-copy window without a
+  cross-rank fence; that write is now fenced.)
+- **flashinfer-ep** decode. Prefill stays eager; graphs change nothing there.
+- **uccl-ep** low-latency, intranode only, except b200 FP8, which measured faster eager. Normal
+  mode host-syncs unless padded to `num_worst_tokens` and stays eager.
+- **deepep-v2** low-latency and normal-mode **decode**. Normal decode runs ElasticBuffer as
+  vLLM's graphed `deepep_v2` decode does: `do_cpu_sync=False`, receive sized to the next power of
+  two of T, valid prefix read from the handle on device. Its kernel generation is
+  `v2-elastic-buffer-nosync`. Normal prefill keeps the host sync that sizes its receive exactly
+  and stays eager.
+- **MoRI** stays eager: ROCm torch before 2.13 rejects the external events the replay windows are
+  recorded with.
+
+Every family keeps its eager meaning under replay; only the launch mechanism changes:
+
+- **Fresh-entry components** (`roundtrip`, `dispatch`, `combine`) capture one pair with event
+  nodes around the timed window, so host launch cost never enters it.
+  - Each timed replay starts behind a device-side rank barrier: an all-reduce, then a spin of fixed
+    **wall time**, with no host sync before the replay. The spin is converted to cycles by
+    measuring each GPU's spin rate per timed series, because `torch.cuda._sleep` counts SM cycles
+    and a fixed count left ~15 µs of skew between differently clocked ranks.
+  - Without the barrier, b200 EP16 ranks entered ~75 µs apart and the cross-rank MAX reported the
+    stagger as latency. A rank whose host is late to launch still stalls the others, and those
+    stalls own the tail.
+  - These series therefore publish **only p50** under replay: p90/p95/p99 are null and so is the
+    matching token rate. Component origin is `cuda-graph-replay`.
+- **The chained family** (`pair_period`, chain floors, chain health) captures each sibling chain as
+  ONE graph of `chain_iters` unrolled pairs, the shape a decode graph has, and replays it once
+  untimed and once behind the barrier.
+  - Event records are graph nodes and cost the host nothing, so the floors sibling carries op
+    windows without the eager six-events-per-pair defect.
+  - The chained oracle and the chained-output check apply unchanged, and the period keeps its
+    tails.
+
+`stage` is not separately timed under replay. `COLLX_CUDA_GRAPH=0` restores the eager pipeline.
+
+The value check runs on every graphed row:
+
+- Each timed capture's output is poisoned after timing and replayed once more; a finite rewrite
+  gates the case.
+- A separate untimed capture then stages INSIDE the graph (the timed captures hoist staging where
+  it does device work).
+- Before its only timed replay, what dispatch wrote and the combined output are overwritten with
+  0xFF bytes (NaN for every float payload).
+- The replay's result must match an eager drained pair, so a replay that skipped or stalely reused
+  its dispatch fails `cuda_graph_last_output_passed`.
+
+A graphed row's `kernel_generation` carries a `-cudagraph` suffix, so the durable store never
+pools graph-replayed and eager samples of one kernel family into a single series. The artifact
+also records `implementation.cuda_graph_replay` and `cuda_graph_supported`.
 
 ### Chained Pair Period
 
@@ -426,8 +468,11 @@ it (as NVIDIA's own `ep_bench` does: CUDA events around dispatch and combine onl
 outside the loop) on the argument that its capacity-proportional cost would import a ladder-max
 term into dispatch; that argument describes exactly what production pays, since engines size the
 handle to their max token capacity and update it per step. The timed window now includes the
-update; rows carry `kernel_generation` `nccl-ep-v02-ht-routed-zc`
-(`nccl-ep-v02-ll-rm-zc` for scale-up low-latency and `nccl-ep-v02-ll-rm` for scale-out).
+update; rows carry `kernel_generation` `nccl-ep-v02-ht-routed-zc-static`
+(`nccl-ep-v02-ll-rm-zc` for scale-up low-latency and `nccl-ep-v02-ll-rm` for scale-out;
+`nccl-ep-v02-ll-em` under `COLLX_NCCL_LL_LAYOUT=expert-major`). `-static` marks HT combine taking
+the full static receive plane the FLAT contract requires; earlier `-zc` rows sliced it to the
+received count.
 The `v02` component discriminates the `nccl-extensions` v0.2 mover from earlier wheels, and
 pre-change `nccl-ep-ht`/`nccl-ep-ht-routed` rows are a different measurement contract or mover —
 the per-row discriminator the earliest NCCL changes lacked. HT uses zero-copy. LL uses the
@@ -647,7 +692,7 @@ One raw case document carries `record_type: "case-attempt"`, the single `version
   `combine_reduction` and `library_version` (which reduction the oracle held the kernel to, and
   the installed library that selected it), and two generation discriminators:
   `stage_excluded_from_roundtrip` (whether `roundtrip` excludes expert-output staging, discussed
-  above), `chained_period` (whether this document's rows carry the eager chained family),
+  above), `chained_period` (whether this document's rows carry the chained family),
   `cuda_graph_supported` (whether the adapter declares this mode graph-safe), and
   `cuda_graph_replay` (whether the existing measurement pipeline used replay).
 - `topology`: requested SKU/product, placement, `gpus_per_node`, nodes, scale-up domain, `scope`,
@@ -660,9 +705,8 @@ One raw case document carries `record_type: "case-attempt"`, the single `version
 - `provenance`: the mounted image tag and source SHA, and
 - `outcome`: `status` (`success` or `invalid`) and `reasons`.
 
-Each `rows` entry carries point latency (graph replay in `components.roundtrip` by default where
-supported, otherwise the eager `components` plus `components.pair_period`, `chain_floor_us` and
-`chain_health` (see Chained Pair Period)), byte
+Each `rows` entry carries point latency (`components`, graph-replayed by default where supported,
+plus `components.pair_period`, `chain_floor_us` and `chain_health` (see Chained Pair Period)), byte
 accounting, token rate, correctness, load, and fanout, while
 per-point statistics are summarized in place, not emitted as separate documents. Each dispatched
 case writes exactly this one raw result document, while unsupported or never-run cells produce no

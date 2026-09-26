@@ -251,6 +251,39 @@ class NcclLowLatencyLadderSizing(unittest.TestCase):
         self.assertEqual(ll.combine_reduction, "rank-fp32")
         self.assertEqual(getattr(ht, "combine_reduction", "domain-fp32"), "domain-fp32")
 
+    def test_ll_layout_selector_restores_the_expert_major_contract(self):
+        module = self._module()
+        module.dist.group = types.SimpleNamespace(WORLD=object())
+
+        def base_init(instance, options, rank, world_size, local_rank, device):
+            instance.args = options
+            instance.mode = options.mode
+
+        common = dict(experts=384, hidden=7168, topk=6, scale_up_domain=8)
+        with mock.patch.object(module.EPBackend, "__init__", base_init):
+            with mock.patch.dict(os.environ, {"COLLX_NCCL_LL_LAYOUT": "expert-major"}):
+                em = module.NCCLEPBackend(
+                    types.SimpleNamespace(mode="low-latency", **common), 0, 8, 0, "cuda:0"
+                )
+            rm = module.NCCLEPBackend(
+                types.SimpleNamespace(mode="low-latency", **common), 0, 8, 0, "cuda:0"
+            )
+            with mock.patch.dict(os.environ, {"COLLX_NCCL_LL_LAYOUT": "flat"}), \
+                    self.assertRaisesRegex(ValueError, "COLLX_NCCL_LL_LAYOUT"):
+                module.NCCLEPBackend(
+                    types.SimpleNamespace(mode="low-latency", **common), 0, 8, 0, "cuda:0"
+                )
+
+        self.assertEqual(em._layout, module.Layout.EXPERT_MAJOR)
+        self.assertEqual(
+            (em.kernel_generation, em.receive_layout, em.combine_weight_semantics),
+            ("nccl-ep-v02-ll-em", "token-expert", "weighted-kernel-sum"),
+        )
+        self.assertFalse(em.zero_copy)
+        self.assertEqual(getattr(em, "combine_reduction", "domain-fp32"), "domain-fp32")
+        self.assertEqual(rm._layout, module.Layout.RANK_MAJOR)
+        self.assertEqual(rm.combine_reduction, "rank-fp32")
+
     def test_ladder_cap_drops_only_oversized_measurement_points(self):
         module = self._module()
         backend = self._backend(module, low_latency=True)
@@ -510,6 +543,7 @@ def backend(ll=True):
     # create_buffer always runs before the first _ensure_handle, so the HT receive plane exists
     # by then; a list stands in for the tensor because `_t` is identity here.
     b._recv_x = list(range(64))
+    b._recv_x_t = ("window", "full-plane")
     return b
 
 
@@ -540,15 +574,143 @@ class TestSingleHandle(unittest.TestCase):
         self.assertIs(ll._ensure_handle(pa).in_weights_t, first_weights)
         ll._t.assert_not_called()
 
-    def test_ht_combine_input_is_sliced_to_the_received_count(self):
-        """HT combine's staging copy is sized by the tensor it is handed: the whole ladder-max
-        receive plane put a rung-independent floor under it. LL keeps the full padded plane."""
+    def test_ht_combine_input_is_the_full_static_receive_plane(self):
+        """The FLAT contract gives combine the dispatch output's static [num_recv_slots, hidden]
+        shape (required under graph capture); a count-sized slice needs an AUTO-sized group."""
         b = backend(ll=False)
         h = b._ensure_handle(problem(1))
         # 7 is what the stubbed `torch.zeros(...).item()` reports as the received count.
         self.assertEqual(h.count, 7)
-        self.assertEqual(h.combine_in_t, list(range(7)))
-        self.assertLess(len(h.combine_in_t), len(b._recv_x))
+        self.assertIs(h.combine_in_t, b._recv_x_t)
+
+
+def _deepep_v2_stubs():
+    """Fake torch / deep_ep so `import ep_deepep_v2` succeeds without the benchmark image."""
+    torch = types.ModuleType("torch")
+    torch.compile = lambda *a, **k: (lambda fn: fn)
+    dist = types.ModuleType("torch.distributed")
+    dist.group = types.SimpleNamespace(WORLD="world")
+    torch.distributed = dist
+    deep_ep = types.ModuleType("deep_ep")
+    deep_ep.ElasticBuffer = type("ElasticBuffer", (), {})
+    deep_ep.Buffer = type("Buffer", (), {})
+    return {"torch": torch, "torch.distributed": dist, "deep_ep": deep_ep}
+
+
+class DeepEPV2GraphContract(unittest.TestCase):
+    """Normal-mode decode drops ElasticBuffer's host sync -- vLLM's graphed deepep_v2 decode
+    contract -- and only that makes it graph-capturable; prefill keeps the exact-size sync."""
+
+    def _backend(self, **updates):
+        with mock.patch.dict(sys.modules, _deepep_v2_stubs()):
+            sys.modules.pop("ep_deepep_v2", None)
+            import ep_deepep_v2
+            sys.modules.pop("ep_deepep_v2", None)
+            return ep_deepep_v2.DeepEPV2Backend(args(**updates), 0, 8, 0, "cpu")
+
+    def _dispatch_kwargs(self, backend, tokens=3):
+        calls = []
+
+        def dispatch(*_args, **kwargs):
+            calls.append(kwargs)
+            return "recv_x", "recv_idx", "recv_w", "handle", None
+
+        backend.buffer = types.SimpleNamespace(dispatch=dispatch)
+        backend.max_tokens, backend.num_sms, backend.num_qps = 512, 1, 1
+        backend.dispatch(types.SimpleNamespace(
+            T=tokens, dispatch_x="x", topk_idx="i", topk_weights="w",
+        ))
+        return calls[0]
+
+    def _dispatched_cpu_sync(self, backend):
+        return self._dispatch_kwargs(backend)["do_cpu_sync"]
+
+    def test_no_sync_decode_sizes_the_receive_to_the_next_power_of_two(self):
+        # Worst-case sizing is num_max_tokens_per_rank * num_ranks rows; the ladder maximum made
+        # every rung receive (and FP8-dequantize) the T=512 plane. vLLM rounds the batch up.
+        backend = self._backend(mode="normal", phase="decode")
+        for tokens, capacity in ((1, 1), (3, 4), (64, 64), (65, 128), (512, 512)):
+            kwargs = self._dispatch_kwargs(backend, tokens)
+            self.assertEqual(kwargs["num_max_tokens_per_rank"], capacity)
+        prefill = self._backend(mode="normal", phase="prefill")
+        self.assertEqual(self._dispatch_kwargs(prefill, 3)["num_max_tokens_per_rank"], 512)
+
+    def test_normal_decode_is_the_no_sync_graphed_contract(self):
+        backend = self._backend(mode="normal", phase="decode")
+        self.assertIs(self._dispatched_cpu_sync(backend), False)
+        self.assertTrue(backend.cuda_graph_supported)
+        self.assertEqual(backend.kernel_generation, "v2-elastic-buffer-nosync")
+
+    def test_normal_prefill_keeps_the_host_sync_and_stays_eager(self):
+        backend = self._backend(mode="normal", phase="prefill")
+        self.assertIs(self._dispatched_cpu_sync(backend), True)
+        self.assertFalse(backend.cuda_graph_supported)
+        self.assertEqual(backend.kernel_generation, "v2-elastic-buffer")
+
+    def test_low_latency_stays_graphed(self):
+        backend = self._backend(mode="low-latency", phase="decode")
+        self.assertTrue(backend.cuda_graph_supported)
+
+
+class PerCaseGraphGates(unittest.TestCase):
+    """Graph replay is each adapter's default only where it was measured best and safe."""
+
+    def _load(self, name, extra):
+        torch = types.ModuleType("torch")
+        dist = types.ModuleType("torch.distributed")
+        dist.group = types.SimpleNamespace(WORLD="world")
+        torch.distributed = dist
+        torch.compile = lambda *a, **k: (lambda fn: fn)
+        modules = {"torch": torch, "torch.distributed": dist, **extra}
+        with mock.patch.dict(sys.modules, modules):
+            sys.modules.pop(name, None)
+            module = __import__(name)
+            sys.modules.pop(name, None)
+        return module
+
+    def _instance(self, cls, mode, world_size=8, **fields):
+        backend = object.__new__(cls)
+        backend.mode, backend.world_size = mode, world_size
+        backend.precision = fields.pop("precision", "bf16")
+        backend.args = types.SimpleNamespace(scale_up_domain=8, runner="h200-dgxc", **fields)
+        return backend
+
+    def test_uccl_low_latency_graphs_intranode_except_b200_fp8(self):
+        deep_ep = types.ModuleType("deep_ep")
+        deep_ep.Buffer, deep_ep.Config = object, object
+        module = self._load("ep_uccl", {"deep_ep": deep_ep})
+        cls = module.UCCLEPBackend
+        with mock.patch.dict(os.environ, {}, clear=True):
+            self.assertTrue(self._instance(cls, "low-latency").cuda_graph_supported)
+            self.assertFalse(self._instance(cls, "normal").cuda_graph_supported)
+            self.assertFalse(
+                self._instance(cls, "low-latency", world_size=16).cuda_graph_supported
+            )
+            b200_fp8 = self._instance(cls, "low-latency", precision="fp8")
+            b200_fp8.args.runner = "b200-nscale"
+            self.assertFalse(b200_fp8.cuda_graph_supported)
+            b200_fp8.precision = "bf16"
+            self.assertTrue(b200_fp8.cuda_graph_supported)
+        with mock.patch.dict(os.environ, {"UCCL_RDMA_ADAPTIVE_SLEEP": "1"}):
+            self.assertFalse(self._instance(cls, "low-latency").cuda_graph_supported)
+
+    def test_flashinfer_graphs_decode_only(self):
+        module = self._load("ep_flashinfer", {})
+        cls = module.FlashInferEPBackend if hasattr(module, "FlashInferEPBackend") else next(
+            value for value in vars(module).values()
+            if isinstance(value, type) and issubclass(value, EPBackend) and value is not EPBackend
+        )
+        self.assertTrue(self._instance(cls, "normal", phase="decode").cuda_graph_supported)
+        self.assertFalse(self._instance(cls, "normal", phase="prefill").cuda_graph_supported)
+
+    def test_nccl_graphs_low_latency_and_ht_decode_only(self):
+        with mock.patch.dict(sys.modules, _stub_modules()):
+            import importlib
+            import ep_nccl
+            cls = importlib.reload(ep_nccl).NCCLEPBackend
+        self.assertTrue(self._instance(cls, "normal", phase="decode").cuda_graph_supported)
+        self.assertFalse(self._instance(cls, "normal", phase="prefill").cuda_graph_supported)
+        self.assertTrue(self._instance(cls, "low-latency", phase="decode").cuda_graph_supported)
 
 if __name__ == "__main__":
     unittest.main()

@@ -42,6 +42,9 @@ class MoRIBackend(EPBackend):
     maturity = "production"  # vLLM --all2all-backend mori_*; SGLang --moe-a2a-backend mori
     SUPPORTED_MODES = ("normal", "low-latency")
     SUPPORTED_PRECISIONS = ("bf16", "fp8")
+    # Eager here; graph replay for MoRI is its own change (ROCm torch before 2.13 rejects the
+    # external events the replay windows are recorded with, so it needs its own event path).
+    CUDA_GRAPH_MODES = ()
     requires_fresh_pair = True
 
     def __init__(self, args, rank, world_size, local_rank, device):
