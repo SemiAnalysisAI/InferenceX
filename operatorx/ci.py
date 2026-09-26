@@ -395,15 +395,19 @@ def import_image(args) -> None:
             host, repository, tag = probe_module().registry_reference(image)
             uri = f"docker://{host}#{repository}:{tag}"
             # B300 login/compute homes are node-local; every importer gets private
-            # temporary paths. Preserve an explicitly configured shared cache.
+            # temporary paths. Preserve an explicitly configured shared cache. Where
+            # /tmp cannot hold overlay whiteouts (H100 DGXC) the node's own enroot
+            # paths are kept, as its InferenceX launcher imports with them.
             with tempfile.TemporaryDirectory(prefix="operatorx-enroot-") as scratch:
                 env = dict(os.environ)
-                env["TMPDIR"] = scratch
-                for name in ("TEMP", "DATA", "RUNTIME"):
+                private = os.environ.get("OPERATORX_ENROOT_DEFAULTS") != "1"
+                if private:
+                    env["TMPDIR"] = scratch
+                for name in ("TEMP", "DATA", "RUNTIME") if private else ():
                     directory = Path(scratch) / name.lower()
                     directory.mkdir()
                     env[f"ENROOT_{name}_PATH"] = str(directory)
-                if "ENROOT_CACHE_PATH" not in env:
+                if private and "ENROOT_CACHE_PATH" not in env:
                     cache = Path(scratch) / "cache"
                     cache.mkdir()
                     env["ENROOT_CACHE_PATH"] = str(cache)
@@ -585,6 +589,8 @@ def execute(args) -> None:
         import_env = dict(os.environ)
         if profile.get("enroot_cache_path"):
             import_env["ENROOT_CACHE_PATH"] = profile["enroot_cache_path"]
+        if hardware.get("enroot_defaults"):
+            import_env["OPERATORX_ENROOT_DEFAULTS"] = "1"
         command(import_command, root / "import.log", env=import_env)
         key = image_key(cell["image"], cell["digest"], image_platform)
         env = dict(os.environ)
