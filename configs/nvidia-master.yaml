@@ -5508,7 +5508,7 @@ qwen3.5-fp4-gb200-dynamo-sglang-agentic-mtp:
           additional-settings:
           - "CONFIG_FILE=recipes/qwen3.5/sglang/gb200-fp4/agentx/agg-variants.yaml:override_tp2ep2_hicache_cap48"
 minimaxm3-fp4-b300-vllm-agentic-mtp:
-  image: vllm/vllm-openai:nightly-1dc464d42681d22f38caf1fdc1eb632dc4421c45
+  image: vllm/vllm-openai:nightly-29468dde8b515031dc6d4d9d06bf0a2fa0442098
   model: nvidia/MiniMax-M3-NVFP4
   model-prefix: minimaxm3
   runner: cluster:b300-dsxe
@@ -5517,14 +5517,14 @@ minimaxm3-fp4-b300-vllm-agentic-mtp:
   multinode: false
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.683
+    - dram-utilization: 1.0
       search-space:
       - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1], srt-recipe: benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/b300-fp4-mtp/agentic.yaml }
       - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 5, 10, 15, 20], srt-recipe: benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/b300-fp4-mtp/agentic.yaml }
-      - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [30], srt-recipe: benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/b300-fp4-mtp/agentic.yaml }
+      - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [30, 40, 48, 64], srt-recipe: benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/b300-fp4-mtp/agentic.yaml }
     - dram-utilization: 1.0
       search-space:
-      - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [24], srt-recipe: benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/b300-fp4-mtp/agentic.yaml }
+      - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [24, 32, 40], srt-recipe: benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/b300-fp4-mtp/agentic.yaml }
 
 minimaxm3-fp4-gb300-dynamo-vllm-agentic-mtp-disagg:
   image: vllm/vllm-openai:nightly-5e35a6f4f9bbc217c599692157ca985c894373f7
@@ -5636,33 +5636,34 @@ minimaxm3-fp4-b300-trtllm-agentic-mtp:
 # MiniMax-M3's only active B200 configuration -- the 8k1k scenario that carried
 # the previous B200 curves was removed in #2493.
 #
-# TP4-only. The B300 sibling also runs a TP2 arm, but TP2 does not fit on B200:
+# TP4-only until a new TP2 arm is qualified. At 0.90 HBM utilization TP2
+# does not fit on B200:
 # the ~250 GB NVFP4 checkpoint leaves a 31.72 GiB KV pool at
 # --gpu-memory-utilization 0.9, and one request at the model's 1,048,576-token
 # max_model_len needs 37.62 GiB, so vLLM raises in _check_enough_kv_cache_memory
 # and the engine never reaches serving (run 31141913741 -- both TP2 cells, c1
-# and c2, died identically at init; every TP4 cell passed). This is structural,
-# not a concurrency cliff: the estimated max model length at TP2 is 883,840,
-# below the corpus context, so no conc-list would have made the arm run.
+# and c2, died identically at init; every TP4 cell passed). This is a startup
+# capacity limit at 0.90, not a concurrency cliff: the estimated max model
+# length at TP2 is 883,840, below the corpus context. The new 0.95 limit may
+# clear that check, but needs a live full-context run.
 #
-# Concurrency on the surviving arms still differs from B300, whose TP4 pool is
-# ~787 GB against B200's ~398 GB:
+# Concurrency on the surviving arms still differs from B300; at the prior
+# 0.90 HBM limit, its TP4 KV pool was ~787 GB against B200's ~398 GB:
 #   TP4   B300 runs 1-20; B200 samples 5-15 densely because the cliff lands
 #         inside that range at roughly half the KV, and retains 20 past it.
 #   TP4 + SimpleCPU  picks up at 20 rather than B300's 30, since the host tier
 #         has to start absorbing the working set one step earlier, and stops at
-#         40 rather than following B300 to 75. Past 40 the host tier is
+#         40 rather than following B300's new sweep to 64. Past 40 the host tier is
 #         absorbing a working set that never fit in B200's ~398 GB TP4 pool to
 #         begin with, so those points cost four engine starts each to trace a
 #         tail that is offload bandwidth, not the SKU.
 #
-# dram-utilization 0.683 is the B300 value verbatim, and it resolves to the same
-# 1,024 GB engine-level CPU KV budget at TP4: b200-nscale and b300-nv both report
-# more installed DRAM than MAX_AGENTIC_AVAILABLE_CPU_DRAM_MIB, so both clamp to
-# the same 3 TB AgentX ceiling before the proportional-GPU rule is applied.
-# GPU-resident points receive a zero budget.
+# B200's 1.0 offload arm uses the full declared host budget: 2,063,920 MiB
+# times TP4/8, or about 1,082 GB for this server. GPU-resident points receive
+# no host KV budget. B300 has a higher, 3 TB capped node budget (1,499 GB for
+# TP4, 749 GB for TP2 after whole-GB rounding).
 minimaxm3-fp4-b200-vllm-agentic-mtp:
-  image: vllm/vllm-openai:nightly-1dc464d42681d22f38caf1fdc1eb632dc4421c45
+  image: vllm/vllm-openai:nightly-29468dde8b515031dc6d4d9d06bf0a2fa0442098
   model: nvidia/MiniMax-M3-NVFP4
   model-prefix: minimaxm3
   runner: cluster:b200-nscale
