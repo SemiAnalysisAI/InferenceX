@@ -239,7 +239,7 @@ def test_srt_commands_run_in_the_srtctl_venv(tmp_path, monkeypatch):
     calls = []
 
     def fake_run(argv, *_args, **_kwargs):
-        calls.append((list(argv), os.environ["PATH"]))
+        calls.append((list(argv), os.environ["PATH"], os.getcwd()))
         if argv[:3] == ["python3", "-m", "infx.srt_slurm.single_node"]:
             raise _StopAfterPrepare
         return subprocess.CompletedProcess(argv, 0, "", "")
@@ -251,6 +251,8 @@ def test_srt_commands_run_in_the_srtctl_venv(tmp_path, monkeypatch):
     with pytest.raises(_StopAfterPrepare):
         srt_launch.launch_srt_single_node("h100-dgxc-slurm")
 
-    argv, path = calls[-1]
+    argv, path, cwd = calls[-1]
     assert argv[:4] == ["python3", "-m", "infx.srt_slurm.single_node", "prepare"]
     assert path.split(":")[0].endswith("/checkout/.venv/bin")
+    # srtctl finds srtslurm.yaml in the working directory, as after the bash `cd`.
+    assert cwd.endswith("/checkout")

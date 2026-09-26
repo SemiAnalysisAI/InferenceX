@@ -434,17 +434,15 @@ def launch_srt_single_node(
 
     # Install uv + venv.
     _ensure_uv()
-    old_cwd = str(Path.cwd())
+    # setup_srt_slurm cd's into the checkout and every later step runs there:
+    # srtctl reads srtslurm.yaml from the working directory.
     os.chdir(srtctl_root)
-    try:
-        subprocess.run(["uv", "venv", "--quiet", ".venv"], check=True)
-        # Activate the venv by adjusting PATH and VIRTUAL_ENV.
-        venv_bin = os.path.join(srtctl_root, ".venv", "bin")
-        os.environ["VIRTUAL_ENV"] = os.path.join(srtctl_root, ".venv")
-        os.environ["PATH"] = f"{venv_bin}:{os.environ['PATH']}"
-        subprocess.run(["uv", "pip", "install", "--quiet", "-e", "."], check=True)
-    finally:
-        os.chdir(old_cwd)
+    subprocess.run(["uv", "venv", "--quiet", ".venv"], check=True)
+    # Activate the venv by adjusting PATH and VIRTUAL_ENV.
+    venv_bin = os.path.join(srtctl_root, ".venv", "bin")
+    os.environ["VIRTUAL_ENV"] = os.path.join(srtctl_root, ".venv")
+    os.environ["PATH"] = f"{venv_bin}:{os.environ['PATH']}"
+    subprocess.run(["uv", "pip", "install", "--quiet", "-e", "."], check=True)
 
     os.environ["PYTHONPATH"] = f"{github_workspace}:{os.environ.get('PYTHONPATH', '')}"
 
