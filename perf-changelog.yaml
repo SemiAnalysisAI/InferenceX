@@ -9008,3 +9008,11 @@
   description:
     - "Port the settings to active srt-slurm recipes and use FlashInfer draft attention with inherited FP8 KV."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3435
+
+- config-keys:
+    - minimaxm3-fp4-b300-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Set B300 TP2 offload to 0.92 GPU memory utilization to reserve MSA prefill workspace."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3435
