@@ -35,7 +35,7 @@
 | Agent 规则与仓库地图 | `AGENTS.md` | 快速政策很完整，但没有按任务组织导航 |
 | PR 审阅与合并 | `CONTRIBUTING.md`、`docs/PR_REVIEW_CHECKLIST.md` | 知道文件位置后容易找到，但没有统一文档索引 |
 | 常见 CI 与集群故障 | `KLAUD_DEBUG.md` | 恢复步骤有价值，但与历史故障背景混在一起 |
-| 配置 Schema 与拓扑 | `configs/CONFIGS.md`、`utils/matrix_logic/validation.py` | Schema 参考存在，但修改流程与消费路径分散 |
+| 配置 Schema 与拓扑 | `configs/CONFIGS.md`、`infx/matrix/validation.py` | Schema 参考存在，但修改流程与消费路径分散 |
 | 矩阵生成与扫描复用 | `.github/workflows/README.md`、`.github/workflows/*.yml` | 运维指南位于 `.github`，不在主要文档路径下 |
 | 评估与分数门禁 | `utils/evals/EVALS.md`、`infx/evals/thresholds.yaml` | 参考文档详细，但与吞吐量、结果收集的关系不直观 |
 | 多节点 Recipe | `benchmarks/multi_node/srt-slurm-recipes/RECIPES.md` | 编辑任一文件前应明确 Recipe 与主配置的耦合关系 |
