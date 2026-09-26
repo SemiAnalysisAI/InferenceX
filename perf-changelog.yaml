@@ -8962,3 +8962,15 @@
     - "旧镜像切出于 2026-09-16，新镜像领先 441 个提交，包含当前曲线所不含的三项 Kimi-K3 正确性修复：vllm-project/vllm#51483 不再将无状态的首个 chunk 当作 decode，vllm-project/vllm#57098 修复 Kimi-K3 reasoning parser，vllm-project/vllm#57430 支持 routed expert 量化。新镜像还包含本臂在并发大于 4 时均会使用的 ROCm CPU KV 卸载改动，包括 vllm-project/vllm#57160（ROCm CPU KV 卸载改用私有 pinned 张量）与 vllm-project/vllm#50045（卸载背压检测）。"
     - "This image bump does not change the DSpark draft model data type. Only the image: line changes and kimik3_fp4_mi355x_mtp.sh is unchanged; the draft loads unmodified from the published Inferact/Kimi-K3-DSpark checkpoint via --speculative-config (model=Inferact/Kimi-K3-DSpark, method=dspark). The only dtype in that speculative-config is kv_cache_dtype=fp8, which sets the draft KV-cache storage precision, not the draft weights. No flag overrides or re-quantizes the draft-model weights, so the draft dtype is preserved from its checkpoint across this re-sweep."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3419
+
+- config-keys:
+    - minimaxm3-fp8-h200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh the MiniMax-M3 H200 vLLM AgentX image from nightly-d9105ea8 (2026-09-07) to nightly-ddd6fbca148a867aad1fcab7ec72f582b9977db4 (vllm-project/vllm@ddd6fbca, 2026-09-26) and re-measure the arm."
+    - "Nightlies from 2026-09-15 on lazy-mmap large checkpoints on h200-dgxc's VIRTIOFS HF cache ~14x slower and miss the 3600 s readiness window (seen on #3134). Like the DeepSeek-V4.1-Flash H200 recipe, the server now uses --safetensors-load-strategy prefetch with VLLM_ENGINE_READY_TIMEOUT_S=7200 and a 7200 s health-check window. Hopper runs FA3, so the Blackwell FA4 fp8-descale issue does not apply and the EAGLE3 draft keeps attention_backend FLASH_ATTN."
+    - "将 MiniMax-M3 H200 vLLM AgentX 镜像从 nightly-d9105ea8（2026-09-07）刷新至 nightly-ddd6fbca148a867aad1fcab7ec72f582b9977db4（vllm-project/vllm@ddd6fbca，2026-09-26）并重新测量该臂。"
+    - "自 2026-09-15 起的 nightly 在 h200-dgxc 的 VIRTIOFS HF 缓存上以 lazy mmap 加载大 checkpoint 慢约 14 倍，会超出 3600 秒就绪窗口（见 #3134）。与 DeepSeek-V4.1-Flash H200 配方一致，服务端改用 --safetensors-load-strategy prefetch，并设置 VLLM_ENGINE_READY_TIMEOUT_S=7200 与 7200 秒健康检查窗口。Hopper 使用 FA3，Blackwell FA4 fp8 descale 问题不适用，EAGLE3 draft 保持 attention_backend FLASH_ATTN。"
+    - "This change does not alter the EAGLE3 draft model data type. The draft loads unmodified from the published Inferact/MiniMax-M3-EAGLE3-GQA checkpoint via --speculative-config (method=eagle3). kv-cache-dtype fp8 sets KV-cache storage precision, not the draft weights, and no flag overrides or re-quantizes the draft weights."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3493
