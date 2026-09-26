@@ -861,7 +861,8 @@ def main() -> None:
             if not digests[cell["image"]] and cell.get("recipe"):
                 cell["recipe_image_unavailable"] = cell["image"]
                 cell["image"] = images[cell["backends"][0]]["image"]
-                digests.setdefault(cell["image"], probe_module().resolve_image_digest(cell["image"]))
+                if not digests.get(cell["image"]):
+                    digests[cell["image"]] = probe_module().resolve_image_digest(cell["image"])
         for image in {c["image"] for c in result["include"]}:
             if not digests.get(image):
                 raise RuntimeError(f"cannot resolve image digest: {image}")
