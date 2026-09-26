@@ -138,7 +138,7 @@ needed; if a point matches zero or several variants, fix the recipe, not the lau
 ## Step 5 — perf-changelog
 
 Append a `- config-keys: [<key>]` block with a clear `description` and `pr-link: TBD`. The
-changelog diff vs `origin/main` is what `process_changelog.py` uses to select the sweep, so a
+changelog diff vs `origin/main` is what `infx.matrix.plan` uses to select the sweep, so a
 new entry is **required** for CI to run your config.
 
 ## Step 6 — validate locally

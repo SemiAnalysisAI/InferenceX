@@ -302,13 +302,11 @@ def validate_generated_config(
     )
     if result.returncode != 0:
         detail = result.stderr.strip() or result.stdout.strip()
-        raise ChangelogValidationError(f"process_changelog.py rejected the diff:\n{detail}")
+        raise ChangelogValidationError(f"infx.matrix.plan rejected the diff:\n{detail}")
     try:
         json.loads(result.stdout)
     except json.JSONDecodeError as exc:
-        raise ChangelogValidationError(
-            f"process_changelog.py returned invalid JSON: {exc}"
-        ) from exc
+        raise ChangelogValidationError(f"infx.matrix.plan returned invalid JSON: {exc}") from exc
 
 
 def validate_matrix_compatible_change(

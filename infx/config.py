@@ -1,5 +1,6 @@
 """Default repository paths used by sweep planning."""
 
+import os
 from pathlib import Path
 
 MASTER_CONFIGS = ["configs/amd-master.yaml", "configs/nvidia-master.yaml"]
@@ -12,5 +13,7 @@ LEGACY_GENERATOR_SCRIPT = "utils/matrix_logic/generate_sweep_configs.py"
 
 
 def repository_root() -> Path:
+    if root := os.environ.get("INFERENCEX_REPOSITORY_ROOT"):
+        return Path(root)
     source_root = Path(__file__).resolve().parent.parent
     return source_root if (source_root / "configs").is_dir() else Path.cwd()

@@ -37,7 +37,7 @@
 | [`perf-changelog.yaml`](../perf-changelog.yaml) | 以仅追加方式选择要针对某项变更运行的配置键 |
 | [`infx/matrix/validation.py`](../infx/matrix/validation.py) | 强制执行的 Pydantic 模式和跨字段不变量 |
 | [`infx/matrix/generate.py`](../infx/matrix/generate.py) | 搜索空间展开、默认值、过滤器、派生元数据、运行器解析和评测选择 |
-| [`infx/matrix/plan.py`](../infx/matrix/plan.py) | 变更日志选择、配置键展开、追加模式比较、矩阵分桶及最终验证；`utils/process_changelog.py` 保留 CLI |
+| [`infx/matrix/plan.py`](../infx/matrix/plan.py) | 变更日志选择、配置键展开、追加模式比较、矩阵分桶及最终验证；通过 `python -m infx.matrix.plan` 运行 |
 | [`.github/workflows/run-sweep.yml`](../.github/workflows/run-sweep.yml) | 触发策略、矩阵扇出、收集依赖和跨仓库摄取分派 |
 | [`.github/workflows/benchmark-tmpl.yml`](../.github/workflows/benchmark-tmpl.yml)、[`.github/workflows/benchmark-multinode-tmpl.yml`](../.github/workflows/benchmark-multinode-tmpl.yml) | 可复用作业输入契约、环境映射、启动器调用、结果检查和单作业上传 |
 | [`runners/`](../runners/) | 特定机群的模型路径、挂载、容器或 Slurm 设置以及基准测试脚本路由 |
@@ -45,7 +45,7 @@
 | [`benchmarks/`](../benchmarks/) | 特定于框架和拓扑的服务器与客户端命令 |
 | [`infx/github.py`](../infx/github.py) | 工作流操作共用的 GitHub REST、分页和评论表态基础操作 |
 | [`infx/workflows/`](../infx/workflows/) | 复用命令解析、授权查找、源 Run 验证及表态反馈；现有复用 CLI 保持兼容 |
-| [`infx/results/`](../infx/results/) | 可导入的结果构建函数、组件元数据解析和功耗指标转换；[`utils/process_result.py`](../utils/process_result.py) 保留固定序列处理的 CLI |
+| [`infx/results/`](../infx/results/) | 可导入的结果构建函数、组件元数据解析和功耗指标转换；通过 `python -m infx.results.fixed_sequence` 处理固定序列结果 |
 | [`.github/workflows/collect-results.yml`](../.github/workflows/collect-results.yml)、[`.github/workflows/collect-evals.yml`](../.github/workflows/collect-evals.yml) | 运行级基准测试和评测工件聚合 |
 
 ### InferenceX-app 使用方
@@ -71,7 +71,7 @@
 ```mermaid
 flowchart LR
   A[主 YAML 和 runners.yaml] --> B[Pydantic 验证]
-  P[perf-changelog 新增项] --> C[process_changelog.py]
+  P[perf-changelog 新增项] --> C[infx.matrix.plan]
   B --> D[infx.matrix.generate]
   C --> D
   D --> E[经过验证的 JSON 矩阵]
@@ -123,7 +123,7 @@ flowchart LR
 1. 主文件是受支持工作的目录。变更日志是审计记录和触发选择，而不是配置内容的另一个副本。
 2. 如果编辑主条目时没有添加匹配的变更日志条目，则不会通过 `run-sweep.yml` 调度该变更，因为其路径触发器监视的是 `perf-changelog.yaml`。
 
-`process_changelog.py` 会在发出的 JSON 中保留变更日志元数据。工作流随后将其作为 `changelog-metadata` 上传，使 InferenceX-app 能够将持久化的数据行与所选变更关联起来。
+`infx.matrix.plan` 会在发出的 JSON 中保留变更日志元数据。工作流随后将其作为 `changelog-metadata` 上传，使 InferenceX-app 能够将持久化的数据行与所选变更关联起来。
 
 ## 阶段 2：验证与矩阵生成
 
@@ -142,13 +142,13 @@ flowchart LR
 
 从仓库根目录使用 `python -m infx.<package>.<module>` 运行命令。依赖仍由各命令分别管理；导入 `infx` 不会加载基准测试客户端或评测依赖。`utils/` 保留工作流、恢复命令或显式兼容性测试仍在使用的兼容入口；没有调用方的转发包装文件已删除。数据集工具、AgentX 聚合与分析、评测适配器与补丁，以及基准测试客户端辅助模块应使用规范的 `infx` 路径。测试、运行器配置 Shell 脚本、AgentX 运行时依赖清单及外部子模块仍位于 `utils/`。
 
-复制到隔离环境中的评测适配器和补丁使用 `infx/evals` 下的实际文件，因此仍可独立运行。可信工作流辅助模块会明确选择工具代码所在的检出目录。需要支持旧目标修订的工作流步骤直接调用稳定的 `utils/` 入口：当前的轻量入口转调 `infx`，旧提交则运行原有实现。调用处无需检查包模块是否存在。
+复制到隔离环境中的评测适配器和补丁使用 `infx/evals` 下的实际文件，因此仍可独立运行。可信工作流辅助模块会明确选择工具代码所在的检出目录。固定序列结果处理使用单独检出的工作流修订版中的包，并以被测检出目录为工作目录。因此，历史被测修订版无需包含结果处理包。
 
 默认仓库路径定义在 [`infx/config.py`](../infx/config.py) 中。配置常量从 `infx.config` 导入，模式从 `infx.matrix.validation` 导入。包的 `__init__.py` 文件保持精简。
 
-`utils/process_changelog.py` 保留为轻量兼容入口，其脚本命令、参数、相对输入路径和依赖保持不变，从仓库检出目录运行时无需安装包。矩阵生成通过 `python -m infx.matrix.generate` 运行；历史 append-only 规划会运行基准修订版自身的生成器，对早于该模块的修订版则运行其遗留的 `utils/matrix_logic/generate_sweep_configs.py` 脚本。`process_changelog.py` 指向 `infx.matrix.plan`；`validate_perf_changelog.py` 保留现有处理器 CLI 边界和诊断。
+从仓库根目录或安装好的包运行 `python -m infx.matrix.plan` 进行变更日志规划，运行 `python -m infx.workflows.validate_perf_changelog` 进行验证。矩阵生成通过 `python -m infx.matrix.generate` 运行；历史 append-only 规划使用基准修订版自身的生成器，缺少模块时使用该修订版的旧脚本。摄取恢复使用恢复工具自身的规划模块，以及所选 worktree 的配置和配方。
 
-使用当前工具代码的工作流直接调用 `infx` 模块，测试也导入规范模块。可信调度通过 `PYTHONPATH` 和 Python 的 `-P` 选项明确指定工具代码所在的检出目录，同时仍以目标检出目录作为工作目录读取输入。手动矩阵生成、性能分析及基准测试步骤使用稳定的脚本入口来支持旧修订；追加模式的历史提取也使用各修订自身的兼容入口。
+使用当前工具代码的工作流直接调用 `infx` 模块，测试也导入规范模块。可信调度和结果处理通过 `PYTHONPATH` 和 Python 的 `-P` 选项明确指定工具代码所在的检出目录，同时仍以目标检出目录作为工作目录读取输入。恢复工具将 `INFERENCEX_REPOSITORY_ROOT` 设为所选 worktree，确保配方数据来自该修订版；其他调用方仍默认使用源码检出目录。
 
 `infx.matrix.plan.build_plan(changelog_data, base_ref=..., head_ref=...)` 返回完整扫描的已验证 `ChangelogMatrixEntry`，统一负责条目优先级、基准测试与评测各自的场景覆盖、裁剪、指纹及输出分桶。当前主配置文件只加载一次，运行器元数据在首次生成时加载一次；每组选中的配置直接调用 `infx.matrix.generate.generate_config_matrix`。当前输入来自传入的路径（默认为检出目录中的路径），`head_ref` 仍用作来源元数据。规划过程假设这些文件在本次操作期间保持稳定。
 
@@ -224,7 +224,7 @@ bash ./runners/launch_${RUNNER_NAME%%_*}.sh
 
 单节点模板根据实验标识、精度、框架、拓扑、解聚、推测解码、并发度和具体运行器计算稳定的 `RESULT_FILENAME`。启动器和基准测试代码必须以该标识写入预期文件。
 
-对于固定序列吞吐量作业，工作流要求存在 `<RESULT_FILENAME>.json`，随后运行 [`utils/process_result.py`](../utils/process_result.py)，并将 `agg_<RESULT_FILENAME>.json` 作为 `bmk_<RESULT_FILENAME>` 上传。
+对于固定序列吞吐量作业，工作流要求存在 `<RESULT_FILENAME>.json`，随后运行 [`infx/results/fixed_sequence.py`](../infx/results/fixed_sequence.py)，并将 `agg_<RESULT_FILENAME>.json` 作为 `bmk_<RESULT_FILENAME>` 上传。
 
 ### 复用与扩展结果处理
 

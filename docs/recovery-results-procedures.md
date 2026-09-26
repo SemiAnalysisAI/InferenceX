@@ -33,7 +33,7 @@ audit and server artifacts before returning the failure.
 For a normal single-node throughput job:
 
 1. The launcher must leave `${RESULT_FILENAME}.json` in the workspace. The workflow waits briefly and fails if it never appears.
-2. `utils/process_result.py` reads the raw JSON plus topology/runtime environment variables, normalizes metadata and per-GPU throughput, converts millisecond fields to seconds, derives interactivity, and writes `agg_${RESULT_FILENAME}.json`.
+2. `infx/results/fixed_sequence.py` reads the raw JSON plus topology/runtime environment variables, normalizes metadata and per-GPU throughput, converts millisecond fields to seconds, derives interactivity, and writes `agg_${RESULT_FILENAME}.json`.
 3. The job uploads that aggregate as artifact `bmk_${RESULT_FILENAME}`.
 4. `collect-results.yml` downloads `bmk_*`, runs `python3 -m infx.results.collect_results results/ bmk`, and uploads `results_bmk`, whose payload is `agg_bmk.json`.
 
@@ -49,7 +49,7 @@ DECODE_GPUS="$decode_gpus" \
 
 The uploaded `bmk_${RESULT_FILENAME}` artifact contains `agg_${RESULT_FILENAME}_*.json`. Missing source files indicate a benchmark/launcher failure. Missing `agg_` files indicate a processing failure. Missing `results_bmk` indicates a collection failure. Do not classify any of those as a database failure.
 
-Sources: [single-node process/upload](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.github/workflows/benchmark-tmpl.yml#L289-L323), [multi-node process/upload](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.github/workflows/benchmark-multinode-tmpl.yml#L345-L387), [`process_result.py` contract](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/utils/process_result.py#L43-L75), [throughput collector](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.github/workflows/collect-results.yml#L25-L38).
+Sources: [single-node process/upload](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.github/workflows/benchmark-tmpl.yml#L289-L323), [multi-node process/upload](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.github/workflows/benchmark-multinode-tmpl.yml#L345-L387), [`infx.results.fixed_sequence` contract](../infx/results/fixed_sequence.py), [throughput collector](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.github/workflows/collect-results.yml#L25-L38).
 
 ### Eval results
 
@@ -406,7 +406,7 @@ Classify by the earliest broken boundary, not the final red job.
 | --- | --- | --- |
 | **Benchmark/runtime** | server never becomes ready, OOM, HIP/CUDA/RCCL/NCCL, request failures, raw result missing, or zero successful requests | Reproduce the exact config, compare with a working node/SKU, and repair the recipe/image/runtime. Do not touch ingest |
 | **Eval** | eval-only has no `results*.json`, score validation fails, `meta_env.json` coverage/concurrency mismatch, or sample files are incomplete | Inspect evaluator output and requested concurrencies. Preserve uploaded partial artifacts. Fix the evaluator/config before rerun |
-| **Processing/collection** | raw JSON exists but `agg_*.json` is missing, collector cannot parse, or `results_bmk` or `eval_results_all` is absent | Inspect `process_result.py`/collector logs and artifact layout. Rerun failed workflow jobs only after the format problem is understood |
+| **Processing/collection** | raw JSON exists but `agg_*.json` is missing, collector cannot parse, or `results_bmk` or `eval_results_all` is absent | Inspect `infx.results.fixed_sequence`/collector logs and artifact layout. Rerun failed workflow jobs only after the format problem is understood |
 | **Runner workspace** | checkout cleanup `EACCES` under `_work/.../benchmark_logs/logs/slurm_job-*` | Read-only ownership scan, approved scoped deletion, zero-result verification, then rerun |
 | **MI300X provisioning** | pyxis/enroot namespace signature, with failing nodes reading sysctl `1` and working nodes reading `0` | Apply the approved node repair and escalate the provisioning-image fix, then rerun affected jobs |
 | **Dispatch/handoff** | no app run after `trigger-ingest`, curl/auth failure, or app preparation logs showing wrong IDs or missing/expired artifacts | Repair dispatch credentials/selection or use recovery. Do not rerun GPU work |

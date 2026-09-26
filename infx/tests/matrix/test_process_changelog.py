@@ -554,21 +554,93 @@ def committed_planning_repo(planning_repo):
     return root, base, head
 
 
+@pytest.mark.parametrize("shadow_package", [False, True])
+def test_recovery_uses_current_planner_with_historical_checkout(
+    committed_planning_repo, shadow_package
+):
+    from infx.workflows.recover_failed_ingest import build_config
+
+    root, base, head = committed_planning_repo
+    master_path = root / "configs/nvidia-master.yaml"
+    master = yaml.safe_load(master_path.read_text())
+    master["multi"]["scenarios"]["fixed-seq-len"][0]["search-space"][0]["prefill"][
+        "additional-settings"
+    ] = ["CONFIG_FILE=recipes/recovery-fixture.yaml"]
+    master_path.write_text(yaml.safe_dump(master, sort_keys=False))
+    recipe = root / "benchmarks/multi_node/srt-slurm-recipes/recovery-fixture.yaml"
+    recipe.parent.mkdir(parents=True)
+    recipe.write_text("schema: 2\nroles:\n  prefill: {nodes: 3}\n  decode: {nodes: 4}\n")
+    changelog = root / "perf-changelog.yaml"
+    entries = yaml.safe_load(changelog.read_text())
+    entries[0]["config-keys"] = ["multi"]
+    changelog.write_text(yaml.safe_dump(entries, sort_keys=False))
+    shutil.rmtree(root / "infx")
+    shutil.rmtree(root / "utils", ignore_errors=True)
+    if shadow_package:
+        (root / "infx").mkdir()
+        (root / "infx/__init__.py").write_text("raise RuntimeError('wrong tooling checkout')\n")
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    subprocess.run(["git", "commit", "-qm", "historical tooling fixture"], cwd=root, check=True)
+    head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
+    changelog.write_text("\n" + yaml.safe_dump(entries, sort_keys=False))
+    output, metadata = root / "config.json", root / "metadata.json"
+
+    result = build_config(root, base, head, 1, "perf-changelog.yaml", output, metadata)
+
+    assert result["fixed_rows"] == 1
+    assert result["agentic_rows"] == result["eval_jobs"] == 0
+    config = json.loads(output.read_text())
+    assert [row["conc"] for row in config["multi_node"]["8k1k"]] == [[16, 32, 64]]
+    assert [row["node-count"] for row in config["multi_node"]["8k1k"]] == [7]
+    written_metadata = json.loads(metadata.read_text())
+    assert written_metadata["base_ref"] == base
+    assert written_metadata["head_ref"] == head
+    assert [entry["pr-link"] for entry in written_metadata["entries"]] == [
+        "https://github.com/SemiAnalysisAI/InferenceX/pull/1"
+    ]
+
+
+def test_historical_generator_uses_snapshot_recipes_not_inherited_recovery_root(
+    planning_repo, monkeypatch
+):
+    root, master, _ = planning_repo
+    master["multi"]["scenarios"]["fixed-seq-len"][0]["search-space"][0]["prefill"][
+        "additional-settings"
+    ] = ["CONFIG_FILE=recipes/snapshot.yaml"]
+    (root / "configs/nvidia-master.yaml").write_text(yaml.safe_dump(master, sort_keys=False))
+    recipe = root / "benchmarks/multi_node/srt-slurm-recipes/snapshot.yaml"
+    recipe.parent.mkdir(parents=True)
+    recipe.write_text("schema: 2\nroles:\n  prefill: {nodes: 3}\n  decode: {nodes: 4}\n")
+    unrelated = root / "other-revision"
+    unrelated.mkdir()
+    monkeypatch.setenv("INFERENCEX_REPOSITORY_ROOT", str(unrelated))
+    inputs = process_changelog.GenerationInputs(
+        ["configs/amd-master.yaml", "configs/nvidia-master.yaml"],
+        ("-m", "infx.matrix.generate"),
+        "configs/runners.yaml",
+        str(root),
+    )
+
+    rows = process_changelog.generate_matrix(
+        ["multi"], ["--no-evals", "--scenario-type", "fixed-seq-len"], inputs
+    )
+
+    assert [row["node-count"] for row in rows] == [7]
+    assert rows[0]["conc"] == [16, 32, 64]
+
+
 def test_validator_uses_trusted_entrypoints_while_reading_another_checkout(committed_planning_repo):
     root, base, head = committed_planning_repo
-    source = Path(__file__).resolve().parents[3]
     tooling = root / ".tooling"
     tooling.mkdir()
     shutil.move(root / "infx", tooling / "infx")
     shutil.rmtree(root / "utils", ignore_errors=True)
-    (tooling / "utils").mkdir()
-    for script in ("validate_perf_changelog.py", "process_changelog.py"):
-        shutil.copy(source / "utils" / script, tooling / "utils" / script)
     (root / "infx").mkdir()
     (root / "infx/__init__.py").write_text("raise RuntimeError('wrong tooling checkout')\n")
     env = {key: value for key, value in os.environ.items() if key != "PYTHONPATH"}
+    env["PYTHONPATH"] = str(tooling)
     result = subprocess.run(
-        [sys.executable, str(tooling / "utils/validate_perf_changelog.py"),
+        [sys.executable, "-P", "-m", "infx.workflows.validate_perf_changelog",
          "--base-ref", base, "--head-ref", head],
         cwd=root, env=env, capture_output=True, text=True, timeout=10,
     )
@@ -584,7 +656,7 @@ def changelog_run(planning_repo, monkeypatch, capsys):
                     "pr-link": "https://github.com/SemiAnalysisAI/InferenceX/pull/1",
                     **entry} for entry in entries]
         monkeypatch.setattr(process_changelog, "get_added_lines", lambda *_: json.dumps(entries))
-        monkeypatch.setattr(sys, "argv", ["process_changelog.py", "--base-ref", "base",
+        monkeypatch.setattr(sys, "argv", ["infx.matrix.plan", "--base-ref", "base",
                             "--head-ref", "head", "--changelog-file", "perf-changelog.yaml", *cli_flags])
         process_changelog.main()
         captured = capsys.readouterr()

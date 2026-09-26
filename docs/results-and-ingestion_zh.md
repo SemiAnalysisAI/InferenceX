@@ -13,7 +13,7 @@
 | 权威来源 | 控制内容 |
 | --- | --- |
 | [`benchmark-tmpl.yml`](../.github/workflows/benchmark-tmpl.yml)、[`benchmark-multinode-tmpl.yml`](../.github/workflows/benchmark-multinode-tmpl.yml) | 吞吐量、评测和 AgentX 工件的单配置名称、文件及上传规则 |
-| [`utils/process_result.py`](../utils/process_result.py) | 固定序列吞吐量聚合架构及派生的每 GPU 指标 |
+| [`infx/results/fixed_sequence.py`](../infx/results/fixed_sequence.py) | 固定序列吞吐量聚合架构及派生的每 GPU 指标 |
 | [`infx/results/collect_results.py`](../infx/results/collect_results.py)、[`collect-results.yml`](../.github/workflows/collect-results.yml) | 将基准结果递归收集为 `agg_<prefix>.json` 和 `results_<prefix>` |
 | [`infx/results/collect_eval_results.py`](../infx/results/collect_eval_results.py)、[`collect-evals.yml`](../.github/workflows/collect-evals.yml) | 评测发现、指标提取、批量并发选择及 `eval_results_<prefix>` |
 | [`infx/results/evals.py`](../infx/results/evals.py)、[`eval_artifacts.py`](../infx/results/eval_artifacts.py) | 供收集流程和 Klaud 共用的评测读取、结果选择、复用一致性检查及重跑去重 |
@@ -61,7 +61,7 @@
 
 ### 生产端和收集器
 
-对于单节点固定序列任务，[`benchmark-tmpl.yml`](../.github/workflows/benchmark-tmpl.yml) 根据实验、精度、框架、TP/PP/DCP/PCP/EP/DP-attention、解耦、推测模式、并发和具体 runner 构建 `RESULT_FILENAME`。基准先写入 `<RESULT_FILENAME>.json`。[`utils/process_result.py`](../utils/process_result.py) 读取该文件并写入 `agg_<RESULT_FILENAME>.json`。工作流按下列身份上传：
+对于单节点固定序列任务，[`benchmark-tmpl.yml`](../.github/workflows/benchmark-tmpl.yml) 根据实验、精度、框架、TP/PP/DCP/PCP/EP/DP-attention、解耦、推测模式、并发和具体 runner 构建 `RESULT_FILENAME`。基准先写入 `<RESULT_FILENAME>.json`。[`infx/results/fixed_sequence.py`](../infx/results/fixed_sequence.py) 读取该文件并写入 `agg_<RESULT_FILENAME>.json`。工作流按下列身份上传：
 
 ```text
 artifact: bmk_<RESULT_FILENAME>
@@ -103,7 +103,7 @@ InferenceX-app 将路由字段作为列或配置维度，并把数值测量存�
 
 `power_invalid_reasons` 和 `power_audit` 在数值指标旁携带有界摘要，包括可用的测量窗口、预期与观测 GPU 数、采样诊断、观测设备标识和生产者版本。`source` 指向保留的 `power_validation_*.json` 工件名称。设备标识保留采集器原有语义，本地 SMI 序号不是物理 UUID 的证明。
 
-对于多节点固定序列任务，`utils/process_result.py --all` 先处理所有已有结果，再返回失败。它接受 `_c<N>_gpus_...`、`_conc<N>_gpus_...` 和 AMD 的 `_concurrency_<N>_req_rate_<R>_gpus_...` 文件名，也支持 `inf` 请求速率。它将结果并发度与 `CONC_LIST` 比较，拒绝重复或矛盾的点身份，并将遗漏和错误记录到 `result_processing_<RESULT_FILENAME>.json`。共享工作池通过 `AGGREGATE_GPUS` 及零值角色 GPU 数进行遥测验证；独立的 prefill/decode 能耗保持缺失。当 `DISAGG=true` 的配置组中某个点没有 decode worker 时，聚合行会有意设置 `disagg: false` 并记录 `num_aggregate_gpu`；文件名、工件名和工作流输入仍保留配置组身份。下游应按聚合行的拓扑解释测量结果。
+对于多节点固定序列任务，`python -m infx.results.fixed_sequence --all` 先处理所有已有结果，再返回失败。它接受 `_c<N>_gpus_...`、`_conc<N>_gpus_...` 和 AMD 的 `_concurrency_<N>_req_rate_<R>_gpus_...` 文件名，也支持 `inf` 请求速率。它将结果并发度与 `CONC_LIST` 比较，拒绝重复或矛盾的点身份，并将遗漏和错误记录到 `result_processing_<RESULT_FILENAME>.json`。共享工作池通过 `AGGREGATE_GPUS` 及零值角色 GPU 数进行遥测验证；独立的 prefill/decode 能耗保持缺失。当 `DISAGG=true` 的配置组中某个点没有 decode worker 时，聚合行会有意设置 `disagg: false` 并记录 `num_aggregate_gpu`；文件名、工件名和工作流输入仍保留配置组身份。下游应按聚合行的拓扑解释测量结果。
 
 PR changelog 选择具有代表性的 NVIDIA 和 AMD 覆盖，并非所有受影响配置的完整列表；共享处理逻辑的变更适用于所有固定序列配置。
 

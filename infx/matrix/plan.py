@@ -398,7 +398,14 @@ def generate_matrix(
     command = _matrix_command(config_keys, flags, inputs)
     try:
         result = subprocess.run(
-            command, capture_output=True, text=True, check=True, cwd=inputs.root if inputs else None
+            command,
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=inputs.root if inputs else None,
+            env={**os.environ, "INFERENCEX_REPOSITORY_ROOT": str(Path(inputs.root).resolve())}
+            if inputs and inputs.root
+            else None,
         )
     except subprocess.CalledProcessError as exc:
         print(exc.stderr)
