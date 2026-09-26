@@ -8371,7 +8371,7 @@ dsv41flash-fp4-b200-vllm-agentic-dspark:
 # Follows the cookbook's verified Blackwell TP4/EP4 low-latency cell; backends
 # resolve automatically (dsv4 / flashinfer_mxfp4 / flashinfer_cutedsl).
 dsv41flash-fp4-b200-sglang-agentic-dspark:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260922-582389ce@sha256:0e1b14e302619a42ef5581b87db6804651d4f946301cf543d74a3a1eb1c33b40
+  image: lmsysorg/sglang:nightly-dev-cu13-20260926-1f6ce4b0@sha256:2557b8c96ba1117b80feee95e936e99d4c96427cead1c29b137c3d17e3861fd7
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:b200-nscale
