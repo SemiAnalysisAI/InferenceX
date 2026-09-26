@@ -1425,11 +1425,19 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         # Which oracle pass failed, agreed across ranks. `max_relative_error` folds all three, so
         # without these a failure cannot be placed before (Pass 1, before any timing or capture)
         # or after the measured regimes -- the distinction that attributes it to them or not.
-        oracle_verdicts = {
-            name: bool(_reduce_int(torch, dist, device, int(bool(g[key]["passed"])), MIN))
-            for name, key in (("pre", "oracle_pre"), ("chained", "oracle_chain"),
-                              ("post", "oracle_post"))
-        }
+        oracle_verdicts, oracle_failed_checks = {}, {}
+        for name, key in (("pre", "oracle_pre"), ("chained", "oracle_chain"),
+                          ("post", "oracle_post")):
+            report = g[key]
+            oracle_verdicts[name] = bool(
+                _reduce_int(torch, dist, device, int(bool(report["passed"])), MIN)
+            )
+            # Which sub-checks failed on ANY rank (dispatch payload/metadata/counts vs the combine
+            # values): the first thing a failed pass has to answer, collective on every rank.
+            oracle_failed_checks[name] = [
+                check for check in _ORACLE_CHECKS
+                if not _reduce_int(torch, dist, device, int(bool(report["checks"][check])), MIN)
+            ]
         # Agreed across ranks like `passed`, not rank 0's local view.
         post_chain_state_passed = bool(
             _reduce_int(torch, dist, device, g["chain_local_ok"], MIN)
@@ -1606,6 +1614,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                 # against the BF16-faithful expected combine.
                 "max_relative_error": max_rel,
                 "oracle_passed": oracle_verdicts,
+                "oracle_failed_checks": oracle_failed_checks,
                 "passed": point_ok,
             },
             "global_tokens": gt,
