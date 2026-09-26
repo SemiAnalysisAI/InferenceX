@@ -104,7 +104,7 @@ class NCCLEPBackend(EPBackend):
     # write into the zero-copy window (fixed in `combine_transformed`); with that fixed, graphed
     # HT is correct but 1.03-1.11x eager's pair period on h100/h200 EP16 (runs 36231927003..
     # 36231931954 vs 36176100175), so eager is HT's best configuration.
-    CUDA_GRAPH_MODES = ("low-latency",)
+    CUDA_GRAPH_MODES = ("low-latency", "normal") if os.environ.get("COLLX_DIAG_HT_GRAPH", "1") == "1" else ("low-latency",)
     stage_device_work = False
     requires_fresh_pair = False
     receive_layout = "token-rank"
@@ -254,8 +254,17 @@ class NCCLEPBackend(EPBackend):
             max_recv_tokens_per_rank=max_recv,
             max_token_bytes=hidden * 2,  # bfloat16 payload
             zero_copy=ZeroCopyMode.ON if self.zero_copy else ZeroCopyMode.OFF,
+            **(
+                {"alloc": self._routing_window_alloc()}
+                if not self._ll and os.environ.get("COLLX_DIAG_ROUTING_WINDOW", "1") == "1"
+                else {}
+            ),
         )
         self._ep_group = nccl_ep.Group.create(self._comm, config)
+        if not self._ll:
+            st = getattr(self, "_rw_state", None)
+            tag = "none" if st is None else f"w{st['registered']}-rc{st['rc']}-n{st['matches']}"
+            self.kernel_generation = f"{self.kernel_generation}-diagrw-{tag}-cta{os.environ.get('NCCL_CTA_POLICY', 'd')}"
 
         dev = self.device
         if self._ll_expert_major:
@@ -409,6 +418,59 @@ class NCCLEPBackend(EPBackend):
             self._rebind(h)
         p._nccl = h
         return h
+
+    def _routing_window_alloc(self):
+        """DIAG: register the HT routing map as a symmetric NCCL window so ncclAllGather can
+        take a symmetric (proxy-free) kernel under graph capture."""
+        import ctypes
+        from cuda.bindings import runtime as cudart
+        from nccl.ep.allocator import AllocConfig, AllocFn, FreeFn
+
+        lib = ctypes.CDLL("libnccl.so.2")
+        lib.ncclMemAlloc.argtypes = [ctypes.POINTER(ctypes.c_void_p), ctypes.c_size_t]
+        lib.ncclCommWindowRegister.argtypes = [
+            ctypes.c_void_p, ctypes.c_void_p, ctypes.c_size_t,
+            ctypes.POINTER(ctypes.c_void_p), ctypes.c_int,
+        ]
+        lsa = int(self.args.scale_up_domain)
+        nodes = max(1, self.world_size // lsa)
+        row = -(-(min(lsa, self.world_size) * self.num_local_experts) // 8) * nodes
+        target = self.world_size * self.max_dispatch * row
+        comm = self._comm.ptr
+        st = self._rw_state = {"registered": 0, "rc": None, "matches": 0, "keep": set(), "target": target}
+
+        @AllocFn
+        def alloc(out, size, ctx):
+            if size == target:
+                st["matches"] += 1
+                p = ctypes.c_void_p()
+                rc = lib.ncclMemAlloc(ctypes.byref(p), size)
+                if rc == 0:
+                    win = ctypes.c_void_p()
+                    rc = lib.ncclCommWindowRegister(ctypes.c_void_p(comm), p, size, ctypes.byref(win), 1)
+                    if rc == 0:
+                        st["registered"] += 1
+                        st["keep"].add(p.value)
+                st["rc"] = rc
+                if rc == 0:
+                    out[0] = p.value
+                    return 0
+            err, ptr = cudart.cudaMalloc(size)
+            out[0] = int(ptr)
+            return int(err)
+
+        @FreeFn
+        def free(ptr, ctx):
+            if ptr in st["keep"]:
+                return 0  # registered for the process lifetime (diag)
+            (err,) = cudart.cudaFree(ptr)
+            return int(err)
+
+        self._rw_fns = (alloc, free)
+        return AllocConfig(
+            alloc_fn=ctypes.cast(alloc, ctypes.c_void_p).value,
+            free_fn=ctypes.cast(free, ctypes.c_void_p).value,
+        )
 
     def _bind_ht_recv_count(self, h):
         """Read HT's received-token count and bind the combine input to the full receive plane.
