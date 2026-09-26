@@ -104,7 +104,7 @@ class NCCLEPBackend(EPBackend):
     # across nodes on x86 (b200 EP16 T=128, h200 EP16 T=32 and prefill T=1024; runs 35994093313,
     # 36113759089) while eager zero-copy HT passed every cell and was as fast or faster
     # (run 36114371399), so eager is the better HT configuration on every pool measured.
-    CUDA_GRAPH_MODES = ("low-latency",)
+    CUDA_GRAPH_MODES = ("normal", "low-latency")
     stage_device_work = False
     requires_fresh_pair = False
     receive_layout = "token-rank"
