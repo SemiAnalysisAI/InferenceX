@@ -600,6 +600,35 @@ def test_recovery_uses_current_planner_with_historical_checkout(
     ]
 
 
+def test_historical_generator_uses_snapshot_recipes_not_inherited_recovery_root(
+    planning_repo, monkeypatch
+):
+    root, master, _ = planning_repo
+    master["multi"]["scenarios"]["fixed-seq-len"][0]["search-space"][0]["prefill"][
+        "additional-settings"
+    ] = ["CONFIG_FILE=recipes/snapshot.yaml"]
+    (root / "configs/nvidia-master.yaml").write_text(yaml.safe_dump(master, sort_keys=False))
+    recipe = root / "benchmarks/multi_node/srt-slurm-recipes/snapshot.yaml"
+    recipe.parent.mkdir(parents=True)
+    recipe.write_text("schema: 2\nroles:\n  prefill: {nodes: 3}\n  decode: {nodes: 4}\n")
+    unrelated = root / "other-revision"
+    unrelated.mkdir()
+    monkeypatch.setenv("INFERENCEX_REPOSITORY_ROOT", str(unrelated))
+    inputs = process_changelog.GenerationInputs(
+        ["configs/amd-master.yaml", "configs/nvidia-master.yaml"],
+        ("-m", "infx.matrix.generate"),
+        "configs/runners.yaml",
+        str(root),
+    )
+
+    rows = process_changelog.generate_matrix(
+        ["multi"], ["--no-evals", "--scenario-type", "fixed-seq-len"], inputs
+    )
+
+    assert [row["node-count"] for row in rows] == [7]
+    assert rows[0]["conc"] == [16, 32, 64]
+
+
 def test_validator_uses_trusted_entrypoints_while_reading_another_checkout(committed_planning_repo):
     root, base, head = committed_planning_repo
     tooling = root / ".tooling"
