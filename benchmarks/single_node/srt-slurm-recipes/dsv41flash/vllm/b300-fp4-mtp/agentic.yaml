@@ -6,7 +6,7 @@ base:
   name: dsv41flash-fp4-b300-vllm-agentic
   model:
     path: hf:deepseek-ai/DeepSeek-V4.1-Flash
-    container: vllm/vllm-openai:deepseekv41-flash-0909
+    container: vllm/vllm-openai:nightly-ddd6fbca148a867aad1fcab7ec72f582b9977db4
     precision: fp4
   resources:
     gpu_type: b300
@@ -24,7 +24,7 @@ base:
   # The engine may take the full VLLM_ENGINE_READY_TIMEOUT_S to become ready.
   health_check:
     interval_seconds: 10
-    max_attempts: 360
+    max_attempts: 720
   roles:
     agg:
       nodes: 1
@@ -37,6 +37,10 @@ base:
         enable-auto-tool-choice: true
         reasoning-parser: deepseek_v41
         engram-config: '{"cpu_offload":true}'
+        # FlashInfer sparse attention with the merged Blackwell sparse indexer
+        # (MXFP4 indexer KV, sparse logits) at both TP sizes; fp8 KV cache.
+        attention-config: '{"backend":"FLASHINFER_MLA_SPARSE_DSV41","indexer_kv_dtype":"mxfp4","indexer_sparse_logits":true}'
+        kv-cache-dtype: fp8
         # Five-token DSpark with probabilistic drafting. Throughput runs replace
         # block rejection with the golden acceptance length.
         speculative-config: '{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block","enable_adaptive_verification":false}'
@@ -46,7 +50,7 @@ base:
       env:
         VLLM_USE_RUST_FRONTEND: '1'
         PYTHONUNBUFFERED: '1'
-        VLLM_ENGINE_READY_TIMEOUT_S: '3600'
+        VLLM_ENGINE_READY_TIMEOUT_S: '7200'
   benchmark:
     type: custom
     command: bash /infmax-workspace/benchmarks/srt_agentic.sh
