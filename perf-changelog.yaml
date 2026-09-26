@@ -8956,4 +8956,4 @@
   description:
     - "Match ATOM's fixed 16384 --max-num-batched-tokens (prefill chunk) at every concurrency instead of reducing to 4096/8192 at TP=2 c64+/c128+ and TP=4 c128; unpin image to TBD pending KV-headroom validation at those points on this SKU."
     - "将 --max-num-batched-tokens（预填充块大小）在所有并发下固定为与 ATOM 一致的 16384，不再在 TP=2 c64+/c128+ 与 TP=4 c128 处降为 4096/8192；镜像取消固定为 TBD，待在该 SKU 上验证这些并发点的 KV 显存余量后再恢复固定。"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3451
