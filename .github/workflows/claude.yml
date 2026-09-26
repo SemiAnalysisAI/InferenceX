@@ -319,7 +319,6 @@ jobs:
           echo "path=$claude_cli" >> "$GITHUB_OUTPUT"
       - name: PR Review with Claude
         uses: anthropics/claude-code-action@9171db3e57d6a3140a37ddc2ba92788584e0ead6 # v1.0.234
-        env:
         with:
           path_to_claude_code_executable: ${{ steps.claude_cli.outputs.path }}
           # Repository review credential; the job gates eligible review requests.
