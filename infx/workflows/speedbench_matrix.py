@@ -36,14 +36,11 @@ def aggregate_cells(
                 pass
             cells[mode][mtp] = al
 
-    lines: list[str] = []
-    for header in header_lines:
-        lines.append(f"# {header}")
+    lines = [f"# {header}" for header in header_lines]
     lines.append(f"{model_key}:")
     for mode in thinking_modes:
         lines.append(f"  thinking_{mode}:")
-        for mtp in mtp_list:
-            lines.append(f"    {mtp}: {cells[mode][mtp]}")
+        lines.extend(f"    {mtp}: {cells[mode][mtp]}" for mtp in mtp_list)
     return "\n".join(lines) + "\n"
 
 

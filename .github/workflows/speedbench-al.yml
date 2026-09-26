@@ -255,6 +255,12 @@ jobs:
               echo "ERROR: SPEED-Bench recipe not found: $RECIPE_PATH" >&2
               exit 1
             fi
+            # Plain TP8 is incompatible with the Qwen3.8-Flash-Next FP8 checkpoint's
+            # 128-wide quantization blocks; its recipe runs TP4 (as the legacy
+            # collector did), so bind the matrix TP and GPU count to match.
+            if [[ "$MODEL_PREFIX" == qwen3.8next ]]; then
+              export TP=4 GPU_COUNT=4
+            fi
             mkdir -p speedbench_results
             ALL_FAILED=true
             # Harmless values for launch_srt_single_node env checks; the collector
