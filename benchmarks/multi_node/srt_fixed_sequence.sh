@@ -29,7 +29,7 @@ ctx=$((PREFILL_NUM_WORKERS * PREFILL_TP))
 gen=$((DECODE_NUM_WORKERS * DECODE_TP))
 for concurrency in $CONC_LIST; do
     result="results_concurrency_${concurrency}_gpus_$((ctx + gen))_ctx_${ctx}_gen_${gen}.json"
-    python3 "$repo_root/utils/bench_serving/benchmark_serving.py" \
+    PYTHONPATH="$repo_root${PYTHONPATH:+:$PYTHONPATH}" python3 -P -m infx.bench_serving.benchmark_serving \
         --backend "$CLIENT_BACKEND" \
         --base-url "http://${SRT_FRONTEND_HOST}:${SRT_FRONTEND_PORT}" \
         --endpoint "$endpoint" \
