@@ -8398,12 +8398,12 @@ dsv4-fp4-b200-vllm-agentic-cache-sources-mtp:
     agentic-coding:
     - dram-utilization: 0.0592
       search-space:
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-native }, spec-decoding: mtp, conc-list: [8] }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-native }, spec-decoding: mtp, conc-list: [8], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv4/vllm/b200-fp4-mtp/cache-sources.yaml }
     - search-space:
-      - { tp: 8, kv-offloading: nvme, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [14] }
+      - { tp: 8, kv-offloading: nvme, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [14], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv4/vllm/b200-fp4-mtp/cache-sources.yaml }
     - dram-utilization: 0.0592
       search-space:
-      - { tp: 8, kv-offloading: [dram, nvme], kv-offload-backend: { name: vllm-native }, spec-decoding: mtp, conc-list: [14] }
+      - { tp: 8, kv-offloading: [dram, nvme], kv-offload-backend: { name: vllm-native }, spec-decoding: mtp, conc-list: [14], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv4/vllm/b200-fp4-mtp/cache-sources.yaml }
 
 dsv4-fp4-gb300-dynamo-vllm-agentic-cache-sources-mtp-disagg:
   image: cquil11/vllm-cache-sources@sha256:6ce87fcb9ef8b929f7a8270bc6fbba3c219c3440cd77d3bf1ae74db5a1cb5715

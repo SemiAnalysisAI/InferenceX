@@ -453,3 +453,56 @@ def test_b300_keeps_agentic_and_explicit_collector_dispatch(tmp_path, collector)
     assert calls[-1][-2:] == ["bash", expected]
     assert "--jobid=42" in calls[-1]
     assert (tmp_path / "cancelled").read_text() == "42\n"
+
+
+# ---------------------------------------------------------------------------
+# Cache-sources recipe: each variant renders the expected kv-transfer-config
+# and capture sizes.
+# ---------------------------------------------------------------------------
+
+CACHE_SOURCES_RECIPE = str(ROOT / "benchmarks/single_node/srt-slurm-recipes/dsv4/vllm/b200-fp4-mtp/cache-sources.yaml")
+
+CACHE_SOURCES_BASE_ENV = {
+    "MODEL": "deepseek-ai/DeepSeek-V4-Pro",
+    "IMAGE": "cquil11/vllm-cache-sources@sha256:6f9e476f6a1e1c25ac9bc1a863329538db465812fb4ac18c6553e988eae09a56",
+    "PRECISION": "fp4", "FRAMEWORK": "vllm", "TP": "8", "EP_SIZE": "1",
+    "DP_ATTENTION": "false", "PP_SIZE": "1", "DCP_SIZE": "1", "PCP_SIZE": "1",
+    "GPU_COUNT": "8", "IS_AGENTIC": "1", "SPEC_DECODING": "mtp",
+    "THINKING_MODE": "off", "EVAL_ONLY": "false", "RUN_EVAL": "false",
+    "MODEL_PREFIX": "dsv4", "DURATION": "3600", "RESULT_FILENAME": "test",
+    "GPU_MONITOR_INTERVAL": "5",
+}
+
+
+@pytest.mark.parametrize(
+    ("conc", "kv_offloading", "total_dram", "variant_suffix", "connector", "kv_path"),
+    [
+        ("8", "dram", "128", "c8_dram_native", "OffloadingConnector", None),
+        ("14", "nvme", "0", "c14_nvme_simple", "SimpleCPUOffloadConnector", "/kv-offload/cache.bin"),
+        ("14", "dram+nvme", "128", "c14_dramnvme_native", "OffloadingConnector", "/kv-offload"),
+    ],
+)
+def test_cache_sources_variant_renders_expected_offload(
+    conc, kv_offloading, total_dram, variant_suffix, connector, kv_path,
+):
+    env = {**CACHE_SOURCES_BASE_ENV, "CONC": conc, "KV_OFFLOADING": kv_offloading,
+           "TOTAL_CPU_DRAM_GB": total_dram}
+    config, recipe = select_recipe(CACHE_SOURCES_RECIPE, env)
+    assert config.endswith(f"override_tp8_{variant_suffix}")
+
+    transfer = json.loads(recipe["roles"]["agg"]["args"]["kv-transfer-config"])
+    assert transfer["kv_connector"] == connector
+
+    max_num_seqs = recipe["roles"]["agg"]["args"]["max-num-seqs"]
+    assert max_num_seqs == 2 * int(conc)
+
+    compilation = json.loads(recipe["roles"]["agg"]["args"]["compilation-config"])
+    expected_captures = sorted(set([4 * n for n in range(1, max_num_seqs + 1)] + [100, 200, 300, 400, 500]))
+    assert compilation["cudagraph_capture_sizes"] == expected_captures
+
+    if kv_path and connector == "SimpleCPUOffloadConnector":
+        assert transfer["kv_connector_extra_config"]["disk_path"] == kv_path
+    elif kv_path and connector == "OffloadingConnector":
+        tiers = transfer["kv_connector_extra_config"]["secondary_tiers"]
+        assert len(tiers) == 1
+        assert tiers[0]["root_dir"] == kv_path

@@ -786,10 +786,6 @@ run_agentic() {
     if [[ ! -f "$BENCH_SCRIPT" ]]; then
         BENCH_SCRIPT="${BENCH_BASE}${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh"
     fi
-    if [[ "$MODEL" == "deepseek-ai/DeepSeek-V4-Pro" && "$FRAMEWORK" == vllm && "$SPEC_DECODING" == mtp && "$IMAGE" == cquil11/vllm-cache-sources@sha256:6f9e476f6a1e1c25ac9bc1a863329538db465812fb4ac18c6553e988eae09a56 ]]; then
-        BENCH_SCRIPT="benchmarks/single_node/agentic/dsv4_fp4_b200_vllm_cache_sources_mtp.sh"
-        export GPU_MEMORY_UTILIZATION=0.85
-    fi
     LOCK_FILE="${SQUASH_FILE}.lock"
 
     # TODO(Cam): lmsysorg/sglang:deepseek-v4-blackwell installs sglang editable at
@@ -797,7 +793,7 @@ run_agentic() {
     # the default $GITHUB_WORKSPACE:/workspace/ bind-mount masks the install and
     # breaks `import sglang`. Mount this one image at /ix instead; drop the
     # conditional once the image stops installing editable under /workspace.
-    if [[ "$IMAGE" == *deepseek-v4-blackwell* || "$BENCH_SCRIPT" == *cache_sources_mtp.sh ]]; then
+    if [[ "$IMAGE" == *deepseek-v4-blackwell* ]]; then
         CONTAINER_MOUNT_DIR=/ix
     else
         CONTAINER_MOUNT_DIR=/workspace
@@ -814,37 +810,9 @@ run_agentic() {
     else
         CONTAINER_MOUNTS="$GITHUB_WORKSPACE:$CONTAINER_MOUNT_DIR,$MODEL_PATH:$MODEL_PATH,$AIPERF_MMAP_CACHE_HOST_PATH:/aiperf_mmap_cache"
     fi
-    if [[ "$BENCH_SCRIPT" == *cache_sources_mtp.sh ]]; then
-        export INFMAX_CONTAINER_WORKSPACE="$CONTAINER_MOUNT_DIR"
-        export RESULT_DIR="$CONTAINER_MOUNT_DIR/results"
-    fi
 
-    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$GPU_COUNT --exclusive --mem=0 --time="$SALLOC_TIME_LIMIT" --no-shell --job-name="$RUNNER_NAME" || return 1
+    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$GPU_COUNT --exclusive --mem=0 --time="$SALLOC_TIME_LIMIT" --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
-    [[ "$JOB_ID" =~ ^[0-9]+$ ]] || { echo "Could not resolve Slurm allocation" >&2; return 1; }
-
-    if [[ "$BENCH_SCRIPT" == *cache_sources_mtp.sh ]]; then
-        NVME_HOST_DIR=""
-        cleanup_offload_cache() {
-            local rc=$?
-            if [[ -n "$NVME_HOST_DIR" ]]; then
-                timeout --kill-after=10s 300s srun --jobid="$JOB_ID" rm -rf -- "$NVME_HOST_DIR" || rc=1
-            fi
-            scancel "$JOB_ID" || true
-            exit "$rc"
-        }
-        trap cleanup_offload_cache EXIT
-        trap 'exit 130' INT
-        trap 'exit 143' TERM
-    fi
-
-    if [[ "$KV_OFFLOADING" == *nvme* ]]; then
-        # This directory belongs only to the validated numeric allocation above.
-        export NVME_HOST_DIR="/scratch/inferencex-kv-$JOB_ID"
-        srun --jobid="$JOB_ID" mkdir -m 700 "$NVME_HOST_DIR" || return 1
-        export NVME_OFFLOAD_DIR=/kv-offload
-        CONTAINER_MOUNTS+=",$NVME_HOST_DIR:$NVME_OFFLOAD_DIR"
-    fi
 
     # Bench scripts skip `hf download` when MODEL is a local path.
     export MODEL="$MODEL_PATH"
