@@ -263,7 +263,7 @@ class NCCLEPBackend(EPBackend):
         self._ep_group = nccl_ep.Group.create(self._comm, config)
         if not self._ll:
             st = getattr(self, "_rw_state", None)
-            tag = "none" if st is None else f"w{st['registered']}-rc{st['rc']}-n{st['matches']}"
+            tag = "none" if st is None else f"w{st['registered']}-rc{st['rc']}-n{st['matches']}-{st['rt']}"
             self.kernel_generation = f"{self.kernel_generation}-diagrw-{tag}-cta{os.environ.get('NCCL_CTA_POLICY', 'd')}"
 
         dev = self.device
@@ -423,7 +423,10 @@ class NCCLEPBackend(EPBackend):
         """DIAG: register the HT routing map as a symmetric NCCL window so ncclAllGather can
         take a symmetric (proxy-free) kernel under graph capture."""
         import ctypes
-        from cuda.bindings import runtime as cudart
+        try:
+            from cuda.bindings import runtime as cudart
+        except ImportError:
+            cudart = None
         from nccl.ep.allocator import AllocConfig, AllocFn, FreeFn
 
         lib = ctypes.CDLL("libnccl.so.2")
@@ -437,7 +440,8 @@ class NCCLEPBackend(EPBackend):
         row = -(-(min(lsa, self.world_size) * self.num_local_experts) // 8) * nodes
         target = self.world_size * self.max_dispatch * row
         comm = self._comm.ptr
-        st = self._rw_state = {"registered": 0, "rc": None, "matches": 0, "keep": set(), "target": target}
+        st = self._rw_state = {"registered": 0, "rc": None, "matches": 0, "keep": set(), "target": target,
+                                  "rt": "cudart" if cudart else "ncclmem"}
 
         @AllocFn
         def alloc(out, size, ctx):
@@ -455,6 +459,11 @@ class NCCLEPBackend(EPBackend):
                 if rc == 0:
                     out[0] = p.value
                     return 0
+            if cudart is None:
+                p = ctypes.c_void_p()
+                rc = lib.ncclMemAlloc(ctypes.byref(p), size)
+                out[0] = p.value
+                return 0 if rc == 0 else 2
             err, ptr = cudart.cudaMalloc(size)
             out[0] = int(ptr)
             return int(err)
@@ -463,6 +472,8 @@ class NCCLEPBackend(EPBackend):
         def free(ptr, ctx):
             if ptr in st["keep"]:
                 return 0  # registered for the process lifetime (diag)
+            if cudart is None:
+                return 0
             (err,) = cudart.cudaFree(ptr)
             return int(err)
 
