@@ -1,12 +1,14 @@
 # DeepSeek-V4-Pro-0813 AgentX on MI355X with SGLang DSpark. Low concurrency
 # keeps KV on GPU; higher concurrency extends it to host DRAM through HiCache,
 # and the widest band runs DP attention behind a cache-aware SGLang router.
+# FP8 unified KV is on for every arm. BCG is limited to conc 1/4. Grouped ASM
+# is on for TP-only arms at conc >= 16. EP8 DP arms use MegaMoE+EPLB.
 base:
   schema: 2
   name: dsv4-fp4-mi355x-sglang-agentic
   model:
     path: hf:deepseek-ai/DeepSeek-V4-Pro-0813
-    container: lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260914
+    container: lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260926
     precision: fp4
   resources:
     gpu_type: mi355x
@@ -62,6 +64,7 @@ base:
         SGLANG_DSV4_REASONING_EFFORT: high
         SGLANG_USE_ROCM700A: '0'
         SGLANG_HACK_FLASHMLA_BACKEND: unified_kv_triton
+        SGLANG_DSV4_UNIFIED_KV_FP8: '1'
         AITER_BF16_FP8_MOE_BOUND: '0'
         TORCH_BLAS_PREFER_HIPBLASLT: '1'
         HSA_NO_SCRATCH_RECLAIM: '0'
@@ -91,6 +94,7 @@ override_tp8_c1:
       args:
         max-running-requests: 2
         cuda-graph-max-bs-decode: 2
+        cuda-graph-backend-prefill: breakable
   benchmark:
     env:
       CONC: '1'
@@ -102,6 +106,7 @@ override_tp8_c4:
       args:
         max-running-requests: 8
         cuda-graph-max-bs-decode: 8
+        cuda-graph-backend-prefill: breakable
   benchmark:
     env:
       CONC: '4'
@@ -113,6 +118,8 @@ override_tp8_c16:
       args:
         max-running-requests: 32
         cuda-graph-max-bs-decode: 32
+      env:
+        SGLANG_DSV4_GROUPED_ASM: '1'
   benchmark:
     env:
       CONC: '16'
@@ -129,6 +136,8 @@ override_tp8_c32_hicache:
         hicache-write-policy: write_through
         hicache-io-backend: direct
         hicache-mem-layout: page_first_direct
+      env:
+        SGLANG_DSV4_GROUPED_ASM: '1'
   benchmark:
     env:
       CONC: '32'
@@ -146,12 +155,15 @@ override_tp8_c48_hicache:
         hicache-write-policy: write_through
         hicache-io-backend: direct
         hicache-mem-layout: page_first_direct
+      env:
+        SGLANG_DSV4_GROUPED_ASM: '1'
   benchmark:
     env:
       CONC: '48'
       KV_OFFLOADING: dram
       AGENTIC_WARMUP_GRACE_PERIOD: '3600'
 
+# EP1 DP-attention reference point (no MegaMoE).
 override_tp8_c128_dp_hicache:
   frontend:
     type: sglang-router
@@ -181,6 +193,7 @@ override_tp8_c128_dp_hicache:
         tokenizer-worker-num: 8
         stream-interval: 20
         prefill-delayer-token-usage-low-watermark: 0.7
+        load-balance-method: total_requests
         chunked-prefill-size: 65536
         mem-fraction-static: 0.92
       env:
@@ -196,7 +209,66 @@ override_tp8_c128_dp_hicache:
       AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
       AGENTIC_WARMUP_GRACE_PERIOD: '3600'
 
-override_tp8_c256_dp_hicache:
+# EP8 + MegaMoE + EPLB. Mori heap is outside mem-fraction.
+override_tp8_c128_dp_ep8_megamoe_hicache:
+  frontend:
+    type: sglang-router
+    args:
+      policy: cache_aware
+      request-id-headers: x-correlation-id
+      dp-aware: true
+      connect-timeout-secs: 900
+      request-timeout-secs: 14400
+      disable-health-check: true
+      disable-retries: true
+  roles:
+    agg:
+      args:
+        max-running-requests: 256
+        cuda-graph-max-bs-decode: 128
+        enable-hierarchical-cache: true
+        hicache-ratio: 1.5
+        hicache-write-policy: write_through
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
+        data-parallel-size: 8
+        expert-parallel-size: 8
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        enable-prefill-delayer: true
+        enable-dp-attention-local-control-broadcast: true
+        tokenizer-worker-num: 8
+        stream-interval: 20
+        prefill-decode-interval: 20
+        prefill-delayer-token-usage-low-watermark: 0.7
+        load-balance-method: total_requests
+        chunked-prefill-size: 65536
+        mem-fraction-static: 0.85
+        enforce-shared-experts-fusion: false
+        moe-a2a-backend: megamoe
+        moe-dense-tp-size: 1
+        disable-shared-experts-fusion: true
+        enable-eplb: true
+        eplb-rebalance-num-iterations: 200
+        expert-distribution-recorder-mode: stat
+      env:
+        SGLANG_AMD_USE_FLYDSL_MEGA_MOE: '1'
+        SGLANG_AMD_FLYDSL_MEGA_MOE_MTPR: '8192'
+        SGLANG_AMD_FLYDSL_MEGA_QUANT: a8w4
+        MORI_SHMEM_HEAP_SIZE: '17179869184'
+        SGLANG_AITER_MEGA_RANK_SYNC: '1'
+        SGLANG_AITER_MEGA_EPLB_PREFILL_ONLY: '1'
+        SGLANG_AITER_MEGA_EPLB_FUSED_MAP_RECORD: '1'
+        SGLANG_DP_USE_REDUCE_SCATTER: '0'
+        GPU_MAX_HW_QUEUES: '5'
+  benchmark:
+    env:
+      CONC: '128'
+      KV_OFFLOADING: dram
+      AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+
+override_tp8_c256_dp_ep8_megamoe_hicache:
   frontend:
     type: sglang-router
     args:
@@ -219,24 +291,97 @@ override_tp8_c256_dp_hicache:
         hicache-io-backend: direct
         hicache-mem-layout: page_first_direct
         data-parallel-size: 8
+        expert-parallel-size: 8
         enable-dp-attention: true
         enable-dp-lm-head: true
         enable-prefill-delayer: true
         enable-dp-attention-local-control-broadcast: true
         tokenizer-worker-num: 8
         stream-interval: 20
+        prefill-decode-interval: 20
         prefill-delayer-token-usage-low-watermark: 0.7
+        load-balance-method: total_requests
         chunked-prefill-size: 65536
-        mem-fraction-static: 0.92
+        mem-fraction-static: 0.85
+        enforce-shared-experts-fusion: false
+        moe-a2a-backend: megamoe
+        moe-dense-tp-size: 1
+        disable-shared-experts-fusion: true
+        enable-eplb: true
+        eplb-rebalance-num-iterations: 200
+        expert-distribution-recorder-mode: stat
       env:
-        SGLANG_SHARED_EXPERT_TP1: '1'
-        SGLANG_DP_SHARED_EXPERT_LOCAL: '1'
-        SGLANG_DP_USE_GATHERV: '1'
-        SGLANG_DP_USE_REDUCE_SCATTER: '1'
+        SGLANG_AMD_USE_FLYDSL_MEGA_MOE: '1'
+        SGLANG_AMD_FLYDSL_MEGA_MOE_MTPR: '8192'
+        SGLANG_AMD_FLYDSL_MEGA_QUANT: a8w4
+        MORI_SHMEM_HEAP_SIZE: '17179869184'
+        SGLANG_AITER_MEGA_RANK_SYNC: '1'
+        SGLANG_AITER_MEGA_EPLB_PREFILL_ONLY: '1'
+        SGLANG_AITER_MEGA_EPLB_FUSED_MAP_RECORD: '1'
+        SGLANG_DP_USE_REDUCE_SCATTER: '0'
         GPU_MAX_HW_QUEUES: '5'
   benchmark:
     env:
       CONC: '256'
+      KV_OFFLOADING: dram
+      AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+
+override_tp8_c384_dp_ep8_megamoe_hicache:
+  frontend:
+    type: sglang-router
+    args:
+      policy: cache_aware
+      balance-abs-threshold: 32
+      request-id-headers: x-correlation-id
+      dp-aware: true
+      connect-timeout-secs: 900
+      request-timeout-secs: 14400
+      disable-health-check: true
+      disable-retries: true
+  roles:
+    agg:
+      args:
+        max-running-requests: 768
+        cuda-graph-max-bs-decode: 128
+        enable-hierarchical-cache: true
+        hicache-ratio: 1.5
+        hicache-write-policy: write_through
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
+        data-parallel-size: 8
+        expert-parallel-size: 8
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        enable-prefill-delayer: true
+        enable-dp-attention-local-control-broadcast: true
+        tokenizer-worker-num: 8
+        stream-interval: 20
+        prefill-decode-interval: 15
+        prefill-delayer-token-usage-low-watermark: 0.7
+        load-balance-method: total_requests
+        chunked-prefill-size: 65536
+        mem-fraction-static: 0.85
+        enforce-shared-experts-fusion: false
+        moe-a2a-backend: megamoe
+        moe-dense-tp-size: 1
+        disable-shared-experts-fusion: true
+        enable-eplb: true
+        eplb-rebalance-num-iterations: 200
+        expert-distribution-recorder-mode: stat
+      env:
+        SGLANG_AMD_USE_FLYDSL_MEGA_MOE: '1'
+        SGLANG_AMD_FLYDSL_MEGA_MOE_MTPR: '8192'
+        SGLANG_AMD_FLYDSL_MEGA_QUANT: a8w4
+        MORI_SHMEM_HEAP_SIZE: '17179869184'
+        SGLANG_AITER_MEGA_RANK_SYNC: '1'
+        SGLANG_AITER_MEGA_EPLB_PREFILL_ONLY: '1'
+        SGLANG_AITER_MEGA_EPLB_FUSED_MAP_RECORD: '1'
+        SGLANG_DP_USE_REDUCE_SCATTER: '0'
+        GPU_MAX_HW_QUEUES: '5'
+  benchmark:
+    env:
+      CONC: '384'
       KV_OFFLOADING: dram
       AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
       AGENTIC_WARMUP_GRACE_PERIOD: '3600'
