@@ -46,7 +46,7 @@ Sweeps do not trigger while a PR has merge conflicts. For `perf-changelog.yaml` 
 
 Pushes to `main` always enter sweep setup and either reuse approved artifacts or run an untrimmed full sweep. `[skip-sweep]` only skips PR benchmark setup. It never skips a main-branch sweep. It still permits changelog validation and reuse authorization checks.
 
-Artifact reuse excludes runs with `evals-only` or `agentx-fast`. See `.github/workflows/README.md` and `utils/merge_with_reuse.sh` for eligibility and merge behavior.
+Artifact reuse excludes runs with `evals-only` or `agentx-fast`. See `.github/workflows/README.md` and `python3 -m infx.workflows.merge_with_reuse` for eligibility and merge behavior.
 
 ## Workflow dispatch and monitoring
 

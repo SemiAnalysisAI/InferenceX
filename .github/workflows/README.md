@@ -222,7 +222,7 @@ validation remains authoritative; an acknowledgment cannot override expired or
 invalid artifacts. `evals-only` and `agentx-fast` remain incompatible with reuse.
 Remove and re-add the sweep label to force one.
 
-`utils/merge_with_reuse.sh <pr-number>` is the supported merge path for reuse.
+`python3 -m infx.workflows.merge_with_reuse <pr-number>` is the supported merge path for reuse.
 It merges `main`, preserves changelog bytes, fixes an appended `XXX` PR link,
 pushes a synchronization commit, waits for checks, then merges.
 

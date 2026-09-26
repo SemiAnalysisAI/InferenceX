@@ -71,7 +71,7 @@ Then decide:
 ## Check 1 — A passing sweep + evals ran on a commit IN this PR
 The merge standard (and InferenceX's own reuse gate) requires a green full sweep,
 including evals, on a commit that is CURRENTLY part of this PR. A sweep that ran on a
-commit later rebased/force-pushed out does NOT count: at merge, `merge_with_reuse.sh`
+commit later rebased/force-pushed out does NOT count: at merge, `merge_with_reuse.py`
 → `validate_reusable_run` (in `infx/workflows/reuse.py`) rejects any source
 whose `head_sha` is not in `GET /pulls/<n>/commits`. So the whole question collapses
 to one fact: does a commit still in this PR carry green, executed sweep/eval checks?
@@ -185,7 +185,7 @@ public upstream documentation.
   standard.
 
 ## Check 4 — Reuse-sweep command explicitly posted
-The supported merge path for an approved PR is reuse (`utils/merge_with_reuse.sh`).
+The supported merge path for an approved PR is reuse (`python3 -m infx.workflows.merge_with_reuse`).
 An authorized maintainer must explicitly post a reuse command as a PR comment;
 a green sweep alone is not enough. Verify the command directly from the comments:
 - Prefer `/use <run_id>`, with a numeric run ID on the same line. Also accept the legacy
