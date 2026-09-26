@@ -121,6 +121,40 @@ gh workflow run speedbench-al.yml \
 - YAML 第一行链接了源 Actions run。
 - 提交的数值与工作流 artifact 完全一致。
 
+## Qwen3.8-27B 收集
+
+支持固定版本的收集器 `benchmarks/single_node/speedbench/qwen3.827b_vllm.sh`
+可测量 FP8 和 BF16 目标模型的原生 MTP。触发 `speedbench-al.yml`
+时，可选择 `runner=b300` 或 `runner=cluster:h200-dgxc`（H200 池同样支持显式
+指定收集器）。将 `collector-script` 设为该路径，并显式传入 `precision`、`tp=1`、固定的
+`model-revision` 和 `speculative-config`（由收集器逐点填入
+`num_speculative_tokens`）。传入 `mtp-list=1 2 3 4`；收集器会在下载模型或启动服务前
+拒绝超出 1–4 范围的草稿长度。Qwen 使用
+`thinking-kwargs={"enable_thinking":true}`。采样遵循模型卡：thinking 开启时，
+temperature 为 1.0、top-p 为 0.95、presence penalty 为 0；关闭时分别为
+0.7、0.8 和 1.5；两种模式的 top-k 均为 20。
+
+官方 FP8 checkpoint 同时量化了内嵌 MTP 头。为保持原始草稿精度，收集原生 MTP
+时必须在 `speculative-config` 中显式指定 `model=Qwen/Qwen3.8-27B` 及其固定的
+BF16 revision，并设置 `kv_cache_dtype=auto`。两种目标精度均使用同一原始 MTP 头。
+固定版本的 vLLM MTP loader 还会继承目标模型的量化配置。因此，收集 FP8 时，
+收集器通过 `--hf-overrides` 将原始 `mtp.*` 权重对应的所有模块加入量化排除列表，
+并保留目标模型的其他设置和已有排除项。如果缺少这些排除项，仅指定 BF16 草稿
+checkpoint 仍可能把权重转换到 FP8 模块中，同时使用无效的缩放因子。
+证据中包含完整覆盖配置和 vLLM 模型检查输出，接受曲线前可以据此确认 MTP
+线性模块未量化。
+这些测量不能
+作为量化草稿头或让草稿继承目标模型 FP8 KV cache 的配方的有效性证明。
+
+只有所选 coding 提示词全部成功完成，测量点才会被接受。收集器关闭基准客户端
+额外的就绪检查请求和预热，并保留运行前后的 Prometheus 计数器。
+AL 为 `1 + accepted / drafts`；AR 为 `accepted / proposed_tokens`，使用实际
+提出的草稿 token 数，而非假设每轮草稿长度固定。
+`speedbench-evidence-<model-prefix>-<precision>` 包含命令、checkpoint 元数据、
+处理后的数据集、逐请求输出、日志、未舍入的计数器与 AL/AR，以及 AR 矩阵。
+运行时目录位于 `/tmp`，最终 YAML 和证据归档以文件形式放在工作区根目录。
+失败或未完成的测量点不会生成黄金矩阵。
+
 ## 当前黄金曲线
 
 | 模型 | 方法 | 黄金 YAML | 源 run |
@@ -135,6 +169,11 @@ gh workflow run speedbench-al.yml \
 | MiniMax-M3 | EAGLE3（GQA） | [`minimaxm3_eagle3_gqa.yaml`](minimaxm3_eagle3_gqa.yaml) | [29784780049](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/29784780049) |
 | GLM-5.2 | MTP | [`glm5.2_mtp.yaml`](glm5.2_mtp.yaml) | [28058352479](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28058352479) |
 | Qwen3.8-Flash-Next | MTP (native) | [`qwen3.8next_mtp.yaml`](qwen3.8next_mtp.yaml) | [33034290269](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/33034290269) |
+| Qwen3.8-27B BF16 | 原生 MTP（原始 BF16 头） | [`qwen3.827b_bf16_mtp.yaml`](qwen3.827b_bf16_mtp.yaml) | [thinking 关闭](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35492788796)、[thinking 开启](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35492789880) |
+| Qwen3.8-27B FP8 | 原生 MTP（原始 BF16 头） | [`qwen3.827b_fp8_mtp.yaml`](qwen3.827b_fp8_mtp.yaml) | [thinking 关闭](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35492786441)、[thinking 开启](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35492787451) |
+
+Qwen3.8-27B 的两条曲线均覆盖 1–4 个草稿 token，以及 thinking 关闭/开启两种模式。每个测量点均完成全部 80 个 coding 提示词，失败数为零。YAML 注释保留逐点 AR 比例和原始计数器；数值和模型检查结果已与工作流 artifact 核对。
+
 
 ## 主要参考资料
 

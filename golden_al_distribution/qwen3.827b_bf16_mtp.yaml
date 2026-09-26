@@ -1,0 +1,23 @@
+# Source GitHub Actions runs: thinking_off https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35492788796; thinking_on https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35492789880
+# SPEED-Bench Qualitative coding; all 80 requests succeeded in every cell; maximum output length 4096.
+# Prepared dataset SHA256: e9bbbe998472b79501ed79ba2bf126e58b63e153a6deef70ce2b63ea7a4de845
+# Target: Qwen/Qwen3.8-27B @ 1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0; target weights: bf16; target KV cache: fp8.
+# Image: vllm/vllm-openai:nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3; H200; TP=1; concurrency=64; context=16384; seed=0.
+# Native MTP head: Qwen/Qwen3.8-27B @ 1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0; original BF16 weights, compute and KV cache.
+# FP8 collection excludes all original MTP weight modules from inherited target quantization through --hf-overrides.
+# thinking_on: temperature=1.0, top_p=0.95, top_k=20, presence_penalty=0.0, chat_template_kwargs={"enable_thinking":true}.
+# thinking_off: temperature=0.7, top_p=0.8, top_k=20, presence_penalty=1.5, chat_template_kwargs={"enable_thinking":false}.
+# AL includes the bonus token and is rounded to two decimals. AR comments are fractions, using actual proposed tokens.
+# Counter comments retain accepted draft tokens, proposed draft tokens, and verification drafts for exact recomputation.
+# Collector: benchmarks/single_node/speedbench/qwen3.827b_vllm.sh (speedbench-al.yml); draft lengths limited to 1-4.
+qwen3.8-27b:
+  thinking_off:
+    1: 1.91  # AR=0.911074663054; accepted=25552; proposed=28046; drafts=28046
+    2: 2.66  # AR=0.829343758995; accepted=34577; proposed=41692; drafts=20846
+    3: 3.27  # AR=0.755599710983; accepted=37647; proposed=49824; drafts=16608
+    4: 3.78  # AR=0.694046325228; accepted=40871; proposed=58888; drafts=14722
+  thinking_on:
+    1: 1.73  # AR=0.732153180956; accepted=89915; proposed=122809; drafts=122809
+    2: 2.21  # AR=0.604088456726; accepted=117790; proposed=194988; drafts=97494
+    3: 2.51  # AR=0.502475973156; accepted=126838; proposed=252426; drafts=84142
+    4: 2.72  # AR=0.428857766600; accepted=134368; proposed=313316; drafts=78329

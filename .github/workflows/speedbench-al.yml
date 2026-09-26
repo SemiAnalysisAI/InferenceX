@@ -1,4 +1,5 @@
 name: SpeedBench AL Collection
+run-name: "SPEED-Bench ${{ inputs.model }} | ${{ inputs.precision }} | k=[${{ inputs.mtp-list }}] | thinking=[${{ inputs.thinking-modes }}]"
 
 # Push-button (workflow_dispatch) collection of a SPEED-Bench acceptance-length
 # (AL) matrix: thinking_on/off x MTP levels, for the given model (defaults to
@@ -30,6 +31,25 @@ on: # zizmor: ignore[concurrency-limits]
         required: false
         type: string
         default: 'vllm/vllm-openai:v0.21.0'
+      precision:
+        description: "Target precision"
+        type: string
+        default: 'fp4'
+      tp:
+        description: "Tensor parallel size and allocated GPU count"
+        type: string
+        default: '8'
+      collector-script:
+        description: "Optional model-specific collector path"
+        type: string
+      model-revision:
+        description: "Model checkpoint revision for revision-aware collectors"
+        type: string
+        default: 'main'
+      speculative-config:
+        description: "Real draft configuration; collector supplies num_speculative_tokens"
+        type: string
+        default: '{"method":"mtp"}'
       mtp-list:
         description: "Space-separated MTP levels (num_speculative_tokens)"
         required: false
@@ -96,17 +116,25 @@ env:
   # the launcher resolves MODEL_PATH to the pre-staged local weights and mounts
   # them. The collector serves from MODEL_PATH (see SERVE_MODEL), so no download.
   MODEL: ${{ inputs.model }}
+  MODEL_PATH: /mnt/hf_hub_cache/speedbench-${{ inputs.model-prefix }}-${{ inputs.precision }}
   MODEL_PREFIX: ${{ inputs.model-prefix }}
-  PRECISION: fp4
+  PRECISION: ${{ inputs.precision }}
   FRAMEWORK: vllm
   EXP_NAME: ${{ inputs.model-prefix }}_speedbench
   IMAGE: ${{ inputs.image }}
-  TP: '8'
+  TP: ${{ inputs.tp }}
   EP_SIZE: '1'
   DP_ATTENTION: 'false'
   SPEC_DECODING: mtp
   # Run the AL-matrix collector instead of the auto-selected throughput script.
-  BENCH_SCRIPT_OVERRIDE: benchmarks/single_node/speedbench/${{ inputs.model-prefix }}_fp4_b300_vllm.sh
+  BENCH_SCRIPT_OVERRIDE: ${{ inputs.collector-script || format('benchmarks/single_node/speedbench/{0}_fp4_b300_vllm.sh', inputs.model-prefix) }}
+  MODEL_REVISION: ${{ inputs.model-revision }}
+  SPEEDBENCH_SPECULATIVE_CONFIG: ${{ inputs.speculative-config }}
+  SPEEDBENCH_CONCURRENCY: '64'
+  SPEEDBENCH_MAX_MODEL_LEN: '16384'
+  SPEEDBENCH_GPU_MEMORY_UTILIZATION: '0.90'
+  SPEEDBENCH_SEED: '0'
+  SPEEDBENCH_PREPARE_REVISION: 'bcf059af55c20a89f797724598f9908d126153e6'
   SALLOC_TIME_LIMIT: ${{ inputs.salloc-time }}
   # Matrix-collector tunables (propagated into the container via srun --export=ALL).
   MTP_LIST: ${{ inputs.mtp-list }}
@@ -133,15 +161,17 @@ jobs:
         env:
           RUNNER: ${{ inputs.runner }}
           MODEL_PREFIX: ${{ inputs.model-prefix }}
+          TARGET_PRECISION: ${{ inputs.precision }}
         run: |
           entry=$(jq -cn \
             --arg runner "$RUNNER" \
             --arg model_prefix "$MODEL_PREFIX" \
+            --arg precision "$TARGET_PRECISION" \
             '[{
               runner: $runner,
               framework: "vllm",
               "model-prefix": $model_prefix,
-              precision: "fp4",
+              precision: $precision,
               "spec-decoding": "mtp"
             }]')
           scored=$(printf '%s' "$entry" |
@@ -156,29 +186,16 @@ jobs:
     runs-on: >-
       ${{ fromJSON(
         vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
-        (
-          vars.NODE_SLOT_SCHEDULER_ENABLED == 'true' &&
-          format(
-            '["self-hosted",{0},{1},{2},{3}]',
-            toJSON(inputs.runner),
-            '"nodes:1"',
-            toJSON(format(
-              'ci-job-{0}-{1}',
-              needs.setup.outputs.priority,
-              needs.setup.outputs.queue-token
-            )),
-            toJSON(format('ci-attempt-{0}', github.run_attempt))
-          ) ||
-          format(
-            '["self-hosted",{0},{1},{2}]',
-            toJSON(inputs.runner),
-            toJSON(format(
-              'ci-job-{0}-{1}',
-              needs.setup.outputs.priority,
-              needs.setup.outputs.queue-token
-            )),
-            toJSON(format('ci-attempt-{0}', github.run_attempt))
-          )
+        format(
+          '["self-hosted",{0},{1},{2},{3}]',
+          toJSON(inputs.runner),
+          '"nodes:1"',
+          toJSON(format(
+            'ci-job-{0}-{1}',
+            needs.setup.outputs.priority,
+            needs.setup.outputs.queue-token
+          )),
+          toJSON(format('ci-attempt-{0}', github.run_attempt))
         ) ||
         format('[{0}]', toJSON(inputs.runner))
       ) }}
@@ -223,6 +240,7 @@ jobs:
       - name: Cleanup stale outputs (pre-run)
         run: |
           rm -f speedbench-reference-al.yaml || true
+          rm -f speedbench-evidence.tar.gz || true
           rm -f gpu_metrics.csv || true
           rm -rf speed_bench_data || true
 
@@ -286,6 +304,14 @@ jobs:
             --body "Auto-generated by the SpeedBench AL Collection workflow (run ${GITHUB_RUN_ID}). Model: \`${MODEL}\`, category: \`${CATEGORY}\`, MTP: \`${MTP_LIST}\`, thinking: \`${THINKING_MODES}\`, output_len: \`${SPEEDBENCH_OUTPUT_LEN}\`. Please review the measured values before merging." \
             --base main \
             --head "$BRANCH"
+
+      - name: Upload revision-aware collector evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: speedbench-evidence-${{ inputs.model-prefix }}-${{ inputs.precision }}
+          path: speedbench-evidence.tar.gz
+          if-no-files-found: ignore
 
       - name: Upload server logs
         if: always()

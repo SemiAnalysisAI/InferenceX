@@ -121,6 +121,44 @@ Before accepting an updated curve, reviewers should verify:
 - The source Actions run is linked at the first line of the YAML.
 - The committed values exactly match the workflow artifact.
 
+## Qwen3.8-27B collection
+
+The revision-aware collector `benchmarks/single_node/speedbench/qwen3.827b_vllm.sh`
+supports FP8 and BF16 targets with native MTP. Dispatch `speedbench-al.yml`
+on `runner=b300` or `runner=cluster:h200-dgxc` (the H200 pool also accepts the
+explicit collector override),
+with `collector-script` set to that path, `precision`, `tp=1`, a pinned
+`model-revision`, and an explicit `speculative-config` (the collector supplies
+`num_speculative_tokens`). Pass `mtp-list=1 2 3 4`; this collector rejects draft
+lengths outside 1–4 before downloading models or starting a server. Use the Qwen chat setting
+`thinking-kwargs={"enable_thinking":true}`. Sampling follows the model card:
+thinking on uses temperature 1.0, top-p 0.95 and presence penalty 0; thinking off
+uses 0.7, 0.8 and 1.5, respectively; both use top-k 20.
+
+The official FP8 checkpoint also quantizes its embedded MTP head. To preserve
+the original draft precision, native MTP collection must explicitly select
+`model=Qwen/Qwen3.8-27B` and its pinned BF16 revision inside `speculative-config`,
+with `kv_cache_dtype=auto`. Both target precisions use this same original MTP head.
+The pinned vLLM MTP loader also inherits the target quantization configuration.
+For FP8, the collector adds every original `mtp.*` weight module to that
+configuration's exclusion list through `--hf-overrides`, preserving all target
+settings and existing exclusions. Without these exclusions, selecting the BF16
+draft checkpoint alone can cast its weights into FP8 modules with invalid scales.
+The evidence includes the exact overrides and vLLM model inspection output, so
+the MTP linear modules can be verified as unquantized before accepting a curve.
+These measurements do not validate recipes that quantize
+the draft head or inherit the target's FP8 KV cache for the draft.
+
+All selected coding prompts must complete before a cell is accepted. The collector
+disables the benchmark client's extra readiness request and warmups, and retains
+before/after Prometheus counters. AL is `1 + accepted / drafts`; AR is
+`accepted / proposed_tokens`, using actual proposals rather than an assumed
+fixed draft length. `speedbench-evidence-<model-prefix>-<precision>` contains
+commands, checkpoint metadata, the prepared dataset, per-request outputs, logs,
+unrounded counters/AL/AR, and an AR matrix. Runtime directories are created under
+`/tmp`; the final YAML and evidence archive are staged as workspace-root files.
+Failed or incomplete cells never produce a golden matrix.
+
 ## Current golden curves
 
 | Model | Method | Golden YAML | Source run |
@@ -135,6 +173,11 @@ Before accepting an updated curve, reviewers should verify:
 | MiniMax-M3 | EAGLE3 (GQA) | [`minimaxm3_eagle3_gqa.yaml`](minimaxm3_eagle3_gqa.yaml) | [29784780049](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/29784780049) |
 | GLM-5.2 | MTP | [`glm5.2_mtp.yaml`](glm5.2_mtp.yaml) | [28058352479](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28058352479) |
 | Qwen3.8-Flash-Next | MTP (native) | [`qwen3.8next_mtp.yaml`](qwen3.8next_mtp.yaml) | [33034290269](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/33034290269) |
+| Qwen3.8-27B BF16 | Native MTP (original BF16 head) | [`qwen3.827b_bf16_mtp.yaml`](qwen3.827b_bf16_mtp.yaml) | [thinking off](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35492788796), [thinking on](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35492789880) |
+| Qwen3.8-27B FP8 | Native MTP (original BF16 head) | [`qwen3.827b_fp8_mtp.yaml`](qwen3.827b_fp8_mtp.yaml) | [thinking off](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35492786441), [thinking on](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35492787451) |
+
+Both Qwen3.8-27B curves cover draft lengths 1–4 with thinking off/on. Every cell completed all 80 coding prompts with zero failures. The YAML comments retain per-point AR fractions and raw counters; the values and model inspection were checked against the workflow artifacts.
+
 
 ## Primary references
 
