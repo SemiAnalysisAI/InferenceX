@@ -124,14 +124,14 @@ benchmark:
 dynamo:
   install: true
   source:
-    rev: ba83080ecd31c1ce918559e576d3c5bc9e092ff1
+    rev: cfada2fd9d17bfa6bb68dbee9d2f455e12577b8b
 identity:
   model:
     repo: moonshotai/Kimi-K3
   container:
     image: vllm/vllm-openai:nightly-0961bbae2894d574be790d219651824eb199318e
   frameworks:
-    dynamo: ba83080ecd31c1ce918559e576d3c5bc9e092ff1
+    dynamo: cfada2fd9d17bfa6bb68dbee9d2f455e12577b8b
 slurm:
   time_limit: 06:00:00
 sbatch_directives:
