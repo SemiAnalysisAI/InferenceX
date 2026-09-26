@@ -15,7 +15,7 @@ import math
 import os
 import socket
 import time
-from datetime import UTC
+from datetime import timezone
 from pathlib import Path
 
 from . import ALL_POWER_METRIC_KEYS
@@ -31,6 +31,8 @@ from .single_node import (
     _parse_timestamp,
     integrate_power,
 )
+
+UTC = timezone.utc  # noqa: UP017 -- staged power modules support Python 3.10.
 
 
 def _identity(path: Path, vendor: str) -> dict[str, str]:

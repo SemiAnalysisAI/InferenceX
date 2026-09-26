@@ -43,6 +43,20 @@ from .validation import (
 SCENARIO_TYPES = ("fixed-seq-len", "agentic-coding")
 
 
+def validate_manual_workflow(name: str) -> None:
+    """Read dispatch metadata from the target checkout, like the other current inputs."""
+    path = Path.cwd() / ".github" / "workflows" / name
+    if not path.is_file():
+        raise ValueError(f"workflow-dispatch workflow does not exist: {name}")
+    # BaseLoader builds only strings/containers and preserves GitHub's literal "on" key.
+    workflow = yaml.load(path.read_text(), Loader=yaml.BaseLoader)  # noqa: S506
+    triggers = workflow.get("on") if isinstance(workflow, dict) else None
+    if isinstance(triggers, str):
+        triggers = [triggers]
+    if not isinstance(triggers, (dict, list)) or "workflow_dispatch" not in triggers:
+        raise ValueError(f"workflow-dispatch workflow has no workflow_dispatch trigger: {name}")
+
+
 @dataclass(frozen=True)
 class GenerationInputs:
     config_files: list[str]
@@ -442,6 +456,8 @@ def build_plan(
     """Build the complete sweep from changelog entries and configuration paths.
 
     Load each current input once; load runners only when generation is needed.
+    Current workflows and default config paths belong to the caller's working directory,
+    including when this module is installed or loaded from a separate tooling checkout.
     Append-only base generation uses that revision's own isolated code and inputs.
     Nothing is published until generation and final schema validation succeed.
     """
@@ -450,6 +466,10 @@ def build_plan(
 
     with ExitStack() as stack:
         parsed_entries = [ChangelogEntry.model_validate(entry) for entry in changelog_data]
+        for entry in parsed_entries:
+            if entry.workflow_dispatch is not None:
+                validate_manual_workflow(entry.workflow_dispatch)
+        parsed_entries = [entry for entry in parsed_entries if entry.workflow_dispatch is None]
         if any(entry.no_evals for entry in parsed_entries) and (all_evals or evals_only):
             raise ValueError("no-evals entries cannot use all-evals or evals-only modifiers")
         has_append_only = any(entry.append_only for entry in parsed_entries)

@@ -1,0 +1,91 @@
+name: Test H3 Video
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - 'experimental/video-generation/**'
+      - 'utils/aggregate_power.py'
+      - 'infx/__init__.py'
+      - 'infx/results/__init__.py'
+      - 'infx/results/power/*.py'
+      - 'benchmarks/benchmark_lib.sh'
+      - '.github/workflows/h3-video.yml'
+      - '.github/workflows/h3-fidelity.yml'
+      - '.github/workflows/test-h3-video.yml'
+      - '.github/workflows/e2e-tests.yml'
+  push:
+    paths:
+      - 'experimental/video-generation/**'
+      - 'utils/aggregate_power.py'
+      - 'infx/__init__.py'
+      - 'infx/results/__init__.py'
+      - 'infx/results/power/*.py'
+      - 'benchmarks/benchmark_lib.sh'
+      - '.github/workflows/h3-video.yml'
+      - '.github/workflows/h3-fidelity.yml'
+      - '.github/workflows/test-h3-video.yml'
+      - '.github/workflows/e2e-tests.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: H3 CPU harness and workflow checks
+    if: ${{ github.event.pull_request.draft != true }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - name: Test CPU harness and CI control
+        working-directory: experimental/video-generation
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          source ../../benchmarks/benchmark_lib.sh --validation-only
+          check_env_vars PYTHONPATH
+          uv run --no-project --python 3.12 \
+          --with 'av==16.1.0' --with 'numpy==2.3.5' \
+          --with 'pytest>=8,<9' --with 'jsonschema>=4,<5' python -m pytest -q
+      - name: Check entry shell syntax
+        run: |
+          bash -n experimental/video-generation/runtime-entry.example.sh
+          bash -n experimental/video-generation/campaigns/h3-cross-hardware/entry-only-amd.sh
+      - name: Check workflow wiring
+        run: |
+          set -eo pipefail
+          go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 -shellcheck= \
+            .github/workflows/h3-video.yml .github/workflows/test-h3-video.yml .github/workflows/h3-fidelity.yml
+          # actionlint 1.7.12 predates $/ exact-commit calls. Adapt only its stdin;
+          # retain local called-workflow validation and the repository's $/ syntax.
+          sed 's|uses: \$/|uses: ./|' .github/workflows/e2e-tests.yml | \
+            go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 -shellcheck= \
+              -stdin-filename .github/workflows/e2e-tests.yml -
+
+  staged-power-python310:
+    name: H3 staged power on Python 3.10
+    if: ${{ github.event.pull_request.draft != true }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - name: Test isolated staged power in the retained runtime Python version
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          source benchmarks/benchmark_lib.sh --validation-only
+          check_env_vars PYTHONPATH
+          uv run --no-project --python 3.10 --with 'pytest==8.4.2' \
+          python -m pytest -q \
+          experimental/video-generation/tests/test_ci.py::test_staged_package_recomputes_power_without_the_repository

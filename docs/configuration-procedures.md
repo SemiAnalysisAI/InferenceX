@@ -653,6 +653,32 @@ Sources: [`AGENTS.md#non-negotiable-benchmark-invariants`](../AGENTS.md#non-nego
 6. If the file conflicts with `main`, restore the current `main` version and re-append only this branch's entries. Do not hand-merge reordered history.
 7. Parse the file and confirm the generated changelog selection includes the intended keys before requesting a sweep.
 
+### Separately dispatched workloads
+
+For a workload with its own manual workflow, record its change with an empty
+`config-keys` list and a `workflow-dispatch` basename:
+
+```yaml
+- config-keys: []
+  workflow-dispatch: h3-video.yml
+  description:
+    - "Update the H3 serving measurement harness"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/<number>
+```
+
+The planner validates that `.github/workflows/<name>` exists and declares
+`workflow_dispatch`. Run the planner from the target benchmark checkout: current
+workflows and default configuration paths come from that working directory, even
+when `infx` is installed as a wheel or loaded from a separate tooling checkout.
+This follows the planner's existing current-input contract; `head-ref` does not
+select a historical workflow file.
+
+These entries remain in changelog metadata and select no LLM benchmark or eval
+jobs. They do not dispatch the workflow or grant permission to run it. Do not
+combine `workflow-dispatch` with config keys, scenario selection, eval modifiers,
+or `append-only` in the same entry. Separate ordinary entries retain their normal
+selection behavior. Historical bytes and physical-tail append rules still apply.
+
 ## Stop conditions
 
 Stop before dispatching GPU work or claiming the configuration complete when any condition below holds. Obtain the missing fact or fix the source mismatch. Do not guess.

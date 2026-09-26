@@ -557,6 +557,30 @@ python -m pytest infx/tests/matrix/ -v
 6. 如果文件与 `main` 冲突，恢复当前 `main` 版本，只重新追加本分支条目。不要手动合并已经重排的历史。
 7. 请求 sweep 前解析文件，并确认生成的 changelog 选择包含预期 key。
 
+### 单独手动派发的工作负载
+
+对于使用独立手动 workflow 的工作负载，用空的 `config-keys` 列表和
+`workflow-dispatch` 文件名记录变更：
+
+```yaml
+- config-keys: []
+  workflow-dispatch: h3-video.yml
+  description:
+    - "Update the H3 serving measurement harness"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/<number>
+```
+
+规划器会验证 `.github/workflows/<name>` 存在且声明了 `workflow_dispatch`。
+请在目标基准 checkout 的根目录运行规划器：当前 workflow 和默认配置路径均从
+该工作目录读取，即使 `infx` 安装为 wheel，或代码从另一个 tooling checkout 加载，
+也遵循此规则。这与规划器现有的当前输入契约一致；`head-ref` 不用于选择历史
+workflow 文件。
+
+这些条目保留在 changelog 元数据中，不选择 LLM 基准或评估任务，也不会派发
+workflow 或授予运行权限。同一条目不能把 `workflow-dispatch` 与配置 key、场景
+选择、评估修饰符或 `append-only` 混用。其他独立的普通条目仍按原规则选择任务。
+历史字节保留和物理文件末尾追加规则同样适用。
+
 ## 停止条件
 
 出现以下任何条件时，在派发 GPU 工作或宣称配置完成前停止。取得缺失事实或修复来源不一致；不要猜测。

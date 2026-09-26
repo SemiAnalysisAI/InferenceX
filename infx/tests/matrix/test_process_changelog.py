@@ -631,8 +631,21 @@ def test_historical_generator_uses_snapshot_recipes_not_inherited_recovery_root(
     assert rows[0]["conc"] == [16, 32, 64]
 
 
-def test_validator_uses_trusted_entrypoints_while_reading_another_checkout(committed_planning_repo):
+@pytest.mark.parametrize("manual", [False, True])
+def test_validator_uses_trusted_entrypoints_while_reading_another_checkout(committed_planning_repo, manual):
     root, base, head = committed_planning_repo
+    if manual:
+        workflows = root / ".github/workflows"
+        workflows.mkdir(parents=True)
+        (workflows / "manual.yml").write_text("on: workflow_dispatch\n")
+        (root / "perf-changelog.yaml").write_text(yaml.safe_dump([{
+            "config-keys": [], "workflow-dispatch": "manual.yml",
+            "description": ["Record manual workload"],
+            "pr-link": "https://github.com/SemiAnalysisAI/InferenceX/pull/1",
+        }]))
+        subprocess.run(["git", "add", "."], cwd=root, check=True)
+        subprocess.run(["git", "commit", "-qm", "manual workload"], cwd=root, check=True)
+        head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
     tooling = root / ".tooling"
     tooling.mkdir()
     shutil.move(root / "infx", tooling / "infx")
@@ -649,6 +662,45 @@ def test_validator_uses_trusted_entrypoints_while_reading_another_checkout(commi
     assert result.returncode == 0, result.stderr
     assert result.stdout == "Validated perf-changelog.yaml: final newline present and matrix generated\n"
     assert result.stderr == ""
+
+
+@pytest.mark.parametrize("triggers,ordinary", [
+    ("workflow_dispatch", False), ("[push, workflow_dispatch]", False),
+    ("\n  workflow_dispatch:", True),
+])
+def test_manual_workflow_preserves_metadata_without_selecting_llm_jobs(
+    planning_repo, changelog_run, triggers, ordinary,
+):
+    root, _, _ = planning_repo
+    workflows = root / ".github/workflows"
+    workflows.mkdir(parents=True)
+    (workflows / "manual.yml").write_text(f"on: {triggers}\n")
+    entries = [{"config-keys": [], "workflow-dispatch": "manual.yml"}]
+    if ordinary:
+        entries.append({"scenario-type": ["fixed-seq-len"], "no-evals": True})
+    output = changelog_run(entries)
+    recorded = output["changelog_metadata"]["entries"]
+    assert recorded[0]["workflow-dispatch"] == "manual.yml"
+    assert recorded[0]["config-keys"] == []
+    assert len(recorded) == len(entries)
+    assert output["multi_node"] == {}
+    for key in ("evals", "agentic_evals", "multinode_evals", "multinode_agentic_evals"):
+        assert output[key] == []
+    if ordinary:
+        assert [row["conc"] for row in output["single_node"]["8k1k"]] == [16, 32, 64]
+    else:
+        assert output["single_node"] == {}
+
+
+@pytest.mark.parametrize("content", [None, "on:\n  push:\n", "on: [push, workflow_call]\n"])
+def test_manual_workflow_requires_existing_dispatch_trigger(planning_repo, changelog_run, content):
+    root, _, _ = planning_repo
+    if content is not None:
+        workflows = root / ".github/workflows"
+        workflows.mkdir(parents=True)
+        (workflows / "manual.yml").write_text(content)
+    with pytest.raises(ValueError, match="workflow-dispatch workflow"):
+        changelog_run([{"config-keys": [], "workflow-dispatch": "manual.yml"}])
 
 
 @pytest.fixture
@@ -777,7 +829,13 @@ def test_append_only_main_runs_only_added_points_and_skips_evals(planning_repo, 
     git("tag", "base")
     master["single"]["scenarios"]["fixed-seq-len"][0]["search-space"][0]["conc-list"].append(128)
     (root / "configs/nvidia-master.yaml").write_text(yaml.safe_dump(master, sort_keys=False))
-    output = changelog_run([{"append-only": True, "scenario-type": ["fixed-seq-len"]}],
+    workflows = root / ".github/workflows"
+    workflows.mkdir(parents=True)
+    (workflows / "manual.yml").write_text("on: workflow_dispatch\n")
+    output = changelog_run([
+        {"config-keys": [], "workflow-dispatch": "manual.yml"},
+        {"append-only": True, "scenario-type": ["fixed-seq-len"]},
+    ],
                            ["--trim-conc"] if trim else [])
     rows = output["single_node"]["8k1k"]
     assert [r["conc"] for r in rows] == [128]
