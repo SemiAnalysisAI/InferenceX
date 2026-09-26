@@ -121,6 +121,7 @@ class NCCLEPBackend(EPBackend):
         # also covers manual/torchrun invocations. Verified on h100 EP8: absent -> group.create
         # fails (error 5); present -> device_api_support=True and HT+LL groups create.
         os.environ.setdefault("NCCL_CUMEM_ENABLE", "1")
+        os.environ.setdefault("NCCL_GRAPH_STREAM_ORDERING", "0")  # DIAG: no capture-time serialization stream
         self.group = dist.group.WORLD
         self.experts_per_rank = args.experts // world_size
         self.num_local_experts = self.experts_per_rank
@@ -264,7 +265,7 @@ class NCCLEPBackend(EPBackend):
         if not self._ll:
             st = getattr(self, "_rw_state", None)
             tag = "none" if st is None else f"w{st['registered']}-rc{st['rc']}-n{st['matches']}-{st['rt']}"
-            self.kernel_generation = f"{self.kernel_generation}-diagrw-{tag}-cta{os.environ.get('NCCL_CTA_POLICY', 'd')}"
+            self.kernel_generation = f"{self.kernel_generation}-diagrw-{tag}-cta{os.environ.get('NCCL_CTA_POLICY', 'd')}-gso{os.environ.get('NCCL_GRAPH_STREAM_ORDERING', 'd')}"
 
         dev = self.device
         if self._ll_expert_major:
