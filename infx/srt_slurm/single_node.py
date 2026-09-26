@@ -1,4 +1,4 @@
-"""Bind a native single-node SRT recipe to one fixed-sequence or AgentX matrix point."""
+"""Bind a native single-node SRT recipe to one fixed-sequence, AgentX, or SPEED-Bench point."""
 
 from __future__ import annotations
 
@@ -15,6 +15,13 @@ import yaml
 from infx.srt_slurm.synthetic_acceptance import ENGINES, selected_recipes, spec_parameters
 
 SINGLE_NODE_ENGINES = {**ENGINES, "atom": "atom"}
+
+SPEEDBENCH_CLIENT = "srt_speedbench.sh"
+
+
+def _is_speedbench(benchmark: dict[str, Any]) -> bool:
+    """Detect a SPEED-Bench AL collector from its benchmark command."""
+    return benchmark.get("command", "").endswith(SPEEDBENCH_CLIENT)
 
 
 def parallelism_constraints(
@@ -95,6 +102,7 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
     # A point that stops drafting may keep its matrix label.
     speculation = "mtp" if spec else workload.get("SPEC_DECODING", "none")
     agentic = environment["IS_AGENTIC"] == "1"
+    collector = _is_speedbench(benchmark)
     expected = {
         "engine": (engine, SINGLE_NODE_ENGINES[environment["FRAMEWORK"]]),
         "model": (recipe["model"]["path"], f"hf:{environment['MODEL']}"),
@@ -114,9 +122,13 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
             if environment["SPEC_DECODING"] == "draft_model"
             else environment["SPEC_DECODING"],
         ),
-        "AgentX client": (benchmark.get("command", "").endswith("srt_agentic.sh"), agentic),
     }
-    if not agentic:
+    if not collector:
+        expected["AgentX client"] = (
+            benchmark.get("command", "").endswith("srt_agentic.sh"),
+            agentic,
+        )
+    if not agentic and not collector:
         expected["USE_CHAT_TEMPLATE"] = (workload["USE_CHAT_TEMPLATE"], "true" if spec else "false")
         for name in ("ISL", "OSL", "RANDOM_RANGE_RATIO"):
             expected[name] = (str(workload[name]), environment[name])
@@ -160,6 +172,7 @@ def runtime_arguments(config: str, environment: Mapping[str, str]) -> list[str]:
         for key, value in options.items():
             overrides += ["--set", f"srun_options.{key}={json.dumps(value)}"]
     agentic = environment["IS_AGENTIC"] == "1"
+    collector = _is_speedbench(recipe["benchmark"])
     names = [
         "CONC",
         "RESULT_FILENAME",
@@ -179,6 +192,20 @@ def runtime_arguments(config: str, environment: Mapping[str, str]) -> list[str]:
         if name == "CONC" and name in recipe["benchmark"]["env"]:
             continue
         overrides += ["--set", f"benchmark.env.{name}={json.dumps(value)}"]
+    if collector:
+        # SPEED-Bench collector tunables: bind workflow-level settings into
+        # the per-cell benchmark environment so the client reads them.
+        for name in ("CATEGORY", "SPEEDBENCH_OUTPUT_LEN"):
+            value = environment.get(name, "")
+            if not value:
+                raise ValueError(f"Missing SPEED-Bench input: {name}")
+            overrides += ["--set", f"benchmark.env.{name}={json.dumps(value)}"]
+        # Chat-template kwargs are optional (dsr1 has no off mode).
+        for name in ("CHAT_TEMPLATE_KWARGS_ON",):
+            value = environment.get(name, "")
+            if value:
+                overrides += ["--set", f"benchmark.env.{name}={json.dumps(value)}"]
+        return [*overrides, "--set", 'benchmark.env.RESULT_DIR="/logs"']
     if agentic:
         # The aggregated result lands where fixed-sequence results do.
         overrides += ["--set", 'benchmark.env.AGENTIC_OUTPUT_DIR="/logs"']

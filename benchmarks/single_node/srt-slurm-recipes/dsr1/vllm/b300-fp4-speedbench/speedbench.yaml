@@ -1,0 +1,94 @@
+# DeepSeek-R1 B300 vLLM SPEED-Bench AL matrix (native MTP).
+#
+# R1 always reasons (no thinking-off mode), so only zip_override_thinking_on is
+# provided.  Each entry varies num_speculative_tokens 1..8.
+#
+# FP4 MoE on Blackwell needs FlashInfer (VLLM_USE_FLASHINFER_MOE_FP4).
+# R1 is DeepSeek-V3 architecture (plain MLA): no --attention_config.use_fp4_indexer_cache,
+# no deepseek_v4 tokenizer/parsers.  --kv-cache-dtype fp8 keeps all golden AL values
+# under one KV-cache numeric regime.  Sampling: temperature 0.6, top_p 0.95
+# (DeepSeek-R1 generation_config).
+base:
+  schema: 2
+  name: dsr1-fp4-b300-vllm-speedbench
+  model:
+    path: hf:nvidia/DeepSeek-R1-0528-NVFP4-v2
+    container: vllm/vllm-openai:v0.21.0
+    precision: fp4
+  resources:
+    gpu_type: b300
+    gpus_per_node: 8
+  frontend:
+    type: vllm
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine:
+    type: vllm
+    connector: null
+  health_check:
+    interval_seconds: 10
+    max_attempts: 360
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        served-model-name: nvidia/DeepSeek-R1-0528-NVFP4-v2
+        tensor-parallel-size: 8
+        data-parallel-size: 1
+        pipeline-parallel-size: 1
+        trust-remote-code: true
+        enable-expert-parallel: true
+        kv-cache-dtype: fp8
+        no-enable-prefix-caching: true
+        max-model-len: 16384
+      env:
+        VLLM_USE_FLASHINFER_MOE_FP4: '1'
+        VLLM_ENGINE_READY_TIMEOUT_S: '3600'
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/single_node/srt_speedbench.sh
+    env:
+      MODEL: nvidia/DeepSeek-R1-0528-NVFP4-v2
+      SPEC_DECODING: mtp
+      TEMPERATURE: '0.6'
+      TOP_P: '0.95'
+      SPEEDBENCH_TRUST_REMOTE_CODE: '1'
+
+zip_override_thinking_on:
+  roles:
+    agg:
+      args:
+        speculative-config:
+          - '{"method":"mtp","num_speculative_tokens":1}'
+          - '{"method":"mtp","num_speculative_tokens":2}'
+          - '{"method":"mtp","num_speculative_tokens":3}'
+          - '{"method":"mtp","num_speculative_tokens":4}'
+          - '{"method":"mtp","num_speculative_tokens":5}'
+          - '{"method":"mtp","num_speculative_tokens":6}'
+          - '{"method":"mtp","num_speculative_tokens":7}'
+          - '{"method":"mtp","num_speculative_tokens":8}'
+  benchmark:
+    env:
+      THINKING:
+        - 'on'
+        - 'on'
+        - 'on'
+        - 'on'
+        - 'on'
+        - 'on'
+        - 'on'
+        - 'on'
+      MTP:
+        - '1'
+        - '2'
+        - '3'
+        - '4'
+        - '5'
+        - '6'
+        - '7'
+        - '8'

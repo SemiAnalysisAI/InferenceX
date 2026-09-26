@@ -124,7 +124,9 @@ EXECUTION_PATH=agentic
 if [[ "$IS_MULTINODE" == true ]]; then
     EXECUTION_PATH=multinode
 elif [[ -n "${BENCH_SCRIPT_OVERRIDE:-}" ]]; then
-    # SPEED-Bench collectors explicitly supply their script outside this migration.
+    # Legacy SPEED-Bench collectors (draft-model variants: dsv4dspark*, kimik3,
+    # minimaxm3) explicitly supply their script. Native-MTP collectors migrated
+    # to the srt-slurm path set SRT_RECIPE instead.
     EXECUTION_PATH=script
 elif [[ "$IS_AGENTIC" == 0 || -n "${SRT_RECIPE:-}" ]]; then
     check_env_vars SRT_RECIPE

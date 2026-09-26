@@ -1,0 +1,132 @@
+# GLM-5 B300 vLLM SPEED-Bench AL matrix (native MTP).
+#
+# GLM requires --chat-template-content-format=string.  Do NOT pass
+# --attention_config.use_fp4_indexer_cache: despite GLM-5 also being DSA sparse
+# attention, that knob is read only by vllm/models/deepseek_v4/attention.py.
+# Thinking ON is default; OFF requires explicit enable_thinking:false kwargs.
+# GPU memory utilization 0.80 matches the NVIDIA model-card recommendation for
+# NVFP4 + DSA + MTP draft layers.
+# Sampling: temperature 1.0, top_p 0.95 (GLM-5 generation_config).
+base:
+  schema: 2
+  name: glm5-fp4-b300-vllm-speedbench
+  model:
+    path: hf:nvidia/GLM-5-NVFP4
+    container: vllm/vllm-openai:v0.21.0
+    precision: fp4
+  resources:
+    gpu_type: b300
+    gpus_per_node: 8
+  frontend:
+    type: vllm
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine:
+    type: vllm
+    connector: null
+  health_check:
+    interval_seconds: 10
+    max_attempts: 360
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        served-model-name: nvidia/GLM-5-NVFP4
+        tensor-parallel-size: 8
+        data-parallel-size: 1
+        pipeline-parallel-size: 1
+        trust-remote-code: true
+        kv-cache-dtype: fp8
+        no-enable-prefix-caching: true
+        reasoning-parser: glm45
+        tool-call-parser: glm47
+        enable-auto-tool-choice: true
+        chat-template-content-format: string
+        gpu-memory-utilization: 0.80
+        max-model-len: 16384
+      env:
+        VLLM_ENGINE_READY_TIMEOUT_S: '3600'
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/single_node/srt_speedbench.sh
+    env:
+      MODEL: nvidia/GLM-5-NVFP4
+      SPEC_DECODING: mtp
+      TEMPERATURE: '1.0'
+      TOP_P: '0.95'
+      CHAT_TEMPLATE_KWARGS_OFF: '{"enable_thinking": false}'
+      SPEEDBENCH_TRUST_REMOTE_CODE: '1'
+      APPLY_CHAT_TEMPLATE_KWARGS_SHIM: '1'
+
+zip_override_thinking_off:
+  roles:
+    agg:
+      args:
+        speculative-config:
+          - '{"method":"mtp","num_speculative_tokens":1}'
+          - '{"method":"mtp","num_speculative_tokens":2}'
+          - '{"method":"mtp","num_speculative_tokens":3}'
+          - '{"method":"mtp","num_speculative_tokens":4}'
+          - '{"method":"mtp","num_speculative_tokens":5}'
+          - '{"method":"mtp","num_speculative_tokens":6}'
+          - '{"method":"mtp","num_speculative_tokens":7}'
+          - '{"method":"mtp","num_speculative_tokens":8}'
+  benchmark:
+    env:
+      THINKING:
+        - 'off'
+        - 'off'
+        - 'off'
+        - 'off'
+        - 'off'
+        - 'off'
+        - 'off'
+        - 'off'
+      MTP:
+        - '1'
+        - '2'
+        - '3'
+        - '4'
+        - '5'
+        - '6'
+        - '7'
+        - '8'
+
+zip_override_thinking_on:
+  roles:
+    agg:
+      args:
+        speculative-config:
+          - '{"method":"mtp","num_speculative_tokens":1}'
+          - '{"method":"mtp","num_speculative_tokens":2}'
+          - '{"method":"mtp","num_speculative_tokens":3}'
+          - '{"method":"mtp","num_speculative_tokens":4}'
+          - '{"method":"mtp","num_speculative_tokens":5}'
+          - '{"method":"mtp","num_speculative_tokens":6}'
+          - '{"method":"mtp","num_speculative_tokens":7}'
+          - '{"method":"mtp","num_speculative_tokens":8}'
+  benchmark:
+    env:
+      THINKING:
+        - 'on'
+        - 'on'
+        - 'on'
+        - 'on'
+        - 'on'
+        - 'on'
+        - 'on'
+        - 'on'
+      MTP:
+        - '1'
+        - '2'
+        - '3'
+        - '4'
+        - '5'
+        - '6'
+        - '7'
+        - '8'

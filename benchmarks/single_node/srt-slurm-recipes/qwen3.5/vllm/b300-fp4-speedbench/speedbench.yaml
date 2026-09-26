@@ -1,0 +1,139 @@
+# Qwen3.5-397B-A17B B300 vLLM SPEED-Bench AL matrix (native MTP).
+#
+# --max-cudagraph-capture-size 512: Qwen3.5 is a mamba hybrid and a large capture
+# size trips the causal_conv1d assert (vLLM PR #34571).  --language-model-only:
+# the checkpoint is multimodal, AL is collected on text only.
+# Thinking OFF must be passed explicitly via enable_thinking.
+#
+# Per-mode sampling (model-card):
+#   thinking : temperature 0.6, top_p 0.95, top_k 20, presence_penalty 0.0
+#   instruct : temperature 0.7, top_p 0.8,  top_k 20, presence_penalty 1.5
+base:
+  schema: 2
+  name: qwen35-fp4-b300-vllm-speedbench
+  model:
+    path: hf:nvidia/Qwen3.5-397B-A17B-NVFP4-V2
+    container: vllm/vllm-openai:v0.21.0
+    precision: fp4
+  resources:
+    gpu_type: b300
+    gpus_per_node: 8
+  frontend:
+    type: vllm
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine:
+    type: vllm
+    connector: null
+  health_check:
+    interval_seconds: 10
+    max_attempts: 360
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        served-model-name: nvidia/Qwen3.5-397B-A17B-NVFP4-V2
+        tensor-parallel-size: 8
+        data-parallel-size: 1
+        pipeline-parallel-size: 1
+        trust-remote-code: true
+        kv-cache-dtype: fp8
+        no-enable-prefix-caching: true
+        reasoning-parser: qwen3
+        tool-call-parser: qwen3_coder
+        enable-auto-tool-choice: true
+        language-model-only: true
+        max-cudagraph-capture-size: 512
+        max-model-len: 16384
+      env:
+        VLLM_ENGINE_READY_TIMEOUT_S: '3600'
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/single_node/srt_speedbench.sh
+    env:
+      MODEL: nvidia/Qwen3.5-397B-A17B-NVFP4-V2
+      SPEC_DECODING: mtp
+      TEMPERATURE_ON: '0.6'
+      TOP_P_ON: '0.95'
+      TOP_K_ON: '20'
+      PRESENCE_PENALTY_ON: '0.0'
+      TEMPERATURE_OFF: '0.7'
+      TOP_P_OFF: '0.8'
+      TOP_K_OFF: '20'
+      PRESENCE_PENALTY_OFF: '1.5'
+      CHAT_TEMPLATE_KWARGS_OFF: '{"enable_thinking": false}'
+      SPEEDBENCH_TRUST_REMOTE_CODE: '1'
+      APPLY_CHAT_TEMPLATE_KWARGS_SHIM: '1'
+
+zip_override_thinking_off:
+  roles:
+    agg:
+      args:
+        speculative-config:
+          - '{"method":"mtp","num_speculative_tokens":1}'
+          - '{"method":"mtp","num_speculative_tokens":2}'
+          - '{"method":"mtp","num_speculative_tokens":3}'
+          - '{"method":"mtp","num_speculative_tokens":4}'
+          - '{"method":"mtp","num_speculative_tokens":5}'
+          - '{"method":"mtp","num_speculative_tokens":6}'
+          - '{"method":"mtp","num_speculative_tokens":7}'
+          - '{"method":"mtp","num_speculative_tokens":8}'
+  benchmark:
+    env:
+      THINKING:
+        - 'off'
+        - 'off'
+        - 'off'
+        - 'off'
+        - 'off'
+        - 'off'
+        - 'off'
+        - 'off'
+      MTP:
+        - '1'
+        - '2'
+        - '3'
+        - '4'
+        - '5'
+        - '6'
+        - '7'
+        - '8'
+
+zip_override_thinking_on:
+  roles:
+    agg:
+      args:
+        speculative-config:
+          - '{"method":"mtp","num_speculative_tokens":1}'
+          - '{"method":"mtp","num_speculative_tokens":2}'
+          - '{"method":"mtp","num_speculative_tokens":3}'
+          - '{"method":"mtp","num_speculative_tokens":4}'
+          - '{"method":"mtp","num_speculative_tokens":5}'
+          - '{"method":"mtp","num_speculative_tokens":6}'
+          - '{"method":"mtp","num_speculative_tokens":7}'
+          - '{"method":"mtp","num_speculative_tokens":8}'
+  benchmark:
+    env:
+      THINKING:
+        - 'on'
+        - 'on'
+        - 'on'
+        - 'on'
+        - 'on'
+        - 'on'
+        - 'on'
+        - 'on'
+      MTP:
+        - '1'
+        - '2'
+        - '3'
+        - '4'
+        - '5'
+        - '6'
+        - '7'
+        - '8'

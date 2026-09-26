@@ -105,8 +105,6 @@ env:
   EP_SIZE: '1'
   DP_ATTENTION: 'false'
   SPEC_DECODING: mtp
-  # Run the AL-matrix collector instead of the auto-selected throughput script.
-  BENCH_SCRIPT_OVERRIDE: benchmarks/single_node/speedbench/${{ inputs.model-prefix }}_fp4_b300_vllm.sh
   SALLOC_TIME_LIMIT: ${{ inputs.salloc-time }}
   # Matrix-collector tunables (propagated into the container via srun --export=ALL).
   MTP_LIST: ${{ inputs.mtp-list }}
@@ -239,7 +237,77 @@ jobs:
           if [[ -f runners/runtime_settings.sh ]]; then
             source runners/runtime_settings.sh
           fi
-          bash ./runners/launch_${RUNNER_NAME%%_*}.sh
+
+          # Migrated native-MTP prefixes use the srt-slurm single-node path.
+          # Draft-model collectors (dsv4dspark*, kimik3, minimaxm3) keep the
+          # legacy BENCH_SCRIPT_OVERRIDE path.
+          _is_srt_slurm_prefix() {
+            case "$1" in
+              dsr1|dsv4|glm5|glm52|qwen3.5|qwen3.8next) return 0 ;;
+              *) return 1 ;;
+            esac
+          }
+
+          if _is_srt_slurm_prefix "$MODEL_PREFIX"; then
+            # --- srt-slurm per-cell collection ---
+            RECIPE_PATH="benchmarks/single_node/srt-slurm-recipes/${MODEL_PREFIX}/vllm/b300-fp4-speedbench/speedbench.yaml"
+            if [[ ! -f "$RECIPE_PATH" ]]; then
+              echo "ERROR: SPEED-Bench recipe not found: $RECIPE_PATH" >&2
+              exit 1
+            fi
+            mkdir -p speedbench_results
+            ALL_FAILED=true
+            # Harmless values for launch_srt_single_node env checks; the collector
+            # recipe and client do not read them.
+            export ISL=256
+            export OSL=256
+            export RANDOM_RANGE_RATIO=0.0
+            export CONC=1
+            export PP_SIZE=1
+            export DCP_SIZE=1
+            export PCP_SIZE=1
+            for mode in $THINKING_MODES; do
+              for mtp in $MTP_LIST; do
+                IDX=$((mtp - 1))
+                export SRT_RECIPE="${RECIPE_PATH}:zip_override_thinking_${mode}[${IDX}]"
+                export RESULT_FILENAME="speedbench_${mode}_mtp${mtp}"
+                echo ""
+                echo "=========================================="
+                echo "  srt-slurm cell: thinking=${mode} MTP=${mtp}"
+                echo "  SRT_RECIPE=${SRT_RECIPE}"
+                echo "=========================================="
+                CELL_RC=0
+                bash ./runners/launch_"${RUNNER_NAME%%_*}".sh || CELL_RC=$?
+                # Collect per-cell artifacts into the results directory.
+                if [[ -f "${RESULT_FILENAME}.json" ]]; then
+                  mv "${RESULT_FILENAME}.json" "speedbench_results/${RESULT_FILENAME}.json"
+                  ALL_FAILED=false
+                fi
+                if [[ -f srt-single-node-logs.tar.gz ]]; then
+                  mv srt-single-node-logs.tar.gz "speedbench_results/srt-logs_${mode}_mtp${mtp}.tar.gz"
+                fi
+                if [[ "$CELL_RC" -ne 0 ]]; then
+                  echo "  -> cell failed (rc=$CELL_RC), recording N/A"
+                fi
+              done
+            done
+            if [[ "$ALL_FAILED" == true ]]; then
+              echo "ERROR: every SPEED-Bench cell failed" >&2
+              exit 1
+            fi
+            # Aggregate per-cell result JSONs into the reference YAML.
+            PYTHONPATH="${GITHUB_WORKSPACE}${PYTHONPATH:+:$PYTHONPATH}" \
+              python3 -m infx.workflows.speedbench_matrix \
+              --result-dir speedbench_results \
+              --model-key "$(basename "$(echo "$MODEL" | tr '[:upper:]' '[:lower:]')")" \
+              --thinking-modes "$THINKING_MODES" \
+              --mtp-list "$MTP_LIST" \
+              > speedbench-reference-al.yaml
+          else
+            # --- Legacy collector script ---
+            export BENCH_SCRIPT_OVERRIDE="benchmarks/single_node/speedbench/${MODEL_PREFIX}_fp4_b300_vllm.sh"
+            bash ./runners/launch_"${RUNNER_NAME%%_*}".sh
+          fi
 
           if [ ! -f "speedbench-reference-al.yaml" ]; then
             echo "AL collection failed: speedbench-reference-al.yaml not produced." >&2
@@ -292,7 +360,9 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: speedbench_server_logs-${{ inputs.model-prefix }}
-          path: speedbench_results/server_*.log
+          path: |
+            speedbench_results/server_*.log
+            speedbench_results/srt-logs_*.tar.gz
           if-no-files-found: ignore
 
       # Per-request benchmark detail (vllm bench serve --save-detailed): includes

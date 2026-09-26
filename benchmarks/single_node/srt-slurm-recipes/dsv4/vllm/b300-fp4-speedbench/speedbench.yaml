@@ -1,0 +1,131 @@
+# DeepSeek-V4-Pro B300 vLLM SPEED-Bench AL matrix (native MTP).
+#
+# DSV4 tokenizer, parsers, compilation, and FP4 indexer cache match the AgentX
+# recipe.  Temperature 1.0 (generation_config); thinking-on kwargs from the
+# workflow (CHAT_TEMPLATE_KWARGS_ON).  The client-side --chat-template-kwargs
+# shim is applied when APPLY_CHAT_TEMPLATE_KWARGS_SHIM=1.
+base:
+  schema: 2
+  name: dsv4-fp4-b300-vllm-speedbench
+  model:
+    path: hf:deepseek-ai/DeepSeek-V4-Pro
+    container: vllm/vllm-openai:v0.21.0
+    precision: fp4
+  resources:
+    gpu_type: b300
+    gpus_per_node: 8
+  frontend:
+    type: vllm
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine:
+    type: vllm
+    connector: null
+  health_check:
+    interval_seconds: 10
+    max_attempts: 360
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        served-model-name: deepseek-ai/DeepSeek-V4-Pro
+        tensor-parallel-size: 8
+        data-parallel-size: 1
+        pipeline-parallel-size: 1
+        trust-remote-code: true
+        kv-cache-dtype: fp8
+        block-size: 256
+        no-enable-prefix-caching: true
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}'
+        attention-config: '{"use_fp4_indexer_cache":true}'
+        tokenizer-mode: deepseek_v4
+        tool-call-parser: deepseek_v4
+        enable-auto-tool-choice: true
+        reasoning-parser: deepseek_v4
+        max-cudagraph-capture-size: 2048
+        max-model-len: 16384
+      env:
+        VLLM_ENGINE_READY_TIMEOUT_S: '3600'
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/single_node/srt_speedbench.sh
+    env:
+      MODEL: deepseek-ai/DeepSeek-V4-Pro
+      SPEC_DECODING: mtp
+      TEMPERATURE: '1.0'
+      SPEEDBENCH_TOKENIZER_MODE: deepseek_v4
+      SPEEDBENCH_TRUST_REMOTE_CODE: '1'
+      APPLY_CHAT_TEMPLATE_KWARGS_SHIM: '1'
+
+zip_override_thinking_off:
+  roles:
+    agg:
+      args:
+        speculative-config:
+          - '{"method":"mtp","num_speculative_tokens":1}'
+          - '{"method":"mtp","num_speculative_tokens":2}'
+          - '{"method":"mtp","num_speculative_tokens":3}'
+          - '{"method":"mtp","num_speculative_tokens":4}'
+          - '{"method":"mtp","num_speculative_tokens":5}'
+          - '{"method":"mtp","num_speculative_tokens":6}'
+          - '{"method":"mtp","num_speculative_tokens":7}'
+          - '{"method":"mtp","num_speculative_tokens":8}'
+  benchmark:
+    env:
+      THINKING:
+        - 'off'
+        - 'off'
+        - 'off'
+        - 'off'
+        - 'off'
+        - 'off'
+        - 'off'
+        - 'off'
+      MTP:
+        - '1'
+        - '2'
+        - '3'
+        - '4'
+        - '5'
+        - '6'
+        - '7'
+        - '8'
+
+zip_override_thinking_on:
+  roles:
+    agg:
+      args:
+        speculative-config:
+          - '{"method":"mtp","num_speculative_tokens":1}'
+          - '{"method":"mtp","num_speculative_tokens":2}'
+          - '{"method":"mtp","num_speculative_tokens":3}'
+          - '{"method":"mtp","num_speculative_tokens":4}'
+          - '{"method":"mtp","num_speculative_tokens":5}'
+          - '{"method":"mtp","num_speculative_tokens":6}'
+          - '{"method":"mtp","num_speculative_tokens":7}'
+          - '{"method":"mtp","num_speculative_tokens":8}'
+  benchmark:
+    env:
+      THINKING:
+        - 'on'
+        - 'on'
+        - 'on'
+        - 'on'
+        - 'on'
+        - 'on'
+        - 'on'
+        - 'on'
+      MTP:
+        - '1'
+        - '2'
+        - '3'
+        - '4'
+        - '5'
+        - '6'
+        - '7'
+        - '8'
