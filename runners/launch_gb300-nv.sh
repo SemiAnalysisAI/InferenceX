@@ -180,6 +180,11 @@ rm -rf "$SRT_REPO_DIR"
 
 setup_srt_slurm "$SRT_REPO_DIR" "$FRAMEWORK" "$USES_DCGM_POWER" || exit 1
 
+if [[ "$CONFIG_FILE" == recipes/dsv4/vllm/gb300-fp4/agentx/cache-sources-dep4-dep16-c256-mtp.yaml ]]; then
+    # This validation needs all five DP metrics endpoints and verifies the PR overlay after setup.
+    git -C "$SRT_REPO_DIR" apply "$GITHUB_WORKSPACE/runners/srt-slurm/validation/pr56318.patch" || exit 1
+fi
+
 if [[ "$FRAMEWORK" == "dynamo-trt" && "$MODEL_PREFIX" == "dsv4" ]]; then
     SRT_SLURM_MODEL_PREFIX="deepseek-ai/DeepSeek-V4-Pro"
 fi

@@ -8962,3 +8962,15 @@
     - "旧镜像切出于 2026-09-16，新镜像领先 441 个提交，包含当前曲线所不含的三项 Kimi-K3 正确性修复：vllm-project/vllm#51483 不再将无状态的首个 chunk 当作 decode，vllm-project/vllm#57098 修复 Kimi-K3 reasoning parser，vllm-project/vllm#57430 支持 routed expert 量化。新镜像还包含本臂在并发大于 4 时均会使用的 ROCm CPU KV 卸载改动，包括 vllm-project/vllm#57160（ROCm CPU KV 卸载改用私有 pinned 张量）与 vllm-project/vllm#50045（卸载背压检测）。"
     - "This image bump does not change the DSpark draft model data type. Only the image: line changes and kimik3_fp4_mi355x_mtp.sh is unchanged; the draft loads unmodified from the published Inferact/Kimi-K3-DSpark checkpoint via --speculative-config (model=Inferact/Kimi-K3-DSpark, method=dspark). The only dtype in that speculative-config is kv_cache_dtype=fp8, which sets the draft KV-cache storage precision, not the draft weights. No flag overrides or re-quantizes the draft-model weights, so the draft dtype is preserved from its checkpoint across this re-sweep."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3419
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-agentic-cache-sources-mtp
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-cache-sources-mtp-disagg
+  scenario-type:
+    - agentic-coding
+  no-evals: true
+  description:
+    - "Rerun vLLM PR56318 at bd57138f9b98eb64c44ea6a0f10d08c8f639820e with the four proven DeepSeek-V4-Pro hybrid cache-source points: B200 TP8 MTP3 native DRAM c8, Simple NVMe c14, and native DRAM+NVMe c14; GB300 MTP3 NIXL plus Mooncake c256."
+    - "Preserve B200 GPU utilization 0.85, native DRAM utilization 0.0592, the dedicated 1 TB Simple NVMe budget, 3600-second AgentX profiles, and disabled evals. GB300 is one DEP4 prefill worker on one node plus one DEP16 decode worker across four nodes: five nodes and twenty GPUs total."
+    - "Keep existing benchmark curves unchanged. Adapt the isolated old-Pro validation recipes to current InferenceX paths and current vLLM flag names, use the Python frontend, and collect all raw backend metrics with the cached-prompt source counter required."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX

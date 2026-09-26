@@ -23,6 +23,12 @@ Use this page for benchmark configuration, recipe, image, and runner changes. It
 
 Delete retired entries from the active master configs; they are not archived. Git history and `perf-changelog.yaml` keep the historical settings. For partial retirements, remove only the retired scenarios. Delete retired AMD server-registry entries and model-specific setup from `benchmarks/multi_node/amd_utils/` as well. Preserve shared dependencies needed by retained SPEED-Bench collectors, including their scheduling scores. See the [deprecation rules](../AGENTS.md#deprecating-benchmark-configs).
 
+## Cache-source validation
+
+Single-node AgentX configs accept `kv-offloading: nvme` or `[dram, nvme]` in addition to `none` and `dram`. Tiered entries still require `dram-utilization`, which budgets host memory only. The dedicated DeepSeek-V4-Pro B200 validation recipe supports Simple NVMe and native DRAM/NVMe. Its launcher mounts a job-owned `/scratch/inferencex-kv-<job-id>` directory and removes it before releasing the allocation. Other recipes must explicitly opt in to NVMe modes.
+
+The dedicated GB300 cache-source recipe applies a job-local srt-slurm patch to scrape every physical DP worker, including nonleader nodes. It verifies the image's PR-overlay checksums after dependency installation. This patch does not run for other recipes.
+
 ## Dependency submodules
 
 Git records the exact dependency commits. [`.gitmodules`](../.gitmodules) defines the repositories: AIPerf at `utils/aiperf`, NVIDIA srt-slurm at `utils/srt-slurm`. TileRT is a documented manual fork checkout in `setup_srt_slurm()`, not a separate submodule.

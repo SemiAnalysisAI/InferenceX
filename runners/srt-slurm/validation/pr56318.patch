@@ -1,0 +1,24 @@
+diff --git a/src/srtctl/cli/mixins/benchmark_stage.py b/src/srtctl/cli/mixins/benchmark_stage.py
+--- a/src/srtctl/cli/mixins/benchmark_stage.py
++++ b/src/srtctl/cli/mixins/benchmark_stage.py
+@@ -862,7 +862,7 @@ class BenchmarkStageMixin:
+                 env.update(self._get_aiperf_server_metrics_env())
+             elif is_custom:
+                 assert logical_endpoints is not None
+-                env.update(self._get_aiperf_server_metrics_env(logical_endpoints, logical_workers_only=True))
++                env.update(self._get_aiperf_server_metrics_env())
+         if isinstance(runner, AIPerfBenchmarkRunner) and self.config.benchmark.aiperf_package:
+             env["AIPERF_PACKAGE"] = self.config.benchmark.aiperf_package
+ 
+diff --git a/src/srtctl/cli/mixins/worker_stage.py b/src/srtctl/cli/mixins/worker_stage.py
+--- a/src/srtctl/cli/mixins/worker_stage.py
++++ b/src/srtctl/cli/mixins/worker_stage.py
+@@ -132,6 +132,8 @@ class WorkerStageMixin:
+         # Skip if dynamo.install is False (container already has dynamo installed)
+         if installs_dynamo(self.config):
+             parts.append(self.config.dynamo.get_install_commands())
++        # Fail before model load if dependency installation replaced the PR overlay.
++        parts.append("sha256sum -c /opt/pr56318-validation/validation-overlay.sha256")
+ 
+         if not parts:
+             return None
