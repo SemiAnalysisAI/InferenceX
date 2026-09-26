@@ -1,0 +1,75 @@
+# Qwen3.5 FP8 AgentX on H100 with SGLang, no speculative decoding; attention is
+# flashinfer (trtllm_mha is Blackwell-only).
+base:
+  schema: 2
+  name: qwen3.5-fp8-h100-sglang-agentic
+  model:
+    path: hf:Qwen/Qwen3.5-397B-A17B-FP8
+    container: lmsysorg/sglang:v0.5.12-cu130
+    precision: fp8
+  resources:
+    gpu_type: h100
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  # This release drops cached_tokens_details on the multi-tokenizer path.
+  setup_script: sglang-multi-tokenizer-cached-tokens-details.sh
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        served-model-name: Qwen/Qwen3.5-397B-A17B-FP8
+        trust-remote-code: true
+        tensor-parallel-size: 8
+        data-parallel-size: 1
+        expert-parallel-size: 8
+        quantization: fp8
+        kv-cache-dtype: fp8_e4m3
+        mamba-ssm-dtype: bfloat16
+        attention-backend: flashinfer
+        enable-flashinfer-allreduce-fusion: true
+        # 80 GB HBM3 keeps the static fraction at 0.75.
+        mem-fraction-static: 0.75
+        stream-interval: 50
+        scheduler-recv-interval: 10
+        tokenizer-worker-num: 6
+        enable-metrics: true
+      env:
+        PYTHONNOUSERSITE: '1'
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
+    env:
+      MODEL: Qwen/Qwen3.5-397B-A17B-FP8
+      # H100 caps max_model_len at 131k; the 256k-capped with-subagents corpus
+      # keeps the rejection rate far below the unfiltered ~1M-token corpus.
+      WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_with_subagents_256k
+
+override_gpu_kv:
+  benchmark:
+    env:
+      KV_OFFLOADING: none
+# HiCache extends RadixAttention. Hybrid GDN/Mamba allocates one KV and one
+# Mamba host pool per rank: 1731 GB / TP8 / 2 pools = 108 GB each.
+override_hicache:
+  roles:
+    agg:
+      args:
+        page-size: 64
+        enable-hierarchical-cache: true
+        hicache-size: 108
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+        hicache-write-policy: write_through_selective
+  benchmark:
+    env:
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1731'

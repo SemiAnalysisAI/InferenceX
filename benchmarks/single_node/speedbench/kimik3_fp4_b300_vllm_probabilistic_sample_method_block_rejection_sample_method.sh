@@ -35,7 +35,7 @@ DRAFT_MODEL="Inferact/Kimi-K3-DSpark"
 MODEL_KEY="$(basename "$SERVE_MODEL" | tr '[:upper:]' '[:lower:]')"
 # AL is concurrency-independent (per-token accept/reject; no spec-disable-by-batch is
 # set), so batch the SPEED-Bench pass to stay under the CI wall-time limit; conc=1
-# blew the 8h budget on Kimi-K2.5.
+# blew the 8h budget on an earlier Kimi model.
 CONCURRENCY="64"
 TOP_P="0.95"
 # K3 defaults to thinking ON, so the on-cell kwargs are explicit and the off-cell

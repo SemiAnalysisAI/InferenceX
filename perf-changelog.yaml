@@ -8922,6 +8922,48 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3420
 
 - config-keys:
+    - dsv41flash-fp4-mi355x-atom-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add DeepSeek-V4.1-Flash FP4 ATOM AgentX on MI355X following the upstream TP2 / TP4 recipe: TP2 concurrency [1, 2, 8, 16, 32, 64], TP4 concurrency [2, 8, 16, 32, 64], no expert parallelism or KV offload."
+    - "Use rocm/atom-dev:nightly_202609250902 (digest sha256:9aaeed59d78decfc51eaabda072ba095c1d64d6cfbdb64ecb28ea74cf3deb18a), BF16 KV, FP8 index cache, max-num-seqs 128, 16K batching/prefill chunks, prefix caching with block size 16, 8K state checkpoints, level 3 and FULL graphs with dense capture sizes through 32 at concurrency 32."
+    - "Use five-token DSpark with thinking_on golden AL 3.51 for throughput and real acceptance for eval, the shipped draft, and dsml_v41 tool parsing. Replay semianalysis_cc_traces_weka_062126 for 3600 seconds per point with five warmup requests per lane."
+    - "DSpark draft layers 37-39 keep their checkpoint precision: the recipe passes no --online_quant_config, so online_quant_config resolves to None and make_v4_quant_config builds the same per-layer quant spec for the drafter as for the target. The MTP weights (mtp.0/1/2) load inline from the same checkpoint with spec_decode=True, and config.get_layer_quant_config has no mtp.* special case, so layers 37-39 are neither re-quantized nor up/down-cast by ATOM and retain their on-disk dtype. --kv_cache_dtype bf16 and --index-cache-dtype fp8 touch cache storage only, not draft/MTP weights."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3387
+
+- config-keys:
+    - glm5.2-fp8-mi325x-sglang-agentic-mtp
+  description:
+    - "Update SGLang ROCm image to v0.5.20-rocm720-mi30x; replace retired --cuda-graph-max-bs with --cuda-graph-max-bs-decode."
+    - "将 SGLang ROCm 镜像更新至 v0.5.20-rocm720-mi30x，并以 --cuda-graph-max-bs-decode 替换已移除的 --cuda-graph-max-bs。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3362
+
+- config-keys:
+    - minimaxm3-fp8-mi300x-vllm-agentic-mtp
+  description:
+    - "Update the vLLM ROCm image from v0.29.0 to v0.30.0; benchmark configuration unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3361
+
+- config-keys:
+    - dsv4-fp4-b200-sglang-agentic-hicache-mtp
+  description:
+    - "Update SGLang image from v0.5.19-cu130 to v0.5.20-cu130 and pass --cuda-graph-max-bs-decode after the alias removal."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3334
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh the Kimi-K3 MI355X vLLM AgentX image from nightly-rocm100-af1c0149 to nightly-rocm100-7f1a5398e9610d96c473931a26c0e12bbe0d0423 (published 2026-09-24T05:45:09Z, digest sha256:5df261803a5b4e8c4d6bbe58a32c9cd597140b6fdfa7358c0ef0d0211c33ab32) and re-measure the arm. Only the image changes: the TP=8 rows keep concurrency 1 and 4 GPU-resident, 8, 10, 12 and 14 on vllm-simple DRAM offload, and 44, 48 and 70 on TP8/DCP8 with vllm-simple, and benchmarks/single_node/agentic/kimik3_fp4_mi355x_mtp.sh is unchanged."
+    - "The old pin dates from 2026-09-16 and the new one is 441 commits ahead. It carries three Kimi-K3 correctness fixes that the current curve predates: vllm-project/vllm#51483 stops a stateless first chunk being classified as a decode, vllm-project/vllm#57098 fixes the Kimi-K3 reasoning parser, and vllm-project/vllm#57430 adds routed-expert quantization support. It also carries ROCm CPU KV-offload work that this arm exercises at every concurrency above 4, including vllm-project/vllm#57160 private pinned tensors for ROCm CPU KV offload and vllm-project/vllm#50045 offload back-pressure detection."
+    - "将 Kimi-K3 MI355X vLLM AgentX 镜像从 nightly-rocm100-af1c0149 刷新至 nightly-rocm100-7f1a5398e9610d96c473931a26c0e12bbe0d0423（发布于 2026-09-24T05:45:09Z，摘要 sha256:5df261803a5b4e8c4d6bbe58a32c9cd597140b6fdfa7358c0ef0d0211c33ab32）并重新测量该臂。本次仅更换镜像：TP=8 各行保持并发 1 与 4 的 GPU 常驻 KV，8、10、12、14 的 vllm-simple DRAM 卸载，以及 44、48、70 的 TP8/DCP8 加 vllm-simple；benchmarks/single_node/agentic/kimik3_fp4_mi355x_mtp.sh 未作改动。"
+    - "旧镜像切出于 2026-09-16，新镜像领先 441 个提交，包含当前曲线所不含的三项 Kimi-K3 正确性修复：vllm-project/vllm#51483 不再将无状态的首个 chunk 当作 decode，vllm-project/vllm#57098 修复 Kimi-K3 reasoning parser，vllm-project/vllm#57430 支持 routed expert 量化。新镜像还包含本臂在并发大于 4 时均会使用的 ROCm CPU KV 卸载改动，包括 vllm-project/vllm#57160（ROCm CPU KV 卸载改用私有 pinned 张量）与 vllm-project/vllm#50045（卸载背压检测）。"
+    - "This image bump does not change the DSpark draft model data type. Only the image: line changes and kimik3_fp4_mi355x_mtp.sh is unchanged; the draft loads unmodified from the published Inferact/Kimi-K3-DSpark checkpoint via --speculative-config (model=Inferact/Kimi-K3-DSpark, method=dspark). The only dtype in that speculative-config is kv_cache_dtype=fp8, which sets the draft KV-cache storage precision, not the draft weights. No flag overrides or re-quantizes the draft-model weights, so the draft dtype is preserved from its checkpoint across this re-sweep."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3419
+
+- config-keys:
     - glm5.2-fp4-gb300-dynamo-sglang-agentic-agg
     - glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg
   scenario-type:
@@ -8961,4 +9003,14 @@
   description:
     - "Move required GLM-5.2 GB300 PowerX telemetry to port 19401, matching existing GB300 recipes after exporter startup collided on port 9401; retain workload and acceptance settings."
     - "GLM-5.2 GB300 必需 PowerX 的 exporter 启动在 9401 端口冲突，改用现有 GB300 配方的 19401 端口；保留工作负载及验收设置。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3402
+
+- config-keys:
+    - glm5.2-fp4-gb300-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Preserve GLM-5.2 GB300 flag-off and required-power settings while adopting the canonical srt_agentic.sh entrypoint from main; retain images, topology, workload and acceptance."
+    - "采用 main 的规范 srt_agentic.sh 入口，保留 GLM-5.2 GB300 flag-off 与必需功耗设置，以及镜像、拓扑、工作负载和验收条件。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3402

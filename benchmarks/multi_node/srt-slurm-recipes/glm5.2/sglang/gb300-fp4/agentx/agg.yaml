@@ -4,7 +4,7 @@
 # Flat single-variant schema the agentic CI flow expects: applied via
 # CONFIG_FILE=<this file> with no zip_override selector, so it must NOT be
 # base:-wrapped. Concurrency is not a recipe field; the GHA matrix fans out
-# one job per concurrency from the master-config conc-list into agentic_srt.sh.
+# one job per concurrency from the master-config conc-list into srt_agentic.sh.
 schema: 2
 name: gb300-fp4-glm5.2-agentx-agg
 model:
@@ -108,7 +108,7 @@ telemetry:
     port: 19401
 benchmark:
   type: custom
-  command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
+  command: bash /infmax-workspace/benchmarks/srt_agentic.sh
   env:
     INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
     RESULT_DIR: /logs/agentic
