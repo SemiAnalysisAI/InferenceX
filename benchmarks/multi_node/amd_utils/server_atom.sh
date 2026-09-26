@@ -420,9 +420,9 @@ if [ "$NODE_RANK" -eq 0 ]; then
         export ROUTER_PORT
         export DURATION="${DURATION:-1800}"
         export CLEAR_CACHE_BETWEEN_CONC="${CLEAR_CACHE_BETWEEN_CONC:-0}"
-        # trace_replay.sh / benchmark_lib.sh locate utils/aiperf +
-        # utils/agentic-benchmark under INFMAX_CONTAINER_WORKSPACE (the container
-        # repo root). The SGLang client-image path sets it in its env-file; the
+        # trace_replay.sh / benchmark_lib.sh locate utils/aiperf under
+        # INFMAX_CONTAINER_WORKSPACE (the container repo root).
+        # The SGLang client-image path sets it in its env-file; the
         # in-container ATOM path must set it too -> derive it from ATOM_WS_PATH
         # (.../benchmarks/multi_node/amd_utils -> repo root, i.e. /workspace).
         export INFMAX_CONTAINER_WORKSPACE="${INFMAX_CONTAINER_WORKSPACE:-${ATOM_WS_PATH%/benchmarks/multi_node/amd_utils}}"

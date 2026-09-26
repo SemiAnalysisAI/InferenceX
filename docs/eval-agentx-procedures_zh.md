@@ -187,6 +187,8 @@ gh run download "$RUN_ID" --repo SemiAnalysisAI/InferenceX \
 
 ## 7. 运行 AgentX：快速反馈与 canonical 证据
 
+[`install_agentic_deps()`](../benchmarks/benchmark_lib.sh) 在安装可编辑模式的 `utils/aiperf` 时直接声明 AgentX client 所需的依赖，并使用调用方提供的 `AIPERF_PYTHON_VERSION` 将它们安装到隔离的 `AIPERF_RUNTIME_DIR` 环境中。
+
 AgentX 是 AIPerf `inferencex-agentx-mvp` trace replay，不是固定 token 的合成 benchmark。仓库默认设置对每条 trajectory lane 额外执行十个 warmup 请求，并使用 recipe 配置的 profile 时长。`agentx-fast` 强制每条 lane 只运行一个 warmup 请求，并将 profile 设为 1,200 秒。它只影响单节点和多节点 AgentX 吞吐量；定长序列吞吐量与 eval 保持 canonical。Fast 运行不符合 artifact reuse 条件（[工作流策略](../.github/workflows/README.md#agentx-fast-mode)、[fast replay 设置](../benchmarks/benchmark_lib.sh#L2104-L2128)）。
 
 对于多节点 srt-slurm 作业，benchmark client 与 frontend 可能运行在不同主机上。`srt_agentic.sh` 会优先使用显式提供的 `AIPERF_SERVER_URL`；否则从 `SRT_FRONTEND_HOST` 和 `SRT_FRONTEND_PORT` 推导地址；仅在没有远端 endpoint 时回退到 `localhost:$PORT`。Trace replay 和并发点之间的 drain 检查必须使用同一个解析后的 endpoint。
