@@ -437,6 +437,51 @@ class GraphAlignmentAndValueCheck(unittest.TestCase):
         self.assertTrue(result.cloned)
 
 
+class RocmGraphEventRecord(unittest.TestCase):
+    """ROCm torch < 2.13 rejects Event(external=True); the capture records through HIP instead."""
+
+    def _torch(self, hip, records):
+        class Event:
+            def __init__(self, **kwargs):
+                if kwargs.get("external"):
+                    raise RuntimeError("External events are disallowed in rocm")
+                self.cuda_event = 0xE0
+
+            def record(self):
+                records.append("record")
+
+        return types.SimpleNamespace(
+            version=types.SimpleNamespace(hip=hip),
+            cuda=types.SimpleNamespace(
+                Event=Event,
+                current_stream=lambda: types.SimpleNamespace(cuda_stream=0x5),
+            ),
+        )
+
+    def test_rocm_events_are_recorded_once_outside_then_captured_through_hip(self):
+        records, hip_calls = [], []
+        fake_hip = types.SimpleNamespace(
+            hipEventRecordWithFlags=lambda event, stream, flags: hip_calls.append(
+                (event.value, stream.value, flags.value)
+            ) or 0
+        )
+        with mock.patch.dict(sys.modules, {"torch": self._torch("7.2", records)}), \
+                mock.patch.object(ep_backend.EPBackend, "_hip_runtime", lambda: fake_hip):
+            event = ep_backend.EPBackend._graph_event()
+            self.assertEqual(records, ["record"])  # materialized outside capture
+            ep_backend.EPBackend._record_graph_event(event)
+        self.assertEqual(records, ["record"])  # the captured record went through HIP
+        self.assertEqual(hip_calls, [(0xE0, 0x5, 0x1)])  # hipEventRecordExternal
+
+    def test_a_failed_hip_record_raises(self):
+        fake_hip = types.SimpleNamespace(hipEventRecordWithFlags=lambda *args: 1)
+        with mock.patch.dict(sys.modules, {"torch": self._torch("7.2", [])}), \
+                mock.patch.object(ep_backend.EPBackend, "_hip_runtime", lambda: fake_hip):
+            event = ep_backend.EPBackend._graph_event()
+            with self.assertRaisesRegex(RuntimeError, "hipEventRecordWithFlags"):
+                ep_backend.EPBackend._record_graph_event(event)
+
+
 class EventPlacement(unittest.TestCase):
     """Which events each sibling chain may carry. The stub charges host work nothing, so these
     assert record placement in the trace rather than window values."""

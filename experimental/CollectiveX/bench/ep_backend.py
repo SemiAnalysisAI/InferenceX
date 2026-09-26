@@ -433,7 +433,8 @@ class EPBackend(abc.ABC):
         dist.all_reduce(token)
         torch.cuda._sleep(self._graph_align_cycles)
 
-    def _graph_event(self):
+    @staticmethod
+    def _graph_event():
         """A timing event whose record() can become a node of a graph being captured.
 
         CUDA torch does this with `external=True`. ROCm torch before 2.13 rejects external events
