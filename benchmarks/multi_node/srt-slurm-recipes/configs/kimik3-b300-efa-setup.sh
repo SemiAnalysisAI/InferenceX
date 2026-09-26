@@ -2,7 +2,7 @@
 set -eo pipefail
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -y -qq --no-install-recommends ca-certificates curl numactl patch
+apt-get install -y -qq --no-install-recommends ca-certificates curl libhwloc15 numactl patch
 curl -fL --retry 3 https://efa-installer.amazonaws.com/aws-efa-installer-1.50.0.tar.gz -o /tmp/aws-efa-installer-1.50.0.tar.gz
 printf '%s  %s\n' fa6dff8593d866866c13cb4640d9059835cd4efa427971f100ab40c97bef2841 /tmp/aws-efa-installer-1.50.0.tar.gz | sha256sum -c -
 mkdir -p /tmp/efa
