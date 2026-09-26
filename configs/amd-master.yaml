@@ -690,7 +690,7 @@ kimik3-fp4-mi355x-vllm-agentic-mtp:
 #            wider in-flight window needs the deeper pool to keep the paged KV
 #            resident.
 kimik3-fp4-mi355x-atom-agentic-mtp:
-  image: rocm/atom-dev:ubuntu24.04_py3.12_pytorch_release_2.10.0_kimi_k3_agentic_0911
+  image: rocm/atom-dev:ubuntu24.04_py3.12_pytorch_release_2.10.0_kimi_k3_agentic_0924
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:mi355x-amds

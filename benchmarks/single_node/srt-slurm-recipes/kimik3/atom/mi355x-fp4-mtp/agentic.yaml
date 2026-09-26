@@ -7,7 +7,7 @@ base:
   name: kimik3-fp4-mi355x-atom-agentic
   model:
     path: hf:moonshotai/Kimi-K3
-    container: rocm/atom-dev:ubuntu24.04_py3.12_pytorch_release_2.10.0_kimi_k3_agentic_0911
+    container: rocm/atom-dev:ubuntu24.04_py3.12_pytorch_release_2.10.0_kimi_k3_agentic_0924
     precision: fp4
   resources:
     gpu_type: mi355x
