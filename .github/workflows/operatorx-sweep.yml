@@ -234,3 +234,27 @@ jobs:
           path: operatorx-summary.json
           if-no-files-found: error
           retention-days: 14
+
+  trigger-ingest:
+    name: Trigger OperatorX database ingest
+    # A run with failed shards is still stored: its unrun cases read as missing.
+    if: >-
+      always() && github.event_name == 'workflow_dispatch' &&
+      (needs.summarize.result == 'success' || needs.summarize.result == 'failure')
+    needs: [summarize]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch ingest to InferenceX-app
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          RUN_ID: ${{ github.run_id }}
+        with:
+          # Cross-repository dispatch credential, as run-sweep.yml's database ingest uses.
+          github-token: ${{ secrets.FRONTEND_PAT }} # zizmor: ignore[secrets-outside-env]
+          script: |
+            await github.rest.repos.createDispatchEvent({
+              owner: "SemiAnalysisAI",
+              repo: "InferenceX-app",
+              event_type: "ingest-operatorx",
+              client_payload: { "run-id": process.env.RUN_ID }
+            });
