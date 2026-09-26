@@ -19,9 +19,6 @@ base:
     tachometer:
       enabled: false
   engine: sglang
-  # Measured H200 launch configurations: the replicated projection on TP4 and
-  # TP8, plus the qualified TP8 sharded shapes.
-  setup_script: dsv41flash-h200-block32.sh
   roles:
     agg:
       nodes: 1
@@ -90,8 +87,6 @@ override_tp4_c1:
       args:
         tensor-parallel-size: 4
         max-running-requests: 2
-      env:
-        DSV41_BLOCK32_TP: '4'
   benchmark:
     env:
       CONC: '1'
@@ -104,8 +99,6 @@ override_tp4_c2:
       args:
         tensor-parallel-size: 4
         max-running-requests: 4
-      env:
-        DSV41_BLOCK32_TP: '4'
   benchmark:
     env:
       CONC: '2'
@@ -118,8 +111,6 @@ override_tp4_c4:
       args:
         tensor-parallel-size: 4
         max-running-requests: 8
-      env:
-        DSV41_BLOCK32_TP: '4'
   benchmark:
     env:
       CONC: '4'
@@ -132,8 +123,6 @@ override_tp4_c8:
       args:
         tensor-parallel-size: 4
         max-running-requests: 16
-      env:
-        DSV41_BLOCK32_TP: '4'
   benchmark:
     env:
       CONC: '8'
@@ -146,8 +135,6 @@ override_tp4_c16:
       args:
         tensor-parallel-size: 4
         max-running-requests: 32
-      env:
-        DSV41_BLOCK32_TP: '4'
   benchmark:
     env:
       CONC: '16'
@@ -160,8 +147,6 @@ override_tp4_c32:
       args:
         tensor-parallel-size: 4
         max-running-requests: 64
-      env:
-        DSV41_BLOCK32_TP: '4'
   benchmark:
     env:
       CONC: '32'
@@ -174,8 +159,6 @@ override_tp4_c64:
       args:
         tensor-parallel-size: 4
         max-running-requests: 64
-      env:
-        DSV41_BLOCK32_TP: '4'
   benchmark:
     env:
       CONC: '64'
@@ -188,8 +171,6 @@ override_tp4_c128:
       args:
         tensor-parallel-size: 4
         max-running-requests: 64
-      env:
-        DSV41_BLOCK32_TP: '4'
   benchmark:
     env:
       CONC: '128'
@@ -202,8 +183,6 @@ override_tp8_c1:
       args:
         tensor-parallel-size: 8
         max-running-requests: 2
-      env:
-        DSV41_BLOCK32_TP: '8'
   benchmark:
     env:
       CONC: '1'
@@ -216,8 +195,6 @@ override_tp8_c2:
       args:
         tensor-parallel-size: 8
         max-running-requests: 4
-      env:
-        DSV41_BLOCK32_TP: '8'
   benchmark:
     env:
       CONC: '2'
@@ -230,8 +207,6 @@ override_tp8_c4:
       args:
         tensor-parallel-size: 8
         max-running-requests: 8
-      env:
-        DSV41_BLOCK32_TP: '8'
   benchmark:
     env:
       CONC: '4'
@@ -244,8 +219,6 @@ override_tp8_c8:
       args:
         tensor-parallel-size: 8
         max-running-requests: 16
-      env:
-        DSV41_BLOCK32_TP: '8'
   benchmark:
     env:
       CONC: '8'
@@ -258,8 +231,6 @@ override_tp8_c16:
       args:
         tensor-parallel-size: 8
         max-running-requests: 32
-      env:
-        DSV41_BLOCK32_TP: '8'
   benchmark:
     env:
       CONC: '16'
@@ -272,8 +243,6 @@ override_tp8_c32:
       args:
         tensor-parallel-size: 8
         max-running-requests: 64
-      env:
-        DSV41_BLOCK32_TP: '8'
   benchmark:
     env:
       CONC: '32'
@@ -286,8 +255,6 @@ override_tp8_c64:
       args:
         tensor-parallel-size: 8
         max-running-requests: 64
-      env:
-        DSV41_BLOCK32_TP: '8'
   benchmark:
     env:
       CONC: '64'
@@ -300,8 +267,6 @@ override_tp8_c128:
       args:
         tensor-parallel-size: 8
         max-running-requests: 64
-      env:
-        DSV41_BLOCK32_TP: '8'
   benchmark:
     env:
       CONC: '128'
