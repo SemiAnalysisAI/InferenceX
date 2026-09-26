@@ -77,7 +77,6 @@ roles:
       VLLM_MOONCAKE_LOAD_RECV_THREADS: '4'
       PYTHONUNBUFFERED: '1'
       GLIBC_TUNABLES: glibc.malloc.hugetlb=1
-      LD_LIBRARY_PATH: /opt/libfabric/lib
     args:
       served-model-name: moonshotai/Kimi-K3
       tensor-parallel-size: 8

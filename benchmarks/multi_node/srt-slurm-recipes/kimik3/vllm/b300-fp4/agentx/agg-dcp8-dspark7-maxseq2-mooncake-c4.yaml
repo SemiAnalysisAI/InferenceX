@@ -77,7 +77,6 @@ roles:
       PYTHONUNBUFFERED: '1'
       TORCH_CUDA_ARCH_LIST: '10.0'
       GLIBC_TUNABLES: glibc.malloc.hugetlb=1
-      LD_LIBRARY_PATH: /opt/libfabric/lib
       MC_STORE_MEMCPY: '1'
       MC_WORKERS_PER_CTX: '4'
     args:

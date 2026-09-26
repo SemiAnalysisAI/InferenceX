@@ -106,7 +106,6 @@ roles:
       MC_STORE_CLIENT_METRIC_INTERVAL: '5'
       MC_TE_METRIC: '0'
       GLIBC_TUNABLES: glibc.malloc.hugetlb=1
-      LD_LIBRARY_PATH: /opt/libfabric/lib
       MC_STORE_MEMCPY: '1'
       MC_WORKERS_PER_CTX: '4'
     args:
@@ -179,7 +178,6 @@ roles:
       MC_STORE_CLIENT_METRIC_INTERVAL: '5'
       MC_TE_METRIC: '0'
       GLIBC_TUNABLES: glibc.malloc.hugetlb=1
-      LD_LIBRARY_PATH: /opt/libfabric/lib
       MC_STORE_MEMCPY: '1'
       MC_WORKERS_PER_CTX: '4'
     args:

@@ -1,7 +1,0 @@
-diff --git a/vllm/v1/worker/gpu/cudagraph_utils.py b/vllm/v1/worker/gpu/cudagraph_utils.py
-index ddab779..9ec73d4 100644
---- a/vllm/v1/worker/gpu/cudagraph_utils.py
-+++ b/vllm/v1/worker/gpu/cudagraph_utils.py
-@@ -173 +173 @@ class CudaGraphManager:
--        self.pool = current_platform.get_global_graph_pool() if cudagraph_mode else None
-+        self.pool = current_platform.graph_pool_handle() if cudagraph_mode else None
