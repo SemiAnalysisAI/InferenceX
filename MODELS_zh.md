@@ -12,7 +12,7 @@ InferenceX-e2e 运行在数量固定且有限的 GPU 资源池上，并由一支
 
 **2026 年 8 月 3 日（星期一）**为下方第一张表中场景与精度的最后运行日，此后即告弃用。独立 A/B 基线的下线另见该表下方说明。
 
-**已于 2026 年 8 月 4 日部分执行**（[#2493](https://github.com/SemiAnalysisAI/InferenceX/pull/2493)）：第一张表中的场景与精度下线已完成。此次执行从启用的 master 配置中移除 54 个配置键并归档至 [`configs/deprecated/`](configs/deprecated/)，其基准测试脚本亦移入同级 `deprecated/` 目录。第二张表中的投机解码 A/B 下线**尚未执行**，详见该表下方说明。
+**已于 2026 年 8 月 4 日部分执行**（[#2493](https://github.com/SemiAnalysisAI/InferenceX/pull/2493)）：第一张表中的场景与精度下线已完成。此次执行从启用的 master 配置中移除 54 个配置键并归档至 `configs/deprecated/`，其基准测试脚本亦移入同级 `deprecated/` 目录。第二张表中的投机解码 A/B 下线**尚未执行**，详见该表下方说明。
 
 场景与精度下线：
 
@@ -42,7 +42,7 @@ InferenceX-e2e 运行在数量固定且有限的 GPU 资源池上，并由一支
 
 **2026 年 8 月 6 日（星期四）**为 **Kimi-K2.5/2.6/2.7-Code**（`kimik2.5`）**单轮 8k1k** 场景的最后运行日，此后该场景对这些模型弃用。原因：Kimi-K3 已于 2026 年 7 月 27 日发布，GPU 集群时间将转向更新的前沿模型。叠加上文的智能体编码弃用，`kimik2.5` 将不再有任何启用场景。该模型将于 **2026 年 8 月 6 日后完全退役**。
 
-**已于 2026-08-07 执行**（[#2527](https://github.com/SemiAnalysisAI/InferenceX/pull/2527)）：从启用的主配置中移除 17 个 `kimik2.5` 配置项，归档至 [`configs/deprecated/`](configs/deprecated/)，现分别合并至 `configs/deprecated/nvidia-master.yaml`（10 个）与 `configs/deprecated/amd-master.yaml`（7 个）。对应的 12 个基准测试脚本移入同级 `deprecated/` 目录。此后 `kimik2.5` 在所有主配置中**均无启用配置**，正式完全退役。同一 PR 还归档了 `kimik2.5-int4-h100-vllm`。#2493 将其脚本移入 `benchmarks/single_node/agentic/deprecated/` 时，该智能体编码配置项被遗留在 `nvidia-master.yaml` 中，现已与同类项一并归入 `configs/deprecated/nvidia-master.yaml`。SPEED-Bench 接受长度脚本 `benchmarks/single_node/speedbench/kimik2.5_fp4_b300_vllm.sh` 予以保留。Speedbench 由 `speedbench-al.yml` 驱动，不经过主配置，与 #2493 处理 MiniMax-M3 的方式一致。
+**已于 2026-08-07 执行**（[#2527](https://github.com/SemiAnalysisAI/InferenceX/pull/2527)）：从启用的主配置中移除 17 个 `kimik2.5` 配置项，归档至 `configs/deprecated/`，现分别合并至 `configs/deprecated/nvidia-master.yaml`（10 个）与 `configs/deprecated/amd-master.yaml`（7 个）。对应的 12 个基准测试脚本移入同级 `deprecated/` 目录。此后 `kimik2.5` 在所有主配置中**均无启用配置**，正式完全退役。同一 PR 还归档了 `kimik2.5-int4-h100-vllm`。#2493 将其脚本移入 `benchmarks/single_node/agentic/deprecated/` 时，该智能体编码配置项被遗留在 `nvidia-master.yaml` 中，现已与同类项一并归入 `configs/deprecated/nvidia-master.yaml`。SPEED-Bench 接受长度脚本 `benchmarks/single_node/speedbench/kimik2.5_fp4_b300_vllm.sh` 予以保留。Speedbench 由 `speedbench-al.yml` 驱动，不经过主配置，与 #2493 处理 MiniMax-M3 的方式一致。
 
 ### 2026 年 9 月 8 日（星期二）
 
@@ -54,9 +54,9 @@ InferenceX-e2e 运行在数量固定且有限的 GPU 资源池上，并由一支
 
 原因：`dsv4` 是本仓库中单轮场景占用最大的模型。当前有 45 个启用的配置项使用 8k1k 场景（`configs/nvidia-master.yaml` 32 个，`configs/amd-master.yaml` 13 个），覆盖 H200、B200、B300、GB200、GB300、MI300X、MI325X 与 MI355X，涉及 vLLM、SGLang、TensorRT-LLM、ATOM、Dynamo 与 llm-d，在每一轮完整 sweep 中占比可观。AgentX 轨迹回放才是 AI 实验室与 ML 社区真正关注的场景，而 DeepSeek-V4-Pro 的 19 个智能体编码配置项正是 `dsv4` 中支撑已发布北极星（North Star）帕累托前沿的部分。下线固定序列长度分支可为 AgentX 以及 Qwen3.8-Flash-Next 等新前沿模型腾出集群机时，同时不减少该模型对外发布的内容。对于仍列有该场景的其他模型，单轮 8k1k 保持启用。
 
-**已于 2026-09-09 执行**（[#2921](https://github.com/SemiAnalysisAI/InferenceX/pull/2921)）：46 个 `dsv4` 8k1k 配置项已从启用的主配置中移除并归档至 [`configs/deprecated/`](configs/deprecated/)，现合并至 `configs/deprecated/nvidia-master.yaml`（33 个）与 `configs/deprecated/amd-master.yaml`（13 个）；对应的 28 个基准测试脚本移入同级 `deprecated/` 目录（`benchmarks/single_node/fixed_seq_len/` 下 25 个，`benchmarks/multi_node/` 下 3 个），与 [#2493](https://github.com/SemiAnalysisAI/InferenceX/pull/2493) 和 [#2527](https://github.com/SemiAnalysisAI/InferenceX/pull/2527) 的做法一致。数量为 46 而非上文所述的 45，是因为 `dsv4-fp4-b200-dynamo-sglang` 在本公告发布后才合入。19 个智能体编码配置项未做改动：`dsv4` 以智能体编码为唯一场景继续运行与发布。`dsv4` 的 SPEED-Bench 接受长度脚本予以保留。Speedbench 由 `speedbench-al.yml` 驱动，不经过主配置。已归档多节点配置项所引用的 srt-slurm 与 llm-d 配方 YAML 作为惰性参考数据原地保留，与 #2493 和 #2527 的处理一致。
+**已于 2026-09-09 执行**（[#2921](https://github.com/SemiAnalysisAI/InferenceX/pull/2921)）：46 个 `dsv4` 8k1k 配置项已从启用的主配置中移除并归档至 `configs/deprecated/`，现合并至 `configs/deprecated/nvidia-master.yaml`（33 个）与 `configs/deprecated/amd-master.yaml`（13 个）；对应的 28 个基准测试脚本移入同级 `deprecated/` 目录（`benchmarks/single_node/fixed_seq_len/` 下 25 个，`benchmarks/multi_node/` 下 3 个），与 [#2493](https://github.com/SemiAnalysisAI/InferenceX/pull/2493) 和 [#2527](https://github.com/SemiAnalysisAI/InferenceX/pull/2527) 的做法一致。数量为 46 而非上文所述的 45，是因为 `dsv4-fp4-b200-dynamo-sglang` 在本公告发布后才合入。19 个智能体编码配置项未做改动：`dsv4` 以智能体编码为唯一场景继续运行与发布。`dsv4` 的 SPEED-Bench 接受长度脚本予以保留。Speedbench 由 `speedbench-al.yml` 驱动，不经过主配置。已归档多节点配置项所引用的 srt-slurm 与 llm-d 配方 YAML 作为惰性参考数据原地保留，与 #2493 和 #2527 的处理一致。
 
-**弃用状态一致性核查（2026-09-21）：** 启用的主配置及基准测试脚本位置与上述已执行的退役事项和下方支持矩阵一致。GLM-5.1 B200 TileRT 仍是文档明确保留的例外，不受此前 GLM-5/5.1 和 1k1k 退役范围限制。有条件的 A/B 基线退役仍待执行；对 Pareto 前沿有贡献的非投机解码配置继续受支持。进一步的路由核查还移除了启动器和运行时设置中遗留的退役模型分支及 GLM-5 专用环境覆盖，并修正了仍推荐退役配置的工作流和智能体指南。SPEED-Bench 采集器、历史结果读取逻辑及明确保留的配方 YAML 继续保留。弃用配置现统一归档至 [`configs/deprecated/amd-master.yaml`](configs/deprecated/amd-master.yaml) 和 [`configs/deprecated/nvidia-master.yaml`](configs/deprecated/nvidia-master.yaml)。
+**弃用状态一致性核查（2026-09-21）：** 启用的主配置及基准测试脚本位置与上述已执行的退役事项和下方支持矩阵一致。GLM-5.1 B200 TileRT 仍是文档明确保留的例外，不受此前 GLM-5/5.1 和 1k1k 退役范围限制。有条件的 A/B 基线退役仍待执行；对 Pareto 前沿有贡献的非投机解码配置继续受支持。进一步的路由核查还移除了启动器和运行时设置中遗留的退役模型分支及 GLM-5 专用环境覆盖，并修正了仍推荐退役配置的工作流和智能体指南。SPEED-Bench 采集器、历史结果读取逻辑及明确保留的配方 YAML 继续保留。弃用配置曾统一归档至 `configs/deprecated/amd-master.yaml` 和 `configs/deprecated/nvidia-master.yaml`。
 
 **单节点切换为仅使用 SRT（2026-09-22）：** 活跃的单节点定长配方现统一使用 SRT-Slurm。两个仅支持 Docker 的 Qwen3.5 RTX PRO 6000 FP4 配置（启用和关闭 MTP）已退役，原始设置保留在 `configs/deprecated/nvidia-master.yaml`，脚本保留在 `benchmarks/single_node/fixed_seq_len/deprecated/`。已移除不再使用的 `rtx6000pro-lat` runner 映射、启动器及运行时设置。Qwen3.5 在其他受支持的 Slurm 池上继续启用；AgentX 和多节点覆盖保持不变。
 
@@ -66,7 +66,7 @@ InferenceX-e2e 运行在数量固定且有限的 GPU 资源池上，并由一支
 |---|---|---|
 | 智能体编码（agentic coding） | 长上下文、多轮真实流量的轨迹回放，含子智能体（sub agents） | 启用。此场景采用基于轨迹回放的智能体编码基准测试（见 [`benchmarks/single_node/agentic/`](benchmarks/single_node/agentic/)）。今后新模型预计将仅以智能体编码场景接入。可开启或关闭投机解码以获得最优帕累托点；不要求独立的非投机解码 A/B 基线（见[弃用公告](#弃用公告)）。 |
 | 单轮 8k1k | 8192 / 1024 | 启用。当前主要的固定序列长度（fixed-seq-len）场景。 |
-| 单轮 1k1k | 1024 / 1024 | 自 2026-07-17 起弃用（[#2263](https://github.com/SemiAnalysisAI/InferenceX/pull/2263)），以便将 GPU 集群时间留给优先级更高的真实场景智能体编码基准测试与新的前沿模型。归档配置位于 [`configs/deprecated/`](configs/deprecated/)。后续由 [#2533](https://github.com/SemiAnalysisAI/InferenceX/pull/2533) 加入的 GLM-5.1 B200 TileRT 测试点仍启用。 |
+| 单轮 1k1k | 1024 / 1024 | 自 2026-07-17 起弃用（[#2263](https://github.com/SemiAnalysisAI/InferenceX/pull/2263)），以便将 GPU 集群时间留给优先级更高的真实场景智能体编码基准测试与新的前沿模型。归档配置曾位于 `configs/deprecated/`，该目录已在 #3464 中删除，请查阅 Git 历史。后续由 [#2533](https://github.com/SemiAnalysisAI/InferenceX/pull/2533) 加入的 GLM-5.1 B200 TileRT 测试点仍启用。 |
 | 单轮 1k8k | 1024 / 8192 | **对所有模型均已弃用**，自 2026-03-27 起（[#911](https://github.com/SemiAnalysisAI/InferenceX/pull/911)），以便将 GPU 集群时间留给优先级更高的真实场景智能体编码基准测试与新的前沿模型。相关配置已删除，未归档。 |
 
 ## AgentX 指南
@@ -176,7 +176,7 @@ InferenceX 支持 SGLang 和 vLLM 双方的维护者，并响应 AI 实验室和
 ## 说明
 
 - 「前缀」列为 `configs/*-master.yaml` 中的规范 `model-prefix`，同时用于 `generate_sweep_configs.py --model-prefix`。
-- 「退役」指该模型已无任何启用场景。退役模型的配置（`llama70b` 除外）归档于 [`configs/deprecated/`](configs/deprecated/)。
+- 「退役」指该模型已无任何启用场景。退役模型的配置直接从主配置中删除；原 `configs/deprecated/` 归档目录已在 #3464 中删除，历史设置保留在 Git 历史与 `perf-changelog.yaml` 中。
 - 弃用某一精度（如 Qwen3.5 bf16）或 A/B 对照中的某一分支（如非 MTP），只是收窄该模型的配方覆盖范围，并不等于模型退役；只要仍有一个场景在运行，该模型即继续列为启用状态。
 - `dsr1` 最初以 DeepSeek-V3 workflow 模板的形式随仓库首次导入，2025-08-13 切换为 DeepSeek-R1 基准测试（2025-08-20 将 `dsv3` 重命名为 `dsr1`）。
 - 新增模型时，请按[添加模型 + 硬件配方](docs/configuration-procedures_zh.md#添加模型--硬件配方)流程操作，并在同一 PR 中同时更新本文件与 [`MODELS.md`](MODELS.md) 的表格。
