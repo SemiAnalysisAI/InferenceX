@@ -158,6 +158,7 @@
       "scale_up_domain": 8,
       "scale_up_transport": "xgmi",
       "launcher": "mi-amds",
+      "runner_label": "cluster:mi325x-amds",
       "backends": {"mori": [8], "uccl-ep": [8]},
       "ll_backends": {},
       "fabric": {

@@ -28,6 +28,13 @@ SWEEP = _load_config("sweep.json")
 PLATFORMS = _load_config("platform_config.json")["platforms"]
 # Per-backend production/candidate map for the matrix and docs; see EPBackend.maturity.
 BACKEND_MATURITY = _load_config("platform_config.json")["backend_maturity"]
+
+
+def _runner_label(sku: str) -> str:
+    """The runs-on label for a pool: the SKU itself unless the registry names its runners."""
+    return PLATFORMS[sku].get("runner_label", sku)
+
+
 SWEEP_BACKENDS = tuple(dict.fromkeys(
     backend for platform in PLATFORMS.values() for backend in platform["backends"]
 ))
@@ -252,6 +259,7 @@ def resolve_matrix(
         shards_by_sku.setdefault(sku, []).append({
             "id": f"{sku}-{target}{mode_segment}-{precision}-n{nodes}",
             "sku": sku,
+            "runner": _runner_label(sku),
             "backend": target,
             "mode": mode,
             "launcher": PLATFORMS[sku]["launcher"],

@@ -23,6 +23,7 @@ def build_matrix(platforms: dict, only_sku: str, exclude_skus: str) -> dict:
             {
                 "id": f"swap-{sku}",
                 "sku": sku,
+                "runner": platform.get("runner_label", sku),
                 "backend": "swap-blocks",
                 "nodes": 1,
                 "gpus_per_node": 1,
