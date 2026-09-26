@@ -3,7 +3,7 @@ base:
   name: dsr1-fp4-b200-sglang-mtp-8k1k
   model:
     path: hf:nvidia/DeepSeek-R1-0528-FP4-V2
-    container: lmsysorg/sglang:v0.5.16-cu130
+    container: lmsysorg/sglang:v0.5.20-cu130
     precision: fp4
   resources:
     gpu_type: b200
@@ -25,7 +25,7 @@ base:
         trust-remote-code: true
         tensor-parallel-size: 4
         data-parallel-size: 1
-        cuda-graph-max-bs: 256
+        cuda-graph-max-bs-decode: 256
         max-running-requests: 256
         mem-fraction-static: 0.85
         kv-cache-dtype: fp8_e4m3
@@ -34,7 +34,7 @@ base:
         quantization: modelopt_fp4
         enable-flashinfer-allreduce-fusion: true
         scheduler-recv-interval: 10
-        disable-piecewise-cuda-graph: true
+        cuda-graph-backend-prefill: disabled
         attention-backend: trtllm_mla
         moe-runner-backend: flashinfer_trtllm
         stream-interval: 10
