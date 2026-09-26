@@ -320,7 +320,14 @@ jobs:
           if [[ -f runners/runtime_settings.sh ]]; then
             source runners/runtime_settings.sh
           fi
-          bash "./runners/launch_${RUNNER_NAME%%_*}.sh"
+          # Clusters ported to Python use the infx.runners entry point;
+          # all others keep the existing bash launcher.
+          _cluster="${RUNNER_NAME%%_*}"
+          if python3 -c "from infx.runners.clusters import PORTED_CLUSTERS; raise SystemExit(0 if '${_cluster}' in PORTED_CLUSTERS else 1)" 2>/dev/null; then
+            python3 -m infx.runners "${_cluster}"
+          else
+            bash "./runners/launch_${_cluster}.sh"
+          fi
 
           if [ "${EVAL_ONLY}" = "true" ]; then
             echo "Eval-only mode: skipping benchmark result file check"
