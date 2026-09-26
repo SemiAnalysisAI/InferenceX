@@ -328,8 +328,8 @@ decode, below:
   two of T, valid prefix read from the handle on device. Its kernel generation is
   `v2-elastic-buffer-nosync`. Normal prefill keeps the host sync that sizes its receive exactly
   and stays eager.
-- **MoRI** stays eager: ROCm torch before 2.13 rejects the external events the replay windows are
-  recorded with.
+- **MoRI** both modes. ROCm torch before 2.13 rejects external events, so the timing events are
+  captured with `hipEventRecordWithFlags(..., hipEventRecordExternal)`, the call newer torch makes.
 
 Every family keeps its eager meaning under replay; only the launch mechanism changes:
 
