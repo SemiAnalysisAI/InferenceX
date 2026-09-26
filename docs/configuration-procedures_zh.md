@@ -167,6 +167,15 @@ B200 Nscale 的 GLM-5.1 可用 `MODEL_PATH` 指定已有共享权重，覆盖默
 
 不得只提交一侧：`srtctl` 读取配方，而矩阵生成读取主配置。仅改配方可能给结果贴错标签；仅改主配置不会改变实际部署的配方。
 
+### 同一配方的多个变体
+
+相关拓扑可以共用一个 override 格式的配方（`base` 加 `zip_override_<group>` 段；见 srt-slurm 的 [overrides 指南](https://github.com/NVIDIA/srt-slurm/blob/main/docs/overrides.md)）。每个主配置条目只选择一个变体：`CONFIG_FILE=recipes/<dir>/<file>.yaml:zip_override_<group>[<i>]`、`:override_<name>` 或 `:base`。一个矩阵行对应一个作业，因此不接受整组或通配符选择器。
+
+- 启动脚本首先调用 `materialize_srt_configs`（[`runners/slurm_utils.sh`](../runners/slurm_utils.sh)）。它把选中的变体写到源文件旁的 `<file>.<selector>.resolved.yaml`，并让 `CONFIG_FILE` 指向该文件，使功耗检测、启动脚本补丁和 `srtctl` 都看到独立配方。展开规则与 srtctl 一致（[`infx/srt_slurm/recipe_selector.py`](../infx/srt_slurm/recipe_selector.py)）。
+- 矩阵生成从选中的变体读取节点数。
+- 每个 zip 组都要提供 `name` 列表，否则 srtctl 会把变体重命名为 `<base-name>_<group>_<i>`。zip 段中的每个列表都是 zip 维度：列表值设置需再包一层列表；`null` 元素会删除该键。
+- 把现有平铺配方迁入变体时，在 [`benchmarks/multi_node/srt-slurm-recipe-identities.yaml`](../benchmarks/multi_node/srt-slurm-recipe-identities.yaml) 中添加 `<新 CONFIG_FILE>: <旧 CONFIG_FILE>`。配方指纹和曲线身份因此沿用旧路径，历史数据和 Klaud 基线仍可匹配。删除旧文件前，先确认解析后的变体与旧文件一致。
+
 ## 注册 llm-d 配方
 
 来源：[`benchmarks/llm-d/README.md`](../benchmarks/llm-d/README.md)、[`benchmarks/multi_node/llm-d/README.md`](../benchmarks/multi_node/llm-d/README.md)、[`llm-d-recipes/`](../benchmarks/multi_node/llm-d-recipes/) 和当前 [`llmd-vllm` 基准 wrapper](../benchmarks/multi_node/dsv4_fp4_gb200_llmd-vllm-disagg.sh)。

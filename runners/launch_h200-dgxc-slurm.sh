@@ -14,6 +14,7 @@ DSV4_MODEL_REPO="deepseek-ai/DeepSeek-V4-Pro-0813"
 set -x
 
 source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh" || exit 1
+materialize_srt_configs || exit 1
 
 EXECUTION_PATH=agentic
 if [[ "$IS_MULTINODE" == true ]]; then

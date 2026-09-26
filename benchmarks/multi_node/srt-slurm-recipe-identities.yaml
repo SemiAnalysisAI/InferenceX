@@ -1,0 +1,3 @@
+# CONFIG_FILE selectors that replaced flat recipes, mapped to the replaced
+# CONFIG_FILE. Matrix fingerprints and curve identity use the replaced path.
+{}

@@ -218,6 +218,15 @@ Mapping source: [`benchmarks/multi_node/srt-slurm-recipes/RECIPES.md`](../benchm
 
 Do not ship one side alone. `srtctl` reads the recipe, while matrix generation reads the master config. Recipe-only changes can mislabel results. Master-only changes do not alter the deployed recipe.
 
+### Variants of one recipe
+
+Related topologies can share one override-format recipe (`base` plus `zip_override_<group>` sections; see srt-slurm's [overrides guide](https://github.com/NVIDIA/srt-slurm/blob/main/docs/overrides.md)). Each master entry then selects exactly one variant: `CONFIG_FILE=recipes/<dir>/<file>.yaml:zip_override_<group>[<i>]`, `:override_<name>`, or `:base`. Group or glob selectors are rejected because one matrix row is one job.
+
+- Launchers call `materialize_srt_configs` ([`runners/slurm_utils.sh`](../runners/slurm_utils.sh)) first. It writes the selected variant beside its source as `<file>.<selector>.resolved.yaml` and points `CONFIG_FILE` at it, so power detection, launcher patches and `srtctl` all see a standalone recipe. Expansion follows srtctl ([`infx/srt_slurm/recipe_selector.py`](../infx/srt_slurm/recipe_selector.py)).
+- Matrix generation takes the node count from the selected variant.
+- Give every zip group a `name` list; otherwise srtctl renames variants to `<base-name>_<group>_<i>`. Inside a zip section every list is a zip dimension: wrap list-valued settings in an outer list, and note that a `null` element deletes the key.
+- When moving an existing flat recipe into a variant, add `<new CONFIG_FILE>: <old CONFIG_FILE>` to [`benchmarks/multi_node/srt-slurm-recipe-identities.yaml`](../benchmarks/multi_node/srt-slurm-recipe-identities.yaml). Recipe fingerprints and curve identity then keep the old path, so history and Klaud baselines still match. Verify that the resolved variant equals the old file before deleting it.
+
 ## Register an llm-d recipe
 
 Sources: [`benchmarks/llm-d/README.md`](../benchmarks/llm-d/README.md), [`benchmarks/multi_node/llm-d/README.md`](../benchmarks/multi_node/llm-d/README.md), [`llm-d-recipes/`](../benchmarks/multi_node/llm-d-recipes/), and the current [`llmd-vllm` benchmark wrapper](../benchmarks/multi_node/dsv4_fp4_gb200_llmd-vllm-disagg.sh).

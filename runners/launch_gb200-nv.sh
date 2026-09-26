@@ -7,6 +7,7 @@ check_env_vars EVAL_ONLY IS_AGENTIC IS_MULTINODE RUN_EVAL SALLOC_TIME_LIMIT
 set -x
 
 source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh" || exit 1
+materialize_srt_configs || exit 1
 
 export SLURM_PARTITION="batch"
 export SLURM_ACCOUNT="benchmark"
