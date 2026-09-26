@@ -8973,4 +8973,4 @@
     - "将 MiniMax-M3 H100 vLLM AgentX 镜像从 v0.27.1 正式版切换至最新 nightly-ddd6fbca148a867aad1fcab7ec72f582b9977db4（vllm-project/vllm@ddd6fbca，2026-09-26）并重新测量该臂。仅更换镜像；配方已设置 VLLM_ENGINE_READY_TIMEOUT_S=7200 与 7200 秒健康检查窗口，并保持 lazy safetensors 加载与每 GPU 26 GiB CPU 权重卸载。TP8 各行保持并发 1-5 GPU 常驻，6、8 使用 Mooncake DRAM 卸载。"
     - "Hopper 使用 FA3，Blackwell FA4 fp8 descale 问题不适用，EAGLE3 draft 保持 attention_backend FLASH_ATTN。"
     - "This change does not alter the EAGLE3 draft model data type. The draft loads unmodified from the published Inferact/MiniMax-M3-EAGLE3-GQA checkpoint via --speculative-config (method=eagle3). kv-cache-dtype fp8 sets KV-cache storage precision, not the draft weights, and no flag overrides or re-quantizes the draft weights."
-  pr-link: PRLINK_PLACEHOLDER
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3503
