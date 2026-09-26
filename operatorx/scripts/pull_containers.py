@@ -76,7 +76,7 @@ def import_image(image: str) -> int:
 def main(argv: list[str]) -> int:
     if len(argv) < 2:
         print(f"usage: {argv[0]} <platform>")
-        print("  e.g., nvidia | amd | tpu | trainium")
+        print("  e.g., nvidia | amd")
         return 2
     platform = argv[1]
     images = unique_images(platform)

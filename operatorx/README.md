@@ -1,7 +1,7 @@
 # operatorx
 
 Multi-platform inference operator benchmark suite. Times one op at a time
-(gemm, ...) on NVIDIA / AMD / TPU / Trainium and
+(gemm, moe) on NVIDIA and AMD and
 emits one JSON per run under `results/<platform>/<cluster>/`.
 
 See `CLUSTERS.md` for how to reach each cluster and the per-host quirks.
@@ -38,16 +38,6 @@ OPERATORX_QOS=batch_1_qos \
 OPERATORX_SQUASH_DIR=/data/home/sa-shared/harrison/containers \
 OPERATORX_BACKENDS=vllm \
 python3 scripts/submit_run.py nvidia
-```
-
-### TPU / Trainium
-
-These hosts have no SLURM, so `submit_run.py` (which submits `sbatch` jobs)
-does not apply. Run the benchmark directly on the VM or instance:
-
-```bash
-OPERATORX_CLUSTER=v6e_4x   python -m operatorx   # TPU     (default tpu cluster)
-OPERATORX_CLUSTER=trn3_16x python -m operatorx   # Trainium (default trainium cluster)
 ```
 
 ## Env vars honored by `submit_run.py`

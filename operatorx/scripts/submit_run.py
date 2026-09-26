@@ -41,8 +41,6 @@ WORLD_SIZES = [1, 2, 4, 8]  # ws>8 disabled: multi-node NCCL IB bring-up hangs o
 DEFAULT_CLUSTER = {
     "nvidia": "b200_dgx_8x",
     "amd":    "mi355x_8x",
-    "tpu":    "v6e_4x",
-    "trainium": "trn3_16x",
 }
 
 
