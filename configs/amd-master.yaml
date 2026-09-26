@@ -849,7 +849,7 @@ dsr1-fp8-mi325x-sglang-mtp:
         srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsr1/sglang/mi325x-fp8-mtp/8k1k.yaml
 
 qwen3.5-fp8-mi325x-sglang-mtp:
-  image: lmsysorg/sglang:v0.5.12-rocm720-mi30x
+  image: lmsysorg/sglang:v0.5.20-rocm720-mi30x@sha256:4abecde156b531809c7f597e501930ea2023deb2c822b69f92efb66f3fdada86
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: mi325x
