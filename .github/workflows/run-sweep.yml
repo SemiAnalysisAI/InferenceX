@@ -442,7 +442,7 @@ jobs:
                     # Canary is a benchmark-only smoke test — exclude entries
                     # whose primary purpose is eval (run-eval == true) so the
                     # picked canary never runs an eval pass.
-                    (((.single_node["1k1k"] // []) + (.single_node["8k1k"] // []))
+                    (((.single_node["1k1k"] // []) + (.single_node["8k1k"] // []) + (.single_node.agentic // []))
                       | map(select(.["run-eval"] != true))) as $candidates
                     | (if ($candidates | length) == 0 then null else ($candidates | min_by(.conc)) end) as $canary
                     | {
@@ -452,6 +452,7 @@ jobs:
                           | .single_node = (.single_node // {})
                           | .single_node["1k1k"] = ((.single_node["1k1k"] // []) | remove_one($canary))
                           | .single_node["8k1k"] = ((.single_node["8k1k"] // []) | remove_one($canary))
+                          | .single_node.agentic = ((.single_node.agentic // []) | remove_one($canary))
                         )
                       }
                   ' <<<"$SEARCH_SPACE")
@@ -482,6 +483,9 @@ jobs:
             skip-queue-pr: ${{ matrix.config['skip-queue-pr'] || '' }}
             dp-attn: ${{ matrix.config.dp-attn }}
             run-eval: false
+            scenario-type: ${{ matrix.config['scenario-type'] || 'fixed-seq-len' }}
+            duration: ${{ matrix.config.duration || '3600' }}
+            agentx-fast: ${{ contains(github.event.pull_request.labels.*.name, 'agentx-fast') }}
 
     sweep-multi-node-1k1k:
         needs: [setup, canary-select, canary-sweep]
@@ -600,14 +604,15 @@ jobs:
               needs.setup.result == 'success' &&
               needs.setup.outputs.reuse-enabled != 'true' &&
               (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
-              toJson(fromJson(needs.setup.outputs.search-space-config).single_node['agentic']) != 'null'
+              toJson(fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['agentic']) != 'null' &&
+              toJson(fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['agentic']) != '[]'
             }}
         uses: $/.github/workflows/benchmark-tmpl.yml
         name: agentic /
         strategy:
             fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') || contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast-no-canary') }}
             matrix:
-                config: ${{ fromJson(needs.setup.outputs.search-space-config).single_node['agentic'] }}
+                config: ${{ fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['agentic'] }}
         secrets:
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
