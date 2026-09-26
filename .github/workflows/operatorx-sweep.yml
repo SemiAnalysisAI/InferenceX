@@ -3,21 +3,35 @@ name: OperatorX Sweep
 on:
   workflow_dispatch:
     inputs:
-      pool:
-        description: GPU runner pool (one physical node per shard)
+      runner:
+        description: Self-hosted runner label (one physical node per shard)
         type: choice
-        default: h100-dgxc
-        options: [h100-dgxc, h200-dgxc, b200-nscale, b300, gb200, gb300, mi300x, mi325x, mi355x]
+        default: cluster:h100-dgxc
+        options:
+          - cluster:h100-dgxc
+          - cluster:h200-dgxc
+          - cluster:b200-nscale
+          - cluster:b300-dsxe
+          - cluster:gb200-nv
+          - cluster:gb300-nv
+          - cluster:mi300x-amd
+          - cluster:mi325x-amds
+          - cluster:mi355x-amds
       backends:
-        description: Comma-separated backends (torch GEMM/attention, AMD aiter attention, vllm routed MoE)
+        description: Comma-separated backends (vllm GEMM; AMD also torch GEMM)
         type: string
-        default: torch
+        default: vllm
       testlists:
         description: Comma-separated testlist stems
         type: string
         default: gemm
+      mode:
+        description: timing (latency, telemetry, profiler replay) or counters (per-kernel ncu / rocprofv3 counters; latencies perturbed)
+        type: choice
+        default: timing
+        options: [timing, counters]
       world_sizes:
-        description: Comma-separated world sizes (1,2,4; also 8 on eight-GPU pools)
+        description: Comma-separated world sizes (1,2,4; also 8 on eight-GPU nodes)
         type: string
         default: '1'
       chunk_size:
@@ -25,7 +39,7 @@ on:
         type: number
         default: 500
       recovery_run_id:
-        description: Optional recent OperatorX run on this pool whose failed cleanup should be retried
+        description: Optional recent OperatorX run on this runner whose failed cleanup should be retried
         type: string
         default: ''
   pull_request:
@@ -57,22 +71,23 @@ jobs:
       - name: Plan requested coverage
         id: plan
         env:
-          OPERATORX_POOL: ${{ inputs.pool || 'h100-dgxc' }}
-          OPERATORX_BACKENDS: ${{ inputs.backends || 'torch' }}
+          OPERATORX_RUNNER: ${{ inputs.runner || 'cluster:h100-dgxc' }}
+          OPERATORX_BACKENDS: ${{ inputs.backends || 'vllm' }}
           OPERATORX_TESTLISTS: ${{ inputs.testlists || 'gemm' }}
           OPERATORX_WORLD_SIZES: ${{ inputs.world_sizes || '1' }}
+          OPERATORX_MODE: ${{ inputs.mode || 'timing' }}
           OPERATORX_RECOVERY_RUN: ${{ inputs.recovery_run_id }}
           OPERATORX_CHUNK_SIZE: ${{ github.event_name == 'workflow_dispatch' && format('{0}', inputs.chunk_size) || '500' }}
           PYTHONPATH: experimental
         run: |
           set -eo pipefail
           source benchmarks/benchmark_lib.sh --validation-only
-          check_env_vars OPERATORX_POOL OPERATORX_BACKENDS OPERATORX_TESTLISTS OPERATORX_WORLD_SIZES OPERATORX_CHUNK_SIZE GITHUB_RUN_ID GITHUB_RUN_ATTEMPT GITHUB_SHA GITHUB_OUTPUT
+          check_env_vars OPERATORX_RUNNER OPERATORX_BACKENDS OPERATORX_TESTLISTS OPERATORX_WORLD_SIZES OPERATORX_MODE OPERATORX_CHUNK_SIZE GITHUB_RUN_ID GITHUB_RUN_ATTEMPT GITHUB_SHA GITHUB_OUTPUT
           python3 -m operatorx.ci plan \
             --platform-config experimental/operatorx/platforms.json \
-            --pool "$OPERATORX_POOL" --backends "$OPERATORX_BACKENDS" \
+            --runner "$OPERATORX_RUNNER" --backends "$OPERATORX_BACKENDS" \
             --testlists "$OPERATORX_TESTLISTS" --world-sizes "$OPERATORX_WORLD_SIZES" \
-            --chunk-size "$OPERATORX_CHUNK_SIZE" --run-id "$GITHUB_RUN_ID" \
+            --chunk-size "$OPERATORX_CHUNK_SIZE" --mode "$OPERATORX_MODE" --run-id "$GITHUB_RUN_ID" \
             --attempt "$GITHUB_RUN_ATTEMPT" --source-sha "$GITHUB_SHA" \
             --out operatorx-manifest.json > operatorx-matrix.json
           if [ -n "$OPERATORX_RECOVERY_RUN" ]; then
@@ -103,10 +118,10 @@ jobs:
     runs-on: >-
       ${{ fromJSON(vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
         format('["self-hosted",{0},"nodes:1",{1},{2}]',
-          toJSON(matrix.pool),
+          toJSON(matrix.runner),
           toJSON(format('ci-job-{0}-{1}', needs.setup.outputs.priority, matrix.queue-token)),
           toJSON(format('ci-attempt-{0}', github.run_attempt))) ||
-        format('["self-hosted",{0}]', toJSON(matrix.pool))) }}
+        format('["self-hosted",{0}]', toJSON(matrix.runner))) }}
     name: p${{ needs.setup.outputs.priority }} | OperatorX ${{ matrix.id }}
     env:
       OPERATORX_SHARD: ${{ matrix.id }}
@@ -135,13 +150,13 @@ jobs:
         if: inputs.recovery_run_id != ''
         env:
           OPERATORX_RECOVERY_RUN: ${{ inputs.recovery_run_id }}
-          OPERATORX_POOL: ${{ matrix.pool }}
+          OPERATORX_RUNNER: ${{ matrix.runner }}
         run: |
           set -eo pipefail
           source benchmarks/benchmark_lib.sh --validation-only
-          check_env_vars RUNNER_TEMP OPERATORX_RECOVERY_RUN OPERATORX_POOL OPERATORX_CLEANUP_SECONDS
+          check_env_vars RUNNER_TEMP OPERATORX_RECOVERY_RUN OPERATORX_RUNNER OPERATORX_CLEANUP_SECONDS
           python3 -m operatorx.ci recover --artifacts operatorx-recovery \
-            --run-id "$OPERATORX_RECOVERY_RUN" --pool "$OPERATORX_POOL" \
+            --run-id "$OPERATORX_RECOVERY_RUN" --runner "$OPERATORX_RUNNER" \
             --cleanup-seconds "$OPERATORX_CLEANUP_SECONDS" \
             --platform-config experimental/operatorx/platforms.json
       - name: Run one Slurm allocation
@@ -219,3 +234,27 @@ jobs:
           path: operatorx-summary.json
           if-no-files-found: error
           retention-days: 14
+
+  trigger-ingest:
+    name: Trigger OperatorX database ingest
+    # A run with failed shards is still stored: its unrun cases read as missing.
+    if: >-
+      always() && github.event_name == 'workflow_dispatch' &&
+      (needs.summarize.result == 'success' || needs.summarize.result == 'failure')
+    needs: [summarize]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch ingest to InferenceX-app
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          RUN_ID: ${{ github.run_id }}
+        with:
+          # Cross-repository dispatch credential, as run-sweep.yml's database ingest uses.
+          github-token: ${{ secrets.FRONTEND_PAT }} # zizmor: ignore[secrets-outside-env]
+          script: |
+            await github.rest.repos.createDispatchEvent({
+              owner: "SemiAnalysisAI",
+              repo: "InferenceX-app",
+              event_type: "ingest-operatorx",
+              client_payload: { "run-id": process.env.RUN_ID }
+            });
