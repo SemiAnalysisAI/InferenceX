@@ -7,7 +7,7 @@ check_env_vars EVAL_ONLY IS_AGENTIC IS_MULTINODE KEEP_LOGS RUN_EVAL
 EXECUTION_PATH=agentic
 if [[ "$IS_MULTINODE" == true ]]; then
     EXECUTION_PATH=multinode
-elif [[ "$IS_AGENTIC" == 0 ]]; then
+elif [[ "$IS_AGENTIC" == 0 || -n "${SRT_RECIPE:-}" ]]; then
     check_env_vars SRT_RECIPE
     EXECUTION_PATH=native-single-node
 fi
@@ -15,10 +15,22 @@ if [[ "$EXECUTION_PATH" == native-single-node ]]; then
     check_env_vars GITHUB_WORKSPACE MODEL IMAGE
     source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh" || exit 1
     export HF_HUB_CACHE_MOUNT=/var/lib/hf-hub-cache/
+    # AgentX checkpoints the legacy scripts read from the shared NFS cache.
+    if [[ "$IS_AGENTIC" == 1 ]]; then
+        case "$MODEL" in
+            MiniMaxAI/MiniMax-M3*|amd/MiniMax-M3*|zai-org/GLM-5.2-FP8|deepseek-ai/DeepSeek-V4.1-Flash)
+                export HF_HUB_CACHE_MOUNT=/it-share/hf-hub-cache/ ;;
+            deepseek-ai/DeepSeek-V4-Pro|deepseek-ai/DeepSeek-V4-Pro-0813)
+                if [[ "$FRAMEWORK" == vllm || "$FRAMEWORK" == atom ]]; then
+                    export HF_HUB_CACHE_MOUNT=/it-share/hf-hub-cache/
+                fi ;;
+        esac
+    fi
     export SRT_MODEL_PATH="hf:$MODEL"
     export SALLOC_TIME_LIMIT=500
     export SRT_SRUN_OPTIONS='{"container-remap-root":"", "container-writable":""}'
-    SRT_SQUASH_FILE="/var/lib/squash/$(printf '%s' "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    # A squash staged on shared storage survives the registry pruning nightly tags.
+    SRT_SQUASH_FILE="/it-share/gharunners2/srt-slurm/containers/$(printf '%s' "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
     launch_srt_single_node mi355x-amds --var GITHUB_WORKSPACE "$GITHUB_WORKSPACE"
     exit $?
 fi

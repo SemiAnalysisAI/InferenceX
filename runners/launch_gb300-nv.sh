@@ -105,6 +105,18 @@ import_squash() {
 }
 
 import_squash "$SQUASH_FILE" "$IMAGE"
+# Single-tray points with an srt-slurm recipe run natively on the aarch64 trays.
+if [[ "$IS_MULTINODE" != true && -n "${SRT_RECIPE:-}" ]]; then
+    HF_HUB_CACHE_MOUNT="$HF_HUB_CACHE_HOST_PATH"
+    SRT_MODEL_PATH="hf:$MODEL"
+    SRT_SQUASH_FILE="$SQUASH_FILE"
+    SRT_SETUP_ARCH=aarch64 launch_srt_single_node gb300-nv \
+        --var SLURM_ACCOUNT "$SLURM_ACCOUNT" --var SLURM_PARTITION "$SLURM_PARTITION" \
+        --var AIPERF_MMAP_CACHE_HOST_PATH "$AIPERF_MMAP_CACHE_HOST_PATH" \
+        --var HF_HUB_CACHE_HOST_PATH "$HF_HUB_CACHE_HOST_PATH" \
+        --var DYNAMO_WHEELS_CACHE_HOST_PATH "$DYNAMO_WHEELS_CACHE_HOST_PATH"
+    exit $?
+fi
 # Keep this branch before the nginx import and srtctl setup.
 if [[ "$MODEL_PREFIX" == "dsv41flash" && ( "$FRAMEWORK" == "vllm" || "$FRAMEWORK" == "sglang" ) && "${IS_MULTINODE}" != "true" ]]; then
     check_env_vars SPEC_DECODING

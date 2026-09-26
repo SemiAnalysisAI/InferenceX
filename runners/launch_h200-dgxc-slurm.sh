@@ -18,12 +18,13 @@ source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh" || exit 1
 EXECUTION_PATH=agentic
 if [[ "$IS_MULTINODE" == true ]]; then
     EXECUTION_PATH=multinode
-elif [[ "$IS_AGENTIC" == 0 ]]; then
+elif [[ "$IS_AGENTIC" == 0 || -n "${SRT_RECIPE:-}" ]]; then
     check_env_vars SRT_RECIPE
     EXECUTION_PATH=native-single-node
 fi
 
 if [[ "$EXECUTION_PATH" == native-single-node ]]; then
+    SRT_MODEL_PATH="hf:$MODEL"
     SRT_SQUASH_FILE="/data/containers/$(printf '%s' "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
     launch_srt_single_node h200-dgxc-slurm \
         --var SLURM_ACCOUNT "$SLURM_ACCOUNT" --var SLURM_PARTITION "$SLURM_PARTITION" \
