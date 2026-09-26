@@ -31,25 +31,39 @@ import sys
 import time
 from typing import TYPE_CHECKING
 
-import git as gitpython
+try:
+    import git as gitpython
 
-from github import Github, GithubException
+    from github import Github, GithubException
+except ImportError:
+    gitpython = None  # type: ignore[assignment]
+    Github = None  # type: ignore[assignment, misc]
+
+    class GithubException(Exception):  # type: ignore[no-redef]  # noqa: N818
+        """Stub when PyGithub is not installed."""
+
+        status = 0
+        data: object = None
+        headers: dict = {}  # type: ignore[type-arg]  # noqa: RUF012
+
+
+_WORKFLOWS_AVAILABLE = gitpython is not None
 
 if TYPE_CHECKING:
     from github.PullRequest import PullRequest
     from github.Repository import Repository
 
-from .prepare_perf_changelog_merge import (
+from .prepare_perf_changelog_merge import (  # noqa: E402
     canonicalize_appended_links,
     resolve_conflict_bytes,
 )
-from .sweep_runs import (
+from .sweep_runs import (  # noqa: E402
     artifact_names,
     completed_pr_runs,
     has_reusable_result_artifacts,
     pr_commit_shas,
 )
-from .validate_perf_changelog import read_git_file
+from .validate_perf_changelog import read_git_file  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Defaults
@@ -77,6 +91,8 @@ REUSE_INCOMPATIBLE_LABELS = frozenset({"evals-only", "agentx-fast"})
 logging.getLogger("github").setLevel(logging.WARNING)
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 logging.getLogger("git").setLevel(logging.WARNING)
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Logging helpers (match the bash colors/symbols exactly)
@@ -135,6 +151,41 @@ def _make_github(token: str) -> Github:
 
 
 # ---------------------------------------------------------------------------
+# Transient error handling for API polling
+# ---------------------------------------------------------------------------
+
+_TRANSIENT_HTTP_STATUSES = frozenset({403, 429, 500, 502, 503, 504})
+
+
+def _is_transient_error(exc: Exception) -> bool:
+    """Return True for API errors safe to retry during check polling.
+
+    Covers server errors (5xx), rate limits (403/429), and connection-level
+    failures from requests/urllib3.
+    """
+    if isinstance(exc, GithubException):
+        return exc.status in _TRANSIENT_HTTP_STATUSES
+    # Connection/timeout at any level (builtin, requests, urllib3).
+    # builtins.ConnectionError covers ConnectionRefused/Reset/Aborted/BrokenPipe.
+    # requests.ConnectionError and urllib3 errors inherit from OSError.
+    return isinstance(exc, (ConnectionError, TimeoutError))
+
+
+def _retry_delay(exc: Exception) -> float:
+    """Extract Retry-After from a rate-limited response, default 10s, capped at 60s."""
+    if isinstance(exc, GithubException):
+        headers = getattr(exc, "headers", None) or {}
+        if isinstance(headers, dict):
+            raw = headers.get("Retry-After") or headers.get("retry-after")
+            if raw:
+                try:
+                    return min(max(float(raw), 1.0), 60.0)
+                except (ValueError, TypeError):
+                    pass
+    return 10.0
+
+
+# ---------------------------------------------------------------------------
 # GitPython wrapper
 # ---------------------------------------------------------------------------
 
@@ -178,13 +229,17 @@ class GitOps:
     def show_stage(self, stage: int, path: str) -> bytes:
         """Read a file from a given git index stage during a merge conflict.
 
-        Equivalent to ``git show :<stage>:<path>`` (binary output).
+        Returns raw bytes identical to ``git show :<stage>:<path>``.
+        ``repo.git.show()`` returns str by default and strips the trailing
+        newline, which breaks ``parse_changelog``'s newline requirement.
+        ``stdout_as_string=False`` and ``strip_newline_in_stdout=False``
+        preserve the exact bytes.
         """
-        raw = self.repo.git.show(f":{stage}:{path}", as_process=False)
-        # repo.git.show returns str by default; encode for callers expecting bytes.
-        if isinstance(raw, str):
-            return raw.encode()
-        return raw  # pragma: no cover
+        return self.repo.git.show(
+            f":{stage}:{path}",
+            stdout_as_string=False,
+            strip_newline_in_stdout=False,
+        )
 
     # -- mutations --
 
@@ -253,6 +308,66 @@ def find_eligible_run(
 
 
 # ---------------------------------------------------------------------------
+# Check-run deduplication helpers
+# ---------------------------------------------------------------------------
+
+
+def _latest_check_runs(check_runs: list) -> list:
+    """Dedupe check runs by name, keeping the one with the latest started_at/id.
+
+    GitHub can return superseded re-runs for the same check name.  This mirrors
+    ``gh pr checks --watch --fail-fast`` which only considers the latest run
+    per check name.
+    """
+    by_name: dict[str, object] = {}
+    for cr in check_runs:
+        existing = by_name.get(cr.name)
+        if existing is None:
+            by_name[cr.name] = cr
+            continue
+        cr_key = (str(cr.started_at or ""), getattr(cr, "id", 0))
+        ex_key = (
+            str(getattr(existing, "started_at", "") or ""),
+            getattr(existing, "id", 0),
+        )
+        if cr_key > ex_key:
+            by_name[cr.name] = cr
+    return list(by_name.values())
+
+
+def _latest_statuses(statuses: list) -> list:
+    """Dedupe commit statuses by context, keeping the most recent."""
+    by_context: dict[str, object] = {}
+    for s in statuses:
+        existing = by_context.get(s.context)
+        if existing is None:
+            by_context[s.context] = s
+            continue
+        s_key = (str(getattr(s, "updated_at", "") or ""), getattr(s, "id", 0))
+        ex_key = (
+            str(getattr(existing, "updated_at", "") or ""),
+            getattr(existing, "id", 0),
+        )
+        if s_key > ex_key:
+            by_context[s.context] = s
+    return list(by_context.values())
+
+
+# Check-run conclusions that trigger fail-fast.  ``cancelled`` is deliberately
+# excluded: ``gh pr checks --watch --fail-fast`` does not treat a cancelled run
+# as a fast-fail trigger either -- it counts as "completed, not passing" but
+# does not abort the wait.
+_FAIL_FAST_CONCLUSIONS = frozenset(
+    {
+        "failure",
+        "timed_out",
+        "action_required",
+        "startup_failure",
+    }
+)
+
+
+# ---------------------------------------------------------------------------
 # Check-run polling (mirrors wait_for_check in the bash)
 # ---------------------------------------------------------------------------
 
@@ -265,45 +380,68 @@ def wait_for_checks(
 ) -> int:
     """Poll until all check runs and commit statuses complete on *sha*.
 
-    Fail-fast: any failed/cancelled/timed_out/action_required check or
-    error/failure commit status causes an immediate return of 1.
+    Fail-fast on ``failure``, ``timed_out``, ``action_required``, or
+    ``startup_failure``.  ``cancelled`` is **not** a fail-fast trigger
+    (matching ``gh pr checks --watch --fail-fast`` behavior).  ``stale``
+    is treated as pending (the check needs re-evaluation).  ``skipped``
+    and ``neutral`` count as passing.
+
+    Check runs are deduped by name (latest ``started_at``/``id`` wins) and
+    commit statuses by context to ignore superseded re-runs.
+
+    Transient API errors (5xx, rate limits, connection failures) are retried
+    with backoff until the timeout expires.
 
     Returns 0 when every check succeeds/is neutral/skipped and every
     commit status succeeds, 1 on failure or timeout.
-
-    This replaces both ``wait_for_check`` (single named check) and
-    ``gh pr checks --watch --fail-fast`` (all checks).
     """
     log(f"Waiting for checks on {sha[:8]}")
     deadline = time.monotonic() + timeout
     commit = gh_repo.get_commit(sha)
 
     while time.monotonic() < deadline:
-        # -- Check runs (GitHub Checks API) --
-        check_runs = list(commit.get_check_runs())
-        all_completed = True
-        for cr in check_runs:
-            if cr.status != "completed":
-                all_completed = False
-                continue
-            if cr.conclusion in ("failure", "cancelled", "timed_out", "action_required"):
-                detail = f" - {cr.details_url}" if cr.details_url else ""
-                return die(f"{cr.name} concluded {cr.conclusion}{detail}")
+        try:
+            check_runs = _latest_check_runs(list(commit.get_check_runs()))
 
-        # -- Commit statuses (Status API, e.g. external CI) --
-        combined = commit.get_combined_status()
-        statuses_done = True
-        for status in combined.statuses:
-            if status.state == "pending":
-                statuses_done = False
-                continue
-            if status.state in ("error", "failure"):
-                detail = f" - {status.target_url}" if status.target_url else ""
-                return die(f"{status.context} concluded {status.state}{detail}")
+            all_completed = True
+            for cr in check_runs:
+                if cr.status != "completed":
+                    all_completed = False
+                    continue
+                if cr.conclusion == "stale":
+                    # Stale means the check needs re-evaluation; treat as pending.
+                    all_completed = False
+                    continue
+                if cr.conclusion in _FAIL_FAST_CONCLUSIONS:
+                    detail = f" - {cr.details_url}" if cr.details_url else ""
+                    return die(f"{cr.name} concluded {cr.conclusion}{detail}")
+                # cancelled: completed but not a fail-fast trigger
+                # success, neutral, skipped: passing
 
-        if all_completed and statuses_done and (check_runs or combined.statuses):
-            ok("All checks passed")
-            return 0
+            # -- Commit statuses (Status API, e.g. external CI) --
+            combined = commit.get_combined_status()
+            statuses = _latest_statuses(list(combined.statuses))
+            statuses_done = True
+            for status in statuses:
+                if status.state == "pending":
+                    statuses_done = False
+                    continue
+                if status.state in ("error", "failure"):
+                    detail = f" - {status.target_url}" if status.target_url else ""
+                    return die(f"{status.context} concluded {status.state}{detail}")
+
+            if all_completed and statuses_done and (check_runs or statuses):
+                ok("All checks passed")
+                return 0
+
+        except Exception as exc:
+            if _is_transient_error(exc):
+                delay = _retry_delay(exc)
+                logger.warning("Transient API error (retrying in %.0fs): %s", delay, exc)
+                time.sleep(delay)
+                commit = gh_repo.get_commit(sha)
+                continue
+            raise
 
         time.sleep(5)
         # Re-fetch commit object to get fresh check data
@@ -321,24 +459,34 @@ def wait_for_check(
     """Poll until a named check-run completes on a commit.
 
     Returns 0 on success, 1 on failure or timeout.
+    Transient API errors are retried with backoff until the timeout expires.
     """
     log(f"Waiting for {check_name} on {sha[:8]}")
     deadline = time.monotonic() + timeout
     commit = gh_repo.get_commit(sha)
 
     while time.monotonic() < deadline:
-        check_runs = list(commit.get_check_runs())
-        matching = [cr for cr in check_runs if cr.name == check_name]
-        if matching:
-            matching.sort(key=lambda cr: str(cr.started_at or ""))
-            latest = matching[-1]
+        try:
+            check_runs = list(commit.get_check_runs())
+            matching = [cr for cr in check_runs if cr.name == check_name]
+            if matching:
+                matching.sort(key=lambda cr: str(cr.started_at or ""))
+                latest = matching[-1]
 
-            if latest.status == "completed":
-                detail = f" - {latest.details_url}" if latest.details_url else ""
-                if latest.conclusion == "success":
-                    ok(f"{check_name} passed{detail}")
-                    return 0
-                return die(f"{check_name} concluded {latest.conclusion or 'unknown'}{detail}")
+                if latest.status == "completed":
+                    detail = f" - {latest.details_url}" if latest.details_url else ""
+                    if latest.conclusion == "success":
+                        ok(f"{check_name} passed{detail}")
+                        return 0
+                    return die(f"{check_name} concluded {latest.conclusion or 'unknown'}{detail}")
+        except Exception as exc:
+            if _is_transient_error(exc):
+                delay = _retry_delay(exc)
+                logger.warning("Transient API error (retrying in %.0fs): %s", delay, exc)
+                time.sleep(delay)
+                commit = gh_repo.get_commit(sha)
+                continue
+            raise
 
         time.sleep(5)
         commit = gh_repo.get_commit(sha)
@@ -396,6 +544,15 @@ def canonicalize_changelog(pr: int, repo: str) -> None:
 # ---------------------------------------------------------------------------
 
 
+class _MergeState:
+    """Shared mutable state between merge_pr and its cleanup closure."""
+
+    __slots__ = ("local_branch",)
+
+    def __init__(self) -> None:
+        self.local_branch = ""
+
+
 def merge_pr(
     pr: int,
     *,
@@ -420,13 +577,16 @@ def merge_pr(
         return die("Working tree is not clean")
 
     original_branch = git_ops.current_ref()
-    local_branch = ""
+    state = _MergeState()
 
     def cleanup() -> None:
+        # Abort any in-progress merge first so checkout doesn't fail on a
+        # half-merged index.
+        git_ops.merge_abort()
         with contextlib.suppress(Exception):
             git_ops.checkout("--quiet", original_branch)
-        if local_branch:
-            git_ops.branch_delete(local_branch)
+        if state.local_branch:
+            git_ops.branch_delete(state.local_branch)
 
     try:
         return _merge_pr_inner(
@@ -438,6 +598,7 @@ def merge_pr(
             token=token,
             gh=gh,
             git_ops=git_ops,
+            state=state,
         )
     finally:
         cleanup()
@@ -453,6 +614,7 @@ def _merge_pr_inner(
     token: str,
     gh: Github,
     git_ops: GitOps,
+    state: _MergeState,
 ) -> int:
     gh_repo = gh.get_repo(repo)
     pull = gh_repo.get_pull(pr)
@@ -462,7 +624,13 @@ def _merge_pr_inner(
     if pr_state != "OPEN":
         return die(f"PR #{pr} is {pr_state}, expected OPEN")
 
-    if pull.head.repo.full_name != pull.base.repo.full_name:
+    head_repo = pull.head.repo
+    if head_repo is None:
+        return die(
+            f"PR #{pr} head repository is unavailable (deleted fork?); "
+            "the merge helper cannot update its branch"
+        )
+    if head_repo.full_name != pull.base.repo.full_name:
         return die(f"PR #{pr} is from a fork; the merge helper cannot update its branch")
 
     head_branch: str = pull.head.ref
@@ -489,10 +657,10 @@ def _merge_pr_inner(
     ok("Comment posted")
 
     # --- Fetch and checkout PR branch ---
-    local_branch = f"pr-{pr}-reuse-{os.getpid()}"
+    state.local_branch = f"pr-{pr}-reuse-{os.getpid()}"
     log(f"Fetching PR branch {head_branch}")
-    git_ops.fetch("origin", f"pull/{pr}/head:{local_branch}", "--quiet")
-    git_ops.checkout("--quiet", local_branch)
+    git_ops.fetch("origin", f"pull/{pr}/head:{state.local_branch}", "--quiet")
+    git_ops.checkout("--quiet", state.local_branch)
     git_ops.fetch("origin", "main", "--quiet")
 
     pre_merge = git_ops.rev_parse()
@@ -540,7 +708,7 @@ def _merge_pr_inner(
 
     # --- Push ---
     log(f"Pushing prepared commit {post_merge[:8]}")
-    git_ops.push("origin", f"{local_branch}:{head_branch}")
+    git_ops.push("origin", f"{state.local_branch}:{head_branch}")
     ok("Push complete; reuse authorization will be evaluated on the new head")
 
     # --- Verify head (with lag retry) ---
@@ -566,13 +734,12 @@ def _merge_pr_inner(
         return die(f"PR head changed to {current_head[:8]}; expected {post_merge[:8]}")
 
     # --- Squash merge ---
-    # Admin bypass relies on the caller's token having ruleset bypass
-    # permission, equivalent to ``gh pr merge --admin``.  If the merge
-    # is refused (e.g. missing bypass permission), the API error message
-    # is surfaced verbatim.
+    # GitHub's MergePullRequestInput has no bypass field; the "Protect main"
+    # ruleset lists org admins as bypass actors, so REST PullRequest.merge
+    # with an admin token is equivalent to ``gh pr merge --admin``.
     log(f"Squash-merging PR #{pr} into main")
     try:
-        merge_status = pull.merge(merge_method="squash")
+        merge_status = pull.merge(merge_method="squash", sha=post_merge)
     except GithubException as exc:
         # Surface the API error message verbatim, but never the token.
         api_message = (
@@ -621,8 +788,17 @@ def _poll_pr_head(
 # CLI
 # ---------------------------------------------------------------------------
 
+_INSTALL_HINT = (
+    "Missing required dependencies (PyGithub, GitPython). Install with:\n"
+    "  uv run --extra workflows python -m infx.workflows.merge_with_reuse <pr>"
+)
+
 
 def main() -> int:
+    if not _WORKFLOWS_AVAILABLE:
+        print(_INSTALL_HINT, file=sys.stderr)
+        return 1
+
     if len(sys.argv) != 2 or not re.fullmatch(r"\d+", sys.argv[1]):
         print(f"Usage: {sys.argv[0]} <pr-number>", file=sys.stderr)
         return 2
