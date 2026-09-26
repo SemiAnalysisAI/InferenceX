@@ -104,7 +104,7 @@ class NCCLEPBackend(EPBackend):
     # across nodes on x86 (b200 EP16 T=128, h200 EP16 T=32 and prefill T=1024; runs 35994093313,
     # 36113759089) while eager zero-copy HT passed every cell and was as fast or faster
     # (run 36114371399), so eager is the better HT configuration on every pool measured.
-    CUDA_GRAPH_MODES = ("low-latency",)
+    CUDA_GRAPH_MODES = ("normal", "low-latency")
     stage_device_work = False
     requires_fresh_pair = False
     receive_layout = "token-rank"
@@ -660,6 +660,10 @@ class NCCLEPBackend(EPBackend):
         # destination ranks back to each token's home rank.
         self._recv_x.zero_()
         self._recv_x[: transformed.shape[0]].copy_(transformed.to(self._recv_x.dtype))
+        # DIAG: every rank's combine input is written before any rank's combine reads it.
+        torch.cuda.synchronize()
+        dist.barrier()
+        torch.cuda.synchronize()
         stream = self._stream()
         h.handle.combine(
             # Same sliced input the timed path uses, so the two cannot diverge in shape.
