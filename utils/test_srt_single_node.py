@@ -326,7 +326,7 @@ def test_pool_launcher_stages_artifacts_and_propagates_failure(point, tmp_path, 
         "B200_SQUASH_DIR": str(tmp_path), "B300_HF_CACHE_HOST_DIR": str(tmp_path),
         "B300_HF_CACHE_CONTAINER_DIR": "/hf", "ENROOT_IMPORT_TIME_LIMIT": "10",
         "INFERENCEX_RUNTIME_ENV_VARS": "REQUIRE_POWER",
-        "TEST_FAILURE": failure, "CANCEL_CAPTURE": str(capture),
+        "TEST_FAILURE": failure, "CANCEL_CAPTURE": str(capture), "RUNNER_NAME": "fixture_00",
         "SRUN_CAPTURE": str(tmp_path / "srun.jsonl"),
         "KEEP_LOGS": "0",
     }
@@ -337,7 +337,7 @@ def test_pool_launcher_stages_artifacts_and_propagates_failure(point, tmp_path, 
         env.pop("SRT_RECIPE")
     if failure == "agentic":
         env.update(IS_AGENTIC="1", SCENARIO_SUBDIR="agentic/", EXP_NAME="fixture_agentic",
-                   RUNNER_NAME="fixture_00", SRT_RECIPE="unused.yaml")
+                   RUNNER_NAME="fixture_00", SRT_RECIPE="")  # not yet ported: legacy script
     result = subprocess.run(
         ["bash", str(ROOT / f"runners/launch_{pool}.sh")], cwd=tmp_path,
         env=env, capture_output=True, text=True, timeout=30,

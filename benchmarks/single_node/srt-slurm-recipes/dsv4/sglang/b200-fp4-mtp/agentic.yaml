@@ -1,0 +1,408 @@
+# DeepSeek-V4-Pro-0813 FP4 AgentX on B200 with SGLang DSpark (block 6). TP8
+# covers the low-concurrency points (GPU KV, then HiCache); DEP8 attention-DP
+# fronted by the SGLang Model Gateway covers the high-concurrency HiCache points.
+base:
+  schema: 2
+  name: dsv4-fp4-b200-sglang-agentic
+  model:
+    path: hf:deepseek-ai/DeepSeek-V4-Pro-0813
+    container: lmsysorg/sglang:v0.5.19-cu130
+    precision: fp4
+  resources:
+    gpu_type: b200
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        served-model-name: deepseek-ai/DeepSeek-V4-Pro-0813
+        trust-remote-code: true
+        tensor-parallel-size: 8
+        enable-deepseek-v4-fp4-indexer: true
+        disable-flashinfer-autotune: true
+        tool-call-parser: deepseekv4
+        reasoning-parser: deepseek-v4
+        chat-template: /infmax-workspace/benchmarks/single_node/chat_templates/deepseek_v4_thinking.jinja
+        watchdog-timeout: 1800
+        speculative-algorithm: DSPARK
+        speculative-dspark-block-size: 6
+        speculative-num-steps: 1
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 7
+        # The checkpoint lives on Lustre: prefetch sequentially across local
+        # ranks so post-load repacking reads from page cache.
+        weight-loader-prefetch-checkpoints: true
+        model-loader-extra-config: '{"enable_multithread_load": true}'
+        enable-metrics: true
+        enable-cache-report: true
+      env:
+        PYTHONNOUSERSITE: '1'
+        TORCH_CUDA_ARCH_LIST: '10.0'
+        # Outlast AIPerf's pooled keep-alive connections.
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        SGLANG_ENABLE_UNIFIED_RADIX_TREE: '1'
+        SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: '1'
+        SGLANG_JIT_DEEPGEMM_FAST_WARMUP: '1'
+        SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: '1'
+        SGLANG_OPT_USE_JIT_NORM: '1'
+        SGLANG_OPT_USE_JIT_INDEXER_METADATA: '1'
+        SGLANG_OPT_USE_TOPK_V2: '1'
+        SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2: '1'
+        # The image's first ptxas on the legacy search path.
+        TRITON_PTXAS_PATH: /usr/local/cuda-13.0/bin/ptxas
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
+    env:
+      MODEL: deepseek-ai/DeepSeek-V4-Pro-0813
+      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+
+# One variant per point; admission is 2x CONC. TP8 captures graphs up to the
+# admission cap and runs the FlashInfer MXFP4 MoE; its replicated HiCache
+# pools fit ratio 2.75 (~121 GiB/rank) on 1.7 TiB hosts. DEP8 shards the host
+# pools (ratio 8), caps graphs at 32, runs MegaMoE with 6144 prefill tokens per
+# DP rank, and balances DP admission; the gateway routes sessions by AIPerf
+# correlation ID. C160 interleaves prefill more often and bounds the gateway's
+# load imbalance.
+override_tp8_c1:
+  roles:
+    agg:
+      args:
+        moe-runner-backend: flashinfer_mxfp4
+        mem-fraction-static: 0.9
+        swa-full-tokens-ratio: 0.1
+        chunked-prefill-size: 8192
+        max-running-requests: 2
+        cuda-graph-max-bs: 2
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: none
+
+override_tp8_c2:
+  roles:
+    agg:
+      args:
+        moe-runner-backend: flashinfer_mxfp4
+        mem-fraction-static: 0.9
+        swa-full-tokens-ratio: 0.1
+        chunked-prefill-size: 8192
+        max-running-requests: 4
+        cuda-graph-max-bs: 4
+  benchmark:
+    env:
+      CONC: '2'
+      KV_OFFLOADING: none
+
+override_tp8_c3:
+  roles:
+    agg:
+      args:
+        moe-runner-backend: flashinfer_mxfp4
+        mem-fraction-static: 0.9
+        swa-full-tokens-ratio: 0.1
+        chunked-prefill-size: 8192
+        max-running-requests: 6
+        cuda-graph-max-bs: 6
+  benchmark:
+    env:
+      CONC: '3'
+      KV_OFFLOADING: none
+
+override_tp8_c4:
+  roles:
+    agg:
+      args:
+        moe-runner-backend: flashinfer_mxfp4
+        mem-fraction-static: 0.9
+        swa-full-tokens-ratio: 0.1
+        chunked-prefill-size: 8192
+        max-running-requests: 8
+        cuda-graph-max-bs: 8
+  benchmark:
+    env:
+      CONC: '4'
+      KV_OFFLOADING: none
+
+override_tp8_c5:
+  roles:
+    agg:
+      args:
+        moe-runner-backend: flashinfer_mxfp4
+        mem-fraction-static: 0.9
+        swa-full-tokens-ratio: 0.1
+        chunked-prefill-size: 8192
+        max-running-requests: 10
+        cuda-graph-max-bs: 10
+  benchmark:
+    env:
+      CONC: '5'
+      KV_OFFLOADING: none
+
+override_tp8_hicache_c8:
+  roles:
+    agg:
+      args:
+        moe-runner-backend: flashinfer_mxfp4
+        mem-fraction-static: 0.9
+        swa-full-tokens-ratio: 0.1
+        chunked-prefill-size: 8192
+        max-running-requests: 16
+        cuda-graph-max-bs: 16
+        enable-hierarchical-cache: true
+        hicache-write-policy: write_through
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
+        hicache-ratio: 2.75
+  benchmark:
+    env:
+      CONC: '8'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1731'
+
+override_tp8_hicache_c10:
+  roles:
+    agg:
+      args:
+        moe-runner-backend: flashinfer_mxfp4
+        mem-fraction-static: 0.9
+        swa-full-tokens-ratio: 0.1
+        chunked-prefill-size: 8192
+        max-running-requests: 20
+        cuda-graph-max-bs: 20
+        enable-hierarchical-cache: true
+        hicache-write-policy: write_through
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
+        hicache-ratio: 2.75
+  benchmark:
+    env:
+      CONC: '10'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1731'
+
+override_tp8_hicache_c16:
+  roles:
+    agg:
+      args:
+        moe-runner-backend: flashinfer_mxfp4
+        mem-fraction-static: 0.9
+        swa-full-tokens-ratio: 0.1
+        chunked-prefill-size: 8192
+        max-running-requests: 32
+        cuda-graph-max-bs: 32
+        enable-hierarchical-cache: true
+        hicache-write-policy: write_through
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
+        hicache-ratio: 2.75
+  benchmark:
+    env:
+      CONC: '16'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1731'
+
+override_dep8_hicache_c64:
+  frontend:
+    type: sglang-router
+    args:
+      policy: cache_aware
+      request-id-headers: x-correlation-id
+      dp-aware: true
+      connect-timeout-secs: 900
+      request-timeout-secs: 14400
+      disable-health-check: true
+      disable-retries: true
+  roles:
+    agg:
+      args:
+        data-parallel-size: 8
+        expert-parallel-size: 8
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        enable-dp-attention-local-control-broadcast: true
+        incremental-streaming-output: true
+        stream-interval: 20
+        tokenizer-worker-num: 8
+        load-balance-method: total_requests
+        load-snapshot-publish-interval: 1
+        prefill-decode-interval: 24
+        moe-a2a-backend: megamoe
+        enable-w4a4-mxfp4-megamoe: true
+        disable-shared-experts-fusion: true
+        mem-fraction-static: 0.88
+        swa-full-tokens-ratio: 0.02
+        chunked-prefill-size: 49152
+        max-running-requests: 128
+        cuda-graph-max-bs: 32
+        enable-hierarchical-cache: true
+        hicache-write-policy: write_through
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
+        hicache-ratio: 8
+      env:
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '8320'
+  benchmark:
+    env:
+      CONC: '64'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1731'
+      AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
+
+override_dep8_hicache_c96:
+  frontend:
+    type: sglang-router
+    args:
+      policy: cache_aware
+      request-id-headers: x-correlation-id
+      dp-aware: true
+      connect-timeout-secs: 900
+      request-timeout-secs: 14400
+      disable-health-check: true
+      disable-retries: true
+  roles:
+    agg:
+      args:
+        data-parallel-size: 8
+        expert-parallel-size: 8
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        enable-dp-attention-local-control-broadcast: true
+        incremental-streaming-output: true
+        stream-interval: 20
+        tokenizer-worker-num: 8
+        load-balance-method: total_requests
+        load-snapshot-publish-interval: 1
+        prefill-decode-interval: 24
+        moe-a2a-backend: megamoe
+        enable-w4a4-mxfp4-megamoe: true
+        disable-shared-experts-fusion: true
+        mem-fraction-static: 0.88
+        swa-full-tokens-ratio: 0.02
+        chunked-prefill-size: 49152
+        max-running-requests: 192
+        cuda-graph-max-bs: 32
+        enable-hierarchical-cache: true
+        hicache-write-policy: write_through
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
+        hicache-ratio: 8
+      env:
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '8320'
+  benchmark:
+    env:
+      CONC: '96'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1731'
+      AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
+
+override_dep8_hicache_c128:
+  frontend:
+    type: sglang-router
+    args:
+      policy: cache_aware
+      request-id-headers: x-correlation-id
+      dp-aware: true
+      connect-timeout-secs: 900
+      request-timeout-secs: 14400
+      disable-health-check: true
+      disable-retries: true
+  roles:
+    agg:
+      args:
+        data-parallel-size: 8
+        expert-parallel-size: 8
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        enable-dp-attention-local-control-broadcast: true
+        incremental-streaming-output: true
+        stream-interval: 20
+        tokenizer-worker-num: 8
+        load-balance-method: total_requests
+        load-snapshot-publish-interval: 1
+        prefill-decode-interval: 24
+        moe-a2a-backend: megamoe
+        enable-w4a4-mxfp4-megamoe: true
+        disable-shared-experts-fusion: true
+        mem-fraction-static: 0.88
+        swa-full-tokens-ratio: 0.02
+        chunked-prefill-size: 49152
+        max-running-requests: 256
+        cuda-graph-max-bs: 32
+        enable-hierarchical-cache: true
+        hicache-write-policy: write_through
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
+        hicache-ratio: 8
+      env:
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '8320'
+  benchmark:
+    env:
+      CONC: '128'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1731'
+      AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
+
+override_dep8_hicache_c160:
+  frontend:
+    type: sglang-router
+    args:
+      policy: cache_aware
+      balance-abs-threshold: 32
+      request-id-headers: x-correlation-id
+      dp-aware: true
+      connect-timeout-secs: 900
+      request-timeout-secs: 14400
+      disable-health-check: true
+      disable-retries: true
+  roles:
+    agg:
+      args:
+        data-parallel-size: 8
+        expert-parallel-size: 8
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        enable-dp-attention-local-control-broadcast: true
+        incremental-streaming-output: true
+        stream-interval: 20
+        tokenizer-worker-num: 8
+        load-balance-method: total_requests
+        load-snapshot-publish-interval: 1
+        prefill-decode-interval: 20
+        moe-a2a-backend: megamoe
+        enable-w4a4-mxfp4-megamoe: true
+        disable-shared-experts-fusion: true
+        mem-fraction-static: 0.88
+        swa-full-tokens-ratio: 0.02
+        chunked-prefill-size: 49152
+        max-running-requests: 320
+        cuda-graph-max-bs: 32
+        enable-hierarchical-cache: true
+        hicache-write-policy: write_through
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
+        hicache-ratio: 8
+      env:
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '8320'
+  benchmark:
+    env:
+      CONC: '160'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1731'
+      AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'

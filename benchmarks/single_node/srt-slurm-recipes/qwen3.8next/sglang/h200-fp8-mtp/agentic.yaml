@@ -1,0 +1,105 @@
+# Qwen3.8-Flash-Next FP8 AgentX on H200 via SGLang with native NEXTN MTP.
+base:
+  schema: 2
+  name: qwen3.8next-fp8-h200-sglang-agentic
+  model:
+    path: hf:Qwen/Qwen3.8-Flash-Next-FP8
+    container: lmsysorg/sglang:qwen38flashnext
+    precision: fp8
+  resources:
+    gpu_type: h200
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      args:
+        served-model-name: Qwen/Qwen3.8-Flash-Next-FP8
+        trust-remote-code: true
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        data-parallel-size: 1
+        mem-fraction-static: 0.85
+        chunked-prefill-size: 8192
+        linear-attn-prefill-backend: flashinfer
+        linear-attn-decode-backend: flashinfer
+        mamba-ssm-dtype: float32
+        speculative-algorithm: NEXTN
+        speculative-num-steps: 3
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 4
+        reasoning-parser: auto
+        stream-interval: 50
+        scheduler-recv-interval: 10
+        tokenizer-worker-num: 6
+        enable-metrics: true
+      env:
+        PYTHONNOUSERSITE: '1'
+        SGLANG_ENABLE_SPEC_V2: '1'
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
+    env:
+      MODEL: Qwen/Qwen3.8-Flash-Next-FP8
+      # 256k-capped with-subagents corpus, within this model's context.
+      WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_with_subagents_256k
+
+# One variant per point: admission is 2x CONC and the graph batch is CONC.
+override_c1:
+  roles:
+    agg:
+      args:
+        max-running-requests: 2
+        cuda-graph-max-bs: 1
+  benchmark:
+    env:
+      CONC: '1'
+
+override_c4:
+  roles:
+    agg:
+      args:
+        max-running-requests: 8
+        cuda-graph-max-bs: 4
+  benchmark:
+    env:
+      CONC: '4'
+
+override_c8:
+  roles:
+    agg:
+      args:
+        max-running-requests: 16
+        cuda-graph-max-bs: 8
+  benchmark:
+    env:
+      CONC: '8'
+
+override_c12:
+  roles:
+    agg:
+      args:
+        max-running-requests: 24
+        cuda-graph-max-bs: 12
+  benchmark:
+    env:
+      CONC: '12'
+
+override_c16:
+  roles:
+    agg:
+      args:
+        max-running-requests: 32
+        cuda-graph-max-bs: 16
+  benchmark:
+    env:
+      CONC: '16'

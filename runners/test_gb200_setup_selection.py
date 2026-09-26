@@ -10,13 +10,13 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 RECIPE = "glm5.2/sglang/gb200-fp4/agentx/disagg-mtp-variants.yaml"
-C48_RECIPE = "glm5.2/sglang/gb200-fp4/agentx/disagg-1p4d-dep8-tp4-c48-mtp.yaml"
-C45_RECIPE = "glm5.2/sglang/gb200-fp4/agentx/disagg-1p6d-dep8-tp4-c45-mtp.yaml"
-C128_RECIPE = "glm5.2/sglang/gb200-fp4/agentx/disagg-2p1d-dep8-dep16-c128-mtp.yaml"
+C48_RECIPE = "glm5.2/sglang/gb200-fp4/agentx/disagg-dep8-mtp-variants.yaml:override_1p4d_tp4_c48"
+C45_RECIPE = "glm5.2/sglang/gb200-fp4/agentx/disagg-dep8-mtp-variants.yaml:override_1p6d_tp4_c45"
+C128_RECIPE = "glm5.2/sglang/gb200-fp4/agentx/disagg-dep8-mtp-variants.yaml:override_2p1d_dep16_c128"
 
 
 @pytest.mark.parametrize("model,recipe,eval_only,expected", [
-    ("glm5.2", f"recipes/{RECIPE}:zip_override_mtp[0]", "false", "glm52-gb200-nixl-prefill.sh"),
+    ("glm5.2", f"recipes/{RECIPE}:zip_override_mtp_agentx_frontier[0]", "false", "glm52-gb200-nixl-prefill.sh"),
     ("glm5.2", f"benchmarks/multi_node/srt-slurm-recipes/{RECIPE}:base", "false", "glm52-gb200-nixl-prefill.sh"),
     ("glm5.2", f"recipes/{RECIPE}:base", "true", "install-torchao.sh"),
     ("glm5.2", "recipes/glm5.2/sglang/gb200-fp4/agentx/agg.yaml:base", "false", "install-torchao.sh"),
@@ -30,6 +30,9 @@ C128_RECIPE = "glm5.2/sglang/gb200-fp4/agentx/disagg-2p1d-dep8-dep16-c128-mtp.ya
     ("glm5.2", f"recipes/{C128_RECIPE}", "false", "glm52-gb200-nixl-prefill.sh"),
     ("glm5.2", f"benchmarks/multi_node/srt-slurm-recipes/{C128_RECIPE}", "false", "glm52-gb200-nixl-prefill.sh"),
     ("glm5.2", f"recipes/{C128_RECIPE}", "true", "install-torchao.sh"),
+    ("glm5.2", "recipes/glm5.2/sglang/gb200-fp4/agentx/agg-mtp-variants.yaml:override_c2", "false", "install-torchao.sh"),
+    ("glm5.2", "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb200-fp4/agentx/agg-mtp-variants.yaml:override_c4", "false", "install-torchao.sh"),
+    ("glm5.2", "recipes/glm5.2/sglang/gb200-fp4/agentx/agg-mtp-variants.yaml:override_c8", "false", "install-torchao.sh"),
     ("dsr1", f"recipes/{RECIPE}:base", "false", "install-torchao.sh"),
 ])
 def test_launcher_submits_scoped_setup(tmp_path, model, recipe, eval_only, expected):
@@ -49,6 +52,7 @@ write_srt_cluster_config() { echo 'fixture: native' > "$2"; }
 run_srt_setup() { return 0; }
 apply_srt_recipe() {
     printf '%s\\0' "$@" > "$TEST_CAPTURE"
+    printf '%s\\n' "$RUNNER_NAME" > "$TEST_CAPTURE.runner"
     echo 'Job 42'
 }
 stream_slurm_job_log() { return 0; }
@@ -125,6 +129,9 @@ fi' DEBUG
     assert argv[argv.index("--setup-script") + 1] == expected
     assert argv.count("--setup-script") == 1
     assert argv[argv.index("-f") + 1] == recipe
+    assert Path(str(capture) + ".runner").read_text().strip() == "inferencex-gb200-nv_fixture"
+    if "/agentx/disagg-dep8-mtp-variants.yaml" in recipe or "/agentx/agg-mtp-variants.yaml" in recipe:
+        assert 'name="inferencex-gb200-nv_fixture"' in argv
 
 
 @pytest.mark.parametrize("role,install_rc,patch_rc,expected_rc,expected_steps", [

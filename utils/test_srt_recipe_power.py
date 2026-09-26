@@ -54,7 +54,7 @@ def agentx_recipe() -> dict:
         "benchmark": {
             "type": "custom",
             "concurrencies": [99],
-            "command": "bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh",
+            "command": "bash /infmax-workspace/benchmarks/srt_agentic.sh",
             "env": {
                 "RESULT_DIR": "/logs/agentic",
                 "INFMAX_CONTAINER_WORKSPACE": "/infmax-workspace",

@@ -101,38 +101,14 @@ import_squash() {
     ) || exit 1
 }
 
-# Direct single-tray AgentX uses the existing shared image and HF caches.
-if [[ "$MODEL_PREFIX" == "dsv41flash" && ( "$FRAMEWORK" == "vllm" || "$FRAMEWORK" == "sglang" ) && "${IS_MULTINODE}" != "true" ]]; then
-    check_env_vars SPEC_DECODING
-    BENCH_SCRIPT="benchmarks/single_node/agentic/${MODEL_PREFIX}_${PRECISION}_gb200_${FRAMEWORK}"
-    case "$SPEC_DECODING" in
-        mtp) BENCH_SCRIPT+="_mtp.sh" ;;
-        none)
-            [[ "$FRAMEWORK" == "sglang" ]] || { echo "Native STP requires the SGLang recipe" >&2; exit 1; }
-            BENCH_SCRIPT+=".sh"
-            ;;
-        *) echo "Unsupported SPEC_DECODING=$SPEC_DECODING" >&2; exit 1 ;;
-    esac
-    # Cover DSpark5 verification for concurrent AgentX subagents at c1/c2/c4.
-    export DSV41_MIN_CUDAGRAPH_CAPTURE_SIZE=64
-    [[ "${IS_AGENTIC}" == "1" && -f "$BENCH_SCRIPT" ]] || {
-        echo "Unsupported single-node recipe: $BENCH_SCRIPT" >&2
-        exit 1
-    }
-    HF_HUB_CACHE_HOST_PATH="/mnt/lustre01/users-public/sa-shared/hf-hub-cache"
-    mkdir -p "$HF_HUB_CACHE_HOST_PATH"
-    export MODEL_PATH="$MODEL" HF_HUB_CACHE=/hf-cache
-    export INFMAX_CONTAINER_WORKSPACE=/ix RESULT_DIR=/ix/results
-    SQUASH_FILE="$SQUASH_DIR/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-    import_squash "$SQUASH_FILE" "$IMAGE"
-    srun --account="$SLURM_ACCOUNT" --partition="$SLURM_PARTITION" \
-        --nodes=1 --ntasks=1 --gpus="${TP:?}" --exclusive --mem=0 \
-        --time="${SALLOC_TIME_LIMIT}" --job-name="$RUNNER_NAME" \
-        --mpi=none --container-image="$SQUASH_FILE" \
-        --container-mounts="$GITHUB_WORKSPACE:/ix,$HF_HUB_CACHE_HOST_PATH:/hf-cache" \
-        --no-container-mount-home --container-remap-root \
-        --container-workdir=/ix --no-container-entrypoint \
-        --export=ALL,PORT=8888 bash "$BENCH_SCRIPT"
+# Single-tray points with an srt-slurm recipe run natively on the aarch64 trays.
+if [[ "$IS_MULTINODE" != true && -n "${SRT_RECIPE:-}" ]]; then
+    HF_HUB_CACHE_MOUNT="/mnt/lustre01/users-public/sa-shared/hf-hub-cache"
+    SRT_MODEL_PATH="hf:$MODEL"
+    SRT_SQUASH_FILE="$SQUASH_DIR/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    import_squash "$SRT_SQUASH_FILE" "$IMAGE"
+    SRT_SETUP_ARCH=aarch64 launch_srt_single_node gb200-nv \
+        --var SLURM_ACCOUNT "$SLURM_ACCOUNT" --var SLURM_PARTITION "$SLURM_PARTITION"
     exit $?
 fi
 
@@ -545,16 +521,22 @@ SRTCTL_APPLY_ARGS=(
     -f "$CONFIG_FILE"
     --tags "gb200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)"
 )
+# Consolidated recipes store names under base/override blocks; the top-level
+# sed above cannot preserve the standalone recipe's effective submission name.
+case "$CONFIG_PATH" in
+    recipes/glm5.2/sglang/gb200-fp4/agentx/agg-mtp-variants.yaml|\
+    benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb200-fp4/agentx/agg-mtp-variants.yaml|\
+    recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-dep8-mtp-variants.yaml|\
+    benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-dep8-mtp-variants.yaml)
+        SRTCTL_APPLY_ARGS+=(--set "name=\"${SRT_SLURM_JOB_NAME}\"")
+        ;;
+esac
 if [[ "$FRAMEWORK" == "dynamo-sglang" ]]; then
     if [[ "$USES_GLM52_RECOVERY" == "1" && "$EVAL_ONLY" != "true" &&
         ( "$CONFIG_PATH" == "recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-mtp-variants.yaml" ||
           "$CONFIG_PATH" == "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-mtp-variants.yaml" ||
-          "$CONFIG_PATH" == "recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-1p4d-dep8-tp4-c48-mtp.yaml" ||
-          "$CONFIG_PATH" == "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-1p4d-dep8-tp4-c48-mtp.yaml" ||
-          "$CONFIG_PATH" == "recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-2p1d-dep8-dep16-c128-mtp.yaml" ||
-          "$CONFIG_PATH" == "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-2p1d-dep8-dep16-c128-mtp.yaml" ||
-          "$CONFIG_PATH" == "recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-1p6d-dep8-tp4-c45-mtp.yaml" ||
-          "$CONFIG_PATH" == "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-1p6d-dep8-tp4-c45-mtp.yaml" ) ]]; then
+          "$CONFIG_PATH" == "recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-dep8-mtp-variants.yaml" ||
+          "$CONFIG_PATH" == "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-dep8-mtp-variants.yaml" ) ]]; then
         # The CLI overrides recipe setup_script, so select the composite setup.
         SRTCTL_APPLY_ARGS+=(--setup-script glm52-gb200-nixl-prefill.sh)
     else

@@ -3,12 +3,13 @@ import os
 import shlex
 import subprocess
 import sys
+from types import SimpleNamespace
 
 import pytest
 
 from infx.klaud import __main__ as klaud
 from infx.klaud import api, claims, github, lifecycle, reporting, validation
-from infx.klaud.models import CandidateOutcome, Feed, OwnedCandidate
+from infx.klaud.models import CandidateOutcome, Feed, OwnedCandidate, identity
 
 
 @pytest.mark.parametrize("current_head,expected", [("ours", True), ("other", False)])
@@ -106,20 +107,24 @@ def test_diagnostics_prefers_verified_outcome_when_action_output_is_invalid(
                 pull_request=None,
                 run_ids=[],
                 repairs_used=0,
+                reason_code="baseline-provenance-unverified",
             )
 
     evidence = tmp_path / "evidence"
     evidence.mkdir()
     (evidence / "outcome.json").write_text(
         '{"outcome":"failed","phase":"baseline","pull-request":null,'
-        '"run-ids":[],"repairs-used":0}\n'
+        '"run-ids":[],"repairs-used":0,"reason-code":"baseline-provenance-unverified"}\n'
     )
     execution = tmp_path / "execution.json"
     execution.write_text("{}\n")
     structured = tmp_path / "structured.json"
     structured.write_text("not json\n")
     output = tmp_path / "diagnostics.json"
+    summary = tmp_path / "summary.md"
     monkeypatch.setenv("KLAUD_EVIDENCE", str(evidence))
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
+    monkeypatch.setenv("GITHUB_REPOSITORY", "example/project")
     monkeypatch.setattr(lifecycle, "current_session", Session)
 
     assert klaud.save_diagnostics(execution, structured, "success", output)
@@ -132,7 +137,60 @@ def test_diagnostics_prefers_verified_outcome_when_action_output_is_invalid(
         "pull-request": None,
         "run-ids": [],
         "repairs-used": 0,
+        "reason-code": "baseline-provenance-unverified",
     }
+    assert "baseline-provenance-unverified" in summary.read_text()
+
+
+def test_candidate_outcome_rejects_raw_reason_and_preserves_legacy_receipts():
+    legacy = CandidateOutcome.model_validate(
+        {
+            "outcome": "failed",
+            "phase": "baseline",
+            "pull-request": None,
+            "run-ids": [],
+            "repairs-used": 0,
+        }
+    )
+    assert "reason-code" not in legacy.model_dump(by_alias=True, exclude_unset=True)
+    with pytest.raises(ValueError):
+        CandidateOutcome.model_validate(
+            {
+                **legacy.model_dump(by_alias=True, exclude_unset=True),
+                "reason-code": "private error",
+            }
+        )
+
+
+def test_finish_requires_specific_baseline_reason_before_touching_session(
+    tmp_path, monkeypatch, capfd
+):
+    requested = tmp_path / "requested-outcome.json"
+    requested.write_text(
+        json.dumps(
+            {
+                "outcome": "failed",
+                "phase": "baseline",
+                "pull-request": None,
+                "run-ids": [],
+                "repairs-used": 0,
+            }
+        )
+    )
+    monkeypatch.setattr(
+        sys, "argv", ["klaud", "finish", "--outcome-file", str(requested)]
+    )
+    monkeypatch.setattr(
+        lifecycle,
+        "current_session",
+        lambda: pytest.fail(
+            "An unclassified baseline failure must not reach lifecycle cleanup"
+        ),
+    )
+    assert klaud.main() == 1
+    assert capfd.readouterr().out == (
+        "::error::Klaud: Baseline failure requires a fixed reason-code.\n"
+    )
 
 
 def test_recent_candidates_use_all_current_base_workflow_artifacts(monkeypatch):
@@ -197,7 +255,14 @@ def test_select_continues_after_one_baseline_state_failure(tmp_path, monkeypatch
     def resolve(_repository, candidate, _context, _model, _goal):
         if candidate.id == first_id:
             raise OSError("transient")
-        return object()
+        return reporting.Baseline(
+            family=candidate.family,
+            date="2026-09-19",
+            image="example/image:1",
+            goal=reporting.Prose(en="Check the baseline.", zh="检查基线。"),
+            sources=["https://inferencex.semianalysis.com/api/v1/benchmarks"],
+            points=[],
+        )
 
     monkeypatch.setenv("GITHUB_REPOSITORY", "example/project")
     monkeypatch.setenv("GITHUB_RUN_ID", "42")
@@ -212,6 +277,72 @@ def test_select_continues_after_one_baseline_state_failure(tmp_path, monkeypatch
     assert selection["candidates"] == [second_id]
     assert selection["baseline-deferred-candidates"] == [first_id]
     assert selection["deferred-reason"] is None
+    preflight = reporting.BaselinePreflight.model_validate_json(
+        (tmp_path / second_id / "baseline-preflight.json").read_text()
+    )
+    assert preflight.candidate_id == second_id
+    assert preflight.baseline_model == "Model"
+    assert preflight.source_identity == identity({})
+    selected = json.loads((tmp_path / second_id / "candidate.json").read_text())
+    assert selected["baseline-preflight-required"] is True
+
+
+def test_prepare_baseline_uses_bound_preflight_and_rejects_source_drift(
+    tmp_path, monkeypatch
+):
+    candidate = OwnedCandidate(
+        id="1" * 16 + "-" + "2" * 16,
+        family="configs/nvidia-master.yaml:test-family",
+        base="a" * 40,
+    )
+    context = {"source": {"date": "2026-09-19", "image": "example/image:1"}}
+    original_goal = reporting.Prose(en="Check the baseline.", zh="检查基线。")
+    goal = reporting.Prose(en="Update the image.", zh="更新镜像。")
+    baseline = reporting.Baseline(
+        family=candidate.family,
+        date="2026-09-19",
+        image="example/image:1",
+        goal=original_goal,
+        sources=["https://inferencex.semianalysis.com/api/v1/benchmarks"],
+        points=[
+            reporting.Point(
+                key="b" * 64,
+                label="8k/1k c4",
+                conc=4,
+                scenario="fixed-seq-len",
+                values=reporting.Values(total_tps_gpu=42),
+                result="passed",
+            )
+        ],
+    )
+    preflight = reporting.BaselinePreflight(
+        candidate_id=candidate.id,
+        base=candidate.base,
+        baseline_model="Model",
+        source_identity=identity(context["source"]),
+        baseline=baseline,
+    )
+    (tmp_path / "baseline-preflight.json").write_text(
+        preflight.model_dump_json(by_alias=True)
+    )
+    monkeypatch.setenv("KLAUD_EVIDENCE", str(tmp_path))
+    session = SimpleNamespace(repository="example/project", candidate=candidate)
+
+    prepared = reporting.prepare_baseline(session, context, "Model", goal)
+    assert prepared.goal == goal
+    assert prepared.points[0].values.total_tps_gpu == 42
+    with pytest.raises(github.VerificationError, match="preflight does not match"):
+        reporting.prepare_baseline(
+            session,
+            {"source": {**context["source"], "image": "example/image:2"}},
+            "Model",
+            goal,
+        )
+    (tmp_path / "baseline-preflight.json").unlink()
+    with pytest.raises(github.VerificationError, match="artifact is missing"):
+        reporting.prepare_baseline(
+            session, {**context, "baseline-preflight-required": True}, "Model", goal
+        )
 
 
 def test_baseline_normalizes_enroot_image_and_rejects_unverified_provenance(

@@ -330,11 +330,7 @@ cutoff to make resolution pass. CollectiveX uses a fresh venv and `uv pip instal
 index, whose mirrors of other packages lack timestamps. Other dependencies come
 from PyPI. The job verifies that the installed wheel has no CUDA or ROCm backend.
 
-The review workflows share [`.github/mcp-ci.json`](../.github/mcp-ci.json), which
-starts their Python MCP server through uv using the existing requirements file.
-The server uses the MCP 1.x API; the requirements exclude incompatible SDK 2.x,
-and CI exercises server construction and discovery without cloning repositories.
-Their checkout refs, credentials, and review policy are unchanged. Matrix and
+Matrix and
 CollectiveX unit tests now run on draft PRs too, allowing CI environment changes
 to be verified before requesting review.
 
