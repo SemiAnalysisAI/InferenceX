@@ -282,7 +282,8 @@ class SlurmClient:
         This shells out to ``srun`` because Pyxis flags are srun-spank plugins
         with no pyslurm binding.  The step overlaps the holder batch job.
         """
-        cmd: list[str] = ["srun", f"--jobid={job_id}"]
+        # The holder batch step owns the allocation; steps must overlap it or they queue forever.
+        cmd: list[str] = ["srun", f"--jobid={job_id}", "--overlap"]
         if container:
             cmd.append(f"--container-image={container}")
         if container_mounts:

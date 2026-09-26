@@ -328,6 +328,7 @@ class TestRunStep:
             cmd = mock_run.call_args[0][0]
             assert cmd[0] == "srun"
             assert "--jobid=42" in cmd
+            assert "--overlap" in cmd  # steps must share the holder allocation
             assert "--container-image=/path/to.sqsh" in cmd
             assert "--container-mounts=/src:/dst" in cmd
             assert "--container-workdir=/workspace/" in cmd
