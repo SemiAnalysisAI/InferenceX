@@ -21,7 +21,7 @@
 | [`perf-changelog.yaml`](../perf-changelog.yaml) | 只允许追加的基准触发日志 |
 | [`AGENTS.md`](../AGENTS.md) | 仓库级配置、MTP、changelog 和 sweep 规则 |
 
-退役的配置项直接从启用的主配置中删除，不再归档；历史设置由 Git 历史和 `perf-changelog.yaml` 保留。仅弃用部分场景时，只删除已退役的场景。退役的 AMD 服务注册项和模型专用初始化逻辑应移至 `benchmarks/multi_node/amd_utils/deprecated/`，不参与启用服务的查找。保留 SPEED-Bench 采集器仍需使用的共享依赖，包括调度评分。参见[弃用规则](../AGENTS.md#deprecating-benchmark-configs)。
+退役的配置项直接从启用的主配置中删除，不再归档；历史设置由 Git 历史和 `perf-changelog.yaml` 保留。仅弃用部分场景时，只删除已退役的场景。退役的 AMD 服务注册项和模型专用初始化逻辑也应从 `benchmarks/multi_node/amd_utils/` 中删除。保留 SPEED-Bench 采集器仍需使用的共享依赖，包括调度评分。参见[弃用规则](../AGENTS.md#deprecating-benchmark-configs)。
 
 ## 依赖子模块
 
