@@ -129,6 +129,13 @@ esac
 export ATOM_ENABLE_REPLAYSSM
 export AITER_REUSE_IDENTICAL_COMM_GROUPS
 
+# From concurrency 16 up, hold a ready prefill for 4 decode passes instead of
+# interleaving it into every step; MAX_QUEUE_MS bounds the wait. 14 runs without it.
+if [ "$CONC" -ge 16 ]; then
+    export ATOM_PREFILL_DECODE_INTERVAL=4
+    export ATOM_PREFILL_DELAYER_MAX_QUEUE_MS=5000
+fi
+
 # Full CUDA graphs over [1 .. window * (1 + draft tokens)]: the verify step
 # submits one row per draft token on top of the accepted token, so capturing
 # only up to the window would send every speculative decode down the eager path.
@@ -199,6 +206,8 @@ export AITER_FLYDSL_STAGE2_FP8=1
 # costs more in evictions than its reuse is worth on these traces.
 export ATOM_STATE_CHECKPOINT_DEMAND=0
 export ATOM_GDN_SSM_DTYPE=fp16
+# FlyDSL FP8 prefill attention; ATOM defaults it off.
+export ATOM_USE_FLYDSL_FP8_PREFILL_ATTN=1
 
 # https://github.com/SemiAnalysisAI/InferenceX/blob/main/golden_al_distribution/kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml
 #  7 draft tokens -> AL 3.84
