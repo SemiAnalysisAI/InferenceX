@@ -16,9 +16,7 @@ workflows = ["codeowners>=0.9,<0.10"]
 results = ["psycopg2-binary>=2,<3", "tabulate>=0.10,<0.11"]
 
 [dependency-groups]
-mcp = ["gitpython>=3.1.40,<4", "mcp>=1.30,<2"]
 test = [
-    { include-group = "mcp" },
     "aiohttp>=3,<4",
     "jinja2>=3.1,<4",
     "marshmallow>=3.20,<5",
