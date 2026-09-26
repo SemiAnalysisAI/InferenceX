@@ -293,6 +293,21 @@ The pinned image is the official ATOM nightly
 The recipe does not patch AITER source at runtime; TP communication
 fusion, DSpark K6 and graph capture use the implementation shipped in the image.
 
+### MiniMax-M3 ATOM FlyDSL paged decode
+
+`minimaxm3-fp4-mi355x-atom-agentic-mtp` uses
+`rocm/atom-dev:nightly_202609231248` with `ATOM_PA_FLYDSL=1` and
+`ATOM_PA_FLYDSL_PLAN=1`, following [ROCm/ATOM#2366](https://github.com/ROCm/ATOM/pull/2366)
+and the [upstream recipe](https://github.com/ROCm/ATOM/blob/94cde4ba786f45b38c26ee8201444659e44f861f/recipes/MiniMax-M3-Agentic-InferenceX.md).
+FlyDSL handles supported paged-decode shapes; its work planner balances dense
+decode by actual context length. Unsupported shapes retain the Gluon fallback.
+Verify the selected route and capture-time work-plan creation in `server.log`.
+
+The change is limited to the image and the two FlyDSL variables in
+`benchmarks/single_node/srt-slurm-recipes/minimaxm3/atom/mi355x-fp4-mtp/agentic.yaml`;
+TP4 C32 is dropped; the TP4 C1-C28 and TP2 C1-C2 points, EAGLE3 K3, golden AL 2.78 and indexer CP
+are unchanged.
+
 ### DeepSeek-V4.1-Flash DSpark
 
 The GB200 DSpark recipe uses a minimum CUDA graph capture size of 64 tokens to cover concurrent AgentX subagents. This raises c1/c2/c4 from 8/16/32 to 64; c8 and above retain their existing sizes. The full trace, AL 3.51, and Engram UVA settings are preserved; low-concurrency tail latency improvements require CI confirmation.

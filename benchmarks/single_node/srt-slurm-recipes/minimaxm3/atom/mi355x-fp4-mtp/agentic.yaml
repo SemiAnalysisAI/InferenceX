@@ -7,7 +7,7 @@ base:
   name: minimaxm3-fp4-mi355x-atom-agentic
   model:
     path: hf:amd/MiniMax-M3-MXFP4
-    container: rocm/atom-dev:nightly_202609171455
+    container: rocm/atom-dev:nightly_202609231248
     precision: fp4
   resources:
     gpu_type: mi355x
@@ -47,6 +47,8 @@ base:
         AITER_QUICK_REDUCE_QUANTIZATION: INT4
         AITER_FLYDSL_STAGE2_FP8: '1'
         ATOM_FORCE_ATTN_TRITON: '1'
+        ATOM_PA_FLYDSL: '1'
+        ATOM_PA_FLYDSL_PLAN: '1'
   benchmark:
     type: custom
     command: bash /infmax-workspace/benchmarks/srt_agentic.sh
@@ -57,7 +59,7 @@ base:
       AIPERF_APPLY_CHAT_TEMPLATE: 'true'
 
 # One variant per point. Admission is 2x CONC. TP4 shards the indexer across
-# ranks at the measured points (15, 20, 24, 28, 32).
+# ranks at the measured points (15, 20, 24, 28).
 override_tp4_c1:
   roles:
     agg:
@@ -175,18 +177,6 @@ override_tp4_c28:
   benchmark:
     env:
       CONC: '28'
-
-override_tp4_c32:
-  roles:
-    agg:
-      gpus: 4
-      args:
-        max-num-seqs: 64
-      env:
-        ATOM_M3_INDEXER_CP: '1'
-  benchmark:
-    env:
-      CONC: '32'
 
 override_tp2_c1:
   roles:
