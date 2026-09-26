@@ -20,7 +20,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BENCHMARK_LIB = REPO_ROOT / "benchmarks" / "benchmark_lib.sh"
-MULTINODE_AGENTIC_SCRIPT = REPO_ROOT / "benchmarks/multi_node/agentic_srt.sh"
+MULTINODE_AGENTIC_SCRIPT = REPO_ROOT / "benchmarks/srt_agentic.sh"
 
 
 @pytest.fixture(autouse=True)

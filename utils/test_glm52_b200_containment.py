@@ -8,9 +8,12 @@ import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
-C48 = "recipes/glm5.2/sglang/b200-fp4/agentx/disagg-1p4d-dep8-tp4-c48-mtp.yaml"
+RECIPE_DIR = "recipes/glm5.2/sglang/b200-fp4/agentx/"
+C48 = RECIPE_DIR + "disagg-variants.yaml:override_1p4d_tp4_c48"
+C64 = RECIPE_DIR + "disagg-variants.yaml:override_1p1d_c64"
 SETUP = "glm52-b200-c48-containment.sh"
 
 
@@ -62,7 +65,16 @@ def launch(
     fixture = tmp_path / "fixture"
     config = fixture / recipe.split(":", 1)[0]
     config.parent.mkdir(parents=True)
-    config.write_text("name: controlled\nhealth_check:\n  max_attempts: 1440\n")
+    config.write_text(yaml.safe_dump({
+        "base": {
+            "name": "fixture-base",
+            "health_check": {"max_attempts": 17, "interval_seconds": 3},
+            "frontend": {"env": {}},
+            "roles": {"prefill": {"env": {}}, "decode": {"env": {}}},
+            "benchmark": {"env": {}},
+        },
+        recipe.split(":", 1)[1]: {"name": "fixture-variant"},
+    }))
     (runners / "slurm_utils.sh").write_text(r"""
 setup_srt_slurm() { command mkdir -p "$1"; cp -R "$FIXTURE/." "$1/"; cd "$1"; }
 install_srt_slurm() { :; }
@@ -172,6 +184,7 @@ def test_c48_performance_submits_all_role_containment(tmp_path, use_default):
     ]
     assert set(overrides) == {
         "telemetry.required=true",
+        'name="controlled-runner"',
         "dynamo.install=false",
         'frontend.env.DYN_GLM52_PREFILL_FAILURE_CONTAINMENT="1"',
         'roles.prefill.env.DYN_GLM52_PREFILL_FAILURE_CONTAINMENT="1"',
@@ -217,7 +230,7 @@ def test_foreign_containment_payload_prevents_submission(tmp_path):
     [
         (C48, "true"),
         (
-            "recipes/glm5.2/sglang/b200-fp4/agentx/disagg-1p1d-dep8-tp8-c64-mtp.yaml",
+            C64,
             "false",
         ),
     ],
@@ -240,6 +253,38 @@ def test_unaffected_cells_do_not_require_or_activate_payload(
         for value in submitted
     )
     assert str(payload) not in cluster
+
+
+@pytest.mark.parametrize(
+    ("recipe", "eval_only"),
+    [(RECIPE_DIR + f"agg-variants.yaml:override_c{c}", "false") for c in (1, 4, 8)]
+    + [(C48, "false"), (C64, "false"), (C48, "true"), (C64, "true")],
+)
+def test_canonical_variants_preserve_runner_identity_and_health_budget(
+    tmp_path, recipe, eval_only
+):
+    sys.path.insert(0, str(ROOT / "utils/srt-slurm/src"))
+    from srtctl.core.config import generate_override_configs
+    from srtctl.core.overrides import apply_overrides_to_recipe, parse_overrides
+
+    result, submitted, _, _ = launch(tmp_path, recipe=recipe, eval_only=eval_only)
+    assert result.returncode == 0, result.stdout + result.stderr
+    source = tmp_path / "fixture" / recipe.split(":", 1)[0]
+    raw = yaml.safe_load(source.read_text())
+    overrides = [
+        submitted[i + 1] for i, arg in enumerate(submitted[:-1]) if arg == "--set"
+    ]
+    apply_overrides_to_recipe(raw, parse_overrides(overrides, []))
+    resolved = generate_override_configs(raw, selector=recipe.split(":", 1)[1])[0][1]
+    assert resolved["name"] == "controlled-runner"
+    assert resolved["health_check"] == {"max_attempts": 17, "interval_seconds": 3}
+    active = recipe == C48 and eval_only == "false"
+    assert ("--setup-script" in submitted) is active
+    assert (
+        "DYN_GLM52_PREFILL_FAILURE_CONTAINMENT"
+        in resolved["frontend"].get("env", {})
+    ) is active
+    assert ("AIPERF_REQUEST_TIMEOUT_SECONDS" in resolved["benchmark"]["env"]) is active
 
 
 @pytest.mark.parametrize(

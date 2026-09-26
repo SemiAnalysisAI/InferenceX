@@ -329,6 +329,7 @@ def test_pool_launcher_stages_artifacts_and_propagates_failure(point, tmp_path, 
         "TEST_FAILURE": failure, "CANCEL_CAPTURE": str(capture),
         "SRUN_CAPTURE": str(tmp_path / "srun.jsonl"),
         "KEEP_LOGS": "0",
+        "RUNNER_NAME": "fixture_00",
     }
     env.pop("AIPERF_DRAIN_TIMEOUT_SECONDS", None)
     env.pop("AIPERF_DRAIN_POLL_SECONDS", None)
@@ -337,7 +338,7 @@ def test_pool_launcher_stages_artifacts_and_propagates_failure(point, tmp_path, 
         env.pop("SRT_RECIPE")
     if failure == "agentic":
         env.update(IS_AGENTIC="1", SCENARIO_SUBDIR="agentic/", EXP_NAME="fixture_agentic",
-                   RUNNER_NAME="fixture_00", SRT_RECIPE="unused.yaml")
+                   RUNNER_NAME="fixture_00", SRT_RECIPE="")  # not yet ported: legacy script
     result = subprocess.run(
         ["bash", str(ROOT / f"runners/launch_{pool}.sh")], cwd=tmp_path,
         env=env, capture_output=True, text=True, timeout=30,

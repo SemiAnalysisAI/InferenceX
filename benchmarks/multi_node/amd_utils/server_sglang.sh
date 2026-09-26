@@ -580,8 +580,8 @@ elif [[ "$KV_OFFLOADING" != "none" && "$KV_OFFLOAD_BACKEND" == umbp-linker* ]]; 
     # =========================================================================
     # UMBP as a DIRECT external store for the unified radix tree (PD disagg).
     #
-    # Ported from benchmarks/single_node/agentic/dsv4_fp4_mi355x_sglang_mtp.sh,
-    # which is where this arm exists today. It is a SEPARATE sglang code path
+    # Ported from the single-node DSv4 MI355X SGLang AgentX bash script (since
+    # removed in #3460). It is a SEPARATE sglang code path
     # from the HiCache branch above, not a variation of it: the tree loads and
     # offloads pages against UMBP with NO host cache tier in between, and
     # sglang rejects the combination outright (server_args.py::_handle_hicache

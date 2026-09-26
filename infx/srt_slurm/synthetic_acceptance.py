@@ -28,6 +28,7 @@ ENGINES = {
     "dynamo-sglang": "sglang",
     "trt": "trtllm",
     "dynamo-trt": "trtllm",
+    "atom": "atom",
 }
 SGLANG_VARIABLES = (
     "SGLANG_SIMULATE_ACC_LEN",
@@ -43,10 +44,15 @@ def spec_parameters(role: Mapping[str, Any], engine: str) -> dict[str, Any]:
         method = args.get("method")
         if not method:
             return {}
-        return {
+        spec = {
             "method": str(method).lower(),
             "num_speculative_tokens": args.get("num-speculative-tokens"),
+            "model": args.get("draft-model", ""),
         }
+        if spec["method"] == "dspark":
+            # ATOM DSpark verifies with probabilistic block rejection sampling.
+            spec["draft_sample_method"] = "probabilistic"
+        return spec
     if engine == "vllm":
         raw = args.get("speculative-config")
         if raw is None:
@@ -89,7 +95,7 @@ def golden_length(model: str, spec: Mapping[str, Any], thinking: str, golden_dir
     method = str(spec.get("method", "")).lower()
     # SGLang calls native model MTP EAGLE/NEXTN; the curve describes the model's head.
     if method in ("eagle", "nextn"):
-        method = "eagle3" if model in ("kimik2.5", "minimaxm3") else "mtp"
+        method = "eagle3" if model == "minimaxm3" else "mtp"
     curve = f"{model}_{method}"
     if model in ("dsv4", "dsv4dspark", "dsv4dsparkprob") and method == "dspark":
         curve = "dsv4-pro-0813-dspark"
@@ -182,6 +188,13 @@ def build_overrides(
                 "--set",
                 f"{prefix}.args.speculative-config={json.dumps(worker_spec)}",
             ]
+        elif engine == "atom":
+            # ATOM forces acceptance with a server flag rather than environment.
+            key = "spec-decode-acceptance-length"
+            if al is not None and worker_spec:
+                overrides += ["--set", f"{prefix}.args.{key}={al:g}"]
+            elif key in (role.get("args") or {}):
+                overrides += ["--unset", f"{prefix}.args.{key}"]
         elif al is not None and worker_spec:
             values = (
                 (f"{al:g}", "match-expected", "real-draft-token")
@@ -330,12 +343,12 @@ def inspect_power(config: str, arguments: list[str], environment: Mapping[str, s
     if (
         benchmark.type != "custom"
         or shlex.split(benchmark.command or "")
-        != ["bash", "/infmax-workspace/benchmarks/multi_node/agentic_srt.sh"]
+        != ["bash", "/infmax-workspace/benchmarks/srt_agentic.sh"]
         or benchmark.env.get("RESULT_DIR") != "/logs/agentic"
         or benchmark.env.get("INFMAX_CONTAINER_WORKSPACE") != "/infmax-workspace"
         or benchmark.env.get("IS_MULTINODE") != "true"
     ):
-        raise ValueError("AgentX PowerX requires the shared agentic_srt.sh window/result contract")
+        raise ValueError("AgentX PowerX requires the shared srt_agentic.sh window/result contract")
     if not typed.telemetry.required:
         raise ValueError("AgentX PowerX requires telemetry.required: true")
     return "agentx"

@@ -143,7 +143,7 @@ telemetry:
 benchmark:
   type: custom
   concurrencies: [1, 4]
-  command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
+  command: bash /infmax-workspace/benchmarks/srt_agentic.sh
   env:
     ENABLE_AGENTX_POWER: "1"
     REQUIRE_POWER: "1"
