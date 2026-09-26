@@ -175,7 +175,7 @@ InferenceX 支持 SGLang 和 vLLM 双方的维护者，并响应 AI 实验室和
 
 ## 说明
 
-- 「前缀」列为 `configs/*-master.yaml` 中的规范 `model-prefix`，同时用于 `python -m infx.matrix.generate --model-prefix`。
+- 「前缀」列为 `configs/*-master.yaml` 中的规范 `model-prefix`，同时用于 `full-sweep` 子命令的 `--model-prefix` 筛选参数，例如 `python -m infx.matrix.generate full-sweep --config-files configs/nvidia-master.yaml --model-prefix dsr1`。
 - 「退役」指该模型已无任何启用场景。退役模型的配置直接从主配置中删除；原 `configs/deprecated/` 归档目录已在 #3464 中删除，历史设置保留在 Git 历史与 `perf-changelog.yaml` 中。
 - 弃用某一精度（如 Qwen3.5 bf16）或 A/B 对照中的某一分支（如非 MTP），只是收窄该模型的配方覆盖范围，并不等于模型退役；只要仍有一个场景在运行，该模型即继续列为启用状态。
 - `dsr1` 最初以 DeepSeek-V3 workflow 模板的形式随仓库首次导入，2025-08-13 切换为 DeepSeek-R1 基准测试（2025-08-20 将 `dsv3` 重命名为 `dsr1`）。

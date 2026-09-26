@@ -140,15 +140,17 @@ flowchart LR
 | `infx.datasets` | AgentX 轨迹采样、转换、数据集构建及分布图 |
 | `infx.klaud` | Klaud 编排、生命周期、GitHub/API 适配器和模式 |
 
-从仓库根目录使用 `python -m infx.<package>.<module>` 运行命令。依赖仍由各命令分别管理；导入 `infx` 不会加载基准测试客户端或评测依赖。`utils/` 保留工作流、恢复命令或显式兼容性测试仍在使用的兼容入口；没有调用方的转发包装文件已删除。数据集工具、AgentX 聚合与分析、评测适配器与补丁，以及基准测试客户端辅助模块应使用规范的 `infx` 路径。测试、运行器配置 Shell 脚本、AgentX 运行时依赖清单及外部子模块仍位于 `utils/`。
+从仓库根目录使用 `python -m infx.<package>.<module>` 运行命令。依赖仍由各命令分别管理；导入 `infx` 不会加载基准测试客户端或评测依赖。`utils/` 下的 Python 兼容包装文件已删除。数据集工具、AgentX 聚合与分析、评测适配器与补丁，以及基准测试客户端辅助模块应使用规范的 `infx` 路径。评测文档位于 `infx/evals/EVALS.md`，评测测试位于 `infx/tests/evals/`。其他行为测试、运行器配置 Shell 脚本及外部子模块仍位于 `utils/`。
 
-复制到隔离环境中的评测适配器和补丁使用 `infx/evals` 下的实际文件，因此仍可独立运行。可信工作流辅助模块会明确选择工具代码所在的检出目录。固定序列结果处理使用单独检出的工作流修订版中的包，并以被测检出目录为工作目录。因此，历史被测修订版无需包含结果处理包。
+复制到隔离环境中的评测适配器和补丁使用 `infx/evals` 下的实际文件，因此仍可独立运行。可信工作流辅助模块会明确选择工具代码所在的检出目录。固定序列处理、评测分数验证和单节点 AgentX 结果验证步骤使用单独检出的工作流修订版中的包，并以被测检出目录为工作目录。仅评测作业也会准备工具代码和 Python 3.12。因此，历史被测修订版无需包含这些辅助模块。分数阈值取自工作流修订版随包提供的 `infx/evals/thresholds.yaml`。
 
 默认仓库路径定义在 [`infx/config.py`](../infx/config.py) 中。配置常量从 `infx.config` 导入，模式从 `infx.matrix.validation` 导入。包的 `__init__.py` 文件保持精简。
 
-从仓库根目录或安装好的包运行 `python -m infx.matrix.plan` 进行变更日志规划，运行 `python -m infx.workflows.validate_perf_changelog` 进行验证。矩阵生成通过 `python -m infx.matrix.generate` 运行；历史 append-only 规划使用基准修订版自身的生成器，缺少模块时使用该修订版的旧脚本。摄取恢复使用恢复工具自身的规划模块，以及所选 worktree 的配置和配方。
+从仓库根目录或安装好的包运行 `python -m infx.matrix.plan` 进行变更日志规划，运行 `python -m infx.workflows.validate_perf_changelog` 进行验证。矩阵生成使用 `python -m infx.matrix.generate` 入口，并指定 `full-sweep` 或 `test-config` 子命令；历史 append-only 规划使用基准修订版自身的生成器，缺少模块时使用该修订版的旧脚本。摄取恢复使用恢复工具自身的规划模块，以及所选 worktree 的配置和配方。
 
 使用当前工具代码的工作流直接调用 `infx` 模块，测试也导入规范模块。可信调度和结果处理通过 `PYTHONPATH` 和 Python 的 `-P` 选项明确指定工具代码所在的检出目录，同时仍以目标检出目录作为工作目录读取输入。恢复工具将 `INFERENCEX_REPOSITORY_ROOT` 设为所选 worktree，确保配方数据来自该修订版；其他调用方仍默认使用源码检出目录。
+
+手动矩阵生成、性能分析、OperatorX 枚举和历史 append-only 规划均支持模块与遗留脚本两种布局。生成器子进程会将所选检出目录或快照明确置于 `PYTHONPATH` 前部，必要时也包含遗留脚本所在目录，因此启用 `PYTHONSAFEPATH` 时也不会误用其他已安装检出版本的代码。
 
 `infx.matrix.plan.build_plan(changelog_data, base_ref=..., head_ref=...)` 返回完整扫描的已验证 `ChangelogMatrixEntry`，统一负责条目优先级、基准测试与评测各自的场景覆盖、裁剪、指纹及输出分桶。当前主配置文件只加载一次，运行器元数据在首次生成时加载一次；每组选中的配置直接调用 `infx.matrix.generate.generate_config_matrix`。当前输入来自传入的路径（默认为检出目录中的路径），`head_ref` 仍用作来源元数据。规划过程假设这些文件在本次操作期间保持稳定。
 

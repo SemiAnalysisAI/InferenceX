@@ -303,7 +303,6 @@ jobs:
           persist-credentials: false
 
       - name: Checkout result tooling
-        if: ${{ !inputs.eval-only }}
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.workflow_sha }}
@@ -311,13 +310,11 @@ jobs:
           persist-credentials: false
 
       - name: Set up uv for result processing
-        if: ${{ !inputs.eval-only }}
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           enable-cache: false
 
       - name: Prepare result-processing Python
-        if: ${{ !inputs.eval-only }}
         run: |
           uv python install --quiet --no-bin 3.12
           result_python=$(uv python find --system 3.12)
@@ -501,12 +498,16 @@ jobs:
 
       - name: Verify eval scores
         if: ${{ (success() || failure()) && inputs.eval-only }}
+        env:
+          PYTHONPATH: ${{ github.workspace }}/.result-tooling
         run: |
+          source .result-tooling/benchmarks/benchmark_lib.sh --validation-only
+          check_env_vars INFERENCEX_RESULTS_PYTHON
           expected_concs="${EVAL_CONC}"
           if [[ -z "${expected_concs}" ]]; then
             expected_concs="$(printf '%s\n' "${CONC_LIST}" | tr ' ' '\n' | sort -n | tail -1)"
           fi
-          python3 utils/evals/validate_scores.py --expected-concs "${expected_concs}"
+          "$INFERENCEX_RESULTS_PYTHON" -P -m infx.evals.validate_scores --expected-concs "${expected_concs}"
 
       - name: Cleanup eval outputs (post-upload)
         if: ${{ always() && (inputs.run-eval || inputs.eval-only) }}

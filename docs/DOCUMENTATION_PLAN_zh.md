@@ -37,12 +37,12 @@
 | 常见 CI 与集群故障 | `KLAUD_DEBUG.md` | 恢复步骤有价值，但与历史故障背景混在一起 |
 | 配置 Schema 与拓扑 | `configs/CONFIGS.md`、`infx/matrix/validation.py` | Schema 参考存在，但修改流程与消费路径分散 |
 | 矩阵生成与扫描复用 | `.github/workflows/README.md`、`.github/workflows/*.yml` | 运维指南位于 `.github`，不在主要文档路径下 |
-| 评估与分数门禁 | `utils/evals/EVALS.md`、`infx/evals/thresholds.yaml` | 参考文档详细，但与吞吐量、结果收集的关系不直观 |
+| 评估与分数门禁 | `infx/evals/EVALS.md`、`infx/evals/thresholds.yaml` | 参考文档详细，但与吞吐量、结果收集的关系不直观 |
 | 多节点 Recipe | `benchmarks/multi_node/srt-slurm-recipes/RECIPES.md` | 编辑任一文件前应明确 Recipe 与主配置的耦合关系 |
 | Runner 初始化 | `utils/runner_setup/RUNNER_SETUP.md`、`runners/` | 部署与运行时启动器关注点分离 |
 | 模型与硬件目录 | `MODELS.md`、`configs/*-master.yaml` | 面向用户的模型列表与可运行配置列表服务于不同读者 |
 | AgentX 与 Agentic Coding | `benchmarks/single_node/srt-slurm-recipes/**/agentic.yaml`、`benchmarks/srt_agentic.sh`、`MODELS.md`、`configs/*-master.yaml` | 状态与发布说明冲突，需要一份持续维护的官方 Trace 到结果指南 |
-| 产物 Schema 与 App 交接 | `infx/results/fixed_sequence.py`、`utils/collect_*.py`、`../InferenceX-app/.github/workflows/ingest-results.yml`、`../InferenceX-app/packages/db/src/etl/*` | 本仓库没有说明产物身份、JSON 契约以及进入 InferenceX-app 的边界 |
+| 产物 Schema 与 App 交接 | `infx/results/fixed_sequence.py`、`infx/results/collect_*.py`、`../InferenceX-app/.github/workflows/ingest-results.yml`、`../InferenceX-app/packages/db/src/etl/*` | 本仓库没有说明产物身份、JSON 契约以及进入 InferenceX-app 的边界 |
 
 ## 目标信息架构
 

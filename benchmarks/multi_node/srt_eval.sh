@@ -21,7 +21,7 @@ PORT=$(echo "$ENDPOINT" | sed -E 's|.*:([0-9]+).*|\1|')
 
 echo "Eval Config: endpoint=${ENDPOINT}; host=${HOST}; port=${PORT}; workspace=${INFMAX_WORKSPACE}"
 
-# cd to workspace so that relative paths (e.g., utils/evals/*.yaml) resolve
+# cd to workspace so that relative paths (e.g., infx/evals/*.yaml) resolve
 cd "${INFMAX_WORKSPACE}"
 
 source "${INFMAX_WORKSPACE}/benchmarks/benchmark_lib.sh"

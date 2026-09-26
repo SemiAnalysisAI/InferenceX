@@ -57,18 +57,30 @@ def _run_inferencex_generator(
     if not os.path.isdir(inferencex_dir):
         raise FileNotFoundError(f"InferenceX directory not found: {inferencex_dir}")
 
+    inferencex_dir = os.path.abspath(inferencex_dir)
     module_path = os.path.join(inferencex_dir, "infx", "matrix", "generate.py")
-    if not os.path.isfile(module_path):
+    legacy_script = os.path.join(inferencex_dir, "utils", "matrix_logic", "generate_sweep_configs.py")
+    import_paths = [inferencex_dir]
+    if os.path.isfile(module_path):
+        generator = ["-m", "infx.matrix.generate"]
+    elif os.path.isfile(legacy_script):
+        generator = [legacy_script]
+        import_paths.insert(0, os.path.dirname(legacy_script))
+    else:
         raise FileNotFoundError(f"InferenceX generator not found: {module_path}")
 
-    # Running from the InferenceX root puts its infx package first on sys.path.
-    args = [sys.executable, "-m", "infx.matrix.generate", "full-sweep", "--config-files", *config_files]
+    # Explicit paths also pin the selected revision with PYTHONSAFEPATH enabled.
+    env = os.environ.copy()
+    if env.get("PYTHONPATH"):
+        import_paths.append(env["PYTHONPATH"])
+    env["PYTHONPATH"] = os.pathsep.join(import_paths)
+    args = [sys.executable, *generator, "full-sweep", "--config-files", *config_files]
     if extra_flags:
         args.extend(extra_flags)
 
     # Run from the InferenceX root so relative paths in the master config resolve.
     proc = subprocess.run(
-        args, capture_output=True, text=True, cwd=inferencex_dir, check=False
+        args, capture_output=True, text=True, cwd=inferencex_dir, env=env, check=False
     )
     if proc.returncode != 0:
         raise RuntimeError(
