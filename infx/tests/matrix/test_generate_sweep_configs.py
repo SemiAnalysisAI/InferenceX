@@ -416,9 +416,9 @@ class TestMarkEvalEntries:
         assert marked[0]["conc"] == 64
 
     def test_marks_multinode_agentic_entry_at_highest_eligible_conc(self):
-        """Multi-node agentic (SWE-bench) eval selection mirrors the
-        fixed-seq-len multi-node policy: one eval row per parallelism
-        topology, at its highest eligible (>= MIN_EVAL_CONC) concurrency.
+        """Multi-node agentic eval selection mirrors the fixed-seq-len
+        multi-node policy: one eval row per parallelism topology, at its
+        highest eligible (>= MIN_EVAL_CONC) concurrency.
 
         Each concurrency is its own matrix entry (chunk size 1) whose
         exp-name embeds that concurrency, unlike fixed-seq-len multi-node

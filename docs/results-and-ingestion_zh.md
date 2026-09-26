@@ -129,7 +129,7 @@ PR changelog 选择具有代表性的 NVIDIA 和 AMD 覆盖，并非所有受影
 
 ### 单配置身份和收集
 
-每个评测上传名为 `eval_<EXP_NAME>_<RESULT_FILENAME>`。当前允许的载荷包括 `meta_env.json`、`results*.json`、样本 JSONL、预测、SWE-bench 报告和轨迹文件。收集器只使用元数据和 lm-eval 结果 JSON 来生成聚合记录。
+每个评测上传名为 `eval_<EXP_NAME>_<RESULT_FILENAME>`。当前允许的载荷包括 `meta_env.json`、`results*.json`、样本 JSONL、预测和轨迹文件。收集器只使用元数据和 lm-eval 结果 JSON 来生成聚合记录。
 
 收集与复用共用结果读取和选择逻辑，但保留各自的校验规则。收集可以输出失败批次中已完成的点；复用则拒绝失败或不完整的批次。每个阶段使用已读取的 JSON 完成选择和校验。去重改写或删除工件后，校验会重新读取最终文件。
 

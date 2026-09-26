@@ -52,17 +52,12 @@ on: # zizmor: ignore[concurrency-limits]
                 type: string
                 default: ""
             eval-framework:
-                description: "Eval runner override (auto uses model-aware selection; lm-eval, swebench, kimi-vendor, minimax-vendor, or bfcl)"
+                description: "Eval runner override (auto uses model-aware selection; lm-eval, kimi-vendor, minimax-vendor, or bfcl)"
                 required: false
                 type: string
                 default: "auto"
             eval-suite:
-                description: "Eval suite (kimi_tool_call_schema, kimi_tool_call_schema_full, minimax_m3_smoke, minimax_m3_full, bfcl_smoke, bfcl_vllm_minimax_m3, or bfcl_vllm_kimi); empty for lm-eval and swebench"
-                required: false
-                type: string
-                default: ""
-            swebench-gen-mode:
-                description: "SWE-bench generation mode (single-shot | agentic). Empty = agentic (single-shot is an explicit debugging escape hatch)."
+                description: "Eval suite (kimi_tool_call_schema, kimi_tool_call_schema_full, minimax_m3_smoke, minimax_m3_full, bfcl_smoke, bfcl_vllm_minimax_m3, or bfcl_vllm_kimi); empty for lm-eval"
                 required: false
                 type: string
                 default: ""
@@ -105,10 +100,6 @@ on: # zizmor: ignore[concurrency-limits]
         secrets:
           INFERENCEX_OFFICIAL_RO_HF_TOKEN:
             required: true
-          MODAL_TOKEN_ID:
-            required: false
-          MODAL_TOKEN_SECRET:
-            required: false
         inputs:
             generate-cli-command:
                 description: "Command passed to generate matrix script"
@@ -154,17 +145,12 @@ on: # zizmor: ignore[concurrency-limits]
                 type: string
                 default: ""
             eval-framework:
-                description: "Eval runner override (auto uses model-aware selection; lm-eval, swebench, kimi-vendor, minimax-vendor, or bfcl)"
+                description: "Eval runner override (auto uses model-aware selection; lm-eval, kimi-vendor, minimax-vendor, or bfcl)"
                 required: false
                 type: string
                 default: "auto"
             eval-suite:
-                description: "Eval suite (kimi_tool_call_schema, kimi_tool_call_schema_full, minimax_m3_smoke, minimax_m3_full, bfcl_smoke, bfcl_vllm_minimax_m3, or bfcl_vllm_kimi); empty for lm-eval and swebench"
-                required: false
-                type: string
-                default: ""
-            swebench-gen-mode:
-                description: "SWE-bench generation mode (single-shot | agentic). Empty = agentic (single-shot is an explicit debugging escape hatch)."
+                description: "Eval suite (kimi_tool_call_schema, kimi_tool_call_schema_full, minimax_m3_smoke, minimax_m3_full, bfcl_smoke, bfcl_vllm_minimax_m3, or bfcl_vllm_kimi); empty for lm-eval"
                 required: false
                 type: string
                 default: ""
@@ -370,8 +356,7 @@ jobs:
                 config: ${{ fromJson(needs.get-jobs.outputs.multi-node-config) }}
         secrets:
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
-            MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
-            MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+
         with:
             config: ${{ toJSON(matrix.config) }}
             klaud-run: ${{ inputs.klaud-run }}
@@ -396,8 +381,7 @@ jobs:
                 config: ${{ fromJson(needs.get-jobs.outputs.multi-node-eval-config) }}
         secrets:
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
-            MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
-            MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+
         with:
             config: ${{ toJSON(matrix.config) }}
             klaud-run: ${{ inputs.klaud-run }}
@@ -412,7 +396,7 @@ jobs:
             eval-limit: ${{ inputs.eval-limit }}
             eval-framework: ${{ inputs.eval-framework == 'auto' && (matrix.config['eval-framework'] || 'lm-eval') || inputs.eval-framework }}
             eval-suite: ${{ inputs.eval-suite != '' && inputs.eval-suite || (inputs.eval-framework == 'auto' && matrix.config['eval-suite'] || '') }}
-            swebench-gen-mode: ${{ inputs.swebench-gen-mode }}
+
             ref: ${{ needs.get-jobs.outputs.benchmark-ref }}
 
     test-sweep-agentic:
@@ -426,8 +410,7 @@ jobs:
                 config: ${{ fromJson(needs.get-jobs.outputs.agentic-config) }}
         secrets:
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
-            MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
-            MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+
         with:
             config: ${{ toJSON(matrix.config) }}
             klaud-run: ${{ inputs.klaud-run }}
@@ -453,8 +436,7 @@ jobs:
                 config: ${{ fromJson(needs.get-jobs.outputs.agentic-eval-config) }}
         secrets:
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
-            MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
-            MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+
         with:
             config: ${{ toJSON(matrix.config) }}
             klaud-run: ${{ inputs.klaud-run }}
@@ -467,7 +449,7 @@ jobs:
             run-eval: true
             eval-only: true
             eval-limit: ${{ inputs.eval-limit }}
-            swebench-gen-mode: ${{ inputs.swebench-gen-mode }}
+
             eval-framework: ${{ inputs.eval-framework == 'auto' && (matrix.config['eval-framework'] || 'lm-eval') || inputs.eval-framework }}
             eval-suite: ${{ inputs.eval-suite != '' && inputs.eval-suite || (inputs.eval-framework == 'auto' && matrix.config['eval-suite'] || '') }}
             scenario-type: agentic-coding
@@ -484,8 +466,7 @@ jobs:
                 config: ${{ fromJson(needs.get-jobs.outputs.multi-node-agentic-config) }}
         secrets:
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
-            MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
-            MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+
         with:
             config: ${{ toJSON(matrix.config) }}
             klaud-run: ${{ inputs.klaud-run }}
@@ -514,8 +495,7 @@ jobs:
                 config: ${{ fromJson(needs.get-jobs.outputs.multi-node-agentic-eval-config) }}
         secrets:
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
-            MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
-            MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+
         with:
             config: ${{ toJSON(matrix.config) }}
             klaud-run: ${{ inputs.klaud-run }}
@@ -530,7 +510,7 @@ jobs:
             eval-only: true
             eval-conc: ${{ matrix.config['eval-conc'] }}
             eval-limit: ${{ inputs.eval-limit }}
-            swebench-gen-mode: ${{ inputs.swebench-gen-mode }}
+
             eval-framework: ${{ inputs.eval-framework == 'auto' && (matrix.config['eval-framework'] || 'lm-eval') || inputs.eval-framework }}
             eval-suite: ${{ inputs.eval-suite != '' && inputs.eval-suite || (inputs.eval-framework == 'auto' && matrix.config['eval-suite'] || '') }}
             scenario-type: agentic-coding
@@ -547,8 +527,7 @@ jobs:
                 config: ${{ fromJson(needs.get-jobs.outputs.single-node-config) }}
         secrets:
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
-            MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
-            MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+
         with:
             config: ${{ toJSON(matrix.config) }}
             klaud-run: ${{ inputs.klaud-run }}
@@ -571,8 +550,7 @@ jobs:
                 config: ${{ fromJson(needs.get-jobs.outputs.eval-config) }}
         secrets:
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
-            MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
-            MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+
         with:
             config: ${{ toJSON(matrix.config) }}
             klaud-run: ${{ inputs.klaud-run }}
@@ -585,7 +563,7 @@ jobs:
             eval-limit: ${{ inputs.eval-limit }}
             eval-framework: ${{ inputs.eval-framework == 'auto' && (matrix.config['eval-framework'] || 'lm-eval') || inputs.eval-framework }}
             eval-suite: ${{ inputs.eval-suite != '' && inputs.eval-suite || (inputs.eval-framework == 'auto' && matrix.config['eval-suite'] || '') }}
-            swebench-gen-mode: ${{ inputs.swebench-gen-mode }}
+
             ref: ${{ needs.get-jobs.outputs.benchmark-ref }}
 
     collect-results:

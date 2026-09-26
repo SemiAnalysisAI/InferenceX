@@ -54,7 +54,7 @@ This page was authored from branch commit `0c28706b33d4a796b82f6f9c3594c19c46365
 
 - The branch-local [`e2e-tests.yml`](../.github/workflows/e2e-tests.yml) requires `generate-cli-command` and hard-codes each matrix to `fail-fast: false`. The audited [`origin/main` version](https://github.com/SemiAnalysisAI/InferenceX/blob/de493d8597035e6692833de6189b567887968460/.github/workflows/e2e-tests.yml) makes that command conditionally optional and adds trusted-changelog dispatch, `fail-fast`, and power-validation inputs.
 - The branch-local [`run-sweep.yml`](../.github/workflows/run-sweep.yml) lacks the same-repository-head guard that `origin/main` adds before PR GPU setup. The [`trusted-external-sweep.yml` workflow](https://github.com/SemiAnalysisAI/InferenceX/blob/de493d8597035e6692833de6189b567887968460/.github/workflows/trusted-external-sweep.yml) exists on that `origin/main` snapshot but not on this branch. Do not infer external-fork secret or GPU behavior from the branch-local workflow.
-- Agentic eval comments in the branch-local generator identify SWE-bench, while the audited `origin/main` generator identifies GSM8K. Inspect the target ref before describing the agentic dataset selected by `all-evals` or `evals-only`.
+- Agentic eval comments in the branch-local generator may identify a different dataset than the audited `origin/main` generator. Inspect the target ref before describing the agentic dataset selected by `all-evals` or `evals-only`.
 
 A `workflow_dispatch` request uses the workflow definition from its dispatch `--ref`. The separate `inputs.ref` controls what the jobs check out. Before using inputs beyond the common example below, inspect the deployed definition:
 
