@@ -278,7 +278,7 @@ def test_pool_launcher_stages_artifacts_and_propagates_failure(point, tmp_path, 
     # Only external executables are stubbed; run the real pool launcher, shared
     # setup/profile/acceptance helpers, binder, and artifact collection.
     scripts = {
-        "git": 'if [[ "$1" == -c ]]; then shift 2; fi; if [[ "$1" == clone ]]; then mkdir -p "${@: -1}/configs"; else echo test-commit; fi',
+        "git": 'if [[ " $* " == *" clone "* ]]; then mkdir -p "${@: -1}/configs"; else echo test-commit; fi',
         "uv": 'if [[ "$1" == venv ]]; then mkdir -p .venv/bin; echo ":" > .venv/bin/activate; fi',
         "make": '[[ "$TEST_FAILURE" == bootstrap ]] && exit 13; mkdir -p bin; touch bin/uv',
         "squeue": '[[ "$TEST_FAILURE" == submission || "$TEST_FAILURE" == agentic ]] && echo "42"; exit 0',
