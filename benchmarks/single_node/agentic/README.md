@@ -1,5 +1,12 @@
 # Agentic single-node benchmarks
 
+> **Legacy.** Single-node AgentX configs now run as declarative srt-slurm
+> recipes (`benchmarks/single_node/srt-slurm-recipes/<model>/<engine>/<sku>/agentic.yaml`,
+> see #3428). The only bash scripts left here are the ones a master config still
+> reaches through a search-space entry without an `srt-recipe:`; delete each one
+> when its config is ported. `install_h1{0,2}0_block32_configs.py` and
+> `kernel_configs/` also serve the multi-node DeepSeek-V4.1-Flash H100/H200 recipes.
+
 **MVP / experimental.** Nothing in this directory is an official InferenceX
 benchmark. Results are not published on https://inferencex.com and are not
 intended to be cited.
