@@ -8962,3 +8962,15 @@
     - "旧镜像切出于 2026-09-16，新镜像领先 441 个提交，包含当前曲线所不含的三项 Kimi-K3 正确性修复：vllm-project/vllm#51483 不再将无状态的首个 chunk 当作 decode，vllm-project/vllm#57098 修复 Kimi-K3 reasoning parser，vllm-project/vllm#57430 支持 routed expert 量化。新镜像还包含本臂在并发大于 4 时均会使用的 ROCm CPU KV 卸载改动，包括 vllm-project/vllm#57160（ROCm CPU KV 卸载改用私有 pinned 张量）与 vllm-project/vllm#50045（卸载背压检测）。"
     - "This image bump does not change the DSpark draft model data type. Only the image: line changes and kimik3_fp4_mi355x_mtp.sh is unchanged; the draft loads unmodified from the published Inferact/Kimi-K3-DSpark checkpoint via --speculative-config (model=Inferact/Kimi-K3-DSpark, method=dspark). The only dtype in that speculative-config is kv_cache_dtype=fp8, which sets the draft KV-cache storage precision, not the draft weights. No flag overrides or re-quantizes the draft-model weights, so the draft dtype is preserved from its checkpoint across this re-sweep."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3419
+
+- config-keys:
+    - minimaxm3-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh the MiniMax-M3 B200 vLLM AgentX image from nightly-1dc464d4 (2026-08-30) to nightly-ddd6fbca148a867aad1fcab7ec72f582b9977db4 (vllm-project/vllm@ddd6fbca, 2026-09-26) and re-measure the arm."
+    - "Nightlies from 2026-09-05 on (vllm-project/vllm@4ee259551 FA sync) break the EAGLE3 FLASH_ATTN draft with fp8 KV on Blackwell (FA4 CuTe descale stride assert at engine init); the fix vllm-project/vllm#58304 is still open and this nightly's vllm-flash-attn 9cd61de3 carries the same kernels. The EAGLE3 draft therefore moves from attention_backend FLASH_ATTN to FLASHINFER, the backend the target model already uses; acceptance stays synthetic at the golden AL, so the draft backend does not change the measured AL."
+    - "将 MiniMax-M3 B200 vLLM AgentX 镜像从 nightly-1dc464d4（2026-08-30）刷新至 nightly-ddd6fbca148a867aad1fcab7ec72f582b9977db4（vllm-project/vllm@ddd6fbca，2026-09-26）并重新测量该臂。"
+    - "自 2026-09-05 起的 nightly（vllm-project/vllm@4ee259551 FA 同步）在 Blackwell 上会使 fp8 KV 的 EAGLE3 FLASH_ATTN draft 在引擎初始化时因 FA4 CuTe descale stride 断言失败；修复 vllm-project/vllm#58304 仍未合并，本 nightly 的 vllm-flash-attn 9cd61de3 仍含相同内核。因此 EAGLE3 draft 的 attention_backend 从 FLASH_ATTN 改为目标模型已在使用的 FLASHINFER；吞吐运行仍以黄金 AL 做合成接受，draft 后端不影响所测 AL。"
+    - "This change does not alter the EAGLE3 draft model data type. The draft loads unmodified from the published Inferact/MiniMax-M3-EAGLE3-GQA checkpoint via --speculative-config (method=eagle3); only its attention_backend changes. kv-cache-dtype fp8 sets KV-cache storage precision, not the draft weights, and no flag overrides or re-quantizes the draft weights."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3492

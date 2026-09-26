@@ -5,7 +5,7 @@ base:
   name: minimaxm3-fp4-b200-vllm-agentic
   model:
     path: hf:nvidia/MiniMax-M3-NVFP4
-    container: vllm/vllm-openai:nightly-1dc464d42681d22f38caf1fdc1eb632dc4421c45
+    container: vllm/vllm-openai:nightly-ddd6fbca148a867aad1fcab7ec72f582b9977db4
     precision: fp4
   resources:
     gpu_type: b200
@@ -47,7 +47,7 @@ base:
         trust-remote-code: true
         # Three-token EAGLE3 with the GQA draft head. Throughput runs switch to
         # synthetic rejection at the golden acceptance length.
-        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASH_ATTN"}'
+        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASHINFER"}'
       env:
         PYTHONNOUSERSITE: '1'
         VLLM_ENGINE_READY_TIMEOUT_S: '3600'
