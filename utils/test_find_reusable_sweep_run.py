@@ -12,16 +12,14 @@ import pytest
 from infx.workflows import reuse
 
 
-@pytest.mark.parametrize("entrypoint", ["legacy", "package"])
 @pytest.mark.parametrize("token_present", [False, True])
 def test_reuse_entrypoints_preserve_outputs_and_errors_without_installation(
-    tmp_path, entrypoint, token_present,
+    tmp_path, token_present,
 ):
     root = Path(__file__).resolve().parents[1]
     # The package must work without utils/ and without an inherited import path.
     shutil.copytree(root / "infx", tmp_path / "infx", ignore=shutil.ignore_patterns("__pycache__"))
-    command = ([str(root / "utils/find_reusable_sweep_run.py")] if entrypoint == "legacy"
-               else ["-m", "infx.workflows.reuse"])
+    command = ["-m", "infx.workflows.reuse"]
     env = {key: value for key, value in os.environ.items()
            if key not in {"PYTHONPATH", "GH_TOKEN", "GITHUB_TOKEN", "GITHUB_OUTPUT"}}
     if token_present:

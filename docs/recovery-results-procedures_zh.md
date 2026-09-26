@@ -57,7 +57,7 @@ DECODE_GPUS="$decode_gpus" \
 - eval-only 任务没有任何评测文件时会报错；
 - 评测文件在 `always()` 条件下上传，以保留失败任务的部分证据；
 - `infx/evals/validate_scores.py` 在上传后验证 eval-only 分数覆盖范围；
-- `collect-evals.yml` 下载 `eval_*`，运行 `collect_eval_results.py`，打印摘要，并上传 `eval_results_all/agg_eval_all.json`。
+- `collect-evals.yml` 下载 `eval_*`，运行 `python -m infx.results.collect_eval_results`，打印摘要，并上传 `eval_results_all/agg_eval_all.json`。
 
 应用既能摄取聚合行，也能摄取逐配置评测目录。两种输入最终落到相同的自然键，而 sample 文件把详细数据附加到已经解析的评测行。因此，仅有聚合文件只能证明完成了收集，不能证明 sample 完整；当逐 sample 输出很重要时，必须核对逐配置制品。
 

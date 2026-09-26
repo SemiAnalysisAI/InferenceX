@@ -1,8 +1,8 @@
 """Make the colocated utils/ modules importable from this test subfolder.
 
 These tests live in their own directory but exercise modules that remain in
-utils/ (validate_perf_changelog, prepare_perf_changelog_merge,
-recover_failed_ingest, and matrix_logic). Under pytest's default prepend import
+utils/ (validate_perf_changelog, prepare_perf_changelog_merge, and
+matrix_logic). Under pytest's default prepend import
 mode only this directory is added to sys.path, so prepend utils/ as well to
 resolve the top-level imports.
 """

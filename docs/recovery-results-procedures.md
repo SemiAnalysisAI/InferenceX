@@ -58,7 +58,7 @@ Eval jobs upload per-config artifacts named `eval_${EXP_NAME}_${RESULT_FILENAME}
 - an eval-only job errors when no eval files are found.
 - eval files upload under `always()`, preserving partial evidence from a failed job.
 - `infx/evals/validate_scores.py` validates eval-only score coverage after upload.
-- `collect-evals.yml` downloads `eval_*`, runs `collect_eval_results.py`, prints a summary, and uploads `eval_results_all/agg_eval_all.json`.
+- `collect-evals.yml` downloads `eval_*`, runs `python -m infx.results.collect_eval_results`, prints a summary, and uploads `eval_results_all/agg_eval_all.json`.
 
 The app can ingest both the aggregate rows and the per-config eval directories. They converge on the same natural key, while sample files attach detail to the resolved eval row. Therefore, an aggregate alone proves collection, not sample completeness. Verify the per-config artifact when sample-level output matters.
 

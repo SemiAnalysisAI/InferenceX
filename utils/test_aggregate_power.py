@@ -1371,7 +1371,7 @@ def power_artifacts(tmp_path, request):
             expected_num_gpus=4, validation_result=package.validation_result,
         )
         args += ["--csv", str(telemetry), "--expected-num-gpus", "4"]
-        script = "aggregate_power"
+        script = "infx.results.power.single_node"
     else:
         telemetry = package.power_dir / "manifest.json"
         runner = package.run
@@ -1379,26 +1379,24 @@ def power_artifacts(tmp_path, request):
             "--power-dir", str(package.power_dir), "--logs-root", str(package.logs_root),
             "--prefill-gpus", "2", "--decode-gpus", "2", "--expected-producer-sha", PRODUCER_SHA,
         ]
-        script = "aggregate_power_multinode"
+        script = "infx.results.power.multinode"
     return {"package": package, "run": runner, "args": args, "script": script, "telemetry": telemetry}
 
 
-def _run_power_cli(case, *, module=False, args=None, environment=None):
+def _run_power_cli(case, *, args=None, environment=None):
     repo = Path(__file__).resolve().parents[1]
-    command = [sys.executable, "-E", "-S"]
-    command += ["-m", f"utils.{case['script']}"] if module else [str(repo / "utils" / f"{case['script']}.py")]
+    command = [sys.executable, "-E", "-S", "-m", case["script"]]
     return subprocess.run(
         command + (case["args"] if args is None else args),
-        cwd=repo if module else case["package"].root,
+        cwd=repo,
         env={"PATH": "/usr/bin:/bin", **(environment or {})},
         text=True, capture_output=True, timeout=10,
     )
 
 
-@pytest.mark.parametrize("module", [False, True], ids=["script-outside-repo", "legacy-module"])
-def test_power_cli_preserves_energy_and_audit_contract(power_artifacts, module):
+def test_power_cli_preserves_energy_and_audit_contract(power_artifacts):
     case = power_artifacts
-    result = _run_power_cli(case, module=module)
+    result = _run_power_cli(case)
     assert result.returncode == 0, result.stderr
     assert result.stderr == ""
     # Four GPUs average 350 W for 60 s: 84,000 J, or 10,500 J per completed query.
@@ -1437,7 +1435,7 @@ def test_power_cli_invalid_telemetry_preserves_strictness(power_artifacts, env_v
     assert audit["reasons"]
 
 
-def test_power_cli_rejects_missing_arguments_outside_repo(power_artifacts):
+def test_power_cli_rejects_missing_arguments(power_artifacts):
     result = _run_power_cli(power_artifacts, args=[])
     assert result.returncode == 2
     assert "required" in result.stderr
@@ -1485,7 +1483,7 @@ def test_power_sidecars_keep_audit_precision_and_omit_nonfinite_metrics(power_ar
         "total_gpu_energy_j": float("inf"), "joules_per_total_token": float("nan"),
         "joules_per_input_token": None,
     }
-    if case["script"] == "aggregate_power":
+    if case["script"] == "infx.results.power.single_node":
         payload = single._validation_payload(
             csv_path=case["telemetry"], bench_result=package.bench_result, benchmark=None,
             integration=single._empty_integration(expected_num_gpus=4, reasons=[]),
@@ -1501,15 +1499,14 @@ def test_power_sidecars_keep_audit_precision_and_omit_nonfinite_metrics(power_ar
     json.dumps(payload, allow_nan=False)
 
 
-def test_packaged_power_runs_without_legacy_scripts(power_artifacts, tmp_path):
+def test_packaged_power_runs_from_isolated_package(power_artifacts, tmp_path):
     import shutil
 
     repo = Path(__file__).resolve().parents[1]
     isolated = tmp_path / "package-only"
     shutil.copytree(repo / "infx", isolated / "infx", ignore=shutil.ignore_patterns("__pycache__"))
-    module = "single_node" if power_artifacts["script"] == "aggregate_power" else "multinode"
     result = subprocess.run(
-        [sys.executable, "-E", "-S", "-m", f"infx.results.power.{module}", *power_artifacts["args"]],
+        [sys.executable, "-E", "-S", "-m", power_artifacts["script"], *power_artifacts["args"]],
         cwd=isolated, env={"PATH": "/usr/bin:/bin"},
         text=True, capture_output=True, timeout=10,
     )
