@@ -9,7 +9,13 @@ set -exo pipefail
 # shellcheck source=runners/slurm_utils.sh
 source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh" || exit 1
 
-check_env_vars SLURM_PARTITION
+check_env_vars SLURM_PARTITION MODEL_PREFIX FRAMEWORK PRECISION SPEC_DECODING
+USES_GLM52_RECOVERY=0
+if [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "glm5.2" &&
+    "$FRAMEWORK" == "dynamo-sglang" && "$PRECISION" == "fp4" &&
+    "$SPEC_DECODING" == "mtp" ]]; then
+    USES_GLM52_RECOVERY=1
+fi
 export SBATCH_PARTITION="$SLURM_PARTITION"
 export SLURM_ACCOUNT="benchmark"
 export ENROOT_ROOTFS_WRITABLE=1
@@ -120,37 +126,39 @@ fi
 
 import_squash "$NGINX_SQUASH_FILE" "$NGINX_IMAGE"
 
-# A recipe opts into the power lane via an enabled dcgm-power telemetry block.
-# The srt-slurm checkout does not exist yet, so read the workspace mirror;
-# recipes that exist only upstream stay non-power.
 USES_DCGM_POWER=0
-_RECIPE_REL="${CONFIG_FILE%%:*}"
-_RECIPE_SRC="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/${_RECIPE_REL#recipes/}"
-# Scoped match: a stray "enabled: true" outside the telemetry block must not flip the lane.
-if [[ -n "$CONFIG_FILE" && -f "$_RECIPE_SRC" ]] && awk '
-    /^telemetry:/ { t = 1; next }
-    t && /^[^ ]/  { t = 0 }
-    t && /^  dcgm_exporter:/ { p = 1 }
-    t && /^  enabled: true$/        { e = 1 }
-    END { exit !(p && e) }
-' "$_RECIPE_SRC"; then
-    USES_DCGM_POWER=1
-fi
-
 USES_AGENTX_POWER=0
-if [[ "$USES_DCGM_POWER" == "1" && "$IS_AGENTIC" == "1" &&
-    "$MODEL_PREFIX" == "kimik3" && "$PRECISION" == "fp4" &&
-    "$FRAMEWORK" == "dynamo-vllm" &&
-    "$_RECIPE_REL" == recipes/kimik3/vllm/*/agentx/* ]]; then
-    USES_AGENTX_POWER=1
-fi
-if [[ "$USES_DCGM_POWER" == "1" && "$FRAMEWORK" != "dynamo-sglang" && "$USES_AGENTX_POWER" != "1" ]]; then
-    echo "Error: dcgm-power requires dynamo-sglang or the supported Kimi-K3 AgentX route" >&2
-    exit 1
+if [[ "$USES_GLM52_RECOVERY" != "1" ]]; then
+    # A recipe opts into the power lane via an enabled dcgm-power telemetry block.
+    # The srt-slurm checkout does not exist yet, so read the workspace mirror;
+    # recipes that exist only upstream stay non-power.
+    _RECIPE_REL="${CONFIG_FILE%%:*}"
+    _RECIPE_SRC="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/${_RECIPE_REL#recipes/}"
+    # Scoped match: a stray "enabled: true" outside the telemetry block must not flip the lane.
+    if [[ -n "$CONFIG_FILE" && -f "$_RECIPE_SRC" ]] && awk '
+        /^telemetry:/ { t = 1; next }
+        t && /^[^ ]/  { t = 0 }
+        t && /^  dcgm_exporter:/ { p = 1 }
+        t && /^  enabled: true$/        { e = 1 }
+        END { exit !(p && e) }
+    ' "$_RECIPE_SRC"; then
+        USES_DCGM_POWER=1
+    fi
+
+    if [[ "$USES_DCGM_POWER" == "1" && "$IS_AGENTIC" == "1" &&
+        "$MODEL_PREFIX" == "kimik3" && "$PRECISION" == "fp4" &&
+        "$FRAMEWORK" == "dynamo-vllm" &&
+        "$_RECIPE_REL" == recipes/kimik3/vllm/*/agentx/* ]]; then
+        USES_AGENTX_POWER=1
+    fi
+    if [[ "$USES_DCGM_POWER" == "1" && "$FRAMEWORK" != "dynamo-sglang" && "$USES_AGENTX_POWER" != "1" ]]; then
+        echo "Error: dcgm-power requires dynamo-sglang or the supported Kimi-K3 AgentX route" >&2
+        exit 1
+    fi
 fi
 
 
-if [[ "$USES_DCGM_POWER" == "1" ]]; then
+stage_dcgm_power_exporter() {
     DCGM_EXPORTER_IMAGE="nvcr.io/nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless"
     # enroot resolves bare paths against Docker Hub; nvcr.io pulls need the registry# form
     DCGM_EXPORTER_ENROOT_REF="${DCGM_EXPORTER_IMAGE/nvcr.io\//nvcr.io#}"
@@ -161,6 +169,9 @@ if [[ "$USES_DCGM_POWER" == "1" ]]; then
     test -r "$DCGM_EXPORTER_SQSH" || { echo "Error: DCGM exporter squash not readable: $DCGM_EXPORTER_SQSH" >&2; exit 1; }
     srun --account="$SLURM_ACCOUNT" --partition="$SLURM_PARTITION" --exclusive --time=30 bash -c "unsquashfs -l \"$DCGM_EXPORTER_SQSH\" > /dev/null" || { echo "Error: DCGM exporter squash invalid: $DCGM_EXPORTER_SQSH" >&2; exit 1; }
     sha256sum "$DCGM_EXPORTER_SQSH" > "$GITHUB_WORKSPACE/exporter-image.sha256"
+}
+if [[ "$USES_DCGM_POWER" == "1" ]]; then
+    stage_dcgm_power_exporter
 fi
 
 if [[ "$EVAL_ONLY" == "true" && -n "${EVAL_CONFIG_FILE:-}" ]]; then
@@ -200,15 +211,27 @@ export PATH="$UV_INSTALL_DIR:$PATH"
 check_env_vars GITHUB_RUN_ID GITHUB_RUN_ATTEMPT
 VENV_DIR="${GITHUB_WORKSPACE}/.venv-srt-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${RUN_KEY}"
 rm -rf "$VENV_DIR"
-# --seed installs pip; srtctl's prefetch-ai-dynamo-wheel.sh (recipes with
-# dynamo.wheel) otherwise fails with "No module named pip".
-uv venv --quiet --seed "$VENV_DIR"
-source "$VENV_DIR/bin/activate"
-uv pip install --quiet -e .
+if [[ "$USES_GLM52_RECOVERY" == "1" ]]; then
+    install_srt_slurm "$VENV_DIR" || exit 1
+else
+    # --seed installs pip; srtctl's prefetch-ai-dynamo-wheel.sh (recipes with
+    # dynamo.wheel) otherwise fails with "No module named pip".
+    uv venv --quiet --seed "$VENV_DIR"
+    source "$VENV_DIR/bin/activate"
+    uv pip install --quiet -e .
+fi
 
 if ! command -v srtctl &> /dev/null; then
     echo "Error: Failed to install srtctl"
     exit 1
+fi
+
+SRTCTL_RECIPE_ARGS=("${SRTCTL_EVAL_ARGS[@]}")
+if [[ "$USES_GLM52_RECOVERY" == "1" ]]; then
+    prepare_srt_power "$CONFIG_FILE" "$FRAMEWORK" || exit 1
+    if [[ "$USES_DCGM_POWER" == "1" ]]; then
+        stage_dcgm_power_exporter
+    fi
 fi
 
 echo "Configs available at: $SRT_REPO_DIR/"
@@ -229,7 +252,11 @@ write_srt_cluster_config gb300-nv srtslurm.yaml "$USES_DCGM_POWER" \
 echo "Generated srtslurm.yaml:"
 cat srtslurm.yaml
 
-run_srt_setup ARCH=aarch64
+if [[ "$USES_GLM52_RECOVERY" == "1" ]]; then
+    run_srt_setup ARCH=aarch64 || exit 1
+else
+    run_srt_setup ARCH=aarch64
+fi
 
 # Read by srt-slurm's post-benchmark eval.
 export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
@@ -250,7 +277,7 @@ sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
 # Throughput recipes opt into synthetic acceptance via the master config;
 # eval-only jobs strip it so tokens get real target-model verification.
 
-if [[ "$USES_DCGM_POWER" == "1" ]]; then
+if [[ "$USES_DCGM_POWER" == "1" && ( "$USES_GLM52_RECOVERY" != "1" || "$USES_AGENTX_POWER" != "1" ) ]]; then
     read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
     python3 "$GITHUB_WORKSPACE/runners/inject_srt_power_concurrencies.py" \
         "$CONFIG_PATH" "${POWER_CONCURRENCIES[@]}" || exit 1
@@ -266,7 +293,7 @@ if [[ "$IS_AGENTIC" == "1" || ( "$MODEL_PREFIX" == "qwen3.5" && "$PRECISION" == 
     SRTCTL_APPLY_ARGS+=(--no-preflight)
 fi
 
-SRTCTL_OUTPUT=$(apply_srt_recipe "$CONFIG_FILE" "$FRAMEWORK" "${SRTCTL_EVAL_ARGS[@]}" "${SRTCTL_APPLY_ARGS[@]}" 2>&1)
+SRTCTL_OUTPUT=$(apply_srt_recipe "$CONFIG_FILE" "$FRAMEWORK" "${SRTCTL_RECIPE_ARGS[@]}" "${SRTCTL_APPLY_ARGS[@]}" 2>&1)
 echo "$SRTCTL_OUTPUT"
 
 JOB_ID=$(echo "$SRTCTL_OUTPUT" | grep -oP '✅ Job \K[0-9]+' || echo "$SRTCTL_OUTPUT" | grep -oP 'Job \K[0-9]+')

@@ -278,7 +278,9 @@ def test_pool_launcher_stages_artifacts_and_propagates_failure(point, tmp_path, 
     # Only external executables are stubbed; run the real pool launcher, shared
     # setup/profile/acceptance helpers, binder, and artifact collection.
     scripts = {
-        "git": 'if [[ " $* " == *" clone "* ]]; then mkdir -p "${@: -1}/configs"; else echo test-commit; fi',
+        "git": 'while [[ "$1" == -c || "$1" == -C ]]; do shift 2; done; '
+               'case "$1" in clone) mkdir -p "${@: -1}/configs";; '
+               'rev-parse) echo test-commit;; *) exit 1;; esac',
         "uv": 'if [[ "$1" == venv ]]; then mkdir -p .venv/bin; echo ":" > .venv/bin/activate; fi',
         "make": '[[ "$TEST_FAILURE" == bootstrap ]] && exit 13; mkdir -p bin; touch bin/uv',
         "squeue": '[[ "$TEST_FAILURE" == submission || "$TEST_FAILURE" == agentic ]] && echo "42"; exit 0',
@@ -324,7 +326,7 @@ def test_pool_launcher_stages_artifacts_and_propagates_failure(point, tmp_path, 
         "B200_SQUASH_DIR": str(tmp_path), "B300_HF_CACHE_HOST_DIR": str(tmp_path),
         "B300_HF_CACHE_CONTAINER_DIR": "/hf", "ENROOT_IMPORT_TIME_LIMIT": "10",
         "INFERENCEX_RUNTIME_ENV_VARS": "REQUIRE_POWER",
-        "TEST_FAILURE": failure, "CANCEL_CAPTURE": str(capture),
+        "RUNNER_NAME": "fixture_00", "TEST_FAILURE": failure, "CANCEL_CAPTURE": str(capture),
         "SRUN_CAPTURE": str(tmp_path / "srun.jsonl"),
         "KEEP_LOGS": "0",
     }
