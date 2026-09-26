@@ -146,9 +146,11 @@ flowchart LR
 
 默认仓库路径定义在 [`infx/config.py`](../infx/config.py) 中。配置常量从 `infx.config` 导入，模式从 `infx.matrix.validation` 导入。包的 `__init__.py` 文件保持精简。
 
-从仓库根目录或安装好的包运行 `python -m infx.matrix.plan` 进行变更日志规划，运行 `python -m infx.workflows.validate_perf_changelog` 进行验证。矩阵生成通过 `python -m infx.matrix.generate` 运行；历史 append-only 规划使用基准修订版自身的生成器，缺少模块时使用该修订版的旧脚本。摄取恢复使用恢复工具自身的规划模块，以及所选 worktree 的配置和配方。
+从仓库根目录或安装好的包运行 `python -m infx.matrix.plan` 进行变更日志规划，运行 `python -m infx.workflows.validate_perf_changelog` 进行验证。矩阵生成使用 `python -m infx.matrix.generate` 入口，并指定 `full-sweep` 或 `test-config` 子命令；历史 append-only 规划使用基准修订版自身的生成器，缺少模块时使用该修订版的旧脚本。摄取恢复使用恢复工具自身的规划模块，以及所选 worktree 的配置和配方。
 
 使用当前工具代码的工作流直接调用 `infx` 模块，测试也导入规范模块。可信调度和结果处理通过 `PYTHONPATH` 和 Python 的 `-P` 选项明确指定工具代码所在的检出目录，同时仍以目标检出目录作为工作目录读取输入。恢复工具将 `INFERENCEX_REPOSITORY_ROOT` 设为所选 worktree，确保配方数据来自该修订版；其他调用方仍默认使用源码检出目录。
+
+手动矩阵生成、性能分析、OperatorX 枚举和历史 append-only 规划均支持模块与遗留脚本两种布局。生成器子进程会将所选检出目录或快照明确置于 `PYTHONPATH` 前部，必要时也包含遗留脚本所在目录，因此启用 `PYTHONSAFEPATH` 时也不会误用其他已安装检出版本的代码。
 
 `infx.matrix.plan.build_plan(changelog_data, base_ref=..., head_ref=...)` 返回完整扫描的已验证 `ChangelogMatrixEntry`，统一负责条目优先级、基准测试与评测各自的场景覆盖、裁剪、指纹及输出分桶。当前主配置文件只加载一次，运行器元数据在首次生成时加载一次；每组选中的配置直接调用 `infx.matrix.generate.generate_config_matrix`。当前输入来自传入的路径（默认为检出目录中的路径），`head_ref` 仍用作来源元数据。规划过程假设这些文件在本次操作期间保持稳定。
 

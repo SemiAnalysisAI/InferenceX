@@ -67,9 +67,16 @@ def generation_repo(tmp_path, monkeypatch):
 @pytest.mark.parametrize("revision,expected", [
     ("older", ("older", 2)), ("newer", ("newer", 6)), ("moving", ("older", 2)),
 ])
-def test_historical_generation_uses_committed_source_and_inputs(generation_repo, revision, expected, monkeypatch):
+@pytest.mark.parametrize("safe_path", [False, True])
+def test_historical_generation_uses_committed_source_and_inputs(generation_repo, revision, expected, monkeypatch, safe_path, capsys):
+    root, git = generation_repo
+    monkeypatch.setenv("PYTHONPATH", str(root))
+    monkeypatch.setenv("PATH", f"{Path(sys.executable).parent}{os.pathsep}{os.environ['PATH']}")
+    if safe_path:
+        monkeypatch.setenv("PYTHONSAFEPATH", "1")
+    else:
+        monkeypatch.delenv("PYTHONSAFEPATH", raising=False)
     if revision == "moving":
-        root, git = generation_repo
         git("update-ref", "refs/heads/moving", "older")
         run = subprocess.run
 
@@ -81,16 +88,9 @@ def test_historical_generation_uses_committed_source_and_inputs(generation_repo,
 
         monkeypatch.setattr(subprocess, "run", advance_after_listing)
     with process_changelog.generation_inputs_at_ref(revision) as inputs:
-        result = subprocess.run(
-            [sys.executable, *inputs.generator, "test-config", "--config-files",
-             *inputs.config_files, "--runner-config", inputs.runner_config,
-             "--config-keys", "fixture", "--no-evals"],
-            capture_output=True, text=True, check=True, cwd=inputs.root,
-        )
-        rows = json.loads(result.stdout)
+        rows = process_changelog.generate_matrix(["fixture"], ["--no-evals"], inputs)
         assert [(row["model"], row["conc"]) for row in rows] == [expected]
-        assert result.stderr == ""
-        assert inputs.generator == ("-m", "infx.matrix.generate")
+        assert capsys.readouterr().err == ""
         snapshot = Path(inputs.root)
         assert (snapshot / "infx/data.bin").read_bytes() == b"\x00\nblob\xff\n"
         assert (snapshot / "infx/data 中文\t\r\n.bin").read_bytes() == b"named asset"
@@ -109,27 +109,29 @@ def test_historical_generation_rejects_missing_inputs(generation_repo):
             pytest.fail("an incomplete snapshot must not be used for generation")
 
 
-def test_historical_generation_supports_legacy_script_layout(generation_repo):
+@pytest.mark.parametrize("safe_path", [False, True])
+def test_historical_generation_supports_legacy_script_layout(generation_repo, monkeypatch, safe_path):
     root, git = generation_repo
+    monkeypatch.setenv("PATH", f"{Path(sys.executable).parent}{os.pathsep}{os.environ['PATH']}")
+    if safe_path:
+        monkeypatch.setenv("PYTHONSAFEPATH", "1")
+    else:
+        monkeypatch.delenv("PYTHONSAFEPATH", raising=False)
     git("rm", "-rf", "--ignore-unmatch", "infx")
     # The historical command is an external collaborator: exercise extraction
     # and sibling imports without freezing a past copy of the matrix algorithm.
     script = root / "utils/matrix_logic/generate_sweep_configs.py"
     schema = script.with_name("validation.py")
     script.parent.mkdir(parents=True, exist_ok=True)
-    script.write_text("from validation import revision\nprint(revision)\n")
+    script.write_text("import json\nfrom validation import revision\nprint(json.dumps([{'model': revision, 'conc': 2}]))\n")
     schema.write_text('revision = "legacy snapshot"\n')
     git("add", str(script), str(schema))
     git("commit", "-qm", "legacy generator")
     schema.write_text('raise RuntimeError("wrong revision")\n')
 
     with process_changelog.generation_inputs_at_ref("HEAD") as inputs:
-        result = subprocess.run(
-            [sys.executable, *inputs.generator],
-            capture_output=True, text=True, check=True, cwd=inputs.root,
-        )
-        assert result.stdout == "legacy snapshot\n"
-        assert result.stderr == ""
+        rows = process_changelog.generate_matrix(["fixture"], ["--no-evals"], inputs)
+        assert rows == [{"model": "legacy snapshot", "conc": 2}]
 
 
 def _fixed_matrix_row(
