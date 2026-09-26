@@ -80,8 +80,10 @@ or successful C48 scoring. Preserve component tests separately from native evide
 Failed-room quarantine remains owned until the actual frontend/prefill/decode
 workers exit. Local `srun` exit alone is insufficient. The C48 launcher
 checks the exact Slurm job, Unix user, runner name and output path. An authoritative
-abort or cleanup marker starts a 300-second grace; remaining work is cancelled
-only in that job. Terminal state and no active steps must be verified within the
+abort or cleanup marker starts a 300-second grace; remaining workload steps trigger
+cancellation of only that job. Once those steps exit, exact `batch` and `extern`
+steps may finish CPU reports within the original allocation deadline. Terminal
+state and no active steps must be verified within the
 post-cancel bound before resource reuse. Inspection failure rejects acceptance.
 Individual scored-request errors retain the existing benchmark thresholds. Preserve
 all failed attempts; accept recovery only with the original full C48 window and valid PowerX.
