@@ -3,7 +3,7 @@ base:
   name: dsr1-fp8-b200-trt-mtp-8k1k
   model:
     path: hf:deepseek-ai/DeepSeek-R1-0528
-    container: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
+    container: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc28
     precision: fp8
   resources:
     gpu_type: b200

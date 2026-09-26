@@ -1561,7 +1561,7 @@ dsr1-fp8-b200-trt:
         srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsr1/trtllm/b200-fp8/8k1k.yaml
 
 dsr1-fp8-b200-trt-mtp:
-  image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
+  image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc28
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: cluster:b200-nscale
