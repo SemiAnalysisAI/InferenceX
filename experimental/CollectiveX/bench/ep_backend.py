@@ -395,18 +395,19 @@ class EPBackend(abc.ABC):
 
     # ---- CUDA graph capture ----------------------------------------------------------------
 
-    # Wall time the stream spins after the alignment all-reduce, so every rank's host has enqueued
-    # its replay before the stream reaches it and the replay start is set by the barrier release,
-    # not by host launch latency. Converted to cycles per GPU by `_calibrate_align_spin`:
-    # `torch.cuda._sleep` counts SM cycles, so a fixed cycle count spun 48-70us across the clock
-    # range and left ~15us of cross-rank skew on gb200 (a fast-clocked rank released early).
-    _GRAPH_ALIGN_SPIN_US = 100.0
     # Attributes of a dispatch handle that hold what dispatch wrote; the replay check poisons them
     # so a replay that skipped (or stalely reused) the dispatch cannot reproduce a valid output.
     _DISPATCH_OUTPUT_FIELDS = ("recv_x", "recv_scales", "dispatch_output")
 
-    def _calibrate_align_spin(self):
-        """Measure this GPU's current spin rate and size the alignment spin to a wall time."""
+    def _calibrate_align_spin(self, spin_us=100.0):
+        """Size the post-barrier alignment spin to `spin_us` of wall time on this GPU.
+
+        The stream spins after the alignment all-reduce so every rank's host has enqueued its
+        replay before the stream reaches it: the replay start is set by the barrier release, not
+        by host launch latency. `torch.cuda._sleep` counts SM cycles, so a fixed cycle count spun
+        48-70us across the clock range and left ~15us of cross-rank skew on gb200 (a fast-clocked
+        rank released early); measuring the spin rate converts the wall time to cycles per GPU.
+        """
         import torch
 
         probe = 200_000
@@ -418,7 +419,7 @@ class EPBackend(abc.ABC):
         end.record()
         torch.cuda.synchronize()
         elapsed_us = max(start.elapsed_time(end) * 1000.0, 1e-3)
-        self._graph_align_cycles = max(1, int(probe * self._GRAPH_ALIGN_SPIN_US / elapsed_us))
+        self._graph_align_cycles = max(1, int(probe * spin_us / elapsed_us))
 
     def _graph_align(self):
         """Enqueue a device-side rank barrier on the current stream, without a host sync."""

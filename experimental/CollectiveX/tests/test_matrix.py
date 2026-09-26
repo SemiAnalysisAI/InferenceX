@@ -31,6 +31,13 @@ class MatrixTests(unittest.TestCase):
                     {shard["nodes"]},
                 )
 
+    def test_shards_run_on_the_registry_runner_label_else_the_sku(self):
+        for shard in matrix(backend="all")["include"]:
+            with self.subTest(shard=shard["id"]):
+                platform = sweep_matrix.PLATFORMS[shard["sku"]]
+                self.assertEqual(shard["runner"], platform.get("runner_label", shard["sku"]))
+        self.assertEqual(sweep_matrix._runner_label("mi325x"), "cluster:mi325x-amds")
+
     def test_only_real_platform_cells_are_unsupported(self):
         platform = {
             "product": "test-gpu", "gpus_per_node": 8, "scale_up_domain": 8,
