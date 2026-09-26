@@ -138,7 +138,7 @@ needed; if a point matches zero or several variants, fix the recipe, not the lau
 ## Step 5 — perf-changelog
 
 Append a `- config-keys: [<key>]` block with a clear `description` and `pr-link: TBD`. The
-changelog diff vs `origin/main` is what `process_changelog.py` uses to select the sweep, so a
+changelog diff vs `origin/main` is what `infx.matrix.plan` uses to select the sweep, so a
 new entry is **required** for CI to run your config.
 
 ## Step 6 — validate locally
@@ -147,7 +147,7 @@ new entry is **required** for CI to run your config.
 python3 -c "import yaml; yaml.safe_load(open('benchmarks/single_node/srt-slurm-recipes/<recipe>'))"
 python3 -c "import yaml; yaml.safe_load(open('configs/<nvidia|amd>-master.yaml')); yaml.safe_load(open('perf-changelog.yaml'))"
 uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
-  utils/matrix_logic/generate_sweep_configs.py test-config \
+  python -m infx.matrix.generate test-config \
   --config-files configs/<nvidia|amd>-master.yaml --config-keys <key>
 ```
 Sanity-check the generated matrix: expected layouts/concurrencies, `max-model-len` = scenario

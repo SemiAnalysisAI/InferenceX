@@ -10,9 +10,7 @@ import json
 import re
 from typing import Any
 
-# ============================================================
 # Special Tokens
-# ============================================================
 
 bos_token: str = "<｜begin▁of▁sentence｜>"  # noqa: RUF001, S105
 eos_token: str = "<｜end▁of▁sentence｜>"  # noqa: RUF001, S105
@@ -35,9 +33,7 @@ DS_TASK_SP_TOKENS = {
 }
 VALID_TASKS = set(DS_TASK_SP_TOKENS.keys())
 
-# ============================================================
 # Templates
-# ============================================================
 
 system_msg_template: str = "{content}"
 user_msg_template: str = "{content}"
@@ -88,9 +84,7 @@ Otherwise, output directly after {thinking_end_token} with tool calls or final r
 You MUST strictly follow the above defined tool name and parameter schemas to invoke tool calls.
 """
 
-# ============================================================
 # Utility Functions
-# ============================================================
 
 
 def to_json(value: Any) -> str:
@@ -136,15 +130,7 @@ def tool_calls_to_openai_format(
 
 
 def encode_arguments_to_dsml(tool_call: dict[str, str]) -> str:
-    """
-    Encode tool call arguments into DSML parameter format.
-
-    Args:
-        tool_call: Dict with "name" and "arguments" (JSON string) keys.
-
-    Returns:
-        DSML-formatted parameter string.
-    """
+    """Encode a tool call's JSON-string ``arguments`` as DSML parameters."""
     p_dsml_template = (
         '<{dsml_token}parameter name="{key}" string="{is_str}">{value}</{dsml_token}parameter>'
     )
@@ -170,16 +156,7 @@ def encode_arguments_to_dsml(tool_call: dict[str, str]) -> str:
 def decode_dsml_to_arguments(
     tool_name: str, tool_args: dict[str, tuple[str, str]]
 ) -> dict[str, str]:
-    """
-    Decode DSML parameters back to a tool call dict.
-
-    Args:
-        tool_name: Name of the tool.
-        tool_args: Dict mapping param_name -> (value, is_string_flag).
-
-    Returns:
-        Dict with "name" and "arguments" (JSON string) keys.
-    """
+    """Convert param_name -> (value, is_string) pairs to OpenAI tool-call arguments."""
 
     def _decode_value(key: str, value: str, string: str) -> str:
         if string == "true":
@@ -195,15 +172,7 @@ def decode_dsml_to_arguments(
 
 
 def render_tools(tools: list[dict[str, str | dict[str, Any]]]) -> str:
-    """
-    Render tool schemas into the system prompt format.
-
-    Args:
-        tools: List of tool schema dicts (each with name, description, parameters).
-
-    Returns:
-        Formatted tools section string.
-    """
+    """Render tool schemas for the system prompt."""
     tools_json = [to_json(t) for t in tools]
 
     return TOOLS_TEMPLATE.format(
@@ -224,9 +193,7 @@ def find_last_user_index(messages: list[dict[str, Any]]) -> int:
     return last_user_index
 
 
-# ============================================================
 # Message Rendering
-# ============================================================
 
 
 def render_message(
@@ -238,9 +205,6 @@ def render_message(
 ) -> str:
     """
     Render a single message at the given index into its encoded string form.
-
-    This is the core function that converts each message in the conversation
-    into the DeepSeek-V4 format.
 
     Args:
         index: Index of the message to render.
@@ -274,7 +238,6 @@ def render_message(
     if tool_calls:
         tool_calls = tool_calls_from_openai_format(tool_calls)
 
-    # Reasoning effort prefix (only at index 0 in thinking mode with max effort)
     assert reasoning_effort in ["max", None, "high"], (  # noqa: S101
         f"Invalid reasoning effort: {reasoning_effort}"
     )
@@ -306,7 +269,6 @@ def render_message(
     elif role == "user":
         prompt += USER_SP_TOKEN
 
-        # Handle content blocks (tool results mixed with text)
         content_blocks = msg.get("content_blocks")
         if content_blocks:
             parts = []
@@ -385,7 +347,6 @@ def render_message(
     else:
         raise NotImplementedError(f"Unknown role: {role}")
 
-    # Append transition tokens based on what follows
     if index + 1 < len(messages) and messages[index + 1].get("role") not in [
         "assistant",
         "latest_reminder",
@@ -394,23 +355,19 @@ def render_message(
 
     task = messages[index].get("task")
     if task is not None:
-        # Task special token for internal classification tasks
         assert task in VALID_TASKS, (  # noqa: S101
             f"Invalid task: '{task}'. Valid tasks are: {list(VALID_TASKS)}"
         )
         task_sp_token = DS_TASK_SP_TOKENS[task]
 
         if task != "action":
-            # Non-action tasks: append task sp token directly after the message
             prompt += task_sp_token
         else:
-            # Action task: append Assistant + thinking token + action sp token
             prompt += ASSISTANT_SP_TOKEN
             prompt += thinking_end_token if thinking_mode != "thinking" else thinking_start_token
             prompt += task_sp_token
 
     elif messages[index].get("role") in ["user", "developer"]:
-        # Normal generation: append Assistant + thinking token
         prompt += ASSISTANT_SP_TOKEN
         if (not drop_thinking and thinking_mode == "thinking") or (
             drop_thinking and thinking_mode == "thinking" and index >= last_user_idx
@@ -422,27 +379,13 @@ def render_message(
     return prompt
 
 
-# ============================================================
 # Preprocessing
-# ============================================================
 
 
 def merge_tool_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """
-    Merge tool messages into the preceding user message using content_blocks format.
+    """Merge OpenAI tool messages into user-message content_blocks.
 
-    DeepSeek-V4 does not have a standalone "tool" role; instead, tool results
-    are encoded as <tool_result> blocks within user messages.
-
-    This function converts a standard OpenAI-format conversation (with separate
-    "tool" role messages) into V4 format where tool results are merged into
-    user messages.
-
-    Args:
-        messages: List of message dicts in OpenAI format.
-
-    Returns:
-        Processed message list with tool messages merged into user messages.
+    DeepSeek-V4 has no standalone tool role; it uses <tool_result> blocks.
     """
     merged: list[dict[str, Any]] = []
 
@@ -451,13 +394,11 @@ def merge_tool_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
         role = msg.get("role")
 
         if role == "tool":
-            # Convert tool message to a user message with tool_result block
             tool_block = {
                 "type": "tool_result",
                 "tool_use_id": msg.get("tool_call_id", ""),
                 "content": msg.get("content", ""),
             }
-            # Merge into previous message if it's already a user (merged tool)
             if merged and merged[-1].get("role") == "user" and "content_blocks" in merged[-1]:
                 merged[-1]["content_blocks"].append(tool_block)
             else:
@@ -496,16 +437,7 @@ def merge_tool_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def sort_tool_results_by_call_order(
     messages: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """
-    Sort tool_result blocks within user messages by the order of tool_calls
-    in the preceding assistant message.
-
-    Args:
-        messages: Preprocessed message list (after merge_tool_messages).
-
-    Returns:
-        Message list with sorted tool result blocks.
-    """
+    """Sort merged tool_result blocks by the preceding assistant's tool_calls order."""
     last_tool_call_order: dict[str, int] = {}
 
     for msg in messages:
@@ -537,9 +469,7 @@ def sort_tool_results_by_call_order(
     return messages
 
 
-# ============================================================
 # Main Encoding Function
-# ============================================================
 
 
 def encode_messages(
@@ -552,12 +482,6 @@ def encode_messages(
 ) -> str:
     """
     Encode a list of messages into the DeepSeek-V4 prompt format.
-
-    This is the main entry point for encoding conversations. It handles:
-    - BOS token insertion
-    - Thinking mode with optional reasoning content dropping
-    - Tool message merging into user messages
-    - Multi-turn conversation context
 
     Args:
         messages: List of message dicts to encode.
@@ -573,7 +497,6 @@ def encode_messages(
     """
     context = context or []
 
-    # Preprocess: merge tool messages and sort tool results
     messages = merge_tool_messages(messages)
     messages = sort_tool_results_by_call_order(context + messages)[len(context) :]
     if context:
@@ -584,7 +507,6 @@ def encode_messages(
 
     prompt = bos_token if add_default_bos_token and len(context) == 0 else ""
 
-    # Resolve drop_thinking: if any message has tools defined, don't drop thinking
     effective_drop_thinking = drop_thinking
     if any(m.get("tools") for m in full_messages):
         effective_drop_thinking = False
@@ -638,9 +560,7 @@ def _drop_thinking_messages(messages: list[dict[str, Any]]) -> list[dict[str, An
     return result
 
 
-# ============================================================
 # Parsing (Decoding model output)
-# ============================================================
 
 
 def _read_until_stop(index: int, text: str, stop: list[str]) -> tuple[int, str, str | None]:
@@ -667,16 +587,9 @@ def _read_until_stop(index: int, text: str, stop: list[str]) -> tuple[int, str, 
 
 
 def parse_tool_calls(index: int, text: str) -> tuple[int, str | None, list[dict[str, str]]]:
-    """
-    Parse DSML tool calls from text starting at the given index.
+    """Return (new_index, last_stop_token, tool_calls) from DSML text at index.
 
-    Args:
-        index: Starting position in text.
-        text: The full text to parse.
-
-    Returns:
-        Tuple of (new_index, last_stop_token, list_of_tool_call_dicts).
-        Each tool call dict has "name" and "arguments" keys.
+    Tool calls have OpenAI ``name`` and JSON-string ``arguments`` keys.
     """
     tool_calls: list[dict[str, Any]] = []
     stop_token = None
@@ -739,14 +652,7 @@ def parse_message_from_completion_text(text: str, thinking_mode: str) -> dict[st
     """
     Parse a model completion text into a structured assistant message.
 
-    This function takes the raw text output from the model (a single assistant turn)
-    and extracts:
-    - reasoning_content (thinking block)
-    - content (summary/response)
-    - tool_calls (if any)
-
-    NOTE: This function is designed to parse only correctly formatted strings and
-    will raise ValueError for malformed output.
+    Raises ValueError for malformed output.
 
     Args:
         text: The raw completion text (including EOS token).

@@ -32,7 +32,7 @@ AgentX launcher 仍会先保留已有的审计和服务端产物，再返回失�
 对于普通单节点吞吐量任务：
 
 1. launcher 必须在工作区留下 `${RESULT_FILENAME}.json`。工作流会短暂等待；如果该文件一直没有出现，任务失败。
-2. `utils/process_result.py` 读取原始 JSON 以及拓扑/运行时环境变量，规范化元数据和每 GPU 吞吐量，把毫秒字段转换成秒，推导 interactivity，并写出 `agg_${RESULT_FILENAME}.json`。
+2. `infx/results/fixed_sequence.py` 读取原始 JSON 以及拓扑/运行时环境变量，规范化元数据和每 GPU 吞吐量，把毫秒字段转换成秒，推导 interactivity，并写出 `agg_${RESULT_FILENAME}.json`。
 3. 任务将聚合结果上传为制品 `bmk_${RESULT_FILENAME}`。
 4. `collect-results.yml` 下载 `bmk_*`，运行 `python3 -m infx.results.collect_results results/ bmk`，再上传 `results_bmk`；其负载为 `agg_bmk.json`。
 
@@ -48,7 +48,7 @@ DECODE_GPUS="$decode_gpus" \
 
 上传的 `bmk_${RESULT_FILENAME}` 制品包含 `agg_${RESULT_FILENAME}_*.json`。缺少源文件属于基准/launcher 故障；缺少 `agg_` 文件属于结果处理故障；缺少 `results_bmk` 属于收集故障。不要把这些问题归类为数据库故障。
 
-来源：[单节点处理/上传](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.github/workflows/benchmark-tmpl.yml#L289-L323)、[多节点处理/上传](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.github/workflows/benchmark-multinode-tmpl.yml#L345-L387)、[`process_result.py` 契约](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/utils/process_result.py#L43-L75)、[吞吐量收集器](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.github/workflows/collect-results.yml#L25-L38)。
+来源：[单节点处理/上传](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.github/workflows/benchmark-tmpl.yml#L289-L323)、[多节点处理/上传](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.github/workflows/benchmark-multinode-tmpl.yml#L345-L387)、[`infx.results.fixed_sequence` 契约](../infx/results/fixed_sequence.py)、[吞吐量收集器](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.github/workflows/collect-results.yml#L25-L38)。
 
 ### 评测结果
 
@@ -405,7 +405,7 @@ gh run view "$RUN_ID" --repo SemiAnalysisAI/InferenceX --log-failed \
 | --- | --- | --- |
 | **基准/运行时** | server 一直未就绪；OOM；HIP/CUDA/RCCL/NCCL；请求失败；原始结果缺失；成功请求数为零 | 复现准确配置，与工作节点/SKU 比较，修复 recipe/镜像/运行时；不要改摄取 |
 | **评测** | eval-only 没有 `results*.json`；分数验证失败；`meta_env.json` 覆盖范围/并发不匹配；sample 文件不完整 | 检查评测器输出和请求并发；保留已上传的部分制品；修复评测器/配置后再重跑 |
-| **处理/收集** | 原始 JSON 存在但缺少 `agg_*.json`；收集器无法解析；缺少 `results_bmk` 或 `eval_results_all` | 检查 `process_result.py`/收集器日志和制品布局；理解格式问题后才重跑失败工作流任务 |
+| **处理/收集** | 原始 JSON 存在但缺少 `agg_*.json`；收集器无法解析；缺少 `results_bmk` 或 `eval_results_all` | 检查 `infx.results.fixed_sequence`/收集器日志和制品布局；理解格式问题后才重跑失败工作流任务 |
 | **Runner 工作区** | checkout 清理在 `_work/.../benchmark_logs/logs/slurm_job-*` 下报 `EACCES` | 只读所有者扫描、批准后的有范围删除、零结果验证，然后重跑 |
 | **MI300X provisioning** | pyxis/enroot 命名空间特征；失败节点 sysctl 为 `1`，工作节点为 `0` | 获批后修复节点并升级 provisioning image，然后重跑受影响任务 |
 | **Dispatch/交接** | `trigger-ingest` 后没有应用 run；curl/auth 失败；应用准备日志显示错误 ID 或制品缺失/过期 | 修复 dispatch 凭据/选择，或使用恢复流程；不要重跑 GPU 工作 |

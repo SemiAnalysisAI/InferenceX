@@ -3075,7 +3075,6 @@ run_eval() {
 
 # Agentic trace replay helpers (aiperf driver)
 
-AGENTIC_DIR="${INFMAX_CONTAINER_WORKSPACE}/utils/agentic-benchmark"
 AIPERF_DIR="${INFMAX_CONTAINER_WORKSPACE}/utils/aiperf"
 AIPERF_RUNTIME_DIR="${AIPERF_RUNTIME_DIR:-${TMPDIR:-/tmp}/inferencex-agentic-${SLURM_JOB_ID:-$$}}"
 AIPERF_VENV="${AIPERF_RUNTIME_DIR}/venv"
@@ -3135,9 +3134,16 @@ install_agentic_deps() {
         "$AIPERF_UV_BIN" venv --python "${AIPERF_PYTHON_VERSION}" "$AIPERF_VENV" || return $?
     UV_CACHE_DIR="$AIPERF_UV_CACHE_DIR" UV_HTTP_TIMEOUT=120 UV_HTTP_RETRIES=3 \
         "$AIPERF_UV_BIN" pip install --python "$AIPERF_PYTHON" \
-        -r "$AGENTIC_DIR/requirements.txt" \
         -e "$AIPERF_DIR" \
+        "numpy>=1.24" \
+        "pandas>=2.0.0" \
+        "aiohttp>=3.10" \
+        "transformers>=4.46" \
+        "xlsxwriter>=3.2.1" \
+        "tqdm>=4.66" \
         "datasets>=4.7.0" \
+        tiktoken \
+        matplotlib \
         "huggingface_hub[cli]>=0.25.0" \
         urllib3 \
         requests || {

@@ -552,7 +552,7 @@ PY
     if [[ "${RUN_EVAL}" == "true" ]]; then
         # run_eval/append_lm_eval_summary read EVAL_CONCURRENT_REQUESTS and CONC (not
         # EVAL_CONC). Exporting CONC makes meta_env.json's "conc" match what
-        # utils/evals/validate_scores.py --expected-concs verifies; without it the
+        # infx.evals.validate_scores --expected-concs verifies; without it the
         # metadata records conc=1 and score verification fails even when accuracy passes.
         if [[ -n "${EVAL_CONC:-}" ]]; then
             export EVAL_CONCURRENT_REQUESTS="${EVAL_CONC}"

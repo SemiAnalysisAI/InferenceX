@@ -35,9 +35,6 @@ from infx.matrix.validation import (
 )
 
 
-# =============================================================================
-# Test Fixtures
-# =============================================================================
 
 @pytest.fixture
 def valid_single_node_matrix_entry():
@@ -213,12 +210,8 @@ def valid_runner_config():
     }
 
 
-# =============================================================================
-# Test WorkerConfig
-# =============================================================================
 
 class TestWorkerConfig:
-    """Tests for WorkerConfig model."""
 
     @pytest.mark.parametrize("field", ["pp", "dcp-size", "pcp-size"])
     def test_worker_parallelism_fields_must_be_positive(self, field):
@@ -242,7 +235,6 @@ class TestWorkerConfig:
             })
 
     def test_worker_config_missing_required_field(self):
-        """Missing required field should fail."""
         with pytest.raises(ValidationError):
             WorkerConfig(**{
                 "num-worker": 2,
@@ -251,7 +243,6 @@ class TestWorkerConfig:
             })
 
     def test_worker_config_extra_field_forbidden(self):
-        """Extra fields should be forbidden."""
         with pytest.raises(ValidationError):
             WorkerConfig(**{
                 "num-worker": 2,
@@ -262,27 +253,20 @@ class TestWorkerConfig:
             })
 
 
-# =============================================================================
-# Test SingleNodeMatrixEntry
-# =============================================================================
 
 class TestSingleNodeMatrixEntry:
-    """Tests for SingleNodeMatrixEntry model."""
 
     def test_invalid_spec_decoding(self, valid_single_node_matrix_entry):
-        """Invalid spec decoding value should fail."""
         valid_single_node_matrix_entry["spec-decoding"] = "invalid"
         with pytest.raises(ValidationError):
             SingleNodeMatrixEntry(**valid_single_node_matrix_entry)
 
     def test_missing_required_field(self, valid_single_node_matrix_entry):
-        """Missing required field should fail validation."""
         del valid_single_node_matrix_entry["model"]
         with pytest.raises(ValidationError):
             SingleNodeMatrixEntry(**valid_single_node_matrix_entry)
 
     def test_extra_field_forbidden(self, valid_single_node_matrix_entry):
-        """Extra fields should be forbidden."""
         valid_single_node_matrix_entry["extra-field"] = "value"
         with pytest.raises(ValidationError):
             SingleNodeMatrixEntry(**valid_single_node_matrix_entry)
@@ -294,12 +278,8 @@ class TestSingleNodeMatrixEntry:
             SingleNodeMatrixEntry(**valid_single_node_matrix_entry)
 
 
-# =============================================================================
-# Test Agentic Matrix Entries
-# =============================================================================
 
 class TestAgenticMatrixEntries:
-    """Tests for agentic coding validation models."""
 
     def test_arbitrary_backend_is_valid_for_single_node_agentic_entry(self):
         entry = SingleNodeAgenticMatrixEntry(**{
@@ -508,12 +488,8 @@ class TestAgenticMatrixEntries:
             })
 
 
-# =============================================================================
-# Test MultiNodeMatrixEntry
-# =============================================================================
 
 class TestMultiNodeMatrixEntry:
-    """Tests for MultiNodeMatrixEntry model."""
 
     def test_disagg_allows_omitted_hardware(self, valid_multinode_matrix_entry):
         """Homogeneous disaggregated entries may omit hardware metadata."""
@@ -534,7 +510,6 @@ class TestMultiNodeMatrixEntry:
 
 
     def test_conc_must_be_list(self, valid_multinode_matrix_entry):
-        """Conc must be a list for multinode."""
         valid_multinode_matrix_entry["conc"] = 2150  # Single int, not list
         with pytest.raises(ValidationError):
             MultiNodeMatrixEntry(**valid_multinode_matrix_entry)
@@ -555,40 +530,29 @@ class TestMultiNodeMatrixEntry:
             MultiNodeMatrixEntry(**valid_multinode_matrix_entry)
 
     def test_missing_prefill(self, valid_multinode_matrix_entry):
-        """Missing prefill should fail."""
         del valid_multinode_matrix_entry["prefill"]
         with pytest.raises(ValidationError):
             MultiNodeMatrixEntry(**valid_multinode_matrix_entry)
 
 
-# =============================================================================
-# Test validate_matrix_entry function
-# =============================================================================
 
 class TestValidateMatrixEntry:
-    """Tests for validate_matrix_entry function."""
 
     def test_invalid_single_node_raises_valueerror(self, valid_single_node_matrix_entry):
-        """Invalid single node entry should raise ValueError."""
         del valid_single_node_matrix_entry["tp"]
         with pytest.raises(ValueError) as exc_info:
             validate_matrix_entry(valid_single_node_matrix_entry, is_multinode=False)
         assert "failed validation" in str(exc_info.value)
 
     def test_invalid_multinode_raises_valueerror(self, valid_multinode_matrix_entry):
-        """Invalid multinode entry should raise ValueError."""
         del valid_multinode_matrix_entry["prefill"]
         with pytest.raises(ValueError) as exc_info:
             validate_matrix_entry(valid_multinode_matrix_entry, is_multinode=True)
         assert "failed validation" in str(exc_info.value)
 
 
-# =============================================================================
-# Test SingleNodeSearchSpaceEntry
-# =============================================================================
 
 class TestSingleNodeSearchSpaceEntry:
-    """Tests for SingleNodeSearchSpaceEntry model."""
 
     def test_pp_must_be_positive_integer(self):
         with pytest.raises(ValidationError, match="greater than 0"):
@@ -608,7 +572,6 @@ class TestSingleNodeSearchSpaceEntry:
             })
 
     def test_cannot_have_both_range_and_list(self):
-        """Cannot specify both conc range and list."""
         with pytest.raises(ValidationError) as exc_info:
             SingleNodeSearchSpaceEntry(**{
                 "tp": 4,
@@ -619,7 +582,6 @@ class TestSingleNodeSearchSpaceEntry:
         assert "Cannot specify both" in str(exc_info.value)
 
     def test_must_have_range_or_list(self):
-        """Must specify either conc range or list."""
         with pytest.raises(ValidationError) as exc_info:
             SingleNodeSearchSpaceEntry(**{
                 "tp": 8,
@@ -627,7 +589,6 @@ class TestSingleNodeSearchSpaceEntry:
         assert "Must specify either" in str(exc_info.value)
 
     def test_conc_start_must_be_lte_conc_end(self):
-        """conc-start must be <= conc-end."""
         with pytest.raises(ValidationError) as exc_info:
             SingleNodeSearchSpaceEntry(**{
                 "tp": 8,
@@ -651,7 +612,6 @@ class TestSingleNodeSearchSpaceEntry:
         assert "must be greater than 0" in str(exc_info.value)
 
     def test_conc_list_values_must_be_positive(self):
-        """conc-list values must be > 0."""
         with pytest.raises(ValidationError) as exc_info:
             SingleNodeSearchSpaceEntry(**{
                 "tp": 4,
@@ -659,12 +619,8 @@ class TestSingleNodeSearchSpaceEntry:
             })
         assert "must be greater than 0" in str(exc_info.value)
 
-# =============================================================================
-# Test MultiNodeSearchSpaceEntry
-# =============================================================================
 
 class TestMultiNodeSearchSpaceEntry:
-    """Tests for MultiNodeSearchSpaceEntry model."""
 
     def test_valid_aggregate_worker(self):
         """An aggregate entry has one worker rather than serving roles."""
@@ -684,7 +640,6 @@ class TestMultiNodeSearchSpaceEntry:
         assert entry.decode is None
 
     def test_missing_conc_specification(self):
-        """Missing conc specification should fail."""
         with pytest.raises(ValidationError):
             MultiNodeSearchSpaceEntry(**{
                 "prefill": {
@@ -703,9 +658,6 @@ class TestMultiNodeSearchSpaceEntry:
             })
 
 
-# =============================================================================
-# Test SeqLenConfig models
-# =============================================================================
 
 class TestSeqLenConfigs:
     @pytest.mark.parametrize("multinode", [False, True])
@@ -730,9 +682,6 @@ class TestSeqLenConfigs:
         assert error.value.errors()[0]["loc"] == ("search-space", 1)
 
 
-# =============================================================================
-# Test MasterConfigEntry models
-# =============================================================================
 
 def make_aggregated_multinode_master_config(config, num_nodes=3):
     """Convert the disaggregated fixture to one aggregate worker."""
@@ -749,7 +698,6 @@ def make_aggregated_multinode_master_config(config, num_nodes=3):
 
 
 class TestMasterConfigEntries:
-    """Tests for master config entry models."""
 
     def test_disagg_master_config_allows_omitted_hardware(self, valid_multinode_master_config):
         """Homogeneous disaggregated master configs may omit hardware metadata."""
@@ -769,13 +717,11 @@ class TestMasterConfigEntries:
             MultiNodeMasterConfigEntry(**valid_multinode_master_config)
 
     def test_single_node_cannot_have_multinode_true(self, valid_single_node_master_config):
-        """Single node config must have multinode=False."""
         valid_single_node_master_config["multinode"] = True
         with pytest.raises(ValidationError):
             SingleNodeMasterConfigEntry(**valid_single_node_master_config)
 
     def test_multinode_cannot_have_multinode_false(self, valid_multinode_master_config):
-        """Multinode config must have multinode=True."""
         valid_multinode_master_config["multinode"] = False
         with pytest.raises(ValidationError):
             MultiNodeMasterConfigEntry(**valid_multinode_master_config)
@@ -1057,12 +1003,8 @@ class TestMasterConfigEntries:
         assert MultiNodeMasterConfigEntry(**config).runner == "cluster:b200-nscale"
 
 
-# =============================================================================
-# Test validate_master_config function
-# =============================================================================
 
 class TestValidateMasterConfig:
-    """Tests for validate_master_config function."""
 
     def test_invalid_config_raises_valueerror(self, valid_single_node_master_config):
         """Invalid config should raise ValueError with key name."""
@@ -1074,15 +1016,10 @@ class TestValidateMasterConfig:
         assert "failed validation" in str(exc_info.value)
 
 
-# =============================================================================
-# Test validate_runner_config function
-# =============================================================================
 
 class TestValidateRunnerConfig:
-    """Tests for validate_runner_config function."""
 
     def test_value_must_be_list(self):
-        """Runner config values must be lists."""
         config = {
             "labels": {
                 "h100": "h100-cr_0",  # Not a list
@@ -1093,7 +1030,6 @@ class TestValidateRunnerConfig:
         assert "must be a list" in str(exc_info.value)
 
     def test_list_must_contain_strings(self):
-        """Runner config lists must contain only strings."""
         config = {
             "labels": {
                 "h100": ["h100-cr_0", 123],  # Contains non-string
@@ -1104,7 +1040,6 @@ class TestValidateRunnerConfig:
         assert "must contain only strings" in str(exc_info.value)
 
     def test_list_cannot_be_empty(self):
-        """Runner config lists cannot be empty."""
         config = {
             "labels": {
                 "mi355x": [],
@@ -1140,12 +1075,8 @@ class TestValidateRunnerConfig:
         assert "gpus-per-node" in str(exc_info.value)
 
 
-# =============================================================================
-# Test changelog entry validation
-# =============================================================================
 
 class TestChangelogEntry:
-    """Tests for changelog eval mode validation."""
 
     @pytest.mark.parametrize("scenario_type", [[], ["unsupported"]])
     def test_scenario_type_must_be_nonempty_and_supported(self, scenario_type):
@@ -1158,9 +1089,6 @@ class TestChangelogEntry:
             })
 
 
-# =============================================================================
-# Test ChangelogMatrixEntry
-# =============================================================================
 
 AGENTIC_EVAL_ROW = {
     "image": "vllm/vllm-openai:nightly", "model": "deepseek-ai/DeepSeek-V4-Pro",
@@ -1319,7 +1247,6 @@ class TestChangelogMatrixEntry:
 
 
 class TestMultiNodeAgenticMatrixEntry:
-    """Tests for multi-node agentic (SWE-bench) matrix entry validation."""
 
     def test_node_count_is_required(self):
         row = dict(MULTINODE_AGENTIC_EVAL_ROW)
@@ -1344,15 +1271,10 @@ class TestMultiNodeAgenticMatrixEntry:
             validate_agentic_matrix_entry(without_prefill)
 
 
-# =============================================================================
-# Test load_config_files
-# =============================================================================
 
 class TestLoadConfigFiles:
-    """Tests for load_config_files function."""
 
     def test_load_single_file_with_validation(self, tmp_path, valid_single_node_master_config):
-        """Should load and validate a single config file."""
         config_file = tmp_path / "config.yaml"
         import yaml
         config_file.write_text(yaml.dump({"test-config": valid_single_node_master_config}))
@@ -1361,7 +1283,6 @@ class TestLoadConfigFiles:
         assert result["test-config"]["image"] == valid_single_node_master_config["image"]
 
     def test_load_single_file_without_validation(self, tmp_path):
-        """Should load a single config file without validation when validate=False."""
         config_file = tmp_path / "config.yaml"
         config_file.write_text("""
 test-config:
@@ -1373,7 +1294,6 @@ test-config:
         assert result["test-config"]["image"] == "test-image"
 
     def test_load_multiple_files(self, tmp_path):
-        """Should merge multiple config files."""
         config1 = tmp_path / "config1.yaml"
         config1.write_text("""
 config-one:
@@ -1389,7 +1309,6 @@ config-two:
         assert "config-two" in result
 
     def test_duplicate_keys_raise_error(self, tmp_path):
-        """Duplicate keys across files should raise error."""
         config1 = tmp_path / "config1.yaml"
         config1.write_text("""
 duplicate-key:
@@ -1405,7 +1324,6 @@ duplicate-key:
         assert "Duplicate configuration keys" in str(exc_info.value)
 
     def test_nonexistent_file_raises_error(self):
-        """Nonexistent file should raise error."""
         with pytest.raises(ValueError) as exc_info:
             load_config_files(["nonexistent.yaml"])
         assert "does not exist" in str(exc_info.value)
@@ -1425,7 +1343,6 @@ duplicate-key:
             load_config_files([str(path)], validate=False)
 
     def test_validation_runs_by_default(self, tmp_path):
-        """Validation should run by default and catch invalid configs."""
         config_file = tmp_path / "config.yaml"
         config_file.write_text("""
 invalid-config:
@@ -1437,15 +1354,10 @@ invalid-config:
         assert "failed validation" in str(exc_info.value)
 
 
-# =============================================================================
-# Test load_runner_file
-# =============================================================================
 
 class TestLoadRunnerFile:
-    """Tests for load_runner_file function."""
 
     def test_load_runner_file_with_validation(self, tmp_path):
-        """Should load and validate runner config file."""
         runner_file = tmp_path / "runners.yaml"
         runner_file.write_text("""
 labels:
@@ -1473,13 +1385,11 @@ hardware:
             load_runner_file(str(runner_file))
 
     def test_nonexistent_runner_file(self):
-        """Nonexistent runner file should raise error."""
         with pytest.raises(ValueError) as exc_info:
             load_runner_file("nonexistent.yaml")
         assert "does not exist" in str(exc_info.value)
 
     def test_validation_runs_by_default(self, tmp_path):
-        """Validation should run by default and catch invalid configs."""
         runner_file = tmp_path / "runners.yaml"
         runner_file.write_text("""
 labels:

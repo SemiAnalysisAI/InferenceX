@@ -14,7 +14,7 @@ Use this page for benchmark configuration, recipe, image, and runner changes. It
 | --- | --- |
 | [`configs/CONFIGS.md`](../configs/CONFIGS.md) | Master-config and runner-config field contract |
 | [`infx/matrix/validation.py`](../infx/matrix/validation.py) | Enforced Pydantic schema and topology invariants |
-| [`utils/matrix_logic/generate_sweep_configs.py`](../utils/matrix_logic/generate_sweep_configs.py) | Matrix expansion, filtering, runner lookup, and emitted job metadata |
+| [`infx/matrix/generate.py`](../infx/matrix/generate.py) | Matrix expansion, filtering, runner lookup, and emitted job metadata |
 | [`configs/nvidia-master.yaml`](../configs/nvidia-master.yaml), [`configs/amd-master.yaml`](../configs/amd-master.yaml) | Executable benchmark definitions |
 | [`configs/runners.yaml`](../configs/runners.yaml) | Schedulable labels, concrete runner names, and hardware facts |
 | [`benchmarks/`](../benchmarks/) and [`runners/`](../runners/) | Runtime commands and launcher routing |
@@ -144,7 +144,7 @@ A `MODELS.md` row alone is not an executable recipe. The complete path is benchm
 
 ## Change a master config
 
-Sources: [`configs/CONFIGS.md`](../configs/CONFIGS.md), [`validation.py`](../infx/matrix/validation.py), [`generate_sweep_configs.py`](../utils/matrix_logic/generate_sweep_configs.py).
+Sources: [`configs/CONFIGS.md`](../configs/CONFIGS.md), [`validation.py`](../infx/matrix/validation.py), [`generate.py`](../infx/matrix/generate.py).
 
 1. Locate the exact key and read its whole entry plus adjacent siblings.
 2. Use only documented kebab-case fields. The schema forbids extras. A plausible-looking field is not accepted automatically.

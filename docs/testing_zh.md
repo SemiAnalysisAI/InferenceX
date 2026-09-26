@@ -148,7 +148,7 @@ uv run --locked \
 | Changelog 内容或 PR 门禁 | `python -m pytest infx/tests/matrix/test_process_changelog.py infx/tests/workflows/test_validate_perf_changelog.py infx/tests/workflows/test_prepare_perf_changelog_merge.py -v` |
 | 结果处理与拓扑 | `python -m pytest infx/tests/results/power/test_process_result.py infx/tests/results/agentic/test_process_agentic_result.py infx/tests/results/power/test_aggregate_power.py infx/tests/workflows/test_calc_success_rate.py -v` |
 | AgentX 聚合与工件加载 | `python -m pytest infx/tests/results/agentic/ -v` |
-| 评测分发、批处理或补丁 | `python -m pytest infx/tests/evals/ utils/evals/ -v` |
+| 评测分发、批处理或补丁 | `python -m pytest infx/tests/evals/ -v` |
 | 评测收集 | `python -m pytest infx/tests/results/test_collect_eval_results.py -v` |
 | 扫描复用或可复用制品 | `python -m pytest infx/tests/test_github.py infx/tests/workflows/test_find_reusable_sweep_run.py infx/tests/workflows/test_acknowledge_sweep_reuse.py infx/tests/workflows/test_validate_reusable_sweep_artifacts.py -v` |
 
@@ -199,7 +199,7 @@ uv run --locked --all-extras --group test --no-editable \
 
 吞吐与评测是独立任务。默认扫描对选中的 8k1k 子集进行评测；`all-evals` 扩大评测选择，`evals-only` 抑制吞吐。根据变更范围选择修饰标签，但不要用仅评测或预检运行替代所需的全量扫描。
 
-评测完成不能只看绿色任务。保留并检查 `meta_env.json`、`results*.json` 文件、分数验证输出、推理镜像和聚合评测制品。[`utils/evals/EVALS.md`](../utils/evals/EVALS.md) 负责任务与制品行为。[`validate_scores.py`](../infx/evals/validate_scores.py) 会拒绝缺失结果文件、低于阈值的分数和没有任何已检查指标的运行；当存在预期并发元数据时，它还会拒绝无效、不完整或失败的批次。工作流调用时没有传入 `--expected-concs`，因此评审者必须独立验证单并发制品中的 `meta_env.json`。
+评测完成不能只看绿色任务。保留并检查 `meta_env.json`、`results*.json` 文件、分数验证输出、推理镜像和聚合评测制品。[`infx/evals/EVALS.md`](../infx/evals/EVALS.md) 负责任务与制品行为。[`validate_scores.py`](../infx/evals/validate_scores.py) 会拒绝缺失结果文件、低于阈值的分数和没有任何已检查指标的运行；当存在预期并发元数据时，它还会拒绝无效、不完整或失败的批次。单节点工作流调用时没有传入 `--expected-concs`，因此评审者必须独立验证单并发制品中的 `meta_env.json`。
 
 ## 证据标准
 

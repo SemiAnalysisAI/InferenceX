@@ -1,4 +1,4 @@
-"""Exercise file and module entrypoints across checkout boundaries."""
+"""Exercise module entrypoints across checkout boundaries."""
 
 import json
 import os
@@ -12,17 +12,12 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 
 
-@pytest.fixture(params=["module", "legacy"])
-def invoke(request, tmp_path):
-    def run(module, legacy, *args, **environment):
+@pytest.fixture
+def invoke(tmp_path):
+    def run(module, *args, **environment):
         env = {key: value for key, value in os.environ.items() if key != "PYTHONPATH"}
-        if request.param == "legacy" and legacy is None:
-            pytest.skip(f"{module} has no legacy file entrypoint")
-        if request.param == "module":
-            command = ["-P", "-m", module]
-            env["PYTHONPATH"] = str(ROOT)
-        else:
-            command = [str(ROOT / legacy)]
+        command = ["-P", "-m", module]
+        env["PYTHONPATH"] = str(ROOT)
         return subprocess.run(
             [sys.executable, *command, *args], cwd=tmp_path,
             env={**env, **environment}, capture_output=True, text=True, timeout=10,
@@ -42,7 +37,7 @@ def test_collector_preserves_nested_json_and_empty_inputs(invoke, tmp_path, payl
         (inputs / "result.json").write_text(payload)
     (inputs / "ignored.txt").write_text("not JSON")
 
-    result = invoke("infx.results.collect_results", None, "inputs", "test")
+    result = invoke("infx.results.collect_results", "inputs", "test")
 
     assert result.returncode == 0, result.stderr
     assert result.stdout == result.stderr == ""
@@ -59,7 +54,7 @@ def test_collector_does_not_publish_partial_output_on_invalid_json(invoke, tmp_p
     if published is not None:
         output.write_bytes(published)
 
-    result = invoke("infx.results.collect_results", None, "inputs", "test")
+    result = invoke("infx.results.collect_results", "inputs", "test")
 
     assert result.returncode != 0
     assert "JSONDecodeError" in result.stderr
@@ -70,17 +65,17 @@ def test_collector_does_not_publish_partial_output_on_invalid_json(invoke, tmp_p
 
 
 def test_filename_entrypoint_retains_environment_and_point_arguments(invoke):
-    result = invoke("infx.results.result_filename", "utils/result_filename.py",
+    result = invoke("infx.results.result_filename",
                     RESULT_FILENAME_BASE="model_tp8", RECIPE_FINGERPRINT="abc")
     assert result.returncode == 0, result.stderr
     assert result.stdout == "model_tp8_recipe-abc\n"
 
-    point = invoke("infx.results.result_filename", "utils/result_filename.py",
+    point = invoke("infx.results.result_filename",
                    "--point", "model_tp8", "config", "4", "8", "1024", "512")
     assert point.returncode == 0, point.stderr
     assert point.stdout == "model_tp8_config_conc4_gpus_8_ctx_1024_gen_512.json\n"
 
-    invalid = invoke("infx.results.result_filename", "utils/result_filename.py",
+    invalid = invoke("infx.results.result_filename",
                      "--point", "model_tp8", "config", "four", "8", "", "")
     assert invalid.returncode != 0
     assert "Expected numeric point identity" in invalid.stderr
@@ -88,7 +83,7 @@ def test_filename_entrypoint_retains_environment_and_point_arguments(invoke):
 
 def test_run_statistics_reject_invalid_run_id_without_publishing(invoke, tmp_path):
     result = invoke(
-        "infx.workflows.calc_success_rate", None, "stats",
+        "infx.workflows.calc_success_rate", "stats",
         GITHUB_RUN_ID="not-an-integer", GITHUB_REPOSITORY="example/project", GITHUB_TOKEN="unused",
     )
     assert result.returncode != 0
