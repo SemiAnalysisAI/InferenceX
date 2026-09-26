@@ -129,7 +129,7 @@ The native collector sets UTC and records context beside its CSV for portable re
 
 ### Per-config identity and collection
 
-Each eval upload is named `eval_<EXP_NAME>_<RESULT_FILENAME>`. Its current allowed payload includes `meta_env.json`, `results*.json`, sample JSONL, predictions, SWE-bench reports, and trajectory files. The collector uses only the metadata and lm-eval result JSON for aggregate rows.
+Each eval upload is named `eval_<EXP_NAME>_<RESULT_FILENAME>`. Its current allowed payload includes `meta_env.json`, `results*.json`, sample JSONL, predictions, and trajectory files. The collector uses only the metadata and lm-eval result JSON for aggregate rows.
 
 Collection and reuse share result reading and selection, but retain different validation policies. Collection can report completed points from a failed batch; reuse rejects failed or incomplete batches. Each phase uses its loaded JSON for selection and validation. After deduplication rewrites or removes artifacts, validation reads the resulting files afresh.
 

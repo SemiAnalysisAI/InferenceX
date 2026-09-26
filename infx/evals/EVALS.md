@@ -606,7 +606,7 @@ attempt cannot replace a newer failed retry.
 |----------|---------|-------------|
 | `RUN_EVAL` | `false` | Enable eval after throughput benchmark |
 | `EVAL_ONLY` | `false` | Skip throughput, only run evals (set by workflow) |
-| `EVAL_FRAMEWORK` | Workflow: `auto`; benchmark runner: `lm-eval` | Eval runner (`lm-eval`, `swebench`, `kimi-vendor`, `minimax-vendor`, or `bfcl`). `auto` resolves from matrix metadata before reusable workflow dispatch |
+| `EVAL_FRAMEWORK` | Workflow: `auto`; benchmark runner: `lm-eval` | Eval runner (`lm-eval`, `kimi-vendor`, `minimax-vendor`, or `bfcl`). `auto` resolves from matrix metadata before reusable workflow dispatch |
 | `EVAL_SUITE` | Matrix-selected for automatic vendor evals; otherwise basename of `EVAL_TASKS_DIR` or `gsm8k` | Provider suite selector and artifact identity. Explicit workflow overrides remain supported |
 | `EVAL_TASKS_DIR` | `infx/evals/gsm8k.yaml` | Path to lm-eval task YAML |
 | `EVAL_RESULT_DIR` | `/tmp/eval_out-*` | Output directory for eval results |
@@ -641,55 +641,8 @@ Source rewrites are anchor-checked, idempotent, and atomic.
   (extracts `reasoning_content` when `message.content` is empty) and TRT
   compatibility (no `{"type": "text"}` injection for non-HF tokenizers).
   Copied into a temp dir as `sitecustomize.py` on `PYTHONPATH`.
-- `patch_swebench_agent.py` (`_patch_swebench_agent`): mini-swe-agent/swe-rex
-  sandbox lifecycle cleanup, budget-exhaustion submission fallback, and the
-  [SWE-ReX #281](https://github.com/SWE-agent/SWE-ReX/pull/281) closed-stdin fix.
-- `patch_swebench_scoring.py` (`_patch_swebench_scoring`): swebench Modal
-  scorer reserved-CPU reduction + sandbox termination on instance completion.
-
-### SWE-bench Lite (`--framework swebench`)
-
-SWE-bench requires applying each generated patch and running repository tests.
-The dedicated framework uses mini-swe-agent for agentic generation by default,
-then scores predictions with the official SWE-bench harness. It emits
-`exact_match,resolved` in the existing lm-eval result shape so collection and
-validation remain shared with the other evals.
-
-```bash
-run_eval --framework swebench --port "$PORT"
-append_lm_eval_summary
-```
-
-- Task metadata and single-shot prompt: `infx/evals/swebench_lite.yaml`.
-- Scoring: `infx/evals/swebench_score.py` (diff extraction → `predictions.jsonl` →
-  `python -m swebench.harness.run_evaluation` → resolved-rate → results JSON). Offline
-  `--report` mode skips Docker for testing.
-- Generation modes (`SWEBENCH_GEN_MODE`) include `agentic`, the default, which runs the
-  mini-swe-agent loop against the local endpoint. Each instance's shell runs in a Modal
-  sandbox via swe-rex, matching the real SWE-bench setting. The `single-shot` mode uses
-  lm-eval with one prompt per instance. It provides a roughly 10% floor baseline and is
-  kept only as an explicit debugging escape hatch. Agentic knobs include `SWEBENCH_AGENT_WORKERS`
-  (default: the config's `CONC`, else 64), `SWEBENCH_AGENT_STEP_LIMIT` (250),
-  `SWEBENCH_AGENT_CMD_TIMEOUT` (per command, 300s), `SWEBENCH_AGENT_TIMEOUT` (6h),
-  `SWEBENCH_AGENT_SANDBOX_CPU` (unset = Modal default), and `SWEBENCH_MODAL_APP_NAME`
-  (`infx-evals-swe`).
-- Run size: an empty `EVAL_LIMIT` runs the full split of roughly 300 instances. A positive integer runs the
-  first N as an explicit smoke-test slice. `EVAL_LIMIT=full` (or `0`) also selects the full split.
-- Scoring knobs: `SWEBENCH_TASK_NAME` (selects the YAML), `SWEBENCH_MAX_WORKERS`,
-  `SWEBENCH_EVAL_SANDBOX_CPU` (cores per scoring sandbox, default 2), `SWEBENCH_EVAL_TIMEOUT`
-  (per-instance test timeout, default 900s), `SWEBENCH_NAMESPACE` (pass `""` on arm/Mac),
-  `SWEBENCH_SKIP_SCORE=true` (generate-only), `SWEBENCH_USE_MODAL=true` (score on Modal remote
-  sandboxes instead of local Docker, as used in CI). For Modal credentials, set
-  `MODAL_TOKEN_ID`/`MODAL_TOKEN_SECRET` (e.g. from a GitHub secret) or provide `~/.modal.toml`.
-  If the file is absent, the env vars are bootstrapped into it automatically. The scoring dataset
-  is derived from the YAML's `dataset_path`, which keeps generation and scoring aligned.
-  If `SWEBENCH_DATASET` is set, it must match or the run fails fast.
-- Scoring runs on Modal remote sandboxes in CI (`SWEBENCH_USE_MODAL=true`, no Docker on the GPU
-  nodes). Local Docker scoring needs about 120 GB of disk. The `thresholds.yaml` gate is `0.50`,
-  calibrated from full-split runs that scored 54%. Historical 50-instance slices scored 62–76%.
 
 ## Task files
 The following files are task definitions from lm-eval. More information on changes lives within the files:
 - `infx/evals/gsm8k.yaml`
 - `infx/evals/gpqa_diamond.yaml`
-- `infx/evals/swebench_lite.yaml` (generation only, scored by `swebench_score.py`)

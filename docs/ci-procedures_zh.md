@@ -54,7 +54,7 @@
 
 - 分支本地的 [`e2e-tests.yml`](../.github/workflows/e2e-tests.yml) 要求提供 `generate-cli-command`，并将各矩阵硬编码为 `fail-fast: false`。审计过的 [`origin/main` 版本](https://github.com/SemiAnalysisAI/InferenceX/blob/de493d8597035e6692833de6189b567887968460/.github/workflows/e2e-tests.yml) 仅在特定条件下要求该命令，并新增受信任 Changelog 派发、`fail-fast` 与功耗验证输入。
 - 分支本地的 [`run-sweep.yml`](../.github/workflows/run-sweep.yml) 缺少 `origin/main` 在 PR GPU Setup 之前新增的“Head 仓库必须与当前仓库相同”保护。该 `origin/main` 快照存在 [`trusted-external-sweep.yml` Workflow](https://github.com/SemiAnalysisAI/InferenceX/blob/de493d8597035e6692833de6189b567887968460/.github/workflows/trusted-external-sweep.yml)，本分支则没有。不要根据分支本地 Workflow 推断外部 Fork 的 Secret 或 GPU 行为。
-- 分支本地生成器的 Agentic Eval 注释指向 SWE-bench，审计过的 `origin/main` 生成器则指向 GSM8K。在描述 `all-evals` 或 `evals-only` 选择的 Agentic 数据集之前，必须检查目标 Ref。
+- 分支本地生成器的 Agentic Eval 注释可能指向与审计过的 `origin/main` 生成器不同的数据集。在描述 `all-evals` 或 `evals-only` 选择的 Agentic 数据集之前，必须检查目标 Ref。
 
 `workflow_dispatch` 请求使用其派发 `--ref` 中的 Workflow 定义；单独的 `inputs.ref` 控制 Job Checkout 的内容。在使用下方公共示例以外的输入前，应检查已部署定义：
 

@@ -216,7 +216,7 @@ A launcher under [`runners/`](../runners/) adapts logical job metadata to one ph
 - choose a single-node script, a multi-node wrapper, or a checked-in external recipe.
 - pass the workflow environment into the runtime container or allocation.
 
-Benchmark scripts under [`benchmarks/`](../benchmarks/) own the actual engine and client commands. Most source [`benchmarks/benchmark_lib.sh`](../benchmarks/benchmark_lib.sh), which centralizes server readiness, the serving benchmark client, GPU monitoring, lm-eval, SWE-bench, AgentX replay, and stable output helpers.
+Benchmark scripts under [`benchmarks/`](../benchmarks/) own the actual engine and client commands. Most source [`benchmarks/benchmark_lib.sh`](../benchmarks/benchmark_lib.sh), which centralizes server readiness, the serving benchmark client, GPU monitoring, lm-eval, AgentX replay, and stable output helpers.
 
 The boundary is intentional. A master config remains portable and reviewable. Machine paths, scheduler details, and container mechanics stay close to the fleet that requires them. Framework flags stay close to the benchmark recipe where they can be tested against that engine.
 
@@ -265,7 +265,7 @@ Test builders with small, independently worked examples and read-only inputs. Fo
 
 ### Eval and AgentX outputs
 
-For eval-only jobs, throughput output is not required. The workflow instead requires at least one `results*.json`. For jobs marked to run eval, uploads may contain `meta_env.json`, `results*.json`, `sample*.jsonl`, SWE-bench predictions and reports, and trajectory files. [`infx/evals/validate_scores.py`](../infx/evals/validate_scores.py) checks produced eval scores.
+For eval-only jobs, throughput output is not required. The workflow instead requires at least one `results*.json`. For jobs marked to run eval, uploads may contain `meta_env.json`, `results*.json`, `sample*.jsonl`, and trajectory files. [`infx/evals/validate_scores.py`](../infx/evals/validate_scores.py) checks produced eval scores.
 
 [`infx.results.evals`](../infx/results/evals.py) provides `extract_metrics` for loaded eval JSON and `build_rows` for collector output. Both accept explicit inputs without file I/O or input mutation. The builder applies metadata defaults and primary-score precedence, retaining failed evaluations as diagnostic rows. The CLI owns file discovery, concurrency eligibility, reporting, and artifact writes.
 

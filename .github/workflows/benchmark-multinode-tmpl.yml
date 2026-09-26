@@ -5,10 +5,6 @@ on:
     secrets:
       INFERENCEX_OFFICIAL_RO_HF_TOKEN:
         required: true
-      MODAL_TOKEN_ID:
-        required: false
-      MODAL_TOKEN_SECRET:
-        required: false
     inputs:
       config:
         description: "Benchmark configuration as JSON"
@@ -52,12 +48,12 @@ on:
         required: false
         default: false
       eval-framework:
-        description: "Eval runner (lm-eval, swebench, kimi-vendor, minimax-vendor, or bfcl)"
+        description: "Eval runner (lm-eval, kimi-vendor, minimax-vendor, or bfcl)"
         type: string
         required: false
         default: "lm-eval"
       eval-suite:
-        description: "Eval suite (kimi_tool_call_schema, kimi_tool_call_schema_full, minimax_m3_smoke, minimax_m3_full, bfcl_smoke, bfcl_vllm_minimax_m3, or bfcl_vllm_kimi); empty for lm-eval and swebench"
+        description: "Eval suite (kimi_tool_call_schema, kimi_tool_call_schema_full, minimax_m3_smoke, minimax_m3_full, bfcl_smoke, bfcl_vllm_minimax_m3, or bfcl_vllm_kimi); empty for lm-eval"
         type: string
         required: false
         default: ""
@@ -68,11 +64,6 @@ on:
         default: ""
       eval-limit:
         description: "Eval instance count: empty/full = whole split (default); N = first-N smoke slice"
-        required: false
-        type: string
-        default: ""
-      swebench-gen-mode:
-        description: "SWE-bench generation mode (single-shot | agentic). Empty = agentic (single-shot is an explicit debugging escape hatch)."
         required: false
         type: string
         default: ""
@@ -156,11 +147,6 @@ env:
   EVAL_SUITE: ${{ inputs.eval-suite }}
   EVAL_CONC: ${{ inputs.eval-conc }}
   EVAL_LIMIT: ${{ inputs.eval-limit }}
-  SWEBENCH_GEN_MODE: ${{ inputs.swebench-gen-mode || 'agentic' }}
-  # GPU/multi-node runners lack Docker for SWE-bench scoring.
-  SWEBENCH_USE_MODAL: 'true'
-  MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
-  MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
   REQUIRE_POWER: ${{ inputs.require-power && '1' || '0' }}
   POWER_PRODUCER_SHA: ${{ inputs.power-producer-sha }}
   # Agentic-coding env. Fixed-seq-len jobs leave these empty.
@@ -491,7 +477,6 @@ jobs:
             sample*.jsonl
             agent_preds.json
             predictions.jsonl
-            swebench_report_*.json
             *_artifacts.tar.gz
             *.traj*
           if-no-files-found: ${{ inputs.eval-only && 'error' || 'ignore' }}
@@ -518,7 +503,7 @@ jobs:
           rm -f -- ./*_results.jsonl || true
           rm -f -- ./*_artifacts.tar.gz || true
           rm -f sample*.jsonl || true
-          rm -f agent_preds.json predictions.jsonl swebench_report_*.json *.traj* || true
+          rm -f agent_preds.json predictions.jsonl *.traj* || true
 
       - name: Slurm cleanup (post-run)
         if: always()

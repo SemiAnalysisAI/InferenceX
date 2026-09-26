@@ -46,8 +46,7 @@ import os
 
 names = [
     "EVAL_FRAMEWORK", "EVAL_CONC", "EVAL_LIMIT", "EVAL_SUITE",
-    "SWEBENCH_GEN_MODE", "SWEBENCH_USE_MODAL", "MODAL_TOKEN_ID",
-    "MODAL_TOKEN_SECRET", "IS_AGENTIC", "SCENARIO_TYPE",
+    "IS_AGENTIC", "SCENARIO_TYPE",
     "TP", "EP_SIZE", "DP_ATTENTION", "PP_SIZE", "DCP_SIZE", "PCP_SIZE", "CONC",
 ]
 print(json.dumps(names + os.environ["INFERENCEX_RUNTIME_ENV_VARS"].split()))
