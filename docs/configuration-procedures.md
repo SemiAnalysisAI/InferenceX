@@ -214,6 +214,8 @@ The GLM-5.2 GB200 v0.5.17 TP4 disaggregated recipe and nightly C45 1P6D, C48 1P4
 
 For these recipes' performance jobs, the GB200 launcher selects the composite setup script explicitly: the native `--setup-script` option overrides `setup_script` in the recipe. The composite runs the existing torchao installer first and then the prefill-only NIXL patch; either failure stops setup. Eval-only jobs and other recipes, including aggregate recipes, keep the torchao-only path. Check the submitted setup override and worker setup log as well as the rendered recipe before counting the patch as executed.
 
+GLM-5.2 GB200 nightly C45 selects a DCGM collector list containing power and GPU utilization, without profiling watches, through its named recipe override. Its optional SM activity series is absent; required-power coverage and the three-second sample-gap gate remain unchanged. C48, C128 and other selectors retain their exporter commands. See the [C45 failure and mitigation record](waiver/3401.md#c45-required-power-recovery) for the excluded attempt and runtime verification boundary.
+
 ## Register an srt-slurm recipe
 
 Mapping source: [`benchmarks/multi_node/srt-slurm-recipes/RECIPES.md`](../benchmarks/multi_node/srt-slurm-recipes/RECIPES.md). Checked-in recipes: [`benchmarks/multi_node/srt-slurm-recipes/`](../benchmarks/multi_node/srt-slurm-recipes/).

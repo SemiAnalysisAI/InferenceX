@@ -219,6 +219,11 @@ base:
 
 override_1p6d_tp4_c45:
   name: disagg-gb200-1p6d-dep8-tp4-c45-mtp
+  telemetry:
+    dcgm_exporter:
+      command: >-
+        dcgm-exporter --collect-interval=100 --address :{port}
+        --collectors /infmax-workspace/benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb200-fp4/agentx/power-counters.csv
   roles:
     decode:
       nodes: 6

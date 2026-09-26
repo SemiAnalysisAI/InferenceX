@@ -9053,3 +9053,12 @@
     - "Preserve GLM-5.2 GB200 recovery setup, job identity and required PowerX when selecting consolidated recipes and the canonical AgentX benchmark command."
     - "为 GLM-5.2 GB200 的合并配方及规范 AgentX 命令保留恢复安装、作业身份和必需 PowerX。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3401
+
+- config-keys:
+  - glm5.2-fp4-gb200-dynamo-sglang-agentic-mtp
+  scenario-type:
+  - agentic-coding
+  description:
+  - Select power and GPU utilization counters without optional DCGM profiling watches for GLM-5.2 GB200 C45 after a required-power sampling gap; preserve other selectors and the three-second acceptance limit.
+  - GLM-5.2 GB200 C45 出现必需功耗采样间隔失败后，选择功率和 GPU 利用率计数器，移除可选 DCGM profiling watch；保留其他 selector 和三秒验收门槛。
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3401

@@ -163,6 +163,8 @@ GLM-5.2 GB200 v0.5.17 TP4 分离式配方和 nightly C45 1P6D、C48 1P4D、C128 
 
 这些配方的性能任务由 GB200 启动器显式选择组合安装脚本，因为原生 `--setup-script` 参数会覆盖配方中的 `setup_script`。组合脚本先执行现有 torchao 安装，再执行仅限 prefill 的 NIXL 修复；任一步失败都会终止安装。仅评测任务及其他配方（包括聚合配方）继续使用只安装 torchao 的路径。确认补丁实际执行时，除渲染后的配方外，还必须核对提交的 setup 覆盖参数和 worker 安装日志。
 
+GLM-5.2 GB200 nightly C45 通过命名配方 override 选择仅包含功率和 GPU 利用率、不启用 profiling watch 的 DCGM 计数器列表。可选的 SM activity 序列将缺失；必需功耗覆盖和三秒采样间隔门槛不变。C48、C128 及其他 selector 保留原有 exporter 命令。被排除的尝试和运行时验证边界见 [C45 失败与缓解记录](waiver/3401_zh.md#c45-必需功耗恢复)。
+
 ## 注册 srt-slurm 配方
 
 映射来源：[`benchmarks/multi_node/srt-slurm-recipes/RECIPES.md`](../benchmarks/multi_node/srt-slurm-recipes/RECIPES.md)。检入的配方：[`benchmarks/multi_node/srt-slurm-recipes/`](../benchmarks/multi_node/srt-slurm-recipes/)。

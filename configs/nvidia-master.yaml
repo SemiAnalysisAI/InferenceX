@@ -7328,6 +7328,7 @@ glm5.2-fp4-gb200-dynamo-sglang-agentic-mtp:
           ep: 8
           dp-attn: true
           additional-settings:
+          # C45 requires power and GPU utilization without optional DCGM profiling watches.
           - CONFIG_FILE=recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-dep8-mtp-variants.yaml:override_1p6d_tp4_c45
         decode:
           num-worker: 6

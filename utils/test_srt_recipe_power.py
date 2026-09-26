@@ -200,7 +200,14 @@ def test_native_selector_controls_the_power_lane(
     raw = {
         "schema": 2,
         "base": agentx_recipe,
-        "override_power": {"telemetry": {"enabled": True}},
+        "override_power": {
+            "telemetry": {
+                "enabled": True,
+                "dcgm_exporter": {
+                    "command": "dcgm-exporter --address :{port} --collectors /configs/power.csv"
+                },
+            }
+        },
         "zip_override_power": {
             "name": ["disabled", "enabled"],
             "telemetry": {"enabled": [False, True]},
@@ -213,6 +220,12 @@ def test_native_selector_controls_the_power_lane(
     resolved = _resolved_submission(raw, commands[0])
     assert resolved["telemetry"]["enabled"] is bool(expected)
     assert resolved["benchmark"]["concurrencies"] == [1, 4]
+    expected_exporter = {"container_image": "dcgm-exporter", "port": 9401}
+    if selector == "override_power":
+        expected_exporter["command"] = (
+            "dcgm-exporter --address :{port} --collectors /configs/power.csv"
+        )
+    assert resolved["telemetry"]["dcgm_exporter"] == expected_exporter
 
 
 @pytest.mark.parametrize(
