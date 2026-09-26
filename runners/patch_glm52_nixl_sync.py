@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
-"""Candidate synchronous UCX progress for GLM GB200 SGLang v0.5.17 prefill.
+"""Guarded synchronous UCX progress for GLM GB200 prefill.
 
-The input hash identifies the upstream release source, not yet the installed
-image. Unknown image contents fail closed. This workaround removes the progress
-thread path reported in ai-dynamo/nixl#2102; GPU recovery remains unverified.
+The input hash identifies byte-identical v0.5.17 and 9303e26f source.
+Unknown installed contents fail closed. This workaround removes the progress
+thread path reported in ai-dynamo/nixl#2102.
 """
 
 from __future__ import annotations
@@ -101,7 +101,7 @@ def main(argv: list[str]) -> int:
         print(f"ERROR: NIXL prefill candidate rejected: {error}", file=sys.stderr)
         return 1
     state = "Patched" if changed else "Already patched"
-    print(f"{state} SGLang v0.5.17 UCX prefill synchronous-progress candidate")
+    print(f"{state} SGLang UCX prefill synchronous-progress candidate; source={SOURCE_HASH} output={PATCHED_HASH}")
     return 0
 
 
