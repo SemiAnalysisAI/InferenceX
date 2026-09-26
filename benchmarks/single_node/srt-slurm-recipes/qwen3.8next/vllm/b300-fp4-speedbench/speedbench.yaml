@@ -36,6 +36,8 @@ base:
   engine:
     type: vllm
     connector: null
+    # The qwen38-flash-next build may predate --device-ids; bind GPUs via CUDA_VISIBLE_DEVICES.
+    set_visible_devices: true
   health_check:
     interval_seconds: 10
     max_attempts: 360

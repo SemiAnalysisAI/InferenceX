@@ -629,3 +629,12 @@ def test_speedbench_cells_keep_string_env_through_srtctl_variant_round_trip(reci
         env = reloaded["benchmark"]["env"]
         assert all(isinstance(value, str) for value in env.values()), (selector, env)
         assert env["THINKING"] in {"thinking_on", "thinking_off"}
+
+
+@pytest.mark.parametrize(
+    "recipe", sorted(Path("benchmarks/single_node/srt-slurm-recipes").glob("*/vllm/b300-fp4-speedbench/speedbench.yaml"))
+)
+def test_speedbench_recipes_bind_gpus_without_device_ids(recipe):
+    # vLLM v0.21.0 rejects srtctl's default --device-ids binding at startup.
+    raw = yaml.safe_load(recipe.read_text())
+    assert raw["base"]["engine"]["set_visible_devices"] is True

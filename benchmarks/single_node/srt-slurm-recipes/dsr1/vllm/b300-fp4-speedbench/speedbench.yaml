@@ -28,6 +28,8 @@ base:
   engine:
     type: vllm
     connector: null
+    # vLLM v0.21.0 predates --device-ids; bind GPUs via CUDA_VISIBLE_DEVICES.
+    set_visible_devices: true
   health_check:
     interval_seconds: 10
     max_attempts: 360
