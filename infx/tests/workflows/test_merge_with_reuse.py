@@ -29,9 +29,6 @@ from infx.workflows.merge_with_reuse import (
     wait_for_checks,
 )
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
 
 def make_mock_label(name: str) -> MagicMock:
@@ -131,9 +128,6 @@ def make_status(
     return s
 
 
-# ---------------------------------------------------------------------------
-# Fixture: temporary git repo
-# ---------------------------------------------------------------------------
 
 
 @pytest.fixture
@@ -148,9 +142,6 @@ def temp_repo(tmp_path):
     return repo
 
 
-# ---------------------------------------------------------------------------
-# Unit tests: _resolve_token
-# ---------------------------------------------------------------------------
 
 
 class TestResolveToken:
@@ -208,9 +199,6 @@ class TestResolveToken:
         assert token == secret  # it's returned, not printed
 
 
-# ---------------------------------------------------------------------------
-# Unit tests: find_eligible_run
-# ---------------------------------------------------------------------------
 
 
 class TestFindEligibleRun:
@@ -294,9 +282,6 @@ class TestFindEligibleRun:
             assert result == 99
 
 
-# ---------------------------------------------------------------------------
-# Unit tests: wait_for_check
-# ---------------------------------------------------------------------------
 
 
 class TestWaitForCheck:
@@ -367,9 +352,6 @@ class TestWaitForCheck:
         assert result == 0
 
 
-# ---------------------------------------------------------------------------
-# Unit tests: wait_for_checks (all-checks polling)
-# ---------------------------------------------------------------------------
 
 
 class TestWaitForChecks:
@@ -520,7 +502,6 @@ class TestWaitForChecks:
             # Stale on first poll -> waits -> timeout
             mock_time.side_effect = [0, 0, 11]
             result = wait_for_checks(pull, sha, gh_repo, timeout=10)
-        # Should timeout (stale never resolves in this test)
         assert result == 1
 
     def test_genuine_failure_fail_fast(self):
@@ -538,7 +519,6 @@ class TestWaitForChecks:
 
         sha = "a" * 40
         result = wait_for_checks(pull, sha, gh_repo, timeout=60)
-        # Should fail fast without waiting
         assert result == 1
 
     def test_no_checks_yet_keeps_waiting(self):
@@ -575,11 +555,8 @@ class TestWaitForChecks:
         commit.get_combined_status.return_value = combined
 
         sha = "a" * 40
-        # cancelled is completed, not a fail-fast trigger, counts as "passed"
-        # since it's in the "completed" bucket but not in _FAIL_FAST_CONCLUSIONS
+        # A cancelled check completes polling without triggering fail-fast.
         result = wait_for_checks(pull, sha, gh_repo, timeout=10)
-        # Only cancelled check -> completed, passes the all_completed gate,
-        # and since cancelled is not in _FAIL_FAST_CONCLUSIONS, returns 0
         assert result == 0
 
     def test_transient_error_retried_then_succeeds(self):
@@ -615,9 +592,6 @@ class TestWaitForChecks:
         assert result == 0
 
 
-# ---------------------------------------------------------------------------
-# Unit tests: _latest_check_runs / _latest_statuses
-# ---------------------------------------------------------------------------
 
 
 class TestDeduplication:
@@ -650,9 +624,6 @@ class TestDeduplication:
         assert result[0].id == 2
 
 
-# ---------------------------------------------------------------------------
-# Unit tests: transient error helpers
-# ---------------------------------------------------------------------------
 
 
 class TestTransientErrors:
@@ -714,9 +685,6 @@ class TestTransientErrors:
         assert delay == 60.0
 
 
-# ---------------------------------------------------------------------------
-# Unit tests: _poll_pr_head
-# ---------------------------------------------------------------------------
 
 
 class TestPollPrHead:
@@ -750,9 +718,6 @@ class TestPollPrHead:
         assert result == "stale_sha"
 
 
-# ---------------------------------------------------------------------------
-# Unit tests: main() CLI
-# ---------------------------------------------------------------------------
 
 
 class TestMainCli:
@@ -789,9 +754,6 @@ class TestMainCli:
         mock_merge.assert_called_once()
 
 
-# ---------------------------------------------------------------------------
-# Integration-style tests: merge_pr with full mocking
-# ---------------------------------------------------------------------------
 
 
 class TestMergePrEligibility:
@@ -1191,7 +1153,6 @@ class TestMergePrFullFlow:
                 _gh=gh,
             )
         assert result == 0
-        # Should have called commit with --amend
         git_ops.commit.assert_any_call("--amend", "--no-edit")
 
     def test_synchronize_empty_commit(self):
@@ -1227,7 +1188,6 @@ class TestMergePrFullFlow:
                 _gh=gh,
             )
         assert result == 0
-        # Should have called commit with --allow-empty
         git_ops.commit.assert_any_call(
             "--allow-empty",
             "-m",
@@ -1235,9 +1195,6 @@ class TestMergePrFullFlow:
         )
 
 
-# ---------------------------------------------------------------------------
-# Test: exit codes
-# ---------------------------------------------------------------------------
 
 
 class TestExitCodes:
@@ -1249,9 +1206,6 @@ class TestExitCodes:
         assert die("error") == 1
 
 
-# ---------------------------------------------------------------------------
-# Test: token never leaks
-# ---------------------------------------------------------------------------
 
 
 class TestTokenNeverLeaks:
@@ -1312,9 +1266,7 @@ class TestTokenNeverLeaks:
             )
         assert result == 1
         captured = capsys.readouterr()
-        # API message is surfaced
         assert "Pull Request is not mergeable" in captured.err
-        # Token NEVER appears
         assert secret not in captured.out
         assert secret not in captured.err
 
@@ -1336,9 +1288,6 @@ class TestTokenNeverLeaks:
         assert secret not in captured.err
 
 
-# ---------------------------------------------------------------------------
-# Integration tests: real git repo
-# ---------------------------------------------------------------------------
 
 
 class TestShowStageRawBytes:
@@ -1444,18 +1393,13 @@ class TestChangelogConflictIntegration:
         merge_rc = git_ops.merge(main_branch, "--no-ff", "--no-edit")
         assert merge_rc != 0, "Expected a merge conflict"
 
-        # Resolve
         result = resolve_changelog_conflict(99, "SemiAnalysisAI/InferenceX", git_ops)
         assert result is True
 
         resolved = changelog_path.read_bytes()
-        # Main's content is preserved at the start
         assert resolved.startswith(main_raw.rstrip(b"\n"))
-        # PR entry is appended
         assert b"model-b/h100" in resolved
-        # Resolved ends with newline
         assert resolved.endswith(b"\n")
-        # PR link is canonicalized
         assert b"https://github.com/SemiAnalysisAI/InferenceX/pull/99" in resolved
 
         # Validate no deletion lines vs main
@@ -1471,9 +1415,6 @@ class TestChangelogConflictIntegration:
         validate_raw_change(main_raw, resolved, len(additions), corrections)
 
 
-# ---------------------------------------------------------------------------
-# Integration tests: branch cleanup
-# ---------------------------------------------------------------------------
 
 
 class TestBranchCleanup:
@@ -1584,9 +1525,6 @@ class TestMergeAbortInCleanup:
         assert branch_name not in [b.name for b in repo.heads]
 
 
-# ---------------------------------------------------------------------------
-# Test: _MergeState
-# ---------------------------------------------------------------------------
 
 
 class TestMergeState:

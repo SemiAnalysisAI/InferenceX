@@ -22,7 +22,6 @@ DEFAULT_AGENTIC_DURATION_SECONDS = 3600
 
 
 class Fields(Enum):
-    # Field name constants
     # Top-level config fields
     IMAGE = "image"
     MODEL = "model"
@@ -1081,39 +1080,19 @@ class ChangelogMatrixEntry(BaseModel):
         default_factory=dict
     )
     evals: list[SingleNodeMatrixEntry] = Field(default_factory=list)
-    # Agentic GSM8K eval rows live in their own bucket rather than a
-    # union inside `evals`: each bucket maps 1:1 to a run-sweep.yml job with a
-    # static input block, so an agentic row can never reach the fixed-seq-len
-    # eval dispatch (which reads isl/osl/max-model-len and would launch the
-    # wrong benchmark script).
+    # Each bucket maps to a run-sweep.yml job with fixed inputs. Separate
+    # AgentX rows so they cannot dispatch the fixed-sequence benchmark.
     agentic_evals: list[SingleNodeAgenticMatrixEntry] = Field(default_factory=list)
     multinode_evals: list[MultiNodeMatrixEntry] = Field(default_factory=list)
-    # Multi-node agentic (SWE-bench) eval rows, split out of multinode_evals
-    # the same way agentic_evals is split out of evals: they carry the
-    # agentic input shape (scenario-type, kv-offloading, ...) rather than
-    # the fixed-seq-len shape (isl/osl/max-model-len) multinode_evals rows do.
     multinode_agentic_evals: list[MultiNodeAgenticMatrixEntry] = Field(default_factory=list)
     changelog_metadata: ChangelogMetadata
 
 
-# =============================================================================
 # File Loading Functions
-# =============================================================================
 
 
 def load_config_files(config_files: list[str], validate: bool = True) -> dict:
-    """Load and merge configuration files.
-
-    Args:
-        config_files: List of paths to YAML configuration files.
-        validate: If True, run validate_master_config on loaded data. Defaults to True.
-
-    Returns:
-        Merged configuration dictionary.
-
-    Raises:
-        ValueError: If file doesn't exist, isn't a dict, or has duplicate keys.
-    """
+    """Merge YAML configs, rejecting missing files, non-mappings and duplicate keys."""
     all_config_data = {}
     for config_file in config_files:
         try:
@@ -1151,18 +1130,7 @@ def load_config_files(config_files: list[str], validate: bool = True) -> dict:
 
 
 def load_runner_file(runner_file: str, validate: bool = True) -> dict:
-    """Load runner configuration file.
-
-    Args:
-        runner_file: Path to the runner YAML configuration file.
-        validate: If True, run validate_runner_config on loaded data. Defaults to True.
-
-    Returns:
-        Runner configuration dictionary.
-
-    Raises:
-        ValueError: If file doesn't exist or fails validation.
-    """
+    """Load runner YAML, optionally validating its schema."""
     try:
         with open(runner_file) as f:
             runner_config = yaml.safe_load(f)

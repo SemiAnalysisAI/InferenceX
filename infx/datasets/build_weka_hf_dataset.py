@@ -47,9 +47,7 @@ PLOT_WEKA = HERE / "plot_weka_distributions.py"
 PLOT_SUBAGENT = HERE / "plot_subagent_distributions.py"
 
 
-# ---------------------------------------------------------------------------
 # Pipeline stages
-# ---------------------------------------------------------------------------
 
 
 def parse_args() -> argparse.Namespace:
@@ -85,7 +83,6 @@ def parse_args() -> argparse.Namespace:
         help="Cache directory for sample/convert/upload payload.",
     )
 
-    # sampler pass-through
     p.add_argument("--min-trace-version", type=int, default=None)
     p.add_argument("--max-trace-version", type=int, default=None)
     p.add_argument(
@@ -124,7 +121,6 @@ def parse_args() -> argparse.Namespace:
         "dynamic-workflow-bug filter (sampler default 3).",
     )
 
-    # auth
     p.add_argument("--db-url", default=None, help="Postgres URL (else $AGENTIC_PROXY_DB_URL).")
     p.add_argument(
         "--hf-token",
@@ -132,7 +128,6 @@ def parse_args() -> argparse.Namespace:
         help="HF write token (else $HF_TOKEN or cached login).",
     )
 
-    # idempotency
     p.add_argument("--skip-sample", action="store_true", help="Reuse work-dir/proxy/ if present.")
     p.add_argument(
         "--skip-convert",
@@ -210,9 +205,7 @@ def stage_convert(args: argparse.Namespace, proxy_dir: Path, work_dir: Path) -> 
     return per_trace
 
 
-# ---------------------------------------------------------------------------
 # Payload assembly
-# ---------------------------------------------------------------------------
 
 
 def _concat_traces_jsonl(per_trace_dir: Path, out_path: Path) -> int:
@@ -504,9 +497,7 @@ def _build_payload(
     return stats
 
 
-# ---------------------------------------------------------------------------
 # Request-drop filters (256k total cap; ISL-only cap)
-# ---------------------------------------------------------------------------
 
 
 def _is_oversize(req: dict, cap: int = CAP_TOKENS) -> bool:
@@ -520,20 +511,11 @@ def _is_oversize_isl(req: dict, cap: int) -> bool:
 
 
 def _filter_trace(trace: dict, is_oversize: Callable[[dict], bool]) -> dict | None:
-    """Drop requests for which ``is_oversize`` is true.
+    """Drop oversized requests and subagent groups with no surviving requests.
 
-      - per-request drop when ``is_oversize(req)``
-      - sub-agent group dropped only if every inner is filtered
-      - surviving timestamps retain their original relative offsets
-
-    ``think_time`` is computed over the globally ordered proxy rows, so it
-    cannot reconstruct overlapping top-level entries. Rebuilding timestamps
-    by chaining ``prev_t + prev_api_time + think_time`` serializes concurrent
-    subagents. Instead, preserve the recorded wall-clock topology. When the
-    earliest request is removed, translate every surviving timestamp by the
-    same offset so the trace still starts at zero.
-
-    Returns the filtered trace (deep copy) or None if nothing survives.
+    Preserve relative timestamps, shifting all survivors equally to start at
+    zero. Reconstructing from think_time would serialize concurrent subagents.
+    Return a deep copy, or None if nothing survives.
     """
     out = copy.deepcopy(trace)
     requests = out.get("requests", [])
@@ -645,9 +627,7 @@ def stage_isl_filter(per_trace_dir: Path, work_dir: Path, cap: int) -> Path:
     )
 
 
-# ---------------------------------------------------------------------------
 # Upload
-# ---------------------------------------------------------------------------
 
 
 def stage_upload(
@@ -702,9 +682,7 @@ def _reconstruct_sampler_cmd(args: argparse.Namespace) -> list:
     return cmd
 
 
-# ---------------------------------------------------------------------------
 # Main
-# ---------------------------------------------------------------------------
 
 
 def main() -> int:
