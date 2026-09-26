@@ -86,7 +86,7 @@ Required permissions (all of these endpoints require **admin access to the repos
    to fetch the **registration token** and **runner tarball URL**, which are inputs to
    `setup.sh`:
 
-   ![Where to find the runner URL and token](assets/new-runner-page.png)
+   ![Where to find the runner URL and token](<img width="691" height="508" alt="image" src="https://github.com/user-attachments/assets/d84efbf4-621f-4136-8051-269869398e91" />)
 
    > Note: the registration token expires after ~1 hour. If `config.sh` starts failing with
    > authentication errors partway through, refresh the page and re-run with a new token.
