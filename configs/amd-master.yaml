@@ -704,7 +704,7 @@ kimik3-fp4-mi355x-atom-agentic-mtp:
       - { tp: 8, kv-offloading: none, conc-list: [1, 4], spec-decoding: mtp, srt-recipe: benchmarks/single_node/srt-slurm-recipes/kimik3/atom/mi355x-fp4-mtp/agentic.yaml }
 
 minimaxm3-fp4-mi355x-atom-agentic-mtp:
-  image: rocm/atom-dev:nightly_202609171455
+  image: rocm/atom-dev:nightly_202609261501
   model: amd/MiniMax-M3-MXFP4
   model-prefix: minimaxm3
   runner: cluster:mi355x-amds

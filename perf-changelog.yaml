@@ -9052,3 +9052,9 @@
   description:
     - "Retain the branch Kimi MI355X grid through native SRT-Slurm variants, including no-draft DCP8, after removal of its legacy launcher"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3156
+
+- config-keys:
+    - minimaxm3-fp4-mi355x-atom-agentic-mtp
+  description:
+    - "Qualify stock ATOM nightly_202609261501 with native MiniMax tool evals and a matching stock router; omit runtime dependency installation and host tuning"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3156

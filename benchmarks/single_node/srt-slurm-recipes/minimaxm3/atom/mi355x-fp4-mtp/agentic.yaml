@@ -7,21 +7,29 @@ base:
   name: minimaxm3-fp4-mi355x-atom-agentic
   model:
     path: hf:amd/MiniMax-M3-MXFP4
-    container: rocm/atom-dev:nightly_202609171455
+    container: rocm/atom-dev:nightly_202609261501
     precision: fp4
   resources:
     gpu_type: mi355x
     gpus_per_node: 8
   frontend:
     type: atomesh
-    container_image: rocm/atom-dev@sha256:f00a9dc588a380038fdad54cd57a956043cb316ddda54ebb1b62a24f8caa343b
+    container_image: rocm/atom-dev:nightly_202609261501
     enable_multiple_frontends: false
+    args:
+      tool-call-parser: minimax
   observability:
     enabled: false
     tachometer:
       enabled: false
   engine: atom
-  setup_script: minimaxm3-atom-eagle3-deps.sh
+  # Stock-image trial: do not install dependencies or modify engine files.
+  host_setup:
+    timeout_seconds: 1200
+    nodes: all
+    commands:
+    - IBDEVICES=rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7 bash {infmax_workspace}/runners/srt-slurm/hooks/mi355x-amds/check-rdma.sh
+    - bash -c 'source {infmax_workspace}/runners/srt-slurm/hooks/common.sh; wait_for_amd_gpu_clean'
   roles:
     agg:
       nodes: 1
