@@ -1,0 +1,111 @@
+--- a/pyslurm/core/job/job.pyx	2026-04-15 17:24:11
++++ b/pyslurm/core/job/job.pyx	2026-09-26 15:21:07
+@@ -464,7 +464,7 @@
+             >>> pyslurm.Job(9999).modify(changes)
+         """
+         changes._create_job_submit_desc(is_update=True)
+-        changes.ptr.step_id.job_id = self.id
++        changes.ptr.job_id = self.id
+         verify_rpc(slurm_update_job(changes.ptr))
+ 
+     def hold(self, mode=None):
+@@ -650,7 +650,7 @@
+         slurm_msg_t_init(&resp)
+ 
+         memset(&msg, 0, sizeof(msg))
+-        msg.step_id.job_id = self.id
++        msg.job_id = self.id
+         req.msg_type = slurm.REQUEST_BATCH_SCRIPT
+         req.data = &msg
+ 
+@@ -1337,7 +1337,9 @@
+ 
+     @property
+     def submit_line(self):
+-        return cstr.to_unicode(self.ptr.submit_line)
++        # submit_line was added to slurm_job_info_t in Slurm 25.11.
++        # Not available on 25.05.
++        return None
+ 
+     @property
+     def run_time_remaining(self):
+--- a/pyslurm/core/job/submission.pyx	2026-04-15 17:24:11
++++ b/pyslurm/core/job/submission.pyx	2026-09-26 15:15:22
+@@ -102,7 +102,7 @@
+         self._create_job_submit_desc()
+         verify_rpc(slurm_submit_batch_job(self.ptr, &resp))
+ 
+-        job_id = resp.step_id.job_id
++        job_id = resp.job_id
+         slurm_free_submit_response_response_msg(resp)
+ 
+         return job_id
+--- a/pyslurm/core/job/step.pyx	2026-04-15 17:24:11
++++ b/pyslurm/core/job/step.pyx	2026-09-26 15:21:07
+@@ -111,7 +111,7 @@
+             dict steps = {}
+ 
+         step_id.job_id = job_id
+-        rc = slurm_get_job_steps(&step_id, &self.info, flags)
++        rc = slurm_get_job_steps(0, step_id.job_id, step_id.step_id, &self.info, flags)
+         verify_rpc(rc)
+ 
+         # zero-out a dummy job_step_info_t
+@@ -240,7 +240,7 @@
+ 
+         _step_id.job_id = job_id.id if isinstance(job_id, Job) else job_id
+         _step_id.step_id = dehumanize_step_id(step_id)
+-        rc = slurm_get_job_steps(&_step_id, &info, slurm.SHOW_ALL)
++        rc = slurm_get_job_steps(0, _step_id.job_id, _step_id.step_id, &info, slurm.SHOW_ALL)
+         verify_rpc(rc)
+ 
+         if info and info.job_step_count == 1:
+@@ -314,7 +314,7 @@
+             >>> pyslurm.JobStep(9999, 1).send_signal(9)
+         """
+         sig = signal_to_num(signal)
+-        verify_rpc(slurm_signal_job_step(&self.ptr.step_id, sig))
++        verify_rpc(slurm_signal_job_step(self.ptr.step_id.job_id, self.ptr.step_id.step_id, sig))
+ 
+     def cancel(self):
+         """Cancel a Job step.
+@@ -328,7 +328,7 @@
+             >>> import pyslurm
+             >>> pyslurm.JobStep(9999, 1).cancel()
+         """
+-        verify_rpc(slurm_kill_job_step(&self.ptr.step_id, 9, 0))
++        verify_rpc(slurm_kill_job_step(self.ptr.step_id.job_id, self.ptr.step_id.step_id, 9, 0))
+ 
+     def modify(self, JobStep changes):
+         """Modify a job step.
+@@ -353,7 +353,8 @@
+         """
+         cdef JobStep js = <JobStep>changes
+         js._alloc_umsg()
+-        js.umsg.step_id = self.ptr.step_id
++        js.umsg.job_id = self.ptr.step_id.job_id
++        js.umsg.step_id = self.ptr.step_id.step_id
+         verify_rpc(slurm_update_step(js.umsg))
+ 
+     def as_dict(self):
+--- a/pyslurm/core/slurmctld/config.pyx	2026-04-15 17:24:11
++++ b/pyslurm/core/slurmctld/config.pyx	2026-09-26 15:22:11
+@@ -563,7 +563,7 @@
+ 
+     @property
+     def namespace_plugin(self):
+-        return cstr.to_unicode(self.ptr.namespace_plugin)
++        return cstr.to_unicode(self.ptr.job_container_plugin)
+ 
+     @property
+     def job_defaults(self):
+@@ -681,7 +681,8 @@
+ 
+     @property
+     def metrics_type(self):
+-        return cstr.to_unicode(self.ptr.metrics_type)
++        # metrics_type was added in Slurm 25.11; not available on 25.05.
++        return None
+ 
+     @property
+     def min_job_age(self):

@@ -27,7 +27,7 @@ jobs:
       fail-fast: false
       matrix:
         cluster:
-          - h100-cw
+          - h100-dgxc
     steps:
       - name: Inventory Slurm toolchain
         env:

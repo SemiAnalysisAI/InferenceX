@@ -1,0 +1,98 @@
+[build-system]
+build-backend = "setuptools.build_meta"
+requires = [
+    "setuptools>=59.2.0",
+    "wheel>=0.37.0",
+    "Cython>=0.29.37",
+    "packaging>=21.3"
+]
+
+[project]
+name = "pyslurm"
+dynamic = ["version"]
+license = {text = "GPL-2.0-only"}
+description = "Python Interface for Slurm"
+readme = "README.md"
+requires-python = ">=3.6"
+authors = [
+    { name = "Mark Roberts" },
+    { name = "Giovanni Torres" },
+    { name = "Toni Harzendorf" },
+]
+maintainers = [
+    { name = "Toni Harzendorf", email = "toni.harzendorf@gmail.com" },
+]
+keywords = [
+    "HPC",
+    "Batch Scheduler",
+    "Resource Manager",
+    "Slurm",
+    "Cython",
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "Natural Language :: English",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Cython",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.6",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: System :: Distributed Computing",
+]
+
+[project.urls]
+Homepage = "https://github.com/PySlurm/pyslurm"
+Repository = "https://github.com/PySlurm/pyslurm"
+Issues = "https://github.com/PySlurm/pyslurm/issues"
+Discussions = "https://github.com/PySlurm/pyslurm/discussions"
+
+[project.optional-dependencies]
+dev = [
+    "ruff",
+    "cython-lint",
+    "pytest",
+    "pytest-sugar",
+]
+
+[tool.setuptools.dynamic]
+version = { attr = "pyslurm.version.__version__" }
+
+[tool.setuptools.packages.find]
+include = ["pyslurm*"]
+exclude = ["pyslurm.pydefines", "pyslurm.slurm"]
+
+[tool.ruff]
+line-length = 80
+extend-exclude = [
+    ".eggs",
+    "build",
+    "tests",
+    "examples",
+    "scripts",
+]
+
+[tool.ruff.lint]
+extend-ignore = ["E203", "E225", "E226", "E227"]
+
+[tool.ruff.lint.isort]
+
+[tool.cython-lint]
+max-line-length = 80
+ignore = ['E503', 'E504']
+exclude = 'deprecated.pyx'
+
+[tool.codespell]
+skip = '.git,*.pdf,*.svg,*.lock,*.css'
+check-hidden = true
+ignore-words-list = 'mmaped,splitted'
