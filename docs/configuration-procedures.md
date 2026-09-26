@@ -220,7 +220,7 @@ Do not ship one side alone. `srtctl` reads the recipe, while matrix generation r
 
 ## Register an llm-d recipe
 
-Sources: [`benchmarks/llm-d/README.md`](../benchmarks/llm-d/README.md), [`benchmarks/multi_node/llm-d/README.md`](../benchmarks/multi_node/llm-d/README.md), [`llm-d-recipes/`](../benchmarks/multi_node/llm-d-recipes/), and the current [`llmd-vllm` benchmark wrapper](../benchmarks/multi_node/dsv4_fp4_gb200_llmd-vllm-disagg.sh).
+Sources: [`benchmarks/llm-d/README.md`](../benchmarks/llm-d/README.md), [`benchmarks/multi_node/llm-d/README.md`](../benchmarks/multi_node/llm-d/README.md), and [`llm-d-recipes/`](../benchmarks/multi_node/llm-d-recipes/).
 
 llm-d is not the srt-slurm path: InferenceX owns the Slurm allocation and starts one container per node.
 
