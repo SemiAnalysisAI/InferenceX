@@ -89,7 +89,9 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
         raise ValueError(f"Unsupported single-node framework: {environment['FRAMEWORK']!r}")
     spec = spec_parameters(role, engine)
     if spec and spec["method"] not in {"eagle", "eagle3", "nextn", "mtp", "dspark"}:
-        raise ValueError("Single-node SRT supports only native MTP, EAGLE3, DSpark or no speculation")
+        raise ValueError(
+            "Single-node SRT supports only native MTP, EAGLE3, DSpark or no speculation"
+        )
     # A point that stops drafting may keep its matrix label.
     speculation = "mtp" if spec else workload.get("SPEC_DECODING", "none")
     agentic = environment["IS_AGENTIC"] == "1"
@@ -108,7 +110,9 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
         # draft_model names a bundled or separate draft; its recipes speculate natively.
         "SPEC_DECODING": (
             speculation,
-            "mtp" if environment["SPEC_DECODING"] == "draft_model" else environment["SPEC_DECODING"],
+            "mtp"
+            if environment["SPEC_DECODING"] == "draft_model"
+            else environment["SPEC_DECODING"],
         ),
         "AgentX client": (benchmark.get("command", "").endswith("srt_agentic.sh"), agentic),
     }
