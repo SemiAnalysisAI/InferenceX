@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-LIBRARY = Path(__file__).resolve().parents[1] / "benchmarks" / "benchmark_lib.sh"
+LIBRARY = Path(__file__).resolve().parents[2] / "benchmarks" / "benchmark_lib.sh"
 
 
 @pytest.mark.parametrize(
