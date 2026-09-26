@@ -132,10 +132,17 @@ class SlurmClient:
         desc = pyslurm.JobSubmitDescription(
             name=job_name,
             script="#!/bin/bash\nexec sleep infinity\n",
+            # The holder only sleeps. Its default slurm-%j.out lands in the submit
+            # directory, which compute pods may not mount (h100-dgxc: the batch
+            # step dies with signal 53), so write nowhere and start in /.
+            standard_output="/dev/null",
+            standard_error="/dev/null",
+            working_directory="/",
             partitions=partition,
             account=account,
             gres_per_node=gres,
-            time_limit=time_limit,
+            # salloc --time takes bare minutes ("480"); pyslurm needs an int for that form.
+            time_limit=int(time_limit) if time_limit.strip().isdigit() else time_limit,
             nodes=num_nodes,
             resource_sharing="no" if exclusive else None,
         )

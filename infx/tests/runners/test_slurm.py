@@ -177,9 +177,22 @@ class TestSubmitHolderJob:
         assert submission["partitions"] == "hpc-gpu-1"
         assert submission["account"] == "customer"
         assert submission["gres_per_node"] == "gpu:8"
-        assert submission["time_limit"] == "180"
+        assert submission["time_limit"] == 180  # bare minutes become an int for pyslurm
         assert submission["resource_sharing"] == "no"
         assert "sleep infinity" in submission["script"]
+        # Compute pods may not see the submit directory; the holder writes nowhere.
+        assert submission["standard_output"] == "/dev/null"
+        assert submission["standard_error"] == "/dev/null"
+        assert submission["working_directory"] == "/"
+
+    def test_clock_time_limit_passes_through(self, _inject_fake_pyslurm):
+        _, _, fake_jsd, _ = _inject_fake_pyslurm
+        from infx.runners.slurm import SlurmClient
+
+        SlurmClient.submit_holder_job(
+            partition="p", account="a", gres="gpu:8", time_limit="08:00:00", job_name="n",
+        )
+        assert fake_jsd._last_submission["time_limit"] == "08:00:00"
 
 
 class TestJobState:
