@@ -8217,39 +8217,6 @@ glm5.1-fp8-b200-tilert:
           additional-settings:
           - "DECODE_NODES=1"
 
-glm5.1-fp8-b200-tilert-agentic:
-  image: ghcr.io/tile-ai/tilert:0.1.5
-  model: zai-org/GLM-5.1-FP8
-  model-prefix: glm5.1
-  runner: cluster:b200-nscale
-  precision: fp8
-  framework: tilert
-  router: { name: tilert-pd-router, version: "0.1.5.post3" }
-  multinode: true
-  disagg: true
-  kv-p2p-transfer: nixl
-  scenarios:
-    agentic-coding:
-    - search-space:
-      - spec-decoding: "mtp"
-        conc-list: [1]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_IMAGE=vllm/vllm-openai:v0.26.0"
-          - "PREFILL_NODES=1"
-          - "CONFIG_FILE=recipes/glm5.1/tilert/b200-fp8/agentx/disagg-1p1d-tp8-mtp.yaml"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=1"
-
 # H100 AgentX arm for DeepSeek-V4.1-Flash. H100 is not in the upstream hardware
 # table (h200, gb200, gb300, mi350x are). It needs its own script, not the
 # shared symlink: the sparse attention indexer's
