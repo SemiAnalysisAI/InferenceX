@@ -409,7 +409,11 @@ def build_config(
             fixed_sha,
         ],
         cwd=worktree,
-        env={**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[2])},
+        env={
+            **os.environ,
+            "PYTHONPATH": str(Path(__file__).resolve().parents[2]),
+            "INFERENCEX_REPOSITORY_ROOT": str(worktree.resolve()),
+        },
     )
     try:
         config = json.loads(result.stdout)

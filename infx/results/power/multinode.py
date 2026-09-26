@@ -1449,7 +1449,7 @@ def main() -> int:
         "--agg-result",
         type=Path,
         required=True,
-        help="Path to the agg_<run>.json output of process_result.py (will be patched in place)",
+        help="Path to the agg_<run>.json output of infx.results.fixed_sequence (will be patched in place)",
     )
     parser.add_argument(
         "--prefill-gpus",

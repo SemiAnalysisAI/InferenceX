@@ -148,7 +148,7 @@ flowchart LR
 
 从仓库根目录或安装好的包运行 `python -m infx.matrix.plan` 进行变更日志规划，运行 `python -m infx.workflows.validate_perf_changelog` 进行验证。矩阵生成通过 `python -m infx.matrix.generate` 运行；历史 append-only 规划使用基准修订版自身的生成器，缺少模块时使用该修订版的旧脚本。摄取恢复使用恢复工具自身的规划模块，以及所选 worktree 的配置和配方。
 
-使用当前工具代码的工作流直接调用 `infx` 模块，测试也导入规范模块。可信调度和结果处理通过 `PYTHONPATH` 和 Python 的 `-P` 选项明确指定工具代码所在的检出目录，同时仍以目标检出目录作为工作目录读取输入。仓库数据查找优先使用包含 `configs/` 的工作目录；从其他位置调用时回退到源码检出目录。
+使用当前工具代码的工作流直接调用 `infx` 模块，测试也导入规范模块。可信调度和结果处理通过 `PYTHONPATH` 和 Python 的 `-P` 选项明确指定工具代码所在的检出目录，同时仍以目标检出目录作为工作目录读取输入。恢复工具将 `INFERENCEX_REPOSITORY_ROOT` 设为所选 worktree，确保配方数据来自该修订版；其他调用方仍默认使用源码检出目录。
 
 `infx.matrix.plan.build_plan(changelog_data, base_ref=..., head_ref=...)` 返回完整扫描的已验证 `ChangelogMatrixEntry`，统一负责条目优先级、基准测试与评测各自的场景覆盖、裁剪、指纹及输出分桶。当前主配置文件只加载一次，运行器元数据在首次生成时加载一次；每组选中的配置直接调用 `infx.matrix.generate.generate_config_matrix`。当前输入来自传入的路径（默认为检出目录中的路径），`head_ref` 仍用作来源元数据。规划过程假设这些文件在本次操作期间保持稳定。
 
