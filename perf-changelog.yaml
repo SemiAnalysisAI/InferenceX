@@ -8969,4 +8969,4 @@
     - agentic-coding
   description:
     - "Update B300 vLLM AgentX to DSpark6 on a new image with a sampled concurrency grid and per-mode --kv-cache-memory-bytes pins."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3477

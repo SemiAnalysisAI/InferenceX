@@ -122,14 +122,8 @@ zip_override_dep8:
         long-prefill-token-threshold: 512
         max-num-batched-tokens: [8304, 8360, 8416, 8528, 8640, 8696]
         gpu-memory-utilization: 0.92
-        # Historical concurrency-tier limits, each reduced by 1 GiB.
-        kv-cache-memory-bytes:
-        - 127049332736  # c64
-        - 125124147200  # c96
-        - 125124147200  # c128
-        - 125124147200  # c192
-        - 119885460480  # c256
-        - 119885460480  # c288
+        # Leave runtime workspace headroom at every concurrency.
+        kv-cache-memory-bytes: 105000000000
         max-num-seqs: [16, 24, 32, 48, 64, 72]
         compilation-config:
         - '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,7,12,14,18,21,24,28,30,35,36,42,48,49,54,56,60,63,66,70,72,77,78,84,90,91,96,98,105,112]}'
