@@ -8,6 +8,7 @@ import fnmatch
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 from collections.abc import Mapping
@@ -243,17 +244,90 @@ def plan_commands(
     return commands
 
 
+def recipe_with_overrides(path: str, arguments: list[str]) -> tuple[dict[str, Any], list[Any]]:
+    """Use the same native caller-override ordering for inspection and submission."""
+    from srtctl.core.overrides import apply_overrides_to_recipe, parse_overrides
+
+    raw = yaml.safe_load(Path(path).read_text())
+    if not isinstance(raw, dict):
+        raise ValueError("Recipe must be a mapping")
+    parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
+    parser.add_argument("--set", action="append")
+    parser.add_argument("--unset", action="append")
+    existing, _ = parser.parse_known_args(arguments)
+    overrides = parse_overrides(existing.set, existing.unset)
+    apply_overrides_to_recipe(raw, overrides)
+    return raw, overrides
+
+
+def inspect_power(config: str, arguments: list[str], environment: Mapping[str, str]) -> str:
+    """Check the native power artifact/window contract before submission."""
+    from marshmallow import ValidationError
+    from srtctl.core.config import expand_engine_config_defaults, resolve_config_with_defaults
+    from srtctl.core.schema import SrtConfig
+
+    path, _, selector = config.partition(":")
+    raw, _ = recipe_with_overrides(path, arguments)
+    variants = selected_recipes(raw, selector or None)
+    if len(variants) != 1:
+        # Preserve existing non-AgentX, non-power multi-variant submissions.
+        # Their lifecycle is separate from the single-job PowerX result contract.
+        if (
+            variants
+            and environment["IS_AGENTIC"] != "1"
+            and all(not recipe.get("telemetry", {}).get("enabled", False) for _, recipe in variants)
+        ):
+            return "none"
+        raise ValueError("SRT power launcher requires exactly one selected recipe per job")
+    recipe = variants[0][1]
+    if not recipe.get("telemetry", {}).get("enabled", False):
+        return "none"
+    resolved = resolve_config_with_defaults(recipe, None)
+    expand_engine_config_defaults(resolved)
+    try:
+        typed = SrtConfig.Schema().load(resolved)
+    except ValidationError as error:
+        raise ValueError(f"Invalid power recipe: {error}") from error
+    if not typed.telemetry.enabled:
+        return "none"
+    if typed.telemetry.dcgm_exporter is None:
+        raise ValueError("SRT PowerX requires telemetry.dcgm_exporter")
+    if typed.telemetry.dcgm_exporter.container_image != "dcgm-exporter":
+        raise ValueError("SRT PowerX requires the dcgm-exporter container alias")
+    if typed.telemetry.storage_subdir != "power":
+        raise ValueError("SRT PowerX requires telemetry.storage_subdir: power")
+    if environment["IS_AGENTIC"] != "1":
+        return "dcgm"
+    benchmark = typed.benchmark
+    if (
+        benchmark.type != "custom"
+        or shlex.split(benchmark.command or "")
+        != ["bash", "/infmax-workspace/benchmarks/srt_agentic.sh"]
+        or benchmark.env.get("RESULT_DIR") != "/logs/agentic"
+        or benchmark.env.get("INFMAX_CONTAINER_WORKSPACE") != "/infmax-workspace"
+        or benchmark.env.get("IS_MULTINODE") != "true"
+    ):
+        raise ValueError("AgentX PowerX requires the shared srt_agentic.sh window/result contract")
+    if not typed.telemetry.required:
+        raise ValueError("AgentX PowerX requires telemetry.required: true")
+    return "agentx"
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--inspect-power", action="store_true")
     parser.add_argument("config")
     parser.add_argument("framework")
     parser.add_argument("arguments", nargs=argparse.REMAINDER)
     args = parser.parse_args(argv)
     arguments = args.arguments[1:] if args.arguments[:1] == ["--"] else args.arguments
     try:
+        if args.inspect_power:
+            print(inspect_power(args.config, arguments, os.environ))
+            return 0
         commands = plan_commands(args.config, args.framework, arguments, os.environ)
     except (OSError, KeyError, ValueError, TypeError, yaml.YAMLError) as error:
-        print(f"ERROR: golden acceptance: {error}", file=sys.stderr)
+        print(f"ERROR: SRT recipe: {error}", file=sys.stderr)
         return 1
     for command in commands:
         result = subprocess.run(command, check=False)

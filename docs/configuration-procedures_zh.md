@@ -153,6 +153,18 @@ B200 Nscale 的 GLM-5.1 可用 `MODEL_PATH` 指定已有共享权重，覆盖默
 
 仅固定 8192/1024 的 `glm5.1-fp8-b200-tilert` 要求原生功耗。TileRT 在 `salloc` 返回的分配内运行，保留两个角色的退出码，并在保存审计数据前等待采集器排空。每个角色仅支持一个物理节点。其他序列长度、AgentX 和 eval-only 不启用此采集器。硬件资格验证与发布仍待完成。
 
+## 限定 GLM-5.2 的 PowerX 恢复
+
+GLM-5.2 FP4 MTP AgentX 恢复路径在调用方覆盖生效后解析选定的原生配方，包括变体选择。性能点要求共享的 AgentX 测量窗口与结果契约、`telemetry.required: true` 及 `dcgm-exporter` 容器别名。基准并发和必需功耗设置一起传递；eval-only 保留真实验证，不采集性能功耗。
+
+显式启用的安装器应用 `runners/srt-slurm/glm52-local-version-compute-setup.patch`，在本地磁盘计算 Hatch 的实际版本，并传给登录节点和计算节点安装过程。安装失败会停止提交。该补丁位于自动应用的补丁目录之外，其他模型和 launcher 路径保留现有安装与功耗行为。
+
+GLM-5.2 GB200 v0.5.17 TP4 分离式配方和 nightly C45 1P6D、C48 1P4D、C128 2P1D 配方仅为 prefill 角色启用带源码哈希保护的同步 NIXL 推进。它同时关闭 agent 后台推进线程和显式创建的 UCX 线程池，保留严格同步，并在调用线程推进传输前绑定该 rank 的 GPU。未知源码哈希会终止安装。v0.5.17 与 nightly 源码 `9303e26f` 中允许的 `conn.py` 逐字节一致；镜像标签本身不能证明已安装源码身份。C10/C12 的集成运行时和必需功耗证据已验证；推进方式可能影响吞吐，因此 nightly C45/C48/C128 仍须完成自身的完整窗口恢复。
+
+这些配方的性能任务由 GB200 启动器显式选择组合安装脚本，因为原生 `--setup-script` 参数会覆盖配方中的 `setup_script`。组合脚本先执行现有 torchao 安装，再执行仅限 prefill 的 NIXL 修复；任一步失败都会终止安装。仅评测任务及其他配方（包括聚合配方）继续使用只安装 torchao 的路径。确认补丁实际执行时，除渲染后的配方外，还必须核对提交的 setup 覆盖参数和 worker 安装日志。
+
+GLM-5.2 GB200 nightly C45 通过命名配方 override 选择仅包含功率和 GPU 利用率、不启用 profiling watch 的 DCGM 计数器列表。可选的 SM activity 序列将缺失；必需功耗覆盖和三秒采样间隔门槛不变。C48、C128 及其他 selector 保留原有 exporter 命令。被排除的尝试和运行时验证边界见 [C45 失败与缓解记录](waiver/3401_zh.md#c45-必需功耗恢复)。
+
 ## 注册 srt-slurm 配方
 
 映射来源：[`benchmarks/multi_node/srt-slurm-recipes/RECIPES.md`](../benchmarks/multi_node/srt-slurm-recipes/RECIPES.md)。检入的配方：[`benchmarks/multi_node/srt-slurm-recipes/`](../benchmarks/multi_node/srt-slurm-recipes/)。

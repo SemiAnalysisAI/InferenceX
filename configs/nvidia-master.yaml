@@ -7328,6 +7328,7 @@ glm5.2-fp4-gb200-dynamo-sglang-agentic-mtp:
           ep: 8
           dp-attn: true
           additional-settings:
+          # Profiling-watch repair stalled C45's required-power exporter.
           - CONFIG_FILE=recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-dep8-mtp-variants.yaml:override_1p6d_tp4_c45
         decode:
           num-worker: 6

@@ -5,6 +5,7 @@
 schema: 2
 
 base:
+  setup_script: glm52-gb200-nixl-prefill.sh
   model:
     path: glm-5.2-fp4
     container: dynamo-sglang
@@ -28,6 +29,7 @@ base:
     enable_multiple_frontends: true
     env:
       PIP_BREAK_SYSTEM_PACKAGES: '1'
+      INFX_GLM52_NIXL_SYNC_PATCH: '0'
     args:
       router-mode: kv
       router-session-affinity-ttl-secs: '3600'
@@ -45,6 +47,7 @@ base:
       workers: 1
       gpus: 8
       env:
+        INFX_GLM52_NIXL_SYNC_PATCH: '1'
         TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
         PYTHONUNBUFFERED: '1'
         DYN_SKIP_SGLANG_LOG_FORMATTING: '1'
@@ -109,6 +112,7 @@ base:
       nodes: 4
       gpus: 4
       env:
+        INFX_GLM52_NIXL_SYNC_PATCH: '0'
         TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
         PYTHONUNBUFFERED: '1'
         DYN_SKIP_SGLANG_LOG_FORMATTING: '1'
@@ -124,7 +128,7 @@ base:
         SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
         SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK: '512'
         SGLANG_MOE_NVFP4_DISPATCH: '1'
-        SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '1'
+        SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '0'
         SGLANG_ENABLE_THINKING: '1'
         SGLANG_CLIP_MAX_NEW_TOKENS_ESTIMATION: '8'
         SGLANG_REASONING_EFFORT: max
@@ -170,6 +174,17 @@ base:
   health_check:
     max_attempts: 1440
     interval_seconds: 10
+  telemetry:
+    enabled: true
+    collect_interval_ms: 1000
+    storage_subdir: power
+    required: true
+    startup_timeout_seconds: 120
+    request_timeout_seconds: 2
+    collector_join_timeout_seconds: 12
+    dcgm_exporter:
+      container_image: dcgm-exporter
+      port: 9401
   benchmark:
     type: custom
     command: bash /infmax-workspace/benchmarks/srt_agentic.sh
@@ -204,6 +219,11 @@ base:
 
 override_1p6d_tp4_c45:
   name: disagg-gb200-1p6d-dep8-tp4-c45-mtp
+  telemetry:
+    dcgm_exporter:
+      command: >-
+        dcgm-exporter --collect-interval=100 --address :{port}
+        --collectors /infmax-workspace/benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb200-fp4/agentx/power-counters.csv
   roles:
     decode:
       nodes: 6

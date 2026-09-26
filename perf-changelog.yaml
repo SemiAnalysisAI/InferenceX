@@ -8962,3 +8962,103 @@
     - "旧镜像切出于 2026-09-16，新镜像领先 441 个提交，包含当前曲线所不含的三项 Kimi-K3 正确性修复：vllm-project/vllm#51483 不再将无状态的首个 chunk 当作 decode，vllm-project/vllm#57098 修复 Kimi-K3 reasoning parser，vllm-project/vllm#57430 支持 routed expert 量化。新镜像还包含本臂在并发大于 4 时均会使用的 ROCm CPU KV 卸载改动，包括 vllm-project/vllm#57160（ROCm CPU KV 卸载改用私有 pinned 张量）与 vllm-project/vllm#50045（卸载背压检测）。"
     - "This image bump does not change the DSpark draft model data type. Only the image: line changes and kimik3_fp4_mi355x_mtp.sh is unchanged; the draft loads unmodified from the published Inferact/Kimi-K3-DSpark checkpoint via --speculative-config (model=Inferact/Kimi-K3-DSpark, method=dspark). The only dtype in that speculative-config is kv_cache_dtype=fp8, which sets the draft KV-cache storage precision, not the draft weights. No flag overrides or re-quantizes the draft-model weights, so the draft dtype is preserved from its checkpoint across this re-sweep."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3419
+
+- config-keys:
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-disagg
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-mtp
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-mtp-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Disable the opt-in FP8 NextN MoE conversion for GLM-5.2 NVFP4 AgentX on GB200; rerun existing configurations with unchanged images and topology."
+    - "关闭 GB200 GLM-5.2 NVFP4 AgentX 的可选 FP8 NextN MoE 转换，保留镜像和拓扑并重跑现有配置。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3401
+
+- config-keys:
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-disagg
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-mtp
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-mtp-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Require native PowerX on every selected GLM-5.2 GB200 AgentX performance cell, retaining flag 0, existing images, topology, concurrency and golden acceptance."
+    - "为 GLM-5.2 GB200 所有选定 AgentX 性能点启用必需的原生 PowerX；保留 flag 0、镜像、拓扑、并发和 golden 验收。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3401
+
+- config-keys:
+  - glm5.2-fp4-gb200-dynamo-sglang-agentic-agg
+  - glm5.2-fp4-gb200-dynamo-sglang-agentic-disagg
+  - glm5.2-fp4-gb200-dynamo-sglang-agentic-mtp
+  - glm5.2-fp4-gb200-dynamo-sglang-agentic-mtp-agg
+  description:
+  - Include GLM-5.2 GB200 installation and required PowerX runtime fixes in the SKU PR; preserve other model paths.
+  - 在 GB200 PR 内包含 GLM-5.2 安装及必需 PowerX 运行时修复，保留其他模型路径。
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3401
+  scenario-type:
+  - agentic-coding
+
+- config-keys:
+  - glm5.2-fp4-gb200-dynamo-sglang-agentic-disagg
+  scenario-type:
+  - agentic-coding
+  description:
+  - Use source-guarded caller-driven NIXL progress for GLM-5.2 GB200 TP4 disaggregated prefill after a native UCX shared-thread crash; retain image, topology, concurrency, flag 0 and required PowerX.
+  - GLM-5.2 GB200 TP4 分离式 prefill 遇到 UCX 后台线程崩溃后，通过源码哈希保护启用调用线程推进 NIXL；保留镜像、拓扑、并发、flag 0 和必需 PowerX。
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3401
+
+- config-keys:
+  - glm5.2-fp4-gb200-dynamo-sglang-agentic-disagg
+  scenario-type:
+  - agentic-coding
+  description:
+  - Select the composite torchao and prefill NIXL setup in the GB200 launcher for GLM-5.2 TP4 disaggregated performance jobs; preserve eval-only and other recipe setup paths.
+  - 为 GLM-5.2 TP4 分离式性能任务在 GB200 启动器中选择 torchao 与 prefill NIXL 组合安装脚本，保留仅评测及其他配方的安装路径。
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3401
+
+- config-keys:
+  - glm5.2-fp4-gb200-dynamo-sglang-agentic-mtp
+  scenario-type:
+  - agentic-coding
+  description:
+  - Select the existing source-guarded synchronous UCX prefill setup for GLM-5.2 GB200 nightly C48 after its NIXL shared-progress-thread crash; preserve torchao, other cells and required PowerX.
+  - GLM-5.2 GB200 nightly C48 发生 NIXL 后台推进线程崩溃后，选择现有源码保护的同步 UCX prefill 安装路径；保留 torchao、其他测试点及必需 PowerX。
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3401
+
+- config-keys:
+  - glm5.2-fp4-gb200-dynamo-sglang-agentic-mtp
+  scenario-type:
+  - agentic-coding
+  description:
+  - Select the existing source-guarded synchronous UCX prefill setup for GLM-5.2 GB200 nightly C128 after its NIXL shared-progress-thread crash; preserve torchao, other cells and required PowerX.
+  - GLM-5.2 GB200 nightly C128 发生 NIXL 后台推进线程崩溃后，选择现有源码保护的同步 UCX prefill 安装路径；保留 torchao、其他测试点及必需 PowerX。
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3401
+
+- config-keys:
+  - glm5.2-fp4-gb200-dynamo-sglang-agentic-mtp
+  scenario-type:
+  - agentic-coding
+  description:
+  - Select the existing source-guarded synchronous UCX prefill setup for GLM-5.2 GB200 nightly C45 after its NIXL shared-progress-thread crash; preserve torchao, other cells and required PowerX.
+  - GLM-5.2 GB200 nightly C45 发生 NIXL 后台推进线程崩溃后，选择现有源码保护的同步 UCX prefill 安装路径；保留 torchao、其他测试点及必需 PowerX。
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3401
+
+- config-keys:
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Preserve GLM-5.2 GB200 recovery setup, job identity and required PowerX when selecting consolidated recipes and the canonical AgentX benchmark command."
+    - "为 GLM-5.2 GB200 的合并配方及规范 AgentX 命令保留恢复安装、作业身份和必需 PowerX。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3401
+
+- config-keys:
+  - glm5.2-fp4-gb200-dynamo-sglang-agentic-mtp
+  scenario-type:
+  - agentic-coding
+  description:
+  - Select power and GPU utilization counters without optional DCGM profiling watches for GLM-5.2 GB200 C45 after a required-power sampling gap; preserve other selectors and the three-second acceptance limit.
+  - GLM-5.2 GB200 C45 出现必需功耗采样间隔失败后，选择功率和 GPU 利用率计数器，移除可选 DCGM profiling watch；保留其他 selector 和三秒验收门槛。
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3401

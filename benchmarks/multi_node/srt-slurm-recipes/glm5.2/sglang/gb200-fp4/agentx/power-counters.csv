@@ -1,0 +1,3 @@
+# Power collection does not require DCGM profiling watches.
+DCGM_FI_DEV_POWER_USAGE, gauge, GPU power usage in watts.
+DCGM_FI_DEV_GPU_UTIL, gauge, GPU utilization in percent.

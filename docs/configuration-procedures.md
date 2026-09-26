@@ -204,6 +204,18 @@ For GLM-5.1 on B200 Nscale, `MODEL_PATH` can select an existing shared checkpoin
 
 Only fixed 8192/1024 `glm5.1-fp8-b200-tilert` requires native power. TileRT runs inside its returned `salloc` allocation, retains both role exit codes and drains collectors before staging audits. Exactly one physical node per role is supported. Other sequence lengths, AgentX and eval-only do not enable this collector. Hardware qualification and publication remain pending.
 
+## Scoped GLM-5.2 PowerX recovery
+
+The GLM-5.2 FP4 MTP AgentX recovery path resolves the selected native recipe after caller overrides, including variant selection. Performance cells require the shared AgentX window/result contract, `telemetry.required: true`, and the `dcgm-exporter` container alias. The benchmark concurrency and required-power settings are forwarded together. Eval-only jobs retain real verification and do not collect performance power.
+
+The opted-in installer applies `runners/srt-slurm/glm52-local-version-compute-setup.patch`, derives Hatch's actual version on local disk and passes it to login and compute installation. Setup errors stop submission. The patch is outside the automatically applied patch directory; other model and launcher paths retain their existing setup and power behavior.
+
+The GLM-5.2 GB200 v0.5.17 TP4 disaggregated recipe and nightly C45 1P6D, C48 1P4D and C128 2P1D recipes opt their prefill role into source-guarded synchronous NIXL progress. It disables both the agent progress thread and the explicitly created UCX thread pool, retains strict synchronization, and binds the transfer worker to its rank GPU before caller-driven progress. Unknown source hashes stop setup. The accepted `conn.py` is byte-identical in v0.5.17 and nightly source `9303e26f`; the image label alone does not prove installed source identity. C10/C12 have verified integration runtime and required-power evidence; nightly C45/C48/C128 still require their own full-window recovery because progress scheduling can change throughput.
+
+For these recipes' performance jobs, the GB200 launcher selects the composite setup script explicitly: the native `--setup-script` option overrides `setup_script` in the recipe. The composite runs the existing torchao installer first and then the prefill-only NIXL patch; either failure stops setup. Eval-only jobs and other recipes, including aggregate recipes, keep the torchao-only path. Check the submitted setup override and worker setup log as well as the rendered recipe before counting the patch as executed.
+
+GLM-5.2 GB200 nightly C45 selects a DCGM collector list containing power and GPU utilization, without profiling watches, through its named recipe override. Its optional SM activity series is absent; required-power coverage and the three-second sample-gap gate remain unchanged. C48, C128 and other selectors retain their exporter commands. See the [C45 failure and mitigation record](waiver/3401.md#c45-required-power-recovery) for the excluded attempt and runtime verification boundary.
+
 ## Register an srt-slurm recipe
 
 Mapping source: [`benchmarks/multi_node/srt-slurm-recipes/RECIPES.md`](../benchmarks/multi_node/srt-slurm-recipes/RECIPES.md). Checked-in recipes: [`benchmarks/multi_node/srt-slurm-recipes/`](../benchmarks/multi_node/srt-slurm-recipes/).
