@@ -39,4 +39,5 @@ python3 -m pip uninstall -y mooncake-transfer-engine mooncake-transfer-engine-cu
 python3 -m pip install --no-deps mooncake-transfer-engine-efa-cuda13==0.3.13.post1
 mooncake_engine=$(python3 -c 'from importlib.util import find_spec; from pathlib import Path; print(Path(find_spec("mooncake").origin).with_name("engine.so"))')
 fabric_loaded=$(ldd "$mooncake_engine" | awk '$1 == "libfabric.so.1" { print $3 }')
+printf 'Mooncake libfabric: %s\n' "$fabric_loaded"
 test "$(readlink -f "$fabric_loaded")" = "$efa_lib/libfabric.so.1.32.0"

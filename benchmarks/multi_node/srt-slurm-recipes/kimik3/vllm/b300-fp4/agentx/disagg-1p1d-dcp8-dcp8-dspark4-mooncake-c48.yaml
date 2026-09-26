@@ -4,6 +4,7 @@ model:
   path: moonshotai/Kimi-K3
   container: vllm/vllm-openai:nightly-0961bbae2894d574be790d219651824eb199318e
   precision: fp4
+environment: {LD_LIBRARY_PATH: "/opt/amazon/efa-1.50/lib:/usr/local/nvidia/lib64:/usr/local/cuda/lib64:/usr/local/nvidia/lib"}
 dynamo:
   install: true
   source:
