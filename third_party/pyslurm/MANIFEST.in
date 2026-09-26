@@ -1,0 +1,8 @@
+include README.md
+include COPYING.txt
+graft examples
+graft tests
+graft docs
+graft pyslurm/slurm
+graft pyslurm/pydefines
+recursive-include pyslurm *.pyx *.px[di] *.h

@@ -1,0 +1,114 @@
+Metadata-Version: 2.4
+Name: pyslurm
+Version: 25.11.2
+Summary: Python Interface for Slurm
+Author: Mark Roberts, Giovanni Torres, Toni Harzendorf
+Maintainer-email: Toni Harzendorf <toni.harzendorf@gmail.com>
+License: GPL-2.0-only
+Project-URL: Homepage, https://github.com/PySlurm/pyslurm
+Project-URL: Repository, https://github.com/PySlurm/pyslurm
+Project-URL: Issues, https://github.com/PySlurm/pyslurm/issues
+Project-URL: Discussions, https://github.com/PySlurm/pyslurm/discussions
+Keywords: HPC,Batch Scheduler,Resource Manager,Slurm,Cython
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Environment :: Console
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: System Administrators
+Classifier: Natural Language :: English
+Classifier: Operating System :: POSIX :: Linux
+Classifier: Programming Language :: Cython
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Topic :: Software Development :: Libraries
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Topic :: System :: Distributed Computing
+Requires-Python: >=3.6
+Description-Content-Type: text/markdown
+License-File: COPYING.txt
+Provides-Extra: dev
+Requires-Dist: ruff; extra == "dev"
+Requires-Dist: cython-lint; extra == "dev"
+Requires-Dist: pytest; extra == "dev"
+Requires-Dist: pytest-sugar; extra == "dev"
+Dynamic: license-file
+
+# <img src="logo.png" alt="PySlurm Logo">
+
+pyslurm is the Python client library for the [Slurm Workload Manager](https://slurm.schedmd.com)
+
+## Requirements
+
+* [Slurm](https://slurm.schedmd.com) 25.11.x — shared library and header files
+* [Python](https://www.python.org) >= 3.6
+
+## Versioning
+
+PySlurm uses the format `X.Y.Z` where `X.Y` tracks the Slurm major release
+and `Z` is PySlurm's own patch increment, reset to `0` on each new Slurm
+major release.
+
+| PySlurm | Slurm |
+|---|---|
+| 25.11.x | 25.11.x |
+| 24.05.x | 24.05.x |
+| 23.11.x | 23.11.x |
+
+## Installation
+
+PySlurm requires the Slurm development headers and shared library at build
+time.
+
+### Slurm header and library paths
+
+If you have `slurm-devel` installed in the default paths, skip this section.
+
+By default, PySlurm looks in:
+
+* `/usr/include` — for Slurm header files (`slurm/slurm.h`)
+* `/usr/lib64` — for the Slurm shared library (`libslurmfull.so`)
+
+If your Slurm installation is not in the default paths, set these before
+installing:
+
+```shell
+export SLURM_INCLUDE_DIR=/path/to/slurm/include
+export SLURM_LIB_DIR=/path/to/slurm/lib
+```
+
+### From PyPI
+
+```shell
+pip install pyslurm
+```
+
+### From source
+
+```shell
+git clone https://github.com/PySlurm/pyslurm.git && cd pyslurm
+scripts/build.sh
+```
+
+Use `-j` to build with multiple cores (or set `PYSLURM_BUILD_JOBS`):
+
+```shell
+scripts/build.sh -j4
+```
+
+## Contributors
+
+pyslurm is made by [contributors like
+you](https://github.com/PySlurm/pyslurm/graphs/contributors).
+
+## Support
+
+Feel free to ask questions in the [GitHub
+Discussions](https://github.com/orgs/PySlurm/discussions)
+
+Found a bug or you are missing a feature? Feel free to [open an Issue!](https://github.com/PySlurm/pyslurm/issues/new)

@@ -270,7 +270,21 @@ jobs:
           if [[ -f runners/runtime_settings.sh ]]; then
             source runners/runtime_settings.sh
           fi
-          bash ./runners/launch_${RUNNER_NAME%%_*}.sh
+          # Clusters ported to Python (infx/runners/clusters/<cluster>.py) use
+          # infx.runners on a vendored pyslurm built for this host's Slurm; the
+          # rest keep their bash launcher. A failed pyslurm build fails the job.
+          _cluster="${RUNNER_NAME%%_*}"
+          if [[ -f "infx/runners/clusters/${_cluster//-/_}.py" ]]; then
+            pyslurm_path=$(uv run --locked --only-group pyslurm-build python -m infx.runners.pyslurm_build \
+              --cache-root "$HOME/.cache/inferencex/pyslurm" | sed -n 's/^PYSLURM_PATH=//p')
+            if [[ -z "$pyslurm_path" ]]; then
+              echo "ERROR: pyslurm build failed for ${_cluster}" >&2
+              exit 1
+            fi
+            INFERENCEX_PYSLURM_PATH="$pyslurm_path" python3 -m infx.runners "${_cluster}"
+          else
+            bash "./runners/launch_${_cluster}.sh"
+          fi
 
           if [ ! -f "${res_name}.json" ]; then
             echo "Run failed: Benchmark result ${res_name}.json not found." >&2

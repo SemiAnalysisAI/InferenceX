@@ -1,0 +1,560 @@
+diff -ruN a/pyslurm/slurm/extra.pxi b/pyslurm/slurm/extra.pxi
+--- a/pyslurm/slurm/extra.pxi	2026-04-15 17:24:11
++++ b/pyslurm/slurm/extra.pxi	2026-09-26 15:15:22
+@@ -63,7 +63,7 @@
+ 
+ # https://github.com/SchedMD/slurm/blob/slurm-24-11-0-1/src/common/slurm_protocol_defs.h#L432
+ ctypedef struct job_id_msg_t:
+-    slurm_step_id_t step_id
++    uint32_t job_id
+     uint16_t show_flags
+ 
+ # https://github.com/SchedMD/slurm/blob/slurm-24-05-3-1/src/common/msg_type.h#L45
+diff -ruN a/pyslurm/slurm/slurm.h.pxi b/pyslurm/slurm/slurm.h.pxi
+--- a/pyslurm/slurm/slurm.h.pxi	2026-04-15 17:24:11
++++ b/pyslurm/slurm/slurm.h.pxi	2026-09-26 15:20:10
+@@ -63,10 +63,6 @@
+     uint32_t NO_VAL
+     uint64_t NO_VAL64
+     uint64_t NO_CONSUME_VAL64
+-    uint8_t MAX_VAL8
+-    uint16_t MAX_VAL16
+-    uint32_t MAX_VAL
+-    uint64_t MAX_VAL64
+     uint16_t MAX_TASKS_PER_NODE
+     uint32_t MAX_JOB_ID
+     uint32_t MAX_FED_JOB_ID
+@@ -98,7 +94,6 @@
+     uint32_t JOB_RESV_DEL_HOLD
+     uint32_t JOB_SIGNALING
+     uint32_t JOB_STAGE_OUT
+-    uint32_t JOB_EXPEDITING
+     int8_t READY_JOB_FATAL
+     int8_t READY_JOB_ERROR
+     uint8_t READY_NODE_STATE
+@@ -272,9 +267,6 @@
+     uint64_t GRES_ALLOW_TASK_SHARING
+     uint64_t STEPMGR_ENABLED
+     uint64_t HETJOB_PURGE
+-    uint64_t SPREAD_SEGMENTS
+-    uint64_t CONSOLIDATE_SEGMENTS
+-    uint64_t EXPEDITED_REQUEUE
+     uint8_t X11_FORWARD_ALL
+     uint8_t X11_FORWARD_BATCH
+     uint8_t X11_FORWARD_FIRST
+@@ -375,7 +367,7 @@
+     uint32_t DEBUG_FLAG_PROFILE
+     uint32_t DEBUG_FLAG_INTERCONNECT
+     uint32_t DEBUG_FLAG_GLOB_SILENCE
+-    uint32_t DEBUG_FLAG_NAMESPACE
++    uint32_t DEBUG_FLAG_JOB_CONT
+     uint32_t DEBUG_FLAG_AUDIT_RPCS
+     uint32_t DEBUG_FLAG_PROTOCOL
+     uint32_t DEBUG_FLAG_BACKFILL_MAP
+@@ -407,7 +399,6 @@
+     uint64_t DEBUG_FLAG_JAG
+     uint64_t DEBUG_FLAG_CGROUP
+     uint64_t DEBUG_FLAG_SCRIPT
+-    uint64_t DEBUG_FLAG_METRICS
+     uint8_t PREEMPT_MODE_OFF
+     uint8_t PREEMPT_MODE_SUSPEND
+     uint8_t PREEMPT_MODE_REQUEUE
+@@ -425,7 +416,6 @@
+     uint8_t HEALTH_CHECK_NODE_NONDRAINED_IDLE
+     uint8_t HEALTH_CHECK_NODE_ANY
+     uint16_t HEALTH_CHECK_CYCLE
+-    uint16_t HEALTH_CHECK_START_ONLY
+     uint8_t PROLOG_FLAG_ALLOC
+     uint8_t PROLOG_FLAG_NOHOLD
+     uint8_t PROLOG_FLAG_CONTAIN
+@@ -451,7 +441,6 @@
+     uint16_t CONF_FLAG_SHR
+     uint16_t CONF_FLAG_CONTAIN_SPANK
+     uint32_t CONF_FLAG_NO_STDIO
+-    uint32_t CONF_FLAG_DISABLE_HTTP
+     uint8_t LOG_FMT_ISO8601_MS
+     uint8_t LOG_FMT_ISO8601
+     uint8_t LOG_FMT_RFC5424_MS
+@@ -591,7 +580,6 @@
+         WAIT_RESERVATION
+         WAIT_NODE_NOT_AVAIL
+         WAIT_HELD_USER
+-        WAIT_NVIDIA_IMEX_CHANNELS
+         FAIL_DEFER
+         FAIL_DOWN_PARTITION
+         FAIL_DOWN_NODE
+@@ -981,21 +969,22 @@
+         NODE_STATE_FUTURE
+         NODE_STATE_END
+ 
+-    ctypedef enum select_type_flags_t:
+-        SELECT_CPU
+-        SELECT_SOCKET
+-        SELECT_CORE
+-        SELECT_BOARD
+-        SELECT_MEMORY
+-        SELECT_LINEAR
+-        SELECT_ENFORCE_BINDING_GRES
+-        SELECT_ONE_TASK_PER_SHARING_GRES
+-        SELECT_ONE_TASK_PER_CORE
+-        SELECT_PACK_NODES
+-        SELECT_LL_SHARED_GRES
+-        SELECT_CORE_DEFAULT_DIST_BLOCK
+-        SELECT_LLN
+-        SELECT_MULTIPLE_SHARING_GRES_PJ
++    # Slurm 25.05: these are CR_* #defines, not a select_type_flags_t enum.
++    # Cython name aliases let .pyx code keep using SELECT_* names.
++    uint16_t SELECT_CPU "CR_CPU"
++    uint16_t SELECT_SOCKET "CR_SOCKET"
++    uint16_t SELECT_CORE "CR_CORE"
++    uint16_t SELECT_BOARD "CR_BOARD"
++    uint16_t SELECT_MEMORY "CR_MEMORY"
++    uint16_t SELECT_LINEAR "CR_LINEAR"
++    uint16_t SELECT_ENFORCE_BINDING_GRES "ENFORCE_BINDING_GRES"
++    uint16_t SELECT_ONE_TASK_PER_SHARING_GRES "ONE_TASK_PER_SHARING_GRES"
++    uint16_t SELECT_ONE_TASK_PER_CORE "CR_ONE_TASK_PER_CORE"
++    uint16_t SELECT_PACK_NODES "CR_PACK_NODES"
++    uint16_t SELECT_LL_SHARED_GRES "LL_SHARED_GRES"
++    uint16_t SELECT_CORE_DEFAULT_DIST_BLOCK "CR_CORE_DEFAULT_DIST_BLOCK"
++    uint16_t SELECT_LLN "CR_LLN"
++    uint16_t SELECT_MULTIPLE_SHARING_GRES_PJ "MULTIPLE_SHARING_GRES_PJ"
+ 
+     ctypedef enum step_spec_flags_t:
+         SSF_NONE
+@@ -1189,8 +1178,7 @@
+         uint32_t site_factor
+         char** spank_job_env
+         uint32_t spank_job_env_size
+-        slurm_step_id_t step_id
+-        char* submit_line
++        uint32_t job_id
+         uint32_t task_dist
+         uint32_t time_limit
+         uint32_t time_min
+@@ -1300,6 +1288,7 @@
+         uint32_t het_job_id
+         char* het_job_id_set
+         uint32_t het_job_offset
++        uint32_t job_id
+         job_resources_t* job_resrcs
+         char* job_size_str
+         uint32_t job_state
+@@ -1352,7 +1341,6 @@
+         char* selinux_context
+         uint16_t shared
+         uint32_t site_factor
+-        slurm_step_id_t step_id
+         uint16_t sockets_per_board
+         uint16_t sockets_per_node
+         time_t start_time
+@@ -1363,7 +1351,6 @@
+         char* std_in
+         char* std_out
+         uint16_t segment_size
+-        char* submit_line
+         time_t submit_time
+         time_t suspend_time
+         char* system_comment
+@@ -1383,7 +1370,6 @@
+         uint32_t wait4switch
+         char* wckey
+         char* work_dir
+-        uint32_t job_id
+ 
+     ctypedef job_info slurm_job_info_t
+ 
+@@ -1461,7 +1447,8 @@
+         job_state_response_job_t* jobs
+ 
+     cdef struct step_update_request_msg:
+-        slurm_step_id_t step_id
++        uint32_t job_id
++        uint32_t step_id
+         uint32_t time_limit
+ 
+     ctypedef step_update_request_msg step_update_request_msg_t
+@@ -1541,12 +1528,13 @@
+     ctypedef task_ext_msg task_exit_msg_t
+ 
+     ctypedef struct net_forward_msg_t:
+-        slurm_step_id_t step_id
++        uint32_t job_id
+         uint32_t flags
+         uint16_t port
+         char* target
+ 
+-    ctypedef slurm_step_id_t srun_ping_msg_t
++    ctypedef struct srun_ping_msg_t:
++        uint32_t job_id
+ 
+     ctypedef slurm_step_id_t srun_job_complete_msg_t
+ 
+@@ -1557,7 +1545,7 @@
+     ctypedef srun_timeout_msg srun_timeout_msg_t
+ 
+     cdef struct srun_user_msg:
+-        slurm_step_id_t step_id
++        uint32_t job_id
+         char* msg
+ 
+     ctypedef srun_user_msg srun_user_msg_t
+@@ -1580,13 +1568,14 @@
+ 
+     cdef struct suspend_msg:
+         uint16_t op
++        uint32_t job_id
+         char* job_id_str
+-        slurm_step_id_t step_id
+ 
+     ctypedef suspend_msg suspend_msg_t
+ 
+     cdef struct top_job_msg:
+         uint16_t op
++        uint32_t job_id
+         char* job_id_str
+ 
+     ctypedef top_job_msg top_job_msg_t
+@@ -1752,7 +1741,7 @@
+         uint32_t user_id
+ 
+     ctypedef struct stepmgr_job_info_t:
+-        slurm_step_id_t step_id
++        uint32_t job_id
+         char* stepmgr
+ 
+     cdef struct job_step_info_response_msg:
+@@ -1820,7 +1809,6 @@
+         uint32_t node_state
+         char* os
+         uint32_t owner
+-        char* parameters
+         char* partitions
+         uint16_t port
+         uint64_t real_memory
+@@ -1875,7 +1863,7 @@
+     ctypedef topo_config_response_msg topo_config_response_msg_t
+ 
+     cdef struct job_alloc_info_msg:
+-        slurm_step_id_t step_id
++        uint32_t job_id
+         char* req_cluster
+ 
+     ctypedef job_alloc_info_msg job_alloc_info_msg_t
+@@ -1982,9 +1970,7 @@
+         uint64_t pn_min_memory
+         char* qos
+         char* resv_name
+-        uint16_t segment_size
+-        uint16_t start_protocol_ver
+-        slurm_step_id_t step_id
++        uint32_t job_id
+         char* tres_per_node
+         char* tres_per_task
+         uid_t uid
+@@ -2007,15 +1993,11 @@
+         char* part_name
+         list_t* preemptee_job_id
+         uint32_t proc_cnt
+-        slurm_step_id_t step_id
++        uint32_t job_id
+         time_t start_time
+ 
+     ctypedef will_run_response_msg will_run_response_msg_t
+ 
+-    ctypedef struct ns_fd_map_t:
+-        int type
+-        int fd
+-
+     cdef struct resv_core_spec:
+         char* node_name
+         char* core_id
+@@ -2024,7 +2006,6 @@
+ 
+     cdef struct reserve_info:
+         char* accounts
+-        char* allowed_parts
+         char* burst_buffer
+         char* comment
+         uint32_t core_cnt
+@@ -2042,7 +2023,6 @@
+         char* node_list
+         char* partition
+         uint32_t purge_comp_time
+-        char* qos
+         time_t start_time
+         char* tres_str
+         char* users
+@@ -2058,7 +2038,6 @@
+ 
+     cdef struct resv_desc_msg:
+         char* accounts
+-        char* allowed_parts
+         char* burst_buffer
+         char* comment
+         uint32_t core_cnt
+@@ -2075,7 +2054,6 @@
+         char* node_list
+         char* partition
+         uint32_t purge_comp_time
+-        char* qos
+         time_t start_time
+         time_t time_force
+         char* tres_str
+@@ -2124,7 +2102,6 @@
+         char* certmgr_params
+         char* certmgr_type
+         void* cgroup_conf
+-        char* cli_filter_params
+         char* cli_filter_plugins
+         uint16_t cluster_id
+         char* cluster_name
+@@ -2162,7 +2139,6 @@
+         uint16_t health_check_interval
+         uint16_t health_check_node_state
+         char* health_check_program
+-        char* http_parser_type
+         uint32_t host_unreach_retry_count
+         uint16_t inactive_limit
+         char* interactive_step_opts
+@@ -2174,11 +2150,10 @@
+         char* job_comp_loc
+         char* job_comp_params
+         char* job_comp_pass
+-        char* job_comp_pass_script
+         uint32_t job_comp_port
+         char* job_comp_type
+         char* job_comp_user
+-        char* namespace_plugin
++        char* job_container_plugin
+         list_t* job_defaults_list
+         uint16_t job_file_append
+         uint16_t job_requeue
+@@ -2204,7 +2179,6 @@
+         uint16_t max_tasks_per_node
+         char* mcs_plugin
+         char* mcs_plugin_params
+-        char* metrics_type
+         uint32_t min_job_age
+         void* mpi_conf
+         char* mpi_default
+@@ -2321,7 +2295,6 @@
+         uint16_t tree_width
+         char* unkillable_program
+         uint16_t unkillable_timeout
+-        char* url_parser_type
+         char* version
+         uint16_t vsize_factor
+         uint16_t wait_time
+@@ -2347,7 +2320,8 @@
+     ctypedef slurmd_status_msg slurmd_status_t
+ 
+     cdef struct submit_response_msg:
+-        slurm_step_id_t step_id
++        uint32_t job_id
++        uint32_t step_id
+         uint32_t error_code
+         char* job_submit_user_msg
+ 
+@@ -2413,7 +2387,7 @@
+         uint32_t gettimeofday_latency
+         uint32_t schedule_cycle_max
+         uint32_t schedule_cycle_last
+-        uint64_t schedule_cycle_sum
++        uint32_t schedule_cycle_sum
+         uint32_t schedule_cycle_counter
+         uint32_t schedule_cycle_depth
+         uint32_t* schedule_exit
+@@ -2606,7 +2580,6 @@
+ 
+     ctypedef struct kill_jobs_msg_t:
+         char* account
+-        char* admin_comment
+         uint16_t flags
+         char* job_name
+         char** jobs_array
+@@ -2634,7 +2607,7 @@
+ 
+     int slurm_kill_job(uint32_t job_id, uint16_t signal, uint16_t flags)
+ 
+-    int slurm_kill_job_step(slurm_step_id_t* step_id, uint16_t signal, uint16_t flags)
++    int slurm_kill_job_step(uint32_t job_id, uint32_t step_id, uint16_t signal, uint16_t flags)
+ 
+     int slurm_kill_job2(const char* job_id, uint16_t signal, uint16_t flags, const char* sibling)
+ 
+@@ -2642,11 +2615,11 @@
+ 
+     int slurm_signal_job(uint32_t job_id, uint16_t signal)
+ 
+-    int slurm_signal_job_step(slurm_step_id_t* step_id, uint32_t signal)
++    int slurm_signal_job_step(uint32_t job_id, uint32_t step_id, uint32_t signal)
+ 
+-    int slurm_complete_job(slurm_step_id_t* step_id, uint32_t job_return_code)
++    int slurm_complete_job(uint32_t job_id, uint32_t job_return_code)
+ 
+-    int slurm_terminate_job_step(slurm_step_id_t* step_id)
++    int slurm_terminate_job_step(uint32_t job_id, uint32_t step_id)
+ 
+     void slurm_step_launch_params_t_init(slurm_step_launch_params_t* ptr)
+ 
+@@ -2690,7 +2663,6 @@
+ 
+     int slurm_reset_statistics(stats_info_request_msg_t* req)
+ 
+-    int slurm_get_resource_layout(slurm_step_id_t* step_id, void** response)
+ 
+     void slurm_free_job_info_msg(job_info_msg_t* job_buffer_ptr)
+ 
+@@ -2716,7 +2688,6 @@
+ 
+     int slurm_load_job(job_info_msg_t** resp, uint32_t job_id, uint16_t show_flags)
+ 
+-    int slurm_load_job_sluid(job_info_msg_t** resp, sluid_t sluid, uint16_t show_flags)
+ 
+     int slurm_load_job_prio(priority_factors_response_msg_t** factors_resp, uint16_t show_flags)
+ 
+@@ -2734,7 +2705,7 @@
+ 
+     int slurm_update_job2(job_desc_msg_t* job_msg, job_array_resp_msg_t** resp)
+ 
+-    int slurm_get_job_steps(slurm_step_id_t* step_id, job_step_info_response_msg_t** resp, uint16_t show_flags)
++    int slurm_get_job_steps(time_t update_time, uint32_t job_id, uint32_t step_id, job_step_info_response_msg_t** resp, uint16_t show_flags)
+ 
+     int slurm_find_step_ids_by_container_id(uint16_t show_flags, uid_t uid, const char* container_id, list_t* steps)
+ 
+diff -ruN a/pyslurm/slurm/slurm_errno.h.pxi b/pyslurm/slurm/slurm_errno.h.pxi
+--- a/pyslurm/slurm/slurm_errno.h.pxi	2026-04-15 17:24:11
++++ b/pyslurm/slurm/slurm_errno.h.pxi	2026-09-26 15:15:22
+@@ -159,6 +159,7 @@
+         ESLURM_STEP_LIMIT
+         ESLURM_JOB_SUSPENDED
+         ESLURM_CAN_NOT_START_IMMEDIATELY
++        ESLURM_INTERCONNECT_BUSY
+         ESLURM_RESERVATION_EMPTY
+         ESLURM_INVALID_ARRAY
+         ESLURM_RESERVATION_NAME_DUP
+@@ -176,7 +177,7 @@
+         ESLURM_INVALID_BURST_BUFFER_REQUEST
+         ESLURM_PRIO_RESET_FAIL
+         ESLURM_CANNOT_MODIFY_CRON_JOB
+-        ESLURM_INVALID_NAMESPACE_CHANGE
++        ESLURM_INVALID_JOB_CONTAINER_CHANGE
+         ESLURM_CANNOT_CANCEL_CRON_JOB
+         ESLURM_INVALID_MCS_LABEL
+         ESLURM_BURST_BUFFER_WAIT
+@@ -258,12 +259,6 @@
+         ESLURM_MAX_POWERED_NODES
+         ESLURM_REQUESTED_TOPO_CONFIG_UNAVAILABLE
+         ESLURM_PREEMPTION_REQUIRED
+-        ESLURM_INVALID_NODE_STATE_TRANSITION
+-        ESLURM_INVALID_JOB_STATE
+-        ESLURM_BREAK_EVAL
+-        ESLURM_RETRY_EVAL
+-        ESLURM_RETRY_EVAL_HINT
+-        ESLURM_INVALID_SLUID
+         ESPANK_ERROR
+         ESPANK_BAD_ARG
+         ESPANK_NOT_TASK
+@@ -311,8 +306,6 @@
+         ESLURM_AUTH_UNPACK
+         ESLURM_AUTH_SKIP
+         ESLURM_AUTH_UNABLE_TO_GENERATE_TOKEN
+-        ESLURM_AUTH_NOBODY
+-        ESLURM_AUTH_SOCKET_INVALID_PEER
+         ESLURM_DB_CONNECTION
+         ESLURM_JOBS_RUNNING_ON_ASSOC
+         ESLURM_CLUSTER_DELETED
+@@ -334,15 +327,6 @@
+         ESLURM_INVALID_CLUSTER_NAME
+         ESLURM_FED_JOB_LOCK
+         ESLURM_FED_NO_VALID_CLUSTERS
+-        ESLURM_LUA_INVALID_STATE
+-        ESLURM_LUA_INVALID_SYNTAX
+-        ESLURM_LUA_FUNC_NOT_FOUND
+-        ESLURM_LUA_FUNC_INVALID_RC
+-        ESLURM_LUA_FUNC_FAILED
+-        ESLURM_LUA_FUNC_FAILED_RUNTIME_ERROR
+-        ESLURM_LUA_FUNC_FAILED_ENOMEM
+-        ESLURM_LUA_FUNC_FAILED_GARBAGE_COLLECTOR
+-        ESLURM_LUA_INVALID_CONVERSION_TYPE
+         ESLURM_MISSING_TIME_LIMIT
+         ESLURM_PLUGIN_INVALID
+         ESLURM_PLUGIN_INCOMPLETE
+@@ -359,9 +343,6 @@
+         ESLURM_REST_EMPTY_RESULT
+         ESLURM_REST_MISSING_UID
+         ESLURM_REST_MISSING_GID
+-        ESLURM_REST_UNKNOWN_URL
+-        ESLURM_REST_UNKNOWN_URL_METHOD
+-        ESLURM_REST_AUTH_FAIL
+         ESLURM_DATA_PATH_NOT_FOUND
+         ESLURM_DATA_PTR_NULL
+         ESLURM_DATA_CONV_FAILED
+@@ -378,41 +359,9 @@
+         ESLURM_DATA_INVALID_PARSER
+         ESLURM_DATA_PARSING_DEPTH
+         ESLURM_DATA_PARSER_INVALID_STATE
+-        ESLURM_DATA_PARSE_BAD_INPUT
+         ESLURM_CONTAINER_NOT_CONFIGURED
+         ESLURM_URL_UNKNOWN_SCHEME
+         ESLURM_URL_EMPTY
+-        ESLURM_URL_NON_NULL_TERMINATOR
+-        ESLURM_URL_INVALID_FORMATING
+-        ESLURM_URL_INVALID_SCHEME
+-        ESLURM_URL_UNSUPPORTED_SCHEME
+-        ESLURM_URL_INVALID_HOST
+-        ESLURM_URL_INVALID_PORT
+-        ESLURM_URL_INVALID_PATH
+-        ESLURM_URL_INVALID_QUERY
+-        ESLURM_URL_INVALID_FRAGMENT
+-        ESLURM_URL_UNSUPPORTED_FORMAT
+-        ESLURM_HTTP_PARSING_FAILURE
+-        ESLURM_HTTP_UNEXPECTED_URL
+-        ESLURM_HTTP_EMPTY_HEADER
+-        ESLURM_HTTP_INVALID_STATUS_CODE
+-        ESLURM_HTTP_INVALID_METHOD
+-        ESLURM_HTTP_MISSING_LF
+-        ESLURM_HTTP_INVALID_CHARACTER
+-        ESLURM_HTTP_INVALID_CONTENT_LENGTH
+-        ESLURM_HTTP_INVALID_TRANSFER_ENCODING
+-        ESLURM_HTTP_UNSUPPORTED_CHUNK_ENCODING
+-        ESLURM_HTTP_UNEXPECTED_REQUEST
+-        ESLURM_HTTP_UNSUPPORTED_VERSION
+-        ESLURM_HTTP_UNSUPPORTED_UPGRADE
+-        ESLURM_HTTP_INVALID_CONTENT_ENCODING
+-        ESLURM_HTTP_UNSUPPORTED_EXPECT
+-        ESLURM_HTTP_UNSUPPORTED_KEEP_ALIVE
+-        ESLURM_HTTP_CONTENT_LENGTH_TOO_LARGE
+-        ESLURM_HTTP_POST_MISSING_CONTENT_LENGTH
+-        ESLURM_HTTP_UNEXPECTED_BODY
+-        ESLURM_HTTP_UNKNOWN_ACCEPT_MIME_TYPE
+-        ESLURM_TLS_REQUIRED
+ 
+     ctypedef struct slurm_errtab_t:
+         int xe_number
+diff -ruN a/pyslurm/slurm/slurmdb.h.pxi b/pyslurm/slurm/slurmdb.h.pxi
+--- a/pyslurm/slurm/slurmdb.h.pxi	2026-04-15 17:24:11
++++ b/pyslurm/slurm/slurmdb.h.pxi	2026-09-26 15:15:22
+@@ -70,7 +70,6 @@
+     uint8_t SLURMDB_JOB_FLAG_SCHED
+     uint8_t SLURMDB_JOB_FLAG_BACKFILL
+     uint8_t SLURMDB_JOB_FLAG_START_R
+-    uint8_t SLURMDB_JOB_FLAG_ALTERED
+     uint8_t JOBCOND_FLAG_DUP
+     uint8_t JOBCOND_FLAG_NO_STEP
+     uint8_t JOBCOND_FLAG_NO_TRUNC
+@@ -225,7 +224,6 @@
+         uint32_t rec_count
+         uint64_t count
+         uint32_t id
+-        char modifier
+         char* name
+         char* type
+ 
+@@ -856,7 +854,6 @@
+         list_t* assoc_list
+         slurmdb_bf_usage_t* bf_usage
+         list_t* coord_accts
+-        uint32_t def_qos_id
+         char* default_acct
+         char* default_wckey
+         uint32_t flags

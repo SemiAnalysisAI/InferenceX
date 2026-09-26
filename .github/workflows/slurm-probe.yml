@@ -1,0 +1,80 @@
+name: Slurm Probe
+
+# Read-only inventory of each cluster's Slurm toolchain: version, headers,
+# libslurm, compiler and container plugins. The vendored pyslurm patches in
+# third_party/pyslurm/patches/ target the versions this reports. Allocates
+# nothing and runs no benchmark.
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/slurm-probe.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: slurm-probe-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    name: probe / ${{ matrix.cluster }}
+    runs-on: ["self-hosted", "cluster:${{ matrix.cluster }}"] # zizmor: ignore[self-hosted-runner]
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        cluster:
+          - h100-dgxc
+    steps:
+      - name: Inventory Slurm toolchain
+        env:
+          CLUSTER: ${{ matrix.cluster }}
+        run: |
+          set +e
+          out="slurm-probe-${CLUSTER}.txt"
+          {
+            echo "cluster=$CLUSTER host=$(hostname) arch=$(uname -m)"
+            grep -E '^(PRETTY_NAME|VERSION_ID)=' /etc/os-release
+            echo "--- commands"
+            for c in sinfo srun sbatch salloc squeue sacct scancel scontrol enroot docker gcc cc python3; do
+              printf '%-9s %s\n' "$c" "$(command -v "$c" || echo MISSING)"
+            done
+            echo "--- versions"
+            sinfo -V 2>&1
+            srun --version 2>&1
+            scontrol show config 2>/dev/null | grep -E '^(SLURM_VERSION|PluginDir|SlurmctldHost|MpiDefault|PlugStackConfig) '
+            echo "--- headers (slurm_version.h)"
+            for h in /usr/include/slurm/slurm_version.h /usr/local/include/slurm/slurm_version.h \
+                     /opt/slurm/include/slurm/slurm_version.h \
+                     $(ls -d /opt/slurm*/include/slurm/slurm_version.h /cm/shared/apps/slurm/*/include/slurm/slurm_version.h 2>/dev/null); do
+              [ -f "$h" ] && echo "$h: $(grep -E 'define SLURM_VERSION_STRING' "$h")"
+            done
+            echo "--- libslurm"
+            ldconfig -p 2>/dev/null | grep -E 'libslurm(full)?\.so'
+            ls -l /usr/lib64/libslurm*.so* /usr/lib/x86_64-linux-gnu/libslurm*.so* /usr/lib/aarch64-linux-gnu/libslurm*.so* \
+                  /opt/slurm*/lib*/libslurm*.so* 2>/dev/null
+            echo "--- spank plugins (pyxis)"
+            for p in /etc/slurm/plugstack.conf /etc/slurm/plugstack.conf.d/*; do
+              [ -f "$p" ] && echo "$p: $(tr '\n' ' ' < "$p")"
+            done
+            echo "--- toolchain"
+            gcc --version 2>/dev/null | head -1
+            python3 --version 2>&1
+            python3 -c 'import sysconfig; print("python-include", sysconfig.get_paths()["include"])' 2>&1
+            python3 -c 'import pyslurm; print("pyslurm", pyslurm.__version__)' 2>&1 | tail -1
+            enroot version 2>&1 | head -1
+            echo "--- build readiness"
+            grep -hE 'SLURM_VERSION_(NUMBER|STRING)' /usr/include/slurm/slurm_version.h 2>/dev/null
+            ls /usr/include/slurm/ 2>/dev/null | tr '\n' ' '; echo
+            dpkg -l 2>/dev/null | awk '/slurm/ {print $2, $3}'
+            python3 -m pip --version 2>&1 | head -1
+            python3 -c 'import Cython; print("cython", Cython.__version__)' 2>&1 | tail -1
+            python3 -m pip config list 2>/dev/null
+            df -h "$RUNNER_TEMP" 2>/dev/null | tail -1
+          } > "$out" 2>&1
+          cat "$out"
+          { echo '```'; cat "$out"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          exit 0
