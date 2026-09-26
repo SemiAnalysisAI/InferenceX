@@ -26,6 +26,7 @@ import sys
 from pathlib import Path
 
 import operatorx.ops  # noqa: F401  populates op registry
+from operatorx.core import op_registry
 from operatorx import Op, Result, UnsupportedOpError, write_run_result
 from operatorx.clusters import CLUSTER_PLATFORMS
 from operatorx.runtime import runtime_snapshot, utc_now_iso
@@ -211,6 +212,8 @@ def main() -> int:
         try:
             if op.type not in backend_ops.get(op.backend, set()):
                 raise UnsupportedOpError(f"{platform}/{op.backend} has no implementation for {op.type}")
+            # a case the op's schema rejects is a bad testlist entry: an error, never measured
+            op_registry.validate(op)
             r = runner_mod.run(op)
             results.append(Result(op=op, metrics=r.metrics, status="ok",
                                   testlist=tl))
