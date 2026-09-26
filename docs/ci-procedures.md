@@ -419,10 +419,10 @@ On a later PR `synchronize` event, the reuse gate skips another PR sweep only af
 
 ### Supported merge path
 
-Run from a clean checkout with authenticated `gh`, `git`, `jq`, and Python:
+Run from a clean checkout with `uv`, `git`, and a `GH_TOKEN` or `GITHUB_TOKEN` set (or `gh` authenticated):
 
 ```bash
-python3 -m infx.workflows.merge_with_reuse <pr-number>
+uv run --extra workflows python -m infx.workflows.merge_with_reuse <pr-number>
 ```
 
 [`merge_with_reuse.py`](../infx/workflows/merge_with_reuse.py) verifies an eligible successful source artifact, posts the authorization pinned to that run, merges `origin/main` into the PR branch, resolves only a `perf-changelog.yaml` conflict, canonicalizes appended `XXX` links, creates/pushes a synchronization commit when needed, waits for `check-changelog` and all PR checks, verifies the head did not move, and admin squash-merges. It refuses forks, dirty worktrees, multiple primary labels, incompatible modifiers, unexpected conflicts, missing artifacts, failed checks, or a moving PR head.
@@ -471,7 +471,7 @@ uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with p
   --head-ref HEAD
 ```
 
-When reuse is authorized, prefer [`python3 -m infx.workflows.merge_with_reuse`](../infx/workflows/merge_with_reuse.py). It performs this conflict preparation and the required synchronization/check sequence together.
+When reuse is authorized, prefer [`uv run --extra workflows python -m infx.workflows.merge_with_reuse`](../infx/workflows/merge_with_reuse.py). It performs this conflict preparation and the required synchronization/check sequence together.
 
 ## Artifact downloads and parsing
 

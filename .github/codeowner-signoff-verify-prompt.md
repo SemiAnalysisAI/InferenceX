@@ -185,7 +185,7 @@ public upstream documentation.
   standard.
 
 ## Check 4 — Reuse-sweep command explicitly posted
-The supported merge path for an approved PR is reuse (`python3 -m infx.workflows.merge_with_reuse`).
+The supported merge path for an approved PR is reuse (`uv run --extra workflows python -m infx.workflows.merge_with_reuse`).
 An authorized maintainer must explicitly post a reuse command as a PR comment;
 a green sweep alone is not enough. Verify the command directly from the comments:
 - Prefer `/use <run_id>`, with a numeric run ID on the same line. Also accept the legacy

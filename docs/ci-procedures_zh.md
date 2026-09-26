@@ -401,10 +401,10 @@ Klaud 和恢复工具继续使用现有的 `gh` 认证。GitHub CLI 跟随分页
 
 ### 受支持的合并路径
 
-在具有已认证 `gh`、`git`、`jq` 和 Python 的干净 Checkout 中运行：
+在设置了 `GH_TOKEN` 或 `GITHUB_TOKEN`（或 `gh` 已认证）的干净 Checkout 中运行：
 
 ```bash
-python3 -m infx.workflows.merge_with_reuse <pr-number>
+uv run --extra workflows python -m infx.workflows.merge_with_reuse <pr-number>
 ```
 
 [`merge_with_reuse.py`](../infx/workflows/merge_with_reuse.py) 会验证合格的成功源产物、发布固定到该 Run 的授权、把 `origin/main` 合并进 PR Branch、只解决 `perf-changelog.yaml` 冲突、规范化追加条目中的 `XXX` Link、按需创建并推送 Synchronization Commit、等待 `check-changelog` 和全部 PR Check、再次确认 Head 未移动，最后执行 Admin Squash Merge。它会拒绝 Fork、脏 Working Tree、多个主标签、不兼容修饰标签、意外冲突、缺少产物、失败 Check 或移动过的 PR Head。
@@ -453,7 +453,7 @@ uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with p
   --head-ref HEAD
 ```
 
-复用已获授权时，优先使用 [`python3 -m infx.workflows.merge_with_reuse`](../infx/workflows/merge_with_reuse.py)；它会一次完成冲突准备以及所需的 Synchronization/Check 序列。
+复用已获授权时，优先使用 [`uv run --extra workflows python -m infx.workflows.merge_with_reuse`](../infx/workflows/merge_with_reuse.py)；它会一次完成冲突准备以及所需的 Synchronization/Check 序列。
 
 ## 产物下载与解析
 
