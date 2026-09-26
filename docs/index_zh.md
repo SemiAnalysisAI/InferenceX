@@ -39,8 +39,8 @@
 | [`utils/evals/EVALS.md`](../utils/evals/EVALS.md) | Eval 任务、执行、收集、校验与 SWE-bench 契约 |
 | [`benchmarks/multi_node/srt-slurm-recipes/RECIPES.md`](../benchmarks/multi_node/srt-slurm-recipes/RECIPES.md) | 分离式 Recipe 注册与主配置耦合 |
 | [`utils/runner_setup/RUNNER_SETUP.md`](../utils/runner_setup/RUNNER_SETUP.md) | Runner 部署与初始化 |
-| [`MODELS_zh.md`](../MODELS_zh.md) | 支持的模型、硬件覆盖与命名 |
-| [`KLAUD_DEBUG.md`](../KLAUD_DEBUG.md) | Klaud-Cold、CI、镜像、集群与 GitHub CLI 的历史故障特征 |
+| [`MODELS_zh.md`](MODELS_zh.md) | 支持的模型、硬件覆盖与命名 |
+| [`KLAUD_DEBUG.md`](KLAUD_DEBUG.md) | Klaud-Cold、CI、镜像、集群与 GitHub CLI 的历史故障特征 |
 | [`klaud.md`](./klaud.md) / [`klaud_zh.md`](./klaud_zh.md) | Klaud Cold 候选选择、所有权、验证与恢复 |
 | [`klaud-reporting.md`](./klaud-reporting.md) / [`klaud-reporting_zh.md`](./klaud-reporting_zh.md) | Klaud PR 正文、进度评论、数值对比与最终预检 |
 | [`benchmarks/srt_agentic.sh`](../benchmarks/srt_agentic.sh) | 单节点与多节点 srt-slurm 配方共用的 AgentX Trace 回放客户端 |

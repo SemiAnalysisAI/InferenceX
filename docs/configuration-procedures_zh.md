@@ -145,7 +145,7 @@ B300 DSXE 的 Kimi-K3 AgentX 路径在 `/scratch/models` 下挂载预置目标�
 
 TileRT 的共享导入器保留 Docker Hub 镜像名称，并将 `ghcr.io/team/image:tag` 等显式仓库地址转换为 Enroot 的 `docker://ghcr.io#team/image:tag` 格式。已有的 `#` 地址保持不变。有效的缓存 squash 镜像会直接复用；命中缓存不能证明仓库导入路径有效。无效的缓存镜像会在持有导入锁时删除，再重新导入。
 
-GLM-5.1 B200 Nscale 1k1k 和 8k1k 配方使用已准备的共享 checkpoint、TileRT 转换权重和 squash 缓存，1k1k 的分配时限为 45 分钟，8k1k 为 90 分钟，以容纳完整 GSM8K eval。C1 低于自动 eval 选择门槛，完整资格验证应同时使用 PR 标签 `all-evals` 和 `full-sweep-fail-fast`。TileRT 在 GLM-5.1 一般退役之后由 [#2533](https://github.com/SemiAnalysisAI/InferenceX/pull/2533) 加入；[MODELS_zh.md](../MODELS_zh.md) 记录了这部分保留范围。相关改动仍须完成正常 PR sweep、适用质量验证、签核和复用，才能发布。
+GLM-5.1 B200 Nscale 1k1k 和 8k1k 配方使用已准备的共享 checkpoint、TileRT 转换权重和 squash 缓存，1k1k 的分配时限为 45 分钟，8k1k 为 90 分钟，以容纳完整 GSM8K eval。C1 低于自动 eval 选择门槛，完整资格验证应同时使用 PR 标签 `all-evals` 和 `full-sweep-fail-fast`。TileRT 在 GLM-5.1 一般退役之后由 [#2533](https://github.com/SemiAnalysisAI/InferenceX/pull/2533) 加入；[MODELS_zh.md](MODELS_zh.md) 记录了这部分保留范围。相关改动仍须完成正常 PR sweep、适用质量验证、签核和复用，才能发布。
 
 TileRT 的 eval 封装调用共享 `run_eval` 分发器，不覆盖其中的 `run_lm_eval` 客户端。评测后保存可用产物，并保留评测或产物保存阶段的失败状态。TCP 就绪探测只在子 shell 中使用 socket，不改变调用方的诊断输出流。
 

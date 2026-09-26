@@ -149,7 +149,7 @@ jobs:
             **IMPORTANT: Keep runs precise and efficient:**
             - Use `full-sweep` with filter flags to narrow down the benchmark scope - "full-sweep" does NOT mean running everything
             - When using `full-sweep`, you must use `--min-conc` and `--max-conc` together to specify a single concurrency value. Unless prompted otherwise, use `--min-conc 4 --max-conc 4`
-            - For fixed-sequence runs, use `--seq-lens 8k1k`. Use `1k1k` only for the explicitly retained GLM-5.1 B200 TileRT config. Consult `MODELS.md` for model-specific scenario eligibility.
+            - For fixed-sequence runs, use `--seq-lens 8k1k`. Use `1k1k` only for the explicitly retained GLM-5.1 B200 TileRT config. Consult `docs/MODELS.md` for model-specific scenario eligibility.
             - Use `test-config` ONLY when given specific config keys to test - Use `--config-files`, `--config-keys`, and `--conc` flags ONLY
             - Always filter by specific models, frameworks, precision, conc, or config keys when possible
 
@@ -200,7 +200,7 @@ jobs:
 
             **How to map a natural-language request to inputs:**
             The user will say something like "profile sglang b200 deepseek fp4 conc=4". Parse it as:
-            - Model: resolve the requested model against the current active master configs and `MODELS.md`; for example, `dsr1` means DeepSeek-R1 and `qwen3.5` means Qwen3.5. Reject retired model/scenario requests and preserve documented exceptions.
+            - Model: resolve the requested model against the current active master configs and `docs/MODELS.md`; for example, `dsr1` means DeepSeek-R1 and `qwen3.5` means Qwen3.5. Reject retired model/scenario requests and preserve documented exceptions.
             - Precision: "fp4" / "fp8" / "bf16"
             - Runner/hardware: "b200", "h200", "h100", "mi300x", "mi325x", "mi355x", etc.
             - Framework: must be "sglang" (reject if not)
@@ -564,7 +564,7 @@ jobs:
             ## Model Prefix Validation:
             When reviewing changes to `configs/*-master.yaml` files, verify that ALL config keys use valid model prefixes.
 
-            Use `MODELS.md` and the active master configs as the source of truth for supported models, scenarios, precisions, and documented exceptions. Do not use a hard-coded historical prefix allowlist.
+            Use `docs/MODELS.md` and the active master configs as the source of truth for supported models, scenarios, precisions, and documented exceptions. Do not use a hard-coded historical prefix allowlist.
 
             **Config identity:**
             - `model-prefix` identifies the model family and does not include precision (for example, `dsr1`, not `dsr1-fp8`).
@@ -572,7 +572,7 @@ jobs:
             - Example: `dsr1-fp8-gb200-vllm` has model-prefix `dsr1` and precision `fp8`.
 
             **Deprecation validation:**
-            - Reject new active entries for retired models, scenarios, or precisions unless `MODELS.md` explicitly documents an exception.
+            - Reject new active entries for retired models, scenarios, or precisions unless `docs/MODELS.md` explicitly documents an exception.
             - Preserve the GLM-5.1 B200 TileRT exception and the conditional non-speculative AgentX policy; do not infer retirement from the existence of a speculative counterpart.
             - Retired entries are deleted from the master configs, not archived, following `AGENTS.md`; git history and `perf-changelog.yaml` are the historical record.
-            - For a newly supported model, require matching updates to `MODELS.md` and `MODELS_zh.md` rather than rejecting it against an obsolete model list.
+            - For a newly supported model, require matching updates to `docs/MODELS.md` and `docs/MODELS_zh.md` rather than rejecting it against an obsolete model list.

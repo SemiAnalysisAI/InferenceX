@@ -5185,7 +5185,7 @@ qwen3.5-fp8-h100-sglang-agentic:
 
 # First Qwen3.5 AgentX recipe on H200, shipped spec-decode-only per the AgentX
 # policy that new agentic arms enable speculative decoding rather than running a
-# separate STP baseline (MODELS.md). SGLang EAGLE MTP (num-steps 3, eagle-topk 1,
+# separate STP baseline (docs/MODELS.md). SGLang EAGLE MTP (num-steps 3, eagle-topk 1,
 # 4 draft tokens = 3 speculative tokens) with simulated acceptance pinned to the
 # golden AL 3.39 (golden_al_distribution/qwen3.5_mtp.yaml, thinking_on, K=3).
 # Image is lmsysorg/sglang:v0.5.16-cu130: SGLANG_SIMULATE_ACC_TOKEN_MODE only
@@ -7017,7 +7017,7 @@ glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-agg:
           - "CONFIG_FILE=recipes/glm5.2/sglang/h200-fp8/agentx/agg-h200-tp8-mtp-c16.yaml"
 
 # GLM-5.2 B300 NVFP4 AgentX with EAGLE/MTP speculative decoding, following the
-# AgentX speculative-decoding policy in MODELS.md. SGLang EAGLE runs off
+# AgentX speculative-decoding policy in docs/MODELS.md. SGLang EAGLE runs off
 # GLM-5.2's built-in nextn head (num-steps 3,
 # eagle-topk 1, 4 draft tokens = 3 speculative tokens), with acceptance pinned
 # to the golden AL 2.99 (golden_al_distribution/glm5.2_mtp.yaml, thinking_on,
@@ -7046,7 +7046,7 @@ glm5.2-fp4-b300-sglang-agentic-mtp:
 # First GLM-5.2 FP8 AgentX recipe on B300, the FP8 precision sibling of
 # glm5.2-fp4-b300-sglang-agentic-mtp and the B300 counterpart of
 # glm5.2-fp8-b200-sglang-agentic-mtp (#2863). Same spec-decode-only shape per
-# the AgentX policy (MODELS.md): SGLang EAGLE off GLM-5.2's built-in nextn head
+# the AgentX policy (docs/MODELS.md): SGLang EAGLE off GLM-5.2's built-in nextn head
 # (num-steps 3, eagle-topk 1, 4 draft tokens = 3 speculative tokens) with
 # acceptance pinned to the golden AL 2.99 (golden_al_distribution/glm5.2_mtp.yaml,
 # thinking_on, K=3), which was measured on glm-5.2-fp8, i.e. on this checkpoint.
@@ -7076,7 +7076,7 @@ glm5.2-fp8-b300-sglang-agentic-mtp:
 
 # First GLM-5.2 AgentX recipe on B200, shipped spec-decode-only per the AgentX
 # policy that agentic arms enable speculative decoding rather than running a
-# separate STP baseline (MODELS.md). SGLang EAGLE off GLM-5.2's built-in nextn
+# separate STP baseline (docs/MODELS.md). SGLang EAGLE off GLM-5.2's built-in nextn
 # head (num-steps 3, eagle-topk 1, 4 draft tokens = 3 speculative tokens) with
 # acceptance pinned to the golden AL 2.99 (golden_al_distribution/glm5.2_mtp.yaml,
 # thinking_on, K=3) through SGLANG_SIMULATE_ACC_*. SGLang v0.5.16 is the first
@@ -7105,7 +7105,7 @@ glm5.2-fp4-b200-sglang-agentic-mtp:
 
 # First GLM-5.2 FP8 AgentX recipe on B200, the FP8 precision sibling of
 # glm5.2-fp4-b200-sglang-agentic-mtp. Same spec-decode-only shape per the AgentX
-# policy (MODELS.md): SGLang EAGLE off GLM-5.2's built-in nextn head (num-steps
+# policy (docs/MODELS.md): SGLang EAGLE off GLM-5.2's built-in nextn head (num-steps
 # 3, eagle-topk 1, 4 draft tokens = 3 speculative tokens) with acceptance pinned
 # to the golden AL 2.99 (golden_al_distribution/glm5.2_mtp.yaml, thinking_on,
 # K=3) through SGLANG_SIMULATE_ACC_*. That curve was measured on glm-5.2-fp8,
