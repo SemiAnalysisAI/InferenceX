@@ -136,6 +136,19 @@ Before accepting an updated curve, reviewers should verify:
 | GLM-5.2 | MTP | [`glm5.2_mtp.yaml`](glm5.2_mtp.yaml) | [28058352479](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28058352479) |
 | Qwen3.8-Flash-Next | MTP (native) | [`qwen3.8next_mtp.yaml`](qwen3.8next_mtp.yaml) | [33034290269](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/33034290269) |
 
+## Querying the curves
+
+This directory is the `infx.golden_al_distribution` Python package. `golden_length(model_prefix, spec, thinking)` returns the value AgentX synthetic acceptance applies, and `curve_name` shows which YAML a speculative config resolves to. The same lookup runs from a shell:
+
+```bash
+python -m infx.golden_al_distribution list                          # every curve and its measured draft lengths
+python -m infx.golden_al_distribution show qwen3.5_mtp              # every AL in one curve
+python -m infx.golden_al_distribution lookup qwen3.5 mtp 3          # 3.39 (thinking_on by default)
+python -m infx.golden_al_distribution lookup kimik3 dspark 7 --draft-sample-method probabilistic --json
+```
+
+`lookup` takes the InferenceX model prefix, the engine's method name (`mtp`, `eagle`, `nextn`, `eagle3`, `dspark`) and `num_speculative_tokens`. `--draft-model` selects the MiniMax GQA curve, and `--draft-sample-method` chooses between the two Kimi DSpark curves. A missing curve or cell exits non-zero, exactly as a launch would fail.
+
 ## Primary references
 
 - [Similar Efforts from AMD @haic0 PR Reference 1](https://github.com/SemiAnalysisAI/InferenceX/pull/1633)

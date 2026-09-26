@@ -136,6 +136,19 @@ gh workflow run speedbench-al.yml \
 | GLM-5.2 | MTP | [`glm5.2_mtp.yaml`](glm5.2_mtp.yaml) | [28058352479](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28058352479) |
 | Qwen3.8-Flash-Next | MTP (native) | [`qwen3.8next_mtp.yaml`](qwen3.8next_mtp.yaml) | [33034290269](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/33034290269) |
 
+## 查询曲线
+
+本目录即 `infx.golden_al_distribution` Python 包。`golden_length(model_prefix, spec, thinking)` 返回 AgentX 合成接受所使用的数值，`curve_name` 给出某个投机解码配置对应的 YAML。也可以在 shell 中执行相同的查询：
+
+```bash
+python -m infx.golden_al_distribution list                          # 所有曲线及其已测量的草稿长度
+python -m infx.golden_al_distribution show qwen3.5_mtp              # 单条曲线的全部 AL
+python -m infx.golden_al_distribution lookup qwen3.5 mtp 3          # 3.39（默认 thinking_on）
+python -m infx.golden_al_distribution lookup kimik3 dspark 7 --draft-sample-method probabilistic --json
+```
+
+`lookup` 接受 InferenceX 模型前缀、引擎的方法名（`mtp`、`eagle`、`nextn`、`eagle3`、`dspark`）以及 `num_speculative_tokens`。`--draft-model` 用于选择 MiniMax GQA 曲线，`--draft-sample-method` 用于在两条 Kimi DSpark 曲线之间选择。缺少曲线或数值时以非零状态退出，与启动时的失败方式一致。
+
 ## 主要参考资料
 
 - [AMD @haic0 的类似工作：PR 参考 1](https://github.com/SemiAnalysisAI/InferenceX/pull/1633)
