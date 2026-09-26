@@ -1,8 +1,9 @@
 # Kimi-K3 MXFP4 AgentX on MI355X with vLLM DSpark
 # (https://recipes.vllm.ai/moonshotai/Kimi-K3). TP8 only: the 1.56 TB checkpoint
 # is ~195 GB per GPU. The KV cache is GPU-resident through c4 and backed by
-# vLLM's SimpleCPUOffloadConnector from c8. The DCP8 arm (c44-c70) runs without
-# a draft model and stays on the legacy script.
+# vLLM's SimpleCPUOffloadConnector from c8. The DCP8 arm (c44-c70) ran without a
+# draft model on the legacy script and was removed with it (#3461). No master
+# config uses this recipe yet.
 base:
   schema: 2
   name: kimik3-fp4-mi355x-vllm-agentic
