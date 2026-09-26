@@ -148,7 +148,7 @@ uv run --locked \
 | Changelog 内容或 PR 门禁 | `python -m pytest infx/tests/matrix/test_process_changelog.py infx/tests/workflows/test_validate_perf_changelog.py infx/tests/workflows/test_prepare_perf_changelog_merge.py -v` |
 | 结果处理与拓扑 | `python -m pytest infx/tests/results/power/test_process_result.py infx/tests/results/agentic/test_process_agentic_result.py infx/tests/results/power/test_aggregate_power.py infx/tests/workflows/test_calc_success_rate.py -v` |
 | AgentX 聚合与工件加载 | `python -m pytest infx/tests/results/agentic/ -v` |
-| 评测分发、批处理或补丁 | `python -m pytest infx/tests/evals/ utils/evals/ -v` |
+| 评测分发、批处理或补丁 | `python -m pytest infx/tests/evals/ -v` |
 | 评测收集 | `python -m pytest infx/tests/results/test_collect_eval_results.py -v` |
 | 扫描复用或可复用制品 | `python -m pytest infx/tests/test_github.py infx/tests/workflows/test_find_reusable_sweep_run.py infx/tests/workflows/test_acknowledge_sweep_reuse.py infx/tests/workflows/test_validate_reusable_sweep_artifacts.py -v` |
 

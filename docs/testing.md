@@ -148,7 +148,7 @@ Inspect the emitted values, not only the exit code or row count: config key, mod
 | Changelog content or PR gating | `python -m pytest infx/tests/matrix/test_process_changelog.py infx/tests/workflows/test_validate_perf_changelog.py infx/tests/workflows/test_prepare_perf_changelog_merge.py -v` |
 | Result processing and topology | `python -m pytest infx/tests/results/power/test_process_result.py infx/tests/results/agentic/test_process_agentic_result.py infx/tests/results/power/test_aggregate_power.py infx/tests/workflows/test_calc_success_rate.py -v` |
 | AgentX aggregation and artifact loading | `python -m pytest infx/tests/results/agentic/ -v` |
-| Eval dispatch, batching, or patches | `python -m pytest infx/tests/evals/ utils/evals/ -v` |
+| Eval dispatch, batching, or patches | `python -m pytest infx/tests/evals/ -v` |
 | Eval collection | `python -m pytest infx/tests/results/test_collect_eval_results.py -v` |
 | Sweep reuse or reusable artifacts | `python -m pytest infx/tests/test_github.py infx/tests/workflows/test_find_reusable_sweep_run.py infx/tests/workflows/test_acknowledge_sweep_reuse.py infx/tests/workflows/test_validate_reusable_sweep_artifacts.py -v` |
 
