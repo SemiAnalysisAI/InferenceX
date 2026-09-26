@@ -241,7 +241,9 @@ def test_strict_benchmark_writes_actual_status(
     monkeypatch.setenv("WORLD_SIZE", "1")
     monkeypatch.setenv("RANK", "0")
     (tmp_path / "tiny.json").write_text(
-        json.dumps([{"type": "gemm", "args": {"m": 2}, "sources": [], "name": []}])
+        json.dumps([{"type": "gemm", "sources": [], "name": [],
+                     "args": {"m": 2, "n": 64, "k": 64, "a": {"dtype": "bf16"},
+                              "b": {"dtype": "bf16"}, "out": "bf16"}}])
     )
     monkeypatch.setattr(
         sys,
