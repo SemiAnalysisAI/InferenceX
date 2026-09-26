@@ -8969,6 +8969,6 @@
     - agentic-coding
   description:
     - "Update the MiniMax-M3 ATOM AgentX srt-slurm recipe from rocm/atom-dev:nightly_202609171455 to nightly_202609231248 (digest sha256:80f2c66579704aba933a9ff2a6e22e1dc61917c0fe6a2b0a0166816cd6d0100a), which contains ROCm/ATOM#2366, and set ATOM_PA_FLYDSL=1 and ATOM_PA_FLYDSL_PLAN=1 for FlyDSL paged decode with context-length-aware dense-decode work planning."
-    - "Search space, EAGLE3 K3 with golden AL 2.78, indexer CP, graph sizes and the atomesh frontend are unchanged: TP4 concurrency 1-32 and TP2 concurrency 1-2, GPU-resident KV."
-    - "将 MiniMax-M3 ATOM AgentX srt-slurm 配方镜像从 nightly_202609171455 更新为包含 ROCm/ATOM#2366 的 nightly_202609231248，并设置 ATOM_PA_FLYDSL=1 与 ATOM_PA_FLYDSL_PLAN=1，启用 FlyDSL paged decode 及按上下文长度规划的 dense decode 工作划分。搜索空间、EAGLE3 K3（golden AL 2.78）、indexer CP、graph 档位与 atomesh 前端保持不变。"
+    - "Search space, EAGLE3 K3 with golden AL 2.78, indexer CP, graph sizes and the atomesh frontend are unchanged. Drop TP4 concurrency 32 to bound the sweep; the search space is TP4 concurrency 1-28 and TP2 concurrency 1-2 with GPU-resident KV."
+    - "将 MiniMax-M3 ATOM AgentX srt-slurm 配方镜像从 nightly_202609171455 更新为包含 ROCm/ATOM#2366 的 nightly_202609231248，并设置 ATOM_PA_FLYDSL=1 与 ATOM_PA_FLYDSL_PLAN=1，启用 FlyDSL paged decode 及按上下文长度规划的 dense decode 工作划分。EAGLE3 K3（golden AL 2.78）、indexer CP、graph 档位与 atomesh 前端保持不变；移除 TP4 C32，搜索空间为 TP4 C1-C28 与 TP2 C1-C2（GPU 常驻 KV）。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3388

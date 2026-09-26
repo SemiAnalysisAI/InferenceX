@@ -59,7 +59,7 @@ base:
       AIPERF_APPLY_CHAT_TEMPLATE: 'true'
 
 # One variant per point. Admission is 2x CONC. TP4 shards the indexer across
-# ranks at the measured points (15, 20, 24, 28, 32).
+# ranks at the measured points (15, 20, 24, 28).
 override_tp4_c1:
   roles:
     agg:
@@ -177,18 +177,6 @@ override_tp4_c28:
   benchmark:
     env:
       CONC: '28'
-
-override_tp4_c32:
-  roles:
-    agg:
-      gpus: 4
-      args:
-        max-num-seqs: 64
-      env:
-        ATOM_M3_INDEXER_CP: '1'
-  benchmark:
-    env:
-      CONC: '32'
 
 override_tp2_c1:
   roles:

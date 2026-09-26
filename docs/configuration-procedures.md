@@ -305,7 +305,7 @@ Verify the selected route and capture-time work-plan creation in `server.log`.
 
 The change is limited to the image and the two FlyDSL variables in
 `benchmarks/single_node/srt-slurm-recipes/minimaxm3/atom/mi355x-fp4-mtp/agentic.yaml`;
-the TP4 C1-C32 and TP2 C1-C2 points, EAGLE3 K3, golden AL 2.78 and indexer CP
+TP4 C32 is dropped; the TP4 C1-C28 and TP2 C1-C2 points, EAGLE3 K3, golden AL 2.78 and indexer CP
 are unchanged.
 
 ### DeepSeek-V4.1-Flash DSpark

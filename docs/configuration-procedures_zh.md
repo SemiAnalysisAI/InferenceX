@@ -249,7 +249,7 @@ schedule 和 ragged verification 保持关闭。
 
 改动仅限
 `benchmarks/single_node/srt-slurm-recipes/minimaxm3/atom/mi355x-fp4-mtp/agentic.yaml`
-中的镜像和两个 FlyDSL 变量；TP4 C1-C32、TP2 C1-C2、EAGLE3 K3、golden AL 2.78
+中的镜像和两个 FlyDSL 变量，并移除 TP4 C32；TP4 C1-C28、TP2 C1-C2、EAGLE3 K3、golden AL 2.78
 和 indexer CP 保持不变。
 
 ### DeepSeek-V4.1-Flash DSpark
