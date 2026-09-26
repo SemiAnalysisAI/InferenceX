@@ -1,5 +1,6 @@
 schema: 2
 name: disagg-gb200-1p6d-dep8-tp4-c45-mtp
+setup_script: glm52-gb200-nixl-prefill.sh
 model:
   path: glm-5.2-fp4
   container: dynamo-sglang
@@ -23,6 +24,7 @@ frontend:
   enable_multiple_frontends: true
   env:
     PIP_BREAK_SYSTEM_PACKAGES: '1'
+    INFX_GLM52_NIXL_SYNC_PATCH: '0'
   args:
     router-mode: kv
     router-session-affinity-ttl-secs: '3600'
@@ -40,6 +42,7 @@ roles:
     workers: 1
     gpus: 8
     env:
+      INFX_GLM52_NIXL_SYNC_PATCH: '1'
       TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
       PYTHONUNBUFFERED: '1'
       DYN_SKIP_SGLANG_LOG_FORMATTING: '1'
@@ -105,6 +108,7 @@ roles:
     workers: 6
     gpus: 4
     env:
+      INFX_GLM52_NIXL_SYNC_PATCH: '0'
       TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
       PYTHONUNBUFFERED: '1'
       DYN_SKIP_SGLANG_LOG_FORMATTING: '1'
