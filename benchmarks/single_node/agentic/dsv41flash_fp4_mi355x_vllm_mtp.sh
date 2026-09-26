@@ -71,22 +71,16 @@ while (( CAPTURE_SIZE < GRAPH_NUM_SEQS * (1 + NUM_SPEC_TOKENS) && CAPTURE_SIZE <
     CAPTURE_SIZE=$((CAPTURE_SIZE * 2))
 done
 
-# The sparse-attention indexer and its companion per-rank buffers scale with
-# --max-num-batched-tokens at roughly 4.4 MiB per token, measured on gfx950, so
-# a smaller prefill chunk buys KV room. TP=2 starts from half the per-rank space
-# and is the arm that runs short: at the upstream 16384 it holds 7.84M KV
-# tokens, 122K per request at c64, where run 35574132719 fell to a 17.6% prefix
-# cache hit rate, 187 s TTFT and 150 tok/s against 94.8%, 1.3 s and 957 tok/s at
-# c32. Every point that held had 232K per request or more, so keep the upstream
-# chunk through c32 (245K at TP=2) and trade it away only above that. B300 runs
-# 8192 at TP=4 and the Blackwell TP=2 arms run 4096 (#3320, #3321).
-if (( CONC >= 128 )); then
-    (( TP == 2 )) && BATCHED_TOKENS=4096 || BATCHED_TOKENS=8192
-elif (( TP == 2 && CONC >= 64 )); then
-    BATCHED_TOKENS=8192
-else
-    BATCHED_TOKENS=16384
-fi
+# ATOM's TP2/TP4 AgentX recipe for this model (ROCm/ATOM
+# dsv41flash_fp4_mi355x_atom_mtp.sh) runs the upstream 16384 chunk unconditionally
+# at every concurrency, including TP=2 c64/c128 where this recipe previously
+# traded chunk size for KV room (see the superseded comment this replaces: the
+# sparse-attention indexer's per-rank buffers scale with --max-num-batched-tokens
+# at ~4.4 MiB/token on gfx950, and run 35574132719 saw TP=2 c64 fall to 17.6%
+# prefix cache hit rate at the smaller 8192 chunk before this change). Matching
+# ATOM's fixed value here is unvalidated at c64/c128 on this SKU -- confirm KV
+# headroom does not regress at those points before taking this out of draft.
+BATCHED_TOKENS=16384
 
 # DSpark verifies 1+5 tokens per sequence, so a decode batch of max_num_seqs
 # needs six times that many token slots. The MI355X API-server default of 1024
