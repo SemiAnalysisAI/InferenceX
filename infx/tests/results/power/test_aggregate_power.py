@@ -1,17 +1,4 @@
-"""Tests for aggregate_power.py.
-
-Covers:
-  - NVIDIA CSV (nvidia-smi --query-gpu format with "X W" power cells)
-  - AMD CSV (amd-smi --csv with ISO/epoch timestamps and bare numeric power)
-  - Backward-compatible arithmetic aggregation
-  - Per-device trapezoidal integration over the formal benchmark window
-  - Expected/observed GPU validation, window coverage, and sampling gaps
-  - Missing / empty / malformed CSV: returns None, no exception
-  - Whole-deployment power/energy/J-query/J-token metric semantics
-  - Best-effort invalid results and REQUIRE_POWER strict failures
-  - Atomic aggregate and validation artifacts
-  - Advisory energy-accumulator cross-check against the AMD sidecar snapshots
-"""
+"""Power integration, validation, and publication from controlled SMI telemetry."""
 from __future__ import annotations
 
 import json
@@ -55,11 +42,6 @@ def _write_amd_csv(path: Path, samples: list[tuple[float, int, float]]) -> None:
         iso = datetime.fromtimestamp(ts).isoformat(timespec="milliseconds")
         lines.append(f"{iso},{idx},{pw},65")
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-
-
-# --------------------------------------------------------------------------- #
-# Column / cell parsers
-# --------------------------------------------------------------------------- #
 
 
 def test_detect_columns_nvidia():
@@ -142,11 +124,6 @@ def test_parse_timestamp_epoch_milliseconds():
 def test_parse_timestamp_garbage_returns_none():
     assert _parse_timestamp("not-a-date") is None
     assert _parse_timestamp("") is None
-
-
-# --------------------------------------------------------------------------- #
-# aggregate_power core
-# --------------------------------------------------------------------------- #
 
 
 def test_aggregate_power_nvidia_single_gpu(tmp_path: Path):
@@ -297,11 +274,6 @@ def test_aggregate_power_invalid_window_returns_none(tmp_path: Path):
     assert aggregate_power(csv, 200.0, 100.0) is None
 
 
-# --------------------------------------------------------------------------- #
-# End-to-end run() — patching the agg JSON
-# --------------------------------------------------------------------------- #
-
-
 def _write_bench_result(
     path: Path,
     *,
@@ -348,11 +320,6 @@ def _write_constant_window_samples(
             for gpu in range(num_gpus)
         ],
     )
-
-
-# --------------------------------------------------------------------------- #
-# Validated per-device integration contract
-# --------------------------------------------------------------------------- #
 
 
 def test_integrate_power_uses_per_device_trapezoidal_integration(tmp_path: Path):
@@ -1070,10 +1037,6 @@ def test_run_invalid_benchmark_denominator_is_auditable(
     assert json.loads(agg.read_text())["power_valid"] == 0
     assert json.loads(validation.read_text())["reasons"] == [reason]
 
-
-# --------------------------------------------------------------------------- #
-# Advisory hardware energy-accumulator cross-check
-# --------------------------------------------------------------------------- #
 
 _ENERGY_SNAPSHOT_HEADER = (
     "gpu,socket_power,gfx_voltage,soc_voltage,mem_voltage,"

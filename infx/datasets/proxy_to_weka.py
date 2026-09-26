@@ -111,17 +111,7 @@ def load_session_rows(path: Path) -> list[dict]:
                 rows.append(json.loads(line))
     rows.sort(key=lambda r: r["timestamp"])
 
-    # Drop exact-duplicate rows. The proxy occasionally records the same
-    # logical request twice — observed at ~1.5% of subagent inner rows on
-    # the v5 + CC>=2.1.139 pool, concentrated in heavy-fanout subagents.
-    # Without deduping, the weka conversion would inflate token counts /
-    # request counts and the converter would also misclassify the
-    # duplicate row as "concurrent with itself" when grouping.
-    #
-    # Fingerprint: (timestamp, model, input_tokens, output_tokens,
-    # duration_ms, agent_id). Two distinct logical requests landing on
-    # the same nanosecond timestamp with identical token counts AND the
-    # same agent_id are so unlikely that collapsing them is safe.
+    # Duplicate proxy rows inflate token counts and look like concurrent requests.
     seen: set[tuple] = set()
     deduped: list[dict] = []
     for r in rows:
@@ -250,12 +240,8 @@ def compute_think_times(rows: list[dict]) -> list[float | None]:
     return out
 
 
-# Claude CLI version at which `x-claude-code-agent-id` became the
-# canonical sub-agent signal. On rows >= this version, a labelled row
-# without a header id is treated as a utility call (Title Generation,
-# Statusline Agent, …), demoted to a main turn instead of getting its
-# own SubagentEntry. Diverges intentionally from the dashboard, which
-# still renders those as subagents — we want clean weka traces.
+# From this CLI version, the agent-id header distinguishes subagents from
+# labelled utility calls. Unlike the dashboard, replay treats those calls as main turns.
 MIN_CLI_FOR_HEADER_AS_TRUTH = (2, 1, 139)
 
 
@@ -317,9 +303,7 @@ def build_subagent_entry(
     duration_ms = round((end_t - first_row["t_sec"]) * 1000)
     total_tokens = sum(r["in"] + r["out"] for r in inner)
     models = sorted({row["model"] for row, _ in items})
-    # agent_id suffix priority: Claude Code agent-id (canonical when
-    # present) > Codex thread-id. Matches the dashboard's
-    # getSubagentRunLabel which suffixes with the last 8 chars.
+    # Match the dashboard's label suffix, preferring the canonical Claude agent ID.
     cc_agent_id = first_row.get("agent_id")
     thread_id = first_row.get("thread_id")
     agent_id = f"{slugify(label)}_{instance_idx:03d}"
@@ -333,8 +317,7 @@ def build_subagent_entry(
         "subagent_type": label,
         "duration_ms": duration_ms,
         "total_tokens": total_tokens,
-        # tool_use_count is not tracked in the proxy DB; leave as None
-        # (the model field defaults to None).
+        # The proxy does not track tool_use_count.
         "tool_use_count": None,
         "status": "completed",
         "requests": inner,
@@ -352,10 +335,7 @@ def session_to_weka(session_id: str, rows: list[dict]) -> dict:
             "requests": [],
         }
 
-    # Demote utility-labelled rows (no header id) on new CLI versions
-    # so they appear as main turns instead of 1-inner SubagentEntries.
-    # We work on a shallow copy that nulls out subagent_label on those
-    # rows; everything else is unchanged.
+    # Treat utility calls as main turns without mutating the source rows.
     n_demoted = 0
     demoted_rows: list[dict] = []
     for r in rows:
@@ -380,13 +360,8 @@ def session_to_weka(session_id: str, rows: list[dict]) -> dict:
     instance_count: dict[str, int] = {}
     models_seen: set[str] = set()
 
-    # Pass 1: pre-collect ALL rows belonging to each header-keyed group
-    # across the entire session, not just within contiguous label
-    # stretches. A sub-agent running in the background while the user
-    # makes more main-agent requests would otherwise get fragmented
-    # into one entry per stretch. The agent-id / thread-id header is
-    # stable across fragments — collapse them. Mirrors the pass-1 logic
-    # in subagent-runs.ts:buildRequestRuns.
+    # Group by stable header ID across the session so interleaved main turns
+    # do not split a background subagent into multiple entries.
     id_groups: dict[str, list[tuple[dict, float | None]]] = {}
     for r, tt in zip(rows, think_times, strict=False):
         key = _id_group_key(r)
@@ -394,18 +369,8 @@ def session_to_weka(session_id: str, rows: list[dict]) -> dict:
             continue
         id_groups.setdefault(key, []).append((r, tt))
 
-    # Pass 2: walk chronologically and emit:
-    #   - main turn (null label)           → emit at its position
-    #   - id-keyed sub-agent, first sight  → emit FULL collected group
-    #   - id-keyed sub-agent, already seen → skip (already grouped)
-    #   - label-only sub-agent (no header) → fall back to old stretch-
-    #                                        based grouping
-    #
-    # For agent-id (Claude Code ≥ 2.1.139) groups, the per-request label
-    # drifts arbitrarily across the agent's life (e.g. General Agent ↔
-    # Web Search Agent). We follow the dashboard and use a flat
-    # 'Subagent' label for those. For thread-id (Codex) groups, the
-    # label is stable so we keep the original.
+    # Emit each ID-keyed group at its first occurrence. Rows without IDs
+    # retain the legacy grouping by contiguous label stretches.
     emitted: set[str] = set()
     i = 0
     while i < len(rows):
@@ -431,10 +396,6 @@ def session_to_weka(session_id: str, rows: list[dict]) -> dict:
             i += 1
             continue
 
-        # Legacy contiguous-stretch fallback for label-only sub-agents
-        # (pre-2.1.139 Claude Code or rows with no header coverage).
-        # Same algorithm as before: collect consecutive same-label rows
-        # bounded by main-agent turns, group by label.
         stretch_rows: list[tuple[dict, float | None]] = []
         while (
             i < len(rows)

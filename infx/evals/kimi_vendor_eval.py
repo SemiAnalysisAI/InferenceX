@@ -13,6 +13,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+if __package__:
+    from . import vendor_artifacts as artifacts
+else:
+    import vendor_artifacts as artifacts
+
 TASK_NAME = "kimi_tool_call_schema"
 FULL_TASK_NAME = "kimi_tool_call_schema_full"
 SUPPORTED_TASK_NAMES = (TASK_NAME, FULL_TASK_NAME)
@@ -23,18 +28,15 @@ EXPECTED_TOTALS = {TASK_NAME: 2, FULL_TASK_NAME: 408}
 FULL_SELECTED_CASES = 204
 DEFAULT_TIMEOUT_SECONDS = 900
 FULL_WORKERS = 8
-RESULT_FORMAT = "inferencex-eval-v1"
 ADAPTER_NAME = "kimi-vendor-verifier"
 
 ENDPOINT_REJECTION_RE = re.compile(r"(?im)^(?:E\s+)?AssertionError:.*tool schema rejected:")
 
 
 def prepare_compatibility_path(output_dir: Path) -> Path:
-    """Remove stale projections and return a timestamped collector artifact path."""
-    for stale_path in output_dir.glob(COMPATIBILITY_GLOB):
-        stale_path.unlink()
-    timestamp = datetime.now(UTC).strftime("%Y-%m-%dT%H-%M-%S.%f")
-    return output_dir / f"results_kimi_vendor_{timestamp}.json"
+    return artifacts.prepare_compatibility_path(
+        output_dir, prefix="results_kimi_vendor_", stale_glob=COMPATIBILITY_GLOB
+    )
 
 
 def build_pytest_command(
@@ -242,36 +244,15 @@ def _compatibility_result(
     n_samples: int,
     integration_error: BaseException | None = None,
 ) -> dict[str, Any]:
-    expected_total = _expected_total(task_name)
-    result: dict[str, Any] = {
-        "result_format": RESULT_FORMAT,
-        "eval_adapter": ADAPTER_NAME,
-        "model_name": model,
-        "results": {
-            task_name: {
-                "exact_match,strict-match": score,
-                "exact_match_stderr,strict-match": 0.0,
-            }
-        },
-        "configs": {
-            task_name: {
-                "metric_list": [{"metric": "exact_match"}],
-                "filter_list": [{"name": "strict-match"}],
-            }
-        },
-        "n-samples": {
-            task_name: {
-                "original": expected_total,
-                "effective": n_samples,
-            }
-        },
-    }
-    if integration_error is not None:
-        result["integration_error"] = {
-            "type": type(integration_error).__name__,
-            "message": str(integration_error),
-        }
-    return result
+    return artifacts.compatibility_result(
+        adapter=ADAPTER_NAME,
+        task=task_name,
+        model=model,
+        score=score,
+        original=_expected_total(task_name),
+        effective=n_samples,
+        integration_error=integration_error,
+    )
 
 
 def _write_native_failure(
@@ -308,7 +289,7 @@ def _write_native_failure(
 
 
 def _write_compatibility(path: Path, result: Mapping[str, Any]) -> None:
-    path.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+    artifacts.write_json(path, result, ensure_ascii=True)
 
 
 def run_evaluation(
@@ -328,7 +309,6 @@ def run_evaluation(
     output_dir.mkdir(parents=True, exist_ok=True)
     native_report = output_dir / NATIVE_REPORT_FILENAME
     compatibility_path = prepare_compatibility_path(output_dir)
-    subprocess_rc: int | None = None
     integration_error: BaseException | None = None
     compatibility = _compatibility_result(
         model,
@@ -336,7 +316,6 @@ def run_evaluation(
         task_name=task_name,
         n_samples=0,
     )
-    all_passed = False
     completed_successfully = False
     try:
         native_report.unlink(missing_ok=True)
@@ -364,24 +343,16 @@ def run_evaluation(
         valid_outcome = (subprocess_rc == 0 and all_passed) or (
             subprocess_rc == 1 and not all_passed
         )
-        completed_successfully = subprocess_rc == 0 and all_passed
         if endpoint_rejections:
             integration_error = RuntimeError(
                 "upstream verifier reported "
                 f"{len(endpoint_rejections)} endpoint request or response failure(s)"
             )
-            compatibility = _compatibility_result(
-                model,
-                0.0,
-                task_name=task_name,
-                n_samples=0,
-                integration_error=integration_error,
-            )
-            completed_successfully = False
-        elif valid_outcome:
-            completed_successfully = True
         elif not valid_outcome:
             integration_error = RuntimeError(f"upstream verifier exited with code {subprocess_rc}")
+        else:
+            completed_successfully = True
+        if integration_error is not None:
             compatibility = _compatibility_result(
                 model,
                 0.0,
@@ -389,7 +360,6 @@ def run_evaluation(
                 n_samples=0,
                 integration_error=integration_error,
             )
-            completed_successfully = False
     except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
         integration_error = exc
         compatibility = _compatibility_result(

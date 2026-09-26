@@ -294,10 +294,16 @@ def test_single_node_reusable_keys_normalize_legacy_parallelism_and_separate_var
         legacy_row.pop("pp")
         legacy_row.pop("dcp_size")
         legacy_row.pop("pcp_size")
-        assert identity(legacy_row) == identity(row), name
-        assert identity({**row, "pp": 2}) != identity(row), name
-        assert identity({**row, "dcp_size": 2}) != identity(row), name
-        assert identity({**row, "pcp_size": 2}) != identity(row), name
+        groups = {}
+        for label, candidate in [
+            ("legacy", legacy_row),
+            ("default", row),
+            ("pp", {**row, "pp": 2}),
+            ("dcp", {**row, "dcp_size": 2}),
+            ("pcp", {**row, "pcp_size": 2}),
+        ]:
+            groups.setdefault(identity(candidate), []).append(label)
+        assert list(groups.values()) == [["legacy", "default"], ["pp"], ["dcp"], ["pcp"]], name
 
 
 def test_multinode_keys_normalize_legacy_parallelism_and_separate_topologies() -> None:
@@ -347,7 +353,9 @@ def test_multinode_keys_normalize_legacy_parallelism_and_separate_topologies() -
             "decode_dcp_size": 1,
             "decode_pcp_size": 1,
         }
-        assert identity(legacy_row) == identity(default_row)
+        groups = {}
+        for label, candidate in [("legacy", legacy_row), ("default", default_row)]:
+            groups.setdefault(identity(candidate), []).append(label)
         for field in (
             "prefill_tp",
             "prefill_pp",
@@ -360,7 +368,15 @@ def test_multinode_keys_normalize_legacy_parallelism_and_separate_topologies() -
             "decode_pcp_size",
             "decode_num_workers",
         ):
-            assert identity({**default_row, field: default_row[field] + 1}) != identity(default_row)
+            candidate = {**default_row, field: default_row[field] + 1}
+            groups.setdefault(identity(candidate), []).append(field)
+        assert list(groups.values()) == [
+            ["legacy", "default"],
+            ["prefill_tp"], ["prefill_pp"], ["prefill_dcp_size"], ["prefill_pcp_size"],
+            ["prefill_num_workers"],
+            ["decode_tp"], ["decode_pp"], ["decode_dcp_size"], ["decode_pcp_size"],
+            ["decode_num_workers"],
+        ]
 
 
 def test_agentic_identity_freezes_nested_kv_offload_backend() -> None:
@@ -374,27 +390,24 @@ def test_agentic_identity_freezes_nested_kv_offload_backend() -> None:
     }
     row.pop("offloading")
 
-    identity = agentic_key(row)
-
-    # Equivalent nested metadata must be usable as the same dictionary/set key.
-    assert {identity} == {agentic_key(
-        {
-            **row,
-            "kv_offload_backend": {
-                "options": {"layers": ["cpu", "gpu"]},
-                "name": "native",
-            },
-        }
-    )}
-    assert identity != agentic_key(
-        {
-            **row,
-            "kv_offload_backend": {
-                "name": "native",
-                "options": {"layers": ["cpu"]},
-            },
-        }
-    )
+    reordered = {
+        **row,
+        "kv_offload_backend": {
+            "options": {"layers": ["cpu", "gpu"]},
+            "name": "native",
+        },
+    }
+    cpu_only = {
+        **row,
+        "kv_offload_backend": {
+            "name": "native",
+            "options": {"layers": ["cpu"]},
+        },
+    }
+    groups = {}
+    for label, candidate in [("original", row), ("reordered", reordered), ("cpu", cpu_only)]:
+        groups.setdefault(agentic_key(candidate), []).append(label)
+    assert list(groups.values()) == [["original", "reordered"], ["cpu"]]
 
 
 def write_agentic_artifacts(

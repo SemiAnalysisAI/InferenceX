@@ -47,11 +47,6 @@ PLOT_WEKA = HERE / "plot_weka_distributions.py"
 PLOT_SUBAGENT = HERE / "plot_subagent_distributions.py"
 
 
-# ---------------------------------------------------------------------------
-# Pipeline stages
-# ---------------------------------------------------------------------------
-
-
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
         description=__doc__,
@@ -85,7 +80,6 @@ def parse_args() -> argparse.Namespace:
         help="Cache directory for sample/convert/upload payload.",
     )
 
-    # sampler pass-through
     p.add_argument("--min-trace-version", type=int, default=None)
     p.add_argument("--max-trace-version", type=int, default=None)
     p.add_argument(
@@ -124,7 +118,6 @@ def parse_args() -> argparse.Namespace:
         "dynamic-workflow-bug filter (sampler default 3).",
     )
 
-    # auth
     p.add_argument("--db-url", default=None, help="Postgres URL (else $AGENTIC_PROXY_DB_URL).")
     p.add_argument(
         "--hf-token",
@@ -132,7 +125,6 @@ def parse_args() -> argparse.Namespace:
         help="HF write token (else $HF_TOKEN or cached login).",
     )
 
-    # idempotency
     p.add_argument("--skip-sample", action="store_true", help="Reuse work-dir/proxy/ if present.")
     p.add_argument(
         "--skip-convert",
@@ -208,11 +200,6 @@ def stage_convert(args: argparse.Namespace, proxy_dir: Path, work_dir: Path) -> 
         ]
     )
     return per_trace
-
-
-# ---------------------------------------------------------------------------
-# Payload assembly
-# ---------------------------------------------------------------------------
 
 
 def _concat_traces_jsonl(per_trace_dir: Path, out_path: Path) -> int:
@@ -504,11 +491,6 @@ def _build_payload(
     return stats
 
 
-# ---------------------------------------------------------------------------
-# Request-drop filters (256k total cap; ISL-only cap)
-# ---------------------------------------------------------------------------
-
-
 def _is_oversize(req: dict, cap: int = CAP_TOKENS) -> bool:
     return (req.get("in") or 0) + (req.get("out") or 0) > cap
 
@@ -645,11 +627,6 @@ def stage_isl_filter(per_trace_dir: Path, work_dir: Path, cap: int) -> Path:
     )
 
 
-# ---------------------------------------------------------------------------
-# Upload
-# ---------------------------------------------------------------------------
-
-
 def stage_upload(
     args: argparse.Namespace, payload_dir: Path, repo_id: str, commit_msg: str
 ) -> None:
@@ -702,11 +679,6 @@ def _reconstruct_sampler_cmd(args: argparse.Namespace) -> list:
     return cmd
 
 
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
-
-
 def main() -> int:
     args = parse_args()
     work_dir = args.work_dir
@@ -745,7 +717,6 @@ def main() -> int:
         f"(v{args.min_trace_version or '?'}{'-' + str(args.max_trace_version) if args.max_trace_version and args.max_trace_version != args.min_trace_version else ''}{isl_note})",
     )
 
-    # --- 256k variant
     if args.repo_256k:
         per_trace_256k = stage_256k(per_trace_dir, work_dir)
         cap_payload = work_dir / "256k"

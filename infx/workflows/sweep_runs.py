@@ -29,12 +29,9 @@ def completed_pr_runs(
 def pr_commit_shas(repo: str, pr_number: int, token: str) -> set[str]:
     """Return the set of commit SHAs currently on a PR.
 
-    The Actions ``run.pull_requests`` field is dynamically recomputed and only
-    lists PRs whose *current* head matches the run's ``head_sha``.  After any
-    additional commit lands on the PR (e.g. a ``main`` merge to resolve a
-    ``perf-changelog.yaml`` conflict), the pinned source run drops out of that
-    field even though its commit is still part of the PR.  Checking the PR
-    commit list directly survives that case.
+    Actions recomputes ``run.pull_requests`` against the current PR head, so
+    older runs disappear from that field after a push. The commit list still
+    associates those runs with the PR.
     """
     commits = github.paginate(
         repo,

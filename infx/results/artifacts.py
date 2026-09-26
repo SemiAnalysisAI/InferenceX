@@ -40,37 +40,33 @@ def json_rows(paths: Iterable[Path]) -> Iterable[tuple[Path, dict[str, Any]]]:
                 yield path, row
 
 
+def _worker_key(row: dict[str, Any], prefix: str = "") -> tuple[Any, ...]:
+    return (
+        as_int(row.get(f"{prefix}tp")),
+        as_int(row.get(f"{prefix}pp", 1), 1),
+        as_int(row.get(f"{prefix}dcp_size", 1), 1),
+        as_int(row.get(f"{prefix}pcp_size", 1), 1),
+        as_int(row.get(f"{prefix}ep", 1)),
+        as_bool(row.get(f"{prefix}dp_attention", False)),
+    )
+
+
+def topology_key(row: dict[str, Any]) -> tuple[Any, ...]:
+    """Normalize parallelism in the legacy artifact identity field order."""
+    if not as_bool(row.get("is_multinode", False)):
+        return _worker_key(row)
+    return (
+        *_worker_key(row, "prefill_"),
+        as_int(row.get("prefill_num_workers", 0)),
+        *_worker_key(row, "decode_"),
+        as_int(row.get("decode_num_workers", 0)),
+    )
+
+
 def benchmark_key(row: dict[str, Any]) -> tuple[Any, ...]:
     """Build a fixed-sequence identity from one result row."""
-    if as_bool(row.get("is_multinode", False)):
-        return (
-            "multi",
-            row.get("hw"),
-            row.get("infmax_model_prefix"),
-            row.get("framework"),
-            row.get("precision"),
-            row.get("spec_decoding", "none"),
-            as_bool(row.get("disagg", False)),
-            as_int(row.get("isl")),
-            as_int(row.get("osl")),
-            as_int(row.get("prefill_tp")),
-            as_int(row.get("prefill_pp", 1), 1),
-            as_int(row.get("prefill_dcp_size", 1), 1),
-            as_int(row.get("prefill_pcp_size", 1), 1),
-            as_int(row.get("prefill_ep", 1)),
-            as_bool(row.get("prefill_dp_attention", False)),
-            as_int(row.get("prefill_num_workers", 0)),
-            as_int(row.get("decode_tp")),
-            as_int(row.get("decode_pp", 1), 1),
-            as_int(row.get("decode_dcp_size", 1), 1),
-            as_int(row.get("decode_pcp_size", 1), 1),
-            as_int(row.get("decode_ep", 1)),
-            as_bool(row.get("decode_dp_attention", False)),
-            as_int(row.get("decode_num_workers", 0)),
-            as_int(row.get("conc")),
-        )
     return (
-        "single",
+        "multi" if as_bool(row.get("is_multinode", False)) else "single",
         row.get("hw"),
         row.get("infmax_model_prefix"),
         row.get("framework"),
@@ -79,12 +75,7 @@ def benchmark_key(row: dict[str, Any]) -> tuple[Any, ...]:
         as_bool(row.get("disagg", False)),
         as_int(row.get("isl")),
         as_int(row.get("osl")),
-        as_int(row.get("tp")),
-        as_int(row.get("pp", 1), 1),
-        as_int(row.get("dcp_size", 1), 1),
-        as_int(row.get("pcp_size", 1), 1),
-        as_int(row.get("ep", 1)),
-        as_bool(row.get("dp_attention", False)),
+        *topology_key(row),
         as_int(row.get("conc")),
     )
 
@@ -137,20 +128,7 @@ def agentic_key(row: dict[str, Any]) -> tuple[Any, ...]:
             row.get("precision"),
             row.get("spec_decoding", "none"),
             as_bool(row.get("disagg", False)),
-            as_int(row.get("prefill_tp")),
-            as_int(row.get("prefill_pp", 1), 1),
-            as_int(row.get("prefill_dcp_size", 1), 1),
-            as_int(row.get("prefill_pcp_size", 1), 1),
-            as_int(row.get("prefill_ep", 1)),
-            as_bool(row.get("prefill_dp_attention", False)),
-            as_int(row.get("prefill_num_workers", 0)),
-            as_int(row.get("decode_tp")),
-            as_int(row.get("decode_pp", 1), 1),
-            as_int(row.get("decode_dcp_size", 1), 1),
-            as_int(row.get("decode_pcp_size", 1), 1),
-            as_int(row.get("decode_ep", 1)),
-            as_bool(row.get("decode_dp_attention", False)),
-            as_int(row.get("decode_num_workers", 0)),
+            *topology_key(row),
             as_int(row.get("conc")),
         )
         if "kv_offloading" in row or "offloading" in row:
@@ -162,12 +140,7 @@ def agentic_key(row: dict[str, Any]) -> tuple[Any, ...]:
         row.get("infmax_model_prefix"),
         row.get("framework"),
         row.get("precision"),
-        as_int(row.get("tp")),
-        as_int(row.get("pp", 1), 1),
-        as_int(row.get("dcp_size", 1), 1),
-        as_int(row.get("pcp_size", 1), 1),
-        as_int(row.get("ep", 1)),
-        as_bool(row.get("dp_attention", False)),
+        *topology_key(row),
         as_int(row.get("conc")),
         offload_key,
     )

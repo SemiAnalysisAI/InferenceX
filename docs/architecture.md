@@ -267,6 +267,8 @@ Test builders with small, independently worked examples and read-only inputs. Fo
 
 For eval-only jobs, throughput output is not required. The workflow instead requires at least one `results*.json`. For jobs marked to run eval, uploads may contain `meta_env.json`, `results*.json`, `sample*.jsonl`, SWE-bench predictions and reports, and trajectory files. [`infx/evals/validate_scores.py`](../infx/evals/validate_scores.py) checks produced eval scores.
 
+The Kimi and MiniMax adapters share the collector-compatible result envelope and JSON writing in [`infx.evals.vendor_artifacts`](../infx/evals/vendor_artifacts.py). Each adapter owns its verifier, score validation, task metadata, native reports, and CLI failure policy.
+
 [`infx.results.evals`](../infx/results/evals.py) provides `extract_metrics` for loaded eval JSON and `build_rows` for collector output. Both accept explicit inputs without file I/O or input mutation. The builder applies metadata defaults and primary-score precedence, retaining failed evaluations as diagnostic rows. The CLI owns file discovery, concurrency eligibility, reporting, and artifact writes.
 
 ```python
@@ -290,6 +292,8 @@ Per-job artifacts remain useful for diagnosis and detailed ingestion. Two collec
 - `run-sweep.yml` separately uploads `changelog-metadata/changelog_metadata.json` and `run-stats/run_stats.json` when applicable.
 
 Artifact names are part of the cross-repository interface. InferenceX-app's `ingest-ci-run.ts` names `results_bmk`, `run-stats`, `eval_results_all`, and `changelog-metadata` explicitly. It also discovers per-job `bmk_*`, `eval_*`, logs, and agentic sibling directories.
+
+Fixed-sequence, AgentX, and eval artifact identities share topology normalization through `topology_key` in [`infx.results.artifacts`](../infx/results/artifacts.py). Their identity builders retain their own workload fields and historical tuple ordering, including the different offload fields used by older AgentX results.
 
 On a qualifying push to `main`, `run-sweep.yml` sends a GitHub `repository_dispatch` to `SemiAnalysisAI/InferenceX-app`.
 

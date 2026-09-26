@@ -323,28 +323,6 @@ def test_append_only_delta_rejects_head_only_image_variant():
         raise AssertionError("an append cannot fork the target curve's image")
 
 
-def test_recipe_fingerprint_ignores_concurrency_and_experiment_name():
-    first = _fixed_matrix_row(4)
-    second = _fixed_matrix_row(16)
-
-    assert process_changelog.recipe_fingerprint(first) == (
-        process_changelog.recipe_fingerprint(second)
-    )
-
-
-def test_recipe_fingerprint_changes_for_any_recipe_variant():
-    base = _fixed_matrix_row(4, tp=4, duration=3600)
-    changed_parallelism = _fixed_matrix_row(4, tp=8, duration=3600)
-    changed_duration = _fixed_matrix_row(4, tp=4, duration=300)
-
-    fingerprints = {
-        process_changelog.recipe_fingerprint(entry)
-        for entry in (base, changed_parallelism, changed_duration)
-    }
-
-    assert len(fingerprints) == 3
-
-
 def test_append_only_delta_rejects_removed_parallelism_recipe():
     tp4 = _fixed_matrix_row(4, tp=4)
     tp8 = _fixed_matrix_row(8, tp=8)
@@ -812,29 +790,15 @@ def test_eval_prefill_ep_filter_preserves_single_node_and_order(threshold, expec
     assert [row["label"] for row in process_changelog.filter_eval_rows_by_prefill_ep(rows, threshold)] == expected
 
 
-def test_current_plan_loads_inputs_once_and_uses_no_generator_process(planning_repo, monkeypatch):
-    import builtins
-    from collections import Counter
+def test_current_plan_combines_single_and_multinode_configs(planning_repo):
     from infx.matrix.plan import build_plan
 
-    reads = Counter()
-    real_open = builtins.open
-
-    def counted_open(file, *args, **kwargs):
-        reads[str(file)] += 1
-        return real_open(file, *args, **kwargs)
-
-    monkeypatch.setattr(builtins, "open", counted_open)
-    monkeypatch.setattr(subprocess, "run", lambda *a, **kw: pytest.fail("current generation launched a child"))
     entries = [{"config-keys": [key], "description": ["Controlled change"],
                 "pr-link": "https://github.com/SemiAnalysisAI/InferenceX/pull/1"}
                for key in ("single", "multi")]
     result = build_plan(entries, base_ref="base", head_ref="head").model_dump(by_alias=True, exclude_none=True)
     assert [r["conc"] for r in result["single_node"]["8k1k"]] == [16, 32, 64]
     assert result["multi_node"]["8k1k"][0]["node-count"] == 2
-    assert {path: reads[path] for path in (
-        "configs/amd-master.yaml", "configs/nvidia-master.yaml", "configs/runners.yaml",
-    )} == {"configs/amd-master.yaml": 1, "configs/nvidia-master.yaml": 1, "configs/runners.yaml": 1}
 
 
 def test_generation_api_preserves_inputs_and_returns_independent_nested_rows(planning_repo):

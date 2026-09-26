@@ -16,8 +16,6 @@ from infx.results.collect_eval_results import (
     detect_lm_eval_jsons,
     result_concurrency,
 )
-from infx.evals.kimi_vendor_eval import RESULT_FORMAT as KIMI_VENDOR_RESULT_FORMAT
-from infx.evals.minimax_provider_eval import RESULT_FORMAT as MINIMAX_RESULT_FORMAT
 from infx.results.evals import (
     build_rows, extract_metrics, select_latest_result, select_latest_results,
 )
@@ -435,11 +433,7 @@ def test_collect_eval_rows_ignores_failed_batch_points(
     assert [row["conc"] for row in rows] == [4]
 
 
-
-@pytest.mark.parametrize("result_format", [KIMI_VENDOR_RESULT_FORMAT, MINIMAX_RESULT_FORMAT])
-def test_collect_eval_rows_accepts_provider_compatibility_result(
-    tmp_path: Path, result_format: str,
-) -> None:
+def test_collect_eval_rows_accepts_provider_compatibility_result(tmp_path: Path) -> None:
     artifact_dir = tmp_path / "eval_minimax"
     artifact_dir.mkdir()
     (artifact_dir / "meta_env.json").write_text(
@@ -449,7 +443,7 @@ def test_collect_eval_rows_accepts_provider_compatibility_result(
     _write_lm_eval_result(result_path, 1.0, task="minimax_m3_smoke")
     result = json.loads(result_path.read_text())
     result.pop("lm_eval_version")
-    result["result_format"] = result_format
+    result["result_format"] = "inferencex-eval-v1"
     result["eval_adapter"] = "minimax-provider-verifier"
     result_path.write_text(json.dumps(result))
 

@@ -22,7 +22,6 @@ DEFAULT_AGENTIC_DURATION_SECONDS = 3600
 
 
 class Fields(Enum):
-    # Field name constants
     # Top-level config fields
     IMAGE = "image"
     MODEL = "model"
@@ -952,9 +951,6 @@ def validate_master_config(master_configs: dict) -> list[dict]:
     return master_configs
 
 
-# Runner Config Validation
-
-
 def _validate_runner_labels(labels: dict) -> None:
     for key, value in labels.items():
         if not isinstance(value, list):
@@ -1081,24 +1077,12 @@ class ChangelogMatrixEntry(BaseModel):
         default_factory=dict
     )
     evals: list[SingleNodeMatrixEntry] = Field(default_factory=list)
-    # Agentic GSM8K eval rows live in their own bucket rather than a
-    # union inside `evals`: each bucket maps 1:1 to a run-sweep.yml job with a
-    # static input block, so an agentic row can never reach the fixed-seq-len
-    # eval dispatch (which reads isl/osl/max-model-len and would launch the
-    # wrong benchmark script).
+    # Each bucket feeds a workflow job with fixed inputs. Agentic rows need
+    # separate jobs because they do not supply isl/osl/max-model-len.
     agentic_evals: list[SingleNodeAgenticMatrixEntry] = Field(default_factory=list)
     multinode_evals: list[MultiNodeMatrixEntry] = Field(default_factory=list)
-    # Multi-node agentic (SWE-bench) eval rows, split out of multinode_evals
-    # the same way agentic_evals is split out of evals: they carry the
-    # agentic input shape (scenario-type, kv-offloading, ...) rather than
-    # the fixed-seq-len shape (isl/osl/max-model-len) multinode_evals rows do.
     multinode_agentic_evals: list[MultiNodeAgenticMatrixEntry] = Field(default_factory=list)
     changelog_metadata: ChangelogMetadata
-
-
-# =============================================================================
-# File Loading Functions
-# =============================================================================
 
 
 def load_config_files(config_files: list[str], validate: bool = True) -> dict:

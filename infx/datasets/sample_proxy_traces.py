@@ -63,20 +63,9 @@ SUBAGENT_MIGRATION_TS = "2026-04-16T16:00:00+00:00"
 # intentionally excluded.
 ANTHROPIC_MODEL_LIKE = "claude-%"
 
-# Subagent labeling and thread-id extraction mirror
-# semianalysis-claude-code-proxy:
-#   packages/app/src/lib/subagent-runs.ts  (getRequestThreadId,
-#                                            getRequestSubagentLabel,
-#                                            buildRequestRuns)
-# Two SQL projections do the per-row work the dashboard does in JS so
-# the JSONL dump and the downstream weka converter both consume the
-# already-resolved label and thread id.
-#
-# (1) Effective subagent_label = server-set label, with a "Subagent
-#     (Haiku)" fallback for unlabelled haiku calls whose max_tokens is
-#     anything other than 1 (the dashboard's `req.model.includes('haiku')
-#     && req.requestBody?.max_tokens !== 1` rule). max_tokens missing/non-
-#     numeric is treated as "not 1", matching JS truthiness semantics.
+# Match label and ID resolution in semianalysis-claude-code-proxy's
+# packages/app/src/lib/subagent-runs.ts. One-token Haiku calls are probes,
+# not subagents; other unlabelled Haiku calls receive the fallback label.
 EFFECTIVE_SUBAGENT_LABEL_EXPR = """
     CASE
         WHEN subagent_label IS NOT NULL THEN subagent_label
@@ -88,12 +77,8 @@ EFFECTIVE_SUBAGENT_LABEL_EXPR = """
     END
 """
 
-# (2) Thread id COALESCE over raw HTTP header keys, in the same priority
-#     as getRequestThreadId. Headers are stored lowercased / hyphenated
-#     (raw HTTP form), so camelCase variants don't appear in the DB and
-#     can be omitted. x-codex-window-id is "<id>:<msg>"; we split on `:`
-#     and take the prefix. NULLIF on each branch treats empty strings as
-#     absent to match the JS truthiness check.
+# Headers use raw HTTP names. Match getRequestThreadId's precedence and
+# treatment of empty strings; x-codex-window-id contains "<id>:<msg>".
 THREAD_ID_EXPR = """
     COALESCE(
         NULLIF(request_headers->>'thread_id', ''),
@@ -103,60 +88,21 @@ THREAD_ID_EXPR = """
     )
 """
 
-# (2b) Claude Code agent id — added in claude-cli ≥ 2.1.139. When
-#      present this is the canonical sub-agent identifier per
-#      `getRequestClaudeCodeAgentId` in subagent-runs.ts: one id
-#      = one logical sub-agent invocation, regardless of how the
-#      per-request system-prompt label drifts across its tool calls.
-#      Absent on main-agent requests and on older Claude clients —
-#      the converter falls back to (label, thread_id) grouping in
-#      that case.
+# Claude CLI >= 2.1.139 supplies a stable subagent ID even when labels drift.
+# Older clients and main-agent requests omit it.
 CLAUDE_CODE_AGENT_ID_EXPR = """
     NULLIF(request_headers->>'x-claude-code-agent-id', '')
 """
 
-# (2c) Claude CLI version — extracted from the user-agent header
-#      ("claude-cli/X.Y.Z (external, cli)"). Used by the converter to
-#      decide whether `x-claude-code-agent-id` is reliable enough to
-#      demote utility-labelled rows (Title Generation etc.) without an
-#      agent-id back to main turns. Pre-2.1.139 rows fall back to the
-#      legacy label-only grouping.
+# The converter uses the CLI version to distinguish utility calls from
+# subagents on clients that support the agent-id header.
 CLI_VERSION_EXPR = """
     substring(request_headers->>'user-agent'
               from 'claude-cli/([0-9]+\\.[0-9]+\\.[0-9]+)')
 """
 
-# (3) Image-content exclusion (HARDCODED): v1/v2 trace versions did not
-#     consistently capture or anonymize image content blocks, so an
-#     aiperf replay run against them would be unreliable. Exclude any
-#     session containing a row that is both `trace_version <= 2` AND has
-#     a `messages[*].content[*].type == "image"` block in its
-#     `request_body`. v3+ rows with image content are allowed through.
-#
-#     Two-phase implementation: this expensive JSONB scan runs only in
-#     IMAGE_CHECK_SQL below, bounded to candidate session_ids that
-#     already passed the cheap aggregates. Avoids paying the @?
-#     jsonpath cost on the full ~117K-row table.
-
-# (4) Non-conversational classifier exclusion (HARDCODED): Claude Code
-#     fires several auxiliary classifier calls that aren't real agent
-#     turns — "SUGGESTION MODE" next-input prediction, conversation-
-#     title generation, haiku-style intent detection, the "Security
-#     Monitor" subagent, etc. They share a clean shape:
-#         max_tokens <= 64   (output is intentionally capped tiny)
-#         tools = []         (classifiers don't get the agent toolbox)
-#     and they show up as a heavy spike at OSL 5-10 in the published
-#     distribution. The label-only Security Monitor filter we shipped
-#     first did NOT catch them — most have subagent_label IS NULL
-#     because the proxy doesn't recognize them as subagent calls.
-#
-#     Drop them at source by shape, not label. This is universal across
-#     privacy modes (max_tokens + tools array shape survive anon
-#     redaction; only the text inside system/messages is nulled).
-#
-#     We keep the Security Monitor label/body fallback in addition,
-#     since the Security Monitor subagent itself sometimes has
-#     max_tokens above 64 and would otherwise leak through.
+# Auxiliary classifier calls have a small output budget and no tools.
+# Those fields survive anonymization, unlike system and message text.
 CLASSIFIER_SHAPE_PREDICATE = """
     (request_body->>'max_tokens') IS NOT NULL
     AND (request_body->>'max_tokens')::int <= 64
@@ -167,8 +113,7 @@ CLASSIFIER_SHAPE_PREDICATE = """
     )
 """
 
-# Kept name for backwards compatibility with the rest of the file —
-# this is now a combined classifier+SecMon predicate, NOT only SecMon.
+# Security Monitor calls can exceed the classifier token budget.
 SECURITY_MONITOR_FILTER_SQL = f"""
     NOT ({CLASSIFIER_SHAPE_PREDICATE})
     AND subagent_label IS DISTINCT FROM 'Security Monitor'
@@ -430,20 +375,8 @@ def get_db_url(args: argparse.Namespace) -> str:
     return url
 
 
-# Phase 1: cheap aggregates only. No image-content JSONB scan here —
-# Postgres can use idx_requests_privacy_mode_timestamp for the
-# (privacy_mode, timestamp) prefix and stream the GROUP BY. Per-row cost
-# is dominated by the count/sum/min/max aggregates plus the
-# EFFECTIVE_SUBAGENT_LABEL_EXPR (which is cheap: ILIKE + top-level JSONB
-# key access).
-# Compact CLI-version encoding: X * 1_000_000 + Y * 1_000 + Z. Within
-# 0-999 per segment (true for every CC release to date), preserves
-# lexicographic ordering as numeric ordering. NULL when the user-agent
-# header is missing or doesn't match the claude-cli/X.Y.Z shape, which
-# downstream interprets as "unknown CLI" — sessions with any such row
-# must be excluded when --require-cli-min is set, because we cannot
-# verify they're on a build where the x-claude-code-agent-id header is
-# present and the subagent grouping algorithm is reliable.
+# X * 1_000_000 + Y * 1_000 + Z preserves version order for segments below 1000.
+# Missing or malformed versions remain NULL so --require-cli-min rejects them.
 CLI_VERSION_INT_EXPR = r"""
     CASE
         WHEN request_headers->>'user-agent' ~ 'claude-cli/[0-9]+\.[0-9]+\.[0-9]+'
@@ -497,11 +430,8 @@ SELECT *
    )
 """  # noqa: S608
 
-# Phase 2: image-content check, bounded to candidate session_ids that
-# passed phase 1. session_id = ANY(...) uses idx_requests_session_id so
-# heap reads are bounded. The cheap text-LIKE pre-filter short-circuits
-# the expensive @? jsonpath to rows whose body actually contains the
-# substring "image"; postgres evaluates AND clauses left-to-right.
+# v1/v2 traces did not reliably capture or anonymize images. Restrict the
+# JSONB check to candidate sessions that passed the aggregate filters.
 IMAGE_CHECK_SQL = """
 SELECT DISTINCT session_id
   FROM requests
@@ -514,20 +444,9 @@ SELECT DISTINCT session_id
    )
 """
 
-# Phase 2.5: peak concurrent subagent group count per session via sweep-
-# line over (start, +1)/(end, -1) events. A "group" is one
-# x-claude-code-agent-id (one Task-tool invocation, regardless of inner
-# turn count). span_start = MIN(timestamp); span_end = MAX(timestamp +
-# duration_ms) over all inner rows of the same agent_id.
-#
-# Tie-break: events at the same instant are ordered ends-before-starts
-# (delta ASC: -1 before +1) so a new group starting at the exact moment
-# another ends does NOT count as overlapping. Without the explicit
-# secondary sort, postgres is free to reorder ties and can overcount.
-#
-# NULL duration_ms is treated as a zero-length span (collapses to a
-# single timestamp). Anthropic 200s should always have duration_ms; this
-# is defensive.
+# Count overlapping spans per agent ID, spanning its first through last request.
+# Process ends before starts at equal timestamps so touching spans do not overlap.
+# A missing duration contributes a zero-length request span.
 SUBAGENT_CONCURRENCY_SQL = f"""
 WITH subagent_spans AS (
     SELECT session_id,
@@ -664,9 +583,6 @@ def find_sessions(
 
     surviving = [c for c in candidates if c["session_id"] not in excluded_ids]
 
-    # Phase 2.5: optional max-parallel-subagents filter. Computes peak
-    # concurrent subagent-group count per session via a sweep-line over
-    # agent_id spans; drops sessions where peak > cap.
     if args.max_parallel_subagents is not None:
         surviving_ids = [c["session_id"] for c in surviving]
         logger.info(
@@ -690,9 +606,7 @@ def find_sessions(
                 )
                 for row in cur.fetchall():
                     peak_by_id[row["session_id"]] = row["max_parallel_subagents"]
-        # Sessions absent from peak_by_id have zero subagents → peak 0.
-        # Annotate every surviving row with its computed peak so downstream
-        # logging / manifest can see it.
+        # Sessions absent from peak_by_id have no subagents.
         kept = []
         for c in surviving:
             peak = peak_by_id.get(c["session_id"], 0)
@@ -718,11 +632,8 @@ def find_sessions(
     return _sort_and_limit(surviving, args)
 
 
-# Session-id passthrough: compute the same summary stats as phase 1 for
-# a single explicitly named session. No filtering on min_requests /
-# image content / migration_floor — the caller asked for this session
-# by id, we trust them. Privacy mode and Anthropic-only filters still
-# apply for safety.
+# Explicit session selection bypasses discovery filters while retaining
+# privacy-mode and model filters.
 ONE_SESSION_SUMMARY_SQL = f"""
 SELECT session_id,
        count(*)                                                       AS req_count,
@@ -812,9 +723,6 @@ SELECT
 """  # noqa: S608
 
 
-# ---------------------------------------------------------------------------
-# Dynamic-workflow subagent-label bug (Claude Code CLI < 2.1.174)
-# ---------------------------------------------------------------------------
 # Claude Code CLI versions BEFORE 2.1.174 failed to attach the subagent-label /
 # x-claude-code-agent-id header to subagents launched via *dynamic workflows*
 # (changelog 2.1.173 -> 2.1.174). Those subagents land in the proxy as ordinary
@@ -922,9 +830,7 @@ def fetch_session_rows(
         )
         rows = cur.fetchall()
     for row in rows:
-        # Belt-and-braces: SQL already filters, but a per-row check guarantees
-        # no mismatched-privacy row hits disk even if the WHERE clause is ever
-        # broken upstream.
+        # Recheck privacy mode at the file-write boundary.
         if row["privacy_mode"] != privacy_mode:
             raise RuntimeError(
                 f"privacy_mode safety check failed for session "

@@ -255,22 +255,19 @@ def test_annotation_only_touches_runnable_matrix_entries(policy):
     assert "queue-token" not in payload["single_node"]["1k1k"][0]
 
 
-def test_queue_tokens_change_between_run_attempts():
-    entry = {"runner": "b200", "framework": "sglang"}
-
-    assert queue_token(entry, "123:1", ("0",)) != queue_token(
-        entry,
-        "123:2",
-        ("0",),
-    )
-
-
-def test_queue_tokens_are_stable_for_reordered_keys_but_distinct_for_duplicate_jobs():
+def test_queue_tokens_group_equivalent_jobs_but_separate_attempts_and_duplicates():
     entry = {"runner": "example", "framework": "vllm"}
     reordered = {"framework": "vllm", "runner": "example"}
 
-    assert queue_token(entry, "run", ("0",)) == queue_token(reordered, "run", ("0",))
-    assert queue_token(entry, "run", ("0",)) != queue_token(entry, "run", ("1",))
+    groups = {}
+    for label, candidate, attempt, path in [
+        ("original", entry, "123:1", ("0",)),
+        ("reordered", reordered, "123:1", ("0",)),
+        ("retry", entry, "123:2", ("0",)),
+        ("duplicate", entry, "123:1", ("1",)),
+    ]:
+        groups.setdefault(queue_token(candidate, attempt, path), []).append(label)
+    assert list(groups.values()) == [["original", "reordered"], ["retry"], ["duplicate"]]
 
 
 @pytest.mark.parametrize("framework,expected", [("vllm", "15"), ("vllm-disagg", "15"), ("vllmish", "10")])

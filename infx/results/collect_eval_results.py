@@ -62,10 +62,8 @@ def find_eval_sets(root: Path) -> list[Path]:
     """
     out: list[Path] = []
     try:
-        # Handle flat structure (single artifact extracted directly into root)
         if (root / "meta_env.json").exists():
             out.append(root)
-        # Handle nested structure (multiple artifacts in subdirectories)
         out.extend(d for d in root.iterdir() if d.is_dir() and (d / "meta_env.json").exists())
     except Exception:  # noqa: BLE001, S110
         pass
@@ -148,7 +146,6 @@ def main() -> None:
     single_node_rows = [r for r in rows if not r["is_multinode"]]
     multinode_rows = [r for r in rows if r["is_multinode"]]
 
-    # Sort for stable output (default: by model_prefix)
     sort_by = sys.argv[3] if len(sys.argv) > 3 else "model_prefix"
     single_node_sort_key = (
         (
@@ -224,7 +221,6 @@ def main() -> None:
     if not rows:
         print("> No eval results found to summarize.")
     else:
-        # Print table using tabulate
         model_prefix_header = "Model Prefix"
 
         if single_node_rows:
@@ -329,7 +325,6 @@ def main() -> None:
             print("### Multi-Node Eval Results\n")
             print(tabulate(table_rows, headers=headers, tablefmt="github"))
 
-    # Write JSON aggregate
     out_path = Path(f"agg_eval_{exp_name}.json")
     with open(out_path, "w") as f:
         json.dump(rows, f, indent=2)

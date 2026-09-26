@@ -15,6 +15,7 @@ from infx.results.artifacts import (
     as_int,
     duplicate_identity_errors,
     load_json,
+    topology_key,
     validate_identity_set,
 )
 from infx.results.evals import (
@@ -42,35 +43,8 @@ def invalid_eval_suite(row: dict[str, Any]) -> bool:
 
 def eval_key(row: dict[str, Any]) -> tuple[Any, ...]:
     """Build an eval identity from one aggregate row."""
-    if as_bool(row.get("is_multinode", False)):
-        return (
-            "multi",
-            normalized_runner(row.get("hw")),
-            row.get("model_prefix", row.get("infmax_model_prefix")),
-            row.get("framework"),
-            row.get("precision"),
-            row.get("eval_suite", LEGACY_EVAL_SUITE),
-            row.get("spec_decoding", "none"),
-            as_int(row.get("isl", 8192), 8192),
-            as_int(row.get("osl", 1024), 1024),
-            as_int(row.get("prefill_tp")),
-            as_int(row.get("prefill_pp", 1), 1),
-            as_int(row.get("prefill_dcp_size", 1), 1),
-            as_int(row.get("prefill_pcp_size", 1), 1),
-            as_int(row.get("prefill_ep", 1)),
-            as_bool(row.get("prefill_dp_attention", False)),
-            as_int(row.get("prefill_num_workers", 0)),
-            as_int(row.get("decode_tp")),
-            as_int(row.get("decode_pp", 1), 1),
-            as_int(row.get("decode_dcp_size", 1), 1),
-            as_int(row.get("decode_pcp_size", 1), 1),
-            as_int(row.get("decode_ep", 1)),
-            as_bool(row.get("decode_dp_attention", False)),
-            as_int(row.get("decode_num_workers", 0)),
-            as_int(row.get("conc")),
-        )
     return (
-        "single",
+        "multi" if as_bool(row.get("is_multinode", False)) else "single",
         normalized_runner(row.get("hw")),
         row.get("model_prefix", row.get("infmax_model_prefix")),
         row.get("framework"),
@@ -79,12 +53,7 @@ def eval_key(row: dict[str, Any]) -> tuple[Any, ...]:
         row.get("spec_decoding", "none"),
         as_int(row.get("isl", 8192), 8192),
         as_int(row.get("osl", 1024), 1024),
-        as_int(row.get("tp")),
-        as_int(row.get("pp", 1), 1),
-        as_int(row.get("dcp_size", 1), 1),
-        as_int(row.get("pcp_size", 1), 1),
-        as_int(row.get("ep", 1)),
-        as_bool(row.get("dp_attention", False)),
+        *topology_key(row),
         as_int(row.get("conc")),
     )
 

@@ -278,7 +278,6 @@ def main() -> int:
             )
             return 1
 
-    # Load thresholds config
     config = {"default": {}, "models": {}}
     thresholds_path = args.thresholds
     if thresholds_path is None:
@@ -295,7 +294,6 @@ def main() -> int:
                 file=sys.stderr,
             )
 
-    # Identify the model so per-model thresholds can apply
     prefix = detect_model_prefix(args.meta_env, args.model_prefix)
     if prefix and prefix in config.get("models", {}):
         print(f"Model prefix: {prefix} (per-model thresholds apply)")

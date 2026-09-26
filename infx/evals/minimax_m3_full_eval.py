@@ -14,12 +14,15 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Callable, Mapping, Sequence
-from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+if __package__:
+    from . import vendor_artifacts as artifacts
+else:
+    import vendor_artifacts as artifacts
+
 TASK_NAME = "minimax_m3_full"
-RESULT_FORMAT = "inferencex-eval-v1"
 ADAPTER_NAME = "minimax-provider-verifier"
 NATIVE_REPORT_FILENAME = "minimax_vendor_report.json"
 NATIVE_RESULTS_FILENAME = "minimax_vendor_results.jsonl"
@@ -223,10 +226,6 @@ def build_verifier_command(
     ]
 
 
-def _error_dict(error: BaseException) -> dict[str, str]:
-    return {"type": type(error).__name__, "message": str(error)}
-
-
 def _compatibility_result(
     *,
     model: str,
@@ -234,50 +233,34 @@ def _compatibility_result(
     effective: int,
     integration_error: BaseException | None = None,
 ) -> dict[str, Any]:
-    result: dict[str, Any] = {
-        "result_format": RESULT_FORMAT,
-        "eval_adapter": ADAPTER_NAME,
-        "model_name": model,
-        "results": {
-            TASK_NAME: {
-                "exact_match,strict-match": score,
-                "exact_match_stderr,strict-match": 0.0,
-            }
+    return artifacts.compatibility_result(
+        adapter=ADAPTER_NAME,
+        task=TASK_NAME,
+        model=model,
+        score=score,
+        original=EXPECTED_RESULT_COUNT,
+        effective=effective,
+        task_config={
+            "native_metric": "tool_calls_match_rate",
+            "diagnostic_threshold": 0.0,
         },
-        "configs": {
-            TASK_NAME: {
-                "metric_list": [{"metric": "exact_match"}],
-                "filter_list": [{"name": "strict-match"}],
-                "native_metric": "tool_calls_match_rate",
-                "diagnostic_threshold": 0.0,
-            }
-        },
-        "n-samples": {
-            TASK_NAME: {
-                "original": EXPECTED_RESULT_COUNT,
-                "effective": effective,
-            }
-        },
-        "source": {
+        source={
             "repository": "MiniMax-AI/MiniMax-Provider-Verifier",
             "ref": UPSTREAM_REF,
             "sample_sha256": EXPECTED_SAMPLE_SHA256,
         },
-    }
-    if integration_error is not None:
-        result["integration_error"] = _error_dict(integration_error)
-    return result
+        integration_error=integration_error,
+    )
 
 
 def _compatibility_path(output_dir: Path) -> Path:
-    for stale_path in output_dir.glob(COMPATIBILITY_GLOB):
-        stale_path.unlink()
-    timestamp = datetime.now(UTC).strftime("%Y-%m-%dT%H-%M-%S.%f")
-    return output_dir / f"results_minimax_vendor_full_{timestamp}.json"
+    return artifacts.prepare_compatibility_path(
+        output_dir, prefix="results_minimax_vendor_full_", stale_glob=COMPATIBILITY_GLOB
+    )
 
 
 def _write_json(path: Path, value: Mapping[str, Any]) -> None:
-    path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    artifacts.write_json(path, value, ensure_ascii=False)
 
 
 def _read_native_report(path: Path) -> dict[str, Any]:
@@ -383,7 +366,7 @@ def publish_failure(*, output_dir: Path, model: str, error: BaseException) -> Pa
             "success_count": 0,
             "failure_count": EXPECTED_RESULT_COUNT,
             "tool_calls_match_rate": 0.0,
-            "integration_error": _error_dict(error),
+            "integration_error": artifacts.error_dict(error),
         },
     )
     if not native_results_path.exists():
@@ -392,7 +375,7 @@ def publish_failure(*, output_dir: Path, model: str, error: BaseException) -> Pa
                 {
                     "status": "integration_error",
                     "model": model,
-                    "error": _error_dict(error),
+                    "error": artifacts.error_dict(error),
                 },
                 ensure_ascii=False,
             )

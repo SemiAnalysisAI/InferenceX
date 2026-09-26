@@ -224,7 +224,7 @@ def test_projects_upstream_outcomes(
     assert _score(output_dir) == expected_score
     assert _n_eff(output_dir) == expected_n_eff
     projected = _result(output_dir)
-    assert projected["result_format"] == kve.RESULT_FORMAT
+    assert projected["result_format"] == "inferencex-eval-v1"
     assert projected["eval_adapter"] == kve.ADAPTER_NAME
     if expected_error is None:
         assert "integration_error" not in projected
@@ -346,14 +346,24 @@ def test_cli_applies_suite_timeout_policy(
 
     monkeypatch.setattr(kve.subprocess, "run", fake_run)
     output_dir = tmp_path / "output"
-    assert kve.main([
-        "--verifier-dir", str(tmp_path),
-        "--base-url", "http://localhost/v1",
-        "--model", "model-a",
-        "--output-dir", str(output_dir),
-        "--task-name", task_name,
-        *timeout_args,
-    ]) == 0
+    assert (
+        kve.main(
+            [
+                "--verifier-dir",
+                str(tmp_path),
+                "--base-url",
+                "http://localhost/v1",
+                "--model",
+                "model-a",
+                "--output-dir",
+                str(output_dir),
+                "--task-name",
+                task_name,
+                *timeout_args,
+            ]
+        )
+        == 0
+    )
     assert timeouts == [expected_timeout]
     assert _score(output_dir, task_name) == 1.0
     assert _n_eff(output_dir, task_name) == expected_samples
@@ -478,19 +488,24 @@ def test_cli_setup_failure_writes_zero_score_artifact(tmp_path: Path) -> None:
         "{}"
     )
 
-    assert (
-        kve.main(
-            [
-                "--model",
-                "model-a",
-                "--output-dir",
-                str(output_dir),
-                "--integration-error",
-                "checkout failed",
-            ]
-        )
-        == 0
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-S",
+            str(Path(kve.__file__).resolve()),
+            "--model",
+            "model-a",
+            "--output-dir",
+            str(output_dir),
+            "--integration-error",
+            "checkout failed",
+        ],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
     )
+    assert completed.returncode == 0, completed.stderr
     projected = _result(output_dir)
     native = json.loads((output_dir / kve.NATIVE_REPORT_FILENAME).read_text())
     assert native["completed"] is False

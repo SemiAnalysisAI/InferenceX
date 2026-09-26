@@ -267,6 +267,8 @@ result = build_result(records, profile, server_metrics, runtime_env,
 
 对于仅评测作业，不要求吞吐量输出。工作流改为要求至少存在一个 `results*.json`。对于标记为运行评测的作业，上传内容可能包含 `meta_env.json`、`results*.json`、`sample*.jsonl`、SWE-bench 预测和报告以及轨迹文件。[`infx/evals/validate_scores.py`](../infx/evals/validate_scores.py) 会检查生成的评测分数。
 
+Kimi 和 MiniMax 适配器通过 [`infx.evals.vendor_artifacts`](../infx/evals/vendor_artifacts.py) 共享收集器兼容的结果结构和 JSON 写入逻辑。各适配器仍负责自己的验证器、分数校验、任务元数据、原生报告和 CLI 失败处理策略。
+
 [`infx.results.evals`](../infx/results/evals.py) 提供 `extract_metrics`，用于解析已加载的评测 JSON，并提供 `build_rows`，用于构建收集器输出。两者均接收显式输入，不执行文件 I/O，也不修改输入。构建函数应用元数据默认值和主分数优先级，并将失败评测保留为诊断行。CLI 负责文件查找、并发数资格筛选、报告输出和工件写入。
 
 ```python
@@ -290,6 +292,8 @@ rows = build_rows(raw_eval, metadata, source="eval_job/results.json")
 - `run-sweep.yml` 还会在适用时单独上传 `changelog-metadata/changelog_metadata.json` 和 `run-stats/run_stats.json`。
 
 工件名称是跨仓库接口的一部分。InferenceX-app 的 `ingest-ci-run.ts` 会明确指定 `results_bmk`、`run-stats`、`eval_results_all` 和 `changelog-metadata`。它还会发现单作业 `bmk_*`、`eval_*`、日志和智能体同级目录。
+
+固定序列、AgentX 和评测工件的标识通过 [`infx.results.artifacts`](../infx/results/artifacts.py) 中的 `topology_key` 共享拓扑规范化逻辑。各标识构建函数保留自己的工作负载字段和历史元组顺序，包括旧版 AgentX 结果使用的不同卸载字段。
 
 对于符合条件的 `main` 推送，`run-sweep.yml` 会向 `SemiAnalysisAI/InferenceX-app` 发送 GitHub `repository_dispatch`。
 

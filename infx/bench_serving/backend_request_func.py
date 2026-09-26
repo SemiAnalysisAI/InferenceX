@@ -88,12 +88,10 @@ async def async_request_tgi(
 
                         data = json.loads(chunk)
                         timestamp = time.perf_counter()
-                        # First token
                         if ttft == 0.0:
                             ttft = time.perf_counter() - st
                             output.ttft = ttft
 
-                        # Decoding phase
                         else:
                             output.itl.append(timestamp - most_recent_timestamp)
 
@@ -153,12 +151,10 @@ async def async_request_trt_llm(
                         data = json.loads(chunk)
                         output.generated_text += data["text_output"]
                         timestamp = time.perf_counter()
-                        # First token
                         if ttft == 0.0:
                             ttft = timestamp - st
                             output.ttft = ttft
 
-                        # Decoding phase
                         else:
                             output.itl.append(timestamp - most_recent_timestamp)
 
@@ -277,13 +273,11 @@ async def async_request_openai_completions(
                                 # e.g. for special tokens
                                 text = choices[0].get("text")
                                 timestamp = time.perf_counter()
-                                # First token
                                 if not first_chunk_received:
                                     first_chunk_received = True
                                     ttft = time.perf_counter() - st
                                     output.ttft = ttft
 
-                                # Decoding phase
                                 else:
                                     output.itl.append(timestamp - most_recent_timestamp)
 
@@ -371,12 +365,10 @@ async def async_request_openai_chat_completions(
 
                             if choices := data.get("choices"):
                                 content = choices[0]["delta"].get("content")
-                                # First token
                                 if ttft == 0.0:
                                     ttft = timestamp - st
                                     output.ttft = ttft
 
-                                # Decoding phase
                                 else:
                                     output.itl.append(timestamp - most_recent_timestamp)
 

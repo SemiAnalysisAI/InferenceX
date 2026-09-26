@@ -62,8 +62,6 @@ from .common import (
     patch_power_metrics,
 )
 
-# --- srt-slurm dcgm-power v1 wire contract (mirrored constants) -------------
-
 SCHEMA_VERSION = 1
 PRODUCER = "srt-slurm.dcgm-power"
 POWER_METRIC = "DCGM_FI_DEV_POWER_USAGE"
@@ -144,9 +142,6 @@ def _is_finite(value: Any) -> bool:
 
 def _is_positive_finite(value: Any) -> bool:
     return _is_finite(value) and value > 0
-
-
-# --- strict manifest parsing (mirrors srt-slurm validate_artifacts) ---------
 
 
 @dataclass(frozen=True)
@@ -336,9 +331,6 @@ def _check_wire_contract(manifest: dict) -> list[str]:
     return failures
 
 
-# --- strict samples parsing (mirrors srt-slurm samples.read_samples) --------
-
-
 def _parse_sample_row(raw: list[str], expected_version: int) -> SampleRow | None:
     """Validate the selected CSV generation, including optional utilization."""
     header = SAMPLES_HEADER_V2 if expected_version == 2 else SAMPLES_HEADER
@@ -444,9 +436,6 @@ def derive_observed_devices(rows: tuple[SampleRow, ...]) -> list[ObservedDevice]
             )
         )
     return devices
-
-
-# --- device identity / topology (mirrors srt-slurm validation.py) -----------
 
 
 def _resolve_roles(
@@ -555,9 +544,6 @@ def _check_role_topology(
     if len(set(assigned)) != len(assigned):
         failures.append("roles share a het group")
     return failures
-
-
-# --- window scan + audit (mirrors srt-slurm windows.py) ---------------------
 
 
 @dataclass(frozen=True)
@@ -830,9 +816,6 @@ def _validate_expected_windows(
     return validations, parsed
 
 
-# --- stored-evidence cross-check (mirrors srt-slurm validate_artifacts) -----
-
-
 def _check_stored_evidence(
     manifest: dict,
     expected_devices: list[ExpectedDevice],
@@ -875,9 +858,6 @@ def _check_stored_evidence(
             failures.append(f"{label} contains duplicate keys")
 
     return failures
-
-
-# --- consumer-side verdict, integration, and metrics ------------------------
 
 
 @dataclass
@@ -1269,9 +1249,6 @@ def _select_window_for_result(
         "duration": window.duration,
     }
     return window
-
-
-# --- aggregate patch + sidecar + entry point ---------------------------------
 
 
 def _patch_agg(agg_path: Path, audit: MultinodePowerAudit) -> None:

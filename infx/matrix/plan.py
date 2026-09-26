@@ -65,11 +65,8 @@ def get_added_lines(base_ref: str, head_ref: str, filepath: str) -> str:
     for line in result.stdout.split("\n"):
         if line.startswith("-") and not line.startswith("---"):
             deleted_content = line[1:]
-            # Allow whitespace-only or empty line deletions
+            # This legacy diff reader accepts whitespace-only deletions.
             if deleted_content.strip():
-                # Don't allow deletions in the changelog
-                # By convention, it should act as a running log of performance changes,
-                # so we only want to see additions
                 raise ValueError(
                     f"Deletions are not allowed in {filepath}. "
                     f"Only additions to the changelog are permitted. "
@@ -599,7 +596,6 @@ def build_plan(
             suffix = "agentic_evals" if result.get("scenario-type") == "agentic-coding" else "evals"
             final_results[prefix + suffix].append(result)
 
-        # Validate final results structure
         return ChangelogMatrixEntry.model_validate(final_results)
 
 

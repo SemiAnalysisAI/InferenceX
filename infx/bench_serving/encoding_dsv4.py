@@ -10,10 +10,6 @@ import json
 import re
 from typing import Any
 
-# ============================================================
-# Special Tokens
-# ============================================================
-
 bos_token: str = "<｜begin▁of▁sentence｜>"  # noqa: RUF001, S105
 eos_token: str = "<｜end▁of▁sentence｜>"  # noqa: RUF001, S105
 thinking_start_token: str = "<think>"  # noqa: S105
@@ -35,9 +31,6 @@ DS_TASK_SP_TOKENS = {
 }
 VALID_TASKS = set(DS_TASK_SP_TOKENS.keys())
 
-# ============================================================
-# Templates
-# ============================================================
 
 system_msg_template: str = "{content}"
 user_msg_template: str = "{content}"
@@ -87,10 +80,6 @@ Otherwise, output directly after {thinking_end_token} with tool calls or final r
 
 You MUST strictly follow the above defined tool name and parameter schemas to invoke tool calls.
 """
-
-# ============================================================
-# Utility Functions
-# ============================================================
 
 
 def to_json(value: Any) -> str:
@@ -224,11 +213,6 @@ def find_last_user_index(messages: list[dict[str, Any]]) -> int:
     return last_user_index
 
 
-# ============================================================
-# Message Rendering
-# ============================================================
-
-
 def render_message(
     index: int,
     messages: list[dict[str, Any]],
@@ -306,7 +290,6 @@ def render_message(
     elif role == "user":
         prompt += USER_SP_TOKEN
 
-        # Handle content blocks (tool results mixed with text)
         content_blocks = msg.get("content_blocks")
         if content_blocks:
             parts = []
@@ -422,11 +405,6 @@ def render_message(
     return prompt
 
 
-# ============================================================
-# Preprocessing
-# ============================================================
-
-
 def merge_tool_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """
     Merge tool messages into the preceding user message using content_blocks format.
@@ -537,11 +515,6 @@ def sort_tool_results_by_call_order(
     return messages
 
 
-# ============================================================
-# Main Encoding Function
-# ============================================================
-
-
 def encode_messages(
     messages: list[dict[str, Any]],
     thinking_mode: str,
@@ -573,7 +546,6 @@ def encode_messages(
     """
     context = context or []
 
-    # Preprocess: merge tool messages and sort tool results
     messages = merge_tool_messages(messages)
     messages = sort_tool_results_by_call_order(context + messages)[len(context) :]
     if context:
@@ -636,11 +608,6 @@ def _drop_thinking_messages(messages: list[dict[str, Any]]) -> list[dict[str, An
         # developer and other roles before last_user_idx are dropped
 
     return result
-
-
-# ============================================================
-# Parsing (Decoding model output)
-# ============================================================
 
 
 def _read_until_stop(index: int, text: str, stop: list[str]) -> tuple[int, str, str | None]:

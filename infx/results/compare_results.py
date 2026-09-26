@@ -129,7 +129,6 @@ BASELINE_QUERY = """
 # E2EL is in seconds
 # Interactivity is in tok/s/user
 METRIC_DEFS = [
-    # TPUT
     ("tput_per_gpu", "TPUT/GPU", True, ".2f"),
     # TTFT (lower is better, stored in seconds, display in ms — handled specially)
     ("median_ttft", "TTFT Median (ms)", False, ".4f"),
@@ -200,7 +199,6 @@ def main() -> None:
     results_dir = Path(sys.argv[1])
     database_url = os.environ["DATABASE_URL"]
 
-    # Load all benchmark result JSONs (files may contain a single dict or a list of dicts)
     results = []
     for path in results_dir.rglob("*.json"):
         with open(path) as f:
@@ -299,7 +297,6 @@ def main() -> None:
     single_node = [r for r in rows if "P(" not in r["parallelism"]]
     multi_node = [r for r in rows if "P(" in r["parallelism"]]
 
-    # Build metric headers: for each metric, one column for value and one for delta
     metric_headers = []
     for _, label, _, _ in METRIC_DEFS:
         metric_headers.extend([label, f"{label} Delta"])

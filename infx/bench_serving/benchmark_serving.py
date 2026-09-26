@@ -101,7 +101,6 @@ class BenchmarkMetrics:
     percentiles_e2el_ms: list[tuple[float, float]]
 
 
-# --- Multiprocessing helpers for sample_random_requests ---
 _worker_tokenizer = None
 
 
@@ -281,13 +280,11 @@ def sample_random_requests(
         ].tolist()  # derive seed from current state without advancing it
     )
 
-    # Decide whether to use multiprocessing
     if num_workers <= 0:
         num_workers = min(cpu_count() or 1, 8)
     use_parallel = num_workers > 1 and tokenizer_id is not None
 
     if use_parallel:
-        # Split work into chunks, one per worker
         chunk_size = (num_prompts + num_workers - 1) // num_workers
         chunk_args_list = []
         for w in range(num_workers):
@@ -418,13 +415,11 @@ async def get_request(
         yield request
 
         if request_rate == float("inf"):
-            # If the request rate is infinity, then we don't need to wait.
             continue
 
         # Sample the request interval from the gamma distribution.
         # If burstiness is 1, it follows exponential distribution.
         interval = np.random.gamma(shape=burstiness, scale=theta)  # noqa: NPY002
-        # The next request will be sent after the interval.
         await asyncio.sleep(interval)
 
 
@@ -603,7 +598,6 @@ async def benchmark(
         print("Warmup completed.")
 
     if lora_modules:
-        # For each input request, choose a LoRA module at random.
         lora_modules = iter(
             [random.choice(lora_modules) for _ in range(len(input_requests))]  # noqa: S311
         )
@@ -744,15 +738,10 @@ async def benchmark(
     }
 
     def process_one_metric(
-        # E.g., "ttft"
         metric_attribute_name: str,
-        # E.g., "TTFT"
         metric_name: str,
-        # E.g., "Time to First Token"
         metric_header: str,
     ) -> None:
-        # This function prints and adds statistics of the specified
-        # metric.
         if metric_attribute_name not in selected_percentile_metrics:
             return
         print("{s:{c}^{n}}".format(s=metric_header, n=50, c="-"))
@@ -793,7 +782,6 @@ async def benchmark(
 
 
 def check_goodput_args(args: argparse.Namespace) -> dict[str, float]:
-    # Check and parse goodput arguments
     goodput_config_dict = {}
     valid_names = ["ttft", "tpot", "e2el"]
     if args.goodput:
@@ -847,8 +835,7 @@ def save_to_pytorch_benchmark_format(
         "std_itl_ms",
         "p99_itl_ms",
     ]
-    # These raw data might be useful, but they are rather big. They can be added
-    # later if needed
+    # Keep the summary artifact small by omitting per-request arrays.
     ignored_metrics = ["ttfts", "itls", "generated_texts", "errors"]
     pt_records = convert_to_pytorch_benchmark_format(
         args=args,
@@ -858,7 +845,6 @@ def save_to_pytorch_benchmark_format(
         },
     )
     if pt_records:
-        # Don't use json suffix here as we don't want CI to pick it up
         pt_file = f"{os.path.splitext(file_name)[0]}.pytorch.json"
         with open(pt_file, "w") as f:
             json.dump(pt_records, f)
@@ -952,11 +938,9 @@ def main(args: argparse.Namespace) -> None:
         }
     benchmark_result["benchmark_outcome"] = outcome
 
-    # Save config and results to json
     if args.save_result:
         result_json: dict[str, Any] = {}
 
-        # Setup
         current_dt = datetime.now().strftime("%Y%m%d-%H%M%S")  # noqa: DTZ005
         result_json["date"] = current_dt
         result_json["backend"] = backend
@@ -965,7 +949,6 @@ def main(args: argparse.Namespace) -> None:
         result_json["best_of"] = args.best_of
         result_json["num_prompts"] = args.num_prompts
 
-        # Metadata
         if args.metadata:
             for item in args.metadata:
                 if "=" in item:
@@ -974,18 +957,15 @@ def main(args: argparse.Namespace) -> None:
                 else:
                     raise ValueError("Invalid metadata format. Please use KEY=VALUE format.")
 
-        # Traffic
         result_json["request_rate"] = (
             args.request_rate if args.request_rate < float("inf") else "inf"
         )
         result_json["burstiness"] = args.burstiness
         result_json["max_concurrency"] = args.max_concurrency
 
-        # Merge with benchmark result
         result_json = {**result_json, **benchmark_result}
 
         if not args.save_detailed:
-            # Remove fields with too many data points
             for field in [
                 "ttfts",
                 "itls",
@@ -997,7 +977,6 @@ def main(args: argparse.Namespace) -> None:
                 if field in benchmark_result:
                     del benchmark_result[field]
 
-        # Save to file
         base_model_id = model_id.split("/")[-1]
         max_concurrency_str = (
             f"-concurrency{args.max_concurrency}" if args.max_concurrency is not None else ""
@@ -1220,7 +1199,6 @@ if __name__ == "__main__":
         "and the blog: https://hao-ai-lab.github.io/blogs/distserve",
     )
 
-    # group for dataset specific arguments
     sonnet_group = parser.add_argument_group("sonnet dataset options")
     sonnet_group.add_argument(
         "--sonnet-input-len",

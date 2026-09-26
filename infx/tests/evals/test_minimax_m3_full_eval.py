@@ -56,7 +56,10 @@ def test_prepared_source_tree_requires_every_pinned_byte(
     monkeypatch.setattr(
         full,
         "REQUIRED_SOURCE_SHA256",
-        {name: hashlib.sha256(content).hexdigest() for name, content in contents.items()},
+        {
+            name: hashlib.sha256(content).hexdigest()
+            for name, content in contents.items()
+        },
     )
 
     source_dir = tmp_path / "source"
@@ -66,6 +69,7 @@ def test_prepared_source_tree_requires_every_pinned_byte(
     (source_dir / "verify.py").write_text("mutated\n", encoding="utf-8")
     with pytest.raises(ValueError, match="SHA256 mismatch"):
         full.verify_source_tree(source_dir)
+
 
 def test_fetch_source_retries_transient_network_failures(
     monkeypatch: pytest.MonkeyPatch,
@@ -195,19 +199,21 @@ def test_projects_exactly_102_results_from_native_match_rate_without_rewriting_r
     assert compatibility["configs"]["minimax_m3_full"]["native_metric"] == (
         "tool_calls_match_rate"
     )
-    assert compatibility["configs"]["minimax_m3_full"][
-        "diagnostic_threshold"
-    ] == 0.0
+    assert compatibility["configs"]["minimax_m3_full"]["diagnostic_threshold"] == 0.0
     assert compatibility["n-samples"]["minimax_m3_full"] == {
         "original": 102,
         "effective": 102,
     }
     assert (tmp_path / full.NATIVE_REPORT_FILENAME).read_bytes() == report_bytes
-    assert len(
-        (tmp_path / full.NATIVE_RESULTS_FILENAME)
-        .read_text(encoding="utf-8")
-        .splitlines()
-    ) == 102
+    assert (
+        len(
+            (tmp_path / full.NATIVE_RESULTS_FILENAME)
+            .read_text(encoding="utf-8")
+            .splitlines()
+        )
+        == 102
+    )
+
 
 def test_full_projection_removes_stale_smoke_result(tmp_path: Path) -> None:
     stale_smoke = tmp_path / "results_minimax_vendor_2026-01-01.json"
@@ -225,20 +231,25 @@ def test_failure_command_replaces_stale_native_artifacts(tmp_path: Path) -> None
     native_report.write_text('{"stale": true}\n')
     native_results.write_text('{"stale": true}\n')
 
-    assert (
-        full.main(
-            [
-                "failure",
-                "--model",
-                "MiniMax-M3",
-                "--output-dir",
-                str(tmp_path),
-                "--message",
-                "runtime setup failed",
-            ]
-        )
-        == 0
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-S",
+            str(Path(full.__file__).resolve()),
+            "failure",
+            "--model",
+            "MiniMax-M3",
+            "--output-dir",
+            str(tmp_path),
+            "--message",
+            "runtime setup failed",
+        ],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
     )
+    assert completed.returncode == 0, completed.stderr
 
     report = json.loads(native_report.read_text(encoding="utf-8"))
     assert report["completed"] is False
@@ -272,14 +283,12 @@ def test_projection_rejects_incomplete_or_transport_failed_native_results(
 
 
 def test_upstream_process_failure_is_nonzero_and_publishes_all_failure_artifacts(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, minimax_source: Path
 ) -> None:
-    source_dir = tmp_path / "source"
+    source_dir = minimax_source
     dependency_dir = tmp_path / "deps"
     output_dir = tmp_path / "output"
-    source_dir.mkdir()
     dependency_dir.mkdir()
-    monkeypatch.setattr(full, "verify_source_tree", lambda _path: None)
 
     def failed_runner(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess:
         return subprocess.CompletedProcess([], 9)

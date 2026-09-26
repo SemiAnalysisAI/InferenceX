@@ -65,9 +65,6 @@ from .sweep_runs import (  # noqa: E402
 )
 from .validate_perf_changelog import read_git_file  # noqa: E402
 
-# ---------------------------------------------------------------------------
-# Defaults
-# ---------------------------------------------------------------------------
 DEFAULT_REPO = "SemiAnalysisAI/InferenceX"
 DEFAULT_CHECK_TIMEOUT = 900
 DEFAULT_HEAD_LAG_RETRIES = 6
@@ -94,9 +91,6 @@ logging.getLogger("git").setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Logging helpers (match the bash colors/symbols exactly)
-# ---------------------------------------------------------------------------
 
 _CYAN_BOLD = "\033[1;36m"
 _GREEN_BOLD = "\033[1;32m"
@@ -117,11 +111,6 @@ def die(msg: str) -> int:
     return 1
 
 
-# ---------------------------------------------------------------------------
-# Auth
-# ---------------------------------------------------------------------------
-
-
 def _resolve_token() -> str:
     """Resolve the GitHub token from the environment, falling back to ``gh auth token``.
 
@@ -131,7 +120,6 @@ def _resolve_token() -> str:
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN") or ""
     if token:
         return token
-    # Last-resort fallback: ask the gh CLI for its stored credential.
     try:
         result = subprocess.run(
             ["gh", "auth", "token"],
@@ -149,10 +137,6 @@ def _make_github(token: str) -> Github:
     base_url = os.environ.get("GITHUB_API_URL") or "https://api.github.com"
     return Github(login_or_token=token, base_url=base_url)
 
-
-# ---------------------------------------------------------------------------
-# Transient error handling for API polling
-# ---------------------------------------------------------------------------
 
 _TRANSIENT_HTTP_STATUSES = frozenset({403, 429, 500, 502, 503, 504})
 
@@ -185,11 +169,6 @@ def _retry_delay(exc: Exception) -> float:
     return 10.0
 
 
-# ---------------------------------------------------------------------------
-# GitPython wrapper
-# ---------------------------------------------------------------------------
-
-
 class GitOps:
     """Thin wrapper around GitPython for the operations this workflow needs.
 
@@ -200,8 +179,6 @@ class GitOps:
 
     def __init__(self, repo: gitpython.Repo | None = None) -> None:
         self.repo = repo or gitpython.Repo(".")
-
-    # -- queries --
 
     def is_clean(self) -> bool:
         return not self.repo.is_dirty(untracked_files=True)
@@ -241,8 +218,6 @@ class GitOps:
             strip_newline_in_stdout=False,
         )
 
-    # -- mutations --
-
     def fetch(self, *args: str) -> None:
         self.repo.git.fetch(*args)
 
@@ -275,11 +250,6 @@ class GitOps:
             self.repo.git.merge("--abort")
 
 
-# ---------------------------------------------------------------------------
-# Eligibility check (mirrors the bash's loop over workflow runs + artifacts)
-# ---------------------------------------------------------------------------
-
-
 def find_eligible_run(
     repo: str,
     pr: int,
@@ -305,11 +275,6 @@ def find_eligible_run(
         if has_reusable_result_artifacts(names):
             return int(run["id"])
     return None
-
-
-# ---------------------------------------------------------------------------
-# Check-run deduplication helpers
-# ---------------------------------------------------------------------------
 
 
 def _latest_check_runs(check_runs: list) -> list:
@@ -367,11 +332,6 @@ _FAIL_FAST_CONCLUSIONS = frozenset(
 )
 
 
-# ---------------------------------------------------------------------------
-# Check-run polling (mirrors wait_for_check in the bash)
-# ---------------------------------------------------------------------------
-
-
 def wait_for_checks(
     _pull: PullRequest,
     sha: str,
@@ -418,7 +378,6 @@ def wait_for_checks(
                 # cancelled: completed but not a fail-fast trigger
                 # success, neutral, skipped: passing
 
-            # -- Commit statuses (Status API, e.g. external CI) --
             combined = commit.get_combined_status()
             statuses = _latest_statuses(list(combined.statuses))
             statuses_done = True
@@ -444,7 +403,6 @@ def wait_for_checks(
             raise
 
         time.sleep(5)
-        # Re-fetch commit object to get fresh check data
         commit = gh_repo.get_commit(sha)
 
     return die(f"Timed out after {timeout}s waiting for checks on {sha}")
@@ -494,11 +452,6 @@ def wait_for_check(
     return die(f"Timed out after {timeout}s waiting for {check_name} on {sha}")
 
 
-# ---------------------------------------------------------------------------
-# Changelog conflict resolution (calls infx Python APIs, not CLI)
-# ---------------------------------------------------------------------------
-
-
 def _read_index_stage(git_ops: GitOps, stage: int, path: str) -> bytes:
     """Read a file from a given git index stage during a merge conflict."""
     return git_ops.show_stage(stage, path)
@@ -539,11 +492,6 @@ def canonicalize_changelog(pr: int, repo: str) -> None:
         print(f"{CHANGELOG} already prepared for PR #{pr}")
 
 
-# ---------------------------------------------------------------------------
-# Main merge flow
-# ---------------------------------------------------------------------------
-
-
 class _MergeState:
     """Shared mutable state between merge_pr and its cleanup closure."""
 
@@ -572,7 +520,6 @@ def merge_pr(
     gh = _gh or _make_github(token)
     git_ops = _git_ops or GitOps()
 
-    # --- Pre-flight: clean worktree ---
     if not git_ops.is_clean():
         return die("Working tree is not clean")
 
@@ -619,7 +566,6 @@ def _merge_pr_inner(
     gh_repo = gh.get_repo(repo)
     pull = gh_repo.get_pull(pr)
 
-    # --- PR eligibility ---
     pr_state = pull.state.upper()
     if pr_state != "OPEN":
         return die(f"PR #{pr} is {pr_state}, expected OPEN")
@@ -646,17 +592,14 @@ def _merge_pr_inner(
             f"PR #{pr} uses {', '.join(incompatible)}, which is not eligible for artifact reuse"
         )
 
-    # --- Find an eligible run with reusable artifacts ---
     eligible_run = find_eligible_run(repo, pr, head_branch, token)
     if eligible_run is None:
         return die(f"PR #{pr} has no successful reusable run-sweep.yml run on a current commit")
 
-    # --- Post reuse comment ---
     log(f"Posting /reuse-sweep-run {eligible_run} on PR #{pr}")
     pull.create_issue_comment(f"/reuse-sweep-run {eligible_run}")
     ok("Comment posted")
 
-    # --- Fetch and checkout PR branch ---
     state.local_branch = f"pr-{pr}-reuse-{os.getpid()}"
     log(f"Fetching PR branch {head_branch}")
     git_ops.fetch("origin", f"pull/{pr}/head:{state.local_branch}", "--quiet")
@@ -665,11 +608,9 @@ def _merge_pr_inner(
 
     pre_merge = git_ops.rev_parse()
 
-    # --- Merge origin/main ---
     log("Merging origin/main")
     merge_rc = git_ops.merge("origin/main", "--no-ff", "--no-edit")
     if merge_rc != 0:
-        # Check what's unresolved
         unresolved = git_ops.diff_name_only_unmerged()
         if unresolved != CHANGELOG:
             git_ops.merge_abort()
@@ -685,7 +626,6 @@ def _merge_pr_inner(
         git_ops.add(CHANGELOG)
         git_ops.commit("--no-edit")
 
-    # --- Canonicalize changelog links ---
     head_after_merge = git_ops.rev_parse()
     canonicalize_changelog(pr, repo)
 
@@ -696,7 +636,6 @@ def _merge_pr_inner(
         else:
             git_ops.commit("-m", f"fix: canonicalize PR #{pr} changelog link [skip-sweep]")
 
-    # --- Ensure synchronize event ---
     if pre_merge == git_ops.rev_parse():
         git_ops.commit(
             "--allow-empty",
@@ -706,34 +645,28 @@ def _merge_pr_inner(
 
     post_merge = git_ops.rev_parse()
 
-    # --- Push ---
     log(f"Pushing prepared commit {post_merge[:8]}")
     git_ops.push("origin", f"{state.local_branch}:{head_branch}")
     ok("Push complete; reuse authorization will be evaluated on the new head")
 
-    # --- Verify head (with lag retry) ---
     current_head = _poll_pr_head(pull, post_merge, head_lag_retries, head_lag_delay)
     if current_head != post_merge:
         return die(f"PR head changed to {current_head[:8]}; expected {post_merge[:8]}")
 
-    # --- Wait for check-changelog ---
     rc = wait_for_check(post_merge, "check-changelog", gh_repo, check_timeout)
     if rc != 0:
         return rc
 
-    # --- Wait for all PR checks ---
     log("Waiting for all PR checks")
     rc = wait_for_checks(pull, post_merge, gh_repo, check_timeout)
     if rc != 0:
         return rc
 
-    # --- Final head verification ---
     pull.update()
     current_head = pull.head.sha
     if current_head != post_merge:
         return die(f"PR head changed to {current_head[:8]}; expected {post_merge[:8]}")
 
-    # --- Squash merge ---
     # GitHub's MergePullRequestInput has no bypass field; the "Protect main"
     # ruleset lists org admins as bypass actors, so REST PullRequest.merge
     # with an admin token is equivalent to ``gh pr merge --admin``.
@@ -741,7 +674,6 @@ def _merge_pr_inner(
     try:
         merge_status = pull.merge(merge_method="squash", sha=post_merge)
     except GithubException as exc:
-        # Surface the API error message verbatim, but never the token.
         api_message = (
             exc.data.get("message", str(exc.status))
             if isinstance(exc.data, dict)
@@ -783,10 +715,6 @@ def _poll_pr_head(
             time.sleep(delay)
     return current  # type: ignore[possibly-undefined]
 
-
-# ---------------------------------------------------------------------------
-# CLI
-# ---------------------------------------------------------------------------
 
 _INSTALL_HINT = (
     "Missing required dependencies (PyGithub, GitPython). Install with:\n"

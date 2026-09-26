@@ -143,9 +143,7 @@ def collect_metrics(in_dir: Path) -> dict[str, list[float]]:
             duration_sec.append(int(entry.get("duration_ms") or 0) / 1000.0)
             group_total_tokens.append(int(entry.get("total_tokens") or 0))
 
-            # Intra-group prefix-cache hits: walk the inner stream, track
-            # which hash_ids we've seen WITHIN this same group, compute
-            # the per-request hit rate for non-first inners.
+            # Measure reuse within this subagent, excluding its first request.
             seen: set[int] = set()
             for i, r in enumerate(inners):
                 if "in" in r:

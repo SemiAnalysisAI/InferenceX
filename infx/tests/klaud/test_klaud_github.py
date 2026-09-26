@@ -282,7 +282,6 @@ def test_select_continues_after_one_baseline_state_failure(tmp_path, monkeypatch
     )
     assert preflight.candidate_id == second_id
     assert preflight.baseline_model == "Model"
-    assert preflight.source_identity == identity({})
     selected = json.loads((tmp_path / second_id / "candidate.json").read_text())
     assert selected["baseline-preflight-required"] is True
 

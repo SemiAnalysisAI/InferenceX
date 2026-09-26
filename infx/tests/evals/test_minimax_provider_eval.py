@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
-
-import pytest
 
 import infx.evals.minimax_provider_eval as mpe
 
@@ -16,7 +15,7 @@ def _native_outputs(
     model: str = "MiniMax-M3",
     status: str = "success",
     match_rate: float = 1.0,
-    schema_rate: float = 1.0,
+    schema_errors: int = 0,
     reasoning_error_rate: float = 0.0,
     tool_call_total: int = 10,
 ) -> None:
@@ -24,7 +23,6 @@ def _native_outputs(
         json.dumps({"data_index": 1, "status": status}) + "\n",
         encoding="utf-8",
     )
-    schema_errors = round((1.0 - schema_rate) * tool_call_total)
     (output_dir / mpe.NATIVE_REPORT_FILENAME).write_text(
         json.dumps(
             {
@@ -49,39 +47,12 @@ def _compatibility(output_dir: Path) -> dict[str, Any]:
 
 
 def test_prepare_smoke_input_preserves_request_and_unicode(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path, minimax_smoke_fixture: Path
 ) -> None:
-    fixture = tmp_path / "fixture.json"
-    fixture.write_text(
-        json.dumps({
-            "source": mpe.UPSTREAM_SOURCE,
-            "ref": mpe.UPSTREAM_REF,
-            "indices": [71],
-            "license": "Test license\n",
-            "rows": [{
-                "messages": [{"role": "user", "content": "Find café hours"}],
-                "tools": [],
-            }],
-        }),
-        encoding="utf-8",
-    )
-    # Supply the trusted digests for this controlled input; run the real
-    # fixture validation and JSONL writer, including Unicode preservation.
-    monkeypatch.setattr(
-        mpe,
-        "EXPECTED_LICENSE_SHA256",
-        "c24d5f6da316a4bec6612e644e5fdcc0243fcb3a3ebcec4a2a16389ada6c520c",
-    )
-    monkeypatch.setattr(
-        mpe,
-        "EXPECTED_CASE_SHA256",
-        {71: "05b119b71e4dcc69cf439da009703721d993c5ec05c502da3c9daed79ec9a48a"},
-    )
     destination = tmp_path / "smoke.jsonl"
 
     mpe.prepare_smoke_input(
-        fixture_path=fixture,
+        fixture_path=minimax_smoke_fixture,
         destination=destination,
     )
 
@@ -123,17 +94,13 @@ def test_build_command_invokes_stock_verifier_without_source_changes(
 
 
 def test_run_uses_verified_stock_source_and_projects_native_metrics(
-    tmp_path: Path, monkeypatch
+    tmp_path: Path, minimax_source: Path, minimax_smoke_fixture: Path
 ) -> None:
     output_dir = tmp_path / "output"
-    source_dir = tmp_path / "source"
+    source_dir = minimax_source
     dependency_dir = tmp_path / "deps"
-    source_dir.mkdir()
     dependency_dir.mkdir()
-    verified: list[Path] = []
     invocation: dict[str, Any] = {}
-
-    monkeypatch.setattr(mpe, "verify_source_tree", verified.append)
 
     def runner(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
         invocation["command"] = command
@@ -141,7 +108,7 @@ def test_run_uses_verified_stock_source_and_projects_native_metrics(
         _native_outputs(
             output_dir,
             match_rate=0.9,
-            schema_rate=0.8,
+            schema_errors=2,
             reasoning_error_rate=0.1,
         )
         return subprocess.CompletedProcess(command, 0)
@@ -154,10 +121,10 @@ def test_run_uses_verified_stock_source_and_projects_native_metrics(
         model="MiniMax-M3",
         output_dir=output_dir,
         runner=runner,
+        fixture_path=minimax_smoke_fixture,
     )
 
     assert passed is True
-    assert verified == [source_dir]
     assert invocation["check"] is False
     assert invocation["timeout"] == mpe.UPSTREAM_TIMEOUT_SECONDS
     assert invocation["env"]["PYTHONPATH"] == f"{source_dir}:{dependency_dir}"
@@ -170,17 +137,15 @@ def test_run_uses_verified_stock_source_and_projects_native_metrics(
 
 
 def test_completed_model_failure_is_not_reclassified_as_integration_error(
-    tmp_path: Path, monkeypatch
+    tmp_path: Path, minimax_source: Path, minimax_smoke_fixture: Path
 ) -> None:
     output_dir = tmp_path / "output"
-    source_dir = tmp_path / "source"
+    source_dir = minimax_source
     dependency_dir = tmp_path / "deps"
-    source_dir.mkdir()
     dependency_dir.mkdir()
-    monkeypatch.setattr(mpe, "verify_source_tree", lambda _: None)
 
     def runner(command: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
-        _native_outputs(output_dir, match_rate=0.0, schema_rate=0.0)
+        _native_outputs(output_dir, match_rate=0.0, schema_errors=10)
         return subprocess.CompletedProcess(command, 0)
 
     passed = mpe.run_evaluation(
@@ -191,6 +156,7 @@ def test_completed_model_failure_is_not_reclassified_as_integration_error(
         model="MiniMax-M3",
         output_dir=output_dir,
         runner=runner,
+        fixture_path=minimax_smoke_fixture,
     )
 
     assert passed is True
@@ -201,14 +167,12 @@ def test_completed_model_failure_is_not_reclassified_as_integration_error(
 
 
 def test_completed_zero_tool_call_result_is_model_failure(
-    tmp_path: Path, monkeypatch
+    tmp_path: Path, minimax_source: Path, minimax_smoke_fixture: Path
 ) -> None:
     output_dir = tmp_path / "output"
-    source_dir = tmp_path / "source"
+    source_dir = minimax_source
     dependency_dir = tmp_path / "deps"
-    source_dir.mkdir()
     dependency_dir.mkdir()
-    monkeypatch.setattr(mpe, "verify_source_tree", lambda _: None)
 
     def runner(command: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
         _native_outputs(output_dir, match_rate=0.0, tool_call_total=0)
@@ -222,6 +186,7 @@ def test_completed_zero_tool_call_result_is_model_failure(
         model="MiniMax-M3",
         output_dir=output_dir,
         runner=runner,
+        fixture_path=minimax_smoke_fixture,
     )
 
     assert passed is True
@@ -232,14 +197,12 @@ def test_completed_zero_tool_call_result_is_model_failure(
 
 
 def test_request_failure_is_reported_as_integration_error(
-    tmp_path: Path, monkeypatch
+    tmp_path: Path, minimax_source: Path, minimax_smoke_fixture: Path
 ) -> None:
     output_dir = tmp_path / "output"
-    source_dir = tmp_path / "source"
+    source_dir = minimax_source
     dependency_dir = tmp_path / "deps"
-    source_dir.mkdir()
     dependency_dir.mkdir()
-    monkeypatch.setattr(mpe, "verify_source_tree", lambda _: None)
 
     def runner(command: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
         _native_outputs(output_dir, status="failed")
@@ -253,6 +216,7 @@ def test_request_failure_is_reported_as_integration_error(
         model="MiniMax-M3",
         output_dir=output_dir,
         runner=runner,
+        fixture_path=minimax_smoke_fixture,
     )
 
     assert passed is False
@@ -289,20 +253,32 @@ def test_publish_failure_does_not_replace_existing_native_report(
 
 def test_failure_cli_is_stdlib_only(tmp_path: Path) -> None:
     output_dir = tmp_path / "output"
-
-    assert (
-        mpe.main(
-            [
-                "failure",
-                "--model",
-                "MiniMax-M3",
-                "--output-dir",
-                str(output_dir),
-                "--message",
-                "setup failed",
-            ]
-        )
-        == 0
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-S",
+            str(Path(mpe.__file__).resolve()),
+            "failure",
+            "--model",
+            "MiniMax-M3",
+            "--output-dir",
+            str(output_dir),
+            "--message",
+            "setup failed",
+        ],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
     )
+
+    assert completed.returncode == 0, completed.stderr
     compatibility = _compatibility(output_dir)
-    assert compatibility["integration_error"]["message"] == "setup failed"
+    assert compatibility["integration_error"] == {
+        "type": "SmokeSuiteError",
+        "message": "setup failed",
+    }
+    assert compatibility["n-samples"]["minimax_m3_smoke"] == {
+        "original": 1,
+        "effective": 0,
+    }

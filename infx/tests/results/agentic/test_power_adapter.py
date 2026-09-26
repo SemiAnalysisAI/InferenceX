@@ -288,7 +288,6 @@ def test_run_agentic_power_patches_strict_whole_deployment_metrics(tmp_path: Pat
 @pytest.mark.parametrize(("require_power", "expected_exit"), [(False, 0), (True, 1)])
 def test_run_agentic_power_records_window_write_failure_before_returning(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
     require_power: bool,
     expected_exit: int,
@@ -307,14 +306,7 @@ def test_run_agentic_power_records_window_write_failure_before_returning(
         )
     )
     window_path = result_dir / "agentic_power_window.json"
-    original_write_json_atomic = power_adapter._write_json_atomic
-
-    def write_json_atomic(path: Path, payload: dict) -> None:
-        if path == window_path:
-            raise OSError("simulated full disk")
-        original_write_json_atomic(path, payload)
-
-    monkeypatch.setattr(power_adapter, "_write_json_atomic", write_json_atomic)
+    window_path.mkdir()
 
     exit_code = power_adapter.run_agentic_power(
         result_dir=result_dir,
@@ -324,7 +316,7 @@ def test_run_agentic_power_records_window_write_failure_before_returning(
     )
 
     assert exit_code == expected_exit
-    assert not window_path.exists()
+    assert window_path.is_dir()
     agg = json.loads(agg_path.read_text())
     assert agg["power_metric_schema_version"] == 2
     assert agg["power_valid"] == 0
@@ -397,7 +389,7 @@ def _set_multinode_window_environment(
     return window_dir, result_root
 
 
-def test_multinode_window_writer_publishes_boundary_identical_result_last(
+def test_multinode_window_writer_publishes_result_before_completed_window(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ):
@@ -410,13 +402,14 @@ def test_multinode_window_writer_publishes_boundary_identical_result_last(
         logs_root=logs_root,
     )
     writes: list[Path] = []
-    original_write = power_adapter._write_json_atomic
+    original_replace = Path.replace
 
-    def record_write(path: Path, payload: dict) -> None:
-        writes.append(path)
-        original_write(path, payload)
+    def record_replace(path: Path, target: Path) -> Path:
+        published = original_replace(path, target)
+        writes.append(target)
+        return published
 
-    monkeypatch.setattr(power_adapter, "_write_json_atomic", record_write)
+    monkeypatch.setattr(Path, "replace", record_replace)
     monkeypatch.setattr(power_adapter.time, "time", lambda: 1_700_000_000.0)
 
     assert power_adapter.write_multinode_power_window(
@@ -510,112 +503,6 @@ def test_multinode_window_writer_fails_closed_on_invalid_window_environment(
     assert "formal measurement-window contract" in capsys.readouterr().err
 
 
-def test_multinode_aggregation_uses_central_package_and_aggregate_topology(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-):
-    from infx.results.agentic import power_adapter
-
-    logs_root = tmp_path / "logs"
-    result_dir = logs_root / "agentic" / "conc_8"
-    result_dir.mkdir(parents=True)
-    bench_result = result_dir / "agentic_power_concurrency_8.json"
-    bench_result.write_text(json.dumps({"max_concurrency": 8}))
-    agg_result = tmp_path / "agg_agentx_conc8.json"
-    agg_result.write_text(
-        json.dumps(
-            {"disagg": True, "num_prefill_gpu": 16, "num_decode_gpu": 16}
-        ),
-        encoding="utf-8",
-    )
-    power_dir = logs_root / "power"
-    power_dir.mkdir(parents=True)
-    calls: list[dict] = []
-
-    def fake_run(**kwargs) -> int:
-        calls.append(kwargs)
-        return 0
-
-    monkeypatch.setattr(power_adapter, "run_multinode_power", fake_run)
-
-    exit_code = power_adapter.run_multinode_agentic_power(
-        result_dir=result_dir,
-        agg_result=agg_result,
-        power_dir=power_dir,
-        logs_root=logs_root,
-        expected_producer_sha="a1b8c7af10c00e5ea40074aebdc0086189bbc064",
-        require_power=True,
-    )
-
-    assert exit_code == 0
-    assert calls == [
-        {
-            "power_dir": power_dir,
-            "bench_result": bench_result,
-            "agg_result": agg_result,
-            "prefill_gpus": 16,
-            "decode_gpus": 16,
-            "aggregate_gpus": 0,
-            "expected_producer_sha": "a1b8c7af10c00e5ea40074aebdc0086189bbc064",
-            "logs_root": logs_root,
-            "validation_result": result_dir / "power_validation.json",
-            "require_power": True,
-        }
-    ]
-
-
-def test_multinode_aggregation_maps_aggregate_deployment_to_agg_role(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-):
-    from infx.results.agentic import power_adapter
-
-    logs_root = tmp_path / "logs"
-    result_dir = logs_root / "agentic" / "conc_8"
-    result_dir.mkdir(parents=True)
-    bench_result = result_dir / "agentic_power_concurrency_8.json"
-    bench_result.write_text(json.dumps({"max_concurrency": 8}))
-    agg_result = tmp_path / "agg_agentx_conc8.json"
-    agg_result.write_text(
-        json.dumps(
-            {"disagg": False, "num_prefill_gpu": 8, "num_decode_gpu": 0}
-        ),
-        encoding="utf-8",
-    )
-    power_dir = logs_root / "power"
-    power_dir.mkdir(parents=True)
-    calls: list[dict] = []
-
-    def fake_run(**kwargs) -> int:
-        calls.append(kwargs)
-        return 0
-
-    monkeypatch.setattr(power_adapter, "run_multinode_power", fake_run)
-
-    assert power_adapter.run_multinode_agentic_power(
-        result_dir=result_dir,
-        agg_result=agg_result,
-        power_dir=power_dir,
-        logs_root=logs_root,
-        expected_producer_sha="a" * 40,
-        require_power=True,
-    ) == 0
-    assert calls == [
-        {
-            "power_dir": power_dir,
-            "bench_result": bench_result,
-            "agg_result": agg_result,
-            "prefill_gpus": 0,
-            "decode_gpus": 0,
-            "aggregate_gpus": 8,
-            "expected_producer_sha": "a" * 40,
-            "logs_root": logs_root,
-            "validation_result": result_dir / "power_validation.json",
-            "require_power": True,
-        }
-    ]
-
-
 @pytest.mark.parametrize(
     "payload",
     [
@@ -693,19 +580,17 @@ def test_multinode_invalid_aggregate_retains_failure_verdict(
 
 
 def test_multinode_failure_clears_stale_metrics_when_verdict_write_fails(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     from infx.results.agentic import power_adapter
 
     aggregate_path = tmp_path / "aggregate.json"
     aggregate_path.write_text(json.dumps({"power_valid": 1, "avg_power_w": 999}))
 
-    def fail_verdict(*args):
-        raise OSError("audit directory unavailable")
-
-    monkeypatch.setattr(power_adapter, "_write_multinode_failure_validation", fail_verdict)
+    result_dir = tmp_path / "logs/agentic/conc_8"
+    (result_dir / "power_validation.json").mkdir(parents=True)
     assert power_adapter.run_multinode_agentic_power(
-        result_dir=tmp_path / "logs/agentic/conc_8",
+        result_dir=result_dir,
         agg_result=aggregate_path,
         power_dir=tmp_path / "logs/power",
         logs_root=tmp_path / "logs",

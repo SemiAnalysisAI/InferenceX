@@ -1,15 +1,4 @@
-"""Smoke tests for process_agentic_result.py against synthetic aiperf output.
-
-The processor consumes three files in $RESULT_DIR/aiperf_artifacts/:
-profile_export.jsonl, profile_export_aiperf.json, and
-(optionally) server_metrics_export.json. It writes one
-$RESULT_FILENAME.json under $AGENTIC_OUTPUT_DIR. We build a minimal
-fixture, run the processor, and assert the agg JSON has the expected
-metadata plus nested request/server metric schema.
-
-These tests run entirely in tmpdir; no aiperf install or HF cache
-required.
-"""
+"""AgentX result transformations and CLI artifacts from controlled AIPerf input."""
 
 from __future__ import annotations
 

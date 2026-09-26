@@ -56,9 +56,6 @@ except ImportError:
     sys.exit(1)
 
 
-# ---- Loaders --------------------------------------------------------------
-
-
 def load_jsonl_records(path: Path) -> list[dict]:
     records: list[dict] = []
     with open(path) as f:
@@ -94,9 +91,6 @@ def metric_value(record: dict, key: str) -> float | None:
         return float(v)
     except (TypeError, ValueError):
         return None
-
-
-# ---- Server-metrics helpers ----------------------------------------------
 
 
 def first_update_ns(server_metrics: dict) -> int | None:
@@ -223,9 +217,6 @@ def rolling_window(n: int, max_window: int = 50) -> int:
     if n <= 10:
         return 1
     return min(max_window, max(1, n // 10))
-
-
-# ---- Panels --------------------------------------------------------------
 
 
 def panel_kv_cache_usage(ax: Axes, server_metrics: dict, t0_ns: int | None) -> None:
@@ -762,9 +753,6 @@ def panel_preemptions(ax: Axes, server_metrics: dict, t0_ns: int | None) -> None
     ax.tick_params(axis="y", labelcolor="red")
     ax.set_title("Preemptions Over Time")
     ax.grid(True, alpha=0.3)
-
-
-# ---- Main ----------------------------------------------------------------
 
 
 def main(argv: list[str]) -> int:

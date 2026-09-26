@@ -33,7 +33,7 @@ These sources outrank this guide when behavior changes. Update the English page 
 
 [`CI`](../.github/workflows/ci.yml) runs **Lint** and **Tests** in parallel for PRs (including forks) and pushes to `main` that change Python files, `.github/scripts/` helpers, `ci.yml`, `pyproject.toml`, `uv.lock`, `.python-version`, Ruff configuration, or `pytest.ini`. [`Workflow security`](../.github/workflows/zizmor.yml) runs **Zizmor** for changes to workflows, action definitions, Dependabot, pre-commit, or zizmor configuration. Python-only changes do not trigger Zizmor; other workflow-only changes do not trigger Lint or Tests. Editing `ci.yml` triggers all three jobs. Each workflow can be dispatched manually. Changes only to other docs, shell scripts, or benchmark YAML do not trigger either workflow; run the applicable checks locally or dispatch them manually.
 
-Tests runs every suite under `utils/`, `runners/`, and `experimental/CollectiveX/tests/` with four pytest workers. New tests in those directories are discovered automatically. CI installs `infx` as a wheel with `uv sync --locked --all-extras --group test --no-editable`, using Python 3.12 and CPU-only PyTorch. A failing job does not cancel the other; a newer PR update cancels the superseded CI run. Branch pushes without a PR no longer start a separate changelog-test run.
+Tests runs the suites under `infx/tests/`, `utils/`, `runners/`, `experimental/CollectiveX/tests/`, and `experimental/operatorx/tests/` with four pytest workers. New tests in those directories are discovered automatically. The `utils/srt-slurm` submodule is initialized for connector tests, but its own suite runs in upstream CI. CI installs `infx` as a wheel with `uv sync --locked --all-extras --group test --no-editable`, using Python 3.12 and CPU-only PyTorch. A failing job does not cancel the other; a newer PR update cancels the superseded CI run. Branch pushes without a PR no longer start a separate changelog-test run.
 
 | Layer | What it can prove | What it cannot prove |
 | --- | --- | --- |
@@ -172,11 +172,15 @@ The existing Python suites cover workflow contracts too. `infx/tests/matrix/test
 Run the same locked environment and four-worker suite as CI:
 
 ```bash
+git submodule update --init utils/srt-slurm
 uv run --locked --all-extras --group test --no-editable \
-  python -m pytest infx/tests/ utils/ runners/ experimental/CollectiveX/tests/ -n 4
+  python -m pytest infx/tests/ utils/ runners/ experimental/CollectiveX/tests/ \
+  experimental/operatorx/tests/ --ignore=utils/srt-slurm -n 4
 ```
 
 Use `-n 0` for serial debugging. Tests must keep temporary files and ports isolated and collect deterministic parameter cases across workers.
+
+On macOS, put Bash 5 on `PATH` before running launcher tests. The system Bash 3.2 lacks the `mapfile` support used by the Slurm launchers.
 
 ## Smoke, sweep, and eval
 

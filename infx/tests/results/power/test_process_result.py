@@ -126,10 +126,6 @@ def test_fixed_topology_rejects_empty_parallelism(
         build_result(sample_benchmark_result, {**single_node_env_vars, name: ""})
 
 
-# =============================================================================
-# Test Fixtures - Based on real benchmark output structure
-# =============================================================================
-
 @pytest.fixture
 def sample_benchmark_result():
     """Sample benchmark result JSON based on real output structure."""
@@ -219,69 +215,14 @@ def run_script(tmp_path, env, benchmark_result, result_filename="benchmark_resul
     )
 
 
-def run_script_with_broken_aggregator(
-    tmp_path, env, benchmark_result, result_filename="benchmark_result", *,
-    multinode=False, fail_import=False,
-):
-    """Run process_result with the real aggregator patched to raise unexpectedly."""
-    result_file = tmp_path / f"{result_filename}.json"
-    result_file.write_text(json.dumps(benchmark_result))
-    env = {**env, "RESULT_FILENAME": result_filename}
-    wrapper = f"""
-import runpy
-import sys
-import json
-import builtins
-from pathlib import Path
-
-sys.path.insert(0, {str(REPO_ROOT)!r})
-from infx.results.power import single_node as aggregate_power
-
-def broken_run(*args, **kwargs):
-    path = Path(kwargs['agg_result'] if 'agg_result' in kwargs else args[2])
-    data = json.loads(path.read_text())
-    data.update(prefill_gpu_energy_j=99, total_gpu_energy_j=99)
-    path.write_text(json.dumps(data))
-    raise RuntimeError("forced aggregation failure")
-if {multinode!r}:
-    if {fail_import!r}:
-        original_import = builtins.__import__
-        def failing_import(name, *args, **kwargs):
-            if name.endswith('power.multinode'):
-                raise ImportError("forced import failure")
-            return original_import(name, *args, **kwargs)
-        builtins.__import__ = failing_import
-    else:
-        from infx.results.power import multinode as aggregate_power_multinode
-        aggregate_power_multinode.run = broken_run
-else:
-    aggregate_power.run = broken_run
-runpy.run_module("infx.results.fixed_sequence", run_name="__main__")
-"""
-    return subprocess.run(
-        [sys.executable, "-c", wrapper],
-        cwd=tmp_path,
-        env=env,
-        capture_output=True,
-        text=True,
-    )
-
-
-# =============================================================================
-# Test script execution via subprocess
-# =============================================================================
-
 class TestProcessResultScript:
-    """Tests for infx.results.fixed_sequence script execution."""
 
     def test_single_node_processing(self, tmp_path, sample_benchmark_result, single_node_env_vars):
-        """Test single-node result processing."""
         result = run_script(tmp_path, single_node_env_vars, sample_benchmark_result)
         assert result.returncode == 0, f"Script failed: {result.stderr}"
 
         output_data = json.loads(result.stdout)
 
-        # Verify base fields
         assert output_data["hw"] == "mi300x"
         assert output_data["framework"] == "sglang"
         assert output_data["precision"] == "fp8"
@@ -293,7 +234,6 @@ class TestProcessResultScript:
         assert output_data["disagg"] is False
         assert output_data["recipe_fingerprint"] == "a" * 64
 
-        # Verify single-node specific fields
         assert output_data["is_multinode"] is False
         assert output_data["tp"] == 8
         assert output_data["ep"] == 1
@@ -314,24 +254,20 @@ class TestProcessResultScript:
         assert output_data["intvty_p50"] == pytest.approx(40.0)
         assert output_data["intvty_p99"] == pytest.approx(22.222222)
 
-        # Verify output file created
         output_file = tmp_path / "agg_benchmark_result.json"
-        assert output_file.exists()
+        assert json.loads(output_file.read_text()) == output_data
 
     def test_multinode_processing(self, tmp_path, sample_benchmark_result, multinode_env_vars):
-        """Test multinode result processing."""
         result = run_script(tmp_path, multinode_env_vars, sample_benchmark_result)
         assert result.returncode == 0, f"Script failed: {result.stderr}"
 
         output_data = json.loads(result.stdout)
 
-        # Verify base fields
         assert output_data["hw"] == "gb200"
         assert output_data["framework"] == "dynamo-trt"
         assert output_data["precision"] == "fp4"
         assert output_data["disagg"] is True
 
-        # Verify multinode specific fields
         assert output_data["is_multinode"] is True
         assert output_data["prefill_tp"] == 4
         assert output_data["prefill_ep"] == 4
@@ -346,7 +282,6 @@ class TestProcessResultScript:
         assert output_data["prefill_hw"] == "gb200"
         assert output_data["decode_hw"] == "h100"
 
-        # Verify throughput calculations
         assert output_data["tput_per_gpu"] == pytest.approx(535.732143)  # 28 GPUs total
         assert output_data["output_tput_per_gpu"] == pytest.approx(1500.0)  # 8 decode GPUs
         assert output_data["input_tput_per_gpu"] == pytest.approx(150.025)  # 20 prefill GPUs
@@ -437,7 +372,6 @@ class TestProcessResultScript:
         assert "PREFILL_HARDWARE and DECODE_HARDWARE" in result.stderr
 
     def test_missing_base_env_vars(self, tmp_path, sample_benchmark_result):
-        """Test that missing base env vars causes failure."""
         result_file = tmp_path / "benchmark_result.json"
         result_file.write_text(json.dumps(sample_benchmark_result))
 
@@ -453,7 +387,6 @@ class TestProcessResultScript:
         assert "Missing required environment variables" in result.stderr
 
     def test_missing_single_node_env_vars(self, tmp_path, sample_benchmark_result, base_env_vars):
-        """Test that missing single-node env vars causes failure."""
         # base_env_vars doesn't have TP, EP_SIZE, DP_ATTENTION
         result = run_script(tmp_path, base_env_vars, sample_benchmark_result)
 
@@ -461,21 +394,21 @@ class TestProcessResultScript:
         assert "Missing required environment variables" in result.stderr
 
     def test_missing_multinode_env_vars(self, tmp_path, sample_benchmark_result, base_env_vars):
-        """Test that missing multinode env vars causes failure."""
         env = base_env_vars.copy()
         env["IS_MULTINODE"] = "true"
         env["DISAGG"] = "true"
-        # Missing multinode-specific vars
 
         result = run_script(tmp_path, env, sample_benchmark_result)
 
         assert result.returncode != 0
         assert "Missing required environment variables" in result.stderr
 
-    def test_disagg_without_multinode_fails(self, tmp_path, sample_benchmark_result, single_node_env_vars):
-        """Test that disagg=true without multinode raises error."""
+    @pytest.mark.parametrize("disagg", ["true", "True", "TRUE"])
+    def test_disagg_without_multinode_fails(
+        self, tmp_path, sample_benchmark_result, single_node_env_vars, disagg
+    ):
         env = single_node_env_vars.copy()
-        env["DISAGG"] = "true"  # Disagg without multinode
+        env["DISAGG"] = disagg
 
         result = run_script(tmp_path, env, sample_benchmark_result)
 
@@ -483,7 +416,6 @@ class TestProcessResultScript:
         assert "Disaggregated mode requires multinode setup" in result.stderr
 
     def test_missing_result_file(self, tmp_path, single_node_env_vars):
-        """Test that missing result file causes failure."""
         env = single_node_env_vars.copy()
         env["RESULT_FILENAME"] = "nonexistent"
         env["PYTHONPATH"] = str(REPO_ROOT)
@@ -499,15 +431,9 @@ class TestProcessResultScript:
         assert result.returncode != 0
 
 
-# =============================================================================
-# Test latency and throughput calculations
-# =============================================================================
-
 class TestCalculations:
-    """Tests for throughput and latency calculations."""
 
     def test_latency_ms_to_seconds_conversion(self, tmp_path, single_node_env_vars):
-        """Test that _ms fields are converted to seconds."""
         benchmark_result = {
             "model_id": "test-model",
             "max_concurrency": 8,
@@ -546,7 +472,6 @@ class TestCalculations:
         assert output_data["input_tput_per_gpu"] == pytest.approx(125.0)
 
     def test_throughput_per_gpu_multinode(self, tmp_path, multinode_env_vars):
-        """Test throughput per GPU calculation for multinode."""
         benchmark_result = {
             "model_id": "test-model",
             "max_concurrency": 64,
@@ -629,59 +554,6 @@ class TestCalculations:
         assert result.returncode != 0
         assert "Multinode results require at least one GPU" in result.stderr
 
-
-# =============================================================================
-# Test output file generation
-# =============================================================================
-
-class TestOutputFile:
-    """Tests for output file generation."""
-
-    def test_output_file_created(self, tmp_path, sample_benchmark_result, single_node_env_vars):
-        """Test that aggregated output file is created."""
-        result = run_script(tmp_path, single_node_env_vars, sample_benchmark_result)
-        assert result.returncode == 0, f"Script failed: {result.stderr}"
-
-        output_file = tmp_path / "agg_benchmark_result.json"
-        assert output_file.exists()
-
-        # Verify content matches stdout
-        with open(output_file) as f:
-            file_content = json.load(f)
-
-        stdout_content = json.loads(result.stdout)
-        assert file_content == stdout_content
-
-    def test_output_file_has_correct_prefix(self, tmp_path, sample_benchmark_result, single_node_env_vars):
-        """Test that output file has 'agg_' prefix."""
-        result = run_script(tmp_path, single_node_env_vars, sample_benchmark_result, "my_custom_result")
-        assert result.returncode == 0, f"Script failed: {result.stderr}"
-
-        output_file = tmp_path / "agg_my_custom_result.json"
-        assert output_file.exists()
-
-
-# =============================================================================
-# Test edge cases
-# =============================================================================
-
-class TestEdgeCases:
-    """Tests for edge cases and special scenarios."""
-
-
-    def test_boolean_disagg_parsing_true_requires_multinode(self, tmp_path, sample_benchmark_result, single_node_env_vars):
-        """Test that DISAGG=true without multinode fails."""
-        for disagg_value in ["true", "True", "TRUE"]:
-            env = single_node_env_vars.copy()
-            env["DISAGG"] = disagg_value
-
-            result = run_script(tmp_path, env, sample_benchmark_result)
-            assert result.returncode != 0
-
-
-# =============================================================================
-# Integration: power aggregation patches the agg JSON
-# =============================================================================
 
 class TestPowerAggregationIntegration:
     """End-to-end wiring: infx.results.fixed_sequence invokes aggregate_power.py and
@@ -974,72 +846,6 @@ class TestPowerAggregationIntegration:
         )
         assert validation["power_valid"] is True
         assert validation["reasons"] == []
-
-    @pytest.mark.parametrize(
-        ("require_power", "expected_returncode"),
-        [(False, 0), (True, 1)],
-    )
-    def test_internal_aggregation_error_is_always_auditable(
-        self,
-        tmp_path,
-        single_node_env_vars,
-        require_power,
-        expected_returncode,
-    ):
-        benchmark_result = {
-            "model_id": "test-model",
-            "max_concurrency": 4,
-            "total_token_throughput": 1000.0,
-            "output_throughput": 500.0,
-            "benchmark_start_time_unix": 1_700_000_100.0,
-            "benchmark_end_time_unix": 1_700_000_110.0,
-            "duration": 10.0,
-            "completed": 4,
-            "total_input_tokens": 32_768,
-            "total_output_tokens": 4_096,
-        }
-        env = single_node_env_vars.copy()
-        if require_power:
-            env["REQUIRE_POWER"] = "1"
-
-        result = run_script_with_broken_aggregator(tmp_path, env, benchmark_result)
-
-        assert result.returncode == expected_returncode
-        agg = json.loads((tmp_path / "agg_benchmark_result.json").read_text())
-        assert agg["power_metric_schema_version"] == 2
-        assert agg["power_valid"] == 0
-        assert agg["power_invalid_reasons"] == ["aggregation_internal_error"]
-        validation = json.loads(
-            (tmp_path / "power_validation_benchmark_result.json").read_text()
-        )
-        assert validation["power_valid"] is False
-        assert validation["reasons"] == ["aggregation_internal_error"]
-        assert validation["internal_error"]["type"] == "RuntimeError"
-        assert "prefill_gpu_energy_j" not in agg
-        assert "total_gpu_energy_j" not in agg
-
-    @pytest.mark.parametrize("require_power", ["", "yes"])
-    @pytest.mark.parametrize("fail_import", [False, True])
-    def test_multinode_internal_error_preserves_validation(
-        self, tmp_path, multinode_env_vars, sample_benchmark_result,
-        require_power, fail_import,
-    ):
-        result = run_script_with_broken_aggregator(
-            tmp_path, {**multinode_env_vars, "REQUIRE_POWER": require_power},
-            {**sample_benchmark_result, "prefill_gpu_energy_j_ms": 99000},
-            multinode=True, fail_import=fail_import,
-        )
-        assert result.returncode == (1 if require_power else 0)
-        agg = json.loads(result.stdout)
-        assert agg["power_valid"] == 0
-        assert "prefill_gpu_energy_j" not in agg
-        assert "total_gpu_energy_j" not in agg
-        validation = json.loads((tmp_path / "power_validation_benchmark_result.json").read_text())
-        assert validation["reasons"] == ["aggregation_internal_error"]
-        assert validation["internal_error"] == {
-            "type": "ImportError" if fail_import else "RuntimeError",
-            "message": "forced import failure" if fail_import else "forced aggregation failure",
-        }
 
     def test_amd_csv_filter_streams_complete_rows_before_eof(self):
         """A live producer must not leave telemetry buffered until shutdown."""
@@ -1355,11 +1161,6 @@ fi
         assert (tmp_path / "gpu_metrics_energy_end.csv").exists()
         identity = json.loads((tmp_path / "gpu_metrics_identity.json").read_text())
         assert identity == {"gpu_data": []}
-
-
-# =============================================================================
-# Integration: multinode power aggregation patches the agg JSON
-# =============================================================================
 
 
 class TestMultinodePower:

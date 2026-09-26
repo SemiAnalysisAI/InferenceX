@@ -23,7 +23,7 @@ def process_docs(
             perm = rng.sample(range(4), 4)
 
             new_choices = [base_choices[j] for j in perm]
-            correct_letter = LETTERS[perm.index(0)]  # where correct ended up
+            correct_letter = LETTERS[perm.index(0)]
 
             new_doc = dict(doc)
             new_doc["A"], new_doc["B"], new_doc["C"], new_doc["D"] = new_choices

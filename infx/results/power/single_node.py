@@ -107,8 +107,6 @@ def _parse_timestamp(value: str, *, naive_timezone: timezone | None = None) -> f
             return datetime.strptime(value, fmt).replace(tzinfo=naive_timezone).timestamp()
         except ValueError:
             pass
-    # ISO 8601 (amd-smi variants). fromisoformat tolerates 'T' or space separator
-    # in Python 3.11+; older versions need 'T'.
     iso_value = value.replace(" ", "T", 1) if " " in value and "T" not in value else value
     try:
         dt = datetime.fromisoformat(iso_value)
@@ -169,11 +167,7 @@ def aggregate_power(
     start_unix: float,
     end_unix: float,
 ) -> tuple[float, int] | None:
-    """Legacy arithmetic mean retained for callers of the pre-PR1 helper.
-
-    Published PR1 metrics use :func:`integrate_power`; this compatibility API
-    must not be used for energy calculations.
-    """
+    """Return the legacy arithmetic mean; energy metrics use ``integrate_power``."""
     if not csv_path.is_file() or csv_path.stat().st_size == 0:
         return None
     if end_unix <= start_unix:
@@ -189,17 +183,8 @@ def aggregate_power(
             if not timestamp_col or not power_col:
                 return None
 
-            # Group power readings by sample timestamp so per-sample total power
-            # (sum across GPUs) is computed correctly even if rows are interleaved.
-            #
-            # per_sample_row_count is the structural divisor: it's incremented for
-            # every contributing row regardless of whether a GPU-index column was
-            # detected. per_sample_gpus / gpu_keys are only populated when gpu_col
-            # is present and provide the canonical num_gpus via distinct-id count.
-            # When gpu_col is absent (vendor schema variant whose header doesn't
-            # match _GPU_INDEX_COL_RE), we fall back to inferring num_gpus from
-            # the modal row count per timestamp — assuming one row per GPU per
-            # sample, which is what every SMI tool we've seen actually emits.
+            # Group interleaved device rows by timestamp. Without device IDs,
+            # assume one row per GPU per sample to recover the per-GPU mean.
             per_sample_total: dict[float, float] = {}
             per_sample_row_count: dict[float, int] = {}
             per_sample_gpus: dict[float, set[str]] = {}
@@ -229,10 +214,6 @@ def aggregate_power(
     if not per_sample_total:
         return None
 
-    # Per-sample divisor and overall num_gpus.
-    # - If a GPU column was detected, trust distinct GPU IDs (correct for any
-    #   sampling pattern, including hot-swap or partial visibility).
-    # - Otherwise, infer from row count (one row per GPU per sample).
     if gpu_col and gpu_keys:
         num_gpus = len(gpu_keys)
         per_sample_mean_per_gpu = [
@@ -358,10 +339,8 @@ def integrate_power(
                 if timestamp is None or not math.isfinite(timestamp):
                     _append_reason(reasons, "invalid_timestamp_sample")
                     continue
-                # Note (wenyao): corrupt warmup/eval rows are skipped only when
-                # their parseable timestamp proves they cannot affect the
-                # window. An unparseable timestamp has unknown position, so it
-                # was rejected above instead of skipped.
+                # A parseable timestamp proves these corrupt rows fall outside
+                # the ingest band. Unknown timestamps remain invalid.
                 if (
                     timestamp < start_unix - max_sample_gap_s
                     or timestamp > end_unix + max_sample_gap_s

@@ -11,13 +11,14 @@ import os
 import subprocess
 import urllib.parse
 from collections.abc import Callable, Mapping, Sequence
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 if __package__:
+    from . import vendor_artifacts as artifacts
     from .minimax_m3_full_eval import UPSTREAM_REF, verify_source_tree
 else:
+    import vendor_artifacts as artifacts
     from minimax_m3_full_eval import UPSTREAM_REF, verify_source_tree
 
 TASK_NAME = "minimax_m3_smoke"
@@ -25,7 +26,6 @@ NATIVE_REPORT_FILENAME = "minimax_vendor_report.json"
 NATIVE_RESULTS_FILENAME = "minimax_vendor_results.jsonl"
 COMPATIBILITY_GLOB = "results_minimax_vendor_*.json"
 DEFAULT_FIXTURE_PATH = Path(__file__).with_name("minimax_m3_smoke.json")
-RESULT_FORMAT = "inferencex-eval-v1"
 ADAPTER_NAME = "minimax-provider-verifier"
 EXPECTED_INDICES = (71,)
 EXPECTED_LICENSE_SHA256 = "aa7cec386fcb5e555aba0e8b1c31307940af41967708c9bc0f78b4e02e235dd5"
@@ -144,10 +144,6 @@ def build_verifier_command(
     ]
 
 
-def _error_dict(error: BaseException) -> dict[str, str]:
-    return {"type": type(error).__name__, "message": str(error)}
-
-
 def _rate(value: Any, name: str) -> float:
     if (
         isinstance(value, bool)
@@ -166,10 +162,9 @@ def _nonnegative_count(value: Any, name: str) -> int:
 
 
 def _compatibility_path(output_dir: Path) -> Path:
-    for stale_path in output_dir.glob(COMPATIBILITY_GLOB):
-        stale_path.unlink()
-    timestamp = datetime.now(UTC).strftime("%Y-%m-%dT%H-%M-%S.%f")
-    return output_dir / f"results_minimax_vendor_{timestamp}.json"
+    return artifacts.prepare_compatibility_path(
+        output_dir, prefix="results_minimax_vendor_", stale_glob=COMPATIBILITY_GLOB
+    )
 
 
 def _compatibility_result(
@@ -179,44 +174,32 @@ def _compatibility_result(
     effective: int,
     integration_error: BaseException | None = None,
 ) -> dict[str, Any]:
-    result: dict[str, Any] = {
-        "result_format": RESULT_FORMAT,
-        "eval_adapter": ADAPTER_NAME,
-        "model_name": model,
-        "results": {
-            TASK_NAME: {
-                "exact_match,strict-match": score,
-                "exact_match_stderr,strict-match": 0.0,
-            }
+    return artifacts.compatibility_result(
+        adapter=ADAPTER_NAME,
+        task=TASK_NAME,
+        model=model,
+        score=score,
+        original=1,
+        effective=effective,
+        task_config={
+            "native_metrics": [
+                "tool_calls_match_rate",
+                "tool_calls_schema_validation_error_count",
+                "tool_calls_total_count",
+                "error_only_reasoning_rate",
+            ],
         },
-        "configs": {
-            TASK_NAME: {
-                "metric_list": [{"metric": "exact_match"}],
-                "filter_list": [{"name": "strict-match"}],
-                "native_metrics": [
-                    "tool_calls_match_rate",
-                    "tool_calls_schema_validation_error_count",
-                    "tool_calls_total_count",
-                    "error_only_reasoning_rate",
-                ],
-            }
-        },
-        "n-samples": {
-            TASK_NAME: {"original": 1, "effective": effective},
-        },
-        "source": {
+        source={
             "repository": "MiniMax-AI/MiniMax-Provider-Verifier",
             "ref": UPSTREAM_REF,
             "indices": list(EXPECTED_INDICES),
         },
-    }
-    if integration_error is not None:
-        result["integration_error"] = _error_dict(integration_error)
-    return result
+        integration_error=integration_error,
+    )
 
 
 def _write_json(path: Path, value: Mapping[str, Any]) -> None:
-    path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    artifacts.write_json(path, value, ensure_ascii=False)
 
 
 def project_native_artifacts(*, output_dir: Path, model: str) -> Path:
@@ -274,7 +257,7 @@ def publish_failure(*, output_dir: Path, model: str, error: BaseException) -> Pa
                 "model": model,
                 "completed": False,
                 "source": {"ref": UPSTREAM_REF, "indices": list(EXPECTED_INDICES)},
-                "integration_error": _error_dict(error),
+                "integration_error": artifacts.error_dict(error),
             },
         )
     compatibility_path = _compatibility_path(output_dir)

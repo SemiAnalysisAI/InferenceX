@@ -43,7 +43,6 @@ def _load_aiperf_summary_csv(csv_path: Path) -> dict | None:
     if len(lines) < 2:
         return None
 
-    # Section 1: per-metric stats (header + data rows with 14 columns)
     header = lines[0].split(",")
     per_metric = {}
     scalars = {}
@@ -52,10 +51,8 @@ def _load_aiperf_summary_csv(csv_path: Path) -> dict | None:
             continue
         parts = line.split(",")
         if len(parts) == len(header):
-            # Per-metric row
             per_metric[parts[0]] = {h: parts[i] for i, h in enumerate(header)}
         elif len(parts) == 2:
-            # Scalar row (Metric, Value)
             scalars[parts[0]] = parts[1]
         else:
             # Different section (GPU metrics) — stop
@@ -149,7 +146,6 @@ def load_experiment(exp_dir: Path) -> dict | None:
         return result
 
     try:
-        # Determine data source: aiperf summary CSV (preferred) or custom client CSV
         if aiperf_summary_csv is not None:
             aiperf_metrics = _load_aiperf_summary_csv(aiperf_summary_csv)
             if aiperf_metrics is None:
@@ -212,7 +208,6 @@ def load_experiment(exp_dir: Path) -> dict | None:
         else:
             return result
 
-        # Cache hit rates from server metrics
         if server_csv.exists():
             try:
                 sdf = pd.read_csv(server_csv)
@@ -248,7 +243,6 @@ def main() -> None:
         print(f"Error: {artifacts_dir} is not a directory")
         sys.exit(1)
 
-    # Load all experiments
     experiments = []
     for subdir in sorted(artifacts_dir.iterdir()):
         if not subdir.is_dir():
@@ -261,19 +255,16 @@ def main() -> None:
         print("No experiments found.")
         sys.exit(0)
 
-    # Write summary CSV
     summary_path = output_dir / "summary.csv"
     df = pd.DataFrame(experiments)
     df.to_csv(summary_path, index=False)
     print(f"Summary written to {summary_path} ({len(experiments)} experiments)")
 
-    # Print status summary
     success = sum(1 for e in experiments if e.get("status") == "SUCCESS")
     failed = sum(1 for e in experiments if e.get("status") == "FAILED")
     other = len(experiments) - success - failed
     print(f"  SUCCESS: {success}, FAILED: {failed}, OTHER: {other}")
 
-    # Run overview plots (throughput vs concurrency, workload consistency)
     try:
         from plot_sweep_overview import (
             plot_throughput_vs_concurrency,

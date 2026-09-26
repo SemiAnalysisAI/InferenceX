@@ -1,4 +1,3 @@
-import importlib.util
 import json
 import runpy
 import subprocess
@@ -8,19 +7,12 @@ from pathlib import Path
 
 import pytest
 
+from infx.evals.patches import (
+    patch_swebench_agent as agent_patch,
+    patch_swebench_scoring as scoring_patch,
+)
+
 PATCH_DIR = Path(__file__).resolve().parents[3] / "infx/evals/patches"
-
-
-def _load_patch_module(name: str):
-    spec = importlib.util.spec_from_file_location(name, PATCH_DIR / f"{name}.py")
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-agent_patch = _load_patch_module("patch_swebench_agent")
-scoring_patch = _load_patch_module("patch_swebench_scoring")
 
 
 def test_agent_patch_is_atomic_and_idempotent(tmp_path):
@@ -111,13 +103,53 @@ def test_scoring_patch_is_atomic_and_idempotent(tmp_path):
     assert not scoring_patch.patch(str(target), "2")
     assert target.read_text() == "prefix\ncpu=4,\nsuffix\n"
 
-    source = "cpu=4,\n" + scoring_patch.LIFECYCLE_ANCHOR
-    target.write_text(source)
-    assert scoring_patch.patch(str(target), "2")
-    patched = target.read_text()
-    assert "cpu=2," in patched
-    assert scoring_patch.patch(str(target), "2")
-    assert target.read_text() == patched
+    target.write_text(
+        """events = []
+log_dir = "logs"
+
+class Runner:
+    def __init__(self, cpu):
+        events.append(["cpu", cpu])
+        self.sandbox = self
+
+    def terminate(self):
+        events.append(["terminated"])
+
+def report(log_dir, errored):
+    events.append([log_dir, errored])
+
+def run_instance(fail):
+    runner = Runner(
+        cpu=4,
+    )
+    try:
+        if fail:
+            raise RuntimeError("failed")
+        return "completed"
+    except RuntimeError:
+        report(
+            log_dir=log_dir,
+            errored=True,
+        )
+
+
+def run_instances_modal():
+    return run_instance(False), run_instance(True)
+
+outcomes = run_instances_modal()
+"""
+    )
+    for _ in range(2):
+        assert scoring_patch.patch(str(target), "2")
+        result = runpy.run_path(str(target))
+        assert result["outcomes"] == ("completed", None)
+        assert result["events"] == [
+            ["cpu", 2],
+            ["terminated"],
+            ["cpu", 2],
+            ["logs", True],
+            ["terminated"],
+        ]
 
 
 @pytest.mark.parametrize("value", ["0", "-1", "nan", "inf", "bad"])

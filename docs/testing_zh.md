@@ -33,7 +33,7 @@
 
 [`CI`](../.github/workflows/ci.yml) 在 PR（包括 fork）或向 `main` 的推送修改 Python 文件、`.github/scripts/` 辅助脚本、`ci.yml`、`pyproject.toml`、`uv.lock`、`.python-version`、Ruff 配置或 `pytest.ini` 时，并行运行 **Lint** 和 **Tests**。[`Workflow security`](../.github/workflows/zizmor.yml) 在工作流、action 定义、Dependabot、pre-commit 或 zizmor 配置变更时运行 **Zizmor**。仅修改 Python 文件不会触发 Zizmor；仅修改其他工作流不会触发 Lint 或 Tests。修改 `ci.yml` 会触发全部三项任务。两个工作流均可手动分发。仅修改其他文档、Shell 脚本或基准测试 YAML 不会触发这两个工作流；请在本地执行相应检查，或手动分发。
 
-Tests 使用四个 pytest worker 运行 `utils/`、`runners/` 和 `experimental/CollectiveX/tests/` 下的全部测试。这些目录中的新增测试会自动发现。CI 通过 `uv sync --locked --all-extras --group test --no-editable` 将 `infx` 安装为 wheel，使用 Python 3.12 和仅支持 CPU 的 PyTorch。一项任务失败不会取消另一项；PR 更新会取消旧提交的 CI。尚未创建 PR 的分支推送不再单独触发变更日志测试。
+Tests 使用四个 pytest worker 运行 `infx/tests/`、`utils/`、`runners/`、`experimental/CollectiveX/tests/` 和 `experimental/operatorx/tests/` 下的测试套件。这些目录中的新增测试会自动发现。`utils/srt-slurm` 子模块会为连接器测试初始化，但它自身的测试套件由上游 CI 运行。CI 通过 `uv sync --locked --all-extras --group test --no-editable` 将 `infx` 安装为 wheel，使用 Python 3.12 和仅支持 CPU 的 PyTorch。一项任务失败不会取消另一项；PR 更新会取消旧提交的 CI。尚未创建 PR 的分支推送不再单独触发变更日志测试。
 
 | 层级 | 能够证明 | 不能证明 |
 | --- | --- | --- |
@@ -172,11 +172,15 @@ python3 -m infx.workflows.validate_perf_changelog \
 使用与 CI 相同的锁定环境和四个 worker 运行测试套件：
 
 ```bash
+git submodule update --init utils/srt-slurm
 uv run --locked --all-extras --group test --no-editable \
-  python -m pytest infx/tests/ utils/ runners/ experimental/CollectiveX/tests/ -n 4
+  python -m pytest infx/tests/ utils/ runners/ experimental/CollectiveX/tests/ \
+  experimental/operatorx/tests/ --ignore=utils/srt-slurm -n 4
 ```
 
 串行调试时使用 `-n 0`。测试必须隔离临时文件和端口，并确保各 worker 收集到的参数化用例一致。
+
+在 macOS 上运行启动器测试前，请将 Bash 5 加入 `PATH`。系统自带的 Bash 3.2 不支持 Slurm 启动器使用的 `mapfile`。
 
 ## 冒烟、扫描与评测
 

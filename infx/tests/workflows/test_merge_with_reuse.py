@@ -1,5 +1,3 @@
-"""Tests for infx.workflows.merge_with_reuse."""
-
 from __future__ import annotations
 
 import os
@@ -16,7 +14,6 @@ from infx.workflows.merge_with_reuse import (
     _is_transient_error,
     _latest_check_runs,
     _latest_statuses,
-    _MergeState,
     _poll_pr_head,
     _resolve_token,
     _retry_delay,
@@ -28,17 +25,6 @@ from infx.workflows.merge_with_reuse import (
     wait_for_check,
     wait_for_checks,
 )
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def make_mock_label(name: str) -> MagicMock:
-    """Build a mock label object matching PyGithub's Label."""
-    label = MagicMock()
-    label.name = name
-    return label
 
 
 def make_mock_pull(
@@ -52,7 +38,6 @@ def make_mock_pull(
     head_repo: str | None = None,
     head_repo_none: bool = False,
 ) -> MagicMock:
-    """Build a mock PullRequest matching PyGithub's PullRequest."""
     pull = MagicMock()
     pull.state = state
     pull.head.ref = head_ref
@@ -62,7 +47,7 @@ def make_mock_pull(
         pull.head.repo = None
     else:
         pull.head.repo.full_name = head_repo or (base_repo if not is_fork else "fork/repo")
-    pull.labels = [make_mock_label(n) for n in (labels or [])]
+    pull.labels = [SimpleNamespace(name=name) for name in (labels or [])]
     pull.create_issue_comment = MagicMock()
     pull.update = MagicMock()
     pull.merge = MagicMock(return_value=SimpleNamespace(merged=True, sha="b" * 40, message="ok"))
@@ -70,7 +55,6 @@ def make_mock_pull(
 
 
 def make_mock_gh(pull: MagicMock | None = None) -> MagicMock:
-    """Build a mock Github client with a mock Repository."""
     gh = MagicMock()
     gh_repo = MagicMock()
     gh.get_repo.return_value = gh_repo
@@ -82,7 +66,6 @@ def make_mock_gh(pull: MagicMock | None = None) -> MagicMock:
 def make_mock_git_ops(
     *, clean: bool = True, current_ref: str = "main", sha: str = "a" * 40
 ) -> MagicMock:
-    """Build a mock GitOps."""
     git_ops = MagicMock(spec=GitOps)
     git_ops.is_clean.return_value = clean
     git_ops.current_ref.return_value = current_ref
@@ -101,16 +84,15 @@ def make_check_run(
     started_at: str = "2024-01-01T00:00:00Z",
     details_url: str = "",
     cr_id: int = 1,
-) -> MagicMock:
-    """Build a mock CheckRun."""
-    cr = MagicMock()
-    cr.name = name
-    cr.status = status
-    cr.conclusion = conclusion
-    cr.started_at = started_at
-    cr.details_url = details_url
-    cr.id = cr_id
-    return cr
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        name=name,
+        status=status,
+        conclusion=conclusion,
+        started_at=started_at,
+        details_url=details_url,
+        id=cr_id,
+    )
 
 
 def make_status(
@@ -120,25 +102,18 @@ def make_status(
     target_url: str = "",
     updated_at: str = "2024-01-01T00:00:00Z",
     status_id: int = 1,
-) -> MagicMock:
-    """Build a mock CommitStatus."""
-    s = MagicMock()
-    s.context = context
-    s.state = state
-    s.target_url = target_url
-    s.updated_at = updated_at
-    s.id = status_id
-    return s
-
-
-# ---------------------------------------------------------------------------
-# Fixture: temporary git repo
-# ---------------------------------------------------------------------------
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        context=context,
+        state=state,
+        target_url=target_url,
+        updated_at=updated_at,
+        id=status_id,
+    )
 
 
 @pytest.fixture
 def temp_repo(tmp_path):
-    """Create a temporary git repo with an initial commit."""
     repo = gitpython.Repo.init(tmp_path)
     repo.config_writer().set_value("user", "name", "Test").release()
     repo.config_writer().set_value("user", "email", "test@test.com").release()
@@ -146,11 +121,6 @@ def temp_repo(tmp_path):
     repo.index.add(["README"])
     repo.index.commit("initial")
     return repo
-
-
-# ---------------------------------------------------------------------------
-# Unit tests: _resolve_token
-# ---------------------------------------------------------------------------
 
 
 class TestResolveToken:
@@ -198,7 +168,6 @@ class TestResolveToken:
             assert _resolve_token() == ""
 
     def test_token_never_in_stdout_or_stderr(self, capsys):
-        """Verify the token string never leaks into stdout/stderr."""
         secret = "ghp_SuperSecretToken12345"
         with patch.dict(os.environ, {"GH_TOKEN": secret}, clear=False):
             token = _resolve_token()
@@ -206,11 +175,6 @@ class TestResolveToken:
         assert secret not in captured.out
         assert secret not in captured.err
         assert token == secret  # it's returned, not printed
-
-
-# ---------------------------------------------------------------------------
-# Unit tests: find_eligible_run
-# ---------------------------------------------------------------------------
 
 
 class TestFindEligibleRun:
@@ -294,11 +258,6 @@ class TestFindEligibleRun:
             assert result == 99
 
 
-# ---------------------------------------------------------------------------
-# Unit tests: wait_for_check
-# ---------------------------------------------------------------------------
-
-
 class TestWaitForCheck:
     def test_success_returns_zero(self):
         gh_repo = MagicMock()
@@ -342,7 +301,6 @@ class TestWaitForCheck:
         assert result == 1
 
     def test_transient_error_retried_then_succeeds(self):
-        """A transient 502 on the first poll is retried; success on second."""
         from github import GithubException
 
         gh_repo = MagicMock()
@@ -365,11 +323,6 @@ class TestWaitForCheck:
             mock_time.side_effect = [0, 0, 0, 0, 0]
             result = wait_for_check("a" * 40, "check-changelog", gh_repo, timeout=60)
         assert result == 0
-
-
-# ---------------------------------------------------------------------------
-# Unit tests: wait_for_checks (all-checks polling)
-# ---------------------------------------------------------------------------
 
 
 class TestWaitForChecks:
@@ -443,7 +396,6 @@ class TestWaitForChecks:
         assert result == 1
 
     def test_rerun_duplicate_old_cancelled_new_success(self):
-        """Old cancelled + new success for the same check -> pass (not fail-fast)."""
         pull = MagicMock()
         gh_repo = MagicMock()
         commit = MagicMock()
@@ -472,7 +424,6 @@ class TestWaitForChecks:
         assert result == 0
 
     def test_rerun_duplicate_old_failed_new_success(self):
-        """Old failed + new success for the same check -> pass."""
         pull = MagicMock()
         gh_repo = MagicMock()
         commit = MagicMock()
@@ -500,7 +451,6 @@ class TestWaitForChecks:
         assert result == 0
 
     def test_stale_keeps_waiting(self):
-        """A check with conclusion 'stale' is treated as pending."""
         pull = MagicMock()
         gh_repo = MagicMock()
         commit = MagicMock()
@@ -524,7 +474,6 @@ class TestWaitForChecks:
         assert result == 1
 
     def test_genuine_failure_fail_fast(self):
-        """A genuine failure triggers immediate fail-fast."""
         pull = MagicMock()
         gh_repo = MagicMock()
         commit = MagicMock()
@@ -542,7 +491,6 @@ class TestWaitForChecks:
         assert result == 1
 
     def test_no_checks_yet_keeps_waiting(self):
-        """No check runs and no statuses -> keeps waiting until timeout."""
         pull = MagicMock()
         gh_repo = MagicMock()
         commit = MagicMock()
@@ -562,7 +510,6 @@ class TestWaitForChecks:
         assert result == 1
 
     def test_cancelled_not_fail_fast(self):
-        """A cancelled check alone is not a fail-fast trigger; it just doesn't count as passing."""
         pull = MagicMock()
         gh_repo = MagicMock()
         commit = MagicMock()
@@ -583,7 +530,6 @@ class TestWaitForChecks:
         assert result == 0
 
     def test_transient_error_retried_then_succeeds(self):
-        """A transient 500 on the first poll is retried; success on second."""
         from github import GithubException
 
         pull = MagicMock()
@@ -615,11 +561,6 @@ class TestWaitForChecks:
         assert result == 0
 
 
-# ---------------------------------------------------------------------------
-# Unit tests: _latest_check_runs / _latest_statuses
-# ---------------------------------------------------------------------------
-
-
 class TestDeduplication:
     def test_latest_check_runs_keeps_newest(self):
         old = make_check_run(name="ci", started_at="2024-01-01T00:00:00Z", cr_id=1)
@@ -648,11 +589,6 @@ class TestDeduplication:
         result = _latest_statuses([old, new])
         assert len(result) == 1
         assert result[0].id == 2
-
-
-# ---------------------------------------------------------------------------
-# Unit tests: transient error helpers
-# ---------------------------------------------------------------------------
 
 
 class TestTransientErrors:
@@ -714,11 +650,6 @@ class TestTransientErrors:
         assert delay == 60.0
 
 
-# ---------------------------------------------------------------------------
-# Unit tests: _poll_pr_head
-# ---------------------------------------------------------------------------
-
-
 class TestPollPrHead:
     def test_returns_immediately_on_match(self):
         pull = MagicMock()
@@ -750,11 +681,6 @@ class TestPollPrHead:
         assert result == "stale_sha"
 
 
-# ---------------------------------------------------------------------------
-# Unit tests: main() CLI
-# ---------------------------------------------------------------------------
-
-
 class TestMainCli:
     def test_usage_with_no_args(self):
         with patch("sys.argv", ["merge_with_reuse"]):
@@ -769,7 +695,6 @@ class TestMainCli:
             assert main() == 2
 
     def test_missing_workflows_extra_exits_one(self, capsys):
-        """When PyGithub/GitPython are missing, main() exits 1 with install hint."""
         with patch("infx.workflows.merge_with_reuse._WORKFLOWS_AVAILABLE", False):
             with patch("sys.argv", ["prog", "123"]):
                 result = main()
@@ -779,7 +704,6 @@ class TestMainCli:
         assert "PyGithub" in captured.err
 
     def test_main_propagates_merge_failure(self):
-        """main() propagates non-zero from merge_pr."""
         with (
             patch("sys.argv", ["prog", "42"]),
             patch("infx.workflows.merge_with_reuse.merge_pr", return_value=1) as mock_merge,
@@ -789,13 +713,7 @@ class TestMainCli:
         mock_merge.assert_called_once()
 
 
-# ---------------------------------------------------------------------------
-# Integration-style tests: merge_pr with full mocking
-# ---------------------------------------------------------------------------
-
-
 class TestMergePrEligibility:
-    """Test the eligibility checks at the start of merge_pr."""
 
     def test_dirty_worktree_exits_one(self):
         git_ops = make_mock_git_ops(clean=False)
@@ -818,7 +736,6 @@ class TestMergePrEligibility:
         assert result == 1
 
     def test_deleted_fork_exits_one(self):
-        """PR with head.repo == None (deleted fork) exits 1."""
         pull = make_mock_pull(head_repo_none=True)
         gh = make_mock_gh(pull)
         git_ops = make_mock_git_ops()
@@ -826,7 +743,6 @@ class TestMergePrEligibility:
         assert result == 1
 
     def test_deleted_fork_error_message(self, capsys):
-        """Deleted fork error message mentions unavailable repository."""
         pull = make_mock_pull(head_repo_none=True)
         gh = make_mock_gh(pull)
         git_ops = make_mock_git_ops()
@@ -862,7 +778,6 @@ class TestMergePrEligibility:
 
 
 class TestMergePrCommentPosting:
-    """Test that the reuse comment is posted with the correct run ID."""
 
     def test_comment_posted_with_eligible_run_id(self):
         pull = make_mock_pull()
@@ -880,10 +795,8 @@ class TestMergePrCommentPosting:
 
 
 class TestMergePrFullFlow:
-    """Test the full merge flow with comprehensive mocking."""
 
     def _run_full_flow(self, *, merge_fails=False, changelog_diff=False, sha=None):
-        """Run merge_pr with comprehensive mocking for the happy path."""
         sha = sha or "a" * 40
         pull = make_mock_pull(head_sha=sha)
         gh = make_mock_gh(pull)
@@ -1004,7 +917,6 @@ class TestMergePrFullFlow:
         assert result == 1
 
     def test_merge_calls_squash_with_sha(self):
-        """Verify merge is called with merge_method=squash and sha pinned."""
         sha = "a" * 40
         merge_sha = "b" * 40
         pull = make_mock_pull(head_sha=sha)
@@ -1066,7 +978,6 @@ class TestMergePrFullFlow:
         assert result == 1
 
     def test_merge_api_error_surfaces_message(self, capsys):
-        """Verify API error message is surfaced verbatim but token is not leaked."""
         from github import GithubException
 
         sha = "a" * 40
@@ -1114,7 +1025,6 @@ class TestMergePrFullFlow:
         assert secret not in captured.err
 
     def test_non_changelog_conflict_aborts(self):
-        """A non-changelog conflict triggers merge_abort and exit 1."""
         sha = "a" * 40
         pull = make_mock_pull(head_sha=sha)
         gh = make_mock_gh(pull)
@@ -1141,7 +1051,6 @@ class TestMergePrFullFlow:
         git_ops.merge_abort.assert_called()
 
     def test_canonicalize_amend_path(self):
-        """When changelog changes and head moved (merge happened), commit --amend is used."""
         sha = "a" * 40
         new_sha = "b" * 40
         pull = make_mock_pull(head_sha=sha)
@@ -1195,7 +1104,6 @@ class TestMergePrFullFlow:
         git_ops.commit.assert_any_call("--amend", "--no-edit")
 
     def test_synchronize_empty_commit(self):
-        """When pre_merge == post_merge (no change), an empty commit is created."""
         sha = "a" * 40
         pull = make_mock_pull(head_sha=sha)
         gh = make_mock_gh(pull)
@@ -1235,11 +1143,6 @@ class TestMergePrFullFlow:
         )
 
 
-# ---------------------------------------------------------------------------
-# Test: exit codes
-# ---------------------------------------------------------------------------
-
-
 class TestExitCodes:
     def test_main_returns_two_on_bad_usage(self):
         with patch("sys.argv", ["prog"]):
@@ -1249,13 +1152,7 @@ class TestExitCodes:
         assert die("error") == 1
 
 
-# ---------------------------------------------------------------------------
-# Test: token never leaks
-# ---------------------------------------------------------------------------
-
-
 class TestTokenNeverLeaks:
-    """Verify the token string never appears in stdout/stderr output."""
 
     def test_auth_fallback_no_leak(self, capsys):
         secret = "ghp_ThisShouldNeverAppearAnywhere42"
@@ -1269,7 +1166,6 @@ class TestTokenNeverLeaks:
         assert token == secret
 
     def test_api_error_no_token_leak(self, capsys):
-        """A failing API path must surface the API message, not the token."""
         from github import GithubException
 
         sha = "a" * 40
@@ -1319,7 +1215,6 @@ class TestTokenNeverLeaks:
         assert secret not in captured.err
 
     def test_eligibility_error_no_token_leak(self, capsys):
-        """Even eligibility failures never leak the token."""
         secret = "ghp_EligibilityLeakTest9999"
         pull = make_mock_pull(state="closed")
         gh = make_mock_gh(pull)
@@ -1336,56 +1231,7 @@ class TestTokenNeverLeaks:
         assert secret not in captured.err
 
 
-# ---------------------------------------------------------------------------
-# Integration tests: real git repo
-# ---------------------------------------------------------------------------
-
-
-class TestShowStageRawBytes:
-    """Verify GitOps.show_stage returns byte-identical output to git show."""
-
-    def test_show_stage_preserves_trailing_newline(self, temp_repo, tmp_path):
-        """show_stage returns bytes with trailing newline preserved."""
-        content = b"line1\nline2\n"
-        (tmp_path / "test.txt").write_bytes(content)
-        temp_repo.index.add(["test.txt"])
-        temp_repo.index.commit("add test.txt")
-
-        git_ops = GitOps(temp_repo)
-        # Use HEAD:test.txt via repo.git.show to compare
-        raw = git_ops.repo.git.show(
-            "HEAD:test.txt",
-            stdout_as_string=False,
-            strip_newline_in_stdout=False,
-        )
-        assert raw == content
-
-    def test_show_stage_matches_subprocess(self, temp_repo, tmp_path):
-        """show_stage output matches raw subprocess git show output."""
-        content = b"- config-keys: [model/h100]\n  description: [test]\n  pr-link: XXX\n"
-        (tmp_path / "file.yaml").write_bytes(content)
-        temp_repo.index.add(["file.yaml"])
-        temp_repo.index.commit("add yaml")
-
-        # Get via subprocess (the ground truth)
-        result = subprocess.run(
-            ["git", "show", "HEAD:file.yaml"],
-            capture_output=True,
-            cwd=tmp_path,
-        )
-        expected = result.stdout
-
-        # Get via GitOps.show_stage equivalent
-        raw = temp_repo.git.show(
-            "HEAD:file.yaml",
-            stdout_as_string=False,
-            strip_newline_in_stdout=False,
-        )
-        assert raw == expected
-
-
 class TestChangelogConflictIntegration:
-    """Integration test: real git repo with a genuine perf-changelog.yaml conflict."""
 
     def _make_entry(self, key: str, pr_link: str) -> str:
         return (
@@ -1393,7 +1239,6 @@ class TestChangelogConflictIntegration:
         )
 
     def test_resolve_real_conflict_preserves_main_bytes(self, tmp_path, monkeypatch):
-        """Resolve a real changelog conflict; main's bytes are preserved, PR entry appended."""
         monkeypatch.chdir(tmp_path)
 
         repo = gitpython.Repo.init(tmp_path)
@@ -1471,16 +1316,9 @@ class TestChangelogConflictIntegration:
         validate_raw_change(main_raw, resolved, len(additions), corrections)
 
 
-# ---------------------------------------------------------------------------
-# Integration tests: branch cleanup
-# ---------------------------------------------------------------------------
-
-
 class TestBranchCleanup:
-    """Verify the temporary branch is cleaned up after merge_pr."""
 
     def test_branch_deleted_after_success(self, temp_repo):
-        """After a successful merge_pr, the local branch is deleted."""
         git_ops = GitOps(temp_repo)
         main_branch = temp_repo.active_branch.name
         branch_name = f"pr-7-reuse-{os.getpid()}"
@@ -1503,7 +1341,6 @@ class TestBranchCleanup:
         assert temp_repo.active_branch.name == main_branch
 
     def test_branch_deleted_after_failure(self, temp_repo):
-        """After a failed merge_pr (exception), the branch is still cleaned up."""
         git_ops = GitOps(temp_repo)
         main_branch = temp_repo.active_branch.name
         branch_name = f"pr-7-reuse-{os.getpid()}"
@@ -1527,10 +1364,8 @@ class TestBranchCleanup:
 
 
 class TestMergeAbortInCleanup:
-    """Verify cleanup aborts a half-merged state and restores the original branch."""
 
     def test_merge_abort_on_exception_during_conflict(self, tmp_path):
-        """If an exception occurs during a conflicted merge, cleanup restores clean state."""
         repo = gitpython.Repo.init(tmp_path)
         repo.config_writer().set_value("user", "name", "T").release()
         repo.config_writer().set_value("user", "email", "t@t.com").release()
@@ -1582,19 +1417,3 @@ class TestMergeAbortInCleanup:
         assert repo.active_branch.name == main_branch
         assert not repo.is_dirty(untracked_files=True)
         assert branch_name not in [b.name for b in repo.heads]
-
-
-# ---------------------------------------------------------------------------
-# Test: _MergeState
-# ---------------------------------------------------------------------------
-
-
-class TestMergeState:
-    def test_initial_state(self):
-        state = _MergeState()
-        assert state.local_branch == ""
-
-    def test_local_branch_settable(self):
-        state = _MergeState()
-        state.local_branch = "pr-42-reuse-1234"
-        assert state.local_branch == "pr-42-reuse-1234"
