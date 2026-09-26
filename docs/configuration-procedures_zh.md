@@ -169,7 +169,7 @@ B200 Nscale 的 GLM-5.1 可用 `MODEL_PATH` 指定已有共享权重，覆盖默
 
 ## 注册 llm-d 配方
 
-来源：[`benchmarks/llm-d/README.md`](../benchmarks/llm-d/README.md)、[`benchmarks/multi_node/llm-d/README.md`](../benchmarks/multi_node/llm-d/README.md)、[`llm-d-recipes/`](../benchmarks/multi_node/llm-d-recipes/) 和当前 [`llmd-vllm` 基准 wrapper](../benchmarks/multi_node/dsv4_fp4_gb200_llmd-vllm-disagg.sh)。
+来源：[`benchmarks/llm-d/README.md`](../benchmarks/llm-d/README.md)、[`benchmarks/multi_node/llm-d/README.md`](../benchmarks/multi_node/llm-d/README.md)、和 [`llm-d-recipes/`](../benchmarks/multi_node/llm-d-recipes/)。
 
 llm-d 不是 srt-slurm 路径：InferenceX 自己持有 Slurm allocation，并在每个节点启动一个容器。
 
