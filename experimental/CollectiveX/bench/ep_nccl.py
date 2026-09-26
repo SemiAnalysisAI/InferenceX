@@ -100,17 +100,27 @@ class NCCLEPBackend(EPBackend):
     kernel_generation = "nccl-ep-v02-ht-routed-zc-static"
     SUPPORTED_MODES = ("normal", "low-latency")
     SUPPORTED_PRECISIONS = ("bf16",)
-    # LL replays; HT stays eager. Graphed HT's oracle failures were the oracle's own unfenced
-    # write into the zero-copy window (fixed in `combine_transformed`); with that fixed, graphed
-    # HT is correct but 1.03-1.11x eager's pair period on h100/h200 EP16 (runs 36231927003..
-    # 36231931954 vs 36176100175), so eager is HT's best configuration.
-    CUDA_GRAPH_MODES = ("low-latency",)
+    # HT replays at decode only, the regime an engine's captured decode step would run it in
+    # (see `cuda_graph_supported`); LL replays everywhere.
+    CUDA_GRAPH_MODES = ("normal", "low-latency")
     stage_device_work = False
     requires_fresh_pair = False
     receive_layout = "token-rank"
     combine_weight_semantics = "unweighted-rank-sum"
     zero_copy = True
     _ll_expert_major = False
+
+    @property
+    def cuda_graph_supported(self) -> bool:
+        # HT prefill stays eager: engines run prefill uncaptured. HT decode replays because a
+        # captured decode step would run it that way, even though it is slower there: 1.03-1.11x
+        # eager's pair period on h100/h200 EP16 (runs 36231927003..36231931954 vs 36176100175).
+        # Captured, the per-step routing ncclAllGather is a proxy-driven cross-node collective,
+        # which NCCL fronts with a host-callback node on every replay (enqueue.cc, persistent
+        # plans), ~+50us of dispatch at EP16 and nothing within one node.
+        if self.mode == "normal" and getattr(self.args, "phase", None) != "decode":
+            return False
+        return super().cuda_graph_supported
 
     def __init__(self, args, rank, world_size, local_rank, device):
         super().__init__(args, rank, world_size, local_rank, device)
