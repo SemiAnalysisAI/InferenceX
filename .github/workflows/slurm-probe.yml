@@ -21,23 +21,13 @@ concurrency:
 jobs:
   probe:
     name: probe / ${{ matrix.cluster }}
-    runs-on: ["self-hosted", "cluster:${{ matrix.cluster }}"]
+    runs-on: ["self-hosted", "cluster:${{ matrix.cluster }}"] # zizmor: ignore[self-hosted-runner]
     timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
         cluster:
-          - b200-nscale
-          - b300-dsxe
-          - gb200-nv
-          - gb300-nv
           - h100-cw
-          - h100-dgxc
-          - h200-cw
-          - h200-dgxc
-          - mi300x-amd
-          - mi325x-amds
-          - mi355x-amds
     steps:
       - name: Inventory Slurm toolchain
         env:
@@ -76,6 +66,14 @@ jobs:
             python3 -c 'import sysconfig; print("python-include", sysconfig.get_paths()["include"])' 2>&1
             python3 -c 'import pyslurm; print("pyslurm", pyslurm.__version__)' 2>&1 | tail -1
             enroot version 2>&1 | head -1
+            echo "--- build readiness"
+            grep -hE 'SLURM_VERSION_(NUMBER|STRING)' /usr/include/slurm/slurm_version.h 2>/dev/null
+            ls /usr/include/slurm/ 2>/dev/null | tr '\n' ' '; echo
+            dpkg -l 2>/dev/null | awk '/slurm/ {print $2, $3}'
+            python3 -m pip --version 2>&1 | head -1
+            python3 -c 'import Cython; print("cython", Cython.__version__)' 2>&1 | tail -1
+            python3 -m pip config list 2>/dev/null
+            df -h "$RUNNER_TEMP" 2>/dev/null | tail -1
           } > "$out" 2>&1
           cat "$out"
           { echo '```'; cat "$out"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
