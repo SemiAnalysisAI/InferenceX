@@ -13,7 +13,7 @@ Use this page for benchmark configuration, recipe, image, and runner changes. It
 | Source of truth | What it controls |
 | --- | --- |
 | [`configs/CONFIGS.md`](../configs/CONFIGS.md) | Master-config and runner-config field contract |
-| [`utils/matrix_logic/validation.py`](../utils/matrix_logic/validation.py) | Enforced Pydantic schema and topology invariants |
+| [`infx/matrix/validation.py`](../infx/matrix/validation.py) | Enforced Pydantic schema and topology invariants |
 | [`utils/matrix_logic/generate_sweep_configs.py`](../utils/matrix_logic/generate_sweep_configs.py) | Matrix expansion, filtering, runner lookup, and emitted job metadata |
 | [`configs/nvidia-master.yaml`](../configs/nvidia-master.yaml), [`configs/amd-master.yaml`](../configs/amd-master.yaml) | Executable benchmark definitions |
 | [`configs/runners.yaml`](../configs/runners.yaml) | Schedulable labels, concrete runner names, and hardware facts |
@@ -144,7 +144,7 @@ A `MODELS.md` row alone is not an executable recipe. The complete path is benchm
 
 ## Change a master config
 
-Sources: [`configs/CONFIGS.md`](../configs/CONFIGS.md), [`validation.py`](../utils/matrix_logic/validation.py), [`generate_sweep_configs.py`](../utils/matrix_logic/generate_sweep_configs.py).
+Sources: [`configs/CONFIGS.md`](../configs/CONFIGS.md), [`validation.py`](../infx/matrix/validation.py), [`generate_sweep_configs.py`](../utils/matrix_logic/generate_sweep_configs.py).
 
 1. Locate the exact key and read its whole entry plus adjacent siblings.
 2. Use only documented kebab-case fields. The schema forbids extras. A plausible-looking field is not accepted automatically.
@@ -616,7 +616,7 @@ For srt-slurm, also run the upstream recipe checker/`srtctl` command documented 
 
 ## Avoid schema and topology traps
 
-Enforced details come from [`validation.py`](../utils/matrix_logic/validation.py) and are summarized in [`configs/CONFIGS.md`](../configs/CONFIGS.md):
+Enforced details come from [`validation.py`](../infx/matrix/validation.py) and are summarized in [`configs/CONFIGS.md`](../configs/CONFIGS.md):
 
 - Schemas use `extra='forbid'`. Use kebab-case aliases exactly.
 - Choose either `conc-start` + `conc-end` **or** non-empty `conc-list`, never both. Values must be positive and start must not exceed end.

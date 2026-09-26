@@ -144,7 +144,7 @@ flowchart LR
 
 复制到隔离环境中的评测适配器和补丁使用 `infx/evals` 下的实际文件，因此仍可独立运行。可信工作流辅助模块会明确选择工具代码所在的检出目录。需要支持旧目标修订的工作流步骤直接调用稳定的 `utils/` 入口：当前的轻量入口转调 `infx`，旧提交则运行原有实现。调用处无需检查包模块是否存在。
 
-默认仓库路径定义在 [`infx/config.py`](../infx/config.py) 中；`utils/constants.py` 保留旧导入方式。包的 `__init__.py` 文件保持精简。
+默认仓库路径定义在 [`infx/config.py`](../infx/config.py) 中。包的 `__init__.py` 文件保持精简。
 
 `utils/process_changelog.py`、`utils/matrix_logic/generate_sweep_configs.py` 和 `validation.py` 保留为轻量兼容入口，旧导入路径指向同一个模块对象，避免重复创建模式类。现有脚本命令、参数、相对输入路径和依赖保持不变，从仓库检出目录运行时无需安装包。`process_changelog.py` 指向 `infx.matrix.plan`；`validate_perf_changelog.py` 保留现有处理器 CLI 边界和诊断。
 

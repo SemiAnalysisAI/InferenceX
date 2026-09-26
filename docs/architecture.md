@@ -144,7 +144,7 @@ Run commands with `python -m infx.<package>.<module>` from the checkout root. De
 
 Eval adapters and patches copied into isolated environments use the actual files under `infx/evals`, so they remain standalone. Trusted workflow helpers explicitly select their tooling checkout. Workflow steps that support older target revisions call the stable `utils/` entrypoints directly: current stubs delegate to `infx`, while older commits run their original implementations. Call sites need no package-presence checks.
 
-Default repository paths live in [`infx/config.py`](../infx/config.py); `utils/constants.py` preserves the legacy imports. Package `__init__.py` files stay minimal.
+Default repository paths live in [`infx/config.py`](../infx/config.py). Package `__init__.py` files stay minimal.
 
 `utils/process_changelog.py`, `utils/matrix_logic/generate_sweep_configs.py`, and `validation.py` remain thin compatibility entrypoints. Legacy imports resolve to the same module objects, avoiding duplicate schema classes. Existing script commands, arguments, relative input paths, and dependencies are unchanged; running from a checkout requires no package installation. `process_changelog.py` resolves to `infx.matrix.plan`; `validate_perf_changelog.py` retains its existing processor CLI boundary and diagnostics.
 
