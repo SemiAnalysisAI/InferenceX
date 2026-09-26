@@ -28,8 +28,8 @@ base:
     timeout_seconds: 1200
     nodes: all
     commands:
-    - IBDEVICES=rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7 bash {infmax_workspace}/runners/srt-slurm/hooks/mi355x-amds/check-rdma.sh
-    - bash -c 'source {infmax_workspace}/runners/srt-slurm/hooks/common.sh; wait_for_amd_gpu_clean'
+    - IBDEVICES=rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7 bash "$GITHUB_WORKSPACE"/runners/srt-slurm/hooks/mi355x-amds/check-rdma.sh
+    - bash -c 'source "$GITHUB_WORKSPACE"/runners/srt-slurm/hooks/common.sh; wait_for_amd_gpu_clean'
   roles:
     agg:
       nodes: 1
