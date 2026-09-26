@@ -5,16 +5,28 @@
       "arch": "gfx942",
       "gpus_per_node": 8,
       "image_platform": "linux/amd64",
-      "operator": {"partition": "compute-0", "cpus_per_node": 128}
+      "operator": {
+        "partition": "compute-0",
+        "cpus_per_node": 128
+      }
     },
     "cluster:mi325x-amds": {
       "arch": "gfx942",
       "gpus_per_node": 8,
       "image_platform": "linux/amd64",
-      "operator": {"partition": "compute", "cpus_per_node": 256}
+      "operator": {
+        "partition": "compute",
+        "cpus_per_node": 256
+      }
     },
     "cluster:mi355x-amds": {
-      "operator": {"partition": "compute", "cpus_per_node": 128}
+      "operator": {
+        "partition": "compute",
+        "cpus_per_node": 128
+      }
+    },
+    "cluster:h100-dgxc": {
+      "enroot_defaults": true
     }
   }
 }
