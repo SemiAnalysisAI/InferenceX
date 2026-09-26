@@ -609,7 +609,7 @@ Inspect, do not merely count, the emitted `model`, `image`, `runner`, scenario, 
 If schema or generator behavior changed, run its focused suite:
 
 ```bash
-python -m pytest utils/matrix_logic/ -v
+python -m pytest tests/matrix/ -v
 ```
 
 For srt-slurm, also run the upstream recipe checker/`srtctl` command documented for that recipe. For llm-d, validate recipe YAML and exercise the allocation/discovery path on the intended Slurm fleet. Local matrix generation cannot prove endpoint discovery.

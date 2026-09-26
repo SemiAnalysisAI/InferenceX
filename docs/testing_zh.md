@@ -144,13 +144,13 @@ uv run --locked \
 
 | 变更 | 聚焦命令 |
 | --- | --- |
-| 矩阵模式或生成 | `python -m pytest utils/matrix_logic/ -v` |
-| Changelog 内容或 PR 门禁 | `python -m pytest utils/test_process_changelog.py utils/changelog_gate_tests/ -v` |
-| 结果处理与拓扑 | `python -m pytest utils/test_process_result.py utils/agentic/aggregation/test_process_agentic_result.py utils/test_aggregate_power.py utils/test_calc_success_rate.py -v` |
-| AgentX 聚合与工件加载 | `python -m pytest utils/agentic/aggregation/ -v` |
-| 评测分发、批处理或补丁 | `python -m pytest utils/evals/ -v` |
-| 评测收集 | `python -m pytest utils/test_collect_eval_results.py -v` |
-| 扫描复用或可复用制品 | `python -m pytest utils/test_github.py utils/test_find_reusable_sweep_run.py utils/test_acknowledge_sweep_reuse.py utils/test_validate_reusable_sweep_artifacts.py -v` |
+| 矩阵模式或生成 | `python -m pytest tests/matrix/ -v` |
+| Changelog 内容或 PR 门禁 | `python -m pytest tests/matrix/test_process_changelog.py tests/workflows/test_validate_perf_changelog.py tests/workflows/test_prepare_perf_changelog_merge.py -v` |
+| 结果处理与拓扑 | `python -m pytest tests/results/power/test_process_result.py tests/results/agentic/test_process_agentic_result.py tests/results/power/test_aggregate_power.py tests/workflows/test_calc_success_rate.py -v` |
+| AgentX 聚合与工件加载 | `python -m pytest tests/results/agentic/ -v` |
+| 评测分发、批处理或补丁 | `python -m pytest tests/evals/ utils/evals/ -v` |
+| 评测收集 | `python -m pytest tests/results/test_collect_eval_results.py -v` |
+| 扫描复用或可复用制品 | `python -m pytest tests/test_github.py tests/workflows/test_find_reusable_sweep_run.py tests/workflows/test_acknowledge_sweep_reuse.py tests/workflows/test_validate_reusable_sweep_artifacts.py -v` |
 
 若编辑了 changelog，还要使用真实 base 和 head ref 运行 setup 所用的同一矩阵兼容性验证器：
 
@@ -167,13 +167,13 @@ python3 -m infx.workflows.validate_perf_changelog \
 
 ### 并行运行完整本地测试套件
 
-现有 Python 测试套件也覆盖工作流契约。`utils/matrix_logic/test_validation.py` 测试工作流输入模式，并使用受控的生成器输出执行两个准备脚本。非法数据行必须在发布作业输出前失败；合法数据行必须保持不变，包括手动分派测量旧 checkout 的情况。`utils/test_process_result.py` 通过记录环境的启动器执行实际启动步骤，覆盖当前和旧版 checkout。这些测试不模拟 GitHub 表达式引擎，也不证明 GPU 性能；表达式修改需结合工作流验证和适用的 smoke 证据进行审查。
+现有 Python 测试套件也覆盖工作流契约。`tests/matrix/test_validation.py` 测试工作流输入模式，并使用受控的生成器输出执行两个准备脚本。非法数据行必须在发布作业输出前失败；合法数据行必须保持不变，包括手动分派测量旧 checkout 的情况。`tests/results/power/test_process_result.py` 通过记录环境的启动器执行实际启动步骤，覆盖当前和旧版 checkout。这些测试不模拟 GitHub 表达式引擎，也不证明 GPU 性能；表达式修改需结合工作流验证和适用的 smoke 证据进行审查。
 
 使用与 CI 相同的锁定环境和四个 worker 运行测试套件：
 
 ```bash
 uv run --locked --all-extras --group test --no-editable \
-  python -m pytest utils/ runners/ experimental/CollectiveX/tests/ -n 4
+  python -m pytest tests/ utils/ runners/ experimental/CollectiveX/tests/ -n 4
 ```
 
 串行调试时使用 `-n 0`。测试必须隔离临时文件和端口，并确保各 worker 收集到的参数化用例一致。

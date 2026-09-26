@@ -2025,7 +2025,7 @@ class TestCommandLine:
         """Direct scripts must resolve their own imports and caller-relative inputs."""
         (tmp_path / "master config.yaml").write_text(yaml.safe_dump(sample_single_node_config))
         (tmp_path / "runners.yaml").write_text(yaml.safe_dump(sample_runner_config))
-        script = Path(__file__).with_name("generate_sweep_configs.py")
+        script = Path(__file__).resolve().parents[2] / "utils" / "matrix_logic" / "generate_sweep_configs.py"
         args = [
             command, "--config-files", "master config.yaml",
             "--runner-config", "runners.yaml", "--seq-lens", "1k1k", "--no-evals",

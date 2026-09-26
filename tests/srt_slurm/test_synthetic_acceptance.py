@@ -18,7 +18,7 @@ from infx.srt_slurm.synthetic_acceptance import (
     selected_recipes,
 )
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "utils/srt-slurm/src"))
 
 # Exercise the pinned upstream checkout without installing its serving dependencies.

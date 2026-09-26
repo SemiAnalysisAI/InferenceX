@@ -16,7 +16,7 @@ from infx.workflows import reuse
 def test_reuse_entrypoints_preserve_outputs_and_errors_without_installation(
     tmp_path, token_present,
 ):
-    root = Path(__file__).resolve().parents[1]
+    root = Path(__file__).resolve().parents[2]
     # The package must work without utils/ and without an inherited import path.
     shutil.copytree(root / "infx", tmp_path / "infx", ignore=shutil.ignore_patterns("__pycache__"))
     command = ["-m", "infx.workflows.reuse"]

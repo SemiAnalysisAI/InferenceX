@@ -10,7 +10,7 @@ import pytest
 
 from infx.results.power.native_multinode import record_begin, record_end, run
 
-REPO = Path(__file__).resolve().parents[1]
+REPO = Path(__file__).resolve().parents[3]
 
 
 def _package(tmp_path, vendor="amd"):

@@ -10,7 +10,7 @@ import yaml
 
 from infx.srt_slurm.cluster_config import render_cluster_config
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_exclusive_allocation_override(tmp_path):

@@ -16,8 +16,8 @@ from infx.results.collect_eval_results import (
     detect_lm_eval_jsons,
     result_concurrency,
 )
-from evals.kimi_vendor_eval import RESULT_FORMAT as KIMI_VENDOR_RESULT_FORMAT
-from evals.minimax_provider_eval import RESULT_FORMAT as MINIMAX_RESULT_FORMAT
+from infx.evals.kimi_vendor_eval import RESULT_FORMAT as KIMI_VENDOR_RESULT_FORMAT
+from infx.evals.minimax_provider_eval import RESULT_FORMAT as MINIMAX_RESULT_FORMAT
 from infx.results.evals import (
     build_rows, extract_metrics, select_latest_result, select_latest_results,
 )
@@ -349,7 +349,7 @@ def test_collector_cli_runs_outside_checkout(tmp_path: Path) -> None:
     result = artifact / "custom.json"
     _write_lm_eval_result(result, 0.75)
     env = dict(os.environ)
-    env["PYTHONPATH"] = str(Path(__file__).resolve().parents[1])
+    env["PYTHONPATH"] = str(Path(__file__).resolve().parents[2])
 
     completed = subprocess.run(
         [sys.executable, "-m", "infx.results.collect_eval_results",

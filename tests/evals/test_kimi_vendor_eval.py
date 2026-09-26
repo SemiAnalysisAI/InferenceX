@@ -8,8 +8,6 @@ from typing import Any
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-
 import infx.evals.kimi_vendor_eval as kve
 
 

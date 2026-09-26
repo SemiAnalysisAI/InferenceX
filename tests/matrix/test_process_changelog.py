@@ -21,7 +21,7 @@ from infx.workflows import benchmark_schema
 @pytest.fixture
 def generation_repo(tmp_path, monkeypatch):
     """An isolated history containing the real generator and controlled inputs."""
-    source = Path(__file__).resolve().parents[1]
+    source = Path(__file__).resolve().parents[2]
     for directory in ("utils/matrix_logic", "infx"):
         if (source / directory).exists():
             shutil.copytree(source / directory, tmp_path / directory, ignore=shutil.ignore_patterns("__pycache__"))
@@ -520,7 +520,7 @@ def planning_inputs() -> tuple[dict, dict]:
 @pytest.fixture
 def planning_repo(tmp_path, monkeypatch):
     """Real CLI/config/generator wiring with small, independent input recipes."""
-    source = Path(__file__).resolve().parents[1]
+    source = Path(__file__).resolve().parents[2]
     for directory in ("utils/matrix_logic", "infx"):
         shutil.copytree(source / directory, tmp_path / directory, ignore=shutil.ignore_patterns("__pycache__"))
     (tmp_path / "configs").mkdir()
@@ -556,7 +556,7 @@ def committed_planning_repo(planning_repo):
 
 def test_validator_uses_trusted_entrypoints_while_reading_another_checkout(committed_planning_repo):
     root, base, head = committed_planning_repo
-    source = Path(__file__).resolve().parents[1]
+    source = Path(__file__).resolve().parents[2]
     tooling = root / ".tooling"
     tooling.mkdir()
     shutil.move(root / "infx", tooling / "infx")
