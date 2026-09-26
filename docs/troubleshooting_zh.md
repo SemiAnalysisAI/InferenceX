@@ -113,7 +113,7 @@ Setup 阶段的删除错误通常意味着陈旧分支或改变空白的合并�
 
 ### 评测
 
-阅读单个 `eval /` 任务，不要只看 `collect-evals`。对每个预期并发检查 `meta_env.json`、完成/失败元数据及其 `results*.json`。[`validate_scores.py`](../infx/evals/validate_scores.py) 会拒绝缺失结果文件、低于阈值的分数和零个已检查指标的运行。存在预期并发元数据时，它还会拒绝无效 manifest、重复/意外/缺失并发和失败批次。由于工作流调用时没有传入 `--expected-concs`，应单独检查非批处理的 `meta_env.json`；即使分数验证器成功退出，缺失或无效元数据仍然属于失败。
+阅读单个 `eval /` 任务，不要只看 `collect-evals`。对每个预期并发检查 `meta_env.json`、完成/失败元数据及其 `results*.json`。[`validate_scores.py`](../infx/evals/validate_scores.py) 会拒绝缺失结果文件、低于阈值的分数和零个已检查指标的运行。存在预期并发元数据时，它还会拒绝无效 manifest、重复/意外/缺失并发和失败批次。由于单节点工作流调用时没有传入 `--expected-concs`，应单独检查非批处理的 `meta_env.json`；即使分数验证器成功退出，缺失或无效元数据仍然属于失败。
 
 确认任务与镜像匹配生成配置。如果服务器在评测中失败，返回服务器层级。如果任务、阈值或 manifest 错误，修复其事实来源并重跑精确评测。不要接受结果被跳过、为空或不匹配的绿色任务。
 

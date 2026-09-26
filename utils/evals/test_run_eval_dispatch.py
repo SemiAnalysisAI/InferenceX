@@ -2037,11 +2037,11 @@ def _run_lm_eval_with_include_path(
 
 def test_include_path_injected_when_eval_include_path_set():
     out = _run_lm_eval_with_include_path(
-        eval_include_path="utils/evals",
+        eval_include_path="infx/evals",
         eval_tasks_dir="swebench_lite",
     )
-    assert "--include_path utils/evals" in out, (
-        f"Expected '--include_path utils/evals' in output:\n{out}"
+    assert "--include_path infx/evals" in out, (
+        f"Expected '--include_path infx/evals' in output:\n{out}"
     )
     assert "--tasks swebench_lite" in out, (
         f"Expected '--tasks swebench_lite' in output:\n{out}"

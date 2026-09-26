@@ -42,7 +42,7 @@ This table records the repository state before the staged consolidation below.
 | Runner setup | `utils/runner_setup/RUNNER_SETUP.md`, `runners/` | Provisioning and runtime launcher concerns are separated |
 | Model and hardware catalog | `MODELS.md`, `configs/*-master.yaml` | Public model list and runnable config list serve different audiences |
 | AgentX and agentic coding | `benchmarks/single_node/srt-slurm-recipes/**/agentic.yaml`, `benchmarks/srt_agentic.sh`, `MODELS.md`, `configs/*-master.yaml` | Status and publication claims conflict. The official trace-to-result path needs one maintained guide |
-| Artifact schemas and app handoff | `infx/results/fixed_sequence.py`, `utils/collect_*.py`, `../InferenceX-app/.github/workflows/ingest-results.yml`, `../InferenceX-app/packages/db/src/etl/*` | Artifact identities, JSON contracts, and the boundary into InferenceX-app are not documented in this repository |
+| Artifact schemas and app handoff | `infx/results/fixed_sequence.py`, `infx/results/collect_*.py`, `../InferenceX-app/.github/workflows/ingest-results.yml`, `../InferenceX-app/packages/db/src/etl/*` | Artifact identities, JSON contracts, and the boundary into InferenceX-app are not documented in this repository |
 
 ## Target information architecture
 

@@ -42,7 +42,7 @@
 | Runner 初始化 | `utils/runner_setup/RUNNER_SETUP.md`、`runners/` | 部署与运行时启动器关注点分离 |
 | 模型与硬件目录 | `MODELS.md`、`configs/*-master.yaml` | 面向用户的模型列表与可运行配置列表服务于不同读者 |
 | AgentX 与 Agentic Coding | `benchmarks/single_node/srt-slurm-recipes/**/agentic.yaml`、`benchmarks/srt_agentic.sh`、`MODELS.md`、`configs/*-master.yaml` | 状态与发布说明冲突，需要一份持续维护的官方 Trace 到结果指南 |
-| 产物 Schema 与 App 交接 | `infx/results/fixed_sequence.py`、`utils/collect_*.py`、`../InferenceX-app/.github/workflows/ingest-results.yml`、`../InferenceX-app/packages/db/src/etl/*` | 本仓库没有说明产物身份、JSON 契约以及进入 InferenceX-app 的边界 |
+| 产物 Schema 与 App 交接 | `infx/results/fixed_sequence.py`、`infx/results/collect_*.py`、`../InferenceX-app/.github/workflows/ingest-results.yml`、`../InferenceX-app/packages/db/src/etl/*` | 本仓库没有说明产物身份、JSON 契约以及进入 InferenceX-app 的边界 |
 
 ## 目标信息架构
 

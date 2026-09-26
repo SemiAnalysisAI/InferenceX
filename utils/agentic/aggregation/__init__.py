@@ -1,2 +1,1 @@
-"""Agentic result aggregation utilities."""
-
+"""Agentic power lifecycle integration tests."""

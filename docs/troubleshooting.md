@@ -113,7 +113,7 @@ Stop if the proposed workaround changes model semantics, reduces model FLOPs, pa
 
 ### Eval
 
-Read the individual `eval /` job, not only `collect-evals`. For each expected concurrency, inspect `meta_env.json`, completion/failure metadata, and its `results*.json`. [`validate_scores.py`](../infx/evals/validate_scores.py) rejects missing result files, below-threshold scores, and runs with zero checked metrics. With expected concurrency metadata it also rejects invalid manifests, duplicate/unexpected/missing concurrency, and failed batches. Because the workflow invokes it without `--expected-concs`, inspect unbatched `meta_env.json` separately. Missing or invalid metadata remains a failure even when the score validator exits successfully.
+Read the individual `eval /` job, not only `collect-evals`. For each expected concurrency, inspect `meta_env.json`, completion/failure metadata, and its `results*.json`. [`validate_scores.py`](../infx/evals/validate_scores.py) rejects missing result files, below-threshold scores, and runs with zero checked metrics. With expected concurrency metadata it also rejects invalid manifests, duplicate/unexpected/missing concurrency, and failed batches. Because the single-node workflow invokes it without `--expected-concs`, inspect unbatched `meta_env.json` separately. Missing or invalid metadata remains a failure even when the score validator exits successfully.
 
 Confirm the task and image match the generated config. If the server failed during eval, return to the server layer. If the task, threshold, or manifest is wrong, fix that source and rerun the exact eval. Do not accept a green job with skipped, empty, or mismatched results.
 
