@@ -88,7 +88,7 @@ CODEOWNER 自动验证目前仅供审阅参考。工作流会核验新提交及�
 - **这为每个人减少了 CI 排队时间。** 每次复用合并都会为其他 PR 释放数小时的 GPU runner 时间，因此请优先选择 reuse 路径，而不是不带它直接合并。仅有全绿 sweep 还不够。复用命令必须在评论记录中（签署验证会检查这一点），否则 `main` 会静默地重新运行完整 sweep。
 - 复用不要求保留 sweep 标签。机器人会在命令被接受时添加 👍，拒绝时添加 👎，详情见 Actions 运行摘要；合并时仍会重新验证源产物。
 - 缺少授权维护者发布的复用命令时，Check 4 会给出 **WARN**，不会因此拒绝签署。警告会在签署裁定中保持展开；要实际复用产物，仍需先发布有效的授权命令。
-- `utils/merge_with_reuse.sh <pr-number>` 是受支持的合并路径。它会发布命令、将分支与 `main` 同步、等待检查并 squash 合并。资格详情见 [workflows README](.github/workflows/README.md#reusing-an-approved-pr-full-sweep)。
+- `uv run --extra workflows python -m infx.workflows.merge_with_reuse <pr-number>` 是受支持的合并路径。它会发布命令、将分支与 `main` 同步、等待检查并 squash 合并。资格详情见 [workflows README](.github/workflows/README.md#reusing-an-approved-pr-full-sweep)。
 
 ## AMD 集群：严禁在 runner 工作区留下 root 所属文件
 

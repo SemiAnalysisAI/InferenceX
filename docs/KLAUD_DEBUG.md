@@ -43,7 +43,7 @@ Do **not** try a 3-way merge of `perf-changelog.yaml`. Whitespace edits will sil
 After committing and pushing the resolution, the synchronize run checks the
 changelog with the same matrix processor used by setup, then checks the reuse
 authorization. This catches deleted history or malformed appended entries
-before reuse can skip setup. `utils/merge_with_reuse.sh <PR>` performs the push
+before reuse can skip setup. `uv run --extra workflows python -m infx.workflows.merge_with_reuse <PR>` performs the push
 and waits for the PR checks automatically.
 
 ### 1.2 Truncated NATS/etcd dependency archives
@@ -292,7 +292,7 @@ are skipped; dispatch a new autosweep so recovery checks the old session first.
 - Image-bump / new-recipe PRs I open on behalf of the user (or that the user creates) get the **`[Klaud Cold]`** title prefix.
 - Klaud Cold keeps targeted attempts draft and unlabeled; final validation keeps the PR draft with `full-sweep-enabled` as its sole sweep label; `finish` publishes verified results before readiness. Wait for successful completion on the exact head and reusable artifacts. See [the current Klaud guide](klaud.md); generic manual-sweep recommendations do not override this flow.
 - After any code change that shifts a PR's scope (drops a recipe, changes an image tag), **update the PR title AND body in the same step** and **verify** with `gh pr view <N> --json title,body`. `gh pr edit` silently fails (see §8).
-- `utils/merge_with_reuse.sh <N>` is the merge entrypoint. It handles the `perf-changelog.yaml` auto-append.
+- `uv run --extra workflows python -m infx.workflows.merge_with_reuse <N>` is the merge entrypoint. It handles the `perf-changelog.yaml` auto-append.
 
 ---
 
@@ -301,7 +301,7 @@ are skipped; dispatch a new autosweep so recovery checks the old session first.
 - `/find-mergeable-claude-prs` lists `claude/*` PRs whose full sweep finished all-green.
 - `/list-claude-pr-status` lists READY/RUNNING (and optionally FAILED) state per `claude/*` PR.
 - `/fix-klaud-cron-prs` diagnoses failing `claude/*` PRs by reading their failed job logs.
-- `/merge-prs <N> [<N>...]` performs a sequential merge via `utils/merge_with_reuse.sh`.
+- `/merge-prs <N> [<N>...]` performs a sequential merge via `uv run --extra workflows python -m infx.workflows.merge_with_reuse`.
 
 Each command file is self-contained. Read them to understand the exact jq filters they use.
 
