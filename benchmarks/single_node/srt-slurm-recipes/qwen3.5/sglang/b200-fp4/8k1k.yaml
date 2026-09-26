@@ -3,7 +3,7 @@ base:
   name: qwen3.5-fp4-b200-sglang-8k1k
   model:
     path: hf:nvidia/Qwen3.5-397B-A17B-NVFP4-V2
-    container: lmsysorg/sglang:v0.5.19-cu130
+    container: lmsysorg/sglang:v0.5.20-cu130
     precision: fp4
   resources:
     gpu_type: b200
@@ -33,7 +33,7 @@ base:
         mamba-ssm-dtype: bfloat16
         attention-backend: trtllm_mha
         moe-runner-backend: flashinfer_trtllm
-        cuda-graph-max-bs: 4
+        cuda-graph-max-bs-decode: 4
         max-prefill-tokens: 16384
         chunked-prefill-size: 16384
         mem-fraction-static: 0.8
@@ -64,7 +64,7 @@ zip_override_tp2_ep1:
     agg:
       gpus: 2
       args:
-        cuda-graph-max-bs: [4, 8, 16, 32, 64, 128]
+        cuda-graph-max-bs-decode: [4, 8, 16, 32, 64, 128]
         scheduler-recv-interval: [10, 30, 30, 30, 30, 30]
         tensor-parallel-size: 2
   benchmark:
