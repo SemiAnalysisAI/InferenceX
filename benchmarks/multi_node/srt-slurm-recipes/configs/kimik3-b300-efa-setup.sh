@@ -7,6 +7,13 @@ curl -fL --retry 3 https://efa-installer.amazonaws.com/aws-efa-installer-1.50.0.
 printf '%s  %s\n' fa6dff8593d866866c13cb4640d9059835cd4efa427971f100ab40c97bef2841 /tmp/aws-efa-installer-1.50.0.tar.gz | sha256sum -c -
 mkdir -p /tmp/efa
 tar -xzf /tmp/aws-efa-installer-1.50.0.tar.gz -C /tmp/efa
+if [ -d /etc/libibverbs.d ] && [ ! -w /etc/libibverbs.d ]; then
+  [ -f /etc/libibverbs.d/efa.driver ] || { echo 'EFA driver descriptor missing from read-only mount' >&2; exit 1; }
+  mkdir -p /etc/dpkg/dpkg.cfg.d
+  [ ! -e /etc/dpkg/dpkg.cfg.d/efa-ro-ibverbs ]
+  printf '%s\n' 'path-exclude=/etc/libibverbs.d/*' >/etc/dpkg/dpkg.cfg.d/efa-ro-ibverbs
+  trap 'rm -f /etc/dpkg/dpkg.cfg.d/efa-ro-ibverbs' EXIT
+fi
 (cd /tmp/efa/aws-efa-installer && ./efa_installer.sh -y --skip-kmod --skip-limit-conf --no-verify --skip-mpi)
 rm -rf /tmp/efa /tmp/aws-efa-installer-1.50.0.tar.gz
 ldconfig
