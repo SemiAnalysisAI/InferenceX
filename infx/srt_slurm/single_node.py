@@ -136,6 +136,28 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
             raise ValueError(f"Single-node SRT {name}: recipe/matrix {actual!r} != {wanted!r}")
 
 
+def bfcl_diagnostic_mode(recipe: Mapping[str, Any], environment: Mapping[str, str]) -> str:
+    """Enable opt-in MI355X diagnostics only for the requested BFCL eval job."""
+    if not (
+        environment["IS_AGENTIC"] == "1"
+        and environment["EVAL_ONLY"] == "true"
+        and environment.get("EVAL_FRAMEWORK") == "bfcl"
+        and environment["FRAMEWORK"] == "vllm"
+        and environment["MODEL_PREFIX"] == "kimik3"
+        and recipe["resources"].get("gpu_type") == "mi355x"
+    ):
+        return "none"
+    if environment.get("EVAL_SUITE") == "bfcl_kimi_diagnostic":
+        return "kimi-metrics"
+    if (
+        environment.get("EVAL_SUITE") == "bfcl_smoke"
+        and environment.get("KV_OFFLOADING") == "dram"
+        and environment.get("KV_OFFLOAD_BACKEND") == "vllm-simple"
+    ):
+        return "native-cpu-restore"
+    return "none"
+
+
 def runtime_arguments(config: str, environment: Mapping[str, str]) -> list[str]:
     """Bind only runtime-owned values after validating the selected recipe."""
     _, recipe = select_recipe(config, environment)
@@ -159,6 +181,24 @@ def runtime_arguments(config: str, environment: Mapping[str, str]) -> list[str]:
         # flags. Runtime option mappings therefore need individual leaf sets.
         for key, value in options.items():
             overrides += ["--set", f"srun_options.{key}={json.dumps(value)}"]
+    mode = bfcl_diagnostic_mode(recipe, environment)
+    callback = [
+        "bash",
+        "{infmax_workspace}/benchmarks/single_node/srt_eval.sh",
+        "{endpoint}",
+        "/logs/infx-eval-exit-code",
+        mode,
+    ]
+    overrides += ["--set", f"post_eval.command={json.dumps(callback)}"]
+    if mode == "kimi-metrics":
+        overrides += ["--set", 'roles.agg.env.VLLM_COMPUTE_NANS_IN_LOGITS="1"']
+    elif mode == "native-cpu-restore":
+        overrides += [
+            "--set",
+            'roles.agg.env.VLLM_SERVER_DEV_MODE="1"',
+            "--set",
+            "roles.agg.args.enable-prompt-tokens-details=true",
+        ]
     agentic = environment["IS_AGENTIC"] == "1"
     names = [
         "CONC",

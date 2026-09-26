@@ -79,6 +79,7 @@ def _dispatch(
     eval_only: str = "false",
     cli_fw=None,
     env_fw=None,
+    serving_framework: str = "vllm",
 ) -> str:
     env = {
         **os.environ,
@@ -86,6 +87,7 @@ def _dispatch(
         "IS_AGENTIC": is_agentic,
         "EVAL_ONLY": eval_only,
         "KV_OFFLOADING": "none",
+        "FRAMEWORK": serving_framework,
     }
     env.pop("EVAL_FRAMEWORK", None)
     env.pop("CLI_FW", None)
@@ -2486,6 +2488,70 @@ run_agentic_replay_and_write_outputs() { echo replay >> "$EVENTS"; }
         assert events_path.read_text().splitlines() == expected
 
 
+@pytest.mark.parametrize("serving_framework", ["trt", "dynamo-trt"])
+@pytest.mark.parametrize("selection", ["env", "cli"])
+@pytest.mark.parametrize("eval_only", ["true", "false"])
+def test_trt_skips_bfcl_before_readiness_and_staging(
+    serving_framework: str, selection: str, eval_only: str
+) -> None:
+    output = _dispatch(
+        is_agentic="1",
+        eval_only=eval_only,
+        env_fw="bfcl" if selection == "env" else None,
+        cli_fw="bfcl" if selection == "cli" else None,
+        serving_framework=serving_framework,
+    )
+
+    assert f"SKIP: BFCL is disabled for {serving_framework}" in output
+    assert "DISPATCH=" not in output
+    assert "READY=" not in output
+    assert "STAGED=" not in output
+
+
+@pytest.mark.parametrize("serving_framework", ["trt", "dynamo-trt"])
+@pytest.mark.parametrize("eval_framework", ["kimi-vendor", "minimax-vendor", "lm-eval"])
+def test_trt_keeps_other_evaluations_enabled(
+    serving_framework: str, eval_framework: str
+) -> None:
+    output = _dispatch(
+        is_agentic="1", eval_only="true", env_fw=eval_framework,
+        serving_framework=serving_framework,
+    )
+    assert f"DISPATCH={eval_framework}" in output
+    assert "SKIP:" not in output
+
+
+@pytest.mark.parametrize("serving_framework", ["vllm", "sglang", "atom", "dynamo-sglang"])
+def test_non_trt_frameworks_keep_bfcl_enabled(serving_framework: str) -> None:
+    output = _dispatch(
+        is_agentic="1", eval_only="true", env_fw="bfcl",
+        serving_framework=serving_framework,
+    )
+    assert "DISPATCH=bfcl" in output
+    assert "STAGED=summary" in output
+
+
+@pytest.mark.parametrize("serving_framework", ["trt", "dynamo-trt"])
+@pytest.mark.parametrize("suite", ["bfcl_smoke", "bfcl_responses_smoke", "bfcl_vllm_minimax_m3"])
+def test_direct_bfcl_entrypoint_skips_trt_without_installing(
+    serving_framework: str, suite: str, tmp_path: Path
+) -> None:
+    result = subprocess.run(
+        ["bash", "-c", r'''
+source "$BENCHMARK_LIB"
+_run_bfcl_suite_eval() { echo UNEXPECTED_BFCL_EXECUTION; return 99; }
+run_bfcl_eval --results-dir "$RESULTS_DIR"
+'''],
+        env={**os.environ, "BENCHMARK_LIB": str(BENCHMARK_LIB),
+             "FRAMEWORK": serving_framework, "EVAL_SUITE": suite,
+             "RESULTS_DIR": str(tmp_path)},
+        text=True, capture_output=True, check=True,
+    )
+    assert "SKIP: BFCL is disabled" in result.stdout
+    assert "UNEXPECTED_BFCL_EXECUTION" not in result.stdout
+    assert list(tmp_path.iterdir()) == []
+
+
 def test_env_can_force_bfcl_on_agentic_eval() -> None:
     output = _dispatch(is_agentic="1", eval_only="true", env_fw="bfcl")
 
@@ -2794,6 +2860,7 @@ def test_bfcl_full_suites_use_suite_specific_runtime_and_archive_before_cleanup(
     suite_contracts = (
         ("bfcl_vllm_minimax_m3", "8", "7200"),
         ("bfcl_vllm_kimi", "16", "14400"),
+        ("bfcl_kimi_diagnostic", "16", "600"),
     )
 
     for suite, expected_threads, expected_timeout in suite_contracts:
@@ -3078,3 +3145,12 @@ def test_select_available_server_port_avoids_an_existing_listener(occupied: bool
             assert selected == preferred
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
             server.bind(("0.0.0.0", selected))
+
+
+def test_bfcl_responses_smoke_uses_explicit_suite_and_smoke_budget(tmp_path: Path) -> None:
+    result, _ = _run_bfcl_adapter_command(tmp_path, suite="bfcl_responses_smoke")
+    assert result.returncode == 0, result.stderr
+    assert "ADAPTER_ARG=<--suite>" in result.stdout
+    assert "ADAPTER_ARG=<bfcl_responses_smoke>" in result.stdout
+    assert "ADAPTER_ARG=<4>" in result.stdout
+    assert "EVAL_COMPLETED_SUITE=bfcl_responses_smoke" in result.stdout

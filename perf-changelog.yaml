@@ -8962,3 +8962,93 @@
     - "旧镜像切出于 2026-09-16，新镜像领先 441 个提交，包含当前曲线所不含的三项 Kimi-K3 正确性修复：vllm-project/vllm#51483 不再将无状态的首个 chunk 当作 decode，vllm-project/vllm#57098 修复 Kimi-K3 reasoning parser，vllm-project/vllm#57430 支持 routed expert 量化。新镜像还包含本臂在并发大于 4 时均会使用的 ROCm CPU KV 卸载改动，包括 vllm-project/vllm#57160（ROCm CPU KV 卸载改用私有 pinned 张量）与 vllm-project/vllm#50045（卸载背压检测）。"
     - "This image bump does not change the DSpark draft model data type. Only the image: line changes and kimik3_fp4_mi355x_mtp.sh is unchanged; the draft loads unmodified from the published Inferact/Kimi-K3-DSpark checkpoint via --speculative-config (model=Inferact/Kimi-K3-DSpark, method=dspark). The only dtype in that speculative-config is kv_cache_dtype=fp8, which sets the draft KV-cache storage precision, not the draft weights. No flag overrides or re-quantizes the draft-model weights, so the draft dtype is preserved from its checkpoint across this re-sweep."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3419
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+    - minimaxm3-fp4-b200-vllm-agentic-mtp
+    - minimaxm3-fp4-b300-vllm-agentic-mtp
+    - minimaxm3-fp4-b200-trtllm-agentic-mtp
+    - minimaxm3-fp4-b300-trtllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Remove the TRT-LLM chat request schema patch; stock Chat Completions still rejects BFCL store=false."
+    - "移除 TRT-LLM 聊天请求结构补丁；原生 Chat Completions 仍拒绝 BFCL 的 store=false。"
+    - "Remove the TRT executor metrics rewrite, select the native MiniMax-M3 tool parser, and add a stock BFCL Responses smoke; native metrics overhead requires fresh performance validation."
+    - "移除 TRT 执行器指标改写，选择原生 MiniMax-M3 工具解析器，并添加上游 BFCL Responses smoke；原生指标采集开销需重新验证性能。"
+    - "Add an experimental native TensorRT-LLM rc26 BFCL Responses probe with upstream token-usage reporting."
+    - "新增实验性原生 TensorRT-LLM rc26 BFCL Responses 探测配置，使用上游 token 用量统计。"
+    - "Select native FlashInfer attention for the B200 MiniMax EAGLE3 draft to avoid the FA4 FP8 descale stride failure. Requires fresh throughput validation."
+    - "B200 MiniMax EAGLE3 草稿模型改用原生 FlashInfer attention，避开 FA4 FP8 descale stride 故障；需重新验证吞吐量。"
+    - "Upgrade B200/B300 MiniMax TRT to rc26 and preserve per-conversation reuse using block_reuse_config.policy. Refresh the experimental vLLM image to include the upstream MSA/QuACK compatibility fix."
+    - "B200/B300 MiniMax TRT 升级至 rc26，通过 block_reuse_config.policy 保留按会话复用语义；实验性 vLLM 镜像同步到包含上游 MSA/QuACK 兼容修复的版本。"
+    - "Add an experimental resident-only Kimi MI355X vLLM c8 BFCL diagnostic; this does not validate the unavailable LMCache offload dependency."
+    - "新增实验性 Kimi MI355X vLLM c8 纯 GPU 驻留 BFCL 诊断；不作为缺失 LMCache 依赖的 offload 路径验证。"
+    - "Upgrade Kimi MI355X vLLM to upstream nightly-af1c0149 and use its bundled LMCache 0.5.3, built against the image's PyTorch. Remove runtime LMCache, Python dependency and OS package installation; validate the native DRAM offload path separately."
+    - "Kimi MI355X vLLM 升级至上游 nightly-af1c0149，使用镜像内针对其 PyTorch 构建的 LMCache 0.5.3。移除运行时 LMCache、Python 依赖及系统包安装；原生 DRAM offload 路径单独验证。"
+    - "Remove the obsolete MiniMax TRT fuse_qkv_index_projection option rejected by rc26. Set Kimi DCP1 LMCache prefill batches to 1536 tokens, preserving every recurrent-state snapshot as required by the bundled connector. These recipe changes require fresh throughput validation."
+    - "移除 rc26 已不支持的 MiniMax TRT fuse_qkv_index_projection 配置。Kimi DCP1 LMCache 的预填充批次改为 1536 token，按镜像内连接器的要求保留每个循环状态快照；这些配方变更需重新验证吞吐量。"
+    - "Upgrade both B200/B300 MiniMax vLLM images to nightly-af1c0149 with upstream mixed-layout CPU-offload and MSA fixes. Remove both runtime offload patch calls and their shared helper together; use native FlashInfer draft attention on both SKUs. Offload and B300 validation remain separate from the successful B200 resident evaluation; fresh throughput validation is required."
+    - "B200/B300 MiniMax vLLM 同步升级至包含上游混合布局 CPU offload 和 MSA 修复的 nightly-af1c0149 镜像，一并移除两个运行时 offload 补丁调用及共享脚本；两种 SKU 均使用原生 FlashInfer 草稿 attention。Offload 和 B300 验证独立于已通过的 B200 纯 GPU 驻留评估，仍需重新验证吞吐量。"
+    - "Convert the generated MiniMax B200/B300 CPU offload budget from decimal GB to bytes without inflating it by 7.4 percent. Revalidate the corrected budget."
+    - "MiniMax B200/B300 的 CPU offload 预算按生成配置中的十进制 GB 转换为字节，避免多分配约 7.4%；重新验证修正后的预算。"
+    - "Add a bounded 16-case Kimi BFCL diagnostic with native NaN-logit counters and archived metrics; preserve full-suite sampling and quality gates."
+    - "新增 16 用例 Kimi BFCL 限时诊断，启用原生 NaN logits 计数并保留指标；完整套件的采样和质量门槛保持不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3156
+
+- config-keys:
+    - minimaxm3-fp4-b200-trtllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Pin the experimental B200 TRT BFCL Responses probe to official nightly 1.3.0rc28.dev202609180000 by image digest, containing upstream MiniMax-M3 EAGLE3 support. Production image pins are unchanged by this experiment; no runtime source patching."
+    - "B200 TRT BFCL Responses 实验配置按镜像摘要固定到官方 nightly 1.3.0rc28.dev202609180000，包含上游 MiniMax-M3 EAGLE3 支持。本次实验不修改正式配置的镜像版本，不应用运行时源码补丁。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3156
+
+- config-keys:
+    - minimaxm3-fp4-b200-trtllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Correct the experimental B200 TRT nightly probe image reference for Enroot 3.x while preserving the exact manifest digest; no runtime patching."
+    - "修正 B200 TRT nightly 实验配置的镜像引用格式，兼容 Enroot 3.x 并保留相同的 manifest 摘要；不应用运行时补丁。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3156
+
+- config-keys:
+    - minimaxm3-fp4-b200-trtllm-agentic-mtp
+    - minimaxm3-fp4-b300-trtllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Restore MiniMax B200/B300 TRT to the original rc23.post1 image and native configuration fields. Disable BFCL for trt and dynamo-trt while retaining vendor evals; remove the experimental nightly probe without restoring runtime patches."
+    - "MiniMax B200/B300 TRT 恢复原有 rc23.post1 镜像及对应的原生配置字段。禁用 trt 和 dynamo-trt 的 BFCL，保留厂商评估；移除 nightly 实验配置，不恢复运行时补丁。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3156
+
+- config-keys:
+    - minimaxm3-fp4-b300-trtllm-agentic-mtp
+    - minimaxm3-fp4-b200-trtllm-agentic-mtp
+    - minimaxm3-fp4-gb200-dynamo-trt-agentic-agg-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update MiniMax-M3 B200, B300, and GB200 TensorRT-LLM images from 1.3.0rc23.post1 to the official 1.3.0rc28.dev202609220000 nightly; synchronize every referenced GB200 SRT recipe."
+    - "Use native block_reuse_config.policy for per-conversation KV reuse and remove the unsupported fuse_qkv_index_projection option. Keep BFCL disabled for trt and dynamo-trt; fresh GPU validation is required. No runtime source patches."
+    - "将 MiniMax-M3 在 B200、B300 和 GB200 上的 TensorRT-LLM 镜像从 1.3.0rc23.post1 更新至官方 nightly 1.3.0rc28.dev202609220000，并同步所有引用的 GB200 SRT 配方。"
+    - "使用 原生 block_reuse_config.policy 保留按会话复用 KV 缓存的行为，移除已不支持的 fuse_qkv_index_projection 配置。继续禁用 trt 和 dynamo-trt 的 BFCL；需要重新进行 GPU 验证，不应用运行时源码补丁。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3156
+
+- config-keys:
+    - minimaxm3-fp4-b200-vllm-agentic-mtp
+    - minimaxm3-fp4-b300-vllm-agentic-mtp
+    - minimaxm3-fp4-b200-trtllm-agentic-mtp
+    - minimaxm3-fp4-b300-trtllm-agentic-mtp
+    - minimaxm3-fp4-gb200-dynamo-trt-agentic-agg-mtp
+  description:
+    - "Port vendor-eval image pins, native KV offload and BFCL diagnostics to SRT-Slurm recipes after retiring legacy launchers; retain the production TRT BFCL guard"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3156
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  description:
+    - "Retain the branch Kimi MI355X grid through native SRT-Slurm variants, including no-draft DCP8, after removal of its legacy launcher"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3156

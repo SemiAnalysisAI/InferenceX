@@ -1,0 +1,60 @@
+# Native SRT-Slurm diagnostic; no runtime engine patches.
+schema: 2
+model:
+  path: hf:nvidia/MiniMax-M3-NVFP4
+  container: vllm/vllm-openai:nightly-af1c01499b289be555c475669ba50a88e96d846e
+  precision: fp4
+resources:
+  gpu_type: b200
+  gpus_per_node: 8
+frontend:
+  type: vllm
+  enable_multiple_frontends: false
+observability:
+  enabled: false
+  tachometer:
+    enabled: false
+engine:
+  type: vllm
+  connector: null
+health_check:
+  interval_seconds: 10
+  max_attempts: 360
+roles:
+  agg:
+    nodes: 1
+    workers: 1
+    args:
+      served-model-name: nvidia/MiniMax-M3-NVFP4
+      gpu-memory-utilization: 0.9
+      block-size: 128
+      language-model-only: true
+      enable-prefix-caching: true
+      no-enable-flashinfer-autotune: true
+      reasoning-parser: minimax_m3
+      tool-call-parser: minimax_m3
+      enable-auto-tool-choice: true
+      default-chat-template-kwargs: '{"thinking_mode":"enabled"}'
+      attention-config: '{"backend":"FLASHINFER","use_trtllm_attention":true,"indexer_kv_dtype":"fp8"}'
+      kv-cache-dtype: fp8
+      max-cudagraph-capture-size: 512
+      max-num-batched-tokens: 16384
+      stream-interval: 20
+      trust-remote-code: true
+      speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASHINFER"}'
+      tensor-parallel-size: 4
+    env:
+      PYTHONNOUSERSITE: '1'
+      VLLM_ENGINE_READY_TIMEOUT_S: '3600'
+      VLLM_FLOAT32_MATMUL_PRECISION: high
+      VLLM_FLASHINFER_ALLREDUCE_BACKEND: trtllm
+    gpus: 4
+benchmark:
+  type: custom
+  command: bash /infmax-workspace/benchmarks/srt_agentic.sh
+  env:
+    MODEL: nvidia/MiniMax-M3-NVFP4
+    AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
+    CONC: '1'
+    KV_OFFLOADING: none
+name: b200-minimax-native

@@ -2,6 +2,8 @@
 import argparse
 import copy
 import json
+import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -3234,3 +3236,112 @@ def test_require_power_is_scoped_to_one_fixed_sequence(multinode, power_key, sam
     sequences[0][power_key] = True
     with pytest.raises(ValueError, match="only fixed-sequence 8192/1024"):
         expand_full_sweep(config, sample_runner_config)
+
+
+@pytest.fixture
+def split_e2e_configs(tmp_path):
+    """Run the shipped workflow step; stub only generation and priority scoring."""
+    repo_root = Path(__file__).resolve().parents[2]
+    workflow = yaml.safe_load((repo_root / ".github/workflows/e2e-tests.yml").read_text())
+    step = next(step for step in workflow["jobs"]["get-jobs"]["steps"] if step.get("id") == "get-jobs")
+    # Actions resolves these expressions before invoking Bash. Their values
+    # are irrelevant to routing, so use a harmless nonempty command/context.
+    script = re.sub(r"\$\{\{.*?\}\}", "fixture", step["run"])
+    boundary_stubs = r"""#!/bin/bash
+case "$*" in
+  *generate_sweep_configs.py*|*infx.matrix.generate*) cat "$MATRIX_FIXTURE" ;;
+  *infx.workflows.benchmark_schema*) exec "$TEST_PYTHON" -P -m infx.workflows.benchmark_schema ;;
+  *ci_priority.py*|*infx.workflows.ci_priority*) cat ;;
+  *) exit 1 ;;
+esac
+"""
+    tools = tmp_path / "bin"
+    tools.mkdir()
+    (tools / "uv").write_text(boundary_stubs)
+    (tools / "uv").chmod(0o755)
+    (tmp_path / ".ci-priority").symlink_to(repo_root, target_is_directory=True)
+
+    def run(entries):
+        matrix_file = tmp_path / "matrix.json"
+        matrix_file.write_text(json.dumps(entries))
+        output_file = tmp_path / "outputs"
+        output_file.write_text("")
+        subprocess.run(
+            ["bash", "-euo", "pipefail", "-c", script],
+            cwd=tmp_path, check=True, capture_output=True, text=True, timeout=30,
+            env={
+                **os.environ,
+                "PATH": f"{tools}:{Path(sys.executable).parent}{os.pathsep}{os.environ['PATH']}",
+                "GITHUB_WORKSPACE": str(tmp_path), "GITHUB_OUTPUT": str(output_file),
+                "MATRIX_FIXTURE": str(matrix_file), "PR_LABELS": "[]",
+                "TEST_PYTHON": sys.executable,
+                "GENERATE_COMMAND": "full-sweep", "GITHUB_EVENT_NAME": "workflow_dispatch",
+                "GITHUB_RUN_ID": "1", "GITHUB_RUN_ATTEMPT": "1",
+                "CHANGELOG_BASE_REF": "", "CHANGELOG_HEAD_REF": "",
+                "TRIM_CONC": "false", "ALL_EVALS": "false", "EVALS_ONLY": "false",
+            },
+        )
+        return {
+            name: json.loads(value)
+            for line in output_file.read_text().splitlines()
+            for name, value in [line.split("=", 1)]
+        }
+
+    return run
+
+
+@pytest.mark.parametrize("vendor", ["amd", "nvidia"])
+def test_real_vendor_evals_preserve_every_point_through_workflow(vendor, split_e2e_configs):
+    """Both hardware catalogs retain model-specific suites and all conc points."""
+    repo_root = Path(__file__).resolve().parents[2]
+    result = subprocess.run(
+        [sys.executable, "-m", "infx.matrix.generate", "full-sweep",
+         "--config-files", f"configs/{vendor}-master.yaml",
+         "--model-prefix", "kimik3", "minimaxm3",
+         "--scenario-type", "agentic-coding"],
+        cwd=repo_root, check=True, capture_output=True, text=True, timeout=60,
+    )
+    rows = json.loads(result.stdout)
+    assert rows, f"No vendor coverage in {vendor} catalog"
+    expected = {
+        "kimik3": ("kimi-vendor", "kimi_tool_call_schema_full"),
+        "minimaxm3": ("minimax-vendor", "minimax_m3_full"),
+    }
+    assert {row["model-prefix"] for row in rows} == set(expected)
+    for row in rows:
+        assert row["run-eval"] is True, row["exp-name"]
+        assert (row["eval-framework"], row["eval-suite"]) == expected[row["model-prefix"]]
+    output = split_e2e_configs(rows)
+    routed = output["agentic-eval-config"] + output["multi-node-agentic-eval-config"]
+    # Compare complete rows, not just counts: metadata loss must fail this test.
+    assert sorted(map(json.dumps, routed)) == sorted(map(json.dumps, rows))
+    assert output["eval-config"] == output["multi-node-eval-config"] == []
+
+
+@pytest.mark.parametrize("workflow_name", ["run-sweep.yml", "e2e-tests.yml"])
+def test_all_eval_callers_forward_model_selected_suite(workflow_name):
+    """Catch the #3020 omission in shipped YAML, including the manual auto path."""
+    repo_root = Path(__file__).resolve().parents[2]
+    workflow = yaml.safe_load((repo_root / ".github/workflows" / workflow_name).read_text())
+    callers = {
+        name: job for name, job in workflow["jobs"].items()
+        if job.get("uses", "").startswith(("./.github/workflows/benchmark-", "$/.github/workflows/benchmark-"))
+        and job.get("with", {}).get("eval-only") is True
+    }
+    assert len(callers) == 4, f"Review eval forwarding coverage for {set(callers)}"
+    if workflow_name == "run-sweep.yml":
+        expected = {
+            "eval-framework": "${{ matrix.config['eval-framework'] || 'lm-eval' }}",
+            "eval-suite": "${{ matrix.config['eval-suite'] || '' }}",
+        }
+    else:
+        expected = {
+            "eval-framework": "${{ inputs.eval-framework == 'auto' && (matrix.config['eval-framework'] || 'lm-eval') || inputs.eval-framework }}",
+            "eval-suite": "${{ inputs.eval-suite != '' && inputs.eval-suite || (inputs.eval-framework == 'auto' && matrix.config['eval-suite'] || '') }}",
+        }
+    for name, job in callers.items():
+        for field, expression in expected.items():
+            assert job["with"].get(field) == expression, (name, field)
+        template = yaml.safe_load((repo_root / job["uses"].removeprefix("$/")).read_text())
+        assert template["env"]["EVAL_FRAMEWORK"] == "${{ inputs.eval-framework }}"
+        assert template["env"]["EVAL_SUITE"] == "${{ inputs.eval-suite }}"

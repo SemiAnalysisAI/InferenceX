@@ -177,7 +177,6 @@ launch_srt_single_node() {
     SRT_SELECTED_RECIPE="${SRT_RUNTIME_ARGS[0]}"
     SRT_RUNTIME_ARGS=("${SRT_RUNTIME_ARGS[@]:1}")
     SRT_RUNTIME_ARGS+=(
-        --set 'post_eval.command=["bash", "{infmax_workspace}/benchmarks/single_node/srt_eval.sh", "{endpoint}", "/logs/infx-eval-exit-code"]'
         --set "post_eval.passthrough_env=$SRT_EVAL_PASSTHROUGH"
     )
     # Reuse only a valid cache for this exact image. Missing caches are imported

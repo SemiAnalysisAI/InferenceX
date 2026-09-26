@@ -406,6 +406,10 @@ def test_perfect_score_projects_upstream_headers_and_compatibility_metrics(
     )
     assert native["completed"] is True
     assert native["passed"] is True
+    assert native["transport"] == {
+        "request_timeout_seconds": 180,
+        "max_retries": 2,
+    }
     assert native["summary"] == {
         "accuracy": 1.0,
         "correct_count": 4,
@@ -824,6 +828,7 @@ def test_selected_suite_integration_error_preserves_suite_identity(
         expected_leaf_counts=(("left", 2), ("right", 1)),
         temperature=0.25,
         default_num_threads=7,
+        request_timeout_seconds=600,
     )
     monkeypatch.setattr(be, "SUITE_SPECS", {suite.name: suite})
 
@@ -848,6 +853,10 @@ def test_selected_suite_integration_error_preserves_suite_identity(
     assert native["sampling"] == {
         "temperature": 0.25,
         "num_threads": 7,
+    }
+    assert native["transport"] == {
+        "request_timeout_seconds": 600,
+        "max_retries": 2,
     }
     assert list(compatibility["results"]) == [
         "custom_suite",
@@ -880,7 +889,7 @@ def test_score_total_must_match_every_selected_id(tmp_path: Path) -> None:
         )
 
 
-def test_full_suite_handler_bounds_openai_requests() -> None:
+def test_handler_bounds_openai_requests() -> None:
     class StockOpenAICompletionsHandler:
         def _build_client_kwargs(self) -> dict[str, Any]:
             return {"api_key": "stock-key"}
@@ -895,41 +904,29 @@ def test_full_suite_handler_bounds_openai_requests() -> None:
     }
 
 
-def test_kimi_suite_caps_multi_turn_steps(monkeypatch: pytest.MonkeyPatch) -> None:
-    constants = ModuleType("bfcl_eval.constants")
-    constants.__path__ = []
-    prompts = ModuleType("bfcl_eval.constants.default_prompts")
-    prompts.MAXIMUM_STEP_LIMIT = 20
-    constants.default_prompts = prompts
-    monkeypatch.setitem(sys.modules, "bfcl_eval.constants", constants)
-    monkeypatch.setitem(
-        sys.modules,
-        "bfcl_eval.constants.default_prompts",
-        prompts,
-    )
-
-    be._apply_suite_runtime_limits(be.MINIMAX_SUITE)
-    assert prompts.MAXIMUM_STEP_LIMIT == 20
-
-    be._apply_suite_runtime_limits(be.KIMI_SUITE)
-    assert prompts.MAXIMUM_STEP_LIMIT == 10
-
-
-def test_upstream_registration_uses_exact_stock_openai_handler(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize("suite", [be.SMOKE_SUITE, be.RESPONSES_SMOKE_SUITE, be.MINIMAX_SUITE, be.KIMI_SUITE])
+def test_upstream_registration_preserves_stock_semantics(
+    suite: be.SuiteSpec, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     project_root = tmp_path / "bfcl"
     be._write_id_map(project_root, be.SMOKE_CASE_IDS)
     model_config_mapping: dict[str, Any] = {}
+    prompts = ModuleType("bfcl_eval.constants.default_prompts")
+    prompts.MAXIMUM_STEP_LIMIT = 20
+    monkeypatch.setattr(be, "_read_selected_suite", lambda _: (suite, be.SMOKE_CASE_IDS))
 
     class ModelConfig:
         def __init__(self, **kwargs: Any) -> None:
             self.__dict__.update(kwargs)
 
     class OpenAICompletionsHandler:
-        pass
+        def _build_client_kwargs(self):
+            return {"base_url": "http://127.0.0.1:8000/v1"}
 
-    def generate(**_: Any) -> None:
+    def generate(**kwargs: Any) -> None:
+        assert prompts.MAXIMUM_STEP_LIMIT == 20
+        assert kwargs["test_category"] == list(suite.generation_categories)
+        assert kwargs["temperature"] == suite.temperature
         result_dir = project_root / "result" / "model-a"
         result_dir.mkdir(parents=True)
         for category, case_ids in be.SMOKE_CASE_IDS.items():
@@ -957,6 +954,9 @@ def test_upstream_registration_uses_exact_stock_openai_handler(
         "bfcl_eval.model_handler.api_inference.openai_completion": ModuleType(
             "bfcl_eval.model_handler.api_inference.openai_completion"
         ),
+        "bfcl_eval.model_handler.api_inference.openai_response": ModuleType(
+            "bfcl_eval.model_handler.api_inference.openai_response"
+        ),
         "bfcl_eval.__main__": ModuleType("bfcl_eval.__main__"),
     }
     modules[
@@ -966,6 +966,9 @@ def test_upstream_registration_uses_exact_stock_openai_handler(
     modules[
         "bfcl_eval.model_handler.api_inference.openai_completion"
     ].OpenAICompletionsHandler = OpenAICompletionsHandler
+    modules["bfcl_eval.model_handler.api_inference.openai_response"].OpenAIResponsesHandler = OpenAICompletionsHandler
+    modules["bfcl_eval.constants.default_prompts"] = prompts
+    modules["bfcl_eval.constants"].default_prompts = prompts
     modules["bfcl_eval.__main__"].generate = generate
     modules["bfcl_eval.__main__"].evaluate = evaluate
     for name, module in modules.items():
@@ -987,4 +990,28 @@ def test_upstream_registration_uses_exact_stock_openai_handler(
         num_threads=4,
     )
 
-    assert model_config_mapping["model-a"].model_handler is OpenAICompletionsHandler
+    handler = model_config_mapping["model-a"].model_handler
+    assert issubclass(handler, OpenAICompletionsHandler)
+    assert handler()._build_client_kwargs() == {
+        "base_url": "http://127.0.0.1:8000/v1",
+        "timeout": 600 if suite is be.KIMI_SUITE else 180,
+        "max_retries": 2,
+    }
+    assert prompts.MAXIMUM_STEP_LIMIT == 20
+
+
+def test_responses_suite_manifest_disambiguates_identical_smoke_cases(tmp_path: Path) -> None:
+    be._write_id_map(tmp_path, be.SMOKE_CASE_IDS)
+    assert be._read_selected_suite(tmp_path)[0] is be.SMOKE_SUITE
+    (tmp_path / "inferencex_suite.json").write_text(json.dumps({"suite": "bfcl_responses_smoke"}))
+    assert be._read_selected_suite(tmp_path) == (be.RESPONSES_SMOKE_SUITE, dict(be.SMOKE_CASE_IDS))
+    assert be._build_suite_case_ids(be.RESPONSES_SMOKE_SUITE) == dict(be.SMOKE_CASE_IDS)
+    assert be.RESPONSES_SMOKE_SUITE.projected_task("parallel") == "bfcl_responses_smoke_parallel"
+
+
+@pytest.mark.parametrize("suite", ["unknown", "bfcl_vllm_kimi"])
+def test_suite_manifest_rejects_unknown_or_mismatched_identity(tmp_path: Path, suite: str) -> None:
+    be._write_id_map(tmp_path, be.SMOKE_CASE_IDS)
+    (tmp_path / "inferencex_suite.json").write_text(json.dumps({"suite": suite}))
+    with pytest.raises(ValueError, match="supported suite"):
+        be._read_selected_suite(tmp_path)

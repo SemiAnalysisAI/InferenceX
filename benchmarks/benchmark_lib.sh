@@ -363,21 +363,6 @@ if not speed_bench_ok or not sample_ok:
 PYEOF
 }
 
-disable_trtllm_detailed_perf_metrics() {
-    local trtllm_root
-    local py_executor
-    local detailed_metrics_gate="enabled=getattr(self.llm_args, 'return_perf_metrics', False))"
-
-    trtllm_root=$(python3 -c 'from importlib.util import find_spec; from pathlib import Path; print(Path(find_spec("tensorrt_llm").origin).parent)')
-    py_executor="$trtllm_root/_torch/pyexecutor/py_executor.py"
-    if ! grep -Fq "$detailed_metrics_gate" "$py_executor"; then
-        echo "Error: unsupported TensorRT-LLM detailed metrics implementation in $py_executor" >&2
-        return 1
-    fi
-    sed -i "s/enabled=getattr(self.llm_args, 'return_perf_metrics', False))/enabled=False)/" "$py_executor"
-    grep -Fq "self.perf_manager = PerfMetricsManager(" "$py_executor"
-    grep -Fq "enabled=False)" "$py_executor"
-}
 
 # Agentic replays must use the model's native context limit. Ignore inherited
 # workflow or shell overrides so neither the server nor AIPerf applies a cap.
@@ -1714,7 +1699,20 @@ _run_bfcl_smoke_eval() {
     _run_bfcl_suite_eval bfcl_smoke 4 900 false "$@"
 }
 
+_skip_bfcl_for_trt() {
+    case "${FRAMEWORK:-}" in
+        trt|dynamo-trt)
+            echo "SKIP: BFCL is disabled for ${FRAMEWORK}; no evaluation score was produced."
+            return 0
+            ;;
+        *) return 1 ;;
+    esac
+}
+
 run_bfcl_eval() {
+    if _skip_bfcl_for_trt; then
+        return 0
+    fi
     local eval_suite="${EVAL_SUITE:-bfcl_smoke}"
     export EVAL_SUITE="$eval_suite"
 
@@ -1722,11 +1720,17 @@ run_bfcl_eval() {
         bfcl_smoke)
             _run_bfcl_smoke_eval "$@"
             ;;
+        bfcl_responses_smoke)
+            _run_bfcl_suite_eval "$eval_suite" 4 900 false "$@"
+            ;;
         bfcl_vllm_minimax_m3)
             _run_bfcl_suite_eval "$eval_suite" 8 7200 true "$@"
             ;;
         bfcl_vllm_kimi)
             _run_bfcl_suite_eval "$eval_suite" 16 14400 true "$@"
+            ;;
+        bfcl_kimi_diagnostic)
+            _run_bfcl_suite_eval "$eval_suite" 16 600 true "$@"
             ;;
         *)
             echo "ERROR: unsupported BFCL suite '${eval_suite}'" >&2
@@ -2922,6 +2926,9 @@ run_eval() {
     fi
 
     local framework="${EVAL_FRAMEWORK:-${cli_framework:-$scenario_default}}"
+    if [ "$framework" = "bfcl" ] && _skip_bfcl_for_trt; then
+        return 0
+    fi
     case "$framework" in
         kimi-vendor)
             [ -n "${EVAL_SUITE:-}" ] || EVAL_SUITE="kimi_tool_call_schema"

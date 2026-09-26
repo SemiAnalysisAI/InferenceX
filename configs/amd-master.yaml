@@ -652,6 +652,22 @@ dsr1-fp8-mi355x-sglang-disagg-mtp:
           ep: 1
           dp-attn: false
 
+kimik3-fp4-mi355x-vllm-agentic-mtp:
+  image: vllm/vllm-openai-rocm:nightly-rocm100-7f1a5398e9610d96c473931a26c0e12bbe0d0423
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.60
+      search-space:
+      - { tp: 8, ep: 1, dcp-size: 1, kv-offloading: none, conc-list: [1, 4] , spec-decoding: mtp, srt-recipe: benchmarks/single_node/srt-slurm-recipes/kimik3/vllm/mi355x-fp4-mtp/agentic.yaml }
+      - { tp: 8, ep: 1, dcp-size: 1, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [8, 10, 12, 14], spec-decoding: mtp, srt-recipe: benchmarks/single_node/srt-slurm-recipes/kimik3/vllm/mi355x-fp4-mtp/agentic.yaml }
+      - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [44, 48, 70], spec-decoding: mtp, srt-recipe: benchmarks/single_node/srt-slurm-recipes/kimik3/vllm/mi355x-fp4-mtp/agentic.yaml }
+
 # Kimi-K3 MXFP4 agentic-coding benchmark on MI355X via ATOM with DSpark
 # speculative decoding. Acceptance is pinned to the committed golden curve in
 # golden_al_distribution/kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml

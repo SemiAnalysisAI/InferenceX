@@ -1,15 +1,14 @@
 # Kimi-K3 MXFP4 AgentX on MI355X with vLLM DSpark
 # (https://recipes.vllm.ai/moonshotai/Kimi-K3). TP8 only: the 1.56 TB checkpoint
 # is ~195 GB per GPU. The KV cache is GPU-resident through c4 and backed by
-# vLLM's SimpleCPUOffloadConnector from c8. The DCP8 arm (c44-c70) ran without a
-# draft model on the legacy script and was removed with it (#3461). No master
-# config uses this recipe yet.
+# vLLM's SimpleCPUOffloadConnector from c8. The DCP8 arm (c44-c70) runs without
+# a draft model, preserving the configured MTP label.
 base:
   schema: 2
   name: kimik3-fp4-mi355x-vllm-agentic
   model:
     path: hf:moonshotai/Kimi-K3
-    container: vllm/vllm-openai-rocm:nightly-rocm100-af1c01499b289be555c475669ba50a88e96d846e
+    container: vllm/vllm-openai-rocm:nightly-rocm100-7f1a5398e9610d96c473931a26c0e12bbe0d0423
     precision: fp4
   resources:
     gpu_type: mi355x
@@ -184,3 +183,66 @@ override_tp8_c14_simple:
       CONC: '14'
       KV_OFFLOADING: 'dram'
       TOTAL_CPU_DRAM_GB: '1799'
+
+override_tp8_dcp8_c44_simple:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 88
+        max-num-batched-tokens: 8192
+        compilation-config: '{"mode":3,"cudagraph_mode":"FULL","max_cudagraph_capture_size":88,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88]}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":224875000000,"lazy_offload":false}}'
+        decode-context-parallel-size: 8
+        dcp-comm-backend: a2a
+        attention-backend: ROCM_AITER_MLA
+      env:
+        VLLM_USE_BREAKABLE_CUDAGRAPH: '0'
+        PYTHONHASHSEED: '42'
+  benchmark:
+    env:
+      CONC: '44'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1799'
+      SPEC_DECODING: mtp
+
+override_tp8_dcp8_c48_simple:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 96
+        max-num-batched-tokens: 8192
+        compilation-config: '{"mode":3,"cudagraph_mode":"FULL","max_cudagraph_capture_size":96,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96]}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":224875000000,"lazy_offload":false}}'
+        decode-context-parallel-size: 8
+        dcp-comm-backend: a2a
+        attention-backend: ROCM_AITER_MLA
+      env:
+        VLLM_USE_BREAKABLE_CUDAGRAPH: '0'
+        PYTHONHASHSEED: '42'
+  benchmark:
+    env:
+      CONC: '48'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1799'
+      SPEC_DECODING: mtp
+
+override_tp8_dcp8_c70_simple:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 140
+        max-num-batched-tokens: 8192
+        compilation-config: '{"mode":3,"cudagraph_mode":"FULL","max_cudagraph_capture_size":140,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,127,128,129,130,131,132,133,134,135,136,137,138,139,140]}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":224875000000,"lazy_offload":false}}'
+        decode-context-parallel-size: 8
+        dcp-comm-backend: a2a
+        attention-backend: ROCM_AITER_MLA
+      env:
+        VLLM_USE_BREAKABLE_CUDAGRAPH: '0'
+        PYTHONHASHSEED: '42'
+  benchmark:
+    env:
+      CONC: '70'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1799'
+      SPEC_DECODING: mtp

@@ -6,7 +6,7 @@ base:
   name: minimaxm3-fp4-b200-trtllm-agentic
   model:
     path: hf:nvidia/MiniMax-M3-NVFP4
-    container: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc23.post1
+    container: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc28.dev202609220000
     precision: fp4
   resources:
     gpu_type: b200
@@ -21,9 +21,6 @@ base:
   engine:
     type: trtllm
     served_model_name: nvidia/MiniMax-M3-NVFP4
-  # Keep Prometheus without rc23's per-step timing collector and accept BFCL's
-  # store=false field.
-  setup_script: minimaxm3-trtllm-rc23.sh
   # TP8 loads, autotunes and captures graphs past the 30-minute default.
   health_check:
     max_attempts: 1440
@@ -33,7 +30,7 @@ base:
       nodes: 1
       workers: 1
       # Server-layer flag; the local checkpoint mounts at /model.
-      extra_args: [--chat_template, /model/chat_template.jinja]
+      extra_args: [--chat_template, /model/chat_template.jinja, --tool_parser, minimax_m3]
       args:
         moe_expert_parallel_size: 1
         max_seq_len: 1048576
@@ -55,11 +52,11 @@ base:
           implementation: msa
           indexer_kv_dtype: fp8
           sparse_disable_index_value: true
-          fuse_qkv_index_projection: true
         kv_cache_config:
           free_gpu_memory_fraction: 0.94
           enable_block_reuse: true
-          block_reuse_policy: per_conversation
+          block_reuse_config:
+            policy: per_conversation
           tokens_per_block: 128
           use_kv_cache_manager_v2: true
           dtype: fp8
