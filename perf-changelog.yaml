@@ -8950,3 +8950,13 @@
   description:
     - "Update SGLang image from v0.5.19-cu130 to v0.5.20-cu130 and pass --cuda-graph-max-bs-decode after the alias removal."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3334
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Select the SiTUv2 a4w4 FlyDSL MoE path via the canonical VLLM_ROCM_USE_AITER_MOE_SITUV2=1 flag and drop the deprecated VLLM_ROCM_USE_AITER_MOE_SITUV2_A8W4 alias and the legacy AITER_SITUV2_A8W4 override. vLLM exports AITER_SITUV2_A4W4=1 from this flag at init and clears any AITER_SITUV2_A8W4 (AITER checks A8W4 first); the tuned a4w4 dispatch needs AITER >= v0.1.20 (ROCm/aiter#4463), otherwise FlyDSL falls back to heuristic configs. This selects the fp4-activation MoE kernels and does not change the target or DSpark draft model weight precision."
+    - "Refresh the vLLM ROCm image to vllm/vllm-openai-rocm:nightly-rocm100-29468dde8b515031dc6d4d9d06bf0a2fa0442098 and bump the LMCache host KV tier to 0.5.6.dev101+rocm7.2."
+    - "Trim the search space to a single lmcache DRAM-offload arm at TP8/DCP8, conc [70, 80], dram-utilization 0.50, spec-decoding mtp; the earlier GPU-resident and vllm-simple arms are commented out for this re-sweep."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3447
