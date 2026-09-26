@@ -401,8 +401,7 @@ class GraphAlignmentAndValueCheck(unittest.TestCase):
             with mock.patch.dict(sys.modules, {"torch": fake}):
                 backend._calibrate_align_spin()
             results[probe_ms] = backend._graph_align_cycles
-        target = ep_backend.EPBackend._GRAPH_ALIGN_SPIN_US
-        self.assertEqual(results[0.1], int(200_000 * target / 100.0))
+        self.assertEqual(results[0.1], 200_000)  # the default 100us spin at 2 cycles/ns
         self.assertEqual(results[0.05], 2 * results[0.1])
 
     def test_the_replay_value_check_poisons_what_dispatch_wrote_before_replaying(self):
