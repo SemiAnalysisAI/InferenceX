@@ -102,7 +102,6 @@ def _generate_plots(
     fig, axes = plt.subplots(1, 2, figsize=(14, 5))
     fig.suptitle("Benchmark Workload Distribution Analysis", fontsize=14)
 
-    # ISL histogram
     ax = axes[0]
     isl_sorted = sorted(all_isl)
     clip = int(isl_sorted[int(len(isl_sorted) * 0.99)] * 1.2)
@@ -143,7 +142,6 @@ def _generate_plots(
     ax.legend(fontsize=8)
     ax.grid(True, alpha=0.3, axis="y")
 
-    # OSL histogram
     ax = axes[1]
     osl_sorted = sorted(all_osl)
     clip = min(3000, int(osl_sorted[int(len(osl_sorted) * 0.99)] * 1.2))

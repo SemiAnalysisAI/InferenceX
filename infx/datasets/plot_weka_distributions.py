@@ -132,17 +132,8 @@ def collect_metrics(in_dir: Path) -> dict[str, list[float]]:
     isls: list[int] = []
     osls: list[int] = []
     hit_rates: list[float] = []
-    # Number of main-agent (top-level, non-subagent) turns per session.
     main_turns_per_session: list[int] = []
-    # Average turn depth over the agents in a session. Each session
-    # contains one main agent and N sub-agents; each contributes one
-    # "turn depth" datapoint (its request count). The session value is
-    # the mean of that list. A session with 50 main turns + 3 sub-agent
-    # groups of [10, 20, 5] inners contributes mean([50, 10, 20, 5]) =
-    # 21.25. This is more meaningful than "total requests per session"
-    # for characterizing conversational depth, because a session with
-    # one giant agent and one with many shallow agents have the same
-    # total but very different shapes.
+    # Mean request count per nonempty agent, including the main agent.
     avg_agent_depth_per_session: list[float] = []
 
     files = sorted(in_dir.glob("*.json"))
@@ -154,8 +145,7 @@ def collect_metrics(in_dir: Path) -> dict[str, list[float]]:
         trace = json.loads(p.read_text())
         seen_hashes: set[int] = set()
         n_main = 0
-        # Per-agent turn counts within this session: index 0 is the main
-        # agent, indices 1..N are the sub-agents in trace order.
+        # Index 0 is the main agent; remaining entries are subagents.
         agent_turn_counts: list[int] = [0]
         for r in trace.get("requests", []):
             if r.get("type") == "subagent":
@@ -223,8 +213,7 @@ def _draw_histogram(
     pct = {p: float(np.percentile(arr, p)) for p in PERCENTILES}
 
     if log_x:
-        # Log axis requires positive values; zeros are silently
-        # dropped from this view (they're visible in the linear plot).
+        # Zeros appear only in the linear plot.
         positive = arr[arr > 0]
         if positive.size == 0:
             ax.set_title(f"{title}\n(no positive values)")
@@ -236,11 +225,7 @@ def _draw_histogram(
         ax.hist(positive, bins=edges, color="#888", edgecolor="#222", linewidth=0.4)
         ax.set_xscale("log")
     else:
-        # Two-sided range when data has negatives (e.g. token-growth
-        # with compaction events); one-sided otherwise. The x-axis is
-        # bounded at p99 (and p1 if negative-valued) so heavy tails
-        # don't compress the bulk; outliers beyond the range fall off
-        # the visible plot rather than being annotated.
+        # Clip heavy tails; also clip the lower tail when values can be negative.
         has_neg = float(arr.min()) < 0
         if has_neg:
             lo_pct = 100 - linear_clip_pct

@@ -80,8 +80,7 @@ async def async_request_tgi(
                             continue
                         chunk_bytes = chunk_bytes.decode("utf-8")
 
-                        # NOTE: Sometimes TGI returns a ping response without
-                        # any data, we should skip it.
+                        # TGI pings may contain no data.
                         if chunk_bytes.startswith(":"):
                             continue
                         chunk = chunk_bytes.removeprefix("data:")
@@ -269,12 +268,9 @@ async def async_request_openai_completions(
                         if chunk != "[DONE]":
                             data = json.loads(chunk)
 
-                            # NOTE: Some completion API might have a last
-                            # usage summary response without a token so we
-                            # want to check a token was generated
+                            # The final usage-only chunk may contain no token.
                             if choices := data.get("choices"):
-                                # Note that text could be empty here
-                                # e.g. for special tokens
+                                # Special tokens may have empty text.
                                 text = choices[0].get("text")
                                 timestamp = time.perf_counter()
                                 # First token
@@ -420,25 +416,12 @@ def _fix_tokenizer_for_sglang(
 ) -> PreTrainedTokenizer | PreTrainedTokenizerFast:
     """Fix transformers v5 tokenizer to match sglang server-side behavior.
 
-    Root cause: transformers v5 (>= 5.0) changed how tokenizers are loaded.
-    Specifically, LlamaTokenizerFast.__init__ in v5 rebuilds the pre_tokenizer
-    and decoder from scratch using class-specific components, discarding the
-    originals from tokenizer.json. For models like DeepSeek-R1 that declare
-    LlamaTokenizerFast but actually use a ByteLevel/Sequence tokenizer
-    architecture, v5 incorrectly replaces the original Sequence pre_tokenizer
-    with Metaspace, and the original ByteLevel decoder with Sequence.
+    Transformers v5 rebuilds LlamaTokenizerFast components instead of retaining
+    tokenizer.json's pre_tokenizer and decoder. For DeepSeek-R1 this changes
+    token counts between client and server, inflating measured TTFT.
     See: https://github.com/sgl-project/sglang/blob/9238bd08a2895fa3b7ec79ea567e5c27ac951343/python/sglang/srt/utils/hf_transformers_utils.py#L836
 
-    The sglang server applies fixes for this in hf_transformers_utils.py
-    (_fix_v5_tokenizer_components and _fix_v5_add_bos_eos_token), but the
-    benchmark client loads the tokenizer directly via AutoTokenizer without
-    these fixes. This mismatch causes the client to encode text differently
-    from the server -- e.g. a 7000-token prompt on the client becomes ~35000
-    tokens on the server, leading to ~5x TTFT inflation and false performance
-    regressions in benchmarks.
-
-    This function replicates the same fixes so the benchmark client tokenizes
-    identically to the sglang server. It is a no-op on transformers v4.
+    Apply sglang's component and BOS/EOS fixes here too. No-op on transformers v4.
     """
     import json
     from pathlib import Path

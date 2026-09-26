@@ -189,17 +189,9 @@ def aggregate_power(
             if not timestamp_col or not power_col:
                 return None
 
-            # Group power readings by sample timestamp so per-sample total power
-            # (sum across GPUs) is computed correctly even if rows are interleaved.
-            #
-            # per_sample_row_count is the structural divisor: it's incremented for
-            # every contributing row regardless of whether a GPU-index column was
-            # detected. per_sample_gpus / gpu_keys are only populated when gpu_col
-            # is present and provide the canonical num_gpus via distinct-id count.
-            # When gpu_col is absent (vendor schema variant whose header doesn't
-            # match _GPU_INDEX_COL_RE), we fall back to inferring num_gpus from
-            # the modal row count per timestamp — assuming one row per GPU per
-            # sample, which is what every SMI tool we've seen actually emits.
+            # Group by timestamp to handle interleaved GPU rows. Without a GPU
+            # column, infer GPU count from the modal rows per sample, assuming
+            # one row per GPU per sample.
             per_sample_total: dict[float, float] = {}
             per_sample_row_count: dict[float, int] = {}
             per_sample_gpus: dict[float, set[str]] = {}
@@ -229,10 +221,7 @@ def aggregate_power(
     if not per_sample_total:
         return None
 
-    # Per-sample divisor and overall num_gpus.
-    # - If a GPU column was detected, trust distinct GPU IDs (correct for any
-    #   sampling pattern, including hot-swap or partial visibility).
-    # - Otherwise, infer from row count (one row per GPU per sample).
+    # Prefer distinct GPU IDs; otherwise use the per-sample row count.
     if gpu_col and gpu_keys:
         num_gpus = len(gpu_keys)
         per_sample_mean_per_gpu = [
