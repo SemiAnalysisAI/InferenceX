@@ -255,7 +255,7 @@ B200 Kimi 配方采用 DCP8，且关闭 Mooncake Offload。Master Config 记录 
 Canary 和 Fail-fast 解决不同问题：
 
 1. 只有使用 `full-sweep-enabled` 或 `full-sweep-fail-fast` 的 PR 才创建 Canary。No-canary 标签和 `sweep-enabled` 会跳过它。
-2. Canary 选择会检查单节点固定序列 `1k1k` 和 `8k1k` 条目，排除主要用途为 Eval 的条目，并选取最低并发候选。该条目随后会从单节点矩阵移除。
+2. Canary 首先检查单节点固定序列 `1k1k`、`8k1k` 和单节点 AgentX 条目；若没有合格条目，再检查多节点 AgentX 条目。它排除 Eval 条目，选取最低并发候选，使用对应的单节点或多节点工作流运行，并从后续矩阵移除该条目。
 3. 如果没有合格候选，Canary 会被跳过。否则所有 Benchmark/Eval 矩阵都要求 Canary 成功；Canary 失败会阻止其扇出。
 4. `full-sweep-fail-fast` 与 `full-sweep-fail-fast-no-canary` 会分别为每个矩阵 Job Family 设置 `strategy.fail-fast: true`。首个失败点会取消同一矩阵 Family 中排队或运行中的兄弟项；它不是跨所有独立 Family 的全局 Kill Switch。
 5. 非 Fail-fast 标签会保持矩阵 Fail-fast 为 false，使其他点继续运行并保留更广泛的诊断覆盖。
