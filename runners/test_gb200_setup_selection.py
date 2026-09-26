@@ -11,6 +11,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 RECIPE = "glm5.2/sglang/gb200-fp4/agentx/disagg-mtp-variants.yaml"
 C48_RECIPE = "glm5.2/sglang/gb200-fp4/agentx/disagg-1p4d-dep8-tp4-c48-mtp.yaml"
+C128_RECIPE = "glm5.2/sglang/gb200-fp4/agentx/disagg-2p1d-dep8-dep16-c128-mtp.yaml"
 
 
 @pytest.mark.parametrize("model,recipe,eval_only,expected", [
@@ -23,7 +24,9 @@ C48_RECIPE = "glm5.2/sglang/gb200-fp4/agentx/disagg-1p4d-dep8-tp4-c48-mtp.yaml"
     ("glm5.2", f"benchmarks/multi_node/srt-slurm-recipes/{C48_RECIPE}", "false", "glm52-gb200-nixl-prefill.sh"),
     ("glm5.2", f"recipes/{C48_RECIPE}", "true", "install-torchao.sh"),
     ("glm5.2", "recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-1p6d-dep8-tp4-c45-mtp.yaml", "false", "install-torchao.sh"),
-    ("glm5.2", "recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-2p1d-dep8-dep16-c128-mtp.yaml", "false", "install-torchao.sh"),
+    ("glm5.2", f"recipes/{C128_RECIPE}", "false", "glm52-gb200-nixl-prefill.sh"),
+    ("glm5.2", f"benchmarks/multi_node/srt-slurm-recipes/{C128_RECIPE}", "false", "glm52-gb200-nixl-prefill.sh"),
+    ("glm5.2", f"recipes/{C128_RECIPE}", "true", "install-torchao.sh"),
     ("dsr1", f"recipes/{RECIPE}:base", "false", "install-torchao.sh"),
 ])
 def test_launcher_submits_scoped_setup(tmp_path, model, recipe, eval_only, expected):

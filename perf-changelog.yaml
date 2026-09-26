@@ -9013,3 +9013,12 @@
   - Select the existing source-guarded synchronous UCX prefill setup for GLM-5.2 GB200 nightly C48 after its NIXL shared-progress-thread crash; preserve torchao, other cells and required PowerX.
   - GLM-5.2 GB200 nightly C48 发生 NIXL 后台推进线程崩溃后，选择现有源码保护的同步 UCX prefill 安装路径；保留 torchao、其他测试点及必需 PowerX。
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3401
+
+- config-keys:
+  - glm5.2-fp4-gb200-dynamo-sglang-agentic-mtp
+  scenario-type:
+  - agentic-coding
+  description:
+  - Select the existing source-guarded synchronous UCX prefill setup for GLM-5.2 GB200 nightly C128 after its NIXL shared-progress-thread crash; preserve torchao, other cells and required PowerX.
+  - GLM-5.2 GB200 nightly C128 发生 NIXL 后台推进线程崩溃后，选择现有源码保护的同步 UCX prefill 安装路径；保留 torchao、其他测试点及必需 PowerX。
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3401

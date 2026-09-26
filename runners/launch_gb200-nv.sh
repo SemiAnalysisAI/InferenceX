@@ -550,7 +550,9 @@ if [[ "$FRAMEWORK" == "dynamo-sglang" ]]; then
         ( "$CONFIG_PATH" == "recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-mtp-variants.yaml" ||
           "$CONFIG_PATH" == "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-mtp-variants.yaml" ||
           "$CONFIG_PATH" == "recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-1p4d-dep8-tp4-c48-mtp.yaml" ||
-          "$CONFIG_PATH" == "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-1p4d-dep8-tp4-c48-mtp.yaml" ) ]]; then
+          "$CONFIG_PATH" == "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-1p4d-dep8-tp4-c48-mtp.yaml" ||
+          "$CONFIG_PATH" == "recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-2p1d-dep8-dep16-c128-mtp.yaml" ||
+          "$CONFIG_PATH" == "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-2p1d-dep8-dep16-c128-mtp.yaml" ) ]]; then
         # The CLI overrides recipe setup_script, so select the composite setup.
         SRTCTL_APPLY_ARGS+=(--setup-script glm52-gb200-nixl-prefill.sh)
     else
