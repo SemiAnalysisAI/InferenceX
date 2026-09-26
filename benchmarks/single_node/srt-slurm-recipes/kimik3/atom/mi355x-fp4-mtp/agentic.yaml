@@ -1,7 +1,8 @@
 # Kimi-K3 MXFP4 AgentX on MI355X with ATOM DSpark: the interactive band, TP8
 # with GPU-resident KV and the deepest published draft (seven tokens). The
-# 1.56 TB checkpoint only fits at TP8. The DCP8 LMCache bands stay on the legacy
-# script: srtctl reserves ATOM's kv-transfer-config for disaggregated workers.
+# 1.56 TB checkpoint only fits at TP8. The DCP8 LMCache bands were removed with
+# the legacy script (#3461): srtctl reserves ATOM's kv-transfer-config for
+# disaggregated workers.
 base:
   schema: 2
   name: kimik3-fp4-mi355x-atom-agentic

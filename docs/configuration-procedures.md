@@ -21,7 +21,7 @@ Use this page for benchmark configuration, recipe, image, and runner changes. It
 | [`perf-changelog.yaml`](../perf-changelog.yaml) | Append-only benchmark trigger log |
 | [`AGENTS.md`](../AGENTS.md) | Repository-wide config, MTP, changelog, and sweep rules |
 
-Archive deprecated entries in [`configs/deprecated/amd-master.yaml`](../configs/deprecated/amd-master.yaml) or [`configs/deprecated/nvidia-master.yaml`](../configs/deprecated/nvidia-master.yaml). Use only these two vendor archives, not separate files per deprecation. Preserve historical settings and comments; disambiguate colliding keys with a descriptive suffix and an original-key comment. For partial retirements, move only the retired scenarios. Keep archives out of active sweep inputs. Retired AMD server-registry entries and model-specific setup belong in `benchmarks/multi_node/amd_utils/deprecated/`, outside the active server lookup. Preserve shared dependencies needed by retained SPEED-Bench collectors, including their scheduling scores. See the [deprecation rules](../AGENTS.md#deprecating-benchmark-configs).
+Delete retired entries from the active master configs; they are not archived. Git history and `perf-changelog.yaml` keep the historical settings. For partial retirements, remove only the retired scenarios. Delete retired AMD server-registry entries and model-specific setup from `benchmarks/multi_node/amd_utils/` as well. Preserve shared dependencies needed by retained SPEED-Bench collectors, including their scheduling scores. See the [deprecation rules](../AGENTS.md#deprecating-benchmark-configs).
 
 ## Dependency submodules
 
@@ -132,11 +132,11 @@ Detailed source: [`.claude/commands/add-model-hardware.md`](../.claude/commands/
 STP (Single Token Prediction) is vanilla autoregressive decoding with one token per forward pass. MTP (Multi-Token Prediction) predicts multiple tokens per forward pass through native heads or speculative decoding.
 
 1. **Fix the identity.** Confirm the exact checkpoint ID, model prefix, precision, architecture, native context, target SKU, framework, and whether decoding is STP, native MTP, or draft-model speculation. Verify the image tag exists. Never invent one.
-2. **Choose two kinds of sibling.** Read the same model on another SKU and another model on the target SKU. Also read the target [`runners/launch_*.sh`](../runners/) and shared [`benchmark_lib.sh`](../benchmarks/benchmark_lib.sh).
-3. **Add the runtime script.** Put the single-node script under [`benchmarks/single_node/fixed_seq_len/`](../benchmarks/single_node/fixed_seq_len/). Preserve the proven sibling's env propagation, parser flags, attention/MoE backend, KV-cache dtype, graph/eager mode, cache setup, and context handling.
+2. **Choose two kinds of sibling.** Read the same model on another SKU and another model on the target SKU. Read their srt-slurm recipes under [`benchmarks/single_node/srt-slurm-recipes/`](../benchmarks/single_node/srt-slurm-recipes/) and master-config entries.
+3. **Add the srt-slurm recipe.** Put it at `benchmarks/single_node/srt-slurm-recipes/<model-prefix>/<engine>/<sku>-<precision>[-mtp]/8k1k.yaml`, with one `override_*` variant per matrix point. Preserve the proven sibling's engine args, env, parser flags, attention/MoE backend, KV-cache dtype, graph/eager mode, `setup_script`, and context handling.
 4. **Add the master entry.** Use [`amd-master.yaml`](../configs/amd-master.yaml) for `mi*`. Otherwise, use [`nvidia-master.yaml`](../configs/nvidia-master.yaml). Set exact `image`, `model`, `model-prefix`, `runner`, `precision`, `framework`, scenarios, and supported search spaces.
 5. **Size from evidence.** Mirror proven parallelism layouts and trim unsupported ones. Latency TP rows normally start at concurrency 1. Do not copy large-memory TP/EP layouts onto a smaller SKU.
-6. **Check launcher routing.** The launcher must resolve the new filename, including framework and `_mtp` suffixes. Simulate STP and MTP resolution and confirm each selected file exists.
+6. **Check variant selection.** Every search-space row carries `srt-recipe:`, and each matrix point must match exactly one recipe variant by TP/GPU count, `CONC`, `KV_OFFLOADING` and image (`infx/srt_slurm/single_node.py::select_recipe`). No launcher routing is needed.
 7. **Append one changelog entry** for the exact new key. See [Append the changelog safely](#append-the-changelog-safely).
 8. **Validate syntax and generated output.** Inspect image, model, runner, ISL/OSL, `max-model-len`, concurrency, TP/PP/EP/DCP/PCP, and `spec-decoding`.
 
@@ -248,7 +248,7 @@ Sources: [`AGENTS.md#non-negotiable-benchmark-invariants`](../AGENTS.md#non-nego
 
 ## Add or change MTP
 
-Sources: [`AGENTS.md#non-negotiable-benchmark-invariants`](../AGENTS.md#non-negotiable-benchmark-invariants), [MTP appendix in the model+hardware playbook](../.claude/commands/add-model-hardware.md#appendix--mtp--eagle3-spec-decoding-variant), and current [`*_mtp.sh` siblings](../benchmarks/single_node/fixed_seq_len/).
+Sources: [`AGENTS.md#non-negotiable-benchmark-invariants`](../AGENTS.md#non-negotiable-benchmark-invariants), [MTP appendix in the model+hardware playbook](../.claude/commands/add-model-hardware.md#appendix--mtp--eagle3-spec-decoding-variant), and current [`*-mtp` srt-slurm recipes](../benchmarks/single_node/srt-slurm-recipes/).
 
 1. Confirm native MTP modules versus an external draft. For a draft, verify exact model ID, method (for example `eagle3`), and recommended speculative-token count from the model/upstream recipe.
 2. Copy a working sibling for the same model and backend. Preserve its speculative config, attention backend, token count, model patches, and dependency setup.
