@@ -664,3 +664,18 @@ def test_speedbench_recipes_bind_gpus_without_device_ids(recipe):
     # vLLM v0.21.0 rejects srtctl's default --device-ids binding at startup.
     raw = yaml.safe_load(recipe.read_text())
     assert raw["base"]["engine"]["set_visible_devices"] is True
+
+
+def test_speedbench_client_finds_benchmark_lib_without_legacy_workspace():
+    # srt-slurm mounts the repo at /infmax-workspace, not the legacy /workspace;
+    # the client must fall back to its own checkout and reach check_env_vars.
+    result = subprocess.run(
+        ["bash", "benchmarks/single_node/srt_speedbench.sh"],
+        env={"PATH": os.environ["PATH"], "INFMAX_CONTAINER_WORKSPACE": "/workspace"},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode != 0
+    assert "No such file" not in result.stderr, result.stderr
+    assert "required environment variables are not set" in result.stdout

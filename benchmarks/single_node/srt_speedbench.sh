@@ -16,9 +16,9 @@
 set -eo pipefail
 
 # Jobs inherit the legacy scripts' /workspace, which srt-slurm does not mount;
-# fall back to the repo mount this client runs from.
+# fall back to the repo mount this client runs from (two levels up).
 if [[ ! -f "${INFMAX_CONTAINER_WORKSPACE:-}/benchmarks/benchmark_lib.sh" ]]; then
-    INFMAX_CONTAINER_WORKSPACE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    INFMAX_CONTAINER_WORKSPACE="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 fi
 export INFMAX_CONTAINER_WORKSPACE
 
