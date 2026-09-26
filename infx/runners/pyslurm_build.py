@@ -108,18 +108,40 @@ def _find_slurm_include(args_include: str | None) -> Path:
     )
 
 
+def _slurm_plugin_dir() -> Path | None:
+    """Return Slurm's PluginDir from ``scontrol show config``, if available."""
+    try:
+        out = subprocess.check_output(["scontrol", "show", "config"], text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    for line in out.splitlines():
+        key, _, value = line.partition("=")
+        if key.strip() == "PluginDir" and value.strip():
+            return Path(value.strip().split(":")[0])
+    return None
+
+
 def _find_slurm_lib() -> Path:
-    """Find the directory containing libslurm.so or libslurmfull.so."""
-    for d in [
+    """Find the directory holding libslurmfull.so.
+
+    pyslurm uses Slurm-internal symbols (e.g. assoc_mgr_tres_list) that only
+    libslurmfull exports; linking the public libslurm builds a wheel that
+    fails at import. Distributions install libslurmfull beside the plugins.
+    """
+    roots = [
         Path("/usr/lib/x86_64-linux-gnu"),
         Path("/usr/lib64"),
         Path("/usr/lib/aarch64-linux-gnu"),
         Path("/usr/local/lib"),
-    ]:
-        for name in ["libslurmfull.so", "libslurm.so"]:
-            if (d / name).exists():
-                return d
-    raise FileNotFoundError("Cannot find libslurm.so")
+        Path("/usr/lib"),
+    ]
+    plugin_dir = _slurm_plugin_dir()
+    candidates = ([plugin_dir] if plugin_dir else []) + [d / "slurm" for d in roots] + roots
+    for d in candidates:
+        if (d / "libslurmfull.so").exists():
+            return d
+    searched = ", ".join(str(d) for d in candidates)
+    raise FileNotFoundError(f"Cannot find libslurmfull.so (searched {searched})")
 
 
 def _apply_patches(build_dir: Path, slurm_major_minor: tuple[int, int]) -> None:
@@ -144,7 +166,8 @@ def _apply_patches(build_dir: Path, slurm_major_minor: tuple[int, int]) -> None:
     for p in patches:
         print(f"[pyslurm-build] Applying {p.name}")
         subprocess.check_call(
-            ["git", "apply", "--directory=.", str(p)],
+            # Patches use a/ b/ prefixes relative to the pyslurm source root.
+            ["git", "apply", "-p1", str(p)],
             cwd=build_dir,
         )
 
