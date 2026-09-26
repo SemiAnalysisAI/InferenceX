@@ -13,7 +13,7 @@ import yaml
 from infx.srt_slurm.single_node import runtime_arguments, select_recipe, submission_fields
 from infx.srt_slurm.synthetic_acceptance import plan_commands, selected_recipes
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "utils/srt-slurm/src"))
 from srtctl.core.overrides import apply_overrides_to_recipe, parse_overrides
 

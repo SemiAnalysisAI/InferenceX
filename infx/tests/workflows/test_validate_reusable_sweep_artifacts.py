@@ -996,7 +996,7 @@ def test_eval_only_cli_runs_outside_checkout_without_benchmark_artifacts(tmp_pat
     write_eval_aggregate(tmp_path, [single_eval_result(32)])
     write_raw_eval_artifact(tmp_path, 32)
     env = dict(os.environ)
-    env["PYTHONPATH"] = str(Path(__file__).resolve().parents[1])
+    env["PYTHONPATH"] = str(Path(__file__).resolve().parents[3])
     completed = subprocess.run(
         [
             sys.executable,

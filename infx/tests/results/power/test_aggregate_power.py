@@ -1384,7 +1384,7 @@ def power_artifacts(tmp_path, request):
 
 
 def _run_power_cli(case, *, args=None, environment=None):
-    repo = Path(__file__).resolve().parents[1]
+    repo = Path(__file__).resolve().parents[4]
     command = [sys.executable, "-E", "-S", "-m", case["script"]]
     return subprocess.run(
         command + (case["args"] if args is None else args),
@@ -1502,7 +1502,7 @@ def test_power_sidecars_keep_audit_precision_and_omit_nonfinite_metrics(power_ar
 def test_packaged_power_runs_from_isolated_package(power_artifacts, tmp_path):
     import shutil
 
-    repo = Path(__file__).resolve().parents[1]
+    repo = Path(__file__).resolve().parents[4]
     isolated = tmp_path / "package-only"
     shutil.copytree(repo / "infx", isolated / "infx", ignore=shutil.ignore_patterns("__pycache__"))
     result = subprocess.run(

@@ -144,13 +144,13 @@ Inspect the emitted values, not only the exit code or row count: config key, mod
 
 | Change | Focused command |
 | --- | --- |
-| Matrix schema or generation | `python -m pytest utils/matrix_logic/ -v` |
-| Changelog content or PR gating | `python -m pytest utils/test_process_changelog.py utils/changelog_gate_tests/ -v` |
-| Result processing and topology | `python -m pytest utils/test_process_result.py utils/agentic/aggregation/test_process_agentic_result.py utils/test_aggregate_power.py utils/test_calc_success_rate.py -v` |
-| AgentX aggregation and artifact loading | `python -m pytest utils/agentic/aggregation/ -v` |
-| Eval dispatch, batching, or patches | `python -m pytest utils/evals/ -v` |
-| Eval collection | `python -m pytest utils/test_collect_eval_results.py -v` |
-| Sweep reuse or reusable artifacts | `python -m pytest utils/test_github.py utils/test_find_reusable_sweep_run.py utils/test_acknowledge_sweep_reuse.py utils/test_validate_reusable_sweep_artifacts.py -v` |
+| Matrix schema or generation | `python -m pytest infx/tests/matrix/ -v` |
+| Changelog content or PR gating | `python -m pytest infx/tests/matrix/test_process_changelog.py infx/tests/workflows/test_validate_perf_changelog.py infx/tests/workflows/test_prepare_perf_changelog_merge.py -v` |
+| Result processing and topology | `python -m pytest infx/tests/results/power/test_process_result.py infx/tests/results/agentic/test_process_agentic_result.py infx/tests/results/power/test_aggregate_power.py infx/tests/workflows/test_calc_success_rate.py -v` |
+| AgentX aggregation and artifact loading | `python -m pytest infx/tests/results/agentic/ -v` |
+| Eval dispatch, batching, or patches | `python -m pytest infx/tests/evals/ utils/evals/ -v` |
+| Eval collection | `python -m pytest infx/tests/results/test_collect_eval_results.py -v` |
+| Sweep reuse or reusable artifacts | `python -m pytest infx/tests/test_github.py infx/tests/workflows/test_find_reusable_sweep_run.py infx/tests/workflows/test_acknowledge_sweep_reuse.py infx/tests/workflows/test_validate_reusable_sweep_artifacts.py -v` |
 
 For an edited changelog, also run the same matrix-compatibility validator used by setup, with real base and head refs:
 
@@ -167,13 +167,13 @@ A local matrix cannot prove Slurm allocation or llm-d endpoint discovery. Multi-
 
 ### Full local suite in parallel
 
-The existing Python suites cover workflow contracts too. `utils/matrix_logic/test_validation.py` tests the workflow input schemas and runs both preparation scripts with controlled generator output. Invalid rows must fail before publishing job outputs; accepted rows must remain unchanged, including when manual dispatch measures an older checkout. `utils/test_process_result.py` executes the shipped launch step with a recording launcher for current and historical checkouts. These tests do not emulate GitHub's expression engine or prove GPU performance; review expression changes with workflow validation and applicable smoke evidence.
+The existing Python suites cover workflow contracts too. `infx/tests/matrix/test_validation.py` tests the workflow input schemas and runs both preparation scripts with controlled generator output. Invalid rows must fail before publishing job outputs; accepted rows must remain unchanged, including when manual dispatch measures an older checkout. `infx/tests/results/power/test_process_result.py` executes the shipped launch step with a recording launcher for current and historical checkouts. These tests do not emulate GitHub's expression engine or prove GPU performance; review expression changes with workflow validation and applicable smoke evidence.
 
 Run the same locked environment and four-worker suite as CI:
 
 ```bash
 uv run --locked --all-extras --group test --no-editable \
-  python -m pytest utils/ runners/ experimental/CollectiveX/tests/ -n 4
+  python -m pytest infx/tests/ utils/ runners/ experimental/CollectiveX/tests/ -n 4
 ```
 
 Use `-n 0` for serial debugging. Tests must keep temporary files and ports isolated and collect deterministic parameter cases across workers.

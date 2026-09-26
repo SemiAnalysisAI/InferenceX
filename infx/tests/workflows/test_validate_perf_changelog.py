@@ -206,7 +206,7 @@ def test_matrix_compatible_check_rejects_missing_final_newline(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "validate_perf_changelog.read_git_file",
+        "infx.workflows.validate_perf_changelog.read_git_file",
         lambda *_args: b"- config-keys: []",
     )
 
@@ -218,7 +218,7 @@ def test_matrix_compatible_check_propagates_matrix_rejection(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "validate_perf_changelog.read_git_file",
+        "infx.workflows.validate_perf_changelog.read_git_file",
         lambda *_args: b"- config-keys: []\n",
     )
 
@@ -226,7 +226,7 @@ def test_matrix_compatible_check_propagates_matrix_rejection(
         raise ChangelogValidationError("matrix rejected")
 
     monkeypatch.setattr(
-        "validate_perf_changelog.validate_generated_config",
+        "infx.workflows.validate_perf_changelog.validate_generated_config",
         reject_matrix,
     )
 

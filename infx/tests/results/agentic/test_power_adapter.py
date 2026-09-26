@@ -37,7 +37,7 @@ def test_contract_missing_cli_preserves_invalid_verdict_and_requested_strictness
         command.append("--require-power")
     result = subprocess.run(
         command,
-        cwd=Path(__file__).resolve().parents[3],
+        cwd=Path(__file__).resolve().parents[4],
         env={**os.environ, "REQUIRE_POWER": "0"},
         capture_output=True,
         text=True,

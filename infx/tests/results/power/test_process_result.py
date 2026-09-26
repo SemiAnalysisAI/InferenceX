@@ -13,7 +13,7 @@ import pytest
 from infx.results.power.multinode import ROLE_METRIC_KEYS, WHOLE_METRIC_KEYS
 from test_aggregate_power_multinode import PRODUCER_SHA, build_package
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[4]
 MODULE_COMMAND = [sys.executable, "-m", "infx.results.fixed_sequence"]
 
 
@@ -1090,7 +1090,7 @@ class TestPowerAggregationIntegration:
             "clocks.current.sm [MHz], clocks.current.memory [MHz], "
             "utilization.gpu [%], utilization.memory [%]\n"
         )
-        benchmark_lib = Path(__file__).parents[1] / "benchmarks/benchmark_lib.sh"
+        benchmark_lib = Path(__file__).parents[4] / "benchmarks/benchmark_lib.sh"
         script = f"""
 source {str(benchmark_lib)!r}
 kill() {{ return 0; }}
@@ -1147,7 +1147,7 @@ stop_gpu_monitor
             f"{header}\n{complete_sample}\n{truncated_sample}"
         )
 
-        benchmark_lib = Path(__file__).parents[1] / "benchmarks/benchmark_lib.sh"
+        benchmark_lib = Path(__file__).parents[4] / "benchmarks/benchmark_lib.sh"
         script = f"""
 source {str(benchmark_lib)!r}
 kill() {{ return 0; }}
@@ -1193,7 +1193,7 @@ stop_gpu_monitor
         contents = "timestamp,gpu,socket_power\n1785881113,0,238\n"
         metrics = tmp_path / "gpu_metrics.csv"
         metrics.write_text(contents)
-        benchmark_lib = Path(__file__).parents[1] / "benchmarks/benchmark_lib.sh"
+        benchmark_lib = Path(__file__).parents[4] / "benchmarks/benchmark_lib.sh"
         script = f"""
 source {str(benchmark_lib)!r}
 kill() {{ return 0; }}
@@ -1239,7 +1239,7 @@ stop_gpu_monitor
         complete_sample = "1785881113,0,238"
         metrics = tmp_path / "gpu_metrics.csv"
         metrics.write_text(f"{header}\n{complete_sample}\n1785881114,0,2")
-        benchmark_lib = Path(__file__).parents[1] / "benchmarks/benchmark_lib.sh"
+        benchmark_lib = Path(__file__).parents[4] / "benchmarks/benchmark_lib.sh"
         script = f"""
 source {str(benchmark_lib)!r}
 kill() {{ return 0; }}
@@ -1291,7 +1291,7 @@ stop_gpu_monitor
         )
         fake_amd_smi.chmod(0o755)
         metrics = tmp_path / "gpu_metrics.csv"
-        benchmark_lib = Path(__file__).parents[1] / "benchmarks/benchmark_lib.sh"
+        benchmark_lib = Path(__file__).parents[4] / "benchmarks/benchmark_lib.sh"
         script = f"""
 source {str(benchmark_lib)!r}
 # Wait for observable pipeline output instead of a fixed sampling delay.

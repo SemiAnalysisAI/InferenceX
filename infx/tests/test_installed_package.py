@@ -17,7 +17,7 @@ def installed_python(tmp_path_factory):
                 "uv",
                 "sync",
                 "--project",
-                str(Path(__file__).resolve().parents[1]),
+                str(Path(__file__).resolve().parents[2]),
                 "--locked",
                 "--no-default-groups",
                 "--no-editable",
