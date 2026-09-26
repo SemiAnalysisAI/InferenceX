@@ -117,39 +117,6 @@ if [[ "$IS_MULTINODE" != true && -n "${SRT_RECIPE:-}" ]]; then
         --var DYNAMO_WHEELS_CACHE_HOST_PATH "$DYNAMO_WHEELS_CACHE_HOST_PATH"
     exit $?
 fi
-# Keep this branch before the nginx import and srtctl setup.
-if [[ "$MODEL_PREFIX" == "dsv41flash" && ( "$FRAMEWORK" == "vllm" || "$FRAMEWORK" == "sglang" ) && "${IS_MULTINODE}" != "true" ]]; then
-    check_env_vars SPEC_DECODING
-    BENCH_SCRIPT="benchmarks/single_node/agentic/${MODEL_PREFIX}_${PRECISION}_gb300_${FRAMEWORK}"
-    case "$SPEC_DECODING" in
-        mtp) BENCH_SCRIPT+="_mtp.sh" ;;
-        none)
-            [[ "$FRAMEWORK" == "sglang" ]] || { echo "Native STP requires the SGLang recipe" >&2; exit 1; }
-            BENCH_SCRIPT+=".sh"
-            ;;
-        *) echo "Unsupported SPEC_DECODING=$SPEC_DECODING" >&2; exit 1 ;;
-    esac
-    # Cover DSpark5 verification for concurrent AgentX subagents at c1/c2/c4.
-    export DSV41_MIN_CUDAGRAPH_CAPTURE_SIZE=64
-    [[ "${IS_AGENTIC}" == "1" && -f "$BENCH_SCRIPT" ]] || {
-        echo "Unsupported single-node recipe: $BENCH_SCRIPT" >&2
-        exit 1
-    }
-    export HF_HUB_CACHE=/hf-cache
-    export INFMAX_CONTAINER_WORKSPACE=/ix
-    export RESULT_DIR=/ix/results
-    # Cold model loading and graph capture exceeded the one-hour frontend deadline.
-    export VLLM_ENGINE_READY_TIMEOUT_S=7200
-    srun --account="$SLURM_ACCOUNT" --partition="$SLURM_PARTITION" \
-        --nodes=1 --ntasks=1 --gpus="${TP:?}" --cpus-per-task=144 --exclusive --mem=0 \
-        --time="${SALLOC_TIME_LIMIT}" --job-name="$RUNNER_NAME" \
-        --mpi=none --container-image="$SQUASH_FILE" \
-        --container-mounts="$GITHUB_WORKSPACE:/ix,$HF_HUB_CACHE_HOST_PATH:/hf-cache" \
-        --no-container-mount-home --container-remap-root \
-        --container-workdir=/ix --no-container-entrypoint \
-        --export=ALL,PORT=8888 bash "$BENCH_SCRIPT"
-    exit $?
-fi
 
 import_squash "$NGINX_SQUASH_FILE" "$NGINX_IMAGE"
 

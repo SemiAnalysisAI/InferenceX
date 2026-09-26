@@ -1,6 +1,7 @@
 # MiniMax-M3 MXFP4 AgentX on MI355X with ATOM EAGLE3 (GQA draft, three tokens)
-# and GPU-resident KV at TP2 and TP4. The LMCache bands stay on the legacy
-# script: srtctl reserves ATOM's kv-transfer-config for disaggregated workers.
+# and GPU-resident KV at TP2 and TP4. The LMCache bands were removed with the
+# legacy script (#3461): srtctl reserves ATOM's kv-transfer-config for
+# disaggregated workers.
 base:
   schema: 2
   name: minimaxm3-fp4-mi355x-atom-agentic

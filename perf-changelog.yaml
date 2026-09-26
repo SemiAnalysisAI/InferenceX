@@ -9043,7 +9043,12 @@
     - minimaxm3-fp4-b200-trtllm-agentic-mtp
     - minimaxm3-fp4-b300-trtllm-agentic-mtp
     - minimaxm3-fp4-gb200-dynamo-trt-agentic-agg-mtp
-    - kimik3-fp4-mi355x-vllm-agentic-mtp
   description:
     - "Port vendor-eval image pins, native KV offload and BFCL diagnostics to SRT-Slurm recipes after retiring legacy launchers; retain the production TRT BFCL guard"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3156
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  description:
+    - "Retain the branch Kimi MI355X grid through native SRT-Slurm variants, including no-draft DCP8, after removal of its legacy launcher"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3156

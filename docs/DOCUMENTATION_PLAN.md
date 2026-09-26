@@ -24,7 +24,7 @@ The main risks are:
 - Operational recovery knowledge remains trapped in a long agent-instruction file or historical debugging note.
 - New contributor-facing pages violate the bilingual documentation rule or omit the matching Chinese link.
 - Existing domain references are not consistently discoverable from `docs/`, and many are not paired with `_zh.md`. The migration must distinguish contributor-facing pages from internal implementation notes.
-- AgentX documentation is inconsistent: `benchmarks/single_node/agentic/README.md` describes an unpublished experimental MVP while `MODELS.md` and active master configs expose agentic-coding coverage.
+- AgentX documentation is scattered: the legacy `benchmarks/single_node/agentic/` README was removed with the bash scripts (#3461), and single-node AgentX now lives in srt-slurm recipes plus `benchmarks/srt_agentic.sh` with no maintained guide.
 
 ## Baseline knowledge inventory
 
@@ -41,7 +41,7 @@ This table records the repository state before the staged consolidation below.
 | Multi-node recipes | `benchmarks/multi_node/srt-slurm-recipes/RECIPES.md` | Recipe/master-config coupling should be visible before editing either file |
 | Runner setup | `utils/runner_setup/RUNNER_SETUP.md`, `runners/` | Provisioning and runtime launcher concerns are separated |
 | Model and hardware catalog | `MODELS.md`, `configs/*-master.yaml` | Public model list and runnable config list serve different audiences |
-| AgentX and agentic coding | `benchmarks/single_node/agentic/README.md`, `MODELS.md`, `configs/*-master.yaml` | Status and publication claims conflict. The official trace-to-result path needs one maintained guide |
+| AgentX and agentic coding | `benchmarks/single_node/srt-slurm-recipes/**/agentic.yaml`, `benchmarks/srt_agentic.sh`, `MODELS.md`, `configs/*-master.yaml` | Status and publication claims conflict. The official trace-to-result path needs one maintained guide |
 | Artifact schemas and app handoff | `utils/process_result.py`, `utils/collect_*.py`, `../InferenceX-app/.github/workflows/ingest-results.yml`, `../InferenceX-app/packages/db/src/etl/*` | Artifact identities, JSON contracts, and the boundary into InferenceX-app are not documented in this repository |
 
 ## Target information architecture

@@ -29,8 +29,6 @@ base:
   health_check:
     interval_seconds: 10
     max_attempts: 360
-  # Hardware-specific tiling only; checkpoint data, scales and dtypes are unchanged.
-  setup_script: dsv41flash-h100-block32.sh
   roles:
     agg:
       nodes: 1

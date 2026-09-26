@@ -702,10 +702,6 @@ kimik3-fp4-mi355x-atom-agentic-mtp:
     - dram-utilization: 0.343
       search-space:
       - { tp: 8, kv-offloading: none, conc-list: [1, 4], spec-decoding: mtp, srt-recipe: benchmarks/single_node/srt-slurm-recipes/kimik3/atom/mi355x-fp4-mtp/agentic.yaml }
-      - { tp: 8, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.4.5" }, conc-list: [14, 16, 48], spec-decoding: mtp }
-    - dram-utilization: 0.513
-      search-space:
-      - { tp: 8, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.4.5" }, conc-list: [56, 72], spec-decoding: mtp }
 
 minimaxm3-fp4-mi355x-atom-agentic-mtp:
   image: rocm/atom-dev:nightly_202609171455
@@ -723,8 +719,6 @@ minimaxm3-fp4-mi355x-atom-agentic-mtp:
       search-space:
       - { tp: 4, kv-offloading: none, conc-list: [1, 2, 4, 5, 8, 10, 12, 15, 20, 24, 28, 32], spec-decoding: mtp, srt-recipe: benchmarks/single_node/srt-slurm-recipes/minimaxm3/atom/mi355x-fp4-mtp/agentic.yaml }
       - { tp: 2, kv-offloading: none, conc-list: [1, 2], spec-decoding: mtp, srt-recipe: benchmarks/single_node/srt-slurm-recipes/minimaxm3/atom/mi355x-fp4-mtp/agentic.yaml }
-      - { tp: 2, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.5rc3+rocm7.2.4" }, conc-list: [20, 25, 30], spec-decoding: mtp }
-      - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.5rc3+rocm7.2.4" }, conc-list: [40, 48], spec-decoding: mtp }
 
 dsr1-fp4-mi355x-sglang-disagg:
   image: lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260809
@@ -1305,21 +1299,6 @@ dsv4-fp4-mi355x-atom-disagg-agentic-lmcache-dspark:
           - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=3"
 
-minimaxm3-fp4-mi355x-vllm-agentic-mtp:
-  image: vllm/vllm-openai-rocm:nightly-2a02f6efe319c885e3ccbcecde402e0028f9ec1e
-  model: amd/MiniMax-M3-MXFP4
-  model-prefix: minimaxm3
-  runner: cluster:mi355x-amds
-  precision: fp4
-  framework: vllm
-  multinode: false
-  scenarios:
-    agentic-coding:
-    - dram-utilization: 0.20
-      search-space:
-      - { tp: 4, kv-offloading: none, conc-list: [1, 4, 5, 8, 10, 12, 15, 20, 24, 32], spec-decoding: mtp }
-      - { tp: 2, kv-offloading: none, conc-list: [1, 2], spec-decoding: mtp }
-
 # GLM-5.2 FP4 agentic-coding benchmark on MI355X via SGLang with MTP speculative
 # decoding. Two arms:
 # (1) TP4/EP4 with HiCache KV offloading to DRAM at concurrency [4, 8, 10, 12, 14, 16];
@@ -1392,11 +1371,9 @@ glm5.2-fp4-mi355x-atom-agentic-mtp:
     agentic-coding:
     # dram-utilization 0.171 -> TOTAL_CPU_DRAM_GB=256 per TP4 rank (recipe's
     # LMCACHE_MAX_LOCAL_CPU_SIZE=256): min(3095781,2861022)MiB*0.171*4/8 = 256.
-    # Only the DCP4 arm offloads; the other two are GPU-resident.
     - dram-utilization: 0.171
       search-space:
        - { tp: 4, kv-offloading: none, conc-list: [2, 4, 8, 10], spec-decoding: mtp, srt-recipe: benchmarks/single_node/srt-slurm-recipes/glm5.2/atom/mi355x-fp4-mtp/agentic.yaml }
-       - { tp: 4, dcp-size: 4, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.4.5" }, conc-list: [16, 24, 32, 40, 48], spec-decoding: mtp }
        - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4], spec-decoding: mtp, srt-recipe: benchmarks/single_node/srt-slurm-recipes/glm5.2/atom/mi355x-fp4-mtp/agentic.yaml }
 
 dsv4-fp4-mi355x-sglang-agentic-mtp:
@@ -1444,22 +1421,6 @@ dsv41flash-fp4-mi355x-vllm-agentic-dspark:
       # 1-32 measured only on the superseded nightly-eed1f3d0 pin.
       - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/mi355x-fp4-mtp/agentic.yaml }
       - { tp: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/mi355x-fp4-mtp/agentic.yaml }
-
-# DeepSeek-V4.1-Flash on ATOM, following the upstream TP2 / TP4 AgentX recipe.
-# Five-token DSpark uses golden AL 3.51 for throughput and real acceptance for eval.
-dsv41flash-fp4-mi355x-atom-agentic-dspark:
-  image: rocm/atom-dev:nightly_202609250902
-  model: deepseek-ai/DeepSeek-V4.1-Flash
-  model-prefix: dsv41flash
-  runner: cluster:mi355x-amds
-  precision: fp4
-  framework: atom
-  multinode: false
-  scenarios:
-    agentic-coding:
-    - search-space:
-      - { tp: 2, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 2, 8, 16, 32, 64] }
-      - { tp: 4, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: draft_model, conc-list: [2, 8, 16, 32, 64] }
 
 # Speculative decoding on an agentic scenario must run with simulated
 # synthetic acceptance at the committed golden AL for this model, thinking mode
