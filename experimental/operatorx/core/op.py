@@ -11,18 +11,16 @@ class Op:
     type: str
     args: Mapping[str, Any]
     backend: str
-    # Where the case comes from: `sources` are the checkpoint ids whose layers run this
-    # op (several when models share a shape; empty for a shape from no model), `name`
-    # its roles in them (e.g. "q_proj", "down_proj", "mlp"; one shape can be a q_proj in
-    # one model and an o_proj in another). Equality/hash ignore both - the same
-    # (type, args, backend) is the same op whichever model it came from.
-    name: tuple[str, ...] = ()
+    # Where the case comes from: one "<checkpoint>/<role>" per layer that runs this op,
+    # e.g. "deepseek-ai/DeepSeek-V4-Pro/q_a_proj" (a checkpoint id is "org/model", so the
+    # role is what follows the last "/"). A shape shared by several models, or by several
+    # roles in one, lists every pair; a shape from no model lists none. Equality/hash
+    # ignore it - the same (type, args, backend) is the same op whichever model it came from.
     sources: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "args", MappingProxyType(dict(self.args)))
         object.__setattr__(self, "sources", tuple(self.sources))
-        object.__setattr__(self, "name", tuple(self.name))
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Op):

@@ -113,10 +113,7 @@
       }
     },
     "sources": [
-      "deepseek-ai/DeepSeek-R1-0528"
-    ],
-    "name": [
-      "mlp"
+      "deepseek-ai/DeepSeek-R1-0528/mlp"
     ]
   },
   {
@@ -289,10 +286,7 @@
       }
     },
     "sources": [
-      "nvidia/DeepSeek-R1-0528-NVFP4-v2"
-    ],
-    "name": [
-      "mlp"
+      "nvidia/DeepSeek-R1-0528-NVFP4-v2/mlp"
     ]
   },
   {
@@ -409,10 +403,7 @@
       }
     },
     "sources": [
-      "amd/DeepSeek-R1-0528-MXFP4"
-    ],
-    "name": [
-      "mlp"
+      "amd/DeepSeek-R1-0528-MXFP4/mlp"
     ]
   },
   {
@@ -529,10 +520,7 @@
       }
     },
     "sources": [
-      "deepseek-ai/DeepSeek-V4-Pro"
-    ],
-    "name": [
-      "mlp"
+      "deepseek-ai/DeepSeek-V4-Pro/ffn"
     ]
   },
   {
@@ -650,10 +638,7 @@
       }
     },
     "sources": [
-      "deepseek-ai/DeepSeek-V4-Pro"
-    ],
-    "name": [
-      "mlp"
+      "deepseek-ai/DeepSeek-V4-Pro/ffn"
     ]
   },
   {
@@ -770,10 +755,7 @@
       }
     },
     "sources": [
-      "deepseek-ai/DeepSeek-V4.1-Flash"
-    ],
-    "name": [
-      "mlp"
+      "deepseek-ai/DeepSeek-V4.1-Flash/ffn"
     ]
   },
   {
@@ -887,10 +869,7 @@
       }
     },
     "sources": [
-      "Qwen/Qwen3.5-397B-A17B-FP8"
-    ],
-    "name": [
-      "mlp"
+      "Qwen/Qwen3.5-397B-A17B-FP8/mlp"
     ]
   },
   {
@@ -1012,10 +991,7 @@
       }
     },
     "sources": [
-      "nvidia/Qwen3.5-397B-A17B-NVFP4"
-    ],
-    "name": [
-      "mlp"
+      "nvidia/Qwen3.5-397B-A17B-NVFP4/mlp"
     ]
   },
   {
@@ -1161,10 +1137,7 @@
       }
     },
     "sources": [
-      "nvidia/Qwen3.5-397B-A17B-NVFP4-V2"
-    ],
-    "name": [
-      "mlp"
+      "nvidia/Qwen3.5-397B-A17B-NVFP4-V2/mlp"
     ]
   },
   {
@@ -1254,10 +1227,7 @@
       }
     },
     "sources": [
-      "amd/Qwen3.5-397B-A17B-MXFP4"
-    ],
-    "name": [
-      "mlp"
+      "amd/Qwen3.5-397B-A17B-MXFP4/mlp"
     ]
   },
   {
@@ -1371,10 +1341,7 @@
       }
     },
     "sources": [
-      "amd/Qwen3.5-397B-A17B-MXFP4-AttnFP8-V2"
-    ],
-    "name": [
-      "mlp"
+      "amd/Qwen3.5-397B-A17B-MXFP4-AttnFP8-V2/mlp"
     ]
   },
   {
@@ -1464,10 +1431,7 @@
       }
     },
     "sources": [
-      "Qwen/Qwen3.8-Flash-Next-FP8"
-    ],
-    "name": [
-      "mlp"
+      "Qwen/Qwen3.8-Flash-Next-FP8/mlp"
     ]
   },
   {
@@ -1589,10 +1553,7 @@
       }
     },
     "sources": [
-      "RadixArk/Qwen3.8-Flash-Next-NVFP4"
-    ],
-    "name": [
-      "mlp"
+      "RadixArk/Qwen3.8-Flash-Next-NVFP4/mlp"
     ]
   },
   {
@@ -1710,13 +1671,10 @@
       }
     },
     "sources": [
-      "zai-org/GLM-5.2-FP8",
-      "zai-org/GLM-5-FP8",
-      "zai-org/GLM-5.1-FP8",
-      "zai-org/GLM-5.3"
-    ],
-    "name": [
-      "mlp"
+      "zai-org/GLM-5.2-FP8/mlp",
+      "zai-org/GLM-5-FP8/mlp",
+      "zai-org/GLM-5.1-FP8/mlp",
+      "zai-org/GLM-5.3/mlp"
     ]
   },
   {
@@ -1842,12 +1800,9 @@
       }
     },
     "sources": [
-      "nvidia/GLM-5.2-NVFP4",
-      "nvidia/GLM-5-NVFP4",
-      "nvidia/GLM-5.1-NVFP4"
-    ],
-    "name": [
-      "mlp"
+      "nvidia/GLM-5.2-NVFP4/mlp",
+      "nvidia/GLM-5-NVFP4/mlp",
+      "nvidia/GLM-5.1-NVFP4/mlp"
     ]
   },
   {
@@ -1965,11 +1920,8 @@
       }
     },
     "sources": [
-      "amd/GLM-5.2-MXFP4",
-      "amd/GLM-5.1-MXFP4"
-    ],
-    "name": [
-      "mlp"
+      "amd/GLM-5.2-MXFP4/mlp",
+      "amd/GLM-5.1-MXFP4/mlp"
     ]
   },
   {
@@ -2051,10 +2003,7 @@
       }
     },
     "sources": [
-      "moonshotai/Kimi-K3"
-    ],
-    "name": [
-      "mlp"
+      "moonshotai/Kimi-K3/block_sparse_moe"
     ],
     "recipes": [
       "kimik3-fp4-mi355x-vllm-agentic-mtp"
@@ -2175,10 +2124,7 @@
       }
     },
     "sources": [
-      "MiniMaxAI/MiniMax-M3-MXFP8"
-    ],
-    "name": [
-      "mlp"
+      "MiniMaxAI/MiniMax-M3-MXFP8/block_sparse_moe"
     ]
   },
   {
@@ -2328,10 +2274,7 @@
       }
     },
     "sources": [
-      "nvidia/MiniMax-M3-NVFP4"
-    ],
-    "name": [
-      "mlp"
+      "nvidia/MiniMax-M3-NVFP4/block_sparse_moe"
     ]
   },
   {
@@ -2449,10 +2392,7 @@
       }
     },
     "sources": [
-      "amd/MiniMax-M3-MXFP4"
-    ],
-    "name": [
-      "mlp"
+      "amd/MiniMax-M3-MXFP4/block_sparse_moe"
     ]
   },
   {
@@ -2510,10 +2450,7 @@
       }
     },
     "sources": [
-      "Qwen/Qwen3.5-397B-A17B"
-    ],
-    "name": [
-      "mlp"
+      "Qwen/Qwen3.5-397B-A17B/mlp"
     ]
   },
   {
@@ -2686,11 +2623,8 @@
       }
     },
     "sources": [
-      "nvidia/Kimi-K2.5-NVFP4",
-      "nvidia/Kimi-K2.6-NVFP4"
-    ],
-    "name": [
-      "mlp"
+      "nvidia/Kimi-K2.5-NVFP4/mlp",
+      "nvidia/Kimi-K2.6-NVFP4/mlp"
     ]
   },
   {
@@ -2807,10 +2741,7 @@
       }
     },
     "sources": [
-      "amd/Kimi-K2.5-MXFP4"
-    ],
-    "name": [
-      "mlp"
+      "amd/Kimi-K2.5-MXFP4/mlp"
     ]
   },
   {
@@ -2887,10 +2818,7 @@
       }
     },
     "sources": [
-      "MiniMaxAI/MiniMax-M2.5"
-    ],
-    "name": [
-      "mlp"
+      "MiniMaxAI/MiniMax-M2.5/block_sparse_moe"
     ]
   },
   {
@@ -2999,10 +2927,7 @@
       }
     },
     "sources": [
-      "nvidia/MiniMax-M2.5-NVFP4"
-    ],
-    "name": [
-      "mlp"
+      "nvidia/MiniMax-M2.5-NVFP4/block_sparse_moe"
     ]
   },
   {
@@ -3079,10 +3004,7 @@
       }
     },
     "sources": [
-      "amd/MiniMax-M2.5-MXFP4"
-    ],
-    "name": [
-      "mlp"
+      "amd/MiniMax-M2.5-MXFP4/block_sparse_moe"
     ]
   },
   {
@@ -3199,10 +3121,7 @@
       }
     },
     "sources": [
-      "deepseek-ai/DeepSeek-R1-0528"
-    ],
-    "name": [
-      "mlp"
+      "deepseek-ai/DeepSeek-R1-0528/mlp"
     ]
   },
   {
@@ -3319,10 +3238,7 @@
       }
     },
     "sources": [
-      "deepseek-ai/DeepSeek-R1-0528"
-    ],
-    "name": [
-      "mlp"
+      "deepseek-ai/DeepSeek-R1-0528/mlp"
     ]
   },
   {
@@ -3442,10 +3358,7 @@
       }
     },
     "sources": [
-      "deepseek-ai/DeepSeek-R1-0528"
-    ],
-    "name": [
-      "mlp"
+      "deepseek-ai/DeepSeek-R1-0528/mlp"
     ]
   },
   {
@@ -3562,10 +3475,7 @@
       }
     },
     "sources": [
-      "deepseek-ai/DeepSeek-R1-0528"
-    ],
-    "name": [
-      "mlp"
+      "deepseek-ai/DeepSeek-R1-0528/mlp"
     ]
   },
   {
@@ -3679,10 +3589,7 @@
       }
     },
     "sources": [
-      "Qwen/Qwen3.5-397B-A17B-FP8"
-    ],
-    "name": [
-      "mlp"
+      "Qwen/Qwen3.5-397B-A17B-FP8/mlp"
     ]
   },
   {
@@ -3796,10 +3703,7 @@
       }
     },
     "sources": [
-      "Qwen/Qwen3.5-397B-A17B-FP8"
-    ],
-    "name": [
-      "mlp"
+      "Qwen/Qwen3.5-397B-A17B-FP8/mlp"
     ]
   },
   {
@@ -3916,10 +3820,7 @@
       }
     },
     "sources": [
-      "Qwen/Qwen3.5-397B-A17B-FP8"
-    ],
-    "name": [
-      "mlp"
+      "Qwen/Qwen3.5-397B-A17B-FP8/mlp"
     ]
   },
   {
@@ -4033,10 +3934,7 @@
       }
     },
     "sources": [
-      "Qwen/Qwen3.5-397B-A17B-FP8"
-    ],
-    "name": [
-      "mlp"
+      "Qwen/Qwen3.5-397B-A17B-FP8/mlp"
     ]
   },
   {
@@ -4153,10 +4051,7 @@
       }
     },
     "sources": [
-      "deepseek-ai/DeepSeek-R1-0528"
-    ],
-    "name": [
-      "mlp"
+      "deepseek-ai/DeepSeek-R1-0528/mlp"
     ]
   },
   {
@@ -4273,10 +4168,7 @@
       }
     },
     "sources": [
-      "deepseek-ai/DeepSeek-R1-0528"
-    ],
-    "name": [
-      "mlp"
+      "deepseek-ai/DeepSeek-R1-0528/mlp"
     ]
   },
   {
@@ -4393,10 +4285,7 @@
       }
     },
     "sources": [
-      "deepseek-ai/DeepSeek-R1-0528"
-    ],
-    "name": [
-      "mlp"
+      "deepseek-ai/DeepSeek-R1-0528/mlp"
     ]
   },
   {
@@ -4513,10 +4402,7 @@
       }
     },
     "sources": [
-      "deepseek-ai/DeepSeek-R1-0528"
-    ],
-    "name": [
-      "mlp"
+      "deepseek-ai/DeepSeek-R1-0528/mlp"
     ]
   },
   {
@@ -4633,10 +4519,7 @@
       }
     },
     "sources": [
-      "deepseek-ai/DeepSeek-V4-Pro"
-    ],
-    "name": [
-      "mlp"
+      "deepseek-ai/DeepSeek-V4-Pro/ffn"
     ]
   },
   {
@@ -4753,10 +4636,7 @@
       }
     },
     "sources": [
-      "deepseek-ai/DeepSeek-V4-Pro"
-    ],
-    "name": [
-      "mlp"
+      "deepseek-ai/DeepSeek-V4-Pro/ffn"
     ]
   },
   {
@@ -4873,10 +4753,7 @@
       }
     },
     "sources": [
-      "deepseek-ai/DeepSeek-V4-Pro"
-    ],
-    "name": [
-      "mlp"
+      "deepseek-ai/DeepSeek-V4-Pro/ffn"
     ]
   },
   {
@@ -4993,10 +4870,7 @@
       }
     },
     "sources": [
-      "deepseek-ai/DeepSeek-V4-Pro"
-    ],
-    "name": [
-      "mlp"
+      "deepseek-ai/DeepSeek-V4-Pro/ffn"
     ]
   },
   {
@@ -5110,10 +4984,7 @@
       }
     },
     "sources": [
-      "Qwen/Qwen3.5-397B-A17B-FP8"
-    ],
-    "name": [
-      "mlp"
+      "Qwen/Qwen3.5-397B-A17B-FP8/mlp"
     ]
   },
   {
@@ -5227,10 +5098,7 @@
       }
     },
     "sources": [
-      "Qwen/Qwen3.5-397B-A17B-FP8"
-    ],
-    "name": [
-      "mlp"
+      "Qwen/Qwen3.5-397B-A17B-FP8/mlp"
     ]
   },
   {
@@ -5344,10 +5212,7 @@
       }
     },
     "sources": [
-      "Qwen/Qwen3.5-397B-A17B-FP8"
-    ],
-    "name": [
-      "mlp"
+      "Qwen/Qwen3.5-397B-A17B-FP8/mlp"
     ]
   },
   {
@@ -5461,10 +5326,7 @@
       }
     },
     "sources": [
-      "Qwen/Qwen3.5-397B-A17B-FP8"
-    ],
-    "name": [
-      "mlp"
+      "Qwen/Qwen3.5-397B-A17B-FP8/mlp"
     ]
   },
   {
@@ -5582,10 +5444,7 @@
       }
     },
     "sources": [
-      "zai-org/GLM-5.2-FP8"
-    ],
-    "name": [
-      "mlp"
+      "zai-org/GLM-5.2-FP8/mlp"
     ]
   },
   {
@@ -5703,10 +5562,7 @@
       }
     },
     "sources": [
-      "zai-org/GLM-5.2-FP8"
-    ],
-    "name": [
-      "mlp"
+      "zai-org/GLM-5.2-FP8/mlp"
     ]
   },
   {
@@ -5824,10 +5680,7 @@
       }
     },
     "sources": [
-      "zai-org/GLM-5.2-FP8"
-    ],
-    "name": [
-      "mlp"
+      "zai-org/GLM-5.2-FP8/mlp"
     ]
   },
   {
@@ -5945,10 +5798,7 @@
       }
     },
     "sources": [
-      "zai-org/GLM-5.2-FP8"
-    ],
-    "name": [
-      "mlp"
+      "zai-org/GLM-5.2-FP8/mlp"
     ]
   },
   {
@@ -6030,10 +5880,7 @@
       }
     },
     "sources": [
-      "moonshotai/Kimi-K3"
-    ],
-    "name": [
-      "mlp"
+      "moonshotai/Kimi-K3/block_sparse_moe"
     ],
     "recipes": [
       "kimik3-fp4-mi355x-vllm-agentic-mtp"
@@ -6118,10 +5965,7 @@
       }
     },
     "sources": [
-      "moonshotai/Kimi-K3"
-    ],
-    "name": [
-      "mlp"
+      "moonshotai/Kimi-K3/block_sparse_moe"
     ],
     "recipes": [
       "kimik3-fp4-mi355x-vllm-agentic-mtp"
@@ -6206,10 +6050,7 @@
       }
     },
     "sources": [
-      "moonshotai/Kimi-K3"
-    ],
-    "name": [
-      "mlp"
+      "moonshotai/Kimi-K3/block_sparse_moe"
     ],
     "recipes": [
       "kimik3-fp4-mi355x-vllm-agentic-mtp"
@@ -6294,10 +6135,7 @@
       }
     },
     "sources": [
-      "moonshotai/Kimi-K3"
-    ],
-    "name": [
-      "mlp"
+      "moonshotai/Kimi-K3/block_sparse_moe"
     ],
     "recipes": [
       "kimik3-fp4-mi355x-vllm-agentic-mtp"
@@ -6418,10 +6256,7 @@
       }
     },
     "sources": [
-      "MiniMaxAI/MiniMax-M3-MXFP8"
-    ],
-    "name": [
-      "mlp"
+      "MiniMaxAI/MiniMax-M3-MXFP8/block_sparse_moe"
     ]
   },
   {
@@ -6539,10 +6374,7 @@
       }
     },
     "sources": [
-      "MiniMaxAI/MiniMax-M3-MXFP8"
-    ],
-    "name": [
-      "mlp"
+      "MiniMaxAI/MiniMax-M3-MXFP8/block_sparse_moe"
     ]
   },
   {
@@ -6660,10 +6492,7 @@
       }
     },
     "sources": [
-      "MiniMaxAI/MiniMax-M3-MXFP8"
-    ],
-    "name": [
-      "mlp"
+      "MiniMaxAI/MiniMax-M3-MXFP8/block_sparse_moe"
     ]
   },
   {
@@ -6781,10 +6610,7 @@
       }
     },
     "sources": [
-      "MiniMaxAI/MiniMax-M3-MXFP8"
-    ],
-    "name": [
-      "mlp"
+      "MiniMaxAI/MiniMax-M3-MXFP8/block_sparse_moe"
     ]
   },
   {
@@ -6861,10 +6687,7 @@
       }
     },
     "sources": [
-      "MiniMaxAI/MiniMax-M2.5"
-    ],
-    "name": [
-      "mlp"
+      "MiniMaxAI/MiniMax-M2.5/block_sparse_moe"
     ]
   },
   {
@@ -6941,10 +6764,7 @@
       }
     },
     "sources": [
-      "MiniMaxAI/MiniMax-M2.5"
-    ],
-    "name": [
-      "mlp"
+      "MiniMaxAI/MiniMax-M2.5/block_sparse_moe"
     ]
   },
   {
@@ -7021,10 +6841,7 @@
       }
     },
     "sources": [
-      "MiniMaxAI/MiniMax-M2.5"
-    ],
-    "name": [
-      "mlp"
+      "MiniMaxAI/MiniMax-M2.5/block_sparse_moe"
     ]
   },
   {
@@ -7101,10 +6918,7 @@
       }
     },
     "sources": [
-      "MiniMaxAI/MiniMax-M2.5"
-    ],
-    "name": [
-      "mlp"
+      "MiniMaxAI/MiniMax-M2.5/block_sparse_moe"
     ]
   }
 ]
