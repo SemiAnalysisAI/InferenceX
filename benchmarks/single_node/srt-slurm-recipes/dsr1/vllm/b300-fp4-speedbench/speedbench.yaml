@@ -1,7 +1,8 @@
 # DeepSeek-R1 B300 vLLM SPEED-Bench AL matrix (native MTP).
 #
-# R1 always reasons (no thinking-off mode), so only zip_override_thinking_on is
-# provided.  Each entry varies num_speculative_tokens 1..8.
+# R1 always reasons (no thinking-off mode); the workflow dispatches only
+# thinking-on cells.  Each zip_override_mtp entry varies
+# num_speculative_tokens 1..8.
 #
 # FP4 MoE on Blackwell needs FlashInfer (VLLM_USE_FLASHINFER_MOE_FP4).
 # R1 is DeepSeek-V3 architecture (plain MLA): no --attention_config.use_fp4_indexer_cache,
@@ -61,7 +62,7 @@ base:
       TOP_P: '0.95'
       SPEEDBENCH_TRUST_REMOTE_CODE: '1'
 
-zip_override_thinking_on:
+zip_override_mtp:
   roles:
     agg:
       args:
@@ -74,23 +75,3 @@ zip_override_thinking_on:
           - '{"method":"mtp","num_speculative_tokens":6}'
           - '{"method":"mtp","num_speculative_tokens":7}'
           - '{"method":"mtp","num_speculative_tokens":8}'
-  benchmark:
-    env:
-      THINKING:
-        - 'thinking_on'
-        - 'thinking_on'
-        - 'thinking_on'
-        - 'thinking_on'
-        - 'thinking_on'
-        - 'thinking_on'
-        - 'thinking_on'
-        - 'thinking_on'
-      MTP:
-        - '1'
-        - '2'
-        - '3'
-        - '4'
-        - '5'
-        - '6'
-        - '7'
-        - '8'

@@ -195,7 +195,7 @@ def runtime_arguments(config: str, environment: Mapping[str, str]) -> list[str]:
     if collector:
         # SPEED-Bench collector tunables: bind workflow-level settings into
         # the per-cell benchmark environment so the client reads them.
-        for name in ("CATEGORY", "SPEEDBENCH_OUTPUT_LEN"):
+        for name in ("CATEGORY", "SPEEDBENCH_OUTPUT_LEN", "THINKING", "MTP"):
             value = environment.get(name, "")
             if not value:
                 raise ValueError(f"Missing SPEED-Bench input: {name}")

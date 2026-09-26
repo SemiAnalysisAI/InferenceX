@@ -275,7 +275,9 @@ jobs:
             for mode in $THINKING_MODES; do
               for mtp in $MTP_LIST; do
                 IDX=$((mtp - 1))
-                export SRT_RECIPE="${RECIPE_PATH}:zip_override_thinking_${mode}[${IDX}]"
+                export THINKING="$mode"
+                export MTP="$mtp"
+                export SRT_RECIPE="${RECIPE_PATH}:zip_override_mtp[${IDX}]"
                 export RESULT_FILENAME="speedbench_${mode}_mtp${mtp}"
                 echo ""
                 echo "=========================================="
