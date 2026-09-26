@@ -5,7 +5,7 @@ base:
   name: minimaxm3-fp8-h100-vllm-agentic
   model:
     path: hf:MiniMaxAI/MiniMax-M3-MXFP8
-    container: vllm/vllm-openai:v0.27.1
+    container: vllm/vllm-openai:nightly-ddd6fbca148a867aad1fcab7ec72f582b9977db4
     precision: fp8
   resources:
     gpu_type: h100
