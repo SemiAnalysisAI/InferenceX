@@ -27,7 +27,7 @@ conc, spec-decoding)` tuple in the InferenceX matrix, we:
    `--no-merge-existing` is passed.
 
 Matrix expansion is delegated to InferenceX's own
-`utils/matrix_logic/generate_sweep_configs.py full-sweep` so the enumerator
+`python -m infx.matrix.generate full-sweep` so the enumerator
 stays in sync with InferenceX semantics automatically.
 
 ## Known limitations

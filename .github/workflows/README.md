@@ -309,7 +309,7 @@ configs/*.yaml
         │
         ▼
 ┌─────────────────────────┐
-│  generate_sweep_configs │  ← Matrix generation
+│  infx.matrix.generate   │  ← Matrix generation
 └─────────────────────────┘
         │
         ▼

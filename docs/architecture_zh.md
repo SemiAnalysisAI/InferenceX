@@ -72,7 +72,7 @@
 flowchart LR
   A[主 YAML 和 runners.yaml] --> B[Pydantic 验证]
   P[perf-changelog 新增项] --> C[process_changelog.py]
-  B --> D[generate_sweep_configs.py]
+  B --> D[infx.matrix.generate]
   C --> D
   D --> E[经过验证的 JSON 矩阵]
   E --> F[run-sweep.yml 扇出]
@@ -146,7 +146,7 @@ flowchart LR
 
 默认仓库路径定义在 [`infx/config.py`](../infx/config.py) 中。配置常量从 `infx.config` 导入，模式从 `infx.matrix.validation` 导入。包的 `__init__.py` 文件保持精简。
 
-`utils/process_changelog.py` 和 `utils/matrix_logic/generate_sweep_configs.py` 保留为轻量兼容入口。这两个入口的脚本命令、参数、相对输入路径和依赖保持不变，从仓库检出目录运行时无需安装包。`process_changelog.py` 指向 `infx.matrix.plan`；`validate_perf_changelog.py` 保留现有处理器 CLI 边界和诊断。
+`utils/process_changelog.py` 保留为轻量兼容入口，其脚本命令、参数、相对输入路径和依赖保持不变，从仓库检出目录运行时无需安装包。矩阵生成通过 `python -m infx.matrix.generate` 运行；历史 append-only 规划会运行基准修订版自身的生成器，对早于该模块的修订版则运行其遗留的 `utils/matrix_logic/generate_sweep_configs.py` 脚本。`process_changelog.py` 指向 `infx.matrix.plan`；`validate_perf_changelog.py` 保留现有处理器 CLI 边界和诊断。
 
 使用当前工具代码的工作流直接调用 `infx` 模块，测试也导入规范模块。可信调度通过 `PYTHONPATH` 和 Python 的 `-P` 选项明确指定工具代码所在的检出目录，同时仍以目标检出目录作为工作目录读取输入。手动矩阵生成、性能分析及基准测试步骤使用稳定的脚本入口来支持旧修订；追加模式的历史提取也使用各修订自身的兼容入口。
 

@@ -18,7 +18,13 @@ from pathlib import Path
 
 import yaml
 
-from infx.config import GENERATE_SWEEPS_PY_SCRIPT, MASTER_CONFIGS, RUNNER_CONFIG
+from infx.config import (
+    GENERATOR_MODULE,
+    GENERATOR_MODULE_PATH,
+    LEGACY_GENERATOR_SCRIPT,
+    MASTER_CONFIGS,
+    RUNNER_CONFIG,
+)
 
 from .generate import (
     EvalMode,
@@ -40,8 +46,11 @@ SCENARIO_TYPES = ("fixed-seq-len", "agentic-coding")
 @dataclass(frozen=True)
 class GenerationInputs:
     config_files: list[str]
-    generator_script: str
+    # argv after python3: ("-m", module) or (legacy script path,)
+    generator: tuple[str, ...]
     runner_config: str
+    # Child working directory; a snapshot root makes `-m` import its own infx.
+    root: str | None = None
 
 
 def get_added_lines(base_ref: str, head_ref: str, filepath: str) -> str:
@@ -133,11 +142,14 @@ def generation_inputs_at_ref(ref: str) -> Iterator[GenerationInputs]:
         for entry in files_result.stdout.split(b"\0")[:-1]:
             metadata, path = entry.split(b"\t", 1)
             repo_files[os.fsdecode(path)] = metadata.split()[2]
-        required_paths = {
-            *MASTER_CONFIGS,
-            "configs/runners.yaml",
-            GENERATE_SWEEPS_PY_SCRIPT,
-        }
+        required_paths = {*MASTER_CONFIGS, "configs/runners.yaml"}
+        if GENERATOR_MODULE_PATH in repo_files:
+            generator: tuple[str, ...] = ("-m", GENERATOR_MODULE)
+        elif LEGACY_GENERATOR_SCRIPT in repo_files:
+            generator = (str(Path(temp_dir) / LEGACY_GENERATOR_SCRIPT),)
+        else:
+            generator = ()
+            required_paths.add(GENERATOR_MODULE_PATH)
         missing_paths = required_paths - repo_files.keys()
         if missing_paths:
             raise ValueError(
@@ -164,8 +176,9 @@ def generation_inputs_at_ref(ref: str) -> Iterator[GenerationInputs]:
 
         yield GenerationInputs(
             config_files=[str(Path(temp_dir) / path) for path in MASTER_CONFIGS],
-            generator_script=str(Path(temp_dir) / GENERATE_SWEEPS_PY_SCRIPT),
+            generator=generator,
             runner_config=str(Path(temp_dir) / "configs/runners.yaml"),
+            root=temp_dir,
         )
 
 
@@ -384,7 +397,9 @@ def generate_matrix(
     """
     command = _matrix_command(config_keys, flags, inputs)
     try:
-        result = subprocess.run(command, capture_output=True, text=True, check=True)
+        result = subprocess.run(
+            command, capture_output=True, text=True, check=True, cwd=inputs.root if inputs else None
+        )
     except subprocess.CalledProcessError as exc:
         print(exc.stderr)
         raise
@@ -459,7 +474,7 @@ def build_plan(
         eval_scenarios_seen = defaultdict(set)
 
         config_files = MASTER_CONFIGS if config_files is None else config_files
-        head_inputs = GenerationInputs(config_files, GENERATE_SWEEPS_PY_SCRIPT, runner_config)
+        head_inputs = GenerationInputs(config_files, ("-m", GENERATOR_MODULE), runner_config)
         master_config = load_config_files(config_files)
         runner_data = None
 
@@ -638,7 +653,7 @@ def _matrix_command(
 ) -> list[str]:
     command = [
         "python3",
-        inputs.generator_script if inputs else GENERATE_SWEEPS_PY_SCRIPT,
+        *(inputs.generator if inputs else ("-m", GENERATOR_MODULE)),
         "test-config",
         "--config-keys",
         *config_keys,

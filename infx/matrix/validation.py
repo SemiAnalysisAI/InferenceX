@@ -97,7 +97,7 @@ class Fields(Enum):
 
 
 """
-    Below is the validation logic for the OUTPUT of utils/matrix_logic/generate_sweep_configs.py, i.e.,
+    Below is the validation logic for the OUTPUT of infx.matrix.generate, i.e.,
     the input to the actual workflow files. The validation enforces a strict set of rules on the structure
     of the generated matrix entries to ensure correctness before proceeding with benchmarking. This ensures
     that no validation has to happen in the workflow itself, i.e., at runtime, it is assumed that all inputs
@@ -450,7 +450,7 @@ def validate_matrix_entry(entry: dict, is_multinode: bool) -> dict:
 
 
 """
-    Below is the validation logic for the INPUT to utils/matrix_logic/generate_sweep_configs.py, i.e.,
+    Below is the validation logic for the INPUT to infx.matrix.generate, i.e.,
     the master configuration files found in configs. The validation enforces a strict set of
     rules on the structure of the master configuration files to ensure correctness before proceeding
     with matrix generation.

@@ -14,7 +14,7 @@
 | --- | --- |
 | [`configs/CONFIGS.md`](../configs/CONFIGS.md) | 主配置和 runner 配置的字段契约 |
 | [`infx/matrix/validation.py`](../infx/matrix/validation.py) | 强制执行的 Pydantic schema 和拓扑不变量 |
-| [`utils/matrix_logic/generate_sweep_configs.py`](../utils/matrix_logic/generate_sweep_configs.py) | 矩阵展开、过滤、runner 查找和生成的作业元数据 |
+| [`infx/matrix/generate.py`](../infx/matrix/generate.py) | 矩阵展开、过滤、runner 查找和生成的作业元数据 |
 | [`configs/nvidia-master.yaml`](../configs/nvidia-master.yaml)、[`configs/amd-master.yaml`](../configs/amd-master.yaml) | 可执行的基准定义 |
 | [`configs/runners.yaml`](../configs/runners.yaml) | 可调度标签、具体 runner 名称和硬件事实 |
 | [`benchmarks/`](../benchmarks/) 和 [`runners/`](../runners/) | 运行时命令和 launcher 路由 |
@@ -95,7 +95,7 @@ STP（Single Token Prediction，单 Token 预测）是每次前向传播生成�
 
 ## 修改主配置
 
-来源：[`configs/CONFIGS.md`](../configs/CONFIGS.md)、[`validation.py`](../infx/matrix/validation.py)、[`generate_sweep_configs.py`](../utils/matrix_logic/generate_sweep_configs.py)。
+来源：[`configs/CONFIGS.md`](../configs/CONFIGS.md)、[`validation.py`](../infx/matrix/validation.py)、[`generate.py`](../infx/matrix/generate.py)。
 
 1. 定位精确 key，完整阅读其条目及相邻同类项。
 2. 只使用文档列出的 kebab-case 字段。schema 禁止额外字段；看起来合理的字段不会自动被接受。
