@@ -8950,3 +8950,9 @@
   description:
     - "Update SGLang image from v0.5.19-cu130 to v0.5.20-cu130 and pass --cuda-graph-max-bs-decode after the alias removal."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3334
+
+- config-keys:
+    - qwen3.5-fp4-mi355x-sglang-agentic-mtp
+  description:
+    - "Update SGLang ROCm image from v0.5.19-rocm720-mi35x-20260915 to v0.5.20-rocm720-mi35x-20260924 (latest nightly)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3455
