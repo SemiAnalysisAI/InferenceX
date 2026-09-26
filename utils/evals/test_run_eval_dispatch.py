@@ -107,6 +107,7 @@ def test_agentic_dependency_install_is_rootless_without_git(tmp_path: Path) -> N
     fake_uv = fake_bin / "uv"
     fake_uv.write_text(
         "#!/bin/bash\n"
+        'printf "%s\\n" "$@" >> "$UV_CALLS"\n'
         "if [[ \"$1\" == \"venv\" ]]; then\n"
         "  target=\"${@: -1}\"\n"
         "  mkdir -p \"$target/bin\"\n"
@@ -125,8 +126,8 @@ def test_agentic_dependency_install_is_rootless_without_git(tmp_path: Path) -> N
 
     env = {
         **os.environ,
-        "AGENTIC_DIR": str(tmp_path / "agentic"),
-        "AIPERF_DIR": str(tmp_path / "aiperf"),
+        "INFMAX_CONTAINER_WORKSPACE": str(tmp_path / "checkout with spaces"),
+        "UV_CALLS": str(tmp_path / "uv-calls"),
         "AIPERF_RUNTIME_DIR": str(tmp_path / "runtime"),
         "BENCHMARK_LIB": str(BENCHMARK_LIB),
         "FAKE_UV": str(fake_uv),
@@ -150,6 +151,35 @@ def test_agentic_dependency_install_is_rootless_without_git(tmp_path: Path) -> N
     assert result.returncode == 0, result.stderr
     assert (tmp_path / "runtime/venv/bin/aiperf").is_file()
     assert (tmp_path / "runtime/venv/bin/hf").is_file()
+    install_args = (tmp_path / "uv-calls").read_text().splitlines()
+    assert install_args[:4] == [
+        "venv",
+        "--python",
+        "3.11",
+        str(tmp_path / "runtime/venv"),
+    ]
+    assert install_args[4:10] == [
+        "pip",
+        "install",
+        "--python",
+        str(tmp_path / "runtime/venv/bin/python"),
+        "-e",
+        str(tmp_path / "checkout with spaces/utils/aiperf"),
+    ]
+    assert set(install_args[10:]) == {
+        "numpy>=1.24",
+        "pandas>=2.0.0",
+        "aiohttp>=3.10",
+        "transformers>=4.46",
+        "xlsxwriter>=3.2.1",
+        "tqdm>=4.66",
+        "datasets>=4.7.0",
+        "tiktoken",
+        "matplotlib",
+        "huggingface_hub[cli]>=0.25.0",
+        "urllib3",
+        "requests",
+    }
 
 
 def test_agentic_scenario_defaults_to_gsm8k_lm_eval():
