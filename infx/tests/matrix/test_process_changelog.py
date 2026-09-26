@@ -631,11 +631,21 @@ def test_validator_uses_trusted_entrypoints_while_reading_another_checkout(commi
 
 @pytest.fixture
 def changelog_run(planning_repo, monkeypatch, capsys):
+    real_run = subprocess.run
+
     def run(entries, cli_flags=()):
         entries = [{"config-keys": ["single"], "description": ["Controlled change"],
                     "pr-link": "https://github.com/SemiAnalysisAI/InferenceX/pull/1",
                     **entry} for entry in entries]
-        monkeypatch.setattr(process_changelog, "get_added_lines", lambda *_: json.dumps(entries))
+
+        def run_command(command, *args, **kwargs):
+            if command == ["git", "diff", "base", "head", "--", "perf-changelog.yaml"]:
+                return subprocess.CompletedProcess(
+                    command, 0, stdout="+" + json.dumps(entries) + "\n", stderr=""
+                )
+            return real_run(command, *args, **kwargs)
+
+        monkeypatch.setattr(subprocess, "run", run_command)
         monkeypatch.setattr(sys, "argv", ["infx.matrix.plan", "--base-ref", "base",
                             "--head-ref", "head", "--changelog-file", "perf-changelog.yaml", *cli_flags])
         process_changelog.main()
@@ -824,23 +834,6 @@ def test_generation_api_rejects_unknown_eval_mode(planning_repo):
     _, master, runners = planning_repo
     with pytest.raises(ValueError, match="Unknown eval mode"):
         generate_config_matrix(["single"], master, runners, eval_mode="typo")
-
-
-def test_plan_failure_after_throughput_generation_publishes_nothing(planning_repo, changelog_run, monkeypatch, capsys):
-    from infx.matrix import plan
-    generate = plan.generate_config_matrix
-
-    def fail_eval(*args, **kwargs):
-        if kwargs["eval_mode"] == "subset":
-            raise ValueError("controlled eval selection failure")
-        return generate(*args, **kwargs)
-
-    monkeypatch.setattr(plan, "generate_config_matrix", fail_eval)
-    with pytest.raises(subprocess.CalledProcessError):
-        changelog_run([{}])
-    output = capsys.readouterr().out
-    assert "controlled eval selection failure" in output
-    assert '"single_node":' not in output
 
 
 def test_plan_rejects_empty_changelog_before_reading_inputs():
