@@ -38,9 +38,16 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
 
+      - name: Install Claude Code 2.1.282
+        id: claude_cli
+        run: | # zizmor: ignore[adhoc-packages] Claude CLI and its native packages are pinned to 2.1.282
+          npm install --prefix "$RUNNER_TEMP/claude-code" --no-audit --no-fund @anthropic-ai/claude-code@2.1.282
+          claude_cli="$RUNNER_TEMP/claude-code/node_modules/.bin/claude"
+          test "$("$claude_cli" --version)" = "2.1.282 (Claude Code)"
+          echo "path=$claude_cli" >> "$GITHUB_OUTPUT"
       - name: Run Claude Code
         id: claude
-        uses: anthropics/claude-code-action@0d0e0876d3eaa933f45dc692f7a4312c83caf36f # v1.0.218
+        uses: anthropics/claude-code-action@9171db3e57d6a3140a37ddc2ba92788584e0ead6 # v1.0.234
         env:
           # Repository agent credential; the pinned action authorizes the triggering actor.
           GH_TOKEN: ${{ secrets.AGENT_PAT }} # zizmor: ignore[secrets-outside-env]
@@ -50,6 +57,7 @@ jobs:
           BASH_DEFAULT_TIMEOUT_MS: "1800000"
           BASH_MAX_TIMEOUT_MS: "3600000"
         with:
+          path_to_claude_code_executable: ${{ steps.claude_cli.outputs.path }}
           # Repository agent credential; the pinned action authorizes the triggering actor.
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }} # zizmor: ignore[secrets-outside-env]
           # Repository agent credential; the pinned action authorizes the triggering actor.
@@ -315,11 +323,19 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
 
+      - name: Install Claude Code 2.1.282
+        id: claude_cli
+        run: | # zizmor: ignore[adhoc-packages] Claude CLI and its native packages are pinned to 2.1.282
+          npm install --prefix "$RUNNER_TEMP/claude-code" --no-audit --no-fund @anthropic-ai/claude-code@2.1.282
+          claude_cli="$RUNNER_TEMP/claude-code/node_modules/.bin/claude"
+          test "$("$claude_cli" --version)" = "2.1.282 (Claude Code)"
+          echo "path=$claude_cli" >> "$GITHUB_OUTPUT"
       - name: PR Review with Claude
-        uses: anthropics/claude-code-action@0d0e0876d3eaa933f45dc692f7a4312c83caf36f # v1.0.218
+        uses: anthropics/claude-code-action@9171db3e57d6a3140a37ddc2ba92788584e0ead6 # v1.0.234
         env:
           INFERENCEMAX_ROOT: ${{ github.workspace }}
         with:
+          path_to_claude_code_executable: ${{ steps.claude_cli.outputs.path }}
           # Repository review credential; the job gates eligible review requests.
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }} # zizmor: ignore[secrets-outside-env]
           trigger_phrase: "@pr-claude"

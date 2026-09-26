@@ -58,9 +58,12 @@ Freeze the COMPLETE original public baseline point roster before attempts, using
 candidate.source.date, verified old-image producer IDs/SHAs and full recipe/workload/topology/
 concurrency/dataset identities. Use the reporting guide's prepare-baseline/report commands;
 candidate.json provides the planner-verified exact `baseline-model`; use that value unchanged.
-The planner's preflight proves that a full roster can be reconstructed but does not freeze or
-publish it. Prepare the candidate's own baseline after resolving the exact old/new image goal;
-the helper recovers original points from producer revisions. Supplement verified public
+The planner supplies `baseline-preflight.json` beside candidate.json. It contains the verified
+benchmark roster bound to the selected candidate, base SHA, source observation and model.
+After resolving the exact old/new image goal, prepare-baseline checks this binding and uses
+that roster without refetching it. If candidate.json requires the preflight and it is absent
+or invalid, stop with `baseline-preflight-mismatch`; only legacy candidates may reconstruct.
+The preflight is not a published or final baseline. Supplement verified public
 eval/dataset evidence before freezing; never replace a failed lookup with a partial roster.
 Never reduce the baseline to overlapping points, displayed rows or a smaller current family. Never dispatch the old
 image. Unproven deltas are N/A with a reason; N/A never excuses missing updated-image results.
@@ -123,6 +126,16 @@ On terminal resolve/baseline evidence, stop investigating. Finalize attempts, wr
 CandidateOutcome to $KLAUD_EVIDENCE/requested-outcome.json and run `finish --outcome-file
 "$KLAUD_EVIDENCE/requested-outcome.json"`. Only finish may mark ready after verifying complete
 artifacts and publishing the final report BEFORE reviews begin.
+For `failed` in phase `baseline`, include one fixed `reason-code` in CandidateOutcome:
+`baseline-preflight-mismatch` (candidate/base/source/model binding differs),
+`baseline-provenance-unverified` (old-image point producer or SHA cannot be proven),
+`baseline-point-mismatch` (roster identity, topology or coverage is ambiguous),
+`baseline-eval-unverified` (required published eval or dataset evidence cannot be proven),
+`baseline-api-unavailable` (public evidence read failed), or `baseline-other` (none of these
+can be established). Select the first actual blocker, not a guessed cause. A failure before
+baseline work belongs in `resolve`, and a failed updated-image run belongs in `targeted` or
+`final-sweep`. Do not put free text, raw responses, private telemetry or transcripts in the
+code. The fixed code appears in sanitized diagnostics and the completion report.
 After finish returns a verified `validated` outcome, check for an existing exact `/use
 <verified-final-run-id>` comment, then post it once on this PR. Never post `/use` for any
 other outcome or any run except the verified final sweep.
