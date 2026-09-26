@@ -554,6 +554,30 @@
   {
     "type": "dispatch",
     "args": {
+      "num_tokens": 16,
+      "num_experts": 384,
+      "top_k": 8,
+      "hidden": 7168,
+      "dtype": "bf16",
+      "world_size": 4
+    },
+    "name": "kimik2.5"
+  },
+  {
+    "type": "combine",
+    "args": {
+      "num_tokens": 16,
+      "num_experts": 384,
+      "top_k": 8,
+      "hidden": 7168,
+      "dtype": "bf16",
+      "world_size": 4
+    },
+    "name": "kimik2.5"
+  },
+  {
+    "type": "dispatch",
+    "args": {
       "num_tokens": 4,
       "num_experts": 384,
       "top_k": 6,
@@ -670,6 +694,30 @@
       "world_size": 4
     },
     "name": "gptoss"
+  },
+  {
+    "type": "dispatch",
+    "args": {
+      "num_tokens": 3,
+      "num_experts": 384,
+      "top_k": 8,
+      "hidden": 7168,
+      "dtype": "bf16",
+      "world_size": 4
+    },
+    "name": "kimik2.5"
+  },
+  {
+    "type": "combine",
+    "args": {
+      "num_tokens": 3,
+      "num_experts": 384,
+      "top_k": 8,
+      "hidden": 7168,
+      "dtype": "bf16",
+      "world_size": 4
+    },
+    "name": "kimik2.5"
   },
   {
     "type": "dispatch",
@@ -934,6 +982,30 @@
       "world_size": 8
     },
     "name": "glm5"
+  },
+  {
+    "type": "dispatch",
+    "args": {
+      "num_tokens": 16,
+      "num_experts": 384,
+      "top_k": 8,
+      "hidden": 7168,
+      "dtype": "bf16",
+      "world_size": 8
+    },
+    "name": "kimik2.5"
+  },
+  {
+    "type": "combine",
+    "args": {
+      "num_tokens": 16,
+      "num_experts": 384,
+      "top_k": 8,
+      "hidden": 7168,
+      "dtype": "bf16",
+      "world_size": 8
+    },
+    "name": "kimik2.5"
   },
   {
     "type": "dispatch",

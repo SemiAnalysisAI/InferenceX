@@ -101,8 +101,8 @@ def _text_subconfig(raw: dict[str, Any]) -> dict[str, Any]:
     """Some configs nest the LM under `text_config` (Kimi, Qwen3.5 multimodal).
 
     Top-level architectures/model_type wins so family detection sees the brand
-    (e.g. a Kimi *ForConditionalGeneration) rather than the LM-class it reuses
-    (DeepseekV3ForCausalLM under the hood)."""
+    (e.g. KimiK25ForConditionalGeneration) rather than the LM-class it reuses
+    (Kimi K2.5 reuses DeepseekV3ForCausalLM under the hood)."""
     if "text_config" in raw and isinstance(raw["text_config"], dict):
         merged = dict(raw["text_config"])
         if raw.get("architectures"):
@@ -214,7 +214,7 @@ def _build_glm(cfg: dict[str, Any], name: str) -> Arch:
 
 
 def _build_kimi(cfg: dict[str, Any], name: str) -> Arch:
-    # Kimi: MLA + MoE. Same shape as DeepSeek.
+    # Kimi K2.5: MLA + MoE. Same shape as DeepSeek.
     return Arch(
         name=name,
         family="kimi",
