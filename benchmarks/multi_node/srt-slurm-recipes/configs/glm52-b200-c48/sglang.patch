@@ -1,0 +1,316 @@
+--- /dev/null
++++ b/python/sglang/srt/disaggregation/abort_quarantine.py
+@@ -0,0 +1,53 @@
++# SPDX-License-Identifier: Apache-2.0
++"""Fail-closed lifetime guard for the pinned GLM52 recovery route.
++
++The old NIXL ABORT_ACK does not prove that all queued/sibling writes ended.
++Failed requests retain their buffers until the owning native worker teardown.
++This does not restore serving capacity after transport failure.
++"""
++import os
++
++
++def enabled():
++    return os.environ.get("DYN_GLM52_PREFILL_FAILURE_CONTAINMENT") == "1"
++
++
++def mark_failed(manager, room):
++    if enabled():
++        # setdefault cannot overwrite a tombstone set installed by another
++        # transfer/control thread on this pinned CPython runtime.
++        manager.__dict__.setdefault("_glm52_failed_rooms", set()).add(room)
++
++
++def is_failed(manager, room):
++    return enabled() and room in getattr(manager, "_glm52_failed_rooms", ())
++
++
++def retain_prefill(req):
++    sender = getattr(req, "disagg_kv_sender", None)
++    manager = getattr(sender, "kv_mgr", None)
++    if manager is None or not is_failed(manager, req.bootstrap_room):
++        return False
++    if not hasattr(manager, "_glm52_held_requests"):
++        manager._glm52_held_requests = {}
++    manager._glm52_held_requests[req.rid] = req
++    return True
++
++
++def mark_request(req):
++    sender = getattr(req, "disagg_kv_sender", None)
++    manager = getattr(sender, "kv_mgr", None)
++    if manager is not None:
++        mark_failed(manager, req.bootstrap_room)
++
++
++def has_holds(scheduler):
++    if not enabled():
++        return False
++    prefill = getattr(scheduler, "disagg_prefill_bootstrap_queue", None)
++    manager = getattr(prefill, "kv_manager", None)
++    decode = getattr(scheduler, "disagg_decode_transfer_queue", None)
++    return bool(
++        getattr(manager, "_glm52_held_requests", None)
++        or getattr(decode, "_deferred_releases", None)
++    )
+--- a/python/sglang/srt/disaggregation/common/conn.py
++++ b/python/sglang/srt/disaggregation/common/conn.py
+@@ -1,4 +1,6 @@
+ from __future__ import annotations
++
++from sglang.srt.disaggregation import abort_quarantine
+ 
+ import asyncio
+ import concurrent.futures
+@@ -363,6 +365,11 @@
+         return self.request_status[bootstrap_room]
+ 
+     def update_status(self, bootstrap_room: int, status: KVPoll):
++        if status == KVPoll.Failed:
++            abort_quarantine.mark_failed(self, bootstrap_room)
++        elif abort_quarantine.is_failed(self, bootstrap_room):
++            # A completed non-last chunk must not resurrect an aborted room.
++            return
+         if bootstrap_room not in self.request_status:
+             # Do not resurrect a cleared entry with Failed: once clear() has
+             # popped the room from request_status, any late update_status(Failed)
+@@ -415,6 +422,9 @@
+ 
+     def _send_abort_ack(self, decode_ip: str, decode_port: int, room: int) -> None:
+         """Best-effort ack that this rank's transfer for an aborted room drained."""
++        if abort_quarantine.is_failed(self, room):
++            # Existing ACK accounting does not exclude future/sibling writes.
++            return
+         try:
+             na = NetworkAddress(decode_ip, decode_port)
+             self._send_multipart_locked(
+@@ -1358,6 +1368,8 @@
+         return KVPoll.Failed
+ 
+     def clear(self) -> None:
++        if abort_quarantine.is_failed(self.kv_mgr, self.bootstrap_room):
++            return
+         self.kv_mgr.request_status.pop(self.bootstrap_room, None)
+         if hasattr(self.kv_mgr, "req_to_decode_prefix_len"):
+             self.kv_mgr.req_to_decode_prefix_len.pop(self.bootstrap_room, None)
+--- a/python/sglang/srt/disaggregation/decode.py
++++ b/python/sglang/srt/disaggregation/decode.py
+@@ -19,6 +19,8 @@
+ """
+ 
+ from __future__ import annotations
++
++from sglang.srt.disaggregation import abort_quarantine
+ 
+ import hashlib
+ import logging
+@@ -2135,8 +2137,9 @@
+                 "(bootstrap_room=0)",
+                 status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+             )
+-            decode_req.kv_receiver.clear()
+-            decode_req.kv_receiver = None
++            if not abort_quarantine.enabled():
++                decode_req.kv_receiver.clear()
++                decode_req.kv_receiver = None
+             return
+         elif actual_room != expected_room:
+             # Real corruption detected (mismatch)
+@@ -2154,8 +2157,9 @@
+                 "Metadata corruption detected - bootstrap_room mismatch",
+                 status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+             )
+-            decode_req.kv_receiver.clear()
+-            decode_req.kv_receiver = None
++            if not abort_quarantine.enabled():
++                decode_req.kv_receiver.clear()
++                decode_req.kv_receiver = None
+             return
+ 
+         self._commit_hicache_local_restore_to_req(decode_req)
+@@ -2352,9 +2356,12 @@
+                 if self.scheduler.enable_hisparse:
+                     self.scheduler.hisparse_coordinator.request_finished(decode_req.req)
+                 if (
+-                    self.enable_deferred_kv_release
+-                    and decode_req.kv_receiver.kv_mgr.enable_deferred_decode_kv_release
+-                    and decode_req.kv_receiver.abort_notified
++                    abort_quarantine.enabled()
++                    or (
++                        self.enable_deferred_kv_release
++                        and decode_req.kv_receiver.kv_mgr.enable_deferred_decode_kv_release
++                        and decode_req.kv_receiver.abort_notified
++                    )
+                 ):
+                     # Decode-initiated abort: a prefill write may still target
+                     # these pages, so hold them until the drain ack or timeout.
+@@ -2391,7 +2398,11 @@
+                             decode_req.req
+                         )
+                     self._clean_hicache_prefetch_resources(decode_req)
+-                    release_kv_cache(decode_req.req, self.tree_cache, is_insert=False)
++                    if abort_quarantine.enabled():
++                        self._defer_release(decode_req)
++                        deferred_indices.add(i)
++                    else:
++                        release_kv_cache(decode_req.req, self.tree_cache, is_insert=False)
+                     if self.scheduler.metrics_reporter.enable_metrics:
+                         self.scheduler.metrics_collector.increment_transfer_failed_reqs()
+                 else:
+@@ -2463,6 +2474,17 @@
+         for decode_req, deadline, idx, required_acks in self._deferred_releases:
+             room = decode_req.req.bootstrap_room
+             kv_mgr = decode_req.kv_receiver.kv_mgr
++            if abort_quarantine.enabled():
++                # The client has already received FINISH_ABORT/500. A timeout
++                # cannot establish DMA quiescence or make these pages reusable.
++                if now >= deadline:
++                    logger.error(
++                        "Failed KV room %s remains quarantined; native worker teardown required",
++                        room,
++                    )
++                    deadline = float("inf")
++                still_held.append((decode_req, deadline, idx, required_acks))
++                continue
+             drained = kv_mgr.is_abort_release_safe(room, required_acks)
+             if not drained and now < deadline:
+                 still_held.append((decode_req, deadline, idx, required_acks))
+@@ -2486,6 +2508,9 @@
+ 
+     def release_memory_occupation(self):
+         """Clean up in-flight transfers before releasing GPU memory."""
++        # A live-engine memory reset is not transport teardown.
++        if abort_quarantine.enabled() and self._deferred_releases:
++            raise RuntimeError("Quarantined KV requires native worker teardown")
+         self.queue.clear()
+         # Pool is being torn down; drop held entries without per-request release.
+         self._deferred_releases.clear()
+--- a/python/sglang/srt/disaggregation/prefill.py
++++ b/python/sglang/srt/disaggregation/prefill.py
+@@ -18,6 +18,8 @@
+ """
+ 
+ from __future__ import annotations
++
++from sglang.srt.disaggregation import abort_quarantine
+ 
+ import hashlib
+ import logging
+@@ -130,6 +132,8 @@
+         req: The request object that may have a metadata_buffer_index allocated
+         allocator: The ReqToMetadataIdxAllocator instance to free the index
+     """
++    if abort_quarantine.retain_prefill(req):
++        return
+     if req.metadata_buffer_index >= 0:
+         allocator.free(req.metadata_buffer_index)
+         req.metadata_buffer_index = -1
+@@ -1026,6 +1030,8 @@
+         self: Scheduler, req: Req
+     ) -> Optional[Exception]:
+         """Conclude an inflight request whose KV transfer failed."""
++        # PP consensus can report failure while this local sender still writes.
++        abort_quarantine.mark_failed(req.disagg_kv_sender.kv_mgr, req.bootstrap_room)
+         error_message = (
+             f"Prefill transfer failed for request rank={self.ps.tp_rank} "
+             f"{req.rid=} {req.bootstrap_room=}"
+@@ -1058,10 +1064,13 @@
+         call this: a stale entry holds the unified-memory compaction gate closed
+         for the process lifetime.
+         """
++        if abort_quarantine.retain_prefill(req):
++            return
+         self.disagg_prefill_pending_chunk_rids.discard(req.rid)
+ 
+     def _retire_aborted_prefill_result(self: Scheduler, req: Req) -> bool:
+         """Release an aborted request when its last prefill result is safe."""
++        abort_quarantine.mark_request(req)
+         self.clear_pending_chunk_send(req)
+         owns_resources = (
+             req.kv.holds_kv or req.kv.holds_mamba or req.metadata_buffer_index >= 0
+@@ -1090,6 +1099,7 @@
+         return True
+ 
+     def handle_bootstrap_failure(self: Scheduler, req: Req) -> None:
++        abort_quarantine.mark_request(req)
+         self.clear_pending_chunk_send(req)
+         error_message = (
+             f"Prefill bootstrap failed for request rank={self.ps.tp_rank} "
+@@ -1424,7 +1434,8 @@
+         # A last chunk needs no entry: every `last_chunk=True` call site has
+         # already put the request on `disagg_prefill_inflight_queue`.
+         if last_chunk:
+-            self.disagg_prefill_pending_chunk_rids.discard(req.rid)
++            if not abort_quarantine.retain_prefill(req):
++                self.disagg_prefill_pending_chunk_rids.discard(req.rid)
+         else:
+             self.disagg_prefill_pending_chunk_rids.add(req.rid)
+ 
+--- a/python/sglang/srt/managers/scheduler.py
++++ b/python/sglang/srt/managers/scheduler.py
+@@ -18,6 +18,7 @@
+ import logging
+ import math
+ import os
++from sglang.srt.disaggregation import abort_quarantine
+ import signal
+ import sys
+ import time
+@@ -4708,7 +4709,7 @@
+         # Also skipped while deferred KV releases are pending: they hold pages out
+         # of the allocator by design, so the pool is transiently below `total` and
+         # would trip the idle leak invariant. Resumes once the holds resolve.
+-        deferred_pending = (
++        deferred_pending = abort_quarantine.has_holds(self) or (
+             self.disaggregation_mode == DisaggregationMode.DECODE
+             and self.disagg_decode_transfer_queue.has_pending_deferred_releases()
+         )
+@@ -4760,6 +4761,8 @@
+             self.metrics_reporter.record_scheduler_active()
+ 
+     def is_fully_idle(self, for_health_check=False) -> bool:
++        if not for_health_check and abort_quarantine.has_holds(self):
++            return False
+         # Health check piggybacks on running requests in process_output.
+         # Only running_batch + waiting_queue guarantee active GPU processing;
+         # disagg queues (bootstrap/prealloc/transfer) may have items without
+@@ -5190,7 +5193,10 @@
+             # This only works for requests that have not started anything.
+             # We still need to send something back to TokenizerManager to clean up the state.
+             req = self.waiting_queue.pop(i)
+-            self._release_aborted_request(req.rid)
++            if self.disaggregation_mode == DisaggregationMode.PREFILL:
++                abort_quarantine.mark_request(req)
++            if not abort_quarantine.retain_prefill(req):
++                self._release_aborted_request(req.rid)
+             self.beam_coordinator.retire_group(req)
+             # Without the initiator's reason the tokenizer falls back to a
+             # generic abort message.
+--- a/python/sglang/srt/mem_cache/common.py
++++ b/python/sglang/srt/mem_cache/common.py
+@@ -1,4 +1,6 @@
+ from __future__ import annotations
++
++from sglang.srt.disaggregation import abort_quarantine
+ 
+ import logging
+ from typing import TYPE_CHECKING, Any, NamedTuple, Optional, cast
+@@ -143,6 +145,8 @@
+ 
+ 
+ def maybe_cache_unfinished_req(req: Req, tree_cache: BasePrefixCache, **kwargs):
++    if abort_quarantine.retain_prefill(req):
++        return
+     if getattr(req, "skip_radix_cache_insert", False):
+         return
+ 
+@@ -236,6 +240,8 @@
+ 
+ 
+ def release_kv_cache(req: Req, tree_cache: BasePrefixCache, is_insert: bool = True):
++    if abort_quarantine.retain_prefill(req):
++        return
+     assert (not req.kv.holds_kv) == req.kv.is_kv_released
+     # MambaRadixCache may alloc mamba state before alloc KV cache
+     if not req.kv.holds_kv:

@@ -58,6 +58,50 @@ else
 fi
 echo "B200 Nscale launch path: $LAUNCH_PATH"
 
+check_env_vars MODEL_PREFIX FRAMEWORK PRECISION SPEC_DECODING
+USES_GLM52_RECOVERY=0
+if [[ "$LAUNCH_PATH" == "native-srt" && "$IS_AGENTIC" == "1" &&
+    "$MODEL_PREFIX" == "glm5.2" && "$FRAMEWORK" == "dynamo-sglang" &&
+    "$PRECISION" == "fp4" && "$SPEC_DECODING" == "mtp" ]]; then
+    USES_GLM52_RECOVERY=1
+fi
+
+USES_GLM52_C48_CONTAINMENT=0
+if [[ "$USES_GLM52_RECOVERY" == "1" && "$EVAL_ONLY" != "true" &&
+    "$CONFIG_FILE" == "recipes/glm5.2/sglang/b200-fp4/agentx/disagg-variants.yaml:override_1p4d_tp4_c48" ]]; then
+    USES_GLM52_C48_CONTAINMENT=1
+    if [[ -z "${GLM52_CONTAINMENT_PAYLOAD+x}" ]]; then
+        GLM52_CONTAINMENT_PAYLOAD="${HOME}/.cache/inferencex/glm52-b200-c48/27aa9a6eb223616d956dd7d507c0e26839cadcfb84339179898ff3a502ccbcba"
+    fi
+    echo "GLM-5.2 C48 containment payload: $GLM52_CONTAINMENT_PAYLOAD"
+    if [[ "$GLM52_CONTAINMENT_PAYLOAD" != /* || "$GLM52_CONTAINMENT_PAYLOAD" == *[:,[:space:]]* ]]; then
+        echo "Error: GLM52_CONTAINMENT_PAYLOAD must be an absolute path without whitespace, colons or commas" >&2
+        exit 1
+    fi
+    for required in \
+        "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs/glm52-b200-c48-containment.sh" \
+        "$GITHUB_WORKSPACE/runners/watch_glm52_b200_c48_cleanup.py" \
+        "$GLM52_CONTAINMENT_PAYLOAD/install_native_containment.py" \
+        "$GLM52_CONTAINMENT_PAYLOAD/inputs/integrated-candidate-file-hashes.json" \
+        "$GLM52_CONTAINMENT_PAYLOAD/wheels/build-output-receipt.json" \
+        "$GLM52_CONTAINMENT_PAYLOAD/wheels/ai_dynamo-1.5.0.dev20260909-py3-none-any.whl" \
+        "$GLM52_CONTAINMENT_PAYLOAD/wheels/ai_dynamo_runtime-1.5.0.dev20260909-cp310-abi3-manylinux_2_39_x86_64.whl"; do
+        if [[ ! -r "$required" ]]; then
+            echo "Error: required GLM-5.2 C48 containment input is missing: $required" >&2
+            exit 1
+        fi
+    done
+    # Reject an incomplete or foreign payload before reserving GPU resources.
+    (cd "$GLM52_CONTAINMENT_PAYLOAD" && sha256sum --check --status <<'PAYLOAD_SHA256'
+327f68b33957358b5a80c52817e2e4e924311a4abfc699af8093c9f48da311a0  install_native_containment.py
+5b7ea883d3f7b6188318ec83f96e88fb459dd784b05359c70925515962f7f7de  inputs/integrated-candidate-file-hashes.json
+27aa9a6eb223616d956dd7d507c0e26839cadcfb84339179898ff3a502ccbcba  wheels/build-output-receipt.json
+fa638cb209c6391e598c641a331839be6cd8551e9831e539d84ee172cb77554f  wheels/ai_dynamo-1.5.0.dev20260909-py3-none-any.whl
+5523aa8f7dcb2c5d5bd94043a758ad5fac204c2f40f54762ecea9080aa2b29b4  wheels/ai_dynamo_runtime-1.5.0.dev20260909-cp310-abi3-manylinux_2_39_x86_64.whl
+PAYLOAD_SHA256
+    ) || { echo "Error: GLM-5.2 C48 containment payload hash mismatch" >&2; exit 1; }
+fi
+
 # ---------------------------------------------------------------------------
 # Model resolution
 # ---------------------------------------------------------------------------
@@ -243,32 +287,39 @@ run_native_srt_lane() {
 
     USES_DCGM_POWER=0
     USES_AGENTX_POWER=0
-    _POWER_CONFIG_FILE="${CONFIG_FILE:-}"
-    if [[ "${EVAL_ONLY}" == "true" && -n "${EVAL_CONFIG_FILE:-}" ]]; then
-        _POWER_CONFIG_FILE="$EVAL_CONFIG_FILE"
-    fi
-    _RECIPE_REL="${_POWER_CONFIG_FILE%%:*}"
-    _RECIPE_SRC="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/${_RECIPE_REL#recipes/}"
-    if [[ -n "$_POWER_CONFIG_FILE" && -f "$_RECIPE_SRC" ]] && awk '
-        /^telemetry:/ { t = 1; next }
-        t && /^[^ ]/  { t = 0 }
-        t && /^  dcgm_exporter:/ { p = 1 }
-        t && /^  enabled: true$/        { e = 1 }
-        END { exit !(p && e) }
-    ' "$_RECIPE_SRC"; then
-        USES_DCGM_POWER=1
-    fi
-    if [[ "$USES_DCGM_POWER" == "1" && "$IS_AGENTIC" == "1" &&
-        "$MODEL_PREFIX" == "kimik3" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-vllm" ]]; then
-        USES_AGENTX_POWER=1
-    elif [[ "$USES_DCGM_POWER" == "1" && (
-        "${IS_AGENTIC}" == "1" ||
-        "$PRECISION" != "fp4" ||
-        ( "$MODEL_PREFIX" == "dsv4" && "$FRAMEWORK" != "dynamo-sglang" && "$FRAMEWORK" != "dynamo-vllm" ) ||
-        "$MODEL_PREFIX" != "dsv4"
-    ) ]]; then
-        echo "Error: B200 nscale dcgm-power requires a supported fixed-sequence lane or Kimi-K3 AgentX vLLM" >&2
-        exit 1
+    if [[ "$USES_GLM52_RECOVERY" == "1" ]]; then
+        if [[ "$EVAL_ONLY" == "true" && -n "${EVAL_CONFIG_FILE:-}" ]]; then
+            CONFIG_FILE="$EVAL_CONFIG_FILE"
+        fi
+        check_env_vars CONFIG_FILE
+    else
+        _POWER_CONFIG_FILE="${CONFIG_FILE:-}"
+        if [[ "${EVAL_ONLY}" == "true" && -n "${EVAL_CONFIG_FILE:-}" ]]; then
+            _POWER_CONFIG_FILE="$EVAL_CONFIG_FILE"
+        fi
+        _RECIPE_REL="${_POWER_CONFIG_FILE%%:*}"
+        _RECIPE_SRC="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/${_RECIPE_REL#recipes/}"
+        if [[ -n "$_POWER_CONFIG_FILE" && -f "$_RECIPE_SRC" ]] && awk '
+            /^telemetry:/ { t = 1; next }
+            t && /^[^ ]/  { t = 0 }
+            t && /^  dcgm_exporter:/ { p = 1 }
+            t && /^  enabled: true$/        { e = 1 }
+            END { exit !(p && e) }
+        ' "$_RECIPE_SRC"; then
+            USES_DCGM_POWER=1
+        fi
+        if [[ "$USES_DCGM_POWER" == "1" && "$IS_AGENTIC" == "1" &&
+            "$MODEL_PREFIX" == "kimik3" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-vllm" ]]; then
+            USES_AGENTX_POWER=1
+        elif [[ "$USES_DCGM_POWER" == "1" && (
+            "${IS_AGENTIC}" == "1" ||
+            "$PRECISION" != "fp4" ||
+            ( "$MODEL_PREFIX" == "dsv4" && "$FRAMEWORK" != "dynamo-sglang" && "$FRAMEWORK" != "dynamo-vllm" ) ||
+            "$MODEL_PREFIX" != "dsv4"
+        ) ]]; then
+            echo "Error: B200 nscale dcgm-power requires a supported fixed-sequence lane or Kimi-K3 AgentX vLLM" >&2
+            exit 1
+        fi
     fi
 
     export SERVED_MODEL_NAME=$MODEL
@@ -282,13 +333,23 @@ run_native_srt_lane() {
     export UV_INSTALL_DIR="$GITHUB_WORKSPACE/.local/bin"
     curl -LsSf https://astral.sh/uv/install.sh | sh
     export PATH="$UV_INSTALL_DIR:$PATH"
-    uv venv --quiet "$GITHUB_WORKSPACE/.venv"
-    source "$GITHUB_WORKSPACE/.venv/bin/activate"
-    uv pip install --quiet -e .
+    if [[ "$USES_GLM52_RECOVERY" == "1" ]]; then
+        install_srt_slurm "$GITHUB_WORKSPACE/.venv" || exit 1
+    else
+        uv venv --quiet "$GITHUB_WORKSPACE/.venv"
+        source "$GITHUB_WORKSPACE/.venv/bin/activate"
+        uv pip install --quiet -e .
+    fi
 
     if ! command -v srtctl &> /dev/null; then
         echo "Error: Failed to install srtctl" >&2
         exit 1
+    fi
+
+    if [[ "$USES_GLM52_RECOVERY" == "1" ]]; then
+        prepare_srt_power "$CONFIG_FILE" "$FRAMEWORK" || exit 1
+    else
+        SRTCTL_RECIPE_ARGS=("${SRTCTL_EVAL_ARGS[@]}")
     fi
 
     NGINX_IMAGE="nginx:1.27.4"
@@ -302,6 +363,9 @@ run_native_srt_lane() {
 
     PREFILL_SQUASH_FILE=""
     SRT_CLUSTER_ARGS=()
+    if [[ "$USES_GLM52_C48_CONTAINMENT" == "1" ]]; then
+        SRT_CLUSTER_ARGS+=(--mount "$GLM52_CONTAINMENT_PAYLOAD" /glm52-containment:ro)
+    fi
     if [[ $FRAMEWORK == "tilert" ]]; then
         : "${PREFILL_IMAGE:?PREFILL_IMAGE is required for TileRT prefill}"
         PREFILL_SQUASH_FILE="$SQUASH_DIR/$(echo "$PREFILL_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
@@ -352,7 +416,11 @@ run_native_srt_lane() {
     echo "Generated srtslurm.yaml:"
     cat srtslurm.yaml
 
-    run_srt_setup ARCH=x86_64
+    if [[ "$USES_GLM52_RECOVERY" == "1" ]]; then
+        run_srt_setup ARCH=x86_64 || exit 1
+    else
+        run_srt_setup ARCH=x86_64
+    fi
 
     # Read by srt-slurm's post-benchmark eval.
     export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
@@ -384,13 +452,31 @@ run_native_srt_lane() {
         sed -i 's/^  max_attempts: [0-9]*/  max_attempts: 720/' "$CONFIG_PATH"
     fi
 
-    if [[ "$USES_DCGM_POWER" == "1" ]]; then
+    if [[ "$USES_DCGM_POWER" == "1" && ( "$USES_GLM52_RECOVERY" != "1" || "$USES_AGENTX_POWER" != "1" ) ]]; then
         read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
         python "$GITHUB_WORKSPACE/runners/inject_srt_power_concurrencies.py" \
             "$CONFIG_PATH" "${POWER_CONCURRENCIES[@]}" || exit 1
     fi
 
     SRTCTL_PREFLIGHT_ARGS=()
+    if [[ "$USES_GLM52_RECOVERY" == "1" ]]; then
+        # Native overrides reach names inside the canonical base/variant recipes.
+        # Keep the submitted identity equal to the exact-job cleanup watcher's.
+        SRTCTL_PREFLIGHT_ARGS+=(--set "name=\"${RUNNER_NAME}\"")
+    fi
+    if [[ "$USES_GLM52_C48_CONTAINMENT" == "1" ]]; then
+        # Setup exports cannot activate their parent worker/frontend process.
+        SRTCTL_PREFLIGHT_ARGS+=(
+            --setup-script glm52-b200-c48-containment.sh
+            --set 'dynamo.install=false'
+            --set 'frontend.env.DYN_GLM52_PREFILL_FAILURE_CONTAINMENT="1"'
+            --set 'roles.prefill.env.DYN_GLM52_PREFILL_FAILURE_CONTAINMENT="1"'
+            --set 'roles.decode.env.DYN_GLM52_PREFILL_FAILURE_CONTAINMENT="1"'
+            --set 'roles.prefill.env.SGLANG_DISAGGREGATION_DEFERRED_DECODE_KV_RELEASE="1"'
+            --set 'roles.decode.env.SGLANG_DISAGGREGATION_DEFERRED_DECODE_KV_RELEASE="1"'
+            --set 'benchmark.env.AIPERF_REQUEST_TIMEOUT_SECONDS="1800"'
+        )
+    fi
     # These weights are staged on the Slurm compute nodes, not the login node.
     if [[ $MODEL_PREFIX == "kimik3" ]] ||
        [[ $MODEL_PREFIX == "glm5.2" ]] ||
@@ -398,7 +484,7 @@ run_native_srt_lane() {
         SRTCTL_PREFLIGHT_ARGS+=(--no-preflight)
     fi
 
-    SRTCTL_OUTPUT=$(apply_srt_recipe "$CONFIG_FILE" "$FRAMEWORK" "${SRTCTL_EVAL_ARGS[@]}" -f "$CONFIG_FILE" "${SRTCTL_PREFLIGHT_ARGS[@]}" --tags "b200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
+    SRTCTL_OUTPUT=$(apply_srt_recipe "$CONFIG_FILE" "$FRAMEWORK" "${SRTCTL_RECIPE_ARGS[@]}" -f "$CONFIG_FILE" "${SRTCTL_PREFLIGHT_ARGS[@]}" --tags "b200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
     echo "$SRTCTL_OUTPUT"
 
     JOB_ID=$(echo "$SRTCTL_OUTPUT" | grep -oP '✅ Job \K[0-9]+' || echo "$SRTCTL_OUTPUT" | grep -oP 'Job \K[0-9]+')
@@ -416,7 +502,12 @@ run_native_srt_lane() {
     LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
 
     SRT_JOB_RC=0
-    stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || SRT_JOB_RC=$?
+    if [[ "$USES_GLM52_C48_CONTAINMENT" == "1" ]]; then
+        python3 "$GITHUB_WORKSPACE/runners/watch_glm52_b200_c48_cleanup.py" \
+            "$JOB_ID" "$LOG_FILE" "$RUNNER_NAME" || SRT_JOB_RC=$?
+    else
+        stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || SRT_JOB_RC=$?
+    fi
     if [[ "$SRT_JOB_RC" != "0" && "$USES_AGENTX_POWER" != "1" ]]; then
         exit "$SRT_JOB_RC"
     fi

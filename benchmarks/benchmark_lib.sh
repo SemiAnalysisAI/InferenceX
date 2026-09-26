@@ -3245,6 +3245,22 @@ build_replay_cmd() {
     local result_dir="$1"
     local duration="$DURATION"
     local warmup_requests_per_lane="${AIPERF_WARMUP_REQUESTS_PER_LANE}"
+    local request_timeout=""
+    if [[ -n "${AIPERF_REQUEST_TIMEOUT_SECONDS:-}" ]]; then
+        request_timeout=$(python3 - "$AIPERF_REQUEST_TIMEOUT_SECONDS" <<'PYTIMEOUT'
+import math
+import sys
+
+try:
+    value = float(sys.argv[1])
+    if not math.isfinite(value) or value <= 0:
+        raise ValueError
+except ValueError:
+    sys.exit("ERROR: AIPERF_REQUEST_TIMEOUT_SECONDS must be positive and finite")
+print(value)
+PYTIMEOUT
+        ) || return 1
+    fi
 
     # Fast mode: one advance per lane and a 20-minute profile.
     if [[ "${AIPERF_EXPERIMENTAL_FAST}" == "1" ]]; then
@@ -3275,6 +3291,10 @@ build_replay_cmd() {
     REPLAY_CMD+=" --tokenizer $MODEL"
     REPLAY_CMD+=" --concurrency $CONC"
     REPLAY_CMD+=" --benchmark-duration $duration"
+    if [[ -n "$request_timeout" ]]; then
+        # An operational failure deadline, never a shortened success window.
+        REPLAY_CMD+=" --request-timeout-seconds $request_timeout"
+    fi
     REPLAY_CMD+=" --stats-interval 30"
     REPLAY_CMD+=" --random-seed 42"
     # Live abort threshold; recipes with correlated low-concurrency trajectories
