@@ -102,6 +102,7 @@ def watch(job_id, log_path, job_name):
     armed_at = cancelled_at = terminal_at = None
     inspection_failures = 0
     verified_owner = False
+    worker_exit_recorded = False
     while True:
         now = time.monotonic()
         for path in (log_path, log_path.parent / "benchmark.out"):
@@ -127,6 +128,13 @@ def watch(job_id, log_path, job_name):
             inspection_failures = 0
             receipt["last_job"] = raw.strip()
             receipt["last_active_steps"] = steps.splitlines()
+            # batch/extern remain while CPU reports are generated after worker
+            # cleanup. Every other step (including unknown IDs) remains guarded.
+            worker_steps = [
+                step for step in steps.splitlines()
+                if step not in {f"{job_id}.batch", f"{job_id}.extern"}
+            ]
+            receipt["last_worker_steps"] = worker_steps
             if not verified_owner:
                 verified_owner = True
                 record("ownership_verified")
@@ -148,6 +156,9 @@ def watch(job_id, log_path, job_name):
             continue
 
         state = fields.get("JobState", "").split("+", 1)[0]
+        if armed_at is not None and not worker_steps and not worker_exit_recorded:
+            worker_exit_recorded = True
+            record("workload_steps_exited")
         if state in TERMINAL:
             if not steps:
                 receipt["status"] = "terminal_no_active_steps"
@@ -178,7 +189,11 @@ def watch(job_id, log_path, job_name):
                     reason="Exact-job cancellation did not reach terminal/no-active-steps",
                 )
                 return 1
-        elif armed_at is not None and now - armed_at >= GRACE_SECONDS:
+        elif (
+            armed_at is not None
+            and now - armed_at >= GRACE_SECONDS
+            and worker_steps
+        ):
             # Revalidated this exact job and output immediately above. Normal
             # scancel cancels the allocation (not just its local srun client).
             try:

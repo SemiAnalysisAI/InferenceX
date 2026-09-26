@@ -25,6 +25,7 @@ def run_watch(
     owner="valid",
     scheduler="normal",
     terminal_at=None,
+    remaining_steps=None,
 ):
     log = tmp_path / "logs/sweep_123.log"
     log.parent.mkdir()
@@ -72,7 +73,11 @@ def run_watch(
             return subprocess.CompletedProcess(
                 args,
                 0,
-                "" if terminal and scheduler != "terminal_active_steps" else "123.0\n",
+                ""
+                if terminal and scheduler != "terminal_active_steps"
+                else remaining_steps
+                if remaining_steps is not None and clock[0] >= 100
+                else "123.0\n",
                 "",
             )
         if args[0] == "scancel":
@@ -184,8 +189,9 @@ def test_ownership_is_rechecked_before_cancellation(tmp_path, monkeypatch):
     assert not any(args[0] == "scancel" for _, args in calls)
 
 
+@pytest.mark.parametrize("remaining_steps", ["123.0\n", "123.batch\n123.extern\n"])
 def test_terminal_allocation_with_active_steps_does_not_verify_cleanup(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, remaining_steps
 ):
     result, receipt, calls = run_watch(
         tmp_path,
@@ -193,7 +199,42 @@ def test_terminal_allocation_with_active_steps_does_not_verify_cleanup(
         marker="INFO Cleanup\n",
         scheduler="terminal_active_steps",
         terminal_at=100,
+        remaining_steps=remaining_steps,
     )
     assert result == 1 and receipt["status"] == "cleanup_unverified"
     assert not any(args[0] == "scancel" for _, args in calls)
     assert calls[-1][0] == 300
+
+
+@pytest.mark.parametrize("remaining_steps", ["123.batch\n123.extern\n", ""])
+def test_report_generation_after_worker_exit_can_outlast_cleanup_grace(
+    tmp_path, monkeypatch, remaining_steps
+):
+    result, receipt, calls = run_watch(
+        tmp_path,
+        monkeypatch,
+        marker="INFO Cleanup\n",
+        remaining_steps=remaining_steps,
+        terminal_at=1500,
+    )
+    assert result == 0
+    assert not any(args[0] == "scancel" for _, args in calls)
+    assert receipt["status"] == "terminal_no_active_steps"
+    assert calls[-1][0] == 1500  # still wait for allocation exit, not just workers
+
+
+@pytest.mark.parametrize("remaining_steps", ["123.batch\n123.extern\n123.44\n", "123.unknown\n"])
+def test_workload_or_unknown_steps_still_trigger_exact_job_cleanup(
+    tmp_path, monkeypatch, remaining_steps
+):
+    result, receipt, calls = run_watch(
+        tmp_path,
+        monkeypatch,
+        marker="INFO Cleanup\n",
+        remaining_steps=remaining_steps,
+    )
+    assert result == 1
+    assert [(at, args) for at, args in calls if args[0] == "scancel"] == [
+        (300, ("scancel", "123"))
+    ]
+    assert receipt["status"] == "terminal_no_active_steps"

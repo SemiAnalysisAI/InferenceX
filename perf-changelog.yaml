@@ -9020,3 +9020,12 @@
     - "Preserve GLM-5.2 B200 recovery setup, job identity and required PowerX when selecting consolidated recipes and the canonical AgentX benchmark command."
     - "为 GLM-5.2 B200 的合并配方及规范 AgentX 命令保留恢复安装、作业身份和必需 PowerX。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3400
+
+- config-keys:
+    - glm5.2-fp4-b200-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Keep GLM-5.2 B200 C48 post-run report generation alive after workload steps exit; retain exact-job cancellation for lingering workload steps and terminal-allocation cleanup verification."
+    - "GLM-5.2 B200 C48 的工作步骤退出后允许生成报告；保留对残留工作步骤的精确作业取消，以及分配终止的清理验收。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3400
