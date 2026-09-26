@@ -1,0 +1,14 @@
+diff --git a/configs/patches/pr56318-overlay-check.sh b/configs/patches/pr56318-overlay-check.sh
+new file mode 100644
+index 000000000..000000001
+--- /dev/null
++++ b/configs/patches/pr56318-overlay-check.sh
+@@ -0,0 +1,8 @@
++#!/bin/bash
++# Verify PR56318 validation overlay checksums before engine start.
++# A no-op when run on images that do not carry the overlay.
++set -euo pipefail
++OVERLAY=/opt/pr56318-validation/validation-overlay.sha256
++if [ -f "$OVERLAY" ]; then
++    sha256sum -c "$OVERLAY"
++fi

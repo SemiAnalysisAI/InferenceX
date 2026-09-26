@@ -1,0 +1,127 @@
+# PR56318 cache-source validation: DeepSeek-V4-Pro TP8/MTP3 on B200 with
+# three KV offload modes (native DRAM, Simple NVMe, native DRAM+NVMe).
+# One variant per search-space row.
+base:
+  schema: 2
+  name: dsv4-fp4-b200-vllm-cache-sources
+  model:
+    path: hf:deepseek-ai/DeepSeek-V4-Pro
+    container: cquil11/vllm-cache-sources@sha256:6f9e476f6a1e1c25ac9bc1a863329538db465812fb4ac18c6553e988eae09a56
+    precision: fp4
+  resources:
+    gpu_type: b200
+    gpus_per_node: 8
+  frontend:
+    type: vllm
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine:
+    type: vllm
+    connector: null
+  health_check:
+    interval_seconds: 10
+    max_attempts: 720
+  setup_script: pr56318-overlay-check.sh
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      args:
+        served-model-name: deepseek-ai/DeepSeek-V4-Pro
+        trust-remote-code: true
+        kv-cache-dtype: fp8
+        block-size: 256
+        max-model-len: 1048576
+        gpu-memory-utilization: 0.85
+        numa-bind: true
+        enable-cumem-allocator: true
+        no-enable-flashinfer-autotune: true
+        tokenizer-mode: deepseek_v4
+        tool-call-parser: deepseek_v4
+        enable-auto-tool-choice: true
+        reasoning-parser: deepseek_v4
+        attention-config: '{"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true,"indexer_kv_dtype":"mxfp4"}'
+        speculative-config: '{"method":"mtp","num_speculative_tokens":3}'
+        no-disable-hybrid-kv-cache-manager: true
+        disable-uvicorn-access-log: true
+        tensor-parallel-size: 8
+        data-parallel-size: 1
+      env:
+        VLLM_ENGINE_READY_TIMEOUT_S: '3600'
+        VLLM_PREFIX_CACHE_RETENTION_INTERVAL: '32768'
+        VLLM_USE_V2_MODEL_RUNNER: '1'
+        VLLM_USE_RUST_FRONTEND: '0'
+        VLLM_DSV4_MEGA_FP8_COMBINE: '1'
+        VLLM_RPC_TIMEOUT: '600000'
+        PYTHONHASHSEED: '42'
+        TORCH_CUDA_ARCH_LIST: '10.0'
+        PYTHONNOUSERSITE: '1'
+        VLLM_FLOAT32_MATMUL_PRECISION: high
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
+    env:
+      MODEL: deepseek-ai/DeepSeek-V4-Pro
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:prompt_tokens_cached_by_source'
+
+# ---------- Variant 1: TP8 c8 native DRAM ----------
+# max-num-seqs = 2 * CONC = 16; capture sizes = {4*n for n=1..16} ∪ {100..500}
+override_tp8_c8_dram_native:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        max-num-seqs: 16
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,100,200,300,400,500]}'
+        kv-transfer-config: '{"kv_connector":"OffloadingConnector","kv_role":"kv_both","kv_connector_extra_config":{"spec_name":"TieringOffloadingSpec","cpu_bytes_to_use":128000000000,"secondary_tiers":[]}}'
+  benchmark:
+    env:
+      CONC: '8'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '128'
+
+# ---------- Variant 2: TP8 c14 Simple NVMe ----------
+# max-num-seqs = 2 * CONC = 28; disk_capacity_bytes = 1e12 / 8
+override_tp8_c14_nvme_simple:
+  container_mounts:
+    "/scratch/inferencex-kv-{job_id}": "/kv-offload"
+  host_setup:
+    commands: ["mkdir -m 700 /scratch/inferencex-kv-$SLURM_JOB_ID"]
+    teardown: ["rm -rf /scratch/inferencex-kv-$SLURM_JOB_ID"]
+    nodes: workers
+  roles:
+    agg:
+      gpus: 8
+      args:
+        max-num-seqs: 28
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,200,300,400,500]}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"kv_offload_backend":"disk","disk_path":"/kv-offload/cache.bin","disk_capacity_bytes":125000000000,"disk_buffer_slots":4,"lazy_offload":false}}'
+  benchmark:
+    env:
+      CONC: '14'
+      KV_OFFLOADING: nvme
+
+# ---------- Variant 3: TP8 c14 native DRAM + NVMe ----------
+# max-num-seqs = 2 * CONC = 28; cpu_bytes = 128e9, fs tier at /kv-offload
+override_tp8_c14_dramnvme_native:
+  container_mounts:
+    "/scratch/inferencex-kv-{job_id}": "/kv-offload"
+  host_setup:
+    commands: ["mkdir -m 700 /scratch/inferencex-kv-$SLURM_JOB_ID"]
+    teardown: ["rm -rf /scratch/inferencex-kv-$SLURM_JOB_ID"]
+    nodes: workers
+  roles:
+    agg:
+      gpus: 8
+      args:
+        max-num-seqs: 28
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,200,300,400,500]}'
+        kv-transfer-config: '{"kv_connector":"OffloadingConnector","kv_role":"kv_both","kv_connector_extra_config":{"spec_name":"TieringOffloadingSpec","cpu_bytes_to_use":128000000000,"secondary_tiers":[{"type":"fs","root_dir":"/kv-offload","locality":"LOCAL"}]}}'
+  benchmark:
+    env:
+      CONC: '14'
+      KV_OFFLOADING: dram+nvme
+      TOTAL_CPU_DRAM_GB: '128'
