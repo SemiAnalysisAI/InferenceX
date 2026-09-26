@@ -9052,3 +9052,10 @@
   description:
     - "Retain the branch Kimi MI355X grid through native SRT-Slurm variants, including no-draft DCP8, after removal of its legacy launcher"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3156
+
+- config-keys:
+    - minimaxm3-fp4-b200-trtllm-agentic-mtp
+    - minimaxm3-fp4-b300-trtllm-agentic-mtp
+  description:
+    - "Qualify official TRT 1.3.0rc29.dev202609260000 with native tool evals; B200 eager prefill, B300 compiled prefill; no runtime engine patches"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3156

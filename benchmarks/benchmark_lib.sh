@@ -1700,6 +1700,13 @@ _run_bfcl_smoke_eval() {
 }
 
 _skip_bfcl_for_trt() {
+    # Isolated stock-image qualification only; retain the production skip elsewhere.
+    if [[ "${FRAMEWORK:-}" == trt && "${EVAL_ONLY:-}" == true &&
+          "${MODEL:-}" == nvidia/MiniMax-M3-NVFP4 &&
+          "${EVAL_SUITE:-}" == bfcl_vllm_minimax_m3 &&
+          "${IMAGE:-}" == nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc29.dev202609260000 ]]; then
+        return 1
+    fi
     case "${FRAMEWORK:-}" in
         trt|dynamo-trt)
             echo "SKIP: BFCL is disabled for ${FRAMEWORK}; no evaluation score was produced."
