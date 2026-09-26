@@ -595,7 +595,7 @@ def test_speedbench_zip_override_selects_cell(tmp_path):
         "THINKING": "off", "MTP": "2",
     }
     # The workflow provides an explicit selector: select cell [1] (MTP=2).
-    config, selected = select_recipe(f"{path}:zip_override_mtp[1]", env)
+    config, _ = select_recipe(f"{path}:zip_override_mtp[1]", env)
     assert "zip_override_mtp[1]" in config
     # Verify runtime_arguments works on the selected cell.
     argv = runtime_arguments(f"{path}:zip_override_mtp[1]", env)
@@ -632,7 +632,10 @@ def test_speedbench_runtime_thinking_stays_string_through_srtctl_set(mode):
     # The workflow binds THINKING per cell via --set; srtctl dumps the result
     # and reloads it as YAML 1.1, where a bare on/off becomes a boolean.
     from srtctl.core.overrides import apply_overrides_to_recipe, parse_overrides
-    from srtctl.core.yaml_utils import dump_yaml_with_comments, load_yaml_text_with_comments
+    from srtctl.core.yaml_utils import (
+        dump_yaml_with_comments,
+        load_yaml_text_with_comments,
+    )
 
     recipe = Path("benchmarks/single_node/srt-slurm-recipes/dsv4/vllm/b300-fp4-speedbench/speedbench.yaml")
     env = {
