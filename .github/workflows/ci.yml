@@ -10,8 +10,6 @@ on:
       - 'pyproject.toml'
       - 'uv.lock'
       - '.python-version'
-      - '.mcp.json'
-      - '.github/mcp-ci.json'
       - 'infx/ruff.toml'
       - '**/pytest.ini'
       - 'utils/srt-slurm'
@@ -60,21 +58,6 @@ jobs:
           git submodule update --init utils/srt-slurm
           uv sync --locked --all-extras --group test --no-editable
           echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
-
-      - name: Verify MCP server compatibility
-        if: matrix.check == 'Tests'
-        run: |
-          python - <<'PY'
-          import asyncio
-          import runpy
-
-          module = runpy.run_path(".claude/mcp/server.py")
-          server = module["InferenceXMCPServer"]()
-          tools = asyncio.run(server.list_tools())
-          assert any(tool.name == "list_versions" for tool in tools)
-          assert asyncio.run(server.list_resources()) == []
-          print("MCP server construction and discovery passed.")
-          PY
 
       - name: Run tests
         if: matrix.check == 'Tests'

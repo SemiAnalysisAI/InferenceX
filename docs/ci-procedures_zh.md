@@ -322,11 +322,7 @@ gh run rerun <RUN_ID> --repo SemiAnalysisAI/InferenceX
 CPU 索引获取 PyTorch 包，其他依赖从 PyPI 获取，因为 CPU 索引中的这些依赖
 镜像缺少上传时间戳。该 Job 确认安装的 Wheel 不包含 CUDA 或 ROCm 后端。
 
-审阅 Workflow 共用 [`.github/mcp-ci.json`](../.github/mcp-ci.json)，
-通过 uv 和原有依赖文件启动 Python MCP Server。Server 使用 MCP 1.x API；
-依赖文件排除不兼容的 SDK 2.x，CI 在不克隆仓库的情况下验证 Server 构造与发现功能。
-Checkout Ref、凭据和审阅
-策略保持不变。矩阵和 CollectiveX 单元测试现在也会在草稿 PR 上运行，
+矩阵和 CollectiveX 单元测试现在也会在草稿 PR 上运行，
 以便在请求审阅前验证 CI 环境变更。
 
 仅依赖标准库的辅助程序继续使用 Runner 自带的 Python。基准容器及其框架
