@@ -11,6 +11,10 @@ SCORING = {"softmax", "sigmoid", "sqrtsoftplus"}
 ACTIVATIONS = {"silu", "gelu", "gelu_tanh", "swigluoai", "situ", "swiglustep"}
 GATE_DTYPES = {"bf16", "fp32"}
 DISTRIBUTIONS = {"natural", "balanced", "single_hot"}
+# vLLM's FusedMoEQuantConfig slots: a1 the experts' input, w1 the fused gate/up weight,
+# w2 the down weight, a2 the intermediate activation
+EXPERT_OPERANDS = ("a1", "w1", "w2", "a2")
+SHARED_OPERANDS = ("a1", "w1", "w2")
 
 
 def _keys(d: Any, where: str, required: set[str], optional: set[str] = frozenset()) -> None:
@@ -31,14 +35,13 @@ def _number(v: Any, where: str) -> None:
         raise ValueError(f"{where} must be a number or null, got {v!r}")
 
 
-def _check_quant(q: Any, where: str, operands: set[str]) -> None:
-    _keys(q, where, set(operands))
+def _check_operands(d: dict, where: str, operands: tuple[str, ...]) -> None:
     for name in operands:
-        check_operand(q[name], f"{where}.{name}")
+        check_operand(d[name], f"{where}.{name}")
 
 
 def _check_experts(e: Any) -> None:
-    _keys(e, "experts", {"num", "top_k", "inter", "quant"}, {"bias", "latent", "latent_norm", "zero"})
+    _keys(e, "experts", {"num", "top_k", "inter", *EXPERT_OPERANDS}, {"bias", "latent", "latent_norm", "zero"})
     for k in ("num", "top_k", "inter"):
         _pos_int(e[k], f"experts.{k}")
     if e["top_k"] > e["num"]:
@@ -52,7 +55,7 @@ def _check_experts(e: Any) -> None:
             raise ValueError(f"experts.{k} must be a bool")
     if e.get("latent_norm") and not e.get("latent"):
         raise ValueError("experts.latent_norm needs experts.latent")
-    _check_quant(e["quant"], "experts.quant", {"x", "w13", "w2", "a2"})
+    _check_operands(e, "experts", EXPERT_OPERANDS)
 
 
 def _check_router(r: Any, num_experts: int) -> None:
@@ -96,12 +99,12 @@ def _check_activation(a: Any) -> None:
 
 
 def _check_shared(s: Any) -> None:
-    _keys(s, "shared", {"count", "inter", "quant"}, {"gate"})
+    _keys(s, "shared", {"count", "inter", *SHARED_OPERANDS}, {"gate"})
     _pos_int(s["count"], "shared.count")
     _pos_int(s["inter"], "shared.inter")
     if s.get("gate") not in (None, "sigmoid"):
         raise ValueError("shared.gate must be null or 'sigmoid'")
-    _check_quant(s["quant"], "shared.quant", {"x", "w13", "w2"})
+    _check_operands(s, "shared", SHARED_OPERANDS)
 
 
 def _check_routing(r: Any) -> None:
@@ -126,10 +129,10 @@ class MoeArgs:
     the combined output; residual add and norms are outside it. Operand
     descriptors are the gemm op's ({"dtype", "scale"?, "scale2"?, "symmetric"?}).
 
-    experts: {"num": E, "top_k": K, "inter": I, "quant": {x, w13, w2, a2},
+    experts: {"num": E, "top_k": K, "inter": I, "a1", "w1", "w2", "a2",
               "bias"?: bool, "latent"?: L, "latent_norm"?: bool, "zero"?: n}
-      quant.x is the experts' input as they consume it, w13 the fused gate/up
-      weight, w2 the down weight, a2 the intermediate activation. latent: experts
+      a1 is the experts' input as they consume it, w1 the fused gate/up weight
+      [2I, H], w2 the down weight [H, I], a2 the intermediate activation. latent: experts
       run at width L with bf16 H->L / L->H projections (latent_norm: RMSNorm on the
       routed latent output before L->H). zero: identity experts.
     router: {"gate": {"dtype", "logits"?}, "scoring": softmax|sigmoid|sqrtsoftplus,
@@ -140,10 +143,10 @@ class MoeArgs:
       gate.dtype is the router weight's dtype, gate.logits the dtype of the logits it
       produces (default: gate.dtype).
     activation: {"kind", "gated"?: default true, "interleaved"?: gate/up rows interleaved
-                 in w13 (default false: [gate; up]), "limit"?, "alpha"?, "beta"?}
+                 in w1 (default false: [gate; up]), "limit"?, "alpha"?, "beta"?}
       swigluoai: alpha scales the gate sigmoid, beta offsets up, limit clamps. situ: alpha and beta
       soft-cap the gate and up halves (alpha*tanh(g/alpha)*sigmoid(g) * beta*tanh(u/beta)).
-    shared: null | {"count", "inter", "quant": {x, w13, w2}, "gate"?: null|"sigmoid"}
+    shared: null | {"count", "inter", "a1", "w1", "w2", "gate"?: null|"sigmoid"}
     routing: {"distribution": "natural" | "balanced" | "single_hot" | {"kind": "zipf", "s"}, "seed"}
       natural: routing is whatever the router computes on seeded random inputs.
       Otherwise expert choice is forced: balanced spreads tokens evenly over experts,
