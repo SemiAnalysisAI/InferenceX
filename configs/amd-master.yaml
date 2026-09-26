@@ -654,7 +654,7 @@ dsr1-fp8-mi355x-sglang-disagg-mtp:
 
 # Kimi-K3 MXFP4 agentic-coding benchmark on MI355X via ATOM with DSpark
 # speculative decoding. Acceptance is pinned to the committed golden curve in
-# golden_al_distribution/kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml
+# infx/golden_al_distribution/kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml
 # at both draft lengths used here: 7 draft tokens -> AL 3.84 at concurrency 1 and 4,
 # 3 draft tokens -> AL 3.00 at concurrency 14 and 16.
 # Companion to kimik3-fp4-mi355x-vllm-agentic-mtp: same checkpoint, same runner.
@@ -1411,7 +1411,7 @@ dsv41flash-fp4-mi355x-vllm-agentic-dspark:
 # and draft length (docs/PR_REVIEW_CHECKLIST.md), and a submission may not
 # substitute its own target. Nothing about that target is written here:
 # AGENTS.md forbids hard-coding an acceptance length in a master config, so
-# server_tilert.sh reads golden_al_distribution/glm5.3_mtp.yaml at launch and
+# server_tilert.sh reads infx/golden_al_distribution/glm5.3_mtp.yaml at launch and
 # fails the run if the curve or the draft length is missing.
 # The curve is consumed in the same units as every other framework here, and
 # AgentX replays run with thinking on.

@@ -304,7 +304,7 @@ B300 uses the same minimum capture size at c1/c2/c4. Its c1 CI comparison reduce
 
 The AgentX-only `dsv41flash-fp4-<sku>-vllm-agentic-dspark` recipes use
 `vllm/vllm-openai:deepseekv41-flash-0909` at TP4 on Blackwell SKUs with native five-token DSpark,
-probabilistic drafting. Throughput uses the [committed golden AL](../golden_al_distribution/dsv41flash_dspark.yaml) of 3.51 for thinking on and five draft tokens, with synthetic rejection sampling and adaptive verification disabled. Accuracy evals retain real block rejection and adaptive verification. `--engram-config '{"cpu_offload":true}'`
+probabilistic drafting. Throughput uses the [committed golden AL](../infx/golden_al_distribution/dsv41flash_dspark.yaml) of 3.51 for thinking on and five draft tokens, with synthetic rejection sampling and adaptive verification disabled. Accuracy evals retain real block rejection and adaptive verification. `--engram-config '{"cpu_offload":true}'`
 stores Engram embedding tables in pinned host DRAM accessed through UVA;
 `kv-offloading: none` describes the separate, GPU-resident KV cache. MXFP4 expert
 weights determine the recipe's `precision: fp4` label.
@@ -356,7 +356,7 @@ for diagnostics. GPU sweep and eval validation is pending.
 `dsv41flash-fp4-h200-vllm-agentic-dspark` is the H200 AgentX arm of the
 DeepSeek-V4.1-Flash recipe. It shares `vllm/vllm-openai:deepseekv41-flash-0909` and the
 text-only serving script with the Blackwell arms: `deepseek_v41` tokenizer and parsers,
-1M context, native five-token DSpark with probabilistic drafting. Throughput uses the [committed golden AL](../golden_al_distribution/dsv41flash_dspark.yaml) of 3.51 for thinking on and five draft tokens, with synthetic rejection sampling and adaptive verification disabled. Accuracy evals retain real block rejection and adaptive verification.
+1M context, native five-token DSpark with probabilistic drafting. Throughput uses the [committed golden AL](../infx/golden_al_distribution/dsv41flash_dspark.yaml) of 3.51 for thinking on and five draft tokens, with synthetic rejection sampling and adaptive verification disabled. Accuracy evals retain real block rejection and adaptive verification.
 
 The arm runs **TP8**, not the upstream TP4. Upstream verifies TP4 on one GB200 NVL4 tray
 and states that the same layout becomes TP8 per role on 8-GPU nodes, which is what an
@@ -397,7 +397,7 @@ port is occupied; serving, replay, metrics, and eval share that endpoint.
 
 ### DeepSeek-V4.1-Flash DSpark on H100
 
-Throughput uses the [committed golden AL](../golden_al_distribution/dsv41flash_dspark.yaml) of 3.51 for thinking on and five draft tokens, with synthetic rejection sampling and adaptive verification disabled. Accuracy evals retain real block rejection and adaptive verification.
+Throughput uses the [committed golden AL](../infx/golden_al_distribution/dsv41flash_dspark.yaml) of 3.51 for thinking on and five draft tokens, with synthetic rejection sampling and adaptive verification disabled. Accuracy evals retain real block rejection and adaptive verification.
 
 `dsv41flash-fp4-h100-vllm-agentic-dspark` is the H100 AgentX arm of the
 DeepSeek-V4.1-Flash recipe, added after the H200 arm and deliberately separate from
@@ -527,7 +527,7 @@ inspect startup's actual resident/huge-page counts before claiming a benefit.
 DSpark is the checkpoint's own bundled draft. SGLang exposes no EAGLE or MTP path and no
 `--speculative-num-steps` knob for it; the recipes pass `--speculative-algorithm DSPARK
 --speculative-dspark-block-size 5`. Throughput uses the same
-[committed golden AL](../golden_al_distribution/dsv41flash_dspark.yaml) of 3.51 for thinking
+[committed golden AL](../infx/golden_al_distribution/dsv41flash_dspark.yaml) of 3.51 for thinking
 on and five draft tokens through `SGLANG_SIMULATE_ACC_LEN` with `match-expected` and
 `real-draft-token`; accuracy evals keep real verification. Thinking is off by default in
 SGLang for this model, so the scripts set `SGLANG_DEFAULT_THINKING=1` and
@@ -672,7 +672,7 @@ A configuration is ready for sweep only when the executable files agree, the exa
 
 ## DeepSeek-V4.1-Flash on MI355X
 
-The `dsv41flash-fp4-mi355x-vllm-agentic-dspark` recipe extends [#2958](https://github.com/SemiAnalysisAI/InferenceX/pull/2958) to MI355X AgentX: TP4 and TP2, concurrency 1–128, native five-token DSpark. Throughput uses the [committed golden AL](../golden_al_distribution/dsv41flash_dspark.yaml) of 3.51 for thinking on and five draft tokens, with synthetic rejection sampling and adaptive verification disabled. Accuracy evals retain real block rejection but, unlike the CUDA arms, also keep adaptive verification disabled: it trims verification requests on device, which the ROCm `DeepseekV4IndexerBackend` does not support, and the engine refused to start with it enabled ([run 34651830283](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34651830283)). FP4 describes the MXFP4 experts; the checkpoint also contains MXFP8 weights.
+The `dsv41flash-fp4-mi355x-vllm-agentic-dspark` recipe extends [#2958](https://github.com/SemiAnalysisAI/InferenceX/pull/2958) to MI355X AgentX: TP4 and TP2, concurrency 1–128, native five-token DSpark. Throughput uses the [committed golden AL](../infx/golden_al_distribution/dsv41flash_dspark.yaml) of 3.51 for thinking on and five draft tokens, with synthetic rejection sampling and adaptive verification disabled. Accuracy evals retain real block rejection but, unlike the CUDA arms, also keep adaptive verification disabled: it trims verification requests on device, which the ROCm `DeepseekV4IndexerBackend` does not support, and the engine refused to start with it enabled ([run 34651830283](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34651830283)). FP4 describes the MXFP4 experts; the checkpoint also contains MXFP8 weights.
 
 Follow the AMD overrides in the merged [upstream recipe #968](https://github.com/vllm-project/recipes/pull/968): `VLLM_ROCM_USE_AITER=1`, `VLLM_ROCM_USE_AITER_MOE=1`, and `--moe-backend aiter`. The generic AITER selector lets vLLM pick the CK a8w4 experts, matching the DSV4-Pro MI355X recipe. The recipe pins `semianalysis_cc_traces_weka_062126` (the unfiltered corpus) via `WEKA_LOADER_OVERRIDE`. KV stays GPU-resident. Engram stayed on GPU under the upstream AMD defaults until [vllm-project/vllm#57491](https://github.com/vllm-project/vllm/pull/57491) widened the two `is_cuda()` gates to `is_cuda_alike()`. From that commit on, ROCm resolves an `EngramConfig` and `cpu_offload` defaults to on through `VLLM_PLE_CPU_OFFLOAD`, so the recipe sets `--engram-config` explicitly rather than leaning on that default. TP=2 always offloads, since the tables need 94.4 GiB per rank there; TP=4 keeps them resident through concurrency 64, where the KV pool is not the constraint, and offloads only at 128. The recipe likewise trims `--max-num-batched-tokens` only above concurrency 32, to 8192 at TP=2 c64 and TP=4 c128 and to 4096 at TP=2 c128, because the sparse-attention indexer and its companion per-rank buffers grow at roughly 4.4 MiB per batched token. Where that chunk falls below six times the API-server default of 1024 sequences, `--max-num-seqs` is capped at the graph-capture shape: DSpark verifies 1+5 tokens per sequence, and at 4096 against 1024 sequences the engram projection faults during profiling. The rule in every case is to spend device memory on KV only at the concurrencies that ran short of it, leaving the validated low-concurrency settings alone. Images built before that merge still reject the option on ROCm. The MI355X launcher uses the shared HF cache and mounts this model's repository at `/ix`, and exports `INFMAX_CONTAINER_WORKSPACE=/ix` so AgentX dependencies and outputs resolve inside that mount.
 

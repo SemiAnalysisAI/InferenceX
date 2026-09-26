@@ -74,10 +74,10 @@ python -m atom.entrypoints.openai_server \
 
 ## 黄金 AL 曲线如何收集
 
-一键触发的 [`speedbench-al.yml`](../.github/workflows/speedbench-al.yml) 工作流最初由 [InferenceX#1650](https://github.com/SemiAnalysisAI/InferenceX/pull/1650) 引入，随后在 [InferenceX#1706](https://github.com/SemiAnalysisAI/InferenceX/pull/1706) 中扩展到更多 MTP 和 EAGLE3 模型。它取代了 [InferenceX#1592](https://github.com/SemiAnalysisAI/InferenceX/pull/1592) 中早期手工整理的参考值，使精确命令、日志、输出和生成的 YAML 都可以从同一次运行中审计。其流程如下：
+一键触发的 [`speedbench-al.yml`](../../.github/workflows/speedbench-al.yml) 工作流最初由 [InferenceX#1650](https://github.com/SemiAnalysisAI/InferenceX/pull/1650) 引入，随后在 [InferenceX#1706](https://github.com/SemiAnalysisAI/InferenceX/pull/1706) 中扩展到更多 MTP 和 EAGLE3 模型。它取代了 [InferenceX#1592](https://github.com/SemiAnalysisAI/InferenceX/pull/1592) 中早期手工整理的参考值，使精确命令、日志、输出和生成的 YAML 都可以从同一次运行中审计。其流程如下：
 
 1. 维护者触发工作流，指定模型、模型前缀、vLLM 镜像、草稿长度（通常为 1–8）、思考模式、`category=coding` 和 `output-len=4096`。
-2. 工作流在 B300 runner 上启动模型，并选择 [`benchmarks/single_node/speedbench/`](../benchmarks/single_node/speedbench/) 下对应的收集脚本。
+2. 工作流在 B300 runner 上启动模型，并选择 [`benchmarks/single_node/speedbench/`](../../benchmarks/single_node/speedbench/) 下对应的收集脚本。
 3. 对每个“思考模式 × 草稿长度”组合，收集脚本使用真实 MTP 或 EAGLE3 解码以及该模型的生产采样和聊天模板设置，启动一个干净的 vLLM 服务。
 4. 收集脚本读取 vLLM 累计的已接受 token 和验证草稿计数器，通过 `vllm bench serve` 运行 SPEED-Bench Qualitative `coding` 类别中的全部提示词，然后再次读取计数器。
 5. 按以下公式计算平均接受长度：
@@ -146,7 +146,7 @@ gh workflow run speedbench-al.yml \
 - [vLLM 合成接受支持](https://github.com/vllm-project/vllm/pull/40662)
 - [ATOM 强制接受长度支持](https://github.com/ROCm/ATOM/pull/1948)
 - [InferenceX 合成接受跟踪 issue](https://github.com/SemiAnalysisAI/InferenceX/issues/1651)
-- [InferenceX SPEED-Bench 工作流](../.github/workflows/speedbench-al.yml)
+- [InferenceX SPEED-Bench 工作流](../../.github/workflows/speedbench-al.yml)
 - [InferenceX 早期参考值对齐 PR](https://github.com/SemiAnalysisAI/InferenceX/pull/1592)
 - [InferenceX 初始 AL 收集器 PR](https://github.com/SemiAnalysisAI/InferenceX/pull/1650)
 - [InferenceX 多模型 AL 收集器 PR](https://github.com/SemiAnalysisAI/InferenceX/pull/1706)

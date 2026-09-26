@@ -241,7 +241,7 @@ start_decode() {
     local extra=( ${TILERT_DECODE_EXTRA_FLAGS} )
     if [[ "$SPEC_DECODING" == "mtp" && "$EVAL_ONLY" != "true" && "$RUN_EVAL" != "true" ]]; then
         check_env_vars MODEL_PREFIX THINKING_MODE
-        local curve="${WS_PATH%/benchmarks/*}/golden_al_distribution/${MODEL_PREFIX}_mtp.yaml"
+        local curve="${WS_PATH%/benchmarks/*}/infx/golden_al_distribution/${MODEL_PREFIX}_mtp.yaml"
         TILERT_SIMULATE_ACC_LEN="$("$PY" - "$curve" "$THINKING_MODE" "$DECODE_MTP_SIZE" <<'PYEOF'
 import sys, yaml
 path, thinking, tokens = sys.argv[1], sys.argv[2], int(sys.argv[3])
