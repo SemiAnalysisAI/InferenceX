@@ -16,6 +16,8 @@ ROOT = Path(__file__).resolve().parents[1]
 def invoke(request, tmp_path):
     def run(module, legacy, *args, **environment):
         env = {key: value for key, value in os.environ.items() if key != "PYTHONPATH"}
+        if request.param == "legacy" and legacy is None:
+            pytest.skip(f"{module} has no legacy file entrypoint")
         if request.param == "module":
             command = ["-P", "-m", module]
             env["PYTHONPATH"] = str(ROOT)
@@ -40,7 +42,7 @@ def test_collector_preserves_nested_json_and_empty_inputs(invoke, tmp_path, payl
         (inputs / "result.json").write_text(payload)
     (inputs / "ignored.txt").write_text("not JSON")
 
-    result = invoke("infx.results.collect_results", "utils/collect_results.py", "inputs", "test")
+    result = invoke("infx.results.collect_results", None, "inputs", "test")
 
     assert result.returncode == 0, result.stderr
     assert result.stdout == result.stderr == ""
@@ -57,7 +59,7 @@ def test_collector_does_not_publish_partial_output_on_invalid_json(invoke, tmp_p
     if published is not None:
         output.write_bytes(published)
 
-    result = invoke("infx.results.collect_results", "utils/collect_results.py", "inputs", "test")
+    result = invoke("infx.results.collect_results", None, "inputs", "test")
 
     assert result.returncode != 0
     assert "JSONDecodeError" in result.stderr
@@ -86,7 +88,7 @@ def test_filename_entrypoint_retains_environment_and_point_arguments(invoke):
 
 def test_run_statistics_reject_invalid_run_id_without_publishing(invoke, tmp_path):
     result = invoke(
-        "infx.workflows.calc_success_rate", "utils/calc_success_rate.py", "stats",
+        "infx.workflows.calc_success_rate", None, "stats",
         GITHUB_RUN_ID="not-an-integer", GITHUB_REPOSITORY="example/project", GITHUB_TOKEN="unused",
     )
     assert result.returncode != 0

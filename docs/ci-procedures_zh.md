@@ -383,7 +383,7 @@ Klaud 和恢复工具继续使用现有的 `gh` 认证。GitHub CLI 跟随分页
 
 ### 资格与授权
 
-`infx.github` 提供仓库范围的 REST 调用、分页及评论表态基础操作，不包含扫描策略。`infx.workflows.sweep_runs` 为暂存和复用共享 PR 提交查询、已完成 Run 列表及未过期结果工件查找；各调用方保留自身的资格规则。`infx.workflows.reuse` 负责命令解析、授权查找及源 Run 的选择和验证。`infx.workflows.reuse_comment` 使用相同规则提供表态反馈。工作流通过 `python3 -m` 调用这些模块；现有 `utils/find_reusable_sweep_run.py` 命令和导入路径保持兼容。这些辅助程序使用 Python 标准库和 GitHub CLI；从检出目录运行时无需安装 Python 包。
+`infx.github` 提供仓库范围的 REST 调用、分页及评论表态基础操作，不包含扫描策略。`infx.workflows.sweep_runs` 为暂存和复用共享 PR 提交查询、已完成 Run 列表及未过期结果工件查找；各调用方保留自身的资格规则。`infx.workflows.reuse` 负责命令解析、授权查找及源 Run 的选择和验证。`infx.workflows.reuse_comment` 使用相同规则提供表态反馈。工作流通过 `python3 -m` 调用这些模块。这些辅助程序使用 Python 标准库和 GitHub CLI；从检出目录运行时无需安装 Python 包。
 
 1. 复用不要求扫描标签。标签用于选择新的 GPU 工作；移除主标签不会使已有源 Run 失效。Changelog 验证和合并辅助脚本仍会拒绝冲突的主标签。
 2. `evals-only` 与 `agentx-fast` 会令 Run 不可复用。默认完整扫描以及带 `all-evals` 的完整扫描仍可复用。

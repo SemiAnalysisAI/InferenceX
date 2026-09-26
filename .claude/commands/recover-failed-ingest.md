@@ -62,7 +62,7 @@ venv or `--break-system-packages`. Then inspect the target:
 
 ```bash
 python3 -m pip install pydantic pyyaml  # only if the import check failed
-python3 utils/recover_failed_ingest.py inspect-target \
+python3 -m infx.workflows.recover_failed_ingest inspect-target \
   "$FAILED_RUN_OR_JOB_URL" \
   --output /tmp/infx-recovery-target.json
 
@@ -125,7 +125,7 @@ Fetch history and inspect the exact original changelog delta:
 git fetch origin main
 git cat-file -e "${ORIGINAL_MERGE_SHA}^{commit}"
 ORIGINAL_BASE_SHA=$(git rev-parse "${ORIGINAL_MERGE_SHA}^")
-python3 utils/recover_failed_ingest.py audit-changelog \
+python3 -m infx.workflows.recover_failed_ingest audit-changelog \
   --ref "$ORIGINAL_MERGE_SHA"
 git diff "$ORIGINAL_BASE_SHA" "$ORIGINAL_MERGE_SHA" -- \
   perf-changelog.yaml

@@ -349,10 +349,10 @@ def test_collector_cli_runs_outside_checkout(tmp_path: Path) -> None:
     result = artifact / "custom.json"
     _write_lm_eval_result(result, 0.75)
     env = dict(os.environ)
-    env.pop("PYTHONPATH", None)
+    env["PYTHONPATH"] = str(Path(__file__).resolve().parents[1])
 
     completed = subprocess.run(
-        [sys.executable, str(Path(__file__).with_name("collect_eval_results.py")),
+        [sys.executable, "-m", "infx.results.collect_eval_results",
          str(artifact), "test"],
         cwd=tmp_path, env=env, capture_output=True, text=True, timeout=10,
     )
