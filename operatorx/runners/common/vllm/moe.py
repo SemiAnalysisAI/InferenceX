@@ -173,10 +173,9 @@ class _MoeBlock(torch.nn.Module):
             raise UnsupportedOpError("zero experts are not wired for vLLM MoE yet")
         if rt.get("weight_on_input"):
             raise UnsupportedOpError("router weight on the expert input is not wired")
-        q = ex["quant"]
-        if q["w13"] != q["w2"] or q["a2"] != q["x"]:
-            raise UnsupportedOpError("vLLM MoE takes one scheme for w13/w2 and for x/a2")
-        qc = _expert_quant(q["x"], q["w13"])
+        if ex["w1"] != ex["w2"] or ex["a2"] != ex["a1"]:
+            raise UnsupportedOpError("vLLM MoE takes one scheme for w1/w2 and for a1/a2")
+        qc = _expert_quant(ex["a1"], ex["w1"])
         vllm_linear._set_quant_fp8_op(qc)
         H, E, K = a["hidden"], ex["num"], ex["top_k"]
         L = ex.get("latent") or H
@@ -203,11 +202,10 @@ class _MoeBlock(torch.nn.Module):
             custom = _ForcedRouting(self, rt["scoring"])
         shared, shared_gate, fused_shared = None, None, False
         if sh is not None:
-            sq = sh["quant"]
-            if sq["w13"] != sq["w2"]:
-                raise UnsupportedOpError("shared experts take one weight scheme for w13/w2")
-            sqc = _quant(sq["x"], sq["w13"], "shared")
-            if sq == {"x": q["x"], "w13": q["w13"], "w2": q["w2"]} and not ex.get("latent"):
+            if sh["w1"] != sh["w2"]:
+                raise UnsupportedOpError("shared experts take one weight scheme for w1/w2")
+            sqc = _quant(sh["a1"], sh["w1"], "shared")
+            if all(sh[k] == ex[k] for k in ("a1", "w1", "w2")) and not ex.get("latent"):
                 fused_shared = resolve_layer_fused_shared_expert(qc, prefix)
             expert_gate = None
             if sh.get("gate") == "sigmoid":
