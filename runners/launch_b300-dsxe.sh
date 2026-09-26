@@ -66,7 +66,6 @@ STAGED_MODELS=(
     DeepSeek-V4-Pro-NVFP4
     GLM-5.2-FP8
     GLM-5.2-NVFP4
-    Kimi-K2.6-NVFP4 # Retained Kimi SPEED-Bench collector staging.
     Kimi-K3
     MiniMax-M3
     MiniMax-M3-MXFP8

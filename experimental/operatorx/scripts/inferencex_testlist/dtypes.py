@@ -105,7 +105,7 @@ def _resolve_attn_dense(precision: str, runner: str, model_prefix: str) -> OpDty
         # FlashInfer SM90 cutlass MXFP4 MoE backend (PR #24816, explicit W4A16).
         return OpDtype("mxfp4", _BF16, _BF16)
     if precision == "int4":
-        # Weight-only quantization (e.g. Kimi K2.5 int4 compressed-tensors).
+        # Weight-only quantization (int4 compressed-tensors).
         # SGLang's CompressedTensorsWNA16 path: int4 weight × bf16 activation.
         return OpDtype("int4", _BF16, _BF16)
     if precision == "int8":
