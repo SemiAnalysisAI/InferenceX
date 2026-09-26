@@ -3,7 +3,7 @@ base:
   name: qwen3.5-fp8-mi355x-sglang-mtp-8k1k
   model:
     path: hf:Qwen/Qwen3.5-397B-A17B-FP8
-    container: lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260924
+    container: lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260926@sha256:b0bd5c4c3e3ba87e2dacfec6860eeb7dffc3c330e2aba0ec985eaefc7e005a60
     precision: fp8
   resources:
     gpu_type: mi355x
