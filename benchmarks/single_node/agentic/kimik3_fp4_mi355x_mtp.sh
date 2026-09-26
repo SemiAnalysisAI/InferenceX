@@ -219,7 +219,13 @@ case "$CONC" in
         GPU_MEM_UTIL=0.9
         MAX_NUM_BATCHED_TOKENS=8192
         ;;
-    8|10)
+    8)
+        SYNTHETIC_ACCEPT_LEN=3.84
+        SPEC_NUM_TOKENS=7
+        GPU_MEM_UTIL=0.9
+        MAX_NUM_BATCHED_TOKENS=8192
+        ;;
+    10)
         SYNTHETIC_ACCEPT_LEN=3.36
         SPEC_NUM_TOKENS=4
         GPU_MEM_UTIL=0.9
