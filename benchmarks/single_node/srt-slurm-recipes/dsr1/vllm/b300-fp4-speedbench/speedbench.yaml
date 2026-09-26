@@ -75,14 +75,14 @@ zip_override_thinking_on:
   benchmark:
     env:
       THINKING:
-        - 'on'
-        - 'on'
-        - 'on'
-        - 'on'
-        - 'on'
-        - 'on'
-        - 'on'
-        - 'on'
+        - 'thinking_on'
+        - 'thinking_on'
+        - 'thinking_on'
+        - 'thinking_on'
+        - 'thinking_on'
+        - 'thinking_on'
+        - 'thinking_on'
+        - 'thinking_on'
       MTP:
         - '1'
         - '2'

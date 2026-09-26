@@ -487,7 +487,7 @@ def speedbench_point(tmp_path):
                 "MODEL": "deepseek-ai/DeepSeek-V4-Pro",
                 "SPEC_DECODING": "mtp",
                 "TEMPERATURE": "1.0",
-                "THINKING": "off",
+                "THINKING": "thinking_off",
                 "MTP": "3",
             },
         },
@@ -581,7 +581,7 @@ def test_speedbench_zip_override_selects_cell(tmp_path):
             '{"method":"mtp","num_speculative_tokens":2}',
         ]}}},
         "benchmark": {"env": {
-            "THINKING": ["off", "off"],
+            "THINKING": ["thinking_off", "thinking_off"],
             "MTP": ["1", "2"],
         }},
     }}
@@ -604,3 +604,28 @@ def test_speedbench_zip_override_selects_cell(tmp_path):
     # Verify runtime_arguments works on the selected cell.
     argv = runtime_arguments(f"{path}:zip_override_thinking_off[1]", env)
     assert any("CATEGORY" in arg for arg in argv)
+
+
+@pytest.mark.parametrize(
+    "recipe", sorted(Path("benchmarks/single_node/srt-slurm-recipes").glob("*/vllm/b300-fp4-speedbench/speedbench.yaml"))
+)
+def test_speedbench_cells_keep_string_env_through_srtctl_variant_round_trip(recipe):
+    # srtctl expands zip variants with ruamel (YAML 1.2) and reloads them with a
+    # YAML 1.1 loader, where bare on/off become booleans and fail its schema.
+    from srtctl.core.config import resolve_override_yaml
+    from srtctl.core.yaml_utils import dump_yaml_with_comments
+
+    raw = yaml.safe_load(recipe.read_text())
+    selectors = [
+        f"{group}[{index}]"
+        for group in raw
+        if group.startswith("zip_override_thinking_")
+        for index in range(len(raw[group]["benchmark"]["env"]["MTP"]))
+    ]
+    assert selectors
+    for selector in selectors:
+        [(_, variant)] = resolve_override_yaml(recipe, selector=selector)
+        reloaded = yaml.safe_load(dump_yaml_with_comments(variant))
+        env = reloaded["benchmark"]["env"]
+        assert all(isinstance(value, str) for value in env.values()), (selector, env)
+        assert env["THINKING"] in {"thinking_on", "thinking_off"}

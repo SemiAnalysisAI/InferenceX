@@ -27,6 +27,14 @@ check_env_vars \
     MODEL CATEGORY SPEEDBENCH_OUTPUT_LEN THINKING MTP \
     RESULT_DIR RESULT_FILENAME SRT_FRONTEND_HOST SRT_FRONTEND_PORT
 
+# Recipes store thinking_on/thinking_off: srtctl round-trips zip variants
+# through a YAML 1.1 loader, where bare on/off become booleans.
+THINKING="${THINKING#thinking_}"
+if [[ "$THINKING" != on && "$THINKING" != off ]]; then
+    echo "ERROR: THINKING must be thinking_on or thinking_off" >&2
+    exit 1
+fi
+
 SPEEDBENCH_DIR="/tmp/speed_bench_data"
 MODEL_KEY="$(basename "$MODEL" | tr '[:upper:]' '[:lower:]')"
 CONCURRENCY="${SPEEDBENCH_CONCURRENCY:-1}"
