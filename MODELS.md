@@ -58,6 +58,8 @@ Rationale: `dsv4` carries the largest single-turn footprint in the repository. 4
 
 **Deprecation parity audit (2026-09-21):** Active master configs and benchmark-script locations match the enacted retirements above and in the support matrix below. GLM-5.1 B200 TileRT remains the documented exception to the earlier GLM-5/5.1 and 1k1k retirements. Conditional A/B baseline retirement remains pending; non-speculative Pareto contributors remain supported. The broader routing audit also removed stale retired-model branches from launchers/runtime settings and a GLM-5-only environment override, and corrected workflow/agent guidance that still recommended retired coverage. SPEED-Bench collectors, historical result readers, and the explicitly retained recipe YAMLs remain available. Deprecated configs are consolidated in [`configs/deprecated/amd-master.yaml`](configs/deprecated/amd-master.yaml) and [`configs/deprecated/nvidia-master.yaml`](configs/deprecated/nvidia-master.yaml).
 
+**Single-node SRT-only cutover (2026-09-22):** Active single-node fixed-sequence recipes now use SRT-Slurm. The two Docker-only Qwen3.5 RTX PRO 6000 FP4 configs (with and without MTP) are retired, with their original settings preserved in `configs/deprecated/nvidia-master.yaml` and their scripts in `benchmarks/single_node/fixed_seq_len/deprecated/`. The unused `rtx6000pro-lat` runner mappings, launcher, and runtime settings are removed. Qwen3.5 remains active on the other supported Slurm pools; AgentX and multi-node coverage are unchanged.
+
 ## Scenarios
 
 | Scenario | ISL/OSL | Status |
@@ -154,7 +156,7 @@ Other offloading tiers, including NVMe KV cache offloading, are outside the init
 
 | Model architecture class | Prefix | Date added | Active scenarios | Deprecated scenarios |
 |---|---|---|---|---|
-| DeepSeek-V4.1-Flash | `dsv41flash` | 2026-09-10 | Agentic coding (vLLM: DSpark, Engram UVA offload; SGLang: DSpark arms added per SKU from 2026-09-17; GPU validation pending) | |
+| DeepSeek-V4.1-Flash | `dsv41flash` | 2026-09-10 | Agentic coding (vLLM: DSpark, Engram UVA offload; SGLang: DSpark arms added per SKU from 2026-09-17; ATOM: MI355X TP2/TP4 DSpark added 2026-09-23; GPU validation pending) | |
 | GLM-5.3 | `glm5.3` | 2026-09-22 ([#3366](https://github.com/SemiAnalysisAI/InferenceX/pull/3366)) | Agentic coding (MTP only, per the Deprecation Notice) | Single-turn 1k1k (deprecated for all models before this model was added; never run) |
 | Qwen3.8-Flash-Next | `qwen3.8next` | 2026-08-26 ([#2742](https://github.com/SemiAnalysisAI/InferenceX/pull/2742)) | Agentic coding | |
 | Kimi-K3 | `kimik3` | 2026-07-27 ([#2391](https://github.com/SemiAnalysisAI/InferenceX/pull/2391)) | Agentic coding (DSpark may be disabled for better Pareto points) | Standalone non-DSpark A/B baseline (not required from day 0) |

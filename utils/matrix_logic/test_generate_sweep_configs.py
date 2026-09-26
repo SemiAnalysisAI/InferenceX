@@ -190,6 +190,20 @@ def test_multinode_node_count_prefers_recipe_roles(
 # Test Fixtures
 # =============================================================================
 
+
+@pytest.mark.parametrize("command", ["full-sweep", "test-config"])
+def test_srt_recipe_selection_stays_with_its_scenario(
+    sample_single_node_config, sample_runner_config, full_sweep_args_both, command,
+):
+    key, config = next(iter(sample_single_node_config.items()))
+    config["scenarios"]["fixed-seq-len"][0]["search-space"][0]["srt-recipe"] = "pilot.yaml:base"
+    vars(full_sweep_args_both).update(config_keys=[key], no_evals=True)
+    generate = generate_full_sweep if command == "full-sweep" else generate_test_config_sweep
+    rows = generate(full_sweep_args_both, sample_single_node_config, sample_runner_config)
+    assert rows
+    assert {row.get("srt-recipe") for row in rows if row["isl"] == 1024} == {"pilot.yaml:base"}
+    assert {row.get("srt-recipe") for row in rows if row["isl"] == 8192} == {None}
+
 @pytest.fixture
 def sample_single_node_config():
     """Single node config based on dsr1-fp8-mi300x-sglang."""

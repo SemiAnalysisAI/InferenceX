@@ -1,0 +1,43 @@
+# srt-slurm cluster profile for the MI355X AMD Slurm cluster. The login and
+# compute nodes share /it-share, so source, output, image, and result paths do
+# not need node-local transport.
+
+cluster: mi355x-amds
+default_partition: compute
+default_time_limit: ${SRT_DEFAULT_TIME_LIMIT}
+output_dir: /it-share/gharunners2/srt-slurm/outputs
+srtctl_root: ${SRTCTL_ROOT}
+
+gpus_per_node: 8
+visible_devices_env: ROCR_VISIBLE_DEVICES
+default_gpu_exporter: null
+network_interface: eno0
+
+use_gpus_per_node_directive: true
+use_segment_sbatch_directive: false
+use_exclusive_sbatch_directive: true
+
+default_sbatch_directives:
+  cpus-per-task: '128'
+
+model_paths:
+  DeepSeek-V4-Pro-0813: /it-share/data/DeepSeek-V4-Pro-0813
+  # The Hub snapshot's config drops vision_config, which SGLang's Qwen-VL processor requires.
+  Qwen3.5-397B-A17B-FP8: /it-share/data/Qwen3.5-397B-A17B-FP8
+
+default_mounts:
+  /dev/kfd: /dev/kfd
+  /dev/dri: /dev/dri
+  # This host directory is already the Hub cache, not HF_HOME.
+  /it-share/hf-hub-cache: /hf_hub_cache/hub
+  /it-share/hf_home: /it-share/hf_home
+
+nginx_raise_ulimit: false
+
+default_host_setup:
+  # The GPU-drain check can take 15 minutes; leave room for the fabric check
+  # and host-memory preparation.
+  timeout_seconds: 1200
+  commands:
+    - IBDEVICES=rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7 bash "${GITHUB_WORKSPACE}/runners/srt-slurm/hooks/mi355x-amds/setup.sh"
+  nodes: all

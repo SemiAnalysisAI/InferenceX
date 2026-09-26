@@ -35,6 +35,15 @@ git submodule update --init
 
 To upgrade, fetch and check out the desired commit inside the relevant submodule, then commit the updated submodule pointer in InferenceX. Benchmark workflows already initialize submodules. Slurm launchers make a local Git clone for each job so recipe staging and runtime writes do not modify the submodule, and record the actual commit for result provenance. NVIDIA setup clones locally; TileRT setup fetches its pinned fork commit over the network.
 
+Single-node fixed-sequence recipes use NVIDIA upstream srt-slurm. ATOM recipes use
+the native `atomesh` frontend with one aggregate worker and
+`enable_multiple_frontends: false`. The router's pinned official image belongs in
+`frontend.container_image`: older benchmark worker images do not include AToMesh.
+Keep `model.container` aligned with the master config's worker `image`; changing the
+router image does not require changing the worker image. TRT-LLM recipes use native
+`engine.served_model_name`, without duplicating that flag in `roles.agg.extra_args`.
+The former fork's direct ATOM frontend is not required.
+
 ### Cluster profiles
 
 Launchers that use srt-slurm keep their cluster configuration in
@@ -55,6 +64,32 @@ parsed YAML scalars so quotes and punctuation remain data, not YAML or shell syn
 
 Keep model selection, cache preparation, and workload-dependent time limits in the
 launcher. Do not add profiles for non-srt-slurm launchers or change their routing here.
+
+Put per-allocation host checks and setup in
+`runners/srt-slurm/hooks/<cluster>/setup.sh`, with cluster-specific helpers beside it.
+The directory name matches the cluster profile's filename stem. Invoke the script
+explicitly through `default_host_setup.commands` in that profile; scripts are not
+auto-discovered. srt-slurm runs them on the selected allocated nodes, outside containers,
+before starting services and workers. A failed check stops startup by default.
+Pass configuration explicitly from the profile. If setup needs an undo step, keep it
+in `teardown.sh` beside `setup.sh` and register it in `default_host_setup.teardown`.
+These are job-owned hooks, not administrator-installed Slurm Prolog/Epilog scripts.
+Only add hooks for clusters that need them; do not add empty scripts for every profile.
+
+Put reusable host-check functions in `runners/srt-slurm/hooks/common.sh`; keep
+cluster-only helpers beside `setup.sh`. The common file only defines functions:
+sourcing it must not run checks, change environment variables, or initialize
+benchmarks. Both setup hooks and benchmark scripts can reuse these functions
+without importing benchmark initialization into host setup.
+
+Hooks inject **cluster-specific host prerequisites only**, such as fabric checks or
+required host-state preparation. Keep them small, workload-independent, and safe to
+run repeatedly. Prefer native srt-slurm settings over shell code where possible.
+Benchmark execution, model selection, engine flags, concurrency tuning, evaluation,
+result collection, and job orchestration do not belong here. Do not patch engines or
+containers, bypass failed checks, or hide runtime bugs with retries and ad hoc
+workarounds; fix the owning component instead. Limit host changes to allocated nodes
+and preserve resources used by other jobs.
 
 ## Procedure index
 
@@ -296,6 +331,26 @@ GPU sweep and eval evidence is required before calling any recipe validated.
 
 Source: [upstream recipe](https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4.1-Flash).
 
+### DeepSeek-V4.1-Flash DSpark on ATOM
+
+`dsv41flash-fp4-mi355x-atom-agentic-dspark` follows the
+[upstream ATOM recipe](https://github.com/ROCm/ATOM/blob/53b11c9a665e786798785acbedfdfd4da3fb87c4/recipes/DeepSeek-V4.1-Flash-Agentic.md)
+with `rocm/atom-dev:nightly_202609250902`. TP2 covers concurrency
+`[1, 2, 8, 16, 32, 64]`; TP4 covers `[2, 8, 16, 32, 64]`, without expert
+parallelism or KV offload. Every point uses BF16 KV, FP8 index cache, 128 maximum
+sequences, 16K batched-token/prefill chunks, prefix caching with block size 16,
+8K state checkpoints, compilation level 3 and FULL graphs. Concurrency 32 captures
+every size from 1 through 32 plus 48, 64 and 128; other points use the upstream
+sparse list. Five-token DSpark uses golden AL 3.51 for throughput and real
+acceptance for eval, with the checkpoint's shipped draft and `dsml_v41` parser.
+
+The existing MI355X launcher mounts this model's shared cache and the repository
+at `/ix`, preserves Slurm's GPU allocation and routes `draft_model` to the new
+`dsv41flash_fp4_mi355x_atom_mtp.sh` script. Canonical AgentX runs use the uncapped
+`semianalysis_cc_traces_weka_062126` corpus, 3600 seconds per point and five warmup
+requests per lane. Workflow duration overrides and `agentx-fast` remain available
+for diagnostics. GPU sweep and eval validation is pending.
+
 ### DeepSeek-V4.1-Flash DSpark on H200
 
 `dsv41flash-fp4-h200-vllm-agentic-dspark` is the H200 AgentX arm of the
@@ -399,11 +454,17 @@ Source: [upstream recipe](https://github.com/vllm-project/recipes/blob/main/mode
 
 ### DeepSeek-V4.1-Flash DSpark on SGLang
 
+The H100 SGLang candidate sweeps DSpark at concurrency 1/2/4/8/16/20. It retains 8 SWA prefix tails per concurrency at C1/C2 and 32 at C4 and above. A matched one-hour comparison rejected a blanket 128-tail floor: C2 throughput improved only 1.7% while interactivity fell 44.5%. Completed STP comparisons did not contribute a measured frontier point, so STP is excluded from the selected sweep. The recipe interleaves 16 decode steps between prefill chunks, preserving trace content and context limits.
+
+The same sweep also qualifies supported TP8/EP8/DP8 attention at C4/C8/C16/C20. DP uses a stock consistent-hash router with stable session keys, DP LM-head execution, and 64 SWA prefix tails per rank. Full C16 GSM8K passed on all 1,319 examples; its performance contribution remains under measurement. The native 1M context and the AgentX subagent/session semantics are preserved.
+
+The nightly candidate uses `nightly-dev-cu13-20260922-582389ce`, native MXFP4 Marlin MoE, and `SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank`. A resolved local snapshot lets the upstream allocator evict checkpoint file cache before allocating anonymous host tables. Draft precision follows the pinned image's default handling, including its WO_A FP8-to-BF16 conversion. GPU-specific block32 FP8 launch configurations use the upstream kernel and supported `SPLIT_K`/`SWAP_AB` options; checkpoint data, scales, output dtype and context limits remain unchanged. Small-batch configurations require FP32-reference and CUDA-graph validation at selection boundaries, followed by full-model accuracy and serving measurements. Larger batches retain their previous configurations. Full canonical qualification is still required.
+
 `dsv41flash-fp4-<sku>-sglang-agentic-dspark` are the SGLang counterparts of the vLLM
 arms, one PR per SKU across h100, h200, b200, b300, gb200, gb300 and mi355x. They follow the
 [SGLang cookbook](https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1),
 which has no released SGLang version for this model yet. B200 pins the CUDA 13 nightly
-`lmsysorg/sglang:nightly-dev-cu13-20260922-582389ce` by digest; the other NVIDIA arms use
+`lmsysorg/sglang:nightly-dev-cu13-20260922-4cbf290f` by digest; the other NVIDIA arms use
 `lmsysorg/sglang:dev-dsv41` and MI355X uses `lmsysorg/sglang:dev-dsv41-mi35x`.
 
 B200 uses shipped-default DSpark across TP4/EP4 C1–128 and TP2/EP2 C1–8.

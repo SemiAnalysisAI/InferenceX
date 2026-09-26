@@ -58,6 +58,8 @@ InferenceX-e2e 运行在数量固定且有限的 GPU 资源池上，并由一支
 
 **弃用状态一致性核查（2026-09-21）：** 启用的主配置及基准测试脚本位置与上述已执行的退役事项和下方支持矩阵一致。GLM-5.1 B200 TileRT 仍是文档明确保留的例外，不受此前 GLM-5/5.1 和 1k1k 退役范围限制。有条件的 A/B 基线退役仍待执行；对 Pareto 前沿有贡献的非投机解码配置继续受支持。进一步的路由核查还移除了启动器和运行时设置中遗留的退役模型分支及 GLM-5 专用环境覆盖，并修正了仍推荐退役配置的工作流和智能体指南。SPEED-Bench 采集器、历史结果读取逻辑及明确保留的配方 YAML 继续保留。弃用配置现统一归档至 [`configs/deprecated/amd-master.yaml`](configs/deprecated/amd-master.yaml) 和 [`configs/deprecated/nvidia-master.yaml`](configs/deprecated/nvidia-master.yaml)。
 
+**单节点切换为仅使用 SRT（2026-09-22）：** 活跃的单节点定长配方现统一使用 SRT-Slurm。两个仅支持 Docker 的 Qwen3.5 RTX PRO 6000 FP4 配置（启用和关闭 MTP）已退役，原始设置保留在 `configs/deprecated/nvidia-master.yaml`，脚本保留在 `benchmarks/single_node/fixed_seq_len/deprecated/`。已移除不再使用的 `rtx6000pro-lat` runner 映射、启动器及运行时设置。Qwen3.5 在其他受支持的 Slurm 池上继续启用；AgentX 和多节点覆盖保持不变。
+
 ## 场景
 
 | 场景 | ISL/OSL | 状态 |
@@ -154,7 +156,7 @@ InferenceX 支持 SGLang 和 vLLM 双方的维护者，并响应 AI 实验室和
 
 | 模型架构类别 | 前缀 | 加入日期 | 启用场景 | 已弃用场景 |
 |---|---|---|---|---|
-| DeepSeek-V4.1-Flash | `dsv41flash` | 2026-09-10 | 智能体编码（DSpark、Engram UVA 卸载；GPU 待验证） | |
+| DeepSeek-V4.1-Flash | `dsv41flash` | 2026-09-10 | 智能体编码（vLLM：DSpark、Engram UVA 卸载；SGLang：自 2026-09-17 起按 SKU 添加 DSpark 配置；ATOM：2026-09-23 添加 MI355X TP2/TP4 DSpark；GPU 待验证） | |
 | GLM-5.3 | `glm5.3` | 2026-09-22（[#3366](https://github.com/SemiAnalysisAI/InferenceX/pull/3366)） | 智能体编码（仅 MTP，见弃用公告） | 单轮 1k1k（在本模型加入前已对所有模型弃用，从未运行） |
 | Qwen3.8-Flash-Next | `qwen3.8next` | 2026-08-26（[#2742](https://github.com/SemiAnalysisAI/InferenceX/pull/2742)） | 智能体编码 | |
 | Kimi-K3 | `kimik3` | 2026-07-27 ([#2391](https://github.com/SemiAnalysisAI/InferenceX/pull/2391)) | 智能体编码（可关闭 DSpark 以获得更优帕累托点） | 独立非 DSpark A/B 基线（自第 0 天起即不要求） |

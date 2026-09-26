@@ -150,7 +150,9 @@ CUDA_GRAPH_MAX_BS=$((2 * CONC))
 if [ "$DP_ATTENTION" = "true" ]; then
     CUDA_GRAPH_MAX_BS=32
 fi
-CUDA_GRAPH_ARGS=(--cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS")
+# SGLang v0.5.20 removed the deprecated --cuda-graph-max-bs alias
+# (sgl-project/sglang#38375); --cuda-graph-max-bs-decode is its replacement.
+CUDA_GRAPH_ARGS=(--cuda-graph-max-bs-decode "$CUDA_GRAPH_MAX_BS")
 
 export PYTHONNOUSERSITE=1
 export TORCH_CUDA_ARCH_LIST=10.0

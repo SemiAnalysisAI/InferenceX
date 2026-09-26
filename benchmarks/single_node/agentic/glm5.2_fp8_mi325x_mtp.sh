@@ -91,7 +91,9 @@ SGLANG_CMD=(
     --chunked-prefill-size 131072
     --mem-fraction-static 0.85
     --max-running-requests "$MAX_RUNNING_REQUESTS"
-    --cuda-graph-max-bs "$MAX_RUNNING_REQUESTS"
+    # SGLang v0.5.20 retired the deprecated --cuda-graph-max-bs alias
+    # (sgl-project/sglang#38375); the decode-phase flag is the same setting.
+    --cuda-graph-max-bs-decode "$MAX_RUNNING_REQUESTS"
     --speculative-algorithm EAGLE
     --speculative-num-steps 3
     --speculative-eagle-topk 1

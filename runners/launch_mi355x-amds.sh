@@ -3,6 +3,91 @@
 source "$(dirname "${BASH_SOURCE[0]}")/../benchmarks/benchmark_lib.sh" --validation-only || exit 1
 check_env_vars EVAL_ONLY IS_AGENTIC IS_MULTINODE KEEP_LOGS RUN_EVAL
 
+# Select native fixed-sequence execution before the retained AgentX/multi-node paths.
+EXECUTION_PATH=agentic
+if [[ "$IS_MULTINODE" == true ]]; then
+    EXECUTION_PATH=multinode
+elif [[ "$IS_AGENTIC" == 0 ]]; then
+    check_env_vars SRT_RECIPE
+    EXECUTION_PATH=native-single-node
+fi
+if [[ "$EXECUTION_PATH" == native-single-node ]]; then
+    check_env_vars GITHUB_WORKSPACE MODEL IMAGE
+    source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh" || exit 1
+    export HF_HUB_CACHE_MOUNT=/var/lib/hf-hub-cache/
+    export SRT_MODEL_PATH="hf:$MODEL"
+    export SALLOC_TIME_LIMIT=500
+    export SRT_SRUN_OPTIONS='{"container-remap-root":"", "container-writable":""}'
+    SRT_SQUASH_FILE="/var/lib/squash/$(printf '%s' "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    launch_srt_single_node mi355x-amds --var GITHUB_WORKSPACE "$GITHUB_WORKSPACE"
+    exit $?
+fi
+
+# Multi-node srt-slurm recipes use the shared native path: srt-slurm owns the
+# allocation, serving, and post-eval; the recipe owns the workload.
+if [[ "$EXECUTION_PATH" == multinode && -n "${CONFIG_FILE:-}" ]]; then
+    check_env_vars GITHUB_WORKSPACE IMAGE FRAMEWORK RESULT_FILENAME
+    source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh" || exit 1
+    SRT_SHARED_BASE=/it-share/gharunners2/srt-slurm
+    SRTCTL_ROOT="$GITHUB_WORKSPACE/srt-slurm"
+    rm -rf "$SRTCTL_ROOT"
+    setup_srt_slurm "$SRTCTL_ROOT" "$FRAMEWORK" 0 || exit 1
+    if ! command -v uv >/dev/null; then
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        source "$HOME/.local/bin/env"
+    fi
+    uv venv .venv
+    source .venv/bin/activate
+    uv pip install -e .
+    export PYTHONPATH="$GITHUB_WORKSPACE${PYTHONPATH:+:$PYTHONPATH}"
+
+    # Reuse a provisioned image when one exists; otherwise Pyxis imports it.
+    SQUASH_FILE="$SRT_SHARED_BASE/containers/$(printf '%s' "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    [[ -f "$SQUASH_FILE" ]] || SQUASH_FILE="$IMAGE"
+    SLURM_ACCOUNT="$USER" SLURM_PARTITION=compute NGINX_SQUASH_FILE=nginx:1.27.4 \
+        write_srt_cluster_config mi355x-amds srtslurm.yaml 0 \
+        --var SRT_DEFAULT_TIME_LIMIT 01:00:00 --var GITHUB_WORKSPACE "$GITHUB_WORKSPACE" \
+        --container "$IMAGE" "$SQUASH_FILE" \
+        --mount /it-share/aiperf-cache /aiperf_mmap_cache || exit 1
+    make setup ARCH=x86_64
+    export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
+
+    SRT_EVAL_OVERRIDES=()
+    if [[ "$RUN_EVAL" == true || "$EVAL_ONLY" == true ]]; then
+        # Evals need real expert dispatch; throughput variants may use fake dispatch.
+        SRT_EVAL_OVERRIDES=(--unset roles.prefill.args.ep-dispatch-algorithm
+            --unset roles.decode.args.ep-dispatch-algorithm)
+    fi
+    SRT_JOB_ID=""
+    trap '[[ -n "$SRT_JOB_ID" ]] && slurm_job_is_active "$SRT_JOB_ID" && scancel "$SRT_JOB_ID"' EXIT
+    apply_srt_recipe "$CONFIG_FILE" "$FRAMEWORK" "${SRTCTL_EVAL_ARGS[@]}" "${SRT_EVAL_OVERRIDES[@]}" \
+        -f "$CONFIG_FILE" --json --yes > "$GITHUB_WORKSPACE/srt-submission.json" || {
+        cat "$GITHUB_WORKSPACE/srt-submission.json" >&2
+        exit 1
+    }
+    python3 -m infx.srt_slurm.single_node submission "$GITHUB_WORKSPACE/srt-submission.json" \
+        > srt-submission-fields || exit 1
+    mapfile -t SRT_SUBMISSION < srt-submission-fields
+    SRT_JOB_ID="${SRT_SUBMISSION[0]}"
+    LOGS_DIR="${SRT_SUBMISSION[1]}/logs"
+
+    job_rc=0
+    stream_slurm_job_log "$SRT_JOB_ID" "$LOGS_DIR/sweep_${SRT_JOB_ID}.log" || job_rc=$?
+    verify_slurm_job_status "$SRT_JOB_ID" || job_rc=$?
+    tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$LOGS_DIR" . || job_rc=1
+    if [[ "$EVAL_ONLY" != true ]]; then
+        if [[ "$IS_AGENTIC" == 1 ]]; then
+            copy_agentic_results "$INFMAX_WORKSPACE" "$GITHUB_WORKSPACE" "$RESULT_FILENAME" || job_rc=1
+        else
+            copy_fixed_sequence_results "$LOGS_DIR" "$GITHUB_WORKSPACE" "$RESULT_FILENAME" || job_rc=1
+        fi
+    fi
+    if [[ "$RUN_EVAL" == true || "$EVAL_ONLY" == true ]]; then
+        cp "$LOGS_DIR"/eval_results/* "$GITHUB_WORKSPACE/" || job_rc=1
+    fi
+    exit "$job_rc"
+fi
+
 scancel_sync() {
     local jobid=$1
     local timeout=${2:-600}
@@ -80,26 +165,20 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         trap cleanup_and_save_logs EXIT
     fi
 
-    SCRIPT_NAME="${EXP_NAME%%_*}_${PRECISION}_mi355x_${FRAMEWORK}.sh"
-    if [[ "$FRAMEWORK" == "sglang-disagg" ]] || [[ "$FRAMEWORK" == "vllm-disagg" ]] || [[ "$FRAMEWORK" == "atom-disagg" ]] || [[ "$FRAMEWORK" == "tilert" ]]; then
-        # Agentic recipes under multi_node/agentic/ export the HiCache tunables;
-        # fixed-seq-len recipes live at the multi_node/ root.
-        if [[ "${SCENARIO_SUBDIR}" == "agentic/" ]]; then
-            BENCHMARK_SUBDIR="multi_node/agentic"
-        else
-            BENCHMARK_SUBDIR="multi_node"
-        fi
-    else
-        BENCHMARK_SUBDIR="single_node/fixed_seq_len"
+    # Only AgentX recipes still use this path; fixed-sequence runs use srt-slurm.
+    if [[ "$IS_AGENTIC" != 1 ]]; then
+        echo "ERROR: MI355X multi-node fixed-sequence jobs require a CONFIG_FILE srt-slurm recipe" >&2
+        exit 1
     fi
-    JOB_ID=$(bash "benchmarks/${BENCHMARK_SUBDIR}/${SCRIPT_NAME}")
+    SCRIPT_NAME="${EXP_NAME%%_*}_${PRECISION}_mi355x_${FRAMEWORK}.sh"
+    JOB_ID=$(bash "benchmarks/multi_node/agentic/${SCRIPT_NAME}")
 
     # An empty JOB_ID means the recipe or submit.sh failed before sbatch. The
     # wait loop below would then poll for slurm_job-.out forever, because its
     # liveness guard degenerates to `grep -q ""` and matches any job this user
     # has queued. Fail here instead of burning the job's whole time limit.
     if [[ -z "${JOB_ID//[[:space:]]/}" ]]; then
-        echo "ERROR: benchmarks/${BENCHMARK_SUBDIR}/${SCRIPT_NAME} returned no Slurm job id;" \
+        echo "ERROR: benchmarks/multi_node/agentic/${SCRIPT_NAME} returned no Slurm job id;" \
              "the recipe or submit.sh failed before sbatch (see its stderr above)" >&2
         exit 1
     fi
@@ -132,43 +211,6 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     wait $POLL_PID
 
     set -x
-
-
-
-
-    if [[ "${EVAL_ONLY}" != "true" && "${IS_AGENTIC}" != "1" ]]; then
-        cat > collect_latest_results.py <<'PY'
-import os, sys
-job_dir, isl, osl, nexp, framework = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4]), sys.argv[5]
-logs_root = f"{job_dir}/logs/"
-candidates = []
-if os.path.isdir(logs_root):
-    for name in os.listdir(logs_root):
-        subdir = f"{logs_root}{name}/{framework}_isl_{isl}_osl_{osl}"
-        if os.path.isdir(subdir):
-            candidates.append(subdir)
-for path in sorted(candidates, key=os.path.getmtime, reverse=True)[:nexp]:
-    print(path)
-PY
-
-        LOGS_DIR=$(python3 collect_latest_results.py "$BENCHMARK_LOGS_DIR" "$ISL" "$OSL" 1 "$FRAMEWORK")
-        if [ -z "$LOGS_DIR" ]; then
-            echo "No logs directory found for ISL=${ISL}, OSL=${OSL}"
-            exit 1
-        fi
-
-        echo "Found logs directory: $LOGS_DIR"
-        ls -la "$LOGS_DIR"
-
-        for result_file in $(find $LOGS_DIR -type f); do
-            file_name=$(basename $result_file)
-            if [ -f $result_file ]; then
-                WORKSPACE_RESULT_FILE="$GITHUB_WORKSPACE/${RESULT_FILENAME}_${file_name}"
-                echo "Found result file ${result_file}. Copying it to ${WORKSPACE_RESULT_FILE}"
-                cp $result_file $WORKSPACE_RESULT_FILE
-            fi
-        done
-    fi
 
     if [[ "${RUN_EVAL}" == "true" ]]; then
         EVAL_DIR=$(find "$BENCHMARK_LOGS_DIR/logs" -type d -name eval_results 2>/dev/null | head -1)
