@@ -52,10 +52,12 @@ install_agentic_deps
 export VLLM_ROCM_AITER_MLA_ASM_PADDING=asm
 export VLLM_ROCM_USE_AITER=1
 export SAFETENSORS_FAST_GPU=1
-export VLLM_ROCM_USE_AITER_MOE_SITUV2_A8W4=1
-export AITER_SITUV2_A8W4=1
+# Route the K3 SiTU MXFP4 MoE through the FlyDSL SiTUv2 a4w4 path (fp4
+# activations). vLLM exports AITER_SITUV2_A4W4=1 from this flag at init and
+# clears any legacy AITER_SITUV2_A8W4 override; the tuned a4w4 dispatch needs
+# AITER >= v0.1.20 (ROCm/aiter#4463), otherwise FlyDSL falls back to heuristics.
+export VLLM_ROCM_USE_AITER_MOE_SITUV2=1
 export AITER_BF16_FP8_MOE_BOUND=0
-export VLLM_USE_BREAKABLE_CUDAGRAPH=0
 export AITER_QUICK_REDUCE_QUANTIZATION=INT4
 
 # MEC FW <177 has an RCCL memory reclaim issue.
@@ -110,7 +112,7 @@ case "${KV_OFFLOAD_BACKEND:-}" in
       lmcache)
     require_agentic_kv_offload_backend "$KV_OFFLOAD_BACKEND"
 
-    LMCACHE_VERSION=0.5.5.dev114+rocm7.2
+    LMCACHE_VERSION=0.5.6.dev101+rocm7.2
     LMCACHE_ROCM_INDEX="https://github.com/LMCache/LMCache/releases/expanded_assets/nightly-rocm"
 
     agentic_pip_install --quiet --no-cache-dir --no-deps \
@@ -217,7 +219,13 @@ case "$CONC" in
         GPU_MEM_UTIL=0.9
         MAX_NUM_BATCHED_TOKENS=8192
         ;;
-    8|10)
+    8)
+        SYNTHETIC_ACCEPT_LEN=3.84
+        SPEC_NUM_TOKENS=7
+        GPU_MEM_UTIL=0.9
+        MAX_NUM_BATCHED_TOKENS=8192
+        ;;
+    10)
         SYNTHETIC_ACCEPT_LEN=3.36
         SPEC_NUM_TOKENS=4
         GPU_MEM_UTIL=0.9
