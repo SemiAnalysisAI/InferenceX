@@ -14,7 +14,15 @@ if [ -d /etc/libibverbs.d ] && [ ! -w /etc/libibverbs.d ]; then
   printf '%s\n' 'path-exclude=/etc/libibverbs.d/*' >/etc/dpkg/dpkg.cfg.d/efa-ro-ibverbs
   trap 'rm -f /etc/dpkg/dpkg.cfg.d/efa-ro-ibverbs' EXIT
 fi
-(cd /tmp/efa/aws-efa-installer && ./efa_installer.sh -y --skip-kmod --skip-limit-conf --no-verify --skip-mpi)
+efa_installer_flags=()
+if [ -d /opt/amazon/efa/lib ] && [ ! -w /opt/amazon/efa/lib ]; then
+  dpkg-deb -x /tmp/efa/aws-efa-installer/DEBS/UBUNTU2404/x86_64/libfabric1-aws_2.6.0amzn1.0_amd64.deb /tmp/efa/reference
+  dpkg-deb -x /tmp/efa/aws-efa-installer/DEBS/UBUNTU2404/x86_64/libfabric-aws-bin_2.6.0amzn1.0_amd64.deb /tmp/efa/reference
+  cmp /tmp/efa/reference/opt/amazon/efa/lib/libfabric.so.1.32.0 /opt/amazon/efa/lib/libfabric.so.1.32.0
+  cmp /tmp/efa/reference/opt/amazon/efa/bin/fi_info /opt/amazon/efa/bin/fi_info
+  efa_installer_flags+=(--minimal)
+fi
+(cd /tmp/efa/aws-efa-installer && ./efa_installer.sh -y --skip-kmod --skip-limit-conf --no-verify --skip-mpi "${efa_installer_flags[@]}")
 rm -rf /tmp/efa /tmp/aws-efa-installer-1.50.0.tar.gz
 ldconfig
 /opt/amazon/efa/bin/fi_info -p efa >/tmp/fi-info
