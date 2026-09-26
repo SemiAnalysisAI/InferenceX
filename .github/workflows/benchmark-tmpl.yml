@@ -354,7 +354,11 @@ jobs:
             fi
 
             if [ "${SCENARIO_TYPE}" = "agentic-coding" ]; then
-              python3 -m utils.agentic.validation.validate_agentic_result \
+              # Use workflow tooling even when measuring a historical checkout.
+              source .result-tooling/benchmarks/benchmark_lib.sh --validation-only
+              check_env_vars GITHUB_WORKSPACE INFERENCEX_RESULTS_PYTHON AIPERF_FAILED_REQUEST_THRESHOLD
+              PYTHONPATH="$GITHUB_WORKSPACE/.result-tooling" \
+                "$INFERENCEX_RESULTS_PYTHON" -P -m infx.results.agentic.validate_agentic_result \
                 results/aiperf_artifacts \
                 --failed-request-threshold "$AIPERF_FAILED_REQUEST_THRESHOLD"
             fi

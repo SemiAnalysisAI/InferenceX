@@ -1,2 +1,0 @@
-"""Agentic result validation utilities."""
-
