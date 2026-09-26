@@ -147,11 +147,11 @@ trap 'exit 143' TERM
 
 if [ "${EVAL_ONLY:-}" = "true" ]; then
     SPEC_CONFIG=$(printf \
-        '{"method":"eagle3","model":"%s","num_speculative_tokens":%d,"attention_backend":"FLASHINFER","kv_cache_dtype":"fp8"}' \
+        '{"method":"eagle3","model":"%s","num_speculative_tokens":%d,"attention_backend":"TRITON_ATTN","kv_cache_dtype":"fp8"}' \
         "$DRAFT_MODEL_PATH" "$NUM_SPEC_TOKENS")
 else
     SPEC_CONFIG=$(printf \
-        '{"method":"eagle3","model":"%s","num_speculative_tokens":%d,"attention_backend":"FLASHINFER","kv_cache_dtype":"fp8","rejection_sample_method":"synthetic","synthetic_acceptance_length":%.2f}' \
+        '{"method":"eagle3","model":"%s","num_speculative_tokens":%d,"attention_backend":"TRITON_ATTN","kv_cache_dtype":"fp8","rejection_sample_method":"synthetic","synthetic_acceptance_length":%.2f}' \
         "$DRAFT_MODEL_PATH" "$NUM_SPEC_TOKENS" "$SYNTHETIC_ACCEPT_LEN")
 fi
 
