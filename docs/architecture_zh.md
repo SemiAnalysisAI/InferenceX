@@ -140,7 +140,7 @@ flowchart LR
 | `infx.datasets` | AgentX 轨迹采样、转换、数据集构建及分布图 |
 | `infx.klaud` | Klaud 编排、生命周期、GitHub/API 适配器和模式 |
 
-从仓库根目录使用 `python -m infx.<package>.<module>` 运行命令。依赖仍由各命令分别管理；导入 `infx` 不会加载基准测试客户端或评测依赖。`utils/` 下的 Python 兼容包装文件已删除。数据集工具、AgentX 聚合与分析、评测适配器与补丁，以及基准测试客户端辅助模块应使用规范的 `infx` 路径。行为测试、评测文档、运行器配置 Shell 脚本及外部子模块仍位于 `utils/`。
+从仓库根目录使用 `python -m infx.<package>.<module>` 运行命令。依赖仍由各命令分别管理；导入 `infx` 不会加载基准测试客户端或评测依赖。`utils/` 下的 Python 兼容包装文件已删除。数据集工具、AgentX 聚合与分析、评测适配器与补丁，以及基准测试客户端辅助模块应使用规范的 `infx` 路径。评测文档位于 `infx/evals/EVALS.md`，评测测试位于 `infx/tests/evals/`。其他行为测试、运行器配置 Shell 脚本及外部子模块仍位于 `utils/`。
 
 复制到隔离环境中的评测适配器和补丁使用 `infx/evals` 下的实际文件，因此仍可独立运行。可信工作流辅助模块会明确选择工具代码所在的检出目录。固定序列处理、评测分数验证和单节点 AgentX 结果验证步骤使用单独检出的工作流修订版中的包，并以被测检出目录为工作目录。仅评测作业也会准备工具代码和 Python 3.12。因此，历史被测修订版无需包含这些辅助模块。分数阈值取自工作流修订版随包提供的 `infx/evals/thresholds.yaml`。
 
