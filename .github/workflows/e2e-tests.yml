@@ -314,9 +314,19 @@ jobs:
                     if [ "$EVALS_ONLY" = "true" ]; then
                       GENERATE_ARGS+=(--evals-only)
                     fi
-                    CONFIG_JSON=$(env PYTHONPATH="${GITHUB_WORKSPACE}" \
+                    GENERATOR_PATH="${GITHUB_WORKSPACE}"
+                    if [ -f "${GITHUB_WORKSPACE}/infx/matrix/generate.py" ]; then
+                      GENERATOR=(-m infx.matrix.generate)
+                    elif [ -f "${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py" ]; then
+                      GENERATOR=("${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py")
+                      GENERATOR_PATH="${GITHUB_WORKSPACE}/utils/matrix_logic:${GITHUB_WORKSPACE}"
+                    else
+                      echo "Matrix generator not found in selected checkout" >&2
+                      exit 1
+                    fi
+                    CONFIG_JSON=$(env PYTHONPATH="$GENERATOR_PATH" \
                       uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
-                      python -P -m infx.matrix.generate "${GENERATE_ARGS[@]}")
+                      python -P "${GENERATOR[@]}" "${GENERATE_ARGS[@]}")
                   fi
                   CONFIG_JSON=$(printf '%s' "$CONFIG_JSON" | env PYTHONPATH="$PRIORITY_ROOT" \
                     uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \

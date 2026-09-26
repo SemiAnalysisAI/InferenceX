@@ -49,7 +49,7 @@ class GenerationInputs:
     # argv after python3: ("-m", module) or (legacy script path,)
     generator: tuple[str, ...]
     runner_config: str
-    # Child working directory; a snapshot root makes `-m` import its own infx.
+    # Child working directory and explicit import root for snapshot isolation.
     root: str | None = None
 
 
@@ -396,9 +396,18 @@ def generate_matrix(
     legacy flags, optional input override, and child diagnostics for script users.
     """
     command = _matrix_command(config_keys, flags, inputs)
+    root = Path(inputs.root).resolve() if inputs and inputs.root else Path.cwd()
+    import_paths = [str(root)]
+    if inputs and inputs.generator[0] != "-m":
+        # Pre-package generators import validation and other sibling modules.
+        import_paths.insert(0, str(Path(inputs.generator[0]).resolve().parent))
+    env = os.environ.copy()
+    if env.get("PYTHONPATH"):
+        import_paths.append(env["PYTHONPATH"])
+    env["PYTHONPATH"] = os.pathsep.join(import_paths)
     try:
         result = subprocess.run(
-            command, capture_output=True, text=True, check=True, cwd=inputs.root if inputs else None
+            command, capture_output=True, text=True, check=True, cwd=root, env=env
         )
     except subprocess.CalledProcessError as exc:
         print(exc.stderr)

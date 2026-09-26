@@ -142,13 +142,13 @@ flowchart LR
 
 从仓库根目录使用 `python -m infx.<package>.<module>` 运行命令。依赖仍由各命令分别管理；导入 `infx` 不会加载基准测试客户端或评测依赖。`utils/` 保留工作流、恢复命令或显式兼容性测试仍在使用的兼容入口；没有调用方的转发包装文件已删除。数据集工具、AgentX 聚合与分析、评测适配器与补丁，以及基准测试客户端辅助模块应使用规范的 `infx` 路径。测试、运行器配置 Shell 脚本、AgentX 运行时依赖清单及外部子模块仍位于 `utils/`。
 
-复制到隔离环境中的评测适配器和补丁使用 `infx/evals` 下的实际文件，因此仍可独立运行。可信工作流辅助模块会明确选择工具代码所在的检出目录。需要支持旧目标修订的工作流步骤直接调用稳定的 `utils/` 入口：当前的轻量入口转调 `infx`，旧提交则运行原有实现。调用处无需检查包模块是否存在。
+复制到隔离环境中的评测适配器和补丁使用 `infx/evals` 下的实际文件，因此仍可独立运行。可信工作流辅助模块会明确选择工具代码所在的检出目录。需要支持旧目标修订的工作流步骤会在可用时使用保留的 `utils/` 入口。矩阵生成优先使用目标检出目录中的模块；若该修订没有模块，则运行其遗留脚本。
 
 默认仓库路径定义在 [`infx/config.py`](../infx/config.py) 中。配置常量从 `infx.config` 导入，模式从 `infx.matrix.validation` 导入。包的 `__init__.py` 文件保持精简。
 
-`utils/process_changelog.py` 保留为轻量兼容入口，其脚本命令、参数、相对输入路径和依赖保持不变，从仓库检出目录运行时无需安装包。矩阵生成通过 `python -m infx.matrix.generate` 运行；历史 append-only 规划会运行基准修订版自身的生成器，对早于该模块的修订版则运行其遗留的 `utils/matrix_logic/generate_sweep_configs.py` 脚本。`process_changelog.py` 指向 `infx.matrix.plan`；`validate_perf_changelog.py` 保留现有处理器 CLI 边界和诊断。
+`utils/process_changelog.py` 保留为轻量兼容入口，其脚本命令、参数、相对输入路径和依赖保持不变，从仓库检出目录运行时无需安装包。矩阵生成使用 `python -m infx.matrix.generate` 入口，并指定 `full-sweep` 或 `test-config` 子命令；历史 append-only 规划会运行基准修订版自身的生成器，对早于该模块的修订版则运行其遗留的 `utils/matrix_logic/generate_sweep_configs.py` 脚本。`process_changelog.py` 指向 `infx.matrix.plan`；`validate_perf_changelog.py` 保留现有处理器 CLI 边界和诊断。
 
-使用当前工具代码的工作流直接调用 `infx` 模块，测试也导入规范模块。可信调度通过 `PYTHONPATH` 和 Python 的 `-P` 选项明确指定工具代码所在的检出目录，同时仍以目标检出目录作为工作目录读取输入。手动矩阵生成、性能分析及基准测试步骤使用稳定的脚本入口来支持旧修订；追加模式的历史提取也使用各修订自身的兼容入口。
+使用当前工具代码的工作流直接调用 `infx` 模块，测试也导入规范模块。可信调度通过 `PYTHONPATH` 和 Python 的 `-P` 选项明确指定工具代码所在的检出目录，同时仍以目标检出目录作为工作目录读取输入。手动矩阵生成、性能分析、OperatorX 枚举和历史 append-only 规划均支持模块与遗留脚本两种布局。生成器子进程会将所选检出目录或快照明确置于 `PYTHONPATH` 前部，必要时也包含遗留脚本所在目录，因此启用 `PYTHONSAFEPATH` 时也不会误用其他已安装检出版本的代码。
 
 `infx.matrix.plan.build_plan(changelog_data, base_ref=..., head_ref=...)` 返回完整扫描的已验证 `ChangelogMatrixEntry`，统一负责条目优先级、基准测试与评测各自的场景覆盖、裁剪、指纹及输出分桶。当前主配置文件只加载一次，运行器元数据在首次生成时加载一次；每组选中的配置直接调用 `infx.matrix.generate.generate_config_matrix`。当前输入来自传入的路径（默认为检出目录中的路径），`head_ref` 仍用作来源元数据。规划过程假设这些文件在本次操作期间保持稳定。
 
