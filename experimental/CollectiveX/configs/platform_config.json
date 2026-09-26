@@ -159,7 +159,7 @@
       "scale_up_transport": "xgmi",
       "launcher": "mi-amds",
       "backends": {"mori": [8], "uccl-ep": [8]},
-      "ll_backends": {"mori": [8]},
+      "ll_backends": {},
       "fabric": {
         "nic": "n/a (single-node scale-up)",
         "switch": "n/a (single-node scale-up)"
