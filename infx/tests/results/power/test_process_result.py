@@ -768,8 +768,7 @@ class TestPowerAggregationIntegration:
         step = next(
             s for s in workflow["jobs"]["benchmark"]["steps"] if s.get("name") == "Process result"
         )
-        for directory in ["utils", "benchmarks"]:
-            (tmp_path / directory).symlink_to(REPO_ROOT / directory, target_is_directory=True)
+        (tmp_path / ".result-tooling").symlink_to(REPO_ROOT, target_is_directory=True)
         (tmp_path / "bin").mkdir()
         ambient_python = tmp_path / "bin/python3"
         ambient_python.write_text("#!/bin/sh\nexit 73\n")

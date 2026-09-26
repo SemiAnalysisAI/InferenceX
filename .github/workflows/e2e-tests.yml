@@ -324,7 +324,7 @@ jobs:
                   score_matrix() {
                     local family="$1"
                     env PYTHONPATH="$PRIORITY_ROOT" uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml \
-                      python -P "${PRIORITY_ROOT}/utils/ci_priority.py" \
+                      python -P -m infx.workflows.ci_priority \
                       --policy "${PRIORITY_ROOT}/configs/ci-priority.yaml" \
                       --event-name "${GITHUB_EVENT_NAME}" \
                       --queue-namespace "${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}:${family}" \

@@ -554,21 +554,52 @@ def committed_planning_repo(planning_repo):
     return root, base, head
 
 
+@pytest.mark.parametrize("shadow_package", [False, True])
+def test_recovery_uses_current_planner_with_historical_checkout(
+    committed_planning_repo, shadow_package
+):
+    from infx.workflows.recover_failed_ingest import build_config
+
+    root, base, head = committed_planning_repo
+    shutil.rmtree(root / "infx")
+    shutil.rmtree(root / "utils", ignore_errors=True)
+    if shadow_package:
+        (root / "infx").mkdir()
+        (root / "infx/__init__.py").write_text("raise RuntimeError('wrong tooling checkout')\n")
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    subprocess.run(["git", "commit", "-qm", "historical tooling fixture"], cwd=root, check=True)
+    head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
+    changelog = root / "perf-changelog.yaml"
+    entries = yaml.safe_load(changelog.read_text())
+    changelog.write_text("\n" + yaml.safe_dump(entries, sort_keys=False))
+    output, metadata = root / "config.json", root / "metadata.json"
+
+    result = build_config(root, base, head, 1, "perf-changelog.yaml", output, metadata)
+
+    assert result["fixed_rows"] == 3
+    assert result["agentic_rows"] == result["eval_jobs"] == 0
+    config = json.loads(output.read_text())
+    assert [row["conc"] for row in config["single_node"]["8k1k"]] == [16, 32, 64]
+    written_metadata = json.loads(metadata.read_text())
+    assert written_metadata["base_ref"] == base
+    assert written_metadata["head_ref"] == head
+    assert [entry["pr-link"] for entry in written_metadata["entries"]] == [
+        "https://github.com/SemiAnalysisAI/InferenceX/pull/1"
+    ]
+
+
 def test_validator_uses_trusted_entrypoints_while_reading_another_checkout(committed_planning_repo):
     root, base, head = committed_planning_repo
-    source = Path(__file__).resolve().parents[3]
     tooling = root / ".tooling"
     tooling.mkdir()
     shutil.move(root / "infx", tooling / "infx")
     shutil.rmtree(root / "utils", ignore_errors=True)
-    (tooling / "utils").mkdir()
-    for script in ("validate_perf_changelog.py", "process_changelog.py"):
-        shutil.copy(source / "utils" / script, tooling / "utils" / script)
     (root / "infx").mkdir()
     (root / "infx/__init__.py").write_text("raise RuntimeError('wrong tooling checkout')\n")
     env = {key: value for key, value in os.environ.items() if key != "PYTHONPATH"}
+    env["PYTHONPATH"] = str(tooling)
     result = subprocess.run(
-        [sys.executable, str(tooling / "utils/validate_perf_changelog.py"),
+        [sys.executable, "-P", "-m", "infx.workflows.validate_perf_changelog",
          "--base-ref", base, "--head-ref", head],
         cwd=root, env=env, capture_output=True, text=True, timeout=10,
     )

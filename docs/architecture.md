@@ -37,7 +37,7 @@ This page explains how a declared benchmark becomes a validated job, a runtime r
 | [`perf-changelog.yaml`](../perf-changelog.yaml) | Append-only selection of config keys to run for a change |
 | [`infx/matrix/validation.py`](../infx/matrix/validation.py) | Enforced Pydantic schemas and cross-field invariants |
 | [`infx/matrix/generate.py`](../infx/matrix/generate.py) | Search-space expansion, defaults, filters, derived metadata, runner resolution, and eval selection |
-| [`infx/matrix/plan.py`](../infx/matrix/plan.py) | Changelog selection, config-key expansion, append-only comparison, matrix bucketing, and final validation; `utils/process_changelog.py` preserves the CLI |
+| [`infx/matrix/plan.py`](../infx/matrix/plan.py) | Changelog selection, config-key expansion, append-only comparison, matrix bucketing, and final validation; run with `python -m infx.matrix.plan` |
 | [`.github/workflows/run-sweep.yml`](../.github/workflows/run-sweep.yml) | Trigger policy, matrix fan-out, collection dependencies, and cross-repository ingest dispatch |
 | [`.github/workflows/benchmark-tmpl.yml`](../.github/workflows/benchmark-tmpl.yml), [`.github/workflows/benchmark-multinode-tmpl.yml`](../.github/workflows/benchmark-multinode-tmpl.yml) | Reusable job input contract, environment projection, launcher invocation, result checks, and per-job uploads |
 | [`runners/`](../runners/) | Fleet-specific model paths, mounts, container or Slurm setup, and benchmark-script routing |
@@ -45,7 +45,7 @@ This page explains how a declared benchmark becomes a validated job, a runtime r
 | [`benchmarks/`](../benchmarks/) | Framework and topology-specific server and client commands |
 | [`infx/github.py`](../infx/github.py) | GitHub REST, pagination, and comment reactions shared by workflow operations |
 | [`infx/workflows/`](../infx/workflows/) | Reuse command parsing, authorization lookup, source-run validation, and reaction feedback; the existing reuse CLI remains compatible |
-| [`infx/results/`](../infx/results/) | Importable result builders, component metadata parsing, and power-metric transformations; [`utils/process_result.py`](../utils/process_result.py) preserves the fixed-sequence CLI |
+| [`infx/results/`](../infx/results/) | Importable result builders, component metadata parsing, and power-metric transformations; run fixed-sequence processing with `python -m infx.results.fixed_sequence` |
 | [`.github/workflows/collect-results.yml`](../.github/workflows/collect-results.yml), [`.github/workflows/collect-evals.yml`](../.github/workflows/collect-evals.yml) | Run-level benchmark and eval artifact aggregation |
 
 ### InferenceX-app consumers
@@ -71,7 +71,7 @@ These are cross-repository links because InferenceX-app owns the database and pr
 ```mermaid
 flowchart LR
   A[Master YAML and runners.yaml] --> B[Pydantic validation]
-  P[perf-changelog additions] --> C[process_changelog.py]
+  P[perf-changelog additions] --> C[infx.matrix.plan]
   B --> D[infx.matrix.generate]
   C --> D
   D --> E[Validated JSON matrix]
@@ -123,7 +123,7 @@ This split has two consequences.
 1. The master files are the catalog of supported work. The changelog is the audit trail and trigger selection, not another copy of config contents.
 2. Editing a master entry without a matching changelog addition does not schedule that change through `run-sweep.yml`, whose path trigger watches `perf-changelog.yaml`.
 
-`process_changelog.py` preserves changelog metadata in the emitted JSON. The workflow later uploads it as `changelog-metadata`, allowing InferenceX-app to associate persisted rows with the selected change.
+`infx.matrix.plan` preserves changelog metadata in the emitted JSON. The workflow later uploads it as `changelog-metadata`, allowing InferenceX-app to associate persisted rows with the selected change.
 
 ## Stage 2: validation and matrix generation
 
@@ -142,13 +142,13 @@ The remaining Python tools are grouped by responsibility:
 
 Run commands with `python -m infx.<package>.<module>` from the checkout root. Dependencies remain specific to each command; importing `infx` does not load benchmark-client or eval dependencies. `utils/` retains compatibility entrypoints used by workflows, recovery commands, or explicit compatibility tests; unreferenced forwarding wrappers have been removed. Use the canonical `infx` paths for dataset tools, AgentX aggregation and analysis, eval adapters and patches, and benchmark-client helpers. Tests, runner-provisioning shell scripts, AgentX runtime requirements, and the external submodules remain under `utils/`.
 
-Eval adapters and patches copied into isolated environments use the actual files under `infx/evals`, so they remain standalone. Trusted workflow helpers explicitly select their tooling checkout. Workflow steps that support older target revisions call the stable `utils/` entrypoints directly: current stubs delegate to `infx`, while older commits run their original implementations. Call sites need no package-presence checks.
+Eval adapters and patches copied into isolated environments use the actual files under `infx/evals`, so they remain standalone. Trusted workflow helpers explicitly select their tooling checkout. Fixed-sequence result processing uses the package from the workflow revision in a separate checkout, with the measured checkout as its working directory. Historical measured revisions therefore do not need the result-processing package.
 
 Default repository paths live in [`infx/config.py`](../infx/config.py). Import configuration constants from `infx.config` and schemas from `infx.matrix.validation`. Package `__init__.py` files stay minimal.
 
-`utils/process_changelog.py` remains a thin compatibility entrypoint; its script command, arguments, relative input paths, and dependencies are unchanged, and running from a checkout requires no package installation. Matrix generation runs as `python -m infx.matrix.generate`; historical append-only planning runs a base revision's own generator, including the legacy `utils/matrix_logic/generate_sweep_configs.py` script in revisions that predate the module. `process_changelog.py` resolves to `infx.matrix.plan`; `validate_perf_changelog.py` retains its existing processor CLI boundary and diagnostics.
+Run changelog planning with `python -m infx.matrix.plan` and validation with `python -m infx.workflows.validate_perf_changelog` from the repository root or an installed package. Matrix generation runs as `python -m infx.matrix.generate`; historical append-only planning runs a base revision's own generator, including its legacy script when the module is absent. Ingest recovery uses the recovery tool's own planner module and the selected worktree's configs and recipes.
 
-Workflows using current tooling call `infx` modules directly, and tests import canonical modules. Trusted dispatch selects its tooling checkout explicitly through `PYTHONPATH` and Python's `-P` option while keeping the target checkout as the working directory for inputs. Manual matrix generation, profiling, and benchmark steps use stable script entrypoints to support older revisions; historical append-only extraction also uses each revision's compatibility entrypoint.
+Workflows using current tooling call `infx` modules directly, and tests import canonical modules. Trusted dispatch and result processing select their tooling checkout explicitly through `PYTHONPATH` and Python's `-P` option while keeping the target checkout as the working directory for inputs. Repository data lookup prefers a working directory containing `configs/`, falling back to the source checkout when invoked elsewhere.
 
 `infx.matrix.plan.build_plan(changelog_data, base_ref=..., head_ref=...)` returns the validated `ChangelogMatrixEntry` for the complete sweep. It owns entry precedence, separate benchmark/eval scenario coverage, trimming, fingerprints, and output buckets. Current master files are loaded once, and runner metadata is loaded once on first generation; each selected group calls `infx.matrix.generate.generate_config_matrix` directly. Current inputs come from the supplied paths (the checkout defaults), while `head_ref` remains provenance metadata. Planning assumes those files are stable during the operation.
 
@@ -224,7 +224,7 @@ Do not use YAML acceptance as proof of execution. A field can be valid and emitt
 
 The single-node template computes a stable `RESULT_FILENAME` from experiment identity, precision, framework, topology, disaggregation, speculative decoding, concurrency, and concrete runner. The launcher and benchmark code must write the expected file under that identity.
 
-For fixed-sequence throughput jobs, the workflow requires `<RESULT_FILENAME>.json`, then runs [`utils/process_result.py`](../utils/process_result.py) and uploads `agg_<RESULT_FILENAME>.json` as `bmk_<RESULT_FILENAME>`.
+For fixed-sequence throughput jobs, the workflow requires `<RESULT_FILENAME>.json`, then runs [`infx/results/fixed_sequence.py`](../infx/results/fixed_sequence.py) and uploads `agg_<RESULT_FILENAME>.json` as `bmk_<RESULT_FILENAME>`.
 
 ### Reusing and extending result processing
 

@@ -512,7 +512,7 @@ Do not assume every run has every artifact. Important contracts are:
 
 ### Parse bounded fields
 
-Throughput aggregate fields come from [`utils/process_result.py`](../utils/process_result.py):
+Throughput aggregate fields come from [`infx/results/fixed_sequence.py`](../infx/results/fixed_sequence.py):
 
 ```bash
 jq -r '

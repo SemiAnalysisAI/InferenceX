@@ -12,5 +12,8 @@ LEGACY_GENERATOR_SCRIPT = "utils/matrix_logic/generate_sweep_configs.py"
 
 
 def repository_root() -> Path:
+    working_root = Path.cwd()
+    if (working_root / "configs").is_dir():
+        return working_root
     source_root = Path(__file__).resolve().parent.parent
-    return source_root if (source_root / "configs").is_dir() else Path.cwd()
+    return source_root if (source_root / "configs").is_dir() else working_root

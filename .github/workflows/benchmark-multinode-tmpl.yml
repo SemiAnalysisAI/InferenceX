@@ -302,6 +302,14 @@ jobs:
           submodules: true
           persist-credentials: false
 
+      - name: Checkout result tooling
+        if: ${{ !inputs.eval-only }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .result-tooling
+          persist-credentials: false
+
       - name: Set up uv for result processing
         if: ${{ !inputs.eval-only }}
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
@@ -325,8 +333,8 @@ jobs:
           RESULT_FILENAME_BASE: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_prefill-tp${{ env.PREFILL_TP }}-pp${{ env.PREFILL_PP_SIZE }}-dcp${{ env.PREFILL_DCP_SIZE }}-pcp${{ env.PREFILL_PCP_SIZE }}-ep${{ env.PREFILL_EP }}-dp${{ env.PREFILL_DP_ATTN }}-nw${{ env.PREFILL_NUM_WORKERS }}_decode-tp${{ env.DECODE_TP }}-pp${{ env.DECODE_PP_SIZE }}-dcp${{ env.DECODE_DCP_SIZE }}-pcp${{ env.DECODE_PCP_SIZE }}-ep${{ env.DECODE_EP }}-dp${{ env.DECODE_DP_ATTN }}-nw${{ env.DECODE_NUM_WORKERS }}_disagg-${{ env.DISAGG }}_spec-${{ env.SPEC_DECODING }}_conc${{ join(fromJson(inputs.conc-list), 'x') }}_${{ runner.name }}
         run: |
           set -x
-          if [[ -f utils/result_filename.py ]]; then
-            RESULT_FILENAME=$(python3 utils/result_filename.py)
+          if [[ -f infx/results/result_filename.py ]]; then
+            RESULT_FILENAME=$(python3 -m infx.results.result_filename)
           else
             # Older measured commits predate the helper; preserve safe identity.
             RESULT_FILENAME=$(printf '%s\0' "$RESULT_FILENAME_BASE" "$RECIPE_FINGERPRINT" | sha256sum)
@@ -407,8 +415,9 @@ jobs:
         if: ${{ always() && env.RESULT_FILENAME != '' && !inputs.eval-only && inputs.scenario-type != 'agentic-coding' }}
         env:
           RUNNER_TYPE: ${{ inputs.runner }}
+          PYTHONPATH: ${{ github.workspace }}/.result-tooling
         run: |
-          source benchmarks/benchmark_lib.sh --validation-only
+          source .result-tooling/benchmarks/benchmark_lib.sh --validation-only
           check_env_vars INFERENCEX_RESULTS_PYTHON
           # Launcher stamp supplies the producer SHA unless the
           # power-producer-sha input is set as a manual override
@@ -416,47 +425,7 @@ jobs:
             export POWER_PRODUCER_SHA="$(cat power-producer-sha.txt)"
             echo "POWER_PRODUCER_SHA derived from launcher stamp: $POWER_PRODUCER_SHA"
           fi
-          # Older measured refs predate the batch CLI. Import failures in a
-          # present processor are errors, not a reason to downgrade validation.
-          has_batch=$("$INFERENCEX_RESULTS_PYTHON" - <<'PY'
-          import importlib
-          from pathlib import Path
-          if Path('infx/results/fixed_sequence.py').is_file():
-              module = importlib.import_module('infx.results.fixed_sequence')
-              print(int(hasattr(module, 'process_multinode_results')))
-          else:
-              print(0)
-          PY
-          )
-          if [ "$has_batch" = 1 ]; then
-            "$INFERENCEX_RESULTS_PYTHON" utils/process_result.py --all
-          else
-            batch_rc=0
-            observed=()
-            for result_file in "${RESULT_FILENAME}"_*.json; do
-              [ -f "$result_file" ] || continue
-              case "$result_file" in
-                *.pytorch.json|"${RESULT_FILENAME}_gpu_metrics_context.json"|"${RESULT_FILENAME}_gpu_metrics_identity.json") continue ;;
-              esac
-              if [[ "$result_file" =~ _(c|conc|concurrency_)([0-9]+)(_req_rate_[^_]+)?_gpus_([0-9]+)(_ctx_([0-9]+)_gen_([0-9]+))?\.json$ ]]; then
-                observed+=("${BASH_REMATCH[2]}")
-                gpus=${BASH_REMATCH[4]}
-                prefill_gpus=${BASH_REMATCH[6]:-$gpus}
-                decode_gpus=${BASH_REMATCH[7]:-0}
-                RESULT_FILENAME=${result_file%.json} IS_MULTINODE=true PREFILL_GPUS="$prefill_gpus" DECODE_GPUS="$decode_gpus" \
-                  "$INFERENCEX_RESULTS_PYTHON" utils/process_result.py || batch_rc=1
-              else
-                echo "Unrecognized result filename: $result_file" >&2
-                batch_rc=1
-              fi
-            done
-            read -r -a expected <<< "$CONC_LIST"
-            if [[ "$(printf '%s\n' "${observed[@]}" | sort -n)" != "$(printf '%s\n' "${expected[@]}" | sort -n)" ]]; then
-              echo 'Legacy result batch has missing, duplicate or unexpected concurrencies' >&2
-              batch_rc=1
-            fi
-            exit "$batch_rc"
-          fi
+          "$INFERENCEX_RESULTS_PYTHON" -P -m infx.results.fixed_sequence --all
 
       - name: Upload result
         if: ${{ success() && env.RESULT_FILENAME != '' && !inputs.eval-only && inputs.scenario-type != 'agentic-coding' }}
