@@ -21,7 +21,7 @@
 | [`perf-changelog.yaml`](../perf-changelog.yaml) | 只允许追加的基准触发日志 |
 | [`AGENTS.md`](../AGENTS.md) | 仓库级配置、MTP、changelog 和 sweep 规则 |
 
-弃用的配置项应归档至 [`configs/deprecated/amd-master.yaml`](../configs/deprecated/amd-master.yaml) 或 [`configs/deprecated/nvidia-master.yaml`](../configs/deprecated/nvidia-master.yaml)。仅使用这两个按厂商划分的归档文件，不要为每次弃用创建单独文件。保留历史设置和注释；遇到配置键冲突时，使用描述性后缀区分，并用注释记录原始配置键。仅弃用部分场景时，只移出已退役的场景。归档文件不得加入启用的 sweep 输入。退役的 AMD 服务注册项和模型专用初始化逻辑应移至 `benchmarks/multi_node/amd_utils/deprecated/`，不参与启用服务的查找。保留 SPEED-Bench 采集器仍需使用的共享依赖，包括调度评分。参见[弃用规则](../AGENTS.md#deprecating-benchmark-configs)。
+退役的配置项直接从启用的主配置中删除，不再归档；历史设置由 Git 历史和 `perf-changelog.yaml` 保留。仅弃用部分场景时，只删除已退役的场景。退役的 AMD 服务注册项和模型专用初始化逻辑也应从 `benchmarks/multi_node/amd_utils/` 中删除。保留 SPEED-Bench 采集器仍需使用的共享依赖，包括调度评分。参见[弃用规则](../AGENTS.md#deprecating-benchmark-configs)。
 
 ## 依赖子模块
 
@@ -83,11 +83,11 @@ git status --short --branch
 STP（Single Token Prediction，单 Token 预测）是每次前向传播生成一个 Token 的标准自回归解码。MTP（Multi-Token Prediction，多 Token 预测）通过原生预测头或投机解码在每次前向传播中预测多个 Token。
 
 1. **固定身份。**确认精确 checkpoint ID、model prefix、精度、架构、原生上下文、目标 SKU、框架，以及解码方式是 STP、原生 MTP 还是 draft-model 推测。验证镜像 tag 确实存在；绝不能编造。
-2. **选择两类同类项。**阅读同一模型在其他 SKU 上的实现，以及目标 SKU 上的另一个模型。还要阅读目标 [`runners/launch_*.sh`](../runners/) 和共享 [`benchmark_lib.sh`](../benchmarks/benchmark_lib.sh)。
-3. **添加运行时脚本。**把单节点脚本放入 [`benchmarks/single_node/fixed_seq_len/`](../benchmarks/single_node/fixed_seq_len/)。保留已验证同类项中的 env 传递、parser 参数、attention/MoE backend、KV-cache dtype、graph/eager 模式、缓存设置和上下文处理。
+2. **选择两类同类项。**阅读同一模型在其他 SKU 上的实现，以及目标 SKU 上的另一个模型。阅读它们在 [`benchmarks/single_node/srt-slurm-recipes/`](../benchmarks/single_node/srt-slurm-recipes/) 下的 srt-slurm 配方及主配置条目。
+3. **添加 srt-slurm 配方。**放在 `benchmarks/single_node/srt-slurm-recipes/<model-prefix>/<engine>/<sku>-<precision>[-mtp]/8k1k.yaml`，每个矩阵点对应一个 `override_*` 变体。保留已验证同类项中的引擎参数、env、parser 参数、attention/MoE backend、KV-cache dtype、graph/eager 模式、`setup_script` 和上下文处理。
 4. **添加主配置条目。**`mi*` 使用 [`amd-master.yaml`](../configs/amd-master.yaml)，其他使用 [`nvidia-master.yaml`](../configs/nvidia-master.yaml)。精确设置 `image`、`model`、`model-prefix`、`runner`、`precision`、`framework`、scenario 和支持的搜索空间。
 5. **依据证据确定规模。**复制已验证的并行布局并删除不支持的布局。延迟型 TP 行通常从并发 1 开始；不要把大显存 SKU 的 TP/EP 布局复制到小显存 SKU。
-6. **检查 launcher 路由。**launcher 必须能解析新文件名，包括 framework 和 `_mtp` 后缀。模拟 STP 与 MTP 解析，并确认每个被选择的文件都存在。
+6. **检查变体选择。**每个搜索空间行都带有 `srt-recipe:`，每个矩阵点必须按 TP/GPU 数、`CONC`、`KV_OFFLOADING` 和镜像恰好匹配一个配方变体（`infx/srt_slurm/single_node.py::select_recipe`），无需 launcher 路由。
 7. **追加一条 changelog**，精确选择新 key；参见[安全追加 changelog](#安全追加-changelog)。
 8. **验证语法和生成结果。**检查 image、model、runner、ISL/OSL、`max-model-len`、并发、TP/PP/EP/DCP/PCP 和 `spec-decoding`。
 
@@ -169,7 +169,7 @@ B200 Nscale 的 GLM-5.1 可用 `MODEL_PATH` 指定已有共享权重，覆盖默
 
 ## 注册 llm-d 配方
 
-来源：[`benchmarks/llm-d/README.md`](../benchmarks/llm-d/README.md)、[`benchmarks/multi_node/llm-d/README.md`](../benchmarks/multi_node/llm-d/README.md)、[`llm-d-recipes/`](../benchmarks/multi_node/llm-d-recipes/) 和当前 [`llmd-vllm` 基准 wrapper](../benchmarks/multi_node/dsv4_fp4_gb200_llmd-vllm-disagg.sh)。
+来源：[`benchmarks/llm-d/README.md`](../benchmarks/llm-d/README.md)、[`benchmarks/multi_node/llm-d/README.md`](../benchmarks/multi_node/llm-d/README.md)、和 [`llm-d-recipes/`](../benchmarks/multi_node/llm-d-recipes/)。
 
 llm-d 不是 srt-slurm 路径：InferenceX 自己持有 Slurm allocation，并在每个节点启动一个容器。
 
@@ -197,7 +197,7 @@ llm-d 不是 srt-slurm 路径：InferenceX 自己持有 Slurm allocation，并�
 
 ## 添加或修改 MTP
 
-来源：[`AGENTS.md#non-negotiable-benchmark-invariants`](../AGENTS.md#non-negotiable-benchmark-invariants)、[模型+硬件 playbook 的 MTP 附录](../.claude/commands/add-model-hardware.md#appendix--mtp--eagle3-spec-decoding-variant)和现有 [`*_mtp.sh` 同类项](../benchmarks/single_node/fixed_seq_len/)。
+来源：[`AGENTS.md#non-negotiable-benchmark-invariants`](../AGENTS.md#non-negotiable-benchmark-invariants)、[模型+硬件 playbook 的 MTP 附录](../.claude/commands/add-model-hardware.md#appendix--mtp--eagle3-spec-decoding-variant)和现有 [`*-mtp` srt-slurm 配方](../benchmarks/single_node/srt-slurm-recipes/)。
 
 1. 确认使用原生 MTP 模块还是外部 draft。使用 draft 时，从模型/上游配方验证精确模型 ID、方法（例如 `eagle3`）和建议 speculative token 数。
 2. 复制相同模型和 backend 的可工作同类项。保留其 speculative config、attention backend、token 数、模型补丁和依赖设置。
@@ -247,16 +247,10 @@ schedule 和 ragged verification 保持关闭。
 按实际上下文长度均衡 dense decode 工作量；不支持的 shape 仍回退至 Gluon。
 从 `server.log` 核对实际路由，以及 work plan 是否在图捕获时创建。
 
-当 ROCR 已选择 GPU 时，脚本清除 HIP 的第二层 mask，避免再次筛选已重新编号的设备。
-仅在调用方未传入任何 mask 时，offload 才为 TP2 选择 `0,4`、为 TP4 选择 `0,1,4,5`。
-保留显式 ROCR 分配和仅 HIP 的分配。19 个 resident/offload 点、EAGLE3 K3、
-golden AL 2.78、indexer CP 和 DRAM 预算保持原值。
-
-changelog 条目设置 `no-evals: true`，PR sweep 只运行 19 个吞吐点。准确性证据来自
-同一配方和镜像上单个 TP4 C48 LMCache-offload 的 `minimax-vendor` /
-`minimax_m3_full` eval（真实 acceptance）。如需重跑，用
-`test-config --config-files configs/amd-master.yaml --config-keys minimaxm3-fp4-mi355x-atom-agentic-mtp --conc 48 --evals-only`
-触发 `e2e-tests.yml`。
+改动仅限
+`benchmarks/single_node/srt-slurm-recipes/minimaxm3/atom/mi355x-fp4-mtp/agentic.yaml`
+中的镜像和两个 FlyDSL 变量；TP4 C1-C32、TP2 C1-C2、EAGLE3 K3、golden AL 2.78
+和 indexer CP 保持不变。
 
 ### DeepSeek-V4.1-Flash DSpark
 
@@ -290,6 +284,24 @@ TP2 并发 128 使用 `--max-num-batched-tokens 2048`，其余情况使用 8192�
 GB300 launcher 将引擎就绪等待时间设为 7200 秒。在[运行 34504969146](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34504969146) 中，仅模型加载就耗时 18–23 分钟；Rust frontend 达到 3600 秒期限时，引擎仍在捕获 CUDA graph。此次仅延长启动等待时间，基准测试时长和解码设置保持不变。
 
 来源：[上游配方](https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4.1-Flash)。
+
+### ATOM 上的 DeepSeek-V4.1-Flash DSpark
+
+`dsv41flash-fp4-mi355x-atom-agentic-dspark` 按照
+[ATOM 上游配方](https://github.com/ROCm/ATOM/blob/53b11c9a665e786798785acbedfdfd4da3fb87c4/recipes/DeepSeek-V4.1-Flash-Agentic.md)
+使用 `rocm/atom-dev:nightly_202609250902`。TP2 覆盖并发
+`[1, 2, 8, 16, 32, 64]`，TP4 覆盖 `[2, 8, 16, 32, 64]`，不启用专家并行或
+KV 卸载。所有点均使用 BF16 KV、FP8 index cache、128 个最大序列、16K
+批处理 token／prefill chunk、block size 16 的前缀缓存、8K 状态检查点、
+编译 level 3 和 FULL graphs。并发 32 捕获 1 到 32 的全部尺寸以及 48、64、128，
+其他点使用上游稀疏列表。5-token DSpark 在吞吐测试中使用 golden AL 3.51，
+eval 使用真实 acceptance，并保留检查点随附的 draft 和 `dsml_v41` parser。
+
+现有 MI355X launcher 挂载该模型的共享缓存，并将仓库挂载到 `/ix`，保留 Slurm
+分配的 GPU，将 `draft_model` 路由到新增的 `dsv41flash_fp4_mi355x_atom_mtp.sh`。
+标准 AgentX 运行使用未截断的 `semianalysis_cc_traces_weka_062126` 数据集，
+每个点测量 3600 秒，每条 lane 预热 5 个请求。诊断时仍可使用 workflow 的时长覆盖
+和 `agentx-fast`。GPU sweep 和 eval 尚待验证。
 
 ### H200 上的 DeepSeek-V4.1-Flash DSpark
 

@@ -77,7 +77,7 @@ changing the benchmark recipe.
 
 **Fix:** in `benchmarks/single_node/<recipe>.sh`, either:
 1. **Lower `--gpu-memory-utilization`** (`0.95 → 0.90`, sometimes 0.85). Matches the H100/H200/B200 NVIDIA pattern. Smallest blast radius.
-2. **Disable the profiler entirely** for cases where lowering isn't enough: `export VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0` before `vllm serve`. Matches `benchmarks/single_node/agentic/deprecated/kimik2.5_fp4_b200.sh:65`.
+2. **Disable the profiler entirely** for cases where lowering isn't enough: `export VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0` before `vllm serve`.
 
 Seen on: #1395 (kimik2.5-fp4-b200-vllm, needed env var), #1403 (gptoss-fp4-mi300x-vllm, needed 0.90), #1461 (dsv4-fp8-h200-vllm, needed 0.90).
 
@@ -402,3 +402,21 @@ are skipped, and registry `/` and enroot `#` image spellings are normalized for 
 historical identity matching and point backfill. A transient or malformed baseline for
 one candidate defers that candidate and continues through the reviewed pool; it does
 not consume or block later candidate slots.
+
+### 7.8 Selected candidates can still stop in the baseline phase
+
+**Symptom:** a parent workflow and candidate wrapper jobs succeed, but sanitized
+candidate outcomes say `failed` / `baseline`, with no validation runs. A draft PR
+may have been created and then closed. The wrapper status only means the agent
+reported and cleaned up; it does not mean the image update worked.
+
+**Diagnosis:** planner preflight already reconstructed the public benchmark roster.
+The selected candidate now receives that typed roster in `baseline-preflight.json`.
+`prepare-baseline` verifies its candidate/base/source/model binding and reuses it,
+then the agent still verifies additional eval/dataset evidence before publication.
+Read the fixed `reason-code` in `candidate-diagnostics.json`, the job summary or
+the completion receipt to identify the first verified blocker. An absent code on
+an older run means the exact cause was not recorded; do not infer one from the phase.
+Never publish raw API responses, agent transcripts or private telemetry to fill
+that gap. A preflight mismatch must stop rather than silently refetching another
+roster or shrinking coverage.

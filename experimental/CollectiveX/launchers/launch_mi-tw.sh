@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# CollectiveX Docker launcher for the Slurm-less "-tw" AMD clusters (mi325x-tw, mi300x-tw).
+# CollectiveX Docker launcher for the Slurm-less mi325x-tw AMD cluster.
 # Their GHA runners run as `gharunner` on an 8x CDNA (gfx942) node with Docker but no Slurm or
 # enroot, so each case runs in a Docker container driven by torchrun. EP8 scale-up only: there
 # is no scheduler or RDMA fabric to build EP16 scale-out on.
@@ -12,8 +12,8 @@ source "$HERE/../runtime/common.sh"
 
 RUNNER="${COLLX_SHARD_SKU:-}"
 case "$RUNNER" in
-  mi325x-tw | mi300x-tw) ;;
-  *) collx_die "launch_mi-tw expects a Slurm-less -tw AMD SKU (mi325x-tw|mi300x-tw), got '${RUNNER}'" ;;
+  mi325x-tw) ;;
+  *) collx_die "launch_mi-tw expects mi325x-tw, got '${RUNNER}'" ;;
 esac
 export COLLX_RUNNER="$RUNNER" COLLX_BENCH="${COLLX_BENCH:-mori}" COLLX_VENDOR=amd
 case "$COLLX_BENCH" in
@@ -37,8 +37,7 @@ IMAGE="$COLLX_IMAGE"
 TS="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
 
 command -v docker >/dev/null 2>&1 || collx_die "docker not found on the $RUNNER runner"
-# -tw runner accounts differ: mi325x-tw's is in the docker group, mi300x-tw's `cam` only has
-# passwordless sudo.
+# Prefer direct Docker access; support accounts with passwordless sudo.
 DOCKER=(docker)
 if ! docker ps >/dev/null 2>&1; then
   if sudo -n docker ps >/dev/null 2>&1; then
@@ -143,11 +142,8 @@ if [ "$COLLX_BENCH" = uccl-ep ]; then
     -e COLLECTIVEX_SOURCE_SHA="${COLLECTIVEX_SOURCE_SHA:-}"
   )
 else
-  # MoRI's SDMA "anvil" transport (hsaKmtCreateQueueExt with HSA_QUEUE_SDMA_BY_ENG_ID) fails at
-  # init on the mi300x-tw kernel thunk (anvil.cpp:193); disable it there so MoRI falls back to
-  # the hipIpc/P2P intra-node path. mi325x-tw's thunk accepts the SDMA queue.
+  # The retained pool's kernel thunk supports MoRI's SDMA transport.
   mori_sdma_default=1
-  [ "$RUNNER" = mi300x-tw ] && mori_sdma_default=0
   docker_env=(
     -e MORI_DISABLE_AUTO_XGMI="${MORI_DISABLE_AUTO_XGMI:-0}"
     -e MORI_ENABLE_SDMA="${MORI_ENABLE_SDMA:-$mori_sdma_default}"

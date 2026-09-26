@@ -278,7 +278,7 @@ def test_pool_launcher_stages_artifacts_and_propagates_failure(point, tmp_path, 
     # Only external executables are stubbed; run the real pool launcher, shared
     # setup/profile/acceptance helpers, binder, and artifact collection.
     scripts = {
-        "git": 'if [[ "$1" == clone ]]; then mkdir -p "${@: -1}/configs"; else echo test-commit; fi',
+        "git": 'if [[ " $* " == *" clone "* ]]; then mkdir -p "${@: -1}/configs"; else echo test-commit; fi',
         "uv": 'if [[ "$1" == venv ]]; then mkdir -p .venv/bin; echo ":" > .venv/bin/activate; fi',
         "make": '[[ "$TEST_FAILURE" == bootstrap ]] && exit 13; mkdir -p bin; touch bin/uv',
         "squeue": '[[ "$TEST_FAILURE" == submission || "$TEST_FAILURE" == agentic ]] && echo "42"; exit 0',
@@ -335,7 +335,7 @@ def test_pool_launcher_stages_artifacts_and_propagates_failure(point, tmp_path, 
         env.pop("SRT_RECIPE")
     if failure == "agentic":
         env.update(IS_AGENTIC="1", SCENARIO_SUBDIR="agentic/", EXP_NAME="fixture_agentic",
-                   RUNNER_NAME="fixture_00", SRT_RECIPE="unused.yaml")
+                   RUNNER_NAME="fixture_00", SRT_RECIPE="")  # not yet ported: legacy script
     result = subprocess.run(
         ["bash", str(ROOT / f"runners/launch_{pool}.sh")], cwd=tmp_path,
         env=env, capture_output=True, text=True, timeout=30,
