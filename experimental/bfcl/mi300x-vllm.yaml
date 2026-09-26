@@ -12,4 +12,4 @@ minimaxm3-fp8-mi300x-vllm-bfcl-probe:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [2] }
+      - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [2], srt-recipe: experimental/bfcl/mi300x-minimax-native.yaml }

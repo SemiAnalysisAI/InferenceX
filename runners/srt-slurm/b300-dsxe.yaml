@@ -1,5 +1,7 @@
 default_account: ${SLURM_ACCOUNT}
 default_partition: ${SLURM_PARTITION}
+# srtctl otherwise submits with a one-hour limit.
+default_time_limit: ${SRT_DEFAULT_TIME_LIMIT}
 gpus_per_node: 8
 network_interface: ""
 srtctl_root: ${SRTCTL_ROOT}

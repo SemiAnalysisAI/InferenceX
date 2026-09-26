@@ -97,7 +97,7 @@ telemetry:
 benchmark:
   type: custom
   concurrencies: [1, 2, 3, 4, 5, 6, 7, 8, 10, 12]
-  command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
+  command: bash /infmax-workspace/benchmarks/srt_agentic.sh
   env:
     INFMAX_CONTAINER_WORKSPACE: "/infmax-workspace"
     RESULT_DIR: "/logs/agentic"

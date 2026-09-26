@@ -12,4 +12,4 @@ minimaxm3-fp4-b200-vllm-bfcl-probe:
     agentic-coding:
     - dram-utilization: 0.683
       search-space:
-      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1] }
+      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1], srt-recipe: experimental/bfcl/b200-minimax-native.yaml }

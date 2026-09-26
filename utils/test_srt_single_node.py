@@ -331,11 +331,12 @@ def test_pool_launcher_stages_artifacts_and_propagates_failure(point, tmp_path, 
     env.pop("AIPERF_DRAIN_TIMEOUT_SECONDS", None)
     env.pop("AIPERF_DRAIN_POLL_SECONDS", None)
     env.pop("BENCH_SCRIPT_OVERRIDE", None)
+    env["RUNNER_NAME"] = "fixture_00"
     if failure == "missing-recipe":
         env.pop("SRT_RECIPE")
     if failure == "agentic":
         env.update(IS_AGENTIC="1", SCENARIO_SUBDIR="agentic/", EXP_NAME="fixture_agentic",
-                   RUNNER_NAME="fixture_00", SRT_RECIPE="unused.yaml")
+                   RUNNER_NAME="fixture_00", SRT_RECIPE="")  # not yet ported: legacy script
     result = subprocess.run(
         ["bash", str(ROOT / f"runners/launch_{pool}.sh")], cwd=tmp_path,
         env=env, capture_output=True, text=True, timeout=30,
@@ -453,3 +454,36 @@ def test_b300_keeps_agentic_and_explicit_collector_dispatch(tmp_path, collector)
     assert calls[-1][-2:] == ["bash", expected]
     assert "--jobid=42" in calls[-1]
     assert (tmp_path / "cancelled").read_text() == "42\n"
+
+
+@pytest.mark.parametrize("suite,offload,eval_only,mode,server_env,details", [
+    ("bfcl_kimi_diagnostic", "none", "true", "kimi-metrics", {"VLLM_COMPUTE_NANS_IN_LOGITS": "1"}, False),
+    ("bfcl_smoke", "dram", "true", "native-cpu-restore", {"VLLM_SERVER_DEV_MODE": "1"}, True),
+    ("bfcl_smoke", "none", "true", "none", {}, False),
+    ("bfcl", "dram", "true", "none", {}, False),
+    ("bfcl_kimi_diagnostic", "none", "false", "none", {}, False),
+])
+def test_native_bfcl_diagnostics_bind_server_and_callback_together(
+    point, suite, offload, eval_only, mode, server_env, details
+):
+    path, recipe, env = point
+    recipe["engine"] = "vllm"
+    recipe["resources"]["gpu_type"] = "mi355x"
+    recipe["benchmark"]["command"] = "bash /repo/benchmarks/srt_agentic.sh"
+    recipe["roles"]["agg"]["args"] = {"tensor-parallel-size": 4}
+    path.write_text(yaml.safe_dump(recipe))
+    env.update(
+        FRAMEWORK="vllm", IS_AGENTIC="1", EVAL_ONLY=eval_only, RUN_EVAL="true",
+        MODEL_PREFIX="kimik3", DURATION="60", EVAL_FRAMEWORK="bfcl", EVAL_SUITE=suite,
+        KV_OFFLOADING=offload, KV_OFFLOAD_BACKEND="vllm-simple",
+    )
+    argv = runtime_arguments(str(path), env)
+    apply_overrides_to_recipe(recipe, parse_overrides(argv[1::2], []))
+    assert recipe["post_eval"]["command"] == [
+        "bash", "{infmax_workspace}/benchmarks/single_node/srt_eval.sh",
+        "{endpoint}", "/logs/infx-eval-exit-code", mode,
+    ]
+    role = recipe["roles"]["agg"]
+    assert role.get("env", {}) == server_env
+    assert role["args"].get("enable-prompt-tokens-details", False) == details
+    assert role["args"]["tensor-parallel-size"] == 4

@@ -150,7 +150,7 @@ apply_srt_recipe() {
         "$config" "$framework" -- "$@"
 }
 
-# One native submission per fixed-sequence matrix point, shared across Slurm pools.
+# One native submission per fixed-sequence or AgentX matrix point, shared across Slurm pools.
 launch_srt_single_node() {
     set -eo pipefail
     local profile="$1"
@@ -177,7 +177,6 @@ launch_srt_single_node() {
     SRT_SELECTED_RECIPE="${SRT_RUNTIME_ARGS[0]}"
     SRT_RUNTIME_ARGS=("${SRT_RUNTIME_ARGS[@]:1}")
     SRT_RUNTIME_ARGS+=(
-        --set 'post_eval.command=["bash", "{infmax_workspace}/benchmarks/single_node/srt_eval.sh", "{endpoint}", "/logs/infx-eval-exit-code"]'
         --set "post_eval.passthrough_env=$SRT_EVAL_PASSTHROUGH"
     )
     # Reuse only a valid cache for this exact image. Missing caches are imported
@@ -193,7 +192,7 @@ launch_srt_single_node() {
         --var SRT_DEFAULT_TIME_LIMIT "$SALLOC_TIME_LIMIT" \
         --model "hf:$MODEL" "$SRT_MODEL_PATH" --container "$IMAGE" "$SRT_CONTAINER" \
         --mount "$HF_HUB_CACHE_MOUNT" "$HF_HUB_CACHE" --exclusive "$@"
-    run_srt_setup ARCH=x86_64
+    run_srt_setup "ARCH=${SRT_SETUP_ARCH:-x86_64}"
 
     SRT_JOB_ID=""
     SRT_JOB_OUTPUT=""
@@ -216,6 +215,10 @@ launch_srt_single_node() {
                 [[ -f "$artifact" ]] || continue
                 copy_to_workspace "$artifact" "$GITHUB_WORKSPACE/$(basename "$artifact")" || rc=1
             done
+            # AgentX uploads its raw replay artifacts and power window from results/.
+            if [[ -d "$SRT_JOB_OUTPUT/logs/agentic" ]]; then
+                cp -r "$SRT_JOB_OUTPUT/logs/agentic" "$GITHUB_WORKSPACE/results" || rc=1
+            fi
         fi
         exit "$rc"
     }

@@ -524,6 +524,17 @@ case IDs, failure records, and sampling settings. The compatibility
 `results_bfcl.json` remains the only input to the normal InferenceX eval
 collector and dashboard path.
 
+### Native single-node BFCL diagnostics
+
+The configs under `experimental/bfcl/` select explicit native SRT-Slurm recipes.
+They retain their own image pins and resident/offload settings independently of
+the production grid. The matrix binder enables MI355X Kimi NaN metrics only for
+`bfcl_kimi_diagnostic` eval-only jobs and native cache-reset access only for the
+`bfcl_smoke`/`vllm-simple` offload diagnostic. The native post-eval callback
+archives `bfcl_diagnostic_metrics_artifacts.tar.gz` even when BFCL fails and
+preserves the original evaluator exit code. These controls do not enable the
+production TRT BFCL path, which remains guarded off.
+
 ### Experimental native CPU-cache restore check
 
 The Kimi MI355X vLLM `bfcl_smoke` path with `vllm-simple` offload also runs
@@ -538,8 +549,8 @@ requires an unchanged nonempty completion, a native cached-token count on the
 second request, and an increase in the external-prefix-hit counter. This checks
 one CPU restore; it is not a quality benchmark or comprehensive offload coverage.
 The 600-second process bound includes bounded HTTP calls and reset/metric settling.
-`results/native_cpu_restore_report.json` preserves both native responses and
-counter evidence, including failures, in the agentic raw artifact. It does not
+`native_cpu_restore_report.json` preserves both native responses and counter
+evidence, including failures, in the eval artifact. It does not
 rewrite BFCL results. A restore failure fails the job independently of BFCL.
 
 ### Benchmark script flow

@@ -12,7 +12,7 @@ kimik3-fp4-mi355x-vllm-bfcl-probe:
     agentic-coding:
     - dram-utilization: 0.60
       search-space:
-      - { tp: 8, ep: 1, dcp-size: 1, kv-offloading: none, conc-list: [8], spec-decoding: mtp }
+      - { tp: 8, ep: 1, dcp-size: 1, kv-offloading: none, conc-list: [8], spec-decoding: mtp, srt-recipe: experimental/bfcl/mi355x-kimi-native.yaml:override_resident }
 
 # Native CPU-offload diagnostic; no LMCache dependency or source patch.
 # 原生 CPU offload 诊断；不依赖 LMCache，也不修改框架源码。
@@ -28,4 +28,4 @@ kimik3-fp4-mi355x-vllm-native-offload-bfcl-probe:
     agentic-coding:
     - dram-utilization: 0.60
       search-space:
-      - { tp: 8, ep: 1, dcp-size: 1, kv-offloading: dram, kv-offload-backend: { name: vllm-simple, version: af1c01499b289be555c475669ba50a88e96d846e }, conc-list: [4], spec-decoding: mtp }
+      - { tp: 8, ep: 1, dcp-size: 1, kv-offloading: dram, kv-offload-backend: { name: vllm-simple, version: af1c01499b289be555c475669ba50a88e96d846e }, conc-list: [4], spec-decoding: mtp, srt-recipe: experimental/bfcl/mi355x-kimi-native.yaml:override_restore }
