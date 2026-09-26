@@ -425,6 +425,7 @@ jobs:
         runs-on: ubuntu-latest
         outputs:
             canary-config: ${{ steps.pick.outputs.canary-config }}
+            multi-node-canary-config: ${{ steps.pick.outputs.multi-node-canary-config }}
             remaining-search-space-config: ${{ steps.pick.outputs.remaining-search-space-config }}
         steps:
             - id: pick
@@ -443,21 +444,30 @@ jobs:
                     # whose primary purpose is eval (run-eval == true) so the
                     # picked canary never runs an eval pass.
                     (((.single_node["1k1k"] // []) + (.single_node["8k1k"] // []) + (.single_node.agentic // []))
-                      | map(select(.["run-eval"] != true))) as $candidates
-                    | (if ($candidates | length) == 0 then null else ($candidates | min_by(.conc)) end) as $canary
+                      | map(select(.["run-eval"] != true))) as $single_candidates
+                    | ((.multi_node.agentic // []) | map(select(.["run-eval"] != true))) as $multi_candidates
+                    | (if ($single_candidates | length) == 0 then null else ($single_candidates | min_by(.conc)) end) as $canary
+                    | (if $canary != null or ($multi_candidates | length) == 0 then null
+                       else ($multi_candidates | min_by(.conc[0])) end) as $multi_canary
                     | {
                         canary: (if $canary == null then [] else [$canary] end),
+                        multi_node_canary: (if $multi_canary == null then [] else [$multi_canary] end),
                         remaining: (
                           .
                           | .single_node = (.single_node // {})
                           | .single_node["1k1k"] = ((.single_node["1k1k"] // []) | remove_one($canary))
                           | .single_node["8k1k"] = ((.single_node["8k1k"] // []) | remove_one($canary))
                           | .single_node.agentic = ((.single_node.agentic // []) | remove_one($canary))
+                          | .multi_node = (.multi_node // {})
+                          | .multi_node.agentic = ((.multi_node.agentic // []) | remove_one($multi_canary))
                         )
                       }
                   ' <<<"$SEARCH_SPACE")
-                  echo "canary-config=$(jq -c '.canary' <<<"$selection")" >> "$GITHUB_OUTPUT"
-                  echo "remaining-search-space-config=$(jq -c '.remaining' <<<"$selection")" >> "$GITHUB_OUTPUT"
+                  {
+                    echo "canary-config=$(jq -c '.canary' <<<"$selection")"
+                    echo "multi-node-canary-config=$(jq -c '.multi_node_canary' <<<"$selection")"
+                    echo "remaining-search-space-config=$(jq -c '.remaining' <<<"$selection")"
+                  } >> "$GITHUB_OUTPUT"
 
     canary-sweep:
         needs: canary-select
@@ -487,14 +497,44 @@ jobs:
             duration: ${{ matrix.config.duration || '3600' }}
             agentx-fast: ${{ contains(github.event.pull_request.labels.*.name, 'agentx-fast') }}
 
+    canary-multi-node-sweep:
+        needs: canary-select
+        if: ${{ needs.canary-select.outputs.multi-node-canary-config != '' && needs.canary-select.outputs.multi-node-canary-config != '[]' }}
+        uses: $/.github/workflows/benchmark-multinode-tmpl.yml
+        name: multi-node canary /
+        strategy:
+            fail-fast: false
+            matrix:
+                config: ${{ fromJson(needs.canary-select.outputs.multi-node-canary-config) }}
+        secrets:
+            INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
+            MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+            MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+        with:
+            config: ${{ toJSON(matrix.config) }}
+            klaud-run: *klaud-run
+            runner: ${{ matrix.config.runner }}
+            node-count: ${{ matrix.config.node-count }}
+            priority: ${{ matrix.config.priority }}
+            queue-token: ${{ matrix.config['queue-token'] }}
+            skip-queue-pr: ${{ matrix.config['skip-queue-pr'] || '' }}
+            conc-list: ${{ toJson(matrix.config.conc) }}
+            conc: ${{ matrix.config.conc[0] }}
+            total-cpu-dram-gb: ${{ matrix.config['total-cpu-dram-gb'] }}
+            duration: ${{ matrix.config.duration }}
+            run-eval: false
+            scenario-type: agentic-coding
+            agentx-fast: ${{ contains(github.event.pull_request.labels.*.name, 'agentx-fast') }}
+
     sweep-multi-node-1k1k:
-        needs: [setup, canary-select, canary-sweep]
+        needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep]
         if: >-
             ${{
               !cancelled() &&
               needs.setup.result == 'success' &&
               needs.setup.outputs.reuse-enabled != 'true' &&
               (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
+              (needs.canary-multi-node-sweep.result == 'success' || needs.canary-multi-node-sweep.result == 'skipped') &&
               toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['1k1k']) != 'null'
             }}
         uses: $/.github/workflows/benchmark-multinode-tmpl.yml
@@ -520,13 +560,14 @@ jobs:
             run-eval: false
 
     sweep-multi-node-8k1k:
-        needs: [setup, canary-select, canary-sweep]
+        needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep]
         if: >-
             ${{
               !cancelled() &&
               needs.setup.result == 'success' &&
               needs.setup.outputs.reuse-enabled != 'true' &&
               (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
+              (needs.canary-multi-node-sweep.result == 'success' || needs.canary-multi-node-sweep.result == 'skipped') &&
               toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['8k1k']) != 'null'
             }}
         uses: $/.github/workflows/benchmark-multinode-tmpl.yml
@@ -542,13 +583,14 @@ jobs:
         with: *multi-node-inputs
 
     sweep-single-node-1k1k:
-        needs: [setup, canary-select, canary-sweep]
+        needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep]
         if: >-
             ${{
               !cancelled() &&
               needs.setup.result == 'success' &&
               needs.setup.outputs.reuse-enabled != 'true' &&
               (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
+              (needs.canary-multi-node-sweep.result == 'success' || needs.canary-multi-node-sweep.result == 'skipped') &&
               toJson(fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['1k1k']) != 'null' &&
               toJson(fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['1k1k']) != '[]'
             }}
@@ -574,13 +616,14 @@ jobs:
             run-eval: ${{ matrix.config.run-eval }}
 
     sweep-single-node-8k1k:
-        needs: [setup, canary-select, canary-sweep]
+        needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep]
         if: >-
             ${{
               !cancelled() &&
               needs.setup.result == 'success' &&
               needs.setup.outputs.reuse-enabled != 'true' &&
               (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
+              (needs.canary-multi-node-sweep.result == 'success' || needs.canary-multi-node-sweep.result == 'skipped') &&
               toJson(fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['8k1k']) != 'null' &&
               toJson(fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['8k1k']) != '[]'
             }}
@@ -597,13 +640,14 @@ jobs:
         with: *single-node-inputs
 
     sweep-agentic:
-        needs: [setup, canary-select, canary-sweep]
+        needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep]
         if: >-
             ${{
               !cancelled() &&
               needs.setup.result == 'success' &&
               needs.setup.outputs.reuse-enabled != 'true' &&
               (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
+              (needs.canary-multi-node-sweep.result == 'success' || needs.canary-multi-node-sweep.result == 'skipped') &&
               toJson(fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['agentic']) != 'null' &&
               toJson(fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['agentic']) != '[]'
             }}
@@ -631,21 +675,23 @@ jobs:
             agentx-fast: ${{ contains(github.event.pull_request.labels.*.name, 'agentx-fast') }}
 
     sweep-multi-node-agentic:
-        needs: [setup, canary-select, canary-sweep]
+        needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep]
         if: >-
             ${{
               !cancelled() &&
               needs.setup.result == 'success' &&
               needs.setup.outputs.reuse-enabled != 'true' &&
               (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
-              toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['agentic']) != 'null'
+              (needs.canary-multi-node-sweep.result == 'success' || needs.canary-multi-node-sweep.result == 'skipped') &&
+              toJson(fromJson((needs.canary-multi-node-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).multi_node['agentic']) != 'null' &&
+              toJson(fromJson((needs.canary-multi-node-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).multi_node['agentic']) != '[]'
             }}
         uses: $/.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node agentic /
         strategy:
             fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') || contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast-no-canary') }}
             matrix:
-                config: ${{ fromJson(needs.setup.outputs.search-space-config).multi_node['agentic'] }}
+                config: ${{ fromJson((needs.canary-multi-node-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).multi_node['agentic'] }}
         secrets:
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
@@ -667,13 +713,14 @@ jobs:
             agentx-fast: ${{ contains(github.event.pull_request.labels.*.name, 'agentx-fast') }}
 
     sweep-evals:
-        needs: [setup, canary-select, canary-sweep]
+        needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep]
         if: >-
             ${{
               !cancelled() &&
               needs.setup.result == 'success' &&
               needs.setup.outputs.reuse-enabled != 'true' &&
               (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
+              (needs.canary-multi-node-sweep.result == 'success' || needs.canary-multi-node-sweep.result == 'skipped') &&
               toJson(fromJson(needs.setup.outputs.search-space-config).evals) != '[]' &&
               toJson(fromJson(needs.setup.outputs.search-space-config).evals) != 'null'
             }}
@@ -704,13 +751,14 @@ jobs:
     # dispatched with sweep-agentic's inputs rather than sweep-evals' fixed-seq-len
     # inputs (isl/osl/max-model-len, which agentic rows don't have).
     sweep-agentic-evals:
-        needs: [setup, canary-select, canary-sweep]
+        needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep]
         if: >-
             ${{
               !cancelled() &&
               needs.setup.result == 'success' &&
               needs.setup.outputs.reuse-enabled != 'true' &&
               (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
+              (needs.canary-multi-node-sweep.result == 'success' || needs.canary-multi-node-sweep.result == 'skipped') &&
               toJson(fromJson(needs.setup.outputs.search-space-config).agentic_evals) != '[]' &&
               toJson(fromJson(needs.setup.outputs.search-space-config).agentic_evals) != 'null'
             }}
@@ -740,13 +788,14 @@ jobs:
             scenario-type: agentic-coding
 
     sweep-multi-node-evals:
-        needs: [setup, canary-select, canary-sweep]
+        needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep]
         if: >-
             ${{
               !cancelled() &&
               needs.setup.result == 'success' &&
               needs.setup.outputs.reuse-enabled != 'true' &&
               (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
+              (needs.canary-multi-node-sweep.result == 'success' || needs.canary-multi-node-sweep.result == 'skipped') &&
               toJson(fromJson(needs.setup.outputs.search-space-config).multinode_evals) != '[]' &&
               toJson(fromJson(needs.setup.outputs.search-space-config).multinode_evals) != 'null'
             }}
@@ -782,13 +831,14 @@ jobs:
     # eval-conc per topology; fixed-sequence --all-evals rows may instead pass
     # a joined concurrency list to lm-eval.
     sweep-multi-node-agentic-evals:
-        needs: [setup, canary-select, canary-sweep]
+        needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep]
         if: >-
             ${{
               !cancelled() &&
               needs.setup.result == 'success' &&
               needs.setup.outputs.reuse-enabled != 'true' &&
               (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
+              (needs.canary-multi-node-sweep.result == 'success' || needs.canary-multi-node-sweep.result == 'skipped') &&
               toJson(fromJson(needs.setup.outputs.search-space-config).multinode_agentic_evals) != '[]' &&
               toJson(fromJson(needs.setup.outputs.search-space-config).multinode_agentic_evals) != 'null'
             }}
@@ -826,6 +876,7 @@ jobs:
         needs:
             [
                 canary-sweep,
+                canary-multi-node-sweep,
                 sweep-single-node-1k1k,
                 sweep-single-node-8k1k,
                 sweep-agentic,
@@ -840,6 +891,7 @@ jobs:
               needs.setup.result == 'success' &&
               (
                 needs.canary-sweep.result == 'success' ||
+                needs.canary-multi-node-sweep.result == 'success' ||
                 needs.sweep-single-node-1k1k.result != 'skipped' ||
                 needs.sweep-single-node-8k1k.result != 'skipped' ||
                 needs.sweep-multi-node-1k1k.result != 'skipped' ||

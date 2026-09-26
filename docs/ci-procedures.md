@@ -263,7 +263,7 @@ Changing a recognized primary or modifier label shares the active sweep concurre
 Canary and fail-fast solve different problems:
 
 1. A canary is created only for `full-sweep-enabled` or `full-sweep-fail-fast` PRs. No-canary labels and `sweep-enabled` skip it.
-2. Canary selection considers single-node fixed-sequence `1k1k` and `8k1k` entries and single-node AgentX entries, excludes entries whose primary purpose is eval, and chooses the lowest-concurrency candidate. It uses that entry's scenario and duration, then removes it from the later matrix.
+2. Canary selection first considers single-node fixed-sequence `1k1k` and `8k1k` entries and single-node AgentX entries. If none are eligible, it considers multi-node AgentX entries. It excludes eval entries, chooses the lowest-concurrency candidate, runs it with the matching single-node or multi-node workflow, and removes it from the later matrix.
 3. If there is no eligible candidate, the canary is skipped. Otherwise all benchmark/eval matrices require the canary to succeed. A failed canary prevents their fan-out.
 4. `full-sweep-fail-fast` and `full-sweep-fail-fast-no-canary` set `strategy.fail-fast: true` separately on each matrix job family. The first failing point cancels queued/in-progress siblings in that matrix family. It is not one global kill switch for every independent family.
 5. Non-fail-fast labels leave matrix fail-fast false so other points continue and preserve broader diagnostic coverage.
