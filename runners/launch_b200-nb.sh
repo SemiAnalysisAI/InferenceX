@@ -1,7 +1,24 @@
 #!/usr/bin/bash
 
 source "$(dirname "${BASH_SOURCE[0]}")/../benchmarks/benchmark_lib.sh" --validation-only || exit 1
-check_env_vars IS_MULTINODE
+check_env_vars IS_MULTINODE IS_AGENTIC
+
+EXECUTION_PATH=agentic
+if [[ "$IS_MULTINODE" == true ]]; then
+    EXECUTION_PATH=multinode
+elif [[ "$IS_AGENTIC" == 0 || -n "${SRT_RECIPE:-}" ]]; then
+    check_env_vars SRT_RECIPE
+    EXECUTION_PATH=native-single-node
+fi
+if [[ "$EXECUTION_PATH" == native-single-node ]]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh" || exit 1
+    HF_HUB_CACHE_MOUNT=/mnt/data/gharunners/hf-hub-cache
+    SRT_MODEL_PATH="hf:$MODEL"
+    unset SRT_SQUASH_FILE
+    export UCX_NET_DEVICES=eth0
+    launch_srt_single_node b200-nb
+    exit $?
+fi
 
 HF_HUB_CACHE_MOUNT="/mnt/data/gharunners/hf-hub-cache/"
 PARTITION="main"

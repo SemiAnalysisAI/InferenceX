@@ -52,12 +52,10 @@ check_env_vars IS_MULTINODE MODEL_NAME PRECISION
 
 ## Deprecating benchmark configs
 
-- Move deprecated entries out of the active master config into [`configs/deprecated/amd-master.yaml`](configs/deprecated/amd-master.yaml) or [`configs/deprecated/nvidia-master.yaml`](configs/deprecated/nvidia-master.yaml), matching the vendor. These are the only deprecated master-config files; do not create separate files per model, scenario, or deprecation.
-- For a partial deprecation, archive only the retired scenarios and retain the supported scenarios in the active entry. Preserve archived settings and explanatory comments; do not update historical image pins or runners during archival.
-- Keep every archive key unique. If a key already exists with different settings, preserve both versions with a descriptive suffix on the historical key and a comment recording its original config key. Existing colliding 1k1k versions use `-deprecated-1k1k`. Never overwrite an archived version or add duplicate YAML keys.
+- Delete retired entries from the active master config; do not archive them. Git history and `perf-changelog.yaml` are the record of past settings. For a partial deprecation, remove only the retired scenarios and retain the supported scenarios in the active entry.
 - Check retirement statements in [`MODELS.md`](MODELS.md) against active configs and script routing in the same PR, and update `MODELS.md` plus `MODELS_zh.md` together. Preserve explicitly documented exceptions and conditional retirement policies; do not treat planned retirement as completed.
 - Remove unused retired-model branches from launchers and runtime settings, and update workflow/agent guidance that still recommends retired coverage. Audit callers before removing shared helpers; retained SPEED-Bench collectors and historical result readers may still need model-specific support.
-- Keep these archives out of active sweep inputs. Follow the existing benchmark-script archival convention, moving retired scripts into the sibling `deprecated/` directory only when no active config still uses them.
+- Delete recipes, setup scripts and other assets that no active config uses any more rather than moving them to a `deprecated/` directory.
 
 ## Runner launchers (one file per pool)
 
@@ -65,6 +63,15 @@ check_env_vars IS_MULTINODE MODEL_NAME PRECISION
 - Do not add a second launcher for a pool and `exec` into it for some jobs. Different execution paths for one pool (single-node `salloc`, srt-slurm recipes, cluster-maintained lanes) branch inside that pool's one file. Select the path once near the top and name it, so the routing for a pool reads in one place.
 - Do not add launcher-name aliases to `runners/runtime_settings.sh` or elsewhere for scripts that no runner resolves to. A launcher without a pool is dead code; a pool without a launcher fails at job start.
 - When a pool is retired, delete its launcher in the same PR rather than keeping it as a fallback for another pool.
+
+## SRT Slurm cluster hooks
+
+- Put reusable host-check functions in `runners/srt-slurm/hooks/common.sh`. Sourcing it must only define functions, without running checks, changing environment variables, or initializing benchmarks. Cluster-only helpers stay beside their setup script.
+- Keep cluster-specific host prerequisites in `runners/srt-slurm/hooks/<cluster>/setup.sh`, invoked explicitly by the matching cluster profile's `default_host_setup`. These run after allocation, before services and workers start.
+- Hooks are only for checks and setup required by that cluster's hosts or fabric. Keep them small, workload-independent, and safe to run repeatedly. Prefer native srt-slurm configuration whenever it can express the requirement.
+- Do not put benchmark execution, model selection, engine flags, concurrency tuning, evaluation, result collection, or job orchestration in hooks. Those belong in recipes, benchmark scripts, or the existing orchestration layer.
+- Do not use hooks to patch engines or containers, bypass failed checks, or hide runtime bugs behind retries and ad hoc workarounds. Fix problems in the component that owns them.
+- Pass settings explicitly from the cluster profile. Scope mutations to the allocated nodes, preserve other jobs' resources, and register teardown for temporary state that needs restoring. See [cluster profiles](docs/configuration-procedures.md#cluster-profiles).
 
 ## SRT Slurm synthetic acceptance
 

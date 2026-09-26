@@ -4,13 +4,14 @@
 #
 # The reusable workflows run runners/launch_${RUNNER_NAME%%_*}.sh, so every
 # b200-nscale-slurm_* runner enters here and this is the pool's only launcher.
-# Three execution paths share the file and are selected once, below:
+# Execution paths share the file and are selected once, below:
 #   native-srt     multi-node lanes whose srt-slurm recipes are maintained
 #                  against this cluster (DSV4 / Kimi K3 / GLM-5.2
 #                  FP4 and GLM-5.1 FP8 TileRT)
 #   multinode-srt  every other multi-node job, through srt-slurm with the
 #                  cluster-wide model table
-#   single-node    salloc + srun of the benchmarks/single_node script
+#   native-single-node  fixed-sequence jobs, which require an SRT recipe
+#   agentic        salloc + srun of the existing AgentX script
 source "$(dirname "${BASH_SOURCE[0]}")/../benchmarks/benchmark_lib.sh" --validation-only || exit 1
 check_env_vars EVAL_ONLY IS_AGENTIC IS_MULTINODE RUN_EVAL
 # Exported for this pool by runners/runtime_settings.sh.
@@ -49,8 +50,11 @@ if uses_native_srt_lane; then
     LAUNCH_PATH="native-srt"
 elif [[ "$IS_MULTINODE" == "true" ]]; then
     LAUNCH_PATH="multinode-srt"
+elif [[ "$IS_AGENTIC" == "0" || -n "${SRT_RECIPE:-}" ]]; then
+    check_env_vars SRT_RECIPE
+    LAUNCH_PATH="native-single-node"
 else
-    LAUNCH_PATH="single-node"
+    LAUNCH_PATH="agentic"
 fi
 echo "B200 Nscale launch path: $LAUNCH_PATH"
 
@@ -134,10 +138,8 @@ elif [[ $MODEL_PREFIX == "kimik3" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/scratch/models/Kimi-K3"
     export SRT_SLURM_MODEL_PREFIX="kimik3"
 elif [[ $MODEL_PREFIX == "qwen3.8next" && $PRECISION == "fp4" ]]; then
-    check_env_vars MODEL_PATH
-    if [[ -n "${MODEL_PATH}" && -d "$MODEL_PATH" ]]; then
-        :
-    else
+    # No pool setting names this checkpoint; default to the node-local copy.
+    if [[ -z "${MODEL_PATH:-}" || ! -d "$MODEL_PATH" ]]; then
         export MODEL_PATH="/scratch/models/Qwen3.8-Flash-Next-NVFP4"
     fi
     export SRT_SLURM_MODEL_PREFIX="qwen3.8next-fp4"
@@ -146,6 +148,17 @@ else
     echo "Available models under /scratch/models:"
     ls -la /scratch/models
     exit 1
+fi
+
+if [[ "$LAUNCH_PATH" == native-single-node ]]; then
+    HF_HUB_CACHE_MOUNT=/data/home/sa-shared/gharunners/hf-hub-cache
+    SRT_MODEL_PATH="$MODEL_PATH"
+    # Models not staged locally resolve through the Hugging Face cache mount.
+    [[ "$SRT_MODEL_PATH" == /* ]] || SRT_MODEL_PATH="hf:$MODEL"
+    SRT_SQUASH_FILE="$B200_SQUASH_DIR/$(printf '%s' "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    launch_srt_single_node b200-nscale-slurm \
+        --var SLURM_ACCOUNT "$SLURM_ACCOUNT" --var SLURM_PARTITION "$SLURM_PARTITION"
+    exit $?
 fi
 
 # ---------------------------------------------------------------------------
@@ -269,9 +282,9 @@ run_native_srt_lane() {
     export UV_INSTALL_DIR="$GITHUB_WORKSPACE/.local/bin"
     curl -LsSf https://astral.sh/uv/install.sh | sh
     export PATH="$UV_INSTALL_DIR:$PATH"
-    uv venv "$GITHUB_WORKSPACE/.venv"
+    uv venv --quiet "$GITHUB_WORKSPACE/.venv"
     source "$GITHUB_WORKSPACE/.venv/bin/activate"
-    uv pip install -e .
+    uv pip install --quiet -e .
 
     if ! command -v srtctl &> /dev/null; then
         echo "Error: Failed to install srtctl" >&2
@@ -339,8 +352,7 @@ run_native_srt_lane() {
     echo "Generated srtslurm.yaml:"
     cat srtslurm.yaml
 
-    echo "Running make setup..."
-    make setup ARCH=x86_64
+    run_srt_setup ARCH=x86_64
 
     # Read by srt-slurm's post-benchmark eval.
     export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
@@ -372,7 +384,7 @@ run_native_srt_lane() {
         sed -i 's/^  max_attempts: [0-9]*/  max_attempts: 720/' "$CONFIG_PATH"
     fi
 
-    if [[ "$USES_AGENTX_POWER" == "1" ]]; then
+    if [[ "$USES_DCGM_POWER" == "1" ]]; then
         read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
         python "$GITHUB_WORKSPACE/runners/inject_srt_power_concurrencies.py" \
             "$CONFIG_PATH" "${POWER_CONCURRENCIES[@]}" || exit 1
@@ -571,9 +583,9 @@ run_multinode_srt() {
     curl -LsSf https://astral.sh/uv/install.sh | sh
     export PATH="$UV_INSTALL_DIR:$PATH"
 
-    uv venv "$GITHUB_WORKSPACE/.venv"
+    uv venv --quiet "$GITHUB_WORKSPACE/.venv"
     source "$GITHUB_WORKSPACE/.venv/bin/activate"
-    uv pip install -e .
+    uv pip install --quiet -e .
 
     if ! command -v srtctl &> /dev/null; then
         echo "Error: Failed to install srtctl"
@@ -630,8 +642,7 @@ run_multinode_srt() {
     echo "Generated srtslurm.yaml:"
     cat srtslurm.yaml
 
-    echo "Running make setup..."
-    make setup ARCH=x86_64
+    run_srt_setup ARCH=x86_64
 
     # Read by srt-slurm's post-benchmark eval.
     export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
@@ -754,10 +765,10 @@ run_multinode_srt() {
 }
 
 # ---------------------------------------------------------------------------
-# single-node: salloc + srun of the benchmarks/single_node script
+# agentic: salloc + srun of the existing AgentX script
 # ---------------------------------------------------------------------------
 
-run_single_node() {
+run_agentic() {
     # The runner lease reserves the Slurm nodes before this single-node job is
     # submitted to the Nscale batch_1 partition.
     check_env_vars SALLOC_TIME_LIMIT GPU_COUNT
@@ -834,5 +845,5 @@ run_single_node() {
 case "$LAUNCH_PATH" in
     native-srt) run_native_srt_lane ;;
     multinode-srt) run_multinode_srt ;;
-    single-node) run_single_node ;;
+    agentic) run_agentic ;;
 esac

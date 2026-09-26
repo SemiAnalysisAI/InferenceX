@@ -137,8 +137,9 @@ health_check:
   interval_seconds: 10
 
 benchmark:
-  type: sa-bench
-  isl: 8192
-  osl: 1024
-  req_rate: inf
-  concurrencies: '512'
+  type: custom
+  command: bash /infmax-workspace/benchmarks/multi_node/srt_fixed_sequence.sh
+  env:
+    TOKENIZER: /model
+    ISL: '8192'
+    OSL: '1024'

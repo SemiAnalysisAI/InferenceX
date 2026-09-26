@@ -121,6 +121,30 @@ def test_multinode_node_count_reads_schema_two_roles(tmp_path, monkeypatch, role
         assert generate.recipe_node_count(prefill, {}) == expected
 
 
+@pytest.mark.parametrize("selector, expected", [
+    ("base", 3),
+    ("override_wide", 5),
+    ("override_colocated", 2),
+    ("zip_override_sweep[0]", None),
+])
+def test_recipe_node_count_resolves_override_selectors(tmp_path, monkeypatch, selector, expected):
+    recipe = tmp_path / "benchmarks/multi_node/srt-slurm-recipes/variants.yaml"
+    recipe.parent.mkdir(parents=True)
+    recipe.write_text(yaml.safe_dump({
+        "schema": 2,
+        "base": {"roles": {"prefill": {"nodes": 1}, "decode": {"nodes": 2}}},
+        "override_wide": {"roles": {"decode": {"nodes": 4}}},
+        "override_colocated": {"roles": {"prefill": {"nodes": 2}, "decode": {"nodes": "colocate"}}},
+        "zip_override_sweep": {"roles": {"decode": {"nodes": [1, 2]}}},
+    }))
+    import infx.matrix.generate as generate
+    import infx.config
+    (tmp_path / "configs").mkdir()
+    monkeypatch.setattr(infx.config, "__file__", str(tmp_path / "infx/config.py"))
+    prefill = {"additional-settings": [f"CONFIG_FILE=recipes/variants.yaml:{selector}"]}
+    assert generate.recipe_node_count(prefill, {}) == expected
+
+
 def test_multinode_node_count_uses_role_gpu_footprints(sample_runner_config):
     prefill = {"num-worker": 3, "tp": 2, "pp": 1, "pcp-size": 1}
     decode = {"num-worker": 2, "tp": 8, "pp": 1, "pcp-size": 1}
@@ -189,6 +213,20 @@ def test_multinode_node_count_prefers_recipe_roles(
 # =============================================================================
 # Test Fixtures
 # =============================================================================
+
+
+@pytest.mark.parametrize("command", ["full-sweep", "test-config"])
+def test_srt_recipe_selection_stays_with_its_scenario(
+    sample_single_node_config, sample_runner_config, full_sweep_args_both, command,
+):
+    key, config = next(iter(sample_single_node_config.items()))
+    config["scenarios"]["fixed-seq-len"][0]["search-space"][0]["srt-recipe"] = "pilot.yaml:base"
+    vars(full_sweep_args_both).update(config_keys=[key], no_evals=True)
+    generate = generate_full_sweep if command == "full-sweep" else generate_test_config_sweep
+    rows = generate(full_sweep_args_both, sample_single_node_config, sample_runner_config)
+    assert rows
+    assert {row.get("srt-recipe") for row in rows if row["isl"] == 1024} == {"pilot.yaml:base"}
+    assert {row.get("srt-recipe") for row in rows if row["isl"] == 8192} == {None}
 
 @pytest.fixture
 def sample_single_node_config():

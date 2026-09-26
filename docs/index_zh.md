@@ -43,7 +43,7 @@
 | [`KLAUD_DEBUG.md`](../KLAUD_DEBUG.md) | Klaud-Cold、CI、镜像、集群与 GitHub CLI 的历史故障特征 |
 | [`klaud.md`](./klaud.md) / [`klaud_zh.md`](./klaud_zh.md) | Klaud Cold 候选选择、所有权、验证与恢复 |
 | [`klaud-reporting.md`](./klaud-reporting.md) / [`klaud-reporting_zh.md`](./klaud-reporting_zh.md) | Klaud PR 正文、进度评论、数值对比与最终预检 |
-| [`benchmarks/single_node/agentic/README.md`](../benchmarks/single_node/agentic/README.md) | AgentX Trace 基准测试实现 |
+| [`benchmarks/srt_agentic.sh`](../benchmarks/srt_agentic.sh) | 单节点与多节点 srt-slurm 配方共用的 AgentX Trace 回放客户端 |
 
 ## 上下文规则
 
