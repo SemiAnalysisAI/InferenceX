@@ -1,4 +1,4 @@
-"""Bind a native single-node SRT recipe to one fixed-sequence matrix point."""
+"""Bind a native single-node SRT recipe to one fixed-sequence or AgentX matrix point."""
 
 from __future__ import annotations
 
@@ -36,6 +36,14 @@ def parallelism_constraints(
             "moe_expert_parallel_size": (args["moe_expert_parallel_size"], ep),
             "pipeline_parallel_size": (args.get("pipeline_parallel_size", 1), 1),
             "DP_ATTENTION": (args.get("enable_attention_dp", False), dp_attention),
+        }
+    if engine == "vllm":
+        # vLLM spreads DP attention across data-parallel ranks of tensor size 1.
+        data_parallel = args.get("data-parallel-size", 1)
+        return {
+            "tensor x data parallel": (args.get("tensor-parallel-size", 1) * data_parallel, tp),
+            "DP_ATTENTION": (data_parallel > 1, dp_attention),
+            "enable-expert-parallel": (args.get("enable-expert-parallel", False), ep > 1),
         }
     if engine == "atom":
         if ep not in {1, tp}:
@@ -77,12 +85,16 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
     workload = benchmark["env"]
     engine_config = recipe["engine"]
     engine = engine_config["type"] if isinstance(engine_config, dict) else engine_config
-    if environment["FRAMEWORK"] not in {"sglang", "trt", "atom"}:
+    if environment["FRAMEWORK"] not in {"sglang", "trt", "atom", "vllm"}:
         raise ValueError(f"Unsupported single-node framework: {environment['FRAMEWORK']!r}")
     spec = spec_parameters(role, engine)
-    if spec and spec["method"] not in {"eagle", "nextn", "mtp"}:
-        raise ValueError("Single-node SRT supports only native MTP or no speculation")
-    speculation = "mtp" if spec else "none"
+    if spec and spec["method"] not in {"eagle", "eagle3", "nextn", "mtp", "dspark"}:
+        raise ValueError(
+            "Single-node SRT supports only native MTP, EAGLE3, DSpark or no speculation"
+        )
+    # A point that stops drafting may keep its matrix label.
+    speculation = "mtp" if spec else workload.get("SPEC_DECODING", "none")
+    agentic = environment["IS_AGENTIC"] == "1"
     expected = {
         "engine": (engine, SINGLE_NODE_ENGINES[environment["FRAMEWORK"]]),
         "model": (recipe["model"]["path"], f"hf:{environment['MODEL']}"),
@@ -95,23 +107,29 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
         "roles": (set(recipe["roles"]), {"agg"}),
         "benchmark type": (benchmark["type"], "custom"),
         "benchmark MODEL": (workload["MODEL"], environment["MODEL"]),
-        "SPEC_DECODING": (speculation, environment["SPEC_DECODING"]),
-        "USE_CHAT_TEMPLATE": (workload["USE_CHAT_TEMPLATE"], "true" if spec else "false"),
+        # draft_model names a bundled or separate draft; its recipes speculate natively.
+        "SPEC_DECODING": (
+            speculation,
+            "mtp"
+            if environment["SPEC_DECODING"] == "draft_model"
+            else environment["SPEC_DECODING"],
+        ),
+        "AgentX client": (benchmark.get("command", "").endswith("srt_agentic.sh"), agentic),
     }
-    if "CONC" in workload:
-        expected["CONC"] = (str(workload["CONC"]), environment["CONC"])
+    if not agentic:
+        expected["USE_CHAT_TEMPLATE"] = (workload["USE_CHAT_TEMPLATE"], "true" if spec else "false")
+        for name in ("ISL", "OSL", "RANDOM_RANGE_RATIO"):
+            expected[name] = (str(workload[name]), environment[name])
+    # A variant that names its point, or the host budget it sizes, must match the matrix.
+    for name in ("CONC", "KV_OFFLOADING", "TOTAL_CPU_DRAM_GB"):
+        if name in workload:
+            expected[name] = (str(workload[name]), environment[name])
     if engine == "atom":
         # Native ATOM derives -tp from the aggregate worker's GPU allocation.
         expected["ATOM TP"] = (role["gpus"], int(environment["TP"]))
-    for name in ("ISL", "OSL", "RANDOM_RANGE_RATIO"):
-        expected[name] = (str(workload[name]), environment[name])
-    # Multi-node and AgentX workloads use their existing connector.
-    for name, value in {
-        "PP_SIZE": "1",
-        "DCP_SIZE": "1",
-        "PCP_SIZE": "1",
-        "IS_AGENTIC": "0",
-    }.items():
+    # vLLM shards decode KV across its tensor-parallel ranks.
+    dcp = str(args.get("decode-context-parallel-size", 1)) if engine == "vllm" else "1"
+    for name, value in {"PP_SIZE": "1", "DCP_SIZE": dcp, "PCP_SIZE": "1"}.items():
         expected[name] = (environment[name], value)
     for name, (actual, wanted) in expected.items():
         if actual != wanted:
@@ -141,14 +159,18 @@ def runtime_arguments(config: str, environment: Mapping[str, str]) -> list[str]:
         # flags. Runtime option mappings therefore need individual leaf sets.
         for key, value in options.items():
             overrides += ["--set", f"srun_options.{key}={json.dumps(value)}"]
-    for name in (
+    agentic = environment["IS_AGENTIC"] == "1"
+    names = [
         "CONC",
         "RESULT_FILENAME",
         "GPU_MONITOR_INTERVAL",
         "RUN_EVAL",
         "EVAL_ONLY",
         "FRAMEWORK",
-    ):
+    ]
+    if agentic:
+        names += ["MODEL_PREFIX", "PRECISION", "DURATION", "TP", "PP_SIZE", "PCP_SIZE"]
+    for name in names:
         value = environment[name]
         if not value:
             raise ValueError(f"Missing runtime input: {name}")
@@ -157,6 +179,10 @@ def runtime_arguments(config: str, environment: Mapping[str, str]) -> list[str]:
         if name == "CONC" and name in recipe["benchmark"]["env"]:
             continue
         overrides += ["--set", f"benchmark.env.{name}={json.dumps(value)}"]
+    if agentic:
+        # The aggregated result lands where fixed-sequence results do.
+        overrides += ["--set", 'benchmark.env.AGENTIC_OUTPUT_DIR="/logs"']
+        return [*overrides, "--set", 'benchmark.env.RESULT_DIR="/logs/agentic"']
     if environment["EVAL_ONLY"] == "true":
         context = int(environment["MAX_MODEL_LEN"])
         if context <= 0:
@@ -165,6 +191,7 @@ def runtime_arguments(config: str, environment: Mapping[str, str]) -> list[str]:
             "sglang": ("context-length",),
             "trt": ("max_seq_len", "max_num_tokens"),
             "atom": ("max-model-len",),
+            "vllm": ("max-model-len",),
         }[environment["FRAMEWORK"]]
         for key in context_keys:
             overrides += ["--set", f"roles.agg.args.{key}={context}"]

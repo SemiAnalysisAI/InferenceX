@@ -1,5 +1,7 @@
 default_account: ${SLURM_ACCOUNT}
 default_partition: ${SLURM_PARTITION}
+# srtctl otherwise submits with a one-hour limit.
+default_time_limit: ${SRT_DEFAULT_TIME_LIMIT}
 gpus_per_node: 8
 network_interface: ""
 srtctl_root: ${SRTCTL_ROOT}
@@ -12,8 +14,6 @@ model_paths:
   glm-5.2-fp8: ${MODEL_ROOT}/GLM-5.2-FP8
   nvidia/GLM-5.2-NVFP4: ${MODEL_ROOT}/GLM-5.2-NVFP4
   zai-org/GLM-5.2-FP8: ${MODEL_ROOT}/GLM-5.2-FP8
-  # Retained historical SRT recipe alias; no active master selects this model.
-  kimi-k2.6-nvfp4: ${MODEL_ROOT}/Kimi-K2.6-NVFP4
   kimi-k3: ${MODEL_ROOT}/Kimi-K3
   kimik3: ${MODEL_ROOT}/Kimi-K3
   moonshotai/Kimi-K3: ${MODEL_ROOT}/Kimi-K3

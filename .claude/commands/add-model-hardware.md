@@ -1,5 +1,5 @@
 ---
-description: Add a new model+hardware single-node benchmark recipe (script + master-config entry + perf-changelog + launcher routing), open a [Klaud Cold] PR, label full-sweep-fail-fast, and monitor CI
+description: Add a new model+hardware single-node benchmark recipe (srt-slurm recipe + master-config entry + perf-changelog), open a [Klaud Cold] PR, label full-sweep-fail-fast, and monitor CI
 argument-hint: <model-link> <gpu-sku> [recipes-link] [draft-model-link] [mtp]
 ---
 
@@ -40,45 +40,43 @@ Check `MODELS.md` before choosing a model, scenario, or precision. Do not reintr
 
 **A. In-codebase research (primary because this repo is the source of truth):**
 ```bash
-# similar benchmark scripts: same model on other SKUs, AND same SKU on other models
-ls benchmarks/single_node/fixed_seq_len/<model>_*.sh benchmarks/single_node/fixed_seq_len/*_<sku>*.sh
+# similar srt-slurm recipes: same model on other SKUs, AND same SKU on other models
+ls -d benchmarks/single_node/srt-slurm-recipes/<model>/*/* benchmarks/single_node/srt-slurm-recipes/*/*/<sku>-*
 # similar master-config entries (search spaces, image, parallelism), this model + analogues
 grep -nE "<model>-|.*-<sku>-" configs/{nvidia,amd}-master.yaml
-# the runner launcher for this SKU (script-name routing, env, mounts, MODEL_PATH rewrite)
-sed -n '1,80p' runners/launch_<sku>*.sh
-# shared helpers the scripts rely on
-grep -nE "run_benchmark_serving|setup_eval_context|wait_for_server_ready|start_gpu_monitor" benchmarks/benchmark_lib.sh
+# how a matrix point selects exactly one recipe variant (TP, GPUs, CONC, KV_OFFLOADING, image)
+sed -n '/def select_recipe/,/^def runtime_arguments/p' infx/srt_slurm/single_node.py
 ```
-- **Read multiple sibling scripts** end-to-end for the exact env vars and serve shape (`VLLM_*`,
+- **Read multiple sibling recipes** end-to-end for the exact engine args, env vars and serve shape (`VLLM_*`,
   `SGLANG_*`, device mapping, download/cache handling, `--enforce-eager` vs graph capture,
-  KV-cache dtype, attention/MoE backend, parsers). These are the truth for each runner.
+  KV-cache dtype, attention/MoE backend, parsers, `setup_script`). These are the truth for each runner.
 - **Compare several master-config search spaces** (e.g. `dsr1`, `qwen3.5`, the same model on a
   sibling SKU) to choose `{tp, ep, dp-attn} × concurrency` combos that fit *this* hardware's
   memory. Small-memory SKUs like h100/mi300x go TP8-only, while bigger SKUs add tp4/tp2/DEP.
 - **Internalize the fixed-seq-len nuances from the existing configs**: `8k1k` runs do **not**
   need the full `MAX_MODEL_LEN` (the matrix supplies `isl + osl + slack`), and graph-capture
   batch sizes are scaled to concurrency/scenario (and spec-token count for MTP), not maxed.
-  Copy how sibling scripts/configs already do it.
+  Copy how sibling recipes/configs already do it.
 
 **B. External research (confirm against upstream guidance):**
 - **`WebFetch` the model-link card + its `config.json`** → confirm `model:` id, precision, max
   context, architecture, spec-decode fields (`num_mtp_modules`, etc.).
 - **`WebFetch` the recipes-link** (if given) → canonical `vllm serve` flags + troubleshooting.
-  Reconcile with what the sibling scripts do. If they conflict, follow the repo and note why.
+  Reconcile with what the sibling recipes do. If they conflict, follow the repo and note why.
 - If a **draft-model-link** is given, note its id for `--speculative-config` and check the card
   for method (`eagle3` vs native `mtp`) and recommended token count.
 - Pick the **image tag** from the sibling's master-config entry (or recipes page) and **verify
   it exists** on the registry before using it.
 
-This research directly feeds Step 2 (script flags/env) and Step 3 (search space).
+This research directly feeds Step 2 (recipe args/env) and Step 3 (search space).
 
-## What you're producing (4–5 files)
+## What you're producing (3 files)
 
-1. `benchmarks/single_node/fixed_seq_len/<model>_<precision>_<sku>[_<engine>][_mtp].sh`
+1. `benchmarks/single_node/srt-slurm-recipes/<model-prefix>/<engine>/<sku>-<precision>[-mtp]/8k1k.yaml`
+   (an `agentic.yaml` beside it for AgentX)
 2. an entry in either master config, **`configs/nvidia-master.yaml`** (b*/h*/gb* SKUs) or
-   **`configs/amd-master.yaml`** (mi* SKUs)
+   **`configs/amd-master.yaml`** (mi* SKUs), with `srt-recipe:` on every search-space row
 3. a `perf-changelog.yaml` entry (this diff vs main is what selects the sweep)
-4. (if missing) `SPEC_SUFFIX`/framework-suffix routing in `runners/launch_<sku>*.sh`
 
 ## Step 1 — branch + find the sibling to copy
 
@@ -86,17 +84,20 @@ This research directly feeds Step 2 (script flags/env) and Step 3 (search space)
 git checkout main && git pull origin main
 git checkout -b feat/<model>-<sku>[-mtp]-dayzero
 # nearest sibling: same model other SKU, or same SKU other model
-ls benchmarks/single_node/fixed_seq_len/<model>_*           # same model, other hardware
-ls benchmarks/single_node/fixed_seq_len/*_<sku>*.sh         # same hardware, other model
+ls -d benchmarks/single_node/srt-slurm-recipes/<model>/*/*      # same model, other hardware
+ls -d benchmarks/single_node/srt-slurm-recipes/*/*/<sku>-*       # same hardware, other model
 grep -n "<model>-<precision>-<sku>" configs/{nvidia,amd}-master.yaml
 ```
-Read the closest sibling script **and** its master-config entry. Copy their flag shapes and
+Read the closest sibling recipe **and** its master-config entry. Copy their flag shapes and
 search-space structure rather than inventing. The right model is "same model on a sibling SKU,
 adjusted for this hardware's quirks."
 
-## Step 2 — write the benchmark script
+## Step 2 — write the srt-slurm recipe
 
-Copy the sibling script and adjust. Things that vary and must be checked against the sibling /
+Copy the sibling recipe (`base:` plus one `override_*` variant per matrix point) and adjust.
+Engine flags are `roles.agg.args` keys without the leading `--`; env vars go in
+`roles.agg.env`; each variant names its `CONC` (and `KV_OFFLOADING` for AgentX) in
+`benchmark.env`, and `model.container` must equal the master-config `image`. Things that vary and must be checked against the sibling /
 the model's `recipes.vllm.ai` page:
 - **Mandatory model flags** (carry from the sibling): block size, parser flags
   (`--tool-call-parser` / `--reasoning-parser`), `--language-model-only` for text-only sweeps,
@@ -113,7 +114,7 @@ the model's `recipes.vllm.ai` page:
 - **Memory headroom.** Bigger checkpoints constrain TP/EP. If the sibling on a smaller-memory
   SKU is TP8-only (e.g. h100), match that.
 
-Validate as you go: `bash -n <script>`.
+Validate as you go: `python3 -c "import yaml; yaml.safe_load(open('<recipe>'))"`.
 
 ## Step 3 — master-config entry + search space
 
@@ -127,18 +128,12 @@ Append `<model>-<precision>-<sku>[-<engine>][-mtp]` after the sibling, with the 
 
 Confirm which master file by SKU: `mi*` → `amd-master.yaml`, everything else → `nvidia-master.yaml`.
 
-## Step 4 — launcher routing
+## Step 4 — no launcher routing
 
-The runner's launcher must resolve your script name. Most build it as
-`<model>_<precision>_<sku>[_<framework>][_mtp].sh`. h200 launchers already carry the framework
-+ `SPEC_SUFFIX`. **h100 and mi300x/mi355x launchers have historically hardcoded the bare
-`_<sku>.sh`**. Check and fix this if you added a framework-tagged or `_mtp` script:
-```bash
-grep -n 'SPEC_SUFFIX\|FRAMEWORK_SUFFIX\|bash benchmarks\|EXP_NAME%%' runners/launch_<sku>*.sh
-```
-If needed, add `SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')`
-(and/or the framework suffix) near the top and splice it into the bench-script path. Simulate
-both `none`/`mtp` to confirm the resolved filename exists.
+Single-node points with an `srt-recipe:` go through `launch_srt_single_node`, which picks the
+one recipe variant whose TP/GPU count, `CONC`, `KV_OFFLOADING` and image match the matrix
+point (`infx/srt_slurm/single_node.py::select_recipe`). No per-script launcher routing is
+needed; if a point matches zero or several variants, fix the recipe, not the launcher.
 
 ## Step 5 — perf-changelog
 
@@ -149,7 +144,7 @@ new entry is **required** for CI to run your config.
 ## Step 6 — validate locally
 
 ```bash
-bash -n benchmarks/single_node/fixed_seq_len/<script>
+python3 -c "import yaml; yaml.safe_load(open('benchmarks/single_node/srt-slurm-recipes/<recipe>'))"
 python3 -c "import yaml; yaml.safe_load(open('configs/<nvidia|amd>-master.yaml')); yaml.safe_load(open('perf-changelog.yaml'))"
 uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
   utils/matrix_logic/generate_sweep_configs.py test-config \
@@ -186,14 +181,11 @@ external **`Inferact/MiniMax-M3-EAGLE3`** draft, `method: eagle3`, **3 speculati
 ```
 - **CUDA (b*/h*).** Pin the drafter to `FLASH_ATTN` because FlashInfer can't run the MHA EAGLE3 head
   at the mandatory page-size 128. Scale cudagraph capture to `CONC * (1 + NUM_SPEC_TOKENS)`.
-- **ROCm (mi*)**: no backend pin (server runs `TRITON_ATTN`). The shipped
-  `vllm/vllm-openai-rocm:minimax-m3` image's AMD model lacks `SupportsEagle3`, so until the
-  upstream fix (`vllm-project/vllm#45546`) is in the image, patch the installed
-  `models/minimax_m3/amd/model.py` in-place before serving. Copy the idempotent, drift-checked
-  `python3 - <<'PYEOF' ... PYEOF` block verbatim from `minimaxm3_fp8_mi355x_mtp.sh` (adds
-  `EagleModelMixin` + aux-hidden-state emission + `SupportsEagle3` on the two outer classes).
-- **All**: route benchmark prompts through `--use-chat-template` (+ `pip install -q datasets
-  pandas`). Raw random tokens tank spec-decode acceptance. Search space mirrors the non-MTP
+- **ROCm (mi*)**: no backend pin (server runs `TRITON_ATTN`). Use an image that already carries
+  the upstream `SupportsEagle3` fix (`vllm-project/vllm#45546`); the old in-place model patch was
+  retired with the legacy bash scripts. Copy the sibling `minimaxm3/vllm/mi*-mtp` recipe.
+- **All**: set `USE_CHAT_TEMPLATE: 'true'` in the recipe's `benchmark.env` (the single-node
+  adapter requires it whenever speculation is on). Raw random tokens tank spec-decode acceptance. Search space mirrors the non-MTP
   entry trimmed at the extreme-conc end, latency rows starting at conc 1, `tp2-ep2` dropped.
 - Other models may instead use **native MTP** (`method: mtp`, no external draft) when the
   checkpoint ships MTP modules (`num_mtp_modules > 0`), e.g. the DeepSeek-V4 recipes.
