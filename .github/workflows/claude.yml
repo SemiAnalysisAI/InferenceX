@@ -611,5 +611,5 @@ jobs:
             **Deprecation validation:**
             - Reject new active entries for retired models, scenarios, or precisions unless `MODELS.md` explicitly documents an exception.
             - Preserve the GLM-5.1 B200 TileRT exception and the conditional non-speculative AgentX policy; do not infer retirement from the existence of a speculative counterpart.
-            - Deprecated entries belong only in `configs/deprecated/amd-master.yaml` or `configs/deprecated/nvidia-master.yaml`, following `AGENTS.md`. Historical entries in these archives are not active submissions.
+            - Retired entries are deleted from the master configs, not archived, following `AGENTS.md`; git history and `perf-changelog.yaml` are the historical record.
             - For a newly supported model, require matching updates to `MODELS.md` and `MODELS_zh.md` rather than rejecting it against an obsolete model list.

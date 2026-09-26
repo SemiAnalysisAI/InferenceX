@@ -1,6 +1,6 @@
 # GLM-5.2 MXFP4 AgentX on MI355X with ATOM MTP, TP-only with GPU-resident KV.
-# The DCP4 LMCache band stays on the legacy script: srtctl reserves ATOM's
-# kv-transfer-config for disaggregated workers.
+# The DCP4 LMCache band was removed with the legacy script (#3461): srtctl
+# reserves ATOM's kv-transfer-config for disaggregated workers.
 base:
   schema: 2
   name: glm5.2-fp4-mi355x-atom-agentic
