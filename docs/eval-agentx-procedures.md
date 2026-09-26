@@ -344,6 +344,45 @@ gh run cancel <RUN_ID> --repo SemiAnalysisAI/InferenceX
 
 Use `scancel` or process termination only with explicit approval and a concrete reason. They can bypass cleanup or strand the runner. After a recipe fix, dispatch one targeted fast e2e point, inspect it live, then reserve a canonical run/full sweep for the candidate that passed.
 
+## 11. Lessons from the September 2026 DSpark and GLM-5.2 AgentX sweeps
+
+Evidence-backed rules from the DeepSeek-V4.1-Flash DSpark arms (#3239-#3247, #3216) and the GLM-5.2 nightly bumps (#3275-#3277). Cited run ids are GitHub Actions runs in this repository.
+
+**Memory on Blackwell SGLang DSpark arms**
+
+- Keep `--max-running-requests` inside the decode CUDA-graph batch (64). A DSpark verify step for a batch above the captured tier runs eagerly and allocates its attention workspace on the fly; the H200 eval OOMed that way at 128 running requests with 2 GiB free (run 35306704553).
+- Use `--mem-fraction-static 0.70` and `--chunked-prefill-size 4096` on every Blackwell arm. GB300 kept 0.75/8192/128 and c128 OOMed 82 minutes into warmup when the TVM sparse-attention prefill kernel asked for 20 GiB with 12.5 GiB free (run 35307635202); B300 completed c1-c128 on 0.70/64.
+- Per-request pool caps scale with the DSpark block: the indexer and verify buffers grow with chunk × context, so the prefill chunk, not the static fraction, is the first lever when a long prompt OOMs.
+
+**MI355X (gfx950) SGLang preview**
+
+- The Engram tables must stay on the GPU. `SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1` raised `hipErrorIllegalAddress` on every rank during decode graph capture (run 35306715045). With the tables resident the weights take 117-129 GB of each 288 GB card, so the static fraction has to drop (0.60 shipped).
+- The ROCm image runs the torch caching allocator with fixed segments (aiter logs `expandable_segments=False`). Eager chunked prefill of one 126k-token prompt hoarded every non-static byte and RCCL aborted with `HSA_STATUS_ERROR_OUT_OF_RESOURCES` at 0 MB free with a single request running (runs 35376928227, 35460273555). `PYTORCH_HIP_ALLOC_CONF=expandable_segments:True` plus a 2048-token chunk cleared c1, c2, c4 and the eval (run 35468635539). `GPU_MAX_HW_QUEUES=2` and `HSA_NO_SCRATCH_RECLAIM=1` on MEC firmware below 177 are the other RCCL levers on this SKU.
+- When a concurrency point exceeds what the eager 1M-context prefill can hold, publish the points that fit and trim the conc-list, as #2661 did for B300 HiCache; 13 concurrent sessions did not fit at any static fraction.
+
+**vLLM DSpark on B200 TP2**
+
+- The eval path (block rejection with adaptive verification) died with `cudaErrorIllegalAddress` twice on TP2, first in the eager draft `lm_head` GEMM and then at the adaptive verifier's `record_confidences` sync even with lm-eval pinned to 32 requests inside the graph tier (runs 35399984613, 35403890075). The identical config passes on TP4. Turn adaptive verification off for TP2 evals; block rejection alone is exact.
+- An AgentX warmup that aborts with `ClientOSError: Can not write request body` and `ServerDisconnectedError` while the server log shows only `auto-aborting request due to dropped stream` is a client-side abort during a server stall (autotune, first long prefill), not a crash. Rerun the point; raise `AIPERF_HTTP_TCP_USER_TIMEOUT` if it recurs.
+
+**Detecting hung jobs**
+
+- A GitHub job can sit "in progress" for hours with no Slurm allocation behind it (B300 c4 ran 5.5 hours while siblings finished in 2; GLM-5.2 B300 evals ran 4 hours against an 18-minute B200 baseline). Compare against the durations of finished siblings on the same or a sibling SKU, then check `squeue` for the runner name. `PrivateData=jobs` hides other users' jobs on some clusters, so an empty queue is not proof; the duration gap is. Cancel the run and `gh run rerun --failed` to keep the green points.
+- Server logs vanish minutes after a job ends because the next job reuses the runner workspace. For crash hunting on a shared jumpbox, run a detached capture loop (`nohup`, pid file) that copies `results/server.log` when it matches a crash signature; SSH-tethered loops die with the connection.
+
+**Queue and lease mechanics**
+
+- The lease controller admits jobs by publishing a `ci-job-*` label onto a leased runner. Idle runners tagged `ci-slurm-unavailable`, or a pool held by multi-node `ci-lease-*` tokens and `ci-job-1.000` priority work, mean priority-0 single-node jobs never dispatch even with runners online.
+- GitHub cancels a job that has been queued for 24 hours (GB300 run 35307635202 attempt 1, B300 c4 attempt 2). `gh run rerun <id> --failed` re-queues only the cancelled jobs and preserves successes and the reuse authorization.
+- A force-push while the previous head's sweep is still running leaves the new run `pending` behind the pull-request concurrency group; `gh run cancel` can lag, so use the `force-cancel` API when the old run lingers.
+
+**Repository mechanics**
+
+- `check-changelog` validates that every config key named by a new entry exists in the master configs (run 35403589805 rejected a misspelled key). Use the exact key.
+- The reuse gate only requires the green run's head commit to remain in the PR. Merge `origin/main` (append-only changelog resolution) to keep reuse valid; rebase to a single fresh commit only when a new sweep is wanted, and diff against the merge-base, not `origin/main`, or the rebase silently reverts work that landed on main in between.
+- Launcher refactors change conflict shapes: #3270 folded `launch_b200-nscale-compat.sh` into `launch_b200-nscale-slurm.sh`, so a PR editing the old file must port its hunk into the merged launcher and accept the deletion.
+- SGLang nightlies from 2026-09-15 reject `--cuda-graph-max-bs` as an ambiguous prefix; pass `--cuda-graph-max-bs-decode`. ROCm `vllm-openai-rocm` nightly tags disappear from Docker Hub within days, so verify the tag on the day you pin it and expect a re-pin before merge.
+
 ## Completion checklist
 
 - Matrix preview matches intended scenario, topology, eval mode, and concurrency.
