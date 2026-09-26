@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Build pyslurm 25.11.2 against the system (or vendored) Slurm headers.
 
 Usage:
@@ -26,7 +25,6 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 VENDOR_DIR = REPO_ROOT / "third_party" / "pyslurm"
@@ -92,8 +90,10 @@ def _find_slurm_include(args_include: str | None) -> Path:
         for pattern in [runtime_ver, ".".join(runtime_ver.split(".")[:2])]:
             for d in sorted(HEADERS_DIR.iterdir()) if HEADERS_DIR.exists() else []:
                 if d.name.startswith(pattern) and (d / "slurm" / "slurm.h").exists():
-                    print(f"[pyslurm-build] Using vendored Slurm {d.name} headers "
-                          f"(runtime Slurm {runtime_ver})")
+                    print(
+                        f"[pyslurm-build] Using vendored Slurm {d.name} headers "
+                        f"(runtime Slurm {runtime_ver})"
+                    )
                     return d
 
     # 4. Fall back to any vendored 25.05.x headers
@@ -103,9 +103,7 @@ def _find_slurm_include(args_include: str | None) -> Path:
                 print(f"[pyslurm-build] Falling back to vendored Slurm {d.name} headers")
                 return d
 
-    raise FileNotFoundError(
-        "Cannot find Slurm headers. Pass --slurm-include or install slurm-dev."
-    )
+    raise FileNotFoundError("Cannot find Slurm headers. Pass --slurm-include or install slurm-dev.")
 
 
 def _slurm_plugin_dir() -> Path | None:
@@ -153,15 +151,15 @@ def _apply_patches(build_dir: Path, slurm_major_minor: tuple[int, int]) -> None:
         print("[pyslurm-build] Slurm 25.11 detected — no patches needed")
         return
     else:
-        print(f"[pyslurm-build] WARNING: Slurm {major}.{minor:02d} — "
-              f"no patches available, trying unpatched build")
+        print(
+            f"[pyslurm-build] WARNING: Slurm {major}.{minor:02d} — "
+            f"no patches available, trying unpatched build"
+        )
         return
 
     patches = sorted(PATCHES_DIR.glob(f"*-{patch_prefix}-*.patch"))
     if not patches:
-        raise FileNotFoundError(
-            f"No patches found for Slurm {major}.{minor:02d} in {PATCHES_DIR}"
-        )
+        raise FileNotFoundError(f"No patches found for Slurm {major}.{minor:02d} in {PATCHES_DIR}")
 
     for p in patches:
         print(f"[pyslurm-build] Applying {p.name}")
@@ -172,8 +170,7 @@ def _apply_patches(build_dir: Path, slurm_major_minor: tuple[int, int]) -> None:
         )
 
 
-def _build_wheel(build_dir: Path, include_dir: Path, lib_dir: Path,
-                 out_dir: Path) -> Path:
+def _build_wheel(build_dir: Path, include_dir: Path, lib_dir: Path, out_dir: Path) -> Path:
     """Cythonize and build pyslurm, return the wheel path."""
     env = os.environ.copy()
     env["SLURM_INCLUDE_DIR"] = str(include_dir)
@@ -186,8 +183,7 @@ def _build_wheel(build_dir: Path, include_dir: Path, lib_dir: Path,
     setup_py = build_dir / "setup.py"
     content = setup_py.read_text()
     if lib_name != "slurmfull":
-        content = content.replace('SLURM_LIB = "libslurmfull"',
-                                  f'SLURM_LIB = "lib{lib_name}"')
+        content = content.replace('SLURM_LIB = "libslurmfull"', f'SLURM_LIB = "lib{lib_name}"')
 
     # Disable the version check — we've patched the declarations
     content = content.replace(
@@ -220,8 +216,7 @@ def _build_inplace(build_dir: Path, include_dir: Path, lib_dir: Path) -> Path:
     setup_py = build_dir / "setup.py"
     content = setup_py.read_text()
     if lib_name != "slurmfull":
-        content = content.replace('SLURM_LIB = "libslurmfull"',
-                                  f'SLURM_LIB = "lib{lib_name}"')
+        content = content.replace('SLURM_LIB = "libslurmfull"', f'SLURM_LIB = "lib{lib_name}"')
     content = content.replace(
         "if Version(self.version) != Version(SLURM_VERSION):",
         "if False:  # Version check disabled by pyslurm_build patch",
@@ -240,9 +235,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Build pyslurm against system Slurm")
     parser.add_argument("--slurm-include", help="Path to Slurm include dir")
     parser.add_argument("--out", help="Output directory for the wheel")
-    parser.add_argument("--inplace", action="store_true",
-                        help="Build in-place instead of a wheel; "
-                             "print the importable pyslurm path")
+    parser.add_argument(
+        "--inplace",
+        action="store_true",
+        help="Build in-place instead of a wheel; print the importable pyslurm path",
+    )
     args = parser.parse_args()
 
     include_dir = _find_slurm_include(args.slurm_include)
@@ -251,8 +248,10 @@ def main() -> None:
         raise RuntimeError(f"Cannot read SLURM_VERSION_NUMBER from {include_dir}")
 
     major, minor = _version_number_to_major_minor(vnum)
-    print(f"[pyslurm-build] Slurm version: {major}.{minor:02d} "
-          f"(0x{vnum:06x}), headers at {include_dir}")
+    print(
+        f"[pyslurm-build] Slurm version: {major}.{minor:02d} "
+        f"(0x{vnum:06x}), headers at {include_dir}"
+    )
 
     lib_dir = _find_slurm_lib()
     print(f"[pyslurm-build] Slurm library dir: {lib_dir}")
@@ -261,8 +260,12 @@ def main() -> None:
     build_dir = Path(tempfile.mkdtemp(prefix="pyslurm-build-"))
     print(f"[pyslurm-build] Build directory: {build_dir}")
 
-    shutil.copytree(VENDOR_DIR, build_dir, dirs_exist_ok=True,
-                    ignore=shutil.ignore_patterns("patches", "VENDORED.md"))
+    shutil.copytree(
+        VENDOR_DIR,
+        build_dir,
+        dirs_exist_ok=True,
+        ignore=shutil.ignore_patterns("patches", "VENDORED.md"),
+    )
 
     # Apply patches
     _apply_patches(build_dir, (major, minor))
