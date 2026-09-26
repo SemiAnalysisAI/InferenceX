@@ -395,13 +395,12 @@ def build_config(
         pr_number,
         changelog_path,
     )
-    processor = ["-m", "infx.matrix.plan"]
-    if not (worktree / "infx/matrix/plan.py").is_file():
-        processor = [str(worktree / "utils/process_changelog.py")]
     result = run_command(
         [
             sys.executable,
-            *processor,
+            "-P",
+            "-m",
+            "infx.matrix.plan",
             "--changelog-file",
             changelog_path,
             "--base-ref",
@@ -410,11 +409,16 @@ def build_config(
             fixed_sha,
         ],
         cwd=worktree,
+        env={
+            **os.environ,
+            "PYTHONPATH": str(Path(__file__).resolve().parents[2]),
+            "INFERENCEX_REPOSITORY_ROOT": str(worktree.resolve()),
+        },
     )
     try:
         config = json.loads(result.stdout)
     except json.JSONDecodeError as exc:
-        raise RecoveryError(f"process_changelog.py returned invalid JSON: {exc}") from exc
+        raise RecoveryError(f"infx.matrix.plan returned invalid JSON: {exc}") from exc
 
     expected_link = f"https://github.com/{DEFAULT_REPO}/pull/{pr_number}"
     metadata = config.get("changelog_metadata", {})

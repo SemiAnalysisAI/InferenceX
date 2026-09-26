@@ -202,7 +202,7 @@ def multinode_env_vars(base_env_vars):
 
 
 def run_script(tmp_path, env, benchmark_result, result_filename="benchmark_result"):
-    """Helper to run the process_result.py script."""
+    """Helper to run the infx.results.fixed_sequence script."""
     result_file = tmp_path / f"{result_filename}.json"
     result_file.write_text(json.dumps(benchmark_result))
 
@@ -272,7 +272,7 @@ runpy.run_module("infx.results.fixed_sequence", run_name="__main__")
 # =============================================================================
 
 class TestProcessResultScript:
-    """Tests for process_result.py script execution."""
+    """Tests for infx.results.fixed_sequence script execution."""
 
     def test_single_node_processing(self, tmp_path, sample_benchmark_result, single_node_env_vars):
         """Test single-node result processing."""
@@ -684,7 +684,7 @@ class TestEdgeCases:
 # =============================================================================
 
 class TestPowerAggregationIntegration:
-    """End-to-end wiring: process_result.py invokes aggregate_power.py and
+    """End-to-end wiring: infx.results.fixed_sequence invokes aggregate_power.py and
     patches the validated whole-deployment power contract into the agg JSON.
 
     Exercises the env-var path resolution (GPU_METRICS_CSV), the subprocess
@@ -717,7 +717,7 @@ class TestPowerAggregationIntegration:
         path.write_text("\n".join(lines) + "\n")
 
     def test_agg_json_gets_patched_with_power_and_joules(self, tmp_path, single_node_env_vars):
-        """The full pipeline: process_result.py + aggregate_power.py."""
+        """The full pipeline: infx.results.fixed_sequence + aggregate_power.py."""
         start, end = 1_700_000_100.0, 1_700_000_160.0  # 60s bench window
         csv_path = tmp_path / "gpu_metrics.csv"
         self._write_nvidia_csv(csv_path, start, end, watts_per_gpu=600.0, num_gpus=8)
@@ -759,17 +759,23 @@ class TestPowerAggregationIntegration:
         assert patched["joules_per_output_token"] == pytest.approx(9.6, abs=0.05)
         assert (tmp_path / "power_validation_benchmark_result.json").is_file()
 
+    @pytest.mark.parametrize("workflow_name,step_name", [
+        ("benchmark-tmpl.yml", "Process result"),
+        ("profile.yml", "Process result (json -> agg)"),
+    ])
     def test_workflow_uses_result_python_with_unsupported_ambient_python(
-        self, tmp_path, single_node_env_vars
+        self, tmp_path, single_node_env_vars, workflow_name, step_name
     ):
         import yaml
 
-        workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/benchmark-tmpl.yml").read_text())
+        workflow = yaml.safe_load((REPO_ROOT / ".github/workflows" / workflow_name).read_text())
         step = next(
-            s for s in workflow["jobs"]["benchmark"]["steps"] if s.get("name") == "Process result"
+            s for job in workflow["jobs"].values() for s in job.get("steps", [])
+            if s.get("name") == step_name
         )
-        for directory in ["utils", "benchmarks"]:
-            (tmp_path / directory).symlink_to(REPO_ROOT / directory, target_is_directory=True)
+        (tmp_path / ".result-tooling").symlink_to(REPO_ROOT, target_is_directory=True)
+        (tmp_path / "infx").mkdir()
+        (tmp_path / "infx/__init__.py").write_text("raise RuntimeError('measured package imported')\n")
         (tmp_path / "bin").mkdir()
         ambient_python = tmp_path / "bin/python3"
         ambient_python.write_text("#!/bin/sh\nexit 73\n")
@@ -798,7 +804,7 @@ class TestPowerAggregationIntegration:
             "REQUIRE_POWER": "1",
             "PATH": str(tmp_path / "bin") + os.pathsep + os.environ["PATH"],
             "INFERENCEX_RESULTS_PYTHON": sys.executable,
-            "PYTHONPATH": str(REPO_ROOT),
+            "PYTHONPATH": step["env"]["PYTHONPATH"].replace("${{ github.workspace }}", str(tmp_path)),
         }
         result = subprocess.run(
             ["bash", "-eo", "pipefail", "-c", step["run"]],
@@ -814,7 +820,7 @@ class TestPowerAggregationIntegration:
         assert aggregate["total_gpu_energy_j"] == pytest.approx(288_000)
 
     def test_missing_csv_does_not_break_process_result(self, tmp_path, single_node_env_vars):
-        """Without GPU_METRICS_CSV (or with a missing file), process_result.py
+        """Without GPU_METRICS_CSV (or with a missing file), infx.results.fixed_sequence
         still succeeds and writes the agg JSON — just without the power fields.
         This is the production case for runs that ship without monitoring."""
         benchmark_result = {
@@ -1357,7 +1363,7 @@ fi
 
 
 class TestMultinodePower:
-    """End-to-end wiring: process_result.py invokes aggregate_power_multinode.py
+    """End-to-end wiring: infx.results.fixed_sequence invokes aggregate_power_multinode.py
     against the srt-slurm artifact package staged under LOGS/.
 
     The consumer binds the processed copy to LOGS/<result_path> by canonical
@@ -1519,13 +1525,21 @@ def test_multinode_batch_preserves_points_and_checks_completeness(
     tmp_path, multinode_env_vars, sample_benchmark_result, conc_token, rate_suffix,
     expected_concs, missing,
 ):
+    import yaml
+
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/benchmark-multinode-tmpl.yml").read_text())
+    step = next(s for job in workflow["jobs"].values() for s in job.get("steps", [])
+                if s.get("name") == "Process result")
+    (tmp_path / ".result-tooling").symlink_to(REPO_ROOT, target_is_directory=True)
     for conc in (4, 16):
         (tmp_path / f'run_recipe_{conc_token}{conc}{rate_suffix}_gpus_4_ctx_2_gen_2.json').write_text(
             json.dumps({**sample_benchmark_result, 'max_concurrency': conc}))
     env = {**os.environ, **multinode_env_vars, 'RESULT_FILENAME': 'run',
            'CONC_LIST': expected_concs, 'REQUIRE_POWER': '0'}
-    result = subprocess.run([*MODULE_COMMAND, '--all'], cwd=tmp_path,
-                            env={**env, 'PYTHONPATH': str(REPO_ROOT)},
+    result = subprocess.run(['bash', '-eo', 'pipefail', '-c', step['run']], cwd=tmp_path,
+                            env={**env, 'INFERENCEX_RESULTS_PYTHON': sys.executable,
+                                 'PYTHONPATH': step['env']['PYTHONPATH'].replace(
+                                     '${{ github.workspace }}', str(tmp_path))},
                             capture_output=True, text=True)
     assert result.returncode == int(bool(missing)), result.stderr
     receipt = json.loads((tmp_path / 'result_processing_run.json').read_text())

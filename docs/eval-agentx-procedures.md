@@ -189,6 +189,8 @@ Retain `meta_env.json`, `results*.json`, and `sample*.jsonl`. Agentic SWE-bench 
 
 ## 7. Run AgentX: fast feedback versus canonical evidence
 
+[`install_agentic_deps()`](../benchmarks/benchmark_lib.sh) declares the AgentX client dependencies directly alongside the editable `utils/aiperf` install. It installs them into the isolated `AIPERF_RUNTIME_DIR` environment with the caller-supplied `AIPERF_PYTHON_VERSION`.
+
 AgentX is AIPerf `inferencex-agentx-mvp` trace replay, not a fixed-token synthetic benchmark. The checked-in default uses ten additional warmup requests per trajectory lane and the recipe's configured profile duration. `agentx-fast` forces one warmup request per lane and a 1,200-second profile. It affects single- and multi-node AgentX throughput only. Fixed-sequence throughput and evals remain canonical. Fast runs are not eligible for artifact reuse ([workflow policy](../.github/workflows/README.md#agentx-fast-mode), [fast replay settings](../benchmarks/benchmark_lib.sh#L2104-L2128)).
 
 For multi-node srt-slurm jobs, the benchmark client may run on a different host from the frontend. `srt_agentic.sh` uses an explicit `AIPERF_SERVER_URL` when supplied, otherwise derives it from `SRT_FRONTEND_HOST` and `SRT_FRONTEND_PORT`, and falls back to `localhost:$PORT` only when no remote endpoint is available. Trace replay and inter-point drain checks must use that same resolved endpoint.

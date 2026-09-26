@@ -100,7 +100,7 @@ jobs:
             python -P "${GENERATOR[@]}" \
             test-config --config-files "$INPUTS_CONFIG_FILE" --config-keys "$INPUTS_CONFIG_KEY" --conc "$INPUTS_CONC")
           CONFIG_JSON=$(printf '%s' "$CONFIG_JSON" | env PYTHONPATH="$PRIORITY_ROOT" uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml \
-            python -P "${PRIORITY_ROOT}/utils/ci_priority.py" \
+            python -P -m infx.workflows.ci_priority \
             --policy "${PRIORITY_ROOT}/configs/ci-priority.yaml" \
             --event-name "${GITHUB_EVENT_NAME}" \
             --queue-namespace "${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}" \
@@ -256,6 +256,25 @@ jobs:
           clean: false
           persist-credentials: false
 
+      - name: Checkout result tooling
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .result-tooling
+          persist-credentials: false
+
+      - name: Set up uv for result processing
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: false
+
+      - name: Prepare result-processing Python
+        run: |
+          uv python install --quiet --no-bin 3.12
+          result_python=$(uv python find --system 3.12)
+          "$result_python" --version
+          echo "INFERENCEX_RESULTS_PYTHON=$result_python" >> "$GITHUB_ENV"
+
       - name: Launch + Profile (single-node sglang/vllm)
         id: run
         env:
@@ -315,8 +334,11 @@ jobs:
       - name: Process result (json -> agg)
         env:
           RUNNER_TYPE: ${{ matrix.config.runner }}
+          PYTHONPATH: ${{ github.workspace }}/.result-tooling
         run: |
-          python3 utils/process_result.py
+          source .result-tooling/benchmarks/benchmark_lib.sh --validation-only
+          check_env_vars INFERENCEX_RESULTS_PYTHON
+          "$INFERENCEX_RESULTS_PYTHON" -P -m infx.results.fixed_sequence
 
       - name: Upload profile as artifact
         if: ${{ steps.run.outputs.trace != '' }}

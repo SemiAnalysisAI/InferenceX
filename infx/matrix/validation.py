@@ -1068,7 +1068,7 @@ class ChangelogMetadata(BaseModel):
 
 class ChangelogMatrixEntry(BaseModel):
     """Pydantic model for validating final changelog matrix entry structure.
-    This imposes a strict contract on the output of process_changelog.py, dictated by
+    This imposes a strict contract on the output of infx.matrix.plan, dictated by
     the expected input to the run-sweep.yml workflow file.
     """
 
@@ -1123,7 +1123,7 @@ def load_config_files(config_files: list[str], validate: bool = True) -> dict:
                     raise ValueError(f"Config file '{config_file}' must contain a dictionary")
 
                 # Don't allow '*' wildcard in master config keys as we need to reserve these
-                # for expansion in process_changelog.py
+                # for expansion in infx.matrix.plan
                 for key in config_data:
                     if not isinstance(key, str):
                         raise ValueError(

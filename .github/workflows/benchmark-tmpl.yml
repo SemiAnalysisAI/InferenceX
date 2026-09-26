@@ -276,6 +276,14 @@ jobs:
           submodules: true
           persist-credentials: false
 
+      - name: Checkout result tooling
+        if: ${{ !inputs.eval-only }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .result-tooling
+          persist-credentials: false
+
       - name: Set up uv for result processing
         if: ${{ !inputs.eval-only }}
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
@@ -299,8 +307,8 @@ jobs:
           # We'll publish a single combined eval table in the collection job instead.
           GITHUB_STEP_SUMMARY: ''
         run: |
-          if [[ -f utils/result_filename.py ]]; then
-            RESULT_FILENAME=$(python3 utils/result_filename.py)
+          if [[ -f infx/results/result_filename.py ]]; then
+            RESULT_FILENAME=$(python3 -m infx.results.result_filename)
           else
             # Older measured commits predate the helper; preserve safe identity.
             RESULT_FILENAME=$(printf '%s\0' "$RESULT_FILENAME_BASE" "$RECIPE_FINGERPRINT" | sha256sum)
@@ -356,14 +364,15 @@ jobs:
         if: ${{ always() && env.RESULT_FILENAME != '' && !inputs.eval-only && inputs.scenario-type != 'agentic-coding' }}
         env:
           RUNNER_TYPE: ${{ inputs.runner }}
+          PYTHONPATH: ${{ github.workspace }}/.result-tooling
         run: |
-          source benchmarks/benchmark_lib.sh --validation-only
+          source .result-tooling/benchmarks/benchmark_lib.sh --validation-only
           check_env_vars INFERENCEX_RESULTS_PYTHON
           if [ ! -f "$RESULT_FILENAME.json" ]; then
             echo "no raw result to process: $RESULT_FILENAME.json" >&2
             exit 1
           fi
-          "$INFERENCEX_RESULTS_PYTHON" utils/process_result.py
+          "$INFERENCEX_RESULTS_PYTHON" -P -m infx.results.fixed_sequence
 
       - name: Upload result
         if: ${{ success() && env.RESULT_FILENAME != '' && !inputs.eval-only && inputs.scenario-type != 'agentic-coding' }}

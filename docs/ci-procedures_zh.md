@@ -494,7 +494,7 @@ gh run download "$RUN_ID" --repo "$REPO" -n changelog-metadata -D "$OUT/changelo
 
 ### 解析有限字段
 
-吞吐量聚合字段来自 [`utils/process_result.py`](../utils/process_result.py)：
+吞吐量聚合字段来自 [`infx/results/fixed_sequence.py`](../infx/results/fixed_sequence.py)：
 
 ```bash
 jq -r '

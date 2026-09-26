@@ -107,7 +107,7 @@ Before adding `full-sweep-fail-fast`, validate the exact pushed head's full matr
 ```bash
 head_sha=$(git rev-parse HEAD)
 uv run --no-project --python 3.12 --with 'pydantic>=2.10,<3' --with pyyaml \
-  python utils/process_changelog.py --base-ref origin/main --head-ref "$head_sha" \
+  python -m infx.matrix.plan --base-ref origin/main --head-ref "$head_sha" \
   --changelog-file perf-changelog.yaml > "$KLAUD_EVIDENCE/final-matrix.json"
 "${KLAUD[@]}" check-final --matrix-file "$KLAUD_EVIDENCE/final-matrix.json"
 ```

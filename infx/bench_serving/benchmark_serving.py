@@ -11,7 +11,7 @@ On the server side, run one of the following commands:
     ./launch_tgi_server.sh <your_model> <max_batch_total_tokens>
 
 On the client side, run:
-    python benchmarks/benchmark_serving.py \
+    python -m infx.bench_serving.benchmark_serving \
         --backend <backend> \
         --model <your_model> \
         --dataset-name sharegpt \

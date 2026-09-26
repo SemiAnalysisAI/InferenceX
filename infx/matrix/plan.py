@@ -405,6 +405,8 @@ def generate_matrix(
     if env.get("PYTHONPATH"):
         import_paths.append(env["PYTHONPATH"])
     env["PYTHONPATH"] = os.pathsep.join(import_paths)
+    if inputs and inputs.root:
+        env["INFERENCEX_REPOSITORY_ROOT"] = str(root)
     try:
         result = subprocess.run(
             command, capture_output=True, text=True, check=True, cwd=root, env=env
