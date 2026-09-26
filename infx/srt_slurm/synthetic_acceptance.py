@@ -6,7 +6,6 @@ import argparse
 import copy
 import fnmatch
 import json
-import math
 import os
 import re
 import shlex
@@ -18,7 +17,8 @@ from typing import Any
 
 import yaml
 
-GOLDEN_DIR = Path(__file__).resolve().parents[2] / "golden_al_distribution"
+from infx.golden_al_distribution import GOLDEN_DIR, golden_length
+
 ENGINES = {
     "sglang": "sglang",
     "sglang-disagg": "sglang",
@@ -89,47 +89,6 @@ def spec_parameters(role: Mapping[str, Any], engine: str) -> dict[str, Any]:
         "num_speculative_tokens": spec.get("max_draft_len"),
         "model": spec.get("speculative_model", ""),
     }
-
-
-def golden_length(model: str, spec: Mapping[str, Any], thinking: str, golden_dir: Path) -> float:
-    method = str(spec.get("method", "")).lower()
-    # SGLang calls native model MTP EAGLE/NEXTN; the curve describes the model's head.
-    if method in ("eagle", "nextn"):
-        method = "eagle3" if model == "minimaxm3" else "mtp"
-    curve = f"{model}_{method}"
-    if model in ("dsv4", "dsv4dspark", "dsv4dsparkprob") and method == "dspark":
-        curve = "dsv4-pro-0813-dspark"
-    elif model == "minimaxm3" and method == "eagle3":
-        if "gqa" in str(spec.get("model", "")).lower():
-            curve += "_gqa"
-    elif model == "kimik3" and method == "dspark":
-        # Kimi has distinct measured curves; require the recipe to choose its sampler.
-        sampling = spec.get("draft_sample_method")
-        if sampling == "probabilistic":
-            curve += "_probabilistic_sample_method_block_rejection_sample_method"
-        elif sampling != "greedy":
-            raise ValueError(f"No Kimi DSpark golden curve for draft sampling {sampling!r}")
-    if not re.fullmatch(r"[a-z0-9_.-]+", curve):
-        raise ValueError(f"Invalid golden curve identity: {curve!r}")
-    tokens = spec.get("num_speculative_tokens")
-    if not isinstance(tokens, int) or isinstance(tokens, bool) or tokens <= 0:
-        raise ValueError("Speculative decoding requires a positive integer draft length")
-    path = golden_dir / f"{curve}.yaml"
-    if not path.is_file():
-        raise ValueError(f"No committed golden curve for {model}/{method}: {path.name}")
-    data = yaml.safe_load(path.read_text())
-    if not isinstance(data, dict) or len(data) != 1:
-        raise ValueError(f"Expected one model in golden curve {path.name}")
-    modes = next(iter(data.values()))
-    try:
-        value = float(modes[thinking][tokens])
-    except (KeyError, TypeError, ValueError) as error:
-        raise ValueError(
-            f"No golden acceptance for {curve}/{thinking}/{tokens} draft tokens"
-        ) from error
-    if not math.isfinite(value) or not 1 <= value <= tokens + 1:
-        raise ValueError(f"Invalid golden acceptance {value} in {path.name}")
-    return value
 
 
 def build_overrides(

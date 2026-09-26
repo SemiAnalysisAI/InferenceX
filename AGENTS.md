@@ -7,7 +7,7 @@ Guidance for AI agents working with InferenceX.
 1. **Start every task with [`docs/index.md`](docs/index.md).** Choose the one focused guide that matches the task. Do not load every documentation page.
 2. Repository source, schemas, workflows, launchers, and collectors are authoritative. If documentation disagrees with implementation, follow the implementation and update the nearest English guide plus its Chinese counterpart.
 3. Read [`CONTRIBUTING.md`](CONTRIBUTING.md) before opening or reviewing a PR or changing review, sweep, or merge policy.
-4. Read [`KLAUD_DEBUG.md`](KLAUD_DEBUG.md) before debugging a Klaud-Cold or `claude/*` image-bump PR.
+4. Read [`docs/KLAUD_DEBUG.md`](docs/KLAUD_DEBUG.md) before debugging a Klaud-Cold or `claude/*` image-bump PR.
 
 ## Agent-specific policy
 
@@ -53,7 +53,7 @@ check_env_vars IS_MULTINODE MODEL_NAME PRECISION
 ## Deprecating benchmark configs
 
 - Delete retired entries from the active master config; do not archive them. Git history and `perf-changelog.yaml` are the record of past settings. For a partial deprecation, remove only the retired scenarios and retain the supported scenarios in the active entry.
-- Check retirement statements in [`MODELS.md`](MODELS.md) against active configs and script routing in the same PR, and update `MODELS.md` plus `MODELS_zh.md` together. Preserve explicitly documented exceptions and conditional retirement policies; do not treat planned retirement as completed.
+- Check retirement statements in [`docs/MODELS.md`](docs/MODELS.md) against active configs and script routing in the same PR, and update `docs/MODELS.md` plus `docs/MODELS_zh.md` together. Preserve explicitly documented exceptions and conditional retirement policies; do not treat planned retirement as completed.
 - Remove unused retired-model branches from launchers and runtime settings, and update workflow/agent guidance that still recommends retired coverage. Audit callers before removing shared helpers; retained SPEED-Bench collectors and historical result readers may still need model-specific support.
 - Delete recipes, setup scripts and other assets that no active config uses any more rather than moving them to a `deprecated/` directory.
 
@@ -75,7 +75,7 @@ check_env_vars IS_MULTINODE MODEL_NAME PRECISION
 
 ## SRT Slurm synthetic acceptance
 
-- **Do not hard-code synthetic acceptance lengths in SRT recipes, master configs, or launchers.** InferenceX automatically selects the measured value from [`golden_al_distribution/`](golden_al_distribution/) for speculative AgentX throughput runs. Do not add manual `SYNTHETIC_ACCEPTANCE_LENGTH`, vLLM `synthetic_acceptance_length`, SGLang `SGLANG_SIMULATE_ACC_LEN`, or TRT-LLM `TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS` settings.
+- **Do not hard-code synthetic acceptance lengths in SRT recipes, master configs, or launchers.** InferenceX automatically selects the measured value from [`infx/golden_al_distribution/`](infx/golden_al_distribution/) for speculative AgentX throughput runs. Do not add manual `SYNTHETIC_ACCEPTANCE_LENGTH`, vLLM `synthetic_acceptance_length`, SGLang `SGLANG_SIMULATE_ACC_LEN`, or TRT-LLM `TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS` settings.
 - Submit recipes through [`apply_srt_recipe`](runners/slurm_utils.sh). Its [`infx/srt_slurm` connector](infx/srt_slurm/synthetic_acceptance.py) applies native SRT `--set` / `--unset` overrides; calling upstream `srtctl` directly does not perform InferenceX's automatic selection.
 - Keep the actual speculative method, draft model, draft-token count, and relevant sampling settings explicit in the recipe. The connector combines the generation role's settings (decode, otherwise aggregated), after caller overrides, with `MODEL_PREFIX` and `THINKING_MODE` to select the golden curve. For Kimi DSpark, explicitly set `draft_sample_method` to `greedy` or `probabilistic`.
 - Eval-only and non-AgentX runs use real verification; the connector removes stale synthetic settings. Non-speculative roles do not receive simulation settings. `RUN_EVAL` does not disable simulation for the throughput portion.

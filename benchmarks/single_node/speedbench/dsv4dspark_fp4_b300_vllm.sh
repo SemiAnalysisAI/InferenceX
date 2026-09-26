@@ -39,10 +39,10 @@ MAX_NUM_SEQS="64"
 # Reserve device memory for KV cache and speculative verification.
 GPU_MEM_UTIL="0.90"
 TEMPERATURE="1.0"
-# MUST match the golden config: golden_al_distribution/dsv4_mtp.yaml was measured
+# MUST match the golden config: infx/golden_al_distribution/dsv4_mtp.yaml was measured
 # with reasoning_effort=high.
 # The published recipe uses greedy; probabilistic won at every level on Kimi-K3
-# (golden_al_distribution/kimik3_dspark*.yaml). vLLM accepts exactly these two values
+# (infx/golden_al_distribution/kimik3_dspark*.yaml). vLLM accepts exactly these two values
 # (vllm/config/speculative.py: DraftSampleMethod).
 case "$DRAFT_SAMPLE_METHOD" in
     greedy|probabilistic) ;;

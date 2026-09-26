@@ -42,7 +42,7 @@ Modifiers:
 
 Fail-fast is matrix-scoped: one matrix failure does not cancel other matrices, and completed results remain valid. The failed job remains red.
 
-Sweeps do not trigger while a PR has merge conflicts. For `perf-changelog.yaml` conflicts, follow `KLAUD_DEBUG.md` section 1.1: merge `origin/main`, restore the file byte-for-byte from `origin/main`, then append only the PR's entry at the tail. Never 3-way merge the changelog.
+Sweeps do not trigger while a PR has merge conflicts. For `perf-changelog.yaml` conflicts, follow `docs/KLAUD_DEBUG.md` section 1.1: merge `origin/main`, restore the file byte-for-byte from `origin/main`, then append only the PR's entry at the tail. Never 3-way merge the changelog.
 
 Pushes to `main` always enter sweep setup and either reuse approved artifacts or run an untrimmed full sweep. `[skip-sweep]` only skips PR benchmark setup. It never skips a main-branch sweep. It still permits changelog validation and reuse authorization checks.
 

@@ -185,7 +185,7 @@ raw artifact:       agentic_<RESULT_FILENAME>
 raw tree:           results/**, excluding inputs.json and profile_export_raw.jsonl
 ```
 
-聚合工件匹配 `bmk_*` 收集模式，因此也会成为 `results_bmk/agg_bmk.json` 中的一条记录。原始同级工件不会交给 `collect_results.py`。InferenceX-app 移除 `bmk_` 和 `agentic_` 后缀前缀，将 `bmk_agentic_<suffix>` 与 `agentic_<suffix>` 配对。对于以 `_concN.json` 命名的文件，并发也参与 trace 同级工件查找。
+聚合工件匹配 `bmk_*` 收集模式，因此也会成为 `results_bmk/agg_bmk.json` 中的一条记录。原始同级工件不会交给 `infx.results.collect_results`。InferenceX-app 移除 `bmk_` 和 `agentic_` 后缀前缀，将 `bmk_agentic_<suffix>` 与 `agentic_<suffix>` 配对。对于以 `_concN.json` 命名的文件，并发也参与 trace 同级工件查找。
 
 服务器日志是单独的 `server_logs_<RESULT_FILENAME>` 工件。应用会使用完全移除前缀后的后缀作为回退，从而让 AgentX 记录找到不含 `agentic_` 前缀的日志工件。
 
@@ -297,7 +297,7 @@ InferenceX-app 按以下顺序执行。固定序列工作流超时为 30 分钟�
 | --- | --- |
 | CI 中的工件准备 | 每个完全相同的工件名保留最新且未过期的上传。复用只会以 merge 运行副本替换变更日志元数据。 |
 | 应用直接下载模式 | [`dedupeArtifactsByLogicalName`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/lib/github-artifacts.ts) 移除末尾 runner-pool 和 attempt token，并保留最新的逻辑工件，防止重试工件覆盖良好指标。 |
-| 基准收集 | `collect_results.py` 附加每个已解析 JSON。它不做记录级去重。 |
+| 基准收集 | `infx.results.collect_results` 附加每个已解析 JSON。它不做记录级去重。 |
 | 基准数据库写入 | 按基准自然键执行 `ON CONFLICT`，更新指标、镜像、功耗 worker 及相关字段。当新工件缺少服务器派生的 `kv_cache_pool_tokens` 时会保留已有值。 |
 | 评测数据库写入 | 维度完整且匹配的聚合记录和单配置记录会按评测自然键冲突。后一次写入刷新指标，并返回同一记录 ID 供样本附加。任一可空键维度为空时，PostgreSQL 当前的普通唯一约束不会对这些记录去重。 |
 | 评测样本 | 按 `(eval_result_id, doc_id)` 冲突，防止文档重复。 |

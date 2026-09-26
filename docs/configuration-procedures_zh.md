@@ -145,7 +145,7 @@ B300 DSXE 的 Kimi-K3 AgentX 路径在 `/scratch/models` 下挂载预置目标�
 
 TileRT 的共享导入器保留 Docker Hub 镜像名称，并将 `ghcr.io/team/image:tag` 等显式仓库地址转换为 Enroot 的 `docker://ghcr.io#team/image:tag` 格式。已有的 `#` 地址保持不变。有效的缓存 squash 镜像会直接复用；命中缓存不能证明仓库导入路径有效。无效的缓存镜像会在持有导入锁时删除，再重新导入。
 
-GLM-5.1 B200 Nscale 1k1k 和 8k1k 配方使用已准备的共享 checkpoint、TileRT 转换权重和 squash 缓存，1k1k 的分配时限为 45 分钟，8k1k 为 90 分钟，以容纳完整 GSM8K eval。C1 低于自动 eval 选择门槛，完整资格验证应同时使用 PR 标签 `all-evals` 和 `full-sweep-fail-fast`。TileRT 在 GLM-5.1 一般退役之后由 [#2533](https://github.com/SemiAnalysisAI/InferenceX/pull/2533) 加入；[MODELS_zh.md](../MODELS_zh.md) 记录了这部分保留范围。相关改动仍须完成正常 PR sweep、适用质量验证、签核和复用，才能发布。
+GLM-5.1 B200 Nscale 1k1k 和 8k1k 配方使用已准备的共享 checkpoint、TileRT 转换权重和 squash 缓存，1k1k 的分配时限为 45 分钟，8k1k 为 90 分钟，以容纳完整 GSM8K eval。C1 低于自动 eval 选择门槛，完整资格验证应同时使用 PR 标签 `all-evals` 和 `full-sweep-fail-fast`。TileRT 在 GLM-5.1 一般退役之后由 [#2533](https://github.com/SemiAnalysisAI/InferenceX/pull/2533) 加入；[MODELS_zh.md](MODELS_zh.md) 记录了这部分保留范围。相关改动仍须完成正常 PR sweep、适用质量验证、签核和复用，才能发布。
 
 TileRT 的 eval 封装调用共享 `run_eval` 分发器，不覆盖其中的 `run_lm_eval` 客户端。评测后保存可用产物，并保留评测或产物保存阶段的失败状态。TCP 就绪探测只在子 shell 中使用 socket，不改变调用方的诊断输出流。
 
@@ -260,7 +260,7 @@ B300 在 c1/c2/c4 使用相同的最小捕获范围。其 c1 CI 对比中，请�
 
 仅运行 AgentX 的 `dsv41flash-fp4-<sku>-vllm-agentic-dspark` 配方使用
 `vllm/vllm-openai:deepseekv41-flash-0909`，在 Blackwell SKU 上采用 TP4、原生五 token DSpark、
-概率采样草稿。吞吐测试使用[已提交的黄金 AL](../golden_al_distribution/dsv41flash_dspark.yaml)：thinking 开启、五个草稿 token 对应 3.51，采用合成拒绝采样并关闭自适应验证。准确率 eval 保留真实块拒绝采样和自适应验证。
+概率采样草稿。吞吐测试使用[已提交的黄金 AL](../infx/golden_al_distribution/dsv41flash_dspark.yaml)：thinking 开启、五个草稿 token 对应 3.51，采用合成拒绝采样并关闭自适应验证。准确率 eval 保留真实块拒绝采样和自适应验证。
 `--engram-config '{"cpu_offload":true}'` 将 Engram 嵌入表放在固定页主机 DRAM
 中，通过 UVA 访问；`kv-offloading: none` 描述的是另行保留在 GPU 上的 KV cache。
 专家权重为 MXFP4，因此配方标记为 `precision: fp4`。
@@ -304,7 +304,7 @@ eval 使用真实 acceptance，并保留检查点随附的 draft 和 `dsml_v41` 
 
 `dsv41flash-fp4-h200-vllm-agentic-dspark` 是 DeepSeek-V4.1-Flash 配方的 H200 AgentX
 分支。它与 Blackwell 分支共用 `vllm/vllm-openai:deepseekv41-flash-0909` 和纯文本服务
-脚本：`deepseek_v41` tokenizer 和解析器、1M 上下文、原生五 token DSpark（概率采样草稿）。吞吐测试使用[已提交的黄金 AL](../golden_al_distribution/dsv41flash_dspark.yaml)：thinking 开启、五个草稿 token 对应 3.51，采用合成拒绝采样并关闭自适应验证。准确率 eval 保留真实块拒绝采样和自适应验证。
+脚本：`deepseek_v41` tokenizer 和解析器、1M 上下文、原生五 token DSpark（概率采样草稿）。吞吐测试使用[已提交的黄金 AL](../infx/golden_al_distribution/dsv41flash_dspark.yaml)：thinking 开启、五个草稿 token 对应 3.51，采用合成拒绝采样并关闭自适应验证。准确率 eval 保留真实块拒绝采样和自适应验证。
 
 该分支使用 **TP8**，而非上游的 TP4。上游在一个 GB200 NVL4 tray 上验证 TP4，并说明在
 8 GPU 节点上同一布局每个角色变为 TP8，而 H200 DGXC 节点正是 8 GPU 节点。
@@ -338,7 +338,7 @@ launcher 为该配方将仓库挂载到 `/ix`，避免在 `/workspace` 下创建
 
 ### H100 上的 DeepSeek-V4.1-Flash DSpark
 
-吞吐测试使用[已提交的黄金 AL](../golden_al_distribution/dsv41flash_dspark.yaml)：thinking 开启、五个草稿 token 对应 3.51，采用合成拒绝采样并关闭自适应验证。准确率 eval 保留真实块拒绝采样和自适应验证。
+吞吐测试使用[已提交的黄金 AL](../infx/golden_al_distribution/dsv41flash_dspark.yaml)：thinking 开启、五个草稿 token 对应 3.51，采用合成拒绝采样并关闭自适应验证。准确率 eval 保留真实块拒绝采样和自适应验证。
 
 `dsv41flash-fp4-h100-vllm-agentic-dspark` 是 DeepSeek-V4.1-Flash 配方的 H100 AgentX
 分支，在 H200 分支之后加入，并有意与其分开。H100 **不在**上游硬件表中（该表列出
@@ -449,7 +449,7 @@ GB200 的主机表布局为 `per_rank`：计算节点内核通过 `madvise` 启�
 DSpark 是检查点自带的草稿模型。SGLang 对它不提供 EAGLE 或 MTP 路径，也没有
 `--speculative-num-steps` 参数；配方传入 `--speculative-algorithm DSPARK
 --speculative-dspark-block-size 5`。吞吐测试通过 `SGLANG_SIMULATE_ACC_LEN`（`match-expected`、
-`real-draft-token`）使用同一[已提交的黄金 AL](../golden_al_distribution/dsv41flash_dspark.yaml)：
+`real-draft-token`）使用同一[已提交的黄金 AL](../infx/golden_al_distribution/dsv41flash_dspark.yaml)：
 thinking 开启、五个草稿 token 对应 3.51；准确率 eval 保留真实验证。SGLang 对该模型默认关闭
 thinking，因此脚本设置 `SGLANG_DEFAULT_THINKING=1` 与 `SGLANG_DSV41_REASONING_EFFORT=high`，
 以测量黄金 AL 所采集的 thinking 开启状态。
@@ -525,7 +525,7 @@ uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with p
 如果修改了 schema 或生成器行为，运行其聚焦测试：
 
 ```bash
-python -m pytest utils/matrix_logic/ -v
+python -m pytest infx/tests/matrix/ -v
 ```
 
 对 srt-slurm，还要运行该配方文档指定的上游 recipe checker/`srtctl` 命令。对 llm-d，要验证配方 YAML 并在目标 Slurm fleet 上实际检查 allocation/discovery 路径；本地矩阵生成无法证明 endpoint discovery。
@@ -588,7 +588,7 @@ python -m pytest utils/matrix_logic/ -v
 
 ## MI355X 上的 DeepSeek-V4.1-Flash
 
-配方 `dsv41flash-fp4-mi355x-vllm-agentic-dspark` 将 [#2958](https://github.com/SemiAnalysisAI/InferenceX/pull/2958) 扩展至 MI355X AgentX：TP4 与 TP2、并发 1–128、原生五 token DSpark。吞吐测试使用[已提交的黄金 AL](../golden_al_distribution/dsv41flash_dspark.yaml)：thinking 开启、五个草稿 token 对应 3.51，采用合成拒绝采样并关闭自适应验证。准确率 eval 保留真实块拒绝采样，但与 CUDA 分支不同，同样关闭自适应验证：它会在设备端裁剪验证请求，而 ROCm 的 `DeepseekV4IndexerBackend` 不支持该操作，启用后引擎拒绝启动（[运行 34651830283](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34651830283)）。FP4 表示 MXFP4 专家权重；检查点还包含 MXFP8 权重。
+配方 `dsv41flash-fp4-mi355x-vllm-agentic-dspark` 将 [#2958](https://github.com/SemiAnalysisAI/InferenceX/pull/2958) 扩展至 MI355X AgentX：TP4 与 TP2、并发 1–128、原生五 token DSpark。吞吐测试使用[已提交的黄金 AL](../infx/golden_al_distribution/dsv41flash_dspark.yaml)：thinking 开启、五个草稿 token 对应 3.51，采用合成拒绝采样并关闭自适应验证。准确率 eval 保留真实块拒绝采样，但与 CUDA 分支不同，同样关闭自适应验证：它会在设备端裁剪验证请求，而 ROCm 的 `DeepseekV4IndexerBackend` 不支持该操作，启用后引擎拒绝启动（[运行 34651830283](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34651830283)）。FP4 表示 MXFP4 专家权重；检查点还包含 MXFP8 权重。
 
 遵循已合并的[上游配方 #968](https://github.com/vllm-project/recipes/pull/968) 中的 AMD 设置：`VLLM_ROCM_USE_AITER=1`、`VLLM_ROCM_USE_AITER_MOE=1` 和 `--moe-backend aiter`。通用 AITER 选择器允许 vLLM 选择 CK a8w4 专家内核，与 DSV4-Pro MI355X 配方一致。配方通过 `WEKA_LOADER_OVERRIDE` 固定使用完整语料 `semianalysis_cc_traces_weka_062126`。KV 驻留 GPU。在 [vllm-project/vllm#57491](https://github.com/vllm-project/vllm/pull/57491) 将两处 `is_cuda()` 判断放宽为 `is_cuda_alike()` 之前，Engram 按上游 AMD 默认设置常驻 GPU。自该提交起，ROCm 会解析 `EngramConfig`，且 `cpu_offload` 经由 `VLLM_PLE_CPU_OFFLOAD` 默认开启，因此配方显式设置 `--engram-config`，而不依赖该默认值。TP=2 始终下放，因为此时表每 rank 需 94.4 GiB；TP=4 在并发 64 及以下保持常驻（此时 KV 池并非瓶颈），仅在并发 128 时下放。同样地，配方仅在并发高于 32 时调低 `--max-num-batched-tokens`：TP=2 c64 与 TP=4 c128 为 8192，TP=2 c128 为 4096，因为稀疏注意力 indexer 及其配套的每 rank 缓冲区按每个批量 token 约 4.4 MiB 增长。当该分块低于 API server 默认 1024 序列所需的六倍时，`--max-num-seqs` 会被限制为 CUDA graph 捕获的规模：DSpark 每序列验证 1+5 个 token，4096 对 1024 序列会使 engram 投影在 profiling 阶段崩溃。所有情况下的原则一致：只在确实出现 KV 不足的并发点上把设备内存让给 KV，保持低并发处已验证的设置不变。早于该合并的镜像在 ROCm 上仍会拒绝该选项。MI355X launcher 使用共享 HF 缓存，并将此模型的仓库挂载至 `/ix`，同时导出 `INFMAX_CONTAINER_WORKSPACE=/ix`，确保 AgentX 依赖与输出路径位于该挂载中。
 

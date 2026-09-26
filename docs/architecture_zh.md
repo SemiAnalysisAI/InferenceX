@@ -200,7 +200,7 @@ bash ./runners/launch_${RUNNER_NAME%%_*}.sh
 
 因此，第一个下划线之前的前缀标识机群启动器。运行器命名和启动器文件名共同构成一项路由契约。
 
-`infx.github` 负责共享 REST、分页及评论表态基础操作。`infx.workflows.reuse` 负责复用选择和验证，`infx.workflows.reuse_comment` 负责评论表态反馈。两者均可作为包模块执行。`utils/find_reusable_sweep_run.py` 保留直接脚本执行和旧导入路径，旧路径指向同一个规范模块。这些辅助模块仅依赖标准库。
+`infx.github` 负责共享 REST、分页及评论表态基础操作。`infx.workflows.reuse` 负责复用选择和验证，`infx.workflows.reuse_comment` 负责评论表态反馈。两者均可作为包模块执行。这些辅助模块仅依赖标准库。
 
 ## 阶段 4：启动器与运行时执行
 
@@ -257,7 +257,7 @@ result = build_result(records, profile, server_metrics, runtime_env,
 
 功耗遥测处理引擎也位于 [`infx.results.power`](../infx/results/power/)：`single_node.run` 读取 GPU 监控 CSV，`multinode.run` 验证 srt-slurm 工件包。两者通过 `common.py` 共享基准窗口解析、单设备能量积分、聚合结果替换及审计序列化，同时保留各自的遥测校验和失败策略。固定序列及 AgentX 适配器直接导入这些引擎；新结果格式可以将其基准窗口和 token 计数提供给匹配的引擎。
 
-现有 `utils/aggregate_power.py` 和 `utils/aggregate_power_multinode.py` 命令继续作为兼容入口，包括从检出目录之外直接执行。旧导入路径解析到对应的引擎模块，因此两种路径引用的是相同的类和函数。`infx` 包可独立于这些入口运行，无需安装步骤或新增运行时依赖。还可以从仓库根目录运行 `python -m infx.results.power.single_node` 和 `python -m infx.results.power.multinode` 来调用引擎。
+`infx` 包无需安装步骤或新增运行时依赖。从仓库根目录运行 `python -m infx.results.power.single_node` 和 `python -m infx.results.power.multinode` 来调用引擎。
 
 构建函数测试应使用独立计算预期结果的小样例和只读输入。修改现有适配器时，还应与旧实现比较 CLI 退出状态、诊断信息和生成工件，覆盖无效输入以及严格模式和尽力处理模式下的功耗失败。
 

@@ -15,8 +15,8 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "utils/srt-slurm/src"))
 
-from srtctl.core.config import generate_override_configs  # noqa: E402
-from srtctl.core.overrides import (  # noqa: E402
+from srtctl.core.config import generate_override_configs
+from srtctl.core.overrides import (
     apply_overrides_to_recipe,
     parse_overrides,
 )
@@ -95,13 +95,15 @@ def _submit(
         [
             "bash",
             "-c",
-            'source "$1" || exit $?; config="$2"; framework="$3"; shift 3; '
-            'SRTCTL_EVAL_ARGS+=("$@"); '
-            'prepare_srt_power "$config" "$framework" || exit $?; '
-            'printf \'{"dcgm":%s,"agentx":%s}\\n\' '
-            '"$USES_DCGM_POWER" "$USES_AGENTX_POWER" > "$LANE"; '
-            'apply_srt_recipe "$config" "$framework" '
-            '-f "$config" --tags "ordinary AgentX submission" "${SRTCTL_RECIPE_ARGS[@]}"',
+            (
+                'source "$1" || exit $?; config="$2"; framework="$3"; shift 3; '
+                'SRTCTL_EVAL_ARGS+=("$@"); '
+                'prepare_srt_power "$config" "$framework" || exit $?; '
+                'printf \'{"dcgm":%s,"agentx":%s}\\n\' '
+                '"$USES_DCGM_POWER" "$USES_AGENTX_POWER" > "$LANE"; '
+                'apply_srt_recipe "$config" "$framework" '
+                '-f "$config" --tags "ordinary AgentX submission" "${SRTCTL_RECIPE_ARGS[@]}"'
+            ),
             "bash",
             str(ROOT / "runners/slurm_utils.sh"),
             f"{recipe_path}{':' + selector if selector else ''}",
