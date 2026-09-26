@@ -851,7 +851,7 @@ dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp:
         decode: {num-worker: 1, tp: 8, ep: 8, dp-attn: true}
 
 dsr1-fp8-mi325x-sglang-mtp:
-  image: lmsysorg/sglang:v0.5.12-rocm700-mi30x
+  image: lmsysorg/sglang:v0.5.20-rocm720-mi30x@sha256:4abecde156b531809c7f597e501930ea2023deb2c822b69f92efb66f3fdada86
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: mi325x
