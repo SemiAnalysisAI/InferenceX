@@ -17,12 +17,9 @@ import sys
 
 from infx.runners.clusters import PORTED_CLUSTERS
 
-# TODO: pyslurm build integration — before any pyslurm call, ensure the
-# extension is importable.  The companion ``infx/runners/pyslurm_build.py``
-# (being added on the ``klaud/runners-python-pyslurm`` branch) compiles
-# pyslurm from ``third_party/pyslurm/`` using vendored Slurm headers.
-# Accept ``INFERENCEX_PYSLURM_PATH`` to prepend to ``sys.path``; when set,
-# do ``sys.path.insert(0, path)`` before any import that reaches pyslurm.
+# The workflow builds (or reuses) the vendored pyslurm with
+# ``python -m infx.runners.pyslurm_build --cache-root ...`` and passes the
+# importable directory in INFERENCEX_PYSLURM_PATH.
 _PYSLURM_PATH_VAR = "INFERENCEX_PYSLURM_PATH"
 
 

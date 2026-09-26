@@ -2,6 +2,11 @@
 
 Usage:
     python3 -m infx.runners.pyslurm_build --slurm-include /usr/include --out /tmp/pyslurm_wheel
+    python3 -m infx.runners.pyslurm_build --cache-root ~/.cache/inferencex/pyslurm
+
+``--cache-root`` builds once per content key (vendored tree, patches, headers,
+Slurm version, Python version, arch) and prints ``PYSLURM_PATH=<dir>``, an
+importable directory reused by later runs on the same host.
 
 The builder:
 1. Copies the vendored pyslurm source to a temp directory.
@@ -18,12 +23,17 @@ version (detected from ``sinfo -V`` or ``scontrol show config``).
 from __future__ import annotations
 
 import argparse
+import contextlib
+import fcntl
+import hashlib
 import os
+import platform
 import re
 import shutil
 import subprocess
 import sys
 import tempfile
+import zipfile
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -231,10 +241,52 @@ def _build_inplace(build_dir: Path, include_dir: Path, lib_dir: Path) -> Path:
     return build_dir / "pyslurm"
 
 
+def _content_key(include_dir: Path, lib_dir: Path, vnum: int) -> str:
+    """Hash every input that changes the built extension."""
+    digest = hashlib.sha256()
+    for root in (VENDOR_DIR, include_dir / "slurm"):
+        for path in sorted(p for p in root.rglob("*") if p.is_file()):
+            digest.update(str(path.relative_to(root)).encode())
+            digest.update(path.read_bytes())
+    digest.update(f"{vnum}|{lib_dir}|{sys.version_info[:2]}|{platform.machine()}".encode())
+    return digest.hexdigest()[:16]
+
+
+def _cached_build(cache_root: Path, build: callable, key: str, label: str) -> Path:
+    """Return an importable pyslurm directory, building it at most once per key."""
+    dest = cache_root / f"pyslurm-{label}-{key}"
+    marker = dest / ".complete"
+    if marker.exists():
+        print(f"[pyslurm-build] Cache hit: {dest}")
+        return dest
+    cache_root.mkdir(parents=True, exist_ok=True)
+    with (cache_root / ".lock").open("w") as lock:
+        # Runners on one login host share the cache; build under an exclusive lock.
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if marker.exists():
+            print(f"[pyslurm-build] Cache hit after wait: {dest}")
+            return dest
+        staging = Path(tempfile.mkdtemp(prefix=f"{dest.name}.", dir=cache_root))
+        wheel = build(staging / "dist")
+        with zipfile.ZipFile(wheel) as archive:
+            archive.extractall(staging / "site")
+        (staging / "site" / ".complete").write_text(wheel.name + "\n")
+        with contextlib.suppress(FileNotFoundError):
+            shutil.rmtree(dest)
+        (staging / "site").rename(dest)
+        shutil.rmtree(staging, ignore_errors=True)
+    print(f"[pyslurm-build] Cached build: {dest}")
+    return dest
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Build pyslurm against system Slurm")
     parser.add_argument("--slurm-include", help="Path to Slurm include dir")
     parser.add_argument("--out", help="Output directory for the wheel")
+    parser.add_argument(
+        "--cache-root",
+        help="Build once per content key under this directory and print PYSLURM_PATH",
+    )
     parser.add_argument(
         "--inplace",
         action="store_true",
@@ -256,7 +308,25 @@ def main() -> None:
     lib_dir = _find_slurm_lib()
     print(f"[pyslurm-build] Slurm library dir: {lib_dir}")
 
-    # Copy vendored source to temp dir
+    if args.cache_root:
+        key = _content_key(include_dir, lib_dir, vnum)
+        label = f"{major}.{minor:02d}-cp{sys.version_info[0]}{sys.version_info[1]}"
+
+        def build(out_dir: Path) -> Path:
+            tree = _prepare_tree(major, minor)
+            out_dir.mkdir(parents=True, exist_ok=True)
+            return _build_wheel(tree, include_dir, lib_dir, out_dir)
+
+        path = _cached_build(Path(args.cache_root).expanduser(), build, key, label)
+        print(f"PYSLURM_PATH={path}")
+        return
+
+    build_dir = _prepare_tree(major, minor)
+    _finish(args, build_dir, include_dir, lib_dir)
+
+
+def _prepare_tree(major: int, minor: int) -> Path:
+    """Copy the vendored source to a temp dir and apply the matching patches."""
     build_dir = Path(tempfile.mkdtemp(prefix="pyslurm-build-"))
     print(f"[pyslurm-build] Build directory: {build_dir}")
 
@@ -267,9 +337,12 @@ def main() -> None:
         ignore=shutil.ignore_patterns("patches", "VENDORED.md"),
     )
 
-    # Apply patches
     _apply_patches(build_dir, (major, minor))
+    return build_dir
 
+
+def _finish(args: argparse.Namespace, build_dir: Path, include_dir: Path, lib_dir: Path) -> None:
+    """Build in place or as a wheel, per the CLI flags."""
     if args.inplace:
         pkg_dir = _build_inplace(build_dir, include_dir, lib_dir)
         print(f"\n[pyslurm-build] SUCCESS — importable from: {pkg_dir}")
