@@ -65,7 +65,8 @@ base:
       AIPERF_APPLY_CHAT_TEMPLATE: 'true'
 
 # One variant per point. Admission is 2x CONC and the decode graph batch follows
-# it up to 128; TP4 adds tokenizer workers. HiCache holds 1.5x the device KV pool.
+# it up to 128; TP4 adds tokenizer workers. HiCache pins a 253 GB host pool
+# (hicache-size overrides hicache-ratio).
 override_tp4_c1:
   roles:
     agg:
@@ -188,7 +189,7 @@ override_tp2_c12:
       CONC: '12'
       KV_OFFLOADING: none
 
-override_tp2_c16:
+override_tp2_c16_hicache:
   roles:
     agg:
       gpus: 2
@@ -196,23 +197,16 @@ override_tp2_c16:
         tensor-parallel-size: 2
         max-running-requests: 32
         cuda-graph-max-bs-decode: 32
+        enable-hierarchical-cache: true
+        hicache-ratio: 1.5
+        hicache-size: 253
+        hicache-write-policy: write_through
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
   benchmark:
     env:
       CONC: '16'
-      KV_OFFLOADING: none
-
-override_tp2_c20:
-  roles:
-    agg:
-      gpus: 2
-      args:
-        tensor-parallel-size: 2
-        max-running-requests: 40
-        cuda-graph-max-bs-decode: 40
-  benchmark:
-    env:
-      CONC: '20'
-      KV_OFFLOADING: none
+      KV_OFFLOADING: dram
 
 override_tp2_c20_hicache:
   roles:
@@ -224,6 +218,7 @@ override_tp2_c20_hicache:
         cuda-graph-max-bs-decode: 40
         enable-hierarchical-cache: true
         hicache-ratio: 1.5
+        hicache-size: 253
         hicache-write-policy: write_through
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
@@ -242,6 +237,7 @@ override_tp2_c24_hicache:
         cuda-graph-max-bs-decode: 48
         enable-hierarchical-cache: true
         hicache-ratio: 1.5
+        hicache-size: 253
         hicache-write-policy: write_through
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
@@ -260,6 +256,7 @@ override_tp2_c28_hicache:
         cuda-graph-max-bs-decode: 56
         enable-hierarchical-cache: true
         hicache-ratio: 1.5
+        hicache-size: 253
         hicache-write-policy: write_through
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
@@ -278,6 +275,7 @@ override_tp2_c32_hicache:
         cuda-graph-max-bs-decode: 64
         enable-hierarchical-cache: true
         hicache-ratio: 1.5
+        hicache-size: 253
         hicache-write-policy: write_through
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
@@ -296,6 +294,7 @@ override_tp2_c36_hicache:
         cuda-graph-max-bs-decode: 72
         enable-hierarchical-cache: true
         hicache-ratio: 1.5
+        hicache-size: 253
         hicache-write-policy: write_through
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
@@ -314,6 +313,7 @@ override_tp2_c40_hicache:
         cuda-graph-max-bs-decode: 80
         enable-hierarchical-cache: true
         hicache-ratio: 1.5
+        hicache-size: 253
         hicache-write-policy: write_through
         hicache-io-backend: kernel
         hicache-mem-layout: page_first

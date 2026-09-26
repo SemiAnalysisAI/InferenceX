@@ -8955,4 +8955,6 @@
     - qwen3.5-fp4-mi355x-sglang-agentic-mtp
   description:
     - "Update SGLang ROCm image from v0.5.19-rocm720-mi35x-20260915 to v0.5.20-rocm720-mi35x-20260924 (latest nightly)"
+    - "Port the #3364 tuning onto the srt-slurm recipe: move TP2 concurrency 16 from GPU-resident KV to HiCache and drop the TP2 GPU-resident concurrency-20 point, giving TP2 grids resident [1, 4, 8, 12] and HiCache [16, 20, 24, 28, 32, 36, 40]; TP4 stays [1, 4, 8, 12, 16]."
+    - "Pin the HiCache host pool with hicache-size 253 (overrides hicache-ratio)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3455
