@@ -244,6 +244,7 @@ override_tp8_c128_dp_ep8_megamoe_hicache:
         load-balance-method: total_requests
         chunked-prefill-size: 65536
         mem-fraction-static: 0.85
+        enforce-shared-experts-fusion: false
         moe-a2a-backend: megamoe
         moe-dense-tp-size: 1
         disable-shared-experts-fusion: true
@@ -302,6 +303,7 @@ override_tp8_c256_dp_ep8_megamoe_hicache:
         load-balance-method: total_requests
         chunked-prefill-size: 65536
         mem-fraction-static: 0.85
+        enforce-shared-experts-fusion: false
         moe-a2a-backend: megamoe
         moe-dense-tp-size: 1
         disable-shared-experts-fusion: true
@@ -360,6 +362,7 @@ override_tp8_c384_dp_ep8_megamoe_hicache:
         load-balance-method: total_requests
         chunked-prefill-size: 65536
         mem-fraction-static: 0.85
+        enforce-shared-experts-fusion: false
         moe-a2a-backend: megamoe
         moe-dense-tp-size: 1
         disable-shared-experts-fusion: true
