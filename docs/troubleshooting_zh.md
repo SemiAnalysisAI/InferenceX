@@ -23,7 +23,7 @@
 
 ## 事实来源
 
-- [`KLAUD_DEBUG.md`](../KLAUD_DEBUG.md) 记录反复出现的 Klaud-Cold/镜像升级事故及其已观测特征。它是事故知识，不替代当前工作流或评审政策。
+- [`KLAUD_DEBUG.md`](KLAUD_DEBUG.md) 记录反复出现的 Klaud-Cold/镜像升级事故及其已观测特征。它是事故知识，不替代当前工作流或评审政策。
 - [`run-sweep.yml`](../.github/workflows/run-sweep.yml)、[`benchmark-tmpl.yml`](../.github/workflows/benchmark-tmpl.yml) 和 [`benchmarks/benchmark_lib.sh`](../benchmarks/benchmark_lib.sh) 定义编排、制品上传、服务器就绪、基准测试和评测行为。
 - [`validate_perf_changelog.py`](../infx/workflows/validate_perf_changelog.py)、[`generate_sweep_configs.py`](../utils/matrix_logic/generate_sweep_configs.py) 和 [`validation.py`](../infx/matrix/validation.py) 分别负责 changelog、矩阵和模式失败。
 - [`utils/runner_setup/RUNNER_SETUP.md`](../utils/runner_setup/RUNNER_SETUP.md) 与 [`runners/`](../runners/) 负责预置和启动器路由。[`CONTRIBUTING.md`](../CONTRIBUTING.md#amd-cluster-never-leave-root-owned-files-in-runner-workspaces) 负责 AMD 工作区安全规则。
@@ -58,7 +58,7 @@
 
 ### Changelog
 
-Setup 阶段的删除错误通常意味着陈旧分支或改变空白的合并使历史字节看起来被删除。遵循 [`KLAUD_DEBUG.md` §1.1](../KLAUD_DEBUG.md#11-perf-changelogyaml-deletion-not-allowed) 的规范修复：逐字采用当前 main 版本，然后只在末尾追加本 PR 条目。使用 [`validate_perf_changelog.py`](../infx/workflows/validate_perf_changelog.py) 对真实 base 与 head 进行验证。
+Setup 阶段的删除错误通常意味着陈旧分支或改变空白的合并使历史字节看起来被删除。遵循 [`KLAUD_DEBUG.md` §1.1](KLAUD_DEBUG.md#11-perf-changelogyaml-deletion-not-allowed) 的规范修复：逐字采用当前 main 版本，然后只在末尾追加本 PR 条目。使用 [`validate_perf_changelog.py`](../infx/workflows/validate_perf_changelog.py) 对真实 base 与 head 进行验证。
 
 不要对 `perf-changelog.yaml` 做三方合并或格式规范化。如果预期配置键、评测标志、场景范围或历史差异不明确，请停止。Changelog 新增内容和允许的 `pr-link` 修正行为由验证器强制执行，不能只依据目视有效的 YAML 解析结果。
 
@@ -79,7 +79,7 @@ Setup 阶段的删除错误通常意味着陈旧分支或改变空白的合并�
 - 仅在运行器恢复健康后重跑。不要仅为了避开坏节点而修改模型并行度、内存标志或镜像。
 - 将访问权限、drained 节点、socket、存储和永久 Slurm 配置变更升级给集群运维人员。
 
-[`KLAUD_DEBUG.md` §5](../KLAUD_DEBUG.md#5-cluster-infrastructure-amd-mi355x--mi300x--mi325x) 列出了已知 AMD 节点、Docker socket、磁盘和端口事故。除非当前节点证据再次确认，否则应把其中点名的节点状态视为历史记录。
+[`KLAUD_DEBUG.md` §5](KLAUD_DEBUG.md#5-cluster-infrastructure-amd-mi355x--mi300x--mi325x) 列出了已知 AMD 节点、Docker socket、磁盘和端口事故。除非当前节点证据再次确认，否则应把其中点名的节点状态视为历史记录。
 
 ### AMD root 属主工作区文件
 
@@ -101,7 +101,7 @@ Setup 阶段的删除错误通常意味着陈旧分支或改变空白的合并�
 
 使用最早出现的具体特征：
 
-- **镜像拉取/tag 失败：**修改运行时标志前验证精确 registry tag 或 digest 是否存在。[`KLAUD_DEBUG.md` §6](../KLAUD_DEBUG.md#6-docker-image-tag-gotchas) 警告不要从带日期的 nightly 推导 release tag。
+- **镜像拉取/tag 失败：**修改运行时标志前验证精确 registry tag 或 digest 是否存在。[`KLAUD_DEBUG.md` §6](KLAUD_DEBUG.md#6-docker-image-tag-gotchas) 警告不要从带日期的 nightly 推导 release tag。
 - **权重/KV/CUDA graph OOM：**记录空闲显存、配置利用率、每 rank 并发、graph 限制和启动失败位置。只应用与匹配案例一致的设置；之后同时确认服务器启动和工作负载完成。
 - **内核/架构断言或非法地址：**保留完整堆栈和 GPU 架构。优先使用已修复/固定的上游镜像或受支持后端，而不是未经评审的本地引擎补丁。
 - **地址被占用：**终止进程前确认占用者及其集群所有者。不要杀死未经验证的 PID 或无关服务。
@@ -142,20 +142,20 @@ Setup 阶段的删除错误通常意味着陈旧分支或改变空白的合并�
 
 ## 已知 KLAUD 案例
 
-使用 [`KLAUD_DEBUG.md`](../KLAUD_DEBUG.md) 识别精确特征，然后依据当前镜像、配方、硬件和政策验证，再应用其修复。
+使用 [`KLAUD_DEBUG.md`](KLAUD_DEBUG.md) 识别精确特征，然后依据当前镜像、配方、硬件和政策验证，再应用其修复。
 
 | 特征 | 已知案例与安全边界 |
 | --- | --- |
-| Setup 表示 changelog 历史被删除 | [§1.1](../KLAUD_DEBUG.md#11-perf-changelogyaml-deletion-not-allowed)：恢复 main 字节并只追加 PR 条目；绝不三方合并历史 |
-| vLLM 权重加载/KV 分配 OOM | [§2](../KLAUD_DEBUG.md#2-vllm-v021x--v020x-gpu-oom-at-model-load)：降低利用率或使用记录的 profiler 设置前，先确认 memory-profiler 特征 |
-| DEP decoder 在大型 CUDA graph capture 中失败 | [§2.1](../KLAUD_DEBUG.md#21-dep-cuda-graph-capture-oom-on-gb300)：按每个 DP rank 的负载而不是全局并发设置 sequence/graph 限制 |
-| DSV4 在自定义 digest 上可用但在通用 SGLang 上 OOM | [§3](../KLAUD_DEBUG.md#3-custom-dsv4-image--generic-v0512-ooms)：通用 release 不是可直接替换项；保留/回退到已验证兼容镜像 |
-| B300 DeepGemm 非法地址、EAGLE trtllm GEMM 失败或 flash-attn 架构断言 | [§4](../KLAUD_DEBUG.md#4-upstream-sglang-v0512-b300-regressions)：区分三种堆栈；使用受支持后端/上限或已修复/固定的上游镜像 |
-| AMD drained/Pyxis、Docker socket、磁盘满或端口被占用 | [§5](../KLAUD_DEBUG.md#5-cluster-infrastructure-amd-mi355x--mi300x--mi325x)：确认当前节点状态并升级基础设施问题；不健康基础设施没有配方级修复 |
-| `dpkg-deb` 或 `tar` 拒绝刚下载的 srt-slurm 依赖归档 | [§1.2](../KLAUD_DEBUG.md#12-truncated-natsetcd-dependency-archives)：保留首个 setup 错误。H200 仅在 NATS/etcd 归档未通过完整性检查时重试，只删除无效归档，并对无关的 setup 失败立即停止 |
-| 猜测的 Docker tag 返回 404 | [§6](../KLAUD_DEBUG.md#6-docker-image-tag-gotchas)：在 registry 验证精确 tag；不要推断命名规律 |
-| `gh run rerun --failed` 被拒绝 | [§7](../KLAUD_DEBUG.md#7-ci-rerun-mechanics)：检查运行状态/结论；仅已完成的失败支持只重跑失败任务，取消运行需要完整重跑 |
-| MiniMax M3 B300 MSA 报告 `q2k_indices` 不连续 | [§11](../KLAUD_DEBUG.md#11-minimax-m3-b300-msa-top-k-slice-is-non-contiguous)：识别 TP1/data-parallel-attention 暴露条件；优先使用上游已修复镜像。提交记录中的引擎补丁须符合当前清单/豁免要求 |
+| Setup 表示 changelog 历史被删除 | [§1.1](KLAUD_DEBUG.md#11-perf-changelogyaml-deletion-not-allowed)：恢复 main 字节并只追加 PR 条目；绝不三方合并历史 |
+| vLLM 权重加载/KV 分配 OOM | [§2](KLAUD_DEBUG.md#2-vllm-v021x--v020x-gpu-oom-at-model-load)：降低利用率或使用记录的 profiler 设置前，先确认 memory-profiler 特征 |
+| DEP decoder 在大型 CUDA graph capture 中失败 | [§2.1](KLAUD_DEBUG.md#21-dep-cuda-graph-capture-oom-on-gb300)：按每个 DP rank 的负载而不是全局并发设置 sequence/graph 限制 |
+| DSV4 在自定义 digest 上可用但在通用 SGLang 上 OOM | [§3](KLAUD_DEBUG.md#3-custom-dsv4-image--generic-v0512-ooms)：通用 release 不是可直接替换项；保留/回退到已验证兼容镜像 |
+| B300 DeepGemm 非法地址、EAGLE trtllm GEMM 失败或 flash-attn 架构断言 | [§4](KLAUD_DEBUG.md#4-upstream-sglang-v0512-b300-regressions)：区分三种堆栈；使用受支持后端/上限或已修复/固定的上游镜像 |
+| AMD drained/Pyxis、Docker socket、磁盘满或端口被占用 | [§5](KLAUD_DEBUG.md#5-cluster-infrastructure-amd-mi355x--mi300x--mi325x)：确认当前节点状态并升级基础设施问题；不健康基础设施没有配方级修复 |
+| `dpkg-deb` 或 `tar` 拒绝刚下载的 srt-slurm 依赖归档 | [§1.2](KLAUD_DEBUG.md#12-truncated-natsetcd-dependency-archives)：保留首个 setup 错误。H200 仅在 NATS/etcd 归档未通过完整性检查时重试，只删除无效归档，并对无关的 setup 失败立即停止 |
+| 猜测的 Docker tag 返回 404 | [§6](KLAUD_DEBUG.md#6-docker-image-tag-gotchas)：在 registry 验证精确 tag；不要推断命名规律 |
+| `gh run rerun --failed` 被拒绝 | [§7](KLAUD_DEBUG.md#7-ci-rerun-mechanics)：检查运行状态/结论；仅已完成的失败支持只重跑失败任务，取消运行需要完整重跑 |
+| MiniMax M3 B300 MSA 报告 `q2k_indices` 不连续 | [§11](KLAUD_DEBUG.md#11-minimax-m3-b300-msa-top-k-slice-is-non-contiguous)：识别 TP1/data-parallel-attention 暴露条件；优先使用上游已修复镜像。提交记录中的引擎补丁须符合当前清单/豁免要求 |
 
 历史 KLAUD 标签或合并建议不能覆盖当前[扫描标签政策](../.github/AGENT_OPERATIONS.md#sweep-labels-and-reuse)、[`CONTRIBUTING.md`](../CONTRIBUTING.md) 或 [PR 清单](./PR_REVIEW_CHECKLIST.md)。
 
