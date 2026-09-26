@@ -703,5 +703,14 @@ class PerCaseGraphGates(unittest.TestCase):
         self.assertTrue(self._instance(cls, "normal", phase="decode").cuda_graph_supported)
         self.assertFalse(self._instance(cls, "normal", phase="prefill").cuda_graph_supported)
 
+    def test_nccl_graphs_low_latency_and_ht_decode_only(self):
+        with mock.patch.dict(sys.modules, _stub_modules()):
+            import importlib
+            import ep_nccl
+            cls = importlib.reload(ep_nccl).NCCLEPBackend
+        self.assertTrue(self._instance(cls, "normal", phase="decode").cuda_graph_supported)
+        self.assertFalse(self._instance(cls, "normal", phase="prefill").cuda_graph_supported)
+        self.assertTrue(self._instance(cls, "low-latency", phase="decode").cuda_graph_supported)
+
 if __name__ == "__main__":
     unittest.main()
