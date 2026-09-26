@@ -1,0 +1,129 @@
+{
+  "schema_version": 1,
+  "upstream": "https://github.com/kvcache-ai/Mooncake",
+  "base_commit": "fe0d23e332f41c7d54b5c217194dce5f8e751b21",
+  "package_date": "2026-09-25",
+  "patch_order": [
+    "0001-tent-transfer-event-recorder.patch",
+    "0002-tebench-slurm.patch",
+    "0003-store-benchmark-slurm.patch"
+  ],
+  "patched_files": [
+    {
+      "path": "mooncake-transfer-engine/tent/include/tent/runtime/segment_manager.h",
+      "sha256": "43ab3d3cc0b8172a49201d2812d19343119c535eafd3675962a58a778fdd2942"
+    },
+    {
+      "path": "mooncake-transfer-engine/tent/include/tent/runtime/transfer_engine_impl.h",
+      "sha256": "ea937bd0d304e65c1764edefc673e87ef38d9bc8351689945aa637885329f533"
+    },
+    {
+      "path": "mooncake-transfer-engine/tent/src/runtime/segment_manager.cpp",
+      "sha256": "49ce72f2f2a8dbaa19ff95a2d92f4996fad00f981095fa7087a62d939c7da0cf"
+    },
+    {
+      "path": "mooncake-transfer-engine/tent/src/runtime/transfer_engine_impl.cpp",
+      "sha256": "a930b15225f2ba9a28e44ef058f35d94308cb19509b13bf4288a4f8cf6d120b5"
+    },
+    {
+      "path": "mooncake-transfer-engine/tent/tests/CMakeLists.txt",
+      "sha256": "8b8d233e8f5dc3ee553bf82d0b230c39c0ee9547af8d9b46b890e8d5418123e6"
+    },
+    {
+      "path": "mooncake-transfer-engine/tent/TRANSFER_EVENTS.md",
+      "sha256": "bc73d64ebff9a1052d998ee3662d4be45ec1a1ba9ce234ad4acd93bf3cb84760"
+    },
+    {
+      "path": "mooncake-transfer-engine/tent/include/tent/runtime/transfer_event_recorder.h",
+      "sha256": "a034b2db5ea3d572427e8807bc45b0859c17e5c030671be9235e6f960a289835"
+    },
+    {
+      "path": "mooncake-transfer-engine/tent/src/runtime/transfer_event_recorder.cpp",
+      "sha256": "b827e4c3208922b19c527af8389b661bfbb34f4757e9941c10de611be473c12c"
+    },
+    {
+      "path": "mooncake-transfer-engine/tent/tests/transfer_event_recorder_test.cpp",
+      "sha256": "c6705a82f02e89c3f88773c025e7cd6f6332c0749585289e7159e05811edb7a4"
+    },
+    {
+      "path": "mooncake-transfer-engine/benchmark/slurm/README.md",
+      "sha256": "ed6380df8e487be3a1326bf65550e6ab1d2c0d83839e694303d957c929d25b96"
+    },
+    {
+      "path": "mooncake-transfer-engine/benchmark/slurm/tebench.sbatch",
+      "sha256": "66683b706a7829eeffa706a3095e35d6357ffe9e7f351691255f601d542e1d1f"
+    },
+    {
+      "path": "mooncake-store/benchmarks/slurm/README.md",
+      "sha256": "b6f4d76e8c61283165011700b62c7d79801ebbc95be65ed204690a9d1d84382c"
+    },
+    {
+      "path": "mooncake-store/benchmarks/slurm/common.sh",
+      "sha256": "c26feb9edbbe8b6b8d0c24a31b0d9b72f7740308d2f58eb6ad2035f03787d5d7"
+    },
+    {
+      "path": "mooncake-store/benchmarks/slurm/storage_trace.sbatch",
+      "sha256": "964448d1157c049831ad6255fa04bdb9aeb50739578c3cd9ad7c75d80fef16b8"
+    },
+    {
+      "path": "mooncake-store/benchmarks/slurm/store_kv.sbatch",
+      "sha256": "47862dd2eec4fb23f1c98487735dae9a33e091ee83659e40f5a63fac0b060a5e"
+    },
+    {
+      "path": "mooncake-store/benchmarks/slurm/store_micro.sbatch",
+      "sha256": "cb3c2af9a1a1d4b50a63cc2d2cc76a0f6a14bd34be16392722d52eb3d555a854"
+    },
+    {
+      "path": "mooncake-store/benchmarks/slurm/worker.sh",
+      "sha256": "09942d545b794bb3232856dffdc7945345332b0507ab15729720b6a05c421c8a"
+    }
+  ],
+  "source_result_directory": "/mnt/home/kimbo/networkx/Mooncake/benchmark-results/tebench-1695.6UKR6R",
+  "raw_traces_included": false,
+  "raw_trace_directory": "/mnt/home/kimbo/networkx/Mooncake/benchmark-results/tebench-1695.6UKR6R/events",
+  "raw_trace_files": [
+    {
+      "file": "tent-events-slurm-h100-206-025-2231481-gziMb7.jsonl",
+      "bytes": 2951125300,
+      "written_records": 8853876,
+      "dropped_records": 312506
+    },
+    {
+      "file": "tent-events-slurm-h100-206-025-2232757-0Y5JRP.jsonl",
+      "bytes": 2926127648,
+      "written_records": 8778252,
+      "dropped_records": 417592
+    },
+    {
+      "file": "tent-events-slurm-h100-206-025-2234022-WL8pRq.jsonl",
+      "bytes": 2938446459,
+      "written_records": 8815626,
+      "dropped_records": 276006
+    },
+    {
+      "file": "tent-events-slurm-h100-206-025-2232113-2zgoGf.jsonl",
+      "bytes": 2916445523,
+      "written_records": 8722968,
+      "dropped_records": 505420
+    },
+    {
+      "file": "tent-events-slurm-h100-206-025-2233390-uky9P4.jsonl",
+      "bytes": 2906519707,
+      "written_records": 8693000,
+      "dropped_records": 593004
+    },
+    {
+      "file": "tent-events-slurm-h100-206-025-2234663-oNUhoa.jsonl",
+      "bytes": 2958300924,
+      "written_records": 8848568,
+      "dropped_records": 378892
+    }
+  ],
+  "validation": {
+    "regression_job": 1694,
+    "passed_tests": 64,
+    "trace_smoke_job": 1693,
+    "traced_sweep_job": 1695,
+    "analysis_job": 1696
+  }
+}

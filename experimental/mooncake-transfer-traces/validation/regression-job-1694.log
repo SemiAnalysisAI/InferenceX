@@ -1,0 +1,197 @@
+-- glog version '0.4.0' (< 0.6.0 or unknown): IsGoogleLoggingInitialized() unavailable
+CMAKE_BUILD_TYPE: Release
+-- [limit_jobs] Available memory: 2020066 MB, CPU cores: 128
+-- [limit_jobs] Compile jobs: 128 (1500 MB/job), Link jobs: 128 (4000 MB/job)
+-- [limit_jobs] Hint: use -G Ninja for automatic compile/link parallelism separation
+-- [limit_jobs] With Make, recommend: cmake --build . -j128
+-- Event-driven completion is disabled
+-- None of USE_ETCD, USE_REDIS, USE_HTTP is selected, only "P2PHANDSHAKE" is supported as metadata server
+-- metrics is enabled
+-- -------------YLT INSTALL SETTING------------
+-- INSTALL_THIRDPARTY: ON
+-- INSTALL_STANDALONE: ON
+-- INSTALL_INDEPENDENT_THIRDPARTY: ON
+-- INSTALL_INDEPENDENT_STANDALONE: ON
+-- --------------------------------------------
+-- -------------YLT CONFIG SETTING-------------
+YLT is imported by fetchContent or add_subdirectory
+-- YLT_ENABLE_DL: ON
+-- YLT_ENABLE_SSL: OFF
+-- YLT_ENABLE_NTLS: OFF
+-- Enable ibverbs support
+-- YLT_ENABLE_PMR: OFF
+-- YLT_ENABLE_IO_URING: OFF
+-- YLT_ENABLE_STRUCT_PACK_UNPORTABLE_TYPE: OFF
+-- YLT_ENABLE_STRUCT_PACK_OPTIMIZE: OFF
+-- --------------------------------------------
+-- pybind11 v2.13.6 
+-- USE_NOF=OFF, NoF SSD pool support is disabled
+-- CUDA: Disabled
+-- ROCm/HIP: Disabled
+-- GDS: Disabled
+-- RDMA: Enabled
+-- Uring: Enabled
+-- Could NOT find CURL (missing: CURL_LIBRARY CURL_INCLUDE_DIR) 
+-- Http metastore support: Disabled
+-- Redis metastore support: Disabled
+-- TENT metrics: DISABLED (zero overhead)
+/usr/local/lib/python3.10/dist-packages
+-- CUDA: Disabled
+-- ROCm/HIP: Disabled
+-- Sunrise/Tang: Disabled
+-- Mooncake Python install directory: /usr/local/lib/python3.10/dist-packages/mooncake
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /mnt/home/kimbo/networkx/Mooncake/build/trace-tests
+Consolidate compiler generated dependencies of target asio_shared
+Consolidate compiler generated dependencies of target gtest
+[  4%] Built target gtest
+Consolidate compiler generated dependencies of target gtest_main
+[  4%] Built target gtest_main
+[  4%] Built target asio_shared
+Consolidate compiler generated dependencies of target mooncake_common
+Consolidate compiler generated dependencies of target tent_common
+[  9%] Built target tent_common
+Consolidate compiler generated dependencies of target tent_rpc
+Consolidate compiler generated dependencies of target tent_platform_all
+Consolidate compiler generated dependencies of target tent_xport_uring
+Consolidate compiler generated dependencies of target tent_xport_bufio
+Consolidate compiler generated dependencies of target tent_metrics
+[ 13%] Built target tent_platform_all
+Consolidate compiler generated dependencies of target tent_xport_hp_tcp_core
+Consolidate compiler generated dependencies of target tent_xport_rdma
+[ 18%] Built target tent_metrics
+[ 22%] Built target mooncake_common
+[ 31%] Built target tent_xport_uring
+[ 31%] Built target tent_xport_bufio
+[ 31%] Built target tent_rpc
+[ 36%] Built target tent_xport_hp_tcp_core
+[ 50%] Built target tent_xport_rdma
+Consolidate compiler generated dependencies of target tent_xport_tcp
+Consolidate compiler generated dependencies of target tent_xport_shm
+Consolidate compiler generated dependencies of target tent_xport_mpcomm
+Consolidate compiler generated dependencies of target tent_xport_hp_tcp
+[ 54%] Built target tent_xport_tcp
+[ 54%] Built target tent_xport_shm
+[ 68%] Built target tent_xport_hp_tcp
+[ 68%] Built target tent_xport_mpcomm
+Consolidate compiler generated dependencies of target tent_runtime
+[ 68%] Building CXX object mooncake-transfer-engine/tent/src/runtime/CMakeFiles/tent_runtime.dir/transfer_engine_impl.cpp.o
+[ 68%] Building CXX object mooncake-transfer-engine/tent/src/runtime/CMakeFiles/tent_runtime.dir/transfer_event_recorder.cpp.o
+[ 95%] Built target tent_runtime
+Consolidate compiler generated dependencies of target tent
+[ 95%] Linking CXX static library libtent.a
+[100%] Built target tent
+Consolidate compiler generated dependencies of target tent_transfer_event_recorder_test
+[100%] Building CXX object mooncake-transfer-engine/tent/tests/CMakeFiles/tent_transfer_event_recorder_test.dir/transfer_event_recorder_test.cpp.o
+/mnt/home/kimbo/networkx/Mooncake/mooncake-transfer-engine/tent/tests/transfer_event_recorder_test.cpp: In member function ‘virtual void mooncake::tent::{anonymous}::TransferEventTest_FailoverKeepsOneLogicalRequest_Test::TestBody()’:
+/mnt/home/kimbo/networkx/Mooncake/mooncake-transfer-engine/tent/tests/transfer_event_recorder_test.cpp:505:12: warning: suggest explicit braces to avoid ambiguous ‘else’ [-Wdangling-else]
+  505 |         if (row["event"] == "complete") EXPECT_EQ(row["transport"], "tcp");
+      |            ^
+[100%] Linking CXX executable tent_transfer_event_recorder_test
+[100%] Built target tent_transfer_event_recorder_test
+[  4%] Built target gtest
+[  4%] Built target asio_shared
+[  4%] Built target gtest_main
+[ 13%] Built target tent_common
+[ 13%] Built target mooncake_common
+[ 21%] Built target tent_platform_all
+[ 21%] Built target tent_metrics
+[ 26%] Built target tent_xport_uring
+[ 30%] Built target tent_xport_bufio
+[ 30%] Built target tent_rpc
+[ 34%] Built target tent_xport_hp_tcp_core
+[ 47%] Built target tent_xport_rdma
+[ 52%] Built target tent_xport_shm
+[ 52%] Built target tent_xport_tcp
+[ 65%] Built target tent_xport_mpcomm
+[ 65%] Built target tent_xport_hp_tcp
+Consolidate compiler generated dependencies of target tent_runtime
+[ 91%] Built target tent_runtime
+[ 95%] Built target tent
+[100%] Building CXX object mooncake-transfer-engine/tent/tests/CMakeFiles/request_merge_test.dir/request_merge_test.cpp.o
+/mnt/home/kimbo/networkx/Mooncake/mooncake-transfer-engine/tent/tests/request_merge_test.cpp: In function ‘mooncake::tent::Request mooncake::tent::{anonymous}::makeWriteRequest(char*, size_t, uint64_t, size_t)’:
+/mnt/home/kimbo/networkx/Mooncake/mooncake-transfer-engine/tent/tests/request_merge_test.cpp:45:5: warning: missing initializer for member ‘mooncake::tent::Request::policy_name’ [-Wmissing-field-initializers]
+   45 |     };
+      |     ^
+[100%] Linking CXX executable request_merge_test
+[100%] Built target request_merge_test
+[  0%] Built target asio_shared
+[  4%] Built target gtest
+[  4%] Built target gtest_main
+[ 13%] Built target tent_common
+[ 13%] Built target mooncake_common
+[ 27%] Built target tent_rpc
+[ 27%] Built target tent_platform_all
+[ 31%] Built target tent_xport_uring
+[ 36%] Built target tent_xport_bufio
+[ 31%] Built target tent_metrics
+[ 40%] Built target tent_xport_hp_tcp_core
+[ 50%] Built target tent_xport_rdma
+[ 54%] Built target tent_xport_tcp
+[ 54%] Built target tent_xport_shm
+[ 63%] Built target tent_xport_mpcomm
+[ 68%] Built target tent_xport_hp_tcp
+[ 95%] Built target tent_runtime
+[100%] Built target tent
+[100%] Building CXX object mooncake-transfer-engine/tent/tests/CMakeFiles/causal_chain_test.dir/causal_chain_test.cpp.o
+[100%] Linking CXX executable causal_chain_test
+[100%] Built target causal_chain_test
+[  4%] Built target gtest
+[  4%] Built target asio_shared
+[  4%] Built target gtest_main
+[  9%] Built target tent_common
+[ 13%] Built target mooncake_common
+[ 27%] Built target tent_xport_uring
+[ 27%] Built target tent_platform_all
+[ 27%] Built target tent_xport_bufio
+[ 27%] Built target tent_rpc
+[ 40%] Built target tent_xport_rdma
+[ 45%] Built target tent_metrics
+[ 45%] Built target tent_xport_tcp
+[ 54%] Built target tent_xport_shm
+[ 59%] Built target tent_xport_mpcomm
+[ 63%] Built target tent_xport_hp_tcp_core
+[ 68%] Built target tent_xport_hp_tcp
+[ 95%] Built target tent_runtime
+[100%] Built target tent
+[100%] Building CXX object mooncake-transfer-engine/tent/tests/CMakeFiles/tent_runtime_queue_dispatch_test.dir/runtime_queue_dispatch_test.cpp.o
+[100%] Linking CXX executable tent_runtime_queue_dispatch_test
+[100%] Built target tent_runtime_queue_dispatch_test
+[  0%] Built target asio_shared
+[  4%] Built target gtest
+[  9%] Built target tent_common
+[  9%] Built target gtest_main
+[ 13%] Built target mooncake_common
+[ 18%] Built target tent_rpc
+[ 27%] Built target tent_xport_bufio
+[ 27%] Built target tent_xport_uring
+[ 27%] Built target tent_platform_all
+[ 31%] Built target tent_metrics
+[ 36%] Built target tent_xport_hp_tcp_core
+[ 50%] Built target tent_xport_tcp
+[ 50%] Built target tent_xport_shm
+[ 54%] Built target tent_xport_rdma
+[ 63%] Built target tent_xport_mpcomm
+[ 68%] Built target tent_xport_hp_tcp
+[ 95%] Built target tent_runtime
+[100%] Built target tent
+[100%] Building CXX object mooncake-transfer-engine/tent/tests/CMakeFiles/tent_engine_failover_e2e_test.dir/engine_failover_e2e_test.cpp.o
+[100%] Linking CXX executable tent_engine_failover_e2e_test
+[100%] Built target tent_engine_failover_e2e_test
+Internal ctest changing into directory: /mnt/home/kimbo/networkx/Mooncake/build/trace-tests
+Test project /mnt/home/kimbo/networkx/Mooncake/build/trace-tests
+    Start  62: request_merge_test
+1/5 Test  #62: request_merge_test ..................   Passed    0.03 sec
+    Start  96: tent_engine_failover_e2e_test
+2/5 Test  #96: tent_engine_failover_e2e_test .......   Passed    1.02 sec
+    Start 104: tent_runtime_queue_dispatch_test
+3/5 Test #104: tent_runtime_queue_dispatch_test ....   Passed    1.00 sec
+    Start 106: causal_chain_test
+4/5 Test #106: causal_chain_test ...................   Passed    0.13 sec
+    Start 109: tent_transfer_event_recorder_test
+5/5 Test #109: tent_transfer_event_recorder_test ...   Passed    0.25 sec
+
+100% tests passed, 0 tests failed out of 5
+
+Total Test time (real) =   2.52 sec

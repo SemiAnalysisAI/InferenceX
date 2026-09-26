@@ -1,0 +1,283 @@
+Start testing: Sep 24 19:03 UTC
+----------------------------------------------------------
+62/113 Testing: request_merge_test
+62/113 Test: request_merge_test
+Command: "/mnt/home/kimbo/networkx/Mooncake/build/trace-tests/mooncake-transfer-engine/tent/tests/request_merge_test"
+Directory: /mnt/home/kimbo/networkx/Mooncake/build/trace-tests/mooncake-transfer-engine/tent/tests
+"request_merge_test" start time: Sep 24 19:03 UTC
+Output:
+----------------------------------------------------------
+Running main() from /mnt/home/kimbo/networkx/Mooncake/build/trace-tests/_deps/googletest-src/googletest/src/gtest_main.cc
+[==========] Running 8 tests from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 8 tests from RequestMergeTest
+[ RUN      ] RequestMergeTest.KeepsRequestsSplitAcrossRegisteredBufferBoundaries
+[       OK ] RequestMergeTest.KeepsRequestsSplitAcrossRegisteredBufferBoundaries (0 ms)
+[ RUN      ] RequestMergeTest.MergesAdjacentRequestsInsideSameRegisteredBuffers
+[       OK ] RequestMergeTest.MergesAdjacentRequestsInsideSameRegisteredBuffers (0 ms)
+[ RUN      ] RequestMergeTest.KeepsNonContiguousRequestsSplit
+[       OK ] RequestMergeTest.KeepsNonContiguousRequestsSplit (0 ms)
+[ RUN      ] RequestMergeTest.DoesNotMergeAcrossDifferentTransportHint
+[       OK ] RequestMergeTest.DoesNotMergeAcrossDifferentTransportHint (0 ms)
+[ RUN      ] RequestMergeTest.MergesAdjacentRequestsWithSameTransportHint
+[       OK ] RequestMergeTest.MergesAdjacentRequestsWithSameTransportHint (0 ms)
+[ RUN      ] RequestMergeTest.KeepsDifferentSelectionAttributesSplit
+[       OK ] RequestMergeTest.KeepsDifferentSelectionAttributesSplit (0 ms)
+[ RUN      ] RequestMergeTest.MergesMatchingSelectionAttributes
+[       OK ] RequestMergeTest.MergesMatchingSelectionAttributes (0 ms)
+[ RUN      ] RequestMergeTest.MixedHintBatchStillMergesPerHint
+[       OK ] RequestMergeTest.MixedHintBatchStillMergesPerHint (0 ms)
+[----------] 8 tests from RequestMergeTest (0 ms total)
+
+[----------] Global test environment tear-down
+[==========] 8 tests from 1 test suite ran. (0 ms total)
+[  PASSED  ] 8 tests.
+<end of output>
+Test time =   0.03 sec
+----------------------------------------------------------
+Test Passed.
+"request_merge_test" end time: Sep 24 19:03 UTC
+"request_merge_test" time elapsed: 00:00:00
+----------------------------------------------------------
+
+96/113 Testing: tent_engine_failover_e2e_test
+96/113 Test: tent_engine_failover_e2e_test
+Command: "/mnt/home/kimbo/networkx/Mooncake/build/trace-tests/mooncake-transfer-engine/tent/tests/tent_engine_failover_e2e_test"
+Directory: /mnt/home/kimbo/networkx/Mooncake/build/trace-tests/mooncake-transfer-engine/tent/tests
+"tent_engine_failover_e2e_test" start time: Sep 24 19:03 UTC
+Output:
+----------------------------------------------------------
+Running main() from /mnt/home/kimbo/networkx/Mooncake/build/trace-tests/_deps/googletest-src/googletest/src/gtest_main.cc
+[==========] Running 30 tests from 3 test suites.
+[----------] Global test environment set-up.
+[----------] 26 tests from EngineFailoverE2E
+[ RUN      ] EngineFailoverE2E.HpTcpStaleMetadataRetriesSameTransportOnce
+[       OK ] EngineFailoverE2E.HpTcpStaleMetadataRetriesSameTransportOnce (39 ms)
+[ RUN      ] EngineFailoverE2E.HpTcpPermanentFailureDoesNotFailOver
+[       OK ] EngineFailoverE2E.HpTcpPermanentFailureDoesNotFailOver (35 ms)
+[ RUN      ] EngineFailoverE2E.HpTcpPollErrorDoesNotInspectStaleStatusOutput
+[       OK ] EngineFailoverE2E.HpTcpPollErrorDoesNotInspectStaleStatusOutput (34 ms)
+[ RUN      ] EngineFailoverE2E.StatusCorruptionTriggersFailoverToSecondary
+[       OK ] EngineFailoverE2E.StatusCorruptionTriggersFailoverToSecondary (36 ms)
+[ RUN      ] EngineFailoverE2E.AutoFailoverOnPollDisabledLeavesTaskFailed
+[       OK ] EngineFailoverE2E.AutoFailoverOnPollDisabledLeavesTaskFailed (34 ms)
+[ RUN      ] EngineFailoverE2E.AutoFailoverOnPollDisabledAppliesToVectorStatus
+[       OK ] EngineFailoverE2E.AutoFailoverOnPollDisabledAppliesToVectorStatus (34 ms)
+[ RUN      ] EngineFailoverE2E.AutoFailoverOnPollDisabledAppliesToOverallStatus
+[       OK ] EngineFailoverE2E.AutoFailoverOnPollDisabledAppliesToOverallStatus (34 ms)
+[ RUN      ] EngineFailoverE2E.ProgressBatchRetriesWhenPollAutoFailoverDisabled
+[       OK ] EngineFailoverE2E.ProgressBatchRetriesWhenPollAutoFailoverDisabled (34 ms)
+[ RUN      ] EngineFailoverE2E.ProgressBatchDoesNotReviveObservedFailedTask
+[       OK ] EngineFailoverE2E.ProgressBatchDoesNotReviveObservedFailedTask (34 ms)
+[ RUN      ] EngineFailoverE2E.ProgressBatchHonorsMaxFailoverAttemptsZero
+WARNING: Logging before InitGoogleLogging() is written to STDERR
+W0924 19:03:59.487087 2229394 transfer_engine_impl.cpp:2776] Task failover limit reached (0), last transport=rdma
+[       OK ] EngineFailoverE2E.ProgressBatchHonorsMaxFailoverAttemptsZero (34 ms)
+[ RUN      ] EngineFailoverE2E.ProgressBatchKeepsOverallPendingWithMixedOutcomes
+W0924 19:03:59.521595 2229394 transfer_engine_impl.cpp:2776] Task failover limit reached (0), last transport=rdma
+[       OK ] EngineFailoverE2E.ProgressBatchKeepsOverallPendingWithMixedOutcomes (34 ms)
+[ RUN      ] EngineFailoverE2E.OverallStatusUsesWorstFailureNotGenericFailed
+[       OK ] EngineFailoverE2E.OverallStatusUsesWorstFailureNotGenericFailed (34 ms)
+[ RUN      ] EngineFailoverE2E.WaitTransferCompletionUsesProgressBatchWhenPollDisabled
+[       OK ] EngineFailoverE2E.WaitTransferCompletionUsesProgressBatchWhenPollDisabled (34 ms)
+[ RUN      ] EngineFailoverE2E.TransferSyncUsesProgressBatchWhenPollDisabled
+[       OK ] EngineFailoverE2E.TransferSyncUsesProgressBatchWhenPollDisabled (34 ms)
+[ RUN      ] EngineFailoverE2E.TransferSyncFreesBatchWhenSubmitFails
+W0924 19:03:59.659814 2229394 transfer_engine_impl.cpp:2151] Unable to find registered buffer for request: opcode 1 source 0x5b228b0fb8a0 target_id 0 target_offset 0x5b228b0fb8a0 length 4096 transport_hint unspec
+[       OK ] EngineFailoverE2E.TransferSyncFreesBatchWhenSubmitFails (34 ms)
+[ RUN      ] EngineFailoverE2E.ProgressBatchAdvancesExactlyOneStepPerCall
+[       OK ] EngineFailoverE2E.ProgressBatchAdvancesExactlyOneStepPerCall (34 ms)
+[ RUN      ] EngineFailoverE2E.BothTransportsFailExhaustsFailoverBudget
+W0924 19:03:59.730998 2229394 transfer_engine_impl.cpp:2793] No more transports available after tcp failed
+[       OK ] EngineFailoverE2E.BothTransportsFailExhaustsFailoverBudget (36 ms)
+[ RUN      ] EngineFailoverE2E.MixedFaultsAcrossManySubmissions
+[       OK ] EngineFailoverE2E.MixedFaultsAcrossManySubmissions (44 ms)
+[ RUN      ] EngineFailoverE2E.MaxFailoverAttemptsZeroDisablesFailover
+W0924 19:03:59.810497 2229394 transfer_engine_impl.cpp:2776] Task failover limit reached (0), last transport=rdma
+[       OK ] EngineFailoverE2E.MaxFailoverAttemptsZeroDisablesFailover (34 ms)
+[ RUN      ] EngineFailoverE2E.MaxFailoverAttemptsOneAllowsSingleFailover
+[       OK ] EngineFailoverE2E.MaxFailoverAttemptsOneAllowsSingleFailover (36 ms)
+[ RUN      ] EngineFailoverE2E.PerTaskFailoverCountsAreIndependent
+[       OK ] EngineFailoverE2E.PerTaskFailoverCountsAreIndependent (36 ms)
+[ RUN      ] EngineFailoverE2E.SubmitStageFailureFailsOverToSecondary
+[       OK ] EngineFailoverE2E.SubmitStageFailureFailsOverToSecondary (34 ms)
+[ RUN      ] EngineFailoverE2E.SubmitStageFailureExhaustsBudget
+[       OK ] EngineFailoverE2E.SubmitStageFailureExhaustsBudget (34 ms)
+[ RUN      ] EngineFailoverE2E.SubmitStageFailoverWithDerivedTasks
+[       OK ] EngineFailoverE2E.SubmitStageFailoverWithDerivedTasks (34 ms)
+[ RUN      ] EngineFailoverE2E.QueuedPathSubmitStageFailover
+[       OK ] EngineFailoverE2E.QueuedPathSubmitStageFailover (34 ms)
+[ RUN      ] EngineFailoverE2E.SubmitStagePartialAcceptanceExecutesExactlyOnce
+[       OK ] EngineFailoverE2E.SubmitStagePartialAcceptanceExecutesExactlyOnce (34 ms)
+[----------] 26 tests from EngineFailoverE2E (923 ms total)
+
+[----------] 2 tests from TransferStatusSeverityTest
+[ RUN      ] TransferStatusSeverityTest.KnownRanksMatchFormerMap
+[       OK ] TransferStatusSeverityTest.KnownRanksMatchFormerMap (0 ms)
+[ RUN      ] TransferStatusSeverityTest.UnknownValueRanksWithFailedAndDoesNotThrow
+[       OK ] TransferStatusSeverityTest.UnknownValueRanksWithFailedAndDoesNotThrow (0 ms)
+[----------] 2 tests from TransferStatusSeverityTest (0 ms total)
+
+[----------] 2 tests from EngineFailoverE2E/PinnedFailoverPolicyTest
+[ RUN      ] EngineFailoverE2E/PinnedFailoverPolicyTest.PolicyIsPinnedAtSubmit/0
+W0924 19:04:00.093765 2229394 transfer_engine_impl.cpp:2776] Task failover limit reached (0), last transport=rdma
+[       OK ] EngineFailoverE2E/PinnedFailoverPolicyTest.PolicyIsPinnedAtSubmit/0 (36 ms)
+[ RUN      ] EngineFailoverE2E/PinnedFailoverPolicyTest.PolicyIsPinnedAtSubmit/1
+[       OK ] EngineFailoverE2E/PinnedFailoverPolicyTest.PolicyIsPinnedAtSubmit/1 (36 ms)
+[----------] 2 tests from EngineFailoverE2E/PinnedFailoverPolicyTest (73 ms total)
+
+[----------] Global test environment tear-down
+[==========] 30 tests from 3 test suites ran. (996 ms total)
+[  PASSED  ] 30 tests.
+<end of output>
+Test time =   1.02 sec
+----------------------------------------------------------
+Test Passed.
+"tent_engine_failover_e2e_test" end time: Sep 24 19:04 UTC
+"tent_engine_failover_e2e_test" time elapsed: 00:00:01
+----------------------------------------------------------
+
+104/113 Testing: tent_runtime_queue_dispatch_test
+104/113 Test: tent_runtime_queue_dispatch_test
+Command: "/mnt/home/kimbo/networkx/Mooncake/build/trace-tests/mooncake-transfer-engine/tent/tests/tent_runtime_queue_dispatch_test"
+Directory: /mnt/home/kimbo/networkx/Mooncake/build/trace-tests/mooncake-transfer-engine/tent/tests
+"tent_runtime_queue_dispatch_test" start time: Sep 24 19:04 UTC
+Output:
+----------------------------------------------------------
+Running main() from /mnt/home/kimbo/networkx/Mooncake/build/trace-tests/_deps/googletest-src/googletest/src/gtest_main.cc
+[==========] Running 14 tests from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 14 tests from RuntimeQueueDispatch
+[ RUN      ] RuntimeQueueDispatch.RejectsOverfullBatchBeforePublishingTasks
+[       OK ] RuntimeQueueDispatch.RejectsOverfullBatchBeforePublishingTasks (36 ms)
+[ RUN      ] RuntimeQueueDispatch.RejectsOwnerLargerThanDispatchByteWindow
+[       OK ] RuntimeQueueDispatch.RejectsOwnerLargerThanDispatchByteWindow (34 ms)
+[ RUN      ] RuntimeQueueDispatch.RejectsEmptyDispatchWindowConfig
+WARNING: Logging before InitGoogleLogging() is written to STDERR
+E0924 19:04:00.232915 2229676 transfer_engine_impl.cpp:302] Failed to construct Transfer Engine instance: InvalidArgument: runtime queue dispatch window must be non-zero
+    Raised at /mnt/home/kimbo/networkx/Mooncake/mooncake-transfer-engine/tent/src/runtime/transfer_engine_impl.cpp:423
+E0924 19:04:00.232957 2229676 transfer_engine_impl.cpp:302] Failed to construct Transfer Engine instance: InvalidArgument: runtime queue dispatch window must be non-zero
+    Raised at /mnt/home/kimbo/networkx/Mooncake/mooncake-transfer-engine/tent/src/runtime/transfer_engine_impl.cpp:423
+[       OK ] RuntimeQueueDispatch.RejectsEmptyDispatchWindowConfig (0 ms)
+[ RUN      ] RuntimeQueueDispatch.DispatchesOnlyOneWindowOnSubmit
+[       OK ] RuntimeQueueDispatch.DispatchesOnlyOneWindowOnSubmit (34 ms)
+[ RUN      ] RuntimeQueueDispatch.KeepsDispatchWindowUntilOwnerIsTerminal
+[       OK ] RuntimeQueueDispatch.KeepsDispatchWindowUntilOwnerIsTerminal (34 ms)
+[ RUN      ] RuntimeQueueDispatch.CancelsQueuedOwnerWithoutDispatchingIt
+[       OK ] RuntimeQueueDispatch.CancelsQueuedOwnerWithoutDispatchingIt (34 ms)
+[ RUN      ] RuntimeQueueDispatch.CancelsDispatchedRdmaTaskIdempotently
+[       OK ] RuntimeQueueDispatch.CancelsDispatchedRdmaTaskIdempotently (34 ms)
+[ RUN      ] RuntimeQueueDispatch.RejectsCancellationForUnsupportedTransport
+[       OK ] RuntimeQueueDispatch.RejectsCancellationForUnsupportedTransport (34 ms)
+[ RUN      ] RuntimeQueueDispatch.ProgressWorkerRefillsWindowFromTransportNotify
+[       OK ] RuntimeQueueDispatch.ProgressWorkerRefillsWindowFromTransportNotify (36 ms)
+[ RUN      ] RuntimeQueueDispatch.RuntimeQueueDrainsWithoutUserPolling
+[       OK ] RuntimeQueueDispatch.RuntimeQueueDrainsWithoutUserPolling (38 ms)
+[ RUN      ] RuntimeQueueDispatch.EarlyFreeReclaimsAfterQueuedCompletion
+[       OK ] RuntimeQueueDispatch.EarlyFreeReclaimsAfterQueuedCompletion (36 ms)
+[ RUN      ] RuntimeQueueDispatch.PollingDerivedTaskCompletesMergedOwner
+[       OK ] RuntimeQueueDispatch.PollingDerivedTaskCompletesMergedOwner (67 ms)
+[ RUN      ] RuntimeQueueDispatch.BatchNotificationsFollowSubmitIntervals
+[       OK ] RuntimeQueueDispatch.BatchNotificationsFollowSubmitIntervals (136 ms)
+[ RUN      ] RuntimeQueueDispatch.TcpCapsPreservePublicMappingAndOwnerBytes
+[       OK ] RuntimeQueueDispatch.TcpCapsPreservePublicMappingAndOwnerBytes (410 ms)
+[----------] 14 tests from RuntimeQueueDispatch (967 ms total)
+
+[----------] Global test environment tear-down
+[==========] 14 tests from 1 test suite ran. (967 ms total)
+[  PASSED  ] 14 tests.
+<end of output>
+Test time =   1.00 sec
+----------------------------------------------------------
+Test Passed.
+"tent_runtime_queue_dispatch_test" end time: Sep 24 19:04 UTC
+"tent_runtime_queue_dispatch_test" time elapsed: 00:00:00
+----------------------------------------------------------
+
+106/113 Testing: causal_chain_test
+106/113 Test: causal_chain_test
+Command: "/mnt/home/kimbo/networkx/Mooncake/build/trace-tests/mooncake-transfer-engine/tent/tests/causal_chain_test"
+Directory: /mnt/home/kimbo/networkx/Mooncake/build/trace-tests/mooncake-transfer-engine/tent/tests
+"causal_chain_test" start time: Sep 24 19:04 UTC
+Output:
+----------------------------------------------------------
+Running main() from /mnt/home/kimbo/networkx/Mooncake/build/trace-tests/_deps/googletest-src/googletest/src/gtest_main.cc
+[==========] Running 3 tests from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 3 tests from CausalChain
+[ RUN      ] CausalChain.TimestampsPopulatedOnQueuePath
+[       OK ] CausalChain.TimestampsPopulatedOnQueuePath (35 ms)
+[ RUN      ] CausalChain.MultipleTransfersAllComplete
+[       OK ] CausalChain.MultipleTransfersAllComplete (34 ms)
+[ RUN      ] CausalChain.TimestampsPopulatedOnDirectPath
+[       OK ] CausalChain.TimestampsPopulatedOnDirectPath (34 ms)
+[----------] 3 tests from CausalChain (105 ms total)
+
+[----------] Global test environment tear-down
+[==========] 3 tests from 1 test suite ran. (105 ms total)
+[  PASSED  ] 3 tests.
+<end of output>
+Test time =   0.13 sec
+----------------------------------------------------------
+Test Passed.
+"causal_chain_test" end time: Sep 24 19:04 UTC
+"causal_chain_test" time elapsed: 00:00:00
+----------------------------------------------------------
+
+109/113 Testing: tent_transfer_event_recorder_test
+109/113 Test: tent_transfer_event_recorder_test
+Command: "/mnt/home/kimbo/networkx/Mooncake/build/trace-tests/mooncake-transfer-engine/tent/tests/tent_transfer_event_recorder_test"
+Directory: /mnt/home/kimbo/networkx/Mooncake/build/trace-tests/mooncake-transfer-engine/tent/tests
+"tent_transfer_event_recorder_test" start time: Sep 24 19:04 UTC
+Output:
+----------------------------------------------------------
+Running main() from /mnt/home/kimbo/networkx/Mooncake/build/trace-tests/_deps/googletest-src/googletest/src/gtest_main.cc
+[==========] Running 9 tests from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 9 tests from TransferEventTest
+[ RUN      ] TransferEventTest.DisabledAndInvalidConfiguration
+TENT trace disabled: invalid TENT_TRACE_BUFFER_RECORDS
+TENT trace disabled: cannot create /tmp/tent-event-test-ZkjS9Y/missing/tent-events-slurm-h100-206-025-2230001-XXXXXX.jsonl
+[       OK ] TransferEventTest.DisabledAndInvalidConfiguration (0 ms)
+[ RUN      ] TransferEventTest.ConcurrentWritersAndDuplicateCompletion
+TENT transfer events: /tmp/tent-event-test-aBrzbM/tent-events-slurm-h100-206-025-2230001-BF5M7g.jsonl
+[       OK ] TransferEventTest.ConcurrentWritersAndDuplicateCompletion (10 ms)
+[ RUN      ] TransferEventTest.OverflowIsExplicitAndFilesAreUnique
+TENT transfer events: /tmp/tent-event-test-UmRKA2/tent-events-slurm-h100-206-025-2230001-DaJcsS.jsonl
+TENT transfer events: /tmp/tent-event-test-UmRKA2/tent-events-slurm-h100-206-025-2230001-uaAzbI.jsonl
+TENT trace incomplete: 4 dropped records, write_failed=0, file=/tmp/tent-event-test-UmRKA2/tent-events-slurm-h100-206-025-2230001-DaJcsS.jsonl
+[       OK ] TransferEventTest.OverflowIsExplicitAndFilesAreUnique (0 ms)
+[ RUN      ] TransferEventTest.MergedDescriptorsAndAppendKeepOriginalSizes
+TENT transfer events: /tmp/tent-event-test-zeNDDA/tent-events-slurm-h100-206-025-2230001-nrAL6C.jsonl
+[       OK ] TransferEventTest.MergedDescriptorsAndAppendKeepOriginalSizes (36 ms)
+[ RUN      ] TransferEventTest.QueueCompletionAndQueuedCancellation
+TENT transfer events: /tmp/tent-event-test-AVTWxP/tent-events-slurm-h100-206-025-2230001-nZsXWC.jsonl
+[       OK ] TransferEventTest.QueueCompletionAndQueuedCancellation (34 ms)
+[ RUN      ] TransferEventTest.SubmitFailureIsRecordedWithoutMetrics
+TENT transfer events: /tmp/tent-event-test-gaXZOJ/tent-events-slurm-h100-206-025-2230001-FwvnWE.jsonl
+WARNING: Logging before InitGoogleLogging() is written to STDERR
+W0924 19:04:01.407263 2230001 transfer_engine_impl.cpp:2793] No more transports available after rdma failed
+[       OK ] TransferEventTest.SubmitFailureIsRecordedWithoutMetrics (35 ms)
+[ RUN      ] TransferEventTest.RejectionAndUnobservedTeardown
+TENT transfer events: /tmp/tent-event-test-dem2yK/tent-events-slurm-h100-206-025-2230001-LvOXIa.jsonl
+[       OK ] TransferEventTest.RejectionAndUnobservedTeardown (34 ms)
+[ RUN      ] TransferEventTest.QueuedSubmitFailureRecordedOnce
+TENT transfer events: /tmp/tent-event-test-1IYgVi/tent-events-slurm-h100-206-025-2230001-26bfBU.jsonl
+[       OK ] TransferEventTest.QueuedSubmitFailureRecordedOnce (34 ms)
+[ RUN      ] TransferEventTest.FailoverKeepsOneLogicalRequest
+TENT transfer events: /tmp/tent-event-test-ufMe9o/tent-events-slurm-h100-206-025-2230001-m4KSTA.jsonl
+[       OK ] TransferEventTest.FailoverKeepsOneLogicalRequest (34 ms)
+[----------] 9 tests from TransferEventTest (221 ms total)
+
+[----------] Global test environment tear-down
+[==========] 9 tests from 1 test suite ran. (221 ms total)
+[  PASSED  ] 9 tests.
+<end of output>
+Test time =   0.25 sec
+----------------------------------------------------------
+Test Passed.
+"tent_transfer_event_recorder_test" end time: Sep 24 19:04 UTC
+"tent_transfer_event_recorder_test" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Sep 24 19:04 UTC

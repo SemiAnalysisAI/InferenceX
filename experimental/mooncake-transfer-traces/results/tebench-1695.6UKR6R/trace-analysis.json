@@ -1,0 +1,998 @@
+[
+  {
+    "label": "read-1",
+    "file": "tent-events-slurm-h100-206-025-2231481-gziMb7.jsonl",
+    "file_bytes": 2951125300,
+    "header": {
+      "buffer_records": 65536,
+      "event": "trace_start",
+      "initiator": "10.0.1.136:16828",
+      "pid": 2231481,
+      "schema_version": 1
+    },
+    "footer": {
+      "dropped_records": 312506,
+      "event": "trace_end",
+      "schema_version": 1,
+      "written_records": 8853876
+    },
+    "counts": {
+      "submit": 4426938,
+      "complete": 4426938
+    },
+    "status": {
+      "completed": 4426938
+    },
+    "transports": {
+      "rdma": 4426938
+    },
+    "peers": [
+      [
+        "10.0.1.136:16828",
+        "10.0.3.49:15309",
+        "read",
+        "user"
+      ]
+    ],
+    "max_request_id": 4583191,
+    "matched_pairs": 4426893,
+    "submit_only": 45,
+    "complete_only": 45,
+    "unobserved_ids_before_last": 156208,
+    "duplicate_events": 0,
+    "invalid_duration": 0,
+    "span_seconds": 90.367789774,
+    "sizes": {
+      "4096": {
+        "submit": 620338,
+        "complete": 620338,
+        "duration_ns_sum": 4874674410,
+        "duration_ns_max": 41302504,
+        "first_ns": 8056348470263156,
+        "last_ns": 8056354469454106
+      },
+      "8192": {
+        "submit": 631413,
+        "complete": 631413,
+        "duration_ns_sum": 4657636948,
+        "duration_ns_max": 877923,
+        "first_ns": 8056354524474027,
+        "last_ns": 8056360524477054
+      },
+      "16384": {
+        "submit": 597734,
+        "complete": 597733,
+        "duration_ns_sum": 4627158484,
+        "duration_ns_max": 922615,
+        "first_ns": 8056360574274815,
+        "last_ns": 8056366574276095
+      },
+      "32768": {
+        "submit": 583968,
+        "complete": 583968,
+        "duration_ns_sum": 4756718355,
+        "duration_ns_max": 1021983,
+        "first_ns": 8056366618445404,
+        "last_ns": 8056372618441966
+      },
+      "65536": {
+        "submit": 568641,
+        "complete": 568642,
+        "duration_ns_sum": 5083874129,
+        "duration_ns_max": 907026,
+        "first_ns": 8056372669587386,
+        "last_ns": 8056378669598113
+      },
+      "131072": {
+        "submit": 465667,
+        "complete": 465667,
+        "duration_ns_sum": 5140671812,
+        "duration_ns_max": 1168422,
+        "first_ns": 8056378710877663,
+        "last_ns": 8056384710884315
+      },
+      "262144": {
+        "submit": 367575,
+        "complete": 367575,
+        "duration_ns_sum": 5288523777,
+        "duration_ns_max": 1063249,
+        "first_ns": 8056384747712075,
+        "last_ns": 8056390747719641
+      },
+      "524288": {
+        "submit": 242181,
+        "complete": 242181,
+        "duration_ns_sum": 5039716562,
+        "duration_ns_max": 1070291,
+        "first_ns": 8056390771963675,
+        "last_ns": 8056396771962811
+      },
+      "1048576": {
+        "submit": 161704,
+        "complete": 161704,
+        "duration_ns_sum": 5338236137,
+        "duration_ns_max": 104667,
+        "first_ns": 8056396793252675,
+        "last_ns": 8056402793276252
+      },
+      "2097152": {
+        "submit": 84096,
+        "complete": 84096,
+        "duration_ns_sum": 5582428722,
+        "duration_ns_max": 920287,
+        "first_ns": 8056402806006851,
+        "last_ns": 8056408806010883
+      },
+      "4194304": {
+        "submit": 50063,
+        "complete": 50063,
+        "duration_ns_sum": 5746937372,
+        "duration_ns_max": 184378,
+        "first_ns": 8056408815893529,
+        "last_ns": 8056414815990182
+      },
+      "8388608": {
+        "submit": 27684,
+        "complete": 27684,
+        "duration_ns_sum": 5863271521,
+        "duration_ns_max": 386831,
+        "first_ns": 8056414822986469,
+        "last_ns": 8056420823065106
+      },
+      "16777216": {
+        "submit": 14639,
+        "complete": 14639,
+        "duration_ns_sum": 5926675744,
+        "duration_ns_max": 584541,
+        "first_ns": 8056420828582097,
+        "last_ns": 8056426828949498
+      },
+      "33554432": {
+        "submit": 7504,
+        "complete": 7504,
+        "duration_ns_sum": 5961587442,
+        "duration_ns_max": 1146232,
+        "first_ns": 8056426833425297,
+        "last_ns": 8056432834188856
+      },
+      "67108864": {
+        "submit": 3731,
+        "complete": 3731,
+        "duration_ns_sum": 5981972830,
+        "duration_ns_max": 2364511,
+        "first_ns": 8056432836975763,
+        "last_ns": 8056438838052930
+      }
+    }
+  },
+  {
+    "label": "read-2",
+    "file": "tent-events-slurm-h100-206-025-2232757-0Y5JRP.jsonl",
+    "file_bytes": 2926127648,
+    "header": {
+      "buffer_records": 65536,
+      "event": "trace_start",
+      "initiator": "10.0.1.136:15085",
+      "pid": 2232757,
+      "schema_version": 1
+    },
+    "footer": {
+      "dropped_records": 417592,
+      "event": "trace_end",
+      "schema_version": 1,
+      "written_records": 8778252
+    },
+    "counts": {
+      "submit": 4389126,
+      "complete": 4389126
+    },
+    "status": {
+      "completed": 4389126
+    },
+    "transports": {
+      "rdma": 4389126
+    },
+    "peers": [
+      [
+        "10.0.1.136:15085",
+        "10.0.3.49:15309",
+        "read",
+        "user"
+      ]
+    ],
+    "max_request_id": 4597922,
+    "matched_pairs": 4389071,
+    "submit_only": 55,
+    "complete_only": 55,
+    "unobserved_ids_before_last": 208741,
+    "duplicate_events": 0,
+    "invalid_duration": 0,
+    "span_seconds": 90.378727415,
+    "sizes": {
+      "4096": {
+        "submit": 606475,
+        "complete": 606475,
+        "duration_ns_sum": 4735856159,
+        "duration_ns_max": 39263989,
+        "first_ns": 8056536486073727,
+        "last_ns": 8056542485489713
+      },
+      "8192": {
+        "submit": 614497,
+        "complete": 614497,
+        "duration_ns_sum": 4466379128,
+        "duration_ns_max": 664043,
+        "first_ns": 8056542542231311,
+        "last_ns": 8056548542226266
+      },
+      "16384": {
+        "submit": 601543,
+        "complete": 601543,
+        "duration_ns_sum": 4653948606,
+        "duration_ns_max": 811984,
+        "first_ns": 8056548595810095,
+        "last_ns": 8056554595805217
+      },
+      "32768": {
+        "submit": 583356,
+        "complete": 583356,
+        "duration_ns_sum": 4738428554,
+        "duration_ns_max": 749643,
+        "first_ns": 8056554637651688,
+        "last_ns": 8056560637653113
+      },
+      "65536": {
+        "submit": 563856,
+        "complete": 563856,
+        "duration_ns_sum": 5135051234,
+        "duration_ns_max": 901387,
+        "first_ns": 8056560682701776,
+        "last_ns": 8056566682695262
+      },
+      "131072": {
+        "submit": 473263,
+        "complete": 473263,
+        "duration_ns_sum": 5200500692,
+        "duration_ns_max": 1056803,
+        "first_ns": 8056566724704234,
+        "last_ns": 8056572724721270
+      },
+      "262144": {
+        "submit": 357203,
+        "complete": 357203,
+        "duration_ns_sum": 5095637138,
+        "duration_ns_max": 1049244,
+        "first_ns": 8056572761768125,
+        "last_ns": 8056578761777924
+      },
+      "524288": {
+        "submit": 239160,
+        "complete": 239160,
+        "duration_ns_sum": 5034344644,
+        "duration_ns_max": 1718686,
+        "first_ns": 8056578787079169,
+        "last_ns": 8056584787078945
+      },
+      "1048576": {
+        "submit": 161971,
+        "complete": 161971,
+        "duration_ns_sum": 5364998043,
+        "duration_ns_max": 151574,
+        "first_ns": 8056584809289105,
+        "last_ns": 8056590809330987
+      },
+      "2097152": {
+        "submit": 84347,
+        "complete": 84347,
+        "duration_ns_sum": 5608748103,
+        "duration_ns_max": 470327,
+        "first_ns": 8056590820746607,
+        "last_ns": 8056596820827902
+      },
+      "4194304": {
+        "submit": 50040,
+        "complete": 50040,
+        "duration_ns_sum": 5734883316,
+        "duration_ns_max": 195119,
+        "first_ns": 8056596831853265,
+        "last_ns": 8056602831958636
+      },
+      "8388608": {
+        "submit": 27676,
+        "complete": 27676,
+        "duration_ns_sum": 5859823175,
+        "duration_ns_max": 307806,
+        "first_ns": 8056602840311675,
+        "last_ns": 8056608840530569
+      },
+      "16777216": {
+        "submit": 14634,
+        "complete": 14634,
+        "duration_ns_sum": 5924930462,
+        "duration_ns_max": 585903,
+        "first_ns": 8056608845808941,
+        "last_ns": 8056614846010061
+      },
+      "33554432": {
+        "submit": 7370,
+        "complete": 7370,
+        "duration_ns_sum": 5961303610,
+        "duration_ns_max": 1189450,
+        "first_ns": 8056614849967129,
+        "last_ns": 8056620851080978
+      },
+      "67108864": {
+        "submit": 3735,
+        "complete": 3735,
+        "duration_ns_sum": 5982314920,
+        "duration_ns_max": 2360346,
+        "first_ns": 8056620862383461,
+        "last_ns": 8056626864801142
+      }
+    }
+  },
+  {
+    "label": "read-3",
+    "file": "tent-events-slurm-h100-206-025-2234022-WL8pRq.jsonl",
+    "file_bytes": 2938446459,
+    "header": {
+      "buffer_records": 65536,
+      "event": "trace_start",
+      "initiator": "10.0.1.136:15080",
+      "pid": 2234022,
+      "schema_version": 1
+    },
+    "footer": {
+      "dropped_records": 276006,
+      "event": "trace_end",
+      "schema_version": 1,
+      "written_records": 8815626
+    },
+    "counts": {
+      "submit": 4407813,
+      "complete": 4407813
+    },
+    "status": {
+      "completed": 4407813
+    },
+    "transports": {
+      "rdma": 4407813
+    },
+    "peers": [
+      [
+        "10.0.1.136:15080",
+        "10.0.3.49:15309",
+        "read",
+        "user"
+      ]
+    ],
+    "max_request_id": 4545816,
+    "matched_pairs": 4407773,
+    "submit_only": 40,
+    "complete_only": 40,
+    "unobserved_ids_before_last": 137963,
+    "duplicate_events": 0,
+    "invalid_duration": 0,
+    "span_seconds": 90.361228293,
+    "sizes": {
+      "4096": {
+        "submit": 608671,
+        "complete": 608670,
+        "duration_ns_sum": 4734068544,
+        "duration_ns_max": 39621066,
+        "first_ns": 8056724483346769,
+        "last_ns": 8056730473689151
+      },
+      "8192": {
+        "submit": 623508,
+        "complete": 623509,
+        "duration_ns_sum": 4593350056,
+        "duration_ns_max": 721607,
+        "first_ns": 8056730542115145,
+        "last_ns": 8056736542110909
+      },
+      "16384": {
+        "submit": 609072,
+        "complete": 609072,
+        "duration_ns_sum": 4757037279,
+        "duration_ns_max": 920497,
+        "first_ns": 8056736586226559,
+        "last_ns": 8056742586224763
+      },
+      "32768": {
+        "submit": 603757,
+        "complete": 603757,
+        "duration_ns_sum": 4975888662,
+        "duration_ns_max": 1211186,
+        "first_ns": 8056742627784226,
+        "last_ns": 8056748627779392
+      },
+      "65536": {
+        "submit": 566854,
+        "complete": 566854,
+        "duration_ns_sum": 5117413982,
+        "duration_ns_max": 775480,
+        "first_ns": 8056748678830124,
+        "last_ns": 8056754678838370
+      },
+      "131072": {
+        "submit": 458861,
+        "complete": 458861,
+        "duration_ns_sum": 5165026439,
+        "duration_ns_max": 1074061,
+        "first_ns": 8056754722841481,
+        "last_ns": 8056760722841842
+      },
+      "262144": {
+        "submit": 348583,
+        "complete": 348583,
+        "duration_ns_sum": 5119236576,
+        "duration_ns_max": 1009307,
+        "first_ns": 8056760758433406,
+        "last_ns": 8056766758453193
+      },
+      "524288": {
+        "submit": 239004,
+        "complete": 239004,
+        "duration_ns_sum": 5021071271,
+        "duration_ns_max": 1644397,
+        "first_ns": 8056766781878128,
+        "last_ns": 8056772781902064
+      },
+      "1048576": {
+        "submit": 161657,
+        "complete": 161657,
+        "duration_ns_sum": 5338724209,
+        "duration_ns_max": 130777,
+        "first_ns": 8056772803514200,
+        "last_ns": 8056778803568064
+      },
+      "2097152": {
+        "submit": 84302,
+        "complete": 84302,
+        "duration_ns_sum": 5592452071,
+        "duration_ns_max": 155972,
+        "first_ns": 8056778815284975,
+        "last_ns": 8056784815371130
+      },
+      "4194304": {
+        "submit": 50091,
+        "complete": 50091,
+        "duration_ns_sum": 5748225059,
+        "duration_ns_max": 594739,
+        "first_ns": 8056784824877837,
+        "last_ns": 8056790824984913
+      },
+      "8388608": {
+        "submit": 27700,
+        "complete": 27700,
+        "duration_ns_sum": 5865441272,
+        "duration_ns_max": 309479,
+        "first_ns": 8056790831417435,
+        "last_ns": 8056796831452800
+      },
+      "16777216": {
+        "submit": 14644,
+        "complete": 14644,
+        "duration_ns_sum": 5928854405,
+        "duration_ns_max": 584670,
+        "first_ns": 8056796835938051,
+        "last_ns": 8056802836546496
+      },
+      "33554432": {
+        "submit": 7374,
+        "complete": 7374,
+        "duration_ns_sum": 5962548903,
+        "duration_ns_max": 1192358,
+        "first_ns": 8056802839845859,
+        "last_ns": 8056808840353310
+      },
+      "67108864": {
+        "submit": 3735,
+        "complete": 3735,
+        "duration_ns_sum": 5981758574,
+        "duration_ns_max": 2371414,
+        "first_ns": 8056808843277784,
+        "last_ns": 8056814844575062
+      }
+    }
+  },
+  {
+    "label": "write-1",
+    "file": "tent-events-slurm-h100-206-025-2232113-2zgoGf.jsonl",
+    "file_bytes": 2916445523,
+    "header": {
+      "buffer_records": 65536,
+      "event": "trace_start",
+      "initiator": "10.0.1.136:15344",
+      "pid": 2232113,
+      "schema_version": 1
+    },
+    "footer": {
+      "dropped_records": 505420,
+      "event": "trace_end",
+      "schema_version": 1,
+      "written_records": 8722968
+    },
+    "counts": {
+      "submit": 4361484,
+      "complete": 4361484
+    },
+    "status": {
+      "completed": 4361484
+    },
+    "transports": {
+      "rdma": 4361484
+    },
+    "peers": [
+      [
+        "10.0.1.136:15344",
+        "10.0.3.49:15309",
+        "write",
+        "user"
+      ]
+    ],
+    "max_request_id": 4614194,
+    "matched_pairs": 4361438,
+    "submit_only": 46,
+    "complete_only": 46,
+    "unobserved_ids_before_last": 252664,
+    "duplicate_events": 0,
+    "invalid_duration": 0,
+    "span_seconds": 90.369534192,
+    "sizes": {
+      "4096": {
+        "submit": 610427,
+        "complete": 610426,
+        "duration_ns_sum": 4779846441,
+        "duration_ns_max": 43611012,
+        "first_ns": 8056442408020737,
+        "last_ns": 8056448399253879
+      },
+      "8192": {
+        "submit": 598750,
+        "complete": 598751,
+        "duration_ns_sum": 4368581870,
+        "duration_ns_max": 1176814,
+        "first_ns": 8056448467404399,
+        "last_ns": 8056454467402905
+      },
+      "16384": {
+        "submit": 588940,
+        "complete": 588940,
+        "duration_ns_sum": 4439362805,
+        "duration_ns_max": 700544,
+        "first_ns": 8056454514520220,
+        "last_ns": 8056460514527351
+      },
+      "32768": {
+        "submit": 587755,
+        "complete": 587755,
+        "duration_ns_sum": 4759998968,
+        "duration_ns_max": 955827,
+        "first_ns": 8056460551597015,
+        "last_ns": 8056466551604847
+      },
+      "65536": {
+        "submit": 557029,
+        "complete": 557029,
+        "duration_ns_sum": 4991356598,
+        "duration_ns_max": 807806,
+        "first_ns": 8056466592474749,
+        "last_ns": 8056472592475252
+      },
+      "131072": {
+        "submit": 466530,
+        "complete": 466530,
+        "duration_ns_sum": 5138890491,
+        "duration_ns_max": 1081677,
+        "first_ns": 8056472626851406,
+        "last_ns": 8056478626854125
+      },
+      "262144": {
+        "submit": 357914,
+        "complete": 357914,
+        "duration_ns_sum": 5108009365,
+        "duration_ns_max": 1171841,
+        "first_ns": 8056478658241700,
+        "last_ns": 8056484658255722
+      },
+      "524288": {
+        "submit": 245636,
+        "complete": 245636,
+        "duration_ns_sum": 5201989549,
+        "duration_ns_max": 1154523,
+        "first_ns": 8056484703074084,
+        "last_ns": 8056490703091457
+      },
+      "1048576": {
+        "submit": 161364,
+        "complete": 161364,
+        "duration_ns_sum": 5353752583,
+        "duration_ns_max": 187398,
+        "first_ns": 8056490734195170,
+        "last_ns": 8056496734231340
+      },
+      "2097152": {
+        "submit": 85707,
+        "complete": 85707,
+        "duration_ns_sum": 5590479062,
+        "duration_ns_max": 142718,
+        "first_ns": 8056496746764571,
+        "last_ns": 8056502746772876
+      },
+      "4194304": {
+        "submit": 49640,
+        "complete": 49640,
+        "duration_ns_sum": 5743284381,
+        "duration_ns_max": 423261,
+        "first_ns": 8056502755476886,
+        "last_ns": 8056508755581938
+      },
+      "8388608": {
+        "submit": 26958,
+        "complete": 26958,
+        "duration_ns_sum": 5849559396,
+        "duration_ns_max": 343352,
+        "first_ns": 8056508762525354,
+        "last_ns": 8056514762837690
+      },
+      "16777216": {
+        "submit": 14074,
+        "complete": 14074,
+        "duration_ns_sum": 5928722417,
+        "duration_ns_max": 2269196,
+        "first_ns": 8056514767099833,
+        "last_ns": 8056520767361156
+      },
+      "33554432": {
+        "submit": 7169,
+        "complete": 7169,
+        "duration_ns_sum": 5964092881,
+        "duration_ns_max": 1292101,
+        "first_ns": 8056520771126229,
+        "last_ns": 8056526772661758
+      },
+      "67108864": {
+        "submit": 3591,
+        "complete": 3591,
+        "duration_ns_sum": 5983589608,
+        "duration_ns_max": 2635058,
+        "first_ns": 8056526775392224,
+        "last_ns": 8056532777554929
+      }
+    }
+  },
+  {
+    "label": "write-2",
+    "file": "tent-events-slurm-h100-206-025-2233390-uky9P4.jsonl",
+    "file_bytes": 2906519707,
+    "header": {
+      "buffer_records": 65536,
+      "event": "trace_start",
+      "initiator": "10.0.1.136:15723",
+      "pid": 2233390,
+      "schema_version": 1
+    },
+    "footer": {
+      "dropped_records": 593004,
+      "event": "trace_end",
+      "schema_version": 1,
+      "written_records": 8693000
+    },
+    "counts": {
+      "submit": 4346500,
+      "complete": 4346500
+    },
+    "status": {
+      "completed": 4346500
+    },
+    "transports": {
+      "rdma": 4346500
+    },
+    "peers": [
+      [
+        "10.0.1.136:15723",
+        "10.0.3.49:15309",
+        "write",
+        "user"
+      ]
+    ],
+    "max_request_id": 4643002,
+    "matched_pairs": 4346452,
+    "submit_only": 48,
+    "complete_only": 48,
+    "unobserved_ids_before_last": 296454,
+    "duplicate_events": 0,
+    "invalid_duration": 0,
+    "span_seconds": 90.44909977,
+    "sizes": {
+      "4096": {
+        "submit": 591729,
+        "complete": 591730,
+        "duration_ns_sum": 4592925574,
+        "duration_ns_max": 40460129,
+        "first_ns": 8056630461221807,
+        "last_ns": 8056636460596433
+      },
+      "8192": {
+        "submit": 572178,
+        "complete": 572177,
+        "duration_ns_sum": 4134912942,
+        "duration_ns_max": 800270,
+        "first_ns": 8056636519366467,
+        "last_ns": 8056642499847482
+      },
+      "16384": {
+        "submit": 619862,
+        "complete": 619862,
+        "duration_ns_sum": 4629186659,
+        "duration_ns_max": 950189,
+        "first_ns": 8056642573061377,
+        "last_ns": 8056648573061386
+      },
+      "32768": {
+        "submit": 579724,
+        "complete": 579724,
+        "duration_ns_sum": 4620717204,
+        "duration_ns_max": 1105226,
+        "first_ns": 8056648617460269,
+        "last_ns": 8056654617460369
+      },
+      "65536": {
+        "submit": 569369,
+        "complete": 569369,
+        "duration_ns_sum": 5027083859,
+        "duration_ns_max": 1075170,
+        "first_ns": 8056654687795385,
+        "last_ns": 8056660687804728
+      },
+      "131072": {
+        "submit": 466876,
+        "complete": 466876,
+        "duration_ns_sum": 5155125116,
+        "duration_ns_max": 1030421,
+        "first_ns": 8056660780450411,
+        "last_ns": 8056666780450828
+      },
+      "262144": {
+        "submit": 352472,
+        "complete": 352472,
+        "duration_ns_sum": 5160583695,
+        "duration_ns_max": 1293320,
+        "first_ns": 8056666815209001,
+        "last_ns": 8056672815204573
+      },
+      "524288": {
+        "submit": 244554,
+        "complete": 244554,
+        "duration_ns_sum": 5173402394,
+        "duration_ns_max": 1101953,
+        "first_ns": 8056672842487055,
+        "last_ns": 8056678842512738
+      },
+      "1048576": {
+        "submit": 162825,
+        "complete": 162825,
+        "duration_ns_sum": 5403758217,
+        "duration_ns_max": 507035,
+        "first_ns": 8056678863971209,
+        "last_ns": 8056684864030194
+      },
+      "2097152": {
+        "submit": 85442,
+        "complete": 85442,
+        "duration_ns_sum": 5609747806,
+        "duration_ns_max": 149786,
+        "first_ns": 8056684876387057,
+        "last_ns": 8056690876444305
+      },
+      "4194304": {
+        "submit": 49574,
+        "complete": 49574,
+        "duration_ns_sum": 5760600578,
+        "duration_ns_max": 239294,
+        "first_ns": 8056690885151453,
+        "last_ns": 8056696885333189
+      },
+      "8388608": {
+        "submit": 27011,
+        "complete": 27011,
+        "duration_ns_sum": 5871092281,
+        "duration_ns_max": 345055,
+        "first_ns": 8056696892611401,
+        "last_ns": 8056702892801812
+      },
+      "16777216": {
+        "submit": 14126,
+        "complete": 14126,
+        "duration_ns_sum": 5927223550,
+        "duration_ns_max": 680029,
+        "first_ns": 8056702896984837,
+        "last_ns": 8056708897429551
+      },
+      "33554432": {
+        "submit": 7167,
+        "complete": 7167,
+        "duration_ns_sum": 5965351515,
+        "duration_ns_max": 1394257,
+        "first_ns": 8056708900414231,
+        "last_ns": 8056714900688491
+      },
+      "67108864": {
+        "submit": 3591,
+        "complete": 3591,
+        "duration_ns_sum": 5983811475,
+        "duration_ns_max": 2782580,
+        "first_ns": 8056714908866691,
+        "last_ns": 8056720910321577
+      }
+    }
+  },
+  {
+    "label": "write-3",
+    "file": "tent-events-slurm-h100-206-025-2234663-oNUhoa.jsonl",
+    "file_bytes": 2958300924,
+    "header": {
+      "buffer_records": 65536,
+      "event": "trace_start",
+      "initiator": "10.0.1.136:16369",
+      "pid": 2234663,
+      "schema_version": 1
+    },
+    "footer": {
+      "dropped_records": 378892,
+      "event": "trace_end",
+      "schema_version": 1,
+      "written_records": 8848568
+    },
+    "counts": {
+      "submit": 4424285,
+      "complete": 4424283
+    },
+    "status": {
+      "completed": 4424283
+    },
+    "transports": {
+      "rdma": 4424283
+    },
+    "peers": [
+      [
+        "10.0.1.136:16369",
+        "10.0.3.49:15309",
+        "write",
+        "user"
+      ]
+    ],
+    "max_request_id": 4613730,
+    "matched_pairs": 4424234,
+    "submit_only": 51,
+    "complete_only": 49,
+    "unobserved_ids_before_last": 189396,
+    "duplicate_events": 0,
+    "invalid_duration": 0,
+    "span_seconds": 90.409687715,
+    "sizes": {
+      "4096": {
+        "submit": 607511,
+        "complete": 607511,
+        "duration_ns_sum": 4698905311,
+        "duration_ns_max": 42018134,
+        "first_ns": 8056818344890199,
+        "last_ns": 8056824344014006
+      },
+      "8192": {
+        "submit": 616705,
+        "complete": 616704,
+        "duration_ns_sum": 4479767325,
+        "duration_ns_max": 835063,
+        "first_ns": 8056824437225639,
+        "last_ns": 8056830395564814
+      },
+      "16384": {
+        "submit": 613728,
+        "complete": 613728,
+        "duration_ns_sum": 4621243043,
+        "duration_ns_max": 927462,
+        "first_ns": 8056830486665829,
+        "last_ns": 8056836486670584
+      },
+      "32768": {
+        "submit": 612189,
+        "complete": 612188,
+        "duration_ns_sum": 4898216759,
+        "duration_ns_max": 1188950,
+        "first_ns": 8056836530977064,
+        "last_ns": 8056842530977352
+      },
+      "65536": {
+        "submit": 574480,
+        "complete": 574480,
+        "duration_ns_sum": 5122379983,
+        "duration_ns_max": 720619,
+        "first_ns": 8056842578340443,
+        "last_ns": 8056848578344585
+      },
+      "131072": {
+        "submit": 466501,
+        "complete": 466501,
+        "duration_ns_sum": 5172184379,
+        "duration_ns_max": 1321588,
+        "first_ns": 8056848619246375,
+        "last_ns": 8056854619255523
+      },
+      "262144": {
+        "submit": 347135,
+        "complete": 347135,
+        "duration_ns_sum": 5049051294,
+        "duration_ns_max": 1087165,
+        "first_ns": 8056854651731709,
+        "last_ns": 8056860651734298
+      },
+      "524288": {
+        "submit": 240348,
+        "complete": 240348,
+        "duration_ns_sum": 5012208471,
+        "duration_ns_max": 1853511,
+        "first_ns": 8056860677918154,
+        "last_ns": 8056866677940966
+      },
+      "1048576": {
+        "submit": 159543,
+        "complete": 159543,
+        "duration_ns_sum": 5339006293,
+        "duration_ns_max": 264070,
+        "first_ns": 8056866701446699,
+        "last_ns": 8056872701501463
+      },
+      "2097152": {
+        "submit": 85025,
+        "complete": 85025,
+        "duration_ns_sum": 5585546304,
+        "duration_ns_max": 173186,
+        "first_ns": 8056872714885362,
+        "last_ns": 8056878714917639
+      },
+      "4194304": {
+        "submit": 49348,
+        "complete": 49348,
+        "duration_ns_sum": 5730324662,
+        "duration_ns_max": 244578,
+        "first_ns": 8056878726224294,
+        "last_ns": 8056884726312322
+      },
+      "8388608": {
+        "submit": 26895,
+        "complete": 26895,
+        "duration_ns_sum": 5847321551,
+        "duration_ns_max": 510324,
+        "first_ns": 8056884736253009,
+        "last_ns": 8056890736781025
+      },
+      "16777216": {
+        "submit": 14122,
+        "complete": 14122,
+        "duration_ns_sum": 5927144398,
+        "duration_ns_max": 662553,
+        "first_ns": 8056890742322789,
+        "last_ns": 8056896742969528
+      },
+      "33554432": {
+        "submit": 7164,
+        "complete": 7164,
+        "duration_ns_sum": 5962482513,
+        "duration_ns_max": 1290341,
+        "first_ns": 8056896747206230,
+        "last_ns": 8056902747395282
+      },
+      "67108864": {
+        "submit": 3591,
+        "complete": 3591,
+        "duration_ns_sum": 5983880782,
+        "duration_ns_max": 2641735,
+        "first_ns": 8056902751797946,
+        "last_ns": 8056908754577914
+      }
+    }
+  }
+]

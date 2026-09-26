@@ -1,0 +1,30 @@
+JobId=1695 JobName=tebench-rdma
+   UserId=kimbo(100001) GroupId=kimbo(100001) MCS_label=N/A
+   Priority=1 Nice=0 Account=cw-sup QOS=normal
+   JobState=RUNNING Reason=None Dependency=(null)
+   Requeue=1 Restarts=0 BatchFlag=1 Reboot=0 ExitCode=0:0
+   RunTime=00:00:02 TimeLimit=02:00:00 TimeMin=N/A
+   SubmitTime=2026-09-24T19:09:24 EligibleTime=2026-09-24T19:09:24
+   AccrueTime=2026-09-24T19:09:24
+   StartTime=2026-09-24T19:09:24 EndTime=2026-09-24T21:09:24 Deadline=N/A
+   SuspendTime=None SecsPreSuspend=0 LastSchedEval=2026-09-24T19:09:24 Scheduler=Main
+   Partition=h100 AllocNode:Sid=10-0-0-208:3612265
+   ReqNodeList=slurm-h100-206-[025,035] ExcNodeList=(null)
+   NodeList=slurm-h100-206-[025,035]
+   BatchHost=slurm-h100-206-025
+   NumNodes=2 NumCPUs=16 NumTasks=2 CPUs/Task=8 ReqB:S:C:T=0:0:*:*
+   ReqTRES=cpu=16,mem=128G,node=2,billing=16,gres/gpu=2
+   AllocTRES=cpu=16,mem=128G,node=2,billing=16,gres/gpu=2
+   Socks/Node=* NtasksPerN:B:S:C=1:0:*:* CoreSpec=*
+   MinCPUsNode=8 MinMemoryNode=64G MinTmpDiskNode=0
+   Features=(null) DelayBoot=00:00:00
+   OverSubscribe=OK Contiguous=0 Licenses=(null) LicensesAlloc=(null) Network=(null)
+   Command=/mnt/home/kimbo/networkx/Mooncake/mooncake-transfer-engine/benchmark/slurm/tebench.sbatch
+   WorkDir=/mnt/home/kimbo/networkx
+   StdErr=/mnt/home/kimbo/networkx/tebench-1695.out
+   StdIn=/dev/null
+   StdOut=/mnt/home/kimbo/networkx/tebench-1695.out
+   TresPerNode=gres/gpu:1
+   TresPerTask=cpu=8
+   
+

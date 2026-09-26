@@ -1,0 +1,440 @@
+diff --git a/mooncake-store/benchmarks/slurm/README.md b/mooncake-store/benchmarks/slurm/README.md
+new file mode 100644
+index 00000000..61e69ca1
+--- /dev/null
++++ b/mooncake-store/benchmarks/slurm/README.md
+@@ -0,0 +1,168 @@
++# H200 Slurm benchmark launchers
++
++These launchers target this checkout and the cluster inspected on 2026-09-21.
++Submit from the Mooncake repository root, or export an absolute `MOONCAKE_ROOT`.
++They run existing workloads without changing benchmark implementations.
++
++## Workload inventory
++
++The repository has `benchmarks/`, not a top-level `benchmark/` directory.
++
++| Location | Workload and measurement |
++| --- | --- |
++| `benchmarks/storage_benchmark_v1` | Replays conversation, synthetic, and tool-agent JSONL traces from `FAST25-release/traces`. Repeated cache-page hashes drive reads; new pages drive writes. GLM-5 and Kimi-K2.6 MLA layouts determine object bytes. Measures QPS, hit rate, request wall/I/O latency, page-read/write bandwidth and percentiles. Supports replay pacing, multiple independent clients, single-file/per-page files, and fsync policies. This tests filesystem storage, not the Mooncake Store service. |
++| `benchmarks/xypd_benchmarks` | End-to-end vLLM disaggregated prefill/decode through MooncakeStoreConnector and a proxy. The shell demo sweeps 1P1D, 2P1D, 2P2D, 2P4D, 4P4D routing; random prompts of 1024/4096 input and 6/256 output tokens; concurrency 1/4/8/16 (1 only for 1P1D); 50-token prefix by default. Reports serving throughput and TTFT, TPOT, inter-token and end-to-end latency. It launches four prefill and four decode instances even for smaller routing configurations. |
++| `mooncake-store/benchmarks/store_kv_bench.py` | Real Store API workloads: verified writes, fill, write/read performance, mixed existing-object reads plus new-object writes; also metadata smoke/mix, remove performance, and recorded-operation replay in the current source. Plain and registered-buffer APIs; single/batch operations; worker/depth controls. Outputs request/KV rate, MiB/s, latency percentiles, misses/errors, JSON summary and journal. |
++| `allocation_strategy_bench` | Simulated allocation placement across segment/replica/strategy matrices: fill-up, scale-out convergence, DSA churn, weighted size-class churn. Measures allocation latency, throughput, utilization, partial/failing allocations and fragmentation. Virtual segment capacity is not physical cluster RAM. |
++| `allocator_bench`, `offset_allocator_concurrency_bench` | Low-level allocation patterns and concurrent allocator/PutStart stages; allocation/free cost and contention. |
++| `master_bench`, `batch_get_replica_bench` | Master metadata RPC throughput and batched replica-lookup latency, including dataset prefill and optional concurrent refill. Mounted segments are synthetic; these are not data-transfer bandwidth benchmarks. |
++| `storage_backend_bench` | Offset-allocator, bucket and file-per-key storage: initialization, offload, load, concurrent reads, existence, mixed reads/writes, churn and restart. Configurable object/batch sizes, key access patterns and cache modes; integrity checking. |
++| `file_interface_bench`, `uring_batch_read_bench` | File read/write bandwidth through POSIX/io_uring/direct-I/O variants; sequential versus batched aligned io_uring reads. Requires a build/kernel supporting the selected variant. |
++| `batch_evict_bench`, `batch_oplog_promotion_bench` | In-process eviction scale/mutex contention and synthetic standby object promotion in chunks. |
++| `batch_remove_benchmark.py` | Batch-remove API demonstrations, correctness checks and single/batch removal comparisons. Use `store_kv_bench.py --scenario remove_perf` for the supplied Slurm removal workflow. |
++| `oplog_batch_bench`, `run_oplog_batch_sweep.py`, `report_oplog_batch.py` | Etcd-backed operation-log batching: batch size, producer count, writer/backend throughput and latency; repeatable sweep and report tooling. Requires `STORE_USE_ETCD` and a dedicated etcd endpoint. |
++| `nof_worker_pool_bench` | SPDK NVMe-oF read/write/mixed I/O, sequential/random offsets, queue depth, request sizes, submission concurrency and endpoint scaling. Requires `USE_NOF` and configured storage targets. |
++
++The Slurm scripts cover local Store KV, the listed supported C++ microbenchmarks,
++and filesystem trace replay. They do not provision vLLM models/servers, etcd or
++NVMe-oF targets. The upstream vLLM demo installs packages and manages processes
++by ports; it is not used as an unattended Slurm entry point here.
++
++## Observed cluster
++
++- Cluster `slurm`, Slurm 25.05.3; account `cw-sup`, allowed QoS `normal`.
++- `h200`: **one** node, `slurm-h200-205-005`, eight H200 GPUs.
++- `h100`: two nodes; not used by these launchers.
++- Each node advertises 128 logical CPUs (64 cores, two sockets) and 2,031,616 MiB
++  RAM (1,984 GiB), with 32,768 MiB reserved by Slurm.
++- Default partition is `hpc-mid`. Other shared partitions are `all`, `hpc-low`,
++  `hpc-high`, and `hpc-prod`; scripts explicitly select `h200`.
++- H200 probe found local XFS at `/tmp`; `/mnt/home` is shared NFS. RDMA device
++  names include `ibp0` through `ibp7` and `mlx5_0` through `mlx5_8`. No bandwidth
++  or link-speed claim was measured.
++- At inspection the H200 node had five GPUs, 80 CPUs, and 500 GiB allocated.
++  Availability changes; jobs queue normally.
++
++Defaults request one node, one task, 16 CPUs/64 GiB for Store or 4 CPUs/16 GiB
++for trace replay, with a 30-minute limit. These are host-memory and disk tests:
++selecting H200 places them on that host but does not reserve or use a GPU.
++For isolated measurements add `--exclusive` (which may wait for other jobs).
++One H200 node cannot measure cross-node RDMA; KV defaults to local TCP with one
++memory replica. The single-process Store client owns its segment, so this can
++exercise local-copy paths and must not be labeled network throughput.
++
++## Prerequisites
++
++The inspected environment has Python 3 but no Mooncake build directory,
++`mooncake_master` on PATH, or importable `mooncake` Python package. Build this
++checkout with the dependencies in `docs/source/getting_started/build.md`, and
++install its matching Python bindings in a shared environment. No system package
++installation is performed by these scripts.
++
++For an already provisioned build environment, enable benchmark targets:
++
++```bash
++cmake -S . -B build -DWITH_STORE=ON -DBUILD_BENCHMARK=ON
++cmake --build build --parallel 16 --target mooncake_master allocation_strategy_bench \
++  offset_allocator_concurrency_bench storage_backend_bench master_bench \
++  batch_get_replica_bench allocator_bench batch_evict_bench \
++  batch_oplog_promotion_bench file_interface_bench uring_batch_read_bench
++```
++
++Use `BUILD_DIR` for a different absolute build directory, `MASTER_BIN` for a
++master executable elsewhere, and `VENV_DIR` or `PYTHON` for Python bindings built
++from this revision. A generic released wheel may lack APIs in this checkout.
++Trace replay uses the standard Python library and does not require Mooncake.
++
++## Submit
++
++From the Mooncake repository root:
++
++```bash
++# Count-bounded, read-after-write verification: 1024 x 128 KiB, batches of 16.
++sbatch mooncake-store/benchmarks/slurm/store_kv.sbatch
++
++# Read performance with automatic dataset preparation and registered buffers.
++SCENARIO=read_perf IO_API=zcopy RUNTIME=30 \
++  sbatch mooncake-store/benchmarks/slurm/store_kv.sbatch
++
++# Existing-object reads and new-object writes, 70% reads by default.
++SCENARIO=mixed_rw sbatch mooncake-store/benchmarks/slurm/store_kv.sbatch
++
++SCENARIO=remove_perf sbatch mooncake-store/benchmarks/slurm/store_kv.sbatch
++
++# Allocation churn is the default microbenchmark.
++sbatch mooncake-store/benchmarks/slurm/store_micro.sbatch
++BENCHMARK=master_bench sbatch mooncake-store/benchmarks/slurm/store_micro.sbatch \
++  --operation=BatchGet
++BENCHMARK=batch_get_replica_bench \
++  sbatch mooncake-store/benchmarks/slurm/store_micro.sbatch
++BENCHMARK=storage_backend_bench \
++  sbatch mooncake-store/benchmarks/slurm/store_micro.sbatch \
++  --backend=all --test=mixed_rw --pattern=zipf
++
++# A bounded trace sample; choose each trace or all.
++SCENARIO=all sbatch mooncake-store/benchmarks/slurm/storage_trace.sbatch
++FSYNC_MODE=always MAX_REQUESTS=1000 MAX_PAGES=512 \
++  sbatch mooncake-store/benchmarks/slurm/storage_trace.sbatch
++```
++
++Arguments after the script path pass through to the benchmark; for C++ flags,
++later arguments override launcher defaults. Slurm options belong before the
++script path. Do not override service endpoints or output paths unless you also
++adapt the worker's readiness/summary handling. An existing replay journal can
++be supplied with `SCENARIO=replay` and `--replay-file /absolute/path`.
++
++| Launcher | Environment controls (defaults) |
++| --- | --- |
++| All | `MOONCAKE_ROOT` (submission directory), `BUILD_DIR` (`$MOONCAKE_ROOT/build`), `PYTHON` (`python3`), optional `VENV_DIR`, `RESULT_ROOT` (`$MOONCAKE_ROOT/benchmark-results`), `SCRATCH_ROOT` (`$SLURM_TMPDIR` or `/tmp`), `KEEP_SCRATCH` (`0`) |
++| Store KV | `SCENARIO=verify_write`, `IO_API=plain`, `OBJECTS=1024`, `WRITE_OBJECTS=1024`, `VALUE_BYTES=131072`, `BATCH_SIZE=16`, `NUMJOBS=4`, `IODEPTH=1`, `RUNTIME=0`, `SEGMENT_BYTES=8589934592`, `BUFFER_BYTES=268435456` |
++| Micro | `BENCHMARK=allocation_strategy_bench`; supported choices are the ten C++ targets in the build command above, excluding `mooncake_master` |
++| Trace | `SCENARIO=toolagent`, `TRACE_DIR` (`$MOONCAKE_ROOT/FAST25-release/traces`), `MODEL=glm5`, `THREADS=1`, `MAX_PAGES=128`, `MAX_REQUESTS=100`, `FILE_MODE=single`, `FSYNC_MODE=none`, `REPLAY_SCALES=0` |
++
++## Results and interpretation
++
++`benchmark-results/JOBID/` contains `benchmark.log`, host/filesystem details,
++Slurm allocation details, commit and worktree status. Service-backed jobs also
++save `master.log`; KV jobs save `kv/summary.json` and a journal; replica lookup
++saves `replica.csv`. Commands and resolved arguments are recorded in the log.
++The Slurm output file is created in the submission directory. Each job uses a
++unique scratch directory and shuts down only its own master process on exit.
++`KEEP_SCRATCH=1` retains data at the path recorded in `host.txt`.
++
++Verification/pattern generation, Python threads and service/client CPU sharing
++contribute to the measured cost. Write workloads are count-bounded by default;
++raise counts/runtime and segment size deliberately for capacity/eviction tests.
++KV summaries with `ok=false` fail the job even when the upstream performance
++scenario exits zero. Inspect misses, error counts and latency sample rate before
++comparing results.
++
++Trace defaults are smoke-scale, not a full trace reproduction. GLM-5 at 512
++tokens uses roughly 53.6 MiB per page, so 128 pages take about 6.7 GiB per client.
++Each extra thread replays a full independent trace and uses its own storage.
++If pages exceed the cap, modulo mapping reuses physical slots. `fsync=none`
++measures page-cache-backed I/O, not durable disk throughput. Per-file `batch`
++and `end` fsync modes have weaker durability than single-file mode; see the
++upstream trace README. No global cache dropping is performed.
++
++## Validation
++
++Run `bash -n` separately on each `.sh` and `.sbatch` file. `sbatch --test-only`
++checks scheduling without submitting a job. Full Store execution requires the
++matching binaries/bindings described above. GPU-memory, multi-node RDMA,
++NVMe-oF and etcd-backed tests need additional topology/services and are outside
++these single-node launchers.
++
++Validation performed on 2026-09-21:
++
++- Shell syntax checks passed for every launcher and helper.
++- `sbatch --test-only` accepted all three requests on `slurm-h200-205-005`.
++- Job 1592 ran trace replay on H200 with one request and two physical pages;
++  Slurm reported `COMPLETED`, exit `0:0`. It wrote 14 logical pages using modulo
++  mapping and removed its scratch directory. This is a launch smoke test, not
++  a performance baseline.
++- Temporary stand-in master/benchmark executables verified successful and failed
++  benchmark exits (0 and 17), master termination and scratch cleanup.
++- Whitespace checks passed. `pre-commit` is not installed in this environment.
++- Real Store binaries/bindings were unavailable, so Store execution remains
++  unverified; no Store performance results are claimed.
+diff --git a/mooncake-store/benchmarks/slurm/common.sh b/mooncake-store/benchmarks/slurm/common.sh
+new file mode 100644
+index 00000000..1468711c
+--- /dev/null
++++ b/mooncake-store/benchmarks/slurm/common.sh
+@@ -0,0 +1,22 @@
++#!/usr/bin/env bash
++# Shared initialization. sbatch copies scripts, so resolve from MOONCAKE_ROOT.
++set -euo pipefail
++: "${SLURM_JOB_ID:?Submit this script with sbatch}"
++export MOONCAKE_ROOT=${MOONCAKE_ROOT:-${SLURM_SUBMIT_DIR}}
++[[ -f "$MOONCAKE_ROOT/mooncake-store/benchmarks/store_kv_bench.py" ]] || {
++    echo 'Set MOONCAKE_ROOT to the absolute Mooncake checkout path.' >&2; exit 1;
++}
++export BUILD_DIR=${BUILD_DIR:-$MOONCAKE_ROOT/build}
++export PYTHON=${PYTHON:-python3}
++if [[ -n ${VENV_DIR:-} ]]; then
++    source "$VENV_DIR/bin/activate"
++fi
++export PYTHONUNBUFFERED=1
++export OMP_NUM_THREADS=${OMP_NUM_THREADS:-1}
++export RUN_DIR=${RESULT_ROOT:-$MOONCAKE_ROOT/benchmark-results}/${SLURM_JOB_ID}${SLURM_ARRAY_TASK_ID:+_$SLURM_ARRAY_TASK_ID}
++mkdir -p "$RUN_DIR"
++# Unique local scratch is created inside the srun task, never on the login node.
++export SLURM_BENCH_DIR=$MOONCAKE_ROOT/mooncake-store/benchmarks/slurm
++scontrol show job "$SLURM_JOB_ID" > "$RUN_DIR/slurm-job.txt"
++git -C "$MOONCAKE_ROOT" rev-parse HEAD > "$RUN_DIR/commit.txt"
++git -C "$MOONCAKE_ROOT" status --short > "$RUN_DIR/worktree.txt"
+diff --git a/mooncake-store/benchmarks/slurm/storage_trace.sbatch b/mooncake-store/benchmarks/slurm/storage_trace.sbatch
+new file mode 100644
+index 00000000..d936af39
+--- /dev/null
++++ b/mooncake-store/benchmarks/slurm/storage_trace.sbatch
+@@ -0,0 +1,14 @@
++#!/usr/bin/env bash
++#SBATCH --job-name=mc-trace
++#SBATCH --partition=h200
++#SBATCH --account=cw-sup
++#SBATCH --nodes=1
++#SBATCH --ntasks=1
++#SBATCH --cpus-per-task=4
++#SBATCH --mem=16G
++#SBATCH --time=00:30:00
++#SBATCH --output=mooncake-%x-%j.out
++
++set -euo pipefail
++source "${MOONCAKE_ROOT:-$SLURM_SUBMIT_DIR}/mooncake-store/benchmarks/slurm/common.sh"
++srun --kill-on-bad-exit=1 --cpu-bind=cores bash "$SLURM_BENCH_DIR/worker.sh" trace "$@"
+diff --git a/mooncake-store/benchmarks/slurm/store_kv.sbatch b/mooncake-store/benchmarks/slurm/store_kv.sbatch
+new file mode 100644
+index 00000000..a4064daa
+--- /dev/null
++++ b/mooncake-store/benchmarks/slurm/store_kv.sbatch
+@@ -0,0 +1,14 @@
++#!/usr/bin/env bash
++#SBATCH --job-name=mc-kv
++#SBATCH --partition=h200
++#SBATCH --account=cw-sup
++#SBATCH --nodes=1
++#SBATCH --ntasks=1
++#SBATCH --cpus-per-task=16
++#SBATCH --mem=64G
++#SBATCH --time=00:30:00
++#SBATCH --output=mooncake-%x-%j.out
++
++set -euo pipefail
++source "${MOONCAKE_ROOT:-$SLURM_SUBMIT_DIR}/mooncake-store/benchmarks/slurm/common.sh"
++srun --kill-on-bad-exit=1 --cpu-bind=cores bash "$SLURM_BENCH_DIR/worker.sh" kv "$@"
+diff --git a/mooncake-store/benchmarks/slurm/store_micro.sbatch b/mooncake-store/benchmarks/slurm/store_micro.sbatch
+new file mode 100644
+index 00000000..4638fa1e
+--- /dev/null
++++ b/mooncake-store/benchmarks/slurm/store_micro.sbatch
+@@ -0,0 +1,14 @@
++#!/usr/bin/env bash
++#SBATCH --job-name=mc-micro
++#SBATCH --partition=h200
++#SBATCH --account=cw-sup
++#SBATCH --nodes=1
++#SBATCH --ntasks=1
++#SBATCH --cpus-per-task=16
++#SBATCH --mem=64G
++#SBATCH --time=00:30:00
++#SBATCH --output=mooncake-%x-%j.out
++
++set -euo pipefail
++source "${MOONCAKE_ROOT:-$SLURM_SUBMIT_DIR}/mooncake-store/benchmarks/slurm/common.sh"
++srun --kill-on-bad-exit=1 --cpu-bind=cores bash "$SLURM_BENCH_DIR/worker.sh" micro "$@"
+diff --git a/mooncake-store/benchmarks/slurm/worker.sh b/mooncake-store/benchmarks/slurm/worker.sh
+new file mode 100644
+index 00000000..d37eb757
+--- /dev/null
++++ b/mooncake-store/benchmarks/slurm/worker.sh
+@@ -0,0 +1,172 @@
++#!/usr/bin/env bash
++set -euo pipefail
++mode=$1
++shift
++master_pid=
++scratch=$(mktemp -d "${SCRATCH_ROOT:-${SLURM_TMPDIR:-/tmp}}/mooncake-${SLURM_JOB_ID}.XXXXXX")
++cleanup() {
++    local rc=$?
++    trap - EXIT
++    if [[ -n $master_pid ]]; then
++        kill "$master_pid" 2>/dev/null || true
++        # Bound shutdown; only kill the process started by this worker.
++        for ((i=0; i<20; i++)); do
++            kill -0 "$master_pid" 2>/dev/null || break
++            sleep 0.1
++        done
++        kill -KILL "$master_pid" 2>/dev/null || true
++        wait "$master_pid" 2>/dev/null || true
++    fi
++    if [[ ${KEEP_SCRATCH:-0} != 1 ]]; then
++        rm -rf -- "$scratch"
++    fi
++    exit "$rc"
++}
++trap cleanup EXIT
++trap 'exit 143' TERM
++trap 'exit 130' INT
++exec > >(tee "$RUN_DIR/benchmark.log") 2>&1
++{
++    hostname
++    date -u
++    printf 'scratch=%s\nmode=%s\n' "$scratch" "$mode"
++    findmnt -T "$scratch"
++    lscpu
++} > "$RUN_DIR/host.txt"
++cd "$scratch"
++export MOONCAKE_HOST_ID
++MOONCAKE_HOST_ID=$(hostname)
++
++run() {
++    printf '%q ' "$@"
++    printf '\n'
++    "$@"
++}
++require_binary() {
++    [[ -x $1 ]] || { echo "Missing executable: $1 (build this checkout first)" >&2; exit 1; }
++}
++start_master() {
++    local master=${MASTER_BIN:-$BUILD_DIR/mooncake-store/src/mooncake_master}
++    require_binary "$master"
++    # Allocate three currently free ports; startup detects collisions/races.
++    read -r master_port metadata_port metrics_port < <("$PYTHON" - <<'PY'
++import socket
++sockets = [socket.socket() for _ in range(3)]
++for sock in sockets:
++    sock.bind(('127.0.0.1', 0))
++print(*(sock.getsockname()[1] for sock in sockets))
++PY
++)
++    "$master" --rpc_port="$master_port" --rpc_thread_num=4 \
++        --enable_http_metadata_server=true \
++        --http_metadata_server_host=127.0.0.1 \
++        --http_metadata_server_port="$metadata_port" \
++        --metrics_host=127.0.0.1 --metrics_port="$metrics_port" \
++        --enable_ha=false --enable_offload=false > "$RUN_DIR/master.log" 2>&1 &
++    master_pid=$!
++    "$PYTHON" - "$master_pid" "$master_port" "$metadata_port" <<'PY'
++import os
++import socket
++import sys
++import time
++pid, *ports = map(int, sys.argv[1:])
++deadline = time.monotonic() + 60
++while time.monotonic() < deadline:
++    os.kill(pid, 0)
++    try:
++        for port in ports:
++            with socket.create_connection(('127.0.0.1', port), timeout=0.5):
++                pass
++        break
++    except OSError:
++        time.sleep(0.2)
++else:
++    raise SystemExit('Master readiness timed out; inspect master.log')
++PY
++    kill -0 "$master_pid"
++}
++case "$mode" in
++    kv)
++        "$PYTHON" -c 'from mooncake.store import MooncakeDistributedStore, ReplicateConfig'
++        start_master
++        scenario=${SCENARIO:-verify_write}
++        # Count-bounded writes avoid accidentally filling node memory in a timed loop.
++        run "$PYTHON" "$MOONCAKE_ROOT/mooncake-store/benchmarks/store_kv_bench.py" \
++            --scenario "$scenario" --io-api "${IO_API:-plain}" \
++            --local-hostname 127.0.0.1 \
++            --metadata-server "http://127.0.0.1:$metadata_port/metadata" \
++            --master-server "127.0.0.1:$master_port" --protocol tcp \
++            --global-segment-size "${SEGMENT_BYTES:-8589934592}" \
++            --local-buffer-size "${BUFFER_BYTES:-268435456}" \
++            --nr-objects "${OBJECTS:-1024}" --write-objects "${WRITE_OBJECTS:-1024}" \
++            --value-size "${VALUE_BYTES:-131072}" --batch-size "${BATCH_SIZE:-16}" \
++            --numjobs "${NUMJOBS:-4}" --iodepth "${IODEPTH:-1}" \
++            --runtime "${RUNTIME:-0}" --memory-replica-num 1 --nof-replica-num 0 \
++            --key-prefix "j${SLURM_JOB_ID}_" --key-size 64 \
++            --verify --pattern 0xab --output-dir "$RUN_DIR/kv" "$@"
++        # Some performance scenarios return 0 even with failed KV operations.
++        "$PYTHON" - "$RUN_DIR/kv/summary.json" <<'PY'
++import json
++import sys
++with open(sys.argv[1]) as stream:
++    result = json.load(stream)
++if not result['ok']:
++    raise SystemExit('KV errors recorded; inspect summary.json and journal.jsonl')
++PY
++        ;;
++    micro)
++        benchmark=${BENCHMARK:-allocation_strategy_bench}
++        binary=$BUILD_DIR/mooncake-store/benchmarks/$benchmark
++        require_binary "$binary"
++        case "$benchmark" in
++            allocation_strategy_bench)
++                run "$binary" --workload=size_class_churn --segment_capacity=1024 \
++                    --num_allocations=10000 --prefill_pct=70 "$@" ;;
++            offset_allocator_concurrency_bench)
++                run "$binary" --threads="${SLURM_CPUS_PER_TASK:-16}" "$@" ;;
++            storage_backend_bench)
++                run "$binary" --storage_path="$scratch/backend" --capacity_gb=4 \
++                    --num_operations=100 --warmup_operations=10 \
++                    --num_threads="${SLURM_CPUS_PER_TASK:-16}" "$@" ;;
++            file_interface_bench)
++                run "$binary" --file "$scratch/file.dat" "$@" ;;
++            uring_batch_read_bench)
++                run "$binary" "$scratch/uring.dat" "$@" ;;
++            master_bench)
++                start_master
++                run "$binary" --master_server="127.0.0.1:$master_port" \
++                    --num_clients=4 --num_threads=1 --duration=30 "$@" ;;
++            batch_get_replica_bench)
++                start_master
++                run "$binary" --master_server="127.0.0.1:$master_port" \
++                    --num_objects=100000 --prefill_threads=4 --lookup_threads=8 \
++                    --batch_size=128 --duration=30 --cycles=1 \
++                    --csv_path="$RUN_DIR/replica.csv" "$@" ;;
++            allocator_bench|batch_evict_bench|batch_oplog_promotion_bench)
++                run "$binary" "$@" ;;
++            *) echo "Unsupported benchmark: $benchmark; see README.md" >&2; exit 2 ;;
++        esac
++        ;;
++    trace)
++        scenario=${SCENARIO:-toolagent}
++        trace_dir=${TRACE_DIR:-$MOONCAKE_ROOT/FAST25-release/traces}
++        case "$scenario" in
++            conversation|synthetic|toolagent) scenarios=("$scenario") ;;
++            all) scenarios=(conversation synthetic toolagent) ;;
++            *) echo "Unknown trace scenario: $scenario" >&2; exit 2 ;;
++        esac
++        for item in "${scenarios[@]}"; do
++            [[ -s "$trace_dir/${item}_trace.jsonl" ]] || {
++                echo "Missing trace: $trace_dir/${item}_trace.jsonl" >&2; exit 1;
++            }
++        done
++        cd "$MOONCAKE_ROOT/benchmarks/storage_benchmark_v1"
++        run "$PYTHON" benchmark.py --trace-dir "$trace_dir" --scenario "$scenario" \
++            --storage-dir "$scratch/trace" --model "${MODEL:-glm5}" \
++            --threads "${THREADS:-1}" --max-pages "${MAX_PAGES:-128}" \
++            --max-requests "${MAX_REQUESTS:-100}" --file-mode "${FILE_MODE:-single}" \
++            --fsync-mode "${FSYNC_MODE:-none}" --replay-scales "${REPLAY_SCALES:-0}" \
++            --progress-interval 0 "$@"
++        ;;
++    *) echo "Unknown mode: $mode" >&2; exit 2 ;;
++esac

@@ -1,0 +1,4 @@
+All 3 patches applied to base fe0d23e332f41c7d54b5c217194dce5f8e751b21; all 17 resulting files matched the tested working-tree hashes.
+Packaged streaming audit reproduced 2 matched pairs, 1 submit-only ID, 1 complete-only ID, and 1 wholly absent ID on each controlled fixture.
+Packaged extractor returned the expected 16 mid-phase spans (IDs 33–48, each 6 microseconds) from complete sequential fixtures.
+README local links and bilingual command blocks checked.

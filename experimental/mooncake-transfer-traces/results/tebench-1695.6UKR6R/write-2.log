@@ -1,0 +1,59 @@
+WARNING: Logging before InitGoogleLogging() is written to STDERR
+I0924 19:14:15.376253 2233390 transport_selector.cpp:129] No 'policy' configured, using default transport selection
+I0924 19:14:15.376325 2233390 ibv_loader.cpp:40] libibverbs lacks optional symbol ibv_query_port_speed; the fallback path will be used
+I0924 19:14:15.376713 2233390 ibv_loader.cpp:123] IbvLoader: libibverbs loaded successfully, devices=8
+W0924 19:14:15.381251 2233390 context.cpp:270] No network-attached GID found on ibp0, using non-network GID[0]
+I0924 19:14:15.381258 2233390 context.cpp:938] Resolved GID index 0 for device ibp0: fe:80:00:00:00:00:00:00:a0:88:c2:03:00:96:84:44
+I0924 19:14:15.384708 2233390 context.cpp:408] [RDMA] Relaxed ordering is supported and enabled for ibp0
+W0924 19:14:15.389348 2233390 context.cpp:270] No network-attached GID found on ibp1, using non-network GID[0]
+I0924 19:14:15.389355 2233390 context.cpp:938] Resolved GID index 0 for device ibp1: fe:80:00:00:00:00:00:00:a0:88:c2:03:00:99:48:a2
+I0924 19:14:15.392874 2233390 context.cpp:408] [RDMA] Relaxed ordering is supported and enabled for ibp1
+W0924 19:14:15.397509 2233390 context.cpp:270] No network-attached GID found on ibp2, using non-network GID[0]
+I0924 19:14:15.397522 2233390 context.cpp:938] Resolved GID index 0 for device ibp2: fe:80:00:00:00:00:00:00:a0:88:c2:03:00:96:7d:fc
+I0924 19:14:15.401007 2233390 context.cpp:408] [RDMA] Relaxed ordering is supported and enabled for ibp2
+W0924 19:14:15.405615 2233390 context.cpp:270] No network-attached GID found on ibp3, using non-network GID[0]
+I0924 19:14:15.405622 2233390 context.cpp:938] Resolved GID index 0 for device ibp3: fe:80:00:00:00:00:00:00:a0:88:c2:03:00:96:7e:f4
+I0924 19:14:15.409132 2233390 context.cpp:408] [RDMA] Relaxed ordering is supported and enabled for ibp3
+W0924 19:14:15.413748 2233390 context.cpp:270] No network-attached GID found on ibp4, using non-network GID[0]
+I0924 19:14:15.413755 2233390 context.cpp:938] Resolved GID index 0 for device ibp4: fe:80:00:00:00:00:00:00:a0:88:c2:03:00:96:7e:2c
+I0924 19:14:15.417279 2233390 context.cpp:408] [RDMA] Relaxed ordering is supported and enabled for ibp4
+W0924 19:14:15.421927 2233390 context.cpp:270] No network-attached GID found on ibp5, using non-network GID[0]
+I0924 19:14:15.421934 2233390 context.cpp:938] Resolved GID index 0 for device ibp5: fe:80:00:00:00:00:00:00:a0:88:c2:03:00:96:7d:a4
+I0924 19:14:15.425487 2233390 context.cpp:408] [RDMA] Relaxed ordering is supported and enabled for ibp5
+W0924 19:14:15.430200 2233390 context.cpp:270] No network-attached GID found on ibp6, using non-network GID[0]
+I0924 19:14:15.430207 2233390 context.cpp:938] Resolved GID index 0 for device ibp6: fe:80:00:00:00:00:00:00:a0:88:c2:03:00:99:43:d2
+I0924 19:14:15.433723 2233390 context.cpp:408] [RDMA] Relaxed ordering is supported and enabled for ibp6
+W0924 19:14:15.438374 2233390 context.cpp:270] No network-attached GID found on ibp7, using non-network GID[0]
+I0924 19:14:15.438380 2233390 context.cpp:938] Resolved GID index 0 for device ibp7: fe:80:00:00:00:00:00:00:a0:88:c2:03:00:99:48:b2
+I0924 19:14:15.441932 2233390 context.cpp:408] [RDMA] Relaxed ordering is supported and enabled for ibp7
+TENT transfer events: /mnt/home/kimbo/networkx/Mooncake/benchmark-results/tebench-1695.6UKR6R/events/tent-events-slurm-h100-206-025-2233390-uky9P4.jsonl
+I0924 19:14:15.452504 2233390 tent_metrics.cpp:789] TENT metrics disabled at compile time (TENT_METRICS_ENABLED=0)
+I0924 19:14:15.452512 2233390 transfer_engine_impl.cpp:560] TENT Metrics system initialized
+I0924 19:14:15.452514 2233390 transfer_engine_impl.cpp:577] Transfer Engine 10.0.1.136:15723 started successfully
+I0924 19:14:15.592624 2233390 tent_backend.cpp:281] Allocated 268435456 bytes across 1 buffers (1 seg_types) in 137.077 ms, registered in 3.0184 ms
+BlkSize (B)   Batch   BW (GB/s)     Avg Inst GB/s     Avg Lat (us)  Avg Tx (us)   P99 Tx (us)   P999 Tx (us)  
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+I0924 19:14:15.592664 2233390 segment_manager.cpp:56] Opened segment #1: 10.0.3.49:15309
+I0924 19:14:15.593487 2233390 tent_backend.cpp:356] Opened 1 target segments
+I0924 19:14:15.594870 2233590 rail_monitor.cpp:83] RailMonitor: error_threshold=3 error_window=10s cooldown=30s
+4096          1       0.466771      0.529568          8.8           7.8           10.0          14.0          
+8192          1       0.946778      1.051227          8.7           7.8           10.0          12.0          
+16384         1       1.839842      2.040808          8.9           8.1           10.0          12.0          
+32768         1       3.453079      3.950270          9.5           8.4           10.0          18.0          
+65536         1       6.387092      7.228450          10.3          9.2           12.0          35.0          
+I0924 19:14:45.914480 2233591 rail_monitor.cpp:83] RailMonitor: error_threshold=3 error_window=10s cooldown=30s
+131072        1       10.196167     11.122271         12.9          11.8          15.0          18.0          
+I0924 19:14:51.949473 2233593 rail_monitor.cpp:83] RailMonitor: error_threshold=3 error_window=10s cooldown=30s
+I0924 19:14:51.949506 2233592 rail_monitor.cpp:83] RailMonitor: error_threshold=3 error_window=10s cooldown=30s
+262144        1       15.365413     16.574162         17.1          15.9          18.0          22.0          
+I0924 19:14:57.976567 2233595 rail_monitor.cpp:83] RailMonitor: error_threshold=3 error_window=10s cooldown=30s
+I0924 19:14:57.976572 2233594 rail_monitor.cpp:83] RailMonitor: error_threshold=3 error_window=10s cooldown=30s
+524288        1       21.315779     22.826878         24.6          23.1          27.0          32.0          
+1048576       1       28.499240     30.184190         36.8          34.9          56.0          60.0          
+2097152       1       29.862403     31.107084         70.2          67.5          99.0          103.0         
+4194304       1       34.650234     35.548444         121.0         118.2         178.0         183.0         
+8388608       1       37.762484     38.315931         222.1         219.4         334.4         342.0         
+16777216      1       39.497671     39.849683         424.8         421.9         457.5         662.0         
+33554432      1       40.076195     40.299435         837.3         834.4         1280.3        1291.0        
+67108864      1       40.155430     40.316483         1671.2        1668.4        2018.6        2636.0        
+TENT trace incomplete: 593004 dropped records, write_failed=0, file=/mnt/home/kimbo/networkx/Mooncake/benchmark-results/tebench-1695.6UKR6R/events/tent-events-slurm-h100-206-025-2233390-uky9P4.jsonl

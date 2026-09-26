@@ -1,0 +1,506 @@
+diff --git a/mooncake-transfer-engine/benchmark/slurm/README.md b/mooncake-transfer-engine/benchmark/slurm/README.md
+new file mode 100644
+index 00000000..b03949c6
+--- /dev/null
++++ b/mooncake-transfer-engine/benchmark/slurm/README.md
+@@ -0,0 +1,200 @@
++# Two-node tebench RDMA sweep
++
++`tebench.sbatch` runs a target on one node and an initiator on another, using
++TENT RDMA with peer-to-peer metadata (no etcd or Store master). It discovers the
++endpoint from the target's startup output, waits up to 120 seconds, runs the
++sweep, and terminates its own target step when finished or interrupted.
++
++## Node selection
++
++The default allocation uses **two H100 nodes**: `slurm-h100-206-025` and
++`slurm-h100-206-035`, in partition `h100`, account `cw-sup`. The first node is
++the initiator; the second is the target. Each node reserves one GPU, eight CPUs
++and 64 GiB host RAM for up to two hours (including compilation). Busy nodes queue normally; the script
++does not touch existing jobs.
++
++Override the node list and partition using sbatch options before the script
++path. `INITIATOR_NODE` can select either allocated node to reverse the roles.
++The inspected cluster has only one H200 node, so it cannot currently provide an
++H200-to-H200 comparison.
++
++## Build and submit
++
++Submit directly from the Mooncake root; no CMake is needed on the login node:
++
++```bash
++sbatch mooncake-transfer-engine/benchmark/slurm/tebench.sbatch
++```
++
++The script builds on the CPU cores of the initiator node inside a writable
++Pyxis container. The base image is `ubuntu:22.04`; it binds the compute node's
++existing CUDA 13 toolkit into the container instead of downloading a large CUDA
++development image. It installs CMake, GCC and the required development packages
++inside the container, initializes the pybind11 submodule if missing, and builds
++only `tebench` with CUDA/TENT enabled. Store, EP, examples and tests are disabled.
++No host system packages are changed. First-time setup needs registry, Ubuntu
++package-mirror and GitHub access from the compute node.
++
++The compiled files go into shared `build/tebench-pyxis/`. The populated container
++is saved as `runtime.sqsh` there, and **both benchmark peers run in that image**
++so their libraries match the build. The launcher supplies the CUDA and TENT
++shared-library paths and binds `/dev/infiniband` directly. It disables this
++cluster's optional Mellanox remount hook, which fails on absent uverbs devices;
++GPU access still follows Slurm cgroups and `CUDA_VISIBLE_DEVICES`. Subsequent builds reuse that image and the
++CMake build tree. A lock protects the build directory throughout the benchmark;
++use separate `BUILD_DIR` values for concurrent independent jobs.
++
++To build first without reserving GPUs or a second node:
++
++```bash
++BUILD_ONLY=1 sbatch --nodes=1 --nodelist=slurm-h100-206-025 --gpus-per-node=0 \
++  mooncake-transfer-engine/benchmark/slurm/tebench.sbatch
++
++# After the build job completes, run the two-node benchmark without rebuilding.
++BUILD=0 sbatch mooncake-transfer-engine/benchmark/slurm/tebench.sbatch
++```
++
++This cluster exposes no CPU-only partition; the build-only command uses CPU
++resources on an H100 host and requests zero GPUs. The default combined job
++reserves its two benchmark GPUs for the whole allocation, including build time.
++
++Export an absolute `MOONCAKE_ROOT` when submitting from elsewhere. The checkout,
++build directory, saved image and results must be shared between nodes. Override
++`CUDA_HOST_PATH` if the toolkit lives elsewhere; `BUILD_IMAGE` can be another
++Ubuntu-compatible base or an existing squashfs image. A custom `TEBENCH_BIN`
++requires `BUILD=0` and a compatible `RUNTIME_IMAGE`.
++
++Examples (from the repository root):
++
++```bash
++# Default: H100 initiator, H100 target, GPU-memory RDMA.
++sbatch mooncake-transfer-engine/benchmark/slurm/tebench.sbatch
++
++# Reverse initiator and target on the same two nodes.
++INITIATOR_NODE=slurm-h100-206-035 sbatch \
++  mooncake-transfer-engine/benchmark/slurm/tebench.sbatch
++
++# Host-memory RDMA; allocation still reserves one GPU per node.
++SEG_TYPE=DRAM sbatch mooncake-transfer-engine/benchmark/slurm/tebench.sbatch
++
++# Longer write-only sweep: 1 KiB through 128 MiB, fixed batching/concurrency.
++MIN_BYTES=1024 MAX_BYTES=134217728 BUFFER_BYTES=1073741824 \
++BATCH_SIZE=4 THREADS=2 DURATION=10 OPS=write \
++  sbatch mooncake-transfer-engine/benchmark/slurm/tebench.sbatch
++
++# Short launch check: two sizes, one repetition, one second per size.
++MIN_BYTES=4096 MAX_BYTES=8192 REPEATS=1 DURATION=1 OPS=write \
++  sbatch mooncake-transfer-engine/benchmark/slurm/tebench.sbatch
++```
++
++## Sweep and controls
++
++The default is **4 KiB, 8 KiB, ... 64 MiB** (15 message sizes), fixed batch size
++1 and one sending thread. Read and write sweeps each run three times; each size
++has five seconds of measurement plus tebench's warmup. Expected benchmark time
++is roughly nine minutes plus startup, excluding the build. No automatic batch/concurrency sweep is
++mixed into the message-size comparison.
++
++| Variable | Default | Meaning |
++| --- | --- | --- |
++| `SEG_TYPE` | `VRAM` | GPU memory; use `DRAM` for host-memory RDMA |
++| `MIN_BYTES`, `MAX_BYTES` | `4096`, `67108864` | Doubling sweep endpoints, in bytes |
++| `BUFFER_BYTES` | `268435456` | Registered buffer size; must cover maximum message × batch × threads |
++| `BATCH_SIZE`, `THREADS` | `1`, `1` | Fixed submission batch and concurrency |
++| `OPS` | `read write` | One or both operations, space separated |
++| `DURATION` | `5` | Measured seconds per size |
++| `REPEATS` | `3` | Repetitions of each operation's sweep |
++| `READY_TIMEOUT` | `120` | Target startup limit in seconds |
++| `INITIATOR_NODE` | First allocated node | Initiator host |
++| `BUILD`, `BUILD_ONLY` | `1`, `0` | Build before running; optionally exit after building |
++| `BUILD_DIR` | `$MOONCAKE_ROOT/build/tebench-pyxis` | Shared incremental build and container cache |
++| `BUILD_JOBS` | Allocated CPUs (8) | Compiler parallelism, no more than allocated CPUs |
++| `BUILD_IMAGE` | `ubuntu:22.04` | Initial Pyxis build image; cached runtime takes precedence |
++| `RUNTIME_IMAGE` | `$BUILD_DIR/runtime.sqsh` | Saved build environment used by both peers |
++| `CUDA_HOST_PATH`, `CUDA_HOME` | `/usr/local/cuda-13.0`, `/usr/local/cuda` | Host toolkit path and container mount destination |
++| `TEBENCH_BIN` | `$BUILD_DIR/mooncake-transfer-engine/benchmark/tebench` | Executable |
++| `RESULT_ROOT` | `$MOONCAKE_ROOT/benchmark-results` | Shared result directory; do not use node-local `/tmp` |
++| `PYTHON` | `python3` | Standard-library-only result validation |
++
++`MAX_BYTES / MIN_BYTES` must be a power of two. Numeric controls are positive
++decimal integers, capped at 2^31-1 by the launcher. Increase Slurm's `--time`
++when expanding repetitions/durations. For controlled placement, configure the
++TENT engine with `MC_TENT_CONF` before submission; Slurm GPU visibility is
++preserved and each process uses its visible GPU 0. GPU RDMA requires working
++GPUDirect registration; the launcher reports failures instead of falling back
++to CPU memory or another transport.
++
++## Results
++
++A unique `benchmark-results/tebench-JOBID.XXXXXX/` directory contains:
++
++- `build.log` when compilation is enabled.
++- `target.log`, `endpoint.txt` and the exact target command.
++- `read-N.log` / `write-N.log`, matching command files and JSONL measurements.
++- Allocation, commit, role mapping, GPU/NIC topology, locked-memory limit and
++  per-node shared-library checks.
++
++Each JSONL file contains one record per size, including `block_size`,
++`aggregate_throughput_gbps` (decimal **GB/s**, despite the field spelling), and
++per-target mean/p99/p999 transfer latency. The launcher rejects missing sizes,
++empty measurements and failed initiator exits. Compare repeated runs rather
++than treating a single observation as peak fabric throughput.
++
++A read pulls target memory into the initiator; a write pushes initiator memory
++to the target. These are separate one-direction measurements, not simultaneous
++bidirectional bandwidth. With a single thread and batch size 1, small messages
++primarily expose latency and submission overhead; increase fixed batching or
++concurrency in a separate run to explore saturation. A file supplied through `MC_TENT_CONF` must be inside a mounted directory.
++GPU choice, NIC selection
++and other jobs on either host can affect results.
++
++## Validation performed
++
++- Job 1608 built `tebench` successfully in Pyxis on one H100 host using eight
++  CPUs and **zero GPUs**, in 4 minutes 13 seconds. It produced the executable
++  under `build/tebench-pyxis/mooncake-transfer-engine/benchmark/tebench` and a
++  roughly 488 MiB `runtime.sqsh` image.
++- Job 1610 reused that image on both H100 nodes and completed GPU-memory RDMA
++  reads and writes at 4 KiB and 8 KiB, one repetition, one measured second per
++  size. Job status was `COMPLETED`, exit `0:0`; all four JSON records were
++  validated. The long-lived target step is intentionally cancelled at cleanup.
++  This smoke test validates the build/runtime path, not peak bandwidth or the
++  full default size sweep.
++- Logs for these validation jobs are in the shared workspace's
++  `mooncake-build-results/` directory.
++- Shell syntax and whitespace checks passed. Temporary stand-ins also verified
++  build-only success/failure, preservation of the old image after a failed
++  build, sweep completion, initiator exit-code propagation, startup timeout,
++  incomplete-result rejection and target cleanup.
++- `pre-commit` was unavailable in the environment.
++
++## Optional per-request event traces
++
++After rebuilding the modified TENT backend, use `TRACE=1` to record original
++request submissions and observed completions from both processes under the
++run's `events/` directory. For a short two-node H100 example:
++
++```bash
++export MOONCAKE_ROOT=/mnt/home/kimbo/networkx/Mooncake
++TRACE=1 REPEATS=1 DURATION=1 MIN_BYTES=1048576 MAX_BYTES=4194304 \
++  sbatch "$MOONCAKE_ROOT/mooncake-transfer-engine/benchmark/slurm/tebench.sbatch"
++```
++
++The default `BUILD=1` rebuilds the binary first. An existing binary built before
++this recorder was added will not produce traces with `BUILD=0`.
++
++Each process/engine gets a unique JSONL file. The initiator log prints its trace
++filename, which associates the file with the operation and repeat. The target
++normally submits no requests for one-sided RDMA, so its file has no data events;
++the launcher terminates that waiting target and its final footer may be absent.
++Initiator files should end with `trace_end` and `dropped_records: 0`.
++
++Tracing also records warmup transfers. Unlike the tebench per-case summary,
++event files contain every observed request, and can be large. JSON serialization
++and tracing overhead can change measured bandwidth; retain untraced sweeps as
++the performance baseline. `TENT_TRACE_BUFFER_RECORDS` sets the bounded queue size
++(default 65536). Overflow drops trace records and is reported at shutdown.
++
++See [TENT event recorder](../../tent/TRANSFER_EVENTS.md) for the schema,
++completion semantics, clock interpretation, and use with an independent replay
++driver.
+diff --git a/mooncake-transfer-engine/benchmark/slurm/tebench.sbatch b/mooncake-transfer-engine/benchmark/slurm/tebench.sbatch
+new file mode 100644
+index 00000000..77e606ec
+--- /dev/null
++++ b/mooncake-transfer-engine/benchmark/slurm/tebench.sbatch
+@@ -0,0 +1,294 @@
++#!/usr/bin/env bash
++#SBATCH --job-name=tebench-rdma
++#SBATCH --partition=h100
++#SBATCH --account=cw-sup
++#SBATCH --nodes=2
++#SBATCH --nodelist=slurm-h100-206-025,slurm-h100-206-035
++#SBATCH --ntasks-per-node=1
++#SBATCH --cpus-per-task=8
++#SBATCH --gpus-per-node=1
++#SBATCH --mem=64G
++#SBATCH --time=02:00:00
++#SBATCH --output=tebench-%j.out
++
++# Submit from the Mooncake root or export an absolute MOONCAKE_ROOT.
++set -euo pipefail
++: "${SLURM_JOB_ID:?Submit with sbatch}"
++MOONCAKE_ROOT=${MOONCAKE_ROOT:-$SLURM_SUBMIT_DIR}
++BUILD=${BUILD:-1}
++BUILD_ONLY=${BUILD_ONLY:-0}
++TRACE=${TRACE:-0}
++BUILD_IMAGE=${BUILD_IMAGE:-ubuntu:22.04}
++CUDA_HOST_PATH=${CUDA_HOST_PATH:-/usr/local/cuda-13.0}
++BUILD_DIR=${BUILD_DIR:-$MOONCAKE_ROOT/build/tebench-pyxis}
++RUNTIME_IMAGE=${RUNTIME_IMAGE:-$BUILD_DIR/runtime.sqsh}
++BUILD_JOBS=${BUILD_JOBS:-${SLURM_CPUS_PER_TASK:-8}}
++CUDA_HOME=${CUDA_HOME:-/usr/local/cuda}
++TEBENCH_BIN=${TEBENCH_BIN:-$BUILD_DIR/mooncake-transfer-engine/benchmark/tebench}
++SEG_TYPE=${SEG_TYPE:-VRAM}
++MIN_BYTES=${MIN_BYTES:-4096}
++MAX_BYTES=${MAX_BYTES:-67108864}
++BUFFER_BYTES=${BUFFER_BYTES:-268435456}
++BATCH_SIZE=${BATCH_SIZE:-1}
++THREADS=${THREADS:-1}
++DURATION=${DURATION:-5}
++REPEATS=${REPEATS:-3}
++READY_TIMEOUT=${READY_TIMEOUT:-120}
++OPS=${OPS:-read write}
++PYTHON=${PYTHON:-python3}
++export TEBENCH_BIN MOONCAKE_ROOT BUILD_DIR BUILD_JOBS CUDA_HOME PYTHON
++
++fail() { echo "$*" >&2; exit 1; }
++[[ $# == 0 ]] || fail 'Configure the benchmark via environment variables; see README.md.'
++[[ $TEBENCH_BIN = /* && $BUILD_DIR = /* && $MOONCAKE_ROOT = /* && $RUNTIME_IMAGE = /* ]] || fail 'MOONCAKE_ROOT, BUILD_DIR, TEBENCH_BIN and RUNTIME_IMAGE must be absolute paths'
++for flag in BUILD BUILD_ONLY TRACE; do
++    [[ ${!flag} == 0 || ${!flag} == 1 ]] || fail "$flag must be 0 or 1"
++done
++if [[ $BUILD == 1 && $TEBENCH_BIN != "$BUILD_DIR/mooncake-transfer-engine/benchmark/tebench" ]]; then
++    fail 'Use BUILD=0 for an external TEBENCH_BIN, or select its BUILD_DIR'
++fi
++[[ $BUILD_JOBS =~ ^[1-9][0-9]*$ ]] || fail 'BUILD_JOBS must be a positive integer'
++((BUILD_JOBS <= ${SLURM_CPUS_PER_TASK:-8})) || fail 'BUILD_JOBS exceeds allocated CPUs'
++[[ $SEG_TYPE == VRAM || $SEG_TYPE == DRAM ]] || fail 'SEG_TYPE must be VRAM or DRAM'
++for var in MIN_BYTES MAX_BYTES BUFFER_BYTES BATCH_SIZE THREADS DURATION REPEATS READY_TIMEOUT; do
++    [[ ${!var} =~ ^[1-9][0-9]*$ ]] || fail "$var must be a positive decimal integer"
++done
++# Validate bounds in Python to avoid overflowing shell arithmetic on user inputs.
++"$PYTHON" - "$MIN_BYTES" "$MAX_BYTES" "$BUFFER_BYTES" "$BATCH_SIZE" "$THREADS" \
++    "$DURATION" "$REPEATS" "$READY_TIMEOUT" <<'PY'
++import sys
++lo, hi, buf, batch, threads, duration, repeats, ready = map(int, sys.argv[1:])
++if max(lo, hi, buf, batch, threads, duration, repeats, ready) > 2**31 - 1:
++    raise SystemExit('Launcher parameters must be <= 2^31-1')
++if lo > hi or hi % lo or (hi // lo) & ((hi // lo) - 1):
++    raise SystemExit('MAX_BYTES must equal MIN_BYTES times a power of two')
++if hi * batch * threads > buf:
++    raise SystemExit('BUFFER_BYTES must cover MAX_BYTES * BATCH_SIZE * THREADS')
++PY
++read -r -a operations <<< "$OPS"
++((${#operations[@]})) || fail 'OPS must contain read and/or write'
++for op in "${operations[@]}"; do
++    [[ $op == read || $op == write ]] || fail "Unsupported operation: $op"
++done
++mapfile -t nodes < <(scontrol show hostnames "$SLURM_JOB_NODELIST")
++if [[ $BUILD_ONLY == 1 ]]; then
++    ((${#nodes[@]} >= 1)) || fail 'At least one allocated node is required'
++else
++    ((${#nodes[@]} == 2)) || fail 'Exactly two allocated nodes are required'
++fi
++# Use the first allocated node as initiator unless explicitly overridden.
++initiator=${INITIATOR_NODE:-${nodes[0]}}
++[[ $initiator == "${nodes[0]}" || $initiator == "${nodes[1]:-}" ]] || fail 'INITIATOR_NODE must be in the allocation'
++target=${nodes[0]}
++[[ $target != "$initiator" ]] || target=${nodes[1]:-$initiator}
++# Must be shared between both nodes. Never default to node-local /tmp.
++run_base=${RESULT_ROOT:-$MOONCAKE_ROOT/benchmark-results}
++mkdir -p "$run_base"
++run_dir=$(mktemp -d "$run_base/tebench-${SLURM_JOB_ID}.XXXXXX")
++run_dir=$(cd "$run_dir" && pwd)
++export run_dir
++# Hold the lock through the sweep so another job cannot relink a running binary.
++mkdir -p "$BUILD_DIR"
++exec 9> "$BUILD_DIR/.slurm-build.lock"
++flock -w 1800 9 || fail 'Another job is using BUILD_DIR; select a different directory'
++scontrol show job "$SLURM_JOB_ID" > "$run_dir/slurm-job.txt"
++git -C "$MOONCAKE_ROOT" rev-parse HEAD > "$run_dir/commit.txt"
++printf 'initiator=%s\ntarget=%s\nseg_type=%s\nCUDA_VISIBLE_DEVICES is assigned by Slurm per node\n' \
++    "$initiator" "$target" "$SEG_TYPE" > "$run_dir/topology.txt"
++printf 'Results: %s\nInitiator: %s; target: %s; RDMA %s\n' "$run_dir" "$initiator" "$target" "$SEG_TYPE"
++
++# --exact lets the two one-node steps coexist within the two-node allocation.
++step=(srun --exact --nodes=1 --ntasks=1 --cpus-per-task="${SLURM_CPUS_PER_TASK:-8}"
++      --gpus-per-node=1 --cpu-bind=cores --kill-on-bad-exit=1)
++pids=()
++cleanup() {
++    local rc=$?
++    trap - EXIT
++    for pid in "${pids[@]}"; do kill -TERM "$pid" 2>/dev/null || true; done
++    # Signalling srun forwards termination to its remote task.
++    for ((i=0; i<50; i++)); do
++        local alive=0
++        for pid in "${pids[@]}"; do kill -0 "$pid" 2>/dev/null && alive=1; done
++        ((alive)) || break
++        sleep 0.1
++    done
++    for pid in "${pids[@]}"; do
++        kill -KILL "$pid" 2>/dev/null || true
++        wait "$pid" 2>/dev/null || true
++    done
++    exit "$rc"
++}
++trap cleanup EXIT
++trap 'exit 143' TERM
++trap 'exit 130' INT
++
++# Runs inside a writable Pyxis container on a compute node.
++build_tebench() {
++    set -euo pipefail
++    export PATH="$CUDA_HOME/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
++    export DEBIAN_FRONTEND=noninteractive
++    echo "Building tebench in Pyxis on $(hostname), output: $BUILD_DIR"
++    if [[ ! -f /opt/mooncake-tebench-deps-v1 ]]; then
++        apt-get update
++        apt-get install -y --no-install-recommends \
++            ca-certificates cmake make g++ git python3-dev pkg-config \
++            libnuma-dev libibverbs-dev librdmacm-dev libgflags-dev \
++            libgoogle-glog-dev libjsoncpp-dev libyaml-cpp-dev libssl-dev liburing-dev
++        apt-get clean
++        mkdir -p /opt
++        touch /opt/mooncake-tebench-deps-v1
++    fi
++    if [[ ! -f $MOONCAKE_ROOT/extern/pybind11/CMakeLists.txt ]]; then
++        git -c safe.directory="$MOONCAKE_ROOT" -C "$MOONCAKE_ROOT" \
++            submodule update --init --recursive extern/pybind11
++    fi
++    [[ -x $CUDA_HOME/bin/nvcc ]] || {
++        echo "CUDA compiler missing: $CUDA_HOME/bin/nvcc; check CUDA_HOST_PATH" >&2; return 1;
++    }
++    cmake --version
++    "$CUDA_HOME/bin/nvcc" --version
++    cmake -S "$MOONCAKE_ROOT" -B "$BUILD_DIR" \
++        -DCMAKE_BUILD_TYPE=Release -DENABLE_DEBUG_SYMBOLS=OFF \
++        -DCUDAToolkit_ROOT="$CUDA_HOME" -DCMAKE_CUDA_COMPILER="$CUDA_HOME/bin/nvcc" \
++        -DCMAKE_CUDA_ARCHITECTURES=90 -DPython3_EXECUTABLE=/usr/bin/python3 \
++        -DWITH_TE=ON -DUSE_TENT=ON -DUSE_CUDA=ON \
++        -DWITH_STORE=OFF -DWITH_STORE_RUST=OFF -DWITH_STORE_GO=OFF \
++        -DWITH_EP=OFF -DWITH_CONDUCTOR=OFF -DWITH_P2P_STORE=OFF \
++        -DWITH_RUST_EXAMPLE=OFF -DBUILD_UNIT_TESTS=OFF -DBUILD_EXAMPLES=OFF \
++        -DBUILD_BENCHMARK=ON -DUSE_ETCD=OFF -DUSE_REDIS=OFF -DUSE_HTTP=OFF
++    cmake --build "$BUILD_DIR" --target tebench --parallel "$BUILD_JOBS"
++    test -x "$TEBENCH_BIN"
++    ldd "$TEBENCH_BIN"
++}
++container_mounts="$MOONCAKE_ROOT:$MOONCAKE_ROOT,$BUILD_DIR:$BUILD_DIR,$run_dir:$run_dir,$CUDA_HOST_PATH:$CUDA_HOME:ro"
++if [[ $BUILD == 1 ]]; then
++    echo "Compute-node container build log: $run_dir/build.log"
++    build_image=$BUILD_IMAGE
++    [[ ! -f $RUNTIME_IMAGE ]] || build_image=$RUNTIME_IMAGE
++    # Save to a new path; publish the image only after a successful build.
++    pending_image=$BUILD_DIR/runtime-${SLURM_JOB_ID}.sqsh
++    MELLANOX_VISIBLE_DEVICES=none srun --exact --nodes=1 --ntasks=1 --nodelist="$initiator" \
++        --cpus-per-task="${SLURM_CPUS_PER_TASK:-8}" --gpus-per-node=0 \
++        --container-image="$build_image" --container-mounts="$container_mounts" \
++        --container-workdir="$MOONCAKE_ROOT" --no-container-mount-home \
++        --container-remap-root --container-writable --container-save="$pending_image" \
++        --kill-on-bad-exit=1 bash -c "$(declare -f build_tebench); build_tebench" \
++        > "$run_dir/build.log" 2>&1 &
++    pids=("$!")
++    build_rc=0
++    wait "${pids[0]}" || build_rc=$?
++    pids=()
++    if ((build_rc != 0)); then
++        tail -n 60 "$run_dir/build.log" >&2
++        echo "Build failed; full log: $run_dir/build.log" >&2
++        exit "$build_rc"
++    fi
++    mv -- "$pending_image" "$RUNTIME_IMAGE"
++fi
++[[ -x $TEBENCH_BIN ]] || fail "Missing executable: $TEBENCH_BIN"
++[[ -f $RUNTIME_IMAGE ]] || fail "Missing built runtime image: $RUNTIME_IMAGE"
++if [[ $BUILD_ONLY == 1 ]]; then
++    echo "Build complete: $TEBENCH_BIN; runtime image: $RUNTIME_IMAGE"
++    exit 0
++fi
++# Run both peers in the saved image so runtime libraries match the build.
++# The cluster already exposes permitted RDMA devices; the optional Mellanox
++# hook tries to recreate absent uverbs devices and fails on this platform.
++if [[ $TRACE == 1 ]]; then
++    export TENT_TRACE_DIR="$run_dir/events"
++    mkdir -p "$TENT_TRACE_DIR"
++    export TENT_TRACE_BUFFER_RECORDS=${TENT_TRACE_BUFFER_RECORDS:-65536}
++    echo "Transfer event traces: $TENT_TRACE_DIR"
++fi
++export MELLANOX_VISIBLE_DEVICES=none
++export NVIDIA_VISIBLE_DEVICES=all
++export NVIDIA_DRIVER_CAPABILITIES=compute,utility
++# GPU access remains restricted by Slurm cgroups and CUDA_VISIBLE_DEVICES.
++export LD_LIBRARY_PATH="$CUDA_HOME/lib64:$BUILD_DIR/mooncake-transfer-engine/tent/src/metrics${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
++container_mounts+=",/dev/infiniband:/dev/infiniband"
++container_env=LD_LIBRARY_PATH
++if [[ $TRACE == 1 ]]; then
++    container_env+=,TENT_TRACE_DIR,TENT_TRACE_BUFFER_RECORDS
++fi
++container=(--container-image="$RUNTIME_IMAGE" --container-mounts="$container_mounts"
++           --container-workdir="$MOONCAKE_ROOT" --no-container-mount-home
++           --container-env="$container_env")
++step+=("${container[@]}")
++
++# Preflight on both nodes, including shared-path visibility and allocated GPUs.
++srun --nodes=2 --ntasks=2 --ntasks-per-node=1 --gpus-per-node=1 \
++    --kill-on-bad-exit=1 "${container[@]}" bash -c '
++    set -eu
++    test -x "$TEBENCH_BIN"
++    test -d "$run_dir"
++    ldd "$TEBENCH_BIN" > "$run_dir/ldd-$(hostname).txt"
++    if grep -q "not found" "$run_dir/ldd-$(hostname).txt"; then
++        cat "$run_dir/ldd-$(hostname).txt" >&2
++        exit 1
++    fi
++    { hostname; printf "CUDA_VISIBLE_DEVICES=%s\n" "${CUDA_VISIBLE_DEVICES:-unset}"
++      nvidia-smi -L; nvidia-smi topo -m
++      ls /sys/class/infiniband; ulimit -l
++    } > "$run_dir/host-$(hostname).txt"
++'
++# Keep both roles on GPU 0 in their own Slurm-provided visible device list.
++common=(--backend=tent --xport_type=rdma --metadata_type=p2p --rpc_server_port=0
++        --seg_type="$SEG_TYPE" --local_gpu_id=0 --target_gpu_id=0
++        --total_buffer_size="$BUFFER_BYTES")
++printf '%q ' "$TEBENCH_BIN" "${common[@]}" > "$run_dir/target-command.txt"
++printf '\n' >> "$run_dir/target-command.txt"
++"${step[@]}" --nodelist="$target" "$TEBENCH_BIN" "${common[@]}" \
++    > "$run_dir/target.log" 2>&1 &
++target_pid=$!
++pids+=("$target_pid")
++endpoint=
++deadline=$((SECONDS + READY_TIMEOUT))
++while ((SECONDS < deadline)); do
++    kill -0 "$target_pid" 2>/dev/null || fail "Target exited; inspect $run_dir/target.log"
++    endpoint=$(sed -n 's/.*\.\/tebench --target_seg_name=\([^[:space:]]*\).*/\1/p' "$run_dir/target.log" | head -n 1)
++    [[ -z $endpoint ]] || break
++    sleep 0.5
++done
++[[ -n $endpoint ]] || fail "Target readiness timed out; inspect $run_dir/target.log"
++printf '%s\n' "$endpoint" > "$run_dir/endpoint.txt"
++
++for ((repeat=1; repeat<=REPEATS; repeat++)); do
++    for op in "${operations[@]}"; do
++        kill -0 "$target_pid" 2>/dev/null || fail 'Target exited during sweep'
++        stem=$run_dir/${op}-${repeat}
++        args=("${common[@]}" --target_seg_name="$endpoint" --op_type="$op"
++              --start_block_size="$MIN_BYTES" --max_block_size="$MAX_BYTES"
++              --start_batch_size="$BATCH_SIZE" --max_batch_size="$BATCH_SIZE"
++              --start_num_threads="$THREADS" --max_num_threads="$THREADS"
++              --duration="$DURATION" --result_output_jsonl="$stem.jsonl")
++        printf '%q ' "$TEBENCH_BIN" "${args[@]}" > "$stem.command.txt"
++        printf '\n' >> "$stem.command.txt"
++        echo "Sweep: $op, repeat $repeat/$REPEATS, $MIN_BYTES..$MAX_BYTES bytes"
++        "${step[@]}" --nodelist="$initiator" "$TEBENCH_BIN" "${args[@]}" > "$stem.log" 2>&1 &
++        initiator_pid=$!
++        pids+=("$initiator_pid")
++        rc=0
++        wait "$initiator_pid" || rc=$?
++        pids=("$target_pid")
++        ((rc == 0)) || { echo "Initiator failed: $stem.log" >&2; exit "$rc"; }
++        # Detect skipped/empty results even if the executable exits successfully.
++        "$PYTHON" - "$stem.jsonl" "$MIN_BYTES" "$MAX_BYTES" "$BATCH_SIZE" "$THREADS" <<'PY'
++import json
++import sys
++path, lo, hi, batch, threads = sys.argv[1:]
++expected = []
++size = int(lo)
++while size <= int(hi):
++    expected.append(size)
++    size *= 2
++with open(path) as stream:
++    rows = [json.loads(line) for line in stream if line.strip()]
++if [row['block_size'] for row in rows] != expected:
++    raise SystemExit('Incomplete message-size sweep: ' + path)
++if any(row['batch_size'] != int(batch) or row['num_threads'] != int(threads)
++       or row['aggregate_operations'] <= 0 for row in rows):
++    raise SystemExit('Unexpected parameters or empty measurements: ' + path)
++PY
++    done
++done
++echo "Completed all sweeps. JSON results and logs: $run_dir"

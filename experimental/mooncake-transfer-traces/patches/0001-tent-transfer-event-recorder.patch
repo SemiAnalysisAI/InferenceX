@@ -1,0 +1,1283 @@
+diff --git a/mooncake-transfer-engine/tent/include/tent/runtime/segment_manager.h b/mooncake-transfer-engine/tent/include/tent/runtime/segment_manager.h
+index 26fccd23..c2fdbea9 100644
+--- a/mooncake-transfer-engine/tent/include/tent/runtime/segment_manager.h
++++ b/mooncake-transfer-engine/tent/include/tent/runtime/segment_manager.h
+@@ -55,6 +55,9 @@ class SegmentManager {
+ 
+     Status closeRemote(SegmentID handle);
+ 
++    // Local handle lookup only; never contacts the metadata service.
++    std::string lookupSegmentName(SegmentID handle);
++
+     // Use `withCachedSegment()` when you want automatic
+     // cache invalidation and retry on stale segment cache.
+     Status getRemoteCached(SegmentDesc *&desc, SegmentID handle);
+diff --git a/mooncake-transfer-engine/tent/include/tent/runtime/transfer_engine_impl.h b/mooncake-transfer-engine/tent/include/tent/runtime/transfer_engine_impl.h
+index bb1417fe..a4f97c04 100644
+--- a/mooncake-transfer-engine/tent/include/tent/runtime/transfer_engine_impl.h
++++ b/mooncake-transfer-engine/tent/include/tent/runtime/transfer_engine_impl.h
+@@ -33,6 +33,7 @@
+ #include "tent/common/types.h"
+ #include "tent/runtime/admission_queue.h"
+ #include "tent/runtime/transport.h"
++#include "tent/runtime/transfer_event_recorder.h"
+ #include "tent/runtime/transport_selector.h"
+ #include "tent/runtime/hp_tcp_transport_config.h"
+ 
+@@ -105,6 +106,7 @@ struct TaskInfo {
+     // attempt, so a task that recovers and later fails at poll still
+     // attributes its root cause to submit.
+     int8_t failure_stage{-1};
++    std::shared_ptr<TransferEventSpan> trace_span;
+ 
+     TaskInfo() = default;
+ 
+@@ -131,7 +133,8 @@ struct TaskInfo {
+           attempt_post_time(other.attempt_post_time),
+           attempt_type(other.attempt_type),
+           attempt_active(other.attempt_active),
+-          failure_stage(other.failure_stage) {}
++          failure_stage(other.failure_stage),
++          trace_span(other.trace_span) {}
+ 
+     TaskInfo(TaskInfo&& other) noexcept
+         : type(other.type),
+@@ -156,7 +159,8 @@ struct TaskInfo {
+           attempt_post_time(other.attempt_post_time),
+           attempt_type(other.attempt_type),
+           attempt_active(other.attempt_active),
+-          failure_stage(other.failure_stage) {}
++          failure_stage(other.failure_stage),
++          trace_span(other.trace_span) {}
+ 
+     TaskInfo& operator=(const TaskInfo& other) {
+         if (this != &other) {
+@@ -185,6 +189,7 @@ struct TaskInfo {
+             attempt_type = other.attempt_type;
+             attempt_active = other.attempt_active;
+             failure_stage = other.failure_stage;
++            trace_span = other.trace_span;
+         }
+         return *this;
+     }
+@@ -216,6 +221,7 @@ struct TaskInfo {
+             attempt_type = other.attempt_type;
+             attempt_active = other.attempt_active;
+             failure_stage = other.failure_stage;
++            trace_span = other.trace_span;
+         }
+         return *this;
+     }
+@@ -456,6 +462,9 @@ class TransferEngineImpl {
+ 
+     Status commitPreparedSubmit(Batch* batch, const PreparedSubmit& prepared);
+ 
++    void recordPreparedSubmit(Batch* batch, const PreparedSubmit& prepared);
++    void recordTraceCompletion(TaskInfo& task, TransferStatusEnum status);
++
+     void attachProgressNotifier(Batch* batch, Transport::SubBatchRef sub_batch);
+ 
+     uint64_t nextBatchToken();
+@@ -585,6 +594,7 @@ class TransferEngineImpl {
+     uint16_t port_;
+     bool ipv6_;
+     std::string local_segment_name_;
++    std::unique_ptr<TransferEventRecorder> event_recorder_;
+ 
+     std::unique_ptr<ProxyManager> staging_proxy_;
+     bool merge_requests_;
+diff --git a/mooncake-transfer-engine/tent/src/runtime/segment_manager.cpp b/mooncake-transfer-engine/tent/src/runtime/segment_manager.cpp
+index 61811719..598e6e2c 100644
+--- a/mooncake-transfer-engine/tent/src/runtime/segment_manager.cpp
++++ b/mooncake-transfer-engine/tent/src/runtime/segment_manager.cpp
+@@ -59,6 +59,12 @@ Status SegmentManager::openRemote(SegmentID &handle,
+     return Status::OK();
+ }
+ 
++std::string SegmentManager::lookupSegmentName(SegmentID handle) {
++    RWSpinlock::ReadGuard guard(lock_);
++    auto it = id_to_name_map_.find(handle);
++    return it == id_to_name_map_.end() ? std::string() : it->second;
++}
++
+ Status SegmentManager::closeRemote(SegmentID handle) {
+     RWSpinlock::WriteGuard guard(lock_);
+     if (!id_to_name_map_.count(handle))
+diff --git a/mooncake-transfer-engine/tent/src/runtime/transfer_engine_impl.cpp b/mooncake-transfer-engine/tent/src/runtime/transfer_engine_impl.cpp
+index 7371be09..5c4f4f49 100644
+--- a/mooncake-transfer-engine/tent/src/runtime/transfer_engine_impl.cpp
++++ b/mooncake-transfer-engine/tent/src/runtime/transfer_engine_impl.cpp
+@@ -70,6 +70,7 @@ struct Batch {
+     size_t runtime_refs{0};
+     bool free_requested{false};
+     uint64_t queue_token{0};
++    uint64_t trace_batch_id{0};
+     // Consecutive lazyFreeBatch passes that failed to reclaim this batch
+     // (poll error or queue retire error). Reset when a pass observes the
+     // batch healthy (PENDING). At kMaxReclaimAttempts the batch is marked
+@@ -530,6 +531,9 @@ Status TransferEngineImpl::construct() {
+         }
+     }
+ 
++    event_recorder_ =
++        TransferEventRecorder::fromEnvironment(local_segment_name_);
++
+     if (enable_progress_worker_) {
+         progress_worker_ = std::make_unique<ProgressWorker>(
+             this, runtime_queue_config_.enabled
+@@ -629,6 +633,11 @@ Status TransferEngineImpl::deconstruct() {
+         std::unordered_set<Batch*> released_batches;
+         auto release_batch = [&](Batch* batch) {
+             if (!released_batches.insert(batch).second) return;
++            if (event_recorder_) {
++                for (auto& task : batch->task_list)
++                    event_recorder_->finish(task.trace_span, "unobserved",
++                                            transportTypeName(task.type));
++            }
+             for (size_t type = 0; type < kSupportedTransportTypes; ++type) {
+                 auto& transport = transport_list_[type];
+                 auto& sub_batch = batch->sub_batch[type];
+@@ -686,6 +695,7 @@ Status TransferEngineImpl::deconstruct() {
+         }
+     }
+ 
++    event_recorder_.reset();
+     progress_worker_.reset();
+     local_segment_tracker_.reset();
+     if (metadata_) {
+@@ -1086,6 +1096,7 @@ BatchID TransferEngineImpl::allocateBatch(size_t batch_size) {
+     Batch* batch = Slab<Batch>::Get().allocate();
+     if (!batch) return (BatchID)0;
+     batch->max_size = batch_size;
++    if (event_recorder_) batch->trace_batch_id = event_recorder_->nextBatchId();
+     batch->task_list.reserve(batch_size);
+     BatchID batch_id = (BatchID)batch;
+     // Registry insert under the batch's own shard; no global lock.
+@@ -1615,6 +1626,7 @@ struct TransferEngineImpl::PreparedSubmit {
+         std::vector<std::string> staging_params;
+     };
+ 
++    bool trace_internal{false};
+     std::chrono::steady_clock::time_point submit_time{};
+     LogicalTransferRuntimePolicy runtime_policy;
+     std::vector<Task> tasks;
+@@ -2096,6 +2108,8 @@ Status TransferEngineImpl::commitPreparedSubmit(
+     batch->task_list.insert(batch->task_list.end(), prepared.tasks.size(),
+                             TaskInfo{});
+ 
++    recordPreparedSubmit(batch, prepared);
++
+     std::unordered_map<size_t, size_t> owner_task_id_by_merged_task;
+     std::unordered_map<size_t, std::vector<size_t>>
+         public_tasks_by_physical_owner;
+@@ -2341,6 +2355,8 @@ Status TransferEngineImpl::enqueuePreparedSubmit(Batch* batch,
+         task.derived = task_plan.task_id != owner.owner_task_id;
+     }
+ 
++    recordPreparedSubmit(batch, prepared);
++
+     for (size_t i = 0; i < admitted_owner_ids.size(); ++i) {
+         QueuedOwnerState queued;
+         queued.batch = batch;
+@@ -2377,6 +2393,8 @@ Status TransferEngineImpl::finishQueuedOwner(
+         queued.in_dispatch_window = false;
+     }
+     for (const auto task_id : queued.public_task_ids) {
++        recordTraceCompletion(queued.batch->task_list[task_id],
++                              terminal_status);
+         queued.batch->task_list[task_id].status = terminal_status;
+     }
+     queued_owners_.erase(queued_it);
+@@ -2396,6 +2414,7 @@ Status TransferEngineImpl::cancelQueuedOwner(QueueOwnerId owner_id) {
+     for (const auto task_id : queued_it->second.public_task_ids) {
+         auto& task = queued_it->second.batch->task_list[task_id];
+         task.cancel_requested = true;
++        recordTraceCompletion(task, CANCELED);
+         task.status = CANCELED;
+     }
+     queued_owners_.erase(queued_it);
+@@ -2582,6 +2601,7 @@ Status TransferEngineImpl::submitTransfer(
+     const size_t start_task_id = batch_ref.get()->task_list.size();
+     PreparedSubmit prepared;
+     CHECK_STATUS(prepareSubmit(batch_ref.get(), request_list, prepared));
++    prepared.trace_internal = owner_kind == QueueOwnerKind::StagingInternal;
+ 
+     if (shouldQueueSubmit(prepared, owner_kind)) {
+         CHECK_STATUS(
+@@ -2723,6 +2743,7 @@ Status TransferEngineImpl::cancelTransfer(BatchID batch_id, size_t task_id) {
+     }
+     if (owner.type == UNSPEC) {
+         owner.cancel_requested = true;
++        recordTraceCompletion(owner, CANCELED);
+         owner.status = CANCELED;
+         return Status::OK();
+     }
+@@ -3418,9 +3439,60 @@ Status TransferEngineImpl::unlockStageBuffer(uint64_t addr) {
+     return staging_proxy_->unpinStageBuffer(addr);
+ }
+ 
++void TransferEngineImpl::recordPreparedSubmit(Batch* batch,
++                                              const PreparedSubmit& prepared) {
++    if (!event_recorder_) return;
++    std::vector<std::vector<TransferEventSpan::Request>> requests(
++        prepared.owners.size());
++    for (const auto& task : prepared.tasks)
++        requests[task.merged_task_index].push_back(
++            {task.task_id, task.public_length});
++    for (size_t i = 0; i < prepared.owners.size(); ++i) {
++        const auto& owner = prepared.owners[i];
++        const auto target = owner.request.target_id;
++        // Handle-to-name lookup only: recording must never fetch metadata.
++        const auto peer =
++            target == LOCAL_SEGMENT_ID
++                ? local_segment_name_
++                : metadata_->segmentManager().lookupSegmentName(target);
++        auto span = event_recorder_->begin(
++            batch->trace_batch_id, target, peer,
++            owner.request.opcode == Request::READ ? "read" : "write",
++            prepared.trace_internal, std::move(requests[i]));
++        batch->task_list[owner.owner_task_id].trace_span = span;
++        for (auto id : owner.derived_task_ids)
++            batch->task_list[id].trace_span = span;
++    }
++}
++
++void TransferEngineImpl::recordTraceCompletion(TaskInfo& task,
++                                               TransferStatusEnum status) {
++    if (!event_recorder_ || status == PENDING) return;
++    const char* name = "unknown";
++    switch (status) {
++        case COMPLETED:
++            name = "completed";
++            break;
++        case FAILED:
++            name = "failed";
++            break;
++        case CANCELED:
++            name = "canceled";
++            break;
++        case TIMEOUT:
++            name = "timeout";
++            break;
++        default:
++            break;
++    }
++    event_recorder_->finish(task.trace_span, name,
++                            transportTypeName(task.type));
++}
++
+ void TransferEngineImpl::recordTaskCompletionMetrics(
+     TaskInfo& task, TransferStatusEnum prev_status,
+     TransferStatusEnum new_status) {
++    recordTraceCompletion(task, new_status);
+ #if TENT_METRICS_ENABLED
+     if (prev_status == PENDING && new_status != PENDING && !task.derived) {
+         auto end_time = std::chrono::steady_clock::now();
+diff --git a/mooncake-transfer-engine/tent/tests/CMakeLists.txt b/mooncake-transfer-engine/tent/tests/CMakeLists.txt
+index b7aef776..e0eef001 100644
+--- a/mooncake-transfer-engine/tent/tests/CMakeLists.txt
++++ b/mooncake-transfer-engine/tent/tests/CMakeLists.txt
+@@ -808,3 +808,16 @@ target_include_directories(tent_segment_desc_retry_test
+                            PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../include)
+ add_test(NAME tent_segment_desc_retry_test COMMAND tent_segment_desc_retry_test)
+ set_tests_properties(tent_segment_desc_retry_test PROPERTIES TIMEOUT 60)
++
++# Optional event recorder: exercise actual engine merge/queue/terminal paths
++# even when aggregate metrics are compiled out.
++add_executable(tent_transfer_event_recorder_test transfer_event_recorder_test.cpp)
++target_link_libraries(tent_transfer_event_recorder_test
++                      PRIVATE gtest gtest_main tent_link_group)
++if(TARGET asio_shared)
++  target_link_libraries(tent_transfer_event_recorder_test PRIVATE asio_shared)
++endif()
++target_include_directories(tent_transfer_event_recorder_test
++                           PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../include)
++add_test(NAME tent_transfer_event_recorder_test
++         COMMAND tent_transfer_event_recorder_test)
+diff --git a/mooncake-transfer-engine/tent/TRANSFER_EVENTS.md b/mooncake-transfer-engine/tent/TRANSFER_EVENTS.md
+new file mode 100644
+index 00000000..88cf42dd
+--- /dev/null
++++ b/mooncake-transfer-engine/tent/TRANSFER_EVENTS.md
+@@ -0,0 +1,128 @@
++# Transfer event recording
++
++The TENT backend can record original Transfer Engine request descriptors at
++admission and observed completion. Recording is disabled by default and works
++with `TENT_METRICS_ENABLED=OFF`. The classic Transfer Engine backend is not
++instrumented by this recorder.
++
++## Enable
++
++Build TENT normally, create a directory, and set the environment before creating
++the engine:
++
++```bash
++mkdir -p /path/to/events
++export TENT_TRACE_DIR=/path/to/events
++export TENT_TRACE_BUFFER_RECORDS=65536  # optional
++# Run your existing application or trace replay driver here.
++```
++
++Set this on every process that initiates transfers. No replay-driver changes
++are required. The directory must exist and be writable in the process/container.
++Each engine creates a private, unique
++`tent-events-HOST-PID-RANDOM.jsonl` file and prints its path to stderr. Multiple
++engines, processes and hosts can share the directory without overwriting files.
++An invalid setting or file-open failure prints a diagnostic and disables
++recording without preventing engine startup.
++
++For the supplied two-node Slurm launcher, `TRACE=1` creates and exports a shared
++`events/` directory under the benchmark result directory. Rebuild before using
++this with previously built binaries.
++
++## JSONL schema (version 1)
++
++Each file starts with `trace_start` (initiator segment name, PID, buffer size).
++Every admitted original descriptor produces a `submit` record and, when its
++terminal state is observed, a `complete` record:
++
++| Field | Meaning |
++| --- | --- |
++| `timestamp_ns` | Unix wall-clock nanoseconds, captured at the engine hook |
++| `monotonic_ns` | Local steady-clock nanoseconds; use for local ordering/durations |
++| `initiator`, `peer` | Local and target segment names, usually host:port with p2p metadata |
++| `target_id` | Engine-local segment handle; peer is empty if the handle is unknown |
++| `batch_id` | Recorder-assigned batch ID, never a memory address |
++| `request_id` | Recorder-assigned original descriptor ID |
++| `task_index` | Original descriptor index within the batch, including appended submissions |
++| `operation` | `read` or `write`, from the initiator's perspective |
++| `bytes` | Original requested payload bytes, even if merged with adjacent requests |
++| `scope` | `user` or `staging_internal` |
++| `merged_request_count` | Number of original descriptors sharing this owner; repeated on each descriptor |
++| `status` | Completion only: `completed`, `failed`, `canceled`, `timeout`, or `unknown` |
++| `transport` | Completion only: final engine transport attribution |
++| `duration_ns` | Completion only: local monotonic time since the admission record |
++
++Join records by **file + request_id**; batch/request IDs are unique only within
++one engine's file. A read pulls bytes **peer → initiator**; a write pushes bytes
++**initiator → peer**. One-sided RDMA does not generate a matching target-side
++receive event at this boundary. The recorder does not capture NIC work requests,
++packet counts, transport attempts, or CPU instructions.
++
++Requests rejected before admission produce no records. Submission timestamps
++are captured after validation/route preparation and before dispatch, so they
++exclude preparation time and include any admission-queue wait after acceptance.
++Completion timestamps indicate when the engine observes terminal status,
++including its polling delay, rather than NIC hardware completion time.
++
++Merging preserves one record per original descriptor. Retries do not create
++additional logical submissions or completions. Polling a request repeatedly,
++polling a merged alias, and freeing a batch do not duplicate completions.
++Staging's internal child requests are tagged separately: filter `scope ==
++"user"` for logical workload counts. Request/session IDs owned by the application
++are not available at this engine boundary; recorder request IDs are not replay
++request IDs.
++
++On engine teardown, descriptors with no observed terminal state get `abandoned`
++records with `status: "unobserved"`; these are **not successful completions**.
++A clean recorder shutdown drains the queue and writes `trace_end` with
++`written_records` (submit/complete/abandoned records) and `dropped_records`.
++Require that footer and zero drops when checking a complete trace. A process
++killed abruptly can lose queued/buffered records and have no footer.
++
++## Analyze alongside a separate replay driver
++
++Keep the workload's scheduling, session affinity and timing in the driver. This
++recorder observes whatever that driver actually submits. For each time window:
++
++- Count `submit` records with `scope == "user"` for the number of requested
++  transfer descriptors, grouped by initiator, peer and operation.
++- Sum their `bytes` for offered payload volume. Do not sum
++  `merged_request_count`: it repeats on each original descriptor.
++- Sum `bytes` on `complete` records with `status == "completed"` and user scope
++  for completed payload volume, then divide by the window duration for GB/s.
++  This assigns each entire request to its completion window; it does not measure
++  continuous wire utilization or partial bytes from failed requests.
++- Join submit/complete records to plot outstanding requests and local durations.
++  File order across submitting threads need not equal timestamp order; sort by
++  the clock appropriate to the analysis.
++
++Use synchronized host wall clocks to compare events across nodes; the recorder
++does not synchronize them. Steady-clock values should only be compared locally.
++
++## Overhead and limits
++
++JSON serialization and file writes run on a background thread. Producers enqueue
++in-memory events through a short mutex-protected queue. There are no per-request
++file writes or metadata network lookups on the submission/polling threads.
++Tracing still adds allocations, clock reads, locks and CPU/I/O load; run without
++tracing when measuring baseline bandwidth.
++
++The queue is bounded in original descriptor records (default 65536). The writer
++may hold one additional drained buffer of that size while formatting it. An
++event group that will not fit is dropped, without waiting for disk I/O. Drops
++are counted in the footer and reported to stderr on shutdown; write errors also
++emit diagnostics. Increase the buffer or reduce the trace workload if records
++are dropped. Files are flushed after draining and at least every 250 ms while
++idle, but are not fsynced and have no rotation or size limit.
++
++## Tests
++
++With `BUILD_UNIT_TESTS=ON`, build `tent_transfer_event_recorder_test` and run:
++
++```bash
++ctest --test-dir /path/to/build -R '^tent_transfer_event_recorder_test$' --output-on-failure
++```
++
++The tests exercise the real engine with a fake transport (no RDMA/GPU hardware
++required), plus concurrent recording, overflow accounting and disabled/error
++configuration. They also run with aggregate metrics compiled out.
+diff --git a/mooncake-transfer-engine/tent/include/tent/runtime/transfer_event_recorder.h b/mooncake-transfer-engine/tent/include/tent/runtime/transfer_event_recorder.h
+new file mode 100644
+index 00000000..9b70c292
+--- /dev/null
++++ b/mooncake-transfer-engine/tent/include/tent/runtime/transfer_event_recorder.h
+@@ -0,0 +1,91 @@
++// Copyright 2026 KVCache.AI
++// SPDX-License-Identifier: Apache-2.0
++
++#pragma once
++
++#include <atomic>
++#include <condition_variable>
++#include <cstdint>
++#include <cstdio>
++#include <deque>
++#include <memory>
++#include <mutex>
++#include <string>
++#include <thread>
++#include <vector>
++
++namespace mooncake {
++namespace tent {
++
++// One span per merged owner; each original API descriptor keeps its own ID.
++// Shared by derived tasks so polling an alias cannot duplicate completions.
++struct TransferEventSpan {
++    struct Request {
++        uint64_t task_index;
++        uint64_t bytes;
++        uint64_t request_id{0};
++    };
++    uint64_t batch_id{0};
++    uint64_t target_id{0};
++    uint64_t submit_wall_ns{0};
++    uint64_t submit_mono_ns{0};
++    std::string peer;
++    std::string operation;
++    bool internal{false};
++    std::vector<Request> requests;
++    std::atomic<bool> finished{false};
++};
++
++class TransferEventRecorder {
++   public:
++    // Unset/empty TENT_TRACE_DIR disables recording. Directory must exist.
++    // Failure to open a trace is reported but never fails engine startup.
++    static std::unique_ptr<TransferEventRecorder> fromEnvironment(
++        const std::string& initiator);
++    static std::unique_ptr<TransferEventRecorder> create(
++        const std::string& directory, const std::string& initiator,
++        size_t capacity = 65536);
++    ~TransferEventRecorder();
++
++    uint64_t nextBatchId() { return next_batch_id_.fetch_add(1); }
++    std::shared_ptr<TransferEventSpan> begin(
++        uint64_t batch_id, uint64_t target_id, std::string peer,
++        std::string operation, bool internal,
++        std::vector<TransferEventSpan::Request> requests);
++    void finish(const std::shared_ptr<TransferEventSpan>& span,
++                const std::string& status, const std::string& transport);
++    const std::string& path() const { return path_; }
++
++   private:
++    struct Event {
++        std::shared_ptr<TransferEventSpan> span;
++        uint64_t wall_ns;
++        uint64_t mono_ns;
++        std::string status;
++        std::string transport;
++    };
++    TransferEventRecorder(FILE* file, std::string path, std::string initiator,
++                          size_t capacity);
++    void enqueue(Event event);
++    void run();
++    void writeLine(const std::string& line);
++
++    FILE* file_;
++    const std::string path_;
++    const std::string initiator_;
++    const size_t capacity_;
++    std::atomic<uint64_t> next_batch_id_{1};
++    std::atomic<uint64_t> next_request_id_{1};
++    std::mutex mutex_;
++    std::condition_variable ready_;
++    std::deque<Event> queue_;
++    size_t queued_records_{0};
++    uint64_t dropped_records_{0};
++    uint64_t written_records_{0};
++    bool stopping_{false};
++    bool write_failed_{false};
++    std::thread writer_;
++};
++
++}  // namespace tent
++}  // namespace mooncake
+diff --git a/mooncake-transfer-engine/tent/src/runtime/transfer_event_recorder.cpp b/mooncake-transfer-engine/tent/src/runtime/transfer_event_recorder.cpp
+new file mode 100644
+index 00000000..adc31471
+--- /dev/null
++++ b/mooncake-transfer-engine/tent/src/runtime/transfer_event_recorder.cpp
+@@ -0,0 +1,234 @@
++// Copyright 2026 KVCache.AI
++// SPDX-License-Identifier: Apache-2.0
++
++#include "tent/runtime/transfer_event_recorder.h"
++
++#include <unistd.h>
++
++#include <chrono>
++#include <cstdlib>
++#include <limits>
++#include <stdexcept>
++#include <utility>
++
++#include "tent/thirdparty/nlohmann/json.h"
++
++namespace mooncake {
++namespace tent {
++namespace {
++template <class Clock>
++uint64_t nowNs() {
++    return std::chrono::duration_cast<std::chrono::nanoseconds>(
++               Clock::now().time_since_epoch())
++        .count();
++}
++}  // namespace
++
++std::unique_ptr<TransferEventRecorder> TransferEventRecorder::fromEnvironment(
++    const std::string& initiator) {
++    const char* directory = std::getenv("TENT_TRACE_DIR");
++    if (!directory || !*directory) return nullptr;
++    size_t capacity = 65536;
++    const char* value = std::getenv("TENT_TRACE_BUFFER_RECORDS");
++    if (value) {
++        try {
++            const std::string text(value);
++            size_t end = 0;
++            auto parsed = std::stoull(text, &end);
++            if (text.empty() ||
++                text.find_first_not_of("0123456789") != std::string::npos ||
++                end != text.size() || parsed == 0 ||
++                parsed > std::numeric_limits<size_t>::max())
++                throw std::invalid_argument("invalid capacity");
++            capacity = static_cast<size_t>(parsed);
++        } catch (...) {
++            std::fprintf(stderr,
++                         "TENT trace disabled: invalid "
++                         "TENT_TRACE_BUFFER_RECORDS\n");
++            return nullptr;
++        }
++    }
++    return create(directory, initiator, capacity);
++}
++
++std::unique_ptr<TransferEventRecorder> TransferEventRecorder::create(
++    const std::string& directory, const std::string& initiator,
++    size_t capacity) {
++    if (!capacity) return nullptr;
++    char host[256]{};
++    if (gethostname(host, sizeof(host) - 1) != 0) host[0] = '\0';
++    std::string pattern = directory + "/tent-events-" + host + "-" +
++                          std::to_string(getpid()) + "-XXXXXX.jsonl";
++    std::vector<char> filename(pattern.begin(), pattern.end());
++    filename.push_back('\0');
++    int fd = mkstemps(filename.data(), 6);
++    if (fd < 0) {
++        std::fprintf(stderr, "TENT trace disabled: cannot create %s\n",
++                     pattern.c_str());
++        return nullptr;
++    }
++    FILE* file = fdopen(fd, "w");
++    if (!file) {
++        close(fd);
++        unlink(filename.data());
++        std::fprintf(stderr, "TENT trace disabled: fdopen failed\n");
++        return nullptr;
++    }
++    try {
++        auto recorder =
++            std::unique_ptr<TransferEventRecorder>(new TransferEventRecorder(
++                file, filename.data(), initiator, capacity));
++        std::fprintf(stderr, "TENT transfer events: %s\n", filename.data());
++        return recorder;
++    } catch (const std::exception& e) {
++        fclose(file);
++        std::fprintf(stderr, "TENT trace disabled: %s\n", e.what());
++        return nullptr;
++    }
++}
++
++TransferEventRecorder::TransferEventRecorder(FILE* file, std::string path,
++                                             std::string initiator,
++                                             size_t capacity)
++    : file_(file),
++      path_(std::move(path)),
++      initiator_(std::move(initiator)),
++      capacity_(capacity),
++      writer_(&TransferEventRecorder::run, this) {}
++
++TransferEventRecorder::~TransferEventRecorder() {
++    {
++        std::lock_guard<std::mutex> lock(mutex_);
++        stopping_ = true;
++    }
++    ready_.notify_one();
++    writer_.join();
++    if (fclose(file_) != 0) write_failed_ = true;
++    if (dropped_records_ || write_failed_)
++        std::fprintf(stderr,
++                     "TENT trace incomplete: %llu dropped records, "
++                     "write_failed=%d, file=%s\n",
++                     static_cast<unsigned long long>(dropped_records_),
++                     write_failed_, path_.c_str());
++}
++
++std::shared_ptr<TransferEventSpan> TransferEventRecorder::begin(
++    uint64_t batch_id, uint64_t target_id, std::string peer,
++    std::string operation, bool internal,
++    std::vector<TransferEventSpan::Request> requests) {
++    auto span = std::make_shared<TransferEventSpan>();
++    span->batch_id = batch_id;
++    span->target_id = target_id;
++    span->peer = std::move(peer);
++    span->operation = std::move(operation);
++    span->internal = internal;
++    span->requests = std::move(requests);
++    for (auto& request : span->requests)
++        request.request_id = next_request_id_.fetch_add(1);
++    span->submit_wall_ns = nowNs<std::chrono::system_clock>();
++    span->submit_mono_ns = nowNs<std::chrono::steady_clock>();
++    enqueue({span, span->submit_wall_ns, span->submit_mono_ns, "", ""});
++    return span;
++}
++
++void TransferEventRecorder::finish(
++    const std::shared_ptr<TransferEventSpan>& span, const std::string& status,
++    const std::string& transport) {
++    if (!span || span->finished.exchange(true)) return;
++    enqueue({span, nowNs<std::chrono::system_clock>(),
++             nowNs<std::chrono::steady_clock>(), status, transport});
++}
++
++void TransferEventRecorder::enqueue(Event event) {
++    {
++        std::lock_guard<std::mutex> lock(mutex_);
++        const auto count = event.span->requests.size();
++        if (count > capacity_ - queued_records_) {
++            dropped_records_ += count;
++            return;
++        }
++        queued_records_ += count;
++        queue_.push_back(std::move(event));
++    }
++    ready_.notify_one();
++}
++
++void TransferEventRecorder::writeLine(const std::string& line) {
++    if (write_failed_) return;
++    if (fwrite(line.data(), 1, line.size(), file_) != line.size() ||
++        fputc('\n', file_) == EOF) {
++        write_failed_ = true;
++        std::fprintf(stderr, "TENT trace write failed: %s\n", path_.c_str());
++    }
++}
++
++void TransferEventRecorder::run() {
++    using nlohmann::json;
++    try {
++        writeLine(json({{"event", "trace_start"},
++                        {"schema_version", 1},
++                        {"initiator", initiator_},
++                        {"pid", getpid()},
++                        {"buffer_records", capacity_}})
++                      .dump());
++        for (;;) {
++            std::deque<Event> events;
++            bool stop;
++            {
++                std::unique_lock<std::mutex> lock(mutex_);
++                ready_.wait_for(lock, std::chrono::milliseconds(250), [this] {
++                    return stopping_ || !queue_.empty();
++                });
++                events.swap(queue_);
++                queued_records_ = 0;
++                stop = stopping_;
++            }
++            for (const auto& event : events) {
++                const auto& span = *event.span;
++                const bool complete = !event.status.empty();
++                for (const auto& request : span.requests) {
++                    json record = {
++                        {"schema_version", 1},
++                        {"event",
++                         complete ? (event.status == "unobserved" ? "abandoned"
++                                                                  : "complete")
++                                  : "submit"},
++                        {"timestamp_ns", event.wall_ns},
++                        {"monotonic_ns", event.mono_ns},
++                        {"initiator", initiator_},
++                        {"peer", span.peer},
++                        {"target_id", span.target_id},
++                        {"batch_id", span.batch_id},
++                        {"request_id", request.request_id},
++                        {"task_index", request.task_index},
++                        {"operation", span.operation},
++                        {"bytes", request.bytes},
++                        {"scope", span.internal ? "staging_internal" : "user"},
++                        {"merged_request_count", span.requests.size()}};
++                    if (complete) {
++                        record["status"] = event.status;
++                        record["transport"] = event.transport;
++                        record["duration_ns"] =
++                            event.mono_ns - span.submit_mono_ns;
++                    }
++                    writeLine(record.dump(-1, ' ', false,
++                                          json::error_handler_t::replace));
++                    if (!write_failed_) ++written_records_;
++                }
++            }
++            if (fflush(file_) != 0) write_failed_ = true;
++            if (stop) break;
++        }
++        writeLine(json({{"event", "trace_end"},
++                        {"schema_version", 1},
++                        {"written_records", written_records_},
++                        {"dropped_records", dropped_records_}})
++                      .dump());
++    } catch (const std::exception& e) {
++        write_failed_ = true;
++        std::fprintf(stderr, "TENT trace writer failed: %s\n", e.what());
++    }
++}
++
++}  // namespace tent
++}  // namespace mooncake
+diff --git a/mooncake-transfer-engine/tent/tests/transfer_event_recorder_test.cpp b/mooncake-transfer-engine/tent/tests/transfer_event_recorder_test.cpp
+new file mode 100644
+index 00000000..51f64fcd
+--- /dev/null
++++ b/mooncake-transfer-engine/tent/tests/transfer_event_recorder_test.cpp
+@@ -0,0 +1,510 @@
++// Copyright 2026 KVCache.AI
++//
++// Licensed under the Apache License, Version 2.0 (the "License");
++// you may not use this file except in compliance with the License.
++// You may obtain a copy of the License at
++//
++//     http://www.apache.org/licenses/LICENSE-2.0
++//
++// Unless required by applicable law or agreed to in writing, software
++// distributed under the License is distributed on an "AS IS" BASIS,
++// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++// See the License for the specific language governing permissions and
++// limitations under the License.
++
++#include <gtest/gtest.h>
++#include <filesystem>
++#include <fstream>
++#include <map>
++#include <unistd.h>
++#include "tent/thirdparty/nlohmann/json.h"
++
++#include <atomic>
++#include <chrono>
++#include <cstdlib>
++#include <functional>
++#include <memory>
++#include <string>
++#include <thread>
++#include <vector>
++
++#include "tent/common/config.h"
++#include "tent/common/types.h"
++#if TENT_METRICS_ENABLED
++#include "tent/metrics/tent_metrics.h"
++#endif
++#include "tent/runtime/transfer_engine_impl.h"
++#include "tent/runtime/transport.h"
++
++namespace mooncake {
++namespace tent {
++namespace {
++
++class FakeSubBatch : public Transport::SubBatch {
++   public:
++    size_t size() const override { return task_count; }
++
++    size_t task_count = 0;
++    std::vector<Request> requests;
++    std::vector<TransferStatus> statuses;
++};
++
++class FakeTransport : public Transport {
++   public:
++    explicit FakeTransport(TransportType self_type) : self_type_(self_type) {
++        caps.dram_to_dram = true;
++    }
++
++    std::atomic<int> submit_calls{0};
++    std::atomic<TransferStatusEnum> outcome{COMPLETED};
++    bool fail_submit{false};
++
++    Status install(std::string&, std::shared_ptr<ControlService>,
++                   std::shared_ptr<Topology>,
++                   std::shared_ptr<Config>) override {
++        return Status::OK();
++    }
++
++    Status allocateSubBatch(SubBatchRef& batch, size_t) override {
++        batch = new FakeSubBatch();
++        return Status::OK();
++    }
++
++    Status freeSubBatch(SubBatchRef& batch) override {
++        delete static_cast<FakeSubBatch*>(batch);
++        batch = nullptr;
++        return Status::OK();
++    }
++
++    Status submitTransferTasks(SubBatchRef batch,
++                               const std::vector<Request>& requests) override {
++        ++submit_calls;
++        if (fail_submit)
++            return Status::InternalError("injected submit failure");
++        auto* fake = static_cast<FakeSubBatch*>(batch);
++        for (const auto& request : requests) {
++            fake->requests.push_back(request);
++            fake->statuses.push_back(
++                {TransferStatusEnum::COMPLETED, request.length});
++            ++fake->task_count;
++        }
++        batch->notifyProgress();
++        return Status::OK();
++    }
++
++    Status getTransferStatus(SubBatchRef batch, int task_id,
++                             TransferStatus& status) override {
++        auto* fake = static_cast<FakeSubBatch*>(batch);
++        if (task_id < 0 || task_id >= (int)fake->statuses.size()) {
++            return Status::InvalidArgument("bad task_id" LOC_MARK);
++        }
++        status = fake->statuses[task_id];
++        status.s = outcome.load();
++        return Status::OK();
++    }
++
++    Status addMemoryBuffer(BufferDesc& desc, const MemoryOptions&) override {
++        desc.transports.push_back(self_type_);
++        return Status::OK();
++    }
++
++    Status addMemoryBuffer(std::vector<BufferDesc>& desc_list,
++                           const MemoryOptions& options) override {
++        for (auto& desc : desc_list) {
++            auto s = addMemoryBuffer(desc, options);
++            if (!s.ok()) return s;
++        }
++        return Status::OK();
++    }
++
++    Status removeMemoryBuffer(BufferDesc&) override { return Status::OK(); }
++
++    Status allocateLocalMemory(void** addr, size_t size,
++                               MemoryOptions&) override {
++        *addr = std::malloc(size);
++        return *addr ? Status::OK()
++                     : Status::InternalError("malloc failed" LOC_MARK);
++    }
++
++    Status freeLocalMemory(void* addr, size_t) override {
++        std::free(addr);
++        return Status::OK();
++    }
++
++    bool warmupMemory(void*, size_t) override { return false; }
++
++    const char* getName() const override { return "<fake-trace>"; }
++
++   private:
++    TransportType self_type_;
++};
++
++std::shared_ptr<Config> makeTraceConfig(size_t max_dispatch_owners,
++                                        size_t max_dispatch_bytes) {
++    auto cfg = std::make_shared<Config>();
++    cfg->set("metadata_type", "p2p");
++    cfg->set("metadata_servers", "");
++    cfg->set("rpc_server_hostname", "127.0.0.1");
++    cfg->set("rpc_server_port", "0");
++    cfg->set("log_level", "warning");
++    cfg->set("merge_requests", false);
++    cfg->set("enable_runtime_queue", true);
++    cfg->set("runtime_queue/max_outstanding_owners", 16UL);
++    cfg->set("runtime_queue/max_outstanding_bytes", 1UL << 20);
++    cfg->set("runtime_queue/max_dispatch_owners", max_dispatch_owners);
++    cfg->set("runtime_queue/max_dispatch_bytes", max_dispatch_bytes);
++    cfg->set("runtime_queue/staging_owner_reserve", 0UL);
++    cfg->set("runtime_queue/staging_byte_reserve", 0UL);
++    cfg->set("runtime_queue/progress_fallback_interval_us", 50000UL);
++
++    cfg->set("transports/tcp/enable", false);
++    cfg->set("transports/shm/enable", false);
++    cfg->set("transports/rdma/enable", false);
++    cfg->set("transports/io_uring/enable", false);
++    cfg->set("transports/nvlink/enable", false);
++    cfg->set("transports/mnnvl/enable", false);
++    cfg->set("transports/gds/enable", false);
++    cfg->set("transports/ascend_direct/enable", false);
++    return cfg;
++}
++
++void installFakeRdma(TransferEngineImpl& engine,
++                     const std::shared_ptr<FakeTransport>& fake) {
++    std::string seg_name = engine.getSegmentName();
++    ASSERT_TRUE(fake->install(seg_name, nullptr, nullptr, nullptr).ok());
++    engine.swapTransportForTest(RDMA, fake);
++}
++
++Request makeLocalWrite(uint8_t* ptr, size_t length) {
++    Request request;
++    request.opcode = Request::WRITE;
++    request.source = ptr;
++    request.target_id = LOCAL_SEGMENT_ID;
++    request.target_offset = reinterpret_cast<uint64_t>(ptr);
++    request.length = length;
++    request.transport_hint = RDMA;
++    return request;
++}
++
++using nlohmann::json;
++
++class TransferEventTest : public ::testing::Test {
++   protected:
++    std::string directory;
++    std::string old_directory;
++    std::string old_capacity;
++    bool had_directory{false};
++    bool had_capacity{false};
++
++    void SetUp() override {
++        char path[] = "/tmp/tent-event-test-XXXXXX";
++        ASSERT_NE(mkdtemp(path), nullptr);
++        directory = path;
++        if (auto value = getenv("TENT_TRACE_DIR")) {
++            had_directory = true;
++            old_directory = value;
++        }
++        if (auto value = getenv("TENT_TRACE_BUFFER_RECORDS")) {
++            had_capacity = true;
++            old_capacity = value;
++        }
++        setenv("TENT_TRACE_DIR", directory.c_str(), 1);
++        unsetenv("TENT_TRACE_BUFFER_RECORDS");
++    }
++    void TearDown() override {
++        if (had_directory)
++            setenv("TENT_TRACE_DIR", old_directory.c_str(), 1);
++        else
++            unsetenv("TENT_TRACE_DIR");
++        if (had_capacity)
++            setenv("TENT_TRACE_BUFFER_RECORDS", old_capacity.c_str(), 1);
++        else
++            unsetenv("TENT_TRACE_BUFFER_RECORDS");
++        std::filesystem::remove_all(directory);
++    }
++    std::vector<json> records() {
++        std::vector<json> result;
++        for (const auto& file :
++             std::filesystem::directory_iterator(directory)) {
++            std::ifstream input(file.path());
++            std::string line;
++            while (std::getline(input, line))
++                result.push_back(json::parse(line));
++        }
++        return result;
++    }
++    void checkPairs(const std::vector<json>& rows, size_t count,
++                    const std::string& status) {
++        std::map<uint64_t, json> submitted, completed;
++        for (const auto& row : rows) {
++            if (row["event"] == "submit") {
++                EXPECT_TRUE(submitted.emplace(row["request_id"], row).second);
++            } else if (row["event"] == "complete") {
++                EXPECT_TRUE(completed.emplace(row["request_id"], row).second);
++                EXPECT_EQ(row["status"], status);
++            }
++        }
++        ASSERT_EQ(submitted.size(), count);
++        ASSERT_EQ(completed.size(), count);
++        for (const auto& [id, begin] : submitted) {
++            ASSERT_EQ(completed.count(id), 1);
++            const auto& end = completed.at(id);
++            EXPECT_EQ(begin["bytes"], end["bytes"]);
++            EXPECT_EQ(begin["batch_id"], end["batch_id"]);
++            EXPECT_EQ(begin["task_index"], end["task_index"]);
++            EXPECT_GE(end["monotonic_ns"].get<uint64_t>(),
++                      begin["monotonic_ns"].get<uint64_t>());
++            EXPECT_EQ(end["duration_ns"].get<uint64_t>(),
++                      end["monotonic_ns"].get<uint64_t>() -
++                          begin["monotonic_ns"].get<uint64_t>());
++        }
++    }
++};
++
++TEST_F(TransferEventTest, DisabledAndInvalidConfiguration) {
++    unsetenv("TENT_TRACE_DIR");
++    EXPECT_EQ(TransferEventRecorder::fromEnvironment("a"), nullptr);
++    setenv("TENT_TRACE_DIR", directory.c_str(), 1);
++    setenv("TENT_TRACE_BUFFER_RECORDS", "-1", 1);
++    EXPECT_EQ(TransferEventRecorder::fromEnvironment("a"), nullptr);
++    EXPECT_EQ(TransferEventRecorder::create(directory + "/missing", "a"),
++              nullptr);
++    EXPECT_TRUE(records().empty());
++}
++
++TEST_F(TransferEventTest, ConcurrentWritersAndDuplicateCompletion) {
++    auto recorder = TransferEventRecorder::create(directory, "node\"a\n");
++    ASSERT_NE(recorder, nullptr);
++    std::vector<std::thread> threads;
++    for (int t = 0; t < 8; ++t) {
++        threads.emplace_back([&] {
++            auto batch = recorder->nextBatchId();
++            for (int i = 0; i < 50; ++i) {
++                auto span = recorder->begin(batch, 7, "node-b", "read", false,
++                                            {{static_cast<uint64_t>(i), 4096}});
++                recorder->finish(span, "completed", "rdma");
++                recorder->finish(span, "failed", "tcp");
++            }
++        });
++    }
++    for (auto& thread : threads) thread.join();
++    recorder.reset();
++    auto rows = records();
++    checkPairs(rows, 400, "completed");
++    EXPECT_EQ(rows.back()["dropped_records"], 0);
++    EXPECT_EQ(rows.back()["written_records"], 800);
++}
++
++TEST_F(TransferEventTest, OverflowIsExplicitAndFilesAreUnique) {
++    auto recorder = TransferEventRecorder::create(directory, "a", 1);
++    auto other = TransferEventRecorder::create(directory, "a", 1);
++    ASSERT_NE(recorder, nullptr);
++    ASSERT_NE(other, nullptr);
++    EXPECT_NE(recorder->path(), other->path());
++    auto path = recorder->path();
++    auto span = recorder->begin(1, 2, "b", "write", false, {{0, 8}, {1, 8}});
++    recorder->finish(span, "completed", "rdma");
++    recorder.reset();
++    std::ifstream input(path);
++    json end;
++    std::string line;
++    while (std::getline(input, line)) end = json::parse(line);
++    EXPECT_EQ(end["event"], "trace_end");
++    EXPECT_EQ(end["dropped_records"], 4);
++    EXPECT_EQ(end["written_records"], 0);
++}
++
++TEST_F(TransferEventTest, MergedDescriptorsAndAppendKeepOriginalSizes) {
++    std::vector<uint8_t> buf(4096);
++    {
++        auto cfg = makeTraceConfig(4, 1UL << 20);
++        cfg->set("enable_runtime_queue", false);
++        cfg->set("merge_requests", true);
++        TransferEngineImpl engine(cfg);
++        ASSERT_TRUE(engine.available());
++        auto fake = std::make_shared<FakeTransport>(RDMA);
++        installFakeRdma(engine, fake);
++        ASSERT_TRUE(engine.registerLocalMemory(buf.data(), buf.size()).ok());
++        auto batch = engine.allocateBatch(4);
++        auto a = makeLocalWrite(buf.data(), 128);
++        auto b = makeLocalWrite(buf.data() + 128, 256);
++        ASSERT_TRUE(engine.submitTransfer(batch, {a, b}).ok());
++        TransferStatus status;
++        ASSERT_TRUE(engine.getTransferStatus(batch, 1, status).ok());
++        ASSERT_TRUE(engine.getTransferStatus(batch, status).ok());
++        ASSERT_EQ(status.s, COMPLETED);
++        a.opcode = Request::READ;
++        ASSERT_TRUE(engine.submitTransfer(batch, {a}).ok());
++        ASSERT_TRUE(engine.getTransferStatus(batch, status).ok());
++        ASSERT_EQ(status.s, COMPLETED);
++        ASSERT_TRUE(engine.getTransferStatus(batch, status).ok());
++        ASSERT_TRUE(engine.freeBatch(batch).ok());
++        ASSERT_TRUE(engine.unregisterLocalMemory(buf.data(), buf.size()).ok());
++    }
++    auto rows = records();
++    checkPairs(rows, 3, "completed");
++    size_t merged = 0, reads = 0;
++    for (const auto& row : rows) {
++        if (row["event"] != "submit") continue;
++        EXPECT_EQ(row["scope"], "user");
++        EXPECT_EQ(row["peer"], row["initiator"]);
++        if (row["operation"] == "read") ++reads;
++        if (row["merged_request_count"] == 2) ++merged;
++    }
++    EXPECT_EQ(merged, 2);
++    EXPECT_EQ(reads, 1);
++}
++
++TEST_F(TransferEventTest, QueueCompletionAndQueuedCancellation) {
++    std::vector<uint8_t> buf(4096);
++    {
++        auto cfg = makeTraceConfig(1, 1UL << 20);
++        TransferEngineImpl engine(cfg);
++        ASSERT_TRUE(engine.available());
++        auto fake = std::make_shared<FakeTransport>(RDMA);
++        fake->outcome = PENDING;
++        installFakeRdma(engine, fake);
++        ASSERT_TRUE(engine.registerLocalMemory(buf.data(), buf.size()).ok());
++        auto batch = engine.allocateBatch(2);
++        ASSERT_TRUE(
++            engine
++                .submitTransfer(batch, {makeLocalWrite(buf.data(), 128),
++                                        makeLocalWrite(buf.data() + 128, 128)})
++                .ok());
++        ASSERT_TRUE(engine.cancelTransfer(batch, 1).ok());
++        fake->outcome = COMPLETED;
++        TransferStatus status;
++        for (int i = 0; i < 1000; ++i) {
++            ASSERT_TRUE(engine.getTransferStatus(batch, status).ok());
++            if (status.s != PENDING) break;
++            std::this_thread::sleep_for(std::chrono::milliseconds(1));
++        }
++        EXPECT_EQ(status.s, CANCELED);
++        ASSERT_TRUE(engine.freeBatch(batch).ok());
++        ASSERT_TRUE(engine.unregisterLocalMemory(buf.data(), buf.size()).ok());
++    }
++    auto rows = records();
++    size_t canceled = 0, completed = 0;
++    for (const auto& row : rows) {
++        if (row["event"] != "complete") continue;
++        if (row["status"] == "canceled") ++canceled;
++        if (row["status"] == "completed") ++completed;
++    }
++    EXPECT_EQ(canceled, 1);
++    EXPECT_EQ(completed, 1);
++}
++
++TEST_F(TransferEventTest, SubmitFailureIsRecordedWithoutMetrics) {
++    std::vector<uint8_t> buf(4096);
++    {
++        auto cfg = makeTraceConfig(4, 1UL << 20);
++        cfg->set("enable_runtime_queue", false);
++        TransferEngineImpl engine(cfg);
++        auto fake = std::make_shared<FakeTransport>(RDMA);
++        fake->fail_submit = true;
++        installFakeRdma(engine, fake);
++        ASSERT_TRUE(engine.registerLocalMemory(buf.data(), buf.size()).ok());
++        auto batch = engine.allocateBatch(1);
++        ASSERT_TRUE(
++            engine.submitTransfer(batch, {makeLocalWrite(buf.data(), 128)})
++                .ok());
++        TransferStatus status;
++        ASSERT_TRUE(engine.getTransferStatus(batch, status).ok());
++        EXPECT_EQ(status.s, FAILED);
++        ASSERT_TRUE(engine.freeBatch(batch).ok());
++        ASSERT_TRUE(engine.unregisterLocalMemory(buf.data(), buf.size()).ok());
++    }
++    checkPairs(records(), 1, "failed");
++}
++
++TEST_F(TransferEventTest, RejectionAndUnobservedTeardown) {
++    std::vector<uint8_t> buf(4096);
++    {
++        auto cfg = makeTraceConfig(4, 1UL << 20);
++        cfg->set("enable_runtime_queue", false);
++        TransferEngineImpl engine(cfg);
++        auto fake = std::make_shared<FakeTransport>(RDMA);
++        installFakeRdma(engine, fake);
++        ASSERT_TRUE(engine.registerLocalMemory(buf.data(), buf.size()).ok());
++        auto rejected = engine.allocateBatch(0);
++        auto request = makeLocalWrite(buf.data(), 128);
++        EXPECT_FALSE(engine.submitTransfer(rejected, {request}).ok());
++        EXPECT_TRUE(engine.freeBatch(rejected).ok());
++        auto unpolled = engine.allocateBatch(1);
++        ASSERT_TRUE(engine.submitTransfer(unpolled, {request}).ok());
++        // Fake transport completed, but the engine has never observed it.
++        // Teardown must not claim success on its behalf.
++    }
++    auto rows = records();
++    size_t submissions = 0, abandoned = 0, completed = 0;
++    for (const auto& row : rows) {
++        if (row["event"] == "submit") ++submissions;
++        if (row["event"] == "abandoned") {
++            ++abandoned;
++            EXPECT_EQ(row["status"], "unobserved");
++        }
++        if (row["event"] == "complete") ++completed;
++    }
++    EXPECT_EQ(submissions, 1);
++    EXPECT_EQ(abandoned, 1);
++    EXPECT_EQ(completed, 0);
++}
++
++TEST_F(TransferEventTest, QueuedSubmitFailureRecordedOnce) {
++    std::vector<uint8_t> buf(4096);
++    {
++        auto cfg = makeTraceConfig(4, 1UL << 20);
++        TransferEngineImpl engine(cfg);
++        auto fake = std::make_shared<FakeTransport>(RDMA);
++        fake->fail_submit = true;
++        installFakeRdma(engine, fake);
++        ASSERT_TRUE(engine.registerLocalMemory(buf.data(), buf.size()).ok());
++        auto batch = engine.allocateBatch(1);
++        ASSERT_TRUE(
++            engine.submitTransfer(batch, {makeLocalWrite(buf.data(), 128)})
++                .ok());
++        TransferStatus status;
++        ASSERT_TRUE(engine.getTransferStatus(batch, status).ok());
++        EXPECT_EQ(status.s, FAILED);
++        ASSERT_TRUE(engine.freeBatch(batch).ok());
++        ASSERT_TRUE(engine.unregisterLocalMemory(buf.data(), buf.size()).ok());
++    }
++    checkPairs(records(), 1, "failed");
++}
++
++TEST_F(TransferEventTest, FailoverKeepsOneLogicalRequest) {
++    std::vector<uint8_t> buf(4096);
++    {
++        auto cfg = makeTraceConfig(4, 1UL << 20);
++        cfg->set("enable_runtime_queue", false);
++        TransferEngineImpl engine(cfg);
++        auto rdma = std::make_shared<FakeTransport>(RDMA);
++        rdma->outcome = FAILED;
++        installFakeRdma(engine, rdma);
++        auto tcp = std::make_shared<FakeTransport>(TCP);
++        engine.swapTransportForTest(TCP, tcp);
++        ASSERT_TRUE(engine.registerLocalMemory(buf.data(), buf.size()).ok());
++        auto batch = engine.allocateBatch(1);
++        auto request = makeLocalWrite(buf.data(), 128);
++        request.transport_hint = UNSPEC;
++        ASSERT_TRUE(engine.submitTransfer(batch, {request}).ok());
++        TransferStatus status;
++        for (int i = 0; i < 1000; ++i) {
++            ASSERT_TRUE(engine.getTransferStatus(batch, status).ok());
++            if (status.s != PENDING) break;
++        }
++        EXPECT_EQ(status.s, COMPLETED);
++        EXPECT_EQ(rdma->submit_calls.load(), 1);
++        EXPECT_EQ(tcp->submit_calls.load(), 1);
++        ASSERT_TRUE(engine.freeBatch(batch).ok());
++        ASSERT_TRUE(engine.unregisterLocalMemory(buf.data(), buf.size()).ok());
++    }
++    auto rows = records();
++    checkPairs(rows, 1, "completed");
++    for (const auto& row : rows)
++        if (row["event"] == "complete") EXPECT_EQ(row["transport"], "tcp");
++}
++
++}  // namespace
++}  // namespace tent
++}  // namespace mooncake
