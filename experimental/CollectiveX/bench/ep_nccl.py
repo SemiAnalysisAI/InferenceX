@@ -104,7 +104,7 @@ class NCCLEPBackend(EPBackend):
     # across nodes on x86 (b200 EP16 T=128, h200 EP16 T=32 and prefill T=1024; runs 35994093313,
     # 36113759089) while eager zero-copy HT passed every cell and was as fast or faster
     # (run 36114371399), so eager is the better HT configuration on every pool measured.
-    CUDA_GRAPH_MODES = ("low-latency",)
+    CUDA_GRAPH_MODES = ("normal", "low-latency")
     stage_device_work = False
     requires_fresh_pair = False
     receive_layout = "token-rank"
@@ -458,7 +458,9 @@ class NCCLEPBackend(EPBackend):
             # uccl-ep, MoRI and FlashInfer all carry theirs per call. No sync or counter
             # read here: the bound problem's counters are deterministic and already read
             # (_bind_ht_recv_count) in the untimed rebind.
-            h.handle.update(h.topk_idx_t, layout_info=h.layout_info, stream=stream)
+            # DIAG: keep the routing update (and its ncclAllGather) out of any graph capture.
+            if not torch.cuda.is_current_stream_capturing():
+                h.handle.update(h.topk_idx_t, layout_info=h.layout_info, stream=stream)
         if self._ll_expert_major:
             # LL EXPERT_MAJOR: tokens in, 3D per-expert padded tokens out, per-expert recv
             # counts written into expert_counters. No weights on the dispatch (the gate is
