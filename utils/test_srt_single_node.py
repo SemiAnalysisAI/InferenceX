@@ -627,6 +627,33 @@ def test_speedbench_cells_keep_string_env_through_srtctl_variant_round_trip(reci
         assert all(isinstance(value, str) for value in env.values()), (selector, env)
 
 
+@pytest.mark.parametrize("mode", ["on", "off"])
+def test_speedbench_runtime_thinking_stays_string_through_srtctl_set(mode):
+    # The workflow binds THINKING per cell via --set; srtctl dumps the result
+    # and reloads it as YAML 1.1, where a bare on/off becomes a boolean.
+    from srtctl.core.overrides import apply_overrides_to_recipe, parse_overrides
+    from srtctl.core.yaml_utils import dump_yaml_with_comments, load_yaml_text_with_comments
+
+    recipe = Path("benchmarks/single_node/srt-slurm-recipes/dsv4/vllm/b300-fp4-speedbench/speedbench.yaml")
+    env = {
+        "FRAMEWORK": "vllm", "MODEL": "deepseek-ai/DeepSeek-V4-Pro",
+        "IMAGE": "vllm/vllm-openai:v0.21.0", "PRECISION": "fp4",
+        "TP": "8", "GPU_COUNT": "8", "PP_SIZE": "1", "DCP_SIZE": "1", "PCP_SIZE": "1",
+        "EP_SIZE": "1", "DP_ATTENTION": "false", "SPEC_DECODING": "mtp", "IS_AGENTIC": "0",
+        "RUN_EVAL": "false", "EVAL_ONLY": "false",
+        "CONC": "1", "RESULT_FILENAME": f"speedbench_{mode}_mtp1",
+        "GPU_MONITOR_INTERVAL": "3", "MODEL_PREFIX": "dsv4",
+        "CATEGORY": "coding", "SPEEDBENCH_OUTPUT_LEN": "4096",
+        "THINKING": mode, "MTP": "1",
+    }
+    argv = runtime_arguments(f"{recipe}:zip_override_mtp[0]", env)
+    sets = [argv[i + 1] for i, arg in enumerate(argv) if arg == "--set"]
+    document = load_yaml_text_with_comments(recipe.read_text())
+    apply_overrides_to_recipe(document, parse_overrides(sets, None))
+    reloaded = yaml.safe_load(dump_yaml_with_comments(document))
+    assert reloaded["base"]["benchmark"]["env"]["THINKING"] == f"thinking_{mode}"
+
+
 @pytest.mark.parametrize(
     "recipe", sorted(Path("benchmarks/single_node/srt-slurm-recipes").glob("*/vllm/b300-fp4-speedbench/speedbench.yaml"))
 )

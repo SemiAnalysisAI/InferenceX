@@ -199,6 +199,10 @@ def runtime_arguments(config: str, environment: Mapping[str, str]) -> list[str]:
             value = environment.get(name, "")
             if not value:
                 raise ValueError(f"Missing SPEED-Bench input: {name}")
+            # srtctl dumps the overridden recipe and reloads it as YAML 1.1,
+            # where a bare on/off becomes a boolean; the client strips this prefix.
+            if name == "THINKING" and value in ("on", "off"):
+                value = f"thinking_{value}"
             overrides += ["--set", f"benchmark.env.{name}={json.dumps(value)}"]
         # Chat-template kwargs are optional (dsr1 has no off mode).
         for name in ("CHAT_TEMPLATE_KWARGS_ON",):
