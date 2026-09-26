@@ -112,7 +112,7 @@ jobs:
                   fi
 
             - name: Set up uv
-              uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+              uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
 
             - name: Validate perf-changelog matrix
               env:
@@ -265,7 +265,7 @@ jobs:
                         ['infx tooling', data.sha],
                       ]).write();
                       return data.sha;
-            - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+            - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
             - name: Install Claude Code 2.1.282
               id: claude_cli
               if: vars.PRIORITY_SCHEDULER_ENABLED == 'true' && github.event_name == 'pull_request'
@@ -987,7 +987,7 @@ jobs:
                   pattern: results_*
 
             - name: Set up uv
-              uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+              uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
 
             - name: Calculate success rate
               run: >-
@@ -1029,7 +1029,7 @@ jobs:
                   pattern: results_bmk
 
             - name: Set up uv
-              uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+              uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
 
             - name: Compare results against main
               run: >-
