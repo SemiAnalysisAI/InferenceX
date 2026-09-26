@@ -82,21 +82,21 @@ def test_historical_generation_uses_committed_source_and_inputs(generation_repo,
         monkeypatch.setattr(subprocess, "run", advance_after_listing)
     with process_changelog.generation_inputs_at_ref(revision) as inputs:
         result = subprocess.run(
-            [sys.executable, inputs.generator_script, "test-config", "--config-files",
+            [sys.executable, *inputs.generator, "test-config", "--config-files",
              *inputs.config_files, "--runner-config", inputs.runner_config,
              "--config-keys", "fixture", "--no-evals"],
-            capture_output=True, text=True, check=True,
+            capture_output=True, text=True, check=True, cwd=inputs.root,
         )
         rows = json.loads(result.stdout)
         assert [(row["model"], row["conc"]) for row in rows] == [expected]
         assert result.stderr == ""
-        snapshot = Path(inputs.generator_script).parents[2]
+        assert inputs.generator == ("-m", "infx.matrix.generate")
+        snapshot = Path(inputs.root)
         assert (snapshot / "infx/data.bin").read_bytes() == b"\x00\nblob\xff\n"
         assert (snapshot / "infx/data 中文\t\r\n.bin").read_bytes() == b"named asset"
         assert (snapshot / "infx/data-link").read_bytes() == b"data.bin"
         assert not (snapshot / "infx/data-link").is_symlink()
-        extracted_script = Path(inputs.generator_script)
-    assert not extracted_script.exists()
+    assert not snapshot.exists()
 
 
 def test_historical_generation_rejects_missing_inputs(generation_repo):
@@ -116,6 +116,7 @@ def test_historical_generation_supports_legacy_script_layout(generation_repo):
     # and sibling imports without freezing a past copy of the matrix algorithm.
     script = root / "utils/matrix_logic/generate_sweep_configs.py"
     schema = script.with_name("validation.py")
+    script.parent.mkdir(parents=True, exist_ok=True)
     script.write_text("from validation import revision\nprint(revision)\n")
     schema.write_text('revision = "legacy snapshot"\n')
     git("add", str(script), str(schema))
@@ -124,8 +125,8 @@ def test_historical_generation_supports_legacy_script_layout(generation_repo):
 
     with process_changelog.generation_inputs_at_ref("HEAD") as inputs:
         result = subprocess.run(
-            [sys.executable, inputs.generator_script],
-            capture_output=True, text=True, check=True,
+            [sys.executable, *inputs.generator],
+            capture_output=True, text=True, check=True, cwd=inputs.root,
         )
         assert result.stdout == "legacy snapshot\n"
         assert result.stderr == ""
@@ -521,8 +522,7 @@ def planning_inputs() -> tuple[dict, dict]:
 def planning_repo(tmp_path, monkeypatch):
     """Real CLI/config/generator wiring with small, independent input recipes."""
     source = Path(__file__).resolve().parents[3]
-    for directory in ("utils/matrix_logic", "infx"):
-        shutil.copytree(source / directory, tmp_path / directory, ignore=shutil.ignore_patterns("__pycache__"))
+    shutil.copytree(source / "infx", tmp_path / "infx", ignore=shutil.ignore_patterns("__pycache__"))
     (tmp_path / "configs").mkdir()
     (tmp_path / "configs/amd-master.yaml").write_text("{}\n")
     master, runners = planning_inputs()
@@ -560,7 +560,7 @@ def test_validator_uses_trusted_entrypoints_while_reading_another_checkout(commi
     tooling = root / ".tooling"
     tooling.mkdir()
     shutil.move(root / "infx", tooling / "infx")
-    shutil.rmtree(root / "utils")
+    shutil.rmtree(root / "utils", ignore_errors=True)
     (tooling / "utils").mkdir()
     for script in ("validate_perf_changelog.py", "process_changelog.py"):
         shutil.copy(source / "utils" / script, tooling / "utils" / script)

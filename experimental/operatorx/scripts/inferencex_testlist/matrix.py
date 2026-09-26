@@ -1,7 +1,7 @@
 """Load and flatten InferenceX matrix entries from master YAML configs.
 
 Delegates the heavy expansion (conc-range -> per-conc rows, search-space
-fan-out, etc.) to InferenceX's own `generate_sweep_configs.py full-sweep` so
+fan-out, etc.) to InferenceX's own `python -m infx.matrix.generate full-sweep` so
 that this module stays in sync with InferenceX semantics automatically.
 """
 from __future__ import annotations
@@ -57,13 +57,12 @@ def _run_inferencex_generator(
     if not os.path.isdir(inferencex_dir):
         raise FileNotFoundError(f"InferenceX directory not found: {inferencex_dir}")
 
-    script = os.path.join(
-        inferencex_dir, "utils", "matrix_logic", "generate_sweep_configs.py"
-    )
-    if not os.path.isfile(script):
-        raise FileNotFoundError(f"InferenceX generator not found: {script}")
+    module_path = os.path.join(inferencex_dir, "infx", "matrix", "generate.py")
+    if not os.path.isfile(module_path):
+        raise FileNotFoundError(f"InferenceX generator not found: {module_path}")
 
-    args = [sys.executable, script, "full-sweep", "--config-files", *config_files]
+    # Running from the InferenceX root puts its infx package first on sys.path.
+    args = [sys.executable, "-m", "infx.matrix.generate", "full-sweep", "--config-files", *config_files]
     if extra_flags:
         args.extend(extra_flags)
 
@@ -73,7 +72,7 @@ def _run_inferencex_generator(
     )
     if proc.returncode != 0:
         raise RuntimeError(
-            f"generate_sweep_configs.py failed (exit {proc.returncode}):\n"
+            f"infx.matrix.generate failed (exit {proc.returncode}):\n"
             f"stderr:\n{proc.stderr}"
         )
     try:

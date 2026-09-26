@@ -175,7 +175,7 @@ Other offloading tiers, including NVMe KV cache offloading, are outside the init
 
 ## Notes
 
-- The `Prefix` column is the canonical `model-prefix` used in `configs/*-master.yaml` and by `generate_sweep_configs.py --model-prefix`.
+- The `Prefix` column is the canonical `model-prefix` used in `configs/*-master.yaml` and by `python -m infx.matrix.generate --model-prefix`.
 - "Retired" means the model no longer has any active scenario. Retired models' configs are deleted from the master configs; the former `configs/deprecated/` archive was removed in #3464, so past settings live in git history and `perf-changelog.yaml`.
 - Deprecating a precision (e.g. Qwen3.5 bf16) or one arm of an A/B pair (e.g. non-MTP) narrows a model's recipe coverage without retiring the model. The model stays listed as active as long as one scenario still runs.
 - `dsr1` began as the DeepSeek-V3 workflow templates in the initial repo import and was switched to DeepSeek-R1 benchmarking on 2025-08-13 (renamed `dsv3` → `dsr1` on 2025-08-20).

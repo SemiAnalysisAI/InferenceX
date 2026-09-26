@@ -1,7 +1,8 @@
-"""Comprehensive tests for generate_sweep_configs.py"""
+"""Comprehensive tests for infx.matrix.generate."""
 import argparse
 import copy
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -2022,10 +2023,10 @@ class TestCommandLine:
         self, tmp_path, sample_single_node_config, sample_runner_config,
         command, invalid,
     ):
-        """Direct scripts must resolve their own imports and caller-relative inputs."""
+        """The module entrypoint resolves caller-relative inputs from another directory."""
         (tmp_path / "master config.yaml").write_text(yaml.safe_dump(sample_single_node_config))
         (tmp_path / "runners.yaml").write_text(yaml.safe_dump(sample_runner_config))
-        script = Path(__file__).resolve().parents[3] / "utils" / "matrix_logic" / "generate_sweep_configs.py"
+        repo_root = Path(__file__).resolve().parents[3]
         args = [
             command, "--config-files", "master config.yaml",
             "--runner-config", "runners.yaml", "--seq-lens", "1k1k", "--no-evals",
@@ -2036,7 +2037,8 @@ class TestCommandLine:
             args += ["--all-evals"]
 
         result = subprocess.run(
-            [sys.executable, str(script), *args], cwd=tmp_path,
+            [sys.executable, "-m", "infx.matrix.generate", *args], cwd=tmp_path,
+            env={**os.environ, "PYTHONPATH": str(repo_root)},
             capture_output=True, text=True, check=False,
         )
 

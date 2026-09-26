@@ -80,7 +80,7 @@ The dispatch POST returns no body or run ID.
 
 Full details live in `utils/evals/EVALS.md`.
 
-`mark_eval_entries()` in `utils/matrix_logic/generate_sweep_configs.py` selects evals, which default to the 8k1k subset and run separately from throughput with `EVAL_ONLY=true`.
+`mark_eval_entries()` in `infx/matrix/generate.py` selects evals, which default to the 8k1k subset and run separately from throughput with `EVAL_ONLY=true`.
 
 - `--no-evals`: skip evals.
 - `--evals-only`: run the default selected eval subset and suppress throughput.

@@ -85,8 +85,9 @@ jobs:
           fi
           source "$PRIORITY_ROOT/benchmarks/benchmark_lib.sh" --validation-only
           check_env_vars INPUTS_CONFIG_FILE INPUTS_CONFIG_KEY INPUTS_CONC PR_LABELS
-          CONFIG_JSON=$(uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
-            python "${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py" \
+          CONFIG_JSON=$(env PYTHONPATH="${GITHUB_WORKSPACE}" \
+            uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
+            python -P -m infx.matrix.generate \
             test-config --config-files "$INPUTS_CONFIG_FILE" --config-keys "$INPUTS_CONFIG_KEY" --conc "$INPUTS_CONC")
           CONFIG_JSON=$(printf '%s' "$CONFIG_JSON" | env PYTHONPATH="$PRIORITY_ROOT" uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml \
             python -P "${PRIORITY_ROOT}/utils/ci_priority.py" \

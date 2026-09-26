@@ -72,7 +72,7 @@ These are cross-repository links because InferenceX-app owns the database and pr
 flowchart LR
   A[Master YAML and runners.yaml] --> B[Pydantic validation]
   P[perf-changelog additions] --> C[process_changelog.py]
-  B --> D[generate_sweep_configs.py]
+  B --> D[infx.matrix.generate]
   C --> D
   D --> E[Validated JSON matrix]
   E --> F[run-sweep.yml fan-out]
@@ -146,7 +146,7 @@ Eval adapters and patches copied into isolated environments use the actual files
 
 Default repository paths live in [`infx/config.py`](../infx/config.py). Import configuration constants from `infx.config` and schemas from `infx.matrix.validation`. Package `__init__.py` files stay minimal.
 
-`utils/process_changelog.py` and `utils/matrix_logic/generate_sweep_configs.py` remain thin compatibility entrypoints. Their script commands, arguments, relative input paths, and dependencies are unchanged; running from a checkout requires no package installation. `process_changelog.py` resolves to `infx.matrix.plan`; `validate_perf_changelog.py` retains its existing processor CLI boundary and diagnostics.
+`utils/process_changelog.py` remains a thin compatibility entrypoint; its script command, arguments, relative input paths, and dependencies are unchanged, and running from a checkout requires no package installation. Matrix generation runs as `python -m infx.matrix.generate`; historical append-only planning runs a base revision's own generator, including the legacy `utils/matrix_logic/generate_sweep_configs.py` script in revisions that predate the module. `process_changelog.py` resolves to `infx.matrix.plan`; `validate_perf_changelog.py` retains its existing processor CLI boundary and diagnostics.
 
 Workflows using current tooling call `infx` modules directly, and tests import canonical modules. Trusted dispatch selects its tooling checkout explicitly through `PYTHONPATH` and Python's `-P` option while keeping the target checkout as the working directory for inputs. Manual matrix generation, profiling, and benchmark steps use stable script entrypoints to support older revisions; historical append-only extraction also uses each revision's compatibility entrypoint.
 

@@ -314,9 +314,9 @@ jobs:
                     if [ "$EVALS_ONLY" = "true" ]; then
                       GENERATE_ARGS+=(--evals-only)
                     fi
-                    CONFIG_JSON=$(uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
-                      python "${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py" \
-                      "${GENERATE_ARGS[@]}")
+                    CONFIG_JSON=$(env PYTHONPATH="${GITHUB_WORKSPACE}" \
+                      uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
+                      python -P -m infx.matrix.generate "${GENERATE_ARGS[@]}")
                   fi
                   CONFIG_JSON=$(printf '%s' "$CONFIG_JSON" | env PYTHONPATH="$PRIORITY_ROOT" \
                     uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
