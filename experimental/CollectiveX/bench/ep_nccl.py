@@ -121,6 +121,7 @@ class NCCLEPBackend(EPBackend):
         # also covers manual/torchrun invocations. Verified on h100 EP8: absent -> group.create
         # fails (error 5); present -> device_api_support=True and HT+LL groups create.
         os.environ.setdefault("NCCL_CUMEM_ENABLE", "1")
+        os.environ.setdefault("NCCL_CTA_POLICY", "ZERO")  # DIAG: allow the CE / hierarchical-CE all-gather
         self.group = dist.group.WORLD
         self.experts_per_rank = args.experts // world_size
         self.num_local_experts = self.experts_per_rank
