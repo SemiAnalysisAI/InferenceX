@@ -104,7 +104,7 @@ class NCCLEPBackend(EPBackend):
     # write into the zero-copy window (fixed in `combine_transformed`); with that fixed, graphed
     # HT is correct but 1.03-1.11x eager's pair period on h100/h200 EP16 (runs 36231927003..
     # 36231931954 vs 36176100175), so eager is HT's best configuration.
-    CUDA_GRAPH_MODES = ("low-latency", "normal") if os.environ.get("COLLX_DIAG_HT_GRAPH", "1") == "1" else ("low-latency",)
+    CUDA_GRAPH_MODES = ("low-latency", "normal") if os.environ.get("COLLX_DIAG_HT_GRAPH", "0") == "1" else ("low-latency",)
     stage_device_work = False
     requires_fresh_pair = False
     receive_layout = "token-rank"
