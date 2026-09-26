@@ -315,8 +315,12 @@ def measure(op, time_once) -> tuple[float, dict]:
         before = provider.counters()
         t0 = time.time_ns()
         provider.start()
-        median_us = time_once(sleep_s)
-        samples = provider.stop()
+        try:
+            median_us = time_once(sleep_s)
+        finally:
+            # a kernel that faults mid-replay must not leave the sampler polling into
+            # the next op's telemetry
+            samples = provider.stop()
         t1 = time.time_ns()
         after = provider.counters()
         delta = {k: after[k] - before[k] for k in after if k in before}
