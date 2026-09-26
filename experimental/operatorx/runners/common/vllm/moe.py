@@ -102,20 +102,10 @@ _DSV4_FP4_EXPERTS = ("deepseek_v4_fp8", {"quant_method": "fp8", "activation_sche
                                          "scale_fmt": "ue8m0", "weight_block_size": [128, 128]})
 
 
-# gpt-oss ships MXFP4 experts with a bias per expert, and vLLM serves those through its
-# own 'mxfp4' method rather than the compressed-tensors mxfp4-pack config that the same
-# operand descriptors mean for a checkpoint without bias (Kimi-K3). The descriptors alone
-# cannot tell the two apart, so the expert bias picks the config.
-_MXFP4_W4A16 = ({"dtype": "bf16"}, {"dtype": "e2m1", "scale": {"dtype": "ue8m0", "static": True, "group": [1, 32]}})
-_GPTOSS_MXFP4 = ("mxfp4", {"quant_method": "mxfp4"})
-
-
-def _expert_quant(x: dict, w: dict, bias: bool = False):
+def _expert_quant(x: dict, w: dict):
     if (x.get("dtype") == "e4m3" and x.get("scale", {}).get("dtype") == "ue8m0" and w["dtype"] == "e2m1"
             and w.get("scale") == {"dtype": "ue8m0", "static": True, "group": [1, 32]} and "scale2" not in w):
         return vllm_linear.quant_config(*_DSV4_FP4_EXPERTS)
-    if bias and (x, w) == _MXFP4_W4A16:
-        return vllm_linear.quant_config(*_GPTOSS_MXFP4)
     return _quant(x, w, "experts")
 
 
@@ -186,7 +176,7 @@ class _MoeBlock(torch.nn.Module):
         q = ex["quant"]
         if q["w13"] != q["w2"] or q["a2"] != q["x"]:
             raise UnsupportedOpError("vLLM MoE takes one scheme for w13/w2 and for x/a2")
-        qc = _expert_quant(q["x"], q["w13"], bool(ex.get("bias")))
+        qc = _expert_quant(q["x"], q["w13"])
         vllm_linear._set_quant_fp8_op(qc)
         H, E, K = a["hidden"], ex["num"], ex["top_k"]
         L = ex.get("latent") or H
