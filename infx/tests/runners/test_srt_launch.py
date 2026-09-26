@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import os
+import subprocess
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -203,3 +206,51 @@ class TestCheckStagedSrtAssets:
         ):
             mock_run.return_value = MagicMock(returncode=1)
             check_staged_srt_assets(str(model), "/nonexistent.sqsh")
+
+
+class _StopAfterPrepare(Exception):
+    pass
+
+
+def test_srt_commands_run_in_the_srtctl_venv(tmp_path, monkeypatch):
+    """Like slurm_utils.sh, infx.srt_slurm commands run under the activated srtctl venv.
+
+    The runner's system python3 has no PyYAML; the first CI run failed with
+    ModuleNotFoundError when prepare ran under sys.executable.
+    """
+    from infx.runners import srt_launch
+
+    env = {
+        "GITHUB_WORKSPACE": str(tmp_path), "SRT_RECIPE": "recipe.yaml", "FRAMEWORK": "sglang",
+        "MODEL": "m", "MODEL_PREFIX": "p", "IMAGE": "img:1", "PRECISION": "fp8", "TP": "8",
+        "PP_SIZE": "1", "DCP_SIZE": "1", "PCP_SIZE": "1", "EP_SIZE": "1", "DP_ATTENTION": "false",
+        "GPU_COUNT": "8", "IS_AGENTIC": "1", "SPEC_DECODING": "none", "CONC": "1", "ISL": "1",
+        "OSL": "1", "RANDOM_RANGE_RATIO": "1", "RESULT_FILENAME": "r", "GPU_MONITOR_INTERVAL": "1",
+        "SRT_MODEL_PATH": "hf:m", "HF_HUB_CACHE_MOUNT": "/h", "HF_HUB_CACHE": "/c",
+        "SALLOC_TIME_LIMIT": "480", "PATH": "/usr/bin:/bin",
+    }
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+
+    def fake_setup(root, *_args, **_kwargs):
+        Path(root).mkdir(parents=True)
+        return "[]"
+
+    calls = []
+
+    def fake_run(argv, *_args, **_kwargs):
+        calls.append((list(argv), os.environ["PATH"]))
+        if argv[:3] == ["python3", "-m", "infx.srt_slurm.single_node"]:
+            raise _StopAfterPrepare
+        return subprocess.CompletedProcess(argv, 0, "", "")
+
+    monkeypatch.setattr(srt_launch, "setup_srt_slurm", fake_setup)
+    monkeypatch.setattr(srt_launch, "_ensure_uv", lambda: None)
+    monkeypatch.setattr(srt_launch.subprocess, "run", fake_run)
+
+    with pytest.raises(_StopAfterPrepare):
+        srt_launch.launch_srt_single_node("h100-dgxc-slurm")
+
+    argv, path = calls[-1]
+    assert argv[:4] == ["python3", "-m", "infx.srt_slurm.single_node", "prepare"]
+    assert path.split(":")[0].endswith("/checkout/.venv/bin")

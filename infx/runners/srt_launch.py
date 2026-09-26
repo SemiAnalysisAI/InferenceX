@@ -239,7 +239,7 @@ def apply_srt_recipe(
 
     result = subprocess.run(
         [
-            sys.executable,
+            "python3",
             "-m",
             "infx.srt_slurm.synthetic_acceptance",
             config,
@@ -339,7 +339,7 @@ def copy_fixed_sequence_results(
             env["PYTHONPATH"] = f"{inferencex_root}:{pp}" if pp else inferencex_root
             proc = subprocess.run(
                 [
-                    sys.executable,
+                    "python3",
                     "-m",
                     "infx.results.result_filename",
                     "--point",
@@ -452,7 +452,7 @@ def launch_srt_single_node(
     args_file = os.path.join(srt_single_node_root, "arguments")
     subprocess.run(
         [
-            sys.executable,
+            "python3",
             "-m",
             "infx.srt_slurm.single_node",
             "prepare",
@@ -498,7 +498,7 @@ def launch_srt_single_node(
     srt_model_path = _env("SRT_MODEL_PATH")
 
     cluster_config_cmd = [
-        sys.executable,
+        "python3",
         "-m",
         "infx.srt_slurm.cluster_config",
         os.path.join(inferencex_slurm_utils_dir, "srt-slurm", f"{profile}.yaml"),
@@ -556,7 +556,7 @@ def launch_srt_single_node(
             try:
                 subprocess.run(
                     [
-                        sys.executable,
+                        "python3",
                         "-m",
                         "infx.srt_slurm.single_node",
                         "submission",
@@ -646,7 +646,7 @@ def launch_srt_single_node(
         # Read submission fields.
         fields_file = os.path.join(srt_single_node_root, "submission-fields")
         result = subprocess.run(
-            [sys.executable, "-m", "infx.srt_slurm.single_node", "submission", submission_json],
+            ["python3", "-m", "infx.srt_slurm.single_node", "submission", submission_json],
             check=True,
             capture_output=True,
             text=True,
