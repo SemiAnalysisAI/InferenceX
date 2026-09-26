@@ -312,8 +312,9 @@ Serving engines capture their decode step, so graph-compatible backend/mode pair
 under `CUDAGraph.replay()` by default. The graphed set is each library's best measured
 configuration that passed every check, without changing its contract:
 
-- **nccl-ep** low-latency. HT stays eager: graphed HT failed the combine oracle intermittently
-  across x86 nodes while eager HT was correct and no slower.
+- **nccl-ep** low-latency. HT stays eager: graphed HT is correct but 3-11% slower than eager on
+  h100/h200 EP16. (Its earlier oracle failures were the oracle writing its combine input into the
+  zero-copy window without a cross-rank fence; that write is now fenced.)
 - **flashinfer-ep** decode. Prefill stays eager; graphs change nothing there.
 - **uccl-ep** low-latency, intranode only, except b200 FP8, which measured faster eager. Normal
   mode host-syncs unless padded to `num_worst_tokens` and stays eager.
