@@ -100,10 +100,10 @@ class NCCLEPBackend(EPBackend):
     kernel_generation = "nccl-ep-v02-ht-routed-zc-static"
     SUPPORTED_MODES = ("normal", "low-latency")
     SUPPORTED_PRECISIONS = ("bf16",)
-    # LL replays; HT stays eager. Graphed zero-copy HT failed the combine oracle intermittently
-    # across nodes on x86 (b200 EP16 T=128, h200 EP16 T=32 and prefill T=1024; runs 35994093313,
-    # 36113759089) while eager zero-copy HT passed every cell and was as fast or faster
-    # (run 36114371399), so eager is the better HT configuration on every pool measured.
+    # LL replays; HT stays eager. Graphed HT's oracle failures were the oracle's own unfenced
+    # write into the zero-copy window (fixed in `combine_transformed`); with that fixed, graphed
+    # HT is correct but 1.03-1.11x eager's pair period on h100/h200 EP16 (runs 36231927003..
+    # 36231931954 vs 36176100175), so eager is HT's best configuration.
     CUDA_GRAPH_MODES = ("low-latency",)
     stage_device_work = False
     requires_fresh_pair = False
@@ -660,6 +660,15 @@ class NCCLEPBackend(EPBackend):
         # destination ranks back to each token's home rank.
         self._recv_x.zero_()
         self._recv_x[: transformed.shape[0]].copy_(transformed.to(self._recv_x.dtype))
+        # Fence the write across ranks. `_recv_x` is the zero-copy window peers access directly,
+        # and nothing orders this rank's local write against a peer's combine touching it: after
+        # graph replay shifted rank timing, the combine read a peer's half-written input
+        # (combine_values failed, dispatch checks clean, EP16 only; h100/h200 3/3 runs). With this
+        # fence the same cells passed 4/4 (runs 36231927003..36231931954). The timed path writes
+        # nothing between dispatch and combine, so it needs no fence; this is the oracle's write.
+        torch.cuda.synchronize()
+        dist.barrier()
+        torch.cuda.synchronize()
         stream = self._stream()
         h.handle.combine(
             # Same sliced input the timed path uses, so the two cannot diverge in shape.
