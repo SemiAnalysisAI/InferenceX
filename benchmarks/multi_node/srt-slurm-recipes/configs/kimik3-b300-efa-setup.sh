@@ -2,7 +2,7 @@
 set -eo pipefail
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -y -qq --no-install-recommends ca-certificates curl libhwloc15 numactl patch
+apt-get install -y -qq --no-install-recommends ca-certificates curl libhwloc15 numactl
 curl -fL --retry 3 https://efa-installer.amazonaws.com/aws-efa-installer-1.50.0.tar.gz -o /tmp/aws-efa-installer-1.50.0.tar.gz
 printf '%s  %s\n' fa6dff8593d866866c13cb4640d9059835cd4efa427971f100ab40c97bef2841 /tmp/aws-efa-installer-1.50.0.tar.gz | sha256sum -c -
 mkdir -p /tmp/efa
@@ -14,4 +14,3 @@ ldconfig
 grep -q 'provider: efa' /tmp/fi-info
 python3 -m pip uninstall -y mooncake-transfer-engine mooncake-transfer-engine-cuda13
 python3 -m pip install --no-deps mooncake-transfer-engine-efa-cuda13==0.3.13.post1
-patch --batch --forward -d /usr/local/lib/python3.12/dist-packages -p1 </configs/patches/vllm-dynamo-compat.patch
