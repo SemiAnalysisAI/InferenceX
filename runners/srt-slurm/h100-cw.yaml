@@ -1,0 +1,6 @@
+default_partition: h100
+default_time_limit: ${SRT_DEFAULT_TIME_LIMIT}
+gpus_per_node: 8
+network_interface: ""
+srtctl_root: ${SRTCTL_ROOT}
+use_exclusive_sbatch_directive: true

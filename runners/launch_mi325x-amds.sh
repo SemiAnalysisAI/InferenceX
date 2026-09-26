@@ -1,8 +1,28 @@
 #!/usr/bin/env bash
 
 source "$(dirname "${BASH_SOURCE[0]}")/../benchmarks/benchmark_lib.sh" --validation-only || exit 1
-check_env_vars IS_MULTINODE
+check_env_vars IS_MULTINODE IS_AGENTIC
 set -eo pipefail
+
+# Select native fixed-sequence execution before the retained AgentX/multi-node paths.
+EXECUTION_PATH=agentic
+if [[ "$IS_MULTINODE" == true ]]; then
+    EXECUTION_PATH=multinode
+elif [[ "$IS_AGENTIC" == 0 || -n "${SRT_RECIPE:-}" ]]; then
+    check_env_vars SRT_RECIPE
+    EXECUTION_PATH=native-single-node
+fi
+if [[ "$EXECUTION_PATH" == native-single-node ]]; then
+    check_env_vars GITHUB_WORKSPACE MODEL IMAGE
+    source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh" || exit 1
+    export HF_HUB_CACHE_MOUNT=/raid/hf-hub-cache/
+    export SRT_MODEL_PATH="hf:$MODEL"
+    export SALLOC_TIME_LIMIT=480
+    export SRT_SRUN_OPTIONS='{"container-remap-root":"", "container-writable":""}'
+    SRT_SQUASH_FILE="/raid/squash/$(printf '%s' "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    launch_srt_single_node mi325x-amds
+    exit $?
+fi
 
 export HF_HUB_CACHE_MOUNT="/raid/hf-hub-cache/"
 

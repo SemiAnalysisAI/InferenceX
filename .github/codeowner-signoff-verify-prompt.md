@@ -316,7 +316,7 @@ The rule covers the SERVING stack that produces the numbers.
 ## Check 11 — Agentic spec-decode configs use the golden simulated acceptance length
 APPLICABILITY: this check covers AGENTIC-workload benchmark changes that enable
 speculative decoding. From the PR diff, identify configs that are BOTH:
-- agentic scripts under `benchmarks/single_node/agentic/**`, multi-node recipes
+- single-node agentic srt-slurm recipes (`benchmarks/single_node/srt-slurm-recipes/**/agentic.yaml`), multi-node recipes
   under an `agentic/` directory (e.g. `benchmarks/multi_node/srt-slurm-recipes/**/agentic/**`),
   or master-config entries whose name/recipe path marks them agentic, AND
 - speculative-decoding with MTP / EAGLE / draft-model flags such as

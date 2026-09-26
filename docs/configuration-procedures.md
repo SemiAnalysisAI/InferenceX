@@ -13,7 +13,7 @@ Use this page for benchmark configuration, recipe, image, and runner changes. It
 | Source of truth | What it controls |
 | --- | --- |
 | [`configs/CONFIGS.md`](../configs/CONFIGS.md) | Master-config and runner-config field contract |
-| [`utils/matrix_logic/validation.py`](../utils/matrix_logic/validation.py) | Enforced Pydantic schema and topology invariants |
+| [`infx/matrix/validation.py`](../infx/matrix/validation.py) | Enforced Pydantic schema and topology invariants |
 | [`utils/matrix_logic/generate_sweep_configs.py`](../utils/matrix_logic/generate_sweep_configs.py) | Matrix expansion, filtering, runner lookup, and emitted job metadata |
 | [`configs/nvidia-master.yaml`](../configs/nvidia-master.yaml), [`configs/amd-master.yaml`](../configs/amd-master.yaml) | Executable benchmark definitions |
 | [`configs/runners.yaml`](../configs/runners.yaml) | Schedulable labels, concrete runner names, and hardware facts |
@@ -21,7 +21,7 @@ Use this page for benchmark configuration, recipe, image, and runner changes. It
 | [`perf-changelog.yaml`](../perf-changelog.yaml) | Append-only benchmark trigger log |
 | [`AGENTS.md`](../AGENTS.md) | Repository-wide config, MTP, changelog, and sweep rules |
 
-Archive deprecated entries in [`configs/deprecated/amd-master.yaml`](../configs/deprecated/amd-master.yaml) or [`configs/deprecated/nvidia-master.yaml`](../configs/deprecated/nvidia-master.yaml). Use only these two vendor archives, not separate files per deprecation. Preserve historical settings and comments; disambiguate colliding keys with a descriptive suffix and an original-key comment. For partial retirements, move only the retired scenarios. Keep archives out of active sweep inputs. Retired AMD server-registry entries and model-specific setup belong in `benchmarks/multi_node/amd_utils/deprecated/`, outside the active server lookup. Preserve shared dependencies needed by retained SPEED-Bench collectors, including their scheduling scores. See the [deprecation rules](../AGENTS.md#deprecating-benchmark-configs).
+Delete retired entries from the active master configs; they are not archived. Git history and `perf-changelog.yaml` keep the historical settings. For partial retirements, remove only the retired scenarios. Delete retired AMD server-registry entries and model-specific setup from `benchmarks/multi_node/amd_utils/` as well. Preserve shared dependencies needed by retained SPEED-Bench collectors, including their scheduling scores. See the [deprecation rules](../AGENTS.md#deprecating-benchmark-configs).
 
 ## Dependency submodules
 
@@ -34,6 +34,15 @@ git submodule update --init
 ```
 
 To upgrade, fetch and check out the desired commit inside the relevant submodule, then commit the updated submodule pointer in InferenceX. Benchmark workflows already initialize submodules. Slurm launchers make a local Git clone for each job so recipe staging and runtime writes do not modify the submodule, and record the actual commit for result provenance. NVIDIA setup clones locally; TileRT setup fetches its pinned fork commit over the network.
+
+Single-node fixed-sequence recipes use NVIDIA upstream srt-slurm. ATOM recipes use
+the native `atomesh` frontend with one aggregate worker and
+`enable_multiple_frontends: false`. The router's pinned official image belongs in
+`frontend.container_image`: older benchmark worker images do not include AToMesh.
+Keep `model.container` aligned with the master config's worker `image`; changing the
+router image does not require changing the worker image. TRT-LLM recipes use native
+`engine.served_model_name`, without duplicating that flag in `roles.agg.extra_args`.
+The former fork's direct ATOM frontend is not required.
 
 ### Cluster profiles
 
@@ -55,6 +64,32 @@ parsed YAML scalars so quotes and punctuation remain data, not YAML or shell syn
 
 Keep model selection, cache preparation, and workload-dependent time limits in the
 launcher. Do not add profiles for non-srt-slurm launchers or change their routing here.
+
+Put per-allocation host checks and setup in
+`runners/srt-slurm/hooks/<cluster>/setup.sh`, with cluster-specific helpers beside it.
+The directory name matches the cluster profile's filename stem. Invoke the script
+explicitly through `default_host_setup.commands` in that profile; scripts are not
+auto-discovered. srt-slurm runs them on the selected allocated nodes, outside containers,
+before starting services and workers. A failed check stops startup by default.
+Pass configuration explicitly from the profile. If setup needs an undo step, keep it
+in `teardown.sh` beside `setup.sh` and register it in `default_host_setup.teardown`.
+These are job-owned hooks, not administrator-installed Slurm Prolog/Epilog scripts.
+Only add hooks for clusters that need them; do not add empty scripts for every profile.
+
+Put reusable host-check functions in `runners/srt-slurm/hooks/common.sh`; keep
+cluster-only helpers beside `setup.sh`. The common file only defines functions:
+sourcing it must not run checks, change environment variables, or initialize
+benchmarks. Both setup hooks and benchmark scripts can reuse these functions
+without importing benchmark initialization into host setup.
+
+Hooks inject **cluster-specific host prerequisites only**, such as fabric checks or
+required host-state preparation. Keep them small, workload-independent, and safe to
+run repeatedly. Prefer native srt-slurm settings over shell code where possible.
+Benchmark execution, model selection, engine flags, concurrency tuning, evaluation,
+result collection, and job orchestration do not belong here. Do not patch engines or
+containers, bypass failed checks, or hide runtime bugs with retries and ad hoc
+workarounds; fix the owning component instead. Limit host changes to allocated nodes
+and preserve resources used by other jobs.
 
 ## Procedure index
 
@@ -97,11 +132,11 @@ Detailed source: [`.claude/commands/add-model-hardware.md`](../.claude/commands/
 STP (Single Token Prediction) is vanilla autoregressive decoding with one token per forward pass. MTP (Multi-Token Prediction) predicts multiple tokens per forward pass through native heads or speculative decoding.
 
 1. **Fix the identity.** Confirm the exact checkpoint ID, model prefix, precision, architecture, native context, target SKU, framework, and whether decoding is STP, native MTP, or draft-model speculation. Verify the image tag exists. Never invent one.
-2. **Choose two kinds of sibling.** Read the same model on another SKU and another model on the target SKU. Also read the target [`runners/launch_*.sh`](../runners/) and shared [`benchmark_lib.sh`](../benchmarks/benchmark_lib.sh).
-3. **Add the runtime script.** Put the single-node script under [`benchmarks/single_node/fixed_seq_len/`](../benchmarks/single_node/fixed_seq_len/). Preserve the proven sibling's env propagation, parser flags, attention/MoE backend, KV-cache dtype, graph/eager mode, cache setup, and context handling.
+2. **Choose two kinds of sibling.** Read the same model on another SKU and another model on the target SKU. Read their srt-slurm recipes under [`benchmarks/single_node/srt-slurm-recipes/`](../benchmarks/single_node/srt-slurm-recipes/) and master-config entries.
+3. **Add the srt-slurm recipe.** Put it at `benchmarks/single_node/srt-slurm-recipes/<model-prefix>/<engine>/<sku>-<precision>[-mtp]/8k1k.yaml`, with one `override_*` variant per matrix point. Preserve the proven sibling's engine args, env, parser flags, attention/MoE backend, KV-cache dtype, graph/eager mode, `setup_script`, and context handling.
 4. **Add the master entry.** Use [`amd-master.yaml`](../configs/amd-master.yaml) for `mi*`. Otherwise, use [`nvidia-master.yaml`](../configs/nvidia-master.yaml). Set exact `image`, `model`, `model-prefix`, `runner`, `precision`, `framework`, scenarios, and supported search spaces.
 5. **Size from evidence.** Mirror proven parallelism layouts and trim unsupported ones. Latency TP rows normally start at concurrency 1. Do not copy large-memory TP/EP layouts onto a smaller SKU.
-6. **Check launcher routing.** The launcher must resolve the new filename, including framework and `_mtp` suffixes. Simulate STP and MTP resolution and confirm each selected file exists.
+6. **Check variant selection.** Every search-space row carries `srt-recipe:`, and each matrix point must match exactly one recipe variant by TP/GPU count, `CONC`, `KV_OFFLOADING` and image (`infx/srt_slurm/single_node.py::select_recipe`). No launcher routing is needed.
 7. **Append one changelog entry** for the exact new key. See [Append the changelog safely](#append-the-changelog-safely).
 8. **Validate syntax and generated output.** Inspect image, model, runner, ISL/OSL, `max-model-len`, concurrency, TP/PP/EP/DCP/PCP, and `spec-decoding`.
 
@@ -109,7 +144,7 @@ A `MODELS.md` row alone is not an executable recipe. The complete path is benchm
 
 ## Change a master config
 
-Sources: [`configs/CONFIGS.md`](../configs/CONFIGS.md), [`validation.py`](../utils/matrix_logic/validation.py), [`generate_sweep_configs.py`](../utils/matrix_logic/generate_sweep_configs.py).
+Sources: [`configs/CONFIGS.md`](../configs/CONFIGS.md), [`validation.py`](../infx/matrix/validation.py), [`generate_sweep_configs.py`](../utils/matrix_logic/generate_sweep_configs.py).
 
 1. Locate the exact key and read its whole entry plus adjacent siblings.
 2. Use only documented kebab-case fields. The schema forbids extras. A plausible-looking field is not accepted automatically.
@@ -185,7 +220,7 @@ Do not ship one side alone. `srtctl` reads the recipe, while matrix generation r
 
 ## Register an llm-d recipe
 
-Sources: [`benchmarks/llm-d/README.md`](../benchmarks/llm-d/README.md), [`benchmarks/multi_node/llm-d/README.md`](../benchmarks/multi_node/llm-d/README.md), [`llm-d-recipes/`](../benchmarks/multi_node/llm-d-recipes/), and the current [`llmd-vllm` benchmark wrapper](../benchmarks/multi_node/dsv4_fp4_gb200_llmd-vllm-disagg.sh).
+Sources: [`benchmarks/llm-d/README.md`](../benchmarks/llm-d/README.md), [`benchmarks/multi_node/llm-d/README.md`](../benchmarks/multi_node/llm-d/README.md), and [`llm-d-recipes/`](../benchmarks/multi_node/llm-d-recipes/).
 
 llm-d is not the srt-slurm path: InferenceX owns the Slurm allocation and starts one container per node.
 
@@ -213,7 +248,7 @@ Sources: [`AGENTS.md#non-negotiable-benchmark-invariants`](../AGENTS.md#non-nego
 
 ## Add or change MTP
 
-Sources: [`AGENTS.md#non-negotiable-benchmark-invariants`](../AGENTS.md#non-negotiable-benchmark-invariants), [MTP appendix in the model+hardware playbook](../.claude/commands/add-model-hardware.md#appendix--mtp--eagle3-spec-decoding-variant), and current [`*_mtp.sh` siblings](../benchmarks/single_node/fixed_seq_len/).
+Sources: [`AGENTS.md#non-negotiable-benchmark-invariants`](../AGENTS.md#non-negotiable-benchmark-invariants), [MTP appendix in the model+hardware playbook](../.claude/commands/add-model-hardware.md#appendix--mtp--eagle3-spec-decoding-variant), and current [`*-mtp` srt-slurm recipes](../benchmarks/single_node/srt-slurm-recipes/).
 
 1. Confirm native MTP modules versus an external draft. For a draft, verify exact model ID, method (for example `eagle3`), and recommended speculative-token count from the model/upstream recipe.
 2. Copy a working sibling for the same model and backend. Preserve its speculative config, attention backend, token count, model patches, and dependency setup.
@@ -295,6 +330,26 @@ The GB300 launcher allows 7200 seconds for engine readiness. In [run 34504969146
 GPU sweep and eval evidence is required before calling any recipe validated.
 
 Source: [upstream recipe](https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4.1-Flash).
+
+### DeepSeek-V4.1-Flash DSpark on ATOM
+
+`dsv41flash-fp4-mi355x-atom-agentic-dspark` follows the
+[upstream ATOM recipe](https://github.com/ROCm/ATOM/blob/53b11c9a665e786798785acbedfdfd4da3fb87c4/recipes/DeepSeek-V4.1-Flash-Agentic.md)
+with `rocm/atom-dev:nightly_202609250902`. TP2 covers concurrency
+`[1, 2, 8, 16, 32, 64]`; TP4 covers `[2, 8, 16, 32, 64]`, without expert
+parallelism or KV offload. Every point uses BF16 KV, FP8 index cache, 128 maximum
+sequences, 16K batched-token/prefill chunks, prefix caching with block size 16,
+8K state checkpoints, compilation level 3 and FULL graphs. Concurrency 32 captures
+every size from 1 through 32 plus 48, 64 and 128; other points use the upstream
+sparse list. Five-token DSpark uses golden AL 3.51 for throughput and real
+acceptance for eval, with the checkpoint's shipped draft and `dsml_v41` parser.
+
+The existing MI355X launcher mounts this model's shared cache and the repository
+at `/ix`, preserves Slurm's GPU allocation and routes `draft_model` to the new
+`dsv41flash_fp4_mi355x_atom_mtp.sh` script. Canonical AgentX runs use the uncapped
+`semianalysis_cc_traces_weka_062126` corpus, 3600 seconds per point and five warmup
+requests per lane. Workflow duration overrides and `agentx-fast` remain available
+for diagnostics. GPU sweep and eval validation is pending.
 
 ### DeepSeek-V4.1-Flash DSpark on H200
 
@@ -561,7 +616,7 @@ For srt-slurm, also run the upstream recipe checker/`srtctl` command documented 
 
 ## Avoid schema and topology traps
 
-Enforced details come from [`validation.py`](../utils/matrix_logic/validation.py) and are summarized in [`configs/CONFIGS.md`](../configs/CONFIGS.md):
+Enforced details come from [`validation.py`](../infx/matrix/validation.py) and are summarized in [`configs/CONFIGS.md`](../configs/CONFIGS.md):
 
 - Schemas use `extra='forbid'`. Use kebab-case aliases exactly.
 - Choose either `conc-start` + `conc-end` **or** non-empty `conc-list`, never both. Values must be positive and start must not exceed end.

@@ -163,7 +163,7 @@ def test_kimi_curve_requires_an_explicit_supported_sampler(
     ("framework", "args", "environment", "expected"),
     [
         (
-            "dynamo-sglang",
+            "sglang-disagg",
             {
                 "speculative-algorithm": "DSpark",
                 "speculative-dspark-block-size": 3,
@@ -229,7 +229,7 @@ def test_engine_token_selection_and_environment(
     "environment",
     [{"EVAL_ONLY": "true"}, {"IS_AGENTIC": "0"}, {"SPEC_DECODING": "none"}],
 )
-@pytest.mark.parametrize("framework", ["vllm", "dynamo-sglang", "trt"])
+@pytest.mark.parametrize("framework", ["vllm", "vllm-disagg", "sglang", "dynamo-sglang", "trt"])
 def test_real_runs_clear_synthetic_without_a_curve(
     tmp_path: Path, framework: str, environment: dict[str, str]
 ) -> None:
@@ -251,7 +251,7 @@ def test_real_runs_clear_synthetic_without_a_curve(
         build_overrides(recipe, framework, env, golden_dir=tmp_path / "absent"),
     )
     role = result["roles"]["agg"]
-    if framework == "vllm":
+    if framework in {"vllm", "vllm-disagg"}:
         assert json.loads(role["args"]["speculative-config"]) == {
             "method": "dspark",
             "num_speculative_tokens": 3,
@@ -265,6 +265,28 @@ def test_real_runs_clear_synthetic_without_a_curve(
         assert not any(key.startswith("SGLANG_SIMULATE_ACC_") for key in result["environment"])
     assert role["env"]["KEEP"] == "yes"
     assert result["environment"]["KEEP"] == "yes"
+
+
+@pytest.mark.parametrize(
+    ("prefix", "args", "expected"),
+    [
+        ("dsv4", {"method": "dspark"}, 2.7),
+        ("kimik3", {"method": "dspark", "draft-model": "Inferact/Kimi-K3-DSpark"}, 2.9),
+        ("minimaxm3", {"method": "eagle3", "draft-model": "Inferact/MiniMax-M3-EAGLE3-GQA"}, 2.6),
+    ],
+)
+def test_atom_forces_golden_acceptance_by_server_flag(
+    golden_dir: Path, prefix: str, args: dict[str, Any], expected: float
+) -> None:
+    recipe = {"roles": {"agg": {"args": {**args, "num-speculative-tokens": 3}, "env": {}}}}
+    env = {**ENV, "MODEL_PREFIX": prefix}
+    result = apply_native(recipe, build_overrides(recipe, "atom", env, golden_dir=golden_dir))
+    assert result["roles"]["agg"]["args"]["spec-decode-acceptance-length"] == expected
+    # Evals verify real drafts, so a recipe-pinned acceptance length is removed.
+    evaluated = apply_native(
+        result, build_overrides(result, "atom", {**env, "EVAL_ONLY": "true"}, golden_dir=golden_dir)
+    )
+    assert "spec-decode-acceptance-length" not in evaluated["roles"]["agg"]["args"]
 
 
 @pytest.mark.parametrize(

@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     import torch
 
 from ep_harness import (
+    time_cuda_graph_phase_us,
     time_us,
     token_ladder,
 )
@@ -77,6 +78,9 @@ class EPBackend(abc.ABC):
     # adapter that also sends an FP8-quantized dispatch payload widens this.
     SUPPORTED_PRECISIONS: tuple = ("bf16",)
     stage_device_work = False
+    # Modes whose fixed-shape dispatch -> stage -> combine roundtrip is safe to capture and
+    # replay. Graph-capable modes use replay by default; COLLX_CUDA_GRAPH=0 restores eager timing.
+    CUDA_GRAPH_MODES: tuple = ()
     # Dispatch and combine form a single-use pair: every timed combine needs a fresh
     # dispatch and every timed dispatch must be drained by a combine (double-buffered
     # low-latency result tensors; MoRI/FlashInfer phase asserts). One flag, because a
@@ -165,6 +169,19 @@ class EPBackend(abc.ABC):
         if not self.stage_device_work:
             return False
         return not (self.precision == "fp8" and self.fp8_consume == "dequant")
+
+    @property
+    def cuda_graph_supported(self) -> bool:
+        """Whether this realized backend/mode has a graph-safe fixed-shape roundtrip."""
+        return self.mode in self.CUDA_GRAPH_MODES
+
+    @property
+    def cuda_graph_enabled(self) -> bool:
+        """Use CUDA graph replay unless the external eager switch disables it."""
+        setting = os.environ.get("COLLX_CUDA_GRAPH", "1")
+        if setting not in ("0", "1"):
+            raise ValueError(f"COLLX_CUDA_GRAPH must be '0' or '1', got {setting!r}")
+        return self.cuda_graph_supported and setting == "1"
 
     def fused_quantize(self, eager):
         """The fp8 quantize the TIMED dispatch should call, keyed on mode.
@@ -382,7 +399,7 @@ class EPBackend(abc.ABC):
         """Components measured for this backend: roundtrip, dispatch and combine
         always; stage only when it launches device work."""
         components = ["roundtrip", "dispatch", "combine"]
-        if self.stage_device_work:
+        if self.stage_device_work and not self.cuda_graph_enabled:
             components.append("stage")
         return components
 
@@ -532,6 +549,10 @@ class EPBackend(abc.ABC):
 
     def benchmark_component(self, component, problem, warmup, iters):
         """Measure one named component; every component gets the same warm-up first."""
+        if self.cuda_graph_enabled:
+            # Re-capture the roundtrip for each component, adding timing nodes only
+            # around that phase so roundtrip replay stays uninstrumented.
+            return self.benchmark_roundtrip(problem, warmup, iters, component)
         if component == "roundtrip":
             return self.benchmark_roundtrip(problem, warmup, iters)
         if component == "dispatch":
@@ -542,7 +563,7 @@ class EPBackend(abc.ABC):
             return self.benchmark_combine(problem, warmup, iters)
         raise RuntimeError(f"unknown timed component {component!r}")
 
-    def benchmark_roundtrip(self, problem, warmup, iters):
+    def benchmark_roundtrip(self, problem, warmup, iters, graph_component="roundtrip"):
         import torch
 
         self.warm(problem, warmup)
@@ -560,6 +581,55 @@ class EPBackend(abc.ABC):
             staged = handle.combine_input
             self.combine(problem, handle)  # drain the pair backends require
             torch.cuda.synchronize()
+        if self.cuda_graph_enabled:
+            # Capture replaces the existing roundtrip callable in place. Capture and its warmup
+            # are excluded; the ordinary time_us event pipeline measures replay directly.
+            import torch.distributed as dist
+
+            dist.barrier()
+            torch.cuda.synchronize()
+            graph = torch.cuda.CUDAGraph()
+            interval = (
+                (
+                    torch.cuda.Event(enable_timing=True, external=True),
+                    torch.cuda.Event(enable_timing=True, external=True),
+                )
+                if graph_component != "roundtrip" else None
+            )
+            with torch.cuda.graph(graph, capture_error_mode="relaxed"):
+                if graph_component == "dispatch":
+                    interval[0].record()
+                handle = self.dispatch(problem)
+                if graph_component == "dispatch":
+                    interval[1].record()
+                if staged is None:
+                    self.stage(problem, handle)
+                else:
+                    handle.combine_input = staged
+                if graph_component == "combine":
+                    interval[0].record()
+                combined = self.combine(problem, handle)
+                if graph_component == "combine":
+                    interval[1].record()
+            torch.cuda.synchronize()
+            if interval is None:
+                samples = time_us(torch, graph.replay, warmup, iters)
+            else:
+                samples = time_cuda_graph_phase_us(
+                    torch, graph.replay, warmup, iters, interval
+                )
+
+            # Prove replay, rather than capture, writes the output used by the correctness gate.
+            combined.fill_(float("nan"))
+            torch.cuda.synchronize()
+            graph.replay()
+            torch.cuda.synchronize()
+            replayed = combined.clone()
+            problem._cuda_graph_output = replayed
+            problem._cuda_graph_output_rewritten = bool(
+                torch.isfinite(replayed).all().item()
+            )
+            return samples
         return time_us(torch, lambda p=problem: self.run_roundtrip(p, staged), 0, iters)
 
     def benchmark_dispatch(self, problem, warmup, iters):

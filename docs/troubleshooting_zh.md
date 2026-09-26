@@ -25,7 +25,7 @@
 
 - [`KLAUD_DEBUG.md`](../KLAUD_DEBUG.md) 记录反复出现的 Klaud-Cold/镜像升级事故及其已观测特征。它是事故知识，不替代当前工作流或评审政策。
 - [`run-sweep.yml`](../.github/workflows/run-sweep.yml)、[`benchmark-tmpl.yml`](../.github/workflows/benchmark-tmpl.yml) 和 [`benchmarks/benchmark_lib.sh`](../benchmarks/benchmark_lib.sh) 定义编排、制品上传、服务器就绪、基准测试和评测行为。
-- [`validate_perf_changelog.py`](../infx/workflows/validate_perf_changelog.py)、[`generate_sweep_configs.py`](../utils/matrix_logic/generate_sweep_configs.py) 和 [`validation.py`](../utils/matrix_logic/validation.py) 分别负责 changelog、矩阵和模式失败。
+- [`validate_perf_changelog.py`](../infx/workflows/validate_perf_changelog.py)、[`generate_sweep_configs.py`](../utils/matrix_logic/generate_sweep_configs.py) 和 [`validation.py`](../infx/matrix/validation.py) 分别负责 changelog、矩阵和模式失败。
 - [`utils/runner_setup/RUNNER_SETUP.md`](../utils/runner_setup/RUNNER_SETUP.md) 与 [`runners/`](../runners/) 负责预置和启动器路由。[`CONTRIBUTING.md`](../CONTRIBUTING.md#amd-cluster-never-leave-root-owned-files-in-runner-workspaces) 负责 AMD 工作区安全规则。
 - [`utils/evals/EVALS.md`](../utils/evals/EVALS.md)、[`validate_scores.py`](../infx/evals/validate_scores.py) 和 [`collect_eval_results.py`](../infx/results/collect_eval_results.py) 分别负责评测执行、验证和收集。
 - [失败摄取恢复命令](../.claude/commands/recover-failed-ingest.md)是带防护的恢复流程。下游事实来源是 InferenceX-app 的 [`ingest-results.yml`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/main/.github/workflows/ingest-results.yml)、[`prepare-ci-artifacts.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/main/packages/db/src/prepare-ci-artifacts.ts)、[`ingest-ci-run.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/main/packages/db/src/ingest-ci-run.ts) 和 [`benchmark-mapper.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/main/packages/db/src/etl/benchmark-mapper.ts)。
@@ -95,7 +95,7 @@ Setup 阶段的删除错误通常意味着陈旧分支或改变空白的合并�
 
 [`wait_for_server_ready`](../benchmarks/benchmark_lib.sh) 会区分“服务器在日志出现前死亡”“服务器在健康前死亡”和进程存活但 `/health` 尚未通过。保留服务器日志和 PID 状态；仅有工作流最终超时不能构成诊断。
 
-就绪后，共享 helper 会记录服务器及已识别的持久 engine worker。Benchmark、AgentX 和 eval 客户端通过 `utils/server_watch.py` 监控：进程消失、成为 zombie 或 PID 被复用时，仅停止所属客户端进程组。健康但缓慢的工作没有新增时限。使用其他就绪路径的 recipe 需要显式监控服务器；wrapper 存活不能单独证明 worker 健康。
+就绪后，共享 helper 会记录服务器及已识别的持久 engine worker。Benchmark、AgentX 和 eval 客户端通过 `infx.bench_serving.server_watch` 监控：进程消失、成为 zombie 或 PID 被复用时，仅停止所属客户端进程组。健康但缓慢的工作没有新增时限。使用其他就绪路径的 recipe 需要显式监控服务器；wrapper 存活不能单独证明 worker 健康。
 
 客户端依赖安装使用 uv 有限次 HTTP 重试和 120 秒读取超时，并保留下载缓存。网络或下载失败属于基础设施证据，不应据此更改 engine 参数。H100 srt-slurm 将请求镜像解析到其独立 squash 路径并检查已暂存的模型/镜像资源；B300 在分配到的计算节点上检查节点本地模型配置，再启动容器。资源缺失属于就绪性阻塞，不能替换为旧镜像或其他权重。
 

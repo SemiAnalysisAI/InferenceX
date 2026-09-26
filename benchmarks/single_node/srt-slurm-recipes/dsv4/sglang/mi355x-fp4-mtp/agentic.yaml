@@ -1,0 +1,242 @@
+# DeepSeek-V4-Pro-0813 AgentX on MI355X with SGLang DSpark. Low concurrency
+# keeps KV on GPU; higher concurrency extends it to host DRAM through HiCache,
+# and the widest band runs DP attention behind a cache-aware SGLang router.
+base:
+  schema: 2
+  name: dsv4-fp4-mi355x-sglang-agentic
+  model:
+    path: hf:deepseek-ai/DeepSeek-V4-Pro-0813
+    container: lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260914
+    precision: fp4
+  resources:
+    gpu_type: mi355x
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        served-model-name: deepseek-ai/DeepSeek-V4-Pro-0813
+        trust-remote-code: true
+        tensor-parallel-size: 8
+        data-parallel-size: 1
+        expert-parallel-size: 1
+        attention-backend: dsv4
+        enable-deepseek-v4-fp4-indexer: true
+        page-size: 256
+        swa-full-tokens-ratio: 0.1
+        kv-cache-dtype: fp8_e4m3
+        enforce-shared-experts-fusion: true
+        # No chat-template override: deepseek_v4_thinking.jinja drops tool
+        # definitions and tool messages.
+        tool-call-parser: deepseekv4
+        reasoning-parser: deepseek-v4
+        chunked-prefill-size: 16384
+        mem-fraction-static: 0.86
+        prefill-decode-interval: 20
+        # DSpark is the checkpoint's bundled draft; gamma 6 is AL-optimal on the
+        # golden curve and verifies a window of 7.
+        speculative-algorithm: DSPARK
+        speculative-dspark-block-size: 6
+        speculative-num-steps: 1
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 7
+        # Draft passes under long-context load outlast the 1800 s default watchdog.
+        watchdog-timeout: 3600
+        enable-metrics: true
+      env:
+        PYTHONNOUSERSITE: '1'
+        # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        # AgentX measures thinking on, the regime of the golden acceptance curve.
+        SGLANG_DEFAULT_THINKING: '1'
+        SGLANG_DSV4_REASONING_EFFORT: high
+        SGLANG_USE_ROCM700A: '0'
+        SGLANG_HACK_FLASHMLA_BACKEND: unified_kv_triton
+        AITER_BF16_FP8_MOE_BOUND: '0'
+        TORCH_BLAS_PREFER_HIPBLASLT: '1'
+        HSA_NO_SCRATCH_RECLAIM: '0'
+        # aiter batched GEMM for the absorbed MLA projections.
+        SGLANG_OPT_USE_AITER_BATCHED_GEMM: '1'
+        # Unified radix tree that releases out-of-window SWA slots, so cached
+        # sessions keep their trailing window under multi-turn load.
+        SGLANG_ENABLE_UNIFIED_RADIX_TREE: '1'
+        SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: '1'
+        GPU_MAX_HW_QUEUES: '2'
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
+    env:
+      MODEL: deepseek-ai/DeepSeek-V4-Pro-0813
+      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+
+# One variant per point. Admission is 2x CONC; the decode graph batch follows it
+# up to 128. HiCache pins 1.5x the device KV pool per rank. DP attention keeps
+# 8192 prefill tokens per rank, and the router pins each AIPerf session to the
+# rank holding its prefix. Saturation points get a longer warmup drain.
+override_tp8_c1:
+  roles:
+    agg:
+      args:
+        max-running-requests: 2
+        cuda-graph-max-bs-decode: 2
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: none
+
+override_tp8_c4:
+  roles:
+    agg:
+      args:
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
+  benchmark:
+    env:
+      CONC: '4'
+      KV_OFFLOADING: none
+
+override_tp8_c16:
+  roles:
+    agg:
+      args:
+        max-running-requests: 32
+        cuda-graph-max-bs-decode: 32
+  benchmark:
+    env:
+      CONC: '16'
+      KV_OFFLOADING: none
+
+override_tp8_c32_hicache:
+  roles:
+    agg:
+      args:
+        max-running-requests: 64
+        cuda-graph-max-bs-decode: 64
+        enable-hierarchical-cache: true
+        hicache-ratio: 1.5
+        hicache-write-policy: write_through
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
+  benchmark:
+    env:
+      CONC: '32'
+      KV_OFFLOADING: dram
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+
+override_tp8_c48_hicache:
+  roles:
+    agg:
+      args:
+        max-running-requests: 96
+        cuda-graph-max-bs-decode: 96
+        enable-hierarchical-cache: true
+        hicache-ratio: 1.5
+        hicache-write-policy: write_through
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
+  benchmark:
+    env:
+      CONC: '48'
+      KV_OFFLOADING: dram
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+
+override_tp8_c128_dp_hicache:
+  frontend:
+    type: sglang-router
+    args:
+      policy: cache_aware
+      request-id-headers: x-correlation-id
+      dp-aware: true
+      connect-timeout-secs: 900
+      request-timeout-secs: 14400
+      disable-health-check: true
+      disable-retries: true
+  roles:
+    agg:
+      args:
+        max-running-requests: 256
+        cuda-graph-max-bs-decode: 128
+        enable-hierarchical-cache: true
+        hicache-ratio: 1.5
+        hicache-write-policy: write_through
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
+        data-parallel-size: 8
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        enable-prefill-delayer: true
+        enable-dp-attention-local-control-broadcast: true
+        tokenizer-worker-num: 8
+        stream-interval: 20
+        prefill-delayer-token-usage-low-watermark: 0.7
+        chunked-prefill-size: 65536
+        mem-fraction-static: 0.92
+      env:
+        SGLANG_SHARED_EXPERT_TP1: '1'
+        SGLANG_DP_SHARED_EXPERT_LOCAL: '1'
+        SGLANG_DP_USE_GATHERV: '1'
+        SGLANG_DP_USE_REDUCE_SCATTER: '1'
+        GPU_MAX_HW_QUEUES: '5'
+  benchmark:
+    env:
+      CONC: '128'
+      KV_OFFLOADING: dram
+      AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+
+override_tp8_c256_dp_hicache:
+  frontend:
+    type: sglang-router
+    args:
+      policy: cache_aware
+      balance-abs-threshold: 32
+      request-id-headers: x-correlation-id
+      dp-aware: true
+      connect-timeout-secs: 900
+      request-timeout-secs: 14400
+      disable-health-check: true
+      disable-retries: true
+  roles:
+    agg:
+      args:
+        max-running-requests: 512
+        cuda-graph-max-bs-decode: 128
+        enable-hierarchical-cache: true
+        hicache-ratio: 1.5
+        hicache-write-policy: write_through
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
+        data-parallel-size: 8
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        enable-prefill-delayer: true
+        enable-dp-attention-local-control-broadcast: true
+        tokenizer-worker-num: 8
+        stream-interval: 20
+        prefill-delayer-token-usage-low-watermark: 0.7
+        chunked-prefill-size: 65536
+        mem-fraction-static: 0.92
+      env:
+        SGLANG_SHARED_EXPERT_TP1: '1'
+        SGLANG_DP_SHARED_EXPERT_LOCAL: '1'
+        SGLANG_DP_USE_GATHERV: '1'
+        SGLANG_DP_USE_REDUCE_SCATTER: '1'
+        GPU_MAX_HW_QUEUES: '5'
+  benchmark:
+    env:
+      CONC: '256'
+      KV_OFFLOADING: dram
+      AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'

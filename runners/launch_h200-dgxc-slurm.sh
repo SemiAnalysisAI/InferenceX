@@ -1,7 +1,7 @@
 #!/usr/bin/bash
 
 source "$(dirname "${BASH_SOURCE[0]}")/../benchmarks/benchmark_lib.sh" --validation-only || exit 1
-check_env_vars EVAL_ONLY IS_MULTINODE REQUIRE_POWER RUN_EVAL SALLOC_TIME_LIMIT
+check_env_vars EVAL_ONLY IS_MULTINODE REQUIRE_POWER RUN_EVAL SALLOC_TIME_LIMIT IS_AGENTIC
 set -eo pipefail
 
 SLURM_PARTITION="main"
@@ -15,7 +15,23 @@ set -x
 
 source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh" || exit 1
 
-if [[ "$IS_MULTINODE" == "true" ]]; then
+EXECUTION_PATH=agentic
+if [[ "$IS_MULTINODE" == true ]]; then
+    EXECUTION_PATH=multinode
+elif [[ "$IS_AGENTIC" == 0 || -n "${SRT_RECIPE:-}" ]]; then
+    check_env_vars SRT_RECIPE
+    EXECUTION_PATH=native-single-node
+fi
+
+if [[ "$EXECUTION_PATH" == native-single-node ]]; then
+    SRT_MODEL_PATH="hf:$MODEL"
+    SRT_SQUASH_FILE="/data/containers/$(printf '%s' "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    launch_srt_single_node h200-dgxc-slurm \
+        --var SLURM_ACCOUNT "$SLURM_ACCOUNT" --var SLURM_PARTITION "$SLURM_PARTITION" \
+        --var AIPERF_MMAP_CACHE_HOST_PATH "$AIPERF_MMAP_CACHE_HOST_PATH" \
+        --var HF_HUB_CACHE_MOUNT "$HF_HUB_CACHE_MOUNT" --var CONTAINER_KEY "$IMAGE"
+
+elif [[ "$EXECUTION_PATH" == multinode ]]; then
 
     if [[ -z "${CONFIG_FILE:-}" ]]; then
         echo "Error: CONFIG_FILE is not set. The srt-slurm path requires a CONFIG_FILE in additional-settings." >&2
@@ -117,9 +133,9 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     curl -LsSf https://astral.sh/uv/install.sh | sh
     source $HOME/.local/bin/env
 
-    uv venv
+    uv venv --quiet
     source .venv/bin/activate
-    uv pip install -e .
+    uv pip install --quiet -e .
 
     # A full sweep starts several independent runner jobs at once. Serialize
     # the initial DSV4 download into the shared model directory so those jobs
@@ -130,7 +146,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         DSV4_MODEL_READY="${MODEL_PATH}/.inference-max-download-complete"
         DSV4_MODEL_LOCK="${MODEL_PATH}.download.lock"
         if [[ ! -f "$DSV4_MODEL_READY" ]]; then
-            uv pip install huggingface-hub
+            uv pip install --quiet huggingface-hub
             mkdir -p "$(dirname "$MODEL_PATH")"
             (
                 exec 9>"$DSV4_MODEL_LOCK"
@@ -262,7 +278,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     SRT_SETUP_SUCCEEDED=0
     for ((SRT_SETUP_ATTEMPT = 1; SRT_SETUP_ATTEMPT <= SRT_SETUP_MAX_ATTEMPTS; SRT_SETUP_ATTEMPT++)); do
         echo "Running make setup (attempt ${SRT_SETUP_ATTEMPT}/${SRT_SETUP_MAX_ATTEMPTS})..."
-        if make setup ARCH=x86_64; then
+        if run_srt_setup ARCH=x86_64; then
             SRT_SETUP_SUCCEEDED=1
             break
         fi

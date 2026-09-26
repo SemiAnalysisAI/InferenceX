@@ -13,12 +13,7 @@ fi
 model_path=$1
 model_name=$2
 concurrency_list=${3}
-# vllm-disagg uses --served-model-name MODEL_NAME; sglang defaults to MODEL_PATH
-if [[ "$ENGINE" == "vllm-disagg" ]]; then
-    MODEL="${MODEL_NAME}"
-else
-    MODEL="${MODEL_PATH}"
-fi
+MODEL="${MODEL_PATH}"
 log_path=${4}
 
 IFS='x' read -r -a chosen_concurrencies <<< "${concurrency_list}"
@@ -78,7 +73,7 @@ PORT="${ROUTER_PORT}"
 check_env_vars DURATION RESULT_FILENAME FLUSH_DRAIN_TIMEOUT CLEAR_CACHE_BETWEEN_CONC
 export MODEL DURATION MAX_MODEL_LEN
 # The workflow guard / upload steps expect one "${RESULT_FILENAME}_conc<N>.json" per
-# concurrency, so each conc below is suffixed with _conc<N> (as agentic_srt.sh does).
+# concurrency, so each conc below is suffixed with _conc<N> (as srt_agentic.sh does).
 RESULT_FILENAME_BASE="${RESULT_FILENAME}"
 
 mkdir -p "$RESULT_DIR"
@@ -108,7 +103,7 @@ for max_concurrency in "${chosen_concurrencies[@]}"; do
 
     # benchmark-multinode-tmpl.yml expects the per-conc nesting (LOGS/agentic/conc_*/...)
     # even though CI runs one concurrency per job; nesting also keeps local multi-conc
-    # sweeps from overwriting each other (same layout as agentic_srt.sh).
+    # sweeps from overwriting each other (same layout as srt_agentic.sh).
     CONC_RESULT_DIR="$RESULT_DIR/conc_${max_concurrency}"
     mkdir -p "$CONC_RESULT_DIR"
 

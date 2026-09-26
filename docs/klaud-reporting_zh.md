@@ -29,7 +29,7 @@ KLAUD=(uv run --no-project --exclude-newer PT12H --python 3.12 \
 "${KLAUD[@]}" report --kind attempt --file "$KLAUD_EVIDENCE/attempt.json"
 ```
 
-`prepare-baseline` 使用候选日期、`exact=true` 查询公开 `benchmarks`，不使用 calculator view；通过 `workflow-info` 核实产出运行 ID、head 和运行次数。它用受信任的本地生成器，从各产出提交的 YAML 重建所选配置族，支持历史 `.github/configs` 路径和平铺 runner 标签格式。只校验所选配置族，避免已退役兄弟配置的旧 schema 阻断重建。匹配要求旧镜像及完整公开工作负载、拓扑、并发身份一致；存在 recipe fingerprint 时也必须匹配。没有指纹的旧数据必须唯一匹配，且产出运行的 changelog 必须选择该配置族。不属于重建配置族的数据行会被忽略，即使其产出运行元数据不完整。匹配当前或历史测试点的数据行若来源缺失，或存在身份歧义、重复点，会阻止准备，不发布不完整基线。首次发布前，按[公开 API 路由](./klaud_zh.md#公开-api-调查)补充已验证的历史评测和数据集来源。`BenchmarkRow` 本身不含数据集身份；AgentX 数据集无法核实时，差值仍为 N/A。绝不通过运行旧镜像补齐基线。
+`prepare-baseline` 核对规划阶段 `baseline-preflight.json` 中候选、基准 SHA、来源和模型的绑定，并复用其公开 benchmark 测试点清单。标记 `baseline-preflight-required` 的所选候选在文件缺失或无效时停止。没有该文件的旧候选使用候选日期、`exact=true` 查询公开 `benchmarks`，不使用 calculator view；通过 `workflow-info` 核实产出运行 ID、head 和运行次数。它用受信任的本地生成器，从各产出提交的 YAML 重建所选配置族，支持历史 `.github/configs` 路径和平铺 runner 标签格式。只校验所选配置族，避免已退役兄弟配置的旧 schema 阻断重建。匹配要求旧镜像及完整公开工作负载、拓扑、并发身份一致；存在 recipe fingerprint 时也必须匹配。没有指纹的旧数据必须唯一匹配，且产出运行的 changelog 必须选择该配置族。不属于重建配置族的数据行会被忽略，即使其产出运行元数据不完整。匹配当前或历史测试点的数据行若来源缺失，或存在身份歧义、重复点，会阻止准备，不发布不完整基线。首次发布前，按[公开 API 路由](./klaud_zh.md#公开-api-调查)补充已验证的历史评测和数据集来源。`BenchmarkRow` 本身不含数据集身份；AgentX 数据集无法核实时，差值仍为 N/A。绝不通过运行旧镜像补齐基线。
 
 基线文件仅创建一次，重试不重新获取。PR 正文通过压缩的隐藏标记冻结完整类型化记录，并只渲染一次完整基线；冲突替换会被拒绝。旧 PR 使用的基线评论格式仍可供恢复流程读取。确需修正时，由维护者检查证据并明确记录更正，不能在修复期间静默改变基线。
 
