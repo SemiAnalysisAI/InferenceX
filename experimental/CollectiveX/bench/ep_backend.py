@@ -755,6 +755,9 @@ class EPBackend(abc.ABC):
             problem, staged, iters, ("pair",)
         )
         self._calibrate_align_spin()
+        # DIAG: hold this chain's graphs until the next chain call, so no graph is destroyed
+        # between the chain and the oracle that follows it.
+        self._diag_chain_graphs = (floors, period)
         for graph in (floors, period):
             graph.replay()
             torch.cuda.synchronize()
