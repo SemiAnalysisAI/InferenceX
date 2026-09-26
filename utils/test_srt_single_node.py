@@ -10,7 +10,13 @@ from pathlib import Path
 import pytest
 import yaml
 
-from infx.srt_slurm.single_node import runtime_arguments, select_recipe, submission_fields
+from infx.srt_slurm.single_node import (
+    SPEEDBENCH_CLIENT,
+    _is_speedbench,
+    runtime_arguments,
+    select_recipe,
+    submission_fields,
+)
 from infx.srt_slurm.synthetic_acceptance import plan_commands, selected_recipes
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -453,3 +459,208 @@ def test_b300_keeps_agentic_and_explicit_collector_dispatch(tmp_path, collector)
     assert calls[-1][-2:] == ["bash", expected]
     assert "--jobid=42" in calls[-1]
     assert (tmp_path / "cancelled").read_text() == "42\n"
+
+
+# ---------------------------------------------------------------------------
+# SPEED-Bench collector tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def speedbench_point(tmp_path):
+    """A recipe that targets the SPEED-Bench collector client."""
+    recipe = {
+        "engine": "vllm",
+        "resources": {"gpus_per_node": 8},
+        "model": {"path": "hf:deepseek-ai/DeepSeek-V4-Pro", "container": "vllm/vllm-openai:v0.21.0", "precision": "fp4"},
+        "roles": {"agg": {
+            "nodes": 1, "workers": 1, "gpus": 8,
+            "args": {
+                "tensor-parallel-size": 8, "data-parallel-size": 1, "pipeline-parallel-size": 1,
+                "trust-remote-code": True, "kv-cache-dtype": "fp8",
+                "speculative-config": '{"method":"mtp","num_speculative_tokens":3}',
+            },
+        }},
+        "benchmark": {"type": "custom",
+            "command": f"bash /infmax-workspace/benchmarks/single_node/{SPEEDBENCH_CLIENT}",
+            "env": {
+                "MODEL": "deepseek-ai/DeepSeek-V4-Pro",
+                "SPEC_DECODING": "mtp",
+                "TEMPERATURE": "1.0",
+            },
+        },
+    }
+    path = tmp_path / "speedbench.yaml"
+    path.write_text(yaml.safe_dump({"base": recipe}))
+    env = {
+        "FRAMEWORK": "vllm", "MODEL": "deepseek-ai/DeepSeek-V4-Pro",
+        "IMAGE": "vllm/vllm-openai:v0.21.0", "PRECISION": "fp4",
+        "TP": "8", "GPU_COUNT": "8", "PP_SIZE": "1", "DCP_SIZE": "1", "PCP_SIZE": "1",
+        "EP_SIZE": "1", "DP_ATTENTION": "false", "SPEC_DECODING": "mtp", "IS_AGENTIC": "0",
+        "RUN_EVAL": "false", "EVAL_ONLY": "false",
+        "CONC": "1", "RESULT_FILENAME": "speedbench_off_mtp3",
+        "GPU_MONITOR_INTERVAL": "3", "MODEL_PREFIX": "dsv4",
+        "CATEGORY": "qualitative", "SPEEDBENCH_OUTPUT_LEN": "512",
+        "THINKING": "off", "MTP": "3",
+        # ISL/OSL/RANDOM_RANGE_RATIO intentionally absent -- collector skips them
+    }
+    return path, recipe, env
+
+
+def test_speedbench_detection():
+    assert _is_speedbench({"command": f"bash /infmax-workspace/benchmarks/single_node/{SPEEDBENCH_CLIENT}"})
+    assert not _is_speedbench({"command": "bash /infmax-workspace/benchmarks/single_node/srt_agentic.sh"})
+    assert not _is_speedbench({})
+
+
+def test_speedbench_collector_skips_isl_osl_and_chat_template(speedbench_point):
+    """Collector recipes must validate without ISL, OSL, RANDOM_RANGE_RATIO, or USE_CHAT_TEMPLATE."""
+    path, _, env = speedbench_point
+    # These keys would make validate_recipe fail for a normal (non-collector) recipe
+    assert "ISL" not in env
+    assert "OSL" not in env
+    argv = runtime_arguments(f"{path}:base", env)
+    assert any("CATEGORY" in arg for arg in argv)
+    assert any("SPEEDBENCH_OUTPUT_LEN" in arg for arg in argv)
+    assert any("RESULT_DIR" in arg and "/logs" in arg for arg in argv)
+
+
+def test_speedbench_collector_binds_chat_template_kwargs_on(speedbench_point):
+    """CHAT_TEMPLATE_KWARGS_ON is bound when present in the environment."""
+    path, _, env = speedbench_point
+    env_with_kwargs = {**env, "CHAT_TEMPLATE_KWARGS_ON": '{"enable_thinking": true}'}
+    argv = runtime_arguments(f"{path}:base", env_with_kwargs)
+    assert any("CHAT_TEMPLATE_KWARGS_ON" in arg for arg in argv)
+
+
+def test_speedbench_collector_omits_chat_template_kwargs_when_empty(speedbench_point):
+    """CHAT_TEMPLATE_KWARGS_ON is omitted when not set."""
+    path, _, env = speedbench_point
+    argv = runtime_arguments(f"{path}:base", env)
+    assert not any("CHAT_TEMPLATE_KWARGS_ON" in arg for arg in argv)
+
+
+def test_speedbench_collector_rejects_missing_category(speedbench_point):
+    path, _, env = speedbench_point
+    with pytest.raises(ValueError, match="Missing SPEED-Bench input.*CATEGORY"):
+        runtime_arguments(f"{path}:base", {**env, "CATEGORY": ""})
+
+
+def test_speedbench_collector_rejects_missing_output_len(speedbench_point):
+    path, _, env = speedbench_point
+    with pytest.raises(ValueError, match="Missing SPEED-Bench input.*SPEEDBENCH_OUTPUT_LEN"):
+        runtime_arguments(f"{path}:base", {**env, "SPEEDBENCH_OUTPUT_LEN": ""})
+
+
+def test_speedbench_zip_override_selects_cell(tmp_path):
+    """Collector recipe with zip_override_mtp + selector resolves to one cell.
+
+    The workflow constructs the exact selector (e.g. zip_override_mtp[1])
+    for each cell, so select_recipe sees exactly one matching variant.
+    THINKING and MTP are bound as runtime env overrides, not in the recipe.
+    """
+    recipe = {
+        "engine": "vllm",
+        "resources": {"gpus_per_node": 8},
+        "model": {"path": "hf:deepseek-ai/DeepSeek-V4-Pro", "container": "vllm/vllm-openai:v0.21.0", "precision": "fp4"},
+        "roles": {"agg": {
+            "nodes": 1, "workers": 1, "gpus": 8,
+            "args": {
+                "tensor-parallel-size": 8, "data-parallel-size": 1, "pipeline-parallel-size": 1,
+                "trust-remote-code": True, "kv-cache-dtype": "fp8",
+            },
+        }},
+        "benchmark": {"type": "custom",
+            "command": f"bash /infmax-workspace/benchmarks/single_node/{SPEEDBENCH_CLIENT}",
+            "env": {"MODEL": "deepseek-ai/DeepSeek-V4-Pro", "SPEC_DECODING": "mtp", "TEMPERATURE": "1.0"},
+        },
+    }
+    raw = {"base": recipe, "zip_override_mtp": {
+        "roles": {"agg": {"args": {"speculative-config": [
+            '{"method":"mtp","num_speculative_tokens":1}',
+            '{"method":"mtp","num_speculative_tokens":2}',
+        ]}}},
+    }}
+    path = tmp_path / "speedbench.yaml"
+    path.write_text(yaml.safe_dump(raw))
+    env = {
+        "FRAMEWORK": "vllm", "MODEL": "deepseek-ai/DeepSeek-V4-Pro",
+        "IMAGE": "vllm/vllm-openai:v0.21.0", "PRECISION": "fp4",
+        "TP": "8", "GPU_COUNT": "8", "PP_SIZE": "1", "DCP_SIZE": "1", "PCP_SIZE": "1",
+        "EP_SIZE": "1", "DP_ATTENTION": "false", "SPEC_DECODING": "mtp", "IS_AGENTIC": "0",
+        "RUN_EVAL": "false", "EVAL_ONLY": "false",
+        "CONC": "1", "RESULT_FILENAME": "speedbench_off_mtp2",
+        "GPU_MONITOR_INTERVAL": "3", "MODEL_PREFIX": "dsv4",
+        "CATEGORY": "qualitative", "SPEEDBENCH_OUTPUT_LEN": "512",
+        "THINKING": "off", "MTP": "2",
+    }
+    # The workflow provides an explicit selector: select cell [1] (MTP=2).
+    config, _ = select_recipe(f"{path}:zip_override_mtp[1]", env)
+    assert "zip_override_mtp[1]" in config
+    # Verify runtime_arguments works on the selected cell.
+    argv = runtime_arguments(f"{path}:zip_override_mtp[1]", env)
+    assert any("CATEGORY" in arg for arg in argv)
+    assert any("THINKING" in arg for arg in argv)
+    assert any("MTP" in arg for arg in argv)
+
+
+@pytest.mark.parametrize(
+    "recipe", sorted(Path("benchmarks/single_node/srt-slurm-recipes").glob("*/vllm/b300-fp4-speedbench/speedbench.yaml"))
+)
+def test_speedbench_cells_keep_string_env_through_srtctl_variant_round_trip(recipe):
+    # srtctl expands zip variants with ruamel (YAML 1.2) and reloads them with a
+    # YAML 1.1 loader, where bare on/off become booleans and fail its schema.
+    # THINKING and MTP are now runtime env overrides (not in the recipe), so only
+    # the speculative-config list under roles.agg.args is expanded here.
+    from srtctl.core.config import resolve_override_yaml
+    from srtctl.core.yaml_utils import dump_yaml_with_comments
+
+    raw = yaml.safe_load(recipe.read_text())
+    assert "zip_override_mtp" in raw, f"Missing zip_override_mtp in {recipe}"
+    spec_list = raw["zip_override_mtp"]["roles"]["agg"]["args"]["speculative-config"]
+    selectors = [f"zip_override_mtp[{i}]" for i in range(len(spec_list))]
+    assert selectors
+    for selector in selectors:
+        [(_, variant)] = resolve_override_yaml(recipe, selector=selector)
+        reloaded = yaml.safe_load(dump_yaml_with_comments(variant))
+        env = reloaded["benchmark"]["env"]
+        assert all(isinstance(value, str) for value in env.values()), (selector, env)
+
+
+@pytest.mark.parametrize("mode", ["on", "off"])
+def test_speedbench_runtime_thinking_stays_string_through_srtctl_set(mode):
+    # The workflow binds THINKING per cell via --set; srtctl dumps the result
+    # and reloads it as YAML 1.1, where a bare on/off becomes a boolean.
+    from srtctl.core.overrides import apply_overrides_to_recipe, parse_overrides
+    from srtctl.core.yaml_utils import (
+        dump_yaml_with_comments,
+        load_yaml_text_with_comments,
+    )
+
+    recipe = Path("benchmarks/single_node/srt-slurm-recipes/dsv4/vllm/b300-fp4-speedbench/speedbench.yaml")
+    env = {
+        "FRAMEWORK": "vllm", "MODEL": "deepseek-ai/DeepSeek-V4-Pro",
+        "IMAGE": "vllm/vllm-openai:v0.21.0", "PRECISION": "fp4",
+        "TP": "8", "GPU_COUNT": "8", "PP_SIZE": "1", "DCP_SIZE": "1", "PCP_SIZE": "1",
+        "EP_SIZE": "1", "DP_ATTENTION": "false", "SPEC_DECODING": "mtp", "IS_AGENTIC": "0",
+        "RUN_EVAL": "false", "EVAL_ONLY": "false",
+        "CONC": "1", "RESULT_FILENAME": f"speedbench_{mode}_mtp1",
+        "GPU_MONITOR_INTERVAL": "3", "MODEL_PREFIX": "dsv4",
+        "CATEGORY": "coding", "SPEEDBENCH_OUTPUT_LEN": "4096",
+        "THINKING": mode, "MTP": "1",
+    }
+    argv = runtime_arguments(f"{recipe}:zip_override_mtp[0]", env)
+    sets = [argv[i + 1] for i, arg in enumerate(argv) if arg == "--set"]
+    document = load_yaml_text_with_comments(recipe.read_text())
+    apply_overrides_to_recipe(document, parse_overrides(sets, None))
+    reloaded = yaml.safe_load(dump_yaml_with_comments(document))
+    assert reloaded["base"]["benchmark"]["env"]["THINKING"] == f"thinking_{mode}"
+
+
+@pytest.mark.parametrize(
+    "recipe", sorted(Path("benchmarks/single_node/srt-slurm-recipes").glob("*/vllm/b300-fp4-speedbench/speedbench.yaml"))
+)
+def test_speedbench_recipes_bind_gpus_without_device_ids(recipe):
+    # vLLM v0.21.0 rejects srtctl's default --device-ids binding at startup.
+    raw = yaml.safe_load(recipe.read_text())
+    assert raw["base"]["engine"]["set_visible_devices"] is True

@@ -77,9 +77,9 @@ python -m atom.entrypoints.openai_server \
 一键触发的 [`speedbench-al.yml`](../.github/workflows/speedbench-al.yml) 工作流最初由 [InferenceX#1650](https://github.com/SemiAnalysisAI/InferenceX/pull/1650) 引入，随后在 [InferenceX#1706](https://github.com/SemiAnalysisAI/InferenceX/pull/1706) 中扩展到更多 MTP 和 EAGLE3 模型。它取代了 [InferenceX#1592](https://github.com/SemiAnalysisAI/InferenceX/pull/1592) 中早期手工整理的参考值，使精确命令、日志、输出和生成的 YAML 都可以从同一次运行中审计。其流程如下：
 
 1. 维护者触发工作流，指定模型、模型前缀、vLLM 镜像、草稿长度（通常为 1–8）、思考模式、`category=coding` 和 `output-len=4096`。
-2. 工作流在 B300 runner 上启动模型，并选择 [`benchmarks/single_node/speedbench/`](../benchmarks/single_node/speedbench/) 下对应的收集脚本。
-3. 对每个“思考模式 × 草稿长度”组合，收集脚本使用真实 MTP 或 EAGLE3 解码以及该模型的生产采样和聊天模板设置，启动一个干净的 vLLM 服务。
-4. 收集脚本读取 vLLM 累计的已接受 token 和验证草稿计数器，通过 `vllm bench serve` 运行 SPEED-Bench Qualitative `coding` 类别中的全部提示词，然后再次读取计数器。
+2. 工作流在 B300 runner 上启动模型。原生 MTP 模型（dsr1、dsv4、glm5、glm52、qwen3.5、qwen3.8next）使用 srt-slurm 单节点路径，通过 [`benchmarks/single_node/srt-slurm-recipes/`](../benchmarks/single_node/srt-slurm-recipes/) 下的配方和共享客户端 [`srt_speedbench.sh`](../benchmarks/single_node/srt_speedbench.sh)。草稿模型收集脚本（dsv4dspark*、kimik3、minimaxm3）保留在 [`benchmarks/single_node/speedbench/`](../benchmarks/single_node/speedbench/) 下。
+3. 对每个”思考模式 × 草稿长度”组合，服务使用真实 MTP 或 EAGLE3 解码以及该模型的生产采样和聊天模板设置启动。
+4. 客户端读取 vLLM 累计的已接受 token 和验证草稿计数器，通过 `vllm bench serve` 运行 SPEED-Bench Qualitative `coding` 类别中的全部提示词，然后再次读取计数器。
 5. 按以下公式计算平均接受长度：
 
    ```text
@@ -87,7 +87,7 @@ python -m atom.entrypoints.openai_server \
    ```
 
    其中 `1` 是目标模型保证生成的验证 token。结果四舍五入到小数点后两位。
-6. 收集脚本生成 YAML 矩阵。工作流将其发布到 GitHub Actions step summary，并上传为 `speedbench-reference-al-<model-prefix>` artifact。
+6. 逐单元格结果汇总为 YAML 矩阵。工作流将其发布到 GitHub Actions step summary，并上传为 `speedbench-reference-al-<model-prefix>` artifact。
 7. 工作流保留服务日志和逐请求详细结果，以便审阅者确认输出合理、思考模式正确，并且没有静默的服务或聊天模板故障。
 8. 审阅完成后，将矩阵连同准确的采样元数据和源 Actions run URL 一并提交到本目录。
 

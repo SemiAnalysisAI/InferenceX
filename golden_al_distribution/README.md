@@ -77,9 +77,9 @@ This policy follows the same broad principle as MLPerf Inference: prescribe the 
 The push-button [`speedbench-al.yml`](../.github/workflows/speedbench-al.yml) workflow, introduced in [InferenceX#1650](https://github.com/SemiAnalysisAI/InferenceX/pull/1650) and extended to additional MTP and EAGLE3 models in [InferenceX#1706](https://github.com/SemiAnalysisAI/InferenceX/pull/1706), performs the following process. It superseded the early manually assembled reference in [InferenceX#1592](https://github.com/SemiAnalysisAI/InferenceX/pull/1592), making the exact commands, logs, outputs, and generated YAML auditable from one run.
 
 1. A maintainer dispatches the workflow with a model, model prefix, vLLM image, draft lengths (normally 1–8), thinking modes, `category=coding`, and `output-len=4096`.
-2. The workflow launches the model on a B300 runner and selects the matching collector under [`benchmarks/single_node/speedbench/`](../benchmarks/single_node/speedbench/).
-3. For every `(thinking mode, draft length)` cell, the collector starts a clean vLLM server with real MTP or EAGLE3 decoding and the model's production sampling/chat-template settings.
-4. The collector snapshots vLLM's cumulative accepted-token and verification-draft counters, runs every prompt in the SPEED-Bench Qualitative `coding` category through `vllm bench serve`, and snapshots the counters again.
+2. The workflow launches the model on a B300 runner. Native-MTP models (dsr1, dsv4, glm5, glm52, qwen3.5, qwen3.8next) use the srt-slurm single-node path with per-model recipes under [`benchmarks/single_node/srt-slurm-recipes/`](../benchmarks/single_node/srt-slurm-recipes/) and the shared client [`srt_speedbench.sh`](../benchmarks/single_node/srt_speedbench.sh). Draft-model collectors (dsv4dspark*, kimik3, minimaxm3) keep dedicated scripts under [`benchmarks/single_node/speedbench/`](../benchmarks/single_node/speedbench/).
+3. For every `(thinking mode, draft length)` cell, the server starts with real MTP or EAGLE3 decoding and the model's production sampling/chat-template settings.
+4. The client snapshots vLLM's cumulative accepted-token and verification-draft counters, runs every prompt in the SPEED-Bench Qualitative `coding` category through `vllm bench serve`, and snapshots the counters again.
 5. It computes the mean acceptance length as:
 
    ```text
@@ -87,7 +87,7 @@ The push-button [`speedbench-al.yml`](../.github/workflows/speedbench-al.yml) wo
    ```
 
    The `1` is the target model's guaranteed verification token. Values are rounded to two decimal places.
-6. The collector emits a YAML matrix. The workflow publishes it in the GitHub Actions step summary and uploads it as a `speedbench-reference-al-<model-prefix>` artifact.
+6. The per-cell results are aggregated into a YAML matrix. The workflow publishes it in the GitHub Actions step summary and uploads it as a `speedbench-reference-al-<model-prefix>` artifact.
 7. Server logs and detailed per-request results are retained so reviewers can confirm sensible output, correct thinking mode, and the absence of silent server or chat-template failures.
 8. After review, the matrix is committed here with its exact sampling metadata and source Actions run URL.
 
