@@ -102,6 +102,7 @@ class Trace:
         modules = []  # qualified names from infx_mod markers
         stack_modules = []  # class-instance names from Python stacks (capture only)
         frame = None
+        module_inputs = None
         for i in self.stack_of.get(launch, ()):
             e = self.events[i]
             name = e["name"]
@@ -109,7 +110,9 @@ class Trace:
             if m:
                 marks[m.group(1)] = int(m.group(2))
             elif name.startswith(MODULE_MARK):
-                modules.append(name[len(MODULE_MARK):])
+                qualname, _, sig = name[len(MODULE_MARK):].partition("#")
+                modules.append(qualname)
+                module_inputs = sig
             elif e["cat"] == "cpu_op" or (e["cat"] == "user_annotation" and not name.startswith("infx_")):
                 ops.append(i)
             elif e["cat"] == "python_function":
@@ -128,6 +131,7 @@ class Trace:
             "concrete_inputs": args.get("Concrete Inputs"),
             "kernel_file": args.get("kernel_file"),
             "module_path": modules or stack_modules,
+            "module_inputs": json.loads(module_inputs) if module_inputs else None,
             "py_frame": frame,
             "launch_api": self.events[launch]["name"],
         }
