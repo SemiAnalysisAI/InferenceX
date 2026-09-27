@@ -5,7 +5,7 @@ base:
   name: minimaxm3-fp4-b300-trtllm-agentic
   model:
     path: hf:nvidia/MiniMax-M3-NVFP4
-    container: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc28.dev202609220000
+    container: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc29.dev202609270000
     precision: fp4
   resources:
     gpu_type: b300
@@ -20,7 +20,6 @@ base:
   engine:
     type: trtllm
     served_model_name: nvidia/MiniMax-M3-NVFP4
-  setup_script: minimaxm3-trtllm-agentx.sh
   roles:
     agg:
       nodes: 1
