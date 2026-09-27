@@ -26,7 +26,7 @@ import os
 import re
 import sys
 
-MARK = re.compile(r"^infx_(step|graph_replay|graph_capture|piece)#(\d+)$")
+MARK = re.compile(r"^infx_(step|dummy|graph_replay|graph_capture|piece)#(\d+)$")
 MODULE_MARK = "infx_mod#"
 DEVICE_CATS = {"kernel", "gpu_memcpy", "gpu_memset"}
 LAUNCH_CATS = {"cuda_runtime", "cuda_driver"}
@@ -176,12 +176,21 @@ def rank_of_pid(profile_dir):
     return ranks
 
 
+def step_key(record):
+    """("step", k) for scheduled steps, ("dummy", k) for idle-rank dummy forwards."""
+    if "step" in record:
+        return ("step", record["step"])
+    if "dummy" in record:
+        return ("dummy", record["dummy"])
+    return None
+
+
 def load_steps(profile_dir):
     steps = {}
     for path in glob.glob(os.path.join(profile_dir, "steps", "*.jsonl")):
         rank = os.path.basename(path)[: -len(".jsonl")]
         with open(path) as f:
-            steps[rank] = {r["step"]: r for r in map(json.loads, f)}
+            steps[rank] = {step_key(r): r for r in map(json.loads, f)}
     return steps
 
 
@@ -239,8 +248,8 @@ def extract_replay(trace, captured, known_names, rank, step_log, out_dir, report
             device=args.get("device", e.get("pid")), ts_us=e["ts"], dur_us=e.get("dur", 0),
             graph_node_id=args.get("graph node id"), grid=args.get("grid"), block=args.get("block"),
         )
-        step = (row.get("marks") or {}).get("step")
-        row["step"] = step
+        step = step_key(row.get("marks") or {})
+        row["step"] = list(step) if step else None
         if step is not None:
             s = per_step[step]
             s["kernels"] += 1
@@ -260,7 +269,8 @@ def extract_replay(trace, captured, known_names, rank, step_log, out_dir, report
             s = per_step[step]
             log = step_log.get(step, {})
             f.write(json.dumps({
-                "rank": rank, "step": step, "kernels": s["kernels"], "busy_us": s["busy_us"],
+                "rank": rank, "kind": step[0], "step": step[1],
+                "kernels": s["kernels"], "busy_us": s["busy_us"],
                 "span_us": s["t1"] - s["t0"], "reqs": log.get("reqs"),
                 "total_tokens": log.get("total_tokens"), "dispatch": log.get("dispatch"),
             }) + "\n")

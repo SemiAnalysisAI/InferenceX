@@ -172,6 +172,9 @@ def profiling_arguments(environment: Mapping[str, str]) -> list[str]:
         # Python stacks make exports of eager steps outlast the RPC timeout;
         # modules mark themselves instead (benchmarks/profiling/vllm).
         "torch_profiler_with_stack": False,
+        # The summary table walks every event in Python on all ranks at once;
+        # on offload-sized hosts that exhausted memory. The raw trace suffices.
+        "torch_profiler_dump_cuda_time_total": False,
         "ignore_frontend": True,
         "max_iterations": int(windows[0][1]),
     }
@@ -202,6 +205,9 @@ def profiling_arguments(environment: Mapping[str, str]) -> list[str]:
         "--set",
         f"benchmark.env.INFX_PROF_DIR={json.dumps(PROFILE_DIR)}",
     ]
+    # A window's export pauses the engine; its requests must not abort the replay.
+    for name in ("AIPERF_FAILED_REQUEST_THRESHOLD", "AIPERF_LIVE_FAILED_REQUEST_THRESHOLD"):
+        overrides += ["--set", f'benchmark.env.{name}="1.0"']
     return overrides
 
 

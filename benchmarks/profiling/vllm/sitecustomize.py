@@ -508,6 +508,35 @@ def _patch_model_runner(module):
     cls._infx_patched = True
 
 
+def _patch_gpu_worker(module):
+    """Idle DP ranks run a dummy forward each step to keep EP collectives in step."""
+    import torch
+
+    cls = module.Worker
+    if getattr(cls, "_infx_patched", False) or not hasattr(cls, "execute_dummy_batch"):
+        return
+    orig = cls.execute_dummy_batch
+    counter = itertools.count()
+
+    def execute_dummy_batch(self, *args, **kwargs):
+        k = next(counter)
+        t0 = time.time_ns()
+        try:
+            if not _profiling():
+                return orig(self, *args, **kwargs)
+            with torch.autograd.profiler.record_function(f"infx_dummy#{k}"):
+                return orig(self, *args, **kwargs)
+        finally:
+            try:
+                _sink("steps", _rank_tag(getattr(self, "model_runner", None))).write(
+                    {"dummy": k, "t0_ns": t0, "t1_ns": time.time_ns()})
+            except Exception:
+                _write_error("dummy step write")
+
+    cls.execute_dummy_batch = execute_dummy_batch
+    cls._infx_patched = True
+
+
 # --- post-import hooks ------------------------------------------------------
 
 _HOOKS = {
@@ -516,6 +545,7 @@ _HOOKS = {
     "vllm.v1.worker.gpu.model_runner": _patch_model_runner,
     "vllm.profiler.wrapper": _patch_profiler_wrapper,
     "vllm.compilation.piecewise_backend": _patch_piecewise_backend,
+    "vllm.v1.worker.gpu_worker": _patch_gpu_worker,
 }
 
 

@@ -1,23 +1,28 @@
 """Open torch profiler windows on every vLLM server during an AgentX replay.
 
-Usage: profile_windows.py WINDOWS_JSON LOG_PATH WARMUP_REQUESTS SERVER_URL...
+Usage: profile_windows.py WINDOWS_JSON LOG_PATH AIPERF_LOG WARMUP_REQUESTS SERVER_URL...
 
 WINDOWS_JSON lists [delay_seconds, iterations] pairs. Delays count from the
-end of the client's warmup: the moment the servers have completed
-WARMUP_REQUESTS requests (vllm:request_success_total), or, if the servers
-never report it, from this script's start. Each window POSTs /start_profile
-to every server; vLLM stops on its own after its configured max_iterations,
-and a /stop_profile after a grace period closes a window that did not fill
-(for example when the servers went idle).
+start of the client's measured phase: aiperf logging a non-warmup phase start
+in AIPERF_LOG, else the servers having completed WARMUP_REQUESTS requests
+(vllm:request_success_total), else, when neither signal exists, from this
+script's start. Each window POSTs /start_profile to every server; vLLM stops
+on its own after its configured max_iterations, and a /stop_profile after a
+grace period closes a window that did not fill.
 """
 
 import json
+import os
+import re
 import sys
 import time
 import urllib.request
 
 SUCCESS_METRIC = "vllm:request_success_total"
-WARMUP_TIMEOUT_S = 3600.0
+PHASE_START = re.compile(r"Phase (\S+) \((\S+)\) started")
+POLL_S = 5.0
+SIGNAL_WAIT_S = 900.0  # give up on both signals if neither has appeared by then
+MEASURED_WAIT_S = 7200.0
 
 
 def post(url: str) -> str:
@@ -46,30 +51,48 @@ def completed_requests(servers: list[str]) -> float | None:
     return total if seen else None
 
 
+def measured_phase_started(aiperf_log: str) -> str | None:
+    try:
+        with open(aiperf_log) as f:
+            for line in f:
+                m = PHASE_START.search(line)
+                if m and m.group(2) != "warmup":
+                    return m.group(2)
+    except OSError:
+        return None
+    return None
+
+
+def wait_for_measurement(aiperf_log: str, warmup_requests: int, servers: list[str]) -> dict:
+    start = time.monotonic()
+    while time.monotonic() - start < MEASURED_WAIT_S:
+        phase = measured_phase_started(aiperf_log)
+        if phase:
+            return {"basis": "aiperf", "phase": phase}
+        done = completed_requests(servers)
+        if done is not None and done >= warmup_requests:
+            return {"basis": "metric", "completed_requests": done}
+        if (done is None and not os.path.exists(aiperf_log)
+                and time.monotonic() - start > SIGNAL_WAIT_S):
+            break
+        time.sleep(POLL_S)
+    return {"basis": "wall"}
+
+
 def main() -> None:
     windows = json.loads(sys.argv[1])
-    log_path = sys.argv[2]
-    warmup_requests = int(sys.argv[3])
-    servers = [url.rstrip("/") for url in sys.argv[4:]]
+    log_path, aiperf_log = sys.argv[2], sys.argv[3]
+    warmup_requests = int(sys.argv[4])
+    servers = [url.rstrip("/") for url in sys.argv[5:]]
     with open(log_path, "a", buffering=1) as log:
         def note(**record):
             record["t_unix"] = time.time()
             log.write(json.dumps(record) + "\n")
 
-        note(event="servers", servers=servers, windows=windows, warmup_requests=warmup_requests)
+        note(event="servers", servers=servers, windows=windows, aiperf_log=aiperf_log,
+             warmup_requests=warmup_requests)
+        note(event="measurement_start", **wait_for_measurement(aiperf_log, warmup_requests, servers))
         start = time.monotonic()
-        deadline = start + WARMUP_TIMEOUT_S
-        done = completed_requests(servers)
-        while time.monotonic() < deadline:
-            done = completed_requests(servers)
-            if done is not None and done >= warmup_requests:
-                break
-            if done is None and time.monotonic() - start > 120:
-                break  # no counter to watch: fall back to wall time
-            time.sleep(5)
-        start = time.monotonic()
-        note(event="measurement_start", completed_requests=done,
-             basis="warmup" if done is not None and done >= warmup_requests else "wall")
         for index, (delay, iterations) in enumerate(windows):
             time.sleep(max(0.0, start + float(delay) - time.monotonic()))
             for server in servers:
