@@ -20,7 +20,7 @@ from operatorx.runners.common.vllm.linear import (_ENV_KEYS, _fill, _is_fault, _
 __all__ = ["IMPLS", "versions"]
 
 _DTYPES = {"bf16": torch.bfloat16, "fp32": torch.float32}
-_MAX_TOKENS = 2048  # covers the largest CUDA-graph capture size
+_MAX_TOKENS = 65536  # the largest token count in the testlists
 _WORKSPACE = False
 _LAYER = 0
 
