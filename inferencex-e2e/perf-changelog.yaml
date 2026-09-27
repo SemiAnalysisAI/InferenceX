@@ -9168,3 +9168,9 @@
     - "Relevant ATOM changes in the range: V4 decode reuses the sparse prefill ASM (ROCm/ATOM#2271), greedy sampler picks via aiter.topk_select (ROCm/ATOM#2244), and FP8 block scales declared scale_fmt ue8m0 are now stored as E8M0 on gfx950 by default (ROCm/ATOM#2419; previously FP32 unless ATOM_FP8_BLOCKSCALE_USE_E8M0_SCALE=1). The upstream DeepSeek-V4 recipes are unchanged across the range, and every recipe flag and choice (all2all-backend rccl, dp-load-balance least_tokens, moe-backend standard) remains valid."
     - "No data-type or precision change to the DeepSeek-V4-Pro-0813 DSpark draft: no online quantization is configured, so it keeps its checkpoint precision; the E8M0 scale storage represents the checkpoint's power-of-two block scales exactly. kv-cache-dtype and index-cache-dtype touch cache storage only."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3605
+
+- config-keys:
+    - dsv41flash-fp4-gb300-vllm-agentic-dspark
+  description:
+    - "Pin GB300 DeepSeek-V4.1-Flash vLLM to nightly ac68c308 with FlashInfer sparse attention, MXFP4 indexer KV, sparse logits, fp8 KV cache, and B300's batching and CUDA graph tiers; use FlashInfer CUTLASS for MXFP8 GEMMs to avoid the CuTe-DSL split-K startup failure."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3396
