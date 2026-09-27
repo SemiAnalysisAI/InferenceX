@@ -8986,3 +8986,12 @@
     - "Hopper 使用 FA3，Blackwell FA4 fp8 descale 问题不适用，EAGLE3 draft 保持 attention_backend FLASH_ATTN。"
     - "This change does not alter the EAGLE3 draft model data type. The draft loads unmodified from the published Inferact/MiniMax-M3-EAGLE3-GQA checkpoint via --speculative-config (method=eagle3). kv-cache-dtype fp8 sets KV-cache storage precision, not the draft weights, and no flag overrides or re-quantizes the draft weights."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3503
+
+- config-keys:
+    - dsv4flash-fp4-b200-sglang-mtp
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Add DeepSeek-V4-Flash B200 Nscale TP2 SGLang 8k1k serving at concurrency 1, 2, 4, 8, 16, 32, 64, 128 with bundled EAGLE MTP (3 steps, top-k 1, 4 draft tokens), real verification, and GPU-resident weights/KV. Stage the unstaged checkpoint and HF/Xet download caches on writable shared storage before SRT submission; stop on download failure."
+    - "新增 DeepSeek-V4-Flash B200 Nscale TP2 SGLang 8k1k serving，并发为 1、2、4、8、16、32、64、128，采用原生 EAGLE MTP（3 steps、top-k 1、4 draft tokens）、真实验证和 GPU 常驻权重/KV。SRT 提交前在共享可写目录下载 checkpoint 并设置 HF/Xet 下载缓存，下载失败时停止提交。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX

@@ -46,6 +46,17 @@ The former fork's direct ATOM frontend is not required.
 
 ### Cluster profiles
 
+The B200 Nscale fixed-sequence `deepseek-ai/DeepSeek-V4-Flash` launcher stages the
+checkpoint with `hf download --local-dir` under
+`/data/home/sa-shared/gharunners/models/DeepSeek-V4-Flash` before SRT submission.
+Each launch resumes or validates that download; failure stops submission. This
+shared writable location does not require a pre-staged `/scratch/models` copy.
+The download process uses explicit writable `HF_HOME`, `HF_HUB_CACHE`, and
+`HF_XET_CACHE` paths beneath the checkpoint's `.cache/huggingface` directory;
+the serving process retains its container cache settings.
+The recipe uses bundled MTP through `EAGLE` (3 steps, top-k 1, 4 draft tokens),
+with the DeepSeek-V4 chat encoder selected by the client's `--dsv4` option.
+
 Launchers that use srt-slurm keep their cluster configuration in
 [`runners/srt-slurm/<launcher>.yaml`](../runners/srt-slurm/). The native settings
 (GPU count, scheduling directives, aliases, and mounts) are separate from workload recipes.

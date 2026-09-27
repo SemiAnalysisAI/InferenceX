@@ -42,6 +42,15 @@ frontend、一个聚合 worker，并设置 `enable_multiple_frontends: false`。
 镜像。TRT-LLM 配方使用原生 `engine.served_model_name`，不再通过 `roles.agg.extra_args`
 重复传入该参数。不再依赖此前分叉中的 ATOM 直连 frontend。
 
+B200 Nscale 的固定序列 `deepseek-ai/DeepSeek-V4-Flash` 启动器在提交 SRT 前，
+通过 `hf download --local-dir` 将 checkpoint 下载至
+`/data/home/sa-shared/gharunners/models/DeepSeek-V4-Flash`。
+每次启动均续传或验证下载，失败时停止提交；此共享可写目录不依赖
+`/scratch/models` 中的预置副本。下载进程显式将 `HF_HOME`、`HF_HUB_CACHE`
+和 `HF_XET_CACHE` 指向 checkpoint 的 `.cache/huggingface` 下的可写路径，
+服务进程仍保留容器缓存设置。配方通过 `EAGLE` 使用原生 MTP
+（3 steps、top-k 1、4 draft tokens），客户端以 `--dsv4` 选择 DeepSeek-V4 chat 编码器。
+
 ## 规程索引
 
 1. [准备 worktree](#准备-worktree)
