@@ -256,18 +256,24 @@ class SlurmClient:
                 raise RuntimeError(msg)
             time.sleep(poll)
 
-        # Background: poll until job leaves queue, then exit (so tail --pid stops).
+        # Wait on the poller ourselves instead of `tail --pid=<poller>`: the
+        # finished poller stays a zombie until this process reaps it, and tail
+        # treats a zombie as alive, so blocking on tail would never return.
         poller = subprocess.Popen(
             ["bash", "-c", _POLL_SCRIPT.format(job_id=job_id, poll=int(poll))],
         )
         log.info("Tailing %s", log_file)
+        tail = subprocess.Popen(["tail", "-F", "-s", "2", "-n+1", log_file])
         try:
-            subprocess.run(
-                ["tail", "-F", "-s", "2", "-n+1", log_file, f"--pid={poller.pid}"],
-                check=False,
-            )
-        finally:
             poller.wait()
+            # One more tail poll interval so the final log lines are printed.
+            time.sleep(3)
+        finally:
+            tail.terminate()
+            tail.wait()
+            if poller.poll() is None:
+                poller.terminate()
+                poller.wait()
 
     # -- Step execution (srun) -----------------------------------------------
 

@@ -388,3 +388,26 @@ class TestPyslurmUnavailable:
                 sys.modules["pyslurm.db"] = old_db
             slurm_mod._pyslurm = None
             slurm_mod._pyslurm_available = None
+
+
+def test_stream_job_log_returns_after_job_leaves_queue(tmp_path, monkeypatch):
+    """Regression: `tail --pid=<poller>` deadlocked on the zombie poller."""
+    import threading
+
+    from infx.runners import slurm as slurm_mod
+
+    log_file = tmp_path / "sweep.log"
+    log_file.write_text("line 1\n")
+    # Poller that "sees" the job finish almost immediately.
+    monkeypatch.setattr(slurm_mod, "_POLL_SCRIPT", "sleep 0.5 # {job_id} {poll}")
+    monkeypatch.setattr(slurm_mod.SlurmClient, "job_is_active", staticmethod(lambda _job_id: True))
+
+    done = threading.Event()
+
+    def run() -> None:
+        slurm_mod.SlurmClient.stream_job_log(1, str(log_file), poll=1)
+        done.set()
+
+    thread = threading.Thread(target=run, daemon=True)
+    thread.start()
+    assert done.wait(timeout=20), "stream_job_log did not return after the poller exited"
