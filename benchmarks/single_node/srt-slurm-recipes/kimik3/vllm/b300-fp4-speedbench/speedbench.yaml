@@ -1,0 +1,91 @@
+# Kimi-K3 B300 vLLM SPEED-Bench AL matrix (DSpark, greedy draft).
+#
+# External draft model: Inferact/Kimi-K3-DSpark. The target (moonshotai/Kimi-K3)
+# is pre-staged; vLLM auto-downloads the draft by its HF id.
+# K3 defaults to thinking ON (kimi_k3 reasoning parser), so the off-cell
+# CHAT_TEMPLATE_KWARGS_OFF disables it.  Per-mode temperatures: 1.0 thinking-on,
+# 0.6 thinking-off.  SPEEDBENCH_CONCURRENCY=64 keeps collection under the CI
+# wall-time limit.
+#
+# enable-prefix-caching is ON (not no-enable-prefix-caching) to match the
+# production K3 recipe; FlashInfer MLA attention backend for both target and draft.
+base:
+  schema: 2
+  name: kimik3-fp4-b300-vllm-speedbench
+  model:
+    path: hf:moonshotai/Kimi-K3
+    container: vllm/vllm-openai:nightly-dev-x86_64-cu13-3696c77
+    precision: fp4
+  resources:
+    gpu_type: b300
+    gpus_per_node: 8
+  frontend:
+    type: vllm
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine:
+    type: vllm
+    connector: null
+    # Bind GPUs via CUDA_VISIBLE_DEVICES for image compatibility.
+    set_visible_devices: true
+  health_check:
+    interval_seconds: 10
+    max_attempts: 360
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        served-model-name: moonshotai/Kimi-K3
+        tensor-parallel-size: 8
+        data-parallel-size: 1
+        pipeline-parallel-size: 1
+        trust-remote-code: true
+        load-format: fastsafetensors
+        moe-backend: auto
+        enable-prefix-caching: true
+        kv-cache-dtype: fp8
+        reasoning-parser: kimi_k3
+        tool-call-parser: kimi_k3
+        enable-auto-tool-choice: true
+        gpu-memory-utilization: 0.90
+        max-num-seqs: 512
+        max-model-len: 16384
+        max-cudagraph-capture-size: 256
+        attention-config: '{"mla_prefill_backend":"FLASHINFER","use_prefill_query_quantization":true}'
+      env:
+        NCCL_DMABUF_ENABLE: '0'
+        VLLM_ALLREDUCE_USE_FLASHINFER: '1'
+        VLLM_USE_RUST_FRONTEND: '1'
+        VLLM_ENGINE_READY_TIMEOUT_S: '3600'
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/single_node/srt_speedbench.sh
+    env:
+      MODEL: moonshotai/Kimi-K3
+      SPEC_DECODING: mtp
+      TEMPERATURE_ON: '1.0'
+      TEMPERATURE_OFF: '0.6'
+      TOP_P: '0.95'
+      CHAT_TEMPLATE_KWARGS_OFF: '{"thinking": false}'
+      SPEEDBENCH_TRUST_REMOTE_CODE: '1'
+      APPLY_CHAT_TEMPLATE_KWARGS_SHIM: '1'
+      SPEEDBENCH_CONCURRENCY: '64'
+
+zip_override_mtp:
+  roles:
+    agg:
+      args:
+        speculative-config:
+          - '{"method":"dspark","model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":1,"attention_backend":"FLASHINFER_MLA"}'
+          - '{"method":"dspark","model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":2,"attention_backend":"FLASHINFER_MLA"}'
+          - '{"method":"dspark","model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":3,"attention_backend":"FLASHINFER_MLA"}'
+          - '{"method":"dspark","model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":4,"attention_backend":"FLASHINFER_MLA"}'
+          - '{"method":"dspark","model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":5,"attention_backend":"FLASHINFER_MLA"}'
+          - '{"method":"dspark","model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":6,"attention_backend":"FLASHINFER_MLA"}'
+          - '{"method":"dspark","model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":7,"attention_backend":"FLASHINFER_MLA"}'
+          - '{"method":"dspark","model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":8,"attention_backend":"FLASHINFER_MLA"}'
