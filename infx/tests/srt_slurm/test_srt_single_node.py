@@ -707,17 +707,17 @@ _SPEEDBENCH_PREFIXES = {
     },
     "kimik3": {
         "MODEL": "moonshotai/Kimi-K3",
-        "IMAGE": "vllm/vllm-openai:v0.21.0",
+        "IMAGE": "vllm/vllm-openai:nightly-dev-x86_64-cu13-3696c77",
         "TP": "8", "GPU_COUNT": "8",
     },
     "kimik3prob": {
         "MODEL": "moonshotai/Kimi-K3",
-        "IMAGE": "vllm/vllm-openai:v0.21.0",
+        "IMAGE": "vllm/vllm-openai:nightly-dev-x86_64-cu13-3696c77",
         "TP": "8", "GPU_COUNT": "8",
     },
     "minimaxm3": {
         "MODEL": "MiniMax/MiniMax-M3",
-        "IMAGE": "vllm/vllm-openai:v0.21.0",
+        "IMAGE": "vllm/vllm-openai:nightly-dev-x86_64-cu13-af03963",
         "TP": "8", "GPU_COUNT": "8",
     },
     "qwen3.5": {
