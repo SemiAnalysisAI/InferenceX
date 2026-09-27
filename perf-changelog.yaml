@@ -9076,3 +9076,12 @@
   description:
     - "Retain the branch Kimi MI355X grid through native SRT-Slurm variants, including no-draft DCP8, after removal of its legacy launcher"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3156
+
+- config-keys:
+  - minimaxm3-fp4-b200-vllm-stock-eval-mtp
+  scenario-type:
+  - agentic-coding
+  description:
+  - Complete the official vLLM CUDA a9eafde MiniMax B200 TP4 c1 qualification using an Enroot-compatible commit tag; preserve full BFCL and vendor suites, FP8 GPU KV and real EAGLE3 verification with no runtime engine changes.
+  - 使用 Enroot 支持的提交标签完成官方 vLLM CUDA a9eafde MiniMax B200 TP4 c1 评估；保留完整 BFCL 和厂商测试、GPU 驻留 FP8 KV 缓存及真实 EAGLE3 验收，不修改运行时引擎。
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3156
