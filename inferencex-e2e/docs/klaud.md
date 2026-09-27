@@ -8,7 +8,7 @@
 
 [`klaud-plan.yml`](../../.github/workflows/klaud-plan.yml) reconciles recorded interrupted sessions, prepares candidates with Python, uses a read-only Claude review to exclude overlapping PRs, then calls [`klaud-candidate.yml`](../../.github/workflows/klaud-candidate.yml). One autonomous Klaud Cold session owns each candidate’s edits, diagnosis and repairs. The `finish` command verifies validation or performs cleanup and posts its completion receipt; the read-only Stop hook and diagnostics verify that receipt against GitHub. Recovery uses the next existing autosweep, with no second agent or additional workflow.
 
-The PR review uses `claude-opus-5` (Opus 5), `fastMode: false`, and up to 500 turns to resolve overlaps, target clusters and public baseline model names for a bounded candidate batch. Candidate execution uses `claude-fable-5-1` (Fable 5.1) with fast mode disabled and owns upstream image research. The agent's display name is **Klaud Cold**; workflow filenames, CLI, artifacts, branches and runtime environment variables use `klaud` / `KLAUD`. Existing candidate branches with the previous spelling still block duplicate selection. Configure `DASH_API_KEY` before dispatching; workflows pass it to the existing `KLAUD_DASHBOARD_API_KEY` runtime variable.
+The PR review and candidate execution both run `claude-opus-5-5` (Opus 5.5) on pinned Claude Code 2.1.282, with `fastMode: false` and up to 500 turns. The review resolves overlaps, target clusters and public baseline model names for a bounded candidate batch; the candidate owns upstream image research. The agent's display name is **Klaud Cold**; workflow filenames, CLI, artifacts, branches and runtime environment variables use `klaud` / `KLAUD`. Existing candidate branches with the previous spelling still block duplicate selection. Configure `DASH_API_KEY` before dispatching; workflows pass it to the existing `KLAUD_DASHBOARD_API_KEY` runtime variable.
 
 ## Selection
 
@@ -114,15 +114,16 @@ The entry workflow runs every six hours (`0 */6 * * *`, UTC) and supports manual
 
 The recovery and final selection steps receive `AGENT_PAT` for verified ownership cleanup and atomic family claims; the read-only overlap-review agent does not receive it. The planner's Python preparation and final capacity check use the dashboard key; preparation also uses the read-only workflow token. The bounded Claude PR review uses `ANTHROPIC_API_KEY` and the read-only workflow token with `pull-requests: read`. It receives private eligibility hints but neither `AGENT_PAT` nor the dashboard key, and makes no GitHub mutations. The candidate receives `AGENT_PAT` for branch/PR writes and e2e dispatch/cancellation, `ANTHROPIC_API_KEY` for Klaud Cold, and an expiring `status:read` `DASH_API_KEY` covering clusters. Klaud Cold must not publish credentials or private API responses. The shared HTTP reader uses fixed origins, bounds compressed and decoded GET bodies, supports explicit gzip/identity JSON responses and rejects redirects or unsupported encodings. Non-finite JSON numbers, including overflowing exponents such as `1e400`, are rejected before validation or hashing. No additional service, database or environment configuration is required.
 
-All external actions use full commit SHAs; the table reflects the current workflow pins. The internal call uses `./.github/workflows/klaud-candidate.yml` to resolve the caller’s exact commit, with the three required secrets explicitly forwarded.
+All external actions use full commit SHAs; the table reflects the current workflow pins. The internal call uses `$/.github/workflows/klaud-candidate.yml` to resolve the caller’s exact commit, with the three required secrets explicitly forwarded.
 
 | Action | Version | Commit |
 | --- | --- | --- |
-| `anthropics/claude-code-action` | `v1.0.218` | [`0d0e0876d3ea`](https://github.com/anthropics/claude-code-action/commit/0d0e0876d3eaa933f45dc692f7a4312c83caf36f) |
+| `anthropics/claude-code-action` | `v1.0.234` | [`9171db3e57d6`](https://github.com/anthropics/claude-code-action/commit/9171db3e57d6a3140a37ddc2ba92788584e0ead6) |
 | `actions/checkout` | `v7.0.1` | [`3d3c42e5aac5`](https://github.com/actions/checkout/commit/3d3c42e5aac5ba805825da76410c181273ba90b1) |
 | `actions/upload-artifact` | `v7.0.1` | [`043fb46d1a93`](https://github.com/actions/upload-artifact/commit/043fb46d1a93c77aae656e7c1c64a875d1fc6a0a) |
 | `actions/download-artifact` | `v8.0.1` | [`3e5f45b2cfb9`](https://github.com/actions/download-artifact/commit/3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c) |
 | `astral-sh/setup-uv` | `v10.0.1` | [`20cfd1bf945f`](https://github.com/astral-sh/setup-uv/commit/20cfd1bf945f4377ade1205e4dbc17946fc9a30d) |
+| `actions/github-script` | `v9.0.0` | [`3a2844b7e9c4`](https://github.com/actions/github-script/commit/3a2844b7e9c422d3c10d287c895573f7108da1b3) |
 
 ## Local verification
 
@@ -133,7 +134,7 @@ uvx --exclude-newer PT12H zizmor@latest --offline --no-config --no-ignores .gith
 
 CLI and workflow checks do not establish GPU workingness. Klaud Cold uses the existing InferenceX validation and e2e workflows for its candidate changes. No live model, benchmark, PR creation or deployment is part of local verification.
 
-The strict zizmor scan reports no unsuppressed findings. A `--no-ignores` review reports the intentional overlapping-wave concurrency exception and five existing repository-secret environment findings. `actionlint` 1.7.12 does not yet recognize the runner's `$/` same-repository workflow-call syntax and reports that existing call even though GitHub Actions accepts it.
+The strict zizmor scan reports no unsuppressed findings. A `--no-ignores` review reports the intentional overlapping-wave concurrency exception, five existing repository-secret environment findings and two `adhoc-packages` findings for the pinned CLI install. `actionlint` 1.7.12 does not yet recognize the runner's `$/` same-repository workflow-call syntax and reports that existing call even though GitHub Actions accepts it.
 
 ### Result names and final-sweep scheduling
 

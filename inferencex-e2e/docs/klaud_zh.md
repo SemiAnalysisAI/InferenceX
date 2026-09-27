@@ -8,7 +8,7 @@
 
 [`klaud-plan.yml`](../../.github/workflows/klaud-plan.yml) 先收尾有记录的中断会话，再用 Python 准备候选，经只读 Claude 检查排除重叠 PR 后调用 [`klaud-candidate.yml`](../../.github/workflows/klaud-candidate.yml)。每个候选仍由一个自主 Klaud Cold 会话负责修改、诊断和修复。`finish` 命令验证结果或执行清理，并发布完成记录；只读 Stop hook 和诊断步骤对照 GitHub 验证该记录。恢复工作放在下一次现有 autosweep 中，不增加第二个 agent 或工作流。
 
-PR 检查使用 `claude-opus-5`（Opus 5），关闭 fast mode（`fastMode: false`），最多运行 500 轮，为有界候选批次解析重复工作、目标集群及公开基线模型名。候选执行使用 `claude-fable-5-1`（Fable 5.1），关闭 fast mode，并负责上游镜像调查。Agent 的显示名称为 **Klaud Cold**；工作流文件名、CLI、产物、分支及运行时环境变量统一使用 `klaud` / `KLAUD`。旧拼写的候选分支仍会阻止重复选择。调度前须配置 `DASH_API_KEY`；工作流仍将其传给现有的 `KLAUD_DASHBOARD_API_KEY` 运行时变量。
+PR 检查和候选执行均在固定版本的 Claude Code 2.1.282 上使用 `claude-opus-5-5`（Opus 5.5），关闭 fast mode（`fastMode: false`），最多运行 500 轮。PR 检查为有界候选批次解析重复工作、目标集群及公开基线模型名；候选执行负责上游镜像调查。Agent 的显示名称为 **Klaud Cold**；工作流文件名、CLI、产物、分支及运行时环境变量统一使用 `klaud` / `KLAUD`。旧拼写的候选分支仍会阻止重复选择。调度前须配置 `DASH_API_KEY`；工作流仍将其传给现有的 `KLAUD_DASHBOARD_API_KEY` 运行时变量。
 
 ## 候选选择
 
@@ -114,15 +114,16 @@ smoke benchmark 和代表性 eval 都通过后，在 changelog 物理末尾追�
 
 恢复和最终选择步骤使用 `AGENT_PAT` 执行已确认归属的清理及配置族认领；只读重叠检查 agent 不获得该凭据。planner 的 Python 准备和最终容量检查步骤使用 dashboard key；准备步骤还使用只读工作流 token。限轮数的 Claude PR 检查使用 `ANTHROPIC_API_KEY` 和具有 `pull-requests: read` 权限的只读工作流 token。它接收私有资格线索，但不接收 `AGENT_PAT` 或 dashboard key，也不执行 GitHub 写操作。candidate 获得用于分支/PR 写入及 e2e 调度/取消的 `AGENT_PAT`、用于 Klaud Cold 的 `ANTHROPIC_API_KEY`，以及覆盖 clusters 的限期 `status:read` `DASH_API_KEY`。Klaud Cold 不得发布凭据或私有 API 响应。共享 HTTP 读取器固定来源，同时限制压缩和解码后的 GET 响应大小，支持明确的 gzip/identity JSON 响应，并拒绝重定向或不支持的编码。非有限 JSON 数值（包括 `1e400` 这样的指数溢出）会在校验或哈希计算前被拒绝。不需要部署额外服务、数据库或新增 environment 配置。
 
-所有外部 action 均固定完整提交 SHA；下表与当前工作流中的固定版本一致。内部调用使用 `./.github/workflows/klaud-candidate.yml` 解析调用者的精确提交，并显式传递三个必需 secret。
+所有外部 action 均固定完整提交 SHA；下表与当前工作流中的固定版本一致。内部调用使用 `$/.github/workflows/klaud-candidate.yml` 解析调用者的精确提交，并显式传递三个必需 secret。
 
 | Action | 版本 | 提交 |
 | --- | --- | --- |
-| `anthropics/claude-code-action` | `v1.0.218` | [`0d0e0876d3ea`](https://github.com/anthropics/claude-code-action/commit/0d0e0876d3eaa933f45dc692f7a4312c83caf36f) |
+| `anthropics/claude-code-action` | `v1.0.234` | [`9171db3e57d6`](https://github.com/anthropics/claude-code-action/commit/9171db3e57d6a3140a37ddc2ba92788584e0ead6) |
 | `actions/checkout` | `v7.0.1` | [`3d3c42e5aac5`](https://github.com/actions/checkout/commit/3d3c42e5aac5ba805825da76410c181273ba90b1) |
 | `actions/upload-artifact` | `v7.0.1` | [`043fb46d1a93`](https://github.com/actions/upload-artifact/commit/043fb46d1a93c77aae656e7c1c64a875d1fc6a0a) |
 | `actions/download-artifact` | `v8.0.1` | [`3e5f45b2cfb9`](https://github.com/actions/download-artifact/commit/3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c) |
 | `astral-sh/setup-uv` | `v10.0.1` | [`20cfd1bf945f`](https://github.com/astral-sh/setup-uv/commit/20cfd1bf945f4377ade1205e4dbc17946fc9a30d) |
+| `actions/github-script` | `v9.0.0` | [`3a2844b7e9c4`](https://github.com/actions/github-script/commit/3a2844b7e9c422d3c10d287c895573f7108da1b3) |
 
 ## 本地验证
 
@@ -133,7 +134,7 @@ uvx --exclude-newer PT12H zizmor@latest --offline --no-config --no-ignores .gith
 
 CLI 和工作流检查不能证明 GPU 实际可运行。Klaud Cold 使用现有 InferenceX 校验和 e2e 工作流验证候选修改。本地验证不调用真实模型、不调度 benchmark、不创建 PR、不部署。
 
-严格 zizmor 扫描没有未忽略的发现。使用 `--no-ignores` 检查时，会报告允许多轮重叠的并发例外，以及五项现有仓库 secret environment 提示。`actionlint` 1.7.12 尚不识别 runner 的 `$/` 同仓库工作流调用语法，因此会报告该现有调用，但 GitHub Actions 可以接受它。
+严格 zizmor 扫描没有未忽略的发现。使用 `--no-ignores` 检查时，会报告允许多轮重叠的并发例外、五项现有仓库 secret environment 提示，以及固定安装 CLI 产生的两项 `adhoc-packages` 提示。`actionlint` 1.7.12 尚不识别 runner 的 `$/` 同仓库工作流调用语法，因此会报告该现有调用，但 GitHub Actions 可以接受它。
 
 ### 结果文件命名与最终 sweep 调度
 
