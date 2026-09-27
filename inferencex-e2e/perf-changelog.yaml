@@ -8988,12 +8988,6 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3503
 
 - config-keys:
-    - qwen3.5-fp8-h100-sglang
-  description:
-    - "Validate the end-to-end launch path after moving it into inferencex-e2e/ and promoting CollectiveX and OperatorX to top-level projects"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3525
-
-- config-keys:
     - minimaxm3-fp8-h100-vllm-agentic-mtp
     - minimaxm3-fp4-mi355x-atom-agentic-mtp
   scenario-type:
