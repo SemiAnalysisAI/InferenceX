@@ -8995,4 +8995,4 @@
   description:
     - "Add two Kimi-K3 B300 Mooncake EFA AgentX configurations on ghcr.io/semianalysisai/vllm-openai:efa_pr_58768 (vLLM PR vllm-project/vllm#58768 vllm-openai-efa target at a0c6725d8, which bakes in the AWS EFA libfabric 2.6.0amzn1.0 stack and mooncake-transfer-engine-efa-cuda13 0.3.13.post1): aggregate DCP8 DSpark7 maxseq2 at c1 and disaggregated 1P3D DCP8/DCP8 DSpark4 at c32. Supersedes #3405, dropping its kimik3-b300-efa-setup.sh runtime installer because the image already provides the EFA stack."
     - "新增两个基于 ghcr.io/semianalysisai/vllm-openai:efa_pr_58768（vLLM PR vllm-project/vllm#58768 在 a0c6725d8 的 vllm-openai-efa 目标，内置 AWS EFA libfabric 2.6.0amzn1.0 与 mooncake-transfer-engine-efa-cuda13 0.3.13.post1）的 Kimi-K3 B300 Mooncake EFA AgentX 配置：聚合 DCP8 DSpark7 maxseq2（c1）与分离式 1P3D DCP8/DCP8 DSpark4（c32）。取代 #3405，并删除其 kimik3-b300-efa-setup.sh 运行时安装脚本，因为镜像已提供 EFA 组件。"
-  pr-link: PRLINK_PLACEHOLDER
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3521
