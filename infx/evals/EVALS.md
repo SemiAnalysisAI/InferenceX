@@ -550,7 +550,7 @@ For multi-node `all-evals`, `EVAL_CONC` is a space-separated list. When it conta
 - All four use their respective benchmark templates (`benchmark-tmpl.yml` for single-node,
   `benchmark-multinode-tmpl.yml` for multi-node) with `eval-only: true`, `run-eval: true`
 - `collect-evals` depends on all four eval jobs; `collect-results` only runs when benchmark jobs ran
-- `process_changelog.py` splits eval results by node count and scenario type into `evals`
+- `infx.matrix.plan` splits eval results by node count and scenario type into `evals`
   (single-node fixed-seq-len), `agentic_evals` (single-node agentic), `multinode_evals`
   (multi-node fixed-seq-len), and `multinode_agentic_evals` (multi-node agentic)
 

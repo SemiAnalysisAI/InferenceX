@@ -2,13 +2,19 @@
 
 # GLM-5.2 B300 vLLM SPEED-Bench AL matrix collector.
 #
-# Same serve parameters, sampling and thinking kwargs as glm5_fp4_b300_vllm.sh (GLM-5.2
-# shares the glm_moe_dsa architecture, MTP head and chat template), plus a download
-# guard for the not-yet-staged checkpoint.
+# For each thinking mode (on/off) and MTP level (num_speculative_tokens), measure the
+# REAL acceptance length (AL) on one SPEED-Bench category and emit a YAML matrix in
+# the golden_al_distribution shape. GLM-5.2 shares GLM-5's glm_moe_dsa architecture,
+# MTP head and chat template; this script adds a download guard for the not-yet-staged
+# checkpoint.
 #
-# Dispatch this collector through speedbench-al.yml.
+# GLM requires --chat-template-content-format=string (vLLM docs). Do NOT pass
+# --attention_config.use_fp4_indexer_cache: that knob is read only by the DeepSeek-V4
+# attention and MLA indexer backend; GLM's DSA (GlmMoeDsaForCausalLM) never reads it.
+# Thinking is ON by default for GLM, so the OFF cell MUST pass enable_thinking:false.
 #
-# Tunables (env): same as glm5_fp4_b300_vllm.sh
+# Dispatch this collector through speedbench-al.yml; it supplies the env vars checked
+# below.
 
 set -o pipefail
 source "$(dirname "$0")/../../benchmark_lib.sh"

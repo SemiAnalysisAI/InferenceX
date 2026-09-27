@@ -55,6 +55,7 @@ This pace of software advancement creates a challenge: benchmarks conducted at a
 
 | SKU | Status |
 | --- | --- |
+| Vera Rubin NVL72 | ✅ |
 | GB300 NVL72 | ✅ |
 | GB200 NVL72 | ✅ |
 | MI355X | ✅ |
@@ -64,9 +65,9 @@ This pace of software advancement creates a challenge: benchmarks conducted at a
 | MI300X | ✅ |
 | H200 | ✅ |
 | H100 | ✅ |
-| TPUv7x Ironwood Ghostfish | Coming Soon 🔜 |
+| TPUv7x Ironwood Ghostfish | ✅ |
+| RTX PRO 6000 Server | ✅ |
 | MI455 UALoE72 | Coming Soon 🔜 |
-| Vera Rubin NVL72 | Coming Soon 🔜 |
 | Rubin NVL8 | Coming Soon 🔜 |
 | Chip #1 from Hardware Vendor #1 | Coming Soon 🔜 |
 | Chip #2 from Hardware Vendor #1 | Coming Soon 🔜 |

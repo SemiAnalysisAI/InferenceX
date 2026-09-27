@@ -38,7 +38,7 @@ export TILERT_ROLE
 
 source "$WS_PATH/setup_deps.sh"
 source "$WS_PATH/env.sh"
-# benchmark_lib.sh derives AGENTIC_DIR/AIPERF_DIR from this at source time, so
+# benchmark_lib.sh derives AIPERF_DIR from this at source time, so
 # it must be set before the library is loaded, not in run_agentic_replay. The
 # AgentX replay runs in this container, where the repo is mounted at /workspace.
 export INFMAX_CONTAINER_WORKSPACE=/workspace

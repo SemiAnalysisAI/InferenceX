@@ -36,7 +36,7 @@
 | [`.github/AGENT_OPERATIONS.md`](../.github/AGENT_OPERATIONS.md) | 翻译术语、扫描标签、派发、Eval 选择、功耗、指标与产物 |
 | [`configs/CONFIGS.md`](../configs/CONFIGS.md) | 主配置 Schema、搜索空间、Runner 与拓扑字段 |
 | [`.github/workflows/README.md`](../.github/workflows/README.md) | 生成器示例、Workflow 操作与复用政策 |
-| [`utils/evals/EVALS.md`](../utils/evals/EVALS.md) | Eval 任务、执行、收集、校验与 SWE-bench 契约 |
+| [`infx/evals/EVALS.md`](../infx/evals/EVALS.md) | Eval 任务、执行、收集、校验与 SWE-bench 契约 |
 | [`benchmarks/multi_node/srt-slurm-recipes/RECIPES.md`](../benchmarks/multi_node/srt-slurm-recipes/RECIPES.md) | 分离式 Recipe 注册与主配置耦合 |
 | [`utils/runner_setup/RUNNER_SETUP.md`](../utils/runner_setup/RUNNER_SETUP.md) | Runner 部署与初始化 |
 | [`MODELS_zh.md`](MODELS_zh.md) | 支持的模型、硬件覆盖与命名 |

@@ -34,18 +34,7 @@ from typing import Any
 
 
 def _dump_trace_inline_hash_ids(trace: dict, path: Path) -> None:
-    """Write the trace as indented JSON, but with every ``hash_ids``
-    array kept on a single line regardless of length.
-
-    `json.dump(..., indent=2)` always expands arrays to one element
-    per line, which turns the weka file into thousands of one-int
-    lines that drown out the actual structure. We work around it
-    with a two-phase serialize: substitute each ``hash_ids`` list
-    with a placeholder string before dumping, then text-replace the
-    placeholder with a compact one-line array. Robust against weird
-    list contents because the substitution happens at object level,
-    not at the JSON-text level.
-    """
+    """Write indented JSON with each ``hash_ids`` array on one line."""
     placeholders: list[list[Any]] = []
 
     def _substitute(obj: Any) -> Any:
@@ -111,17 +100,8 @@ def load_session_rows(path: Path) -> list[dict]:
                 rows.append(json.loads(line))
     rows.sort(key=lambda r: r["timestamp"])
 
-    # Drop exact-duplicate rows. The proxy occasionally records the same
-    # logical request twice — observed at ~1.5% of subagent inner rows on
-    # the v5 + CC>=2.1.139 pool, concentrated in heavy-fanout subagents.
-    # Without deduping, the weka conversion would inflate token counts /
-    # request counts and the converter would also misclassify the
-    # duplicate row as "concurrent with itself" when grouping.
-    #
-    # Fingerprint: (timestamp, model, input_tokens, output_tokens,
-    # duration_ms, agent_id). Two distinct logical requests landing on
-    # the same nanosecond timestamp with identical token counts AND the
-    # same agent_id are so unlikely that collapsing them is safe.
+    # Proxy duplicates inflate token counts and appear to overlap themselves.
+    # Treat matching nanosecond timestamps, counts, duration, model and agent as duplicates.
     seen: set[tuple] = set()
     deduped: list[dict] = []
     for r in rows:
@@ -153,32 +133,18 @@ def remap_hash(h: str, m: dict[str, int]) -> int:
 
 
 def infer_block_size(rows: list[dict]) -> int:  # noqa: ARG001
-    """Anthropic's KV-cache uses a constant 64-token block. The proxy's
-    `hash_token_count` can drift below `len(hash_ids) * 64` on rows
-    where the prompt's trailing partial block isn't hashed — naive
-    division over the first row gives nonsense (53 for a 377-token
-    utility call). We don't infer; we constant 64.
+    """Return the proxy's 64-token block size.
+
+    Partial trailing blocks make hash_token_count / len(hash_ids) unreliable.
     """
     return 64
 
 
 def effective_input_length(row: dict, block_size: int = 64) -> int:
-    """Effective ``in`` for the weka request.
+    """Replay only hashed tokens, excluding the synthetic unhashed tail.
 
-    We want the replayed prompt to be EXACTLY what the proxy hashed and
-    nothing more — the unhashed tail (typically the volatile user
-    message of the turn) is synthesized junk at replay time and doesn't
-    represent real content. So ``in`` is the proxy's own
-    ``hash_token_count`` whenever it's populated. Fallback chain:
-
-      1. ``hash_token_count``       — proxy's exact accounting, handles
-                                       last-block-partial residues
-                                       (e.g. 212 not 256 for 4 blocks).
-      2. ``len(hash_ids) * block_size`` — clean block-multiple if the
-                                          proxy didn't record the count.
-      3. ``input + cache_read + cache_write`` — total prompt length,
-                                                used only when no hash
-                                                coverage exists.
+    Prefer hash_token_count (which accounts for partial blocks), then hash
+    count times block size. Use total prompt length only without hash coverage.
     """
     hash_tok = row.get("hash_token_count") or 0
     if hash_tok > 0:
@@ -250,12 +216,8 @@ def compute_think_times(rows: list[dict]) -> list[float | None]:
     return out
 
 
-# Claude CLI version at which `x-claude-code-agent-id` became the
-# canonical sub-agent signal. On rows >= this version, a labelled row
-# without a header id is treated as a utility call (Title Generation,
-# Statusline Agent, …), demoted to a main turn instead of getting its
-# own SubagentEntry. Diverges intentionally from the dashboard, which
-# still renders those as subagents — we want clean weka traces.
+# From this CLI version, x-claude-code-agent-id identifies subagents.
+# Labelled rows without it are utility calls and become main turns.
 MIN_CLI_FOR_HEADER_AS_TRUTH = (2, 1, 139)
 
 
@@ -352,10 +314,6 @@ def session_to_weka(session_id: str, rows: list[dict]) -> dict:
             "requests": [],
         }
 
-    # Demote utility-labelled rows (no header id) on new CLI versions
-    # so they appear as main turns instead of 1-inner SubagentEntries.
-    # We work on a shallow copy that nulls out subagent_label on those
-    # rows; everything else is unchanged.
     n_demoted = 0
     demoted_rows: list[dict] = []
     for r in rows:
@@ -380,13 +338,8 @@ def session_to_weka(session_id: str, rows: list[dict]) -> dict:
     instance_count: dict[str, int] = {}
     models_seen: set[str] = set()
 
-    # Pass 1: pre-collect ALL rows belonging to each header-keyed group
-    # across the entire session, not just within contiguous label
-    # stretches. A sub-agent running in the background while the user
-    # makes more main-agent requests would otherwise get fragmented
-    # into one entry per stretch. The agent-id / thread-id header is
-    # stable across fragments — collapse them. Mirrors the pass-1 logic
-    # in subagent-runs.ts:buildRequestRuns.
+    # Group by header ID across main turns so background subagents stay intact.
+    # Matches subagent-runs.ts:buildRequestRuns.
     id_groups: dict[str, list[tuple[dict, float | None]]] = {}
     for r, tt in zip(rows, think_times, strict=False):
         key = _id_group_key(r)
@@ -394,18 +347,6 @@ def session_to_weka(session_id: str, rows: list[dict]) -> dict:
             continue
         id_groups.setdefault(key, []).append((r, tt))
 
-    # Pass 2: walk chronologically and emit:
-    #   - main turn (null label)           → emit at its position
-    #   - id-keyed sub-agent, first sight  → emit FULL collected group
-    #   - id-keyed sub-agent, already seen → skip (already grouped)
-    #   - label-only sub-agent (no header) → fall back to old stretch-
-    #                                        based grouping
-    #
-    # For agent-id (Claude Code ≥ 2.1.139) groups, the per-request label
-    # drifts arbitrarily across the agent's life (e.g. General Agent ↔
-    # Web Search Agent). We follow the dashboard and use a flat
-    # 'Subagent' label for those. For thread-id (Codex) groups, the
-    # label is stable so we keep the original.
     emitted: set[str] = set()
     i = 0
     while i < len(rows):
@@ -431,10 +372,7 @@ def session_to_weka(session_id: str, rows: list[dict]) -> dict:
             i += 1
             continue
 
-        # Legacy contiguous-stretch fallback for label-only sub-agents
-        # (pre-2.1.139 Claude Code or rows with no header coverage).
-        # Same algorithm as before: collect consecutive same-label rows
-        # bounded by main-agent turns, group by label.
+        # Without header IDs, group by label within stretches bounded by main turns.
         stretch_rows: list[tuple[dict, float | None]] = []
         while (
             i < len(rows)

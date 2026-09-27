@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+REPO_ROOT = Path(__file__).resolve().parents[4]
 BENCHMARK_LIB = REPO_ROOT / "benchmarks" / "benchmark_lib.sh"
 
 
@@ -70,7 +70,6 @@ validate_required_agentic_server_metrics() {{
 trap 'printf "parent-exit\\n" >> {str(event_log)!r}' EXIT
 REPLAY_CMD=fake_replay
 AIPERF_PYTHON=fake_python
-AGENTIC_DIR={str(tmp_path)!r}
 INFMAX_CONTAINER_WORKSPACE={str(tmp_path)!r}
 AGENTIC_OUTPUT_DIR={str(tmp_path)!r}
 RESULT_FILENAME=agg_agentx
