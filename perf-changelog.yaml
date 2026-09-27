@@ -8994,4 +8994,4 @@
   description:
     - "Add DeepSeek-V4-Flash B300 TP2 SGLang 8k1k serving at concurrency 1, 2, 4, 8, 16, 32, 64, 128 with bundled MTP via EAGLE (3 steps, top-k 1, 4 draft tokens), real verification, GPU-resident weights/KV, and the DeepSeek-V4 chat encoder."
     - "新增 DeepSeek-V4-Flash B300 TP2 SGLang 8k1k serving，并发为 1、2、4、8、16、32、64、128；通过 EAGLE 使用原生 MTP（3 steps、top-k 1、4 draft tokens），采用真实验证、GPU 常驻权重/KV 和 DeepSeek-V4 chat 编码器。"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3516
