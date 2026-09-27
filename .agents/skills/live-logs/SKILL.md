@@ -45,7 +45,7 @@ If the host is missing, the script names the cluster and exits. Get the login ad
 - **Each pane header:**
   - The latest phase: weights loaded → KV cache sized → EFA devices up → Mooncake segment registration → autotune → ✅ healthy.
   - A count of real errors, excluding known noise such as NCCL `ibv_query_port_speed`, the pip resolver notice and the node-exporter TaskProlog message.
-  - Buttons: jump to start / end, copy, and maximize (Esc restores).
+  - Buttons: jump to start / end, ⬇ download that full log (fetched fresh from the cluster, whatever the display settings), copy, and maximize (Esc restores).
 - **Controls:**
   - Regex filter and "errors only".
   - "Hide Mooncake metrics noise", on by default. It hides the client metric report blocks, throughput and latency summaries, and dynamo HTTP 200 spam.

@@ -123,7 +123,7 @@ def tail_batch(args, st, rels):
         st.status["ssh"] = "connected"
         st.publish({"t": "status", "s": st.status})
         p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, errors="replace", bufsize=1)
-        cur = None
+        cur = rels[0] if len(rels) == 1 else None  # tail prints "==> f <==" headers only for several files
         for line in p.stdout:
             line = ANSI.sub("", line.rstrip("\n"))
             m = re.match(r"^==> (.+) <==$", line)
@@ -221,6 +221,27 @@ def make_handler(args, st):
         def log_message(self, *a):
             pass
 
+        def send_file(self, rel):
+            """Stream one full log straight from the cluster; only files the viewer discovered are allowed."""
+            if rel not in st.buffers:
+                self.send_error(404, "unknown log file")
+                return
+            p = subprocess.Popen(SSH + [args.host, f"cat {args.logdir}/{rel}"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Disposition", f'attachment; filename="slurm-{args.job}-{os.path.basename(rel)}"')
+            self.end_headers()
+            try:
+                while True:
+                    chunk = p.stdout.read(1 << 20)
+                    if not chunk:
+                        break
+                    self.wfile.write(chunk)
+            except (BrokenPipeError, ConnectionResetError):
+                p.kill()
+            finally:
+                p.wait()
+
         def do_GET(self):
             if self.path == "/":
                 with open(page_path) as f:
@@ -257,6 +278,9 @@ def make_handler(args, st):
                     os.remove(path)
                 return
             url = urlparse(self.path)
+            if url.path == "/file":
+                self.send_file(parse_qs(url.query).get("f", [""])[0])
+                return
             if url.path != "/events":
                 self.send_error(404)
                 return

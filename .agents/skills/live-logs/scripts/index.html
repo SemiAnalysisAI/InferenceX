@@ -102,12 +102,13 @@ function captureLayout(){
 function paneState(k){
   if (panes[k]) return panes[k];
   const p = document.createElement("section"); p.className = "pane";
-  p.innerHTML = `<div class="ph"><b></b><span class="phase"></span><span class="ec"></span><span class="cnt"></span><button class="top" title="jump to start">⤒</button><button class="bot" title="jump to end">⤓</button><button class="cp" title="copy visible">⧉</button><button class="mx" title="maximize / restore (Esc)">⛶</button></div><div class="log"></div>`;
+  p.innerHTML = `<div class="ph"><b></b><span class="phase"></span><span class="ec"></span><span class="cnt"></span><button class="top" title="jump to start">⤒</button><button class="bot" title="jump to end">⤓</button><button class="dlf" title="download this full log from the cluster (ignores show / filter settings)">⬇</button><button class="cp" title="copy visible">⧉</button><button class="mx" title="maximize / restore (Esc)">⛶</button></div><div class="log"></div>`;
   const log = p.querySelector(".log");
   const st = {key:k, el:p, log, phase:p.querySelector(".phase"), cnt:p.querySelector(".cnt"), ec:p.querySelector(".ec"), lines:[], errs:0, follow:true};
   log.addEventListener("scroll", () => { st.follow = log.scrollTop + log.clientHeight >= log.scrollHeight - 30; p.classList.toggle("paused", !st.follow); });
   p.querySelector(".top").onclick = () => { log.scrollTop = 0; };
   p.querySelector(".bot").onclick = () => { log.scrollTop = log.scrollHeight; };
+  p.querySelector(".dlf").onclick = () => { const a = document.createElement("a"); a.href = "/file?f=" + encodeURIComponent(k); a.download = ""; document.body.appendChild(a); a.click(); a.remove(); };
   p.querySelector(".cp").onclick = () => navigator.clipboard.writeText([...log.children].map(d => d.textContent).join("\n"));
   p.querySelector(".mx").onclick = () => { const on = !p.classList.contains("max"); document.querySelectorAll(".pane.max").forEach(x => x.classList.remove("max")); p.classList.toggle("max", on); if (st.follow) log.scrollTop = log.scrollHeight; };
   return panes[k] = st;
