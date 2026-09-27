@@ -26,8 +26,6 @@ def _load_custom_client_csv(client_csv: Path, exp_dir: Path) -> pd.DataFrame | N
     df = pd.read_csv(client_csv)
     if len(df) == 0:
         return None
-    # Columns expected: start_time_ms, ttft_ms, tpot_ms, latency_ms,
-    #                   input_num_tokens, output_num_tokens, ...
     return df
 
 
@@ -37,13 +35,11 @@ def _load_aiperf_summary_csv(csv_path: Path) -> dict | None:
     Returns a dict with pre-computed metrics matching the result schema,
     or None if the file can't be parsed.
     """
-    # The CSV has multiple sections with different column counts.
-    # Read raw lines and split into per-metric and scalar sections.
+    # CSV sections have different column counts.
     lines = csv_path.read_text().strip().split("\n")
     if len(lines) < 2:
         return None
 
-    # Section 1: per-metric stats (header + data rows with 14 columns)
     header = lines[0].split(",")
     per_metric = {}
     scalars = {}
@@ -52,10 +48,8 @@ def _load_aiperf_summary_csv(csv_path: Path) -> dict | None:
             continue
         parts = line.split(",")
         if len(parts) == len(header):
-            # Per-metric row
             per_metric[parts[0]] = {h: parts[i] for i, h in enumerate(header)}
         elif len(parts) == 2:
-            # Scalar row (Metric, Value)
             scalars[parts[0]] = parts[1]
         else:
             # Different section (GPU metrics) — stop
@@ -104,7 +98,6 @@ def load_experiment(exp_dir: Path) -> dict | None:
     client_csv = exp_dir / "metrics_client_metrics.csv"
     server_csv = exp_dir / "metrics_server_metrics.csv"
 
-    # An experiment is considered SUCCESS iff aiperf produced a summary CSV.
     aiperf_summary_csv = None
     aiperf_artifacts = exp_dir / "aiperf_artifacts"
     if aiperf_artifacts.exists():
@@ -149,7 +142,6 @@ def load_experiment(exp_dir: Path) -> dict | None:
         return result
 
     try:
-        # Determine data source: aiperf summary CSV (preferred) or custom client CSV
         if aiperf_summary_csv is not None:
             aiperf_metrics = _load_aiperf_summary_csv(aiperf_summary_csv)
             if aiperf_metrics is None:
@@ -212,7 +204,6 @@ def load_experiment(exp_dir: Path) -> dict | None:
         else:
             return result
 
-        # Cache hit rates from server metrics
         if server_csv.exists():
             try:
                 sdf = pd.read_csv(server_csv)
@@ -248,7 +239,6 @@ def main() -> None:
         print(f"Error: {artifacts_dir} is not a directory")
         sys.exit(1)
 
-    # Load all experiments
     experiments = []
     for subdir in sorted(artifacts_dir.iterdir()):
         if not subdir.is_dir():
@@ -261,19 +251,16 @@ def main() -> None:
         print("No experiments found.")
         sys.exit(0)
 
-    # Write summary CSV
     summary_path = output_dir / "summary.csv"
     df = pd.DataFrame(experiments)
     df.to_csv(summary_path, index=False)
     print(f"Summary written to {summary_path} ({len(experiments)} experiments)")
 
-    # Print status summary
     success = sum(1 for e in experiments if e.get("status") == "SUCCESS")
     failed = sum(1 for e in experiments if e.get("status") == "FAILED")
     other = len(experiments) - success - failed
     print(f"  SUCCESS: {success}, FAILED: {failed}, OTHER: {other}")
 
-    # Run overview plots (throughput vs concurrency, workload consistency)
     try:
         from plot_sweep_overview import (
             plot_throughput_vs_concurrency,

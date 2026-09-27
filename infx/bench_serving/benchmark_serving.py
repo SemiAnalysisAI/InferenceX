@@ -92,9 +92,7 @@ class BenchmarkMetrics:
     median_itl_ms: float
     std_itl_ms: float
     percentiles_itl_ms: list[tuple[float, float]]
-    # E2EL stands for end-to-end latency per request.
-    # It is the time taken on the client side from sending
-    # a request to receiving a complete response.
+    # Client latency from request send to complete response.
     mean_e2el_ms: float
     median_e2el_ms: float
     std_e2el_ms: float
@@ -271,23 +269,18 @@ def sample_random_requests(
     output_lens = sample_uniform(output_len)
     offsets = np.random.randint(0, vocab_size, size=num_prompts)  # noqa: NPY002
 
-    # Create a local RNG for retry-loop padding so that neither serial nor
-    # parallel path consumes global np.random draws beyond this point.
-    # This ensures downstream code (e.g. gamma draws for inter-arrival times)
-    # sees identical global RNG state regardless of num_workers.
+    # Local padding draws keep downstream arrival times independent of num_workers.
     local_rng = np.random.RandomState(
         np.random.get_state()[1][  # noqa: NPY002
             :4
         ].tolist()  # derive seed from current state without advancing it
     )
 
-    # Decide whether to use multiprocessing
     if num_workers <= 0:
         num_workers = min(cpu_count() or 1, 8)
     use_parallel = num_workers > 1 and tokenizer_id is not None
 
     if use_parallel:
-        # Split work into chunks, one per worker
         chunk_size = (num_prompts + num_workers - 1) // num_workers
         chunk_args_list = []
         for w in range(num_workers):
@@ -329,8 +322,6 @@ def sample_random_requests(
         elapsed = time.perf_counter() - t0
         print(f"Prompt generation completed in {elapsed:.1f}s")
     else:
-        # Original serial path — also uses local_rng for retry-loop padding
-        # to keep global RNG consumption identical to the parallel path.
         if tokenizer_id is None and num_workers > 1:
             print("Warning: tokenizer_id not provided, falling back to serial prompt generation.")
         input_requests = []
@@ -388,27 +379,13 @@ async def get_request(
     request_rate: float,
     burstiness: float = 1.0,
 ) -> AsyncGenerator[tuple[str, int, int], None]:
-    """
-    Asynchronously generates requests at a specified rate
-    with OPTIONAL burstiness.
+    """Yield requests at request_rate requests/s with gamma-distributed intervals.
 
-    Args:
-        input_requests:
-            A list of input requests, each represented as a tuple.
-        request_rate:
-            The rate at which requests are generated (requests/s).
-        burstiness (optional):
-            The burstiness factor of the request generation.
-            Only takes effect when request_rate is not inf.
-            Default value is 1, which follows a Poisson process.
-            Otherwise, the request intervals follow a gamma distribution.
-            A lower burstiness value (0 < burstiness < 1) results
-            in more bursty requests, while a higher burstiness value
-            (burstiness > 1) results in a more uniform arrival of requests.
+    Burstiness 1 gives Poisson arrivals; values below 1 are burstier and values
+    above 1 are more uniform. Infinite request_rate disables waiting.
     """
     input_requests = iter(input_requests)
 
-    # Calculate scale parameter theta to maintain the desired request_rate.
     assert burstiness > 0, (  # noqa: S101
         f"A positive burstiness factor is expected, but given {burstiness}."
     )
@@ -418,13 +395,9 @@ async def get_request(
         yield request
 
         if request_rate == float("inf"):
-            # If the request rate is infinity, then we don't need to wait.
             continue
 
-        # Sample the request interval from the gamma distribution.
-        # If burstiness is 1, it follows exponential distribution.
         interval = np.random.gamma(shape=burstiness, scale=theta)  # noqa: NPY002
-        # The next request will be sent after the interval.
         await asyncio.sleep(interval)
 
 
@@ -451,11 +424,7 @@ def calculate_metrics(
             output_len = outputs[i].output_tokens
 
             if output_len is None:
-                # We use the tokenizer to count the number of output tokens
-                # for some serving backends instead of looking at
-                # len(outputs[i].itl) since multiple output tokens may be
-                # bundled together
-                # Note : this may inflate the output token count slightly
+                # Chunks can bundle tokens; retokenization may slightly overcount.
                 output_len = len(
                     tokenizer(outputs[i].generated_text, add_special_tokens=False).input_ids
                 )
@@ -603,7 +572,6 @@ async def benchmark(
         print("Warmup completed.")
 
     if lora_modules:
-        # For each input request, choose a LoRA module at random.
         lora_modules = iter(
             [random.choice(lora_modules) for _ in range(len(input_requests))]  # noqa: S311
         )
@@ -744,15 +712,10 @@ async def benchmark(
     }
 
     def process_one_metric(
-        # E.g., "ttft"
         metric_attribute_name: str,
-        # E.g., "TTFT"
         metric_name: str,
-        # E.g., "Time to First Token"
         metric_header: str,
     ) -> None:
-        # This function prints and adds statistics of the specified
-        # metric.
         if metric_attribute_name not in selected_percentile_metrics:
             return
         print("{s:{c}^{n}}".format(s=metric_header, n=50, c="-"))
@@ -793,7 +756,6 @@ async def benchmark(
 
 
 def check_goodput_args(args: argparse.Namespace) -> dict[str, float]:
-    # Check and parse goodput arguments
     goodput_config_dict = {}
     valid_names = ["ttft", "tpot", "e2el"]
     if args.goodput:
@@ -847,8 +809,6 @@ def save_to_pytorch_benchmark_format(
         "std_itl_ms",
         "p99_itl_ms",
     ]
-    # These raw data might be useful, but they are rather big. They can be added
-    # later if needed
     ignored_metrics = ["ttfts", "itls", "generated_texts", "errors"]
     pt_records = convert_to_pytorch_benchmark_format(
         args=args,
@@ -858,7 +818,6 @@ def save_to_pytorch_benchmark_format(
         },
     )
     if pt_records:
-        # Don't use json suffix here as we don't want CI to pick it up
         pt_file = f"{os.path.splitext(file_name)[0]}.pytorch.json"
         with open(pt_file, "w") as f:
             json.dump(pt_records, f)
@@ -952,11 +911,9 @@ def main(args: argparse.Namespace) -> None:
         }
     benchmark_result["benchmark_outcome"] = outcome
 
-    # Save config and results to json
     if args.save_result:
         result_json: dict[str, Any] = {}
 
-        # Setup
         current_dt = datetime.now().strftime("%Y%m%d-%H%M%S")  # noqa: DTZ005
         result_json["date"] = current_dt
         result_json["backend"] = backend
@@ -965,7 +922,6 @@ def main(args: argparse.Namespace) -> None:
         result_json["best_of"] = args.best_of
         result_json["num_prompts"] = args.num_prompts
 
-        # Metadata
         if args.metadata:
             for item in args.metadata:
                 if "=" in item:
@@ -974,14 +930,12 @@ def main(args: argparse.Namespace) -> None:
                 else:
                     raise ValueError("Invalid metadata format. Please use KEY=VALUE format.")
 
-        # Traffic
         result_json["request_rate"] = (
             args.request_rate if args.request_rate < float("inf") else "inf"
         )
         result_json["burstiness"] = args.burstiness
         result_json["max_concurrency"] = args.max_concurrency
 
-        # Merge with benchmark result
         result_json = {**result_json, **benchmark_result}
 
         if not args.save_detailed:
@@ -997,7 +951,6 @@ def main(args: argparse.Namespace) -> None:
                 if field in benchmark_result:
                     del benchmark_result[field]
 
-        # Save to file
         base_model_id = model_id.split("/")[-1]
         max_concurrency_str = (
             f"-concurrency{args.max_concurrency}" if args.max_concurrency is not None else ""
@@ -1220,7 +1173,6 @@ if __name__ == "__main__":
         "and the blog: https://hao-ai-lab.github.io/blogs/distserve",
     )
 
-    # group for dataset specific arguments
     sonnet_group = parser.add_argument_group("sonnet dataset options")
     sonnet_group.add_argument(
         "--sonnet-input-len",

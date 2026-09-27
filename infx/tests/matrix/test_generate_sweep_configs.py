@@ -211,9 +211,6 @@ def test_multinode_node_count_prefers_recipe_roles(
     assert multinode_node_count(prefill, decode, "unknown", {}) == expected_nodes
 
 
-# =============================================================================
-# Test Fixtures
-# =============================================================================
 
 
 @pytest.mark.parametrize("command", ["full-sweep", "test-config"])
@@ -383,30 +380,20 @@ def full_sweep_args_multi_node():
     return args
 
 
-# =============================================================================
-# Test sequence length formatting
-# =============================================================================
 
 class TestSeqLenToStr:
-    """Tests for seq_len_to_str function."""
 
     def test_known_sequence_lengths(self):
-        """Known sequence lengths should return short name."""
         assert seq_len_to_str(1024, 1024) == "1k1k"
         assert seq_len_to_str(8192, 1024) == "8k1k"
 
     def test_unknown_sequence_lengths(self):
-        """Unknown sequence lengths should return isl_osl format."""
         assert seq_len_to_str(2048, 2048) == "2048_2048"
         assert seq_len_to_str(4096, 1024) == "4096_1024"
 
 
-# =============================================================================
-# Test mark_eval_entries
-# =============================================================================
 
 class TestMarkEvalEntries:
-    """Tests for eval matrix selection policy."""
 
     def test_marks_agentic_entry_for_gsm8k(self):
         matrix_values = [
@@ -612,7 +599,6 @@ class TestMarkEvalEntries:
 
 
     def test_single_node_skips_eval_entries_below_min_conc(self):
-        """Single-node eval selection should ignore conc values below MIN_EVAL_CONC."""
         matrix_values = [
             {
                 "model": "deepseek-ai/DeepSeek-R1-0528",
@@ -672,7 +658,6 @@ class TestMarkEvalEntries:
         assert result[3]["run-eval"] is True
 
     def test_multi_node_skips_groups_with_only_conc_below_min_conc(self):
-        """Multinode eval selection should skip groups whose conc lists are all below MIN_EVAL_CONC."""
         matrix_values = [
             {
                 "model": "deepseek-ai/DeepSeek-R1-0528",
@@ -704,7 +689,6 @@ class TestMarkEvalEntries:
         assert "eval-conc" not in result[0]
 
     def test_multi_node_marks_each_parallelism_at_highest_eligible_conc(self):
-        """Each multinode parallelism should eval at its highest eligible concurrency."""
         matrix_values = [
             {
                 "model": "deepseek-ai/DeepSeek-R1-0528",
@@ -760,7 +744,6 @@ class TestMarkEvalEntries:
         assert result[1]["eval-conc"] == 64
 
     def test_multi_node_worker_counts_define_parallelism(self):
-        """Prefill and decode worker counts should each define a distinct eval target."""
         def entry(prefill_workers, decode_workers, conc):
             return {
                 "model": "deepseek-ai/DeepSeek-R1-0528",
@@ -798,7 +781,6 @@ class TestMarkEvalEntries:
         ]
 
     def test_multi_node_split_parallelism_uses_only_highest_concurrency_entry(self):
-        """Split concurrency rows for one parallelism should produce one eval job."""
         base_entry = {
             "model": "deepseek-ai/DeepSeek-R1-0528",
             "runner": "cluster:mi355x-amds",
@@ -855,7 +837,6 @@ class TestMarkEvalEntries:
         assert result[2]['run-eval'] is True    # conc=512 (highest)
 
     def test_non_8k1k_never_marked(self):
-        """Entries with non-8k1k seq lengths should never be eval-marked."""
         entries = [
             {'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
              'isl': 1024, 'osl': 1024, 'tp': 2, 'conc': 512,
@@ -866,7 +847,6 @@ class TestMarkEvalEntries:
 
 
 class TestMarkAllEvalEntries:
-    """Tests for the all-evals selection policy."""
 
     def test_marks_only_8k1k_entries_and_passes_other_seq_lens_through(self):
         entries = [
@@ -1078,12 +1058,8 @@ class TestMarkAllEvalEntries:
         assert all(row["eval-suite"] == eval_suite for row in result)
 
 
-# =============================================================================
-# Test generate_full_sweep for single-node
-# =============================================================================
 
 class TestGenerateFullSweepSingleNode:
-    """Tests for generate_full_sweep with single-node configs."""
 
     def test_sweep_expands_each_sequence_length_across_concurrencies(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
         """Each input sequence pair gets the complete requested concurrency range."""
@@ -1099,7 +1075,6 @@ class TestGenerateFullSweepSingleNode:
         ]
 
     def test_matrix_entry_structure(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
-        """Generated entries should have correct structure."""
         result = generate_full_sweep(
             full_sweep_args_single_node,
             sample_single_node_config,
@@ -1131,7 +1106,6 @@ class TestGenerateFullSweepSingleNode:
         } == {(2, 2, 2)}
 
     def test_filter_by_model_prefix(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
-        """Filter by model prefix should work."""
         full_sweep_args_single_node.model_prefix = ["dsr1"]
         result = generate_full_sweep(
             full_sweep_args_single_node,
@@ -1140,7 +1114,6 @@ class TestGenerateFullSweepSingleNode:
         )
         assert len(result) > 0
 
-        # Non-matching prefix should return empty
         full_sweep_args_single_node.model_prefix = ["nonexistent"]
         result = generate_full_sweep(
             full_sweep_args_single_node,
@@ -1150,7 +1123,6 @@ class TestGenerateFullSweepSingleNode:
         assert len(result) == 0
 
     def test_filter_by_precision(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
-        """Filter by precision should work."""
         full_sweep_args_single_node.precision = ["fp8"]
         result = generate_full_sweep(
             full_sweep_args_single_node,
@@ -1168,7 +1140,6 @@ class TestGenerateFullSweepSingleNode:
         assert len(result) == 0
 
     def test_filter_by_framework(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
-        """Filter by framework should work."""
         full_sweep_args_single_node.framework = ["sglang"]
         result = generate_full_sweep(
             full_sweep_args_single_node,
@@ -1186,7 +1157,6 @@ class TestGenerateFullSweepSingleNode:
         assert len(result) == 0
 
     def test_filter_by_runner_type(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
-        """Filter by runner type should work."""
         full_sweep_args_single_node.runner_type = ["mi300x"]
         result = generate_full_sweep(
             full_sweep_args_single_node,
@@ -1204,7 +1174,6 @@ class TestGenerateFullSweepSingleNode:
         assert len(result) == 0
 
     def test_invalid_runner_type_raises_error(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
-        """Invalid runner type should raise ValueError."""
         full_sweep_args_single_node.runner_type = ["invalid_runner"]
         with pytest.raises(ValueError) as exc_info:
             generate_full_sweep(
@@ -1215,7 +1184,6 @@ class TestGenerateFullSweepSingleNode:
         assert "Invalid runner type" in str(exc_info.value)
 
     def test_filter_by_seq_lens(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
-        """Filter by sequence lengths should work."""
         full_sweep_args_single_node.seq_lens = ["1k1k"]
         result = generate_full_sweep(
             full_sweep_args_single_node,
@@ -1227,7 +1195,6 @@ class TestGenerateFullSweepSingleNode:
         assert all(entry["isl"] == 1024 and entry["osl"] == 1024 for entry in result)
 
     def test_max_conc_filter(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
-        """max_conc filter should limit concurrency values."""
         full_sweep_args_single_node.max_conc = 16
         full_sweep_args_single_node.seq_lens = ["1k1k"]
         result = generate_full_sweep(
@@ -1240,7 +1207,6 @@ class TestGenerateFullSweepSingleNode:
         assert all(entry["conc"] <= 16 for entry in result)
 
     def test_max_conc_creates_config_when_below_min(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
-        """max_conc below config's min should create config with max_conc value."""
         # Config has conc-start=4, so max_conc=1 should create entry with conc=1
         full_sweep_args_single_node.max_conc = 1
         full_sweep_args_single_node.seq_lens = ["1k1k"]
@@ -1249,12 +1215,10 @@ class TestGenerateFullSweepSingleNode:
             sample_single_node_config,
             sample_runner_config
         )
-        # Should create 1 entry with conc=1
         assert len(result) == 1
         assert result[0]["conc"] == 1
 
     def test_max_conc_zero_or_negative_skips(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
-        """max_conc of 0 or negative should skip configs."""
         for invalid_value in [0, -1, -100]:
             full_sweep_args_single_node.max_conc = invalid_value
             result = generate_full_sweep(
@@ -1305,7 +1269,6 @@ class TestGenerateFullSweepSingleNode:
         assert all(entry["tp"] == 4 for entry in result)
 
     def test_max_tp_below_all_available_skips(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
-        """If all available tp values are > max_tp, generator should return empty (skip)."""
         full_sweep_args_single_node.max_tp = 2
         full_sweep_args_single_node.seq_lens = ["1k1k"]
 
@@ -1318,7 +1281,6 @@ class TestGenerateFullSweepSingleNode:
         assert len(result) == 0
 
     def test_max_tp_zero_or_negative_skips(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
-        """max_tp of 0 or negative should skip configs."""
         for invalid_value in [0, -1, -100]:
             full_sweep_args_single_node.max_tp = invalid_value
             result = generate_full_sweep(
@@ -1329,7 +1291,6 @@ class TestGenerateFullSweepSingleNode:
             assert len(result) == 0, f"Expected 0 results for max_tp={invalid_value}"
 
     def test_step_size(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
-        """Different step sizes should affect concurrency progression."""
         full_sweep_args_single_node.step_size = 4
         full_sweep_args_single_node.seq_lens = ["1k1k"]
         result = generate_full_sweep(
@@ -1345,7 +1306,6 @@ class TestGenerateFullSweepSingleNode:
         assert 64 in conc_values
 
     def test_exp_name_format(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
-        """exp-name should have correct format."""
         full_sweep_args_single_node.seq_lens = ["1k1k"]
         result = generate_full_sweep(
             full_sweep_args_single_node,
@@ -1384,7 +1344,6 @@ class TestGenerateFullSweepSingleNode:
         assert "mi300x-amd_1" in runners
 
     def test_runner_node_filter_no_match(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
-        """Runner node filter with no matches should skip configs (return empty)."""
         full_sweep_args_single_node.runner_type = ["mi300x"]
         full_sweep_args_single_node.runner_node_filter = "nonexistent"
         result = generate_full_sweep(
@@ -1392,7 +1351,6 @@ class TestGenerateFullSweepSingleNode:
             sample_single_node_config,
             sample_runner_config
         )
-        # No nodes match, so config is skipped
         assert len(result) == 0
 
     def test_runner_node_filter_without_runner_type(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
@@ -1410,12 +1368,8 @@ class TestGenerateFullSweepSingleNode:
         assert all("amd" in entry["runner"] for entry in result)
 
 
-# =============================================================================
-# Test generate_full_sweep for multi-node
-# =============================================================================
 
 class TestGenerateFullSweepMultiNode:
-    """Tests for generate_full_sweep with multi-node configs."""
 
     def test_multinode_entry_structure(self, sample_multinode_config, sample_runner_config, full_sweep_args_multi_node):
         """Multinode entries should have prefill and decode configs."""
@@ -1475,7 +1429,6 @@ class TestGenerateFullSweepMultiNode:
         assert entry["conc"] == [2150]
 
     def test_single_node_flag_skips_multinode(self, sample_multinode_config, sample_runner_config, full_sweep_args_single_node):
-        """Single-node flag should skip multinode configs."""
         result = generate_full_sweep(
             full_sweep_args_single_node,
             sample_multinode_config,
@@ -1484,7 +1437,6 @@ class TestGenerateFullSweepMultiNode:
         assert len(result) == 0
 
     def test_runner_node_filter_multinode(self, sample_runner_config, full_sweep_args_multi_node):
-        """Runner node filter should work with multinode configs."""
         # Create a multinode config with h200 runner (which has 4 nodes)
         config = {
             "test-multinode": {
@@ -1539,15 +1491,10 @@ class TestGenerateFullSweepMultiNode:
         assert "h200-cw_1" in runners
 
 
-# =============================================================================
-# Test edge cases and special configurations
-# =============================================================================
 
 class TestEdgeCases:
-    """Tests for edge cases and special configurations."""
 
     def test_config_with_ep_and_dp_attn(self, sample_runner_config, full_sweep_args_single_node):
-        """Config with ep and dp-attn should be handled correctly."""
         config = {
             "test-config": {
                 "image": "test-image",
@@ -1581,7 +1528,6 @@ class TestEdgeCases:
         assert result[0]["dp-attn"] is True
 
     def test_config_with_spec_decoding(self, sample_runner_config, full_sweep_args_single_node):
-        """Config with spec-decoding should be handled correctly."""
         config = {
             "test-config": {
                 "image": "test-image",
@@ -1614,7 +1560,6 @@ class TestEdgeCases:
         assert result[0]["spec-decoding"] == "mtp"
 
     def test_conc_list_in_single_node(self, sample_runner_config, full_sweep_args_single_node):
-        """Single node config with conc-list should work."""
         config = {
             "test-config": {
                 "image": "test-image",
@@ -1716,7 +1661,6 @@ class TestEdgeCases:
             )
 
     def test_disagg_defaults_to_false(self, sample_runner_config, full_sweep_args_single_node):
-        """disagg should default to False when not specified."""
         config = {
             "test-config": {
                 "image": "test-image",
@@ -1749,7 +1693,6 @@ class TestEdgeCases:
         assert result[0]["disagg"] is False
 
     def test_multinode_conc_range_expansion(self, sample_runner_config, full_sweep_args_multi_node):
-        """Multinode with conc range should expand to list."""
         config = {
             "test-config": {
                 "image": "test-image",
@@ -1800,7 +1743,6 @@ class TestEdgeCases:
         assert result[0]["conc"] == [1, 2, 4, 8]
 
     def test_max_ep_creates_config_when_below_min(self, sample_runner_config, full_sweep_args_single_node):
-        """max_ep below config's ep should create config with max_ep value."""
         config = {
             "test-config": {
                 "image": "test-image",
@@ -1835,7 +1777,6 @@ class TestEdgeCases:
         assert result[0]["ep"] == 2
 
     def test_max_ep_zero_or_negative_skips(self, sample_runner_config, full_sweep_args_single_node):
-        """max_ep of 0 or negative should skip configs."""
         config = {
             "test-config": {
                 "image": "test-image",
@@ -1869,7 +1810,6 @@ class TestEdgeCases:
             assert len(result) == 0, f"Expected 0 results for max_ep={invalid_value}"
 
     def test_multinode_max_conc_zero_or_negative_skips(self, sample_runner_config, full_sweep_args_multi_node):
-        """Multinode max_conc of 0 or negative should skip configs."""
         config = {
             "test-config": {
                 "image": "test-image",
@@ -1919,7 +1859,6 @@ class TestEdgeCases:
             assert len(result) == 0, f"Expected 0 results for max_conc={invalid_value}"
 
     def test_multinode_max_conc_creates_config_when_below_min(self, sample_runner_config, full_sweep_args_multi_node):
-        """Multinode max_conc below all values should create config with max_conc."""
         config = {
             "test-config": {
                 "image": "test-image",
@@ -2010,12 +1949,8 @@ class TestEdgeCases:
         assert result[0]["ep"] == 1
         assert result[0]["conc"] == 1
 
-# =============================================================================
-# Test argument parsing and defaults
-# =============================================================================
 
 class TestCommandLine:
-    """Tests for CLI input loading and sweep-selection behavior."""
 
     @pytest.mark.parametrize("command", ["full-sweep", "test-config"])
     @pytest.mark.parametrize("invalid", [False, True])
@@ -2319,9 +2254,6 @@ class TestCommandLine:
             generate_sweep_configs.main()
 
 
-# =============================================================================
-# Mixed-mode fixtures
-# =============================================================================
 
 @pytest.fixture
 def sample_mixed_config(sample_single_node_config, sample_multinode_config):
@@ -2352,12 +2284,8 @@ def full_sweep_args_both():
     return args
 
 
-# =============================================================================
-# Test generate_test_config_sweep
-# =============================================================================
 
 class TestGenerateTestConfigSweep:
-    """Tests for exact config-key sweep generation."""
 
     def test_single_node_parallelism_fields_are_generated(
         self,
@@ -2441,7 +2369,6 @@ class TestGenerateTestConfigSweep:
         assert result[0]["runner"] == "gb200-nv_0"
 
     def test_runner_node_filter_no_match_skips_config(self, sample_multinode_config, sample_runner_config):
-        """Unmatched node filters should produce no entries."""
         args = argparse.Namespace(
             config_keys=["dsr1-fp4-gb200-dynamo-trt"],
             seq_lens=None,
@@ -2811,7 +2738,6 @@ class TestAgenticGeneration:
     def test_multinode_agentic_rejects_node_misaligned_prefill(
         self, sample_runner_config, generate_agentic_sweep
     ):
-        """A prefill worker whose GPU footprint does not tile the node is rejected."""
         config = {
             "dsv4-agentic-hicache-misaligned": {
                 "image": "sglang-rocm",
@@ -2843,34 +2769,24 @@ class TestAgenticGeneration:
             generate_agentic_sweep(config, sample_runner_config)
 
 
-# =============================================================================
-# Test apply_node_type_defaults
-# =============================================================================
 
 class TestApplyNodeTypeDefaults:
-    """Tests for apply_node_type_defaults function."""
 
     def test_neither_flag_sets_both_true(self):
-        """When neither flag is set, both should become True."""
         args = argparse.Namespace(single_node=False, multi_node=False)
         apply_node_type_defaults(args)
         assert args.single_node is True
         assert args.multi_node is True
 
     def test_single_only_stays_single(self):
-        """When only single_node is set, it stays that way."""
         args = argparse.Namespace(single_node=True, multi_node=False)
         apply_node_type_defaults(args)
         assert args.single_node is True
         assert args.multi_node is False
 
 
-# =============================================================================
-# Test generate_full_sweep mixed mode
-# =============================================================================
 
 class TestGenerateFullSweepMixed:
-    """Tests for generate_full_sweep with both single-node and multi-node configs."""
 
     @pytest.mark.parametrize(("multinode", "points", "expected"), [
         (False, {"conc-start": 3, "conc-end": 10}, [5, 7]),
@@ -2989,7 +2905,6 @@ class TestGenerateFullSweepMixed:
                 generate_full_sweep(full_sweep_args_both, sample_single_node_config, sample_runner_config)
 
     def test_both_flags_generates_mixed(self, sample_mixed_config, sample_runner_config, full_sweep_args_both):
-        """Both flags True should produce both single-node and multinode entries."""
         result = generate_full_sweep(
             full_sweep_args_both,
             sample_mixed_config,
@@ -3001,7 +2916,6 @@ class TestGenerateFullSweepMixed:
         assert has_multi, "Expected multinode entries in mixed output"
 
     def test_single_node_only_from_mixed(self, sample_mixed_config, sample_runner_config, full_sweep_args_single_node):
-        """--single-node should skip multinode entries from mixed config."""
         result = generate_full_sweep(
             full_sweep_args_single_node,
             sample_mixed_config,
@@ -3012,7 +2926,6 @@ class TestGenerateFullSweepMixed:
         assert all("tp" in entry for entry in result), "All entries should have tp field"
 
     def test_multi_node_only_from_mixed(self, sample_mixed_config, sample_runner_config, full_sweep_args_multi_node):
-        """--multi-node should skip single-node entries from mixed config."""
         result = generate_full_sweep(
             full_sweep_args_multi_node,
             sample_mixed_config,
@@ -3099,9 +3012,6 @@ class TestGenerateFullSweepMixed:
         ) == (2, 2, 1)
 
 
-# =============================================================================
-# Test filter_exp_names
-# =============================================================================
 
 
 class TestFilterExpNames:
@@ -3139,12 +3049,8 @@ class TestFilterExpNames:
             filter_exp_names(entries, names)
 
 
-# =============================================================================
-# Test expand_config_keys
-# =============================================================================
 
 class TestExpandConfigKeys:
-    """Tests for expand_config_keys glob/wildcard matching."""
 
     AVAILABLE = [
         "dsr1-fp4-b200-sglang",
@@ -3155,7 +3061,6 @@ class TestExpandConfigKeys:
     ]
 
     def test_exact_keys_pass_through(self):
-        """Exact keys should be returned unchanged."""
         result = expand_config_keys(
             ["dsr1-fp4-b200-sglang", "dsr1-fp8-h200-trt"], self.AVAILABLE
         )
@@ -3177,17 +3082,14 @@ class TestExpandConfigKeys:
         assert result == ["dsr1-fp8-mi300x-sglang"]
 
     def test_no_match_pattern_raises(self):
-        """Pattern matching nothing should raise ValueError."""
         with pytest.raises(ValueError, match="matched no config keys"):
             expand_config_keys(["*-b300"], self.AVAILABLE)
 
     def test_missing_exact_key_raises(self):
-        """Missing exact key should raise ValueError."""
         with pytest.raises(ValueError, match="Config key\\(s\\) not found"):
             expand_config_keys(["nonexistent-key"], self.AVAILABLE)
 
     def test_mixed_exact_and_glob(self):
-        """Mix of exact keys and glob patterns should work."""
         result = expand_config_keys(
             ["dsr1-fp8-h200-trt", "gptoss*"], self.AVAILABLE
         )
