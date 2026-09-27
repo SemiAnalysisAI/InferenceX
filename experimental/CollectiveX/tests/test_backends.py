@@ -2,6 +2,8 @@
 """EPBackend contracts: ladder/spec construction, the staging-vs-roundtrip gate, and the NCCL EP handle."""
 from __future__ import annotations
 
+import contextlib
+import importlib
 import os
 import sys
 import types
@@ -584,133 +586,96 @@ class TestSingleHandle(unittest.TestCase):
         self.assertIs(h.combine_in_t, b._recv_x_t)
 
 
-def _deepep_v2_stubs():
-    """Fake torch / deep_ep so `import ep_deepep_v2` succeeds without the benchmark image."""
+@contextlib.contextmanager
+def _stubbed(name, extra=None):
+    """Import one adapter module against a fake torch (plus `extra` fake modules)."""
     torch = types.ModuleType("torch")
     torch.compile = lambda *a, **k: (lambda fn: fn)
     dist = types.ModuleType("torch.distributed")
     dist.group = types.SimpleNamespace(WORLD="world")
     torch.distributed = dist
-    deep_ep = types.ModuleType("deep_ep")
-    deep_ep.ElasticBuffer = type("ElasticBuffer", (), {})
-    deep_ep.Buffer = type("Buffer", (), {})
-    return {"torch": torch, "torch.distributed": dist, "deep_ep": deep_ep}
+    with mock.patch.dict(sys.modules, {"torch": torch, "torch.distributed": dist, **(extra or {})}):
+        sys.modules.pop(name, None)
+        yield __import__(name)
+        sys.modules.pop(name, None)
 
 
-class DeepEPV2GraphContract(unittest.TestCase):
-    """Normal-mode decode drops ElasticBuffer's host sync -- vLLM's graphed deepep_v2 decode
-    contract -- and only that makes it graph-capturable; prefill keeps the exact-size sync."""
-
-    def _backend(self, **updates):
-        with mock.patch.dict(sys.modules, _deepep_v2_stubs()):
-            sys.modules.pop("ep_deepep_v2", None)
-            import ep_deepep_v2
-            sys.modules.pop("ep_deepep_v2", None)
-            return ep_deepep_v2.DeepEPV2Backend(args(**updates), 0, 8, 0, "cpu")
-
-    def _dispatch_kwargs(self, backend, tokens=3):
-        calls = []
-
-        def dispatch(*_args, **kwargs):
-            calls.append(kwargs)
-            return "recv_x", "recv_idx", "recv_w", "handle", None
-
-        backend.buffer = types.SimpleNamespace(dispatch=dispatch)
-        backend.max_tokens, backend.num_sms, backend.num_qps = 512, 1, 1
-        backend.dispatch(types.SimpleNamespace(
-            T=tokens, dispatch_x="x", topk_idx="i", topk_weights="w",
-        ))
-        return calls[0]
-
-    def _dispatched_cpu_sync(self, backend):
-        return self._dispatch_kwargs(backend)["do_cpu_sync"]
-
-    def test_no_sync_decode_sizes_the_receive_to_the_next_power_of_two(self):
-        # Worst-case sizing is num_max_tokens_per_rank * num_ranks rows; the ladder maximum made
-        # every rung receive (and FP8-dequantize) the T=512 plane. vLLM rounds the batch up.
-        backend = self._backend(mode="normal", phase="decode")
-        for tokens, capacity in ((1, 1), (3, 4), (64, 64), (65, 128), (512, 512)):
-            kwargs = self._dispatch_kwargs(backend, tokens)
-            self.assertEqual(kwargs["num_max_tokens_per_rank"], capacity)
-        prefill = self._backend(mode="normal", phase="prefill")
-        self.assertEqual(self._dispatch_kwargs(prefill, 3)["num_max_tokens_per_rank"], 512)
-
-    def test_normal_decode_is_the_no_sync_graphed_contract(self):
-        backend = self._backend(mode="normal", phase="decode")
-        self.assertIs(self._dispatched_cpu_sync(backend), False)
-        self.assertTrue(backend.cuda_graph_supported)
-        self.assertEqual(backend.kernel_generation, "v2-elastic-buffer-nosync")
-
-    def test_normal_prefill_keeps_the_host_sync_and_stays_eager(self):
-        backend = self._backend(mode="normal", phase="prefill")
-        self.assertIs(self._dispatched_cpu_sync(backend), True)
-        self.assertFalse(backend.cuda_graph_supported)
-        self.assertEqual(backend.kernel_generation, "v2-elastic-buffer")
-
-    def test_low_latency_stays_graphed(self):
-        backend = self._backend(mode="low-latency", phase="decode")
-        self.assertTrue(backend.cuda_graph_supported)
+def _deep_ep(*classes):
+    module = types.ModuleType("deep_ep")
+    for cls in classes:
+        setattr(module, cls, type(cls, (), {}))
+    return module
 
 
-class PerCaseGraphGates(unittest.TestCase):
+def _gate(cls, mode, world_size=8, precision="bf16", runner="h200-dgxc", **fields):
+    """An adapter carrying only what `cuda_graph_supported` reads."""
+    backend = object.__new__(cls)
+    backend.mode, backend.world_size, backend.precision = mode, world_size, precision
+    backend.args = types.SimpleNamespace(scale_up_domain=8, runner=runner, **fields)
+    return backend
+
+
+class GraphReplayDefaults(unittest.TestCase):
     """Graph replay is each adapter's default only where it was measured best and safe."""
 
-    def _load(self, name, extra):
-        torch = types.ModuleType("torch")
-        dist = types.ModuleType("torch.distributed")
-        dist.group = types.SimpleNamespace(WORLD="world")
-        torch.distributed = dist
-        torch.compile = lambda *a, **k: (lambda fn: fn)
-        modules = {"torch": torch, "torch.distributed": dist, **extra}
-        with mock.patch.dict(sys.modules, modules):
-            sys.modules.pop(name, None)
-            module = __import__(name)
-            sys.modules.pop(name, None)
-        return module
+    def test_deepep_v2_normal_decode_drops_the_host_sync_and_rounds_the_receive_up(self):
+        calls = []
+        with _stubbed("ep_deepep_v2", {"deep_ep": _deep_ep("ElasticBuffer", "Buffer")}) as module:
+            def make(phase, mode="normal"):
+                backend = module.DeepEPV2Backend(args(mode=mode, phase=phase), 0, 8, 0, "cpu")
+                backend.buffer = types.SimpleNamespace(
+                    dispatch=lambda *a, **k: calls.append(k) or ("x", "i", "w", "h", None)
+                )
+                backend.max_tokens, backend.num_sms, backend.num_qps = 512, 1, 1
+                return backend
 
-    def _instance(self, cls, mode, world_size=8, **fields):
-        backend = object.__new__(cls)
-        backend.mode, backend.world_size = mode, world_size
-        backend.precision = fields.pop("precision", "bf16")
-        backend.args = types.SimpleNamespace(scale_up_domain=8, runner="h200-dgxc", **fields)
-        return backend
+            decode, prefill, ll = make("decode"), make("prefill"), make("decode", "low-latency")
 
-    def test_uccl_low_latency_graphs_intranode_except_b200_fp8(self):
-        deep_ep = types.ModuleType("deep_ep")
-        deep_ep.Buffer, deep_ep.Config = object, object
-        module = self._load("ep_uccl", {"deep_ep": deep_ep})
-        cls = module.UCCLEPBackend
-        with mock.patch.dict(os.environ, {}, clear=True):
-            self.assertTrue(self._instance(cls, "low-latency").cuda_graph_supported)
-            self.assertFalse(self._instance(cls, "normal").cuda_graph_supported)
-            self.assertFalse(
-                self._instance(cls, "low-latency", world_size=16).cuda_graph_supported
-            )
-            b200_fp8 = self._instance(cls, "low-latency", precision="fp8")
-            b200_fp8.args.runner = "b200-nscale"
-            self.assertFalse(b200_fp8.cuda_graph_supported)
-            b200_fp8.precision = "bf16"
-            self.assertTrue(b200_fp8.cuda_graph_supported)
-        with mock.patch.dict(os.environ, {"UCCL_RDMA_ADAPTIVE_SLEEP": "1"}):
-            self.assertFalse(self._instance(cls, "low-latency").cuda_graph_supported)
+        def dispatched(backend, tokens):
+            backend.dispatch(types.SimpleNamespace(
+                T=tokens, dispatch_x="x", topk_idx="i", topk_weights="w",
+            ))
+            return calls[-1]["num_max_tokens_per_rank"], calls[-1]["do_cpu_sync"]
 
-    def test_flashinfer_graphs_decode_only(self):
-        module = self._load("ep_flashinfer", {})
-        cls = module.FlashInferEPBackend if hasattr(module, "FlashInferEPBackend") else next(
-            value for value in vars(module).values()
-            if isinstance(value, type) and issubclass(value, EPBackend) and value is not EPBackend
+        # vLLM's graphed decode passes the next power of two of the batch; prefill syncs exactly.
+        for tokens, capacity in ((1, 1), (3, 4), (65, 128), (512, 512)):
+            self.assertEqual(dispatched(decode, tokens), (capacity, False))
+        self.assertEqual(dispatched(prefill, 3), (512, True))
+        self.assertEqual(
+            (decode.cuda_graph_supported, decode.kernel_generation),
+            (True, "v2-elastic-buffer-nosync"),
         )
-        self.assertTrue(self._instance(cls, "normal", phase="decode").cuda_graph_supported)
-        self.assertFalse(self._instance(cls, "normal", phase="prefill").cuda_graph_supported)
+        self.assertEqual(
+            (prefill.cuda_graph_supported, prefill.kernel_generation), (False, "v2-elastic-buffer")
+        )
+        self.assertTrue(ll.cuda_graph_supported)
 
-    def test_nccl_graphs_low_latency_and_ht_decode_only(self):
+    def test_uccl_graphs_intranode_low_latency_except_b200_fp8(self):
+        with _stubbed("ep_uccl", {"deep_ep": _deep_ep("Buffer", "Config")}) as module:
+            cls = module.UCCLEPBackend
+        with mock.patch.dict(os.environ, {}, clear=True):
+            for gate, expected in (
+                (_gate(cls, "low-latency"), True),
+                (_gate(cls, "normal"), False),
+                (_gate(cls, "low-latency", world_size=16), False),
+                (_gate(cls, "low-latency", precision="fp8", runner="b200-nscale"), False),
+                (_gate(cls, "low-latency", runner="b200-nscale"), True),
+            ):
+                self.assertIs(gate.cuda_graph_supported, expected)
+        with mock.patch.dict(os.environ, {"UCCL_RDMA_ADAPTIVE_SLEEP": "1"}):
+            self.assertFalse(_gate(cls, "low-latency").cuda_graph_supported)
+
+    def test_flashinfer_and_nccl_ht_graph_decode_only(self):
+        with _stubbed("ep_flashinfer") as module:
+            flashinfer = module.FlashInferEPBackend
         with mock.patch.dict(sys.modules, _stub_modules()):
-            import importlib
             import ep_nccl
-            cls = importlib.reload(ep_nccl).NCCLEPBackend
-        self.assertTrue(self._instance(cls, "normal", phase="decode").cuda_graph_supported)
-        self.assertFalse(self._instance(cls, "normal", phase="prefill").cuda_graph_supported)
-        self.assertTrue(self._instance(cls, "low-latency", phase="decode").cuda_graph_supported)
+            nccl = importlib.reload(ep_nccl).NCCLEPBackend
+        for cls in (flashinfer, nccl):
+            self.assertTrue(_gate(cls, "normal", phase="decode").cuda_graph_supported)
+            self.assertFalse(_gate(cls, "normal", phase="prefill").cuda_graph_supported)
+        self.assertTrue(_gate(nccl, "low-latency", phase="decode").cuda_graph_supported)
+
 
 if __name__ == "__main__":
     unittest.main()

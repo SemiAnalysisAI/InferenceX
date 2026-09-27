@@ -395,18 +395,14 @@ class EPBackend(abc.ABC):
 
     # ---- CUDA graph capture ----------------------------------------------------------------
 
-    # Attributes of a dispatch handle that hold what dispatch wrote; the replay check poisons them
-    # so a replay that skipped (or stalely reused) the dispatch cannot reproduce a valid output.
+    # Handle attributes dispatch writes; the replay check poisons them (see graph_replay_output).
     _DISPATCH_OUTPUT_FIELDS = ("recv_x", "recv_scales", "dispatch_output")
 
     def _calibrate_align_spin(self, spin_us=100.0):
         """Size the post-barrier alignment spin to `spin_us` of wall time on this GPU.
 
-        The stream spins after the alignment all-reduce so every rank's host has enqueued its
-        replay before the stream reaches it: the replay start is set by the barrier release, not
-        by host launch latency. `torch.cuda._sleep` counts SM cycles, so a fixed cycle count spun
-        48-70us across the clock range and left ~15us of cross-rank skew on gb200 (a fast-clocked
-        rank released early); measuring the spin rate converts the wall time to cycles per GPU.
+        The spin lets every host enqueue its replay before the stream reaches it. `_sleep` counts
+        SM cycles, so a fixed count left ~15us of skew between differently clocked gb200 ranks.
         """
         import torch
 
@@ -434,36 +430,23 @@ class EPBackend(abc.ABC):
         dist.all_reduce(token)
         torch.cuda._sleep(self._graph_align_cycles)
 
-    @staticmethod
-    def _graph_event():
-        """A timing event whose record() becomes a node of the graph being captured."""
-        import torch
-
-        return torch.cuda.Event(enable_timing=True, external=True)
-
-    @staticmethod
-    def _record_graph_event(event):
-        event.record()
-
     def _capture_pairs(self, problem, staged, pairs, marks):
         """Capture `pairs` back-to-back dispatch -> combine pairs into one graph.
 
-        `marks` selects which windows get event nodes: "pair" (the whole pair), "dispatch",
-        "combine". Event records are graph nodes, so they cost the stream nothing on the host --
-        the six-events-per-pair defect the eager chain splits around does not exist here.
-        Returns (graph, {mark: (starts, ends)}, last combined output, last dispatch handle).
+        `marks` picks the windows that get event nodes ("pair", "dispatch", "combine"). Returns
+        (graph, {mark: (starts, ends)}, last combined output, last dispatch handle).
         """
         import torch
         import torch.distributed as dist
 
         def events():
-            return [self._graph_event() for _ in range(pairs)]
+            return [torch.cuda.Event(enable_timing=True, external=True) for _ in range(pairs)]
 
         stamps = {mark: (events(), events()) for mark in marks}
 
         def record(mark, edge, i):
             if mark in stamps:
-                self._record_graph_event(stamps[mark][edge][i])
+                stamps[mark][edge][i].record()
 
         dist.barrier()
         torch.cuda.synchronize()
@@ -505,13 +488,10 @@ class EPBackend(abc.ABC):
             tensor.fill_(float("nan") if tensor.is_floating_point() else -1)
 
     def graph_replay_output(self, problem):
-        """The value check for graph replay: one untimed capture with `stage` INSIDE the graph.
+        """Graph replay's value check: an untimed capture with `stage` INSIDE the graph.
 
-        The timed captures hoist staging where `stage` does device work, so their output never
-        depends on that replay's dispatch and a stale replay would still look correct. This one
-        stages per pair, then poisons what dispatch wrote and the combined output before its only
-        replay: the result is valid only if the replay itself re-ran dispatch, stage and combine.
-        The caller compares it with an eager drained pair through the same code path.
+        Dispatch's output and the result are poisoned before the only replay, so the returned
+        output is valid only if that replay re-ran dispatch, stage and combine.
         """
         import torch
         import torch.distributed as dist
@@ -524,10 +504,8 @@ class EPBackend(abc.ABC):
             self._poison(getattr(handle, field, None))
         self._poison(combined)
         torch.cuda.synchronize()
-        # Every rank must finish poisoning before ANY rank replays: zero-copy and RDMA transports
-        # write straight into peers' receive buffers, so a fast rank's replay would otherwise land
-        # its payload in a slow peer's buffer before that peer poisoned it, and the poison would
-        # overwrite fresh data (seen as NaN output on nccl-ep LL-zc EP8 and MoRI EP16).
+        # Peers write straight into each other's receive buffers: without the barrier a fast
+        # rank's replay lands before a slow peer's poison, which then overwrites fresh data.
         dist.barrier()
         torch.cuda.synchronize()
         graph.replay()
@@ -691,13 +669,9 @@ class EPBackend(abc.ABC):
         }
 
     def _benchmark_chain_graph(self, problem, staged, iters, drop):
-        """The chained family under capture: each chain is ONE graph of `iters` unrolled pairs.
-
-        That is the shape a serving decode graph has -- every layer's dispatch -> combine back to
-        back inside a single replay -- so the period keeps its eager meaning (free-running pairs,
-        entry skew amortised across the chain) with launch overhead removed. Same two siblings as
-        the eager chain and the same returned series, so `run_sweep` reduces both identically.
-        Each graph replays once untimed (first-launch upload), then once aligned and timed.
+        """The chained family under capture: each sibling is ONE graph of `iters` unrolled pairs,
+        the shape of a decode graph. Returns the eager chain's series; each graph replays once
+        untimed (upload), then once aligned and timed.
         """
         import torch
 
@@ -765,9 +739,8 @@ class EPBackend(abc.ABC):
             self.combine(problem, handle)  # drain the pair backends require
             torch.cuda.synchronize()
         if self.cuda_graph_enabled:
-            # One captured pair, bracketed by external events for the timed component. Capture
-            # and its warm-up are excluded; each timed replay starts behind a device-side rank
-            # barrier (`_graph_align`) so the cross-rank MAX is the operation, not launch skew.
+            # One captured pair with event nodes around the timed component; each timed replay
+            # starts behind `_graph_align` so the cross-rank MAX is the operation, not launch skew.
             mark = "pair" if graph_component == "roundtrip" else graph_component
             graph, stamps, combined, _ = self._capture_pairs(problem, staged, 1, (mark,))
             # Re-measure the spin rate per timed series: clocks move with load and temperature.

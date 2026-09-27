@@ -134,10 +134,8 @@ class UCCLEPBackend(EPBackend):
     kernel_generation = "uccl-legacy-buffer"
     SUPPORTED_MODES = ("normal", "low-latency")
     SUPPORTED_PRECISIONS = ("bf16", "fp8")
-    # The low-latency kernels are plain launches whose only host state is the double-buffer
-    # toggle, baked into a capture exactly as in DeepEP; every capture holds whole pairs (an even
-    # call count), so the toggle lands where it started. Normal mode host-syncs on its receive
-    # counters unless dispatched with `num_worst_tokens`, which this adapter does not do.
+    # LL's only host state is the double-buffer toggle; captures hold whole pairs, so it returns
+    # to where it started. Normal mode host-syncs on its receive counters.
     CUDA_GRAPH_MODES = ("low-latency",)
     stage_device_work = False
     requires_fresh_pair = False
@@ -153,9 +151,7 @@ class UCCLEPBackend(EPBackend):
         if not super().cuda_graph_supported:
             return False
         args = self.args
-        # Intranode only: at EP8 the LL kernels take the IPC path. Scale-out LL runs through the
-        # CPU proxy, which a replay reaches only via GPU-written queues -- never validated under
-        # capture -- and whose adaptive sleeper is woken only by a host call replay skips.
+        # Intranode only: scale-out LL runs through the CPU proxy, unvalidated under capture.
         if self.world_size > int(getattr(args, "scale_up_domain", self.world_size)):
             return False
         if os.environ.get("UCCL_RDMA_ADAPTIVE_SLEEP", "0") not in ("", "0"):

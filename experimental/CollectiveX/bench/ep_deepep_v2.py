@@ -137,9 +137,7 @@ class DeepEPV2Backend(EPBackend):
     kernel_generation = "v2-elastic-buffer"
     SUPPORTED_MODES = ("normal", "low-latency")
     SUPPORTED_PRECISIONS = ("bf16", "fp8")
-    # The legacy decode kernels are explicitly graph compatible. ElasticBuffer normal mode is
-    # graph compatible only without its host sync, which this adapter drops for the decode phase
-    # alone (see `_normal_cpu_sync` and `cuda_graph_supported`).
+    # Legacy decode kernels are graph compatible; ElasticBuffer normal only without its host sync.
     CUDA_GRAPH_MODES = ("low-latency",)
     stage_device_work = False
     requires_fresh_pair = False
@@ -169,13 +167,8 @@ class DeepEPV2Backend(EPBackend):
             # Normal/HT quantises inside the timed dispatch with the compiled form; low-latency
             # keeps the eager helper, whose bits its in-kernel quantise matches. See fused_quantize.
             self._quant = self.fused_quantize(self._to_fp8)
-        # Normal-mode decode runs ElasticBuffer the way vLLM's deepep_v2 decode path does
-        # (prepare_finalize/deepep_v2.py, use_cudagraph=True): do_expand=False, do_cpu_sync=False,
-        # receive sized to the worst case (num_max_tokens_per_rank * num_ranks) with the valid
-        # prefix read from the handle's device-side psum. That is the graph-capturable contract,
-        # and it lands one row per (token, destination rank) with an unweighted rank-sum combine:
-        # the rank-major shape. Prefill keeps the host sync that sizes the receive exactly, as
-        # vLLM's (uncaptured) prefill does.
+        # Normal decode runs ElasticBuffer as vLLM's graphed deepep_v2 decode does
+        # (do_cpu_sync=False, valid prefix read on device); prefill keeps the exact-size sync.
         self._normal_cpu_sync = self.mode == "normal" and args.phase != "decode"
         if self.mode == "normal" and not self._normal_cpu_sync:
             self.kernel_generation = "v2-elastic-buffer-nosync"
@@ -198,14 +191,8 @@ class DeepEPV2Backend(EPBackend):
         return super().cuda_graph_supported
 
     def _dispatch_capacity(self, tokens):
-        """Per-call `num_max_tokens_per_rank`.
-
-        With the host sync the receive is sized exactly, so the buffer maximum is only a bound.
-        Without it DeepEP allocates `num_max_tokens_per_rank * num_ranks` receive rows
-        (elastic/buffer.hpp "allocate with the worst case"), so passing the ladder maximum made a
-        T=1 dispatch receive 4096 rows at EP8 and the FP8 stage dequantize all of them (stage
-        59 -> 212us, b200 EP8). vLLM's graphed decode (prepare_finalize/deepep_v2.py) passes the
-        next power of two of the batch, which bounds both the receive and the JIT variants.
+        """Per-call `num_max_tokens_per_rank`: without the host sync DeepEP receives that many
+        rows per rank, so pass the next power of two of the batch, as vLLM's graphed decode does.
         """
         if self._normal_cpu_sync:
             return self.max_tokens
