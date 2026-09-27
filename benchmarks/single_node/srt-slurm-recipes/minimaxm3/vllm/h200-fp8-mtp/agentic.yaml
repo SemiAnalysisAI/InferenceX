@@ -5,7 +5,7 @@ base:
   name: minimaxm3-fp8-h200-vllm-agentic
   model:
     path: hf:MiniMaxAI/MiniMax-M3-MXFP8
-    container: vllm/vllm-openai:nightly-d9105ea8001e0a6d77a96327d17515bb5791fb36
+    container: vllm/vllm-openai:nightly-ddd6fbca148a867aad1fcab7ec72f582b9977db4
     precision: fp8
   resources:
     gpu_type: h200
@@ -23,7 +23,7 @@ base:
   # The engine may take the full VLLM_ENGINE_READY_TIMEOUT_S to become ready.
   health_check:
     interval_seconds: 10
-    max_attempts: 360
+    max_attempts: 720
   roles:
     agg:
       nodes: 1
@@ -49,9 +49,13 @@ base:
         reasoning-parser: minimax_m3
         enable-auto-tool-choice: true
         trust-remote-code: true
+        # vLLM nightlies from 2026-09-15 lazy-mmap checkpoints on h200-dgxc's VIRTIOFS
+        # HF cache ~14x slower and miss the readiness window; stream the shards into
+        # page cache with parallel readers first.
+        safetensors-load-strategy: prefetch
       env:
         PYTHONNOUSERSITE: '1'
-        VLLM_ENGINE_READY_TIMEOUT_S: '3600'
+        VLLM_ENGINE_READY_TIMEOUT_S: '7200'
         # Atomic reduction for the Marlin MXFP8 MoE path.
         VLLM_MARLIN_USE_ATOMIC_ADD: '1'
   benchmark:

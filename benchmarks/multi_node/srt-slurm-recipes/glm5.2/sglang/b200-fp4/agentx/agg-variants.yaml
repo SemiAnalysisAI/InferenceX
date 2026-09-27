@@ -125,7 +125,7 @@ base:
 # One TP8 worker serves prefill and decode on a single node. The sweep matrix
 # supplies the concurrency list; srt_agentic.sh replays every point against
 # this one server. Acceptance is pinned to the golden thinking-on AL for three
-# speculative tokens (golden_al_distribution/glm5.2_mtp.yaml).
+# speculative tokens (infx/golden_al_distribution/glm5.2_mtp.yaml).
 override_c1:
   name: agg-b200-tp8-c1-mtp
   roles:
@@ -139,7 +139,7 @@ override_c1:
 # One TP8 worker serves prefill and decode on a single node. The sweep matrix
 # supplies the concurrency list; srt_agentic.sh replays every point against
 # this one server. Acceptance is pinned to the golden thinking-on AL for three
-# speculative tokens (golden_al_distribution/glm5.2_mtp.yaml).
+# speculative tokens (infx/golden_al_distribution/glm5.2_mtp.yaml).
 override_c4:
   name: agg-b200-tp8-c4-mtp
   roles:
@@ -153,7 +153,7 @@ override_c4:
 # One TP8 worker serves prefill and decode on a single node. The sweep matrix
 # supplies the concurrency list; srt_agentic.sh replays every point against
 # this one server. Acceptance is pinned to the golden thinking-on AL for three
-# speculative tokens (golden_al_distribution/glm5.2_mtp.yaml).
+# speculative tokens (infx/golden_al_distribution/glm5.2_mtp.yaml).
 override_c8:
   name: agg-b200-tp8-c8-mtp
   roles:

@@ -137,8 +137,7 @@ class DeepEPV2Backend(EPBackend):
     kernel_generation = "v2-elastic-buffer"
     SUPPORTED_MODES = ("normal", "low-latency")
     SUPPORTED_PRECISIONS = ("bf16", "fp8")
-    # ElasticBuffer normal dispatch performs a host synchronization; the legacy decode kernels
-    # are explicitly graph compatible.
+    # Legacy decode kernels are graph compatible; ElasticBuffer normal only without its host sync.
     CUDA_GRAPH_MODES = ("low-latency",)
     stage_device_work = False
     requires_fresh_pair = False
@@ -168,6 +167,11 @@ class DeepEPV2Backend(EPBackend):
             # Normal/HT quantises inside the timed dispatch with the compiled form; low-latency
             # keeps the eager helper, whose bits its in-kernel quantise matches. See fused_quantize.
             self._quant = self.fused_quantize(self._to_fp8)
+        # Normal decode runs ElasticBuffer as vLLM's graphed deepep_v2 decode does
+        # (do_cpu_sync=False, valid prefix read on device); prefill keeps the exact-size sync.
+        self._normal_cpu_sync = self.mode == "normal" and args.phase != "decode"
+        if self.mode == "normal" and not self._normal_cpu_sync:
+            self.kernel_generation = "v2-elastic-buffer-nosync"
         if self.mode == "low-latency":
             # Legacy Buffer IBGDA decode path: a distinct kernel family whose combine
             # multiplies by the gate at the source (weighted), not an unweighted rank sum.
@@ -179,6 +183,20 @@ class DeepEPV2Backend(EPBackend):
             # moment"), so every timed combine needs a fresh dispatch and every timed
             # dispatch must be drained by its combine.
             self.requires_fresh_pair = True
+
+    @property
+    def cuda_graph_supported(self) -> bool:
+        if self.mode == "normal":
+            return not getattr(self, "_normal_cpu_sync", True)
+        return super().cuda_graph_supported
+
+    def _dispatch_capacity(self, tokens):
+        """Per-call `num_max_tokens_per_rank`: without the host sync DeepEP receives that many
+        rows per rank, so pass the next power of two of the batch, as vLLM's graphed decode does.
+        """
+        if self._normal_cpu_sync:
+            return self.max_tokens
+        return min(self.max_tokens, 1 << max(0, int(tokens) - 1).bit_length())
 
     def buffer_cap(self, args):
         if self.mode == "low-latency":
@@ -371,13 +389,13 @@ class DeepEPV2Backend(EPBackend):
             topk_idx=p.topk_idx,
             topk_weights=p.topk_weights,
             num_experts=self.args.experts,
-            num_max_tokens_per_rank=self.max_tokens,
+            num_max_tokens_per_rank=self._dispatch_capacity(p.T),
             expert_alignment=1,
             num_sms=self.num_sms,
             num_qps=self.num_qps,
             async_with_compute_stream=False,
             do_handle_copy=True,
-            do_cpu_sync=True,
+            do_cpu_sync=self._normal_cpu_sync,
             do_expand=False,
         )
         return types.SimpleNamespace(

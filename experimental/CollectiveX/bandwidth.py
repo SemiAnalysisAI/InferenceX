@@ -76,7 +76,7 @@ def _ep(document: dict) -> int:
 def _algbw_per_gpu(total_logical_bytes: int, latency_us: float, ep: int) -> float | None:
     """Per-GPU effective GB/s, or None when the latency cannot yield a rate. Bytes are the
     AGGREGATE world payload (routed_copies, routing.py), hence the divide by EP size."""
-    if latency_us <= 0:
+    if latency_us is None or latency_us <= 0:
         return None
     return total_logical_bytes / (latency_us * 1e-6) / 1e9 / ep
 
@@ -156,9 +156,12 @@ def _cell(row: dict, component: str, ep: int) -> str:
         return f"{component}=n/a"
     nbytes = _wire_bytes(row, component)
     p50 = _algbw_per_gpu(nbytes, percentiles["p50"], ep)
-    p99 = _algbw_per_gpu(nbytes, percentiles["p99"], ep)
-    return f"{component}=n/a" if p50 is None or p99 is None \
-        else f"{component}={p50:6.1f}/{p99:<6.1f}"
+    p99 = _algbw_per_gpu(nbytes, percentiles.get("p99"), ep)
+    if p50 is None:
+        return f"{component}=n/a"
+    # Graph-replayed fresh-entry rows publish p50 only (tails withheld, see methodology).
+    tail = "-" if p99 is None else f"{p99:<6.1f}"
+    return f"{component}={p50:6.1f}/{tail}"
 
 
 def _sort_key(document: dict):

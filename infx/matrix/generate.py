@@ -37,7 +37,6 @@ BYTES_PER_GB = 1_000_000_000
 # 3 TB decimal DRAM cap, expressed in MiB, before utilization scaling.
 MAX_AGENTIC_AVAILABLE_CPU_DRAM_MIB = 2_861_022
 
-# Reverse mapping for exp-name generation
 seq_len_itos = {v: k for k, v in seq_len_stoi.items()}
 
 
@@ -1446,7 +1445,6 @@ def generate_config_matrix(
 
 
 def main() -> list[dict]:
-    # Create parent parser with common arguments
     parent_parser = argparse.ArgumentParser(add_help=False)
     parent_parser.add_argument(
         "--config-files",
@@ -1504,12 +1502,10 @@ def main() -> list[dict]:
         help="Scenario type(s) to include. If not specified, all scenario types are generated.",
     )
 
-    # Create main parser
     parser = argparse.ArgumentParser(
         description="Generate benchmark configurations from YAML config files"
     )
 
-    # Create subparsers for subcommands
     subparsers = parser.add_subparsers(dest="command", required=True, help="Available commands")
 
     full_sweep_parser = subparsers.add_parser(
@@ -1646,11 +1642,9 @@ def main() -> list[dict]:
     if args.no_evals and args.all_evals:
         parser.error("--all-evals cannot be combined with --no-evals")
 
-    # Load and validate configuration files (validation happens by default in load functions)
     all_config_data = load_config_files(args.config_files)
     runner_data = load_runner_file(args.runner_config)
 
-    # Route to appropriate function based on subcommand
     if args.command == "full-sweep":
         matrix_values = generate_full_sweep(args, all_config_data, runner_data)
     elif args.command == "test-config":

@@ -28,6 +28,7 @@ is preserved, not loosened.
 """
 from __future__ import annotations
 
+import os
 import sys
 import types
 
@@ -133,10 +134,30 @@ class UCCLEPBackend(EPBackend):
     kernel_generation = "uccl-legacy-buffer"
     SUPPORTED_MODES = ("normal", "low-latency")
     SUPPORTED_PRECISIONS = ("bf16", "fp8")
+    # LL's only host state is the double-buffer toggle; captures hold whole pairs, so it returns
+    # to where it started. Normal mode host-syncs on its receive counters.
+    CUDA_GRAPH_MODES = ("low-latency",)
     stage_device_work = False
     requires_fresh_pair = False
     receive_layout = "token-rank"
     combine_weight_semantics = "unweighted-rank-sum"
+
+    # (product, precision) cases measured faster eager than graphed: b200 FP8 low-latency pair
+    # period 0.98x baseline eager vs 1.04x graphed, every rung (runs 36114371399, 36113759089).
+    _EAGER_CASES = frozenset({("b200", "fp8")})
+
+    @property
+    def cuda_graph_supported(self) -> bool:
+        if not super().cuda_graph_supported:
+            return False
+        args = self.args
+        # Intranode only: scale-out LL runs through the CPU proxy, unvalidated under capture.
+        if self.world_size > int(getattr(args, "scale_up_domain", self.world_size)):
+            return False
+        if os.environ.get("UCCL_RDMA_ADAPTIVE_SLEEP", "0") not in ("", "0"):
+            return False
+        product = str(getattr(args, "runner", "")).split("-")[0]
+        return (product, self.precision) not in self._EAGER_CASES
 
     def __init__(self, args, rank, world_size, local_rank, device):
         super().__init__(args, rank, world_size, local_rank, device)

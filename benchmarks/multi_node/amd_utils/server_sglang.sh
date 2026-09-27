@@ -1418,7 +1418,7 @@ else
     # Agentic trace replay doesn't reproduce real token-by-token traffic, so
     # measured MTP/EAGLE acceptance there isn't representative (PR #2309
     # review: https://github.com/SemiAnalysisAI/InferenceX/pull/2309#pullrequestreview-4778348624).
-    # Per the AgentX fairness guidelines (golden_al_distribution/README.md),
+    # Per the AgentX fairness guidelines (infx/golden_al_distribution/README.md),
     # agentic throughput benchmarks simulate acceptance at the model's
     # committed golden AL instead of measuring real (non-representative)
     # acceptance. Eval runs (RUN_EVAL / EVAL_ONLY) need real acceptance so
@@ -1426,7 +1426,7 @@ else
     # per checkpoint, thinking mode, and draft length, including when the
     # supported PD draft implementation differs from the calibration engine.
     # Sources (thinking_on): dsv4_mtp.yaml for the original checkpoint and
-    # golden_al_distribution/dsv4-pro-0813-dspark.yaml for Pro-0813.
+    # infx/golden_al_distribution/dsv4-pro-0813-dspark.yaml for Pro-0813.
     DECODE_SIM_ACC_ENV=""
     if [[ "$DECODE_MTP_SIZE" -gt 0 ]] && { [[ "${IS_AGENTIC}" == "1" ]] || [[ "${IS_AGENTIC:-}" == "true" ]]; }; then
         if [[ "${EVAL_ONLY}" == "true" ]] || [[ "${RUN_EVAL}" == "true" ]]; then
@@ -1453,7 +1453,7 @@ else
             if [[ -n "$DSV4_GOLDEN_AL" ]]; then
                 DECODE_SIM_ACC_ENV="SGLANG_SIMULATE_ACC_LEN=${DSV4_GOLDEN_AL} SGLANG_SIMULATE_ACC_METHOD=match-expected SGLANG_SIMULATE_ACC_TOKEN_MODE=real-draft-token"
             else
-                echo "WARNING: agentic spec-decoding run (model=${MODEL_NAME}, algorithm=${SPEC_DECODING:-mtp}, DECODE_MTP_SIZE=${DECODE_MTP_SIZE}) has no golden AL wired in server_sglang.sh -- falling back to real (unsimulated, non-representative) acceptance. Add a case in server_sglang.sh and golden_al_distribution/ before shipping this arm. See golden_al_distribution/README.md." >&2
+                echo "WARNING: agentic spec-decoding run (model=${MODEL_NAME}, algorithm=${SPEC_DECODING:-mtp}, DECODE_MTP_SIZE=${DECODE_MTP_SIZE}) has no golden AL wired in server_sglang.sh -- falling back to real (unsimulated, non-representative) acceptance. Add a case in server_sglang.sh and infx/golden_al_distribution/ before shipping this arm. See infx/golden_al_distribution/README.md." >&2
             fi
         fi
     fi

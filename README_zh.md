@@ -55,6 +55,7 @@ SGLang、vLLM、TensorRT-LLM、CUDA、ROCm 等 AI 软件通过核函式優化、
 
 | SKU | 状态 |
 | --- | --- |
+| Vera Rubin NVL72 | ✅ |
 | GB300 NVL72 | ✅ |
 | GB200 NVL72 | ✅ |
 | MI355X | ✅ |
@@ -64,9 +65,9 @@ SGLang、vLLM、TensorRT-LLM、CUDA、ROCm 等 AI 软件通过核函式優化、
 | MI300X | ✅ |
 | H200 | ✅ |
 | H100 | ✅ |
-| TPUv7x Ironwood Ghostfish | Coming Soon 🔜 |
+| TPUv7x Ironwood Ghostfish | ✅ |
+| RTX PRO 6000 Server | ✅ |
 | MI455 UALoE72 | Coming Soon 🔜 |
-| Vera Rubin NVL72 | Coming Soon 🔜 |
 | Rubin NVL8 | Coming Soon 🔜 |
 | Chip #1 from Hardware Vendor #1 | Coming Soon 🔜 |
 | Chip #2 from Hardware Vendor #1 | Coming Soon 🔜 |

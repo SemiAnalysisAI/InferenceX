@@ -113,11 +113,13 @@ def trace_torch(clock, log):
             CUDAGraph=lambda: _TraceGraph(clock, log),
             graph=graph_context,
             synchronize=lambda *args, **kwargs: log.append("sync"),
+            _sleep=lambda *args, **kwargs: log.append("align_spin"),
             current_stream=lambda *args, **kwargs: types.SimpleNamespace(
                 synchronize=lambda: log.append("sync")
             ),
         ),
         distributed=dist,
+        version=types.SimpleNamespace(hip=None, cuda="13.0"),
         zeros=tensor, ones=tensor, empty=tensor, full=tensor, tensor=tensor,
         float32="float32", float64="float64", bfloat16="bfloat16", int32="int32",
         isfinite=lambda _value: types.SimpleNamespace(
@@ -320,6 +322,45 @@ class CudaGraphRoundtrip(unittest.TestCase):
         self.assertTrue(problem._cuda_graph_output.cloned)
         self.assertTrue(problem._cuda_graph_output_rewritten)
 
+    def _graph_backend(self):
+        backend = _ChainBackend(stage_device_work=False, fp8_consume="native", precision="bf16")
+        backend.mode, backend.CUDA_GRAPH_MODES = "normal", ("normal",)
+        return backend
+
+    def _aligned_replays(self, calls):
+        """Replays preceded by the device-side rank barrier (all-reduce, then the spin)."""
+        return [i for i, call in enumerate(calls)
+                if call == "graph_replay" and calls[i - 2:i] == ["all_reduce", "align_spin"]]
+
+    def test_every_timed_replay_starts_behind_a_device_side_rank_barrier(self):
+        # Without it each replay restarts from the preceding sync and ranks enter ~75us apart.
+        backend = self._graph_backend()
+        with mock.patch.dict(os.environ, {}, clear=True), \
+                trace_torch(backend.clock, backend.calls):
+            backend.benchmark_component("roundtrip", new_problem(), warmup=2, iters=3)
+        replays = [i for i, call in enumerate(backend.calls) if call == "graph_replay"]
+        self.assertEqual(self._aligned_replays(backend.calls), replays[2:5])
+
+    def test_the_graph_chain_is_one_capture_of_unrolled_pairs_per_sibling(self):
+        iters, drop = 5, 1
+        backend = self._graph_backend()
+        with mock.patch.dict(os.environ, {}, clear=True), \
+                trace_torch(backend.clock, backend.calls):
+            series = backend.benchmark_chain(new_problem(), 0, iters, drop)
+        calls = backend.calls
+        begin = [i for i, call in enumerate(calls) if call == "capture_begin"]
+        end = [i for i, call in enumerate(calls) if call == "capture_end"]
+        # Floors and period siblings: one capture each holding every pair, each replayed once
+        # untimed and once behind the barrier.
+        self.assertEqual(len(begin), 2)
+        for lo, hi in zip(begin, end):
+            self.assertEqual(ops_only(calls[lo:hi]), ["dispatch", "stage", "combine"] * iters)
+        self.assertEqual(calls.count("graph_replay"), 4)
+        self.assertEqual(len(self._aligned_replays(calls)), 2)
+        self.assertEqual({len(series[k]) for k in ("pair", "dispatch", "combine")}, {iters - drop})
+        self.assertEqual(len(series["start_to_start"]), iters - drop - 1)
+        self.assertTrue(series["combined"].cloned)
+
     def test_external_switch_restores_the_eager_component_pipeline(self):
         backend = _ChainBackend()
         backend.mode = "normal"
@@ -335,6 +376,52 @@ class CudaGraphRoundtrip(unittest.TestCase):
         with mock.patch.dict(os.environ, {"COLLX_CUDA_GRAPH": "maybe"}, clear=True), \
                 self.assertRaisesRegex(ValueError, "COLLX_CUDA_GRAPH"):
             backend.timed_components()
+
+
+class GraphAlignmentAndValueCheck(unittest.TestCase):
+    def test_the_alignment_spin_is_sized_to_wall_time_not_a_cycle_count(self):
+        # A GPU spinning twice as fast (the probe spin takes half the time) must be handed twice
+        # the cycles, so every rank releases after the same wall time whatever its SM clock.
+        spins = []
+        fake = types.SimpleNamespace(cuda=types.SimpleNamespace(
+            _sleep=spins.append, synchronize=lambda: None,
+            Event=lambda **kwargs: types.SimpleNamespace(
+                record=lambda: None, elapsed_time=lambda other: probe_ms,
+            ),
+        ))
+        backend = _ChainBackend()
+        results = {}
+        for probe_ms in (0.1, 0.05):  # the 200k-cycle probe took 100us, then 50us
+            with mock.patch.dict(sys.modules, {"torch": fake}):
+                backend._calibrate_align_spin()
+            results[probe_ms] = backend._graph_align_cycles
+        self.assertEqual(results[0.1], 200_000)  # the default 100us spin at 2 cycles/ns
+        self.assertEqual(results[0.05], 2 * results[0.1])
+
+    def test_the_replay_value_check_poisons_what_dispatch_wrote_before_replaying(self):
+        backend = _ChainBackend(stage_device_work=True, fp8_consume="native", precision="fp8")
+        order, combined = [], _Combined(1.0)
+        handle = types.SimpleNamespace(recv_x="recv", recv_scales=None, combine_input=None)
+        graph = types.SimpleNamespace(replay=lambda: order.append("replay"))
+        backend.warm = lambda problem, count: order.append("warm")
+        backend._capture_pairs = lambda problem, staged, pairs, marks: (
+            order.append(("capture", staged)) or (graph, {}, combined, handle)
+        )
+        backend._poison = lambda tensor: order.append(("poison", tensor))
+        dist = types.SimpleNamespace(barrier=lambda: order.append("barrier"))
+        fake = types.SimpleNamespace(cuda=types.SimpleNamespace(synchronize=lambda: None),
+                                     distributed=dist)
+        with mock.patch.dict(sys.modules, {"torch": fake, "torch.distributed": dist}):
+            result = backend.graph_replay_output(new_problem())
+        # Staging runs INSIDE the capture (staged=None). Between the upload replay and the
+        # returned one, dispatch's output and the result are poisoned, then every rank barriers:
+        # peers write into each other's buffers, so an unbarriered replay races a slow poison.
+        self.assertEqual(order, [
+            "warm", ("capture", None), "replay",
+            ("poison", "recv"), ("poison", None), ("poison", None), ("poison", combined),
+            "barrier", "replay",
+        ])
+        self.assertTrue(result.cloned)
 
 
 class EventPlacement(unittest.TestCase):
@@ -623,6 +710,10 @@ class _SweepBackend(ep_backend.EPBackend):
 class _GraphSweepBackend(_SweepBackend):
     CUDA_GRAPH_MODES = ("normal",)
 
+    def graph_replay_output(self, problem):
+        self.events.append(("graph-value-check", problem.T))
+        return f"graph-{problem.T}"
+
     def benchmark_component(self, component, problem, warmup, iters):
         self.events.append(("graph", component, problem.T))
         problem._cuda_graph_output = f"graph-{problem.T}"
@@ -759,6 +850,11 @@ class ChainedRegimeOracleGate(unittest.TestCase):
                     self.assertIs(row["correctness"]["passed"], False)
                     self.assertIs(row["correctness"]["post_chain_state_passed"], True)
                     self.assertIs(row["correctness"]["chain_last_output_passed"], True)
+                    # The per-pass verdicts place the failure in the pass that produced it.
+                    self.assertEqual(
+                        row["correctness"]["oracle_passed"],
+                        {"pre": phase != "pre", "chained": True, "post": phase != "post"},
+                    )
 
     def test_the_output_check_is_skipped_where_staging_is_hoisted(self):
         # Under the hoist the chain captures one warm-up dispatch's staged stand-in and reuses
@@ -860,8 +956,9 @@ class CudaGraphPublication(unittest.TestCase):
     def test_existing_component_fields_carry_graph_measurements(self):
         self.assertEqual(self.swept.rc, 0)
         self.assertIs(self.swept.doc["implementation"]["cuda_graph_replay"], True)
-        self.assertIs(self.swept.doc["implementation"]["chained_period"], False)
-        self.assertFalse(any(event[0] == "chain" for event in self.swept.events))
+        # Graph mode keeps the chained family: the chain is captured, not dropped.
+        self.assertIs(self.swept.doc["implementation"]["chained_period"], True)
+        self.assertTrue(any(event[0] == "chain" for event in self.swept.events))
         for row in self.swept.rows:
             with self.subTest(tokens=row["tokens_per_rank"]):
                 roundtrip = row["components"]["roundtrip"]
@@ -873,11 +970,20 @@ class CudaGraphPublication(unittest.TestCase):
                 self.assertEqual(row["components"]["dispatch"]["origin"], "cuda-graph-replay")
                 self.assertEqual(row["components"]["combine"]["origin"], "cuda-graph-replay")
                 self.assertEqual(row["components"]["isolated_sum"]["percentiles_us"]["p50"], 24.0)
-                for name in ("stage", "pair_period"):
-                    self.assertIsNone(row["components"][name]["percentiles_us"])
+                self.assertIsNone(row["components"]["stage"]["percentiles_us"])
+                self.assertIsNotNone(row["components"]["pair_period"]["percentiles_us"])
                 self.assertIs(row["correctness"]["cuda_graph_output_rewritten"], True)
                 self.assertIs(row["correctness"]["cuda_graph_last_output_passed"], True)
-                self.assertIsNone(row["correctness"]["post_chain_state_passed"])
+                self.assertIs(row["correctness"]["post_chain_state_passed"], True)
+                # Graphed fresh-entry tails are withheld; the chained period keeps its tails.
+                for name in ("roundtrip", "dispatch", "combine", "isolated_sum"):
+                    tails = row["components"][name]["percentiles_us"]
+                    self.assertIsNotNone(tails["p50"])
+                    self.assertEqual([tails[k] for k in ("p90", "p95", "p99")], [None] * 3)
+                self.assertIsNone(row["cross_rank_min_us"]["roundtrip"]["percentiles_us"]["p99"])
+                self.assertIsNotNone(row["components"]["pair_period"]["percentiles_us"]["p99"])
+        checked = [event[1] for event in self.swept.events if event[0] == "graph-value-check"]
+        self.assertEqual(sorted(checked), sorted(LADDER))
 
     def test_a_replay_that_does_not_rewrite_its_output_reds_the_case(self):
         swept = drive(backend_factory=_BrokenGraphSweepBackend)
@@ -979,6 +1085,12 @@ class ChainOutputCheck(unittest.TestCase):
                 got, error = ep_harness._chain_output_matches(_Vec(chained), _Vec(drained))
                 self.assertIs(got, ok)
                 self.assertAlmostEqual(error, expected_error)
+
+    def test_a_non_finite_output_is_an_unbounded_mismatch_not_zero_error(self):
+        # NaN would vanish from the cross-rank MAX and publish "failed, error 0.0".
+        got, error = ep_harness._chain_output_matches(_Vec([float("nan"), 1.0]), _Vec([1.0, 1.0]))
+        self.assertIs(got, False)
+        self.assertEqual(error, float("inf"))
 
     def test_near_zero_elements_are_judged_against_the_magnitude_floor(self):
         # Relative error against a denominator of 1e-6 would be huge; the floor keeps

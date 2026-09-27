@@ -13,7 +13,7 @@
 | 权威来源 | 控制内容 |
 | --- | --- |
 | [`benchmark-tmpl.yml`](../.github/workflows/benchmark-tmpl.yml)、[`benchmark-multinode-tmpl.yml`](../.github/workflows/benchmark-multinode-tmpl.yml) | 吞吐量、评测和 AgentX 工件的单配置名称、文件及上传规则 |
-| [`utils/process_result.py`](../utils/process_result.py) | 固定序列吞吐量聚合架构及派生的每 GPU 指标 |
+| [`infx/results/fixed_sequence.py`](../infx/results/fixed_sequence.py) | 固定序列吞吐量聚合架构及派生的每 GPU 指标 |
 | [`infx/results/collect_results.py`](../infx/results/collect_results.py)、[`collect-results.yml`](../.github/workflows/collect-results.yml) | 将基准结果递归收集为 `agg_<prefix>.json` 和 `results_<prefix>` |
 | [`infx/results/collect_eval_results.py`](../infx/results/collect_eval_results.py)、[`collect-evals.yml`](../.github/workflows/collect-evals.yml) | 评测发现、指标提取、批量并发选择及 `eval_results_<prefix>` |
 | [`infx/results/evals.py`](../infx/results/evals.py)、[`eval_artifacts.py`](../infx/results/eval_artifacts.py) | 供收集流程和 Klaud 共用的评测读取、结果选择、复用一致性检查及重跑去重 |
@@ -61,7 +61,7 @@
 
 ### 生产端和收集器
 
-对于单节点固定序列任务，[`benchmark-tmpl.yml`](../.github/workflows/benchmark-tmpl.yml) 根据实验、精度、框架、TP/PP/DCP/PCP/EP/DP-attention、解耦、推测模式、并发和具体 runner 构建 `RESULT_FILENAME`。基准先写入 `<RESULT_FILENAME>.json`。[`utils/process_result.py`](../utils/process_result.py) 读取该文件并写入 `agg_<RESULT_FILENAME>.json`。工作流按下列身份上传：
+对于单节点固定序列任务，[`benchmark-tmpl.yml`](../.github/workflows/benchmark-tmpl.yml) 根据实验、精度、框架、TP/PP/DCP/PCP/EP/DP-attention、解耦、推测模式、并发和具体 runner 构建 `RESULT_FILENAME`。基准先写入 `<RESULT_FILENAME>.json`。[`infx/results/fixed_sequence.py`](../infx/results/fixed_sequence.py) 读取该文件并写入 `agg_<RESULT_FILENAME>.json`。工作流按下列身份上传：
 
 ```text
 artifact: bmk_<RESULT_FILENAME>
@@ -103,7 +103,7 @@ InferenceX-app 将路由字段作为列或配置维度，并把数值测量存�
 
 `power_invalid_reasons` 和 `power_audit` 在数值指标旁携带有界摘要，包括可用的测量窗口、预期与观测 GPU 数、采样诊断、观测设备标识和生产者版本。`source` 指向保留的 `power_validation_*.json` 工件名称。设备标识保留采集器原有语义，本地 SMI 序号不是物理 UUID 的证明。
 
-对于多节点固定序列任务，`utils/process_result.py --all` 先处理所有已有结果，再返回失败。它接受 `_c<N>_gpus_...`、`_conc<N>_gpus_...` 和 AMD 的 `_concurrency_<N>_req_rate_<R>_gpus_...` 文件名，也支持 `inf` 请求速率。它将结果并发度与 `CONC_LIST` 比较，拒绝重复或矛盾的点身份，并将遗漏和错误记录到 `result_processing_<RESULT_FILENAME>.json`。共享工作池通过 `AGGREGATE_GPUS` 及零值角色 GPU 数进行遥测验证；独立的 prefill/decode 能耗保持缺失。当 `DISAGG=true` 的配置组中某个点没有 decode worker 时，聚合行会有意设置 `disagg: false` 并记录 `num_aggregate_gpu`；文件名、工件名和工作流输入仍保留配置组身份。下游应按聚合行的拓扑解释测量结果。
+对于多节点固定序列任务，`python -m infx.results.fixed_sequence --all` 先处理所有已有结果，再返回失败。它接受 `_c<N>_gpus_...`、`_conc<N>_gpus_...` 和 AMD 的 `_concurrency_<N>_req_rate_<R>_gpus_...` 文件名，也支持 `inf` 请求速率。它将结果并发度与 `CONC_LIST` 比较，拒绝重复或矛盾的点身份，并将遗漏和错误记录到 `result_processing_<RESULT_FILENAME>.json`。共享工作池通过 `AGGREGATE_GPUS` 及零值角色 GPU 数进行遥测验证；独立的 prefill/decode 能耗保持缺失。当 `DISAGG=true` 的配置组中某个点没有 decode worker 时，聚合行会有意设置 `disagg: false` 并记录 `num_aggregate_gpu`；文件名、工件名和工作流输入仍保留配置组身份。下游应按聚合行的拓扑解释测量结果。
 
 PR changelog 选择具有代表性的 NVIDIA 和 AMD 覆盖，并非所有受影响配置的完整列表；共享处理逻辑的变更适用于所有固定序列配置。
 
@@ -185,7 +185,7 @@ raw artifact:       agentic_<RESULT_FILENAME>
 raw tree:           results/**, excluding inputs.json and profile_export_raw.jsonl
 ```
 
-聚合工件匹配 `bmk_*` 收集模式，因此也会成为 `results_bmk/agg_bmk.json` 中的一条记录。原始同级工件不会交给 `collect_results.py`。InferenceX-app 移除 `bmk_` 和 `agentic_` 后缀前缀，将 `bmk_agentic_<suffix>` 与 `agentic_<suffix>` 配对。对于以 `_concN.json` 命名的文件，并发也参与 trace 同级工件查找。
+聚合工件匹配 `bmk_*` 收集模式，因此也会成为 `results_bmk/agg_bmk.json` 中的一条记录。原始同级工件不会交给 `infx.results.collect_results`。InferenceX-app 移除 `bmk_` 和 `agentic_` 后缀前缀，将 `bmk_agentic_<suffix>` 与 `agentic_<suffix>` 配对。对于以 `_concN.json` 命名的文件，并发也参与 trace 同级工件查找。
 
 服务器日志是单独的 `server_logs_<RESULT_FILENAME>` 工件。应用会使用完全移除前缀后的后缀作为回退，从而让 AgentX 记录找到不含 `agentic_` 前缀的日志工件。
 
@@ -297,7 +297,7 @@ InferenceX-app 按以下顺序执行。固定序列工作流超时为 30 分钟�
 | --- | --- |
 | CI 中的工件准备 | 每个完全相同的工件名保留最新且未过期的上传。复用只会以 merge 运行副本替换变更日志元数据。 |
 | 应用直接下载模式 | [`dedupeArtifactsByLogicalName`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/lib/github-artifacts.ts) 移除末尾 runner-pool 和 attempt token，并保留最新的逻辑工件，防止重试工件覆盖良好指标。 |
-| 基准收集 | `collect_results.py` 附加每个已解析 JSON。它不做记录级去重。 |
+| 基准收集 | `infx.results.collect_results` 附加每个已解析 JSON。它不做记录级去重。 |
 | 基准数据库写入 | 按基准自然键执行 `ON CONFLICT`，更新指标、镜像、功耗 worker 及相关字段。当新工件缺少服务器派生的 `kv_cache_pool_tokens` 时会保留已有值。 |
 | 评测数据库写入 | 维度完整且匹配的聚合记录和单配置记录会按评测自然键冲突。后一次写入刷新指标，并返回同一记录 ID 供样本附加。任一可空键维度为空时，PostgreSQL 当前的普通唯一约束不会对这些记录去重。 |
 | 评测样本 | 按 `(eval_result_id, doc_id)` 冲突，防止文档重复。 |

@@ -129,9 +129,7 @@ BASELINE_QUERY = """
 # E2EL is in seconds
 # Interactivity is in tok/s/user
 METRIC_DEFS = [
-    # TPUT
     ("tput_per_gpu", "TPUT/GPU", True, ".2f"),
-    # TTFT (lower is better, stored in seconds, display in ms — handled specially)
     ("median_ttft", "TTFT Median (ms)", False, ".4f"),
     ("p90_ttft", "TTFT P90 (ms)", False, ".4f"),
     ("p99_ttft", "TTFT P99 (ms)", False, ".4f"),
@@ -140,7 +138,6 @@ METRIC_DEFS = [
     ("p90_intvty", "Intvty@P90 TPOT", True, ".4f"),
     ("p99_intvty", "Intvty@P99 TPOT", True, ".4f"),
     ("p99.9_intvty", "Intvty@P99.9 TPOT", True, ".4f"),
-    # E2EL (lower is better, in seconds)
     ("median_e2el", "E2EL Median (s)", False, ".4f"),
     ("p90_e2el", "E2EL P90 (s)", False, ".4f"),
     ("p99_e2el", "E2EL P99 (s)", False, ".4f"),
@@ -180,7 +177,6 @@ def compute_metric_delta(
     baseline = get_metric_value(baseline_data, key) if baseline_data else None
     if current is None or baseline is None or baseline == 0:
         return "N/A"
-    # For ms-display keys, convert both to ms before computing delta
     if key in MS_DISPLAY_KEYS:
         current_display = current * 1000
         baseline_display = baseline * 1000
@@ -200,7 +196,6 @@ def main() -> None:
     results_dir = Path(sys.argv[1])
     database_url = os.environ["DATABASE_URL"]
 
-    # Load all benchmark result JSONs (files may contain a single dict or a list of dicts)
     results = []
     for path in results_dir.rglob("*.json"):
         with open(path) as f:
@@ -299,7 +294,6 @@ def main() -> None:
     single_node = [r for r in rows if "P(" not in r["parallelism"]]
     multi_node = [r for r in rows if "P(" in r["parallelism"]]
 
-    # Build metric headers: for each metric, one column for value and one for delta
     metric_headers = []
     for _, label, _, _ in METRIC_DEFS:
         metric_headers.extend([label, f"{label} Delta"])

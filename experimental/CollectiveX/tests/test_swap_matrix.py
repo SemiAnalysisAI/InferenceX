@@ -20,6 +20,7 @@ class SwapMatrixTests(unittest.TestCase):
                     {
                         "id": "swap-amd-test",
                         "sku": "amd-test",
+                        "runner": "amd-test",
                         "backend": "swap-blocks",
                         "nodes": 1,
                         "gpus_per_node": 1,
@@ -32,6 +33,10 @@ class SwapMatrixTests(unittest.TestCase):
         )
         self.assertEqual(
             build_matrix(platforms, "cuda-test", "")["include"][0]["vendor"], "nvidia"
+        )
+        labelled = {"amd-test": {"arch": "gfx942", "runner_label": "cluster:amd-pool"}}
+        self.assertEqual(
+            build_matrix(labelled, "amd-test", "")["include"][0]["runner"], "cluster:amd-pool"
         )
         for only, exclude in [
             ("missing", ""),

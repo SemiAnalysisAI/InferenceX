@@ -43,7 +43,7 @@ These files are the contract. Follow the target ref's source rather than copying
 | Throughput and eval aggregation | [`.github/workflows/collect-results.yml`](../.github/workflows/collect-results.yml), [`.github/workflows/collect-evals.yml`](../.github/workflows/collect-evals.yml), [`infx/results/collect_results.py`](../infx/results/collect_results.py), [`infx/results/collect_eval_results.py`](../infx/results/collect_eval_results.py) |
 | Changelog byte/diff/matrix gate | [`infx/workflows/validate_perf_changelog.py`](../infx/workflows/validate_perf_changelog.py), [`infx.matrix.plan`](../infx/matrix/plan.py) |
 | Reuse authorization and source-run selection | [`infx/workflows/reuse.py`](../infx/workflows/reuse.py) |
-| Supported reuse merge and conflict preparation | [`utils/merge_with_reuse.sh`](../utils/merge_with_reuse.sh), [`infx/workflows/prepare_perf_changelog_merge.py`](../infx/workflows/prepare_perf_changelog_merge.py) |
+| Supported reuse merge and conflict preparation | [`infx/workflows/merge_with_reuse.py`](../infx/workflows/merge_with_reuse.py), [`infx/workflows/prepare_perf_changelog_merge.py`](../infx/workflows/prepare_perf_changelog_merge.py) |
 | Staging request and callback | [`infx/workflows/stage_results.py`](../infx/workflows/stage_results.py), [`.github/workflows/stage-results.yml`](../.github/workflows/stage-results.yml), [`.github/workflows/stage-results-callback.yml`](../.github/workflows/stage-results-callback.yml) |
 | Reused agentic-ingest redispatch | [`.github/workflows/recover-reused-ingest.yml`](../.github/workflows/recover-reused-ingest.yml) |
 | Post-merge responsibility reminder | [`.github/workflows/pr-recipe-reminder.yml`](../.github/workflows/pr-recipe-reminder.yml) |
@@ -401,7 +401,7 @@ Reuse prevents an approved full PR sweep from being rerun on `main`. It is not a
 
 ### Eligibility and authorization
 
-`infx.github` provides repository-scoped REST calls, pagination, and comment-reaction primitives. It contains no sweep policy. `infx.workflows.sweep_runs` shares PR commit lookup, completed-run listing, and unexpired result-artifact discovery between staging and reuse. Each caller keeps its own eligibility rules. `infx.workflows.reuse` owns command parsing, authorization lookup, and source-run selection/validation. `infx.workflows.reuse_comment` uses those same rules for reaction feedback. Workflows run these modules with `python3 -m`; the existing `utils/find_reusable_sweep_run.py` command and imports remain compatible. These helpers use Python’s standard library and the GitHub CLI; no Python package installation is needed when running them from a checkout.
+`infx.github` provides repository-scoped REST calls, pagination, and comment-reaction primitives. It contains no sweep policy. `infx.workflows.sweep_runs` shares PR commit lookup, completed-run listing, and unexpired result-artifact discovery between staging and reuse. Each caller keeps its own eligibility rules. `infx.workflows.reuse` owns command parsing, authorization lookup, and source-run selection/validation. `infx.workflows.reuse_comment` uses those same rules for reaction feedback. Workflows run these modules with `python3 -m`. These helpers use Python’s standard library and the GitHub CLI; no Python package installation is needed when running them from a checkout.
 
 1. Reuse does not require a sweep label. Labels select new GPU work; removing a primary label does not invalidate an existing source run. Conflicting primary labels remain rejected by changelog validation and the merge helper.
 2. `evals-only` and `agentx-fast` make the run ineligible. A default full sweep and a full sweep with `all-evals` remain eligible.
@@ -419,13 +419,13 @@ On a later PR `synchronize` event, the reuse gate skips another PR sweep only af
 
 ### Supported merge path
 
-Run from a clean checkout with authenticated `gh`, `git`, `jq`, and Python:
+Run from a clean checkout with `uv`, `git`, and a `GH_TOKEN` or `GITHUB_TOKEN` set (or `gh` authenticated):
 
 ```bash
-utils/merge_with_reuse.sh <pr-number>
+uv run --extra workflows python -m infx.workflows.merge_with_reuse <pr-number>
 ```
 
-[`merge_with_reuse.sh`](../utils/merge_with_reuse.sh) verifies an eligible successful source artifact, posts the authorization pinned to that run, merges `origin/main` into the PR branch, resolves only a `perf-changelog.yaml` conflict, canonicalizes appended `XXX` links, creates/pushes a synchronization commit when needed, waits for `check-changelog` and all PR checks, verifies the head did not move, and admin squash-merges. It refuses forks, dirty worktrees, multiple primary labels, incompatible modifiers, unexpected conflicts, missing artifacts, failed checks, or a moving PR head.
+[`merge_with_reuse.py`](../infx/workflows/merge_with_reuse.py) verifies an eligible successful source artifact, posts the authorization pinned to that run, merges `origin/main` into the PR branch, resolves only a `perf-changelog.yaml` conflict, canonicalizes appended `XXX` links, creates/pushes a synchronization commit when needed, waits for `check-changelog` and all PR checks, verifies the head did not move, and admin squash-merges. It refuses forks, dirty worktrees, multiple primary labels, incompatible modifiers, unexpected conflicts, missing artifacts, failed checks, or a moving PR head.
 
 Do not manually reproduce only half of this sequence. In particular, posting the comment and squash-merging without the synchronization/check phase can leave the merge run unable to select the intended source.
 
@@ -471,7 +471,7 @@ uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with p
   --head-ref HEAD
 ```
 
-When reuse is authorized, prefer [`utils/merge_with_reuse.sh`](../utils/merge_with_reuse.sh). It performs this conflict preparation and the required synchronization/check sequence together.
+When reuse is authorized, prefer [`uv run --extra workflows python -m infx.workflows.merge_with_reuse`](../infx/workflows/merge_with_reuse.py). It performs this conflict preparation and the required synchronization/check sequence together.
 
 ## Artifact downloads and parsing
 
@@ -512,7 +512,7 @@ Do not assume every run has every artifact. Important contracts are:
 
 ### Parse bounded fields
 
-Throughput aggregate fields come from [`utils/process_result.py`](../utils/process_result.py):
+Throughput aggregate fields come from [`infx/results/fixed_sequence.py`](../infx/results/fixed_sequence.py):
 
 ```bash
 jq -r '

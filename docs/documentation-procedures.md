@@ -52,7 +52,7 @@ The information architecture follows the useful pattern in the [`InferenceX-app`
    - **Procedure:** prerequisites, ordered actions, verification, failure/stop conditions, and authoritative links.
    - **Reference:** stable schema, terminology, supported values, or a navigation map.
    - **Troubleshooting:** observable symptom, evidence to collect, root-cause branches, safe remediation, and escalation boundary.
-5. **Keep source-adjacent references source-adjacent.** Detailed schema or command documentation may belong beside the code, such as [`configs/CONFIGS.md`](../configs/CONFIGS.md), [`.github/workflows/README.md`](../.github/workflows/README.md), or [`utils/evals/EVALS.md`](../utils/evals/EVALS.md). Link it from `docs/` instead of copying it.
+5. **Keep source-adjacent references source-adjacent.** Detailed schema or command documentation may belong beside the code, such as [`configs/CONFIGS.md`](../configs/CONFIGS.md), [`.github/workflows/README.md`](../.github/workflows/README.md), or [`infx/evals/EVALS.md`](../infx/evals/EVALS.md). Link it from `docs/` instead of copying it.
 6. **Define completion before editing.** Name the bilingual pair, index location, implementation links, and the review evidence required.
 
 ## Add a contributor-facing page

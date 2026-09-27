@@ -36,11 +36,11 @@ This is the mandatory low-context router for InferenceX work. Pick the one page 
 | [`.github/AGENT_OPERATIONS.md`](../.github/AGENT_OPERATIONS.md) | Translation terms, sweep labels, dispatch, eval selection, power, metrics, and artifacts |
 | [`configs/CONFIGS.md`](../configs/CONFIGS.md) | Master-config schema, search spaces, runners, and topology fields |
 | [`.github/workflows/README.md`](../.github/workflows/README.md) | Generator examples, workflow operation, and reuse policy |
-| [`utils/evals/EVALS.md`](../utils/evals/EVALS.md) | Eval task, execution, collection, validation, and SWE-bench contracts |
+| [`infx/evals/EVALS.md`](../infx/evals/EVALS.md) | Eval task, execution, collection, validation, and SWE-bench contracts |
 | [`benchmarks/multi_node/srt-slurm-recipes/RECIPES.md`](../benchmarks/multi_node/srt-slurm-recipes/RECIPES.md) | Disaggregated recipe registration and master-config coupling |
 | [`utils/runner_setup/RUNNER_SETUP.md`](../utils/runner_setup/RUNNER_SETUP.md) | Runner provisioning and setup |
-| [`MODELS.md`](../MODELS.md) | Supported models, hardware coverage, and naming |
-| [`KLAUD_DEBUG.md`](../KLAUD_DEBUG.md) | Historical Klaud-Cold, CI, image, cluster, and GitHub CLI failure signatures |
+| [`MODELS.md`](MODELS.md) | Supported models, hardware coverage, and naming |
+| [`KLAUD_DEBUG.md`](KLAUD_DEBUG.md) | Historical Klaud-Cold, CI, image, cluster, and GitHub CLI failure signatures |
 | [`klaud.md`](./klaud.md) / [`klaud_zh.md`](./klaud_zh.md) | Klaud Cold selection, ownership, validation and recovery |
 | [`klaud-reporting.md`](./klaud-reporting.md) / [`klaud-reporting_zh.md`](./klaud-reporting_zh.md) | Klaud PR body, progress comments, numeric comparisons and final preflight |
 | [`benchmarks/srt_agentic.sh`](../benchmarks/srt_agentic.sh) | AgentX trace replay client shared by single- and multi-node srt-slurm recipes |
