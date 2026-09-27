@@ -211,6 +211,14 @@ launch_srt_single_node() {
             scancel "$SRT_JOB_ID" || true
         fi
         if [[ -n "$SRT_JOB_OUTPUT" && -d "$SRT_JOB_OUTPUT" ]]; then
+            # Op-attribution profiles upload as their own artifact (INFX_PROFILE).
+            if [[ -d "$SRT_JOB_OUTPUT/logs/infx_profile" ]]; then
+                if tar cf "$GITHUB_WORKSPACE/infx-profile.tar" -C "$SRT_JOB_OUTPUT/logs" infx_profile; then
+                    rm -rf "$SRT_JOB_OUTPUT/logs/infx_profile"
+                else
+                    rc=1
+                fi
+            fi
             bundle_server_logs "$SRT_JOB_OUTPUT" "$GITHUB_WORKSPACE/srt-single-node-logs.tar.gz"
             for artifact in "$SRT_JOB_OUTPUT/logs/$RESULT_FILENAME.json" "$SRT_JOB_OUTPUT"/logs/gpu_metrics*; do
                 [[ -f "$artifact" ]] || continue
