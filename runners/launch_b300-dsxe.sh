@@ -112,8 +112,18 @@ import_squash_image() {
         if unsquashfs -l \"$sqsh\" > /dev/null 2>&1; then
             exit 0
         fi
-        rm -f \"$sqsh\"
-        enroot import -o \"$sqsh\" \"docker://$image_ref\"
+        # Large registry layers (e.g. GHCR) can drop mid-transfer with
+        # \"curl: (56) Connection reset by peer\". Retry with fewer parallel
+        # connections; enroot's layer cache keeps finished layers across attempts.
+        for attempt in 1 2 3 4; do
+            rm -f \"$sqsh\"
+            if ENROOT_MAX_CONNECTIONS=\"\${ENROOT_MAX_CONNECTIONS:-4}\" enroot import -o \"$sqsh\" \"docker://$image_ref\"; then
+                break
+            fi
+            [ \"\$attempt\" -eq 4 ] && exit 1
+            echo \"enroot import attempt \$attempt failed for $image_ref; retrying in \$((attempt * 30))s\" >&2
+            sleep \$((attempt * 30))
+        done
         unsquashfs -l \"$sqsh\" > /dev/null
     " || { echo "Error: enroot import failed for $image_ref -> $sqsh" >&2; exit 1; }
 
