@@ -8994,4 +8994,4 @@
   description:
     - "Add B300 TP1 DeepSeek-V4.1-Flash vLLM DSpark 8k1k serving at concurrency 1, 2, 4, 8, 16, 32, 64, 128 on nightly-ddd6fbca148a867aad1fcab7ec72f582b9977db4. Explicitly offload Engram and 60 GiB of routed expert weights to host UVA; KV stays GPU-resident. Use real DSpark verification, unchanged shipped draft precision, and the shared fixed-sequence client with vLLM routing enabled. Existing AgentX recipes are unchanged."
     - "新增 B300 TP1 DeepSeek-V4.1-Flash vLLM DSpark 8k1k serving 扫描，并发为 1、2、4、8、16、32、64、128。显式将 Engram 和 60 GiB routed expert 权重卸载至主机 UVA，KV 保留在 GPU。使用真实 DSpark 验证，不修改发布的 draft 精度；为共享固定序列客户端启用 vLLM 路由。现有 AgentX 配方保持不变。"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/0
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3515
