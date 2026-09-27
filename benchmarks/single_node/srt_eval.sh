@@ -10,7 +10,18 @@ SRT_EVAL_STATUS_FILE="$2"
 trap 'rc=$?; printf "%s\n" "$rc" > "$SRT_EVAL_STATUS_FILE"' EXIT
 
 source "$(dirname "${BASH_SOURCE[0]}")/../benchmark_lib.sh"
-check_env_vars MODEL MODEL_NAME CONC TP EP_SIZE DP_ATTENTION IS_MULTINODE MAX_MODEL_LEN
+check_env_vars MODEL MODEL_NAME CONC TP EP_SIZE DP_ATTENTION IS_MULTINODE IS_AGENTIC
+# AgentX evaluates at the native context with the workflow's eval framework.
+eval_args=()
+if [[ "$IS_AGENTIC" != 1 ]]; then
+    check_env_vars MAX_MODEL_LEN
+    eval_args=(--framework lm-eval)
+elif [[ "${MODEL_PREFIX:-}" == glm5.2 ]]; then
+    # GLM-5.2's template defaults to maximum reasoning effort without
+    # chat_template_kwargs, which mini-swe-agent never passes; the heavy thinking
+    # exhausts the shared step budget. The recipe env does not reach post-eval.
+    export SWEBENCH_AGENT_STEP_LIMIT=150
+fi
 export PORT="${1##*:}"
 if [[ ! "$PORT" =~ ^[1-9][0-9]*$ || "$IS_MULTINODE" != false ]]; then
     echo "ERROR: single-node eval requires a local endpoint and single-node metadata" >&2
@@ -22,6 +33,9 @@ if [[ -d /model ]]; then
 fi
 
 eval_rc=0
-run_eval --framework lm-eval --port "$PORT" || eval_rc=$?
-append_lm_eval_summary || eval_rc=1
+run_eval "${eval_args[@]}" --port "$PORT" || eval_rc=$?
+# AgentX eval-only run_eval already staged and removed its results.
+if [[ "$IS_AGENTIC" != 1 ]]; then
+    append_lm_eval_summary || eval_rc=1
+fi
 exit "$eval_rc"

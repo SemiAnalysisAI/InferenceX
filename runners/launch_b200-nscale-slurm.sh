@@ -50,7 +50,7 @@ if uses_native_srt_lane; then
     LAUNCH_PATH="native-srt"
 elif [[ "$IS_MULTINODE" == "true" ]]; then
     LAUNCH_PATH="multinode-srt"
-elif [[ "$IS_AGENTIC" == "0" ]]; then
+elif [[ "$IS_AGENTIC" == "0" || -n "${SRT_RECIPE:-}" ]]; then
     check_env_vars SRT_RECIPE
     LAUNCH_PATH="native-single-node"
 else
@@ -138,10 +138,8 @@ elif [[ $MODEL_PREFIX == "kimik3" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/scratch/models/Kimi-K3"
     export SRT_SLURM_MODEL_PREFIX="kimik3"
 elif [[ $MODEL_PREFIX == "qwen3.8next" && $PRECISION == "fp4" ]]; then
-    check_env_vars MODEL_PATH
-    if [[ -n "${MODEL_PATH}" && -d "$MODEL_PATH" ]]; then
-        :
-    else
+    # No pool setting names this checkpoint; default to the node-local copy.
+    if [[ -z "${MODEL_PATH:-}" || ! -d "$MODEL_PATH" ]]; then
         export MODEL_PATH="/scratch/models/Qwen3.8-Flash-Next-NVFP4"
     fi
     export SRT_SLURM_MODEL_PREFIX="qwen3.8next-fp4"
@@ -155,6 +153,8 @@ fi
 if [[ "$LAUNCH_PATH" == native-single-node ]]; then
     HF_HUB_CACHE_MOUNT=/data/home/sa-shared/gharunners/hf-hub-cache
     SRT_MODEL_PATH="$MODEL_PATH"
+    # Models not staged locally resolve through the Hugging Face cache mount.
+    [[ "$SRT_MODEL_PATH" == /* ]] || SRT_MODEL_PATH="hf:$MODEL"
     SRT_SQUASH_FILE="$B200_SQUASH_DIR/$(printf '%s' "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
     launch_srt_single_node b200-nscale-slurm \
         --var SLURM_ACCOUNT "$SLURM_ACCOUNT" --var SLURM_PARTITION "$SLURM_PARTITION"

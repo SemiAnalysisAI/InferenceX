@@ -52,7 +52,7 @@
    - **操作流程：** 前置条件、有序步骤、验证、失败/停止条件和权威链接。
    - **参考：** 稳定的 schema、术语、支持值或导航地图。
    - **故障排查：** 可观察症状、需收集的证据、根因分支、安全修复方法和升级边界。
-5. **源码相邻的参考文档应继续靠近源码。** 详细 schema 或命令文档可能更适合放在代码旁，例如 [`configs/CONFIGS.md`](../configs/CONFIGS.md)、[`.github/workflows/README.md`](../.github/workflows/README.md) 或 [`utils/evals/EVALS.md`](../utils/evals/EVALS.md)。应从 `docs/` 链接它们，而不是复制内容。
+5. **源码相邻的参考文档应继续靠近源码。** 详细 schema 或命令文档可能更适合放在代码旁，例如 [`configs/CONFIGS.md`](../configs/CONFIGS.md)、[`.github/workflows/README.md`](../.github/workflows/README.md) 或 [`infx/evals/EVALS.md`](../infx/evals/EVALS.md)。应从 `docs/` 链接它们，而不是复制内容。
 6. **编辑前定义完成条件。** 明确双语页面对、索引位置、实现链接和所需审阅证据。
 
 ## 新增面向贡献者的页面

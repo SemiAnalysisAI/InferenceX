@@ -163,6 +163,7 @@ jobs:
             ${{ runner.temp }}/klaud/selection.json
             ${{ runner.temp }}/klaud/review-diagnostics.json
             ${{ runner.temp }}/klaud/*/candidate.json
+            ${{ runner.temp }}/klaud/*/baseline-preflight.json
           retention-days: 14
 
   candidates:

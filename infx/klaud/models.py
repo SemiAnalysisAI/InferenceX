@@ -115,6 +115,17 @@ class CandidateOutcome(Contract):
     pull_request: Annotated[int, Field(gt=0)] | None
     run_ids: list[Annotated[int, Field(gt=0)]] = Field(max_length=256)
     repairs_used: int | None = Field(ge=0)
+    reason_code: (
+        Literal[
+            "baseline-preflight-mismatch",
+            "baseline-provenance-unverified",
+            "baseline-point-mismatch",
+            "baseline-eval-unverified",
+            "baseline-api-unavailable",
+            "baseline-other",
+        ]
+        | None
+    ) = None
 
     @model_validator(mode="after")
     def consistent_outcome(self) -> CandidateOutcome:
@@ -126,6 +137,8 @@ class CandidateOutcome(Contract):
             raise ValueError("Validated requires final-sweep evidence")
         if len(set(self.run_ids)) != len(self.run_ids):
             raise ValueError("Run IDs must be distinct")
+        if self.reason_code is not None and (self.outcome != "failed" or self.phase != "baseline"):
+            raise ValueError("Baseline reason codes require a failed baseline outcome")
         return self
 
 

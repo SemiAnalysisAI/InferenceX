@@ -262,7 +262,7 @@ class Session:
             if (
                 not receipt
                 or receipt.get("head") != pull["head"]["sha"]
-                or receipt["outcome"] != outcome.model_dump(by_alias=True)
+                or receipt["outcome"] != outcome.model_dump(by_alias=True, exclude_unset=True)
             ):
                 raise VerificationError("Missing verified completion report")
 
@@ -314,7 +314,7 @@ class Session:
                     pending = self.marker.replace("klaud-outcome:", "klaud-cleanup:")
                     request = {
                         "head": pull["head"]["sha"],
-                        "outcome": outcome.model_dump(by_alias=True),
+                        "outcome": outcome.model_dump(by_alias=True, exclude_unset=True),
                     }
                     body = (
                         pending
@@ -387,7 +387,7 @@ class Session:
                 }
             record = {
                 "head": pull["head"]["sha"],
-                "outcome": outcome.model_dump(by_alias=True),
+                "outcome": outcome.model_dump(by_alias=True, exclude_unset=True),
                 "validation": proof,
             }
             if self.report(pull) != record:
@@ -399,18 +399,20 @@ class Session:
                     or "—"
                 )
                 repairs = outcome.repairs_used if outcome.repairs_used is not None else "unknown"
+                reason_en = f" · Reason: {outcome.reason_code}" if outcome.reason_code else ""
+                reason_zh = f" · 原因：{outcome.reason_code}" if outcome.reason_code else ""
                 body = (
                     self.marker
                     + json.dumps(record)
                     + "\n-->\n"
                     + translated(
-                        f"**{outcome.outcome}** · Repairs: {repairs} · Runs: {links}  \nAll owned runs ended. "
+                        f"**{outcome.outcome}**{reason_en} · Repairs: {repairs} · Runs: {links}  \nAll owned runs ended. "
                         + (
                             "Full sweep verified; ready for review."
                             if proof
                             else "PR closed; branch deleted for retry."
                         ),
-                        f"**{outcome.outcome}** · 修复次数：{repairs} · 运行：{links}  \n所有自有运行均已结束。"
+                        f"**{outcome.outcome}**{reason_zh} · 修复次数：{repairs} · 运行：{links}  \n所有自有运行均已结束。"
                         + (
                             "完整 sweep 已验证；已就绪，等待审查。"
                             if proof

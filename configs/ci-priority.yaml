@@ -32,7 +32,6 @@ adjustments:
     # Retained SPEED-Bench collectors still use these retired-family scores.
     glm5: 0.75
     glm5.1: 0.75
-    kimik2.5: 0.75 # SPEED-Bench only; no active master entry.
     dsv4: 0.25
     minimaxm3: 0.25
     qwen3.5: 0.1

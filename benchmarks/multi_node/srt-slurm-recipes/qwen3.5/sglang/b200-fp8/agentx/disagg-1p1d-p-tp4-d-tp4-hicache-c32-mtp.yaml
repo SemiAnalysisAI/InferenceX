@@ -154,7 +154,7 @@ telemetry:
     port: 9401
 benchmark:
   type: custom
-  command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
+  command: bash /infmax-workspace/benchmarks/srt_agentic.sh
   concurrencies:
   - 32
   env:

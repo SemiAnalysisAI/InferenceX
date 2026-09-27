@@ -293,4 +293,4 @@ cat > /tmp/klaud_pr_diag.json <<'EOF'
 EOF
 ```
 
-See `KLAUD_DEBUG.md` for the canonical catalog of recurring failure modes to draw diagnoses from.
+See `docs/KLAUD_DEBUG.md` for the canonical catalog of recurring failure modes to draw diagnoses from.

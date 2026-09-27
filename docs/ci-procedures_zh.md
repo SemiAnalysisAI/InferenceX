@@ -43,7 +43,7 @@
 | 吞吐量与 Eval 聚合 | [`.github/workflows/collect-results.yml`](../.github/workflows/collect-results.yml)、[`.github/workflows/collect-evals.yml`](../.github/workflows/collect-evals.yml)、[`infx/results/collect_results.py`](../infx/results/collect_results.py)、[`infx/results/collect_eval_results.py`](../infx/results/collect_eval_results.py) |
 | Changelog 字节、Diff 与矩阵 Gate | [`infx/workflows/validate_perf_changelog.py`](../infx/workflows/validate_perf_changelog.py)、[`infx.matrix.plan`](../infx/matrix/plan.py) |
 | 复用授权与源 Run 选择 | [`infx/workflows/reuse.py`](../infx/workflows/reuse.py) |
-| 受支持的复用合并与冲突准备 | [`utils/merge_with_reuse.sh`](../utils/merge_with_reuse.sh)、[`infx/workflows/prepare_perf_changelog_merge.py`](../infx/workflows/prepare_perf_changelog_merge.py) |
+| 受支持的复用合并与冲突准备 | [`infx/workflows/merge_with_reuse.py`](../infx/workflows/merge_with_reuse.py)、[`infx/workflows/prepare_perf_changelog_merge.py`](../infx/workflows/prepare_perf_changelog_merge.py) |
 | 预发布请求与回调 | [`infx/workflows/stage_results.py`](../infx/workflows/stage_results.py)、[`.github/workflows/stage-results.yml`](../.github/workflows/stage-results.yml)、[`.github/workflows/stage-results-callback.yml`](../.github/workflows/stage-results-callback.yml) |
 | 复用 Agentic 入库的重新派发 | [`.github/workflows/recover-reused-ingest.yml`](../.github/workflows/recover-reused-ingest.yml) |
 | 合并后责任提醒 | [`.github/workflows/pr-recipe-reminder.yml`](../.github/workflows/pr-recipe-reminder.yml) |
@@ -255,7 +255,7 @@ B200 Kimi 配方采用 DCP8，且关闭 Mooncake Offload。Master Config 记录 
 Canary 和 Fail-fast 解决不同问题：
 
 1. 只有使用 `full-sweep-enabled` 或 `full-sweep-fail-fast` 的 PR 才创建 Canary。No-canary 标签和 `sweep-enabled` 会跳过它。
-2. Canary 选择会检查单节点固定序列 `1k1k` 和 `8k1k` 条目，排除主要用途为 Eval 的条目，并选取最低并发候选。该条目随后会从单节点矩阵移除。
+2. Canary 首先检查单节点固定序列 `1k1k`、`8k1k` 和单节点 AgentX 条目；若没有合格条目，再检查多节点 AgentX 条目。它排除 Eval 条目，选取最低并发候选，使用对应的单节点或多节点工作流运行，并从后续矩阵移除该条目。
 3. 如果没有合格候选，Canary 会被跳过。否则所有 Benchmark/Eval 矩阵都要求 Canary 成功；Canary 失败会阻止其扇出。
 4. `full-sweep-fail-fast` 与 `full-sweep-fail-fast-no-canary` 会分别为每个矩阵 Job Family 设置 `strategy.fail-fast: true`。首个失败点会取消同一矩阵 Family 中排队或运行中的兄弟项；它不是跨所有独立 Family 的全局 Kill Switch。
 5. 非 Fail-fast 标签会保持矩阵 Fail-fast 为 false，使其他点继续运行并保留更广泛的诊断覆盖。
@@ -322,11 +322,7 @@ gh run rerun <RUN_ID> --repo SemiAnalysisAI/InferenceX
 CPU 索引获取 PyTorch 包，其他依赖从 PyPI 获取，因为 CPU 索引中的这些依赖
 镜像缺少上传时间戳。该 Job 确认安装的 Wheel 不包含 CUDA 或 ROCm 后端。
 
-审阅 Workflow 共用 [`.github/mcp-ci.json`](../.github/mcp-ci.json)，
-通过 uv 和原有依赖文件启动 Python MCP Server。Server 使用 MCP 1.x API；
-依赖文件排除不兼容的 SDK 2.x，CI 在不克隆仓库的情况下验证 Server 构造与发现功能。
-Checkout Ref、凭据和审阅
-策略保持不变。矩阵和 CollectiveX 单元测试现在也会在草稿 PR 上运行，
+矩阵和 CollectiveX 单元测试现在也会在草稿 PR 上运行，
 以便在请求审阅前验证 CI 环境变更。
 
 仅依赖标准库的辅助程序继续使用 Runner 自带的 Python。基准容器及其框架
@@ -387,7 +383,7 @@ Klaud 和恢复工具继续使用现有的 `gh` 认证。GitHub CLI 跟随分页
 
 ### 资格与授权
 
-`infx.github` 提供仓库范围的 REST 调用、分页及评论表态基础操作，不包含扫描策略。`infx.workflows.sweep_runs` 为暂存和复用共享 PR 提交查询、已完成 Run 列表及未过期结果工件查找；各调用方保留自身的资格规则。`infx.workflows.reuse` 负责命令解析、授权查找及源 Run 的选择和验证。`infx.workflows.reuse_comment` 使用相同规则提供表态反馈。工作流通过 `python3 -m` 调用这些模块；现有 `utils/find_reusable_sweep_run.py` 命令和导入路径保持兼容。这些辅助程序使用 Python 标准库和 GitHub CLI；从检出目录运行时无需安装 Python 包。
+`infx.github` 提供仓库范围的 REST 调用、分页及评论表态基础操作，不包含扫描策略。`infx.workflows.sweep_runs` 为暂存和复用共享 PR 提交查询、已完成 Run 列表及未过期结果工件查找；各调用方保留自身的资格规则。`infx.workflows.reuse` 负责命令解析、授权查找及源 Run 的选择和验证。`infx.workflows.reuse_comment` 使用相同规则提供表态反馈。工作流通过 `python3 -m` 调用这些模块。这些辅助程序使用 Python 标准库和 GitHub CLI；从检出目录运行时无需安装 Python 包。
 
 1. 复用不要求扫描标签。标签用于选择新的 GPU 工作；移除主标签不会使已有源 Run 失效。Changelog 验证和合并辅助脚本仍会拒绝冲突的主标签。
 2. `evals-only` 与 `agentx-fast` 会令 Run 不可复用。默认完整扫描以及带 `all-evals` 的完整扫描仍可复用。
@@ -405,13 +401,13 @@ Klaud 和恢复工具继续使用现有的 `gh` 认证。GitHub CLI 跟随分页
 
 ### 受支持的合并路径
 
-在具有已认证 `gh`、`git`、`jq` 和 Python 的干净 Checkout 中运行：
+在设置了 `GH_TOKEN` 或 `GITHUB_TOKEN`（或 `gh` 已认证）的干净 Checkout 中运行：
 
 ```bash
-utils/merge_with_reuse.sh <pr-number>
+uv run --extra workflows python -m infx.workflows.merge_with_reuse <pr-number>
 ```
 
-[`merge_with_reuse.sh`](../utils/merge_with_reuse.sh) 会验证合格的成功源产物、发布固定到该 Run 的授权、把 `origin/main` 合并进 PR Branch、只解决 `perf-changelog.yaml` 冲突、规范化追加条目中的 `XXX` Link、按需创建并推送 Synchronization Commit、等待 `check-changelog` 和全部 PR Check、再次确认 Head 未移动，最后执行 Admin Squash Merge。它会拒绝 Fork、脏 Working Tree、多个主标签、不兼容修饰标签、意外冲突、缺少产物、失败 Check 或移动过的 PR Head。
+[`merge_with_reuse.py`](../infx/workflows/merge_with_reuse.py) 会验证合格的成功源产物、发布固定到该 Run 的授权、把 `origin/main` 合并进 PR Branch、只解决 `perf-changelog.yaml` 冲突、规范化追加条目中的 `XXX` Link、按需创建并推送 Synchronization Commit、等待 `check-changelog` 和全部 PR Check、再次确认 Head 未移动，最后执行 Admin Squash Merge。它会拒绝 Fork、脏 Working Tree、多个主标签、不兼容修饰标签、意外冲突、缺少产物、失败 Check 或移动过的 PR Head。
 
 不要只手工复制该序列的一半。尤其是，只发表评论后直接 Squash Merge、却不执行 Synchronization/Check 阶段，可能导致 Merge Run 无法选择预期源 Run。
 
@@ -457,7 +453,7 @@ uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with p
   --head-ref HEAD
 ```
 
-复用已获授权时，优先使用 [`utils/merge_with_reuse.sh`](../utils/merge_with_reuse.sh)；它会一次完成冲突准备以及所需的 Synchronization/Check 序列。
+复用已获授权时，优先使用 [`uv run --extra workflows python -m infx.workflows.merge_with_reuse`](../infx/workflows/merge_with_reuse.py)；它会一次完成冲突准备以及所需的 Synchronization/Check 序列。
 
 ## 产物下载与解析
 
@@ -498,7 +494,7 @@ gh run download "$RUN_ID" --repo "$REPO" -n changelog-metadata -D "$OUT/changelo
 
 ### 解析有限字段
 
-吞吐量聚合字段来自 [`utils/process_result.py`](../utils/process_result.py)：
+吞吐量聚合字段来自 [`infx/results/fixed_sequence.py`](../infx/results/fixed_sequence.py)：
 
 ```bash
 jq -r '

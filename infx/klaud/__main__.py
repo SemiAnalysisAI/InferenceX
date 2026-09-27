@@ -510,7 +510,7 @@ def save_diagnostics(
         diagnostics["outcome-report"] = "unavailable-or-invalid"
     else:
         diagnostics["outcome-report"] = "available"
-    diagnostics["candidate-outcome"] = outcome.model_dump(by_alias=True)
+    diagnostics["candidate-outcome"] = outcome.model_dump(by_alias=True, exclude_unset=True)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(diagnostics, indent=2) + "\n")
     if filename := os.environ.get("GITHUB_STEP_SUMMARY"):
@@ -525,18 +525,19 @@ def save_diagnostics(
         repairs = (
             str(outcome.repairs_used) if outcome.repairs_used is not None else "unknown / 未知"
         )
+        reason = outcome.reason_code or "—"
         with open(filename, "a") as summary:
             summary.write(
-                "| Outcome / 结果 | Phase / 阶段 | PR | Repairs / 修复 | Runs / 运行 |\n"
-                "| --- | --- | --- | --- | --- |\n"
-                f"| {outcome.outcome} | {outcome.phase} | {pr} | {repairs} | {runs} |\n"
+                "| Outcome / 结果 | Phase / 阶段 | Reason / 原因 | PR | Repairs / 修复 | Runs / 运行 |\n"
+                "| --- | --- | --- | --- | --- | --- |\n"
+                f"| {outcome.outcome} | {outcome.phase} | {reason} | {pr} | {repairs} | {runs} |\n"
             )
     return outcome.outcome != "unexpected-error"
 
 
 def select(directory: Path, max_candidates: int, execution_file: Path | None = None) -> None:
     from . import claims
-    from .reporting import Prose, resolve_baseline
+    from .reporting import BaselinePreflight, Prose, resolve_baseline
 
     contexts = json.loads((directory / "candidates.json").read_text())
     review = PRReview(decisions=[])
@@ -572,6 +573,7 @@ def select(directory: Path, max_candidates: int, execution_file: Path | None = N
             deferred = "capacity-unavailable"
     capacity_deferred = []
     baseline_deferred = []
+    preflights = {}
     families = {decision.family for decision in review.decisions if decision.decision != "proceed"}
     for candidate in contexts:
         decision = decisions.get(candidate["id"])
@@ -584,7 +586,7 @@ def select(directory: Path, max_candidates: int, execution_file: Path | None = N
             {key: candidate[key] for key in ("id", "family", "base")}
         )
         try:
-            resolve_baseline(
+            baseline = resolve_baseline(
                 os.environ["GITHUB_REPOSITORY"],
                 owned,
                 candidate,
@@ -593,6 +595,13 @@ def select(directory: Path, max_candidates: int, execution_file: Path | None = N
                     en="Verify the complete published baseline before candidate dispatch.",
                     zh="在调度候选任务前验证完整的已发布基线。",
                 ),
+            )
+            preflight = BaselinePreflight(
+                candidate_id=candidate["id"],
+                base=candidate["base"],
+                baseline_model=decision.baseline_model,
+                source_identity=identity(candidate["source"]),
+                baseline=baseline,
             )
         except VerificationError:
             baseline_deferred.append(candidate["id"])
@@ -610,9 +619,11 @@ def select(directory: Path, max_candidates: int, execution_file: Path | None = N
             {
                 **candidate,
                 "baseline-model": decision.baseline_model,
+                "baseline-preflight-required": True,
                 "pr-review": decision.model_dump(by_alias=True),
             }
         )
+        preflights[candidate["id"]] = preflight
         families.add(decision.family)
         if len(selected) >= max_candidates:
             break
@@ -621,6 +632,9 @@ def select(directory: Path, max_candidates: int, execution_file: Path | None = N
         target.mkdir(parents=True, exist_ok=True)
         (target / "candidate.json").write_text(
             json.dumps(candidate, indent=2, allow_nan=False) + "\n"
+        )
+        (target / "baseline-preflight.json").write_text(
+            preflights[candidate["id"]].model_dump_json(by_alias=True) + "\n"
         )
     ownership = Ownership(
         run_id=int(os.environ["GITHUB_RUN_ID"]),
@@ -848,9 +862,15 @@ def main() -> int:
             from .lifecycle import current_session
 
             outcome = CandidateOutcome.model_validate_json(args.outcome_file.read_text())
+            if (
+                outcome.outcome == "failed"
+                and outcome.phase == "baseline"
+                and not outcome.reason_code
+            ):
+                raise VerificationError("Baseline failure requires a fixed reason-code")
             outcome = current_session().finish(outcome)
             (Path(os.environ["KLAUD_EVIDENCE"]) / "outcome.json").write_text(
-                outcome.model_dump_json(by_alias=True) + "\n"
+                outcome.model_dump_json(by_alias=True, exclude_unset=True) + "\n"
             )
             return 0
         if args.command == "outcome-schema":

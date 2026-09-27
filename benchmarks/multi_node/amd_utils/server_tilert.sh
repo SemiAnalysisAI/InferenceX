@@ -38,7 +38,7 @@ export TILERT_ROLE
 
 source "$WS_PATH/setup_deps.sh"
 source "$WS_PATH/env.sh"
-# benchmark_lib.sh derives AGENTIC_DIR/AIPERF_DIR from this at source time, so
+# benchmark_lib.sh derives AIPERF_DIR from this at source time, so
 # it must be set before the library is loaded, not in run_agentic_replay. The
 # AgentX replay runs in this container, where the repo is mounted at /workspace.
 export INFMAX_CONTAINER_WORKSPACE=/workspace
@@ -241,7 +241,7 @@ start_decode() {
     local extra=( ${TILERT_DECODE_EXTRA_FLAGS} )
     if [[ "$SPEC_DECODING" == "mtp" && "$EVAL_ONLY" != "true" && "$RUN_EVAL" != "true" ]]; then
         check_env_vars MODEL_PREFIX THINKING_MODE
-        local curve="${WS_PATH%/benchmarks/*}/golden_al_distribution/${MODEL_PREFIX}_mtp.yaml"
+        local curve="${WS_PATH%/benchmarks/*}/infx/golden_al_distribution/${MODEL_PREFIX}_mtp.yaml"
         TILERT_SIMULATE_ACC_LEN="$("$PY" - "$curve" "$THINKING_MODE" "$DECODE_MTP_SIZE" <<'PYEOF'
 import sys, yaml
 path, thinking, tokens = sys.argv[1], sys.argv[2], int(sys.argv[3])

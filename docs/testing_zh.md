@@ -31,9 +31,9 @@
 
 ## 测试层级
 
-[`CI`](../.github/workflows/ci.yml) 在 PR（包括 fork）或向 `main` 的推送修改 Python 文件、`.github/scripts/` 辅助脚本、`ci.yml`、`pyproject.toml`、`uv.lock`、`.python-version`、MCP 配置、Ruff 配置或 `pytest.ini` 时，并行运行 **Lint** 和 **Tests**。[`Workflow security`](../.github/workflows/zizmor.yml) 在工作流、action 定义、Dependabot、pre-commit 或 zizmor 配置变更时运行 **Zizmor**。仅修改 Python 文件不会触发 Zizmor；仅修改其他工作流不会触发 Lint 或 Tests。修改 `ci.yml` 会触发全部三项任务。两个工作流均可手动分发。仅修改其他文档、Shell 脚本或基准测试 YAML 不会触发这两个工作流；请在本地执行相应检查，或手动分发。
+[`CI`](../.github/workflows/ci.yml) 在 PR（包括 fork）或向 `main` 的推送修改 Python 文件、`.github/scripts/` 辅助脚本、`ci.yml`、`pyproject.toml`、`uv.lock`、`.python-version`、Ruff 配置或 `pytest.ini` 时，并行运行 **Lint** 和 **Tests**。[`Workflow security`](../.github/workflows/zizmor.yml) 在工作流、action 定义、Dependabot、pre-commit 或 zizmor 配置变更时运行 **Zizmor**。仅修改 Python 文件不会触发 Zizmor；仅修改其他工作流不会触发 Lint 或 Tests。修改 `ci.yml` 会触发全部三项任务。两个工作流均可手动分发。仅修改其他文档、Shell 脚本或基准测试 YAML 不会触发这两个工作流；请在本地执行相应检查，或手动分发。
 
-Tests 使用四个 pytest worker 运行 `utils/`、`runners/` 和 `experimental/CollectiveX/tests/` 下的全部测试，并检查 MCP 兼容性。这些目录中的新增测试会自动发现。CI 通过 `uv sync --locked --all-extras --group test --no-editable` 将 `infx` 安装为 wheel，使用 Python 3.12 和仅支持 CPU 的 PyTorch。一项任务失败不会取消另一项；PR 更新会取消旧提交的 CI。尚未创建 PR 的分支推送不再单独触发变更日志测试。
+Tests 使用四个 pytest worker 运行 `utils/`、`runners/` 和 `experimental/CollectiveX/tests/` 下的全部测试。这些目录中的新增测试会自动发现。CI 通过 `uv sync --locked --all-extras --group test --no-editable` 将 `infx` 安装为 wheel，使用 Python 3.12 和仅支持 CPU 的 PyTorch。一项任务失败不会取消另一项；PR 更新会取消旧提交的 CI。尚未创建 PR 的分支推送不再单独触发变更日志测试。
 
 | 层级 | 能够证明 | 不能证明 |
 | --- | --- | --- |
@@ -65,13 +65,13 @@ Tests 使用四个 pytest worker 运行 `utils/`、`runners/` 和 `experimental/
 
 ### Python 环境
 
-[`pyproject.toml`](../pyproject.toml) 定义 `infx` 包及其依赖；[`uv.lock`](../uv.lock) 记录解析后的版本。运行 `uv sync --locked` 安装核心工具，然后用 `uv run --locked python -m infx.matrix.generate ...` 调用现有模块命令。CODEOWNER/GitHub 集成使用 `--extra workflows`，评测摘要和数据库比较使用 `--extra results`，仓库 MCP 服务使用 `--group mcp`。`test` 依赖组包含 MCP 和 CPU 测试所需依赖。
+[`pyproject.toml`](../pyproject.toml) 定义 `infx` 包及其依赖；[`uv.lock`](../uv.lock) 记录解析后的版本。运行 `uv sync --locked` 安装核心工具，然后用 `uv run --locked python -m infx.matrix.generate ...` 调用现有模块命令。CODEOWNER/GitHub 集成使用 `--extra workflows`，评测摘要和数据库比较使用 `--extra results`。`test` 依赖组包含 CPU 测试所需依赖。
 
 开发时 uv 以 editable 模式安装包，源码修改立即生效。CI 安装普通 wheel，但主 pytest 套件导入源码 checkout。独立的安装包测试创建仅含核心或 results 依赖的独立环境，并在源码 checkout 之外运行，检查配方节点数、运行器元数据、矩阵拒绝、包内阈值加载、分数验证、BFCL 许可证归属记录，以及生成的评测结果行与摘要。依赖仓库文件的命令在 editable 安装时使用源码仓库；使用 wheel 时，应从仓库根目录运行。评测 YAML/JSON 资源及 Apache 许可证随包分发。
 
 核心依赖使用 `uv add` 添加，集成依赖使用 `uv add --optional <extra>`，测试工具使用 `uv add --group test`。同时提交 manifest 和 lockfile。`uv lock --upgrade-package <name>` 更新指定依赖；解析时按 `pyproject.toml` 执行 12 小时发布冷却期。Ruff 和 Zizmor 不加入 lockfile，CI 继续使用满足冷却期的最新版本。基准测试镜像、供应商评测环境和测量历史 checkout 的命令保留原有依赖安装方式。
 
-依赖限制在当前支持的最新主版本内；次版本和补丁更新记录在 `uv.lock` 中，并通过 CI 验证。对尚未达到 1.0 的包，次版本升级也需审查。MCP 保持在 1.x，因为 2.x 替换了当前服务使用的装饰器式处理器 API。新版本发布不会自动改变已锁定的环境。
+依赖限制在当前支持的最新主版本内；次版本和补丁更新记录在 `uv.lock` 中，并通过 CI 验证。对尚未达到 1.0 的包，次版本升级也需审查。新版本发布不会自动改变已锁定的环境。
 
 结果收集、结果比较和运行统计使用当前 `main` 中的 `infx`，在 sweep setup 时解析一次提交，并在这些 job 间共享。Klaud 同样只解析一次 `main`，将该提交传给所有候选任务；候选任务的 hook 使用独立的工具 checkout，避免配方编辑替换导入的包。Sign-off 也检出当前受信任的 `main`。这些工具不固定到发布版本，仓库提交不受依赖发布冷却期限制。PR CI 测试 PR 自身的包；矩阵生成、基准测试脚本和配方仍使用所选 checkout。Sweep 摘要显示解析后的 setup 和工具提交；复用基准测试时还显示源 head。E2E 基准测试和评测 job 使用与矩阵生成相同的已解析 SHA，即使请求的分支在任务排队时发生移动也不受影响。Klaud 摘要显示作为候选任务基础的工具提交。
 
@@ -144,13 +144,13 @@ uv run --locked \
 
 | 变更 | 聚焦命令 |
 | --- | --- |
-| 矩阵模式或生成 | `python -m pytest utils/matrix_logic/ -v` |
-| Changelog 内容或 PR 门禁 | `python -m pytest utils/test_process_changelog.py utils/changelog_gate_tests/ -v` |
-| 结果处理与拓扑 | `python -m pytest utils/test_process_result.py utils/agentic/aggregation/test_process_agentic_result.py utils/test_aggregate_power.py utils/test_calc_success_rate.py -v` |
-| AgentX 聚合与工件加载 | `python -m pytest utils/agentic/aggregation/ -v` |
-| 评测分发、批处理或补丁 | `python -m pytest utils/evals/ -v` |
-| 评测收集 | `python -m pytest utils/test_collect_eval_results.py -v` |
-| 扫描复用或可复用制品 | `python -m pytest utils/test_github.py utils/test_find_reusable_sweep_run.py utils/test_acknowledge_sweep_reuse.py utils/test_validate_reusable_sweep_artifacts.py -v` |
+| 矩阵模式或生成 | `python -m pytest infx/tests/matrix/ -v` |
+| Changelog 内容或 PR 门禁 | `python -m pytest infx/tests/matrix/test_process_changelog.py infx/tests/workflows/test_validate_perf_changelog.py infx/tests/workflows/test_prepare_perf_changelog_merge.py -v` |
+| 结果处理与拓扑 | `python -m pytest infx/tests/results/power/test_process_result.py infx/tests/results/agentic/test_process_agentic_result.py infx/tests/results/power/test_aggregate_power.py infx/tests/workflows/test_calc_success_rate.py -v` |
+| AgentX 聚合与工件加载 | `python -m pytest infx/tests/results/agentic/ -v` |
+| 评测分发、批处理或补丁 | `python -m pytest infx/tests/evals/ -v` |
+| 评测收集 | `python -m pytest infx/tests/results/test_collect_eval_results.py -v` |
+| 扫描复用或可复用制品 | `python -m pytest infx/tests/test_github.py infx/tests/workflows/test_find_reusable_sweep_run.py infx/tests/workflows/test_acknowledge_sweep_reuse.py infx/tests/workflows/test_validate_reusable_sweep_artifacts.py -v` |
 
 若编辑了 changelog，还要使用真实 base 和 head ref 运行 setup 所用的同一矩阵兼容性验证器：
 
@@ -167,13 +167,13 @@ python3 -m infx.workflows.validate_perf_changelog \
 
 ### 并行运行完整本地测试套件
 
-现有 Python 测试套件也覆盖工作流契约。`utils/matrix_logic/test_validation.py` 测试工作流输入模式，并使用受控的生成器输出执行两个准备脚本。非法数据行必须在发布作业输出前失败；合法数据行必须保持不变，包括手动分派测量旧 checkout 的情况。`utils/test_process_result.py` 通过记录环境的启动器执行实际启动步骤，覆盖当前和旧版 checkout。这些测试不模拟 GitHub 表达式引擎，也不证明 GPU 性能；表达式修改需结合工作流验证和适用的 smoke 证据进行审查。
+现有 Python 测试套件也覆盖工作流契约。`infx/tests/matrix/test_validation.py` 测试工作流输入模式，并使用受控的生成器输出执行两个准备脚本。非法数据行必须在发布作业输出前失败；合法数据行必须保持不变，包括手动分派测量旧 checkout 的情况。`infx/tests/results/power/test_process_result.py` 通过记录环境的启动器执行实际启动步骤，覆盖当前和旧版 checkout。这些测试不模拟 GitHub 表达式引擎，也不证明 GPU 性能；表达式修改需结合工作流验证和适用的 smoke 证据进行审查。
 
 使用与 CI 相同的锁定环境和四个 worker 运行测试套件：
 
 ```bash
 uv run --locked --all-extras --group test --no-editable \
-  python -m pytest utils/ runners/ experimental/CollectiveX/tests/ -n 4
+  python -m pytest infx/tests/ utils/ runners/ experimental/CollectiveX/tests/ -n 4
 ```
 
 串行调试时使用 `-n 0`。测试必须隔离临时文件和端口，并确保各 worker 收集到的参数化用例一致。
@@ -199,7 +199,7 @@ uv run --locked --all-extras --group test --no-editable \
 
 吞吐与评测是独立任务。默认扫描对选中的 8k1k 子集进行评测；`all-evals` 扩大评测选择，`evals-only` 抑制吞吐。根据变更范围选择修饰标签，但不要用仅评测或预检运行替代所需的全量扫描。
 
-评测完成不能只看绿色任务。保留并检查 `meta_env.json`、`results*.json` 文件、分数验证输出、推理镜像和聚合评测制品。[`utils/evals/EVALS.md`](../utils/evals/EVALS.md) 负责任务与制品行为。[`validate_scores.py`](../infx/evals/validate_scores.py) 会拒绝缺失结果文件、低于阈值的分数和没有任何已检查指标的运行；当存在预期并发元数据时，它还会拒绝无效、不完整或失败的批次。工作流调用时没有传入 `--expected-concs`，因此评审者必须独立验证单并发制品中的 `meta_env.json`。
+评测完成不能只看绿色任务。保留并检查 `meta_env.json`、`results*.json` 文件、分数验证输出、推理镜像和聚合评测制品。[`infx/evals/EVALS.md`](../infx/evals/EVALS.md) 负责任务与制品行为。[`validate_scores.py`](../infx/evals/validate_scores.py) 会拒绝缺失结果文件、低于阈值的分数和没有任何已检查指标的运行；当存在预期并发元数据时，它还会拒绝无效、不完整或失败的批次。单节点工作流调用时没有传入 `--expected-concs`，因此评审者必须独立验证单并发制品中的 `meta_env.json`。
 
 ## 证据标准
 

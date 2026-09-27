@@ -9,16 +9,18 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 import re
 import zlib
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Literal, Self
 
 from pydantic import AfterValidator, Field, field_validator, model_validator
 
 from . import github
 from .github import VerificationError
-from .models import Contract, identity
+from .models import Contract, identity, normalized_image
 
 if TYPE_CHECKING:
     from infx.klaud.lifecycle import Session
@@ -112,6 +114,14 @@ class Baseline(Contract):
         unique_points(self.points)
         unique_evals(self.evals)
         return self
+
+
+class BaselinePreflight(Contract):
+    candidate_id: str = Field(pattern=r"^[0-9a-f]{16}-[0-9a-f]{16}$")
+    base: SHA
+    baseline_model: str = Field(min_length=1)
+    source_identity: str = Field(pattern=r"^[0-9a-f]{64}$")
+    baseline: Baseline
 
 
 class Attempt(Contract):
@@ -988,6 +998,27 @@ def resolve_baseline(
 
 def prepare_baseline(session: Session, context: dict, model: str, goal: Prose) -> Baseline:
     """Resolve a baseline for the current owned session."""
+    evidence = Path(os.environ["KLAUD_EVIDENCE"])
+    preflight_file = evidence / "baseline-preflight.json"
+    if preflight_file.exists():
+        try:
+            preflight = BaselinePreflight.model_validate_json(preflight_file.read_text())
+        except (OSError, ValueError):
+            raise VerificationError("Baseline preflight is unavailable or invalid") from None
+        if (
+            preflight.candidate_id != session.candidate.id
+            or preflight.base != session.candidate.base
+            or preflight.baseline_model != model
+            or preflight.source_identity != identity(context["source"])
+            or preflight.baseline.family != session.candidate.family
+            or preflight.baseline.date != context["source"]["date"]
+            or normalized_image(preflight.baseline.image)
+            != normalized_image(context["source"]["image"])
+        ):
+            raise VerificationError("Baseline preflight does not match this candidate")
+        return preflight.baseline.model_copy(update={"goal": goal})
+    if context.get("baseline-preflight-required") is True:
+        raise VerificationError("Required baseline preflight artifact is missing")
     return resolve_baseline(
         session.repository,
         session.candidate,

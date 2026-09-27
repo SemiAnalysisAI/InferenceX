@@ -25,7 +25,7 @@ PR 检查使用 `claude-opus-5`（Opus 5），关闭 fast mode（`fastMode: fals
 
 私有容量门槛是 **节点利用率严格低于 80%**：`(summary.allocatedNodes + summary.mixedNodes) * 5 < summary.totalNodes * 4`，不做舍入。完全分配和部分使用的节点均计入已使用节点；恰好 80% 时不放行。不扣除预留节点。要求至少有一个空闲节点，避免整个集群不可用时仍以 0% 利用率通过检查。缺失、无效、不一致、过期或不可用的数据均拒绝。硬件匹配只用于初筛；检查阶段必须解析每个实际目标，选择阶段重新检查这些精确 ID。符合条件的作业可以先排队，由调度器等待完整物理节点需求能够满足后再启动。兼容性按实际读取的字段判断，不依赖 `schemaVersion`；新增字段或版本变化不会排除其他方面均有效的集群。
 
-`klaud-plan` 产物仅显式包含 `candidates.json`、`open-prs.json`、`selection.json`、`review-diagnostics.json` 及每个所选候选的 `candidate.json`。本地 `capacity.json` 为检查阶段提供遥测 ID 和资格线索，**绝不上传**；任意临时文件也不会上传。每份交接文件包含已发布基线观测、已验证的 `baseline-model`、分支、基准 SHA、公开 benchmark 查询 URL 和通过校验的 `pr-review`，不包含私有节点计数或原始遥测。所选候选并行运行，各自获得独立 Klaud Cold 会话。一个候选失败不会取消其他候选。不再复制模型/runner 目录，也不保留 `recipes.py`；agent 使用现有 InferenceX 配置和工具理解实际 recipe 及上游镜像。
+`klaud-plan` 产物仅显式包含 `candidates.json`、`open-prs.json`、`selection.json`、`review-diagnostics.json` 及每个所选候选的 `candidate.json` 和 `baseline-preflight.json`。本地 `capacity.json` 为检查阶段提供遥测 ID 和资格线索，**绝不上传**；任意临时文件也不会上传。每份交接文件包含已发布基线观测、已验证的 `baseline-model`、分支、基准 SHA、公开 benchmark 查询 URL 和通过校验的 `pr-review`，不包含私有节点计数或原始遥测。所选候选并行运行，各自获得独立 Klaud Cold 会话。一个候选失败不会取消其他候选。不再复制模型/runner 目录，也不保留 `recipes.py`；agent 使用现有 InferenceX 配置和工具理解实际 recipe 及上游镜像。
 
 ## Klaud Cold 负责执行
 
@@ -57,13 +57,13 @@ Klaud Cold 调度 `e2e-tests.yml` 时显式设置布尔输入 `klaud-run: true`�
 
 ### 已发布基线与会话完成
 
-基线来自 **`https://inferencex.semianalysis.com` 的公开 dashboard API**。规划阶段先解析 OpenAPI 展示模型名，并在启动 agent 前预检完整测试点清单。候选使用 `candidate.json` 中这一精确值，将 `candidate.source.date` 传给 `workflow-info` 和 `benchmarks`，设置 `date` 和 `exact=true`，不使用计算器 `view`。预检只判断资格；候选解析精确的新旧镜像目标后，仍须冻结并发布自己的基线。核实旧镜像以及完整的模型、硬件、框架、精度、推测解码和工作负载身份，再逐点匹配拓扑、并发量及数据集。记录 API 查询、发布日期和每个测试点的来源 `run_url`/SHA，区分逻辑曲线快照与实际数据来源。按需读取已发布 eval，所有尝试共用这份固定基线。缺失或不可比较的数据填写 `N/A` 并说明原因。绝不调度或重跑旧镜像基线。
+基线来自 **`https://inferencex.semianalysis.com` 的公开 dashboard API**。规划阶段先解析 OpenAPI 展示模型名，并在启动 agent 前预检完整测试点清单。候选使用 `candidate.json` 中这一精确值，将 `candidate.source.date` 传给 `workflow-info` 和 `benchmarks`，设置 `date` 和 `exact=true`，不使用计算器 `view`。规划阶段将已验证的 benchmark 测试点清单写入 `baseline-preflight.json`，并绑定候选 ID、基准 SHA、来源观测和展示模型。候选解析精确的新旧镜像目标后，`prepare-baseline` 核对这些绑定并复用同一清单，不再重复读取 benchmark API；标记 `baseline-preflight-required` 的所选候选在产物缺失或无效时停止；仅旧候选按原路径重建。候选仍须补充公开 eval／数据集证据，并冻结、发布最终基线。核实旧镜像以及完整的模型、硬件、框架、精度、推测解码和工作负载身份，再逐点匹配拓扑、并发量及数据集。记录 API 查询、发布日期和每个测试点的来源 `run_url`/SHA，区分逻辑曲线快照与实际数据来源。按需读取已发布 eval，所有尝试共用这份固定基线。缺失或不可比较的数据填写 `N/A` 并说明原因。绝不调度或重跑旧镜像基线。
 
 调度运行或创建草稿不代表任务完成。使用 `gh run watch --interval 60` 留在同一会话中等待，工具超时后继续等待，并检查作业级状态，因为 queued 工作流可能包含正在运行的作业。benchmark 矩阵失败后，eval 作业仍可能继续。定位首个服务端错误而非清理阶段症状；在原有范围、预算和容量规则内修复。工具调用被拒绝时改用允许的工具或命令，不得提前报告成功。先将所有尝试的最终结果写入 PR 尝试评论，再报告停止原因、修复次数、已确认的子运行结束状态和 PR URL。不得承诺稍后继续监控，也不得仅为结束会话而取消正常运行。
 
 [Stop hook](https://code.claude.com/docs/en/hooks#stop) 通过 `check-stop` 检查 `$KLAUD_EVIDENCE/outcome.json`。结束前，将请求的 `CandidateOutcome` JSON 写入单独文件，运行 `uv run --no-project --exclude-newer PT12H --python 3.12 --with "pydantic>=2.10,<3" --with pyyaml python -m infx.klaud finish --outcome-file "$KLAUD_EVIDENCE/requested-outcome.json"`，然后仅调用一次 `StructuredOutput`，传入已验证的 `outcome.json` 对象，不附加说明文字，也不将其编码为字符串。诊断优先使用该验证文件；仅在文件不可用或无效时，才回退到 action 的重复结构化输出。命令从父运行原始创建时间起发现所有自有定向和最终运行，包括旧 head、已关闭或移除标签的 PR。先发布失败或延后报告，再取消运行；全部结束后才移除 sweep 标签、退回草稿、关闭 PR，并为所有失败结果删除未移动的精确 head 分支。完成记录包含实际运行 ID 和清理状态。取消或 PR 状态转换事件的作业仍在进行时，等待后重试 `finish`。维护者接管优先于清理；不覆盖其他所有者、fork、已移动的 head、已合并 PR 或不明确的状态。没有所属 PR 时不删除无法验证归属的分支。hook 仅做验证，不修改状态，也不能突破 Claude 内置的停止循环上限。
 
-每次 agent 步骤结束后，无论 action 结果如何，`recover-current` 都执行一次受信任的非阻塞收尾。没有 PR/run 的会话会立即释放；健康子运行保留给后续恢复；已结束工作则完成清理或验证。随后诊断优先使用经 GitHub 验证的生命周期记录。固定错误码区分会话状态不可用、记录无效、结构化输出无效和生命周期验证失败。无法验证时，先上传脱敏产物，再让候选作业失败。仅记录固定结果类别、数字 ID/指标及 head/attempt，不包含原始执行消息、命令、凭据或私有响应。
+每次 agent 步骤结束后，无论 action 结果如何，`recover-current` 都执行一次受信任的非阻塞收尾。没有 PR/run 的会话会立即释放；健康子运行保留给后续恢复；已结束工作则完成清理或验证。随后诊断优先使用经 GitHub 验证的生命周期记录。固定错误码区分会话状态不可用、记录无效、结构化输出无效和生命周期验证失败。无法验证时，先上传脱敏产物，再让候选作业失败。基线阶段的失败结果必须附带固定 `reason-code`，标明首个经核实的阻碍：预检绑定、来源溯源、测试点身份、eval 证据、公开 API 或其他。经验证的完成记录、脱敏候选产物、作业摘要和 PR 完成评论保留该代码；没有代码的历史记录仍可读取。仅记录固定结果类别、数字 ID/指标及 head/attempt，不包含原始执行消息、命令、凭据或私有响应。
 
 `run-sweep.yml` 上传包含完整矩阵、精确 head 和 run ID/attempt 的 `klaud-sweep-manifest`。`check-final` 与最终验证均使用受信任代码，从精确 head 的 YAML 独立生成未过滤配置族。覆盖等价的 scenario filter 可以通过，缺失或改变的配置点与默认 eval 不能通过。验证器选择当前 attempt 的 manifest，以及同一 run/head 下每个名称最新的产物。仅当对应配置生产作业没有重跑时，才保留之前的 aggregate；全部覆盖及原始结果/汇总一致性仍须通过。不同 archive 不叠加解压。缺失、过期产物及生成器策略变化需要检查；无 manifest 的旧运行不能自动认证。
 

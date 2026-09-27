@@ -31,9 +31,9 @@ These sources outrank this guide when behavior changes. Update the English page 
 
 ## Testing layers
 
-[`CI`](../.github/workflows/ci.yml) runs **Lint** and **Tests** in parallel for PRs (including forks) and pushes to `main` that change Python files, `.github/scripts/` helpers, `ci.yml`, `pyproject.toml`, `uv.lock`, `.python-version`, MCP configuration, Ruff configuration, or `pytest.ini`. [`Workflow security`](../.github/workflows/zizmor.yml) runs **Zizmor** for changes to workflows, action definitions, Dependabot, pre-commit, or zizmor configuration. Python-only changes do not trigger Zizmor; other workflow-only changes do not trigger Lint or Tests. Editing `ci.yml` triggers all three jobs. Each workflow can be dispatched manually. Changes only to other docs, shell scripts, or benchmark YAML do not trigger either workflow; run the applicable checks locally or dispatch them manually.
+[`CI`](../.github/workflows/ci.yml) runs **Lint** and **Tests** in parallel for PRs (including forks) and pushes to `main` that change Python files, `.github/scripts/` helpers, `ci.yml`, `pyproject.toml`, `uv.lock`, `.python-version`, Ruff configuration, or `pytest.ini`. [`Workflow security`](../.github/workflows/zizmor.yml) runs **Zizmor** for changes to workflows, action definitions, Dependabot, pre-commit, or zizmor configuration. Python-only changes do not trigger Zizmor; other workflow-only changes do not trigger Lint or Tests. Editing `ci.yml` triggers all three jobs. Each workflow can be dispatched manually. Changes only to other docs, shell scripts, or benchmark YAML do not trigger either workflow; run the applicable checks locally or dispatch them manually.
 
-Tests runs every suite under `utils/`, `runners/`, and `experimental/CollectiveX/tests/` with four pytest workers, plus MCP compatibility. New tests in those directories are discovered automatically. CI installs `infx` as a wheel with `uv sync --locked --all-extras --group test --no-editable`, using Python 3.12 and CPU-only PyTorch. A failing job does not cancel the other; a newer PR update cancels the superseded CI run. Branch pushes without a PR no longer start a separate changelog-test run.
+Tests runs every suite under `utils/`, `runners/`, and `experimental/CollectiveX/tests/` with four pytest workers. New tests in those directories are discovered automatically. CI installs `infx` as a wheel with `uv sync --locked --all-extras --group test --no-editable`, using Python 3.12 and CPU-only PyTorch. A failing job does not cancel the other; a newer PR update cancels the superseded CI run. Branch pushes without a PR no longer start a separate changelog-test run.
 
 | Layer | What it can prove | What it cannot prove |
 | --- | --- | --- |
@@ -65,13 +65,13 @@ Run checks from the repository root and replace placeholders with the exact chan
 
 ### Python environment
 
-[`pyproject.toml`](../pyproject.toml) defines the `infx` package and its dependencies; [`uv.lock`](../uv.lock) records their resolved versions. Run `uv sync --locked` to install the core tooling, then `uv run --locked python -m infx.matrix.generate ...` to use the existing module commands. Use `--extra workflows` for CODEOWNER/GitHub integrations, `--extra results` for eval summaries/database comparisons, or `--group mcp` for the repository MCP server. The `test` group includes MCP and the CPU test dependencies.
+[`pyproject.toml`](../pyproject.toml) defines the `infx` package and its dependencies; [`uv.lock`](../uv.lock) records their resolved versions. Run `uv sync --locked` to install the core tooling, then `uv run --locked python -m infx.matrix.generate ...` to use the existing module commands. Use `--extra workflows` for CODEOWNER/GitHub integrations, `--extra results` for eval summaries/database comparisons. The `test` group holds the CPU test dependencies.
 
 For development, uv installs the package in editable mode, so source edits apply immediately. CI installs a regular wheel, but the main pytest suite imports the source checkout. Dedicated installed-package tests create clean environments with only core or results dependencies and run outside the source checkout. They check recipe node counts, runner metadata, matrix rejection, packaged threshold loading, score validation, BFCL license attribution, and generated eval rows and summaries. Repository-dependent commands use their source checkout when installed editable; with a wheel, run them from the repository root. Eval YAML/JSON resources and the Apache license ship with the package.
 
 Use `uv add` for core dependencies, `uv add --optional <extra>` for an integration, or `uv add --group test` for test-only tools. Commit both the manifest and lockfile. `uv lock --upgrade-package <name>` updates a dependency; resolution enforces a 12-hour age cutoff from `pyproject.toml`. Ruff and Zizmor remain outside the lockfile so their CI checks keep using the latest eligible release. Benchmark images, vendor eval environments, and commands that measure historical checkouts retain their existing dependency setup.
 
-Dependencies stay within the latest supported major; minor and patch upgrades are recorded in `uv.lock` and validated in CI. For pre-1.0 packages, review minor upgrades too. MCP stays on 1.x because 2.x replaces the server's decorator-based handler API. New releases do not automatically change a locked environment.
+Dependencies stay within the latest supported major; minor and patch upgrades are recorded in `uv.lock` and validated in CI. For pre-1.0 packages, review minor upgrades too. New releases do not automatically change a locked environment.
 
 Result collection, comparisons, and run statistics use `infx` from current `main`, resolved once during sweep setup and shared across those jobs. Klaud resolves `main` once and passes that commit to every candidate; candidate hooks use a separate tooling checkout so recipe edits cannot replace the imported package. Sign-off also checks out current trusted `main`. These tools have no release-version pin or cooldown on repository commits. PR CI tests the PR's package, while matrix generation, benchmark scripts, and recipes retain the selected checkout. Sweep summaries show the resolved setup and tooling commits, plus the source head when reusing benchmarks. E2E benchmark and eval jobs use the same resolved SHA as matrix generation, even if the requested branch moves while jobs queue. Klaud summaries show the tooling commit used as the candidate base.
 
@@ -144,13 +144,13 @@ Inspect the emitted values, not only the exit code or row count: config key, mod
 
 | Change | Focused command |
 | --- | --- |
-| Matrix schema or generation | `python -m pytest utils/matrix_logic/ -v` |
-| Changelog content or PR gating | `python -m pytest utils/test_process_changelog.py utils/changelog_gate_tests/ -v` |
-| Result processing and topology | `python -m pytest utils/test_process_result.py utils/agentic/aggregation/test_process_agentic_result.py utils/test_aggregate_power.py utils/test_calc_success_rate.py -v` |
-| AgentX aggregation and artifact loading | `python -m pytest utils/agentic/aggregation/ -v` |
-| Eval dispatch, batching, or patches | `python -m pytest utils/evals/ -v` |
-| Eval collection | `python -m pytest utils/test_collect_eval_results.py -v` |
-| Sweep reuse or reusable artifacts | `python -m pytest utils/test_github.py utils/test_find_reusable_sweep_run.py utils/test_acknowledge_sweep_reuse.py utils/test_validate_reusable_sweep_artifacts.py -v` |
+| Matrix schema or generation | `python -m pytest infx/tests/matrix/ -v` |
+| Changelog content or PR gating | `python -m pytest infx/tests/matrix/test_process_changelog.py infx/tests/workflows/test_validate_perf_changelog.py infx/tests/workflows/test_prepare_perf_changelog_merge.py -v` |
+| Result processing and topology | `python -m pytest infx/tests/results/power/test_process_result.py infx/tests/results/agentic/test_process_agentic_result.py infx/tests/results/power/test_aggregate_power.py infx/tests/workflows/test_calc_success_rate.py -v` |
+| AgentX aggregation and artifact loading | `python -m pytest infx/tests/results/agentic/ -v` |
+| Eval dispatch, batching, or patches | `python -m pytest infx/tests/evals/ -v` |
+| Eval collection | `python -m pytest infx/tests/results/test_collect_eval_results.py -v` |
+| Sweep reuse or reusable artifacts | `python -m pytest infx/tests/test_github.py infx/tests/workflows/test_find_reusable_sweep_run.py infx/tests/workflows/test_acknowledge_sweep_reuse.py infx/tests/workflows/test_validate_reusable_sweep_artifacts.py -v` |
 
 For an edited changelog, also run the same matrix-compatibility validator used by setup, with real base and head refs:
 
@@ -167,13 +167,13 @@ A local matrix cannot prove Slurm allocation or llm-d endpoint discovery. Multi-
 
 ### Full local suite in parallel
 
-The existing Python suites cover workflow contracts too. `utils/matrix_logic/test_validation.py` tests the workflow input schemas and runs both preparation scripts with controlled generator output. Invalid rows must fail before publishing job outputs; accepted rows must remain unchanged, including when manual dispatch measures an older checkout. `utils/test_process_result.py` executes the shipped launch step with a recording launcher for current and historical checkouts. These tests do not emulate GitHub's expression engine or prove GPU performance; review expression changes with workflow validation and applicable smoke evidence.
+The existing Python suites cover workflow contracts too. `infx/tests/matrix/test_validation.py` tests the workflow input schemas and runs both preparation scripts with controlled generator output. Invalid rows must fail before publishing job outputs; accepted rows must remain unchanged, including when manual dispatch measures an older checkout. `infx/tests/results/power/test_process_result.py` executes the shipped launch step with a recording launcher for current and historical checkouts. These tests do not emulate GitHub's expression engine or prove GPU performance; review expression changes with workflow validation and applicable smoke evidence.
 
 Run the same locked environment and four-worker suite as CI:
 
 ```bash
 uv run --locked --all-extras --group test --no-editable \
-  python -m pytest utils/ runners/ experimental/CollectiveX/tests/ -n 4
+  python -m pytest infx/tests/ utils/ runners/ experimental/CollectiveX/tests/ -n 4
 ```
 
 Use `-n 0` for serial debugging. Tests must keep temporary files and ports isolated and collect deterministic parameter cases across workers.
@@ -199,7 +199,7 @@ The current meanings and eligibility rules are defined in the [sweep-label refer
 
 Throughput and evals are separate jobs. The default sweep evaluates the selected 8k1k subset. `all-evals` expands eval selection, and `evals-only` suppresses throughput. Choose modifiers from the changed scope, but do not substitute an eval-only or preflight run for the required full sweep.
 
-Eval completion is not just a green job. Preserve and inspect `meta_env.json`, the `results*.json` files, the score-validation output, the inference image, and the aggregated eval artifact. [`utils/evals/EVALS.md`](../utils/evals/EVALS.md) owns task and artifact behavior. [`validate_scores.py`](../infx/evals/validate_scores.py) rejects missing result files, below-threshold scores, and runs with no checked metrics. When expected concurrency metadata is available, it also rejects invalid/incomplete/failed batches. The workflow invokes it without `--expected-concs`, so reviewers must verify `meta_env.json` independently for single-concurrency artifacts.
+Eval completion is not just a green job. Preserve and inspect `meta_env.json`, the `results*.json` files, the score-validation output, the inference image, and the aggregated eval artifact. [`infx/evals/EVALS.md`](../infx/evals/EVALS.md) owns task and artifact behavior. [`validate_scores.py`](../infx/evals/validate_scores.py) rejects missing result files, below-threshold scores, and runs with no checked metrics. When expected concurrency metadata is available, it also rejects invalid/incomplete/failed batches. The single-node workflow invokes it without `--expected-concs`, so reviewers must verify `meta_env.json` independently for single-concurrency artifacts.
 
 ## Evidence standard
 

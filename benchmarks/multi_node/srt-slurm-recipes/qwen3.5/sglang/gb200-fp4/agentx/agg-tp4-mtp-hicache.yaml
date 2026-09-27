@@ -73,7 +73,7 @@ sbatch_directives: {mem: "0", cpus-per-task: "144"}
 srun_options: {mem: "0", container-remap-root: ""}
 benchmark:
   type: custom
-  command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
+  command: bash /infmax-workspace/benchmarks/srt_agentic.sh
   env:
     INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
     RESULT_DIR: /logs/agentic

@@ -3,8 +3,8 @@
 # Agentic trace-replay recipe for a disaggregated ATOM server on MI355X
 # (DeepSeek-V4-Pro FP4, 1P1D TP8), mooncake RDMA KV transfer + atomesh router.
 #
-# CI-style sibling of dsv4_fp4_mi355x_sglang-disagg.sh (same agentic trace
-# workload, same submit.sh path), but drives the ATOM engine instead of SGLang.
+# CI-style sibling of the former SGLang dsv4_fp4_mi355x_sglang-disagg.sh (same
+# agentic trace workload, same submit.sh path), but drives the ATOM engine.
 # Modeled on ATOM recipes/DeepSeek-V4-Agentic-PD-Max.md: three concurrency
 # tiers selected by the search space -- TP (conc 1-32), DP-attention
 # (conc 64-128, no offload), and DP-attention + CPU KV offload (conc 256,

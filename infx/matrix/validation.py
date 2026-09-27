@@ -22,7 +22,6 @@ DEFAULT_AGENTIC_DURATION_SECONDS = 3600
 
 
 class Fields(Enum):
-    # Field name constants
     # Top-level config fields
     IMAGE = "image"
     MODEL = "model"
@@ -97,7 +96,7 @@ class Fields(Enum):
 
 
 """
-    Below is the validation logic for the OUTPUT of utils/matrix_logic/generate_sweep_configs.py, i.e.,
+    Below is the validation logic for the OUTPUT of infx.matrix.generate, i.e.,
     the input to the actual workflow files. The validation enforces a strict set of rules on the structure
     of the generated matrix entries to ensure correctness before proceeding with benchmarking. This ensures
     that no validation has to happen in the workflow itself, i.e., at runtime, it is assumed that all inputs
@@ -309,6 +308,7 @@ class SingleNodeAgenticMatrixEntry(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     image: str
+    srt_recipe: str | None = Field(default=None, alias=Fields.SRT_RECIPE.value, min_length=1)
     model: str
     model_prefix: str = Field(alias=Fields.MODEL_PREFIX.value)
     precision: str
@@ -449,7 +449,7 @@ def validate_matrix_entry(entry: dict, is_multinode: bool) -> dict:
 
 
 """
-    Below is the validation logic for the INPUT to utils/matrix_logic/generate_sweep_configs.py, i.e.,
+    Below is the validation logic for the INPUT to infx.matrix.generate, i.e.,
     the master configuration files found in configs. The validation enforces a strict set of
     rules on the structure of the master configuration files to ensure correctness before proceeding
     with matrix generation.
@@ -628,6 +628,7 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     tp: int | None = None
+    srt_recipe: str | None = Field(default=None, alias=Fields.SRT_RECIPE.value, min_length=1)
     pp: int = Field(default=1, gt=0, strict=True)
     dcp_size: int = Field(default=1, alias=Fields.DCP_SIZE.value, gt=0, strict=True)
     pcp_size: int = Field(default=1, alias=Fields.PCP_SIZE.value, gt=0, strict=True)
@@ -1066,7 +1067,7 @@ class ChangelogMetadata(BaseModel):
 
 class ChangelogMatrixEntry(BaseModel):
     """Pydantic model for validating final changelog matrix entry structure.
-    This imposes a strict contract on the output of process_changelog.py, dictated by
+    This imposes a strict contract on the output of infx.matrix.plan, dictated by
     the expected input to the run-sweep.yml workflow file.
     """
 
@@ -1079,39 +1080,19 @@ class ChangelogMatrixEntry(BaseModel):
         default_factory=dict
     )
     evals: list[SingleNodeMatrixEntry] = Field(default_factory=list)
-    # Agentic GSM8K eval rows live in their own bucket rather than a
-    # union inside `evals`: each bucket maps 1:1 to a run-sweep.yml job with a
-    # static input block, so an agentic row can never reach the fixed-seq-len
-    # eval dispatch (which reads isl/osl/max-model-len and would launch the
-    # wrong benchmark script).
+    # Each bucket maps to a run-sweep.yml job with fixed inputs. Separate
+    # AgentX rows so they cannot dispatch the fixed-sequence benchmark.
     agentic_evals: list[SingleNodeAgenticMatrixEntry] = Field(default_factory=list)
     multinode_evals: list[MultiNodeMatrixEntry] = Field(default_factory=list)
-    # Multi-node agentic (SWE-bench) eval rows, split out of multinode_evals
-    # the same way agentic_evals is split out of evals: they carry the
-    # agentic input shape (scenario-type, kv-offloading, ...) rather than
-    # the fixed-seq-len shape (isl/osl/max-model-len) multinode_evals rows do.
     multinode_agentic_evals: list[MultiNodeAgenticMatrixEntry] = Field(default_factory=list)
     changelog_metadata: ChangelogMetadata
 
 
-# =============================================================================
 # File Loading Functions
-# =============================================================================
 
 
 def load_config_files(config_files: list[str], validate: bool = True) -> dict:
-    """Load and merge configuration files.
-
-    Args:
-        config_files: List of paths to YAML configuration files.
-        validate: If True, run validate_master_config on loaded data. Defaults to True.
-
-    Returns:
-        Merged configuration dictionary.
-
-    Raises:
-        ValueError: If file doesn't exist, isn't a dict, or has duplicate keys.
-    """
+    """Merge YAML configs, rejecting missing files, non-mappings and duplicate keys."""
     all_config_data = {}
     for config_file in config_files:
         try:
@@ -1121,7 +1102,7 @@ def load_config_files(config_files: list[str], validate: bool = True) -> dict:
                     raise ValueError(f"Config file '{config_file}' must contain a dictionary")
 
                 # Don't allow '*' wildcard in master config keys as we need to reserve these
-                # for expansion in process_changelog.py
+                # for expansion in infx.matrix.plan
                 for key in config_data:
                     if not isinstance(key, str):
                         raise ValueError(
@@ -1149,18 +1130,7 @@ def load_config_files(config_files: list[str], validate: bool = True) -> dict:
 
 
 def load_runner_file(runner_file: str, validate: bool = True) -> dict:
-    """Load runner configuration file.
-
-    Args:
-        runner_file: Path to the runner YAML configuration file.
-        validate: If True, run validate_runner_config on loaded data. Defaults to True.
-
-    Returns:
-        Runner configuration dictionary.
-
-    Raises:
-        ValueError: If file doesn't exist or fails validation.
-    """
+    """Load runner YAML, optionally validating its schema."""
     try:
         with open(runner_file) as f:
             runner_config = yaml.safe_load(f)
