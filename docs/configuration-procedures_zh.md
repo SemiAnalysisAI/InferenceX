@@ -147,6 +147,9 @@ B300 DSXE 的 Kimi-K3 AgentX 路径在 `/scratch/models` 下挂载预置目标�
 B300 原生单节点启动器在 SRT 提交前，通过 `hf download --local-dir` 将
 `deepseek-ai/DeepSeek-V4-Flash` 下载至 `/data/home/sa-gha-runner/models/DeepSeek-V4-Flash`。
 每次启动都会验证或续传本地下载，下载失败则停止提交，不要求 `/data/models` 中存在预置副本。
+主机下载命令显式将 `HF_HOME`、`HF_HUB_CACHE` 和 `HF_XET_CACHE` 设置到
+`B300_HF_CACHE_HOST_DIR` 下，防止继承仅适用于容器的缓存路径。这些覆盖仅作用于下载命令，
+不会改变 SRT 的容器缓存挂载。
 
 ## TileRT 原生功耗
 

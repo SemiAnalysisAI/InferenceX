@@ -9013,3 +9013,12 @@
     - "Download DeepSeek-V4-Flash into the B300 runner's writable home models directory before native SRT submission instead of requiring a missing /data/models copy. Resume or validate the download on every launch and stop before submission on download failure."
     - "在原生 SRT 提交前，将 DeepSeek-V4-Flash 下载到 B300 runner 的 home 可写模型目录，不再要求不存在的 /data/models 副本。每次启动均续传或验证下载，下载失败时停止提交。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3516
+
+- config-keys:
+    - dsv4flash-fp4-b300-sglang-mtp
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Scope HF_HOME, HF_HUB_CACHE, and HF_XET_CACHE to the runner's writable home cache during the host-side V4 Flash download. Preserve the container cache environment and mounts for subsequent SRT execution."
+    - "在主机下载 V4 Flash 时，将 HF_HOME、HF_HUB_CACHE 和 HF_XET_CACHE 限定到 runner 的 home 可写缓存；保留后续 SRT 执行所需的容器缓存环境和挂载。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3516

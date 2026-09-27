@@ -199,6 +199,9 @@ The B300 native single-node launcher downloads `deepseek-ai/DeepSeek-V4-Flash`
 with `hf download --local-dir` into `/data/home/sa-gha-runner/models/DeepSeek-V4-Flash`
 before SRT submission. Every launch validates or resumes the local download; a failure
 stops submission. This checkpoint does not require a pre-staged `/data/models` copy.
+The host download explicitly sets `HF_HOME`, `HF_HUB_CACHE`, and `HF_XET_CACHE`
+under `B300_HF_CACHE_HOST_DIR`; container-only cache paths must not leak into the
+host downloader. These overrides are command-scoped so SRT retains its container cache mount.
 
 ## Native TileRT power
 

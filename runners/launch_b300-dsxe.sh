@@ -140,6 +140,9 @@ if [[ "$EXECUTION_PATH" == native-single-node ]]; then
     elif [[ "$MODEL" == deepseek-ai/DeepSeek-V4-Flash ]]; then
         SRT_MODEL_PATH="$WRITABLE_MODELS_DIR/${MODEL##*/}"
         # Resume and verify the download before SRT checks the local model path.
+        HF_HOME="$B300_HF_CACHE_HOST_DIR" \
+        HF_HUB_CACHE="$HF_HUB_CACHE_MOUNT" \
+        HF_XET_CACHE="$B300_HF_CACHE_HOST_DIR/xet" \
         uv tool run --from 'huggingface-hub>=0.34,<2' hf download "$MODEL" \
             --local-dir "$SRT_MODEL_PATH" || exit 1
     elif [[ " ${STAGED_MODELS[*]} " != *" ${MODEL##*/} "* || "${MODEL##*/}" == DeepSeek-V4-Pro-0813 ]]; then

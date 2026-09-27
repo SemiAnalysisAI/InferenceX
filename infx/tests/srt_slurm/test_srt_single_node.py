@@ -288,6 +288,7 @@ def test_pool_launcher_stages_artifacts_and_propagates_failure(point, tmp_path, 
         "uv": """
 if [[ "$1" == tool ]]; then
     printf '%s\\n' "$@" > "$DOWNLOAD_CAPTURE"
+    printf '%s\\n' "$HF_HOME" "$HF_HUB_CACHE" "$HF_XET_CACHE" > "$DOWNLOAD_ENV_CAPTURE"
     [[ "$TEST_FAILURE" != download-failure ]] || exit 17
 elif [[ "$1" == venv ]]; then
     mkdir -p .venv/bin
@@ -340,12 +341,15 @@ fi
         "INFERENCEX_RUNTIME_ENV_VARS": "REQUIRE_POWER",
         "TEST_FAILURE": failure, "CANCEL_CAPTURE": str(capture),
         "DOWNLOAD_CAPTURE": str(tmp_path / "download-args"),
+        "DOWNLOAD_ENV_CAPTURE": str(tmp_path / "download-env"),
         "SRUN_CAPTURE": str(tmp_path / "srun.jsonl"),
         "KEEP_LOGS": "0",
     }
     env.pop("AIPERF_DRAIN_TIMEOUT_SECONDS", None)
     env.pop("AIPERF_DRAIN_POLL_SECONDS", None)
     env.pop("BENCH_SCRIPT_OVERRIDE", None)
+    if failure.startswith("download"):
+        env.update(HF_HOME="/data/models", HF_HUB_CACHE="/mnt/hf_hub_cache", HF_XET_CACHE="/data/models/xet")
     if failure == "missing-recipe":
         env.pop("SRT_RECIPE")
     if failure == "agentic":
@@ -357,6 +361,9 @@ fi
     )
     assert result.returncode == {"none": 0, "allocation": 1, "submission": 7, "bootstrap": 13, "missing-recipe": 1, "agentic": 0, "download": 0, "download-failure": 1}[failure], result.stderr
     if failure.startswith("download"):
+        assert Path(env["DOWNLOAD_ENV_CAPTURE"]).read_text().splitlines() == [
+            str(tmp_path), str(tmp_path / "hub"), str(tmp_path / "xet"),
+        ]
         assert Path(env["DOWNLOAD_CAPTURE"]).read_text().splitlines() == [
             "tool", "run", "--from", "huggingface-hub>=0.34,<2", "hf", "download",
             "deepseek-ai/DeepSeek-V4-Flash", "--local-dir",
@@ -392,6 +399,7 @@ fi
         assert cluster_config["model_paths"]["hf:deepseek-ai/DeepSeek-V4-Flash"] == (
             "/data/home/sa-gha-runner/models/DeepSeek-V4-Flash"
         )
+        assert cluster_config["default_mounts"][str(tmp_path / "hub")] == "/mnt/hf_hub_cache"
     assert (capture.read_text() if capture.exists() else "") == ("42\n" if failure == "submission" else "")
 
 
