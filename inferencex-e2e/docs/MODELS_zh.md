@@ -60,6 +60,8 @@ InferenceX-e2e 运行在数量固定且有限的 GPU 资源池上，并由一支
 
 **单节点切换为仅使用 SRT（2026-09-22）：** 活跃的单节点定长配方现统一使用 SRT-Slurm。两个仅支持 Docker 的 Qwen3.5 RTX PRO 6000 FP4 配置（启用和关闭 MTP）已退役，原始设置保留在 `configs/deprecated/nvidia-master.yaml`，脚本保留在 `benchmarks/single_node/fixed_seq_len/deprecated/`。已移除不再使用的 `rtx6000pro-lat` runner 映射、启动器及运行时设置。Qwen3.5 在其他受支持的 Slurm 池上继续启用；AgentX 和多节点覆盖保持不变。
 
+**MiniMax-M3 MI355X vLLM AgentX：** `minimaxm3-fp4-mi355x-vllm-agentic-mtp` 使用支持 TP4 和 TP2 的[原生 SRT 配方](../benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/mi355x-fp4-mtp/agentic.yaml)。该配置因仍依赖已删除的 Bash 路由而在 #3463 中移除，现通过此配方恢复，并保留原有镜像与并发范围。固定的 nightly 镜像已从镜像仓库移除，因此原生执行需要启动器可读取的已暂存缓存镜像。
+
 ## 场景
 
 | 场景 | ISL/OSL | 状态 |
