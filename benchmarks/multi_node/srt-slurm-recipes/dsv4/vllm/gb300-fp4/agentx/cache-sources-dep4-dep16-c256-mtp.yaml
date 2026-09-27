@@ -214,7 +214,7 @@ srun_options:
 
 benchmark:
   type: custom
-  command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
+  command: bash /infmax-workspace/benchmarks/srt_agentic.sh
   env:
     AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "vllm:prompt_tokens_cached_by_source"
     INFMAX_CONTAINER_WORKSPACE: "/infmax-workspace"
