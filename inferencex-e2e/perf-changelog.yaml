@@ -9053,3 +9053,15 @@
   description:
     - "Update the GB300 DeepSeek-V4.1-Flash SGLang AgentX curve to lmsysorg/sglang:dev-cu13-nightly-0924 (digest pinned): pure TP4 (EP1) at C1/C2 with Engram in HBM, and TP4/EP4 at C4+ with per-rank host Engram, 16K prefill chunks, no prefill-decode interval, 4096 SWA prefix tails and a 128 decode graph batch; all TP4 points use static ragged verify; TP2 is unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3421
+
+- config-keys:
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-disagg
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-mtp
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-mtp-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Keep the GLM-5.2 NextN/MTP draft at shipped precision and disable background UCX progress for GB200 disaggregated prefill to avoid the observed event-arm crash; images, topology, workload and golden acceptance are unchanged."
+    - "使 GLM-5.2 NextN/MTP draft 保持原始发布精度，并关闭 GB200 分离式 prefill 的 UCX 后台进展以规避已观察到的 event-arm 崩溃；镜像、拓扑、工作负载和 golden acceptance 不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3401

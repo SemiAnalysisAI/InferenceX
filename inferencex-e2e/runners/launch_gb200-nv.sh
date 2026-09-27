@@ -496,7 +496,14 @@ SRTCTL_APPLY_ARGS=(
     --tags "gb200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)"
 )
 if [[ "$FRAMEWORK" == "dynamo-sglang" ]]; then
-    SRTCTL_APPLY_ARGS+=(--setup-script install-torchao.sh)
+    case "$CONFIG_PATH" in
+        recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-mtp-variants.yaml|\
+        benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-mtp-variants.yaml|\
+        recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-dep8-mtp-variants.yaml|\
+        benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-dep8-mtp-variants.yaml)
+            SRTCTL_APPLY_ARGS+=(--setup-script glm52-gb200-nixl-prefill.sh) ;;
+        *) SRTCTL_APPLY_ARGS+=(--setup-script install-torchao.sh) ;;
+    esac
 fi
 # srtctl gives RUNNER_NAME precedence over config.name; override it for the
 # submission so the #SBATCH job name keeps the namespace used above.
