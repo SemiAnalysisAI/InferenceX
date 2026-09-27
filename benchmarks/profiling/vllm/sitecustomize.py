@@ -72,19 +72,17 @@ def _rank_tag(runner=None):
 
 
 class _JsonlSink:
+    """Line-buffered: engines are killed at teardown, so nothing may sit in a buffer."""
+
     def __init__(self, path):
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        self._f = open(path, "a", buffering=1 << 16)
+        self._f = open(path, "a", buffering=1)
         self._lock = threading.Lock()
-        self._n = 0
 
     def write(self, record):
         line = json.dumps(record, separators=(",", ":"), default=str)
         with self._lock:
             self._f.write(line + "\n")
-            self._n += 1
-            if self._n % 256 == 0:
-                self._f.flush()
 
     def flush(self):
         with self._lock:
@@ -298,6 +296,132 @@ def _step_record(scheduler_output):
     return {"total_tokens": scheduler_output.total_num_scheduled_tokens, "reqs": reqs}
 
 
+# --- module markers ---------------------------------------------------------
+# Replay windows run without Python stacks (their export stalls the engine), so
+# eager modules mark themselves: infx_mod#<qualified name>. Global module hooks
+# are only safe where Dynamo never traces (compilation mode NONE); compiled
+# pieces mark themselves through the piecewise backend instead.
+
+_module_names = None  # weakref.WeakKeyDictionary once a runner registers its models
+_module_hooks = []
+_module_tls = threading.local()
+_module_hooks_allowed = False
+
+
+def _register_module_names(runner):
+    import weakref
+
+    global _module_names, _module_hooks_allowed
+    names = weakref.WeakKeyDictionary()
+    roots = [("model", getattr(runner, "model", None))]
+    speculator = getattr(runner, "speculator", None)
+    if speculator is not None:
+        roots.append(("draft", getattr(speculator, "model", None)))
+    for prefix, root in roots:
+        if root is None or not hasattr(root, "named_modules"):
+            continue
+        for name, mod in root.named_modules(prefix=prefix):
+            names.setdefault(mod, name)
+    _module_names = names
+    try:
+        mode = runner.vllm_config.compilation_config.mode
+        _module_hooks_allowed = int(mode) == 0
+    except Exception:
+        _module_hooks_allowed = False
+
+
+def _module_pre_hook(module, args):
+    try:
+        import torch
+
+        name = (_module_names.get(module) if _module_names is not None else None) or type(module).__name__
+        rf = torch.autograd.profiler.record_function(f"infx_mod#{name}")
+        rf.__enter__()
+        stack = getattr(_module_tls, "stack", None)
+        if stack is None:
+            stack = _module_tls.stack = []
+        stack.append((module, rf))
+    except Exception:
+        pass
+
+
+def _module_post_hook(module, args, output):
+    stack = getattr(_module_tls, "stack", None)
+    while stack:
+        mod, rf = stack.pop()
+        try:
+            rf.__exit__(None, None, None)
+        except Exception:
+            pass
+        if mod is module:
+            break
+
+
+def _enable_module_markers():
+    if not _module_hooks_allowed or _module_hooks:
+        return
+    from torch.nn.modules import module as nn_module
+
+    _module_hooks.append(nn_module.register_module_forward_pre_hook(_module_pre_hook))
+    _module_hooks.append(nn_module.register_module_forward_hook(_module_post_hook, always_call=True))
+
+
+def _disable_module_markers():
+    while _module_hooks:
+        _module_hooks.pop().remove()
+    stack = getattr(_module_tls, "stack", None)
+    while stack:
+        try:
+            stack.pop()[1].__exit__(None, None, None)
+        except Exception:
+            pass
+
+
+def _patch_profiler_wrapper(module):
+    cls = module.WorkerProfiler
+    if getattr(cls, "_infx_patched", False):
+        return
+    orig_start, orig_stop = cls._call_start, cls._call_stop
+
+    def _call_start(self, *args, **kwargs):
+        result = orig_start(self, *args, **kwargs)
+        try:
+            _enable_module_markers()
+        except Exception:
+            _write_error("enable module markers")
+        return result
+
+    def _call_stop(self, *args, **kwargs):
+        try:
+            _disable_module_markers()
+        except Exception:
+            _write_error("disable module markers")
+        return orig_stop(self, *args, **kwargs)
+
+    cls._call_start = _call_start
+    cls._call_stop = _call_stop
+    cls._infx_patched = True
+
+
+def _patch_piecewise_backend(module):
+    import torch
+
+    cls = module.PiecewiseBackend
+    if getattr(cls, "_infx_patched", False):
+        return
+    orig_call = cls.__call__
+
+    def __call__(self, *args):
+        if not _profiling():
+            return orig_call(self, *args)
+        index = getattr(self, "piecewise_compile_index", "?")
+        with torch.autograd.profiler.record_function(f"infx_piece#{index}"):
+            return orig_call(self, *args)
+
+    cls.__call__ = __call__
+    cls._infx_patched = True
+
+
 def _patch_model_runner(module):
     import torch
 
@@ -311,8 +435,15 @@ def _patch_model_runner(module):
     def capture_model(self, *args, **kwargs):
         tag = _rank_tag(self)
         _write_env(self, tag)
+        try:
+            _register_module_names(self)
+        except Exception:
+            _write_error("register module names")
         if tag not in _capture_ranks() and "all" not in _capture_ranks():
-            return orig_capture(self, *args, **kwargs)
+            try:
+                return orig_capture(self, *args, **kwargs)
+            finally:
+                _flush_all()
         try:
             from torch.profiler import ProfilerActivity, profile
             prof = profile(
@@ -321,6 +452,7 @@ def _patch_model_runner(module):
                 with_stack=True,
             )
             prof.__enter__()
+            _enable_module_markers()
         except Exception:
             _write_error("capture profiler start")
             return orig_capture(self, *args, **kwargs)
@@ -328,6 +460,7 @@ def _patch_model_runner(module):
             return orig_capture(self, *args, **kwargs)
         finally:
             try:
+                _disable_module_markers()
                 prof.__exit__(None, None, None)
                 path = os.path.join(_DIR, "capture", f"{tag}.pt.trace.json.gz")
                 os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -381,6 +514,8 @@ _HOOKS = {
     "torch.cuda.graphs": _patch_cuda_graph,
     "vllm.v1.worker.gpu.dp_utils": _patch_dp_utils,
     "vllm.v1.worker.gpu.model_runner": _patch_model_runner,
+    "vllm.profiler.wrapper": _patch_profiler_wrapper,
+    "vllm.compilation.piecewise_backend": _patch_piecewise_backend,
 }
 
 

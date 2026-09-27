@@ -26,7 +26,8 @@ import os
 import re
 import sys
 
-MARK = re.compile(r"^infx_(step|graph_replay|graph_capture)#(\d+)$")
+MARK = re.compile(r"^infx_(step|graph_replay|graph_capture|piece)#(\d+)$")
+MODULE_MARK = "infx_mod#"
 DEVICE_CATS = {"kernel", "gpu_memcpy", "gpu_memset"}
 LAUNCH_CATS = {"cuda_runtime", "cuda_driver"}
 CONTEXT_CATS = {"cpu_op", "user_annotation", "python_function"}
@@ -98,7 +99,8 @@ class Trace:
         """Markers, op chain, innermost op args and module path of a launch."""
         marks = {}
         ops = []
-        modules = []
+        modules = []  # qualified names from infx_mod markers
+        stack_modules = []  # class-instance names from Python stacks (capture only)
         frame = None
         for i in self.stack_of.get(launch, ()):
             e = self.events[i]
@@ -106,11 +108,13 @@ class Trace:
             m = MARK.match(name)
             if m:
                 marks[m.group(1)] = int(m.group(2))
+            elif name.startswith(MODULE_MARK):
+                modules.append(name[len(MODULE_MARK):])
             elif e["cat"] == "cpu_op" or (e["cat"] == "user_annotation" and not name.startswith("infx_")):
                 ops.append(i)
             elif e["cat"] == "python_function":
                 if name.startswith("nn.Module: "):
-                    modules.append(name[len("nn.Module: "):])
+                    stack_modules.append(name[len("nn.Module: "):])
                 else:
                     frame = name
         inner = self.events[ops[-1]] if ops else None
@@ -123,7 +127,7 @@ class Trace:
             "input_types": args.get("Input type"),
             "concrete_inputs": args.get("Concrete Inputs"),
             "kernel_file": args.get("kernel_file"),
-            "module_path": modules,
+            "module_path": modules or stack_modules,
             "py_frame": frame,
             "launch_api": self.events[launch]["name"],
         }

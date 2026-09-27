@@ -139,7 +139,7 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
 PROFILE_DIR = "/logs/infx_profile"
 PROFILE_DEFAULTS: dict[str, Any] = {
     # (seconds after the replay starts, engine iterations) per torch profiler window
-    "windows": [[420, 64]],
+    "windows": [[420, 32]],
     # workers whose CUDA graph capture is profiled; "all" profiles every rank
     "capture_ranks": "dp0_tp0",
 }
@@ -167,7 +167,9 @@ def profiling_arguments(environment: Mapping[str, str]) -> list[str]:
         "profiler": "torch",
         "torch_profiler_dir": f"{PROFILE_DIR}/torch",
         "torch_profiler_record_shapes": True,
-        "torch_profiler_with_stack": True,
+        # Python stacks make exports of eager steps outlast the RPC timeout;
+        # modules mark themselves instead (benchmarks/profiling/vllm).
+        "torch_profiler_with_stack": False,
         "ignore_frontend": True,
         "max_iterations": int(windows[0][1]),
     }
@@ -180,6 +182,8 @@ def profiling_arguments(environment: Mapping[str, str]) -> list[str]:
         "VLLM_CACHE_ROOT": f"{PROFILE_DIR}/vllm_cache",
         "VLLM_COMPILE_CACHE_SAVE_FORMAT": "unpacked",
         "INDUCTOR_PROVENANCE": "1",
+        # A window's trace export blocks its worker; keep peers from timing out.
+        "VLLM_RPC_TIMEOUT": "1800000",
     }
     overrides = ["--set", f"roles.agg.args.profiler-config={json.dumps(profiler_config)}"]
     for name, value in worker_env.items():
