@@ -55,7 +55,6 @@ base:
       OSL: '1024'
       RANDOM_RANGE_RATIO: '0.8'
       USE_CHAT_TEMPLATE: 'true'
-      KV_OFFLOADING: none
 
 zip_override_tp2:
   roles:

@@ -8995,3 +8995,12 @@
     - "Add DeepSeek-V4-Flash B300 TP2 SGLang 8k1k serving at concurrency 1, 2, 4, 8, 16, 32, 64, 128 with bundled MTP via EAGLE (3 steps, top-k 1, 4 draft tokens), real verification, GPU-resident weights/KV, and the DeepSeek-V4 chat encoder."
     - "新增 DeepSeek-V4-Flash B300 TP2 SGLang 8k1k serving，并发为 1、2、4、8、16、32、64、128；通过 EAGLE 使用原生 MTP（3 steps、top-k 1、4 draft tokens），采用真实验证、GPU 常驻权重/KV 和 DeepSeek-V4 chat 编码器。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3516
+
+- config-keys:
+    - dsv4flash-fp4-b300-sglang-mtp
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Remove AgentX-only KV_OFFLOADING metadata from the fixed-sequence recipe: CI passes an empty value for this scenario, and the explicit 'none' value rejected recipe selection before server launch. Serving settings are unchanged."
+    - "移除固定序列配方中仅适用于 AgentX 的 KV_OFFLOADING 元数据：该场景的 CI 传入空值，显式设置 'none' 导致配方选择在服务启动前失败。Serving 设置保持不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3516
