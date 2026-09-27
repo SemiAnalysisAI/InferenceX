@@ -239,8 +239,12 @@ def _prepare_gemm(op: Op) -> dict:
     m, n, k = a["m"], a["n"], a["k"]
     if min(m, n, k) <= 0:
         raise UnsupportedOpError(f"degenerate gemm shape m={m} n={n} k={k}")
-    if a.get("out", "bf16") != "bf16" or a["a"].get("input", "bf16") != "bf16":
-        raise UnsupportedOpError("vLLM linear layers take a bf16 activation and return bf16")
+    if a["a"].get("input", "bf16") != "bf16":
+        raise UnsupportedOpError("vLLM linear layers take a bf16 activation")
+    if a.get("out", "bf16") == "fp32" or a["b"]["dtype"] == "fp32":
+        return _prepare_fp32_out(op)
+    if a.get("out", "bf16") != "bf16":
+        raise UnsupportedOpError(f"vLLM linear layers return bf16 or fp32; got {a['out']!r}")
     _vllm_context()
     import vllm.envs as envs
     from vllm.model_executor.layers.linear import ReplicatedLinear
@@ -282,6 +286,40 @@ def _prepare_gemm(op: Op) -> dict:
         if _is_fault(e):
             raise
         raise UnsupportedOpError(f"vLLM kernel failed for {a}: {type(e).__name__}: {e}"[:400]) from e
+    return ctx
+
+
+class _TorchMM(torch.nn.Module):
+    """The matmul vLLM runs for fp32-output gates and routers (GateLinear's cuBLAS tier):
+    torch.mm with an fp32 epilogue on a bf16 weight; an fp32 matmul on an fp32 weight."""
+
+    def __init__(self, k: int, n: int, dtype: torch.dtype, bias: bool):
+        super().__init__()
+        self.weight = torch.nn.Parameter(torch.randn(n, k, device=device()).mul_(0.02).to(dtype),
+                                         requires_grad=False)
+        self.bias = torch.nn.Parameter(torch.zeros(n, device=device(), dtype=dtype),
+                                       requires_grad=False) if bias else None
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if self.weight.dtype == torch.bfloat16 and self.bias is None:
+            return torch.mm(x, self.weight.T, out_dtype=torch.float32)
+        return torch.nn.functional.linear(x.to(self.weight.dtype), self.weight, self.bias).float()
+
+
+def _prepare_fp32_out(op: Op) -> dict:
+    a = op.args
+    qa, qb = a["a"], a["b"]
+    if "scale" in qa or "scale" in qb or qa["dtype"] != "bf16" or qb["dtype"] not in ("bf16", "fp32") \
+            or a.get("out", "bf16") != "fp32":
+        raise UnsupportedOpError(f"no fp32-output vLLM matmul for a={qa} b={qb} out={a.get('out')}")
+    _vllm_context()
+    layer = _TorchMM(a["k"], a["n"], getattr(torch, {"bf16": "bfloat16", "fp32": "float32"}[qb["dtype"]]),
+                     bool(a.get("bias")))
+    ctx = {"layer": layer, "x": torch.randn(a["m"], a["k"], device=device(), dtype=torch.bfloat16),
+           "meta": {"vllm_quant_method": "torch.mm", "vllm_kernels": {},
+                    "param_dtypes_loaded": _param_dtypes(layer), "param_dtypes": _param_dtypes(layer)}}
+    _kernel_gemm(ctx)
+    sync()
     return ctx
 
 
