@@ -8986,3 +8986,12 @@
     - "Hopper 使用 FA3，Blackwell FA4 fp8 descale 问题不适用，EAGLE3 draft 保持 attention_backend FLASH_ATTN。"
     - "This change does not alter the EAGLE3 draft model data type. The draft loads unmodified from the published Inferact/MiniMax-M3-EAGLE3-GQA checkpoint via --speculative-config (method=eagle3). kv-cache-dtype fp8 sets KV-cache storage precision, not the draft weights, and no flag overrides or re-quantizes the draft weights."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3503
+
+- config-keys:
+    - dsv4flash-fp4-mi355x-sglang-mtp
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Add DeepSeek-V4-Flash MI355X TP2 SGLang 8k1k serving at concurrency 1, 2, 4, 8, 16, 32, 64, 128 on lmsysorg/sglang-rocm v0.5.20-rocm720-mi35x-20260926, with bundled MTP via EAGLE (2 steps, top-k 1, 3 draft tokens) with CUDA/HIP graphs disabled for decode, prefill, and speculative verify/draft, real verification, GPU-resident weights/KV, and the DeepSeek-V4 chat encoder. Flags follow SGLang's MI355X Flash FP4 low-latency recipe at TP2."
+    - "新增 DeepSeek-V4-Flash MI355X TP2 SGLang 8k1k serving，并发为 1、2、4、8、16、32、64、128，镜像为 lmsysorg/sglang-rocm v0.5.20-rocm720-mi35x-20260926；通过 EAGLE 使用原生 MTP（2 steps、top-k 1、3 draft tokens），decode、prefill 及投机验证/draft 均关闭 CUDA/HIP graph，采用真实验证、GPU 常驻权重/KV 和 DeepSeek-V4 chat 编码器。参数沿用 SGLang MI355X Flash FP4 低延迟配方，改为 TP2。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3518

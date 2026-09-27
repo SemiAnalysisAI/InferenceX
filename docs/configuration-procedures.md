@@ -44,6 +44,9 @@ router image does not require changing the worker image. TRT-LLM recipes use nat
 `engine.served_model_name`, without duplicating that flag in `roles.agg.extra_args`.
 The former fork's direct ATOM frontend is not required.
 
+DeepSeek-V4 fixed-sequence recipes pass `--dsv4` to `srt_fixed_sequence.sh` and set
+`USE_CHAT_TEMPLATE: 'true'` to use the shared DeepSeek-V4 encoder rather than a missing HF chat template.
+
 ### Cluster profiles
 
 Launchers that use srt-slurm keep their cluster configuration in
