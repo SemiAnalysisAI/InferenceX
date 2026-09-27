@@ -144,7 +144,7 @@ The remaining Python tools are grouped by responsibility:
 | `infx.datasets` | AgentX trace sampling, conversion, dataset assembly, and distribution plots |
 | `infx.klaud` | Klaud orchestration, lifecycle, GitHub/API adapters, and schemas |
 
-Run commands with `python -m infx.<package>.<module>` from `inferencex-e2e/`. Dependencies remain specific to each command; importing `infx` does not load benchmark-client or eval dependencies. Python compatibility wrappers under `utils/` have been removed. Use the canonical `infx` paths for dataset tools, AgentX aggregation and analysis, eval adapters and patches, and benchmark-client helpers. Eval documentation lives at `infx/evals/EVALS.md`, and eval tests live under `infx/tests/evals/`. Other behavioral tests, runner-provisioning shell scripts, and the external submodules remain under `utils/`.
+Run commands with `python -m infx.<package>.<module>` from `inferencex-e2e/`. Dependencies remain specific to each command; importing `infx` does not load benchmark-client or eval dependencies. Python compatibility wrappers under `utils/` have been removed. Use the canonical `infx` paths for dataset tools, AgentX aggregation and analysis, eval adapters and patches, and benchmark-client helpers. Eval documentation lives at `infx/evals/EVALS.md`, and eval tests live under `infx/tests/evals/`. Other behavioral tests live under `infx/tests/`. Only the runner-provisioning shell scripts (`utils/runner_setup/`) and the external `aiperf` and `srt-slurm` submodules remain under `utils/`.
 
 Eval adapters and patches copied into isolated environments use the actual files under `infx/evals`, so they remain standalone. Trusted workflow helpers explicitly select their tooling checkout. Fixed-sequence processing, eval-score validation, and the single-node AgentX result-validation step use the package from the workflow revision in a separate checkout, with the measured checkout as their working directory. Tooling and Python 3.12 are provisioned for eval-only jobs too. Historical measured revisions therefore do not need these helper modules. Score thresholds come from the workflow revision's packaged `infx/evals/thresholds.yaml`.
 
@@ -412,7 +412,7 @@ Use this procedure when a row is missing, mislabeled, or unexpected.
      --config-keys <exact-key>
    ```
 
-4. **Matrix handoff:** In the `setup` job, verify the row is in the expected `single_node`, `multi_node`, `evals`, `agentic_evals`, or `multinode_evals` bucket. Confirm every required field is forwarded by the matching fan-out job.
+4. **Matrix handoff:** In the `setup` job, verify the row is in the expected `single_node`, `multi_node`, `evals`, `agentic_evals`, `multinode_evals`, or `multinode_agentic_evals` bucket. Confirm every required field is forwarded by the matching fan-out job.
 5. **Scheduling:** Verify the template's `runs-on` value matches the intended runner. Confirm the concrete runner name prefix resolves to an existing `runners/launch_<prefix>.sh`.
 6. **Runtime:** Trace the launcher branch to the exact benchmark script or external recipe. Confirm every critical matrix field reaches a consumed environment variable or command argument.
 7. **Output:** Verify the workflow's required raw result exists. Then verify the expected `bmk_*`, `eval_*`, `agentic_*`, logs, or metrics artifact was uploaded.

@@ -58,12 +58,12 @@ CPU-only machines run measurement/mapping tests and skip the real GPU test.
 Select `backend: swap-blocks` in **CollectiveX Sweep**, or dispatch:
 
 ```bash
-gh workflow run collectivex-sweep.yml --ref codex/collectivex-swap-blocks \
+gh workflow run collectivex-sweep.yml --ref main \
   -f backend=swap-blocks -f swap_profile=smoke \
   -f swap_image=vllm/vllm-openai:v0.25.1
 ```
 
-Use `--ref main` after merge. Blank `only_sku` selects the nine current Slurm GPU pools;
+Blank `only_sku` selects the nine current Slurm GPU pools;
 set it to `h200-dgxc`, `h100-dgxc`, `b200-nscale`, `b300`, `gb200`, `gb300`,
 `mi300x`, `mi325x`, or `mi355x` for an isolated GPU sweep. `exclude_skus`
 accepts a comma-separated exclusion list. Leave EP filters blank. Each cell requests

@@ -80,7 +80,7 @@ The below list describes what each field is:
 
 - `image`: The image used to serve the benchmark, e.g., `vllm/vllm-openai:v0.10.2`
 - `model`: The model to serve, e.g., `deepseek-ai/DeepSeek-R1-0528`
-- `model-prefix`: The canonical InferenceMAX model prefix reference, i.e., `dsr1` for DeepSeek-R1 or `qwen3.5` for Qwen3.5. Consult `docs/MODELS.md` for supported model/scenario combinations. This value is used to decipher which script in `benchmarks/` should be used in order to launch the benchmark.
+- `model-prefix`: The canonical InferenceX model prefix reference, i.e., `dsr1` for DeepSeek-R1 or `qwen3.5` for Qwen3.5. Consult `docs/MODELS.md` for supported model/scenario combinations. This value is used to decipher which script in `benchmarks/` should be used in order to launch the benchmark.
 - `runner`: This is the runner label on which to run the benchmark. This must be a valid key under `labels` in `runners.yaml`.
   Agentic configs must use an exact `cluster:<name>` runner label, not a broad
   SKU or capacity label, so every search-space point runs on the same hardware
@@ -142,7 +142,7 @@ jobs to 3600 seconds. Reusable workflow callers may override the `duration`
 input.
 
 Notes:
-- No extra fields besides the ones listed may be specified, or else the benchmarks will fail to run.
+- The fields above are the common ones, not the full schema. The Pydantic models in [`infx/matrix/validation.py`](../infx/matrix/validation.py) are the authoritative contract; they also accept fields such as `spec-decoding`, `srt-recipe`, `num-nodes`, and `require-power`, and they reject any field they do not define, which fails matrix generation.
 - Setting the fields above only guarantees that their values are passed as environment variables to benchmark scripts. Single-node jobs receive `PP_SIZE`, `DCP_SIZE`, and `PCP_SIZE`. Multinode jobs receive `PREFILL_PP_SIZE`, `PREFILL_DCP_SIZE`, `PREFILL_PCP_SIZE`, `DECODE_PP_SIZE`, `DECODE_DCP_SIZE`, and `DECODE_PCP_SIZE`. Actually using those variables is an implementation detail of the benchmark Bash script.
 
 ## Runners

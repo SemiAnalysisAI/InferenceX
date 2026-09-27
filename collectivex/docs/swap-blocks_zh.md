@@ -52,12 +52,12 @@ python3 -m unittest discover collectivex/tests -p 'test_swap_blocks.py' -v
 在 **CollectiveX Sweep** 中选择 `backend: swap-blocks`，或执行：
 
 ```bash
-gh workflow run collectivex-sweep.yml --ref codex/collectivex-swap-blocks \
+gh workflow run collectivex-sweep.yml --ref main \
   -f backend=swap-blocks -f swap_profile=smoke \
   -f swap_image=vllm/vllm-openai:v0.25.1
 ```
 
-合并后使用 `--ref main`。多平台运行和镜像选择见下方说明；`all` 仍仅运行 EP。
+多平台运行和镜像选择见下方说明；`all` 仍仅运行 EP。
 
 
 `smoke` 覆盖三个方向、两种布局、257/4096/65536/262144 字节（最大 256 KiB）的块大小及 1/4/16/64/256/1024/2048 个块，

@@ -16,8 +16,8 @@ positional arguments:
                         filtering by model, precision, framework, runner type,
                         and sequence lengths
     test-config         Generate full sweep for specific config keys.
-                        Supports wildcard patterns (* and ?) for matching
-                        multiple keys at once.
+                        Validates that all specified keys exist before
+                        generating.
 
 options:
   -h, --help            show this help message and exit
@@ -32,12 +32,16 @@ usage: python -m infx.matrix.generate full-sweep
     --config-files CONFIG_FILES [CONFIG_FILES ...]
     [--runner-config RUNNER_CONFIG]
     [--no-evals | --evals-only] [--all-evals]
+    [--smoke] [--trim-conc]
+    [--runner-node-filter RUNNER_NODE_FILTER]
+    [--scenario-type {fixed-seq-len,agentic-coding} [{fixed-seq-len,agentic-coding} ...]]
     [--model-prefix MODEL_PREFIX [MODEL_PREFIX ...]]
     [--precision PRECISION [PRECISION ...]]
     [--framework FRAMEWORK [FRAMEWORK ...]]
     [--runner-type RUNNER_TYPE [RUNNER_TYPE ...]]
     [--seq-lens {1k1k,8k1k} [{1k1k,8k1k} ...]]
     [--step-size STEP_SIZE]
+    [--min-conc MIN_CONC]
     [--max-conc MAX_CONC]
     [--max-tp MAX_TP]
     [--max-ep MAX_EP]
@@ -101,8 +105,13 @@ usage: python -m infx.matrix.generate test-config
     --config-files CONFIG_FILES [CONFIG_FILES ...]
     [--runner-config RUNNER_CONFIG]
     [--no-evals | --evals-only] [--all-evals]
+    [--smoke] [--trim-conc]
+    [--runner-node-filter RUNNER_NODE_FILTER]
+    [--scenario-type {fixed-seq-len,agentic-coding} [{fixed-seq-len,agentic-coding} ...]]
     --config-keys CONFIG_KEYS [CONFIG_KEYS ...]
     [--conc CONC [CONC ...]]
+    [--exp-names EXP_NAMES [EXP_NAMES ...]]
+    [--seq-lens {1k1k,8k1k} [{1k1k,8k1k} ...]]
 ```
 
 Config keys support **wildcard patterns** using `*` (matches any characters) and `?` (matches a single character). Patterns that match no keys will raise an error.
