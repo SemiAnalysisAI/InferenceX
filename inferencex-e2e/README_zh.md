@@ -16,3 +16,5 @@ uv run --locked python -m infx.matrix.generate test-config \
 Python 项目清单与锁文件保留在仓库根目录，`uv` 会从此目录向上查找它们。
 GitHub 工作流、仓库规范及 CODEOWNERS 也保留在仓库根目录。
 工作流手动触发时的生成器参数使用相对此目录的路径；历史版本仍使用原有执行目录。
+
+本目录保留一份 `LICENSE`，以便仅挂载此项目目录的容器仍能生成许可证归属信息。

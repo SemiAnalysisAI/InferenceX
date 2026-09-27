@@ -395,7 +395,7 @@ def _write_json(path: Path, value: Mapping[str, Any]) -> None:
 def _write_upstream_attribution(project_root: Path) -> None:
     """Keep BFCL provenance and its Apache license with archived outputs."""
     project_root.mkdir(parents=True, exist_ok=True)
-    repository_license = Path(__file__).resolve().parents[3] / "LICENSE"
+    repository_license = Path(__file__).resolve().parents[2] / "LICENSE"
     if repository_license.is_file():
         license_bytes = repository_license.read_bytes()
     else:

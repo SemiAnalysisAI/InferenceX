@@ -1,6 +1,7 @@
 import builtins
 import json
 import os
+import shutil
 import subprocess
 import sys
 from dataclasses import replace
@@ -986,3 +987,27 @@ def test_upstream_registration_uses_exact_stock_openai_handler(
     )
 
     assert model_config_mapping["model-a"].model_handler is OpenAICompletionsHandler
+
+
+def test_source_mount_archives_license_without_installed_distribution(tmp_path: Path) -> None:
+    mounted = tmp_path / "mounted"
+    package = mounted / "infx/evals"
+    package.mkdir(parents=True)
+    (mounted / "infx/__init__.py").touch()
+    (package / "__init__.py").touch()
+    shutil.copyfile(be.__file__, package / "bfcl_adapter.py")
+    (mounted / "LICENSE").write_bytes(b"fixture Apache license\n")
+    completed = subprocess.run(
+        [
+            sys.executable, "-S", "-c",
+            "from pathlib import Path; "
+            "from infx.evals.bfcl_adapter import _write_upstream_attribution; "
+            "_write_upstream_attribution(Path('output'))",
+        ],
+        cwd=mounted, env={**os.environ, "PYTHONPATH": str(mounted)},
+        capture_output=True, text=True, check=False,
+    )
+    assert completed.returncode == 0, completed.stderr
+    assert (mounted / "output/BFCL_LICENSE.apache-2.0.txt").read_bytes() == b"fixture Apache license\n"
+    attribution = json.loads((mounted / "output/BFCL_ATTRIBUTION.json").read_text())
+    assert attribution["upstream"]["license"] == "Apache-2.0"

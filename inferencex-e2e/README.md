@@ -17,3 +17,5 @@ The Python manifest and lockfile stay at the repository root. `uv` discovers the
 from this directory. GitHub workflows, repository policy, and CODEOWNERS also stay
 at the repository root. Workflow dispatch generator arguments use paths relative
 to this directory. Historical checkouts retain their original execution root.
+
+The local `LICENSE` copy keeps attribution available when containers mount only this project directory.
