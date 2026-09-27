@@ -260,6 +260,7 @@ def test_submission_manifest(tmp_path, record, expected):
     ("b200-cw", "none"), ("b200-nb", "none"), ("b200-nscale-slurm", "none"),
     ("b200-nscale-slurm", "agentic"),
     ("b200-nscale-slurm", "download"), ("b200-nscale-slurm", "download-failure"),
+    ("b200-nscale-slurm", "download-cached"),
     ("b300-dsxe", "none"),
     ("mi300x-amd", "none"), ("mi325x-amds", "none"), ("mi355x-amds", "none"),
 ] + [(pool, "missing-recipe") for pool in (
@@ -270,10 +271,16 @@ def test_submission_manifest(tmp_path, record, expected):
 def test_pool_launcher_stages_artifacts_and_propagates_failure(point, tmp_path, pool, failure):
     path, recipe, point_env = point
     if failure.startswith("download"):
-        point_env = {**point_env, "MODEL": "deepseek-ai/DeepSeek-V4-Flash"}
+        point_env = {
+            **point_env, "MODEL": "deepseek-ai/DeepSeek-V4-Flash",
+            "IMAGE": f"example/server:nightly@sha256:{'a' * 64}",
+        }
         recipe["model"]["path"] = "hf:deepseek-ai/DeepSeek-V4-Flash"
+        recipe["model"]["container"] = point_env["IMAGE"]
         recipe["benchmark"]["env"]["MODEL"] = "deepseek-ai/DeepSeek-V4-Flash"
         path.write_text(yaml.safe_dump({"base": recipe}))
+    if failure == "download-cached":
+        (tmp_path / f"example_server_nightly_sha256_{'a' * 64}.sqsh").write_text("cache")
     binaries = tmp_path / "bin"
     binaries.mkdir()
     model = tmp_path / "model"
@@ -301,6 +308,7 @@ fi
         "sacct": 'if [[ "$TEST_FAILURE" == allocation ]]; then echo "FAILED|1:0"; else echo "COMPLETED|0:0"; fi',
         "scancel": 'printf "%s\\n" "$@" >> "$CANCEL_CAPTURE"',
         "tail": 'exit 0',
+        "unsquashfs": '[[ "$TEST_FAILURE" == download-cached ]]',
     }
     for name, script in scripts.items():
         binary = binaries / name
@@ -358,7 +366,7 @@ fi
         ["bash", str(ROOT / f"runners/launch_{pool}.sh")], cwd=tmp_path,
         env=env, capture_output=True, text=True, timeout=30,
     )
-    assert result.returncode == {"none": 0, "allocation": 1, "submission": 7, "bootstrap": 13, "missing-recipe": 1, "agentic": 0, "download": 0, "download-failure": 1}[failure], result.stderr
+    assert result.returncode == {"none": 0, "allocation": 1, "submission": 7, "bootstrap": 13, "missing-recipe": 1, "agentic": 0, "download": 0, "download-failure": 1, "download-cached": 0}[failure], result.stderr
     if failure.startswith("download"):
         assert Path(env["DOWNLOAD_CAPTURE"]).read_text().splitlines() == [
             "tool", "run", "--from", "huggingface-hub>=0.34,<2", "hf", "download",
@@ -394,9 +402,16 @@ fi
     assert json.loads((tmp_path / "gpu_metrics_context.json").read_text()) == {"device_count": 4}
     assert (tmp_path / "srt-single-node-logs.tar.gz").stat().st_size > 0
     cluster_config = yaml.safe_load(next(tmp_path.glob("srt-single.*/checkout/srtslurm.yaml")).read_text())
-    assert cluster_config["containers"]["test:tag"] == "test:tag"
-    assert cluster_config["use_exclusive_sbatch_directive"] is True
     if failure == "download":
+        assert cluster_config["containers"][point_env["IMAGE"]] == f"example/server:sha256:{'a' * 64}"
+    elif failure == "download-cached":
+        assert cluster_config["containers"][point_env["IMAGE"]] == str(
+            tmp_path / f"example_server_nightly_sha256_{'a' * 64}.sqsh"
+        )
+    else:
+        assert cluster_config["containers"]["test:tag"] == "test:tag"
+    assert cluster_config["use_exclusive_sbatch_directive"] is True
+    if failure in {"download", "download-cached"}:
         assert cluster_config["model_paths"]["hf:deepseek-ai/DeepSeek-V4-Flash"] == (
             "/data/home/sa-shared/gharunners/models/DeepSeek-V4-Flash"
         )

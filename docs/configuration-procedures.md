@@ -54,6 +54,9 @@ shared writable location does not require a pre-staged `/scratch/models` copy.
 The download process uses explicit writable `HF_HOME`, `HF_HUB_CACHE`, and
 `HF_XET_CACHE` paths beneath the checkpoint's `.cache/huggingface` directory;
 the serving process retains its container cache settings.
+For an uncached digest-pinned image, this lane maps Docker's `repo:tag@sha256:...`
+to Pyxis/Enroot's `repo:sha256:...` manifest reference. The recorded image and
+digest stay unchanged; a valid cached squash image still takes precedence.
 The recipe uses bundled MTP through `EAGLE` (3 steps, top-k 1, 4 draft tokens),
 with the DeepSeek-V4 chat encoder selected by the client's `--dsv4` option.
 

@@ -159,17 +159,6 @@ else
     exit 1
 fi
 
-if [[ "$LAUNCH_PATH" == native-single-node ]]; then
-    HF_HUB_CACHE_MOUNT=/data/home/sa-shared/gharunners/hf-hub-cache
-    SRT_MODEL_PATH="$MODEL_PATH"
-    # Models not staged locally resolve through the Hugging Face cache mount.
-    [[ "$SRT_MODEL_PATH" == /* ]] || SRT_MODEL_PATH="hf:$MODEL"
-    SRT_SQUASH_FILE="$B200_SQUASH_DIR/$(printf '%s' "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-    launch_srt_single_node b200-nscale-slurm \
-        --var SLURM_ACCOUNT "$SLURM_ACCOUNT" --var SLURM_PARTITION "$SLURM_PARTITION"
-    exit $?
-fi
-
 # ---------------------------------------------------------------------------
 # Container import helpers shared by both srt-slurm paths
 # ---------------------------------------------------------------------------
@@ -201,6 +190,26 @@ enroot_uri_for_image() {
         printf 'docker://%s\n' "$image_ref"
     fi
 }
+
+if [[ "$LAUNCH_PATH" == native-single-node ]]; then
+    HF_HUB_CACHE_MOUNT=/data/home/sa-shared/gharunners/hf-hub-cache
+    SRT_MODEL_PATH="$MODEL_PATH"
+    # Models not staged locally resolve through the Hugging Face cache mount.
+    [[ "$SRT_MODEL_PATH" == /* ]] || SRT_MODEL_PATH="hf:$MODEL"
+    SRT_SQUASH_FILE="$B200_SQUASH_DIR/$(printf '%s' "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    SRT_IMAGE_ARGS=()
+    if [[ "$MODEL" == deepseek-ai/DeepSeek-V4-Flash && "$IMAGE" == *@sha256:* ]] &&
+       ! { [[ -r "$SRT_SQUASH_FILE" ]] && unsquashfs -s "$SRT_SQUASH_FILE" >/dev/null 2>&1; }; then
+        # Pyxis interprets Docker's @digest as credentials; preserve the digest
+        # using Enroot's manifest-tag syntax, without its docker:// prefix.
+        SRT_IMAGE_URI=$(enroot_uri_for_image "$IMAGE") || exit 1
+        SRT_IMAGE_ARGS=(--container "$IMAGE" "${SRT_IMAGE_URI#docker://}")
+    fi
+    launch_srt_single_node b200-nscale-slurm \
+        --var SLURM_ACCOUNT "$SLURM_ACCOUNT" --var SLURM_PARTITION "$SLURM_PARTITION" \
+        "${SRT_IMAGE_ARGS[@]}"
+    exit $?
+fi
 
 # Import containers via enroot, serialized so concurrent runners on this
 # cluster don't race on the same squash file.

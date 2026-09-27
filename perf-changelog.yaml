@@ -8995,3 +8995,12 @@
     - "Add DeepSeek-V4-Flash B200 Nscale TP2 SGLang 8k1k serving at concurrency 1, 2, 4, 8, 16, 32, 64, 128 with bundled EAGLE MTP (3 steps, top-k 1, 4 draft tokens), real verification, and GPU-resident weights/KV. Stage the unstaged checkpoint and HF/Xet download caches on writable shared storage before SRT submission; stop on download failure."
     - "新增 DeepSeek-V4-Flash B200 Nscale TP2 SGLang 8k1k serving，并发为 1、2、4、8、16、32、64、128，采用原生 EAGLE MTP（3 steps、top-k 1、4 draft tokens）、真实验证和 GPU 常驻权重/KV。SRT 提交前在共享可写目录下载 checkpoint 并设置 HF/Xet 下载缓存，下载失败时停止提交。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3517
+
+- config-keys:
+    - dsv4flash-fp4-b200-sglang-mtp
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Fix B200 V4 Flash single-node Pyxis image import by converting uncached Docker @sha256 references to Enroot manifest-tag syntax. Preserve the pinned image digest and prefer valid cached squash images. No serving settings change."
+    - "修复 B200 V4 Flash 单节点 Pyxis 镜像导入：将尚未缓存的 Docker @sha256 引用转换为 Enroot manifest-tag 语法，保留固定镜像 digest 并优先使用有效 squash 缓存，不更改 serving 设置。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3517
