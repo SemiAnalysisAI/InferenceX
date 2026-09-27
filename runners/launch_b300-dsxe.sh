@@ -61,6 +61,7 @@ WRITABLE_MODELS_DIR="/data/home/sa-gha-runner/models"
 STAGED_MODELS=(
     DeepSeek-R1-0528
     DeepSeek-R1-0528-NVFP4-v2
+    DeepSeek-V4-Flash
     DeepSeek-V4-Pro
     DeepSeek-V4-Pro-0813
     DeepSeek-V4-Pro-NVFP4
