@@ -9076,3 +9076,13 @@
   description:
     - "Retain the branch Kimi MI355X grid through native SRT-Slurm variants, including no-draft DCP8, after removal of its legacy launcher"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3156
+
+- config-keys:
+  - minimaxm3-fp4-b200-vllm-stock-eval-mtp
+  - kimik3-fp4-b300-vllm-stock-eval-mtp
+  scenario-type:
+  - agentic-coding
+  description:
+  - Qualify the official vLLM CUDA nightly a9eafde on MiniMax B200 TP4 c1 and Kimi B300 TP8 DCP8 c8 with GPU-resident FP8 KV, native tool parsers and real speculative acceptance; no runtime framework patches or dependency installs.
+  - 使用官方 vLLM CUDA nightly a9eafde，在 MiniMax B200 TP4 c1 和 Kimi B300 TP8 DCP8 c8 上验证完整工具评估；使用 GPU 驻留 FP8 KV 缓存、原生工具解析器和真实投机解码验收，不安装运行时框架补丁或依赖。
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3156
