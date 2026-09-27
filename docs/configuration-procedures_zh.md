@@ -42,6 +42,9 @@ frontend、一个聚合 worker，并设置 `enable_multiple_frontends: false`。
 镜像。TRT-LLM 配方使用原生 `engine.served_model_name`，不再通过 `roles.agg.extra_args`
 重复传入该参数。不再依赖此前分叉中的 ATOM 直连 frontend。
 
+DeepSeek-V4 固定序列长度配方向 `srt_fixed_sequence.sh` 传入 `--dsv4`，并设置
+`USE_CHAT_TEMPLATE: 'true'`，使用共享 DeepSeek-V4 编码器，而不是 checkpoint 中缺失的 HF chat template。
+
 ## 规程索引
 
 1. [准备 worktree](#准备-worktree)

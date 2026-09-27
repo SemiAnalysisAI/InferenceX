@@ -1,0 +1,77 @@
+# DeepSeek-V4-Flash 8k1k on MI355X at TP2, following SGLang's MI355X Flash FP4
+# low-latency recipe (TP8 upstream) with bundled MTP through EAGLE.
+# https://github.com/sgl-project/sglang/blob/8ca82118e0e1a0a1b49f85f675843b19ebb388ba/docs/src/snippets/configs/deepseek-ai/deepseek-v4.jsx
+base:
+  schema: 2
+  name: dsv4flash-fp4-mi355x-sglang-mtp-8k1k
+  model:
+    path: hf:deepseek-ai/DeepSeek-V4-Flash
+    container: lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260926
+    precision: fp4
+  resources:
+    gpu_type: mi355x
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 2
+      args:
+        served-model-name: deepseek-ai/DeepSeek-V4-Flash
+        trust-remote-code: true
+        tensor-parallel-size: 2
+        data-parallel-size: 1
+        expert-parallel-size: 1
+        attention-backend: dsv4
+        page-size: 256
+        kv-cache-dtype: fp8_e4m3
+        enforce-shared-experts-fusion: true
+        disable-radix-cache: true
+        mem-fraction-static: 0.9
+        swa-full-tokens-ratio: 0.15
+        chunked-prefill-size: 16384
+        context-length: 9236
+        reasoning-parser: deepseek-v4
+        tool-call-parser: deepseekv4
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 2
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 3
+        watchdog-timeout: 3600
+        enable-metrics: true
+      env:
+        PYTHONNOUSERSITE: '1'
+        PYTHONUNBUFFERED: '1'
+        SGLANG_USE_ROCM700A: '0'
+        TORCH_BLAS_PREFER_HIPBLASLT: '1'
+        SGLANG_HACK_FLASHMLA_BACKEND: unified_kv_triton
+        AITER_BF16_FP8_MOE_BOUND: '0'
+        # aiter batched GEMM for the absorbed MLA projections.
+        SGLANG_OPT_USE_AITER_BATCHED_GEMM: 'true'
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/single_node/srt_fixed_sequence.sh --dsv4
+    env:
+      MODEL: deepseek-ai/DeepSeek-V4-Flash
+      ISL: '8192'
+      OSL: '1024'
+      RANDOM_RANGE_RATIO: '0.8'
+      USE_CHAT_TEMPLATE: 'true'
+
+zip_override_tp2:
+  roles:
+    agg:
+      args:
+        max-running-requests: [1, 2, 4, 8, 16, 32, 64, 128]
+        cuda-graph-max-bs-decode: [1, 2, 4, 8, 16, 32, 64, 128]
+  benchmark:
+    env:
+      CONC: ['1', '2', '4', '8', '16', '32', '64', '128']
