@@ -41,7 +41,7 @@ gh workflow run operatorx-sweep.yml --repo SemiAnalysisAI/InferenceX \
 ```
 
 快速检查基础设施时，可显式选择 `testlists=gemm_perf` 和 `chunk_size=50`
-（11 个 BF16 测试）。`gemm_serving_8k1k_min` 和 `gemm_serving_all_min`
+（11 个 BF16 测试）。测试运行应设置 `-f ingest=false`，使结果不进入 OperatorX 数据库；手动触发的运行默认会被导入。`gemm_serving_8k1k_min` 和 `gemm_serving_all_min`
 包含 InferenceX 推理服务配置中的 GEMM。
 不支持的操作会保留在结果中。后端导入错误、基准错误，以及没有任何成功结果，
 都会使分片失败。先验证 BF16 GEMM，再验证量化格式。

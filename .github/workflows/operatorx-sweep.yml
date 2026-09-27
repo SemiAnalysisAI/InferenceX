@@ -42,6 +42,10 @@ on:
         description: Optional recent OperatorX run on this runner whose failed cleanup should be retried
         type: string
         default: ''
+      ingest:
+        description: Ingest the results into the OperatorX database (false for test runs)
+        type: boolean
+        default: true
   pull_request:
     paths:
       - operatorx/**
@@ -242,7 +246,7 @@ jobs:
     name: Trigger OperatorX database ingest
     # A run with failed shards is still stored: its unrun cases read as missing.
     if: >-
-      always() && github.event_name == 'workflow_dispatch' &&
+      always() && github.event_name == 'workflow_dispatch' && inputs.ingest &&
       (needs.summarize.result == 'success' || needs.summarize.result == 'failure')
     needs: [summarize]
     runs-on: ubuntu-latest
