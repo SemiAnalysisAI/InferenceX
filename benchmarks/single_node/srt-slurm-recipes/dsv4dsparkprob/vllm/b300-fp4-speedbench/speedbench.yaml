@@ -1,0 +1,82 @@
+# DeepSeek-V4-Pro-DSpark B300 vLLM SPEED-Bench AL matrix (DSpark, probabilistic draft).
+#
+# Identical to dsv4dspark except draft_sample_method=probabilistic. The greedy
+# vs probabilistic comparison isolates the effect of draft-token sampling on
+# acceptance length. No rejection_sample_method override (the bash wrapper
+# dsv4dsparkprob_fp4_b300_vllm.sh only sets DRAFT_SAMPLE_METHOD=probabilistic).
+base:
+  schema: 2
+  name: dsv4dsparkprob-fp4-b300-vllm-speedbench
+  model:
+    path: hf:deepseek-ai/DeepSeek-V4-Pro-DSpark
+    container: vllm/vllm-openai:v0.21.0
+    precision: fp4
+  resources:
+    gpu_type: b300
+    gpus_per_node: 8
+  frontend:
+    type: vllm
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine:
+    type: vllm
+    connector: null
+    # vLLM v0.21.0 predates --device-ids; bind GPUs via CUDA_VISIBLE_DEVICES.
+    set_visible_devices: true
+  health_check:
+    interval_seconds: 10
+    max_attempts: 360
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        served-model-name: deepseek-ai/DeepSeek-V4-Pro-DSpark
+        tensor-parallel-size: 8
+        data-parallel-size: 1
+        pipeline-parallel-size: 1
+        trust-remote-code: true
+        kv-cache-dtype: fp8
+        block-size: 256
+        no-enable-prefix-caching: true
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}'
+        attention-config: '{"use_fp4_indexer_cache":true}'
+        tokenizer-mode: deepseek_v4
+        tool-call-parser: deepseek_v4
+        enable-auto-tool-choice: true
+        reasoning-parser: deepseek_v4
+        max-cudagraph-capture-size: 2048
+        max-model-len: 16384
+        max-num-seqs: 64
+        gpu-memory-utilization: 0.90
+      env:
+        VLLM_ENGINE_READY_TIMEOUT_S: '3600'
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/single_node/srt_speedbench.sh
+    env:
+      MODEL: deepseek-ai/DeepSeek-V4-Pro-DSpark
+      SPEC_DECODING: mtp
+      TEMPERATURE: '1.0'
+      SPEEDBENCH_TOKENIZER_MODE: deepseek_v4
+      SPEEDBENCH_TRUST_REMOTE_CODE: '1'
+      APPLY_CHAT_TEMPLATE_KWARGS_SHIM: '1'
+      SPEEDBENCH_CONCURRENCY: '32'
+
+zip_override_mtp:
+  roles:
+    agg:
+      args:
+        speculative-config:
+          - '{"method":"dspark","num_speculative_tokens":1,"draft_sample_method":"probabilistic"}'
+          - '{"method":"dspark","num_speculative_tokens":2,"draft_sample_method":"probabilistic"}'
+          - '{"method":"dspark","num_speculative_tokens":3,"draft_sample_method":"probabilistic"}'
+          - '{"method":"dspark","num_speculative_tokens":4,"draft_sample_method":"probabilistic"}'
+          - '{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic"}'
+          - '{"method":"dspark","num_speculative_tokens":6,"draft_sample_method":"probabilistic"}'
+          - '{"method":"dspark","num_speculative_tokens":7,"draft_sample_method":"probabilistic"}'
+          - '{"method":"dspark","num_speculative_tokens":8,"draft_sample_method":"probabilistic"}'

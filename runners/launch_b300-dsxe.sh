@@ -124,7 +124,8 @@ EXECUTION_PATH=agentic
 if [[ "$IS_MULTINODE" == true ]]; then
     EXECUTION_PATH=multinode
 elif [[ -n "${BENCH_SCRIPT_OVERRIDE:-}" ]]; then
-    # SPEED-Bench collectors explicitly supply their script outside this migration.
+    # Legacy path: caller supplies a script via BENCH_SCRIPT_OVERRIDE.
+    # All SPEED-Bench collectors migrated to srt-slurm recipes (SRT_RECIPE).
     EXECUTION_PATH=script
 elif [[ "$IS_AGENTIC" == 0 || -n "${SRT_RECIPE:-}" ]]; then
     check_env_vars SRT_RECIPE
@@ -141,8 +142,10 @@ if [[ "$EXECUTION_PATH" == native-single-node ]]; then
         # Not staged on every node's NVMe; read the shared copy.
         SRT_MODEL_PATH="$SHARED_MODEL_ROOT/${MODEL##*/}"
     fi
-    # Not staged on node-local NVMe: the engine downloads it into the shared HF cache.
-    if [[ "$MODEL" == RadixArk/Qwen3.8-Flash-Next-NVFP4 ]]; then
+    # Not staged on node-local NVMe and not pre-copied to shared storage
+    # (or present as an empty directory from a failed download): let the
+    # engine download via the mounted HF cache.
+    if [[ "$SRT_MODEL_PATH" != hf:* && ( ! -d "$SRT_MODEL_PATH" || -z "$(ls -A "$SRT_MODEL_PATH" 2>/dev/null)" ) ]]; then
         SRT_MODEL_PATH="hf:$MODEL"
     fi
     SRT_SQUASH_FILE="$SQUASH_DIR/$(printf '%s' "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"

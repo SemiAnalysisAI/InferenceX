@@ -1,0 +1,98 @@
+# Qwen3.8-Flash-Next B300 vLLM SPEED-Bench AL matrix (native MTP).
+#
+# TP4 (not 8): plain TP8 is incompatible with the FP8 checkpoint's 128-wide
+# quantization blocks.  AL is GPU-count-independent, so collecting on 4 of 8
+# GPUs does not affect the curve.
+#
+# --no-enable-flashinfer-autotune; --max-num-seqs 256 (avoids a Mamba-cache
+# capacity error at startup); kv-cache dtype left at default for the hybrid
+# GDN + Qwen Sparse Attention architecture (do not force fp8);
+# --max-cudagraph-capture-size 512 (mamba-hybrid causal_conv1d capture-size
+# assert); --language-model-only (the checkpoint is multimodal, AL is collected
+# on text only).
+#
+# SPEEDBENCH_CONCURRENCY=64 keeps collection under the CI wall-time limit.
+#
+# Per-mode sampling (model-card):
+#   thinking : temperature 1.0, top_p 0.95, top_k 20, presence_penalty 0.0
+#   instruct : temperature 0.7, top_p 0.8,  top_k 20, presence_penalty 1.5
+base:
+  schema: 2
+  name: qwen38next-fp4-b300-vllm-speedbench
+  model:
+    path: hf:Qwen/Qwen3.8-Flash-Next-FP8
+    container: vllm/vllm-openai:qwen38-flash-next
+    precision: fp4
+  resources:
+    gpu_type: b300
+    gpus_per_node: 8
+  frontend:
+    type: vllm
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine:
+    type: vllm
+    connector: null
+    # The qwen38-flash-next build may predate --device-ids; bind GPUs via CUDA_VISIBLE_DEVICES.
+    set_visible_devices: true
+  health_check:
+    interval_seconds: 10
+    max_attempts: 360
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      args:
+        served-model-name: Qwen/Qwen3.8-Flash-Next-FP8
+        tensor-parallel-size: 4
+        data-parallel-size: 1
+        pipeline-parallel-size: 1
+        trust-remote-code: true
+        no-enable-prefix-caching: true
+        reasoning-parser: qwen3
+        tool-call-parser: qwen3_coder
+        enable-auto-tool-choice: true
+        language-model-only: true
+        no-enable-flashinfer-autotune: true
+        gpu-memory-utilization: 0.90
+        max-num-seqs: 256
+        max-cudagraph-capture-size: 512
+        max-model-len: 16384
+      env:
+        VLLM_ENGINE_READY_TIMEOUT_S: '3600'
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/single_node/srt_speedbench.sh
+    env:
+      MODEL: Qwen/Qwen3.8-Flash-Next-FP8
+      SPEC_DECODING: mtp
+      TEMPERATURE_ON: '1.0'
+      TOP_P_ON: '0.95'
+      TOP_K_ON: '20'
+      PRESENCE_PENALTY_ON: '0.0'
+      TEMPERATURE_OFF: '0.7'
+      TOP_P_OFF: '0.8'
+      TOP_K_OFF: '20'
+      PRESENCE_PENALTY_OFF: '1.5'
+      CHAT_TEMPLATE_KWARGS_OFF: '{"enable_thinking": false}'
+      SPEEDBENCH_TRUST_REMOTE_CODE: '1'
+      APPLY_CHAT_TEMPLATE_KWARGS_SHIM: '1'
+      SPEEDBENCH_CONCURRENCY: '64'
+
+zip_override_mtp:
+  roles:
+    agg:
+      args:
+        speculative-config:
+          - '{"method":"mtp","num_speculative_tokens":1}'
+          - '{"method":"mtp","num_speculative_tokens":2}'
+          - '{"method":"mtp","num_speculative_tokens":3}'
+          - '{"method":"mtp","num_speculative_tokens":4}'
+          - '{"method":"mtp","num_speculative_tokens":5}'
+          - '{"method":"mtp","num_speculative_tokens":6}'
+          - '{"method":"mtp","num_speculative_tokens":7}'
+          - '{"method":"mtp","num_speculative_tokens":8}'
