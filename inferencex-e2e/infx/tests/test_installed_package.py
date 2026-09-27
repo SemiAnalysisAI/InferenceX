@@ -17,7 +17,7 @@ def installed_python(tmp_path_factory):
                 "uv",
                 "sync",
                 "--project",
-                str(Path(__file__).resolve().parents[3]),
+                str(Path(__file__).resolve().parents[2]),
                 "--locked",
                 "--no-default-groups",
                 "--no-editable",
@@ -49,11 +49,14 @@ def run_installed(installed_python, tmp_path):
     return run
 
 
-def test_installed_tools_use_callers_repository(tmp_path, run_installed):
-    configs = tmp_path / "configs"
+@pytest.mark.parametrize("layout", ["", "inferencex-e2e"])
+def test_installed_tools_use_callers_repository(tmp_path, run_installed, layout):
+    project = tmp_path / layout
+    project.mkdir(exist_ok=True)
+    configs = project / "configs"
     configs.mkdir()
     (configs / "runners.yaml").write_text("labels:\n  cluster:fixture-gpu: [self-hosted]\n")
-    recipes = tmp_path / "benchmarks/multi_node/srt-slurm-recipes"
+    recipes = project / "benchmarks/multi_node/srt-slurm-recipes"
     recipes.mkdir(parents=True)
     (recipes / "fixture.yaml").write_text(
         "schema: 2\nroles:\n  prefill: {nodes: 2}\n  decode: {nodes: 4}\n"

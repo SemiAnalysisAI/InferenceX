@@ -39,10 +39,10 @@ build-backend = "uv_build"
 
 [tool.uv]
 exclude-newer = "PT12H"
-cache-keys = [{ file = "pyproject.toml" }, { file = "inferencex-e2e/infx/**" }]
+cache-keys = [{ file = "pyproject.toml" }, { file = "infx/**" }]
 
 [tool.uv.build-backend]
-module-root = "inferencex-e2e"
+module-root = "."
 # The test suite lives beside the package but is not shipped in the wheel.
 wheel-exclude = ["infx/tests"]
 
@@ -55,4 +55,4 @@ url = "https://download.pytorch.org/whl/cpu"
 explicit = true
 
 [tool.pytest.ini_options]
-pythonpath = ["inferencex-e2e"]
+pythonpath = ["."]

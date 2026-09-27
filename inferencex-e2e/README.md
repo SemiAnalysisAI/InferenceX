@@ -1,21 +1,29 @@
 # InferenceX end-to-end benchmarks
 
+<div align="center">
+
 **English** | [中文](README_zh.md)
 
-Model-serving benchmarks, configurations, launchers, result tooling, and the
-performance changelog live here. Start with [the documentation index](docs/index.md).
+</div>
 
-Run end-to-end commands from this directory:
+This project contains model-serving benchmarks, configurations, launchers, Python
+tooling, documentation, and performance history. Start with the
+[documentation index](docs/index.md).
+
+The [Python manifest](pyproject.toml) and [lockfile](uv.lock) belong to this
+project. From the repository root, install and run the local tooling with:
 
 ```bash
 cd inferencex-e2e
+uv sync --locked
 uv run --locked python -m infx.matrix.generate test-config \
   --config-files configs/nvidia-master.yaml --config-keys <key>
 ```
 
-The Python manifest and lockfile stay at the repository root. `uv` discovers them
-from this directory. GitHub workflows, repository policy, and CODEOWNERS also stay
-at the repository root. Workflow dispatch generator arguments use paths relative
-to this directory. Historical checkouts retain their original execution root.
+Replace `<key>` with the selected config key. Workflow dispatch generator arguments
+also use paths relative to this directory. See the [testing guide](docs/testing.md)
+for dependency groups and checks.
 
-The local `LICENSE` copy keeps attribution available when containers mount only this project directory.
+Repository policy, GitHub workflows, and the shared [Python version](../.python-version)
+remain at the repository root. The local [license](LICENSE) keeps attribution
+available when containers mount only this project directory.

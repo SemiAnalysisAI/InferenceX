@@ -65,7 +65,7 @@ Tests 使用四个 pytest worker 运行 `infx/tests/`、`utils/`、`runners/`、
 
 ### Python 环境
 
-[`pyproject.toml`](../../pyproject.toml) 定义 `infx` 包及其依赖；[`uv.lock`](../../uv.lock) 记录解析后的版本。运行 `uv sync --locked` 安装核心工具，然后用 `uv run --locked python -m infx.matrix.generate ...` 调用现有模块命令。CODEOWNER/GitHub 集成使用 `--extra workflows`，评测摘要和数据库比较使用 `--extra results`。`test` 依赖组包含 CPU 测试所需依赖。
+[`pyproject.toml`](../pyproject.toml) 定义 `infx` 包及其依赖；[`uv.lock`](../uv.lock) 记录解析后的版本。运行 `uv sync --locked` 安装核心工具，然后用 `uv run --locked python -m infx.matrix.generate ...` 调用现有模块命令。CODEOWNER/GitHub 集成使用 `--extra workflows`，评测摘要和数据库比较使用 `--extra results`。`test` 依赖组包含 CPU 测试所需依赖。
 
 开发时 uv 以 editable 模式安装包，源码修改立即生效。CI 安装普通 wheel，但主 pytest 套件导入源码 checkout。独立的安装包测试创建仅含核心或 results 依赖的独立环境，并在源码 checkout 之外运行，检查配方节点数、运行器元数据、矩阵拒绝、包内阈值加载、分数验证、BFCL 许可证归属记录，以及生成的评测结果行与摘要。依赖仓库文件的命令在 editable 安装时使用源码仓库；使用 wheel 时，应从 `inferencex-e2e/` 目录运行。评测 YAML/JSON 资源及 Apache 许可证随包分发。
 

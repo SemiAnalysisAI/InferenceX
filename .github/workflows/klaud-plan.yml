@@ -46,15 +46,28 @@ jobs:
             await core.summary.addHeading('Revisions', 2).addTable([
               ['infx tooling / candidate base', process.env.TOOLING_SHA],
             ]).write();
+      - name: Select Python project
+        run: |
+          python_project="$GITHUB_WORKSPACE"
+          if [[ -f "$python_project/inferencex-e2e/pyproject.toml" ]]; then
+            python_project="$python_project/inferencex-e2e"
+          fi
+          test -f "$python_project/pyproject.toml"
+          echo "INFERENCEX_PYTHON_PROJECT=$python_project" >> "$GITHUB_ENV"
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           python-version: '3.12'
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+            inferencex-e2e/pyproject.toml
+            inferencex-e2e/uv.lock
       - name: Reconcile interrupted owned candidates
         env:
           # Recovery mutates only sessions recorded by this workflow after their parent finishes.
           # Repository automation credential; the planner runs only on main.
           GH_TOKEN: ${{ secrets.AGENT_PAT }} # zizmor: ignore[secrets-outside-env]
-        run: uv run --locked python -m infx.klaud recover
+        run: uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked python -m infx.klaud recover
       - name: Prepare eligible candidates and open PRs
         id: prepare
         env:
@@ -62,7 +75,7 @@ jobs:
           # Repository automation credential; the planner runs only on main.
           KLAUD_DASHBOARD_API_KEY: ${{ secrets.DASH_API_KEY }} # zizmor: ignore[secrets-outside-env]
         run: >-
-          uv run --locked python -m infx.klaud plan
+          uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked python -m infx.klaud plan
           --directory "$RUNNER_TEMP/klaud"
           --review-batch-size "$REVIEW_BATCH_SIZE"
           --cooldown-hours "$CANDIDATE_COOLDOWN_HOURS"
@@ -145,7 +158,7 @@ jobs:
           KLAUD_PR_REVIEW: ${{ steps.review.outputs.structured_output }}
           KLAUD_REVIEW_OUTCOME: ${{ steps.review.outcome }}
           KLAUD_REVIEW_EXECUTION: ${{ steps.review.outputs.execution_file }}
-        run: uv run --locked python -m infx.klaud select --max-candidates-per-run "$MAX_CANDIDATES_PER_RUN" --directory "$RUNNER_TEMP/klaud" --execution-file "${KLAUD_REVIEW_EXECUTION:-$RUNNER_TEMP/claude-execution-output.json}"
+        run: uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked python -m infx.klaud select --max-candidates-per-run "$MAX_CANDIDATES_PER_RUN" --directory "$RUNNER_TEMP/klaud" --execution-file "${KLAUD_REVIEW_EXECUTION:-$RUNNER_TEMP/claude-execution-output.json}"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: klaud-ownership

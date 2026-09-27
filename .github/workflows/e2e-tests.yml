@@ -640,12 +640,27 @@ jobs:
                   path: ${{ env.RESULTS_DIR }}
                   pattern: results_*
 
+            - name: Select Python project
+              run: |
+                python_project="$GITHUB_WORKSPACE"
+                if [[ -f "$python_project/inferencex-e2e/pyproject.toml" ]]; then
+                  python_project="$python_project/inferencex-e2e"
+                fi
+                test -f "$python_project/pyproject.toml"
+                echo "INFERENCEX_PYTHON_PROJECT=$python_project" >> "$GITHUB_ENV"
+
             - name: Set up uv
               uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+              with:
+                  cache-dependency-glob: |
+                      pyproject.toml
+                      uv.lock
+                      inferencex-e2e/pyproject.toml
+                      inferencex-e2e/uv.lock
 
             - name: Calculate success rate
               run: >-
-                  uv run --locked --extra workflows
+                  uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked --extra workflows
                   python -m infx.workflows.calc_success_rate "$STATS_FILENAME"
 
             - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

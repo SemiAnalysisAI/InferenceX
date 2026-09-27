@@ -8,7 +8,7 @@
 
 这是 InferenceX 工作的必读低上下文路由页。只选择负责当前任务的一份页面，再按需打开其中链接的源文件。仓库源文件与 Workflow 仍是行为的权威来源。
 
-除非另有说明，这些指南中的路径和 shell 命令均相对 `inferencex-e2e/`。仓库级规范、GitHub 工作流和 Python 打包元数据仍位于仓库根目录。
+除非另有说明，这些指南中的路径和 shell 命令均相对 `inferencex-e2e/`。Python 项目清单与锁文件位于该项目目录。仓库级规范、GitHub 工作流和共享的 `.python-version` 仍位于仓库根目录。
 
 ## 任务与页面索引
 

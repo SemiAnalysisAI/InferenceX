@@ -1,6 +1,6 @@
 # How to Test Workflows
 
-Run end-to-end commands from `inferencex-e2e/`. Workflow dispatch generator arguments also resolve paths relative to that directory.
+Run end-to-end commands from `inferencex-e2e/`, which owns `pyproject.toml` and `uv.lock`. Workflow dispatch generator arguments also resolve paths relative to that directory. The repository-root `.python-version` supplies the shared Python default.
 
 In order to test configurations described in `inferencex-e2e/configs`, the primary workflow file used is `.github/workflows/e2e-tests.yml`. As input, this workflow takes in the CLI arguments for the `python -m infx.matrix.generate` command. The command usage is shown below:
 

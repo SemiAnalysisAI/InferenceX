@@ -743,7 +743,8 @@ class TestMainCli:
                 result = main()
         assert result == 1
         captured = capsys.readouterr()
-        assert "uv run --extra workflows" in captured.err
+        assert "From the repository root" in captured.err
+        assert "uv run --project inferencex-e2e --extra workflows" in captured.err
         assert "PyGithub" in captured.err
 
     def test_main_propagates_merge_failure(self):

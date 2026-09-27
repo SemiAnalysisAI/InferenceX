@@ -65,7 +65,7 @@ Run end-to-end checks from `inferencex-e2e/` and replace placeholders with the e
 
 ### Python environment
 
-[`pyproject.toml`](../../pyproject.toml) defines the `infx` package and its dependencies; [`uv.lock`](../../uv.lock) records their resolved versions. Run `uv sync --locked` to install the core tooling, then `uv run --locked python -m infx.matrix.generate ...` to use the existing module commands. Use `--extra workflows` for CODEOWNER/GitHub integrations, `--extra results` for eval summaries/database comparisons. The `test` group holds the CPU test dependencies.
+[`pyproject.toml`](../pyproject.toml) defines the `infx` package and its dependencies; [`uv.lock`](../uv.lock) records their resolved versions. Run `uv sync --locked` to install the core tooling, then `uv run --locked python -m infx.matrix.generate ...` to use the existing module commands. Use `--extra workflows` for CODEOWNER/GitHub integrations, `--extra results` for eval summaries/database comparisons. The `test` group holds the CPU test dependencies.
 
 For development, uv installs the package in editable mode, so source edits apply immediately. CI installs a regular wheel, but the main pytest suite imports the source checkout. Dedicated installed-package tests create clean environments with only core or results dependencies and run outside the source checkout. They check recipe node counts, runner metadata, matrix rejection, packaged threshold loading, score validation, BFCL license attribution, and generated eval rows and summaries. Repository-dependent commands use their source checkout when installed editable; with a wheel, run them from `inferencex-e2e/`. Eval YAML/JSON resources and the Apache license ship with the package.
 

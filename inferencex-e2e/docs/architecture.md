@@ -9,7 +9,7 @@
 This page explains how a declared benchmark becomes a validated job, a runtime result, a GitHub Actions artifact, and finally a row consumed by InferenceX-app. It describes boundaries and invariants. The linked implementation remains authoritative for field-level behavior.
 
 
-The repository separates `inferencex-e2e/`, `collectivex/`, `operatorx/`, `shared/`, and `experimental/`. Paths and shell commands in this guide are relative to `inferencex-e2e/`; GitHub workflows and packaging metadata remain at the repository root.
+The repository separates `inferencex-e2e/`, `collectivex/`, `operatorx/`, `shared/`, and `experimental/`. Paths and shell commands in this guide are relative to `inferencex-e2e/`; Python packaging metadata lives in that project directory. GitHub workflows and the shared `.python-version` remain at the repository root.
 
 
 ## Page index

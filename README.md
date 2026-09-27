@@ -103,4 +103,4 @@ Full list of supporters & quotes: https://inferencex.semianalysis.com/quotes
 | [`shared/`](shared/) | Home for shared components |
 | [`experimental/`](experimental/) | Remaining experiments |
 
-Run end-to-end commands from `inferencex-e2e/`. Repository-wide policy, GitHub workflows, and Python packaging metadata remain at the root.
+Run end-to-end commands from `inferencex-e2e/`, which owns `pyproject.toml` and `uv.lock`. Repository-wide policy, GitHub workflows, and the shared `.python-version` remain at the root.

@@ -6,9 +6,9 @@ re-appending the PR's with the canonical PR URL), push a sync commit so the
 reuse gate sees the authorization on the new head, then squash-merge with
 admin bypass.
 
-Usage::
+From the repository root::
 
-    uv run --extra workflows python -m infx.workflows.merge_with_reuse <pr-number>
+    uv run --project inferencex-e2e --extra workflows python -m infx.workflows.merge_with_reuse <pr-number>
 
 Environment variables:
 
@@ -762,8 +762,9 @@ def _poll_pr_head(
 # CLI
 
 _INSTALL_HINT = (
-    "Missing required dependencies (PyGithub, GitPython). Install with:\n"
-    "  uv run --extra workflows python -m infx.workflows.merge_with_reuse <pr>"
+    "Missing required dependencies (PyGithub, GitPython). From the repository root, run:\n"
+    "  uv run --project inferencex-e2e --extra workflows "
+    "python -m infx.workflows.merge_with_reuse <pr>"
 )
 
 

@@ -7,8 +7,8 @@ on:
       - '**/*.py'
       - '.github/scripts/**'
       - '.github/workflows/ci.yml'
-      - 'pyproject.toml'
-      - 'uv.lock'
+      - 'inferencex-e2e/pyproject.toml'
+      - 'inferencex-e2e/uv.lock'
       - '.python-version'
       - 'inferencex-e2e/infx/ruff.toml'
       - '**/pytest.ini'
@@ -45,6 +45,9 @@ jobs:
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           cache-suffix: ${{ matrix.check }}
+          cache-dependency-glob: |
+            inferencex-e2e/pyproject.toml
+            inferencex-e2e/uv.lock
 
       - name: Lint and format
         if: matrix.check == 'Lint'
@@ -56,12 +59,12 @@ jobs:
         if: matrix.check == 'Tests'
         run: |
           git submodule update --init inferencex-e2e/utils/srt-slurm
-          uv sync --locked --all-extras --group test --no-editable
-          echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
+          uv sync --project inferencex-e2e --locked --all-extras --group test --no-editable
+          echo "$GITHUB_WORKSPACE/inferencex-e2e/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Run tests
         if: matrix.check == 'Tests'
         run: |
           python -c "import torch; assert torch.version.cuda is None and torch.version.hip is None"
           # SRT is initialized for our connector tests; its upstream suite runs in its own CI.
-          python -m pytest inferencex-e2e/infx/tests/ inferencex-e2e/utils/ inferencex-e2e/runners/ collectivex/tests/ operatorx/tests/ --ignore=inferencex-e2e/utils/srt-slurm -n 4
+          python -m pytest -c inferencex-e2e/pyproject.toml inferencex-e2e/infx/tests/ inferencex-e2e/utils/ inferencex-e2e/runners/ collectivex/tests/ operatorx/tests/ --ignore=inferencex-e2e/utils/srt-slurm -n 4

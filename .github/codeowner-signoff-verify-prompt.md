@@ -185,7 +185,7 @@ public upstream documentation.
   standard.
 
 ## Check 4 — Reuse-sweep command explicitly posted
-The supported merge path for an approved PR is reuse (`uv run --extra workflows python -m infx.workflows.merge_with_reuse`).
+The supported merge path for an approved PR is reuse (`uv run --project inferencex-e2e --extra workflows python -m infx.workflows.merge_with_reuse`).
 An authorized maintainer must explicitly post a reuse command as a PR comment;
 a green sweep alone is not enough. Verify the command directly from the comments:
 - Prefer `/use <run_id>`, with a numeric run ID on the same line. Also accept the legacy
@@ -563,7 +563,7 @@ Pinned app references at
   incompatible images, historical runs, or unrelated series to reach five.
 - Reproduce the calculation using trusted
   `inferencex-e2e/infx/workflows/pareto_coverage.py` from this workflow checkout:
-  `uv run --locked python -m infx.workflows.pareto_coverage < /tmp/pareto-curves.json`.
+  `uv run --project inferencex-e2e --locked python -m infx.workflows.pareto_coverage < /tmp/pareto-curves.json`.
   Input is a JSON array of `{ "key": "<model/scenario/hwKey/precision/run/percentile/image>",
   "points": [{ "x": 1.0, "y": 100.0 }] }`. Create inputs from inspected data, not
   numbers asserted in the PR. Include every affected curve, including empty ones.
