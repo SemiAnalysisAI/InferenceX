@@ -144,6 +144,10 @@ B300 DSXE 的 Kimi-K3 AgentX 路径在 `/scratch/models` 下挂载预置目标�
 并发任务通过模型专用锁串行准备草稿权重。每个任务在启动服务前由 `hf download`
 校验或续传现有缓存；目录非空不代表下载完成。
 
+B300 原生单节点启动器在 SRT 提交前，通过 `hf download --local-dir` 将
+`deepseek-ai/DeepSeek-V4-Flash` 下载至 `/data/home/sa-gha-runner/models/DeepSeek-V4-Flash`。
+每次启动都会验证或续传本地下载，下载失败则停止提交，不要求 `/data/models` 中存在预置副本。
+
 ## TileRT 原生功耗
 
 TileRT 的共享导入器保留 Docker Hub 镜像名称，并将 `ghcr.io/team/image:tag` 等显式仓库地址转换为 Enroot 的 `docker://ghcr.io#team/image:tag` 格式。已有的 `#` 地址保持不变。有效的缓存 squash 镜像会直接复用；命中缓存不能证明仓库导入路径有效。无效的缓存镜像会在持有导入锁时删除，再重新导入。

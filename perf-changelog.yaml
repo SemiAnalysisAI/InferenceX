@@ -9004,3 +9004,12 @@
     - "Remove AgentX-only KV_OFFLOADING metadata from the fixed-sequence recipe: CI passes an empty value for this scenario, and the explicit 'none' value rejected recipe selection before server launch. Serving settings are unchanged."
     - "移除固定序列配方中仅适用于 AgentX 的 KV_OFFLOADING 元数据：该场景的 CI 传入空值，显式设置 'none' 导致配方选择在服务启动前失败。Serving 设置保持不变。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3516
+
+- config-keys:
+    - dsv4flash-fp4-b300-sglang-mtp
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Download DeepSeek-V4-Flash into the B300 runner's writable home models directory before native SRT submission instead of requiring a missing /data/models copy. Resume or validate the download on every launch and stop before submission on download failure."
+    - "在原生 SRT 提交前，将 DeepSeek-V4-Flash 下载到 B300 runner 的 home 可写模型目录，不再要求不存在的 /data/models 副本。每次启动均续传或验证下载，下载失败时停止提交。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3516
