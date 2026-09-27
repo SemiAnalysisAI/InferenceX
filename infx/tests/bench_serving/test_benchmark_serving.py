@@ -1,12 +1,32 @@
 """Exercise client result persistence without loading a model or serving requests."""
 
 import json
+import sys
 from argparse import Namespace
+from types import ModuleType
 from unittest.mock import AsyncMock
 
 import pytest
 
 from infx.bench_serving import benchmark_serving as client
+
+
+@pytest.mark.parametrize("mode", ["deepseek_v4", "deepseek_v41"])
+def test_deepseek_tokenizer_uses_native_renderer(monkeypatch, mode):
+    tokenizers = ModuleType("vllm.tokenizers")
+
+    class NativeTokenizer:
+        def apply_chat_template(self, messages, **kwargs):
+            return f"native:{mode}:{messages[0]['content']}"
+
+    def get_native_tokenizer(model, tokenizer_mode, trust_remote_code):
+        assert (model, tokenizer_mode, trust_remote_code) == ("test/model", mode, False)
+        return NativeTokenizer()
+
+    tokenizers.get_tokenizer = get_native_tokenizer
+    monkeypatch.setitem(sys.modules, "vllm.tokenizers", tokenizers)
+    tokenizer = client._load_tokenizer("test/model", mode, False)
+    assert client._apply_chat_template("hello", tokenizer, False) == f"native:{mode}:hello"
 
 
 @pytest.mark.parametrize('requested,completed,status', [

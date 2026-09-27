@@ -1,0 +1,73 @@
+# TP1 capacity experiment: Engram and 60 GiB of routed experts use host UVA.
+# KV stays GPU-resident. Offload parameters follow the upstream single-GPU recipe:
+# https://github.com/vllm-project/recipes/blob/main/models/deepseek-ai/DeepSeek-V4.1-Flash.yaml
+base:
+  schema: 2
+  name: dsv41flash-fp4-b300-vllm-dspark-tp1-8k1k
+  model:
+    path: hf:deepseek-ai/DeepSeek-V4.1-Flash
+    container: vllm/vllm-openai:nightly-ddd6fbca148a867aad1fcab7ec72f582b9977db4
+    precision: fp4
+  resources:
+    gpu_type: b300
+    gpus_per_node: 8
+  frontend:
+    type: vllm
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine:
+    type: vllm
+    connector: null
+  health_check:
+    interval_seconds: 10
+    max_attempts: 720
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 1
+      args:
+        served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
+        tensor-parallel-size: 1
+        language-model-only: true
+        tokenizer-mode: deepseek_v41
+        tool-call-parser: deepseek_v41
+        enable-auto-tool-choice: true
+        reasoning-parser: deepseek_v41
+        engram-config: '{"cpu_offload":true}'
+        offload-backend: uva
+        cpu-offload-gb: 60
+        cpu-offload-params:
+          - routed_experts.w13_weight
+          - routed_experts.w2_weight
+        speculative-config: '{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block","enable_adaptive_verification":false}'
+        attention-config: '{"backend":"FLASHINFER_MLA_SPARSE_DSV41","indexer_kv_dtype":"mxfp4","indexer_sparse_logits":true}'
+        kv-cache-dtype: fp8
+        max-model-len: 9472
+        max-num-seqs: 128
+        max-num-batched-tokens: 2048
+        gpu-memory-utilization: 0.95
+        compilation-config: '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020]}'
+        max-cudagraph-capture-size: 1020
+        no-enable-prefix-caching: true
+        disable-uvicorn-access-log: true
+      env:
+        VLLM_USE_RUST_FRONTEND: '1'
+        PYTHONUNBUFFERED: '1'
+        VLLM_ENGINE_READY_TIMEOUT_S: '7200'
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/single_node/srt_fixed_sequence.sh --tokenizer-mode deepseek_v41
+    env:
+      MODEL: deepseek-ai/DeepSeek-V4.1-Flash
+      ISL: '8192'
+      OSL: '1024'
+      RANDOM_RANGE_RATIO: '0.8'
+      USE_CHAT_TEMPLATE: 'true'
+zip_override_tp1:
+  benchmark:
+    env:
+      CONC: ['1', '2', '4', '8', '16', '32', '64', '128']

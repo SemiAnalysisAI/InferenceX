@@ -142,6 +142,8 @@ STP (Single Token Prediction) is vanilla autoregressive decoding with one token 
 
 A `MODELS.md` row alone is not an executable recipe. The complete path is benchmark script + master entry + launcher routing + changelog trigger + generated matrix.
 
+The shared fixed-sequence client supports `vllm` alongside `sglang`, `atom`, and `trt`. Recipes that need a native tokenizer adapter must pass `--tokenizer-mode` in the benchmark command. DeepSeek-V4.1-Flash uses `srt_fixed_sequence.sh --tokenizer-mode deepseek_v41` with `USE_CHAT_TEMPLATE: 'true'`; the client loads the pinned image's vLLM V4.1 adapter rather than an HF chat template or the V4 encoder.
+
 ## Change a master config
 
 Sources: [`configs/CONFIGS.md`](../configs/CONFIGS.md), [`validation.py`](../infx/matrix/validation.py), [`generate.py`](../infx/matrix/generate.py).

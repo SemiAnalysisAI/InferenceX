@@ -93,6 +93,8 @@ STP（Single Token Prediction，单 Token 预测）是每次前向传播生成�
 
 仅添加 `MODELS.md` 行并不会产生可执行配方。完整路径是：基准脚本 + 主配置条目 + launcher 路由 + changelog 触发项 + 生成的矩阵。
 
+共享固定序列客户端支持 `vllm`、`sglang`、`atom` 和 `trt`。需要原生 tokenizer 适配器的配方必须在 benchmark 命令中传入 `--tokenizer-mode`。DeepSeek-V4.1-Flash 使用 `srt_fixed_sequence.sh --tokenizer-mode deepseek_v41`，并设置 `USE_CHAT_TEMPLATE: 'true'`；客户端加载固定镜像内的 vLLM V4.1 适配器，不使用 HF chat template 或 V4 编码器。
+
 ## 修改主配置
 
 来源：[`configs/CONFIGS.md`](../configs/CONFIGS.md)、[`validation.py`](../infx/matrix/validation.py)、[`generate.py`](../infx/matrix/generate.py)。
