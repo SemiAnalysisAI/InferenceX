@@ -8986,3 +8986,13 @@
     - "Hopper 使用 FA3，Blackwell FA4 fp8 descale 问题不适用，EAGLE3 draft 保持 attention_backend FLASH_ATTN。"
     - "This change does not alter the EAGLE3 draft model data type. The draft loads unmodified from the published Inferact/MiniMax-M3-EAGLE3-GQA checkpoint via --speculative-config (method=eagle3). kv-cache-dtype fp8 sets KV-cache storage precision, not the draft weights, and no flag overrides or re-quantizes the draft weights."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3503
+
+- config-keys:
+    - glm5.2-fp4-b200-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-b200-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Disable FP8 conversion of the GLM-5.2 NextN/MTP draft MoE on B200 AgentX so the draft runs at its shipped precision; images, topology, workload and acceptance are unchanged."
+    - "关闭 B200 GLM-5.2 AgentX 对 NextN/MTP draft MoE 的 FP8 转换，使 draft 保持原始发布精度；镜像、拓扑、工作负载和验收不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3400
