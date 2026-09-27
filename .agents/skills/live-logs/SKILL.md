@@ -59,5 +59,6 @@ If the host is missing, the script names the cluster and exits. Get the login ad
 
 ## Notes
 
-- One SSH `tail -F` runs per batch of discovered files. After an SSH drop, those files are re-read from the start, so nothing is lost.
+- One SSH `tail -F` runs per log file, so a huge log doesn't hold up the others. After an SSH drop, that file is re-read from the start, so nothing is lost.
+- The server keeps the full logs, but on connect it sends only the last 4000 matching lines of each; noise and "errors only" are also filtered on the server. This keeps the page responsive with logs of hundreds of MB. "Entire log" asks for confirmation first.
 - The viewer only reads logs. It never touches processes or files on shared hosts.

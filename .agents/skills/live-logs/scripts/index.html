@@ -104,7 +104,7 @@ function paneState(k){
   const p = document.createElement("section"); p.className = "pane";
   p.innerHTML = `<div class="ph"><b></b><span class="phase"></span><span class="ec"></span><span class="cnt"></span><button class="top" title="jump to start">⤒</button><button class="bot" title="jump to end">⤓</button><button class="cp" title="copy visible">⧉</button><button class="mx" title="maximize / restore (Esc)">⛶</button></div><div class="log"></div>`;
   const log = p.querySelector(".log");
-  const st = {el:p, log, phase:p.querySelector(".phase"), cnt:p.querySelector(".cnt"), ec:p.querySelector(".ec"), lines:[], errs:0, follow:true};
+  const st = {key:k, el:p, log, phase:p.querySelector(".phase"), cnt:p.querySelector(".cnt"), ec:p.querySelector(".ec"), lines:[], errs:0, follow:true};
   log.addEventListener("scroll", () => { st.follow = log.scrollTop + log.clientHeight >= log.scrollHeight - 30; p.classList.toggle("paused", !st.follow); });
   p.querySelector(".top").onclick = () => { log.scrollTop = 0; };
   p.querySelector(".bot").onclick = () => { log.scrollTop = log.scrollHeight; };
@@ -179,6 +179,7 @@ function visible(l){
 }
 function track(st, l){
   st.lines.push(l);
+  if (HIST.value !== "all" && st.lines.length > 3 * domLimit()) st.lines.splice(0, st.lines.length - domLimit());
   if (ERR.test(l) && !/ibv_query_port_speed|pip's dependency|GDRCopy|TaskProlog/.test(l)) st.errs++;
   for (const [r, name] of MILE) if (r.test(l)) { const ts = (l.match(/\d\d:\d\d:\d\d/)||[""])[0]; st.phase.textContent = `${name} ${ts}`; break; }
 }
@@ -188,7 +189,8 @@ function add(st, l){
   st.log.appendChild(d);
   while (st.log.childElementCount > domLimit()) st.log.firstChild.remove();
 }
-function refresh(st){ st.cnt.textContent = `${st.lines.length} lines`; st.ec.textContent = st.errs ? `${st.errs} err` : ""; if (st.follow) st.log.scrollTop = st.log.scrollHeight; }
+let totals = {};
+function refresh(st){ const t = totals[st.key]; st.cnt.textContent = t ? `${st.lines.length.toLocaleString()} shown / ${t.toLocaleString()} total` : `${st.lines.length.toLocaleString()} lines`; st.ec.textContent = st.errs ? `${st.errs} err` : ""; if (st.follow) st.log.scrollTop = st.log.scrollHeight; }
 function rerender(){
   for (const st of Object.values(panes)) {
     const frag = document.createDocumentFragment(); let n = 0;
@@ -199,8 +201,14 @@ function rerender(){
     st.log.textContent = ""; st.log.appendChild(frag); refresh(st);
   }
 }
-["q","noise","erronly"].forEach(id => document.getElementById(id).addEventListener("input", rerender));
-HIST.addEventListener("change", () => { try { localStorage.setItem("lw-hist", HIST.value); } catch {} rerender(); });
+document.getElementById("q").addEventListener("input", rerender);
+// history depth, noise and errors-only are applied on the server, so changing them re-subscribes
+["noise","erronly"].forEach(id => document.getElementById(id).addEventListener("change", connect));
+HIST.addEventListener("change", () => {
+  if (HIST.value === "all" && !confirm("Load every line of every log? Very large logs (hundreds of MB) can take a while and use a lot of browser memory. Keeping \"hide Mooncake metrics noise\" on makes this much smaller.")) { HIST.value = "4000"; return; }
+  try { localStorage.setItem("lw-hist", HIST.value); } catch {}
+  connect();
+});
 
 function setStatus(s){
   document.getElementById("ssh").textContent = "ssh: " + s.ssh;
@@ -213,10 +221,13 @@ function setStatus(s){
 
 let es;
 function connect(){
-  es = new EventSource("/events");
+  if (es) es.close();
+  const qs = new URLSearchParams({n: HIST.value, noise: document.getElementById("noise").checked ? "1" : "0", err: document.getElementById("erronly").checked ? "1" : "0"});
+  es = new EventSource("/events?" + qs);
   es.onmessage = ev => {
     const m = JSON.parse(ev.data);
     if (m.t === "snapshot") {
+      totals = m.s.totals || {};
       buildLayout(m.f);
       for (const [k, arr] of Object.entries(m.b)) { const st = paneState(k); st.lines = []; st.errs = 0; arr.forEach(l => track(st, l)); }
       rerender(); setStatus(m.s); return;
@@ -224,7 +235,7 @@ function connect(){
     const touched = new Set();
     for (const e of m.e) {
       if (e.t === "line") { const st = panes[e.k]; if (!st) continue; track(st, e.l); add(st, e.l); touched.add(st); }
-      else if (e.t === "status") setStatus(e.s);
+      else if (e.t === "status") { setStatus(e.s); if (e.s.totals) { totals = e.s.totals; Object.values(panes).forEach(refresh); } }
       else if (e.t === "files") { buildLayout(e.f); files.forEach(f => refresh(paneState(f[0]))); }
       else if (e.t === "reset") e.k.forEach(k => { const st = panes[k]; if (st) { st.lines = []; st.errs = 0; st.log.textContent = ""; } });
     }

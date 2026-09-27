@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Stream one Slurm job's srt-slurm logs to a local browser page.
 
-A single ssh `tail -F` per batch of discovered log files feeds an in-memory buffer; the page
+One ssh `tail -F` per discovered log file feeds an in-memory buffer; the page
 subscribes over Server-Sent Events. New log files (for example aiperf output once the benchmark
 starts) are discovered every 30 s and get their own pane.
 """
@@ -18,6 +18,7 @@ import threading
 import time
 import zipfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs, urlparse
 
 ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 SSH = ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=20", "-o", "ServerAliveInterval=15"]
@@ -28,6 +29,38 @@ FIND_EXPR = (
     "-o -name 'sweep_*.log' -o -name '*_frontend_*.out' -o -name 'service_mooncake-master.out' "
     "-o -name 'service_etcd.out' -o -name 'aiperf.log' -o -name 'benchmark.log' \\)"
 )
+
+
+def page_regex(name):
+    """Reuse the page's NOISE / ERR regex so server- and client-side filtering agree."""
+    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html")) as f:
+        page = f.read()
+    m = re.search(rf"^const {name} = /(.*)/;$", page, re.MULTILINE)
+    return re.compile(m.group(1))
+
+
+NOISE_RE = page_regex("NOISE")
+ERR_RE = page_regex("ERR")
+
+
+def wanted(line, noise, erronly):
+    if erronly:
+        return bool(ERR_RE.search(line))
+    return not (noise and NOISE_RE.search(line) and not ERR_RE.search(line))
+
+
+def last_matching(buf, n, noise, erronly):
+    """Newest n lines of buf that pass the filters (n=None means all), oldest first."""
+    if n is None:
+        return [l for l in buf if wanted(l, noise, erronly)]
+    out = []
+    for l in reversed(buf):
+        if wanted(l, noise, erronly):
+            out.append(l)
+            if len(out) >= n:
+                break
+    out.reverse()
+    return out
 
 
 def group_of(rel):
@@ -61,6 +94,7 @@ class State:
     def __init__(self):
         self.files = []  # [rel, label, group]
         self.buffers = {}
+        self.totals = collections.Counter()
         self.status = {"ssh": "connecting", "squeue": "", "mem": {}}
         self.subscribers = []
         self.lock = threading.Lock()
@@ -99,11 +133,13 @@ def tail_batch(args, st, rels):
             if cur is None or not line:
                 continue
             st.buffers[cur].append(line)
+            st.totals[cur] += 1
             st.publish({"t": "line", "k": cur, "l": line})
         p.wait()
         with st.lock:
             for r in rels:
                 st.buffers[r].clear()
+                st.totals[r] = 0
         st.publish({"t": "reset", "k": rels})
         st.status["ssh"] = f"reconnecting (exit {p.returncode})"
         st.publish({"t": "status", "s": st.status})
@@ -121,7 +157,10 @@ def discover_loop(args, st):
                         st.buffers[r] = collections.deque(maxlen=args.max_lines)
                         st.files.append([r, label_of(r), group_of(r)])
                 st.publish({"t": "files", "f": st.files})
-                threading.Thread(target=tail_batch, args=(args, st, new), daemon=True).start()
+                # one tail per file: a multi-file tail prints each file in full before the next,
+                # so a huge prefill log would hold every other pane empty until it finished
+                for r in new:
+                    threading.Thread(target=tail_batch, args=(args, st, [r]), daemon=True).start()
         except (OSError, subprocess.SubprocessError, ValueError) as e:  # flaky network: keep going
             st.status["ssh"] = f"discovery error: {e}"
         time.sleep(30)
@@ -144,6 +183,7 @@ def status_loop(args, st):
                     _, name, *kvs = l.split()
                     mem[name] = dict(x.split("=", 1) for x in kvs if "=" in x)
             st.status["mem"] = mem
+            st.status["totals"] = dict(st.totals)
             st.publish({"t": "status", "s": st.status})
         except (OSError, subprocess.SubprocessError, ValueError) as e:
             st.status["squeue"] = f"status poll error: {e}"
@@ -216,16 +256,23 @@ def make_handler(args, st):
                 finally:
                     os.remove(path)
                 return
-            if self.path != "/events":
+            url = urlparse(self.path)
+            if url.path != "/events":
                 self.send_error(404)
                 return
+            qs = parse_qs(url.query)
+            n_arg = qs.get("n", ["4000"])[0]
+            n = None if n_arg == "all" else max(1, int(n_arg))
+            noise = qs.get("noise", ["1"])[0] == "1"
+            erronly = qs.get("err", ["0"])[0] == "1"
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")
             self.send_header("Cache-Control", "no-cache")
             self.end_headers()
             q = queue.Queue(maxsize=50000)
             with st.lock:
-                snap = {k: list(v) for k, v in st.buffers.items()}
+                snap = {k: last_matching(v, n, noise, erronly) for k, v in st.buffers.items()}
+                st.status["totals"] = dict(st.totals)
                 files = [list(f) for f in st.files]
                 st.subscribers.append(q)
             try:
@@ -239,6 +286,9 @@ def make_handler(args, st):
                                 batch.append(q.get_nowait())
                             except queue.Empty:
                                 break
+                        batch = [e for e in batch if e["t"] != "line" or wanted(e["l"], noise, erronly)]
+                        if not batch:
+                            continue
                         self.wfile.write(f"data: {json.dumps({'t': 'batch', 'e': batch})}\n\n".encode())
                     except queue.Empty:
                         self.wfile.write(b": ping\n\n")
