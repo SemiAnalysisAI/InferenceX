@@ -8340,7 +8340,7 @@ dsv41flash-fp4-b300-vllm-dspark:
     - isl: 8192
       osl: 1024
       search-space:
-      - tp: 1
+      - tp: 2
         spec-decoding: mtp
         conc-list: [1, 2, 4, 8, 16, 32, 64, 128]
         srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/b300-fp4-mtp/8k1k.yaml
