@@ -8986,3 +8986,12 @@
     - "Hopper 使用 FA3，Blackwell FA4 fp8 descale 问题不适用，EAGLE3 draft 保持 attention_backend FLASH_ATTN。"
     - "This change does not alter the EAGLE3 draft model data type. The draft loads unmodified from the published Inferact/MiniMax-M3-EAGLE3-GQA checkpoint via --speculative-config (method=eagle3). kv-cache-dtype fp8 sets KV-cache storage precision, not the draft weights, and no flag overrides or re-quantizes the draft weights."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3503
+
+- config-keys:
+    - kimik3-fp4-b300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add the Kimi-K3 B300 Mooncake EFA AgentX disaggregated 1P3D DCP8/DCP8 DSpark4 configuration at c32 on ghcr.io/semianalysisai/vllm-openai:efa_pr_58768 (vllm-project/vllm#58768 vllm-openai-efa target at a0c6725d8, with AWS EFA libfabric 2.6.0amzn1.0 and mooncake-transfer-engine-efa-cuda13 0.3.13.post1 built in). Split from #3521 so the disaggregated arm sweeps in parallel with the aggregate arm; drops #3405's kimik3-b300-efa-setup.sh runtime installer."
+    - "新增基于 ghcr.io/semianalysisai/vllm-openai:efa_pr_58768（vllm-project/vllm#58768 在 a0c6725d8 的 vllm-openai-efa 目标，内置 AWS EFA libfabric 2.6.0amzn1.0 与 mooncake-transfer-engine-efa-cuda13 0.3.13.post1）的 Kimi-K3 B300 Mooncake EFA AgentX 分离式 1P3D DCP8/DCP8 DSpark4 配置（c32）。从 #3521 拆出，使分离式与聚合式并行扫描；删除 #3405 的 kimik3-b300-efa-setup.sh 运行时安装脚本。"
+  pr-link: PRLINK_PLACEHOLDER
