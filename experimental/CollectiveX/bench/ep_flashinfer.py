@@ -120,6 +120,11 @@ class FlashInferEPBackend(EPBackend):
     # Forced by the phase asserts described in the module docstring.
     requires_fresh_pair = True
 
+    @property
+    def cuda_graph_supported(self) -> bool:
+        # Decode only: replay cuts gb200 EP8 T=1 pair period 151 -> 43us but leaves prefill flat.
+        return super().cuda_graph_supported and getattr(self.args, "phase", None) == "decode"
+
     def __init__(self, args, rank, world_size, local_rank, device):
         super().__init__(args, rank, world_size, local_rank, device)
         self._fp8 = self.precision == "fp8"
