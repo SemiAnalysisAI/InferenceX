@@ -185,6 +185,7 @@ for index in "${!CONCURRENCIES[@]}"; do
         [[ "${AIPERF_EXPERIMENTAL_FAST:-0}" == "1" ]] && warmup_per_lane=1
         python3 "$INFMAX_CONTAINER_WORKSPACE/benchmarks/profiling/vllm/profile_windows.py" \
             "$INFX_PROFILE_WINDOWS" "$INFX_PROF_DIR/windows_conc${concurrency}.jsonl" \
+            "$RESULT_DIR/aiperf_artifacts/logs/aiperf.log" \
             "$(( concurrency * warmup_per_lane ))" "${profile_metrics_urls[@]%/metrics}" &
         profile_windows_pid=$!
     fi
