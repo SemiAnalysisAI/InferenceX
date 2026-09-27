@@ -679,3 +679,83 @@ def test_speedbench_client_finds_benchmark_lib_without_legacy_workspace():
     assert result.returncode != 0
     assert "No such file" not in result.stderr, result.stderr
     assert "required environment variables are not set" in result.stdout
+
+
+# --- Recipe-render validation for every speedbench prefix ---
+
+# Per-prefix dispatch environment that mirrors the speedbench-al.yml inputs.
+_SPEEDBENCH_PREFIXES = {
+    "dsv4": {
+        "MODEL": "deepseek-ai/DeepSeek-V4-Pro",
+        "IMAGE": "vllm/vllm-openai:v0.21.0",
+        "TP": "8", "GPU_COUNT": "8",
+    },
+    "dsv4dspark": {
+        "MODEL": "deepseek-ai/DeepSeek-V4-Pro-DSpark",
+        "IMAGE": "vllm/vllm-openai:v0.21.0",
+        "TP": "8", "GPU_COUNT": "8",
+    },
+    "dsv4dsparkprob": {
+        "MODEL": "deepseek-ai/DeepSeek-V4-Pro-DSpark",
+        "IMAGE": "vllm/vllm-openai:v0.21.0",
+        "TP": "8", "GPU_COUNT": "8",
+    },
+    "glm52": {
+        "MODEL": "nvidia/GLM-5.2-NVFP4",
+        "IMAGE": "vllm/vllm-openai:v0.21.0",
+        "TP": "8", "GPU_COUNT": "8",
+    },
+    "kimik3": {
+        "MODEL": "moonshotai/Kimi-K3",
+        "IMAGE": "vllm/vllm-openai:v0.21.0",
+        "TP": "8", "GPU_COUNT": "8",
+    },
+    "kimik3prob": {
+        "MODEL": "moonshotai/Kimi-K3",
+        "IMAGE": "vllm/vllm-openai:v0.21.0",
+        "TP": "8", "GPU_COUNT": "8",
+    },
+    "minimaxm3": {
+        "MODEL": "MiniMax/MiniMax-M3",
+        "IMAGE": "vllm/vllm-openai:v0.21.0",
+        "TP": "8", "GPU_COUNT": "8",
+    },
+    "qwen3.5": {
+        "MODEL": "nvidia/Qwen3.5-397B-A17B-NVFP4-V2",
+        "IMAGE": "vllm/vllm-openai:v0.21.0",
+        "TP": "8", "GPU_COUNT": "8",
+    },
+    "qwen3.8next": {
+        "MODEL": "Qwen/Qwen3.8-Flash-Next-FP8",
+        "IMAGE": "vllm/vllm-openai:qwen38-flash-next",
+        "TP": "4", "GPU_COUNT": "4",
+    },
+}
+
+
+@pytest.mark.parametrize("prefix", sorted(_SPEEDBENCH_PREFIXES))
+def test_speedbench_recipe_validates_and_renders(prefix):
+    """Each speedbench recipe selects and validates against the workflow env."""
+    recipe = Path(
+        f"benchmarks/single_node/srt-slurm-recipes/{prefix}/vllm/b300-fp4-speedbench/speedbench.yaml"
+    )
+    assert recipe.exists(), f"Recipe not found: {recipe}"
+    overrides = _SPEEDBENCH_PREFIXES[prefix]
+    env = {
+        "FRAMEWORK": "vllm",
+        "PRECISION": "fp4",
+        "PP_SIZE": "1", "DCP_SIZE": "1", "PCP_SIZE": "1",
+        "EP_SIZE": "1", "DP_ATTENTION": "false",
+        "SPEC_DECODING": "mtp", "IS_AGENTIC": "0",
+        "RUN_EVAL": "false", "EVAL_ONLY": "false",
+        "CONC": "1", "RESULT_FILENAME": "speedbench_off_mtp1",
+        "GPU_MONITOR_INTERVAL": "3", "MODEL_PREFIX": prefix,
+        "CATEGORY": "coding", "SPEEDBENCH_OUTPUT_LEN": "4096",
+        "THINKING": "off", "MTP": "1",
+        **overrides,
+    }
+    argv = runtime_arguments(f"{recipe}:zip_override_mtp[0]", env)
+    sets = [argv[i + 1] for i, arg in enumerate(argv) if arg == "--set"]
+    # Verify THINKING survived as a string through the set binding.
+    thinking_set = [s for s in sets if "THINKING" in s]
+    assert any("thinking_off" in s for s in thinking_set), thinking_set
