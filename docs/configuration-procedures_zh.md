@@ -49,7 +49,7 @@ B200 Nscale 的固定序列 `deepseek-ai/DeepSeek-V4-Flash` 启动器在提交 S
 `/scratch/models` 中的预置副本。下载进程显式将 `HF_HOME`、`HF_HUB_CACHE`
 和 `HF_XET_CACHE` 指向 checkpoint 的 `.cache/huggingface` 下的可写路径，
 服务进程仍保留容器缓存设置。配方通过 `EAGLE` 使用原生 MTP
-（3 steps、top-k 1、4 draft tokens），客户端以 `--dsv4` 选择 DeepSeek-V4 chat 编码器。
+（2 steps、top-k 1、3 draft tokens），客户端以 `--dsv4` 选择 DeepSeek-V4 chat 编码器。
 对于尚未缓存的 digest 固定镜像，此路径将 Docker 的 `repo:tag@sha256:...`
 转换为 Pyxis/Enroot 的 `repo:sha256:...` manifest 引用。记录的镜像和 digest
 保持不变，已有有效 squash 镜像仍优先使用。

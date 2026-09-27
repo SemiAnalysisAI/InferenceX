@@ -57,7 +57,7 @@ the serving process retains its container cache settings.
 For an uncached digest-pinned image, this lane maps Docker's `repo:tag@sha256:...`
 to Pyxis/Enroot's `repo:sha256:...` manifest reference. The recorded image and
 digest stay unchanged; a valid cached squash image still takes precedence.
-The recipe uses bundled MTP through `EAGLE` (3 steps, top-k 1, 4 draft tokens),
+The recipe uses bundled MTP through `EAGLE` (2 steps, top-k 1, 3 draft tokens),
 with the DeepSeek-V4 chat encoder selected by the client's `--dsv4` option.
 
 Launchers that use srt-slurm keep their cluster configuration in
