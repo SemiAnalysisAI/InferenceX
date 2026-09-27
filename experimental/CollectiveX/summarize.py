@@ -102,7 +102,8 @@ def _headline(document: dict) -> tuple:
         return (component.get("percentiles_us") or {}).get("p50", "-")
 
     return (
-        row["tokens_per_rank"], latency["p50"], latency["p99"],
+        row["tokens_per_rank"], latency["p50"],
+        "-" if latency.get("p99") is None else latency["p99"],
         percentile("cross_rank_min_us", "roundtrip"),
         percentile("cross_rank_spread_us", ""),
         period is not None,

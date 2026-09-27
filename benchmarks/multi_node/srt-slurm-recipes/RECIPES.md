@@ -59,7 +59,7 @@ srtctl migrate --verify -f benchmarks/multi_node/srt-slurm-recipes/dsr1/sglang
 srtctl migrate --in-place -f benchmarks/multi_node/srt-slurm-recipes/dsr1/sglang
 # Repeat for the other model/engine directories.
 # Use the pinned TileRT fork for glm5.1/tilert/.
-python -m pytest utils/matrix_logic/ -q
+python -m pytest infx/tests/matrix/ -q
 python -m infx.matrix.generate full-sweep \
   --config-files configs/nvidia-master.yaml \
   --framework dynamo-sglang dynamo-trt dynamo-vllm --multi-node

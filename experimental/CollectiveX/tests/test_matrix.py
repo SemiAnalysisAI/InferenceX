@@ -31,6 +31,11 @@ class MatrixTests(unittest.TestCase):
                     {shard["nodes"]},
                 )
 
+    def test_shards_run_on_the_registry_runner_label_else_the_sku(self):
+        runners = {shard["sku"]: shard["runner"] for shard in matrix(backend="all")["include"]}
+        self.assertEqual(runners["mi325x"], "cluster:mi325x-amds")
+        self.assertEqual(runners["h200-dgxc"], "h200-dgxc")
+
     def test_only_real_platform_cells_are_unsupported(self):
         platform = {
             "product": "test-gpu", "gpus_per_node": 8, "scale_up_domain": 8,

@@ -13,7 +13,7 @@ Use this page to identify benchmark artifacts, inspect their contracts, and deci
 | Source of truth | What it controls |
 | --- | --- |
 | [`benchmark-tmpl.yml`](../.github/workflows/benchmark-tmpl.yml), [`benchmark-multinode-tmpl.yml`](../.github/workflows/benchmark-multinode-tmpl.yml) | Per-config names, files, and upload rules for throughput, eval, and AgentX artifacts |
-| [`utils/process_result.py`](../utils/process_result.py) | Fixed-sequence throughput aggregate schema and derived per-GPU metrics |
+| [`infx/results/fixed_sequence.py`](../infx/results/fixed_sequence.py) | Fixed-sequence throughput aggregate schema and derived per-GPU metrics |
 | [`infx/results/collect_results.py`](../infx/results/collect_results.py), [`collect-results.yml`](../.github/workflows/collect-results.yml) | Recursive benchmark collection into `agg_<prefix>.json` and `results_<prefix>` |
 | [`infx/results/collect_eval_results.py`](../infx/results/collect_eval_results.py), [`collect-evals.yml`](../.github/workflows/collect-evals.yml) | Eval discovery, metric extraction, batched-concurrency selection, and `eval_results_<prefix>` |
 | [`infx/results/evals.py`](../infx/results/evals.py), [`eval_artifacts.py`](../infx/results/eval_artifacts.py) | Shared eval reading, result selection, reuse consistency checks, and rerun deduplication for collection and Klaud |
@@ -61,7 +61,7 @@ The distinction matters during reuse. Artifact bytes can come from a PR sweep wh
 
 ### Producer and collector
 
-For a single-node fixed-sequence job, [`benchmark-tmpl.yml`](../.github/workflows/benchmark-tmpl.yml) builds a `RESULT_FILENAME` from the experiment, precision, framework, TP/PP/DCP/PCP/EP/DP-attention, disaggregation, speculative mode, concurrency, and concrete runner. The benchmark first writes `<RESULT_FILENAME>.json`. [`utils/process_result.py`](../utils/process_result.py) reads that file and writes `agg_<RESULT_FILENAME>.json`. The workflow uploads it as:
+For a single-node fixed-sequence job, [`benchmark-tmpl.yml`](../.github/workflows/benchmark-tmpl.yml) builds a `RESULT_FILENAME` from the experiment, precision, framework, TP/PP/DCP/PCP/EP/DP-attention, disaggregation, speculative mode, concurrency, and concrete runner. The benchmark first writes `<RESULT_FILENAME>.json`. [`infx/results/fixed_sequence.py`](../infx/results/fixed_sequence.py) reads that file and writes `agg_<RESULT_FILENAME>.json`. The workflow uploads it as:
 
 ```text
 artifact: bmk_<RESULT_FILENAME>
@@ -103,7 +103,7 @@ The serving client records `benchmark_outcome` before saving its raw result. It 
 
 `power_invalid_reasons` and `power_audit` carry a bounded summary alongside numeric metrics. The summary includes the available measurement window, expected/observed GPU counts, sampling diagnostics, observed device identifiers and producer pin. Its `source` names the retained `power_validation_*.json` sidecar. Device identifiers retain the collector's semantics; local SMI indices are not physical UUID proof.
 
-For multinode fixed-sequence jobs, `utils/process_result.py --all` processes every available result before returning failure. It accepts `_c<N>_gpus_...`, `_conc<N>_gpus_...`, and AMD `_concurrency_<N>_req_rate_<R>_gpus_...` filenames, including `inf` request rates. It compares result concurrencies with `CONC_LIST`, rejects duplicate or contradictory point identities, and records omissions/errors in `result_processing_<RESULT_FILENAME>.json`. Aggregate workers pass `AGGREGATE_GPUS` with zero role GPU counts to telemetry validation; separate prefill/decode energy remains absent. For a `DISAGG=true` group with zero decode workers, the aggregate row intentionally sets `disagg: false` and reports `num_aggregate_gpu`; the filename, artifact name, and workflow inputs retain the group identity. Downstream consumers should use the row topology to interpret the measurement.
+For multinode fixed-sequence jobs, `python -m infx.results.fixed_sequence --all` processes every available result before returning failure. It accepts `_c<N>_gpus_...`, `_conc<N>_gpus_...`, and AMD `_concurrency_<N>_req_rate_<R>_gpus_...` filenames, including `inf` request rates. It compares result concurrencies with `CONC_LIST`, rejects duplicate or contradictory point identities, and records omissions/errors in `result_processing_<RESULT_FILENAME>.json`. Aggregate workers pass `AGGREGATE_GPUS` with zero role GPU counts to telemetry validation; separate prefill/decode energy remains absent. For a `DISAGG=true` group with zero decode workers, the aggregate row intentionally sets `disagg: false` and reports `num_aggregate_gpu`; the filename, artifact name, and workflow inputs retain the group identity. Downstream consumers should use the row topology to interpret the measurement.
 
 The PR changelog selects representative NVIDIA and AMD coverage, not an exhaustive list of affected recipes; shared processing changes apply to every fixed-sequence recipe.
 
@@ -186,7 +186,7 @@ raw artifact:       agentic_<RESULT_FILENAME>
 raw tree:           results/**, excluding inputs.json and profile_export_raw.jsonl
 ```
 
-The aggregate artifact matches the `bmk_*` collection pattern and therefore also appears as a row in `results_bmk/agg_bmk.json`. The raw sibling is not fed to `collect_results.py`. InferenceX-app pairs `bmk_agentic_<suffix>` with `agentic_<suffix>` after stripping `bmk_` and `agentic_`. For files named with `_concN.json`, the concurrency is part of trace-sibling lookup.
+The aggregate artifact matches the `bmk_*` collection pattern and therefore also appears as a row in `results_bmk/agg_bmk.json`. The raw sibling is not fed to `infx.results.collect_results`. InferenceX-app pairs `bmk_agentic_<suffix>` with `agentic_<suffix>` after stripping `bmk_` and `agentic_`. For files named with `_concN.json`, the concurrency is part of trace-sibling lookup.
 
 Server logs are separate `server_logs_<RESULT_FILENAME>` artifacts. The app uses the fully stripped suffix fallback so AgentX rows can find a server log even though the log artifact has no `agentic_` prefix.
 
@@ -308,7 +308,7 @@ Dedupe exists at several boundaries. Check the boundary before diagnosing a dupl
 | --- | --- |
 | Artifact preparation in CI | Newest unexpired upload per exact artifact name. Reuse replaces only changelog metadata with the merge-run copy. |
 | Direct app download mode | [`dedupeArtifactsByLogicalName`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/lib/github-artifacts.ts) strips a trailing runner-pool and attempt token and keeps the newest logical artifact. This prevents a retry artifact from overwriting good metrics. |
-| Benchmark collection | `collect_results.py` appends every parsed JSON. It has no row-level dedupe. |
+| Benchmark collection | `infx.results.collect_results` appends every parsed JSON. It has no row-level dedupe. |
 | Benchmark database write | `ON CONFLICT` on the benchmark natural key updates metrics, image, power workers, and related fields. Server-derived `kv_cache_pool_tokens` is preserved when a fresh artifact lacks it. |
 | Eval database write | Aggregate and per-config rows with fully populated matching dimensions conflict on the eval natural key. The later write refreshes metrics and returns the same row ID for sample attachment. If any nullable key dimension is null, PostgreSQL's current ordinary unique constraint does not deduplicate the rows. |
 | Eval samples | Conflict on `(eval_result_id, doc_id)` prevents duplicate documents. |
