@@ -181,9 +181,11 @@ for index in "${!CONCURRENCIES[@]}"; do
     if [[ -n "${INFX_PROFILE_WINDOWS:-}" ]]; then
         mkdir -p "$INFX_PROF_DIR"
         IFS=',' read -r -a profile_metrics_urls <<< "${AIPERF_SERVER_METRICS_URLS:-${AIPERF_SERVER_URL}/metrics}"
+        warmup_per_lane="${AIPERF_WARMUP_REQUESTS_PER_LANE:-10}"
+        [[ "${AIPERF_EXPERIMENTAL_FAST:-0}" == "1" ]] && warmup_per_lane=1
         python3 "$INFMAX_CONTAINER_WORKSPACE/benchmarks/profiling/vllm/profile_windows.py" \
             "$INFX_PROFILE_WINDOWS" "$INFX_PROF_DIR/windows_conc${concurrency}.jsonl" \
-            "${profile_metrics_urls[@]%/metrics}" &
+            "$(( concurrency * warmup_per_lane ))" "${profile_metrics_urls[@]%/metrics}" &
         profile_windows_pid=$!
     fi
     run_agentic_replay_and_write_outputs "$RESULT_DIR"

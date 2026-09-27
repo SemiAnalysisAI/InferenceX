@@ -138,11 +138,13 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
 
 PROFILE_DIR = "/logs/infx_profile"
 PROFILE_DEFAULTS: dict[str, Any] = {
-    # (seconds after the replay starts, engine iterations) per torch profiler window
-    "windows": [[420, 32]],
+    # (seconds after the client's warmup ends, engine iterations) per torch window
+    "windows": [[60, 32], [240, 32]],
     # workers whose CUDA graph capture is profiled; "all" profiles every rank
     "capture_ranks": "dp0_tp0",
 }
+# Replay past the last window's start: the window, its export and a margin.
+PROFILE_TAIL_SECONDS = 240
 
 
 def profiling_arguments(environment: Mapping[str, str]) -> list[str]:
@@ -188,7 +190,13 @@ def profiling_arguments(environment: Mapping[str, str]) -> list[str]:
     overrides = ["--set", f"roles.agg.args.profiler-config={json.dumps(profiler_config)}"]
     for name, value in worker_env.items():
         overrides += ["--set", f"roles.agg.env.{name}={json.dumps(value)}"]
+    # Profiling needs only its windows; replaying longer only holds the node.
+    duration = int(
+        settings.get("duration") or max(int(w[0]) for w in windows) + PROFILE_TAIL_SECONDS
+    )
     overrides += [
+        "--set",
+        f"benchmark.env.INFX_PROFILE_DURATION={json.dumps(str(duration))}",
         "--set",
         f"benchmark.env.INFX_PROFILE_WINDOWS={json.dumps(json.dumps(windows))}",
         "--set",
