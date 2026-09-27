@@ -18,7 +18,7 @@ Arguments (`$ARGUMENTS`): `<engine> <target-tag> [filter]`
 
 | engine | NVIDIA image | AMD/ROCm image | master config |
 |--------|--------------|----------------|---------------|
-| vllm   | `vllm/vllm-openai` | `vllm/vllm-openai-rocm` | `configs/nvidia-master.yaml` / `amd-master.yaml` |
+| vllm   | `vllm/vllm-openai` | `vllm/vllm-openai-rocm` | `inferencex-e2e/configs/nvidia-master.yaml` / `amd-master.yaml` |
 | sglang | `lmsysorg/sglang`  | `lmsysorg/sglang` (rocm-suffixed tag) | same two files |
 
 ## Grouping rules (NON-NEGOTIABLE)
@@ -36,7 +36,7 @@ Arguments (`$ARGUMENTS`): `<engine> <target-tag> [filter]`
 
 Parse both master YAMLs for top-level keys whose `framework:` matches `engine`, and
 record each key's current `image:`. Keep only single-node keys (they carry a SKU like
-`b200/b300/h100/h200/mi300x/mi325x/mi355x` and map to `benchmarks/single_node/*`). Drop
+`b200/b300/h100/h200/mi300x/mi325x/mi355x` and map to `inferencex-e2e/benchmarks/single_node/*`). Drop
 multi-node/disagg keys. Apply the `filter` if given. Then collapse `-mtp` siblings into
 their base family.
 
@@ -111,7 +111,7 @@ git checkout main -q && git reset --hard origin/main -q
 branch="klaud/<basekey>-<TAG>"
 git checkout -b "$branch" -q
 python3 /tmp/edit_image.py <master.yaml> <NEW_IMAGE> <key> [<key>-mtp]
-python3 /tmp/append_changelog.py perf-changelog.yaml "<DESC>" <key> [<key>-mtp]
+python3 /tmp/append_changelog.py inferencex-e2e/perf-changelog.yaml "<DESC>" <key> [<key>-mtp]
 git add -A
 git commit -q -m "[Klaud Cold] Update <basekey>[ (+mtp)] <PHRASE> to <TAG>"
 git push -u origin "$branch" -q --force-with-lease
@@ -119,11 +119,11 @@ url=$(gh pr create --repo SemiAnalysisAI/InferenceX --base main --head "$branch"
       --title "[Klaud Cold] Update <basekey>[ (+mtp)] <PHRASE> to <TAG>" \
       --body "<BODY>" --label full-sweep-fail-fast | grep -o 'https://github.com/[^ ]*')
 # patch the changelog pr-link with the real URL, then amend + force-push
-python3 - perf-changelog.yaml "$url" <<'PY'
+python3 - inferencex-e2e/perf-changelog.yaml "$url" <<'PY'
 import sys; f,u=sys.argv[1],sys.argv[2]
 open(f,'w').write(open(f).read().replace("PRLINK_PLACEHOLDER",u,1))
 PY
-git add perf-changelog.yaml && git commit -q --amend --no-edit && git push -q --force-with-lease
+git add inferencex-e2e/perf-changelog.yaml && git commit -q --amend --no-edit && git push -q --force-with-lease
 ```
 
 Conventions:

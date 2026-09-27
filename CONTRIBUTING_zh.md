@@ -2,7 +2,7 @@
 
 <div align="center">
 
-[English](./CONTRIBUTING.md) | **中文**
+[English](CONTRIBUTING.md) | **中文**
 
 </div>
 
@@ -17,7 +17,7 @@
 3. 在 Slack 上联系核心维护者进行最终批准；若要求清单签署，请先完成签署。
 4. 由授权维护者发布 `/use <run_id>`（见下文），然后通过 reuse 路径合并 PR。
 
-**性能变更日志要求：** 凡是可能影响基准测试性能的变更，以及任何配方（recipe）的新增或修改，都**必须**在 `perf-changelog.yaml` 文件的物理末尾追加一个新条目。历史条目**严禁**编辑。
+**性能变更日志要求：** 凡是可能影响基准测试性能的变更，以及任何配方（recipe）的新增或修改，都**必须**在 `inferencex-e2e/perf-changelog.yaml` 文件的物理末尾追加一个新条目。历史条目**严禁**编辑。
 
 ## Draft 模型精度
 
@@ -47,7 +47,7 @@ Target/verifier 模型仍可在满足现有 eval 要求的前提下量化。只�
 
 审阅者必须对照发布基线核实 draft 的实际运行精度，不能只看启动参数。检查 checkpoint 元数据与量化排除项、环境变量、锁定镜像中的框架默认行为，以及从 target 模型继承的量化设置。不得仅凭 target checkpoint 的名称或精度标签推断 draft 精度。
 
-涉及投机解码的改动，CODEOWNER 必须在 Additional detail section 中注明 draft checkpoint 及其 revision（或内嵌 head）、其发布精度、锁定上游镜像对其的默认处理方式，以及实际运行精度，以便审阅者确认后两者一致。无法核实时，该条目不满足要求。参见[审阅清单](docs/PR_REVIEW_CHECKLIST_zh.md)及[验证器检查 13](.github/codeowner-signoff-verify-prompt.md#check-13--draft-runs-as-shipped)。
+涉及投机解码的改动，CODEOWNER 必须在 Additional detail section 中注明 draft checkpoint 及其 revision（或内嵌 head）、其发布精度、锁定上游镜像对其的默认处理方式，以及实际运行精度，以便审阅者确认后两者一致。无法核实时，该条目不满足要求。参见[审阅清单](inferencex-e2e/docs/PR_REVIEW_CHECKLIST_zh.md)及[验证器检查 13](.github/codeowner-signoff-verify-prompt.md#check-13--draft-runs-as-shipped)。
 
 此要求与 [MLPerf Inference Rules 附录 C：Speculative Decoding](https://github.com/mlcommons/inference_policies/blob/ff7edba545fded369e7e7e3d5a2f0bab4a95eece/inference_rules.adoc#appendix-c-speculative-decoding) 的原则一致：参考 MTP head 使用提供时的相同精度（"at the same precision as provided"），并禁止参考 head 权重量化及其他人为操纵接受率的行为。InferenceX 不采用该版本针对特定量化边缘工作负载的例外、其允许模型列表，或其投机解码配置与接受率测试方法。
 
@@ -57,13 +57,13 @@ CODEOWNER 自动验证目前仅供审阅参考。工作流会核验新提交及�
 
 仅当修改的文件存在仓库管理员及 `@SemiAnalysisAI/core` 之外的 CODEOWNER 时，才要求签核。归属以 PR 目标分支当前最新提交中的 CODEOWNERS 为准：先解析该分支的 SHA，再使用同一 SHA 校验并读取 CODEOWNERS，最后匹配的规则生效；重命名同时检查旧路径和新路径。归属规则不从 PR 的 Head 或其记录中可能过期的基础提交读取。同一文件有 core 团队作为 owner，不会豁免其他 owner。个人管理员必须同时拥有仓库 `permission: admin` 和 `role_name: admin`；其他团队和邮箱 owner 均要求签核。归属信息缺失或权限查询失败不能授予豁免。不涉及此类 owner 的改动会跳过验证。
 
-由一名符合条件的 CODEOWNER 审阅者在批准评论中填写最新的 [PR_REVIEW_CHECKLIST.md](docs/PR_REVIEW_CHECKLIST.md)（[中文说明](docs/PR_REVIEW_CHECKLIST_zh.md)）模板。
+由一名符合条件的 CODEOWNER 审阅者在批准评论中填写最新的 [PR_REVIEW_CHECKLIST.md](inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md)（[中文说明](inferencex-e2e/docs/PR_REVIEW_CHECKLIST_zh.md)）模板。
 
 **每个 PR 只需一名符合条件的 CODEOWNER 审阅者发布清单。** 发布前先检查是否已有清单；其他审阅者无需重复发布。需要更正条目或补充证据时，原审阅者必须**编辑自己已有的清单评论**，不要另发一条。只有原评论被删除时才创建替代评论。
 
 友情提醒。请**正确**遵循最新的清单模板：
 
-- 务必从 `main` 分支上**当前**的 [docs/PR_REVIEW_CHECKLIST.md](docs/PR_REVIEW_CHECKLIST.md) 复制模板。清单会不断演进，使用过期副本的签署会被标记为缺项。
+- 务必从 `main` 分支上**当前**的 [inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md](inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md) 复制模板。清单会不断演进，使用过期副本的签署会被标记为缺项。
 - 保持模板的开头语句原样不变（必须保留英文原文）：
 
   > As a PR reviewer and CODEOWNER, I have reviewed this and have:

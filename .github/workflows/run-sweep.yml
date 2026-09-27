@@ -29,7 +29,7 @@ on:
         branches:
             - main
         paths:
-            - "perf-changelog.yaml"
+            - "inferencex-e2e/perf-changelog.yaml"
     pull_request:
         branches:
             - main
@@ -38,10 +38,13 @@ on:
             - labeled
             - unlabeled
         paths:
-            - "perf-changelog.yaml"
+            - "inferencex-e2e/perf-changelog.yaml"
 
 permissions:
   contents: read
+
+env:
+  PYTHONPATH: ${{ github.workspace }}/inferencex-e2e
 
 jobs:
     check-changelog:
@@ -120,6 +123,7 @@ jobs:
                   ALL_EVALS: ${{ contains(github.event.pull_request.labels.*.name, 'all-evals') }}
                   EVALS_ONLY: ${{ contains(github.event.pull_request.labels.*.name, 'evals-only') }}
               run: |
+                  cd "$GITHUB_WORKSPACE/inferencex-e2e"
                   CMD=(
                       uv run --no-project --exclude-newer PT12H --python 3.12
                       --with "pydantic>=2" --with pyyaml python -m infx.workflows.validate_perf_changelog
@@ -356,6 +360,7 @@ jobs:
                         contains(github.event.pull_request.labels.*.name, 'evals-only')
                       }}
               run: |
+                  cd "$GITHUB_WORKSPACE/inferencex-e2e"
 
                   if [ "${GITHUB_EVENT_NAME}" == "pull_request" ]; then
                       BASE_REF="origin/${GITHUB_BASE_REF}"
@@ -368,7 +373,7 @@ jobs:
                   CMD=(
                       uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
                       python -m infx.matrix.plan
-                      --changelog-file "${GITHUB_WORKSPACE}/perf-changelog.yaml"
+                      --changelog-file "${GITHUB_WORKSPACE}/inferencex-e2e/perf-changelog.yaml"
                       --base-ref "$BASE_REF"
                       --head-ref "$HEAD_REF"
                   )

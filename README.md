@@ -8,7 +8,7 @@
 </p>
 <div align="center">
 
-**English** | [中文](./README_zh.md)
+**English** | [中文](README_zh.md)
 
 </div>
 
@@ -78,8 +78,8 @@ This pace of software advancement creates a challenge: benchmarks conducted at a
 
 ## Contributing
 
-PRs are welcome! See [CONTRIBUTING.md](./CONTRIBUTING.md) for more details on the PR review flow, the [PR Review Checklist](./docs/PR_REVIEW_CHECKLIST.md), and the merge process.
-For the maintainer and agent documentation map, start with [`docs/index.md`](./docs/index.md). It links the architecture, configuration, workflow, eval, runner, and troubleshooting references.
+PRs are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for more details on the PR review flow, the [PR Review Checklist](inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md), and the merge process.
+For the maintainer and agent documentation map, start with [`docs/index.md`](inferencex-e2e/docs/index.md). It links the architecture, configuration, workflow, eval, runner, and troubleshooting references.
 
 ## Acknowledgements & Supporters
 Thank you to Lisa Su and Anush Elangovan for providing the MI355X and CDNA3 GPUs for this free and open-source project. We want to recognize the many AMD contributors for their responsiveness and for debugging, optimizing, and validating performance across AMD GPUs. 
@@ -92,3 +92,15 @@ Full list of supporters & quotes: https://inferencex.semianalysis.com/quotes
 
 <img width="938" height="487" alt="image" src="https://github.com/user-attachments/assets/aa9b8257-fa7d-4691-97c3-dada8db05cb3" />
 
+
+## Repository layout
+
+| Directory | Contents |
+| --- | --- |
+| [`inferencex-e2e/`](inferencex-e2e/) | End-to-end serving benchmarks, configs, docs, Python tooling, runners, utilities, and performance history |
+| [`collectivex/`](collectivex/) | Collective communication benchmarks |
+| [`operatorx/`](operatorx/) | Operator benchmarks |
+| [`shared/`](shared/) | Home for shared components |
+| [`experimental/`](experimental/) | Remaining experiments |
+
+Run end-to-end commands from `inferencex-e2e/`. Repository-wide policy, GitHub workflows, and Python packaging metadata remain at the root.

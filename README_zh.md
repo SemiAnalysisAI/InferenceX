@@ -8,7 +8,7 @@
 </p>
 <div align="center">
 
-[English](./README.md) | **中文**
+[English](README.md) | **中文**
 
 </div>
 
@@ -78,8 +78,8 @@ SGLang、vLLM、TensorRT-LLM、CUDA、ROCm 等 AI 软件通过核函式優化、
 
 ## 参与贡献
 
-欢迎提交 PR！有关 PR 审阅流程、[PR 审阅清单](./docs/PR_REVIEW_CHECKLIST_zh.md)与合并流程的更多详情，请参阅 [CONTRIBUTING_zh.md](./CONTRIBUTING_zh.md)。
-维护者与 Agent 的文档导航请从 [`docs/index_zh.md`](./docs/index_zh.md) 开始，其中集中链接架构、配置、Workflow、评估、Runner 与故障排查参考。
+欢迎提交 PR！有关 PR 审阅流程、[PR 审阅清单](inferencex-e2e/docs/PR_REVIEW_CHECKLIST_zh.md)与合并流程的更多详情，请参阅 [CONTRIBUTING_zh.md](CONTRIBUTING_zh.md)。
+维护者与 Agent 的文档导航请从 [`docs/index_zh.md`](inferencex-e2e/docs/index_zh.md) 开始，其中集中链接架构、配置、Workflow、评估、Runner 与故障排查参考。
 
 ## 致谢与支持者
 感谢 Lisa Su 与 Anush Elangovan 为这一免费开源项目提供 MI355X 与 CDNA3 GPU。我们也要感谢众多 AMD 贡献者的积极响应，以及他们在各类 AMD GPU 上进行调试、优化与性能验证所付出的努力。
@@ -93,3 +93,15 @@ SGLang、vLLM、TensorRT-LLM、CUDA、ROCm 等 AI 软件通过核函式優化、
 <img width="938" height="487" alt="image" src="https://github.com/user-attachments/assets/aa9b8257-fa7d-4691-97c3-dada8db05cb3" />
 
 
+
+## 仓库布局
+
+| 目录 | 内容 |
+| --- | --- |
+| [`inferencex-e2e/`](inferencex-e2e/) | 端到端推理服务基准测试、配置、文档、Python 工具、启动器、辅助工具及性能历史 |
+| [`collectivex/`](collectivex/) | 集合通信基准测试 |
+| [`operatorx/`](operatorx/) | 算子基准测试 |
+| [`shared/`](shared/) | 共享组件目录 |
+| [`experimental/`](experimental/) | 其余实验 |
+
+请在 `inferencex-e2e/` 中运行端到端命令。仓库级规范、GitHub 工作流和 Python 打包元数据保留在根目录。

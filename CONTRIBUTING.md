@@ -2,7 +2,7 @@
 
 <div align="center">
 
-**English** | [中文](./CONTRIBUTING_zh.md)
+**English** | [中文](CONTRIBUTING_zh.md)
 
 </div>
 
@@ -17,7 +17,7 @@ Every PR description must include an **AI model disclosure** section. Name the e
 3. Ping a core maintainer on Slack for final approval, after obtaining the checklist sign-off when required.
 4. An authorized maintainer posts `/use <run_id>` (see below) and the PR is merged via the reuse path.
 
-**Performance changelog requirement:** Every change that can affect benchmark performance and every recipe addition or modification **MUST** append a new entry to the physical end of `perf-changelog.yaml`. Historical entries **MUST NOT** be edited.
+**Performance changelog requirement:** Every change that can affect benchmark performance and every recipe addition or modification **MUST** append a new entry to the physical end of `inferencex-e2e/perf-changelog.yaml`. Historical entries **MUST NOT** be edited.
 
 ## Draft-model precision
 
@@ -103,7 +103,7 @@ For speculative-decoding changes, the CODEOWNER's additional detail section must
 identify the draft checkpoint/revision (or embedded head), the precision it ships in,
 how the pinned upstream image handles it by default, and its effective serving
 precision, so the reviewer can confirm the last two match. If this cannot be
-verified, the criterion is not satisfied. See the [review checklist](docs/PR_REVIEW_CHECKLIST.md) and
+verified, the criterion is not satisfied. See the [review checklist](inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md) and
 [verifier Check 13](.github/codeowner-signoff-verify-prompt.md#check-13--draft-runs-as-shipped).
 
 This follows the same principle as
@@ -120,13 +120,13 @@ Automated CODEOWNER verification is advisory for now. The workflow checks submit
 
 Sign-off is required only when a changed file has a CODEOWNER other than a repository admin or `@SemiAnalysisAI/core`. Ownership comes from the current tip of the PR target branch, resolved once and pinned to the same SHA for CODEOWNERS validation and content reads, using the last matching rule; renames check both old and new paths. The PR head and its potentially stale recorded base SHA do not supply ownership rules. A matching core owner does not exempt another owner on the same file. Individual admins must have both repository `permission: admin` and `role_name: admin`; other teams and email owners require sign-off. Missing ownership data or failed permission lookups cannot grant an exemption. Changes without a qualifying owner skip verification.
 
-One eligible CODEOWNER reviewer fills in the latest [PR_REVIEW_CHECKLIST.md](docs/PR_REVIEW_CHECKLIST.md) template in their approval comment.
+One eligible CODEOWNER reviewer fills in the latest [PR_REVIEW_CHECKLIST.md](inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md) template in their approval comment.
 
 **Only one eligible CODEOWNER reviewer needs to post the checklist for each PR.** Check for an existing checklist before posting; additional reviewers do not need to post their own copies. For corrections or missing evidence, the original reviewer must **edit their existing checklist comment** instead of adding a new one. Create a replacement only if the original comment was deleted.
 
 A friendly reminder. Please follow the latest checklist template **correctly**:
 
-- Always copy the template from the **current** [docs/PR_REVIEW_CHECKLIST.md](docs/PR_REVIEW_CHECKLIST.md) on `main`. The checklist evolves, and a sign-off made from a stale copy will be flagged as missing items.
+- Always copy the template from the **current** [inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md](inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md) on `main`. The checklist evolves, and a sign-off made from a stale copy will be flagged as missing items.
 - Keep the template's opening phrase intact:
 
   > As a PR reviewer and CODEOWNER, I have reviewed this and have:

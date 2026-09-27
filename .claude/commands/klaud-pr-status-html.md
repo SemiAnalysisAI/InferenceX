@@ -293,4 +293,4 @@ cat > /tmp/klaud_pr_diag.json <<'EOF'
 EOF
 ```
 
-See `docs/KLAUD_DEBUG.md` for the canonical catalog of recurring failure modes to draw diagnoses from.
+See `inferencex-e2e/docs/KLAUD_DEBUG.md` for the canonical catalog of recurring failure modes to draw diagnoses from.

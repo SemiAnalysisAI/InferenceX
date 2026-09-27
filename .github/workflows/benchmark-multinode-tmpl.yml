@@ -118,6 +118,8 @@ on:
         type: string
 
 env:
+  PYTHONPATH: ${{ github.workspace }}/inferencex-e2e
+  INFERENCEX_E2E_ROOT: ${{ github.workspace }}
   PORT: '8888'
   INFMAX_CONTAINER_WORKSPACE: '/workspace'
   DSV41_MIN_CUDAGRAPH_CAPTURE_SIZE: '1'
@@ -289,7 +291,7 @@ jobs:
               if ! git --git-dir="${gitdir}" rev-parse --verify 'HEAD^{commit}' >/dev/null 2>&1; then
                 rel="${gitdir##*/.git/modules/}"
                 echo "[git-repair] Removing corrupt submodule state: ${rel}"
-                rm -rf "${gitdir}" "${repo_dir:?}/${rel}"
+                rm -rf "${gitdir}" "${repo_dir:?}/${rel}" "${repo_dir:?}/inferencex-e2e/${rel}"
               fi
             done
           fi
@@ -329,6 +331,9 @@ jobs:
           RUNNER_TYPE: ${{ inputs.runner }}
           RESULT_FILENAME_BASE: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_prefill-tp${{ env.PREFILL_TP }}-pp${{ env.PREFILL_PP_SIZE }}-dcp${{ env.PREFILL_DCP_SIZE }}-pcp${{ env.PREFILL_PCP_SIZE }}-ep${{ env.PREFILL_EP }}-dp${{ env.PREFILL_DP_ATTN }}-nw${{ env.PREFILL_NUM_WORKERS }}_decode-tp${{ env.DECODE_TP }}-pp${{ env.DECODE_PP_SIZE }}-dcp${{ env.DECODE_DCP_SIZE }}-pcp${{ env.DECODE_PCP_SIZE }}-ep${{ env.DECODE_EP }}-dp${{ env.DECODE_DP_ATTN }}-nw${{ env.DECODE_NUM_WORKERS }}_disagg-${{ env.DISAGG }}_spec-${{ env.SPEC_DECODING }}_conc${{ join(fromJson(inputs.conc-list), 'x') }}_${{ runner.name }}
         run: |
+          if [[ -d inferencex-e2e ]]; then cd inferencex-e2e; fi
+          export GITHUB_WORKSPACE="$PWD"
+          echo "INFERENCEX_E2E_ROOT=$PWD" >> "$GITHUB_ENV"
           set -x
           if [[ -f infx/results/result_filename.py ]]; then
             RESULT_FILENAME=$(python3 -m infx.results.result_filename)
@@ -412,9 +417,10 @@ jobs:
         if: ${{ always() && env.RESULT_FILENAME != '' && !inputs.eval-only && inputs.scenario-type != 'agentic-coding' }}
         env:
           RUNNER_TYPE: ${{ inputs.runner }}
-          PYTHONPATH: ${{ github.workspace }}/.result-tooling
+          PYTHONPATH: ${{ github.workspace }}/.result-tooling/inferencex-e2e
         run: |
-          source .result-tooling/benchmarks/benchmark_lib.sh --validation-only
+          if [[ -d inferencex-e2e ]]; then cd inferencex-e2e; fi
+          source "$PYTHONPATH/benchmarks/benchmark_lib.sh" --validation-only
           check_env_vars INFERENCEX_RESULTS_PYTHON
           # Launcher stamp supplies the producer SHA unless the
           # power-producer-sha input is set as a manual override
@@ -429,7 +435,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: bmk_${{ env.RESULT_FILENAME }}
-          path: agg_${{ env.RESULT_FILENAME }}_*.json
+          path: ${{ env.INFERENCEX_E2E_ROOT }}/agg_${{ env.RESULT_FILENAME }}_*.json
 
       - name: Upload power audit bundle
         if: ${{ always() && !inputs.eval-only }}
@@ -437,16 +443,16 @@ jobs:
         with:
           name: power_audit_${{ env.RESULT_FILENAME }}
           path: |
-            ${{ env.RESULT_FILENAME }}_*.json
-            agg_${{ env.RESULT_FILENAME }}_*.json
-            power_validation_${{ env.RESULT_FILENAME }}_*.json
-            LOGS/power/**
-            LOGS/native_power/**
-            result_processing_${{ env.RESULT_FILENAME }}.json
-            LOGS/*/results_*.json
-            LOGS/agentic/**/agentic_power_concurrency_*.json
-            LOGS/agentic/**/agentic_power_timezone_offset.txt
-            LOGS/agentic/**/power_validation.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/${{ env.RESULT_FILENAME }}_*.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/agg_${{ env.RESULT_FILENAME }}_*.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/power_validation_${{ env.RESULT_FILENAME }}_*.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/power/**
+            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/native_power/**
+            ${{ env.INFERENCEX_E2E_ROOT }}/result_processing_${{ env.RESULT_FILENAME }}.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/*/results_*.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/agentic/**/agentic_power_concurrency_*.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/agentic/**/agentic_power_timezone_offset.txt
+            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/agentic/**/power_validation.json
           if-no-files-found: ignore
 
       - name: Upload server logs
@@ -456,8 +462,8 @@ jobs:
           name: multinode_server_logs_${{ env.RESULT_FILENAME }}
           # multinode launchers package server logs into this tarball.
           path: |
-            multinode_server_logs.tar.gz
-            srt-setup.log
+            ${{ env.INFERENCEX_E2E_ROOT }}/multinode_server_logs.tar.gz
+            ${{ env.INFERENCEX_E2E_ROOT }}/srt-setup.log
           if-no-files-found: ignore
 
       - name: Upload agentic aggregated result
@@ -465,7 +471,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: bmk_agentic_${{ env.RESULT_FILENAME }}
-          path: ${{ env.RESULT_FILENAME }}_conc*.json
+          path: ${{ env.INFERENCEX_E2E_ROOT }}/${{ env.RESULT_FILENAME }}_conc*.json
 
       - name: Upload agentic raw results
         if: ${{ always() && inputs.scenario-type == 'agentic-coding' }}
@@ -473,9 +479,9 @@ jobs:
         with:
           name: agentic_${{ env.RESULT_FILENAME }}
           path: |
-            LOGS/agentic/**
-            !LOGS/agentic/**/aiperf_artifacts/inputs.json
-            !LOGS/agentic/**/aiperf_artifacts/profile_export_raw.jsonl
+            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/agentic/**
+            !${{ env.INFERENCEX_E2E_ROOT }}/LOGS/agentic/**/aiperf_artifacts/inputs.json
+            !${{ env.INFERENCEX_E2E_ROOT }}/LOGS/agentic/**/aiperf_artifacts/profile_export_raw.jsonl
           if-no-files-found: ignore
 
       - name: Upload eval results (if any)
@@ -484,24 +490,25 @@ jobs:
         with:
           name: eval_${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_p${{ env.PREFILL_NUM_WORKERS }}x${{ env.PREFILL_TP }}p${{ env.PREFILL_PP_SIZE }}c${{ env.PREFILL_DCP_SIZE }}k${{ env.PREFILL_PCP_SIZE }}e${{ env.PREFILL_EP }}d${{ env.PREFILL_DP_ATTN }}_d${{ env.DECODE_NUM_WORKERS }}x${{ env.DECODE_TP }}p${{ env.DECODE_PP_SIZE }}c${{ env.DECODE_DCP_SIZE }}k${{ env.DECODE_PCP_SIZE }}e${{ env.DECODE_EP }}d${{ env.DECODE_DP_ATTN }}_g${{ env.DISAGG }}_r${{ env.EVAL_ARTIFACT_RECIPE }}_c${{ env.EVAL_ARTIFACT_CONC }}_kv${{ env.KV_OFFLOADING }}-${{ env.KV_OFFLOAD_BACKEND }}_spec${{ env.SPEC_DECODING }}_${{ env.EVAL_FRAMEWORK }}_${{ env.EVAL_SUITE }}_${{ runner.name }}_${{ github.run_attempt }}
           path: |
-            meta_env.json
-            results*.json
-            *_report.json
-            *_results.jsonl
-            sample*.jsonl
-            agent_preds.json
-            predictions.jsonl
-            swebench_report_*.json
-            *_artifacts.tar.gz
-            *.traj*
+            ${{ env.INFERENCEX_E2E_ROOT }}/meta_env.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/results*.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/*_report.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/*_results.jsonl
+            ${{ env.INFERENCEX_E2E_ROOT }}/sample*.jsonl
+            ${{ env.INFERENCEX_E2E_ROOT }}/agent_preds.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/predictions.jsonl
+            ${{ env.INFERENCEX_E2E_ROOT }}/swebench_report_*.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/*_artifacts.tar.gz
+            ${{ env.INFERENCEX_E2E_ROOT }}/*.traj*
           if-no-files-found: ${{ inputs.eval-only && 'error' || 'ignore' }}
 
       - name: Verify eval scores
         if: ${{ (success() || failure()) && inputs.eval-only }}
         env:
-          PYTHONPATH: ${{ github.workspace }}/.result-tooling
+          PYTHONPATH: ${{ github.workspace }}/.result-tooling/inferencex-e2e
         run: |
-          source .result-tooling/benchmarks/benchmark_lib.sh --validation-only
+          if [[ -d inferencex-e2e ]]; then cd inferencex-e2e; fi
+          source "$PYTHONPATH/benchmarks/benchmark_lib.sh" --validation-only
           check_env_vars INFERENCEX_RESULTS_PYTHON
           expected_concs="${EVAL_CONC}"
           if [[ -z "${expected_concs}" ]]; then
@@ -512,6 +519,7 @@ jobs:
       - name: Cleanup eval outputs (post-upload)
         if: ${{ always() && (inputs.run-eval || inputs.eval-only) }}
         run: |
+          if [[ -d inferencex-e2e ]]; then cd inferencex-e2e; fi
           rm -f meta_env.json || true
           rm -f results*.json || true
           rm -f -- ./*_report.json || true

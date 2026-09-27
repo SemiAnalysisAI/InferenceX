@@ -104,17 +104,17 @@ jobs:
             use gh api --method GET. Use Read/Glob/Grep for local inspection, not shell file commands
             or Python. Run one allowed gh/git command per Bash call, without cd/env wrappers,
             pipes or compound commands; use gh --jq for filtering (never with --slurp).
-            Read docs/index.md and AGENTS.md. Titles alone cannot exclude
+            Read inferencex-e2e/docs/index.md and AGENTS.md. Titles alone cannot exclude
             overlap; incomplete file lists require investigation, not assumptions.
 
-            Each candidate names its live configs/*-master.yaml:KEY family and an exact published
+            Each candidate names its live inferencex-e2e/configs/*-master.yaml:KEY family and an exact published
             benchmark observation from the canonical matrix generator. The public observation is benchmark
             evidence only. Verify the exact current family; the candidate agent, not this review, owns
             upstream image research and compatibility. Never substitute a sibling or retired workload.
             Duplicate means overlapping edits or shared dependencies, not merely the same model/image on
             a different family. For every proceed decision, resolve baseline-model to the exact display
             model accepted by the public benchmark API using the supplied OpenAPI schema.
-            Resolve ALL possible target clusters from its runner and configs/runners.yaml to the
+            Resolve ALL possible target clusters from its runner and inferencex-e2e/configs/runners.yaml to the
             exact IDs in capacity.json. Same-hardware sibling clusters cannot stand in for the
             recipe's target. Proceed only if every target is in eligible-telemetry-clusters;
             unproven mappings or unavailable targets mean uncertain. Continue to later candidates

@@ -57,6 +57,9 @@ concurrency:
   group: cx-${{ github.ref }}-${{ inputs.backend }}-${{ inputs.only_sku }}
   cancel-in-progress: false
 
+env:
+  PYTHONPATH: ${{ github.workspace }}/inferencex-e2e
+
 jobs:
   # ---- setup: generate the shard matrix and upload its requested coverage ----
   setup:
@@ -76,7 +79,7 @@ jobs:
             uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml python -m infx.workflows.ci_priority)
           echo "priority=$(jq -r '.[0].priority' <<<"$scored")" >> "$GITHUB_OUTPUT"
       - id: gen
-        working-directory: experimental/CollectiveX
+        working-directory: collectivex
         env:
           INPUT_BACKEND: ${{ inputs.backend }}
           INPUT_ONLY_SKU: ${{ inputs.only_sku }}
@@ -87,7 +90,7 @@ jobs:
           RUN_ATTEMPT: ${{ github.run_attempt }}
         run: |
           set -eo pipefail
-          source ../../benchmarks/benchmark_lib.sh --validation-only
+          source ../inferencex-e2e/benchmarks/benchmark_lib.sh --validation-only
           check_env_vars INPUT_BACKEND RUN_ID RUN_ATTEMPT GITHUB_OUTPUT
           args=(--backend "$INPUT_BACKEND")
           [ -n "$INPUT_ONLY_SKU" ] && args+=(--only-sku "$INPUT_ONLY_SKU")
@@ -126,7 +129,7 @@ jobs:
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: cxsweep-matrix-${{ github.run_id }}
-          path: experimental/CollectiveX/matrix_full.json
+          path: collectivex/matrix_full.json
           if-no-files-found: error
           overwrite: true
           retention-days: 14
@@ -270,7 +273,7 @@ jobs:
           MATRIX_ID: ${{ matrix.id }}
         run: |
           set -eo pipefail
-          cd "$COLLX_SOURCE_ROOT/experimental/CollectiveX" 2>/dev/null \
+          cd "$COLLX_SOURCE_ROOT/collectivex" 2>/dev/null \
             || { echo "CollectiveX source is unavailable" >&2; exit 1; }
           python3 sweep_matrix.py \
             --extract-from "$COLLX_JOB_ROOT/control/matrix_full.json" \
@@ -290,7 +293,7 @@ jobs:
           # launcher's collx_load_operator_config emits it per SKU.
           cd "$COLLX_SOURCE_ROOT" 2>/dev/null \
             || { echo "CollectiveX source is unavailable" >&2; exit 1; }
-          bash "experimental/CollectiveX/launchers/launch_${MATRIX_LAUNCHER}.sh"
+          bash "collectivex/launchers/launch_${MATRIX_LAUNCHER}.sh"
 
       # always(): cancel any Slurm allocation a killed launcher left recorded, append the summary table, and stage result JSONs so a red or partial leg still uploads.
       - name: Summarize and stage shard results
@@ -300,20 +303,20 @@ jobs:
           set -eo pipefail
           cd "$COLLX_SOURCE_ROOT" 2>/dev/null \
             || { echo "CollectiveX source is unavailable" >&2; exit 1; }
-          source experimental/CollectiveX/runtime/common.sh
+          source collectivex/runtime/common.sh
           collx_cleanup_allocation "$COLLX_JOB_ROOT" \
             || { echo "CollectiveX allocation cleanup failed; results may still be changing" >&2; exit 1; }
           if [ "$COLLX_BENCH" != swap-blocks ]; then
-            python3 experimental/CollectiveX/summarize.py \
-              --results-dir experimental/CollectiveX/results >> "$GITHUB_STEP_SUMMARY" || true
+            python3 collectivex/summarize.py \
+              --results-dir collectivex/results >> "$GITHUB_STEP_SUMMARY" || true
           # Second view over the same documents: latency answers how long a point took,
           # this answers how fast it moved its payload. Both are renderers over the staged
           # JSON and neither gates the leg, so both are `|| true`.
-            python3 experimental/CollectiveX/bandwidth.py \
-              --results-dir experimental/CollectiveX/results >> "$GITHUB_STEP_SUMMARY" || true
+            python3 collectivex/bandwidth.py \
+              --results-dir collectivex/results >> "$GITHUB_STEP_SUMMARY" || true
           fi
           shopt -s nullglob
-          results=(experimental/CollectiveX/results/*.json)
+          results=(collectivex/results/*.json)
           if [ "${#results[@]}" -eq 0 ]; then
             echo "staged=false" >> "$GITHUB_OUTPUT"
             echo "No result JSON to stage; leg produced none."
