@@ -100,8 +100,6 @@ class NCCLEPBackend(EPBackend):
     kernel_generation = "nccl-ep-v02-ht-routed-zc-static"
     SUPPORTED_MODES = ("normal", "low-latency")
     SUPPORTED_PRECISIONS = ("bf16",)
-    # HT replays at decode only, the regime an engine's captured decode step would run it in
-    # (see `cuda_graph_supported`); LL replays everywhere.
     CUDA_GRAPH_MODES = ("normal", "low-latency")
     stage_device_work = False
     requires_fresh_pair = False
@@ -112,12 +110,8 @@ class NCCLEPBackend(EPBackend):
 
     @property
     def cuda_graph_supported(self) -> bool:
-        # HT prefill stays eager: engines run prefill uncaptured. HT decode replays because a
-        # captured decode step would run it that way, even though it is slower there: 1.03-1.11x
-        # eager's pair period on h100/h200 EP16 (runs 36231927003..36231931954 vs 36176100175).
-        # Captured, the per-step routing ncclAllGather is a proxy-driven cross-node collective,
-        # which NCCL fronts with a host-callback node on every replay (enqueue.cc, persistent
-        # plans), ~+50us of dispatch at EP16 and nothing within one node.
+        # HT replays at decode only, as a captured decode step runs it (engines run prefill
+        # uncaptured). It is slower there at EP16: see methodology, CUDA Graph Replay.
         if self.mode == "normal" and getattr(self.args, "phase", None) != "decode":
             return False
         return super().cuda_graph_supported
@@ -423,14 +417,9 @@ class NCCLEPBackend(EPBackend):
     def _bind_ht_recv_count(self, h):
         """Read HT's received-token count and bind the combine input to the full receive plane.
 
-        The FLAT contract (ep_enums.h, NCCL_EP_LAYOUT_FLAT) gives combine the SAME
-        `[num_recv_slots, hidden]` shape as the dispatch output, static at the group's
-        `max_recv_tokens_per_rank` -- "Required under CUDA Graph capture"; sizing it to the
-        received count is only valid for a group created with `max_recv_tokens_per_rank =
-        NCCL_EP_AUTO`, which this one is not. An earlier revision sliced it to the count, which
-        broke that contract in both regimes. The slice existed to dodge a whole-plane staging
-        copy (~470-1295us on prefill); zero-copy HT elides that staging, so the full plane costs
-        nothing. The count is still read here (untimed) for `recv_tokens` and the oracle.
+        FLAT combine takes the dispatch output's static `[num_recv_slots, hidden]` shape
+        (ep_enums.h; a count-sized slice needs an NCCL_EP_AUTO group). Zero-copy elides the
+        staging copy the old slice avoided. The count is read here, untimed, for the oracle.
         """
         h.count = int(h.recv_total.item())
         h.combine_in_t = self._recv_x_t
@@ -670,12 +659,8 @@ class NCCLEPBackend(EPBackend):
         # destination ranks back to each token's home rank.
         self._recv_x.zero_()
         self._recv_x[: transformed.shape[0]].copy_(transformed.to(self._recv_x.dtype))
-        # Fence the write across ranks. `_recv_x` is the zero-copy window peers access directly,
-        # and nothing orders this rank's local write against a peer's combine touching it: after
-        # graph replay shifted rank timing, the combine read a peer's half-written input
-        # (combine_values failed, dispatch checks clean, EP16 only; h100/h200 3/3 runs). With this
-        # fence the same cells passed 4/4 (runs 36231927003..36231931954). The timed path writes
-        # nothing between dispatch and combine, so it needs no fence; this is the oracle's write.
+        # `_recv_x` is the zero-copy window peers read directly: fence this write across ranks
+        # or a peer's combine can read it half-written (EP16). The timed path writes nothing here.
         torch.cuda.synchronize()
         dist.barrier()
         torch.cuda.synchronize()

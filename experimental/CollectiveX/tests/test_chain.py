@@ -322,48 +322,42 @@ class CudaGraphRoundtrip(unittest.TestCase):
         self.assertTrue(problem._cuda_graph_output.cloned)
         self.assertTrue(problem._cuda_graph_output_rewritten)
 
-    def test_every_timed_replay_starts_behind_a_device_side_rank_barrier(self):
-        # Without the barrier each replay restarts from the preceding synchronize and ranks enter
-        # ~75us apart across nodes; the barrier must sit between the sync and the replay, with no
-        # host sync in between, on every timed replay and on none of the warm-ups.
+    def _graph_backend(self):
         backend = _ChainBackend(stage_device_work=False, fp8_consume="native", precision="bf16")
-        backend.mode = "normal"
-        backend.CUDA_GRAPH_MODES = ("normal",)
+        backend.mode, backend.CUDA_GRAPH_MODES = "normal", ("normal",)
+        return backend
+
+    def _aligned_replays(self, calls):
+        """Replays preceded by the device-side rank barrier (all-reduce, then the spin)."""
+        return [i for i, call in enumerate(calls)
+                if call == "graph_replay" and calls[i - 2:i] == ["all_reduce", "align_spin"]]
+
+    def test_every_timed_replay_starts_behind_a_device_side_rank_barrier(self):
+        # Without it each replay restarts from the preceding sync and ranks enter ~75us apart.
+        backend = self._graph_backend()
         with mock.patch.dict(os.environ, {}, clear=True), \
                 trace_torch(backend.clock, backend.calls):
             backend.benchmark_component("roundtrip", new_problem(), warmup=2, iters=3)
         replays = [i for i, call in enumerate(backend.calls) if call == "graph_replay"]
-        warmups, timed = replays[:2], replays[2:5]
-        for index in warmups:
-            self.assertNotEqual(backend.calls[index - 1], "align_spin")
-        for index in timed:
-            self.assertEqual(backend.calls[index - 2:index], ["all_reduce", "align_spin"])
+        self.assertEqual(self._aligned_replays(backend.calls), replays[2:5])
 
     def test_the_graph_chain_is_one_capture_of_unrolled_pairs_per_sibling(self):
         iters, drop = 5, 1
-        backend = _ChainBackend(stage_device_work=False, fp8_consume="native", precision="bf16")
-        backend.mode = "normal"
-        backend.CUDA_GRAPH_MODES = ("normal",)
+        backend = self._graph_backend()
         with mock.patch.dict(os.environ, {}, clear=True), \
                 trace_torch(backend.clock, backend.calls):
             series = backend.benchmark_chain(new_problem(), 0, iters, drop)
-        # Floors and period siblings: one capture each, holding every pair of the chain.
-        self.assertEqual(backend.calls.count("capture_begin"), 2)
-        begin = [i for i, call in enumerate(backend.calls) if call == "capture_begin"]
-        end = [i for i, call in enumerate(backend.calls) if call == "capture_end"]
+        calls = backend.calls
+        begin = [i for i, call in enumerate(calls) if call == "capture_begin"]
+        end = [i for i, call in enumerate(calls) if call == "capture_end"]
+        # Floors and period siblings: one capture each holding every pair, each replayed once
+        # untimed and once behind the barrier.
+        self.assertEqual(len(begin), 2)
         for lo, hi in zip(begin, end):
-            self.assertEqual(
-                ops_only(backend.calls[lo:hi]), ["dispatch", "stage", "combine"] * iters
-            )
-        # Each graph replays once untimed, then once behind the barrier.
-        self.assertEqual(backend.calls.count("graph_replay"), 4)
-        aligned = [
-            i for i, call in enumerate(backend.calls)
-            if call == "graph_replay" and backend.calls[i - 2:i] == ["all_reduce", "align_spin"]
-        ]
-        self.assertEqual(len(aligned), 2)
-        for key in ("pair", "dispatch", "combine"):
-            self.assertEqual(len(series[key]), iters - drop)
+            self.assertEqual(ops_only(calls[lo:hi]), ["dispatch", "stage", "combine"] * iters)
+        self.assertEqual(calls.count("graph_replay"), 4)
+        self.assertEqual(len(self._aligned_replays(calls)), 2)
+        self.assertEqual({len(series[k]) for k in ("pair", "dispatch", "combine")}, {iters - drop})
         self.assertEqual(len(series["start_to_start"]), iters - drop - 1)
         self.assertTrue(series["combined"].cloned)
 
@@ -406,33 +400,27 @@ class GraphAlignmentAndValueCheck(unittest.TestCase):
 
     def test_the_replay_value_check_poisons_what_dispatch_wrote_before_replaying(self):
         backend = _ChainBackend(stage_device_work=True, fp8_consume="native", precision="fp8")
-        order = []
+        order, combined = [], _Combined(1.0)
         handle = types.SimpleNamespace(recv_x="recv", recv_scales=None, combine_input=None)
-        combined = _Combined(1.0)
         graph = types.SimpleNamespace(replay=lambda: order.append("replay"))
         backend.warm = lambda problem, count: order.append("warm")
         backend._capture_pairs = lambda problem, staged, pairs, marks: (
-            order.append(("capture", staged, marks)) or (graph, {}, combined, handle)
+            order.append(("capture", staged)) or (graph, {}, combined, handle)
         )
         backend._poison = lambda tensor: order.append(("poison", tensor))
         dist = types.SimpleNamespace(barrier=lambda: order.append("barrier"))
-        fake = types.SimpleNamespace(
-            cuda=types.SimpleNamespace(synchronize=lambda: None), distributed=dist,
-        )
+        fake = types.SimpleNamespace(cuda=types.SimpleNamespace(synchronize=lambda: None),
+                                     distributed=dist)
         with mock.patch.dict(sys.modules, {"torch": fake, "torch.distributed": dist}):
             result = backend.graph_replay_output(new_problem())
-        # Staging runs INSIDE the capture (staged=None), and the poison lands between the upload
-        # replay and the replay whose output is returned.
-        self.assertEqual(order[1], ("capture", None, ()))
-        first, last = order.index("replay"), len(order) - 1 - order[::-1].index("replay")
-        poisoned = [entry for entry in order[first:last] if isinstance(entry, tuple)]
-        self.assertIn(("poison", "recv"), poisoned)
-        self.assertIn(("poison", combined), poisoned)
-        # Every rank finishes poisoning before any rank replays: peers write into each other's
-        # receive buffers, so an unbarriered replay races a slow peer's poison.
-        last_poison = max(i for i, entry in enumerate(order) if isinstance(entry, tuple)
-                          and entry[0] == "poison")
-        self.assertIn("barrier", order[last_poison:last])
+        # Staging runs INSIDE the capture (staged=None). Between the upload replay and the
+        # returned one, dispatch's output and the result are poisoned, then every rank barriers:
+        # peers write into each other's buffers, so an unbarriered replay races a slow poison.
+        self.assertEqual(order, [
+            "warm", ("capture", None), "replay",
+            ("poison", "recv"), ("poison", None), ("poison", None), ("poison", combined),
+            "barrier", "replay",
+        ])
         self.assertTrue(result.cloned)
 
 

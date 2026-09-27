@@ -216,11 +216,8 @@ CUDA_GRAPH_ORIGIN = "cuda-graph-replay"
 def _published_tails(percentiles, graph_replay):
     """Fresh-entry percentiles as published: under graph replay only the median.
 
-    A graphed fresh-entry sample starts behind the alignment barrier, but a rank whose host is
-    late to launch its replay still stalls the others, and those stalls own the tail (gb200
-    flashinfer T=1: roundtrip p99 858us against a 30us combine p99). Until that alignment is
-    clean, the p90/p95/p99 of these series describe host jitter, so they are withheld (null)
-    rather than published as operation tails. The chained family is unaffected.
+    A rank whose host is late to launch its replay stalls the others, so graphed fresh-entry
+    tails measure host jitter (gb200 flashinfer T=1 roundtrip p99 858us vs combine p99 30us).
     """
     if not graph_replay or percentiles is None:
         return percentiles
@@ -336,12 +333,8 @@ def time_cuda_graph_phase_us(
 ) -> list[float]:
     """Time one event-record interval captured inside graph replay.
 
-    `interval` is a pair of external events recorded as graph nodes, so the host's replay launch
-    never lands in the window. `align()` runs before each replay with no host sync between the
-    two: it enqueues a device-side rank barrier, so every rank's replay starts when that barrier
-    releases instead of when its own host got round to launching the graph. Without it each
-    sample restarts from the preceding synchronize and ranks enter ~75us apart across nodes
-    (b200 EP16), which the cross-rank MAX then reports as latency.
+    `align()` enqueues a device-side rank barrier before each replay, so replays start together
+    rather than ~75us apart (b200 EP16), which the cross-rank MAX would report as latency.
     """
     for _ in range(max(0, warmup)):
         fn()
@@ -357,12 +350,7 @@ def time_cuda_graph_phase_us(
 
 
 def kernel_generation(backend) -> str:
-    """Return the adapter's declared kernel family, suffixed when timed under graph replay.
-
-    Replay removes launch overhead that eager timing pays, so the two regimes are different
-    series: the suffix keeps the durable store from pooling a graphed row with the eager rows
-    published under the same kernel family.
-    """
+    """Return the adapter's kernel family; `-cudagraph` keeps replayed rows a separate series."""
     family = getattr(backend, "kernel_generation", None) or "n-a"
     if getattr(backend, "cuda_graph_enabled", False):
         return f"{family}-cudagraph"
@@ -725,8 +713,7 @@ def _chain_output_matches(chained, drained):
     error = (chained.float() - drained.float()).abs()
     relative = error / drained.float().abs().clamp_min(COMBINE_MAG_FLOOR)
     worst = float(relative.max().item())
-    # torch.max propagates NaN, so a non-finite element lands here. Report it as inf: NaN would
-    # vanish from the cross-rank MAX and publish a failed check beside an error of 0.0.
+    # NaN would vanish from the cross-rank MAX and publish "failed, error 0.0".
     if not math.isfinite(worst):
         return False, float("inf")
     return worst < COMBINE_REL_TOL, worst
@@ -1201,8 +1188,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     # stand-in is decoupled from each pair's dispatch, so chained and drained are not
     # comparable -- see the call site for the measurement that established this.
     chain_output_applicable = not backend.stage_excluded_from_roundtrip
-    # Every graphed row is value-checked: `graph_replay_output` stages inside its own capture, so
-    # the comparison is defined even where the timed captures hoist staging.
+    # `graph_replay_output` stages inside its own capture, so every graphed row is comparable.
     cuda_graph_output_applicable = cuda_graph
 
     # ---- Pass 2: every backend uses the same rotated point order.
@@ -1250,10 +1236,8 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                 samples[T].dispatch_min += _reduce_vec(torch, dist, device, measured["dispatch"], MIN)
                 samples[T].combine_min += _reduce_vec(torch, dist, device, measured["combine"], MIN)
 
-    # Graph mode: verify that the timed replays overwrote their poisoned output, then value-check
-    # replay itself -- a capture with staging inside it, dispatch outputs and result poisoned
-    # before its only replay -- against an ordinary drained pair. Untimed; collective in ladder
-    # order on every rank.
+    # Graph mode: the timed replays must rewrite their poisoned output, and a poisoned replay
+    # (graph_replay_output) must match a drained pair. Untimed, in ladder order on every rank.
     if cuda_graph:
         for T in ladder:
             problem = problems[T]
@@ -1422,9 +1406,8 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         recv_max = _reduce_int(torch, dist, device, g["recv_local"], MAX)
         recv_min = _reduce_int(torch, dist, device, g["recv_local"], MIN)
         global_ok = _reduce_int(torch, dist, device, g["local_ok"], MIN)
-        # Which oracle pass failed, agreed across ranks. `max_relative_error` folds all three, so
-        # without these a failure cannot be placed before (Pass 1, before any timing or capture)
-        # or after the measured regimes -- the distinction that attributes it to them or not.
+        # Which oracle pass failed (before, within or after the measured regimes), and which of
+        # its sub-checks, agreed across ranks. `max_relative_error` folds all three passes.
         oracle_verdicts, oracle_failed_checks = {}, {}
         for name, key in (("pre", "oracle_pre"), ("chained", "oracle_chain"),
                           ("post", "oracle_post")):
@@ -1432,8 +1415,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             oracle_verdicts[name] = bool(
                 _reduce_int(torch, dist, device, int(bool(report["passed"])), MIN)
             )
-            # Which sub-checks failed on ANY rank (dispatch payload/metadata/counts vs the combine
-            # values): the first thing a failed pass has to answer, collective on every rank.
             oracle_failed_checks[name] = [
                 check for check in _ORACLE_CHECKS
                 if not _reduce_int(torch, dist, device, int(bool(report["checks"][check])), MIN)
@@ -1762,9 +1743,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             "stage_excluded_from_roundtrip": bool(
                 getattr(backend, "stage_excluded_from_roundtrip", False)
             ),
-            # Whether this document's rows carry the chained family. Consumers key the headline on
-            # presence, as for `stage_excluded_from_roundtrip`. Graph mode keeps it: the chain is
-            # captured as one graph of unrolled pairs (EPBackend._benchmark_chain_graph).
+            # Whether rows carry the chained family; graph mode captures it too.
             "chained_period": True,
             "cuda_graph_replay": cuda_graph,
             "cuda_graph_supported": bool(

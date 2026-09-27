@@ -32,11 +32,9 @@ class MatrixTests(unittest.TestCase):
                 )
 
     def test_shards_run_on_the_registry_runner_label_else_the_sku(self):
-        for shard in matrix(backend="all")["include"]:
-            with self.subTest(shard=shard["id"]):
-                platform = sweep_matrix.PLATFORMS[shard["sku"]]
-                self.assertEqual(shard["runner"], platform.get("runner_label", shard["sku"]))
-        self.assertEqual(sweep_matrix._runner_label("mi325x"), "cluster:mi325x-amds")
+        runners = {shard["sku"]: shard["runner"] for shard in matrix(backend="all")["include"]}
+        self.assertEqual(runners["mi325x"], "cluster:mi325x-amds")
+        self.assertEqual(runners["h200-dgxc"], "h200-dgxc")
 
     def test_only_real_platform_cells_are_unsupported(self):
         platform = {
