@@ -40,6 +40,9 @@ base:
         speculative-num-steps: 2
         speculative-eagle-topk: 1
         speculative-num-draft-tokens: 3
+        # Eager decode and speculative verify/draft; no CUDA graph capture.
+        cuda-graph-backend-decode: disabled
+        cuda-graph-backend-prefill: disabled
         watchdog-timeout: 3600
         enable-metrics: true
       env:
@@ -61,7 +64,6 @@ zip_override_tp2:
     agg:
       args:
         max-running-requests: [1, 2, 4, 8, 16, 32, 64, 128]
-        cuda-graph-max-bs-decode: [1, 2, 4, 8, 16, 32, 64, 128]
   benchmark:
     env:
       CONC: ['1', '2', '4', '8', '16', '32', '64', '128']
