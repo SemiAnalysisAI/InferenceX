@@ -10,7 +10,7 @@ base:
   name: glm52-fp4-b300-vllm-speedbench
   model:
     path: hf:nvidia/GLM-5.2-NVFP4
-    container: vllm/vllm-openai:v0.21.0
+    container: vllm/vllm-openai:nightly-dev-x86_64-cu13-3696c77
     precision: fp4
   resources:
     gpu_type: b300
@@ -25,7 +25,6 @@ base:
   engine:
     type: vllm
     connector: null
-    # vLLM v0.21.0 predates --device-ids; bind GPUs via CUDA_VISIBLE_DEVICES.
     set_visible_devices: true
   health_check:
     interval_seconds: 10

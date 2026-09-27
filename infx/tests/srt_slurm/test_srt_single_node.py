@@ -702,7 +702,7 @@ _SPEEDBENCH_PREFIXES = {
     },
     "glm52": {
         "MODEL": "nvidia/GLM-5.2-NVFP4",
-        "IMAGE": "vllm/vllm-openai:v0.21.0",
+        "IMAGE": "vllm/vllm-openai:nightly-dev-x86_64-cu13-3696c77",
         "TP": "8", "GPU_COUNT": "8",
     },
     "kimik3": {
@@ -717,7 +717,7 @@ _SPEEDBENCH_PREFIXES = {
     },
     "minimaxm3": {
         "MODEL": "MiniMax/MiniMax-M3",
-        "IMAGE": "vllm/vllm-openai:nightly-dev-x86_64-cu13-af03963",
+        "IMAGE": "vllm/vllm-openai:v0.21.0",
         "TP": "8", "GPU_COUNT": "8",
     },
     "qwen3.5": {

@@ -16,7 +16,7 @@ base:
   name: minimaxm3-fp4-b300-vllm-speedbench
   model:
     path: hf:MiniMax/MiniMax-M3
-    container: vllm/vllm-openai:nightly-dev-x86_64-cu13-af03963
+    container: vllm/vllm-openai:v0.21.0
     precision: fp4
   resources:
     gpu_type: b300
@@ -31,7 +31,7 @@ base:
   engine:
     type: vllm
     connector: null
-    # Bind GPUs via CUDA_VISIBLE_DEVICES for image compatibility.
+    # vLLM v0.21.0 predates --device-ids; bind GPUs via CUDA_VISIBLE_DEVICES.
     set_visible_devices: true
   health_check:
     interval_seconds: 10
