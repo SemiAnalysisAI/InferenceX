@@ -20,7 +20,7 @@ SRT_MONITOR_INTERVAL="$GPU_MONITOR_INTERVAL"
 CLIENT_ARGS=()
 for argument in "$@"; do
     case "$argument" in
-        --trust-remote-code) CLIENT_ARGS+=("$argument") ;;
+        --trust-remote-code|--dsv4) CLIENT_ARGS+=("$argument") ;;
         *) echo "ERROR: unsupported fixed-sequence argument: $argument" >&2; exit 1 ;;
     esac
 done

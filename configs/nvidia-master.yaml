@@ -8928,3 +8928,18 @@ dsv41flash-fp4-gb300-sglang-agentic-dspark:
       search-space:
       - { tp: 2, ep: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/sglang/gb300-fp4-mtp/agentic.yaml }
       - { tp: 4, ep: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/sglang/gb300-fp4-mtp/agentic.yaml }
+
+dsv4flash-fp4-b300-sglang-mtp:
+  image: lmsysorg/sglang:nightly-dev-cu13-20260925-8ca82118@sha256:baea7ec5ea86412ce59837f17011028b940f9777fa15129254de02bd6a842559
+  model: deepseek-ai/DeepSeek-V4-Flash
+  model-prefix: dsv4flash
+  runner: cluster:b300-dsxe
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 2, ep: 1, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv4flash/sglang/b300-fp4-mtp/8k1k.yaml }
