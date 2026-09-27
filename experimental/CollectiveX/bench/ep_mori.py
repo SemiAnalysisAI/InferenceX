@@ -42,11 +42,8 @@ class MoRIBackend(EPBackend):
     maturity = "production"  # vLLM --all2all-backend mori_*; SGLang --moe-a2a-backend mori
     SUPPORTED_MODES = ("normal", "low-latency")
     SUPPORTED_PRECISIONS = ("bf16", "fp8")
-    # Both kernel families launch with host-built args only (no per-call host read of counts; the
-    # reset moved on-device in ROCm/mori#86 for vLLM's graphs), and MoRI's own benchmark captures
-    # IntraNode dispatch/combine and N-pair graphs. `stage` slices by the untimed per-rung
-    # `recv_tokens`, fixed for a rung's routing and so safe to bake into a capture. The timing
-    # events are captured through hipEventRecordWithFlags on ROCm (EPBackend._graph_event).
+    # Kernels launch with host-built args only (reset on-device since ROCm/mori#86); `stage`
+    # slices by the per-rung `recv_tokens`, fixed for a rung, so it is safe to capture.
     CUDA_GRAPH_MODES = ("normal", "low-latency")
     requires_fresh_pair = True
 

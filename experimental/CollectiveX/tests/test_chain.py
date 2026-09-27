@@ -427,46 +427,34 @@ class GraphAlignmentAndValueCheck(unittest.TestCase):
 class RocmGraphEventRecord(unittest.TestCase):
     """ROCm torch < 2.13 rejects Event(external=True); the capture records through HIP instead."""
 
-    def _torch(self, hip, records):
+    def _record(self, rc):
+        records, calls = [], []
+
         class Event:
+            cuda_event = 0xE0
+
             def __init__(self, **kwargs):
-                if kwargs.get("external"):
-                    raise RuntimeError("External events are disallowed in rocm")
-                self.cuda_event = 0xE0
+                assert not kwargs.get("external"), "External events are disallowed in rocm"
 
             def record(self):
                 records.append("record")
 
-        return types.SimpleNamespace(
-            version=types.SimpleNamespace(hip=hip),
-            cuda=types.SimpleNamespace(
-                Event=Event,
-                current_stream=lambda: types.SimpleNamespace(cuda_stream=0x5),
-            ),
-        )
+        fake = types.SimpleNamespace(version=types.SimpleNamespace(hip="7.2"), cuda=types.SimpleNamespace(
+            Event=Event, current_stream=lambda: types.SimpleNamespace(cuda_stream=0x5)))
+        hip = types.SimpleNamespace(hipEventRecordWithFlags=lambda e, s, f: calls.append(
+            (e.value, s.value, f.value)) or rc)
+        with mock.patch.dict(sys.modules, {"torch": fake}), \
+                mock.patch.object(ep_backend.EPBackend, "_hip_runtime", lambda: hip):
+            ep_backend.EPBackend._record_graph_event(ep_backend.EPBackend._graph_event())
+        return records, calls
 
     def test_rocm_events_are_recorded_once_outside_then_captured_through_hip(self):
-        records, hip_calls = [], []
-        fake_hip = types.SimpleNamespace(
-            hipEventRecordWithFlags=lambda event, stream, flags: hip_calls.append(
-                (event.value, stream.value, flags.value)
-            ) or 0
-        )
-        with mock.patch.dict(sys.modules, {"torch": self._torch("7.2", records)}), \
-                mock.patch.object(ep_backend.EPBackend, "_hip_runtime", lambda: fake_hip):
-            event = ep_backend.EPBackend._graph_event()
-            self.assertEqual(records, ["record"])  # materialized outside capture
-            ep_backend.EPBackend._record_graph_event(event)
-        self.assertEqual(records, ["record"])  # the captured record went through HIP
-        self.assertEqual(hip_calls, [(0xE0, 0x5, 0x1)])  # hipEventRecordExternal
+        # One record materializes the event outside capture; the captured one goes through HIP.
+        self.assertEqual(self._record(0), (["record"], [(0xE0, 0x5, 0x1)]))
 
     def test_a_failed_hip_record_raises(self):
-        fake_hip = types.SimpleNamespace(hipEventRecordWithFlags=lambda *args: 1)
-        with mock.patch.dict(sys.modules, {"torch": self._torch("7.2", [])}), \
-                mock.patch.object(ep_backend.EPBackend, "_hip_runtime", lambda: fake_hip):
-            event = ep_backend.EPBackend._graph_event()
-            with self.assertRaisesRegex(RuntimeError, "hipEventRecordWithFlags"):
-                ep_backend.EPBackend._record_graph_event(event)
+        with self.assertRaisesRegex(RuntimeError, "hipEventRecordWithFlags"):
+            self._record(1)
 
 
 class EventPlacement(unittest.TestCase):

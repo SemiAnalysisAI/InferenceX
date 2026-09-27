@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import abc
+import functools
 import os
 import types
 from dataclasses import dataclass, field
@@ -432,14 +433,9 @@ class EPBackend(abc.ABC):
 
     @staticmethod
     def _graph_event():
-        """A timing event whose record() can become a node of a graph being captured.
-
-        CUDA torch does this with `external=True`. ROCm torch before 2.13 rejects external events
-        ("External events are disallowed in rocm") although HIP >= 7 supports them, so there the
-        event is created normally, recorded once outside capture so it exists and counts as
-        recorded, and captured with `hipEventRecordWithFlags(..., hipEventRecordExternal)` --
-        the call torch 2.13 itself makes (pytorch#178264).
-        """
+        """A timing event whose record() can be captured into a graph. ROCm torch < 2.13 rejects
+        `external=True`, so there the event is recorded once to exist and its captured record goes
+        through hipEventRecordWithFlags, as torch 2.13 does (pytorch#178264)."""
         import torch
 
         if not getattr(torch.version, "hip", None):
@@ -451,15 +447,13 @@ class EPBackend(abc.ABC):
 
     @staticmethod
     def _record_graph_event(event):
+        import ctypes
+
         import torch
 
         if not getattr(event, "_collx_hip_external", False):
-            event.record()
-            return
-        import ctypes
-
-        hip = EPBackend._hip_runtime()
-        rc = hip.hipEventRecordWithFlags(
+            return event.record()
+        rc = EPBackend._hip_runtime().hipEventRecordWithFlags(
             ctypes.c_void_p(event.cuda_event),
             ctypes.c_void_p(torch.cuda.current_stream().cuda_stream),
             ctypes.c_uint(0x1),  # hipEventRecordExternal
@@ -468,27 +462,16 @@ class EPBackend(abc.ABC):
             raise RuntimeError(f"hipEventRecordWithFlags(external) failed with hipError {rc}")
 
     @staticmethod
+    @functools.cache
     def _hip_runtime():
-        lib = getattr(EPBackend, "_hip_lib", None)
-        if lib is None:
-            import ctypes
-            import os as _os
+        import ctypes
 
-            import torch
+        import torch
 
-            candidates = ["libamdhip64.so", _os.path.join(_os.path.dirname(torch.__file__), "lib",
-                                                          "libamdhip64.so")]
-            for name in candidates:
-                try:
-                    lib = ctypes.CDLL(name)
-                    break
-                except OSError:
-                    continue
-            if lib is None:
-                raise RuntimeError("libamdhip64.so not loadable for graph event capture")
-            lib.hipEventRecordWithFlags.restype = ctypes.c_int
-            EPBackend._hip_lib = lib
-        return lib
+        try:
+            return ctypes.CDLL("libamdhip64.so")
+        except OSError:  # pip ROCm torch bundles the runtime in torch/lib
+            return ctypes.CDLL(os.path.join(os.path.dirname(torch.__file__), "lib", "libamdhip64.so"))
 
     def _capture_pairs(self, problem, staged, pairs, marks):
         """Capture `pairs` back-to-back dispatch -> combine pairs into one graph.
