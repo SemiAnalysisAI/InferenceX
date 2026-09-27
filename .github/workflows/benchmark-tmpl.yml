@@ -306,7 +306,7 @@ jobs:
           # We'll publish a single combined eval table in the collection job instead.
           GITHUB_STEP_SUMMARY: ''
         run: |
-          if [[ -d inferencex-e2e ]]; then cd inferencex-e2e; fi
+          if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
           export GITHUB_WORKSPACE="$PWD"
           echo "INFERENCEX_E2E_ROOT=$PWD" >> "$GITHUB_ENV"
           if [[ -f infx/results/result_filename.py ]]; then
@@ -361,7 +361,7 @@ jobs:
         env:
           PYTHONPATH: ${{ github.workspace }}/.result-tooling/inferencex-e2e
         run: |
-          if [[ -d inferencex-e2e ]]; then cd inferencex-e2e; fi
+          if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
           source "$PYTHONPATH/benchmarks/benchmark_lib.sh" --validation-only
           check_env_vars INFERENCEX_RESULTS_PYTHON AIPERF_FAILED_REQUEST_THRESHOLD
           "$INFERENCEX_RESULTS_PYTHON" -P -m infx.results.agentic.validate_agentic_result \
@@ -374,7 +374,7 @@ jobs:
           RUNNER_TYPE: ${{ inputs.runner }}
           PYTHONPATH: ${{ github.workspace }}/.result-tooling/inferencex-e2e
         run: |
-          if [[ -d inferencex-e2e ]]; then cd inferencex-e2e; fi
+          if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
           source "$PYTHONPATH/benchmarks/benchmark_lib.sh" --validation-only
           check_env_vars INFERENCEX_RESULTS_PYTHON
           if [ ! -f "$RESULT_FILENAME.json" ]; then
@@ -487,7 +487,7 @@ jobs:
         env:
           PYTHONPATH: ${{ github.workspace }}/.result-tooling/inferencex-e2e
         run: |
-          if [[ -d inferencex-e2e ]]; then cd inferencex-e2e; fi
+          if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
           source "$PYTHONPATH/benchmarks/benchmark_lib.sh" --validation-only
           check_env_vars INFERENCEX_RESULTS_PYTHON
           "$INFERENCEX_RESULTS_PYTHON" -P -m infx.evals.validate_scores
@@ -495,7 +495,7 @@ jobs:
       - name: Cleanup eval outputs (post-upload)
         if: ${{ always() && (env.RUN_EVAL == 'true' || inputs.eval-only) }}
         run: |
-          if [[ -d inferencex-e2e ]]; then cd inferencex-e2e; fi
+          if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
           rm -f meta_env.json || true
           # Remove any eval results JSONs that were moved into workspace
           rm -f results*.json || true
@@ -508,7 +508,7 @@ jobs:
       - name: Repair root-owned artifacts (post-run)
         if: ${{ always() && inputs.runner == 'cluster:mi355x-amds' }}
         run: |
-          if [[ -d inferencex-e2e ]]; then cd inferencex-e2e; fi
+          if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
           if [[ -d "$GITHUB_WORKSPACE" ]]; then
             sudo chown -R "$(id -u):$(id -g)" "$GITHUB_WORKSPACE"
           fi

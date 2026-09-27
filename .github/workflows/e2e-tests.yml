@@ -274,13 +274,13 @@ jobs:
                   ALL_EVALS: ${{ inputs.all-evals }}
                   EVALS_ONLY: ${{ inputs.evals-only }}
               run: |
-                  if [[ -d inferencex-e2e ]]; then cd inferencex-e2e; fi
+                  if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
                   MEASURED_ROOT="$PWD"
                   PRIORITY_ROOT="${GITHUB_WORKSPACE}"
                   if [ -d "${GITHUB_WORKSPACE}/.ci-priority" ]; then
                     PRIORITY_ROOT="${GITHUB_WORKSPACE}/.ci-priority"
                   fi
-                  if [[ -d "$PRIORITY_ROOT/inferencex-e2e" ]]; then
+                  if [[ -f "$PRIORITY_ROOT/inferencex-e2e/configs/runners.yaml" ]]; then
                     PRIORITY_ROOT="$PRIORITY_ROOT/inferencex-e2e"
                   fi
                   if [ -n "$CHANGELOG_BASE_REF" ] || [ -n "$CHANGELOG_HEAD_REF" ]; then

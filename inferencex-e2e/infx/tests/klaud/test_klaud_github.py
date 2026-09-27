@@ -543,3 +543,37 @@ def test_live_families_preserve_public_identity_after_move(tmp_path, family_conf
         ("dsr1", "fixture", "sglang", "fp8", "none", False, "single_turn",
          1024, 1024, "example/image:stable"): {"configs/nvidia-master.yaml:fixture"},
     }
+
+
+def test_historical_families_ignore_leftover_nested_results(tmp_path, family_configs):
+    master, runners = family_configs
+    configs = tmp_path / "configs"
+    configs.mkdir()
+    (configs / "nvidia-master.yaml").write_text(yaml.safe_dump(master))
+    (configs / "runners.yaml").write_text(yaml.safe_dump(runners))
+
+    def git(*args):
+        return subprocess.check_output(
+            ["git", *args], cwd=tmp_path, text=True, stderr=subprocess.DEVNULL,
+        ).strip()
+
+    git("init", "-q")
+    git("config", "user.name", "Test")
+    git("config", "user.email", "test@example.com")
+    git("add", ".")
+    git("commit", "-qm", "historical layout")
+    historical = git("rev-parse", "HEAD")
+    nested = tmp_path / "inferencex-e2e"
+    nested.mkdir()
+    git("mv", "configs", "inferencex-e2e/")
+    git("commit", "-qm", "new layout")
+    (nested / "results").mkdir()
+    (nested / "results/output.json").write_text("{}\n")
+    git("checkout", "--quiet", historical)
+
+    families = klaud.live_families(tmp_path)
+
+    assert families == {
+        ("dsr1", "fixture", "sglang", "fp8", "none", False, "single_turn",
+         1024, 1024, "example/image:stable"): {"configs/nvidia-master.yaml:fixture"},
+    }

@@ -232,7 +232,7 @@ gh pr comment "$RECOVERY_PR" --repo SemiAnalysisAI/InferenceX \
   --body "/use $SOURCE_RUN_ID"
 ```
 
-Append recovery entries to the end of `perf-changelog.yaml`. Never modify historical bytes. Preserve the original `config-keys`, `description`, `evals-only`, and `scenario-type`, but use the recovery PR URL. Validate both the changelog and generated scope:
+Append recovery entries to the end of `perf-changelog.yaml`. Never modify historical bytes. Preserve the original `config-keys`, `description`, `evals-only`, and `scenario-type`, but use the recovery PR URL. Validate both the changelog and generated scope from `inferencex-e2e/`, where the tools resolve their relative master-config paths:
 
 ```bash
 python3 -m infx.workflows.validate_perf_changelog \

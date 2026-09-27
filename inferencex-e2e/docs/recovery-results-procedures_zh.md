@@ -231,7 +231,7 @@ gh pr comment "$RECOVERY_PR" --repo SemiAnalysisAI/InferenceX \
   --body "/use $SOURCE_RUN_ID"
 ```
 
-把恢复条目追加到 `perf-changelog.yaml` 末尾；绝不要修改历史字节。保留原始 `config-keys`、`description`、`evals-only` 和 `scenario-type`，但使用恢复 PR URL。验证 changelog 和生成的范围：
+把恢复条目追加到 `perf-changelog.yaml` 末尾；绝不要修改历史字节。保留原始 `config-keys`、`description`、`evals-only` 和 `scenario-type`，但使用恢复 PR URL。在 `inferencex-e2e/` 中验证 changelog 和生成的范围，以便工具正确解析主配置文件的相对路径：
 
 ```bash
 python3 -m infx.workflows.validate_perf_changelog \

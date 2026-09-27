@@ -25,27 +25,29 @@ def repository_root() -> Path:
 def project_root(checkout: Path) -> Path:
     """Locate the end-to-end project in a current or historical checkout."""
     nested = checkout / "inferencex-e2e"
-    return nested if nested.is_dir() else checkout
+    return nested if (nested / RUNNER_CONFIG).is_file() else checkout
 
 
-def git_repository_root() -> Path:
+def git_repository_root(cwd: Path | None = None) -> Path:
     """Return the root of the working Git checkout, independently of installed code."""
     return Path(
-        subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True).strip()
+        subprocess.check_output(["git", "rev-parse", "--show-toplevel"], cwd=cwd, text=True).strip()
     ).resolve()
 
 
-def git_path_at_ref(ref: str, path: str) -> str:
+def git_path_at_ref(ref: str, path: str, *, cwd: Path | None = None) -> str:
     """Resolve a project file across the repository-layout migration."""
     requested = Path(path)
     if requested.is_absolute() or ".." in requested.parts:
-        path = requested.resolve().relative_to(git_repository_root()).as_posix()
+        requested = requested if requested.is_absolute() else (cwd or Path.cwd()) / requested
+        path = requested.resolve().relative_to(git_repository_root(cwd)).as_posix()
     else:
         path = requested.as_posix()
     relative = path.removeprefix("inferencex-e2e/")
     for candidate in (f"inferencex-e2e/{relative}", relative):
         result = subprocess.run(
             ["git", "cat-file", "-e", f"{ref}:{candidate}"],
+            cwd=cwd,
             capture_output=True,
             check=False,
         )

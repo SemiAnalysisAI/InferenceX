@@ -602,8 +602,9 @@ def test_recovery_uses_current_planner_with_historical_checkout(
     ]
 
 
+@pytest.mark.parametrize("nested_layout", [False, True])
 def test_historical_generator_uses_snapshot_recipes_not_inherited_recovery_root(
-    planning_repo, monkeypatch
+    planning_repo, monkeypatch, nested_layout
 ):
     root, master, _ = planning_repo
     master["multi"]["scenarios"]["fixed-seq-len"][0]["search-space"][0]["prefill"][
@@ -613,19 +614,28 @@ def test_historical_generator_uses_snapshot_recipes_not_inherited_recovery_root(
     recipe = root / "benchmarks/multi_node/srt-slurm-recipes/snapshot.yaml"
     recipe.parent.mkdir(parents=True)
     recipe.write_text("schema: 2\nroles:\n  prefill: {nodes: 3}\n  decode: {nodes: 4}\n")
+    if nested_layout:
+        project = root / "inferencex-e2e"
+        project.mkdir()
+        for name in ("infx", "configs", "benchmarks"):
+            shutil.move(root / name, project / name)
+        recipe = project / "benchmarks/multi_node/srt-slurm-recipes/snapshot.yaml"
+    for command in (
+        ["init", "-q"],
+        ["config", "user.name", "Test"],
+        ["config", "user.email", "test@example.com"],
+        ["add", "."],
+        ["commit", "-qm", "committed recipe allocation"],
+    ):
+        subprocess.run(["git", *command], cwd=root, check=True)
+    recipe.write_text("schema: 2\nroles:\n  prefill: {nodes: 20}\n  decode: {nodes: 30}\n")
     unrelated = root / "other-revision"
     unrelated.mkdir()
     monkeypatch.setenv("INFERENCEX_REPOSITORY_ROOT", str(unrelated))
-    inputs = process_changelog.GenerationInputs(
-        ["configs/amd-master.yaml", "configs/nvidia-master.yaml"],
-        ("-m", "infx.matrix.generate"),
-        "configs/runners.yaml",
-        str(root),
-    )
-
-    rows = process_changelog.generate_matrix(
-        ["multi"], ["--no-evals", "--scenario-type", "fixed-seq-len"], inputs
-    )
+    with process_changelog.generation_inputs_at_ref("HEAD") as inputs:
+        rows = process_changelog.generate_matrix(
+            ["multi"], ["--no-evals", "--scenario-type", "fixed-seq-len"], inputs
+        )
 
     assert [row["node-count"] for row in rows] == [7]
     assert rows[0]["conc"] == [16, 32, 64]

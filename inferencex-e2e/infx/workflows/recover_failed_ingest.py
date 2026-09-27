@@ -15,6 +15,7 @@ from typing import Any
 import yaml
 
 from infx import github
+from infx.config import git_path_at_ref, git_repository_root, project_root
 
 from .validate_perf_changelog import (
     CANONICAL_PR_LINK,
@@ -61,6 +62,10 @@ def run_command(
 
 def read_git_file_from(worktree: Path, ref: str, path: str) -> bytes:
     """Read an exact blob through a specific repository worktree."""
+    try:
+        path = git_path_at_ref(ref, path, cwd=worktree)
+    except ValueError as exc:
+        raise RecoveryError(str(exc)) from exc
     result = subprocess.run(
         ["git", "show", f"{ref}:{path}"],
         check=False,
@@ -305,6 +310,11 @@ def create_synthetic_commit(
     changelog_path: str,
 ) -> tuple[str, int]:
     """Stage only the repaired changelog in its detached worktree."""
+    worktree = git_repository_root(worktree)
+    try:
+        changelog_path = git_path_at_ref(merge_ref, changelog_path, cwd=worktree)
+    except ValueError as exc:
+        raise RecoveryError(str(exc)) from exc
     actual_head = run_command(
         ["git", "rev-parse", "HEAD"],
         cwd=worktree,
@@ -388,6 +398,11 @@ def build_config(
     metadata_output: Path,
 ) -> dict[str, Any]:
     """Build the exact synthetic config from a repaired detached worktree."""
+    worktree = git_repository_root(worktree)
+    try:
+        changelog_path = git_path_at_ref(merge_ref, changelog_path, cwd=worktree)
+    except ValueError as exc:
+        raise RecoveryError(str(exc)) from exc
     fixed_sha, additions = create_synthetic_commit(
         worktree,
         base_ref,
@@ -402,13 +417,13 @@ def build_config(
             "-m",
             "infx.matrix.plan",
             "--changelog-file",
-            changelog_path,
+            str(worktree / changelog_path),
             "--base-ref",
             base_ref,
             "--head-ref",
             fixed_sha,
         ],
-        cwd=worktree,
+        cwd=project_root(worktree),
         env={
             **os.environ,
             "PYTHONPATH": str(Path(__file__).resolve().parents[2]),

@@ -225,7 +225,7 @@ jobs:
 
       - name: Cleanup stale outputs (pre-run)
         run: |
-          if [[ -d inferencex-e2e ]]; then cd inferencex-e2e; fi
+          if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
           rm -f speedbench-reference-al.yaml || true
           rm -f gpu_metrics.csv || true
           rm -rf speed_bench_data || true
@@ -234,7 +234,7 @@ jobs:
         env:
           RUNNER_NAME: ${{ runner.name }}
         run: |
-          if [[ -d inferencex-e2e ]]; then cd inferencex-e2e; fi
+          if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
           export GITHUB_WORKSPACE="$PWD"
           echo "INFERENCEX_E2E_ROOT=$PWD" >> "$GITHUB_ENV"
           set -eo pipefail
@@ -271,7 +271,7 @@ jobs:
           # Repository write credential for authorized reference-data collection.
           GH_TOKEN: ${{ secrets.SPEEDBENCH_PAT }} # zizmor: ignore[secrets-outside-env]
         run: |
-          if [[ -d inferencex-e2e ]]; then cd inferencex-e2e; fi
+          if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
           set -eo pipefail
           # NOTE: the reference yaml is keyed by model at the top level. This
           # overwrites it with the current model's matrix; when more than one

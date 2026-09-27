@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -82,6 +83,7 @@ def make_mock_git_ops(
 ) -> MagicMock:
     """Build a mock GitOps."""
     git_ops = MagicMock(spec=GitOps)
+    git_ops.repo = SimpleNamespace(working_dir=str(Path.cwd()))
     git_ops.is_clean.return_value = clean
     git_ops.current_ref.return_value = current_ref
     git_ops.rev_parse.return_value = sha
@@ -1314,6 +1316,8 @@ class TestChangelogConflictIntegration:
         )
         changelog_path = tmp_path / layout / "perf-changelog.yaml"
         changelog_path.parent.mkdir(parents=True, exist_ok=True)
+        (changelog_path.parent / "configs").mkdir()
+        (changelog_path.parent / "configs/runners.yaml").write_text("labels: {}\n")
         tracked_path = changelog_path.relative_to(tmp_path).as_posix()
         changelog_path.write_text(base_content)
         repo.index.add([tracked_path])
@@ -1513,6 +1517,8 @@ def test_canonicalize_changelog_across_layout_migration(temp_repo, tmp_path, mon
     temp_repo.git.update_ref("refs/remotes/origin/main", old.hexsha)
     project = tmp_path / "inferencex-e2e"
     project.mkdir()
+    (project / "configs").mkdir()
+    (project / "configs/runners.yaml").write_text("labels: {}\n")
     temp_repo.git.mv("perf-changelog.yaml", "inferencex-e2e/")
     path = project / "perf-changelog.yaml"
     path.write_bytes(base + b"\n- config-keys: [new]\n  description: [added]\n  pr-link: XXX\n")
@@ -1524,3 +1530,91 @@ def test_canonicalize_changelog_across_layout_migration(temp_repo, tmp_path, mon
         base + b"\n- config-keys: [new]\n  description: [added]\n"
         b"  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/99\n"
     )
+
+
+@pytest.mark.parametrize("outcome", ["success", "fetch-failure", "restore-failure"])
+def test_merge_from_nested_directory_survives_historical_checkout(
+    tmp_path, monkeypatch, outcome,
+):
+    from infx.workflows import merge_with_reuse as merger
+
+    checkout = tmp_path / "checkout"
+    repo = gitpython.Repo.init(checkout)
+    repo.config_writer().set_value("user", "name", "Test").release()
+    repo.config_writer().set_value("user", "email", "test@example.com").release()
+    repo.git.branch("-M", "main")
+    (checkout / "configs").mkdir()
+    (checkout / "configs/runners.yaml").write_text("labels: {}\n")
+    base = (
+        "- config-keys: [base]\n  description: [original]\n"
+        "  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1\n"
+    )
+    contribution = "\n- config-keys: [new]\n  description: [new]\n  pr-link: XXX\n"
+    (checkout / "perf-changelog.yaml").write_text(base)
+    repo.git.add(".")
+    repo.index.commit("base")
+    legacy = repo.create_head("legacy-pr")
+    legacy.checkout()
+    (checkout / "perf-changelog.yaml").write_text(base + contribution)
+    repo.git.add(".")
+    legacy_sha = repo.index.commit("legacy contribution").hexsha
+    repo.heads.main.checkout()
+    project = checkout / "inferencex-e2e"
+    project.mkdir()
+    repo.git.mv("configs", "perf-changelog.yaml", "inferencex-e2e/")
+    repo.index.commit("new layout")
+    origin = gitpython.Repo.init(tmp_path / "origin.git", bare=True)
+    repo.create_remote("origin", str(origin.git_dir))
+    repo.git.push("origin", "main", "legacy-pr", "legacy-pr:refs/pull/7/head")
+
+    pull = make_mock_pull(head_ref="legacy-pr", head_sha=legacy_sha)
+    gh = make_mock_gh(pull)
+    gh.get_repo.return_value.get_commit.return_value.get_check_runs.return_value = [
+        make_check_run(name="check-changelog"),
+    ]
+    gh.get_repo.return_value.get_commit.return_value.get_combined_status.return_value.statuses = []
+
+    def update_remote_head():
+        pull.head.sha = origin.commit("refs/heads/legacy-pr").hexsha
+
+    pull.update.side_effect = update_remote_head
+    monkeypatch.setenv("GH_TOKEN", "fixture-token")
+    monkeypatch.setattr(merger, "pr_commit_shas", lambda *_: {legacy_sha})
+    monkeypatch.setattr(merger, "completed_pr_runs", lambda *_: [{
+        "id": 42, "conclusion": "success", "head_sha": legacy_sha,
+    }])
+    monkeypatch.setattr(merger, "artifact_names", lambda *_: {"results_bmk"})
+    git_ops = GitOps(repo)
+    fetch = git_ops.fetch
+    checkout_branch = git_ops.checkout
+
+    def fetch_with_failure(*args):
+        if outcome != "success" and args[:2] == ("origin", "main"):
+            raise RuntimeError("controlled fetch failure")
+        fetch(*args)
+
+    def checkout_with_failure(*args):
+        if outcome == "restore-failure" and args == ("--quiet", "main"):
+            raise RuntimeError("controlled restore failure")
+        checkout_branch(*args)
+
+    monkeypatch.setattr(git_ops, "fetch", fetch_with_failure)
+    monkeypatch.setattr(git_ops, "checkout", checkout_with_failure)
+    monkeypatch.chdir(project)
+
+    if outcome == "success":
+        assert merge_pr(7, _git_ops=git_ops, _gh=gh) == 0
+        assert origin.git.show("legacy-pr:inferencex-e2e/perf-changelog.yaml") == (
+            base + contribution.replace("XXX", "https://github.com/SemiAnalysisAI/InferenceX/pull/7")
+        ).rstrip("\n")
+    else:
+        with pytest.raises(RuntimeError, match="controlled fetch failure"):
+            merge_pr(7, _git_ops=git_ops, _gh=gh)
+
+    if outcome == "restore-failure":
+        assert Path.cwd() == checkout
+        assert not project.exists()
+    else:
+        assert Path.cwd() == project
+        assert repo.active_branch.name == "main"
+        assert f"pr-7-reuse-{os.getpid()}" not in repo.heads

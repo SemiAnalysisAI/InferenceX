@@ -29,6 +29,7 @@ import re
 import subprocess
 import sys
 import time
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from infx.config import git_repository_root, project_root
@@ -561,6 +562,10 @@ def merge_pr(
         return die("Working tree is not clean")
 
     original_branch = git_ops.current_ref()
+    original_directory = Path.cwd()
+    # Checking out a pre-migration PR can remove the caller's project directory.
+    # Keep process-relative Git and file operations anchored at the stable checkout.
+    os.chdir(git_ops.repo.working_dir)
     state = _MergeState()
 
     def cleanup() -> None:
@@ -585,7 +590,14 @@ def merge_pr(
             state=state,
         )
     finally:
-        cleanup()
+        try:
+            cleanup()
+        finally:
+            # Cleanup normally recreates the original project directory. If branch
+            # restoration failed, retain the checkout root instead of a deleted cwd.
+            if original_directory.is_dir():
+                with contextlib.suppress(OSError):
+                    os.chdir(original_directory)
 
 
 def _merge_pr_inner(

@@ -331,7 +331,7 @@ jobs:
           RUNNER_TYPE: ${{ inputs.runner }}
           RESULT_FILENAME_BASE: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_prefill-tp${{ env.PREFILL_TP }}-pp${{ env.PREFILL_PP_SIZE }}-dcp${{ env.PREFILL_DCP_SIZE }}-pcp${{ env.PREFILL_PCP_SIZE }}-ep${{ env.PREFILL_EP }}-dp${{ env.PREFILL_DP_ATTN }}-nw${{ env.PREFILL_NUM_WORKERS }}_decode-tp${{ env.DECODE_TP }}-pp${{ env.DECODE_PP_SIZE }}-dcp${{ env.DECODE_DCP_SIZE }}-pcp${{ env.DECODE_PCP_SIZE }}-ep${{ env.DECODE_EP }}-dp${{ env.DECODE_DP_ATTN }}-nw${{ env.DECODE_NUM_WORKERS }}_disagg-${{ env.DISAGG }}_spec-${{ env.SPEC_DECODING }}_conc${{ join(fromJson(inputs.conc-list), 'x') }}_${{ runner.name }}
         run: |
-          if [[ -d inferencex-e2e ]]; then cd inferencex-e2e; fi
+          if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
           export GITHUB_WORKSPACE="$PWD"
           echo "INFERENCEX_E2E_ROOT=$PWD" >> "$GITHUB_ENV"
           set -x
@@ -419,7 +419,7 @@ jobs:
           RUNNER_TYPE: ${{ inputs.runner }}
           PYTHONPATH: ${{ github.workspace }}/.result-tooling/inferencex-e2e
         run: |
-          if [[ -d inferencex-e2e ]]; then cd inferencex-e2e; fi
+          if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
           source "$PYTHONPATH/benchmarks/benchmark_lib.sh" --validation-only
           check_env_vars INFERENCEX_RESULTS_PYTHON
           # Launcher stamp supplies the producer SHA unless the
@@ -507,7 +507,7 @@ jobs:
         env:
           PYTHONPATH: ${{ github.workspace }}/.result-tooling/inferencex-e2e
         run: |
-          if [[ -d inferencex-e2e ]]; then cd inferencex-e2e; fi
+          if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
           source "$PYTHONPATH/benchmarks/benchmark_lib.sh" --validation-only
           check_env_vars INFERENCEX_RESULTS_PYTHON
           expected_concs="${EVAL_CONC}"
@@ -519,7 +519,7 @@ jobs:
       - name: Cleanup eval outputs (post-upload)
         if: ${{ always() && (inputs.run-eval || inputs.eval-only) }}
         run: |
-          if [[ -d inferencex-e2e ]]; then cd inferencex-e2e; fi
+          if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
           rm -f meta_env.json || true
           rm -f results*.json || true
           rm -f -- ./*_report.json || true

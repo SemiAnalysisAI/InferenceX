@@ -6,10 +6,12 @@ import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
 from infx.workflows.recover_failed_ingest import (
     RecoveryError,
     audit_changelog_bytes,
+    build_config,
     create_synthetic_commit,
     parse_target_url,
     select_failed_job,
@@ -298,8 +300,9 @@ jobs:
         validate_recovery_workflow(workflow, 42)
 
 
+@pytest.mark.parametrize("layout", ["", "inferencex-e2e"])
 def test_synthetic_commit_uses_base_tree_plus_only_changelog(
-    tmp_path: Path,
+    tmp_path: Path, layout: str,
 ) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
@@ -321,13 +324,15 @@ def test_synthetic_commit_uses_base_tree_plus_only_changelog(
         "base",
         "https://github.com/SemiAnalysisAI/InferenceX/pull/1",
     )
-    (repo / "perf-changelog.yaml").write_bytes(base_changelog)
+    project = repo / layout
+    project.mkdir(exist_ok=True)
+    (project / "perf-changelog.yaml").write_bytes(base_changelog)
     (repo / "other.txt").write_text("base\n")
     git("add", ".")
     git("commit", "-m", "base")
     base_sha = git("rev-parse", "HEAD")
 
-    (repo / "perf-changelog.yaml").write_bytes(
+    (project / "perf-changelog.yaml").write_bytes(
         base_changelog
         + b"\n"
         + block(
@@ -350,6 +355,73 @@ def test_synthetic_commit_uses_base_tree_plus_only_changelog(
 
     assert additions == 1
     assert git("diff", "--name-only", base_sha, fixed_sha) == (
-        "perf-changelog.yaml"
+        (project / "perf-changelog.yaml").relative_to(repo).as_posix()
     )
     assert git("show", f"{fixed_sha}:other.txt") == "base"
+
+
+@pytest.mark.parametrize("base_layout,head_layout,argument", [
+    ("", "", "perf-changelog.yaml"),
+    ("inferencex-e2e", "inferencex-e2e", "perf-changelog.yaml"),
+    ("inferencex-e2e", "inferencex-e2e", "inferencex-e2e/perf-changelog.yaml"),
+    ("", "inferencex-e2e", "inferencex-e2e/perf-changelog.yaml"),
+])
+def test_build_recovery_config_from_current_and_historical_projects(
+    tmp_path, base_layout, head_layout, argument,
+):
+    repo = tmp_path / "checkout"
+    repo.mkdir()
+
+    def git(*args):
+        return subprocess.check_output(
+            ["git", *args], cwd=repo, text=True, stderr=subprocess.DEVNULL,
+        ).strip()
+
+    git("init", "-q")
+    git("config", "user.name", "Test")
+    git("config", "user.email", "test@example.com")
+    project = repo / base_layout
+    configs = project / "configs"
+    configs.mkdir(parents=True)
+    (configs / "amd-master.yaml").write_text("{}\n")
+    (configs / "runners.yaml").write_text("labels: {fixture: [node-a]}\nhardware: {}\n")
+    master = {"fixture": {
+        "image": "example/image:stable", "model": "example/model", "model-prefix": "dsr1",
+        "precision": "fp8", "framework": "sglang", "runner": "fixture", "multinode": False,
+        "scenarios": {"fixed-seq-len": [{
+            "isl": 8192, "osl": 1024, "search-space": [{"tp": 1, "conc-list": [2]}],
+        }]},
+    }}
+    (configs / "nvidia-master.yaml").write_text(yaml.safe_dump(master))
+    base_bytes = block("fixture", "https://github.com/SemiAnalysisAI/InferenceX/pull/1")
+    (project / "perf-changelog.yaml").write_bytes(base_bytes)
+    git("add", ".")
+    git("commit", "-qm", "base")
+    base = git("rev-parse", "HEAD")
+    if head_layout != base_layout:
+        project = repo / head_layout
+        project.mkdir()
+        git("mv", "configs", "perf-changelog.yaml", head_layout + "/")
+    (project / "perf-changelog.yaml").write_bytes(
+        base_bytes + b"\n" + block("fixture", "https://github.com/SemiAnalysisAI/InferenceX/pull/42")
+    )
+    git("commit", "-qam", "merge")
+    head = git("rev-parse", "HEAD")
+    output = tmp_path / "config.json"
+    metadata_output = tmp_path / "metadata.json"
+
+    result = build_config(repo, base, head, 42, argument, output, metadata_output)
+
+    config = json.loads(output.read_text())
+    rows = config["single_node"]["8k1k"]
+    assert [(row["model"], row["conc"], row["image"]) for row in rows] == [
+        ("example/model", 2, "example/image:stable"),
+    ]
+    assert result["appended_entries"] == 1
+    assert result["fixed_rows"] == 1
+    metadata = json.loads(metadata_output.read_text())
+    assert metadata["head_ref"] == head
+    assert metadata["base_ref"] == base
+    assert [entry["pr-link"] for entry in metadata["entries"]] == [
+        "https://github.com/SemiAnalysisAI/InferenceX/pull/42",
+    ]

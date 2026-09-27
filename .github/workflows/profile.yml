@@ -81,13 +81,13 @@ jobs:
       - id: gen
         name: Generate matrix via script
         run: |
-          if [[ -d inferencex-e2e ]]; then cd inferencex-e2e; fi
+          if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
           MEASURED_ROOT="$PWD"
           PRIORITY_ROOT="${GITHUB_WORKSPACE}"
           if [ -d "${GITHUB_WORKSPACE}/.ci-priority" ]; then
             PRIORITY_ROOT="${GITHUB_WORKSPACE}/.ci-priority"
           fi
-          if [[ -d "$PRIORITY_ROOT/inferencex-e2e" ]]; then
+          if [[ -f "$PRIORITY_ROOT/inferencex-e2e/configs/runners.yaml" ]]; then
             PRIORITY_ROOT="$PRIORITY_ROOT/inferencex-e2e"
           fi
           source "$PRIORITY_ROOT/benchmarks/benchmark_lib.sh" --validation-only
@@ -292,7 +292,7 @@ jobs:
           VLLM_RPC_TIMEOUT: '1800000'
         shell: bash
         run: |
-          if [[ -d inferencex-e2e ]]; then cd inferencex-e2e; fi
+          if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
           export GITHUB_WORKSPACE="$PWD"
           echo "INFERENCEX_E2E_ROOT=$PWD" >> "$GITHUB_ENV"
           set -eo pipefail
@@ -346,7 +346,7 @@ jobs:
           RUNNER_TYPE: ${{ matrix.config.runner }}
           PYTHONPATH: ${{ github.workspace }}/.result-tooling/inferencex-e2e
         run: |
-          if [[ -d inferencex-e2e ]]; then cd inferencex-e2e; fi
+          if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
           source "$PYTHONPATH/benchmarks/benchmark_lib.sh" --validation-only
           check_env_vars INFERENCEX_RESULTS_PYTHON
           "$INFERENCEX_RESULTS_PYTHON" -P -m infx.results.fixed_sequence
