@@ -8992,33 +8992,6 @@
   scenario-type:
     - fixed-seq-len
   description:
-    - "Add DeepSeek-V4-Flash B300 TP2 SGLang 8k1k serving at concurrency 1, 2, 4, 8, 16, 32, 64, 128 with bundled MTP via EAGLE (3 steps, top-k 1, 4 draft tokens), real verification, GPU-resident weights/KV, and the DeepSeek-V4 chat encoder."
-    - "新增 DeepSeek-V4-Flash B300 TP2 SGLang 8k1k serving，并发为 1、2、4、8、16、32、64、128；通过 EAGLE 使用原生 MTP（3 steps、top-k 1、4 draft tokens），采用真实验证、GPU 常驻权重/KV 和 DeepSeek-V4 chat 编码器。"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3516
-
-- config-keys:
-    - dsv4flash-fp4-b300-sglang-mtp
-  scenario-type:
-    - fixed-seq-len
-  description:
-    - "Remove AgentX-only KV_OFFLOADING metadata from the fixed-sequence recipe: CI passes an empty value for this scenario, and the explicit 'none' value rejected recipe selection before server launch. Serving settings are unchanged."
-    - "移除固定序列配方中仅适用于 AgentX 的 KV_OFFLOADING 元数据：该场景的 CI 传入空值，显式设置 'none' 导致配方选择在服务启动前失败。Serving 设置保持不变。"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3516
-
-- config-keys:
-    - dsv4flash-fp4-b300-sglang-mtp
-  scenario-type:
-    - fixed-seq-len
-  description:
-    - "Download DeepSeek-V4-Flash into the B300 runner's writable home models directory before native SRT submission instead of requiring a missing /data/models copy. Resume or validate the download on every launch and stop before submission on download failure."
-    - "在原生 SRT 提交前，将 DeepSeek-V4-Flash 下载到 B300 runner 的 home 可写模型目录，不再要求不存在的 /data/models 副本。每次启动均续传或验证下载，下载失败时停止提交。"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3516
-
-- config-keys:
-    - dsv4flash-fp4-b300-sglang-mtp
-  scenario-type:
-    - fixed-seq-len
-  description:
-    - "Scope HF_HOME, HF_HUB_CACHE, and HF_XET_CACHE to the runner's writable home cache during the host-side V4 Flash download. Preserve the container cache environment and mounts for subsequent SRT execution."
-    - "在主机下载 V4 Flash 时，将 HF_HOME、HF_HUB_CACHE 和 HF_XET_CACHE 限定到 runner 的 home 可写缓存；保留后续 SRT 执行所需的容器缓存环境和挂载。"
+    - "Add DeepSeek-V4-Flash B300 TP2 SGLang 8k1k serving at concurrency 1, 2, 4, 8, 16, 32, 64, 128 with bundled MTP via EAGLE (2 steps, top-k 1, 3 draft tokens), real verification, GPU-resident weights/KV, and the DeepSeek-V4 chat encoder. Weights load from the node-local /scratch/models copy; mmap page faults on the shared /data copy read at ~10 MB/s and outlast the 1800 s health timeout."
+    - "新增 DeepSeek-V4-Flash B300 TP2 SGLang 8k1k serving，并发为 1、2、4、8、16、32、64、128；通过 EAGLE 使用原生 MTP（2 steps、top-k 1、3 draft tokens），采用真实验证、GPU 常驻权重/KV 和 DeepSeek-V4 chat 编码器。权重从节点本地 /scratch/models 副本加载；共享 /data 副本的 mmap 缺页读取仅约 10 MB/s，会超过 1800 s 健康检查超时。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3516

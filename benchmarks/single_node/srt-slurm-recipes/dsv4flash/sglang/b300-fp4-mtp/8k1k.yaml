@@ -37,9 +37,9 @@ base:
         reasoning-parser: deepseek-v4
         tool-call-parser: deepseekv4
         speculative-algorithm: EAGLE
-        speculative-num-steps: 3
+        speculative-num-steps: 2
         speculative-eagle-topk: 1
-        speculative-num-draft-tokens: 4
+        speculative-num-draft-tokens: 3
         watchdog-timeout: 3600
         enable-metrics: true
       env:

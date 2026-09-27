@@ -61,6 +61,7 @@ WRITABLE_MODELS_DIR="/data/home/sa-gha-runner/models"
 STAGED_MODELS=(
     DeepSeek-R1-0528
     DeepSeek-R1-0528-NVFP4-v2
+    DeepSeek-V4-Flash
     DeepSeek-V4-Pro
     DeepSeek-V4-Pro-0813
     DeepSeek-V4-Pro-NVFP4
@@ -137,14 +138,6 @@ if [[ "$EXECUTION_PATH" == native-single-node ]]; then
     SRT_MODEL_PATH="$MODEL_ROOT/${MODEL##*/}"
     if [[ "$MODEL" == nvidia/DeepSeek-R1-0528-FP4-V2 ]]; then
         SRT_MODEL_PATH="$MODEL_ROOT/DeepSeek-R1-0528-NVFP4-v2"
-    elif [[ "$MODEL" == deepseek-ai/DeepSeek-V4-Flash ]]; then
-        SRT_MODEL_PATH="$WRITABLE_MODELS_DIR/${MODEL##*/}"
-        # Resume and verify the download before SRT checks the local model path.
-        HF_HOME="$B300_HF_CACHE_HOST_DIR" \
-        HF_HUB_CACHE="$HF_HUB_CACHE_MOUNT" \
-        HF_XET_CACHE="$B300_HF_CACHE_HOST_DIR/xet" \
-        uv tool run --from 'huggingface-hub>=0.34,<2' hf download "$MODEL" \
-            --local-dir "$SRT_MODEL_PATH" || exit 1
     elif [[ " ${STAGED_MODELS[*]} " != *" ${MODEL##*/} "* || "${MODEL##*/}" == DeepSeek-V4-Pro-0813 ]]; then
         # Not staged on every node's NVMe; read the shared copy.
         SRT_MODEL_PATH="$SHARED_MODEL_ROOT/${MODEL##*/}"
