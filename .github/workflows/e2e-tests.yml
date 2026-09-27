@@ -101,6 +101,11 @@ on: # zizmor: ignore[concurrency-limits]
                 required: false
                 type: string
                 default: "[]"
+            profile:
+                description: "Op-attribution profiling settings (JSON) for vLLM AgentX points; empty disables"
+                required: false
+                type: string
+                default: ""
     workflow_call:
         secrets:
           INFERENCEX_OFFICIAL_RO_HF_TOKEN:
@@ -203,6 +208,11 @@ on: # zizmor: ignore[concurrency-limits]
                 required: false
                 type: string
                 default: "[]"
+            profile:
+                description: "Op-attribution profiling settings (JSON) for vLLM AgentX points; empty disables"
+                required: false
+                type: string
+                default: ""
 
 jobs:
     get-jobs:
@@ -440,6 +450,7 @@ jobs:
             run-eval: false
             require-power: ${{ inputs.require-power }}
             scenario-type: agentic-coding
+            profile: ${{ inputs.profile }}
             ref: ${{ needs.get-jobs.outputs.benchmark-ref }}
 
     test-sweep-agentic-evals:

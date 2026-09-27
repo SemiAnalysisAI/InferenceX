@@ -176,7 +176,21 @@ for index in "${!CONCURRENCIES[@]}"; do
     if [[ -n "${AIPERF_BENCHMARK_GRACE_PERIOD:-}" ]]; then
         REPLAY_CMD+=" --benchmark-grace-period $AIPERF_BENCHMARK_GRACE_PERIOD"
     fi
+    # Op-attribution profiling (INFX_PROFILE): torch windows on every worker.
+    profile_windows_pid=""
+    if [[ -n "${INFX_PROFILE_WINDOWS:-}" ]]; then
+        mkdir -p "$INFX_PROF_DIR"
+        IFS=',' read -r -a profile_metrics_urls <<< "${AIPERF_SERVER_METRICS_URLS:-${AIPERF_SERVER_URL}/metrics}"
+        python3 "$INFMAX_CONTAINER_WORKSPACE/benchmarks/profiling/vllm/profile_windows.py" \
+            "$INFX_PROFILE_WINDOWS" "$INFX_PROF_DIR/windows_conc${concurrency}.jsonl" \
+            "${profile_metrics_urls[@]%/metrics}" &
+        profile_windows_pid=$!
+    fi
     run_agentic_replay_and_write_outputs "$RESULT_DIR"
+    if [[ -n "$profile_windows_pid" ]]; then
+        kill "$profile_windows_pid" 2>/dev/null || true
+        wait "$profile_windows_pid" 2>/dev/null || true
+    fi
 
     if [ "$index" -lt "$(( ${#CONCURRENCIES[@]} - 1 ))" ]; then
         wait_for_agentic_servers_idle

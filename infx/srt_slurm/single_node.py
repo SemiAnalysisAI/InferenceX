@@ -136,6 +136,63 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
             raise ValueError(f"Single-node SRT {name}: recipe/matrix {actual!r} != {wanted!r}")
 
 
+PROFILE_DIR = "/logs/infx_profile"
+PROFILE_DEFAULTS: dict[str, Any] = {
+    # (seconds after the replay starts, engine iterations) per torch profiler window
+    "windows": [[420, 64]],
+    # workers whose CUDA graph capture is profiled; "all" profiles every rank
+    "capture_ranks": "dp0_tp0",
+}
+
+
+def profiling_arguments(environment: Mapping[str, str]) -> list[str]:
+    """Op-attribution profiling for vLLM: capture hooks, step log and torch windows.
+
+    INFX_PROFILE is a JSON object overriding PROFILE_DEFAULTS; empty disables.
+    Everything lands in PROFILE_DIR, which the launcher uploads as its own artifact.
+    """
+    raw = environment.get("INFX_PROFILE", "")
+    if not raw:
+        return []
+    if environment["FRAMEWORK"] != "vllm":
+        raise ValueError("INFX_PROFILE supports only vLLM recipes")
+    settings = {**PROFILE_DEFAULTS, **json.loads(raw)}
+    windows = settings["windows"]
+    if not windows or any(
+        len(window) != 2 or int(window[0]) < 0 or int(window[1]) <= 0 for window in windows
+    ):
+        raise ValueError("INFX_PROFILE windows must be [delay_seconds, iterations] pairs")
+    # vLLM's profiler window length is fixed per engine; every window uses the first's.
+    profiler_config = {
+        "profiler": "torch",
+        "torch_profiler_dir": f"{PROFILE_DIR}/torch",
+        "torch_profiler_record_shapes": True,
+        "torch_profiler_with_stack": True,
+        "ignore_frontend": True,
+        "max_iterations": int(windows[0][1]),
+    }
+    worker_env = {
+        "INFX_PROF_DIR": PROFILE_DIR,
+        "INFX_PROF_CAPTURE_RANKS": settings["capture_ranks"],
+        "PYTHONPATH": "/infmax-workspace/benchmarks/profiling/vllm",
+        # A run-local compile cache, kept readable, so every Inductor kernel the
+        # traces name resolves to its generated source.
+        "VLLM_CACHE_ROOT": f"{PROFILE_DIR}/vllm_cache",
+        "VLLM_COMPILE_CACHE_SAVE_FORMAT": "unpacked",
+        "INDUCTOR_PROVENANCE": "1",
+    }
+    overrides = ["--set", f"roles.agg.args.profiler-config={json.dumps(profiler_config)}"]
+    for name, value in worker_env.items():
+        overrides += ["--set", f"roles.agg.env.{name}={json.dumps(value)}"]
+    overrides += [
+        "--set",
+        f"benchmark.env.INFX_PROFILE_WINDOWS={json.dumps(json.dumps(windows))}",
+        "--set",
+        f"benchmark.env.INFX_PROF_DIR={json.dumps(PROFILE_DIR)}",
+    ]
+    return overrides
+
+
 def runtime_arguments(config: str, environment: Mapping[str, str]) -> list[str]:
     """Bind only runtime-owned values after validating the selected recipe."""
     _, recipe = select_recipe(config, environment)
@@ -148,6 +205,7 @@ def runtime_arguments(config: str, environment: Mapping[str, str]) -> list[str]:
     # Match the legacy container working directory using the existing repo mount.
     # PyTorch's generated module imports fail from / with PYTHONPYCACHEPREFIX set.
     overrides += ["--set", 'srun_options.container-workdir="/infmax-workspace"']
+    overrides += profiling_arguments(environment)
     if environment.get("SRT_SRUN_OPTIONS"):
         options = json.loads(environment["SRT_SRUN_OPTIONS"])
         if not isinstance(options, dict) or any(

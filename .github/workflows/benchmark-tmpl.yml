@@ -94,6 +94,11 @@ on:
         required: false
         type: string
         default: ""
+      profile:
+        description: "Op-attribution profiling settings (JSON, vLLM srt-slurm recipes); empty disables"
+        required: false
+        type: string
+        default: ""
 env:
   PORT: '8888'
   INFMAX_CONTAINER_WORKSPACE: '/workspace'
@@ -148,6 +153,7 @@ env:
   AIPERF_EXPERIMENTAL_FAST: ${{ inputs.agentx-fast && '1' || '0' }}
   EVAL_LIMIT: ${{ inputs.eval-limit }}
   SWEBENCH_GEN_MODE: ${{ inputs.swebench-gen-mode || 'agentic' }}
+  INFX_PROFILE: ${{ inputs.profile }}
   AIPERF_FAILED_REQUEST_THRESHOLD: '0.10'
   RESULT_DIR: /workspace/results
   PYTHONDONTWRITEBYTECODE: '1'
@@ -400,6 +406,15 @@ jobs:
             !results/aiperf_artifacts/inputs.json
             !results/aiperf_artifacts/profile_export_raw.jsonl
           if-no-files-found: ignore
+
+      - name: Upload op-attribution profile
+        if: ${{ always() && inputs.profile != '' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: profile_${{ env.RESULT_FILENAME }}
+          path: infx-profile.tar
+          compression-level: 1
+          if-no-files-found: warn
 
       - name: Upload server logs
         if: always()
