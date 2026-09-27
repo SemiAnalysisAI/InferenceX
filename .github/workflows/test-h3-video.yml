@@ -5,10 +5,12 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - 'experimental/video-generation/**'
-      - 'utils/aggregate_power.py'
       - 'infx/__init__.py'
       - 'infx/results/__init__.py'
       - 'infx/results/power/*.py'
+      - 'infx/workflows/__init__.py'
+      - 'infx/workflows/ci_priority.py'
+      - 'configs/ci-priority.yaml'
       - 'benchmarks/benchmark_lib.sh'
       - '.github/workflows/h3-video.yml'
       - '.github/workflows/h3-fidelity.yml'
@@ -17,10 +19,12 @@ on:
   push:
     paths:
       - 'experimental/video-generation/**'
-      - 'utils/aggregate_power.py'
       - 'infx/__init__.py'
       - 'infx/results/__init__.py'
       - 'infx/results/power/*.py'
+      - 'infx/workflows/__init__.py'
+      - 'infx/workflows/ci_priority.py'
+      - 'configs/ci-priority.yaml'
       - 'benchmarks/benchmark_lib.sh'
       - '.github/workflows/h3-video.yml'
       - '.github/workflows/h3-fidelity.yml'

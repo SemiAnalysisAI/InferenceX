@@ -39,11 +39,11 @@ inside the existing runtime. A rootfs-created marker alone is not proof of model
 compatibility. The adapter checks saved preparation and input identity before
 allocation; it does not install packages, import an image, or create a rootfs.
 
-The execution package includes the shared `infx.results.power` modules and the
-legacy power entrypoint from the dispatched repository revision. Their hashes
-are recorded with the H3 sources. This keeps power analysis usable inside the
-prepared runtime without mounting the full repository; reusing a staged package
-still requires identical source bytes.
+The execution package imports the shared `infx.results.power` modules directly
+from the dispatched repository revision. Their hashes are recorded with the H3
+sources; no legacy `utils` entrypoint is required. This keeps power analysis usable
+inside the prepared runtime without mounting the full repository; reusing a staged
+package still requires identical source bytes.
 
 The staged power modules support the retained AMD runtime's Python 3.10. A
 focused CPU check runs the isolated staged calculation on that interpreter;

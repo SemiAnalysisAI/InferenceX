@@ -345,8 +345,7 @@ def stage_package(source: Path, destination: Path) -> dict[str, str]:
     selected = {p.relative_to(source).as_posix(): p for p in [*source.glob("*.py"), *(source / "evaluator").glob("*.py"),
                 *(source / "runtime-patches").glob("*.patch")]}
     repository = source.parents[1]
-    shared_power = [repository / "utils" / "aggregate_power.py",
-                    repository / "infx" / "__init__.py",
+    shared_power = [repository / "infx" / "__init__.py",
                     repository / "infx" / "results" / "__init__.py",
                     *(repository / "infx" / "results" / "power").glob("*.py")]
     for path in shared_power:

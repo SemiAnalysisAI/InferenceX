@@ -10,7 +10,7 @@ from pathlib import Path
 from statistics import median
 from tempfile import TemporaryDirectory
 
-from utils.aggregate_power import integrate_power
+from infx.results.power.single_node import integrate_power
 
 
 _CLOCK_TOLERANCE_SECONDS = 0.1

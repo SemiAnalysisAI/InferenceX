@@ -9077,3 +9077,9 @@
   description:
     - "Integrate the existing manually dispatched H3 lifecycle with the current infx planner and staged power package. Resolve workflow validation in the target checkout and preserve retained AMD Python 3.10, monitor bytes decoding, and GPU accounting; select no LLM jobs."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2894
+
+- config-keys: []
+  workflow-dispatch: h3-video.yml
+  description:
+    - "Use canonical infx power and priority modules after removal of the legacy utils wrappers. Preserve staged Python 3.10 power analysis and manual H3 execution; select no LLM jobs."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2916
