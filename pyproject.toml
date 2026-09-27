@@ -12,7 +12,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-workflows = ["codeowners>=0.9,<0.10"]
+workflows = ["codeowners>=0.9,<0.10", "PyGithub>=2.6,<3", "GitPython>=3.1,<4"]
 results = ["psycopg2-binary>=2,<3", "tabulate>=0.10,<0.11"]
 
 [dependency-groups]
@@ -42,6 +42,8 @@ exclude-newer = "PT12H"
 
 [tool.uv.build-backend]
 module-root = ""
+# The test suite lives beside the package but is not shipped in the wheel.
+wheel-exclude = ["infx/tests"]
 
 [tool.uv.sources]
 torch = [{ index = "pytorch-cpu", marker = "sys_platform != 'darwin'" }]

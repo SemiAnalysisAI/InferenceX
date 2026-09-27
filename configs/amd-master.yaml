@@ -330,7 +330,7 @@ qwen3.5-fp8-mi355x-sglang-disagg:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/qwen3.5/mi355x/disagg-1p1d-tp4p-tp8d-fixed-seq.yaml"
+          - "CONFIG_FILE=recipes/qwen3.5/sglang/mi355x-fp8/8k1k/disagg-1p1d-p-tp4-d-tp8.yaml"
         decode:
           num-worker: 1
           tp: 8
@@ -449,7 +449,7 @@ qwen3.5-fp4-mi355x-sglang-disagg:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/qwen3.5/mi355x/disagg-1p1d-tp8-mxfp4-fixed-seq.yaml"
+          - "CONFIG_FILE=recipes/qwen3.5/sglang/mi355x-fp4/8k1k/disagg-1p1d-tp8.yaml"
         decode:
           num-worker: 1
           tp: 8
@@ -557,7 +557,7 @@ dsr1-fp8-mi355x-sglang-disagg:
           ep: 8
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/dsr1/mi355x/fp8-disagg-fixed-seq.yaml:override_stp_2p1d_dep8"
+          - "CONFIG_FILE=recipes/dsr1/sglang/mi355x-fp8/8k1k/disagg-variants.yaml:override_stp_2p1d_dep8"
         decode:
           num-worker: 1
           tp: 8
@@ -571,7 +571,7 @@ dsr1-fp8-mi355x-sglang-disagg:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/dsr1/mi355x/fp8-disagg-fixed-seq.yaml:override_stp_1p2d_tp8"
+          - "CONFIG_FILE=recipes/dsr1/sglang/mi355x-fp8/8k1k/disagg-variants.yaml:override_stp_1p2d_tp8"
         decode:
           num-worker: 2
           tp: 8
@@ -585,7 +585,7 @@ dsr1-fp8-mi355x-sglang-disagg:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/dsr1/mi355x/fp8-disagg-fixed-seq.yaml:override_stp_1p1d_tp4_tp8"
+          - "CONFIG_FILE=recipes/dsr1/sglang/mi355x-fp8/8k1k/disagg-variants.yaml:override_stp_1p1d_tp4_tp8"
         decode:
           num-worker: 1
           tp: 8
@@ -617,7 +617,7 @@ dsr1-fp8-mi355x-sglang-disagg-mtp:
           ep: 8
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/dsr1/mi355x/fp8-disagg-fixed-seq.yaml:override_mtp_2p1d_dep8"
+          - "CONFIG_FILE=recipes/dsr1/sglang/mi355x-fp8/8k1k/disagg-variants.yaml:override_mtp_2p1d_dep8"
         decode:
           num-worker: 1
           tp: 8
@@ -631,7 +631,7 @@ dsr1-fp8-mi355x-sglang-disagg-mtp:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/dsr1/mi355x/fp8-disagg-fixed-seq.yaml:override_mtp_1p2d_tp8"
+          - "CONFIG_FILE=recipes/dsr1/sglang/mi355x-fp8/8k1k/disagg-variants.yaml:override_mtp_1p2d_tp8"
         decode:
           num-worker: 2
           tp: 8
@@ -645,7 +645,7 @@ dsr1-fp8-mi355x-sglang-disagg-mtp:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/dsr1/mi355x/fp8-disagg-fixed-seq.yaml:override_mtp_1p1d_tp4_tp8"
+          - "CONFIG_FILE=recipes/dsr1/sglang/mi355x-fp8/8k1k/disagg-variants.yaml:override_mtp_1p1d_tp4_tp8"
         decode:
           num-worker: 1
           tp: 8
@@ -670,7 +670,7 @@ kimik3-fp4-mi355x-vllm-agentic-mtp:
 
 # Kimi-K3 MXFP4 agentic-coding benchmark on MI355X via ATOM with DSpark
 # speculative decoding. Acceptance is pinned to the committed golden curve in
-# golden_al_distribution/kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml
+# infx/golden_al_distribution/kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml
 # at both draft lengths used here: 7 draft tokens -> AL 3.84 at concurrency 1 and 4,
 # 3 draft tokens -> AL 3.00 at concurrency 14 and 16.
 # Companion to kimik3-fp4-mi355x-vllm-agentic-mtp: same checkpoint, same runner.
@@ -744,7 +744,7 @@ dsr1-fp4-mi355x-sglang-disagg:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/dsr1/mi355x/fp4-disagg-fixed-seq.yaml:override_stp_1p1d_tp8"
+          - "CONFIG_FILE=recipes/dsr1/sglang/mi355x-fp4/8k1k/disagg-variants.yaml:override_stp_1p1d_tp8"
         decode: {num-worker: 1, tp: 8, ep: 1, dp-attn: false}
       - spec-decoding: "none"
         conc-list: [2, 4, 8, 16, 32, 64, 128, 256]
@@ -754,7 +754,7 @@ dsr1-fp4-mi355x-sglang-disagg:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/dsr1/mi355x/fp4-disagg-fixed-seq.yaml:override_stp_1p2d_tp8"
+          - "CONFIG_FILE=recipes/dsr1/sglang/mi355x-fp4/8k1k/disagg-variants.yaml:override_stp_1p2d_tp8"
         decode: {num-worker: 2, tp: 8, ep: 1, dp-attn: false}
       - spec-decoding: "none"
         conc-list: [64, 128, 256]
@@ -764,7 +764,7 @@ dsr1-fp4-mi355x-sglang-disagg:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/dsr1/mi355x/fp4-disagg-fixed-seq.yaml:override_stp_1p2d_tp4_tp8"
+          - "CONFIG_FILE=recipes/dsr1/sglang/mi355x-fp4/8k1k/disagg-variants.yaml:override_stp_1p2d_tp4_tp8"
         decode: {num-worker: 2, tp: 8, ep: 1, dp-attn: false}
       - spec-decoding: "none"
         conc-list: [128, 256, 512]
@@ -774,7 +774,7 @@ dsr1-fp4-mi355x-sglang-disagg:
           ep: 8
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/dsr1/mi355x/fp4-disagg-fixed-seq.yaml:override_stp_1p1d_dep8"
+          - "CONFIG_FILE=recipes/dsr1/sglang/mi355x-fp4/8k1k/disagg-variants.yaml:override_stp_1p1d_dep8"
         decode: {num-worker: 1, tp: 8, ep: 8, dp-attn: true}
       - spec-decoding: "none"
         conc-list: [1024, 2048, 4096]
@@ -784,7 +784,7 @@ dsr1-fp4-mi355x-sglang-disagg:
           ep: 8
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/dsr1/mi355x/fp4-disagg-fixed-seq.yaml:override_stp_2p1d_dep8"
+          - "CONFIG_FILE=recipes/dsr1/sglang/mi355x-fp4/8k1k/disagg-variants.yaml:override_stp_2p1d_dep8"
         decode: {num-worker: 1, tp: 8, ep: 8, dp-attn: true}
 
 dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp:
@@ -811,7 +811,7 @@ dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/dsr1/mi355x/fp4-disagg-fixed-seq.yaml:override_mtp3_1p1d_tp8"
+          - "CONFIG_FILE=recipes/dsr1/sglang/mi355x-fp4/8k1k/disagg-variants.yaml:override_mtp3_1p1d_tp8"
         decode: {num-worker: 1, tp: 8, ep: 1, dp-attn: false}
       - spec-decoding: "mtp"
         conc-list: [2, 4, 8, 16, 32, 64]
@@ -821,7 +821,7 @@ dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/dsr1/mi355x/fp4-disagg-fixed-seq.yaml:override_mtp3_1p2d_tp8_wide"
+          - "CONFIG_FILE=recipes/dsr1/sglang/mi355x-fp4/8k1k/disagg-variants.yaml:override_mtp3_1p2d_tp8_wide"
         decode: {num-worker: 2, tp: 8, ep: 1, dp-attn: false}
       - spec-decoding: "mtp"
         conc-list: [64, 128, 256, 512, 640]
@@ -831,7 +831,7 @@ dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp:
           ep: 8
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/dsr1/mi355x/fp4-disagg-fixed-seq.yaml:override_mtp3_1p1d_dep8"
+          - "CONFIG_FILE=recipes/dsr1/sglang/mi355x-fp4/8k1k/disagg-variants.yaml:override_mtp3_1p1d_dep8"
         decode: {num-worker: 1, tp: 8, ep: 8, dp-attn: true}
       - spec-decoding: "mtp"
         conc-list: [1024, 2048, 4096]
@@ -841,7 +841,7 @@ dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp:
           ep: 8
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/dsr1/mi355x/fp4-disagg-fixed-seq.yaml:override_mtp1_2p1d_dep8"
+          - "CONFIG_FILE=recipes/dsr1/sglang/mi355x-fp4/8k1k/disagg-variants.yaml:override_mtp1_2p1d_dep8"
         decode: {num-worker: 1, tp: 8, ep: 8, dp-attn: true}
 
 dsr1-fp8-mi325x-sglang-mtp:
@@ -948,7 +948,7 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/dsr1/mi355x/fp4-disagg-fixed-seq.yaml:override_mtp3_1p1d_tp8"
+          - "CONFIG_FILE=recipes/dsr1/sglang/mi355x-fp4/8k1k/disagg-variants.yaml:override_mtp3_1p1d_tp8"
         decode: {num-worker: 1, tp: 8, ep: 1, dp-attn: false}
       - spec-decoding: "mtp"
         conc-list: [2, 4, 8, 16, 32]
@@ -958,7 +958,7 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/dsr1/mi355x/fp4-disagg-fixed-seq.yaml:override_mtp3_1p2d_tp8_narrow"
+          - "CONFIG_FILE=recipes/dsr1/sglang/mi355x-fp4/8k1k/disagg-variants.yaml:override_mtp3_1p2d_tp8_narrow"
         decode: {num-worker: 2, tp: 8, ep: 1, dp-attn: false}
       - spec-decoding: "mtp"
         conc-list: [64, 128, 256]
@@ -968,7 +968,7 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/dsr1/mi355x/fp4-disagg-fixed-seq.yaml:override_mtp2_1p2d_tp8"
+          - "CONFIG_FILE=recipes/dsr1/sglang/mi355x-fp4/8k1k/disagg-variants.yaml:override_mtp2_1p2d_tp8"
         decode: {num-worker: 2, tp: 8, ep: 1, dp-attn: false}
       - spec-decoding: "mtp"
         conc-list: [64, 128, 256, 512]
@@ -978,7 +978,7 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
           ep: 8
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/dsr1/mi355x/fp4-disagg-fixed-seq.yaml:override_mtp1_1p1d_dep8"
+          - "CONFIG_FILE=recipes/dsr1/sglang/mi355x-fp4/8k1k/disagg-variants.yaml:override_mtp1_1p1d_dep8"
         decode: {num-worker: 1, tp: 8, ep: 8, dp-attn: true}
       - spec-decoding: "mtp"
         conc-list: [1024, 2048, 4096]
@@ -988,7 +988,7 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
           ep: 8
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/dsr1/mi355x/fp4-disagg-fixed-seq.yaml:override_mtp1_2p1d_dep8"
+          - "CONFIG_FILE=recipes/dsr1/sglang/mi355x-fp4/8k1k/disagg-variants.yaml:override_mtp1_2p1d_dep8"
         decode: {num-worker: 1, tp: 8, ep: 8, dp-attn: true}
 
 minimaxm3-fp8-mi300x-vllm-agentic-mtp:
@@ -1427,7 +1427,7 @@ dsv41flash-fp4-mi355x-vllm-agentic-dspark:
 # and draft length (docs/PR_REVIEW_CHECKLIST.md), and a submission may not
 # substitute its own target. Nothing about that target is written here:
 # AGENTS.md forbids hard-coding an acceptance length in a master config, so
-# server_tilert.sh reads golden_al_distribution/glm5.3_mtp.yaml at launch and
+# server_tilert.sh reads infx/golden_al_distribution/glm5.3_mtp.yaml at launch and
 # fails the run if the curve or the draft length is missing.
 # The curve is consumed in the same units as every other framework here, and
 # AgentX replays run with thinking on.

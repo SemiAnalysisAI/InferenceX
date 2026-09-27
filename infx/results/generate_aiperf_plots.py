@@ -589,7 +589,6 @@ def panel_prefill_source_breakdown(ax: Axes, server_metrics: dict, t0_ns: int | 
         c_t, c_v = _prompt_token_source_series(server_metrics, "local_compute", t0_ns)
         h_t, h_v = _prompt_token_source_series(server_metrics, "local_cache_hit", t0_ns)
         e_t, e_v = _prompt_token_source_series(server_metrics, "external_kv_transfer", t0_ns)
-    # Align timestamps: use the union of all sample timestamps.
     if not (c_t or h_t or e_t):
         ax.set_xlabel("Time (s)")
         ax.set_ylabel("% of Prefill Tokens")
@@ -597,9 +596,7 @@ def panel_prefill_source_breakdown(ax: Axes, server_metrics: dict, t0_ns: int | 
         ax.set_ylim(0, 105)
         ax.grid(True, alpha=0.3)
         return
-    # Build per-timestamp cumulative values; counters are already cumulative
-    # totals from the scrape (rate=delta over slice, but ``total`` here is
-    # the slice total — accumulate ourselves).
+    # AIPerf's timeslice total is a delta, so accumulate it across slices.
     samples = sorted(set(c_t) | set(h_t) | set(e_t))
 
     def _cum_at(times: list[float], values: list[float]) -> dict:
@@ -608,7 +605,6 @@ def panel_prefill_source_breakdown(ax: Axes, server_metrics: dict, t0_ns: int | 
         for t, v in zip(times, values, strict=False):
             running += v
             d[t] = running
-        # Forward-fill for missing samples.
         out: dict[float, float] = {}
         last = 0.0
         for t in samples:
@@ -747,7 +743,6 @@ def panel_preemptions(ax: Axes, server_metrics: dict, t0_ns: int | None) -> None
                 linewidth=1.5,
                 label=f"Rolling avg (n={win})",
             )
-        # Cumulative on twin axis.
         cumulative: list[float] = []
         running = 0.0
         for v in values:

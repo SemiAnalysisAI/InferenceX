@@ -71,7 +71,7 @@ Then decide:
 ## Check 1 — A passing sweep + evals ran on a commit IN this PR
 The merge standard (and InferenceX's own reuse gate) requires a green full sweep,
 including evals, on a commit that is CURRENTLY part of this PR. A sweep that ran on a
-commit later rebased/force-pushed out does NOT count: at merge, `merge_with_reuse.sh`
+commit later rebased/force-pushed out does NOT count: at merge, `merge_with_reuse.py`
 → `validate_reusable_run` (in `infx/workflows/reuse.py`) rejects any source
 whose `head_sha` is not in `GET /pulls/<n>/commits`. So the whole question collapses
 to one fact: does a commit still in this PR carry green, executed sweep/eval checks?
@@ -185,7 +185,7 @@ public upstream documentation.
   standard.
 
 ## Check 4 — Reuse-sweep command explicitly posted
-The supported merge path for an approved PR is reuse (`utils/merge_with_reuse.sh`).
+The supported merge path for an approved PR is reuse (`uv run --extra workflows python -m infx.workflows.merge_with_reuse`).
 An authorized maintainer must explicitly post a reuse command as a PR comment;
 a green sweep alone is not enough. Verify the command directly from the comments:
 - Prefer `/use <run_id>`, with a numeric run ID on the same line. Also accept the legacy
@@ -246,16 +246,16 @@ and read its `framework:`, `runner:`, and `image:` fields.
 - N/A if the PR changes no master-config entries (state that in one line).
 
 ## Check 7 — No submissions for deprecated models or scenarios
-Read the current `MODELS.md` in the checked-out default branch. It is the source of
+Read the current `docs/MODELS.md` in the checked-out default branch. It is the source of
 truth for active and deprecated models, scenarios, and model-scenario combinations.
 For every benchmark configuration or recipe that the PR adds, changes, or re-enables,
 identify its model prefix and scenario, including fixed-sequence, agentic, single-node,
 and multi-node entries.
 - Use `date -u +%F` to establish the review date. Honor an effective date in
-  `MODELS.md`, so a scheduled future deprecation is allowed until its stated date.
+  `docs/MODELS.md`, so a scheduled future deprecation is allowed until its stated date.
 - FAIL if the PR submits a model that is retired on the review date, a deprecated
   scenario, or a deprecated model-scenario combination. Name the model prefix,
-  scenario, and the `MODELS.md` row or notice that prohibits it.
+  scenario, and the `docs/MODELS.md` row or notice that prohibits it.
 - N/A if the PR adds, changes, or re-enables no benchmark configurations or recipes.
 
 ## Check 8 — No benchmark hacks that change the model architecture
@@ -324,7 +324,7 @@ speculative decoding. From the PR diff, identify configs that are BOTH:
   downloads, or config names containing `-mtp` / `eagle`.
 Agentic replay does not reproduce real-world token-by-token traffic, so measured
 acceptance there is not representative. Per the AgentX fairness guidelines
-in `golden_al_distribution/README.md` on the checked-out default branch, such configs
+in `infx/golden_al_distribution/README.md` on the checked-out default branch, such configs
 must instead SIMULATE acceptance at the committed golden acceptance length (AL).
 Verify BOTH:
 - (a) SIMULATED ACCEPTANCE ENABLED. The launch config must pin a simulated/synthetic
@@ -343,7 +343,7 @@ Verify BOTH:
   FAIL if an agentic spec-decode config runs real (unsimulated) acceptance.
   Name the config/script and line.
 - (b) AL VALUE MATCHES THE GOLDEN CURVE. Read the committed golden AL YAML for the
-  model in `golden_al_distribution/` on the default-branch checkout. Examples include
+  model in `infx/golden_al_distribution/` on the default-branch checkout. Examples include
   `qwen3.5_mtp.yaml` and `minimaxm3_eagle3.yaml`. Confirm the pinned AL equals the golden value for that
   model, thinking mode, and the config's `num_speculative_tokens` / MTP level (e.g.
   qwen3.5 thinking_on with 3 speculative tokens -> 3.39). For TRT-LLM configs, compare

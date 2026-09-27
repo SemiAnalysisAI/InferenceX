@@ -36,7 +36,7 @@ breakdown. Do **not** invent image tags. Verify them on the registry first.
 Don't guess flags or concurrencies. **Deep-research the InferenceX codebase first**, then
 the external sources. Read *several* similar files, not just one, and copy what actually runs.
 
-Check `MODELS.md` before choosing a model, scenario, or precision. Do not reintroduce retired coverage; preserve only explicitly documented exceptions. Use active siblings, not files under `deprecated/`.
+Check `docs/MODELS.md` before choosing a model, scenario, or precision. Do not reintroduce retired coverage; preserve only explicitly documented exceptions. Use active siblings, not files under `deprecated/`.
 
 **A. In-codebase research (primary because this repo is the source of truth):**
 ```bash
@@ -120,7 +120,7 @@ Validate as you go: `python3 -c "import yaml; yaml.safe_load(open('<recipe>'))"`
 
 Append `<model>-<precision>-<sku>[-<engine>][-mtp]` after the sibling, with the correct
 `image`, `model`, `model-prefix`, `runner`, `precision`, `framework`. The **search space** is
-`{tp, ep, dp-attn} × concurrency` per supported scenario from `MODELS.md` (8k1k or AgentX as applicable; 1k1k is only retained for GLM-5.1 B200 TileRT):
+`{tp, ep, dp-attn} × concurrency` per supported scenario from `docs/MODELS.md` (8k1k or AgentX as applicable; 1k1k is only retained for GLM-5.1 B200 TileRT):
 - Mirror a sibling's parallelism layouts. Trim concurrency ranges to what the SKU's memory
   supports (small-mem SKUs → TP8-only, drop tp2/tp4 and DEP).
 - Latency (TP-only) rows should start at conc 1. TEP/DEP rows start higher (they only pay off
@@ -138,7 +138,7 @@ needed; if a point matches zero or several variants, fix the recipe, not the lau
 ## Step 5 — perf-changelog
 
 Append a `- config-keys: [<key>]` block with a clear `description` and `pr-link: TBD`. The
-changelog diff vs `origin/main` is what `process_changelog.py` uses to select the sweep, so a
+changelog diff vs `origin/main` is what `infx.matrix.plan` uses to select the sweep, so a
 new entry is **required** for CI to run your config.
 
 ## Step 6 — validate locally
@@ -147,7 +147,7 @@ new entry is **required** for CI to run your config.
 python3 -c "import yaml; yaml.safe_load(open('benchmarks/single_node/srt-slurm-recipes/<recipe>'))"
 python3 -c "import yaml; yaml.safe_load(open('configs/<nvidia|amd>-master.yaml')); yaml.safe_load(open('perf-changelog.yaml'))"
 uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
-  utils/matrix_logic/generate_sweep_configs.py test-config \
+  python -m infx.matrix.generate test-config \
   --config-files configs/<nvidia|amd>-master.yaml --config-keys <key>
 ```
 Sanity-check the generated matrix: expected layouts/concurrencies, `max-model-len` = scenario

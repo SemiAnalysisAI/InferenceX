@@ -42,11 +42,11 @@ Modifiers:
 
 Fail-fast is matrix-scoped: one matrix failure does not cancel other matrices, and completed results remain valid. The failed job remains red.
 
-Sweeps do not trigger while a PR has merge conflicts. For `perf-changelog.yaml` conflicts, follow `KLAUD_DEBUG.md` section 1.1: merge `origin/main`, restore the file byte-for-byte from `origin/main`, then append only the PR's entry at the tail. Never 3-way merge the changelog.
+Sweeps do not trigger while a PR has merge conflicts. For `perf-changelog.yaml` conflicts, follow `docs/KLAUD_DEBUG.md` section 1.1: merge `origin/main`, restore the file byte-for-byte from `origin/main`, then append only the PR's entry at the tail. Never 3-way merge the changelog.
 
 Pushes to `main` always enter sweep setup and either reuse approved artifacts or run an untrimmed full sweep. `[skip-sweep]` only skips PR benchmark setup. It never skips a main-branch sweep. It still permits changelog validation and reuse authorization checks.
 
-Artifact reuse excludes runs with `evals-only` or `agentx-fast`. See `.github/workflows/README.md` and `utils/merge_with_reuse.sh` for eligibility and merge behavior.
+Artifact reuse excludes runs with `evals-only` or `agentx-fast`. See `.github/workflows/README.md` and `uv run --extra workflows python -m infx.workflows.merge_with_reuse` for eligibility and merge behavior.
 
 ## Workflow dispatch and monitoring
 
@@ -78,9 +78,9 @@ The dispatch POST returns no body or run ID.
 
 ## Evaluation selection
 
-Full details live in `utils/evals/EVALS.md`.
+Full details live in `infx/evals/EVALS.md`.
 
-`mark_eval_entries()` in `utils/matrix_logic/generate_sweep_configs.py` selects evals, which default to the 8k1k subset and run separately from throughput with `EVAL_ONLY=true`.
+`mark_eval_entries()` in `infx/matrix/generate.py` selects evals, which default to the 8k1k subset and run separately from throughput with `EVAL_ONLY=true`.
 
 - `--no-evals`: skip evals.
 - `--evals-only`: run the default selected eval subset and suppress throughput.
