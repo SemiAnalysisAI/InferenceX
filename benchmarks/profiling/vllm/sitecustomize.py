@@ -330,12 +330,28 @@ def _register_module_names(runner):
         _module_hooks_allowed = False
 
 
+def _tensor_signature(args):
+    """[[shape, dtype], ...] of the tensors among a call's (one-level nested) args."""
+    import torch
+
+    sig = []
+    for arg in args:
+        items = arg if isinstance(arg, (list, tuple)) else (arg,)
+        for item in items:
+            if isinstance(item, torch.Tensor):
+                sig.append([list(item.shape), str(item.dtype).removeprefix("torch.")])
+    return sig
+
+
 def _module_pre_hook(module, args):
     try:
         import torch
 
         name = (_module_names.get(module) if _module_names is not None else None) or type(module).__name__
-        rf = torch.autograd.profiler.record_function(f"infx_mod#{name}")
+        # Python-launched kernels (Triton, TileLang, DeepGEMM) have no op
+        # shapes of their own; the module's input shapes stand in for them.
+        sig = json.dumps(_tensor_signature(args), separators=(",", ":"))
+        rf = torch.autograd.profiler.record_function(f"infx_mod#{name}#{sig}")
         rf.__enter__()
         stack = getattr(_module_tls, "stack", None)
         if stack is None:
