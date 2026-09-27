@@ -19,10 +19,11 @@ python3 .agents/skills/live-logs/scripts/live_logs.py <PR# | PR URL | run URL | 
 - **Job URL:** uses just that job.
 - **Result:** one local viewer per Slurm job, for example the benchmark job and the eval job of the same run. Each opens in the browser, and each URL is printed.
 - **Stop:** `live_logs.py --stop` stops every viewer the script started.
+- **Manual mode:** when you already know the job, pass `--host <ssh target> --job <slurm id> --logdir <.../outputs/<id>/logs>` instead of a target.
 - **Faster start on very large logs:** pass `--history 4000` to fetch only the last 4000 lines of each file.
 - **Requirements:** only the Python standard library, plus `gh` (authenticated) and `ssh` to the cluster login node. The viewer binds to `127.0.0.1` only.
 
-Job resolution relies on srtctl naming the Slurm job after the GitHub runner (for example `b300-dsxe_01`). `squeue -n <runner>` finds the job, and `sacct` covers a job that has just finished. `scontrol show job` gives the WorkDir, and the logs are read from `<WorkDir>/outputs/<job>/logs`. Single-node jobs have no such Slurm job, and the script says so.
+Job resolution relies on srtctl naming the Slurm job after the GitHub runner (for example `b300-dsxe_01`). Jobs named after the worker instead (for example `worker-2` on h200-dgxc) are found through the runner's `gharunnerNN` work directory in `squeue`. `squeue -n <runner>` finds the job, and `sacct` covers a job that has just finished. `scontrol show job` gives the WorkDir, and the logs are read from `<WorkDir>/outputs/<job>/logs`. Single-node jobs have no such Slurm job, and the script says so.
 
 ## Cluster login hosts: never put them in the repo
 

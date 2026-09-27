@@ -27,7 +27,7 @@ BANNER = ("Access to this system", "All activity is logged")
 FIND_EXPR = (
     "\\( -name '*_prefill_w*.out' -o -name '*_decode_w*.out' -o -name '*_agg_w*.out' "
     "-o -name 'sweep_*.log' -o -name '*_frontend_*.out' -o -name 'service_mooncake-master.out' "
-    "-o -name 'service_etcd.out' -o -name 'aiperf.log' -o -name 'benchmark.log' \\)"
+    "-o -name 'service_etcd.out' -o -name 'aiperf.log' -o -name 'benchmark.log' -o -name 'benchmark.out' \\)"
 )
 
 
@@ -66,14 +66,14 @@ def last_matching(buf, n, noise, erronly):
 def group_of(rel):
     if re.search(r"_(prefill|decode|agg)_w\d+\.out$", rel):
         return 0
-    if rel.endswith(("aiperf.log", "benchmark.log")):
+    if rel.endswith(("aiperf.log", "benchmark.log", "benchmark.out")):
         return 2
     return 1
 
 
 def label_of(rel):
     base = os.path.basename(rel)
-    m = re.match(r".*-(gpu-\d+|[a-z0-9]+-\d+)_(prefill|decode|agg)_w(\d+)\.out$", base)
+    m = re.match(r"(?:.*-)?(gpu-\d+|[a-z0-9]+-\d+)_(prefill|decode|agg)_w(\d+)\.out$", base)
     if m:
         return f"{m.group(2).capitalize()} w{m.group(3)} · {m.group(1)}"
     m = re.match(r".*-(gpu-\d+|[a-z0-9]+-\d+)_frontend_(\d+)\.out$", base)
@@ -83,9 +83,11 @@ def label_of(rel):
         return "srtctl sweep"
     if base.startswith("service_"):
         return base[len("service_"):-len(".out")]
-    m = re.search(r"(conc_\d+)/.*?(aiperf|benchmark)\.log$", rel)
+    m = re.search(r"(aiperf|benchmark)\.(log|out)$", rel)
     if m:
-        return f"{m.group(2)} · {m.group(1)}"
+        conc = re.search(r"conc_\d+", rel)
+        where = conc.group(0) if conc else (rel.split("/")[0] if "/" in rel else "")
+        return f"{m.group(1)}.{m.group(2)}" + (f" · {where}" if where else "")
     parts = rel.split("/")
     return "/".join(parts[-3:]) if len(parts) > 1 else base
 

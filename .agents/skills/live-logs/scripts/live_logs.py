@@ -86,6 +86,12 @@ def slurm_job_for_runner(host, runner):
                          f"sacct -n -X -P --name {runner} -S now-1days -o JobID | grep -E '^[0-9]+$' | sort -n | tail -1")
     ids = [l.split()[0] for l in lines if l.split()[0].isdigit()]
     if not ids:
+        # Some launchers name the job after the worker (e.g. worker-2); fall back to the runner's
+        # gharunnerNN work directory.
+        suffix = runner.rsplit("_", 1)[-1]
+        lines = remote(host, f"squeue -h -o '%i %Z' | grep '/gharunner{suffix}/' | sort -n | tail -1")
+        ids = [l.split()[0] for l in lines if l.split()[0].isdigit()]
+    if not ids:
         return None, None
     job = ids[0]
     wd = remote(host, f"wd=$(scontrol show job {job} 2>/dev/null | grep -oE 'WorkDir=[^ ]+' | cut -d= -f2); "
@@ -141,12 +147,21 @@ def main():
     ap.add_argument("target", nargs="?", help="PR number, PR URL, workflow run URL or job URL")
     ap.add_argument("--stop", action="store_true", help="stop every viewer started by this script")
     ap.add_argument("--no-open", action="store_true", help="print URLs without opening a browser")
+    ap.add_argument("--host", help="manual mode: ssh target of the login node (with --job and --logdir)")
+    ap.add_argument("--job", help="manual mode: Slurm job id")
+    ap.add_argument("--logdir", help="manual mode: the job's logs directory on the cluster")
     ap.add_argument("--history", default="all", help="'all' (default) or N: only fetch the last N lines of each log (faster on huge logs)")
     args = ap.parse_args()
     if args.stop:
         return stop_all()
+    if args.host and args.job and args.logdir:
+        url = start_viewer(args.host, args.job, args.logdir, f"Slurm {args.job}", args.history)
+        print(url)
+        if not args.no_open:
+            webbrowser.open(url)
+        return None
     if not args.target:
-        ap.error("target is required")
+        ap.error("target is required (or --host/--job/--logdir for manual mode)")
 
     jobs = resolve_jobs(args.target)
     if not jobs:
