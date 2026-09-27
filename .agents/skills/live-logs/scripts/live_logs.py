@@ -94,9 +94,15 @@ def slurm_job_for_runner(host, runner):
     if not ids:
         return None, None
     job = ids[0]
-    wd = remote(host, f"wd=$(scontrol show job {job} 2>/dev/null | grep -oE 'WorkDir=[^ ]+' | cut -d= -f2); "
-                      f"[ -n \"$wd\" ] && echo \"$wd\" || sacct -n -X -P -j {job} -o WorkDir")
-    return job, (wd[0] if wd else None)
+    # srtctl points the job's StdOut at <outputs>/<job>/logs/sweep_<job>.log, which is the most
+    # reliable way to find the logs (WorkDir can be a checkout next to outputs/, not its parent).
+    info = remote(host, f"scontrol show job {job} 2>/dev/null | grep -oE '(WorkDir|StdOut)=[^ ]+'")
+    kv = dict(x.split("=", 1) for x in info if "=" in x)
+    out = kv.get("StdOut", "")
+    if os.path.basename(out).startswith("sweep_"):
+        return job, os.path.dirname(out)
+    wd = kv.get("WorkDir") or next(iter(remote(host, f"sacct -n -X -P -j {job} -o WorkDir")), None)
+    return job, (f"{wd}/outputs/{job}/logs" if wd else None)
 
 
 def free_port(start=8765):
@@ -174,11 +180,10 @@ def main():
         if not host:
             missing.add(cluster)
             continue
-        job, workdir = slurm_job_for_runner(host, runner)
-        if not job or not workdir:
+        job, logdir = slurm_job_for_runner(host, runner)
+        if not job or not logdir:
             print(f"- {j['name'][:90]}: no Slurm job named {runner} on {cluster} (single-node or not submitted yet)")
             continue
-        logdir = f"{workdir}/outputs/{job}/logs"
         title = f"{cluster} · Slurm {job} · {j['name'].split('|')[-1].strip()[:80]}"
         url = start_viewer(host, job, logdir, title, args.history)
         print(f"- {j['name'][:90]}\n  runner {runner} → Slurm {job}\n  {url}  (GitHub job {j['html_url']})")
