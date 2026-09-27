@@ -60,8 +60,6 @@ Rationale: `dsv4` carries the largest single-turn footprint in the repository. 4
 
 **Single-node SRT-only cutover (2026-09-22):** Active single-node fixed-sequence recipes now use SRT-Slurm. The two Docker-only Qwen3.5 RTX PRO 6000 FP4 configs (with and without MTP) are retired, with their original settings preserved in `configs/deprecated/nvidia-master.yaml` and their scripts in `benchmarks/single_node/fixed_seq_len/deprecated/`. The unused `rtx6000pro-lat` runner mappings, launcher, and runtime settings are removed. Qwen3.5 remains active on the other supported Slurm pools; AgentX and multi-node coverage are unchanged.
 
-**MiniMax-M3 MI355X vLLM AgentX:** `minimaxm3-fp4-mi355x-vllm-agentic-mtp` uses the [native SRT recipe](../benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/mi355x-fp4-mtp/agentic.yaml) with TP4 and TP2. The registration removed in #3463 because it still depended on deleted Bash routing is restored through this recipe, preserving its image and concurrency ranges. The pinned nightly has been removed from the registry, so native execution requires the cached image staged for the launcher.
-
 ## Scenarios
 
 | Scenario | ISL/OSL | Status |

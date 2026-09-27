@@ -8988,13 +8988,10 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3503
 
 - config-keys:
-    - minimaxm3-fp8-h100-vllm-agentic-mtp
-    - minimaxm3-fp4-mi355x-vllm-agentic-mtp
+    - minimaxm3-fp8-h200-vllm-agentic-mtp
   scenario-type:
     - agentic-coding
   description:
-    - "Validate MiniMax-M3 AgentX on H100 with vLLM FP8 and MI355X with vLLM FP4 after moving the end-to-end project into inferencex-e2e/."
-    - "Restore the MI355X vLLM config removed in #3463 by connecting its existing image, TP4/TP2 concurrency ranges, and benchmark settings to the retained native SRT recipe."
-    - "将端到端项目迁入 inferencex-e2e/ 后，验证 H100 上的 vLLM FP8 和 MI355X 上的 vLLM FP4 MiniMax-M3 AgentX 运行路径。"
-    - "恢复 #3463 中移除的 MI355X vLLM 配置，将其原有镜像、TP4/TP2 并发范围和基准测试设置接入保留的原生 SRT 配方。"
+    - "Validate MiniMax-M3 AgentX on H200 with vLLM FP8 after moving the end-to-end project into inferencex-e2e/. Preserve the existing image, recipe, and benchmark settings."
+    - "将端到端项目迁入 inferencex-e2e/ 后，验证 H200 上的 vLLM FP8 MiniMax-M3 AgentX 运行路径，沿用现有镜像、配方和基准测试设置。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3525
