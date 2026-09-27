@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import abc
+import functools
 import os
 import types
 from dataclasses import dataclass, field
@@ -430,6 +431,48 @@ class EPBackend(abc.ABC):
         dist.all_reduce(token)
         torch.cuda._sleep(self._graph_align_cycles)
 
+    @staticmethod
+    def _graph_event():
+        """A timing event whose record() can be captured into a graph. ROCm torch < 2.13 rejects
+        `external=True`, so there the event is recorded once to exist and its captured record goes
+        through hipEventRecordWithFlags, as torch 2.13 does (pytorch#178264)."""
+        import torch
+
+        if not getattr(torch.version, "hip", None):
+            return torch.cuda.Event(enable_timing=True, external=True)
+        event = torch.cuda.Event(enable_timing=True)
+        event.record()
+        event._collx_hip_external = True
+        return event
+
+    @staticmethod
+    def _record_graph_event(event):
+        import ctypes
+
+        import torch
+
+        if not getattr(event, "_collx_hip_external", False):
+            return event.record()
+        rc = EPBackend._hip_runtime().hipEventRecordWithFlags(
+            ctypes.c_void_p(event.cuda_event),
+            ctypes.c_void_p(torch.cuda.current_stream().cuda_stream),
+            ctypes.c_uint(0x1),  # hipEventRecordExternal
+        )
+        if rc != 0:
+            raise RuntimeError(f"hipEventRecordWithFlags(external) failed with hipError {rc}")
+
+    @staticmethod
+    @functools.cache
+    def _hip_runtime():
+        import ctypes
+
+        import torch
+
+        try:
+            return ctypes.CDLL("libamdhip64.so")
+        except OSError:  # pip ROCm torch bundles the runtime in torch/lib
+            return ctypes.CDLL(os.path.join(os.path.dirname(torch.__file__), "lib", "libamdhip64.so"))
+
     def _capture_pairs(self, problem, staged, pairs, marks):
         """Capture `pairs` back-to-back dispatch -> combine pairs into one graph.
 
@@ -440,13 +483,13 @@ class EPBackend(abc.ABC):
         import torch.distributed as dist
 
         def events():
-            return [torch.cuda.Event(enable_timing=True, external=True) for _ in range(pairs)]
+            return [self._graph_event() for _ in range(pairs)]
 
         stamps = {mark: (events(), events()) for mark in marks}
 
         def record(mark, edge, i):
             if mark in stamps:
-                stamps[mark][edge][i].record()
+                self._record_graph_event(stamps[mark][edge][i])
 
         dist.barrier()
         torch.cuda.synchronize()

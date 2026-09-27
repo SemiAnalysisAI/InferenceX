@@ -424,6 +424,39 @@ class GraphAlignmentAndValueCheck(unittest.TestCase):
         self.assertTrue(result.cloned)
 
 
+class RocmGraphEventRecord(unittest.TestCase):
+    """ROCm torch < 2.13 rejects Event(external=True); the capture records through HIP instead."""
+
+    def _record(self, rc):
+        records, calls = [], []
+
+        class Event:
+            cuda_event = 0xE0
+
+            def __init__(self, **kwargs):
+                assert not kwargs.get("external"), "External events are disallowed in rocm"
+
+            def record(self):
+                records.append("record")
+
+        fake = types.SimpleNamespace(version=types.SimpleNamespace(hip="7.2"), cuda=types.SimpleNamespace(
+            Event=Event, current_stream=lambda: types.SimpleNamespace(cuda_stream=0x5)))
+        hip = types.SimpleNamespace(hipEventRecordWithFlags=lambda e, s, f: calls.append(
+            (e.value, s.value, f.value)) or rc)
+        with mock.patch.dict(sys.modules, {"torch": fake}), \
+                mock.patch.object(ep_backend.EPBackend, "_hip_runtime", lambda: hip):
+            ep_backend.EPBackend._record_graph_event(ep_backend.EPBackend._graph_event())
+        return records, calls
+
+    def test_rocm_events_are_recorded_once_outside_then_captured_through_hip(self):
+        # One record materializes the event outside capture; the captured one goes through HIP.
+        self.assertEqual(self._record(0), (["record"], [(0xE0, 0x5, 0x1)]))
+
+    def test_a_failed_hip_record_raises(self):
+        with self.assertRaisesRegex(RuntimeError, "hipEventRecordWithFlags"):
+            self._record(1)
+
+
 class EventPlacement(unittest.TestCase):
     """Which events each sibling chain may carry. The stub charges host work nothing, so these
     assert record placement in the trace rather than window values."""

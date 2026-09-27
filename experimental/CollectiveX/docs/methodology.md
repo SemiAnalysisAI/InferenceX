@@ -321,7 +321,8 @@ every check, without changing its contract.
 - **deepep-v2** low-latency and normal **decode**, run as vLLM's graphed `deepep_v2` decode runs
   ElasticBuffer (`do_cpu_sync=False`, receive sized to the next power of two of T; kernel
   generation `v2-elastic-buffer-nosync`). Normal prefill keeps its host sync and stays eager.
-- **MoRI** stays eager: ROCm torch before 2.13 rejects the external timing events.
+- **MoRI** both modes. ROCm torch before 2.13 rejects external events, so the timing events are
+  captured with `hipEventRecordWithFlags(..., hipEventRecordExternal)`, the call newer torch makes.
 
 Only the launch mechanism changes; every family keeps its eager meaning:
 
