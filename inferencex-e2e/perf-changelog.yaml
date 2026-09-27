@@ -8995,3 +8995,9 @@
     - "Validate MiniMax-M3 AgentX on H200 with vLLM FP8 after moving the end-to-end project into inferencex-e2e/. Preserve the existing image, recipe, and benchmark settings."
     - "将端到端项目迁入 inferencex-e2e/ 后，验证 H200 上的 vLLM FP8 MiniMax-M3 AgentX 运行路径，沿用现有镜像、配方和基准测试设置。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3525
+
+- config-keys:
+    - dsv41flash-fp4-b300-vllm-agentic-dspark
+  description:
+    - "Pin B300 DeepSeek-V4.1-Flash vLLM to nightly ddd6fbca with FlashInfer sparse attention, MXFP4 indexer KV, sparse logits, fp8 KV cache, and a 7200 s readiness timeout."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3458
