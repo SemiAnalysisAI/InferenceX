@@ -9292,3 +9292,9 @@
     - "Update the B200 DeepSeek-V4.1-Flash vLLM AgentX image from nightly ddd6fbca to nightly-dev-x86_64-cu130-ac9126e58aa7 and enable FlashInfer autotuning."
     - "Run TP4 at concurrency 1-128 and replace TP2 with DEP2 (TP1 x DP2 + EP2, DeepGEMM MegaMoE) at concurrency 8-32 and DEP4 (TP1 x DP4 + EP4, MegaMoE) at concurrency 64-128, both behind a consistent-hash vLLM Router. All points set gpu-memory-utilization 0.97."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3686
+
+- config-keys:
+    - dsv41flash-fp4-gb200-vllm-agentic-dspark
+  description:
+    - "Align GB200 DeepSeek-V4.1-Flash with B200 using vLLM nightly ddd6fbca and the same serving flags."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3395
