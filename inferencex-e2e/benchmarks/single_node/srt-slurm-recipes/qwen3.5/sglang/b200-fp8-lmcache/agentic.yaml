@@ -63,10 +63,11 @@ base:
       WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126_256k
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
 
-# The hicache c76 point with LMCache in place of HiCache. The server's L1 takes
-# the 2 x 8 x 104 GB the HiCache KV and Mamba host pools used. Its chunk is the
-# Mamba track interval, a multiple of the page; the hybrid model's recurrent
-# state needs separate object groups.
+# The hicache c76 point with LMCache in place of HiCache. The server pins its
+# whole L1 (GiB) in the background, beside SGLang in the job's 1920 GiB, so
+# 1400 GiB leaves SGLang its own host memory. The chunk is the Mamba track
+# interval, a multiple of the page; the recurrent state needs separate object
+# groups.
 override_tp8_lmcache_c76:
   # The worker imports LMCache's SGLang connector; see SETUP_PIP_PACKAGES.
   setup_script: pip-runtime-deps.sh
@@ -85,7 +86,7 @@ override_tp8_lmcache_c76:
         timeout_seconds: 900
       args:
         - --l1-size-gb
-        - '1664'
+        - '1400'
         - --chunk-size
         - '256'
         - --eviction-policy
