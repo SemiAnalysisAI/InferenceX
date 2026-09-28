@@ -83,10 +83,9 @@ gh workflow run collectivex-sweep.yml --ref main \
 `only_sku` 留空时运行当前九个 Slurm GPU 池，也可单独指定 `h200-dgxc`、`h100-dgxc`、
 `b200-nscale`、`b300`、`gb200`、`gb300`、`mi300x`、`mi325x` 或 `mi355x`。
 `exclude_skus` 接受以逗号分隔的排除列表；EP 筛选项应留空。每个任务请求 `nodes:1`，
-只运行一个 GPU 进程。Slurm 独占分配一个节点，`-tw` 则使用 runner 所在主机的 Docker。
+只运行一个 GPU 进程，由 Slurm 独占分配一个节点。
 CUDA 平台使用 `swap_image`，AMD 平台使用 `swap_rocm_image`，默认值为
-`vllm/vllm-openai-rocm:v0.27.1`；GB 平台选择 ARM64 镜像。Docker 以 runner 的
-UID/GID 写入文件。产物记录 SKU 和源码 SHA，名称为 `cxshard-swap-<sku>-<run_id>-<attempt>`。
+`vllm/vllm-openai-rocm:v0.27.1`；GB 平台选择 ARM64 镜像。产物记录 SKU 和源码 SHA，名称为 `cxshard-swap-<sku>-<run_id>-<attempt>`。
 
 H100 首先检查 `/mnt/nfs/lustre/containers` 中由运维预置的推理镜像缓存，
 按推理启动器的文件命名规则查找与请求标签完全一致的镜像。有效的 squash 可直接复用，
@@ -99,6 +98,4 @@ H100 首先检查 `/mnt/nfs/lustre/containers` 中由运维预置的推理镜像
 每个任务的临时导入目录在退出时清理。Slurm 排除列表与当前节点清单取交集，忽略已退役
 名称，同时保留对现有节点的排除。B300/GB300 与推理启动器保持一致，使用分区默认 QoS。
 
-旧版 `mi325x-tw` Docker 池仍可显式选择，能否运行取决于 runner
-是否在线。Docker 主机无法报告 Slurm 节点容量，因此不进入 Slurm 优先级调度器。
-默认扫描使用当前的 `mi300x` 和 `mi325x` Slurm 池；这两个新增平台未启用 EP 后端。
+默认扫描使用 `mi300x` 和 `mi325x` Slurm 池；这两个平台未启用 EP 后端。

@@ -67,11 +67,11 @@ Blank `only_sku` selects the nine current Slurm GPU pools;
 set it to `h200-dgxc`, `h100-dgxc`, `b200-nscale`, `b300`, `gb200`, `gb300`,
 `mi300x`, `mi325x`, or `mi355x` for an isolated GPU sweep. `exclude_skus`
 accepts a comma-separated exclusion list. Leave EP filters blank. Each cell requests
-`nodes:1` and runs one GPU process; Slurm cells allocate an exclusive node, while
-`-tw` cells use the runner's Docker host. `all` remains EP-only.
+`nodes:1` and runs one GPU process in an exclusive Slurm node allocation. `all`
+remains EP-only.
 CUDA pools use `swap_image`; AMD pools use `swap_rocm_image` (default
 `vllm/vllm-openai-rocm:v0.27.1`). GB pools select the image's ARM64 variant.
-Docker writes as the runner UID/GID, and each artifact records its SKU and source SHA.
+Each artifact records its SKU and source SHA.
 
 The `smoke` profile covers all three directions, both layouts, block sizes
 257/4096/65536/262144 bytes (up to 256 KiB), and counts 1/4/16/64/256/1024/2048, with 4 warmups and 20 samples
@@ -110,7 +110,5 @@ intersected with the current node inventory: retired names cannot invalidate the
 allocation, while exclusions of existing nodes are preserved. B300/GB300 use the
 partition default QoS, matching their serving launchers.
 
-`mi325x-tw` remains an explicitly selectable legacy Docker pool,
-subject to runner availability. It bypasses the Slurm priority scheduler because
-Docker-only hosts cannot advertise Slurm node capacity. The default sweep uses
-the current `mi300x` and `mi325x` Slurm pools; their EP backend registries remain empty.
+The default sweep uses the `mi300x` and `mi325x` Slurm pools; their EP backend
+registries remain empty.

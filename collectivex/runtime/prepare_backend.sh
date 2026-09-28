@@ -216,7 +216,7 @@ deepep_install() {
     || { collx_log "ERROR: DeepEP V2 build-tool installation failed"; return 1; }
   "${pip[@]}" --index-url https://download.pytorch.org/whl/cu130 \
     --extra-index-url https://pypi.org/simple "$COLLX_DEEPEP_V2_TORCH_SPEC" >&2 2>&1 \
-    || { collx_log "ERROR: torch 2.10.0+cu130 installation failed"; return 1; }
+    || { collx_log "ERROR: $COLLX_DEEPEP_V2_TORCH_SPEC (cu130) installation failed"; return 1; }
   # Torch pins NCCL 2.28.9; ElasticBuffer requires 2.30.4.
   "${pip[@]}" --force-reinstall --no-deps "nvidia-nccl-cu13==2.30.4" >&2 2>&1 \
     || { collx_log "ERROR: NCCL 2.30.4 installation failed"; return 1; }
@@ -248,7 +248,7 @@ deepep_prepare() {
   lock_path="${root}.lock"
   command -v flock >/dev/null || { collx_log "ERROR: flock is required for DeepEP V2"; return 1; }
   mkdir -p "${root%/*}" || return 1
-  collx_log "DeepEP V2: preparing PR #605 with upstream PR #630 and #640 fixes ($COLLX_DEEPEP_V2_COMMIT)"
+  collx_log "DeepEP V2: preparing upstream main ($COLLX_DEEPEP_V2_COMMIT)"
   if ! (
     [ ! -L "$lock_path" ] \
       || { collx_log "ERROR: DeepEP V2 cache lock is unsafe"; exit 1; }

@@ -9,10 +9,10 @@ collx_log() { printf '[collectivex] %s\n' "$*" >&2; }
 collx_die() { printf '[collectivex] FATAL: %s\n' "$*" >&2; exit 1; }
 
 COLLX_DEEPEP_V2_REPO="https://github.com/deepseek-ai/DeepEP"
-# Upstream DeepEP main. Carries #630 (single-node V2 init), #642 (fence.proxy.async in
-# LOW_LATENCY_COMBINE_RECV; fixes the Blackwell low-latency combine corruption, DeepEP issue
-# #700), #715 (system-scope release before the GIN barrier), #688 (NCCL Device API compat) and
-# #640/#627 (pip-wheel SO-name resolution). The backend cache is keyed on this value.
+# Upstream DeepEP main: it carries single-node V2 init, the fence.proxy.async in
+# LOW_LATENCY_COMBINE_RECV (without it Blackwell low-latency combine corrupts), the system-scope
+# release before the GIN barrier, NCCL Device API compat and pip-wheel SO-name resolution. The
+# backend cache is keyed on this value.
 COLLX_DEEPEP_V2_COMMIT="01dc3aaac82068020353dce2c302e38153c0bfaa"
 
 # Must match the image's CUDA line: the cu12 wheel's r12 host library on cu130 images survives
@@ -32,9 +32,9 @@ COLLX_DEEPEP_V2_BUILD_GEN="dlarch1"
 COLLX_UCCL_REPO="https://github.com/uccl-project/uccl"
 COLLX_UCCL_COMMIT="fc1b582031221645ea9fce58aeb57187713145e3"
 
-# nccl-extensions (github.com/NVIDIA/nccl-extensions) owns nccl.ep since nccl4py stopped
-# bundling it at 0.4; its combine-recv fence (the DeepEP #642 analogue) releases the low-latency
-# ladder clamp. nccl4py is pinned alongside so a rebuild resolves the same tree. Two
+# nccl-extensions (github.com/NVIDIA/nccl-extensions) owns nccl.ep, which nccl4py >= 0.4 does
+# not bundle; its combine-recv fence (DeepEP's LOW_LATENCY_COMBINE_RECV analogue) releases the
+# low-latency ladder clamp. nccl4py is pinned alongside so a rebuild resolves the same tree. Two
 # whitespace-separated pip specs: the install site word-splits this deliberately, and the whole
 # string keys the shared cache dir.
 COLLX_NCCL_EP_SPEC="nccl-extensions[cu13]==0.1.0 nccl4py[cu13]==0.5.0"
@@ -729,26 +729,21 @@ collx_ensure_squash() {
     rm -f "$sq" "$sq.digest" 2>> "$log" \
       || { collx_log_tail "$log"; return 1; }
     # </dev/null: never block on an interactive password prompt.
-    if [ "${COLLX_ENROOT_LOCAL_IMPORT:-0}" = 1 ]; then
-      enroot_local="$(mktemp -d /tmp/inferencex-collectivex-enroot.XXXXXX)" \
-        || { collx_log_tail "$log"; return 1; }
-      (
-        trap 'rm -rf -- "$enroot_local"' EXIT
-        export ENROOT_TEMP_PATH="$enroot_local/tmp"
-        export ENROOT_CACHE_PATH="$enroot_local/cache"
-        export ENROOT_DATA_PATH="$enroot_local/data"
-        export ENROOT_RUNTIME_PATH="$enroot_local/run"
-        mkdir -p "$ENROOT_TEMP_PATH" "$ENROOT_CACHE_PATH" \
-          "$ENROOT_DATA_PATH" "$ENROOT_RUNTIME_PATH"
-        enroot import -o "$sq" "docker://$image" </dev/null
-      ) >> "$log" 2>&1 || import_rc=$?
-      rm -rf -- "$enroot_local" >/dev/null 2>&1 || true
-      [ "$import_rc" = 0 ] \
-        || { collx_log_tail "$log"; return 1; }
-    else
-      enroot import -o "$sq" "docker://$image" </dev/null >> "$log" 2>&1 \
-        || { collx_log_tail "$log"; return 1; }
-    fi
+    enroot_local="$(mktemp -d /tmp/inferencex-collectivex-enroot.XXXXXX)" \
+      || { collx_log_tail "$log"; return 1; }
+    (
+      trap 'rm -rf -- "$enroot_local"' EXIT
+      export ENROOT_TEMP_PATH="$enroot_local/tmp"
+      export ENROOT_CACHE_PATH="$enroot_local/cache"
+      export ENROOT_DATA_PATH="$enroot_local/data"
+      export ENROOT_RUNTIME_PATH="$enroot_local/run"
+      mkdir -p "$ENROOT_TEMP_PATH" "$ENROOT_CACHE_PATH" \
+        "$ENROOT_DATA_PATH" "$ENROOT_RUNTIME_PATH"
+      enroot import -o "$sq" "docker://$image" </dev/null
+    ) >> "$log" 2>&1 || import_rc=$?
+    rm -rf -- "$enroot_local" >/dev/null 2>&1 || true
+    [ "$import_rc" = 0 ] \
+      || { collx_log_tail "$log"; return 1; }
     unsquashfs -l "$sq" >> "$log" 2>&1 \
       || { collx_log_tail "$log"; return 1; }
     # World-readable so another account's launcher can reuse the squash instead of dying on
@@ -1047,9 +1042,9 @@ collx_run_shard() {
       || { rm -f "$argv_file"; collx_die "case $ci produced no benchmark arguments"; }
     collx_log "EP${NGPUS}[$((ci + 1))/$expected_cases] $COLLX_BENCH"
     runtime_log="$(collx_private_log_path "runtime-c$(printf '%03d' "$ci")")"
-    # A hang guard, not a work budget: 900 killed FP8 prefill cases with complete artifacts, and
-    # 1800 killed b200/h200 multi-node EP16 prefill (virtualized pools with degraded GPU-NIC p2p,
-    # ~34 GB/s per node; see docs/methodology.md). 5400 stays inside the 300-minute allocation.
+    # A hang guard, not a work budget: FP8 prefill and multi-node EP16 prefill on pools with
+    # degraded GPU-NIC p2p (~34 GB/s per node; see docs/methodology.md) legitimately run past 30
+    # minutes. 5400 stays inside the 300-minute allocation.
     if ! timeout -k 30 "${COLLX_RUN_TIMEOUT:-5400}" \
       srun --jobid="$JOB_ID" --nodes="$NODES" \
       --ntasks="$NGPUS" --ntasks-per-node="$GPN" --chdir=/tmp \

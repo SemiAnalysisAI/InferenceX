@@ -395,8 +395,8 @@ class ContainerImportRetry(unittest.TestCase):
     SOFT-mounted network filesystem -- one that returns an error instead of blocking when its
     transport drops. gb300's /data is NFSv3 over RDMA, and a transport gap there surfaces from
     `mkdir` as "Protocol family not supported", which reads like a missing mount but is not: the
-    same node writes it fine minutes later. Run 31089556516 lost its gb300 shards that way, ~25
-    minutes into each leg, so the import must not treat one such failure as terminal.
+    same node writes it fine minutes later, so the import must not treat one such failure as
+    terminal.
     """
 
     HARNESS = """
