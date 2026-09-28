@@ -460,7 +460,7 @@ index 641709f..121f060 100644
      def get_mooncake_worker_env(self, infra_node_ip: str, local_hostname: str) -> dict[str, str]:
          """Get mooncake env vars to inject on a specific worker.
 diff --git a/src/srtctl/backends/vllm.py b/src/srtctl/backends/vllm.py
-index 048627a..5d47ae1 100644
+index 048627a..79168fd 100644
 --- a/src/srtctl/backends/vllm.py
 +++ b/src/srtctl/backends/vllm.py
 @@ -35,6 +35,7 @@ from srtctl.ports import (
@@ -480,7 +480,21 @@ index 048627a..5d47ae1 100644
      # Can be overridden per role by setting "connector" in roles.<role>.args; connector_for_mode resolves it.
      # "moriio" (ROCm MoRI-IO) registers workers with the vLLM Router and needs frontend.type: vllm-router.
      # dynamo 1.0.0+: translated to --kv-transfer-config (--connector was removed).
-@@ -1756,6 +1757,8 @@ class KVConnector:
+@@ -1278,9 +1279,10 @@ class VLLMProtocol:
+             overridden = pop_vllm_orchestration_flags(config)
+             config.setdefault("served-model-name", served_model_name)
+ 
+-            # A prefill/decode worker gets its KV connector; an aggregate worker has none.
+-            config.pop("connector", None)
+-            if mode in {"prefill", "decode"}:
++            # A prefill/decode worker gets its KV connector. An aggregate worker gets
++            # only the one its role names (e.g. lmcache-mp offload), not the P/D default.
++            role_connector = config.pop("connector", None)
++            if mode in {"prefill", "decode"} or role_connector is not None:
+                 kv_transfer_config = self.kv_transfer_config(mode, process, runtime)
+                 if kv_transfer_config is not None:
+                     config.setdefault("kv-transfer-config", kv_transfer_config)
+@@ -1756,6 +1758,8 @@ class KVConnector:
      kv_role: str | None = "kv_both"
      module_path: str | None = None
      discovery: bool = False
@@ -489,7 +503,7 @@ index 048627a..5d47ae1 100644
  
      def transfer_config(self, mode: WorkerMode) -> dict[str, Any]:
          """The ``--kv-transfer-config`` payload for a worker mode, before any topology-derived extras."""
-@@ -1763,6 +1766,8 @@ class KVConnector:
+@@ -1763,6 +1767,8 @@ class KVConnector:
          if self.module_path is not None:
              payload["kv_connector_module_path"] = self.module_path
          payload["kv_role"] = self.kv_role or ("kv_producer" if mode == "prefill" else "kv_consumer")
@@ -498,7 +512,7 @@ index 048627a..5d47ae1 100644
          return payload
  
  
-@@ -1770,6 +1775,12 @@ class KVConnector:
+@@ -1770,6 +1776,12 @@ class KVConnector:
  _CONNECTOR_MAP: dict[str, KVConnector] = {
      "nixl": KVConnector("NixlConnector"),
      "lmcache": KVConnector("LMCacheConnectorV1"),
@@ -785,7 +799,7 @@ index 0000000..52f3f8d
 +
 +    assert backend.get_process_environment(_process()) == {}
 diff --git a/tests/test_vllm_connectors.py b/tests/test_vllm_connectors.py
-index 691990b..4bb0974 100644
+index 691990b..1dfe69e 100644
 --- a/tests/test_vllm_connectors.py
 +++ b/tests/test_vllm_connectors.py
 @@ -23,6 +23,14 @@ def test_table_presets_serialize_exactly_as_before():
@@ -803,3 +817,43 @@ index 691990b..4bb0974 100644
      assert VLLMProtocol(connector="kvbm").kv_transfer_config("decode") == json.dumps(
          {
              "kv_connector": "DynamoConnector",
+@@ -67,3 +75,39 @@ def test_a_mode_dependent_role_follows_the_worker_mode():
+     assert row.transfer_config("prefill")["kv_role"] == "kv_producer"
+     assert row.transfer_config("decode")["kv_role"] == "kv_consumer"
+     assert KVConnector("SomeConnector").transfer_config("prefill")["kv_role"] == "kv_both"
++
++
++@pytest.mark.parametrize(
++    ("aggregated", "expected"),
++    [
++        ({}, None),
++        ({"connector": "none"}, None),
++        ({"connector": "lmcache-mp"}, _CONNECTOR_MAP["lmcache-mp"].transfer_config("agg")),
++    ],
++)
++def test_direct_aggregate_worker_runs_only_its_role_connector(aggregated, expected):
++    """A direct `vllm serve` aggregate worker skips the P/D default connector but keeps the one its role names."""
++    from pathlib import Path
++    from unittest.mock import MagicMock
++
++    from srtctl.core.topology import Process
++
++    backend = VLLMProtocol(connector="nixl", vllm_config=VLLMServerConfig(aggregated=aggregated))
++    process = Process(
++        node="node0",
++        gpu_indices=frozenset(range(8)),
++        sys_port=8081,
++        http_port=0,
++        endpoint_mode="agg",
++        endpoint_index=0,
++        node_rank=0,
++    )
++    runtime = MagicMock(model_path=Path("/model"), is_hf_model=False, frontend_port=9000)
++
++    cmd = backend.build_worker_command(
++        process=process, endpoint_processes=[process], runtime=runtime, frontend_type="vllm"
++    )
++
++    assert "--connector" not in cmd
++    kv_config = json.loads(cmd[cmd.index("--kv-transfer-config") + 1]) if "--kv-transfer-config" in cmd else None
++    assert kv_config == expected
