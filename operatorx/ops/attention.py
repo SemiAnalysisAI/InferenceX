@@ -231,12 +231,12 @@ class Dsv4AttnArgs:
     cache write -> sparse MQA over window + compressed tokens with attn_sink -> inverse
     RoPE -> wo_a (o_groups grouped) -> wo_b.
 
-    compress_ratio: 0 window only; 4 / 128 V4-Pro (4 with an indexer, 128 attends every
-    compressed token); 1 / 2 V4.1. The compressor's overlap, positional embedding and
+    compress_ratio: 4 / 128 V4-Pro (4 with an indexer, 128 attends every compressed
+    token); 0 (window only), 1 / 2 V4.1. The compressor's overlap, positional embedding and
     gate follow from the ratio as in the checkpoints. source false: a layer that reads
     a pre-filled compressed cache written by another layer and has no compressor.
     rope_theta applies to window-only layers, compress_rope_theta (+ rope_scaling) to
-    compressed ones. index_cache_dtype: fp8, or mxfp4 (vLLM use_fp4_indexer_cache).
+    compressed ones. index_cache_dtype: the indexer K cache (vLLM indexer_kv_dtype).
     """
     hidden: int
     heads: int
@@ -282,7 +282,7 @@ class Dsv4AttnArgs:
         else:
             for k in index:
                 _pos_int(getattr(self, k), k)
-            _choice(self.index_cache_dtype or "fp8", "index_cache_dtype", {"fp8", "mxfp4"})
+            _choice(self.index_cache_dtype or "fp8", "index_cache_dtype", {"bf16", "fp8", "mxfp4", "nvfp4"})
         _number(self.rope_theta, "rope_theta")
         if self.compress_ratio:
             _number(self.compress_rope_theta, "compress_rope_theta")
@@ -422,21 +422,20 @@ class KdaArgs:
     """Kimi Delta Attention (Kimi-K3 linear layers).
 
     Timed: q_proj, k_proj, v_proj, g_proj, f_a_proj, b_proj -> f_b_proj (the
-    gate_rank-wide per-channel decay gate) -> causal depthwise conv1d on q / k / v with
+    head_dim-rank per-channel decay gate) -> causal depthwise conv1d on q / k / v with
     conv-state update -> decay and beta gates -> gated delta rule with q / k L2 norm,
     reading and writing the recurrent state -> RMSNorm gated by g -> o_proj.
     """
     hidden: int
     heads: int
     head_dim: int
-    gate_rank: int
     conv_kernel: int
     batch: dict
     state_dtype: str = "fp32"
     proj: dict | None = None
 
     def __post_init__(self):
-        for k in ("hidden", "heads", "head_dim", "gate_rank", "conv_kernel"):
+        for k in ("hidden", "heads", "head_dim", "conv_kernel"):
             _pos_int(getattr(self, k), k)
         _choice(self.state_dtype, "state_dtype", STATE_DTYPES)
         _check_proj(self.proj or {}, KDA_PROJ)

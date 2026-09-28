@@ -74,10 +74,29 @@ def _quant(op: Op, names: tuple[str, ...]) -> dict | None:
     return scheme[1]
 
 
+def _kimi_k3(mla: dict, kda: dict, target: str) -> _Build:
+    """Kimi-K3: one KDA layer then one MLA layer (1-based layer lists), dense MLPs."""
+    c = _family("kimi_k3")
+    t = c["text_config"]
+    lin = dict(t["linear_attn_config"], kda_layers=[1], full_attn_layers=[2], **kda)
+    t.update(num_hidden_layers=2, linear_attn_config=lin, first_k_dense_replace=2, intermediate_size=_MLP,
+             num_nextn_predict_layers=0, vocab_size=_VOCAB, **mla)
+    return _Build("kimi_k3", c, target, {"language_model_only": True})
+
+
+def _mla_dims(a: dict) -> dict:
+    return dict(hidden_size=a["hidden"], num_attention_heads=a["heads"], num_key_value_heads=a["heads"],
+                q_lora_rank=a["q_lora_rank"], kv_lora_rank=a["kv_lora_rank"], qk_nope_head_dim=a["nope"],
+                qk_rope_head_dim=a["rope_dim"], v_head_dim=a["v"])
+
+
 def _build_mla(op: Op) -> _Build:
     a = op.args
     if not a.get("rope", True) or a.get("gate"):
-        raise UnsupportedOpError("MLA without RoPE or with an output gate (Kimi-K3) is not wired yet")
+        if a.get("rope", True):
+            raise UnsupportedOpError("the gated MLA module (Kimi-K3) has no RoPE")
+        return _kimi_k3(dict(_mla_dims(a), mla_use_nope=True, mla_use_output_gate=bool(a.get("gate"))), {},
+                        "layers.1.self_attn")
     c = _family("deepseek_v3")
     c.update(hidden_size=a["hidden"], num_attention_heads=a["heads"], num_key_value_heads=a["heads"],
              q_lora_rank=a["q_lora_rank"], kv_lora_rank=a["kv_lora_rank"], qk_nope_head_dim=a["nope"],
@@ -127,20 +146,136 @@ def _build_gqa(op: Op) -> _Build:
 
 
 def _build_gdn(op: Op) -> _Build:
+    """silu: Qwen3.5's Gated DeltaNet; sigmoid: Qwen3.8's."""
     a = op.args
-    if a.get("norm_act", "silu") != "silu":
-        raise UnsupportedOpError("the sigmoid-gated GDN (Qwen3.8) is not wired yet")
     linear = dict(hidden_size=a["hidden"], linear_num_key_heads=a["qk_heads"], linear_num_value_heads=a["v_heads"],
                   linear_key_head_dim=a["head_dim"], linear_value_head_dim=a["head_dim"],
                   linear_conv_kernel_dim=a["conv_kernel"],
                   mamba_ssm_dtype={"fp32": "float32", "bf16": "bfloat16"}[a.get("state_dtype", "fp32")])
+    if a.get("norm_act", "silu") == "sigmoid":
+        return _build_gdn_qwen38(a, linear)
     b = _qwen35(a, {}, linear, "layers.0.linear_attn")
     b.engine["mamba_ssm_cache_dtype"] = linear["mamba_ssm_dtype"]
     return b
 
 
+def _build_kda(op: Op) -> _Build:
+    a = op.args
+    b = _kimi_k3({"hidden_size": a["hidden"]},
+                 {"num_heads": a["heads"], "head_dim": a["head_dim"], "short_conv_kernel_size": a["conv_kernel"]},
+                 "layers.0.self_attn")
+    b.engine["mamba_ssm_cache_dtype"] = {"fp32": "float32", "bf16": "bfloat16"}[a.get("state_dtype", "fp32")]
+    return b
+
+
+def _build_mla_dsa(op: Op) -> _Build:
+    """GLM-5.x: a layer with its own indexer, then one reusing its top-k ("FS")."""
+    a = op.args
+    c = _family("glm_moe_dsa")
+    rope = {"rope_type": "default", "rope_theta": a["rope_theta"]}
+    if a.get("rope_scaling"):
+        raise UnsupportedOpError("rope scaling for the GLM sparse MLA module is not wired")
+    c.update(_mla_dims(a), qk_head_dim=a["nope"] + a["rope_dim"], rope_parameters=rope, index_topk=a["topk"],
+             index_n_heads=a["index_heads"], index_head_dim=a["index_dim"], num_hidden_layers=2,
+             index_topk_pattern="FS", indexer_types=["full", "shared"], mlp_layer_types=["dense", "dense"],
+             first_k_dense_replace=2, intermediate_size=_MLP, num_nextn_predict_layers=0, vocab_size=_VOCAB)
+    return _Build("glm_moe_dsa", c, "layers.0.self_attn" if a.get("indexer", "own") == "own" else "layers.1.self_attn")
+
+
+def _qwen38(text: dict, target: str) -> _Build:
+    """Qwen3.8-Flash-Next: one Gated DeltaNet layer then one QSA layer."""
+    c = _family("qwen4_exp")
+    t = c["text_config"]
+    t.update(num_hidden_layers=2, layer_types=["linear_attention", "full_attention"], mtp_num_hidden_layers=0,
+             ple_layer_ids=[], num_experts=8, num_experts_per_tok=2, moe_intermediate_size=_MLP,
+             shared_expert_intermediate_size=_MLP, **text)
+    return _Build("qwen4_exp", c, target, {"language_model_only": True})
+
+
+def _build_qsa(op: Op) -> _Build:
+    a = op.args
+    rope = {"rope_type": "default", "rope_theta": a["rope_theta"], "partial_rotary_factor": a["rope_dim"] / a["head_dim"]}
+    if a.get("mrope_section"):
+        rope.update(mrope_section=a["mrope_section"], mrope_interleaved=True)
+    return _qwen38(dict(hidden_size=a["hidden"], num_attention_heads=a["q_heads"], num_key_value_heads=a["kv_heads"],
+                        head_dim=a["head_dim"], partial_rotary_factor=rope["partial_rotary_factor"],
+                        rope_parameters=rope, indexer_n_heads=a["index_heads"], indexer_kv_heads=1,
+                        indexer_head_dim=a["index_dim"], indexer_budget=a["budget"],
+                        indexer_compress_ratio=a["compress"]), "layers.1.self_attn")
+
+
+# DeepSeek-V4.1's layer roles, as the checkpoint arranges them: window-only, then ratio-2
+# (a KV + index source, a consumer reusing its top-k), then ratio-1 (the KV + index source
+# that publishes candidate blocks, a consumer, an index source over the shared index cache).
+_V41_RATIOS = [0, 2, 2, 1, 1, 1]
+_V41_LAYER = {(0, True, None): 0, (2, True, "own"): 1, (2, False, "reuse"): 2, (1, True, "own"): 3,
+              (1, False, "reuse"): 4, (1, False, "shared"): 5}
+
+
+def _build_dsv41(a: dict) -> _Build:
+    layer = _V41_LAYER.get((a["compress_ratio"], a.get("source", True), a.get("indexer")))
+    if layer is None:
+        raise UnsupportedOpError("DeepSeek-V4.1 has no layer with this compress ratio / source / indexer")
+    c = _family("deepseek_v41")
+    t = c["text_config"]
+    t.update(hidden_size=a["hidden"], num_attention_heads=a["heads"], head_dim=a["head_dim"],
+             qk_rope_head_dim=a["rope_dim"], q_lora_rank=a["q_lora_rank"], sliding_window=a["window"],
+             o_groups=a["o_groups"], o_lora_rank=a["o_lora_rank"], compress_ratios=_V41_RATIOS,
+             kv_source_layer_ids=[1, 3], index_source_layer_ids=[1, 3, 5], candidate_source_layer_id=3,
+             rope_theta=a.get("rope_theta", 10000.0), num_hidden_layers=len(_V41_RATIOS),
+             num_nextn_predict_layers=0, engram_layer_ids=[], dspark_target_layer_ids=[], n_routed_experts=8,
+             num_experts_per_tok=2, moe_intermediate_size=_MLP, vocab_size=_VOCAB)
+    if a.get("compress_rope_theta"):
+        t["compress_rope_theta"] = a["compress_rope_theta"]
+    if a.get("rope_scaling"):
+        t["rope_scaling"] = dict(_yarn(a["rope_scaling"]), rope_type="yarn")
+    if a.get("indexer"):
+        t.update(index_topk=a["topk"], index_n_heads=a["index_heads"], index_head_dim=a["index_dim"])
+    return _Build("deepseek_v41", c, f"layers.{layer}.attn", {"language_model_only": True})
+
+
+def _build_dsv4(op: Op) -> _Build:
+    """compress ratio 4 / 128: DeepSeek-V4-Pro; 0 / 1 / 2: DeepSeek-V4.1-Flash."""
+    a = op.args
+    if a["compress_ratio"] in (0, 1, 2):
+        b = _build_dsv41(a)
+    else:
+        b = _build_dsv4_pro(a)
+    if a.get("index_cache_dtype"):
+        b.engine["attention_config"] = {"indexer_kv_dtype": a["index_cache_dtype"]}
+    return b
+
+
+def _build_dsv4_pro(a: dict) -> _Build:
+    c = _family("deepseek_v4")
+    c.pop("expert_dtype", None)
+    # the C4A and C128A layers share one KV cache layout, so either is built next to the other
+    ratios = [4, 128]
+    c.update(hidden_size=a["hidden"], num_attention_heads=a["heads"], head_dim=a["head_dim"],
+             qk_rope_head_dim=a["rope_dim"], q_lora_rank=a["q_lora_rank"], sliding_window=a["window"],
+             o_groups=a["o_groups"], o_lora_rank=a["o_lora_rank"], compress_ratios=ratios,
+             rope_theta=a.get("rope_theta", 10000.0), num_hidden_layers=len(ratios), num_nextn_predict_layers=0,
+             num_hash_layers=0, n_routed_experts=8, num_experts_per_tok=2, moe_intermediate_size=_MLP,
+             vocab_size=_VOCAB)
+    if a["compress_ratio"]:
+        c["compress_rope_theta"] = a["compress_rope_theta"]
+        if a.get("rope_scaling"):
+            c["rope_scaling"] = _yarn(a["rope_scaling"])
+    if a.get("indexer"):
+        c.update(index_topk=a["topk"], index_n_heads=a["index_heads"], index_head_dim=a["index_dim"])
+    return _Build("deepseek_v4", c, f"layers.{ratios.index(a['compress_ratio'])}.attn")
+
+
+def _build_gdn_qwen38(a: dict, linear: dict) -> _Build:
+    b = _qwen38(linear, "layers.0.linear_attn")
+    b.engine["mamba_ssm_cache_dtype"] = linear["mamba_ssm_dtype"]
+    return b
+
+
 _BUILDERS = {"mla": (_build_mla, schema.MLA_PROJ[:-1]), "gqa": (_build_gqa, schema.GQA_PROJ),
-             "gdn": (_build_gdn, schema.GDN_PROJ)}
+             "gdn": (_build_gdn, schema.GDN_PROJ), "kda": (_build_kda, schema.KDA_PROJ),
+             "mla_dsa": (_build_mla_dsa, schema.MLA_DSA_PROJ[:5]), "qsa": (_build_qsa, schema.QSA_PROJ),
+             "dsv4_attn": (_build_dsv4, schema.DSV4_PROJ[:5])}
 
 
 class _Engine:
@@ -164,8 +299,6 @@ class _Engine:
             core = self.llm.llm_engine.engine_core.engine_core
             self.runner = core.model_executor.driver_worker.worker.model_runner
             self.kvm = core.scheduler.kv_cache_manager
-            self.module = next(m for n, m in self.runner.model.named_modules() if n.endswith(b.module))
-            self.forward = self.module.forward
             _fill_caches(self.runner)
         except BaseException:
             self.close()
@@ -175,10 +308,11 @@ class _Engine:
         from vllm.distributed.parallel_state import cleanup_dist_env_and_memory
         try:
             self.release()
-            self.llm.llm_engine.engine_core.shutdown()
+            if hasattr(self, "llm"):
+                self.llm.llm_engine.engine_core.shutdown()
         except Exception as e:  # noqa: BLE001 - teardown is best effort
             print(f"[vllm.attention] engine shutdown: {type(e).__name__}: {e}", file=sys.stderr)
-        for k in ("llm", "runner", "kvm", "module", "forward"):
+        for k in ("llm", "runner", "kvm"):
             self.__dict__.pop(k, None)
         cleanup_dist_env_and_memory()
         gc.collect()
@@ -195,15 +329,16 @@ class _Engine:
 
     def release(self) -> None:
         """Finish the previous op's requests in the runner and free their blocks."""
-        if not self.reqs:
+        if not self.reqs or not hasattr(self, "runner"):
             return
         self.runner.execute_model(self._output([], {}, {r.request_id for r in self.reqs}))
         for r in self.reqs:
             self.kvm.free(r)
         self.reqs = []
 
-    def step(self, batch: dict) -> dict:
-        """Schedule the batch; return the module call the model made, and its context."""
+    def step(self, batch: dict, path: str) -> dict:
+        """Schedule the batch; return the call the model made to the module at path (a
+        module-name suffix), with its forward context."""
         from vllm import SamplingParams
         from vllm.forward_context import get_forward_context
         from vllm.v1.core.sched.output import NewRequestData
@@ -224,21 +359,23 @@ class _Engine:
         if batch.get("pages", "contiguous") == "shuffled":
             blocks = _shuffle(blocks, rng)
         new = [NewRequestData.from_request(r, b, r._all_token_ids) for r, b in zip(self.reqs, blocks)]
-        seen: dict = {}
+        module = next(m for n, m in self.runner.model.named_modules() if n.endswith(path))
+        forward = module.forward
+        seen: dict = {"forward": forward}
 
         def capture(*args, **kwargs):
-            if not seen:
+            if "fc" not in seen:
                 seen.update(args=args, kwargs=kwargs, fc=get_forward_context())
-            return self.forward(*args, **kwargs)
+            return forward(*args, **kwargs)
 
-        self.module.forward = capture
+        module.forward = capture
         try:
             self.runner.execute_model(self._output(new, {r.request_id: r.num_tokens - r.num_computed_tokens
                                                          for r in self.reqs}, set()))
         finally:
-            self.module.forward = self.forward
+            module.forward = forward
             self.runner.execute_model_state = None
-        if not seen:
+        if "fc" not in seen:
             raise RuntimeError("the model never called the attention module")
         return seen
 
@@ -309,10 +446,15 @@ def _prepare(op: Op) -> dict:
     kv = a.get("kv_cache_dtype")
     if kv is not None:
         b.engine["kv_cache_dtype"] = _KV_DTYPES[kv]
-    eng = _engine(b)
-    seen = eng.step(a["batch"])
+    try:
+        eng = _engine(b)
+    except (ValueError, NotImplementedError, AssertionError) as e:
+        if vllm_linear._is_fault(e):
+            raise
+        raise UnsupportedOpError(f"vLLM rejected the {b.family} module: {type(e).__name__}: {e}"[:400]) from e
+    seen = eng.step(a["batch"], b.module)
     ctx = {"engine": eng, **seen,
-           "meta": {"vllm_family": b.family, "vllm_repo": _MODELS[b.family]["repo"],
+           "meta": {"vllm_family": b.family, "vllm_repo": _MODELS[b.family]["repo"], "vllm_module": b.module,
                     "vllm_backends": _backends(eng.runner),
                     "vllm_attn_metadata": {k: type(v).__name__ for k, v in (seen["fc"].attn_metadata or {}).items()},
                     "kv_cache_groups": [
@@ -327,7 +469,7 @@ def _prepare(op: Op) -> dict:
 def _kernel(ctx: dict) -> None:
     from vllm.forward_context import override_forward_context
     with override_forward_context(ctx["fc"]):
-        ctx["out"] = ctx["engine"].forward(*ctx["args"], **ctx["kwargs"])
+        ctx["out"] = ctx["forward"](*ctx["args"], **ctx["kwargs"])
 
 
 def _cudagraph(ctx: dict) -> bool:
@@ -356,21 +498,35 @@ def _cudagraph(ctx: dict) -> bool:
     return True
 
 
+def _ready_upstream(ctx: dict) -> None:
+    """In serving, a layer that reuses an earlier layer's top-k waits on events that
+    earlier layer recorded in the same graph. Captured alone, it would wait on events
+    recorded outside the capture; record them here, already satisfied, instead."""
+    stream = torch.cuda.current_stream()
+    for m in ctx["engine"].runner.model.modules():
+        group = getattr(getattr(m, "impl", None), "index_group", None) or getattr(m, "index_group", None)
+        for name in ("logical_topk_ready", "physical_topk_ready"):
+            ev = getattr(group, name, None)
+            if ev is not None:
+                ev.record(stream)
+
+
 def _launcher(ctx: dict):
-    eager = (lambda: _kernel(ctx)), False  # noqa: E731
+    eager = (lambda: _kernel(ctx)), False
     if not _cudagraph(ctx):
         return eager
     from vllm.forward_context import override_forward_context
     try:
         with override_forward_context(ctx["fc"]):
             for _ in range(2):
-                ctx["engine"].forward(*ctx["args"], **ctx["kwargs"])
+                ctx["forward"](*ctx["args"], **ctx["kwargs"])
             torch.cuda.synchronize()
             g = torch.cuda.CUDAGraph()
             with torch.cuda.graph(g, pool=torch.cuda.graph_pool_handle()):
-                ctx["graph_out"] = ctx["engine"].forward(*ctx["args"], **ctx["kwargs"])
+                _ready_upstream(ctx)
+                ctx["graph_out"] = ctx["forward"](*ctx["args"], **ctx["kwargs"])
         torch.cuda.synchronize()
-    except Exception as e:  # noqa: BLE001 - fall back to eager, as the linear launcher does
+    except Exception as e:  # fall back to eager, as the linear launcher does
         if vllm_linear._is_fault(e):
             raise
         torch.cuda.synchronize()
