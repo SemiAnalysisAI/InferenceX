@@ -58,8 +58,8 @@ PYENV
     # native recipe environment and benchmark.env retain their override priority.
     local source="$INFERENCEX_SLURM_UTILS_DIR/../utils/srt-slurm"
     if [[ "$framework" == "tilert" ]]; then
-        # TileRT still needs its legacy runtime until the native backend and router land.
-        SRT_SLURM_COMMIT=6bc3f306bdafa1edfb5dded2fcda8f1ccede1bde
+        # Per-role engines and the TileRT router: SemiAnalysisAI/srt-slurm#33 and #29.
+        SRT_SLURM_COMMIT=f2b1e91d4193dab62ee568d70a85fc5587c72680
         git init --quiet "$destination" || return 1
         git -C "$destination" remote add origin https://github.com/SemiAnalysisAI/srt-slurm.git || return 1
         git -C "$destination" fetch --quiet --depth=1 origin "$SRT_SLURM_COMMIT" || return 1
@@ -70,16 +70,16 @@ PYENV
             return 1
         fi
         SRT_SLURM_COMMIT=$(git -C "$source" rev-parse HEAD) || return 1
-        SRTCTL_EVAL_ARGS+=(--set benchmark.stream_output=true)
         # A local clone keeps job writes isolated and preserves upstream Git provenance.
         git -c advice.detachedHead=false clone --quiet --no-hardlinks "$source" "$destination" || return 1
-        # Temporary fixes awaiting upstream merge; see runners/srt-slurm/patches/README.md.
-        local patch
-        for patch in "$GITHUB_WORKSPACE"/runners/srt-slurm/patches/*.patch; do
-            [[ -e "$patch" ]] || continue
-            git -C "$destination" apply "$patch" || return 1
-        done
     fi
+    SRTCTL_EVAL_ARGS+=(--set benchmark.stream_output=true)
+    # Temporary fixes awaiting upstream merge; see runners/srt-slurm/patches/README.md.
+    local patch
+    for patch in "$GITHUB_WORKSPACE"/runners/srt-slurm/patches/*.patch; do
+        [[ -e "$patch" ]] || continue
+        git -C "$destination" apply "$patch" || return 1
+    done
     cd "$destination" || return 1
     [[ "$(git rev-parse HEAD)" == "$SRT_SLURM_COMMIT" ]] || return 1
     echo "Using srt-slurm revision $SRT_SLURM_COMMIT"
