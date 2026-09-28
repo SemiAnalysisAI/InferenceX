@@ -104,4 +104,4 @@ SGLang、vLLM、TensorRT-LLM、CUDA、ROCm 等 AI 软件通过核函式優化、
 | [`shared/`](shared/) | 共享组件目录 |
 | [`experimental/`](experimental/) | 其余实验 |
 
-请在 `inferencex-e2e/` 中运行端到端命令；`pyproject.toml` 和 `uv.lock` 也由该项目维护。仓库级规范、GitHub 工作流和共享的 `.python-version` 保留在根目录。
+请在 `inferencex-e2e/` 中运行端到端命令；`pyproject.toml`、`uv.lock` 和 `.python-version` 也由该项目维护。仓库级规范和 GitHub 工作流保留在根目录。

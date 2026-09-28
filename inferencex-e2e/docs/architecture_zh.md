@@ -9,7 +9,7 @@
 本页说明声明的基准测试如何转化为经过验证的作业、运行时结果、GitHub Actions 工件，并最终成为 InferenceX-app 使用的一行数据。本页描述各层边界和不变量。字段级行为仍以链接的实现为准。
 
 
-仓库按 `inferencex-e2e/`、`collectivex/`、`operatorx/`、`shared/` 和 `experimental/` 划分。本文中的路径和 shell 命令均相对 `inferencex-e2e/`；Python 打包元数据位于该项目目录。GitHub 工作流和共享的 `.python-version` 仍位于仓库根目录。
+仓库按 `inferencex-e2e/`、`collectivex/`、`operatorx/`、`shared/` 和 `experimental/` 划分。本文中的路径和 shell 命令均相对 `inferencex-e2e/`；Python 打包元数据和 `.python-version` 位于该项目目录。GitHub 工作流仍位于仓库根目录。
 
 
 ## 页面索引

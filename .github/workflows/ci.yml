@@ -9,7 +9,7 @@ on:
       - '.github/workflows/ci.yml'
       - 'inferencex-e2e/pyproject.toml'
       - 'inferencex-e2e/uv.lock'
-      - '.python-version'
+      - 'inferencex-e2e/.python-version'
       - 'inferencex-e2e/infx/ruff.toml'
       - '**/pytest.ini'
       - 'inferencex-e2e/utils/srt-slurm'
@@ -44,10 +44,12 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
+          working-directory: inferencex-e2e
           cache-suffix: ${{ matrix.check }}
           cache-dependency-glob: |
-            inferencex-e2e/pyproject.toml
-            inferencex-e2e/uv.lock
+            .python-version
+            pyproject.toml
+            uv.lock
 
       - name: Lint and format
         if: matrix.check == 'Lint'

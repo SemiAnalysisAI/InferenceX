@@ -24,6 +24,6 @@ Replace `<key>` with the selected config key. Workflow dispatch generator argume
 also use paths relative to this directory. See the [testing guide](docs/testing.md)
 for dependency groups and checks.
 
-Repository policy, GitHub workflows, and the shared [Python version](../.python-version)
-remain at the repository root. The local [license](LICENSE) keeps attribution
+The project-local [Python version](.python-version) selects its interpreter.
+Repository policy and GitHub workflows remain at the repository root. The local [license](LICENSE) keeps attribution
 available when containers mount only this project directory.

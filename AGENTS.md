@@ -9,7 +9,7 @@ Guidance for AI agents working with InferenceX.
 3. Read [`CONTRIBUTING.md`](CONTRIBUTING.md) before opening or reviewing a PR or changing review, sweep, or merge policy.
 4. Read [`inferencex-e2e/docs/KLAUD_DEBUG.md`](inferencex-e2e/docs/KLAUD_DEBUG.md) before debugging a Klaud-Cold or `claude/*` image-bump PR.
 
-The end-to-end Python project owns `inferencex-e2e/pyproject.toml` and `inferencex-e2e/uv.lock`. Run its `uv` commands from `inferencex-e2e/`; root-level automation can select it with `uv run --project inferencex-e2e`. `.python-version` remains the shared repository default.
+The end-to-end Python project owns `inferencex-e2e/pyproject.toml`, `inferencex-e2e/uv.lock`, and `inferencex-e2e/.python-version`. Run its `uv` commands from `inferencex-e2e/`; root-level automation can select it with `uv run --project inferencex-e2e`.
 
 ## Agent-specific policy
 

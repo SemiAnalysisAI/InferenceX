@@ -22,5 +22,5 @@ uv run --locked python -m infx.matrix.generate test-config \
 将 `<key>` 替换为选定的配置键。工作流手动触发时的生成器参数也使用相对此目录的路径。
 依赖组与检查命令详见[测试指南](docs/testing_zh.md)。
 
-仓库规范、GitHub 工作流及共享的 [Python 版本](../.python-version)仍位于仓库根目录。
+项目内的 [Python 版本](.python-version)文件指定所用解释器。仓库规范和 GitHub 工作流仍位于仓库根目录。
 本目录的[许可证](LICENSE)确保仅挂载此项目目录的容器仍可生成许可证归属信息。

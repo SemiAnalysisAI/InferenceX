@@ -8,7 +8,7 @@
 
 This is the mandatory low-context router for InferenceX work. Pick the one page that owns the task, then follow only its source links. Repository source files and workflows remain authoritative.
 
-Paths and shell commands in these guides are relative to `inferencex-e2e/` unless stated otherwise. The Python manifest and lockfile live in that project directory. Repository-wide policy, GitHub workflows, and the shared `.python-version` remain at the repository root.
+Paths and shell commands in these guides are relative to `inferencex-e2e/` unless stated otherwise. The Python manifest, lockfile, and `.python-version` live in that project directory. Repository-wide policy and GitHub workflows remain at the repository root.
 
 ## Task and page index
 
