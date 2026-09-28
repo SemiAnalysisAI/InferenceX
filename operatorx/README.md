@@ -1,4 +1,4 @@
-# operatorx
+# operatorx - Experimental (Beta)
 
 Multi-platform inference operator benchmark suite. Times one op at a time
 (gemm, attention, moe, collectives, ...) on NVIDIA / AMD / TPU / Trainium and
