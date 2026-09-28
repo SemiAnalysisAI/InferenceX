@@ -423,10 +423,10 @@ echo "CALLS=$(wc -l < "$ROOT/calls" 2>/dev/null | tr -d ' ' || echo 0)"
 
 
 # config.py case-args is the single case→invocation codec: collx_run_shard decodes one
-# null-delimited argv per case and hands it verbatim to bench/run_ep.py. Parse the
-# emitted argv with the actual parser run_ep builds so the two sides cannot
-# drift — a flag the codec emits but run_ep does not declare (or vice versa) fails
-# here instead of on a GPU allocation.
+# null-delimited argv per case and hands it to the rank wrapper, which execs the entrypoint the
+# leading --entrypoint pair names. Parse the rest with the actual parser that entrypoint builds so
+# the two sides cannot drift — a flag the codec emits but the benchmark does not declare (or vice
+# versa) fails here instead of on a GPU allocation.
 class CaseArgvContract(unittest.TestCase):
     CASE = {
         "backend": "deepep-v2", "mode": "normal", "precision": "bf16",
@@ -457,12 +457,15 @@ class CaseArgvContract(unittest.TestCase):
                 run_ep.main()
         return parse.call_args.args[0]
 
-    def _decode(self, stdout: bytes) -> list:
+    def _decode(self, stdout: bytes, entrypoint: str = "run_ep") -> list:
         parts = stdout.split(b"\0")
         self.assertEqual(parts[-1], b"")
-        return [part.decode() for part in parts[:-1]]
+        argv = [part.decode() for part in parts[:-1]]
+        self.assertEqual(argv[:2], ["--entrypoint", entrypoint])
+        return argv[2:]
 
-    def _case_argv(self, placement: list, case: dict | None = None) -> list:
+    def _case_argv(self, placement: list, case: dict | None = None,
+                   entrypoint: str = "run_ep") -> list:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "shard.json"
             path.write_text(json.dumps({"version": 1, "cases": [case or self.CASE]}))
@@ -471,7 +474,7 @@ class CaseArgvContract(unittest.TestCase):
                  str(path), "0", "h200-dgxc", "TS", *placement],
                 capture_output=True, check=True,
             )
-        return self._decode(result.stdout)
+        return self._decode(result.stdout, entrypoint)
 
     def test_case_args_round_trips_through_the_run_ep_parser(self) -> None:
         argv = self._case_argv(["16", "2", "8", "8"])
@@ -553,6 +556,58 @@ class CaseArgvContract(unittest.TestCase):
                 self.assertEqual(args.backend, backend)
                 self.assertEqual(args.case_id, case["case_id"])
                 self.assertEqual(args.out, f"results/{case['case_id']}_TS-c000.json")
+
+    def test_a_swap_blocks_case_round_trips_through_its_own_parser(self) -> None:
+        import run_swap_blocks
+        import sweep_matrix
+
+        shard, = sweep_matrix.resolve_matrix(suites="swap-blocks", only_sku="h200-dgxc")["include"]
+        case = shard["cases"][1]
+        argv = self._case_argv(["1", "1", "1", "1"], case=case, entrypoint="run_swap_blocks")
+        with mock.patch.object(argparse.ArgumentParser, "parse_args", autospec=True,
+                               side_effect=SystemExit) as parse:
+            with self.assertRaises(SystemExit):
+                run_swap_blocks.main(argv)
+        args = parse.call_args.args[0].parse_args(argv)
+        self.assertEqual(args.directions, case["directions"].split())
+        self.assertEqual(args.block_bytes, [int(v) for v in case["block_bytes"].split()])
+        self.assertEqual(args.num_blocks, [int(v) for v in case["num_blocks"].split()])
+        self.assertEqual((args.layout, args.warmup, args.iterations),
+                         (case["layout"], case["warmup"], case["iterations"]))
+        self.assertEqual(args.max_payload_bytes, case["max_payload_bytes"])
+        self.assertEqual(str(args.output), f"results/{case['case_id']}_TS-c000.json")
+        with self.assertRaises(subprocess.CalledProcessError):
+            self._case_argv(["8", "1", "8", "8"], case=case, entrypoint="run_swap_blocks")
+
+    def test_a_case_from_an_unknown_suite_cannot_reach_a_run(self) -> None:
+        with self.assertRaises(subprocess.CalledProcessError):
+            self._case_argv(["16", "2", "8", "8"], case={**self.CASE, "suite": "turbo"})
+
+    def test_the_rank_wrapper_execs_only_a_named_entrypoint(self) -> None:
+        # The wrapper's own guards run before it sources anything, so feed it valid Slurm
+        # identity and stop at the entrypoint gate with a python3 shim that records its argv.
+        with tempfile.TemporaryDirectory() as directory:
+            shim = Path(directory) / "python3"
+            shim.write_text('#!/bin/sh\necho "ARGV $*"\n')
+            shim.chmod(0o755)
+            wrapper = run_common("collx_slurm_rank_wrapper").stdout.replace(
+                ". /ix/collectivex/runtime/common.sh || exit 68", ":")
+            env = {**os.environ, "PATH": f"{directory}:{os.environ['PATH']}",
+                   "SLURM_PROCID": "0", "SLURM_NTASKS": "1", "SLURM_LOCALID": "0",
+                   "SLURM_NODEID": "0", "COLLX_NGPUS": "1", "COLLX_GPUS_PER_NODE": "1"}
+            for argv, rc, out in (
+                (["--entrypoint", "run_swap_blocks", "--layout", "random"], 0,
+                 "ARGV bench/run_swap_blocks.py --layout random"),
+                (["--entrypoint", "run_ep", "--backend", "mori"], 0,
+                 "ARGV bench/run_ep.py --backend mori"),
+                (["--entrypoint", "../../bin/sh"], 67, ""),
+                (["--backend", "mori"], 67, ""),
+            ):
+                with self.subTest(argv=argv):
+                    result = subprocess.run(["bash", "-c", wrapper, "_", *argv], env=env,
+                                            capture_output=True, text=True)
+                    self.assertEqual(result.returncode, rc, result.stderr)
+                    self.assertEqual(result.stdout.strip(), out)
 
 # logical_byte_provenance is where FP8 changes MEASUREMENT semantics (asymmetric
 # per-direction byte counts), so its arithmetic and guards are pinned here on CPU.

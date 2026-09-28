@@ -4,7 +4,7 @@
 
 `bench/run_swap_blocks.py` 在单个 CUDA 或 ROCm GPU 上测量
 `from vllm._custom_ops import swap_blocks`，需要安装兼容的 vLLM。
-可在该环境中直接使用 Python，或选择下方的独立 GPU Action。
+可在该环境中直接使用 Python，或通过下方的 GitHub Action 触发该套件。
 无需 `torchrun`，也不会执行 EP 工作负载。
 结果记录已安装的 vLLM 版本，同时支持旧版三参数接口和显式传入
 `block_size_in_bytes` 的接口。
@@ -47,24 +47,35 @@ python3 -m unittest discover collectivex/tests -p 'test_swap_blocks.py' -v
 
 仅有 CPU 的环境会执行测量和映射测试，并跳过真实 GPU 测试。
 
-## 独立 GitHub GPU Action
+## GitHub GPU Action
 
-在 **CollectiveX Sweep** 中选择 `backend: swap-blocks`，或执行：
+swap-blocks 是 **CollectiveX Sweep** 的一个套件。设置 `suites: swap-blocks`（或 `ep,swap-blocks`
+同时运行两者），或执行：
 
 ```bash
 gh workflow run collectivex-sweep.yml --ref main \
-  -f backend=swap-blocks -f swap_profile=smoke \
-  -f swap_image=vllm/vllm-openai:v0.25.1
+  -f suites=swap-blocks -f swap_profile=smoke
 ```
 
-多平台运行和镜像选择见下方说明；`all` 仍仅运行 EP。
+`only_sku` 留空时运行所有已注册的 GPU 池，也可单独指定 `h200-dgxc`、`h100-dgxc`、`b200-nscale`、
+`b300`、`gb200`、`gb300`、`mi300x`、`mi325x` 或 `mi355x`。`exclude_skus` 接受以逗号分隔的排除列表。
+EP 筛选项（`backend`、`ep_sizes`、`modes`）仅作用于 `ep` 套件；未选择该套件时，矩阵会拒绝这些筛选项。
 
+每个池生成一个分片，包含两个用例，每种布局一个。分片使用该池自己的启动器运行，因此沿用该池的
+资源分配、节点校验、镜像导入和清理流程；它申请一个节点、一个 GPU，时长 45 分钟。`config.py`
+把每个用例编码为 `run_swap_blocks.py` 的参数，rank 包装脚本执行它，而不是 `run_ep.py`。
 
-`smoke` 覆盖三个方向、两种布局、257/4096/65536/262144 字节（最大 256 KiB）的块大小及 1/4/16/64/256/1024/2048 个块，
-每个测试点预热 4 次、采样 20 次，共 168 个测试点。`standard` 使用
-4096/65536/1048576 字节的块大小和相同的块数量，预热 32 次、采样 100 次，共 126 个测试点。
-两种配置均在计时前后检查真实 GPU 复制；缺少 GPU 或兼容 vLLM 时直接失败。
-现有两种配置均使用 2 GiB 有效载荷上限，保留其网格中的全部测试点。
+测试网格和镜像都写在 `configs/swap_sweep.json` 中：
+
+- **镜像。** CUDA 池使用 `vllm/vllm-openai:v0.25.1`，AMD 池使用 `vllm/vllm-openai-rocm:v0.27.1`；
+  GB 池通过注册表中的 `image_platform` 选择 ARM64 镜像。`sku_images` 可为某个池固定镜像：H100 使用
+  `vllm/vllm-openai:v0.27.1`。如需测试其他 vLLM 版本，请在分支上修改配置后从该分支触发。
+- **`smoke` 配置。** 覆盖三个方向、两种布局；块大小为 257、4096、65536、262144 字节（最大 256 KiB）；
+  块数量为 1、4、16、64、256、1024、2048。每个测试点预热 4 次、采样 20 次，共 168 个测试点。
+- **`standard` 配置。** 块大小为 4096、65536、1048576 字节，块数量相同，预热 32 次、采样 100 次，
+  共 126 个测试点。
+- **两种配置**均在计时前后检查真实 GPU 复制；缺少 GPU 或兼容 vLLM 时直接失败，后端准备阶段会在
+  任何用例运行前确认能导入 `swap_blocks`。两者均使用 2 GiB 有效载荷上限，保留网格中的全部测试点。
 
 如需从字节扫描到 GiB，请使用 `-f swap_profile=large-blocks`。块大小依次为
 257 B、4 KiB、64 KiB、256 KiB、1 MiB、4 MiB、16 MiB、64 MiB、256 MiB 和 1 GiB，
@@ -74,28 +85,13 @@ gh workflow run collectivex-sweep.yml --ref main \
 每个传输缓冲区还包含两个保护块，因此 1 GiB 块的测试点每个缓冲区分配 3 GiB，
 此外还需 CPU 正确性参考缓冲区。
 
-下载 `cxshard-swap-<sku>-<run_id>-<attempt>` 可获得两个 JSON 结果文件，
-其中记录实际 GPU、框架版本、镜像、源代码 SHA、正确性状态和测量数据。
-失败时同样执行现有的资源分配和暂存目录清理。CPU CI 独立运行，不能证明 GPU 正确性。
+下载 `cxshard-<sku>-swap-blocks-<run_id>-<attempt>` 可获得两个 JSON 结果文件，文件名为
+`<case_id>_<timestamp>-c<index>.json`，其中 case_id 为 `<sku>-swap-blocks-<profile>-<layout>`。
+结果记录实际 GPU、框架版本、镜像、源代码 SHA、正确性状态和测量数据；EP 汇总表会跳过这些文档。
+CPU CI 独立运行，不能证明 GPU 正确性。
 
-## 多 GPU 平台运行
-
-`only_sku` 留空时运行当前九个 Slurm GPU 池，也可单独指定 `h200-dgxc`、`h100-dgxc`、
-`b200-nscale`、`b300`、`gb200`、`gb300`、`mi300x`、`mi325x` 或 `mi355x`。
-`exclude_skus` 接受以逗号分隔的排除列表；EP 筛选项应留空。每个任务请求 `nodes:1`，
-只运行一个 GPU 进程，由 Slurm 独占分配一个节点。
-CUDA 平台使用 `swap_image`，AMD 平台使用 `swap_rocm_image`，默认值为
-`vllm/vllm-openai-rocm:v0.27.1`；GB 平台选择 ARM64 镜像。产物记录 SKU 和源码 SHA，名称为 `cxshard-swap-<sku>-<run_id>-<attempt>`。
-
-H100 首先检查 `/mnt/nfs/lustre/containers` 中由运维预置的推理镜像缓存，
-按推理启动器的文件命名规则查找与请求标签完全一致的镜像。有效的 squash 可直接复用，
-无需在计算 pod 内重新导入；不存在时，常规导入路径会报告失败。
-`refresh_image=true` 会绕过预置缓存，要求重新导入镜像。
-`swap_h100_image` 显式选择该池的镜像，默认 `vllm/vllm-openai:v0.27.1`；
-其他 CUDA 池使用 `swap_image`。产物记录所选镜像及实际 vLLM 版本，便于识别跨版本结果。
-工作流为 H100 选择 `/var/tmp` 作为镜像导入临时目录，其他平台使用 `/tmp`。
-导入时记录文件系统和 enroot 版本，以便诊断主机上的 whiteout 转换失败。
-每个任务的临时导入目录在退出时清理。Slurm 排除列表与当前节点清单取交集，忽略已退役
-名称，同时保留对现有节点的排除。B300/GB300 与推理启动器保持一致，使用分区默认 QoS。
-
-默认扫描使用 `mi300x` 和 `mi325x` Slurm 池；这两个平台未启用 EP 后端。
+无法自行导入镜像的池可以在 `sku_images` 中指定运维预置的镜像缓存（`staged_image_dir`）。H100 即如此：
+它先在 `/mnt/nfs/lustre/containers` 中按推理启动器的文件命名规则查找与请求标签完全一致的镜像，
+有效的 squash 可直接复用，无需在计算 pod 内导入；文件不存在时走常规导入路径。
+`refresh_image=true` 会绕过预置缓存，要求重新导入。工作流为 H100 选择 `/var/tmp` 作为镜像导入
+临时目录，其他平台使用 `/tmp`。

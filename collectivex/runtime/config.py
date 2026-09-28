@@ -134,8 +134,7 @@ def case_count(path: str) -> None:
     print(len(load(path)["cases"]), end="")
 
 
-def _emit_argv(case: dict, version: object, runner: str, ts: str, index: int) -> None:
-    """Emit one null-delimited run_ep.py argv — the only case-to-invocation codec."""
+def _ep_argv(case: dict, version: object, runner: str) -> list[str]:
     get = lambda key, default="": str(case.get(key) or default)
     argv = [
         "--backend", str(case["backend"]),
@@ -165,11 +164,42 @@ def _emit_argv(case: dict, version: object, runner: str, ts: str, index: int) ->
     for key, flag in _TIMING_FLAGS:
         if key in timing:
             argv += [flag, str(timing[key])]
-    # case_id is the canonical identity (sku==runner, backend, workload, mode, phase, ep, routing,
-    # precision), so a new identity axis cannot be omitted from the filename the way mode once was.
-    # ts + the per-shard case index disambiguate legs that share one results/ directory.
+    return argv
+
+
+def _swap_argv(case: dict, version: object, runner: str) -> list[str]:
+    return [
+        "--directions", *str(case["directions"]).split(),
+        "--block-bytes", *str(case["block_bytes"]).split(),
+        "--num-blocks", *str(case["num_blocks"]).split(),
+        "--layout", str(case["layout"]),
+        "--seed", str(case["seed"]),
+        "--device", str(case["device"]),
+        "--max-payload-bytes", str(case["max_payload_bytes"]),
+        "--warmup", str(case["warmup"]),
+        "--iterations", str(case["iterations"]),
+    ]
+
+
+# suite -> (bench/<entrypoint>.py, argv codec, output flag). The rank wrapper in
+# runtime/common.sh execs the entrypoint the leading --entrypoint pair names.
+_SUITES = {
+    "ep-core": ("run_ep", _ep_argv, "--out"),
+    "swap-blocks": ("run_swap_blocks", _swap_argv, "--output"),
+}
+
+
+def _emit_argv(case: dict, version: object, runner: str, ts: str, index: int) -> None:
+    """Emit one null-delimited benchmark argv — the only case-to-invocation codec."""
+    if case.get("suite") not in _SUITES:
+        print(f"unknown suite {case.get('suite')!r}", file=sys.stderr)
+        raise SystemExit(1)
+    entrypoint, codec, out_flag = _SUITES[case["suite"]]
+    # case_id is the canonical identity, so a new identity axis cannot be omitted from the
+    # filename the way mode once was. ts + the per-shard case index disambiguate legs that share
+    # one results/ directory.
     out = f"results/{case['case_id']}_{ts}-c{index:03d}.json"
-    argv += ["--out", out]
+    argv = ["--entrypoint", entrypoint, *codec(case, version, runner), out_flag, out]
     sys.stdout.buffer.write(b"\0".join(part.encode() for part in argv) + b"\0")
 
 
@@ -182,9 +212,11 @@ def case_args(
     if not 0 <= index < len(cases):
         raise SystemExit(1)
     case = cases[index]
+    # EP cases name their rank count; other suites run one rank per allocated GPU.
+    ranks = case.get("ep", int(case.get("nodes", 0)) * int(case.get("gpus_per_node", 0)))
     placement = tuple(
-        str(case.get(field, ""))
-        for field in ("ep", "nodes", "gpus_per_node", "scale_up_domain")
+        str(value) for value in
+        (ranks, *(case.get(field, "") for field in ("nodes", "gpus_per_node", "scale_up_domain")))
     )
     if placement != (ngpus, nodes, gpus_per_node, scale_up_domain):
         print(f"case placement {placement} differs from the allocation", file=sys.stderr)

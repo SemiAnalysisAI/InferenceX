@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Build the CollectiveX sweep matrix and extract execution shards."""
+"""Build the CollectiveX sweep matrix and extract execution shards.
+
+Each suite resolves into the same shard shape (one allocation, a list of cases), runs through
+the pool's own launcher, and reaches its benchmark through the case codec in runtime/config.py.
+"""
 from __future__ import annotations
 
 import argparse
@@ -25,7 +29,9 @@ def _load_config(name: str) -> dict[str, Any]:
 
 
 SWEEP = _load_config("sweep.json")
+SWAP_SWEEP = _load_config("swap_sweep.json")
 PLATFORMS = _load_config("platform_config.json")["platforms"]
+SUITES = ("ep", "swap-blocks")
 
 
 SWEEP_BACKENDS = tuple(dict.fromkeys(
@@ -113,6 +119,59 @@ def _comma_subset(flag: str, value: str, known) -> set[str]:
     return selected
 
 
+def _vendor(platform: dict[str, Any]) -> str:
+    return "amd" if platform["arch"].startswith("gfx") else "nvidia"
+
+
+def _swap_shard(sku: str, profile_name: str) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """One single-GPU shard per pool: a case per layout over the profile's block grid."""
+    platform = PLATFORMS[sku]
+    profile = SWAP_SWEEP["profiles"][profile_name]
+    pinned = SWAP_SWEEP["sku_images"].get(sku, {})
+    cases = []
+    for layout in SWAP_SWEEP["layouts"]:
+        case = {
+            "suite": SWAP_SWEEP["suite"],
+            "backend": "swap-blocks",
+            "profile": profile_name,
+            "layout": layout,
+            "directions": " ".join(SWAP_SWEEP["directions"]),
+            "block_bytes": " ".join(map(str, profile["block_bytes"])),
+            "num_blocks": " ".join(map(str, profile["num_blocks"])),
+            "max_payload_bytes": profile["max_payload_bytes"],
+            "warmup": profile["warmup"],
+            "iterations": profile["iterations"],
+            "seed": SWAP_SWEEP["seed"],
+            "device": SWAP_SWEEP["device"],
+            "nodes": 1,
+            "gpus_per_node": 1,
+            "scale_up_domain": 1,
+        }
+        case["case_id"] = ep_harness.slug_id((sku, "swap-blocks", profile_name, layout))
+        cases.append(case)
+    shard = {
+        "id": f"{sku}-swap-blocks",
+        "sku": sku,
+        "runner": platform.get("runner_label", sku),
+        "backend": "swap-blocks",
+        "suite": SWAP_SWEEP["suite"],
+        "launcher": platform["launcher"],
+        "nodes": 1,
+        "gpus_per_node": 1,
+        "scale_up_domain": 1,
+        "image": pinned.get("image", SWAP_SWEEP["images"][_vendor(platform)]),
+        "allocation_minutes": SWAP_SWEEP["allocation_minutes"],
+        "cases": cases,
+    }
+    if "staged_image_dir" in pinned:
+        shard["staged_image_dir"] = pinned["staged_image_dir"]
+    requested = [
+        {"sku": sku, "case": case, "disposition": "runnable", "reason": None, "detail": None}
+        for case in cases
+    ]
+    return requested, shard
+
+
 def resolve_matrix(
     backend: str = "all",
     only_sku: str = "",
@@ -120,8 +179,19 @@ def resolve_matrix(
     ep_sizes: str = "",
     precisions: str = "",
     modes: str = "",
+    suites: str = "ep",
+    swap_profile: str = "smoke",
 ) -> dict[str, Any]:
-    """Resolve the fixed sweep into allocation-sized workflow shards."""
+    """Resolve the selected suites into allocation-sized workflow shards."""
+    selected_suites = _comma_subset("suites", suites, SUITES)
+    if not selected_suites:
+        raise SystemExit("--suites selects no suite")
+    if "ep" not in selected_suites and (backend != "all" or ep_sizes or precisions or modes):
+        raise SystemExit("EP filters need the ep suite in --suites")
+    if swap_profile not in SWAP_SWEEP["profiles"]:
+        raise SystemExit(
+            f"unknown --swap-profile {swap_profile!r}; have {sorted(SWAP_SWEEP['profiles'])}"
+        )
     selected_eps: set[int] = set()
     for value in filter(None, (part.strip() for part in ep_sizes.split(","))):
         if not value.isdigit() or int(value) <= 0:
@@ -157,9 +227,11 @@ def resolve_matrix(
     requested_cases: list[dict[str, Any]] = []
     shards: dict[tuple[str, str, str, int, str], list[dict[str, Any]]] = {}
 
-    for sku in sorted(PLATFORMS):
-        if (only_sku and sku != only_sku) or sku in excluded:
-            continue
+    selected_skus = [
+        sku for sku in sorted(PLATFORMS)
+        if not (only_sku and sku != only_sku) and sku not in excluded
+    ]
+    for sku in selected_skus if "ep" in selected_suites else ():
         platform = PLATFORMS[sku]
         for ep in SWEEP["ep_degrees"]:
             if selected_eps and ep not in selected_eps:
@@ -257,6 +329,11 @@ def resolve_matrix(
             "scale_up_domain": first["scale_up_domain"],
             "cases": cases,
         })
+    if "swap-blocks" in selected_suites:
+        for sku in selected_skus:
+            requested, shard = _swap_shard(sku, swap_profile)
+            requested_cases += requested
+            shards_by_sku.setdefault(sku, []).append(shard)
     include = [
         shards_by_sku[sku][index]
         for index in range(max(map(len, shards_by_sku.values()), default=0))
@@ -296,6 +373,10 @@ def main() -> int:
     parser.add_argument("--modes", default="",
                         help="comma-separated subset of configs/sweep.json modes "
                              "(normal, low-latency); blank = all")
+    parser.add_argument("--suites", default="ep",
+                        help=f"comma-separated subset of {', '.join(SUITES)}")
+    parser.add_argument("--swap-profile", default="smoke",
+                        help="configs/swap_sweep.json profile for the swap-blocks suite")
     parser.add_argument("--extract-from", default="", metavar="MATRIX")
     parser.add_argument("--shard-id", default="")
     parser.add_argument("--out", default="")
@@ -316,6 +397,8 @@ def main() -> int:
         ep_sizes=args.ep_sizes,
         precisions=args.precisions,
         modes=args.modes,
+        suites=args.suites,
+        swap_profile=args.swap_profile,
     )
     if args.out:
         Path(args.out).write_text(

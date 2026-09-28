@@ -25,8 +25,8 @@ EXCLUDE_NODES="${COLLX_EXCLUDE_NODES:-}"
 NODELIST="${COLLX_NODELIST:-}"
 MOUNT_DIR=/ix
 case "$COLLX_BENCH" in
-  mori | uccl-ep) ;;
-  *) collx_die "unsupported AMD EP backend: $COLLX_BENCH" ;;
+  mori | uccl-ep | swap-blocks) ;;
+  *) collx_die "unsupported AMD backend: $COLLX_BENCH" ;;
 esac
 
 export MORI_DISABLE_AUTO_XGMI="${MORI_DISABLE_AUTO_XGMI:-0}"

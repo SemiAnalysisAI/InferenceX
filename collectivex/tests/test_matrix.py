@@ -109,5 +109,65 @@ class UndeclaredPrecisionsFailClosed(unittest.TestCase):
         self.assertIn("deepep-v2", str(caught.exception))
         self.assertIn("BACKEND_PRECISIONS", str(caught.exception))
 
+
+class SwapSuiteTests(unittest.TestCase):
+    PLATFORMS = {
+        "amd-test": {"arch": "gfx942", "launcher": "mi-amds"},
+        "cuda-test": {"arch": "sm100", "launcher": "single-slurm",
+                      "runner_label": "cluster:cuda-pool"},
+    }
+
+    def _swap(self, **options):
+        with mock.patch.object(sweep_matrix, "PLATFORMS", self.PLATFORMS):
+            return matrix(suites="swap-blocks", **options)
+
+    def test_one_single_gpu_shard_per_pool_on_its_own_launcher(self):
+        shards = {shard["sku"]: shard for shard in self._swap()["include"]}
+        self.assertEqual(set(shards), {"amd-test", "cuda-test"})
+        amd, cuda = shards["amd-test"], shards["cuda-test"]
+        self.assertEqual((amd["launcher"], cuda["launcher"]), ("mi-amds", "single-slurm"))
+        self.assertEqual(cuda["runner"], "cluster:cuda-pool")
+        self.assertEqual(amd["image"], sweep_matrix.SWAP_SWEEP["images"]["amd"])
+        self.assertEqual(cuda["image"], sweep_matrix.SWAP_SWEEP["images"]["nvidia"])
+        for shard in shards.values():
+            self.assertEqual((shard["nodes"], shard["gpus_per_node"]), (1, 1))
+            self.assertEqual([case["layout"] for case in shard["cases"]],
+                             sweep_matrix.SWAP_SWEEP["layouts"])
+            self.assertNotIn("staged_image_dir", shard)
+
+    def test_a_pinned_pool_carries_its_image_and_staged_cache(self):
+        pinned = sweep_matrix.SWAP_SWEEP["sku_images"]["h100-dgxc"]
+        shard, = matrix(suites="swap-blocks", only_sku="h100-dgxc")["include"]
+        self.assertEqual(shard["image"], pinned["image"])
+        self.assertEqual(shard["staged_image_dir"], pinned["staged_image_dir"])
+
+    def test_the_profile_sets_the_grid(self):
+        for name, profile in sweep_matrix.SWAP_SWEEP["profiles"].items():
+            with self.subTest(profile=name):
+                case = self._swap(swap_profile=name)["include"][0]["cases"][0]
+                self.assertEqual(case["block_bytes"], " ".join(map(str, profile["block_bytes"])))
+                self.assertEqual(case["iterations"], profile["iterations"])
+                self.assertEqual(case["case_id"], f"amd-test-swap-blocks-{name}-contiguous")
+
+    def test_sku_selection_and_bad_requests_fail_closed(self):
+        self.assertEqual([s["sku"] for s in self._swap(exclude_skus="amd-test")["include"]],
+                         ["cuda-test"])
+        for options in (
+            {"swap_profile": "huge"}, {"only_sku": "missing"}, {"exclude_skus": "missing"},
+            {"modes": "normal"}, {"ep_sizes": "8"}, {"backend": "mori"},
+        ):
+            with self.subTest(options=options), self.assertRaises(SystemExit):
+                self._swap(**options)
+        for suites in ("", "turbo"):
+            with self.subTest(suites=suites), self.assertRaises(SystemExit):
+                matrix(suites=suites)
+
+    def test_adding_the_suite_leaves_the_ep_shards_unchanged(self):
+        ep = matrix()["include"]
+        both = matrix(suites="ep,swap-blocks")["include"]
+        self.assertEqual([shard for shard in both if shard["backend"] != "swap-blocks"], ep)
+        self.assertEqual(len(both) - len(ep), len(sweep_matrix.PLATFORMS))
+
+
 if __name__ == "__main__":
     unittest.main()

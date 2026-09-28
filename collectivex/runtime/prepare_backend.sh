@@ -570,6 +570,11 @@ main() {
     uccl-ep) uccl_prepare || return 1 ;;
     nccl-ep) nccl_ep_prepare || return 1 ;;
     flashinfer-ep) flashinfer_ep_prepare || return 1 ;;
+    # The official vLLM image ships the kernel; assert it before the cases start.
+    swap-blocks)
+      python3 -c "from vllm._custom_ops import swap_blocks" \
+        || { collx_log "ERROR: vLLM swap_blocks import failed"; return 1; }
+      ;;
     *)
       collx_log "ERROR: unknown backend preparation request"
       return 1
