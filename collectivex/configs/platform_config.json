@@ -145,7 +145,7 @@
         "switch": "n/a (single-node scale-up)"
       },
       "operator": {
-        "partition": "compute",
+        "partition": "compute-0",
         "squash_dir": "/raid/inferencex/squash"
       }
     },
