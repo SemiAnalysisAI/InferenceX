@@ -2,15 +2,11 @@
 
 [English](CI.md) | **中文**
 
-[OperatorX Sweep](../../.github/workflows/operatorx-sweep.yml) 在带有以下标签之一的自托管运行器上手动运行（与 InferenceX 基准工作流使用的标签一致）：
-`cluster:h100-dgxc`（默认）、`cluster:h200-dgxc`、`cluster:b200-nscale`、
-`cluster:b300-dsxe`、`cluster:gb200-nv`、`cluster:gb300-nv`、`cluster:mi300x-amd`、
-`cluster:mi325x-amds` 或 `cluster:mi355x-amds`。
-PR 只在 GitHub 托管运行器上生成执行计划；GPU 执行必须通过 `workflow_dispatch` 触发。
+[OperatorX Sweep](../.github/workflows/operatorx-sweep.yml) 只通过 `workflow_dispatch` 运行（PR 只运行托管规划器）。
 
-| GPU | 运行器标签 | 每个物理节点的 GPU 数 | 镜像平台 | 结果集群标识 |
+| GPU | 运行器标签 | 每节点 GPU 数 | 镜像平台 | 结果集群标识 |
 | --- | --- | ---: | --- | --- |
-| H100 | `cluster:h100-dgxc` | 8 | `linux/amd64` | `h100_dgxc_8x` |
+| H100 | `cluster:h100-dgxc`（默认） | 8 | `linux/amd64` | `h100_dgxc_8x` |
 | H200 | `cluster:h200-dgxc` | 8 | `linux/amd64` | `h200_dgxc_8x` |
 | B200 | `cluster:b200-nscale` | 8 | `linux/amd64` | `b200_nscale_8x` |
 | B300 | `cluster:b300-dsxe` | 8 | `linux/amd64` | `b300_dsxe_8x` |
@@ -20,108 +16,30 @@ PR 只在 GitHub 托管运行器上生成执行计划；GPU 执行必须通过 `
 | MI325X | `cluster:mi325x-amds` | 8 | `linux/amd64` | `mi325x_amds_8x` |
 | MI355X | `cluster:mi355x-amds` | 8 | `linux/amd64` | `mi355x_8x` |
 
-GB200/GB300 每次使用一个四卡计算托盘，不会占用整个 NVL72 机架。所有运行器的
-稠密 GEMM 都使用 `world_sizes=1`，TFLOPS 始终按单卡计算。硬件信息来自 CollectiveX
-平台配置，并在规划和执行阶段分别校验。
-
 ## 触发运行
-
-GitHub 注册该工作流后，选择 **OperatorX Sweep → Run workflow**，指定源码分支，
-并保留初始默认值：`runner=cluster:h100-dgxc`、`backends=vllm`、`testlists=gemm`、
-`world_sizes=1`、`chunk_size=500`。这会将完整的 GEMM 测试列表拆分为有界分片（目前为 5,416 个测试、11 个分片）。
-列表中包含所选后端不支持的精度，以及可能超出设备显存的形状。不支持的测试会保留
-在结果中；实际的内核和显存分配错误仍会使 CI 失败。运行完整列表不代表其中每个
-测试都能在 H100 上执行。
-新工作流可能需要先进入默认分支，GitHub 才允许手动触发。
 
 ```bash
 gh workflow run operatorx-sweep.yml --repo SemiAnalysisAI/InferenceX \
   --ref <branch> -f runner=cluster:h100-dgxc -f backends=vllm \
-  -f testlists=gemm -f world_sizes=1 -f chunk_size=500
+  -f testlists=gemm -f world_sizes=1 -f chunk_size=500 -f ingest=false
 ```
 
-快速检查基础设施时，可显式选择 `testlists=gemm_perf` 和 `chunk_size=50`
-（11 个 BF16 测试）。`attn_deepseek_v4`、`attn_kimi_k3` 和 `attn_minimax_m3` 包含注意力模块，需与 gemm / moe 测试列表分开触发。测试运行应设置 `-f ingest=false`，使结果不进入 OperatorX 数据库；手动触发的运行默认会被导入。`gemm_serving_8k1k_min` 和 `gemm_serving_all_min`
-包含 InferenceX 推理服务配置中的 GEMM。
-不支持的操作会保留在结果中。后端导入错误、基准错误，以及没有任何成功结果，
-都会使分片失败。先验证 BF16 GEMM，再验证量化格式。
-不要假定面向 Blackwell 的 FP4 内核可以在 Hopper 上运行。
+- 输入：`runner`、`backends`（`vllm`；AMD 另有 `torch`）、`testlists`、`mode`（`timing` | `counters`）、`world_sizes`（1、2、4、8）、`chunk_size`（1-500）、`recovery_run_id`、`ingest`（默认 true；测试运行设为 `false`）。
+- `mode=counters`：每个算子在 Nsight Compute（NVIDIA）或 rocprofv3（AMD，12 轮采集：请用更小的 `chunk_size`）下运行一次；原始文件在 `results/counters/`；延迟受分析器干扰。
+- 冒烟测试：`testlists=gemm_perf`、`chunk_size=50`。`attn_*` 测试列表与 gemm / moe 列表分开触发。
 
 ## 执行约定
 
-- 托管规划步骤校验输入，按容器镜像分组后端，区分 world size 和 MoE 并行参数组合，
-  并将形状拆成大小受限的分片。最多支持 256 个分片。world size 仅允许 1、2、4、8，
-  且不能超过一个物理节点的 GPU 数，因此 GB200/GB300 不接受 8。
-  未被所选大小覆盖的形状会计入 `excluded_shapes`。
-- 每个 Actions 分片独占一个物理 Slurm 节点，包含四张或八张 GPU。GPU 进程数等于所选 world size。
-  准入沿用优先级评分器，以及 `ci-job-*`、`ci-attempt-*` 和唯一的 `nodes:1` 标签。
-  所有分片均可被调度，由优先级/节点调度器控制物理节点准入。额外的 GitHub matrix
-  并发上限可能将标签分配给尚未获准启动的作业，导致停滞。两个调度开关都必须保持启用。
-- 运行器设置来自 CollectiveX 已纳入版本控制的平台配置。源码按工作流 SHA 检出，
-  再复制到共享 squash 父目录或配置中可写的 `storage_roots` 路径（GB200）下的私有目录，
-  该目录必须在计算节点上可见。B300 沿用 CollectiveX，从系统账户数据库读取计算节点可见
-  的账户主目录；显式配置的 `stage_dir` 优先。结果不依赖提交主机的 `/tmp` 在计算节点上可见。
-- 规划步骤解析镜像 digest。导入操作加锁，并按镜像、digest 和 CPU 架构缓存，导入后再次核对
-  digest。标签发生变化或无法解析时运行失败，避免错误标注测量所用镜像。
-  规划和导入主机都必须能匿名读取镜像。导入前校验主机 CPU 架构，并在已分配的计算节点
-  上执行。B300 提交主机缺少该镜像所需的解压空间，因此沿用推理启动器的计算节点导入方式。
-  Enroot 和 GNU parallel 使用私有临时目录；Enroot 使用显式 registry 地址及平台配置指定的
-  缓存路径。分配请求保留 account、QoS 和隔离节点
-  列表，并沿用 B300/GB 平台的 remap-root 与内存设置。B300 与推理启动器一致，由
-  partition/account 选择 QoS；原来的 `batch_1_qos` 覆盖值会被当前集群拒绝。
-  原配置中的隔离节点名称也不存在于该集群，已移除；Slurm 仍会遵循节点的 drain
-  状态。GB300 继续使用其配置的 QoS 和隔离节点列表。
-- 启动器等待分配、导入和执行完成。Slurm 分配限时 45 分钟；Actions 允许 70 分钟，
-  包含排队与清理时间。Slurm 作业名与 Actions 运行器名称一致。
-- 信号处理和工作流的 `always()` 恢复步骤会取消已记录的分配、停止写入、保留部分结果，
-  然后删除暂存源码。工作流显式允许最多 180 秒等待 Slurm epilog 和节点释放，覆盖 H200
-  的延迟释放情况。清理失败时保留暂存目录供调查。如果运行器主机失联，Slurm 时间限制
-  是最后的资源释放保障。
-- CI 严格模式在每个操作结束后原子写入 rank-zero 结果检查点，写入发生在内核计时之外。
-  原有非 CI 计时循环保持不变。
+- 规划：按后端镜像、`parallel` 拆分和 InferenceX 配方（`recipes.py`：镜像、启动环境变量、`vllm serve` 参数）分片，并按 `chunk_size` 切块；最多 256 个分片；没有配方的测试项使用 `containers.toml` 中的后端镜像。
+- 每个分片独占一个 Slurm 节点（GB200/GB300：一个四卡托盘，不支持 world size 8）；分配时限 45 分钟，作业时限 70 分钟。
+- 镜像：规划时解析摘要，在分配到的节点上用 enroot 导入，按镜像 + 摘要 + 架构缓存；规划后标签发生变化则分片失败。
+- Rank：拆分的 world size 中每块 GPU 一个进程，通过 env:// 汇合；运行器设置来自 CollectiveX 平台配置，并由 `platforms.json` 覆盖。
+- 结果：每个算子后保存检查点；不支持的测试项作为结果行保留，错误或没有成功行会使分片失败；产物为 `operatorx-manifest-<run_id>` 和 `operatorx-shard-<run_id>-<attempt>-<shard>`；除非 `ingest=false`，结果会导入 OperatorX 数据库。
+- 清理：取消和 `always()` 步骤会取消分配并保留部分结果；清理失败后，用 `recovery_run_id` 重新运行单个分片。
 
-## 产物与重跑
-
-`operatorx-manifest-<run_id>` 记录请求的案例、镜像 digest 和源码 SHA，失败作业重跑时
-仍可使用。每次尝试分别上传 `operatorx-shard-<run_id>-<attempt>-<shard>`，包含执行元数据、
-分配/导入/基准日志、状态和已生成的原始结果 JSON。
-启动失败时可能只有日志；取消时的检查点仅代表部分覆盖。分片成功要求实际测量成功，
-不能仅凭 Slurm 提交成功。结果环境信息记录工作流运行、尝试、分片、源码 SHA 和镜像 digest。
-
-使用 `gh run download` 下载产物。保留原始文件及来源信息；
-`scripts/consolidate_results.py` 不属于 CI 流程。
-
-## 本地验证
-
-生成计划需要 Python 3.11 或更新版本。计算节点控制代码使用现有的 Python 3.10+
-Slurm 主机环境。CPU 测试执行真实规划器、基准编排和启动器，仅替换外部 GPU/Slurm 依赖。
+## 本地测试
 
 ```bash
 uv run --no-project --python 3.12 --with pytest --with pyyaml --with torch --with numpy \
   python -m pytest operatorx/tests/ -q
 ```
-
-实际验收还需要在每个所选运行器上执行带产物的 smoke 运行、失败分片重跑，以及确认释放分配的取消测试。
-CPU 检查不能证明 GPU 兼容性或集群存储可见性。
-
-最终覆盖汇总为每个请求分片选择最新产物尝试，保留此前尝试中已成功的分片，
-并在任一分片缺失或失败时报告失败。汇总区分请求形状数和结果行数，
-因为一个形状可能在多个后端上执行。
-
-清理失败后，可在单分片触发中将 `recovery_run_id` 设为同一运行器上近期的 OperatorX
-运行 ID。工作流下载执行产物，在申请新节点前重试分配与暂存清理。恢复流程校验运行、
-运行器和私有暂存父目录；不要选择无关或过旧的 Slurm 执行。
-
-`cleanup.log` 记录用于确认分配已释放的活动作业查询。查询使用当前用户的作业列表，
-因为直接查询已删除的作业 ID，即使分配已终止，也可能返回 Slurm 错误。
-
-## AMD 执行
-
-`platforms.json` 在 CollectiveX 配置之上按运行器标签补充 AMDS Slurm 集群。
-AMD 接受单卡 `torch`/`vllm` GEMM。ROCm PyTorch 通过 `torch.cuda` 使用 HIP 事件计时；
-FP8 在 gfx942 上选择 FNUZ，在 gfx950 上选择 OCP。不支持的格式会明确记录。
-暂存目录由 `RUNNER_TEMP` 推导，位于共享运行器根目录下、`_work` 之外。容器不写入
-源码检出目录。MI300X/MI325X 显式传递 `/dev/kfd` 和 `/dev/dri`；CPU 请求沿用各推理启动器。
-
-实验算子变更记录在相邻的 `perf-changelog.yaml`，与根目录中受推理
-配置键约束的变更日志分开维护。

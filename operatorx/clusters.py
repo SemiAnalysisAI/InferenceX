@@ -1,8 +1,4 @@
-"""Minimal cluster routing table.
-
-Maps cluster id -> platform (for runner dispatch) and cluster id -> chip
-(for legacy/grouped layouts). No peak-throughput or bandwidth info.
-"""
+"""Cluster id -> platform (runner dispatch) and cluster id -> chip."""
 from __future__ import annotations
 
 

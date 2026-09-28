@@ -1,0 +1,1692 @@
+[
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 3072,
+      "n": 6144,
+      "out": "bf16",
+      "parallel": {
+        "tp": 8
+      }
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/block_sparse_moe.shared_experts.down_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 3072,
+      "n": 6144,
+      "out": "bf16",
+      "parallel": {
+        "tp": 2
+      }
+    },
+    "sources": [
+      "nvidia/MiniMax-M3-NVFP4/block_sparse_moe.shared_experts.down_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 3072,
+      "n": 6144,
+      "out": "bf16",
+      "parallel": {
+        "tp": 4
+      }
+    },
+    "sources": [
+      "nvidia/MiniMax-M3-NVFP4/block_sparse_moe.shared_experts.down_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 256,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 3072,
+      "n": 6144,
+      "out": "bf16",
+      "parallel": {
+        "tp": 8
+      }
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/block_sparse_moe.shared_experts.down_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 256,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 3072,
+      "n": 6144,
+      "out": "bf16",
+      "parallel": {
+        "tp": 2
+      }
+    },
+    "sources": [
+      "nvidia/MiniMax-M3-NVFP4/block_sparse_moe.shared_experts.down_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 256,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 3072,
+      "n": 6144,
+      "out": "bf16",
+      "parallel": {
+        "tp": 4
+      }
+    },
+    "sources": [
+      "nvidia/MiniMax-M3-NVFP4/block_sparse_moe.shared_experts.down_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 12288,
+      "n": 6144,
+      "out": "bf16",
+      "parallel": {
+        "tp": 8
+      }
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/mlp.down_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 12288,
+      "n": 6144,
+      "out": "bf16",
+      "parallel": {
+        "tp": 2
+      }
+    },
+    "sources": [
+      "nvidia/MiniMax-M3-NVFP4/mlp.down_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 12288,
+      "n": 6144,
+      "out": "bf16",
+      "parallel": {
+        "tp": 4
+      }
+    },
+    "sources": [
+      "nvidia/MiniMax-M3-NVFP4/mlp.down_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 256,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 12288,
+      "n": 6144,
+      "out": "bf16",
+      "parallel": {
+        "tp": 8
+      }
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/mlp.down_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 256,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 12288,
+      "n": 6144,
+      "out": "bf16",
+      "parallel": {
+        "tp": 2
+      }
+    },
+    "sources": [
+      "nvidia/MiniMax-M3-NVFP4/mlp.down_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 256,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 12288,
+      "n": 6144,
+      "out": "bf16",
+      "parallel": {
+        "tp": 4
+      }
+    },
+    "sources": [
+      "nvidia/MiniMax-M3-NVFP4/mlp.down_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 8192,
+      "n": 6144,
+      "out": "bf16",
+      "parallel": {
+        "tp": 8
+      }
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/self_attn.o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 8192,
+      "n": 6144,
+      "out": "bf16",
+      "parallel": {
+        "tp": 2
+      }
+    },
+    "sources": [
+      "nvidia/MiniMax-M3-NVFP4/self_attn.o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 8192,
+      "n": 6144,
+      "out": "bf16",
+      "parallel": {
+        "tp": 4
+      }
+    },
+    "sources": [
+      "nvidia/MiniMax-M3-NVFP4/self_attn.o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 256,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 8192,
+      "n": 6144,
+      "out": "bf16",
+      "parallel": {
+        "tp": 8
+      }
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/self_attn.o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 256,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 8192,
+      "n": 6144,
+      "out": "bf16",
+      "parallel": {
+        "tp": 2
+      }
+    },
+    "sources": [
+      "nvidia/MiniMax-M3-NVFP4/self_attn.o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 256,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 8192,
+      "n": 6144,
+      "out": "bf16",
+      "parallel": {
+        "tp": 4
+      }
+    },
+    "sources": [
+      "nvidia/MiniMax-M3-NVFP4/self_attn.o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "a": {
+        "dtype": "e2m1",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e2m1",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 3072,
+      "n": 6144,
+      "out": "bf16",
+      "parallel": {
+        "tp": 8
+      }
+    },
+    "sources": [
+      "amd/MiniMax-M3-MXFP4/block_sparse_moe.shared_experts.down_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 256,
+      "a": {
+        "dtype": "e2m1",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e2m1",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 3072,
+      "n": 6144,
+      "out": "bf16",
+      "parallel": {
+        "tp": 8
+      }
+    },
+    "sources": [
+      "amd/MiniMax-M3-MXFP4/block_sparse_moe.shared_experts.down_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 12288,
+      "n": 6144,
+      "out": "bf16",
+      "parallel": {
+        "tp": 8
+      }
+    },
+    "sources": [
+      "amd/MiniMax-M3-MXFP4/mlp.down_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 256,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 12288,
+      "n": 6144,
+      "out": "bf16",
+      "parallel": {
+        "tp": 8
+      }
+    },
+    "sources": [
+      "amd/MiniMax-M3-MXFP4/mlp.down_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 8192,
+      "n": 6144,
+      "out": "bf16",
+      "parallel": {
+        "tp": 8
+      }
+    },
+    "sources": [
+      "amd/MiniMax-M3-MXFP4/self_attn.o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 256,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 8192,
+      "n": 6144,
+      "out": "bf16",
+      "parallel": {
+        "tp": 8
+      }
+    },
+    "sources": [
+      "amd/MiniMax-M3-MXFP4/self_attn.o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "k": 16384,
+      "n": 7168,
+      "out": "bf16",
+      "parallel": {
+        "tp": 8
+      }
+    },
+    "sources": [
+      "deepseek-ai/DeepSeek-V4-Pro-0813/attn.wo_b"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "k": 16384,
+      "n": 7168,
+      "out": "bf16",
+      "parallel": {
+        "tp": 4
+      }
+    },
+    "sources": [
+      "deepseek-ai/DeepSeek-V4-Pro/attn.wo_b"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 256,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "k": 16384,
+      "n": 7168,
+      "out": "bf16",
+      "parallel": {
+        "tp": 8
+      }
+    },
+    "sources": [
+      "deepseek-ai/DeepSeek-V4-Pro-0813/attn.wo_b"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 256,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "k": 16384,
+      "n": 7168,
+      "out": "bf16",
+      "parallel": {
+        "tp": 4
+      }
+    },
+    "sources": [
+      "deepseek-ai/DeepSeek-V4-Pro/attn.wo_b"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "k": 3072,
+      "n": 7168,
+      "out": "bf16",
+      "parallel": {
+        "tp": 8
+      }
+    },
+    "sources": [
+      "deepseek-ai/DeepSeek-V4-Pro-0813/ffn.shared_experts.w2"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "k": 3072,
+      "n": 7168,
+      "out": "bf16",
+      "parallel": {
+        "tp": 4
+      }
+    },
+    "sources": [
+      "deepseek-ai/DeepSeek-V4-Pro/ffn.shared_experts.w2"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 256,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "k": 3072,
+      "n": 7168,
+      "out": "bf16",
+      "parallel": {
+        "tp": 8
+      }
+    },
+    "sources": [
+      "deepseek-ai/DeepSeek-V4-Pro-0813/ffn.shared_experts.w2"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 256,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "k": 3072,
+      "n": 7168,
+      "out": "bf16",
+      "parallel": {
+        "tp": 4
+      }
+    },
+    "sources": [
+      "deepseek-ai/DeepSeek-V4-Pro/ffn.shared_experts.w2"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            32,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 8192,
+      "n": 5120,
+      "out": "bf16",
+      "parallel": {
+        "tp": 2
+      }
+    },
+    "sources": [
+      "deepseek-ai/DeepSeek-V4.1-Flash/attn.wo_b"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            32,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 8192,
+      "n": 5120,
+      "out": "bf16",
+      "parallel": {
+        "tp": 4
+      }
+    },
+    "sources": [
+      "deepseek-ai/DeepSeek-V4.1-Flash/attn.wo_b"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            32,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 8192,
+      "n": 5120,
+      "out": "bf16",
+      "parallel": {
+        "tp": 8
+      }
+    },
+    "sources": [
+      "deepseek-ai/DeepSeek-V4.1-Flash/attn.wo_b"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 256,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            32,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 8192,
+      "n": 5120,
+      "out": "bf16",
+      "parallel": {
+        "tp": 2
+      }
+    },
+    "sources": [
+      "deepseek-ai/DeepSeek-V4.1-Flash/attn.wo_b"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 256,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            32,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 8192,
+      "n": 5120,
+      "out": "bf16",
+      "parallel": {
+        "tp": 4
+      }
+    },
+    "sources": [
+      "deepseek-ai/DeepSeek-V4.1-Flash/attn.wo_b"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 256,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            32,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 8192,
+      "n": 5120,
+      "out": "bf16",
+      "parallel": {
+        "tp": 8
+      }
+    },
+    "sources": [
+      "deepseek-ai/DeepSeek-V4.1-Flash/attn.wo_b"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            32,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 2304,
+      "n": 5120,
+      "out": "bf16",
+      "parallel": {
+        "tp": 2
+      }
+    },
+    "sources": [
+      "deepseek-ai/DeepSeek-V4.1-Flash/ffn.shared_experts.w2"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            32,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 2304,
+      "n": 5120,
+      "out": "bf16",
+      "parallel": {
+        "tp": 4
+      }
+    },
+    "sources": [
+      "deepseek-ai/DeepSeek-V4.1-Flash/ffn.shared_experts.w2"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            32,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 2304,
+      "n": 5120,
+      "out": "bf16",
+      "parallel": {
+        "tp": 8
+      }
+    },
+    "sources": [
+      "deepseek-ai/DeepSeek-V4.1-Flash/ffn.shared_experts.w2"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 256,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            32,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 2304,
+      "n": 5120,
+      "out": "bf16",
+      "parallel": {
+        "tp": 2
+      }
+    },
+    "sources": [
+      "deepseek-ai/DeepSeek-V4.1-Flash/ffn.shared_experts.w2"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 256,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            32,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 2304,
+      "n": 5120,
+      "out": "bf16",
+      "parallel": {
+        "tp": 4
+      }
+    },
+    "sources": [
+      "deepseek-ai/DeepSeek-V4.1-Flash/ffn.shared_experts.w2"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 256,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            32,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 2304,
+      "n": 5120,
+      "out": "bf16",
+      "parallel": {
+        "tp": 8
+      }
+    },
+    "sources": [
+      "deepseek-ai/DeepSeek-V4.1-Flash/ffn.shared_experts.w2"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 6144,
+      "n": 7168,
+      "out": "bf16",
+      "parallel": {
+        "tp": 8
+      }
+    },
+    "sources": [
+      "moonshotai/Kimi-K3/block_sparse_moe.shared_experts.down_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 256,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 6144,
+      "n": 7168,
+      "out": "bf16",
+      "parallel": {
+        "tp": 8
+      }
+    },
+    "sources": [
+      "moonshotai/Kimi-K3/block_sparse_moe.shared_experts.down_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 33792,
+      "n": 7168,
+      "out": "bf16",
+      "parallel": {
+        "tp": 8
+      }
+    },
+    "sources": [
+      "moonshotai/Kimi-K3/mlp.down_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 256,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 33792,
+      "n": 7168,
+      "out": "bf16",
+      "parallel": {
+        "tp": 8
+      }
+    },
+    "sources": [
+      "moonshotai/Kimi-K3/mlp.down_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 12288,
+      "n": 7168,
+      "out": "bf16",
+      "parallel": {
+        "tp": 8
+      }
+    },
+    "sources": [
+      "moonshotai/Kimi-K3/self_attn.o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 256,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 12288,
+      "n": 7168,
+      "out": "bf16",
+      "parallel": {
+        "tp": 8
+      }
+    },
+    "sources": [
+      "moonshotai/Kimi-K3/self_attn.o_proj"
+    ]
+  }
+]
