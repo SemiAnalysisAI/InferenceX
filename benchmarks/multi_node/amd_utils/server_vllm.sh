@@ -40,6 +40,14 @@ DRY_RUN="${DRY_RUN:-0}"
 GPUS_PER_NODE="${GPUS_PER_NODE:-8}"
 SERVER_UP_TIMEOUT="${SERVER_UP_TIMEOUT:-900}"
 
+# This branch keeps its own utils layout and Slurm/container adapter.
+source "$(dirname "${BASH_SOURCE[0]}")/../../benchmark_lib.sh" --validation-only
+capture_local_server_after_health() {
+    python3 "$WS_PATH/sync.py" barrier --node-ips "$host_ip" --node-ports "$SERVER_PORT" \
+        --wait-for-all-health --health-endpoint /health --timeout "$SERVER_UP_TIMEOUT" || return 1
+    capture_ready_server_state "$1"
+}
+
 PREFILL_TP_SIZE="${PREFILL_TP_SIZE:-$GPUS_PER_NODE}"
 DECODE_TP_SIZE="${DECODE_TP_SIZE:-$GPUS_PER_NODE}"
 
@@ -60,6 +68,7 @@ host_ip=$(ip route get 1.1.1.1 2>/dev/null | awk '/src/ {print $7}')
 rdma_ip=$(hostname -I | tr ' ' '\n' | grep '^192\.168\.' | head -1)
 rdma_ip="${rdma_ip:-$host_ip}"
 host_name=$(hostname)
+export MORIIO_HOST_IP="$host_ip"
 
 archive_local_server_logs() {
     [[ "$DRY_RUN" == 1 ]] && return 0
@@ -253,6 +262,52 @@ DECODE_SERVER_CONFIG="$(apply_vllm_gpu_memory_utilization "$DECODE_SERVER_CONFIG
 PREFILL_SERVER_CONFIG="$(apply_vllm_kv_cache_memory_bytes "$PREFILL_SERVER_CONFIG" "${PREFILL_KV_CACHE_MEMORY_BYTES:-}")"
 DECODE_SERVER_CONFIG="$(apply_vllm_kv_cache_memory_bytes "$DECODE_SERVER_CONFIG" "${DECODE_KV_CACHE_MEMORY_BYTES:-}")"
 
+if [[ -n "${MAMBA_SSM_CACHE_DTYPE:-}" ]]; then
+    case "${MAMBA_SSM_CACHE_DTYPE}" in
+        auto|float32|bfloat16) ;;
+        *)
+            echo "ERROR: unsupported MAMBA_SSM_CACHE_DTYPE=${MAMBA_SSM_CACHE_DTYPE}" >&2
+            exit 1
+            ;;
+    esac
+    for cfg_name in PREFILL_SERVER_CONFIG DECODE_SERVER_CONFIG; do
+        cfg=${!cfg_name}
+        if echo "$cfg" | grep -q -- '--mamba-ssm-cache-dtype'; then
+            cfg=$(echo "$cfg" | sed -E \
+                "s/--mamba-ssm-cache-dtype[[:space:]]+[^[:space:]]+/--mamba-ssm-cache-dtype ${MAMBA_SSM_CACHE_DTYPE}/g")
+        else
+            cfg+=" --mamba-ssm-cache-dtype ${MAMBA_SSM_CACHE_DTYPE}"
+        fi
+        printf -v "$cfg_name" '%s' "$cfg"
+    done
+fi
+
+validate_kv_cache_geometry() {
+    local log_file="$1"
+    local expected_groups="${EXPECTED_KV_CACHE_GROUP_SIZES:-}"
+    local expected_lcm="${EXPECTED_KV_LCM_BLOCK_SIZE:-}"
+    [[ -n "$expected_groups" || -n "$expected_lcm" ]] || return 0
+
+    local group_line lcm_line actual_groups actual_lcm
+    group_line=$(grep 'kv cache group sizes' "$log_file" | tail -1 || true)
+    lcm_line=$(grep 'kv lcm block sizes' "$log_file" | tail -1 || true)
+    actual_groups=$(sed -nE 's/.*kv cache group sizes \[([^]]+)\].*/\1/p' \
+        <<< "$group_line" | tr -d ' ')
+    actual_lcm=$(sed -nE 's/.*kv lcm block sizes ([0-9]+).*/\1/p' \
+        <<< "$lcm_line")
+    expected_groups=$(tr -d ' []' <<< "$expected_groups")
+
+    if [[ -n "$expected_groups" && "$actual_groups" != "$expected_groups" ]]; then
+        echo "ERROR: KV cache group geometry mismatch: expected ${expected_groups}, got ${actual_groups:-missing}" >&2
+        return 1
+    fi
+    if [[ -n "$expected_lcm" && "$actual_lcm" != "$expected_lcm" ]]; then
+        echo "ERROR: KV cache LCM mismatch: expected ${expected_lcm}, got ${actual_lcm:-missing}" >&2
+        return 1
+    fi
+    echo "[KV-GEOMETRY] groups=${actual_groups} lcm=${actual_lcm}"
+}
+
 if [[ "${MODEL_NAME:-}" == "Kimi-K3" && "${SPEC_DECODING:-}" == "mtp" ]]; then
     apply_numeric_serve_flag() {
         local cfg="$1"
@@ -307,7 +362,11 @@ print(json.dumps(config, separators=(",", ":")))
 PY
     )
     spec_max_num_seqs=${SPEC_MAX_NUM_SEQS:-16}
+    spec_prefill_max_num_seqs=${SPEC_PREFILL_MAX_NUM_SEQS:-$spec_max_num_seqs}
+    spec_decode_max_num_seqs=${SPEC_DECODE_MAX_NUM_SEQS:-$spec_max_num_seqs}
     spec_max_num_batched_tokens=${SPEC_MAX_NUM_BATCHED_TOKENS:-4096}
+    spec_prefill_max_num_batched_tokens=${SPEC_PREFILL_MAX_NUM_BATCHED_TOKENS:-$spec_max_num_batched_tokens}
+    spec_decode_max_num_batched_tokens=${SPEC_DECODE_MAX_NUM_BATCHED_TOKENS:-$spec_max_num_batched_tokens}
     # Keep the legacy shared override as a fallback, but allow P/D to retain
     # their role-specific graph modes. Decode uses full graphs without requiring
     # breakable piecewise capture; prefill keeps the mixed-batch piecewise path.
@@ -315,29 +374,56 @@ PY
     spec_prefill_cudagraph_mode=${SPEC_PREFILL_CUDAGRAPH_MODE:-$spec_cudagraph_mode}
     spec_decode_cudagraph_mode=${SPEC_DECODE_CUDAGRAPH_MODE:-$spec_cudagraph_mode}
     spec_capture_size=${SPEC_MAX_CUDAGRAPH_CAPTURE_SIZE:-$((spec_max_num_seqs * (${SPEC_NUM_TOKENS:-4} + 1)))}
+    spec_prefill_capture_size=${SPEC_PREFILL_MAX_CUDAGRAPH_CAPTURE_SIZE:-$spec_capture_size}
+    spec_decode_capture_size=${SPEC_DECODE_MAX_CUDAGRAPH_CAPTURE_SIZE:-$spec_capture_size}
     for role in PREFILL DECODE; do
         cfg_name="${role}_SERVER_CONFIG"
         cfg=${!cfg_name}
         if [[ "$role" == "PREFILL" ]]; then
+            role_max_num_seqs=$spec_prefill_max_num_seqs
             role_cudagraph_mode=$spec_prefill_cudagraph_mode
+            role_max_num_batched_tokens=$spec_prefill_max_num_batched_tokens
+            role_capture_size=$spec_prefill_capture_size
+            role_capture_sizes=${SPEC_PREFILL_CUDAGRAPH_CAPTURE_SIZES:-${SPEC_CUDAGRAPH_CAPTURE_SIZES:-}}
         else
+            role_max_num_seqs=$spec_decode_max_num_seqs
             role_cudagraph_mode=$spec_decode_cudagraph_mode
+            role_max_num_batched_tokens=$spec_decode_max_num_batched_tokens
+            role_capture_size=$spec_decode_capture_size
+            role_capture_sizes=${SPEC_DECODE_CUDAGRAPH_CAPTURE_SIZES:-${SPEC_CUDAGRAPH_CAPTURE_SIZES:-}}
         fi
+        # K3 PIECEWISE requires breakable graphs, while FULL decode does not.
+        # P/D additional-settings share one environment and model role defaults
+        # are exported later, so bind this flag to the resolved role graph here.
+        role_breakable=0
+        case "$role_cudagraph_mode" in
+            PIECEWISE|FULL_AND_PIECEWISE) role_breakable=1 ;;
+        esac
+        role_env_name="${role}_MODEL_ENVS"
+        printf -v "$role_env_name" '%s VLLM_USE_BREAKABLE_CUDAGRAPH=%s' \
+            "${!role_env_name}" "$role_breakable"
         spec_compilation_config=$( \
             SPEC_ROLE_CUDAGRAPH_MODE="$role_cudagraph_mode" \
-            SPEC_CAPTURE_SIZE="$spec_capture_size" \
+            SPEC_ROLE_CAPTURE_SIZE="$role_capture_size" \
+            SPEC_ROLE_CUDAGRAPH_CAPTURE_SIZES="$role_capture_sizes" \
             python3 - <<'PY'
 import json
 import os
 
-max_size = int(os.environ["SPEC_CAPTURE_SIZE"])
+max_size = int(os.environ["SPEC_ROLE_CAPTURE_SIZE"])
 config = {
     "mode": 3,
     "cudagraph_mode": os.environ["SPEC_ROLE_CUDAGRAPH_MODE"],
     "max_cudagraph_capture_size": max_size,
-    "custom_ops": ["+fused_rms_norm_gated"],
+    "custom_ops": [
+        "+fused_rms_norm_gated",
+        "+quant_fp8",
+        "+grouped_topk",
+        "+sparse_attn_indexer",
+        "none",
+    ],
 }
-raw_sizes = os.environ.get("SPEC_CUDAGRAPH_CAPTURE_SIZES", "").strip()
+raw_sizes = os.environ.get("SPEC_ROLE_CUDAGRAPH_CAPTURE_SIZES", "").strip()
 if raw_sizes:
     sizes = [int(value) for value in raw_sizes.split(",")]
     if sizes != sorted(set(sizes)) or sizes[0] <= 0 or sizes[-1] > max_size:
@@ -349,16 +435,16 @@ if raw_sizes:
 print(json.dumps(config, separators=(",", ":")))
 PY
         )
-        cfg=$(apply_numeric_serve_flag "$cfg" --max-num-seqs "$spec_max_num_seqs")
+        cfg=$(apply_numeric_serve_flag "$cfg" --max-num-seqs "$role_max_num_seqs")
         cfg=$(apply_numeric_serve_flag \
-            "$cfg" --max-num-batched-tokens "$spec_max_num_batched_tokens")
+            "$cfg" --max-num-batched-tokens "$role_max_num_batched_tokens")
         cfg=$(apply_quoted_serve_flag \
             "$cfg" --compilation-config "$spec_compilation_config")
         printf -v "$cfg_name" '%s' "$cfg"
     done
     PREFILL_SERVER_CONFIG+=" --speculative-config '${spec_config}'"
     DECODE_SERVER_CONFIG+=" --speculative-config '${spec_config}'"
-    echo "Applied Kimi-K3 DSpark config to prefill and decode: ${spec_config}; max_num_seqs=${spec_max_num_seqs}; max_num_batched_tokens=${spec_max_num_batched_tokens}; capture_size=${spec_capture_size}; prefill_cudagraph_mode=${spec_prefill_cudagraph_mode}; decode_cudagraph_mode=${spec_decode_cudagraph_mode}"
+    echo "Applied Kimi-K3 DSpark config to prefill and decode: ${spec_config}; prefill_max_num_seqs=${spec_prefill_max_num_seqs}; decode_max_num_seqs=${spec_decode_max_num_seqs}; prefill_max_num_batched_tokens=${spec_prefill_max_num_batched_tokens}; decode_max_num_batched_tokens=${spec_decode_max_num_batched_tokens}; prefill_capture_size=${spec_prefill_capture_size}; decode_capture_size=${spec_decode_capture_size}; prefill_cudagraph_mode=${spec_prefill_cudagraph_mode}; decode_cudagraph_mode=${spec_decode_cudagraph_mode}"
 fi
 
 echo "PREFILL_SERVER_CONFIG (after TP/EP/DP): $PREFILL_SERVER_CONFIG"
@@ -367,8 +453,8 @@ echo "DECODE_SERVER_CONFIG (after TP/EP/DP): $DECODE_SERVER_CONFIG"
 case "${KV_OFFLOADING:-none}" in
     none) ;;
     dram)
-        if [[ "${KV_OFFLOAD_BACKEND:-}" != "lmcache-k3" ]]; then
-            echo "ERROR: vLLM disagg DRAM offload requires KV_OFFLOAD_BACKEND=lmcache-k3" >&2
+        if [[ "${KV_OFFLOAD_BACKEND:-}" != "lmcache-k3" && "${KV_OFFLOAD_BACKEND:-}" != "vllm-simple" ]]; then
+            echo "ERROR: vLLM disagg DRAM offload requires KV_OFFLOAD_BACKEND=lmcache-k3 or vllm-simple" >&2
             exit 1
         fi
         ;;
@@ -380,7 +466,7 @@ esac
 
 lmcache_attached_to_role() {
     local mori_role="$1"
-    [[ "${KV_OFFLOADING:-none}" == "dram" ]] || return 1
+    [[ "${KV_OFFLOADING:-none}" == "dram" && "${KV_OFFLOAD_BACKEND:-}" == "lmcache-k3" ]] || return 1
     [[ "$mori_role" != "kv_consumer" || "${LMCACHE_ON_DECODE:-false}" == "true" ]]
 }
 
@@ -400,8 +486,48 @@ ensure_lmcache_kv_offload() {
     LMCACHE_SETUP_DONE=1
 }
 
+build_simple_kv_transfer_config_json() {
+    MORI_KV_ROLE="$1" python3 - <<'PY'
+import json, os
+role = os.environ["MORI_KV_ROLE"]
+qp = int(os.environ.get("MORI_QP_PER_TRANSFER") or "8")
+if qp <= 0:
+    raise ValueError("MORI_QP_PER_TRANSFER must be positive")
+mori = {
+    "kv_connector": "MoRIIOConnector", "kv_role": role,
+    "kv_load_failure_policy": "fail",
+    "kv_connector_extra_config": {
+        "proxy_ip": os.environ["NODE0_ADDR"], "host_ip": os.environ["MORIIO_HOST_IP"],
+        "proxy_ping_port": os.environ.get("PROXY_PING_PORT") or "36367",
+        "http_port": os.environ.get("SERVER_PORT") or "2584",
+        "backend": os.environ.get("MORIIO_BACKEND") or "rdma",
+        "read_mode": True, "qp_per_transfer": qp,
+    },
+}
+if role == "kv_producer" and os.environ.get("KV_OFFLOADING") == "dram":
+    cpu_bytes = int(float(os.environ["TOTAL_CPU_DRAM_GB"]) * 1e9)
+    if cpu_bytes <= 0:
+        raise ValueError("TOTAL_CPU_DRAM_GB must be positive")
+    result = {
+        "kv_connector": "MultiConnector", "kv_role": "kv_both",
+        "kv_load_failure_policy": "fail",
+        "kv_connector_extra_config": {"connectors": [mori, {
+            "kv_connector": "SimpleCPUOffloadConnector", "kv_role": "kv_both",
+            "kv_connector_extra_config": {"cpu_bytes_to_use": cpu_bytes, "lazy_offload": False},
+        }]},
+    }
+else:
+    result = mori
+print(json.dumps(result))
+PY
+}
+
 build_kv_transfer_config_json() {
     local mori_role="$1"
+    if [[ "${KV_OFFLOAD_BACKEND:-}" == "vllm-simple" ]]; then
+        build_simple_kv_transfer_config_json "$mori_role"
+        return $?
+    fi
     if ! lmcache_attached_to_role "$mori_role"; then
         cat <<EOF
 {"kv_connector": "MoRIIOConnector", "kv_role": "${mori_role}", "kv_load_failure_policy": "${KV_LOAD_FAILURE_POLICY:-recompute}", "kv_connector_extra_config": {"proxy_ip": "${NODE0_ADDR}", "proxy_ping_port": "${PROXY_PING_PORT}", "http_port": "${SERVER_PORT}", "backend": "${MORIIO_BACKEND:-rdma}", "read_mode": true}}
@@ -519,7 +645,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
 
     setup_vllm_env
     ensure_lmcache_kv_offload kv_producer
-    KV_TRANSFER_JSON="$(build_kv_transfer_config_json kv_producer)"
+    KV_TRANSFER_JSON="$(build_kv_transfer_config_json kv_producer)" || exit 1
 
     for env_pair in ${PREFILL_MODEL_ENVS}; do
         export "$env_pair"
@@ -579,6 +705,8 @@ if [ "$NODE_RANK" -eq 0 ]; then
             exit 1
         fi
         echo "MoRI-IO proxy is ready for benchmarking"
+        validate_kv_cache_geometry "$PREFILL_LOG_FILE" || exit 1
+        capture_local_server_after_health "$prefill_pid" || exit 1
     fi
 
     echo "Ready for benchmarking on ${host_name}:${host_ip}"
@@ -586,6 +714,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
     cd $WS_PATH
 
     export ROUTER_PORT=$ROUTER_PORT
+    BENCH_RC=0
     if [[ "${IS_AGENTIC:-0}" == "1" || "${IS_AGENTIC:-}" == "true" ]]; then
         SERVER_FLUSH_URLS_CSV=$(IFS=,; echo "${SERVER_FLUSH_URLS[*]}")
         export SERVER_FLUSH_URLS_CSV
@@ -609,7 +738,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         echo "DRY RUN: $BENCH_CMD"
     else
         set -x
-        eval "$BENCH_CMD"
+        run_server_client bash -c "$BENCH_CMD" || BENCH_RC=$?
         set +x
     fi
 
@@ -708,13 +837,15 @@ if [ "$NODE_RANK" -eq 0 ]; then
         exit 1
     fi
 
+    [[ "$BENCH_RC" == 0 ]] || exit "$BENCH_RC"
+
 elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$xP" ]; then
     echo "${host_name}:${host_ip} is Additional Prefill Node (Model: ${MODEL_NAME})"
     echo "Using prefill config: $PREFILL_SERVER_CONFIG"
 
     setup_vllm_env
     ensure_lmcache_kv_offload kv_producer
-    KV_TRANSFER_JSON="$(build_kv_transfer_config_json kv_producer)"
+    KV_TRANSFER_JSON="$(build_kv_transfer_config_json kv_producer)" || exit 1
 
     for env_pair in ${PREFILL_MODEL_ENVS}; do
         export "$env_pair"
@@ -763,7 +894,8 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$xP" ]; then
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $WAIT_CMD"
     else
-        eval "$WAIT_CMD"
+        capture_local_server_after_health "${prefill_pid:-$decode_pid}" || exit 1
+        run_server_client bash -c "$WAIT_CMD" || exit $?
     fi
 
     echo "Killing the prefill server"
@@ -776,7 +908,7 @@ else
 
     setup_vllm_env
     ensure_lmcache_kv_offload kv_consumer
-    KV_TRANSFER_JSON="$(build_kv_transfer_config_json kv_consumer)"
+    KV_TRANSFER_JSON="$(build_kv_transfer_config_json kv_consumer)" || exit 1
 
     for env_pair in ${DECODE_MODEL_ENVS}; do
         export "$env_pair"
@@ -825,7 +957,8 @@ else
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $WAIT_CMD"
     else
-        eval "$WAIT_CMD"
+        capture_local_server_after_health "${prefill_pid:-$decode_pid}" || exit 1
+        run_server_client bash -c "$WAIT_CMD" || exit $?
     fi
 
     echo "Killing the decode server"

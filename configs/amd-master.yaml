@@ -685,30 +685,30 @@ kimik3-fp4-mi355x-atom-agentic-mtp:
       search-space:
       - { tp: 8, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.4.5" }, conc-list: [32, 40, 56], spec-decoding: mtp }
 
-# Kimi-K3 MXFP4 MI355X vLLM disaggregated agentic (1P1D). Engine flags match
-# SA single-node none:40 (TP8/DCP8 + LMCacheMP). Allowed PD delta only:
-# prefill TP8/DCP8 + LMCacheMP + MoRIIO producer; decode TP8/DCP8 + MoRIIO consumer.
+# GMU0.90 three-point candidate on the original InferenceX runner path.
 kimik3-fp4-mi355x-vllm-disagg-agentic:
-  # Pin the 2026-09-03 nightly validated locally. Some SA nodes retain an older
-  # mutable `nightly` tag whose AttentionConfig predates ROCM_AITER_FA.
-  image: vllm/vllm-openai-rocm:nightly@sha256:91e381f072d6a44e1e4c97c82dce06e50e5189905cb3999a11471c5a8fc6a563
+  image: docker.io/yukiozzz/vllm-openai-rocm@sha256:2ffab8b3739e3c45a363ae9a49b0efb113c157ce94f58fe21d7399eee26adb97
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:mi355x-amds
   precision: fp4
   framework: vllm-disagg
-  router: { name: vllm-router, version: "0.1.14" }
+  router:
+    name: vllm-router
+    version: nightly-20260913-83944c4
   kv-p2p-transfer: moriio
   multinode: true
   disagg: true
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.60
+    - dram-utilization: 0.6
       search-space:
-      - spec-decoding: "none"
-        conc-list: [ 1, 40, 48, 70 ]
+      - spec-decoding: mtp
+        conc-list:
+        - 48
         kv-offloading: dram
-        kv-offload-backend: { name: lmcache-k3, version: "nightly-rocm" }
+        kv-offload-backend:
+          name: vllm-simple
         prefill:
           num-worker: 1
           tp: 8
@@ -716,21 +716,21 @@ kimik3-fp4-mi355x-vllm-disagg-agentic:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "PREFILL_NODES=1"
-          - "GPU_MEMORY_UTILIZATION=0.88"
-          - "TOTAL_CPU_DRAM_GB=1799"
-          - "LMCACHE_CHUNK_SIZE=12288"
-          - "LMCACHE_L1_SIZE_GB=1799"
-          - "LMCACHE_L1_READ_TTL_SECONDS=1800"
-          - "LMCACHE_MAX_GPU_WORKERS=8"
-          - "LMCACHE_VERSION=latest-rocm"
-          - "SERVER_UP_TIMEOUT=900"
-          - "IX_AIPERF_TOKENIZER=moonshotai/Kimi-K3"
-          - "VLLM_K3_FORK_REF=k3-pd-recovery-integration"
-          - "VLLM_K3_FORK_SHA=710a6cbef37aa7b7fb88255e09795729483943ad"
-          - "HF_HUB_CACHE=/models/.cache/huggingface/hub"
-          - "PREFILL_DCP_COMM=a2a"
-          - "PREFILL_CP_KV_CACHE_INTERLEAVE_SIZE=1536"
+          - GPU_MEMORY_UTILIZATION=0.90
+          - MORI_IB_MAX_RD_ATOMIC=1
+          - MORI_QP_PER_TRANSFER=8
+          - MORI_APP_LOG_LEVEL=INFO
+          - VLLM_ENABLE_STARTUP_PLAN=0
+          - AIPERF_CANCEL_WIRE_DRAIN_FIX=1
+          - MAMBA_SSM_CACHE_DTYPE=bfloat16
+          - EXPECTED_KV_CACHE_GROUP_SIZES=896,896,896,7168
+          - EXPECTED_KV_LCM_BLOCK_SIZE=7168
+          - SPEC_PREFILL_MAX_NUM_SEQS=96
+          - PREFILL_GPU_MEMORY_UTILIZATION=0.90
+          - SPEC_PREFILL_MAX_NUM_BATCHED_TOKENS=8192
+          - SPEC_PREFILL_CUDAGRAPH_MODE=NONE
+          - SPEC_PREFILL_MAX_CUDAGRAPH_CAPTURE_SIZE=0
+          - VLLM_USE_BREAKABLE_CUDAGRAPH=0
         decode:
           num-worker: 1
           tp: 8
@@ -738,12 +738,121 @@ kimik3-fp4-mi355x-vllm-disagg-agentic:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "DECODE_NODES=1"
-          - "VLLM_K3_FORK_REF=k3-pd-recovery-integration"
-          - "VLLM_K3_FORK_SHA=710a6cbef37aa7b7fb88255e09795729483943ad"
-          - "HF_HUB_CACHE=/models/.cache/huggingface/hub"
-          - "DECODE_DCP_COMM=a2a"
-          - "DECODE_CP_KV_CACHE_INTERLEAVE_SIZE=1536"
+          - GPU_MEMORY_UTILIZATION=0.90
+          - MORI_IB_MAX_RD_ATOMIC=1
+          - MORI_QP_PER_TRANSFER=8
+          - MORI_APP_LOG_LEVEL=INFO
+          - VLLM_ENABLE_STARTUP_PLAN=0
+          - AIPERF_CANCEL_WIRE_DRAIN_FIX=1
+          - MAMBA_SSM_CACHE_DTYPE=bfloat16
+          - EXPECTED_KV_CACHE_GROUP_SIZES=896,896,896,7168
+          - EXPECTED_KV_LCM_BLOCK_SIZE=7168
+          - SPEC_DECODE_MAX_NUM_SEQS=96
+          - SPEC_DECODE_MAX_NUM_BATCHED_TOKENS=512
+          - SPEC_DECODE_CUDAGRAPH_MODE=FULL_DECODE_ONLY
+          - SPEC_DECODE_MAX_CUDAGRAPH_CAPTURE_SIZE=240
+          - SPEC_DECODE_CUDAGRAPH_CAPTURE_SIZES=1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,127,128,130,140,150,160,170,180,190,200,210,220,230,240
+          - VLLM_USE_BREAKABLE_CUDAGRAPH=0
+      - spec-decoding: mtp
+        conc-list:
+        - 24
+        kv-offloading: dram
+        kv-offload-backend:
+          name: vllm-simple
+        prefill:
+          num-worker: 1
+          tp: 8
+          dcp-size: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - GPU_MEMORY_UTILIZATION=0.90
+          - MORI_IB_MAX_RD_ATOMIC=1
+          - MORI_QP_PER_TRANSFER=8
+          - MORI_APP_LOG_LEVEL=INFO
+          - VLLM_ENABLE_STARTUP_PLAN=0
+          - AIPERF_CANCEL_WIRE_DRAIN_FIX=1
+          - MAMBA_SSM_CACHE_DTYPE=float32
+          - EXPECTED_KV_CACHE_GROUP_SIZES=1536,1536,1536,12288
+          - EXPECTED_KV_LCM_BLOCK_SIZE=12288
+          - SPEC_PREFILL_MAX_NUM_SEQS=48
+          - PREFILL_GPU_MEMORY_UTILIZATION=0.90
+          - SPEC_PREFILL_MAX_NUM_BATCHED_TOKENS=8192
+          - SPEC_PREFILL_CUDAGRAPH_MODE=NONE
+          - SPEC_PREFILL_MAX_CUDAGRAPH_CAPTURE_SIZE=0
+          - VLLM_USE_BREAKABLE_CUDAGRAPH=0
+        decode:
+          num-worker: 2
+          tp: 8
+          dcp-size: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - GPU_MEMORY_UTILIZATION=0.90
+          - MORI_IB_MAX_RD_ATOMIC=1
+          - MORI_QP_PER_TRANSFER=8
+          - MORI_APP_LOG_LEVEL=INFO
+          - VLLM_ENABLE_STARTUP_PLAN=0
+          - AIPERF_CANCEL_WIRE_DRAIN_FIX=1
+          - MAMBA_SSM_CACHE_DTYPE=float32
+          - EXPECTED_KV_CACHE_GROUP_SIZES=1536,1536,1536,12288
+          - EXPECTED_KV_LCM_BLOCK_SIZE=12288
+          - SPEC_DECODE_MAX_NUM_SEQS=24
+          - SPEC_DECODE_MAX_NUM_BATCHED_TOKENS=512
+          - SPEC_DECODE_CUDAGRAPH_MODE=FULL_DECODE_ONLY
+          - SPEC_DECODE_MAX_CUDAGRAPH_CAPTURE_SIZE=120
+          - SPEC_DECODE_CUDAGRAPH_CAPTURE_SIZES=1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,70,80,90,100,110,120
+          - VLLM_USE_BREAKABLE_CUDAGRAPH=0
+      - spec-decoding: mtp
+        conc-list:
+        - 10
+        kv-offloading: dram
+        kv-offload-backend:
+          name: vllm-simple
+        prefill:
+          num-worker: 1
+          tp: 8
+          dcp-size: 1
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - GPU_MEMORY_UTILIZATION=0.90
+          - MORI_IB_MAX_RD_ATOMIC=1
+          - MORI_QP_PER_TRANSFER=8
+          - MORI_APP_LOG_LEVEL=INFO
+          - VLLM_ENABLE_STARTUP_PLAN=0
+          - AIPERF_CANCEL_WIRE_DRAIN_FIX=1
+          - MAMBA_SSM_CACHE_DTYPE=float32
+          - EXPECTED_KV_CACHE_GROUP_SIZES=1536,1536,1536,1536
+          - EXPECTED_KV_LCM_BLOCK_SIZE=1536
+          - SPEC_PREFILL_MAX_NUM_SEQS=20
+          - SPEC_PREFILL_MAX_NUM_BATCHED_TOKENS=8192
+          - SPEC_PREFILL_CUDAGRAPH_MODE=PIECEWISE
+          - SPEC_PREFILL_MAX_CUDAGRAPH_CAPTURE_SIZE=128
+          - SPEC_PREFILL_CUDAGRAPH_CAPTURE_SIZES=1,16,32,64,128
+          - VLLM_USE_BREAKABLE_CUDAGRAPH=1
+        decode:
+          num-worker: 1
+          tp: 8
+          dcp-size: 1
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - GPU_MEMORY_UTILIZATION=0.90
+          - MORI_IB_MAX_RD_ATOMIC=1
+          - MORI_QP_PER_TRANSFER=8
+          - MORI_APP_LOG_LEVEL=INFO
+          - VLLM_ENABLE_STARTUP_PLAN=0
+          - AIPERF_CANCEL_WIRE_DRAIN_FIX=1
+          - MAMBA_SSM_CACHE_DTYPE=float32
+          - EXPECTED_KV_CACHE_GROUP_SIZES=1536,1536,1536,1536
+          - EXPECTED_KV_LCM_BLOCK_SIZE=1536
+          - SPEC_DECODE_MAX_NUM_SEQS=20
+          - SPEC_DECODE_MAX_NUM_BATCHED_TOKENS=512
+          - SPEC_DECODE_CUDAGRAPH_MODE=FULL_DECODE_ONLY
+          - SPEC_DECODE_MAX_CUDAGRAPH_CAPTURE_SIZE=80
+          - SPEC_DECODE_CUDAGRAPH_CAPTURE_SIZES=1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80
+          - VLLM_USE_BREAKABLE_CUDAGRAPH=0
 
 # Kimi-K3 DCP8 PD with DSpark synthetic acceptance. Target verification uses
 # native AITER CPRR and the DCP-sharded draft uses AITER mask0. P runs eager;

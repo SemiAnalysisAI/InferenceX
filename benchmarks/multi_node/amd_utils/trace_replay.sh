@@ -158,7 +158,7 @@ if [ "$PREFILL_ENABLE_DP" = "true" ]; then
 fi
 
 resolve_trace_source
-install_agentic_deps
+install_agentic_deps || exit $?
 
 ANY_FAILED=0
 for max_concurrency in "${chosen_concurrencies[@]}"; do
@@ -208,3 +208,4 @@ export RESULT_FILENAME="$RESULT_FILENAME_BASE"
 if [ "$ANY_FAILED" -ne 0 ]; then
     echo "WARNING: at least one conc had a non-zero exit; per-conc result files were still written when possible." >&2
 fi
+exit "$ANY_FAILED"

@@ -139,6 +139,24 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 
     wait $POLL_PID
 
+    # Preserve allocation failure while still collecting this branch's artifacts.
+    # Never infer success from a finished tail process or a partial result JSON.
+    SLURM_BENCHMARK_RC=1
+    for accounting_attempt in 1 2 3 4 5; do
+        job_record=$(sacct -X -n -P -j "$JOB_ID" -o JobIDRaw,State,ExitCode 2>/dev/null \
+            | awk -F'|' -v job="$JOB_ID" '$1 == job {print; exit}')
+        if [[ -n "$job_record" ]]; then
+            IFS='|' read -r recorded_id recorded_state recorded_exit <<< "$job_record"
+            if [[ "$recorded_state" == COMPLETED && "$recorded_exit" == 0:0 ]]; then
+                SLURM_BENCHMARK_RC=0
+            fi
+            echo "[slurm-result] job=$recorded_id state=$recorded_state exit=$recorded_exit"
+            break
+        fi
+        sleep 2
+    done
+    [[ -n "$job_record" ]] || echo "ERROR: missing Slurm completion status for $JOB_ID" >&2
+
     set -x
 
     # FIXME: The below is bad and is a result of the indirection of the ways in which
@@ -265,6 +283,7 @@ PY
     sudo rm -rf "$BENCHMARK_LOGS_DIR/logs" 2>/dev/null || true
 
     # Log preservation and cleanup handled by EXIT trap (cleanup_and_save_logs)
+    exit "$SLURM_BENCHMARK_RC"
 
 else
 

@@ -1,0 +1,496 @@
+diff --git a/src/aiperf/common/enums/enums.py b/src/aiperf/common/enums/enums.py
+index b4043d36d..47f68a0d5 100644
+--- a/src/aiperf/common/enums/enums.py
++++ b/src/aiperf/common/enums/enums.py
+@@ -443,6 +443,8 @@ class MessageType(CaseInsensitiveStrEnum):
+     CREDIT_PHASE_START = "credit_phase_start"
+     CREDIT_PHASES_CONFIGURED = "credit_phases_configured"
+     CREDITS_COMPLETE = "credits_complete"
++    DATASET_CONFIG_STATUS_REQUEST = "dataset_config_status_request"
++    DATASET_CONFIG_STATUS_RESPONSE = "dataset_config_status_response"
+     DATASET_CONFIGURED_NOTIFICATION = "dataset_configured_notification"
+     DATASET_CONFIGURATION_FAILED = "dataset_configuration_failed"
+     ERROR = "error"
+diff --git a/src/aiperf/common/environment.py b/src/aiperf/common/environment.py
+index a736ea15a..bede7c6e4 100644
+--- a/src/aiperf/common/environment.py
++++ b/src/aiperf/common/environment.py
+@@ -302,6 +302,16 @@ class _DatasetSettings(BaseSettings):
+         default=300.0,
+         description="Timeout in seconds for dataset configuration operations",
+     )
++    CATCH_UP_REQUEST_TIMEOUT: float = Field(
++        ge=0.1,
++        le=100000.0,
++        default=10.0,
++        description="Timeout in seconds for the one-shot DatasetConfigStatusRequest "
++        "a RecordProcessor/RecordsManager sends to DatasetManager when it hasn't yet "
++        "received DatasetConfiguredNotification. Recovers a subscriber that finished "
++        "subscribing after DatasetManager already published the one-shot notification, "
++        "instead of blocking for the full CONFIGURATION_TIMEOUT.",
++    )
+     MMAP_BASE_PATH: Path | None = Field(
+         default=None,
+         description="Base path for memory-mapped dataset files. If None, uses system temp directory. "
+diff --git a/src/aiperf/common/messages/__init__.py b/src/aiperf/common/messages/__init__.py
+index c34f5cc8d..5098bb33c 100644
+--- a/src/aiperf/common/messages/__init__.py
++++ b/src/aiperf/common/messages/__init__.py
+@@ -37,6 +37,8 @@ from aiperf.common.messages.dataset_messages import (
+     ConversationResponseMessage,
+     ConversationTurnRequestMessage,
+     ConversationTurnResponseMessage,
++    DatasetConfigStatusRequest,
++    DatasetConfigStatusResponse,
+     DatasetConfigurationFailedNotification,
+     DatasetConfiguredNotification,
+ )
+@@ -96,6 +98,8 @@ __all__ = [
+     "ConversationResponseMessage",
+     "ConversationTurnRequestMessage",
+     "ConversationTurnResponseMessage",
++    "DatasetConfigStatusRequest",
++    "DatasetConfigStatusResponse",
+     "DatasetConfigurationFailedNotification",
+     "DatasetConfiguredNotification",
+     "ErrorMessage",
+diff --git a/src/aiperf/common/messages/dataset_messages.py b/src/aiperf/common/messages/dataset_messages.py
+index 2628ca1ff..cedab3bbb 100644
+--- a/src/aiperf/common/messages/dataset_messages.py
++++ b/src/aiperf/common/messages/dataset_messages.py
+@@ -91,6 +91,37 @@ class DatasetConfiguredNotification(BaseServiceMessage):
+         return v
+ 
+ 
++class DatasetConfigStatusRequest(BaseServiceMessage):
++    """Late-join catch-up request: ask DatasetManager whether dataset
++    configuration has already completed.
++
++    DatasetConfiguredNotification is a one-shot PUB/SUB broadcast with no
++    replay. A RecordProcessor or RecordsManager that hasn't received it yet
++    sends this request to recover deterministically instead of blocking for
++    the full CONFIGURATION_TIMEOUT -- covers the race where a subscriber
++    finishes subscribing after the notification was already published.
++    """
++
++    message_type: MessageTypeT = MessageType.DATASET_CONFIG_STATUS_REQUEST
++
++
++class DatasetConfigStatusResponse(BaseServiceMessage):
++    """Response to DatasetConfigStatusRequest.
++
++    ``notification`` carries the already-published DatasetConfiguredNotification
++    if configuration has completed, else None -- in which case the requester
++    falls back to waiting on the normal PUB/SUB path.
++    """
++
++    message_type: MessageTypeT = MessageType.DATASET_CONFIG_STATUS_RESPONSE
++
++    notification: DatasetConfiguredNotification | None = Field(
++        default=None,
++        description="The already-published DatasetConfiguredNotification, if "
++        "dataset configuration has completed. None if not yet configured.",
++    )
++
++
+ class DatasetConfigurationFailedNotification(BaseServiceMessage):
+     """Notification published by DatasetManager when its PROFILE_CONFIGURE handler raises.
+ 
+diff --git a/src/aiperf/controller/multiprocess_service_manager.py b/src/aiperf/controller/multiprocess_service_manager.py
+index ce197175b..4ebcededa 100644
+--- a/src/aiperf/controller/multiprocess_service_manager.py
++++ b/src/aiperf/controller/multiprocess_service_manager.py
+@@ -4,6 +4,7 @@ import asyncio
+ import multiprocessing
+ import os
+ import uuid
++from collections import Counter
+ from multiprocessing import Process
+ from multiprocessing.context import SpawnProcess
+ 
+@@ -177,27 +178,35 @@ class MultiProcessServiceManager(BaseServiceManager):
+         # ProfileConfigureCommand would broadcast before the optionals had
+         # subscribed, leaving them un-configured and their data missing from
+         # the final export.
+-        required_types = set(
++        #
++        # Count replicas per type, not per-type presence: a replicated
++        # service (e.g. RECORD_PROCESSOR, scaled with worker count) has
++        # multiple multi_process_info entries sharing one service_type. A
++        # replica that registers after the first can otherwise miss
++        # DatasetManager's one-shot DatasetConfiguredNotification and hang
++        # until DATASET.CONFIGURATION_TIMEOUT.
++        required_counts: Counter[ServiceTypeT] = Counter(
+             info.service_type for info in self.multi_process_info
+-        ) or set(self.required_services.keys())
++        ) or Counter(self.required_services)
+ 
+         # TODO: Can this be done better by using asyncio.Event()?
+ 
+         async def _wait_for_registration():
+             while not stop_event.is_set():
+-                # Get all registered service types from the id map
+-                registered_types = {
++                registered_counts = Counter(
+                     service_info.service_type
+                     for service_info in self.service_id_map.values()
+                     if service_info.registration_status
+                     == ServiceRegistrationStatus.REGISTERED
+-                }
++                )
+ 
+-                # Check if all required types are registered
+-                if required_types.issubset(registered_types):
++                if all(
++                    registered_counts[service_type] >= count
++                    for service_type, count in required_counts.items()
++                ):
+                     return
+ 
+-                self._reap_dead_processes_during_registration(required_types)
++                self._reap_dead_processes_during_registration(required_counts)
+ 
+                 # Wait a bit before checking again
+                 await asyncio.sleep(0.5)
+@@ -205,24 +214,25 @@ class MultiProcessServiceManager(BaseServiceManager):
+         try:
+             await asyncio.wait_for(_wait_for_registration(), timeout=timeout_seconds)
+         except TimeoutError as e:
+-            # Log which services didn't register in time
+-            registered_types_set = set(
++            registered_counts = Counter(
+                 service_info.service_type
+                 for service_info in self.service_id_map.values()
+                 if service_info.registration_status
+                 == ServiceRegistrationStatus.REGISTERED
+             )
+ 
+-            for service_type in required_types:
+-                if service_type not in registered_types_set:
++            for service_type, count in required_counts.items():
++                registered = registered_counts[service_type]
++                if registered < count:
+                     self.error(
+-                        f"Service {service_type} failed to register within timeout"
++                        f"Service {service_type} failed to fully register within "
++                        f"timeout ({registered}/{count} replicas registered)"
+                     )
+ 
+             raise AIPerfError("Some services failed to register within timeout") from e
+ 
+     def _reap_dead_processes_during_registration(
+-        self, required_types: set[ServiceTypeT]
++        self, required_counts: "Counter[ServiceTypeT]"
+     ) -> None:
+         """Reap dead processes mid-registration: required dying is fatal,
+         optional dying gets a warning and is dropped from the wait set.
+@@ -232,9 +242,9 @@ class MultiProcessServiceManager(BaseServiceManager):
+         entire benchmark. ``process is None`` is treated as dead — a None
+         process means the spawn call failed before producing a handle.
+ 
+-        Mutates ``required_types`` (discards optional dead types) and
+-        ``self.multi_process_info`` (removes optional dead entries) so the
+-        caller's wait loop can converge.
++        Mutates ``required_counts`` (decrements the expected replica count
++        for optional dead types) and ``self.multi_process_info`` (removes
++        optional dead entries) so the caller's wait loop can converge.
+ 
+         Raises:
+             AIPerfError: if any required service has died.
+@@ -254,7 +264,7 @@ class MultiProcessServiceManager(BaseServiceManager):
+                 f"registering (exit code {exit_code}); continuing "
+                 f"benchmark without it."
+             )
+-            required_types.discard(info.service_type)
++            required_counts[info.service_type] -= 1
+             self.multi_process_info.remove(info)
+ 
+     async def _wait_for_process(self, info: MultiProcessRunInfo) -> None:
+diff --git a/src/aiperf/dataset/dataset_manager.py b/src/aiperf/dataset/dataset_manager.py
+index bbc046d0f..3ea291627 100644
+--- a/src/aiperf/dataset/dataset_manager.py
++++ b/src/aiperf/dataset/dataset_manager.py
+@@ -35,6 +35,8 @@ from aiperf.common.messages import (
+     ConversationResponseMessage,
+     ConversationTurnRequestMessage,
+     ConversationTurnResponseMessage,
++    DatasetConfigStatusRequest,
++    DatasetConfigStatusResponse,
+     DatasetConfigurationFailedNotification,
+     DatasetConfiguredNotification,
+     ProfileConfigureCommand,
+@@ -133,6 +135,16 @@ class DatasetManager(ReplyClientMixin, BaseComponentService):
+         # writes under the same key the lookup would have used.
+         self._cache_key_for_run: str | None = None
+         self._cache_hit_used: bool = False
++        # Last DatasetConfiguredNotification published this run, if any.
++        # DatasetConfiguredNotification is a one-shot PUB/SUB broadcast with
++        # no replay; a subscriber that finishes subscribing after it was
++        # published never receives it. Cached here so DATASET_CONFIG_STATUS_REQUEST
++        # (sent by a RecordProcessor/RecordsManager that hasn't seen the
++        # notification yet) can hand back the already-published config
++        # instead of the requester blocking until CONFIGURATION_TIMEOUT.
++        self._last_dataset_configured_notification: (
++            DatasetConfiguredNotification | None
++        ) = None
+ 
+     def _is_kubernetes_run(self) -> bool:
+         """Return whether the optional KUBERNETES service-run plugin is active."""
+@@ -850,13 +862,13 @@ class DatasetManager(ReplyClientMixin, BaseComponentService):
+             f"unique conversations: {len(self.dataset_metadata.conversations)}, "
+             f"unique turn count: {self.dataset_metadata.total_turn_count}"
+         )
+-        await self.publish(
+-            DatasetConfiguredNotification(
+-                service_id=self.service_id,
+-                metadata=self.dataset_metadata,
+-                client_metadata=client_metadata,
+-            )
++        notification = DatasetConfiguredNotification(
++            service_id=self.service_id,
++            metadata=self.dataset_metadata,
++            client_metadata=client_metadata,
+         )
++        self._last_dataset_configured_notification = notification
++        await self.publish(notification)
+ 
+     def _populate_cache_after_run(self) -> None:
+         """Write the just-finalized run's mmap files into the cache."""
+@@ -992,12 +1004,29 @@ class DatasetManager(ReplyClientMixin, BaseComponentService):
+         # Note: dataset_configured event is set in _configure_dataset_client_and_free_memory()
+         # after the dataset client is initialized, to avoid a race condition where fallback
+         # requests arrive before the client is ready.
+-        await self.publish(
+-            DatasetConfiguredNotification(
+-                service_id=self.service_id,
+-                metadata=self.dataset_metadata,
+-                client_metadata=client_metadata,
+-            )
++        notification = DatasetConfiguredNotification(
++            service_id=self.service_id,
++            metadata=self.dataset_metadata,
++            client_metadata=client_metadata,
++        )
++        self._last_dataset_configured_notification = notification
++        await self.publish(notification)
++
++    @on_request(MessageType.DATASET_CONFIG_STATUS_REQUEST)
++    async def _handle_dataset_config_status_request(
++        self, message: DatasetConfigStatusRequest
++    ) -> DatasetConfigStatusResponse:
++        """Late-join catch-up: hand back the already-published
++        DatasetConfiguredNotification, if any, to a requester that hasn't
++        received the one-shot PUB/SUB broadcast.
++        """
++        self.debug(
++            lambda: f"Handling dataset config status request from {message.service_id}"
++        )
++        return DatasetConfigStatusResponse(
++            service_id=self.service_id,
++            request_id=message.request_id,
++            notification=self._last_dataset_configured_notification,
+         )
+ 
+     @on_request(MessageType.CONVERSATION_REQUEST)
+diff --git a/src/aiperf/records/dataset_gate.py b/src/aiperf/records/dataset_gate.py
+index fcf3bf1b7..38663393e 100644
+--- a/src/aiperf/records/dataset_gate.py
++++ b/src/aiperf/records/dataset_gate.py
+@@ -11,21 +11,103 @@ configured their processors (e.g. accuracy ground truths / task names).
+ from __future__ import annotations
+ 
+ import asyncio
++from collections.abc import Awaitable, Callable
+ from typing import TYPE_CHECKING
+ 
+ from aiperf.common.environment import Environment
+ from aiperf.common.messages import BaseServiceErrorMessage
++from aiperf.common.messages.dataset_messages import (
++    DatasetConfigStatusRequest,
++    DatasetConfigStatusResponse,
++    DatasetConfiguredNotification,
++)
+ from aiperf.common.models.error_models import ErrorDetails
+ 
+ if TYPE_CHECKING:
+     from aiperf.common.base_component_service import BaseComponentService
++    from aiperf.common.protocols import RequestClientProtocol
++
++
++class DatasetConfigCatchUp:
++    """One-shot late-join catch-up for ``DatasetConfiguredNotification``.
++
++    ``DatasetConfiguredNotification`` is a single one-shot PUB/SUB broadcast:
++    DatasetManager sends it once and never replays it. A subscriber (e.g. a
++    RecordProcessor replica) that finishes subscribing *after* DatasetManager
++    already published it never receives it, and without this class blocks
++    until ``Environment.DATASET.CONFIGURATION_TIMEOUT``.
++
++    This issues one bounded request/response query to DatasetManager asking
++    whether configuration has already completed, and if so applies it
++    immediately via ``on_configured`` instead of waiting out the full
++    timeout. It is a self-heal for a missed broadcast, not the primary path
++    -- the normal PUB/SUB notification is still expected to be the common
++    case, and a failed or negative catch-up simply falls back to waiting on
++    it. Concurrent callers (multiple records arriving before the gate opens)
++    share a single in-flight attempt via the lock; only the first pays the
++    request/response round trip.
++    """
++
++    def __init__(
++        self,
++        request_client: RequestClientProtocol,
++        on_configured: Callable[[DatasetConfiguredNotification], Awaitable[None]],
++        service_id: str,
++    ) -> None:
++        self._request_client = request_client
++        self._on_configured = on_configured
++        self._service_id = service_id
++        self._lock = asyncio.Lock()
++        self._attempted = False
++
++    async def try_once(self, event: asyncio.Event) -> None:
++        """Attempt the catch-up query exactly once for this instance's lifetime.
++
++        No-ops immediately (without taking the lock) once ``event`` is set or
++        a prior attempt has already run, so the hot path (event already set)
++        never pays the lock acquisition after the first call.
++        """
++        if event.is_set() or self._attempted:
++            return
++        async with self._lock:
++            if event.is_set() or self._attempted:
++                return
++            self._attempted = True
++            try:
++                response = await self._request_client.request(
++                    DatasetConfigStatusRequest(service_id=self._service_id),
++                    timeout=Environment.DATASET.CATCH_UP_REQUEST_TIMEOUT,
++                )
++            except Exception:
++                # Not fatal: DatasetManager may not be reachable yet, or the
++                # request may simply time out. The caller falls back to
++                # waiting on the normal PUB/SUB notification.
++                return
++            # The normal PUB/SUB notification may have arrived (and applied
++            # configuration) while this request was in flight -- recheck
++            # before applying the cached copy, or a concurrent delivery would
++            # apply configuration to producers/observers twice.
++            if (
++                not event.is_set()
++                and isinstance(response, DatasetConfigStatusResponse)
++                and response.notification is not None
++            ):
++                await self._on_configured(response.notification)
+ 
+ 
+ async def await_dataset_configured(
+-    service: BaseComponentService, event: asyncio.Event
++    service: BaseComponentService,
++    event: asyncio.Event,
++    catch_up: DatasetConfigCatchUp | None = None,
+ ) -> bool:
+     """Block until the dataset-configured ``event`` is set.
+ 
++    If ``catch_up`` is provided and the event isn't already set, makes one
++    bounded attempt to actively pull the configuration from DatasetManager
++    before falling back to the timed wait -- recovers a subscriber that
++    missed the one-shot ``DatasetConfiguredNotification`` broadcast instead
++    of always blocking for the full ``CONFIGURATION_TIMEOUT``.
++
+     Returns True once configured. On timeout, treats a missing dataset
+     configuration as a fatal misconfiguration: reports it via a
+     BaseServiceErrorMessage (so the run exits non-zero) and kills the service so
+@@ -37,6 +119,10 @@ async def await_dataset_configured(
+     # wait_for timer allocation on the hot path.
+     if event.is_set():
+         return True
++    if catch_up is not None:
++        await catch_up.try_once(event)
++        if event.is_set():
++            return True
+     try:
+         await asyncio.wait_for(
+             event.wait(), timeout=Environment.DATASET.CONFIGURATION_TIMEOUT
+diff --git a/src/aiperf/records/record_processor_service.py b/src/aiperf/records/record_processor_service.py
+index 2218f84c2..3c46fd8e6 100644
+--- a/src/aiperf/records/record_processor_service.py
++++ b/src/aiperf/records/record_processor_service.py
+@@ -42,7 +42,7 @@ from aiperf.post_processors.protocols import (
+     RecordProcessorProtocol,
+ )
+ from aiperf.post_processors.record_observer_context import RecordObserverContext
+-from aiperf.records.dataset_gate import await_dataset_configured
++from aiperf.records.dataset_gate import DatasetConfigCatchUp, await_dataset_configured
+ from aiperf.records.inference_result_parser import InferenceResultParser
+ 
+ if TYPE_CHECKING:
+@@ -102,6 +102,14 @@ class RecordProcessor(PullClientMixin, BaseComponentService):
+         # this event so processors are configured (e.g. accuracy ground truths) before
+         # any record is graded.
+         self._dataset_configured_event: asyncio.Event = asyncio.Event()
++        self._dataset_config_catch_up = DatasetConfigCatchUp(
++            request_client=self.comms.create_request_client(
++                address=CommAddress.DATASET_MANAGER_PROXY_FRONTEND,
++                bind=False,
++            ),
++            on_configured=self._on_dataset_configured,
++            service_id=self.service_id,
++        )
+ 
+         # Stage 1 - PRODUCERS: parse a record and emit one typed result on the
+         # record_type channel declared in plugins.yaml metadata. Grouped by that
+@@ -286,7 +294,11 @@ class RecordProcessor(PullClientMixin, BaseComponentService):
+         the one exception: its False path has already killed the service and
+         aborted the run, so no barrier is left waiting.
+         """
+-        if not await await_dataset_configured(self, self._dataset_configured_event):
++        if not await await_dataset_configured(
++            self,
++            self._dataset_configured_event,
++            getattr(self, "_dataset_config_catch_up", None),
++        ):
+             return
+         record = message.record
+ 
+diff --git a/src/aiperf/records/records_manager.py b/src/aiperf/records/records_manager.py
+index b8c2a7c38..bad2a3acb 100644
+--- a/src/aiperf/records/records_manager.py
++++ b/src/aiperf/records/records_manager.py
+@@ -91,7 +91,7 @@ from aiperf.plugin.enums import (
+     UIType,
+ )
+ from aiperf.records import records_manager_processing
+-from aiperf.records.dataset_gate import await_dataset_configured
++from aiperf.records.dataset_gate import DatasetConfigCatchUp, await_dataset_configured
+ from aiperf.records.error_tracker import ErrorTracker
+ from aiperf.records.records_manager_processing import (
+     LoadedAnalyzer,
+@@ -499,6 +499,14 @@ class RecordsManager(PullClientMixin, BaseComponentService):
+         # this event so results processors are configured (e.g. accuracy task names)
+         # before any record is accumulated.
+         self._dataset_configured_event: asyncio.Event = asyncio.Event()
++        self._dataset_config_catch_up = DatasetConfigCatchUp(
++            request_client=self.comms.create_request_client(
++                address=CommAddress.DATASET_MANAGER_PROXY_FRONTEND,
++                bind=False,
++            ),
++            on_configured=self._on_dataset_configured,
++            service_id=self.service_id,
++        )
+ 
+         self._previous_realtime_records: int | None = None
+         # Server-metric snapshot from the prior realtime tick. The realtime block
+@@ -777,7 +785,11 @@ class RecordsManager(PullClientMixin, BaseComponentService):
+         envelope (``message.metadata`` / ``message.error``), never off sniffing a
+         record type.
+         """
+-        if not await await_dataset_configured(self, self._dataset_configured_event):
++        if not await await_dataset_configured(
++            self,
++            self._dataset_configured_event,
++            getattr(self, "_dataset_config_catch_up", None),
++        ):
+             return
+         if self.is_trace_enabled:
+             self.trace(f"Received records: {message}")

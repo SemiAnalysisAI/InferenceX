@@ -257,6 +257,31 @@ python -m pytest utils/matrix_logic/ -v
 6. 如果文件与 `main` 冲突，恢复当前 `main` 版本，只重新追加本分支条目。不要手动合并已经重排的历史。
 7. 请求 sweep 前解析文件，并确认生成的 changelog 选择包含预期 key。
 
+## Kimi-K3 GMU0.90 候选复测
+
+任务分支 `yichaozhu/k3-pd` 在
+`kimik3-fp4-mi355x-vllm-disagg-agentic` 下只选择三个点。两角色均使用
+GMU0.90、FP8 KV、DSpark K4（synthetic acceptance length 3.36）、MoRIIO READ
+credit1/QP8，以及仅 prefill 开启的 SimpleCPU offload（1799 GB）。这是吞吐和
+稳定性测量，不是精度评测；服务镜像在 YAML 中按 digest 固定。
+
+| 点 | 节点数 | SSM dtype | P/D DCP | P/D max sequences | P/D graph |
+| --- | --- | --- | --- | --- | --- |
+| 1P1D c48 | 2 | bfloat16 | 8/8 | 96/96 | NONE/FULL |
+| 1P2D c24 | 3 | float32 | 8/8 | 48/24 | NONE/FULL |
+| 1P1D c10 | 2 | float32 | 1/1 | 20/20 | PIECEWISE/FULL |
+
+保留完整 warmup、3600 秒 profile、1% 错误门槛以及原来的 30 秒 drain/10 秒
+取消等待。沿用 InferenceX 的 `compute` partition、`/it-share/data` 模型目录、
+`rdma0..7`、Docker 挂载和 collector；不要替换为其他集群的适配。
+draft 路径仍为 `/models/Inferact-Kimi-K3-DSpark`。
+
+`AIPERF_CANCEL_WIRE_DRAIN_FIX=1` 将经过校验的取消与 dataset configuration
+补丁应用到私有运行时源码副本，不写共享 checkout。worker 死亡或 Slurm 非零
+退出会使 benchmark 失败，同时保留已有制品。不要把 partial JSON 当作成功，
+也不要自动重跑失败点。本地角色/geometry 测试不证明运行时稳定，必须检查实际
+云侧日志再验收结果。
+
 ## 停止条件
 
 出现以下任何条件时，在派发 GPU 工作或宣称配置完成前停止。取得缺失事实或修复来源不一致；不要猜测。

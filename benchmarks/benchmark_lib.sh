@@ -1,5 +1,29 @@
 #!/usr/bin/env bash
 
+# Also available to launchers with their own readiness barriers.
+capture_ready_server_state() {
+    local server_pid="$1"
+    INFERENCEX_REPO_ROOT="${INFERENCEX_REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+    INFERENCEX_SERVER_STATE=$(mktemp /tmp/inferencex-server-state.XXXXXX) || return 1
+    python3 "$INFERENCEX_REPO_ROOT/utils/server_watch.py" capture --pid "$server_pid" \
+        > "$INFERENCEX_SERVER_STATE" || return 1
+    INFERENCEX_SERVER_PID="$server_pid"
+}
+
+# Only the owned client's process group is stopped on confirmed server death.
+run_server_client() {
+    if [[ -n "${INFERENCEX_SERVER_STATE:-}" ]]; then
+        python3 "$INFERENCEX_REPO_ROOT/utils/server_watch.py" run --state "$INFERENCEX_SERVER_STATE" -- "$@"
+    else
+        "$@"
+    fi
+}
+
+
+if [[ "${1-}" == "--validation-only" ]]; then
+    return 0
+fi
+
 # Shared benchmarking utilities for InferenceX
 
 # Keep Python bytecode out of the mounted workspace. Benchmark jobs often run as
@@ -237,18 +261,68 @@ _write_amd_smi_sidecar() {
 # Polls rocm-smi VRAM% every 10s for up to 15 minutes; succeeds once the busiest
 # GPU is at <=10% VRAM, otherwise returns 1 so the caller aborts rather than
 # starting a benchmark on GPUs still draining the previous run's memory.
+_amd_gpu_vram_max_percent() {
+    local drm_root="${1:-/sys/class/drm}"
+    local device vendor used total percent maximum=0 count=0
+    for device in "$drm_root"/card[0-9]*/device; do
+        [[ -r "$device/vendor" ]] || continue
+        read -r vendor < "$device/vendor" || return 1
+        [[ "$vendor" == 0x1002 ]] || continue
+        read -r used < "$device/mem_info_vram_used" || return 1
+        read -r total < "$device/mem_info_vram_total" || return 1
+        # Bound arithmetic and reject incomplete/reset counters, never as zero.
+        [[ "$used" =~ ^[0-9]{1,15}$ && "$total" =~ ^[0-9]{1,15}$ ]] || return 1
+        used=$((10#$used)); total=$((10#$total))
+        (( total > 0 && used <= total )) || return 1
+        percent=$(((used * 100 + total - 1) / total))
+        (( percent <= maximum )) || maximum=$percent
+        count=$((count + 1))
+    done
+    (( count > 0 )) || return 1
+    printf '%s\n' "$maximum"
+}
+
 wait_for_amd_gpu_clean() {
-    local gpu_clean=false vram_max i
+    local threshold="${1:-10}"
+    local drm_root="${2:-/sys/class/drm}"
+    local gpu_clean=false vram_max i telemetry
+    [[ "$threshold" =~ ^([0-9]|[1-9][0-9]|100)$ ]] || {
+        echo "Error: GPU drain threshold must be an integer percentage 0..100" >&2
+        return 1
+    }
     for i in $(seq 1 90); do
-        vram_max=$(rocm-smi --showmemuse 2>/dev/null \
-            | grep -oE "GPU Memory Allocated \(VRAM%\): [0-9]+" \
-            | awk '{if ($NF > m) m = $NF} END {print m+0}')
-        if [ "${vram_max:-0}" -le 10 ]; then
-            echo "GPUs clean (vram%max=$vram_max after $((i * 10))s)"
+        if ! command -v rocm-smi >/dev/null 2>&1; then
+            if ! vram_max=$(_amd_gpu_vram_max_percent "$drm_root"); then
+                echo "Error: cannot verify GPU memory reclaim: invalid AMD sysfs telemetry" >&2
+                return 1
+            fi
+        else
+            if ! telemetry=$(rocm-smi --showmemuse 2>&1); then
+                echo "Error: cannot verify GPU memory reclaim: rocm-smi failed" >&2
+                printf '%s\n' "$telemetry" >&2
+                return 1
+            fi
+            # Missing/invalid telemetry is not an idle GPU. In particular, awk's
+            # default numeric zero must not turn a driver/CLI failure into success.
+            if ! vram_max=$(awk '
+                /GPU Memory Allocated \(VRAM%\):/ {
+                    seen++
+                    if ($NF !~ /^[0-9]+$/ || $NF > 100) bad=1
+                    if ($NF > m) m=$NF
+                }
+                END { if (!seen || bad) exit 1; print m+0 }
+            ' <<< "$telemetry"); then
+                echo "Error: cannot verify GPU memory reclaim: invalid rocm-smi telemetry" >&2
+                printf '%s\n' "$telemetry" >&2
+                return 1
+            fi
+        fi
+        if [ "$vram_max" -le "$threshold" ]; then
+            echo "GPUs clean (vram%max=$vram_max <= $threshold after $(((i - 1) * 10))s)"
             gpu_clean=true
             break
         fi
-        echo "waiting for prior-job GPU memory reclaim: vram%max=$vram_max"
+        echo "waiting for prior-job GPU memory reclaim: vram%max=$vram_max (target <= $threshold)"
         sleep 10
     done
     if [ "$gpu_clean" != "true" ]; then
@@ -1837,7 +1911,17 @@ install_agentic_deps() {
         apt-get update && apt-get install -y git
     fi
 
-    ensure_agentic_uv
+    ensure_agentic_uv || return $?
+    # InferenceX uses root Docker with a shared /workspace mount. Patch a
+    # private runtime copy so locks/new files never become root-owned checkout
+    # artifacts. The source submodule SHA remains unchanged.
+    if [[ "${AIPERF_CANCEL_WIRE_DRAIN_FIX:-0}" == 1 ]]; then
+        local runtime_source
+        mkdir -p "$AIPERF_RUNTIME_DIR" || return 1
+        runtime_source=$(mktemp -d "$AIPERF_RUNTIME_DIR/aiperf-source.XXXXXX") || return 1
+        cp -a "$AIPERF_DIR/." "$runtime_source/" || return 1
+        AIPERF_DIR="$runtime_source"
+    fi
     rm -rf "$AIPERF_VENV"
     mkdir -p "$AIPERF_UV_CACHE_DIR"
 
@@ -1853,7 +1937,7 @@ install_agentic_deps() {
     # already used to fetch uv itself above), so this doesn't depend on the
     # container image bundling a new-enough Python.
     UV_CACHE_DIR="$AIPERF_UV_CACHE_DIR" \
-        "$AIPERF_UV_BIN" venv --python "${AIPERF_PYTHON_VERSION:-3.11}" "$AIPERF_VENV"
+        "$AIPERF_UV_BIN" venv --python "${AIPERF_PYTHON_VERSION:-3.11}" "$AIPERF_VENV" || return $?
     UV_CACHE_DIR="$AIPERF_UV_CACHE_DIR" \
         "$AIPERF_UV_BIN" pip install --python "$AIPERF_PYTHON" \
         -r "$AGENTIC_DIR/requirements.txt" \
@@ -1861,13 +1945,59 @@ install_agentic_deps() {
         "datasets>=4.7.0" \
         "huggingface_hub[cli]>=0.25.0" \
         urllib3 \
-        requests
+        requests || return $?
 
     if [ ! -x "$AIPERF_CLI" ] || [ ! -x "$AIPERF_HF_CLI" ]; then
         echo "ERROR: isolated AIPerf environment is incomplete at $AIPERF_VENV" >&2
         return 1
     fi
+    case "${AIPERF_CANCEL_WIRE_DRAIN_FIX:-0}" in
+        0) ;;
+        1)
+            _patch_aiperf_dataset_config_race || return $?
+            local patch_dir
+            patch_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../utils/aiperf-patches" && pwd)"
+            bash "$patch_dir/apply_checked_patch.sh" "$AIPERF_DIR" \
+                "$patch_dir/cancel-wire-drain.patch" \
+                "$patch_dir/cancel-wire-drain.before.sha256" \
+                "$patch_dir/cancel-wire-drain.after.sha256" || return $?
+            ;;
+        *) echo 'ERROR: AIPERF_CANCEL_WIRE_DRAIN_FIX must be 0 or 1' >&2; return 1 ;;
+    esac
     AIPERF_DEPS_READY=1
+}
+
+_patch_aiperf_dataset_config_race() {
+    local patch_file marker
+    patch_file="$(cd "$(dirname "${BASH_SOURCE[0]}")/../utils/aiperf-patches" && pwd)/aiperf-1348-dataset-config-race.patch"
+    marker="src/aiperf/controller/multiprocess_service_manager.py"
+
+    if [ ! -f "$patch_file" ]; then
+        echo "ERROR: AIPerf patch missing at $patch_file" >&2
+        return 1
+    fi
+    if [ ! -f "$AIPERF_DIR/$marker" ]; then
+        echo "ERROR: $AIPERF_DIR/$marker not found; AIPerf layout changed, re-derive the patch" >&2
+        return 1
+    fi
+    if grep -q 'registered_counts' "$AIPERF_DIR/$marker"; then
+        echo "AIPerf already carries the #1348 dataset-config race fix; patch skipped"
+        return 0
+    fi
+    # --dry-run first: a partial apply would leave a half-patched tree that
+    # imports fine and misbehaves later, which is worse than not patching.
+    if ! patch -p1 -d "$AIPERF_DIR" --forward --dry-run <"$patch_file" >/dev/null 2>&1; then
+        echo "ERROR: AIPerf #1348 patch does not apply to $AIPERF_DIR." >&2
+        echo "       The submodule pin moved; re-derive utils/aiperf-patches/ or drop it if fixed upstream." >&2
+        return 1
+    fi
+    patch -p1 -d "$AIPERF_DIR" --forward <"$patch_file" >/dev/null
+    grep -q 'registered_counts' "$AIPERF_DIR/$marker" || {
+        echo "ERROR: AIPerf #1348 patch reported success but the marker is absent" >&2
+        return 1
+    }
+    find "$AIPERF_DIR/src" -name '__pycache__' -type d -exec rm -rf {} + 2>/dev/null || true
+    echo "Applied AIPerf #1348 dataset-config race patch to $AIPERF_DIR"
 }
 
 ensure_hf_cli() {

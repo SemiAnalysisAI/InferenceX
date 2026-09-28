@@ -18,38 +18,22 @@ models_path = Path(sys.argv[2])
 
 recipe = config["kimik3-fp4-mi355x-vllm-disagg-agentic"]
 point = recipe["scenarios"]["agentic-coding"][0]
-arm = point["search-space"][0]
-assert len(point["search-space"]) == 1
-assert recipe["image"] == (
-    "vllm/vllm-openai-rocm:nightly@"
-    "sha256:91e381f072d6a44e1e4c97c82dce06e50e5189905cb3999a11471c5a8fc6a563"
-)
+arms = point["search-space"]
 assert recipe["framework"] == "vllm-disagg"
 assert recipe["kv-p2p-transfer"] == "moriio"
-assert arm["prefill"]["tp"] == 8
-assert arm["prefill"]["dcp-size"] == 8
-assert arm["decode"]["tp"] == 8
-assert arm["decode"]["dcp-size"] == 8
-assert point["dram-utilization"] == 0.60
-assert arm["spec-decoding"] == "none"
-assert arm["conc-list"] == [1, 40, 48, 70]
-assert arm["kv-offloading"] == "dram"
-assert arm["kv-offload-backend"]["name"] == "lmcache-k3"
-assert arm["kv-offload-backend"]["version"] == "nightly-rocm"
-settings = arm["prefill"]["additional-settings"] + arm["decode"]["additional-settings"]
-assert "DECODE_CP_KV_CACHE_INTERLEAVE_SIZE=1536" in settings
-assert "PREFILL_CP_KV_CACHE_INTERLEAVE_SIZE=1536" in settings
-assert "TOTAL_CPU_DRAM_GB=1799" in settings
-assert "LMCACHE_CHUNK_SIZE=12288" in settings
-assert "LMCACHE_L1_SIZE_GB=1799" in settings
-assert "LMCACHE_L1_READ_TTL_SECONDS=1800" in settings
-assert "LMCACHE_MAX_GPU_WORKERS=8" in settings
-assert "LMCACHE_VERSION=latest-rocm" in settings
-assert "GPU_MEMORY_UTILIZATION=0.88" in settings
-assert "SERVER_UP_TIMEOUT=900" in settings
-assert "VLLM_K3_FORK_REF=k3-pd-recovery-integration" in settings
-assert any(item.startswith("VLLM_K3_FORK_SHA=710a6cbef") for item in settings)
-assert "mooncake" not in repr(recipe).lower()
+assert re.fullmatch(r".+@sha256:[0-9a-f]{64}", recipe["image"])
+assert {(a["prefill"]["num-worker"], a["decode"]["num-worker"], tuple(a["conc-list"])) for a in arms} == {
+    (1, 1, (48,)), (1, 2, (24,)), (1, 1, (10,)),
+}
+for arm in arms:
+    assert arm["spec-decoding"] == "mtp"
+    assert arm["kv-offload-backend"]["name"] == "vllm-simple"
+    for role in ("prefill", "decode"):
+        settings = dict(item.split("=", 1) for item in arm[role]["additional-settings"])
+        assert settings["GPU_MEMORY_UTILIZATION"] == "0.90"
+        assert settings["MORI_IB_MAX_RD_ATOMIC"] == "1"
+        assert settings["MORI_QP_PER_TRANSFER"] == "8"
+        assert not any(key.startswith(("VLLM_K3_FORK", "LMCACHE_")) for key in settings)
 
 prefill_scale_recipe = config[
     "kimik3-fp4-mi355x-vllm-disagg-agentic-prefill-scale"
@@ -224,7 +208,7 @@ assert "VLLM_SSM_CONV_STATE_LAYOUT=DS" in env
 assert "VLLM_USE_BREAKABLE_CUDAGRAPH" not in env
 assert "VLLM_ALLOW_DCP_FULL_CUDAGRAPH=1" in env
 assert "PREFIX_CACHING_HASH_ALGO=sha256" in env
-assert "VLLM_USE_BREAKABLE_CUDAGRAPH=1" in k3["prefill_env"]
+assert "VLLM_USE_BREAKABLE_CUDAGRAPH=0" in k3["prefill_env"]  # role builder overrides PIECEWISE
 assert "TORCH_NCCL_BLOCKING_WAIT=0" in k3["prefill_env"]
 assert "VLLM_USE_BREAKABLE_CUDAGRAPH=0" in k3["decode_env"]
 assert "TORCH_NCCL_BLOCKING_WAIT=0" in k3["decode_env"]
@@ -266,7 +250,7 @@ assert '"${MODEL_NAME:-}" == "Kimi-K3"' in server_vllm
 assert '"${SPEC_DECODING:-}" == "mtp"' in server_vllm
 assert "--speculative-config '${spec_config}'" in server_vllm
 assert 'os.environ.get("SPEC_KV_CACHE_DTYPE", "auto")' in server_vllm
-assert 'os.environ.get("SPEC_CUDAGRAPH_CAPTURE_SIZES", "")' in server_vllm
+assert 'os.environ.get("SPEC_ROLE_CUDAGRAPH_CAPTURE_SIZES", "")' in server_vllm
 assert 'config["cudagraph_capture_sizes"] = sizes' in server_vllm
 assert "spec_capture_size=" in server_vllm
 assert "SPEC_PREFILL_CUDAGRAPH_MODE" in server_vllm
@@ -292,7 +276,7 @@ for expected in (
     "--max-model-len 1048576",
     "--kv-cache-dtype fp8",
     "--block-size 128",
-    "--max-num-batched-tokens 16384",
+    "--max-num-batched-tokens 8192",
     "--enable-prefix-caching",
     "--prefix-match-unit 128",
     "--attention-backend ROCM_AITER_MLA",
@@ -301,26 +285,13 @@ for expected in (
     assert expected in flags, expected
 assert "--speculative-config" not in flags
 
-comp = json.loads(re.search(r"--compilation-config '(\{.*\})'", flags).group(1))
-assert comp["cudagraph_mode"] == "PIECEWISE"
-assert comp["max_cudagraph_capture_size"] == 512
-assert comp["cudagraph_capture_sizes"] == (
-    list(range(1, 17)) + [24, 32, 48, 64, 96, 128, 256, 512]
-)
+# Base flags are overwritten by the executed per-role graph builder.
+# utils/test_k3_candidate_recipe.py exercises all six effective role commands.
+for flags in (k3["prefill_flags"], k3["decode_flags"]):
+    comp = json.loads(re.search(r"--compilation-config '(\{.*\})'", flags).group(1))
+    assert comp["cudagraph_mode"] == "NONE"
+    assert comp["max_cudagraph_capture_size"] == 0
 
-decode_comp = json.loads(
-    re.search(r"--compilation-config '(\{.*\})'", k3["decode_flags"]).group(1)
-)
-assert decode_comp["cudagraph_mode"] == "FULL_DECODE_ONLY"
-assert decode_comp["max_cudagraph_capture_size"] == 4096
-assert decode_comp["cudagraph_capture_sizes"] == list(range(1, 81)) + [
-    128,
-    256,
-    512,
-    1024,
-    2048,
-    4096,
-]
 PY
 
 echo "Kimi-K3 PD recipe tests passed"

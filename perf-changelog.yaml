@@ -6636,3 +6636,12 @@
     - "Add an isolated Kimi-K3 MI355X 1P1D TP8/DCP8 DSpark c48 throughput point with synthetic acceptance length 3.36. Retain the validated no-spec AITER, LMCacheMP, memory, and prefix-cache settings; use token-granular DCP interleave plus the validated DSpark graph envelope, overlay the locally validated grouped MoRIIO stack, and resolve the latest compatible ROCm wheel from LMCache's rolling nightly assets while recording the exact installed version."
     - "新增独立的 Kimi-K3 MI355X 1P1D TP8/DCP8 DSpark c48 吞吐点，synthetic acceptance length 为 3.36；保持已验证的 no-spec AITER、LMCacheMP、内存与 prefix-cache 配置，使用 token 粒度 DCP interleave 和已验证的 DSpark 图范围，覆盖本地已验证的 grouped MoRIIO 代码栈，并从 LMCache 滚动 nightly assets 解析最新兼容 ROCm wheel，同时记录实际安装版本。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-disagg-agentic
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Retest GMU0.90 Kimi-K3 with the native workspace/budget candidate image pinned at sha256:2ffab8b3739e3c45a363ae9a49b0efb113c157ce94f58fe21d7399eee26adb97, READ credit1/QP8, prefill SimpleCPU1799GB, and role-specific DSpark graphs: BF16 1P1D c48, FP32 1P2D c24, FP32 1P1D c10. Preserve the original InferenceX fleet/collector and full warmup/3600s/1% gate; isolate checked AIPerf lifecycle patches and propagate worker/Slurm failures. These are candidate measurements, not a stability or accuracy claim."
+    - "使用按 digest 固定的原生 workspace/budget 候选镜像、READ credit1/QP8、prefill SimpleCPU1799GB 及角色独立 DSpark graph，在 GMU0.90 复测 BF16 1P1D c48、FP32 1P2D c24、FP32 1P1D c10。保留原 InferenceX 集群与 collector、完整 warmup/3600 秒/1% 门槛；隔离应用经过校验的 AIPerf 生命周期补丁，并如实传播 worker/Slurm 失败。这是候选测量，不代表稳定性或精度已通过。"
+  pr-link: TBD

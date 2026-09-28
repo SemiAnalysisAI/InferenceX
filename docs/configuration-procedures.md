@@ -257,6 +257,33 @@ Sources: [`AGENTS.md#non-negotiable-benchmark-invariants`](../AGENTS.md#non-nego
 6. If the file conflicts with `main`, restore the current `main` version and re-append only this branch's entries. Do not hand-merge reordered history.
 7. Parse the file and confirm the generated changelog selection includes the intended keys before requesting a sweep.
 
+## Kimi-K3 GMU0.90 candidate retest
+
+The task branch `yichaozhu/k3-pd` selects exactly three points under
+`kimik3-fp4-mi355x-vllm-disagg-agentic`. Both roles use GMU0.90, FP8 KV,
+DSpark K4 with synthetic acceptance length 3.36, MoRIIO READ credit1/QP8,
+and prefill-only SimpleCPU offload (1799 GB). This is throughput/stability
+measurement, not an accuracy evaluation. The serving image is pinned in YAML.
+
+| Point | Nodes | SSM dtype | P/D DCP | P/D max sequences | P/D graph |
+| --- | --- | --- | --- | --- | --- |
+| 1P1D c48 | 2 | bfloat16 | 8/8 | 96/96 | NONE/FULL |
+| 1P2D c24 | 3 | float32 | 8/8 | 48/24 | NONE/FULL |
+| 1P1D c10 | 2 | float32 | 1/1 | 20/20 | PIECEWISE/FULL |
+
+Preserve full warmup, a 3600-second profile, the 1% error gate, and the
+original 30-second drain/10-second cancellation wait. The original InferenceX
+`compute` partition, `/it-share/data` model store, `rdma0..7`, Docker mounts,
+and collector remain authoritative; do not substitute another fleet's adapter.
+The draft path remains `/models/Inferact-Kimi-K3-DSpark`.
+
+`AIPERF_CANCEL_WIRE_DRAIN_FIX=1` applies the checked cancellation and dataset
+configuration patches to a private runtime source copy, never the shared
+checkout. Worker death and nonzero Slurm exit status fail the benchmark while
+preserving available artifacts. Do not interpret partial JSON as success or
+automatically rerun a failed point. Local role/geometry tests are not runtime
+stability proof; inspect the actual cloud logs before accepting results.
+
 ## Stop conditions
 
 Stop before dispatching GPU work or claiming the configuration complete when any condition below holds. Obtain the missing fact or fix the source mismatch. Do not guess.

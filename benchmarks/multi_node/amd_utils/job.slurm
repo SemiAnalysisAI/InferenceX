@@ -547,6 +547,14 @@ DOCKER_ENV_COMMON=(
     -e \"EVAL_LIMIT=\${EVAL_LIMIT:-}\"
 )
 
+# Forward only named recipe values using this branch's Docker/Slurm adapter.
+# -e NAME preserves the exported value without shell-interpolating its content.
+if [[ "$ENGINE" == "vllm-disagg" ]]; then
+    for name in SPEC_PREFILL_MAX_NUM_SEQS SPEC_DECODE_MAX_NUM_SEQS SPEC_PREFILL_MAX_NUM_BATCHED_TOKENS SPEC_DECODE_MAX_NUM_BATCHED_TOKENS SPEC_PREFILL_MAX_CUDAGRAPH_CAPTURE_SIZE SPEC_DECODE_MAX_CUDAGRAPH_CAPTURE_SIZE SPEC_PREFILL_CUDAGRAPH_CAPTURE_SIZES SPEC_DECODE_CUDAGRAPH_CAPTURE_SIZES MAMBA_SSM_CACHE_DTYPE EXPECTED_KV_CACHE_GROUP_SIZES EXPECTED_KV_LCM_BLOCK_SIZE MORI_QP_PER_TRANSFER MORI_IB_MAX_RD_ATOMIC MORI_APP_LOG_LEVEL VLLM_ENABLE_STARTUP_PLAN AIPERF_CANCEL_WIRE_DRAIN_FIX AIPERF_FAILED_REQUEST_THRESHOLD AIPERF_LIVE_FAILED_REQUEST_THRESHOLD VLLM_SERVER_DEV_MODE; do
+        DOCKER_ENV_COMMON+=(-e "$name")
+    done
+fi
+
 # Engine-specific env vars
 if [[ "$ENGINE" == "vllm-disagg" ]]; then
     DOCKER_ENV_ENGINE=(
@@ -733,13 +741,9 @@ else
 fi
 fi  # end: if ENGINE needs host RDMA bind-mounts
 
-# Pre-clean (idempotent): stop then force-remove so GPU VRAM is released
-# before the sanity gate. stop-only left containers in Created/Exited state
-# on some nodes.
-\$DOCKER_CMD ps -aq --filter \"$CONT_FILTER\" | xargs -r \$DOCKER_CMD rm -f || true
-\$DOCKER_CMD ps -aq | xargs -r \$DOCKER_CMD stop -t 15 || true
-\$DOCKER_CMD ps -aq | xargs -r \$DOCKER_CMD rm -f || true
-sleep 2
+# Do not stop unrelated containers on a shared node. Only this allocation owns
+# these exact names; the GPU gate rejects residual memory from previous work.
+\$DOCKER_CMD rm -f \"$DOCKER_CONT_NAME\" \"$ROUTER_CONT_NAME\" \"$CLIENT_CONT_NAME\" 2>/dev/null || true
 
 # GPU drain gate: fail fast on leftover VRAM use instead of OOMing in model
 # load ~15 min later. Reuses wait_for_amd_gpu_clean from benchmark_lib.sh.
@@ -771,16 +775,13 @@ if [[ \"$ENGINE\" == \"vllm-disagg\" && \"$ROUTER_TYPE\" == \"vllm-router\" && \
             --log-level info 2>&1 | tee /run_logs/slurm_job-${SLURM_JOB_ID}/vllm_router_\$(hostname).log \"
 fi
 
-# Skip exec on vllm-disagg rank 0 so we can stop the router after the main
-# container exits.  Without this, decode nodes block forever waiting for the
-# router port to close (the router is a separate container).
-MAYBE_EXEC=exec
+# Keep the Slurm shell signal-responsive while the owned container is attached.
+OWNED_ROUTER=\"\"
 if [[ \"$ENGINE\" == \"vllm-disagg\" && \"$ROUTER_TYPE\" == \"vllm-router\" && \"\$SLURM_PROCID\" == \"0\" ]]; then
-    MAYBE_EXEC=
-    set +e
+    OWNED_ROUTER=\"$ROUTER_CONT_NAME\"
 fi
-
-\$MAYBE_EXEC \$DOCKER_CMD run \
+exec bash \"$DI_REPO_DIR/benchmarks/multi_node/amd_utils/run_owned_container.sh\" \\
+    \"\$DOCKER_CMD\" \"$DOCKER_CONT_NAME\" \"\$OWNED_ROUTER\" \\
     --init \
     --stop-timeout 10 \
     --device /dev/dri \
@@ -827,12 +828,9 @@ fi
         '"$RUN_FILE_FULL"' 2>&1 | tee /run_logs/slurm_job-'\"\$SLURM_JOB_ID\"'/server_\$(hostname).log
     '
 
-# Only reached when exec was skipped (vllm-disagg rank 0)
-DOCKER_EXIT_CODE=\$?
-echo \"[rank 0] Main container exited (rc=\$DOCKER_EXIT_CODE). Stopping vllm-router...\"
-\$DOCKER_CMD rm -f \"$ROUTER_CONT_NAME\" 2>/dev/null || true
-exit \$DOCKER_EXIT_CODE
 "
+
+SERVING_RC=$?
 
 if [[ "${KEEP_CONTAINERS}" != "1" ]]; then
     srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c 'eval "$DOCKER_CMD_DETECT"; $DOCKER_CMD rm -f '"$DOCKER_CONT_NAME"' '"$CLIENT_CONT_NAME"' 2>/dev/null || true'
@@ -844,3 +842,5 @@ if [[ "${KEEP_CONTAINERS}" != "1" ]]; then
         '
     fi
 fi
+
+exit "$SERVING_RC"

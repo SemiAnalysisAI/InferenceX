@@ -1,0 +1,59 @@
+--- a/src/aiperf/timing/phase/progress_tracker.py
++++ b/src/aiperf/timing/phase/progress_tracker.py
+@@ -54,6 +54,8 @@
+         # Events for synchronization
+         self.all_credits_sent_event: asyncio.Event = asyncio.Event()
+         self.all_credits_returned_event: asyncio.Event = asyncio.Event()
++        self._wire_drained_event = asyncio.Event()
++        self._wire_drained_event.set()
+ 
+     # =========================================================================
+     # Counter Properties (delegated to CreditCounter via protocol)
+@@ -100,7 +102,9 @@
+         1. Call freeze_sent_counts()
+         2. Set all_credits_sent_event
+         """
+-        return self._counter.increment_sent(turn)
++        result = self._counter.increment_sent(turn)
++        self._wire_drained_event.clear()
++        return result
+ 
+     def increment_returned(
+         self,
+@@ -138,9 +142,21 @@
+         Note: Late arrivals (after phase complete) are handled by caller
+         checking lifecycle.is_complete before calling this method.
+         """
+-        return self._counter.increment_returned(
++        result = self._counter.increment_returned(
+             is_final_turn, cancelled, errored=errored, is_child=is_child
+         )
++        if self.in_flight == 0:
++            self._wire_drained_event.set()
++        return result
++
++    async def wait_for_wire_drain(self) -> None:
++        """Wait for actual returns without requiring pending DAG work to finish.
++
++        Used only after phase-wide cancellation, not for normal DAG completion.
++        Recheck the live count because an intervening send can clear the event.
++        """
++        while self.in_flight > 0:
++            await self._wire_drained_event.wait()
+ 
+     def increment_prefill_released(self) -> None:
+         """Increment prefill released count.
+--- a/src/aiperf/timing/phase/runner.py
++++ b/src/aiperf/timing/phase/runner.py
+@@ -1130,9 +1130,10 @@
+                 drain_timeout = Environment.TIMING.CANCEL_DRAIN_TIMEOUT
+                 try:
+                     await asyncio.wait_for(
+-                        self._progress.all_credits_returned_event.wait(),
++                        self._progress.wait_for_wire_drain(),
+                         timeout=drain_timeout,
+                     )
++                    self._progress.all_credits_returned_event.set()
+                     self.info(
+                         f"All cancelled credits returned for phase {self._config.phase}"
+                     )
