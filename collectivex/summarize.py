@@ -24,10 +24,8 @@ def load_results(directory: str, runner: str | None, timestamp: str | None) -> l
             continue
         if not (isinstance(document, dict) and document.get("record_type") == CASE_RECORD_TYPE):
             continue
-        # Filter on the SKU the row declares, not on the filename. Results are named
-        # `<case_id>_<ts>-cNNN.json` and case_id joins its factors with "-", so the old
-        # `startswith(f"{runner}_")` test could never match: the summary would have
-        # rendered an empty table rather than failing.
+        # Filter on the SKU the row declares, not on the filename: case_id joins its factors
+        # with "-", so a filename prefix cannot separate the SKU from the rest.
         if runner and document.get("identity", {}).get("case_factors", {}).get("sku") != runner:
             continue
         documents.append(document)
@@ -66,8 +64,9 @@ def _topology(document: dict) -> str:
 def _wire_basis(document: dict) -> str:
     """Which copy basis this backend's kernels actually move.
 
-    Low-latency deepep-v2/uccl-ep/nccl-ep receive one copy per (token, expert); MoRI's IntraNodeLL
-    deduplicates by destination rank -- ~1.5x different combine traffic at EP8, so not equal work.
+    Low-latency deepep-v2/uccl-ep/nccl-ep expert-major receive one copy per (token, expert); MoRI's
+    AsyncLL and nccl-ep rank-major deduplicate by destination rank -- ~1.5x different combine
+    traffic at EP8, so not equal work.
     """
     rows = document["measurement"]["rows"]
     copies = (rows[0] if rows else {}).get("logical_copies") or {}
@@ -174,8 +173,7 @@ def main() -> int:
     documents = load_results(args.results_dir, args.runner, args.ts)
     print(render(documents))
     # Pure renderer — never gates CI. The per-case leg gate lives in ep_harness.run_sweep: a
-    # non-success outcome returns nonzero and fails the shard (see collx_run_shard). A dead
-    # "exit 1 when no success doc" gate here lost its only caller in 41caeaa0.
+    # non-success outcome returns nonzero and fails the shard (see collx_run_shard).
     return 0
 
 
