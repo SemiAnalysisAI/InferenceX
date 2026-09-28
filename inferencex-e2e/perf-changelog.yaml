@@ -8995,3 +8995,15 @@
     - "Validate MiniMax-M3 AgentX on H200 with vLLM FP8 after moving the end-to-end project into inferencex-e2e/. Preserve the existing image, recipe, and benchmark settings."
     - "将端到端项目迁入 inferencex-e2e/ 后，验证 H200 上的 vLLM FP8 MiniMax-M3 AgentX 运行路径，沿用现有镜像、配方和基准测试设置。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3525
+
+- config-keys:
+    - minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp
+    - minimaxm3-fp4-gb200-dynamo-vllm-agentic-disagg-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add MiniMax-M3 GB200 aggregate TP4 SimpleCPU recipe variants with separate scheduler caps, and replace the disaggregated search space with DEP4 prefill plus TP2 decode pools."
+    - "Pin each checked-in recipe to its declared vLLM, Dynamo, and Mooncake runtime, using the shipped EAGLE3 draft precision and real verification for evals."
+    - "新增 MiniMax-M3 GB200 聚合 TP4 SimpleCPU 配方变体，并分别设置调度上限；同时将分离部署搜索空间调整为 DEP4 prefill 与 TP2 decode 池。"
+    - "每个已检入配方固定其声明的 vLLM、Dynamo 与 Mooncake 运行时，使用 EAGLE3 草稿模型随附精度，并在评测中保留真实验证。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3424
