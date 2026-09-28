@@ -58,6 +58,10 @@ if [[ "$EXECUTION_PATH" == multinode && -n "${CONFIG_FILE:-}" ]]; then
     [[ -f "$SQUASH_FILE" ]] || SQUASH_FILE="$IMAGE"
     SRT_CLUSTER_ARGS=()
     if [[ "$FRAMEWORK" == tilert ]]; then
+        if [[ ! -r /it-share/data/GLM-5.3-tilert-tp8/tilert_meta.json ]]; then
+            echo "Missing prepared TileRT checkpoint: /it-share/data/GLM-5.3-tilert-tp8" >&2
+            exit 1
+        fi
         SRT_CLUSTER_ARGS+=(--model GLM-5.3 /it-share/data/GLM-5.3 --mount /it-share/data /models)
     fi
     SLURM_ACCOUNT="$USER" SLURM_PARTITION=compute NGINX_SQUASH_FILE=nginx:1.27.4 \

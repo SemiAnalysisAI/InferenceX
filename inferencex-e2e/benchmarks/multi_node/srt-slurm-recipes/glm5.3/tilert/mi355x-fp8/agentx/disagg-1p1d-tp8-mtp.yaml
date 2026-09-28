@@ -57,8 +57,6 @@ roles:
     gpus: 8
     env:
       TILERT_ROLE: decode
-      TILERT_WEIGHTS_DIR: /models/GLM-5.3-tilert-tp8
-      TILERT_CONVERT_LOCK_WAIT: "21600"
       GLM5_AR_N: "2"
     args:
       model: glm5_2
