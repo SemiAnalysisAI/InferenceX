@@ -195,7 +195,7 @@
       "ll_backends": {"mori": [8]},
       "kv_backends": {
         "mori-io": ["rdma"],
-        "mooncake": {"fabrics": ["rdma"], "ops": "push", "image": "rocm/atom-dev:nightly_202606101403",
+        "mooncake": {"fabrics": ["rdma"], "ops": ["push"], "image": "rocm/atom-dev:nightly_202606101403",
           "device": "rdma{gpu}", "pool_budget": 21474836480}
       },
       "fabric": {"nic": "Pollara 400GbE", "switch": "Arista 7060X6-64PE (Tomahawk5, 51.2T)"},

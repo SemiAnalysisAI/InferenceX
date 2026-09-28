@@ -340,6 +340,13 @@ uccl_activate() {
   [ "${COLLX_VENDOR:-nvidia}" != amd ] || export UCCL_EP_ENABLE_AGGRESSIVE_ATOMIC=1
 }
 
+# Noble-based images mark python externally managed (PEP 668); older pips never refuse, so they
+# never reach the retry flag.
+pip_install() {
+  python3 -m pip install -q --disable-pip-version-check --no-input "$@" \
+    || python3 -m pip install -q --disable-pip-version-check --no-input --break-system-packages "$@"
+}
+
 uccl_install() {
   local root="$1" arch="$2" source_dir="/tmp/collectivex-uccl-$COLLX_UCCL_COMMIT" arch_env sp
   if [ -e "$root" ] || [ -L "$root" ]; then
@@ -347,10 +354,7 @@ uccl_install() {
   fi
   mkdir -m 700 "$root" || { collx_log "ERROR: UCCL cache-create failed"; return 1; }
   collx_log "UCCL-EP: building $COLLX_UCCL_COMMIT from source (USE_DMABUF, PER_EXPERT_BATCHING)"
-  # Some sglang/rocm images mark the system env externally-managed (PEP 668).
-  { python3 -m pip install -q --disable-pip-version-check --no-input nanobind \
-      || python3 -m pip install -q --disable-pip-version-check --no-input \
-           --break-system-packages nanobind; } >&2 2>&1 \
+  pip_install nanobind >&2 2>&1 \
     || { collx_log "ERROR: UCCL nanobind install failed"; return 1; }
   collx_materialize_source "uccl-$COLLX_UCCL_COMMIT" "$source_dir" \
     || { collx_log "ERROR: UCCL staged source is invalid"; return 1; }
@@ -371,9 +375,7 @@ uccl_install() {
   # --no-deps: the wrapper's install_requires=["uccl"] resolves to the PyPI uccl-cu12 wheel, absent
   # on ROCm and wrong on CUDA too, since the from-source ep build already provides uccl.ep.
   ( cd "$source_dir/ep/deep_ep_wrapper" \
-      && { python3 -m pip install -q --disable-pip-version-check --no-input --no-deps . \
-             || python3 -m pip install -q --disable-pip-version-check --no-input \
-                  --no-deps --break-system-packages . ; } ) >&2 2>&1 \
+      && pip_install --no-deps . ) >&2 2>&1 \
     || { collx_log "ERROR: UCCL deep_ep_wrapper build failed"; return 1; }
   sp="$(python3 -c 'import site; print(site.getsitepackages()[0])')" \
     || { collx_log "ERROR: UCCL site-packages resolution failed"; return 1; }
@@ -559,16 +561,8 @@ FICHECK
 }
 
 # The kv-transfer wheels install into the named container, which persists for the job, so one
-# install here serves every case srun. Noble-based images mark python externally managed
-# (PEP 668); the retry flag is the uccl-prep pattern (older pips never refuse, so never reach it).
-pip_install() {
-  python3 -m pip install -q --disable-pip-version-check --no-input "$@" \
-    || python3 -m pip install -q --disable-pip-version-check --no-input --break-system-packages "$@"
-}
-
-# nixl-cuXX directly: the `nixl` meta package depends on BOTH cu12 and cu13 variants, and an
-# unpinned install under the image's stale pip resolved 1.0.1. ROCm images need nothing:
-# sglang-rocm bundles nixl-cu12 with a ROCm-built UCX.
+# install here serves every case srun. nixl-cuXX directly: the `nixl` meta package depends on
+# BOTH cu12 and cu13 variants, and an unpinned install under the image's stale pip resolved 1.0.1.
 nixl_prepare() {
   python3 -c "import nixl" 2>/dev/null && return 0
   pip_install 'nixl-cu13==1.3.2' \
@@ -586,8 +580,10 @@ mooncake_prepare() {
     collx_log "mooncake provided by the image"
     return 0
   fi
-  pip_install 'mooncake-transfer-engine==0.3.12.post1' nvidia-cuda-runtime-cu12 \
+  pip_install 'mooncake-transfer-engine==0.3.12.post1' 'nvidia-cuda-runtime-cu12==12.9.79' \
     || { collx_log "ERROR: mooncake wheel install failed"; return 1; }
+  python3 -c "import mooncake.engine" \
+    || { collx_log "ERROR: mooncake import failed after install"; return 1; }
 }
 
 main() {

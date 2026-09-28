@@ -21,7 +21,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 import kv_workload
-from kv_backend import KVBackend
+from kv_backend import KVBackend, library_version, offset_lists, spans
 
 BATCH_CAP = 8192
 
@@ -53,26 +53,6 @@ def _import_engine():
     return TransferEngine
 
 
-def _engine_version():
-    """The engine build actually imported, not the pin prepare_backend.sh
-    attempted: image-provided builds (b300's pre-0.3.12 lineage, AMD's
-    atom-dev tree) register under varying dist names or none at all, and
-    a null here is what let an image wheel masquerade as the pinned one."""
-    import importlib.metadata as md
-
-    for dist in ("mooncake-transfer-engine", "mooncake"):
-        try:
-            return md.version(dist)
-        except Exception:
-            pass
-    try:
-        import mooncake
-
-        return getattr(mooncake, "__version__", None)
-    except Exception:
-        return None
-
-
 def _physical_gpu_index() -> int:
     """The physical GPU index behind this rank's visible device 0: GPU-paired
     NIC selection (rdma{gpu}) needs the host-level index, which the Slurm
@@ -89,10 +69,15 @@ class MooncakeBackend(KVBackend):
     maturity = "production"
 
     def __init__(self, args, role, device):
-        super().__init__(args, role, device)
         TransferEngine = _import_engine()
+        import mooncake
 
-        self.library_version = _engine_version()
+        # The engine build actually imported, not the pin prepare_backend.sh
+        # attempted: image-provided builds (b300's pre-0.3.12 lineage, AMD's
+        # atom-dev tree) register under varying dist names or none at all, and
+        # a null here is what let an image wheel masquerade as the pinned one.
+        self.library_version = library_version(
+            ("mooncake-transfer-engine", "mooncake"), mooncake)
         # Same-fabric GB pairs: the NVLink-IPC transport claims cross-node
         # segments inside one NVLink domain and then fails the address import
         # (nvlink_transport "Requested address not found", first kv CI run on
@@ -105,11 +90,12 @@ class MooncakeBackend(KVBackend):
         # give the library guard 4x headroom; the runtime's per-case guard
         # still bounds a truly wedged transfer.
         os.environ.setdefault("MC_TRANSFER_TIMEOUT", "120")
+        if not args.socket_ifname:
+            raise RuntimeError("mooncake needs --socket-ifname for its P2P handshake address")
         self._engine = TransferEngine()
         self._ip = kv_workload.iface_ipv4(args.socket_ifname)
         local = f"{self._ip}:{args.kv_mc_port + (0 if role == 'target' else 1)}"
-        nic_filter = (getattr(args, "kv_device", "") or "").replace(
-            "{gpu}", str(_physical_gpu_index()))
+        nic_filter = args.kv_device.replace("{gpu}", str(_physical_gpu_index()))
         self.nic_filter = nic_filter or None
         rc = self._engine.initialize(local, "P2PHANDSHAKE", "rdma", nic_filter)
         if rc != 0:
@@ -118,7 +104,7 @@ class MooncakeBackend(KVBackend):
         self._pool = None
         self._bulk = None
         self._peer = None
-        workers = max(int(v) for v in str(getattr(args, "batch_sizes", "1")).split())
+        workers = max(int(v) for v in args.batch_sizes.split())
         self._exec = ThreadPoolExecutor(max_workers=workers)
 
     def register(self, pool, bulk, reg_layout=None) -> None:
@@ -148,10 +134,9 @@ class MooncakeBackend(KVBackend):
 
     def make_paged(self, cfg, op, local_tables, remote_tables):
         start = time.perf_counter()
-        local = (self._pool.ptr + kv_workload.page_offsets(cfg, local_tables)).tolist()
-        remote = (self._peer["pool_base"] + kv_workload.page_offsets(cfg, remote_tables)).tolist()
-        sizes = kv_workload.desc_sizes(cfg).tolist()
-        chunks = [(i, min(i + BATCH_CAP, len(local))) for i in range(0, len(local), BATCH_CAP)]
+        local, remote, sizes = offset_lists(cfg, local_tables, remote_tables,
+                                            self._pool.ptr, self._peer["pool_base"])
+        chunks = spans(len(local), BATCH_CAP)
         session = self._peer["session"]
         func = self._engine.batch_transfer_sync_read if op == "pull" \
             else self._engine.batch_transfer_sync_write

@@ -180,25 +180,7 @@ def _swap_shard(sku: str, profile_name: str) -> tuple[list[dict[str, Any]], dict
     return _runnable(sku, cases), shard
 
 
-def _kv_backend_spec(value: Any) -> dict[str, Any]:
-    """A registry kv_backends value is a fabric list (the library runs the full sweep) or an
-    object that restricts it: `ops` (a backend that cannot serve one direction on a fabric, e.g.
-    mooncake on Pollara, where ionic RDMA READ is broken upstream), `image` (a backend shipped
-    only inside a specific image, e.g. AMD's atom-dev mooncake build), `device` (an engine NIC
-    filter template; `{gpu}` expands to the physical GPU index at runtime), and `pool_budget`
-    (bytes, where the engine cannot register the default pool on that pool's NICs)."""
-    if isinstance(value, list):
-        value = {"fabrics": value}
-    return {
-        "fabrics": value["fabrics"],
-        "ops": value.get("ops") or " ".join(KV_SWEEP["ops"]),
-        "image": value.get("image"),
-        "device": value.get("device") or "",
-        "pool_budget": value.get("pool_budget"),
-    }
-
-
-def _kv_shards(sku: str, selected_precisions: set[str]) -> tuple[list, list[dict[str, Any]]]:
+def _kv_shards(sku: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """The kv-transfer shards one pool runs: one per (backend, fabric) its registry enables.
 
     A KV leg is 2 nodes x 1 GPU: the per-worker transfer pair an engine actually forms, not an
@@ -212,15 +194,18 @@ def _kv_shards(sku: str, selected_precisions: set[str]) -> tuple[list, list[dict
     scheduling = KV_SWEEP["scheduling"].get(sku, KV_SWEEP["scheduling"]["default"])
     requested, shards = [], []
     for backend, raw in sorted(platform.get("kv_backends", {}).items()):
-        spec = _kv_backend_spec(raw)
+        # A registry value is a fabric list (the full sweep) or an object that restricts it: `ops`
+        # (a direction the fabric cannot serve, e.g. ionic RDMA READ on Pollara), `image` (a build
+        # shipped only in one image), `device` (an engine NIC filter; `{gpu}` expands to the
+        # physical GPU index at runtime) and `pool_budget` (bytes, where the NICs cannot register
+        # the default pool).
+        spec = raw if isinstance(raw, dict) else {"fabrics": raw}
         for fabric in spec["fabrics"]:
             cases = []
             # A workload's dtype mix can be architectural (dsv4's fp8 slots), so the sweep config
-            # maps each workload to its precisions; a test pins the map to kv_workload's PRESETS.
+            # maps each workload to its precisions; a test proves every mapped cell plans.
             for workload, workload_precisions in KV_SWEEP["workloads"].items():
                 for precision in workload_precisions:
-                    if selected_precisions and precision not in selected_precisions:
-                        continue
                     case = {
                         "suite": KV_SWEEP["suite"],
                         "workload": workload,
@@ -233,8 +218,8 @@ def _kv_shards(sku: str, selected_precisions: set[str]) -> tuple[list, list[dict
                         "isl_ladder": " ".join(map(str, KV_SWEEP["isl_ladder"])),
                         "page_tokens": " ".join(map(str, KV_SWEEP["page_tokens"])),
                         "batch_sizes": " ".join(map(str, KV_SWEEP["batch_sizes"])),
-                        "ops": spec["ops"],
-                        "kv_device": spec["device"],
+                        "ops": " ".join(spec.get("ops", KV_SWEEP["ops"])),
+                        "kv_device": spec.get("device", ""),
                         "pool_slack": KV_SWEEP["pool_slack"],
                         "seed": KV_SWEEP["seed"],
                         "warmup": timing["warmup_per_trial"],
@@ -246,22 +231,21 @@ def _kv_shards(sku: str, selected_precisions: set[str]) -> tuple[list, list[dict
                         "scale_up_transport": platform["scale_up_transport"],
                         "topology_class": f"{platform['product']}-kv-{fabric}",
                     }
-                    if spec["pool_budget"]:
+                    if "pool_budget" in spec:
                         case["pool_budget"] = spec["pool_budget"]
                     case["case_id"] = ep_harness.case_id(sku, case)
                     cases.append(case)
-            if not cases:
-                continue
             requested += _runnable(sku, cases)
             shards.append(_shard(
                 sku, f"{sku}-kv-{backend}-{fabric}", backend, cases,
-                suite=KV_SWEEP["suite"], mode=fabric, fabric=fabric,
+                suite=KV_SWEEP["suite"], fabric=fabric,
                 allocation_minutes=scheduling["allocation_minutes"],
                 run_timeout=scheduling["run_timeout"],
-                # The GitHub job must outlive the allocation, or it cancels a healthy shard
-                # before the launcher's own guards act.
-                job_timeout_minutes=scheduling["allocation_minutes"] + 30,
-                **({"image": spec["image"]} if spec["image"] else {}),
+                # The GitHub job must outlive the allocation plus its salloc queue wait, or it
+                # cancels a healthy shard before the launcher's own guards act; never below the
+                # fleet-wide 350.
+                job_timeout_minutes=max(350, scheduling["allocation_minutes"] + 30),
+                **({"image": spec["image"]} if "image" in spec else {}),
             ))
     return requested, shards
 
@@ -280,10 +264,8 @@ def resolve_matrix(
     selected_suites = _comma_subset("suites", suites, SUITES)
     if not selected_suites:
         raise SystemExit("--suites selects no suite")
-    if "ep" not in selected_suites and (backend != "all" or ep_sizes or modes):
+    if "ep" not in selected_suites and (backend != "all" or ep_sizes or precisions or modes):
         raise SystemExit("EP filters need the ep suite in --suites")
-    if not selected_suites & {"ep", "kv-transfer"} and precisions:
-        raise SystemExit("--precisions needs the ep or kv-transfer suite in --suites")
     if swap_profile not in SWAP_SWEEP["profiles"]:
         raise SystemExit(
             f"unknown --swap-profile {swap_profile!r}; have {sorted(SWAP_SWEEP['profiles'])}"
@@ -421,7 +403,7 @@ def resolve_matrix(
             shards_by_sku.setdefault(sku, []).append(shard)
     if "kv-transfer" in selected_suites:
         for sku in selected_skus:
-            requested, kv_shards = _kv_shards(sku, selected_precisions)
+            requested, kv_shards = _kv_shards(sku)
             requested_cases += requested
             if kv_shards:
                 shards_by_sku.setdefault(sku, []).extend(kv_shards)

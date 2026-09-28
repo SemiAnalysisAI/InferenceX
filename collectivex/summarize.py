@@ -124,17 +124,13 @@ def _invalid_banner(documents: list[dict]) -> list[str]:
 
 def _kv_cell(rows: list[dict], kind: str, op: str, batch: str = "min"):
     """The largest-ISL row of a (kind, op) family -- the bandwidth-bound point -- at its smallest
-    or largest measured batch. Paged cells read the largest measured block size (the production
-    one when several ran)."""
+    or largest measured batch."""
     matching = [r for r in rows if r.get("kind") == kind and r.get("op") == op]
-    if kind == "paged" and matching:
-        block = max(r["page_tokens"] for r in matching)
-        matching = [r for r in matching if r["page_tokens"] == block]
     if not matching:
         return "-", "-"
     isl = max(r["isl"] for r in matching)
     pick = min if batch == "min" else max
-    row = pick((r for r in matching if r["isl"] == isl), key=lambda r: r.get("batch", 1))
+    row = pick((r for r in matching if r["isl"] == isl), key=lambda r: r["batch"])
     return row["gbps_p50"], row["latency_ms"]["p50"]
 
 
@@ -179,8 +175,10 @@ def render_kv(documents: list[dict]) -> str:
 
 def render(documents: list[dict]) -> str:
     """One table per suite present; the EP table also renders when nothing was found."""
-    kv = [d for d in documents if d["identity"]["case_factors"]["case"].get("suite") == KV_SUITE]
-    ep = [d for d in documents if d not in kv]
+    kv, ep = [], []
+    for document in documents:
+        is_kv = document["identity"]["case_factors"]["case"].get("suite") == KV_SUITE
+        (kv if is_kv else ep).append(document)
     parts = [render_ep(ep)] if ep or not kv else []
     if kv:
         parts.append(render_kv(kv))

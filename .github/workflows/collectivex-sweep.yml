@@ -154,7 +154,7 @@ jobs:
     timeout-minutes: ${{ matrix.job_timeout_minutes || 350 }}
     env:
       COLLX_BENCH: ${{ matrix.backend }}
-      # Set only on shards whose suite ships its own image (swap-blocks); blank keeps the pool's.
+      # Set only on shards that ship their own image (swap-blocks; mi355x mooncake); blank keeps the pool's.
       COLLX_IMAGE_OVERRIDE: ${{ matrix.image || '' }}
       COLLX_STAGED_IMAGE_DIR: ${{ matrix.staged_image_dir || '' }}
       # The fabric a shard claims (kv-transfer rdma legs on an MNNVL rack leave the NVL domain)

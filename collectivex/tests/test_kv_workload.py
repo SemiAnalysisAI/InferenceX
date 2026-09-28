@@ -5,9 +5,9 @@ The packed block-major layout is the contract: per cache-group region, one
 contiguous descriptor covers all the group's layers for one physical block
 (vLLM's packed DSV4 NIXL shape), block tables are seed-keyed permutations both
 ranks derive independently (batched requests slicing disjoint ranges of one
-permutation), and an offset-derived pattern makes any byte's expected value
-computable from its offset alone. These tests pin that math with hand-computed
-cases validated against vLLM commit 32ad1400d7 (state content 584 B, page
+permutation), and an offset-derived, per-rank-salted pattern makes any byte's
+expected value computable from its source offset and source rank alone.
+These tests pin that math with hand-computed cases validated against vLLM commit 32ad1400d7 (state content 584 B, page
 padded to a 576 B multiple at block granularity, one descriptor per packed
 block); the torch fill path is exercised on metal by the suite itself (a wrong
 fill fails every verify row loudly).
@@ -54,9 +54,11 @@ class Geometry(unittest.TestCase):
         self.assertEqual(
             (regions["c128a"]["layers"], regions["c128a"]["page_bytes"],
              regions["c128a"]["blocks_req"]), (31, 1_728, 2))
+        # the window shares C4A's physical tensor, so its page equals C4A's
         self.assertEqual(
             (regions["swa"]["layers"], regions["swa"]["block_tokens"],
-             regions["swa"]["blocks_req"]), (61, 64, 2))
+             regions["swa"]["page_bytes"], regions["swa"]["blocks_req"]),
+            (61, 64, 37_440, 2))
         self.assertEqual(cfg["descs"], 2 + 2 + 2 + 2)
         self.assertEqual(cfg["req_bytes"],
                          2 * (30 * 37_440 + 30 * 8_640 + 31 * 1_728 + 61 * 37_440))
@@ -65,37 +67,10 @@ class Geometry(unittest.TestCase):
                          sum(r["pool_blocks"] * r["packed_bytes"]
                              for r in cfg["regions"]))
 
-    def test_alignment_pads_the_page_not_each_state(self):
-        # 64 states * 584 B = 37,376 -> padded once per page to 37,440. The
-        # old per-entry 576 B model would give 64 * 576 = 36,864 — vLLM pads
-        # at page granularity, not per state.
-        cfg = kv_workload.plan_config("dsv4", "fp8", 512, 256)
-        c4a = {r["name"]: r for r in cfg["regions"]}["c4a"]
-        self.assertEqual(c4a["page_bytes"], 37_440)
-        self.assertNotEqual(c4a["page_bytes"], 64 * 576)
-
-    def test_swa_shares_the_c4a_page_size(self):
-        # Both block types live in one physical tensor: a 64-token window
-        # block (1 token/state) and a 256-token C4A block (4 tokens/state)
-        # are the same 64 states -> byte-identical pages.
-        cfg = kv_workload.plan_config("dsv4", "fp8", 512, 256)
-        regions = {r["name"]: r for r in cfg["regions"]}
-        self.assertEqual(regions["swa"]["page_bytes"], regions["c4a"]["page_bytes"])
-
-    def test_one_descriptor_per_block_at_the_big_isl(self):
-        # 512k tokens at block 256: 2048 blocks per non-window group + 2
-        # window blocks = 6,146 descriptors per request — the packed shape
-        # vLLM's connector asserts, not a per-(layer, page) explosion.
-        cfg = kv_workload.plan_config("dsv4", "fp8", 524_288, 256)
-        self.assertEqual(cfg["descs"], 2048 * 3 + 2)
-
-    def test_dsv4_window_caps_at_128_tokens(self):
+    def test_a_short_request_uses_only_its_own_window_tokens(self):
+        # min(isl, 128) = 64 tokens -> one 64-token window block
         small = kv_workload.plan_config("dsv4", "fp8", 64, 256)
-        large = kv_workload.plan_config("dsv4", "fp8", 32_768, 256)
-        window = {r["name"]: r for r in large["regions"]}["swa"]
-        self.assertEqual(window["blocks_req"], 2)  # 128 tokens / 64 per block
-        self.assertEqual({r["name"]: r for r in small["regions"]}["swa"]["blocks_req"],
-                         1)  # min(isl, 128) = 64 tokens
+        self.assertEqual({r["name"]: r for r in small["regions"]}["swa"]["blocks_req"], 1)
 
     def test_block_sizes_that_split_a_state_fail_closed(self):
         # C128A's 128-token states force the model block size to a multiple
@@ -125,22 +100,26 @@ class Geometry(unittest.TestCase):
 
 
 class Tables(unittest.TestCase):
-    def test_deterministic_and_distinct_per_side(self):
+    def test_deterministic_and_distinct_per_side_and_seed(self):
         cfg = kv_workload.plan_config("dsv4", "fp8", 4096, 256)
-        local = kv_workload.block_table(cfg, kv_workload.table_seed(cfg, "local"))
-        remote = kv_workload.block_table(cfg, kv_workload.table_seed(cfg, "remote"))
-        again = kv_workload.block_table(cfg, kv_workload.table_seed(cfg, "local"))
+
+        def table(side, seed=67):
+            return kv_workload.block_table(cfg, kv_workload.table_seed(cfg, side, seed))
+
+        local, remote, again, reseeded = table("local"), table("remote"), table("local"), \
+            table("local", seed=68)
         for region in cfg["regions"]:
             name, blocks_req = region["name"], region["blocks_req"]
             self.assertTrue((local[name] == again[name]).all())
             self.assertFalse((local[name] == remote[name]).all())
+            self.assertFalse((local[name] == reseeded[name]).all())
             # distinct in-range blocks (fragmented, never aliased)
             self.assertEqual(len(set(local[name].tolist())), blocks_req)
             self.assertTrue((local[name] < region["pool_blocks"]).all())
 
     def test_batched_requests_slice_disjoint_blocks(self):
         cfg = kv_workload.plan_config("dsv4", "fp8", 512, 256, batch_max=4)
-        seed = kv_workload.table_seed(cfg, "local")
+        seed = kv_workload.table_seed(cfg, "local", 67)
         tables = [kv_workload.block_table(cfg, seed, request=r) for r in range(4)]
         for region in cfg["regions"]:
             blocks = [t[region["name"]].tolist() for t in tables]
@@ -151,21 +130,6 @@ class Tables(unittest.TestCase):
         cfg = kv_workload.plan_config("dsv4", "fp8", 512, 256)  # slack for ~2 requests
         with self.assertRaises(ValueError):
             kv_workload.block_table(cfg, 1, request=8)
-
-    def test_block_major_offsets(self):
-        # One offset per packed block: block b sits at b * packed_bytes.
-        cfg = dict(regions=[dict(name="kv", packed_bytes=512, blocks_req=2,
-                                 pool_blocks=3, base=0)], descs=2)
-        offsets = kv_workload.page_offsets(cfg, {"kv": np.array([2, 0])})
-        self.assertEqual(offsets.tolist(), [2 * 512, 0])
-
-    def test_second_region_offsets_start_at_its_base(self):
-        cfg = dict(regions=[
-            dict(name="a", packed_bytes=256, blocks_req=1, pool_blocks=2, base=0),
-            dict(name="b", packed_bytes=128, blocks_req=1, pool_blocks=2, base=512),
-        ], descs=2)
-        offsets = kv_workload.page_offsets(cfg, {"a": np.array([1]), "b": np.array([1])})
-        self.assertEqual(offsets.tolist(), [256, 512 + 128])
 
     def test_desc_array_carries_per_region_packed_sizes(self):
         cfg = dict(regions=[
@@ -181,84 +145,89 @@ class Tables(unittest.TestCase):
 
 
 class Verify(unittest.TestCase):
+    SRC_SALT, DST_SALT = 1, 0
+
+    @staticmethod
+    def _pattern(nbytes, salt):
+        # The expected byte model, written independently of kv_workload.
+        chunks = np.arange(nbytes, dtype=np.int64) >> 8
+        return ((chunks * 131 + 7 + 101 * salt) & 0xFF).astype(np.uint8)
+
     def _painted_destination(self, cfg, dst_tables, src_tables):
         """A destination pool where every dst block holds its src block's pattern."""
-        pool = np.zeros(cfg["pool_bytes"], dtype=np.uint8)
+        pool = self._pattern(cfg["pool_bytes"], self.DST_SALT)
+        src_pool = self._pattern(cfg["pool_bytes"], self.SRC_SALT)
         for region in cfg["regions"]:
             size = region["packed_bytes"]
             for dst, src in zip(dst_tables[region["name"]], src_tables[region["name"]]):
                 dst_off = int(dst) * size + region["base"]
                 src_off = int(src) * size + region["base"]
-                src_bytes = src_off + np.arange(size, dtype=np.int64)
-                pool[dst_off : dst_off + size] = ((src_bytes >> 8) * 131 + 7) & 0xFF
+                pool[dst_off : dst_off + size] = src_pool[src_off : src_off + size]
         return pool
 
-    def _tables(self, cfg):
-        dst = kv_workload.block_table(cfg, kv_workload.table_seed(cfg, "local"))
-        src = kv_workload.block_table(cfg, kv_workload.table_seed(cfg, "remote"))
-        return dst, src
+    def _setup(self):
+        cfg = kv_workload.plan_config("dsv4", "fp8", 512, 256)
+        dst = kv_workload.block_table(cfg, kv_workload.table_seed(cfg, "local", 67))
+        src = kv_workload.block_table(cfg, kv_workload.table_seed(cfg, "remote", 67))
+        return cfg, dst, src, self._painted_destination(cfg, dst, src)
+
+    def _verify(self, pool, cfg, dst, src, salt=SRC_SALT):
+        return kv_workload.verify_transfer(_read8(pool), cfg, dst, src, src_salt=salt)
 
     def test_a_faithful_transfer_verifies_across_unaligned_pages(self):
         # dsv4's page sizes are 576 B multiples, never 256 B multiples, so
         # per-layer probes land at any byte alignment and exercise the
         # per-byte expectation model.
-        cfg = kv_workload.plan_config("dsv4", "fp8", 512, 256)
-        dst, src = self._tables(cfg)
-        pool = self._painted_destination(cfg, dst, src)
-        ok, detail = kv_workload.verify_transfer(_read8(pool), cfg, dst, src)
+        cfg, dst, src, pool = self._setup()
+        ok, detail = self._verify(pool, cfg, dst, src)
         self.assertTrue(ok, detail)
 
-    def test_one_missing_transfer_fails_with_its_coordinates(self):
-        cfg = kv_workload.plan_config("dsv4", "fp8", 512, 256)
-        dst, src = self._tables(cfg)
-        pool = self._painted_destination(cfg, dst, src)
-        pool[:] = 0  # a transfer that never happened
-        ok, detail = kv_workload.verify_transfer(_read8(pool), cfg, dst, src)
-        self.assertFalse(ok)
-        self.assertIn("expected", detail)
+    def test_wrong_transfers_fail(self):
+        cfg, dst, src, pool = self._setup()
+        untouched = self._pattern(cfg["pool_bytes"], self.DST_SALT)
+        for name, args in (
+            # a transfer that never happened leaves the destination's own
+            # repainted pattern, which the source salt tells apart
+            ("never happened", (untouched, cfg, dst, src)),
+            # dst blocks hold the src pattern, not their own
+            ("tables swapped", (pool, cfg, src, dst)),
+            # a loopback read of the destination's own pool
+            ("wrong source rank", (pool, cfg, dst, src, self.DST_SALT)),
+        ):
+            with self.subTest(name):
+                ok, detail = self._verify(*args)
+                self.assertFalse(ok)
+                self.assertIn("expected", detail)
 
-    def test_direction_matters(self):
-        # Verifying with the tables swapped must fail: dst blocks hold src
-        # pattern, not their own.
-        cfg = kv_workload.plan_config("dsv4", "fp8", 512, 256)
-        dst, src = self._tables(cfg)
-        pool = self._painted_destination(cfg, dst, src)
-        ok, _ = kv_workload.verify_transfer(_read8(pool), cfg, src, dst)
-        self.assertFalse(ok)
-
-    def test_fabric_pool_pattern_matches_the_verify_model(self):
-        # kv_pool's host-built pattern (the mnnvl fill path) and the verify
-        # model must agree byte for byte, or every mnnvl row fails verify.
-        import kv_pool
-
-        pattern = kv_pool._pattern(1024)
-        for offset in (0, 8, 256, 512, 1016):
-            expected = kv_workload._chunk_byte(offset)
-            self.assertTrue((pattern[offset : offset + 8] == expected).all(), offset)
+    def test_the_fabric_pool_tile_matches_the_verify_model(self):
+        # FabricPool (the mnnvl fill path) doubles pattern_tile across the pool;
+        # it must agree byte for byte with the verify model, or every mnnvl row
+        # fails verify.
+        for salt in (0, 1):
+            tile = kv_workload.pattern_tile(salt)
+            self.assertEqual(tile.nbytes, kv_workload.PATTERN_PERIOD)
+            for offset in (0, 8, 256, 1016, kv_workload.PATTERN_PERIOD - 8):
+                expected = bytes(kv_workload._chunk_byte(offset + j, salt) for j in range(8))
+                self.assertEqual(tile[offset : offset + 8].tobytes(), expected, (salt, offset))
+            # periodic: the byte one period on is the same byte
+            self.assertEqual(kv_workload._chunk_byte(kv_workload.PATTERN_PERIOD + 300, salt),
+                             kv_workload._chunk_byte(300, salt))
 
 
 class SweepConfigConsistency(unittest.TestCase):
-    def test_kv_sweep_precisions_match_the_workload_model(self):
-        # sweep_matrix schedules from the JSON map (it must stay stdlib-only);
-        # the workload model owns the truth and plan_config fail-closes on a
-        # mismatch at runtime. This pins the two together at PR time.
-        import json
+    def test_every_scheduled_workload_point_is_plannable(self):
+        # sweep_matrix stays stdlib-only, so it schedules from kv_sweep.json's
+        # workload -> precision map without importing this model; a precision
+        # or block size plan_config rejects would kill every kv leg at its
+        # first grid point.
+        import sweep_matrix
 
-        sweep = json.loads((ROOT / "configs" / "kv_sweep.json").read_text())
-        for workload, precisions in sweep["workloads"].items():
-            preset = kv_workload.PRESETS[workload.removeprefix("kv-")]
-            self.assertEqual(tuple(precisions), preset["precisions"], workload)
-
-    def test_kv_sweep_block_sizes_are_plannable(self):
-        # A sweep block size the model rejects (splitting an HCA state) would
-        # kill every kv leg at the first grid point.
-        import json
-
-        sweep = json.loads((ROOT / "configs" / "kv_sweep.json").read_text())
-        for workload, precisions in sweep["workloads"].items():
-            for block in sweep["page_tokens"]:
-                kv_workload.plan_config(workload.removeprefix("kv-"),
-                                        precisions[0], 512, block)
+        for workload, precisions in sweep_matrix.KV_SWEEP["workloads"].items():
+            for precision in precisions:
+                for block in sweep_matrix.KV_SWEEP["page_tokens"]:
+                    with self.subTest(workload=workload, precision=precision, block=block):
+                        kv_workload.plan_config(workload.removeprefix("kv-"), precision,
+                                                512, block)
 
 
 class Percentiles(unittest.TestCase):

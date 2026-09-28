@@ -170,23 +170,21 @@ benchmark's return code.
 ## KV-Cache Transfer Suite
 
 `kv-transfer` legs run 2 nodes x 1 GPU, the per-worker prefill/decode pair a disaggregated
-deployment actually forms. Each moves bursts of 1 to 32 concurrent requests' paged KV as vLLM's
-packed block-major descriptor lists over seed-keyed random block tables (a burst posts every
-request's prepped transfer, then awaits them all), plus one contiguous bulk row as the wire-speed
-baseline. The workload is transcribed from what vLLM allocates for the model it serves: `kv-dsv4`
-is DeepSeek-V4-Pro's mixed cache (30 Compressed Sparse Attention layers at 4 tokens per 576 B entry
-plus their 132 B indexer entries, 31 Heavily Compressed Attention layers at 128 tokens per entry,
-and the 128-token sliding-window cache on all 61 layers; fp8 by architecture), at ISL 2k to 512k
-and vLLM's 256-token block. `pull` (READ, vLLM NixlConnector) and `push` (WRITE, SGLang disagg) are
-both timed from the initiator, with pattern verification of every request on the destination pool.
+deployment actually forms. Each moves bursts of 1 to 32 concurrent requests' paged KV (vLLM's
+packed block-major descriptor lists over seed-keyed random block tables) plus one contiguous bulk
+row as the wire-speed baseline. The workload is `kv-dsv4`, DeepSeek-V4-Pro's mixed fp8 cache as
+vLLM allocates it, at ISL 2k to 512k and vLLM's 256-token block. `pull` (READ, vLLM
+NixlConnector) and `push` (WRITE, SGLang disagg) are both timed from the initiator, with every
+request verified on the destination pool. The [methodology](docs/methodology.md#kv-cache-transfer-suite)
+has the geometry and verification model.
 
 Backends are `nixl` (what Dynamo, vLLM, and SGLang ship), `mooncake` (the CUDA wheel links libcuda
 at import; mi355x runs AMD's atom-dev build push-only), and `mori-io` (AMD's native engine), where
 the registry's `kv_backends` map enables them. No entry, no legs, mirroring `ll_backends`. An entry
 may restrict ops, pin an image, set a NIC filter, or lower the pool budget. Fabrics are `rdma`
-(torch pools) and, on GB racks, `mnnvl` (cuMem FABRIC pools; see the methodology for the
-bulk-vs-paged lane inversion that row exists to publish). The grid and per-pool scheduling live in
-`configs/kv_sweep.json`; dispatch with `suites: kv-transfer`.
+(torch pools) and, on GB racks, `nixl` also runs `mnnvl` (cuMem FABRIC pools; see the methodology
+for the bulk-vs-paged lane inversion that row exists to publish). The grid and per-pool scheduling
+live in `configs/kv_sweep.json`; dispatch with `suites: kv-transfer`.
 
 ## Workflow And Artifacts
 

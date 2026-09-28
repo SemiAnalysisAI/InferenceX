@@ -14,7 +14,7 @@ import time
 import numpy as np
 
 import kv_workload
-from kv_backend import KVBackend
+from kv_backend import KVBackend, library_version
 
 # b300's CX NICs refuse cuda registrations somewhere between 7083 and 8847 MiB
 # (an ~8 GiB MR wall); UCX surfaces no error and the initiator later segfaults
@@ -51,23 +51,12 @@ class NIXLBackend(KVBackend):
     maturity = "production"
 
     def __init__(self, args, role, device):
-        super().__init__(args, role, device)
         from nixl._api import nixl_agent, nixl_agent_config
 
-        try:
-            import importlib.metadata as md
-
-            for dist_name in ("nixl", "nixl-cu13", "nixl-cu12"):
-                try:
-                    self.library_version = md.version(dist_name)
-                    break
-                except md.PackageNotFoundError:
-                    continue
-        except Exception:
-            self.library_version = None
+        self.library_version = library_version(("nixl", "nixl-cu13", "nixl-cu12"))
         # The registry pin run_kv hands to UCX_NET_DEVICES for this case;
         # None means UCX chose among the operator inventory itself.
-        self.nic_filter = getattr(args, "kv_device", "") or None
+        self.nic_filter = args.kv_device or None
         # prog thread on, listener off: metadata goes through the harness exchange.
         self._agent = nixl_agent(role, nixl_agent_config(True, False, 0, backends=["UCX"]))
         self._handles = []
@@ -138,12 +127,16 @@ class NIXLBackend(KVBackend):
                              dtype=np.uint64)
         return self._make(local_np, remote_np, op)
 
-    def teardown(self) -> None:
+    def release(self) -> None:
         for handle in self._handles:
             try:
                 self._agent.release_xfer_handle(handle)
             except Exception:
                 pass
+        self._handles.clear()
+
+    def teardown(self) -> None:
+        self.release()
         if self._peer is not None:
             try:
                 self._agent.remove_remote_agent(self._remote_name)

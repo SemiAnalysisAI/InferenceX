@@ -28,7 +28,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path[:0] = [HERE, os.path.dirname(HERE)]
 
-import ep_harness  # noqa: E402  (case_id/is_case_id + atomic write; stdlib-only)
+import ep_harness  # noqa: E402  (stdlib-only; safe before torch)
 import kv_workload  # noqa: E402
 from kv_backend import time_bursts  # noqa: E402
 
@@ -283,9 +283,20 @@ def main() -> int:
         from kv_nixl import NIXLBackend as Backend
 
     points, isls, batches = _grid(args)
+    if not points:
+        print("ERROR: no grid point fits DESC_BUDGET and the pool budget", file=sys.stderr)
+        return 2
     reg_layout = _harmonize(points)
     ops = args.ops.split()
-    pool_bytes = max(cfg["pool_bytes"] for cfg, _ in points)
+    pool_bytes = points[0][0]["pool_bytes"]  # _harmonize gives every cfg the union pool
+    preset = args.workload_name.removeprefix("kv-")
+    pages = [int(v) for v in args.page_tokens.split()]
+    # One page family overruns the budget only by head-room (see _harmonize);
+    # several families each get their own slab and can overrun it outright.
+    if len({cfg["page_tokens"] for cfg, _ in points}) > 1 and pool_bytes > args.pool_budget:
+        print(f"ERROR: harmonized pool {pool_bytes} B across page sizes exceeds "
+              f"--pool-budget {args.pool_budget} B", file=sys.stderr)
+        return 2
     bulk_bytes = min(max(cfg["req_bytes"] for cfg, _ in points), BULK_CAP)
 
     # RDMA registration pins the whole pool; a small inherited soft memlock
@@ -296,7 +307,7 @@ def main() -> int:
 
     soft, hard = resource.getrlimit(resource.RLIMIT_MEMLOCK)
     need = pool_bytes + bulk_bytes
-    if soft != resource.RLIM_INFINITY and (hard == resource.RLIM_INFINITY or soft < hard):
+    if soft != hard:  # soft <= hard always, so this raises soft to hard
         resource.setrlimit(resource.RLIMIT_MEMLOCK, (hard, hard))
         soft = hard
     if soft != resource.RLIM_INFINITY and soft < need:
@@ -310,7 +321,7 @@ def main() -> int:
     bulk = kv_pool.create(args.fabric, bulk_bytes, local_rank)
 
     def repaint():
-        pool.fill_pattern()
+        pool.fill_pattern(salt=rank)
         bulk.fill_byte(0xAB if role == "target" else 0xCD)
 
     repaint()
@@ -340,14 +351,16 @@ def main() -> int:
     def verify_burst(cfg, table_pairs):
         """Every request in the burst must land: a passing request 0 says
         nothing about the others, and concurrent same-session requests are
-        exactly where corruption would hide."""
+        exactly where corruption would hide. The source is always the peer,
+        so its salt is the peer's rank."""
         for r, (dst, src) in enumerate(table_pairs):
-            passed, detail = kv_workload.verify_transfer(pool.read8, cfg, dst, src)
+            passed, detail = kv_workload.verify_transfer(pool.read8, cfg, dst, src,
+                                                         src_salt=1 - rank)
             if not passed:
                 return False, f"request={r} {detail}"
         return True, ""
 
-    def measure(make, cfg_row: dict, op: str, verify_side: str, table_pairs=None):
+    def measure(make, cfg, cfg_row: dict, op: str, verify_side: str, table_pairs=None):
         """One grid point: initiator times bursts, then the verifying side checks."""
         if role == "initiator":
             made = make()  # one (post, wait, prep_seconds) per request in the burst
@@ -359,10 +372,11 @@ def main() -> int:
                 burst_ms, request_ms = time_bursts(pairs, args.warmup, args.reps)
                 samples.extend(burst_ms)
                 request_samples.extend(request_ms)
+            backend.release()
         dist.barrier()  # transfers complete before anyone inspects pools
         verdict = exchange_verdict(
             dist, role, verify_side,
-            lambda: verify_burst(cfg_row["_cfg"], table_pairs))
+            lambda: verify_burst(cfg, table_pairs))
         repaint()
         dist.barrier()
         if role != "initiator":
@@ -376,7 +390,7 @@ def main() -> int:
         gbps_incl_prep = (cfg_row["req_bytes"] * cfg_row["batch"]
                           / (stats["p50"] + prep_ms) / 1e6)
         return {
-            **{k: v for k, v in cfg_row.items() if not k.startswith("_")},
+            **cfg_row,
             "op": op,
             "prep_ms": round(prep_ms, 3),
             "latency_ms": {k: round(v, 3) for k, v in stats.items()},
@@ -389,23 +403,21 @@ def main() -> int:
         }
 
     for cfg, allowed in points:
-        seed_t = kv_workload.table_seed(cfg, "remote")
-        seed_i = kv_workload.table_seed(cfg, "local")
+        seed_t = kv_workload.table_seed(cfg, "remote", args.seed)
+        seed_i = kv_workload.table_seed(cfg, "local", args.seed)
         target_tables = [kv_workload.block_table(cfg, seed_t, r) for r in range(allowed[-1])]
         initiator_tables = [kv_workload.block_table(cfg, seed_i, r) for r in range(allowed[-1])]
         base = {
             "kind": "paged", "preset": cfg["preset"], "isl": cfg["isl"],
             "page_tokens": cfg["page_tokens"], "layers": cfg["layers"],
             "page_bytes": cfg["page_bytes"], "descs": cfg["descs"],
-            "req_bytes": cfg["req_bytes"], "_cfg": cfg,
+            "req_bytes": cfg["req_bytes"],
         }
         for batch in allowed:
             for op in ops:
-                make = None
-                if role == "initiator":
-                    make = lambda op=op, batch=batch: [
-                        backend.make_paged(cfg, op, initiator_tables[r], target_tables[r])
-                        for r in range(batch)]
+                # Called by measure on the initiator only, within this iteration.
+                make = lambda: [backend.make_paged(cfg, op, initiator_tables[r], target_tables[r])
+                                for r in range(batch)]
                 # pull lands on the initiator's pool; push on the target's.
                 # Every request in the burst is checked against its own tables.
                 verify_side = "initiator" if op == "pull" else "target"
@@ -413,28 +425,25 @@ def main() -> int:
                     (initiator_tables[r], target_tables[r]) if op == "pull"
                     else (target_tables[r], initiator_tables[r])
                     for r in range(batch)]
-                record(measure(make, {**base, "batch": batch}, op, verify_side, table_pairs))
+                record(measure(make, cfg, {**base, "batch": batch}, op, verify_side,
+                               table_pairs))
 
     for isl in isls:
-        preset = args.workload_name.removeprefix("kv-")
-        block_tokens = int(args.page_tokens.split()[0])
-        cfg = kv_workload.plan_config(preset, args.precision, isl, block_tokens,
-                                      args.pool_slack)
+        cfg = kv_workload.plan_config(preset, args.precision, isl, pages[0], args.pool_slack)
         nbytes = min(cfg["req_bytes"], bulk_bytes)
         base = {"kind": "bulk", "preset": preset, "isl": isl, "page_tokens": None,
                 "layers": cfg["layers"], "page_bytes": None, "descs": 1, "batch": 1,
-                "req_bytes": nbytes, "_cfg": cfg}
+                "req_bytes": nbytes}
         for op in ops:
-            make = (lambda op=op, n=nbytes: [backend.make_bulk(n, op)]) if role == "initiator" else None
-            record(measure(make, base, op, verify_side="none", table_pairs=None))
+            record(measure(lambda: [backend.make_bulk(nbytes, op)], cfg, base, op,
+                           verify_side="none"))
 
     backend.teardown()
 
     gathered: list = [None, None]
-    dist.all_gather_object(gathered, rows if rank == 1 else None)
-    rows = gathered[1] or []
-    hosts: list = [None, None]
-    dist.all_gather_object(hosts, socket.gethostname())
+    dist.all_gather_object(gathered, (socket.gethostname(), rows if rank == 1 else None))
+    hosts = [host for host, _ in gathered]
+    rows = gathered[1][1] or []
     all_ok = bool(rows) and all(r["verify"]["passed"] for r in rows)
 
     if rank == 0:
@@ -443,10 +452,11 @@ def main() -> int:
             os.environ.get("COLLECTIVEX_IMAGE", ""), all_ok, "transfer verification failed",
             workload={
                 "isl_ladder": isls,
-                "page_tokens": [int(v) for v in args.page_tokens.split()],
+                "page_tokens": pages,
                 "batch_sizes": batches,
                 "ops": ops,
-                "preset": kv_workload.PRESETS[args.workload_name.removeprefix("kv-")],
+                "seed": args.seed,
+                "preset": kv_workload.PRESETS[preset],
             },
             measurement={
                 "payload_unit": "request-kv-bytes",
@@ -460,9 +470,9 @@ def main() -> int:
             implementation={
                 "name": args.backend,
                 "fabric": args.fabric,
-                "library_version": getattr(backend, "library_version", None),
-                "maturity": getattr(backend, "maturity", "candidate"),
-                "nic_filter": getattr(backend, "nic_filter", None),
+                "library_version": backend.library_version,
+                "maturity": backend.maturity,
+                "nic_filter": backend.nic_filter,
             },
             topology={
                 "device_product": torch.cuda.get_device_name(device),
@@ -485,10 +495,10 @@ def main() -> int:
         print(f"[run_kv] status={doc['outcome']['status']} rows={len(rows)}"
               + (f" -> {args.out}" if args.out else ""), flush=True)
 
-    flag = torch.tensor([int(all_ok)])
-    dist.all_reduce(flag, op=dist.ReduceOp.MIN)
+    # all_ok is rank-invariant (both ranks hold rank 1's gathered rows); the
+    # barrier keeps a failing rank 1 from exiting before rank 0 writes --out.
     dist.barrier()
-    return 0 if int(flag.item()) else 3
+    return 0 if all_ok else 3
 
 
 if __name__ == "__main__":

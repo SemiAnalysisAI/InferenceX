@@ -15,19 +15,19 @@ from __future__ import annotations
 
 import time
 
+import kv_workload
+
 
 class KVBackend:
-    """One transfer library on one rank. Subclasses implement the five hooks."""
+    """One transfer library on one rank, constructed as ``Backend(args, role,
+    device)``. Subclasses implement the five hooks."""
 
     name = "abstract"
     #: maturity mirrors EPBackend.maturity ("production" | "candidate").
     maturity = "candidate"
     library_version: str | None = None
-
-    def __init__(self, args, role: str, device) -> None:
-        self.args = args
-        self.role = role
-        self.device = device
+    #: the engine NIC filter this case ran under; None = library/UCX choice.
+    nic_filter: str | None = None
 
     # -- lifecycle ------------------------------------------------------------
     def register(self, pool, bulk, reg_layout=None) -> None:
@@ -48,6 +48,9 @@ class KVBackend:
     def connect(self, peer: dict) -> None:
         """Consume the peer's payload; after this, transfers may be prepared."""
         raise NotImplementedError
+
+    def release(self) -> None:
+        """Drop the transfers made for the grid point just measured (initiator)."""
 
     def teardown(self) -> None:  # pragma: no cover - adapter-specific
         pass
@@ -71,6 +74,32 @@ class KVBackend:
         payload over host-observed completion; not a proven physical wire
         rate — backends may split large operations internally)."""
         raise NotImplementedError
+
+
+def library_version(dists, module=None) -> str | None:
+    """The first installed distribution's version, else ``module.__version__``."""
+    import importlib.metadata as md
+
+    for name in dists:
+        try:
+            return md.version(name)
+        except md.PackageNotFoundError:
+            pass
+    return getattr(module, "__version__", None)
+
+
+def spans(n: int, cap: int) -> list[tuple[int, int]]:
+    """[start, end) pieces of at most ``cap`` covering ``range(n)``."""
+    return [(i, min(i + cap, n)) for i in range(0, n, cap)]
+
+
+def offset_lists(cfg: dict, local_tables, remote_tables, local_base: int = 0,
+                 remote_base: int = 0) -> tuple[list, list, list]:
+    """(local addrs, remote addrs, sizes) as Python lists: pool offsets plus the
+    given bases (0 for offset-addressed engines)."""
+    return ((local_base + kv_workload.page_offsets(cfg, local_tables)).tolist(),
+            (remote_base + kv_workload.page_offsets(cfg, remote_tables)).tolist(),
+            kv_workload.desc_sizes(cfg).tolist())
 
 
 def time_bursts(transfers, warmup: int, reps: int) -> tuple[list[float], list[float]]:

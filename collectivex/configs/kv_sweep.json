@@ -1,5 +1,4 @@
 {
-  "version": 2,
   "suite": "kv-transfer",
   "workloads": {
     "kv-dsv4": [

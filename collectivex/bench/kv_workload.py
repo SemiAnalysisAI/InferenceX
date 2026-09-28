@@ -29,8 +29,9 @@ model block size to a multiple of 128; vLLM serves DSV4 at 256. The dtype mix
 is architectural, so the preset pins precision to "fp8".
 
 Pattern correctness: byte at offset o of a pool is derived from o (constant per
-256-byte chunk), so any block's expected contents follow from its offset alone,
-at any alignment.
+256-byte chunk) and the owning rank's salt, so any block's expected contents
+follow from its source offset and source rank alone, at any alignment; the
+salt makes a transfer that reads its own pool (a loopback) fail verify.
 """
 
 from __future__ import annotations
@@ -131,9 +132,9 @@ def block_table(cfg: dict, seed: int, request: int = 0) -> dict:
     return tables
 
 
-def table_seed(cfg: dict, side: str) -> int:
-    """Both ranks derive both sides' tables from the config alone — no exchange."""
-    base = cfg["isl"] * 31 + cfg["page_tokens"] + len(cfg["preset"]) * 7
+def table_seed(cfg: dict, side: str, seed: int = 0) -> int:
+    """Both ranks derive both sides' tables from the config and the sweep seed — no exchange."""
+    base = cfg["isl"] * 31 + cfg["page_tokens"] + len(cfg["preset"]) * 7 + seed * 7919
     return base + (1000 if side == "local" else 0)
 
 
@@ -165,24 +166,34 @@ def desc_array(base: int, cfg: dict, tables: dict, dev: int) -> np.ndarray:
     return out
 
 
-def _chunk_byte(offset: int) -> int:
-    return ((offset >> 8) * 131 + 7) & 0xFF
+# The pattern depends on (offset >> 8) mod 256 only, so it repeats every 64 KiB.
+PATTERN_PERIOD = 1 << 16
 
 
-def fill_pattern(pool_u8) -> None:
+def _chunk_byte(offset: int, salt: int = 0) -> int:
+    return ((offset >> 8) * 131 + 7 + 101 * salt) & 0xFF
+
+
+def pattern_tile(salt: int = 0) -> np.ndarray:
+    """One PATTERN_PERIOD of the pattern from offset 0 (host uint8)."""
+    chunks = np.arange(PATTERN_PERIOD // 256, dtype=np.int64)
+    return np.repeat(((chunks * 131 + 7 + 101 * salt) & 0xFF).astype(np.uint8), 256)
+
+
+def fill_pattern(pool_u8, salt: int = 0) -> None:
     """Paint the offset-derived pattern over the whole pool (torch uint8 tensor)."""
     import torch
 
     chunks = pool_u8.numel() // 256
     view = pool_u8[: chunks * 256].view(chunks, 256)
-    vals = ((torch.arange(chunks, device=pool_u8.device, dtype=torch.int64) * 131 + 7) & 0xFF)
+    vals = (torch.arange(chunks, device=pool_u8.device, dtype=torch.int64) * 131 + 7 + 101 * salt) & 0xFF
     view.copy_(vals.to(torch.uint8)[:, None].expand(chunks, 256))
 
 
 def verify_transfer(read8, cfg: dict, dst_tables: dict, src_tables: dict,
-                    samples: int = 16, seed: int = 7) -> tuple[bool, str]:
+                    src_salt: int = 0, samples: int = 16, seed: int = 7) -> tuple[bool, str]:
     """On the destination pool: packed block (region, dst[i]) must hold the
-    source pool's pattern at (region, src[i])'s offset. Each sample probes one
+    source pool's pattern (salted with ``src_salt``) at (region, src[i])'s offset. Each sample probes one
     layer's page inside the packed block, so the checks range over the whole
     descriptor. ``read8(offset)`` returns 8 destination-pool bytes (see
     kv_pool). Compared per byte, so any page alignment verifies exactly."""
@@ -195,7 +206,7 @@ def verify_transfer(read8, cfg: dict, dst_tables: dict, src_tables: dict,
         delta = layer * region["page_bytes"]
         src_off = int(src[i]) * region["packed_bytes"] + region["base"] + delta
         dst_off = int(dst[i]) * region["packed_bytes"] + region["base"] + delta
-        expected = bytes(_chunk_byte(src_off + j) for j in range(8))
+        expected = bytes(_chunk_byte(src_off + j, src_salt) for j in range(8))
         got = bytes(read8(dst_off))
         if got != expected:
             return False, (f"region={region['name']} layer={layer} i={i} "
@@ -217,6 +228,6 @@ def pcts(samples_ms: list[float]) -> dict:
 
 def iface_ipv4(iface: str) -> str:
     """IPv4 of a named interface (SIOCGIFADDR); the TCP bootstrap address."""
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     packed = struct.pack("256s", iface.encode()[:15])
-    return socket.inet_ntoa(fcntl.ioctl(sock.fileno(), 0x8915, packed)[20:24])
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+        return socket.inet_ntoa(fcntl.ioctl(sock.fileno(), 0x8915, packed)[20:24])

@@ -32,8 +32,8 @@ class TorchPool:
         self._torch = torch
         self.ptr, self.nbytes, self.device = self._t.data_ptr(), nbytes, device
 
-    def fill_pattern(self) -> None:
-        kv_workload.fill_pattern(self._t)
+    def fill_pattern(self, salt: int = 0) -> None:
+        kv_workload.fill_pattern(self._t, salt)
         self._torch.cuda.synchronize()
 
     def fill_byte(self, value: int) -> None:
@@ -56,17 +56,6 @@ class _AllocProp(ctypes.Structure):
 
 class _AccessDesc(ctypes.Structure):
     _fields_ = [("location_type", c_int), ("location_id", c_int), ("flags", c_int)]
-
-
-_PATTERNS: dict[int, np.ndarray] = {}
-
-
-def _pattern(nbytes: int) -> np.ndarray:
-    if nbytes not in _PATTERNS:
-        chunks = nbytes // 256
-        vals = ((np.arange(chunks, dtype=np.int64) * 131 + 7) & 0xFF).astype(np.uint8)
-        _PATTERNS[nbytes] = np.repeat(vals, 256)
-    return _PATTERNS[nbytes]
 
 
 class FabricPool:
@@ -103,15 +92,31 @@ class FabricPool:
         if code != 0:
             raise RuntimeError(f"{what} -> CUresult {code}")
 
-    def _h2d(self, host: np.ndarray) -> None:
-        self._check(self._cu.cuMemcpyHtoD_v2(
-            c_ulonglong(self.ptr), host.ctypes.data_as(c_void_p), c_size_t(host.nbytes)), "h2d")
+    def _sync(self) -> None:
+        # Device-side memset/copy are asynchronous to the host; the pool must be
+        # painted before the barrier that lets the peer transfer.
+        self._check(self._cu.cuCtxSynchronize(), "sync")
 
-    def fill_pattern(self) -> None:
-        self._h2d(_pattern(self.nbytes))
+    def fill_pattern(self, salt: int = 0) -> None:
+        """Upload one pattern period, then double it in place: the pattern is
+        PATTERN_PERIOD-periodic and every copy's destination sits at a multiple
+        of the period, so a copy of [0, n) lands the right bytes. No host
+        buffer of pool size is ever built."""
+        tile = kv_workload.pattern_tile(salt)
+        filled = min(tile.nbytes, self.nbytes)
+        self._check(self._cu.cuMemcpyHtoD_v2(
+            c_ulonglong(self.ptr), tile.ctypes.data_as(c_void_p), c_size_t(filled)), "h2d")
+        while filled < self.nbytes:
+            n = min(filled, self.nbytes - filled)
+            self._check(self._cu.cuMemcpyDtoD_v2(
+                c_ulonglong(self.ptr + filled), c_ulonglong(self.ptr), c_size_t(n)), "d2d")
+            filled += n
+        self._sync()
 
     def fill_byte(self, value: int) -> None:
-        self._h2d(np.full(self.nbytes, value, dtype=np.uint8))
+        self._check(self._cu.cuMemsetD8_v2(
+            c_ulonglong(self.ptr), ctypes.c_ubyte(value), c_size_t(self.nbytes)), "memset")
+        self._sync()
 
     def read8(self, offset: int):
         out = np.empty(8, dtype=np.uint8)

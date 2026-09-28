@@ -12,7 +12,7 @@ from __future__ import annotations
 import time
 
 import kv_workload
-from kv_backend import KVBackend
+from kv_backend import KVBackend, library_version, offset_lists, spans
 
 BATCH_CAP = 16384
 
@@ -22,21 +22,15 @@ class MoRIIOBackend(KVBackend):
     maturity = "production"
 
     def __init__(self, args, role, device):
-        super().__init__(args, role, device)
-        from mori.io import (BackendType, IOEngine, IOEngineConfig,
-                             MemoryLocationType, PollCqMode, RdmaBackendConfig)
+        import mori
+        from mori.io import (BackendType, EngineDesc, IOEngine, IOEngineConfig,
+                             MemoryDesc, MemoryLocationType, PollCqMode, RdmaBackendConfig)
 
         self._gpu_location = MemoryLocationType.GPU
-
-        try:
-            import mori
-
-            self.library_version = getattr(mori, "__version__", None)
-        except Exception:
-            self.library_version = None
-        self._mori_io = __import__("mori.io", fromlist=["EngineDesc", "MemoryDesc"])
+        self._engine_desc, self._memory_desc = EngineDesc, MemoryDesc
+        self.library_version = library_version((), mori)
         host = kv_workload.iface_ipv4(args.socket_ifname) if args.socket_ifname else ""
-        port = int(args.kv_mori_port) + (0 if role == "target" else 1)
+        port = args.kv_mori_port + (0 if role == "target" else 1)
         self._engine = IOEngine(key=role, config=IOEngineConfig(host=host, port=port))
         # Library defaults only: four QPs plus transfer chunking wedged on the metal.
         self._engine.create_backend(BackendType.RDMA, RdmaBackendConfig(
@@ -67,9 +61,9 @@ class MoRIIOBackend(KVBackend):
         }
 
     def connect(self, peer: dict) -> None:
-        self._engine.register_remote_engine(self._mori_io.EngineDesc.unpack(peer["engine"]))
-        remote_pool = self._mori_io.MemoryDesc.unpack(peer["pool"])
-        remote_bulk = self._mori_io.MemoryDesc.unpack(peer["bulk"])
+        self._engine.register_remote_engine(self._engine_desc.unpack(peer["engine"]))
+        remote_pool = self._memory_desc.unpack(peer["pool"])
+        remote_bulk = self._memory_desc.unpack(peer["bulk"])
         self._sessions = {
             "pool": self._engine.create_session(self._pool_mem, remote_pool),
             "bulk": self._engine.create_session(self._bulk_mem, remote_bulk),
@@ -84,10 +78,8 @@ class MoRIIOBackend(KVBackend):
 
     def make_paged(self, cfg, op, local_tables, remote_tables):
         start = time.perf_counter()
-        local = kv_workload.page_offsets(cfg, local_tables).tolist()
-        remote = kv_workload.page_offsets(cfg, remote_tables).tolist()
-        sizes = kv_workload.desc_sizes(cfg).tolist()
-        chunks = [(i, min(i + BATCH_CAP, len(local))) for i in range(0, len(local), BATCH_CAP)]
+        local, remote, sizes = offset_lists(cfg, local_tables, remote_tables)
+        chunks = spans(len(local), BATCH_CAP)
         session = self._sessions["pool"]
         func = session.batch_read if op == "pull" else session.batch_write
         engine = self._engine
@@ -116,16 +108,14 @@ class MoRIIOBackend(KVBackend):
         session = self._sessions["bulk"]
         func = session.read if op == "pull" else session.write
         engine = self._engine
-        spans = [(offset, min(offset + self.BULK_WR_CAP, nbytes))
-                 for offset in range(0, nbytes, self.BULK_WR_CAP)]
-
+        pieces = spans(nbytes, self.BULK_WR_CAP)
         statuses: list = []
 
         def post():
             statuses.clear()
             statuses.extend(
                 func(start, start, end - start, engine.allocate_transfer_uid())
-                for start, end in spans
+                for start, end in pieces
             )
 
         def wait():

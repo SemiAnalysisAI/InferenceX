@@ -32,10 +32,6 @@ collx_require_vars COLLX_IMAGE COLLX_IMAGE_PLATFORM COLLX_PARTITION COLLX_ACCOUN
 PARTITION="$COLLX_PARTITION"; ACCOUNT="$COLLX_ACCOUNT"; SQUASH_DIR="$COLLX_SQUASH_DIR"
 [ -z "${COLLX_ENROOT_CACHE_PATH:-}" ] || export ENROOT_CACHE_PATH="$COLLX_ENROOT_CACHE_PATH"
 export NCCL_CUMEM_ENABLE=1 NCCL_MNNVL_ENABLE=1
-# Mooncake is MC_FORCE_MNNVL's only reader, and it makes the engine install ONLY its cross-node
-# NVLink transport, which cannot open another host's segments in the pinned wheel
-# (cudaIpcOpenMemHandle: invalid resource handle). The mooncake kv row declares the rdma lane.
-[ "$COLLX_BENCH" = mooncake ] || export MC_FORCE_MNNVL=1
 collx_apply_network_profile "$NODES" "$COLLX_TRANSPORT"
 
 collx_log "$PRODUCT nodes=$NODES x ${GPN}gpu world=$NGPUS bench=$COLLX_BENCH"
@@ -52,10 +48,8 @@ allocation=(--partition="$PARTITION" --account="$ACCOUNT" --nodes="$NODES"
 [ -z "${COLLX_EXCLUDE_NODES:-}" ] || allocation+=(--exclude="$COLLX_EXCLUDE_NODES")
 collx_salloc_jobid "${allocation[@]}"
 [ -n "$JOB_ID" ] || collx_die "no JOB_ID from salloc"
-# The kv rdma legs are the only gb-nv shards that leave the NVL domain; prove their pinned socket
-# interface and HCAs on the allocation as every other scale-out launcher does.
-if [ "$COLLX_TRANSPORT" != mnnvl ] \
-    && ! collx_validate_network_profile_on_job "$JOB_ID" "$NODES" "$COLLX_TRANSPORT"; then
+# No-op inside the NVL domain; the kv rdma legs (mnnvl-rdma) prove their socket iface and HCAs.
+if ! collx_validate_network_profile_on_job "$JOB_ID" "$NODES" "$COLLX_TRANSPORT"; then
   collx_log_tail "${COLLX_NETWORK_PROFILE_LOG:-}"
   collx_die "allocated nodes failed the network profile"
 fi

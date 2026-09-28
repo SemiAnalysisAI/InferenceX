@@ -447,14 +447,14 @@ class CaseArgvContract(unittest.TestCase):
         "suite": "ep-core", "workload": "deepseek-v3",
     }
 
-    def _run_ep_parser(self) -> argparse.ArgumentParser:
-        import run_ep
+    def _entrypoint_parser(self, entrypoint: str = "run_ep") -> argparse.ArgumentParser:
+        module = __import__(entrypoint)
 
         # Capture the real entrypoint's parser before it initializes any GPU runtime.
         with mock.patch.object(argparse.ArgumentParser, "parse_args", autospec=True,
                                side_effect=SystemExit) as parse:
             with self.assertRaises(SystemExit):
-                run_ep.main()
+                module.main()
         return parse.call_args.args[0]
 
     def _decode(self, stdout: bytes, entrypoint: str = "run_ep") -> list:
@@ -476,9 +476,9 @@ class CaseArgvContract(unittest.TestCase):
             )
         return self._decode(result.stdout, entrypoint)
 
-    def test_case_args_round_trips_through_the_run_ep_parser(self) -> None:
+    def test_case_args_round_trips_through_the_entrypoint_parser(self) -> None:
         argv = self._case_argv(["16", "2", "8", "8"])
-        args = self._run_ep_parser().parse_args(argv)
+        args = self._entrypoint_parser().parse_args(argv)
         self.assertEqual(
             (args.backend, args.mode, args.phase, args.routing, args.scope),
             ("deepep-v2", "normal", "decode", "uniform", "scale-out"),
@@ -501,7 +501,7 @@ class CaseArgvContract(unittest.TestCase):
         # run_ep's own defaults rather than being duplicated in the codec.
         for profile, chain in (("8:256:32:128:4:16", (128, 4, 16)), ("8:256:32", None)):
             with self.subTest(timing=profile):
-                args = self._run_ep_parser().parse_args(self._case_argv(
+                args = self._entrypoint_parser().parse_args(self._case_argv(
                     ["16", "2", "8", "8"], case={**self.CASE, "timing": profile},
                 ))
                 self.assertEqual((args.iters, args.trials, args.warmup), (8, 256, 32))
@@ -534,13 +534,13 @@ class CaseArgvContract(unittest.TestCase):
             ["16", "2", "8", "8"], case={**self.CASE, "timing": "8:256:32:128:4:x"},
         )
         with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
-            self._run_ep_parser().parse_args(argv)
+            self._entrypoint_parser().parse_args(argv)
 
     def test_case_args_fails_closed_on_placement_mismatch(self) -> None:
         with self.assertRaises(subprocess.CalledProcessError):
             self._case_argv(["8", "1", "8", "8"])
 
-    def test_each_backend_round_trips_through_the_run_ep_parser(self) -> None:
+    def test_each_backend_round_trips_through_the_entrypoint_parser(self) -> None:
         # The codec is backend-agnostic, so one loop replaces three near-identical tests:
         # run_ep's --backend choices must accept each name, and the filename must carry the
         # backend token or two legs of one cell collide in results/.
@@ -550,7 +550,7 @@ class CaseArgvContract(unittest.TestCase):
                     **self.CASE, "backend": backend,
                     "case_id": f"h200-dgxc-{backend}-deepseek-v3-normal-decode-ep16-uniform-bf16",
                 }
-                args = self._run_ep_parser().parse_args(
+                args = self._entrypoint_parser().parse_args(
                     self._case_argv(["16", "2", "8", "8"], case=case)
                 )
                 self.assertEqual(args.backend, backend)
@@ -578,6 +578,50 @@ class CaseArgvContract(unittest.TestCase):
         self.assertEqual(str(args.output), f"results/{case['case_id']}_TS-c000.json")
         with self.assertRaises(subprocess.CalledProcessError):
             self._case_argv(["8", "1", "8", "8"], case=case, entrypoint="run_swap_blocks")
+
+    def _kv_case(self) -> dict:
+        import sweep_matrix
+
+        return next(shard for shard in sweep_matrix.resolve_matrix(
+            suites="kv-transfer", only_sku="h200-dgxc")["include"]
+            if shard["backend"] == "nixl")["cases"][0]
+
+    def test_a_kv_case_round_trips_through_the_run_kv_parser(self) -> None:
+        import run_kv
+
+        case = self._kv_case()
+        parser = self._entrypoint_parser("run_kv")
+        for extra, budget in (({}, run_kv.POOL_BUDGET), ({"pool_budget": 123}, 123)):
+            with self.subTest(extra=extra):
+                argv = self._case_argv(["2", "2", "1", "8"], case={**case, **extra},
+                                       entrypoint="run_kv")
+                args = parser.parse_args(argv)
+                self.assertEqual(
+                    (args.backend, args.workload_name, args.precision, args.fabric),
+                    (case["backend"], case["workload"], case["precision"], case["mode"]))
+                self.assertEqual((args.warmup, args.reps, args.trials, args.seed),
+                                 (case["warmup"], case["reps"], case["trials"], case["seed"]))
+                self.assertEqual((args.batch_sizes, args.kv_device, args.ops),
+                                 (case["batch_sizes"], case["kv_device"], case["ops"]))
+                self.assertEqual(args.pool_budget, budget)
+                self.assertEqual((args.case_id, args.runner), (case["case_id"], "h200-dgxc"))
+                self.assertEqual(args.out, f"results/{case['case_id']}_TS-c000.json")
+                # run_kv recomputes the identity from the runner and its own factors
+                self.assertEqual(ep_harness.case_id(args.runner, run_kv.kv_case(args)),
+                                 case["case_id"])
+        # a kv case is 2 ranks on 2 nodes x 1 GPU; any other allocation is refused
+        with self.assertRaises(subprocess.CalledProcessError):
+            self._case_argv(["8", "1", "8", "8"], case=case, entrypoint="run_kv")
+
+    def test_run_kv_refuses_a_case_id_its_factors_do_not_produce(self) -> None:
+        import run_kv
+
+        argv = self._case_argv(["2", "2", "1", "8"], case=self._kv_case(), entrypoint="run_kv")
+        argv[argv.index("--case-id") + 1] = "h200-dgxc-somebody-else"
+        with mock.patch.object(sys, "argv", ["run_kv.py", *argv]), \
+                contextlib.redirect_stderr(io.StringIO()) as err:
+            self.assertEqual(run_kv.main(), 2)
+        self.assertIn("does not match factors", err.getvalue())
 
     def test_a_case_from_an_unknown_suite_cannot_reach_a_run(self) -> None:
         with self.assertRaises(subprocess.CalledProcessError):
