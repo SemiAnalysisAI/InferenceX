@@ -284,7 +284,10 @@ class _Engine:
         kwargs = dict(model=self.dir, load_format="dummy", skip_tokenizer_init=True, enforce_eager=True,
                       enable_prefix_caching=False, max_num_seqs=_MAX_SEQS,
                       max_num_batched_tokens=_MAX_BATCHED_TOKENS, kv_cache_memory_bytes=_kv_bytes(),
-                      gpu_memory_utilization=_GPU_UTIL)
+                      gpu_memory_utilization=_GPU_UTIL,
+                      # compile kernels when first used (the untimed step) rather than every
+                      # shape up front; FlashInfer autotuning still runs
+                      kernel_config={"enable_jit_warmup": False})
         kwargs.update(b.engine)
         self.reqs: list = []
         self.n = 0
@@ -344,11 +347,12 @@ class _Engine:
                 ctx = g["ctx"] if isinstance(g["ctx"], int) else rng.randint(g["ctx"]["min"], g["ctx"]["max"])
                 self.n += 1
                 r = Request(f"opx{self.n}", [0] * (ctx + g["q"]), SamplingParams(max_tokens=1), None)
-                if self.kvm.allocate_slots(r, ctx + g["q"]) is None:
-                    self.reqs.append(r)
-                    raise UnsupportedOpError(f"the batch needs more KV cache than {_kv_bytes() >> 30} GiB")
+                # as the scheduler allocates a request whose ctx tokens are computed: every
+                # block for full attention, only the window's for sliding-window caches
                 r.num_computed_tokens = ctx
                 self.reqs.append(r)
+                if self.kvm.allocate_slots(r, g["q"]) is None:
+                    raise UnsupportedOpError(f"the batch needs more KV cache than {_kv_bytes() >> 30} GiB")
         blocks = [self.kvm.get_block_ids(r.request_id) for r in self.reqs]
         if batch.get("pages", "contiguous") == "shuffled":
             blocks = _shuffle(blocks, rng)
@@ -447,7 +451,8 @@ def _prepare(op: Op) -> dict:
         b.engine.setdefault("attention_config", {})["use_prefill_query_quantization"] = True
     try:
         eng = _engine(b)
-    except (ValueError, NotImplementedError, AssertionError) as e:
+    # vLLM's own startup (model build, profiling and warmup runs) failing on this config
+    except (ValueError, NotImplementedError, AssertionError, RuntimeError) as e:
         if vllm_linear._is_fault(e):
             raise
         raise UnsupportedOpError(f"vLLM rejected the {b.family} module: {type(e).__name__}: {e}"[:400]) from e
@@ -472,7 +477,8 @@ def _prepare(op: Op) -> dict:
 
 def _kernel(ctx: dict) -> None:
     from vllm.forward_context import override_forward_context
-    with override_forward_context(ctx["fc"]):
+    # the model runner's step runs in inference mode; its tensors are inference tensors
+    with torch.inference_mode(), override_forward_context(ctx["fc"]):
         ctx["out"] = ctx["forward"](*ctx["args"], **ctx["kwargs"])
 
 
@@ -521,7 +527,7 @@ def _launcher(ctx: dict):
         return eager
     from vllm.forward_context import override_forward_context
     try:
-        with override_forward_context(ctx["fc"]):
+        with torch.inference_mode(), override_forward_context(ctx["fc"]):
             for _ in range(2):
                 ctx["forward"](*ctx["args"], **ctx["kwargs"])
             torch.cuda.synchronize()
