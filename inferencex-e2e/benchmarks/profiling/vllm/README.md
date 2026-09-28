@@ -48,6 +48,8 @@ CPU-offload recipes an offload pool smaller by `host_headroom_gib`.
   - `torch/`: vLLM's per-rank traces, one per window.
   - `capture/`: the CUDA graph capture trace (full Python stacks).
   - `steps/<rank>.jsonl`: every step's batch composition on that rank.
+  - `copies/<rank>.jsonl`: every CPU KV-offload block copy the rank queued
+    (direction, blocks, bytes, step, vLLM callers).
   - `graphs/`, `env/`, `windows_conc<c>.jsonl`: graph ordinals, versions and
     config per rank, and the window log.
 - `profile_steps_<result>`: the same profile broken down by step
@@ -65,11 +67,12 @@ CPU-offload recipes an offload pool smaller by `host_headroom_gib`.
      "batch":   {"total_tokens", "reqs": [{"req", "scheduled", "computed", "spec",
                                            "new", "prompt_len"}], "dispatch": [...]},
      "kernels": [{"kernel", "cat", "stream", "device", "ts_us", "dur_us",
-                  "source": "eager" | "graph" | "unattributed",
+                  "source": "eager" | "graph" | "offload_copy" | "unattributed",
                   "module_stack": [[qualified name, [[shape, dtype], ...]], ...],
                   "op", "op_chain", "input_dims", "input_types", "concrete_inputs",
                   "launcher", "launcher_callers", "annotations",
-                  "graph", "node_pos", "graph_node_id", "grid", "block", ...}]}
+                  "graph", "node_pos", "graph_node_id", "grid", "block",
+                  "copy": {"store", "blocks", "bytes", "issue_lag_us"}, ...}]}
     ```
 
 ## How attribution works
@@ -87,10 +90,10 @@ while a profiler runs:
 - `infx_py#<launcher>#<vLLM frame>|...`: the Python entry points that launch
   kernels without a torch op (Triton, TileLang, CuTe DSL, vLLM's DeepGEMM and
   FlashInfer wrappers).
+- `infx_graph_capture#n` / `infx_graph_replay#n`: CUDA graph ordinals.
 
 Marker names carry no quotes or backslashes: Kineto writes event names into the
 trace JSON unescaped, and the extractor fails on a trace it cannot decode.
-- `infx_graph_capture#n` / `infx_graph_replay#n`: CUDA graph ordinals.
 
 An eager kernel joins its launch through the CUDA correlation id. A kernel
 replayed from graph `n` carries a `graph node id`: ordered by node id, graph
@@ -98,3 +101,12 @@ replayed from graph `n` carries a `graph node id`: ordered by node id, graph
 which carry that launch's full context. `report.json` counts a graph whose
 node count differs from its captured launches as `count_mismatch`, and lists
 graph kernels whose op never launched that kernel eagerly.
+
+CPU KV offload (SimpleCPUOffloadConnector) copies blocks with
+`cuMemcpyBatchAsync` from the connector's copy thread. Kineto records neither
+that driver call nor `record_function` ranges on that thread, so those memcpys
+have no CPU launch. Each queued copy is one memcpy on its direction's stream,
+run in queue order, and `copies/` logs each one as it is queued. Per direction,
+the extractor pairs the memcpys in order with the logged copies issued before
+them (with equal bytes), taking the pairing with the least total issue lag.
+The step markers put the log's wall clock on the trace clock.

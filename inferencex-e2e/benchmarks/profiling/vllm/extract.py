@@ -4,13 +4,17 @@ Usage: extract.py PROFILE_DIR OUT_DIR
 
 PROFILE_DIR is an unpacked profile artifact (infx_profile/): torch/ holds the
 engine's per-rank torch traces, capture/ the CUDA graph capture trace,
-steps/ the per-step batch log and env/ the per-rank environment.
+steps/ the per-step batch log, copies/ the CPU KV-offload copy log and env/
+the per-rank environment.
 
 A kernel launched eagerly joins its CPU launch through the CUDA correlation
 id. A kernel replayed from CUDA graph n carries a ``graph node id``; ordered
 by node id, graph n's nodes pair with the launches recorded inside
 ``infx_graph_capture#n``, which carry the op, shapes and stack of the
 capture. Capture ordinals follow capture order, which every rank shares.
+A CPU KV-offload memcpy has no CPU launch (a driver call Kineto does not
+record, from the connector's copy thread); per direction, the memcpys pair in
+order with the logged copies issued before them, least total issue lag first.
 
 Outputs, per replay trace: kernels.jsonl.gz (one row per device activity)
 and steps.jsonl (per step: batch composition and device time), plus
@@ -37,7 +41,7 @@ NODE_ID_MASK = (1 << 32) - 1
 
 KEPT_ARGS = {
     "correlation", "External id", "Input Dims", "Input type", "Concrete Inputs",
-    "kernel_file", "graph node id", "stream", "device", "grid", "block",
+    "kernel_file", "graph node id", "stream", "device", "grid", "block", "bytes",
 }
 
 
@@ -291,7 +295,91 @@ def load_steps(profile_dir):
     return steps
 
 
-def extract_replay(trace, captured, rank, window, step_log, out_dir, pairs):
+def load_copies(profile_dir, ranks):
+    """rank -> logged CPU KV-offload copies (one memcpy each), in issue order.
+
+    A log written before the rank's process groups existed is named pid<pid>.
+    """
+    copies = collections.defaultdict(list)
+    for path in glob.glob(os.path.join(profile_dir, "copies", "*.jsonl")):
+        tag = os.path.basename(path)[: -len(".jsonl")]
+        if tag.startswith("pid") and tag[3:].isdigit():
+            tag = ranks.get(int(tag[3:]), tag)
+        with open(path) as f:
+            copies[tag] += (r for r in map(json.loads, f) if r.get("blocks"))
+    for logged in copies.values():
+        logged.sort(key=lambda r: r["t_ns"])
+    return copies
+
+
+def unix_to_trace_us(trace, step_log):
+    """Offset from unix microseconds to the trace clock, from the step markers."""
+    deltas = []
+    for e in trace.events:
+        m = MARK.match(e["name"]) if e.get("cat") in CONTEXT_CATS else None
+        key = (m.group(1), int(m.group(2))) if m else None
+        if key in step_log and "t0_ns" in step_log[key]:
+            deltas.append(e["ts"] - step_log[key]["t0_ns"] / 1e3)
+    deltas.sort()
+    return deltas[len(deltas) // 2] if deltas else None
+
+
+COPY_LAUNCHER = "vllm.v1.simple_kv_offload.copy_backend.DmaCopyBackend.launch_copy"
+COPY_MAX_LAG_US = 60e6
+
+
+def match_copies(trace, orphans, copies, offset_us):
+    """device index -> logged copy for orphan memcpys, per direction.
+
+    Each logged copy is one memcpy on that direction's stream, executed in
+    issue order after its issue. Of the order-preserving pairings with every
+    copy issued before its memcpy starts (and equal bytes), take the one with
+    least total issue-to-start lag: copies logged before the window whose
+    memcpys ran before it, and copies still queued at its end, stay unpaired.
+    """
+    matched = {}
+    if offset_us is None:
+        return matched
+    for store, marker in ((True, "DtoH"), (False, "HtoD")):
+        memcpys = sorted((i for i in orphans if marker in trace.events[i]["name"]),
+                         key=lambda i: trace.events[i]["ts"])
+        if not memcpys:
+            continue
+        # The log spans the run; a copy's memcpy starts within a minute of its issue.
+        lo = trace.events[memcpys[0]]["ts"] - offset_us - COPY_MAX_LAG_US
+        hi = trace.events[memcpys[-1]]["ts"] - offset_us
+        logged = [c for c in copies if c["store"] == store and lo <= c["t_ns"] / 1e3 <= hi]
+        n, m = len(memcpys), len(logged)
+        if not n or not m:
+            continue
+        inf = float("inf")
+        cost = [[0.0] * (m + 1)] + [[inf] * (m + 1) for _ in range(n)]
+        take = [[False] * (m + 1) for _ in range(n + 1)]
+        for a in range(1, n + 1):
+            e = trace.events[memcpys[a - 1]]
+            nbytes = e.get("args", {}).get("bytes")
+            for j in range(1, m + 1):
+                cost[a][j] = cost[a][j - 1]
+                c = logged[j - 1]
+                lag = e["ts"] - (c["t_ns"] / 1e3 + offset_us)
+                if lag < 0 or (nbytes is not None and c.get("bytes") is not None
+                               and nbytes != c["bytes"]):
+                    continue
+                if cost[a - 1][j - 1] + lag < cost[a][j]:
+                    cost[a][j] = cost[a - 1][j - 1] + lag
+                    take[a][j] = True
+        if cost[n][m] == inf:
+            continue  # more memcpys than pairable copies: leave them unattributed
+        a, j = n, m
+        while a:
+            if take[a][j]:
+                matched[memcpys[a - 1]] = logged[j - 1]
+                a -= 1
+            j -= 1
+    return matched
+
+
+def extract_replay(trace, captured, rank, window, step_log, copies, out_dir, pairs):
     """Attribute every device activity of one replay trace; write one file per step.
 
     Returns the trace's report entry and its index entries. `pairs` accumulates
@@ -299,14 +387,13 @@ def extract_replay(trace, captured, rank, window, step_log, out_dir, pairs):
     """
     rows = []
     graph_replays = collections.defaultdict(list)  # (graph, launch) -> device indices
-    unattributed = 0
+    orphans = []  # device activities with no CPU launch
     for i in trace.device:
         e = trace.events[i]
         args = e.get("args", {})
         launch = trace.launches.get(args.get("correlation"))
         if launch is None:
-            unattributed += 1
-            rows.append({"source": "unattributed", "device_index": i})
+            orphans.append(i)
             continue
         ctx = trace.context(launch)
         if "graph node id" in args and "Graph" in trace.events[launch]["name"]:
@@ -314,6 +401,25 @@ def extract_replay(trace, captured, rank, window, step_log, out_dir, pairs):
             continue
         rows.append({"source": "eager", "device_index": i, **ctx})
         pairs["eager"][(ctx["op"], e["name"])] += 1
+
+    offset_us = unix_to_trace_us(trace, step_log)
+    offload = match_copies(trace, orphans, copies, offset_us)
+    unattributed = 0
+    for i in orphans:
+        copy = offload.get(i)
+        if copy is None:
+            unattributed += 1
+            rows.append({"source": "unattributed", "device_index": i})
+            continue
+        step = copy.get("step")
+        rows.append({
+            "source": "offload_copy", "device_index": i,
+            "marks": {"step": step} if step is not None else {},
+            "launch_api": "cuMemcpyBatchAsync", "launcher": COPY_LAUNCHER,
+            "launcher_callers": copy.get("callers"), "op": None, "module_path": [],
+            "copy": {"store": copy["store"], "blocks": copy["blocks"], "bytes": copy.get("bytes"),
+                     "issue_lag_us": trace.events[i]["ts"] - (copy["t_ns"] / 1e3 + offset_us)},
+        })
 
     graph_checks = collections.Counter()
     for (gid, launch), items in graph_replays.items():
@@ -406,6 +512,7 @@ def main():
         break
     ranks = rank_of_pid(profile_dir)
     steps = load_steps(profile_dir)
+    copies = load_copies(profile_dir, ranks)
     traces = sorted(glob.glob(os.path.join(profile_dir, "torch", "**", "*.pt.trace.json*"),
                               recursive=True), key=trace_time)
     windows_seen = collections.Counter()
@@ -416,7 +523,7 @@ def main():
         window = windows_seen[rank]
         windows_seen[rank] += 1
         entry, entries = extract_replay(trace, captured, rank, window, steps.get(rank, {}),
-                                        out_dir, pairs)
+                                        copies.get(rank, []), out_dir, pairs)
         report["traces"].append(entry)
         index += entries
         del trace

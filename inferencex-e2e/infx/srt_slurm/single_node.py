@@ -247,6 +247,9 @@ def profiling_arguments(
     # A window's export pauses the engine; its requests must not abort the replay.
     for name in ("AIPERF_FAILED_REQUEST_THRESHOLD", "AIPERF_LIVE_FAILED_REQUEST_THRESHOLD"):
         overrides += ["--set", f'benchmark.env.{name}="1.0"']
+    # The window client ends the replay with a user cancel, after which aiperf
+    # exports results but not server metrics; a profiled run charts none.
+    overrides += ["--set", 'benchmark.env.AIPERF_REQUIRED_SERVER_METRIC_PREFIX=""']
     return overrides
 
 

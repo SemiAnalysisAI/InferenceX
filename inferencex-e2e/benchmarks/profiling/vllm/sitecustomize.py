@@ -442,6 +442,9 @@ def _patch_piecewise_backend(module):
     cls._infx_patched = True
 
 
+_current_step = None  # the scheduled step executing on this worker
+
+
 def _patch_model_runner(module):
     import torch
 
@@ -490,9 +493,11 @@ def _patch_model_runner(module):
             _flush_all()
 
     def execute_model(self, scheduler_output, *args, **kwargs):
+        global _current_step
         if kwargs.get("dummy_run") or (args and args[1:2] == (True,)):
             return orig_execute(self, scheduler_output, *args, **kwargs)
         k = next(step_counter)
+        _current_step = k
         record = None
         try:
             record = _step_record(scheduler_output)
@@ -682,6 +687,37 @@ def _patch_gpu_worker(module):
     cls._infx_patched = True
 
 
+# --- CPU KV offload copies ----------------------------------------------------
+# SimpleCPUOffload moves KV blocks with cuMemcpyBatchAsync, a driver call Kineto
+# does not record, issued from its own copy thread, so those memcpys have no CPU
+# launch to join. Each launch_copy queues one copy_blocks, one memcpy; the log
+# of them lets the extractor assign the memcpys in queue order.
+
+def _patch_copy_backend(module):
+    cls = getattr(module, "DmaCopyBackend", None)
+    if cls is None or getattr(cls, "_infx_patched", False) or not hasattr(cls, "launch_copy"):
+        return
+    orig = cls.launch_copy
+    block_bytes = {}  # id(params) -> bytes of one block across all layers
+
+    def launch_copy(self, src_blocks, dst_blocks, is_store, *args, **kwargs):
+        try:
+            params = self._store_params if is_store else self._load_params
+            if id(params) not in block_bytes:
+                block_bytes[id(params)] = int(sum(int(b) for b in params.bpb))
+            _sink("copies", _rank_tag()).write({
+                "t_ns": time.time_ns(), "store": bool(is_store), "blocks": len(src_blocks),
+                "bytes": block_bytes[id(params)] * len(src_blocks), "step": _current_step,
+                "callers": _vllm_callers(2),
+            })
+        except Exception:
+            _write_error("copy log")
+        return orig(self, src_blocks, dst_blocks, is_store, *args, **kwargs)
+
+    cls.launch_copy = launch_copy
+    cls._infx_patched = True
+
+
 # --- post-import hooks ------------------------------------------------------
 
 _HOOKS = {
@@ -691,6 +727,7 @@ _HOOKS = {
     "vllm.profiler.wrapper": _patch_profiler_wrapper,
     "vllm.compilation.piecewise_backend": _patch_piecewise_backend,
     "vllm.v1.worker.gpu_worker": _patch_gpu_worker,
+    "vllm.v1.simple_kv_offload.copy_backend": _patch_copy_backend,
     **_LAUNCHER_HOOKS,
 }
 
