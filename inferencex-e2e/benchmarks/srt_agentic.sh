@@ -180,13 +180,19 @@ for index in "${!CONCURRENCIES[@]}"; do
     profile_windows_pid=""
     if [[ -n "${INFX_PROFILE_WINDOWS:-}" ]]; then
         mkdir -p "$INFX_PROF_DIR"
-        IFS=',' read -r -a profile_metrics_urls <<< "${AIPERF_SERVER_METRICS_URLS:-${AIPERF_SERVER_URL}/metrics}"
+        # srt-slurm's logical worker endpoints: each vLLM server's control port.
+        profile_servers=()
+        IFS=',' read -r -a profile_endpoints <<< "${SRT_AGG_ENDPOINTS:-}"
+        for endpoint in "${profile_endpoints[@]}"; do
+            [[ -n "$endpoint" ]] && profile_servers+=("http://$endpoint")
+        done
+        (( ${#profile_servers[@]} )) || profile_servers=("$AIPERF_SERVER_URL")
         warmup_per_lane="${AIPERF_WARMUP_REQUESTS_PER_LANE:-10}"
         [[ "${AIPERF_EXPERIMENTAL_FAST:-0}" == "1" ]] && warmup_per_lane=1
         python3 "$INFMAX_CONTAINER_WORKSPACE/benchmarks/profiling/vllm/profile_windows.py" \
             "$INFX_PROFILE_WINDOWS" "$INFX_PROF_DIR/windows_conc${concurrency}.jsonl" \
             "$RESULT_DIR/aiperf_artifacts/logs/aiperf.log" \
-            "$(( concurrency * warmup_per_lane ))" "${profile_metrics_urls[@]%/metrics}" &
+            "$(( concurrency * warmup_per_lane ))" "${profile_servers[@]}" &
         profile_windows_pid=$!
     fi
     run_agentic_replay_and_write_outputs "$RESULT_DIR"
