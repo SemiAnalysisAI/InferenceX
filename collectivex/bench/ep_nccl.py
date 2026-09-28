@@ -90,6 +90,7 @@ class NCCLEPBackend(EPBackend):
     # pool with post-upgrade rows.
     # "-static" marks the combine input bound to the full static receive plane (see
     # `_bind_ht_recv_count`); "-zc" rows before it sliced that input to the received count.
+    # Graphed HT decode appends "-gum1": its communicator runs graph usage mode 1 (`_comm_config`).
     kernel_generation = "nccl-ep-v02-ht-routed-zc-static"
     SUPPORTED_MODES = ("normal", "low-latency")
     CUDA_GRAPH_MODES = ("normal", "low-latency")
@@ -99,7 +100,7 @@ class NCCLEPBackend(EPBackend):
     @property
     def cuda_graph_supported(self) -> bool:
         # HT replays at decode only, as a captured decode step runs it (engines run prefill
-        # uncaptured). It is slower there at EP16: see methodology, CUDA Graph Replay.
+        # uncaptured); see methodology, CUDA Graph Replay.
         if self.mode == "normal" and getattr(self.args, "phase", None) != "decode":
             return False
         return super().cuda_graph_supported
@@ -143,6 +144,10 @@ class NCCLEPBackend(EPBackend):
             # NCCL LL rank-major suppresses duplicate ranks in top-k order, accumulates the
             # returned BF16 rank rows in FP32, and narrows only at the final output.
             self.combine_reduction = "rank-fp32"
+        elif self.cuda_graph_supported:
+            # Only graphed HT captures a host NCCL collective (the routing ncclAllGather), so
+            # only its rows change with the communicator's graph usage mode.
+            self.kernel_generation = f"{type(self).kernel_generation}-gum1"
         # NCCL EP's handle is explicitly reusable across dispatch/combine cycles (ep_test.py
         # cached mode redispatches and recombines on one handle), so — unlike DeepEP's legacy
         # low-latency Buffer — no timed component needs a fresh dispatch or a draining combine;
@@ -220,8 +225,20 @@ class NCCLEPBackend(EPBackend):
         n = int(length.item())
         uid = nccl_core.UniqueId.from_bytes(bytes(payload[:n].cpu().numpy().tobytes()))
         self._comm = nccl_core.Communicator.init(
-            nranks=self.world_size, rank=self.rank, unique_id=uid
+            nranks=self.world_size, rank=self.rank, unique_id=uid, config=self._comm_config()
         )
+
+    @staticmethod
+    def _comm_config():
+        """Graph usage mode 1: one graph at a time on this communicator, never concurrent with
+        uncaptured work on it -- how the harness and a captured decode step both use it.
+
+        The default (2, "mixing") wraps every captured collective in an external event wait and
+        an event record so graph and uncaptured work can interleave (NCCL strongstream.cc). Traced
+        on h100 HT decode EP8, that left ~14us idle before each routing ncclAllGather and made the
+        graphed pair period 1.14x eager; mode 0/1 removes the gap (1.03x at T=1, 1.00x at T=256).
+        """
+        return nccl_core.NCCLConfig(graph_usage_mode=1)
 
     # ---- buffer construction -----------------------------------------------------------------
 

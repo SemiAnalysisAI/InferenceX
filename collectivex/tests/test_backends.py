@@ -209,6 +209,24 @@ class NcclLowLatencyLadderSizing(unittest.TestCase):
         self.assertEqual(ll.combine_reduction, "rank-fp32")
         self.assertEqual(getattr(ht, "combine_reduction", "domain-fp32"), "domain-fp32")
 
+    def test_graphed_ht_decode_runs_graph_usage_mode_one(self):
+        module = self._module()
+        module.dist.group = types.SimpleNamespace(WORLD=object())
+
+        def base_init(instance, options, rank, world_size, local_rank, device):
+            instance.args = options
+            instance.mode = options.mode
+
+        common = dict(experts=384, hidden=7168, topk=6, scale_up_domain=8, mode="normal")
+        with mock.patch.object(module.EPBackend, "__init__", base_init), \
+                mock.patch.dict(os.environ, {}, clear=True):
+            decode = module.NCCLEPBackend(types.SimpleNamespace(phase="decode", **common), 0, 16, 0, "cuda:0")
+            prefill = module.NCCLEPBackend(types.SimpleNamespace(phase="prefill", **common), 0, 16, 0, "cuda:0")
+        self.assertEqual(decode.kernel_generation, "nccl-ep-v02-ht-routed-zc-static-gum1")
+        self.assertEqual(prefill.kernel_generation, "nccl-ep-v02-ht-routed-zc-static")
+        with mock.patch.object(module.nccl_core, "NCCLConfig", lambda **kw: kw, create=True):
+            self.assertEqual(module.NCCLEPBackend._comm_config(), {"graph_usage_mode": 1})
+
     def test_ll_layout_selector_restores_the_expert_major_contract(self):
         module = self._module()
         em = self._construct(module, 8, COLLX_NCCL_LL_LAYOUT="expert-major")
