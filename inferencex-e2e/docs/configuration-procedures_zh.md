@@ -248,12 +248,13 @@ schedule 和 ragged verification 保持关闭。
 按实际上下文长度均衡 dense decode 工作量；不支持的 shape 仍回退至 Gluon。
 从 `server.log` 核对实际路由，以及 work plan 是否在图捕获时创建。
 
-TP2 C20/C25/C30 与 TP4 C40/C48 点位启用 LMCache 进程内 CPU 层。srtctl 将 ATOM 的
-`--kv-transfer-config` 保留给分离式 worker，因此
+TP2 C20/C25/C30 与 TP4 C40/C48 点位启用 LMCache 进程内 CPU 层。
 `benchmarks/single_node/srt-slurm-recipes/minimaxm3/atom/mi355x-fp4-mtp/agentic.yaml`
-中的 `*_lmcache` 变体设置 `ATOM_KV_OFFLOAD=lmcache`
-（[ROCm/ATOM#2414](https://github.com/ROCm/ATOM/pull/2414)），组装出相同的
-`lmcache_offload` 连接器。每个变体声明 `KV_OFFLOADING: dram` 和矩阵的
+中的 `*_lmcache` 变体在 `extra-kv-connectors` 下列出
+`{kv_connector: lmcache_offload, kv_role: offload}`，srtctl 将其渲染为
+`--kv-transfer-config '{"kv_connector":"lmcache_offload","kv_role":"offload"}'`
+（`runners/srt-slurm/patches/507-lmcache-server-atom-sglang.patch`），CPU 层由
+`LMCACHE_*` 环境变量配置。每个变体声明 `KV_OFFLOADING: dram` 和矩阵的
 `TOTAL_CPU_DRAM_GB`，并将 `LMCACHE_MAX_LOCAL_CPU_SIZE` 设为
 `TOTAL_CPU_DRAM_GB / TP`（每 rank 257 GB）。`PYTHONHASHSEED=0` 必须设置：否则各
 rank 对同一 prompt 计算出不同的 key，卸载命中率为零。在 `server.log` 中核对组装后的

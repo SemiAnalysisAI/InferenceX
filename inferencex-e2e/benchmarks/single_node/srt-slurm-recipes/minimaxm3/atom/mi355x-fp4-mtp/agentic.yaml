@@ -1,7 +1,7 @@
 # MiniMax-M3 MXFP4 AgentX on MI355X with ATOM EAGLE3 (GQA draft, three tokens)
 # at TP2 and TP4, with GPU-resident KV or an in-process LMCache DRAM tier.
-# srtctl reserves ATOM's kv-transfer-config for disaggregated workers, so the
-# DRAM variants enable LMCache through ATOM_KV_OFFLOAD (ROCm/ATOM#2414).
+# The DRAM variants add ATOM's lmcache_offload connector through
+# extra-kv-connectors (runners/srt-slurm/patches/507-lmcache-server-atom-sglang.patch).
 base:
   schema: 2
   name: minimaxm3-fp4-mi355x-atom-agentic
@@ -208,8 +208,10 @@ override_tp2_c20_lmcache:
       gpus: 2
       args:
         max-num-seqs: 40
+        extra-kv-connectors:
+          - kv_connector: lmcache_offload
+            kv_role: offload
       env:
-        ATOM_KV_OFFLOAD: lmcache
         PYTHONHASHSEED: '0'
         LMCACHE_LOCAL_CPU: 'True'
         LMCACHE_MAX_LOCAL_CPU_SIZE: '257'
@@ -230,8 +232,10 @@ override_tp2_c25_lmcache:
       gpus: 2
       args:
         max-num-seqs: 50
+        extra-kv-connectors:
+          - kv_connector: lmcache_offload
+            kv_role: offload
       env:
-        ATOM_KV_OFFLOAD: lmcache
         PYTHONHASHSEED: '0'
         LMCACHE_LOCAL_CPU: 'True'
         LMCACHE_MAX_LOCAL_CPU_SIZE: '257'
@@ -252,8 +256,10 @@ override_tp2_c30_lmcache:
       gpus: 2
       args:
         max-num-seqs: 60
+        extra-kv-connectors:
+          - kv_connector: lmcache_offload
+            kv_role: offload
       env:
-        ATOM_KV_OFFLOAD: lmcache
         PYTHONHASHSEED: '0'
         LMCACHE_LOCAL_CPU: 'True'
         LMCACHE_MAX_LOCAL_CPU_SIZE: '257'
@@ -274,9 +280,11 @@ override_tp4_c40_lmcache:
       gpus: 4
       args:
         max-num-seqs: 80
+        extra-kv-connectors:
+          - kv_connector: lmcache_offload
+            kv_role: offload
       env:
         ATOM_M3_INDEXER_CP: '1'
-        ATOM_KV_OFFLOAD: lmcache
         PYTHONHASHSEED: '0'
         LMCACHE_LOCAL_CPU: 'True'
         LMCACHE_MAX_LOCAL_CPU_SIZE: '257'
@@ -297,9 +305,11 @@ override_tp4_c48_lmcache:
       gpus: 4
       args:
         max-num-seqs: 96
+        extra-kv-connectors:
+          - kv_connector: lmcache_offload
+            kv_role: offload
       env:
         ATOM_M3_INDEXER_CP: '1'
-        ATOM_KV_OFFLOAD: lmcache
         PYTHONHASHSEED: '0'
         LMCACHE_LOCAL_CPU: 'True'
         LMCACHE_MAX_LOCAL_CPU_SIZE: '257'

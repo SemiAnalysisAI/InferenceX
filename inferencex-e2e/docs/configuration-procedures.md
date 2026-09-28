@@ -304,11 +304,13 @@ decode by actual context length. Unsupported shapes retain the Gluon fallback.
 Verify the selected route and capture-time work-plan creation in `server.log`.
 
 The TP2 C20/C25/C30 and TP4 C40/C48 points add LMCache's in-process CPU tier.
-srtctl reserves ATOM's `--kv-transfer-config` for disaggregated workers, so
-these `*_lmcache` variants in
+The `*_lmcache` variants in
 `benchmarks/single_node/srt-slurm-recipes/minimaxm3/atom/mi355x-fp4-mtp/agentic.yaml`
-set `ATOM_KV_OFFLOAD=lmcache` ([ROCm/ATOM#2414](https://github.com/ROCm/ATOM/pull/2414)),
-which composes the same `lmcache_offload` connector. Each variant declares
+list `{kv_connector: lmcache_offload, kv_role: offload}` under
+`extra-kv-connectors`, which srtctl renders as
+`--kv-transfer-config '{"kv_connector":"lmcache_offload","kv_role":"offload"}'`
+(`runners/srt-slurm/patches/507-lmcache-server-atom-sglang.patch`). The
+`LMCACHE_*` environment variables configure the tier. Each variant declares
 `KV_OFFLOADING: dram` and the matrix `TOTAL_CPU_DRAM_GB`, and sizes
 `LMCACHE_MAX_LOCAL_CPU_SIZE` at `TOTAL_CPU_DRAM_GB / TP` (257 GB per rank).
 `PYTHONHASHSEED=0` is required: without it the ranks hash prompts to different
