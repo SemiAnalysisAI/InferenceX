@@ -25,13 +25,12 @@ GB200/GB300 每次使用一个四卡计算托盘，不会占用整个 NVL72 机�
 
 ## 触发运行
 
-GitHub 注册该工作流后，选择 **OperatorX Sweep → Run workflow**，指定源码分支，
+选择 **OperatorX Sweep → Run workflow**，指定源码分支，
 并保留初始默认值：`pool=h100-dgxc`、`backends=torch`、`testlists=gemm`、
 `world_sizes=1`、`chunk_size=500`。这会将完整的 GEMM 测试列表拆分为有界分片（目前为 7,212 个测试、15 个分片）。
 列表中包含所选后端不支持的精度，以及可能超出设备显存的形状。不支持的测试会保留
 在结果中；实际的内核和显存分配错误仍会使 CI 失败。运行完整列表不代表其中每个
 测试都能在 H100 上执行。
-新工作流可能需要先进入默认分支，GitHub 才允许手动触发。
 
 ```bash
 gh workflow run operatorx-sweep.yml --repo SemiAnalysisAI/InferenceX \

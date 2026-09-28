@@ -58,7 +58,7 @@ For a **single config** (tightest CI loop, skips the rest of the matrix), dispat
 gh workflow run e2e-tests.yml -f generate-cli-command="test-config --config-key <KEY> --config-file <PATH/to/master.yaml>" -f test-name="debug <KEY>"
 ```
 
-(`generate-cli-command` is the required input. Its config paths are relative to
+(`generate-cli-command` carries the matrix selection; the workflow marks it `required: false` because the trusted changelog-dispatch (Klaud) mode omits it, but a manual dispatch without it fails at setup. Its config paths are relative to
 `inferencex-e2e/`, for example `configs/nvidia-master.yaml`. `--target` is NOT a real arg.)
 
 ### 2. Monitor continuously
@@ -104,9 +104,14 @@ Steps:
 
 1. Use the job or runner name to identify the node. Look up that cluster's access details in
    the canvas, then SSH in with `ssh -A` when a jumpbox or agent forwarding is involved.
-2. Reproduce the exact benchmark the launcher runs. Read `inferencex-e2e/runners/launch_<cluster>.sh` for
-   the image, container mounts, and the `inferencex-e2e/benchmarks/single_node/<...>.sh` command and env
-   (`IMAGE`, `TP`, `PRECISION`, `EXP_NAME`, `SPEC_DECODING`, …). On Slurm clusters, use
+2. Reproduce the exact benchmark the launcher runs. Single-node jobs take the
+   `native-single-node` path in `inferencex-e2e/runners/launch_<cluster>.sh`, which calls
+   `launch_srt_single_node <cluster>` in `inferencex-e2e/runners/slurm_utils.sh`: it validates the
+   master row's `srt-recipe:` (`inferencex-e2e/benchmarks/single_node/srt-slurm-recipes/<model>/<engine>/<sku>-<precision>[-mtp]/<scenario>.yaml`)
+   with `python3 -m infx.srt_slurm.single_node prepare`, then submits it through srtctl
+   with the `inferencex-e2e/runners/srt-slurm/<cluster>.yaml` profile. Read the recipe for the image
+   (`model.container`), server args and env, and the launcher for mounts and the job env
+   (`IMAGE`, `TP`, `PRECISION`, `SPEC_DECODING`, `CONC`, …). On Slurm clusters, use
    `salloc` or `srun` with the squash image. On the **bare-metal `-tw` pools, use `docker run`**
    on the node directly without `srun`.
 3. **Always diff against a working node or working SKU** for reference. Most node failures

@@ -4,7 +4,7 @@
 
 InferenceX owns the recipes in this directory. Every NVIDIA srt-slurm launcher uses `setup_srt_slurm()` in [`runners/slurm_utils.sh`](../../../runners/slurm_utils.sh), makes a job-local Git clone of the pinned submodule, and copies this entire tree into `recipes/`. The shared helper records the actual revision in `srt-slurm-sha.txt`; power lanes copy that revision into `power-producer-sha.txt` for result validation.
 
-The shared version is the Git submodule pointer at [`utils/srt-slurm`](../../../utils/srt-slurm), currently [v2.2.1](https://github.com/NVIDIA/srt-slurm/releases/tag/v2.2.1) (`984180e5b8755aef85e9995048b5a16cb5336bce`). Update that submodule pointer when upgrading, then run the recipe and integration checks. Do not add model-specific checkout branches to launchers.
+The shared version is the Git submodule pointer at [`utils/srt-slurm`](../../../utils/srt-slurm), currently [v2.23.2](https://github.com/NVIDIA/srt-slurm/releases/tag/v2.23.2) (`8dace5f9596907a5075bf056251563b2e9563e7d`). Update that submodule pointer when upgrading, then run the recipe and integration checks. Do not add model-specific checkout branches to launchers.
 
 InferenceX requires srt-slurm 2.0 or newer and `schema: 2` recipes. Legacy recipe layouts are unsupported; migrate them before adding them to this tree.
 
@@ -25,7 +25,7 @@ qwen3.5/trtllm/gb300-fp4/agentx/disagg-variants.yaml
 - Name override bundles `*-variants.yaml`. Multi-node AgentX recipes that differ only per configuration share one bundle per master-config entry, usually `agg-variants.yaml` or `disagg-variants.yaml`: `base` holds the shared settings and each former recipe becomes a named `override_<name>` block holding only its differences (plain overrides, not `zip_override_*`). Master entries select one with `CONFIG_FILE=recipes/<dir>/<bundle>.yaml:override_<name>`. Recipes read as text by a launcher, such as power recipes with top-level `telemetry:`, stay standalone. Keep distinct sweep entry files separate even when their contents match: recipe paths participate in eval grouping. The Qwen3.5 `*-stp-sweep.yaml` and `*-mtp-sweep.yaml` pair preserves that existing distinction.
 - Update `CONFIG_FILE` and `EVAL_CONFIG_FILE` references in active and deprecated master configs, launcher path rules, workflow filters, and local documentation together when moving a file. Preserve upstream source URLs as provenance and leave historical performance-changelog entries unchanged. No aliases for the old layout are provided.
 
-Shared runtime assets stay under `configs/` beside the model directories; they are not standalone recipes. The four files in `configs/dsv4-moe-load-balancer-configs/` are copied verbatim from NVIDIA/srt-slurm commit `deb1dfd9934398664f92d194169c183e009da83b`, preserving the EPLB initial expert assignments used by 17 DSV4 TRT recipes. `setup_srt_slurm()` stages them into the job checkout's `configs/` directory for the recipes' bind mounts. Keeping a recipe in this tree does not activate it; the master configs determine the benchmark matrix.
+Shared runtime assets stay under `configs/` beside the model directories; they are not standalone recipes. The four files in `configs/dsv4-moe-load-balancer-configs/` are copied verbatim from NVIDIA/srt-slurm commit `deb1dfd9934398664f92d194169c183e009da83b`, preserving the EPLB initial expert assignments formerly used by the DSV4 TRT recipes; no checked-in recipe currently references them. `setup_srt_slurm()` stages them into the job checkout's `configs/` directory for the recipes' bind mounts. Keeping a recipe in this tree does not activate it; the master configs determine the benchmark matrix.
 
 ## TileRT exception
 
@@ -58,7 +58,7 @@ Install the shared pin in an isolated environment, then use its CLI:
 srtctl migrate --verify -f benchmarks/multi_node/srt-slurm-recipes/dsr1/sglang
 srtctl migrate --in-place -f benchmarks/multi_node/srt-slurm-recipes/dsr1/sglang
 # Repeat for the other model/engine directories.
-# Use the pinned TileRT fork for glm5.1/tilert/.
+# Use the pinned TileRT fork for tilert/ recipe directories.
 python -m pytest infx/tests/matrix/ -q
 python -m infx.matrix.generate full-sweep \
   --config-files configs/nvidia-master.yaml \
@@ -69,7 +69,7 @@ Validate recipes with the exact launcher pin, including all override variants. F
 
 The initial migration also resolves compatibility issues that `srtctl migrate` cannot fix itself:
 
-- SGLang Model Gateway recipes use `frontend.type: sglang-router`; in v2.2.1, `sglang` selects a direct worker without a router.
+- SGLang Model Gateway recipes use `frontend.type: sglang-router`; in v2.23.2, `sglang` selects a direct worker without a router.
 - Duplicate YAML keys retain the value selected by the former PyYAML loader.
 - DCGM telemetry uses `collect_interval_ms: 1000` instead of `provider` and `default_frequency`. The collector derives its shutdown budget; an explicit ten-second budget is too short for the current validator. Dedicated discovery-service placement is preserved from the original recipes. The pinned upstream runtime rejects telemetry with dedicated infrastructure nodes; this remains a power compatibility blocker rather than changing the original topology to satisfy validation. H200 custom recipes declare a default concurrency that the launcher replaces before submission.
 - DeepSeek-V4 vLLM benchmarks use the supported `custom_tokenizer` loader. Retired `warmup_req_rate: inf` fields are removed; the current upstream client uses its fixed warmup rate of 250 requests per second.

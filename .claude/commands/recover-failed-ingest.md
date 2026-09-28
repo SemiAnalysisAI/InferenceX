@@ -5,7 +5,10 @@ argument-hint: <failed-run-or-job-url | pr-number> [source-run-id]
 
 Recover the official database ingest for a failed or skipped InferenceX
 push-to-main `Run Sweep` workflow by creating a recovery PR that reuses artifacts
-from an earlier PR sweep. Do not add a one-off recovery workflow.
+from an earlier PR sweep. Do not add a one-off recovery workflow. The existing
+`.github/workflows/recover-reused-ingest.yml` only redispatches
+`ingest-agentic-results` for a failed reused **agentic** ingest (inputs
+`source-run-id`, `merge-run-id`); it is not a generic fixed-sequence recovery tool.
 
 Inputs from `$ARGUMENTS`:
 
@@ -225,9 +228,9 @@ RECOVERY_PR=$(gh pr view "$RECOVERY_PR_URL" \
   --repo SemiAnalysisAI/InferenceX \
   --json number --jq .number)
 
-gh pr edit "$RECOVERY_PR" \
-  --repo SemiAnalysisAI/InferenceX \
-  --add-label full-sweep-fail-fast
+# REST, not `gh pr edit` (projects-classic GraphQL bug)
+gh api -X POST "repos/SemiAnalysisAI/InferenceX/issues/$RECOVERY_PR/labels" \
+  -f "labels[]=full-sweep-fail-fast" --jq '.[].name'
 gh pr comment "$RECOVERY_PR" \
   --repo SemiAnalysisAI/InferenceX \
   --body "/reuse-sweep-run $SOURCE_RUN_ID"
