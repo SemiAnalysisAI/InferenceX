@@ -314,6 +314,28 @@ def _leak_report() -> None:  # debug branch only: what keeps large GPU tensors a
     big = [o for o in gc.get_objects() if torch.is_tensor(o) and o.is_cuda and o.numel() * o.element_size() > (64 << 20)]
     print(f"[leak] allocated={torch.cuda.memory_allocated() / 2**30:.2f}G tensors>64M={len(big)} "
           f"sum={sum(t.numel() * t.element_size() for t in big) / 2**30:.2f}G", file=sys.stderr, flush=True)
+    import functools
+    for name, mod in list(sys.modules.items()):
+        if not name.startswith(("triton_kernels", "vllm.model_executor.layers.fused_moe", "vllm.model_executor.layers.quantization", "aiter", "vllm._aiter")):
+            continue
+        for attr, fn in list(vars(mod).items()):
+            info = getattr(fn, "cache_info", None)
+            if callable(info):
+                try:
+                    n = info().currsize
+                except Exception:
+                    continue
+                if n:
+                    print(f"[leak] cache {name}.{attr} currsize={n}", file=sys.stderr, flush=True)
+    for t in big[1:3]:
+        for r in gc.get_referrers(t):
+            if type(r).__module__.startswith("triton_kernels"):
+                up = [type(x).__module__ + "." + type(x).__qualname__ for x in gc.get_referrers(r)[:6]]
+                up2 = []
+                for x in gc.get_referrers(r)[:4]:
+                    if isinstance(x, dict):
+                        up2 += [type(y).__module__ + "." + type(y).__qualname__ for y in gc.get_referrers(x)[:4]]
+                print(f"[leak]   storage<-{up} dict<-{up2}", file=sys.stderr, flush=True)
     for t in big[:8]:
         chain = []
         for r in gc.get_referrers(t)[:4]:
