@@ -35,10 +35,76 @@ CONTEXT_CATS = {"cpu_op", "user_annotation", "python_function"}
 NODE_ID_MASK = (1 << 32) - 1
 
 
-def load(path):
+KEPT_ARGS = {
+    "correlation", "External id", "Input Dims", "Input type", "Concrete Inputs",
+    "kernel_file", "graph node id", "stream", "device", "grid", "block",
+}
+
+
+class Event:
+    """The fields of one complete ("X") trace event the joins use."""
+
+    __slots__ = ("cat", "name", "ts", "dur", "pid", "tid", "args")
+
+    def __init__(self, raw, names):
+        self.cat = raw.get("cat")
+        self.name = names.setdefault(raw.get("name", ""), raw.get("name", ""))
+        self.ts = raw["ts"]
+        self.dur = raw.get("dur", 0)
+        self.pid = raw.get("pid")
+        self.tid = raw.get("tid")
+        args = raw.get("args")
+        # Python frames carry nothing the joins read; everything else keeps its ids.
+        self.args = ({k: v for k, v in args.items() if k in KEPT_ARGS}
+                     if args and self.cat != "python_function" else {})
+
+    def __getitem__(self, key):
+        return getattr(self, key)
+
+    def get(self, key, default=None):
+        value = getattr(self, key, None)
+        return default if value is None else value
+
+
+def iter_trace_events(path, chunk_size=1 << 22):
+    """Stream the traceEvents array one event at a time; traces reach several GB."""
+    decoder = json.JSONDecoder()
     opener = gzip.open if path.endswith(".gz") else open
     with opener(path, "rt") as f:
-        return json.load(f)
+        buf, pos = "", 0
+        while True:  # find the array
+            chunk = f.read(chunk_size)
+            if not chunk:
+                return
+            buf += chunk
+            start = buf.find('"traceEvents"')
+            if start >= 0:
+                bracket = buf.find("[", start)
+                if bracket >= 0:
+                    pos = bracket + 1
+                    break
+        while True:
+            while pos < len(buf) and buf[pos] in " \t\r\n,":
+                pos += 1
+            if pos < len(buf) and buf[pos] == "]":
+                return
+            try:
+                event, end = decoder.raw_decode(buf, pos)
+            except ValueError:
+                chunk = f.read(chunk_size)
+                if not chunk:
+                    return
+                buf, pos = buf[pos:] + chunk, 0
+                continue
+            yield event
+            pos = end
+            if pos > chunk_size:
+                buf, pos = buf[pos:], 0
+
+
+def load_events(path):
+    names = {}
+    return [Event(raw, names) for raw in iter_trace_events(path) if raw.get("ph") == "X"]
 
 
 def launch_kind(name):
@@ -59,9 +125,7 @@ class Trace:
 
     def __init__(self, path):
         self.path = path
-        data = load(path)
-        self.events = data["traceEvents"]
-        self.meta = {k: v for k, v in data.items() if k != "traceEvents"}
+        self.events = load_events(path)
         self._index()
 
     def _index(self):
@@ -69,8 +133,6 @@ class Trace:
         self.launches = {}  # correlation -> launch event index
         self.device = []
         for i, e in enumerate(self.events):
-            if e.get("ph") != "X":
-                continue
             cat = e.get("cat")
             if cat in CONTEXT_CATS:
                 by_thread[(e["pid"], e["tid"])].append(i)
@@ -204,8 +266,12 @@ def load_steps(profile_dir):
     return steps
 
 
-def extract_replay(trace, captured, known_names, rank, step_log, out_dir, report):
-    """Write one row per device activity of a replay trace and per-step totals."""
+def extract_replay(trace, captured, rank, window, step_log, out_dir, pairs):
+    """Attribute every device activity of one replay trace; write one file per step.
+
+    Returns the trace's report entry and its index entries. `pairs` accumulates
+    (op, kernel) pairs by source for the cross-trace kernel-name check.
+    """
     rows = []
     graph_replays = collections.defaultdict(list)  # (graph, launch) -> device indices
     unattributed = 0
@@ -217,12 +283,12 @@ def extract_replay(trace, captured, known_names, rank, step_log, out_dir, report
             unattributed += 1
             rows.append({"source": "unattributed", "device_index": i})
             continue
+        ctx = trace.context(launch)
         if "graph node id" in args and "Graph" in trace.events[launch]["name"]:
-            ctx = trace.context(launch)
             graph_replays[(ctx["marks"].get("graph_replay"), launch)].append(i)
             continue
-        ctx = trace.context(launch)
         rows.append({"source": "eager", "device_index": i, **ctx})
+        pairs["eager"][(ctx["op"], e["name"])] += 1
 
     graph_checks = collections.Counter()
     for (gid, launch), items in graph_replays.items():
@@ -237,88 +303,106 @@ def extract_replay(trace, captured, known_names, rank, step_log, out_dir, report
             continue
         graph_checks["joined"] += 1
         for pos, (i, cap) in enumerate(zip(items, launches)):
-            e = trace.events[i]
-            name_ok = None
-            if cap["op"] is not None and cap["op"] in known_names:
-                name_ok = e["name"] in known_names[cap["op"]]
-            elif cap.get("kernel_file") or (cap["op"] or "").startswith("triton_"):
-                name_ok = e["name"] == cap["op"]
-            graph_checks[f"name_{name_ok}"] += 1
             rows.append({"source": "graph", "graph": gid, "node_pos": pos, "device_index": i,
-                         **cap, "marks": replay_ctx["marks"], "name_check": name_ok})
+                         **cap, "marks": replay_ctx["marks"]})
+            pairs["graph"][(cap["op"], trace.events[i]["name"])] += 1
 
-    # Device timing and step totals.
-    per_step = collections.defaultdict(lambda: {"kernels": 0, "busy_us": 0.0, "t0": None, "t1": None})
-    out_rows = []
+    by_step = collections.defaultdict(list)
     for row in rows:
         e = trace.events[row.pop("device_index")]
         args = e.get("args", {})
         row.update(
-            rank=rank, kernel=e["name"], cat=e["cat"], stream=args.get("stream", e.get("tid")),
-            device=args.get("device", e.get("pid")), ts_us=e["ts"], dur_us=e.get("dur", 0),
-            graph_node_id=args.get("graph node id"), grid=args.get("grid"), block=args.get("block"),
+            rank=rank, window=window, kernel=e["name"], cat=e["cat"],
+            stream=args.get("stream", e.get("tid")), device=args.get("device", e.get("pid")),
+            ts_us=e["ts"], dur_us=e.get("dur", 0), graph_node_id=args.get("graph node id"),
+            grid=args.get("grid"), block=args.get("block"),
         )
-        step = step_key(row.get("marks") or {})
-        row["step"] = list(step) if step else None
-        if step is not None:
-            s = per_step[step]
-            s["kernels"] += 1
-            s["busy_us"] += row["dur_us"]
-            s["t0"] = row["ts_us"] if s["t0"] is None else min(s["t0"], row["ts_us"])
-            end = row["ts_us"] + row["dur_us"]
-            s["t1"] = end if s["t1"] is None else max(s["t1"], end)
-        out_rows.append(row)
+        key = step_key(row.get("marks") or {})
+        row["step"] = list(key) if key else None
+        by_step[key].append(row)
 
-    name = os.path.basename(trace.path).split(".pt.trace")[0]
-    os.makedirs(out_dir, exist_ok=True)
-    with gzip.open(os.path.join(out_dir, f"{name}.kernels.jsonl.gz"), "wt") as f:
-        for row in out_rows:
-            f.write(json.dumps(row, separators=(",", ":")) + "\n")
-    with open(os.path.join(out_dir, f"{name}.steps.jsonl"), "w") as f:
-        for step in sorted(per_step):
-            s = per_step[step]
-            log = step_log.get(step, {})
-            f.write(json.dumps({
-                "rank": rank, "kind": step[0], "step": step[1],
-                "kernels": s["kernels"], "busy_us": s["busy_us"],
-                "span_us": s["t1"] - s["t0"], "reqs": log.get("reqs"),
-                "total_tokens": log.get("total_tokens"), "dispatch": log.get("dispatch"),
-            }) + "\n")
-    report[name] = {
-        "rank": rank,
-        "device_activities": len(out_rows),
-        "unattributed": unattributed,
+    rank_dir = os.path.join(out_dir, f"window{window}", str(rank))
+    os.makedirs(rank_dir, exist_ok=True)
+    index = []
+    for key in sorted(by_step, key=lambda k: (k is None, k or ("", 0))):
+        kernels = sorted(by_step[key], key=lambda r: r["ts_us"])
+        t0 = kernels[0]["ts_us"]
+        t1 = max(r["ts_us"] + r["dur_us"] for r in kernels)
+        summary = {
+            "kernels": len(kernels), "busy_us": sum(r["dur_us"] for r in kernels),
+            "t0_us": t0, "t1_us": t1, "span_us": t1 - t0,
+            "sources": dict(collections.Counter(r["source"] for r in kernels)),
+        }
+        name = f"{key[0]}{key[1]:06d}.json.gz" if key else "unstepped.json.gz"
+        batch = step_log.get(key) if key else None
+        with gzip.open(os.path.join(rank_dir, name), "wt") as f:
+            json.dump({"rank": rank, "window": window, "kind": key[0] if key else None,
+                       "step": key[1] if key else None, "summary": summary, "batch": batch,
+                       "kernels": kernels}, f, separators=(",", ":"))
+        reqs = (batch or {}).get("reqs") or []
+        index.append({
+            "window": window, "rank": rank, "kind": key[0] if key else None,
+            "step": key[1] if key else None,
+            "file": os.path.relpath(os.path.join(rank_dir, name), out_dir),
+            **summary, "total_tokens": (batch or {}).get("total_tokens"), "num_reqs": len(reqs),
+            "cudagraph": [d.get("cg_mode") for d in (batch or {}).get("dispatch") or []],
+        })
+    entry = {
+        "trace": os.path.basename(trace.path), "rank": rank, "window": window,
+        "device_activities": len(rows), "unattributed": unattributed,
         "graph_replays": dict(graph_checks),
-        "sources": dict(collections.Counter(r["source"] for r in out_rows)),
-        "steps": len(per_step),
+        "sources": dict(collections.Counter(r["source"] for r in rows)),
+        "steps": sum(1 for k in by_step if k is not None),
     }
+    return entry, index
+
+
+def trace_time(path):
+    """The export timestamp vLLM puts in a trace's file name (<rank>.<ns>.pt.trace...)."""
+    parts = os.path.basename(path).split(".")
+    return int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 0
 
 
 def main():
     profile_dir, out_dir = sys.argv[1], sys.argv[2]
-    report = {}
-    capture_paths = sorted(glob.glob(os.path.join(profile_dir, "capture", "*.json*")))
-    captured, known_names = {}, collections.defaultdict(set)
-    for path in capture_paths:
+    os.makedirs(out_dir, exist_ok=True)
+    report = {"traces": []}
+    pairs = {"eager": collections.Counter(), "graph": collections.Counter()}
+    captured = {}
+    for path in sorted(glob.glob(os.path.join(profile_dir, "capture", "*.json*"))):
         trace = Trace(path)
         captured = capture_launches(trace)  # identical on every rank; the first suffices
         for op, names in eager_kernel_names(trace).items():
-            known_names[op] |= names
-        report["capture"] = {
-            "path": os.path.relpath(path, profile_dir),
-            "graphs": len(captured),
-            "launches": sum(map(len, captured.values())),
-        }
+            for name in names:
+                pairs["eager"][(op, name)] += 1
+        report["capture"] = {"path": os.path.relpath(path, profile_dir), "graphs": len(captured),
+                             "launches": sum(map(len, captured.values()))}
+        del trace
         break
     ranks = rank_of_pid(profile_dir)
     steps = load_steps(profile_dir)
-    for path in sorted(glob.glob(os.path.join(profile_dir, "torch", "**", "*.pt.trace.json*"), recursive=True)):
+    traces = sorted(glob.glob(os.path.join(profile_dir, "torch", "**", "*.pt.trace.json*"),
+                              recursive=True), key=trace_time)
+    windows_seen = collections.Counter()
+    index = []
+    for path in traces:
         trace = Trace(path)
-        pids = trace.process_ids()
-        rank = next((ranks[p] for p in pids if p in ranks), None)
-        for op, names in eager_kernel_names(trace).items():
-            known_names[op] |= names
-        extract_replay(trace, captured, known_names, rank, steps.get(rank, {}), out_dir, report)
+        rank = next((ranks[p] for p in trace.process_ids() if p in ranks), None)
+        window = windows_seen[rank]
+        windows_seen[rank] += 1
+        entry, entries = extract_replay(trace, captured, rank, window, steps.get(rank, {}),
+                                        out_dir, pairs)
+        report["traces"].append(entry)
+        index += entries
+        del trace
+    # A graph-replayed kernel whose op never launched that kernel eagerly anywhere.
+    eager_ops = {op for op, _ in pairs["eager"]}
+    report["graph_kernels_unseen_eagerly"] = sorted(
+        ([op, kernel, n] for (op, kernel), n in pairs["graph"].items()
+         if op is not None and op in eager_ops and (op, kernel) not in pairs["eager"]),
+        key=lambda item: -item[2])
+    with open(os.path.join(out_dir, "index.json"), "w") as f:
+        json.dump({"capture": report.get("capture"), "steps": index}, f)
     with open(os.path.join(out_dir, "report.json"), "w") as f:
         json.dump(report, f, indent=1)
     print(json.dumps(report, indent=1))
