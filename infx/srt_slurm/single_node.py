@@ -142,12 +142,37 @@ PROFILE_DEFAULTS: dict[str, Any] = {
     "windows": [[60, 32], [240, 32]],
     # workers whose CUDA graph capture is profiled; "all" profiles every rank
     "capture_ranks": "dp0_tp0",
+    # Host memory kept free of CPU KV offload for the profiler's trace buffers;
+    # offload recipes otherwise size the pool to nearly the whole host.
+    "host_headroom_gib": 128,
 }
 # Replay past the last window's start: the window, its export and a margin.
 PROFILE_TAIL_SECONDS = 240
 
 
-def profiling_arguments(environment: Mapping[str, str]) -> list[str]:
+def offload_headroom_arguments(role_args: Mapping[str, Any], headroom_gib: float) -> list[str]:
+    """Shrink a CPU KV-offload pool so profiling leaves the host headroom_gib free."""
+    raw = role_args.get("kv-transfer-config")
+    if not raw or headroom_gib <= 0:
+        return []
+    transfer = json.loads(raw) if isinstance(raw, str) else dict(raw)
+    extra = transfer.get("kv_connector_extra_config") or {}
+    per_rank = extra.get("cpu_bytes_to_use_per_rank")
+    if per_rank is None:
+        return []
+    ranks = int(role_args.get("data-parallel-size", 1)) * int(
+        role_args.get("tensor-parallel-size", 1)
+    )
+    shrunk = int(per_rank) - int(headroom_gib * 2**30 / ranks)
+    if shrunk <= 0:
+        raise ValueError("INFX_PROFILE host_headroom_gib exceeds the recipe's CPU offload pool")
+    transfer["kv_connector_extra_config"] = {**extra, "cpu_bytes_to_use_per_rank": shrunk}
+    return ["--set", f"roles.agg.args.kv-transfer-config={json.dumps(transfer)}"]
+
+
+def profiling_arguments(
+    environment: Mapping[str, str], role_args: Mapping[str, Any] | None = None
+) -> list[str]:
     """Op-attribution profiling for vLLM: capture hooks, step log and torch windows.
 
     INFX_PROFILE is a JSON object overriding PROFILE_DEFAULTS; empty disables.
@@ -186,6 +211,7 @@ def profiling_arguments(environment: Mapping[str, str]) -> list[str]:
         "VLLM_RPC_TIMEOUT": "1800000",
     }
     overrides = ["--set", f"roles.agg.args.profiler-config={json.dumps(profiler_config)}"]
+    overrides += offload_headroom_arguments(role_args or {}, float(settings["host_headroom_gib"]))
     for name, value in worker_env.items():
         overrides += ["--set", f"roles.agg.env.{name}={json.dumps(value)}"]
     # Profiling needs only its windows; replaying longer only holds the node.
@@ -218,7 +244,7 @@ def runtime_arguments(config: str, environment: Mapping[str, str]) -> list[str]:
     # Match the legacy container working directory using the existing repo mount.
     # PyTorch's generated module imports fail from / with PYTHONPYCACHEPREFIX set.
     overrides += ["--set", 'srun_options.container-workdir="/infmax-workspace"']
-    overrides += profiling_arguments(environment)
+    overrides += profiling_arguments(environment, recipe["roles"]["agg"]["args"])
     if environment.get("SRT_SRUN_OPTIONS"):
         options = json.loads(environment["SRT_SRUN_OPTIONS"])
         if not isinstance(options, dict) or any(
