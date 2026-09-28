@@ -331,7 +331,11 @@ def _register_module_names(runner):
 
 
 def _tensor_signature(args):
-    """[[shape, dtype], ...] of the tensors among a call's (one-level nested) args."""
+    """'7x7168:bfloat16;1x2:int64' for the tensors among a call's (one-level nested) args.
+
+    Marker names must stay free of quotes and backslashes: Kineto writes event
+    names into the trace JSON without escaping them.
+    """
     import torch
 
     sig = []
@@ -339,8 +343,9 @@ def _tensor_signature(args):
         items = arg if isinstance(arg, (list, tuple)) else (arg,)
         for item in items:
             if isinstance(item, torch.Tensor):
-                sig.append([list(item.shape), str(item.dtype).removeprefix("torch.")])
-    return sig
+                dims = "x".join(str(d) for d in item.shape)
+                sig.append(f"{dims}:{str(item.dtype).removeprefix('torch.')}")
+    return ";".join(sig)
 
 
 def _module_pre_hook(module, args):
@@ -350,8 +355,7 @@ def _module_pre_hook(module, args):
         name = (_module_names.get(module) if _module_names is not None else None) or type(module).__name__
         # Python-launched kernels (Triton, TileLang, DeepGEMM) have no op
         # shapes of their own; the module's input shapes stand in for them.
-        sig = json.dumps(_tensor_signature(args), separators=(",", ":"))
-        rf = torch.autograd.profiler.record_function(f"infx_mod#{name}#{sig}")
+        rf = torch.autograd.profiler.record_function(f"infx_mod#{name}#{_tensor_signature(args)}")
         rf.__enter__()
         stack = getattr(_module_tls, "stack", None)
         if stack is None:
@@ -527,7 +531,7 @@ def _patch_model_runner(module):
 # --- Python launcher markers --------------------------------------------------
 # Kernels launched straight from Python (Triton, TileLang, CuTe DSL, DeepGEMM
 # and FlashInfer bindings) have no torch op. Their launch entry points mark
-# themselves while profiling: infx_py#["<launcher>", ["<vllm frame>", ...]],
+# themselves while profiling: infx_py#<launcher>#<vllm frame>|<vllm frame>...,
 # the frames being the vLLM callers above the launch, outermost first.
 
 _CALLER_FRAMES = 6
@@ -543,13 +547,16 @@ def _compiling():
         return False
 
 
+_OWN_FILE = os.path.abspath(__file__)
+
+
 def _vllm_callers(skip):
     frame = sys._getframe(skip)
     chain = []
     while frame is not None and len(chain) < _CALLER_FRAMES:
         path = frame.f_code.co_filename
         cut = path.rfind(f"{os.sep}vllm{os.sep}")
-        if cut >= 0:
+        if cut >= 0 and os.path.abspath(path) != _OWN_FILE:
             chain.append(f"{path[cut + 1:]}:{frame.f_lineno}:{frame.f_code.co_name}")
         frame = frame.f_back
     return chain[::-1]
@@ -558,8 +565,8 @@ def _vllm_callers(skip):
 def _launcher_marker(label):
     import torch
 
-    name = json.dumps([label, _vllm_callers(3)], separators=(",", ":"))
-    return torch.autograd.profiler.record_function(f"infx_py#{name}")
+    callers = "|".join(_vllm_callers(3))
+    return torch.autograd.profiler.record_function(f"infx_py#{label}#{callers}")
 
 
 def _wrap_launcher(fn, label):

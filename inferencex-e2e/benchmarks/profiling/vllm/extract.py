@@ -66,14 +66,45 @@ class Event:
         return default if value is None else value
 
 
+NAME_LINE = re.compile(r'^(\s*"name": ")(.*)(",?)$', re.M)
+
+
+def repair_names(text):
+    """Escape quotes inside "name" values: Kineto writes event names unescaped."""
+    def fix(m):
+        inner = m.group(2)
+        if '"' not in inner:
+            return m.group(0)
+        return m.group(1) + inner.replace("\\", "\\\\").replace('"', '\\"') + m.group(3)
+
+    return NAME_LINE.sub(fix, text)
+
+
+def read_lines(f, chunk_size):
+    """Chunks of whole lines, each repaired; a name line never straddles two chunks."""
+    carry = ""
+    while True:
+        chunk = f.read(chunk_size)
+        if not chunk:
+            if carry:
+                yield repair_names(carry)
+            return
+        text = carry + chunk
+        cut = text.rfind("\n") + 1
+        carry = text[cut:]
+        if cut:
+            yield repair_names(text[:cut])
+
+
 def iter_trace_events(path, chunk_size=1 << 22):
     """Stream the traceEvents array one event at a time; traces reach several GB."""
     decoder = json.JSONDecoder()
     opener = gzip.open if path.endswith(".gz") else open
-    with opener(path, "rt") as f:
+    with opener(path, "rt") as raw:
+        f = read_lines(raw, chunk_size)
         buf, pos = "", 0
         while True:  # find the array
-            chunk = f.read(chunk_size)
+            chunk = next(f, "")
             if not chunk:
                 return
             buf += chunk
@@ -90,10 +121,14 @@ def iter_trace_events(path, chunk_size=1 << 22):
                 return
             try:
                 event, end = decoder.raw_decode(buf, pos)
-            except ValueError:
-                chunk = f.read(chunk_size)
+            except ValueError as error:
+                # An event never spans more than a chunk or two; a growing
+                # undecodable buffer is corrupt input, not a partial read.
+                if len(buf) - pos > 8 * chunk_size:
+                    raise ValueError(f"{path}: undecodable trace near offset {pos}: {error}") from error
+                chunk = next(f, "")
                 if not chunk:
-                    return
+                    raise ValueError(f"{path}: trace ends inside an event: {error}") from error
                 buf, pos = buf[pos:] + chunk, 0
                 continue
             yield event
@@ -105,6 +140,27 @@ def iter_trace_events(path, chunk_size=1 << 22):
 def load_events(path):
     names = {}
     return [Event(raw, names) for raw in iter_trace_events(path) if raw.get("ph") == "X"]
+
+
+def parse_signature(sig):
+    """[[shape, dtype], ...] from '7x7168:bfloat16;1x2:int64' (or the first runs' JSON)."""
+    if not sig:
+        return []
+    if sig.startswith("["):
+        return json.loads(sig)
+    out = []
+    for item in sig.split(";"):
+        dims, _, dtype = item.rpartition(":")
+        out.append([[int(d) for d in dims.split("x")] if dims else [], dtype])
+    return out
+
+
+def parse_launcher(text):
+    """[launcher, [vLLM caller frames]] from '<launcher>#<frame>|<frame>' (or JSON)."""
+    if text.startswith("["):
+        return json.loads(text)
+    label, _, callers = text.partition("#")
+    return [label, [c for c in callers.split("|") if c]]
 
 
 def launch_kind(name):
@@ -177,9 +233,9 @@ class Trace:
             elif name.startswith(MODULE_MARK):
                 qualname, _, sig = name[len(MODULE_MARK):].partition("#")
                 modules.append(qualname)
-                module_stack.append([qualname, json.loads(sig) if sig else None])
+                module_stack.append([qualname, parse_signature(sig)])
             elif name.startswith(LAUNCHER_MARK):
-                launcher = json.loads(name[len(LAUNCHER_MARK):])
+                launcher = parse_launcher(name[len(LAUNCHER_MARK):])
             elif e["cat"] == "cpu_op":
                 ops.append(i)
             elif e["cat"] == "user_annotation":
@@ -410,6 +466,8 @@ def main():
     with open(os.path.join(out_dir, "report.json"), "w") as f:
         json.dump(report, f, indent=1)
     print(json.dumps(report, indent=1))
+    if traces and not sum(t["device_activities"] for t in report["traces"]):
+        sys.exit(f"no device activity attributed across {len(traces)} traces")
 
 
 if __name__ == "__main__":
