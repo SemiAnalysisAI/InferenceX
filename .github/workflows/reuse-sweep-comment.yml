@@ -35,6 +35,7 @@ jobs:
           persist-credentials: false
 
       - name: Validate request and update reaction
+        working-directory: inferencex-e2e
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 -m infx.workflows.reuse_comment

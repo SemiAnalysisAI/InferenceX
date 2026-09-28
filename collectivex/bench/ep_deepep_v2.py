@@ -1,0 +1,373 @@
+#!/usr/bin/env python3
+"""DeepEP PR #605 adapter with the exact upstream PR #630 and #640 fixes."""
+
+from __future__ import annotations
+
+import inspect
+import os
+import sys
+import types
+from pathlib import Path
+
+import torch
+import torch.distributed as dist
+from ep_backend import EPBackend
+from ep_legacy_ll import LegacyBufferLL
+
+try:
+    import deep_ep
+    from deep_ep import ElasticBuffer  # type: ignore
+except Exception as exc:  # pragma: no cover - requires the benchmark image
+    print(f"ERROR: DeepEP V2 import failed: {exc!r}", file=sys.stderr)
+    raise
+
+
+# The source pin in runtime/common.sh is upstream main, which carries #630 and #640. This
+# adapter does not check the wheel's commit tag, only that the loaded deep_ep exposes
+# ElasticBuffer.
+
+# Low-latency receive sizing, deliberately two numbers: _LL_BUFFER_CAP sizes the pre-allocated
+# receive (and so the transport footprint and fp8 dequant volume), _LL_LADDER_CAP bounds which
+# token counts are measured. Equal today, but kept separate so the ladder can be clamped around a
+# kernel defect at one rung without moving the footprint (see `create_buffer`).
+_LL_BUFFER_CAP = 256
+_LL_LADDER_CAP = 256
+assert _LL_LADDER_CAP <= _LL_BUFFER_CAP <= 511, (
+    "the LL receive cap must fit NVSHMEM_QP_DEPTH=1024 ((cap + 1) * 2 <= 1024 => cap <= 511) "
+    "and the measured ladder must fit inside the buffer"
+)
+
+
+def _fp8_cast_helpers():
+    """The pinned per-token FP8 cast pair (blockwise e4m3fn, per-128-block FP32 scale).
+
+    Imported lazily so a BF16-only run never depends on deep_ep.utils.math, and so
+    the quantization the oracle models is byte-identical to what dispatch transports.
+    """
+    from deep_ep.utils.math import per_token_cast_to_fp8, per_token_cast_back
+    return per_token_cast_to_fp8, per_token_cast_back
+
+
+def _jit_cache_directory(
+    args,
+    world_size: int,
+    max_tokens: int,
+    allow_hybrid_mode: bool,
+    realized: dict[str, int | bool],
+    use_fp8: bool,
+) -> str:
+    values = (
+        args.runner, world_size, args.hidden, args.topk, args.experts,
+        args.experts, max_tokens,
+        int(allow_hybrid_mode), realized["allocated_qps"], realized["num_sms"],
+        int(use_fp8),
+    )
+    return "jit-" + "-".join(str(value) for value in values)
+
+
+# GIN/GDAKI allocates num_allocated_qps device QPs per peer rank on the local NIC
+# (contexts x world_size QPs, before NCCL's own connection QPs). Upstream's hybrid
+# default (129, or 65 with fast RDMA atomics) exhausts the per-NIC QP budget at
+# EP16: construction dies in ncclDevCommCreate with ibv_create_qp ENOMEM once
+# NCCL's regular QPs land on top (identical on H200 bare-metal and B200 pods; on
+# CX-7 the budget sits between 784 and 1040 QPs — 49x16 initializes, 65x16 does
+# not). Spending a fixed ~512-QP budget keeps every EP size inside that limit
+# with headroom. Only EP16 reaches this: the hybrid path needs world > scale_up_domain,
+# so EP8 passes 0 and takes upstream's non-hybrid default of 17, and EP32 is not in the
+# sweep. EP16 resolves to 33 (33 and 49 verified on the failing H200 pair). An explicit value also skips upstream's rank-local ibstat probe,
+# which is not guaranteed to resolve identically across ranks.
+_GIN_QP_BUDGET = 512
+
+
+def _hybrid_num_allocated_qps(world_size: int) -> int:
+    return max(9, 1 + _GIN_QP_BUDGET // world_size)
+
+
+def _configure_gin_mode(args, world_size: int) -> bool:
+    scale_up_domain = int(args.scale_up_domain)
+    allow_hybrid_mode = world_size > scale_up_domain
+    if allow_hybrid_mode:
+        os.environ.pop("EP_DISABLE_GIN", None)
+    else:
+        os.environ["EP_DISABLE_GIN"] = "1"
+    return allow_hybrid_mode
+
+
+def _require_runtime() -> None:
+    """Capability check only: the loaded deep_ep must expose ElasticBuffer (still
+    catches the b300 image-bundled deep_ep 1.2.1 shadowing the from-source build,
+    which lacks the class)."""
+    if not inspect.isclass(ElasticBuffer) or ElasticBuffer.__name__ != "ElasticBuffer":
+        raise RuntimeError("invalid DeepEP V2 runtime: deep_ep.ElasticBuffer is absent")
+
+
+class DeepEPV2Backend(LegacyBufferLL, EPBackend):
+    name = "deepep-v2"
+    maturity = "production"  # vLLM --all2all-backend deepep_v2; SGLang --moe-a2a-backend deepep
+    # Two kernel families under one adapter, selected by mode:
+    #   normal      -> PR #605 ElasticBuffer (LSA vs hybrid GIN are transport paths, not
+    #                  kernel families); rank-deduplicated unweighted-rank-sum combine.
+    #   low-latency -> the legacy deep_ep.Buffer IBGDA decode kernels
+    #                  (low_latency_dispatch/combine); per-expert padded layout with a
+    #                  source-side weighted-kernel-sum combine (ep_legacy_ll). kernel_generation
+    #                  and the combine semantics are switched to their LL values in __init__.
+    kernel_generation = "v2-elastic-buffer"
+    SUPPORTED_MODES = ("normal", "low-latency")
+    SUPPORTED_PRECISIONS = ("bf16", "fp8")
+    # Legacy decode kernels are graph compatible; ElasticBuffer normal only without its host sync.
+    CUDA_GRAPH_MODES = ("low-latency",)
+
+    @staticmethod
+    def init_process_group(dist, rank, world_size, device):
+        # PR #605 reuses PyTorch's NCCL communicator through `_comm_ptr`; device_id forms it
+        # eagerly, before ElasticBuffer construction.
+        dist.init_process_group("nccl", device_id=device)
+
+    def __init__(self, args, rank, world_size, local_rank, device):
+        # Mode picks the kernel family (normal ElasticBuffer vs low-latency legacy
+        # Buffer); base SUPPORTED_MODES enforces the allowed set.
+        super().__init__(args, rank, world_size, local_rank, device)
+        self.group = dist.group.WORLD
+        self._fp8 = self.precision == "fp8"
+        # FP8 dispatch dequantizes the received (e4m3fn, per-128-block FP32 scale) payload
+        # back to the BF16 combine sends, which is real device work and so a separately-
+        # timed component. (Normal mode prequantizes on the host; low-latency casts inside
+        # the dispatch kernel — either way the dequant lands in stage().)
+        self.stage_device_work = self._fp8
+        if self._fp8:
+            # Resolve the pinned cast pair once (lazily, so a BF16-only run never imports
+            # deep_ep.utils.math) so the timed stage() does no module lookup in the
+            # measured region. Low-latency keeps the eager quantize, whose bits its in-kernel
+            # quantise matches.
+            to_fp8, self._cast_back = _fp8_cast_helpers()
+            self._enable_fp8("fp8-e4m3fn", to_fp8, self._cast_back)
+        # Normal decode runs ElasticBuffer as vLLM's graphed deepep_v2 decode does
+        # (do_cpu_sync=False, valid prefix read on device); prefill keeps the exact-size sync.
+        self._normal_cpu_sync = self.mode == "normal" and args.phase != "decode"
+        if self.mode == "normal" and not self._normal_cpu_sync:
+            self.kernel_generation = "v2-elastic-buffer-nosync"
+        if self.mode == "low-latency":
+            self._enable_ll("legacy-buffer-ll")  # the legacy Buffer IBGDA decode kernels
+
+    @property
+    def cuda_graph_supported(self) -> bool:
+        if self.mode == "normal":
+            return not getattr(self, "_normal_cpu_sync", True)
+        return super().cuda_graph_supported
+
+    def _dispatch_capacity(self, tokens):
+        """Per-call `num_max_tokens_per_rank`: without the host sync DeepEP receives that many
+        rows per rank, so pass the next power of two of the batch, as vLLM's graphed decode does.
+        """
+        if self._normal_cpu_sync:
+            return self.max_tokens
+        return min(self.max_tokens, 1 << max(0, int(tokens) - 1).bit_length())
+
+    def buffer_cap(self, args):
+        if self.mode == "low-latency":
+            # LL pre-allocates a fixed [num_local_experts, cap * num_ranks, hidden] receive
+            # buffer, so the cap is a hard per-rank dispatch-slot bound; the harness clamps the
+            # ladder to it and records any dropped point in the artifact. Clamping here is the
+            # containment lever if a kernel defect reds the top rung (check the DeepEP pin first).
+            return _LL_LADDER_CAP
+        return None
+
+    def create_buffer(self, spec):
+        args, world_size = self.args, self.world_size
+        self.max_tokens = spec.max_tokens_per_rank
+        if self.mode == "low-latency":
+            # Size the LL buffer from the fixed cap, not from the clamped ladder: the receive
+            # footprint sets both the transport's memory traffic and the fp8 dequant volume
+            # (`_ll_recv_bf16` converts the whole padded receive), so following the ladder would
+            # shift every retained rung and break comparability with the published series.
+            if spec.max_tokens_per_rank > _LL_BUFFER_CAP:
+                raise RuntimeError(
+                    f"low-latency ladder maximum {spec.max_tokens_per_rank} exceeds the LL "
+                    f"buffer cap {_LL_BUFFER_CAP}"
+                )
+            self.max_tokens = _LL_BUFFER_CAP
+            self._create_ll_buffer(spec)
+            return
+        _require_runtime()
+        jit_root = Path(os.environ["EP_JIT_CACHE_DIR"])
+        allow_hybrid_mode = _configure_gin_mode(args, world_size)
+        self.buffer = ElasticBuffer(
+            self.group,
+            num_max_tokens_per_rank=self.max_tokens,
+            hidden=args.hidden,
+            num_topk=args.topk,
+            use_fp8_dispatch=self._fp8,  # FP8 sizes the buffer for the (e4m3fn, scale) tuple.
+            deterministic=False,
+            allow_hybrid_mode=allow_hybrid_mode,
+            allow_multiple_reduction=True,
+            prefer_overlap_with_compute=True,
+            num_gpu_timeout_secs=100,
+            explicitly_destroy=True,
+            # 0 is upstream's use-the-default sentinel; only hybrid (GIN) mode
+            # needs the explicit budget-derived allocation.
+            num_allocated_qps=(
+                _hybrid_num_allocated_qps(world_size) if allow_hybrid_mode else 0
+            ),
+        )
+        tuning_num_experts = int(args.experts)
+        self.num_sms = int(
+            self.buffer.get_theoretical_num_sms(tuning_num_experts, args.topk)
+        )
+        self.num_qps = int(self.buffer.get_theoretical_num_qps(self.num_sms))
+        realized = {
+            "num_sms": self.num_sms,
+            "allocated_qps": int(self.buffer.num_allocated_qps),
+        }
+        jit_cache_directory = _jit_cache_directory(
+            args,
+            world_size,
+            self.max_tokens,
+            allow_hybrid_mode,
+            realized,
+            self._fp8,
+        )
+        os.environ["EP_JIT_CACHE_DIR"] = str(jit_root / jit_cache_directory)
+
+    def _create_ll_buffer(self, spec):
+        """Construct the legacy low-latency deep_ep.Buffer (IBGDA decode kernels).
+
+        Distinct from the ElasticBuffer path: LL always allocates the NVSHMEM RDMA
+        buffer and forces IBGDA even for single-node EP8, so there is no NVLink-only
+        fallback. `allow_nvlink_for_low_latency_mode` lets NVLink carry intranode
+        traffic alongside IBGDA; it does not remove the IBGDA requirement.
+        """
+        args, world_size = self.args, self.world_size
+        assert args.experts % world_size == 0, (
+            "low-latency EP requires num_experts divisible by the EP size"
+        )
+        self.num_local_experts = args.experts // world_size
+        if not hasattr(deep_ep.Buffer, "low_latency_dispatch"):
+            raise RuntimeError(
+                "invalid DeepEP LL runtime: deep_ep.Buffer.low_latency_dispatch is absent"
+            )
+        num_rdma_bytes = deep_ep.Buffer.get_low_latency_rdma_size_hint(
+            self.max_tokens, args.hidden, world_size, args.experts
+        )
+        kwargs = {}
+        # On an MNNVL rack the scale-up fabric is NVLink across trays, but the legacy Buffer
+        # defaults `allow_mnnvl=False` and a False there self-sets NVSHMEM_DISABLE_MNNVL, so
+        # leaving it unset runs the low-latency kernels over IBGDA on exactly the systems whose
+        # fast path is MNNVL. Keyed on the reported topology, not the SKU name.
+        if str(getattr(args, "scale_up_transport", "")) == "mnnvl":
+            if "allow_mnnvl" in inspect.signature(deep_ep.Buffer.__init__).parameters:
+                kwargs["allow_mnnvl"] = True
+            else:
+                raise RuntimeError(
+                    "MNNVL scale-up needs deep_ep.Buffer(allow_mnnvl=...); this wheel lacks it, "
+                    "so the low-latency path would silently run over IBGDA"
+                )
+        self.buffer = deep_ep.Buffer(
+            self.group,
+            num_rdma_bytes=num_rdma_bytes,
+            low_latency_mode=True,
+            # LL requires the QP-per-rank count to equal the number of local experts.
+            num_qps_per_rank=self.num_local_experts,
+            allow_nvlink_for_low_latency_mode=True,
+            explicitly_destroy=True,
+            **kwargs,
+        )
+
+    def _topk_idx_dtype(self):
+        # DeepEP V2's kernels key routing indices on deep_ep.topk_idx_t, not int64.
+        return deep_ep.topk_idx_t
+
+    def dispatch(self, p):
+        if self.mode == "low-latency":
+            return self._ll_dispatch(p)
+        # Quantise here, not in make_problem: production runs one fused bf16->fp8 kernel per
+        # forward pass immediately before this collective, so the timed window must contain it.
+        dispatch_x = self._quant(p.dispatch_x) if self._fp8 else p.dispatch_x
+        recv_x, recv_topk_idx, recv_topk_weights, handle, _ = self.buffer.dispatch(
+            dispatch_x,
+            topk_idx=p.topk_idx,
+            topk_weights=p.topk_weights,
+            num_experts=self.args.experts,
+            num_max_tokens_per_rank=self._dispatch_capacity(p.T),
+            expert_alignment=1,
+            num_sms=self.num_sms,
+            num_qps=self.num_qps,
+            async_with_compute_stream=False,
+            do_handle_copy=True,
+            do_cpu_sync=self._normal_cpu_sync,
+            do_expand=False,
+        )
+        return types.SimpleNamespace(
+            recv_x=recv_x,
+            recv_topk_idx=recv_topk_idx,
+            recv_topk_weights=recv_topk_weights,
+            handle=handle,
+        )
+
+    def stage(self, p, h):
+        if self.mode == "low-latency":
+            # The timed combine sends the padded per-expert receive back as BF16 (dequant
+            # under FP8). Value correctness is exercised by the oracle's combine_transformed
+            # path; this only has to move the right shape for timing.
+            h.combine_input = self._ll_recv_bf16(h.recv_x)
+            return
+        if self._fp8:
+            # Dequantize the received (fp8, scale) tuple to the BF16 combine sends.
+            h.combine_input = self._cast_back(h.recv_x[0], h.recv_x[1])
+        else:
+            # BF16: the received buffer is already the semantic payload to combine.
+            h.combine_input = h.recv_x
+
+    def combine(self, p, h):
+        if self.mode == "low-latency":
+            # The kernel applies topk_weights internally (weighted).
+            combined_x, _event, _hook = self.buffer.low_latency_combine(
+                h.combine_input, p.topk_idx, p.topk_weights, h.ll_handle
+            )
+            return combined_x[: p.T]
+        combined_x, _, _ = self.buffer.combine(
+            h.combine_input,
+            handle=h.handle,
+            num_sms=self.num_sms,
+            num_qps=self.num_qps,
+            async_with_compute_stream=False,
+        )
+        return combined_x
+
+    def inspect_dispatch(self, p, h):
+        if self.mode == "low-latency":
+            return self._ll_inspect_dispatch(p, h)
+        count = self.recv_tokens(h)
+        if self._fp8:
+            # Dequantize the sliced (fp8, scale) recv tuple so the payload the oracle
+            # inspects is BF16 [count, hidden] (source-ID decode + bit-exact compare).
+            payload = self._cast_back(h.recv_x[0][:count], h.recv_x[1][:count])
+        else:
+            payload = h.recv_x[:count]
+        return self._local_id_view(
+            payload, h.recv_topk_idx[:count], h.recv_topk_weights[:count],
+            self.args.experts // self.world_size,
+        )
+
+    def combine_transformed(self, p, h, transformed):
+        if self.mode == "low-latency":
+            return self._ll_combine_transformed(p, h, transformed)
+        # Combine always sends BF16. Under FP8, recv_x is an (fp8, scale) tuple, so the
+        # BF16 combine buffer is shaped from the fp8 payload rather than zeros_like it.
+        if self._fp8:
+            combine_input = torch.zeros_like(h.recv_x[0], dtype=torch.bfloat16)
+        else:
+            combine_input = torch.zeros_like(h.recv_x)
+        combine_input[: transformed.shape[0]].copy_(transformed.to(combine_input.dtype))
+        combined, _, _ = self.buffer.combine(
+            combine_input,
+            handle=h.handle,
+            num_sms=self.num_sms,
+            num_qps=self.num_qps,
+            async_with_compute_stream=False,
+        )
+        return combined
+
+    def recv_tokens(self, h):
+        if self.mode == "low-latency":
+            return int(h.recv_count.sum().item())
+        return int(h.handle.psum_num_recv_tokens_per_scaleup_rank[-1].item())

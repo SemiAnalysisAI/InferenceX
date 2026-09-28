@@ -5,7 +5,7 @@ file with envsubst, substituting REPO, PR_NUMBER, HEAD_SHA, SIGNOFF_AUTHOR,
 SIGNOFF_KIND and SIGNOFF_FETCH_CMD (write them as shell-style placeholders).
 It lives outside the workflow YAML because GitHub caps a workflow expression
 at 21000 characters and this prompt outgrew it. Keep the checks here in sync
-with docs/PR_REVIEW_CHECKLIST.md, per docs/documentation-procedures.md.
+with inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md, per inferencex-e2e/docs/documentation-procedures.md.
 -->
 
 REPO: ${REPO}
@@ -22,7 +22,7 @@ PR #${PR_NUMBER} as ready to merge. Your job is to
 INDEPENDENTLY verify the checks below (0-14). Do not trust the reviewer's checkmarks.
 Re-derive every conclusion from CODEOWNERS, CI runs, the PR diff, the master
 configs, and the linked recipe yourself. Be rigorous and specific. The checks encode
-the merge standard in `docs/PR_REVIEW_CHECKLIST.md`. Read it in the checked-out
+the merge standard in `inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md`. Read it in the checked-out
 default branch. It is the source of truth if wording here and there ever drifts.
 
 Read the exact sign-off body first (especially its "Additional detail section").
@@ -50,7 +50,7 @@ Check 3 (recipe) consistent with Checks 1-2.
 The sign-off must come from a CODEOWNER for what the PR changes. Read
 `.github/CODEOWNERS` (in the checked-out default branch) and, for each changed file,
 find its owners via last-matching-pattern-wins. The LAST matching line wins, and owners do
-not accumulate. For example, `configs/nvidia-master.yaml @a @b` overrides `* @org/team`.
+not accumulate. For example, `inferencex-e2e/configs/nvidia-master.yaml @a @b` overrides `* @org/team`.
 Then decide:
 - A path whose most-specific owner is a SPECIFIC line (named users/team): the signer
   `@${SIGNOFF_AUTHOR}` must be one of those owners (listed
@@ -72,7 +72,7 @@ Then decide:
 The merge standard (and InferenceX's own reuse gate) requires a green full sweep,
 including evals, on a commit that is CURRENTLY part of this PR. A sweep that ran on a
 commit later rebased/force-pushed out does NOT count: at merge, `merge_with_reuse.py`
-→ `validate_reusable_run` (in `infx/workflows/reuse.py`) rejects any source
+→ `validate_reusable_run` (in `inferencex-e2e/infx/workflows/reuse.py`) rejects any source
 whose `head_sha` is not in `GET /pulls/<n>/commits`. So the whole question collapses
 to one fact: does a commit still in this PR carry green, executed sweep/eval checks?
 
@@ -128,7 +128,7 @@ APPLICABILITY. Read this first. The recipe-link requirement covers SINGLE-NODE
 recipes only, because the official upstream recipe sources (vLLM recipes, SGLang
 cookbook) publish single-node serve commands. Disaggregated / multi-node
 submissions have NO recipe-link requirement. If the PR's benchmark changes are
-exclusively multi-node/disagg, with files under `benchmarks/multi_node/**` (including
+exclusively multi-node/disagg, with files under `inferencex-e2e/benchmarks/multi_node/**` (including
 `srt-slurm-recipes/**`), and/or master-config entries with `multinode: true` or
 `disagg: true`, and/or disagg frameworks (`dynamo-trt`, `dynamo-sglang`,
 `sglang-disagg`, vLLM disagg, ATOM/ATOMesh disagg), report this check as
@@ -139,7 +139,7 @@ fact, not a violation. If the PR touches BOTH single-node and multi-node recipes
 apply (a)/(b)/(c) below to the single-node portion only.
 
 The InferenceX "recipe" for this PR = the files it changes under
-`benchmarks/single_node/**` plus its entry in `configs/*-master.yaml`. The merge
+`inferencex-e2e/benchmarks/single_node/**` plus its entry in `inferencex-e2e/configs/*-master.yaml`. The merge
 standard is: the community must be able to reproduce this benchmark from merged,
 public upstream documentation.
 - (a) LINK PRESENT: The sign-off's "Additional detail section" MUST contain a link to
@@ -185,7 +185,7 @@ public upstream documentation.
   standard.
 
 ## Check 4 — Reuse-sweep command explicitly posted
-The supported merge path for an approved PR is reuse (`uv run --extra workflows python -m infx.workflows.merge_with_reuse`).
+The supported merge path for an approved PR is reuse (`uv run --project inferencex-e2e --extra workflows python -m infx.workflows.merge_with_reuse`).
 An authorized maintainer must explicitly post a reuse command as a PR comment;
 a green sweep alone is not enough. Verify the command directly from the comments:
 - Prefer `/use <run_id>`, with a numeric run ID on the same line. Also accept the legacy
@@ -205,8 +205,8 @@ a green sweep alone is not enough. Verify the command directly from the comments
 
 ## Check 5 — Sign-off uses the LATEST checklist template
 The first item of the checklist has the reviewer affirm they used the latest version
-of `docs/PR_REVIEW_CHECKLIST.md`. Verify it instead of trusting it: read the template
-in `docs/PR_REVIEW_CHECKLIST.md` (checked-out default branch) and compare its items
+of `inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md`. Verify it instead of trusting it: read the template
+in `inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md` (checked-out default branch) and compare its items
 against the sign-off body.
 - PASS if every item in the current template has a corresponding checked (`[x]`) item
   in the sign-off. Match items semantically. Minor wording drift is fine, but a missing
@@ -220,7 +220,7 @@ The checklist makes upstream engine images a HARD guideline: on established hard
 vLLM/SGLang submissions must run images published by the upstream projects, not
 vendor forks. Established (NOT "new hardware") SKUs: NVIDIA H100, H200, B200, B300,
 GB200, GB300, AMD MI300X, AMD MI325X, and AMD MI355X.
-Identify each master-config entry this PR adds/changes (in `configs/*-master.yaml`)
+Identify each master-config entry this PR adds/changes (in `inferencex-e2e/configs/*-master.yaml`)
 and read its `framework:`, `runner:`, and `image:` fields.
 - (a) UPSTREAM IMAGE: for entries with `framework: vllm`, the image must come from the
   upstream vLLM Docker Hub org at https://hub.docker.com/u/vllm. In the master configs,
@@ -238,7 +238,7 @@ and read its `framework:`, `runner:`, and `image:` fields.
   separator as `#`, e.g. `nvcr.io#nvidia/...`. Treat `#` as `/`.)
 - (b) ENGINE-FIRST ORDERING: if this PR adds a config entry for a NON-vLLM/SGLang
   framework (`framework:` of `trtllm`, `atom`, dynamo variants, etc., including images like
-  `rocm/atom*` and `nvcr.io...tensorrt-llm...`), check whether `configs/*-master.yaml`
+  `rocm/atom*` and `nvcr.io...tensorrt-llm...`), check whether `inferencex-e2e/configs/*-master.yaml`
   already contains a vLLM or SGLang entry for the same model (`model-prefix`) and SKU
   (`runner`). If none exists and no exception is documented in the sign-off, FAIL.
   vLLM/SGLang submissions must land before additional frameworks. Otherwise PASS with
@@ -246,20 +246,20 @@ and read its `framework:`, `runner:`, and `image:` fields.
 - N/A if the PR changes no master-config entries (state that in one line).
 
 ## Check 7 — No submissions for deprecated models or scenarios
-Read the current `docs/MODELS.md` in the checked-out default branch. It is the source of
+Read the current `inferencex-e2e/docs/MODELS.md` in the checked-out default branch. It is the source of
 truth for active and deprecated models, scenarios, and model-scenario combinations.
 For every benchmark configuration or recipe that the PR adds, changes, or re-enables,
 identify its model prefix and scenario, including fixed-sequence, agentic, single-node,
 and multi-node entries.
 - Use `date -u +%F` to establish the review date. Honor an effective date in
-  `docs/MODELS.md`, so a scheduled future deprecation is allowed until its stated date.
+  `inferencex-e2e/docs/MODELS.md`, so a scheduled future deprecation is allowed until its stated date.
 - FAIL if the PR submits a model that is retired on the review date, a deprecated
   scenario, or a deprecated model-scenario combination. Name the model prefix,
-  scenario, and the `docs/MODELS.md` row or notice that prohibits it.
+  scenario, and the `inferencex-e2e/docs/MODELS.md` row or notice that prohibits it.
 - N/A if the PR adds, changes, or re-enables no benchmark configurations or recipes.
 
 ## Check 8 — No benchmark hacks that change the model architecture
-Verify from the PR diff (server args in `benchmarks/**` and master-config changes)
+Verify from the PR diff (server args in `inferencex-e2e/benchmarks/**` and master-config changes)
 that nothing alters the model architecture or reduces its FLOPs. Examples include
 `--hf-overrides` that skip the indexer every N layers on a model that doesn't natively
 support it, trimmed layers/experts/heads, or other ways of skipping computation. The rule: making the
@@ -287,7 +287,7 @@ completions) so the acceptance-length distribution matches real-world traffic.
 ## Check 10 — No engine patches without a waiver
 The pinned upstream image must run AS SHIPPED. The community must be able to
 reproduce the number from the released image. From the PR diff (scripts under
-`benchmarks/**`, master configs, workflow changes), scan for anything that modifies
+`inferencex-e2e/benchmarks/**`, master configs, workflow changes), scan for anything that modifies
 the inference engine or serving stack at build or run time:
 - `.patch` files or `git apply` / `patch` invocations.
 - INLINE patches embedded in benchmark scripts. The common shape is a heredoc
@@ -302,9 +302,9 @@ Installing the benchmark harness and client-side deps (aiperf, eval tooling) is 
 The rule covers the SERVING stack that produces the numbers.
 - PASS in one line if the PR introduces no such patching.
 - If patching is present, it FAILs unless BOTH: (a) a filled-out waiver exists at
-  `docs/waiver/<PR_NUMBER>.md`, named after the PR that introduced the patch and
+  `inferencex-e2e/docs/waiver/<PR_NUMBER>.md`, named after the PR that introduced the patch and
   filed in that same PR. For patching THIS PR introduces, that means this PR adds
-  `docs/waiver/${PR_NUMBER}.md`. For pre-existing patching,
+  `inferencex-e2e/docs/waiver/${PR_NUMBER}.md`. For pre-existing patching,
   the waiver named after the original PR must already be on the default branch.
   It must cover exactly this patch, stating what is patched, why the unmodified
   upstream image cannot run this benchmark, the upstream PR/issue link, and a
@@ -316,15 +316,15 @@ The rule covers the SERVING stack that produces the numbers.
 ## Check 11 — Agentic spec-decode configs use the golden simulated acceptance length
 APPLICABILITY: this check covers AGENTIC-workload benchmark changes that enable
 speculative decoding. From the PR diff, identify configs that are BOTH:
-- single-node agentic srt-slurm recipes (`benchmarks/single_node/srt-slurm-recipes/**/agentic.yaml`), multi-node recipes
-  under an `agentic/` directory (e.g. `benchmarks/multi_node/srt-slurm-recipes/**/agentic/**`),
+- single-node agentic srt-slurm recipes (`inferencex-e2e/benchmarks/single_node/srt-slurm-recipes/**/agentic.yaml`), multi-node recipes
+  under an `agentic/` directory (e.g. `inferencex-e2e/benchmarks/multi_node/srt-slurm-recipes/**/agentic/**`),
   or master-config entries whose name/recipe path marks them agentic, AND
 - speculative-decoding with MTP / EAGLE / draft-model flags such as
   `--speculative-config`, `--speculative-algorithm`, `spec-decode`, draft-model
   downloads, or config names containing `-mtp` / `eagle`.
 Agentic replay does not reproduce real-world token-by-token traffic, so measured
 acceptance there is not representative. Per the AgentX fairness guidelines
-in `infx/golden_al_distribution/README.md` on the checked-out default branch, such configs
+in `inferencex-e2e/infx/golden_al_distribution/README.md` on the checked-out default branch, such configs
 must instead SIMULATE acceptance at the committed golden acceptance length (AL).
 Verify BOTH:
 - (a) SIMULATED ACCEPTANCE ENABLED. The launch config must pin a simulated/synthetic
@@ -343,7 +343,7 @@ Verify BOTH:
   FAIL if an agentic spec-decode config runs real (unsimulated) acceptance.
   Name the config/script and line.
 - (b) AL VALUE MATCHES THE GOLDEN CURVE. Read the committed golden AL YAML for the
-  model in `infx/golden_al_distribution/` on the default-branch checkout. Examples include
+  model in `inferencex-e2e/infx/golden_al_distribution/` on the default-branch checkout. Examples include
   `qwen3.5_mtp.yaml` and `minimaxm3_eagle3.yaml`. Confirm the pinned AL equals the golden value for that
   model, thinking mode, and the config's `num_speculative_tokens` / MTP level (e.g.
   qwen3.5 thinking_on with 3 speculative tokens -> 3.39). For TRT-LLM configs, compare
@@ -360,7 +360,7 @@ Verify BOTH:
 - N/A if the PR has no agentic speculative-decoding changes (state that in one line).
 
 ## Check 12 — Append-only changes only add new points to an unchanged curve
-APPLICABILITY: this check applies when any new `perf-changelog.yaml` entry contains
+APPLICABILITY: this check applies when any new `inferencex-e2e/perf-changelog.yaml` entry contains
 `append-only: true`. If none does, report N/A.
 - Confirm every new changelog entry in the sweep is append-only; mixed regular and
   append-only entries are not allowed.
@@ -476,7 +476,7 @@ its separate speculative-algorithm/configuration requirements.
   every `exclude_layer` pattern against the actual draft module names using the
   pinned framework's matching semantics.
   Concrete example from [InferenceX PR #3205](https://github.com/SemiAnalysisAI/InferenceX/pull/3205),
-  `benchmarks/single_node/agentic/glm5.2_fp4_mi355x_atom_mtp.sh` at
+  `inferencex-e2e/benchmarks/single_node/agentic/glm5.2_fp4_mi355x_atom_mtp.sh` at
   `e35574e3c1b01c59644debd69409c91a71daecc8`:
   ```bash
   --online_quant_config '{"global_quant_config":"ptpc_fp8","exclude_layer":["lm_head","model.embed_tokens","*.mlp.gate","model.layers.[0-9].mlp.*expert*","model.layers.[1-6][0-9].mlp.*expert*","model.layers.7[0-7].mlp.*expert*","model.layers.78.*"]}'
@@ -517,7 +517,7 @@ its separate speculative-algorithm/configuration requirements.
   affected speculative path remains.
 
 ## Check 14 — Pareto coverage (recommendation with admin exception)
-Read the current `docs/PR_REVIEW_CHECKLIST.md`. At least
+Read the current `inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md`. At least
 5 measured points on each affected throughput-versus-E2EL frontier are highly
 recommended. This is an advisory recommendation with an admin-exception path,
 not an unconditional five-point requirement or a new commit-status gate.
@@ -562,8 +562,8 @@ Pinned app references at
   are verified under Check 12; new points alone need not number five. Do not pool
   incompatible images, historical runs, or unrelated series to reach five.
 - Reproduce the calculation using trusted
-  `infx/workflows/pareto_coverage.py` from this workflow checkout:
-  `uv run --locked python -m infx.workflows.pareto_coverage < /tmp/pareto-curves.json`.
+  `inferencex-e2e/infx/workflows/pareto_coverage.py` from this workflow checkout:
+  `uv run --project inferencex-e2e --locked python -m infx.workflows.pareto_coverage < /tmp/pareto-curves.json`.
   Input is a JSON array of `{ "key": "<model/scenario/hwKey/precision/run/percentile/image>",
   "points": [{ "x": 1.0, "y": 100.0 }] }`. Create inputs from inspected data, not
   numbers asserted in the PR. Include every affected curve, including empty ones.
