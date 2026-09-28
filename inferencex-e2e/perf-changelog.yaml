@@ -9035,3 +9035,11 @@
     - "Enable breakable CUDA-graph prefill (BCG) at conc <= 4."
     - "Enable EP8 + MegaMoE for DP-attention arms at conc >= 128 (including conc 384)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3430
+
+- config-keys:
+    - minimaxm3-fp4-b300-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update B300 AgentX to vLLM nightly-af7f9488c2210d67e1033ecdc845b087ee7fe92b and enable local argmax reduction for the FlashInfer EAGLE3 draft."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3547

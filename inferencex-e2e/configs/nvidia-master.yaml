@@ -5504,7 +5504,7 @@ qwen3.5-fp4-gb200-dynamo-sglang-agentic-mtp:
           additional-settings:
           - "CONFIG_FILE=recipes/qwen3.5/sglang/gb200-fp4/agentx/agg-variants.yaml:override_tp2ep2_hicache_cap48"
 minimaxm3-fp4-b300-vllm-agentic-mtp:
-  image: vllm/vllm-openai:nightly-1dc464d42681d22f38caf1fdc1eb632dc4421c45
+  image: vllm/vllm-openai:nightly-af7f9488c2210d67e1033ecdc845b087ee7fe92b
   model: nvidia/MiniMax-M3-NVFP4
   model-prefix: minimaxm3
   runner: cluster:b300-dsxe
@@ -5513,14 +5513,14 @@ minimaxm3-fp4-b300-vllm-agentic-mtp:
   multinode: false
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.683
+    - dram-utilization: 1.0
       search-space:
       - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1], srt-recipe: benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/b300-fp4-mtp/agentic.yaml }
       - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 5, 10, 15, 20], srt-recipe: benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/b300-fp4-mtp/agentic.yaml }
-      - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [30], srt-recipe: benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/b300-fp4-mtp/agentic.yaml }
+      - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [30, 40, 48, 64], srt-recipe: benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/b300-fp4-mtp/agentic.yaml }
     - dram-utilization: 1.0
       search-space:
-      - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [24], srt-recipe: benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/b300-fp4-mtp/agentic.yaml }
+      - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [24, 32, 40], srt-recipe: benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/b300-fp4-mtp/agentic.yaml }
 
 minimaxm3-fp4-gb300-dynamo-vllm-agentic-mtp-disagg:
   image: vllm/vllm-openai:nightly-5e35a6f4f9bbc217c599692157ca985c894373f7
