@@ -1,0 +1,173 @@
+# GLM-5.2 FP8 AgentX on MI355X with SGLang EAGLE MTP. The ~756 GB
+# block-FP8 checkpoint is TP8-only; quantization is detected from the checkpoint.
+base:
+  schema: 2
+  name: glm5.2-fp8-mi355x-sglang-agentic
+  model:
+    path: hf:zai-org/GLM-5.2-FP8
+    container: lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260917
+    precision: fp8
+  resources:
+    gpu_type: mi355x
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      args:
+        served-model-name: zai-org/GLM-5.2-FP8
+        trust-remote-code: true
+        kv-cache-dtype: fp8_e4m3
+        dsa-prefill-backend: tilelang
+        dsa-decode-backend: tilelang
+        # GLM-5.2 emits GLM-4.7-style tool calls; glm45 keeps hybrid thinking
+        # in reasoning_content.
+        tool-call-parser: glm47
+        reasoning-parser: glm45
+        # 32k chunks interleave decode between prefill chunks and keep per-chunk
+        # activation headroom low enough for 0.85.
+        chunked-prefill-size: 32768
+        mem-fraction-static: 0.85
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 5
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 6
+        watchdog-timeout: 1800
+        enable-metrics: true
+      env:
+        PYTHONNOUSERSITE: '1'
+        # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        # The DSA indexer uses the precompiled HIP Top-K op.
+        SGLANG_OPT_USE_TOPK_V2: 'false'
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
+    env:
+      MODEL: zai-org/GLM-5.2-FP8
+      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+
+# One variant per point. Admission is 2x CONC; the decode graph batch follows it
+# up to 64. HiCache holds 1.5x the device KV pool and skips non-reusable blocks.
+override_tp8_c1:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 1
+        max-running-requests: 2
+        cuda-graph-max-bs-decode: 2
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: none
+
+override_tp8_c2:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 1
+        max-running-requests: 4
+        cuda-graph-max-bs-decode: 4
+  benchmark:
+    env:
+      CONC: '2'
+      KV_OFFLOADING: none
+
+override_tp8_c4:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 1
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
+  benchmark:
+    env:
+      CONC: '4'
+      KV_OFFLOADING: none
+
+override_tp8_c10:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 1
+        max-running-requests: 20
+        cuda-graph-max-bs-decode: 20
+  benchmark:
+    env:
+      CONC: '10'
+      KV_OFFLOADING: none
+
+override_tp8_c8_hicache:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 1
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 16
+        enable-hierarchical-cache: true
+        hicache-ratio: 1.5
+        hicache-write-policy: write_through_selective
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
+  benchmark:
+    env:
+      CONC: '8'
+      KV_OFFLOADING: dram
+
+override_tp8_c12_hicache:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 1
+        max-running-requests: 24
+        cuda-graph-max-bs-decode: 24
+        enable-hierarchical-cache: true
+        hicache-ratio: 1.5
+        hicache-write-policy: write_through_selective
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
+  benchmark:
+    env:
+      CONC: '12'
+      KV_OFFLOADING: dram
+
+override_tp8_c16_hicache:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 1
+        max-running-requests: 32
+        cuda-graph-max-bs-decode: 32
+        enable-hierarchical-cache: true
+        hicache-ratio: 1.5
+        hicache-write-policy: write_through_selective
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
+  benchmark:
+    env:
+      CONC: '16'
+      KV_OFFLOADING: dram

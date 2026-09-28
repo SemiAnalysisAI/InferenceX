@@ -1,0 +1,344 @@
+# DeepSeek-V4.1-Flash AgentX on GB300 with SGLang native DSpark. The KV cache
+# is GPU-resident.
+base:
+  schema: 2
+  name: dsv41flash-fp4-gb300-sglang-agentic
+  model:
+    path: hf:deepseek-ai/DeepSeek-V4.1-Flash
+    container: lmsysorg/sglang:nightly-dev-cu13-20260922-582389ce@sha256:0e1b14e302619a42ef5581b87db6804651d4f946301cf543d74a3a1eb1c33b40
+    precision: fp4
+  resources:
+    gpu_type: gb300
+    gpus_per_node: 4
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      args:
+        served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
+        trust-remote-code: true
+        # Keep active decode requests progressing while long prefixes are queued.
+        prefill-decode-interval: 16
+        mem-fraction-static: 0.8
+        # DSpark is the checkpoint's bundled draft; the block size is its only knob.
+        speculative-algorithm: DSPARK
+        speculative-dspark-block-size: 5
+        # Admission never exceeds the captured decode graph batch.
+        cuda-graph-max-bs-decode: 64
+        reasoning-parser: auto
+        tool-call-parser: auto
+        # Draft passes under long-context load outlast the 1800 s default watchdog.
+        watchdog-timeout: 3600
+        enable-metrics: true
+      env:
+        PYTHONNOUSERSITE: '1'
+        PYTHONUNBUFFERED: '1'
+        # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        # AgentX measures thinking on, the regime of the golden acceptance curve.
+        SGLANG_DEFAULT_THINKING: '1'
+        SGLANG_DSV41_REASONING_EFFORT: high
+        SGLANG_DSPARK_OPT_MARKOV_W2_BF16: 'True'
+  # Cold weight loads from the shared HF cache plus graph capture outlast
+  # srt-slurm's 1800 s default, as they did the legacy one-hour deadline.
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 5
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
+    env:
+      MODEL: deepseek-ai/DeepSeek-V4.1-Flash
+      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+
+# One variant per point. Admission is 2x CONC, capped at the graph batch. SWA
+# prefix tails are 64x CONC up to 4096 from c2. TP2 keeps row-sharded Engram
+# tables in host DRAM (TP4 fits them in HBM) and doubles the prefill chunk from
+# c64. Saturation points get a longer warmup drain.
+override_tp2_c1:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        chunked-prefill-size: 4096
+        max-running-requests: 2
+      env:
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1'
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
+  benchmark:
+    env:
+      CONC: '1'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+
+override_tp2_c2:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        chunked-prefill-size: 4096
+        swa-prefix-tails: 128
+        max-running-requests: 4
+      env:
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1'
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
+  benchmark:
+    env:
+      CONC: '2'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+
+override_tp2_c4:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        chunked-prefill-size: 4096
+        swa-prefix-tails: 256
+        max-running-requests: 8
+      env:
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1'
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
+  benchmark:
+    env:
+      CONC: '4'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+
+override_tp2_c8:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        chunked-prefill-size: 4096
+        swa-prefix-tails: 512
+        max-running-requests: 16
+      env:
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1'
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
+  benchmark:
+    env:
+      CONC: '8'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+
+override_tp2_c16:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        chunked-prefill-size: 4096
+        swa-prefix-tails: 1024
+        max-running-requests: 32
+      env:
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1'
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
+  benchmark:
+    env:
+      CONC: '16'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+
+override_tp2_c32:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        chunked-prefill-size: 4096
+        swa-prefix-tails: 2048
+        max-running-requests: 64
+      env:
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1'
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
+  benchmark:
+    env:
+      CONC: '32'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+
+override_tp2_c64:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        chunked-prefill-size: 8192
+        swa-prefix-tails: 4096
+        max-running-requests: 64
+      env:
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1'
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
+  benchmark:
+    env:
+      CONC: '64'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+
+override_tp2_c128:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        chunked-prefill-size: 8192
+        swa-prefix-tails: 4096
+        max-running-requests: 64
+      env:
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1'
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
+  benchmark:
+    env:
+      CONC: '128'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+
+override_tp4_c1:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        chunked-prefill-size: 4096
+        max-running-requests: 2
+      env:
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '0'
+  benchmark:
+    env:
+      CONC: '1'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+
+override_tp4_c2:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        chunked-prefill-size: 4096
+        swa-prefix-tails: 128
+        max-running-requests: 4
+      env:
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '0'
+  benchmark:
+    env:
+      CONC: '2'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+
+override_tp4_c4:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        chunked-prefill-size: 4096
+        swa-prefix-tails: 256
+        max-running-requests: 8
+      env:
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '0'
+  benchmark:
+    env:
+      CONC: '4'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+
+override_tp4_c8:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        chunked-prefill-size: 4096
+        swa-prefix-tails: 512
+        max-running-requests: 16
+      env:
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '0'
+  benchmark:
+    env:
+      CONC: '8'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+
+override_tp4_c16:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        chunked-prefill-size: 4096
+        swa-prefix-tails: 1024
+        max-running-requests: 32
+      env:
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '0'
+  benchmark:
+    env:
+      CONC: '16'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+
+override_tp4_c32:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        chunked-prefill-size: 4096
+        swa-prefix-tails: 2048
+        max-running-requests: 64
+      env:
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '0'
+  benchmark:
+    env:
+      CONC: '32'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+
+override_tp4_c64:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        chunked-prefill-size: 4096
+        swa-prefix-tails: 4096
+        max-running-requests: 64
+      env:
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '0'
+  benchmark:
+    env:
+      CONC: '64'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+
+override_tp4_c128:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        chunked-prefill-size: 4096
+        swa-prefix-tails: 4096
+        max-running-requests: 64
+      env:
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '0'
+  benchmark:
+    env:
+      CONC: '128'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
