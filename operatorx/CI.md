@@ -124,7 +124,7 @@ orchestration and launcher with external GPU/Slurm collaborators substituted.
 
 ```bash
 uv run --no-project --python 3.12 --with pytest --with pyyaml --with torch --with numpy \
-  python -m pytest experimental/operatorx/tests/ -q
+  python -m pytest operatorx/tests/ -q
 ```
 
 Real acceptance additionally requires a smoke run with artifacts on each selected runner, a

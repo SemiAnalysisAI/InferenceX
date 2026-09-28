@@ -98,7 +98,7 @@ Slurm 主机环境。CPU 测试执行真实规划器、基准编排和启动器�
 
 ```bash
 uv run --no-project --python 3.12 --with pytest --with pyyaml --with torch --with numpy \
-  python -m pytest experimental/operatorx/tests/ -q
+  python -m pytest operatorx/tests/ -q
 ```
 
 实际验收还需要在每个所选运行器上执行带产物的 smoke 运行、失败分片重跑，以及确认释放分配的取消测试。

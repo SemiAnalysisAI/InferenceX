@@ -655,7 +655,7 @@ def execute(args) -> None:
             run.append("--mpi=none")
         # The Python entrypoint preserves the allocated GPU mask without a shell. Run it
         # by path: an image's own PYTHONPATH (ROCm images set one) replaces the host's.
-        run += ["python3", "/opx/source/experimental/operatorx/ci.py", "rank"]
+        run += ["python3", "/opx/source/operatorx/ci.py", "rank"]
         command(run, root / "benchmark.log", env=env)
         rc = 0
     finally:
@@ -673,7 +673,7 @@ def rank() -> None:
         if not os.environ.get(key):
             raise ValueError(f"required rank input missing: {key}")
     os.environ["RANK"] = os.environ["SLURM_PROCID"]
-    source = "/opx/source/experimental"
+    source = "/opx/source"
     paths = [x for x in os.environ.get("PYTHONPATH", "").split(":") if x and x != source]
     os.environ["PYTHONPATH"] = ":".join([source, *paths])
     os.environ["LOCAL_RANK"] = os.environ["SLURM_LOCALID"]
