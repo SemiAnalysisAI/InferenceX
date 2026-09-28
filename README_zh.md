@@ -1,4 +1,4 @@
-#  InferenceX™，开源持续推理标准与研究平台
+#  InferenceX™，开源推理研究平台
 <p align="center">
   <a href="https://github.com/SemiAnalysisAI/InferenceX/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/badge/License-Apache%202.0-blue.svg"></a>
   <a href="https://github.com/SemiAnalysisAI/InferenceX/pulls"><img alt="PRs Welcome" src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg"></a>
@@ -8,11 +8,21 @@
 </p>
 <div align="center">
 
-[English](./README.md) | **中文**
+[English](README.md) | **中文**
 
 </div>
 
 受到 OpenAI、Meta、Microsoft、Oracle 等万亿美元级 Token 工厂运营商，以及 PyTorch 基金会、vLLM、SGLang、Tri Dao 等机器学习社区的信赖
+
+## 项目
+
+| 目录 | 内容 |
+| --- | --- |
+| [`InferenceX-e2e/`](inferencex-e2e/) | 🚀 端到端推理服务基准测试 |
+| [`CollectiveX/`](collectivex/) | 🌐 网络与集合通信基准测试（实验性 Beta 版本） |
+| [`OperatorX/`](operatorx/) | ⚙️ 算子与内核级基准测试（实验性 Beta 版本） |
+| [`shared/`](shared/) | 🧩 共享组件目录 |
+| [`experimental/`](experimental/) | 🧪 其余实验 |
 
 ## 新闻
 
@@ -78,8 +88,8 @@ SGLang、vLLM、TensorRT-LLM、CUDA、ROCm 等 AI 软件通过核函式優化、
 
 ## 参与贡献
 
-欢迎提交 PR！有关 PR 审阅流程、[PR 审阅清单](./docs/PR_REVIEW_CHECKLIST_zh.md)与合并流程的更多详情，请参阅 [CONTRIBUTING_zh.md](./CONTRIBUTING_zh.md)。
-维护者与 Agent 的文档导航请从 [`docs/index_zh.md`](./docs/index_zh.md) 开始，其中集中链接架构、配置、Workflow、评估、Runner 与故障排查参考。
+欢迎提交 PR！有关 PR 审阅流程、[PR 审阅清单](inferencex-e2e/docs/PR_REVIEW_CHECKLIST_zh.md)与合并流程的更多详情，请参阅 [CONTRIBUTING_zh.md](CONTRIBUTING_zh.md)。
+维护者与 Agent 的文档导航请从 [`docs/index_zh.md`](inferencex-e2e/docs/index_zh.md) 开始，其中集中链接架构、配置、Workflow、评估、Runner 与故障排查参考。
 
 ## 致谢与支持者
 感谢 Lisa Su 与 Anush Elangovan 为这一免费开源项目提供 MI355X 与 CDNA3 GPU。我们也要感谢众多 AMD 贡献者的积极响应，以及他们在各类 AMD GPU 上进行调试、优化与性能验证所付出的努力。
@@ -91,5 +101,3 @@ SGLang、vLLM、TensorRT-LLM、CUDA、ROCm 等 AI 软件通过核函式優化、
 完整支持者名单与引言：https://inferencex.semianalysis.com/quotes
 
 <img width="938" height="487" alt="image" src="https://github.com/user-attachments/assets/aa9b8257-fa7d-4691-97c3-dada8db05cb3" />
-
-
