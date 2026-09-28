@@ -49,8 +49,8 @@ def recipe_kwargs(without: tuple = ()) -> tuple[dict, dict]:
             if k not in without}
     attention = json.loads(args.pop("attention-config", None) or "{}")
     compilation = json.loads(args.pop("compilation-config", None) or "{}")
-    if args.get("max-cudagraph-capture-size"):
-        compilation.setdefault("max_cudagraph_capture_size", int(args["max-cudagraph-capture-size"]))
+    if args.get("max-cudagraph-capture-size"):  # moved: vLLM rejects it in both places
+        compilation.setdefault("max_cudagraph_capture_size", int(args.pop("max-cudagraph-capture-size")))
     info = {"attention_config": attention, "compilation_config": compilation}
     if not args:
         return {}, info
