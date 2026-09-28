@@ -74,31 +74,16 @@ own launcher, so it inherits that pool's allocation, node validation, container 
 and cleanup. It asks for one node and one GPU for 45 minutes. `config.py` encodes each
 case as `run_swap_blocks.py` argv, and the rank wrapper execs it in place of `run_ep.py`.
 
-The grid and the images are data in `configs/swap_sweep.json`:
-
-- **Images.** CUDA pools use `vllm/vllm-openai:v0.25.1`. AMD pools use
-  `vllm/vllm-openai-rocm:v0.27.1`. GB pools get the image's ARM64 variant through the
-  registry's `image_platform`. `sku_images` pins a pool to its own image: H100 uses
-  `vllm/vllm-openai:v0.27.1`. To run another vLLM version, change the config on a branch
-  and dispatch from it.
-- **`smoke` profile.** All three directions and both layouts. Block sizes 257, 4096,
-  65536 and 262144 bytes (up to 256 KiB). Counts 1, 4, 16, 64, 256, 1024 and 2048. 4
-  warmups and 20 samples per point, 168 points in total.
-- **`standard` profile.** Sizes 4096, 65536 and 1048576 with the same block counts, 32
-  warmups and 100 samples, 126 points.
-- **Both profiles** check the actual GPU copies before and after timing. They fail if a
-  GPU or a compatible vLLM is unavailable; backend preparation asserts the
-  `swap_blocks` import before any case runs. Both use a 2 GiB payload cap, which keeps
-  every point in their grids.
-
-For the byte-to-GiB sweep, dispatch with `-f swap_profile=large-blocks`. It uses
-257 B, 4 KiB, 64 KiB, 256 KiB, 1 MiB, 4 MiB, 16 MiB, 64 MiB, 256 MiB, and 1 GiB
-blocks with the same count ladder, 4 warmups, and 20 samples per point. A **1 GiB
-copied-payload cap** excludes larger products: 1 GiB blocks run with one block per
-call, and 256 MiB blocks run with 1 or 4. This produces 294 measured points across
-both layouts and all directions, with 126 over-budget combinations explicitly
-recorded as excluded. Each transfer buffer also contains two guard blocks, so a
-1 GiB block case allocates 3 GiB per buffer plus CPU correctness references.
+The grid and the images are data in `configs/swap_sweep.json`. CUDA and AMD pools use the
+official vLLM images it names; GB pools get the ARM64 variant through the registry's
+`image_platform`, and `sku_images` pins a pool to its own image. To run another vLLM version,
+change the config on a branch and dispatch from it. Every profile covers all three directions and
+both layouts, and checks the actual GPU copies before and after timing; backend preparation asserts
+the `swap_blocks` import before any case runs. `smoke` (the default, up to 256 KiB blocks, 168
+points) and `standard` (4 KiB to 1 MiB, 126 points) keep every grid point under their 2 GiB
+payload cap. `large-blocks` sweeps 257 B to 1 GiB blocks under a **1 GiB copied-payload cap**, so
+larger products are excluded and recorded (294 measured points, 126 excluded); each buffer also
+holds two guard blocks, so a 1 GiB block case allocates 3 GiB per buffer plus CPU references.
 
 Download `cxshard-<sku>-swap-blocks-<run_id>-<attempt>` for the two JSON results,
 named `<case_id>_<timestamp>-c<index>.json`. Each case_id is

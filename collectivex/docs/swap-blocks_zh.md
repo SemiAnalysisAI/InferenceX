@@ -65,25 +65,14 @@ EP 筛选项（`backend`、`ep_sizes`、`modes`）仅作用于 `ep` 套件；未
 资源分配、节点校验、镜像导入和清理流程；它申请一个节点、一个 GPU，时长 45 分钟。`config.py`
 把每个用例编码为 `run_swap_blocks.py` 的参数，rank 包装脚本执行它，而不是 `run_ep.py`。
 
-测试网格和镜像都写在 `configs/swap_sweep.json` 中：
-
-- **镜像。** CUDA 池使用 `vllm/vllm-openai:v0.25.1`，AMD 池使用 `vllm/vllm-openai-rocm:v0.27.1`；
-  GB 池通过注册表中的 `image_platform` 选择 ARM64 镜像。`sku_images` 可为某个池固定镜像：H100 使用
-  `vllm/vllm-openai:v0.27.1`。如需测试其他 vLLM 版本，请在分支上修改配置后从该分支触发。
-- **`smoke` 配置。** 覆盖三个方向、两种布局；块大小为 257、4096、65536、262144 字节（最大 256 KiB）；
-  块数量为 1、4、16、64、256、1024、2048。每个测试点预热 4 次、采样 20 次，共 168 个测试点。
-- **`standard` 配置。** 块大小为 4096、65536、1048576 字节，块数量相同，预热 32 次、采样 100 次，
-  共 126 个测试点。
-- **两种配置**均在计时前后检查真实 GPU 复制；缺少 GPU 或兼容 vLLM 时直接失败，后端准备阶段会在
-  任何用例运行前确认能导入 `swap_blocks`。两者均使用 2 GiB 有效载荷上限，保留网格中的全部测试点。
-
-如需从字节扫描到 GiB，请使用 `-f swap_profile=large-blocks`。块大小依次为
-257 B、4 KiB、64 KiB、256 KiB、1 MiB、4 MiB、16 MiB、64 MiB、256 MiB 和 1 GiB，
-块数量梯度不变，每点预热 4 次、采样 20 次。**复制有效载荷上限为 1 GiB**，
-超过该乘积的组合会被排除：1 GiB 块每次只复制 1 个，256 MiB 块每次复制 1 或 4 个。
-两种布局和三个方向合计测量 294 个测试点，并显式记录 126 个超预算组合。
-每个传输缓冲区还包含两个保护块，因此 1 GiB 块的测试点每个缓冲区分配 3 GiB，
-此外还需 CPU 正确性参考缓冲区。
+测试网格和镜像都写在 `configs/swap_sweep.json` 中。CUDA 与 AMD 池使用其中指定的官方 vLLM 镜像；
+GB 池通过注册表的 `image_platform` 选择 ARM64 镜像，`sku_images` 可为某个池固定镜像。如需其他 vLLM
+版本，请在分支上修改配置后从该分支触发。每种配置都覆盖三个方向和两种布局，并在计时前后检查真实 GPU
+复制；后端准备阶段会在任何用例运行前确认能导入 `swap_blocks`。`smoke`（默认，块最大 256 KiB，168 个
+测试点）和 `standard`（4 KiB 至 1 MiB，126 个测试点）的全部测试点都在 2 GiB 有效载荷上限内。
+`large-blocks` 扫描 257 B 至 1 GiB 的块，**复制有效载荷上限为 1 GiB**，超出的组合会被排除并记录
+（测量 294 个测试点，排除 126 个）；每个缓冲区另含两个保护块，因此 1 GiB 块的测试点每个缓冲区分配
+3 GiB，另需 CPU 正确性参考缓冲区。
 
 下载 `cxshard-<sku>-swap-blocks-<run_id>-<attempt>` 可获得两个 JSON 结果文件，文件名为
 `<case_id>_<timestamp>-c<index>.json`，其中 case_id 为 `<sku>-swap-blocks-<profile>-<layout>`。

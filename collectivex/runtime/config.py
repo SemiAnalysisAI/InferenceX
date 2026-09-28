@@ -134,32 +134,28 @@ def case_count(path: str) -> None:
     print(len(load(path)["cases"]), end="")
 
 
+def _flag(field: str) -> str:
+    return "--" + field.replace("_", "-")
+
+
+def _flag_pairs(case: dict, fields: str, **renamed: str) -> list[str]:
+    """`--flag value` per space-separated field; the flag is spelled from the field name
+    (`gpus_per_node` -> `--gpus-per-node`) and reads the case key `renamed` maps it to."""
+    argv = []
+    for field in fields.split():
+        value = case[renamed.get(field, field)]
+        argv += [_flag(field), "" if value is None else str(value)]
+    return argv
+
+
 def _ep_argv(case: dict, version: object, runner: str) -> list[str]:
-    get = lambda key, default="": str(case.get(key) or default)
-    argv = [
-        "--backend", str(case["backend"]),
-        "--mode", str(case["mode"]),
-        "--precision", str(case["precision"]),
-        "--phase", str(case["phase"]),
-        "--routing", str(case["routing"]),
-        "--gpus-per-node", str(case["gpus_per_node"]),
-        "--scale-up-domain", str(case["scale_up_domain"]),
-        "--scope", str(case["scope"]),
-        "--scale-up-transport", str(case["scale_up_transport"]),
-        "--scale-out-transport", get("scale_out_transport"),
-        "--tokens-ladder", str(case["ladder"]),
-        "--hidden", str(case["hidden"]),
-        "--topk", str(case["topk"]),
-        "--experts", str(case["experts"]),
-        "--seed", str(case["seed"]),
-        "--runner", runner,
-        "--topology-class", str(case["topology_class"]),
-        "--transport", str(case["transport"]),
-        "--case-id", str(case["case_id"]),
-        "--suite", str(case["suite"]),
-        "--workload-name", str(case["workload"]),
-        "--version", str(version),
-    ]
+    argv = _flag_pairs(
+        case,
+        "backend mode precision phase routing gpus_per_node scale_up_domain scope "
+        "scale_up_transport scale_out_transport tokens_ladder hidden topk experts seed "
+        "topology_class transport case_id suite workload_name",
+        tokens_ladder="ladder", workload_name="workload",
+    ) + ["--runner", runner, "--version", str(version)]
     timing = _migrate_timing(case["timing"])
     for key, flag in _TIMING_FLAGS:
         if key in timing:
@@ -168,17 +164,10 @@ def _ep_argv(case: dict, version: object, runner: str) -> list[str]:
 
 
 def _swap_argv(case: dict, version: object, runner: str) -> list[str]:
-    return [
-        "--directions", *str(case["directions"]).split(),
-        "--block-bytes", *str(case["block_bytes"]).split(),
-        "--num-blocks", *str(case["num_blocks"]).split(),
-        "--layout", str(case["layout"]),
-        "--seed", str(case["seed"]),
-        "--device", str(case["device"]),
-        "--max-payload-bytes", str(case["max_payload_bytes"]),
-        "--warmup", str(case["warmup"]),
-        "--iterations", str(case["iterations"]),
-    ]
+    argv = []
+    for field in ("directions", "block_bytes", "num_blocks"):  # nargs="+" lists
+        argv += [_flag(field), *str(case[field]).split()]
+    return argv + _flag_pairs(case, "layout seed device max_payload_bytes warmup iterations")
 
 
 # suite -> (bench/<entrypoint>.py, argv codec, output flag). The rank wrapper in

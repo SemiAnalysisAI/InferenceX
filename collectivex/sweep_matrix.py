@@ -119,13 +119,34 @@ def _comma_subset(flag: str, value: str, known) -> set[str]:
     return selected
 
 
+def _shard(sku: str, shard_id: str, backend: str, cases: list[dict[str, Any]],
+           **extra: Any) -> dict[str, Any]:
+    """One allocation-sized shard; its placement is its cases' (they share one allocation)."""
+    first = cases[0]
+    return {
+        "id": shard_id,
+        "sku": sku,
+        # runs-on label: the SKU unless the registry names the pool's runners.
+        "runner": PLATFORMS[sku].get("runner_label", sku),
+        "backend": backend,
+        "launcher": PLATFORMS[sku]["launcher"],
+        **{field: first[field] for field in ("nodes", "gpus_per_node", "scale_up_domain")},
+        **extra,
+        "cases": cases,
+    }
+
+
+def _runnable(sku: str, cases: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [{"sku": sku, "case": case, "disposition": "runnable", "reason": None, "detail": None}
+            for case in cases]
+
+
 def _vendor(platform: dict[str, Any]) -> str:
     return "amd" if platform["arch"].startswith("gfx") else "nvidia"
 
 
 def _swap_shard(sku: str, profile_name: str) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """One single-GPU shard per pool: a case per layout over the profile's block grid."""
-    platform = PLATFORMS[sku]
     profile = SWAP_SWEEP["profiles"][profile_name]
     pinned = SWAP_SWEEP["sku_images"].get(sku, {})
     cases = []
@@ -149,27 +170,13 @@ def _swap_shard(sku: str, profile_name: str) -> tuple[list[dict[str, Any]], dict
         }
         case["case_id"] = ep_harness.slug_id((sku, "swap-blocks", profile_name, layout))
         cases.append(case)
-    shard = {
-        "id": f"{sku}-swap-blocks",
-        "sku": sku,
-        "runner": platform.get("runner_label", sku),
-        "backend": "swap-blocks",
-        "suite": SWAP_SWEEP["suite"],
-        "launcher": platform["launcher"],
-        "nodes": 1,
-        "gpus_per_node": 1,
-        "scale_up_domain": 1,
-        "image": pinned.get("image", SWAP_SWEEP["images"][_vendor(platform)]),
-        "allocation_minutes": SWAP_SWEEP["allocation_minutes"],
-        "cases": cases,
-    }
-    if "staged_image_dir" in pinned:
-        shard["staged_image_dir"] = pinned["staged_image_dir"]
-    requested = [
-        {"sku": sku, "case": case, "disposition": "runnable", "reason": None, "detail": None}
-        for case in cases
-    ]
-    return requested, shard
+    staged = {key: pinned[key] for key in ("staged_image_dir",) if key in pinned}
+    shard = _shard(
+        sku, f"{sku}-swap-blocks", "swap-blocks", cases, suite=SWAP_SWEEP["suite"],
+        image=pinned.get("image", SWAP_SWEEP["images"][_vendor(PLATFORMS[sku])]),
+        allocation_minutes=SWAP_SWEEP["allocation_minutes"], **staged,
+    )
+    return _runnable(sku, cases), shard
 
 
 def resolve_matrix(
@@ -312,23 +319,12 @@ def resolve_matrix(
 
     shards_by_sku: dict[str, list[dict[str, Any]]] = {}
     for (sku, target, mode, nodes, precision), cases in sorted(shards.items()):
-        first = cases[0]
         # Normal-mode shard IDs are unchanged (no mode segment) so existing references
         # stay valid; a non-normal mode inserts a short slug (low-latency -> "ll").
         mode_segment = "" if mode == "normal" else f"-{_MODE_SLUG[mode]}"
-        shards_by_sku.setdefault(sku, []).append({
-            "id": f"{sku}-{target}{mode_segment}-{precision}-n{nodes}",
-            "sku": sku,
-            # runs-on label: the SKU unless the registry names the pool's runners.
-            "runner": PLATFORMS[sku].get("runner_label", sku),
-            "backend": target,
-            "mode": mode,
-            "launcher": PLATFORMS[sku]["launcher"],
-            "nodes": nodes,
-            "gpus_per_node": first["gpus_per_node"],
-            "scale_up_domain": first["scale_up_domain"],
-            "cases": cases,
-        })
+        shards_by_sku.setdefault(sku, []).append(_shard(
+            sku, f"{sku}-{target}{mode_segment}-{precision}-n{nodes}", target, cases, mode=mode,
+        ))
     if "swap-blocks" in selected_suites:
         for sku in selected_skus:
             requested, shard = _swap_shard(sku, swap_profile)
