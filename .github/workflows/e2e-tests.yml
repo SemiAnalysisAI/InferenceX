@@ -204,6 +204,9 @@ on: # zizmor: ignore[concurrency-limits]
                 type: string
                 default: "[]"
 
+env:
+  PYTHONPATH: ${{ github.workspace }}/inferencex-e2e
+
 jobs:
     get-jobs:
         name: get-jobs
@@ -271,9 +274,14 @@ jobs:
                   ALL_EVALS: ${{ inputs.all-evals }}
                   EVALS_ONLY: ${{ inputs.evals-only }}
               run: |
+                  if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
+                  MEASURED_ROOT="$PWD"
                   PRIORITY_ROOT="${GITHUB_WORKSPACE}"
                   if [ -d "${GITHUB_WORKSPACE}/.ci-priority" ]; then
                     PRIORITY_ROOT="${GITHUB_WORKSPACE}/.ci-priority"
+                  fi
+                  if [[ -f "$PRIORITY_ROOT/inferencex-e2e/configs/runners.yaml" ]]; then
+                    PRIORITY_ROOT="$PRIORITY_ROOT/inferencex-e2e"
                   fi
                   if [ -n "$CHANGELOG_BASE_REF" ] || [ -n "$CHANGELOG_HEAD_REF" ]; then
                     if [ -z "$CHANGELOG_BASE_REF" ] || [ -z "$CHANGELOG_HEAD_REF" ]; then
@@ -284,7 +292,7 @@ jobs:
                       env PYTHONPATH="$PRIORITY_ROOT"
                       uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml
                       python -P -m infx.matrix.plan
-                      --changelog-file "${GITHUB_WORKSPACE}/perf-changelog.yaml"
+                      --changelog-file "${MEASURED_ROOT}/perf-changelog.yaml"
                       --base-ref "$CHANGELOG_BASE_REF"
                       --head-ref "$CHANGELOG_HEAD_REF"
                     )
@@ -314,12 +322,12 @@ jobs:
                     if [ "$EVALS_ONLY" = "true" ]; then
                       GENERATE_ARGS+=(--evals-only)
                     fi
-                    GENERATOR_PATH="${GITHUB_WORKSPACE}"
-                    if [ -f "${GITHUB_WORKSPACE}/infx/matrix/generate.py" ]; then
+                    GENERATOR_PATH="${MEASURED_ROOT}"
+                    if [ -f "${MEASURED_ROOT}/infx/matrix/generate.py" ]; then
                       GENERATOR=(-m infx.matrix.generate)
-                    elif [ -f "${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py" ]; then
-                      GENERATOR=("${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py")
-                      GENERATOR_PATH="${GITHUB_WORKSPACE}/utils/matrix_logic:${GITHUB_WORKSPACE}"
+                    elif [ -f "${MEASURED_ROOT}/utils/matrix_logic/generate_sweep_configs.py" ]; then
+                      GENERATOR=("${MEASURED_ROOT}/utils/matrix_logic/generate_sweep_configs.py")
+                      GENERATOR_PATH="${MEASURED_ROOT}/utils/matrix_logic:${MEASURED_ROOT}"
                     else
                       echo "Matrix generator not found in selected checkout" >&2
                       exit 1
@@ -632,12 +640,27 @@ jobs:
                   path: ${{ env.RESULTS_DIR }}
                   pattern: results_*
 
+            - name: Select Python project
+              run: |
+                python_project="$GITHUB_WORKSPACE"
+                if [[ -f "$python_project/inferencex-e2e/pyproject.toml" ]]; then
+                  python_project="$python_project/inferencex-e2e"
+                fi
+                test -f "$python_project/pyproject.toml"
+                echo "INFERENCEX_PYTHON_PROJECT=$python_project" >> "$GITHUB_ENV"
+
             - name: Set up uv
               uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+              with:
+                  cache-dependency-glob: |
+                      pyproject.toml
+                      uv.lock
+                      inferencex-e2e/pyproject.toml
+                      inferencex-e2e/uv.lock
 
             - name: Calculate success rate
               run: >-
-                  uv run --locked --extra workflows
+                  uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked --extra workflows
                   python -m infx.workflows.calc_success_rate "$STATS_FILENAME"
 
             - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
