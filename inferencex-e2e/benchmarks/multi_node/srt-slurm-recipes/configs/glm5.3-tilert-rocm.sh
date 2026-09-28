@@ -48,13 +48,16 @@ sys.exit(0 if int(metadata.get("num_mtp", 0)) >= 1 else 1)
 PY
 }
 
-mkdir -p "$TILERT_WEIGHTS_DIR"
-exec 9>"$TILERT_WEIGHTS_DIR/.convert.lock"
-flock -w "$TILERT_CONVERT_LOCK_WAIT" 9
 if ! weights_ready; then
-    python3 -m tilert.models.glm_5_2_rocm.weight_converter \
-        --model_dir /model --save_dir "$TILERT_WEIGHTS_DIR" --device cuda:7 --num_mtp 3
-    weights_ready
+    mkdir -p "$TILERT_WEIGHTS_DIR"
+    exec 9>"$TILERT_WEIGHTS_DIR/.convert.lock"
+    flock -w "$TILERT_CONVERT_LOCK_WAIT" 9
+    if ! weights_ready; then
+        python3 -m tilert.models.glm_5_2_rocm.weight_converter \
+            --model_dir /model --save_dir "$TILERT_WEIGHTS_DIR" --device cuda:7 --num_mtp 3
+        weights_ready
+    fi
+    exec 9>&-
 fi
 
 for file in /model/*; do
