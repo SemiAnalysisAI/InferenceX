@@ -12,11 +12,13 @@ See `CLUSTERS.md` for how to reach each cluster and the per-host quirks.
 `(container_image, world_size)` pair to your local SLURM. Each job runs
 `python -m operatorx` inside the container.
 
+The examples assume the repository is checked out at `$HOME/inferencex`.
+
 ### b200 (DGX-style, 8x B200 SXM)
 
 ```bash
 ssh tailscale-b200
-cd /home/sa-shared/harrison/oss-inference-tracker/operatorx
+cd "$HOME/inferencex/operatorx"
 python3 scripts/submit_run.py nvidia
 ```
 
@@ -27,15 +29,16 @@ Defaults that apply: `OPERATORX_CLUSTER=b200_dgx_8x`,
 
 The b300 cluster needs a non-default partition + account + qos, has its own
 squash dir, and DeepEP has known IBGDA issues here so we exclude it.
+This example uses container images stored in `$HOME/containers`.
 
 ```bash
 ssh tailscale-b300
-cd /data/home/sa-shared/harrison/oss-inference-tracker/operatorx
+cd "$HOME/inferencex/operatorx"
 OPERATORX_CLUSTER=b300_hgx_8x \
 OPERATORX_PARTITION=batch_1 \
 OPERATORX_ACCOUNT=benchmark \
 OPERATORX_QOS=batch_1_qos \
-OPERATORX_SQUASH_DIR=/data/home/sa-shared/harrison/containers \
+OPERATORX_SQUASH_DIR="$HOME/containers" \
 OPERATORX_BACKENDS=torch,deepgemm,flashinfer,sglang \
 python3 scripts/submit_run.py nvidia
 ```
