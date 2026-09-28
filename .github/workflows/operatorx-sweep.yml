@@ -90,7 +90,11 @@ jobs:
           set -eo pipefail
           source inferencex-e2e/benchmarks/benchmark_lib.sh --validation-only
           check_env_vars OPERATORX_RUNNER OPERATORX_BACKENDS OPERATORX_TESTLISTS OPERATORX_WORLD_SIZES OPERATORX_MODE OPERATORX_CHUNK_SIZE GITHUB_RUN_ID GITHUB_RUN_ATTEMPT GITHUB_SHA GITHUB_OUTPUT
-          python3 -m operatorx.ci plan \
+          # Cases take InferenceX's srt-slurm recipes, expanded by InferenceX's own code (srtctl).
+          git submodule update --init inferencex-e2e/utils/srt-slurm
+          uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml --with ruamel.yaml \
+            --with marshmallow --with marshmallow-dataclass --with pydantic --with jinja2 --with requests --with rich \
+            python -m operatorx.ci plan \
             --platform-config operatorx/platforms.json \
             --runner "$OPERATORX_RUNNER" --backends "$OPERATORX_BACKENDS" \
             --testlists "$OPERATORX_TESTLISTS" --world-sizes "$OPERATORX_WORLD_SIZES" \
