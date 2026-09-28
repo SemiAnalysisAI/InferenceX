@@ -2,7 +2,7 @@
 
 <div align="center">
 
-[English](./CONTRIBUTING.md) | **中文**
+[English](CONTRIBUTING.md) | **中文**
 
 </div>
 
@@ -17,7 +17,7 @@
 3. 在 Slack 上联系核心维护者进行最终批准；若要求清单签署，请先完成签署。
 4. 由授权维护者发布 `/use <run_id>`（见下文），然后通过 reuse 路径合并 PR。
 
-**性能变更日志要求：** 凡是可能影响基准测试性能的变更，以及任何配方（recipe）的新增或修改，都**必须**在 `perf-changelog.yaml` 文件的物理末尾追加一个新条目。历史条目**严禁**编辑。
+**性能变更日志要求：** 凡是可能影响基准测试性能的变更，以及任何配方（recipe）的新增或修改，都**必须**在 `inferencex-e2e/perf-changelog.yaml` 文件的物理末尾追加一个新条目。历史条目**严禁**编辑。
 
 ## Draft 模型精度
 
@@ -34,6 +34,7 @@
 
 禁止（提交方对 draft 精度的 hack）：
 
+- 今后明确禁止启用 `SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE`（`=1` 或锁定实现认可的其他启用值），包括从环境、launcher、容器或镜像默认值继承的启用设置。上述基线允许项不能豁免此 flag。审阅者必须核实它在实际配方中已禁用；只有锁定实现确认未启用时，未设置或 `=0` 才可接受。历史运行不能作为当前待审提交的先例或例外，此要求也适用于仅更新镜像或重新启用配方的提交。本规则不追溯否定生效前的运行。
 - 通过 flag、环境变量、配置文件或转换步骤，将 draft 权重、激活或计算量化到发布精度以下，无论在线还是离线。包括对 BF16 MTP head 使用 `--speculative-draft-model-quantization quark_mxfp4`、`SGLANG_GLM_NEXTN_MOE_PTPC=1`，以及 `exclude_layer` 模式未覆盖整个 draft head 的 ATOM `--online_quant_config`。
 - 针对 draft 的 dtype 或 KV cache dtype 覆盖设置，使其精度低于框架对该 checkpoint 的默认值。
 - 替换为经过精度转换或不同量化方式的 draft checkpoint，或使用与所服务 target 不同发布版本的 draft head。
@@ -46,7 +47,7 @@ Target/verifier 模型仍可在满足现有 eval 要求的前提下量化。只�
 
 审阅者必须对照发布基线核实 draft 的实际运行精度，不能只看启动参数。检查 checkpoint 元数据与量化排除项、环境变量、锁定镜像中的框架默认行为，以及从 target 模型继承的量化设置。不得仅凭 target checkpoint 的名称或精度标签推断 draft 精度。
 
-涉及投机解码的改动，CODEOWNER 必须在 Additional detail section 中注明 draft checkpoint 及其 revision（或内嵌 head）、其发布精度、锁定上游镜像对其的默认处理方式，以及实际运行精度，以便审阅者确认后两者一致。无法核实时，该条目不满足要求。参见[审阅清单](docs/PR_REVIEW_CHECKLIST_zh.md)及[验证器检查 13](.github/codeowner-signoff-verify-prompt.md#check-13--draft-runs-as-shipped)。
+涉及投机解码的改动，CODEOWNER 必须在 Additional detail section 中注明 draft checkpoint 及其 revision（或内嵌 head）、其发布精度、锁定上游镜像对其的默认处理方式，以及实际运行精度，以便审阅者确认后两者一致。无法核实时，该条目不满足要求。参见[审阅清单](inferencex-e2e/docs/PR_REVIEW_CHECKLIST_zh.md)及[验证器检查 13](.github/codeowner-signoff-verify-prompt.md#check-13--draft-runs-as-shipped)。
 
 此要求与 [MLPerf Inference Rules 附录 C：Speculative Decoding](https://github.com/mlcommons/inference_policies/blob/ff7edba545fded369e7e7e3d5a2f0bab4a95eece/inference_rules.adoc#appendix-c-speculative-decoding) 的原则一致：参考 MTP head 使用提供时的相同精度（"at the same precision as provided"），并禁止参考 head 权重量化及其他人为操纵接受率的行为。InferenceX 不采用该版本针对特定量化边缘工作负载的例外、其允许模型列表，或其投机解码配置与接受率测试方法。
 
@@ -56,13 +57,13 @@ CODEOWNER 自动验证目前仅供审阅参考。工作流会核验新提交及�
 
 仅当修改的文件存在仓库管理员及 `@SemiAnalysisAI/core` 之外的 CODEOWNER 时，才要求签核。归属以 PR 目标分支当前最新提交中的 CODEOWNERS 为准：先解析该分支的 SHA，再使用同一 SHA 校验并读取 CODEOWNERS，最后匹配的规则生效；重命名同时检查旧路径和新路径。归属规则不从 PR 的 Head 或其记录中可能过期的基础提交读取。同一文件有 core 团队作为 owner，不会豁免其他 owner。个人管理员必须同时拥有仓库 `permission: admin` 和 `role_name: admin`；其他团队和邮箱 owner 均要求签核。归属信息缺失或权限查询失败不能授予豁免。不涉及此类 owner 的改动会跳过验证。
 
-由一名符合条件的 CODEOWNER 审阅者在批准评论中填写最新的 [PR_REVIEW_CHECKLIST.md](docs/PR_REVIEW_CHECKLIST.md)（[中文说明](docs/PR_REVIEW_CHECKLIST_zh.md)）模板。
+由一名符合条件的 CODEOWNER 审阅者在批准评论中填写最新的 [PR_REVIEW_CHECKLIST.md](inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md)（[中文说明](inferencex-e2e/docs/PR_REVIEW_CHECKLIST_zh.md)）模板。
 
 **每个 PR 只需一名符合条件的 CODEOWNER 审阅者发布清单。** 发布前先检查是否已有清单；其他审阅者无需重复发布。需要更正条目或补充证据时，原审阅者必须**编辑自己已有的清单评论**，不要另发一条。只有原评论被删除时才创建替代评论。
 
 友情提醒。请**正确**遵循最新的清单模板：
 
-- 务必从 `main` 分支上**当前**的 [docs/PR_REVIEW_CHECKLIST.md](docs/PR_REVIEW_CHECKLIST.md) 复制模板。清单会不断演进，使用过期副本的签署会被标记为缺项。
+- 务必从 `main` 分支上**当前**的 [inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md](inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md) 复制模板。清单会不断演进，使用过期副本的签署会被标记为缺项。
 - 保持模板的开头语句原样不变（必须保留英文原文）：
 
   > As a PR reviewer and CODEOWNER, I have reviewed this and have:
@@ -87,7 +88,7 @@ CODEOWNER 自动验证目前仅供审阅参考。工作流会核验新提交及�
 - **这为每个人减少了 CI 排队时间。** 每次复用合并都会为其他 PR 释放数小时的 GPU runner 时间，因此请优先选择 reuse 路径，而不是不带它直接合并。仅有全绿 sweep 还不够。复用命令必须在评论记录中（签署验证会检查这一点），否则 `main` 会静默地重新运行完整 sweep。
 - 复用不要求保留 sweep 标签。机器人会在命令被接受时添加 👍，拒绝时添加 👎，详情见 Actions 运行摘要；合并时仍会重新验证源产物。
 - 缺少授权维护者发布的复用命令时，Check 4 会给出 **WARN**，不会因此拒绝签署。警告会在签署裁定中保持展开；要实际复用产物，仍需先发布有效的授权命令。
-- `utils/merge_with_reuse.sh <pr-number>` 是受支持的合并路径。它会发布命令、将分支与 `main` 同步、等待检查并 squash 合并。资格详情见 [workflows README](.github/workflows/README.md#reusing-an-approved-pr-full-sweep)。
+- 在仓库根目录运行 `uv run --project inferencex-e2e --extra workflows python -m infx.workflows.merge_with_reuse <pr-number>` 是受支持的合并路径。它会发布命令、将分支与 `main` 同步、等待检查并 squash 合并。资格详情见 [workflows README](.github/workflows/README.md#reusing-an-approved-pr-full-sweep)。
 
 ## AMD 集群：严禁在 runner 工作区留下 root 所属文件
 

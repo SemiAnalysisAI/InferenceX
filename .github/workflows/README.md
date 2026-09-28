@@ -1,6 +1,8 @@
 # How to Test Workflows
 
-In order to test configurations described in `configs`, the primary workflow file used is `.github/workflows/e2e-tests.yml`. As input, this workflow takes in the CLI arguments for the `python -m infx.matrix.generate` command. The command usage is shown below:
+Run end-to-end commands from `inferencex-e2e/`, which owns `pyproject.toml`, `uv.lock`, and `.python-version`. Workflow dispatch generator arguments also resolve paths relative to that directory. The project-local `.python-version` selects its Python version.
+
+In order to test configurations described in `inferencex-e2e/configs`, the primary workflow file used is `.github/workflows/e2e-tests.yml`. As input, this workflow takes in the CLI arguments for the `python -m infx.matrix.generate` command. The command usage is shown below:
 
 ```
 usage: python -m infx.matrix.generate [-h] {full-sweep,test-config} ...
@@ -14,8 +16,8 @@ positional arguments:
                         filtering by model, precision, framework, runner type,
                         and sequence lengths
     test-config         Generate full sweep for specific config keys.
-                        Supports wildcard patterns (* and ?) for matching
-                        multiple keys at once.
+                        Validates that all specified keys exist before
+                        generating.
 
 options:
   -h, --help            show this help message and exit
@@ -30,12 +32,16 @@ usage: python -m infx.matrix.generate full-sweep
     --config-files CONFIG_FILES [CONFIG_FILES ...]
     [--runner-config RUNNER_CONFIG]
     [--no-evals | --evals-only] [--all-evals]
+    [--smoke] [--trim-conc]
+    [--runner-node-filter RUNNER_NODE_FILTER]
+    [--scenario-type {fixed-seq-len,agentic-coding} [{fixed-seq-len,agentic-coding} ...]]
     [--model-prefix MODEL_PREFIX [MODEL_PREFIX ...]]
     [--precision PRECISION [PRECISION ...]]
     [--framework FRAMEWORK [FRAMEWORK ...]]
     [--runner-type RUNNER_TYPE [RUNNER_TYPE ...]]
     [--seq-lens {1k1k,8k1k} [{1k1k,8k1k} ...]]
     [--step-size STEP_SIZE]
+    [--min-conc MIN_CONC]
     [--max-conc MAX_CONC]
     [--max-tp MAX_TP]
     [--max-ep MAX_EP]
@@ -99,8 +105,13 @@ usage: python -m infx.matrix.generate test-config
     --config-files CONFIG_FILES [CONFIG_FILES ...]
     [--runner-config RUNNER_CONFIG]
     [--no-evals | --evals-only] [--all-evals]
+    [--smoke] [--trim-conc]
+    [--runner-node-filter RUNNER_NODE_FILTER]
+    [--scenario-type {fixed-seq-len,agentic-coding} [{fixed-seq-len,agentic-coding} ...]]
     --config-keys CONFIG_KEYS [CONFIG_KEYS ...]
     [--conc CONC [CONC ...]]
+    [--exp-names EXP_NAMES [EXP_NAMES ...]]
+    [--seq-lens {1k1k,8k1k} [{1k1k,8k1k} ...]]
 ```
 
 Config keys support **wildcard patterns** using `*` (matches any characters) and `?` (matches a single character). Patterns that match no keys will raise an error.
@@ -222,7 +233,7 @@ validation remains authoritative; an acknowledgment cannot override expired or
 invalid artifacts. `evals-only` and `agentx-fast` remain incompatible with reuse.
 Remove and re-add the sweep label to force one.
 
-`utils/merge_with_reuse.sh <pr-number>` is the supported merge path for reuse.
+`uv run --extra workflows python -m infx.workflows.merge_with_reuse <pr-number>` is the supported merge path for reuse.
 It merges `main`, preserves changelog bytes, fixes an appended `XXX` PR link,
 pushes a synchronization commit, waits for checks, then merges.
 
@@ -238,13 +249,13 @@ authorization, `main` runs the normal full sweep.
 
 ## Validation Architecture
 
-The benchmarking system uses a strict validation methodology to ensure correctness at every stage. This is implemented in `infx/matrix/validation.py` using Pydantic models.
+The benchmarking system uses a strict validation methodology to ensure correctness at every stage. This is implemented in `inferencex-e2e/infx/matrix/validation.py` using Pydantic models.
 
 ### Validation Methodology
 
 The system validates **both ends** of the configuration pipeline:
 
-1. **Input Validation (Master Configs)**: Validates the structure of `configs/*.yaml` files before any processing occurs
+1. **Input Validation (Master Configs)**: Validates the structure of `inferencex-e2e/configs/*.yaml` files before any processing occurs
 2. **Output Validation (Matrix Entries)**: Validates the generated matrix entries that are passed to workflow templates
 
 This dual-validation approach ensures:
@@ -300,7 +311,7 @@ The corresponding `SingleNodeMatrixEntry` enforces these same fields with approp
 ### Validation Flow
 
 ```
-configs/*.yaml
+inferencex-e2e/configs/*.yaml
         │
         ▼
 ┌─────────────────────────┐
@@ -309,7 +320,7 @@ configs/*.yaml
         │
         ▼
 ┌─────────────────────────┐
-│  generate_sweep_configs │  ← Matrix generation
+│  infx.matrix.generate   │  ← Matrix generation
 └─────────────────────────┘
         │
         ▼
