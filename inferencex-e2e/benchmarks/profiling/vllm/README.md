@@ -29,7 +29,7 @@ One concurrency selects one recipe variant (for DSV4 on B200: `tp8_c*` or
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `windows` | `[[60, 32], [240, 32]]` | `[delay_seconds, iterations]` per torch profiler window; delays count from the end of the client's warmup |
+| `windows` | `[[60, 32], [540, 32]]` | `[delay_seconds, iterations]` per torch profiler window; delays count from the end of the client's warmup. AgentX first turns keep every rank in chunked prefill for the first ~6 minutes, so the first window sees the prefill ramp and the second the decode-dominated steady state |
 | `capture_ranks` | `"dp0_tp0"` | Workers whose CUDA graph capture is profiled (`"all"` for every rank) |
 | `host_headroom_gib` | `128` | Host memory taken from a CPU KV-offload pool for the profiler's buffers |
 | `duration` | last delay + 240 s | Measured replay length; profiling only needs its windows |

@@ -139,7 +139,7 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
 PROFILE_DIR = "/logs/infx_profile"
 PROFILE_DEFAULTS: dict[str, Any] = {
     # (seconds after the client's warmup ends, engine iterations) per torch window
-    "windows": [[60, 32], [240, 32]],
+    "windows": [[60, 32], [540, 32]],
     # workers whose CUDA graph capture is profiled; "all" profiles every rank
     "capture_ranks": "dp0_tp0",
     # Host memory kept free of CPU KV offload for the profiler's trace buffers;
