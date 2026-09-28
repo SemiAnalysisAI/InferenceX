@@ -182,11 +182,6 @@ def profiling_arguments(environment: Mapping[str, str]) -> list[str]:
         "INFX_PROF_DIR": PROFILE_DIR,
         "INFX_PROF_CAPTURE_RANKS": settings["capture_ranks"],
         "PYTHONPATH": "/infmax-workspace/benchmarks/profiling/vllm",
-        # A run-local compile cache, kept readable, so every Inductor kernel the
-        # traces name resolves to its generated source.
-        "VLLM_CACHE_ROOT": f"{PROFILE_DIR}/vllm_cache",
-        "VLLM_COMPILE_CACHE_SAVE_FORMAT": "unpacked",
-        "INDUCTOR_PROVENANCE": "1",
         # A window's trace export blocks its worker; keep peers from timing out.
         "VLLM_RPC_TIMEOUT": "1800000",
     }
