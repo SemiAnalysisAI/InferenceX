@@ -13,8 +13,7 @@ as ``status="unsupported"``. Other exceptions become ``status="error"``.
 
 Platform is detected from ``$OPERATORX_CLUSTER`` → ``CLUSTERS[id].platform``, or
 overridden with ``--platform``. Backend filter via ``--backends`` (CSV) or env
-``OPERATORX_BACKENDS``. World size from ``WORLD_SIZE`` env (set by torchrun, or
-manually for TPU); auto-detected for TPU when unset.
+``OPERATORX_BACKENDS``. World size from ``WORLD_SIZE`` env (set by torchrun).
 """
 from __future__ import annotations
 
@@ -23,13 +22,18 @@ import importlib
 import json
 import os
 import pkgutil
+import re
 import sys
 from pathlib import Path
 
 import operatorx.ops  # noqa: F401  populates op registry
+from operatorx.core import op_registry
 from operatorx import Op, Result, UnsupportedOpError, write_run_result
 from operatorx.clusters import CLUSTER_PLATFORMS
 from operatorx.runtime import runtime_snapshot, utc_now_iso
+
+# a testlist source: the checkpoint id ("org/model") and the op's role in it
+_SOURCE = re.compile(r"[^/\s]+/[^/\s]+/[^/\s]+")
 
 
 # Package directory contains the checked-in testlists and local results.
@@ -70,7 +74,16 @@ def _load_testlists(names: list[str] | None, directory: Path = TESTLIST_DIR) -> 
             raise SystemExit(f"unknown testlist(s): {missing}; available: {sorted(available)}")
     else:
         wanted = available
-    return {name: json.loads(path.read_text()) for name, path in wanted.items()}
+    lists = {name: json.loads(path.read_text()) for name, path in wanted.items()}
+    for name, entries in lists.items():
+        for i, entry in enumerate(entries):
+            v = entry.get("sources")
+            if not isinstance(v, list) or not all(isinstance(s, str) and _SOURCE.fullmatch(s) for s in v):
+                raise SystemExit(f"{name}[{i}]: every testlist entry needs a 'sources' list of "
+                                 f"'<org>/<model>/<role>' strings (empty for a shape from no model)")
+            if "name" in entry:
+                raise SystemExit(f"{name}[{i}]: 'name' is gone; the role is the last part of each source")
+    return lists
 
 
 def _backend_supported_ops(platform: str, backends: list[str], strict: bool = False) -> dict[str, set[str]]:
@@ -127,12 +140,6 @@ def _resolve_world_size(platform: str) -> int:
     ws = os.environ.get("WORLD_SIZE")
     if ws:
         return int(ws)
-    if platform == "tpu":
-        try:
-            import jax
-            return jax.device_count()
-        except Exception:
-            pass
     return 1
 
 
@@ -170,18 +177,6 @@ def main() -> int:
         args.testlist_dir,
     )
 
-    # submit_run.py fans out one job per (ep, routed_tp, shared_tp) MoE combo
-    # plus one job per ws for non-MoE ops, since sglang's group state is
-    # process-global. OPERATORX_MOE_PARALLELISM scopes a job to one combo;
-    # absence scopes it to non-MoE ops only.
-    moe_par_env = os.environ.get("OPERATORX_MOE_PARALLELISM")
-    moe_filter: tuple[int, int, int] | None = None
-    if moe_par_env:
-        parts = moe_par_env.split(":")
-        if len(parts) != 3:
-            raise SystemExit(f"OPERATORX_MOE_PARALLELISM must be ep:routed_tp:shared_tp; got {moe_par_env!r}")
-        moe_filter = (int(parts[0]), int(parts[1]), int(parts[2]))
-
     # Load runner
     runner_mod = importlib.import_module(f"operatorx.runners.{platform}.runner")
 
@@ -199,27 +194,12 @@ def main() -> int:
                     continue
             elif int(shape_ws) != ws:
                 continue
-            # Combo job (moe_filter set): only moe_forward shapes matching the
-            # parallelism triple. Non-combo job: everything except moe_forward.
-            if moe_filter is not None:
-                if shape["type"] != "moe_forward":
-                    continue
-                a = shape["args"]
-                triple = (
-                    a.get("expert_parallel_size", 1),
-                    a.get("routed_tensor_parallel_size", 1),
-                    a.get("shared_tensor_parallel_size", 1),
-                )
-                if triple != moe_filter:
-                    continue
-            elif shape["type"] == "moe_forward":
-                continue
             for backend in backends:
                 if not args.strict and shape["type"] not in backend_ops.get(backend, set()):
                     continue  # Strict CI retains unsupported backend/operator pairs.
                 entries.append((
                     Op(type=shape["type"], args=shape["args"], backend=backend,
-                       name=shape.get("name")),
+                       sources=shape["sources"]),
                     tl_name,
                 ))
 
@@ -237,6 +217,8 @@ def main() -> int:
         try:
             if op.type not in backend_ops.get(op.backend, set()):
                 raise UnsupportedOpError(f"{platform}/{op.backend} has no implementation for {op.type}")
+            # a case the op's schema rejects is a bad testlist entry: an error, never measured
+            op_registry.validate(op)
             r = runner_mod.run(op)
             results.append(Result(op=op, metrics=r.metrics, status="ok",
                                   testlist=tl))
@@ -265,7 +247,8 @@ def main() -> int:
                 run.finished_at = utc_now_iso()
                 write_run_result(out_path, run, results)
             shape_str = " ".join(
-                f"{k}={v}" for k, v in op.args.items() if not k.startswith("dtype")
+                f"{k}={json.dumps(v, separators=(',', ':')) if isinstance(v, (dict, list)) else v}"
+                for k, v in op.args.items() if not k.startswith("dtype")
             )
             print(f"[ws={ws}] {tl:12} {status:11} {op.type:18} {op.backend:10}  "
                   f"{latency_str}  wall={wall_s:6.1f}s   {shape_str}", flush=True)
@@ -286,7 +269,7 @@ def main() -> int:
         write_run_result(out_path, run, results)
         print(f"\n[run_smoke] {counts} -> {out_path}")
 
-    # Multi-rank cleanup (torch.distributed used by NVIDIA + Trainium)
+    # Multi-rank cleanup (torch.distributed)
     if ws > 1:
         try:
             import torch.distributed as dist

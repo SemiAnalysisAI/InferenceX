@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any, Mapping
@@ -10,13 +11,16 @@ class Op:
     type: str
     args: Mapping[str, Any]
     backend: str
-    # Optional preset name for shapes that match a real model
-    # (e.g. "dsv3", "llama3-8b"). Equality/hash ignore this — same
-    # (type, args, backend) is the same op regardless of label.
-    name: str | None = None
+    # Where the case comes from: one "<checkpoint>/<role>" per layer that runs this op,
+    # e.g. "deepseek-ai/DeepSeek-V4-Pro/q_a_proj" (a checkpoint id is "org/model", so the
+    # role is what follows the last "/"). A shape shared by several models, or by several
+    # roles in one, lists every pair; a shape from no model lists none. Equality/hash
+    # ignore it - the same (type, args, backend) is the same op whichever model it came from.
+    sources: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "args", MappingProxyType(dict(self.args)))
+        object.__setattr__(self, "sources", tuple(self.sources))
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Op):
@@ -28,7 +32,8 @@ class Op:
         )
 
     def __hash__(self) -> int:
-        return hash((self.type, tuple(sorted(self.args.items())), self.backend))
+        # args may nest (e.g. gemm operand descriptors); canonical JSON is hashable.
+        return hash((self.type, json.dumps(dict(self.args), sort_keys=True), self.backend))
 
 
 @dataclass(frozen=True)

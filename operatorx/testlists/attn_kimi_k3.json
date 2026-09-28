@@ -1,0 +1,2360 @@
+[
+ {
+  "type": "mla",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "q_lora_rank": 1536,
+   "kv_lora_rank": 512,
+   "nope": 128,
+   "rope_dim": 64,
+   "v": 128,
+   "rope": false,
+   "gate": true,
+   "kv_cache_dtype": "fp8",
+   "batch": {
+    "groups": [
+     {
+      "count": 1,
+      "q": 1,
+      "ctx": 1024
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "mla",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "q_lora_rank": 1536,
+   "kv_lora_rank": 512,
+   "nope": 128,
+   "rope_dim": 64,
+   "v": 128,
+   "rope": false,
+   "gate": true,
+   "kv_cache_dtype": "fp8",
+   "batch": {
+    "groups": [
+     {
+      "count": 1,
+      "q": 1,
+      "ctx": 4096
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "mla",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "q_lora_rank": 1536,
+   "kv_lora_rank": 512,
+   "nope": 128,
+   "rope_dim": 64,
+   "v": 128,
+   "rope": false,
+   "gate": true,
+   "kv_cache_dtype": "fp8",
+   "batch": {
+    "groups": [
+     {
+      "count": 1,
+      "q": 1,
+      "ctx": 16384
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "mla",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "q_lora_rank": 1536,
+   "kv_lora_rank": 512,
+   "nope": 128,
+   "rope_dim": 64,
+   "v": 128,
+   "rope": false,
+   "gate": true,
+   "kv_cache_dtype": "fp8",
+   "batch": {
+    "groups": [
+     {
+      "count": 1,
+      "q": 1,
+      "ctx": 65536
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "mla",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "q_lora_rank": 1536,
+   "kv_lora_rank": 512,
+   "nope": 128,
+   "rope_dim": 64,
+   "v": 128,
+   "rope": false,
+   "gate": true,
+   "kv_cache_dtype": "fp8",
+   "batch": {
+    "groups": [
+     {
+      "count": 1,
+      "q": 1,
+      "ctx": 131072
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "mla",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "q_lora_rank": 1536,
+   "kv_lora_rank": 512,
+   "nope": 128,
+   "rope_dim": 64,
+   "v": 128,
+   "rope": false,
+   "gate": true,
+   "kv_cache_dtype": "fp8",
+   "batch": {
+    "groups": [
+     {
+      "count": 4,
+      "q": 1,
+      "ctx": 1024
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "mla",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "q_lora_rank": 1536,
+   "kv_lora_rank": 512,
+   "nope": 128,
+   "rope_dim": 64,
+   "v": 128,
+   "rope": false,
+   "gate": true,
+   "kv_cache_dtype": "fp8",
+   "batch": {
+    "groups": [
+     {
+      "count": 4,
+      "q": 1,
+      "ctx": 4096
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "mla",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "q_lora_rank": 1536,
+   "kv_lora_rank": 512,
+   "nope": 128,
+   "rope_dim": 64,
+   "v": 128,
+   "rope": false,
+   "gate": true,
+   "kv_cache_dtype": "fp8",
+   "batch": {
+    "groups": [
+     {
+      "count": 4,
+      "q": 1,
+      "ctx": 16384
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "mla",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "q_lora_rank": 1536,
+   "kv_lora_rank": 512,
+   "nope": 128,
+   "rope_dim": 64,
+   "v": 128,
+   "rope": false,
+   "gate": true,
+   "kv_cache_dtype": "fp8",
+   "batch": {
+    "groups": [
+     {
+      "count": 4,
+      "q": 1,
+      "ctx": 65536
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "mla",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "q_lora_rank": 1536,
+   "kv_lora_rank": 512,
+   "nope": 128,
+   "rope_dim": 64,
+   "v": 128,
+   "rope": false,
+   "gate": true,
+   "kv_cache_dtype": "fp8",
+   "batch": {
+    "groups": [
+     {
+      "count": 4,
+      "q": 1,
+      "ctx": 131072
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "mla",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "q_lora_rank": 1536,
+   "kv_lora_rank": 512,
+   "nope": 128,
+   "rope_dim": 64,
+   "v": 128,
+   "rope": false,
+   "gate": true,
+   "kv_cache_dtype": "fp8",
+   "batch": {
+    "groups": [
+     {
+      "count": 16,
+      "q": 1,
+      "ctx": 1024
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "mla",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "q_lora_rank": 1536,
+   "kv_lora_rank": 512,
+   "nope": 128,
+   "rope_dim": 64,
+   "v": 128,
+   "rope": false,
+   "gate": true,
+   "kv_cache_dtype": "fp8",
+   "batch": {
+    "groups": [
+     {
+      "count": 16,
+      "q": 1,
+      "ctx": 4096
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "mla",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "q_lora_rank": 1536,
+   "kv_lora_rank": 512,
+   "nope": 128,
+   "rope_dim": 64,
+   "v": 128,
+   "rope": false,
+   "gate": true,
+   "kv_cache_dtype": "fp8",
+   "batch": {
+    "groups": [
+     {
+      "count": 16,
+      "q": 1,
+      "ctx": 16384
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "mla",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "q_lora_rank": 1536,
+   "kv_lora_rank": 512,
+   "nope": 128,
+   "rope_dim": 64,
+   "v": 128,
+   "rope": false,
+   "gate": true,
+   "kv_cache_dtype": "fp8",
+   "batch": {
+    "groups": [
+     {
+      "count": 16,
+      "q": 1,
+      "ctx": 65536
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "mla",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "q_lora_rank": 1536,
+   "kv_lora_rank": 512,
+   "nope": 128,
+   "rope_dim": 64,
+   "v": 128,
+   "rope": false,
+   "gate": true,
+   "kv_cache_dtype": "fp8",
+   "batch": {
+    "groups": [
+     {
+      "count": 16,
+      "q": 1,
+      "ctx": 131072
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "mla",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "q_lora_rank": 1536,
+   "kv_lora_rank": 512,
+   "nope": 128,
+   "rope_dim": 64,
+   "v": 128,
+   "rope": false,
+   "gate": true,
+   "kv_cache_dtype": "fp8",
+   "batch": {
+    "groups": [
+     {
+      "count": 64,
+      "q": 1,
+      "ctx": 1024
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "mla",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "q_lora_rank": 1536,
+   "kv_lora_rank": 512,
+   "nope": 128,
+   "rope_dim": 64,
+   "v": 128,
+   "rope": false,
+   "gate": true,
+   "kv_cache_dtype": "fp8",
+   "batch": {
+    "groups": [
+     {
+      "count": 64,
+      "q": 1,
+      "ctx": 4096
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "mla",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "q_lora_rank": 1536,
+   "kv_lora_rank": 512,
+   "nope": 128,
+   "rope_dim": 64,
+   "v": 128,
+   "rope": false,
+   "gate": true,
+   "kv_cache_dtype": "fp8",
+   "batch": {
+    "groups": [
+     {
+      "count": 64,
+      "q": 1,
+      "ctx": 16384
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "mla",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "q_lora_rank": 1536,
+   "kv_lora_rank": 512,
+   "nope": 128,
+   "rope_dim": 64,
+   "v": 128,
+   "rope": false,
+   "gate": true,
+   "kv_cache_dtype": "fp8",
+   "batch": {
+    "groups": [
+     {
+      "count": 64,
+      "q": 1,
+      "ctx": 65536
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "mla",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "q_lora_rank": 1536,
+   "kv_lora_rank": 512,
+   "nope": 128,
+   "rope_dim": 64,
+   "v": 128,
+   "rope": false,
+   "gate": true,
+   "kv_cache_dtype": "fp8",
+   "batch": {
+    "groups": [
+     {
+      "count": 64,
+      "q": 1,
+      "ctx": 131072
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "mla",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "q_lora_rank": 1536,
+   "kv_lora_rank": 512,
+   "nope": 128,
+   "rope_dim": 64,
+   "v": 128,
+   "rope": false,
+   "gate": true,
+   "kv_cache_dtype": "fp8",
+   "batch": {
+    "groups": [
+     {
+      "count": 256,
+      "q": 1,
+      "ctx": 1024
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "mla",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "q_lora_rank": 1536,
+   "kv_lora_rank": 512,
+   "nope": 128,
+   "rope_dim": 64,
+   "v": 128,
+   "rope": false,
+   "gate": true,
+   "kv_cache_dtype": "fp8",
+   "batch": {
+    "groups": [
+     {
+      "count": 256,
+      "q": 1,
+      "ctx": 4096
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "mla",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "q_lora_rank": 1536,
+   "kv_lora_rank": 512,
+   "nope": 128,
+   "rope_dim": 64,
+   "v": 128,
+   "rope": false,
+   "gate": true,
+   "kv_cache_dtype": "fp8",
+   "batch": {
+    "groups": [
+     {
+      "count": 256,
+      "q": 1,
+      "ctx": 16384
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "mla",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "q_lora_rank": 1536,
+   "kv_lora_rank": 512,
+   "nope": 128,
+   "rope_dim": 64,
+   "v": 128,
+   "rope": false,
+   "gate": true,
+   "kv_cache_dtype": "fp8",
+   "batch": {
+    "groups": [
+     {
+      "count": 256,
+      "q": 1,
+      "ctx": 65536
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "mla",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "q_lora_rank": 1536,
+   "kv_lora_rank": 512,
+   "nope": 128,
+   "rope_dim": 64,
+   "v": 128,
+   "rope": false,
+   "gate": true,
+   "kv_cache_dtype": "fp8",
+   "batch": {
+    "groups": [
+     {
+      "count": 256,
+      "q": 1,
+      "ctx": 131072
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "mla",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "q_lora_rank": 1536,
+   "kv_lora_rank": 512,
+   "nope": 128,
+   "rope_dim": 64,
+   "v": 128,
+   "rope": false,
+   "gate": true,
+   "kv_cache_dtype": "fp8",
+   "batch": {
+    "groups": [
+     {
+      "count": 1,
+      "q": 1024,
+      "ctx": 0
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "mla",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "q_lora_rank": 1536,
+   "kv_lora_rank": 512,
+   "nope": 128,
+   "rope_dim": 64,
+   "v": 128,
+   "rope": false,
+   "gate": true,
+   "kv_cache_dtype": "fp8",
+   "batch": {
+    "groups": [
+     {
+      "count": 1,
+      "q": 4096,
+      "ctx": 0
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "mla",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "q_lora_rank": 1536,
+   "kv_lora_rank": 512,
+   "nope": 128,
+   "rope_dim": 64,
+   "v": 128,
+   "rope": false,
+   "gate": true,
+   "kv_cache_dtype": "fp8",
+   "batch": {
+    "groups": [
+     {
+      "count": 1,
+      "q": 16384,
+      "ctx": 0
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "mla",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "q_lora_rank": 1536,
+   "kv_lora_rank": 512,
+   "nope": 128,
+   "rope_dim": 64,
+   "v": 128,
+   "rope": false,
+   "gate": true,
+   "kv_cache_dtype": "fp8",
+   "batch": {
+    "groups": [
+     {
+      "count": 1,
+      "q": 32768,
+      "ctx": 0
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "mla",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "q_lora_rank": 1536,
+   "kv_lora_rank": 512,
+   "nope": 128,
+   "rope_dim": 64,
+   "v": 128,
+   "rope": false,
+   "gate": true,
+   "kv_cache_dtype": "fp8",
+   "batch": {
+    "groups": [
+     {
+      "count": 1,
+      "q": 8192,
+      "ctx": 8192
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "mla",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "q_lora_rank": 1536,
+   "kv_lora_rank": 512,
+   "nope": 128,
+   "rope_dim": 64,
+   "v": 128,
+   "rope": false,
+   "gate": true,
+   "kv_cache_dtype": "fp8",
+   "batch": {
+    "groups": [
+     {
+      "count": 1,
+      "q": 8192,
+      "ctx": 32768
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "mla",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "q_lora_rank": 1536,
+   "kv_lora_rank": 512,
+   "nope": 128,
+   "rope_dim": 64,
+   "v": 128,
+   "rope": false,
+   "gate": true,
+   "kv_cache_dtype": "fp8",
+   "batch": {
+    "groups": [
+     {
+      "count": 1,
+      "q": 8192,
+      "ctx": 131072
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "mla",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "q_lora_rank": 1536,
+   "kv_lora_rank": 512,
+   "nope": 128,
+   "rope_dim": 64,
+   "v": 128,
+   "rope": false,
+   "gate": true,
+   "kv_cache_dtype": "fp8",
+   "batch": {
+    "groups": [
+     {
+      "count": 1,
+      "q": 8192,
+      "ctx": 8192
+     },
+     {
+      "count": 64,
+      "q": 1,
+      "ctx": 8192
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "fp32",
+   "batch": {
+    "groups": [
+     {
+      "count": 1,
+      "q": 1,
+      "ctx": 1024
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "fp32",
+   "batch": {
+    "groups": [
+     {
+      "count": 1,
+      "q": 1,
+      "ctx": 4096
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "fp32",
+   "batch": {
+    "groups": [
+     {
+      "count": 1,
+      "q": 1,
+      "ctx": 16384
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "fp32",
+   "batch": {
+    "groups": [
+     {
+      "count": 1,
+      "q": 1,
+      "ctx": 65536
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "fp32",
+   "batch": {
+    "groups": [
+     {
+      "count": 1,
+      "q": 1,
+      "ctx": 131072
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "fp32",
+   "batch": {
+    "groups": [
+     {
+      "count": 4,
+      "q": 1,
+      "ctx": 1024
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "fp32",
+   "batch": {
+    "groups": [
+     {
+      "count": 4,
+      "q": 1,
+      "ctx": 4096
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "fp32",
+   "batch": {
+    "groups": [
+     {
+      "count": 4,
+      "q": 1,
+      "ctx": 16384
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "fp32",
+   "batch": {
+    "groups": [
+     {
+      "count": 4,
+      "q": 1,
+      "ctx": 65536
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "fp32",
+   "batch": {
+    "groups": [
+     {
+      "count": 4,
+      "q": 1,
+      "ctx": 131072
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "fp32",
+   "batch": {
+    "groups": [
+     {
+      "count": 16,
+      "q": 1,
+      "ctx": 1024
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "fp32",
+   "batch": {
+    "groups": [
+     {
+      "count": 16,
+      "q": 1,
+      "ctx": 4096
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "fp32",
+   "batch": {
+    "groups": [
+     {
+      "count": 16,
+      "q": 1,
+      "ctx": 16384
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "fp32",
+   "batch": {
+    "groups": [
+     {
+      "count": 16,
+      "q": 1,
+      "ctx": 65536
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "fp32",
+   "batch": {
+    "groups": [
+     {
+      "count": 16,
+      "q": 1,
+      "ctx": 131072
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "fp32",
+   "batch": {
+    "groups": [
+     {
+      "count": 64,
+      "q": 1,
+      "ctx": 1024
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "fp32",
+   "batch": {
+    "groups": [
+     {
+      "count": 64,
+      "q": 1,
+      "ctx": 4096
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "fp32",
+   "batch": {
+    "groups": [
+     {
+      "count": 64,
+      "q": 1,
+      "ctx": 16384
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "fp32",
+   "batch": {
+    "groups": [
+     {
+      "count": 64,
+      "q": 1,
+      "ctx": 65536
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "fp32",
+   "batch": {
+    "groups": [
+     {
+      "count": 64,
+      "q": 1,
+      "ctx": 131072
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "fp32",
+   "batch": {
+    "groups": [
+     {
+      "count": 256,
+      "q": 1,
+      "ctx": 1024
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "fp32",
+   "batch": {
+    "groups": [
+     {
+      "count": 256,
+      "q": 1,
+      "ctx": 4096
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "fp32",
+   "batch": {
+    "groups": [
+     {
+      "count": 256,
+      "q": 1,
+      "ctx": 16384
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "fp32",
+   "batch": {
+    "groups": [
+     {
+      "count": 256,
+      "q": 1,
+      "ctx": 65536
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "fp32",
+   "batch": {
+    "groups": [
+     {
+      "count": 256,
+      "q": 1,
+      "ctx": 131072
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "fp32",
+   "batch": {
+    "groups": [
+     {
+      "count": 1,
+      "q": 1024,
+      "ctx": 0
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "fp32",
+   "batch": {
+    "groups": [
+     {
+      "count": 1,
+      "q": 4096,
+      "ctx": 0
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "fp32",
+   "batch": {
+    "groups": [
+     {
+      "count": 1,
+      "q": 16384,
+      "ctx": 0
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "fp32",
+   "batch": {
+    "groups": [
+     {
+      "count": 1,
+      "q": 32768,
+      "ctx": 0
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "fp32",
+   "batch": {
+    "groups": [
+     {
+      "count": 1,
+      "q": 8192,
+      "ctx": 8192
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "fp32",
+   "batch": {
+    "groups": [
+     {
+      "count": 1,
+      "q": 8192,
+      "ctx": 32768
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "fp32",
+   "batch": {
+    "groups": [
+     {
+      "count": 1,
+      "q": 8192,
+      "ctx": 131072
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "fp32",
+   "batch": {
+    "groups": [
+     {
+      "count": 1,
+      "q": 8192,
+      "ctx": 8192
+     },
+     {
+      "count": 64,
+      "q": 1,
+      "ctx": 8192
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "bf16",
+   "batch": {
+    "groups": [
+     {
+      "count": 1,
+      "q": 1,
+      "ctx": 1024
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "bf16",
+   "batch": {
+    "groups": [
+     {
+      "count": 1,
+      "q": 1,
+      "ctx": 4096
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "bf16",
+   "batch": {
+    "groups": [
+     {
+      "count": 1,
+      "q": 1,
+      "ctx": 16384
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "bf16",
+   "batch": {
+    "groups": [
+     {
+      "count": 1,
+      "q": 1,
+      "ctx": 65536
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "bf16",
+   "batch": {
+    "groups": [
+     {
+      "count": 1,
+      "q": 1,
+      "ctx": 131072
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "bf16",
+   "batch": {
+    "groups": [
+     {
+      "count": 4,
+      "q": 1,
+      "ctx": 1024
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "bf16",
+   "batch": {
+    "groups": [
+     {
+      "count": 4,
+      "q": 1,
+      "ctx": 4096
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "bf16",
+   "batch": {
+    "groups": [
+     {
+      "count": 4,
+      "q": 1,
+      "ctx": 16384
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "bf16",
+   "batch": {
+    "groups": [
+     {
+      "count": 4,
+      "q": 1,
+      "ctx": 65536
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "bf16",
+   "batch": {
+    "groups": [
+     {
+      "count": 4,
+      "q": 1,
+      "ctx": 131072
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "bf16",
+   "batch": {
+    "groups": [
+     {
+      "count": 16,
+      "q": 1,
+      "ctx": 1024
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "bf16",
+   "batch": {
+    "groups": [
+     {
+      "count": 16,
+      "q": 1,
+      "ctx": 4096
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "bf16",
+   "batch": {
+    "groups": [
+     {
+      "count": 16,
+      "q": 1,
+      "ctx": 16384
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "bf16",
+   "batch": {
+    "groups": [
+     {
+      "count": 16,
+      "q": 1,
+      "ctx": 65536
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "bf16",
+   "batch": {
+    "groups": [
+     {
+      "count": 16,
+      "q": 1,
+      "ctx": 131072
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "bf16",
+   "batch": {
+    "groups": [
+     {
+      "count": 64,
+      "q": 1,
+      "ctx": 1024
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "bf16",
+   "batch": {
+    "groups": [
+     {
+      "count": 64,
+      "q": 1,
+      "ctx": 4096
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "bf16",
+   "batch": {
+    "groups": [
+     {
+      "count": 64,
+      "q": 1,
+      "ctx": 16384
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "bf16",
+   "batch": {
+    "groups": [
+     {
+      "count": 64,
+      "q": 1,
+      "ctx": 65536
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "bf16",
+   "batch": {
+    "groups": [
+     {
+      "count": 64,
+      "q": 1,
+      "ctx": 131072
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "bf16",
+   "batch": {
+    "groups": [
+     {
+      "count": 256,
+      "q": 1,
+      "ctx": 1024
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "bf16",
+   "batch": {
+    "groups": [
+     {
+      "count": 256,
+      "q": 1,
+      "ctx": 4096
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "bf16",
+   "batch": {
+    "groups": [
+     {
+      "count": 256,
+      "q": 1,
+      "ctx": 16384
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "bf16",
+   "batch": {
+    "groups": [
+     {
+      "count": 256,
+      "q": 1,
+      "ctx": 65536
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "bf16",
+   "batch": {
+    "groups": [
+     {
+      "count": 256,
+      "q": 1,
+      "ctx": 131072
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "bf16",
+   "batch": {
+    "groups": [
+     {
+      "count": 1,
+      "q": 1024,
+      "ctx": 0
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "bf16",
+   "batch": {
+    "groups": [
+     {
+      "count": 1,
+      "q": 4096,
+      "ctx": 0
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "bf16",
+   "batch": {
+    "groups": [
+     {
+      "count": 1,
+      "q": 16384,
+      "ctx": 0
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "bf16",
+   "batch": {
+    "groups": [
+     {
+      "count": 1,
+      "q": 32768,
+      "ctx": 0
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "bf16",
+   "batch": {
+    "groups": [
+     {
+      "count": 1,
+      "q": 8192,
+      "ctx": 8192
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "bf16",
+   "batch": {
+    "groups": [
+     {
+      "count": 1,
+      "q": 8192,
+      "ctx": 32768
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "bf16",
+   "batch": {
+    "groups": [
+     {
+      "count": 1,
+      "q": 8192,
+      "ctx": 131072
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ },
+ {
+  "type": "kda",
+  "args": {
+   "hidden": 7168,
+   "heads": 96,
+   "head_dim": 128,
+   "conv_kernel": 4,
+   "state_dtype": "bf16",
+   "batch": {
+    "groups": [
+     {
+      "count": 1,
+      "q": 8192,
+      "ctx": 8192
+     },
+     {
+      "count": 64,
+      "q": 1,
+      "ctx": 8192
+     }
+    ]
+   }
+  },
+  "sources": [
+   "moonshotai/Kimi-K3/self_attn"
+  ]
+ }
+]

@@ -1,5 +1,7 @@
-"""vLLM routed expert kernels on CUDA."""
+"""Dense GEMM, MoE and attention modules through vLLM's own layers and kernel selection."""
+from operatorx.runners.common.vllm import attention, linear, moe
+from operatorx.runners.common.vllm.linear import versions
 
-from operatorx.runners.moe import IMPLS, versions
+IMPLS = [*linear.IMPLS, *moe.IMPLS, *attention.IMPLS]
 
 __all__ = ["IMPLS", "versions"]

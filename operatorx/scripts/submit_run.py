@@ -41,8 +41,6 @@ WORLD_SIZES = [1, 2, 4, 8]  # ws>8 disabled: multi-node NCCL IB bring-up hangs o
 DEFAULT_CLUSTER = {
     "nvidia": "b200_dgx_8x",
     "amd":    "mi355x_8x",
-    "tpu":    "v6e_4x",
-    "trainium": "trn3_16x",
 }
 
 
@@ -85,36 +83,22 @@ def _csv(s: str | None) -> list[str]:
     return [x.strip() for x in s.split(",") if x.strip()]
 
 
-def _scan_testlists(testlist_names: list[str]) -> tuple[set[tuple[int, int, int, int]], set[int]]:
-    """Walks selected testlists. Returns
-       moe_combos = {(world_size, ep, routed_tp, shared_tp)} for moe_forward shapes,
-       non_moe_ws = {world_size} that has at least one non-moe_forward shape."""
+def _scan_testlists(testlist_names: list[str]) -> set[int]:
+    """The world sizes the selected testlists' shapes ask for."""
     tl_dir = PROJECT_ROOT / "testlists"
     available = {p.stem: p for p in tl_dir.glob("*.json")}
     wanted = testlist_names or sorted(available)
-    moe_combos: set[tuple[int, int, int, int]] = set()
-    non_moe_ws: set[int] = set()
+    world_sizes: set[int] = set()
     for name in wanted:
         path = available.get(name)
         if path is None:
             continue
         for shape in json.loads(path.read_text()):
-            a = shape.get("args", {})
-            ws = int(a.get("world_size", 1))
-            if shape.get("type") == "moe_forward":
-                moe_combos.add((
-                    ws,
-                    int(a.get("expert_parallel_size", 1)),
-                    int(a.get("routed_tensor_parallel_size", 1)),
-                    int(a.get("shared_tensor_parallel_size", 1)),
-                ))
-            else:
-                non_moe_ws.add(ws)
-    return moe_combos, non_moe_ws
+            world_sizes.add(int(shape.get("args", {}).get("world_size", 1)))
+    return world_sizes
 
 
-def submit(image: str, backends: list[str], world_size: int, platform: str, cluster: str,
-           moe_parallelism: tuple[int, int, int] | None = None) -> int:
+def submit(image: str, backends: list[str], world_size: int, platform: str, cluster: str) -> int:
     sqsh = SQUASH_DIR / f"{safe_name(image)}.sqsh"
     if not sqsh.exists():
         print(f"[error] missing squash file: {sqsh}")
@@ -143,7 +127,6 @@ def submit(image: str, backends: list[str], world_size: int, platform: str, clus
         "export MASTER_PORT=29500",
         f"OPERATORX_BACKENDS={backend_list} OPERATORX_CLUSTER={cluster}"
         + (f" OPERATORX_TESTLISTS={os.environ['OPERATORX_TESTLISTS']}" if os.environ.get("OPERATORX_TESTLISTS") else "")
-        + (f" OPERATORX_MOE_PARALLELISM={moe_parallelism[0]}:{moe_parallelism[1]}:{moe_parallelism[2]}" if moe_parallelism else "")
         + " python -m operatorx",
     ])
 
@@ -156,8 +139,6 @@ def submit(image: str, backends: list[str], world_size: int, platform: str, clus
     log_dir = project / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     tag = f"ws{world_size}"
-    if moe_parallelism:
-        tag += f"-moe{moe_parallelism[0]}_{moe_parallelism[1]}_{moe_parallelism[2]}"
     out = log_dir / f"opx-{job_name}-{platform}-{tag}-{'_'.join(backends)}-%j.out"
     err = log_dir / f"opx-{job_name}-{platform}-{tag}-{'_'.join(backends)}-%j.err"
     cmd = ["sbatch",
@@ -180,8 +161,6 @@ def submit(image: str, backends: list[str], world_size: int, platform: str, clus
     print(f"  image:      {image}")
     print(f"  backends:   {backends}")
     print(f"  world_size: {world_size} ({nodes} node(s) x {tpn} task(s))")
-    if moe_parallelism:
-        print(f"  moe parallelism: ep={moe_parallelism[0]} routed_tp={moe_parallelism[1]} shared_tp={moe_parallelism[2]}")
     return subprocess.run(cmd).returncode
 
 
@@ -196,21 +175,13 @@ def main(argv: list[str]) -> int:
         print(f"no entries for platform={platform!r} in {MANIFEST}")
         return 1
     testlist_names = _csv(os.environ.get("OPERATORX_TESTLISTS"))
-    moe_combos, non_moe_ws = _scan_testlists(testlist_names)
-    moe_combos = {c for c in moe_combos if c[0] in WORLD_SIZES}
-    non_moe_ws = {ws for ws in non_moe_ws if ws in WORLD_SIZES}
+    world_sizes = {ws for ws in _scan_testlists(testlist_names) if ws in WORLD_SIZES}
     print(f"{platform}: {len(groups)} container(s) on cluster={cluster}; "
-          f"{len(moe_combos)} MoE combos, {len(non_moe_ws)} non-MoE ws -> "
-          f"{len(groups) * (len(moe_combos) + len(non_moe_ws))} job(s)")
+          f"{len(world_sizes)} world size(s) -> {len(groups) * len(world_sizes)} job(s)")
     print()
     rc = 0
     for image, backends in sorted(groups.items()):
-        for ws, ep, r_tp, s_tp in sorted(moe_combos):
-            if submit(image, sorted(backends), ws, platform, cluster,
-                      moe_parallelism=(ep, r_tp, s_tp)) != 0:
-                rc = 1
-            print()
-        for ws in sorted(non_moe_ws):
+        for ws in sorted(world_sizes):
             if submit(image, sorted(backends), ws, platform, cluster) != 0:
                 rc = 1
             print()

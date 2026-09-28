@@ -1,8 +1,16 @@
-# operatorx - Experimental (Beta)
+# operatorx
 
 Multi-platform inference operator benchmark suite. Times one op at a time
-(gemm, attention, moe, collectives, ...) on NVIDIA / AMD / TPU / Trainium and
+(gemm, moe, and attention modules) on NVIDIA and AMD and
 emits one JSON per run under `results/<platform>/<cluster>/`.
+
+Attention ops are whole modules, one op type each: `mla`, `mla_dsa`, `dsv4_attn`,
+`gqa`, `qsa`, `gdn`, `kda` (`ops/attention.py` lists what each one times). The vLLM
+backend builds a one- to six-layer model of the checkpoint family that has the module
+(`runners/common/vllm/attention_models.json`) with dummy weights and schedules the op's
+batch through vLLM's own model runner, so vLLM picks the attention backend, KV cache
+layout and CUDA-graph use as it does when serving. Dispatch `attn_*` testlists on their
+own: each builds its own in-process vLLM engine.
 
 See `CLUSTERS.md` for how to reach each cluster and the per-host quirks.
 
@@ -12,13 +20,11 @@ See `CLUSTERS.md` for how to reach each cluster and the per-host quirks.
 `(container_image, world_size)` pair to your local SLURM. Each job runs
 `python -m operatorx` inside the container.
 
-The examples assume the repository is checked out at `$HOME/inferencex`.
-
 ### b200 (DGX-style, 8x B200 SXM)
 
 ```bash
 ssh tailscale-b200
-cd "$HOME/inferencex/operatorx"
+cd /home/sa-shared/harrison/oss-inference-tracker/operatorx
 python3 scripts/submit_run.py nvidia
 ```
 
@@ -27,42 +33,20 @@ Defaults that apply: `OPERATORX_CLUSTER=b200_dgx_8x`,
 
 ### b300 (HGX-style, 8x B300)
 
-The b300 cluster needs a non-default partition + account + qos, has its own
-squash dir, and DeepEP has known IBGDA issues here so we exclude it.
-This example uses container images stored in `$HOME/containers`.
+The b300 cluster needs a non-default partition + account + qos and has its own
+squash dir.
 
 ```bash
 ssh tailscale-b300
-cd "$HOME/inferencex/operatorx"
+cd /data/home/sa-shared/harrison/oss-inference-tracker/operatorx
 OPERATORX_CLUSTER=b300_hgx_8x \
 OPERATORX_PARTITION=batch_1 \
 OPERATORX_ACCOUNT=benchmark \
 OPERATORX_QOS=batch_1_qos \
-OPERATORX_SQUASH_DIR="$HOME/containers" \
-OPERATORX_BACKENDS=torch,deepgemm,flashinfer,sglang \
+OPERATORX_SQUASH_DIR=/data/home/sa-shared/harrison/containers \
+OPERATORX_BACKENDS=vllm \
 python3 scripts/submit_run.py nvidia
 ```
-
-### TPU / Trainium
-
-These hosts have no SLURM, so `submit_run.py` (which submits `sbatch` jobs)
-does not apply. Run the benchmark directly on the VM or instance:
-
-```bash
-OPERATORX_CLUSTER=v6e_4x   python -m operatorx   # TPU     (default tpu cluster)
-OPERATORX_CLUSTER=trn3_16x python -m operatorx   # Trainium (default trainium cluster)
-```
-
-The TPU `maxtext` backend depends on Google's MaxText library. Install it
-once per TPU VM (the `jax` backend works without it):
-
-```bash
-git clone https://github.com/AI-Hypercomputer/maxtext ~/maxtext
-pip install -e ~/maxtext
-```
-
-If MaxText isn't installed, `moe_forward` on TPU emits `unsupported` rows
-rather than running our old single-device dense fallback.
 
 ## Env vars honored by `submit_run.py`
 
