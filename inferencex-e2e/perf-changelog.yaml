@@ -9024,3 +9024,15 @@
   description:
     - "Pin B200 DeepSeek-V4.1-Flash vLLM to nightly ddd6fbca with FlashInfer sparse attention, MXFP4 indexer KV, sparse logits, fp8 KV cache, and a 7200 s readiness timeout."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3459
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-sglang-agentic-agg
+    - dsv4-fp4-gb300-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh DeepSeek-V4-Pro-0813 GB300 Dynamo+SGLang AgentX on nightly-dev-20260916-c9a8fba9 and Dynamo 1.5.0.dev20260914. Keep TP8 c1 and TP4 c4 aggregate points, and DEP8 prefill / DEP16 decode points at c64, c240, c480, c960, c1440 and c1920."
+    - "Replace the long-TTFT 1P1D c480 point with 1P1D c240 and 2P1D c480, retain DSpark K=6 on both serving stages, and use the current SGLang CUDA graph flags. Adapt the recipes and registry to the shared variant layout under inferencex-e2e/."
+    - "将 DeepSeek-V4-Pro-0813 GB300 Dynamo+SGLang AgentX 更新至 nightly-dev-20260916-c9a8fba9 和 Dynamo 1.5.0.dev20260914。聚合配置保留 TP8 c1 与 TP4 c4；DEP8 预填充、DEP16 解码配置覆盖 c64、c240、c480、c960、c1440 和 c1920。"
+    - "将首 token 延迟较长的 1P1D c480 替换为 1P1D c240 与 2P1D c480，在预填充和解码阶段均使用 DSpark K=6，并采用当前的 SGLang CUDA graph 参数。配方和注册项适配 inferencex-e2e/ 下的共享变体布局。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3218

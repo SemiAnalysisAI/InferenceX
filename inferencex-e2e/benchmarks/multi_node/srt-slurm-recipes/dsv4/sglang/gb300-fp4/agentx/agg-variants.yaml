@@ -13,11 +13,11 @@ base:
     model:
       repo: "deepseek-ai/DeepSeek-V4-Pro-0813"
     container:
-      image: "lmsysorg/sglang:v0.5.19-cu130@sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9"
+      image: "lmsysorg/sglang:nightly-dev-20260916-c9a8fba9"
   dynamo:
     install: true
     source:
-      wheel: "1.5.0.dev20260910"
+      wheel: "1.5.0.dev20260914"
   slurm:
     time_limit: "4:00:00"
   health_check:
@@ -77,7 +77,7 @@ base:
         weight-loader-prefetch-checkpoints: true
         stream-interval: 10
         watchdog-timeout: 1000000
-        mem-fraction-static: 0.94
+        mem-fraction-static: 0.90
         page-size: 256
         chunked-prefill-size: 8192
         max-prefill-tokens: 8192
@@ -115,15 +115,15 @@ base:
 
 # Low-latency AgentX aggregate topology: one TP4 worker occupies one
 # four-GPU GB300 node and serves both prefill and decode with DSpark K=6.
-override_tp4:
-  name: "agg-gb300-tp4-mtp-lowlatency"
+override_tp4_c4:
+  name: "agg-gb300-tp4-c4-mtp-lowlatency"
   roles:
     agg:
       nodes: 1
       gpus: 4
       args:
-        max-running-requests: 32
-        cuda-graph-max-bs-decode: 32
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
         tp-size: 4
   benchmark:
     env:
@@ -131,15 +131,15 @@ override_tp4:
 
 # Low-latency AgentX aggregate topology: one TP8 worker spans two
 # four-GPU GB300 nodes and serves both prefill and decode with DSpark K=6.
-override_tp8:
-  name: "agg-gb300-tp8-mtp-lowlatency"
+override_tp8_c1:
+  name: "agg-gb300-tp8-c1-mtp-lowlatency"
   roles:
     agg:
       nodes: 2
       gpus: 8
       args:
-        max-running-requests: 4
-        cuda-graph-max-bs-decode: 4
+        max-running-requests: 2
+        cuda-graph-max-bs-decode: 2
         tp-size: 8
   benchmark:
     env:

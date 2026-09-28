@@ -13,11 +13,11 @@ base:
     model:
       repo: "deepseek-ai/DeepSeek-V4-Pro-0813"
     container:
-      image: "lmsysorg/sglang:nightly-dev-cu13-20260829-89816a21"
+      image: "lmsysorg/sglang:nightly-dev-20260916-c9a8fba9"
   dynamo:
     install: true
     source:
-      wheel: "1.5.0.dev20260902"
+      wheel: "1.5.0.dev20260914"
   slurm:
     time_limit: "8:00:00"
   health_check:
@@ -208,15 +208,9 @@ base:
       AIPERF_DATASET_MMAP_CACHE_DIR: "/aiperf_mmap_cache"
       HF_HUB_CACHE: "/hf_hub_cache"
 
-# Agentic-coding SGLang disaggregated Pareto recipe for DeepSeek-V4-Pro on GB300
-# (2P x DEP8 / 4D x DEP16, DSpark K=6 + hierarchical-cache KV offload), tuned for concurrency 480.
-#
-# Uses the flat single-variant srtctl schema the agentic CI flow expects;
-# resources + backend (prefill/decode env + sglang_config) are normalized
-# from the Pareto run.
-# Concurrency is exported into srt_agentic.sh from the master-config conc-list.
-override_1p1d_c480:
-  name: "disagg-gb300-2p4d-dep8-dep16-c480-mtp-kvoffload"
+# One DEP8 prefill worker and one DEP16 decode worker at concurrency 64.
+override_1p1d_c64:
+  name: "disagg-gb300-1p1d-dep8-dep16-c64-mtp-kvoffload"
   roles:
     prefill:
       nodes: 2
@@ -224,11 +218,47 @@ override_1p1d_c480:
       gpus: 8
       args:
         max-running-requests: 256
-        cuda-graph-max-bs: 256
+        cuda-graph-max-bs-decode: 256
+        hicache-mem-layout: page_first_direct
     decode:
       gpus: 16
       args:
-        cuda-graph-max-bs: 256
+        max-running-requests: 128
+        cuda-graph-max-bs-decode: 256
+
+# One DEP8 prefill worker and one DEP16 decode worker at concurrency 240.
+override_1p1d_c240:
+  name: "disagg-gb300-1p1d-dep8-dep16-c240-mtp-kvoffload"
+  roles:
+    prefill:
+      nodes: 2
+      workers: 1
+      gpus: 8
+      args:
+        max-running-requests: 512
+        cuda-graph-max-bs-decode: 256
+    decode:
+      gpus: 16
+      args:
+        max-running-requests: 512
+        cuda-graph-max-bs-decode: 256
+
+# Two DEP8 prefill workers and one DEP16 decode worker at concurrency 480.
+override_2p1d_c480:
+  name: "disagg-gb300-2p1d-dep8-dep16-c480-mtp-kvoffload"
+  roles:
+    prefill:
+      nodes: 4
+      workers: 2
+      gpus: 8
+      args:
+        max-running-requests: 512
+        cuda-graph-max-bs-decode: 256
+    decode:
+      gpus: 16
+      args:
+        max-running-requests: 1024
+        cuda-graph-max-bs-decode: 256
 
 # Agentic-coding SGLang disaggregated recipe for DeepSeek-V4-Pro on GB300
 # (4P x DEP8 / 4D x DEP16, DSpark K=6 + hierarchical-cache KV offload), tuned for concurrency 960.
@@ -247,13 +277,13 @@ override_2p1d_c960:
         OMP_NUM_THREADS: '1'
       args:
         max-running-requests: 256
-        cuda-graph-max-bs: 256
+        cuda-graph-max-bs-decode: 256
     decode:
       env:
         OMP_NUM_THREADS: '1'
         SGLANG_DSV4_MHC_PREWARM: '1'
       args:
-        cuda-graph-max-bs: 256
+        cuda-graph-max-bs-decode: 256
 
 # Agentic-coding SGLang disaggregated Pareto recipe for DeepSeek-V4-Pro on GB300
 # (6P x DEP8 / 4D x DEP16, DSpark K=6 + hierarchical-cache KV offload), tuned for concurrency 1440.
@@ -271,11 +301,11 @@ override_3p1d_c1440:
       gpus: 8
       args:
         max-running-requests: 512
-        cuda-graph-max-bs: 512
+        cuda-graph-max-bs-decode: 512
     decode:
       gpus: 16
       args:
-        cuda-graph-max-bs: 512
+        cuda-graph-max-bs-decode: 512
 
 # Agentic-coding SGLang disaggregated Pareto recipe for DeepSeek-V4-Pro on GB300
 # (8P x DEP8 / 4D x DEP16, DSpark K=6 + hierarchical-cache KV offload), tuned for concurrency 1920.
@@ -301,13 +331,13 @@ override_4p1d_c1920:
         SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "3600"
       args:
         max-running-requests: 1024
-        cuda-graph-max-bs: 1024
+        cuda-graph-max-bs-decode: 1024
     decode:
       gpus: 16
       env:
         SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "3600"
       args:
-        cuda-graph-max-bs: 192
+        cuda-graph-max-bs-decode: 192
   benchmark:
     env:
       AIPERF_HTTP_TCP_USER_TIMEOUT: "900000"
