@@ -404,6 +404,8 @@ def _prepare_moe(op: Op) -> dict:
         try:
             own = modules.build(a) if os.environ.get("OPERATORX_MODEL_MODULES") == "1" else None
             block = _ModelBlock(own) if own is not None else _generic_block(a, prefix)
+        except ImportError as e:  # an image whose vLLM predates the MoE API this block uses
+            raise UnsupportedOpError(f"this image's vLLM has no {e.name or e}"[:400]) from e
         except (NotImplementedError, AssertionError, ValueError, RuntimeError, TypeError, KeyError,
                 AttributeError) as e:
             if _is_fault(e) or (isinstance(e, AttributeError) and not _missing_op(e)):

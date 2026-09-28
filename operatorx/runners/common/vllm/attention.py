@@ -13,7 +13,7 @@ import os
 import random
 import sys
 import tempfile
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from pathlib import Path
 
 import torch
@@ -283,12 +283,15 @@ class _Engine:
             model=self.dir, load_format="dummy", skip_tokenizer_init=True, enforce_eager=True,
             enable_prefix_caching=False, max_num_seqs=_MAX_SEQS, kv_cache_memory_bytes=_kv_bytes(),
             gpu_memory_utilization=_GPU_UTIL, **b.engine)
-        # JIT kernels on first use (the untimed step), not every shape up front
-        kernel = kwargs.get("kernel_config")
-        if kernel is None or isinstance(kernel, dict):
-            kwargs["kernel_config"] = {**(kernel or {}), "enable_jit_warmup": False}
-        else:
-            kernel.enable_jit_warmup = False
+        # JIT kernels on first use (the untimed step), not every shape up front, where the
+        # image's vLLM has that setting
+        from vllm.config.kernel import KernelConfig
+        if "enable_jit_warmup" in {f.name for f in fields(KernelConfig)}:
+            kernel = kwargs.get("kernel_config")
+            if kernel is None or isinstance(kernel, dict):
+                kwargs["kernel_config"] = {**(kernel or {}), "enable_jit_warmup": False}
+            else:
+                kernel.enable_jit_warmup = False
         # the engine runs eagerly: the full graphs serving would capture, from vLLM
         self.capture = vllm_engine.full_graph_sizes(kwargs, self.recipe["compilation_config"])
         self.reqs: list = []
