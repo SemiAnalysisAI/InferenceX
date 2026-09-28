@@ -97,5 +97,6 @@ benchmark:
     AIPERF_DATASET_MMAP_CACHE_DIR: /aiperf_mmap_cache
     AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "vllm:"
     HF_HOME: /logs/hf_cache
+    HF_HUB_OFFLINE: "0"
     TRANSFORMERS_VERBOSITY: error
     TOKENIZERS_PARALLELISM: "false"
