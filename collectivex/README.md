@@ -1,4 +1,4 @@
-# CollectiveX
+# CollectiveX - Experimental (Beta)
 
 CollectiveX is an experimental MoE expert-parallel communication benchmark. It measures dispatch,
 combine, and paired roundtrip latency across EP libraries and accelerator systems, then uploads
