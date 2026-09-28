@@ -8928,3 +8928,22 @@ dsv41flash-fp4-gb300-sglang-agentic-dspark:
       search-space:
       - { tp: 2, ep: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/sglang/gb300-fp4-mtp/agentic.yaml }
       - { tp: 4, ep: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/sglang/gb300-fp4-mtp/agentic.yaml }
+
+minimaxm3-fp4-b200-vllm-stock-bfcl-sep28:
+  image: vllm/vllm-openai:nightly-af7f9488c2210d67e1033ecdc845b087ee7fe92b
+  model: nvidia/MiniMax-M3-NVFP4
+  model-prefix: minimaxm3
+  runner: cluster:b200-nscale
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - tp: 4
+        ep: 1
+        conc-start: 1
+        conc-end: 1
+        spec-decoding: mtp
+        srt-recipe: experimental/bfcl/minimax-b200-vllm-stock-sep28.yaml
+        kv-offloading: none
