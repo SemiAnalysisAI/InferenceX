@@ -1,13 +1,13 @@
 # MiniMax-M3 MXFP4 AgentX on MI355X with ATOM EAGLE3 (GQA draft, three tokens)
-# and GPU-resident KV at TP2 and TP4. The LMCache bands were removed with the
-# legacy script (#3461): srtctl reserves ATOM's kv-transfer-config for
-# disaggregated workers.
+# at TP2 and TP4, with GPU-resident KV or an in-process LMCache DRAM tier.
+# srtctl reserves ATOM's kv-transfer-config for disaggregated workers, so the
+# DRAM variants enable LMCache through ATOM_KV_OFFLOAD (ROCm/ATOM#2414).
 base:
   schema: 2
   name: minimaxm3-fp4-mi355x-atom-agentic
   model:
     path: hf:amd/MiniMax-M3-MXFP4
-    container: rocm/atom-dev:nightly_202609231248
+    container: rocm/atom-dev:nightly_202609281543
     precision: fp4
   resources:
     gpu_type: mi355x
@@ -59,7 +59,7 @@ base:
       AIPERF_APPLY_CHAT_TEMPLATE: 'true'
 
 # One variant per point. Admission is 2x CONC. TP4 shards the indexer across
-# ranks at the measured points (15, 20, 24, 28).
+# ranks at the measured points (15, 20, 24, 28, and the DRAM points 40, 48).
 override_tp4_c1:
   roles:
     agg:
@@ -197,3 +197,119 @@ override_tp2_c2:
   benchmark:
     env:
       CONC: '2'
+
+# DRAM variants: LMCache's in-process CPU tier with ATOM's segmented LRU and
+# all-rank lookup, sized at TOTAL_CPU_DRAM_GB / TP (257 GB) per rank.
+# PYTHONHASHSEED keeps every rank's chunk keys identical; without it the
+# offload hit rate is zero.
+override_tp2_c20_lmcache:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        max-num-seqs: 40
+      env:
+        ATOM_KV_OFFLOAD: lmcache
+        PYTHONHASHSEED: '0'
+        LMCACHE_LOCAL_CPU: 'True'
+        LMCACHE_MAX_LOCAL_CPU_SIZE: '257'
+        LMCACHE_CHUNK_SIZE: '256'
+        LMCACHE_CACHE_POLICY: ATOM_SLRU
+        LMCACHE_LOOKUP_SERVER_WORKER_IDS: '0,1'
+        ATOM_PREFIX_CACHE_POLICY: slru
+        ATOM_PREFIX_CACHE_PROTECTED_RATIO: '0.5'
+  benchmark:
+    env:
+      CONC: '20'
+      KV_OFFLOADING: 'dram'
+      TOTAL_CPU_DRAM_GB: '515'
+
+override_tp2_c25_lmcache:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        max-num-seqs: 50
+      env:
+        ATOM_KV_OFFLOAD: lmcache
+        PYTHONHASHSEED: '0'
+        LMCACHE_LOCAL_CPU: 'True'
+        LMCACHE_MAX_LOCAL_CPU_SIZE: '257'
+        LMCACHE_CHUNK_SIZE: '256'
+        LMCACHE_CACHE_POLICY: ATOM_SLRU
+        LMCACHE_LOOKUP_SERVER_WORKER_IDS: '0,1'
+        ATOM_PREFIX_CACHE_POLICY: slru
+        ATOM_PREFIX_CACHE_PROTECTED_RATIO: '0.5'
+  benchmark:
+    env:
+      CONC: '25'
+      KV_OFFLOADING: 'dram'
+      TOTAL_CPU_DRAM_GB: '515'
+
+override_tp2_c30_lmcache:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        max-num-seqs: 60
+      env:
+        ATOM_KV_OFFLOAD: lmcache
+        PYTHONHASHSEED: '0'
+        LMCACHE_LOCAL_CPU: 'True'
+        LMCACHE_MAX_LOCAL_CPU_SIZE: '257'
+        LMCACHE_CHUNK_SIZE: '256'
+        LMCACHE_CACHE_POLICY: ATOM_SLRU
+        LMCACHE_LOOKUP_SERVER_WORKER_IDS: '0,1'
+        ATOM_PREFIX_CACHE_POLICY: slru
+        ATOM_PREFIX_CACHE_PROTECTED_RATIO: '0.5'
+  benchmark:
+    env:
+      CONC: '30'
+      KV_OFFLOADING: 'dram'
+      TOTAL_CPU_DRAM_GB: '515'
+
+override_tp4_c40_lmcache:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        max-num-seqs: 80
+      env:
+        ATOM_M3_INDEXER_CP: '1'
+        ATOM_KV_OFFLOAD: lmcache
+        PYTHONHASHSEED: '0'
+        LMCACHE_LOCAL_CPU: 'True'
+        LMCACHE_MAX_LOCAL_CPU_SIZE: '257'
+        LMCACHE_CHUNK_SIZE: '256'
+        LMCACHE_CACHE_POLICY: ATOM_SLRU
+        LMCACHE_LOOKUP_SERVER_WORKER_IDS: '0,1,2,3'
+        ATOM_PREFIX_CACHE_POLICY: slru
+        ATOM_PREFIX_CACHE_PROTECTED_RATIO: '0.5'
+  benchmark:
+    env:
+      CONC: '40'
+      KV_OFFLOADING: 'dram'
+      TOTAL_CPU_DRAM_GB: '1030'
+
+override_tp4_c48_lmcache:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        max-num-seqs: 96
+      env:
+        ATOM_M3_INDEXER_CP: '1'
+        ATOM_KV_OFFLOAD: lmcache
+        PYTHONHASHSEED: '0'
+        LMCACHE_LOCAL_CPU: 'True'
+        LMCACHE_MAX_LOCAL_CPU_SIZE: '257'
+        LMCACHE_CHUNK_SIZE: '256'
+        LMCACHE_CACHE_POLICY: ATOM_SLRU
+        LMCACHE_LOOKUP_SERVER_WORKER_IDS: '0,1,2,3'
+        ATOM_PREFIX_CACHE_POLICY: slru
+        ATOM_PREFIX_CACHE_PROTECTED_RATIO: '0.5'
+  benchmark:
+    env:
+      CONC: '48'
+      KV_OFFLOADING: 'dram'
+      TOTAL_CPU_DRAM_GB: '1030'

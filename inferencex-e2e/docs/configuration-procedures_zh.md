@@ -238,19 +238,32 @@ schedule 和 ragged verification 保持关闭。
 配方不再在运行时修改 AITER 源码；TP 通信融合、DSpark K6 和 graph capture
 直接使用镜像内实现。
 
-### MiniMax-M3 ATOM FlyDSL paged decode
+### MiniMax-M3 ATOM FlyDSL paged decode 与 LMCache DRAM 层
 
 `minimaxm3-fp4-mi355x-atom-agentic-mtp` 按照
 [ROCm/ATOM#2366](https://github.com/ROCm/ATOM/pull/2366) 和
-[上游配方](https://github.com/ROCm/ATOM/blob/94cde4ba786f45b38c26ee8201444659e44f861f/recipes/MiniMax-M3-Agentic-InferenceX.md)，
-使用 `rocm/atom-dev:nightly_202609231248`，启用 `ATOM_PA_FLYDSL=1` 和
+[上游配方](https://github.com/ROCm/ATOM/blob/1423fceb08fbe88b2e35c77b320b3073b310a63f/recipes/MiniMax-M3-Agentic-InferenceX.md)，
+使用 `rocm/atom-dev:nightly_202609281543`，启用 `ATOM_PA_FLYDSL=1` 和
 `ATOM_PA_FLYDSL_PLAN=1`。FlyDSL 处理支持的 paged-decode shape，work planner
 按实际上下文长度均衡 dense decode 工作量；不支持的 shape 仍回退至 Gluon。
 从 `server.log` 核对实际路由，以及 work plan 是否在图捕获时创建。
 
-改动仅限
+TP2 C20/C25/C30 与 TP4 C40/C48 点位启用 LMCache 进程内 CPU 层。srtctl 将 ATOM 的
+`--kv-transfer-config` 保留给分离式 worker，因此
 `benchmarks/single_node/srt-slurm-recipes/minimaxm3/atom/mi355x-fp4-mtp/agentic.yaml`
-中的镜像和两个 FlyDSL 变量，并移除 TP4 C32；TP4 C1-C28、TP2 C1-C2、EAGLE3 K3、golden AL 2.78
+中的 `*_lmcache` 变体设置 `ATOM_KV_OFFLOAD=lmcache`
+（[ROCm/ATOM#2414](https://github.com/ROCm/ATOM/pull/2414)），组装出相同的
+`lmcache_offload` 连接器。每个变体声明 `KV_OFFLOADING: dram` 和矩阵的
+`TOTAL_CPU_DRAM_GB`，并将 `LMCACHE_MAX_LOCAL_CPU_SIZE` 设为
+`TOTAL_CPU_DRAM_GB / TP`（每 rank 257 GB）。`PYTHONHASHSEED=0` 必须设置：否则各
+rank 对同一 prompt 计算出不同的 key，卸载命中率为零。在 `server.log` 中核对组装后的
+`kv_transfer_config` 日志和非零的 `atom:lmcache_loaded_tokens`。
+
+srtctl 将非整节点 worker 限定在 GPU `0..TP-1`，均位于 NUMA 节点 0。旧脚本把 rank
+分布到两个 socket（`0,4` 与 `0,1,4,5`），因为在单个 NUMA 节点上 pin CPU 层时，TP2
+很慢，TP4 可能超出 ATOM 600 秒的 `allocate_kv_cache` 屏障。
+
+移除 TP4 C32；GPU 常驻 KV 的 TP4 C1-C28、TP2 C1-C2 点位、EAGLE3 K3、golden AL 2.78
 和 indexer CP 保持不变。
 
 ### DeepSeek-V4.1-Flash DSpark

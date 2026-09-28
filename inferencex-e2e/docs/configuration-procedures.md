@@ -293,20 +293,35 @@ The pinned image is the official ATOM nightly
 The recipe does not patch AITER source at runtime; TP communication
 fusion, DSpark K6 and graph capture use the implementation shipped in the image.
 
-### MiniMax-M3 ATOM FlyDSL paged decode
+### MiniMax-M3 ATOM FlyDSL paged decode and LMCache DRAM tier
 
 `minimaxm3-fp4-mi355x-atom-agentic-mtp` uses
-`rocm/atom-dev:nightly_202609231248` with `ATOM_PA_FLYDSL=1` and
+`rocm/atom-dev:nightly_202609281543` with `ATOM_PA_FLYDSL=1` and
 `ATOM_PA_FLYDSL_PLAN=1`, following [ROCm/ATOM#2366](https://github.com/ROCm/ATOM/pull/2366)
-and the [upstream recipe](https://github.com/ROCm/ATOM/blob/94cde4ba786f45b38c26ee8201444659e44f861f/recipes/MiniMax-M3-Agentic-InferenceX.md).
+and the [upstream recipe](https://github.com/ROCm/ATOM/blob/1423fceb08fbe88b2e35c77b320b3073b310a63f/recipes/MiniMax-M3-Agentic-InferenceX.md).
 FlyDSL handles supported paged-decode shapes; its work planner balances dense
 decode by actual context length. Unsupported shapes retain the Gluon fallback.
 Verify the selected route and capture-time work-plan creation in `server.log`.
 
-The change is limited to the image and the two FlyDSL variables in
-`benchmarks/single_node/srt-slurm-recipes/minimaxm3/atom/mi355x-fp4-mtp/agentic.yaml`;
-TP4 C32 is dropped; the TP4 C1-C28 and TP2 C1-C2 points, EAGLE3 K3, golden AL 2.78 and indexer CP
-are unchanged.
+The TP2 C20/C25/C30 and TP4 C40/C48 points add LMCache's in-process CPU tier.
+srtctl reserves ATOM's `--kv-transfer-config` for disaggregated workers, so
+these `*_lmcache` variants in
+`benchmarks/single_node/srt-slurm-recipes/minimaxm3/atom/mi355x-fp4-mtp/agentic.yaml`
+set `ATOM_KV_OFFLOAD=lmcache` ([ROCm/ATOM#2414](https://github.com/ROCm/ATOM/pull/2414)),
+which composes the same `lmcache_offload` connector. Each variant declares
+`KV_OFFLOADING: dram` and the matrix `TOTAL_CPU_DRAM_GB`, and sizes
+`LMCACHE_MAX_LOCAL_CPU_SIZE` at `TOTAL_CPU_DRAM_GB / TP` (257 GB per rank).
+`PYTHONHASHSEED=0` is required: without it the ranks hash prompts to different
+keys and the offload hit rate is zero. Verify the composed `kv_transfer_config`
+line and non-zero `atom:lmcache_loaded_tokens` in `server.log`.
+
+srtctl masks a partial-node worker to GPUs `0..TP-1`, which sit on NUMA node 0.
+The legacy script spread the ranks across both sockets (`0,4` and `0,1,4,5`)
+because pinning the CPU tier on one node is slow at TP2 and can miss ATOM's
+600 s `allocate_kv_cache` barrier at TP4.
+
+TP4 C32 is dropped; the GPU-resident TP4 C1-C28 and TP2 C1-C2 points,
+EAGLE3 K3, golden AL 2.78 and indexer CP are unchanged.
 
 ### DeepSeek-V4.1-Flash DSpark
 
