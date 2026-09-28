@@ -17,8 +17,8 @@ class Result:
     op: Op
     metrics: Mapping[str, float] = field(default_factory=dict)
     status: str = "ok"            # "ok" | "unsupported" | "error"
-    message: str | None = None    # only set when status != "ok"
-    testlist: str | None = None   # which testlist file produced this op
+    message: str | None = None    # only when status != "ok"
+    testlist: str | None = None   # testlist file that produced this op
 
 
 def to_dict(r: Result) -> dict:
@@ -57,11 +57,7 @@ def _result_from_dict(d: dict) -> Result:
 
 
 def write_run_result(path: Path | str, run: RunInfo, results: Iterable[Result]) -> None:
-    """Write one run's worth of results to ``path`` in the run-result wrapper shape.
-
-    Body: ``{"schema_version", "run": {...RunInfo...}, "rows": [{op, metrics}, ...]}``.
-    Parent directories are created. Existing files are overwritten — one file = one run.
-    """
+    """{"schema_version", "run", "rows"}; one file = one run, replaced atomically."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     body = {
@@ -75,7 +71,6 @@ def write_run_result(path: Path | str, run: RunInfo, results: Iterable[Result]) 
 
 
 def read_run_result(path: Path | str) -> tuple[RunInfo, list[Result]]:
-    """Inverse of :func:`write_run_result`. Returns ``(run, rows)``."""
     path = Path(path)
     body = json.loads(path.read_text())
     run = _run_from_dict(body["run"])

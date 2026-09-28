@@ -1,12 +1,8 @@
 """Attention modules through vLLM's own model code, KV cache and scheduling.
 
-An op picks the checkpoint family whose module it describes (attention_models.json holds
-each family's config.json), overrides the module's sizes, cuts the model to the layers
-that module needs, and shrinks the MLP. vLLM builds that model with dummy weights,
-allocates and lays out its KV cache, and picks the attention backend. The op's batch is
-scheduled through vLLM's model runner as requests whose ctx tokens are already computed
-(the cache holds random, format-valid data); the timed call is the module's forward,
-with the arguments and forward context the model's own decoder layer gives it.
+The op's checkpoint family (attention_models.json) with its sizes, cut to the layers the module
+needs, dummy weights; the batch is scheduled through the model runner with ctx tokens already
+computed, and the module's forward is timed with its decoder layer's arguments and forward context.
 """
 from __future__ import annotations
 
@@ -17,12 +13,14 @@ import os
 import random
 import sys
 import tempfile
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from pathlib import Path
 
 import torch
 
-from operatorx.core import BackendImpl, Op, UnsupportedOpError
+from operatorx.core import BackendImpl, Op, UnsupportedOpError, parallel
+from operatorx.runners.common import ranks
+from operatorx.runners.common.vllm import engine as vllm_engine
 from operatorx.runners.common.vllm import linear as vllm_linear
 
 _MODELS = json.loads((Path(__file__).with_name("attention_models.json")).read_text())
@@ -60,8 +58,7 @@ def _yarn(s: dict | None) -> dict | None:
 
 
 def _quant(op: Op, family: str) -> dict | None:
-    """The quantization_config of the family's checkpoint whose projections carry the op's
-    operands (proj lists the quantized projections; the rest stay bf16)."""
+    """The family checkpoint variant's quantization_config whose projections match proj."""
     proj = op.args.get("proj") or {}
     if not proj:
         return None
@@ -104,8 +101,7 @@ def _build_mla(op: Op) -> _Build:
 
 
 def _qwen35(a: dict, full: dict, linear: dict, target: str) -> _Build:
-    """Qwen3.5: one Gated DeltaNet layer then one gated full-attention layer, so the KV
-    cache has the hybrid layout serving uses."""
+    """Qwen3.5: one Gated DeltaNet then one gated full-attention layer (serving's hybrid KV layout)."""
     c = _family("qwen3_5_moe")
     t = c["text_config"]
     t.update(num_hidden_layers=2, layer_types=["linear_attention", "full_attention"], mtp_num_hidden_layers=0,
@@ -200,9 +196,8 @@ def _build_qsa(op: Op) -> _Build:
                         indexer_compress_ratio=a["compress"]), "layers.1.self_attn")
 
 
-# DeepSeek-V4.1's layer roles, as the checkpoint arranges them: window-only, then ratio-2
-# (a KV + index source, a consumer reusing its top-k), then ratio-1 (the KV + index source
-# that publishes candidate blocks, a consumer, an index source over the shared index cache).
+# DeepSeek-V4.1's layer roles, in checkpoint order: window-only; ratio-2 source, top-k reuser;
+# ratio-1 source (publishes candidate blocks), consumer, index source over the shared index cache
 _V41_RATIOS = [0, 2, 2, 1, 1, 1]
 _V41_LAYER = {(0, True, None): 0, (2, True, "own"): 1, (2, False, "reuse"): 2, (1, True, "own"): 3,
               (1, False, "reuse"): 4, (1, False, "shared"): 5}
@@ -252,8 +247,8 @@ def _build_dsv4_pro(a: dict) -> _Build:
              qk_rope_head_dim=a["rope_dim"], q_lora_rank=a["q_lora_rank"], sliding_window=a["window"],
              o_groups=a["o_groups"], o_lora_rank=a["o_lora_rank"], compress_ratios=ratios,
              rope_theta=a.get("rope_theta", 10000.0), num_hidden_layers=len(ratios), num_nextn_predict_layers=0,
-             num_hash_layers=0, n_routed_experts=8, num_experts_per_tok=2, moe_intermediate_size=_MLP,
-             vocab_size=_VOCAB)
+             num_hash_layers=0, n_routed_experts=8, num_experts_per_tok=2, vocab_size=_VOCAB)
+    # the checkpoint's expert width: DeepGEMM's MegaMoE (DEP recipes) rejects a narrower one
     if a["compress_ratio"]:
         c["compress_rope_theta"] = a["compress_rope_theta"]
         if a.get("rope_scaling"):
@@ -276,28 +271,30 @@ _BUILDERS = {"mla": _build_mla, "mla_dsa": _build_mla_dsa, "dsv4_attn": _build_d
 class _Engine:
     """One vLLM engine (in-process) for one module config; reused while ops share it."""
 
-    def __init__(self, key: str, b: _Build):
+    def __init__(self, key: str, b: _Build, split: dict | None):
         os.environ["VLLM_ENABLE_V1_MULTIPROCESSING"] = "0"
         from vllm import LLM
         self.key = key
         self.dir = tempfile.mkdtemp(prefix="opx-attn-")
         Path(self.dir, "config.json").write_text(json.dumps(b.config))
-        recipe, self.recipe = _recipe_kwargs(b.without)
-        kwargs = {"max_num_batched_tokens": _MAX_BATCHED_TOKENS, **recipe}
-        kwargs.update(model=self.dir, load_format="dummy", skip_tokenizer_init=True, enforce_eager=True,
-                      enable_prefix_caching=False, max_num_seqs=_MAX_SEQS, kv_cache_memory_bytes=_kv_bytes(),
-                      gpu_memory_utilization=_GPU_UTIL)
-        # compile kernels when first used (the untimed step) rather than every shape up
-        # front; FlashInfer autotuning still runs
-        kernel = kwargs.get("kernel_config")
-        if kernel is None or isinstance(kernel, dict):
-            kwargs["kernel_config"] = {**(kernel or {}), "enable_jit_warmup": False}
-        else:
-            kernel.enable_jit_warmup = False
-        attention = {**self.recipe["attention_config"], **b.engine.pop("attention_config", {})}
-        kwargs.update(b.engine)
-        if attention:
-            kwargs["attention_config"] = attention
+        vllm_engine.launch()
+        kwargs, self.recipe = vllm_engine.engine_args(
+            split, without=b.without, eager=True, defaults={"max_num_batched_tokens": _MAX_BATCHED_TOKENS},
+            axes=parallel.ATTENTION_AXES,
+            model=self.dir, load_format="dummy", skip_tokenizer_init=True, enforce_eager=True,
+            enable_prefix_caching=False, max_num_seqs=_MAX_SEQS, kv_cache_memory_bytes=_kv_bytes(),
+            gpu_memory_utilization=_GPU_UTIL, **b.engine)
+        # JIT kernels on first use (the untimed step), not every shape up front, where the
+        # image's vLLM has that setting
+        from vllm.config.kernel import KernelConfig
+        if "enable_jit_warmup" in {f.name for f in fields(KernelConfig)}:
+            kernel = kwargs.get("kernel_config")
+            if kernel is None or isinstance(kernel, dict):
+                kwargs["kernel_config"] = {**(kernel or {}), "enable_jit_warmup": False}
+            else:
+                kernel.enable_jit_warmup = False
+        # the engine runs eagerly: the full graphs serving would capture, from vLLM
+        self.capture = vllm_engine.full_graph_sizes(kwargs, self.recipe["compilation_config"])
         self.reqs: list = []
         self.n = 0
         try:
@@ -311,7 +308,8 @@ class _Engine:
             raise
 
     def close(self) -> None:
-        from vllm.distributed.parallel_state import cleanup_dist_env_and_memory
+        # keep the process group for the next engine
+        from vllm.distributed.parallel_state import destroy_model_parallel
         try:
             self.release()
             if hasattr(self, "llm"):
@@ -320,7 +318,7 @@ class _Engine:
             print(f"[vllm.attention] engine shutdown: {type(e).__name__}: {e}", file=sys.stderr)
         for k in ("llm", "runner", "kvm"):
             self.__dict__.pop(k, None)
-        cleanup_dist_env_and_memory()
+        destroy_model_parallel()
         gc.collect()
         torch.cuda.empty_cache()
 
@@ -334,7 +332,6 @@ class _Engine:
             finished_req_ids=finished, free_encoder_mm_hashes=[])
 
     def _configured(self):
-        """vLLM's current config, as the worker sets it around the model runner's step."""
         from vllm.config import set_current_vllm_config
         return set_current_vllm_config(self.runner.vllm_config)
 
@@ -349,8 +346,7 @@ class _Engine:
         self.reqs = []
 
     def step(self, batch: dict, path: str) -> dict:
-        """Schedule the batch; return the call the model made to the module at path (a
-        module-name suffix), with its forward context."""
+        """Schedule the batch; return the model's call to the module at path, with its forward context."""
         from vllm import SamplingParams
         from vllm.forward_context import get_forward_context
         from vllm.v1.core.sched.output import NewRequestData
@@ -365,8 +361,7 @@ class _Engine:
                 ctx = g["ctx"] if isinstance(g["ctx"], int) else rng.randint(g["ctx"]["min"], g["ctx"]["max"])
                 self.n += 1
                 r = Request(f"opx{self.n}", [0] * (ctx + g["q"]), SamplingParams(max_tokens=1), None)
-                # as the scheduler allocates a request whose ctx tokens are computed: every
-                # block for full attention, only the window's for sliding-window caches
+                # as the scheduler allocates computed ctx: every block (full), window only (sliding)
                 r.num_computed_tokens = ctx
                 self.reqs.append(r)
                 if self.kvm.allocate_slots(r, g["q"]) is None:
@@ -397,35 +392,6 @@ class _Engine:
         return seen
 
 
-def _recipe_kwargs(without: tuple = ()) -> tuple[dict, dict]:
-    """The InferenceX recipe's server arguments (OPERATORX_ENGINE_ARGS, set per shard by the
-    planner from operatorx.recipes) as vLLM EngineArgs, parsed by vLLM's own parser; and
-    what the engine itself does not apply: the attention config (merged with the op's) and
-    the CUDA-graph mode and sizes serving would use (the engine here runs eagerly)."""
-    import dataclasses
-
-    from vllm.engine.arg_utils import EngineArgs
-    from vllm.utils.argparse_utils import FlexibleArgumentParser
-
-    from operatorx.recipes import serve_argv
-    args = {k: v for k, v in json.loads(os.environ.get("OPERATORX_ENGINE_ARGS") or "{}").items() if k not in without}
-    attention = json.loads(args.pop("attention-config", None) or "{}")
-    compilation = json.loads(args.pop("compilation-config", None) or "{}")
-    if args.get("max-cudagraph-capture-size"):
-        compilation.setdefault("max_cudagraph_capture_size", int(args["max-cudagraph-capture-size"]))
-    info = {"attention_config": attention, "compilation_config": compilation}
-    if not args:
-        return {}, info
-    parser = EngineArgs.add_cli_args(FlexibleArgumentParser())
-    base = vars(parser.parse_known_args(["--model", "m"])[0])
-    ns = vars(parser.parse_known_args(["--model", "m", *serve_argv(args)])[0])
-    fields = {f.name for f in dataclasses.fields(EngineArgs)} - {"model"}
-    kwargs = {k: v for k, v in ns.items() if k in fields and v != base.get(k)}
-    if compilation.get("custom_ops"):  # custom-op selection holds without compilation
-        kwargs["compilation_config"] = {"custom_ops": compilation["custom_ops"]}
-    return kwargs, info
-
-
 def _kv_bytes() -> int:
     return int(torch.cuda.get_device_properties(torch.cuda.current_device()).total_memory * _KV_FRACTION)
 
@@ -443,10 +409,8 @@ def _shuffle(blocks: list, rng: random.Random) -> list:
 
 
 def _fill_caches(runner) -> None:
-    """Random, format-valid contents for every KV cache and state buffer. Caches are
-    views (often several dtypes, packed layouts with scales) over raw byte storage; every
-    byte is drawn below 0x40, which decodes to a small finite value in fp32, bf16, fp8
-    e4m3 / ue8m0 and int8 alike."""
+    """Random bytes below 0x40 in every KV cache/state buffer: small and finite as fp32, bf16,
+    fp8 e4m3 / ue8m0 and int8 alike (caches are multi-dtype views over raw bytes)."""
     ctx = runner.vllm_config.compilation_config.static_forward_context
     seen: set[int] = set()
     with torch.no_grad():
@@ -467,15 +431,15 @@ def _fill_caches(runner) -> None:
 _ENGINE: _Engine | None = None
 
 
-def _engine(b: _Build) -> _Engine:
+def _engine(b: _Build, split: dict | None) -> _Engine:
     global _ENGINE
-    key = json.dumps([b.family, b.config, b.engine], sort_keys=True)
+    key = json.dumps([b.family, b.config, b.engine, split], sort_keys=True)
     if _ENGINE is not None and _ENGINE.key == key:
         return _ENGINE
     if _ENGINE is not None:
         _ENGINE.close()
         _ENGINE = None
-    _ENGINE = _Engine(key, b)
+    _ENGINE = _Engine(key, b, split)
     return _ENGINE
 
 
@@ -495,21 +459,24 @@ def _prepare(op: Op) -> dict:
     kv = a.get("kv_cache_dtype")
     if kv is not None:
         b.engine["kv_cache_dtype"] = _KV_DTYPES[kv]
-    try:
-        eng = _engine(b)
-    # vLLM's own startup (model build, profiling and warmup runs) failing on this config
-    except (ValueError, NotImplementedError, AssertionError, RuntimeError) as e:
-        if vllm_linear._is_fault(e):
-            raise
-        raise UnsupportedOpError(f"vLLM rejected the {b.family} module: {type(e).__name__}: {e}"[:400]) from e
-    try:
-        seen = eng.step(a["batch"], b.module)
-    except (ValueError, NotImplementedError, AssertionError) as e:
-        if vllm_linear._is_fault(e):
-            raise
-        raise UnsupportedOpError(f"vLLM rejected the batch: {type(e).__name__}: {e}"[:400]) from e
+    split = a.get("parallel")
+    with ranks.together("build this engine"):
+        try:
+            eng = _engine(b, split)
+        # vLLM's startup (build, profiling, warmup) failing on this config
+        except (ValueError, NotImplementedError, AssertionError, RuntimeError) as e:
+            if vllm_linear._is_fault(e):
+                raise
+            raise UnsupportedOpError(f"vLLM rejected the {b.family} module: {type(e).__name__}: {e}"[:400]) from e
+    with ranks.together("schedule this batch"):
+        try:
+            seen = eng.step(a["batch"], b.module)
+        except (ValueError, NotImplementedError, AssertionError) as e:
+            if vllm_linear._is_fault(e):
+                raise
+            raise UnsupportedOpError(f"vLLM rejected the batch: {type(e).__name__}: {e}"[:400]) from e
     ctx = {"engine": eng, **seen,
-           "meta": {"vllm_family": b.family, "vllm_repo": _MODELS[b.family]["repo"], "vllm_module": b.module,
+           "meta": {"vllm_engine": vllm_engine.meta(), "vllm_family": b.family, "vllm_repo": _MODELS[b.family]["repo"], "vllm_module": b.module,
                     "vllm_backends": _backends(eng.runner),
                     "vllm_attn_metadata": {k: type(v).__name__ for k, v in (seen["fc"].attn_metadata or {}).items()},
                     "kv_cache_groups": [
@@ -522,8 +489,7 @@ def _prepare(op: Op) -> dict:
 
 
 def _replaying(ctx: dict):
-    """The context the model runner's step gives a forward: inference mode (its tensors
-    are inference tensors), vLLM's current config, and the step's forward context."""
+    """The model runner step's context: inference mode, vLLM's current config, forward context."""
     import contextlib
 
     from vllm.config import set_current_vllm_config
@@ -541,8 +507,7 @@ def _kernel(ctx: dict) -> None:
 
 
 def _cudagraph(ctx: dict) -> bool:
-    """Whether vLLM would replay this batch as a full CUDA graph: a uniform decode batch
-    within the capture sizes, on backends that support one."""
+    """vLLM would replay this as a full CUDA graph: uniform decode within capture sizes, backend support."""
     with ctx["engine"]._configured():  # backends read vLLM's current config to answer
         return _full_graph(ctx["engine"])
 
@@ -553,13 +518,7 @@ def _full_graph(eng: _Engine) -> bool:
     if len(qs) != 1:
         return False
     q = qs.pop()
-    compilation = eng.recipe["compilation_config"]
-    mode = str(compilation.get("cudagraph_mode", "FULL_AND_PIECEWISE")).upper()
-    if compilation.get("mode") in (0, "NONE") and "cudagraph_mode" not in compilation or mode in ("NONE", "PIECEWISE"):
-        return False
-    sizes = compilation.get("cudagraph_capture_sizes")
-    top = max(sizes) if sizes else compilation.get("max_cudagraph_capture_size") or vllm_linear._capture_sizes()[-1]
-    if q * len(eng.reqs) > top:
+    if not eng.capture or q * len(eng.reqs) > eng.capture[-1]:
         return False
     need = AttentionCGSupport.UNIFORM_SINGLE_TOKEN_DECODE if q == 1 else AttentionCGSupport.UNIFORM_BATCH
     for gs in eng.runner.attn_groups:
@@ -571,9 +530,8 @@ def _full_graph(eng: _Engine) -> bool:
 
 
 def _ready_upstream(ctx: dict) -> None:
-    """In serving, a layer that reuses an earlier layer's top-k waits on events that
-    earlier layer recorded in the same graph. Captured alone, it would wait on events
-    recorded outside the capture; record them here, already satisfied, instead."""
+    """A top-k reusing layer waits on events its source layer records in the same graph;
+    captured alone, record them here (already satisfied) instead."""
     stream = torch.cuda.current_stream()
     for m in ctx["engine"].runner.model.modules():
         group = getattr(getattr(m, "impl", None), "index_group", None) or getattr(m, "index_group", None)
@@ -584,16 +542,19 @@ def _ready_upstream(ctx: dict) -> None:
 
 
 def _launcher(ctx: dict):
+    from vllm.distributed.parallel_state import graph_capture
     eager = (lambda: _kernel(ctx)), False
     if not _cudagraph(ctx):
         return eager
+    err = None
     try:
         with _replaying(ctx):
             for _ in range(2):
                 ctx["forward"](*ctx["args"], **ctx["kwargs"])
             torch.cuda.synchronize()
             g = torch.cuda.CUDAGraph()
-            with torch.cuda.graph(g, pool=torch.cuda.graph_pool_handle()):
+            with graph_capture(torch.device("cuda", torch.cuda.current_device())) as gc_, \
+                    torch.cuda.graph(g, pool=torch.cuda.graph_pool_handle(), stream=gc_.stream):
                 _ready_upstream(ctx)
                 ctx["graph_out"] = ctx["forward"](*ctx["args"], **ctx["kwargs"])
         torch.cuda.synchronize()
@@ -601,7 +562,10 @@ def _launcher(ctx: dict):
         if vllm_linear._is_fault(e):
             raise
         torch.cuda.synchronize()
-        print(f"[vllm.attention] CUDA-graph capture failed, timing eagerly: {type(e).__name__}: {e}"[:300],
+        err = e
+    if not ranks.agree(err is None):  # every rank replays, or every rank runs eagerly
+        print(f"[vllm.attention] CUDA-graph capture failed, timing eagerly: {type(err).__name__}: {err}"[:300]
+              if err else "[vllm.attention] another rank's CUDA-graph capture failed, timing eagerly",
               file=sys.stderr)
         return eager
     ctx["graph"] = g

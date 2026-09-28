@@ -1,11 +1,5 @@
-"""Chrome-trace arithmetic shared by the per-platform profilers.
-
-Platforms differ in how they capture (CUPTI, rocprofiler)
-and in how a replay is delimited, but once a replay is a list of device events
-with a start, a duration and a lane, the structure of a measurement - which
-kernels ran, how long the device was busy, where it was idle, what overlapped -
-is the same arithmetic everywhere.
-"""
+"""Chrome-trace arithmetic shared by the per-platform profilers (CUPTI, rocprofiler):
+a replay is a list of device events with start, duration and lane."""
 from __future__ import annotations
 
 import json
@@ -39,12 +33,8 @@ def busy_us(events: list[dict]) -> float:
 
 
 def replay_stats(replays: list[list[dict]], stream_of: Callable[[dict], object]) -> dict | None:
-    """Timing structure of the replays, reported from the median one by span.
-
-    span is first start to last end, busy the union of device time across lanes,
-    gap the device idle inside the span, and overlap the time counted twice
-    because lanes ran concurrently.
-    """
+    """Median replay by span: span first start to last end, busy the union of device time,
+    gap idle inside the span, overlap time counted twice by concurrent lanes."""
     rows = []
     for r in replays:
         if not r:

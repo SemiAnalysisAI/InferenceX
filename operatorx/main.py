@@ -1,19 +1,8 @@
-"""Run every testlist × every backend on the detected platform.
+"""``python -m operatorx``: run every testlist x backend on this platform.
 
-Invoke as ``python -m operatorx`` (or ``python -m operatorx.main``).
-
-Reads testlists from ``<repo>/testlists/*.json`` (one file per testlist; filename
-without extension = testlist name). Default = all testlists; use ``--testlists a,b,c``
-to filter.
-
-Backend op-type support is derived from each backend module's ``IMPLS`` list. If a
-backend doesn't claim an op_type, the (op, backend) combination is silently skipped
-— no Result row is emitted. Args-level rejection (e.g. dtype mismatch) is captured
-as ``status="unsupported"``. Other exceptions become ``status="error"``.
-
-Platform is detected from ``$OPERATORX_CLUSTER`` → ``CLUSTERS[id].platform``, or
-overridden with ``--platform``. Backend filter via ``--backends`` (CSV) or env
-``OPERATORX_BACKENDS``. World size from ``WORLD_SIZE`` env (set by torchrun).
+Op types a backend's IMPLS doesn't claim are skipped (no row, unless --strict);
+UnsupportedOpError -> status="unsupported", other exceptions -> "error".
+Env: OPERATORX_CLUSTER, OPERATORX_BACKENDS, OPERATORX_PARALLEL (JSON), WORLD_SIZE/RANK.
 """
 from __future__ import annotations
 
@@ -27,16 +16,15 @@ import sys
 from pathlib import Path
 
 import operatorx.ops  # noqa: F401  populates op registry
-from operatorx.core import op_registry
+from operatorx.core import op_registry, parallel
 from operatorx import Op, Result, UnsupportedOpError, write_run_result
 from operatorx.clusters import CLUSTER_PLATFORMS
 from operatorx.runtime import runtime_snapshot, utc_now_iso
 
-# a testlist source: the checkpoint id ("org/model") and the op's role in it
+# a testlist source: "<org>/<model>/<role>"
 _SOURCE = re.compile(r"[^/\s]+/[^/\s]+/[^/\s]+")
 
 
-# Package directory contains the checked-in testlists and local results.
 _REPO_ROOT = Path(__file__).resolve().parent
 
 
@@ -45,9 +33,6 @@ RESULTS_DIR = _REPO_ROOT / "results"
 
 
 def _discover_backends(platform: str) -> list[str]:
-    """All backends for a platform = the python modules under
-    ``operatorx/runners/<platform>/backends/``
-    """
     try:
         pkg = importlib.import_module(f"operatorx.runners.{platform}.backends")
     except ImportError:
@@ -65,7 +50,7 @@ def _csv(s: str | None) -> list[str]:
 
 
 def _load_testlists(names: list[str] | None, directory: Path = TESTLIST_DIR) -> dict[str, list[dict]]:
-    """Returns {testlist_name: [shape_dict, ...]}. Default = all available."""
+    """{testlist_name: [shape_dict, ...]}; all available by default."""
     available = {p.stem: p for p in sorted(directory.glob("*.json"))}
     if names:
         wanted = {n: available[n] for n in names if n in available}
@@ -87,7 +72,6 @@ def _load_testlists(names: list[str] | None, directory: Path = TESTLIST_DIR) -> 
 
 
 def _backend_supported_ops(platform: str, backends: list[str], strict: bool = False) -> dict[str, set[str]]:
-    """Discover per-backend supported op_types from each module's IMPLS list."""
     out: dict[str, set[str]] = {}
     for b in backends:
         try:
@@ -103,11 +87,7 @@ def _backend_supported_ops(platform: str, backends: list[str], strict: bool = Fa
 
 
 def _collect_backend_versions(platform: str, backends: list[str]) -> dict[str, str]:
-    """Ask each backend module to report its own library versions.
-
-    Each backend exports ``versions() -> dict[str, str]``. Returned keys are
-    merged into ``RunInfo.software``. Missing or failing probes are skipped.
-    """
+    """Each backend's versions(); failing probes are skipped."""
     out: dict[str, str] = {}
     for b in backends:
         try:
@@ -136,11 +116,13 @@ def _resolve_platform(args_platform: str | None, run_cluster: str | None) -> str
     )
 
 
-def _resolve_world_size(platform: str) -> int:
-    ws = os.environ.get("WORLD_SIZE")
-    if ws:
-        return int(ws)
-    return 1
+def _resolve_split() -> dict:
+    """This process's split (OPERATORX_PARALLEL, JSON; default one device); must match WORLD_SIZE."""
+    split = parallel.normalize(json.loads(os.environ.get("OPERATORX_PARALLEL") or "null"))
+    ws = int(os.environ.get("WORLD_SIZE", "1"))
+    if parallel.world_size(split) != ws:
+        raise SystemExit(f"OPERATORX_PARALLEL={split} needs {parallel.world_size(split)} ranks, launched {ws}")
+    return split
 
 
 def main() -> int:
@@ -159,44 +141,33 @@ def main() -> int:
     run = runtime_snapshot()
     platform = _resolve_platform(args.platform, run.cluster)
 
-    # Backends
     requested = _csv(args.backends) or _csv(os.environ.get("OPERATORX_BACKENDS"))
     backends = requested if requested else _discover_backends(platform)
     if not backends:
         raise SystemExit(f"no backends configured for platform={platform!r}")
 
     backend_ops = _backend_supported_ops(platform, backends, strict=args.strict)
-    # Merge per-backend library versions into the run's software dict.
     run.software.update(_collect_backend_versions(platform, backends))
-    ws = _resolve_world_size(platform)
+    split = _resolve_split()
+    ws = parallel.world_size(split)
     rank = int(os.environ.get("RANK", "0"))
 
-    # Testlists
     testlists = _load_testlists(
         _csv(args.testlists) or _csv(os.environ.get("OPERATORX_TESTLISTS")) or None,
         args.testlist_dir,
     )
 
-    # Load runner
     runner_mod = importlib.import_module(f"operatorx.runners.{platform}.runner")
 
-    # Build entries: (op, testlist_name).
     entries: list[tuple[Op, str]] = []
     for tl_name, shapes in testlists.items():
         for shape in shapes:
-            # In a multi-rank job (ws>1) only run ops explicitly tagged with the
-            # matching world_size — running single-rank ops on every rank is
-            # both wasteful and meaningless (each rank would redo the same work
-            # in parallel). Per-rank ops belong in the ws=1 job.
-            shape_ws = shape["args"].get("world_size")
-            if shape_ws is None:
-                if ws != 1:
-                    continue
-            elif int(shape_ws) != ws:
+            # one parallel state per process; other splits run in their own process
+            if parallel.normalize(shape["args"].get("parallel")) != split:
                 continue
             for backend in backends:
                 if not args.strict and shape["type"] not in backend_ops.get(backend, set()):
-                    continue  # Strict CI retains unsupported backend/operator pairs.
+                    continue  # strict CI keeps unsupported backend/op pairs
                 entries.append((
                     Op(type=shape["type"], args=shape["args"], backend=backend,
                        sources=shape["sources"]),
@@ -204,7 +175,7 @@ def main() -> int:
                 ))
 
     if rank == 0:
-        print(f"[run_smoke] platform={platform} cluster={run.cluster!r} ws={ws}")
+        print(f"[run_smoke] platform={platform} cluster={run.cluster!r} parallel={split}")
         print(f"[run_smoke] backends={backends}")
         print(f"[run_smoke] testlists={list(testlists)}  -> {len(entries)} (op,backend) entries")
 
@@ -242,7 +213,7 @@ def main() -> int:
             latency_str = f"        ERROR ({type(e).__name__})"
         wall_s = _time.perf_counter() - _t0
         if rank == 0:
-            # Checkpoint outside the timed kernel so cancellation preserves completed rows.
+            # checkpoint after each op, outside timing, so cancellation keeps completed rows
             if args.strict:
                 run.finished_at = utc_now_iso()
                 write_run_result(out_path, run, results)
@@ -252,10 +223,7 @@ def main() -> int:
             )
             print(f"[ws={ws}] {tl:12} {status:11} {op.type:18} {op.backend:10}  "
                   f"{latency_str}  wall={wall_s:6.1f}s   {shape_str}", flush=True)
-        # Release per-op tensors back to the CUDA driver so the next op's
-        # allocator sees the full GPU. Without this, PyTorch's caching
-        # allocator hangs on to large output buffers and the next big shape
-        # OOMs even though the prior tensors are no longer referenced.
+        # release cached blocks, else the next big shape can OOM on the previous op's buffers
         try:
             import torch as _torch
             if _torch.cuda.is_available():
@@ -269,7 +237,6 @@ def main() -> int:
         write_run_result(out_path, run, results)
         print(f"\n[run_smoke] {counts} -> {out_path}")
 
-    # Multi-rank cleanup (torch.distributed)
     if ws > 1:
         try:
             import torch.distributed as dist

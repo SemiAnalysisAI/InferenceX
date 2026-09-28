@@ -1,4 +1,4 @@
-"""Dense GEMM through ROCm PyTorch, including architecture-correct FP8."""
+"""Dense GEMM through ROCm PyTorch (FP8 dtype chosen per gfx arch)."""
 
 from __future__ import annotations
 

@@ -1,7 +1,4 @@
-"""Dense GEMM, MoE and attention modules through vLLM's own layers and kernel selection (ROCm).
-
-AITER is enabled as in InferenceX's ROCm vLLM launches.
-"""
+"""GEMM, MoE and attention through vLLM's layers (ROCm), AITER on as in InferenceX's ROCm launches."""
 import os
 
 os.environ.setdefault("VLLM_ROCM_USE_AITER", "1")

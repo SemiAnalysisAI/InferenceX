@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from operatorx.core import parallel
 from operatorx.core.op import OpSpec
 from operatorx.core.op_registry import register
 
@@ -68,20 +69,17 @@ def plain_dtype(args: dict) -> str | None:
 class GemmArgs:
     """C[M,N] = activation(A[M,K] @ B[N,K]^T + bias); A = activation, B = weight.
 
-    a, b: operand descriptors, {"dtype", "scale"?, "scale2"?, "symmetric"?}
+    a, b: {"dtype", "scale"?, "scale2"?, "symmetric"?, "input"?}; unquantized: {"dtype": "bf16"}
       dtype: storage element type (bf16, e4m3, e2m1, int4, ...)
-      scale: {"dtype", "static", "group": [rows, cols]}, the checkpoint's scale
-        format. group is the block of the operand, in its stored layout
-        (A [M, K], B [N, K]), that shares one scale; -1 spans the dimension:
-        [-1, -1] per-tensor, [1, -1] per-token, [-1, 1] per-channel,
-        [1, g] per-row groups of g along K, [r, c] 2-D blocks.
-        static=False means computed at runtime (activation quantization inside the op).
-      scale2: optional second-level scale (e.g. NVFP4's per-tensor fp32 global scale).
-      symmetric: False when the format carries zero points.
-      input: dtype the operand arrives in (default bf16). When it differs from
-        dtype, quantizing to dtype is part of the op; when equal, the operand
-        is pre-quantized and the op starts at the matmul.
-    An unquantized operand is {"dtype": "bf16"}.
+      scale: {"dtype", "static", "group": [rows, cols]}; group is the block of the stored
+        operand (A [M, K], B [N, K]) sharing one scale, -1 spans the dim: [-1, -1] per-tensor,
+        [1, -1] per-token, [-1, 1] per-channel, [1, g] groups of g along K, [r, c] 2-D blocks.
+        static=False: computed at runtime (quantization inside the op).
+      scale2: second-level scale (e.g. NVFP4's per-tensor fp32 global scale).
+      symmetric: False when the format has zero points.
+      input: dtype the operand arrives in (default bf16); != dtype means quantizing is in the op.
+    parallel: {"tp": T} - B split over K, partial C summed across T devices (in the op);
+      m, n, k are the full layer shape.
     """
     m: int
     n: int
@@ -103,6 +101,7 @@ GEMM = OpSpec(
     type="gemm",
     arg_schema=GemmArgs,
     description="C = activation(A[M,K] @ B[N,K]^T + bias)",
+    parallel_axes=parallel.GEMM_AXES,
 )
 
 register(GEMM)

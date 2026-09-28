@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from operatorx.core import parallel
 from operatorx.core.op import OpSpec
 from operatorx.core.op_registry import register
 from operatorx.ops.gemm import ELEMENT_DTYPES, check_operand
@@ -11,8 +12,7 @@ SCORING = {"softmax", "sigmoid", "sqrtsoftplus"}
 ACTIVATIONS = {"silu", "gelu", "gelu_tanh", "swigluoai", "situ", "swiglustep"}
 GATE_DTYPES = {"bf16", "fp32"}
 DISTRIBUTIONS = {"natural", "balanced", "single_hot"}
-# vLLM's FusedMoEQuantConfig slots: a1 the experts' input, w1 the fused gate/up weight,
-# w2 the down weight, a2 the intermediate activation
+# vLLM's FusedMoEQuantConfig slots
 EXPERT_OPERANDS = ("a1", "w1", "w2", "a2")
 SHARED_OPERANDS = ("a1", "w1", "w2")
 
@@ -125,33 +125,29 @@ def _check_routing(r: Any) -> None:
 class MoeArgs:
     """y[T,H] = shared(x) + sum over the selected experts e of w_e * expert_e(x).
 
-    The op starts at the router GEMM on normed hidden states x [T, H] and ends at
-    the combined output; residual add and norms are outside it. Operand
-    descriptors are the gemm op's ({"dtype", "scale"?, "scale2"?, "symmetric"?}).
+    From the router GEMM on normed x [T, H] to the combined output (residual/norms outside).
+    Operands are gemm operand descriptors.
 
     experts: {"num": E, "top_k": K, "inter": I, "a1", "w1", "w2", "a2",
               "bias"?: bool, "latent"?: L, "latent_norm"?: bool, "zero"?: n}
-      a1 is the experts' input as they consume it, w1 the fused gate/up weight
-      [2I, H], w2 the down weight [H, I], a2 the intermediate activation. latent: experts
-      run at width L with bf16 H->L / L->H projections (latent_norm: RMSNorm on the
-      routed latent output before L->H). zero: identity experts.
+      a1 expert input, w1 fused gate/up [2I, H], w2 down [H, I], a2 intermediate activation.
+      latent: experts at width L with bf16 H->L / L->H projections (latent_norm: RMSNorm
+      before L->H). zero: identity experts.
     router: {"gate": {"dtype", "logits"?}, "scoring": softmax|sigmoid|sqrtsoftplus,
              "select": {"kind": "topk"} | {"kind": "grouped_topk", "groups", "topk_groups"}
                        | {"kind": "hash", "vocab"},
              "bias"?: score-correction bias, "renormalize"?, "scale"?: routed scaling factor,
              "weight_on_input"?: router weight applied to the expert input}
-      gate.dtype is the router weight's dtype, gate.logits the dtype of the logits it
-      produces (default: gate.dtype).
+      gate.dtype: router weight dtype; gate.logits: logits dtype (default gate.dtype).
     activation: {"kind", "gated"?: default true, "interleaved"?: gate/up rows interleaved
                  in w1 (default false: [gate; up]), "limit"?, "alpha"?, "beta"?}
       swigluoai: alpha scales the gate sigmoid, beta offsets up, limit clamps. situ: alpha and beta
       soft-cap the gate and up halves (alpha*tanh(g/alpha)*sigmoid(g) * beta*tanh(u/beta)).
     shared: null | {"count", "inter", "a1", "w1", "w2", "gate"?: null|"sigmoid"}
     routing: {"distribution": "natural" | "balanced" | "single_hot" | {"kind": "zipf", "s"}, "seed"}
-      natural: routing is whatever the router computes on seeded random inputs.
-      Otherwise expert choice is forced: balanced spreads tokens evenly over experts,
-      zipf draws experts with probability ~ 1/rank^s, single_hot sends every token to
-      expert 0 plus top_k-1 random experts. Router weights stay the router's.
+      natural: the router's own choice on seeded random inputs; otherwise forced: balanced
+      evenly, zipf p ~ 1/rank^s, single_hot expert 0 + top_k-1 random. Weights stay the router's.
+    parallel: {"tp", "dp", "ep"} - tokens is each dp group's batch; hidden/experts the full layer.
     """
     tokens: int
     hidden: int
@@ -179,6 +175,7 @@ MOE = OpSpec(
     type="moe",
     arg_schema=MoeArgs,
     description="y = shared(x) + sum_{e in topk(route(x))} w_e * expert_e(x)",
+    parallel_axes=parallel.MOE_AXES,
 )
 
 register(MOE)

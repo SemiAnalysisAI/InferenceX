@@ -1,25 +1,13 @@
-"""Per-op GPU telemetry and the power-throttle retry policy.
+"""Per-op GPU telemetry (sampled every OPERATORX_TELEMETRY_MS) and the throttle retry.
 
-A provider polls clocks, power, temperatures and throttle reasons every
-OPERATORX_TELEMETRY_MS on a background thread while an op is timed, and
-reads cumulative counters (energy, time spent in each throttle reason) at
-the start and end of the window. An attempt is capped when a power/thermal
-throttle reason is active while the SM clock sits more than
-OPERATORX_CAP_CLOCK_FRACTION below rated boost; the power-cap reason at
-full boost is ordinary DVFS and does not count. Capped attempts are
-retried with growing inter-kernel sleeps (OPERATORX_RETRY_SLEEP_MS,
-doubling) up to OPERATORX_THROTTLE_RETRIES times, and the attempt with
-the lowest median is kept.
+An attempt is capped when a power/thermal reason is active with the SM clock below
+OPERATORX_CAP_CLOCK_FRACTION x rated boost (power cap at full boost is ordinary DVFS);
+capped attempts retry with doubling sleeps (OPERATORX_RETRY_SLEEP_MS, up to
+OPERATORX_THROTTLE_RETRIES) and the lowest median is kept.
 
-metrics["telemetry"] = {
-  "provider", "interval_ms", "n_samples", "window_ms", "rated_sm_clock_mhz",
-  <sample field>: {"min", "p50", "max"}, ...   # sm_clock_mhz, power_w, ...
-  "counters": {...},                           # deltas over the window (100 ms steps)
-  "throttle_reasons", "capped", "attempts", "inter_kernel_sleep_ms",
-}
-
-With OPERATORX_TELEMETRY_DIR set, the raw samples of every attempt are
-appended to <dir>/telemetry-rank<RANK>.jsonl.
+metrics["telemetry"]: provider, interval_ms, n_samples, window_ms, rated_sm_clock_mhz,
+<field>: {min, p50, max}, counters (window deltas), throttle_reasons, capped, attempts,
+inter_kernel_sleep_ms. Raw samples: OPERATORX_TELEMETRY_DIR/telemetry-rank<RANK>.jsonl.
 """
 from __future__ import annotations
 
@@ -29,6 +17,8 @@ import threading
 import time
 
 import torch
+
+from operatorx.runners.common import ranks
 
 _INTERVAL_MS = float(os.environ.get("OPERATORX_TELEMETRY_MS", "5"))
 _DIR = os.environ.get("OPERATORX_TELEMETRY_DIR")
@@ -64,13 +54,11 @@ _NVML_TIME_COUNTERS = {
     "below_app_clocks_ms": "NVML_FI_DEV_PERF_POLICY_TOTAL_APP_CLOCKS",
     "below_base_clocks_ms": "NVML_FI_DEV_PERF_POLICY_TOTAL_BASE_CLOCKS",
 }
-# The driver advances these counters (and energy) in 100 ms steps, so deltas
-# are only meaningful for windows much longer than that.
+# the driver advances these counters (and energy) in 100 ms steps
 _COUNTER_MIN_WINDOW_NS = 1_000_000_000
 
 
 class _Provider:
-    """Samples are dicts with "t_ns" plus whichever fields the device reports."""
 
     name = "null"
     rated_mhz: int | None = None
@@ -131,7 +119,7 @@ class _Nvml(_Provider):
         super().__init__()
         import pynvml as nv
         nv.nvmlInit()
-        # NVML ignores CUDA_VISIBLE_DEVICES, so match the device by UUID.
+        # NVML ignores CUDA_VISIBLE_DEVICES: match by UUID
         uuid = str(torch.cuda.get_device_properties(device).uuid)
         self._nv = nv
         self._h = nv.nvmlDeviceGetHandleByUUID(uuid if uuid.startswith("GPU-") else f"GPU-{uuid}")
@@ -207,8 +195,7 @@ class _AmdSmi(_Provider):
         super().__init__()
         import amdsmi
         amdsmi.amdsmi_init()
-        # amdsmi enumerates every GPU regardless of *_VISIBLE_DEVICES, so
-        # match the device by PCI address.
+        # amdsmi ignores *_VISIBLE_DEVICES: match by PCI address
         p = torch.cuda.get_device_properties(device)
         bdf = f"{p.pci_domain_id:04x}:{p.pci_bus_id:02x}:{p.pci_device_id:02x}."
         self._a = amdsmi
@@ -305,9 +292,7 @@ def _dump(op, attempt: int, summary: dict, samples: list[dict]) -> None:
 
 
 def measure(op, time_once) -> tuple[float, dict]:
-    """Time op with time_once(sleep_s) -> median_us, retrying capped attempts.
-
-    Returns the best median and its telemetry summary."""
+    """time_once(sleep_s) -> median_us, retried while capped; the best median and its telemetry."""
     provider = _provider()
     best = None
     for attempt in range(1 + max(_RETRIES, 0)):
@@ -318,8 +303,7 @@ def measure(op, time_once) -> tuple[float, dict]:
         try:
             median_us = time_once(sleep_s)
         finally:
-            # a kernel that faults mid-replay must not leave the sampler polling into
-            # the next op's telemetry
+            # a faulting kernel must not leave the sampler polling into the next op
             samples = provider.stop()
         t1 = time.time_ns()
         after = provider.counters()
@@ -328,7 +312,7 @@ def measure(op, time_once) -> tuple[float, dict]:
         _dump(op, attempt, summary, samples)
         if best is None or median_us < best[0]:
             best = (median_us, summary, sleep_s)
-        if not summary["capped"]:
+        if not ranks.any_(summary["capped"]):  # every rank retries, or none does
             break
     median_us, summary, sleep_s = best
     summary["attempts"] = attempt + 1

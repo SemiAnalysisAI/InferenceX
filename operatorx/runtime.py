@@ -1,13 +1,6 @@
-"""Capture a snapshot of the runtime environment for one smoke-test invocation.
-
-Generic host info (hostname, importlib.metadata library versions, git sha,
-whitelisted env, run id) lives here. Platform-specific driver/runtime probes
-live alongside their kernel runners at ``operatorx/runners/<platform>/runtime.py``
-and expose a ``collect() -> dict[str, str]`` function whose output is merged
-into RunInfo.software. Each probe is fail-soft.
-
-Env-passed (no detection): cluster, container_image, instance_type via
-``$OPERATORX_CLUSTER`` / ``$OPERATORX_CONTAINER_IMAGE`` / ``$OPERATORX_INSTANCE_TYPE``.
+"""RunInfo snapshot of the runtime: host info here, driver probes in runners/<platform>/runtime.py
+(collect(), fail-soft). cluster/container_image/instance_type come from $OPERATORX_CLUSTER,
+$OPERATORX_CONTAINER_IMAGE, $OPERATORX_INSTANCE_TYPE.
 """
 from __future__ import annotations
 
@@ -65,15 +58,12 @@ def _operatorx_version() -> str:
 
 
 def _generic_software() -> dict[str, str]:
-    # Host-level only: python version + platform driver/runtime probes.
-    # Per-backend library versions are merged in by main.py via the backend's
-    # own ``versions()`` function.
+    # backend library versions are added by main.py
     return {"python": sys.version.split()[0]}
 
 
 def _platform_software() -> dict[str, str]:
-    # Each subpackage of operatorx.runners is a platform. The convention is
-    # that it ships a `runtime.collect() -> dict[str, str]`.
+    # each operatorx.runners subpackage is a platform with runtime.collect()
     out: dict[str, str] = {}
     for info in pkgutil.iter_modules(_runners_pkg.__path__):
         if not info.ispkg:

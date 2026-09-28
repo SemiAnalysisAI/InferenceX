@@ -23,8 +23,8 @@ def platforms(runner="cluster:h100-dgxc", gpus=8, architecture="linux/amd64"):
 
 def test_plan_chunks_by_world_size():
     ordinary = {"type": "gemm", "args": {"m": 2}}
-    wide = {"type": "gemm", "args": {"m": 2, "world_size": 4}}
-    multi = {"type": "gemm", "args": {"m": 2, "world_size": 16}}
+    wide = {"type": "gemm", "args": {"m": 2, "parallel": {"tp": 4}}}
+    multi = {"type": "gemm", "args": {"m": 2, "parallel": {"tp": 16}}}
     result = ci.plan(
         "cluster:h100-dgxc",
         ["a", "b"],
@@ -72,7 +72,7 @@ def test_plan_bounds_world_size_to_physical_arm_node():
     shapes = {
         "tiny": [
             {"type": "gemm", "args": {"m": 2}},
-            {"type": "allreduce", "args": {"world_size": 8}},
+            {"type": "allreduce", "args": {"parallel": {"tp": 8}}},
         ]
     }
     hardware = platforms("cluster:gb200-nv", 4, "linux/arm64")
@@ -115,7 +115,7 @@ def test_image_import_separates_architectures_and_refuses_wrong_host(
 
     monkeypatch.setattr(ci.subprocess, "run", external)
     digest = "sha256:" + "a" * 64
-    # Only registry traffic is replaced; use the production reference parser.
+    # only registry traffic is faked; the real reference parser runs
     probe = ci.probe_module()
     monkeypatch.setattr(probe, "resolve_image_digest", lambda image: digest)
     monkeypatch.setattr(ci, "probe_module", lambda: probe)
@@ -137,7 +137,7 @@ def test_image_import_separates_architectures_and_refuses_wrong_host(
         args.image_platform = architecture
         monkeypatch.setattr(ci.platform, "machine", lambda: machine)
         ci.import_image(args)
-        ci.import_image(args)  # Reuse a validated cache on the same architecture.
+        ci.import_image(args)  # reuses the validated cache
     images = list(args.cache.glob("*.sqsh"))
     assert len(images) == 2
     assert all(image.read_bytes() == b"validated squash fixture" for image in images)
@@ -201,7 +201,7 @@ def test_platform_overlay_preserves_base_and_replaces_explicit_profile(tmp_path)
     [("flashinfer", [1], "gemm"), ("torch", [2], "gemm"), ("torch", [1], "allreduce")],
 )
 def test_amd_plan_rejects_unimplemented_execution(backend, worlds, kind):
-    with pytest.raises(ValueError, match="single-GPU torch/vllm GEMM"):
+    with pytest.raises(ValueError, match="AMD CI supports|single-device"):
         ci.plan(
             "cluster:mi300x-amd",
             [backend],
@@ -220,8 +220,7 @@ def test_amd_plan_rejects_unimplemented_execution(backend, worlds, kind):
 def test_strict_benchmark_writes_actual_status(
     tmp_path, monkeypatch, outcome, expected_rc
 ):
-    # The GPU kernel is an external collaborator; selection, exception handling,
-    # checkpointing, serialization and exit decisions execute the real main().
+    # only the GPU kernel is faked; everything else is the real main()
     backend = types.ModuleType("operatorx.runners.testgpu.backends.kernel")
     backend.IMPLS = (
         [] if outcome == "unclaimed" else [types.SimpleNamespace(op_type="gemm")]
