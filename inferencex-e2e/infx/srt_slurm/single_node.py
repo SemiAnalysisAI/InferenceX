@@ -141,9 +141,10 @@ PROFILE_DEFAULTS: dict[str, Any] = {
     # [anchor, seconds after it, engine iterations] per torch window. Anchors are
     # aiperf phases ("warmup", "profiling") or "decode", the first steady decode
     # (FULL CUDA graph replays) after warmup starts. AgentX warmup is the lanes'
-    # long first turns (prefill-heavy); each measured-phase turn re-prefills first,
-    # so steady decode's arrival depends on concurrency.
-    "windows": [["warmup", 60, 32], ["decode", 0, 32]],
+    # long first turns, all sent at its start (prefill-heavy; at low concurrency
+    # they have drained within a minute); each measured-phase turn re-prefills
+    # first, so steady decode's arrival depends on concurrency.
+    "windows": [["warmup", 0, 32], ["decode", 0, 32]],
     # workers whose CUDA graph capture is profiled; "all" profiles every rank
     "capture_ranks": "dp0_tp0",
     # Host memory kept free of CPU KV offload for the profiler's trace buffers;
