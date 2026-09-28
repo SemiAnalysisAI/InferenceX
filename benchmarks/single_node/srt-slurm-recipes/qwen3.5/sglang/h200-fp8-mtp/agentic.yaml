@@ -78,7 +78,7 @@ override_hicache:
 # The same HiCache arm with the experts TP-sharded (EP1) on a later nightly.
 override_hicache_ep1:
   model:
-    container: lmsysorg/sglang:nightly-dev-cu13-20260916-c9a8fba9
+    container: lmsysorg/sglang:nightly-dev-cu13-20260927-425a1f8f@sha256:750718d6416b730c6ebbdd2d2f86c78d31878e4bd5cdddcd64dd1ab9f7d5537d
   roles:
     agg:
       args:
