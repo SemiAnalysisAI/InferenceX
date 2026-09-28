@@ -14,6 +14,16 @@
 
 受到 OpenAI、Meta、Microsoft、Oracle 等万亿美元级 Token 工厂运营商，以及 PyTorch 基金会、vLLM、SGLang、Tri Dao 等机器学习社区的信赖
 
+## 项目
+
+| 目录 | 内容 |
+| --- | --- |
+| 🚀 [`InferenceX-e2e/`](inferencex-e2e/) | 端到端推理服务基准测试 |
+| 🌐 [`CollectiveX/`](collectivex/) | 网络与集合通信基准测试（实验性 Beta 版本） |
+| ⚙️ [`OperatorX/`](operatorx/) | 算子与内核级基准测试（实验性 Beta 版本） |
+| 🧩 [`shared/`](shared/) | 共享组件目录 |
+| 🧪 [`experimental/`](experimental/) | 其余实验 |
+
 ## 新闻
 
 - **[2026/09]** DeepSeek V4.1 Flash：新增 AgentX 基准测试 [仪表盘](https://inferencex.semianalysis.com/agentx)
@@ -91,17 +101,3 @@ SGLang、vLLM、TensorRT-LLM、CUDA、ROCm 等 AI 软件通过核函式優化、
 完整支持者名单与引言：https://inferencex.semianalysis.com/quotes
 
 <img width="938" height="487" alt="image" src="https://github.com/user-attachments/assets/aa9b8257-fa7d-4691-97c3-dada8db05cb3" />
-
-
-
-## 仓库布局
-
-| 目录 | 内容 |
-| --- | --- |
-| [`inferencex-e2e/`](inferencex-e2e/) | 端到端推理服务基准测试、配置、文档、Python 工具、启动器、辅助工具及性能历史 |
-| [`collectivex/`](collectivex/) | 集合通信基准测试 |
-| [`operatorx/`](operatorx/) | 算子基准测试 |
-| [`shared/`](shared/) | 共享组件目录 |
-| [`experimental/`](experimental/) | 其余实验 |
-
-请在 `inferencex-e2e/` 中运行端到端命令；`pyproject.toml`、`uv.lock` 和 `.python-version` 也由该项目维护。仓库级规范和 GitHub 工作流保留在根目录。
