@@ -162,6 +162,7 @@ class Trace:
         """Markers, op chain, innermost op args and module path of a launch."""
         marks = {}
         ops = []
+        annotations = []
         modules = []  # qualified names from infx_mod markers
         stack_modules = []  # class-instance names from Python stacks (capture only)
         frame = None
@@ -179,8 +180,10 @@ class Trace:
                 module_stack.append([qualname, json.loads(sig) if sig else None])
             elif name.startswith(LAUNCHER_MARK):
                 launcher = json.loads(name[len(LAUNCHER_MARK):])
-            elif e["cat"] == "cpu_op" or (e["cat"] == "user_annotation" and not name.startswith("infx_")):
+            elif e["cat"] == "cpu_op":
                 ops.append(i)
+            elif e["cat"] == "user_annotation":
+                annotations.append(name)  # e.g. vLLM's per-step execute_context_* scope
             elif e["cat"] == "python_function":
                 if name.startswith("nn.Module: "):
                     stack_modules.append(name[len("nn.Module: "):])
@@ -192,6 +195,7 @@ class Trace:
             "marks": marks,
             "op": inner["name"] if inner else None,
             "op_chain": [self.events[i]["name"] for i in ops],
+            "annotations": annotations,
             "input_dims": args.get("Input Dims"),
             "input_types": args.get("Input type"),
             "concrete_inputs": args.get("Concrete Inputs"),
