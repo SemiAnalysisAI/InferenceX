@@ -89,7 +89,7 @@ while a profiler runs:
   FlashInfer wrappers).
 
 Marker names carry no quotes or backslashes: Kineto writes event names into the
-trace JSON unescaped. The extractor repairs traces recorded before this rule.
+trace JSON unescaped, and the extractor fails on a trace it cannot decode.
 - `infx_graph_capture#n` / `infx_graph_replay#n`: CUDA graph ordinals.
 
 An eager kernel joins its launch through the CUDA correlation id. A kernel

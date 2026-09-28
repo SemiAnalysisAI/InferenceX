@@ -66,45 +66,14 @@ class Event:
         return default if value is None else value
 
 
-NAME_LINE = re.compile(r'^(\s*"name": ")(.*)(",?)$', re.M)
-
-
-def repair_names(text):
-    """Escape quotes inside "name" values: Kineto writes event names unescaped."""
-    def fix(m):
-        inner = m.group(2)
-        if '"' not in inner:
-            return m.group(0)
-        return m.group(1) + inner.replace("\\", "\\\\").replace('"', '\\"') + m.group(3)
-
-    return NAME_LINE.sub(fix, text)
-
-
-def read_lines(f, chunk_size):
-    """Chunks of whole lines, each repaired; a name line never straddles two chunks."""
-    carry = ""
-    while True:
-        chunk = f.read(chunk_size)
-        if not chunk:
-            if carry:
-                yield repair_names(carry)
-            return
-        text = carry + chunk
-        cut = text.rfind("\n") + 1
-        carry = text[cut:]
-        if cut:
-            yield repair_names(text[:cut])
-
-
 def iter_trace_events(path, chunk_size=1 << 22):
     """Stream the traceEvents array one event at a time; traces reach several GB."""
     decoder = json.JSONDecoder()
     opener = gzip.open if path.endswith(".gz") else open
-    with opener(path, "rt") as raw:
-        f = read_lines(raw, chunk_size)
+    with opener(path, "rt") as f:
         buf, pos = "", 0
         while True:  # find the array
-            chunk = next(f, "")
+            chunk = f.read(chunk_size)
             if not chunk:
                 return
             buf += chunk
@@ -126,7 +95,7 @@ def iter_trace_events(path, chunk_size=1 << 22):
                 # undecodable buffer is corrupt input, not a partial read.
                 if len(buf) - pos > 8 * chunk_size:
                     raise ValueError(f"{path}: undecodable trace near offset {pos}: {error}") from error
-                chunk = next(f, "")
+                chunk = f.read(chunk_size)
                 if not chunk:
                     raise ValueError(f"{path}: trace ends inside an event: {error}") from error
                 buf, pos = buf[pos:] + chunk, 0
@@ -143,11 +112,9 @@ def load_events(path):
 
 
 def parse_signature(sig):
-    """[[shape, dtype], ...] from '7x7168:bfloat16;1x2:int64' (or the first runs' JSON)."""
+    """[[shape, dtype], ...] from '7x7168:bfloat16;1x2:int64'."""
     if not sig:
         return []
-    if sig.startswith("["):
-        return json.loads(sig)
     out = []
     for item in sig.split(";"):
         dims, _, dtype = item.rpartition(":")
@@ -156,9 +123,7 @@ def parse_signature(sig):
 
 
 def parse_launcher(text):
-    """[launcher, [vLLM caller frames]] from '<launcher>#<frame>|<frame>' (or JSON)."""
-    if text.startswith("["):
-        return json.loads(text)
+    """[launcher, [vLLM caller frames]] from '<launcher>#<frame>|<frame>'."""
     label, _, callers = text.partition("#")
     return [label, [c for c in callers.split("|") if c]]
 
