@@ -110,6 +110,30 @@ def test_installed_matrix_validation_rejects_zero_concurrency(run_installed):
     assert result.stdout == ""
 
 
+def test_installed_manual_plan_reads_the_callers_workflow(tmp_path, run_installed):
+    workflows = tmp_path / ".github/workflows"
+    workflows.mkdir(parents=True)
+    (workflows / "manual.yml").write_text("on: {workflow_dispatch: {}}\n")
+    result = run_installed(
+        "-c",
+        """
+from infx.matrix.plan import build_plan
+plan = build_plan([{
+    "config-keys": [], "workflow-dispatch": "manual.yml",
+    "description": ["Record manual workload"],
+    "pr-link": "https://github.com/SemiAnalysisAI/InferenceX/pull/1",
+}], base_ref="base", head_ref="head", config_files=[])
+print(plan.model_dump_json(by_alias=True, exclude_none=True))
+""",
+    )
+    assert result.returncode == 0, result.stderr
+    plan = json.loads(result.stdout)
+    assert plan["single_node"] == plan["multi_node"] == {}
+    for key in ("evals", "agentic_evals", "multinode_evals", "multinode_agentic_evals"):
+        assert plan[key] == []
+    assert plan["changelog_metadata"]["entries"][0]["workflow-dispatch"] == "manual.yml"
+
+
 def test_installed_hardware_matching_works_without_repository_files(run_installed):
     result = run_installed(
         "-c",

@@ -28,7 +28,7 @@ import os
 import re
 import sys
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from statistics import mean
 
@@ -44,6 +44,8 @@ from .common import (
     benchmark_window_payload,
     patch_power_metrics,
 )
+
+UTC = timezone.utc  # noqa: UP017 -- retained H3 runtimes use Python 3.10.
 
 _POWER_COL_RE = re.compile(r"power", re.IGNORECASE)
 _POWER_EXCLUDE_RE = re.compile(r"limit|cap|max|min", re.IGNORECASE)

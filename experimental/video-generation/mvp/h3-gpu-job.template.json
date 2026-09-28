@@ -1,0 +1,113 @@
+{
+  "schema_version": "0.1.0",
+  "job_id": "h3-repeatability-REPLACE_WITH_UNIQUE_ID",
+  "authorization": {
+    "compute_approved": false,
+    "model_license_reviewed": false,
+    "approval_reference": ""
+  },
+  "allocation": {
+    "mode": "cooperative_shared",
+    "label": "REPLACE_WITH_ACTUAL_APPROVED_ALLOCATION"
+  },
+  "gpu_uuids": [
+    "REPLACE_WITH_APPROVED_FULL_GPU_UUID_1",
+    "REPLACE_WITH_APPROVED_FULL_GPU_UUID_2",
+    "REPLACE_WITH_APPROVED_FULL_GPU_UUID_3",
+    "REPLACE_WITH_APPROVED_FULL_GPU_UUID_4"
+  ],
+  "port": 30283,
+  "lock_directory": "/REPLACE_WITH_OWNED_PRIVATE_LOCK_DIRECTORY",
+  "baseline": {
+    "python": "/REPLACE_WITH_BASELINE_ENV/bin/python",
+    "source": "/REPLACE_WITH_BASELINE_SOURCE",
+    "revision": "REPLACE_WITH_MANIFEST_REVISION",
+    "source_sha256": "REPLACE_WITH_MANIFEST_SOURCE_SHA256"
+  },
+  "candidate": {
+    "python": "/REPLACE_WITH_CANDIDATE_ENV/bin/python",
+    "source": "/REPLACE_WITH_CANDIDATE_SOURCE",
+    "revision": "REPLACE_WITH_MANIFEST_REVISION",
+    "source_sha256": "REPLACE_WITH_MANIFEST_SOURCE_SHA256"
+  },
+  "model": {
+    "path": "/REPLACE_WITH_READABLE_MATERIALIZED_H3_SNAPSHOT",
+    "revision": "42ed227ee7df40d41602854ae760620d6eb651fe",
+    "files": []
+  },
+  "server": {
+    "ulysses_degree": 4,
+    "dit_cpu_offload": false,
+    "tp_size": 1,
+    "encoder_parallel": "auto",
+    "performance_mode": "speed"
+  },
+  "plan": {
+    "plan_id": "h3-fl2va-t2va-smoke-v1",
+    "model_id": "MiniMaxAI/MiniMax-H3",
+    "model_revision": "42ed227ee7df40d41602854ae760620d6eb651fe",
+    "generation": {
+      "duration_seconds": 4,
+      "aspect_ratio": "16:9",
+      "width": 1344,
+      "height": 768,
+      "frame_count": 107,
+      "fps": 24,
+      "audio_sample_rate_hz": 32000,
+      "audio_channels": 2,
+      "num_inference_steps": 50,
+      "flow_shift": 12.0,
+      "audio_flow_shift": 3.0
+    },
+    "cases": [
+      {
+        "case_id": "drum-taps",
+        "prompt": "A single continuous medium shot of a drummer tapping a snare drum three times in a quiet rehearsal room. The drumsticks visibly contact the drumhead on each tap. The three crisp snare hits and the natural room ambience are audible. The camera remains still. No music, speech, subtitles, or scene cuts.",
+        "seed": 11,
+        "requires_motion": true,
+        "requires_sound": true
+      },
+      {
+        "case_id": "pouring-water",
+        "prompt": "A single continuous close-up of a hand steadily pouring water from a clear glass jug into an empty drinking glass on a wooden table. The water level visibly rises and the pouring and splashing sounds are clearly audible. Daylight, a still camera, no speech, no music, no subtitles, and no scene cuts.",
+        "seed": 23,
+        "requires_motion": true,
+        "requires_sound": true
+      },
+      {
+        "case_id": "bicycle-pass",
+        "prompt": "A single continuous wide shot of a cyclist riding from the left side of the frame to the right along a quiet park path. The moving wheels remain visible and the bicycle bell rings once as the cyclist passes the camera. Soft outdoor ambience is audible. The camera stays still, with no music, speech, subtitles, or scene cuts.",
+        "seed": 37,
+        "requires_motion": true,
+        "requires_sound": true
+      },
+      {
+        "case_id": "footsteps",
+        "prompt": "A single continuous low-angle shot of a person in ordinary shoes walking across a wooden floor from left to right. Each step visibly lands on the floor and the corresponding footsteps are audible in the quiet room. The camera stays still. No music, speech, subtitles, or scene cuts.",
+        "seed": 53,
+        "requires_motion": true,
+        "requires_sound": true
+      }
+    ],
+    "repetitions": 2,
+    "warmup_runs": 1
+  },
+  "policy": {
+    "policy_id": "h3-example-uncalibrated-gpu-v1",
+    "calibration_status": "uncalibrated",
+    "max_latency_increase_fraction": 0.1,
+    "min_video_psnr_db": 30,
+    "min_audio_spectral_cosine": 0.95,
+    "max_audio_rms_ratio_error": 0.1,
+    "max_memory_increase_fraction": 0.1
+  },
+  "limits": {
+    "job_seconds": 4500,
+    "startup_seconds": 900,
+    "request_seconds": 900,
+    "cleanup_seconds": 60,
+    "telemetry_interval_seconds": 1,
+    "command_seconds": 10,
+    "max_idle_memory_mib": 64
+  }
+}

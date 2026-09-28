@@ -1,0 +1,55 @@
+--- a/python/sglang/multimodal_gen/runtime/entrypoints/openai/video_api.py
++++ b/python/sglang/multimodal_gen/runtime/entrypoints/openai/video_api.py
+@@ -6,6 +6,7 @@
+ import shutil
+ import tempfile
+ import time
++from evaluator import mvp_runtime_timing as vgbench_timing
+ from collections.abc import Coroutine
+ from contextlib import suppress
+ from typing import Any, Dict, Optional
+@@ -527,6 +528,7 @@
+             update_fields, request_id=job_id, result=result
+         )
+         update_fields.update(final_media_fields)
++        vgbench_timing.emit(job_id, "media_ready")
+         await VIDEO_STORE.update_fields(job_id, update_fields)
+     except Exception as e:
+         logger.exception("Video job %s failed", job_id)
+@@ -599,6 +601,7 @@
+ ):
+     content_type = request.headers.get("content-type", "").lower()
+     request_id = generate_request_id()
++    vgbench_timing.emit(request_id, "http_received")
+
+     server_args = get_global_server_args()
+     task_type = server_args.pipeline_config.task_type
+@@ -861,6 +864,7 @@
+         )
+         job.update(sampling_params.project_video_queued_job_fields(batch))
+         await VIDEO_STORE.upsert(request_id, job)
++        vgbench_timing.emit(request_id, "http_accepted")
+     except Exception as e:
+         if batch is not None:
+             try:
+--- a/python/sglang/multimodal_gen/runtime/managers/scheduler.py
++++ b/python/sglang/multimodal_gen/runtime/managers/scheduler.py
+@@ -4,6 +4,7 @@
+ import dataclasses
+ import pickle
+ import time
++from evaluator import mvp_runtime_timing as vgbench_timing
+ from collections import deque
+ from contextlib import contextmanager
+ from copy import deepcopy
+@@ -303,7 +304,9 @@
+                 )
+
+             if len(reqs) == 1 or not allow_dynamic_batching:
+-                return self.worker.execute_forward(reqs)
++                with vgbench_timing.forward(reqs, replica_id=self.dp_replica,
++                                            leader=self.receiver is not None):
++                    return self.worker.execute_forward(reqs)
+
+             if self.server_args.pipeline_config.supports_native_grouped_requests():
+                 return self._execute_generation_grouped(reqs)
