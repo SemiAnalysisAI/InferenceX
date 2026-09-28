@@ -4,7 +4,9 @@ CollectiveX is an experimental MoE expert-parallel communication benchmark. It m
 combine, and paired roundtrip latency across EP libraries and accelerator systems, then uploads
 neutral result artifacts.
 
-A second suite, the [vLLM `swap_blocks` benchmark](docs/swap-blocks.md)
+A second suite, `kv-transfer`, measures disaggregated-serving KV-cache handoffs across transfer
+libraries and fabrics ([below](#kv-cache-transfer-suite)). A third, the
+[vLLM `swap_blocks` benchmark](docs/swap-blocks.md)
 ([中文](docs/swap-blocks_zh.md)), measures pinned CPU↔GPU and same-GPU block copies,
 with its own correctness checks and latency/bandwidth JSON output. It runs through the same
 sweep matrix and pool launchers (`suites: swap-blocks`).
@@ -126,7 +128,8 @@ The matrix covers H100, H200, B200, B300, GB200, GB300, MI300X, MI325X, and MI35
 the requested SKUs, backends, EP sizes, and token ladders, then extracts strict per-shard controls
 and rejects missing, stale, malformed, or altered shard controls. `--only-sku`, `--exclude-skus`,
 `--ep-sizes`, and `--precisions` select a subset. `--suites` picks the suites (`ep` by default;
-`swap-blocks` adds one single-GPU shard per pool from `configs/swap_sweep.json`). Every suite's
+`swap-blocks` adds one single-GPU shard per pool from `configs/swap_sweep.json`; `kv-transfer` adds
+one 2-node shard per registry-enabled backend and fabric from `configs/kv_sweep.json`). Every suite's
 shards take the same path: the pool launcher allocates, `runtime/config.py case-args` encodes each
 case as its entrypoint's argv, and the rank wrapper execs that entrypoint. The matrix is generated
 per dispatch, with no frozen digest or locked case count.
@@ -163,6 +166,27 @@ hybrid path with GIN, two logical scale-out domains represented by two physical 
 scale-up ranks per domain. GB EP16 remains MNNVL scale-up and therefore uses LSA. Whether a given
 SKU/backend/EP cell is attempted is a capability fact. Whether it succeeded is decided by the
 benchmark's return code.
+
+## KV-Cache Transfer Suite
+
+`kv-transfer` legs run 2 nodes x 1 GPU, the per-worker prefill/decode pair a disaggregated
+deployment actually forms. Each moves bursts of 1 to 32 concurrent requests' paged KV as vLLM's
+packed block-major descriptor lists over seed-keyed random block tables (a burst posts every
+request's prepped transfer, then awaits them all), plus one contiguous bulk row as the wire-speed
+baseline. The workload is transcribed from what vLLM allocates for the model it serves: `kv-dsv4`
+is DeepSeek-V4-Pro's mixed cache (30 Compressed Sparse Attention layers at 4 tokens per 576 B entry
+plus their 132 B indexer entries, 31 Heavily Compressed Attention layers at 128 tokens per entry,
+and the 128-token sliding-window cache on all 61 layers; fp8 by architecture), at ISL 2k to 512k
+and vLLM's 256-token block. `pull` (READ, vLLM NixlConnector) and `push` (WRITE, SGLang disagg) are
+both timed from the initiator, with pattern verification of every request on the destination pool.
+
+Backends are `nixl` (what Dynamo, vLLM, and SGLang ship), `mooncake` (the CUDA wheel links libcuda
+at import; mi355x runs AMD's atom-dev build push-only), and `mori-io` (AMD's native engine), where
+the registry's `kv_backends` map enables them. No entry, no legs, mirroring `ll_backends`. An entry
+may restrict ops, pin an image, set a NIC filter, or lower the pool budget. Fabrics are `rdma`
+(torch pools) and, on GB racks, `mnnvl` (cuMem FABRIC pools; see the methodology for the
+bulk-vs-paged lane inversion that row exists to publish). The grid and per-pool scheduling live in
+`configs/kv_sweep.json`; dispatch with `suites: kv-transfer`.
 
 ## Workflow And Artifacts
 

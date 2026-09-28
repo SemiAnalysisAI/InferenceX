@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       suites:
-        description: "Comma-list of suites: ep (expert-parallel dispatch/combine), swap-blocks (vLLM block copies, one GPU per pool)"
+        description: "Comma-list of suites: ep (expert-parallel dispatch/combine), swap-blocks (vLLM block copies, one GPU per pool), kv-transfer (disaggregated KV handoff, 2 nodes x 1 GPU; hours per leg)"
         type: string
         default: ep
       backend:
@@ -149,12 +149,18 @@ jobs:
         format('[{0}]', toJSON(matrix.runner))
       ) }}
     name: p${{ needs.setup.outputs.priority }} | ${{ matrix.sku }} ${{ matrix.backend }} shard ${{ matrix.id }}
-    timeout-minutes: 350
+    # A shard with a long allocation (kv-transfer) carries its own ceiling above it, so GitHub
+    # never cancels a healthy leg before the launcher's guards act.
+    timeout-minutes: ${{ matrix.job_timeout_minutes || 350 }}
     env:
       COLLX_BENCH: ${{ matrix.backend }}
       # Set only on shards whose suite ships its own image (swap-blocks); blank keeps the pool's.
       COLLX_IMAGE_OVERRIDE: ${{ matrix.image || '' }}
       COLLX_STAGED_IMAGE_DIR: ${{ matrix.staged_image_dir || '' }}
+      # The fabric a shard claims (kv-transfer rdma legs on an MNNVL rack leave the NVL domain)
+      # and its per-case hang guard; blank keeps the launcher defaults.
+      COLLX_FABRIC: ${{ matrix.fabric || '' }}
+      COLLX_RUN_TIMEOUT: ${{ matrix.run_timeout || '' }}
       COLLX_IMPORT_TMPDIR: ${{ matrix.sku == 'h100-dgxc' && '/var/tmp' || '/tmp' }}
       COLLX_NODES: ${{ matrix.nodes }}
       COLLX_GPUS_PER_NODE: ${{ matrix.gpus_per_node }}

@@ -600,6 +600,8 @@ class CaseArgvContract(unittest.TestCase):
                  "ARGV bench/run_swap_blocks.py --layout random"),
                 (["--entrypoint", "run_ep", "--backend", "mori"], 0,
                  "ARGV bench/run_ep.py --backend mori"),
+                (["--entrypoint", "run_kv", "--backend", "nixl"], 0,
+                 "ARGV bench/run_kv.py --backend nixl"),
                 (["--entrypoint", "../../bin/sh"], 67, ""),
                 (["--backend", "mori"], 67, ""),
             ):

@@ -24,14 +24,18 @@ if [ "$PRODUCT" = gb200 ]; then default_time=30; else default_time=90; fi
 TIME_MIN="${COLLX_TIME:-$default_time}"
 IMAGE="$COLLX_IMAGE"
 case "$COLLX_BENCH" in
-  deepep-v2 | nccl-ep | flashinfer-ep | swap-blocks) ;;
+  deepep-v2 | nccl-ep | flashinfer-ep | swap-blocks | nixl | mooncake) ;;
   *) collx_die "unsupported $PRODUCT backend: $COLLX_BENCH" ;;
 esac
 collx_require_vars COLLX_IMAGE COLLX_IMAGE_PLATFORM COLLX_PARTITION COLLX_ACCOUNT COLLX_SQUASH_DIR COLLX_STAGE_DIR
 [ "$PRODUCT" != gb300 ] || collx_require_vars COLLX_ENROOT_CACHE_PATH
 PARTITION="$COLLX_PARTITION"; ACCOUNT="$COLLX_ACCOUNT"; SQUASH_DIR="$COLLX_SQUASH_DIR"
 [ -z "${COLLX_ENROOT_CACHE_PATH:-}" ] || export ENROOT_CACHE_PATH="$COLLX_ENROOT_CACHE_PATH"
-export NCCL_CUMEM_ENABLE=1 NCCL_MNNVL_ENABLE=1 MC_FORCE_MNNVL=1
+export NCCL_CUMEM_ENABLE=1 NCCL_MNNVL_ENABLE=1
+# Mooncake is MC_FORCE_MNNVL's only reader, and it makes the engine install ONLY its cross-node
+# NVLink transport, which cannot open another host's segments in the pinned wheel
+# (cudaIpcOpenMemHandle: invalid resource handle). The mooncake kv row declares the rdma lane.
+[ "$COLLX_BENCH" = mooncake ] || export MC_FORCE_MNNVL=1
 collx_apply_network_profile "$NODES" "$COLLX_TRANSPORT"
 
 collx_log "$PRODUCT nodes=$NODES x ${GPN}gpu world=$NGPUS bench=$COLLX_BENCH"
@@ -48,6 +52,13 @@ allocation=(--partition="$PARTITION" --account="$ACCOUNT" --nodes="$NODES"
 [ -z "${COLLX_EXCLUDE_NODES:-}" ] || allocation+=(--exclude="$COLLX_EXCLUDE_NODES")
 collx_salloc_jobid "${allocation[@]}"
 [ -n "$JOB_ID" ] || collx_die "no JOB_ID from salloc"
+# The kv rdma legs are the only gb-nv shards that leave the NVL domain; prove their pinned socket
+# interface and HCAs on the allocation as every other scale-out launcher does.
+if [ "$COLLX_TRANSPORT" != mnnvl ] \
+    && ! collx_validate_network_profile_on_job "$JOB_ID" "$NODES" "$COLLX_TRANSPORT"; then
+  collx_log_tail "${COLLX_NETWORK_PROFILE_LOG:-}"
+  collx_die "allocated nodes failed the network profile"
+fi
 
 SQUASH_FILE="$(collx_ensure_squash_on_job "$JOB_ID" "$SQUASH_DIR" "$IMAGE")"
 

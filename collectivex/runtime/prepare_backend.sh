@@ -558,6 +558,38 @@ FICHECK
   [ "$rc" -eq 0 ] || { collx_log "ERROR: FlashInfer EP one-sided A2A unavailable in this image"; return 1; }
 }
 
+# The kv-transfer wheels install into the named container, which persists for the job, so one
+# install here serves every case srun. Noble-based images mark python externally managed
+# (PEP 668); the retry flag is the uccl-prep pattern (older pips never refuse, so never reach it).
+pip_install() {
+  python3 -m pip install -q --disable-pip-version-check --no-input "$@" \
+    || python3 -m pip install -q --disable-pip-version-check --no-input --break-system-packages "$@"
+}
+
+# nixl-cuXX directly: the `nixl` meta package depends on BOTH cu12 and cu13 variants, and an
+# unpinned install under the image's stale pip resolved 1.0.1. ROCm images need nothing:
+# sglang-rocm bundles nixl-cu12 with a ROCm-built UCX.
+nixl_prepare() {
+  python3 -c "import nixl" 2>/dev/null && return 0
+  pip_install 'nixl-cu13==1.3.2' \
+    || { collx_log "ERROR: nixl wheel install failed"; return 1; }
+  python3 -c "import nixl" \
+    || { collx_log "ERROR: nixl import failed after install"; return 1; }
+}
+
+# ROCm builds ship inside the image (upstream wheels link libcuda.so.1; AMD's atom-dev image
+# carries a working build), so an importable mooncake.engine wins. Otherwise install the pinned
+# CUDA wheel; it links libcudart.so.12, which the adapter dlopens from the runtime package at
+# import, so no LD_LIBRARY_PATH seam is needed.
+mooncake_prepare() {
+  if python3 -c "import mooncake.engine" 2>/dev/null; then
+    collx_log "mooncake provided by the image"
+    return 0
+  fi
+  pip_install 'mooncake-transfer-engine==0.3.12.post1' nvidia-cuda-runtime-cu12 \
+    || { collx_log "ERROR: mooncake wheel install failed"; return 1; }
+}
+
 main() {
   collx_apply_network_profile "${COLLX_NODES:-1}" "${COLLX_TRANSPORT:-}" || return 1
   validate_container_network || return 1
@@ -574,6 +606,12 @@ main() {
     swap-blocks)
       python3 -c "from vllm._custom_ops import swap_blocks" \
         || { collx_log "ERROR: vLLM swap_blocks import failed"; return 1; }
+      ;;
+    nixl) nixl_prepare || return 1 ;;
+    mooncake) mooncake_prepare || return 1 ;;
+    mori-io)
+      python3 -c "import mori.io" \
+        || { collx_log "ERROR: MoRI-IO import failed"; return 1; }
       ;;
     *)
       collx_log "ERROR: unknown backend preparation request"

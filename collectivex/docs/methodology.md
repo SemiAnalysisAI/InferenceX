@@ -532,6 +532,110 @@ rates are named `rate_at_latency_percentile`: bytes or tokens divided by the mat
 percentile. They are lower-tail service rates at p99 latency, not p99 percentiles of an inverted
 rate distribution.
 
+## KV-Cache Transfer Suite
+
+`suite: kv-transfer` measures the prefill→decode KV handoff of disaggregated serving as the
+libraries engines ship perform it: one-sided RDMA over registered GPU pools, initiated by one side
+(`pull` = READ, the vLLM NixlConnector shape; `push` = WRITE, the SGLang disagg shape). A leg is
+2 nodes x 1 GPU — the per-worker pair — with rank 0 owning the target pool and rank 1 posting and
+timing every transfer. Control is a gloo group (payload exchange + lockstep barriers); data never
+rides it.
+
+The transferred object is a burst of `batch` concurrent requests' paged KV in the shape vLLM's
+packed DSV4 NIXL path actually registers and posts: per cache group, the physical block is the
+transfer unit, and ONE contiguous descriptor covers all of that group's layers for the block
+(block-major `[block][layer]` layout, `packed_bytes = layers x page_bytes` per descriptor —
+vLLM's connector asserts exactly this shape). Per request, `isl` tokens (2k through 512k) at the
+production block size of 256 tokens, addressed through seed-keyed random block tables on BOTH
+sides (batched requests slice disjoint ranges of one permutation, as live requests never alias
+blocks) — fragmentation is real but block-granular, the post-fragmentation layout a fragmented
+allocator hands a connector. The suite deliberately does NOT explode each (layer, page) into its
+own descriptor: that shape inflates descriptor counts by ~2 orders of magnitude (~2.1M vs ~6.1k
+per 512k-ISL request) and inverts backend and fabric conclusions on descriptor-bound lanes. Each
+request is its own prepped transfer; a burst posts all of them, then awaits all, the way a decode
+step admits several requests at once.
+
+Workload presets are transcribed from what vLLM actually allocates for the model class, region by
+region (geometry validated against vLLM commit `32ad1400d7`). `kv-dsv4` is DeepSeek-V4-Pro as
+vLLM serves it (MXFP4 checkpoints included — quantization covers weights, the cache layout is
+architectural): every token-state is 584 B of content (448 B NoPE + 128 B RoPE + 8 B fp8 scale,
+the `fp8_ds_mla` layout), and each block's page is padded to a 576 B multiple at PAGE granularity
+(FlashMLA packing), not per state. The config's `compress_ratios` interleave 30 Compressed Sparse
+Attention layers (4 tokens per state) with 31 Heavily Compressed Attention layers (128 tokens per
+state); CSA layers add a 132 B/state lightning-indexer cache (128 fp8 + 4 scale bytes); and all
+61 layers keep a 128-token sliding window whose block size is FIXED at 64 tokens because the
+window shares its physical tensor with the CSA cache — its page equals the CSA page byte for
+byte. HCA's 128-token states force the model block size to a multiple of 128 (the model fails
+closed on anything else); vLLM serves DSV4 at 256. Precision is pinned fp8 because the dtype mix
+is architectural, and the whole thing computes to a few percent of an equivalent dense GQA-bf16
+cache. Each lane also reports a `bulk` row — one single-descriptor transfer of the request's
+total bytes per ISL — as the contiguous baseline the paged rows are read against: logical payload
+over host-observed completion of one contiguous post, NOT a proven physical wire rate (backends
+may split large operations internally). Two budgets shed a point's largest batches rather than
+dropping the point, and the smallest batches always survive, so a single request stays measurable
+everywhere and every point keeps a chartable batch ladder: a per-rank pool budget (64 GiB, sized
+to the fleet's smallest HBM, a hard memory limit the batch floor never overrides — on the packed
+geometry this is the budget that actually bites, at the 512k point's largest batches), and a
+per-burst descriptor budget (posting time is linear in batch x descriptors on the per-descriptor
+floor; the packed grid sits far under it, and it stays as the fail-closed guard for future
+presets or smaller block sizes).
+
+Timing is host wall clock around post→completion — completion of a one-sided transfer is
+host-visible and no local kernel participates, so CUDA events have nothing to bracket. Descriptor
+build + handle creation are reported separately as `prep_ms` (engines amortize them through
+prepped-handle reuse), never inside the timed transfer; because that amortization does NOT hold
+for admissions with unique block tables and handle churn, each row also reports
+`gbps_p50_incl_prep`, the cold-path rate with prep paid once per burst, so a lane whose prep
+rivals its transfer time cannot hide it. Every point reports pooled trials x reps burst
+percentiles, GB/s at p50 (burst-aggregate), and per-request completion marks: `request_ms` is
+each individual request's host-observed completion offset from its burst's start (waits drain in
+posting order, so each mark upper-bounds that request's true completion) — the per-request
+latency distribution, distinct from the burst quantities, which are capacity numbers. A
+verification verdict closes each point: the destination pool is pattern-checked after `pull` on
+the initiator and after `push` on the target (an offset-derived byte pattern makes any block's
+expected contents computable from its offset alone), covering every request in the burst against
+its own block tables — concurrent same-session requests are exactly where corruption would hide,
+so a passing request 0 is never taken as evidence for the others. Both pools are repainted
+between points. A failed verify flips the document `invalid` and the leg red.
+
+A registry backend can carry restrictions: `ops` when a fabric serves one direction only
+(mooncake on mi355x runs `push` — AMD's atom-dev build moves WRITE at healthy rates over the
+GPU-paired Pollara NIC, while upstream ionic RDMA READ completes with retry-exceeded and one
+failed READ poisons the engine, which is also why ATOM's production connector is write-only),
+`image` when the build ships only inside a specific image, and `device` for engine NIC
+filters (`{gpu}` expands to the physical GPU index; registering GPU memory on a non-paired
+NIC fails and cross-rail pairs are unroutable), and `pool_budget` when the engine cannot
+register the default pool on that pool's NICs (mooncake on the mi355x ionic NICs fails
+`ibv_reg_mr` with ENOMEM past ~20 GiB while mori-io registers the same pool; points shed their
+largest batches to fit). No kv backend is enabled on b300: the current b300 pool is the AWS
+EFA cluster, and the one-rail rows measured on the earlier RoCE b300 pool do not carry over. The summary's `op` column names the
+measured direction.
+
+Fabrics are a case dimension. `rdma` runs on torch (cudaMalloc) pools. `mnnvl` allocates the
+pools with cuMem FABRIC handles (kv_pool.FabricPool; needs a live nvidia-imex domain), because
+UCX's cross-node cuda_ipc only engages on fabric-mappable memory: on cudaMalloc pools the flag
+is silently inert and the transfer rides the IB rails with byte-identical numbers. On GB200 the
+mnnvl lane pays ~3.9 µs per descriptor copy where the IB lane does not, so the two lanes invert
+with descriptor count: mnnvl leads on coalesced transfers and falls behind the rails as the
+descriptor list grows. Per-lane bandwidth figures for the packed geometry are what the published
+rows carry; figures measured under the retired per-(layer, page) geometry are not comparable and
+are not restated here.
+
+Other lane facts, measured on the metal: single-WR bulk transfers above the provider's max
+message size must be split (the MoRI adapter caps WRs at 1 GiB); and Mooncake is NVIDIA-only at
+the binary level (the wheel links libcuda.so.1 at import; measured failing on mi355x).
+
+ ## Correctness
+ 
+Scheduling is data. `configs/kv_sweep.json` holds the grid and, per pool, the allocation and the
+per-case hang guard (`scheduling`): a leg runs for hours, gb200's mnnvl descriptor floor alone
+measured ~285 minutes on the five-rung grid, and gb300 paces ~1.8x gb200 at ISL >= 131072 over
+mnnvl, so gb200 asks 460 minutes with a 420-minute guard and gb300 690 with 660; every other pool
+asks 210 with 190. The guard fires before the allocation dies, so a slow case is a clean per-case
+kill, and each shard carries a GitHub job ceiling above its allocation. The asks stay 2 nodes x 1
+GPU, short enough to backfill on a contended pool. KV legs run only when a dispatch names
+`kv-transfer` in `suites`.
+
 ## Correctness
 
 An implementation-independent oracle uses an expert-specific deterministic transform so wrong expert

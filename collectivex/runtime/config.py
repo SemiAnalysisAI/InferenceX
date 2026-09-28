@@ -170,11 +170,42 @@ def _swap_argv(case: dict, version: object, runner: str) -> list[str]:
     return argv + _flag_pairs(case, "layout seed device max_payload_bytes warmup iterations")
 
 
+def _kv_argv(case: dict, version: object, runner: str) -> list[str]:
+    argv = [
+        "--backend", str(case["backend"]),
+        "--workload-name", str(case["workload"]),
+        "--precision", str(case["precision"]),
+        "--fabric", str(case["mode"]),
+        "--isl-ladder", str(case["isl_ladder"]),
+        "--page-tokens", str(case["page_tokens"]),
+        "--batch-sizes", str(case["batch_sizes"]),
+        "--kv-device", str(case.get("kv_device", "")),
+        "--ops", str(case["ops"]),
+        "--warmup", str(case["warmup"]),
+        "--reps", str(case["reps"]),
+        "--trials", str(case["trials"]),
+        "--pool-slack", str(case["pool_slack"]),
+        "--seed", str(case["seed"]),
+        "--runner", runner,
+        "--case-id", str(case["case_id"]),
+        "--suite", str(case["suite"]),
+        "--gpus-per-node", str(case["gpus_per_node"]),
+        "--scale-up-domain", str(case["scale_up_domain"]),
+        "--scale-up-transport", str(case["scale_up_transport"]),
+        "--topology-class", str(case["topology_class"]),
+        "--version", str(version),
+    ]
+    if "pool_budget" in case:
+        argv += ["--pool-budget", str(case["pool_budget"])]
+    return argv
+
+
 # suite -> (bench/<entrypoint>.py, argv codec, output flag). The rank wrapper in
 # runtime/common.sh execs the entrypoint the leading --entrypoint pair names.
 _SUITES = {
     "ep-core": ("run_ep", _ep_argv, "--out"),
     "swap-blocks": ("run_swap_blocks", _swap_argv, "--output"),
+    "kv-transfer": ("run_kv", _kv_argv, "--out"),
 }
 
 

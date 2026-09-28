@@ -72,6 +72,9 @@ collx_set_placement() {
   export COLLX_GPUS_PER_NODE="$GPN" COLLX_SCALE_UP_DOMAIN="$SCALE_UP_DOMAIN"
   COLLX_TRANSPORT="$4"
   [ "$4" = mnnvl ] || [ "$NODES" -le 1 ] || COLLX_TRANSPORT="$4-rdma"
+  # A shard that names the rdma fabric on an MNNVL rack (the kv-transfer rdma legs) leaves the
+  # NVL domain, so it takes the same network profile and validation as any other scale-out.
+  [ "$4:${COLLX_FABRIC:-}" != mnnvl:rdma ] || [ "$NODES" -le 1 ] || COLLX_TRANSPORT=mnnvl-rdma
   export COLLX_TRANSPORT
 }
 
@@ -481,7 +484,7 @@ export RANK="$SLURM_PROCID" WORLD_SIZE="$SLURM_NTASKS"
 export LOCAL_RANK="$SLURM_LOCALID" LOCAL_WORLD_SIZE="$COLLX_GPUS_PER_NODE"
 # config.py case-args leads every argv with the suite's entrypoint.
 [ "${1:-}" = --entrypoint ] || exit 67
-case "${2:-}" in run_ep|run_swap_blocks) ;; *) exit 67 ;; esac
+case "${2:-}" in run_ep|run_swap_blocks|run_kv) ;; *) exit 67 ;; esac
 entry="$2"; shift 2
 exec python3 "bench/$entry.py" "$@"
 BASH
