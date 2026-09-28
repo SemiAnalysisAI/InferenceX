@@ -43,7 +43,7 @@ base:
         attention-config: '{"backend":"FLASHINFER","use_trtllm_attention":true,"indexer_kv_dtype":"fp8"}'
         kv-cache-dtype: fp8
         max-cudagraph-capture-size: 512
-        max-num-batched-tokens: 32768
+        max-num-batched-tokens: 16384
         stream-interval: 20
         trust-remote-code: true
         # Three-token EAGLE3 with the GQA draft head. Throughput runs switch to
