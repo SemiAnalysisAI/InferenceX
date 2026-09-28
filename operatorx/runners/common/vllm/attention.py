@@ -475,10 +475,22 @@ def _prepare(op: Op) -> dict:
     return ctx
 
 
-def _kernel(ctx: dict) -> None:
+def _replaying(ctx: dict):
+    """The context the model runner's step gives a forward: inference mode (its tensors
+    are inference tensors), vLLM's current config, and the step's forward context."""
+    import contextlib
+
+    from vllm.config import set_current_vllm_config
     from vllm.forward_context import override_forward_context
-    # the model runner's step runs in inference mode; its tensors are inference tensors
-    with torch.inference_mode(), override_forward_context(ctx["fc"]):
+    stack = contextlib.ExitStack()
+    stack.enter_context(torch.inference_mode())
+    stack.enter_context(set_current_vllm_config(ctx["engine"].runner.vllm_config))
+    stack.enter_context(override_forward_context(ctx["fc"]))
+    return stack
+
+
+def _kernel(ctx: dict) -> None:
+    with _replaying(ctx):
         ctx["out"] = ctx["forward"](*ctx["args"], **ctx["kwargs"])
 
 
@@ -525,9 +537,8 @@ def _launcher(ctx: dict):
     eager = (lambda: _kernel(ctx)), False
     if not _cudagraph(ctx):
         return eager
-    from vllm.forward_context import override_forward_context
     try:
-        with torch.inference_mode(), override_forward_context(ctx["fc"]):
+        with _replaying(ctx):
             for _ in range(2):
                 ctx["forward"](*ctx["args"], **ctx["kwargs"])
             torch.cuda.synchronize()
