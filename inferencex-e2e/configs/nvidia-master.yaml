@@ -4067,7 +4067,7 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
 # DeepSeek-V4-Pro-0813 (DSpark) FP4 GB200, P/D disagg via llmd-vllm.
 # Long-context workspace headroom: GPU-memory budgets are 0.88 for DEP8, 0.85 for TP8.
 # Always uses Mooncake; DSpark with adaptive verification (no golden AL) on disagg.
-# Aggregated arms in dsv4-fp4-gb200-llmd-vllm-agentx-agg still use golden AL.
+# Aggregated TP8 uses committed golden AL; aggregated DEP8 uses adaptive verification.
 # The DSpark image bundles EPP/pd-sidecar v0.10.0.
 dsv4-fp4-gb200-llmd-vllm-agentx:
   image: quay.io/rh-ee-imarkov/llm-d-nokube-vllm:dspark-0814-nightly@sha256:00742fdd10e572172d49559e44c357a68c388933c74db2c4e819bf61377a6a95

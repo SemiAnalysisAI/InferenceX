@@ -10,8 +10,7 @@ import sys
 
 import yaml
 
-
-REPO_ROOT = Path(__file__).resolve().parents[3]
+from infx.golden_al_distribution import golden_length
 
 
 def validate_agentic_offload(recipe: dict, env: dict) -> None:
@@ -56,17 +55,20 @@ def role_assignments(recipe: dict, role: str, env: dict) -> str:
                 else:
                     if env.get("RUN_EVAL") == "true":
                         raise ValueError("Run accuracy evals separately with EVAL_ONLY=true, not synthetic AL")
-                    if env.get("MODEL_NAME") != "deepseek-ai/DeepSeek-V4-Pro-0813":
-                        raise ValueError("No registered DSpark golden AL for this model")
-                    golden_path = REPO_ROOT / "golden_al_distribution/dsv4-pro-0813-dspark.yaml"
-                    golden = yaml.safe_load(golden_path.read_text())
+                    model_prefix = env.get("MODEL_PREFIX")
+                    thinking = env.get("THINKING_MODE", "thinking_on")
+                    if not model_prefix:
+                        raise ValueError("Missing MODEL_PREFIX for DSpark golden AL lookup")
                     k = config["num_speculative_tokens"]
-                    al = golden["deepseek-v4-pro-0813"]["thinking_on"][k]
+                    al = golden_length(model_prefix, config, thinking)
                     config.update(
                         rejection_sample_method="synthetic",
                         synthetic_acceptance_length=al,
                     )
-                    print(f"DSpark {role}: K={k}, golden AL={al} ({golden_path.name})", file=sys.stderr)
+                    print(
+                        f"DSpark {role}: K={k}, golden AL={al} (thinking={thinking})",
+                        file=sys.stderr,
+                    )
                 extra = extra[:match.end()] + json.dumps(config, separators=(",", ":")) + extra[match.end() + length:]
     assignments = [f"ROLE_EXTRA_ARGS={shlex.quote(extra)}",
                    f"PREFILL_ENABLE_EP={str(recipe.get('prefill', {}).get('enable-expert-parallel', True)).lower()}"]
