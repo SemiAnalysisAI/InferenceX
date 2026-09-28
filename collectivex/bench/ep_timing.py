@@ -141,7 +141,10 @@ class EagerTiming:
             floors["dispatch"][0][i].record()
             handle = b.dispatch(problem)
             floors["dispatch"][1][i].record()
-            b.stage_or_reuse(problem, handle, staged)
+            if staged is None:
+                b.stage(problem, handle)
+            else:
+                handle.combine_input = staged
             floors["combine"][0][i].record()
             b.combine(problem, handle)
             floors["combine"][1][i].record()
@@ -149,7 +152,10 @@ class EagerTiming:
         for i in range(iters):
             pair[0][i].record()
             handle = b.dispatch(problem)
-            b.stage_or_reuse(problem, handle, staged)
+            if staged is None:
+                b.stage(problem, handle)
+            else:
+                handle.combine_input = staged
             combined = b.combine(problem, handle)
             pair[1][i].record()
         torch.cuda.synchronize()

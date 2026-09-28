@@ -333,6 +333,15 @@ class Sweep:
                   f"{self.cap} (hidden={self.args.hidden}); not silently truncated.")
         self.graph = self.backend.cuda_graph_enabled
         self.backend.create_buffer(spec)
+        # create_buffer may set the reduction (FlashInfer picks it by wheel version), so resolve the
+        # oracle's combine model here: a bad declaration fails on every rank before any dispatch,
+        # not inside the oracle with one in flight.
+        try:
+            self.backend.combine_model
+        except ValueError as error:
+            if self.rank == 0:
+                print(f"ERROR: {error}")
+            return 2
         # The chained-output A/B is defined only when each pair stages its own input: under the
         # hoist (every FP8 adapter by default) the staged stand-in matches neither pair's dispatch,
         # so chained and drained are two differently mismatched pairs (h100 deepep-v2 EP8: hoisted

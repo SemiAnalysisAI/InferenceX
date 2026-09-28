@@ -236,8 +236,8 @@ class CudaGraphRoundtrip(unittest.TestCase):
         self.assertTrue(problem._cuda_graph_output.cloned)
         self.assertTrue(problem._cuda_graph_output_rewritten)
 
-    def _graph_backend(self, stage_device_work=False):
-        backend = _ChainBackend(stage_device_work=stage_device_work, precision="bf16")
+    def _graph_backend(self, stage_device_work=False, precision="bf16"):
+        backend = _ChainBackend(stage_device_work=stage_device_work, precision=precision)
         backend.mode, backend.CUDA_GRAPH_MODES = "normal", ("normal",)
         return backend
 
@@ -275,7 +275,7 @@ class CudaGraphRoundtrip(unittest.TestCase):
         self.assertTrue(series["combined"].cloned)
 
     def test_external_switch_restores_the_eager_component_pipeline(self):
-        backend = self._graph_backend(stage_device_work=True)
+        backend = self._graph_backend(stage_device_work=True, precision="fp8")
         with mock.patch.dict(os.environ, {}, clear=True):
             self.assertEqual(
                 backend.timed_components(), ["roundtrip", "dispatch", "combine"]
@@ -759,6 +759,29 @@ def drive(*, fail_phases=(), chain_error=0.0, backend_factory=None, chain_output
         selected({"chain"}) if chain_error else frozenset(), chain_error, backend_factory,
         chain_output_ok=chain_output_ok,
     )
+
+
+class CombineModelGate(unittest.TestCase):
+    def test_a_bad_reduction_from_create_buffer_fails_before_any_dispatch(self):
+        # create_buffer may set the reduction (FlashInfer does, by wheel version), so the harness
+        # resolves the model after it; the oracle would otherwise raise with a dispatch in flight.
+        class _BadReduction(_SweepBackend):
+            def create_buffer(self, spec):
+                self.combine_reduction = "not-a-reduction"
+
+        backend = _BadReduction()
+        self.assertEqual(backend.combine_weight_semantics, "unweighted-rank-sum")
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch.dict(sys.modules, {"routing": fake_routing()}), \
+                mock.patch.dict(os.environ, {"COLLX_ATTEMPT_ID": "1"}), \
+                contextlib.redirect_stdout(io.StringIO()) as out:
+            rc = ep_harness.run_sweep(
+                make_args(Path(directory) / "result.json"), backend, value_torch(), _FakeDist(),
+                "cuda:0", 0, 1,
+            )
+        self.assertEqual(rc, 2)
+        self.assertIn("not-a-reduction", out.getvalue())
+        self.assertEqual(backend.events, [])
 
 
 class ChainedRegimeOracleGate(unittest.TestCase):

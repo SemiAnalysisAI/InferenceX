@@ -504,6 +504,8 @@ class EPBackend(abc.ABC):
             torch.cuda.synchronize()
 
     def stage_or_reuse(self, problem, handle, staged):
+        # Graph capture only. The eager timed loops inline this branch so no Python call sits
+        # between the dispatch and combine launches inside a timed window.
         if staged is None:
             self.stage(problem, handle)
         else:
@@ -513,7 +515,10 @@ class EPBackend(abc.ABC):
         """One dispatch -> combine; `staged` supplies a pre-materialised combine input so staging
         stays out of the timed region (see `stage_excluded_from_roundtrip`)."""
         handle = self.dispatch(problem)
-        self.stage_or_reuse(problem, handle, staged)
+        if staged is None:
+            self.stage(problem, handle)
+        else:
+            handle.combine_input = staged
         return self.combine(problem, handle)
 
     def warm_and_hoist_stage(self, problem, warmup):

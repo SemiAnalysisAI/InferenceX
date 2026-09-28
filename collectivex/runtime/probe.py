@@ -164,7 +164,6 @@ def validate_gpu_health(max_temperature_c: int = 90) -> None:
     second signal. Fails open on anything unreadable: no `nvidia-smi`, non-zero exit, bad output.
     """
     import shutil
-    import subprocess  # re-imported per call: GpuHealthProbe swaps sys.modules["subprocess"]
 
     if shutil.which("nvidia-smi") is None:
         return
