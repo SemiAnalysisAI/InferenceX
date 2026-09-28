@@ -9171,3 +9171,12 @@
     - "Remove LD_PRELOAD from both B300 disaggregated recipes so the EFA 1.50.0 installer does not inject libfabric/libefa into dpkg and other setup subprocesses. Keep the EFA installer and Mooncake package pins unchanged."
     - "从两个 B300 分离式配方中移除 LD_PRELOAD，避免 EFA 1.50.0 安装时向 dpkg 等初始化子进程注入 libfabric/libefa；EFA 安装命令和 Mooncake 包版本保持不变。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3190
+
+- config-keys:
+    - dsv4-fp4-b300-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Set stable, separate Prometheus multiprocess directories for the B300 prefill and decode roles, creating them in container setup before SGLang starts. This avoids the pinned SGLang build's temporary-directory lifetime race during scheduler metrics initialization."
+    - "为 B300 prefill 和 decode 角色设置稳定且分离的 Prometheus 多进程目录，并在容器初始化时预先创建，避免所用 SGLang 版本在调度器指标初始化期间出现临时目录生命周期竞争。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3190
