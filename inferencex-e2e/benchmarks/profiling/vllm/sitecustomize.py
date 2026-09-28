@@ -650,6 +650,15 @@ def _patch_gpu_worker(module):
     def execute_dummy_batch(self, *args, **kwargs):
         k = next(counter)
         t0 = time.time_ns()
+        # vLLM advances its profiler only for scheduled steps, so an idle DP
+        # rank's window never reaches max_iterations and records until the
+        # window is stopped. Its dummy forwards are its steps: count them.
+        profiler = getattr(self, "profiler", None)
+        if profiler is not None and hasattr(profiler, "step"):
+            try:
+                profiler.step()
+            except Exception:
+                _write_error("dummy profiler step")
         try:
             if not _profiling():
                 return orig(self, *args, **kwargs)
