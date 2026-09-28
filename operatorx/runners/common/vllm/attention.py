@@ -508,13 +508,20 @@ def _cudagraph(ctx: dict) -> bool:
         return _full_graph(ctx["engine"])
 
 
+def _max_capture_size() -> int:
+    """The largest batch vLLM captures by default (VllmConfig._set_cudagraph_sizes); the
+    engine here runs eagerly, so its own config lists no capture sizes."""
+    from vllm.platforms import current_platform
+    return 1024 if current_platform.is_device_capability_family(100) else 512
+
+
 def _full_graph(eng: _Engine) -> bool:
     from vllm.v1.attention.backend import AttentionCGSupport
     qs = {r.num_tokens - r.num_computed_tokens for r in eng.reqs}
     if len(qs) != 1:
         return False
     q = qs.pop()
-    if q * len(eng.reqs) > vllm_linear._capture_sizes()[-1]:
+    if q * len(eng.reqs) > _max_capture_size():
         return False
     need = AttentionCGSupport.UNIFORM_SINGLE_TOKEN_DECODE if q == 1 else AttentionCGSupport.UNIFORM_BATCH
     for gs in eng.runner.attn_groups:
