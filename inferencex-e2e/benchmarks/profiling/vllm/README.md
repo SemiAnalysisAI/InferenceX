@@ -80,12 +80,16 @@ while a profiler runs:
 
 - `infx_step#k` / `infx_dummy#k`: a scheduled step and an idle DP rank's
   dummy forward. Each step's batch composition is logged under the same `k`.
-- `infx_mod#<qualified name>#<input signature>`: every module call, through
+- `infx_mod#<qualified name>#<dims>:<dtype>;...` (e.g. `7x7168:bfloat16`): every
+  module call and its tensor inputs, through
   global module hooks registered only while a window is open, and only when
   the engine is not torch.compiled.
-- `infx_py#[launcher, vLLM callers]`: the Python entry points that launch
+- `infx_py#<launcher>#<vLLM frame>|...`: the Python entry points that launch
   kernels without a torch op (Triton, TileLang, CuTe DSL, vLLM's DeepGEMM and
   FlashInfer wrappers).
+
+Marker names carry no quotes or backslashes: Kineto writes event names into the
+trace JSON unescaped. The extractor repairs traces recorded before this rule.
 - `infx_graph_capture#n` / `infx_graph_replay#n`: CUDA graph ordinals.
 
 An eager kernel joins its launch through the CUDA correlation id. A kernel
