@@ -247,8 +247,8 @@ def _build_dsv4_pro(a: dict) -> _Build:
              qk_rope_head_dim=a["rope_dim"], q_lora_rank=a["q_lora_rank"], sliding_window=a["window"],
              o_groups=a["o_groups"], o_lora_rank=a["o_lora_rank"], compress_ratios=ratios,
              rope_theta=a.get("rope_theta", 10000.0), num_hidden_layers=len(ratios), num_nextn_predict_layers=0,
-             num_hash_layers=0, n_routed_experts=8, num_experts_per_tok=2, moe_intermediate_size=_MLP,
-             vocab_size=_VOCAB)
+             num_hash_layers=0, n_routed_experts=8, num_experts_per_tok=2, vocab_size=_VOCAB)
+    # the checkpoint's expert width: DeepGEMM's MegaMoE (DEP recipes) rejects a narrower one
     if a["compress_ratio"]:
         c["compress_rope_theta"] = a["compress_rope_theta"]
         if a.get("rope_scaling"):
