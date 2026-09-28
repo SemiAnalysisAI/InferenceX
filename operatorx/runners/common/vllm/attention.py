@@ -23,16 +23,15 @@ from pathlib import Path
 import torch
 
 from operatorx.core import BackendImpl, Op, UnsupportedOpError
-from operatorx.ops import attention as schema
 from operatorx.runners.common.vllm import linear as vllm_linear
 
 _MODELS = json.loads((Path(__file__).with_name("attention_models.json")).read_text())
 _MLP = 256  # width of the (untimed) MLP in the cut-down model
 _VOCAB = 1024
-_MAX_BATCHED_TOKENS = 65536
+_MAX_BATCHED_TOKENS = 32768  # the largest max-num-batched-tokens of InferenceX's recipes
 _MAX_SEQS = 1024
-_KV_BYTES = int(os.environ.get("OPERATORX_ATTN_KV_BYTES", str(48 << 30)))
-# startup headroom check only; the KV cache is sized by _KV_BYTES
+_KV_FRACTION = float(os.environ.get("OPERATORX_ATTN_KV_FRACTION", "0.5"))  # of device memory
+# startup headroom check only; the KV cache is sized by _KV_FRACTION
 _GPU_UTIL = float(os.environ.get("OPERATORX_ATTN_GPU_UTIL", "0.6"))
 _KV_DTYPES = {"auto": "auto", "bf16": "bfloat16", "fp8": "fp8", "fp8_ds_mla": "fp8_ds_mla"}
 
@@ -59,19 +58,16 @@ def _yarn(s: dict | None) -> dict | None:
     return out
 
 
-def _quant(op: Op, names: tuple[str, ...]) -> dict | None:
-    """The checkpoint quantization_config for the op's projection operands."""
+def _quant(op: Op, family: str) -> dict | None:
+    """The quantization_config of the family's checkpoint whose projections carry the op's
+    operands (proj lists the quantized projections; the rest stay bf16)."""
     proj = op.args.get("proj") or {}
     if not proj:
         return None
-    pairs = {json.dumps(v, sort_keys=True) for v in proj.values()}
-    if len(pairs) > 1 or set(proj) != set(names):
-        raise UnsupportedOpError("projections with different operands are not wired; give all or none")
-    pair = next(iter(proj.values()))
-    scheme = vllm_linear._scheme(pair["a"], pair["b"])
-    if not scheme:
-        raise UnsupportedOpError(f"no vLLM quantization config for projections {pair}")
-    return scheme[1]
+    for v in _MODELS[family].get("variants", []):
+        if all(v["proj"].get(name) == pair for name, pair in proj.items()):
+            return copy.deepcopy(v["quantization_config"])
+    raise UnsupportedOpError(f"no {family} checkpoint quantizes these projections: {sorted(proj)}")
 
 
 def _kimi_k3(mla: dict, kda: dict, target: str) -> _Build:
@@ -272,10 +268,8 @@ def _build_gdn_qwen38(a: dict, linear: dict) -> _Build:
     return b
 
 
-_BUILDERS = {"mla": (_build_mla, schema.MLA_PROJ[:-1]), "gqa": (_build_gqa, schema.GQA_PROJ),
-             "gdn": (_build_gdn, schema.GDN_PROJ), "kda": (_build_kda, schema.KDA_PROJ),
-             "mla_dsa": (_build_mla_dsa, schema.MLA_DSA_PROJ[:5]), "qsa": (_build_qsa, schema.QSA_PROJ),
-             "dsv4_attn": (_build_dsv4, schema.DSV4_PROJ[:5])}
+_BUILDERS = {"mla": _build_mla, "mla_dsa": _build_mla_dsa, "dsv4_attn": _build_dsv4, "gqa": _build_gqa,
+             "qsa": _build_qsa, "gdn": _build_gdn, "kda": _build_kda}
 
 
 class _Engine:
@@ -289,7 +283,7 @@ class _Engine:
         Path(self.dir, "config.json").write_text(json.dumps(b.config))
         kwargs = dict(model=self.dir, load_format="dummy", skip_tokenizer_init=True, enforce_eager=True,
                       enable_prefix_caching=False, max_num_seqs=_MAX_SEQS,
-                      max_num_batched_tokens=_MAX_BATCHED_TOKENS, kv_cache_memory_bytes=_KV_BYTES,
+                      max_num_batched_tokens=_MAX_BATCHED_TOKENS, kv_cache_memory_bytes=_kv_bytes(),
                       gpu_memory_utilization=_GPU_UTIL)
         kwargs.update(b.engine)
         self.reqs: list = []
@@ -352,7 +346,7 @@ class _Engine:
                 r = Request(f"opx{self.n}", [0] * (ctx + g["q"]), SamplingParams(max_tokens=1), None)
                 if self.kvm.allocate_slots(r, ctx + g["q"]) is None:
                     self.reqs.append(r)
-                    raise UnsupportedOpError(f"the batch needs more KV cache than {_KV_BYTES >> 30} GiB")
+                    raise UnsupportedOpError(f"the batch needs more KV cache than {_kv_bytes() >> 30} GiB")
                 r.num_computed_tokens = ctx
                 self.reqs.append(r)
         blocks = [self.kvm.get_block_ids(r.request_id) for r in self.reqs]
@@ -378,6 +372,10 @@ class _Engine:
         if "fc" not in seen:
             raise RuntimeError("the model never called the attention module")
         return seen
+
+
+def _kv_bytes() -> int:
+    return int(torch.cuda.get_device_properties(torch.cuda.current_device()).total_memory * _KV_FRACTION)
 
 
 def _shuffle(blocks: list, rng: random.Random) -> list:
@@ -438,21 +436,27 @@ def _prepare(op: Op) -> dict:
     a = op.args
     if a.get("selection", "natural") != "natural":
         raise UnsupportedOpError("forced token selection is not wired yet")
-    build, names = _BUILDERS[op.type]
-    b = build(op)
-    q = _quant(op, names)
+    b = _BUILDERS[op.type](op)
+    q = _quant(op, b.family)
     if q is not None:
         b.config["quantization_config"] = q
     kv = a.get("kv_cache_dtype")
     if kv is not None:
         b.engine["kv_cache_dtype"] = _KV_DTYPES[kv]
+    if b.family == "kimi_k3" and kv == "fp8":  # vLLM requires it with K3's fp8 latent cache
+        b.engine.setdefault("attention_config", {})["use_prefill_query_quantization"] = True
     try:
         eng = _engine(b)
     except (ValueError, NotImplementedError, AssertionError) as e:
         if vllm_linear._is_fault(e):
             raise
         raise UnsupportedOpError(f"vLLM rejected the {b.family} module: {type(e).__name__}: {e}"[:400]) from e
-    seen = eng.step(a["batch"], b.module)
+    try:
+        seen = eng.step(a["batch"], b.module)
+    except (ValueError, NotImplementedError, AssertionError) as e:
+        if vllm_linear._is_fault(e):
+            raise
+        raise UnsupportedOpError(f"vLLM rejected the batch: {type(e).__name__}: {e}"[:400]) from e
     ctx = {"engine": eng, **seen,
            "meta": {"vllm_family": b.family, "vllm_repo": _MODELS[b.family]["repo"], "vllm_module": b.module,
                     "vllm_backends": _backends(eng.runner),

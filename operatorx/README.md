@@ -1,8 +1,16 @@
 # operatorx
 
 Multi-platform inference operator benchmark suite. Times one op at a time
-(gemm, moe) on NVIDIA and AMD and
+(gemm, moe, and attention modules) on NVIDIA and AMD and
 emits one JSON per run under `results/<platform>/<cluster>/`.
+
+Attention ops are whole modules, one op type each: `mla`, `mla_dsa`, `dsv4_attn`,
+`gqa`, `qsa`, `gdn`, `kda` (`ops/attention.py` lists what each one times). The vLLM
+backend builds a one- to six-layer model of the checkpoint family that has the module
+(`runners/common/vllm/attention_models.json`) with dummy weights and schedules the op's
+batch through vLLM's own model runner, so vLLM picks the attention backend, KV cache
+layout and CUDA-graph use as it does when serving. Dispatch `attn_*` testlists on their
+own: each builds its own in-process vLLM engine.
 
 See `CLUSTERS.md` for how to reach each cluster and the per-host quirks.
 

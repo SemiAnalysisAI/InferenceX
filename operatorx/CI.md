@@ -50,7 +50,8 @@ gh workflow run operatorx-sweep.yml --repo SemiAnalysisAI/InferenceX \
 counters run are perturbed by the profiler.
 
 For a quick infrastructure smoke check, explicitly select `testlists=gemm_perf`
-and `chunk_size=50` (11 BF16 cases). Test runs set `-f ingest=false` so their results stay
+and `chunk_size=50` (11 BF16 cases). `attn_deepseek_v4`, `attn_kimi_k3` and `attn_minimax_m3` hold attention modules; dispatch
+them separately from gemm / moe lists. Test runs set `-f ingest=false` so their results stay
 out of the OperatorX database; a dispatched run is ingested by default. `gemm_serving_8k1k_min` and
 `gemm_serving_all_min` hold the GEMMs of InferenceX serving configurations. Unsupported operations remain visible in results. Backend
 import errors, benchmark errors, and zero successful rows fail the shard.
