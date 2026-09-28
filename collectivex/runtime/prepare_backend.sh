@@ -91,6 +91,57 @@ cuda_toolchain_paths() {
   printf '%s\t%s' "$cuda_home" "$cccl"
 }
 
+# <base>/<name>-<cpu>-<arch>-<image>-<key...>: the directory name is the cache key reused
+# across runs, so every component that changes the build belongs in it. Returns non-zero when
+# no shared cache is mounted (manual runs).
+backend_cache_root() {
+  local name="$1" arch="$2" cpu base image IFS=-
+  shift 2
+  cpu="$(uname -m)"
+  [[ "$cpu" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
+  base="${COLLX_BACKEND_CACHE_ROOT:-}"
+  [[ "$base" = /* ]] || return 1
+  image="$(printf '%s' "${COLLECTIVEX_IMAGE:-manual}" | tr -cs 'A-Za-z0-9_.-' '-')"
+  printf '%s/%s-%s-%s-%s-%s' "$base" "$name" "$cpu" "$arch" "${image#-}" "$*"
+}
+
+# Runs `<ready-check> <root> || <install> <root> <args...>` under the cache root's lock, so
+# concurrent nodes and allocations sharing the cache build it once.
+with_cache_lock() {
+  local label="$1" root="$2" ready="$3" install="$4" lock_path="$2.lock"
+  shift 4
+  (
+    [ ! -L "$lock_path" ] || { collx_log "ERROR: $label cache lock is unsafe"; exit 1; }
+    (umask 077; : >> "$lock_path") && chmod 600 "$lock_path" \
+      || { collx_log "ERROR: $label cache-lock-create failed"; exit 1; }
+    exec 9<>"$lock_path" || { collx_log "ERROR: $label cache-lock-open failed"; exit 1; }
+    flock 9 || { collx_log "ERROR: $label cache-lock-acquire failed"; exit 1; }
+    "$ready" "$root" || "$install" "$root" "$@" || exit 1
+  )
+}
+
+site_cache_ready() { [ -f "$1/.ready" ] && [ -d "$1/site" ]; }
+
+# Sets CACHE_ROOT to the shared cache when one is mounted, else to the node-local fallback, and
+# installs into it unless it is already ready.
+prepare_site_cache() {
+  local name="$1" label="$2" ident="$3" shared="$4" node_local="$5"
+  shift 5
+  if [ -n "$shared" ]; then
+    CACHE_ROOT="$shared"
+    command -v flock >/dev/null \
+      || { collx_log "ERROR: flock is required for $name caching"; return 1; }
+    mkdir -p "${shared%/*}" || return 1
+    collx_log "$name: preparing $ident (shared cache $shared)"
+    with_cache_lock "$label" "$shared" site_cache_ready "$@" \
+      || { collx_log "ERROR: shared $name environment is incomplete"; return 1; }
+  else
+    CACHE_ROOT="$node_local"
+    collx_log "$name: preparing $ident (node-local $node_local; no shared cache mounted)"
+    site_cache_ready "$node_local" || "$1" "$node_local" "${@:2}" || return 1
+  fi
+}
+
 deepep_nvshmem_overlay() {
   local root="$1" packaged="$2" overlay path temporary
   overlay="$root/nvshmem-overlay"
@@ -123,12 +174,6 @@ deepep_nvshmem_overlay() {
 }
 
 deepep_cache_root() {
-  local arch="$1" cpu base image
-  cpu="$(uname -m)"
-  [[ "$cpu" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
-  base="${COLLX_BACKEND_CACHE_ROOT:-}"
-  [[ "$base" = /* ]] || return 1
-  image="$(printf '%s' "${COLLECTIVEX_IMAGE:-manual}" | tr -cs 'A-Za-z0-9_.-' '-')"
   # The NVSHMEM wheel is part of the built venv's identity (see common.sh: the cu12
   # wheel on cu130 images broke sm103), so it keys the cache and a spec change rebuilds.
   local nvshmem_key="${COLLX_DEEPEP_V2_NVSHMEM_SPEC#nvidia-}"
@@ -137,10 +182,11 @@ deepep_cache_root() {
   local build_gen="${COLLX_DEEPEP_V2_BUILD_GEN:?}"
   [[ "$nvshmem_key" =~ ^[A-Za-z0-9._-]+$ && "$torch_key" =~ ^[A-Za-z0-9._-]+$ \
      && "$build_gen" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
-  printf '%s/deepep-v2-%s-sm%s-%s-%s-%s-%s-%s' \
-    "$base" "$cpu" "${arch/./}" "${image#-}" "${COLLX_DEEPEP_V2_COMMIT:0:12}" \
+  backend_cache_root deepep-v2 "sm${1/./}" "${COLLX_DEEPEP_V2_COMMIT:0:12}" \
     "$torch_key" "$nvshmem_key" "$build_gen"
 }
+
+deepep_ready() { [ -f "$1/.ready" ] && [ -x "$1/venv/bin/python" ] && [ -d "$1/source" ]; }
 
 deepep_activate() {
   local root="$1" venv venv_site nccl_root nvshmem_package overlay
@@ -216,13 +262,13 @@ deepep_install() {
     || { collx_log "ERROR: DeepEP V2 build-tool installation failed"; return 1; }
   "${pip[@]}" --index-url https://download.pytorch.org/whl/cu130 \
     --extra-index-url https://pypi.org/simple "$COLLX_DEEPEP_V2_TORCH_SPEC" >&2 2>&1 \
-    || { collx_log "ERROR: torch 2.10.0+cu130 installation failed"; return 1; }
+    || { collx_log "ERROR: $COLLX_DEEPEP_V2_TORCH_SPEC (cu130) installation failed"; return 1; }
   # Torch pins NCCL 2.28.9; ElasticBuffer requires 2.30.4.
   "${pip[@]}" --force-reinstall --no-deps "nvidia-nccl-cu13==2.30.4" >&2 2>&1 \
     || { collx_log "ERROR: NCCL 2.30.4 installation failed"; return 1; }
   deepep_activate "$root" \
     || { collx_log "ERROR: DeepEP V2 environment activation failed"; return 1; }
-  collx_materialize_deepep_source "$source_dir" \
+  collx_materialize_source "deepep-v2-$COLLX_DEEPEP_V2_COMMIT" "$source_dir" \
     || { collx_log "ERROR: DeepEP V2 staged source is invalid"; return 1; }
   # The RDC device-link step (nvcc -dlink) gets no -gencode from the extension build, so nvcc
   # falls back to its default arch (sm_75 on CUDA 13) and links kernels that cannot load on the
@@ -241,27 +287,13 @@ deepep_install() {
 # DeepEP lifecycle
 
 deepep_prepare() {
-  local arch root venv source_dir ready lock_path
+  local arch root
   arch="$(cuda_arch)" || return 1
   root="$(deepep_cache_root "$arch")" || return 1
-  venv="$root/venv"; source_dir="$root/source"; ready="$root/.ready"
-  lock_path="${root}.lock"
   command -v flock >/dev/null || { collx_log "ERROR: flock is required for DeepEP V2"; return 1; }
   mkdir -p "${root%/*}" || return 1
-  collx_log "DeepEP V2: preparing PR #605 with upstream PR #630 and #640 fixes ($COLLX_DEEPEP_V2_COMMIT)"
-  if ! (
-    [ ! -L "$lock_path" ] \
-      || { collx_log "ERROR: DeepEP V2 cache lock is unsafe"; exit 1; }
-    (umask 077; : >> "$lock_path") && chmod 600 "$lock_path" \
-      || { collx_log "ERROR: DeepEP V2 cache-lock-create failed"; exit 1; }
-    exec 9<>"$lock_path" \
-      || { collx_log "ERROR: DeepEP V2 cache-lock-open failed"; exit 1; }
-    flock 9 \
-      || { collx_log "ERROR: DeepEP V2 cache-lock-acquire failed"; exit 1; }
-    if [ ! -f "$ready" ] || [ ! -x "$venv/bin/python" ] || [ ! -d "$source_dir" ]; then
-      deepep_install "$root" "$arch" || exit 1
-    fi
-  ); then
+  collx_log "DeepEP V2: preparing upstream main ($COLLX_DEEPEP_V2_COMMIT)"
+  if ! with_cache_lock "DeepEP V2" "$root" deepep_ready deepep_install "$arch"; then
     collx_log "ERROR: shared DeepEP V2 environment is incomplete"
     return 1
   fi
@@ -294,17 +326,10 @@ PY
 # up its own Docker image and cannot run inside enroot/pyxis). The built deep_ep/uccl packages
 # persist under a cache root and reach the ranks via PYTHONPATH, so later allocations skip the build.
 
-# Returns non-zero when no shared cache is mounted (manual runs); the caller then builds node-local.
 uccl_cache_root() {
-  local arch="$1" cpu base image
-  cpu="$(uname -m)"
-  [[ "$cpu" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
-  base="${COLLX_BACKEND_CACHE_ROOT:-}"
-  [[ "$base" = /* ]] || return 1
-  image="$(printf '%s' "${COLLECTIVEX_IMAGE:-manual}" | tr -cs 'A-Za-z0-9_.-' '-')"
-  arch="$(printf '%s' "$arch" | tr -cs 'A-Za-z0-9_.-' '-')"
-  printf '%s/uccl-ep-%s-%s-%s-%s' \
-    "$base" "$cpu" "${arch#-}" "${image#-}" "${COLLX_UCCL_COMMIT:0:12}"
+  local arch
+  arch="$(printf '%s' "$1" | tr -cs 'A-Za-z0-9_.-' '-')"
+  backend_cache_root uccl-ep "${arch#-}" "${COLLX_UCCL_COMMIT:0:12}"
 }
 
 # CDNA needs UCCL's aggressive host-atomic path.
@@ -327,7 +352,7 @@ uccl_install() {
       || python3 -m pip install -q --disable-pip-version-check --no-input \
            --break-system-packages nanobind; } >&2 2>&1 \
     || { collx_log "ERROR: UCCL nanobind install failed"; return 1; }
-  collx_materialize_uccl_source "$source_dir" \
+  collx_materialize_source "uccl-$COLLX_UCCL_COMMIT" "$source_dir" \
     || { collx_log "ERROR: UCCL staged source is invalid"; return 1; }
   if [ "${COLLX_VENDOR:-nvidia}" = amd ]; then
     arch_env="PYTORCH_ROCM_ARCH=$arch"
@@ -359,39 +384,17 @@ uccl_install() {
 }
 
 uccl_prepare() {
-  local arch root ready lock_path
+  local arch shared
   command -v python3 >/dev/null || { collx_log "ERROR: python3 unavailable for UCCL build"; return 1; }
   if [ "${COLLX_VENDOR:-nvidia}" = amd ]; then
     arch="$(uccl_rocm_arch)" || return 1
   else
     arch="$(cuda_arch)" || return 1
   fi
-  if root="$(uccl_cache_root "$arch")"; then
-    ready="$root/.ready"; lock_path="${root}.lock"
-    command -v flock >/dev/null \
-      || { collx_log "ERROR: flock is required for UCCL-EP caching"; return 1; }
-    mkdir -p "${root%/*}" || return 1
-    collx_log "UCCL-EP: preparing $COLLX_UCCL_COMMIT (shared cache $root)"
-    if ! (
-      [ ! -L "$lock_path" ] || { collx_log "ERROR: UCCL cache lock is unsafe"; exit 1; }
-      (umask 077; : >> "$lock_path") && chmod 600 "$lock_path" \
-        || { collx_log "ERROR: UCCL cache-lock-create failed"; exit 1; }
-      exec 9<>"$lock_path" || { collx_log "ERROR: UCCL cache-lock-open failed"; exit 1; }
-      flock 9 || { collx_log "ERROR: UCCL cache-lock-acquire failed"; exit 1; }
-      if [ ! -f "$ready" ] || [ ! -d "$root/site" ]; then
-        uccl_install "$root" "$arch" || exit 1
-      fi
-    ); then
-      collx_log "ERROR: shared UCCL-EP environment is incomplete"; return 1
-    fi
-  else
-    root="/tmp/collectivex-uccl-cache-$COLLX_UCCL_COMMIT"
-    collx_log "UCCL-EP: preparing $COLLX_UCCL_COMMIT (node-local $root; no shared cache mounted)"
-    if [ ! -f "$root/.ready" ] || [ ! -d "$root/site" ]; then
-      uccl_install "$root" "$arch" || return 1
-    fi
-  fi
-  uccl_activate "$root" || return 1
+  shared="$(uccl_cache_root "$arch")" || shared=""
+  prepare_site_cache UCCL-EP UCCL "$COLLX_UCCL_COMMIT" "$shared" \
+    "/tmp/collectivex-uccl-cache-$COLLX_UCCL_COMMIT" uccl_install "$arch" || return 1
+  uccl_activate "$CACHE_ROOT" || return 1
   uccl_probe || { collx_log "ERROR: UCCL import probe failed"; return 1; }
   collx_log "UCCL-EP ready ($COLLX_UCCL_COMMIT, deep_ep wrapper over uccl.ep CPU-proxy runtime)"
 }
@@ -402,18 +405,11 @@ nccl_ep_spec_slug() {
   printf '%s' "$COLLX_NCCL_EP_SPEC" | tr -cs 'A-Za-z0-9_.-' '-'
 }
 
-# Returns non-zero when no shared cache is mounted (manual runs); the caller then installs node-local.
 nccl_ep_cache_root() {
-  local arch="$1" cpu base image slug
-  cpu="$(uname -m)"
-  [[ "$cpu" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
-  base="${COLLX_BACKEND_CACHE_ROOT:-}"
-  [[ "$base" = /* ]] || return 1
-  image="$(printf '%s' "${COLLECTIVEX_IMAGE:-manual}" | tr -cs 'A-Za-z0-9_.-' '-')"
-  arch="$(printf '%s' "$arch" | tr -cs 'A-Za-z0-9_.-' '-')"
+  local arch slug
+  arch="$(printf '%s' "$1" | tr -cs 'A-Za-z0-9_.-' '-')"
   slug="$(nccl_ep_spec_slug)"
-  printf '%s/nccl-ep-%s-%s-%s-%s' \
-    "$base" "$cpu" "${arch#-}" "${image#-}" "${slug#-}"
+  backend_cache_root nccl-ep "${arch#-}" "${slug#-}"
 }
 
 # The wheel-bundled NCCL goes ahead of the image torch's older NCCL on the loader path: nccl.ep
@@ -471,35 +467,13 @@ nccl_ep_install() {
 }
 
 nccl_ep_prepare() {
-  local arch root ready lock_path
+  local arch shared
   command -v python3 >/dev/null || { collx_log "ERROR: python3 unavailable for NCCL EP"; return 1; }
   arch="$(cuda_arch)" || return 1
-  if root="$(nccl_ep_cache_root "$arch")"; then
-    ready="$root/.ready"; lock_path="${root}.lock"
-    command -v flock >/dev/null \
-      || { collx_log "ERROR: flock is required for NCCL EP caching"; return 1; }
-    mkdir -p "${root%/*}" || return 1
-    collx_log "NCCL EP: preparing $COLLX_NCCL_EP_SPEC (shared cache $root)"
-    if ! (
-      [ ! -L "$lock_path" ] || { collx_log "ERROR: NCCL EP cache lock is unsafe"; exit 1; }
-      (umask 077; : >> "$lock_path") && chmod 600 "$lock_path" \
-        || { collx_log "ERROR: NCCL EP cache-lock-create failed"; exit 1; }
-      exec 9<>"$lock_path" || { collx_log "ERROR: NCCL EP cache-lock-open failed"; exit 1; }
-      flock 9 || { collx_log "ERROR: NCCL EP cache-lock-acquire failed"; exit 1; }
-      if [ ! -f "$ready" ] || [ ! -d "$root/site" ]; then
-        nccl_ep_install "$root" || exit 1
-      fi
-    ); then
-      collx_log "ERROR: shared NCCL EP environment is incomplete"; return 1
-    fi
-  else
-    root="/tmp/collectivex-nccl-ep-cache-$(nccl_ep_spec_slug)"
-    collx_log "NCCL EP: preparing $COLLX_NCCL_EP_SPEC (node-local $root; no shared cache mounted)"
-    if [ ! -f "$root/.ready" ] || [ ! -d "$root/site" ]; then
-      nccl_ep_install "$root" || return 1
-    fi
-  fi
-  nccl_ep_activate "$root" || return 1
+  shared="$(nccl_ep_cache_root "$arch")" || shared=""
+  prepare_site_cache "NCCL EP" "NCCL EP" "$COLLX_NCCL_EP_SPEC" "$shared" \
+    "/tmp/collectivex-nccl-ep-cache-$(nccl_ep_spec_slug)" nccl_ep_install || return 1
+  nccl_ep_activate "$CACHE_ROOT" || return 1
   nccl_ep_probe || { collx_log "ERROR: NCCL EP import probe failed"; return 1; }
   collx_log "NCCL EP ready ($COLLX_NCCL_EP_SPEC; libnccl_ep.so JIT runtime, NCCL Device API LSA/GIN)"
 }
@@ -596,6 +570,11 @@ main() {
     uccl-ep) uccl_prepare || return 1 ;;
     nccl-ep) nccl_ep_prepare || return 1 ;;
     flashinfer-ep) flashinfer_ep_prepare || return 1 ;;
+    # The official vLLM image ships the kernel; assert it before the cases start.
+    swap-blocks)
+      python3 -c "from vllm._custom_ops import swap_blocks" \
+        || { collx_log "ERROR: vLLM swap_blocks import failed"; return 1; }
+      ;;
     *)
       collx_log "ERROR: unknown backend preparation request"
       return 1

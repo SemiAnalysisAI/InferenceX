@@ -11,7 +11,10 @@ source "$HERE/../runtime/common.sh"
 
 RUNNER="${COLLX_SHARD_SKU:-}"
 case "$RUNNER" in
-  mi300x|mi325x) CPUS_PER_NODE=256; DEVICE_MOUNTS=",/dev/kfd:/dev/kfd,/dev/dri:/dev/dri" ;;
+  # mi300x's compute-0 nodes refuse the 256-CPU ask ("Requested node configuration is not
+  # available"), so that pool takes the whole node instead.
+  mi300x) CPUS_PER_NODE=""; DEVICE_MOUNTS=",/dev/kfd:/dev/kfd,/dev/dri:/dev/dri" ;;
+  mi325x) CPUS_PER_NODE=256; DEVICE_MOUNTS=",/dev/kfd:/dev/kfd,/dev/dri:/dev/dri" ;;
   mi355x) CPUS_PER_NODE=128; DEVICE_MOUNTS="" ;;
   *) collx_die "COLLX_SHARD_SKU is not a registered AMD SKU" ;;
 esac
@@ -19,17 +22,14 @@ export COLLX_RUNNER="$RUNNER" COLLX_BENCH="${COLLX_BENCH:-mori}"
 export COLLX_VENDOR=amd
 collx_launcher_prologue "$RUNNER"
 
-NODES="${COLLX_NODES:-1}"; GPN="${COLLX_GPUS_PER_NODE:-8}"
-SCALE_UP_DOMAIN="${COLLX_SCALE_UP_DOMAIN:-8}"
-NGPUS="${COLLX_NGPUS:-$((NODES * GPN))}"
+collx_set_placement 1 8 8 xgmi
 TIME_MIN="${COLLX_TIME:-60}"
 EXCLUDE_NODES="${COLLX_EXCLUDE_NODES:-}"
 NODELIST="${COLLX_NODELIST:-}"
 MOUNT_DIR=/ix
-TS="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
 case "$COLLX_BENCH" in
-  mori | uccl-ep) ;;
-  *) collx_die "unsupported AMD EP backend: $COLLX_BENCH" ;;
+  mori | uccl-ep | swap-blocks) ;;
+  *) collx_die "unsupported AMD backend: $COLLX_BENCH" ;;
 esac
 
 export MORI_DISABLE_AUTO_XGMI="${MORI_DISABLE_AUTO_XGMI:-0}"
@@ -38,13 +38,6 @@ export MORI_APP_LOG_LEVEL="${MORI_APP_LOG_LEVEL:-info}"
 export MORI_SHMEM_LOG_LEVEL="${MORI_SHMEM_LOG_LEVEL:-info}"
 export MORI_IO_LOG_LEVEL="${MORI_IO_LOG_LEVEL:-info}"
 IMAGE="$COLLX_IMAGE"
-export COLLX_NGPUS="$NGPUS" COLLX_NODES="$NODES"
-export COLLX_GPUS_PER_NODE="$GPN" COLLX_SCALE_UP_DOMAIN="$SCALE_UP_DOMAIN"
-if [ "$NODES" -gt 1 ]; then
-  export COLLX_TRANSPORT=xgmi-rdma
-else
-  export COLLX_TRANSPORT=xgmi
-fi
 collx_apply_network_profile "$NODES" "$COLLX_TRANSPORT"
 collx_require_vars COLLX_IMAGE COLLX_IMAGE_PLATFORM COLLX_PARTITION COLLX_SQUASH_DIR COLLX_STAGE_DIR
 PARTITION="$COLLX_PARTITION"; SQUASH_DIR="$COLLX_SQUASH_DIR"
@@ -63,11 +56,11 @@ collx_select_image "$IMAGE"
 command -v salloc >/dev/null || collx_die "salloc not found on this runner"
 
 allocation=(--partition="$PARTITION" --nodes="$NODES" --gres=gpu:"$GPN"
-  --time="$TIME_MIN" --ntasks-per-node="$GPN"
-  --cpus-per-task="$((CPUS_PER_NODE / GPN))")
-if [ "$RUNNER" = mi355x ]; then
-  allocation+=(--exclusive)
-fi
+  --time="$TIME_MIN" --ntasks-per-node="$GPN")
+[ -z "$CPUS_PER_NODE" ] || allocation+=(--cpus-per-task="$((CPUS_PER_NODE / GPN))")
+case "$RUNNER" in
+  mi300x|mi355x) allocation+=(--exclusive) ;;
+esac
 excluded_nodes="$EXCLUDE_NODES"
 for allocation_attempt in 1 2 3; do
   attempt_allocation=("${allocation[@]}")

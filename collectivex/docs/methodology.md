@@ -126,7 +126,7 @@ and identical traffic, while its EP8 rows are correct. The deficit is confined t
 sustains ~34 GB/s per node against a nominal 8x400G (~4.2 GB/s per GPU-NIC pair) where bare-metal
 h100 reaches wire rate. Reordering the NIC-PE mapping to pair each rank with its socket-local NIC
 changed nothing (478µs against a 480µs baseline), which rules the selector out and points at the
-GDR path being degraded wholesale inside the guest. The retired b200-nscale pool showed the same
+GDR path being degraded wholesale inside the guest. The retired b200-dgxc pool showed the same
 shape. Treat EP16 rows from a virtualized pool as a lower bound on the hardware until the host's
 ACS/IOMMU configuration is confirmed.
 
@@ -313,9 +313,12 @@ under `CUDAGraph.replay()` by default: each library's best measured configuratio
 every check, without changing its contract.
 
 - **nccl-ep** low-latency and HT **decode**. HT decode replays as a captured decode step would
-  run it, although it is 3-11% slower than eager at h100/h200 EP16: captured, the per-step routing
-  `ncclAllGather` is a proxy-driven cross-node collective that NCCL fronts with a host-callback
-  node on every replay (about +50 µs of dispatch; nothing within one node). HT prefill stays eager.
+  run it. Its per-step routing `ncclAllGather` is the one host NCCL collective in any capture, so
+  nccl-ep's communicator runs NCCL graph usage mode 1 (one graph at a time): the default mixing
+  mode wraps every captured collective in an external event wait and record, which left ~14 µs
+  idle before each all-gather (h100 EP8 trace). Rows carry the `-gum1` generation suffix. Across
+  nodes the captured all-gather is still proxy-driven, and NCCL fronts it with a host-callback
+  node on every replay (about +50 µs of dispatch at EP16). HT prefill stays eager.
 - **flashinfer-ep** decode; prefill stays eager (graphs change nothing there).
 - **uccl-ep** low-latency, intranode only, except b200 FP8 (faster eager). Normal mode host-syncs.
 - **deepep-v2** low-latency and normal **decode**, run as vLLM's graphed `deepep_v2` decode runs

@@ -124,7 +124,7 @@ Deleting a test that fails these questions needs no replacement. Do not preserve
 - Every priority-scheduled benchmark job on a self-hosted cluster must request exactly one `nodes:N` label, where `N` is the positive integer number of physical Slurm nodes required. Single-node jobs use `nodes:1`; generated multi-node jobs must forward their computed `node-count`. A queued job missing this label is ineligible for priority scheduling, and labels cannot be added retroactively, so fix the source branch and dispatch a new run.
 - Every change that can affect benchmark performance and every recipe addition or modification requires a new `inferencex-e2e/perf-changelog.yaml` entry. The file is append-only and byte-sensitive. Preserve all existing bytes and separator whitespace, and append only at the tail.
 - Multi-node srt-slurm changes update the recipe YAML and matching master config together. For image bumps, `model.container` must equal `image`.
-- Every `*_mtp.sh` passes `--use-chat-template` to `run_benchmark_serving`.
+- Every speculative fixed-sequence benchmark renders prompts with the chat template: single-node srt-slurm recipes that speculate set `benchmark.env.USE_CHAT_TEMPLATE: "true"` (enforced by `inferencex-e2e/infx/srt_slurm/single_node.py::validate_recipe`), which `srt_fixed_sequence.sh` turns into `--use-chat-template` for `run_benchmark_serving`.
 - Benchmarks create no new directories under `/workspace`. Root containers must not leave root-owned files in shared AMD runner workspaces.
 - Generated configuration is not runtime proof. Run the narrowest local check, then the applicable smoke, sweep, or eval procedure from [`inferencex-e2e/docs/procedures.md`](inferencex-e2e/docs/procedures.md).
 

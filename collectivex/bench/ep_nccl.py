@@ -13,8 +13,8 @@ Both modes use the existing CollectiveX combine oracle.
 
 BF16 only for now: v0.2 grows a real quantization surface (DispatchQuantizationRecipe.FWD /
 DS_FP8E3M4 for FP8 dispatch, experimental CombineQuantizationRecipe.NVFP4), but wiring it into
-the fp8_consume model is its own bring-up, so this adapter still does not override the FP8
-encode hooks (SUPPORTED_PRECISIONS=("bf16",)).
+the fp8_consume model is its own bring-up, so this adapter keeps the base BF16-only
+SUPPORTED_PRECISIONS.
 
 Communicator bootstrap: NCCL EP forms its OWN NCCL communicator (separate from PyTorch's
 process group) via ``Communicator.init(nranks, rank, unique_id)``. Upstream broadcasts the
@@ -68,16 +68,9 @@ _UNIQUE_ID_MAX_BYTES = 256
 # Low-latency receive sizing, deliberately two numbers, mirroring ep_deepep_v2: _LL_BUFFER_CAP
 # sizes the pre-allocated receive (and so the transport footprint), _LL_LADDER_CAP bounds which
 # token counts are measured. Separating them lets the ladder be clamped around a kernel defect
-# without moving the footprint and silently re-basing the rungs that remain.
-#
-# The ladder is RESTORED to the full buffer under nccl-ep v0.2. The v0.1 port of DeepEP's
-# low-latency combine lacked the PR #642 fence — reduction warps read shared memory, then
-# mbarrier_arrive(emptyBarriers[stageIdx]) with no fence between, letting the producer's next
-# TMA load overwrite a stage mid-read (observed on gb300 EP8 BF16 at T=256: bimodal 1-in-5
-# discrete corruption, max rel err 0.4704 vs healthy 0.0039). The v0.2 wheel ships the fence:
-# fence_view_async_shared() before the elect_one_sync mbarrier_arrive in the shipped headers'
-# ll_ep.cuh combine recv pipeline — exactly the documented restore condition for this clamp.
-# The T=256 rung is back on the ladder; the correctness oracle re-verifies it on every run.
+# without moving the footprint and silently re-basing the rungs that remain. The ladder runs the
+# full buffer because the v0.2 LL combine recv pipeline carries DeepEP's #642 shared-memory fence
+# (without it the top rung corrupts); the correctness oracle re-verifies that rung on every run.
 _LL_BUFFER_CAP = 256
 _LL_LADDER_CAP = _LL_BUFFER_CAP
 
@@ -97,21 +90,17 @@ class NCCLEPBackend(EPBackend):
     # pool with post-upgrade rows.
     # "-static" marks the combine input bound to the full static receive plane (see
     # `_bind_ht_recv_count`); "-zc" rows before it sliced that input to the received count.
+    # Graphed HT decode appends "-gum1": its communicator runs graph usage mode 1 (`_comm_config`).
     kernel_generation = "nccl-ep-v02-ht-routed-zc-static"
     SUPPORTED_MODES = ("normal", "low-latency")
-    SUPPORTED_PRECISIONS = ("bf16",)
     CUDA_GRAPH_MODES = ("normal", "low-latency")
-    stage_device_work = False
-    requires_fresh_pair = False
-    receive_layout = "token-rank"
-    combine_weight_semantics = "unweighted-rank-sum"
     zero_copy = True
     _ll_expert_major = False
 
     @property
     def cuda_graph_supported(self) -> bool:
         # HT replays at decode only, as a captured decode step runs it (engines run prefill
-        # uncaptured). It is slower there at EP16: see methodology, CUDA Graph Replay.
+        # uncaptured); see methodology, CUDA Graph Replay.
         if self.mode == "normal" and getattr(self.args, "phase", None) != "decode":
             return False
         return super().cuda_graph_supported
@@ -155,6 +144,10 @@ class NCCLEPBackend(EPBackend):
             # NCCL LL rank-major suppresses duplicate ranks in top-k order, accumulates the
             # returned BF16 rank rows in FP32, and narrows only at the final output.
             self.combine_reduction = "rank-fp32"
+        elif self.cuda_graph_supported:
+            # Only graphed HT captures a host NCCL collective (the routing ncclAllGather), so
+            # only its rows change with the communicator's graph usage mode.
+            self.kernel_generation = f"{type(self).kernel_generation}-gum1"
         # NCCL EP's handle is explicitly reusable across dispatch/combine cycles (ep_test.py
         # cached mode redispatches and recombines on one handle), so — unlike DeepEP's legacy
         # low-latency Buffer — no timed component needs a fresh dispatch or a draining combine;
@@ -177,9 +170,7 @@ class NCCLEPBackend(EPBackend):
 
     def buffer_cap(self, args):
         if self._ll:
-            # Bounds which token counts are MEASURED. Equal to _LL_BUFFER_CAP under v0.2 (the
-            # combine recv fence shipped — see the constants above); the two names stay separate
-            # so a future defect can clamp the ladder without moving the footprint.
+            # Bounds which token counts are MEASURED; see the constants above.
             return _LL_LADDER_CAP
         return None
 
@@ -234,8 +225,20 @@ class NCCLEPBackend(EPBackend):
         n = int(length.item())
         uid = nccl_core.UniqueId.from_bytes(bytes(payload[:n].cpu().numpy().tobytes()))
         self._comm = nccl_core.Communicator.init(
-            nranks=self.world_size, rank=self.rank, unique_id=uid
+            nranks=self.world_size, rank=self.rank, unique_id=uid, config=self._comm_config()
         )
+
+    @staticmethod
+    def _comm_config():
+        """Graph usage mode 1: one graph at a time on this communicator, never concurrent with
+        uncaptured work on it -- how the harness and a captured decode step both use it.
+
+        The default (2, "mixing") wraps every captured collective in an external event wait and
+        an event record so graph and uncaptured work can interleave (NCCL strongstream.cc). Traced
+        on h100 HT decode EP8, that left ~14us idle before each routing ncclAllGather and made the
+        graphed pair period 1.14x eager; mode 0/1 removes the gap (1.03x at T=1, 1.00x at T=256).
+        """
+        return nccl_core.NCCLConfig(graph_usage_mode=1)
 
     # ---- buffer construction -----------------------------------------------------------------
 
@@ -304,7 +307,6 @@ class NCCLEPBackend(EPBackend):
             # num_local_experts*max_dispatch, which only equals max_recv there because
             # num_local_experts==n_ranks) overflows that buffer with cudaErrorInvalidValue.
             rows = self.max_dispatch * self.world_size
-            self._recv_rows = rows
             self._recv_x = nccl_core.torch.empty(
                 (rows, hidden), dtype=torch.bfloat16, device=dev
             )
@@ -418,8 +420,8 @@ class NCCLEPBackend(EPBackend):
         """Read HT's received-token count and bind the combine input to the full receive plane.
 
         FLAT combine takes the dispatch output's static `[num_recv_slots, hidden]` shape
-        (ep_enums.h; a count-sized slice needs an NCCL_EP_AUTO group). Zero-copy elides the
-        staging copy the old slice avoided. The count is read here, untimed, for the oracle.
+        (ep_enums.h; a count-sized slice needs an NCCL_EP_AUTO group), and zero-copy leaves no
+        staging copy for a slice to save. The count is read here, untimed, for the oracle.
         """
         h.count = int(h.recv_total.item())
         h.combine_in_t = self._recv_x_t
@@ -549,45 +551,15 @@ class NCCLEPBackend(EPBackend):
         source_rank, source_slot = valid.nonzero(as_tuple=True)
         h.source_rank = source_rank
         h.source_slot = source_slot
-        local_idx = h.recv_idx[source_rank, source_slot].to(torch.int64)
-        valid_idx = local_idx >= 0
-        expert_ids = torch.where(
-            valid_idx, local_idx + self.rank * self.num_local_experts, local_idx
-        )
-        weights = h.recv_w[source_rank, source_slot].to(torch.float32).masked_fill(~valid_idx, 0)
-        return types.SimpleNamespace(
-            payload=recv_bf16[source_rank, source_slot],
-            expert_ids=expert_ids,
-            weights=weights,
-            local_expert_counts=torch.bincount(
-                local_idx[valid_idx], minlength=self.num_local_experts
-            ),
-        )
-
-    def _ll_em_inspect_dispatch(self, p, h):
-        """Flat per-slot view over the EXPERT_MAJOR padded receive (mirror of
-        ep_deepep_v2._ll_inspect_dispatch): each local expert's valid tokens are packed at the
-        front [0:recv_count[e]] of its slot dimension. Flatten to the oracle's compact
-        (expert, slot) row-major contract and keep the coordinates for the combine scatter."""
-        recv_bf16 = h.recv_x  # [E, S, hidden] BF16
-        num_slots = recv_bf16.shape[1]
-        counts = h.recv_count.to(torch.int64)  # [E]
-        slot_valid = (
-            torch.arange(num_slots, device=recv_bf16.device).unsqueeze(0) < counts.unsqueeze(1)
-        )
-        slot_expert, slot_j = slot_valid.nonzero(as_tuple=True)
-        h.slot_expert = slot_expert
-        h.slot_j = slot_j
-        local_lo = self.rank * self.num_local_experts
-        return types.SimpleNamespace(
-            payload=recv_bf16[slot_expert, slot_j],
-            expert_ids=local_lo + slot_expert.to(torch.int64),
-            local_expert_counts=counts,
+        return self._local_id_view(
+            recv_bf16[source_rank, source_slot], h.recv_idx[source_rank, source_slot],
+            h.recv_w[source_rank, source_slot], self.num_local_experts,
         )
 
     def inspect_dispatch(self, p, h):
         if self._ll_expert_major:
-            return self._ll_em_inspect_dispatch(p, h)
+            # EXPERT_MAJOR is deepep-v2 LL's padded [E, S, hidden] receive.
+            return self._expert_major_view(h, h.recv_x, h.recv_count)
         if self._ll:
             return self._ll_inspect_dispatch(p, h)
         # HT FLAT normal recv: front-packed to recv_total_counter, one row per received token.
@@ -595,24 +567,12 @@ class NCCLEPBackend(EPBackend):
         # row (valid entries first, non-local padded to -1) with recv_w aligned to them — NOT the
         # global top-k. (Verified on h100 EP8: rank-1 token recv_idx=[2,17,-1..] for global experts
         # 34,49; rank 0 looks global only because its local range starts at 0.) So rebase the valid
-        # locals to the GLOBAL ids the oracle compares by + rank*experts_per_rank, exactly as
-        # ep_uccl/ep_deepep_v2 normal do. The oracle sorts each row over the top-k axis and sums
-        # the per-expert transforms, so token order is free and no per-(token,expert) expansion is
-        # needed.
+        # locals to the GLOBAL ids the oracle compares, exactly as ep_uccl/ep_deepep_v2 normal
+        # do. The oracle sorts each row over the top-k axis and sums the per-expert transforms,
+        # so token order is free and no per-(token,expert) expansion is needed.
         count = int(h.count)
-        local_idx = h.recv_idx[:count].to(torch.int64)  # [count, topk] LOCAL ids, -1 non-local
-        valid = local_idx >= 0
-        expert_ids = torch.where(
-            valid, local_idx + self.rank * self.experts_per_rank, local_idx
-        )
-        weights = h.recv_w[:count].to(torch.float32).masked_fill(~valid, 0)
-        return types.SimpleNamespace(
-            payload=h.recv_x[:count],  # [count, hidden] BF16
-            expert_ids=expert_ids,
-            weights=weights,
-            local_expert_counts=torch.bincount(
-                local_idx[valid], minlength=self.experts_per_rank
-            ),
+        return self._local_id_view(
+            h.recv_x[:count], h.recv_idx[:count], h.recv_w[:count], self.experts_per_rank
         )
 
     def _ll_combine_transformed(self, p, h, transformed):

@@ -25,15 +25,14 @@ from CollectiveX's platform registry, and both planning and execution validate t
 
 ## Dispatch
 
-Once GitHub has registered the workflow, select **OperatorX Sweep → Run workflow**,
+Select **OperatorX Sweep → Run workflow**,
 choose the source branch, and keep the initial defaults: `pool=h100-dgxc`,
 `backends=torch`, `testlists=gemm`, `world_sizes=1`, `chunk_size=500`.
 This schedules the complete checked-in GEMM catalog in bounded shards (currently
 7,212 cases in 15 shards). The catalog includes formats unsupported by a selected
 backend and shapes that can exceed device memory. Unsupported rows remain visible;
 actual kernel and allocation errors fail CI. A full catalog run is not a promise
-that every case fits or is supported on H100. A newly added workflow
-may need to reach the default branch before GitHub accepts manual dispatch.
+that every case fits or is supported on H100.
 
 ```bash
 gh workflow run operatorx-sweep.yml --repo SemiAnalysisAI/InferenceX \

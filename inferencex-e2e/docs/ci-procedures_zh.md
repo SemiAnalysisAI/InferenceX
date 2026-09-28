@@ -50,19 +50,13 @@
 
 ## 源码快照警告
 
-本页基于分支 Commit `0c28706b33d4a796b82f6f9c3594c19c46365575` 编写。当时本地 `origin/main` 为 `de493d8597035e6692833de6189b567887968460`，相关 CI 源码并不完全相同：
-
-- 分支本地的 [`e2e-tests.yml`](../../.github/workflows/e2e-tests.yml) 要求提供 `generate-cli-command`，并将各矩阵硬编码为 `fail-fast: false`。审计过的 [`origin/main` 版本](https://github.com/SemiAnalysisAI/InferenceX/blob/de493d8597035e6692833de6189b567887968460/.github/workflows/e2e-tests.yml) 仅在特定条件下要求该命令，并新增受信任 Changelog 派发、`fail-fast` 与功耗验证输入。
-- 分支本地的 [`run-sweep.yml`](../../.github/workflows/run-sweep.yml) 缺少 `origin/main` 在 PR GPU Setup 之前新增的“Head 仓库必须与当前仓库相同”保护。该 `origin/main` 快照存在 [`trusted-external-sweep.yml` Workflow](https://github.com/SemiAnalysisAI/InferenceX/blob/de493d8597035e6692833de6189b567887968460/.github/workflows/trusted-external-sweep.yml)，本分支则没有。不要根据分支本地 Workflow 推断外部 Fork 的 Secret 或 GPU 行为。
-- 分支本地生成器的 Agentic Eval 注释指向 SWE-bench，审计过的 `origin/main` 生成器则指向 GSM8K。在描述 `all-evals` 或 `evals-only` 选择的 Agentic 数据集之前，必须检查目标 Ref。
-
 `workflow_dispatch` 请求使用其派发 `--ref` 中的 Workflow 定义；单独的 `inputs.ref` 控制 Job Checkout 的内容。在使用下方公共示例以外的输入前，应检查已部署定义：
 
 ```bash
 gh workflow view e2e-tests.yml --repo SemiAnalysisAI/InferenceX --ref main --yaml
 ```
 
-如果目标 Ref 与本源码快照不同，以其 Workflow 和脚本源码为准。不要猜测某个分支本地输入或 Fork 策略已经部署。
+以目标 Ref 的 Workflow 和脚本源码为准。不要猜测某个分支本地输入或 Fork 策略已经部署。
 
 ## 本地矩阵生成
 
@@ -560,4 +554,4 @@ attention 支持 torch 和 AITER。
 触发方式、覆盖范围、产物、取消及验证说明见
 [OperatorX GitHub Actions](../../operatorx/CI_zh.md)。
 
-H200 DeepSeek-V4.1 Flash SGLang AgentX 在并发 64 及以上的性能任务允许 1440 分钟 Slurm 分配和 1470 分钟 GitHub 任务，以容纳正常预热及保持不变的 3600 秒正式测试；更低并发和 eval-only 任务仍使用标准期限。运行 `35775895782` 在持续推进、请求无错误的预热期间耗尽了原有八小时分配。仅重试失败任务会保留原工作流期限，因此修改期限后必须启动新运行。
+H200 DeepSeek-V4.1 Flash SGLang AgentX 在并发 64 及以上的性能任务允许 1440 分钟 Slurm 分配和 1470 分钟 GitHub 任务，以容纳正常预热及保持不变的 3600 秒正式测试；更低并发和 eval-only 任务仍使用标准期限。运行 `35775895782` 在持续推进、请求无错误的预热期间耗尽了原有八小时分配。对应的 GB200 任务使用 720 分钟分配和 750 分钟 Workflow 期限。仅重试失败任务会保留原工作流期限，因此修改期限后必须启动新运行。

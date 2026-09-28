@@ -119,7 +119,7 @@ Required permissions (all of these endpoints require **admin access to the repos
 5. Start the runners:
 
    ```bash
-   ./InferenceX/utils/runner_setup/start_runners.sh 0 13 ~/gharunners
+   ./InferenceX/utils/runner_setup/start_runners.sh 0 17 ~/gharunners
    ```
 
    This (re)creates a tmux session (default name: `github-actions`) with one tiled pane
@@ -151,7 +151,7 @@ key off that name:
    [`configs/runners.yaml`](../../configs/runners.yaml). New runners do
    **not** receive sweep jobs until they are added there, and the entries must match the
    registered names exactly, including zero-padding. Some older fleets predate the
-   padded convention, such as `h200-dgxc-slurm_0`. Because `setup.sh` always zero-pads, new
+   padded convention, such as `gb200-nv_0`. Because `setup.sh` always zero-pads, new
    entries should use the padded form.
 
 ## Labels / `ADDITIONAL_RUNNER_TAGS`
@@ -251,11 +251,11 @@ The host side of each is defined in that cluster's `runners/launch_<cluster>.sh`
    each node downloads its own copy, so prefer shared storage where available).
 3. **Pre-staged model weights.** Large models are not downloaded from HF in CI. The
    launch scripts override `MODEL_PATH` to per-cluster staging directories
-   (e.g. `/lustre/fsw/models/...` on b200-nscale, `/data/models/...` on b300,
+   (e.g. `/scratch/models/...` on b200-nscale, `/data/models/...` on b300,
    read-only `/scratch/models/` on b300 multinode). Bringing up a new model on a
    cluster means staging the weights there first.
 4. **Squash images.** Launch scripts `enroot import` each Docker image once into a
-   `.sqsh` file under a shared `SQUASH_DIR` (e.g. `/home/sa-shared/containers` on
+   `.sqsh` file under a shared `SQUASH_DIR` (e.g. `/data/home/sa-shared/containers` on
    b200-nscale, `/mnt/lustre01/users-public/sa-shared`
    on gb200), then launch with `--container-image=<file>.sqsh`. This must be on shared
    storage because pyxis reads the file on the **compute** node, and it lets concurrent

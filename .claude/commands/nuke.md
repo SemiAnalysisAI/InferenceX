@@ -104,6 +104,45 @@ block += ["  description:", f'    - "{desc}"', "  pr-link: PRLINK_PLACEHOLDER"]
 open(f,'w').write(content + '\n' + '\n'.join(block) + '\n')
 ```
 
+`/tmp/edit_recipe_container.py` (single-node runs go through the srt-slurm
+recipe each master search-space row names in `srt-recipe:`, and
+`inferencex-e2e/infx/srt_slurm/single_node.py` rejects the run unless the recipe's
+`model.container` equals the master `image:` exactly):
+```python
+#!/usr/bin/env python3
+# Usage: edit_recipe_container.py <master_yaml> <new_image> <key1> [key2 ...]
+import os, re, sys
+f, new_image, keys = sys.argv[1], sys.argv[2], sys.argv[3:]
+# srt-recipe paths are relative to inferencex-e2e/, the parent of configs/
+root = os.path.dirname(os.path.dirname(os.path.abspath(f)))
+master = open(f).read().split('\n')
+recipes = set()
+for key in keys:
+    kre = re.compile(r'^' + re.escape(key) + r':\s*$')
+    start = next((i for i,l in enumerate(master) if kre.match(l)), None)
+    if start is None: sys.exit(f"ERROR: key not found: {key}")
+    for j in range(start+1, len(master)):
+        if re.match(r'^[A-Za-z0-9._-]+:\s*$', master[j]): break  # next top-level key
+        recipes.update(re.findall(r'srt-recipe:\s*([^\s,}]+)', master[j]))
+if not recipes: sys.exit(f"ERROR: no srt-recipe for keys {keys}")
+for r in sorted(os.path.join(root, x) for x in recipes):
+    lines = open(r).read().split('\n')
+    in_model, hit = False, False
+    for i, l in enumerate(lines):
+        if re.match(r'^\s*model:\s*$', l): in_model, indent = True, len(l) - len(l.lstrip()); continue
+        if in_model and l.strip() and len(l) - len(l.lstrip()) <= indent: in_model = False
+        m = re.match(r'^(\s+)container:\s*(.+?)\s*$', l) if in_model else None
+        if m:
+            lines[i] = f"{m.group(1)}container: {new_image}"; hit = True
+            print(f"{r}: {m.group(2)} -> {new_image}"); break
+    if not hit: sys.exit(f"ERROR: no model.container in {r}")
+    open(r, 'w').write('\n'.join(lines))
+```
+
+If `grep -rn '<recipe path>' inferencex-e2e/configs/*-master.yaml` shows a recipe is also
+referenced by a key outside this family, stop and ask the user: bumping it would
+break that other key's `model.container == image` check.
+
 For each family, run strictly sequentially because git checkouts can't be parallel:
 
 ```bash
@@ -111,6 +150,7 @@ git checkout main -q && git reset --hard origin/main -q
 branch="klaud/<basekey>-<TAG>"
 git checkout -b "$branch" -q
 python3 /tmp/edit_image.py <master.yaml> <NEW_IMAGE> <key> [<key>-mtp]
+python3 /tmp/edit_recipe_container.py <master.yaml> <NEW_IMAGE> <key> [<key>-mtp]
 python3 /tmp/append_changelog.py inferencex-e2e/perf-changelog.yaml "<DESC>" <key> [<key>-mtp]
 git add -A
 git commit -q -m "[Klaud Cold] Update <basekey>[ (+mtp)] <PHRASE> to <TAG>"
@@ -119,10 +159,14 @@ url=$(gh pr create --repo SemiAnalysisAI/InferenceX --base main --head "$branch"
       --title "[Klaud Cold] Update <basekey>[ (+mtp)] <PHRASE> to <TAG>" \
       --body "<BODY>" --label full-sweep-fail-fast | grep -o 'https://github.com/[^ ]*')
 # patch the changelog pr-link with the real URL, then amend + force-push
+# (read first, then write: open(f,'w') truncates before a same-line read runs)
+before=$(wc -l < inferencex-e2e/perf-changelog.yaml)
 python3 - inferencex-e2e/perf-changelog.yaml "$url" <<'PY'
 import sys; f,u=sys.argv[1],sys.argv[2]
-open(f,'w').write(open(f).read().replace("PRLINK_PLACEHOLDER",u,1))
+content = open(f).read()
+open(f,'w').write(content.replace("PRLINK_PLACEHOLDER",u,1))
 PY
+[ "$(wc -l < inferencex-e2e/perf-changelog.yaml)" -eq "$before" ] || { echo "perf-changelog.yaml line count changed"; exit 1; }
 git add inferencex-e2e/perf-changelog.yaml && git commit -q --amend --no-edit && git push -q --force-with-lease
 ```
 

@@ -37,7 +37,6 @@ cd "$HOME/inferencex/operatorx"
 OPERATORX_CLUSTER=b300_hgx_8x \
 OPERATORX_PARTITION=batch_1 \
 OPERATORX_ACCOUNT=benchmark \
-OPERATORX_QOS=batch_1_qos \
 OPERATORX_SQUASH_DIR="$HOME/containers" \
 OPERATORX_BACKENDS=torch,deepgemm,flashinfer,sglang \
 python3 scripts/submit_run.py nvidia
@@ -74,7 +73,7 @@ rather than running our old single-device dense fallback.
 | `OPERATORX_QOS` | (omitted) | SLURM `--qos`. |
 | `OPERATORX_SQUASH_DIR` | `/home/sa-shared/containers` | Where `<safe_image>.sqsh` lives. |
 | `OPERATORX_BACKENDS` | all backends for the platform | CSV allowlist. |
-| `OPERATORX_JOB_NAME` | `benchmark` | SLURM job name. Use `h-benchmark` for benchmark runs (see `CLUSTERS.md`). |
+| `OPERATORX_JOB_NAME` | `benchmark` | SLURM job name. Set a recognizable name for your runs (see `CLUSTERS.md`). |
 
 `WORLD_SIZES` in the script is `[1, 2, 4, 8]` and supports single-node runs only.
 Values above 8 are disabled because multi-node NCCL IB bring-up currently hangs on b200/b300.

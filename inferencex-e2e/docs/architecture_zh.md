@@ -144,7 +144,7 @@ flowchart LR
 | `infx.datasets` | AgentX 轨迹采样、转换、数据集构建及分布图 |
 | `infx.klaud` | Klaud 编排、生命周期、GitHub/API 适配器和模式 |
 
-从 `inferencex-e2e/` 使用 `python -m infx.<package>.<module>` 运行命令。依赖仍由各命令分别管理；导入 `infx` 不会加载基准测试客户端或评测依赖。`utils/` 下的 Python 兼容包装文件已删除。数据集工具、AgentX 聚合与分析、评测适配器与补丁，以及基准测试客户端辅助模块应使用规范的 `infx` 路径。评测文档位于 `infx/evals/EVALS.md`，评测测试位于 `infx/tests/evals/`。其他行为测试、运行器配置 Shell 脚本及外部子模块仍位于 `utils/`。
+从 `inferencex-e2e/`使用 `python -m infx.<package>.<module>` 运行命令。依赖仍由各命令分别管理；导入 `infx` 不会加载基准测试客户端或评测依赖。`utils/` 下的 Python 兼容包装文件已删除。数据集工具、AgentX 聚合与分析、评测适配器与补丁，以及基准测试客户端辅助模块应使用规范的 `infx` 路径。评测文档位于 `infx/evals/EVALS.md`，评测测试位于 `infx/tests/evals/`。其他行为测试位于 `infx/tests/`。`utils/` 下仅保留运行器配置 Shell 脚本（`utils/runner_setup/`）及外部子模块 `aiperf` 和 `srt-slurm`。
 
 复制到隔离环境中的评测适配器和补丁使用 `infx/evals` 下的实际文件，因此仍可独立运行。可信工作流辅助模块会明确选择工具代码所在的检出目录。固定序列处理、评测分数验证和单节点 AgentX 结果验证步骤使用单独检出的工作流修订版中的包，并以被测检出目录为工作目录。仅评测作业也会准备工具代码和 Python 3.12。因此，历史被测修订版无需包含这些辅助模块。分数阈值取自工作流修订版随包提供的 `infx/evals/thresholds.yaml`。
 
@@ -412,7 +412,7 @@ AgentX 追踪导出的体积更大，并且需要追踪发现、时间线处理�
      --config-keys <exact-key>
    ```
 
-4. **矩阵交接：** 在 `setup` 作业中，验证该行位于预期的 `single_node`、`multi_node`、`evals`、`agentic_evals` 或 `multinode_evals` 桶中。确认匹配的扇出作业转发了每个必需字段。
+4. **矩阵交接：** 在 `setup` 作业中，验证该行位于预期的 `single_node`、`multi_node`、`evals`、`agentic_evals`、`multinode_evals` 或 `multinode_agentic_evals` 桶中。确认匹配的扇出作业转发了每个必需字段。
 5. **调度：** 验证模板的 `runs-on` 值与预期运行器匹配。确认具体运行器名称前缀能够解析到现有的 `runners/launch_<prefix>.sh`。
 6. **运行时：** 沿启动器分支追踪到确切的基准测试脚本或外部方案。确认每个关键矩阵字段均到达实际被使用的环境变量或命令参数。
 7. **输出：** 验证工作流要求的原始结果存在。然后验证预期的 `bmk_*`、`eval_*`、`agentic_*`、日志或指标工件已上传。

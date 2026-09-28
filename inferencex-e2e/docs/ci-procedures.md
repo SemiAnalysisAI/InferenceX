@@ -50,19 +50,13 @@ These files are the contract. Follow the target ref's source rather than copying
 
 ## Source-snapshot warning
 
-This page was authored from branch commit `0c28706b33d4a796b82f6f9c3594c19c46365575`. At that time, local `origin/main` was `de493d8597035e6692833de6189b567887968460`, and the relevant CI sources were not identical:
-
-- The branch-local [`e2e-tests.yml`](../../.github/workflows/e2e-tests.yml) requires `generate-cli-command` and hard-codes each matrix to `fail-fast: false`. The audited [`origin/main` version](https://github.com/SemiAnalysisAI/InferenceX/blob/de493d8597035e6692833de6189b567887968460/.github/workflows/e2e-tests.yml) makes that command conditionally optional and adds trusted-changelog dispatch, `fail-fast`, and power-validation inputs.
-- The branch-local [`run-sweep.yml`](../../.github/workflows/run-sweep.yml) lacks the same-repository-head guard that `origin/main` adds before PR GPU setup. The [`trusted-external-sweep.yml` workflow](https://github.com/SemiAnalysisAI/InferenceX/blob/de493d8597035e6692833de6189b567887968460/.github/workflows/trusted-external-sweep.yml) exists on that `origin/main` snapshot but not on this branch. Do not infer external-fork secret or GPU behavior from the branch-local workflow.
-- Agentic eval comments in the branch-local generator identify SWE-bench, while the audited `origin/main` generator identifies GSM8K. Inspect the target ref before describing the agentic dataset selected by `all-evals` or `evals-only`.
-
 A `workflow_dispatch` request uses the workflow definition from its dispatch `--ref`. The separate `inputs.ref` controls what the jobs check out. Before using inputs beyond the common example below, inspect the deployed definition:
 
 ```bash
 gh workflow view e2e-tests.yml --repo SemiAnalysisAI/InferenceX --ref main --yaml
 ```
 
-If the target ref differs from this source snapshot, its workflow and script source wins. Do not guess that a branch-local input or fork policy is deployed.
+The workflow and script source at the target ref wins. Do not guess that a branch-local input or fork policy is deployed.
 
 ## Local matrix generation
 
@@ -578,4 +572,4 @@ use one GPU per measurement. AMD attention supports both torch and AITER.
 See [OperatorX GitHub Actions](../../operatorx/CI.md) for dispatch,
 coverage, artifacts, cancellation, and validation.
 
-For H200 DeepSeek-V4.1 Flash SGLang AgentX performance at concurrency 64 or above, the launcher allows a 1440-minute Slurm allocation and the reusable workflow allows 1470 minutes. This accommodates normal warmup and the unchanged 3600-second profile; lower concurrencies and eval-only jobs retain the standard deadlines. Run `35775895782` exhausted the previous eight-hour allocation during progressing, error-free warmup. A failed-only retry retains the original workflow deadline, so deadline changes require a new workflow run.
+For H200 DeepSeek-V4.1 Flash SGLang AgentX performance at concurrency 64 or above, the launcher allows a 1440-minute Slurm allocation and the reusable workflow allows 1470 minutes. This accommodates normal warmup and the unchanged 3600-second profile; lower concurrencies and eval-only jobs retain the standard deadlines. Run `35775895782` exhausted the previous eight-hour allocation during progressing, error-free warmup. The matching GB200 jobs get a 720-minute allocation and a 750-minute workflow deadline. A failed-only retry retains the original workflow deadline, so deadline changes require a new workflow run.
