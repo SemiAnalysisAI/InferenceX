@@ -9003,4 +9003,4 @@
   description:
     - "Set TP4 c1 and TP2 c2/c4/c8/c16/c32/c64 to an 8192-token batch cap and an explicit CUDA Graph ladder. Apply point-specific sparse-indexer limits, all-reduce backend, context length, and indexer KV format where configured."
     - "为 TP4 c1 及 TP2 c2/c4/c8/c16/c32/c64 设置 8192 token 批处理上限和显式 CUDA Graph 阶梯，并按数据点配置稀疏索引器限制、all-reduce 后端、上下文长度及索引器 KV 格式。"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3544
