@@ -8997,12 +8997,20 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3525
 
 - config-keys:
+    - dsv4-fp4-b300-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update B300 vLLM AgentX to DSpark6 on a new image with a sampled concurrency grid and per-mode --kv-cache-memory-bytes pins."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3477
+
+- config-keys:
     - minimaxm3-fp8-mi300x-vllm-agentic-mtp
   scenario-type:
     - agentic-coding
   description:
-    - "Run the MI300X LMCache DRAM point (TP8, concurrency 16) on srt-slurm's native lmcache-server service instead of servers the setup script started inside the worker container. The service runs one LMCache MP server per worker node on ports 8750/8751 before vLLM starts and gates on its /healthcheck; the vLLM worker's kv-transfer-config points LMCacheMPConnector at tcp://localhost:8750. Needs the lmcache-server srt-slurm patch (NVIDIA/srt-slurm#507)."
-    - "Behavior change: the point previously ran 8 LMCache servers of 162 GB L1 each, one per TP rank (lmcache.mp.server_urls). It now runs one server with the same 1296 GB total L1 and the same LMCache flags (chunk size 256, 2 workers, LRU, 7200 s read TTL, lmcache_driven transfer), which all 8 ranks share."
-    - "lmcache-mp-rocm.sh now only installs the ROCm LMCache 0.5.3 wheel; it runs as the LMCache variant's setup_script in the worker container and in the service's preamble. The GPU-resident points are unchanged."
-    - "This change does not alter the EAGLE3 draft model data type. The draft loads unmodified from the published Inferact/MiniMax-M3-EAGLE3-GQA checkpoint via --speculative-config (method=eagle3). kv-cache-dtype fp8 sets KV-cache storage precision, not the draft weights, and no flag overrides or re-quantizes the draft weights."
+    - "Benchmark change for the LMCache DRAM point (TP8, concurrency 16): it now runs srt-slurm's lmcache-server service, one LMCache server per node with 1296 GB L1 shared by all 8 TP ranks, replacing the 8 per-rank LMCache servers of 162 GB L1 each. The server starts before vLLM on ports 8750/8751 and gates on its /healthcheck; the other LMCache flags are unchanged (chunk size 256, 2 workers, LRU, 7200 s read TTL, lmcache_driven transfer)."
+    - "The vLLM worker's connector is LMCacheMPConnector at tcp://localhost:8750, with lmcache.mp.mq_timeout kept at 6000 s. Needs the lmcache-server srt-slurm patch (SemiAnalysisAI/srt-slurm#32, including NVIDIA/srt-slurm#507)."
+    - "The recipe image is vllm/vllm-openai-rocm:v0.30.0, matching the config. The GPU-resident points are unchanged, and all points are re-measured."
+    - "The EAGLE3 draft loads unmodified from the published Inferact/MiniMax-M3-EAGLE3-GQA checkpoint; no flag overrides or re-quantizes the draft weights."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3545
