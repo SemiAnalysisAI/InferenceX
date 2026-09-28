@@ -232,7 +232,9 @@ collx_apply_network_profile() {
     return 0
   fi
   export NVSHMEM_HCA_LIST="$COLLX_RDMA_DEVICES"
-  export NVSHMEM_ENABLE_NIC_PE_MAPPING=1
+  # DIAGNOSTIC: leave NIC-to-PE assignment to NVSHMEM's distance-based default.
+  echo "collx: diag NVSHMEM_HCA_PE_MAPPING was ${NVSHMEM_HCA_PE_MAPPING:+set}${NVSHMEM_HCA_PE_MAPPING:-unset}; unsetting it and NVSHMEM_ENABLE_NIC_PE_MAPPING" >&2
+  unset NVSHMEM_ENABLE_NIC_PE_MAPPING NVSHMEM_HCA_PE_MAPPING
   # RCCL selects its own net plugin; NCCL_NET=IB breaks AMD SKUs.
   if [ "${COLLX_VENDOR:-nvidia}" = amd ]; then
     unset NCCL_NET
