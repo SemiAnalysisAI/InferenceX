@@ -473,6 +473,7 @@ def main() -> int:
                 "library_version": backend.library_version,
                 "maturity": backend.maturity,
                 "nic_filter": backend.nic_filter,
+                "transport": backend.transport,
             },
             topology={
                 "device_product": torch.cuda.get_device_name(device),

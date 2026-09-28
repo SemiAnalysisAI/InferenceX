@@ -28,6 +28,9 @@ class KVBackend:
     library_version: str | None = None
     #: the engine NIC filter this case ran under; None = library/UCX choice.
     nic_filter: str | None = None
+    #: the library's own transport plugin when it has several (NIXL: UCX or
+    #: LIBFABRIC); None = the library has one.
+    transport: str | None = None
 
     # -- lifecycle ------------------------------------------------------------
     def register(self, pool, bulk, reg_layout=None) -> None:

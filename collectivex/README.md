@@ -183,7 +183,9 @@ at import; mi355x runs AMD's atom-dev build push-only), and `mori-io` (AMD's nat
 the registry's `kv_backends` map enables them. No entry, no legs, mirroring `ll_backends`. An entry
 may restrict ops, pin an image, set a NIC filter, or lower the pool budget. Fabrics are `rdma`
 (torch pools) and, on GB racks, `nixl` also runs `mnnvl` (cuMem FABRIC pools; see the methodology
-for the bulk-vs-paged lane inversion that row exists to publish). The grid and per-pool scheduling
+for the bulk-vs-paged lane inversion that row exists to publish). On b300's AWS EFA pool `nixl`
+rides its LIBFABRIC plugin instead of UCX, and there is no `mooncake` leg (its wheel's transport is
+verbs RC, which EFA does not provide). The grid and per-pool scheduling
 live in `configs/kv_sweep.json`; dispatch with `suites: kv-transfer`.
 
 ## Workflow And Artifacts

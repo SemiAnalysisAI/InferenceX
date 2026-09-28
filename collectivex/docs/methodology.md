@@ -623,6 +623,12 @@ are not restated here.
 Other lane facts, measured on the metal: single-WR bulk transfers above the provider's max
 message size must be split (the MoRI adapter caps WRs at 1 GiB); and the upstream PyPI Mooncake
 wheel is NVIDIA-only (it links libcuda.so.1 at import), so mi355x runs AMD's atom-dev build.
+AWS EFA (b300) is not a verbs HCA and UCX has no transport for it, so on a pool whose network
+profile says `rdma_fabric: efa` the NIXL adapter selects the wheel's LIBFABRIC plugin, which
+loads the host libfabric the cluster's enroot hook mounts and rails a GPU across its local EFA
+devices; the row's `implementation.transport` records which plugin carried it. The same PyPI
+Mooncake wheel links only libibverbs/libmlx5 (verbs RC, which EFA does not offer), so b300 carries
+no mooncake leg.
 
 Scheduling is data: `configs/kv_sweep.json` holds the grid and, per pool, the allocation and the
 per-case hang guard. GB pools get the long budgets, because the mnnvl descriptor floor makes a leg

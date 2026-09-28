@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
-"""NIXL (UCX) adapter: the library Dynamo, vLLM NixlConnector, and SGLang
-disagg ship. Agent metadata rides the harness exchange (`add_remote_agent`),
-not NIXL's TCP listener, so the adapter needs no port and no listener race.
+"""NIXL adapter: the library Dynamo, vLLM NixlConnector, and SGLang disagg
+ship. UCX carries it on verbs fabrics (IB, RoCE); on AWS EFA, which is not a
+verbs HCA and has no UCX transport, the wheel's LIBFABRIC plugin carries it
+over the host libfabric the cluster's enroot hook mounts. Agent metadata rides
+the harness exchange (`add_remote_agent`), not NIXL's TCP listener, so the
+adapter needs no port and no listener race.
 Remote descriptors are built locally from the peer's published pool base; both
 block tables are seed-keyed, the same information a decode worker gets from the
 prefill side's block table message.
@@ -9,6 +12,7 @@ prefill side's block table message.
 
 from __future__ import annotations
 
+import os
 import time
 
 import numpy as np
@@ -57,8 +61,11 @@ class NIXLBackend(KVBackend):
         # The registry pin run_kv hands to UCX_NET_DEVICES for this case;
         # None means UCX chose among the operator inventory itself.
         self.nic_filter = args.kv_device or None
+        # The network profile marks EFA pools; there FI_PROVIDER=efa is already set.
+        self.transport = "LIBFABRIC" if os.environ.get("COLLX_RDMA_FABRIC") == "efa" else "UCX"
         # prog thread on, listener off: metadata goes through the harness exchange.
-        self._agent = nixl_agent(role, nixl_agent_config(True, False, 0, backends=["UCX"]))
+        self._agent = nixl_agent(role, nixl_agent_config(True, False, 0,
+                                                         backends=[self.transport]))
         self._handles = []
         self._pool = None
         self._bulk = None
