@@ -9005,4 +9005,4 @@
     - "Behavior change: the point previously ran 8 LMCache servers of 162 GB L1 each, one per TP rank (lmcache.mp.server_urls). It now runs one server with the same 1296 GB total L1 and the same LMCache flags (chunk size 256, 2 workers, LRU, 7200 s read TTL, lmcache_driven transfer), which all 8 ranks share."
     - "lmcache-mp-rocm.sh now only installs the ROCm LMCache 0.5.3 wheel; it runs as the LMCache variant's setup_script in the worker container and in the service's preamble. The GPU-resident points are unchanged."
     - "This change does not alter the EAGLE3 draft model data type. The draft loads unmodified from the published Inferact/MiniMax-M3-EAGLE3-GQA checkpoint via --speculative-config (method=eagle3). kv-cache-dtype fp8 sets KV-cache storage precision, not the draft weights, and no flag overrides or re-quantizes the draft weights."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3545
