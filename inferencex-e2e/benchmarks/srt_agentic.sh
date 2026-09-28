@@ -189,7 +189,8 @@ for index in "${!CONCURRENCIES[@]}"; do
         (( ${#profile_servers[@]} )) || profile_servers=("$AIPERF_SERVER_URL")
         python3 "$INFMAX_CONTAINER_WORKSPACE/benchmarks/profiling/vllm/profile_windows.py" \
             "$INFX_PROFILE_WINDOWS" "$INFX_PROF_DIR/windows_conc${concurrency}.jsonl" \
-            "$RESULT_DIR/aiperf_artifacts/logs/aiperf.log" "${profile_servers[@]}" &
+            "$RESULT_DIR/aiperf_artifacts/logs/aiperf.log" "$INFX_PROF_DIR/steps" \
+            "${profile_servers[@]}" &
         profile_windows_pid=$!
     fi
     run_agentic_replay_and_write_outputs "$RESULT_DIR"

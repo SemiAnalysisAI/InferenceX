@@ -138,20 +138,23 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
 
 PROFILE_DIR = "/logs/infx_profile"
 PROFILE_DEFAULTS: dict[str, Any] = {
-    # [aiperf phase, seconds after it starts, engine iterations] per torch window.
-    # AgentX warmup is the lanes' long first turns (prefill-heavy); the measured
-    # phase starts once they drain (decode-dominated).
-    "windows": [["warmup", 60, 32], ["profiling", 0, 32]],
+    # [anchor, seconds after it, engine iterations] per torch window. Anchors are
+    # aiperf phases ("warmup", "profiling") or "decode", the first steady decode
+    # (FULL CUDA graph replays) after warmup starts. AgentX warmup is the lanes'
+    # long first turns (prefill-heavy); each measured-phase turn re-prefills first,
+    # so steady decode's arrival depends on concurrency.
+    "windows": [["warmup", 60, 32], ["decode", 0, 32]],
     # workers whose CUDA graph capture is profiled; "all" profiles every rank
     "capture_ranks": "dp0_tp0",
     # Host memory kept free of CPU KV offload for the profiler's trace buffers;
     # offload recipes otherwise size the pool to nearly the whole host.
     "host_headroom_gib": 128,
 }
-PROFILE_PHASES = ("warmup", "profiling")
-# Measured replay past its last window's start: the window, its export and a
-# margin. A profiled run stops there; its throughput is not a result.
-PROFILE_TAIL_SECONDS = 150
+PROFILE_PHASES = ("warmup", "decode", "profiling")
+# Cap on the measured replay past its last phase-anchored window's start. Steady
+# decode can take minutes to arrive under data parallelism; the window client
+# ends the replay once its windows close. A profiled run's throughput is not a result.
+PROFILE_MEASURED_CAP_SECONDS = 600
 
 
 def offload_headroom_arguments(role_args: Mapping[str, Any], headroom_gib: float) -> list[str]:
@@ -228,9 +231,10 @@ def profiling_arguments(
     overrides += offload_headroom_arguments(role_args or {}, float(settings["host_headroom_gib"]))
     for name, value in worker_env.items():
         overrides += ["--set", f"roles.agg.env.{name}={json.dumps(value)}"]
-    # Profiling needs only its windows; replaying longer only holds the node.
     measured = [int(w[1]) for w in windows if w[0] == "profiling"]
-    duration = int(settings.get("duration") or max(measured, default=0) + PROFILE_TAIL_SECONDS)
+    duration = int(
+        settings.get("duration") or max(measured, default=0) + PROFILE_MEASURED_CAP_SECONDS
+    )
     overrides += [
         "--set",
         f"benchmark.env.INFX_PROFILE_DURATION={json.dumps(str(duration))}",
