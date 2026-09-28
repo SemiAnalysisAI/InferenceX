@@ -20,9 +20,8 @@ from collections import defaultdict
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-# Each shard runs on the self-hosted runners that carry this label - the labels
-# InferenceX's benchmark workflows request - mapped to its Slurm cluster id and the
-# CollectiveX platform profile (configs/platform_config.json) its Slurm settings come from.
+# runner label (as InferenceX's workflows request) -> (Slurm cluster id, CollectiveX
+# platform profile in configs/platform_config.json)
 RUNNERS = {
     "cluster:h100-dgxc": ("h100_dgxc_8x", "h100-dgxc"),
     "cluster:h200-dgxc": ("h200_dgxc_8x", "h200-dgxc"),
@@ -35,7 +34,7 @@ RUNNERS = {
     "cluster:mi355x-amds": ("mi355x_8x", "mi355x"),
 }
 MODES = ("timing", "counters")
-# Hardware counters per kernel. Latencies from a counters run are perturbed by the profiler.
+# per-kernel hardware counters; a counters run's latencies are perturbed by the profiler
 NCU_METRICS = ",".join((
     "gpu__time_duration.sum", "sm__cycles_elapsed.avg.per_second",
     "gpc__cycles_elapsed.avg.per_second", "dram__cycles_elapsed.avg.per_second",
@@ -58,7 +57,7 @@ NCU_METRICS = ",".join((
     "l1tex__data_pipe_lsu_wavefronts_mem_shared_op_ld.sum",
     "l1tex__data_pipe_lsu_wavefronts_mem_shared_op_st.sum",
 ))
-# Host Nsight Compute: real installs (<root>/nsight-compute[-]<version>/ncu), then any ncu on PATH.
+# host Nsight Compute: real installs (<root>/nsight-compute[-]<version>/ncu), then PATH
 NCU_SEARCH = (
     "ls -d /opt/nvidia/nsight-compute/*/ncu /usr/local/cuda*/nsight-compute*/ncu "
     "/opt/nvidia/nsight-compute*/ncu $(command -v ncu) 2>/dev/null | xargs -r readlink -f | sort -u"
@@ -74,7 +73,7 @@ def pick_ncu(paths: list[str]) -> Path | None:
     if real:
         return max(real, key=version)
     return Path(paths[-1]) if paths else None
-# rocprofv3 fits only a few counters per hardware pass, so a counters run repeats per pass.
+# rocprofv3 fits only a few counters per hardware pass: a counters run repeats per pass
 ROCPROF_PASSES = {
     "fetch": ["FETCH_SIZE"],
     "hm": ["TCC_HIT_sum", "TCC_MISS_sum"],
@@ -98,8 +97,7 @@ ROCPROF_PASSES = {
 
 
 def load_platforms(path: Path) -> dict:
-    """Hardware and Slurm settings per runner label: the CollectiveX profile the label
-    maps to, overlaid with this file's own entry for the label."""
+    """Per runner label: its CollectiveX profile overlaid with this file's entry."""
     document = json.loads(path.read_text())
     base = {}
     if "base" in document:
@@ -110,6 +108,33 @@ def load_platforms(path: Path) -> dict:
         if merged:
             platforms[runner] = merged
     return platforms
+
+
+# CollectiveX's network profile scrub (runtime/common.sh collx_apply_network_profile).
+_NETWORK_ENV = ("NCCL_NET", "NCCL_SOCKET_IFNAME", "NCCL_IB_", "NVSHMEM_", "MORI_RDMA_", "UCCL_")
+
+
+def stage_model_config(checkpoint: str, root: Path) -> None:
+    """The checkpoint's config.json, without weights."""
+    import urllib.request
+
+    dest = root / checkpoint / "config.json"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with urllib.request.urlopen(f"https://huggingface.co/{checkpoint}/raw/main/config.json",
+                                    timeout=60) as r:
+            dest.write_bytes(r.read())
+    except OSError as e:
+        print(f"[operatorx] no config.json for {checkpoint}: {e}", flush=True)
+
+
+def _split_axes(op_type: str) -> tuple[str, ...]:
+    import operatorx.ops  # noqa: F401  registers the op specs
+    from operatorx.core import op_registry, parallel
+    try:
+        return op_registry.get(op_type).parallel_axes or ("tp",)
+    except KeyError:
+        return parallel.AXES
 
 
 def family(name: str) -> str:
@@ -139,9 +164,10 @@ def plan(
     mode: str = "timing",
     find_recipe=None,
 ) -> dict:
-    """Shards for a selection. A case whose source checkpoint InferenceX serves on this
-    hardware runs under that recipe (find_recipe(framework, hardware, checkpoints),
-    operatorx.recipes.find): its image, launch env and server arguments."""
+    """Shards for a selection, one per (parallel split, InferenceX recipe). A case whose
+    source checkpoint InferenceX serves on this hardware runs under that recipe
+    (find_recipe = operatorx.recipes.find): its image, launch env and server arguments."""
+    from operatorx.core import parallel
     from operatorx.recipes import FRAMEWORKS, checkpoints
     if runner not in RUNNERS:
         raise ValueError(f"unsupported runner: {runner}")
@@ -158,20 +184,19 @@ def plan(
         raise ValueError("select at least one registered backend for this GPU platform")
     if is_amd(runner) and (
         set(backends) - {"torch", "vllm"}
-        or world_sizes != [1]
         or any(
             shape["type"] not in {"gemm", "moe", "mla", "mla_dsa", "dsv4_attn", "gqa", "qsa", "gdn", "kda"}
             for shapes in testlists.values()
             for shape in shapes
         )
     ):
-        raise ValueError(
-            "AMD CI supports single-GPU torch/vllm GEMM"
-        )
+        raise ValueError("AMD CI supports the torch/vllm GEMM, MoE and attention ops")
     if not world_sizes or set(world_sizes) - {1, 2, 4, 8}:
         raise ValueError("world sizes must be selected from 1,2,4,8 (single node)")
     if any(ws > gpus for ws in world_sizes):
         raise ValueError(f"world size exceeds the runner's {gpus}-GPU physical node")
+    if "torch" in backends and world_sizes != [1]:
+        raise ValueError("the torch backend runs single-device GEMM only")
     if not 1 <= chunk_size <= 500:
         raise ValueError("chunk size must be between 1 and 500")
     groups = defaultdict(list)
@@ -179,35 +204,38 @@ def plan(
     excluded = 0
     for name, shapes in sorted(testlists.items()):
         for shape in shapes:
-            args = shape["args"]
-            ws = args.get("world_size", 1)
-            if type(ws) is not int or ws < 1:
-                raise ValueError("world_size must be a positive integer")
-            if ws not in world_sizes:
+            split = parallel.normalize(shape["args"].get("parallel"))
+            if parallel.world_size(split) not in world_sizes:
                 excluded += 1
                 continue
             recipe = next((r for b in backends if b in FRAMEWORKS and find_recipe
-                           for r in [find_recipe(b, family(runner), checkpoints(shape.get("sources")))] if r),
-                          None)
+                           for r in [find_recipe(b, family(runner), checkpoints(shape.get("sources")),
+                                                 split, _split_axes(shape["type"]))] if r), None)
             if recipe:
                 recipes_seen[recipe["recipe"]] = recipe
-            groups[(ws, recipe["recipe"] if recipe else "")].append({"testlist": name, "shape": shape})
+            # attention builds its own engine; never in a process with gemm/moe
+            state = "layer" if shape["type"] in ("gemm", "moe") else "engine"
+            groups[(json.dumps(split, sort_keys=True), recipe["recipe"] if recipe else "", state)].append(
+                {"testlist": name, "shape": shape})
     image_groups = defaultdict(list)
     for backend in sorted(set(backends)):
         image_groups[images[backend]["image"]].append(backend)
     cells = []
     shards = []
-    for (ws, recipe), cases in sorted(groups.items()):
+    for (split, recipe, _state), cases in sorted(groups.items()):
+        split = json.loads(split)
+        ws = parallel.world_size(split)
         rest = image_groups
         if recipe:
             r = recipes_seen[recipe]
             framework = next(b for b in backends if b in FRAMEWORKS)
             shards.append((r["image"], [framework], ws, cases,
-                           {"recipe": recipe, "checkpoint": r["checkpoint"], "env": r["env"],
-                            "engine_args": r["engine_args"]}))
+                           {"parallel": split, "recipe": recipe, "recipe_match": r["match"],
+                            "checkpoint": r["checkpoint"], "env": r["env"], "engine_args": r["engine_args"]}))
             # the other backends run the same cases on their own images
             rest = {i: [b for b in bs if b != framework] for i, bs in image_groups.items()}
-        shards += [(image, selected, ws, cases, {}) for image, selected in sorted(rest.items()) if selected]
+        shards += [(image, selected, ws, cases, {"parallel": split})
+                   for image, selected in sorted(rest.items()) if selected]
     for image, selected, ws, cases, extra in shards:
             for offset in range(0, len(cases), chunk_size):
                 cell = {
@@ -304,13 +332,13 @@ def cleanup(root: Path, timeout_seconds: int) -> None:
 
 
 def image_key(image: str, digest: str, image_platform: str) -> str:
-    # Preserve the already-qualified amd64 cache while isolating Arm imports.
+    # keep the existing amd64 cache keys; Arm imports get their own
     suffix = "" if image_platform == "linux/amd64" else f":{image_platform}"
     return hashlib.sha256((image + digest + suffix).encode()).hexdigest()
 
 
 def shared_base(profile: dict, runner: str) -> Path:
-    """Resolve the runner's configured/shared account storage, never temporary HOME."""
+    """The runner's configured/shared account storage, never a temporary HOME."""
     if profile.get("stage_dir"):
         roots = [Path(profile["stage_dir"])]
     elif is_amd(runner):
@@ -322,8 +350,8 @@ def shared_base(profile: dict, runner: str) -> Path:
             raise ValueError("AMD staging requires the shared runner _work/_temp path")
         roots = [runner_temp.parent.parent]
     elif family(runner) == "b300":
-        # CollectiveX uses the compute-visible account home on these nodes.
-        # The shared squash parent is not writable by the GHA service account.
+        # compute-visible account home, as CollectiveX; the shared squash parent isn't
+        # writable by the GHA service account
         roots = [Path(pwd.getpwuid(os.getuid()).pw_dir)]
     elif profile.get("squash_dir"):
         roots = [Path(profile["squash_dir"]).parent]
@@ -336,7 +364,7 @@ def shared_base(profile: dict, runner: str) -> Path:
 
 
 def import_image(args) -> None:
-    # Runs on the configured import host with a compute-visible cache and lock.
+    # runs on the import host, with a compute-visible cache and lock
     import fcntl
 
     image, digest = args.image, args.digest
@@ -363,10 +391,9 @@ def import_image(args) -> None:
         try:
             host, repository, tag = probe_module().registry_reference(image)
             uri = f"docker://{host}#{repository}:{tag}"
-            # B300 login/compute homes are node-local; every importer gets private
-            # temporary paths. Preserve an explicitly configured shared cache. Where
-            # /tmp cannot hold overlay whiteouts (H100 DGXC) the node's own enroot
-            # paths are kept, as its InferenceX launcher imports with them.
+            # B300 homes are node-local: private temp paths unless a shared cache is
+            # configured; where /tmp can't hold overlay whiteouts (H100 DGXC) keep the
+            # node's enroot paths, as its InferenceX launcher does
             with tempfile.TemporaryDirectory(prefix="operatorx-enroot-") as scratch:
                 env = dict(os.environ)
                 private = os.environ.get("OPERATORX_ENROOT_DEFAULTS") != "1"
@@ -387,8 +414,7 @@ def import_image(args) -> None:
                     env=env,
                 )
             subprocess.run(["unsquashfs", "-s", str(temporary)], check=True)
-            # The importer uses the tag, just like CollectiveX. Refuse a tag that moved
-            # between planning and import rather than mislabelling the measurement.
+            # imported by tag (as CollectiveX); refuse a tag that moved since planning
             if probe_module().resolve_image_digest(image) != digest:
                 raise RuntimeError(
                     "image tag moved or digest verification failed; dispatch again"
@@ -493,10 +519,14 @@ def execute(args) -> None:
             stage / "source/operatorx",
             ignore=shutil.ignore_patterns("__pycache__", "results", ".venv", "tests"),
         )
-        shutil.copytree(
-            ROOT.parent / "collectivex/runtime",
-            stage / "source/collectivex/runtime",
-        )
+        for part in ("runtime", "bench"):  # probes; the EP harness's cross-rank timing
+            shutil.copytree(
+                ROOT.parent / "collectivex" / part,
+                stage / "source/collectivex" / part,
+                ignore=shutil.ignore_patterns("__pycache__"),
+            )
+        if cell.get("checkpoint"):
+            stage_model_config(cell["checkpoint"], stage / "models")
         for name in sorted({c["testlist"] for c in cell["cases"]}):
             write_json(
                 stage / "testlists" / f"{name}.json",
@@ -553,8 +583,7 @@ def execute(args) -> None:
             "--image-platform",
             image_platform,
         ]
-        # Import on the allocated architecture, including B300: its submit host
-        # lacks PyTorch extraction space, as the inference launcher notes.
+        # import on the allocated node (B300's submit host lacks extraction space)
         import_env = dict(os.environ)
         if profile.get("enroot_cache_path"):
             import_env["ENROOT_CACHE_PATH"] = profile["enroot_cache_path"]
@@ -583,9 +612,17 @@ def execute(args) -> None:
             PYTHONPATH="/opx/source",
             PYTHONDONTWRITEBYTECODE="1",
             WORLD_SIZE=str(cell["world_size"]),
+            OPERATORX_PARALLEL=json.dumps(cell.get("parallel") or {}),
             MASTER_ADDR="127.0.0.1",
-            MASTER_PORT="29500",
+            MASTER_PORT=str(29500 + int(hashlib.sha256(f"{job}:{cell['id']}".encode()).hexdigest(), 16) % 2000),
         )
+        if (stage / "models" / cell.get("checkpoint", "-") / "config.json").is_file():
+            env["OPERATORX_MODEL_CONFIG"] = f"/opx/models/{cell['checkpoint']}"
+        # --export=ALL forwards the runner's network profile; single node needs none
+        for key in [k for k in env if k.startswith(_NETWORK_ENV)]:
+            del env[key]
+        if not is_amd(cell["runner"]):
+            env["NCCL_CUMEM_ENABLE"] = "1"
         env.update(cell.get("env", {}))  # the InferenceX recipe's launch env
         mounts = f"{stage}:/opx"
         # NVIDIA images carry no Nsight Compute; counters runs mount the node's newest.
@@ -597,8 +634,7 @@ def execute(args) -> None:
             (root / "ncu.log").write_text("\n".join(found) + "\n")
             ncu = pick_ncu(found)
             if ncu is not None:
-                # ncu is a wrapper that finds its install next to itself (../), so mount the
-                # whole install tree at the same path
+                # ncu finds its install relative to itself: mount the whole tree in place
                 mounts += f",{ncu.parent.parent}:{ncu.parent.parent}"
                 env["OPERATORX_NCU"] = str(ncu)
         if hw in ("mi300x", "mi325x"):
@@ -623,13 +659,14 @@ def execute(args) -> None:
             run.append("--container-remap-root")
         if hw == "b300":
             run.append("--mpi=none")
-        # The Python entrypoint preserves the allocated GPU mask without a shell. Run it
-        # by path: an image's own PYTHONPATH (ROCm images set one) replaces the host's.
+        # by path: an image's own PYTHONPATH (ROCm images set one) replaces the host's
         run += ["python3", "/opx/source/operatorx/ci.py", "rank"]
+        # bound a collective that hangs without failing
+        run = ["timeout", "-k", "30", str(max(300, args.time_minutes * 60 - 300)), *run]
         command(run, root / "benchmark.log", env=env)
         rc = 0
     finally:
-        # Stop writers before collecting; failed cleanup retains the evidence.
+        # stop writers before collecting; a failed cleanup keeps the evidence
         for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
             signal.signal(sig, signal.SIG_IGN)
         finalize(root, args.cleanup_seconds)
@@ -668,7 +705,7 @@ def rank() -> None:
     ]
     if os.environ.get("OPERATORX_MODE", "timing") != "counters":
         os.execv(sys.executable, bench)
-    # One profiled replay per op, marked so counters join to ops; no timing warmups.
+    # one marked, profiled replay per op so counters join to ops; no timing warmups
     os.environ.update(
         OPERATORX_PROFILE="1",
         OPERATORX_PROFILE_MARKERS="1",
@@ -811,7 +848,7 @@ def main() -> None:
         }
         vendor = "amd" if is_amd(args.runner) else "nvidia"
         images = tomllib.loads((ROOT / "containers.toml").read_text())[vendor]
-        # Fail here, before any node is allocated, for a backend with no module.
+        # fail before any node is allocated for a backend with no module
         missing = [
             b for b in args.backends.split(",")
             if not (ROOT / "runners" / vendor / "backends" / f"{b}.py").is_file()
@@ -833,8 +870,8 @@ def main() -> None:
         for image in digests:
             digests[image] = probe_module().resolve_image_digest(image)
         for cell in result["include"]:
-            # a recipe whose image tag the registry no longer serves (pruned nightlies) runs on
-            # the backend's own image with the recipe's env; the manifest records the swap
+            # recipe image tag gone from the registry (pruned nightly): backend image + recipe
+            # env; the manifest records the swap
             if not digests[cell["image"]] and cell.get("recipe"):
                 cell["recipe_image_unavailable"] = cell["image"]
                 cell["image"] = images[cell["backends"][0]]["image"]

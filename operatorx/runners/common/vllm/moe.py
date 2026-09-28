@@ -1,18 +1,19 @@
-"""MoE layer through vLLM's own MoE pipeline, so vLLM picks router, expert and
-shared-expert kernels and the stream layout.
+"""MoE layer through vLLM's MoE pipeline, so vLLM picks router, expert and shared-expert kernels.
 
-Each op builds the pieces a vLLM MoE block wires together - a GateLinear
-router, the routed experts from FusedMoEFactory under the quantization config
-the expert descriptors imply, and a shared-expert MLP under its own - loads
-synthetic checkpoint-format weights, runs process_weights_after_loading and
-times the block on bf16 hidden states (as a CUDA graph where vLLM would
-capture one). The quant methods and expert kernels vLLM chose are reported.
+A GateLinear router, FusedMoEFactory experts and a shared-expert MLP under the quant configs the
+descriptors imply, synthetic weights + process_weights_after_loading, timed on bf16 x (CUDA graph
+where vLLM would capture one). Splits shard as vLLM's parallel config does; shared experts and
+sequence-parallel chunking follow DeepseekV2MLP / DeepseekV2MoE.
 """
 from __future__ import annotations
+
+import os
 
 import torch
 
 from operatorx.core import BackendImpl, Op, UnsupportedOpError
+from operatorx.runners.common import ranks
+from operatorx.runners.common.vllm import engine, modules
 from operatorx.runners.common.vllm import linear as vllm_linear
 from operatorx.runners.common.vllm.linear import (_ENV_KEYS, _fill, _is_fault, _launcher, device, sync,
                                                   versions)
@@ -21,17 +22,7 @@ __all__ = ["IMPLS", "versions"]
 
 _DTYPES = {"bf16": torch.bfloat16, "fp32": torch.float32}
 _MAX_TOKENS = 65536  # the largest token count in the testlists
-_WORKSPACE = False
 _LAYER = 0
-
-
-def _context():
-    global _WORKSPACE
-    vllm_linear._vllm_context()
-    if not _WORKSPACE:
-        from vllm.v1.worker.workspace import init_workspace_manager
-        init_workspace_manager(torch.device("cuda", torch.cuda.current_device()))
-        _WORKSPACE = True
 
 
 def _quant(x: dict, w: dict, where: str):
@@ -77,15 +68,29 @@ def _act_fn(act: dict):
     raise UnsupportedOpError(f"shared-expert activation {kind!r} is not wired")
 
 
+def _dp_tokens(cache: dict, T: int):
+    """DP ranks' token counts, coordinated as the model runner does per step (untimed)."""
+    if T not in cache:
+        from vllm.config import get_current_vllm_config
+        from vllm.v1.worker.dp_utils import coordinate_batch_across_dp
+        cfg = get_current_vllm_config()
+        graph = int(bool(cfg.compilation_config.cudagraph_capture_sizes))
+        cache[T] = coordinate_batch_across_dp(T, False, cfg.parallel_config, cudagraph_mode=graph)[1]
+    return cache[T]
+
+
 class _SharedMLP(torch.nn.Module):
-    def __init__(self, hidden: int, inter: int, act: dict, qc, prefix: str, expert_gate=None):
+
+    def __init__(self, hidden: int, inter: int, act: dict, qc, prefix: str, expert_gate=None,
+                 sequence_parallel: bool = False):
         super().__init__()
         self.expert_gate = expert_gate  # Qwen: sigmoid(gate(x)) scales the shared output
         from vllm.model_executor.layers.linear import MergedColumnParallelLinear, RowParallelLinear
         self.gate_up_proj = MergedColumnParallelLinear(hidden, [inter] * 2, bias=False, quant_config=qc,
-                                                       disable_tp=True, prefix=f"{prefix}.gate_up_proj")
+                                                       disable_tp=sequence_parallel,
+                                                       prefix=f"{prefix}.gate_up_proj")
         self.down_proj = RowParallelLinear(inter, hidden, bias=False, quant_config=qc, reduce_results=False,
-                                           disable_tp=True, prefix=f"{prefix}.down_proj")
+                                           disable_tp=sequence_parallel, prefix=f"{prefix}.down_proj")
         self.act_fn = _act_fn(act)
 
     def forward(self, x):
@@ -96,8 +101,8 @@ class _SharedMLP(torch.nn.Module):
         return h
 
 
-# DeepSeek-V4 routed experts: MXFP4 weights under the checkpoint's fp8 (ue8m0) config,
-# which vLLM routes to its MXFP4 MoE method (expert_dtype "fp4").
+# DeepSeek-V4 routed experts: MXFP4 weights under the checkpoint's fp8 (ue8m0) config, which vLLM
+# routes to its MXFP4 MoE method (expert_dtype "fp4")
 _DSV4_FP4_EXPERTS = ("deepseek_v4_fp8", {"quant_method": "fp8", "activation_scheme": "dynamic", "fmt": "e4m3",
                                          "scale_fmt": "ue8m0", "weight_block_size": [128, 128]})
 
@@ -165,6 +170,7 @@ class _MoeBlock(torch.nn.Module):
 
     def __init__(self, a: dict, prefix: str):
         super().__init__()
+        from vllm.config import get_current_vllm_config
         from vllm.model_executor.layers.fused_moe.layer import FusedMoEFactory
         from vllm.model_executor.layers.fused_moe.router.gate_linear import GateLinear
         from vllm.model_executor.layers.fused_moe.utils import resolve_layer_fused_shared_expert
@@ -178,6 +184,8 @@ class _MoeBlock(torch.nn.Module):
         qc = _expert_quant(ex["a1"], ex["w1"])
         vllm_linear._set_quant_fp8_op(qc)
         H, E, K = a["hidden"], ex["num"], ex["top_k"]
+        self.sequence_parallel = get_current_vllm_config().parallel_config.use_sequence_parallel_moe
+        self._dp_tokens: dict[int, torch.Tensor | None] = {}
         L = ex.get("latent") or H
         sel = rt["select"]
         routing = a.get("routing") or {"distribution": "natural", "seed": 0}
@@ -216,7 +224,7 @@ class _MoeBlock(torch.nn.Module):
                 shared_gate = expert_gate
             else:
                 shared = _SharedMLP(H, sh["inter"] * sh["count"], act, sqc, f"{prefix}.shared_experts",
-                                    expert_gate=expert_gate)
+                                    expert_gate=expert_gate, sequence_parallel=self.sequence_parallel)
         latent = {}
         self.down_proj = None
         if ex.get("latent"):  # Kimi-K3: routed experts run at width L between bf16 projections
@@ -242,7 +250,7 @@ class _MoeBlock(torch.nn.Module):
             routed_scaling_factor=rt.get("scale") or 1.0,
             e_score_correction_bias=bias,
             hash_indices_table=self.gate.tid2eid, custom_routing_function=custom,
-            has_bias=bool(ex.get("bias")), reduce_results=False,
+            has_bias=bool(ex.get("bias")), reduce_results=True, is_sequence_parallel=self.sequence_parallel,
             n_shared_experts=sh["count"] if fused_shared else None, fuse_shared_experts=fused_shared,
             router_logits_dtype=self.gate.out_dtype, gate=None if ex.get("latent") else self.gate,
             shared_experts=shared, shared_expert_gate=shared_gate, **latent, **_act_kwargs(act))
@@ -253,24 +261,66 @@ class _MoeBlock(torch.nn.Module):
             self._aux = aux_stream()
             self._events = (torch.cuda.Event(), torch.cuda.Event())
 
+    def dp_tokens(self, T: int):
+        return _dp_tokens(self._dp_tokens, T)
+
     def forward(self, x):
         from vllm.config import get_current_vllm_config
         from vllm.forward_context import set_forward_context
         T = x.shape[0]
-        with set_forward_context(None, get_current_vllm_config(), num_tokens=T):
-            if self.down_proj is None or not hasattr(self, "_aux"):
-                if self.down_proj is not None:  # latent projection without an aux stream
-                    lat, _ = self.down_proj(x)
-                    return self.experts(hidden_states=lat, router_logits=self.gate(x)[0],
-                                        shared_experts_input=x)
-                ids = None if self.input_ids is None else self.input_ids[:T]
-                return self.experts(hidden_states=x, router_logits=x, input_ids=ids)
-            # as Kimi-K3's block: router and latent down projection on two streams at decode sizes
-            from vllm.utils.multi_stream_utils import maybe_execute_in_parallel
-            logits, (lat, _) = maybe_execute_in_parallel(
-                lambda: self.gate(x)[0], lambda: self.down_proj(x), self._events[0], self._events[1],
-                self._aux if T <= self._stream_tokens else None)
-            return self.experts(hidden_states=lat, router_logits=logits, shared_experts_input=x)
+        with set_forward_context(None, get_current_vllm_config(), num_tokens=T,
+                                 num_tokens_across_dp=self.dp_tokens(T)):
+            if not self.sequence_parallel:
+                return self._experts(x)
+            from vllm.distributed import tensor_model_parallel_all_gather
+            from vllm.model_executor.models.utils import sequence_parallel_chunk
+            return tensor_model_parallel_all_gather(self._experts(sequence_parallel_chunk(x)), 0)[:T]
+
+    def _experts(self, x):
+        T = x.shape[0]
+        if self.down_proj is None or not hasattr(self, "_aux"):
+            if self.down_proj is not None:  # latent projection without an aux stream
+                lat, _ = self.down_proj(x)
+                return self.experts(hidden_states=lat, router_logits=self.gate(x)[0],
+                                    shared_experts_input=x)
+            ids = None if self.input_ids is None else self.input_ids[:T]
+            return self.experts(hidden_states=x, router_logits=x, input_ids=ids)
+        # as Kimi-K3's block: router and latent down projection on two streams at decode sizes
+        from vllm.utils.multi_stream_utils import maybe_execute_in_parallel
+        logits, (lat, _) = maybe_execute_in_parallel(
+            lambda: self.gate(x)[0], lambda: self.down_proj(x), self._events[0], self._events[1],
+            self._aux if T <= self._stream_tokens else None)
+        return self.experts(hidden_states=lat, router_logits=logits, shared_experts_input=x)
+
+
+class _ModelBlock(torch.nn.Module):
+    """A checkpoint's own MoE module (modules.py), called as its decoder layer calls it."""
+
+    def __init__(self, module: torch.nn.Module):
+        super().__init__()
+        import inspect
+
+        from vllm.config import get_current_vllm_config
+        self.module = module
+        self.sequence_parallel = False  # handled inside the module
+        self.fused_shared = None
+        self._dp_tokens: dict[int, torch.Tensor | None] = {}
+        self.takes_ids = "input_ids" in inspect.signature(module.forward).parameters
+        vocab = get_current_vllm_config().model_config.hf_text_config.vocab_size
+        self.register_buffer("input_ids", torch.randint(0, vocab, (_MAX_TOKENS,), device=device()))
+
+    def dp_tokens(self, T: int):
+        return _dp_tokens(self._dp_tokens, T)
+
+    def forward(self, x):
+        from vllm.config import get_current_vllm_config
+        from vllm.forward_context import set_forward_context
+        T = x.shape[0]
+        with set_forward_context(None, get_current_vllm_config(), num_tokens=T,
+                                 num_tokens_across_dp=self.dp_tokens(T)):
+            if self.takes_ids:
+                return self.module(x, input_ids=self.input_ids[:T])
+            return self.module(x)
 
 
 def _describe(block) -> dict:
@@ -295,8 +345,7 @@ def _describe(block) -> dict:
 
 
 def _release_previous() -> None:
-    """vLLM registers every MoE layer by name in the forward context; drop the previous
-    op's so its weights and workspaces are freed before the next layer is built."""
+    """Drop the previous op's layers from vLLM's forward context so their memory is freed."""
     import gc
 
     from vllm.config import get_current_vllm_config
@@ -312,6 +361,29 @@ def _missing_op(e: BaseException) -> bool:
     return isinstance(e, AttributeError) and "_OpNamespace" in str(e)
 
 
+def _generic_block(a: dict, prefix: str) -> _MoeBlock:
+    from vllm.model_executor.layers.quantization.base_config import QuantizeMethodBase
+    block = _MoeBlock(a, prefix).to(device())
+    for m in block.modules():
+        _fill(m)
+    if block.gate.e_score_correction_bias is not None:
+        block.gate.e_score_correction_bias.data.zero_()
+    if block.gate.tid2eid is not None:  # the filler knows nothing of expert ids
+        block.gate.tid2eid.data.random_(0, a["experts"]["num"])
+    methods = []
+    for m in block.modules():
+        qm = getattr(m, "quant_method", None)
+        if isinstance(qm, QuantizeMethodBase):
+            methods.append(type(qm).__name__)
+            qm.process_weights_after_loading(m)
+    # an all-unquantized block computed bf16 under a quantized row; a bf16 shared expert alone is normal
+    if block.experts_quant_config is not None and methods and all("Unquantized" in n for n in methods):
+        raise UnsupportedOpError(
+            f"{type(block.experts_quant_config).__name__} has no quantized MoE method here; "
+            f"the layer fell back to {sorted(set(methods))}")
+    return block
+
+
 def _prepare_moe(op: Op) -> dict:
     global _LAYER
     a = op.args
@@ -320,61 +392,50 @@ def _prepare_moe(op: Op) -> dict:
     if a["tokens"] > _MAX_TOKENS:
         raise UnsupportedOpError(f"tokens > {_MAX_TOKENS} is not wired")
     routing = a.get("routing") or {"distribution": "natural", "seed": 0}
-    _context()
+    engine.context(a.get("parallel"))
     _release_previous()
     import vllm.envs as envs
-    from vllm.model_executor.layers.quantization.base_config import QuantizeMethodBase
     torch.manual_seed(routing["seed"])
     _LAYER += 1  # vLLM registers layers by name; each op builds a fresh one
     prefix = f"model.layers.{_LAYER}.mlp"
-    prev = torch.get_default_dtype()
-    torch.set_default_dtype(torch.bfloat16)
-    try:
-        block = _MoeBlock(a, prefix).to(device())
-        for m in block.modules():
-            _fill(m)
-        if block.gate.e_score_correction_bias is not None:
-            block.gate.e_score_correction_bias.data.zero_()
-        if block.gate.tid2eid is not None:  # the filler knows nothing of expert ids
-            block.gate.tid2eid.data.random_(0, a["experts"]["num"])
-        methods = []
-        for m in block.modules():
-            qm = getattr(m, "quant_method", None)
-            if isinstance(qm, QuantizeMethodBase):
-                methods.append(type(qm).__name__)
-                qm.process_weights_after_loading(m)
-        # A quantized block whose every method came out unquantized computed bf16 and
-        # would be recorded under the quantized row it is not. A bf16 shared expert
-        # beside quantized routed ones is normal, so only an all-unquantized block counts.
-        if block.experts_quant_config is not None and methods and all("Unquantized" in n for n in methods):
-            raise UnsupportedOpError(
-                f"{type(block.experts_quant_config).__name__} has no quantized MoE method here; "
-                f"the layer fell back to {sorted(set(methods))}")
-    except (NotImplementedError, AssertionError, ValueError, RuntimeError, TypeError, KeyError,
-            AttributeError) as e:
-        if _is_fault(e) or (isinstance(e, AttributeError) and not _missing_op(e)):
-            raise
-        raise UnsupportedOpError(f"vLLM rejected this MoE layer: {type(e).__name__}: {e}"[:400]) from e
-    finally:
-        torch.set_default_dtype(prev)
-    kernels = _describe(block)
-    if any("Emulation" in str(v) for e in kernels.values() for v in e.values()):
-        raise UnsupportedOpError(f"vLLM has only an emulation kernel for this MoE layer here: {kernels}")
-    x = torch.randn(a["tokens"], a["hidden"], device=device(), dtype=torch.bfloat16)
+    with ranks.together("build this layer"):
+        prev = torch.get_default_dtype()
+        torch.set_default_dtype(torch.bfloat16)
+        try:
+            own = modules.build(a) if os.environ.get("OPERATORX_MODEL_MODULES") == "1" else None
+            block = _ModelBlock(own) if own is not None else _generic_block(a, prefix)
+        except (NotImplementedError, AssertionError, ValueError, RuntimeError, TypeError, KeyError,
+                AttributeError) as e:
+            if _is_fault(e) or (isinstance(e, AttributeError) and not _missing_op(e)):
+                raise
+            raise UnsupportedOpError(f"vLLM rejected this MoE layer: {type(e).__name__}: {e}"[:400]) from e
+        finally:
+            torch.set_default_dtype(prev)
+        kernels = _describe(block)
+        if any("Emulation" in str(v) for e in kernels.values() for v in e.values()):
+            raise UnsupportedOpError(f"vLLM has only an emulation kernel for this MoE layer here: {kernels}")
+    # the tokens of one data-parallel group, identical on its tensor-parallel ranks
+    from vllm.distributed import get_dp_group
+    g = torch.Generator(device=device()).manual_seed(routing["seed"] * 1000 + get_dp_group().rank_in_group)
+    x = torch.randn(a["tokens"], a["hidden"], device=device(), dtype=torch.bfloat16, generator=g)
     ctx = {"layer": block, "x": x,
            "meta": {"vllm_modules": kernels, "fused_shared_experts": block.fused_shared,
-                    "vllm_env": {k: getattr(envs, k) for k in (*_ENV_KEYS, *_MOE_ENV_KEYS) if hasattr(envs, k)}}}
-    try:
-        _kernel_moe(ctx)
-        sync()
-    except (NotImplementedError, AssertionError, RuntimeError, ValueError, TypeError, AttributeError) as e:
-        if _is_fault(e) or (isinstance(e, AttributeError) and not _missing_op(e)):
-            raise
-        raise UnsupportedOpError(f"vLLM MoE kernel failed: {type(e).__name__}: {e}"[:400]) from e
+                    "sequence_parallel_moe": block.sequence_parallel,
+                    "model_module": type(block.module).__name__ if isinstance(block, _ModelBlock) else None,
+                    "vllm_env": {k: getattr(envs, k) for k in (*_ENV_KEYS, *_MOE_ENV_KEYS) if hasattr(envs, k)},
+                    "vllm_engine": engine.meta()}}
+    with ranks.together("run this layer"):
+        try:
+            _kernel_moe(ctx)
+            sync()
+        except (NotImplementedError, AssertionError, RuntimeError, ValueError, TypeError, AttributeError) as e:
+            if _is_fault(e) or (isinstance(e, AttributeError) and not _missing_op(e)):
+                raise
+            raise UnsupportedOpError(f"vLLM MoE kernel failed: {type(e).__name__}: {e}"[:400]) from e
     return ctx
 
 
-# Env that steers vLLM's MoE kernel and stream choice; recorded with every result.
+# env that steers vLLM's MoE kernel and stream choice; recorded with every result
 _MOE_ENV_KEYS = ("VLLM_ROCM_USE_AITER_MOE", "VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS",
                  "VLLM_USE_FLASHINFER_MOE_FP8", "VLLM_USE_FLASHINFER_MOE_FP4", "VLLM_FLASHINFER_MOE_BACKEND",
                  "VLLM_DISABLE_SHARED_EXPERTS_STREAM", "VLLM_SHARED_EXPERTS_STREAM_TOKEN_THRESHOLD")

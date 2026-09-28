@@ -1,34 +1,11 @@
-"""Per-op kernel decomposition, run after timing so it cannot affect latency_us.
+"""Per-op kernel breakdown under torch.profiler (CUPTI / rocprofiler), after timing.
 
-Each op is replayed under torch.profiler - kineto with CUPTI on CUDA,
-rocprofiler on ROCm - and the per-kernel breakdown is attached to the result:
+metrics["profile"]: iters, op_index, kernels [{name, cat, count_per_call, us_per_call, grid, block,
+regs, smem, blocks_per_sm, warps_per_sm, occupancy_pct}] (by time; launch fields where reported),
+gpu_us_per_call, span/busy/gap/overlap_us, streams, timeline (median-span replay), trace.
 
-  metrics["profile"] = {
-    "iters": N, "op_index": i,
-    "kernels": [{"name", "cat", "count_per_call", "us_per_call",
-                 "grid", "block", "regs", "smem", "blocks_per_sm",
-                 "warps_per_sm", "occupancy_pct"}, ...],   # sorted by time
-    "gpu_us_per_call": ...,          # sum of kernel durations
-    "span_us", "busy_us", "gap_us", "overlap_us", "streams",
-                                     # of the median-span replay: first start -> last end,
-                                     # union of kernel time across streams, span - busy,
-                                     # sum of durations - busy (concurrent kernels)
-    "timeline": [{"name", "stream", "start_us", "dur_us"}, ...],  # that replay, op-relative
-    "flush_kernels_excluded": ...,
-    "trace": ...,                    # when a chrome trace was kept
-  }
-
-Launch-config fields are present only where the platform reports them.
-
-OPERATORX_PROFILE=0             disable
-OPERATORX_PROFILE_ITERS         replays per op (default 3)
-OPERATORX_PROFILE_FLUSH_MB      flush size before each replay (default 512, 0 = warm)
-OPERATORX_PROFILE_TRACE_DIR     keep chrome traces here
-OPERATORX_PROFILE_TRACE_EVERY   keep every Nth op's trace (default 200)
-OPERATORX_PROFILE_MARKERS=1     instead of torch.profiler, wrap the replays in an
-                                nvtx/roctx range "opx<op_index>" for an external
-                                profiler (ncu, rocprofv3); op_index is the join key.
-                                Latencies from such runs are not timing data.
+Env OPERATORX_PROFILE_*: =0 off; _ITERS (3); _FLUSH_MB per replay (512, 0 = warm); _TRACE_DIR,
+_TRACE_EVERY (200); _MARKERS=1: nvtx/roctx range "opx<op_index>" for ncu/rocprofv3 instead.
 """
 from __future__ import annotations
 
@@ -48,8 +25,8 @@ _TRACE_EVERY = int(os.environ.get("OPERATORX_PROFILE_TRACE_EVERY", "200"))
 _MARKERS = os.environ.get("OPERATORX_PROFILE_MARKERS", "") == "1"
 # name of the kernel the int8 zero_() flush dispatches
 _FLUSH_KERNEL_MARKER = "FillFunctor"
-# GPU spin enqueued after each flush so the replay's launches queue up behind it and
-# the timeline shows device time, not host launch gaps; torch.cuda._sleep's kernel
+# spin after each flush so launches queue behind it and the timeline shows device time,
+# not host gaps; torch.cuda._sleep's kernel
 _SHIELD_CYCLES = int(os.environ.get("OPERATORX_SHIELD_CYCLES", "4000000"))
 _SHIELD_KERNEL_MARKER = "spin_kernel"
 
@@ -102,9 +79,8 @@ class _Cuda:
         return e.get("name", "")[:200]
 
     def harness_events(self, events: list[dict]) -> tuple[set[int], set[int]]:
-        """(flush, spin) event ids among the sorted device events. The op itself may launch
-        fill kernels, so the flush is identified by position: the last fill before each spin
-        (the loop issues flush, spin, replay). Without a spin, every fill counts as a flush."""
+        """(flush, spin) event ids. The op may launch fills itself, so the flush is the last fill
+        before each spin (flush, spin, replay); without a spin every fill is a flush."""
         flush, spin, last_fill = set(), set(), None
         for i, e in enumerate(events):
             name = e.get("name", "")
@@ -142,13 +118,12 @@ class _Cuda:
 
 
 def _platform():
-    """The capture for the device in front of us: CUDA and ROCm share one."""
     return _Cuda()
 
 
 def _markers_pass(kernel_fn, plat) -> dict:
     marker = f"opx{_counter:06d}"
-    plat.flush()  # outside the range so the flush is not attributed
+    plat.flush()  # outside the range: not attributed
     torch.cuda.synchronize()
     torch.cuda.nvtx.range_push(marker)
     try:

@@ -1,29 +1,25 @@
-"""Dense GEMM as a real vLLM linear layer, so vLLM picks the kernel.
+"""Dense GEMM as a vLLM RowParallelLinear (K split over tp, all-reduced), so vLLM picks the kernel.
 
-Each op builds a vLLM ReplicatedLinear under the quantization config its
-weight scheme implies (the same config classes a checkpoint's
-quantization_config selects), loads synthetic weights in checkpoint format,
-runs vLLM's process_weights_after_loading, and times layer(x) on a bf16
-activation - so activation quantization, kernel selection and any weight
-repacking are vLLM's own - replayed as a CUDA graph where vLLM would capture
-one. The kernel vLLM chose is reported per op.
+Built under the quantization config a checkpoint with the operands' scheme would declare, with
+synthetic checkpoint-format weights and process_weights_after_loading; layer(x) on a bf16
+activation, as a CUDA graph where vLLM would capture one. The chosen kernel is recorded.
 """
 from __future__ import annotations
 
-import json
 import os
 import sys
-import tempfile
 
 import torch
 
 from operatorx.core import BackendImpl, Op, UnsupportedOpError, lookup_versions
+from operatorx.runners.common import ranks
+from operatorx.runners.common.vllm import engine
 
 PER_TENSOR, PER_TOKEN, PER_CHANNEL = [-1, -1], [1, -1], [-1, 1]
 
 
 def device() -> "torch.device":
-    """The accelerator vLLM is running on (cuda on NVIDIA and ROCm)."""
+    """cuda on NVIDIA and ROCm."""
     from vllm.platforms import current_platform
     return torch.device(current_platform.device_type)
 
@@ -35,7 +31,7 @@ _MX_FP4 = {"dtype": "fp4", "qscheme": "per_group", "ch_axis": -1, "group_size": 
            "round_method": "half_even", "scale_type": "float", "scale_format": "e8m0",
            "scale_calculation_mode": "even", "mx_element_dtype": None, "observer_cls": "PerBlockMXObserver",
            "is_scale_quant": False}
-# The quantization_config AMD's MXFP4 checkpoints ship (e.g. amd/Kimi-K2.5-MXFP4), exclusions dropped.
+# the quantization_config AMD's MXFP4 checkpoints ship (e.g. amd/Kimi-K2.5-MXFP4), exclusions dropped
 _QUARK_MXFP4 = {
     "quant_method": "quark", "quant_mode": "eager_mode", "exclude": [], "algo_config": None,
     "global_quant_config": {"input_tensors": {**_MX_FP4, "is_dynamic": True},
@@ -47,7 +43,7 @@ _QUARK_MXFP4 = {
 }
 
 
-# Kimi-K3's routed experts: MXFP4 weights, bf16 activations (compressed-tensors mxfp4-pack).
+# Kimi-K3's routed experts: MXFP4 weights, bf16 activations (compressed-tensors mxfp4-pack)
 _CT_MXFP4_W4A16 = {
     "quant_method": "compressed-tensors", "format": "mxfp4-pack-quantized", "ignore": [],
     "config_groups": {"group_0": {
@@ -59,8 +55,7 @@ _CT_MXFP4_W4A16 = {
 
 
 def _scheme(qa: dict, qb: dict) -> tuple[str, dict] | None:
-    """Operand descriptors -> (vLLM quant method, checkpoint quantization_config), as a
-    checkpoint with that scheme would declare it; None for unquantized."""
+    """Operands -> (quant method, checkpoint quantization_config); None: unquantized; (): unsupported."""
     if "scale" not in qa and "scale" not in qb:
         return None if qa["dtype"] == qb["dtype"] == "bf16" else ()
     sa, sb = qa.get("scale"), qb.get("scale")
@@ -83,7 +78,7 @@ def _scheme(qa: dict, qb: dict) -> tuple[str, dict] | None:
             if sb["dtype"] in ("fp32", "bf16"):  # bf16 block scales load like fp32 ones
                 return "fp8", cfg
             if sb["dtype"] == "ue8m0":
-                # DeepSeek-V4: vLLM remaps the checkpoint's fp8 config to deepseek_v4_fp8 (ue8m0 scales).
+                # DeepSeek-V4: vLLM remaps the checkpoint's fp8 config to deepseek_v4_fp8
                 return "deepseek_v4_fp8", {**cfg, "scale_fmt": "ue8m0"}
         if ga == PER_TOKEN and gb == PER_CHANNEL and not sa["static"]:
             return "compressed-tensors", {
@@ -104,50 +99,12 @@ def _scheme(qa: dict, qb: dict) -> tuple[str, dict] | None:
     return ()
 
 
-# Env that steers vLLM's linear-kernel choice; recorded with every result.
+# env that steers vLLM's linear-kernel choice; recorded with every result
 _ENV_KEYS = ("VLLM_USE_DEEP_GEMM", "VLLM_USE_DEEP_GEMM_E8M0", "VLLM_BLOCKSCALE_FP8_GEMM_FLASHINFER",
              "VLLM_ROCM_USE_AITER", "VLLM_ROCM_USE_AITER_LINEAR")
 
-_READY = None
-
-
 def versions() -> dict[str, str]:
     return lookup_versions("vllm", "torch")
-
-
-def _vllm_context():
-    """Enter a minimal vLLM config + single-rank parallel state once per process."""
-    global _READY
-    if _READY is not None:
-        return _READY
-    from vllm.config import ModelConfig, VllmConfig, set_current_vllm_config
-    from vllm.distributed import init_distributed_environment, initialize_model_parallel
-
-    cfg_dir = tempfile.mkdtemp(prefix="opx_vllm_cfg_")
-    with open(os.path.join(cfg_dir, "config.json"), "w") as f:
-        json.dump({"architectures": ["LlamaForCausalLM"], "model_type": "llama", "hidden_size": 256,
-                   "intermediate_size": 512, "num_attention_heads": 4, "num_key_value_heads": 4,
-                   "num_hidden_layers": 1, "vocab_size": 1024, "max_position_embeddings": 2048,
-                   "torch_dtype": "bfloat16"}, f)
-    vcfg = VllmConfig()
-    vcfg.model_config = ModelConfig(model=cfg_dir, dtype="bfloat16", skip_tokenizer_init=True)
-    try:
-        vcfg._set_cudagraph_sizes()  # vLLM's default capture sizes for this config
-    except Exception:
-        pass
-    ctx = set_current_vllm_config(vcfg)
-    ctx.__enter__()
-    init_distributed_environment(world_size=1, rank=0, local_rank=torch.cuda.current_device(),
-                                 distributed_init_method=f"tcp://127.0.0.1:{29500 + os.getpid() % 1000}",
-                                 backend="nccl")
-    # with no model config vLLM also builds the expert-parallel group (size 1), which MoE layers need
-    model_config, vcfg.model_config = vcfg.model_config, None
-    try:
-        initialize_model_parallel(1, 1)
-    finally:
-        vcfg.model_config = model_config
-    _READY = ctx
-    return ctx
 
 
 def _quant_config(args):
@@ -160,7 +117,6 @@ def _quant_config(args):
 
 
 def quant_config(method: str, cfg: dict):
-    """Instantiate the config vLLM registers for a checkpoint's quant_method."""
     from vllm.model_executor.layers.quantization import QUANTIZATION_METHODS, get_quantization_config
     if method not in QUANTIZATION_METHODS:
         raise UnsupportedOpError(f"vLLM has no {method!r} quantization method")
@@ -168,10 +124,8 @@ def quant_config(method: str, cfg: dict):
 
 
 def _reject_fallback(qc, method) -> None:
-    """A quantized checkpoint whose layer got an unquantized method computed something
-    else - bf16 weights and a bf16 matmul - and would be recorded under the quantized
-    row it is not. vLLM's mxfp4 does this for linear layers, where only its MoE experts
-    have a kernel."""
+    """An unquantized fallback method would record a bf16 matmul under the quantized row
+    (vLLM's mxfp4 does this for linear layers; only its MoE experts have a kernel)."""
     if qc is not None and "Unquantized" in type(method).__name__:
         raise UnsupportedOpError(
             f"{type(qc).__name__} has no quantized linear method here; the layer fell back "
@@ -179,8 +133,8 @@ def _reject_fallback(qc, method) -> None:
 
 
 def _set_quant_fp8_op(qc) -> None:
-    """VllmConfig turns on the CUDA quant_fp8 custom op for checkpoints with blocked
-    weights; mirror that per layer (CustomOp reads it when the layer is built)."""
+    """VllmConfig enables +quant_fp8 for blocked-weight checkpoints; mirror it per layer
+    (CustomOp reads it at build)."""
     from vllm.config import get_current_vllm_config
     ops = get_current_vllm_config().compilation_config.custom_ops
     blocked = getattr(qc, "weight_block_size", None) is not None
@@ -198,7 +152,6 @@ def _is_fault(e: BaseException) -> bool:
 
 
 def _fill(layer: torch.nn.Module) -> None:
-    """Synthetic checkpoint-format values for whatever parameters the method registered."""
     for name, p in layer.named_parameters(recurse=False):
         with torch.no_grad():
             if p.dtype in (torch.float8_e4m3fn, torch.float8_e5m2, torch.float8_e4m3fnuz):
@@ -212,7 +165,6 @@ def _fill(layer: torch.nn.Module) -> None:
 
 
 def _kernel_names(layer) -> dict[str, str]:
-    """Kernel objects vLLM attached to the quant method or its scheme."""
     qm = layer.quant_method
     out = {}
     for owner in (qm, getattr(qm, "scheme", None), getattr(layer, "scheme", None)):
@@ -228,7 +180,6 @@ def _kernel_names(layer) -> dict[str, str]:
 
 
 def _param_dtypes(layer) -> dict[str, str]:
-    """Post-processing dtype of every weight/scale tensor, as the kernel sees it."""
     return {n: str(p.dtype).removeprefix("torch.") for n, p in layer.named_parameters(recurse=False)}
 
 
@@ -245,53 +196,54 @@ def _prepare_gemm(op: Op) -> dict:
         return _prepare_fp32_out(op)
     if a.get("out", "bf16") != "bf16":
         raise UnsupportedOpError(f"vLLM linear layers return bf16 or fp32; got {a['out']!r}")
-    _vllm_context()
+    tp = (a.get("parallel") or {}).get("tp", 1)
+    if k % tp:
+        raise UnsupportedOpError(f"k={k} does not split {tp} ways")
+    engine.context(a.get("parallel"))
     import vllm.envs as envs
-    from vllm.model_executor.layers.linear import ReplicatedLinear
-    qc = _quant_config(a)
-    _set_quant_fp8_op(qc)
-    prev = torch.get_default_dtype()
-    torch.set_default_dtype(torch.bfloat16)  # as vLLM's model loader does while building layers
-    try:
-        layer = ReplicatedLinear(k, n, bias=bool(a.get("bias")), quant_config=qc, params_dtype=torch.bfloat16,
-                                 prefix="model.layers.0.mlp.down_proj", disable_tp=True).to(device())
-        # set by the column/row-parallel linears real layers use; some kernels read them
-        for attr, v in (("input_size_per_partition", k), ("output_size_per_partition", n)):
-            if not hasattr(layer, attr):
-                setattr(layer, attr, v)
-        _fill(layer)
-        loaded = _param_dtypes(layer)
-        qm = layer.quant_method
-        _reject_fallback(qc, qm)
-        if hasattr(qm, "process_weights_after_loading"):
-            qm.process_weights_after_loading(layer)
-    except (NotImplementedError, AssertionError, ValueError, RuntimeError) as e:
-        if _is_fault(e):
-            raise
-        raise UnsupportedOpError(f"vLLM rejected {a}: {type(e).__name__}: {e}"[:400]) from e
-    finally:
-        torch.set_default_dtype(prev)
-    kernels = _kernel_names(layer)
-    if any(v.startswith("Emulation") for v in kernels.values()):
-        raise UnsupportedOpError(f"vLLM has only an emulation kernel for {a} here: {kernels}")
-    x = torch.randn(m, k, device=device(), dtype=torch.bfloat16)
+    from vllm.model_executor.layers.linear import RowParallelLinear
+    with ranks.together("build this layer"):
+        qc = _quant_config(a)
+        _set_quant_fp8_op(qc)
+        prev = torch.get_default_dtype()
+        torch.set_default_dtype(torch.bfloat16)  # as vLLM's model loader does while building layers
+        try:
+            layer = RowParallelLinear(k, n, bias=bool(a.get("bias")), quant_config=qc, params_dtype=torch.bfloat16,
+                                      reduce_results=True, prefix="model.layers.0.mlp.down_proj").to(device())
+            _fill(layer)
+            loaded = _param_dtypes(layer)
+            qm = layer.quant_method
+            _reject_fallback(qc, qm)
+            if hasattr(qm, "process_weights_after_loading"):
+                qm.process_weights_after_loading(layer)
+        except (NotImplementedError, AssertionError, ValueError, RuntimeError) as e:
+            if _is_fault(e):
+                raise
+            raise UnsupportedOpError(f"vLLM rejected {a}: {type(e).__name__}: {e}"[:400]) from e
+        finally:
+            torch.set_default_dtype(prev)
+        kernels = _kernel_names(layer)
+        if any(v.startswith("Emulation") for v in kernels.values()):
+            raise UnsupportedOpError(f"vLLM has only an emulation kernel for {a} here: {kernels}")
+    x = torch.randn(m, layer.input_size_per_partition, device=device(), dtype=torch.bfloat16)
     ctx = {"layer": layer, "x": x,
            "meta": {"vllm_quant_method": type(qm).__name__, "vllm_kernels": kernels,
                     "param_dtypes_loaded": loaded, "param_dtypes": _param_dtypes(layer),
-                    "vllm_env": {k: getattr(envs, k) for k in _ENV_KEYS if hasattr(envs, k)}}}
-    try:
-        _kernel_gemm(ctx)
-        sync()
-    except (NotImplementedError, AssertionError, RuntimeError, ValueError) as e:
-        if _is_fault(e):
-            raise
-        raise UnsupportedOpError(f"vLLM kernel failed for {a}: {type(e).__name__}: {e}"[:400]) from e
+                    "vllm_env": {k: getattr(envs, k) for k in _ENV_KEYS if hasattr(envs, k)},
+                    "vllm_engine": engine.meta()}}
+    with ranks.together("run this layer"):
+        try:
+            _kernel_gemm(ctx)
+            sync()
+        except (NotImplementedError, AssertionError, RuntimeError, ValueError) as e:
+            if _is_fault(e):
+                raise
+            raise UnsupportedOpError(f"vLLM kernel failed for {a}: {type(e).__name__}: {e}"[:400]) from e
     return ctx
 
 
 class _TorchMM(torch.nn.Module):
-    """The matmul vLLM runs for fp32-output gates and routers (GateLinear's cuBLAS tier):
-    torch.mm with an fp32 epilogue on a bf16 weight; an fp32 matmul on an fp32 weight."""
+    """vLLM's fp32-output gate/router matmul (GateLinear's cuBLAS tier)."""
 
     def __init__(self, k: int, n: int, dtype: torch.dtype, bias: bool):
         super().__init__()
@@ -312,7 +264,9 @@ def _prepare_fp32_out(op: Op) -> dict:
     if "scale" in qa or "scale" in qb or qa["dtype"] != "bf16" or qb["dtype"] not in ("bf16", "fp32") \
             or a.get("out", "bf16") != "fp32":
         raise UnsupportedOpError(f"no fp32-output vLLM matmul for a={qa} b={qb} out={a.get('out')}")
-    _vllm_context()
+    if (a.get("parallel") or {}).get("tp", 1) > 1:
+        raise UnsupportedOpError("vLLM's fp32-output gates and routers are replicated, never split")
+    engine.context(a.get("parallel"))
     layer = _TorchMM(a["k"], a["n"], getattr(torch, {"bf16": "bfloat16", "fp32": "float32"}[qb["dtype"]]),
                      bool(a.get("bias")))
     ctx = {"layer": layer, "x": torch.randn(a["m"], a["k"], device=device(), dtype=torch.bfloat16),
@@ -329,42 +283,39 @@ def _kernel_gemm(ctx: dict) -> None:
 
 def _capture_sizes() -> list[int]:
     from vllm.config import get_current_vllm_config
-    sizes = get_current_vllm_config().compilation_config.cudagraph_capture_sizes
-    if sizes:
-        return sorted(sizes)
-    # VllmConfig._set_cudagraph_sizes' default candidates
-    from vllm.platforms import current_platform
-    top = 1024 if current_platform.is_device_capability_family(100) else 512
-    return [1, 2, 4] + list(range(8, 256, 8)) + list(range(256, top + 1, 16))
+    return sorted(get_current_vllm_config().compilation_config.cudagraph_capture_sizes or [])
 
 
 def _launcher(ctx: dict):
-    """(callable to time, whether it is a CUDA-graph replay). As vLLM serves it, a batch
-    of up to the max capture size replays a graph captured at the next capture size
-    (the batch padded up to it); larger batches run eagerly. The cap is vLLM's default
-    unless OPERATORX_CUDA_GRAPH_MAX_TOKENS sets it (0 = never graph); deployments set
-    their own (max-cudagraph-capture-size, cudagraph_mode)."""
+    """(callable, cuda_graph): as served, a batch up to the largest capture size replays the next
+    size's graph, larger ones run eagerly. OPERATORX_CUDA_GRAPH_MAX_TOKENS caps it (0 = never)."""
+    from vllm.distributed.parallel_state import graph_capture
     x = ctx["x"]
     eager = (lambda: _kernel_gemm(ctx)), False  # noqa: E731
     sizes = _capture_sizes()
-    cap = int(os.environ.get("OPERATORX_CUDA_GRAPH_MAX_TOKENS", sizes[-1]))
+    cap = int(os.environ.get("OPERATORX_CUDA_GRAPH_MAX_TOKENS", sizes[-1] if sizes else 0))
     size = next((s for s in sizes if s >= x.shape[0]), None)
     if cap <= 0 or size is None or size > cap:
         return eager
-    xp = torch.randn(size, x.shape[1], device=x.device, dtype=x.dtype)
+    xp = torch.randn(size, *x.shape[1:], device=x.device, dtype=x.dtype)
+    err = None
     try:
         for _ in range(2):
             ctx["layer"](xp)
         torch.cuda.synchronize()
         g = torch.cuda.CUDAGraph()
-        with torch.cuda.graph(g, pool=torch.cuda.graph_pool_handle()):
+        with graph_capture(x.device) as gc, torch.cuda.graph(g, pool=torch.cuda.graph_pool_handle(),
+                                                             stream=gc.stream):
             ctx["graph_out"] = ctx["layer"](xp)
         torch.cuda.synchronize()
     except Exception as e:
         if _is_fault(e):
             raise
         torch.cuda.synchronize()
-        print(f"[vllm.linear] CUDA-graph capture failed, timing eagerly: {type(e).__name__}: {e}"[:300],
+        err = e
+    if not ranks.agree(err is None):  # every rank replays, or every rank runs eagerly
+        print(f"[vllm.linear] CUDA-graph capture failed, timing eagerly: {type(err).__name__}: {err}"[:300]
+              if err else "[vllm.linear] another rank's CUDA-graph capture failed, timing eagerly",
               file=sys.stderr)
         return eager
     ctx["graph"], ctx["x_padded"] = g, xp

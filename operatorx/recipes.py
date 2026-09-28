@@ -3,8 +3,9 @@
 InferenceX serves every single-node configuration from a native srt-slurm recipe
 (inferencex-e2e/benchmarks/single_node/srt-slurm-recipes/<model>/<framework>/<hardware>-<precision>*/*.yaml).
 A case takes the recipe InferenceX runs for its source checkpoint on the runner's
-hardware: the recipe's image, launch env and server arguments. InferenceX's own code
-expands a recipe into its variants (infx.srt_slurm.synthetic_acceptance.selected_recipes).
+hardware - the variant with the case's parallel split, else any of the checkpoint's - for
+the recipe's image, launch env and server arguments. InferenceX's own code expands a
+recipe into its variants (infx.srt_slurm.synthetic_acceptance.selected_recipes).
 Without a recipe the case runs on the backend's default image.
 """
 from __future__ import annotations
@@ -14,6 +15,8 @@ import json
 import sys
 from pathlib import Path
 from typing import Any
+
+from operatorx.core import parallel
 
 REPO = Path(__file__).resolve().parents[1] / "inferencex-e2e"  # infx, its recipes and srt-slurm
 RECIPES = REPO / "benchmarks/single_node/srt-slurm-recipes"
@@ -50,16 +53,33 @@ def _variants(framework: str, hardware: str) -> tuple[tuple[str, dict], ...]:
     return tuple(out)
 
 
-def find(framework: str, hardware: str, checkpoints: list[str]) -> dict | None:
-    """The recipe InferenceX runs for the first of the checkpoints served on this hardware."""
+def _vllm_split(args: dict[str, Any]) -> dict:
+    tp, dp = int(args.get("tensor-parallel-size", 1)), int(args.get("data-parallel-size", 1))
+    return {"tp": tp, "dp": dp, "ep": tp * dp if args.get("enable-expert-parallel") else 1,
+            "dcp": int(args.get("decode-context-parallel-size", 1))}
+
+
+# per framework: the parallel split its serve arguments spell
+SPLITS = {"vllm": _vllm_split}
+
+
+def find(framework: str, hardware: str, checkpoints: list[str], split: dict | None = None,
+         axes: tuple[str, ...] = parallel.AXES) -> dict | None:
+    """The recipe InferenceX runs for the first of the checkpoints served on this hardware,
+    preferring a variant whose split equals the case's on `axes`."""
     if framework not in FRAMEWORKS or not RECIPES.is_dir():
         return None
+    want = parallel.normalize(split)
     variants = _variants(framework, hardware)
     for ckpt in checkpoints:
-        for key, r in variants:
-            if r["model"]["path"] == f"hf:{ckpt}":
+        mine = [(k, r) for k, r in variants if r["model"]["path"] == f"hf:{ckpt}"]
+        exact = [(k, r) for k, r in mine
+                 if all(SPLITS[framework](r["roles"]["agg"]["args"])[a] == want[a] for a in axes)]
+        for match, pool in (("split", exact), ("checkpoint", mine)):
+            if pool:
+                key, r = pool[0]
                 role = r["roles"]["agg"]
-                return {"recipe": key, "checkpoint": ckpt, "image": r["model"]["container"],
+                return {"recipe": key, "match": match, "checkpoint": ckpt, "image": r["model"]["container"],
                         "env": {k: str(v) for k, v in (role.get("env") or {}).items()},
                         "engine_args": role.get("args") or {}}
     return None

@@ -1,30 +1,24 @@
 """Attention modules: one op type per module, each timed whole.
 
-Every op starts at the post-input_layernorm hidden states x [T, hidden] (plus
-positions) and ends at the module output [T, hidden] before the residual add. It
-includes the module's projections, norms, RoPE, cache/state writes, selection
-(indexer, compressor) and the attention itself; the tensor-parallel all-reduce,
-residual, hyper-connections and MTP layers are outside it. The KV cache (or linear
-attention state) holds each request's ctx tokens of random, format-valid data before
-the timed call.
+From post-input_layernorm x [T, hidden] (+ positions) to the module output before the
+residual add: projections, norms, RoPE, cache/state writes, selection and attention; the
+tp all-reduce, residual, hyper-connections and MTP are outside. The cache/state holds
+each request's ctx tokens of random, format-valid data.
 
 Shared args:
-  proj: {"<checkpoint module>": {"a": operand, "b": operand}}. Operand descriptors are
-    the gemm op's; a projection left out is bf16 x bf16.
+  proj: {"<checkpoint module>": {"a": operand, "b": operand}} (gemm operands); omitted: bf16 x bf16.
   batch: {"groups": [{"count", "q", "ctx"}], "pages"?: "contiguous" | "shuffled", "seed"?}
-    count requests with q new tokens each and ctx tokens already cached; ctx is an int
-    or {"dist": "uniform", "min", "max"} drawn per request from seed. Whether a request
-    runs the backend's prefill or decode path is the backend's choice, recorded with
-    the result.
-  selection (sparse modules): which tokens the selection step picks. natural: whatever
-    the module's indexer computes on the random cache; uniform / recent / clustered
-    force the indices.
+    count requests of q new tokens on ctx cached; ctx is an int or {"dist": "uniform", "min",
+    "max"} drawn from seed. Prefill vs decode path is the backend's choice, recorded.
+  selection (sparse modules): natural = the module's indexer on the random cache;
+    uniform / recent / clustered force the indices.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
+from operatorx.core import parallel
 from operatorx.core.op import OpSpec
 from operatorx.core.op_registry import register
 from operatorx.ops.gemm import check_operand
@@ -231,12 +225,11 @@ class Dsv4AttnArgs:
     cache write -> sparse MQA over window + compressed tokens with attn_sink -> inverse
     RoPE -> wo_a (o_groups grouped) -> wo_b.
 
-    compress_ratio: 4 / 128 V4-Pro (4 with an indexer, 128 attends every compressed
-    token); 0 (window only), 1 / 2 V4.1. The compressor's overlap, positional embedding and
-    gate follow from the ratio as in the checkpoints. source false: a layer that reads
-    a pre-filled compressed cache written by another layer and has no compressor.
-    rope_theta applies to window-only layers, compress_rope_theta (+ rope_scaling) to
-    compressed ones. index_cache_dtype: the indexer K cache (vLLM indexer_kv_dtype).
+    compress_ratio: 4 / 128 V4-Pro (4 with an indexer, 128 attends every compressed token);
+    0 (window only), 1 / 2 V4.1; compressor overlap/pos-emb/gate follow the ratio.
+    source false: reads another layer's pre-filled compressed cache, no compressor.
+    rope_theta: window-only layers; compress_rope_theta (+ rope_scaling): compressed ones.
+    index_cache_dtype: the indexer K cache (vLLM indexer_kv_dtype).
     """
     hidden: int
     heads: int
@@ -451,4 +444,4 @@ for _spec in (
     OpSpec(type="gdn", arg_schema=GdnArgs, description="Gated DeltaNet linear attention"),
     OpSpec(type="kda", arg_schema=KdaArgs, description="Kimi Delta Attention"),
 ):
-    register(_spec)
+    register(replace(_spec, parallel_axes=parallel.ATTENTION_AXES))
