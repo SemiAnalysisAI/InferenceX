@@ -305,6 +305,25 @@ def _release_previous() -> None:
         del ctx[name]
     gc.collect()
     torch.cuda.empty_cache()
+    _leak_report()
+
+
+def _leak_report() -> None:  # debug branch only: what keeps large GPU tensors alive
+    import gc
+    import sys
+    big = [o for o in gc.get_objects() if torch.is_tensor(o) and o.is_cuda and o.numel() * o.element_size() > (64 << 20)]
+    print(f"[leak] allocated={torch.cuda.memory_allocated() / 2**30:.2f}G tensors>64M={len(big)} "
+          f"sum={sum(t.numel() * t.element_size() for t in big) / 2**30:.2f}G", file=sys.stderr, flush=True)
+    for t in big[:8]:
+        chain = []
+        for r in gc.get_referrers(t)[:4]:
+            if isinstance(r, dict):
+                owners = [type(o).__module__ + "." + type(o).__qualname__ for o in gc.get_referrers(r)[:3]
+                          if not isinstance(o, (list, dict)) and hasattr(o, "__dict__")]
+                chain.append(f"dict[{','.join(list(map(str, r.keys()))[:4])}]<-{owners}")
+            else:
+                chain.append(type(r).__module__ + "." + type(r).__qualname__)
+        print(f"[leak]   {tuple(t.shape)} {t.dtype} {chain}"[:600], file=sys.stderr, flush=True)
 
 
 def _missing_op(e: BaseException) -> bool:
