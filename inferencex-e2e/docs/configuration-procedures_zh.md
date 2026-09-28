@@ -259,9 +259,12 @@ TP2 C20/C25/C30 与 TP4 C40/C48 点位启用 LMCache 进程内 CPU 层。srtctl 
 rank 对同一 prompt 计算出不同的 key，卸载命中率为零。在 `server.log` 中核对组装后的
 `kv_transfer_config` 日志和非零的 `atom:lmcache_loaded_tokens`。
 
-srtctl 将非整节点 worker 限定在 GPU `0..TP-1`，均位于 NUMA 节点 0。旧脚本把 rank
-分布到两个 socket（`0,4` 与 `0,1,4,5`），因为在单个 NUMA 节点上 pin CPU 层时，TP2
-很慢，TP4 可能超出 ATOM 600 秒的 `allocate_kv_cache` 屏障。
+srtctl 将非整节点 worker 限定在 GPU `0..TP-1`，均位于 NUMA 节点 0；HIP 又把每个 rank
+的 CPU 层 pin 在其 GPU 所在的节点上，因此 CPU 层与权重 staging buffer（TP2 约 720 GB，
+TP4 约 1.23 TB）全部来自节点 0 的 1.5 TB 内存。`runners/srt-slurm/hooks/mi355x-amds/setup.sh`
+会在 `KV_OFFLOADING=dram` 的 job 启动前释放 page cache，保证这些内存页空闲；否则 pin
+内存时需要回收 page cache，各 rank 完成时间相差数分钟，ATOM 启动时 300 秒的屏障会超时
+（[run 36454319395](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/36454319395)）。
 
 移除 TP4 C32；GPU 常驻 KV 的 TP4 C1-C28、TP2 C1-C2 点位、EAGLE3 K3、golden AL 2.78
 和 indexer CP 保持不变。

@@ -315,10 +315,13 @@ which composes the same `lmcache_offload` connector. Each variant declares
 keys and the offload hit rate is zero. Verify the composed `kv_transfer_config`
 line and non-zero `atom:lmcache_loaded_tokens` in `server.log`.
 
-srtctl masks a partial-node worker to GPUs `0..TP-1`, which sit on NUMA node 0.
-The legacy script spread the ranks across both sockets (`0,4` and `0,1,4,5`)
-because pinning the CPU tier on one node is slow at TP2 and can miss ATOM's
-600 s `allocate_kv_cache` barrier at TP4.
+srtctl masks a partial-node worker to GPUs `0..TP-1`, which sit on NUMA node 0,
+and HIP pins each rank's CPU tier on its GPU's node, so the tier and the weight
+staging buffers (about 720 GB at TP2 and 1.23 TB at TP4) all come from node 0's
+1.5 TB. `runners/srt-slurm/hooks/mi355x-amds/setup.sh` drops the page cache before
+a `KV_OFFLOADING=dram` job so these pages are free. Without it, pinning reclaims
+page cache, ranks finish minutes apart and ATOM's 300 s startup barrier times out
+([run 36454319395](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/36454319395)).
 
 TP4 C32 is dropped; the GPU-resident TP4 C1-C28 and TP2 C1-C2 points,
 EAGLE3 K3, golden AL 2.78 and indexer CP are unchanged.
