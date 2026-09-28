@@ -443,7 +443,15 @@ def test_shell_forwards_options_and_submission_failure(tmp_path: Path) -> None:
     )
     assert result.returncode == 7, result.stderr
     argv = json.loads(result.stdout)
-    assert argv[:5] == ["apply", "-f", str(recipe), "--tags", "a b"]
+    assert argv[:7] == [
+        "apply",
+        "--set",
+        'srun_options.container-workdir="/infmax-workspace"',
+        "-f",
+        str(recipe),
+        "--tags",
+        "a b",
+    ]
     result_recipe = apply_native(yaml.safe_load(recipe.read_text()), argv)
     assert (
         json.loads(result_recipe["roles"]["agg"]["args"]["speculative-config"])[

@@ -145,9 +145,12 @@ apply_srt_recipe() {
     local config="$1" framework="$2"
     shift 2
     # Slurm creates a separate compute venv; do not inherit the login venv marker.
+    # Every container starts in the InferenceX workspace mount, as the legacy
+    # launchers did: PyTorch's generated module imports fail from / with
+    # PYTHONPYCACHEPREFIX set. Caller overrides still win.
     PYTHONPATH="$INFERENCEX_SLURM_UTILS_DIR/..${PYTHONPATH:+:$PYTHONPATH}" \
         env -u VIRTUAL_ENV python3 -m infx.srt_slurm.synthetic_acceptance \
-        "$config" "$framework" -- "$@"
+        "$config" "$framework" -- --set 'srun_options.container-workdir="/infmax-workspace"' "$@"
 }
 
 # One native submission per fixed-sequence or AgentX matrix point, shared across Slurm pools.

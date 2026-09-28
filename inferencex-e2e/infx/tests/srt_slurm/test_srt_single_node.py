@@ -54,9 +54,7 @@ def test_native_binding_submits_one_point_and_keeps_server_settings(point):
     overrides = parse_overrides(argv[1::2], [])
     actual = copy.deepcopy(recipe)
     apply_overrides_to_recipe(actual, overrides)
-    assert actual["srun_options"] == {
-        "gpus-per-node": "4", "container-workdir": "/infmax-workspace",
-    }
+    assert actual["srun_options"] == {"gpus-per-node": "4"}
     assert actual["benchmark"]["env"] == {
         "MODEL": "test/model", "ISL": "256", "OSL": "64", "RANDOM_RANGE_RATIO": "0.5",
         "USE_CHAT_TEMPLATE": "false",
@@ -296,6 +294,7 @@ def test_pool_launcher_stages_artifacts_and_propagates_failure(point, tmp_path, 
         f"#!{sys.executable}\n"
         "import json, os, pathlib, sys\n"
         "assert pathlib.Path('bin/uv').is_file(), 'native bootstrap was skipped'\n"
+        "assert 'srun_options.container-workdir=\"/infmax-workspace\"' in sys.argv\n"
         "output = pathlib.Path(sys.argv[sys.argv.index('--output') + 1]) / '42'\n"
         "logs = output / 'logs'\n"
         "logs.mkdir(parents=True)\n"
