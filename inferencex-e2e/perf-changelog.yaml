@@ -9003,3 +9003,13 @@
   description:
     - "Update B300 vLLM AgentX to DSpark6 on a new image with a sampled concurrency grid and per-mode --kv-cache-memory-bytes pins."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3477
+
+- config-keys:
+    - dsv4-fp4-b300-sglang-agentic-hicache-eagle
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add B300 DeepSeek-V4-Pro SGLang AgentX with EAGLE (3 steps, 4 draft tokens, golden AL 2.49) on lmsysorg/sglang:dev-cu13-nightly-09242: TP4 and TP8 at c1-32 with GPU KV, and DEP8 with a HiCache DRAM tier (ratio 2) at c64-512."
+    - "DEP8 uses the dsv4 attention backend, mem-fraction-static 0.84, prefill-decode-interval 32, mixed chunking, shortest-prefill-first scheduling, DP speculative prefill coordination and a router with the circuit breaker disabled, without the DP LM head."
+    - "Runs on the native srt-slurm recipe benchmarks/single_node/srt-slurm-recipes/dsv4/sglang/b300-fp4-eagle/agentic.yaml."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3426
