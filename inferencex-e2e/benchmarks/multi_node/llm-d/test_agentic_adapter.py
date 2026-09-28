@@ -12,7 +12,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 @pytest.mark.parametrize("metrics_body", ["vllm:num_requests_running 0\n", "envoy_http_requests_total 0\n"])
 def test_llmd_agentic_adapter_uses_discovered_worker_metrics(tmp_path: Path, metrics_body: str) -> None:
     """Check endpoint selection, preflight failure, and the real AIPerf CLI builder."""
-    client = tmp_path / "benchmarks/multi_node/agentic_srt.sh"
+    client = tmp_path / "benchmarks/srt_agentic.sh"
     client.parent.mkdir(parents=True)
     client.write_text('''source "$REAL_BENCHMARK_LIB"
 build_replay_cmd "$RESULT_DIR"
@@ -84,7 +84,7 @@ def test_llmd_agentic_adapter_maps_decode_sidecar_ports_to_vllm_metrics(
     tmp_path: Path,
 ) -> None:
     """Disagg decode endpoints list sidecar ports; metrics scrape vLLM DP ranks."""
-    client = tmp_path / "benchmarks/multi_node/agentic_srt.sh"
+    client = tmp_path / "benchmarks/srt_agentic.sh"
     client.parent.mkdir(parents=True)
     client.write_text('''source "$REAL_BENCHMARK_LIB"
 build_replay_cmd "$RESULT_DIR"

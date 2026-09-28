@@ -76,4 +76,4 @@ done
 rm -f "$metrics_probe"
 trap - EXIT
 
-exec bash "$INFMAX_CONTAINER_WORKSPACE/benchmarks/multi_node/agentic_srt.sh"
+exec bash "$INFMAX_CONTAINER_WORKSPACE/benchmarks/srt_agentic.sh"
