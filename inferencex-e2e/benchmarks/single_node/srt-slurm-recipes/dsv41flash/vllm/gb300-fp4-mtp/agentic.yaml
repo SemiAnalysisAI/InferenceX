@@ -53,18 +53,21 @@ base:
       MODEL: deepseek-ai/DeepSeek-V4.1-Flash
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
 
-# One variant per point. Graph capture starts at 64 tokens and doubles until it
-# covers CONC x (1 + 5 drafts), up to 2048. TP2 leaves ~175 GiB of weights on
-# each 277 GiB GPU, so it caps batched tokens at 4096 (the indexer's 1M-wide
-# logits buffer), bounds the scheduler at 2x CONC within [16, 256] (FlashInfer
-# autotune fails below 16) and stops capturing above 512 tokens.
+# One variant per point. TP4 c1 and TP2 c2/c4/c8/c16/c32/c64 use an
+# 8192-token batching limit and explicit CUDA Graph ladder. Other points retain
+# their concurrency-sized captures and TP2 memory caps.
 override_tp4_c1:
   roles:
     agg:
       gpus: 4
       args:
         tensor-parallel-size: 4
-        max-cudagraph-capture-size: 64
+        max-num-batched-tokens: 8192
+        max-num-seqs: 16
+        compilation-config: &selected_graph_ladder '{"cudagraph_capture_sizes":[1,2,4,8,16,24,32,40,48,56,64,72,80,88,96,104,112,120,128,160,192,256,320,384,512,640,768,1024,1280,1536,2048,2560,3072,3584,4096,5120,6144,7168,8192]}'
+      env:
+        VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: '2048'
+        VLLM_FLASHINFER_ALLREDUCE_BACKEND: trtllm
   benchmark:
     env:
       CONC: '1'
@@ -165,8 +168,8 @@ override_tp2_c2:
       gpus: 2
       args:
         tensor-parallel-size: 2
-        max-cudagraph-capture-size: 64
-        max-num-batched-tokens: 4096
+        compilation-config: *selected_graph_ladder
+        max-num-batched-tokens: 8192
         max-num-seqs: 16
   benchmark:
     env:
@@ -178,8 +181,8 @@ override_tp2_c4:
       gpus: 2
       args:
         tensor-parallel-size: 2
-        max-cudagraph-capture-size: 64
-        max-num-batched-tokens: 4096
+        compilation-config: *selected_graph_ladder
+        max-num-batched-tokens: 8192
         max-num-seqs: 16
   benchmark:
     env:
@@ -191,9 +194,11 @@ override_tp2_c8:
       gpus: 2
       args:
         tensor-parallel-size: 2
-        max-cudagraph-capture-size: 64
-        max-num-batched-tokens: 4096
+        compilation-config: *selected_graph_ladder
+        max-num-batched-tokens: 8192
         max-num-seqs: 16
+      env:
+        VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: '2048'
   benchmark:
     env:
       CONC: '8'
@@ -204,9 +209,13 @@ override_tp2_c16:
       gpus: 2
       args:
         tensor-parallel-size: 2
-        max-cudagraph-capture-size: 128
-        max-num-batched-tokens: 4096
+        attention-config: '{"indexer_kv_dtype":"mxfp4","indexer_sparse_logits":true}'
+        compilation-config: *selected_graph_ladder
+        max-model-len: 1003520
+        max-num-batched-tokens: 8192
         max-num-seqs: 32
+      env:
+        VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: '2048'
   benchmark:
     env:
       CONC: '16'
@@ -217,8 +226,9 @@ override_tp2_c32:
       gpus: 2
       args:
         tensor-parallel-size: 2
-        max-cudagraph-capture-size: 256
-        max-num-batched-tokens: 4096
+        attention-config: '{"indexer_kv_dtype":"mxfp4","indexer_sparse_logits":true}'
+        compilation-config: *selected_graph_ladder
+        max-num-batched-tokens: 8192
         max-num-seqs: 64
   benchmark:
     env:
@@ -230,8 +240,9 @@ override_tp2_c64:
       gpus: 2
       args:
         tensor-parallel-size: 2
-        max-cudagraph-capture-size: 512
-        max-num-batched-tokens: 4096
+        attention-config: '{"indexer_kv_dtype":"mxfp4","indexer_sparse_logits":true}'
+        compilation-config: *selected_graph_ladder
+        max-num-batched-tokens: 8192
         max-num-seqs: 128
   benchmark:
     env:
