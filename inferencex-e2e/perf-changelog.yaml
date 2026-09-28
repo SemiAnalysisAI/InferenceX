@@ -8995,3 +8995,11 @@
     - "Validate MiniMax-M3 AgentX on H200 with vLLM FP8 after moving the end-to-end project into inferencex-e2e/. Preserve the existing image, recipe, and benchmark settings."
     - "将端到端项目迁入 inferencex-e2e/ 后，验证 H200 上的 vLLM FP8 MiniMax-M3 AgentX 运行路径，沿用现有镜像、配方和基准测试设置。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3525
+
+- config-keys:
+    - dsv4-fp4-b300-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update B300 vLLM AgentX to DSpark6 on a new image with a sampled concurrency grid and per-mode --kv-cache-memory-bytes pins."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3297
