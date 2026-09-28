@@ -9168,3 +9168,26 @@
     - "Relevant ATOM changes in the range: V4 decode reuses the sparse prefill ASM (ROCm/ATOM#2271), greedy sampler picks via aiter.topk_select (ROCm/ATOM#2244), and FP8 block scales declared scale_fmt ue8m0 are now stored as E8M0 on gfx950 by default (ROCm/ATOM#2419; previously FP32 unless ATOM_FP8_BLOCKSCALE_USE_E8M0_SCALE=1). The upstream DeepSeek-V4 recipes are unchanged across the range, and every recipe flag and choice (all2all-backend rccl, dp-load-balance least_tokens, moe-backend standard) remains valid."
     - "No data-type or precision change to the DeepSeek-V4-Pro-0813 DSpark draft: no online quantization is configured, so it keeps its checkpoint precision; the E8M0 scale storage represents the checkpoint's power-of-two block scales exactly. kv-cache-dtype and index-cache-dtype touch cache storage only."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3605
+
+- config-keys:
+    - dsv4-fp4-gb200-dynamo-sglang-agentic-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GB200 Dynamo+SGLang AgentX TP8 aggregate HiCache recipes at concurrency 1 and 4."
+    - "Use lmsysorg/sglang:nightly-dev-20260916-c9a8fba9 with the checkpoint's bundled DSpark head at block size 6 (golden AL 3.77, thinking_on) and max-running-request/CUDA-graph limits set to twice each concurrency."
+    - "Use the compute-visible Watchtower workspace and node-local DeepSeek-V4-Pro checkpoint staging."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3182
+
+- config-keys:
+    - dsv4-fp4-gb200-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GB200 Dynamo+SGLang AgentX HiCache recipes for 1P1D DEP8/DEP16 at concurrency 64 and 128, 1P1D DEP16/DEP32 at concurrency 256, and 2P1D DEP16/DEP32 at concurrencies 768, 1024, and 1280."
+    - "Use the lower-concurrency DEP8/DEP16 points and the wider DEP16/DEP32 configurations to avoid the long P90 TTFT observed at the superseded DEP8/DEP16 concurrency 400 and 800 points."
+    - "Set the DEP16/DEP32 decode max-running-requests caps to 512 for 1P1D and 1024 for 2P1D, with cuda-graph-max-bs-decode set to 64."
+    - "Lower the DEP8/DEP16 concurrency-128 prefill mem-fraction-static from 0.85 to 0.80 after the 0.85 run exhausted GPU memory while allocating a 6.81 GiB prefill workspace, leaving about 9.2 GiB more per GPU for runtime allocations."
+    - "Use lmsysorg/sglang:nightly-dev-20260916-c9a8fba9 with the Dynamo 1.5.0.dev20260910 wheel and the checkpoint's bundled DSpark head at block size 6 (golden AL 3.77, thinking_on)."
+    - "Use the compute-visible Watchtower workspace and node-local DeepSeek-V4-Pro checkpoint staging."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3182

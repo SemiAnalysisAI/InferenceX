@@ -608,6 +608,7 @@ clusters:
         deepseek-r1-0528: {root: lustre-models, dir: deepseek-r1-0528}
         deepseek-r1-0528-fp4-v2: {root: lustre-models, dir: deepseek-r1-0528-fp4-v2}
         DeepSeek-V4-Pro: {root: lustre-models, dir: DeepSeek-V4-Pro}
+        DeepSeek-V4-Pro-0813: {root: lustre-models, dir: DeepSeek-V4-Pro-0813}
         MiniMax-M3-MXFP8: {root: lustre-models, dir: MiniMax-M3-MXFP8}
         MiniMax-M3-NVFP4: {root: lustre-models, dir: MiniMax-M3-NVFP4}
         Qwen3.5-397B-A17B-FP8: {root: lustre-models, dir: Qwen3.5-397B-A17B-FP8}
