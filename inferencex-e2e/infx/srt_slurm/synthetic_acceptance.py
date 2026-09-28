@@ -28,6 +28,7 @@ ENGINES = {
     "trt": "trtllm",
     "dynamo-trt": "trtllm",
     "atom": "atom",
+    "atom-disagg": "atom",
 }
 SGLANG_VARIABLES = (
     "SGLANG_SIMULATE_ACC_LEN",
