@@ -20,7 +20,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       H3_SOURCE_RUN_IDS: ${{ inputs.source-run-ids }}
-      PYTHONPATH: ${{ github.workspace }}
+      PYTHONPATH: ${{ github.workspace }}/inferencex-e2e
     steps:
       - name: Authorize manual repository execution
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
@@ -46,7 +46,7 @@ jobs:
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
       - name: Verify sealed sources and compare every C1 media pair
         run: |
-          source benchmarks/benchmark_lib.sh --validation-only
+          source inferencex-e2e/benchmarks/benchmark_lib.sh --validation-only
           check_env_vars GH_TOKEN H3_SOURCE_RUN_IDS PYTHONPATH RUNNER_TEMP
           uv run --no-project --python 3.12 --with 'av==16.1.0' --with 'numpy==2.3.5' \
           python experimental/video-generation/compare_serving_ci.py \

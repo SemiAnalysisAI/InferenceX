@@ -46,7 +46,7 @@ AMD SMI adapter 接受监控检查返回的 bytes，校验 `gpu_data` 外层记�
 
 根据保存的可用进入命令调整
 [runtime-entry.example.sh](runtime-entry.example.sh)。将当前 checkout 的
-`benchmarks/benchmark_lib.sh` 复制到进入脚本旁边，把
+`inferencex-e2e/benchmarks/benchmark_lib.sh` 复制到进入脚本旁边，把
 `REPLACE_WITH_BENCHMARK_LIB_SHA256` 替换为该 helper 的 SHA256，再固定进入脚本的摘要。
 进入脚本在 source 前验证旁边的 helper；固定脚本摘要也就固定了预期的 helper 摘要。
 AMD 站点暂存会自动复制并封装这两个文件。现有外部固定的进入脚本保持不变。脚本必须
@@ -169,7 +169,7 @@ XML，同时支持带或不带 `0x` 的 PCI 编号，不重新查询硬件。
 
 ```bash
 cd experimental/video-generation
-PYTHONPATH=../.. uv run --no-project --python 3.12 \
+PYTHONPATH=../../inferencex-e2e uv run --no-project --python 3.12 \
   --with 'av==16.1.0' --with 'numpy==2.3.5' \
   --with 'pytest>=8,<9' --with 'jsonschema>=4,<5' python -m pytest -q
 bash -n runtime-entry.example.sh

@@ -173,7 +173,7 @@ jobs:
           H3_INVENTORY_RUN_ID: ${{ inputs.inventory-run-id }}
         run: |
           set -eo pipefail
-          source benchmarks/benchmark_lib.sh --validation-only
+          source inferencex-e2e/benchmarks/benchmark_lib.sh --validation-only
           check_env_vars H3_CLUSTER H3_PREFLIGHT_ONLY H3_STAGE_AMD_MODEL H3_STAGE_AMD_SITE \
             H3_INSPECT_AMD_NODE H3_PREPARE_AMD_RUNTIME H3_RECOVER_AMD_ROOTFS H3_RUN_AMD_SERVING \
             PRIORITY_ENABLED NODE_SLOTS_ENABLED GITHUB_OUTPUT GITHUB_RUN_ID GITHUB_RUN_ATTEMPT
@@ -225,6 +225,7 @@ jobs:
             exit 1
           fi
           scored=$(jq -nc --arg runner "cluster:$H3_CLUSTER" '[{runner:$runner,framework:"sglang","node-count":1}]' |
+            env PYTHONPATH="$PWD/inferencex-e2e" \
             uv run --no-project --with pyyaml --python 3.12 python -m infx.workflows.ci_priority)
           echo "priority=$(jq -r '.[0].priority' <<<"$scored")" >> "$GITHUB_OUTPUT"
           python3 - <<'PY'
@@ -276,14 +277,14 @@ jobs:
       - name: Inspect trusted runner identity without GPU allocation
         if: ${{ inputs.preflight-only }}
         run: |
-          source benchmarks/benchmark_lib.sh --validation-only
+          source inferencex-e2e/benchmarks/benchmark_lib.sh --validation-only
           check_env_vars RUNNER_TEMP H3_RUN_ID H3_RUN_ATTEMPT H3_CLUSTER H3_REPOSITORY H3_SOURCE_SHA
           python3 experimental/video-generation/site_preflight.py \
           --output "$RUNNER_TEMP/h3-video-$H3_RUN_ID-$H3_RUN_ATTEMPT"
       - name: Recover the interrupted AMD rootfs without GPUs
         if: ${{ inputs.recover-amd-rootfs }}
         run: |
-          source benchmarks/benchmark_lib.sh --validation-only
+          source inferencex-e2e/benchmarks/benchmark_lib.sh --validation-only
           check_env_vars RUNNER_TEMP H3_RUN_ID H3_RUN_ATTEMPT
           python3 experimental/video-generation/prepare_amd_runtime.py \
           --workspace /it-share/data/wenyao-minimax-h3/work \
@@ -294,9 +295,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           H3_SOURCE_RUN_IDS: ${{ inputs.source-run-ids }}
         run: |
-          source benchmarks/benchmark_lib.sh --validation-only
+          source inferencex-e2e/benchmarks/benchmark_lib.sh --validation-only
           check_env_vars GH_TOKEN H3_SOURCE_RUN_IDS RUNNER_TEMP H3_RUN_ID H3_RUN_ATTEMPT
-          export PYTHONPATH="$PWD"
+          export PYTHONPATH="$PWD/inferencex-e2e"
           python3 experimental/video-generation/stage_model_ci.py \
             --source-run-id "$H3_SOURCE_RUN_IDS" \
             --workspace /it-share/data/wenyao-minimax-h3/work \
@@ -307,9 +308,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           H3_SOURCE_RUN_IDS: ${{ inputs.source-run-ids }}
         run: |
-          source benchmarks/benchmark_lib.sh --validation-only
+          source inferencex-e2e/benchmarks/benchmark_lib.sh --validation-only
           check_env_vars GH_TOKEN H3_SOURCE_RUN_IDS RUNNER_TEMP H3_RUN_ID H3_RUN_ATTEMPT
-          export PYTHONPATH="$PWD"
+          export PYTHONPATH="$PWD/inferencex-e2e"
           python3 experimental/video-generation/stage_amd_site.py \
             --source-run-id "$H3_SOURCE_RUN_IDS" \
             --output "$RUNNER_TEMP/h3-video-$H3_RUN_ID-$H3_RUN_ATTEMPT"
@@ -318,7 +319,7 @@ jobs:
         env:
           H3_PREPARE_AMD_RUNTIME: ${{ inputs.prepare-amd-runtime }}
         run: |
-          source benchmarks/benchmark_lib.sh --validation-only
+          source inferencex-e2e/benchmarks/benchmark_lib.sh --validation-only
           check_env_vars RUNNER_TEMP H3_RUN_ID H3_RUN_ATTEMPT H3_PREPARE_AMD_RUNTIME
           runtime_args=()
           if [[ "$H3_PREPARE_AMD_RUNTIME" == true ]]; then runtime_args=(--prepare-runtime); fi
@@ -334,9 +335,9 @@ jobs:
           H3_SOURCE_RUN_IDS: ${{ inputs.source-run-ids }}
         run: |
           set -eo pipefail
-          source benchmarks/benchmark_lib.sh --validation-only
+          source inferencex-e2e/benchmarks/benchmark_lib.sh --validation-only
           check_env_vars GH_TOKEN H3_SOURCE_RUN_IDS RUNNER_TEMP H3_RUN_ID H3_RUN_ATTEMPT GITHUB_OUTPUT
-          export PYTHONPATH="$PWD"
+          export PYTHONPATH="$PWD/inferencex-e2e"
           echo 'mode=serving-smoke' >> "$GITHUB_OUTPUT"
           python3 experimental/video-generation/run_amd_serving_ci.py \
             --source-run-id "$H3_SOURCE_RUN_IDS" \
@@ -346,7 +347,7 @@ jobs:
         if: ${{ inputs.source-run-ids == '' && !inputs.preflight-only && !inputs.stage-amd-model && !inputs.stage-amd-site && !inputs.inspect-amd-node && !inputs.prepare-amd-runtime && !inputs.recover-amd-rootfs && !inputs.run-amd-serving }}
         run: |
           set -eo pipefail
-          source benchmarks/benchmark_lib.sh --validation-only
+          source inferencex-e2e/benchmarks/benchmark_lib.sh --validation-only
           check_env_vars H3_SITE_CONFIG H3_CLUSTER RUNNER_TEMP H3_RUN_ID H3_RUN_ATTEMPT \
             H3_REPOSITORY H3_SOURCE_SHA H3_WORKFLOW_REF H3_WORKFLOW_SHA H3_ACTOR H3_TRIGGERING_ACTOR GITHUB_OUTPUT
           python3 - <<'PY'
@@ -370,9 +371,9 @@ jobs:
           H3_SOURCE_RUN_IDS: ${{ inputs.source-run-ids }}
         run: |
           set -eo pipefail
-          source benchmarks/benchmark_lib.sh --validation-only
+          source inferencex-e2e/benchmarks/benchmark_lib.sh --validation-only
           check_env_vars GH_TOKEN H3_SITE_CONFIG H3_SOURCE_RUN_IDS RUNNER_TEMP H3_RUN_ID H3_RUN_ATTEMPT
-          export PYTHONPATH="$PWD"
+          export PYTHONPATH="$PWD/inferencex-e2e"
           python3 experimental/video-generation/inventory_ci.py \
             --config "$H3_SITE_CONFIG" \
             --source-run-ids "$H3_SOURCE_RUN_IDS" \
@@ -394,7 +395,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      PYTHONPATH: ${{ github.workspace }}
+      PYTHONPATH: ${{ github.workspace }}/inferencex-e2e
       GH_TOKEN: ${{ github.token }}
       H3_SOURCE_RUN_IDS: ${{ inputs.source-run-ids || github.run_id }}
       H3_REUSE: ${{ inputs.source-run-ids != '' }}
@@ -408,7 +409,7 @@ jobs:
       - name: Verify original execution and publish versioned measurements
         run: |
           set -eo pipefail
-          source benchmarks/benchmark_lib.sh --validation-only
+          source inferencex-e2e/benchmarks/benchmark_lib.sh --validation-only
           check_env_vars GH_TOKEN PYTHONPATH H3_SOURCE_RUN_IDS H3_REUSE H3_INVENTORY_RUN_ID RUNNER_TEMP
           hardware_args=()
           if [[ "$H3_REUSE" == true ]]; then hardware_args=(--hardware-run-id "$H3_INVENTORY_RUN_ID"); fi

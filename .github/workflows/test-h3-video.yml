@@ -5,13 +5,13 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - 'experimental/video-generation/**'
-      - 'infx/__init__.py'
-      - 'infx/results/__init__.py'
-      - 'infx/results/power/*.py'
-      - 'infx/workflows/__init__.py'
-      - 'infx/workflows/ci_priority.py'
-      - 'configs/ci-priority.yaml'
-      - 'benchmarks/benchmark_lib.sh'
+      - 'inferencex-e2e/infx/__init__.py'
+      - 'inferencex-e2e/infx/results/__init__.py'
+      - 'inferencex-e2e/infx/results/power/*.py'
+      - 'inferencex-e2e/infx/workflows/__init__.py'
+      - 'inferencex-e2e/infx/workflows/ci_priority.py'
+      - 'inferencex-e2e/configs/ci-priority.yaml'
+      - 'inferencex-e2e/benchmarks/benchmark_lib.sh'
       - '.github/workflows/h3-video.yml'
       - '.github/workflows/h3-fidelity.yml'
       - '.github/workflows/test-h3-video.yml'
@@ -19,13 +19,13 @@ on:
   push:
     paths:
       - 'experimental/video-generation/**'
-      - 'infx/__init__.py'
-      - 'infx/results/__init__.py'
-      - 'infx/results/power/*.py'
-      - 'infx/workflows/__init__.py'
-      - 'infx/workflows/ci_priority.py'
-      - 'configs/ci-priority.yaml'
-      - 'benchmarks/benchmark_lib.sh'
+      - 'inferencex-e2e/infx/__init__.py'
+      - 'inferencex-e2e/infx/results/__init__.py'
+      - 'inferencex-e2e/infx/results/power/*.py'
+      - 'inferencex-e2e/infx/workflows/__init__.py'
+      - 'inferencex-e2e/infx/workflows/ci_priority.py'
+      - 'inferencex-e2e/configs/ci-priority.yaml'
+      - 'inferencex-e2e/benchmarks/benchmark_lib.sh'
       - '.github/workflows/h3-video.yml'
       - '.github/workflows/h3-fidelity.yml'
       - '.github/workflows/test-h3-video.yml'
@@ -52,9 +52,9 @@ jobs:
       - name: Test CPU harness and CI control
         working-directory: experimental/video-generation
         env:
-          PYTHONPATH: ${{ github.workspace }}
+          PYTHONPATH: ${{ github.workspace }}/inferencex-e2e
         run: |
-          source ../../benchmarks/benchmark_lib.sh --validation-only
+          source ../../inferencex-e2e/benchmarks/benchmark_lib.sh --validation-only
           check_env_vars PYTHONPATH
           uv run --no-project --python 3.12 \
           --with 'av==16.1.0' --with 'numpy==2.3.5' \
@@ -86,9 +86,9 @@ jobs:
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
       - name: Test isolated staged power in the retained runtime Python version
         env:
-          PYTHONPATH: ${{ github.workspace }}
+          PYTHONPATH: ${{ github.workspace }}/inferencex-e2e
         run: |
-          source benchmarks/benchmark_lib.sh --validation-only
+          source inferencex-e2e/benchmarks/benchmark_lib.sh --validation-only
           check_env_vars PYTHONPATH
           uv run --no-project --python 3.10 --with 'pytest==8.4.2' \
           python -m pytest -q \

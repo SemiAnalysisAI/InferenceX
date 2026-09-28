@@ -103,7 +103,9 @@ def stage(spec: dict, output: Path, *, server_timing: bool = False, allocation_m
     spec = validate_gpu_job(spec)
     destination.mkdir()
     helper = destination / "benchmark_lib.sh"
-    helper.write_bytes((Path(__file__).parents[2] / "benchmarks/benchmark_lib.sh").read_bytes())
+    helper.write_bytes(
+        (Path(__file__).parents[2] / "inferencex-e2e" / "benchmarks" / "benchmark_lib.sh").read_bytes()
+    )
     entry = destination / "entry-only.sh"
     command = '-c \'exec "$@"\' h3-entry "$@"' if 'exec bash "$@"' in (runtime.get("entrypoint") or "") else '"$@"'
     entry.write_text((INPUTS / "entry-only-amd.sh").read_text().replace("@ENTRY@", command)

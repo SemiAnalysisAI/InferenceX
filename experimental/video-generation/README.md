@@ -56,7 +56,7 @@ unverified; local CPU checks and retained telemetry replay do not qualify
 generation with this revision.
 
 Adapt [runtime-entry.example.sh](runtime-entry.example.sh) from the saved working
-entry command. Copy this checkout's `benchmarks/benchmark_lib.sh` beside the entry,
+entry command. Copy this checkout's `inferencex-e2e/benchmarks/benchmark_lib.sh` beside the entry,
 replace `REPLACE_WITH_BENCHMARK_LIB_SHA256` with that helper's SHA256, and then pin
 the entry's digest. The entry verifies the sibling helper before sourcing it;
 the pinned entry digest also seals the expected helper digest. AMD site staging
@@ -220,7 +220,7 @@ Regression mode additionally requires the existing calibrated acceptance gate.
 
 ```bash
 cd experimental/video-generation
-PYTHONPATH=../.. uv run --no-project --python 3.12 \
+PYTHONPATH=../../inferencex-e2e uv run --no-project --python 3.12 \
   --with 'av==16.1.0' --with 'numpy==2.3.5' \
   --with 'pytest>=8,<9' --with 'jsonschema>=4,<5' python -m pytest -q
 bash -n runtime-entry.example.sh

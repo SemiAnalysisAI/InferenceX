@@ -12,7 +12,9 @@ import ci
 def entry(tmp_path):
     source = Path(ci.__file__).parent
     helper = tmp_path / "benchmark_lib.sh"
-    helper.write_bytes((source.parents[1] / "benchmarks/benchmark_lib.sh").read_bytes())
+    helper.write_bytes(
+        (source.parents[1] / "inferencex-e2e" / "benchmarks" / "benchmark_lib.sh").read_bytes()
+    )
     script = tmp_path / "entry.sh"
     script.write_text((source / "runtime-entry.example.sh").read_text().replace(
         "REPLACE_WITH_BENCHMARK_LIB_SHA256", ci.digest(helper)))

@@ -9100,3 +9100,9 @@
   description:
     - "Use canonical infx power and priority modules after removal of the legacy utils wrappers. Preserve staged Python 3.10 power analysis and manual H3 execution; select no LLM jobs."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2916
+
+- config-keys: []
+  workflow-dispatch: h3-video.yml
+  description:
+    - "Point H3 workflows and staged power packaging at inferencex-e2e after the top-level project reorganization. Preserve the staged package infx/ layout, manual dispatch, media export, asynchronous completion, and AMD preparation paths; select no LLM jobs."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2916

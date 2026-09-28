@@ -74,7 +74,9 @@ def test_seals_matched_workload_and_full_billed_allocation_without_gpu_calls(spe
     assert frozen["limits"]["job_seconds"] + 600 == config["resources"]["minutes"] * 60
     subprocess.run(["bash", "-n", str(output / "entry-only.sh")], check=True)
     helper = output / "benchmark_lib.sh"
-    assert helper.read_bytes() == (Path(ci.__file__).parents[2] / "benchmarks/benchmark_lib.sh").read_bytes()
+    assert helper.read_bytes() == (
+        Path(ci.__file__).parents[2] / "inferencex-e2e" / "benchmarks" / "benchmark_lib.sh"
+    ).read_bytes()
     missing_env = subprocess.run(["bash", str(output / "entry-only.sh")], env={"PATH": os.environ["PATH"]},
                                  capture_output=True, text=True)
     assert missing_env.returncode != 0

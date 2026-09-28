@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Copy beside the PREPARED runtime with benchmarks/benchmark_lib.sh, fill the
+# Copy beside the PREPARED runtime with inferencex-e2e/benchmarks/benchmark_lib.sh, fill the
 # three paths and helper SHA256, then pin this entry's SHA256 in the site config.
 # This entry never allocates, imports, installs, or downloads.
 set -eo pipefail

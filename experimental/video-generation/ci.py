@@ -344,13 +344,15 @@ def collect(run_dir: Path, output: Path) -> None:
 def stage_package(source: Path, destination: Path) -> dict[str, str]:
     selected = {p.relative_to(source).as_posix(): p for p in [*source.glob("*.py"), *(source / "evaluator").glob("*.py"),
                 *(source / "runtime-patches").glob("*.patch")]}
-    repository = source.parents[1]
-    shared_power = [repository / "infx" / "__init__.py",
-                    repository / "infx" / "results" / "__init__.py",
-                    *(repository / "infx" / "results" / "power").glob("*.py")]
+    # Read power modules from the e2e project; keep staged keys as infx/... so the
+    # retained runtime package layout and imports stay unchanged.
+    e2e_root = source.parents[1] / "inferencex-e2e"
+    shared_power = [e2e_root / "infx" / "__init__.py",
+                    e2e_root / "infx" / "results" / "__init__.py",
+                    *(e2e_root / "infx" / "results" / "power").glob("*.py")]
     for path in shared_power:
         if path.is_file():
-            selected[path.relative_to(repository).as_posix()] = path
+            selected[path.relative_to(e2e_root).as_posix()] = path
     expected = {name: digest(path) for name, path in selected.items()}
     if destination.exists():
         need(inventory(destination) == expected, "Staged source differs from this GitHub commit")
