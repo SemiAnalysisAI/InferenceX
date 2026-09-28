@@ -6,4 +6,4 @@ Each patch is a temporary fix for an open upstream PR. When the PR merges and th
 
 | Patch | Upstream PR | Fix |
 |-------|-------------|-----|
-| `504-post-eval-srun-options.patch` | [NVIDIA/srt-slurm#504](https://github.com/NVIDIA/srt-slurm/pull/504) | Forward recipe `srun_options` (e.g. `container-writable`) to post-eval steps |
+| _(none)_ | | No patches are currently carried; the pinned submodule (v2.30.0) includes everything the runners need. |
