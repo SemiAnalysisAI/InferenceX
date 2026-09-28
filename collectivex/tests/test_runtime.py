@@ -32,6 +32,14 @@ import ep_backend  # noqa: E402  (torch is imported lazily inside its methods)
 import ep_oracle  # noqa: E402
 
 
+def run_common(script: str, *args: str, **kwargs) -> subprocess.CompletedProcess:
+    """Run `script` in bash after sourcing runtime/common.sh; `args` arrive as $1, $2, ..."""
+    return subprocess.run(
+        ["bash", "-c", f'source "{RUNTIME / "common.sh"}" && {script}', "collx", *args],
+        capture_output=True, text=True, **kwargs,
+    )
+
+
 # configs/platform_config.json is shared by matrix scheduling, operator/network
 # loading, and backend builds.
 
@@ -129,12 +137,10 @@ class SquashCacheKeyTests(unittest.TestCase):
     DIGEST = "sha256:" + "ab" * 32
 
     def _bash(self, script: str, env: dict, args: list) -> str:
-        result = subprocess.run(
-            ["bash", "-c", f'source "{RUNTIME / "common.sh"}" && {script}', "collx", *args],
-            capture_output=True, text=True, check=True,
+        return run_common(
+            script, *args, check=True,
             env={"PATH": os.environ["PATH"], "COLLX_IMAGE_PLATFORM": "linux/amd64", **env},
-        )
-        return result.stdout
+        ).stdout
 
     def test_the_path_is_invariant_across_runs_and_digests(self) -> None:
         paths = {
@@ -220,40 +226,23 @@ class SingleNodeHcaOverrideTests(unittest.TestCase):
     # self-enables IBGDA even single-node, and only the storage-IB rails accept
     # AH/DCT creation), while scale-out runs keep resolving NVSHMEM_HCA_LIST
     # from the ordinary scale-out selector.
-    @staticmethod
-    def _profile_env(script: str) -> str:
-        completed = subprocess.run(
-            ["bash", "-c", script], cwd=RUNTIME.parent,
-            capture_output=True, text=True, check=True,
-        )
-        return completed.stdout.strip().splitlines()[-1]
-
-    def test_single_node_override_exports_the_pinned_hca_list(self) -> None:
-        line = self._profile_env(
-            "source runtime/common.sh 2>/dev/null;"
-            " export COLLX_SINGLE_NODE_RDMA_DEVICES='mlx5_12:1,mlx5_13:1';"
-            " collx_apply_network_profile 1 nvlink;"
-            " echo \"${NVSHMEM_HCA_LIST:-unset}\""
-        )
-        self.assertEqual(line, "mlx5_12:1,mlx5_13:1")
-
-    def test_single_node_without_override_exports_nothing(self) -> None:
-        line = self._profile_env(
-            "source runtime/common.sh 2>/dev/null;"
-            " collx_apply_network_profile 1 nvlink;"
-            " echo \"${NVSHMEM_HCA_LIST:-unset}\""
-        )
-        self.assertEqual(line, "unset")
-
-    def test_scale_out_ignores_the_single_node_selector(self) -> None:
-        line = self._profile_env(
-            "source runtime/common.sh 2>/dev/null;"
-            " export COLLX_SINGLE_NODE_RDMA_DEVICES='mlx5_12:1';"
-            " export COLLX_RDMA_DEVICES='mlx5_0:1,mlx5_1:1';"
-            " collx_apply_network_profile 2 nvlink-rdma;"
-            " echo \"${NVSHMEM_HCA_LIST:-unset}\""
-        )
-        self.assertEqual(line, "mlx5_0:1,mlx5_1:1")
+    def test_nvshmem_hca_list_per_placement(self) -> None:
+        for name, setup, placement, expected in (
+            ("single-node override", "export COLLX_SINGLE_NODE_RDMA_DEVICES='mlx5_12:1,mlx5_13:1'",
+             "1 nvlink", "mlx5_12:1,mlx5_13:1"),
+            ("single-node without override", ":", "1 nvlink", "unset"),
+            ("scale-out ignores the single-node selector",
+             "export COLLX_SINGLE_NODE_RDMA_DEVICES='mlx5_12:1'"
+             " COLLX_RDMA_DEVICES='mlx5_0:1,mlx5_1:1'",
+             "2 nvlink-rdma", "mlx5_0:1,mlx5_1:1"),
+        ):
+            with self.subTest(name):
+                stdout = run_common(
+                    f'{setup}; collx_apply_network_profile {placement};'
+                    ' echo "${NVSHMEM_HCA_LIST:-unset}"',
+                    check=True,
+                ).stdout
+                self.assertEqual(stdout.strip().splitlines()[-1], expected)
 
 
 class StageTests(unittest.TestCase):
@@ -291,24 +280,29 @@ FAILURE_MARKER = (
 
 
 class NetworkProfileContract(unittest.TestCase):
-    def _fabric(self, root: Path, *, state: str = "4: ACTIVE",
-                link_layer: str = "Ethernet", gid: str = "fe80::1") -> None:
-        net = root / "class" / "net" / "eth0"
+    @staticmethod
+    def _fabric(root: Path, *, interface: str = "eth0", device: str = "mlx5_0",
+                state: str = "4: ACTIVE", link_layer: str = "Ethernet",
+                gid: str | None = "fe80::1") -> None:
+        net = root / "class" / "net" / interface
         net.mkdir(parents=True)
         (net / "operstate").write_text("up\n")
-        port = root / "class" / "infiniband" / "mlx5_0" / "ports" / "1"
+        port = root / "class" / "infiniband" / device / "ports" / "1"
         (port / "gids").mkdir(parents=True)
         (port / "state").write_text(state + "\n")
         (port / "link_layer").write_text(link_layer + "\n")
-        (port / "gids" / "3").write_text(gid + "\n")
+        if gid is not None:
+            (port / "gids" / "3").write_text(gid + "\n")
 
-    def _run(self, root: Path, route: Path, socket_names: str = "eth0"):
+    @staticmethod
+    def _run(root: Path, *profile: str):
+        """validate_network_profile over `root` (default: eth0 + mlx5_0:1 at GID index 3)."""
         buffer = io.StringIO()
         rc = 0
         try:
             with contextlib.redirect_stdout(buffer):
-                probe.validate_network_profile(socket_names, "mlx5_0:1", "3",
-                                                sys_root=root, route_path=route)
+                probe.validate_network_profile(*(profile or ("eth0", "mlx5_0:1", "3")),
+                                                sys_root=root, route_path=root / "route")
         except SystemExit:
             rc = 1
         return rc, buffer.getvalue().splitlines()
@@ -322,7 +316,7 @@ class NetworkProfileContract(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self._fabric(root)
-            rc, lines = self._run(root, root / "route")
+            rc, lines = self._run(root)
             self.assertEqual(rc, 0)
             self.assertEqual(self._captures(SOCKET_MARKER, lines), ["eth0"])
             self.assertEqual(self._captures(LINK_MARKER, lines), ["roce"])
@@ -331,7 +325,7 @@ class NetworkProfileContract(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self._fabric(root, state="1: DOWN")
-            rc, lines = self._run(root, root / "route")
+            rc, lines = self._run(root)
             self.assertEqual(rc, 1)
             failures = [line for line in lines if re.search(FAILURE_MARKER, line)]
             self.assertTrue(any("rdma-port-1=inactive" in line for line in failures), failures)
@@ -339,30 +333,17 @@ class NetworkProfileContract(unittest.TestCase):
     def _efa_fabric(self, root: Path) -> None:
         # An EFA node as sysfs shows it: default-route interface up, verbs device whose port is
         # ACTIVE but carries link_layer Unspecified and no usable GID table (rdma-core -> rdmap*).
-        net = root / "class" / "net" / "enp71s0"
-        net.mkdir(parents=True)
-        (net / "operstate").write_text("up\n")
-        port = root / "class" / "infiniband" / "rdmap86s0" / "ports" / "1"
-        (port / "gids").mkdir(parents=True)
-        (port / "state").write_text("4: ACTIVE\n")
-        (port / "link_layer").write_text("Unspecified\n")
+        self._fabric(root, interface="enp71s0", device="rdmap86s0",
+                     link_layer="Unspecified", gid=None)
 
-    def _run_efa(self, root: Path, route: Path, fabric: str):
-        buffer = io.StringIO()
-        rc = 0
-        try:
-            with contextlib.redirect_stdout(buffer):
-                probe.validate_network_profile("enp71s0", "rdmap86s0", "", fabric,
-                                                sys_root=root, route_path=route)
-        except SystemExit:
-            rc = 1
-        return rc, buffer.getvalue().splitlines()
+    def _run_efa(self, root: Path, fabric: str):
+        return self._run(root, "enp71s0", "rdmap86s0", "", fabric)
 
     def test_declared_efa_fabric_accepts_the_unspecified_link_layer(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self._efa_fabric(root)
-            rc, lines = self._run_efa(root, root / "route", "efa")
+            rc, lines = self._run_efa(root, "efa")
             self.assertEqual(rc, 0, lines)
             self.assertEqual(self._captures(SOCKET_MARKER, lines), ["enp71s0"])
             self.assertEqual(self._captures(LINK_MARKER, lines), ["efa"])
@@ -371,22 +352,9 @@ class NetworkProfileContract(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self._efa_fabric(root)
-            rc, lines = self._run_efa(root, root / "route", "")
+            rc, lines = self._run_efa(root, "")
             self.assertEqual(rc, 1)
             self.assertIn("[collectivex-private] rdma-port-1=link-layer-invalid", lines)
-
-# config.py case-args is the single case→invocation codec: collx_run_shard decodes one
-# null-delimited argv per case and hands it verbatim to bench/run_ep.py. Parse the
-# emitted argv with the same parser shape run_ep builds so the two sides cannot
-# drift — a flag the codec emits but run_ep does not declare (or vice versa) fails
-# here instead of on a GPU allocation.
-# logical_byte_provenance is where FP8 changes MEASUREMENT semantics (asymmetric
-# per-direction byte counts), so its arithmetic and guards are pinned here on CPU.
-try:
-    import torch as _torch
-except Exception:  # torch is absent in the CPU test image; these checks run on GPU CI
-    _torch = None
-
 
 class ContainerImportRetry(unittest.TestCase):
     """A failed container import is retried, because the failure is usually the storage blinking.
@@ -416,7 +384,6 @@ exit ${codes[$idx]}
 FAKE
 chmod +x "$ROOT/bin/srun"
 export PATH="$ROOT/bin:$PATH"
-source "$COMMON"
 sleep() { :; }              # collapse the backoff
 unsquashfs() { return 0; }  # a present squash short-circuits the import
 out="$(collx_ensure_squash_on_job 12345 "$ROOT/sqsh" some/image:tag)"; rc=$?
@@ -427,14 +394,10 @@ echo "CALLS=$(wc -l < "$ROOT/calls" 2>/dev/null | tr -d ' ' || echo 0)"
 
     def _run(self, rc_sequence: str):
         with tempfile.TemporaryDirectory() as root:
-            proc = subprocess.run(
-                ["bash", "-c", self.HARNESS],
-                env={
-                    **os.environ, "ROOT": root, "COMMON": str(RUNTIME / "common.sh"),
-                    "RC_SEQUENCE": rc_sequence, "COLLX_IMPORT_ATTEMPTS": "3",
-                },
-                capture_output=True, text=True,
-            )
+            proc = run_common(self.HARNESS, env={
+                **os.environ, "ROOT": root,
+                "RC_SEQUENCE": rc_sequence, "COLLX_IMPORT_ATTEMPTS": "3",
+            })
         fields = dict(
             line.split("=", 1) for line in proc.stdout.splitlines() if "=" in line
             and line.split("=", 1)[0] in ("RC", "OUT", "CALLS")
@@ -769,30 +732,18 @@ class GpuHealthProbe(unittest.TestCase):
             with self.subTest(output=output[:20]):
                 self.assertEqual(probe.gpu_health_faults(output), [])
 
-    def _run_validate(self, csv: str, has_smi: bool = True):
+    @staticmethod
+    def _run_validate(csv: str):
         """Drive validate_gpu_health with a stubbed nvidia-smi; returns (exit_code, stdout)."""
-        import shutil
-        real_which = shutil.which
-        shutil.which = (lambda name: "/usr/bin/nvidia-smi") if has_smi else (lambda name: None)
-
-        class FakeSubprocess:
-            SubprocessError = subprocess.SubprocessError
-
-            @staticmethod
-            def run(*args, **kwargs):
-                return types.SimpleNamespace(stdout=csv)
-
-        sys.modules["subprocess"] = FakeSubprocess
         captured = io.StringIO()
-        try:
-            with contextlib.redirect_stdout(captured):
+        with mock.patch("shutil.which", return_value="/usr/bin/nvidia-smi"), \
+                mock.patch("subprocess.run", return_value=types.SimpleNamespace(stdout=csv)), \
+                contextlib.redirect_stdout(captured):
+            try:
                 probe.validate_gpu_health()
-            code = 0
-        except SystemExit as exit_:
-            code = exit_.code
-        finally:
-            sys.modules["subprocess"] = subprocess
-            shutil.which = real_which
+                code = 0
+            except SystemExit as exit_:
+                code = exit_.code
         return code, captured.getvalue()
 
     def test_a_fault_exits_nonzero_and_names_the_gpu(self):

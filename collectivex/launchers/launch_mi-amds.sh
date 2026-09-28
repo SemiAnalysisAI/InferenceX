@@ -19,14 +19,11 @@ export COLLX_RUNNER="$RUNNER" COLLX_BENCH="${COLLX_BENCH:-mori}"
 export COLLX_VENDOR=amd
 collx_launcher_prologue "$RUNNER"
 
-NODES="${COLLX_NODES:-1}"; GPN="${COLLX_GPUS_PER_NODE:-8}"
-SCALE_UP_DOMAIN="${COLLX_SCALE_UP_DOMAIN:-8}"
-NGPUS="${COLLX_NGPUS:-$((NODES * GPN))}"
+collx_set_placement 1 8 8 xgmi
 TIME_MIN="${COLLX_TIME:-60}"
 EXCLUDE_NODES="${COLLX_EXCLUDE_NODES:-}"
 NODELIST="${COLLX_NODELIST:-}"
 MOUNT_DIR=/ix
-TS="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
 case "$COLLX_BENCH" in
   mori | uccl-ep) ;;
   *) collx_die "unsupported AMD EP backend: $COLLX_BENCH" ;;
@@ -38,13 +35,6 @@ export MORI_APP_LOG_LEVEL="${MORI_APP_LOG_LEVEL:-info}"
 export MORI_SHMEM_LOG_LEVEL="${MORI_SHMEM_LOG_LEVEL:-info}"
 export MORI_IO_LOG_LEVEL="${MORI_IO_LOG_LEVEL:-info}"
 IMAGE="$COLLX_IMAGE"
-export COLLX_NGPUS="$NGPUS" COLLX_NODES="$NODES"
-export COLLX_GPUS_PER_NODE="$GPN" COLLX_SCALE_UP_DOMAIN="$SCALE_UP_DOMAIN"
-if [ "$NODES" -gt 1 ]; then
-  export COLLX_TRANSPORT=xgmi-rdma
-else
-  export COLLX_TRANSPORT=xgmi
-fi
 collx_apply_network_profile "$NODES" "$COLLX_TRANSPORT"
 collx_require_vars COLLX_IMAGE COLLX_IMAGE_PLATFORM COLLX_PARTITION COLLX_SQUASH_DIR COLLX_STAGE_DIR
 PARTITION="$COLLX_PARTITION"; SQUASH_DIR="$COLLX_SQUASH_DIR"
