@@ -18,7 +18,7 @@ from pathlib import Path
 
 import torch
 
-from operatorx.core import BackendImpl, Op, UnsupportedOpError
+from operatorx.core import BackendImpl, Op, UnsupportedOpError, parallel
 from operatorx.runners.common import ranks
 from operatorx.runners.common.vllm import engine as vllm_engine
 from operatorx.runners.common.vllm import linear as vllm_linear
@@ -280,6 +280,7 @@ class _Engine:
         vllm_engine.launch()
         kwargs, self.recipe = vllm_engine.engine_args(
             split, without=b.without, eager=True, defaults={"max_num_batched_tokens": _MAX_BATCHED_TOKENS},
+            axes=parallel.ATTENTION_AXES,
             model=self.dir, load_format="dummy", skip_tokenizer_init=True, enforce_eager=True,
             enable_prefix_caching=False, max_num_seqs=_MAX_SEQS, kv_cache_memory_bytes=_kv_bytes(),
             gpu_memory_utilization=_GPU_UTIL, **b.engine)

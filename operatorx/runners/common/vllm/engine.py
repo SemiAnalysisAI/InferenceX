@@ -64,10 +64,11 @@ def recipe_kwargs(without: tuple = ()) -> tuple[dict, dict]:
 
 
 def engine_args(split: dict | None, without: tuple = (), eager: bool = False, defaults: dict | None = None,
-                **overrides) -> tuple[dict, dict]:
+                axes: tuple = parallel.AXES, **overrides) -> tuple[dict, dict]:
     """EngineArgs kwargs for a case: defaults, the recipe's, the split, the overrides (an
     attention_config override merges into the recipe's); plus the recipe's attention and
-    compilation configs."""
+    compilation configs. Expert parallelism stays the recipe's when "ep" is not among the
+    op's axes (it does not change the world size)."""
     kw, info = recipe_kwargs(without)
     kw = {**(defaults or {}), **kw}
     compilation = info["compilation_config"]
@@ -76,8 +77,10 @@ def engine_args(split: dict | None, without: tuple = (), eager: bool = False, de
     elif compilation.get("custom_ops"):  # custom-op selection holds without compilation
         kw["compilation_config"] = {"custom_ops": compilation["custom_ops"]}
     key = parallel.normalize(split)
+    recipe = json.loads(os.environ.get("OPERATORX_ENGINE_ARGS") or "{}")
+    ep = key["ep"] > 1 if "ep" in axes else bool(recipe.get("enable-expert-parallel"))
     kw.update(tensor_parallel_size=key["tp"], data_parallel_size=key["dp"],
-              decode_context_parallel_size=key["dcp"], enable_expert_parallel=key["ep"] > 1,
+              decode_context_parallel_size=key["dcp"], enable_expert_parallel=ep,
               distributed_executor_backend="external_launcher")
     attention = {**info["attention_config"], **overrides.pop("attention_config", {})}
     kw.update(overrides)
