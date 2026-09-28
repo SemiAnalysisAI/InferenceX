@@ -27,7 +27,7 @@ if [[ "$IS_MULTINODE" != true && "${MODEL_PREFIX:-}" == dsv41flash &&
         printf '%q\n' "$GITHUB_WORKSPACE/runners/launch_b300-dsxe.sh"
     } > "$BATCH_SCRIPT"
     BATCH_ARGS=(--parsable --partition="$SLURM_PARTITION" --account="$SLURM_ACCOUNT"
-        --nodes=1 --ntasks=1 --cpus-per-task=192 --gres="gpu:$GPU_COUNT" --exclusive --mem=0
+        --nodes=1 --ntasks=1 --gres="gpu:$GPU_COUNT" --exclusive --mem=0
         --time="$SALLOC_TIME_LIMIT" --job-name="$RUNNER_NAME" --export=ALL
         --chdir="$GITHUB_WORKSPACE" --output="$BATCH_LOG")
     if [[ -n "${SALLOC_EXCLUDE:-}" ]]; then
@@ -137,8 +137,7 @@ if [[ "$EXECUTION_PATH" == native-single-node ]]; then
     SRT_MODEL_PATH="$MODEL_ROOT/${MODEL##*/}"
     if [[ "$MODEL" == nvidia/DeepSeek-R1-0528-FP4-V2 ]]; then
         SRT_MODEL_PATH="$MODEL_ROOT/DeepSeek-R1-0528-NVFP4-v2"
-    elif [[ " ${STAGED_MODELS[*]} " != *" ${MODEL##*/} "* ||
-            ( "${MODEL##*/}" == DeepSeek-V4-Pro-0813 && "$FRAMEWORK" != vllm ) ]]; then
+    elif [[ " ${STAGED_MODELS[*]} " != *" ${MODEL##*/} "* || "${MODEL##*/}" == DeepSeek-V4-Pro-0813 ]]; then
         # Not staged on every node's NVMe; read the shared copy.
         SRT_MODEL_PATH="$SHARED_MODEL_ROOT/${MODEL##*/}"
     fi
