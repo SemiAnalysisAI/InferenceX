@@ -129,20 +129,17 @@ def wait_for_decode(aiperf_log: str, steps_dir: str, started: float) -> tuple[fl
 
 
 def aiperf_pids() -> list[int]:
-    """The aiperf CLI processes running a benchmark (not wrappers naming it in their argv)."""
+    """The aiperf SystemController, which titles itself "aiperf system_controller"."""
     pids = []
     for entry in os.listdir("/proc"):
         if not entry.isdigit():
             continue
         try:
             with open(f"/proc/{entry}/cmdline", "rb") as f:
-                argv = f.read().decode(errors="replace").split("\0")
+                title = f.read().replace(b"\0", b" ").decode(errors="replace").split()
         except OSError:
             continue
-        # The program itself, or the script its interpreter runs: [.../bin/aiperf, profile]
-        # or [python, .../bin/aiperf, profile]. A wrapper names it later in its argv.
-        if any(argv[i].endswith("/bin/aiperf") and argv[i + 1:i + 2] == ["profile"] for i in (0, 1)
-               if i < len(argv)):
+        if title[:2] == ["aiperf", "system_controller"]:
             pids.append(int(entry))
     return pids
 
