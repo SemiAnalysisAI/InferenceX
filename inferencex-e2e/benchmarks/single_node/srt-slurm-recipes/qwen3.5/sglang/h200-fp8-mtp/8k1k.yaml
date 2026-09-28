@@ -3,7 +3,7 @@ base:
   name: qwen3.5-fp8-h200-sglang-mtp-8k1k
   model:
     path: hf:Qwen/Qwen3.5-397B-A17B-FP8
-    container: lmsysorg/sglang:v0.5.14-cu130
+    container: lmsysorg/sglang:nightly-dev-cu13-20260928-81f27fb3
     precision: fp8
   resources:
     gpu_type: h200
@@ -30,7 +30,7 @@ base:
         max-running-requests: 128
         chunked-prefill-size: 16384
         mem-fraction-static: 0.8
-        cuda-graph-max-bs: 4
+        cuda-graph-max-bs-decode: 4
         context-length: 9472
         kv-cache-dtype: fp8_e4m3
         quantization: fp8
@@ -62,7 +62,7 @@ zip_override_concurrency:
   roles:
     agg:
       args:
-        cuda-graph-max-bs: [4, 8, 16, 32, 64, 128]
+        cuda-graph-max-bs-decode: [4, 8, 16, 32, 64, 128]
   benchmark:
     env:
       CONC: ['4', '8', '16', '32', '64', '128']

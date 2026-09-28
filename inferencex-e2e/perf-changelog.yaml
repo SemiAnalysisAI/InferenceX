@@ -8995,3 +8995,11 @@
     - "Validate MiniMax-M3 AgentX on H200 with vLLM FP8 after moving the end-to-end project into inferencex-e2e/. Preserve the existing image, recipe, and benchmark settings."
     - "将端到端项目迁入 inferencex-e2e/ 后，验证 H200 上的 vLLM FP8 MiniMax-M3 AgentX 运行路径，沿用现有镜像、配方和基准测试设置。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3525
+
+- config-keys:
+    - qwen3.5-fp8-h200-sglang
+    - qwen3.5-fp8-h200-sglang-mtp
+  description:
+    - "Update SGLang image from v0.5.14-cu130 to nightly-dev-cu13-20260928-81f27fb3 for the Qwen3.5 FP8 H200 8k1k recipes (base + MTP). Rename cuda-graph-max-bs to cuda-graph-max-bs-decode, since the bare flag is ambiguous on SGLang nightlies from 2026-09-15 onward."
+    - "将 Qwen3.5 FP8 H200 8k1k 配方（基础版与 MTP 版）的 SGLang 镜像从 v0.5.14-cu130 更新至 nightly-dev-cu13-20260928-81f27fb3。由于 2026-09-15 起的 SGLang nightly 中 cuda-graph-max-bs 参数存在歧义，将其改为 cuda-graph-max-bs-decode。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3535
