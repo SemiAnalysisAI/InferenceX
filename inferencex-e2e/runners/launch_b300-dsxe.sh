@@ -137,7 +137,8 @@ if [[ "$EXECUTION_PATH" == native-single-node ]]; then
     SRT_MODEL_PATH="$MODEL_ROOT/${MODEL##*/}"
     if [[ "$MODEL" == nvidia/DeepSeek-R1-0528-FP4-V2 ]]; then
         SRT_MODEL_PATH="$MODEL_ROOT/DeepSeek-R1-0528-NVFP4-v2"
-    elif [[ " ${STAGED_MODELS[*]} " != *" ${MODEL##*/} "* || "${MODEL##*/}" == DeepSeek-V4-Pro-0813 ]]; then
+    elif [[ " ${STAGED_MODELS[*]} " != *" ${MODEL##*/} "* ||
+        ( "${MODEL##*/}" == DeepSeek-V4-Pro-0813 && "$FRAMEWORK" != vllm ) ]]; then
         # Not staged on every node's NVMe; read the shared copy.
         SRT_MODEL_PATH="$SHARED_MODEL_ROOT/${MODEL##*/}"
     fi

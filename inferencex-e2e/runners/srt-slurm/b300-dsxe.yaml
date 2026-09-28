@@ -33,5 +33,6 @@ containers:
 use_exclusive_sbatch_directive: true
 default_bash_preamble: ${SRT_DEFAULT_BASH_PREAMBLE}
 default_sbatch_directives:
+  cpus-per-task: '192'
   # gpu-16 retains a foreign 1.63 TB tmpfs allocation; rechecked 2026-09-21.
   exclude: dsxe-sa-b300-prd0-gpu-16
