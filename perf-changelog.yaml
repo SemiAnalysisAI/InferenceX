@@ -6645,3 +6645,12 @@
     - "Retest GMU0.90 Kimi-K3 with the native workspace/budget candidate image pinned at sha256:2ffab8b3739e3c45a363ae9a49b0efb113c157ce94f58fe21d7399eee26adb97, READ credit1/QP8, prefill SimpleCPU1799GB, and role-specific DSpark graphs: BF16 1P1D c48, FP32 1P2D c24, FP32 1P1D c10. Preserve the original InferenceX fleet/collector and full warmup/3600s/1% gate; isolate checked AIPerf lifecycle patches and propagate worker/Slurm failures. These are candidate measurements, not a stability or accuracy claim."
     - "使用按 digest 固定的原生 workspace/budget 候选镜像、READ credit1/QP8、prefill SimpleCPU1799GB 及角色独立 DSpark graph，在 GMU0.90 复测 BF16 1P1D c48、FP32 1P2D c24、FP32 1P1D c10。保留原 InferenceX 集群与 collector、完整 warmup/3600 秒/1% 门槛；隔离应用经过校验的 AIPerf 生命周期补丁，并如实传播 worker/Slurm 失败。这是候选测量，不代表稳定性或精度已通过。"
   pr-link: TBD
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-disagg-agentic
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Restore the original explicit role-node and 1799 GB additional-settings contract for the FP32 c10/c24 retest. Keep the image, runtime, BF16 arm, workflow, launcher, and benchmark gates unchanged; manually dispatch only c10/c24. Add submission-chain regression coverage with mocked Slurm."
+    - "为 FP32 c10/c24 复测恢复原有 additional-settings 中的显式角色节点数和 1799 GB 契约。镜像、runtime、BF16 点、workflow、launcher 和 benchmark 门槛保持不变；手动仅触发 c10/c24，并新增模拟 Slurm 的完整提交链回归测试。"
+  pr-link: TBD

@@ -282,6 +282,21 @@ draft 路径仍为 `/models/Inferact-Kimi-K3-DSpark`。
 也不要自动重跑失败点。本地角色/geometry 测试不证明运行时稳定，必须检查实际
 云侧日志再验收结果。
 
+### FP32 上线复测范围（2026-09-28）
+
+上述 K3 候选仅触发 `--conc 24 10 --no-evals`，冻结 BF16 和 runtime/workspace
+改动。恢复 InferenceX 原有配置契约：prefill 显式设置 `PREFILL_NODES=1`、
+`TOTAL_CPU_DRAM_GB=1799`；decode 在 c24 设置 `DECODE_NODES=2`，c10 设置为 `1`。
+workflow 在模板默认环境之后导出 additional-settings；遗漏这些设置会在 recipe
+提交前失败，或者使 DRAM 使用模板默认的 600 GB。不能将调度的 `nodes:N` 标签
+当作角色节点变量，也不应为这次配置遗漏重写原本正常的 launcher。
+
+`utils/test_k3_workflow_submission.py` 生成精确的两点矩阵，重放 workflow 的
+输入和环境导出，并通过模拟调度和清理命令执行未经修改的 runner、recipe 和
+submit 脚本。测试核对实际提交节点数、每 worker TP8、有效 1799 GB、FP32 和
+原 InferenceX 路径；反向对照分别重现每个设置遗漏。这是提交前契约检查，
+不是 GPU 运行或稳定性证据。
+
 ## 停止条件
 
 出现以下任何条件时，在派发 GPU 工作或宣称配置完成前停止。取得缺失事实或修复来源不一致；不要猜测。

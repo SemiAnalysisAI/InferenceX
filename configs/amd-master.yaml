@@ -766,6 +766,8 @@ kimik3-fp4-mi355x-vllm-disagg-agentic:
           ep: 1
           dp-attn: false
           additional-settings:
+          - PREFILL_NODES=1
+          - TOTAL_CPU_DRAM_GB=1799
           - GPU_MEMORY_UTILIZATION=0.90
           - MORI_IB_MAX_RD_ATOMIC=1
           - MORI_QP_PER_TRANSFER=8
@@ -788,6 +790,7 @@ kimik3-fp4-mi355x-vllm-disagg-agentic:
           ep: 1
           dp-attn: false
           additional-settings:
+          - DECODE_NODES=2
           - GPU_MEMORY_UTILIZATION=0.90
           - MORI_IB_MAX_RD_ATOMIC=1
           - MORI_QP_PER_TRANSFER=8
@@ -816,6 +819,8 @@ kimik3-fp4-mi355x-vllm-disagg-agentic:
           ep: 1
           dp-attn: false
           additional-settings:
+          - PREFILL_NODES=1
+          - TOTAL_CPU_DRAM_GB=1799
           - GPU_MEMORY_UTILIZATION=0.90
           - MORI_IB_MAX_RD_ATOMIC=1
           - MORI_QP_PER_TRANSFER=8
@@ -838,6 +843,7 @@ kimik3-fp4-mi355x-vllm-disagg-agentic:
           ep: 1
           dp-attn: false
           additional-settings:
+          - DECODE_NODES=1
           - GPU_MEMORY_UTILIZATION=0.90
           - MORI_IB_MAX_RD_ATOMIC=1
           - MORI_QP_PER_TRANSFER=8

@@ -284,6 +284,24 @@ preserving available artifacts. Do not interpret partial JSON as success or
 automatically rerun a failed point. Local role/geometry tests are not runtime
 stability proof; inspect the actual cloud logs before accepting results.
 
+### FP32 release retest scope (2026-09-28)
+
+For the K3 candidate above, dispatch only `--conc 24 10 --no-evals` while
+BF16 and runtime/workspace changes are frozen. Restore the original InferenceX
+configuration contract: prefill `PREFILL_NODES=1` and
+`TOTAL_CPU_DRAM_GB=1799`, decode `DECODE_NODES=2` for c24 or `1` for c10.
+The workflow exports these additional settings after its template defaults;
+omitting them either fails the recipe before submission or leaves the DRAM
+budget at the template's 600 GB default. Do not infer role-node counts from
+the scheduler's `nodes:N` label or rewrite the working launcher for this omission.
+
+`utils/test_k3_workflow_submission.py` generates the exact two-point matrix,
+replays the workflow's input/environment exports, and executes the unchanged
+runner, recipe, and submit script with mocked scheduler/cleanup commands.
+It checks the submitted node count, TP8 per worker, effective 1799 GB budget,
+FP32, and unchanged InferenceX paths. Negative controls reproduce each missing
+setting. This is a pre-submission contract gate, not GPU or stability evidence.
+
 ## Stop conditions
 
 Stop before dispatching GPU work or claiming the configuration complete when any condition below holds. Obtain the missing fact or fix the source mismatch. Do not guess.
