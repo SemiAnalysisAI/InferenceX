@@ -324,11 +324,17 @@ class _Engine:
             num_common_prefix_blocks=[0] * len(self.runner.kv_cache_config.kv_cache_groups),
             finished_req_ids=finished, free_encoder_mm_hashes=[])
 
+    def _configured(self):
+        """vLLM's current config, as the worker sets it around the model runner's step."""
+        from vllm.config import set_current_vllm_config
+        return set_current_vllm_config(self.runner.vllm_config)
+
     def release(self) -> None:
         """Finish the previous op's requests in the runner and free their blocks."""
         if not self.reqs or not hasattr(self, "runner"):
             return
-        self.runner.execute_model(self._output([], {}, {r.request_id for r in self.reqs}))
+        with self._configured():
+            self.runner.execute_model(self._output([], {}, {r.request_id for r in self.reqs}))
         for r in self.reqs:
             self.kvm.free(r)
         self.reqs = []
@@ -368,8 +374,9 @@ class _Engine:
 
         module.forward = capture
         try:
-            self.runner.execute_model(self._output(new, {r.request_id: r.num_tokens - r.num_computed_tokens
-                                                         for r in self.reqs}, set()))
+            with self._configured():
+                self.runner.execute_model(self._output(new, {r.request_id: r.num_tokens - r.num_computed_tokens
+                                                             for r in self.reqs}, set()))
         finally:
             module.forward = forward
             self.runner.execute_model_state = None
