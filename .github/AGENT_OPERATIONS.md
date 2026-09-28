@@ -42,11 +42,11 @@ Modifiers:
 
 Fail-fast is matrix-scoped: one matrix failure does not cancel other matrices, and completed results remain valid. The failed job remains red.
 
-Sweeps do not trigger while a PR has merge conflicts. For `perf-changelog.yaml` conflicts, follow `KLAUD_DEBUG.md` section 1.1: merge `origin/main`, restore the file byte-for-byte from `origin/main`, then append only the PR's entry at the tail. Never 3-way merge the changelog.
+Sweeps do not trigger while a PR has merge conflicts. For `inferencex-e2e/perf-changelog.yaml` conflicts, follow `inferencex-e2e/docs/KLAUD_DEBUG.md` section 1.1: merge `origin/main`, restore the file byte-for-byte from `origin/main`, then append only the PR's entry at the tail. Never 3-way merge the changelog.
 
 Pushes to `main` always enter sweep setup and either reuse approved artifacts or run an untrimmed full sweep. `[skip-sweep]` only skips PR benchmark setup. It never skips a main-branch sweep. It still permits changelog validation and reuse authorization checks.
 
-Artifact reuse excludes runs with `evals-only` or `agentx-fast`. See `.github/workflows/README.md` and `utils/merge_with_reuse.sh` for eligibility and merge behavior.
+Artifact reuse excludes runs with `evals-only` or `agentx-fast`. See `.github/workflows/README.md` and `uv run --project inferencex-e2e --extra workflows python -m infx.workflows.merge_with_reuse` for eligibility and merge behavior.
 
 ## Workflow dispatch and monitoring
 
@@ -62,7 +62,7 @@ gh api -X POST \
   -f 'inputs[duration-override]='
 ```
 
-The top-level `ref` selects the workflow definition and is normally `main`. `inputs[ref]` selects the repository revision under test. Direct config dispatches set `inputs[generate-cli-command]`. Trusted changelog-driven dispatches instead set both `inputs[changelog-base-ref]` and `inputs[changelog-head-ref]`. `duration-override` replaces per-config seconds, and `require-power` makes invalid fixed-sequence power telemetry fatal.
+The top-level `ref` selects the workflow definition and is normally `main`. `inputs[ref]` selects the repository revision under test. Direct config dispatches set `inputs[generate-cli-command]` with paths relative to the selected checkout's `inferencex-e2e/` directory. Trusted changelog-driven dispatches instead set both `inputs[changelog-base-ref]` and `inputs[changelog-head-ref]`. `duration-override` replaces per-config seconds, and `require-power` makes invalid fixed-sequence power telemetry fatal.
 
 For AgentX preflight, add `-F 'inputs[agentx-fast]=true'`. Official runs use 10 warmup requests per lane and a one-hour profile.
 
@@ -78,15 +78,15 @@ The dispatch POST returns no body or run ID.
 
 ## Evaluation selection
 
-Full details live in `utils/evals/EVALS.md`.
+Full details live in `inferencex-e2e/infx/evals/EVALS.md`.
 
-`mark_eval_entries()` in `utils/matrix_logic/generate_sweep_configs.py` selects evals, which default to the 8k1k subset and run separately from throughput with `EVAL_ONLY=true`.
+`mark_eval_entries()` in `inferencex-e2e/infx/matrix/generate.py` selects evals, which default to the 8k1k subset and run separately from throughput with `EVAL_ONLY=true`.
 
 - `--no-evals`: skip evals.
 - `--evals-only`: run the default selected eval subset and suppress throughput.
 - `--all-evals`: expand selection to every generated fixed-sequence configuration. It composes with `--evals-only`.
 
-For multi-node configurations, `--all-evals` creates one eval job per engine topology and runs every distinct `conc-list` value sequentially against that engine. Changelog `all-evals: true` suppresses throughput for that entry. The PR `all-evals` label expands selection only, while the `evals-only` label suppresses throughput. `infx/results/collect_eval_results.py` produces aggregated output.
+For multi-node configurations, `--all-evals` creates one eval job per engine topology and runs every distinct `conc-list` value sequentially against that engine. Changelog `all-evals: true` suppresses throughput for that entry. The PR `all-evals` label expands selection only, while the `evals-only` label suppresses throughput. `inferencex-e2e/infx/results/collect_eval_results.py` produces aggregated output.
 
 ## Power telemetry
 
@@ -96,7 +96,7 @@ Multinode disaggregated results add `prefill_gpu_energy_j`, `decode_gpu_energy_j
 
 Every power result — valid or invalid, single-node or multinode — carries `power_metric_schema_version`. Version 2 defines each unprefixed `joules_per_*` field as whole-deployment GPU-board energy over the named denominator; role-scoped energy uses the explicit `prefill_*` / `decode_*` keys. Rows without the field predate the whole-deployment switch and their unprefixed joules are not comparable across topologies.
 
-For srt-slurm recipes, `telemetry.enabled: true` with `telemetry.dcgm_exporter` enables official energy collection. The Git submodule pointer at `utils/srt-slurm` is the source of truth for the shared srt-slurm commit, used by both power and non-power NVIDIA lanes. TileRT is the single documented fork exception. CI derives `POWER_PRODUCER_SHA` from the launcher stamp. The aggregate-power and AgentX power tests validate telemetry and provenance. These local tests do not prove hardware power collection. Eligible recipe-gated `dynamo-sglang` dcgm-power lanes are validated.
+For srt-slurm recipes, `telemetry.enabled: true` with `telemetry.dcgm_exporter` enables official energy collection. The Git submodule pointer at `inferencex-e2e/utils/srt-slurm` is the source of truth for the shared srt-slurm commit, used by both power and non-power NVIDIA lanes. TileRT is the single documented fork exception. CI derives `POWER_PRODUCER_SHA` from the launcher stamp. The aggregate-power and AgentX power tests validate telemetry and provenance. These local tests do not prove hardware power collection. Eligible recipe-gated `dynamo-sglang` dcgm-power lanes are validated.
 
 Power audit artifacts are named `power_audit_<result>` and contain `power_validation_<result>.json` for single-node runs or `power_validation_<result>_*.json` for multinode runs. They are uploaded even when validation fails.
 
