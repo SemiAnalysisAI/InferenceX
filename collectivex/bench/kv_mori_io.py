@@ -38,13 +38,14 @@ class MoRIIOBackend(KVBackend):
         host = kv_workload.iface_ipv4(args.socket_ifname) if args.socket_ifname else ""
         port = int(args.kv_mori_port) + (0 if role == "target" else 1)
         self._engine = IOEngine(key=role, config=IOEngineConfig(host=host, port=port))
+        # Library defaults only: four QPs plus transfer chunking wedged on the metal.
         self._engine.create_backend(BackendType.RDMA, RdmaBackendConfig(
-            qp_per_transfer=int(args.kv_mori_qp),
+            qp_per_transfer=1,
             post_batch_size=-1,
             num_worker_threads=1,
             poll_cq_mode=PollCqMode.POLLING,
             enable_notification=False,
-            enable_transfer_chunking=bool(args.kv_mori_chunking),
+            enable_transfer_chunking=False,
             chunk_bytes=65536,
             max_chunks_per_transfer=64,
         ))

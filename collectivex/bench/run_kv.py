@@ -91,8 +91,6 @@ def add_kv_args(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--scale-up-transport", default="")
     ap.add_argument("--topology-class", default="")
     ap.add_argument("--socket-ifname", default=os.environ.get("COLLX_SOCKET_IFNAME", ""))
-    ap.add_argument("--kv-mori-qp", type=int, default=1)
-    ap.add_argument("--kv-mori-chunking", action="store_true")
     ap.add_argument("--kv-device", default="",
                     help="engine NIC filter template; {gpu} expands to the "
                          "physical GPU index (GPU-paired NICs, e.g. Pollara). "
@@ -334,6 +332,11 @@ def main() -> int:
 
     rows: list[dict] = []
 
+    def record(row):
+        if row is not None:
+            rows.append(row)
+            print(f"[run_kv] {json.dumps(row)}", flush=True)
+
     def verify_burst(cfg, table_pairs):
         """Every request in the burst must land: a passing request 0 says
         nothing about the others, and concurrent same-session requests are
@@ -410,11 +413,7 @@ def main() -> int:
                     (initiator_tables[r], target_tables[r]) if op == "pull"
                     else (target_tables[r], initiator_tables[r])
                     for r in range(batch)]
-                row = measure(make, {**base, "batch": batch}, op, verify_side,
-                              table_pairs)
-                if row is not None:
-                    rows.append(row)
-                    print(f"[run_kv] {json.dumps(row)}", flush=True)
+                record(measure(make, {**base, "batch": batch}, op, verify_side, table_pairs))
 
     for isl in isls:
         preset = args.workload_name.removeprefix("kv-")
@@ -427,10 +426,7 @@ def main() -> int:
                 "req_bytes": nbytes, "_cfg": cfg}
         for op in ops:
             make = (lambda op=op, n=nbytes: [backend.make_bulk(n, op)]) if role == "initiator" else None
-            row = measure(make, base, op, verify_side="none", table_pairs=None)
-            if row is not None:
-                rows.append(row)
-                print(f"[run_kv] {json.dumps(row)}", flush=True)
+            record(measure(make, base, op, verify_side="none", table_pairs=None))
 
     backend.teardown()
 
@@ -442,28 +438,17 @@ def main() -> int:
     all_ok = bool(rows) and all(r["verify"]["passed"] for r in rows)
 
     if rank == 0:
-        doc = {
-            "version": args.version,
-            "record_type": "case-attempt",
-            "generated_at": _dt.datetime.now().astimezone().isoformat(),
-            "identity": {
-                "allocation_factors": {
-                    "run_attempt": os.environ.get("GITHUB_RUN_ATTEMPT"),
-                    "run_id": os.environ.get("GITHUB_RUN_ID"),
-                    "source_sha": os.environ.get("COLLECTIVEX_SOURCE_SHA") or os.environ.get("GITHUB_SHA"),
-                },
-                "attempt_ordinal": int(os.environ.get("COLLX_ATTEMPT_ID", "1")),
-                "case_factors": {"case": {**case, "suite": args.suite}, "sku": args.runner},
-                "case_id": args.case_id,
-            },
-            "workload": {
+        doc = ep_harness.case_attempt(
+            args, {**case, "suite": args.suite}, ep_harness.git_run(),
+            os.environ.get("COLLECTIVEX_IMAGE", ""), all_ok, "transfer verification failed",
+            workload={
                 "isl_ladder": isls,
                 "page_tokens": [int(v) for v in args.page_tokens.split()],
                 "batch_sizes": batches,
                 "ops": ops,
                 "preset": kv_workload.PRESETS[args.workload_name.removeprefix("kv-")],
             },
-            "measurement": {
+            measurement={
                 "payload_unit": "request-kv-bytes",
                 "rows": rows,
                 "sampling": {
@@ -472,14 +457,14 @@ def main() -> int:
                     "warmup_per_trial": args.warmup,
                 },
             },
-            "implementation": {
+            implementation={
                 "name": args.backend,
                 "fabric": args.fabric,
                 "library_version": getattr(backend, "library_version", None),
                 "maturity": getattr(backend, "maturity", "candidate"),
                 "nic_filter": getattr(backend, "nic_filter", None),
             },
-            "topology": {
+            topology={
                 "device_product": torch.cuda.get_device_name(device),
                 "gpus_per_node": args.gpus_per_node,
                 "hosts": hosts,
@@ -490,19 +475,11 @@ def main() -> int:
                 "topology_class": args.topology_class or None,
                 "world_size": world_size,
             },
-            "runtime": {
+            runtime={
                 "framework": str(torch.__version__),
                 "vendor": "amd" if torch.version.hip else "nvidia",
             },
-            "provenance": {
-                "image": os.environ.get("COLLECTIVEX_IMAGE") or None,
-                "source_sha": os.environ.get("COLLECTIVEX_SOURCE_SHA") or os.environ.get("GITHUB_SHA"),
-            },
-            "outcome": {
-                "reasons": [] if all_ok else ["transfer verification failed"],
-                "status": "success" if all_ok else "invalid",
-            },
-        }
+        )
         if args.out:
             ep_harness._write_json_atomic(args.out, doc)
         print(f"[run_kv] status={doc['outcome']['status']} rows={len(rows)}"

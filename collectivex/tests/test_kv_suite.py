@@ -209,80 +209,42 @@ class VerdictExchange(unittest.TestCase):
 
 class UCXSelectors(unittest.TestCase):
     """run_kv pins UCX to the operator's validated RDMA selectors — UCX
-    auto-selection is a wrong-fabric trap (b200-nscale's aux quad-port card,
-    b300's storage IB) — while explicit UCX_* values always win."""
+    auto-selection is a wrong-fabric trap (b200-nscale's aux quad-port card) —
+    while explicit UCX_* values always win, except over a case's own NIC pin."""
 
-    def test_registry_selectors_map_to_ucx(self):
+    # (environment, kv_device pin) -> the UCX variables export_ucx_selectors leaves.
+    CASES = (
+        # registry selectors map to UCX, ports default to 1 and pass through
+        ({"COLLX_RDMA_DEVICES": "mlx5_0,mlx5_10", "COLLX_IB_GID_INDEX": "3"}, "",
+         {"UCX_NET_DEVICES": "mlx5_0:1,mlx5_10:1", "UCX_IB_GID_INDEX": "3"}),
+        ({"COLLX_RDMA_DEVICES": "mlx5_18:1,mlx5_19"}, "",
+         {"UCX_NET_DEVICES": "mlx5_18:1,mlx5_19:1"}),
+        # explicit UCX env wins over the inventory
+        ({"COLLX_RDMA_DEVICES": "mlx5_0", "UCX_NET_DEVICES": "rdma0:1",
+          "COLLX_IB_GID_INDEX": "3", "UCX_IB_GID_INDEX": "1"}, "",
+         {"UCX_NET_DEVICES": "rdma0:1", "UCX_IB_GID_INDEX": "1"}),
+        # a case pin narrows the inventory and overrides a host-inherited blanket value
+        # (forwarded by srun --export=ALL from /etc/environment), which would swallow it
+        ({"COLLX_RDMA_DEVICES": "mlx5_0,mlx5_1"}, "mlx5_0", {"UCX_NET_DEVICES": "mlx5_0:1"}),
+        ({"UCX_NET_DEVICES": "rdma0:1"}, "mlx5_0", {"UCX_NET_DEVICES": "mlx5_0:1"}),
+        # A positive UCX_TLS list without cuda (a cluster-wide UCX_TLS=rc) closes the cuda
+        # mds and NIXL VRAM registration fails; extending it segfaults rkey resolution on the
+        # first GET, so it is dropped. Lists already covering cuda stay untouched.
+        ({"UCX_TLS": "rc"}, "", {}),
+        ({"UCX_TLS": "^tcp"}, "", {"UCX_TLS": "^tcp"}),
+        ({"UCX_TLS": "rc,cuda_copy"}, "", {"UCX_TLS": "rc,cuda_copy"}),
+        ({"UCX_TLS": "all"}, "", {"UCX_TLS": "all"}),
+        ({}, "", {}),
+    )
+
+    def test_selectors(self):
         import run_kv
 
-        env = {"COLLX_RDMA_DEVICES": "mlx5_0,mlx5_10", "COLLX_IB_GID_INDEX": "3"}
-        run_kv.export_ucx_selectors(env)
-        self.assertEqual(env["UCX_NET_DEVICES"], "mlx5_0:1,mlx5_10:1")
-        self.assertEqual(env["UCX_IB_GID_INDEX"], "3")
-
-    def test_explicit_ucx_env_wins(self):
-        import run_kv
-
-        env = {"COLLX_RDMA_DEVICES": "mlx5_0", "UCX_NET_DEVICES": "rdma0:1",
-               "COLLX_IB_GID_INDEX": "3", "UCX_IB_GID_INDEX": "1"}
-        run_kv.export_ucx_selectors(env)
-        self.assertEqual(env["UCX_NET_DEVICES"], "rdma0:1")
-        self.assertEqual(env["UCX_IB_GID_INDEX"], "1")
-
-    def test_registry_device_pin_narrows_the_inventory(self):
-        # A kv_device pin on a UCX-backed case wins over the operator's full
-        # RDMA inventory: rail-isolated pods (b300) publish one-rail rows.
-        import run_kv
-
-        env = {"COLLX_RDMA_DEVICES": "mlx5_0,mlx5_1"}
-        run_kv.export_ucx_selectors(env, device="mlx5_0")
-        self.assertEqual(env["UCX_NET_DEVICES"], "mlx5_0:1")
-
-    def test_device_pin_overrides_host_inherited_ucx_env(self):
-        # b300 ships a blanket 16-device UCX_NET_DEVICES in /etc/environment
-        # (forwarded by srun --export=ALL); left standing it silently swallows
-        # the registry pin, so the pin wins — same treatment as UCX_TLS=rc.
-        import run_kv
-
-        env = {"UCX_NET_DEVICES": "rdma0:1"}
-        run_kv.export_ucx_selectors(env, device="mlx5_0")
-        self.assertEqual(env["UCX_NET_DEVICES"], "mlx5_0:1")
-
-    def test_empty_device_pin_keeps_the_inventory_path(self):
-        import run_kv
-
-        env = {"COLLX_RDMA_DEVICES": "mlx5_0,mlx5_1"}
-        run_kv.export_ucx_selectors(env, device="")
-        self.assertEqual(env["UCX_NET_DEVICES"], "mlx5_0:1,mlx5_1:1")
-
-    def test_ports_in_selectors_pass_through(self):
-        import run_kv
-
-        env = {"COLLX_RDMA_DEVICES": "mlx5_18:1,mlx5_19"}
-        run_kv.export_ucx_selectors(env)
-        self.assertEqual(env["UCX_NET_DEVICES"], "mlx5_18:1,mlx5_19:1")
-
-    def test_positive_tls_list_without_cuda_is_dropped(self):
-        # b300 exports UCX_TLS=rc cluster-wide; an RC-only context closes the
-        # cuda mds and NIXL registration of VRAM fails with NIXL_ERR_BACKEND.
-        # Extending the list with cuda transports segfaults UCX rkey-config
-        # resolution on the first GET, so the list is dropped entirely.
-        import run_kv
-
-        env = {"UCX_TLS": "rc"}
-        run_kv.export_ucx_selectors(env)
-        self.assertNotIn("UCX_TLS", env)
-
-    def test_tls_lists_already_covering_cuda_stay_untouched(self):
-        import run_kv
-
-        for tls in ("^tcp", "rc,cuda_copy", "all"):
-            env = {"UCX_TLS": tls}
-            run_kv.export_ucx_selectors(env)
-            self.assertEqual(env["UCX_TLS"], tls)
-        env = {}
-        run_kv.export_ucx_selectors(env)
-        self.assertNotIn("UCX_TLS", env)
+        for env, device, expected in self.CASES:
+            with self.subTest(env=env, device=device):
+                env = dict(env)
+                run_kv.export_ucx_selectors(env, device=device)
+                self.assertEqual({k: v for k, v in env.items() if k.startswith("UCX_")}, expected)
 
 
 def _kv_document(status="success", sku="b200-nscale"):
@@ -396,37 +358,22 @@ class KVGrid(unittest.TestCase):
         self.assertEqual(allowed[131072], [1, 2, 4, 8, 16])         # 1538, floor
         self.assertEqual(allowed[524288], [1, 2, 4, 8, 16])         # 6146, floor
 
-    def test_pool_budget_sheds_largest_batches_not_the_point(self):
-        # A point whose largest batch cannot fit the pool budget must survive
-        # with the batches that do: pin the budget between the batch-4 and
-        # batch-16 pool sizes.
+    def test_pool_budget_sheds_largest_batches_even_below_the_ladder_floor(self):
+        # A point whose largest batch cannot fit the pool budget survives with the batches that
+        # do. The budget is a hard memory limit, so it sheds batches the descriptor floor keeps:
+        # pinned to the 512k point's batch-1 pool, only [1] remains.
         import kv_workload
         import run_kv
 
-        args = self._args(isl_ladder="32768", batch_sizes="1 4 16")
-        budget = kv_workload.plan_config("dsv4", "fp8", 32768, 256,
-                                         2.0, batch_max=4)["pool_bytes"]
-        args.pool_budget = budget
-        points, _isls, _batches = run_kv._grid(args)
-        self.assertEqual(points[0][1], [1, 4])
-        self.assertLessEqual(points[0][0]["pool_bytes"], budget)
-
-    def test_pool_budget_overrides_the_ladder_floor(self):
-        # The descriptor floor keeps the LADDER_FLOOR smallest batches, but
-        # the pool budget is a hard memory limit and must still shed a
-        # floor-kept batch. Pin the budget to the 512k point's batch-1 pool
-        # size: every larger batch survives the descriptor floor, then the
-        # pool loop must drop them all, leaving [1].
-        import kv_workload
-        import run_kv
-
-        args = self._args(isl_ladder="524288")
-        budget = kv_workload.plan_config("dsv4", "fp8", 524288, 256,
-                                         2.0, batch_max=1)["pool_bytes"]
-        args.pool_budget = budget
-        points, _isls, _batches = run_kv._grid(args)
-        self.assertEqual(points[0][1], [1])
-        self.assertLessEqual(points[0][0]["pool_bytes"], budget)
+        for isl, batches, fit_batch, expected in ((32768, "1 4 16", 4, [1, 4]),
+                                                  (524288, "1 2 4 8 16 32 64", 1, [1])):
+            with self.subTest(isl=isl):
+                args = self._args(isl_ladder=str(isl), batch_sizes=batches)
+                args.pool_budget = kv_workload.plan_config(
+                    "dsv4", "fp8", isl, 256, 2.0, batch_max=fit_batch)["pool_bytes"]
+                points, _isls, _batches = run_kv._grid(args)
+                self.assertEqual(points[0][1], expected)
+                self.assertLessEqual(points[0][0]["pool_bytes"], args.pool_budget)
 
 
 class RegistrationChunking(unittest.TestCase):

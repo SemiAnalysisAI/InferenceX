@@ -252,33 +252,17 @@ def _kv_shards(sku: str, selected_precisions: set[str]) -> tuple[list, list[dict
                     cases.append(case)
             if not cases:
                 continue
-            requested += [
-                {"sku": sku, "case": case, "disposition": "runnable", "reason": None,
-                 "detail": None}
-                for case in cases
-            ]
-            shard = {
-                "id": f"{sku}-kv-{backend}-{fabric}",
-                "sku": sku,
-                "runner": platform.get("runner_label", sku),
-                "backend": backend,
-                "suite": KV_SWEEP["suite"],
-                "mode": fabric,
-                "fabric": fabric,
-                "launcher": platform["launcher"],
-                "nodes": 2,
-                "gpus_per_node": 1,
-                "scale_up_domain": platform["scale_up_domain"],
-                "allocation_minutes": scheduling["allocation_minutes"],
-                "run_timeout": scheduling["run_timeout"],
+            requested += _runnable(sku, cases)
+            shards.append(_shard(
+                sku, f"{sku}-kv-{backend}-{fabric}", backend, cases,
+                suite=KV_SWEEP["suite"], mode=fabric, fabric=fabric,
+                allocation_minutes=scheduling["allocation_minutes"],
+                run_timeout=scheduling["run_timeout"],
                 # The GitHub job must outlive the allocation, or it cancels a healthy shard
                 # before the launcher's own guards act.
-                "job_timeout_minutes": scheduling["allocation_minutes"] + 30,
-                "cases": cases,
-            }
-            if spec["image"]:
-                shard["image"] = spec["image"]
-            shards.append(shard)
+                job_timeout_minutes=scheduling["allocation_minutes"] + 30,
+                **({"image": spec["image"]} if spec["image"] else {}),
+            ))
     return requested, shards
 
 

@@ -627,14 +627,11 @@ the binary level (the wheel links libcuda.so.1 at import; measured failing on mi
 
  ## Correctness
  
-Scheduling is data. `configs/kv_sweep.json` holds the grid and, per pool, the allocation and the
-per-case hang guard (`scheduling`): a leg runs for hours, gb200's mnnvl descriptor floor alone
-measured ~285 minutes on the five-rung grid, and gb300 paces ~1.8x gb200 at ISL >= 131072 over
-mnnvl, so gb200 asks 460 minutes with a 420-minute guard and gb300 690 with 660; every other pool
-asks 210 with 190. The guard fires before the allocation dies, so a slow case is a clean per-case
-kill, and each shard carries a GitHub job ceiling above its allocation. The asks stay 2 nodes x 1
-GPU, short enough to backfill on a contended pool. KV legs run only when a dispatch names
-`kv-transfer` in `suites`.
+Scheduling is data: `configs/kv_sweep.json` holds the grid and, per pool, the allocation and the
+per-case hang guard. GB pools get the long budgets, because the mnnvl descriptor floor makes a leg
+run for hours and gb300 paces ~1.8x gb200 at ISL >= 131072. The guard fires inside the allocation,
+so a slow case is a clean per-case kill, and each shard carries a GitHub job ceiling above its
+allocation. KV legs run only when a dispatch names `kv-transfer` in `suites`.
 
 ## Correctness
 

@@ -178,6 +178,43 @@ _ROUTING_FIELDS = (
 )
 
 
+def git_run() -> dict | None:
+    """The workflow run that produced an attempt, from the environment the launcher forwards."""
+    run = {
+        "run_id": os.environ.get("GITHUB_RUN_ID"),
+        "run_attempt": os.environ.get("GITHUB_RUN_ATTEMPT"),
+        "source_sha": os.environ.get("COLLECTIVEX_SOURCE_SHA") or os.environ.get("GITHUB_SHA"),
+    }
+    return run if any(run.values()) else None
+
+
+def case_attempt(args, case: dict, run: dict | None, image: str, ok: bool, failure: str,
+                 **sections) -> dict:
+    """The case-attempt document every suite writes: identity, provenance and outcome keyed and
+    validated the same way around the suite's own sections (workload, measurement, ...)."""
+    try:
+        attempt_ordinal = int(os.environ.get("COLLX_ATTEMPT_ID", "1"))
+    except ValueError:
+        attempt_ordinal = 0
+    if attempt_ordinal <= 0:
+        raise ValueError("COLLX_ATTEMPT_ID must be a positive integer")
+    run = run or {}
+    return {
+        "version": args.version,
+        "record_type": "case-attempt",
+        "generated_at": _dt.datetime.now().astimezone().isoformat(),
+        "identity": {
+            "allocation_factors": {key: run.get(key) for key in ("run_attempt", "run_id", "source_sha")},
+            "attempt_ordinal": attempt_ordinal,
+            "case_factors": {"case": case, "sku": args.runner},
+            "case_id": args.case_id,
+        },
+        **sections,
+        "provenance": {"image": image or None, "source_sha": run.get("source_sha")},
+        "outcome": {"reasons": [] if ok else [failure], "status": "success" if ok else "invalid"},
+    }
+
+
 def _write_json_atomic(path: str, value) -> None:
     payload = json.dumps(value, allow_nan=False, ensure_ascii=False, separators=(",", ":")).encode() + b"\n"
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
@@ -696,30 +733,16 @@ class Sweep:
         computed = case_id(args.runner, scheduled_case)
         if args.case_id != computed:
             raise ValueError(f"scheduled case ID does not match realized factors: {args.case_id} != {computed}")
-        git_run = getattr(args, "git_run", None) or {}
-        try:
-            attempt_ordinal = int(os.environ.get("COLLX_ATTEMPT_ID", "1"))
-        except ValueError:
-            attempt_ordinal = 0
-        if attempt_ordinal <= 0:
-            raise ValueError("COLLX_ATTEMPT_ID must be a positive integer")
-        return {
-            "version": args.version,
-            "record_type": "case-attempt",
-            "generated_at": _dt.datetime.now().astimezone().isoformat(),
-            "identity": {
-                "allocation_factors": {key: git_run.get(key) for key in ("run_attempt", "run_id", "source_sha")},
-                "attempt_ordinal": attempt_ordinal,
-                "case_factors": {"case": scheduled_case, "sku": args.runner},
-                "case_id": args.case_id,
-            },
-            "workload": {
+        return case_attempt(
+            args, scheduled_case, getattr(args, "git_run", None), getattr(args, "image", ""),
+            all_ok, "semantic correctness or routing identity failed",
+            workload={
                 "cross_rank_consistent": self.routing_consistent,
                 "ladder_measured": list(self.ladder),
                 "ladder_dropped": list(self.dropped),
                 "ladder_cap": self.cap,
             },
-            "measurement": {
+            measurement={
                 "combine_dtype": backend.combine_dtype,
                 "combine_semantics": "activation-only",
                 "dispatch_dtype": backend.dispatch_dtype,
@@ -736,7 +759,7 @@ class Sweep:
                     "chain_trials": args.chain_trials,
                 },
             },
-            "implementation": {
+            implementation={
                 "fp8_consume": backend.fp8_consume,
                 "kernel_generation": kernel_generation(backend),
                 # The reduction the oracle held the kernel to, and the library version it was
@@ -751,7 +774,7 @@ class Sweep:
                 "maturity": backend.maturity or "unknown",
                 "name": backend.name,
             },
-            "topology": {
+            topology={
                 "device_product": getattr(args, "runtime_device_product", None),
                 "gpus_per_node": args.gpus_per_node,
                 "nodes": nodes,
@@ -761,13 +784,8 @@ class Sweep:
                 "transport": args.transport,
                 "world_size": self.world_size,
             },
-            "runtime": getattr(args, "runtime", {}),
-            "provenance": {"image": getattr(args, "image", "") or None, "source_sha": git_run.get("source_sha")},
-            "outcome": {
-                "reasons": [] if all_ok else ["semantic correctness or routing identity failed"],
-                "status": "success" if all_ok else "invalid",
-            },
-        }
+            runtime=getattr(args, "runtime", {}),
+        )
 
     def _print_summary(self, rows, doc):
         # Ladder ends plus two interior points: one mid-ladder headline hides low-token behavior.

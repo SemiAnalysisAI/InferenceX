@@ -171,33 +171,14 @@ def _swap_argv(case: dict, version: object, runner: str) -> list[str]:
 
 
 def _kv_argv(case: dict, version: object, runner: str) -> list[str]:
-    argv = [
-        "--backend", str(case["backend"]),
-        "--workload-name", str(case["workload"]),
-        "--precision", str(case["precision"]),
-        "--fabric", str(case["mode"]),
-        "--isl-ladder", str(case["isl_ladder"]),
-        "--page-tokens", str(case["page_tokens"]),
-        "--batch-sizes", str(case["batch_sizes"]),
-        "--kv-device", str(case.get("kv_device", "")),
-        "--ops", str(case["ops"]),
-        "--warmup", str(case["warmup"]),
-        "--reps", str(case["reps"]),
-        "--trials", str(case["trials"]),
-        "--pool-slack", str(case["pool_slack"]),
-        "--seed", str(case["seed"]),
-        "--runner", runner,
-        "--case-id", str(case["case_id"]),
-        "--suite", str(case["suite"]),
-        "--gpus-per-node", str(case["gpus_per_node"]),
-        "--scale-up-domain", str(case["scale_up_domain"]),
-        "--scale-up-transport", str(case["scale_up_transport"]),
-        "--topology-class", str(case["topology_class"]),
-        "--version", str(version),
-    ]
-    if "pool_budget" in case:
-        argv += ["--pool-budget", str(case["pool_budget"])]
-    return argv
+    argv = _flag_pairs(
+        case,
+        "backend workload_name precision fabric isl_ladder page_tokens batch_sizes kv_device ops "
+        "warmup reps trials pool_slack seed case_id suite gpus_per_node scale_up_domain "
+        "scale_up_transport topology_class",
+        workload_name="workload", fabric="mode",
+    ) + ["--runner", runner, "--version", str(version)]
+    return argv + (_flag_pairs(case, "pool_budget") if "pool_budget" in case else [])
 
 
 # suite -> (bench/<entrypoint>.py, argv codec, output flag). The rank wrapper in
