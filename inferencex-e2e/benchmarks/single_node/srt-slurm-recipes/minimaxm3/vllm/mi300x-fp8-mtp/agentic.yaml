@@ -1,5 +1,5 @@
 # MiniMax-M3 MXFP8 AgentX on MI300X with vLLM EAGLE3 (GQA draft). The KV cache
-# is GPU-resident, or backed by LMCache MP DRAM servers at the offload point.
+# is GPU-resident, or backed by an LMCache MP DRAM server at the offload point.
 base:
   schema: 2
   name: minimaxm3-fp8-mi300x-vllm-agentic
@@ -24,8 +24,6 @@ base:
   health_check:
     interval_seconds: 10
     max_attempts: 360
-  # Starts the LMCache servers for the variant that sets LMCACHE_SHARDS.
-  setup_script: lmcache-mp-rocm.sh
   roles:
     agg:
       nodes: 1
@@ -72,8 +70,9 @@ base:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
       AIPERF_APPLY_CHAT_TEMPLATE: 'true'
 
-# One variant per point. Admission is 2x CONC. The DRAM point splits its
-# 1298 GB budget into one LMCache L1 shard per TP rank (1298 / 8 = 162 GB).
+# One variant per point. Admission is 2x CONC. The DRAM point runs one
+# lmcache-server service on the node with the 8 x 162 GB L1 the per-rank
+# servers used to split between them.
 override_tp8_c2:
   roles:
     agg:
@@ -125,14 +124,40 @@ override_tp8_c10:
       KV_OFFLOADING: 'none'
 
 override_tp8_c16_lmcache:
+  # Installs LMCache in the worker container; the service installs its own.
+  setup_script: lmcache-mp-rocm.sh
+  services:
+    - name: lmcache
+      type: lmcache-server
+      preamble: bash /configs/lmcache-mp-rocm.sh
+      # The default probe with more time: the install counts against it.
+      readiness:
+        http:
+          port: 8751
+          path: /healthcheck
+        timeout_seconds: 900
+      args:
+        - --l1-size-gb
+        - '1296'
+        - --l1-init-size-gb
+        - '10'
+        - --l1-read-ttl-seconds
+        - '7200'
+        - --chunk-size
+        - '256'
+        - --max-workers
+        - '2'
+        - --eviction-policy
+        - LRU
+        - --supported-transfer-mode
+        - lmcache_driven
   roles:
     agg:
       args:
         max-num-seqs: 32
-        kv-transfer-config: '{"kv_connector":"LMCacheMPConnector","kv_connector_module_path":"lmcache.integration.vllm.lmcache_mp_connector","kv_role":"kv_both","kv_connector_extra_config":{"lmcache.mp.server_urls":"tcp://127.0.0.1:5555,tcp://127.0.0.1:5556,tcp://127.0.0.1:5557,tcp://127.0.0.1:5558,tcp://127.0.0.1:5559,tcp://127.0.0.1:5560,tcp://127.0.0.1:5561,tcp://127.0.0.1:5562","lmcache.mp.mq_timeout":6000.0}}'
-      env:
-        LMCACHE_SHARDS: '8'
-        LMCACHE_L1_SHARD_GB: '162'
+        # connector: lmcache-mp does not reach a direct aggregate worker, so this
+        # is its preset (the service's port 8750) plus the old message timeout.
+        kv-transfer-config: '{"kv_connector":"LMCacheMPConnector","kv_connector_module_path":"lmcache.integration.vllm.lmcache_mp_connector","kv_role":"kv_both","kv_connector_extra_config":{"lmcache.mp.host":"tcp://localhost","lmcache.mp.port":8750,"lmcache.mp.mq_timeout":6000.0}}'
   benchmark:
     env:
       CONC: '16'
