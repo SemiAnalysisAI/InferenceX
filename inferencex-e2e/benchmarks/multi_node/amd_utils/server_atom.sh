@@ -16,7 +16,6 @@ check_env_vars \
 
 EXTRA_SERVER_ARGS="${EXTRA_SERVER_ARGS:-}"
 
-source $ATOM_WS_PATH/setup_deps.sh
 source $ATOM_WS_PATH/env_atom.sh
 
 # lm-eval with high num_concurrent exhausts the default 1024 FD limit.

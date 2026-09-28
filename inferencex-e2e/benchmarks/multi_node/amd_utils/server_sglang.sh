@@ -20,7 +20,6 @@ BENCH_MAX_CONC_VALUE=$(echo "$BENCH_MAX_CONCURRENCY" | tr 'x' '\n' | sort -n | t
 # can resolve formulas like "BENCH_MAX_CONC_VALUE*2" for max_running_requests.
 export BENCH_MAX_CONC_VALUE
 
-source $SGLANG_WS_PATH/setup_deps.sh
 source $SGLANG_WS_PATH/env.sh
 
 # Install before starting UMBP or serving processes. Early readiness failures must

@@ -2,21 +2,12 @@
 
 source "$(dirname "${BASH_SOURCE[0]}")/../../benchmark_lib.sh" --validation-only
 check_env_vars ENGINE
-# MoRI-IO queue-pair tuning, the UCX RoCE GID index, SGLang router logging and the
-# SGLang decode cuda-graph NCCL workaround. Only the SGLang MoRI KV path
-# below reads these. ENGINE=tilert moves KV over mooncake and starts no SGLang
-# router, so it is neither given nor reads them: validating them there would force
-# the recipe to invent MoRI tuning for a transport it never uses.
-if [[ "$ENGINE" != "tilert" ]]; then
-    check_env_vars \
-        MORI_IO_SQ_BACKOFF_TIMEOUT_US MORI_IO_QP_MAX_SEND_WR MORI_IO_QP_MAX_CQE MORI_IO_QP_MAX_SGE MORI_IO_TC_DISABLE \
-        UCX_IB_GID_INDEX MORI_APP_LOG_LEVEL SGLANG_ROUTER_STDOUT_LOGS TORCH_NCCL_BLOCKING_WAIT NCCL_BLOCKING_WAIT \
-        SGLANG_OPT_USE_AITER_INDEXER
-fi
-# Dual-engine environment setup for multi-node disaggregated serving.
-#
-# ENGINE=sglang-disagg or tilert selects the engine-specific block.
-#
+# SGLang MoRI environment.
+check_env_vars \
+    MORI_IO_SQ_BACKOFF_TIMEOUT_US MORI_IO_QP_MAX_SEND_WR MORI_IO_QP_MAX_CQE MORI_IO_QP_MAX_SGE MORI_IO_TC_DISABLE \
+    UCX_IB_GID_INDEX MORI_APP_LOG_LEVEL SGLANG_ROUTER_STDOUT_LOGS TORCH_NCCL_BLOCKING_WAIT NCCL_BLOCKING_WAIT \
+    SGLANG_OPT_USE_AITER_INDEXER
+
 # REQUIRED ENVIRONMENT VARIABLES:
 #   IBDEVICES - RDMA/InfiniBand device names (e.g., ionic_0,ionic_1,... or mlx5_0,mlx5_1,...)
 #               Set by runner or auto-detected from hostname.
@@ -119,10 +110,6 @@ else
     fi
 fi
 
-if [[ "$ENGINE" == "tilert" ]]; then
-    echo "[INFO] tilert: IBDEVICES=$IBDEVICES  NCCL_SOCKET_IFNAME=$NCCL_SOCKET_IFNAME  NCCL_IB_HCA=$NCCL_IB_HCA"
-
-else
 
     export SGLANG_USE_AITER=1
     export AITER_LOG_LEVEL=ERROR
@@ -237,5 +224,3 @@ else
             export GPU_MAX_HW_QUEUES=2
         fi
     fi
-
-fi

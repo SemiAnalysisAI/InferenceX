@@ -56,11 +56,15 @@ if [[ "$EXECUTION_PATH" == multinode && -n "${CONFIG_FILE:-}" ]]; then
     # Reuse a provisioned image when one exists; otherwise Pyxis imports it.
     SQUASH_FILE="$SRT_SHARED_BASE/containers/$(printf '%s' "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
     [[ -f "$SQUASH_FILE" ]] || SQUASH_FILE="$IMAGE"
+    SRT_CLUSTER_ARGS=()
+    if [[ "$FRAMEWORK" == tilert ]]; then
+        SRT_CLUSTER_ARGS+=(--model GLM-5.3 /it-share/data/GLM-5.3 --mount /it-share/data /models)
+    fi
     SLURM_ACCOUNT="$USER" SLURM_PARTITION=compute NGINX_SQUASH_FILE=nginx:1.27.4 \
         write_srt_cluster_config mi355x-amds srtslurm.yaml 0 \
         --var SRT_DEFAULT_TIME_LIMIT 01:00:00 --var GITHUB_WORKSPACE "$GITHUB_WORKSPACE" \
         --container "$IMAGE" "$SQUASH_FILE" \
-        --mount /it-share/aiperf-cache /aiperf_mmap_cache || exit 1
+        --mount /it-share/aiperf-cache /aiperf_mmap_cache "${SRT_CLUSTER_ARGS[@]}" || exit 1
     make setup ARCH=x86_64
     export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
 

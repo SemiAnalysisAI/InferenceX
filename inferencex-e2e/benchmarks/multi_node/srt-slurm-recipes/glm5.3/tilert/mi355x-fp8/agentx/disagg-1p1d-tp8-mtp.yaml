@@ -1,0 +1,103 @@
+schema: 2
+name: glm5.3-mi355x-tilert-agentx
+model:
+  path: GLM-5.3
+  container: ghcr.io/tile-ai/tilert-rocm-decode:0.1.6
+  precision: fp8
+slurm:
+  time_limit: "08:00:00"
+resources:
+  gpu_type: mi355x
+  gpus_per_node: 8
+setup_script: glm5.3-tilert-rocm.sh
+environment:
+  TILERT_VERSION: "0.1.6.post2"
+  RDMAV_FORK_SAFE: "1"
+  PYTHONDONTWRITEBYTECODE: "1"
+  NCCL_SOCKET_IFNAME: eno0
+  GLOO_SOCKET_IFNAME: eno0
+  NCCL_IB_HCA: rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7
+roles:
+  prefill:
+    engine:
+      type: vllm
+      set_visible_devices: true
+    container: ghcr.io/tile-ai/tilert-rocm-prefill:0.1.6
+    nodes: 1
+    workers: 1
+    gpus: 8
+    env:
+      TILERT_ROLE: prefill
+      VLLM_ROCM_USE_AITER: "1"
+      VLLM_ROCM_USE_AITER_MOE: "1"
+      VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS: "1"
+      VLLM_ENGINE_READY_TIMEOUT_S: "10800"
+    args:
+      served-model-name: [glm5_2, GLM-5.3]
+      tensor-parallel-size: 8
+      max-model-len: 1048576
+      enforce-eager: true
+      trust-remote-code: true
+      return-tokens-as-token-ids: true
+      gpu-memory-utilization: 0.85
+      kv-cache-dtype: bfloat16
+      block-size: 64
+      speculative-config: '{"method":"mtp","num_speculative_tokens":1}'
+      kv-transfer-config: >-
+        {"kv_connector":"TileRTConnector","kv_connector_module_path":"tilert.pd_vllm.prefill_connector",
+         "kv_role":"kv_producer","kv_connector_extra_config":{
+           "tilert_model":"glm5_2","tilert_max_seq_len":1048576,"tilert_transport":"mooncake"}}
+  decode:
+    engine:
+      type: tilert
+      served_model_name: glm5_2
+    container: ghcr.io/tile-ai/tilert-rocm-decode:0.1.6
+    nodes: 1
+    workers: 1
+    gpus: 8
+    env:
+      TILERT_ROLE: decode
+      TILERT_WEIGHTS_DIR: /models/GLM-5.3-tilert-tp8
+      TILERT_CONVERT_LOCK_WAIT: "21600"
+      GLM5_AR_N: "2"
+    args:
+      model: glm5_2
+      model-weights-dir: /models/GLM-5.3-tilert-tp8
+      max-seq-len: 1048576
+      kv-cache-dtype: bf16
+      transport: mooncake
+      with-mtp: true
+      num-mtp: 3
+frontend:
+  type: tilert-router
+  container_image: ghcr.io/tile-ai/tilert-rocm-decode:0.1.6
+  enable_multiple_frontends: false
+  env:
+    TILERT_ROLE: router
+  args:
+    parser: none
+    model-path: /model
+    queue-timeout: 1800
+sbatch_directives:
+  cpus-per-task: "128"
+  mem: "0"
+srun_options:
+  mem: "0"
+  container-writable: ""
+  container-remap-root: ""
+health_check:
+  max_attempts: 2160
+  interval_seconds: 5
+benchmark:
+  type: custom
+  command: bash /infmax-workspace/benchmarks/srt_agentic.sh
+  env:
+    CONC: "1"
+    SERVED_MODEL_NAME: glm5_2
+    RESULT_DIR: /infmax-workspace/LOGS/agentic
+    AGENTIC_OUTPUT_DIR: /infmax-workspace
+    AIPERF_DATASET_MMAP_CACHE_DIR: /aiperf_mmap_cache
+    AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "vllm:"
+    HF_HOME: /logs/hf_cache
+    TRANSFORMERS_VERBOSITY: error
+    TOKENIZERS_PARALLELISM: "false"
