@@ -155,8 +155,9 @@ override_tp8_c16_lmcache:
     agg:
       args:
         max-num-seqs: 32
-        # LMCacheMPConnector to the lmcache-server service on this node (port 8750).
-        connector: lmcache-mp
+        # The lmcache-mp preset (the node's lmcache-server on port 8750) plus the
+        # measured message queue timeout.
+        connector: '{"kv_connector":"LMCacheMPConnector","kv_connector_module_path":"lmcache.integration.vllm.lmcache_mp_connector","kv_role":"kv_both","kv_connector_extra_config":{"lmcache.mp.host":"tcp://localhost","lmcache.mp.port":8750,"lmcache.mp.mq_timeout":6000.0}}'
   benchmark:
     env:
       CONC: '16'
