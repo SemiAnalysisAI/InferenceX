@@ -1,0 +1,255 @@
+# DeepSeek-V4.1-Flash AgentX on H100 with SGLang native DSpark at TP8/EP8, as
+# a plain TP8 curve and a DP8-attention sweep. H100 is not in the cookbook's
+# hardware table: 80 GB cards cannot hold the resident weights plus the
+# row-sharded Engram tables and still leave a KV pool, so the tables move to
+# per-rank host shards and the prefill chunk is bounded so the sparse-attention
+# indexer's [chunk, context] scoring buffer fits next to the weights at 1M
+# context. The KV cache is GPU-resident.
+# https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1
+base:
+  schema: 2
+  name: dsv41flash-fp4-h100-sglang-agentic
+  model:
+    path: hf:deepseek-ai/DeepSeek-V4.1-Flash
+    container: lmsysorg/sglang:nightly-dev-cu13-20260922-582389ce@sha256:0e1b14e302619a42ef5581b87db6804651d4f946301cf543d74a3a1eb1c33b40
+    precision: fp4
+  resources:
+    gpu_type: h100
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  # Cold loads of the checkpoint and host Engram tables from shared NFS outlast
+  # the default 1800 s health window (c20 was still loading at 1800 s).
+  health_check:
+    interval_seconds: 10
+    max_attempts: 360
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
+        trust-remote-code: true
+        tensor-parallel-size: 8
+        data-parallel-size: 1
+        expert-parallel-size: 8
+        # Native MXFP4 Marlin supports Hopper with BF16 activations; dense FP8
+        # operators and shipped DSpark precision remain unchanged.
+        moe-runner-backend: marlin
+        # 0.7 leaves 24 GB for the 4096-token chunk's working set: 0.8/4096
+        # OOMed c8 (run 35304509605), and a 2048 chunk failed c4's latency
+        # coverage at ~1,000 prefill tok/s (run 35307250127).
+        mem-fraction-static: 0.7
+        chunked-prefill-size: 4096
+        # DSpark is the checkpoint's bundled draft; the block size is its only knob.
+        speculative-algorithm: DSPARK
+        speculative-dspark-block-size: 5
+        # Bound long-prefill decode stalls.
+        prefill-decode-interval: 16
+        reasoning-parser: auto
+        tool-call-parser: auto
+        # Draft passes under long-context load outlast the 1800 s default watchdog.
+        watchdog-timeout: 3600
+        enable-metrics: true
+      env:
+        PYTHONNOUSERSITE: '1'
+        PYTHONUNBUFFERED: '1'
+        # Long-context indexer masks change allocation sizes across requests. At
+        # C20 the stock allocator OOMed on a 2.39 GiB mask with 5.61 GiB reserved.
+        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+        # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        # AgentX measures thinking on, the regime of the golden acceptance curve.
+        SGLANG_DEFAULT_THINKING: '1'
+        SGLANG_DSV41_REASONING_EFFORT: high
+        # Row-sharded anonymous host Engram tables; the KV cache stays on GPU.
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1'
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
+    env:
+      MODEL: deepseek-ai/DeepSeek-V4.1-Flash
+      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+
+# One variant per point. Admission is 2x CONC (at least TP under DP attention)
+# with decode graphs clamped to 64-128. The TP SWA tail reserve is 32x CONC from
+# c4 (8x below); the DP pool is per rank, and 64 tails/rank keeps the C16 TP
+# aggregate 512-tail reserve.
+override_tp8_c1:
+  roles:
+    agg:
+      args:
+        max-running-requests: 2
+        cuda-graph-max-bs-decode: 64
+        swa-prefix-tails: 8
+  benchmark:
+    env:
+      CONC: '1'
+
+override_tp8_c2:
+  roles:
+    agg:
+      args:
+        max-running-requests: 4
+        cuda-graph-max-bs-decode: 64
+        swa-prefix-tails: 16
+  benchmark:
+    env:
+      CONC: '2'
+
+override_tp8_c4:
+  roles:
+    agg:
+      args:
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 64
+        swa-prefix-tails: 128
+  benchmark:
+    env:
+      CONC: '4'
+
+override_tp8_c8:
+  roles:
+    agg:
+      args:
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 64
+        swa-prefix-tails: 256
+  benchmark:
+    env:
+      CONC: '8'
+
+override_tp8_c16:
+  roles:
+    agg:
+      args:
+        max-running-requests: 32
+        cuda-graph-max-bs-decode: 64
+        swa-prefix-tails: 512
+  benchmark:
+    env:
+      CONC: '16'
+
+override_tp8_c20:
+  roles:
+    agg:
+      args:
+        max-running-requests: 40
+        cuda-graph-max-bs-decode: 64
+        swa-prefix-tails: 640
+  benchmark:
+    env:
+      CONC: '20'
+
+# DP8 attention: the shipped MoE DSpark worker requires attn_tp=1. SGLang divides
+# the engine-wide 4096-token chunk by DP (512 tokens/rank). The DP-aware router
+# hashes AIPerf's per-session correlation ID so prefixes stay on one rank.
+override_dp8_c4:
+  frontend:
+    type: sglang-router
+    args:
+      policy: consistent_hashing
+      request-id-headers: x-correlation-id
+      dp-aware: true
+      connect-timeout-secs: 900
+      request-timeout-secs: 14400
+      disable-health-check: true
+      disable-retries: true
+  roles:
+    agg:
+      args:
+        data-parallel-size: 8
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 64
+        swa-prefix-tails: 64
+  benchmark:
+    env:
+      CONC: '4'
+      AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
+
+override_dp8_c8:
+  frontend:
+    type: sglang-router
+    args:
+      policy: consistent_hashing
+      request-id-headers: x-correlation-id
+      dp-aware: true
+      connect-timeout-secs: 900
+      request-timeout-secs: 14400
+      disable-health-check: true
+      disable-retries: true
+  roles:
+    agg:
+      args:
+        data-parallel-size: 8
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 64
+        swa-prefix-tails: 64
+  benchmark:
+    env:
+      CONC: '8'
+      AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
+
+override_dp8_c16:
+  frontend:
+    type: sglang-router
+    args:
+      policy: consistent_hashing
+      request-id-headers: x-correlation-id
+      dp-aware: true
+      connect-timeout-secs: 900
+      request-timeout-secs: 14400
+      disable-health-check: true
+      disable-retries: true
+  roles:
+    agg:
+      args:
+        data-parallel-size: 8
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        max-running-requests: 32
+        cuda-graph-max-bs-decode: 64
+        swa-prefix-tails: 64
+  benchmark:
+    env:
+      CONC: '16'
+      AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
+
+override_dp8_c20:
+  frontend:
+    type: sglang-router
+    args:
+      policy: consistent_hashing
+      request-id-headers: x-correlation-id
+      dp-aware: true
+      connect-timeout-secs: 900
+      request-timeout-secs: 14400
+      disable-health-check: true
+      disable-retries: true
+  roles:
+    agg:
+      args:
+        data-parallel-size: 8
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        max-running-requests: 40
+        cuda-graph-max-bs-decode: 64
+        swa-prefix-tails: 64
+  benchmark:
+    env:
+      CONC: '20'
+      AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'

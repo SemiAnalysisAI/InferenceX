@@ -1,0 +1,41 @@
+{
+  "suite": "swap-blocks",
+  "directions": ["h2d", "d2h", "d2d"],
+  "layouts": ["contiguous", "random"],
+  "seed": 0,
+  "device": 0,
+  "allocation_minutes": 45,
+  "images": {
+    "nvidia": "vllm/vllm-openai:v0.25.1",
+    "amd": "vllm/vllm-openai-rocm:v0.27.1"
+  },
+  "sku_images": {
+    "h100-dgxc": {
+      "image": "vllm/vllm-openai:v0.27.1",
+      "staged_image_dir": "/mnt/nfs/lustre/containers"
+    }
+  },
+  "profiles": {
+    "smoke": {
+      "block_bytes": [257, 4096, 65536, 262144],
+      "num_blocks": [1, 4, 16, 64, 256, 1024, 2048],
+      "warmup": 4,
+      "iterations": 20,
+      "max_payload_bytes": 2147483648
+    },
+    "standard": {
+      "block_bytes": [4096, 65536, 1048576],
+      "num_blocks": [1, 4, 16, 64, 256, 1024, 2048],
+      "warmup": 32,
+      "iterations": 100,
+      "max_payload_bytes": 2147483648
+    },
+    "large-blocks": {
+      "block_bytes": [257, 4096, 65536, 262144, 1048576, 4194304, 16777216, 67108864, 268435456, 1073741824],
+      "num_blocks": [1, 4, 16, 64, 256, 1024, 2048],
+      "warmup": 4,
+      "iterations": 20,
+      "max_payload_bytes": 1073741824
+    }
+  }
+}
