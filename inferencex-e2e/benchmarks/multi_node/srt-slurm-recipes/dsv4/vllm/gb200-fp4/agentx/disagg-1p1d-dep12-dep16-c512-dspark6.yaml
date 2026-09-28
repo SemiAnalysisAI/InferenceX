@@ -1,12 +1,13 @@
 schema: 2
-name: dsv4-vllm-disagg-gb200-p8-d8-c384-dspark6-agentic
+name: dsv4-vllm-disagg-gb200-p12-d16-c512-dspark6-agentic
 model:
-  path: deepseek-v4-pro
+  path: /mnt/lustre01/users-public/sa-shared/models/DeepSeek-V4-Pro-0813
   container: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-20ebb28
   precision: fp4
 identity:
   model:
-    repo: deepseek-ai/DeepSeek-V4-Pro-DSpark
+    repo: deepseek-ai/DeepSeek-V4-Pro-0813
+    revision: 72e1d3230f6c080a530b0a1d46f8eb4602340597
   container:
     image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-20ebb28
   frameworks:
@@ -73,9 +74,9 @@ engine:
   dp_launch_mode: per_node
 roles:
   prefill:
-    nodes: 2
+    nodes: 3
     workers: 1
-    gpus: 8
+    gpus: 12
     env:
       HF_HUB_CACHE: /hf_hub_cache
       HUGGINGFACE_HUB_CACHE: /hf_hub_cache
@@ -107,11 +108,11 @@ roles:
       MC_TE_METRIC: '0'
     args:
       kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_cross_layers_blocks":false,"enable_offload":false}}]}}'
-      served-model-name: deepseek-ai/DeepSeek-V4-Pro-DSpark
+      served-model-name: deepseek-ai/DeepSeek-V4-Pro-0813
       kv-cache-dtype: fp8
       tensor-parallel-size: 1
       pipeline-parallel-size: 1
-      data-parallel-size: 8
+      data-parallel-size: 12
       data-parallel-rpc-port: 13345
       enable-cumem-allocator: true
       enable-expert-parallel: true
@@ -123,7 +124,7 @@ roles:
       trust-remote-code: true
       no-enable-flashinfer-autotune: true
       block-size: 256
-      max-cudagraph-capture-size: 448
+      max-cudagraph-capture-size: 384
       gpu-memory-utilization: 0.9
       no-disable-hybrid-kv-cache-manager: true
       tokenizer-mode: deepseek_v4
@@ -138,9 +139,9 @@ roles:
       - 1
       cudagraph-metrics: true
   decode:
-    nodes: 2
+    nodes: 4
     workers: 1
-    gpus: 8
+    gpus: 16
     env:
       HF_HUB_CACHE: /hf_hub_cache
       HUGGINGFACE_HUB_CACHE: /hf_hub_cache
@@ -170,23 +171,23 @@ roles:
       MC_TE_METRIC: '0'
     args:
       kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_consumer","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_consumer","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_consumer","kv_connector_extra_config":{"load_async":true,"lookup_async":false,"enable_lookup":false,"enable_cross_layers_blocks":false,"enable_offload":false}}]}}'
-      served-model-name: deepseek-ai/DeepSeek-V4-Pro-DSpark
+      served-model-name: deepseek-ai/DeepSeek-V4-Pro-0813
       kv-cache-dtype: fp8
       tensor-parallel-size: 1
       pipeline-parallel-size: 1
-      data-parallel-size: 8
+      data-parallel-size: 16
       data-parallel-rpc-port: 13345
       enable-cumem-allocator: true
       enable-expert-parallel: true
       enable-ep-weight-filter: true
       max-model-len: 1048576
-      max-num-seqs: 96
-      max-num-batched-tokens: 8864
+      max-num-seqs: 64
+      max-num-batched-tokens: 8640
       trust-remote-code: true
       no-enable-flashinfer-autotune: true
       block-size: 256
-      compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0,"cudagraph_capture_sizes":[7,14,21,28,35,42,49,56,63,70,77,84,91,98,105,112,119,126,133,140,147,154,161,168,175,182,189,196,203,210,217,224,231,238,245,252,259,266,273,280,287,294,301,308,315,322,329,336,343,350,357,364,371,378,385,392,399,406,413,420,427,434,441,448,455,462,469,476,483,490,497,504,511,518,525,532,539,546,553,560,567,574,581,588,595,602,609,616,623,630,637,644,651,658,665,672]}'
-      max-cudagraph-capture-size: 672
+      compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0,"cudagraph_capture_sizes":[7,14,21,28,35,42,49,56,63,70,77,84,91,98,105,112,119,126,133,140,147,154,161,168,175,182,189,196,203,210,217,224,231,238,245,252,259,266,273,280,287,294,301,308,315,322,329,336,343,350,357,364,371,378,385,392,399,406,413,420,427,434,441,448]}'
+      max-cudagraph-capture-size: 448
       gpu-memory-utilization: 0.9
       no-disable-hybrid-kv-cache-manager: true
       tokenizer-mode: deepseek_v4
@@ -201,7 +202,6 @@ roles:
       - 1
       prefill-schedule-interval: 16
       long-prefill-token-threshold: 512
-      kv-cache-memory-bytes: 37580963840
       cudagraph-metrics: true
 sbatch_directives:
   cpus-per-task: '144'
@@ -211,7 +211,7 @@ srun_options:
   cpu-bind: none
 benchmark:
   type: custom
-  command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
+  command: bash /infmax-workspace/benchmarks/srt_agentic.sh
   env:
     INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
     RESULT_DIR: /logs/agentic

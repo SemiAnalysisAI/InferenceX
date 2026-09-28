@@ -9016,3 +9016,32 @@
   - Include throughput runs for the GB200 DSpark AgentX recipes.
   - 为 GB200 DSpark AgentX 配置添加吞吐量测试。
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3416
+
+- config-keys:
+  - dsv4-fp4-gb200-dynamo-vllm-agentic-dspark-agg
+  - dsv4-fp4-gb200-dynamo-vllm-agentic-dspark-disagg
+  scenario-type:
+  - agentic-coding
+  description:
+  - Select the staged DeepSeek-V4-Pro-0813 checkpoint for GB200 DSpark recipes.
+  - 为 GB200 DSpark 配置选择已部署的 DeepSeek-V4-Pro-0813 检查点。
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3416
+
+- config-keys:
+  - dsv4-fp4-gb200-dynamo-vllm-agentic-dspark-disagg
+  scenario-type:
+  - agentic-coding
+  description:
+  - Adjust C32 prefill memory headroom.
+  - 调整 C32 prefill 显存预留。
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3416
+
+- config-keys:
+  - dsv4-fp4-gb200-dynamo-vllm-agentic-dspark-agg
+  - dsv4-fp4-gb200-dynamo-vllm-agentic-dspark-disagg
+  scenario-type:
+  - agentic-coding
+  description:
+  - Refresh GB200 DSpark recipes for the current launcher and use K6 for TP8 C1/C4/C8.
+  - 更新 GB200 DSpark 配置以适配当前启动脚本，并在 TP8 C1/C4/C8 使用 K6。
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3416

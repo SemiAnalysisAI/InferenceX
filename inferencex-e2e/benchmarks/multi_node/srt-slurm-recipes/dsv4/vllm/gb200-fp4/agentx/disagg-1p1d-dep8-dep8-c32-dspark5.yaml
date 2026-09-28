@@ -1,12 +1,13 @@
 schema: 2
-name: dsv4-vllm-disagg-gb200-p8-d8-c256-dspark5-agentic
+name: dsv4-vllm-disagg-gb200-p8-d8-c32-dspark5-agentic
 model:
-  path: deepseek-v4-pro
+  path: /mnt/lustre01/users-public/sa-shared/models/DeepSeek-V4-Pro-0813
   container: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-20ebb28
   precision: fp4
 identity:
   model:
-    repo: deepseek-ai/DeepSeek-V4-Pro-DSpark
+    repo: deepseek-ai/DeepSeek-V4-Pro-0813
+    revision: 72e1d3230f6c080a530b0a1d46f8eb4602340597
   container:
     image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-20ebb28
   frameworks:
@@ -107,7 +108,7 @@ roles:
       MC_TE_METRIC: '0'
     args:
       kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_cross_layers_blocks":false,"enable_offload":false}}]}}'
-      served-model-name: deepseek-ai/DeepSeek-V4-Pro-DSpark
+      served-model-name: deepseek-ai/DeepSeek-V4-Pro-0813
       kv-cache-dtype: fp8
       tensor-parallel-size: 1
       pipeline-parallel-size: 1
@@ -124,7 +125,7 @@ roles:
       no-enable-flashinfer-autotune: true
       block-size: 256
       max-cudagraph-capture-size: 384
-      gpu-memory-utilization: 0.9
+      gpu-memory-utilization: 0.85
       no-disable-hybrid-kv-cache-manager: true
       tokenizer-mode: deepseek_v4
       attention-config: '{"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true,"indexer_kv_dtype":"mxfp4"}'
@@ -170,7 +171,7 @@ roles:
       MC_TE_METRIC: '0'
     args:
       kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_consumer","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_consumer","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_consumer","kv_connector_extra_config":{"load_async":true,"lookup_async":false,"enable_lookup":false,"enable_cross_layers_blocks":false,"enable_offload":false}}]}}'
-      served-model-name: deepseek-ai/DeepSeek-V4-Pro-DSpark
+      served-model-name: deepseek-ai/DeepSeek-V4-Pro-0813
       kv-cache-dtype: fp8
       tensor-parallel-size: 1
       pipeline-parallel-size: 1
@@ -180,13 +181,13 @@ roles:
       enable-expert-parallel: true
       enable-ep-weight-filter: true
       max-model-len: 1048576
-      max-num-seqs: 64
-      max-num-batched-tokens: 8576
+      max-num-seqs: 8
+      max-num-batched-tokens: 8240
       trust-remote-code: true
       no-enable-flashinfer-autotune: true
       block-size: 256
-      compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0,"cudagraph_capture_sizes":[6,12,18,24,30,36,42,48,54,60,66,72,78,84,90,96,102,108,114,120,126,132,138,144,150,156,162,168,174,180,186,192,198,204,210,216,222,228,234,240,246,252,258,264,270,276,282,288,294,300,306,312,318,324,330,336,342,348,354,360,366,372,378,384]}'
-      max-cudagraph-capture-size: 384
+      compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0,"cudagraph_capture_sizes":[6,12,18,24,30,36,42,48]}'
+      max-cudagraph-capture-size: 48
       gpu-memory-utilization: 0.9
       no-disable-hybrid-kv-cache-manager: true
       tokenizer-mode: deepseek_v4
@@ -199,6 +200,9 @@ roles:
       - 0
       - 1
       - 1
+      prefill-schedule-interval: 16
+      long-prefill-token-threshold: 512
+      kv-cache-memory-bytes: 37580963840
       cudagraph-metrics: true
 sbatch_directives:
   cpus-per-task: '144'
@@ -208,7 +212,7 @@ srun_options:
   cpu-bind: none
 benchmark:
   type: custom
-  command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
+  command: bash /infmax-workspace/benchmarks/srt_agentic.sh
   env:
     INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
     RESULT_DIR: /logs/agentic
