@@ -128,12 +128,9 @@ class FlashInferEPBackend(EPBackend):
         self._fp8 = self.precision == "fp8"
         if self._fp8:
             # "-offpath" per SUPPORTED_PRECISIONS; bytes and block size match deepep-v2/uccl-ep.
-            self.dispatch_dtype = "fp8-e4m3fn-blockwise-offpath"
-            self.dispatch_value_bytes = 1
-            self.dispatch_scale_bytes_per_copy = (
-                (args.hidden + _FP8_BLOCK - 1) // _FP8_BLOCK
-            ) * 4
-            self._quant = self.fused_quantize(_blockwise_cast_to_fp8)
+            self._enable_fp8(
+                "fp8-e4m3fn-blockwise-offpath", _blockwise_cast_to_fp8, _blockwise_cast_back
+            )
         self._a2a = None
         self._max_tokens = None
         self.experts_per_rank = args.experts // world_size
@@ -148,16 +145,6 @@ class FlashInferEPBackend(EPBackend):
         from `make_problem`, so both payloads reach the kernel with no conversion.
         """
         return torch.int32
-
-    def semantic_payload(self, x):
-        if not self._fp8:
-            return x
-        # Same callable the wire uses, so sender and oracle cannot disagree by construction.
-        return _blockwise_cast_back(*self._quant(x))
-
-    def _validate_quantizer(self, x):
-        if self._fp8:
-            self.assert_quantize_identity(_blockwise_cast_to_fp8, self._quant, x)
 
     def create_buffer(self, spec):
         """Build the one MoeAlltoAll for this group, sized to the ladder maximum.
@@ -343,19 +330,11 @@ class FlashInferEPBackend(EPBackend):
             payload = _blockwise_cast_back(
                 payload, h.recv_scales.reshape(-1, h.recv_scales.shape[-1])[keep]
             )
-        ids = h.recv_idx.reshape(-1, h.topk).to(torch.int64)[keep]
-        weights = h.recv_w.reshape(-1, h.topk).to(torch.float32)[keep]
-        local = (ids >= 0) & ((ids // self.experts_per_rank) == self.rank)
-        expert_ids = torch.where(local, ids, torch.full_like(ids, -1))
-        return types.SimpleNamespace(
-            payload=payload,
-            expert_ids=expert_ids,
-            weights=weights.masked_fill(~local, 0.0),
-            # Per-local-expert arrival count; the oracle compares it against its own bincount.
-            local_expert_counts=torch.bincount(
-                (ids[local] - self.rank * self.experts_per_rank),
-                minlength=self.experts_per_rank,
-            ),
+        return self._global_id_view(
+            payload,
+            h.recv_idx.reshape(-1, h.topk).to(torch.int64)[keep],
+            h.recv_w.reshape(-1, h.topk).to(torch.float32)[keep],
+            self.experts_per_rank,
         )
 
     def combine_transformed(self, p, h, transformed):

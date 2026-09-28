@@ -2,7 +2,6 @@
 """EPBackend contracts: ladder/spec construction, the staging-vs-roundtrip gate, and the NCCL EP handle."""
 from __future__ import annotations
 
-import contextlib
 import importlib
 import os
 import sys
@@ -12,13 +11,13 @@ from pathlib import Path
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path[:0] = [str(ROOT), str(ROOT / "bench")]
+sys.path[:0] = [str(ROOT), str(ROOT / "bench"), str(ROOT / "tests")]
 
 import ep_backend  # noqa: E402
 from ep_backend import EPBackend, RankInputs  # noqa: E402
+from _fakes import _ChainBackend  # noqa: E402
 
 
-# ---- from test_ep_backend.py ------------------------------------------------------
 def args(**updates):
     values = dict(
         experts=8, phase="decode", tokens_ladder="", routing="uniform", seed=0,
@@ -109,55 +108,17 @@ class BackendTests(unittest.TestCase):
         self.assertEqual(calls, ["X"])
 
 
-# ---- from test_roundtrip_staging.py -----------------------------------------------
-class _StagingBackend(ep_backend.EPBackend):
-    """Records the call order; no device work."""
-
-    name = "stub"
-
-    def __init__(self, stage_device_work: bool, fp8_consume: str, precision: str = "fp8"):
-        self.calls: list[str] = []
-        self.stage_device_work = stage_device_work
-        self.fp8_consume = fp8_consume
-        self.precision = precision
-
-    def create_buffer(self, spec):  # pragma: no cover - unused
-        raise NotImplementedError
-
-    def dispatch(self, problem):
-        self.calls.append("dispatch")
-        return types.SimpleNamespace(combine_input=None)
-
-    def stage(self, problem, handle):
-        self.calls.append("stage")
-        handle.combine_input = "staged-by-stage"
-
-    def combine(self, problem, handle):
-        self.calls.append(f"combine({handle.combine_input})")
-        return handle.combine_input
-
-    def recv_tokens(self, handle):  # pragma: no cover - unused
-        return 0
-
-    def inspect_dispatch(self, problem, handle):  # pragma: no cover - unused
-        return {}
-
-    def combine_transformed(self, problem, handle, transformed):  # pragma: no cover
-        return transformed
-
-
 class RoundtripStaging(unittest.TestCase):
     def test_staged_input_keeps_the_conversion_out_of_the_chain(self):
-        b = _StagingBackend(stage_device_work=True, fp8_consume="native")
+        b = _ChainBackend(stage_device_work=True, fp8_consume="native")
         b.run_roundtrip(object(), staged="pre-materialised")
-        self.assertEqual(b.calls, ["dispatch", "combine(pre-materialised)"])
+        self.assertEqual(b.calls, ["dispatch", "combine"])
+        self.assertEqual(b.consumed, ["pre-materialised"])
 
     def test_an_unrecognised_consume_mode_fails_instead_of_silently_meaning_native(self):
         # The value is read at class-body evaluation, so a typo raises at import -- before
         # any measurement -- rather than quietly running the default model and tagging the
         # artifact with whatever the typo said.
-        import importlib
-
         with mock.patch.dict(os.environ, {"CX_FP8_CONSUME": "dequantize"}):
             with self.assertRaises(ValueError):
                 importlib.reload(ep_backend)
@@ -175,10 +136,7 @@ class FlashInferCombineModelSwitch(unittest.TestCase):
     """
 
     def _module(self):
-        with mock.patch.dict(sys.modules, _stub_modules()):
-            import importlib
-            import ep_flashinfer
-            return importlib.reload(ep_flashinfer)
+        return _import_stubbed("ep_flashinfer")
 
     def test_the_fp32_boundary_is_exact_and_ordered_by_version_not_by_text(self):
         gate = self._module()._wheel_has_fp32_combine
@@ -201,10 +159,21 @@ class NcclLowLatencyLadderSizing(unittest.TestCase):
     fence shipped) the ladder is restored to the full buffer, and must never exceed it."""
 
     def _module(self):
-        with mock.patch.dict(sys.modules, _stub_modules()):
-            import importlib
-            import ep_nccl
-            return importlib.reload(ep_nccl)
+        return _import_stubbed("ep_nccl")
+
+    @staticmethod
+    def _construct(module, world_size, mode="low-latency", **env):
+        """NCCLEPBackend.__init__ over a base __init__ reduced to the two fields it reads."""
+        def base_init(instance, options, rank, world_size, local_rank, device):
+            instance.args = options
+            instance.mode = options.mode
+
+        options = types.SimpleNamespace(
+            mode=mode, experts=384, hidden=7168, topk=6, scale_up_domain=8
+        )
+        with mock.patch.object(module.EPBackend, "__init__", base_init), \
+                mock.patch.dict(os.environ, env):
+            return module.NCCLEPBackend(options, 0, world_size, 0, "cuda:0")
 
     def _backend(self, module, low_latency):
         """A backend far enough along to run create_buffer against the stubs."""
@@ -235,46 +204,17 @@ class NcclLowLatencyLadderSizing(unittest.TestCase):
 
     def test_only_ll_rank_major_selects_the_nccl_fp32_reduction(self):
         module = self._module()
-        module.dist.group = types.SimpleNamespace(WORLD=object())
-
-        def base_init(instance, options, rank, world_size, local_rank, device):
-            instance.args = options
-            instance.mode = options.mode
-
-        common = dict(experts=384, hidden=7168, topk=6, scale_up_domain=8)
-        with mock.patch.object(module.EPBackend, "__init__", base_init):
-            ll = module.NCCLEPBackend(
-                types.SimpleNamespace(mode="low-latency", **common), 0, 16, 0, "cuda:0"
-            )
-            ht = module.NCCLEPBackend(
-                types.SimpleNamespace(mode="normal", **common), 0, 16, 0, "cuda:0"
-            )
-
+        ll = self._construct(module, 16)
+        ht = self._construct(module, 16, mode="normal")
         self.assertEqual(ll.combine_reduction, "rank-fp32")
         self.assertEqual(getattr(ht, "combine_reduction", "domain-fp32"), "domain-fp32")
 
     def test_ll_layout_selector_restores_the_expert_major_contract(self):
         module = self._module()
-        module.dist.group = types.SimpleNamespace(WORLD=object())
-
-        def base_init(instance, options, rank, world_size, local_rank, device):
-            instance.args = options
-            instance.mode = options.mode
-
-        common = dict(experts=384, hidden=7168, topk=6, scale_up_domain=8)
-        with mock.patch.object(module.EPBackend, "__init__", base_init):
-            with mock.patch.dict(os.environ, {"COLLX_NCCL_LL_LAYOUT": "expert-major"}):
-                em = module.NCCLEPBackend(
-                    types.SimpleNamespace(mode="low-latency", **common), 0, 8, 0, "cuda:0"
-                )
-            rm = module.NCCLEPBackend(
-                types.SimpleNamespace(mode="low-latency", **common), 0, 8, 0, "cuda:0"
-            )
-            with mock.patch.dict(os.environ, {"COLLX_NCCL_LL_LAYOUT": "flat"}), \
-                    self.assertRaisesRegex(ValueError, "COLLX_NCCL_LL_LAYOUT"):
-                module.NCCLEPBackend(
-                    types.SimpleNamespace(mode="low-latency", **common), 0, 8, 0, "cuda:0"
-                )
+        em = self._construct(module, 8, COLLX_NCCL_LL_LAYOUT="expert-major")
+        rm = self._construct(module, 8)
+        with self.assertRaisesRegex(ValueError, "COLLX_NCCL_LL_LAYOUT"):
+            self._construct(module, 8, COLLX_NCCL_LL_LAYOUT="flat")
 
         self.assertEqual(em._layout, module.Layout.EXPERT_MAJOR)
         self.assertEqual(
@@ -410,43 +350,28 @@ class RoundtripStagingGate(unittest.TestCase):
         )
         for stage_device_work, consume, precision, hoisted in table:
             with self.subTest(stage=stage_device_work, consume=consume, precision=precision):
-                backend = _StagingBackend(stage_device_work, consume, precision)
+                backend = _ChainBackend(stage_device_work, consume, precision)
                 self.assertEqual(bool(backend.stage_excluded_from_roundtrip), hoisted)
 
 class WarmStaging(unittest.TestCase):
     """Warm-up must not rehearse work the timed region skips: where staging is excluded from the
     chain it was the leg's largest single cost (~247us x 32 iters x every component x trial)."""
 
-    @staticmethod
-    def _warm(backend, count, **kwargs):
+    def test_stages_once_when_the_chain_excludes_staging(self):
+        b = _ChainBackend(stage_device_work=True, fp8_consume="native")
         # `warm` imports torch for one synchronize; a stub keeps this runnable without a GPU.
         fake = types.ModuleType("torch")
         fake.cuda = types.SimpleNamespace(synchronize=lambda: None)
-        saved = sys.modules.get("torch")
-        sys.modules["torch"] = fake
-        try:
-            backend.warm(types.SimpleNamespace(), count, **kwargs)
-        finally:
-            if saved is None:
-                del sys.modules["torch"]
-            else:
-                sys.modules["torch"] = saved
-
-    def test_stages_once_when_the_chain_excludes_staging(self):
-        b = _StagingBackend(stage_device_work=True, fp8_consume="native")
-        self._warm(b, 5)
+        with mock.patch.dict(sys.modules, {"torch": fake}):
+            b.warm(types.SimpleNamespace(), 5)
         self.assertEqual(b.calls.count("dispatch"), 5)
         self.assertEqual(b.calls.count("stage"), 1)
         # Every later iteration still hands combine the staged payload, not a stale None.
-        self.assertEqual(b.calls.count("combine(staged-by-stage)"), 5)
-
-# The chained-period staging contract lives in tests/test_chain_period.py, which asserts it per
-# sibling chain with window values.
+        self.assertEqual(b.consumed, ["staged-by-stage"] * 5)
 
 
-# ---- from test_ep_nccl_handle.py --------------------------------------------------
 def _stub_modules():
-    """Fake torch / nccl modules so `import ep_nccl` succeeds without the benchmark image."""
+    """Fake torch / nccl modules so the adapters import without the benchmark image."""
     class StubTorchTensor:
         def __init__(self, shape=()):
             self.shape = shape
@@ -469,7 +394,10 @@ def _stub_modules():
     torch.empty_like = lambda x, *a, **k: StubTorchTensor(getattr(x, "shape", ()))
     torch.zeros = lambda *a, **k: types.SimpleNamespace(item=lambda: 7)
     torch.cuda = types.SimpleNamespace(synchronize=lambda: None)
+    # Import-time decorators (ep_legacy_ll's static dequant) pass through untouched.
+    torch.compile = lambda *a, **k: (lambda fn: fn)
     dist = types.ModuleType("torch.distributed")
+    dist.group = types.SimpleNamespace(WORLD="world")
     torch.distributed = dist
 
     ep = types.ModuleType("nccl.ep")
@@ -494,14 +422,16 @@ def _stub_modules():
     }
 
 
-sys.path[:0] = [str(ROOT), str(ROOT / "bench")]
+def _import_stubbed(name, **vendor):
+    """A fresh import of adapter `name` against the stubs (plus fake `vendor` modules), which are
+    then withdrawn: a fake torch left in sys.modules makes genuinely torch-dependent modules
+    (test_runtime, test_measurement) error instead of skipping."""
+    with mock.patch.dict(sys.modules, {**_stub_modules(), **vendor}):
+        sys.modules.pop(name, None)
+        return importlib.import_module(name)
 
-# Import ep_nccl against the stubs, then withdraw them: a fake torch left in sys.modules makes
-# genuinely torch-dependent modules (test_runtime, test_ll_oracle) error instead of skipping.
-with mock.patch.dict(sys.modules, _stub_modules()):
-    import ep_nccl  # noqa: E402
 
-    sys.modules.pop("ep_nccl", None)
+ep_nccl = _import_stubbed("ep_nccl")
 
 
 class FakeHandle:
@@ -586,20 +516,6 @@ class TestSingleHandle(unittest.TestCase):
         self.assertIs(h.combine_in_t, b._recv_x_t)
 
 
-@contextlib.contextmanager
-def _stubbed(name, extra=None):
-    """Import one adapter module against a fake torch (plus `extra` fake modules)."""
-    torch = types.ModuleType("torch")
-    torch.compile = lambda *a, **k: (lambda fn: fn)
-    dist = types.ModuleType("torch.distributed")
-    dist.group = types.SimpleNamespace(WORLD="world")
-    torch.distributed = dist
-    with mock.patch.dict(sys.modules, {"torch": torch, "torch.distributed": dist, **(extra or {})}):
-        sys.modules.pop(name, None)
-        yield __import__(name)
-        sys.modules.pop(name, None)
-
-
 def _deep_ep(*classes):
     module = types.ModuleType("deep_ep")
     for cls in classes:
@@ -620,16 +536,17 @@ class GraphReplayDefaults(unittest.TestCase):
 
     def test_deepep_v2_normal_decode_drops_the_host_sync_and_rounds_the_receive_up(self):
         calls = []
-        with _stubbed("ep_deepep_v2", {"deep_ep": _deep_ep("ElasticBuffer", "Buffer")}) as module:
-            def make(phase, mode="normal"):
-                backend = module.DeepEPV2Backend(args(mode=mode, phase=phase), 0, 8, 0, "cpu")
-                backend.buffer = types.SimpleNamespace(
-                    dispatch=lambda *a, **k: calls.append(k) or ("x", "i", "w", "h", None)
-                )
-                backend.max_tokens, backend.num_sms, backend.num_qps = 512, 1, 1
-                return backend
+        module = _import_stubbed("ep_deepep_v2", deep_ep=_deep_ep("ElasticBuffer", "Buffer"))
 
-            decode, prefill, ll = make("decode"), make("prefill"), make("decode", "low-latency")
+        def make(phase, mode="normal"):
+            backend = module.DeepEPV2Backend(args(mode=mode, phase=phase), 0, 8, 0, "cpu")
+            backend.buffer = types.SimpleNamespace(
+                dispatch=lambda *a, **k: calls.append(k) or ("x", "i", "w", "h", None)
+            )
+            backend.max_tokens, backend.num_sms, backend.num_qps = 512, 1, 1
+            return backend
+
+        decode, prefill, ll = make("decode"), make("prefill"), make("decode", "low-latency")
 
         def dispatched(backend, tokens):
             backend.dispatch(types.SimpleNamespace(
@@ -651,8 +568,7 @@ class GraphReplayDefaults(unittest.TestCase):
         self.assertTrue(ll.cuda_graph_supported)
 
     def test_uccl_graphs_intranode_low_latency_except_b200_fp8(self):
-        with _stubbed("ep_uccl", {"deep_ep": _deep_ep("Buffer", "Config")}) as module:
-            cls = module.UCCLEPBackend
+        cls = _import_stubbed("ep_uccl", deep_ep=_deep_ep("Buffer", "Config")).UCCLEPBackend
         with mock.patch.dict(os.environ, {}, clear=True):
             for gate, expected in (
                 (_gate(cls, "low-latency"), True),
@@ -666,15 +582,62 @@ class GraphReplayDefaults(unittest.TestCase):
             self.assertFalse(_gate(cls, "low-latency").cuda_graph_supported)
 
     def test_flashinfer_and_nccl_ht_graph_decode_only(self):
-        with _stubbed("ep_flashinfer") as module:
-            flashinfer = module.FlashInferEPBackend
-        with mock.patch.dict(sys.modules, _stub_modules()):
-            import ep_nccl
-            nccl = importlib.reload(ep_nccl).NCCLEPBackend
+        flashinfer = _import_stubbed("ep_flashinfer").FlashInferEPBackend
+        nccl = _import_stubbed("ep_nccl").NCCLEPBackend
         for cls in (flashinfer, nccl):
             self.assertTrue(_gate(cls, "normal", phase="decode").cuda_graph_supported)
             self.assertFalse(_gate(cls, "normal", phase="prefill").cuda_graph_supported)
         self.assertTrue(_gate(nccl, "low-latency", phase="decode").cuda_graph_supported)
+
+
+class LowLatencyCapDecoupling(unittest.TestCase):
+    """The LL receive size and the measured ladder must stay two numbers -- sizing the receive
+    from `max(ladder)` would shift every rung. Driven through the adapter with deep_ep stubbed,
+    so the constants are exercised rather than read out of the syntax tree."""
+
+    @staticmethod
+    def _adapter():
+        # The adapter imports ElasticBuffer by name and fails closed without it.
+        return _import_stubbed("ep_deepep_v2", deep_ep=_deep_ep("Buffer", "ElasticBuffer"))
+
+    def test_ladder_cap_drops_only_oversized_measurement_points(self):
+        module = self._adapter()
+        backend = module.DeepEPV2Backend.__new__(module.DeepEPV2Backend)
+        backend.mode = "low-latency"
+        backend.world_size = 8
+        backend._build_rank_inputs = mock.Mock(return_value=None)
+        args = types.SimpleNamespace(experts=256, tokens_ladder="32 64 128")
+        with mock.patch.object(module, "_LL_LADDER_CAP", 64):
+            spec = backend.make_inputs(args)
+        self.assertEqual(spec.ladder, [32, 64])
+        self.assertEqual(spec.dropped, [128])
+
+    def test_the_receive_is_sized_from_the_buffer_cap_not_the_ladder(self):
+        module = self._adapter()
+        backend = module.DeepEPV2Backend.__new__(module.DeepEPV2Backend)
+        backend.mode, backend.world_size, backend.group = "low-latency", 8, object()
+        backend.args = types.SimpleNamespace(experts=256, hidden=16)
+        vendor_buffer = mock.Mock()
+        vendor_buffer.get_low_latency_rdma_size_hint.return_value = 4096
+        with mock.patch.object(module.deep_ep, "Buffer", vendor_buffer), \
+                mock.patch.object(module, "_LL_BUFFER_CAP", 128), \
+                mock.patch.object(module, "_LL_LADDER_CAP", 64):
+            for ladder_max in (16, 64):
+                backend.create_buffer(types.SimpleNamespace(max_tokens_per_rank=ladder_max))
+                vendor_buffer.get_low_latency_rdma_size_hint.assert_called_with(128, 16, 8, 256)
+                self.assertEqual(vendor_buffer.call_args.kwargs["num_rdma_bytes"], 4096)
+            with self.assertRaisesRegex(RuntimeError, "exceeds"):
+                backend.create_buffer(types.SimpleNamespace(max_tokens_per_rank=129))
+
+    def test_a_clamped_ladder_is_recorded_in_the_artifact_not_only_on_stdout(self):
+        # The clamp must reach the artifact: a rank-0 stdout NOTE alone leaves a document that
+        # measured 8 rungs indistinguishable from one that measured 9. Asserted on a real
+        # emitted document rather than on the presence of key literals in the source.
+        import test_chain
+        workload = test_chain.drive().doc["workload"]
+        for required in ("ladder_measured", "ladder_dropped", "ladder_cap"):
+            self.assertIn(required, workload, f"the emitted record must include {required}")
+        self.assertEqual(workload["ladder_measured"], list(test_chain.LADDER))
 
 
 if __name__ == "__main__":

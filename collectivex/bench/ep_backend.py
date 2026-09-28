@@ -69,8 +69,8 @@ class EPBackend(abc.ABC):
     Subclasses implement the transport (create_buffer, dispatch, stage,
     combine, recv_tokens, inspect_dispatch, combine_transformed);
     everything the driver and the oracles need beyond that is provided here.
-    Combine is always BF16; an adapter that supports FP8 dispatch overrides
-    SUPPORTED_PRECISIONS and the semantic_payload/_validate_quantizer hooks.
+    Combine is always BF16; an adapter that supports FP8 dispatch widens
+    SUPPORTED_PRECISIONS and adopts its codec with `_enable_fp8`.
     """
 
     name: str = ""
@@ -115,6 +115,12 @@ class EPBackend(abc.ABC):
     # adapter sends 1 byte/value plus (for a blockwise codec) per-block FP32 scales.
     dispatch_value_bytes = 2
     dispatch_scale_bytes_per_copy = 0
+    # (eager quantize, dequantize) of an adopted blockwise FP8 codec; see `_enable_fp8`.
+    _fp8_codec = None
+    # Low-latency receives are pre-allocated at a fixed per-rank slot count, so this bounds the
+    # measured ladder: every backend's LL ladder ends at the same rung. 256 is also vLLM's
+    # DEFAULT_MAX_NUM_BATCHED_TOKENS_FOR_BATCHED_DP.
+    LL_LADDER_CAP = 256
     # The expected-combine reduction the oracle holds the kernel to (see ep_oracle.combine_model);
     # published, because a backend may pick it per installed library version.
     combine_reduction = "domain-fp32"
@@ -294,7 +300,7 @@ class EPBackend(abc.ABC):
 
     def buffer_cap(self, args):
         """Max tokens/rank the communicator can serve, or None when unbounded."""
-        return None
+        return self.LL_LADDER_CAP if self.mode == "low-latency" else None
 
     def make_inputs(self, args) -> WorkloadSpec:
         """Resolve the token ladder and materialise per-rank inputs for the sweep.
@@ -347,21 +353,33 @@ class EPBackend(abc.ABC):
             global_weights=w_g,
         )
 
+    def _enable_fp8(self, dispatch_dtype, quantize, dequantize):
+        """Adopt a blockwise FP8 dispatch codec: 1 byte/value plus one FP32 scale per 128-value
+        block. The timed dispatch calls `self._quant`, compiled outside the window except in
+        low-latency (see fused_quantize)."""
+        self.dispatch_dtype = dispatch_dtype
+        self.dispatch_value_bytes = 1
+        self.dispatch_scale_bytes_per_copy = ((self.args.hidden + 127) // 128) * 4
+        self._fp8_codec = (quantize, dequantize)
+        self._quant = self.fused_quantize(quantize)
+
     def semantic_payload(self, x):
         """The BF16 values the oracle should expect for a dispatched payload.
 
-        Identity for a backend that sends x unchanged. An FP8 backend overrides this
-        to apply the exact quant->dequant round-trip the kernel transports, so the
-        dispatched-payload compare stays bit-exact and the combine gate stays tight.
+        Identity for a backend that sends x unchanged. Under an FP8 codec it is the exact
+        quant->dequant round-trip the kernel transports, through the same callable the wire uses,
+        so the dispatched-payload compare stays bit-exact and the combine gate stays tight.
         """
-        return x
+        if self._fp8_codec is None:
+            return x
+        return self._fp8_codec[1](*self._quant(x))
 
     def _validate_quantizer(self, x) -> None:
-        """Per-shape hook, run untimed from make_problem. An FP8 adapter whose timed
-        dispatch calls a COMPILED quantizer overrides this to assert the compiled form
-        is bit-identical to the eager one (see assert_quantize_identity). The base has
-        no quantizer, and low-latency adapters keep the eager form, so neither checks.
-        """
+        """Per-shape hook, run untimed from make_problem: under an FP8 codec, assert the compiled
+        quantizer the timed dispatch calls is bit-identical to the eager one (a no-op where
+        fused_quantize kept the eager form)."""
+        if self._fp8_codec is not None:
+            self.assert_quantize_identity(self._fp8_codec[0], self._quant, x)
 
     def make_problem(self, T, idx, weights, x):
         """Assemble the per-shape problem namespace.
@@ -388,6 +406,58 @@ class EPBackend(abc.ABC):
         """Integer dtype the backend's kernels expect for top-k routing indices."""
         import torch
         return torch.int64
+
+    # ---- Oracle views (shared) -------------------------------------------------------
+
+    def _local_id_view(self, payload, local_idx, weights, experts_per_rank):
+        """Token-rank view of a receive whose top-k ids are LOCAL expert indices, -1 where the
+        expert is not this rank's: rebase the valid ones to the GLOBAL ids the oracle compares."""
+        import torch
+
+        local_idx = local_idx.to(torch.int64)
+        valid = local_idx >= 0
+        return types.SimpleNamespace(
+            payload=payload,
+            expert_ids=torch.where(valid, local_idx + self.rank * experts_per_rank, local_idx),
+            weights=weights.to(torch.float32).masked_fill(~valid, 0),
+            local_expert_counts=torch.bincount(local_idx[valid], minlength=experts_per_rank),
+        )
+
+    def _global_id_view(self, payload, ids, weights, experts_per_rank):
+        """Token-rank view of a receive whose top-k ids come back GLOBAL and cover the token's
+        whole top-k, including other ranks' experts: those are masked to -1 with zero weight, as
+        the oracle's expectation has them."""
+        import torch
+
+        lo = self.rank * experts_per_rank
+        local = (ids >= lo) & (ids < lo + experts_per_rank)
+        return types.SimpleNamespace(
+            payload=payload,
+            expert_ids=torch.where(local, ids, torch.full_like(ids, -1)),
+            weights=weights.masked_fill(~local, 0.0),
+            local_expert_counts=torch.bincount(ids[local] - lo, minlength=experts_per_rank),
+        )
+
+    def _expert_major_view(self, h, recv, recv_count):
+        """Flat per-slot view over an expert-major padded receive `[num_local_experts, slots, hidden]`.
+
+        Each local expert's valid tokens are packed at the front `[0:recv_count[e]]` of its slot
+        dimension. Flatten to the oracle's compact contract in `(expert, slot)` row-major order --
+        nonzero yields C-order indices, e ascending then j ascending -- keeping the coordinates on
+        the handle so combine_transformed can scatter the transformed rows back 1:1.
+        """
+        import torch
+
+        counts = recv_count.to(torch.int64)
+        slot_valid = (
+            torch.arange(recv.shape[1], device=recv.device).unsqueeze(0) < counts.unsqueeze(1)
+        )
+        h.slot_expert, h.slot_j = slot_valid.nonzero(as_tuple=True)
+        return types.SimpleNamespace(
+            payload=recv[h.slot_expert, h.slot_j],
+            expert_ids=self.rank * self.num_local_experts + h.slot_expert.to(torch.int64),
+            local_expert_counts=counts,
+        )
 
     # ---- Timing: EagerTiming / GraphTiming (ep_timing.py) run the windows -----------------
 

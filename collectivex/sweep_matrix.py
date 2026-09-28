@@ -105,6 +105,14 @@ def _selected_backends(backend: str) -> list[str]:
     return [backend]
 
 
+def _comma_subset(flag: str, value: str, known) -> set[str]:
+    selected = {part.strip() for part in value.split(",") if part.strip()}
+    unknown = sorted(selected - set(known))
+    if unknown:
+        raise SystemExit(f"unknown --{flag} {unknown}; have {sorted(known)}")
+    return selected
+
+
 def resolve_matrix(
     backend: str = "all",
     only_sku: str = "",
@@ -119,25 +127,12 @@ def resolve_matrix(
         if not value.isdigit() or int(value) <= 0:
             raise SystemExit(f"invalid --ep-sizes {ep_sizes!r}; expected positive integers")
         selected_eps.add(int(value))
-    known_precisions = set(SWEEP["precisions"])
-    selected_precisions = {value.strip() for value in precisions.split(",") if value.strip()}
-    unknown_precisions = sorted(selected_precisions - known_precisions)
-    if unknown_precisions:
-        raise SystemExit(
-            f"unknown --precisions {unknown_precisions}; have {sorted(known_precisions)}"
-        )
-    known_modes = set(SWEEP["modes"])
-    selected_modes = {value.strip() for value in modes.split(",") if value.strip()}
-    unknown_modes = sorted(selected_modes - known_modes)
-    if unknown_modes:
-        raise SystemExit(f"unknown --modes {unknown_modes}; have {sorted(known_modes)}")
+    selected_precisions = _comma_subset("precisions", precisions, SWEEP["precisions"])
+    selected_modes = _comma_subset("modes", modes, SWEEP["modes"])
 
     if only_sku and only_sku not in PLATFORMS:
         raise SystemExit(f"unknown --only-sku {only_sku!r}; have {sorted(PLATFORMS)}")
-    excluded = {value.strip() for value in exclude_skus.split(",") if value.strip()}
-    unknown = sorted(excluded - set(PLATFORMS))
-    if unknown:
-        raise SystemExit(f"unknown --exclude-skus {unknown}; have {sorted(PLATFORMS)}")
+    excluded = _comma_subset("exclude-skus", exclude_skus, PLATFORMS)
     if only_sku in excluded:
         raise SystemExit("--only-sku and --exclude-skus select disjoint pools")
 

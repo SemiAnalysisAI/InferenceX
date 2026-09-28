@@ -534,45 +534,15 @@ class NCCLEPBackend(EPBackend):
         source_rank, source_slot = valid.nonzero(as_tuple=True)
         h.source_rank = source_rank
         h.source_slot = source_slot
-        local_idx = h.recv_idx[source_rank, source_slot].to(torch.int64)
-        valid_idx = local_idx >= 0
-        expert_ids = torch.where(
-            valid_idx, local_idx + self.rank * self.num_local_experts, local_idx
-        )
-        weights = h.recv_w[source_rank, source_slot].to(torch.float32).masked_fill(~valid_idx, 0)
-        return types.SimpleNamespace(
-            payload=recv_bf16[source_rank, source_slot],
-            expert_ids=expert_ids,
-            weights=weights,
-            local_expert_counts=torch.bincount(
-                local_idx[valid_idx], minlength=self.num_local_experts
-            ),
-        )
-
-    def _ll_em_inspect_dispatch(self, p, h):
-        """Flat per-slot view over the EXPERT_MAJOR padded receive (mirror of
-        ep_deepep_v2._ll_inspect_dispatch): each local expert's valid tokens are packed at the
-        front [0:recv_count[e]] of its slot dimension. Flatten to the oracle's compact
-        (expert, slot) row-major contract and keep the coordinates for the combine scatter."""
-        recv_bf16 = h.recv_x  # [E, S, hidden] BF16
-        num_slots = recv_bf16.shape[1]
-        counts = h.recv_count.to(torch.int64)  # [E]
-        slot_valid = (
-            torch.arange(num_slots, device=recv_bf16.device).unsqueeze(0) < counts.unsqueeze(1)
-        )
-        slot_expert, slot_j = slot_valid.nonzero(as_tuple=True)
-        h.slot_expert = slot_expert
-        h.slot_j = slot_j
-        local_lo = self.rank * self.num_local_experts
-        return types.SimpleNamespace(
-            payload=recv_bf16[slot_expert, slot_j],
-            expert_ids=local_lo + slot_expert.to(torch.int64),
-            local_expert_counts=counts,
+        return self._local_id_view(
+            recv_bf16[source_rank, source_slot], h.recv_idx[source_rank, source_slot],
+            h.recv_w[source_rank, source_slot], self.num_local_experts,
         )
 
     def inspect_dispatch(self, p, h):
         if self._ll_expert_major:
-            return self._ll_em_inspect_dispatch(p, h)
+            # EXPERT_MAJOR is deepep-v2 LL's padded [E, S, hidden] receive.
+            return self._expert_major_view(h, h.recv_x, h.recv_count)
         if self._ll:
             return self._ll_inspect_dispatch(p, h)
         # HT FLAT normal recv: front-packed to recv_total_counter, one row per received token.
@@ -580,24 +550,12 @@ class NCCLEPBackend(EPBackend):
         # row (valid entries first, non-local padded to -1) with recv_w aligned to them — NOT the
         # global top-k. (Verified on h100 EP8: rank-1 token recv_idx=[2,17,-1..] for global experts
         # 34,49; rank 0 looks global only because its local range starts at 0.) So rebase the valid
-        # locals to the GLOBAL ids the oracle compares by + rank*experts_per_rank, exactly as
-        # ep_uccl/ep_deepep_v2 normal do. The oracle sorts each row over the top-k axis and sums
-        # the per-expert transforms, so token order is free and no per-(token,expert) expansion is
-        # needed.
+        # locals to the GLOBAL ids the oracle compares, exactly as ep_uccl/ep_deepep_v2 normal
+        # do. The oracle sorts each row over the top-k axis and sums the per-expert transforms,
+        # so token order is free and no per-(token,expert) expansion is needed.
         count = int(h.count)
-        local_idx = h.recv_idx[:count].to(torch.int64)  # [count, topk] LOCAL ids, -1 non-local
-        valid = local_idx >= 0
-        expert_ids = torch.where(
-            valid, local_idx + self.rank * self.experts_per_rank, local_idx
-        )
-        weights = h.recv_w[:count].to(torch.float32).masked_fill(~valid, 0)
-        return types.SimpleNamespace(
-            payload=h.recv_x[:count],  # [count, hidden] BF16
-            expert_ids=expert_ids,
-            weights=weights,
-            local_expert_counts=torch.bincount(
-                local_idx[valid], minlength=self.experts_per_rank
-            ),
+        return self._local_id_view(
+            h.recv_x[:count], h.recv_idx[:count], h.recv_w[:count], self.experts_per_rank
         )
 
     def _ll_combine_transformed(self, p, h, transformed):

@@ -10,12 +10,10 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / "bench")]
-sys.path[:0] = [str(Path(__file__).resolve().parents[1])]
 
 import bandwidth  # noqa: E402
 
 
-# ---- from test_ll_oracle.py -------------------------------------------------------
 try:
     import torch as _torch
 except Exception:  # torch is absent in the plain CPU test image; runs on GPU CI
@@ -113,7 +111,6 @@ class LowLatencyOracleEndToEnd(unittest.TestCase):
         self.assertFalse(report["checks"]["combine_values"])
 
 
-# ---- from test_bandwidth.py -------------------------------------------------------
 COMPONENTS = bandwidth.COMPONENTS
 
 

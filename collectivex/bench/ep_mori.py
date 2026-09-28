@@ -25,18 +25,6 @@ except Exception as exc:  # pragma: no cover - requires the benchmark image
     raise
 
 
-def _project_local_metadata(torch_module, raw_expert_ids, raw_weights, rank, experts_per_rank):
-    local_start = rank * experts_per_rank
-    local = (raw_expert_ids >= local_start) & (
-        raw_expert_ids < local_start + experts_per_rank
-    )
-    expert_ids = torch_module.where(
-        local, raw_expert_ids, torch_module.full_like(raw_expert_ids, -1)
-    )
-    weights = torch_module.where(local, raw_weights, torch_module.zeros_like(raw_weights))
-    return expert_ids, weights, raw_expert_ids[local] - local_start
-
-
 class MoRIBackend(EPBackend):
     name = "mori"
     maturity = "production"  # vLLM --all2all-backend mori_*; SGLang --moe-a2a-backend mori
@@ -128,14 +116,6 @@ class MoRIBackend(EPBackend):
         # timed device component in that precision only.
         self.stage_device_work = self._fp8
 
-    def buffer_cap(self, args):
-        if self.mode == "low-latency":
-            # 256 tokens/rank, matching deepep-v2, uccl-ep and nccl-ep so every backend's
-            # low-latency ladder ends at the same rung. MoRI imposes no bound of its own; 256 is
-            # also vLLM's DEFAULT_MAX_NUM_BATCHED_TOKENS_FOR_BATCHED_DP.
-            return 256
-        return None
-
     def create_buffer(self, spec):
         args, world_size, rank = self.args, self.world_size, self.rank
         gpus_per_node = int(args.gpus_per_node)
@@ -160,9 +140,9 @@ class MoRIBackend(EPBackend):
                 f"MoRI realized {realized_qps} QPs per PE; {self.num_qps} required"
             )
 
-        # MoRI preallocates one communicator buffer for the case's entire ladder; 256 is the
+        # MoRI preallocates one communicator buffer for the case's entire ladder, at least the
         # low-latency cap (see `buffer_cap`). Normal mode still takes the larger ladder maximum.
-        self._cap = max(256, spec.max_tokens_per_rank)
+        self._cap = max(self.LL_LADDER_CAP, spec.max_tokens_per_rank)
         # quant_type stays "none" for both precisions: dispatch precision is carried by
         # the passed tensor dtype (caller-prequantized e4m3 under FP8, BF16 otherwise),
         # and "none" keeps combine a genuine BF16 send. data_type is deprecated upstream
@@ -242,20 +222,14 @@ class MoRIBackend(EPBackend):
             return x
         return x.to(self._fp8_dtype).to(torch.bfloat16)
 
+    def _topk_idx_dtype(self):
+        return torch.int32
+
     def make_problem(self, T, idx, weights, x):
-        indices = idx.to(torch.int32)
-        gate_weights = weights.to(torch.float32)
-        return types.SimpleNamespace(
-            T=T,
-            x=x,
-            dispatch_x=x,
-            oracle_x=self.semantic_payload(x),
-            topk_idx=indices,
-            topk_weights=gate_weights,
-            indices=indices,
-            weights=gate_weights,
-            scales=torch.empty((T, 0), dtype=torch.uint8, device=self.device),
-        )
+        problem = super().make_problem(T, idx, weights, x)
+        problem.indices, problem.weights = problem.topk_idx, problem.topk_weights
+        problem.scales = torch.empty((T, 0), dtype=torch.uint8, device=self.device)
+        return problem
 
     def dispatch(self, p):
         # Cast inside dispatch, where production pays it: vLLM and SGLang both run an aiter quant
@@ -329,25 +303,15 @@ class MoRIBackend(EPBackend):
             for tensor in (h.dispatch_output, h.dispatch_indices, h.dispatch_weights)
         ):
             raise RuntimeError("MoRI receive count exceeds dispatch metadata")
-        raw_expert_ids = h.dispatch_indices[:count].to(torch.int64)
-        expert_ids, weights, local_expert_ids = _project_local_metadata(
-            torch,
-            raw_expert_ids,
-            h.dispatch_weights[:count].to(torch.float32),
-            self.rank,
-            self.experts_per_rank,
-        )
         # FP8: the oracle compares a BF16 payload, so dequantize the received fp8 slice.
         payload = h.dispatch_output[:count]
         if self._fp8:
             payload = payload.to(torch.bfloat16)
-        return types.SimpleNamespace(
-            payload=payload,
-            expert_ids=expert_ids,
-            weights=weights,
-            local_expert_counts=torch.bincount(
-                local_expert_ids, minlength=self.experts_per_rank
-            ),
+        return self._global_id_view(
+            payload,
+            h.dispatch_indices[:count].to(torch.int64),
+            h.dispatch_weights[:count].to(torch.float32),
+            self.experts_per_rank,
         )
 
     def combine_transformed(self, p, h, transformed):

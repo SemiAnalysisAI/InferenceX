@@ -104,6 +104,13 @@ _GPU_HEALTH_FIELDS = ("index", "clocks_event_reasons.sw_thermal_slowdown",
                       "clocks_event_reasons.hw_thermal_slowdown", "temperature.gpu")
 
 
+def _gpu_health_rows(output: str):
+    for line in output.splitlines():
+        cells = [cell.strip() for cell in line.split(",")]
+        if len(cells) == len(_GPU_HEALTH_FIELDS):
+            yield cells
+
+
 def gpu_health_faults(output: str, max_temperature_c: int = 90) -> list[str]:
     """Throttled or overheating GPUs in an `nvidia-smi --format=csv,noheader` block.
 
@@ -112,11 +119,7 @@ def gpu_health_faults(output: str, max_temperature_c: int = 90) -> list[str]:
     an unreadable probe as healthy rather than blocking a leg on it.
     """
     faults = []
-    for line in output.splitlines():
-        cells = [cell.strip() for cell in line.split(",")]
-        if len(cells) != len(_GPU_HEALTH_FIELDS):
-            continue
-        index, software, hardware, temperature = cells
+    for index, software, hardware, temperature in _gpu_health_rows(output):
         # "Not Active" is the healthy reading, so compare exactly -- a substring test for
         # "Active" passes the fault straight through.
         throttled = "Active" in (software, hardware)
@@ -140,10 +143,7 @@ def gpu_temperature_spread(output: str) -> tuple[int, int, int] | None:
     Healthy references: 50-66 C under load on h100, 34-39 C on b200.
     """
     temperatures = []
-    for line in output.splitlines():
-        cells = [cell.strip() for cell in line.split(",")]
-        if len(cells) != len(_GPU_HEALTH_FIELDS):
-            continue
+    for cells in _gpu_health_rows(output):
         try:
             temperatures.append(int(cells[3].split()[0]))
         except (IndexError, ValueError):
