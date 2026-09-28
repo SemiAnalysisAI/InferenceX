@@ -504,24 +504,22 @@ def _kernel(ctx: dict) -> None:
 def _cudagraph(ctx: dict) -> bool:
     """Whether vLLM would replay this batch as a full CUDA graph: a uniform decode batch
     within the capture sizes, on backends that support one."""
+    with ctx["engine"]._configured():  # backends read vLLM's current config to answer
+        return _full_graph(ctx["engine"])
+
+
+def _full_graph(eng: _Engine) -> bool:
     from vllm.v1.attention.backend import AttentionCGSupport
-    groups = ctx["engine"].reqs
-    qs = {r.num_tokens - r.num_computed_tokens for r in groups}
+    qs = {r.num_tokens - r.num_computed_tokens for r in eng.reqs}
     if len(qs) != 1:
         return False
     q = qs.pop()
-    tokens = q * len(groups)
-    from vllm.config import set_current_vllm_config
-    with set_current_vllm_config(ctx["engine"].runner.vllm_config):
-        top = vllm_linear._capture_sizes()[-1]
-    if tokens > top:
+    if q * len(eng.reqs) > vllm_linear._capture_sizes()[-1]:
         return False
     need = AttentionCGSupport.UNIFORM_SINGLE_TOKEN_DECODE if q == 1 else AttentionCGSupport.UNIFORM_BATCH
-    runner = ctx["engine"].runner
-    for gs in runner.attn_groups:
+    for gs in eng.runner.attn_groups:
         for g in gs:
-            builder = g.backend.get_builder_cls()
-            support = builder.get_cudagraph_support(runner.vllm_config, g.kv_cache_spec)
+            support = g.backend.get_builder_cls().get_cudagraph_support(eng.runner.vllm_config, g.kv_cache_spec)
             if support.value < need.value:
                 return False
     return True
