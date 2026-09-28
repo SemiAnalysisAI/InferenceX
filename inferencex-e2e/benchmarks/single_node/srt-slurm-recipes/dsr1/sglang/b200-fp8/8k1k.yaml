@@ -1,0 +1,73 @@
+base:
+  schema: 2
+  name: dsr1-fp8-b200-sglang-8k1k
+  model:
+    path: hf:deepseek-ai/DeepSeek-R1-0528
+    container: lmsysorg/sglang:v0.5.12-cu130
+    precision: fp8
+  resources:
+    gpu_type: b200
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        data-parallel-size: 1
+        cuda-graph-max-bs: 128
+        max-running-requests: 128
+        mem-fraction-static: 0.82
+        kv-cache-dtype: fp8_e4m3
+        chunked-prefill-size: 32768
+        max-prefill-tokens: 32768
+        enable-flashinfer-allreduce-fusion: true
+        scheduler-recv-interval: 10
+        disable-radix-cache: true
+        attention-backend: trtllm_mla
+        stream-interval: 30
+        expert-parallel-size: 1
+        moe-runner-backend: flashinfer_trtllm
+        quantization: fp8
+        served-model-name: deepseek-ai/DeepSeek-R1-0528
+        enable-metrics: false
+      env:
+        SGL_ENABLE_JIT_DEEPGEMM: 'false'
+        SGLANG_ENABLE_FLASHINFER_GEMM: 'true'
+        PYTHONNOUSERSITE: '1'
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/single_node/srt_fixed_sequence.sh
+    env:
+      MODEL: deepseek-ai/DeepSeek-R1-0528
+      ISL: '8192'
+      OSL: '1024'
+      RANDOM_RANGE_RATIO: '0.8'
+      USE_CHAT_TEMPLATE: 'false'
+zip_override_tp8_ep1:
+  benchmark:
+    env:
+      CONC: ['1', '2', '4']
+zip_override_tp4_ep1:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        chunked-prefill-size: 8192
+        cuda-graph-max-bs: 32
+        max-prefill-tokens: 8192
+        max-running-requests: 32
+        mem-fraction-static: 0.95
+        tensor-parallel-size: 4
+  benchmark:
+    env:
+      CONC: ['1', '2', '4', '8', '16', '32']
