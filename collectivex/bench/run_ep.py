@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib
 import ctypes
 import os
 import sys
@@ -48,10 +49,19 @@ def _runtime_info(torch, *, vendor: str) -> dict:
     }
 
 
+# backend name -> (module, class), imported only after torch initializes.
+BACKENDS = {
+    "deepep-v2": ("ep_deepep_v2", "DeepEPV2Backend"),
+    "mori": ("ep_mori", "MoRIBackend"),
+    "uccl-ep": ("ep_uccl", "UCCLEPBackend"),
+    "nccl-ep": ("ep_nccl", "NCCLEPBackend"),
+    "flashinfer-ep": ("ep_flashinfer", "FlashInferEPBackend"),
+}
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="CollectiveX EP dispatch/combine sweep")
-    ap.add_argument("--backend", required=True,
-                    choices=["deepep-v2", "mori", "uccl-ep", "nccl-ep", "flashinfer-ep"])
+    ap.add_argument("--backend", required=True, choices=sorted(BACKENDS))
     ep_harness.add_common_args(ap)
     args = ap.parse_args()
 
@@ -87,39 +97,10 @@ def main() -> int:
     }
     args.git_run = _run if any(_run.values()) else None
 
-    # Import the backend class only after torch initializes. The selected mode is an
-    # explicit case dimension; adapters do not infer it from the token ladder.
-    if args.backend == "mori":
-        from ep_mori import MoRIBackend as Backend
-    elif args.backend == "uccl-ep":
-        from ep_uccl import UCCLEPBackend as Backend
-    elif args.backend == "nccl-ep":
-        from ep_nccl import NCCLEPBackend as Backend
-    elif args.backend == "flashinfer-ep":
-        from ep_flashinfer import FlashInferEPBackend as Backend
-    else:
-        from ep_deepep_v2 import DeepEPV2Backend as Backend
-
-    # MoRI registers the default GPU process group with its SHMEM runtime. Keep that
-    # group device-only so scale-out does not also depend on a host Gloo fabric.
+    module, class_name = BACKENDS[args.backend]
+    Backend = getattr(importlib.import_module(module), class_name)
     if not dist.is_initialized():
-        if args.backend in ("mori", "uccl-ep", "nccl-ep", "flashinfer-ep"):
-            # MoRI registers this group with its SHMEM runtime; UCCL-EP is portable across
-            # NVIDIA (NCCL) and AMD (RCCL) and bootstraps its Buffer + CPU-proxy ranks from
-            # it. NCCL EP forms its OWN NCCL communicator and uses this group only to broadcast
-            # that communicator's unique id (no MPI in CollectiveX) plus the harness's timing
-            # collectives. All take the explicit rank/world_size form and keep the group
-            # device-only so scale-out does not also depend on a host Gloo fabric.
-            dist.init_process_group(
-                backend="nccl",
-                rank=rank,
-                world_size=world_size,
-                device_id=device,
-            )
-        else:
-            # PR #605 reuses PyTorch's NCCL communicator through ``_comm_ptr``. Supplying
-            # device_id eagerly forms it before ElasticBuffer construction.
-            dist.init_process_group("nccl", device_id=device)
+        Backend.init_process_group(dist, rank, world_size, device)
 
     args.runtime = _runtime_info(torch, vendor=vendor)
 

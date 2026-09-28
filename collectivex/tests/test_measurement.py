@@ -21,7 +21,7 @@ try:
 except Exception:  # torch is absent in the plain CPU test image; runs on GPU CI
     _torch = None
 
-import ep_harness  # noqa: E402  (stdlib-only at import)
+import ep_oracle  # noqa: E402  (stdlib-only at import)
 
 
 class _FakeLLBackend:
@@ -32,6 +32,7 @@ class _FakeLLBackend:
     name = "fake-ll"
     receive_layout = "token-expert"
     combine_weight_semantics = "weighted-kernel-sum"
+    combine_model = ep_oracle.WeightedKernelSum()
 
     def __init__(self, experts_per_rank: int, seed: int):
         self.experts_per_rank = experts_per_rank
@@ -105,7 +106,7 @@ class LowLatencyOracleEndToEnd(unittest.TestCase):
             transformed[i] for i in range(int(h.slot_token.numel()))
         )  # wrong shape/values on purpose
         with mock.patch.object(torch.cuda, "synchronize", lambda *a, **k: None):
-            report = ep_harness._run_ll_expert_oracle(
+            report = ep_oracle.run_expert_oracle(
                 torch, routing, backend, problem, idx_g, w_g,
                 rank=0, experts_per_rank=experts, scale_up_domain=1, seed=67,
             )

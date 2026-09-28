@@ -24,6 +24,8 @@ sys.path[:0] = [str(ROOT)]
 
 import ep_backend  # noqa: E402
 import ep_harness  # noqa: E402
+import ep_oracle  # noqa: E402
+import ep_timing  # noqa: E402
 import summarize  # noqa: E402
 
 
@@ -389,12 +391,12 @@ class GraphAlignmentAndValueCheck(unittest.TestCase):
                 record=lambda: None, elapsed_time=lambda other: probe_ms,
             ),
         ))
-        backend = _ChainBackend()
+        timing = ep_timing.GraphTiming(_ChainBackend())
         results = {}
         for probe_ms in (0.1, 0.05):  # the 200k-cycle probe took 100us, then 50us
             with mock.patch.dict(sys.modules, {"torch": fake}):
-                backend._calibrate_align_spin()
-            results[probe_ms] = backend._graph_align_cycles
+                timing.calibrate_align_spin()
+            results[probe_ms] = timing.align_cycles
         self.assertEqual(results[0.1], 200_000)  # the default 100us spin at 2 cycles/ns
         self.assertEqual(results[0.05], 2 * results[0.1])
 
@@ -404,15 +406,16 @@ class GraphAlignmentAndValueCheck(unittest.TestCase):
         handle = types.SimpleNamespace(recv_x="recv", recv_scales=None, combine_input=None)
         graph = types.SimpleNamespace(replay=lambda: order.append("replay"))
         backend.warm = lambda problem, count: order.append("warm")
-        backend._capture_pairs = lambda problem, staged, pairs, marks: (
+        timing = ep_timing.GraphTiming(backend)
+        timing.capture_pairs = lambda problem, staged, pairs, marks: (
             order.append(("capture", staged)) or (graph, {}, combined, handle)
         )
-        backend._poison = lambda tensor: order.append(("poison", tensor))
         dist = types.SimpleNamespace(barrier=lambda: order.append("barrier"))
         fake = types.SimpleNamespace(cuda=types.SimpleNamespace(synchronize=lambda: None),
                                      distributed=dist)
-        with mock.patch.dict(sys.modules, {"torch": fake, "torch.distributed": dist}):
-            result = backend.graph_replay_output(new_problem())
+        with mock.patch.dict(sys.modules, {"torch": fake, "torch.distributed": dist}), \
+                mock.patch.object(ep_timing, "poison", lambda tensor: order.append(("poison", tensor))):
+            result = timing.replay_output(new_problem())
         # Staging runs INSIDE the capture (staged=None). Between the upload replay and the
         # returned one, dispatch's output and the result are poisoned, then every rank barriers:
         # peers write into each other's buffers, so an unbarriered replay races a slow poison.
@@ -444,8 +447,8 @@ class RocmGraphEventRecord(unittest.TestCase):
         hip = types.SimpleNamespace(hipEventRecordWithFlags=lambda e, s, f: calls.append(
             (e.value, s.value, f.value)) or rc)
         with mock.patch.dict(sys.modules, {"torch": fake}), \
-                mock.patch.object(ep_backend.EPBackend, "_hip_runtime", lambda: hip):
-            ep_backend.EPBackend._record_graph_event(ep_backend.EPBackend._graph_event())
+                mock.patch.object(ep_timing, "_hip_runtime", lambda: hip):
+            ep_timing.record_graph_event(ep_timing.graph_event())
         return records, calls
 
     def test_rocm_events_are_recorded_once_outside_then_captured_through_hip(self):
@@ -800,11 +803,11 @@ def _sweep(fail_indices, error_indices, chain_error, backend_factory=None,
         events.append(("oracle", problem.T))
         oracle_calls.append((index, problem.T, (problem, *rest)))
         passed = index not in fail_indices
-        return ep_harness._oracle_report(
+        return ep_oracle.oracle_report(
             passed=passed,
             receive_count=8,
             max_elementwise_relative_error=chain_error if index in error_indices else 0.0,
-            checks=dict.fromkeys(ep_harness._ORACLE_CHECKS, passed),
+            checks=dict.fromkeys(ep_oracle.ORACLE_CHECKS, passed),
         )
 
     def fake_output_match(chained, drained):
@@ -816,8 +819,8 @@ def _sweep(fail_indices, error_indices, chain_error, backend_factory=None,
         stdout = io.StringIO()
         with mock.patch.dict(sys.modules, {"routing": fake_routing()}), \
                 mock.patch.dict(os.environ, {"COLLX_ATTEMPT_ID": "1"}), \
-                mock.patch.object(ep_harness, "_run_expert_oracle", fake_oracle), \
-                mock.patch.object(ep_harness, "_chain_output_matches", fake_output_match), \
+                mock.patch.object(ep_harness, "run_expert_oracle", fake_oracle), \
+                mock.patch.object(ep_harness, "chain_output_matches", fake_output_match), \
                 contextlib.redirect_stdout(stdout):
             rc = ep_harness.run_sweep(
                 make_args(out), backend, value_torch(), _FakeDist(), "cuda:0", 0, 1
@@ -1115,20 +1118,20 @@ class ChainOutputCheck(unittest.TestCase):
             ("shape", [1.0, 2.0], [1.0, 2.0, 3.0], False, float("inf")),
         ):
             with self.subTest(label):
-                got, error = ep_harness._chain_output_matches(_Vec(chained), _Vec(drained))
+                got, error = ep_oracle.chain_output_matches(_Vec(chained), _Vec(drained))
                 self.assertIs(got, ok)
                 self.assertAlmostEqual(error, expected_error)
 
     def test_a_non_finite_output_is_an_unbounded_mismatch_not_zero_error(self):
         # NaN would vanish from the cross-rank MAX and publish "failed, error 0.0".
-        got, error = ep_harness._chain_output_matches(_Vec([float("nan"), 1.0]), _Vec([1.0, 1.0]))
+        got, error = ep_oracle.chain_output_matches(_Vec([float("nan"), 1.0]), _Vec([1.0, 1.0]))
         self.assertIs(got, False)
         self.assertEqual(error, float("inf"))
 
     def test_near_zero_elements_are_judged_against_the_magnitude_floor(self):
         # Relative error against a denominator of 1e-6 would be huge; the floor keeps
         # numerically-tiny elements from redding a healthy chain.
-        got, error = ep_harness._chain_output_matches(_Vec([0.000101]), _Vec([0.000001]))
+        got, error = ep_oracle.chain_output_matches(_Vec([0.000101]), _Vec([0.000001]))
         self.assertTrue(got)
         self.assertAlmostEqual(error, 0.005)  # 0.0001 difference under the 0.02 magnitude floor
 

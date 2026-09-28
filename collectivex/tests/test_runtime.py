@@ -29,6 +29,7 @@ import config  # noqa: E402
 import stage  # noqa: E402
 import ep_harness  # noqa: E402  (stdlib-only at module top)
 import ep_backend  # noqa: E402  (torch is imported lazily inside its methods)
+import ep_oracle  # noqa: E402
 
 
 # configs/platform_config.json is shared by matrix scheduling, operator/network
@@ -640,21 +641,18 @@ class WeightedCombineSemanticsTests(unittest.TestCase):
         torch = _torch
         payload = torch.randn(3, 64, dtype=torch.bfloat16)
         ids = torch.tensor([[2, -1], [5, -1], [7, -1]], dtype=torch.int64)
-        low = ep_harness._expert_transform(
-            torch, payload, ids, torch.full((3, 2), 0.2), "unweighted-rank-sum"
-        )
-        high = ep_harness._expert_transform(
-            torch, payload, ids, torch.full((3, 2), 0.9), "unweighted-rank-sum"
-        )
+        model = ep_oracle.combine_model("unweighted-rank-sum")
+        low = model.transform(torch, payload, ids, torch.full((3, 2), 0.2))
+        high = model.transform(torch, payload, ids, torch.full((3, 2), 0.9))
         # The gate IS in the transform here, so a larger weight changes the staged value.
         self.assertFalse(torch.equal(low, high))
 
     def test_unknown_semantics_fail_closed(self):
         torch = _torch
         with self.assertRaises(ValueError):
-            ep_harness._expected_transformed_combine(
-                torch, self._problem(), 4, 8, "made-up"
-            )
+            ep_oracle.combine_model("made-up")
+        with self.assertRaises(ValueError):
+            ep_oracle.combine_model("unweighted-rank-sum", "made-up")
 
 
 @unittest.skipUnless(_torch is not None, "combine-oracle math checks require torch")
@@ -672,7 +670,7 @@ class TopkSlotTreeReductionTests(unittest.TestCase):
         slots = [torch.full((1, 1), v, dtype=torch.float32) for v in values]
         destination = torch.arange(len(values)).unsqueeze(0)
         messages = torch.stack(slots)
-        return ep_harness._topk_slot_tree_combine(
+        return ep_oracle.topk_slot_tree_combine(
             torch, destination, torch.ones_like(destination, dtype=torch.bool),
             messages, torch.bfloat16,
         ).item()
@@ -691,13 +689,13 @@ class RankFp32ReductionTests(unittest.TestCase):
         messages = torch.tensor(values, dtype=torch.float32).reshape(8, 1, 1)
         destination = torch.arange(8).unsqueeze(0)
         valid = torch.ones_like(destination, dtype=torch.bool)
-        result = ep_harness._topk_rank_fp32_combine(
+        result = ep_oracle.topk_rank_fp32_combine(
             torch, destination, valid, messages
         )
         self.assertEqual(result.item(), 1.0 + 7 * 2.0**-9)
 
         duplicate = torch.tensor([[0, 0, 1]])
-        result = ep_harness._topk_rank_fp32_combine(
+        result = ep_oracle.topk_rank_fp32_combine(
             torch, duplicate, torch.ones_like(duplicate, dtype=torch.bool), messages
         )
         self.assertEqual(result.item(), 1.0 + 2.0**-9)

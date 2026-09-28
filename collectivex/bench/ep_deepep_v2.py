@@ -144,6 +144,12 @@ class DeepEPV2Backend(EPBackend):
     receive_layout = "token-rank"
     combine_weight_semantics = "unweighted-rank-sum"
 
+    @staticmethod
+    def init_process_group(dist, rank, world_size, device):
+        # PR #605 reuses PyTorch's NCCL communicator through `_comm_ptr`; device_id forms it
+        # eagerly, before ElasticBuffer construction.
+        dist.init_process_group("nccl", device_id=device)
+
     def __init__(self, args, rank, world_size, local_rank, device):
         # Mode picks the kernel family (normal ElasticBuffer vs low-latency legacy
         # Buffer); base SUPPORTED_MODES enforces the allowed set.

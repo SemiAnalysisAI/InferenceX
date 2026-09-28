@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import abc
-import functools
 import os
 import types
 from dataclasses import dataclass, field
@@ -12,11 +11,17 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import torch
 
-from ep_harness import (
-    time_cuda_graph_phase_us,
-    time_us,
-    token_ladder,
-)
+from ep_oracle import combine_model
+from ep_timing import EagerTiming, GraphTiming
+
+
+def token_ladder(spec: str, cap: int | None) -> tuple[list[int], list[int]]:
+    """(ladder, dropped) from an explicit spec: unique positive ints, clamped to `cap` with the
+    dropped points reported rather than silently truncated."""
+    want = sorted({t for t in (int(t) for t in spec.replace(",", " ").split() if t) if t > 0})
+    if cap is not None:
+        return [t for t in want if t <= cap], [t for t in want if t > cap]
+    return want, []
 
 
 @dataclass
@@ -110,41 +115,24 @@ class EPBackend(abc.ABC):
     # adapter sends 1 byte/value plus (for a blockwise codec) per-block FP32 scales.
     dispatch_value_bytes = 2
     dispatch_scale_bytes_per_copy = 0
+    # The expected-combine reduction the oracle holds the kernel to (see ep_oracle.combine_model);
+    # published, because a backend may pick it per installed library version.
+    combine_reduction = "domain-fp32"
+    kernel_generation: "str | None" = None
+    library_version: "str | None" = None
+    mode: "str | None" = None
     # Handle contract, not an attribute of this class: every adapter's stage() sets
     # handle.combine_input to the tensor its combine() reads. The value need not be a torch
     # tensor -- nccl-ep stores its own nccl.ep wrapper -- because the shared paths below
     # only ever pass it through.
 
-    # Which production FP8 consumption path the chained roundtrip models.
-    #
-    #   native  (default) - the expert consumes the dispatched fp8 + per-128-block scales
-    #     DIRECTLY and emits BF16, so no standalone conversion pass sits between the two
-    #     collectives. This is what SGLang does (its DeepEP dispatcher contains no dequant at
-    #     all) and what vLLM does whenever the expert's block shape matches DeepEP's 128
-    #     (`block_k == DEEPEP_QUANT_BLOCK_SIZE` -> "DeepEP kernels did the quantization for
-    #     us", fp8 + scales returned untouched). deepseek-v3 block-fp8 -- the workload this
-    #     suite runs -- takes that branch.
-    #   dequant - vLLM's fallback for a quant-format MISMATCH: dequant_fp8() materialises the
-    #     full padded [experts, max_tokens, hidden] tensor to fp32, casts to the activation
-    #     dtype, then re-quantises for the expert. A real path, just not this workload's.
-    #
-    # `dequant` is a VERIFICATION HATCH, not a second metric: never a sweep axis, never a
-    # default. It is retained because it costs nothing (BF16 needs the same staged-is-None
-    # branch) and because it still reproduces historical deepep-v2/uccl-ep numbers for regression
-    # checks -- 302.0us against 302.5us in run 30177021271 at T=1. It does not reproduce MoRI fp8
-    # (that stage now casts only the rows dispatch filled) or any pre-hoist BF16 roundtrip (the
-    # hatch is fp8-only by design).
-    #
-    # A second measured mode is unnecessary: `dequant roundtrip ~= roundtrip + stage` holds to
-    # within a few percent, so the mismatched-config cost is derivable from what every run
-    # already emits. Measure native and derive dequant, NEVER the reverse -- reconstructing
-    # native as `dequant - stage` is worst exactly in the decode regime the headline reports.
-    # The derivation-accuracy ladder is in docs/methodology.md (search "fp8_consume").
-    #
-    # It matters because for deepep-v2 and uccl `stage` IS the fp8 conversion (both set
-    # stage_device_work = self._fp8), so charging it to the chained roundtrip compares fp8 and
-    # bf16 through structurally different pipelines: on run 30177021271 that inverted the
-    # fp8-vs-bf16 verdict in 39 of 51 comparisons.
+    # Which production FP8 consumption path the chained roundtrip models (methodology, "fp8_consume").
+    # native (default): the expert consumes the dispatched fp8 + scales directly, as SGLang and
+    # vLLM do for this workload's 128-block shape, so no conversion sits between the collectives.
+    # dequant: vLLM's quant-format-mismatch fallback, which materialises and re-quantises. It is a
+    # verification hatch, never a sweep axis: `dequant roundtrip ~= roundtrip + stage` holds within
+    # a few percent, so measure native and derive dequant. Charging stage to the fp8 roundtrip
+    # inverted the fp8-vs-bf16 verdict in 39 of 51 comparisons (run 30177021271).
     fp8_consume = os.environ.get("CX_FP8_CONSUME", "native")
     if fp8_consume not in ("native", "dequant"):
         raise ValueError(f"CX_FP8_CONSUME must be 'native' or 'dequant', got {fp8_consume!r}")
@@ -174,7 +162,7 @@ class EPBackend(abc.ABC):
     @property
     def cuda_graph_supported(self) -> bool:
         """Whether this realized backend/mode has a graph-safe fixed-shape roundtrip."""
-        return getattr(self, "mode", None) in self.CUDA_GRAPH_MODES
+        return self.mode in self.CUDA_GRAPH_MODES
 
     @property
     def cuda_graph_enabled(self) -> bool:
@@ -264,6 +252,13 @@ class EPBackend(abc.ABC):
             raise ValueError(
                 f"{self.name} does not support precision {self.precision!r}"
             )
+
+    @staticmethod
+    def init_process_group(dist, rank, world_size, device):
+        """Form the default NCCL group, device-only so scale-out does not also depend on a host Gloo
+        fabric. MoRI registers it with its SHMEM runtime, UCCL-EP bootstraps its Buffer and CPU-proxy
+        ranks from it, and NCCL EP uses it only to broadcast its own communicator's unique id."""
+        dist.init_process_group(backend="nccl", rank=rank, world_size=world_size, device_id=device)
 
     # ---- Abstract transport contract -------------------------------------------------
 
@@ -394,188 +389,33 @@ class EPBackend(abc.ABC):
         import torch
         return torch.int64
 
-    # ---- CUDA graph capture ----------------------------------------------------------------
+    # ---- Timing: EagerTiming / GraphTiming (ep_timing.py) run the windows -----------------
 
-    # Handle attributes dispatch writes; the replay check poisons them (see graph_replay_output).
-    _DISPATCH_OUTPUT_FIELDS = ("recv_x", "recv_scales", "dispatch_output")
+    @property
+    def combine_model(self):
+        """The expected-combine model for this backend's declared semantics and reduction."""
+        return combine_model(self.combine_weight_semantics, self.combine_reduction)
 
-    def _calibrate_align_spin(self, spin_us=100.0):
-        """Size the post-barrier alignment spin to `spin_us` of wall time on this GPU.
-
-        The spin lets every host enqueue its replay before the stream reaches it. `_sleep` counts
-        SM cycles, so a fixed count left ~15us of skew between differently clocked gb200 ranks.
-        """
-        import torch
-
-        probe = 200_000
-        start = torch.cuda.Event(enable_timing=True)
-        end = torch.cuda.Event(enable_timing=True)
-        torch.cuda._sleep(probe // 10)  # ramp clocks before the measured spin
-        start.record()
-        torch.cuda._sleep(probe)
-        end.record()
-        torch.cuda.synchronize()
-        elapsed_us = max(start.elapsed_time(end) * 1000.0, 1e-3)
-        self._graph_align_cycles = max(1, int(probe * spin_us / elapsed_us))
-
-    def _graph_align(self):
-        """Enqueue a device-side rank barrier on the current stream, without a host sync."""
-        import torch
-        import torch.distributed as dist
-
-        token = getattr(self, "_graph_align_token", None)
-        if token is None:
-            token = self._graph_align_token = torch.zeros(1, device=self.device)
-        if getattr(self, "_graph_align_cycles", None) is None:
-            self._calibrate_align_spin()
-        dist.all_reduce(token)
-        torch.cuda._sleep(self._graph_align_cycles)
-
-    @staticmethod
-    def _graph_event():
-        """A timing event whose record() can be captured into a graph. ROCm torch < 2.13 rejects
-        `external=True`, so there the event is recorded once to exist and its captured record goes
-        through hipEventRecordWithFlags, as torch 2.13 does (pytorch#178264)."""
-        import torch
-
-        if not getattr(torch.version, "hip", None):
-            return torch.cuda.Event(enable_timing=True, external=True)
-        event = torch.cuda.Event(enable_timing=True)
-        event.record()
-        event._collx_hip_external = True
-        return event
-
-    @staticmethod
-    def _record_graph_event(event):
-        import ctypes
-
-        import torch
-
-        if not getattr(event, "_collx_hip_external", False):
-            return event.record()
-        rc = EPBackend._hip_runtime().hipEventRecordWithFlags(
-            ctypes.c_void_p(event.cuda_event),
-            ctypes.c_void_p(torch.cuda.current_stream().cuda_stream),
-            ctypes.c_uint(0x1),  # hipEventRecordExternal
-        )
-        if rc != 0:
-            raise RuntimeError(f"hipEventRecordWithFlags(external) failed with hipError {rc}")
-
-    @staticmethod
-    @functools.cache
-    def _hip_runtime():
-        import ctypes
-
-        import torch
-
-        try:
-            return ctypes.CDLL("libamdhip64.so")
-        except OSError:  # pip ROCm torch bundles the runtime in torch/lib
-            return ctypes.CDLL(os.path.join(os.path.dirname(torch.__file__), "lib", "libamdhip64.so"))
-
-    def _capture_pairs(self, problem, staged, pairs, marks):
-        """Capture `pairs` back-to-back dispatch -> combine pairs into one graph.
-
-        `marks` picks the windows that get event nodes ("pair", "dispatch", "combine"). Returns
-        (graph, {mark: (starts, ends)}, last combined output, last dispatch handle).
-        """
-        import torch
-        import torch.distributed as dist
-
-        def events():
-            return [self._graph_event() for _ in range(pairs)]
-
-        stamps = {mark: (events(), events()) for mark in marks}
-
-        def record(mark, edge, i):
-            if mark in stamps:
-                self._record_graph_event(stamps[mark][edge][i])
-
-        dist.barrier()
-        torch.cuda.synchronize()
-        graph = torch.cuda.CUDAGraph()
-        combined = handle = None
-        with torch.cuda.graph(graph, capture_error_mode="relaxed"):
-            for i in range(pairs):
-                record("pair", 0, i)
-                record("dispatch", 0, i)
-                handle = self.dispatch(problem)
-                record("dispatch", 1, i)
-                if staged is None:
-                    self.stage(problem, handle)
-                else:
-                    handle.combine_input = staged
-                record("combine", 0, i)
-                combined = self.combine(problem, handle)
-                record("combine", 1, i)
-                record("pair", 1, i)
-        torch.cuda.synchronize()
-        return graph, stamps, combined, handle
-
-    @staticmethod
-    def _poison(tensor):
-        """Overwrite a tensor with 0xFF bytes: NaN for bf16/fp16/fp32/fp8-e4m3, -1 for ints."""
-        import torch
-
-        if tensor is None:
-            return
-        if isinstance(tensor, (tuple, list)):
-            for part in tensor:
-                EPBackend._poison(part)
-            return
-        if not isinstance(tensor, torch.Tensor) or not tensor.numel():
-            return
-        try:
-            tensor.view(torch.uint8).fill_(0xFF)
-        except RuntimeError:
-            tensor.fill_(float("nan") if tensor.is_floating_point() else -1)
-
-    def graph_replay_output(self, problem):
-        """Graph replay's value check: an untimed capture with `stage` INSIDE the graph.
-
-        Dispatch's output and the result are poisoned before the only replay, so the returned
-        output is valid only if that replay re-ran dispatch, stage and combine.
-        """
-        import torch
-        import torch.distributed as dist
-
-        self.warm(problem, 1)
-        graph, _, combined, handle = self._capture_pairs(problem, None, 1, ())
-        graph.replay()  # first launch uploads the graph; its output is discarded
-        torch.cuda.synchronize()
-        for field in self._DISPATCH_OUTPUT_FIELDS:
-            self._poison(getattr(handle, field, None))
-        self._poison(combined)
-        torch.cuda.synchronize()
-        # Peers write straight into each other's receive buffers: without the barrier a fast
-        # rank's replay lands before a slow peer's poison, which then overwrites fresh data.
-        dist.barrier()
-        torch.cuda.synchronize()
-        graph.replay()
-        torch.cuda.synchronize()
-        return combined.clone()
-
-    # ---- Timing template methods -----------------------------------------------------
+    @property
+    def timing(self):
+        """The timing strategy for this backend's regime, kept for the backend's lifetime so graph
+        alignment state persists; rebuilt if COLLX_CUDA_GRAPH flips the regime."""
+        graph = self.cuda_graph_enabled
+        timing = self.__dict__.get("_timing")
+        if timing is None or timing.graph != graph:
+            timing = self._timing = (GraphTiming if graph else EagerTiming)(self)
+        return timing
 
     def timed_components(self):
-        """Components measured for this backend: roundtrip, dispatch and combine
-        always; stage only when it launches device work."""
-        components = ["roundtrip", "dispatch", "combine"]
-        if self.stage_device_work and not self.cuda_graph_enabled:
-            components.append("stage")
-        return components
+        return self.timing.components()
 
     def warm(self, problem, count, stage_every=False):
         """Untimed synchronized full round trips (fabric/clock warm-up; cold-jump-safe).
 
-        Caches the dynamic receive cardinality once so adapters never read a device
-        scalar during a timed trial (the count is stable for a fixed routing trace).
-
-        `stage_every` re-materialises the combine input on every iteration; the default hoists it
-        after the first, mirroring `benchmark_roundtrip`. Where staging is excluded from the chain
-        the timed region stages nothing, so warming it warms work the measurement never performs
-        -- ~247us per FP8 dequant against a 61us roundtrip, the leg's largest single cost.
-        `benchmark_stage` opts in, because there staging is the timed operation.
+        Caches the receive cardinality once so no adapter reads a device scalar during a timed
+        trial. `stage_every` re-stages every iteration; the default hoists after the first, as the
+        timed roundtrip does, because warming staging the measurement never performs cost ~247us
+        per FP8 dequant against a 61us roundtrip. Stage timing opts in, since staging is timed there.
         """
         import torch
 
@@ -593,272 +433,58 @@ class EPBackend(abc.ABC):
             self.combine(problem, handle)
             torch.cuda.synchronize()
 
-    def run_roundtrip(self, problem, staged=None):
-        """One chained round trip; returns combined activations.
-
-        `staged` supplies a pre-materialised combine input so staging stays out of the timed
-        region -- the default wherever `stage()` does device work (see
-        `stage_excluded_from_roundtrip`). It is None where `stage()` is a bare pointer
-        assignment, or under the `CX_FP8_CONSUME=dequant` hatch that wants it back in the chain.
-        """
-        handle = self.dispatch(problem)
+    def stage_or_reuse(self, problem, handle, staged):
         if staged is None:
             self.stage(problem, handle)
         else:
             handle.combine_input = staged
+
+    def run_roundtrip(self, problem, staged=None):
+        """One dispatch -> combine; `staged` supplies a pre-materialised combine input so staging
+        stays out of the timed region (see `stage_excluded_from_roundtrip`)."""
+        handle = self.dispatch(problem)
+        self.stage_or_reuse(problem, handle, staged)
         return self.combine(problem, handle)
 
-    def benchmark_chain(self, problem, warmup, iters, drop):
-        """Free-running dispatch->combine pairs, no host sync: a floors chain, then a period chain.
-
-        This is what a serving stack pays: a decode loop never stops between layers, so entry
-        skew amortises across the chain instead of landing on one op the way `roundtrip`'s
-        drained windows charge it. The pairing is `run_roundtrip`'s, so paired-API backends stay
-        in contract; every backend is measured.
-
-        Two chains, because per-op events inside a chained pair execute immediately on an idle
-        stream, landing the host's record() cost in the pair window: six events per pair
-        published a flat +10-30us host constant on every vendor (+20-38% at T=1, decaying with
-        T). So the floors chain carries op-window events only, the period chain one outer pair
-        with nothing between its two collectives, and `chain_health.interpair_gap_us`
-        (start-to-start median minus window median) guards that defect in-artifact.
-
-        Only the pair period and the per-op minima are publishable: each rank's inter-rank wait
-        parks in whichever op window it blocks in while the period is conserved, so `run_sweep`
-        enforces pair -> cross-rank median, per-op -> cross-rank minimum, never a chained per-op
-        median or p99.
-
-        `drop` discards each chain's head (pipeline fill, not period). The chain's own final
-        combined output is returned under `combined` -- cloned after the closing synchronize, so
-        the copy is untimed and detached from any double-buffered receive the next dispatch would
-        overwrite. `run_sweep` checks it against a drained pair through this same code path and
-        separately reruns the full expert oracle against the state the chain leaves behind; both
-        fold into the point's verdict. Interior pairs stay unvalidated by design -- each pair
-        overwrites its predecessor's output, and holding or reducing every output would put
-        device work inside the timed loops (see methodology, Correctness).
-        Free-running is safe fleet-wide: every backend double-buffers per dispatch or completes
-        each op on a reusable handle, and deepep-v2 NORMAL probed clean with 256 un-synced pairs
-        (T=128, EP8+EP16, both precisions, 2026-08-06, pin 01dc3aaa). Returns post-`drop` series
-        in microseconds: `pair` and `start_to_start` from the period chain (the latter one
-        element shorter), `dispatch` and `combine` from the floors chain.
-        """
+    def warm_and_hoist_stage(self, problem, warmup):
+        """Warm, then materialise the combine input ONCE, untimed, where staging is excluded from
+        the roundtrip. Routing is fixed per ladder point, so one staged tensor serves every pair;
+        it is read back through `handle.combine_input`, so a non-torch payload (nccl-ep) passes
+        through unchanged. Returns None where each pair stages inline."""
         import torch
 
         self.warm(problem, warmup)
-        staged = None
-        if self.stage_excluded_from_roundtrip:
-            # The same hoist `benchmark_roundtrip` performs, so the chain is dispatch -> combine
-            # and nothing else. The `CX_FP8_CONSUME=dequant` hatch leaves `staged` None, putting
-            # the conversion inside the pair period and inside neither per-op window -- where
-            # work between the two collectives belongs.
-            handle = self.dispatch(problem)
-            self.stage(problem, handle)
-            staged = handle.combine_input
-            self.combine(problem, handle)  # drain the pair backends require
-            torch.cuda.synchronize()
-        if self.cuda_graph_enabled:
-            return self._benchmark_chain_graph(problem, staged, iters, drop)
-        # Events are allocated BEFORE the loops: an allocation between two record() calls is host
-        # work inside a window meant to belong to the stream, a measurable fraction of the period
-        # at the bottom of the ladder.
-        def events():
-            return [torch.cuda.Event(enable_timing=True) for _ in range(iters)]
-
-        dispatch_start, dispatch_end = events(), events()
-        combine_start, combine_end = events(), events()
-        pair_start, pair_end = events(), events()
-
-        # ---- Floors chain: op windows only, pair boundaries uninstrumented. ----
-        for i in range(iters):
-            dispatch_start[i].record()
-            handle = self.dispatch(problem)
-            dispatch_end[i].record()
-            if staged is None:
-                self.stage(problem, handle)
-            else:
-                handle.combine_input = staged
-            combine_start[i].record()
-            self.combine(problem, handle)
-            combine_end[i].record()
+        if not self.stage_excluded_from_roundtrip:
+            return None
+        handle = self.dispatch(problem)
+        self.stage(problem, handle)
+        staged = handle.combine_input
+        self.combine(problem, handle)  # drain the pair backends require
         torch.cuda.synchronize()
-
-        # ---- Period chain: nothing between the pair's collectives but the pair itself. ----
-        for i in range(iters):
-            pair_start[i].record()
-            handle = self.dispatch(problem)
-            if staged is None:
-                self.stage(problem, handle)
-            else:
-                handle.combine_input = staged
-            combined = self.combine(problem, handle)
-            pair_end[i].record()
-        torch.cuda.synchronize()
-
-        def series(starts, ends):
-            return [
-                start.elapsed_time(end) * 1000.0  # ms -> us
-                for start, end in zip(starts[drop:], ends[drop:])
-            ]
-
-        return {
-            "pair": series(pair_start, pair_end),
-            "start_to_start": series(pair_start[:-1], pair_start[1:]),
-            "dispatch": series(dispatch_start, dispatch_end),
-            "combine": series(combine_start, combine_end),
-            # The period chain's final combined output, produced IN the free-running regime.
-            # Cloned post-sync (untimed, stream-ordered ahead of any later dispatch) so the
-            # caller can compare it against a drained pair without racing the buffers.
-            "combined": combined.clone(),
-        }
-
-    def _benchmark_chain_graph(self, problem, staged, iters, drop):
-        """The chained family under capture: each sibling is ONE graph of `iters` unrolled pairs,
-        the shape of a decode graph. Returns the eager chain's series; each graph replays once
-        untimed (upload), then once aligned and timed.
-        """
-        import torch
-
-        floors, floor_stamps, _, _ = self._capture_pairs(
-            problem, staged, iters, ("dispatch", "combine")
-        )
-        period, period_stamps, combined, _ = self._capture_pairs(
-            problem, staged, iters, ("pair",)
-        )
-        self._calibrate_align_spin()
-        for graph in (floors, period):
-            graph.replay()
-            torch.cuda.synchronize()
-            self._graph_align()
-            graph.replay()
-            torch.cuda.synchronize()
-
-        def series(starts, ends):
-            return [
-                start.elapsed_time(end) * 1000.0  # ms -> us
-                for start, end in zip(starts[drop:], ends[drop:])
-            ]
-
-        pair_start, pair_end = period_stamps["pair"]
-        return {
-            "pair": series(pair_start, pair_end),
-            "start_to_start": series(pair_start[:-1], pair_start[1:]),
-            "dispatch": series(*floor_stamps["dispatch"]),
-            "combine": series(*floor_stamps["combine"]),
-            "combined": combined.clone(),
-        }
+        return staged
 
     def benchmark_component(self, component, problem, warmup, iters):
         """Measure one named component; every component gets the same warm-up first."""
-        if self.cuda_graph_enabled:
-            # Re-capture the roundtrip for each component, adding timing nodes only
-            # around that phase so roundtrip replay stays uninstrumented.
-            return self.benchmark_roundtrip(problem, warmup, iters, component)
-        if component == "roundtrip":
-            return self.benchmark_roundtrip(problem, warmup, iters)
-        if component == "dispatch":
-            return self.benchmark_dispatch(problem, warmup, iters)
-        if component == "stage":
-            return self.benchmark_stage(problem, warmup, iters)
-        if component == "combine":
-            return self.benchmark_combine(problem, warmup, iters)
-        raise RuntimeError(f"unknown timed component {component!r}")
+        return self.timing.component(component, problem, warmup, iters)
 
-    def benchmark_roundtrip(self, problem, warmup, iters, graph_component="roundtrip"):
-        import torch
+    def benchmark_chain(self, problem, warmup, iters, drop):
+        """Free-running dispatch->combine pairs, no host sync between them: what a decode loop pays.
 
-        self.warm(problem, warmup)
-        staged = None
-        if self.stage_excluded_from_roundtrip:
-            # Materialise the expert-output stand-in ONCE, untimed, so the chained measurement is
-            # dispatch -> combine and nothing else. Routing is fixed for a ladder point, so the
-            # same staged tensor is valid for every iteration -- MoRI's is the dispatch output at
-            # BF16 or a `[:rows]` BF16 cast under FP8, FlashInfer's the workspace combine region,
-            # which sits past the end of every dispatch receive plane. Read back through
-            # `handle.combine_input` rather than constructed, so an adapter's non-torch payload
-            # (nccl-ep) would round-trip unchanged if one ever reached here.
-            handle = self.dispatch(problem)
-            self.stage(problem, handle)
-            staged = handle.combine_input
-            self.combine(problem, handle)  # drain the pair backends require
-            torch.cuda.synchronize()
-        if self.cuda_graph_enabled:
-            # One captured pair with event nodes around the timed component; each timed replay
-            # starts behind `_graph_align` so the cross-rank MAX is the operation, not launch skew.
-            mark = "pair" if graph_component == "roundtrip" else graph_component
-            graph, stamps, combined, _ = self._capture_pairs(problem, staged, 1, (mark,))
-            # Re-measure the spin rate per timed series: clocks move with load and temperature.
-            self._calibrate_align_spin()
-            starts, ends = stamps[mark]
-            samples = time_cuda_graph_phase_us(
-                torch, graph.replay, warmup, iters, (starts[0], ends[0]),
-                align=self._graph_align,
-            )
+        Entry skew amortises across the chain instead of landing on one op. Only the pair period and
+        the per-op minima are publishable: each rank's wait parks in whichever op window it blocks
+        in while the period is conserved (run_sweep reduces pair -> median, per-op -> minimum).
+        `drop` discards each chain's head (pipeline fill). The final combined output is returned
+        under `combined` for run_sweep's chained-vs-drained check; interior pairs stay unvalidated
+        by design (holding their outputs would put device work inside the timed loops).
+        Free-running is safe fleet-wide: every backend double-buffers per dispatch or completes each
+        op on a reusable handle (deepep-v2 NORMAL probed clean with 256 un-synced pairs).
+        """
+        staged = self.warm_and_hoist_stage(problem, warmup)
+        return self.timing.chain(problem, staged, iters, drop)
 
-            # Prove replay, rather than capture, writes the output used by the correctness gate.
-            combined.fill_(float("nan"))
-            torch.cuda.synchronize()
-            graph.replay()
-            torch.cuda.synchronize()
-            replayed = combined.clone()
-            problem._cuda_graph_output = replayed
-            problem._cuda_graph_output_rewritten = bool(
-                torch.isfinite(replayed).all().item()
-            )
-            return samples
-        return time_us(torch, lambda p=problem: self.run_roundtrip(p, staged), 0, iters)
-
-    def benchmark_dispatch(self, problem, warmup, iters):
-        import torch
-
-        self.warm(problem, warmup)
-
-        def finish_dispatch(hh, p=problem):
-            self.stage(p, hh)
-            self.combine(p, hh)
-
-        return time_us(
-            torch, lambda p=problem: self.dispatch(p), 0, iters,
-            post=finish_dispatch if self.requires_fresh_pair else None,
-        )
-
-    def benchmark_stage(self, problem, warmup, iters):
-        import torch
-
-        # Staging is the timed operation here, so it must be warmed on every iteration.
-        self.warm(problem, warmup, stage_every=True)
-
-        def prep_stage(p=problem):
-            return self.dispatch(p)
-
-        def stage_op(hh, p=problem):
-            self.stage(p, hh)
-            return hh
-
-        # Drain each timed stage's dispatch with an untimed combine where the
-        # backend requires the pair (same rule as benchmark_dispatch).
-        return time_us(
-            torch, stage_op, 0, iters, pre=prep_stage,
-            post=(lambda hh, p=problem: self.combine(p, hh))
-            if self.requires_fresh_pair else None,
-        )
-
-    def benchmark_combine(self, problem, warmup, iters):
-        import torch
-
-        self.warm(problem, warmup)
-
-        def prep_combine(p=problem):
-            hh = self.dispatch(p)
-            self.stage(p, hh)
-            return hh
-
-        if self.requires_fresh_pair:
-            return time_us(
-                torch, lambda hh, p=problem: self.combine(p, hh), 0, iters, pre=prep_combine,
-            )
-        hh = prep_combine()
-        torch.cuda.synchronize()
-        return time_us(torch, lambda p=problem, hx=hh: self.combine(p, hx), 0, iters)
+    def graph_replay_output(self, problem):
+        """Graph replay's value check (GraphTiming.replay_output)."""
+        return self.timing.replay_output(problem)
 
     def finalize(self, rc):
         """Barrier and tear down the process group; returns rc."""
