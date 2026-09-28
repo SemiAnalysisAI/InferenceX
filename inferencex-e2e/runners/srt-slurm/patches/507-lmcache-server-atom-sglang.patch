@@ -1,5 +1,5 @@
 diff --git a/docs/config-reference.md b/docs/config-reference.md
-index d6ddf28..023fb45 100644
+index d6997e70..7a7178ae 100644
 --- a/docs/config-reference.md
 +++ b/docs/config-reference.md
 @@ -56,6 +56,28 @@ srt-slurm owns the model path, HTTP port, tensor parallel size, and KV-transfer
@@ -32,10 +32,10 @@ index d6ddf28..023fb45 100644
  schema: 2                      # Required: recipe layout version
  name: "my-benchmark"           # Required: job name
 diff --git a/docs/schema-reference.md b/docs/schema-reference.md
-index 016b082..a51b17c 100644
+index 0c172bdd..9ee6090d 100644
 --- a/docs/schema-reference.md
 +++ b/docs/schema-reference.md
-@@ -622,7 +622,7 @@ vLLM protocol - implements BackendProtocol.
+@@ -624,7 +624,7 @@ vLLM protocol - implements BackendProtocol.
  |---|---|---|---|
  | `type` | one of `'vllm'` | `'vllm'` |  |
  | `set_visible_devices` | bool | `False` | Use an environment mask instead of the engine's --device-ids option. |
@@ -45,7 +45,7 @@ index 016b082..a51b17c 100644
  | `allow_prefill_decode_colocation` | bool | `False` | Allow prefill and decode workers to share one node when the combined GPU request fits within gpus_per_node. Defaults off to preserve existing P/D node separation. |
  | `allow_prefill_decode_colocation_across_nodes` | bool | `False` | Extend P/D colocation to multi-node topologies. When enabled together with allow_prefill_decode_colocation, workers are packed contiguously across the minimum number of nodes instead of reserving separate P/D node pools. Defaults off to preserve the original one-node-only policy. |
 diff --git a/docs/services.md b/docs/services.md
-index ab010da..04bb983 100644
+index ab010da1..04bb9838 100644
 --- a/docs/services.md
 +++ b/docs/services.md
 @@ -48,7 +48,7 @@ directory. `examples/features/services.yaml` is a runnable version of this.
@@ -79,20 +79,20 @@ index ab010da..04bb983 100644
  | `gms` | one `python3 -m gpu_memory_service --device k` per GPU of the worker, supervised by bash, in the job container | `before_workers` | `true` | Implied by `engine.failover`; see [Shadow Engine Recovery](shadow-engine-recovery.md). `placement.per: worker` (required): one instance per vLLM worker in that worker's device view, sockets and lock file under `<shared_dir>/srtctl-<job>/<role>_<index>`. Ready when its log says `GMS ready:`; `readiness.timeout_seconds` (default 120) also bounds the servers' startup. |
  
 diff --git a/examples/README.md b/examples/README.md
-index 487fa7b..67c152c 100644
+index 63eb9d97..373e5413 100644
 --- a/examples/README.md
 +++ b/examples/README.md
-@@ -31,6 +31,9 @@ Every example is written in the 2.0 layout: `engine:` names the engine (a string
- | `features/mlperf-client.yaml` | `benchmark.type: custom` driving the MLPerf inference-endpoint client in its own image; placeholder paths, a reference rather than a runnable example |
+@@ -32,6 +32,9 @@ Every example is written in the 2.0 layout: `engine:` names the engine (a string
  | `features/infra-services.yaml` | etcd and NATS as declared services on a dedicated node with a NATS payload limit; the implied exporters overridden or switched off |
  | `features/dynamo-source.yaml` | `dynamo.source:` building Dynamo from a git tag (or a PR head via `--set dynamo.source.rev=refs/pull/<n>/head`), pinned to a commit at submit |
+ | `features/node-hooks.yaml` | `host_setup:` pre-run and post-run commands on each node's bare host, driven by `configs/node-hooks.sh`: arbitrary shell commands, one per line, from `HOOK_PRE` / `HOOK_POST` block scalars in the recipe environment, with per-command logging and a state snapshot |
 +| `features/lmcache-server.yaml` | `services[].type: lmcache-server` plus `connector: lmcache-mp`: an LMCache DRAM tier, one server per worker node started before the workers and gated on its healthcheck; LMCache flags go under `args`. Needs a vLLM image that ships LMCache (the `vllm-lmcache` alias). See [../docs/services.md](../docs/services.md#service-types) |
 +| `features/lmcache-server-disagg.yaml` | The same tier on the prefill side only: the server placed on prefill nodes and a hand-written `MultiConnector` (NIXL plus LMCache MP) in the prefill args, which srtctl passes through untouched |
 +| `features/lmcache-server-sglang.yaml` | The same server next to aggregated SGLang workers: SGLang's `enable-lmcache` flag, with srtctl pointing each worker at the server on its node (`LMCACHE_MP_HOST`/`LMCACHE_MP_PORT`). Needs an SGLang image that ships LMCache (the `sglang-lmcache` alias) |
  | `features/vllm-failover.yaml` | `engine.failover:` shadow engine recovery: a GPU Memory Service sidecar and a parked standby engine per vLLM worker, relaunched in place after a crash. Needs a container that ships `gpu_memory_service` (the `dynamo-vllm` alias, an `nvcr.io/nvidia/ai-dynamo/vllm-runtime` image). See [../docs/shadow-engine-recovery.md](../docs/shadow-engine-recovery.md) |
  
  ## Cluster aliases
-@@ -46,6 +49,8 @@ containers:
+@@ -47,6 +50,8 @@ containers:
    vllm: /path/to/vllm.sqsh                  # vLLM image with the vllm-router executable
    trtllm: /path/to/tensorrtllm-runtime.sqsh # Dynamo TRT-LLM runtime image (ships ai-dynamo and trtllm-serve)
    dynamo-vllm: /path/to/vllm-runtime.sqsh   # Dynamo vLLM runtime image (ships ai-dynamo and gpu_memory_service), for features/vllm-failover.yaml
@@ -103,7 +103,7 @@ index 487fa7b..67c152c 100644
  `resources.gpu_type` and `gpus_per_node` are set to `h100` and `8`; change them to match the partition you submit to.
 diff --git a/examples/features/lmcache-server-disagg.yaml b/examples/features/lmcache-server-disagg.yaml
 new file mode 100644
-index 0000000..95eb632
+index 00000000..95eb632d
 --- /dev/null
 +++ b/examples/features/lmcache-server-disagg.yaml
 @@ -0,0 +1,88 @@
@@ -197,7 +197,7 @@ index 0000000..95eb632
 +  concurrencies: "4x8"
 diff --git a/examples/features/lmcache-server-sglang.yaml b/examples/features/lmcache-server-sglang.yaml
 new file mode 100644
-index 0000000..66a4fb6
+index 00000000..66a4fb65
 --- /dev/null
 +++ b/examples/features/lmcache-server-sglang.yaml
 @@ -0,0 +1,62 @@
@@ -265,7 +265,7 @@ index 0000000..66a4fb6
 +  concurrencies: "4x8"
 diff --git a/examples/features/lmcache-server.yaml b/examples/features/lmcache-server.yaml
 new file mode 100644
-index 0000000..4ecee52
+index 00000000..4ecee520
 --- /dev/null
 +++ b/examples/features/lmcache-server.yaml
 @@ -0,0 +1,78 @@
@@ -348,7 +348,7 @@ index 0000000..4ecee52
 +  osl: 128
 +  concurrencies: "4x8"
 diff --git a/src/srtctl/backends/atom.py b/src/srtctl/backends/atom.py
-index 07082f0..a1c8dcc 100644
+index 2f0fc576..8aeea3a0 100644
 --- a/src/srtctl/backends/atom.py
 +++ b/src/srtctl/backends/atom.py
 @@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal
@@ -360,7 +360,7 @@ index 07082f0..a1c8dcc 100644
  
  if TYPE_CHECKING:
      from srtctl.backends.base import SrunConfig
-@@ -137,19 +137,32 @@ class AtomProtocol:
+@@ -141,19 +141,32 @@ class AtomProtocol:
  
          return endpoints_to_processes(endpoints, base_sys_port=base_sys_port, port_allocator=port_allocator)
  
@@ -406,7 +406,7 @@ index 07082f0..a1c8dcc 100644
          return json.dumps(payload, separators=(",", ":"))
  
      def build_worker_command(
-@@ -171,6 +184,7 @@ class AtomProtocol:
+@@ -175,6 +188,7 @@ class AtomProtocol:
  
          worker_ip = get_hostname_ip(process.node, runtime.network_interface)
          config = self.get_config_for_mode(process.endpoint_mode)
@@ -414,7 +414,7 @@ index 07082f0..a1c8dcc 100644
          reserved = {"model", "host", "server-port", "tp", "tensor-parallel-size", "kv-transfer-config"}
          overlap = reserved.intersection(_canonical_arg_key(key) for key in config)
          if overlap:
-@@ -192,8 +206,9 @@ class AtomProtocol:
+@@ -196,8 +210,9 @@ class AtomProtocol:
                  str(len(process.gpu_indices)),
              ]
          )
@@ -427,7 +427,7 @@ index 07082f0..a1c8dcc 100644
          return command
  
 diff --git a/src/srtctl/backends/sglang.py b/src/srtctl/backends/sglang.py
-index 641709f..121f060 100644
+index 585935a2..e7e0d618 100644
 --- a/src/srtctl/backends/sglang.py
 +++ b/src/srtctl/backends/sglang.py
 @@ -27,6 +27,7 @@ from srtctl.backends.sidecar import build_sidecar_launch_command, get_dynamo_sid
@@ -438,7 +438,7 @@ index 641709f..121f060 100644
      MOONCAKE_HTTP_METADATA_PORT,
      MOONCAKE_MASTER_PORT,
      NCCL_PORTS,
-@@ -203,10 +204,17 @@ class SGLangProtocol:
+@@ -207,10 +208,17 @@ class SGLangProtocol:
      def get_process_environment(self, process: "Process") -> dict[str, str]:
          """Get process-specific environment variables.
  
@@ -460,7 +460,7 @@ index 641709f..121f060 100644
      def get_mooncake_worker_env(self, infra_node_ip: str, local_hostname: str) -> dict[str, str]:
          """Get mooncake env vars to inject on a specific worker.
 diff --git a/src/srtctl/backends/vllm.py b/src/srtctl/backends/vllm.py
-index 048627a..79168fd 100644
+index 52ee6737..0fb3e8cb 100644
 --- a/src/srtctl/backends/vllm.py
 +++ b/src/srtctl/backends/vllm.py
 @@ -35,6 +35,7 @@ from srtctl.ports import (
@@ -480,7 +480,7 @@ index 048627a..79168fd 100644
      # Can be overridden per role by setting "connector" in roles.<role>.args; connector_for_mode resolves it.
      # "moriio" (ROCm MoRI-IO) registers workers with the vLLM Router and needs frontend.type: vllm-router.
      # dynamo 1.0.0+: translated to --kv-transfer-config (--connector was removed).
-@@ -1278,9 +1279,10 @@ class VLLMProtocol:
+@@ -1282,9 +1283,10 @@ class VLLMProtocol:
              overridden = pop_vllm_orchestration_flags(config)
              config.setdefault("served-model-name", served_model_name)
  
@@ -494,7 +494,7 @@ index 048627a..79168fd 100644
                  kv_transfer_config = self.kv_transfer_config(mode, process, runtime)
                  if kv_transfer_config is not None:
                      config.setdefault("kv-transfer-config", kv_transfer_config)
-@@ -1756,6 +1758,8 @@ class KVConnector:
+@@ -1760,6 +1762,8 @@ class KVConnector:
      kv_role: str | None = "kv_both"
      module_path: str | None = None
      discovery: bool = False
@@ -503,7 +503,7 @@ index 048627a..79168fd 100644
  
      def transfer_config(self, mode: WorkerMode) -> dict[str, Any]:
          """The ``--kv-transfer-config`` payload for a worker mode, before any topology-derived extras."""
-@@ -1763,6 +1767,8 @@ class KVConnector:
+@@ -1767,6 +1771,8 @@ class KVConnector:
          if self.module_path is not None:
              payload["kv_connector_module_path"] = self.module_path
          payload["kv_role"] = self.kv_role or ("kv_producer" if mode == "prefill" else "kv_consumer")
@@ -512,7 +512,7 @@ index 048627a..79168fd 100644
          return payload
  
  
-@@ -1770,6 +1776,12 @@ class KVConnector:
+@@ -1774,6 +1780,12 @@ class KVConnector:
  _CONNECTOR_MAP: dict[str, KVConnector] = {
      "nixl": KVConnector("NixlConnector"),
      "lmcache": KVConnector("LMCacheConnectorV1"),
@@ -526,7 +526,7 @@ index 048627a..79168fd 100644
      # AMD MoRI-IO (ROCm): prefill produces and decode consumes KV; workers register with the vLLM Router.
      "moriio": KVConnector("MoRIIOConnector", kv_role=None, discovery=True),
 diff --git a/src/srtctl/ports.py b/src/srtctl/ports.py
-index c9ea7e0..3de5f4b 100644
+index c9ea7e0b..3de5f4b0 100644
 --- a/src/srtctl/ports.py
 +++ b/src/srtctl/ports.py
 @@ -46,6 +46,12 @@ MOONCAKE_HTTP_METADATA_PORT = 8701
@@ -543,7 +543,7 @@ index c9ea7e0..3de5f4b 100644
  VLLM_NIXL_PORT_BASE = 5400
  # vLLM Router discovery endpoint (frontend.type: vllm-router with a discovery
 diff --git a/src/srtctl/services/__init__.py b/src/srtctl/services/__init__.py
-index 715a2f2..81e2207 100644
+index 715a2f2e..81e22071 100644
 --- a/src/srtctl/services/__init__.py
 +++ b/src/srtctl/services/__init__.py
 @@ -4,7 +4,7 @@
@@ -565,7 +565,7 @@ index 715a2f2..81e2207 100644
      "ray",
 diff --git a/src/srtctl/services/lmcache_server.py b/src/srtctl/services/lmcache_server.py
 new file mode 100644
-index 0000000..31a1de9
+index 00000000..31a1de93
 --- /dev/null
 +++ b/src/srtctl/services/lmcache_server.py
 @@ -0,0 +1,57 @@
@@ -627,7 +627,7 @@ index 0000000..31a1de9
 +            timeout_seconds=self.default_readiness_timeout,
 +        )
 diff --git a/tests/test_atom_atomesh.py b/tests/test_atom_atomesh.py
-index 937800b..7f4d017 100644
+index 937800b6..7f4d017f 100644
 --- a/tests/test_atom_atomesh.py
 +++ b/tests/test_atom_atomesh.py
 @@ -200,6 +200,59 @@ def test_atom_pd_worker_emits_mooncake_kv_transfer_config(protocol: str | None,
@@ -691,7 +691,7 @@ index 937800b..7f4d017 100644
      """ATOM cannot coordinate one logical worker across two Slurm nodes."""
      leader = Process("node0", frozenset(range(4)), 7500, 6100, "prefill", 0, nixl_port=6301)
 diff --git a/tests/test_services.py b/tests/test_services.py
-index c7db10b..51a4b2c 100644
+index c7db10bb..51a4b2ce 100644
 --- a/tests/test_services.py
 +++ b/tests/test_services.py
 @@ -19,7 +19,14 @@ from srtctl.core.runtime import Nodes, RuntimeContext
@@ -755,7 +755,7 @@ index c7db10b..51a4b2c 100644
          _load("services:\n  - name: store\n    type: mooncake-store\n    placement:\n      node: workers\n")
 diff --git a/tests/test_sglang_lmcache.py b/tests/test_sglang_lmcache.py
 new file mode 100644
-index 0000000..52f3f8d
+index 00000000..52f3f8d3
 --- /dev/null
 +++ b/tests/test_sglang_lmcache.py
 @@ -0,0 +1,39 @@
@@ -799,7 +799,7 @@ index 0000000..52f3f8d
 +
 +    assert backend.get_process_environment(_process()) == {}
 diff --git a/tests/test_vllm_connectors.py b/tests/test_vllm_connectors.py
-index 691990b..1dfe69e 100644
+index 691990b3..1dfe69ed 100644
 --- a/tests/test_vllm_connectors.py
 +++ b/tests/test_vllm_connectors.py
 @@ -23,6 +23,14 @@ def test_table_presets_serialize_exactly_as_before():
