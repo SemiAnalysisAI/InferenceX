@@ -9127,3 +9127,26 @@
     - "Add Kimi-K3 MXFP4 vLLM agentic-coding on MI355X (TP8, DSpark): dcp1 c1/c4 GPU-resident and c8-c14 with SimpleCPUOffload DRAM offload, plus a new dcp8 c44/c48/c70 throughput band (mtp synthetic acceptance, no draft); vLLM ROCm image vllm/vllm-openai-rocm:nightly-rocm100-36768d1bfd39094681cdbc8cb37d4b31c0729c89"
     - "The Inferact/Kimi-K3-DSpark draft (K3DSparkModel, model_type k3_dspark, 5 layers, hidden 7168, torch_dtype bfloat16, no quantization_config) keeps every layer at its pristine dtype. vLLM builds all its modules with quant_config from get_draft_quant_config() (vllm/models/kimi_k3/nvidia/dspark_mla.py), which returns None because K3DSparkModel is explicitly excluded from the DeepSeek-V4 branch that would set draft.quantization = target.quantization (vllm/config/speculative.py:1431); so context_proj (ReplicatedLinear), context_kv_proj (MergedColumnParallelLinear) and each decoder layer's MLA q/kv projections and dense KimiMLP (gate/up/down) load unquantized in BF16 -- no ptpc_fp8, no mxfp4, no INT4 weights. The draft has no FusedMoE/block_sparse_moe, so VLLM_ROCM_USE_AITER_MOE_SITUV2 (A8W4) never touches it, and its KV cache stays fp8 (kv_cache_dtype). This PR only changes draft depth (num_speculative_tokens 4->7) and enables INT4 custom quick all-reduce (VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4, vllm/distributed/device_communicators/quick_all_reduce.py); because the draft shares the target's TP8 group (vllm/v1/spec_decode/draft_model.py), that INT4 applies to its tensor-parallel reductions too -- a collective-reduction transport precision, not any draft weight, activation, or KV dtype."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3561
+
+- config-keys:
+    - dsv4-fp4-gb200-dynamo-sglang-agentic-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GB200 Dynamo+SGLang AgentX TP8 aggregate HiCache recipes at concurrency 1 and 4."
+    - "Use lmsysorg/sglang:nightly-dev-20260916-c9a8fba9 with the checkpoint's bundled DSpark head at block size 6 (golden AL 3.77, thinking_on) and max-running-request/CUDA-graph limits set to twice each concurrency."
+    - "Use the compute-visible Watchtower workspace and node-local DeepSeek-V4-Pro checkpoint staging."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3182
+
+- config-keys:
+    - dsv4-fp4-gb200-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GB200 Dynamo+SGLang AgentX HiCache recipes for 1P1D DEP8/DEP16 at concurrency 64 and 128, 1P1D DEP16/DEP32 at concurrency 256, and 2P1D DEP16/DEP32 at concurrencies 768, 1024, and 1280."
+    - "Use the lower-concurrency DEP8/DEP16 points and the wider DEP16/DEP32 configurations to avoid the long P90 TTFT observed at the superseded DEP8/DEP16 concurrency 400 and 800 points."
+    - "Set the DEP16/DEP32 decode max-running-requests caps to 512 for 1P1D and 1024 for 2P1D, with cuda-graph-max-bs-decode set to 64."
+    - "Lower the DEP8/DEP16 concurrency-128 prefill mem-fraction-static from 0.85 to 0.80 after the 0.85 run exhausted GPU memory while allocating a 6.81 GiB prefill workspace, leaving about 9.2 GiB more per GPU for runtime allocations."
+    - "Use lmsysorg/sglang:nightly-dev-20260916-c9a8fba9 with the Dynamo 1.5.0.dev20260910 wheel and the checkpoint's bundled DSpark head at block size 6 (golden AL 3.77, thinking_on)."
+    - "Use the compute-visible Watchtower workspace and node-local DeepSeek-V4-Pro checkpoint staging."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3182
