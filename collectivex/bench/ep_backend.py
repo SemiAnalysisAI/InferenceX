@@ -77,7 +77,7 @@ class EPBackend(abc.ABC):
     # "production" = an engine can select this transport today (vLLM `--all2all-backend`,
     # SGLang `--moe-a2a-backend`); "candidate" = a real transport we benchmark that no engine
     # ships a selector for, so its numbers describe the library, not a deployable config.
-    # Mirrored in configs/platform_config.json; tests/test_matrix.py holds the two in step.
+    # Mirrored by hand in configs/platform_config.json `backend_maturity`; nothing checks the two agree.
     maturity: str = ""
     SUPPORTED_MODES: tuple = ("normal",)
     # Dispatch precisions the adapter realizes. BF16 is the universal control; an
@@ -132,7 +132,7 @@ class EPBackend(abc.ABC):
     # dequant: vLLM's quant-format-mismatch fallback, which materialises and re-quantises. It is a
     # verification hatch, never a sweep axis: `dequant roundtrip ~= roundtrip + stage` holds within
     # a few percent, so measure native and derive dequant. Charging stage to the fp8 roundtrip
-    # inverted the fp8-vs-bf16 verdict in 39 of 51 comparisons (run 30177021271).
+    # inverted the fp8-vs-bf16 verdict in 39 of 51 comparisons.
     fp8_consume = os.environ.get("CX_FP8_CONSUME", "native")
     if fp8_consume not in ("native", "dequant"):
         raise ValueError(f"CX_FP8_CONSUME must be 'native' or 'dequant', got {fp8_consume!r}")

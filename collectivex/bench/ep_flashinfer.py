@@ -40,7 +40,6 @@ phase is still covered — `normal` runs the full decode and prefill ladders.
 """
 from __future__ import annotations
 
-import re
 import types
 
 import torch
@@ -101,8 +100,8 @@ def _blockwise_cast_back(values, scales):
 class FlashInferEPBackend(EPBackend):
     name = "flashinfer-ep"
     maturity = "production"  # vLLM --all2all-backend flashinfer_nvlink_one_sided
-    # One kernel family; see the module docstring for why there is no low-latency mode.
-    SUPPORTED_MODES = ("normal",)
+    # One kernel family and so the base's normal-only SUPPORTED_MODES; see the module docstring
+    # for why there is no low-latency mode.
     # FP8 is dispatch-side only: scales ride as a fourth payload and combine stays BF16, so none
     # of the 0.6.16+ combine-quant API is needed. vLLM accepts only nvfp4/mxfp8/bf16 on this
     # transport, so an fp8 row measures the transport off-path; `dispatch_dtype` records that.
@@ -111,10 +110,9 @@ class FlashInferEPBackend(EPBackend):
     kernel_generation = "flashinfer-mnnvl-one-sided"
     # stage() copies the received payload into the workspace combine region.
     stage_device_work = True
-    # The kernel scatters expert outputs back to the supplying rank; it does not multiply by
-    # the routing weights (those ride along as a caller payload, and vLLM applies them in the
-    # MoE layer, not in the A2A). Verified against the oracle during bring-up.
-    combine_weight_semantics = "unweighted-rank-sum"
+    # combine_weight_semantics stays the base's unweighted-rank-sum: the kernel scatters expert
+    # outputs back to the supplying rank without multiplying by the routing weights (those ride
+    # along as a caller payload, and vLLM applies them in the MoE layer, not in the A2A).
     # Set per wheel in create_buffer; see _COMBINE_FP32_SINCE.
     combine_reduction = "topk-slot-tree"
     # Forced by the phase asserts described in the module docstring.
@@ -160,11 +158,6 @@ class FlashInferEPBackend(EPBackend):
     def _validate_quantizer(self, x):
         if self._fp8:
             self.assert_quantize_identity(_blockwise_cast_to_fp8, self._quant, x)
-
-    def buffer_cap(self, args):
-        # The workspace is sized from the ladder maximum rather than a fixed slot budget, so
-        # there is no cap to clamp the ladder against.
-        return None
 
     def create_buffer(self, spec):
         """Build the one MoeAlltoAll for this group, sized to the ladder maximum.
@@ -394,9 +387,8 @@ def _communicator(group):
     FlashInfer needs a communicator spanning exactly the EP group to exchange MNNVL fabric
     handles; the harness has one in torch.distributed, so wrap that rather than standing up a
     second. The contract is `flashinfer.comm.mnnvl.CommBackend` and it is not optional in any
-    part: an earlier version of this adapter implemented only rank/size/allgather/Split and
-    the first dispatch died with `CUDA error: unspecified launch failure` (sticky 719) on
-    gb200. Every method is required because `CommBackend` declares them abstract, not because the
+    part: implementing only rank/size/allgather/Split killed the first dispatch with `CUDA
+    error: unspecified launch failure` (sticky 719) on gb200. Every method is required because `CommBackend` declares them abstract, not because the
     fabric path calls them: `MnnvlMemory` exchanges handles with `allgather` alone. What the
     ordering actually needs is the explicit `torch.distributed.barrier` in create_buffer.
     Built as a subclass of the upstream ABC so a future interface change is an

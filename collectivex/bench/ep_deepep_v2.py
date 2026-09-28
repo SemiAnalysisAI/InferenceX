@@ -139,10 +139,6 @@ class DeepEPV2Backend(EPBackend):
     SUPPORTED_PRECISIONS = ("bf16", "fp8")
     # Legacy decode kernels are graph compatible; ElasticBuffer normal only without its host sync.
     CUDA_GRAPH_MODES = ("low-latency",)
-    stage_device_work = False
-    requires_fresh_pair = False
-    receive_layout = "token-rank"
-    combine_weight_semantics = "unweighted-rank-sum"
 
     @staticmethod
     def init_process_group(dist, rank, world_size, device):
@@ -208,18 +204,12 @@ class DeepEPV2Backend(EPBackend):
         if self.mode == "low-latency":
             # LL pre-allocates a fixed [num_local_experts, cap * num_ranks, hidden] receive
             # buffer, so the cap is a hard per-rank dispatch-slot bound; the harness clamps the
-            # ladder to it and records any dropped point in the artifact. This was clamped to 128
-            # while DeepEP's low-latency combine stochastically corrupted the T=256 rung on
-            # Blackwell (issue #700, fixed upstream by #642); the pin now tracks main so the
-            # ladder runs full. If the top rung reds again, check the pin before assuming the
-            # defect returned -- clamping here is the containment lever either way.
+            # ladder to it and records any dropped point in the artifact. Clamping here is the
+            # containment lever if a kernel defect reds the top rung (check the DeepEP pin first).
             return _LL_LADDER_CAP
         return None
 
     def create_buffer(self, spec):
-        # max_tokens is the measured-ladder maximum; the historical values (which
-        # also folded in the conditioning ramp) are identical because the ramp
-        # never exceeded the measured maximum, so the JIT directory stays stable.
         args, world_size = self.args, self.world_size
         self.max_tokens = spec.max_tokens_per_rank
         if self.mode == "low-latency":
@@ -288,19 +278,10 @@ class DeepEPV2Backend(EPBackend):
             "low-latency EP requires num_experts divisible by the EP size"
         )
         self.num_local_experts = args.experts // world_size
-        # LL requires the QP-per-rank count to equal the number of local experts.
-        num_qps_per_rank = self.num_local_experts
-        assert num_qps_per_rank == self.num_local_experts
         if not hasattr(deep_ep.Buffer, "low_latency_dispatch"):
             raise RuntimeError(
                 "invalid DeepEP LL runtime: deep_ep.Buffer.low_latency_dispatch is absent"
             )
-        # Verified pinned signatures (commit 01dc3aaa, deep_ep/buffers/legacy.py):
-        #   Buffer.get_low_latency_rdma_size_hint(num_max_dispatch_tokens_per_rank,
-        #       hidden, num_ranks, num_experts) -> int   (staticmethod, line 176)
-        #   Buffer(group, num_nvl_bytes=0, num_rdma_bytes=0, low_latency_mode=False,
-        #       num_qps_per_rank=24, allow_nvlink_for_low_latency_mode=True,
-        #       allow_mnnvl=False, explicitly_destroy=False, ...)  (line 33)
         num_rdma_bytes = deep_ep.Buffer.get_low_latency_rdma_size_hint(
             self.max_tokens, args.hidden, world_size, args.experts
         )
@@ -310,7 +291,6 @@ class DeepEPV2Backend(EPBackend):
         # leaving it unset runs the low-latency kernels over IBGDA on exactly the systems whose
         # fast path is MNNVL. Keyed on the reported topology, not the SKU name.
         if str(getattr(args, "scale_up_transport", "")) == "mnnvl":
-            import inspect
             if "allow_mnnvl" in inspect.signature(deep_ep.Buffer.__init__).parameters:
                 kwargs["allow_mnnvl"] = True
             else:
@@ -322,7 +302,8 @@ class DeepEPV2Backend(EPBackend):
             self.group,
             num_rdma_bytes=num_rdma_bytes,
             low_latency_mode=True,
-            num_qps_per_rank=num_qps_per_rank,
+            # LL requires the QP-per-rank count to equal the number of local experts.
+            num_qps_per_rank=self.num_local_experts,
             allow_nvlink_for_low_latency_mode=True,
             explicitly_destroy=True,
             **kwargs,
@@ -365,10 +346,6 @@ class DeepEPV2Backend(EPBackend):
             self.assert_quantize_identity(self._to_fp8, self._quant, x)
 
     def _ll_dispatch(self, p):
-        # Verified pinned signature (legacy.py:553):
-        #   low_latency_dispatch(x[bf16, num_tokens, hidden], topk_idx,
-        #       num_max_dispatch_tokens_per_rank, num_experts, use_fp8=True, ...)
-        #   -> (recv_x | (fp8, scales), recv_count[num_local_experts], handle, event, hook)
         # Defaults async_finish=False / return_recv_hook=False => the kernel ensures the
         # data has arrived, so the hook/event are inert and unused here.
         recv_x, recv_count, ll_handle, _event, _hook = self.buffer.low_latency_dispatch(
@@ -427,10 +404,7 @@ class DeepEPV2Backend(EPBackend):
 
     def combine(self, p, h):
         if self.mode == "low-latency":
-            # Verified pinned signature (legacy.py:624):
-            #   low_latency_combine(x[bf16, num_local_experts, cap*num_ranks, hidden],
-            #       topk_idx, topk_weights, handle, ...) -> (combined_x[num_combined, hidden],
-            #       event, hook). The kernel applies topk_weights internally (weighted).
+            # The kernel applies topk_weights internally (weighted).
             combined_x, _event, _hook = self.buffer.low_latency_combine(
                 h.combine_input, p.topk_idx, p.topk_weights, h.ll_handle
             )

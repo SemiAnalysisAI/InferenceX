@@ -71,9 +71,7 @@ class MoRIBackend(EPBackend):
                 raise RuntimeError(f"MoRI FP8 dispatch unsupported on arch {arch!r}")
             self.dispatch_value_bytes = 1
             self.dispatch_scale_bytes_per_copy = 0  # plain e4m3 cast: no scale payload
-        self.ep_size = world_size
-        self.experts_per_rank = args.experts // self.ep_size
-        gpus_per_node = int(args.gpus_per_node)
+        self.experts_per_rank = args.experts // world_size
         scale_out = args.scope == "scale-out"
 
         # NORMAL mode: the kernel is a pinned function of the cell, not an operator
@@ -93,14 +91,11 @@ class MoRIBackend(EPBackend):
             # SGLang's moriep dispatcher maps EpMode.LOW_LATENCY to AsyncLL (split-phase
             # dispatch_send/dispatch_recv + combine_send/combine_recv) with block_num 64,
             # rdma_block_num 32, warp_num_per_block 8, and its low-latency impl asserts the
-            # kernel IS AsyncLL. The previous adapter measured IntraNodeLL, a kernel no engine
-            # deploys for LL, so those rows described an off-production path (their
-            # kernel_generation "intranode-ll" is the discriminator). AsyncLL must be driven
-            # split-phase: mori.ops' dispatch()/combine() under this kernel_type launch only
-            # the SEND side and return without the payload landing (the earlier "fails
-            # silently single-call" finding), so the timed dispatch here is send+recv
-            # back-to-back — the full transport the serving step pays, merely without the
-            # expert GEMM interleaved between the phases.
+            # kernel IS AsyncLL. AsyncLL must be driven split-phase: mori.ops'
+            # dispatch()/combine() under this kernel_type launch only the SEND side and return
+            # without the payload landing, so the timed dispatch here is send+recv back-to-back
+            # — the full transport the serving step pays, merely without the expert GEMM
+            # interleaved between the phases.
             # Combine keeps weights=None (gate not applied in-kernel), and the receive is the
             # same compact rank-deduplicated [max_recv, hidden] layout, so semantics stay
             # "unweighted-rank-sum" over "token-rank" and the wire basis stays
@@ -132,8 +127,6 @@ class MoRIBackend(EPBackend):
         # its own; under FP8 it still dequantizes the received fp8 payload to BF16, so it is a
         # timed device component in that precision only.
         self.stage_device_work = self._fp8
-        # Stash the __init__-only locals the moved create_buffer body reads back.
-        self._gpus_per_node = gpus_per_node
 
     def buffer_cap(self, args):
         if self.mode == "low-latency":
@@ -145,21 +138,15 @@ class MoRIBackend(EPBackend):
 
     def create_buffer(self, spec):
         args, world_size, rank = self.args, self.world_size, self.rank
-        gpus_per_node = self._gpus_per_node
+        gpus_per_node = int(args.gpus_per_node)
 
         world_group = torch.distributed.group.WORLD
         torch._C._distributed_c10d._register_process_group("default", world_group)
         # Every path, scale-out EP16 included, runs MoRI's default STATIC_HEAP: one
-        # contiguous uncached allocation registered as a single MR. This adapter used to
-        # force VMM_HEAP for scale-out after a 2026-07 EINVAL registering the 6 GiB static
-        # heap on the Ionic stack; that registration succeeds on the current firmware
-        # (1.117.5), and VMM_HEAP was itself the cause of the residual EP16 combine
-        # corruption: ROCm 7.2's clr leaves VMM allocations requested uncached in the
-        # cached pool, so cross-node partials landed in stale lines (ROCm/mori#610).
-        # CI A/B on the same branch, same nodes pool and harness: STATIC_HEAP all-green
-        # on bf16+fp8 decode 1..512 and prefill 1024..8192 (run 34939333022); VMM_HEAP
-        # corrupts (run 34941185534). Nothing is set here so the mode stays whatever
-        # MoRI ships as default; the guard below fails closed if that ever changes.
+        # contiguous uncached allocation registered as a single MR. VMM_HEAP corrupts EP16
+        # combine: ROCm 7.2's clr leaves VMM allocations requested uncached in the cached pool,
+        # so cross-node partials land in stale lines (ROCm/mori#610). Nothing is set here so the
+        # mode stays whatever MoRI ships as default; the guard below fails closed if that changes.
         heap_mode = os.environ.get("MORI_SHMEM_MODE", "STATIC_HEAP").upper()
         if self._inter_node and heap_mode != "STATIC_HEAP":
             raise RuntimeError(
@@ -205,9 +192,8 @@ class MoRIBackend(EPBackend):
         if self._kernel_type is not None:
             config_kwargs["kernel_type"] = self._kernel_type
         # Only InterNodeV1 carries explicit launch/topology fields (and the heap-mode + realized-
-        # config asserts). IntraNodeLL follows the IntraNode path unchanged: base config
-        # plus kernel_type, the registered staging buffer, the default STATIC heap, and the
-        # per-call block/warp launch args.
+        # config asserts). IntraNode and AsyncLL take the base config (plus kernel_type for
+        # AsyncLL), the default STATIC heap, and the per-call block/warp launch args.
         if self._inter_node:
             config_kwargs.update({
                 "block_num": self.block_num,
@@ -274,7 +260,7 @@ class MoRIBackend(EPBackend):
     def dispatch(self, p):
         # Cast inside dispatch, where production pays it: vLLM and SGLang both run an aiter quant
         # immediately before mori's dispatch. MoRI's cast is a single eager elementwise kernel, so
-        # it needs no compile. Low-latency casts here too: MoRI's IntraNodeLL takes a
+        # it needs no compile. Low-latency casts here too: MoRI's AsyncLL takes a
         # caller-prequantized tensor, unlike deepep-v2/uccl-ep whose LL kernels quantise in-kernel.
         dispatch_x = p.dispatch_x.to(self._fp8_dtype) if self._fp8 else p.dispatch_x
         dispatch_output, dispatch_weights, _scales, dispatch_indices, recv_num = (

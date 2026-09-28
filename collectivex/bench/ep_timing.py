@@ -5,7 +5,7 @@ import functools
 import os
 
 
-def time_us(torch, fn, warmup: int, iters: int, pre=None, post=None) -> list[float]:
+def time_us(torch, fn, iters: int, pre=None, post=None) -> list[float]:
     """Per-iteration CUDA-event latencies (us) for THIS rank.
 
     `pre()` runs untimed before each sample and its result is passed to `fn`; `post(result)` runs
@@ -29,18 +29,10 @@ def time_us(torch, fn, warmup: int, iters: int, pre=None, post=None) -> list[flo
             torch.cuda.synchronize()
         return elapsed
 
-    for _ in range(max(0, warmup)):
-        if pre is not None:
-            a = pre()
-            torch.cuda.synchronize()
-            fn(a)
-        else:
-            fn()
-        torch.cuda.synchronize()
     return [sample() for _ in range(iters)]
 
 
-def time_cuda_graph_phase_us(torch, fn, warmup: int, iters: int, interval, align=None) -> list[float]:
+def time_cuda_graph_phase_us(torch, fn, warmup: int, iters: int, interval, align) -> list[float]:
     """Time one event-record interval captured inside graph replay.
 
     `align()` enqueues a device-side rank barrier before each replay, so replays start together
@@ -51,8 +43,7 @@ def time_cuda_graph_phase_us(torch, fn, warmup: int, iters: int, interval, align
         torch.cuda.synchronize()
     samples = []
     for _ in range(iters):
-        if align is not None:
-            align()
+        align()
         fn()
         torch.cuda.synchronize()
         samples.append(interval[0].elapsed_time(interval[1]) * 1000.0)
@@ -95,7 +86,7 @@ class EagerTiming:
         b = self.backend
         if name == "roundtrip":
             staged = b.warm_and_hoist_stage(problem, warmup)
-            return time_us(torch, lambda: b.run_roundtrip(problem, staged), 0, iters)
+            return time_us(torch, lambda: b.run_roundtrip(problem, staged), iters)
         if name == "dispatch":
             b.warm(problem, warmup)
 
@@ -103,7 +94,7 @@ class EagerTiming:
                 b.stage(problem, handle)
                 b.combine(problem, handle)
 
-            return time_us(torch, lambda: b.dispatch(problem), 0, iters,
+            return time_us(torch, lambda: b.dispatch(problem), iters,
                            post=finish if b.requires_fresh_pair else None)
         if name == "stage":
             # Staging is the timed operation here, so it must be warmed on every iteration.
@@ -113,7 +104,7 @@ class EagerTiming:
                 b.stage(problem, handle)
                 return handle
 
-            return time_us(torch, stage, 0, iters, pre=lambda: b.dispatch(problem),
+            return time_us(torch, stage, iters, pre=lambda: b.dispatch(problem),
                            post=(lambda h: b.combine(problem, h)) if b.requires_fresh_pair else None)
         if name == "combine":
             b.warm(problem, warmup)
@@ -124,10 +115,10 @@ class EagerTiming:
                 return handle
 
             if b.requires_fresh_pair:
-                return time_us(torch, lambda h: b.combine(problem, h), 0, iters, pre=staged_dispatch)
+                return time_us(torch, lambda h: b.combine(problem, h), iters, pre=staged_dispatch)
             handle = staged_dispatch()
             torch.cuda.synchronize()
-            return time_us(torch, lambda: b.combine(problem, handle), 0, iters)
+            return time_us(torch, lambda: b.combine(problem, handle), iters)
         raise RuntimeError(f"unknown timed component {name!r}")
 
     def chain(self, problem, staged, iters, drop):

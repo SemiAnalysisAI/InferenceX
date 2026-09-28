@@ -336,7 +336,7 @@ class Sweep:
         # The chained-output A/B is defined only when each pair stages its own input: under the
         # hoist (every FP8 adapter by default) the staged stand-in matches neither pair's dispatch,
         # so chained and drained are two differently mismatched pairs (h100 deepep-v2 EP8: hoisted
-        # error 31..93, per-pair 0.0; runs 31180411148, 31185184372, 31185233991).
+        # error 31..93, per-pair 0.0).
         self.chain_output_applicable = not self.backend.stage_excluded_from_roundtrip
         self.reduce = _Collectives(self.torch, self.dist, self.device)
         prepared = [self._prepare(spec.points[T], T) for T in self.ladder]

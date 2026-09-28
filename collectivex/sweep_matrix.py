@@ -26,8 +26,6 @@ def _load_config(name: str) -> dict[str, Any]:
 
 SWEEP = _load_config("sweep.json")
 PLATFORMS = _load_config("platform_config.json")["platforms"]
-# Per-backend production/candidate map for the matrix and docs; see EPBackend.maturity.
-BACKEND_MATURITY = _load_config("platform_config.json")["backend_maturity"]
 
 
 SWEEP_BACKENDS = tuple(dict.fromkeys(

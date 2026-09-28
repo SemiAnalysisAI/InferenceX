@@ -13,8 +13,8 @@ Both modes use the existing CollectiveX combine oracle.
 
 BF16 only for now: v0.2 grows a real quantization surface (DispatchQuantizationRecipe.FWD /
 DS_FP8E3M4 for FP8 dispatch, experimental CombineQuantizationRecipe.NVFP4), but wiring it into
-the fp8_consume model is its own bring-up, so this adapter still does not override the FP8
-encode hooks (SUPPORTED_PRECISIONS=("bf16",)).
+the fp8_consume model is its own bring-up, so this adapter keeps the base BF16-only
+SUPPORTED_PRECISIONS.
 
 Communicator bootstrap: NCCL EP forms its OWN NCCL communicator (separate from PyTorch's
 process group) via ``Communicator.init(nranks, rank, unique_id)``. Upstream broadcasts the
@@ -68,16 +68,9 @@ _UNIQUE_ID_MAX_BYTES = 256
 # Low-latency receive sizing, deliberately two numbers, mirroring ep_deepep_v2: _LL_BUFFER_CAP
 # sizes the pre-allocated receive (and so the transport footprint), _LL_LADDER_CAP bounds which
 # token counts are measured. Separating them lets the ladder be clamped around a kernel defect
-# without moving the footprint and silently re-basing the rungs that remain.
-#
-# The ladder is RESTORED to the full buffer under nccl-ep v0.2. The v0.1 port of DeepEP's
-# low-latency combine lacked the PR #642 fence — reduction warps read shared memory, then
-# mbarrier_arrive(emptyBarriers[stageIdx]) with no fence between, letting the producer's next
-# TMA load overwrite a stage mid-read (observed on gb300 EP8 BF16 at T=256: bimodal 1-in-5
-# discrete corruption, max rel err 0.4704 vs healthy 0.0039). The v0.2 wheel ships the fence:
-# fence_view_async_shared() before the elect_one_sync mbarrier_arrive in the shipped headers'
-# ll_ep.cuh combine recv pipeline — exactly the documented restore condition for this clamp.
-# The T=256 rung is back on the ladder; the correctness oracle re-verifies it on every run.
+# without moving the footprint and silently re-basing the rungs that remain. The ladder runs the
+# full buffer because the v0.2 LL combine recv pipeline carries DeepEP's #642 shared-memory fence
+# (without it the top rung corrupts); the correctness oracle re-verifies that rung on every run.
 _LL_BUFFER_CAP = 256
 _LL_LADDER_CAP = _LL_BUFFER_CAP
 
@@ -99,12 +92,7 @@ class NCCLEPBackend(EPBackend):
     # `_bind_ht_recv_count`); "-zc" rows before it sliced that input to the received count.
     kernel_generation = "nccl-ep-v02-ht-routed-zc-static"
     SUPPORTED_MODES = ("normal", "low-latency")
-    SUPPORTED_PRECISIONS = ("bf16",)
     CUDA_GRAPH_MODES = ("normal", "low-latency")
-    stage_device_work = False
-    requires_fresh_pair = False
-    receive_layout = "token-rank"
-    combine_weight_semantics = "unweighted-rank-sum"
     zero_copy = True
     _ll_expert_major = False
 
@@ -177,9 +165,7 @@ class NCCLEPBackend(EPBackend):
 
     def buffer_cap(self, args):
         if self._ll:
-            # Bounds which token counts are MEASURED. Equal to _LL_BUFFER_CAP under v0.2 (the
-            # combine recv fence shipped — see the constants above); the two names stay separate
-            # so a future defect can clamp the ladder without moving the footprint.
+            # Bounds which token counts are MEASURED; see the constants above.
             return _LL_LADDER_CAP
         return None
 
@@ -304,7 +290,6 @@ class NCCLEPBackend(EPBackend):
             # num_local_experts*max_dispatch, which only equals max_recv there because
             # num_local_experts==n_ranks) overflows that buffer with cudaErrorInvalidValue.
             rows = self.max_dispatch * self.world_size
-            self._recv_rows = rows
             self._recv_x = nccl_core.torch.empty(
                 (rows, hidden), dtype=torch.bfloat16, device=dev
             )
@@ -418,8 +403,8 @@ class NCCLEPBackend(EPBackend):
         """Read HT's received-token count and bind the combine input to the full receive plane.
 
         FLAT combine takes the dispatch output's static `[num_recv_slots, hidden]` shape
-        (ep_enums.h; a count-sized slice needs an NCCL_EP_AUTO group). Zero-copy elides the
-        staging copy the old slice avoided. The count is read here, untimed, for the oracle.
+        (ep_enums.h; a count-sized slice needs an NCCL_EP_AUTO group), and zero-copy leaves no
+        staging copy for a slice to save. The count is read here, untimed, for the oracle.
         """
         h.count = int(h.recv_total.item())
         h.combine_in_t = self._recv_x_t

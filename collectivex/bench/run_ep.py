@@ -68,9 +68,6 @@ def main() -> int:
     if not ep_harness.is_case_id(args.case_id):
         print(f"ERROR: invalid native case ID {args.case_id!r}", file=sys.stderr)
         return 2
-    # Seed and timing arrive baked into the case argv from the single
-    # configs/sweep.json source; there is no separate canonical constant to
-    # cross-check against.
 
     try:
         import torch

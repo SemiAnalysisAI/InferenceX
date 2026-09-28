@@ -14,15 +14,14 @@ it just constructs the Buffer and calls `.destroy()`.
 
 Both modes use the legacy `Buffer` surface (mirroring bench/ep_deepep_v2.py's legacy-Buffer LL
 path, which is ~1:1 reusable here):
-  normal      -> get_dispatch_layout + dispatch + combine; per-token multi-expert recv layout
-                 (expanded per (token, local-expert) for the oracle, reduced back before combine);
+  normal      -> get_dispatch_layout + dispatch + combine; per-token multi-expert recv layout;
                  activation-only unweighted rank-sum combine.
   low-latency -> low_latency_dispatch/low_latency_combine; per-expert padded recv, source-side
                  weighted-kernel-sum combine.
 
-FP8 dispatch is caller-prequantized in normal mode (blockwise e4m3fn, e4m3fnuz on gfx942); in
-low-latency mode the caller sends BF16 and the decode kernel quantizes to e4m3 internally
-(``use_fp8``). Combine is always BF16 — the oracle applies the identical per-token cast round-trip
+FP8 dispatch quantizes inside the timed dispatch in normal mode (blockwise e4m3fn, e4m3fnuz on
+gfx942); in low-latency mode the caller sends BF16 and the decode kernel quantizes to e4m3
+internally (``use_fp8``). Combine is always BF16 — the oracle applies the identical per-token cast round-trip
 via semantic_payload/oracle_x in both modes, so the tight combine gate (COMBINE_REL_TOL = 8*2^-8)
 is preserved, not loosened.
 """
@@ -137,13 +136,9 @@ class UCCLEPBackend(EPBackend):
     # LL's only host state is the double-buffer toggle; captures hold whole pairs, so it returns
     # to where it started. Normal mode host-syncs on its receive counters.
     CUDA_GRAPH_MODES = ("low-latency",)
-    stage_device_work = False
-    requires_fresh_pair = False
-    receive_layout = "token-rank"
-    combine_weight_semantics = "unweighted-rank-sum"
 
     # (product, precision) cases measured faster eager than graphed: b200 FP8 low-latency pair
-    # period 0.98x baseline eager vs 1.04x graphed, every rung (runs 36114371399, 36113759089).
+    # period 0.98x baseline eager vs 1.04x graphed, every rung.
     _EAGER_CASES = frozenset({("b200", "fp8")})
 
     @property
@@ -290,9 +285,6 @@ class UCCLEPBackend(EPBackend):
         )
 
     # ---- FP8 encode/dequant hooks ----------------------------------------------------------
-
-    def _topk_idx_dtype(self):
-        return torch.int64
 
     def semantic_payload(self, x):
         if not self._fp8:

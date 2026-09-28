@@ -418,7 +418,6 @@ def run_expert_oracle(torch, routing, backend, problem, global_idx, global_weigh
     problem.recv_tokens = receive_count
     model = backend.combine_model
     transformed = model.transform(torch, view.payload, ids, weights)
-    view.combine_input = transformed
     combined = backend.combine_transformed(problem, handle, transformed)
     torch.cuda.synchronize()
     expected = model.expected(torch, problem, experts_per_rank, scale_up_domain)
