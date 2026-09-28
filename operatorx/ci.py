@@ -112,11 +112,6 @@ def load_platforms(path: Path) -> dict:
     return platforms
 
 
-REPO = ROOT.parents[1]
-# launch-script exports that are serving/benchmark plumbing, not kernel selection
-_RECIPE_ENV_SKIP = re.compile(r"^(AIPERF_|HF_|MODEL|PORT|RESULT|SERVER|LMCACHE|PYTHONHASHSEED|VLLM_ENGINE_READY)")
-
-
 def family(name: str) -> str:
     """Hardware family of a runner label: 'cluster:mi355x-amds' -> 'mi355x'."""
     return name.removeprefix("cluster:").split("-")[0]
@@ -124,41 +119,6 @@ def family(name: str) -> str:
 
 def is_amd(runner: str) -> bool:
     return family(runner).startswith("mi")
-
-
-def recipe_env(script: Path) -> dict[str, str]:
-    """The launch script's unconditional top-level `export NAME=value` lines (no expansion)."""
-    env = {}
-    for line in script.read_text().splitlines():
-        m = re.fullmatch(r"export ([A-Z_][A-Z0-9_]*)=(['\"]?)([^$`'\"\s]*)\2", line)
-        if m and not _RECIPE_ENV_SKIP.match(m.group(1)):
-            env[m.group(1)] = m.group(3)
-    return env
-
-
-def load_recipes(keys: set[str]) -> dict[str, dict]:
-    """InferenceX recipes (configs/*-master.yaml) by key: image, framework, hardware family,
-    and the env its single-node launch script exports."""
-    import yaml
-
-    out = {}
-    for vendor in ("amd", "nvidia"):
-        configs = yaml.safe_load((REPO / f"configs/{vendor}-master.yaml").read_text())
-        for key in keys & configs.keys():
-            r = configs[key]
-            hw = family(r["runner"])
-            spec = any(s.get("spec-decoding") == "mtp" for sc in (r.get("scenarios") or {}).values()
-                       for s in (sc[0].get("search-space", []) if isinstance(sc, list) and sc else []))
-            name = f"{r['model-prefix']}_{r['precision']}_{hw}{'_mtp' if spec else ''}.sh"
-            scripts = [REPO / "benchmarks/single_node" / sub / name for sub in ("agentic", "")]
-            script = next((x for x in scripts if x.is_file()), None)
-            out[key] = {"image": r["image"], "framework": r["framework"], "hardware": hw,
-                        "script": str(script.relative_to(REPO)) if script else None,
-                        "env": recipe_env(script) if script else {}}
-    missing = keys - out.keys()
-    if missing:
-        raise ValueError(f"unknown InferenceX recipes: {sorted(missing)}")
-    return out
 
 
 def write_json(path: Path, value: object) -> None:
@@ -177,8 +137,12 @@ def plan(
     chunk_size: int,
     platforms: dict[str, dict],
     mode: str = "timing",
-    recipes: dict[str, dict] | None = None,
+    find_recipe=None,
 ) -> dict:
+    """Shards for a selection. A case whose source checkpoint InferenceX serves on this
+    hardware runs under that recipe (find_recipe(framework, hardware, checkpoints),
+    operatorx.recipes.find): its image, launch env and server arguments."""
+    from operatorx.recipes import FRAMEWORKS, checkpoints
     if runner not in RUNNERS:
         raise ValueError(f"unsupported runner: {runner}")
     if mode not in MODES:
@@ -211,6 +175,7 @@ def plan(
     if not 1 <= chunk_size <= 500:
         raise ValueError("chunk size must be between 1 and 500")
     groups = defaultdict(list)
+    recipes_seen: dict[str, dict] = {}
     excluded = 0
     for name, shapes in sorted(testlists.items()):
         for shape in shapes:
@@ -221,24 +186,28 @@ def plan(
             if ws not in world_sizes:
                 excluded += 1
                 continue
-            # an entry naming an InferenceX recipe for this hardware runs with that recipe's
-            # image and launch env, in its own shard
-            recipe = next((k for k in shape.get("recipes", ()) if recipes and k in recipes
-                           and recipes[k]["hardware"] == family(runner)
-                           and recipes[k]["framework"] in backends), None)
-            groups[(ws, recipe or "")].append({"testlist": name, "shape": shape})
+            recipe = next((r for b in backends if b in FRAMEWORKS and find_recipe
+                           for r in [find_recipe(b, family(runner), checkpoints(shape.get("sources")))] if r),
+                          None)
+            if recipe:
+                recipes_seen[recipe["recipe"]] = recipe
+            groups[(ws, recipe["recipe"] if recipe else "")].append({"testlist": name, "shape": shape})
     image_groups = defaultdict(list)
     for backend in sorted(set(backends)):
         image_groups[images[backend]["image"]].append(backend)
     cells = []
     shards = []
     for (ws, recipe), cases in sorted(groups.items()):
+        rest = image_groups
         if recipe:
-            r = recipes[recipe]
-            shards.append((r["image"], [r["framework"]], ws, cases,
-                           {"recipe": recipe, "recipe_script": r["script"], "env": r["env"]}))
-        else:
-            shards += [(image, selected, ws, cases, {}) for image, selected in sorted(image_groups.items())]
+            r = recipes_seen[recipe]
+            framework = next(b for b in backends if b in FRAMEWORKS)
+            shards.append((r["image"], [framework], ws, cases,
+                           {"recipe": recipe, "checkpoint": r["checkpoint"], "env": r["env"],
+                            "engine_args": r["engine_args"]}))
+            # the other backends run the same cases on their own images
+            rest = {i: [b for b in bs if b != framework] for i, bs in image_groups.items()}
+        shards += [(image, selected, ws, cases, {}) for image, selected in sorted(rest.items()) if selected]
     for image, selected, ws, cases, extra in shards:
             for offset in range(0, len(cases), chunk_size):
                 cell = {
@@ -607,6 +576,7 @@ def execute(args) -> None:
             OPERATORX_BACKENDS=",".join(cell["backends"]),
             OPERATORX_MODE=cell.get("mode", "timing"),
             OPERATORX_RECIPE=cell.get("recipe", ""),
+            OPERATORX_ENGINE_ARGS=json.dumps(cell.get("engine_args") or {}),
             OPERATORX_TESTLISTS=",".join(
                 sorted({c["testlist"] for c in cell["cases"]})
             ),
@@ -831,6 +801,8 @@ def main() -> None:
     if args.command == "plan":
         import tomllib
 
+        from operatorx import recipes
+
         names = args.testlists.split(",")
         if any(not re.fullmatch(r"[A-Za-z0-9_-]+", n) for n in names):
             raise ValueError("invalid testlist name")
@@ -855,8 +827,7 @@ def main() -> None:
             args.chunk_size,
             load_platforms(args.platform_config),
             args.mode,
-            recipes=load_recipes({k for shapes in lists.values() for s in shapes for k in s.get("recipes", ())})
-            if any(s.get("recipes") for shapes in lists.values() for s in shapes) else None,
+            find_recipe=recipes.find,
         )
         digests = {c["image"]: "" for c in result["include"]}
         for image in digests:

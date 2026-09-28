@@ -42,6 +42,7 @@ class _Build:
     config: dict
     module: str  # module path suffix, e.g. "layers.0.self_attn"
     engine: dict = field(default_factory=dict)
+    without: tuple = ()  # recipe arguments for model parts the cut-down model leaves out
 
 
 def _family(name: str) -> dict:
@@ -137,8 +138,7 @@ def _build_gqa(op: Op) -> _Build:
              rope_theta=a["rope_theta"], use_qk_norm=bool(a.get("qk_norm")), attention_output_gate=False,
              num_hidden_layers=1, moe_layer_freq=[0], dense_intermediate_size=_MLP, num_mtp_modules=0,
              sparse_attention_config=sparse, vocab_size=_VOCAB)
-    # MiniMax-M3 serves with 128-token pages (its sparse layers need them), dense layers included
-    return _Build("minimax_m3", c, "layers.0.self_attn", {"language_model_only": True, "block_size": 128})
+    return _Build("minimax_m3", c, "layers.0.self_attn", {"language_model_only": True})
 
 
 def _build_gdn(op: Op) -> _Build:
@@ -227,7 +227,8 @@ def _build_dsv41(a: dict) -> _Build:
         t["rope_scaling"] = dict(_yarn(a["rope_scaling"]), rope_type="yarn")
     if a.get("indexer"):
         t.update(index_topk=a["topk"], index_n_heads=a["index_heads"], index_head_dim=a["index_dim"])
-    return _Build("deepseek_v41", c, f"layers.{layer}.attn", {"language_model_only": True})
+    return _Build("deepseek_v41", c, f"layers.{layer}.attn", {"language_model_only": True},
+                  without=("engram-config",))
 
 
 def _build_dsv4(op: Op) -> _Build:
@@ -281,14 +282,22 @@ class _Engine:
         self.key = key
         self.dir = tempfile.mkdtemp(prefix="opx-attn-")
         Path(self.dir, "config.json").write_text(json.dumps(b.config))
-        kwargs = dict(model=self.dir, load_format="dummy", skip_tokenizer_init=True, enforce_eager=True,
-                      enable_prefix_caching=False, max_num_seqs=_MAX_SEQS,
-                      max_num_batched_tokens=_MAX_BATCHED_TOKENS, kv_cache_memory_bytes=_kv_bytes(),
-                      gpu_memory_utilization=_GPU_UTIL,
-                      # compile kernels when first used (the untimed step) rather than every
-                      # shape up front; FlashInfer autotuning still runs
-                      kernel_config={"enable_jit_warmup": False})
+        recipe, self.recipe = _recipe_kwargs(b.without)
+        kwargs = {"max_num_batched_tokens": _MAX_BATCHED_TOKENS, **recipe}
+        kwargs.update(model=self.dir, load_format="dummy", skip_tokenizer_init=True, enforce_eager=True,
+                      enable_prefix_caching=False, max_num_seqs=_MAX_SEQS, kv_cache_memory_bytes=_kv_bytes(),
+                      gpu_memory_utilization=_GPU_UTIL)
+        # compile kernels when first used (the untimed step) rather than every shape up
+        # front; FlashInfer autotuning still runs
+        kernel = kwargs.get("kernel_config")
+        if kernel is None or isinstance(kernel, dict):
+            kwargs["kernel_config"] = {**(kernel or {}), "enable_jit_warmup": False}
+        else:
+            kernel.enable_jit_warmup = False
+        attention = {**self.recipe["attention_config"], **b.engine.pop("attention_config", {})}
         kwargs.update(b.engine)
+        if attention:
+            kwargs["attention_config"] = attention
         self.reqs: list = []
         self.n = 0
         try:
@@ -347,6 +356,9 @@ class _Engine:
         from vllm.v1.core.sched.output import NewRequestData
         from vllm.v1.request import Request
         self.release()
+        budget = self.runner.vllm_config.scheduler_config.max_num_batched_tokens
+        if sum(g["count"] * g["q"] for g in batch["groups"]) > budget:
+            raise UnsupportedOpError(f"the batch schedules more than max-num-batched-tokens={budget} new tokens")
         rng = random.Random(batch.get("seed", 0))
         for g in batch["groups"]:
             for _ in range(g["count"]):
@@ -383,6 +395,35 @@ class _Engine:
         if "fc" not in seen:
             raise RuntimeError("the model never called the attention module")
         return seen
+
+
+def _recipe_kwargs(without: tuple = ()) -> tuple[dict, dict]:
+    """The InferenceX recipe's server arguments (OPERATORX_ENGINE_ARGS, set per shard by the
+    planner from operatorx.recipes) as vLLM EngineArgs, parsed by vLLM's own parser; and
+    what the engine itself does not apply: the attention config (merged with the op's) and
+    the CUDA-graph mode and sizes serving would use (the engine here runs eagerly)."""
+    import dataclasses
+
+    from vllm.engine.arg_utils import EngineArgs
+    from vllm.utils.argparse_utils import FlexibleArgumentParser
+
+    from operatorx.recipes import serve_argv
+    args = {k: v for k, v in json.loads(os.environ.get("OPERATORX_ENGINE_ARGS") or "{}").items() if k not in without}
+    attention = json.loads(args.pop("attention-config", None) or "{}")
+    compilation = json.loads(args.pop("compilation-config", None) or "{}")
+    if args.get("max-cudagraph-capture-size"):
+        compilation.setdefault("max_cudagraph_capture_size", int(args["max-cudagraph-capture-size"]))
+    info = {"attention_config": attention, "compilation_config": compilation}
+    if not args:
+        return {}, info
+    parser = EngineArgs.add_cli_args(FlexibleArgumentParser())
+    base = vars(parser.parse_known_args(["--model", "m"])[0])
+    ns = vars(parser.parse_known_args(["--model", "m", *serve_argv(args)])[0])
+    fields = {f.name for f in dataclasses.fields(EngineArgs)} - {"model"}
+    kwargs = {k: v for k, v in ns.items() if k in fields and v != base.get(k)}
+    if compilation.get("custom_ops"):  # custom-op selection holds without compilation
+        kwargs["compilation_config"] = {"custom_ops": compilation["custom_ops"]}
+    return kwargs, info
 
 
 def _kv_bytes() -> int:
@@ -454,8 +495,6 @@ def _prepare(op: Op) -> dict:
     kv = a.get("kv_cache_dtype")
     if kv is not None:
         b.engine["kv_cache_dtype"] = _KV_DTYPES[kv]
-    if b.family == "kimi_k3" and kv == "fp8":  # vLLM requires it with K3's fp8 latent cache
-        b.engine.setdefault("attention_config", {})["use_prefill_query_quantization"] = True
     try:
         eng = _engine(b)
     # vLLM's own startup (model build, profiling and warmup runs) failing on this config
@@ -514,7 +553,13 @@ def _full_graph(eng: _Engine) -> bool:
     if len(qs) != 1:
         return False
     q = qs.pop()
-    if q * len(eng.reqs) > vllm_linear._capture_sizes()[-1]:
+    compilation = eng.recipe["compilation_config"]
+    mode = str(compilation.get("cudagraph_mode", "FULL_AND_PIECEWISE")).upper()
+    if compilation.get("mode") in (0, "NONE") and "cudagraph_mode" not in compilation or mode in ("NONE", "PIECEWISE"):
+        return False
+    sizes = compilation.get("cudagraph_capture_sizes")
+    top = max(sizes) if sizes else compilation.get("max_cudagraph_capture_size") or vllm_linear._capture_sizes()[-1]
+    if q * len(eng.reqs) > top:
         return False
     need = AttentionCGSupport.UNIFORM_SINGLE_TOKEN_DECODE if q == 1 else AttentionCGSupport.UNIFORM_BATCH
     for gs in eng.runner.attn_groups:
