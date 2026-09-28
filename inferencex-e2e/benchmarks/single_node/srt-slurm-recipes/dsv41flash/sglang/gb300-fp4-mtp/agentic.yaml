@@ -52,6 +52,9 @@ base:
   health_check:
     max_attempts: 1440
     interval_seconds: 5
+  # Temporary: remove once im-gb300-r01-c001's corrupt container cache is fixed.
+  sbatch_directives:
+    exclude: im-gb300-r01-c001
   benchmark:
     type: custom
     command: bash /infmax-workspace/benchmarks/srt_agentic.sh
