@@ -187,12 +187,9 @@ for index in "${!CONCURRENCIES[@]}"; do
             [[ -n "$endpoint" ]] && profile_servers+=("http://$endpoint")
         done
         (( ${#profile_servers[@]} )) || profile_servers=("$AIPERF_SERVER_URL")
-        warmup_per_lane="${AIPERF_WARMUP_REQUESTS_PER_LANE:-10}"
-        [[ "${AIPERF_EXPERIMENTAL_FAST:-0}" == "1" ]] && warmup_per_lane=1
         python3 "$INFMAX_CONTAINER_WORKSPACE/benchmarks/profiling/vllm/profile_windows.py" \
             "$INFX_PROFILE_WINDOWS" "$INFX_PROF_DIR/windows_conc${concurrency}.jsonl" \
-            "$RESULT_DIR/aiperf_artifacts/logs/aiperf.log" \
-            "$(( concurrency * warmup_per_lane ))" "${profile_servers[@]}" &
+            "$RESULT_DIR/aiperf_artifacts/logs/aiperf.log" "${profile_servers[@]}" &
         profile_windows_pid=$!
     fi
     run_agentic_replay_and_write_outputs "$RESULT_DIR"

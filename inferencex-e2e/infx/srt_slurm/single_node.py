@@ -138,16 +138,20 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
 
 PROFILE_DIR = "/logs/infx_profile"
 PROFILE_DEFAULTS: dict[str, Any] = {
-    # (seconds after the client's warmup ends, engine iterations) per torch window
-    "windows": [[60, 32], [540, 32]],
+    # [aiperf phase, seconds after it starts, engine iterations] per torch window.
+    # AgentX warmup is the lanes' long first turns (prefill-heavy); the measured
+    # phase starts once they drain (decode-dominated).
+    "windows": [["warmup", 60, 32], ["profiling", 0, 32]],
     # workers whose CUDA graph capture is profiled; "all" profiles every rank
     "capture_ranks": "dp0_tp0",
     # Host memory kept free of CPU KV offload for the profiler's trace buffers;
     # offload recipes otherwise size the pool to nearly the whole host.
     "host_headroom_gib": 128,
 }
-# Replay past the last window's start: the window, its export and a margin.
-PROFILE_TAIL_SECONDS = 240
+PROFILE_PHASES = ("warmup", "profiling")
+# Measured replay past its last window's start: the window, its export and a
+# margin. A profiled run stops there; its throughput is not a result.
+PROFILE_TAIL_SECONDS = 150
 
 
 def offload_headroom_arguments(role_args: Mapping[str, Any], headroom_gib: float) -> list[str]:
@@ -186,9 +190,19 @@ def profiling_arguments(
     settings = {**PROFILE_DEFAULTS, **json.loads(raw)}
     windows = settings["windows"]
     if not windows or any(
-        len(window) != 2 or int(window[0]) < 0 or int(window[1]) <= 0 for window in windows
+        len(window) != 3
+        or window[0] not in PROFILE_PHASES
+        or int(window[1]) < 0
+        or int(window[2]) <= 0
+        for window in windows
     ):
-        raise ValueError("INFX_PROFILE windows must be [delay_seconds, iterations] pairs")
+        raise ValueError(
+            f"INFX_PROFILE windows must be [phase in {PROFILE_PHASES}, delay_seconds, iterations]"
+        )
+    if [PROFILE_PHASES.index(w[0]) for w in windows] != sorted(
+        PROFILE_PHASES.index(w[0]) for w in windows
+    ):
+        raise ValueError("INFX_PROFILE windows must be ordered by phase")
     # vLLM's profiler window length is fixed per engine; every window uses the first's.
     profiler_config = {
         "profiler": "torch",
@@ -201,7 +215,7 @@ def profiling_arguments(
         # on offload-sized hosts that exhausted memory. The raw trace suffices.
         "torch_profiler_dump_cuda_time_total": False,
         "ignore_frontend": True,
-        "max_iterations": int(windows[0][1]),
+        "max_iterations": int(windows[0][2]),
     }
     worker_env = {
         "INFX_PROF_DIR": PROFILE_DIR,
@@ -215,9 +229,8 @@ def profiling_arguments(
     for name, value in worker_env.items():
         overrides += ["--set", f"roles.agg.env.{name}={json.dumps(value)}"]
     # Profiling needs only its windows; replaying longer only holds the node.
-    duration = int(
-        settings.get("duration") or max(int(w[0]) for w in windows) + PROFILE_TAIL_SECONDS
-    )
+    measured = [int(w[1]) for w in windows if w[0] == "profiling"]
+    duration = int(settings.get("duration") or max(measured, default=0) + PROFILE_TAIL_SECONDS)
     overrides += [
         "--set",
         f"benchmark.env.INFX_PROFILE_DURATION={json.dumps(str(duration))}",

@@ -29,10 +29,10 @@ One concurrency selects one recipe variant (for DSV4 on B200: `tp8_c*` or
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `windows` | `[[60, 32], [540, 32]]` | `[delay_seconds, iterations]` per torch profiler window; delays count from the end of the client's warmup. AgentX first turns keep every rank in chunked prefill for the first ~6 minutes, so the first window sees the prefill ramp and the second the decode-dominated steady state |
+| `windows` | `[["warmup", 60, 32], ["profiling", 0, 32]]` | `[aiperf phase, delay_seconds, iterations]` per torch profiler window, anchored on aiperf logging that phase's start. AgentX warmup is the lanes' long first turns (prefill-heavy); the measured phase starts once they drain (decode-dominated) |
 | `capture_ranks` | `"dp0_tp0"` | Workers whose CUDA graph capture is profiled (`"all"` for every rank) |
 | `host_headroom_gib` | `128` | Host memory taken from a CPU KV-offload pool for the profiler's buffers |
-| `duration` | last delay + 240 s | Measured replay length; profiling only needs its windows |
+| `duration` | last measured-phase delay + 150 s | Measured replay length: the run stops once its last window has exported |
 
 A profiled point holds its node for about 30 minutes (engine start-up and
 graph capture are most of it). Its throughput is not a result: windows pause
