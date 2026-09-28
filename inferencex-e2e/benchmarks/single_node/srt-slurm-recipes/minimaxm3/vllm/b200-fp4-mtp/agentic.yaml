@@ -1,0 +1,264 @@
+# MiniMax-M3 NVFP4 AgentX on B200 with vLLM EAGLE3 (the GQA draft head).
+# DRAM KV offload uses SimpleCPUOffloadConnector in lazy mode.
+base:
+  schema: 2
+  name: minimaxm3-fp4-b200-vllm-agentic
+  model:
+    path: hf:nvidia/MiniMax-M3-NVFP4
+    container: vllm/vllm-openai:nightly-1dc464d42681d22f38caf1fdc1eb632dc4421c45
+    precision: fp4
+  resources:
+    gpu_type: b200
+    gpus_per_node: 8
+  frontend:
+    type: vllm
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine:
+    type: vllm
+    connector: null
+  # The engine may take the full VLLM_ENGINE_READY_TIMEOUT_S to become ready.
+  health_check:
+    interval_seconds: 10
+    max_attempts: 360
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      args:
+        served-model-name: nvidia/MiniMax-M3-NVFP4
+        gpu-memory-utilization: 0.9
+        block-size: 128
+        language-model-only: true
+        enable-prefix-caching: true
+        no-enable-flashinfer-autotune: true
+        reasoning-parser: minimax_m3
+        tool-call-parser: minimax_m3
+        enable-auto-tool-choice: true
+        default-chat-template-kwargs: '{"thinking_mode":"enabled"}'
+        attention-config: '{"backend":"FLASHINFER","use_trtllm_attention":true,"indexer_kv_dtype":"fp8"}'
+        kv-cache-dtype: fp8
+        max-cudagraph-capture-size: 512
+        max-num-batched-tokens: 16384
+        stream-interval: 20
+        trust-remote-code: true
+        # Three-token EAGLE3 with the GQA draft head. Throughput runs switch to
+        # synthetic rejection at the golden acceptance length.
+        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASH_ATTN"}'
+      env:
+        PYTHONNOUSERSITE: '1'
+        VLLM_ENGINE_READY_TIMEOUT_S: '3600'
+        VLLM_FLOAT32_MATMUL_PRECISION: high
+        VLLM_FLASHINFER_ALLREDUCE_BACKEND: trtllm
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
+    env:
+      MODEL: nvidia/MiniMax-M3-NVFP4
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
+
+# One variant per point. DRAM points give SimpleCPUOffload the whole host budget
+# (TOTAL_CPU_DRAM_GB GiB) with lazy offload.
+override_tp8_c1:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: none
+
+override_tp4_c1:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: none
+
+override_tp4_c5:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+  benchmark:
+    env:
+      CONC: '5'
+      KV_OFFLOADING: none
+
+override_tp4_c10:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+  benchmark:
+    env:
+      CONC: '10'
+      KV_OFFLOADING: none
+
+override_tp4_c15:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+  benchmark:
+    env:
+      CONC: '15'
+      KV_OFFLOADING: none
+
+override_tp4_c20:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+  benchmark:
+    env:
+      CONC: '20'
+      KV_OFFLOADING: none
+
+override_tp4_c15_dram:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1161788653568,"lazy_offload":true}}'
+      env:
+        VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
+  benchmark:
+    env:
+      CONC: '15'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1082'
+
+override_tp4_c20_dram:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1161788653568,"lazy_offload":true}}'
+      env:
+        VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
+  benchmark:
+    env:
+      CONC: '20'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1082'
+
+override_tp4_c25_dram:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1161788653568,"lazy_offload":true}}'
+      env:
+        VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
+  benchmark:
+    env:
+      CONC: '25'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1082'
+
+override_tp4_c30_dram:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1161788653568,"lazy_offload":true}}'
+      env:
+        VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
+  benchmark:
+    env:
+      CONC: '30'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1082'
+
+override_tp4_c32_dram:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1161788653568,"lazy_offload":true}}'
+      env:
+        VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
+  benchmark:
+    env:
+      CONC: '32'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1082'
+
+override_tp4_c34_dram:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1161788653568,"lazy_offload":true}}'
+      env:
+        VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
+  benchmark:
+    env:
+      CONC: '34'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1082'
+
+override_tp4_c36_dram:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1161788653568,"lazy_offload":true}}'
+      env:
+        VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
+  benchmark:
+    env:
+      CONC: '36'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1082'
+
+override_tp4_c38_dram:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1161788653568,"lazy_offload":true}}'
+      env:
+        VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
+  benchmark:
+    env:
+      CONC: '38'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1082'
+
+override_tp4_c40_dram:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1161788653568,"lazy_offload":true}}'
+      env:
+        VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
+  benchmark:
+    env:
+      CONC: '40'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1082'

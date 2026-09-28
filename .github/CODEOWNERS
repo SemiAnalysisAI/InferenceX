@@ -1,14 +1,20 @@
 * @SemiAnalysisAI/core
 
 # AMD master config
-configs/amd-master.yaml @billishyahao @chunfangamd @seungrokj @yctseng0211 @1am9trash
+inferencex-e2e/configs/amd-master.yaml @billishyahao @chunfangamd @seungrokj @yctseng0211 @1am9trash
 
 # NVIDIA master config
-configs/nvidia-master.yaml @ankur-singh @kedarpotdar-nv @SemiAnalysisAI/core
+inferencex-e2e/configs/nvidia-master.yaml @ankur-singh @kedarpotdar-nv @SemiAnalysisAI/core
 
 # PoR for Models & general direction
-MODELS.md @ankur-singh @chunfangamd @SemiAnalysisAI/core
-MODELS_zh.md @ankur-singh @chunfangamd @SemiAnalysisAI/core
+inferencex-e2e/docs/MODELS.md @ankur-singh @chunfangamd @SemiAnalysisAI/core
+inferencex-e2e/docs/MODELS_zh.md @ankur-singh @chunfangamd @SemiAnalysisAI/core
 
-# OperatorX experimental
-experimental/operatorx/ @hbarclay
+# CollectiveX
+collectivex/ @Oseltamivir @functionstackx
+
+# OperatorX
+operatorx/ @hbarclay
+
+# Experimental
+experimental/ @functionstackx
