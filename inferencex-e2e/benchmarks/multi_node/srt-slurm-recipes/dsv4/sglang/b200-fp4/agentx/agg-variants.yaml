@@ -66,13 +66,8 @@ base:
         SGLANG_DSV4_REASONING_EFFORT: high
         PIP_BREAK_SYSTEM_PACKAGES: "1"
         SGLANG_JIT_DEEPGEMM_PRECOMPILE: "1"
-        SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: "1"
-        SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: "1"
-        SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2: "1"
         SGLANG_OPT_USE_ONLINE_COMPRESS: "0"
         SGLANG_OPT_USE_JIT_INDEXER_METADATA: "1"
-        SGLANG_OPT_USE_JIT_NORM: "1"
-        SGLANG_OPT_USE_TOPK_V2: "True"
       args:
         served-model-name: "deepseek-ai/DeepSeek-V4-Pro-0813"
         enable-metrics: true
