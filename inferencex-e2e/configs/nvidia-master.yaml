@@ -1193,6 +1193,21 @@ qwen3.5-fp8-b200-sglang-agentic-mtp:
       - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 14], srt-recipe: benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/b200-fp8-mtp/agentic.yaml }
       - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [16, 18, 20, 22, 24, 28, 32], srt-recipe: benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/b200-fp8-mtp/agentic.yaml }
 
+# DO NOT MERGE: one SGLang LMCache unified radix cache point on the lmcache-server service.
+qwen3.5-fp8-b200-sglang-agentic-lmcache-dnm:
+  image: lmsysorg/sglang:nightly-dev-cu13-20260928-81f27fb3
+  model: Qwen/Qwen3.5-397B-A17B-FP8
+  model-prefix: qwen3.5
+  runner: cluster:b200-nscale
+  precision: fp8
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.6.dev112" }, conc-list: [76], srt-recipe: benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/b200-fp8-lmcache/agentic.yaml }
+
 qwen3.5-fp4-b200-sglang:
   image: lmsysorg/sglang:v0.5.19-cu130
   model: nvidia/Qwen3.5-397B-A17B-NVFP4-V2

@@ -1,0 +1,114 @@
+# DO NOT MERGE. Qwen3.5-397B-A17B FP8 AgentX on B200 with SGLang, one DRAM point
+# on the LMCache unified radix cache backed by the node's lmcache-server. A copy
+# of b200-fp8-mtp without NEXTN: LMCacheUnifiedRadixCache refuses speculative
+# decoding. The image is the newest nightly, the first with that cache's fixes.
+base:
+  schema: 2
+  name: qwen3.5-fp8-b200-sglang-agentic-lmcache
+  model:
+    path: hf:Qwen/Qwen3.5-397B-A17B-FP8
+    container: lmsysorg/sglang:nightly-dev-cu13-20260928-81f27fb3
+    precision: fp8
+  resources:
+    gpu_type: b200
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      args:
+        served-model-name: Qwen/Qwen3.5-397B-A17B-FP8
+        trust-remote-code: true
+        data-parallel-size: 1
+        expert-parallel-size: 1
+        enable-symm-mem: true
+        quantization: fp8
+        kv-cache-dtype: fp8_e4m3
+        mamba-ssm-dtype: bfloat16
+        attention-backend: trtllm_mha
+        moe-runner-backend: flashinfer_trtllm
+        max-prefill-tokens: 16384
+        chunked-prefill-size: 16384
+        mem-fraction-static: 0.8
+        stream-interval: 50
+        scheduler-recv-interval: 10
+        # Parallel tokenization keeps 256k warmups within the client timeout.
+        tokenizer-worker-num: 6
+        reasoning-parser: qwen3
+        tool-call-parser: qwen3_coder
+        enable-metrics: true
+        enable-cache-report: true
+      env:
+        TORCH_CUDA_ARCH_LIST: '10.0'
+        PYTHONNOUSERSITE: '1'
+        NCCL_NVLS_ENABLE: '1'
+        SGL_ENABLE_JIT_DEEPGEMM: 'false'
+        SGLANG_ENABLE_FLASHINFER_GEMM: 'true'
+        # Outlast AIPerf's 300 s client connection pool.
+        SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
+    env:
+      MODEL: Qwen/Qwen3.5-397B-A17B-FP8
+      # 256k-capped corpus, within this model's context.
+      WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126_256k
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+
+# The hicache c76 point with LMCache in place of HiCache. The server's L1 takes
+# the 2 x 8 x 104 GB the HiCache KV and Mamba host pools used. Its chunk is the
+# Mamba track interval, a multiple of the page; the hybrid model's recurrent
+# state needs separate object groups.
+override_tp8_lmcache_c76:
+  # The worker imports LMCache's SGLang connector; see SETUP_PIP_PACKAGES.
+  setup_script: pip-runtime-deps.sh
+  services:
+    - name: lmcache
+      type: lmcache-server
+      # The server imports the same LMCache build in its own container.
+      preamble: bash /configs/pip-runtime-deps.sh
+      env:
+        SETUP_PIP_PACKAGES: lmcache==0.5.6.dev112 --find-links https://github.com/LMCache/LMCache/releases/expanded_assets/nightly
+      # The default probe with more time: the install counts against it.
+      readiness:
+        http:
+          port: 8751
+          path: /healthcheck
+        timeout_seconds: 900
+      args:
+        - --l1-size-gb
+        - '1664'
+        - --chunk-size
+        - '256'
+        - --eviction-policy
+        - LRU
+        - --separate-object-groups
+        - --max-gpu-workers
+        - '8'
+        - --max-cpu-workers
+        - '8'
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        max-running-requests: 152
+        cuda-graph-max-bs-decode: 64
+        page-size: 64
+        enable-lmcache: true
+      env:
+        # The first LMCache build with the SGLang unified connector, a nightly.
+        SETUP_PIP_PACKAGES: lmcache==0.5.6.dev112 --find-links https://github.com/LMCache/LMCache/releases/expanded_assets/nightly
+  benchmark:
+    env:
+      CONC: '76'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1731'
