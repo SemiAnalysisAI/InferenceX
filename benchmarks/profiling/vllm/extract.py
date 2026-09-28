@@ -28,6 +28,7 @@ import sys
 
 MARK = re.compile(r"^infx_(step|dummy|graph_replay|graph_capture|piece)#(\d+)$")
 MODULE_MARK = "infx_mod#"
+LAUNCHER_MARK = "infx_py#"
 DEVICE_CATS = {"kernel", "gpu_memcpy", "gpu_memset"}
 LAUNCH_CATS = {"cuda_runtime", "cuda_driver"}
 CONTEXT_CATS = {"cpu_op", "user_annotation", "python_function"}
@@ -102,7 +103,8 @@ class Trace:
         modules = []  # qualified names from infx_mod markers
         stack_modules = []  # class-instance names from Python stacks (capture only)
         frame = None
-        module_inputs = None
+        module_stack = []  # [qualified name, input signature], outermost first
+        launcher = None  # innermost [launcher, vLLM caller frames]
         for i in self.stack_of.get(launch, ()):
             e = self.events[i]
             name = e["name"]
@@ -112,7 +114,9 @@ class Trace:
             elif name.startswith(MODULE_MARK):
                 qualname, _, sig = name[len(MODULE_MARK):].partition("#")
                 modules.append(qualname)
-                module_inputs = sig
+                module_stack.append([qualname, json.loads(sig) if sig else None])
+            elif name.startswith(LAUNCHER_MARK):
+                launcher = json.loads(name[len(LAUNCHER_MARK):])
             elif e["cat"] == "cpu_op" or (e["cat"] == "user_annotation" and not name.startswith("infx_")):
                 ops.append(i)
             elif e["cat"] == "python_function":
@@ -131,7 +135,9 @@ class Trace:
             "concrete_inputs": args.get("Concrete Inputs"),
             "kernel_file": args.get("kernel_file"),
             "module_path": modules or stack_modules,
-            "module_inputs": json.loads(module_inputs) if module_inputs else None,
+            "module_stack": module_stack,
+            "launcher": launcher[0] if launcher else None,
+            "launcher_callers": launcher[1] if launcher else None,
             "py_frame": frame,
             "launch_api": self.events[launch]["name"],
         }
