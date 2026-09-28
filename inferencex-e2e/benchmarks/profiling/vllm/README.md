@@ -34,9 +34,17 @@ One concurrency selects one recipe variant (for DSV4 on B200: `tp8_c*` or
 | `host_headroom_gib` | `128` | Host memory taken from a CPU KV-offload pool for the profiler's buffers |
 | `duration` | last `profiling` delay + 600 s | Cap on the measured replay. Once its last window closes (and the measured phase has run 60 s), the window client SIGINTs aiperf, which exports what it measured and exits zero, so the run does not replay past its windows |
 
-A profiled point holds its node for about 30 minutes (engine start-up and
-graph capture are most of it). Its throughput is not a result: windows pause
-the engine while they export, and profiled runs tolerate failed requests.
+A profiled point holds its node for 30 to 60 minutes on B200 (engine start-up
+and graph capture, then an AgentX warmup that grows with concurrency). Its
+throughput is not a result: windows pause the engine while they export, and
+profiled runs tolerate failed requests.
+
+At DSV4 DEP8 c192 on B200, a warmup window has preceded an engine fault both
+times it ran (`CUBLAS_STATUS_EXECUTION_FAILED` in the attention compressor's
+`torch.mm`, when warmup's cache-pressure requests arrive, minutes after the
+window closed); the same point without it (`{"windows": [["decode", 0, 32]]}`)
+and unprofiled production runs complete. Profile such a point's prefill and
+decode in separate runs.
 
 Deviations from the recipe, all recorded in the run's config: vLLM's torch
 profiler config, the patch's environment, a raised `VLLM_RPC_TIMEOUT`, and on
