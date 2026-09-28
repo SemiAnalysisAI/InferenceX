@@ -9008,4 +9008,4 @@
     - glm5.3-fp8-mi355x-tilert-agentic
   description:
     - "Port MI355X GLM-5.3 TileRT AgentX to native srt-slurm per-role engines."
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3552
