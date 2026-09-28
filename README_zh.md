@@ -18,11 +18,11 @@
 
 | 目录 | 内容 |
 | --- | --- |
-| 🚀 [`InferenceX-e2e/`](inferencex-e2e/) | 端到端推理服务基准测试 |
-| 🌐 [`CollectiveX/`](collectivex/) | 网络与集合通信基准测试（实验性 Beta 版本） |
-| ⚙️ [`OperatorX/`](operatorx/) | 算子与内核级基准测试（实验性 Beta 版本） |
-| 🧩 [`shared/`](shared/) | 共享组件目录 |
-| 🧪 [`experimental/`](experimental/) | 其余实验 |
+| [`InferenceX-e2e/`](inferencex-e2e/) | 🚀 端到端推理服务基准测试 |
+| [`CollectiveX/`](collectivex/) | 🌐 网络与集合通信基准测试（实验性 Beta 版本） |
+| [`OperatorX/`](operatorx/) | ⚙️ 算子与内核级基准测试（实验性 Beta 版本） |
+| [`shared/`](shared/) | 🧩 共享组件目录 |
+| [`experimental/`](experimental/) | 🧪 其余实验 |
 
 ## 新闻
 

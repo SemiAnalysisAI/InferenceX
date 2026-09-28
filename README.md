@@ -18,11 +18,11 @@ Trusted by Operators of Trillion Dollar Token Factories such as OpenAI, Meta, Mi
 
 | Directory | Contents |
 | --- | --- |
-| 🚀 [`InferenceX-e2e/`](inferencex-e2e/) | End-to-end Inference Serving Benchmarks |
-| 🌐 [`CollectiveX/`](collectivex/) | Networking & Collective Communication Benchmarks (Experimental Beta) |
-| ⚙️ [`OperatorX/`](operatorx/) | Operator & Kernel Level Benchmarks (Experimental Beta) |
-| 🧩 [`shared/`](shared/) | Home for shared components |
-| 🧪 [`experimental/`](experimental/) | Remaining experiments |
+| [`InferenceX-e2e/`](inferencex-e2e/) | 🚀 End-to-end Inference Serving Benchmarks |
+| [`CollectiveX/`](collectivex/) | 🌐 Networking & Collective Communication Benchmarks (Experimental Beta) |
+| [`OperatorX/`](operatorx/) | ⚙️ Operator & Kernel Level Benchmarks (Experimental Beta) |
+| [`shared/`](shared/) | 🧩 Home for shared components |
+| [`experimental/`](experimental/) | 🧪 Remaining experiments |
 
 
 ## News
