@@ -10,5 +10,11 @@ inferencex-e2e/configs/nvidia-master.yaml @ankur-singh @kedarpotdar-nv @SemiAnal
 inferencex-e2e/docs/MODELS.md @ankur-singh @chunfangamd @SemiAnalysisAI/core
 inferencex-e2e/docs/MODELS_zh.md @ankur-singh @chunfangamd @SemiAnalysisAI/core
 
+# CollectiveX
+collectivex/ @Oseltamivir @functionstackx
+
 # OperatorX
 operatorx/ @hbarclay
+
+# Experimental
+experimental/ @functionstackx
