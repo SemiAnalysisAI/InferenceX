@@ -31,6 +31,7 @@ containers:
   "${IMAGE}": ${SQUASH_FILE}
   nginx-sqsh: ${NGINX_SQUASH_FILE}
 use_exclusive_sbatch_directive: true
+default_bash_preamble: ${SRT_DEFAULT_BASH_PREAMBLE}
 default_sbatch_directives:
   cpus-per-task: '192'
   # gpu-16 retains a foreign 1.63 TB tmpfs allocation; rechecked 2026-09-21.

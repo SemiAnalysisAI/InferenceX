@@ -191,6 +191,7 @@ launch_srt_single_node() {
         --var SRTCTL_ROOT "$SRTCTL_ROOT" --var SQUASH_FILE "$SRT_CONTAINER" \
         --var IMAGE "$IMAGE" --var NGINX_SQUASH_FILE nginx:1.27.4 \
         --var SRT_DEFAULT_TIME_LIMIT "$SALLOC_TIME_LIMIT" \
+        --var SRT_DEFAULT_BASH_PREAMBLE "" \
         --model "hf:$MODEL" "$SRT_MODEL_PATH" --container "$IMAGE" "$SRT_CONTAINER" \
         --mount "$HF_HUB_CACHE_MOUNT" "$HF_HUB_CACHE" --exclusive "$@"
     run_srt_setup "ARCH=${SRT_SETUP_ARCH:-x86_64}"
@@ -385,6 +386,36 @@ copy_fixed_sequence_results() {
     fi
 
     echo "All result files processed"
+}
+
+# Check the allocation's final exit status, not a step or a partial result file.
+check_slurm_job_success() {
+    local job_id="$1" logs_dir="$2"
+    local attempt
+    for attempt in 1 2 3; do
+        echo "$attempt" > "$logs_dir/native-job-status-attempts.txt" || return 1
+        if sacct -X -n -P -j "$job_id" --format=JobIDRaw,State,ExitCode \
+            > "$logs_dir/native-job-status.txt" \
+            2>> "$logs_dir/native-job-status.stderr"; then
+            if awk -F'|' -v job="$job_id" '
+                $1 == job && $2 !~ /^(PENDING|RUNNING|COMPLETING)$/ { found = 1 }
+                END { exit !found }
+            ' "$logs_dir/native-job-status.txt"; then
+                if awk -F'|' -v job="$job_id" '
+                    $1 == job { found = 1; if ($2 != "COMPLETED" || $3 != "0:0") failed = 1 }
+                    END { exit (!found || failed) }
+                ' "$logs_dir/native-job-status.txt"; then
+                    return 0
+                fi
+                echo "ERROR: Slurm job $job_id did not complete successfully" >&2
+                return 1
+            fi
+        fi
+        # Accounting can lag squeue removal; keep the wait bounded.
+        if [[ "$attempt" != "3" ]]; then sleep 5; fi
+    done
+    echo "ERROR: no successful terminal accounting record for Slurm job $job_id" >&2
+    return 1
 }
 
 copy_agentic_results() {
