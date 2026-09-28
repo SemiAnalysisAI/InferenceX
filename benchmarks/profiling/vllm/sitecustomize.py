@@ -524,6 +524,119 @@ def _patch_model_runner(module):
     cls._infx_patched = True
 
 
+# --- Python launcher markers --------------------------------------------------
+# Kernels launched straight from Python (Triton, TileLang, CuTe DSL, DeepGEMM
+# and FlashInfer bindings) have no torch op. Their launch entry points mark
+# themselves while profiling: infx_py#["<launcher>", ["<vllm frame>", ...]],
+# the frames being the vLLM callers above the launch, outermost first.
+
+_CALLER_FRAMES = 6
+_WRAP_SKIP_PREFIXES = ("_", "is_", "has_", "should_", "supports")
+
+
+def _compiling():
+    try:
+        import torch
+
+        return torch.compiler.is_compiling()
+    except Exception:
+        return False
+
+
+def _vllm_callers(skip):
+    frame = sys._getframe(skip)
+    chain = []
+    while frame is not None and len(chain) < _CALLER_FRAMES:
+        path = frame.f_code.co_filename
+        cut = path.rfind(f"{os.sep}vllm{os.sep}")
+        if cut >= 0:
+            chain.append(f"{path[cut + 1:]}:{frame.f_lineno}:{frame.f_code.co_name}")
+        frame = frame.f_back
+    return chain[::-1]
+
+
+def _launcher_marker(label):
+    import torch
+
+    name = json.dumps([label, _vllm_callers(3)], separators=(",", ":"))
+    return torch.autograd.profiler.record_function(f"infx_py#{name}")
+
+
+def _wrap_launcher(fn, label):
+    import functools
+
+    @functools.wraps(fn)
+    def launcher(*args, **kwargs):
+        if _compiling() or not _profiling():
+            return fn(*args, **kwargs)
+        with _launcher_marker(label):
+            return fn(*args, **kwargs)
+
+    launcher._infx_launcher = True
+    return launcher
+
+
+def _patch_launcher_module(module):
+    """Mark every public Python function a launcher module defines."""
+    import types
+
+    for name, obj in list(vars(module).items()):
+        if (isinstance(obj, types.FunctionType) and obj.__module__ == module.__name__
+                and not name.startswith(_WRAP_SKIP_PREFIXES)
+                and not getattr(obj, "_infx_launcher", False)):
+            setattr(module, name, _wrap_launcher(obj, f"{module.__name__}.{name}"))
+
+
+def _patch_launcher_calls(module, attr, label_of):
+    """Mark calls of every class in `module` that defines `attr` itself."""
+    for cls in list(vars(module).values()):
+        if not isinstance(cls, type) or cls.__module__ != module.__name__ or attr not in vars(cls):
+            continue
+        orig = vars(cls)[attr]
+        if getattr(orig, "_infx_launcher", False):
+            continue
+
+        def call(self, *args, _orig=orig, **kwargs):
+            if _compiling() or not _profiling():
+                return _orig(self, *args, **kwargs)
+            try:
+                label = label_of(self)
+            except Exception:
+                label = type(self).__qualname__
+            with _launcher_marker(label):
+                return _orig(self, *args, **kwargs)
+
+        call._infx_launcher = True
+        setattr(cls, attr, call)
+
+
+def _triton_label(jit_function):
+    fn = getattr(jit_function, "fn", None)
+    return f"triton:{getattr(fn, '__qualname__', None) or type(jit_function).__qualname__}"
+
+
+def _named_label(prefix):
+    def label(obj):
+        for attr in ("kernel_name", "name", "__name__", "func_name"):
+            value = getattr(obj, attr, None)
+            if isinstance(value, str) and value:
+                return f"{prefix}:{value}"
+        return f"{prefix}:{type(obj).__qualname__}"
+
+    return label
+
+
+_LAUNCHER_HOOKS = {
+    "vllm.utils.deep_gemm": _patch_launcher_module,
+    "vllm.utils.flashinfer": _patch_launcher_module,
+    "vllm.third_party.deep_gemm.mega": _patch_launcher_module,
+    "triton.runtime.jit": lambda m: _patch_launcher_calls(m, "run", _triton_label),
+    "tilelang.jit.kernel": lambda m: _patch_launcher_calls(m, "__call__", _named_label("tilelang")),
+    "cutlass.cutlass_dsl.tvm_ffi_provider": lambda m: _patch_launcher_calls(
+        m, "__call__", _named_label("cute")),
+}
+
+
 def _patch_gpu_worker(module):
     """Idle DP ranks run a dummy forward each step to keep EP collectives in step."""
     import torch
@@ -562,6 +675,7 @@ _HOOKS = {
     "vllm.profiler.wrapper": _patch_profiler_wrapper,
     "vllm.compilation.piecewise_backend": _patch_piecewise_backend,
     "vllm.v1.worker.gpu_worker": _patch_gpu_worker,
+    **_LAUNCHER_HOOKS,
 }
 
 
