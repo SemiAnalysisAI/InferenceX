@@ -11,7 +11,7 @@ name: mi300x-qwen35-agentx-mori-disagg-1p1d-dep8-mtp
 
 model:
   path: hf:Qwen/Qwen3.5-397B-A17B-FP8
-  container: lmsysorg/sglang-rocm:v0.5.19-rocm720-mi30x-20260910
+  container: lmsysorg/sglang-rocm:v0.5.20-rocm720-mi30x-20260929
   precision: fp8
 
 identity:
@@ -19,7 +19,7 @@ identity:
     repo: Qwen/Qwen3.5-397B-A17B-FP8
   container:
     image:
-      lmsysorg/sglang-rocm:v0.5.19-rocm720-mi30x-20260910@sha256:985488daa99010f6c72f17286b05804165e26c683be932325487d10b4ea6fd49
+      lmsysorg/sglang-rocm:v0.5.20-rocm720-mi30x-20260929@sha256:585867623ab32a3f6e7839e15608cf67229f3de77d08af796b8b9d58ff76b6cb
 
 slurm:
   time_limit: "24:00:00"
@@ -143,6 +143,9 @@ roles:
       expert-parallel-size: 8
       dp-size: 8
 
+sbatch_directives:
+  mem: "0"
+
 srun_options:
   container-writable: ""
   container-remap-root: ""
@@ -156,7 +159,7 @@ benchmark:
   command: bash /infmax-workspace/benchmarks/srt_agentic.sh
   env:
     INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
-    IMAGE: lmsysorg/sglang-rocm:v0.5.19-rocm720-mi30x-20260910
+    IMAGE: lmsysorg/sglang-rocm:v0.5.20-rocm720-mi30x-20260929
     IS_MULTINODE: "true"
     DISAGG: "true"
     HF_HOME: /hf-cache

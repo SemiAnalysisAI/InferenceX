@@ -9087,8 +9087,8 @@
   no-evals: true
   description:
     - "Add focused MI300X Qwen3.5 AgentX MORI disaggregation: DEP8 prefill/decode at c32 and c64."
-    - "Use native srt-slurm coordination, cache-aware SGLang routing, the stock September 10 ROCm 7.2.0 image, and golden acceptance length 3.39; accuracy jobs disable acceptance simulation."
-    - "Keep attention layouts homogeneous because the pinned MORI implementation does not preserve Qwen convolution-state group ordering across attention TP8 to TP1."
+    - "Use native srt-slurm coordination, cache-aware SGLang routing, and the digest-pinned September 29 SGLang v0.5.20 ROCm 7.2.0 MI30X nightly. Select golden acceptance automatically; accuracy jobs disable acceptance simulation."
+    - "Keep attention layouts homogeneous; mixed attention TP8-to-TP1 state transfer has not been revalidated on this nightly."
     - "Forward the recipe fingerprint into benchmark artifacts and retain existing workflow scheduling and full-sweep policy."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2984
 
@@ -9097,7 +9097,7 @@
   no-evals: true
   description:
     - "Add low-concurrency MI300X Qwen3.5 AgentX MORI disaggregation with pure TP8/EP1 prefill and decode at c1 and c4."
-    - "Keep the same stock ROCm 7.2.0 image, BF16 KV/Mamba state, native dense-MLP TP defaults, and golden acceptance length 3.39; validate accuracy separately without acceptance simulation."
+    - "Use the same September 29 nightly, BF16 KV/Mamba state, native dense-MLP TP defaults, and automatic golden acceptance; validate accuracy separately without acceptance simulation."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2984
 
 - config-keys:
@@ -9105,6 +9105,6 @@
   no-evals: true
   description:
     - "Add homogeneous MI300X Qwen3.5 AgentX 1P TEP8 / 1D TEP8 at session concurrencies 1, 4, 8 and 16 to the official full sweep."
-    - "Retain the proven screening recipe: stock ROCm 7.2.0, MORI transfer, TP8/EP8 on both roles, 8192-token prefill chunks, memory fraction 0.75, and golden acceptance length 3.39."
+    - "Use the September 29 nightly with MORI transfer, TP8/EP8 on both roles, 8192-token prefill chunks, memory fraction 0.75, and automatic golden acceptance."
     - "Use full default warmup and 3600-second profiling; skip evals as requested."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2984

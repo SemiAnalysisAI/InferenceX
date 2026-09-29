@@ -2501,6 +2501,61 @@ curl() {
     )
     assert events_path.read_text().splitlines() == ["resolve", "deps", "flush", "flush", "build", "replay"]
 
+    class MetricsHandler(BaseHTTPRequestHandler):
+        polls = 0
+
+        def do_GET(self) -> None:
+            type(self).polls += 1
+            pending = int(self.polls == 1)
+            metrics = (
+                "sglang:num_running_reqs 0\n"
+                "sglang:num_queue_reqs 0\n"
+                "sglang:num_prefill_bootstrap_queue_reqs 0\n"
+                "sglang:num_prefill_inflight_queue_reqs 0\n"
+                "sglang:num_decode_prealloc_queue_reqs 0\n"
+                f"sglang:num_decode_transfer_queue_reqs {pending}\n"
+            )
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(metrics.encode())
+
+        def log_message(self, *_args: object) -> None:
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), MetricsHandler)
+    thread = threading.Thread(target=server.serve_forever)
+    thread.start()
+    events_path.unlink()
+    try:
+        result = subprocess.run(
+            ["bash", str(MULTINODE_AGENTIC_SCRIPT)],
+            env={
+                **base_env,
+                "EVAL_ONLY": "false",
+                "IS_MULTINODE": "true",
+                "CONC_LIST": "1 2",
+                "SRTCTL_FRONTEND_TYPE": "sglang-router",
+                "SRT_PREFILL_ENDPOINTS": "prefill:9000",
+                "AIPERF_SERVER_METRICS_URLS": f"http://127.0.0.1:{server.server_port}/metrics",
+                "AIPERF_DRAIN_TIMEOUT_SECONDS": "10",
+                "AIPERF_DRAIN_POLL_SECONDS": "1",
+            },
+            text=True,
+            capture_output=True,
+            check=True,
+            timeout=20,
+        )
+    finally:
+        server.shutdown()
+        thread.join()
+        server.server_close()
+    assert MetricsHandler.polls == 4
+    assert "worker_pending_requests=1" in result.stdout
+    assert "Agentic servers remained idle for three polls" in result.stdout
+    assert events_path.read_text().splitlines() == [
+        "resolve", "deps", "build", "replay", "build", "replay"
+    ]
+
 
 def test_env_can_force_bfcl_on_agentic_eval() -> None:
     output = _dispatch(is_agentic="1", eval_only="true", env_fw="bfcl")
