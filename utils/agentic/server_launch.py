@@ -19,6 +19,8 @@ PROTECTED_ARGS = frozenset(
     {
         "--model",
         "--model-path",
+        "--max-model-len",
+        "--context-length",
         "--served-model-name",
         "--host",
         "--port",
@@ -54,6 +56,7 @@ PROTECTED_ENV = frozenset(
     {
         "MODEL",
         "MODEL_PATH",
+        "MAX_MODEL_LEN",
         "MODEL_NAME",
         "SERVED_MODEL_NAME",
         "MODEL_PREFIX",
@@ -221,14 +224,13 @@ def option_groups(argv: list[str]) -> tuple[list[str], list[list[str]]]:
     return prefix, groups
 
 
-def prepare_launch(
+def apply_launch_args(
     argv: list[str],
     overrides: dict[str, Any],
     framework: str,
-    environ: dict[str, str] | None = None,
-) -> tuple[list[str], dict[str, Any]]:
+) -> list[str]:
+    """Apply the v1 argv contract without reading files or the process environment."""
     overrides = validate_overrides(overrides)
-    environ = dict(os.environ if environ is None else environ)
     if framework not in {"sglang", "vllm"} or not argv:
         raise ValueError(
             "AgentX launch extension supports nonempty SGLang/vLLM commands"
@@ -266,12 +268,25 @@ def prepare_launch(
             ]
         effective = prefix + [token for group in groups + extra for token in group]
     if overrides["executable"] is not None:
+        effective[0] = overrides["executable"]
+    return effective
+
+
+def prepare_launch(
+    argv: list[str],
+    overrides: dict[str, Any],
+    framework: str,
+    environ: dict[str, str] | None = None,
+) -> tuple[list[str], dict[str, Any]]:
+    overrides = validate_overrides(overrides)
+    environ = dict(os.environ if environ is None else environ)
+    effective = apply_launch_args(argv, overrides, framework)
+    if overrides["executable"] is not None:
         executable = Path(overrides["executable"])
         if not executable.is_file() or not os.access(executable, os.X_OK):
             raise ValueError(
                 f"Requested server executable is not executable: {executable}"
             )
-        effective[0] = str(executable)
     sources = {}
     for name, expected in overrides["source_files"].items():
         path = Path(name)

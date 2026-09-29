@@ -1507,3 +1507,19 @@ def test_processor_supports_per_run_subdir_layout(tmp_path: Path):
     output_dir = tmp_path / "out"
     agg = _run_processor(result_dir, output_dir)
     assert agg["num_requests_total"] == 1
+
+
+def test_processor_binds_custom_model_metadata_and_fingerprint(tmp_path: Path):
+    result_dir = _write_fixture(tmp_path)
+    agg = _run_processor(result_dir, tmp_path / "out", env_overrides={
+        "AGENTX_CUSTOM_RECIPE": "1",
+        "AGENTX_NATIVE_CONTEXT_LENGTH": "40960",
+        "MAX_MODEL_LEN": "8192",
+        "AGENTX_MODEL_CONFIG_SHA256": "a" * 64,
+        "RECIPE_FINGERPRINT": "c" * 64,
+    })
+    assert agg["custom_recipe"] is True
+    assert agg["native_context_length"] == 40960
+    assert agg["max_model_len"] == 8192
+    assert agg["model_config_sha256"] == "a" * 64
+    assert agg["recipe_fingerprint"] == "c" * 64

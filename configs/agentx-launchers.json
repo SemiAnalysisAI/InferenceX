@@ -89,5 +89,49 @@
       "model": "deepseek-ai/DeepSeek-V4-Pro",
       "precision": "fp4"
     }
+  },
+  "generic": {
+    "custom-sglang-mi300x": {
+      "framework": "sglang",
+      "runner_type": "mi300x",
+      "benchmark_script": "single_node/agentic/generic_sglang.sh",
+      "launch_overrides_version": 1,
+      "max_gpus": 8
+    },
+    "custom-sglang-mi325x": {
+      "framework": "sglang",
+      "runner_type": "mi325x",
+      "benchmark_script": "single_node/agentic/generic_sglang.sh",
+      "launch_overrides_version": 1,
+      "max_gpus": 8
+    },
+    "custom-sglang-mi355x": {
+      "framework": "sglang",
+      "runner_type": "mi355x",
+      "benchmark_script": "single_node/agentic/generic_sglang.sh",
+      "launch_overrides_version": 1,
+      "max_gpus": 8
+    },
+    "custom-vllm-mi300x": {
+      "framework": "vllm",
+      "runner_type": "mi300x",
+      "benchmark_script": "single_node/agentic/generic_vllm.sh",
+      "launch_overrides_version": 1,
+      "max_gpus": 8
+    },
+    "custom-vllm-mi325x": {
+      "framework": "vllm",
+      "runner_type": "mi325x",
+      "benchmark_script": "single_node/agentic/generic_vllm.sh",
+      "launch_overrides_version": 1,
+      "max_gpus": 8
+    },
+    "custom-vllm-mi355x": {
+      "framework": "vllm",
+      "runner_type": "mi355x",
+      "benchmark_script": "single_node/agentic/generic_vllm.sh",
+      "launch_overrides_version": 1,
+      "max_gpus": 8
+    }
   }
 }

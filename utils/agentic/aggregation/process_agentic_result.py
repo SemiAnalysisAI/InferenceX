@@ -237,6 +237,14 @@ def build_agg(
     }
     agg.update(multinode_fields)
 
+    if env_bool("AGENTX_CUSTOM_RECIPE"):
+        agg.update({
+            "custom_recipe": True,
+            "native_context_length": env_int("AGENTX_NATIVE_CONTEXT_LENGTH"),
+            "max_model_len": env_int("MAX_MODEL_LEN"),
+            "model_config_sha256": os.environ.get("AGENTX_MODEL_CONFIG_SHA256", ""),
+        })
+
     router = optional_component_metadata("ROUTER_METADATA")
     if router is not None:
         agg["router"] = router

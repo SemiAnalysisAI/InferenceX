@@ -372,3 +372,38 @@ above; an empty `{ "version": 1 }` request must preserve canonical argv/env.
 - Every backend/frontend and metrics source is represented in live evidence.
 - Fast/smoke results are labeled diagnostic. Only the canonical candidate is used for final comparison.
 - Workflow and artifact collection conclude green before success is reported.
+
+## 12. Explicit custom models on AMD single-node runners
+
+`configs/agentx-launchers.json` declares `generic` capabilities named
+`custom-{sglang,vllm}-{mi300x,mi325x,mi355x}`. The launchers
+`single_node/agentic/generic_sglang.sh` and `generic_vllm.sh` call the same
+`build_replay_cmd` and `run_agentic_replay_and_write_outputs` functions as registered
+recipes. They do not use the fixed-length/random-request benchmark client.
+
+A resolver supplies an explicit model, precision, image, TP, EP, concurrency,
+`AGENTX_CUSTOM_RECIPE=1`, `AGENTX_NATIVE_CONTEXT_LENGTH`, `AGENTX_MAX_MODEL_LEN`,
+and `AGENTX_MODEL_CONFIG_SHA256`. The image is the caller's tested framework
+runtime. TP fits one eight-GPU node; SGLang EP divides TP, while vLLM EP is 1 or TP.
+These launchers do not infer PP, DP attention, disaggregation, KV offload, or MTP.
+The framework loads the model's own quantization configuration when applicable.
+
+`utils/agentic/custom_model.py` checks local `MODEL_PATH/config.json`, or a
+metadata-only HuggingFace download, against the resolved SHA256 and positive
+native context. It never executes model configuration code. The fixed replay
+context may equal or be below the confirmed native context, never above it; it
+is passed to both server and replay and cannot be changed by launch overrides.
+The trace loader is `semianalysis_cc_traces_weka_062126_256k`. Context, config hash,
+loader, image, and topology belong in the resolved recipe fingerprint. Reusing a
+result across those identities is invalid.
+
+Raw output adds `custom_recipe`, `native_context_length`, `max_model_len`, and
+`model_config_sha256`. The canonical protocol, request validity checks, and
+3600-second measurement are unchanged. Custom models are explicit runtime
+points, not additions to the registered master-config sweep matrix. GPU-free
+boundary tests do not establish that a particular model/image can run; validate
+the actual model/image and retain launch, replay, and aggregate evidence.
+
+`server_launch.apply_launch_args(argv, overrides, framework)` exposes the pure v1
+argv contract for receipt verification. `prepare_launch` additionally checks
+executable availability and source hashes/absences on the server host.

@@ -368,3 +368,31 @@ vLLM 的 executable 指向 vLLM 入口，不改变其余入口 token。
 - 每个 backend/frontend 与 metrics source 都在实时证据中有所体现。
 - Fast/smoke 结果明确标为诊断用途；只有 canonical candidate 用于最终比较。
 - 在报告成功前，工作流与 artifact collection 均已得出 green 结论。
+
+## 12. AMD 单节点上的显式自定义模型
+
+`configs/agentx-launchers.json` 声明名为
+`custom-{sglang,vllm}-{mi300x,mi325x,mi355x}` 的 `generic` 能力。
+`single_node/agentic/generic_sglang.sh` 和 `generic_vllm.sh` 与已注册配方调用同一套
+`build_replay_cmd`、`run_agentic_replay_and_write_outputs`，不使用固定长度或随机请求客户端。
+
+解析器必须明确给出 model、precision、image、TP、EP、concurrency、
+`AGENTX_CUSTOM_RECIPE=1`、`AGENTX_NATIVE_CONTEXT_LENGTH`、`AGENTX_MAX_MODEL_LEN`
+和 `AGENTX_MODEL_CONFIG_SHA256`。image 是调用方已经验证的框架运行环境。
+TP 不得超过单节点的 8 张 GPU；SGLang 的 EP 必须整除 TP，vLLM 的 EP 只能为 1 或 TP。
+这些启动器不推断 PP、DP attention、disaggregation、KV offload 或 MTP；
+量化模型由框架读取模型自带的量化配置。
+
+`utils/agentic/custom_model.py` 读取本地 `MODEL_PATH/config.json`，或仅下载 HuggingFace
+配置元数据，核验已解析的 SHA256 和正整数原生上下文，不执行模型配置代码。
+固定重放上下文可以等于或小于已确认的原生上下文，不能超过；该值同时传给服务端和重放客户端，
+启动覆盖参数不能修改它。trace loader 固定为 `semianalysis_cc_traces_weka_062126_256k`。
+上下文、配置哈希、loader、image 和拓扑都必须进入配方指纹，不能跨这些身份复用结果。
+
+原始结果增加 `custom_recipe`、`native_context_length`、`max_model_len` 和
+`model_config_sha256`。canonical 协议、请求有效性检查和 3600 秒测量时长保持不变。
+自定义模型属于显式运行点，不会自动增加已注册 master-config 的 sweep 矩阵行。
+无 GPU 边界测试不能证明某个模型和镜像可运行；仍需实测并保留启动、重放及聚合证据。
+
+`server_launch.apply_launch_args(argv, overrides, framework)` 提供无文件访问的 v1 参数转换接口，
+可用于核对启动回执。`prepare_launch` 还会在服务端检查可执行文件及源文件的哈希或缺失状态。

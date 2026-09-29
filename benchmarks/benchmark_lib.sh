@@ -34,6 +34,77 @@ agentic_apply_server_launch() {
     return "$rc"
 }
 
+# Generic custom-model AgentX uses the same canonical replay/aggregation path
+# as registered recipes. It never calls the fixed-length benchmark client.
+run_generic_agentic_server() {
+    local framework="$1"
+    check_env_vars MODEL TP EP_SIZE CONC RESULT_DIR DURATION PRECISION \
+        AGENTX_NATIVE_CONTEXT_LENGTH AGENTX_MAX_MODEL_LEN AGENTX_MODEL_CONFIG_SHA256
+    require_agentic_kv_offload_none
+    if [[ "${AGENTX_CUSTOM_RECIPE:-0}" != "1" || "${FRAMEWORK:-}" != "$framework" ]]; then
+        echo "ERROR: generic AgentX requires an explicitly resolved custom recipe" >&2
+        return 1
+    fi
+    mkdir -p "$RESULT_DIR"
+    install_agentic_deps
+    local model_path="${MODEL_PATH:-$MODEL}"
+    local model_config
+    if [[ -d "$model_path" ]]; then
+        model_config="$model_path/config.json"
+    elif [[ -n "${MODEL_PATH:-}" ]]; then
+        echo "ERROR: custom AgentX MODEL_PATH is not an existing directory" >&2
+        return 1
+    else
+        model_config="$("$AIPERF_HF_CLI" download "$MODEL" config.json)" || return $?
+    fi
+    python3 "${_INFERENCEX_BENCHMARK_LIB_DIR}/../utils/agentic/custom_model.py" \
+        --config "$model_config" --expected-sha256 "$AGENTX_MODEL_CONFIG_SHA256" \
+        --native-context "$AGENTX_NATIVE_CONTEXT_LENGTH" \
+        --max-context "$AGENTX_MAX_MODEL_LEN" || return $?
+    # benchmark_lib deliberately clears inherited MAX_MODEL_LEN. Restore only
+    # the independently verified, fingerprinted custom-model context here.
+    export MAX_MODEL_LEN="$AGENTX_MAX_MODEL_LEN"
+    resolve_trace_source
+    local dtype
+    case "$PRECISION" in
+        bf16|bfloat16) dtype=bfloat16 ;;
+        fp16|float16) dtype=float16 ;;
+        fp32|float32) dtype=float32 ;;
+        auto|fp8|fp4|mxfp4) dtype=auto ;;
+        *) echo "ERROR: unsupported custom AgentX precision $PRECISION" >&2; return 1 ;;
+    esac
+    local -a server_command
+    if [[ "$framework" == "sglang" ]]; then
+        server_command=(python3 -m sglang.launch_server
+            --model-path "$model_path" --served-model-name "$MODEL"
+            --host 0.0.0.0 --port "$PORT" --trust-remote-code
+            --tp "$TP" --ep-size "$EP_SIZE" --dtype "$dtype"
+            --context-length "$MAX_MODEL_LEN" --enable-metrics)
+    elif [[ "$framework" == "vllm" ]]; then
+        server_command=(vllm serve "$model_path" --served-model-name "$MODEL"
+            --host 0.0.0.0 --port "$PORT" --trust-remote-code
+            --tensor-parallel-size "$TP" --dtype "$dtype"
+            --max-model-len "$MAX_MODEL_LEN" --disable-log-requests)
+        if [[ "$EP_SIZE" != "1" ]]; then
+            server_command+=(--enable-expert-parallel)
+        fi
+    else
+        echo "ERROR: unsupported generic AgentX framework $framework" >&2
+        return 1
+    fi
+    agentic_apply_server_launch "$framework" "${server_command[@]}" || return $?
+    server_command=("${AGENTX_SERVER_COMMAND[@]}")
+    write_command "$RESULT_DIR/server_command.txt" "${server_command[@]}"
+    SERVER_LOG="$RESULT_DIR/server.log"
+    "${server_command[@]}" > "$SERVER_LOG" 2>&1 &
+    SERVER_PID=$!
+    trap 'kill "$SERVER_PID" 2>/dev/null || true; wait "$SERVER_PID" 2>/dev/null || true' EXIT
+    wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
+    build_replay_cmd "$RESULT_DIR"
+    REPLAY_CMD+=" --server-metrics http://localhost:$PORT/metrics"
+    run_agentic_replay_and_write_outputs "$RESULT_DIR"
+}
+
 # Keep Python bytecode out of the mounted workspace. Benchmark jobs often run as
 # root inside containers, and root-owned cache directories break future checkout
 # cleanup on self-hosted runners.
