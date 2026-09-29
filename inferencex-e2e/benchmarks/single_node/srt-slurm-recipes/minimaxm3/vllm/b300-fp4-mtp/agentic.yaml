@@ -42,7 +42,6 @@ base:
         default-chat-template-kwargs: '{"thinking_mode":"enabled"}'
         attention-config: '{"backend":"FLASHINFER","use_trtllm_attention":true,"indexer_kv_dtype":"fp8"}'
         kv-cache-dtype: fp8
-        max-cudagraph-capture-size: 512
         max-num-batched-tokens: 16384
         stream-interval: 20
         trust-remote-code: true
@@ -70,7 +69,7 @@ override_tp8_c1:
       args:
         tensor-parallel-size: 8
         max-num-seqs: 2
-        max-cudagraph-capture-size: 8
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[8,256,512,1024,2048]}'
   benchmark:
     env:
       CONC: '1'
@@ -83,7 +82,7 @@ override_tp4_c1:
       args:
         tensor-parallel-size: 4
         max-num-seqs: 2
-        max-cudagraph-capture-size: 8
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[8,256,512,1024,2048]}'
   benchmark:
     env:
       CONC: '1'
@@ -95,8 +94,8 @@ override_tp4_c5:
       gpus: 4
       args:
         tensor-parallel-size: 4
-        max-num-seqs: 10
-        max-cudagraph-capture-size: 40
+        max-num-seqs: 8
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[8,12,16,20,24,28,32,256,512,1024,2048]}'
   benchmark:
     env:
       CONC: '5'
@@ -108,8 +107,8 @@ override_tp4_c10:
       gpus: 4
       args:
         tensor-parallel-size: 4
-        max-num-seqs: 20
-        max-cudagraph-capture-size: 80
+        max-num-seqs: 15
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[8,12,16,20,24,28,32,36,40,44,48,52,56,60,256,512,1024,2048]}'
   benchmark:
     env:
       CONC: '10'
@@ -121,8 +120,8 @@ override_tp4_c15:
       gpus: 4
       args:
         tensor-parallel-size: 4
-        max-num-seqs: 30
-        max-cudagraph-capture-size: 120
+        max-num-seqs: 23
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,256,512,1024,2048]}'
   benchmark:
     env:
       CONC: '15'
@@ -134,8 +133,8 @@ override_tp4_c20:
       gpus: 4
       args:
         tensor-parallel-size: 4
-        max-num-seqs: 40
-        max-cudagraph-capture-size: 160
+        max-num-seqs: 30
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,256,512,1024,2048]}'
   benchmark:
     env:
       CONC: '20'
@@ -147,8 +146,8 @@ override_tp4_c30_dram:
       gpus: 4
       args:
         tensor-parallel-size: 4
-        max-num-seqs: 60
-        max-cudagraph-capture-size: 240
+        max-num-seqs: 45
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,148,152,156,160,164,168,172,176,180,256,512,1024,2048]}'
         kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1499000000000,"lazy_offload":true}}'
       env:
         VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
@@ -165,8 +164,8 @@ override_tp2_c24_dram:
       args:
         tensor-parallel-size: 2
         gpu-memory-utilization: 0.92
-        max-num-seqs: 48
-        max-cudagraph-capture-size: 192
+        max-num-seqs: 36
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,256,512,1024,2048]}'
         kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":804232626176,"lazy_offload":true}}'
       env:
         VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
@@ -182,8 +181,8 @@ override_tp4_c40_dram:
       gpus: 4
       args:
         tensor-parallel-size: 4
-        max-num-seqs: 80
-        max-cudagraph-capture-size: 320
+        max-num-seqs: 60
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,148,152,156,160,164,168,172,176,180,184,188,192,196,200,204,208,212,216,220,224,228,232,236,240,256,512,1024,2048]}'
         kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1499000000000,"lazy_offload":true}}'
       env:
         VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
@@ -199,8 +198,8 @@ override_tp4_c48_dram:
       gpus: 4
       args:
         tensor-parallel-size: 4
-        max-num-seqs: 96
-        max-cudagraph-capture-size: 384
+        max-num-seqs: 72
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,148,152,156,160,164,168,172,176,180,184,188,192,196,200,204,208,212,216,220,224,228,232,236,240,244,248,252,256,260,264,268,272,276,280,284,288,512,1024,2048]}'
         kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1499000000000,"lazy_offload":true}}'
       env:
         VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
@@ -216,8 +215,8 @@ override_tp4_c64_dram:
       gpus: 4
       args:
         tensor-parallel-size: 4
-        max-num-seqs: 128
-        max-cudagraph-capture-size: 512
+        max-num-seqs: 96
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,148,152,156,160,164,168,172,176,180,184,188,192,196,200,204,208,212,216,220,224,228,232,236,240,244,248,252,256,260,264,268,272,276,280,284,288,292,296,300,304,308,312,316,320,324,328,332,336,340,344,348,352,356,360,364,368,372,376,380,384,512,1024,2048]}'
         kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1499000000000,"lazy_offload":true}}'
       env:
         VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
@@ -234,8 +233,8 @@ override_tp2_c32_dram:
       args:
         tensor-parallel-size: 2
         gpu-memory-utilization: 0.92
-        max-num-seqs: 64
-        max-cudagraph-capture-size: 256
+        max-num-seqs: 48
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,148,152,156,160,164,168,172,176,180,184,188,192,256,512,1024,2048]}'
         kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":804232626176,"lazy_offload":true}}'
       env:
         VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
@@ -251,8 +250,8 @@ override_tp2_c40_dram:
       args:
         tensor-parallel-size: 2
         gpu-memory-utilization: 0.92
-        max-num-seqs: 80
-        max-cudagraph-capture-size: 320
+        max-num-seqs: 60
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,148,152,156,160,164,168,172,176,180,184,188,192,196,200,204,208,212,216,220,224,228,232,236,240,256,512,1024,2048]}'
         kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":804232626176,"lazy_offload":true}}'
       env:
         VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
