@@ -178,6 +178,13 @@ def _query(argv: list[str]) -> str:
     return result.stdout if result.returncode == 0 else ""
 
 
+def default_account() -> str | None:
+    """This user's Slurm default account, or None when accounting can't say."""
+    user = os.environ.get("USER") or getpass.getuser()
+    account = _query(["sacctmgr", "-nP", "show", "user", user, "format=DefaultAccount"]).strip()
+    return account.splitlines()[0] if account else None
+
+
 def _observe(job: Job) -> tuple[str, str]:
     """One (state, exit code) reading: allocation accounting, else the controller's record."""
     accounting = _query(["sacct", "-X", "-n", "-P", "-j", job.id, "--format=State,ExitCode"])

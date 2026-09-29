@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 import yaml
 
 from infx.clusters.slurm import slurm_settings
+from infx.launch.backends.slurm import cli
 from infx.launch.context import LaunchError
 from infx.launch.drivers.srt.lanes import srt_time_limit
 from infx.launch.drivers.srt.recipe import HEALTH_ATTEMPTS
@@ -97,8 +98,10 @@ def render(cluster: Cluster, job: SrtJob) -> dict[str, Any]:
     if srt is None:
         raise LaunchError(f"cluster {cluster.id!r} has no slurm.srt-slurm settings")
     config: dict[str, Any] = {}
-    if settings.account:
-        config["default_account"] = settings.account
+    # srtctl always passes --account (falling back to "default"); bare sbatch would use this.
+    account = settings.account or cli.default_account()
+    if account:
+        config["default_account"] = account
     config["default_partition"] = settings.partition
     config["default_time_limit"] = job.time_limit
     config["gpus_per_node"] = cluster.gpus_per_node

@@ -116,3 +116,16 @@ def test_a_failed_write_keeps_the_previous_config(tmp_path):
     with pytest.raises(yaml.YAMLError):
         write(target, {"default_partition": object()})
     assert yaml.safe_load(target.read_text()) == {"default_partition": "old"}
+
+
+@pytest.mark.parametrize(
+    ("declared", "sacctmgr", "expected"),
+    [(None, "team-a\n", "team-a"), ("benchmark", "team-a\n", "benchmark"), (None, "", None)],
+)
+def test_account_falls_back_to_the_users_slurm_default(tmp_path, monkeypatch, declared, sacctmgr, expected):
+    fake = tmp_path / "sacctmgr"
+    fake.write_text(f"#!/bin/sh\nprintf '%s' '{sacctmgr}'\n")
+    fake.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{tmp_path}:/usr/bin:/bin")
+    config = render(cluster(slurm={"account": declared} if declared else None), job())
+    assert config.get("default_account") == expected

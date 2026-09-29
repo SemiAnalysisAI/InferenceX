@@ -289,6 +289,8 @@ jobs:
         run: |
           # Never activated, so launched Slurm jobs inherit the runner's PATH and no VIRTUAL_ENV.
           launch_venv="$RUNNER_TEMP/infx-launch-venv"
+          # Some runner homes hold a stale ~/.cache/uv that uv cannot create over.
+          export UV_CACHE_DIR="$RUNNER_TEMP/infx-launch-uv-cache"
           uv venv --quiet --python 3.12 "$launch_venv"
           uv pip install --quiet --exclude-newer PT12H --python "$launch_venv/bin/python" \
             -r "$GITHUB_WORKSPACE/.result-tooling/inferencex-e2e/pyproject.toml"
