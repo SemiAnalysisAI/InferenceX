@@ -9062,3 +9062,9 @@
     - "All points now run vllm/vllm-openai-rocm:v0.30.0 (previously v0.29.0)."
     - "LMCache DRAM point (TP8, concurrency 16): one LMCache server per node with 1296 GB L1 shared by all 8 TP ranks, replacing 8 per-rank servers of 162 GB L1 each."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3545
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-agentic-dspark
+  description:
+    - "Update vLLM to nightly-36768d1b and skip TP4 MXFP8 GEMM autotuning to avoid an invalid split-K tactic."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3579
