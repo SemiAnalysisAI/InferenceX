@@ -701,7 +701,7 @@ kimik3-fp4-mi355x-atom-agentic-mtp:
 # dram-utilization 0.6 -> TOTAL_CPU_DRAM_GB 1799 at TP8 (node cap 2861022 MiB),
 # split evenly across the eight ranks by the launcher.
 kimik3-fp4-mi355x-vllm-agentic-mtp:
-  image: TBD
+  image: vllm/vllm-openai-rocm:nightly-rocm100-36768d1bfd39094681cdbc8cb37d4b31c0729c89
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:mi355x-amds
