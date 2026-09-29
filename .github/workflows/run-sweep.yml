@@ -404,6 +404,35 @@ jobs:
                         ['Reused benchmark source', process.env.REUSE_SHA],
                       ]).write();
 
+    build-srt-tachometer:
+        name: Build patched Tachometer
+        needs: setup
+        if: ${{ !cancelled() && needs.setup.result == 'success' && needs.setup.outputs.reuse-enabled != 'true' }}
+        runs-on: ubuntu-24.04
+        timeout-minutes: 30
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  ref: ${{ github.event.pull_request.head.sha || github.sha }}
+                  submodules: true
+                  persist-credentials: false
+            - name: Apply PR 539 and build its atomic writer
+              working-directory: inferencex-e2e/utils/srt-slurm
+              run: |
+                  git apply ../../runners/srt-slurm/patches/539.patch
+                  cargo build --release --locked --bin tachometer-scraper
+                  mkdir -p "$GITHUB_WORKSPACE/srt-streaming-build"
+                  cp target/release/tachometer-scraper "$GITHUB_WORKSPACE/srt-streaming-build/"
+                  git rev-parse HEAD > "$GITHUB_WORKSPACE/srt-streaming-build/base-commit.txt"
+                  cd "$GITHUB_WORKSPACE/srt-streaming-build"
+                  sha256sum tachometer-scraper > tachometer.sha256
+            - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                  name: srt-pr539-tachometer
+                  path: srt-streaming-build
+                  if-no-files-found: error
+                  retention-days: 7
+
     canary-select:
         name: canary-select
         needs: setup
@@ -462,7 +491,7 @@ jobs:
                   } >> "$GITHUB_OUTPUT"
 
     canary-sweep:
-        needs: canary-select
+        needs: [canary-select, build-srt-tachometer]
         if: ${{ needs.canary-select.outputs.canary-config != '' && needs.canary-select.outputs.canary-config != '[]' }}
         uses: $/.github/workflows/benchmark-tmpl.yml
         name: canary /
@@ -471,6 +500,8 @@ jobs:
             matrix:
                 config: ${{ fromJson(needs.canary-select.outputs.canary-config) }}
         secrets:
+            SRT_STATUS_ENDPOINT: ${{ secrets.SRT_STATUS_ENDPOINT }}
+            SRTCTL_STATUS_TOKEN: ${{ secrets.SRTCTL_STATUS_TOKEN }}
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
@@ -575,11 +606,12 @@ jobs:
         with: *multi-node-inputs
 
     sweep-single-node-1k1k:
-        needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep]
+        needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep, build-srt-tachometer]
         if: >-
             ${{
               !cancelled() &&
               needs.setup.result == 'success' &&
+              needs.build-srt-tachometer.result == 'success' &&
               needs.setup.outputs.reuse-enabled != 'true' &&
               (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
               (needs.canary-multi-node-sweep.result == 'success' || needs.canary-multi-node-sweep.result == 'skipped') &&
@@ -593,6 +625,8 @@ jobs:
             matrix:
                 config: ${{ fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['1k1k'] }}
         secrets:
+            SRT_STATUS_ENDPOINT: ${{ secrets.SRT_STATUS_ENDPOINT }}
+            SRTCTL_STATUS_TOKEN: ${{ secrets.SRTCTL_STATUS_TOKEN }}
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
@@ -608,11 +642,12 @@ jobs:
             run-eval: ${{ matrix.config.run-eval }}
 
     sweep-single-node-8k1k:
-        needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep]
+        needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep, build-srt-tachometer]
         if: >-
             ${{
               !cancelled() &&
               needs.setup.result == 'success' &&
+              needs.build-srt-tachometer.result == 'success' &&
               needs.setup.outputs.reuse-enabled != 'true' &&
               (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
               (needs.canary-multi-node-sweep.result == 'success' || needs.canary-multi-node-sweep.result == 'skipped') &&
@@ -626,17 +661,20 @@ jobs:
             matrix:
                 config: ${{ fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['8k1k'] }}
         secrets:
+            SRT_STATUS_ENDPOINT: ${{ secrets.SRT_STATUS_ENDPOINT }}
+            SRTCTL_STATUS_TOKEN: ${{ secrets.SRTCTL_STATUS_TOKEN }}
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with: *single-node-inputs
 
     sweep-agentic:
-        needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep]
+        needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep, build-srt-tachometer]
         if: >-
             ${{
               !cancelled() &&
               needs.setup.result == 'success' &&
+              needs.build-srt-tachometer.result == 'success' &&
               needs.setup.outputs.reuse-enabled != 'true' &&
               (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
               (needs.canary-multi-node-sweep.result == 'success' || needs.canary-multi-node-sweep.result == 'skipped') &&
@@ -650,6 +688,8 @@ jobs:
             matrix:
                 config: ${{ fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['agentic'] }}
         secrets:
+            SRT_STATUS_ENDPOINT: ${{ secrets.SRT_STATUS_ENDPOINT }}
+            SRTCTL_STATUS_TOKEN: ${{ secrets.SRTCTL_STATUS_TOKEN }}
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
@@ -705,11 +745,12 @@ jobs:
             agentx-fast: ${{ contains(github.event.pull_request.labels.*.name, 'agentx-fast') }}
 
     sweep-evals:
-        needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep]
+        needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep, build-srt-tachometer]
         if: >-
             ${{
               !cancelled() &&
               needs.setup.result == 'success' &&
+              needs.build-srt-tachometer.result == 'success' &&
               needs.setup.outputs.reuse-enabled != 'true' &&
               (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
               (needs.canary-multi-node-sweep.result == 'success' || needs.canary-multi-node-sweep.result == 'skipped') &&
@@ -723,6 +764,8 @@ jobs:
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).evals }}
         secrets:
+            SRT_STATUS_ENDPOINT: ${{ secrets.SRT_STATUS_ENDPOINT }}
+            SRTCTL_STATUS_TOKEN: ${{ secrets.SRTCTL_STATUS_TOKEN }}
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
@@ -743,11 +786,12 @@ jobs:
     # dispatched with sweep-agentic's inputs rather than sweep-evals' fixed-seq-len
     # inputs (isl/osl/max-model-len, which agentic rows don't have).
     sweep-agentic-evals:
-        needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep]
+        needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep, build-srt-tachometer]
         if: >-
             ${{
               !cancelled() &&
               needs.setup.result == 'success' &&
+              needs.build-srt-tachometer.result == 'success' &&
               needs.setup.outputs.reuse-enabled != 'true' &&
               (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
               (needs.canary-multi-node-sweep.result == 'success' || needs.canary-multi-node-sweep.result == 'skipped') &&
@@ -761,6 +805,8 @@ jobs:
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).agentic_evals }}
         secrets:
+            SRT_STATUS_ENDPOINT: ${{ secrets.SRT_STATUS_ENDPOINT }}
+            SRTCTL_STATUS_TOKEN: ${{ secrets.SRTCTL_STATUS_TOKEN }}
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}

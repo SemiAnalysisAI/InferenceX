@@ -8,3 +8,4 @@ Each patch is a temporary fix for an open upstream PR. When the PR merges and th
 
 | Patch | Upstream PR | Fix |
 |-------|-------------|-----|
+| `539.patch` | [NVIDIA/srt-slurm#539](https://github.com/NVIDIA/srt-slurm/pull/539) | Stream raw logs and Tachometer captures; use the source-built atomic writer from the sweep build job. |

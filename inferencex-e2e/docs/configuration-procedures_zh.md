@@ -592,3 +592,15 @@ python -m pytest infx/tests/matrix/ -v
 检查点将仓库挂载到 `/ix` 并重写 `RESULT_DIR`，使 AgentX 运行目录不落在 `/workspace` 下。MI300X
 launcher 还为该检查点将 Slurm 分配时长从 180 分钟提高到 480 分钟：那里的 HF 缓存为节点本地，
 每个节点上的首次运行需先下载 511 GB。在获得 GPU sweep 与 eval 证据之前，不得将任一配方视为已验证。
+
+### 在 B300 上测试 SRT 原始数据流
+
+PR #3591 在每个作业的独立检出中，将 NVIDIA/srt-slurm#539 补丁应用到固定的
+子模块提交。常规 sweep 在 GitHub 托管 runner 上构建一次补丁版 Tachometer，
+验证校验和及基础提交，并在 `make setup` 前安装；已发布的二进制不包含所需的
+原子 Arrow 写入实现。
+
+现有 `glm5.2-fp8-b300-sglang-agentic-mtp` 配方每秒采集 Tachometer 指标，
+每五秒上传原始日志及采集文件。工作流将仓库 Secret `SRT_STATUS_ENDPOINT` 和
+`SRTCTL_STATUS_TOKEN` 传给 B300 配置。部署 Dash 收集 API 后，添加
+`non-canary-full-sweep-enabled` 标签即可启动常规 sweep。
