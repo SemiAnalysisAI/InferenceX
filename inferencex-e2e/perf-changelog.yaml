@@ -9140,3 +9140,11 @@
     - "Use mem-fraction-static 0.75 on disaggregate prefills, cap max-prefill-tokens at 8192, and set the SGLang scheduler watchdog to 1000000 seconds on all serving roles for long-running AgentX requests."
     - "Enable DP-attention local control broadcast on both roles of the c192 recipe so scheduler control messages go to DP leaders without full-TP Gloo collectives on every iteration."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3178
+
+- config-keys:
+    - glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Use the HiCache kernel I/O backend for the c192 prefill recipe after public sweep run 36443508797 reproduced the direct-backend eviction stall and exhausted the four-hour Slurm limit during warmup."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3178
