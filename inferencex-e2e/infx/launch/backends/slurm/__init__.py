@@ -330,8 +330,7 @@ class SlurmBackend(Backend):
         """``salloc`` one node and cancel it when the launch ends."""
         settings = self.settings
         extra = ["--exclusive"] if settings.exclusive else []
-        if settings.cpus_per_task:
-            extra.append(f"--cpus-per-task={settings.cpus_per_task}")
+        extra += [f"--{name}={value}" for name, value in settings.cpu_directives().items()]
         job = cli.salloc(self._resources(gpus, time_min), extra=[*extra, *settings.salloc_args])
         self.life.callback(cli.cancel, job)
         return job

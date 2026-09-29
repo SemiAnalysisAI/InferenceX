@@ -179,7 +179,7 @@ def test_single_node_jobs_skip_the_segment_and_typed_gres_replaces_gpus_per_node
     assert "use_gpus_per_node_directive" not in multi and "default_sbatch_directives" not in multi
 
 
-def test_per_gpu_tasks_split_the_nodes_cpu_budget():
-    record = cluster(slurm={"cpus-per-task": 192})
-    assert render(record, job())["default_sbatch_directives"] == {"cpus-per-task": "192"}
-    assert render(record, job(task_per_gpu=True))["default_sbatch_directives"] == {"cpus-per-task": "24"}
+def test_the_cpu_request_follows_the_clusters_unit():
+    assert render(cluster(slurm={"cpus-per-gpu": 24}), job())["default_sbatch_directives"] == {"cpus-per-gpu": "24"}
+    with pytest.raises(ValueError, match="not both"):
+        cluster(slurm={"cpus-per-task": 192, "cpus-per-gpu": 24})

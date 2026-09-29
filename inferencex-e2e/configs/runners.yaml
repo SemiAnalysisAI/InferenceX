@@ -525,7 +525,7 @@ clusters:
       # gpu-16 retains a foreign 1.63 TB tmpfs allocation; rechecked 2026-09-21.
       exclude: [dsxe-sa-b300-prd0-gpu-16]
       gres: "gpu:{gpus}"
-      cpus-per-task: 192
+      cpus-per-gpu: 24  # all 192 CPUs of a node, whether srtctl runs one task per node or per GPU
       salloc-args: [--mem=0]
       volumes:
         hf-home: {path: ~/.cache/huggingface}

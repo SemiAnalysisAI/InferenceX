@@ -225,8 +225,9 @@ class SlurmSettings(SchedulerSettings):
     exclude: tuple[str, ...] = ()
     # Template with a ``{gpus}`` placeholder, e.g. ``gpu:h200:{gpus}``.
     gres: str | None = None
-    # CPUs per node; jobs with one task per GPU split them evenly.
+    # Per-GPU suits clusters whose jobs place one task per GPU or one per node.
     cpus_per_task: int | None = Field(default=None, alias="cpus-per-task", gt=0)
+    cpus_per_gpu: int | None = Field(default=None, alias="cpus-per-gpu", gt=0)
     # Extra options for every containerized ``srun`` step (srt-slurm ``srun_options``).
     srun_args: tuple[LongOption, ...] = Field(default=(), alias="srun-args")
     salloc_args: tuple[LongOption, ...] = Field(default=(), alias="salloc-args")
@@ -254,6 +255,21 @@ class SlurmSettings(SchedulerSettings):
         if unknown := sorted(mounted.keys() - self.volumes.keys()):
             raise ValueError(f"srt-slurm.volume-mounts names unknown volumes: {unknown}")
         return self
+
+    @model_validator(mode="after")
+    def _one_cpu_request(self) -> Self:
+        """Slurm rejects --cpus-per-task together with --cpus-per-gpu."""
+        if self.cpus_per_task is not None and self.cpus_per_gpu is not None:
+            raise ValueError("set cpus-per-task or cpus-per-gpu, not both")
+        return self
+
+    def cpu_directives(self) -> dict[str, str]:
+        """The sbatch/salloc CPU request, as option name to value."""
+        if self.cpus_per_gpu is not None:
+            return {"cpus-per-gpu": str(self.cpus_per_gpu)}
+        if self.cpus_per_task is not None:
+            return {"cpus-per-task": str(self.cpus_per_task)}
+        return {}
 
     def gres_for(self, gpus: int) -> str | None:
         """Render the GRES request for ``gpus`` GPUs, or None when the cluster sets none."""
