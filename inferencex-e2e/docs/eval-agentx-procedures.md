@@ -9,6 +9,10 @@
 
 Use this page to add and run graded evals, operate AgentX trace replays, preserve evidence, and decide whether a long run should continue. Commands assume `inferencex-e2e/` as the working directory and replace values in `<ANGLE_BRACKETS>`.
 
+To run only the replay client against an existing server, follow
+[Run the AgentX harness by itself](agentx-standalone.md). It includes installation
+and a direct `aiperf profile` command without CI or Slurm.
+
 ## 1. Pick the correct execution mode
 
 For a throughput-only PR sweep, set `no-evals: true` on its

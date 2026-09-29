@@ -21,6 +21,7 @@
 | [`configuration-procedures.md`](configuration-procedures.md) / [`configuration-procedures_zh.md`](configuration-procedures_zh.md) | 配置、Runner、镜像、Recipe、llm-d、srt-slurm 与 MTP 变更 |
 | [`ci-procedures.md`](ci-procedures.md) / [`ci-procedures_zh.md`](ci-procedures_zh.md) | 矩阵生成、校验、派发、PR 扫描、复用、暂存与产物下载 |
 | [`eval-agentx-procedures.md`](eval-agentx-procedures.md) / [`eval-agentx-procedures_zh.md`](eval-agentx-procedures_zh.md) | Eval 与 AgentX 选择、执行、打分、证据与实时运行诊断 |
+| [`agentx-standalone.md`](agentx-standalone.md) / [`agentx-standalone_zh.md`](agentx-standalone_zh.md) | 安装锁定版本的 AgentX 客户端，对已有服务回放轨迹，无需 CI 或 Slurm |
 | [`results-and-ingestion.md`](results-and-ingestion.md) / [`results-and-ingestion_zh.md`](results-and-ingestion_zh.md) | 已发布结果查询、产物身份与 Schema、App 入库、去重与溯源 |
 | [`recovery-results-procedures.md`](recovery-results-procedures.md) / [`recovery-results-procedures_zh.md`](recovery-results-procedures_zh.md) | 结果处理、入库验证与恢复、Runner 清理和故障分类 |
 | [`testing.md`](testing.md) / [`testing_zh.md`](testing_zh.md) | 本地检查、冒烟运行、证据标准与评审门禁 |

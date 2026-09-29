@@ -92,6 +92,10 @@ This pace of software advancement creates a challenge: benchmarks conducted at a
 PRs are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for more details on the PR review flow, the [PR Review Checklist](inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md), and the merge process.
 For the maintainer and agent documentation map, start with [`docs/index.md`](inferencex-e2e/docs/index.md). It links the architecture, configuration, workflow, eval, runner, and troubleshooting references.
 
+To benchmark an existing server without CI or Slurm, see
+[Run the AgentX harness by itself](inferencex-e2e/docs/agentx-standalone.md)
+for client installation and a direct `aiperf profile` command.
+
 ## Acknowledgements & Supporters
 Thank you to Lisa Su and Anush Elangovan for providing the MI355X and CDNA3 GPUs for this free and open-source project. We want to recognize the many AMD contributors for their responsiveness and for debugging, optimizing, and validating performance across AMD GPUs. 
 We’re also grateful to Jensen Huang and Ian Buck for supporting this open source with access to a GB200 NVL72 rack (through OCI) and B200 GPUs. Thank you to the many NVIDIA contributors from the NVIDIA inference team, NVIDIA Dynamo team.

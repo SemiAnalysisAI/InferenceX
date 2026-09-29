@@ -9,6 +9,9 @@
 
 使用本页添加和运行评分 eval、操作 AgentX trace replay、保留证据，并判断长时间运行是否应继续。命令均假定当前目录为 `inferencex-e2e/`；请替换 `<ANGLE_BRACKETS>` 中的值。
 
+若只需对已有服务运行回放客户端，请参阅[独立运行 AgentX 测试工具](agentx-standalone_zh.md)。
+该指南包含安装步骤和直接执行的 `aiperf profile` 命令，无需 CI 或 Slurm。
+
 ## 1. 选择正确的执行模式
 
 若 PR sweep 只需测试吞吐量，请在相应的 `perf-changelog.yaml` 条目中设置
