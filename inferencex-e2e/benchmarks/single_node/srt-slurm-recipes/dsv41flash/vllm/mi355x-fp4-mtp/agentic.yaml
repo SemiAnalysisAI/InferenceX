@@ -6,7 +6,7 @@ base:
   name: dsv41flash-fp4-mi355x-vllm-agentic
   model:
     path: hf:deepseek-ai/DeepSeek-V4.1-Flash
-    container: vllm/vllm-openai-rocm:nightly-rocm100-7f1a5398e9610d96c473931a26c0e12bbe0d0423
+    container: vllm/vllm-openai-rocm:nightly-rocm100-29468dde8b515031dc6d4d9d06bf0a2fa0442098
     precision: fp4
   resources:
     gpu_type: mi355x
