@@ -8,4 +8,4 @@ Each patch is a temporary fix for an open upstream PR. When the PR merges and th
 
 | Patch | Upstream PR | Fix |
 |-------|-------------|-----|
-| _(none)_ | | No patches are currently carried; the pinned submodule (v2.30.0) includes everything the runners need. |
+| `507-lmcache-server-atom-sglang.patch` | [SemiAnalysisAI/srt-slurm#32](https://github.com/SemiAnalysisAI/srt-slurm/pull/32) (includes [NVIDIA/srt-slurm#507](https://github.com/NVIDIA/srt-slurm/pull/507)) | LMCache for vLLM, SGLang and ATOM: the `lmcache-server` service, and ATOM `extra-kv-connectors` wrapped with Mooncake in `multi` |

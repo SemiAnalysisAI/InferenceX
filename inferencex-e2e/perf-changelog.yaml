@@ -9055,6 +9055,15 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3421
 
 - config-keys:
+    - minimaxm3-fp8-mi300x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "All points now run vllm/vllm-openai-rocm:v0.30.0 (previously v0.29.0)."
+    - "LMCache DRAM point (TP8, concurrency 16): one LMCache server per node with 1296 GB L1 shared by all 8 TP ranks, replacing 8 per-rank servers of 162 GB L1 each."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3545
+
+- config-keys:
     - qwen3.5-fp4-mi355x-sglang-agentic-mtp
   scenario-type:
     - agentic-coding
