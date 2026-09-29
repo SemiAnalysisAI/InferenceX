@@ -6,9 +6,12 @@ base:
   name: dsv41flash-fp4-mi355x-vllm-agentic
   model:
     path: hf:deepseek-ai/DeepSeek-V4.1-Flash
-    # Repinned to a nightly build that includes vllm-project/vllm#58655
-    # (mHC fused Triton seams) and #53492 (sparse MLA Gluon kernel).
-    container: vllm/vllm-openai-rocm:nightly-rocm100-36768d1bfd39094681cdbc8cb37d4b31c0729c89
+    # TODO: repin once a nightly image is released that includes
+    # vllm-project/vllm#58671 (paged MXFP4 sparse indexer, merged upstream),
+    # in addition to #58655 (mHC fused Triton seams) and #53492 (sparse MLA
+    # Gluon kernel) already carried by the previous pin
+    # (nightly-rocm100-36768d1b).
+    container: vllm/vllm-openai-rocm:nightly-rocm100-TBD
     precision: fp4
   resources:
     gpu_type: mi355x
@@ -42,6 +45,12 @@ base:
         # aiter_triton_mxfp4_bf16 would force the W4A16 Triton kernel.
         moe-backend: aiter
         gpu-memory-utilization: 0.9
+        # Enables vllm-project/vllm#58671's ROCm paged MXFP4 sparse-logits
+        # indexer kernel instead of the dense fp8 indexer path.
+        attention-config: '{"indexer_kv_dtype":"mxfp4","indexer_sparse_logits":true}'
+        # Auto-resolution picks 64 (min across backends); force 128, which
+        # the indexer and SparseMLA actually prefer.
+        block-size: 128
         # Five-token DSpark with probabilistic drafting. Throughput runs replace
         # block rejection with the golden acceptance length. Adaptive
         # verification trims requests on device, which the ROCm DeepSeek-V4
