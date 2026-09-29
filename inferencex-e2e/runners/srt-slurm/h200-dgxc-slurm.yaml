@@ -1,3 +1,4 @@
+cluster: h200-dgxc-slurm
 default_account: ${SLURM_ACCOUNT}
 default_partition: ${SLURM_PARTITION}
 default_time_limit: ${SRT_DEFAULT_TIME_LIMIT}
