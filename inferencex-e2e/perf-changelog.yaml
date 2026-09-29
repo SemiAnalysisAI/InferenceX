@@ -9053,3 +9053,16 @@
   description:
     - "Update the GB300 DeepSeek-V4.1-Flash SGLang AgentX curve to lmsysorg/sglang:dev-cu13-nightly-0924 (digest pinned): pure TP4 (EP1) at C1/C2 with Engram in HBM, and TP4/EP4 at C4+ with per-rank host Engram, 16K prefill chunks, no prefill-decode interval, 4096 SWA prefix tails and a 128 decode graph batch; all TP4 points use static ragged verify; TP2 is unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3421
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-agg
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Replace the GB300 DeepSeek-V4 vLLM AgentX MTP submission with nine configurations tuned on DeepSeek-V4-Pro-0813: aggregate TP8 c1 and TP4 c1/c2/c4 (agg-variants.yaml), plus disaggregated 1p1d DEP4/DEP16 c128 and c256, 1p1d DEP8/DEP16 c512, 2p1d DEP8/DEP16 c1024, and 2p1d DEP8/DEP12 c1152 (disagg-mtp-variants.yaml). Drop the 1p1d DEP4/DEP8 c256 override and the standalone 1p4d DEP4/TP8 c4 recipe."
+    - "Switch the model to deepseek-ai/DeepSeek-V4-Pro-0813 and speculative decoding from MTP3 to DSpark K=6 with probabilistic draft sampling (spec-decoding: draft_model). Recipes keep real verification; the connector injects the dsv4-pro-0813-dspark golden AL for throughput runs."
+    - "Bump the image to vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-20ebb28 and Dynamo to 1.6.0.dev20260923; use the mxfp4 indexer KV cache, KV router with fastokens, dedicated etcd/nats/frontend placement for disaggregated recipes, and per-configuration decode CUDA-graph sizes."
+    - "Reduce the Mooncake store segment to 140 GB per rank (125 GB for c1152), so dram-utilization becomes 0.666667 and 0.595238."
+    - "将 GB300 DeepSeek-V4 vLLM AgentX MTP 提交替换为基于 DeepSeek-V4-Pro-0813 调优的九个配置：聚合 TP8 c1 与 TP4 c1/c2/c4（agg-variants.yaml），以及分离式 1p1d DEP4/DEP16 c128 和 c256、1p1d DEP8/DEP16 c512、2p1d DEP8/DEP16 c1024、2p1d DEP8/DEP12 c1152（disagg-mtp-variants.yaml）；移除 1p1d DEP4/DEP8 c256 覆盖项与独立的 1p4d DEP4/TP8 c4 配方。模型改为 deepseek-ai/DeepSeek-V4-Pro-0813，推测解码由 MTP3 改为 DSpark K=6（probabilistic 草稿采样，spec-decoding: draft_model）；配方保持真实验证，吞吐运行由连接器注入 dsv4-pro-0813-dspark 黄金 AL。镜像升级为 vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-20ebb28，Dynamo 升级为 1.6.0.dev20260923。Mooncake 每 rank 段大小降为 140 GB（c1152 为 125 GB），dram-utilization 相应为 0.666667 与 0.595238。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3578
