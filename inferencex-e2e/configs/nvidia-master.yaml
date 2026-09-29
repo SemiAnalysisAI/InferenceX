@@ -8358,7 +8358,7 @@ dsv41flash-fp4-b300-vllm-agentic-dspark:
       - { tp: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [2, 4, 8, 16, 32, 64, 128], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/b300-fp4-mtp/agentic.yaml }
 
 dsv41flash-fp4-b200-vllm-agentic-dspark:
-  image: vllm/vllm-openai:nightly-ddd6fbca148a867aad1fcab7ec72f582b9977db4
+  image: vllm/vllm-openai:nightly-36768d1bfd39094681cdbc8cb37d4b31c0729c89@sha256:0ad6fa4178c34f4e04402452bbc4294df6dd2fb2785a0ecd402b2861aea2a189
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:b200-nscale
