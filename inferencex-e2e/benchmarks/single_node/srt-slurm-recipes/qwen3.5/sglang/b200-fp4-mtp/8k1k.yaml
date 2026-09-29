@@ -3,7 +3,7 @@ base:
   name: qwen3.5-fp4-b200-sglang-mtp-8k1k
   model:
     path: hf:nvidia/Qwen3.5-397B-A17B-NVFP4-V2
-    container: lmsysorg/sglang:v0.5.20-cu130@sha256:06e4f2ed21afde4ff513cda65070124e727ba23ccaeff7712b8c40e1097d611f
+    container: lmsysorg/sglang:v0.5.20-cu130
     precision: fp4
   resources:
     gpu_type: b200
