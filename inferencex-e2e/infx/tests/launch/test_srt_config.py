@@ -177,3 +177,9 @@ def test_single_node_jobs_skip_the_segment_and_typed_gres_replaces_gpus_per_node
     multi = render(cluster(slurm={"exclusive": False}, srt={"segment-directive": True}), job())
     assert (multi["use_segment_sbatch_directive"], multi["use_exclusive_sbatch_directive"]) == (True, False)
     assert "use_gpus_per_node_directive" not in multi and "default_sbatch_directives" not in multi
+
+
+def test_a_whole_node_cpu_request_is_dropped_when_each_gpu_runs_its_own_task():
+    record = cluster(slurm={"cpus-per-task": 192})
+    assert render(record, job())["default_sbatch_directives"] == {"cpus-per-task": "192"}
+    assert "default_sbatch_directives" not in render(record, job(task_per_gpu=True))

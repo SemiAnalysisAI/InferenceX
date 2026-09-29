@@ -53,6 +53,12 @@ class SrtJob:
     single_node: bool = False  # one node, so no segment directive
     account: str | None = None
     fork: bool = False  # a framework fork's srtctl, which gets no default health check
+    task_per_gpu: bool = False  # see ``task_per_gpu``
+
+
+def task_per_gpu(framework: str | None) -> bool:
+    """Whether srtctl runs one task per GPU (TRT-LLM) rather than one per node."""
+    return framework in {"trt", "dynamo-trt"}
 
 
 def pyxis_spelling(image: str) -> str:
@@ -138,7 +144,8 @@ def render(cluster: Cluster, job: SrtJob) -> dict[str, Any]:
     directives: dict[str, str] = {}
     if settings.exclude:
         directives["exclude"] = ",".join(settings.exclude)
-    if settings.cpus_per_task is not None:
+    # A whole-node CPU request cannot be granted to each of several tasks on one node.
+    if settings.cpus_per_task is not None and not job.task_per_gpu:
         directives["cpus-per-task"] = str(settings.cpus_per_task)
     # Clusters whose GPUs are only schedulable by typed GRES opt out of --gpus-per-node.
     if srt.gpus_per_node_directive is False and (gres := settings.gres_for(cluster.gpus_per_node)):
@@ -242,6 +249,7 @@ def write_lane_config(
         mounts=lane_mounts(run, lane),
         account=run.account,
         fork=checkout.fork,
+        task_per_gpu=task_per_gpu(request.framework),
     )
     config_yaml = checkout.root / "srtslurm.yaml"
     write(config_yaml, render(run.cluster, job))

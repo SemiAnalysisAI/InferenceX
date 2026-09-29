@@ -67,6 +67,7 @@ def run_single_node(launch: Launch) -> int:
         single_node=True,
         account=run.account,
         fork=checkout.fork,
+        task_per_gpu=config.task_per_gpu(request.framework),
     )
     config.create_volume_mounts(run)
     config.write(checkout.root / "srtslurm.yaml", config.render(run.cluster, job_config))
