@@ -1,16 +1,20 @@
-"""Sample every GPU's clocks through NVML as fast as it answers, for one profile window.
+"""Sample every GPU's clocks through NVML, for one profile window.
 
-Runs in the window client's process, not the engine's. Each poll reads, per
-GPU, the graphics, SM, memory and video clocks and the clock event reasons
-(power cap, thermal, sync boost, ...), stamped with the wall clock the
-engines' step log uses. Output per window, under OUT_DIR:
+Runs in the window client's process, not the engine's. One thread per GPU
+polls, every POLL_INTERVAL_S, the graphics, SM, memory and video clocks and
+the clock event reasons (power cap, thermal, sync boost, ...). A poll is
+stamped with the wall clock (the one the engines' step log uses) before and
+after its NVML calls: those occasionally block for tens of milliseconds, and
+the reading is from somewhere inside that interval. Samples are kept in memory
+and written when the window's sampling stops. Output, under OUT_DIR:
 
   gpus.json          {"<nvml index>": "<uuid>"}
-  window<w>.csv      t_ns,gpu,graphics_mhz,sm_mhz,mem_mhz,video_mhz,event_reasons
+  window<w>.csv      t0_ns,t1_ns,gpu,graphics_mhz,sm_mhz,mem_mhz,video_mhz,event_reasons
 
 The extractor puts each kernel's lifetime on this timeline.
 """
 
+import array
 import ctypes
 import json
 import os
@@ -18,7 +22,9 @@ import threading
 import time
 
 CLOCKS = (("graphics_mhz", 0), ("sm_mhz", 1), ("mem_mhz", 2), ("video_mhz", 3))
-FIELDS = ("t_ns", "gpu") + tuple(name for name, _ in CLOCKS) + ("event_reasons",)
+FIELDS = ("t0_ns", "t1_ns", "gpu") + tuple(name for name, _ in CLOCKS) + ("event_reasons",)
+# Clock changes seen on B200 are milliseconds apart; faster polling only burns a core.
+POLL_INTERVAL_S = 250e-6
 
 
 class Nvml:
@@ -35,8 +41,6 @@ class Nvml:
         # Renamed from ClocksThrottleReasons in recent drivers; same bitmask.
         self._reasons = getattr(self.lib, "nvmlDeviceGetCurrentClocksEventReasons", None) or \
             self.lib.nvmlDeviceGetCurrentClocksThrottleReasons
-        self._mhz = ctypes.c_uint()
-        self._mask = ctypes.c_ulonglong()
 
     @staticmethod
     def _check(status):
@@ -51,20 +55,24 @@ class Nvml:
             out[str(i)] = buf.value.decode()
         return out
 
-    def poll(self, i):
-        """(graphics, sm, mem, video MHz, event reasons) of GPU i; -1 where NVML fails."""
-        handle = self.handles[i]
-        values = []
-        for _, clock_type in CLOCKS:
-            ok = self.lib.nvmlDeviceGetClockInfo(handle, clock_type, ctypes.byref(self._mhz)) == 0
-            values.append(self._mhz.value if ok else -1)
-        ok = self._reasons(handle, ctypes.byref(self._mask)) == 0
-        values.append(self._mask.value if ok else -1)
-        return values
+    def poller(self, i):
+        """A function returning GPU i's (graphics, sm, mem, video MHz, event reasons); -1 on failure."""
+        handle, lib, reasons = self.handles[i], self.lib, self._reasons
+        mhz, mask = ctypes.c_uint(), ctypes.c_ulonglong()
+        mhz_ref, mask_ref = ctypes.byref(mhz), ctypes.byref(mask)
+
+        def poll():
+            values = []
+            for _, clock_type in CLOCKS:
+                values.append(mhz.value if lib.nvmlDeviceGetClockInfo(handle, clock_type, mhz_ref) == 0
+                              else -1)
+            values.append(mask.value if reasons(handle, mask_ref) == 0 else -1)
+            return values
+        return poll
 
 
 class ClockSampler:
-    """Polls every GPU in a background thread between start(window) and stop()."""
+    """Polls every GPU, one thread each, between start(window) and stop()."""
 
     def __init__(self, out_dir):
         self.out_dir = out_dir
@@ -77,33 +85,43 @@ class ClockSampler:
                 json.dump(self.nvml.uuids(), f)
         except Exception as e:  # no NVML here: windows still profile, without clocks
             self.error = str(e)
-        self._thread = None
+        self._threads = []
+        self._samples = []
         self._stop = threading.Event()
+        self._window = None
         self.polls = 0
 
     def start(self, window):
         if self.nvml is None:
             return
         self._stop.clear()
-        self.polls = 0
-        path = os.path.join(self.out_dir, f"window{window}.csv")
-        self._thread = threading.Thread(target=self._run, args=(path,), daemon=True)
-        self._thread.start()
+        self._window = window
+        self._samples = [array.array("q") for _ in self.nvml.handles]
+        self._threads = [threading.Thread(target=self._run, args=(i,), daemon=True)
+                         for i in range(len(self.nvml.handles))]
+        for thread in self._threads:
+            thread.start()
 
     def stop(self):
-        if self._thread is not None:
-            self._stop.set()
-            self._thread.join()
-            self._thread = None
-
-    def _run(self, path):
-        gpus = range(len(self.nvml.handles))
-        with open(path, "w") as f:
+        if not self._threads:
+            return
+        self._stop.set()
+        for thread in self._threads:
+            thread.join()
+        self._threads = []
+        width = len(FIELDS)
+        self.polls = sum(len(s) // width for s in self._samples)
+        with open(os.path.join(self.out_dir, f"window{self._window}.csv"), "w") as f:
             f.write(",".join(FIELDS) + "\n")
-            while not self._stop.is_set():
-                for i in gpus:
-                    t0 = time.time_ns()
-                    values = self.nvml.poll(i)
-                    t = (t0 + time.time_ns()) // 2
-                    f.write(f"{t},{i}," + ",".join(map(str, values)) + "\n")
-                self.polls += 1
+            for samples in self._samples:
+                for k in range(0, len(samples), width):
+                    f.write(",".join(map(str, samples[k:k + width])) + "\n")
+        self._samples = []
+
+    def _run(self, i):
+        poll, out, stop = self.nvml.poller(i), self._samples[i], self._stop
+        while not stop.is_set():
+            t0 = time.time_ns()
+            values = poll()
+            out.extend((t0, time.time_ns(), i, *values))
+            time.sleep(POLL_INTERVAL_S)

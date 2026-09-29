@@ -15,8 +15,8 @@ capture. Capture ordinals follow capture order, which every rank shares.
 A CPU KV-offload memcpy has no CPU launch (a driver call Kineto does not
 record, from the connector's copy thread); per direction, the memcpys pair in
 order with the logged copies issued before them, least total issue lag first.
-Each kernel's clocks are the NVML samples of its rank's GPU over its lifetime,
-the state at its start being the last sample before it.
+Each kernel's clocks are the NVML polls of its rank's GPU over its lifetime:
+the last poll that returned before it started, and every poll overlapping it.
 
 Outputs, per replay trace: kernels.jsonl.gz (one row per device activity)
 and steps.jsonl (per step: batch composition and device time), plus
@@ -337,7 +337,10 @@ def normalize_uuid(uuid):
 
 
 def load_clocks(profile_dir):
-    """rank -> (sample unix ns, [(graphics, sm, mem, video MHz, event reasons)]), time-ordered."""
+    """rank -> (poll start ns, poll end ns, [(graphics, sm, mem, video MHz, event reasons)]).
+
+    Polls are in time order; a reading was taken between its poll's start and end.
+    """
     clock_dir = os.path.join(profile_dir, "clocks")
     try:
         with open(os.path.join(clock_dir, "gpus.json")) as f:
@@ -354,18 +357,20 @@ def load_clocks(profile_dir):
     samples = collections.defaultdict(list)
     for path in glob.glob(os.path.join(clock_dir, "window*.csv")):
         with open(path) as f:
-            next(f, None)
+            header = next(f, "").rstrip("\n").split(",")
+            stamps = 2 if header[:2] == ["t0_ns", "t1_ns"] else 1  # one stamp: an instant
             for line in f:
                 parts = line.rstrip("\n").split(",")
-                if len(parts) != 7:
+                if len(parts) != len(header):
                     continue  # a row cut short when the client stopped
-                rank = rank_of_gpu.get(int(parts[1]))
+                rank = rank_of_gpu.get(int(parts[stamps]))
                 if rank is not None:
-                    samples[rank].append((int(parts[0]), tuple(int(v) for v in parts[2:])))
+                    samples[rank].append((int(parts[0]), int(parts[stamps - 1]),
+                                          tuple(int(v) for v in parts[stamps + 1:])))
     tracks = {}
     for rank, rows in samples.items():
         rows.sort()
-        tracks[rank] = ([t for t, _ in rows], [v for _, v in rows])
+        tracks[rank] = ([r[0] for r in rows], [r[1] for r in rows], [r[2] for r in rows])
     return tracks
 
 
@@ -373,10 +378,10 @@ def kernel_clocks(track, offset_us, ts_us, dur_us):
     """Clock ranges over a kernel's lifetime from its GPU's sample track, or None."""
     if track is None or offset_us is None:
         return None
-    times, values = track
+    starts, ends, values = track
     start = (ts_us - offset_us) * 1e3
-    first = bisect.bisect_right(times, start) - 1  # state in effect at the kernel's start
-    last = bisect.bisect_right(times, start + dur_us * 1e3)
+    first = bisect.bisect_right(ends, start) - 1  # last poll done before the kernel began
+    last = bisect.bisect_left(starts, start + dur_us * 1e3)  # polls begun before it ended
     if first < 0:
         return None
     span = values[first:last]
@@ -387,7 +392,7 @@ def kernel_clocks(track, offset_us, ts_us, dur_us):
         if v[4] >= 0:
             reasons |= v[4]
     out.update(event_reasons=reasons, samples=last - first - 1,
-               prior_us=round((start - times[first]) / 1e3, 1))
+               prior_us=round((start - ends[first]) / 1e3, 1))
     return out
 
 

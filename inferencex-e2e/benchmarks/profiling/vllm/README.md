@@ -59,8 +59,9 @@ CPU-offload recipes an offload pool smaller by `host_headroom_gib`.
   - `copies/<rank>.jsonl`: every CPU KV-offload block copy the rank queued
     (direction, blocks, bytes, step, vLLM callers).
   - `clocks/window<w>.csv`, `clocks/gpus.json`: every GPU's graphics, SM,
-    memory and video clocks and clock event reasons, polled through NVML as
-    fast as it answers for the length of each window (`clock_sampler.py`).
+    memory and video clocks and clock event reasons, polled through NVML every
+    250 us per GPU for the length of each window, each poll stamped when it
+    began and returned (`clock_sampler.py`).
   - `graphs/`, `env/`, `windows_conc<c>.jsonl`: graph ordinals, versions and
     config per rank, and the window log.
 - `profile_steps_<result>`: the same profile broken down by step
@@ -125,10 +126,13 @@ the extractor pairs the memcpys in order with the logged copies issued before
 them (with equal bytes), taking the pairing with the least total issue lag.
 The step markers put the log's wall clock on the trace clock.
 
-A kernel's `clocks` are its GPU's samples over its lifetime: the last sample
-before it starts (`prior_us` earlier) and every sample while it runs
+A kernel's `clocks` are its GPU's polls over its lifetime: the last poll that
+returned before it started (`prior_us` earlier) and every poll overlapping it
 (`samples`), as each clock's min and max and the OR of the event-reason
 bitmasks (NVML `nvmlClocksEventReason*`). The window client, not the engine,
-polls NVML, from just before each window opens until every engine has logged
-its iterations; the env record's GPU UUID ties a rank to its samples.
+polls NVML, one thread per GPU, from just before each window opens until every
+engine has logged its iterations; the env record's GPU UUID ties a rank to its
+polls. On B200 an NVML poll occasionally blocks for 10 to 55 ms, more often
+under prefill load; a reading is from somewhere inside its poll, and a kernel
+within such a poll shows it as a large `prior_us`.
 `report.json` gives each trace's clock coverage and `prior_us` percentiles.
