@@ -16,3 +16,8 @@ use_exclusive_sbatch_directive: true
 default_bash_preamble: |-
   export XDG_CACHE_HOME="/tmp/xdg-cache-$$SLURM_JOB_ID"
   export TRITON_CACHE_DIR="/tmp/triton-cache-$$SLURM_JOB_ID"
+
+reporting:
+  status:
+    endpoint: ${SRT_STATUS_ENDPOINT}
+    token_env: SRTCTL_STATUS_TOKEN

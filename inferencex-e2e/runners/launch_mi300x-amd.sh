@@ -59,6 +59,7 @@ if [[ "$EXECUTION_PATH" == multinode ]]; then
         "$INFERENCEX_SLURM_UTILS_DIR/srt-slurm/mi300x-amd.yaml" srtslurm.yaml \
         --var SRTCTL_ROOT "$SRTCTL_ROOT" --var SRT_DEFAULT_TIME_LIMIT 24:00:00 \
         --var GITHUB_WORKSPACE "$INFMAX_WORKSPACE" \
+        --var SRT_STATUS_ENDPOINT "$SRT_STATUS_ENDPOINT" \
         --model "hf:$MODEL" "hf:$MODEL" --container "$IMAGE" "$SRT_CONTAINER" \
         --mount /dev/infiniband /dev/infiniband \
         --mount /raid/inferencex/models/hub /hf-cache/hub \

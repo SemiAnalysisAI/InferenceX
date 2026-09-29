@@ -18,3 +18,8 @@ containers:
 use_gpus_per_node_directive: true
 use_segment_sbatch_directive: false
 use_exclusive_sbatch_directive: false
+
+reporting:
+  status:
+    endpoint: ${SRT_STATUS_ENDPOINT}
+    token_env: SRTCTL_STATUS_TOKEN

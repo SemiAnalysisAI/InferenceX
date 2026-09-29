@@ -28,6 +28,7 @@ write_srt_cluster_config() {
         --var SLURM_ACCOUNT "$SLURM_ACCOUNT" --var SLURM_PARTITION "$SLURM_PARTITION" \
         --var SRTCTL_ROOT "$SRTCTL_ROOT" --var SQUASH_FILE "$SQUASH_FILE" \
         --var NGINX_SQUASH_FILE "$NGINX_SQUASH_FILE" --var IMAGE "$IMAGE" \
+        --var SRT_STATUS_ENDPOINT "$SRT_STATUS_ENDPOINT" \
         "$@" "${power_args[@]}"
 }
 
@@ -40,6 +41,10 @@ setup_srt_slurm() {
     fi
     local destination="$1" framework="$2" uses_power="$3"
     check_env_vars INFERENCEX_RUNTIME_ENV_VARS EVAL_ONLY
+    # Reporting is optional; an enabled endpoint requires the shared bearer token.
+    if [[ -n "$SRT_STATUS_ENDPOINT" ]]; then
+        check_env_vars SRTCTL_STATUS_TOKEN || return 1
+    fi
     SRT_EVAL_PASSTHROUGH=$(python3 - <<'PYENV'
 import json
 import os
@@ -191,6 +196,7 @@ launch_srt_single_node() {
         --var SRTCTL_ROOT "$SRTCTL_ROOT" --var SQUASH_FILE "$SRT_CONTAINER" \
         --var IMAGE "$IMAGE" --var NGINX_SQUASH_FILE nginx:1.27.4 \
         --var SRT_DEFAULT_TIME_LIMIT "$SALLOC_TIME_LIMIT" \
+        --var SRT_STATUS_ENDPOINT "$SRT_STATUS_ENDPOINT" \
         --model "hf:$MODEL" "$SRT_MODEL_PATH" --container "$IMAGE" "$SRT_CONTAINER" \
         --mount "$HF_HUB_CACHE_MOUNT" "$HF_HUB_CACHE" --exclusive "$@"
     run_srt_setup "ARCH=${SRT_SETUP_ARCH:-x86_64}"

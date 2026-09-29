@@ -105,6 +105,10 @@ on: # zizmor: ignore[concurrency-limits]
         secrets:
           INFERENCEX_OFFICIAL_RO_HF_TOKEN:
             required: true
+          SRT_STATUS_ENDPOINT:
+            required: false
+          SRTCTL_STATUS_TOKEN:
+            required: false
           MODAL_TOKEN_ID:
             required: false
           MODAL_TOKEN_SECRET:
@@ -378,6 +382,8 @@ jobs:
                 config: ${{ fromJson(needs.get-jobs.outputs.multi-node-config) }}
         secrets:
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
+            SRT_STATUS_ENDPOINT: ${{ secrets.SRT_STATUS_ENDPOINT }}
+            SRTCTL_STATUS_TOKEN: ${{ secrets.SRTCTL_STATUS_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
@@ -404,6 +410,8 @@ jobs:
                 config: ${{ fromJson(needs.get-jobs.outputs.multi-node-eval-config) }}
         secrets:
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
+            SRT_STATUS_ENDPOINT: ${{ secrets.SRT_STATUS_ENDPOINT }}
+            SRTCTL_STATUS_TOKEN: ${{ secrets.SRTCTL_STATUS_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
@@ -434,6 +442,8 @@ jobs:
                 config: ${{ fromJson(needs.get-jobs.outputs.agentic-config) }}
         secrets:
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
+            SRT_STATUS_ENDPOINT: ${{ secrets.SRT_STATUS_ENDPOINT }}
+            SRTCTL_STATUS_TOKEN: ${{ secrets.SRTCTL_STATUS_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
@@ -461,6 +471,8 @@ jobs:
                 config: ${{ fromJson(needs.get-jobs.outputs.agentic-eval-config) }}
         secrets:
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
+            SRT_STATUS_ENDPOINT: ${{ secrets.SRT_STATUS_ENDPOINT }}
+            SRTCTL_STATUS_TOKEN: ${{ secrets.SRTCTL_STATUS_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
@@ -492,6 +504,8 @@ jobs:
                 config: ${{ fromJson(needs.get-jobs.outputs.multi-node-agentic-config) }}
         secrets:
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
+            SRT_STATUS_ENDPOINT: ${{ secrets.SRT_STATUS_ENDPOINT }}
+            SRTCTL_STATUS_TOKEN: ${{ secrets.SRTCTL_STATUS_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
@@ -522,6 +536,8 @@ jobs:
                 config: ${{ fromJson(needs.get-jobs.outputs.multi-node-agentic-eval-config) }}
         secrets:
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
+            SRT_STATUS_ENDPOINT: ${{ secrets.SRT_STATUS_ENDPOINT }}
+            SRTCTL_STATUS_TOKEN: ${{ secrets.SRTCTL_STATUS_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
@@ -555,6 +571,8 @@ jobs:
                 config: ${{ fromJson(needs.get-jobs.outputs.single-node-config) }}
         secrets:
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
+            SRT_STATUS_ENDPOINT: ${{ secrets.SRT_STATUS_ENDPOINT }}
+            SRTCTL_STATUS_TOKEN: ${{ secrets.SRTCTL_STATUS_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
@@ -579,6 +597,8 @@ jobs:
                 config: ${{ fromJson(needs.get-jobs.outputs.eval-config) }}
         secrets:
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
+            SRT_STATUS_ENDPOINT: ${{ secrets.SRT_STATUS_ENDPOINT }}
+            SRTCTL_STATUS_TOKEN: ${{ secrets.SRTCTL_STATUS_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:

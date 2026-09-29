@@ -62,6 +62,15 @@ arguments add or override mapping entries. Power jobs add the staged DCGM image 
 the same writer. Missing variables fail before writing; values are substituted into
 parsed YAML scalars so quotes and punctuation remain data, not YAML or shell syntax.
 
+Status reporting uses two shared GitHub Actions secrets: `SRT_STATUS_ENDPOINT` for
+the collector's base URL and `SRTCTL_STATUS_TOKEN` for its bearer token. The sweep
+and end-to-end workflows forward both through the benchmark templates. Each profile
+supplies its own `cluster` and uses `${SRT_STATUS_ENDPOINT}` plus
+`token_env: SRTCTL_STATUS_TOKEN`; the token value stays in the environment. An empty
+endpoint disables reporting. If an endpoint is configured, the token is required.
+All clusters use the same endpoint and token; the collector identifies jobs by
+`(metadata.cluster, job_id)`.
+
 Keep model selection, cache preparation, and workload-dependent time limits in the
 launcher. Do not add profiles for non-srt-slurm launchers or change their routing here.
 

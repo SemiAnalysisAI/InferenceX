@@ -11,3 +11,8 @@ containers:
   "${IMAGE}": ${SQUASH_FILE}
   nginx-sqsh: ${NGINX_SQUASH_FILE}
 use_exclusive_sbatch_directive: true
+
+reporting:
+  status:
+    endpoint: ${SRT_STATUS_ENDPOINT}
+    token_env: SRTCTL_STATUS_TOKEN

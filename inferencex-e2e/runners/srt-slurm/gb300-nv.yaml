@@ -17,3 +17,8 @@ containers:
   "${IMAGE}": ${SQUASH_FILE}
   nginx-sqsh: ${NGINX_SQUASH_FILE}
 use_segment_sbatch_directive: false
+
+reporting:
+  status:
+    endpoint: ${SRT_STATUS_ENDPOINT}
+    token_env: SRTCTL_STATUS_TOKEN

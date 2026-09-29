@@ -16,3 +16,8 @@ use_exclusive_sbatch_directive: true
 default_host_setup:
   commands:
     - bash "${GITHUB_WORKSPACE}/runners/srt-slurm/hooks/mi300x-amd/setup.sh"
+
+reporting:
+  status:
+    endpoint: ${SRT_STATUS_ENDPOINT}
+    token_env: SRTCTL_STATUS_TOKEN

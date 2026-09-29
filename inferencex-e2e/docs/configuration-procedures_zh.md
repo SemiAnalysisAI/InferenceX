@@ -42,6 +42,16 @@ frontend、一个聚合 worker，并设置 `enable_multiple_frontends: false`。
 镜像。TRT-LLM 配方使用原生 `engine.served_model_name`，不再通过 `roles.agg.extra_args`
 重复传入该参数。不再依赖此前分叉中的 ATOM 直连 frontend。
 
+### 集群状态上报
+
+状态上报使用两个共享的 GitHub Actions secret：`SRT_STATUS_ENDPOINT` 指定采集器的
+基础 URL，`SRTCTL_STATUS_TOKEN` 指定 bearer token。sweep 和端到端工作流通过基准
+模板传递这两个值。每个集群配置提供独立的 `cluster`，并使用
+`${SRT_STATUS_ENDPOINT}` 和 `token_env: SRTCTL_STATUS_TOKEN`；token 值仅保留在
+环境变量中。endpoint 为空时不启用上报；设置 endpoint 时必须提供 token。
+所有集群共用同一个 endpoint 和 token，采集器通过 `(metadata.cluster, job_id)`
+区分作业。
+
 ## 规程索引
 
 1. [准备 worktree](#准备-worktree)

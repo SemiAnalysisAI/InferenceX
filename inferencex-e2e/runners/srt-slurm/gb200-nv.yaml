@@ -12,3 +12,8 @@ containers:
   nginx-sqsh: ${NGINX_SQUASH_FILE}
 # Watchtower's single NVL72 rack does not require contiguous segment placement.
 use_segment_sbatch_directive: false
+
+reporting:
+  status:
+    endpoint: ${SRT_STATUS_ENDPOINT}
+    token_env: SRTCTL_STATUS_TOKEN

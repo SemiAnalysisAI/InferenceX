@@ -4,6 +4,10 @@ on:
     secrets:
       INFERENCEX_OFFICIAL_RO_HF_TOKEN:
         required: true
+      SRT_STATUS_ENDPOINT:
+        required: false
+      SRTCTL_STATUS_TOKEN:
+        required: false
       MODAL_TOKEN_ID:
         required: false
       MODAL_TOKEN_SECRET:
@@ -109,6 +113,8 @@ env:
   IS_MULTINODE: 'false'
   RANDOM_RANGE_RATIO: 0.8
   HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
+  SRT_STATUS_ENDPOINT: ${{ secrets.SRT_STATUS_ENDPOINT }}
+  SRTCTL_STATUS_TOKEN: ${{ secrets.SRTCTL_STATUS_TOKEN }}
   HF_HUB_CACHE: '/mnt/hf_hub_cache/'
   EXP_NAME: ${{ fromJSON(inputs.config).exp-name }}
   RECIPE_FINGERPRINT: ${{ fromJSON(inputs.config).recipe-fingerprint || '' }}
