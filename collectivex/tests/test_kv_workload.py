@@ -131,13 +131,18 @@ class Tables(unittest.TestCase):
         with self.assertRaises(ValueError):
             kv_workload.block_table(cfg, 1, request=8)
 
-    def test_desc_array_carries_per_region_packed_sizes(self):
+    def test_prepped_rows_carry_per_region_packed_sizes(self):
+        import kv_nixl
+
         cfg = dict(regions=[
             dict(name="a", packed_bytes=256, blocks_req=2, pool_blocks=4, base=0),
             dict(name="b", packed_bytes=132, blocks_req=1, pool_blocks=4, base=1024),
         ], descs=3)
+        layout = [(0, 256, 4 * 256), (1024, 132, 4 * 132)]
         tables = {"a": np.array([1, 3]), "b": np.array([2])}
-        descs = kv_workload.desc_array(10_000, cfg, tables, dev=5)
+        indices = kv_nixl.desc_indices(layout, cfg, tables)
+        self.assertEqual(indices.tolist(), [1, 3, 4 + 2])
+        descs = kv_nixl.pool_desc_array(10_000, layout, dev=5)[indices]
         self.assertEqual(descs[:, 0].tolist(),
                          [10_000 + 256, 10_000 + 768, 10_000 + 1024 + 264])
         self.assertEqual(descs[:, 1].tolist(), [256, 256, 132])

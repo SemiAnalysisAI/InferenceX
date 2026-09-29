@@ -157,15 +157,6 @@ def desc_sizes(cfg: dict) -> np.ndarray:
     ])
 
 
-def desc_array(base: int, cfg: dict, tables: dict, dev: int) -> np.ndarray:
-    """(addr, len, devId) uint64 rows for descriptor-list APIs (NIXL's numpy form)."""
-    out = np.empty((cfg["descs"], 3), dtype=np.uint64)
-    out[:, 0] = np.uint64(base) + page_offsets(cfg, tables)
-    out[:, 1] = desc_sizes(cfg)
-    out[:, 2] = dev
-    return out
-
-
 # The pattern depends on (offset >> 8) mod 256 only, so it repeats every 64 KiB.
 PATTERN_PERIOD = 1 << 16
 
