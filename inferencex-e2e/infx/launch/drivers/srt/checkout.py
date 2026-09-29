@@ -237,5 +237,13 @@ def compute_workspace(run: SrtRun, checkout: Checkout, *, shared: bool) -> Path:
     if not shared:
         return run.workspace
     name = checkout.root.name.replace("srt-slurm-", "infmax-workspace-", 1)
-    exclude = (".git/", ".venv/", "/utils/srt-slurm/", "/srt-slurm*/", "outputs/", "LOGS/", "*.sqsh")
+    exclude = (
+        ".git/",
+        ".venv/",
+        "/utils/srt-slurm/",
+        "/srt-slurm*/",
+        "outputs/",
+        "LOGS/",
+        "*.sqsh",
+    )
     return run.backend.stage_workspace(run.workspace, checkout.root.parent / name, exclude=exclude)
