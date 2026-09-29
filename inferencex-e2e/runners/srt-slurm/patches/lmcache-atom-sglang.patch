@@ -1,0 +1,355 @@
+diff --git a/docs/config-reference.md b/docs/config-reference.md
+index d6997e70..7a7178ae 100644
+--- a/docs/config-reference.md
++++ b/docs/config-reference.md
+@@ -56,6 +56,28 @@ srt-slurm owns the model path, HTTP port, tensor parallel size, and KV-transfer
+ contract, so recipes cannot override those arguments. See the complete
+ [ATOM/AToMesh recipe](../examples/atom/atomesh-disagg.yaml).
+ 
++To run another KV connector next to the Mooncake one (for example ATOM's in-process
++LMCache CPU offload on prefill), list it under `extra-kv-connectors` in that role's
++args. srtctl keeps generating the Mooncake entry, with its handshake port, and wraps
++both in ATOM's `multi` connector. An aggregate role with one extra connector runs it
++on its own. An `lmcache_mp` connector (ATOM's client for the `lmcache-server`
++service) dials the server on its own node, port 8750, unless its
++`kv_connector_extra_config` sets `lmcache.mp.port` or `lmcache.mp.server_urls`.
++
++```yaml
++roles:
++  prefill:
++    env:
++      PYTHONHASHSEED: "0"      # LMCache prefix hashes must agree across offload workers
++    args:
++      extra-kv-connectors:
++        - kv_connector: lmcache_offload
++          kv_role: offload
++          lmcache.local_cpu: true
++          lmcache.max_local_cpu_size: 180   # GB per worker
++          lmcache.chunk_size: 256
++```
++
+ ```yaml
+ schema: 2                      # Required: recipe layout version
+ name: "my-benchmark"           # Required: job name
+diff --git a/examples/features/lmcache-server-sglang.yaml b/examples/features/lmcache-server-sglang.yaml
+new file mode 100644
+index 00000000..66a4fb65
+--- /dev/null
++++ b/examples/features/lmcache-server-sglang.yaml
+@@ -0,0 +1,62 @@
++# An LMCache DRAM tier next to aggregated SGLang workers.
++#
++# `type: lmcache-server` runs the LMCache multiprocess server on every worker node
++# before the workers start (8750 RPC, 8751 HTTP). SGLang's own `enable-lmcache` flag
++# switches the worker to LMCacheUnifiedRadixCache; srtctl sets LMCACHE_MP_HOST and
++# LMCACHE_MP_PORT so it dials the server on its own node. A recipe that passes
++# `lmcache-config-file` or sets LMCACHE_MP_HOST in the role env keeps its own address.
++#
++# The SGLang image must ship LMCache, so this uses a `sglang-lmcache` alias. Aliases
++# (`qwen3-0.6b`, `sglang-lmcache`) resolve through srtslurm.yaml; see examples/README.md.
++
++schema: 2
++name: "qwen3-0.6b-sglang-lmcache-agg"
++
++slurm:
++  time_limit: "00:30:00"
++
++model:
++  path: "qwen3-0.6b"
++  container: "sglang-lmcache"
++  precision: "bf16"
++
++resources:
++  gpu_type: "h100"
++  gpus_per_node: 8
++
++environment:
++  PYTHONHASHSEED: "0"        # chunk hashes must agree across the server and every rank
++
++frontend:
++  type: sglang
++  enable_multiple_frontends: false
++
++engine: sglang
++roles:
++  agg:
++    nodes: 1
++    workers: 1
++    gpus: 1
++    args:
++      enable-lmcache: true
++      mem-fraction-static: 0.5
++      context-length: 4096
++
++services:
++  - name: lmcache
++    type: lmcache-server
++    args:
++      - --l1-size-gb
++      - "16"
++      - --chunk-size
++      - "256"
++      - --eviction-policy
++      - LRU
++    preamble: |
++      ulimit -l unlimited
++
++benchmark:
++  type: "sa-bench"
++  isl: 128
++  osl: 128
++  concurrencies: "4x8"
+diff --git a/src/srtctl/backends/atom.py b/src/srtctl/backends/atom.py
+index 2f0fc576..8aeea3a0 100644
+--- a/src/srtctl/backends/atom.py
++++ b/src/srtctl/backends/atom.py
+@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal
+ from marshmallow import Schema
+ from marshmallow_dataclass import dataclass
+ 
+-from srtctl.ports import DYN_SYSTEM_PORT_BASE
++from srtctl.ports import DYN_SYSTEM_PORT_BASE, LMCACHE_SERVER_PORT
+ 
+ if TYPE_CHECKING:
+     from srtctl.backends.base import SrunConfig
+@@ -141,19 +141,32 @@ class AtomProtocol:
+ 
+         return endpoints_to_processes(endpoints, base_sys_port=base_sys_port, port_allocator=port_allocator)
+ 
+-    def _kv_transfer_config(self, process: Process, worker_ip: str) -> str:
+-        if process.endpoint_mode not in {"prefill", "decode"}:
+-            raise ValueError("ATOM KV transfer is only valid for prefill/decode workers")
+-        if process.nixl_port is None:
+-            raise ValueError("ATOM P/D worker is missing its Mooncake handshake port")
+-        payload = {
+-            "kv_role": "kv_producer" if process.endpoint_mode == "prefill" else "kv_consumer",
+-            "kv_connector": self.connector,
+-            "proxy_ip": worker_ip,
+-            "handshake_port": process.nixl_port,
+-        }
+-        if self.mooncake_protocol is not None:
+-            payload["protocol"] = self.mooncake_protocol
++    def _kv_transfer_config(
++        self, process: Process, worker_ip: str, extra_connectors: list[dict[str, Any]]
++    ) -> str | None:
++        """Mooncake for P/D workers plus the role's extra connectors; several are wrapped in ``multi``."""
++        connectors = []
++        for connector in extra_connectors:
++            if connector.get("kv_connector") == "lmcache_mp":
++                # Dial the node-local lmcache-server service unless the recipe set a port.
++                extra = {"lmcache.mp.port": LMCACHE_SERVER_PORT, **connector.get("kv_connector_extra_config", {})}
++                connector = {**connector, "kv_connector_extra_config": extra}
++            connectors.append(connector)
++        if process.endpoint_mode in {"prefill", "decode"}:
++            if process.nixl_port is None:
++                raise ValueError("ATOM P/D worker is missing its Mooncake handshake port")
++            mooncake: dict[str, Any] = {
++                "kv_role": "kv_producer" if process.endpoint_mode == "prefill" else "kv_consumer",
++                "kv_connector": self.connector,
++                "proxy_ip": worker_ip,
++                "handshake_port": process.nixl_port,
++            }
++            if self.mooncake_protocol is not None:
++                mooncake["protocol"] = self.mooncake_protocol
++            connectors.insert(0, mooncake)
++        if not connectors:
++            return None
++        payload = connectors[0] if len(connectors) == 1 else {"kv_connector": "multi", "connectors": connectors}
+         return json.dumps(payload, separators=(",", ":"))
+ 
+     def build_worker_command(
+@@ -175,6 +188,7 @@ class AtomProtocol:
+ 
+         worker_ip = get_hostname_ip(process.node, runtime.network_interface)
+         config = self.get_config_for_mode(process.endpoint_mode)
++        extra_connectors = config.pop("extra-kv-connectors", [])
+         reserved = {"model", "host", "server-port", "tp", "tensor-parallel-size", "kv-transfer-config"}
+         overlap = reserved.intersection(_canonical_arg_key(key) for key in config)
+         if overlap:
+@@ -196,8 +210,9 @@ class AtomProtocol:
+                 str(len(process.gpu_indices)),
+             ]
+         )
+-        if process.endpoint_mode in {"prefill", "decode"}:
+-            command.extend(["--kv-transfer-config", self._kv_transfer_config(process, worker_ip)])
++        kv_transfer_config = self._kv_transfer_config(process, worker_ip, extra_connectors)
++        if kv_transfer_config is not None:
++            command.extend(["--kv-transfer-config", kv_transfer_config])
+         command.extend(_config_to_cli_args(config))
+         return command
+ 
+diff --git a/src/srtctl/backends/sglang.py b/src/srtctl/backends/sglang.py
+index 585935a2..e7e0d618 100644
+--- a/src/srtctl/backends/sglang.py
++++ b/src/srtctl/backends/sglang.py
+@@ -27,6 +27,7 @@ from srtctl.backends.sidecar import build_sidecar_launch_command, get_dynamo_sid
+ from srtctl.ports import (
+     DIST_INIT_PORTS,
+     DYN_SYSTEM_PORT_BASE,
++    LMCACHE_SERVER_PORT,
+     MOONCAKE_HTTP_METADATA_PORT,
+     MOONCAKE_MASTER_PORT,
+     NCCL_PORTS,
+@@ -207,10 +208,17 @@ class SGLangProtocol:
+     def get_process_environment(self, process: "Process") -> dict[str, str]:
+         """Get process-specific environment variables.
+ 
+-        SGLang handles kv-events via CLI args (--kv-events-config), so no
+-        additional process-specific env vars are needed here.
++        A worker started with ``enable-lmcache`` dials the LMCache MP server on its own
++        node (``services[].type: lmcache-server``) unless the recipe points it elsewhere
++        with ``lmcache-config-file`` or ``LMCACHE_MP_HOST`` in the role env.
+         """
+-        return {}
++        mode = process.endpoint_mode
++        config = {key.replace("_", "-"): value for key, value in self.get_config_for_mode(mode).items()}
++        if not config.get("enable-lmcache") or config.get("lmcache-config-file"):
++            return {}
++        if "LMCACHE_MP_HOST" in self.get_environment_for_mode(mode):
++            return {}
++        return {"LMCACHE_MP_HOST": "127.0.0.1", "LMCACHE_MP_PORT": str(LMCACHE_SERVER_PORT)}
+ 
+     def get_mooncake_worker_env(self, infra_node_ip: str, local_hostname: str) -> dict[str, str]:
+         """Get mooncake env vars to inject on a specific worker.
+diff --git a/tests/test_atom_atomesh.py b/tests/test_atom_atomesh.py
+index 937800b6..7f4d017f 100644
+--- a/tests/test_atom_atomesh.py
++++ b/tests/test_atom_atomesh.py
+@@ -200,6 +200,59 @@ def test_atom_pd_worker_emits_mooncake_kv_transfer_config(protocol: str | None,
+     }
+ 
+ 
++def test_atom_wraps_extra_kv_connectors_with_mooncake_in_multi() -> None:
++    """A role's extra-kv-connectors ride next to srtctl's Mooncake connector and never reach the CLI as a flag."""
++    offload = {"kv_connector": "lmcache_offload", "kv_role": "offload", "lmcache.max_local_cpu_size": 180}
++    backend = AtomProtocol(atom_config=AtomServerConfig(prefill={"extra-kv-connectors": [offload], "max-model-len": 8}))
++    prefill = Process("node0", frozenset(range(8)), 7500, 6100, "prefill", 0, nixl_port=6301)
++    decode = Process("node1", frozenset(range(8)), 7500, 6100, "decode", 0, nixl_port=6302)
++
++    prefill_command = _build(backend, prefill)
++    decode_command = _build(backend, decode)
++
++    assert json.loads(prefill_command[prefill_command.index("--kv-transfer-config") + 1]) == {
++        "kv_connector": "multi",
++        "connectors": [
++            {"kv_role": "kv_producer", "kv_connector": "mooncake", "proxy_ip": WORKER_IP, "handshake_port": 6301},
++            offload,
++        ],
++    }
++    assert "--extra-kv-connectors" not in prefill_command
++    assert prefill_command[-2:] == ["--max-model-len", "8"]
++    assert json.loads(decode_command[decode_command.index("--kv-transfer-config") + 1])["kv_connector"] == "mooncake"
++
++
++def test_atom_aggregate_worker_runs_a_single_extra_connector_unwrapped() -> None:
++    offload = {"kv_connector": "lmcache_offload", "kv_role": "offload"}
++    backend = AtomProtocol(atom_config=AtomServerConfig(aggregated={"extra-kv-connectors": [offload]}))
++    process = Process("node0", frozenset(range(8)), 7500, 6100, "agg", 0)
++
++    command = _build(backend, process)
++
++    assert json.loads(command[command.index("--kv-transfer-config") + 1]) == offload
++
++
++@pytest.mark.parametrize(
++    ("extra_config", "expected"),
++    [
++        ({}, {"lmcache.mp.port": 8750}),
++        (
++            {"lmcache.mp.port": 5555, "lmcache.mp.tp_rank_collapse": True},
++            {"lmcache.mp.port": 5555, "lmcache.mp.tp_rank_collapse": True},
++        ),
++    ],
++)
++def test_atom_lmcache_mp_defaults_to_the_lmcache_server_port(extra_config: dict, expected: dict) -> None:
++    """lmcache_mp dials srtctl's lmcache-server on its own node unless the recipe gave an address."""
++    connector = {"kv_connector": "lmcache_mp", "kv_role": "offload", "kv_connector_extra_config": extra_config}
++    backend = AtomProtocol(atom_config=AtomServerConfig(aggregated={"extra-kv-connectors": [connector]}))
++    process = Process("node0", frozenset(range(8)), 7500, 6100, "agg", 0)
++
++    command = _build(backend, process)
++
++    assert json.loads(command[command.index("--kv-transfer-config") + 1])["kv_connector_extra_config"] == expected
++
++
+ def test_atom_rejects_cross_node_model_parallel_endpoint() -> None:
+     """ATOM cannot coordinate one logical worker across two Slurm nodes."""
+     leader = Process("node0", frozenset(range(4)), 7500, 6100, "prefill", 0, nixl_port=6301)
+diff --git a/tests/test_sglang_lmcache.py b/tests/test_sglang_lmcache.py
+new file mode 100644
+index 00000000..52f3f8d3
+--- /dev/null
++++ b/tests/test_sglang_lmcache.py
+@@ -0,0 +1,39 @@
++# SPDX-FileCopyrightText: Copyright (c) 2026 SemiAnalysis LLC. All rights reserved.
++# SPDX-License-Identifier: Apache-2.0
++
++"""SGLang workers reach the node-local LMCache MP server (services[].type: lmcache-server)."""
++
++import pytest
++
++from srtctl.backends.sglang import SGLangProtocol, SGLangServerConfig
++from srtctl.core.topology import Process
++
++
++def _process(mode: str = "prefill") -> Process:
++    return Process("node0", frozenset(range(8)), 7500, 6100, mode, 0)
++
++
++def test_enable_lmcache_points_the_worker_at_the_node_local_server() -> None:
++    backend = SGLangProtocol(sglang_config=SGLangServerConfig(prefill={"enable-lmcache": True}))
++
++    assert backend.get_process_environment(_process("prefill")) == {
++        "LMCACHE_MP_HOST": "127.0.0.1",
++        "LMCACHE_MP_PORT": "8750",
++    }
++    assert backend.get_process_environment(_process("decode")) == {}
++
++
++@pytest.mark.parametrize(
++    ("prefill", "environment"),
++    [
++        ({"enable_lmcache": True, "lmcache_config_file": "/configs/lmcache.yaml"}, {}),
++        ({"enable-lmcache": True}, {"LMCACHE_MP_HOST": "10.0.0.5"}),
++    ],
++)
++def test_recipe_owned_lmcache_address_is_left_alone(prefill: dict, environment: dict) -> None:
++    backend = SGLangProtocol(
++        sglang_config=SGLangServerConfig(prefill=prefill),
++        prefill_environment=environment,
++    )
++
++    assert backend.get_process_environment(_process()) == {}
+diff --git a/docs/services.md b/docs/services.md
+--- a/docs/services.md
++++ b/docs/services.md
+@@ -303,7 +303,7 @@
+ | `node-exporter` | `/bin/node_exporter` with the cpu, infiniband, and meminfo collectors on 9101 in `quay.io/prometheus/node-exporter` | `after_frontend` | `false` | Implied on worker nodes while tachometer runs. Shell-less. `options`: `port`. |
+ | `process-exporter` | `configs/process-exporter -config.path <log_dir>/process-exporter.yml -web.listen-address=:9256 -threads=true ...` on the bare node | `after_frontend` | `false` | Implied on every allocated node (`placement.node: all`) while tachometer runs. Host-native from the static binary `make setup` installs; skipped with a warning when it is missing. A declared `container` switches to the image's `/bin/process-exporter` with the group file under `/logs`. `options`: `port`, `binary`. |
+ | `mooncake-store` | `python -m mooncake.mooncake_store_service` | `before_workers` | `true` | Requires a `mooncake-master` entry. Container falls back to the master's. Injects the master's address. |
+-| `lmcache-server` | `lmcache server` bound to the RPC and HTTP ports srtctl owns (8750, 8751) | `before_workers` | `true` | One per worker node (`placement.node: workers`); vLLM ranks reach it over localhost with `connector: lmcache-mp`, which implies it. Services do not inherit the top-level `environment:`, so set `PYTHONHASHSEED` in its `env:` when the workers set it. `args` are appended (`--l1-size-gb`, `--chunk-size`, `--max-workers`, ...). Ready when `GET /healthcheck` answers; LMCache must be installed in the job container. |
++| `lmcache-server` | `lmcache server` bound to the RPC and HTTP ports srtctl owns (8750, 8751) | `before_workers` | `true` | One per worker node (`placement.node: workers`); vLLM ranks reach it over localhost with `connector: lmcache-mp`, which implies it. SGLang workers started with `enable-lmcache` get `LMCACHE_MP_HOST`/`LMCACHE_MP_PORT` pointing at it unless the recipe sets `lmcache-config-file` or `LMCACHE_MP_HOST`. Services do not inherit the top-level `environment:`, so set `PYTHONHASHSEED` in its `env:` when the workers set it. `args` are appended (`--l1-size-gb`, `--chunk-size`, `--max-workers`, ...). Ready when `GET /healthcheck` answers; LMCache must be installed in the job container. |
+ | `ray` | `ray start --head ...` on the first instance, `ray start --address=<head>:6379 ...` on the rest, both `--block` | `before_workers` | `true` | One Ray cluster across the service's nodes; see [Ray cluster](#ray-cluster). Placement `workers` (default), `head`, or `all`. `options`: `port` (GCS, 6379), `dashboard_port` (8265), `num_gpus` (the node's count). `args` are appended to every `ray start`. |
+ | `gms` | one `python3 -m gpu_memory_service --device k` per GPU of the worker, supervised by bash, in the job container | `before_workers` | `true` | Implied by `engine.failover`; see [Shadow Engine Recovery](shadow-engine-recovery.md). `placement.per: worker` (required): one instance per vLLM worker in that worker's device view, sockets and lock file under `<shared_dir>/srtctl-<job>/<role>_<index>`. Ready when its log says `GMS ready:`; `readiness.timeout_seconds` (default 120) also bounds the servers' startup. |
+ 
+diff --git a/examples/README.md b/examples/README.md
+--- a/examples/README.md
++++ b/examples/README.md
+@@ -33,7 +33,8 @@
+ | `features/dynamo-source.yaml` | `dynamo.source:` building Dynamo from a git tag (or a PR head via `--set dynamo.source.rev=refs/pull/<n>/head`), pinned to a commit at submit |
+ | `features/node-hooks.yaml` | `host_setup:` pre-run and post-run commands on each node's bare host, driven by `configs/node-hooks.sh`: arbitrary shell commands, one per line, from `HOOK_PRE` / `HOOK_POST` block scalars in the recipe environment, with per-command logging and a state snapshot |
+ | `features/lmcache-server.yaml` | `services[].type: lmcache-server` plus `connector: lmcache-mp`: an LMCache DRAM tier, one server per worker node started before the workers and gated on its healthcheck; LMCache flags go under `args`. Needs a vLLM image that ships LMCache (the `vllm-lmcache` alias). See [../docs/services.md](../docs/services.md#service-types) |
+ | `features/lmcache-server-disagg.yaml` | The same tier on the prefill side only: the server placed on prefill nodes and a hand-written `MultiConnector` (NIXL plus LMCache MP) in the prefill args, which srtctl passes through untouched |
++| `features/lmcache-server-sglang.yaml` | The same server next to aggregated SGLang workers: SGLang's `enable-lmcache` flag, with srtctl pointing each worker at the server on its node (`LMCACHE_MP_HOST`/`LMCACHE_MP_PORT`). Needs an SGLang image that ships LMCache (the `sglang-lmcache` alias) |
+ | `features/vllm-failover.yaml` | `engine.failover:` shadow engine recovery: a GPU Memory Service sidecar and a parked standby engine per vLLM worker, relaunched in place after a crash. Needs a container that ships `gpu_memory_service` (the `dynamo-vllm` alias, an `nvcr.io/nvidia/ai-dynamo/vllm-runtime` image). See [../docs/shadow-engine-recovery.md](../docs/shadow-engine-recovery.md) |
+ 
+ ## Cluster aliases
+@@ -49,7 +50,8 @@
+   vllm: /path/to/vllm.sqsh                  # vLLM image with the vllm-router executable
+   trtllm: /path/to/tensorrtllm-runtime.sqsh # Dynamo TRT-LLM runtime image (ships ai-dynamo and trtllm-serve)
+   dynamo-vllm: /path/to/vllm-runtime.sqsh   # Dynamo vLLM runtime image (ships ai-dynamo and gpu_memory_service), for features/vllm-failover.yaml
+   vllm-lmcache: /path/to/vllm-lmcache.sqsh  # vLLM image with LMCache installed, for features/lmcache-server*.yaml
++  sglang-lmcache: /path/to/sglang-lmcache.sqsh  # SGLang image with LMCache installed, for features/lmcache-server-sglang.yaml
+ ```
+ 
+ `resources.gpu_type` and `gpus_per_node` are set to `h100` and `8`; change them to match the partition you submit to.
