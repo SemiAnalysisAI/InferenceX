@@ -6,7 +6,11 @@ base:
   name: dsv41flash-fp4-mi355x-vllm-agentic
   model:
     path: hf:deepseek-ai/DeepSeek-V4.1-Flash
-    container: vllm/vllm-openai-rocm:nightly-rocm100-7f1a5398e9610d96c473931a26c0e12bbe0d0423
+    # TODO: repin once vllm-project/vllm#58655 (mHC fused Triton seams),
+    # #53492 (sparse MLA Gluon kernel) and #58208 (DSA candidate
+    # block-selection topk) are merged upstream and released in a nightly
+    # image.
+    container: vllm/vllm-openai-rocm:nightly-rocm100-TBD
     precision: fp4
   resources:
     gpu_type: mi355x
@@ -54,6 +58,7 @@ base:
         VLLM_ROCM_USE_AITER: '1'
         VLLM_ROCM_USE_AITER_MOE: '1'
         AITER_TRITON_LOG_LEVEL: ERROR
+        VLLM_ROCM_USE_AITER_TRITON_SPARSE_MLA: 'True'
         # DeepseekV41ForCausalLM is not torch-compiled upstream; breakable
         # graphs keep FULL_AND_PIECEWISE capture working.
         VLLM_USE_BREAKABLE_CUDAGRAPH: '1'
