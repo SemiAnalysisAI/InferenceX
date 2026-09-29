@@ -6,7 +6,6 @@ source "$(dirname "${BASH_SOURCE[0]}")/../benchmark_lib.sh" --validation-only
 check_env_vars FRAMEWORK IS_AGENTIC MODEL_PREFIX
 
 export BENCH_NUM_PROMPTS_MULTIPLIER=10 DRY_RUN=0 KEEP_CONTAINERS=0
-export AIPERF_DRAIN_TIMEOUT_SECONDS=1800 AIPERF_DRAIN_POLL_SECONDS=10
 
 case "$FRAMEWORK" in
     sglang-disagg)
@@ -15,7 +14,6 @@ case "$FRAMEWORK" in
         export DECODE_MTP_SIZE=0
         export HEADNODE_PORT=20000 SERVER_PORT=2584 PROXY_STREAM_IDLE_TIMEOUT=300
         export ENABLE_METRICS=0 PREFILL_ROUTER_POLICY=random DECODE_ROUTER_POLICY=random
-        export FLUSH_DRAIN_TIMEOUT=120 CLEAR_CACHE_BETWEEN_CONC=1
         export ROCM_PATH=/opt/rocm UCX_HOME=/usr/local/ucx RIXL_HOME=/usr/local/rixl
         export MORI_IO_SQ_BACKOFF_TIMEOUT_US=50000 MORI_IO_QP_MAX_SEND_WR=16384
         export MORI_IO_QP_MAX_CQE=32768 MORI_IO_QP_MAX_SGE=2 MORI_IO_TC_DISABLE=0
@@ -66,7 +64,6 @@ case "$FRAMEWORK" in
             export ROUTER_TYPE=tilert-pd-router ROUTER_PORT=30000 PROXY_PING_PORT=36367
             export HEADNODE_PORT=20000 SERVER_PORT=2584 PROXY_STREAM_IDLE_TIMEOUT=300
             export ENABLE_METRICS=0 PREFILL_ROUTER_POLICY=random DECODE_ROUTER_POLICY=random
-            export FLUSH_DRAIN_TIMEOUT=120 CLEAR_CACHE_BETWEEN_CONC=1
             export DECODE_MTP_SIZE=0
             export ROCM_PATH=/opt/rocm UCX_HOME=/usr/local/ucx RIXL_HOME=/usr/local/rixl
         fi

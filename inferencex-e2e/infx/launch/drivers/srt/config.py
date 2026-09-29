@@ -99,7 +99,7 @@ def render(cluster: Cluster, job: SrtJob) -> dict[str, Any]:
     srt = settings.srt_slurm
     if srt is None:
         raise LaunchError(f"cluster {cluster.id!r} has no slurm.srt-slurm settings")
-    config: dict[str, Any] = {}
+    config: dict[str, Any] = {"cluster": cluster.id}  # srtctl's status-reporting name
     if job.account:
         config["default_account"] = job.account
     config["default_partition"] = settings.partition

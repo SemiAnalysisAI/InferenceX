@@ -2598,7 +2598,7 @@ class TestAgenticGeneration:
         with pytest.raises(ValueError, match="requires 'available-cpu-dram-mib'"):
             generate_agentic_sweep(config, validate_runner_config(runners))
 
-    def test_multinode_agentic_groups_concurrencies_per_search_entry(
+    def test_multinode_agentic_isolates_each_concurrency_per_search_entry(
         self, sample_runner_config, generate_agentic_sweep
     ):
         """One server allocation should run exactly one concurrency (one task per conc)."""

@@ -22,6 +22,10 @@ TILERT_IS_AGENTIC=0
 if [[ "${IS_AGENTIC}" == "1" || "${SCENARIO_TYPE:-}" == "agentic-coding" ]]; then
     TILERT_IS_AGENTIC=1
 fi
+if [[ "$TILERT_IS_AGENTIC" == 1 && "$EVAL_ONLY" != true ]]; then
+    check_env_vars CONC_LIST
+    validate_agentic_concurrency "$CONC_LIST" || exit 1
+fi
 
 AGENTIC_LOGS_DIR=${AGENTIC_LOGS_DIR:-$RESULT_DIR/LOGS/agentic}
 
@@ -269,19 +273,18 @@ run_tilert_eval() {
 }
 
 run_agentic_replay() {
+    validate_agentic_concurrency "$CONC_LIST" || return 1
     wait_for_server_ready --port "$ROUTER_PORT" \
         --server-log "$BENCHMARK_LOGS_DIR/tilert_router.log" --server-pid "$ROUTER_PID"
-    local rc=0 conc conc_result_dir
+    local rc=0 conc="$CONC_LIST" conc_result_dir
     local result_filename_base="$RESULT_FILENAME"
-    for conc in $CONC_LIST; do
-        conc_result_dir="$AGENTIC_LOGS_DIR/conc_${conc}"
-        mkdir -p "$conc_result_dir"
-        export CONC="$conc"
-        export RESULT_FILENAME="${result_filename_base}_conc${conc}"
-        build_replay_cmd "$conc_result_dir"
-        run_agentic_replay_and_write_outputs "$conc_result_dir" \
-            || { rc=$?; echo "[agentic] WARNING: conc=$conc failed/timed out (rc=$rc)"; }
-    done
+    conc_result_dir="$AGENTIC_LOGS_DIR/conc_${conc}"
+    mkdir -p "$conc_result_dir"
+    export CONC="$conc"
+    export RESULT_FILENAME="${result_filename_base}_conc${conc}"
+    build_replay_cmd "$conc_result_dir"
+    run_agentic_replay_and_write_outputs "$conc_result_dir" \
+        || { rc=$?; echo "[agentic] WARNING: conc=$conc failed/timed out (rc=$rc)"; }
     export RESULT_FILENAME="$result_filename_base"
     return $rc
 }
@@ -309,7 +312,7 @@ case "$TILERT_ROLE" in
         ;;
     prefill)
         rdma_preflight || exit 1
-        if [[ "$TILERT_IS_AGENTIC" == "1" ]]; then
+        if [[ "$TILERT_IS_AGENTIC" == "1" && "$EVAL_ONLY" != true ]]; then
             resolve_trace_source
             install_agentic_deps
         fi
@@ -319,7 +322,7 @@ case "$TILERT_ROLE" in
         wait_for_tcp "$PREFILL_HOST" "$PREFILL_PORT" "${PREFILL_WAIT}" \
             || echo "[prefill] WARNING: timed out waiting for the vLLM port ($PREFILL_HOST:$PREFILL_PORT), continuing (see $BENCHMARK_LOGS_DIR/tilert_prefill.log)"
         start_router
-        if [[ "$TILERT_IS_AGENTIC" == "1" ]]; then
+        if [[ "$TILERT_IS_AGENTIC" == "1" && "$EVAL_ONLY" != true ]]; then
             run_agentic_replay; BENCH_RC=$?
         else
             run_bench_and_eval; BENCH_RC=$?

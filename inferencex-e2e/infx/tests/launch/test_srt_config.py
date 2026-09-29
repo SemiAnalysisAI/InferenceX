@@ -77,6 +77,7 @@ def test_the_profile_renders_its_facts_and_mounts_a_volume_at_a_second_target():
     assert "model_paths" not in config
     assert (config["visible_devices_env"], config["default_gpu_exporter"]) == ("ROCR_VISIBLE_DEVICES", None)
     assert (config["network_interface"], config["use_exclusive_sbatch_directive"]) == ("eno0", True)
+    assert config["cluster"] == "c"
 
 
 def test_a_host_directory_cannot_be_mounted_at_three_targets():

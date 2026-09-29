@@ -783,7 +783,6 @@ clusters:
           /dev/dri: /dev/dri
           /it-share/hf_home: /it-share/hf_home
         extra:
-          cluster: mi355x-amds
           visible_devices_env: ROCR_VISIBLE_DEVICES
           default_gpu_exporter: null
           nginx_raise_ulimit: false

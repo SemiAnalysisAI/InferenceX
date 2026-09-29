@@ -230,9 +230,15 @@ def test_atom_binding_uses_allocation_tp_and_native_mtp_arguments(point):
         ({"EP_SIZE": "1"}, "enable-expert-parallel"),
         ({"TP": "8", "EP_SIZE": "8"}, "ATOM TP"),
         ({"DP_ATTENTION": "false"}, "DP_ATTENTION"),
+        ({"DCP_SIZE": "8"}, "DCP_SIZE"),
     ]:
         with pytest.raises(ValueError, match=error):
             runtime_arguments(f"{path}:base", {**env, **changes})
+    recipe["roles"]["agg"]["args"]["decode-context-parallel-size"] = 8
+    path.write_text(yaml.safe_dump({"base": recipe}))
+    runtime_arguments(f"{path}:base", {**env, "DCP_SIZE": "8"})
+    with pytest.raises(ValueError, match="DCP_SIZE"):
+        runtime_arguments(f"{path}:base", env)
 
 
 @pytest.mark.parametrize("record,expected", [

@@ -33,17 +33,9 @@ Path("speedbench-reference-al.yaml").write_text("fixture: 1\\n")
 """
 
 
-@pytest.mark.parametrize(
-    "workflow,step_name",
-    [
-        ("benchmark-tmpl.yml", "Launch job script"),
-        ("benchmark-multinode-tmpl.yml", "Launch multi-node job script"),
-        ("profile.yml", "Launch + Profile (single-node sglang/vllm)"),
-        ("speedbench-al.yml", "Collect AL matrix"),
-    ],
-)
-def test_launch_runs_the_python_entrypoint_from_the_project_root(tmp_path, workflow, step_name):
-    checkout = tmp_path / "checkout"
+def measured_checkout(root: Path, launcher: str) -> tuple[Path, Path]:
+    """A checkout whose ``infx.launch`` runs ``launcher``; returns (checkout, project)."""
+    checkout = root / "checkout"
     project = checkout / "inferencex-e2e"
     (project / "configs").mkdir(parents=True)
     (project / "configs" / "runners.yaml").write_text("{}\n")
@@ -59,20 +51,37 @@ def test_launch_runs_the_python_entrypoint_from_the_project_root(tmp_path, workf
     package.mkdir(parents=True)
     (project / "infx" / "__init__.py").write_text("")
     (package / "__init__.py").write_text("")
-    (package / "__main__.py").write_text(CAPTURE)
+    (package / "__main__.py").write_text(launcher)
     # The measured revision's own result-name helper; every launchable revision ships it.
     results = project / "infx" / "results"
     results.mkdir()
     (results / "__init__.py").write_text("")
     shutil.copy(ROOT / "inferencex-e2e/infx/results/result_filename.py", results)
+    return checkout, project
 
+
+def workflow_step(workflow: str, step_name: str) -> dict:
     config = yaml.safe_load((ROOT / ".github" / "workflows" / workflow).read_text())
-    step = next(
+    return next(
         step
         for job in config["jobs"].values()
         for step in job.get("steps", [])
         if step.get("name") == step_name
     )
+
+
+@pytest.mark.parametrize(
+    "workflow,step_name",
+    [
+        ("benchmark-tmpl.yml", "Launch job script"),
+        ("benchmark-multinode-tmpl.yml", "Launch multi-node job script"),
+        ("profile.yml", "Launch + Profile (single-node sglang/vllm)"),
+        ("speedbench-al.yml", "Collect AL matrix"),
+    ],
+)
+def test_launch_runs_the_python_entrypoint_from_the_project_root(tmp_path, workflow, step_name):
+    checkout, project = measured_checkout(tmp_path, CAPTURE)
+    step = workflow_step(workflow, step_name)
     launch_capture = tmp_path / "launch.json"
     github_env = tmp_path / "github-env"
     github_output = tmp_path / "github-output"
@@ -105,7 +114,8 @@ def test_launch_runs_the_python_entrypoint_from_the_project_root(tmp_path, workf
             "CONC_LIST": "1",
             "EVAL_CONC": "1",
             "EVAL_ONLY": "false",
-            "SCENARIO_TYPE": "fixed-seq-len",
+            "IS_AGENTIC": "0",
+            "SCENARIO_TYPE": "fixed-sequence",
             "PREFILL_ADDITIONAL_SETTINGS": "[]",
             "DECODE_ADDITIONAL_SETTINGS": "[]",
         },
@@ -129,3 +139,53 @@ def test_launch_runs_the_python_entrypoint_from_the_project_root(tmp_path, workf
     if workflow == "profile.yml":
         output = dict(line.split("=", 1) for line in github_output.read_text().splitlines())
         assert Path(output["trace"]).read_bytes() == b"fixture trace"
+
+
+@pytest.mark.parametrize(
+    "agentic,eval_only,conc,conc_list,launches",
+    [
+        (True, False, "4", "4", True),
+        (True, False, "4", "4 8", False),
+        (True, False, "4", "8", False),
+        (True, True, "4", "4 8", True),
+        (False, False, "", "4 8", True),
+    ],
+)
+def test_multinode_launch_isolates_agentx_throughput(
+    tmp_path, agentic, eval_only, conc, conc_list, launches
+):
+    """Reject invalid throughput jobs before launching, without changing eval batching."""
+    marker = tmp_path / "launched"
+    launcher = "import os, pathlib, sys\npathlib.Path(os.environ['LAUNCH_MARKER']).touch()\nsys.exit(77)\n"
+    checkout, _ = measured_checkout(tmp_path, launcher)
+    step = workflow_step("benchmark-multinode-tmpl.yml", "Launch multi-node job script")
+    result = subprocess.run(
+        ["bash", "--noprofile", "--norc", "-e", "-o", "pipefail", "-c", step["run"]],
+        cwd=checkout,
+        env={
+            **os.environ,
+            "LAUNCH_MARKER": str(marker),
+            "INFERENCEX_LAUNCH_PYTHON": sys.executable,
+            "GITHUB_WORKSPACE": str(checkout),
+            "GITHUB_ENV": str(tmp_path / "github-env"),
+            "RESULT_FILENAME_BASE": "agentx-isolation",
+            "RECIPE_FINGERPRINT": "",
+            "PREFILL_ADDITIONAL_SETTINGS": "[]",
+            "DECODE_ADDITIONAL_SETTINGS": "[]",
+            "IS_AGENTIC": "1" if agentic else "0",
+            "SCENARIO_TYPE": "agentic-coding" if agentic else "fixed-seq-len",
+            "EVAL_ONLY": "true" if eval_only else "false",
+            "CONC": conc,
+            "CONC_LIST": conc_list,
+            "EVAL_CONC": "4",
+            "RUNNER_NAME": "fixture_01",
+            "VALIDATION_BENCHMARK_LIB": str(ROOT / "inferencex-e2e/benchmarks/benchmark_lib.sh"),
+        },
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == (77 if launches else 1), result.stdout + result.stderr
+    assert marker.exists() is launches
+    if not launches:
+        assert "AgentX" in result.stderr
