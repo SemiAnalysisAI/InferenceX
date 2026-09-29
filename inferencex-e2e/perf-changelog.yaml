@@ -9026,6 +9026,17 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3459
 
 - config-keys:
+    - dsv4-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update image to lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260926."
+    - "Switch attention to fp8 unified KV; enable grouped decode on TP8-only arms at conc >= 16."
+    - "Enable breakable CUDA-graph prefill (BCG) at conc <= 4."
+    - "Enable EP8 + MegaMoE for DP-attention arms at conc >= 128 (including conc 384)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3430
+
+- config-keys:
     - kimik3-fp4-mi355x-vllm-agentic-mtp
     - minimaxm3-fp4-b200-vllm-agentic-mtp
     - minimaxm3-fp4-b300-vllm-agentic-mtp
