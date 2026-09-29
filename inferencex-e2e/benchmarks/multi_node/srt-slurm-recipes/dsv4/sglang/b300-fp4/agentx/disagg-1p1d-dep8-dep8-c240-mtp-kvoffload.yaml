@@ -19,8 +19,6 @@ identity:
 dynamo:
   install: false
 
-setup_script: install-mooncake-efa-cu13.sh
-
 health_check:
   max_attempts: 1440
   interval_seconds: 10
@@ -65,6 +63,7 @@ roles:
       SGLANG_ENABLE_PREFILL_WAR_READ_DONE: "1"
       SGLANG_RAGGED_VERIFY_MODE: "static"
       SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "900"
+      SGLANG_DISAGGREGATION_NIXL_BACKEND: UCX
       SGLANG_DSV4_MHC_PREWARM: '1'
       PIP_BREAK_SYSTEM_PACKAGES: '1'
       PYTHONUNBUFFERED: '1'
@@ -81,9 +80,6 @@ roles:
       SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '9216'
       SGLANG_OPT_USE_ONLINE_COMPRESS: '0'
       NCCL_CUMEM_ENABLE: '1'
-      MOONCAKE_PROTOCOL: efa
-      MC_MS_FILTERS: rdmap191s0
-      WITH_NVIDIA_PEERMEM: '0'
       NCCL_TIMEOUT: '100000'
       SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW: '1'
       DYN_SKIP_SGLANG_LOG_FORMATTING: '1'
@@ -111,7 +107,7 @@ roles:
       moe-a2a-backend: megamoe
       enable-deepseek-v4-fp4-indexer: true
       enable-w4a4-mxfp4-megamoe: true
-      disaggregation-transfer-backend: mooncake
+      disaggregation-transfer-backend: nixl
       disaggregation-mode: prefill
       load-balance-method: total_tokens
       mem-fraction-static: 0.85
@@ -141,6 +137,7 @@ roles:
     env:
       SGLANG_RAGGED_VERIFY_MODE: "static"
       SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "900"
+      SGLANG_DISAGGREGATION_NIXL_BACKEND: UCX
       PIP_BREAK_SYSTEM_PACKAGES: '1'
       PYTHONUNBUFFERED: '1'
       SGLANG_ENABLE_TP_MEMORY_INBALANCE_CHECK: '0'
@@ -155,9 +152,6 @@ roles:
       SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '4096'
       SGLANG_OPT_USE_ONLINE_COMPRESS: '0'
       NCCL_CUMEM_ENABLE: '1'
-      MOONCAKE_PROTOCOL: efa
-      MC_MS_FILTERS: rdmap191s0
-      WITH_NVIDIA_PEERMEM: '0'
       NCCL_TIMEOUT: '100000'
       SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW: '1'
       SGLANG_CLIP_MAX_NEW_TOKENS_ESTIMATION: '8'
@@ -185,7 +179,7 @@ roles:
       moe-a2a-backend: megamoe
       enable-deepseek-v4-fp4-indexer: true
       enable-w4a4-mxfp4-megamoe: true
-      disaggregation-transfer-backend: mooncake
+      disaggregation-transfer-backend: nixl
       disaggregation-mode: decode
       load-balance-method: total_tokens
       mem-fraction-static: 0.9
