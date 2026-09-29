@@ -9009,8 +9009,6 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Benchmark change for the LMCache DRAM point (TP8, concurrency 16): it now runs srt-slurm's lmcache-server service, one LMCache server per node with 1296 GB L1 shared by all 8 TP ranks, replacing the 8 per-rank LMCache servers of 162 GB L1 each. The server starts before vLLM on ports 8750/8751 and gates on its /healthcheck; the other LMCache flags are unchanged (chunk size 256, 2 workers, LRU, 7200 s read TTL, lmcache_driven transfer)."
-    - "The vLLM worker's connector is LMCacheMPConnector at tcp://localhost:8750, with lmcache.mp.mq_timeout kept at 6000 s. Needs the lmcache-server srt-slurm patch (SemiAnalysisAI/srt-slurm#32, including NVIDIA/srt-slurm#507)."
-    - "The recipe image is vllm/vllm-openai-rocm:v0.30.0, matching the config. The GPU-resident points are unchanged, and all points are re-measured."
-    - "The EAGLE3 draft loads unmodified from the published Inferact/MiniMax-M3-EAGLE3-GQA checkpoint; no flag overrides or re-quantizes the draft weights."
+    - "All points now run vllm/vllm-openai-rocm:v0.30.0 (previously v0.29.0)."
+    - "LMCache DRAM point (TP8, concurrency 16): one LMCache server per node with 1296 GB L1 shared by all 8 TP ranks, replacing 8 per-rank servers of 162 GB L1 each."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3545
