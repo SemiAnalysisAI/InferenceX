@@ -9012,3 +9012,12 @@
     - "Update the GLM-5.2 MXFP4 MI355X SGLang AgentX image from lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260923 to lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260924 (digest sha256:baadaba198e23c46c1dd651b5edefae8000bd5430943bd10b246b563905b3ecf); keep all serving flags, HiCache settings, and sweep points unchanged."
     - "将 GLM-5.2 MXFP4 MI355X SGLang AgentX 镜像从 lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260923 更新到 lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260924（digest sha256:baadaba198e23c46c1dd651b5edefae8000bd5430943bd10b246b563905b3ecf）；其余服务参数、HiCache 设置与 sweep 点保持不变。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3446
+
+- config-keys:
+    - kimik3-fp4-b300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg-1p1d-hugepage
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add a hugepage variant of the Kimi-K3 B300 Mooncake EFA AgentX disaggregated 1P1D DCP8/DCP8 DSpark4 c48 configuration from #3523 on ghcr.io/semianalysisai/vllm-openai:efa_pr_58768 (mooncake-transfer-engine-efa-cuda13 0.3.13.post1). The mooncake-master service and the prefill and decode workers set MC_STORE_USE_HUGEPAGE=1 and MC_STORE_HUGEPAGE_SIZE=2097152 so the embedded Mooncake store segment (190GB global segment, 4GB local buffer) is allocated from 2 MB hugepages; all other recipe settings match #3523."
+    - "新增 #3523 中 Kimi-K3 B300 Mooncake EFA AgentX 分离式 1P1D DCP8/DCP8 DSpark4 c48 配置的大页变体，镜像为 ghcr.io/semianalysisai/vllm-openai:efa_pr_58768（mooncake-transfer-engine-efa-cuda13 0.3.13.post1）。mooncake-master 服务以及 prefill 与 decode worker 均设置 MC_STORE_USE_HUGEPAGE=1 和 MC_STORE_HUGEPAGE_SIZE=2097152，使内嵌 Mooncake store 段（190GB 全局段、4GB 本地缓冲）使用 2 MB 大页分配；其余配方设置与 #3523 相同。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3557
