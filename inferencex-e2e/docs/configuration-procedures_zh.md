@@ -45,12 +45,13 @@ frontend、一个聚合 worker，并设置 `enable_multiple_frontends: false`。
 ### DCGM counters
 
 NVIDIA 集群配置通过 `default_gpu_exporter`，让 Tachometer 默认启动的 DCGM exporter
-使用共享的 `/configs/dcgm-counters-noprof-3.3.9.csv`。功耗配方通过
-`telemetry.dcgm_exporter.command` 为 exporter 4.6.0 选择 `dcgm-counters-noprof.csv`；
-两份 CSV 分别保留对应版本剩余字段的类型。当功耗采集已启动 exporter 时，
-Tachometer 复用该实例。保留功耗、能耗和 GPU 利用率，省略 profiling 与 vGPU license
-counters。这不会开启配方已关闭的采集，也不代表 Tachometer 指标已通过 PowerX 严格校验。
-exporter 镜像及现有的 Tachometer 1000 ms / 功耗 exporter 100 ms 采集间隔保持不变。
+使用与功耗路径相同的 `dcgm-exporter:4.6.0-4.8.3-distroless` 镜像和
+`/configs/dcgm-counters-noprof.csv`。功耗配方通过 `telemetry.dcgm_exporter.command`
+选择同一份 CSV，因此两条路径共用同一 exporter 版本和同一 counters 文件。当功耗采集
+已启动 exporter 时，Tachometer 复用该实例。保留功耗、能耗和 GPU 利用率，省略 profiling
+与 vGPU license counters。这不会开启配方已关闭的采集，也不代表 Tachometer 指标已通过
+PowerX 严格校验。现有的 Tachometer 1000 ms / 功耗 exporter 100 ms 采集间隔及 9401 端口
+保持不变。
 
 ## 规程索引
 

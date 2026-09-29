@@ -1,8 +1,8 @@
 cluster: gb300-nv
 default_gpu_exporter:
-  container_image: nvcr.io#nvidia/k8s/dcgm-exporter:3.3.9-3.6.1-ubuntu22.04
+  container_image: nvcr.io#nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless
   port: 9401
-  command: "dcgm-exporter --collect-interval=1000 --address :{port} -f /configs/dcgm-counters-noprof-3.3.9.csv"
+  command: "dcgm-exporter --collect-interval=1000 --address :{port} -f /configs/dcgm-counters-noprof.csv"
 default_account: ${SLURM_ACCOUNT}
 default_partition: ${SLURM_PARTITION}
 default_time_limit: ${SRT_DEFAULT_TIME_LIMIT}
