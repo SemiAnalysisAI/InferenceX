@@ -32,7 +32,7 @@ NGINX_IMAGE = "nginx:1.27.4"
 DCGM_EXPORTER_IMAGE = "nvcr.io/nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless"
 # The exporter image's provenance, which power lanes stage with their logs for the audit.
 EXPORTER_PROVENANCE = "exporter-image.sha256"
-# What multi-node recipes without a health check get; recipe.py raises lower budgets.
+# What recipes without a health check get (2 h of polls); recipe.py raises lower budgets.
 HEALTH_CHECK = {"max_attempts": HEALTH_ATTEMPTS, "interval_seconds": 10}
 
 
@@ -48,9 +48,8 @@ class SrtJob:
     nginx: str | None = None  # what pyxis receives for the cluster's nginx aliases
     containers: Mapping[str, str] = field(default_factory=dict)  # more recipe containers
     model_paths: Mapping[str, str] = field(default_factory=dict)
-    health_check: Mapping[str, int] | None = None
     mounts: Sequence[tuple[str, str]] = ()  # (host, container) added to the cluster's mounts
-    single_node: bool = False  # one exclusive node; no segment directive
+    single_node: bool = False  # one node, so no segment directive
 
 
 def pyxis_spelling(image: str) -> str:
@@ -111,8 +110,7 @@ def render(cluster: Cluster, job: SrtJob) -> dict[str, Any]:
         config["output_dir"] = str(srt.outputs)
     if job.model_paths:
         config["model_paths"] = dict(job.model_paths)
-    if job.health_check is not None:
-        config["default_health_check"] = dict(job.health_check)
+    config["default_health_check"] = dict(HEALTH_CHECK)
     containers = dict.fromkeys(srt.container_aliases, job.container)
     containers[job.image] = job.container
     containers[pyxis_spelling(job.image)] = job.container
@@ -239,7 +237,6 @@ def write_lane_config(
         nginx=nginx,
         containers=containers,
         model_paths=model_paths,
-        health_check=HEALTH_CHECK,
         mounts=lane_mounts(run, lane),
     )
     config_yaml = checkout / "srtslurm.yaml"

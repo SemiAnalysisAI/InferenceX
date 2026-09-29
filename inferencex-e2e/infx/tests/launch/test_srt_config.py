@@ -61,7 +61,8 @@ def test_the_profile_renders_its_facts_and_mounts_a_volume_at_a_second_target():
     }
     assert config["output_dir"] == "/share/outputs"
     assert config["default_sbatch_directives"] == {"cpus-per-task": "128"}
-    assert "model_paths" not in config and "default_health_check" not in config
+    assert "model_paths" not in config
+    assert config["default_health_check"] == {"max_attempts": 720, "interval_seconds": 10}
     assert (config["visible_devices_env"], config["default_gpu_exporter"]) == ("ROCR_VISIBLE_DEVICES", None)
     assert (config["network_interface"], config["use_exclusive_sbatch_directive"]) == ("eno0", True)
     assert "default_account" not in config
