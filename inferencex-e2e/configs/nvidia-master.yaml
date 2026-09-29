@@ -4111,7 +4111,7 @@ dsv4-fp4-gb200-llmd-vllm-agentx:
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: mooncake }
-        conc-list: [256, 384]
+        conc-list: [256, 384, 576]
         prefill:
           num-worker: 2
           tp: 8

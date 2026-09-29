@@ -9109,3 +9109,30 @@
     - "Enable DSpark adaptive verification on aggregated DEP8 recipes (with and without Mooncake); disagg DEP8 already had it enabled."
     - "在聚合 DEP8 配方（含 Mooncake 与无 Mooncake）上启用 DSpark 自适应验证；分离式 DEP8 此前已启用。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2719
+
+- config-keys:
+    - dsv4-fp4-gb200-llmd-vllm-agentx-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Lower aggregated DEP8 Mooncake gpu-memory-utilization from 0.88 to 0.87 after c52/c72 warmup runs hit CUDA allocator OOM and vLLM worker death under adaptive verification + MultiConnector (Nixl + SimpleCPUOffload + Mooncake)."
+    - "在 c52/c72 预热阶段出现 CUDA 分配器 OOM 及 vLLM worker 异常退出后，将聚合 DEP8 Mooncake 配方的 gpu-memory-utilization 从 0.88 降至 0.87（自适应验证 + MultiConnector：Nixl + SimpleCPUOffload + Mooncake）。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2719
+
+- config-keys:
+    - dsv4-fp4-gb200-llmd-vllm-agentx
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add 2P DEP8 x 1D DEP16 Mooncake concurrency 576 to the llm-d disagg search space (256/384/576)."
+    - "在 llm-d 分离式搜索空间中为 2P DEP8 x 1D DEP16 Mooncake 新增并发 576（256/384/576）。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2719
+
+- config-keys:
+    - dsv4-fp4-gb200-llmd-vllm-agentx-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Align aggregated DEP8 DSpark with disagg decode: num_speculative_tokens 5 -> 3 with enable_adaptive_verification true (both Mooncake and non-Mooncake recipes)."
+    - "将聚合 DEP8 DSpark 与分离式 decode 对齐：num_speculative_tokens 从 5 改为 3，并保持 enable_adaptive_verification 为 true（Mooncake 与非 Mooncake 配方）。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2719
