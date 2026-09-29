@@ -19,6 +19,13 @@ check_env_vars() {
     fi
 }
 
+validate_agentic_concurrency() {
+    if [[ $# -ne 1 || ! "$1" =~ ^[1-9][0-9]*$ ]]; then
+        echo "ERROR: AgentX requires exactly one positive concurrency per server deployment; launch a fresh server for each concurrency." >&2
+        return 1
+    fi
+}
+
 # Report live members of explicitly owned process groups. Zombies cannot hold
 # output pipes open. Do not use leader liveness: a router can orphan its workers.
 _background_process_groups_alive() {
@@ -3242,6 +3249,7 @@ resolve_trace_source() {
 
 build_replay_cmd() {
     check_env_vars INFMAX_CONTAINER_WORKSPACE MODEL PORT CONC DURATION
+    validate_agentic_concurrency "$CONC" || return 1
     check_env_vars \
         AIPERF_FAILED_REQUEST_THRESHOLD AIPERF_LIVE_FAILED_REQUEST_THRESHOLD \
         AIPERF_TRACE_IDLE_GAP_CAP_SECONDS

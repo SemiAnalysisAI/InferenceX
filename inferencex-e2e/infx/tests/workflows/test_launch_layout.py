@@ -93,6 +93,7 @@ PY
             "CONC_LIST": "1",
             "EVAL_CONC": "1",
             "EVAL_ONLY": "false",
+            "IS_AGENTIC": "0",
             "SCENARIO_TYPE": "fixed-sequence",
             "PREFILL_ADDITIONAL_SETTINGS": "[]",
             "DECODE_ADDITIONAL_SETTINGS": "[]",
@@ -116,3 +117,58 @@ PY
     if workflow == "profile.yml":
         output = dict(line.split("=", 1) for line in github_output.read_text().splitlines())
         assert Path(output["trace"]).read_bytes() == b"fixture trace"
+
+
+@pytest.mark.parametrize(
+    "agentic,eval_only,conc,conc_list,launches",
+    [
+        (True, False, "4", "4", True),
+        (True, False, "4", "4 8", False),
+        (True, False, "4", "8", False),
+        (True, True, "4", "4 8", True),
+        (False, False, "", "4 8", True),
+    ],
+)
+def test_multinode_launch_isolates_agentx_throughput(
+    tmp_path, agentic, eval_only, conc, conc_list, launches
+):
+    """Reject invalid throughput jobs before launching, without changing eval batching."""
+    runners = tmp_path / "runners"
+    runners.mkdir()
+    marker = tmp_path / "launched"
+    (runners / "launch_fixture.sh").write_text("touch launched\nexit 77\n")
+    workflow = yaml.safe_load(
+        (ROOT / ".github/workflows/benchmark-multinode-tmpl.yml").read_text()
+    )
+    step = next(
+        step for step in workflow["jobs"]["benchmark"]["steps"]
+        if step.get("name") == "Launch multi-node job script"
+    )
+    result = subprocess.run(
+        ["bash", "--noprofile", "--norc", "-e", "-o", "pipefail", "-c", step["run"]],
+        cwd=tmp_path,
+        env={
+            **os.environ,
+            "GITHUB_WORKSPACE": str(tmp_path),
+            "GITHUB_ENV": str(tmp_path / "github-env"),
+            "RESULT_FILENAME_BASE": "agentx-isolation",
+            "RECIPE_FINGERPRINT": "",
+            "PREFILL_ADDITIONAL_SETTINGS": "[]",
+            "DECODE_ADDITIONAL_SETTINGS": "[]",
+            "IS_AGENTIC": "1" if agentic else "0",
+            "SCENARIO_TYPE": "agentic-coding" if agentic else "fixed-seq-len",
+            "EVAL_ONLY": "true" if eval_only else "false",
+            "CONC": conc,
+            "CONC_LIST": conc_list,
+            "EVAL_CONC": "4",
+            "RUNNER_NAME": "fixture_01",
+            "VALIDATION_BENCHMARK_LIB": str(ROOT / "inferencex-e2e/benchmarks/benchmark_lib.sh"),
+        },
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == (77 if launches else 1), result.stdout + result.stderr
+    assert marker.exists() is launches
+    if not launches:
+        assert "AgentX" in result.stderr

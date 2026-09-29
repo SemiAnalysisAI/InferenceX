@@ -2431,6 +2431,7 @@ def test_multinode_agentic_waits_only_for_eval_openai_endpoint(
     (workspace / "benchmarks").mkdir(parents=True)
     (workspace / "benchmarks/benchmark_lib.sh").write_text(
         """
+source "$BENCHMARK_LIB" --validation-only
 PORT=8765
 check_env_vars() { :; }
 resolve_trace_source() { echo resolve >> "$EVENTS"; }
@@ -2445,6 +2446,7 @@ run_agentic_replay_and_write_outputs() { echo replay >> "$EVENTS"; }
 
     base_env = {
         **os.environ,
+        "BENCHMARK_LIB": str(BENCHMARK_LIB),
         "INFMAX_CONTAINER_WORKSPACE": str(workspace),
         "EVENTS": str(events_path),
         "MODEL": "test-model",

@@ -9064,6 +9064,25 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3545
 
 - config-keys:
+    - qwen3.5-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump the SGLang ROCm image from lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260915 to lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260927 (Docker Hub digest sha256:a2b277dff0be18113d4eb013b607aa281b6020c3fe3e240770eebe9935b2015f) in configs/amd-master.yaml and the srt-slurm AgentX recipe."
+    - "Move TP2 concurrency 16 from GPU-resident KV to HiCache and remove the TP2 GPU-resident concurrency-20 point. Keep TP4 GPU-resident [1, 4, 8, 12, 16]. The resulting TP2 grids are resident [1, 4, 8, 12] and HiCache [16, 20, 24, 28, 32, 36, 40]."
+    - "Pin the HiCache host pool with hicache-size 253 (overrides hicache-ratio) on every TP2 HiCache point."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3558
+
+- config-keys:
+    - qwen3.5-fp4-mi355x-sglang
+    - qwen3.5-fp4-mi355x-sglang-mtp
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Update the SGLang ROCm image from lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260913 to lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260927 (Docker Hub digest sha256:a2b277dff0be18113d4eb013b607aa281b6020c3fe3e240770eebe9935b2015f) for the fixed 8k1k arms. Serving flags and sweep points are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3559
+
+- config-keys:
     - kimik3-fp4-mi355x-vllm-agentic-mtp
     - minimaxm3-fp4-b200-vllm-agentic-mtp
     - minimaxm3-fp4-b300-vllm-agentic-mtp
