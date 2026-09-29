@@ -9020,6 +9020,12 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3458
 
 - config-keys:
+    - dsv41flash-fp4-b200-vllm-agentic-dspark
+  description:
+    - "Pin B200 DeepSeek-V4.1-Flash vLLM to nightly ddd6fbca with FlashInfer sparse attention, MXFP4 indexer KV, sparse logits, fp8 KV cache, and a 7200 s readiness timeout."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3459
+
+- config-keys:
     - dsv4-fp4-mi355x-sglang-agentic-mtp
   scenario-type:
     - agentic-coding
