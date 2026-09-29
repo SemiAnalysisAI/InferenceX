@@ -184,8 +184,8 @@ the registry's `kv_backends` map enables them. No entry, no legs, mirroring `ll_
 may restrict ops, pin an image, set a NIC filter, or lower the pool budget. Fabrics are `rdma`
 (torch pools) and, on GB racks, `nixl` also runs `mnnvl` (cuMem FABRIC pools; see the methodology
 for the bulk-vs-paged lane inversion that row exists to publish). On b300's AWS EFA pool `nixl`
-rides its LIBFABRIC plugin instead of UCX, and there is no `mooncake` leg (its wheel's transport is
-verbs RC, which EFA does not provide). The grid and per-pool scheduling
+rides its LIBFABRIC plugin instead of UCX, and `mooncake` runs the upstream EFA build
+(`mooncake-transfer-engine-efa-cuda13`, protocol `efa`) in place of the image's verbs-only one. The grid and per-pool scheduling
 live in `configs/kv_sweep.json`; dispatch with `suites: kv-transfer`.
 
 ## Workflow And Artifacts

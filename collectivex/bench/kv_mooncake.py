@@ -77,7 +77,11 @@ class MooncakeBackend(KVBackend):
         # atom-dev tree) register under varying dist names or none at all, and
         # a null here is what let an image wheel masquerade as the pinned one.
         self.library_version = library_version(
-            ("mooncake-transfer-engine", "mooncake"), mooncake)
+            ("mooncake-transfer-engine-efa-cuda13", "mooncake-transfer-engine",
+             "mooncake-transfer-engine-cuda13", "mooncake"), mooncake)
+        # EFA is not a verbs HCA: the EFA build's libfabric transport carries it
+        # (prepare_backend installs that build on pools the profile marks efa).
+        self.transport = "efa" if os.environ.get("COLLX_RDMA_FABRIC") == "efa" else "rdma"
         # Same-fabric GB pairs: the NVLink-IPC transport claims cross-node
         # segments inside one NVLink domain and then fails the address import
         # (nvlink_transport "Requested address not found", first kv CI run on
@@ -97,7 +101,7 @@ class MooncakeBackend(KVBackend):
         local = f"{self._ip}:{args.kv_mc_port + (0 if role == 'target' else 1)}"
         nic_filter = args.kv_device.replace("{gpu}", str(_physical_gpu_index()))
         self.nic_filter = nic_filter or None
-        rc = self._engine.initialize(local, "P2PHANDSHAKE", "rdma", nic_filter)
+        rc = self._engine.initialize(local, "P2PHANDSHAKE", self.transport, nic_filter)
         if rc != 0:
             raise RuntimeError(f"mooncake initialize failed rc={rc} "
                                f"nic_filter={nic_filter!r}")

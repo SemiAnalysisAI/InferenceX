@@ -560,6 +560,9 @@ FICHECK
   [ "$rc" -eq 0 ] || { collx_log "ERROR: FlashInfer EP one-sided A2A unavailable in this image"; return 1; }
 }
 
+MOONCAKE_EFA_DIST=mooncake-transfer-engine-efa-cuda13
+MOONCAKE_VERBS_DISTS="mooncake-transfer-engine mooncake-transfer-engine-cuda13"
+
 # The kv-transfer wheels install into the named container, which persists for the job, so one
 # install here serves every case srun. nixl-cuXX directly: the `nixl` meta package depends on
 # BOTH cu12 and cu13 variants, and an unpinned install under the image's stale pip resolved 1.0.1.
@@ -574,8 +577,21 @@ nixl_prepare() {
 # ROCm builds ship inside the image (upstream wheels link libcuda.so.1; AMD's atom-dev image
 # carries a working build), so an importable mooncake.engine wins. Otherwise install the pinned
 # CUDA wheel; it links libcudart.so.12, which the adapter dlopens from the runtime package at
-# import, so no LD_LIBRARY_PATH seam is needed.
+# import, so no LD_LIBRARY_PATH seam is needed. EFA pools are the exception: every other build
+# is verbs-RC only, so the EFA wheel (which links the host libfabric) replaces whatever the image
+# ships; both install the same `mooncake` package, so the image's copy is removed first.
 mooncake_prepare() {
+  if [ "${COLLX_RDMA_FABRIC:-}" = efa ]; then
+    python3 -c "import importlib.metadata as m; m.version('$MOONCAKE_EFA_DIST')" 2>/dev/null \
+      && python3 -c "import mooncake.engine" 2>/dev/null && return 0
+    python3 -m pip uninstall -y -q $MOONCAKE_VERBS_DISTS 2>/dev/null \
+      || python3 -m pip uninstall -y -q --break-system-packages $MOONCAKE_VERBS_DISTS 2>/dev/null
+    pip_install "$MOONCAKE_EFA_DIST==0.3.13.post1" \
+      || { collx_log "ERROR: mooncake EFA wheel install failed"; return 1; }
+    python3 -c "import mooncake.engine" \
+      || { collx_log "ERROR: mooncake EFA import failed after install"; return 1; }
+    return 0
+  fi
   if python3 -c "import mooncake.engine" 2>/dev/null; then
     collx_log "mooncake provided by the image"
     return 0
