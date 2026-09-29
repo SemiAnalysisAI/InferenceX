@@ -15,6 +15,9 @@ script's start. Each window POSTs /start_profile to every server; vLLM stops on
 its own after its configured max_iterations, and a /stop_profile after a grace
 period closes a window that did not fill.
 
+Each window's GPU clocks are sampled through NVML (clock_sampler.py) from
+just before it opens until every active engine has logged its iterations.
+
 The measured phase is capped at INFX_PROFILE_DURATION seconds, long enough for
 steady decode at any concurrency. Once the last window has closed and the
 measured phase has results to export, this script ends the replay early with
@@ -31,6 +34,8 @@ import sys
 import time
 import urllib.request
 
+from clock_sampler import ClockSampler
+
 PHASE_START = re.compile(r"Phase (\S+) \((\S+)\) started")
 POLL_S = 5.0
 NO_LOG_FALLBACK_S = 900.0  # aiperf logs its first phase within minutes of starting
@@ -43,6 +48,8 @@ MEASURED_S = float(os.environ.get("INFX_PROFILE_DURATION") or 600)
 DECODE_DEADLINE_S = max(0.0, MEASURED_S - 150.0)
 # Measured replay before an early stop: aiperf fails a run with no results.
 MIN_MEASURED_S = 60.0
+CLOCK_WINDOW_MAX_S = 120.0  # a window's steps take seconds; stop sampling regardless
+CLOCK_TAIL_S = 0.5
 
 
 def post(url: str) -> str:
@@ -128,6 +135,41 @@ def wait_for_decode(aiperf_log: str, steps_dir: str, started: float) -> tuple[fl
         time.sleep(POLL_S)
 
 
+class StepCounter:
+    """Engine steps (scheduled or dummy) each rank's step log records after a time."""
+
+    def __init__(self, steps_dir: str):
+        self.steps_dir = steps_dir
+        self.offsets: dict[str, int] = {}
+        self.times: dict[str, list[int]] = {}
+
+    def counts_since(self, t_ns: int) -> dict[str, int]:
+        for path in glob.glob(os.path.join(self.steps_dir, "*.jsonl")):
+            try:
+                with open(path) as f:
+                    f.seek(self.offsets.get(path, 0))
+                    while line := f.readline():
+                        if not line.endswith("\n"):
+                            break
+                        self.offsets[path] = f.tell()
+                        record = json.loads(line)
+                        if "t0_ns" in record:
+                            self.times.setdefault(path, []).append(record["t0_ns"])
+            except (OSError, ValueError):
+                continue
+        return {path: sum(t >= t_ns for t in times) for path, times in self.times.items()}
+
+
+def wait_for_window_steps(counter: StepCounter, t_ns: int, iterations: int) -> None:
+    """Until every rank that stepped since t_ns has stepped `iterations` times."""
+    deadline = time.time() + CLOCK_WINDOW_MAX_S
+    while time.time() < deadline:
+        active = [n for n in counter.counts_since(t_ns).values() if n]
+        if active and min(active) >= iterations:
+            return
+        time.sleep(0.2)
+
+
 def aiperf_pids() -> list[int]:
     """The aiperf SystemController, which titles itself "aiperf system_controller"."""
     pids = []
@@ -165,12 +207,15 @@ def main() -> None:
     log_path, aiperf_log, steps_dir = sys.argv[2], sys.argv[3], sys.argv[4]
     servers = [url.rstrip("/") for url in sys.argv[5:]]
     started = time.time()
+    clocks = ClockSampler(os.path.join(os.path.dirname(steps_dir), "clocks"))
+    counter = StepCounter(steps_dir)
     with open(log_path, "a", buffering=1) as log:
         def note(**record):
             record["t_unix"] = time.time()
             log.write(json.dumps(record) + "\n")
 
-        note(event="servers", servers=servers, windows=windows, aiperf_log=aiperf_log)
+        note(event="servers", servers=servers, windows=windows, aiperf_log=aiperf_log,
+             clocks_error=clocks.error)
         for index, (anchor, delay, iterations) in enumerate(windows):
             if anchor == "decode":
                 anchor_t, basis = wait_for_decode(aiperf_log, steps_dir, started)
@@ -178,11 +223,18 @@ def main() -> None:
                 anchor_t, basis = wait_for_phase(aiperf_log, anchor, started)
             note(event="anchor", window=index, anchor=anchor, basis=basis, anchor_unix=anchor_t)
             time.sleep(max(0.0, anchor_t + float(delay) - time.time()))
+            window_t0 = time.time()
+            clocks.start(index)
             for server in servers:
                 note(event="start", window=index, server=server, iterations=iterations,
                      status=post(f"{server}/start_profile"))
+            wait_for_window_steps(counter, int(window_t0 * 1e9), int(iterations))
+            time.sleep(CLOCK_TAIL_S)
+            clocks.stop()
+            note(event="clocks", window=index, polls=clocks.polls,
+                 seconds=round(time.time() - window_t0, 3))
             # Generous grace: a step is well under a second at every agentic point.
-            time.sleep(max(120.0, 4.0 * float(iterations)))
+            time.sleep(max(0.0, window_t0 + max(120.0, 4.0 * float(iterations)) - time.time()))
             for server in servers:
                 note(event="stop", window=index, server=server,
                      status=post(f"{server}/stop_profile"))

@@ -58,6 +58,9 @@ CPU-offload recipes an offload pool smaller by `host_headroom_gib`.
   - `steps/<rank>.jsonl`: every step's batch composition on that rank.
   - `copies/<rank>.jsonl`: every CPU KV-offload block copy the rank queued
     (direction, blocks, bytes, step, vLLM callers).
+  - `clocks/window<w>.csv`, `clocks/gpus.json`: every GPU's graphics, SM,
+    memory and video clocks and clock event reasons, polled through NVML as
+    fast as it answers for the length of each window (`clock_sampler.py`).
   - `graphs/`, `env/`, `windows_conc<c>.jsonl`: graph ordinals, versions and
     config per rank, and the window log.
 - `profile_steps_<result>`: the same profile broken down by step
@@ -80,7 +83,10 @@ CPU-offload recipes an offload pool smaller by `host_headroom_gib`.
                   "op", "op_chain", "input_dims", "input_types", "concrete_inputs",
                   "launcher", "launcher_callers", "annotations",
                   "graph", "node_pos", "graph_node_id", "grid", "block",
-                  "copy": {"store", "blocks", "bytes", "issue_lag_us"}, ...}]}
+                  "copy": {"store", "blocks", "bytes", "issue_lag_us"},
+                  "clocks": {"graphics_mhz": [min, max], "sm_mhz": [min, max],
+                             "mem_mhz": [min, max], "video_mhz": [min, max],
+                             "event_reasons", "samples", "prior_us"}, ...}]}
     ```
 
 ## How attribution works
@@ -118,3 +124,11 @@ run in queue order, and `copies/` logs each one as it is queued. Per direction,
 the extractor pairs the memcpys in order with the logged copies issued before
 them (with equal bytes), taking the pairing with the least total issue lag.
 The step markers put the log's wall clock on the trace clock.
+
+A kernel's `clocks` are its GPU's samples over its lifetime: the last sample
+before it starts (`prior_us` earlier) and every sample while it runs
+(`samples`), as each clock's min and max and the OR of the event-reason
+bitmasks (NVML `nvmlClocksEventReason*`). The window client, not the engine,
+polls NVML, from just before each window opens until every engine has logged
+its iterations; the env record's GPU UUID ties a rank to its samples.
+`report.json` gives each trace's clock coverage and `prior_us` percentiles.

@@ -4,8 +4,8 @@ Usage: extract.py PROFILE_DIR OUT_DIR
 
 PROFILE_DIR is an unpacked profile artifact (infx_profile/): torch/ holds the
 engine's per-rank torch traces, capture/ the CUDA graph capture trace,
-steps/ the per-step batch log, copies/ the CPU KV-offload copy log and env/
-the per-rank environment.
+steps/ the per-step batch log, copies/ the CPU KV-offload copy log, clocks/
+the window client's NVML clock samples and env/ the per-rank environment.
 
 A kernel launched eagerly joins its CPU launch through the CUDA correlation
 id. A kernel replayed from CUDA graph n carries a ``graph node id``; ordered
@@ -15,6 +15,8 @@ capture. Capture ordinals follow capture order, which every rank shares.
 A CPU KV-offload memcpy has no CPU launch (a driver call Kineto does not
 record, from the connector's copy thread); per direction, the memcpys pair in
 order with the logged copies issued before them, least total issue lag first.
+Each kernel's clocks are the NVML samples of its rank's GPU over its lifetime,
+the state at its start being the last sample before it.
 
 Outputs, per replay trace: kernels.jsonl.gz (one row per device activity)
 and steps.jsonl (per step: batch composition and device time), plus
@@ -324,6 +326,71 @@ def unix_to_trace_us(trace, step_log):
     return deltas[len(deltas) // 2] if deltas else None
 
 
+CLOCK_NAMES = ("graphics_mhz", "sm_mhz", "mem_mhz", "video_mhz")
+
+
+def normalize_uuid(uuid):
+    text = str(uuid).lower()
+    for prefix in ("gpu-", "mig-"):
+        text = text.removeprefix(prefix)
+    return text
+
+
+def load_clocks(profile_dir):
+    """rank -> (sample unix ns, [(graphics, sm, mem, video MHz, event reasons)]), time-ordered."""
+    clock_dir = os.path.join(profile_dir, "clocks")
+    try:
+        with open(os.path.join(clock_dir, "gpus.json")) as f:
+            gpu_of_uuid = {normalize_uuid(u): int(i) for i, u in json.load(f).items()}
+    except (OSError, ValueError):
+        return {}
+    rank_of_gpu = {}
+    for path in glob.glob(os.path.join(profile_dir, "env", "*.json")):
+        with open(path) as f:
+            info = json.load(f)
+        gpu = gpu_of_uuid.get(normalize_uuid(info.get("device_uuid", "")))
+        if gpu is not None:
+            rank_of_gpu[gpu] = info["rank"]
+    samples = collections.defaultdict(list)
+    for path in glob.glob(os.path.join(clock_dir, "window*.csv")):
+        with open(path) as f:
+            next(f, None)
+            for line in f:
+                parts = line.rstrip("\n").split(",")
+                if len(parts) != 7:
+                    continue  # a row cut short when the client stopped
+                rank = rank_of_gpu.get(int(parts[1]))
+                if rank is not None:
+                    samples[rank].append((int(parts[0]), tuple(int(v) for v in parts[2:])))
+    tracks = {}
+    for rank, rows in samples.items():
+        rows.sort()
+        tracks[rank] = ([t for t, _ in rows], [v for _, v in rows])
+    return tracks
+
+
+def kernel_clocks(track, offset_us, ts_us, dur_us):
+    """Clock ranges over a kernel's lifetime from its GPU's sample track, or None."""
+    if track is None or offset_us is None:
+        return None
+    times, values = track
+    start = (ts_us - offset_us) * 1e3
+    first = bisect.bisect_right(times, start) - 1  # state in effect at the kernel's start
+    last = bisect.bisect_right(times, start + dur_us * 1e3)
+    if first < 0:
+        return None
+    span = values[first:last]
+    out = {name: [min(v[k] for v in span), max(v[k] for v in span)]
+           for k, name in enumerate(CLOCK_NAMES)}
+    reasons = 0
+    for v in span:
+        if v[4] >= 0:
+            reasons |= v[4]
+    out.update(event_reasons=reasons, samples=last - first - 1,
+               prior_us=round((start - times[first]) / 1e3, 1))
+    return out
+
+
 COPY_LAUNCHER = "vllm.v1.simple_kv_offload.copy_backend.DmaCopyBackend.launch_copy"
 COPY_MAX_LAG_US = 60e6
 
@@ -379,7 +446,7 @@ def match_copies(trace, orphans, copies, offset_us):
     return matched
 
 
-def extract_replay(trace, captured, rank, window, step_log, copies, out_dir, pairs):
+def extract_replay(trace, captured, rank, window, step_log, copies, clocks, out_dir, pairs):
     """Attribute every device activity of one replay trace; write one file per step.
 
     Returns the trace's report entry and its index entries. `pairs` accumulates
@@ -447,6 +514,7 @@ def extract_replay(trace, captured, rank, window, step_log, copies, out_dir, pai
             stream=args.get("stream", e.get("tid")), device=args.get("device", e.get("pid")),
             ts_us=e["ts"], dur_us=e.get("dur", 0), graph_node_id=args.get("graph node id"),
             grid=args.get("grid"), block=args.get("block"),
+            clocks=kernel_clocks(clocks, offset_us, e["ts"], e.get("dur", 0)),
         )
         key = step_key(row.get("marks") or {})
         row["step"] = list(key) if key else None
@@ -484,8 +552,19 @@ def extract_replay(trace, captured, rank, window, step_log, copies, out_dir, pai
         "graph_replays": dict(graph_checks),
         "sources": dict(collections.Counter(r["source"] for r in rows)),
         "steps": sum(1 for k in by_step if k is not None),
+        "clocks": clock_coverage(rows),
     }
     return entry, index
+
+
+def clock_coverage(rows):
+    """How many activities carry clocks, and how stale their start state is."""
+    ages = sorted(r["clocks"]["prior_us"] for r in rows if r.get("clocks"))
+    if not ages:
+        return {"activities_with_clocks": 0}
+    return {"activities_with_clocks": len(ages),
+            "prior_us_p50": ages[len(ages) // 2], "prior_us_p99": ages[int(len(ages) * 0.99)],
+            "prior_us_max": ages[-1]}
 
 
 def trace_time(path):
@@ -513,6 +592,7 @@ def main():
     ranks = rank_of_pid(profile_dir)
     steps = load_steps(profile_dir)
     copies = load_copies(profile_dir, ranks)
+    clocks = load_clocks(profile_dir)
     traces = sorted(glob.glob(os.path.join(profile_dir, "torch", "**", "*.pt.trace.json*"),
                               recursive=True), key=trace_time)
     windows_seen = collections.Counter()
@@ -523,7 +603,8 @@ def main():
         window = windows_seen[rank]
         windows_seen[rank] += 1
         entry, entries = extract_replay(trace, captured, rank, window, steps.get(rank, {}),
-                                        copies.get(rank, []), out_dir, pairs)
+                                        copies.get(rank, []), clocks.get(rank), out_dir,
+                                        pairs)
         report["traces"].append(entry)
         index += entries
         del trace
