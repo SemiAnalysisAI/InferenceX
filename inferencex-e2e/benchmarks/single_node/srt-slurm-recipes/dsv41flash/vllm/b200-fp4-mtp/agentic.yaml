@@ -62,6 +62,8 @@ base:
 # rank, so it caps batched tokens at 4096 (the indexer's 1M-wide logits buffer),
 # bounds the scheduler at 2x CONC within [16, 256] (FlashInfer autotune fails
 # below 16) and stops capturing above 512 tokens.
+# TP4 enables the fused all-reduce + mHC MoE finalize, whose 16-token autotune
+# pass selects an invalid MXFP8 split-K tactic, so TP4 leaves mxfp8_gemm untuned.
 override_tp4_c1:
   roles:
     agg:
@@ -69,6 +71,8 @@ override_tp4_c1:
       args:
         tensor-parallel-size: 4
         max-cudagraph-capture-size: 64
+      env:
+        VLLM_FLASHINFER_AUTOTUNE_SKIP_OPS: mxfp8_gemm
   benchmark:
     env:
       CONC: '1'
@@ -80,6 +84,8 @@ override_tp4_c2:
       args:
         tensor-parallel-size: 4
         max-cudagraph-capture-size: 64
+      env:
+        VLLM_FLASHINFER_AUTOTUNE_SKIP_OPS: mxfp8_gemm
   benchmark:
     env:
       CONC: '2'
@@ -91,6 +97,8 @@ override_tp4_c4:
       args:
         tensor-parallel-size: 4
         max-cudagraph-capture-size: 64
+      env:
+        VLLM_FLASHINFER_AUTOTUNE_SKIP_OPS: mxfp8_gemm
   benchmark:
     env:
       CONC: '4'
@@ -102,6 +110,8 @@ override_tp4_c8:
       args:
         tensor-parallel-size: 4
         max-cudagraph-capture-size: 64
+      env:
+        VLLM_FLASHINFER_AUTOTUNE_SKIP_OPS: mxfp8_gemm
   benchmark:
     env:
       CONC: '8'
@@ -113,6 +123,8 @@ override_tp4_c16:
       args:
         tensor-parallel-size: 4
         max-cudagraph-capture-size: 128
+      env:
+        VLLM_FLASHINFER_AUTOTUNE_SKIP_OPS: mxfp8_gemm
   benchmark:
     env:
       CONC: '16'
@@ -124,6 +136,8 @@ override_tp4_c32:
       args:
         tensor-parallel-size: 4
         max-cudagraph-capture-size: 256
+      env:
+        VLLM_FLASHINFER_AUTOTUNE_SKIP_OPS: mxfp8_gemm
   benchmark:
     env:
       CONC: '32'
@@ -135,6 +149,8 @@ override_tp4_c64:
       args:
         tensor-parallel-size: 4
         max-cudagraph-capture-size: 512
+      env:
+        VLLM_FLASHINFER_AUTOTUNE_SKIP_OPS: mxfp8_gemm
   benchmark:
     env:
       CONC: '64'
@@ -146,6 +162,8 @@ override_tp4_c128:
       args:
         tensor-parallel-size: 4
         max-cudagraph-capture-size: 1024
+      env:
+        VLLM_FLASHINFER_AUTOTUNE_SKIP_OPS: mxfp8_gemm
   benchmark:
     env:
       CONC: '128'
