@@ -9124,8 +9124,8 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Hardcode the profiling-free DCGM counter file in every srt-slurm recipe with a DCGM power exporter, matching the H200 Kimi-K3 change. Power, energy and GPU utilization remain; DCGM_FI_PROF_* metrics are omitted. Exporter image, 100 ms sampling and strict power validation are unchanged."
-    - "所有带 DCGM 功耗 exporter 的 srt-slurm recipe 直接写死无 profiling 的 DCGM counters 文件，与 H200 Kimi-K3 的改动一致。保留功耗、能耗和 GPU 利用率，省略 DCGM_FI_PROF_* 指标；exporter 镜像、100 ms 采样和严格功耗校验不变。"
+    - "Disable profiling and vGPU license counters in DCGM power exporters."
+    - "关闭 DCGM 功耗 exporter 的 profiling 和 vGPU license counters。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3590
 
 - config-keys:
@@ -9137,8 +9137,8 @@
   scenario-type:
     - fixed-seq-len
   description:
-    - "Hardcode the profiling-free DCGM counter file in every srt-slurm recipe with a DCGM power exporter, matching the H200 Kimi-K3 change. Power, energy and GPU utilization remain; DCGM_FI_PROF_* metrics are omitted. Exporter image, 100 ms sampling and strict power validation are unchanged."
-    - "所有带 DCGM 功耗 exporter 的 srt-slurm recipe 直接写死无 profiling 的 DCGM counters 文件，与 H200 Kimi-K3 的改动一致。保留功耗、能耗和 GPU 利用率，省略 DCGM_FI_PROF_* 指标；exporter 镜像、100 ms 采样和严格功耗校验不变。"
+    - "Disable profiling and vGPU license counters in DCGM power exporters."
+    - "关闭 DCGM 功耗 exporter 的 profiling 和 vGPU license counters。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3590
 
 - config-keys:
@@ -9177,8 +9177,8 @@
   scenario-type:
   - agentic-coding
   description:
-  - Use the shared profiling-free counters for implicit Tachometer DCGM exporters through NVIDIA cluster defaults; omit the vGPU license counter from the shared CSV. Preserve existing exporter images, ports and collection intervals.
-  - 通过 NVIDIA 集群默认配置，让 Tachometer 自动启动的 DCGM exporter 使用共享的无 profiling counters；共享 CSV 同时省略 vGPU license counter。保留原有 exporter 镜像、端口和采集间隔。
+  - Disable profiling and vGPU license counters in Tachometer DCGM exporters.
+  - 关闭 Tachometer DCGM exporter 的 profiling 和 vGPU license counters。
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3590
 - config-keys:
   - dsr1-fp4-b200-dynamo-sglang
@@ -9208,6 +9208,6 @@
   scenario-type:
   - fixed-seq-len
   description:
-  - Use the shared profiling-free counters for implicit Tachometer DCGM exporters through NVIDIA cluster defaults; omit the vGPU license counter from the shared CSV. Preserve existing exporter images, ports and collection intervals.
-  - 通过 NVIDIA 集群默认配置，让 Tachometer 自动启动的 DCGM exporter 使用共享的无 profiling counters；共享 CSV 同时省略 vGPU license counter。保留原有 exporter 镜像、端口和采集间隔。
+  - Disable profiling and vGPU license counters in Tachometer DCGM exporters.
+  - 关闭 Tachometer DCGM exporter 的 profiling 和 vGPU license counters。
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3590
