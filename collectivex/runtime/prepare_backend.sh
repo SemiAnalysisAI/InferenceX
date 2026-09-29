@@ -410,80 +410,178 @@ uccl_prepare() {
 # NCCL EP lifecycle
 
 nccl_ep_spec_slug() {
-  printf '%s' "$COLLX_NCCL_EP_SPEC" | tr -cs 'A-Za-z0-9_.-' '-'
+  local checksum
+  checksum="$(printf '%s\0' \
+      "$COLLX_NCCL4PY_SPEC" "$COLLX_NCCL_SPEC" \
+      "$COLLX_NCCL_EP_SETUPTOOLS_SPEC" "$COLLX_NCCL_EP_CYTHON_SPEC" \
+      "$COLLX_NCCL_EP_WHEEL_SPEC" "$COLLX_NCCL_EP_CUDA_CORE_SPEC" \
+      "$COLLX_NCCL_EP_CUDA_PATHFINDER_SPEC" "$COLLX_NCCL_EP_CUDA_BINDINGS_SPEC" \
+      "$COLLX_NCCL_EP_CUTLASS_SPEC" | sha256sum)" || return 1
+  checksum="${checksum%% *}"
+  [[ "$checksum" =~ ^[0-9a-f]{64}$ ]] || return 1
+  printf '%s-deps-%.24s-%s' "$COLLX_NCCL_EXTENSIONS_COMMIT" "$checksum" \
+    "$COLLX_NCCL_EP_BUILD_RECIPE"
 }
 
 nccl_ep_cache_root() {
-  local arch slug
+  local arch slug image_digest="${COLLX_IMAGE_DIGEST:-}"
+  [[ "$image_digest" =~ ^sha256:[0-9a-f]{64}$ ]] || return 1
   arch="$(printf '%s' "$1" | tr -cs 'A-Za-z0-9_.-' '-')"
-  slug="$(nccl_ep_spec_slug)"
-  backend_cache_root nccl-ep "${arch#-}" "${slug#-}"
+  slug="$(nccl_ep_spec_slug)" || return 1
+  image_digest="${image_digest#sha256:}"
+  backend_cache_root nccl-ep "${arch#-}" "${slug#-}" "image-${image_digest:0:24}"
 }
 
-# The wheel-bundled NCCL goes ahead of the image torch's older NCCL on the loader path: nccl.ep
-# needs NCCL >= 2.29.3 (Device API + GIN).
+nccl_ep_ready() {
+  [ -f "$1/.ready" ] && [ -x "$1/venv/bin/python" ] && [ -d "$1/source" ]
+}
+
+# The venv's NCCL goes ahead of the image torch's older NCCL on the loader path: source-built
+# nccl.ep needs the same Device API + GIN-capable runtime it linked against.
 nccl_ep_activate() {
-  local root="$1" site="$1/site" nccl_lib
-  [ -d "$site" ] || { collx_log "ERROR: NCCL EP cache site is unavailable"; return 1; }
-  export PYTHONPATH="$site${PYTHONPATH:+:$PYTHONPATH}"
-  for nccl_lib in "$site"/nvidia/nccl*/lib; do
-    if [ -d "$nccl_lib" ]; then
-      export LD_LIBRARY_PATH="$nccl_lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-      break
-    fi
-  done
+  local root="$1" venv="$1/venv" site nccl_root toolchain cuda_home cccl
+  [ -x "$venv/bin/python" ] \
+    || { collx_log "ERROR: NCCL EP venv interpreter is unavailable"; return 1; }
+  for site in "$venv"/lib/python*/site-packages; do break; done
+  [ -d "$site" ] || { collx_log "ERROR: NCCL EP venv site-packages is unavailable"; return 1; }
+  nccl_root="$(nvidia_package_root "$venv/bin/python" nvidia-nccl-cu13 nccl)" \
+    || { collx_log "ERROR: NCCL EP NCCL package root is unavailable"; return 1; }
+  toolchain="$(cuda_toolchain_paths)" || return 1
+  IFS=$'\t' read -r cuda_home cccl <<< "$toolchain"
+  [ -n "$cuda_home" ] && [ -n "$cccl" ] || return 1
+  export \
+    VIRTUAL_ENV="$venv" \
+    PATH="$venv/bin:${PATH#"$venv/bin:"}" \
+    PYTHONPATH="$site${PYTHONPATH:+:$PYTHONPATH}" \
+    CUDA_HOME="$cuda_home" \
+    CPATH="$cccl${CPATH:+:$CPATH}" \
+    LD_LIBRARY_PATH="$nccl_root/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
   # NCCL only advertises the Device API (LSA symmetric memory) with cuMem allocation enabled;
   # without it ncclEpCreateGroup returns ncclInvalidUsage. Persisted here so every rank has it.
   export NCCL_CUMEM_ENABLE=1
 }
 
 nccl_ep_probe() {
+  local nccl_root
+  nccl_root="$(nvidia_package_root "$VIRTUAL_ENV/bin/python" nvidia-nccl-cu13 nccl)" \
+    || { collx_log "ERROR: NCCL EP probe cannot resolve the NCCL package root"; return 1; }
   # torch first so libc10/libnccl are resident before nccl.ep dlopens. The version line records
-  # which libnccl_ep.so loaded, in case a stale cache or image-bundled copy shadows the wheel.
-  python3 - <<'PY'
+  # which libnccl_ep.so loaded, in case a stale cache or image-bundled copy shadows the venv.
+  "$VIRTUAL_ENV/bin/python" - \
+      "${COLLX_NCCL4PY_SPEC##*==}" "${COLLX_NCCL_SPEC##*==}" "$nccl_root" <<'PY'
+import ctypes
 import sys
+from importlib.metadata import version
+from pathlib import Path
 
 import torch  # noqa: F401
 import nccl.core  # noqa: F401
 import nccl.ep
 
+expected_nccl4py, expected_nccl, nccl_root = sys.argv[1:]
+nccl4py_version = version("nccl4py")
+nccl_version = version("nvidia-nccl-cu13")
+assert nccl4py_version == expected_nccl4py
+assert nccl_version == expected_nccl
+
+libnccl = ctypes.CDLL("libnccl.so.2")
+runtime_version = ctypes.c_int()
+assert libnccl.ncclGetVersion(ctypes.byref(runtime_version)) == 0
+major, minor, patch = map(int, expected_nccl.split("."))
+assert runtime_version.value == major * 10000 + minor * 100 + patch
+expected_dsos = {
+    candidate.resolve()
+    for candidate in (Path(nccl_root) / "lib").glob("libnccl.so.2*")
+}
+mapped_dsos = {
+    Path(fields[-1]).resolve()
+    for line in Path("/proc/self/maps").read_text().splitlines()
+    if len(fields := line.split()) >= 6 and fields[-1].startswith("/")
+    and Path(fields[-1]).name.startswith("libnccl.so.2")
+}
+loaded_dsos = expected_dsos & mapped_dsos
+assert loaded_dsos, (expected_dsos, mapped_dsos)
+
 print(
-    f"nccl.ep: libnccl_ep {nccl.ep.get_lib_version()} at {nccl.ep.get_lib_path()}",
+    f"nccl.ep: nccl4py {nccl4py_version}; "
+    f"NCCL {nccl_version} at {sorted(map(str, loaded_dsos))[0]}; "
+    f"libnccl_ep {nccl.ep.get_lib_version()} at {nccl.ep.get_lib_path()}",
     file=sys.stderr,
 )
 PY
 }
 
 nccl_ep_install() {
-  local root="$1" site="$1/site"
+  local root="$1" arch="$2" venv="$1/venv" source_dir="$1/source" wheel_dir="$1/wheel"
+  local nccl_root gencode
+  local -a pip wheels
   if [ -e "$root" ] || [ -L "$root" ]; then
     rm -rf "$root" || { collx_log "ERROR: incomplete NCCL EP cache-reset failed"; return 1; }
   fi
   mkdir -m 700 "$root" || { collx_log "ERROR: NCCL EP cache-create failed"; return 1; }
-  mkdir -p "$site" || { collx_log "ERROR: NCCL EP cache-site-create failed"; return 1; }
-  collx_log "NCCL EP: installing $COLLX_NCCL_EP_SPEC (pip --target)"
-  # --target does not touch the system env, so PEP 668 does not apply. $COLLX_NCCL_EP_SPEC is
-  # unquoted on purpose: it carries two whitespace-separated pip specs.
-  # shellcheck disable=SC2086
-  python3 -m pip install -q --disable-pip-version-check --no-input \
-      --target "$site" $COLLX_NCCL_EP_SPEC >&2 2>&1 \
-    || { collx_log "ERROR: NCCL EP wheel install failed"; return 1; }
+  collx_log "NCCL EP: building $COLLX_NCCL_EXTENSIONS_COMMIT from source"
+  # Reuse the image's torch without copying its full CUDA stack into the cache. The exact NCCL
+  # requirement installs a venv-local runtime instead of reusing the system torch's older wheel.
+  python3 -m venv --system-site-packages "$venv" \
+    || { collx_log "ERROR: NCCL EP venv creation failed"; return 1; }
+  pip=("$venv/bin/python" -m pip install -q --disable-pip-version-check --no-input)
+  "${pip[@]}" \
+      "$COLLX_NCCL_EP_SETUPTOOLS_SPEC" "$COLLX_NCCL_EP_CYTHON_SPEC" \
+      "$COLLX_NCCL_EP_WHEEL_SPEC" "$COLLX_NCCL_EP_CUDA_CORE_SPEC" \
+      "$COLLX_NCCL_EP_CUDA_PATHFINDER_SPEC" "$COLLX_NCCL_EP_CUDA_BINDINGS_SPEC" \
+      "$COLLX_NCCL_EP_CUTLASS_SPEC" "$COLLX_NCCL_SPEC" "$COLLX_NCCL4PY_SPEC" >&2 2>&1 \
+    || { collx_log "ERROR: NCCL EP build/dependency install failed"; return 1; }
   nccl_ep_activate "$root" \
     || { collx_log "ERROR: NCCL EP environment activation failed"; return 1; }
+  nccl_root="$(nvidia_package_root "$venv/bin/python" nvidia-nccl-cu13 nccl)" \
+    || { collx_log "ERROR: NCCL EP NCCL package root is unavailable"; return 1; }
+  collx_materialize_source \
+      "nccl-extensions-$COLLX_NCCL_EXTENSIONS_COMMIT" "$source_dir" \
+    || { collx_log "ERROR: NCCL Extensions staged source is invalid"; return 1; }
+  gencode="-gencode=arch=compute_${arch/./},code=sm_${arch/./}"
+  make -C "$source_dir/nccl_ep" -j 16 lib \
+      NCCL_HOME="$nccl_root" NVCC_GENCODE="$gencode" >&2 2>&1 \
+    || { collx_log "ERROR: NCCL EP source build failed"; return 1; }
+  # python/setup.py builds the Cython extensions and packages these assets, but does not compile
+  # libnccl_ep.so itself. Stage the native library and headers before invoking it explicitly.
+  mkdir -p "$source_dir/python/nccl/ep/lib/cu13" \
+    || { collx_log "ERROR: NCCL EP Python library staging failed"; return 1; }
+  cp -a "$source_dir/build/lib/libnccl_ep.so"* \
+      "$source_dir/python/nccl/ep/lib/cu13/" \
+    && cp -a "$source_dir/build/include/." "$source_dir/python/nccl/ep/include/" \
+    || { collx_log "ERROR: NCCL EP Python asset staging failed"; return 1; }
+  mkdir -p "$wheel_dir" \
+    || { collx_log "ERROR: NCCL EP wheel directory creation failed"; return 1; }
+  (cd "$source_dir/python" \
+    && "$venv/bin/python" setup.py -q bdist_wheel --dist-dir "$wheel_dir") >&2 2>&1 \
+    || { collx_log "ERROR: NCCL EP setup.py wheel build failed"; return 1; }
+  shopt -s nullglob
+  wheels=("$wheel_dir"/nccl_extensions-*.whl)
+  shopt -u nullglob
+  [ "${#wheels[@]}" -eq 1 ] \
+    || { collx_log "ERROR: NCCL EP setup.py did not produce exactly one wheel"; return 1; }
+  "${pip[@]}" --no-deps --force-reinstall "${wheels[0]}" >&2 2>&1 \
+    || { collx_log "ERROR: NCCL EP wheel install failed"; return 1; }
   nccl_ep_probe || { collx_log "ERROR: NCCL EP import probe failed"; return 1; }
   : > "$root/.ready"
 }
 
 nccl_ep_prepare() {
-  local arch shared
+  local arch root
   command -v python3 >/dev/null || { collx_log "ERROR: python3 unavailable for NCCL EP"; return 1; }
   arch="$(cuda_arch)" || return 1
-  shared="$(nccl_ep_cache_root "$arch")" || shared=""
-  prepare_site_cache "NCCL EP" "NCCL EP" "$COLLX_NCCL_EP_SPEC" "$shared" \
-    "/tmp/collectivex-nccl-ep-cache-$(nccl_ep_spec_slug)" nccl_ep_install || return 1
-  nccl_ep_activate "$CACHE_ROOT" || return 1
+  root="$(nccl_ep_cache_root "$arch")" \
+    || root="/tmp/collectivex-nccl-ep-cache-$(nccl_ep_spec_slug)"
+  command -v flock >/dev/null || { collx_log "ERROR: flock is required for NCCL EP"; return 1; }
+  mkdir -p "${root%/*}" || return 1
+  collx_log "NCCL EP: preparing $COLLX_NCCL_EXTENSIONS_COMMIT (cache $root)"
+  if ! with_cache_lock "NCCL EP" "$root" nccl_ep_ready nccl_ep_install "$arch"; then
+    collx_log "ERROR: NCCL EP environment is incomplete"
+    return 1
+  fi
+  nccl_ep_activate "$root" || return 1
   nccl_ep_probe || { collx_log "ERROR: NCCL EP import probe failed"; return 1; }
-  collx_log "NCCL EP ready ($COLLX_NCCL_EP_SPEC; libnccl_ep.so JIT runtime, NCCL Device API LSA/GIN)"
+  collx_log "NCCL EP ready ($COLLX_NCCL_EXTENSIONS_COMMIT from source; libnccl_ep.so JIT runtime, NCCL Device API LSA/GIN)"
 }
 
 # container boundary

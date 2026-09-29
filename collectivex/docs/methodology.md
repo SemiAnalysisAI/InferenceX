@@ -190,7 +190,9 @@ than by precedent. UCCL-EP is a drop-in, API-identical DeepEP replacement that k
 scale-up is single-node `cudaIpc` over NVLink/XGMI (so the scale-up domain is one physical node,
 never MNNVL) and its EP16 scale-out uses the same per-SKU RDMA rails as the other backends. NCCL EP
 is NVIDIA's native MoE dispatch/combine on the NCCL Device API, shipped since v0.2 as the
-`nccl-extensions` wheel (which owns `nccl.ep`; `nccl4py`, pinned alongside, provides `nccl.core`).
+`nccl-extensions` source tree (which owns `nccl.ep`; pinned nccl4py 0.6.0 provides `nccl.core` with
+NCCL 2.32.3). CollectiveX pins a current-main revision, stages it before allocation, and builds
+`libnccl_ep.so` plus its Python bindings against nccl4py's matching packaged NCCL on each cache miss.
 `normal` mode selects its `HIGH_THROUGHPUT` algorithm, whose FLAT `[N, hidden]` receive and
 unweighted rank-sum combine match `layout-and-dispatch-v1` exactly, so the same oracle applies. It is
 NVIDIA-only and CUDA 13 only, and runs EP8 and EP16 on all six NVIDIA SKUs: EP16 stays inside the
@@ -227,7 +229,7 @@ These rows were held while v0.1's combine
 recv pipeline — a port of DeepEP's PRE-FIX code, missing the `fence.proxy.async.shared::cta` DeepEP
 added in #642 — raced on every rung (observed 1-in-5 bimodal corruption at T=256 on gb300 EP8,
 error 0.47 vs 0.0039; the interim T<=128 ladder clamp reduced exposure but was never a safety
-boundary, so even green clamped rows were not publication-valid). The v0.2 `nccl-extensions` wheel
+boundary, so even green clamped rows were not publication-valid). The v0.2 `nccl-extensions` source
 ships that fence (`fence_view_async_shared` before the `emptyBarriers` arrive in `ll_ep.cuh`),
 which is the documented restore condition: the ladder runs unclamped to the full receive and the
 rows are enabled, subject as always to the correctness oracle. (Historically those rows also wedged
