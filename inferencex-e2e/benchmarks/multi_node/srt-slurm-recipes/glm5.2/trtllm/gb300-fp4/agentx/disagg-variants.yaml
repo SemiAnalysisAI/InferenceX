@@ -1,16 +1,17 @@
-# AgentX glm5.2 trtllm gb300-fp4 recipes: shared settings in base, one
-# override per benchmark configuration. Select one with
-# CONFIG_FILE=recipes/glm5.2/trtllm/gb300-fp4/agentx/disagg-variants.yaml:override_<name>.
+# GLM-5.2 NVFP4 TensorRT-LLM AgentX GB300 disaggregated variants.
+# Select a named variant with CONFIG_FILE in the master configuration.
 
 schema: 2
 
 base:
   model:
     path: nvidia/GLM-5.2-NVFP4
-    container: nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc26.dev202609040000
+    container: nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc28.dev202609210001
     precision: fp4
   dynamo:
     install: true
+    source:
+      wheel: 1.4.0.dev20260807
     request_plane: tcp
   health_check:
     max_attempts: 270
@@ -21,34 +22,35 @@ base:
   engine:
     type: trtllm
     publish_events_and_metrics: false
+    numa_cpu_bind: true
   roles:
     prefill:
       gpus: 4
       env:
-        HF_HUB_OFFLINE: "1"
-        TRANSFORMERS_OFFLINE: "1"
-        TQDM_DISABLE: "1"
-        HF_HUB_DISABLE_PROGRESS_BARS: "1"
+        HF_HUB_OFFLINE: '1'
+        TRANSFORMERS_OFFLINE: '1'
+        TQDM_DISABLE: '1'
+        HF_HUB_DISABLE_PROGRESS_BARS: '1'
         TLLM_LOG_LEVEL: INFO
-        TRTLLM_SERVER_DISABLE_GC: "1"
-        TRTLLM_WORKER_DISABLE_GC: "1"
-        TRTLLM_ENABLE_PDL: "1"
-        NCCL_GRAPH_MIXING_SUPPORT: "0"
-        MIMALLOC_PURGE_DELAY: "0"
+        TRTLLM_SERVER_DISABLE_GC: '1'
+        TRTLLM_WORKER_DISABLE_GC: '1'
+        TRTLLM_ENABLE_PDL: '1'
+        NCCL_GRAPH_MIXING_SUPPORT: '0'
+        MIMALLOC_PURGE_DELAY: '0'
         PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
-        TRTLLM_FUSED_DSA_METADATA: "1"
-        TRTLLM_DSA_INDEXER_BF16: "1"
-        TRTLLM_SERVE_ENABLE_MSGSPEC: "1"
-        TLLM_ADP_ROUTER_MATCH_RATE_THRESHOLD: "0.10"
-        TRTLLM_KV_CACHE_TRANSFER_TIMEOUT_SEC: "600"
-        UCX_CUDA_IPC_ENABLE_MNNVL: "y"
+        TRTLLM_FUSED_DSA_METADATA: '1'
+        TRTLLM_DSA_INDEXER_BF16: '1'
+        TRTLLM_SERVE_ENABLE_MSGSPEC: '1'
+        TLLM_ADP_ROUTER_MATCH_RATE_THRESHOLD: '0.10'
+        TRTLLM_KV_CACHE_TRANSFER_TIMEOUT_SEC: '600'
+        UCX_CUDA_IPC_ENABLE_MNNVL: y
         UCX_RNDV_SCHEME: put_zcopy
-        TRTLLM_KVCACHE_SEND_BUFFER_COUNT: "1"
-        TRTLLM_KVCACHE_RECV_BUFFER_COUNT: "1"
-        DYN_TRTLLM_ENABLE_ATTENTION_DP: "1"
-        DYN_ENGINE_CONV_AFFINITY: "1"
+        TRTLLM_KVCACHE_SEND_BUFFER_COUNT: '1'
+        TRTLLM_KVCACHE_RECV_BUFFER_COUNT: '1'
+        DYN_TRTLLM_ENABLE_ATTENTION_DP: '1'
+        DYN_ENGINE_CONV_AFFINITY: '1'
         DYN_TOKENIZER: fastokens
-        DYN_PUBLISH_KV_EVENTS: "0"
+        DYN_PUBLISH_KV_EVENTS: '0'
       args:
         attention_dp_config:
           enable_kv_cache_aware_routing: false
@@ -57,20 +59,20 @@ base:
         cache_transceiver_config:
           backend: NIXL
           transceiver_runtime: PYTHON
-          kv_cache_bounce_size_mb: 5120
+          agent_bounce_buffer_enable: true
+          agent_bounce_params:
+            max_average_descriptor_size: 4MB
+            min_descriptor_count: '1'
           max_tokens_in_buffer: 1048576
           kv_transfer_timeout_ms: 600000
-        cuda_graph_config:
-        disable_overlap_scheduler: false
+        cuda_graph_config: null
         enable_attention_dp: true
         enable_chunked_prefill: true
         trust_remote_code: true
         kv_cache_config:
-          dtype: fp8
           enable_block_reuse: true
           event_buffer_max_size: 0
           free_gpu_memory_fraction: 0.75
-          host_cache_size: 137438953472
           tokens_per_block: 64
         max_batch_size: 256
         max_num_tokens: 8192
@@ -81,6 +83,7 @@ base:
         num_postprocess_workers: 8
         pipeline_parallel_size: 1
         print_iter_log: true
+        enable_iter_perf_stats: false
         return_perf_metrics: false
         scheduler_config:
           capacity_scheduler_policy: MAX_UTILIZATION
@@ -92,62 +95,62 @@ base:
           max_draft_len: 5
         tensor_parallel_size: 4
     decode:
-      workers: 1
       env:
-        HF_HUB_OFFLINE: "1"
-        TRANSFORMERS_OFFLINE: "1"
-        TQDM_DISABLE: "1"
-        HF_HUB_DISABLE_PROGRESS_BARS: "1"
+        HF_HUB_OFFLINE: '1'
+        TRANSFORMERS_OFFLINE: '1'
+        TQDM_DISABLE: '1'
+        HF_HUB_DISABLE_PROGRESS_BARS: '1'
         TLLM_LOG_LEVEL: INFO
-        TRTLLM_SERVER_DISABLE_GC: "1"
-        TRTLLM_WORKER_DISABLE_GC: "1"
-        TRTLLM_ENABLE_PDL: "1"
-        NCCL_GRAPH_MIXING_SUPPORT: "0"
-        MIMALLOC_PURGE_DELAY: "0"
+        TRTLLM_SERVER_DISABLE_GC: '1'
+        TRTLLM_WORKER_DISABLE_GC: '1'
+        TRTLLM_ENABLE_PDL: '1'
+        NCCL_GRAPH_MIXING_SUPPORT: '0'
+        MIMALLOC_PURGE_DELAY: '0'
         PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
-        TRTLLM_FUSED_DSA_METADATA: "1"
-        TRTLLM_DSA_INDEXER_BF16: "1"
-        TRTLLM_SERVE_ENABLE_MSGSPEC: "1"
-        TLLM_ADP_ROUTER_MATCH_RATE_THRESHOLD: "0.10"
-        TRTLLM_KV_CACHE_TRANSFER_TIMEOUT_SEC: "600"
-        UCX_CUDA_IPC_ENABLE_MNNVL: "y"
+        TRTLLM_FUSED_DSA_METADATA: '1'
+        TRTLLM_DSA_INDEXER_BF16: '1'
+        TRTLLM_SERVE_ENABLE_MSGSPEC: '1'
+        TLLM_ADP_ROUTER_MATCH_RATE_THRESHOLD: '0.10'
+        TRTLLM_KV_CACHE_TRANSFER_TIMEOUT_SEC: '600'
+        UCX_CUDA_IPC_ENABLE_MNNVL: y
         UCX_RNDV_SCHEME: put_zcopy
-        TRTLLM_KVCACHE_SEND_BUFFER_COUNT: "1"
-        TRTLLM_KVCACHE_RECV_BUFFER_COUNT: "1"
-        DYN_TRTLLM_ENABLE_ATTENTION_DP: "1"
-        DYN_ENGINE_CONV_AFFINITY: "1"
+        TRTLLM_KVCACHE_SEND_BUFFER_COUNT: '1'
+        TRTLLM_KVCACHE_RECV_BUFFER_COUNT: '1'
+        DYN_TRTLLM_ENABLE_ATTENTION_DP: '1'
+        DYN_ENGINE_CONV_AFFINITY: '1'
         DYN_TOKENIZER: fastokens
-        DYN_PUBLISH_KV_EVENTS: "0"
+        DYN_PUBLISH_KV_EVENTS: '0'
       args:
         cache_transceiver_config:
           backend: NIXL
           transceiver_runtime: PYTHON
-          kv_cache_bounce_size_mb: 5120
+          agent_bounce_buffer_enable: true
+          agent_bounce_params:
+            max_average_descriptor_size: 4MB
+            min_descriptor_count: '1'
           max_tokens_in_buffer: 1048576
           kv_transfer_timeout_ms: 600000
         cuda_graph_config:
           enable_padding: true
-        enable_attention_dp: false
         trust_remote_code: true
         kv_cache_config:
-          dtype: fp8
           enable_block_reuse: false
           event_buffer_max_size: 0
-          free_gpu_memory_fraction: 0.8
           tokens_per_block: 64
         max_num_tokens: 128
         max_seq_len: 1048576
         moe_config:
-          backend: TRTLLM
           use_low_precision_moe_combine: true
         num_postprocess_workers: 4
         pipeline_parallel_size: 1
         print_iter_log: true
+        enable_iter_perf_stats: false
         return_perf_metrics: false
         sparse_attention_config:
           algorithm: dsa
           enable_heuristic_topk: true
           use_cute_dsl_paged_mqa_logits: true
+          use_cute_dsl_topk: true
         speculative_config:
           decoding_type: MTP
           max_draft_len: 5
@@ -185,7 +188,7 @@ base:
       AIPERF_DATASET_MMAP_CACHE_DIR: /aiperf_mmap_cache
       HF_HUB_CACHE: /hf_hub_cache
       WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126
-      AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES: "0"
+      AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES: '0'
       SERVED_MODEL_NAME: GLM-5.2-NVFP4
       MAX_MODEL_LEN: '1048576'
       AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
@@ -197,205 +200,215 @@ base:
 
 override_1p1d_tp8_c1_b1_mtp5:
   name: dynamo-disagg-gb300-1p1d-tp8-c1-b1-mtp5
-  dynamo:
-    source:
-      wheel: 1.4.0.dev20260807
   roles:
     prefill:
       nodes: 1
       workers: 1
       args:
+        cache_transceiver_config:
+          kv_cache_bounce_size_mb: 1024
         disable_overlap_scheduler: true
+        kv_cache_config:
+          dtype: fp8
+          host_cache_size: 137438953472
         scheduler_config:
           context_chunking_policy: EQUAL_PROGRESS
     decode:
       nodes: 2
-      gpus: 8
-      args:
-        cuda_graph_config:
-          batch_sizes:
-            - 1
-        max_batch_size: 1
-        moe_expert_parallel_size: 1
-        sparse_attention_config:
-          use_cute_dsl_topk: true
-        tensor_parallel_size: 8
-
-override_1p1d_tep8_c20_b5_mtp5:
-  name: dynamo-disagg-gb300-1p1d-tep8-c20-b5-mtp5
-  dynamo:
-    source:
-      git: https://github.com/cquil11/dynamo.git
-      rev: 2cbbdc863c336c2cfffa2a3668e2a6661801b259
-  roles:
-    prefill:
-      nodes: 1
       workers: 1
-      args:
-        enable_iter_perf_stats: true
-    decode:
-      nodes: 2
       gpus: 8
       args:
+        cache_transceiver_config:
+          kv_cache_bounce_size_mb: 1024
         cuda_graph_config:
           batch_sizes:
-            - 1
-            - 2
-            - 4
-            - 5
-        max_batch_size: 5
-        moe_expert_parallel_size: 8
-        enable_iter_perf_stats: true
-        sparse_attention_config:
-          use_cute_dsl_topk: true
+          - 1
+        enable_attention_dp: false
+        kv_cache_config:
+          dtype: fp8
+          free_gpu_memory_fraction: 0.8
+        max_batch_size: 1
+        moe_config:
+          backend: TRTLLM
+        moe_expert_parallel_size: 1
         tensor_parallel_size: 8
-  benchmark:
-    env:
-      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: trtllm_kv_cache_utilization
 
 override_1p4d_tep4_c30_b2_mtp5:
   name: dynamo-disagg-gb300-1p4d-tep4-c30-b2-mtp5
-  dynamo:
-    source:
-      git: https://github.com/cquil11/dynamo.git
-      rev: 2cbbdc863c336c2cfffa2a3668e2a6661801b259
   roles:
     prefill:
       nodes: 1
       workers: 1
       args:
-        enable_iter_perf_stats: true
-    decode:
-      nodes: 4
-      workers: 4
-      gpus: 4
-      args:
-        cuda_graph_config:
-          batch_sizes:
-            - 1
-            - 2
-        max_batch_size: 2
-        moe_expert_parallel_size: 4
-        enable_iter_perf_stats: true
-        sparse_attention_config:
-          use_cute_dsl_topk: true
-        tensor_parallel_size: 4
-  benchmark:
-    env:
-      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: trtllm_kv_cache_utilization
-
-override_3p4d_tep4_c60_b5_mtp5:
-  name: dynamo-disagg-gb300-3p4d-tep4-c60-b5-mtp5
-  dynamo:
-    source:
-      git: https://github.com/cquil11/dynamo.git
-      rev: 2cbbdc863c336c2cfffa2a3668e2a6661801b259
-  roles:
-    prefill:
-      nodes: 3
-      workers: 3
-      args:
-        enable_iter_perf_stats: true
-    decode:
-      nodes: 4
-      workers: 4
-      gpus: 4
-      args:
-        cuda_graph_config:
-          batch_sizes:
-            - 1
-            - 2
-            - 4
-            - 5
-        max_batch_size: 5
-        moe_expert_parallel_size: 4
-        enable_iter_perf_stats: true
-        sparse_attention_config:
-          use_cute_dsl_topk: true
-        tensor_parallel_size: 4
-  benchmark:
-    env:
-      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: trtllm_kv_cache_utilization
-
-override_4p1d_dep8_c227_b16_mtp3:
-  name: dynamo-disagg-gb300-4p1d-dep8-c227-b16-mtp3
-  dynamo:
-    source:
-      git: https://github.com/cquil11/dynamo.git
-      rev: 2cbbdc863c336c2cfffa2a3668e2a6661801b259
-  roles:
-    prefill:
-      nodes: 4
-      workers: 4
-      args:
-        enable_iter_perf_stats: true
-        speculative_config:
-          max_draft_len: 3
-    decode:
-      nodes: 2
-      gpus: 8
-      args:
-        cuda_graph_config:
-          batch_sizes:
-            - 1
-            - 2
-            - 4
-            - 8
-            - 16
-        enable_attention_dp: true
-        enable_lm_head_tp_in_adp: false
+        cache_transceiver_config:
+          kv_cache_bounce_size_mb: 1024
+        disable_overlap_scheduler: false
         kv_cache_config:
-          free_gpu_memory_fraction: 0.9
+          dtype: fp8
           host_cache_size: 137438953472
-        max_batch_size: 16
+    decode:
+      nodes: 4
+      workers: 4
+      gpus: 4
+      args:
+        cache_transceiver_config:
+          kv_cache_bounce_size_mb: 1024
+        cuda_graph_config:
+          batch_sizes:
+          - 1
+          - 2
+        enable_attention_dp: false
+        kv_cache_config:
+          dtype: fp8
+          free_gpu_memory_fraction: 0.8
+        max_batch_size: 2
         moe_config:
-          backend: CUTEDSL
-        moe_expert_parallel_size: 8
-        enable_iter_perf_stats: true
-        speculative_config:
-          max_draft_len: 3
-        tensor_parallel_size: 8
-  benchmark:
-    env:
-      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: trtllm_kv_cache_utilization
+          backend: TRTLLM
+        moe_expert_parallel_size: 4
+        tensor_parallel_size: 4
 
-override_5p1d_dep16_c260_b16_mtp3:
-  name: dynamo-disagg-gb300-5p1d-dep16-c260-b16-mtp3
-  dynamo:
-    source:
-      git: https://github.com/cquil11/dynamo.git
-      rev: 2cbbdc863c336c2cfffa2a3668e2a6661801b259
+override_1p7d_tp4_c66_b4_mtp5:
+  name: dynamo-disagg-gb300-1p7d-tp4-c66-b4-mtp5
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      args:
+        cache_transceiver_config:
+          kv_cache_bounce_size_mb: 4096
+          agent_bounce_params:
+            max_chunk_size: 128MB
+            max_inflight_chunks_per_request: '32'
+        disable_overlap_scheduler: true
+        kv_cache_config:
+          dtype: fp8
+          host_cache_size: 206158430208
+        scheduler_config:
+          context_chunking_policy: EQUAL_PROGRESS
+    decode:
+      nodes: 7
+      workers: 7
+      gpus: 4
+      args:
+        cache_transceiver_config:
+          kv_cache_bounce_size_mb: 4096
+          agent_bounce_params:
+            max_chunk_size: 128MB
+            max_inflight_chunks_per_request: '32'
+        cuda_graph_config:
+          batch_sizes:
+          - 1
+          - 2
+          - 3
+          - 4
+        enable_attention_dp: false
+        kv_cache_config:
+          dtype: fp8
+          free_gpu_memory_fraction: 0.8
+        max_batch_size: 4
+        moe_config:
+          backend: TRTLLM
+        moe_expert_parallel_size: 1
+        tensor_parallel_size: 4
+
+override_5p1d_dep16_c520_b16_mtp5:
+  name: dynamo-disagg-gb300-5p1d-dep16-c520-b16-mtp5
   roles:
     prefill:
       nodes: 5
       workers: 5
+      env:
+        TRTLLM_GVR_SELF_SAMPLING: '1'
       args:
-        enable_iter_perf_stats: true
-        speculative_config:
-          max_draft_len: 3
+        cache_transceiver_config:
+          kv_cache_bounce_size_mb: 1024
+        disable_overlap_scheduler: true
+        kv_cache_config:
+          dtype: nvfp4
+          host_cache_size: 206158430208
+        scheduler_config:
+          context_chunking_policy: EQUAL_PROGRESS
     decode:
       nodes: 4
+      workers: 1
       gpus: 16
+      env:
+        TRTLLM_GVR_SELF_SAMPLING: '1'
       args:
+        cache_transceiver_config:
+          kv_cache_bounce_size_mb: 1024
         cuda_graph_config:
           batch_sizes:
-            - 1
-            - 2
-            - 4
-            - 8
-            - 16
+          - 1
+          - 2
+          - 3
+          - 4
+          - 5
+          - 6
+          - 7
+          - 8
+          - 9
+          - 10
+          - 11
+          - 12
+          - 13
+          - 14
+          - 15
+          - 16
         enable_attention_dp: true
-        enable_lm_head_tp_in_adp: false
+        enable_lm_head_tp_in_adp: true
         kv_cache_config:
+          dtype: nvfp4
           free_gpu_memory_fraction: 0.9
         max_batch_size: 16
+        moe_config:
+          backend: TRTLLM
         moe_expert_parallel_size: 16
-        enable_iter_perf_stats: true
-        sparse_attention_config:
-          use_cute_dsl_topk: true
-        speculative_config:
-          max_draft_len: 3
         tensor_parallel_size: 16
-  benchmark:
-    env:
-      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: trtllm_kv_cache_utilization
+
+override_5p2d_dep16_c424_b8_mtp5:
+  name: dynamo-disagg-gb300-5p2d-dep16-c424-b8-mtp5
+  roles:
+    prefill:
+      nodes: 5
+      workers: 5
+      env:
+        TRTLLM_GVR_SELF_SAMPLING: '1'
+      args:
+        cache_transceiver_config:
+          kv_cache_bounce_size_mb: 1024
+        disable_overlap_scheduler: true
+        kv_cache_config:
+          dtype: nvfp4
+          host_cache_size: 206158430208
+        scheduler_config:
+          context_chunking_policy: EQUAL_PROGRESS
+    decode:
+      nodes: 8
+      workers: 2
+      gpus: 16
+      env:
+        TRTLLM_GVR_SELF_SAMPLING: '1'
+      args:
+        cache_transceiver_config:
+          kv_cache_bounce_size_mb: 1024
+        cuda_graph_config:
+          batch_sizes:
+          - 1
+          - 2
+          - 3
+          - 4
+          - 5
+          - 6
+          - 7
+          - 8
+        enable_attention_dp: true
+        enable_lm_head_tp_in_adp: true
+        kv_cache_config:
+          dtype: nvfp4
+          free_gpu_memory_fraction: 0.9
+        max_batch_size: 8
+        moe_config:
+          backend: CUTEDSL
+        moe_expert_parallel_size: 16
+        tensor_parallel_size: 16
