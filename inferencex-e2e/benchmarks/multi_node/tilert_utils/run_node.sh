@@ -22,6 +22,10 @@ TILERT_IS_AGENTIC=0
 if [[ "${IS_AGENTIC}" == "1" || "${SCENARIO_TYPE:-}" == "agentic-coding" ]]; then
     TILERT_IS_AGENTIC=1
 fi
+if [[ "$TILERT_IS_AGENTIC" == 1 && "$EVAL_ONLY" != true ]]; then
+    check_env_vars CONC_LIST
+    validate_agentic_concurrency "$CONC_LIST" || exit 1
+fi
 
 AGENTIC_LOGS_DIR=${AGENTIC_LOGS_DIR:-$RESULT_DIR/LOGS/agentic}
 
@@ -269,19 +273,18 @@ run_tilert_eval() {
 }
 
 run_agentic_replay() {
+    validate_agentic_concurrency "$CONC_LIST" || return 1
     wait_for_server_ready --port "$ROUTER_PORT" \
         --server-log "$BENCHMARK_LOGS_DIR/tilert_router.log" --server-pid "$ROUTER_PID"
-    local rc=0 conc conc_result_dir
+    local rc=0 conc="$CONC_LIST" conc_result_dir
     local result_filename_base="$RESULT_FILENAME"
-    for conc in $CONC_LIST; do
-        conc_result_dir="$AGENTIC_LOGS_DIR/conc_${conc}"
-        mkdir -p "$conc_result_dir"
-        export CONC="$conc"
-        export RESULT_FILENAME="${result_filename_base}_conc${conc}"
-        build_replay_cmd "$conc_result_dir"
-        run_agentic_replay_and_write_outputs "$conc_result_dir" \
-            || { rc=$?; echo "[agentic] WARNING: conc=$conc failed/timed out (rc=$rc)"; }
-    done
+    conc_result_dir="$AGENTIC_LOGS_DIR/conc_${conc}"
+    mkdir -p "$conc_result_dir"
+    export CONC="$conc"
+    export RESULT_FILENAME="${result_filename_base}_conc${conc}"
+    build_replay_cmd "$conc_result_dir"
+    run_agentic_replay_and_write_outputs "$conc_result_dir" \
+        || { rc=$?; echo "[agentic] WARNING: conc=$conc failed/timed out (rc=$rc)"; }
     export RESULT_FILENAME="$result_filename_base"
     return $rc
 }
