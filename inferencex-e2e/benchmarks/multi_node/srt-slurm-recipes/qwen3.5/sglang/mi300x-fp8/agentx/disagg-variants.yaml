@@ -175,9 +175,14 @@ override_1p1d_dep8_mtp:
   frontend:
     args:
       dp-aware: true
+      # Full-context AgentX warmup can exceed the router's 30-minute default.
+      request-timeout-secs: 14400
+      disable-retries: true
   roles:
     prefill:
       env: &dep8_environment
+        # Decode waits for the queued prefill within the router's request budget.
+        SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "14400"
         # SGLang divides the 8192-token prefill chunk by DP8 before MORI setup.
         SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "1024"
         # Cache-aware routing can select a rank other than bootstrap_room % DP.
