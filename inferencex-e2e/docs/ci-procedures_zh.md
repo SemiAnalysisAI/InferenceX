@@ -231,7 +231,6 @@ B200 Kimi 配方采用 DCP8，且关闭 Mooncake Offload。Master Config 记录 
 | --- | --- | --- | --- |
 | `full-sweep-fail-fast` | 完整 Changelog 矩阵 | 有 | 有；推荐的完整扫描默认值 |
 | `full-sweep-enabled` | 完整 Changelog 矩阵 | 有 | 无；需要每个矩阵点继续运行时使用 |
-| `full-sweep-fail-fast-no-canary` | 完整 Changelog 矩阵 | 无 | 有 |
 | `non-canary-full-sweep-enabled` | 完整 Changelog 矩阵 | 无 | 无 |
 
 可选修饰标签不能替代主标签：
@@ -248,10 +247,10 @@ B200 Kimi 配方采用 DCP8，且关闭 Mooncake Offload。Master Config 记录 
 
 Canary 和 Fail-fast 解决不同问题：
 
-1. 只有使用 `full-sweep-enabled` 或 `full-sweep-fail-fast` 的 PR 才创建 Canary。No-canary 标签会跳过它。
+1. 只有使用 `full-sweep-enabled` 或 `full-sweep-fail-fast` 的 PR 才创建 Canary。`non-canary-full-sweep-enabled` 会跳过它。
 2. Canary 首先检查单节点固定序列 `1k1k`、`8k1k` 和单节点 AgentX 条目；若没有合格条目，再检查多节点 AgentX 条目。它排除 Eval 条目，选取最低并发候选，使用对应的单节点或多节点工作流运行，并从后续矩阵移除该条目。
 3. 如果没有合格候选，Canary 会被跳过。否则所有 Benchmark/Eval 矩阵都要求 Canary 成功；Canary 失败会阻止其扇出。
-4. `full-sweep-fail-fast` 与 `full-sweep-fail-fast-no-canary` 会分别为每个矩阵 Job Family 设置 `strategy.fail-fast: true`。首个失败点会取消同一矩阵 Family 中排队或运行中的兄弟项；它不是跨所有独立 Family 的全局 Kill Switch。
+4. `full-sweep-fail-fast` 会分别为每个矩阵 Job Family 设置 `strategy.fail-fast: true`。首个失败点会取消同一矩阵 Family 中排队或运行中的兄弟项；它不是跨所有独立 Family 的全局 Kill Switch。
 5. 非 Fail-fast 标签会保持矩阵 Fail-fast 为 false，使其他点继续运行并保留更广泛的诊断覆盖。
 6. Fail-fast Run 可能因失败后兄弟项被取消而最终显示 `cancelled`。将取消归类为基础设施事件前，必须先识别第一个真实失败。
 
@@ -355,7 +354,7 @@ Klaud 和恢复工具继续使用现有的 `gh` 认证。GitHub CLI 跟随分页
 请求只有在全部满足下列条件时才可暂存：
 
 - 评论者具有仓库 `write`、`maintain` 或 `admin` 权限。
-- PR 当前具有四个完整扫描标签之一（`full-sweep-enabled`、`non-canary-full-sweep-enabled`、`full-sweep-fail-fast` 或 `full-sweep-fail-fast-no-canary`）。
+- PR 当前具有三个完整扫描标签之一（`full-sweep-enabled`、`non-canary-full-sweep-enabled` 或 `full-sweep-fail-fast`）。
 - 候选是已结束的 PR `run-sweep.yml` Run，创建时完整扫描标签处于活动状态，结论为 `success`、`failure` 或 `cancelled`。
 - 候选按照 Workflow 当前 Head/历史 Pin 规则与该 PR 关联。
 - 存在未过期的 `changelog-metadata`，并且至少存在 `results_bmk`、`eval_results_all` 或 `bmk_agentic_*` 之一。因此失败/取消的 Run 可以暂存有用的部分数据，但空 Run 或仅有 Metadata 的 Run 不行。
