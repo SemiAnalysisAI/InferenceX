@@ -9112,4 +9112,4 @@
   description:
     - "Configure TP2 c128 with MXFP4 indexer KV, a CUDA Graph capture ladder through 4096 tokens, GPU memory utilization 0.96, and lazy SimpleCPUOffload with a 300 GB CPU KV allocation."
     - "为 TP2 c128 配置 MXFP4 indexer KV、覆盖至 4096 token 的 CUDA Graph 捕获阶梯、0.96 GPU 内存利用率，以及分配 300 GB CPU KV 的延迟 SimpleCPUOffload。"
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3599
