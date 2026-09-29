@@ -20,4 +20,4 @@ operatorx/ @hbarclay
 experimental/ @functionstackx
 
 # SRT Slurm patches
-/inferencex-e2e/runners/srt-slurm/patches/ @cquil11
+/inferencex-e2e/runners/srt-slurm/patches/ @cquil11 @SemiAnalysisAI/core
