@@ -6,11 +6,10 @@ base:
   name: dsv41flash-fp4-mi355x-vllm-agentic
   model:
     path: hf:deepseek-ai/DeepSeek-V4.1-Flash
-    # TODO: repin once vllm-project/vllm#58655 (mHC fused Triton seams),
-    # #53492 (sparse MLA Gluon kernel) and #58208 (DSA candidate
-    # block-selection topk) are merged upstream and released in a nightly
-    # image.
-    container: vllm/vllm-openai-rocm:nightly-rocm100-TBD
+    # Repinned to a nightly build that includes vllm-project/vllm#58655
+    # (mHC fused Triton seams), #53492 (sparse MLA Gluon kernel) and #58208
+    # (DSA candidate block-selection topk).
+    container: vllm/vllm-openai-rocm:nightly-rocm100-36768d1bfd39094681cdbc8cb37d4b31c0729c89
     precision: fp4
   resources:
     gpu_type: mi355x
