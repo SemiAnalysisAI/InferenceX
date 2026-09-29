@@ -422,6 +422,9 @@ VLLM_CMD=(
 
 # (srok), not yet
     #--attention_config.use_fp4_indexer_cache=True
+agentic_apply_server_launch vllm "${VLLM_CMD[@]}"
+VLLM_CMD=("${AGENTX_SERVER_COMMAND[@]}")
+
 printf '%q ' "${VLLM_CMD[@]}" | tee "$RESULT_DIR/vllm_command.txt"
 printf '\n' | tee -a "$RESULT_DIR/vllm_command.txt"
 "${VLLM_CMD[@]}" > "$SERVER_LOG" 2>&1 &

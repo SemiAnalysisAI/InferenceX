@@ -112,6 +112,9 @@ SGLANG_CMD=(
     --enable-cache-report
 )
 
+agentic_apply_server_launch sglang "${SGLANG_CMD[@]}"
+SGLANG_CMD=("${AGENTX_SERVER_COMMAND[@]}")
+
 printf '%q ' "${SGLANG_CMD[@]}" | tee "$RESULT_DIR/sglang_command.txt"
 printf '\n' | tee -a "$RESULT_DIR/sglang_command.txt"
 "${SGLANG_CMD[@]}" > "$SERVER_LOG" 2>&1 &

@@ -323,6 +323,41 @@ gh run cancel <RUN_ID> --repo SemiAnalysisAI/InferenceX
 
 只有在获得明确批准且有具体理由时才使用 `scancel` 或终止进程；否则可能绕过 cleanup 或使 runner 残留。修复 recipe 后，先分派一个目标 fast e2e 点并实时检查，只有通过检查的 candidate 才值得进行 canonical 运行/完整 sweep。
 
+## 11. 使用带校验的服务启动扩展
+
+`configs/agentx-launchers.json` 声明支持的 recipe 与 launcher 对应关系及扩展版本。
+其中 11 个 AMD SGLang/vLLM launcher 在完成原有准备步骤和命令组装后、
+记录并启动服务前调用 `agentic_apply_server_launch`。
+不设置 `AGENTX_LAUNCH_OVERRIDES_FILE` 时，原有命令和环境保持不变。
+
+启用扩展时，将 `AGENTX_LAUNCH_OVERRIDES_FILE` 设为 JSON 文件路径，
+`AGENTX_LAUNCH_OVERRIDES_SHA256` 设为规范化 JSON 的哈希，
+`AGENTX_SERVER_LAUNCH_FILE` 设为已有结果目录中的输出文件。
+v1 请求包含 `version: 1`、token 数组 `append_args`、长选项名称数组
+`remove_args`、布尔值 `replace_args`、字符串映射 `env`、名称数组
+`unset_env`、可选绝对路径 `executable`、绝对路径到 SHA256 的映射
+`source_files`，以及绝对路径数组 `absent_source_files`。
+未提供的集合默认为空，`replace_args` 默认为 false，`executable` 默认为 null。
+完整规范化对象使用排序键、`(',', ':')` 分隔符和 `ensure_ascii=True`
+序列化为 JSON，再以 UTF-8 编码计算 SHA256。
+
+删除必须恰好匹配一个原有长选项，并包含其后直到下一个长选项前的值；
+存在歧义的短选项会被拒绝。替换保留固定入口位置参数以及模型、host、port、
+拓扑选项，追加参数也不能改变这些受保护字段。环境覆盖在 launcher 的 export
+之后生效，仅影响服务子进程。SGLang 的 executable 指向 Python 解释器，
+vLLM 的 executable 指向 vLLM 入口，不改变其余入口 token。
+
+源码内容和缺失路径在 recipe 准备完成后校验，因此安装步骤覆盖候选代码时，
+启动会立即被拒绝。回执记录原始和生效 argv、环境变更、选定运行时控制变量
+（排除类似凭证的名称）、可执行文件解析结果、请求哈希和源码证据。
+`evidence_sha256` 对除该字段以外的完整回执计算哈希。
+这只证明启动输入，不证明模型加载或 replay 成功；每次候选测量仍须通过
+正常的 canonical 结果校验。
+
+无需 GPU 的验证命令为 `python -m pytest utils/agentic/test_server_launch.py`。
+候选的真实 GPU 性能仍须按上文执行 fast/canonical 流程；
+空请求 `{ "version": 1 }` 必须保持 canonical argv/env 不变。
+
 ## 完成检查清单
 
 - 矩阵预览符合预期 scenario、topology、eval mode 与 concurrency。

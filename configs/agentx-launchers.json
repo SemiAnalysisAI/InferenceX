@@ -1,0 +1,93 @@
+{
+  "version": 1,
+  "recipes": {
+    "qwen3.5-fp8-mi325x-sglang-agentic-mtp": {
+      "framework": "sglang",
+      "runner_type": "mi325x",
+      "benchmark_script": "single_node/agentic/qwen3.5_fp8_mi325x_mtp.sh",
+      "launch_overrides_version": 1,
+      "model": "Qwen/Qwen3.5-397B-A17B-FP8",
+      "precision": "fp8"
+    },
+    "qwen3.5-fp4-mi355x-sglang-agentic-mtp": {
+      "framework": "sglang",
+      "runner_type": "mi355x",
+      "benchmark_script": "single_node/agentic/qwen3.5_fp4_mi355x_sglang_mtp.sh",
+      "launch_overrides_version": 1,
+      "model": "amd/Qwen3.5-397B-A17B-MXFP4",
+      "precision": "fp4"
+    },
+    "qwen3.5-fp8-mi300x-sglang-agentic-mtp": {
+      "framework": "sglang",
+      "runner_type": "mi300x",
+      "benchmark_script": "single_node/agentic/qwen3.5_fp8_mi300x_mtp.sh",
+      "launch_overrides_version": 1,
+      "model": "Qwen/Qwen3.5-397B-A17B-FP8",
+      "precision": "fp8"
+    },
+    "kimik3-fp4-mi355x-vllm-agentic-mtp": {
+      "framework": "vllm",
+      "runner_type": "mi355x",
+      "benchmark_script": "single_node/agentic/kimik3_fp4_mi355x_mtp.sh",
+      "launch_overrides_version": 1,
+      "model": "moonshotai/Kimi-K3",
+      "precision": "fp4"
+    },
+    "dsv4-fp4-mi355x-vllm-agentic-mtp": {
+      "framework": "vllm",
+      "runner_type": "mi355x",
+      "benchmark_script": "single_node/agentic/dsv4_fp4_mi355x_vllm_mtp.sh",
+      "launch_overrides_version": 1,
+      "model": "deepseek-ai/DeepSeek-V4-Pro",
+      "precision": "fp4"
+    },
+    "minimaxm3-fp8-mi300x-vllm-agentic-mtp": {
+      "framework": "vllm",
+      "runner_type": "mi300x",
+      "benchmark_script": "single_node/agentic/minimaxm3_fp8_mi300x_mtp.sh",
+      "launch_overrides_version": 1,
+      "model": "MiniMaxAI/MiniMax-M3-MXFP8",
+      "precision": "fp8"
+    },
+    "glm5.2-fp8-mi325x-sglang-agentic-mtp": {
+      "framework": "sglang",
+      "runner_type": "mi325x",
+      "benchmark_script": "single_node/agentic/glm5.2_fp8_mi325x_mtp.sh",
+      "launch_overrides_version": 1,
+      "model": "zai-org/GLM-5.2-FP8",
+      "precision": "fp8"
+    },
+    "minimaxm3-fp8-mi325x-vllm-agentic-mtp": {
+      "framework": "vllm",
+      "runner_type": "mi325x",
+      "benchmark_script": "single_node/agentic/minimaxm3_fp8_mi325x_mtp.sh",
+      "launch_overrides_version": 1,
+      "model": "MiniMaxAI/MiniMax-M3-MXFP8",
+      "precision": "fp8"
+    },
+    "minimaxm3-fp4-mi355x-vllm-agentic-mtp": {
+      "framework": "vllm",
+      "runner_type": "mi355x",
+      "benchmark_script": "single_node/agentic/minimaxm3_fp4_mi355x_mtp.sh",
+      "launch_overrides_version": 1,
+      "model": "amd/MiniMax-M3-MXFP4",
+      "precision": "fp4"
+    },
+    "glm5.2-fp4-mi355x-sglang-agentic-mtp": {
+      "framework": "sglang",
+      "runner_type": "mi355x",
+      "benchmark_script": "single_node/agentic/glm5.2_fp4_mi355x_sglang_mtp.sh",
+      "launch_overrides_version": 1,
+      "model": "amd/GLM-5.2-MXFP4",
+      "precision": "fp4"
+    },
+    "dsv4-fp4-mi355x-sglang-agentic-mtp": {
+      "framework": "sglang",
+      "runner_type": "mi355x",
+      "benchmark_script": "single_node/agentic/dsv4_fp4_mi355x_sglang_mtp.sh",
+      "launch_overrides_version": 1,
+      "model": "deepseek-ai/DeepSeek-V4-Pro",
+      "precision": "fp4"
+    }
+  }
+}

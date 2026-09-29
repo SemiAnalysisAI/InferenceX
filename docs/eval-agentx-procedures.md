@@ -323,6 +323,45 @@ gh run cancel <RUN_ID> --repo SemiAnalysisAI/InferenceX
 
 Use `scancel` or process termination only with explicit approval and a concrete reason. They can bypass cleanup or strand the runner. After a recipe fix, dispatch one targeted fast e2e point, inspect it live, then reserve a canonical run/full sweep for the candidate that passed.
 
+## 11. Apply verified server launch extensions
+
+`configs/agentx-launchers.json` declares the supported recipe-to-launcher
+mapping and launch extension version. The 11 declared AMD SGLang/vLLM
+launchers call `agentic_apply_server_launch` after their normal setup and
+command assembly, immediately before recording and spawning the server.
+Unset `AGENTX_LAUNCH_OVERRIDES_FILE` preserves the original command/environment.
+
+To request an extension, set `AGENTX_LAUNCH_OVERRIDES_FILE` to a JSON file,
+`AGENTX_LAUNCH_OVERRIDES_SHA256` to its normalized canonical JSON hash, and
+`AGENTX_SERVER_LAUNCH_FILE` to an output file in the existing result directory.
+The v1 request contains `version: 1`, token arrays `append_args` and
+`remove_args` (long option names), boolean `replace_args`, string mapping
+`env`, name array `unset_env`, optional absolute `executable`, absolute-path
+SHA256 mapping `source_files`, and absolute-path array `absent_source_files`.
+Missing collections default to empty, `replace_args` to false, and
+`executable` to null. Hash the complete normalized object using JSON with
+sorted keys, separators `(',', ':')`, `ensure_ascii=True`, encoded as UTF-8.
+
+Removal must match exactly one base long option and includes its values up to
+the next long option. Ambiguous short options fail. Replacement keeps fixed
+entrypoint positionals and model/host/port/topology flags; appended arguments
+cannot modify those protected controls. Server environment overrides are
+applied after launcher exports and affect only the server child process.
+The executable override selects a Python interpreter for SGLang or a vLLM
+entrypoint for vLLM; it does not change the remaining entrypoint tokens.
+
+Source contents/absences are checked after recipe setup, so an installer that
+overwrites a candidate is rejected before launch. The receipt records
+base/effective argv, changed environment, selected runtime controls (without
+credential-like names), executable resolution, request hash and source
+evidence. Its `evidence_sha256` hashes the complete receipt except that field.
+This is launch evidence, not proof that model loading or the replay succeeded.
+Use the ordinary canonical result gate after every candidate measurement.
+
+GPU-free verification: `python -m pytest utils/agentic/test_server_launch.py`.
+Real GPU performance for a candidate still requires the fast/canonical flow
+above; an empty `{ "version": 1 }` request must preserve canonical argv/env.
+
 ## Completion checklist
 
 - Matrix preview matches intended scenario, topology, eval mode, and concurrency.

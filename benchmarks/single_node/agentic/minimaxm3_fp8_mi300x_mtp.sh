@@ -178,6 +178,9 @@ VLLM_CMD=(
     --speculative-config "$SPEC_CONFIG"
     "${OFFLOAD_ARGS[@]}"
 )
+agentic_apply_server_launch vllm "${VLLM_CMD[@]}"
+VLLM_CMD=("${AGENTX_SERVER_COMMAND[@]}")
+
 write_command "$RESULT_DIR/server_command.txt" "${VLLM_CMD[@]}"
 "${VLLM_CMD[@]}" > "$SERVER_LOG" 2>&1 &
 SERVER_PID=$!

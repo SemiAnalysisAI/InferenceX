@@ -2,6 +2,38 @@
 
 # Shared benchmarking utilities for InferenceX
 
+_INFERENCEX_BENCHMARK_LIB_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+
+# Apply an explicit, versioned server-only launch extension. The Python helper
+# validates edits/source identity and emits NUL-separated argv without eval.
+# An unset request leaves canonical launchers completely unchanged.
+agentic_apply_server_launch() {
+    local framework="$1"
+    shift
+    AGENTX_SERVER_COMMAND=("$@")
+    [[ -n "${AGENTX_LAUNCH_OVERRIDES_FILE:-}" ]] || return 0
+    local output
+    : "${AGENTX_SERVER_LAUNCH_FILE:?AgentX launch evidence path is required}"
+    : "${AGENTX_LAUNCH_OVERRIDES_SHA256:?AgentX launch override hash is required}"
+    output="$(mktemp "${AGENTX_SERVER_LAUNCH_FILE}.argv.XXXXXX")" || return 1
+    local rc=0
+    python3 "${_INFERENCEX_BENCHMARK_LIB_DIR}/../utils/agentic/server_launch.py" \
+        --framework "$framework" \
+        --overrides "$AGENTX_LAUNCH_OVERRIDES_FILE" \
+        --expected-sha256 "$AGENTX_LAUNCH_OVERRIDES_SHA256" \
+        --evidence "$AGENTX_SERVER_LAUNCH_FILE" \
+        --output "$output" -- "${AGENTX_SERVER_COMMAND[@]}" || rc=$?
+    if [[ "$rc" -eq 0 ]]; then
+        local token
+        AGENTX_SERVER_COMMAND=()
+        while IFS= read -r -d '' token; do
+            AGENTX_SERVER_COMMAND+=("$token")
+        done < "$output"
+    fi
+    rm -f -- "$output"
+    return "$rc"
+}
+
 # Keep Python bytecode out of the mounted workspace. Benchmark jobs often run as
 # root inside containers, and root-owned cache directories break future checkout
 # cleanup on self-hosted runners.

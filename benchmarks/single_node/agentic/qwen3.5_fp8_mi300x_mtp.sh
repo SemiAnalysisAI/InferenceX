@@ -91,6 +91,9 @@ SGLANG_CMD=(
     --enable-cache-report
 )
 
+agentic_apply_server_launch sglang "${SGLANG_CMD[@]}"
+SGLANG_CMD=("${AGENTX_SERVER_COMMAND[@]}")
+
 write_command "$RESULT_DIR/sglang_command.txt" "${SGLANG_CMD[@]}"
 "${SGLANG_CMD[@]}" > "$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
