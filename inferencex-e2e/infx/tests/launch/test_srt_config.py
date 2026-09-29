@@ -1,12 +1,25 @@
 """srtslurm.yaml rendering from controlled cluster records."""
 
+import sys
 from pathlib import Path
 
 import pytest
 import yaml
 
 from infx.clusters import Cluster, load_inventory
+from infx.launch.backends.slurm import SlurmBackend
+from infx.launch.context import Launch
 from infx.launch.drivers.srt.config import SrtJob, pyxis_spelling, render, write
+from infx.launch.drivers.srt.recipe import HEALTH_ATTEMPTS, prepare_recipe
+from infx.launch.drivers.srt.run import SrtRun
+from infx.launch.lifecycle import Lifecycle
+from infx.launch.policy import LaunchPath
+from infx.launch.request import SrtRequest
+
+ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(ROOT / "utils/srt-slurm/src"))
+# The pinned srtctl's own srtslurm.yaml defaults, without its serving dependencies.
+from srtctl.core.config import resolve_config_with_defaults  # noqa: E402
 
 
 def cluster(slurm: dict | None = None, srt: dict | None = None, entries: dict | None = None) -> Cluster:
@@ -62,10 +75,8 @@ def test_the_profile_renders_its_facts_and_mounts_a_volume_at_a_second_target():
     assert config["output_dir"] == "/share/outputs"
     assert config["default_sbatch_directives"] == {"cpus-per-task": "128"}
     assert "model_paths" not in config
-    assert config["default_health_check"] == {"max_attempts": 720, "interval_seconds": 10}
     assert (config["visible_devices_env"], config["default_gpu_exporter"]) == ("ROCR_VISIBLE_DEVICES", None)
     assert (config["network_interface"], config["use_exclusive_sbatch_directive"]) == ("eno0", True)
-    assert "default_account" not in config
 
 
 def test_a_host_directory_cannot_be_mounted_at_three_targets():
@@ -76,7 +87,7 @@ def test_a_host_directory_cannot_be_mounted_at_three_targets():
 
 def test_node_exclusions_cpus_and_image_aliases_are_rendered():
     record = cluster(
-        slurm={"account": "bench", "exclude": ["node-1", "node-2"], "cpus-per-task": 192,
+        slurm={"exclude": ["node-1", "node-2"], "cpus-per-task": 192,
                "volumes": {"scratch": {"path": "/scratch/models"}}},
         srt={"container-aliases": ["dynamo-sglang", "dynamo-vllm"], "nginx-aliases": ["nginx-sqsh"]},
     )  # fmt: skip
@@ -88,7 +99,7 @@ def test_node_exclusions_cpus_and_image_aliases_are_rendered():
         "lmsysorg/sglang:v1": "/sq/image.sqsh",
         "nginx-sqsh": "/sq/nginx.sqsh",
     }
-    assert (config["default_account"], config["default_partition"]) == ("bench", "batch")
+    assert config["default_partition"] == "batch"
 
 
 @pytest.mark.parametrize(("image", "spelling"), [
@@ -110,17 +121,48 @@ def test_a_failed_write_keeps_the_previous_config(tmp_path):
     assert yaml.safe_load(target.read_text()) == {"default_partition": "old"}
 
 
-@pytest.mark.parametrize(
-    ("declared", "sacctmgr", "expected"),
-    [(None, "team-a\n", "team-a"), ("benchmark", "team-a\n", "benchmark"), (None, "", None)],
-)
-def test_account_falls_back_to_the_users_slurm_default(tmp_path, monkeypatch, declared, sacctmgr, expected):
-    fake = tmp_path / "sacctmgr"
-    fake.write_text(f"#!/bin/sh\nprintf '%s' '{sacctmgr}'\n")
-    fake.chmod(0o755)
+@pytest.mark.parametrize(("declared", "exported", "users_default", "expected"), [
+    ("bench", "exported", "team", "bench"),
+    (None, "exported", "team", "exported"),
+    (None, None, "team", "team"),
+    (None, None, "", None),  # srtctl's own fallback, "default", applies
+])  # fmt: skip
+def test_jobs_run_under_the_declared_else_exported_else_users_default_account(
+    tmp_path, monkeypatch, declared, exported, users_default, expected
+):
+    sacctmgr = tmp_path / "sacctmgr"
+    sacctmgr.write_text(f"#!/bin/sh\nprintf '%s' '{users_default}'\n")
+    sacctmgr.chmod(0o755)
     monkeypatch.setenv("PATH", f"{tmp_path}:/usr/bin:/bin")
-    config = render(cluster(slurm={"account": declared} if declared else None), job())
-    assert config.get("default_account") == expected
+    record = cluster(slurm={"account": declared} if declared else None)
+    request = SrtRequest.from_env({
+        "RUNNER_NAME": "c_0", "GITHUB_WORKSPACE": str(tmp_path), "IMAGE": "i", "FRAMEWORK": "sglang",
+        "MODEL_PREFIX": "m", "PRECISION": "fp8", "SPEC_DECODING": "none", "RESULT_FILENAME": "r",
+        "IS_AGENTIC": "0", "RUN_EVAL": "false", "EVAL_ONLY": "false",
+        **({"SLURM_ACCOUNT": exported} if exported else {}),
+    })  # fmt: skip
+    life = Lifecycle()
+    launch = Launch(record, SlurmBackend(record, request, life), request, life, LaunchPath.SRT_MULTI)
+
+    run = SrtRun.create(launch, request)
+
+    assert render(record, job(account=run.account)).get("default_account") == expected
+
+
+@pytest.mark.parametrize(("health", "effective"), [
+    (None, {"max_attempts": HEALTH_ATTEMPTS, "interval_seconds": 10}),  # the rendered default
+    ({"max_attempts": 100, "interval_seconds": 5}, {"max_attempts": HEALTH_ATTEMPTS, "interval_seconds": 5}),
+    ({"max_attempts": 2160, "interval_seconds": 5}, {"max_attempts": 2160, "interval_seconds": 5}),
+])  # fmt: skip
+def test_multinode_jobs_wait_at_least_the_health_floor_for_their_server(tmp_path, health, effective):
+    recipe = tmp_path / "recipes/r.yaml"
+    recipe.parent.mkdir()
+    recipe.write_text(yaml.safe_dump({"name": "r", **({"health_check": health} if health else {})}))
+
+    prepare_recipe(tmp_path, "recipes/r.yaml", "job", None, None)
+
+    resolved = resolve_config_with_defaults(yaml.safe_load(recipe.read_text()), render(cluster(), job()))
+    assert resolved["health_check"] == effective
 
 
 def test_single_node_jobs_skip_the_segment_and_typed_gres_replaces_gpus_per_node():

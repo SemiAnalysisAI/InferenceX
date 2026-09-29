@@ -18,9 +18,11 @@ from typing import TYPE_CHECKING
 from infx.clusters.slurm import SlurmSettings
 from infx.launch import policy
 from infx.launch.backends.base import BackendError
+from infx.launch.backends.slurm import srtctl_job_name
 from infx.launch.context import Launch
 from infx.launch.drivers.srt import collect, config, lanes, models, power, submit
 from infx.launch.drivers.srt.checkout import (
+    SRT_FORKS,
     checkout_dir,
     compute_workspace,
     install_srtctl,
@@ -39,12 +41,11 @@ if TYPE_CHECKING:
 def run_single_node(launch: Launch) -> int:
     """One native single-node point: bind its recipe variant, submit, follow, verify."""
     request = SingleNodeRequest.from_env(launch.request.env)
-    run = SrtRun.create(launch, request)
-    model_path = models.single_node_model_path(run.cluster, request)
+    model_path = models.single_node_model_path(launch.cluster, request)
+    staged = {"MODEL_PATH": model_path} if model_path.startswith("/") else {}
+    run = SrtRun.create(launch, request, staged)
     hf_cache = models.single_node_hf_cache(run.cluster, request)
     time_limit = lanes.srt_time_limit(run.cluster.id, request, None, run.srt)
-    if model_path.startswith("/"):
-        run.env["MODEL_PATH"] = model_path
     root = Path(tempfile.mkdtemp(prefix="srt-single.", dir=run.workspace))
     checkout = prepare_checkout(run, root / "checkout", power=False)
     install_srtctl(run, checkout)
@@ -64,6 +65,8 @@ def run_single_node(launch: Launch) -> int:
         model_paths={f"hf:{request.model}": model_path},
         mounts=[(str(hf_cache), request.hf_hub_cache)],
         single_node=True,
+        account=run.account,
+        fork=checkout.fork,
     )
     config.create_volume_mounts(run)
     config.write(checkout.root / "srtslurm.yaml", config.render(run.cluster, job_config))
@@ -125,9 +128,10 @@ def run_multinode(launch: Launch) -> int:
     config_file = lanes.config_file(request)
     decision = power.resolve_power(launch.cluster.id, launch.path, request)
     model = models.checkpoint(launch.cluster, request)
-    model_paths = models.model_paths(launch.cluster, request, config_file, model)
-    run = SrtRun.create(launch, request)
-    run.env.update(models.job_env(launch.cluster, request, model))
+    served = models.served_path(launch.cluster, request, model)
+    fork = request.framework in SRT_FORKS
+    model_paths = models.model_paths(launch.cluster, request, config_file, served, fork=fork)
+    run = SrtRun.create(launch, request, models.job_env(launch.cluster, request, served))
     # srtctl's preflight stats aliased checkpoints from this host, which has no node-local copy.
     preflight = run.srt.preflight and not (model_paths and model and model.node_local)
     if request.framework == "tilert":
@@ -141,7 +145,7 @@ def run_multinode(launch: Launch) -> int:
         "/usr/bin/python3" if shared and os.access("/usr/bin/python3", os.X_OK) else None
     )
     install_srtctl(run, checkout, python=system_python)
-    config.write_lane_config(run, lane, checkout.root, decision, model_paths)
+    config.write_lane_config(run, lane, checkout, decision, model_paths)
     if rc := run_setup(run, checkout):
         return rc
     infmax = compute_workspace(run, checkout, shared=shared)
@@ -149,9 +153,8 @@ def run_multinode(launch: Launch) -> int:
 
     # Power lanes validate one power window per concurrency, so the job runs CONC_LIST.
     conc_list = request.env.get("CONC_LIST", "") if decision.dcgm else None
-    prepare_recipe(
-        checkout.root, config_file, request.runner_name, run.srt.dist_timeout_s, conc_list
-    )
+    job_name = srtctl_job_name(request.runner_name)
+    prepare_recipe(checkout.root, config_file, job_name, run.srt.dist_timeout_s, conc_list)
     arguments = submit.multinode_arguments(
         run, lane, checkout, config_file, overrides, preflight=preflight
     )

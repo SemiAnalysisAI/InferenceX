@@ -71,8 +71,10 @@ def run_steps(tmp_path: Path, steps: list[dict]) -> dict[str, list[str]]:
 
 
 def assert_cancelled_and_waited(calls: dict[str, list[str]]) -> None:
-    assert any(f"--name={RUNNER}" in line.split("|")[0] for line in calls["scancel"]), calls
-    polls = [line for line in calls["squeue"] if f"--name={RUNNER}" in line]
+    # The runner's own jobs, and those srtctl submitted under the namespaced name.
+    for name in (RUNNER, f"inferencex-{RUNNER}"):
+        assert any(f"--name={name}" in line.split("|")[0].split() for line in calls["scancel"]), calls
+    polls = [line for line in calls["squeue"] if f"--name={RUNNER}" in line.split()]
     assert len(polls) >= 2, calls  # it kept polling until the job left the queue
 
 

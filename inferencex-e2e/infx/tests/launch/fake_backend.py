@@ -6,10 +6,13 @@ Unlike Slurm/Pyxis it reaches volumes by claim, copies the checkout in without t
 entries, copies back only the declared outputs, and passes containers no host state.
 """
 
+import fnmatch
 import os
+import re
 import shutil
 import subprocess
 import tempfile
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
@@ -24,8 +27,28 @@ from infx.launch.backends.base import (
     Job,
     JobState,
     JobStatus,
-    container_env,
 )
+
+# Launching-host state as fnmatch patterns. In a container these would name host paths or
+# a host interpreter, or leak runner credentials; exporting bash's readonly ones fails.
+HOST_ENV = (
+    "PATH", "HOME", "USER", "LOGNAME", "PWD", "OLDPWD", "SHELL", "SHLVL", "TERM", "TMPDIR",
+    "HOSTNAME", "_", "LANG", "LC_*", "LD_*", "PYTHON*", "VIRTUAL_ENV", "CONDA_*", "UV_*",
+    "GITHUB_*", "RUNNER_*", "ACTIONS_*", "XDG_*", "SSH_*", "*_VISIBLE_DEVICES",
+    "BASH*", "SHELLOPTS", "UID", "EUID", "PPID",
+)  # fmt: skip
+_SHELL_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
+def container_env(env: Mapping[str, str]) -> dict[str, str]:
+    """The part of the launching environment every container receives (see ``Container``)."""
+    return {
+        name: value
+        for name, value in env.items()
+        if value
+        and _SHELL_NAME.fullmatch(name)
+        and not any(fnmatch.fnmatchcase(name, pattern) for pattern in HOST_ENV)
+    }
 
 
 class FakeVolume(Volume):

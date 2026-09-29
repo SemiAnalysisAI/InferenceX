@@ -208,7 +208,7 @@ flowchart LR
 
 `infx.launch` 会把运行器解析到 `configs/runners.yaml` 中恰好一个 `cluster:<id>` 标签；不在任何集群标签中或同时出现在多个标签中的运行器会在分配资源前失败。`INFERENCEX_LAUNCH_PYTHON` 是一个未激活、只含包依赖的 Python 3.12 环境，因此被启动的作业会继承运行器的 `PATH`，且不带 `VIRTUAL_ENV`。
 
-第一个清理步骤在 checkout 之前运行：用普通的 `scancel` 取消该运行器的 Slurm 作业，并等待 `squeue` 不再列出它们。这样，失效运行器遗留的作业不会写入新的 workspace，而且这一步不依赖 Python。作业结束后它会再运行一次。启动器 Python 就绪后，工作流会从工作流版本的工具 checkout 中运行 `python -m infx.launch cleanup` 作为第二遍清理，在启动前和作业结束后各一次：取消该用户名为 `RUNNER_NAME` 或 `inferencex-RUNNER_NAME` 的 Slurm 作业，并等待它们离开队列。
+第一个清理步骤在 checkout 之前运行：用普通的 `scancel` 取消该运行器的 Slurm 作业，并等待 `squeue` 不再列出它们。这样，失效运行器遗留的作业不会写入新的 workspace，而且这一步不依赖 Python。作业结束后它会再运行一次。启动器 Python 就绪后，工作流会从工作流版本的工具 checkout 中运行 `python -m infx.launch cleanup` 作为第二遍清理，在启动前和作业结束后各一次：取消该用户名为 `RUNNER_NAME` 或 `inferencex-RUNNER_NAME` 的 Slurm 作业，并等待它们离开队列。两遍清理都会取消这两种名称的作业。srtctl 以 `inferencex-RUNNER_NAME` 提交作业，因为其他仓库共用这些物理运行器名称，并会取消以其命名的作业。
 
 `infx.github` 负责共享 REST、分页及评论表态基础操作。`infx.workflows.reuse` 负责复用选择和验证，`infx.workflows.reuse_comment` 负责评论表态反馈。两者均可作为包模块执行。这些辅助模块仅依赖标准库。
 

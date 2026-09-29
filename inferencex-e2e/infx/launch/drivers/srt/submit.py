@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from infx.launch import proc
+from infx.launch.backends.slurm import srtctl_job_name
 from infx.launch.context import LaunchError
 from infx.srt_slurm.single_node import submission_fields
 
@@ -101,16 +102,16 @@ def apply(
         str(checkout.venv / "bin/python"), "-m", "infx.srt_slurm.synthetic_acceptance",
         config, run.request.framework, "--", *arguments,
     ]  # fmt: skip
+    # srtctl names the job after RUNNER_NAME.
+    env = {**run.env, "RUNNER_NAME": srtctl_job_name(run.request.runner_name)}
     if stdout is None:
-        result = proc.run(argv, env=run.env, cwd=checkout.root, capture=True)
+        result = proc.run(argv, env=env, cwd=checkout.root, capture=True)
         sys.stdout.write(result.stdout + result.stderr)
         sys.stdout.flush()
         return result
-    proc.echo(argv, run.env)
+    proc.echo(argv, env)
     with stdout.open("w") as handle:
-        rc = subprocess.run(
-            argv, env=run.env, cwd=checkout.root, stdout=handle, check=False
-        ).returncode
+        rc = subprocess.run(argv, env=env, cwd=checkout.root, stdout=handle, check=False).returncode
     return subprocess.CompletedProcess(argv, rc, stdout.read_text(errors="replace"), "")
 
 

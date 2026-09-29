@@ -237,11 +237,14 @@ jobs:
       - name: Slurm cleanup
         run: |
           if command -v squeue >/dev/null 2>&1; then
-            echo "[Slurm] Cleaning up jobs with name: ${RUNNER_NAME} ..."
-            scancel --name="${RUNNER_NAME}" || true
-            while [ -n "$(squeue --name="${RUNNER_NAME}" --noheader --format='%i')" ]; do
-              squeue --name="${RUNNER_NAME}"
-              sleep 5
+            # srtctl submits as inferencex-<runner> (infx.launch.backends.slurm.srtctl_job_name).
+            for job_name in "${RUNNER_NAME}" "inferencex-${RUNNER_NAME}"; do
+              echo "[Slurm] Cleaning up jobs with name: ${job_name} ..."
+              scancel --name="${job_name}" || true
+              while [ -n "$(squeue --name="${job_name}" --noheader --format='%i')" ]; do
+                squeue --name="${job_name}"
+                sleep 5
+              done
             done
           fi
 
@@ -266,9 +269,10 @@ jobs:
           enable-cache: false
 
       - name: Prepare result-processing Python
-        # Some runner homes hold a ~/.cache/uv that uv cannot create; keep one per runner.
+        # Keep uv's cache and Pythons per runner: some runner homes can't host uv's defaults.
         env: &uv-setup-env
           UV_CACHE_DIR: ${{ github.workspace }}/../.infx-uv-cache
+          UV_PYTHON_INSTALL_DIR: ${{ github.workspace }}/../.infx-uv-python
         run: |
           uv python install --quiet --no-bin 3.12
           result_python=$(uv python find --system 3.12)

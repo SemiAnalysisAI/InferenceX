@@ -180,10 +180,8 @@ class SrtSlurmSettings(Record):
     )
     # Minutes a single-node job gets instead of SALLOC_TIME_LIMIT.
     single_node_time_limit: int | None = Field(default=None, alias="single-node-time-limit", gt=0)
-    # What a single-node recipe's hf:<MODEL> serves: MODEL's staged checkpoint, or the Hub.
-    single_node_models: Literal["staged", "hub"] = Field(
-        default="staged", alias="single-node-models"
-    )
+    # What a single-node recipe's hf:<MODEL> serves: the Hub, or MODEL's staged checkpoint.
+    single_node_models: Literal["staged", "hub"] = Field(default="hub", alias="single-node-models")
     # False where the submit host cannot stat model storage, which srtctl's preflight checks.
     preflight: bool = True
     # Each SGLang role's dist-timeout, for model loads that outlast gloo's 600 s default.
@@ -271,12 +269,3 @@ def slurm_settings(cluster: Cluster) -> SlurmSettings:
     if not isinstance(cluster.scheduler_settings, SlurmSettings):
         raise TypeError(f"cluster {cluster.id!r} is not a Slurm cluster")
     return cluster.scheduler_settings
-
-
-def model_path(cluster: Cluster, key: str) -> Path:
-    """Host path of pre-staged checkpoint ``key``: its root volume's path joined with its dir."""
-    try:
-        entry = cluster.models.entries[key]
-    except KeyError:
-        raise KeyError(f"cluster {cluster.id!r} has no staged model {key!r}") from None
-    return slurm_settings(cluster).volumes[entry.root].path / entry.dir

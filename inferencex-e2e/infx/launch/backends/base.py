@@ -7,8 +7,6 @@ state, and cancelling every job it starts when the launch's Lifecycle ends.
 
 from __future__ import annotations
 
-import fnmatch
-import re
 from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
@@ -84,8 +82,11 @@ class Container:
     A copy-in backend leaves out entries matching an ``exclude`` pattern (fnmatch, any depth).
     ``outputs`` are the workspace-relative paths ``fetch_outputs`` returns. Each of
     ``required_paths`` must be readable where the container runs, or it never starts.
-    ``env`` extends :func:`container_env` and may carry credentials, which a backend must
-    expose no more widely than the launching environment does.
+    Each container receives the launching environment's non-empty, exportable variables
+    except host state (paths, interpreters, runner credentials), with ``env`` over them;
+    workloads rely on no more, though a backend may pass more. ``env`` may carry
+    credentials, which a backend must expose no more widely than the launching environment
+    does.
     """
 
     image: Image
@@ -99,32 +100,6 @@ class Container:
     required_paths: Sequence[PurePosixPath] = ()
     outputs: Sequence[PurePosixPath] = ()
     exclude: Sequence[str] = ()
-
-
-# Launching-host state as fnmatch patterns. In a container these would name host paths or
-# a host interpreter, or leak runner credentials; exporting bash's readonly ones fails.
-HOST_ENV = (
-    "PATH", "HOME", "USER", "LOGNAME", "PWD", "OLDPWD", "SHELL", "SHLVL", "TERM", "TMPDIR",
-    "HOSTNAME", "_", "LANG", "LC_*", "LD_*", "PYTHON*", "VIRTUAL_ENV", "CONDA_*", "UV_*",
-    "GITHUB_*", "RUNNER_*", "ACTIONS_*", "XDG_*", "SSH_*", "*_VISIBLE_DEVICES",
-    "BASH*", "SHELLOPTS", "UID", "EUID", "PPID",
-)  # fmt: skip
-_SHELL_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
-
-
-def container_env(env: Mapping[str, str]) -> dict[str, str]:
-    """The part of the launching environment every container receives.
-
-    Every non-empty, exportable variable except ``HOST_ENV``. Backends that pass the whole
-    environment through give containers more; workloads rely only on this part.
-    """
-    return {
-        name: value
-        for name, value in env.items()
-        if value
-        and _SHELL_NAME.fullmatch(name)
-        and not any(fnmatch.fnmatchcase(name, pattern) for pattern in HOST_ENV)
-    }
 
 
 class Backend(ABC):

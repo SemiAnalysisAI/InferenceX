@@ -106,7 +106,6 @@ env:
   EP_SIZE: '1'
   DP_ATTENTION: 'false'
   SPEC_DECODING: mtp
-  # The AL-matrix collector, instead of an SRT recipe.
   BENCH_SCRIPT_OVERRIDE: benchmarks/single_node/speedbench/${{ inputs.model-prefix }}_fp4_b300_vllm.sh
   SALLOC_TIME_LIMIT: ${{ inputs.salloc-time }}
   # Matrix-collector tunables (propagated into the container via srun --export=ALL).
@@ -202,11 +201,14 @@ jobs:
         run: &resource-cleanup |
           # Cleanup SLURM resources
           if command -v squeue >/dev/null 2>&1; then
-            echo "[Slurm] Cleaning up jobs with name: ${RUNNER_NAME} ..."
-            scancel --name="${RUNNER_NAME}" || true
-            while [ -n "$(squeue --name="${RUNNER_NAME}" --noheader --format='%i')" ]; do
-              squeue --name="${RUNNER_NAME}"
-              sleep 5
+            # srtctl submits as inferencex-<runner> (infx.launch.backends.slurm.srtctl_job_name).
+            for job_name in "${RUNNER_NAME}" "inferencex-${RUNNER_NAME}"; do
+              echo "[Slurm] Cleaning up jobs with name: ${job_name} ..."
+              scancel --name="${job_name}" || true
+              while [ -n "$(squeue --name="${job_name}" --noheader --format='%i')" ]; do
+                squeue --name="${job_name}"
+                sleep 5
+              done
             done
           fi
 
@@ -243,9 +245,10 @@ jobs:
           enable-cache: false
 
       - name: Prepare launcher Python
-        # Some runner homes hold a ~/.cache/uv that uv cannot create; keep one per runner.
+        # Keep uv's cache and Pythons per runner: some runner homes can't host uv's defaults.
         env:
           UV_CACHE_DIR: ${{ github.workspace }}/../.infx-uv-cache
+          UV_PYTHON_INSTALL_DIR: ${{ github.workspace }}/../.infx-uv-python
         run: |
           # Never activated, so launched Slurm jobs inherit the runner's PATH and no VIRTUAL_ENV.
           launch_venv="$RUNNER_TEMP/infx-launch-venv"

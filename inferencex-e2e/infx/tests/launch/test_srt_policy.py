@@ -11,8 +11,10 @@ from infx.launch.drivers.srt.lanes import SrtLane, srt_lane, srt_time_limit
 from infx.launch.drivers.srt.models import (
     Override,
     checkpoint,
+    host_path,
     job_env,
     model_paths,
+    served_path,
     single_node_hf_cache,
     single_node_model_path,
 )
@@ -88,8 +90,8 @@ def test_models_resolve_by_basename_with_overrides(tmp_path, monkeypatch, env, p
     monkeypatch.setitem(models.OVERRIDES, "c", OVERRIDES)
     c, point = cluster(tmp_path), request(**env)
     found = checkpoint(c, point)
-    assert (found and (found.path, found.node_local)) == (path and (tmp_path / path, node_local))
-    assert job_env(c, point, found).get("SERVED_MODEL_NAME") == served
+    assert (found and (host_path(c, found), found.node_local)) == (path and (tmp_path / path, node_local))
+    assert job_env(c, point, served_path(c, point, found)).get("SERVED_MODEL_NAME") == served
     # Single-node points serve the same checkpoint, else the Hub; hub clusters always the Hub.
     assert single_node_model_path(c, point) == (str(tmp_path / path) if path else f"hf:{env['MODEL']}")
     assert single_node_model_path(cluster(tmp_path, "hub"), point) == f"hf:{env['MODEL']}"
@@ -101,7 +103,20 @@ def test_a_checkpoint_that_must_be_readable_fails_before_submission(tmp_path, mo
         checkpoint(cluster(tmp_path), request(MODEL="org/S"))
     (tmp_path / "shared/s").mkdir(parents=True)
     (tmp_path / "shared/s/config.json").write_text("{}")
-    assert checkpoint(cluster(tmp_path), request(MODEL="org/S")).path == tmp_path / "shared/s"
+    c = cluster(tmp_path)
+    assert host_path(c, checkpoint(c, request(MODEL="org/S"))) == tmp_path / "shared/s"
+
+
+def test_a_points_own_model_path_is_what_its_job_serves(tmp_path, monkeypatch):
+    c = cluster(tmp_path)
+    host = request(MODEL="org/M", MODEL_PATH="/host/m")
+    assert served_path(c, host, checkpoint(c, host)) == str(tmp_path / "nvme/m")  # the runner's own loses
+    point = request(MODEL="org/M", MODEL_PATH="/point/m", PREFILL_ADDITIONAL_SETTINGS='["MODEL_PATH=/point/m"]')
+    # Where the staged copy must be readable here, a point serving its own path needs none.
+    monkeypatch.setitem(models.OVERRIDES, "c", (Override(Match(), require_config=True),))
+    served = served_path(c, point, checkpoint(c, point))
+    assert served == "/point/m"
+    assert job_env(c, point, served)["MODEL_PATH"] == "/point/m"
 
 
 BUNDLE = """base:
@@ -126,10 +141,17 @@ def test_every_recipe_alias_maps_to_the_checkpoint_and_literals_pass_through(tmp
     point = request(MODEL=model, GITHUB_WORKSPACE=str(tmp_path / "ws"))
     if paths is LaunchError:
         with pytest.raises(LaunchError, match="stages no checkpoint"):
-            model_paths(c, point, "recipes/r.yaml:override_x", checkpoint(c, point))
+            model_paths(c, point, "recipes/r.yaml:override_x", served_path(c, point, checkpoint(c, point)))
         return
-    resolved = model_paths(c, point, "recipes/r.yaml:override_x", checkpoint(c, point))
+    resolved = model_paths(c, point, "recipes/r.yaml:override_x", served_path(c, point, checkpoint(c, point)))
     assert resolved == {alias: str(tmp_path / path) for alias, path in paths.items()}
+
+
+def test_only_a_fork_may_run_a_recipe_the_mirror_lacks(tmp_path):
+    c, point = cluster(tmp_path), request(MODEL="org/M", GITHUB_WORKSPACE=str(tmp_path))
+    assert model_paths(c, point, "recipes/fork-only.yaml", "/m", fork=True) == {}
+    with pytest.raises(LaunchError, match="not in the recipe mirror"):
+        model_paths(c, point, "recipes/fork-only.yaml", "/m")
 
 
 def test_matching_single_node_points_read_the_shared_hub_cache(tmp_path, monkeypatch):

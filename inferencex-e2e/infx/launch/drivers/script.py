@@ -7,13 +7,13 @@ the container workspace, and ``speedbench_results/`` come back on every exit pat
 from __future__ import annotations
 
 import fnmatch
-from dataclasses import dataclass
 from pathlib import PurePosixPath
 from typing import TYPE_CHECKING
 
 from infx.launch import policy
 from infx.launch.backends.base import Container, Mount
 from infx.launch.context import Launch, LaunchError
+from infx.launch.drivers.srt.models import Checkpoint, checkpoint
 from infx.launch.request import RequestError, ScriptRequest
 
 if TYPE_CHECKING:
@@ -39,28 +39,21 @@ def container_workspace(image: str) -> PurePosixPath:
     return PurePosixPath("/workspace")
 
 
-@dataclass(frozen=True)
-class ModelLocation:
-    volume: str
-    dir: PurePosixPath
-    node_local: bool
-    staged: bool
+def resolve_model(cluster: Cluster, request: ScriptRequest) -> tuple[Checkpoint, bool]:
+    """MODEL's staged checkpoint, else ``<download-root>/<basename>`` for the script to fill.
 
-
-def resolve_model(cluster: Cluster, model: str) -> ModelLocation:
-    """The staged checkpoint of HF id ``model``, else ``<download-root>/<basename>``, which the script fills."""
-    basename = model.rsplit("/", 1)[-1]
-    entry = cluster.models.entries.get(basename)
-    if entry is not None:
-        volume, directory, staged = entry.root, entry.dir, True
-    elif cluster.models.download_root is not None:
-        volume, directory, staged = cluster.models.download_root, basename, False
-    else:
+    The flag says whether the checkpoint is staged.
+    """
+    if (staged := checkpoint(cluster, request)) is not None:
+        return staged, True
+    basename = request.model.rsplit("/", 1)[-1]
+    root = cluster.models.download_root
+    if root is None:
         raise LaunchError(
             f"cluster {cluster.id!r} stages no {basename!r} and has no models.download-root"
         )
-    node_local = cluster.scheduler_settings.volumes[volume].visibility == "node-local"
-    return ModelLocation(volume, PurePosixPath(directory), node_local, staged)
+    # The download root is shared storage (cluster validation).
+    return Checkpoint(root, basename, node_local=False), False
 
 
 def script_outputs(request: ScriptRequest, workdir: PurePosixPath) -> tuple[PurePosixPath, ...]:
@@ -84,7 +77,7 @@ def run(launch: Launch) -> int:
         raise LaunchError(
             f"cluster {cluster.id!r} has no {HF_HOME_VOLUME!r} volume for script runs"
         )
-    model = resolve_model(cluster, request.model)
+    model, staged = resolve_model(cluster, request)
     model_path = CONTAINER_MODELS / model.dir
     workdir = container_workspace(request.image)
     outputs = script_outputs(request, workdir)
@@ -105,7 +98,7 @@ def run(launch: Launch) -> int:
         },
         # Mounting every model root would fail whenever an unused one is absent on the node.
         mounts=(
-            Mount(model.volume, CONTAINER_MODELS, create=not model.staged),
+            Mount(model.volume, CONTAINER_MODELS, create=not staged),
             Mount(HF_HOME_VOLUME, CONTAINER_HF_HOME, create=True),
         ),
         # A node-local checkpoint is visible only on the node that runs the script.

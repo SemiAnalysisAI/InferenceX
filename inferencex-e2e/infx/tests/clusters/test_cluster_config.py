@@ -1,12 +1,10 @@
 import copy
-from pathlib import Path
 
 import pytest
 import yaml
 from pydantic import ValidationError
 
 from infx.clusters import SCHEDULERS, load_inventory, resolve_cluster
-from infx.clusters.slurm import model_path
 from infx.launch.backends import BACKENDS
 from infx.tests.launch.fake_backend import FakeSettings
 
@@ -57,14 +55,6 @@ def test_resolve_cluster_accepts_a_path_and_names_the_owning_cluster(tmp_path):
     assert resolve_cluster("beta_1", path).id == "beta"
     with pytest.raises(ValueError, match="exactly one cluster label"):
         resolve_cluster("gamma_0", path)
-
-
-def test_model_path_joins_the_root_volume_and_directory():
-    cluster = load_inventory(inventory(alpha=CLUSTER)).clusters["alpha"]
-
-    assert model_path(cluster, "Kimi-K3") == Path("/scratch/models/Kimi-K3")
-    with pytest.raises(KeyError, match="no staged model 'GLM-5.2-FP8'"):
-        model_path(cluster, "GLM-5.2-FP8")
 
 
 def test_scheduler_record_errors_carry_the_record_name():

@@ -22,6 +22,8 @@ if TYPE_CHECKING:
 
 RECIPES_MIRROR = Path("benchmarks/multi_node/srt-slurm-recipes")
 HEALTH_ATTEMPTS = 720
+_HEALTH_CHECK = re.compile(r"( *)health_check:")
+_MAX_ATTEMPTS = re.compile(r"(\bmax_attempts:\s*)(\d+)")
 # Forced TRT speculative acceptance, which eval-only real-verification runs strip.
 FORCED_ACCEPTANCE_MARKER = "TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS"
 
@@ -42,12 +44,23 @@ def rename_job(text: str, name: str) -> str:
 
 
 def raise_health_attempts(text: str) -> str:
-    """Raise every health-check ``max_attempts`` to at least HEALTH_ATTEMPTS."""
-    return re.sub(
-        r"(\bmax_attempts:\s*)(\d+)",
-        lambda match: f"{match[1]}{max(int(match[2]), HEALTH_ATTEMPTS)}",
-        text,
-    )
+    """Raise each ``health_check`` block's ``max_attempts`` to at least HEALTH_ATTEMPTS."""
+    lines = text.splitlines(keepends=True)
+    block: int | None = None  # the indentation of the health_check key being read
+    for index, line in enumerate(lines):
+        content = line.strip()
+        indent = len(line) - len(line.lstrip(" "))
+        if block is not None and content and not content.startswith("#") and indent <= block:
+            block = None
+        if heading := _HEALTH_CHECK.match(line):
+            block = len(heading[1])
+        if block is not None:  # a flow mapping's attempts are on the key's own line
+            lines[index] = _MAX_ATTEMPTS.sub(_at_least_the_floor, line)
+    return "".join(lines)
+
+
+def _at_least_the_floor(match: re.Match[str]) -> str:
+    return f"{match[1]}{max(int(match[2]), HEALTH_ATTEMPTS)}"
 
 
 def add_dist_timeout(text: str, seconds: int) -> str:

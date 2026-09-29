@@ -148,15 +148,20 @@ def test_backend_cancel_waits_until_a_listed_job_leaves_the_queue(fake_bin, tmp_
     assert queue_state(Job("4242")) is None
 
 
-def test_workflow_cleanup_cancels_the_jobs_named_after_the_runner(fake_bin, tmp_path, monkeypatch):
-    log = tmp_path / "scancel.log"
-    fake_bin("scancel", recorder(log))
-    fake_bin("squeue", "exit 0")
+def test_workflow_cleanup_cancels_the_runners_jobs_and_those_srtctl_submitted(fake_bin, tmp_path, monkeypatch):
+    scancel, squeue = tmp_path / "scancel.log", tmp_path / "squeue.log"
+    fake_bin("scancel", recorder(scancel))
+    fake_bin("squeue", recorder(squeue))
     monkeypatch.setenv("USER", "runner")
 
     slurm.SlurmBackend.cleanup(None, "b300-dsxe_03")
 
-    assert calls(log) == [["--user=runner", "--name=b300-dsxe_03"]]
+    assert calls(scancel) == [
+        ["--user=runner", "--name=b300-dsxe_03"], ["--user=runner", "--name=inferencex-b300-dsxe_03"],
+    ]
+    # It waits until squeue lists neither.
+    [query] = calls(squeue)
+    assert "--name=b300-dsxe_03,inferencex-b300-dsxe_03" in query
 
 
 def test_a_container_step_killed_by_a_signal_reports_the_shell_exit_code():

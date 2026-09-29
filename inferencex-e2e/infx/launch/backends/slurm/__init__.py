@@ -3,8 +3,9 @@
 A container runs as one ``srun`` step in a one-node ``salloc`` allocation that is cancelled
 when the launch ends. The checkout and volumes are bind-mounted, so outputs need no
 copying, and steps inherit the whole launching environment (``srun --export=ALL``). Jobs
-are named after the runner, which is how :meth:`SlurmBackend.cleanup` finds leftovers.
-srt-slurm and the legacy lanes also use the Slurm-only operations below the generic ones.
+are named after the runner, or :func:`srtctl_job_name` when srtctl submits them, which is
+how :meth:`SlurmBackend.cleanup` finds leftovers. srt-slurm and the legacy lanes also use
+the Slurm-only operations below the generic ones.
 """
 
 from __future__ import annotations
@@ -45,6 +46,15 @@ if TYPE_CHECKING:
     from infx.launch.request import LaunchRequest
 
 CANCEL_POLL_S = 10.0
+
+
+def srtctl_job_name(runner: str) -> str:
+    """What the jobs srtctl submits for ``runner`` are named.
+
+    Other repositories share the physical runner names and cancel jobs by them, so these
+    long jobs carry a prefix that only this repository's cleanup cancels.
+    """
+    return f"inferencex-{runner}"
 
 
 @dataclass(frozen=True)
@@ -170,7 +180,6 @@ class SlurmBackend(Backend):
             raise BackendError(f"Slurm job {job.id} records no outputs")
         return outputs
 
-    @override
     def cancel(self, job: Job, *, wait_s: float = 0.0) -> None:
         """``scancel`` the job if squeue lists it; with ``wait_s``, wait that long for it to go."""
         if not cli.is_active(job):
@@ -190,12 +199,16 @@ class SlurmBackend(Backend):
     @override
     @classmethod
     def cleanup(cls, settings: SchedulerSettings | None, runner: str) -> None:
-        """Cancel this user's jobs named ``runner``; Slurm finds them by user and name alone."""
+        """Cancel this user's jobs named after ``runner``, srtctl's included.
+
+        Slurm finds them by user and name alone, so no settings are needed.
+        """
         if shutil.which("squeue") is None:
             print(f"No Slurm scheduler here; nothing to clean up for {runner}")
             return
-        print(f"[Slurm] Cleaning up jobs named {runner}")
-        cli.cancel_named((runner,))
+        names = (runner, srtctl_job_name(runner))
+        print(f"[Slurm] Cleaning up jobs named {' and '.join(names)}")
+        cli.cancel_named(names)
 
     def stage_image(
         self,

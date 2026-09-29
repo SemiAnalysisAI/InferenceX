@@ -335,7 +335,9 @@ Self-hosted launch steps run `python -m infx.launch` with `INFERENCEX_LAUNCH_PYT
 an unactivated venv the "Prepare launcher Python" step builds in `$RUNNER_TEMP` from
 the tooling checkout's `inferencex-e2e/pyproject.toml`
 (`uv pip install --exclude-newer PT12H`). It is not `uv run`: its `VIRTUAL_ENV` and
-`PATH` changes would leak into `srun --export=ALL` jobs.
+`PATH` changes would leak into `srun --export=ALL` jobs. The Python setup steps keep
+uv's cache and managed Pythons per runner, beside its workspace (`.infx-uv-cache`,
+`.infx-uv-python`), because some runner homes cannot host uv's defaults.
 
 ## Repository-role authorization
 

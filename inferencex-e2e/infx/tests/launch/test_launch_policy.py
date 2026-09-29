@@ -1,6 +1,8 @@
 """Power eligibility, dcgm detection, allocation-time policy, and the tables' agreement
 with the cluster inventory."""
 
+import json
+
 import pytest
 
 from infx.clusters import load_clusters, load_inventory
@@ -189,19 +191,26 @@ def test_a_launch_checks_its_own_cluster_rows_before_any_work(monkeypatch, capsy
     assert "LEGACY_TILERT['c']" in capsys.readouterr().err
 
 
-@pytest.mark.parametrize(
-    ("framework", "env_value", "additional", "expected"),
-    [
-        ("tilert", "host-value", "[]", ",".join(f"mlx5_{i}:1" for i in range(8))),
-        # The workflow exports a point's additional-settings, so the env already holds them.
-        ("tilert", "mlx5_9:1", '["UCX_NET_DEVICES=mlx5_9:1"]', "mlx5_9:1"),
-        ("sglang", "host-value", "[]", "host-value"),
-    ],
-)
-def test_tilert_runtime_settings_beat_the_host_but_not_the_points_settings(framework, env_value, additional, expected):
-    record = {"gpus-per-node": 8, "arch": "x86_64", "scheduler": "slurm",
-              "slurm": {"partition": "p", "exclusive": True}}  # fmt: skip
-    cluster = load_inventory({"labels": {"cluster:b200-nscale": ["b_0"]},
-                              "clusters": {"b200-nscale": record}}).clusters["b200-nscale"]  # fmt: skip
-    request = _request(FRAMEWORK=framework, UCX_NET_DEVICES=env_value, PREFILL_ADDITIONAL_SETTINGS=additional)
-    assert policy.runtime_env(cluster, request)["UCX_NET_DEVICES"] == expected
+# One name per source, and SHARED, which every source sets.
+HOST = {"TILERT": "host", "CLUSTER": "host", "LATER": "host", "SHARED": "host"}
+
+
+@pytest.mark.parametrize(("framework", "chosen", "expected"), [
+    # Every cluster source beats the runner host; of several, the latest wins.
+    ("tilert", {}, {"TILERT": "tilert", "CLUSTER": "cluster", "LATER": "later", "SHARED": "later"}),
+    # The workflow exports a point's additional-settings, so the env already holds them.
+    ("tilert", {"TILERT": "point", "SHARED": "point"},
+     {"TILERT": "point", "CLUSTER": "cluster", "LATER": "later", "SHARED": "point"}),
+    # TILERT_ENV is for TileRT points only.
+    ("sglang", {}, {"TILERT": "host", "CLUSTER": "cluster", "LATER": "later", "SHARED": "later"}),
+])  # fmt: skip
+def test_cluster_settings_beat_the_host_but_never_the_points_settings(monkeypatch, framework, chosen, expected):
+    record = {**RECORD, "env": {"CLUSTER": "cluster", "SHARED": "cluster"}}
+    cluster = load_inventory({"labels": {"cluster:c": ["c_0"]}, "clusters": {"c": record}}).clusters["c"]
+    monkeypatch.setitem(policy.TILERT_ENV, "c", {"TILERT": "tilert", "SHARED": "tilert"})
+    settings = json.dumps([f"{name}={value}" for name, value in chosen.items()])
+    request = _request(FRAMEWORK=framework, DECODE_ADDITIONAL_SETTINGS=settings, **{**HOST, **chosen})
+
+    env = policy.runtime_env(cluster, request, {"LATER": "later", "SHARED": "later"})
+
+    assert {name: env[name] for name in HOST} == expected

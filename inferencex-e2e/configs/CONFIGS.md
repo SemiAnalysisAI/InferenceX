@@ -185,8 +185,10 @@ schema; unknown keys fail.
   `cluster:<id>` label names; broad SKU labels use the GPU family when its clusters
   agree. Agentic master configs must use a `cluster:<id>` label; their DRAM KV-offload
   matrices combine both fields with `dram-utilization` into `total-cpu-dram-gb`.
-- `env` is the workload environment of every launch on the cluster. Values cannot
-  contain commas: Slurm hands them to jobs in an `srun --export` list.
+- `env` is the workload environment of every launch on the cluster. Like
+  `slurm.srt-slurm.env`, it overrides the runner's own environment but never a name the
+  point's additional-settings set. Values cannot contain commas: Slurm hands them to jobs
+  in an `srun --export` list.
 - `models.entries` keys pre-staged checkpoints by directory name, each with its `root`
   volume and `dir`. The optional `models.download-root` names the shared volume that
   receives missing checkpoints as `<root>/<HF basename>`.

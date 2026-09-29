@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from infx.config import repository_root
-from infx.launch.backends.slurm import SlurmBackend
+from infx.launch.backends.slurm import SlurmBackend, cli
 from infx.launch.context import Launch, LaunchError
 from infx.launch.policy import runtime_env
 from infx.launch.request import LaunchRequest, RequestError
@@ -28,24 +29,28 @@ class SrtRun:
     life: Lifecycle
     env: dict[str, str]
     srt: SrtSlurmSettings
+    account: str | None  # the Slurm account jobs are submitted under
 
     @classmethod
-    def create(cls, launch: Launch, request: SrtRequest) -> SrtRun:
-        """Children get the runtime settings, then the cluster's ``env`` and ``srt-slurm.env``."""
+    def create(
+        cls, launch: Launch, request: SrtRequest, job_env: Mapping[str, str] | None = None
+    ) -> SrtRun:
+        """Children get the runtime settings: the cluster's, ``srt-slurm.env``, then ``job_env``."""
         backend = slurm_backend(launch)
         srt = backend.settings.srt_slurm
         if srt is None:
             raise LaunchError(f"cluster {launch.cluster.id!r} has no slurm.srt-slurm settings")
-        env = runtime_env(launch.cluster, request)
-        env.update(launch.cluster.env)
-        env.update(srt.env)
+        env = runtime_env(launch.cluster, request, srt.env, job_env or {})
         # Slurm jobs build their own venv; the launcher's must not leak into them.
         env.pop("VIRTUAL_ENV", None)
         root = str(repository_root())
         env["PYTHONPATH"] = os.pathsep.join(filter(None, (root, env.get("PYTHONPATH"))))
         # Read by srt-slurm's post-benchmark eval.
         env["INFMAX_WORKSPACE"] = str(request.workspace)
-        return cls(launch.cluster, backend, request, launch.life, env, srt)
+        # Without an account, srtctl falls back to SLURM_ACCOUNT, then to "default", which
+        # some clusters reject; the user's Slurm default comes before that.
+        account = backend.settings.account or env.get("SLURM_ACCOUNT") or cli.default_account()
+        return cls(launch.cluster, backend, request, launch.life, env, srt, account)
 
     @property
     def workspace(self) -> Path:

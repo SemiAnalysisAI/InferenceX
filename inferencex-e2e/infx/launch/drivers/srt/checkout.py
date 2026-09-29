@@ -29,7 +29,8 @@ class SrtFork:
     """A framework's srt-slurm fork, checked out instead of the pinned submodule.
 
     Forks get no InferenceX patches, predate ``--json``, ``--no-preflight`` and
-    ``benchmark.stream_output``, and report their job only in prose.
+    ``benchmark.stream_output``, and report their job only in prose. Their jobs keep
+    srtctl's own health-check default, and may run recipes the workspace mirror lacks.
     """
 
     url: str

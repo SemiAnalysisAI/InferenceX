@@ -243,6 +243,21 @@ def test_unstaged_model_resolves_under_the_download_root_without_a_node_probe(
     assert not any(call[0] == "srun" and "test" in call for call in fakes())
 
 
+def test_collectors_serve_the_checkpoint_srt_jobs_would(fakes, workspace, tmp_path):
+    # A shared copy keyed by the basename and a node-local one keyed <basename>@<root>.
+    inventory = inventory_for(tmp_path)
+    inventory["clusters"]["fixture"]["models"]["entries"] = {
+        "Kimi-K3": {"root": "downloads", "dir": "Kimi-K3"},
+        "Kimi-K3@scratch": {"root": "scratch", "dir": "kimi-k3"},
+    }
+    assert launch(load_inventory(inventory).clusters["fixture"], request_for(workspace)) == 0
+
+    # The node-local copy wins, as for srt-slurm jobs.
+    container = container_step(fakes())
+    assert "MODEL_PATH=/models/kimi-k3" in option(container, "--export").split(",")
+    assert f"{tmp_path}/scratch:/models" in option(container, "--container-mounts").split(",")
+
+
 @pytest.mark.parametrize(("overrides", "message"), [
     ({"OUT_YAML": "/tmp/speedbench-reference-al.yaml"}, "lies outside the container workspace"),
     ({"GPU_COUNT": ""}, "GPU_COUNT"),

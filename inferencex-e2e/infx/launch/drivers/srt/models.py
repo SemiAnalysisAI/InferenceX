@@ -1,8 +1,10 @@
-"""Which checkpoint an srt-slurm job serves.
+"""Which checkpoint a job serves.
 
-Every ``model.path`` alias of the recipe (anything but an ``hf:`` id or absolute path) maps
-to MODEL's ``models.entries`` record, keyed by its basename or ``<basename>@<root>``, a
-node-local copy first. ``OVERRIDES`` holds the exceptions.
+MODEL resolves to its ``models.entries`` record, keyed by its basename or
+``<basename>@<root>``, a node-local copy first; ``OVERRIDES`` holds the exceptions. An
+srt-slurm job serves that checkpoint unless the point's additional-settings name a
+MODEL_PATH, and every ``model.path`` alias of its recipe (anything but an ``hf:`` id or
+absolute path) maps to what it serves.
 """
 
 from __future__ import annotations
@@ -14,11 +16,11 @@ from typing import TYPE_CHECKING
 
 import yaml
 
-from infx.clusters.slurm import model_path, slurm_settings
+from infx.clusters.slurm import slurm_settings
 from infx.launch.context import LaunchError
 from infx.launch.drivers.srt.config import volume_path
 from infx.launch.drivers.srt.recipe import recipe_mirror_path
-from infx.launch.policy import Match, any_of
+from infx.launch.policy import Match, any_of, point_settings
 
 if TYPE_CHECKING:
     from infx.clusters import Cluster
@@ -36,12 +38,14 @@ class Override:
 
 
 OVERRIDES: dict[str, tuple[Override, ...]] = {
-    # The NVMe copy is not on every node; only vLLM reads it.
+    # vLLM reads the 0813 NVMe copy, which not every node holds; every other engine the
+    # shared one.
     "b300-dsxe": (
         Override(
-            Match(frameworks=any_of("sglang"), model_glob="*/DeepSeek-V4-Pro-0813"),
-            entry="DeepSeek-V4-Pro-0813",
+            Match(frameworks=any_of("vllm"), model_glob="*/DeepSeek-V4-Pro-0813"),
+            entry="DeepSeek-V4-Pro-0813@scratch",
         ),
+        Override(Match(model_glob="*/DeepSeek-V4-Pro-0813"), entry="DeepSeek-V4-Pro-0813"),
     ),
     "gb200-nv": (
         # dsr1 SGLang and DSV4 vLLM read the Lustre copies; TRT and the DSV4 power lane NVMe.
@@ -98,18 +102,22 @@ def _override(cluster: Cluster, request: LaunchRequest, field: str) -> str | boo
 
 @dataclass(frozen=True)
 class Checkpoint:
-    """A staged checkpoint: its host path, and whether each node holds its own copy."""
+    """Checkpoint directory ``dir`` of volume ``volume``, on any scheduler."""
 
-    path: Path
-    node_local: bool
+    volume: str
+    dir: str
+    node_local: bool  # each node holds its own copy, which a node can lack
 
 
 def checkpoint(cluster: Cluster, request: LaunchRequest) -> Checkpoint | None:
-    """MODEL's checkpoint on ``cluster``, or None when the cluster stages none.
+    """MODEL's staged checkpoint on ``cluster``, or None when the cluster stages none.
 
-    Raises ``LaunchError`` when it must be readable here and is not.
+    None too when the point's additional-settings name a MODEL_PATH of its own. Raises
+    ``LaunchError`` when the checkpoint must be readable here and is not.
     """
-    volumes = slurm_settings(cluster).volumes
+    if "MODEL_PATH" in point_settings(request):
+        return None
+    volumes = cluster.scheduler_settings.volumes
     entries = cluster.models.entries
 
     def node_local(key: str) -> bool:
@@ -122,11 +130,31 @@ def checkpoint(cluster: Cluster, request: LaunchRequest) -> Checkpoint | None:
         key = min(copies, key=lambda name: not node_local(name), default=None)
     if key is None:
         return None
-    path = model_path(cluster, str(key))
-    required = _override(cluster, request, "require_config")
-    if required and not os.access(path / "config.json", os.R_OK):
-        raise LaunchError(f"model checkpoint is unavailable: no readable {path}/config.json")
-    return Checkpoint(path, node_local(str(key)))
+    entry = entries[str(key)]
+    model = Checkpoint(entry.root, entry.dir, node_local(str(key)))
+    # Only srt-slurm clusters have OVERRIDES rows (table_problems), so the host path exists.
+    if _override(cluster, request, "require_config"):
+        config = host_path(cluster, model) / "config.json"
+        if not os.access(config, os.R_OK):
+            raise LaunchError(f"model checkpoint is unavailable: no readable {config}")
+    return model
+
+
+def host_path(cluster: Cluster, model: Checkpoint) -> Path:
+    """Where a Slurm cluster's hosts and jobs see ``model``."""
+    return volume_path(cluster, model.volume) / model.dir
+
+
+def served_path(cluster: Cluster, request: LaunchRequest, model: Checkpoint | None) -> str | None:
+    """What an srt-slurm job serves: ``model``, else the point's own MODEL_PATH setting.
+
+    A point with a MODEL_PATH setting has no ``model``: ``checkpoint`` stages none for it.
+    """
+    if model is not None:
+        return str(host_path(cluster, model))
+    if "MODEL_PATH" in point_settings(request):
+        return request.env.get("MODEL_PATH") or None
+    return None
 
 
 def recipe_aliases(recipe: Path) -> set[str]:
@@ -145,28 +173,38 @@ def recipe_aliases(recipe: Path) -> set[str]:
 
 
 def model_paths(
-    cluster: Cluster, request: LaunchRequest, config_file: str, model: Checkpoint | None
+    cluster: Cluster,
+    request: LaunchRequest,
+    config_file: str,
+    served: str | None,
+    *,
+    fork: bool = False,
 ) -> dict[str, str]:
-    """srtslurm.yaml ``model_paths``: each alias of ``config_file``'s recipe mapped to ``model``."""
+    """srtslurm.yaml ``model_paths``: each alias of ``config_file``'s recipe mapped to ``served``.
+
+    A ``fork`` may run a recipe of its own, which the workspace mirror lacks; it maps none.
+    """
     recipe = recipe_mirror_path(request.workspace, config_file)
     if not recipe.is_file():
+        if fork:
+            return {}
         raise LaunchError(f"CONFIG_FILE {config_file} is not in the recipe mirror: {recipe}")
     aliases = recipe_aliases(recipe)
-    if aliases and model is None:
+    if aliases and served is None:
         raise LaunchError(
             f"cluster {cluster.id!r} stages no checkpoint for MODEL={request.model}, "
             f"which recipe aliases {sorted(aliases)} name"
         )
-    return dict.fromkeys(sorted(aliases), str(model.path)) if model is not None else {}
+    return dict.fromkeys(sorted(aliases), served) if served is not None else {}
 
 
-def job_env(cluster: Cluster, request: LaunchRequest, model: Checkpoint | None) -> dict[str, str]:
+def job_env(cluster: Cluster, request: LaunchRequest, served: str | None) -> dict[str, str]:
     """MODEL_PATH and SERVED_MODEL_NAME, for the job's benchmark and eval clients."""
     env: dict[str, str] = {}
-    if model is not None:
-        env["MODEL_PATH"] = str(model.path)
-    if served := _override(cluster, request, "served_name"):
-        env["SERVED_MODEL_NAME"] = str(served)
+    if served is not None:
+        env["MODEL_PATH"] = served
+    if name := _override(cluster, request, "served_name"):
+        env["SERVED_MODEL_NAME"] = str(name)
     return env
 
 
@@ -175,7 +213,7 @@ def single_node_model_path(cluster: Cluster, request: LaunchRequest) -> str:
     srt = slurm_settings(cluster).srt_slurm
     staged = srt is not None and srt.single_node_models == "staged"
     model = checkpoint(cluster, request) if staged else None
-    return str(model.path) if model is not None else f"hf:{request.model}"
+    return str(host_path(cluster, model)) if model is not None else f"hf:{request.model}"
 
 
 # AgentX single-node points that read the shared Hub cache instead of the node-local one.

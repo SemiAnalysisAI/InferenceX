@@ -282,7 +282,8 @@ clusters:
     scheduler: slurm
     slurm:
       partition: h100
-      exclusive: true
+      # The partition rejects --exclusive (sbatch: Requested node configuration is not available).
+      exclusive: false
       gres: "gpu:h100:{gpus}"
       volumes:
         hf-hub-cache: {path: /mnt/vast/gharunner/hf-hub-cache}
@@ -294,7 +295,7 @@ clusters:
       srt-slurm:
         network-interface: ""
         gpus-per-node-directive: false  # GPUs are requested by typed GRES (slurm.gres)
-        single-node-exclusive: false  # as the old salloc path; the job's 8 GPUs fill the node
+        single-node-exclusive: false  # the partition rejects --exclusive
   h100-dgxc:
     gpus-per-node: 8
     available-cpu-dram-mib: 2_063_837
@@ -339,7 +340,8 @@ clusters:
     scheduler: slurm
     slurm:
       partition: h200
-      exclusive: true
+      # The partition rejects --exclusive (sbatch: Requested node configuration is not available).
+      exclusive: false
       gres: "gpu:h200:{gpus}"
       volumes:
         hf-hub-cache: {path: /mnt/vast/gharunner/hf-hub-cache}
@@ -352,7 +354,7 @@ clusters:
       srt-slurm:
         network-interface: ""
         gpus-per-node-directive: false  # GPUs are requested by typed GRES (slurm.gres)
-        single-node-exclusive: false  # as the old salloc path; the job's 8 GPUs fill the node
+        single-node-exclusive: false  # the partition rejects --exclusive
   h200-dgxc:
     gpus-per-node: 8
     available-cpu-dram-mib: 1_471_356
@@ -396,8 +398,6 @@ clusters:
           dcgm-exporter: {dir: /data/gharunners/containers}
       srt-slurm:
         network-interface: ""
-        # Single-node recipes were validated against the Hub snapshots.
-        single-node-models: hub
         gpus-per-node-directive: true
         segment-directive: false
         container-aliases: [dynamo-trtllm, dynamo-sglang, dynamo-vllm, latest]
@@ -411,7 +411,8 @@ clusters:
     scheduler: slurm
     slurm:
       partition: b200
-      exclusive: true
+      # The partition rejects --exclusive (sbatch: Requested node configuration is not available).
+      exclusive: false
       gres: "gpu:b200:{gpus}"
       volumes:
         hf-hub-cache: {path: /tmp/gharunner/hf-hub-cache, visibility: node-local}
@@ -424,7 +425,7 @@ clusters:
       srt-slurm:
         network-interface: ""
         gpus-per-node-directive: false  # GPUs are requested by typed GRES (slurm.gres)
-        single-node-exclusive: false  # as the old salloc path; the job's 8 GPUs fill the node
+        single-node-exclusive: false  # the partition rejects --exclusive
   b200-nb:
     gpus-per-node: 8
     arch: x86_64
@@ -485,6 +486,7 @@ clusters:
       srt-slurm:
         network-interface: ""
         default-time-limit: "4:00:00"
+        single-node-models: staged
         container-aliases: [dynamo-vllm, dynamo-sglang, dynamo-trtllm, sglang-v0.5.11-cu130]
         nginx-aliases: [nginx-sqsh]
   b300-dsxe:
@@ -541,6 +543,7 @@ clusters:
         lock-timeout-s: 3600
       srt-slurm:
         network-interface: ""
+        single-node-models: staged
         container-aliases: [dynamo-trtllm, dynamo-sglang, dynamo-vllm]
         nginx-aliases: [nginx-sqsh]
   gb200-nv:
@@ -735,8 +738,6 @@ clusters:
       srt-slurm:
         network-interface: eno0
         single-node-time-limit: 500
-        # The staged Qwen copy's config is patched for SGLang; single-node recipes use the Hub's.
-        single-node-models: hub
         gpus-per-node-directive: true
         segment-directive: false
         outputs: /it-share/gharunners2/srt-slurm/outputs

@@ -1,4 +1,8 @@
-"""The srt-slurm driver end to end: ``python -m infx.launch run`` on the sandboxed fakes."""
+"""The srt-slurm driver end to end: ``python -m infx.launch run`` on the fakes.
+
+Most points run on the sandboxed cluster records; the lane test runs synthetic lanes
+in-process, so the lane table it patches applies.
+"""
 
 import json
 import os
@@ -13,10 +17,12 @@ from types import SimpleNamespace
 import pytest
 import yaml
 
-from infx.clusters import load_clusters
-from infx.clusters.slurm import model_path
-from infx.launch.backends.slurm.squash import squash_path
+from infx.launch.__main__ import main
+from infx.launch.drivers.srt import lanes, models
 from infx.launch.drivers.srt.checkout import SRT_FORKS
+from infx.launch.drivers.srt.lanes import LaneMount, SrtLane
+from infx.launch.drivers.srt.models import Override
+from infx.launch.policy import LaunchPath, Match
 from infx.tests.launch.fake_slurm import (
     base_env,
     install_fakes,
@@ -85,10 +91,7 @@ def harness(tmp_path):
     env = base_env(
         fakes=install_fakes(tmp_path / "bin"), logs=logs, workspace=workspace, sandbox=sandbox
     )
-    return SimpleNamespace(
-        tmp=tmp_path, config=config, workspace=workspace, logs=logs, env=env,
-        clusters=load_clusters(config),
-    )  # fmt: skip
+    return SimpleNamespace(tmp=tmp_path, config=config, workspace=workspace, logs=logs, env=env)
 
 
 def single_node_env(harness, cluster_id: str, **overrides: str) -> dict[str, str]:
@@ -99,14 +102,17 @@ def single_node_env(harness, cluster_id: str, **overrides: str) -> dict[str, str
 
 
 def lane_env(harness, cluster_id: str, recipe: str = LANE_RECIPE, **overrides: str) -> dict[str, str]:
-    """Environment of a multi-node point whose recipe lives in the workspace mirror."""
+    """Environment of a multi-node point whose recipe lives in the workspace mirror.
+
+    RUNNER_NAME defaults to the cluster's first runner.
+    """
     mirror = harness.workspace / "benchmarks/multi_node/srt-slurm-recipes/test/lane.yaml"
     mirror.parent.mkdir(parents=True, exist_ok=True)
     mirror.write_text(recipe)
     env = {
-        **harness.env, "RUNNER_NAME": runner_for(cluster_id), "IS_MULTINODE": "true",
-        "CONFIG_FILE": "recipes/test/lane.yaml", "IMAGE": "test:tag", "CONC_LIST": "4",
-        "SPEC_DECODING": "none", "IS_AGENTIC": "0", "ISL": "1024", "OSL": "1024",
+        **harness.env, "RUNNER_NAME": overrides.pop("RUNNER_NAME", None) or runner_for(cluster_id),
+        "IS_MULTINODE": "true", "CONFIG_FILE": "recipes/test/lane.yaml", "IMAGE": "test:tag",
+        "CONC_LIST": "4", "SPEC_DECODING": "none", "IS_AGENTIC": "0", "ISL": "1024", "OSL": "1024",
         "FAKE_RESULTS": "fixed",
     }  # fmt: skip
     return {**env, **overrides}
@@ -125,7 +131,8 @@ def assert_ok(result: subprocess.CompletedProcess[str]) -> None:
 
 def test_single_node_point_stages_workflow_artifacts(harness):
     workspace = harness.workspace
-    assert_ok(launch(single_node_env(harness, "h200-cw"), harness.config, workspace))
+    env = single_node_env(harness, "h200-cw")
+    assert_ok(launch(env, harness.config, workspace))
 
     assert json.loads((workspace / "point-identity.json").read_text()) == {"completed": 2}
     assert (workspace / "gpu_metrics.csv").read_text() == "gpu,power\n0,300\n"
@@ -137,6 +144,8 @@ def test_single_node_point_stages_workflow_artifacts(harness):
     assert argv[argv.index("--file") + 1] == f"{workspace}/recipe.yaml:zip_override_conc[0]"
     assert {"--json", "--yes", "--output"} <= set(argv)
     assert (call["env"]["INFMAX_WORKSPACE"], call["env"]["VIRTUAL_ENV"]) == (str(workspace), None)
+    # The name only this repository's cleanup cancels, besides the runner's own.
+    assert call["env"]["RUNNER_NAME"] == f"inferencex-{env['RUNNER_NAME']}"
     # The job's HF_HUB_CACHE is where the cluster's Hub cache is mounted.
     assert "/hf" in srtslurm(workspace)["default_mounts"].values()
     # Only the .patch file beside the patches README is applied.
@@ -166,72 +175,75 @@ def test_single_node_failed_allocation_fails_the_launch(harness):
     assert (harness.workspace / "point-identity.json").is_file()
 
 
-# ``staging``: the main image is imported first (the default), validated where operators
-# staged it, handed over unchecked, or pulled from the registry by Pyxis inside the job.
-LANES = {
-    "b200-nscale-native": dict(
-        cluster="b200-nscale",
-        env=dict(MODEL_PREFIX="kimik3", PRECISION="fp4", FRAMEWORK="dynamo-vllm", MODEL="moonshotai/Kimi-K3",
-                 IS_AGENTIC="1", ISL="0", OSL="0", FAKE_RESULTS="agentic"),
-        no_preflight=True, tag="b200,kimik3,fp4,agentic,", mounts=("/aiperf_mmap_cache", "/hf_hub_cache"),
+# Two synthetic lanes on synthetic clusters that between them exercise each lane feature.
+# ``lab-a`` serves a node-local checkpoint, so srtctl's preflight is skipped, imports its
+# image on the submit host, and has a tag, a setup script, a mount, a time limit, a served
+# name and a dist-timeout. ``lab-b`` serves a shared checkpoint from the registry image
+# and checks out, and keeps srtctl's outputs, on shared storage.
+LABS = {
+    "lab-a": dict(
+        lane=SrtLane(
+            tag="lab", setup_scripts={"dynamo-sglang": "setup.sh"},
+            mounts=(LaneMount(Match(), "cache", "/cache"),), time_limit="2:00:00",
+        ),
+        env=dict(FRAMEWORK="dynamo-sglang"),
+        model="nvme/model", preflight=False, tag="lab,dsr1,fp8,1024x1024,", setup_script="setup.sh",
+        served="served-model", dist_timeout=True, time="2:00:00", mounts=("/cache",), staging="import",
     ),
-    "b300-dsxe": dict(
-        cluster="b300-dsxe",
-        env=dict(MODEL_PREFIX="dsr1", PRECISION="fp4", FRAMEWORK="dynamo-trt", MODEL="nvidia/DeepSeek-R1-0528-FP4-V2"),
-        no_preflight=True, tag="b300,dsr1,fp4,1024x1024,", time="10",
-    ),
-    "gb200-nv": dict(
-        cluster="gb200-nv",
-        env=dict(MODEL_PREFIX="dsr1", PRECISION="fp8", FRAMEWORK="dynamo-sglang", MODEL="deepseek-ai/DeepSeek-R1-0528"),
-        no_preflight=True, tag="gb200,dsr1,fp8,1024x1024,", setup_script="install-torchao.sh",
-    ),
-    "gb200-nv-shared": dict(
-        cluster="gb200-nv",
-        env=dict(MODEL_PREFIX="kimik3", PRECISION="fp4", FRAMEWORK="dynamo-vllm", MODEL="moonshotai/Kimi-K3",
-                 IS_AGENTIC="1", ISL="0", OSL="0", FAKE_RESULTS="agentic"),
-        no_preflight=True, tag="gb200,kimik3,fp4,agentic,", shared_checkout=True, mounts=("/aiperf_mmap_cache", "/hf_hub_cache"),
-    ),
-    "h100-dgxc": dict(
-        cluster="h100-dgxc",
-        env=dict(MODEL_PREFIX="dsr1", PRECISION="fp8", FRAMEWORK="dynamo-trt", MODEL="deepseek-ai/DeepSeek-R1-0528",
-                 IMAGE="nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post3"),
-        no_preflight=False, tag="h100,dsr1,fp8,1024x1024,", served="DeepSeek-R1-0528", dist_timeout=True,
-        staging="validate",
-    ),
-    "h200-dgxc": dict(
-        cluster="h200-dgxc",
-        env=dict(MODEL_PREFIX="dsr1", PRECISION="fp8", FRAMEWORK="dynamo-sglang", MODEL="deepseek-ai/DeepSeek-R1-0528"),
-        no_preflight=False, tag="h200,dsr1,fp8,1024x1024,", time="4:00:00",
-        staging="unchecked",
-    ),
-    "mi355x-amds": dict(
-        cluster="mi355x-amds",
-        env=dict(MODEL_PREFIX="dsv4", PRECISION="fp4", FRAMEWORK="sglang-disagg", MODEL="deepseek-ai/DeepSeek-V4-Pro-0813"),
-        no_preflight=False, tag=None, time="01:00:00",
-        staging="registry",
+    "lab-b": dict(
+        lane=SrtLane(tag=None, shared_run_root=(Match(),)),
+        env=dict(FRAMEWORK="dynamo-vllm", IS_AGENTIC="1", ISL="0", OSL="0", FAKE_RESULTS="agentic"),
+        model="models/model", preflight=True, tag=None, setup_script=None, served=None,
+        dist_timeout=False, time="10", mounts=(), staging="registry", shared_checkout=True,
     ),
 }  # fmt: skip
 
 
-@pytest.mark.parametrize("lane_id", LANES)
-def test_multinode_lane_stages_workflow_artifacts(harness, lane_id):
-    lane = LANES[lane_id]
-    env = lane_env(harness, lane["cluster"], **lane["env"])
-    runner = env["RUNNER_NAME"]
-    staging = lane.get("staging", "import")
-    if staging == "validate":
-        # Operators staged this cluster's main image and checkpoint.
-        cluster = harness.clusters[lane["cluster"]]
-        policy = cluster.scheduler_settings.squash.policy(env["FRAMEWORK"], env["MODEL_PREFIX"])
-        main = squash_path(env["IMAGE"], policy)
-        main.parent.mkdir(parents=True, exist_ok=True)
-        main.write_text("squash\n")
-        checkpoint = model_path(cluster, "DeepSeek-R1-0528")
-        checkpoint.mkdir(parents=True)
-        (checkpoint / "config.json").write_text("{}")
-    assert_ok(launch(env, harness.config, harness.workspace))
+def lab_config(tmp: Path) -> Path:
+    """runners.yaml of the synthetic clusters, their storage under ``tmp``."""
+    common = {"gpus-per-node": 8, "arch": "x86_64", "scheduler": "slurm"}
+    clusters = {
+        "lab-a": {**common, "models": {"entries": {"Model": {"root": "nvme", "dir": "model"}}}, "slurm": {
+            "partition": "p", "exclusive": True,
+            "volumes": {"nvme": {"path": str(tmp / "nvme"), "visibility": "node-local"},
+                        "cache": {"path": str(tmp / "cache")}},
+            "squash": {"dir": str(tmp / "squash"), "import": "submit-host"},
+            "srt-slurm": {"network-interface": "", "dist-timeout-s": 1800},
+        }},
+        "lab-b": {**common, "models": {"entries": {"Model": {"root": "models", "dir": "model"}}}, "slurm": {
+            "partition": "p", "exclusive": False,
+            "volumes": {"models": {"path": str(tmp / "models")}},
+            "srt-slurm": {"network-interface": "", "outputs": str(tmp / "outputs"),
+                          "shared-run-root": str(tmp / "runs")},
+        }},
+    }  # fmt: skip
+    path = tmp / "lab-runners.yaml"
+    labels = {f"cluster:{cluster_id}": [f"{cluster_id}_00"] for cluster_id in clusters}
+    path.write_text(yaml.safe_dump({"labels": labels, "clusters": clusters}))
+    return path
 
-    workspace = harness.workspace
+
+def launch_here(monkeypatch, env: dict[str, str], config: Path, cwd: Path) -> int:
+    """``python -m infx.launch run`` in this process, with exactly ``env`` as its environment."""
+    for name in os.environ.keys() - env.keys():
+        monkeypatch.delenv(name)
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.chdir(cwd)
+    return main(["--runner-config", str(config), "run"])
+
+
+@pytest.mark.parametrize("cluster_id", LABS)
+def test_multinode_lane_stages_workflow_artifacts(harness, monkeypatch, cluster_id):
+    lab = LABS[cluster_id]
+    for other, spec in LABS.items():
+        monkeypatch.setitem(lanes.SRT_LANES, (other, LaunchPath.SRT_MULTI), spec["lane"])
+    monkeypatch.setitem(models.OVERRIDES, "lab-a", (Override(Match(), served_name="served-model"),))
+    env = lane_env(harness, cluster_id, RUNNER_NAME=f"{cluster_id}_00", MODEL_PREFIX="dsr1",
+                   PRECISION="fp8", MODEL="org/Model", **lab["env"])  # fmt: skip
+    runner, tmp, workspace = env["RUNNER_NAME"], harness.tmp, harness.workspace
+    assert launch_here(monkeypatch, env, lab_config(tmp), workspace) == 0
+
     if env["FAKE_RESULTS"] == "agentic":
         assert json.loads((workspace / "point-identity_conc4.json").read_text()) == {"conc": 4}
     else:
@@ -245,47 +257,40 @@ def test_multinode_lane_stages_workflow_artifacts(harness, lane_id):
     [call] = srtctl_calls(harness.logs)
     argv = call["argv"]
     checkout = Path(call["cwd"]).resolve()
-    if lane.get("shared_checkout"):
+    if lab.get("shared_checkout"):
         assert checkout.name.startswith(f"srt-slurm-9001-1-{runner}-")
-        assert not checkout.is_relative_to(workspace.resolve())
+        assert checkout.parent == (tmp / "runs").resolve()
     else:
         assert checkout.parent == workspace.resolve()
         assert checkout.name.startswith("srt-slurm-9001-1-") and len(checkout.name) == len("srt-slurm-9001-1-") + 12
-    assert ("--no-preflight" in argv) is lane["no_preflight"]
+    assert ("--no-preflight" in argv) is not lab["preflight"]
     assert argv[argv.index("--file") + 1] == "recipes/test/lane.yaml"
     assert {"--json", "--yes", "benchmark.stream_output=true"} <= set(argv)
-    if lane["tag"] is None:
+    if lab["tag"] is None:
         assert "--tags" not in argv
     else:
-        assert argv[argv.index("--tags") + 1].startswith(lane["tag"] + "infmax-")
-    if setup_script := lane.get("setup_script"):
-        assert argv[argv.index("--setup-script") + 1] == setup_script
-    else:
+        assert argv[argv.index("--tags") + 1].startswith(lab["tag"] + "infmax-")
+    if lab["setup_script"] is None:
         assert "--setup-script" not in argv
-    assert call["env"]["SERVED_MODEL_NAME"] == lane.get("served")
+    else:
+        assert argv[argv.index("--setup-script") + 1] == lab["setup_script"]
+    assert call["env"]["SERVED_MODEL_NAME"] == lab["served"]
 
     staged = yaml.safe_load((checkout / "recipes/test/lane.yaml").read_text())
-    assert staged["name"] == runner
-    assert staged["health_check"] == {"max_attempts": 720, "interval_seconds": 5}
-    dist = {"dist-timeout": 1800} if lane.get("dist_timeout") else {}
+    # The job name only this repository's cleanup cancels, besides the runner's own.
+    assert staged["name"] == call["env"]["RUNNER_NAME"] == f"inferencex-{runner}"
+    dist = {"dist-timeout": 1800} if lab["dist_timeout"] else {}
     assert staged["roles"]["prefill"]["args"] == {"tensor-parallel-size": 8, "watchdog-timeout": 600, **dist}
 
     config = srtslurm(checkout)
-    assert config["default_health_check"] == {"max_attempts": 720, "interval_seconds": 10}
-    image = config["containers"][env["IMAGE"]]
-    if staging == "registry":
-        assert image == env["IMAGE"]
-    else:
-        assert image.endswith(".sqsh")
+    assert config["model_paths"] == {"alias": str(tmp / lab["model"])}
+    assert config["default_time_limit"] == lab["time"]
+    assert set(lab["mounts"]) <= set(config.get("default_mounts", {}).values())
     imported = [line.split()[-1] for line in lines(harness.logs, "enroot")]
-    assert ("docker://test:tag" in imported) is (staging == "import")
-    if staging in {"validate", "unchecked"}:
-        # Nothing is imported; only a pre-staged main image is validated.
-        assert imported == [] and lines(harness.logs, "srun") == []
-        assert len(lines(harness.logs, "unsquashfs")) == (1 if staging == "validate" else 0)
-    if "time" in lane:
-        assert config["default_time_limit"] == lane["time"]
-    assert set(lane.get("mounts", ())) <= set(config.get("default_mounts", {}).values())
+    if lab["staging"] == "import":
+        assert config["containers"][env["IMAGE"]].endswith(".sqsh") and imported == ["docker://test:tag"]
+    else:
+        assert config["containers"][env["IMAGE"]] == env["IMAGE"] and imported == []
     outputs = Path(json.loads((workspace / "srt-submission.json").read_text())["output_dir"])
     # Only outputs inside the checkout are removed; a cluster's shared output_dir stays.
     assert outputs.exists() is not outputs.is_relative_to(checkout)
@@ -415,6 +420,8 @@ def test_tilert_native_lane_runs_on_its_fork_without_patches(harness):
     # The fork predates --json, --no-preflight and streamed benchmark output.
     assert not {"--json", "--no-preflight", "benchmark.stream_output=true"} & set(call["argv"])
     config = srtslurm(Path(call["cwd"]))
+    # Its jobs keep srtctl's own health-check default.
+    assert "default_health_check" not in config
     assert config["containers"]["tilert-decode"].endswith("/test_tag.sqsh")
     assert config["containers"]["tilert-prefill"].endswith("/prefill_tag.sqsh")
     assert config["default_mounts"][str(harness.workspace)] == "/infmax-workspace"

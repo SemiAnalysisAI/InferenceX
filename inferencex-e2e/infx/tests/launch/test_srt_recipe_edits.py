@@ -36,9 +36,14 @@ def test_rename_touches_only_the_top_level_name():
 def test_every_health_budget_is_raised_to_720_attempts_but_never_shortened():
     # A recipe may request more than 720 attempts, as GLM-5.2's 1440 x 10s does.
     assert raise_health_attempts(RECIPE) == RECIPE
-    bundle = "base:\n  health_check:\n    max_attempts: 360\noverride_x:\n  health_check: {max_attempts: 100}\n"
+    bundle = (
+        "base:\n  health_check:\n    max_attempts: 360\n  frontend:\n    max_attempts: 3\n"
+        "override_x:\n  health_check: {max_attempts: 100}\n  benchmark: {max_attempts: 2}\n"
+    )
     raised = yaml.safe_load(raise_health_attempts(bundle))
     assert raised["base"]["health_check"]["max_attempts"] == raised["override_x"]["health_check"]["max_attempts"] == 720
+    # Other blocks' attempts are not health budgets.
+    assert (raised["base"]["frontend"]["max_attempts"], raised["override_x"]["benchmark"]["max_attempts"]) == (3, 2)
 
 
 def test_dist_timeout_follows_each_role_watchdog_timeout():

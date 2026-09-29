@@ -142,24 +142,29 @@ TILERT_ENV: dict[str, Mapping[str, str]] = {
 }
 
 
-def runtime_env(cluster: Cluster, request: LaunchRequest) -> dict[str, str]:
+def runtime_env(
+    cluster: Cluster, request: LaunchRequest, *settings: Mapping[str, str]
+) -> dict[str, str]:
     """The launch environment with the cluster's runtime settings applied over it.
 
-    They beat the runner host's own values; only the point's additional-settings beat them.
+    In increasing precedence: TILERT_ENV (TileRT points only), the cluster's ``env``, then
+    each of ``settings``. They all beat the runner host's values, but never a name the
+    point's additional-settings set.
     """
-    settings = TILERT_ENV.get(cluster.id, {}) if request.framework == "tilert" else {}
-    chosen = {setting.partition("=")[0] for setting in _additional_settings(request.env)}
-    return {**request.env, **{k: v for k, v in settings.items() if k not in chosen}}
+    tilert = TILERT_ENV.get(cluster.id, {}) if request.framework == "tilert" else {}
+    merged = {k: v for source in (tilert, cluster.env, *settings) for k, v in source.items()}
+    chosen = point_settings(request)
+    return {**request.env, **{k: v for k, v in merged.items() if k not in chosen}}
 
 
-def _additional_settings(env: Mapping[str, str]) -> list[str]:
-    """The point's NAME=value additional-settings, which the workflow exports."""
-    settings: list[str] = []
+def point_settings(request: LaunchRequest) -> frozenset[str]:
+    """The names the point's NAME=value additional-settings set; the workflow exports them."""
+    names: set[str] = set()
     for name in ("PREFILL_ADDITIONAL_SETTINGS", "DECODE_ADDITIONAL_SETTINGS"):
         with contextlib.suppress(ValueError):
-            values = json.loads(env.get(name) or "[]")
-            settings += [value for value in values or [] if isinstance(value, str)]
-    return settings
+            values = json.loads(request.env.get(name) or "[]")
+            names.update(v.partition("=")[0] for v in values or [] if isinstance(v, str))
+    return frozenset(names)
 
 
 @dataclass(frozen=True)

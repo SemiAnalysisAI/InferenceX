@@ -16,7 +16,6 @@ from typing import TYPE_CHECKING, Any
 import yaml
 
 from infx.clusters.slurm import slurm_settings
-from infx.launch.backends.slurm import cli
 from infx.launch.context import LaunchError
 from infx.launch.drivers.srt.lanes import srt_time_limit
 from infx.launch.drivers.srt.recipe import HEALTH_ATTEMPTS
@@ -24,6 +23,7 @@ from infx.launch.drivers.srt.recipe import HEALTH_ATTEMPTS
 if TYPE_CHECKING:
     from infx.clusters import Cluster
     from infx.clusters.slurm import SlurmSettings
+    from infx.launch.drivers.srt.checkout import Checkout
     from infx.launch.drivers.srt.lanes import SrtLane
     from infx.launch.drivers.srt.power import PowerDecision
     from infx.launch.drivers.srt.run import SrtRun
@@ -32,7 +32,8 @@ NGINX_IMAGE = "nginx:1.27.4"
 DCGM_EXPORTER_IMAGE = "nvcr.io/nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless"
 # The exporter image's provenance, which power lanes stage with their logs for the audit.
 EXPORTER_PROVENANCE = "exporter-image.sha256"
-# What recipes without a health check get (2 h of polls); recipe.py raises lower budgets.
+# What recipes without a health check get (2 h of polls); multi-node lanes also raise a
+# recipe's own shorter budget (recipe.py).
 HEALTH_CHECK = {"max_attempts": HEALTH_ATTEMPTS, "interval_seconds": 10}
 
 
@@ -50,6 +51,8 @@ class SrtJob:
     model_paths: Mapping[str, str] = field(default_factory=dict)
     mounts: Sequence[tuple[str, str]] = ()  # (host, container) added to the cluster's mounts
     single_node: bool = False  # one node, so no segment directive
+    account: str | None = None
+    fork: bool = False  # a framework fork's srtctl, which gets no default health check
 
 
 def pyxis_spelling(image: str) -> str:
@@ -97,10 +100,8 @@ def render(cluster: Cluster, job: SrtJob) -> dict[str, Any]:
     if srt is None:
         raise LaunchError(f"cluster {cluster.id!r} has no slurm.srt-slurm settings")
     config: dict[str, Any] = {}
-    # srtctl always passes --account (falling back to "default"); bare sbatch would use this.
-    account = settings.account or cli.default_account()
-    if account:
-        config["default_account"] = account
+    if job.account:
+        config["default_account"] = job.account
     config["default_partition"] = settings.partition
     config["default_time_limit"] = job.time_limit
     config["gpus_per_node"] = cluster.gpus_per_node
@@ -110,7 +111,8 @@ def render(cluster: Cluster, job: SrtJob) -> dict[str, Any]:
         config["output_dir"] = str(srt.outputs)
     if job.model_paths:
         config["model_paths"] = dict(job.model_paths)
-    config["default_health_check"] = dict(HEALTH_CHECK)
+    if not job.fork:
+        config["default_health_check"] = dict(HEALTH_CHECK)
     containers = dict.fromkeys(srt.container_aliases, job.container)
     containers[job.image] = job.container
     containers[pyxis_spelling(job.image)] = job.container
@@ -205,7 +207,7 @@ def lane_mounts(run: SrtRun, lane: SrtLane) -> list[tuple[str, str]]:
 def write_lane_config(
     run: SrtRun,
     lane: SrtLane,
-    checkout: Path,
+    checkout: Checkout,
     power: PowerDecision,
     model_paths: dict[str, str],
 ) -> None:
@@ -229,7 +231,7 @@ def write_lane_config(
         containers["dcgm-exporter"] = exporter.reference
     create_volume_mounts(run)
     job = SrtJob(
-        srtctl_root=checkout,
+        srtctl_root=checkout.root,
         workspace=run.workspace,
         time_limit=srt_time_limit(run.cluster.id, request, lane, run.srt),
         image=request.image,
@@ -238,7 +240,9 @@ def write_lane_config(
         containers=containers,
         model_paths=model_paths,
         mounts=lane_mounts(run, lane),
+        account=run.account,
+        fork=checkout.fork,
     )
-    config_yaml = checkout / "srtslurm.yaml"
+    config_yaml = checkout.root / "srtslurm.yaml"
     write(config_yaml, render(run.cluster, job))
     print(f"Generated srtslurm.yaml:\n{config_yaml.read_text()}", flush=True)

@@ -56,6 +56,8 @@ if [[ " $* " == *" 4242 "* && "$(cat "$FAKE_LOG_DIR/batch-rc" 2>/dev/null)" != 0
 echo "$state"
 """,
     "scontrol": "exit 1",
+    # Accounting names no default account.
+    "sacctmgr": "exit 0",
     "scancel": r"""
 printf '%s\n' "$*" >> "$FAKE_LOG_DIR/scancel.log"
 [[ -n "${FAKE_ACTIVE:-}" ]] && rm -f "$FAKE_ACTIVE"
@@ -96,9 +98,8 @@ _SRTCTL = r"""
 import json, os, pathlib, sys
 import yaml
 argv = sys.argv[1:]
-keep = ("RUNNER_NAME", "INFMAX_WORKSPACE", "MODEL_PATH", "SERVED_MODEL_NAME",
-        "SRT_SLURM_MODEL_PREFIX", "VIRTUAL_ENV", "UCX_NET_DEVICES",
-        "ENROOT_ROOTFS_WRITABLE", "SRT_SRUN_OPTIONS")
+keep = ("RUNNER_NAME", "INFMAX_WORKSPACE", "MODEL_PATH", "SERVED_MODEL_NAME", "VIRTUAL_ENV",
+        "UCX_NET_DEVICES", "ENROOT_ROOTFS_WRITABLE", "SRT_SRUN_OPTIONS")
 record = {"argv": argv, "cwd": os.getcwd(), "env": {name: os.environ.get(name) for name in keep}}
 with open(os.path.join(os.environ["FAKE_LOG_DIR"], "srtctl.jsonl"), "a") as handle:
     handle.write(json.dumps(record) + "\n")

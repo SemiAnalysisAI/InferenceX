@@ -106,7 +106,11 @@ def fakes(tmp_path, monkeypatch):
     return calls
 
 
-def tilert_env(workspace: Path, **overrides: str) -> dict[str, str]:
+# The master config's additional-settings, which the workflow also exports.
+SETTINGS = {"MODEL_PATH": "/hf/snapshots/glm-5.1", "TILERT_WEIGHTS_DIR": "/tilert-cache/glm5.1-fp8-8shard"}
+
+
+def tilert_env(workspace: Path, settings: dict[str, str], **overrides: str) -> dict[str, str]:
     """glm5.1-fp8-b200-tilert as the multi-node workflow exports it."""
     return {
         **os.environ,
@@ -116,19 +120,19 @@ def tilert_env(workspace: Path, **overrides: str) -> dict[str, str]:
         "IS_MULTINODE": "true",
         "IS_AGENTIC": "0",
         "FRAMEWORK": "tilert",
+        "MODEL": "zai-org/GLM-5.1-FP8",
         "MODEL_PREFIX": "glm5.1",
         "PRECISION": "fp8",
         "SPEC_DECODING": "mtp",
         "EXP_NAME": "glm5.1_1k1k",
         "SCENARIO_SUBDIR": "fixed_seq_len/",
-        # Master-config additional-settings; MODEL_PATH wins over the cluster default.
-        "MODEL_PATH": "/hf/snapshots/glm-5.1",
-        "TILERT_WEIGHTS_DIR": "/tilert-cache/glm5.1-fp8-8shard",
+        "PREFILL_ADDITIONAL_SETTINGS": json.dumps([f"{name}={value}" for name, value in settings.items()]),
+        **settings,
         **overrides,
     }
 
 
-def run_tilert(tmp_path: Path, workspace: Path, *, script: bool, **overrides: str):
+def run_tilert(tmp_path: Path, workspace: Path, *, script: bool, settings: dict[str, str] = SETTINGS, **overrides: str):
     """Run ``python -m infx.launch run``; the disagg script records what it was handed and exits 5."""
     if script:
         path = workspace / "benchmarks/multi_node/glm5.1_fp8_b200_tilert-disagg.sh"
@@ -144,22 +148,28 @@ def run_tilert(tmp_path: Path, workspace: Path, *, script: bool, **overrides: st
     config.write_text(yaml.safe_dump(inventory(tmp_path)))
     launcher = subprocess.Popen(
         [sys.executable, "-m", "infx.launch", "--runner-config", str(config), "run"],
-        env=tilert_env(workspace, **overrides), cwd=workspace,
+        env=tilert_env(workspace, settings, **overrides), cwd=workspace,
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
     )  # fmt: skip
     out, err = launcher.communicate(timeout=60)
     return launcher, out + err
 
 
-def test_tilert_lane_replaces_the_launcher_with_the_disagg_script(tmp_path):
+@pytest.mark.parametrize("own_model_path", [True, False])
+def test_tilert_lane_replaces_the_launcher_with_the_disagg_script(tmp_path, own_model_path):
     workspace = tmp_path / "workspace"
+    # Without a MODEL_PATH setting of its own, the point gets the staged checkpoint, even
+    # over a MODEL_PATH the runner exports.
+    settings = SETTINGS if own_model_path else {"TILERT_WEIGHTS_DIR": SETTINGS["TILERT_WEIGHTS_DIR"]}
+    runner = {} if own_model_path else {"MODEL_PATH": "/runner/glm-5.1"}
 
-    launcher, output = run_tilert(tmp_path, workspace, script=True)
+    launcher, output = run_tilert(tmp_path, workspace, script=True, settings=settings, **runner)
 
     # exec: the script runs as the launcher process and its exit code is the job's.
     assert launcher.returncode == 5, output
+    served = SETTINGS["MODEL_PATH"] if own_model_path else str(tmp_path / "sandbox/scratch/models/GLM-5.1-FP8")
     assert (workspace / "seen.txt").read_text().splitlines() == [
-        str(launcher.pid), "tilert-partition", "tilert-account", "/hf/snapshots/glm-5.1",
+        str(launcher.pid), "tilert-partition", "tilert-account", served,
         "/tilert-cache/glm5.1-fp8-8shard", str(tmp_path / "squash"),
     ]
 

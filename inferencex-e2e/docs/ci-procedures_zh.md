@@ -324,7 +324,9 @@ CPU 索引获取 PyTorch 包，其他依赖从 PyPI 获取，因为 CPU 索引�
 自托管的启动步骤使用 `INFERENCEX_LAUNCH_PYTHON` 运行 `python -m infx.launch`。它是
 “Prepare launcher Python”步骤在 `$RUNNER_TEMP` 中依据工具 checkout 的 `inferencex-e2e/pyproject.toml`
 （`uv pip install --exclude-newer PT12H`）构建的未激活 venv。不使用 `uv run`：它对 `VIRTUAL_ENV`
-和 `PATH` 的修改会泄漏进 `srun --export=ALL` 作业。
+和 `PATH` 的修改会泄漏进 `srun --export=ALL` 作业。Python 准备步骤把 uv 缓存和托管的 Python
+按 runner 放在其 workspace 旁（`.infx-uv-cache`、`.infx-uv-python`），因为有些 runner 的 home
+目录无法容纳 uv 的默认位置。
 
 ## 基于仓库角色的授权
 

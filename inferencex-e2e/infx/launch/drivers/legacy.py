@@ -60,16 +60,15 @@ def _script(template: str, request: LegacyRequest, **fields: str) -> str:
 
 def run_tilert(launch: Launch) -> int:
     """Replace this process with the TileRT disagg script; returns only if it is missing."""
-    backend = slurm_backend(launch)
+    backend, cluster = slurm_backend(launch), launch.cluster
     request = LegacyRequest.from_env(launch.request.env)
-    lane = policy.LEGACY_TILERT[launch.cluster.id]
+    lane = policy.LEGACY_TILERT[cluster.id]
     squash = backend.settings.squash
     if squash is None:
-        raise LaunchError(f"TileRT disagg lane: cluster {launch.cluster.id!r} has no slurm.squash")
-    env = policy.runtime_env(launch.cluster, request)
-    env.update(launch.cluster.env)
-    if (staged := models.checkpoint(launch.cluster, request)) is not None:
-        env.setdefault("MODEL_PATH", str(staged.path))
+        raise LaunchError(f"TileRT disagg lane: cluster {cluster.id!r} has no slurm.squash")
+    # As for srt-slurm jobs: the point's MODEL_PATH setting, else the staged checkpoint.
+    served = models.served_path(cluster, request, models.checkpoint(cluster, request))
+    env = policy.runtime_env(cluster, request, models.job_env(cluster, request, served))
     env["SLURM_PARTITION"] = backend.settings.partition
     if backend.settings.account:
         env["SLURM_ACCOUNT"] = backend.settings.account
@@ -115,7 +114,6 @@ def run_amd_utils(launch: Launch) -> int:
     host_env = srt.host_setup.env if srt is not None and srt.host_setup is not None else {}
     logs_dir = workspace / lane.logs_dir
     env = policy.runtime_env(launch.cluster, request)
-    env.update(launch.cluster.env)
     env.update(
         {
             "BENCHMARK_LOGS_DIR": str(logs_dir),
