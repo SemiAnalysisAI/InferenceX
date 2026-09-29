@@ -85,8 +85,8 @@ fi
 
 nvidia-smi
 
-# Kimi-K3 is in the launcher's STAGED_MODELS (read-only /scratch/models/Kimi-K3),
-# so this is a no-op in CI; it covers a standalone run with unstaged weights.
+# Kimi-K3 is a models.entries checkpoint of the cluster (staged read-only), so this is
+# a no-op in CI; it covers a standalone run with unstaged weights.
 if [[ -n "${MODEL_PATH:-}" ]]; then
     if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
         hf download "$MODEL" --local-dir "$MODEL_PATH"

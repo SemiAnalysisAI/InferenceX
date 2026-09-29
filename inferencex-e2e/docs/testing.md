@@ -111,7 +111,7 @@ Add `--no-ignores` to review all of these exceptions. Keep new findings blocking
 ```bash
 python3 -c "import yaml; yaml.safe_load(open('configs/<nvidia|amd>-master.yaml')); yaml.safe_load(open('configs/runners.yaml')); yaml.safe_load(open('perf-changelog.yaml'))"
 bash -n benchmarks/<path>/<script>.sh
-bash -n runners/launch_<cluster>.sh
+uv run python -c 'from infx.clusters import load_clusters; load_clusters()'
 ```
 
 Parsing is only the first gate. Do not report a YAML parse as matrix validation.

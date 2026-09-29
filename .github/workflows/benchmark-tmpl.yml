@@ -206,7 +206,7 @@ jobs:
         ) ||
         format('[{0}]', toJSON(inputs.runner))
       ) }}
-    timeout-minutes: ${{ inputs.runner == 'cluster:h200-dgxc' && fromJSON(inputs.config).model-prefix == 'dsv41flash' && fromJSON(inputs.config).framework == 'sglang' && inputs.scenario-type == 'agentic-coding' && !inputs.eval-only && fromJSON(inputs.config).conc >= 64 && 1470 || inputs.runner == 'cluster:gb200-nv' && fromJSON(inputs.config).model-prefix == 'dsv41flash' && fromJSON(inputs.config).framework == 'sglang' && inputs.scenario-type == 'agentic-coding' && !inputs.eval-only && fromJSON(inputs.config).conc >= 64 && 750 || 500 }}
+    timeout-minutes: ${{ inputs.runner == 'cluster:h200-dgxc' && fromJSON(inputs.config).model-prefix == 'dsv41flash' && fromJSON(inputs.config).framework == 'sglang' && inputs.scenario-type == 'agentic-coding' && !inputs.eval-only && fromJSON(inputs.config).conc >= 64 && 1470 || 500 }}
     name: >-
       ${{ inputs.klaud-run && 'klaud | ' || '' }}p${{ inputs.priority }} | ${{ fromJSON(inputs.config).model-prefix }} ${{ fromJSON(inputs.config).precision }} ${{ inputs.runner }} ${{ fromJSON(inputs.config).framework == 'sglang' && 'sgl' || fromJSON(inputs.config).framework == 'dynamo-sglang' && 'dyn-sgl' || fromJSON(inputs.config).framework == 'sglang-disagg' && 'sgl-disagg' || fromJSON(inputs.config).framework }}
       TP${{ fromJSON(inputs.config).tp }}${{ format('{0}', fromJSON(inputs.config).pp) != '' && format('{0}', fromJSON(inputs.config).pp) != '1' && format('/PP{0}', fromJSON(inputs.config).pp) || '' }}${{ format('{0}', fromJSON(inputs.config).dcp-size) != '' && format('{0}', fromJSON(inputs.config).dcp-size) != '1' && format('/DCP{0}', fromJSON(inputs.config).dcp-size) || '' }}${{ format('{0}', fromJSON(inputs.config).pcp-size) != '' && format('{0}', fromJSON(inputs.config).pcp-size) != '1' && format('/PCP{0}', fromJSON(inputs.config).pcp-size) || '' }}${{ format('{0}', fromJSON(inputs.config).ep) != '' && format('{0}', fromJSON(inputs.config).ep) != '1' && format('/EP{0}', fromJSON(inputs.config).ep) || '' }}${{ inputs.dp-attn && '/DPA' || '' }}
@@ -222,20 +222,8 @@ jobs:
             sudo chown -R "$(id -u):$(id -g)" "$GITHUB_WORKSPACE"
           fi
 
-      - name: Resource cleanup (pre-run)
-        run: &resource-cleanup |
-          # Cleanup Docker resources
-          if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
-            echo "[Docker] Cleaning up resources ..."
-            docker ps -aq | xargs -r docker rm -f
-            docker network prune -f
-            while [ -n "$(docker ps -aq)" ]; do
-              docker ps -a
-              sleep 5
-            done
-          fi
-
-          # Cleanup SLURM resources
+      - name: Slurm cleanup (pre-run)
+        run: &slurm-cleanup |
           if command -v squeue >/dev/null 2>&1; then
             echo "[Slurm] Cleaning up jobs with name: ${RUNNER_NAME} ..."
             scancel --name="${RUNNER_NAME}" || true
@@ -285,7 +273,7 @@ jobs:
           path: .result-tooling
           persist-credentials: false
 
-      - name: Set up uv for result processing
+      - name: Set up uv
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           enable-cache: false
@@ -296,6 +284,25 @@ jobs:
           result_python=$(uv python find --system 3.12)
           "$result_python" --version
           echo "INFERENCEX_RESULTS_PYTHON=$result_python" >> "$GITHUB_ENV"
+
+      - name: Prepare launcher Python
+        run: |
+          # infx.launch needs pydantic and PyYAML. The venv is never activated, so
+          # launched Slurm jobs inherit the runner's PATH and no VIRTUAL_ENV.
+          launch_venv="$RUNNER_TEMP/infx-launch-venv"
+          uv venv --quiet --python 3.12 "$launch_venv"
+          uv pip install --quiet --exclude-newer PT12H --python "$launch_venv/bin/python" \
+            -r "$GITHUB_WORKSPACE/.result-tooling/inferencex-e2e/pyproject.toml"
+          echo "INFERENCEX_LAUNCH_PYTHON=$launch_venv/bin/python" >> "$GITHUB_ENV"
+
+      - name: Launcher cleanup (pre-run)
+        env:
+          PYTHONPATH: ${{ github.workspace }}/.result-tooling/inferencex-e2e
+        # Second pass after the shell cancel in Slurm cleanup, which needs no Python: the
+        # workflow revision's launcher has the cluster's backend remove what this runner
+        # left behind (on Slurm also its namespaced inferencex-<runner> jobs).
+        run: &launcher-cleanup |
+          "$INFERENCEX_LAUNCH_PYTHON" -P -m infx.launch cleanup
 
       - name: Launch job script
         env:
@@ -309,13 +316,7 @@ jobs:
           if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
           export GITHUB_WORKSPACE="$PWD"
           echo "INFERENCEX_E2E_ROOT=$PWD" >> "$GITHUB_ENV"
-          if [[ -f infx/results/result_filename.py ]]; then
-            RESULT_FILENAME=$(python3 -m infx.results.result_filename)
-          else
-            # Older measured commits predate the helper; preserve safe identity.
-            RESULT_FILENAME=$(printf '%s\0' "$RESULT_FILENAME_BASE" "$RECIPE_FINGERPRINT" | sha256sum)
-            RESULT_FILENAME="${RESULT_FILENAME%% *}"
-          fi
+          RESULT_FILENAME=$(python3 -m infx.results.result_filename)
           export RESULT_FILENAME
           export GPU_COUNT=$((TP * PP_SIZE * PCP_SIZE))
           echo "GPU_COUNT=${GPU_COUNT}" >> "$GITHUB_ENV"
@@ -323,14 +324,8 @@ jobs:
           # Export RESULT_FILENAME early so it's available for artifact uploads even if cancelled
           echo "RESULT_FILENAME=${RESULT_FILENAME}" >> "$GITHUB_ENV"
 
-          # Historical measured revisions own their configuration in the launchers.
-          if [[ -f benchmarks/runtime_settings.sh ]]; then
-            source benchmarks/runtime_settings.sh
-          fi
-          if [[ -f runners/runtime_settings.sh ]]; then
-            source runners/runtime_settings.sh
-          fi
-          bash "./runners/launch_${RUNNER_NAME%%_*}.sh"
+          source benchmarks/runtime_settings.sh
+          "$INFERENCEX_LAUNCH_PYTHON" -m infx.launch run
 
           if [ "${EVAL_ONLY}" = "true" ]; then
             echo "Eval-only mode: skipping benchmark result file check"
@@ -513,6 +508,12 @@ jobs:
             sudo chown -R "$(id -u):$(id -g)" "$GITHUB_WORKSPACE"
           fi
 
-      - name: Resource cleanup (post-run)
+      - name: Slurm cleanup (post-run)
         if: always()
-        run: *resource-cleanup
+        run: *slurm-cleanup
+
+      - name: Launcher cleanup (post-run)
+        if: ${{ always() && env.INFERENCEX_LAUNCH_PYTHON != '' }}
+        env:
+          PYTHONPATH: ${{ github.workspace }}/.result-tooling/inferencex-e2e
+        run: *launcher-cleanup

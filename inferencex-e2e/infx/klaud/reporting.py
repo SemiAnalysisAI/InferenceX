@@ -12,6 +12,8 @@ import json
 import os
 import re
 import zlib
+from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Literal, Self
@@ -845,57 +847,49 @@ def check_baseline_coverage(matrix: dict, baseline: Baseline | None) -> None:
         raise VerificationError("Final matrix omits or changes frozen baseline points")
 
 
-def resolve_baseline(
-    repository: str,
-    candidate: OwnedCandidate,
-    context: dict,
-    model: str,
-    goal: Prose,
-) -> Baseline:
-    """Freeze source-date rows against their own producer's complete family.
+@dataclass(frozen=True)
+class Publication:
+    """The public rows of a candidate's source workload on its source date.
 
-    Legacy fingerprints may be absent, but exact producer provenance and a unique
-    workload/topology/concurrency match are required. Raw API data stays private.
+    Each row comes with its producer run ID and attempt and, when ``workflow-info``
+    proves which revision produced it, that producer head (None otherwise).
     """
-    from fnmatch import fnmatchcase
 
+    sources: list[str]
+    changelogs: list[dict]
+    rows: list[tuple[dict, int | None, int | None, str | None]]
+
+    @property
+    def heads(self) -> list[str]:
+        """The proven producer heads, in feed order."""
+        return list(dict.fromkeys(head for *_, head in self.rows if head is not None))
+
+
+def publication(repository: str, context: dict, model: str) -> Publication:
+    """Fetch the source-date rows of ``context``'s source workload for display ``model``.
+
+    ISL/OSL are not filtered: that would erase other curves of the original family.
+    """
     from .api import fetch
-    from .models import normalized_image
-    from .validation import canonical_matrix
 
-    matrix = canonical_matrix(repository, candidate.base, candidate.family)
-    feed = fetch("benchmarks", model=model, date=context["source"]["date"])
-    info = fetch("workflow-info", date=context["source"]["date"])
+    source = context["source"]
+    feed = fetch("benchmarks", model=model, date=source["date"])
+    info = fetch("workflow-info", date=source["date"])
     # Public database bigint IDs are serialized as strings; URLs use decimal IDs.
     producers = {int(row["github_run_id"]): row for row in info.payload["runs"]}
-    heads = {}
+    heads: dict[int, set[str]] = {}
     for row in info.payload["runConfigs"]:
         if row.get("head_sha"):
             heads.setdefault(int(row["github_run_id"]), set()).add(row["head_sha"])
-    old_image = context["source"]["image"]
-    entries = {point_key(entry): entry for entry in matrix_points(matrix)}
-    if not entries or any(
-        normalized_image(entry["image"]) != normalized_image(old_image)
-        for entry in entries.values()
-    ):
-        raise VerificationError("Baseline source image no longer matches the selected base")
-    historical: dict[str, list[dict]] = {}
-    published: dict[str, Point] = {}
-    unverified: list[dict] = []
-    family_runs = {
-        int(change["workflow_run_id"])
-        for change in info.payload["changelogs"]
-        if any(fnmatchcase(candidate.family.split(":", 1)[1], key) for key in change["config_keys"])
-    }
+    rows: list[tuple[dict, int | None, int | None, str | None]] = []
     for row in feed.payload:
         if not isinstance(row, dict) or not isinstance(row.get("image"), str):
             continue
-        # Do not filter ISL/OSL here: that would erase other curves in the original family.
         if any(
             (
-                normalized_image(row[key]) != normalized_image(context["source"][key])
+                normalized_image(row[key]) != normalized_image(source[key])
                 if key == "image"
-                else row.get(key) != context["source"][key]
+                else row.get(key) != source[key]
             )
             for key in (
                 "model",
@@ -916,20 +910,65 @@ def resolve_baseline(
         )
         run_id = int(producer[1]) if producer else None
         run_attempt = int(producer[2]) if producer and producer[2] else None
-        if (
-            run_id not in producers
-            or len(heads.get(run_id, ())) != 1
-            or (run_attempt is not None and run_attempt > int(producers[run_id]["run_attempt"]))
-        ):
+        proven = (
+            run_id in producers
+            and len(heads.get(run_id, ())) == 1
+            and (run_attempt is None or run_attempt <= int(producers[run_id]["run_attempt"]))
+        )
+        head = next(iter(heads[run_id])) if proven else None
+        # Only a commit SHA names the revision whose own tooling regenerates the family.
+        if not (isinstance(head, str) and re.fullmatch(r"[0-9a-f]{40}", head)):
+            head = None
+        rows.append((row, run_id, run_attempt, head))
+    return Publication([feed.url, info.url], info.payload["changelogs"], rows)
+
+
+def resolve_baseline(
+    repository: str,
+    candidate: OwnedCandidate,
+    context: dict,
+    model: str,
+    goal: Prose,
+    producers: Mapping[str, dict],
+) -> Baseline:
+    """Freeze source-date rows against their own producer's complete family.
+
+    ``producers`` maps producer heads to the families their own revisions regenerated
+    (``python -m infx.klaud regenerate-producers``); this function runs no revision's
+    code. Legacy fingerprints may be absent, but exact producer provenance and a unique
+    workload/topology/concurrency match are required. Raw API data stays private.
+    """
+    from fnmatch import fnmatchcase
+
+    from .validation import PRODUCER_UNAVAILABLE, canonical_matrix
+
+    matrix = canonical_matrix(repository, candidate.base, candidate.family)
+    public = publication(repository, context, model)
+    old_image = context["source"]["image"]
+    entries = {point_key(entry): entry for entry in matrix_points(matrix)}
+    if not entries or any(
+        normalized_image(entry["image"]) != normalized_image(old_image)
+        for entry in entries.values()
+    ):
+        raise VerificationError("Baseline source image no longer matches the selected base")
+    historical: dict[str, list[dict]] = {}
+    published: dict[str, Point] = {}
+    unverified: list[dict] = []
+    family_runs = {
+        int(change["workflow_run_id"])
+        for change in public.changelogs
+        if any(fnmatchcase(candidate.family.split(":", 1)[1], key) for key in change["config_keys"])
+    }
+    for row, run_id, run_attempt, head in public.rows:
+        if head is None:
             # Classify after reconstructing the complete historical family, so an
             # unrelated sibling cannot block it and feed ordering cannot hide points.
             unverified.append(row)
             continue
-        head = next(iter(heads[run_id]))
         if head not in historical:
-            historical[head] = matrix_points(
-                canonical_matrix(repository, head, candidate.family, historical=True)
-            )
+            if head not in producers:
+                raise VerificationError(PRODUCER_UNAVAILABLE)
+            historical[head] = matrix_points(producers[head])
         matches = [
             entry for entry in historical[head] if _matches_public_point(row, public_point(entry))
         ]
@@ -989,7 +1028,7 @@ def resolve_baseline(
         date=context["source"]["date"],
         image=old_image,
         goal=goal,
-        sources=[feed.url, info.url],
+        sources=public.sources,
         points=sorted(
             points, key=lambda point: (point.label.split(" c")[0], point.conc, point.label)
         ),
@@ -997,32 +1036,27 @@ def resolve_baseline(
 
 
 def prepare_baseline(session: Session, context: dict, model: str, goal: Prose) -> Baseline:
-    """Resolve a baseline for the current owned session."""
-    evidence = Path(os.environ["KLAUD_EVIDENCE"])
-    preflight_file = evidence / "baseline-preflight.json"
-    if preflight_file.exists():
-        try:
-            preflight = BaselinePreflight.model_validate_json(preflight_file.read_text())
-        except (OSError, ValueError):
-            raise VerificationError("Baseline preflight is unavailable or invalid") from None
-        if (
-            preflight.candidate_id != session.candidate.id
-            or preflight.base != session.candidate.base
-            or preflight.baseline_model != model
-            or preflight.source_identity != identity(context["source"])
-            or preflight.baseline.family != session.candidate.family
-            or preflight.baseline.date != context["source"]["date"]
-            or normalized_image(preflight.baseline.image)
-            != normalized_image(context["source"]["image"])
-        ):
-            raise VerificationError("Baseline preflight does not match this candidate")
-        return preflight.baseline.model_copy(update={"goal": goal})
-    if context.get("baseline-preflight-required") is True:
+    """The planner's baseline preflight for the current owned session, with ``goal``.
+
+    Selection verified the complete roster before dispatch; the preflight must be bound
+    to this candidate, its base, its source observation and ``model``.
+    """
+    preflight_file = Path(os.environ["KLAUD_EVIDENCE"]) / "baseline-preflight.json"
+    if not preflight_file.exists():
         raise VerificationError("Required baseline preflight artifact is missing")
-    return resolve_baseline(
-        session.repository,
-        session.candidate,
-        context,
-        model,
-        goal,
-    )
+    try:
+        preflight = BaselinePreflight.model_validate_json(preflight_file.read_text())
+    except (OSError, ValueError):
+        raise VerificationError("Baseline preflight is unavailable or invalid") from None
+    if (
+        preflight.candidate_id != session.candidate.id
+        or preflight.base != session.candidate.base
+        or preflight.baseline_model != model
+        or preflight.source_identity != identity(context["source"])
+        or preflight.baseline.family != session.candidate.family
+        or preflight.baseline.date != context["source"]["date"]
+        or normalized_image(preflight.baseline.image)
+        != normalized_image(context["source"]["image"])
+    ):
+        raise VerificationError("Baseline preflight does not match this candidate")
+    return preflight.baseline.model_copy(update={"goal": goal})

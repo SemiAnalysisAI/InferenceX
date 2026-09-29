@@ -111,7 +111,7 @@ Auditor 模式也会报告有意保留的架构选择。豁免仅标注在对应
 ```bash
 python3 -c "import yaml; yaml.safe_load(open('configs/<nvidia|amd>-master.yaml')); yaml.safe_load(open('configs/runners.yaml')); yaml.safe_load(open('perf-changelog.yaml'))"
 bash -n benchmarks/<path>/<script>.sh
-bash -n runners/launch_<cluster>.sh
+uv run python -c 'from infx.clusters import load_clusters; load_clusters()'
 ```
 
 解析只是第一道门禁。不要把 YAML 解析结果报告为矩阵验证。

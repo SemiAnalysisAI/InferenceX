@@ -90,6 +90,8 @@ jobs:
           if [[ -f "$PRIORITY_ROOT/inferencex-e2e/configs/runners.yaml" ]]; then
             PRIORITY_ROOT="$PRIORITY_ROOT/inferencex-e2e"
           fi
+          # The profile job runs the measured revision's own `python -m infx.launch`.
+          env PYTHONPATH="$PRIORITY_ROOT" python3 -P -m infx.workflows.require_launcher "$GITHUB_WORKSPACE"
           source "$PRIORITY_ROOT/benchmarks/benchmark_lib.sh" --validation-only
           check_env_vars INPUTS_CONFIG_FILE INPUTS_CONFIG_KEY INPUTS_CONC PR_LABELS
           GENERATOR_PATH="${MEASURED_ROOT}"
@@ -232,20 +234,8 @@ jobs:
       MOE_DEBUG: '0'
       MOE_DEBUG_LOG: ${{ (inputs.moe-debug) && '/workspace/moe_debug.tp0.log' || '' }}
     steps:
-      - name: Resource cleanup
+      - name: Slurm cleanup
         run: |
-          # Cleanup Docker resources
-          if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
-            echo "[Docker] Cleaning up resources ..."
-            docker ps -aq | xargs -r docker rm -f
-            docker network prune -f
-            while [ -n "$(docker ps -aq)" ]; do
-              docker ps -a
-              sleep 5
-            done
-          fi
-
-          # Cleanup SLURM resources
           if command -v squeue >/dev/null 2>&1; then
             echo "[Slurm] Cleaning up jobs with name: ${RUNNER_NAME} ..."
             scancel --name="${RUNNER_NAME}" || true
@@ -270,7 +260,7 @@ jobs:
           path: .result-tooling
           persist-credentials: false
 
-      - name: Set up uv for result processing
+      - name: Set up uv
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           enable-cache: false
@@ -281,6 +271,25 @@ jobs:
           result_python=$(uv python find --system 3.12)
           "$result_python" --version
           echo "INFERENCEX_RESULTS_PYTHON=$result_python" >> "$GITHUB_ENV"
+
+      - name: Prepare launcher Python
+        run: |
+          # infx.launch needs pydantic and PyYAML. The venv is never activated, so
+          # launched Slurm jobs inherit the runner's PATH and no VIRTUAL_ENV.
+          launch_venv="$RUNNER_TEMP/infx-launch-venv"
+          uv venv --quiet --python 3.12 "$launch_venv"
+          uv pip install --quiet --exclude-newer PT12H --python "$launch_venv/bin/python" \
+            -r "$GITHUB_WORKSPACE/.result-tooling/inferencex-e2e/pyproject.toml"
+          echo "INFERENCEX_LAUNCH_PYTHON=$launch_venv/bin/python" >> "$GITHUB_ENV"
+
+      - name: Launcher cleanup
+        env:
+          PYTHONPATH: ${{ github.workspace }}/.result-tooling/inferencex-e2e
+        # Second pass after the shell cancel in Slurm cleanup, which needs no Python: the
+        # workflow revision's launcher has the cluster's backend remove what this runner
+        # left behind (on Slurm also its namespaced inferencex-<runner> jobs).
+        run: |
+          "$INFERENCEX_LAUNCH_PYTHON" -P -m infx.launch cleanup
 
       - name: Launch + Profile (single-node sglang/vllm)
         id: run
@@ -303,14 +312,8 @@ jobs:
           export RESULT_FILENAME="${res_name}"
           echo "RESULT_FILENAME=${res_name}" >> "$GITHUB_ENV"
 
-          # Historical measured revisions own their configuration in the launchers.
-          if [[ -f benchmarks/runtime_settings.sh ]]; then
-            source benchmarks/runtime_settings.sh
-          fi
-          if [[ -f runners/runtime_settings.sh ]]; then
-            source runners/runtime_settings.sh
-          fi
-          bash ./runners/launch_${RUNNER_NAME%%_*}.sh
+          source benchmarks/runtime_settings.sh
+          "$INFERENCEX_LAUNCH_PYTHON" -m infx.launch run
 
           if [ ! -f "${res_name}.json" ]; then
             echo "Run failed: Benchmark result ${res_name}.json not found." >&2

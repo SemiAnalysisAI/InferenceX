@@ -11,6 +11,13 @@ import yaml
 from infx.klaud import __main__ as klaud
 from infx.klaud import api, claims, github, lifecycle, reporting, validation
 from infx.klaud.models import CandidateOutcome, Feed, OwnedCandidate, identity
+from infx.tests.historical_revision import (
+    FAMILY,
+    KEY,
+    POINTS,
+    commit_history,
+    forbid_current_config_parsing,
+)
 
 
 @pytest.mark.parametrize("current_head,expected", [("ours", True), ("other", False)])
@@ -253,7 +260,7 @@ def test_select_continues_after_one_baseline_state_failure(tmp_path, monkeypatch
         ]
     }
 
-    def resolve(_repository, candidate, _context, _model, _goal):
+    def resolve(_repository, candidate, _context, _model, _goal, _producers):
         if candidate.id == first_id:
             raise OSError("transient")
         return reporting.Baseline(
@@ -265,6 +272,7 @@ def test_select_continues_after_one_baseline_state_failure(tmp_path, monkeypatch
             points=[],
         )
 
+    (tmp_path / "producers.json").write_text("{}\n")
     monkeypatch.setenv("GITHUB_REPOSITORY", "example/project")
     monkeypatch.setenv("GITHUB_RUN_ID", "42")
     monkeypatch.setenv("KLAUD_PR_REVIEW", json.dumps(review))
@@ -285,7 +293,7 @@ def test_select_continues_after_one_baseline_state_failure(tmp_path, monkeypatch
     assert preflight.baseline_model == "Model"
     assert preflight.source_identity == identity({})
     selected = json.loads((tmp_path / second_id / "candidate.json").read_text())
-    assert selected["baseline-preflight-required"] is True
+    assert selected["baseline-model"] == "Model"
 
 
 def test_prepare_baseline_uses_bound_preflight_and_rejects_source_drift(
@@ -341,9 +349,7 @@ def test_prepare_baseline_uses_bound_preflight_and_rejects_source_drift(
         )
     (tmp_path / "baseline-preflight.json").unlink()
     with pytest.raises(github.VerificationError, match="artifact is missing"):
-        reporting.prepare_baseline(
-            session, {**context, "baseline-preflight-required": True}, "Model", goal
-        )
+        reporting.prepare_baseline(session, context, "Model", goal)
 
 
 def test_baseline_normalizes_enroot_image_and_rejects_unverified_provenance(
@@ -406,9 +412,9 @@ def test_baseline_normalizes_enroot_image_and_rejects_unverified_provenance(
         "changelogs": [{"workflow_run_id": "42", "config_keys": ["test-family"]}],
     }
 
-    def canonical_matrix(_repository, head, _family, *, historical=False):
-        assert (head, historical) in ((base, False), (historical_head, True))
-        return historical_matrix if historical else current
+    def canonical_matrix(_repository, head, _family):
+        assert head == base
+        return current
 
     feeds = {
         "benchmarks": [
@@ -428,6 +434,7 @@ def test_baseline_normalizes_enroot_image_and_rejects_unverified_provenance(
 
     monkeypatch.setattr(validation, "canonical_matrix", canonical_matrix)
     monkeypatch.setattr(api, "fetch", fetch)
+    producers = {historical_head: historical_matrix}
     candidate = OwnedCandidate(
         id="1" * 16 + "-" + "2" * 16,
         family="configs/nvidia-master.yaml:test-family",
@@ -452,6 +459,7 @@ def test_baseline_normalizes_enroot_image_and_rejects_unverified_provenance(
         context,
         "Model",
         reporting.Prose(en="Update the image.", zh="更新镜像。"),
+        producers,
     )
 
     assert [(point.conc, point.result) for point in baseline.points] == [
@@ -474,6 +482,7 @@ def test_baseline_normalizes_enroot_image_and_rejects_unverified_provenance(
             context,
             "Model",
             reporting.Prose(en="Update the image.", zh="更新镜像。"),
+            producers,
         )
 
 
@@ -496,11 +505,17 @@ def family_configs():
             },
         },
     }
-    runners = {"labels": {"fixture": ["node-a"]}, "hardware": {}}
+    runners = {
+        "labels": {"fixture": ["node-a"], "cluster:fixture": ["node-a"]},
+        "clusters": {"fixture": {
+            "gpus-per-node": 8, "arch": "x86_64", "scheduler": "slurm",
+            "slurm": {"partition": "batch", "exclusive": True},
+        }},
+    }
     return master, runners
 
 
-@pytest.mark.parametrize("prefix", ["", "inferencex-e2e/", ".github/"])
+@pytest.mark.parametrize("prefix", ["", "inferencex-e2e/"])
 def test_canonical_family_matrix_reads_revision_layout(monkeypatch, family_configs, prefix):
     master, runners = family_configs
     files = {
@@ -515,7 +530,6 @@ def test_canonical_family_matrix_reads_revision_layout(monkeypatch, family_confi
 
     matrix = validation.canonical_matrix(
         "example/project", "a" * 40, "configs/nvidia-master.yaml:fixture",
-        historical=prefix == ".github/",
     )
 
     assert [
@@ -526,6 +540,158 @@ def test_canonical_family_matrix_reads_revision_layout(monkeypatch, family_confi
         ("example/model", 6, "example/image:stable"),
     ]
     assert matrix["evals"] == []
+
+
+CANDIDATE_ID = "1" * 16 + "-" + "2" * 16
+
+
+def publish(monkeypatch, head):
+    """Serve public rows of FAMILY's two points, produced by run 42 at ``head``; return their source."""
+    image = "example/image:stable"
+    published = [
+        {
+            "model": "dsr1", "hardware": "fixture", "framework": "sglang", "precision": "fp8",
+            "spec_method": "none", "disagg": False, "is_multinode": False,
+            "benchmark_type": "single_turn", "isl": 8192, "osl": 1024, "offload_mode": "off",
+            "conc": conc, "image": image, "prefill_tp": 1, "prefill_ep": 1,
+            "prefill_dp_attention": False, "prefill_num_workers": 0, "decode_tp": 1,
+            "decode_ep": 1, "decode_dp_attention": False, "decode_num_workers": 0,
+            "run_url": "https://github.com/example/project/actions/runs/42",
+            "tput_per_gpu": 5.0 * conc, "output_tput_per_gpu": 4.0 * conc, "mean_ttft": 0.1,
+            "mean_tpot": 0.02, "errors": 0,
+        }
+        for conc in (2, 6)
+    ]
+    feeds = {
+        "benchmarks": published,
+        "workflow-info": {
+            "runs": [{"github_run_id": "42", "run_attempt": 1}],
+            "runConfigs": [{"github_run_id": "42", "head_sha": head}],
+            "changelogs": [{"workflow_run_id": "42", "config_keys": [KEY]}],
+        },
+    }
+    monkeypatch.setattr(api, "fetch", lambda resource, **_: Feed(
+        url=f"https://inferencex.semianalysis.com/api/v1/{resource}",
+        retrieved_at="2026-09-20T00:00:00Z", sha256="0" * 64, payload=feeds[resource],
+    ))
+    return {
+        "date": "2026-09-19", "image": image, "model": "dsr1", "hardware": "fixture",
+        "framework": "sglang", "precision": "fp8", "spec_method": "none", "disagg": False,
+    }
+
+
+def review_candidate(directory, monkeypatch, source):
+    """Write one FAMILY candidate observed at ``source`` and a review that proceeds with it."""
+    directory.mkdir()
+    (directory / "candidates.json").write_text(json.dumps(
+        [{"id": CANDIDATE_ID, "family": FAMILY, "base": "a" * 40, "source": source}]
+    ))
+    monkeypatch.setenv("GITHUB_REPOSITORY", "example/project")
+    monkeypatch.setenv("GITHUB_RUN_ID", "42")
+    monkeypatch.setenv("KLAUD_PR_REVIEW", json.dumps({"decisions": [{
+        "candidate-id": CANDIDATE_ID, "decision": "proceed", "family": FAMILY,
+        "telemetry-clusters": ["cluster-a"], "pull-requests": [],
+        "baseline-model": "DeepSeek-R1", "reason": "No overlap",
+    }]}))
+
+
+@pytest.mark.parametrize(("regenerated", "selected", "deferred"), [
+    (True, [CANDIDATE_ID], []),
+    (False, [], [CANDIDATE_ID]),
+])  # fmt: skip
+def test_select_builds_baselines_from_regenerated_producers_without_starting_a_process(
+    tmp_path, monkeypatch, regenerated, selected, deferred
+):
+    _, head = commit_history(tmp_path, "inferencex-e2e")
+    monkeypatch.chdir(tmp_path)
+    # The candidate base still carries the producer's recipe; current code owns that side.
+    base_family = validation.producer_matrix("example/project", head, FAMILY)
+    monkeypatch.setattr(validation, "canonical_matrix", lambda *_: base_family)
+    forbid_current_config_parsing(monkeypatch)
+    directory = tmp_path / "klaud"
+    review_candidate(directory, monkeypatch, publish(monkeypatch, head))
+    if regenerated:
+        # The credential-free step: the hardware-layout producer rebuilds its own family.
+        klaud.regenerate_producers(directory)
+    else:
+        (directory / "producers.json").write_text("{}\n")
+
+    def no_process(args, *_args, **_kwargs):
+        raise AssertionError(f"select started {args!r}")
+
+    # Selection holds the credentials, so it may only read the regenerated rows.
+    monkeypatch.setattr(subprocess, "Popen", no_process)
+    monkeypatch.setattr(klaud, "fetch_capacity", lambda _policy: {"cluster-a"})
+    monkeypatch.setattr(claims, "claim_family", lambda *_args: True)
+
+    klaud.select(directory, 5)
+
+    selection = json.loads((directory / "selection.json").read_text())
+    assert (selection["candidates"], selection["baseline-deferred-candidates"]) == (selected, deferred)
+    if regenerated:
+        preflight = reporting.BaselinePreflight.model_validate_json(
+            (directory / CANDIDATE_ID / "baseline-preflight.json").read_text()
+        )
+        assert [
+            (point.conc, point.result, point.head, point.values.total_tps_gpu)
+            for point in preflight.baseline.points
+        ] == [(2, "passed", head, 10.0), (6, "passed", head, 30.0)]
+
+
+def test_producer_outside_the_local_clone_is_fetched_from_its_repository(tmp_path, monkeypatch):
+    remote = tmp_path / "remote"
+    remote.mkdir()
+    base, head = commit_history(remote)
+
+    def remote_git(*args):
+        subprocess.run(["git", *args], cwd=remote, check=True, capture_output=True)
+
+    # Like a reused pull-request run, the producer is reachable only from a pull ref.
+    remote_git("update-ref", "refs/pull/42/head", head)
+    remote_git("reset", "-q", "--hard", base)
+    remote_git("config", "uploadpack.allowReachableSHA1InWant", "true")
+    local = tmp_path / "local"
+    subprocess.run(["git", "clone", "-q", "--no-local", str(remote), str(local)], check=True)
+    subprocess.run(
+        ["git", "config", f"url.{remote}.insteadOf", "https://github.com/example/project"],
+        cwd=local, check=True,
+    )
+    assert subprocess.run(
+        ["git", "cat-file", "-e", f"{head}^{{commit}}"], cwd=local, capture_output=True,
+    ).returncode
+    monkeypatch.chdir(local)
+
+    matrix = validation.producer_matrix("example/project", head, FAMILY)
+
+    assert [
+        (row["model"], row["conc"], row["image"]) for row in matrix["single_node"]["all"]
+    ] == POINTS
+    with pytest.raises(validation.ProducerRegenerationError) as failure:
+        validation.producer_matrix("example/project", "f" * 40, FAMILY)
+    # git's own diagnostics are kept for the operator.
+    assert f"not our ref {'f' * 40}" in failure.value.stderr
+
+
+def test_failing_producer_keeps_its_stderr_and_never_sees_credentials(tmp_path, monkeypatch):
+    commit_history(tmp_path)
+    (tmp_path / "infx/matrix/generate.py").write_text(
+        "import os, sys\n"
+        "print(f\"generator failed; token={os.environ.get('GH_TOKEN')}\", file=sys.stderr)\n"
+        "sys.exit(1)\n"
+    )
+    subprocess.run(["git", "commit", "-qam", "failing generator"], cwd=tmp_path, check=True)
+    head = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=tmp_path, capture_output=True, text=True, check=True
+    ).stdout.strip()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("GH_TOKEN", "ghp_fixture")
+
+    with pytest.raises(validation.ProducerRegenerationError) as failure:
+        validation.producer_matrix("example/project", head, FAMILY)
+
+    # The public reason stays fixed; the producer's own output is kept apart from it.
+    assert str(failure.value) == "Baseline producer family cannot be regenerated"
+    assert failure.value.stderr == "generator failed; token=None\n"
 
 
 @pytest.mark.parametrize("from_repository_root", [False, True])

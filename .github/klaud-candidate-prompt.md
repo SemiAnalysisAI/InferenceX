@@ -61,8 +61,8 @@ candidate.json provides the planner-verified exact `baseline-model`; use that va
 The planner supplies `baseline-preflight.json` beside candidate.json. It contains the verified
 benchmark roster bound to the selected candidate, base SHA, source observation and model.
 After resolving the exact old/new image goal, prepare-baseline checks this binding and uses
-that roster without refetching it. If candidate.json requires the preflight and it is absent
-or invalid, stop with `baseline-preflight-mismatch`; only legacy candidates may reconstruct.
+that roster without refetching it. If the preflight is absent or invalid, stop with
+`baseline-preflight-mismatch`.
 The preflight is not a published or final baseline. Supplement verified public
 eval/dataset evidence before freezing; never replace a failed lookup with a partial roster.
 Never reduce the baseline to overlapping points, displayed rows or a smaller current family. Never dispatch the old

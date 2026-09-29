@@ -64,16 +64,16 @@ export VLLM_ENGINE_READY_TIMEOUT_S=3600
 mkdir -p "$RESULTS_DIR"
 nvidia-smi
 
-# The DSpark checkpoint is not in the launcher's STAGED_MODELS, so MODEL_PATH resolves
-# to the writable models dir and the ~960 GB download runs once. Add the basename to
-# STAGED_MODELS once the weights are staged on the read-only mount.
+# The DSpark checkpoint has no models.entries record in the cluster's runners.yaml
+# record, so MODEL_PATH resolves under models.download-root and the ~960 GB download
+# runs once. Add a models.entries record once the weights are staged read-only.
 if [[ -n "${MODEL_PATH:-}" ]]; then
     if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
         if [[ ! -w "$(dirname "$MODEL_PATH")" ]]; then
             echo "CRITICAL: $MODEL_PATH is empty and $(dirname "$MODEL_PATH") is not writable."
-            echo "This means the basename is listed in the launcher's STAGED_MODELS but the"
-            echo "weights were never staged. Either get them staged, or remove it from"
-            echo "STAGED_MODELS so MODEL_PATH resolves to the writable models dir instead."
+            echo "This means the cluster's models.entries names this checkpoint but the"
+            echo "weights were never staged. Either get them staged, or remove its record"
+            echo "so MODEL_PATH resolves under the writable models.download-root instead."
             exit 1
         fi
         echo "=== $MODEL_PATH is empty; downloading $MODEL (~960 GB, first run only) ==="

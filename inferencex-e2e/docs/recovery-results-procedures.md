@@ -283,9 +283,9 @@ export PYTHONDONTWRITEBYTECODE=1
 export PYTHONPYCACHEPREFIX="${PYTHONPYCACHEPREFIX:-/tmp/inferencex-pycache}"
 ```
 
-Do not override these paths back into the workspace. The MI355X launcher also deletes stale benchmark logs before launch and installs an EXIT trap that copies Slurm output/error evidence, prints the error tail, then runs scoped `sudo rm -rf "$BENCHMARK_LOGS_DIR"`. Keep `KEEP_LOGS=1` for deliberate local debugging only. It disables the cleanup trap. Cancellation can still bypass teardown, so use the recovery scan below after an `EACCES` cleanup failure.
+Do not override these paths back into the workspace. The MI355X `amd_utils` lane also deletes stale benchmark logs before launch and registers an exit cleanup that copies Slurm output/error evidence, prints the error tail, then runs scoped `sudo rm -rf "$BENCHMARK_LOGS_DIR"`. The cleanup also runs on `SIGINT`/`SIGTERM`. Keep `KEEP_LOGS=1` for deliberate local debugging only. It disables the cleanup. A hard kill can still bypass teardown, so use the recovery scan below after an `EACCES` cleanup failure.
 
-Sources: [Python-cache prevention](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/benchmarks/benchmark_lib.sh#L5-L10), [MI355X cleanup trap](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/runners/launch_mi355x-amds.sh#L49-L76).
+Sources: [Python-cache prevention](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/benchmarks/benchmark_lib.sh#L5-L10), [MI355X cleanup](../infx/launch/drivers/legacy.py).
 
 ### Recover an MI355X TW runner workspace
 

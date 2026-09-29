@@ -322,6 +322,12 @@ CPU 索引获取 PyTorch 包，其他依赖从 PyPI 获取，因为 CPU 索引�
 仅依赖标准库的辅助程序继续使用 Runner 自带的 Python。基准容器及其框架
 环境仍由现有启动器管理；此次 CI 依赖迁移不会修改这些环境。
 
+自托管的启动步骤使用 `INFERENCEX_LAUNCH_PYTHON` 运行 `python -m infx.launch`。该解释器由
+“Prepare launcher Python”步骤在 `$RUNNER_TEMP` 中构建为未激活的 venv：先 `uv venv --python 3.12`，
+再以 `uv pip install --exclude-newer PT12H` 安装工具 checkout 中 `inferencex-e2e/pyproject.toml`
+的依赖。不使用 `uv run`，因为它会导出 `VIRTUAL_ENV` 并把自身环境加到 `PATH` 前面，
+两者都会泄漏进 `srun --export=ALL` 作业。该步骤复用 runner 的 uv 缓存，缓存已热时耗时远低于一秒。
+
 ## 基于仓库角色的授权
 
 结果暂存和可信外部扫描派发均使用 `GITHUB_TOKEN` 检查仓库权限。暂存通过
@@ -554,4 +560,4 @@ attention 支持 torch 和 AITER。
 触发方式、覆盖范围、产物、取消及验证说明见
 [OperatorX GitHub Actions](../../operatorx/CI_zh.md)。
 
-H200 DeepSeek-V4.1 Flash SGLang AgentX 在并发 64 及以上的性能任务允许 1440 分钟 Slurm 分配和 1470 分钟 GitHub 任务，以容纳正常预热及保持不变的 3600 秒正式测试；更低并发和 eval-only 任务仍使用标准期限。运行 `35775895782` 在持续推进、请求无错误的预热期间耗尽了原有八小时分配。对应的 GB200 任务使用 720 分钟分配和 750 分钟 Workflow 期限。仅重试失败任务会保留原工作流期限，因此修改期限后必须启动新运行。
+H200 DeepSeek-V4.1 Flash SGLang AgentX 在并发 64 及以上的性能任务由启动策略（`infx/launch/policy.py` 中的 `SALLOC_TIME_BUMPS`）允许 1440 分钟 Slurm 分配，并允许 1470 分钟 GitHub 任务，以容纳正常预热及保持不变的 3600 秒正式测试；更低并发和 eval-only 任务仍使用标准期限。运行 `35775895782` 在持续推进、请求无错误的预热期间耗尽了原有八小时分配。仅重试失败任务会保留原工作流期限，因此修改期限后必须启动新运行。

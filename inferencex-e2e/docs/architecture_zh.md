@@ -37,14 +37,16 @@
 | --- | --- |
 | [`configs/CONFIGS.md`](../configs/CONFIGS.md) | 面向人员的主配置和运行器配置契约 |
 | [`configs/nvidia-master.yaml`](../configs/nvidia-master.yaml)、[`configs/amd-master.yaml`](../configs/amd-master.yaml) | 声明式的模型、镜像、框架、场景、拓扑和搜索空间意图 |
-| [`configs/runners.yaml`](../configs/runners.yaml) | 生成期间使用的调度标签、具体运行器名称和硬件信息 |
+| [`configs/runners.yaml`](../configs/runners.yaml) | 调度标签、具体运行器名称，以及生成过程和启动器读取的各集群记录（`clusters:`） |
 | [`perf-changelog.yaml`](../perf-changelog.yaml) | 以仅追加方式选择要针对某项变更运行的配置键 |
 | [`infx/matrix/validation.py`](../infx/matrix/validation.py) | 强制执行的 Pydantic 模式和跨字段不变量 |
 | [`infx/matrix/generate.py`](../infx/matrix/generate.py) | 搜索空间展开、默认值、过滤器、派生元数据、运行器解析和评测选择 |
 | [`infx/matrix/plan.py`](../infx/matrix/plan.py) | 变更日志选择、配置键展开、追加模式比较、矩阵分桶及最终验证；通过 `python -m infx.matrix.plan` 运行 |
 | [`.github/workflows/run-sweep.yml`](../../.github/workflows/run-sweep.yml) | 触发策略、矩阵扇出、收集依赖和跨仓库摄取分派 |
 | [`.github/workflows/benchmark-tmpl.yml`](../../.github/workflows/benchmark-tmpl.yml)、[`.github/workflows/benchmark-multinode-tmpl.yml`](../../.github/workflows/benchmark-multinode-tmpl.yml) | 可复用作业输入契约、环境映射、启动器调用、结果检查和单作业上传 |
-| [`runners/`](../runners) | 特定机群的模型路径、挂载、容器或 Slurm 设置以及基准测试脚本路由 |
+| [`infx/launch/`](../infx/launch) | `python -m infx.launch run`：根据运行器名称解析集群、选择启动路径（驱动）、工作负载策略、信号安全的清理以及工件暂存 |
+| [`infx/clusters/`](../infx/clusters)、[`infx/launch/backends/`](../infx/launch/backends) | 类型化集群记录（每个调度器一个设置模型），以及运行容器、跟踪作业的调度器后端（目前为使用 Pyxis squash 镜像的 Slurm） |
+| [`runners/srt-slurm/`](../runners/srt-slurm) | srt-slurm 主机设置 hook 和临时上游补丁 |
 | [`benchmarks/benchmark_lib.sh`](../benchmarks/benchmark_lib.sh) | 共享的服务器就绪检查、基准测试客户端、评测、AgentX 重放和输出行为 |
 | [`benchmarks/`](../benchmarks) | 特定于框架和拓扑的服务器与客户端命令 |
 | [`infx/github.py`](../infx/github.py) | 工作流操作共用的 GitHub REST、分页和评论表态基础操作 |
@@ -81,7 +83,7 @@ flowchart LR
   D --> E[经过验证的 JSON 矩阵]
   E --> F[run-sweep.yml 扇出]
   F --> G[可复用基准测试工作流]
-  G --> H[机群启动器]
+  G --> H[infx.launch 驱动]
   H --> I[基准测试脚本和 benchmark_lib]
   I --> J[基准测试、评测、日志、指标、追踪]
   J --> K[单作业 GitHub 工件]
@@ -108,7 +110,7 @@ flowchart LR
 | 变更日志处理器 | 选择发生变更的配置键，并将其分组到工作流矩阵桶中 | 每项配置的定义或其运行时行为 |
 | 扫描工作流 | 触发和标签策略、金丝雀与复用策略、矩阵扇出、依赖门控和摄取分派 | 特定于机群的启动细节或数据库映射 |
 | 可复用工作流 | 稳定的作业输入和环境契约、自托管调度、启动器调用、文件存在性检查和工件上传名称 | 模型路径选择或框架 CLI 标志 |
-| 机群启动器 | 物理运行器行为、模型暂存、挂载、端口、容器、Slurm 分配，以及选择运行时脚本或外部方案 | 逻辑搜索空间策略或数据库模式 |
+| 启动器（`infx.launch`） | 依据集群记录的物理运行器行为、模型暂存、挂载、容器、Slurm 分配，以及选择驱动、运行时脚本或外部方案 | 逻辑搜索空间策略或数据库模式 |
 | 基准测试和评测代码 | 服务器标志、客户端负载、评分、可供聚合的文件和运行时清理 | 请求了哪些矩阵点或数据行如何在仪表板中显示 |
 | 工件收集器 | 运行级打包和稳定的聚合工件名称 | 对基准测试结果进行语义重解释 |
 | InferenceX-app ETL | 规范化、幂等持久化、跳过报告、可用性、追踪旁路文件和数据库验证 | 服务引擎如何启动或生产方应调度哪些点 |
@@ -118,7 +120,7 @@ flowchart LR
 
 ## 阶段 1：配置与触发选择
 
-主 YAML 文件描述可能执行的工作。配置键将模型、镜像、模型前缀、精度、框架、运行器标签、场景定义以及一个或多个搜索空间条目绑定在一起。[`configs/runners.yaml`](../configs/runners.yaml) 解析调度标签，并提供生成时使用的硬件信息。
+主 YAML 文件描述可能执行的工作。配置键将模型、镜像、模型前缀、精度、框架、运行器标签、场景定义以及一个或多个搜索空间条目绑定在一起。[`configs/runners.yaml`](../configs/runners.yaml) 解析调度标签，其中的 `clusters:` 记录提供生成时使用的节点形状，以及启动器使用的 Slurm、镜像、路径和模型信息。
 
 主条目在被选中之前不会生效。在主扫描路径上，[`perf-changelog.yaml`](../perf-changelog.yaml) 的新增内容会选择确切的配置键或键模式。[`infx.matrix.plan`](../infx/matrix/plan.py) 仅读取基础引用与头部引用之间新增的变更日志行。它会验证每个新增条目，针对已加载的主配置展开键模式，并为选中的键调用矩阵生成器。
 
@@ -150,11 +152,11 @@ flowchart LR
 
 默认仓库路径定义在 [`infx/config.py`](../infx/config.py) 中。配置常量从 `infx.config` 导入，模式从 `infx.matrix.validation` 导入。包的 `__init__.py` 文件保持精简。
 
-从 `inferencex-e2e/` 或安装好的包运行 `python -m infx.matrix.plan` 进行变更日志规划，运行 `python -m infx.workflows.validate_perf_changelog` 进行验证。矩阵生成使用 `python -m infx.matrix.generate` 入口，并指定 `full-sweep` 或 `test-config` 子命令；历史 append-only 规划使用基准修订版自身的生成器，缺少模块时使用该修订版的旧脚本。摄取恢复使用恢复工具自身的规划模块，以及所选 worktree 的配置和配方。
+从 `inferencex-e2e/` 或安装好的包运行 `python -m infx.matrix.plan` 进行变更日志规划，运行 `python -m infx.workflows.validate_perf_changelog` 进行验证。矩阵生成使用 `python -m infx.matrix.generate` 入口，并指定 `full-sweep` 或 `test-config` 子命令。其他修订版的配置只由该修订版自身的工具解释，绝不由当前代码解析，因此配置格式变化不会破坏读取历史修订版的流程：[`infx.matrix.revision`](../infx/matrix/revision.py) 通过 Git 快照中该修订版自身的生成器处理 append-only 基准修订版和 Klaud 基线产出者，并通过被测检出目录自身的规划器处理摄取恢复和可信变更日志调度。
 
-使用当前工具代码的工作流直接调用 `infx` 模块，测试也导入规范模块。可信调度和结果处理通过 `PYTHONPATH` 和 Python 的 `-P` 选项明确指定工具代码所在的检出目录，同时仍以目标检出目录作为工作目录读取输入。恢复工具将 `INFERENCEX_REPOSITORY_ROOT` 设为所选 worktree，确保配方数据来自该修订版；其他调用方仍默认使用源码检出目录。
+使用当前工具代码的工作流直接调用 `infx` 模块，测试也导入规范模块。可信调度和结果处理通过 `PYTHONPATH` 和 Python 的 `-P` 选项明确指定工具代码所在的检出目录，同时仍以目标检出目录作为工作目录读取输入。每个修订版工具子进程都会将 `INFERENCEX_REPOSITORY_ROOT` 设为该修订版的目录树，确保配方数据来自同一修订版；其他调用方仍默认使用源码检出目录。
 
-手动矩阵生成、性能分析、OperatorX 枚举和历史 append-only 规划均支持模块与遗留脚本两种布局。生成器子进程会将所选检出目录或快照明确置于 `PYTHONPATH` 前部，必要时也包含遗留脚本所在目录，因此启用 `PYTHONSAFEPATH` 时也不会误用其他已安装检出版本的代码。
+`infx.matrix.revision` 选择修订版的生成器或规划器（其 `infx` 模块，或该模块取代的遗留脚本），运行时将该修订版的目录树置于 `PYTHONPATH` 中继承路径之前，必要时也包含遗留脚本所在目录，因此启用 `PYTHONSAFEPATH` 时也不会误用其他已安装检出版本的代码。手动和可信 e2e 调度以 `python -m infx.matrix.revision {generate,plan} CHECKOUT ARGS...` 的形式调用它；性能分析和 OperatorX 枚举仍各自保留一份生成器选择逻辑。
 
 `infx.matrix.plan.build_plan(changelog_data, base_ref=..., head_ref=...)` 返回完整扫描的已验证 `ChangelogMatrixEntry`，统一负责条目优先级、基准测试与评测各自的场景覆盖、裁剪、指纹及输出分桶。当前主配置文件只加载一次，运行器元数据在首次生成时加载一次；每组选中的配置直接调用 `infx.matrix.generate.generate_config_matrix`。当前输入来自传入的路径（默认为检出目录中的路径），`head_ref` 仍用作来源元数据。规划过程假设这些文件在本次操作期间保持稳定。
 
@@ -162,7 +164,7 @@ flowchart LR
 
 `expand_full_sweep(master_config, runner_data, options=FullSweepOptions(...))` 提供无需构造 `argparse` 命名空间的完整扫描展开接口。两个命令共用配置和场景遍历及数据行构造逻辑，同时明确保留各自的选择规则。完整扫描过滤具体运行器节点；按配置键展开还接受匹配的调度标签，并对节点去重。固定序列的单节点并发范围先按上下界裁剪再展开，多节点范围和显式列表则先展开再过滤。智能体场景的上下界仅过滤已有并发点。展开接口返回尚未选择评测的数据行；评测或裁剪策略由 `select_matrix_evals` 应用。现有 CLI 命令及接受命名空间的 Python 兼容入口保持不变。
 
-对追加模式的历史比较，`generation_inputs_at_ref` 从同一个 Git 修订提取配置、旧入口及 `infx` 包（若该修订包含它）。包迁移前的修订继续运行其原有独立生成器；迁移后的修订使用自身的包代码。当前工作区中的源码和配置不会替代历史输入。历史子进程继续保持隔离，提取的输入生命周期限定在本次规划操作内，包括失败路径。
+对 append-only 基准修订版和 Klaud 基线产出者，`infx.matrix.revision.snapshot` 从同一个 Git 修订提取配置（位于 `configs/`，迁移到项目根目录之前位于 `.github/configs/`）、多节点配方、旧入口及 `infx` 包（若该修订包含它）。包迁移前的修订运行其原有独立生成器；迁移后的修订使用自身的包代码。当前工作区中的源码和配置绝不替代已提交的输入，规划器只将基准修订版条目作为原始 YAML 读取，用于限定 append-only 范围。快照子进程保持隔离，提取的输入在操作结束时删除，包括失败路径。
 
 [`validation.py`](../infx/matrix/validation.py) 在生成之前验证主文件和运行器数据。其严格模型负责接受的别名和跨字段规则。例如，互斥的并发形式、单节点与多节点形态、组件元数据作用域、预填充与解码硬件配对，以及智能体场景的集群标签要求。
 
@@ -198,31 +200,40 @@ flowchart LR
 
 调度、checkout 选择和执行覆盖选项仍使用显式工作流输入。单节点 `dp-attn` 也保留为布尔输入，以维持 GitHub 的类型检查。AgentX 的序列长度仍为零，旧版本缺失字段仍保留原有的空字符串行为。JSON 由 GitHub Actions 在 checkout 前解析，因此被测旧提交无需新增辅助程序。多节点保留显式的 `node-count`、并发批次/评测覆盖和 CPU DRAM 覆盖输入；手动 AgentX 运行保留原有的内存默认值。性能分析工作流继续使用现有接口。
 
-矩阵中的 `runner` 值也会驱动 `runs-on`。分配自托管运行器后，模板会获取其具体的 `${{ runner.name }}` 并启动：
+矩阵中的 `runner` 值也会驱动 `runs-on`。分配自托管运行器后，模板会把具体的 `${{ runner.name }}` 导出为 `RUNNER_NAME`，并在被测项目根目录运行：
 
 ```bash
-bash ./runners/launch_${RUNNER_NAME%%_*}.sh
+"$INFERENCEX_LAUNCH_PYTHON" -m infx.launch run
 ```
 
-因此，第一个下划线之前的前缀标识机群启动器。运行器命名和启动器文件名共同构成一项路由契约。
+`infx.launch` 会把运行器解析到 `configs/runners.yaml` 中恰好一个 `cluster:<id>` 标签；不在任何集群标签中或同时出现在多个标签中的运行器会在分配资源前失败。`INFERENCEX_LAUNCH_PYTHON` 是一个未激活、只含包依赖的 Python 3.12 环境，因此被启动的作业会继承运行器的 `PATH`，且不带 `VIRTUAL_ENV`。
+
+第一个清理步骤在 checkout 之前运行：用普通的 `scancel` 取消该运行器的 Slurm 作业，并等待 `squeue` 不再列出它们。这样，失效运行器遗留的作业不会写入新的 workspace，而且这一步不依赖 Python。作业结束后它会再运行一次。启动器 Python 就绪后，工作流会从工作流版本的工具 checkout 中运行 `python -m infx.launch cleanup` 作为第二遍清理，在启动前和作业结束后各一次：取消该用户名为 `RUNNER_NAME` 或 `inferencex-RUNNER_NAME` 的 Slurm 作业，并等待它们离开队列。
 
 `infx.github` 负责共享 REST、分页及评论表态基础操作。`infx.workflows.reuse` 负责复用选择和验证，`infx.workflows.reuse_comment` 负责评论表态反馈。两者均可作为包模块执行。这些辅助模块仅依赖标准库。
 
 ## 阶段 4：启动器与运行时执行
 
-[`runners/`](../runners) 下的启动器会将逻辑作业元数据适配到某个物理机群。根据机群和拓扑，它可能会：
+[`infx.launch`](../infx/launch) 将逻辑作业元数据适配到某个物理集群。它一次性解析工作流环境（[`LaunchRequest`](../infx/launch/request.py)），解析集群记录，再由 [`launch_path`](../infx/launch/policy.py) 决定运行哪个驱动。记录中的 `scheduler` 指定运行它的后端（[`infx/launch/backends/`](../infx/launch/backends)，接口见 `base.py`）；只有启动或清理需要时才会导入后端，因此读取记录（只需要 [`infx/clusters/`](../infx/clusters) 中该调度器的设置模型）不会导入任何启动代码。需要特定调度器的驱动会声明这一点，不匹配时在开始任何工作前失败：
 
-- 将可移植模型 ID 解析为已暂存的本地路径；
-- 选择无冲突的端口；
-- 准备主机挂载和缓存；
-- 拉取或导入容器镜像；
-- 分配 Slurm 节点并构建特定于框架的配置；
+| 驱动 | 运行内容 |
+| --- | --- |
+| [`drivers/srt/`](../infx/launch/drivers/srt) | 单节点和多节点 srt-slurm 方案（`SRT_RECIPE`、`CONFIG_FILE`），包括集群维护的 B200 Nscale 通道；仅限 Slurm |
+| [`drivers/script.py`](../infx/launch/drivers/script.py) | 带显式 `BENCH_SCRIPT_OVERRIDE` 的单节点运行，例如 SPEED-Bench 采集脚本：通过后端接口运行一个容器，适用于任何后端；其他调度器上的集群只运行这个驱动 |
+| [`drivers/legacy.py`](../infx/launch/drivers/legacy.py) | 剩余的 srt-slurm 之前的通道（B200 TileRT 解聚脚本、MI355X `amd_utils` AgentX），计划删除；仅限 Slurm |
+
+根据驱动不同，启动器可能会：
+
+- 将可移植模型 ID 解析为集群某个卷中已暂存的检查点（`clusters.<id>.models` 和调度器的 `volumes`）；
+- 按后端的方式暂存容器镜像（在 Slurm 上为 `clusters.<id>.slurm.squash` 中的 Pyxis squash 缓存；集群没有该缓存时直接使用镜像仓库镜像）；
+- 分配 Slurm 节点并生成作业本地的 srt-slurm 配置；
 - 选择单节点脚本、多节点包装器或已签入的外部方案；
-- 将工作流环境传入运行时容器或分配环境。
+- 将工作流环境传入运行时容器或分配环境；
+- 跟踪作业日志、核验分配的最终状态并暂存结果。
 
 [`benchmarks/`](../benchmarks) 下的基准测试脚本负责实际的引擎和客户端命令。大多数脚本会引入 [`benchmarks/benchmark_lib.sh`](../benchmarks/benchmark_lib.sh)，后者集中处理服务器就绪检查、服务基准测试客户端、GPU 监控、lm-eval、SWE-bench、AgentX 重放和稳定输出辅助函数。
 
-这一边界是有意设计的。主配置保持可移植且便于审查。机器路径、调度器细节和容器机制保持靠近需要它们的机群。框架标志保持靠近基准测试方案，以便针对相应引擎进行测试。
+这一边界是有意设计的。主配置保持可移植且便于审查。机器路径、调度器细节和镜像机制保存在集群的 `clusters:` 记录中（[模式](../configs/CONFIGS.md#runners)）；依赖模型、框架、精度或方案的规则保存在具名表中，共享表位于 `infx/launch/policy.py`，srt-slurm 表位于 `infx/launch/drivers/srt/`（`lanes.py`、`models.py`、`power.py`），驱动绝不按集群 id 分支。框架标志保持靠近基准测试方案，以便针对相应引擎进行测试。收到 `SIGINT` 或 `SIGTERM` 时，启动器会先运行已注册的清理（例如取消分配），再以 130 或 143 退出；第一个非零的工作负载退出码优先于清理失败。
 
 不要将 YAML 被接受视为能够执行的证明。某个字段可能有效且已发出，但如果工作流适配器、启动器或基准测试脚本未使用它，该字段仍可能被忽略。
 
@@ -342,9 +353,9 @@ rows = build_rows(raw_eval, metadata, source="eval_job/results.json")
 
 `perf-changelog.yaml` 选择工作并记录原因。它不会重新定义主条目。这样既可以复用配置目录，又能保留可供审查的历史记录，说明每次扫描打算运行什么。
 
-### 启动机制保留在机群本地
+### 启动机制保存在集群记录中
 
-模型挂载、Slurm 分区、squash 缓存和物理端口属于 `runners/launch_*.sh`。框架服务器和客户端标志属于基准测试脚本或外部方案。这样可以避免形成一个充满无关机群分支的通用启动器。
+模型根目录、Slurm 分区、squash 缓存和挂载属于 `configs/runners.yaml` 中该集群的 `clusters:` 记录；与模型、框架或方案相关的启动规则属于 `infx/launch/policy.py` 和 `infx/launch/drivers/srt/` 中的具名表。框架服务器和客户端标志属于基准测试脚本或外部方案。驱动中不出现按集群的分支。
 
 ### 工件 JSON 是仓库边界
 
@@ -413,8 +424,8 @@ AgentX 追踪导出的体积更大，并且需要追踪发现、时间线处理�
    ```
 
 4. **矩阵交接：** 在 `setup` 作业中，验证该行位于预期的 `single_node`、`multi_node`、`evals`、`agentic_evals`、`multinode_evals` 或 `multinode_agentic_evals` 桶中。确认匹配的扇出作业转发了每个必需字段。
-5. **调度：** 验证模板的 `runs-on` 值与预期运行器匹配。确认具体运行器名称前缀能够解析到现有的 `runners/launch_<prefix>.sh`。
-6. **运行时：** 沿启动器分支追踪到确切的基准测试脚本或外部方案。确认每个关键矩阵字段均到达实际被使用的环境变量或命令参数。
+5. **调度：** 验证模板的 `runs-on` 值与预期运行器匹配。确认具体运行器名称恰好出现在 `configs/runners.yaml` 的一个 `cluster:<id>` 标签中。
+6. **运行时：** 沿 `launch_path` 及所选驱动追踪到确切的基准测试脚本或外部方案。确认每个关键矩阵字段均到达实际被使用的环境变量或命令参数。
 7. **输出：** 验证工作流要求的原始结果存在。然后验证预期的 `bmk_*`、`eval_*`、`agentic_*`、日志或指标工件已上传。
 8. **收集：** 对于固定序列吞吐量，检查 `results_bmk/agg_bmk.json`。对于评测，检查 `eval_results_all/agg_eval_all.json` 和按配置划分的评测工件。还要确认 `changelog-metadata` 存在。
 9. **分派：** 对于主分支运行，验证正确的仓库分派作业已运行，并且其 `source-run-id` 和 `merge-run-id` 标识预期运行。
@@ -430,7 +441,7 @@ AgentX 追踪导出的体积更大，并且需要追踪发现、时间线处理�
 - 主键未通过严格验证或定向生成。
 - 生成的拓扑、并发度、评测标记、镜像或运行器与预期声明不同。
 - 必需字段在矩阵 JSON、可复用工作流输入、环境、启动器和运行时命令之间传递时消失。
-- 具体运行器前缀没有匹配的启动器，或者启动器没有适用于该模型、精度、框架和拓扑的兼容分支。
+- 具体运行器不在任何 `cluster:<id>` 标签中，或者没有支持该模型、精度、框架和拓扑的启动路径。
 - 基准测试或评测路径无法说明其预期结果文件名和工件名称。
 - 生产方工件名称不再与 InferenceX-app 使用的名称匹配。
 - 主分支运行在所需收集工作或变更日志元数据准备就绪之前进入分派阶段。

@@ -16,12 +16,12 @@ on: # zizmor: ignore[concurrency-limits]
         type: string
         default: 'b300'
       model:
-        description: "HF model id (basename must be in launcher STAGED_MODELS for pre-staged local weights)"
+        description: "HF model id (basename must be a models.entries key of the cluster in configs/runners.yaml for pre-staged local weights)"
         required: false
         type: string
         default: 'deepseek-ai/DeepSeek-V4-Pro'
       model-prefix:
-        description: "Model prefix; drives launcher MODEL_PATH resolution, exp name, collector script, and artifact names"
+        description: "Model prefix; drives the exp name, collector script, and artifact names"
         required: false
         type: string
         default: 'dsv4'
@@ -93,10 +93,12 @@ env:
   SCENARIO_SUBDIR: fixed_seq_len/
   HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
   HF_HUB_CACHE: '/mnt/hf_hub_cache/'
-  # Drive the single-node path in runners/launch_b300-dsxe.sh. MODEL is the HF id;
-  # its basename (e.g. DeepSeek-V4-Pro) must be in the launcher's STAGED_MODELS so
-  # the launcher resolves MODEL_PATH to the pre-staged local weights and mounts
-  # them. The collector serves from MODEL_PATH (see SERVE_MODEL), so no download.
+  # Run the collector through the script driver (infx/launch/drivers/script.py).
+  # MODEL is the HF id. If its basename (e.g. DeepSeek-V4-Pro) is a models.entries
+  # key of the cluster in configs/runners.yaml, MODEL_PATH resolves to the
+  # pre-staged weights and only that root is mounted. The collector serves from
+  # MODEL_PATH (see SERVE_MODEL), so nothing is downloaded. Unstaged models resolve
+  # under models.download-root, and the collector downloads them there.
   MODEL: ${{ inputs.model }}
   MODEL_PREFIX: ${{ inputs.model-prefix }}
   PRECISION: fp4
@@ -107,7 +109,7 @@ env:
   EP_SIZE: '1'
   DP_ATTENTION: 'false'
   SPEC_DECODING: mtp
-  # Run the AL-matrix collector instead of the auto-selected throughput script.
+  # Run the AL-matrix collector through the script driver instead of an SRT recipe.
   BENCH_SCRIPT_OVERRIDE: benchmarks/single_node/speedbench/${{ inputs.model-prefix }}_fp4_b300_vllm.sh
   SALLOC_TIME_LIMIT: ${{ inputs.salloc-time }}
   # Matrix-collector tunables (propagated into the container via srun --export=ALL).
@@ -130,6 +132,18 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { clean: true, persist-credentials: false }
+      - name: Checkout the measured revision's launcher
+        if: ${{ inputs.ref && inputs.ref != '' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          path: .measured
+          sparse-checkout: inferencex-e2e/infx/launch
+          persist-credentials: false
+      - name: Require the Python launcher
+        if: ${{ inputs.ref && inputs.ref != '' }}
+        # The collect job runs the measured revision's own `python -m infx.launch`.
+        run: python3 -P -m infx.workflows.require_launcher .measured
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
       - id: score
         env:
@@ -189,17 +203,6 @@ jobs:
     steps:
       - name: Resource cleanup (pre-run)
         run: &resource-cleanup |
-          # Cleanup Docker resources
-          if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
-            echo "[Docker] Cleaning up resources ..."
-            docker ps -aq | xargs -r docker rm -f
-            docker network prune -f
-            while [ -n "$(docker ps -aq)" ]; do
-              docker ps -a
-              sleep 5
-            done
-          fi
-
           # Cleanup SLURM resources
           if command -v squeue >/dev/null 2>&1; then
             echo "[Slurm] Cleaning up jobs with name: ${RUNNER_NAME} ..."
@@ -230,6 +233,37 @@ jobs:
           rm -f gpu_metrics.csv || true
           rm -rf speed_bench_data || true
 
+      - name: Checkout launch tooling
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .launch-tooling
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: false
+
+      - name: Prepare launcher Python
+        run: |
+          # infx.launch needs pydantic and PyYAML. The venv is never activated, so
+          # launched Slurm jobs inherit the runner's PATH and no VIRTUAL_ENV.
+          launch_venv="$RUNNER_TEMP/infx-launch-venv"
+          uv venv --quiet --python 3.12 "$launch_venv"
+          uv pip install --quiet --exclude-newer PT12H --python "$launch_venv/bin/python" \
+            -r "$GITHUB_WORKSPACE/.launch-tooling/inferencex-e2e/pyproject.toml"
+          echo "INFERENCEX_LAUNCH_PYTHON=$launch_venv/bin/python" >> "$GITHUB_ENV"
+
+      - name: Launcher cleanup (pre-run)
+        env:
+          PYTHONPATH: ${{ github.workspace }}/.launch-tooling/inferencex-e2e
+        # Second pass after the shell cancel in Resource cleanup, which needs no Python: the
+        # workflow revision's launcher has the cluster's backend remove what this runner
+        # left behind (on Slurm also its namespaced inferencex-<runner> jobs).
+        run: &launcher-cleanup |
+          "$INFERENCEX_LAUNCH_PYTHON" -P -m infx.launch cleanup
+
       - name: Collect AL matrix
         env:
           RUNNER_NAME: ${{ runner.name }}
@@ -239,14 +273,8 @@ jobs:
           echo "INFERENCEX_E2E_ROOT=$PWD" >> "$GITHUB_ENV"
           set -eo pipefail
           export GPU_COUNT="$TP"
-          # Historical measured revisions own their configuration in the launchers.
-          if [[ -f benchmarks/runtime_settings.sh ]]; then
-            source benchmarks/runtime_settings.sh
-          fi
-          if [[ -f runners/runtime_settings.sh ]]; then
-            source runners/runtime_settings.sh
-          fi
-          bash ./runners/launch_${RUNNER_NAME%%_*}.sh
+          source benchmarks/runtime_settings.sh
+          "$INFERENCEX_LAUNCH_PYTHON" -m infx.launch run
 
           if [ ! -f "speedbench-reference-al.yaml" ]; then
             echo "AL collection failed: speedbench-reference-al.yaml not produced." >&2
@@ -317,3 +345,9 @@ jobs:
       - name: Resource cleanup (post-run)
         if: always()
         run: *resource-cleanup
+
+      - name: Launcher cleanup (post-run)
+        if: ${{ always() && env.INFERENCEX_LAUNCH_PYTHON != '' }}
+        env:
+          PYTHONPATH: ${{ github.workspace }}/.launch-tooling/inferencex-e2e
+        run: *launcher-cleanup

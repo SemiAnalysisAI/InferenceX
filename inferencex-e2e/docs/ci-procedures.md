@@ -332,6 +332,14 @@ Standard-library-only helpers continue using the runner's Python. Benchmark
 containers and their framework environments remain managed by their existing
 launchers; this CI dependency migration does not change those environments.
 
+Self-hosted launch steps run `python -m infx.launch` with `INFERENCEX_LAUNCH_PYTHON`,
+which the "Prepare launcher Python" step builds as an unactivated venv in
+`$RUNNER_TEMP`: `uv venv --python 3.12`, then `uv pip install --exclude-newer PT12H`
+of the tooling checkout's `inferencex-e2e/pyproject.toml` dependencies. It is not
+`uv run` because that exports `VIRTUAL_ENV` and prepends its environment to `PATH`, and
+both would leak into `srun --export=ALL` jobs. The step reuses the runner's uv cache,
+so a warm runner spends well under a second on it.
+
 ## Repository-role authorization
 
 Staging and trusted external sweep dispatch check repository permissions with
@@ -572,4 +580,4 @@ use one GPU per measurement. AMD attention supports both torch and AITER.
 See [OperatorX GitHub Actions](../../operatorx/CI.md) for dispatch,
 coverage, artifacts, cancellation, and validation.
 
-For H200 DeepSeek-V4.1 Flash SGLang AgentX performance at concurrency 64 or above, the launcher allows a 1440-minute Slurm allocation and the reusable workflow allows 1470 minutes. This accommodates normal warmup and the unchanged 3600-second profile; lower concurrencies and eval-only jobs retain the standard deadlines. Run `35775895782` exhausted the previous eight-hour allocation during progressing, error-free warmup. The matching GB200 jobs get a 720-minute allocation and a 750-minute workflow deadline. A failed-only retry retains the original workflow deadline, so deadline changes require a new workflow run.
+For H200 DeepSeek-V4.1 Flash SGLang AgentX performance at concurrency 64 or above, the launch policy (`SALLOC_TIME_BUMPS` in `infx/launch/policy.py`) allows a 1440-minute Slurm allocation and the reusable workflow allows 1470 minutes. This accommodates normal warmup and the unchanged 3600-second profile; lower concurrencies and eval-only jobs retain the standard deadlines. Run `35775895782` exhausted the previous eight-hour allocation during progressing, error-free warmup. A failed-only retry retains the original workflow deadline, so deadline changes require a new workflow run.
