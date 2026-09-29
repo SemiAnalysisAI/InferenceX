@@ -36,7 +36,7 @@
       "launcher": "single-slurm",
       "backends": {"deepep-v2": [8, 16], "uccl-ep": [8], "nccl-ep": [8, 16]},
       "ll_backends": {"deepep-v2": [8], "uccl-ep": [8], "nccl-ep": [8]},
-      "kv_backends": {"nixl": ["rdma"], "mooncake": ["rdma"]},
+      "kv_backends": {"nixl": ["rdma"], "mooncake": {"fabrics": ["rdma"], "ops": ["push"]}},
       "fabric": {"nic": "ConnectX-7 400G", "switch": "NVIDIA Quantum-2 QM9790 (25.6T, InfiniBand)"},
       "operator": {
         "partition": "main",
@@ -57,7 +57,7 @@
       "launcher": "single-slurm",
       "backends": {"deepep-v2": [8, 16], "uccl-ep": [8, 16], "nccl-ep": [8, 16]},
       "ll_backends": {"deepep-v2": [8, 16], "uccl-ep": [8], "nccl-ep": [8, 16]},
-      "kv_backends": {"nixl": ["rdma"], "mooncake": ["rdma"]},
+      "kv_backends": {"nixl": ["rdma"], "mooncake": {"fabrics": ["rdma"], "ops": ["push"]}},
       "fabric": {"nic": "8x ConnectX-7-class 400G InfiniBand rails (bare metal, gdrdrv)", "switch": "InfiniBand (model not surveyed)"},
       "operator": {
         "partition": "batch_1",
@@ -80,7 +80,7 @@
       "launcher": "single-slurm",
       "backends": {"deepep-v2": [8], "nccl-ep": [8]},
       "ll_backends": {"nccl-ep": [8]},
-      "kv_backends": {"nixl": ["rdma"], "mooncake": ["rdma"]},
+      "kv_backends": {"nixl": ["rdma"], "mooncake": {"fabrics": ["rdma"], "ops": ["push"]}},
       "fabric": {"nic": "AWS EFA (p6-b300.48xlarge, 16 x 400G per node)", "switch": "AWS EFA fabric (SRD)"},
       "operator": {
         "partition": "batch_1",
@@ -103,7 +103,7 @@
       "launcher": "gb-nv",
       "backends": {"deepep-v2": [8, 16], "nccl-ep": [8, 16], "flashinfer-ep": [8, 16]},
       "ll_backends": {"deepep-v2": [8, 16], "nccl-ep": [8, 16]},
-      "kv_backends": {"nixl": ["rdma", "mnnvl"], "mooncake": ["rdma"]},
+      "kv_backends": {"nixl": ["rdma", "mnnvl"], "mooncake": {"fabrics": ["rdma"], "ops": ["push"]}},
       "fabric": {"nic": "4x ConnectX-7 NDR400 InfiniBand (KV scale-out; EP stays MNNVL)", "switch": "NVLink NVL72 + Quantum-2"},
       "operator": {
         "partition": "batch",
@@ -128,7 +128,7 @@
       "launcher": "gb-nv",
       "backends": {"deepep-v2": [8, 16], "nccl-ep": [8, 16], "flashinfer-ep": [8, 16]},
       "ll_backends": {"deepep-v2": [8, 16], "nccl-ep": [8, 16]},
-      "kv_backends": {"nixl": ["rdma", "mnnvl"], "mooncake": ["rdma"]},
+      "kv_backends": {"nixl": ["rdma", "mnnvl"], "mooncake": {"fabrics": ["rdma"], "ops": ["push"]}},
       "fabric": {"nic": "4x ConnectX-8 XDR800 InfiniBand (KV scale-out; EP stays MNNVL)", "switch": "NVLink NVL72 + Quantum-X800"},
       "operator": {
         "partition": "batch_1",
@@ -195,7 +195,6 @@
       "backends": {"mori": [8, 16], "uccl-ep": [8]},
       "ll_backends": {"mori": [8]},
       "kv_backends": {
-        "mori-io": ["rdma"],
         "mooncake": {"fabrics": ["rdma"], "ops": ["push"], "image": "rocm/atom-dev:nightly_202606101403",
           "device": "rdma{gpu}", "pool_budget": 21474836480}
       },

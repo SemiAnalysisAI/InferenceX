@@ -221,6 +221,7 @@ def _kv_shards(sku: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
                         "ops": " ".join(spec.get("ops", KV_SWEEP["ops"])),
                         "kv_device": spec.get("device", ""),
                         "pool_slack": KV_SWEEP["pool_slack"],
+                        "max_burst_tokens": KV_SWEEP["max_burst_tokens"],
                         "seed": KV_SWEEP["seed"],
                         "warmup": timing["warmup_per_trial"],
                         "reps": timing["reps_per_trial"],

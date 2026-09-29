@@ -1,56 +1,32 @@
 #!/usr/bin/env python3
-"""Mooncake TransferEngine adapter for the KV-transfer suite.
+"""Mooncake TransferEngine adapter, driven the way vLLM's MooncakeConnector
+drives it (32ad1400d7).
 
-P2PHANDSHAKE metadata (no etcd); the peer session id is ip:rpc_port. The
-binding is sync-only in the shape production uses it: SGLang's mooncake
-connector posts blocking calls from a transfer thread pool (the binding
-releases the GIL), so post() here hands the sync call to a worker thread and
-wait() joins it. On CUDA images the wheel links libcudart.so.12, which cu13
-images do not carry; when the plain import fails the adapter dlopens it from
-the nvidia-cuda-runtime-cu12 package and retries, so no launcher-side
-LD_LIBRARY_PATH seam is needed. ROCm runs the image-provided build (AMD's
-atom-dev tree; upstream wheels link libcuda.so.1), where transfers require
-the GPU-paired NIC filter the registry passes through --kv-device.
+vLLM's connector is push-only: the prefill side sends each ready group of
+requests to its decode peer as ONE batch_transfer_sync_write, run on a
+10-worker executor, over P2PHANDSHAKE metadata (no etcd). It registers each
+layer's cache view as its own region, and on DSV4's padded block-row layout a
+layer's stride (the row) exceeds its page, so no two blocks coalesce: every
+(layer, block) is its own entry, and pages move without the row's padding
+(kv_workload.layer_entries). NIC choice is the engine's own auto-discovery
+unless the registry pins a device (Pollara GPU-paired NICs, `{gpu}` expands to
+the physical GPU index). On EFA pools the upstream EFA build and protocol
+"efa" carry it (prepare_backend installs that build); elsewhere verbs RC.
+NVIDIA pools run the pinned cuda13 wheel vLLM's image swaps in; ROCm runs the
+image-provided build (AMD's atom-dev tree), since upstream wheels link CUDA.
 """
 
 from __future__ import annotations
 
-import ctypes
 import os
-import time
 from concurrent.futures import ThreadPoolExecutor
 
+import numpy as np
+
 import kv_workload
-from kv_backend import KVBackend, library_version, offset_lists, spans
+from kv_backend import KVBackend, library_version
 
-BATCH_CAP = 8192
-
-
-def _preload_cudart() -> None:
-    try:
-        ctypes.CDLL("libcudart.so.12", mode=ctypes.RTLD_GLOBAL)
-        return
-    except OSError:
-        pass
-    import importlib.metadata as md
-    import pathlib
-
-    for entry in md.files("nvidia-cuda-runtime-cu12") or []:
-        if entry.name == "libcudart.so.12":
-            ctypes.CDLL(str(pathlib.Path(entry.locate()).resolve()), mode=ctypes.RTLD_GLOBAL)
-            return
-    raise RuntimeError("libcudart.so.12 unavailable; install nvidia-cuda-runtime-cu12")
-
-
-def _import_engine():
-    """Plain import first (ROCm images ship a self-contained build); dlopen
-    the CUDA runtime and retry only when the wheel's link fails."""
-    try:
-        from mooncake.engine import TransferEngine
-    except ImportError:
-        _preload_cudart()
-        from mooncake.engine import TransferEngine
-    return TransferEngine
+WORKERS = 10  # vLLM MooncakeConnector's executor default
 
 
 def _physical_gpu_index() -> int:
@@ -69,31 +45,23 @@ class MooncakeBackend(KVBackend):
     maturity = "production"
 
     def __init__(self, args, role, device):
-        TransferEngine = _import_engine()
-        import mooncake
-
-        # The engine build actually imported, not the pin prepare_backend.sh
-        # attempted: image-provided builds (b300's pre-0.3.12 lineage, AMD's
-        # atom-dev tree) register under varying dist names or none at all, and
-        # a null here is what let an image wheel masquerade as the pinned one.
-        self.library_version = library_version(
-            ("mooncake-transfer-engine-efa-cuda13", "mooncake-transfer-engine",
-             "mooncake-transfer-engine-cuda13", "mooncake"), mooncake)
-        # EFA is not a verbs HCA: the EFA build's libfabric transport carries it
-        # (prepare_backend installs that build on pools the profile marks efa).
-        self.transport = "efa" if os.environ.get("COLLX_RDMA_FABRIC") == "efa" else "rdma"
         # Same-fabric GB pairs: the NVLink-IPC transport claims cross-node
         # segments inside one NVLink domain and then fails the address import
         # (nvlink_transport "Requested address not found", first kv CI run on
         # gb200). This row measures the rdma lane, so pin the transport off;
         # the ROCm twin (MC_USE_HIP_IPC) misclaims the same way on mi355x.
+        # vLLM sets no MC_* variable; this one only keeps the row runnable.
         os.environ.setdefault("MC_USE_NVLINK_IPC", "0")
-        # The engine fails any single sync call after 30 s. Under measured
-        # contention (the x86 high-batch collapse this suite publishes) a
-        # chunked call on a thrashing lane can legitimately exceed that, so
-        # give the library guard 4x headroom; the runtime's per-case guard
-        # still bounds a truly wedged transfer.
-        os.environ.setdefault("MC_TRANSFER_TIMEOUT", "120")
+        from mooncake.engine import TransferEngine
+        import mooncake
+
+        # The engine build actually imported, not the pin prepare_backend.sh
+        # attempted: image-provided builds register under varying dist names.
+        self.library_version = library_version(
+            ("mooncake-transfer-engine-efa-cuda13", "mooncake-transfer-engine-cuda13",
+             "mooncake-transfer-engine", "mooncake"), mooncake)
+        protocol = "efa" if os.environ.get("COLLX_RDMA_FABRIC") == "efa" else "rdma"
+        self.transport = "libfabric" if protocol == "efa" else "verbs"
         if not args.socket_ifname:
             raise RuntimeError("mooncake needs --socket-ifname for its P2P handshake address")
         self._engine = TransferEngine()
@@ -101,17 +69,16 @@ class MooncakeBackend(KVBackend):
         local = f"{self._ip}:{args.kv_mc_port + (0 if role == 'target' else 1)}"
         nic_filter = args.kv_device.replace("{gpu}", str(_physical_gpu_index()))
         self.nic_filter = nic_filter or None
-        rc = self._engine.initialize(local, "P2PHANDSHAKE", self.transport, nic_filter)
+        rc = self._engine.initialize(local, "P2PHANDSHAKE", protocol, nic_filter)
         if rc != 0:
             raise RuntimeError(f"mooncake initialize failed rc={rc} "
-                               f"nic_filter={nic_filter!r}")
-        self._pool = None
-        self._bulk = None
-        self._peer = None
-        workers = max(int(v) for v in args.batch_sizes.split())
-        self._exec = ThreadPoolExecutor(max_workers=workers)
+                               f"protocol={protocol} nic_filter={nic_filter!r}")
+        self.engine_config = {"protocol": protocol, "workers": WORKERS,
+                              "api": "batch_transfer_sync_write"}
+        self._pool = self._bulk = self._peer = None
+        self._exec = ThreadPoolExecutor(max_workers=WORKERS)
 
-    def register(self, pool, bulk, reg_layout=None) -> None:
+    def register(self, pool, bulk, row_bytes: int, reg_layout=None) -> None:
         self._pool, self._bulk = pool, bulk
         if self._engine.register_memory(pool.ptr, pool.nbytes) != 0 \
                 or self._engine.register_memory(bulk.ptr, bulk.nbytes) != 0:
@@ -124,8 +91,12 @@ class MooncakeBackend(KVBackend):
     def connect(self, peer: dict) -> None:
         self._peer = peer
 
-    def _split(self, run, prep_s):
-        """(post, wait, prep_s) around a blocking call via the worker pool."""
+    def request_entries(self, cfg, local_rows, remote_rows):
+        local, sizes = kv_workload.layer_entries(cfg, local_rows)
+        remote, _ = kv_workload.layer_entries(cfg, remote_rows)
+        return local, remote, sizes
+
+    def _submit(self, run):
         pending: list = []
 
         def post():
@@ -134,37 +105,49 @@ class MooncakeBackend(KVBackend):
         def wait():
             pending.pop(0).result()
 
-        return post, wait, prep_s
+        return post, wait
 
-    def make_paged(self, cfg, op, local_tables, remote_tables):
-        start = time.perf_counter()
-        local, remote, sizes = offset_lists(cfg, local_tables, remote_tables,
-                                            self._pool.ptr, self._peer["pool_base"])
-        chunks = spans(len(local), BATCH_CAP)
-        session = self._peer["session"]
-        func = self._engine.batch_transfer_sync_read if op == "pull" \
-            else self._engine.batch_transfer_sync_write
+    @staticmethod
+    def _push_only(op: str) -> None:
+        if op != "push":
+            raise RuntimeError("vLLM's MooncakeConnector only pushes; mooncake has no pull row")
+
+    def make_paged(self, cfg, op, local_rows, remote_rows, request_id: int = 0):
+        return self.make_burst(cfg, op, [(local_rows, remote_rows, request_id)])[0]
+
+    def make_burst(self, cfg, op, requests):
+        """One sync write batch for the whole ready burst, as vLLM sends a
+        ready group of requests to one peer."""
+        self._push_only(op)
+        local, remote, sizes = [], [], []
+        for local_rows, remote_rows, _ in requests:
+            lo, ro, sz = self.request_entries(cfg, local_rows, remote_rows)
+            local.append(lo)
+            remote.append(ro)
+            sizes.append(sz)
+        src = (np.uint64(self._pool.ptr) + np.concatenate(local)).tolist()
+        dst = (np.uint64(self._peer["pool_base"]) + np.concatenate(remote)).tolist()
+        lens = np.concatenate(sizes).tolist()
+        session, engine = self._peer["session"], self._engine
 
         def run():
-            for i, j in chunks:
-                rc = func(session, local[i:j], remote[i:j], sizes[i:j])
-                if rc != 0:
-                    raise RuntimeError(f"mooncake batch transfer failed rc={rc}")
+            rc = engine.batch_transfer_sync_write(session, src, dst, lens)
+            if rc != 0:
+                raise RuntimeError(f"mooncake batch write failed rc={rc}")
 
-        return self._split(run, time.perf_counter() - start)
+        return [self._submit(run)]
 
     def make_bulk(self, nbytes, op):
-        session = self._peer["session"]
-        func = self._engine.transfer_sync_read if op == "pull" \
-            else self._engine.transfer_sync_write
+        self._push_only(op)
+        session, engine = self._peer["session"], self._engine
         local, remote = self._bulk.ptr, self._peer["bulk_base"]
 
         def run():
-            rc = func(session, local, remote, nbytes)
+            rc = engine.transfer_sync_write(session, local, remote, nbytes)
             if rc != 0:
-                raise RuntimeError(f"mooncake bulk transfer failed rc={rc}")
+                raise RuntimeError(f"mooncake bulk write failed rc={rc}")
 
-        return self._split(run, 0.0)
+        return self._submit(run)
 
     def teardown(self) -> None:
         self._exec.shutdown(wait=False)

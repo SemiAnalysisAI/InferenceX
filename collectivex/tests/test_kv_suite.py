@@ -10,7 +10,6 @@ round trip lives with the other suites' in test_runtime.CaseArgvContract.
 from __future__ import annotations
 
 import argparse
-import bisect
 import sys
 import unittest
 from pathlib import Path
@@ -173,12 +172,20 @@ class UCXSelectors(unittest.TestCase):
 
 class BurstTiming(unittest.TestCase):
     def test_a_burst_posts_every_request_before_waiting_on_any(self):
-        order = []
-        pairs = [(lambda i=i: order.append(("post", i)),
-                  lambda i=i: order.append(("wait", i))) for i in range(3)]
-        burst_ms, request_ms = time_bursts(pairs, warmup=1, reps=2)
+        order, built, settled = [], [], []
+
+        def build(rep):
+            built.append(rep)
+            return [(lambda i=i: order.append(("post", i)),
+                     lambda i=i: order.append(("wait", i))) for i in range(3)]
+
+        burst_ms, request_ms = time_bursts(build, warmup=1, reps=2,
+                                           settle=lambda: settled.append(1), rep0=10)
         self.assertEqual(order[:6], [("post", 0), ("post", 1), ("post", 2),
                                      ("wait", 0), ("wait", 1), ("wait", 2)])
+        # every rep builds its own burst (fresh handles and tables) from rep0,
+        # and handles are released after every burst
+        self.assertEqual((built, len(settled)), ([10, 11, 12], 3))
         # warmups dropped; one completion mark per request per kept rep, offsets
         # from the burst start (never decreasing), and the burst is its last mark
         self.assertEqual((len(burst_ms), len(request_ms)), (2, 2 * 3))
@@ -190,108 +197,77 @@ class BurstTiming(unittest.TestCase):
 
 def _grid_args(**overrides):
     base = dict(workload_name="kv-dsv4", precision="fp8",
-                isl_ladder="8192 32768 131072 524288", page_tokens="256",
-                batch_sizes="1 2 4 8 16 32 64", pool_slack=2.0,
+                isl_ladder="2048 8192 32768 65536 131072 524288", page_tokens="256",
+                batch_sizes="1 2 4 8 16 32", pool_slack=2.0, max_burst_tokens=131072,
+                table_sets=kv_workload.DEFAULT_TABLE_SETS,
                 pool_budget=run_kv.POOL_BUDGET, seed=67)
     base.update(overrides)
     return argparse.Namespace(**base)
 
 
 class KVGrid(unittest.TestCase):
-    def test_the_packed_grid_sheds_only_where_the_pool_budget_bites(self):
-        # Packed block-major geometry: a 512k-ISL block-256 request is 6,146
-        # descriptors, so no batch on this ladder nears DESC_BUDGET. Only the
-        # 512k point sheds, and via the pool budget: its batch-32 pool plans
-        # ~118 GB against the 64 GiB budget, batch 16 fits at ~59 GB.
+    def test_the_burst_token_cap_shapes_the_ladder(self):
+        # batch x isl <= 131072 prompt tokens per burst; batch 1 always runs.
         points, isls, batches = run_kv._grid(_grid_args())
-        self.assertEqual((isls, batches),
-                         ([8192, 32768, 131072, 524288], [1, 2, 4, 8, 16, 32, 64]))
         allowed = {cfg["isl"]: allowed for cfg, allowed in points}
-        self.assertEqual(allowed, {8192: batches, 32768: batches, 131072: batches,
-                                   524288: [1, 2, 4, 8, 16]})
-        for cfg, batch_list in points:
-            # one descriptor per packed block: 3 full-ISL groups + 2 window blocks
-            self.assertEqual(cfg["descs"], 3 * -(-cfg["isl"] // 256) + 2)
+        self.assertEqual(allowed, {2048: [1, 2, 4, 8, 16, 32], 8192: [1, 2, 4, 8, 16],
+                                   32768: [1, 2, 4], 65536: [1, 2], 131072: [1],
+                                   524288: [1]})
+        for cfg, _ in points:
+            self.assertEqual(cfg["table_sets"], kv_workload.DEFAULT_TABLE_SETS)
             self.assertLessEqual(cfg["pool_bytes"], run_kv.POOL_BUDGET)
 
-    def test_descriptor_budget_sheds_batches_but_keeps_a_chartable_ladder(self):
-        # DESC_BUDGET stays as the fail-closed guard for future presets whose
-        # bursts are descriptor-bound. Pin it to 4 requests' descriptors at
-        # the largest ISL: batches above the per-point allowance shed, but the
-        # LADDER_FLOOR smallest batches always survive so every point keeps a
-        # chartable batch ladder.
-        probe = kv_workload.plan_config("dsv4", "fp8", 524288, 256)
-        with mock.patch.object(run_kv, "DESC_BUDGET", 4 * probe["descs"]):
-            points, _isls, _batches = run_kv._grid(_grid_args())
-        allowed = {cfg["isl"]: allowed for cfg, allowed in points}
-        self.assertEqual(allowed[8192], [1, 2, 4, 8, 16, 32, 64])   # 98 descs/req
-        self.assertEqual(allowed[32768], [1, 2, 4, 8, 16, 32])      # 386
-        self.assertEqual(allowed[131072], [1, 2, 4, 8, 16])         # 1538, floor
-        self.assertEqual(allowed[524288], [1, 2, 4, 8, 16])         # 6146, floor
+    def test_no_cap_runs_the_full_ladder(self):
+        points, _isls, batches = run_kv._grid(_grid_args(max_burst_tokens=0))
+        self.assertTrue(all(allowed == batches for _, allowed in points
+                            if _["isl"] <= 32768))
 
-    def test_pool_budget_sheds_largest_batches_even_below_the_ladder_floor(self):
-        # The budget is a hard memory limit, so it sheds batches the descriptor
-        # floor keeps: pinned to the 512k point's batch-1 pool, only [1] remains.
-        for isl, batches, fit_batch, expected in ((32768, "1 4 16", 4, [1, 4]),
-                                                  (524288, "1 2 4 8 16 32 64", 1, [1])):
-            with self.subTest(isl=isl):
-                args = _grid_args(isl_ladder=str(isl), batch_sizes=batches)
-                args.pool_budget = kv_workload.plan_config(
-                    "dsv4", "fp8", isl, 256, 2.0, batch_max=fit_batch)["pool_bytes"]
-                points, _isls, _batches = run_kv._grid(args)
-                self.assertEqual(points[0][1], expected)
-                self.assertLessEqual(points[0][0]["pool_bytes"], args.pool_budget)
+    def test_the_pool_budget_sheds_batches_then_table_sets(self):
+        # Pinned to the 512k point's batch-1, two-table-set pool: batches are
+        # already [1], so the table sets shed from four to two.
+        args = _grid_args(isl_ladder="524288")
+        args.pool_budget = kv_workload.plan_config(
+            "dsv4", "fp8", 524288, 256, 2.0, batch_max=1, table_sets=2)["pool_bytes"]
+        (cfg, allowed), = run_kv._grid(args)[0]
+        self.assertEqual((allowed, cfg["table_sets"]), ([1], 2))
+        # a multi-batch point sheds its batches before its table sets
+        args = _grid_args(isl_ladder="2048", max_burst_tokens=0)
+        args.pool_budget = kv_workload.plan_config(
+            "dsv4", "fp8", 2048, 256, 2.0, batch_max=8)["pool_bytes"]
+        (cfg, allowed), = run_kv._grid(args)[0]
+        self.assertEqual((allowed, cfg["table_sets"]),
+                         ([1, 2, 4, 8], kv_workload.DEFAULT_TABLE_SETS))
+
+    def test_descriptor_budget_stays_the_fail_closed_guard(self):
+        probe = kv_workload.plan_config("dsv4", "fp8", 524288, 256)
+        with mock.patch.object(run_kv, "DESC_BUDGET", probe["descs"] - 1):
+            points, _isls, _batches = run_kv._grid(_grid_args(isl_ladder="2048 524288"))
+        self.assertEqual([cfg["isl"] for cfg, _ in points], [2048])
 
 
 class RegistrationChunking(unittest.TestCase):
-    # The NIXL adapter registers an oversized pool in pieces. The pieces must
-    # never cut through a descriptor of ANY planned config, which _harmonize
-    # guarantees by giving every config one shared region layout.
+    # The NIXL adapter registers an oversized pool in pieces cut on the row
+    # grid; every descriptor is a whole row, so no cut may split a row.
 
-    def test_harmonize_makes_region_bases_config_invariant(self):
+    def test_harmonize_gives_every_point_the_one_shared_pool(self):
         points, _isls, _batches = run_kv._grid(_grid_args())
-        layout = run_kv._harmonize(points)
-        total = sum(nbytes for _, _, nbytes in layout)
-        running = 0
-        for base, _packed, nbytes in layout:
-            self.assertEqual(base, running)
-            running += nbytes
+        (base, row, nbytes), = run_kv._harmonize(points)
+        self.assertEqual((base, row), (0, points[0][0]["row_bytes"]))
         for cfg, _ in points:
-            self.assertEqual(cfg["pool_bytes"], total)
-            for region, (base, packed, nbytes) in zip(cfg["regions"], layout):
-                self.assertEqual((region["base"], region["packed_bytes"], region["pool_blocks"]),
-                                 (base, packed, nbytes // packed))
-                self.assertLessEqual(region["blocks_req"], region["pool_blocks"])
+            self.assertEqual((cfg["pool_rows"] * row, cfg["pool_bytes"]), (nbytes, nbytes))
 
-    def test_spans_tile_the_pool_and_no_descriptor_straddles_a_cut(self):
-        # A tiny cap on a small grid forces many cuts; every block any config
-        # can address must land whole inside one registered piece.
-        cap = 1 << 24
-        points, _isls, _batches = run_kv._grid(
-            _grid_args(isl_ladder="2048 8192", batch_sizes="1 4"))
+    def test_spans_tile_the_pool_on_the_row_grid(self):
+        points, _isls, _batches = run_kv._grid(_grid_args(isl_ladder="2048 8192"))
         layout = run_kv._harmonize(points)
-        total = sum(nbytes for _, _, nbytes in layout)
-        spans = kv_nixl.reg_spans(total, layout, cap=cap)
-        self.assertGreater(len(spans), len(layout))
-        # exact in-order coverage, no gap, no overlap, each piece within the cap
+        total = layout[0][2]
+        spans = kv_nixl.reg_spans(total, layout, cap=1 << 24)
+        self.assertGreater(len(spans), 1)
         self.assertEqual(spans[0][0], 0)
         for (a_off, a_len), (b_off, _) in zip(spans, spans[1:]):
             self.assertEqual(a_off + a_len, b_off)
         self.assertEqual(sum(length for _, length in spans), total)
-        for off, length in spans:
-            packed = next(entry for entry in reversed(layout) if entry[0] <= off)[1]
-            self.assertLessEqual(length, max(cap, packed))
-        starts = [off for off, _ in spans]
-        straddles = []
-        for cfg, _ in points:
-            for region in cfg["regions"]:
-                packed = region["packed_bytes"]
-                for block in range(region["pool_blocks"]):
-                    off = region["base"] + block * packed
-                    s_off, s_len = spans[bisect.bisect_right(starts, off) - 1]
-                    if off + packed > s_off + s_len:
-                        straddles.append((region["name"], block))
-        self.assertEqual(straddles, [])
+        row = layout[0][1]
+        self.assertTrue(all(off % row == 0 and length % row == 0 for off, length in spans))
 
     def test_without_a_layout_the_pool_registers_whole(self):
         for layout in (None, []):
@@ -316,6 +292,8 @@ def _kv_document(status="success"):
             row("bulk", None, "pull", 48.3, 47.7),
             row("paged", 256, "push", 48.4, 47.6),
         ]},
+        "implementation": {"library_version": "1.3.2", "transport": "ucx"},
+        "topology": {"network": "infiniband"},
         "outcome": {"status": status, "reasons": []},
     }
 
@@ -325,7 +303,8 @@ class KVSummary(unittest.TestCase):
         text = summarize.render([_kv_document()])
         self.assertIn("KV-transfer results", text)
         self.assertNotIn("EP results", text)
-        self.assertIn("| pull | 43.4 | 96.2 | 48.3 | 53.1 |", text)
+        self.assertIn("| `nixl` | 1.3.2 | rdma | infiniband | ucx | kv-dsv4 | success | pull "
+                      "| 43.4 | 96.2 @b16 | 48.3 | 53.1 |", text)
 
     def test_a_push_only_document_reads_its_push_lane(self):
         doc = _kv_document()

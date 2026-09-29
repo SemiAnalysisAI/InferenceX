@@ -1,37 +1,31 @@
 #!/usr/bin/env python3
-"""Workload model for the KV-cache transfer suite.
+"""Workload model for the KV-cache transfer suite, following vLLM.
 
-A transfer is one request's paged KV in the shape vLLM's packed DSV4 NIXL path
-actually registers and posts: per cache group, the physical block is the
-transfer unit, and one contiguous descriptor covers ALL of that group's layers
-for the block (block-major `[block][layer]` layout, `packed_bytes = layers x
-page_bytes` per descriptor). Fragmentation is real but block-granular:
-seed-keyed random block tables per side scatter each request's blocks over the
-pool, exactly what a fragmented allocator hands a connector. What this model
-deliberately does NOT do is explode each (layer, page) into its own descriptor
-— vLLM's connector asserts one descriptor per packed physical block, and the
-per-(layer, page) shape inflates descriptor counts by ~2 orders of magnitude,
-which inverts backend and fabric conclusions on descriptor-bound lanes.
+A transfer is one request's KV in the shape vLLM's NixlConnector posts for
+DeepSeek-V4-Pro (validated against vLLM 32ad1400d7). vLLM builds every
+DSV4 cache (the three compressed-attention MLA caches, the sliding-window
+caches, and the fp32 compressor states) into ONE backing allocation whose
+block rows are as wide as the widest cache group; the groups overlay each
+other from byte 0 because a block id is owned by one group at a time. Every
+page is padded to the 576 B FlashMLA alignment, so no per-layer view is
+contiguous and the connector registers one region whose descriptor is a
+whole row (`(storage_addr, storage.nbytes() // num_blocks)` in
+nixl/base_worker.py). A request therefore moves one full row per block id:
+``ceil(L/256)`` rows for the MLA group plus each sliding-window group's tail
+(``cdiv(window, block) + 1`` blocks, clipped to the prompt), all drawn from
+one shared block pool so the rows are distinct. Seed-keyed random tables
+scatter those rows over the pool, the block-granular fragmentation a real
+allocator produces; each rep takes a fresh table set, as each request a
+decode worker admits carries fresh block ids.
 
-Geometry for ``dsv4`` is transcribed from vLLM (validated against commit
-32ad1400d7): every token-state is 584 B of content (448 B NoPE + 128 B RoPE +
-8 B fp8 scale, the ``fp8_ds_mla`` layout), and each block's page is padded to
-a 576 B multiple (FlashMLA packing — alignment applies at PAGE granularity,
-not per state). The config's ``compress_ratios`` interleave 30 Compressed
-Sparse Attention layers (4 tokens per state) with 31 Heavily Compressed
-Attention layers (128 tokens per state); CSA layers add a lightning-indexer
-cache (132 B per state: 128 fp8 + 4 scale bytes); and all 61 layers keep a
-128-token sliding window whose block size is FIXED at 64 tokens because the
-window shares its physical tensor with the CSA cache (a 256-token CSA block is
-64 states, so the shared tensor's block covers 64 window tokens — the window
-page equals the CSA page byte for byte). HCA's 128-token states force the
-model block size to a multiple of 128; vLLM serves DSV4 at 256. The dtype mix
-is architectural, so the preset pins precision to "fp8".
+The dtype mix is architectural (fp8_ds_mla states, fp8 indexer, fp32
+compressor states), so the preset pins precision to "fp8", and sparse MLA
+serves only block size 256.
 
-Pattern correctness: byte at offset o of a pool is derived from o (constant per
-256-byte chunk) and the owning rank's salt, so any block's expected contents
-follow from its source offset and source rank alone, at any alignment; the
-salt makes a transfer that reads its own pool (a loopback) fail verify.
+Pattern: every 8-byte word holds its own word index XORed with the owning
+rank's salt mix, so a word's expected value follows from its SOURCE offset and
+source rank alone. No two words in a pool match: a wrong block, a shifted copy,
+a partial descriptor, or a loopback (own salt) all fail verification.
 """
 
 from __future__ import annotations
@@ -43,93 +37,146 @@ import struct
 
 import numpy as np
 
+ALIGNMENT = 576  # vLLM pads every fp8_ds_mla-family page to this
+
+# name: (block_tokens, tokens_per_state, bytes_per_state). page bytes =
+# round_up(block_tokens / tokens_per_state * bytes_per_state, ALIGNMENT).
+DSV4_CACHES = {
+    "c4a": (256, 4, 584),            # CSA KV: 448 NoPE + 128 RoPE + 8 scale
+    "c4a-indexer": (256, 4, 132),    # lightning indexer: 128 fp8 + 4 scale
+    "c128a": (256, 128, 584),        # HCA KV
+    "swa": (64, 1, 584),             # 128-token sliding window, block 64
+    "c4a-state": (4, 1, 8192),       # C4 attention compressor, fp32 2x2x512
+    "c4a-indexer-state": (4, 1, 2048),
+    "c128a-state": (8, 1, 4096),     # C128 compressor, fp32 2x512
+}
+
 PRESETS = {
     "dsv4": dict(
         model_class="deepseek-v4-pro",
-        precisions=("fp8",),  # vLLM's fp8_ds_mla states + fp8 indexer, baked in
+        precisions=("fp8",),
         model_layers=61,
-        alignment=576,  # vLLM pads each block's page to this (FlashMLA packing)
+        block_tokens=256,
+        vllm_commit="32ad1400d7",
+        # vLLM's kv_cache_groups: the MLA specs unify into one group; the
+        # sliding-window specs group by (block_size, window) and the 61 SWA
+        # layers split 31/30 on the uniform-group gcd. (cache, layers) each,
+        # in the order vLLM lays each group's pages out from row byte 0.
         groups=(
-            dict(name="c4a", layers=30, tokens_per_state=4, state_bytes=584),
-            dict(name="c4a-idx", layers=30, tokens_per_state=4, state_bytes=132),
-            dict(name="c128a", layers=31, tokens_per_state=128, state_bytes=584),
-            dict(name="swa", layers=61, tokens_per_state=1, state_bytes=584,
-                 block_tokens=64, window_tokens=128),
+            dict(name="mla", block_tokens=256, window=None,
+                 caches=(("c128a", 31), ("c4a-indexer", 30), ("c4a", 30))),
+            dict(name="swa-a", block_tokens=64, window=128, caches=(("swa", 31),)),
+            dict(name="swa-b", block_tokens=64, window=128, caches=(("swa", 30),)),
+            dict(name="c4a-state", block_tokens=4, window=8,
+                 caches=(("c4a-indexer-state", 30), ("c4a-state", 30))),
+            dict(name="c128a-state", block_tokens=8, window=128,
+                 caches=(("c128a-state", 31),)),
         ),
     ),
 }
+DEFAULT_TABLE_SETS = 4
 
 
 def _round_up(value: int, align: int) -> int:
     return -(-value // align) * align
 
 
-def plan_config(preset: str, precision: str, isl: int, block_tokens: int,
-                pool_slack: float = 2.0, batch_max: int = 1) -> dict:
-    """Resolve one (preset, precision, isl, block size) point into regions.
+def page_bytes(cache: str) -> int:
+    block, per_state, state_bytes = DSV4_CACHES[cache]
+    return _round_up(block // per_state * state_bytes, ALIGNMENT)
 
-    A region is one vLLM cache group. Every region gets: layers, page_bytes
-    (one layer's padded page for one block), packed_bytes (the transfer unit —
-    one descriptor covering all the group's layers for one physical block),
-    blocks_req (descriptors for one request), pool_blocks (sized so
-    ``batch_max`` concurrent requests hold disjoint blocks, plus fragmentation
-    head-room), and its base offset in the one contiguous pool allocation.
-    """
+
+def group_block_bytes(group: dict) -> int:
+    return sum(layers * page_bytes(cache) for cache, layers in group["caches"])
+
+
+def group_blocks(group: dict, isl: int) -> int:
+    """Block ids vLLM transfers for this group: every block of a full-attention
+    group, the window's tail (cdiv(window, block) + 1, clipped) otherwise."""
+    blocks = math.ceil(isl / group["block_tokens"])
+    if group["window"] is None:
+        return blocks
+    return min(math.ceil(group["window"] / group["block_tokens"]) + 1, blocks)
+
+
+def layer_layout(preset: str) -> list[dict]:
+    """Per group, each layer's page (offset inside the row, bytes) in the
+    order vLLM packs them; the per-layer entries a layer-registering
+    connector posts."""
+    out = []
+    for group in PRESETS[preset]["groups"]:
+        offset, layers = 0, []
+        for cache, count in group["caches"]:
+            size = page_bytes(cache)
+            for _ in range(count):
+                layers.append((offset, size))
+                offset += size
+        out.append(dict(name=group["name"], layers=layers))
+    return out
+
+
+def layer_entries(cfg: dict, rows) -> tuple[np.ndarray, np.ndarray]:
+    """(offsets, sizes) of one request's per-layer pages: for every layer of
+    every group, one entry per block of that group (layer-major, the order
+    vLLM's MooncakeConnector walks its per-layer regions). Pages carry no row
+    padding, so a group narrower than the row leaves the row's tail unmoved."""
+    rows = np.asarray(rows, dtype=np.uint64)
+    offsets, sizes = [], []
+    for (_, start, end), group in zip(group_slices(cfg), layer_layout(cfg["preset"])):
+        block_base = rows[start:end] * np.uint64(cfg["row_bytes"])
+        for offset, size in group["layers"]:
+            offsets.append(block_base + np.uint64(offset))
+            sizes.append(np.full(end - start, size, dtype=np.uint64))
+    return np.concatenate(offsets), np.concatenate(sizes)
+
+
+def plan_config(preset: str, precision: str, isl: int, block_tokens: int,
+                pool_slack: float = 2.0, batch_max: int = 1,
+                table_sets: int = DEFAULT_TABLE_SETS) -> dict:
+    """Resolve one (preset, precision, isl, block size) point: per-group block
+    counts, the row size (the widest group's bytes per block), descriptors and
+    bytes per request, and a pool of rows large enough for ``table_sets``
+    disjoint sets of ``batch_max`` requests plus fragmentation head-room."""
     shape = PRESETS[preset]
     if precision not in shape["precisions"]:
         raise ValueError(f"{preset} runs {shape['precisions']}, not {precision}")
-    pool_slack = max(pool_slack, batch_max * 1.25)
-    regions = []
-    offset = 0
-    for group in shape["groups"]:
-        group_block = group.get("block_tokens", block_tokens)
-        if group_block < group["tokens_per_state"] \
-                or group_block % group["tokens_per_state"]:
-            raise ValueError(
-                f"{preset} block size {block_tokens} does not hold whole "
-                f"{group['name']} states ({group['tokens_per_state']} tokens each)")
-        states = group_block // group["tokens_per_state"]
-        page_bytes = _round_up(states * group["state_bytes"], shape["alignment"])
-        packed_bytes = group["layers"] * page_bytes
-        tokens = min(isl, group["window_tokens"]) if "window_tokens" in group else isl
-        blocks_req = math.ceil(tokens / group_block)
-        pool_blocks = int(blocks_req * pool_slack) + 8
-        regions.append(dict(name=group["name"], layers=group["layers"],
-                            block_tokens=group_block, page_bytes=page_bytes,
-                            packed_bytes=packed_bytes, blocks_req=blocks_req,
-                            pool_blocks=pool_blocks, base=offset))
-        offset += pool_blocks * packed_bytes
-
+    if block_tokens != shape["block_tokens"]:
+        raise ValueError(f"{preset} is served at block size {shape['block_tokens']} "
+                         f"(sparse MLA supports no other), not {block_tokens}")
+    row_bytes = max(group_block_bytes(g) for g in shape["groups"])
+    groups = [dict(name=g["name"], blocks=group_blocks(g, isl)) for g in shape["groups"]]
+    descs = sum(g["blocks"] for g in groups)
+    per_request = max(pool_slack, batch_max * 1.25)
+    pool_rows = int(descs * table_sets * per_request) + 8
     return dict(
         preset=preset,
         precision=precision,
         isl=isl,
-        page_tokens=block_tokens,  # row label: the model block size in tokens
+        page_tokens=block_tokens,
         layers=shape["model_layers"],
-        page_bytes=regions[0]["packed_bytes"],  # one primary-region descriptor
-        regions=regions,
-        pool_bytes=offset,
-        req_bytes=sum(r["blocks_req"] * r["packed_bytes"] for r in regions),
-        descs=sum(r["blocks_req"] for r in regions),
+        row_bytes=row_bytes,
+        page_bytes=row_bytes,  # one descriptor: a full block row
+        groups=groups,
+        descs=descs,
+        req_bytes=descs * row_bytes,
+        batch_max=batch_max,
+        table_sets=table_sets,
+        pool_rows=pool_rows,
+        pool_bytes=pool_rows * row_bytes,
     )
 
 
-def block_table(cfg: dict, seed: int, request: int = 0) -> dict:
-    """Per-region block tables (deterministic, seed-keyed): region name -> the
-    random block permutation a fragmented allocator would hand the request.
-    Requests in one batch slice disjoint ranges of a single permutation, as a
-    real allocator's live requests never alias blocks."""
+def block_table(cfg: dict, seed: int, request: int = 0, table_set: int = 0) -> np.ndarray:
+    """One request's row ids (group order, deterministic, seed-keyed): a slice
+    of one random permutation of the pool's rows. Every (table set, request)
+    slices a disjoint range, as a real allocator's live requests never alias
+    blocks."""
     rng = np.random.default_rng(seed)
-    tables = {}
-    for region in cfg["regions"]:
-        low = request * region["blocks_req"]
-        tables[region["name"]] = (
-            rng.permutation(region["pool_blocks"])[low : low + region["blocks_req"]]
-        )
-        if len(tables[region["name"]]) < region["blocks_req"]:
-            raise ValueError(f"pool too small for batch request {request} "
-                             f"in region {region['name']}")
-    return tables
+    low = (table_set * cfg["batch_max"] + request) * cfg["descs"]
+    rows = rng.permutation(cfg["pool_rows"])[low : low + cfg["descs"]]
+    if len(rows) < cfg["descs"]:
+        raise ValueError(f"pool too small for table set {table_set} request {request}")
+    return rows.astype(np.int64)
 
 
 def table_seed(cfg: dict, side: str, seed: int = 0) -> int:
@@ -138,80 +185,106 @@ def table_seed(cfg: dict, side: str, seed: int = 0) -> int:
     return base + (1000 if side == "local" else 0)
 
 
-def page_offsets(cfg: dict, tables: dict) -> np.ndarray:
-    """Block-major byte offsets (relative to the pool base) across all regions:
-    one offset per packed physical block, the descriptor vLLM posts."""
-    parts = []
-    for region in cfg["regions"]:
-        offsets = (tables[region["name"]].astype(np.uint64)
-                   * np.uint64(region["packed_bytes"]) + np.uint64(region["base"]))
-        parts.append(offsets)
-    return np.concatenate(parts)
+def page_offsets(cfg: dict, rows) -> np.ndarray:
+    """Byte offsets (relative to the pool base) of a request's row descriptors."""
+    return np.asarray(rows, dtype=np.uint64) * np.uint64(cfg["row_bytes"])
 
 
 def desc_sizes(cfg: dict) -> np.ndarray:
-    """Per-descriptor byte sizes aligned with page_offsets' ordering."""
-    return np.concatenate([
-        np.full(region["blocks_req"], region["packed_bytes"], dtype=np.uint64)
-        for region in cfg["regions"]
-    ])
+    return np.full(cfg["descs"], cfg["row_bytes"], dtype=np.uint64)
 
 
-def desc_array(base: int, cfg: dict, tables: dict, dev: int) -> np.ndarray:
-    """(addr, len, devId) uint64 rows for descriptor-list APIs (NIXL's numpy form)."""
-    out = np.empty((cfg["descs"], 3), dtype=np.uint64)
-    out[:, 0] = np.uint64(base) + page_offsets(cfg, tables)
-    out[:, 1] = desc_sizes(cfg)
-    out[:, 2] = dev
+def group_slices(cfg: dict) -> list[tuple[str, int, int]]:
+    """(group name, start, end) of each group's rows inside a request's table."""
+    out, start = [], 0
+    for group in cfg["groups"]:
+        out.append((group["name"], start, start + group["blocks"]))
+        start += group["blocks"]
     return out
 
 
-# The pattern depends on (offset >> 8) mod 256 only, so it repeats every 64 KiB.
-PATTERN_PERIOD = 1 << 16
+_SALT_MIX = 0x5851F42D4C957F2D
+FILL_CHUNK_WORDS = 1 << 27  # bounds the fill's arange temp at 1 GiB
 
 
-def _chunk_byte(offset: int, salt: int = 0) -> int:
-    return ((offset >> 8) * 131 + 7 + 101 * salt) & 0xFF
+def salt_mix(salt: int) -> int:
+    return ((salt + 1) * _SALT_MIX) & 0x7FFFFFFFFFFFFFFF
 
 
-def pattern_tile(salt: int = 0) -> np.ndarray:
-    """One PATTERN_PERIOD of the pattern from offset 0 (host uint8)."""
-    chunks = np.arange(PATTERN_PERIOD // 256, dtype=np.int64)
-    return np.repeat(((chunks * 131 + 7 + 101 * salt) & 0xFF).astype(np.uint8), 256)
-
-
-def fill_pattern(pool_u8, salt: int = 0) -> None:
-    """Paint the offset-derived pattern over the whole pool (torch uint8 tensor)."""
+def fill_pattern(words, salt: int) -> None:
+    """Paint word i of an int64 torch view with ``i ^ salt_mix(salt)`` on-device."""
     import torch
 
-    chunks = pool_u8.numel() // 256
-    view = pool_u8[: chunks * 256].view(chunks, 256)
-    vals = (torch.arange(chunks, device=pool_u8.device, dtype=torch.int64) * 131 + 7 + 101 * salt) & 0xFF
-    view.copy_(vals.to(torch.uint8)[:, None].expand(chunks, 256))
+    mix = salt_mix(salt)
+    for start in range(0, words.numel(), FILL_CHUNK_WORDS):
+        end = min(start + FILL_CHUNK_WORDS, words.numel())
+        words[start:end] = torch.arange(start, end, dtype=torch.int64,
+                                        device=words.device) ^ mix
 
 
-def verify_transfer(read8, cfg: dict, dst_tables: dict, src_tables: dict,
-                    src_salt: int = 0, samples: int = 16, seed: int = 7) -> tuple[bool, str]:
-    """On the destination pool: packed block (region, dst[i]) must hold the
-    source pool's pattern (salted with ``src_salt``) at (region, src[i])'s offset. Each sample probes one
-    layer's page inside the packed block, so the checks range over the whole
-    descriptor. ``read8(offset)`` returns 8 destination-pool bytes (see
-    kv_pool). Compared per byte, so any page alignment verifies exactly."""
+def pattern_words(start: int, end: int, salt: int) -> np.ndarray:
+    """Host reference of the pattern: words [start, end) of a pool painted
+    with ``salt`` (what fill_pattern writes on-device)."""
+    return np.arange(start, end, dtype=np.int64) ^ np.int64(salt_mix(salt))
+
+
+def _gather(words, idx: np.ndarray) -> np.ndarray:
+    """Probe words to host: only 3 words per entry cross PCIe, so the
+    comparison runs in numpy (and a numpy pool stands in for tests)."""
+    if isinstance(words, np.ndarray):
+        return words[idx]
+    import torch
+
+    return words[torch.from_numpy(idx).to(words.device)].cpu().numpy()
+
+
+def _check(dst_words, dst_idx: np.ndarray, src_idx: np.ndarray, src_salt: int):
+    got = _gather(dst_words, dst_idx)
+    expected = src_idx ^ np.int64(salt_mix(src_salt))
+    bad = np.flatnonzero(got != expected)
+    if bad.size == 0:
+        return None
+    k = int(bad[0])
+    return k, int(expected[k]), int(got[k]), int(bad.size)
+
+
+def verify_entries(dst_words, dst_offsets, src_offsets, sizes,
+                   src_salt: int, seed: int = 7) -> tuple[bool, str]:
+    """On-device: each destination entry must hold its source entry. Every
+    entry (a row descriptor or a per-layer page) is probed at its first, last
+    and one random interior word, each expected to equal the source word
+    index XOR the source salt mix. Offsets and sizes are bytes, 8-aligned."""
+    dst = np.asarray(dst_offsets, dtype=np.int64) // 8
+    src = np.asarray(src_offsets, dtype=np.int64) // 8
+    words = np.asarray(sizes, dtype=np.int64) // 8
     rng = np.random.default_rng(seed)
-    for _ in range(samples):
-        region = cfg["regions"][int(rng.integers(len(cfg["regions"])))]
-        dst, src = dst_tables[region["name"]], src_tables[region["name"]]
-        layer = int(rng.integers(region["layers"]))
-        i = int(rng.integers(len(dst)))
-        delta = layer * region["page_bytes"]
-        src_off = int(src[i]) * region["packed_bytes"] + region["base"] + delta
-        dst_off = int(dst[i]) * region["packed_bytes"] + region["base"] + delta
-        expected = bytes(_chunk_byte(src_off + j, src_salt) for j in range(8))
-        got = bytes(read8(dst_off))
-        if got != expected:
-            return False, (f"region={region['name']} layer={layer} i={i} "
-                           f"expected={list(expected)} got={list(got)}")
-    return True, ""
+    interior = (rng.random(len(words)) * np.maximum(words - 2, 1)).astype(np.int64) + 1
+    within = np.stack([np.zeros_like(words), np.minimum(interior, words - 1), words - 1],
+                      axis=1)
+    miss = _check(dst_words, (dst[:, None] + within).reshape(-1),
+                  (src[:, None] + within).reshape(-1), src_salt)
+    if miss is None:
+        return True, ""
+    k, expected, got, count = miss
+    return False, (f"entry={k // 3} probe={('first', 'interior', 'last')[k % 3]} "
+                   f"dst_offset={int(dst[k // 3]) * 8} src_offset={int(src[k // 3]) * 8} "
+                   f"expected={expected} got={got} mismatched={count}/{3 * len(words)}")
+
+
+def verify_bulk(dst_words, nbytes: int, src_salt: int, seed: int = 7,
+                samples: int = 4096) -> tuple[bool, str]:
+    """On-device: the contiguous range's first, last and ``samples`` random
+    words must hold the source's pattern (same offsets on both sides)."""
+    words = nbytes // 8
+    rng = np.random.default_rng(seed)
+    idx = np.unique(np.concatenate([[0, words - 1],
+                                    rng.integers(0, words, size=samples)])).astype(np.int64)
+    miss = _check(dst_words, idx, idx, src_salt)
+    if miss is None:
+        return True, ""
+    k, expected, got, count = miss
+    return False, (f"word={int(idx[k])} expected={expected} got={got} "
+                   f"mismatched={count}/{len(idx)}")
 
 
 def pcts(samples_ms: list[float]) -> dict:

@@ -123,52 +123,57 @@ def _invalid_banner(documents: list[dict]) -> list[str]:
 
 
 def _kv_cell(rows: list[dict], kind: str, op: str, batch: str = "min"):
-    """The largest-ISL row of a (kind, op) family -- the bandwidth-bound point -- at its smallest
-    or largest measured batch."""
+    """(GB/s, p50 ms, batch) of a (kind, op) family's largest-ISL row -- the
+    bandwidth-bound point -- at its smallest or largest measured batch."""
     matching = [r for r in rows if r.get("kind") == kind and r.get("op") == op]
     if not matching:
-        return "-", "-"
+        return "-", "-", "-"
     isl = max(r["isl"] for r in matching)
     pick = min if batch == "min" else max
     row = pick((r for r in matching if r["isl"] == isl), key=lambda r: r["batch"])
-    return row["gbps_p50"], row["latency_ms"]["p50"]
+    return row["gbps_p50"], row["latency_ms"]["p50"], row["batch"]
 
 
 def render_kv(documents: list[dict]) -> str:
     """kv-transfer table: paged bandwidth at the bandwidth-bound ISL plus the contiguous
-    baseline, and the paged latency."""
+    baseline and the paged latency, with the fields that tell rows apart (network, the
+    library's transport and version, the largest batch the point actually ran)."""
     def key(document):
         factors = document["identity"]["case_factors"]
         case = factors["case"]
         return factors["sku"], case["backend"], case["mode"], case["workload"], case["precision"]
 
     lines = ["## CollectiveX KV-transfer results", "", *_invalid_banner(documents),
-             "| ver | sku | backend | fabric | workload | precision | outcome | op "
-             "| paged GB/s b1 | paged GB/s bmax | contig GB/s | paged ms b1 |",
-             "|--:|---|---|---|---|---|---|---|--:|--:|--:|--:|"]
+             "| ver | sku | backend | version | fabric | network | transport | workload "
+             "| outcome | op | paged GB/s b1 | paged GB/s bmax | contig GB/s | paged ms b1 |",
+             "|--:|---|---|---|---|---|---|---|---|---|--:|--:|--:|--:|"]
     for document in sorted(documents, key=key):
-        sku, backend, fabric, workload, precision = key(document)
+        sku, backend, fabric, workload, _precision = key(document)
         rows = document["measurement"]["rows"]
-        # Cells read the pull lane when measured, else the push lane (a backend may serve one
-        # direction only, e.g. mooncake on Pollara, where upstream ionic RDMA READ is broken);
-        # the op column names which lane the row's numbers come from.
+        implementation = document.get("implementation") or {}
+        network = (document.get("topology") or {}).get("network") or "-"
+        # Cells read the pull lane when measured, else the push lane (vLLM's Mooncake
+        # connector only pushes); the op column names which lane the numbers come from.
         op = next((candidate for candidate in ("pull", "push")
                    if _kv_cell(rows, "paged", candidate)[0] != "-"), "pull")
-        paged_gbps, paged_ms = _kv_cell(rows, "paged", op)
-        paged_bmax, _ = _kv_cell(rows, "paged", op, batch="max")
-        bulk_gbps, _ = _kv_cell(rows, "bulk", op)
+        paged_gbps, paged_ms, _ = _kv_cell(rows, "paged", op)
+        bmax_gbps, _, bmax = _kv_cell(rows, "paged", op, batch="max")
+        bulk_gbps, _, _ = _kv_cell(rows, "bulk", op)
         lines.append(
-            f"| {document['version']} | {sku} | `{backend}` | {fabric} | {workload} | "
-            f"{precision} | {document['outcome']['status']} | {op} | {paged_gbps} | "
-            f"{paged_bmax} | {bulk_gbps} | {paged_ms} |"
+            f"| {document['version']} | {sku} | `{backend}` | "
+            f"{implementation.get('library_version') or '-'} | {fabric} | {network} | "
+            f"{implementation.get('transport') or '-'} | {workload} | "
+            f"{document['outcome']['status']} | {op} | {paged_gbps} | "
+            f"{bmax_gbps} @b{bmax} | {bulk_gbps} | {paged_ms} |"
         )
     lines.append(
-        "\n> Paged rows move requests' KV as vLLM's packed block-major descriptor lists (one "
-        "contiguous descriptor per physical block per cache group) over randomized block "
-        "tables; b1/bmax = requests posted per burst (GB/s is burst-aggregate); contig is the "
-        "single-descriptor contiguous baseline (host-observed goodput, not proven wire "
-        "utilization); op names the measured direction. GB/s at the largest ISL "
-        "(bandwidth-bound)."
+        "\n> Paged rows move each request's KV in the shape vLLM's connector for that library "
+        "posts (NIXL: one whole block row per block id; Mooncake: one entry per layer page per "
+        "block) over randomized block tables, a fresh table set per rep. b1 = one request per "
+        "burst; bmax @bN = the largest batch the point ran after the burst-token cap and the "
+        "pool budget, so compare bmax cells only at equal N. GB/s is burst-aggregate at the "
+        "largest ISL; contig is the single-descriptor baseline (host-observed goodput, not a "
+        "wire rate). Rows are one GPU pair in isolation: not node-level or TTFT cost."
     )
     return "\n".join(lines)
 

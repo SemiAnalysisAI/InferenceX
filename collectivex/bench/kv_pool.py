@@ -5,16 +5,15 @@ The rdma lanes use plain torch (cudaMalloc) pools. The mnnvl lane needs cuMem
 FABRIC allocations: UCX's cross-node cuda_ipc only engages on fabric-mappable
 memory (cudaMalloc pools silently ride the IB rails instead), and fabric
 handles need a live nvidia-imex domain. Both expose the same surface: raw
-``ptr``/``nbytes``/``device``, pattern fill, byte fill, and ``read8`` for
-kv_workload.verify_transfer. Adapters register raw pointers, never tensors.
+``ptr``/``nbytes``/``device`` for registration, and ``words``, an int64 torch
+view of the whole pool that kv_workload paints and verifies on-device.
+Adapters register raw pointers, never tensors.
 """
 
 from __future__ import annotations
 
 import ctypes
 from ctypes import byref, c_int, c_size_t, c_ulonglong, c_void_p
-
-import numpy as np
 
 import kv_workload
 
@@ -24,24 +23,27 @@ CU_MEM_LOCATION_TYPE_DEVICE = 1
 CU_MEM_ACCESS_FLAGS_PROT_READWRITE = 3
 
 
-class TorchPool:
-    def __init__(self, nbytes: int, device: int):
-        import torch
+class _Pool:
+    """Shared fill surface over ``self.words`` (int64, nbytes // 8 entries)."""
 
-        self._t = torch.empty(nbytes, dtype=torch.uint8, device=f"cuda:{device}")
-        self._torch = torch
-        self.ptr, self.nbytes, self.device = self._t.data_ptr(), nbytes, device
-
-    def fill_pattern(self, salt: int = 0) -> None:
-        kv_workload.fill_pattern(self._t, salt)
+    def fill_pattern(self, salt: int) -> None:
+        kv_workload.fill_pattern(self.words, salt)
         self._torch.cuda.synchronize()
 
     def fill_byte(self, value: int) -> None:
-        self._t.fill_(value)
+        self.words.view(self._torch.uint8).fill_(value)
         self._torch.cuda.synchronize()
 
-    def read8(self, offset: int):
-        return self._t[offset : offset + 8].cpu().numpy().tobytes()
+
+class TorchPool(_Pool):
+    def __init__(self, nbytes: int, device: int):
+        import torch
+
+        nbytes = -(-nbytes // 8) * 8
+        self._torch = torch
+        self._t = torch.empty(nbytes, dtype=torch.uint8, device=f"cuda:{device}")
+        self.words = self._t.view(torch.int64)
+        self.ptr, self.nbytes, self.device = self._t.data_ptr(), nbytes, device
 
 
 class _AllocProp(ctypes.Structure):
@@ -58,8 +60,20 @@ class _AccessDesc(ctypes.Structure):
     _fields_ = [("location_type", c_int), ("location_id", c_int), ("flags", c_int)]
 
 
-class FabricPool:
+class _DeviceBytes:
+    """A raw device range as a __cuda_array_interface__ object, so torch can
+    view cuMem memory it did not allocate."""
+
+    def __init__(self, ptr: int, nbytes: int):
+        self.__cuda_array_interface__ = {
+            "shape": (nbytes,), "typestr": "|u1", "data": (ptr, False), "version": 3}
+
+
+class FabricPool(_Pool):
     def __init__(self, nbytes: int, device: int):
+        import torch
+
+        self._torch = torch
         cu = self._cu = ctypes.CDLL("libcuda.so.1")
         self._check(cu.cuInit(0), "cuInit")
         dev = c_int()
@@ -87,42 +101,12 @@ class FabricPool:
                              flags=CU_MEM_ACCESS_FLAGS_PROT_READWRITE)
         self._check(cu.cuMemSetAccess(ptr, c_size_t(size), byref(access), 1), "setAccess")
         self.ptr, self.nbytes, self.device = ptr.value, size, device
+        self.words = torch.as_tensor(_DeviceBytes(self.ptr, size),
+                                     device=f"cuda:{device}").view(torch.int64)
 
     def _check(self, code: int, what: str) -> None:
         if code != 0:
             raise RuntimeError(f"{what} -> CUresult {code}")
-
-    def _sync(self) -> None:
-        # Device-side memset/copy are asynchronous to the host; the pool must be
-        # painted before the barrier that lets the peer transfer.
-        self._check(self._cu.cuCtxSynchronize(), "sync")
-
-    def fill_pattern(self, salt: int = 0) -> None:
-        """Upload one pattern period, then double it in place: the pattern is
-        PATTERN_PERIOD-periodic and every copy's destination sits at a multiple
-        of the period, so a copy of [0, n) lands the right bytes. No host
-        buffer of pool size is ever built."""
-        tile = kv_workload.pattern_tile(salt)
-        filled = min(tile.nbytes, self.nbytes)
-        self._check(self._cu.cuMemcpyHtoD_v2(
-            c_ulonglong(self.ptr), tile.ctypes.data_as(c_void_p), c_size_t(filled)), "h2d")
-        while filled < self.nbytes:
-            n = min(filled, self.nbytes - filled)
-            self._check(self._cu.cuMemcpyDtoD_v2(
-                c_ulonglong(self.ptr + filled), c_ulonglong(self.ptr), c_size_t(n)), "d2d")
-            filled += n
-        self._sync()
-
-    def fill_byte(self, value: int) -> None:
-        self._check(self._cu.cuMemsetD8_v2(
-            c_ulonglong(self.ptr), ctypes.c_ubyte(value), c_size_t(self.nbytes)), "memset")
-        self._sync()
-
-    def read8(self, offset: int):
-        out = np.empty(8, dtype=np.uint8)
-        self._check(self._cu.cuMemcpyDtoH_v2(
-            out.ctypes.data_as(c_void_p), c_ulonglong(self.ptr + offset), c_size_t(8)), "d2h")
-        return out.tobytes()
 
 
 def create(fabric: str, nbytes: int, device: int):

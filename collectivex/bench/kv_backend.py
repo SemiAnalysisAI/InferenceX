@@ -3,12 +3,13 @@
 
 The harness owns the data (kv_pool pools, pattern fill, verification) and the
 protocol (rank 0 = target, rank 1 = initiator, lockstep barriers); an adapter
-owns registration, connection, and posting. Transfers are one-sided from the
-initiator, so completion is host-visible and timing is wall clock around
-post-to-complete; no CUDA events, because no local kernel participates.
-`pull` (READ) is the vLLM NixlConnector shape, `push` (WRITE) the SGLang disagg
-shape; the measured quantity is the same completion either way. Connection
-payloads ride the harness object exchange, never adapter side channels.
+owns registration, connection, and posting, in the shape vLLM's connector for
+that library posts. Transfers are one-sided from the initiator, so completion
+is host-visible and timing is wall clock around post-to-complete; no CUDA
+events, because no local kernel participates. `pull` is READ (vLLM's default
+NixlConnector path), `push` is WRITE (vLLM's NIXL push path and its Mooncake
+connector); the measured quantity is the same completion either way.
+Connection payloads ride the harness object exchange, never side channels.
 """
 
 from __future__ import annotations
@@ -20,7 +21,8 @@ import kv_workload
 
 class KVBackend:
     """One transfer library on one rank, constructed as ``Backend(args, role,
-    device)``. Subclasses implement the five hooks."""
+    device)``. Subclasses implement register/publish/connect/make_paged/
+    make_bulk; request_entries and make_burst have vLLM-NIXL defaults."""
 
     name = "abstract"
     #: maturity mirrors EPBackend.maturity ("production" | "candidate").
@@ -28,20 +30,18 @@ class KVBackend:
     library_version: str | None = None
     #: the engine NIC filter this case ran under; None = library/UCX choice.
     nic_filter: str | None = None
-    #: the library's own transport plugin when it has several (NIXL: UCX or
-    #: LIBFABRIC); None = the library has one.
+    #: the wire transport under the library, in one vocabulary across
+    #: backends: "ucx", "libfabric", or "verbs".
     transport: str | None = None
+    #: the engine knobs the row ran under (threads, workers, QPs, ...).
+    engine_config: dict = {}
 
     # -- lifecycle ------------------------------------------------------------
-    def register(self, pool, bulk, reg_layout=None) -> None:
-        """Register the pool + bulk tensors with the library.
-
-        ``reg_layout`` is the pool's shared region layout — (base,
-        packed_bytes, nbytes) triples, contiguous from zero and valid for
-        every planned config (run_kv._harmonize). Adapters may use it to
-        split one oversized registration into pieces cut on the descriptor
-        grid, so no descriptor straddles two pieces; ignoring it is valid.
-        """
+    def register(self, pool, bulk, row_bytes: int, reg_layout=None) -> None:
+        """Register the pool + bulk buffers with the library. ``row_bytes`` is
+        the pool's block-row size; ``reg_layout`` is its (base, row_bytes,
+        nbytes) layout (run_kv._harmonize), which an adapter may use to split
+        an oversized registration on the row grid; ignoring it is valid."""
         raise NotImplementedError
 
     def publish(self) -> dict:
@@ -53,29 +53,35 @@ class KVBackend:
         raise NotImplementedError
 
     def release(self) -> None:
-        """Drop the transfers made for the grid point just measured (initiator)."""
+        """Drop the transfer handles of the burst just completed (initiator)."""
 
     def teardown(self) -> None:  # pragma: no cover - adapter-specific
         pass
 
     # -- transfers (initiator only) --------------------------------------------
-    def make_paged(self, cfg: dict, op: str, local_tables, remote_tables):
-        """Return (post, wait, prep_seconds) for one request's paged KV.
+    def request_entries(self, cfg: dict, local_rows, remote_rows):
+        """(local offsets, remote offsets, sizes), bytes from each pool base,
+        of what one request moves. Default: vLLM NIXL's whole-row descriptors."""
+        sizes = kv_workload.desc_sizes(cfg)
+        return (kv_workload.page_offsets(cfg, local_rows),
+                kv_workload.page_offsets(cfg, remote_rows), sizes)
 
-        ``post()`` submits the whole descriptor list asynchronously; ``wait()``
-        blocks until it completes — split so a batch of requests overlaps like
-        a decode step admitting several requests at once. Preparation cost
-        (descriptor build + handle creation) is amortized by engines through
-        prepped-handle reuse, so it is reported separately, never inside the
-        timed transfer.
-        """
+    def make_paged(self, cfg: dict, op: str, local_rows, remote_rows, request_id: int = 0):
+        """Return (post, wait) for one request. ``post()`` builds the
+        request's transfer (handle creation is per request in vLLM, so it is
+        timed) and submits it; ``wait()`` blocks until it completes."""
         raise NotImplementedError
 
+    def make_burst(self, cfg: dict, op: str, requests) -> list:
+        """(post, wait) pairs for a burst of ``requests`` = [(local_rows,
+        remote_rows, request_id)]. Default: one transfer per request."""
+        return [self.make_paged(cfg, op, local, remote, request_id)
+                for local, remote, request_id in requests]
+
     def make_bulk(self, nbytes: int, op: str):
-        """Return (post, wait, prep_seconds) for one contiguous transfer of
-        ``nbytes`` — the single-descriptor contiguous baseline row (logical
-        payload over host-observed completion; not a proven physical wire
-        rate — backends may split large operations internally)."""
+        """Return (post, wait) for one contiguous transfer of ``nbytes`` — the
+        single-descriptor contiguous baseline row (logical payload over
+        host-observed completion; not a proven physical wire rate)."""
         raise NotImplementedError
 
 
@@ -96,26 +102,18 @@ def spans(n: int, cap: int) -> list[tuple[int, int]]:
     return [(i, min(i + cap, n)) for i in range(0, n, cap)]
 
 
-def offset_lists(cfg: dict, local_tables, remote_tables, local_base: int = 0,
-                 remote_base: int = 0) -> tuple[list, list, list]:
-    """(local addrs, remote addrs, sizes) as Python lists: pool offsets plus the
-    given bases (0 for offset-addressed engines)."""
-    return ((local_base + kv_workload.page_offsets(cfg, local_tables)).tolist(),
-            (remote_base + kv_workload.page_offsets(cfg, remote_tables)).tolist(),
-            kv_workload.desc_sizes(cfg).tolist())
-
-
-def time_bursts(transfers, warmup: int, reps: int) -> tuple[list[float], list[float]]:
-    """(burst_ms, request_ms), warmups dropped. ``transfers`` is a list of
-    (post, wait) pairs — one per request. A burst posts every request, then
-    drains the waits in posting order; burst_ms is post-of-first to
-    completion-of-last, and request_ms records each individual request's
-    host-observed completion offset from the burst start. Because the waits
-    drain in posting order, a request's mark upper-bounds its true completion
-    (a later request that finished early is observed at its wait's turn)."""
+def time_bursts(build, warmup: int, reps: int, settle=None,
+                rep0: int = 0) -> tuple[list[float], list[float]]:
+    """(burst_ms, request_ms), warmups dropped. ``build(rep)`` returns the
+    burst's (post, wait) pairs and runs untimed; the burst posts every
+    request, then drains the waits in posting order. burst_ms is post-of-first
+    to completion-of-last; request_ms records each request's host-observed
+    completion offset from the burst start (an upper bound, since waits drain
+    in order). ``settle()`` runs untimed after each burst (handle release)."""
     burst_ms: list[float] = []
     request_ms: list[float] = []
     for rep in range(warmup + reps):
+        transfers = build(rep0 + rep)
         start = time.perf_counter()
         for post, _ in transfers:
             post()
@@ -123,6 +121,8 @@ def time_bursts(transfers, warmup: int, reps: int) -> tuple[list[float], list[fl
         for _, wait in transfers:
             wait()
             marks.append((time.perf_counter() - start) * 1e3)
+        if settle is not None:
+            settle()
         if rep >= warmup:
             burst_ms.append(marks[-1])
             request_ms.extend(marks)

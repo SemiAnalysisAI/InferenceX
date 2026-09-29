@@ -174,8 +174,8 @@ def _kv_argv(case: dict, version: object, runner: str) -> list[str]:
     argv = _flag_pairs(
         case,
         "backend workload_name precision fabric isl_ladder page_tokens batch_sizes kv_device ops "
-        "warmup reps trials pool_slack seed case_id suite gpus_per_node scale_up_domain "
-        "scale_up_transport topology_class",
+        "warmup reps trials pool_slack max_burst_tokens seed case_id suite gpus_per_node "
+        "scale_up_domain scale_up_transport topology_class",
         workload_name="workload", fabric="mode",
     ) + ["--runner", runner, "--version", str(version)]
     return argv + (_flag_pairs(case, "pool_budget") if "pool_budget" in case else [])

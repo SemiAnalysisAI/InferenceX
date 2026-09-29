@@ -24,6 +24,7 @@
     16,
     32
   ],
+  "max_burst_tokens": 131072,
   "ops": [
     "pull",
     "push"

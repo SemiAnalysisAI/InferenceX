@@ -7,13 +7,15 @@ The control plane is a gloo process group: payload exchange by object gather,
 lockstep by barrier — no shared-FS or side-channel protocols. Data never rides
 gloo.
 
-Per (isl, page_tokens, batch) point the initiator preps one transfer per
-request in the burst (disjoint block-table slices), posts them all, then awaits
-them all — a decode step admitting B requests at once. Verification covers both
-directions (pull on the initiator's pool, push on the target's, exchanged as
-verdict objects) and both pools are repainted between points so every verify
-reads a clean pattern. Points whose pool would not fit POOL_BUDGET shed their
-largest batches, so one grid covers dense GQA-bf16 and DSv4's ~2% cache alike.
+Per (isl, batch) point the initiator times bursts: each burst posts one
+transfer per request (disjoint block-table slices, a fresh table set every
+rep, as a decode worker admits requests with fresh block ids), then awaits
+them all. Handle creation is part of each request's post, as in vLLM. Every
+trial's last rep lands on a destination wiped to a sentinel first, so the
+verify after it proves THAT timed rep moved every descriptor (first, last and
+an interior word of each). Bursts are capped at --max-burst-tokens of prompt,
+and points whose pool would not fit the pool budget shed their largest
+batches, then their table sets; the document records what each point ran.
 """
 
 from __future__ import annotations
@@ -50,14 +52,7 @@ POOL_BUDGET = 64 << 30
 # far under this; the budget stays as the fail-closed guard for future
 # presets or small block sizes.
 DESC_BUDGET = 2_250_000
-# The LADDER_FLOOR smallest requested batches ride over DESC_BUDGET anyway:
-# the frontier chart draws its line through the batch ladder at the largest
-# measured ISL, and budget shedding alone leaves that ladder 2-3 points —
-# not interpretable. Five rungs keep every point chartable while bounding
-# the overrun (on the power-of-two ladder, 512k page-16 tops out at batch
-# 16, ~15x budget for that one burst; grid-wide the floor costs ~1.33x the
-# mixed twelve-rung grid and is priced into all three kv launcher guards).
-LADDER_FLOOR = 5
+SENTINEL = 0x5A
 
 
 def add_kv_args(ap: argparse.ArgumentParser) -> None:
@@ -78,6 +73,10 @@ def add_kv_args(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--reps", type=int, default=8)
     ap.add_argument("--trials", type=int, default=3)
     ap.add_argument("--pool-slack", type=float, default=2.0)
+    ap.add_argument("--max-burst-tokens", type=int, default=0,
+                    help="cap on batch x isl per burst (0 = none); batch 1 always runs")
+    ap.add_argument("--table-sets", type=int, default=kv_workload.DEFAULT_TABLE_SETS,
+                    help="disjoint block-table sets the reps rotate through")
     ap.add_argument("--pool-budget", type=int, default=POOL_BUDGET,
                     help="per-rank pool ceiling in bytes; points shed batches to fit")
     ap.add_argument("--seed", type=int, default=67)
@@ -164,13 +163,12 @@ def kv_case(args) -> dict:
 
 
 def _grid(args) -> tuple[list[tuple[dict, list[int]]], list[int], list[int]]:
-    """(cfg, allowed_batches) per (isl, page) point. Batches whose burst would
-    exceed DESC_BUDGET are shed first (the LADDER_FLOOR smallest requested
-    batches are always kept, so every point carries a chartable batch ladder
-    even where a single request nearly fills the budget), then the point is
-    planned for the largest surviving batch whose pool fits the pool budget.
-    Smaller batches share that cfg (and pool), so batch is the only variable
-    across a point's rows."""
+    """(cfg, allowed_batches) per (isl, page) point. A batch runs only if its
+    burst stays under --max-burst-tokens of prompt (batch 1 always runs) and
+    DESC_BUDGET descriptors; the point is then planned for the largest
+    surviving batch and --table-sets whose pool fits the pool budget,
+    shedding batches first and table sets after. Smaller batches share that
+    cfg (and pool), so batch is the only variable across a point's rows."""
     preset = args.workload_name.removeprefix("kv-")
     isls = [int(v) for v in args.isl_ladder.split()]
     pages = [int(v) for v in args.page_tokens.split()]
@@ -178,59 +176,41 @@ def _grid(args) -> tuple[list[tuple[dict, list[int]]], list[int], list[int]]:
     points = []
     for isl in isls:
         for page in pages:
-            # Per-request descriptor count is independent of batch_max.
             probe = kv_workload.plan_config(preset, args.precision, isl, page,
                                             args.pool_slack)
             allowed = [batch for batch in batches
-                       if batch in batches[:LADDER_FLOOR]
-                       or batch * probe["descs"] <= DESC_BUDGET]
+                       if (batch == 1 or not args.max_burst_tokens
+                           or batch * isl <= args.max_burst_tokens)
+                       and batch * probe["descs"] <= DESC_BUDGET]
+            cfg, sets = None, args.table_sets
             while allowed:
                 cfg = kv_workload.plan_config(preset, args.precision, isl, page,
-                                              args.pool_slack, batch_max=allowed[-1])
+                                              args.pool_slack, batch_max=allowed[-1],
+                                              table_sets=sets)
                 if cfg["pool_bytes"] <= args.pool_budget:
                     break
-                allowed.pop()
+                if len(allowed) > 1:
+                    allowed.pop()
+                elif sets > 1:
+                    sets -= 1
+                else:
+                    allowed.pop()
             if allowed:
                 points.append((cfg, allowed))
     return points, isls, batches
 
 
 def _harmonize(points) -> list[tuple[int, int, int]]:
-    """Rewrite every cfg's regions onto one shared pool layout and return it
-    as (base, packed_bytes, nbytes) triples, contiguous from zero.
-
-    The shard's configs share one physical pool, but plan_config lays each
-    config's regions out independently, so region bases shift with ISL and no
-    registration cut point is on every config's descriptor grid at once.
-    Giving every region the largest pool_blocks any config plans for it makes
-    the bases config-invariant: a cut on a region's own packed grid is then
-    between descriptors for every config, which is what lets a backend split
-    an oversized registration (b300 NICs refuse cuda registrations past ~8
-    GiB) without a descriptor ever straddling two pieces. Configs planning a
-    different page size carry a different packed grid, so each page family
-    gets its own slab after the previous one. The union can run past the
-    largest single config's per-config pool budget check by the smaller
-    configs' head-room; the budget's slack absorbs that."""
-    layout: list[tuple[int, int, int]] = []
-    offset = 0
-    families: dict[int, list[dict]] = {}
+    """Give every cfg the one shared pool (the most rows any point plans) and
+    return its registration layout as one (base, row_bytes, nbytes) triple.
+    Every descriptor is a whole row, so a registration cut on the row grid
+    never splits one (b300's former IB NICs refused cuda registrations past
+    ~8 GiB; reg_spans cuts there)."""
+    row_bytes = points[0][0]["row_bytes"]
+    rows = max(cfg["pool_rows"] for cfg, _ in points)
     for cfg, _ in points:
-        families.setdefault(cfg["page_tokens"], []).append(cfg)
-    for cfgs in families.values():
-        shared = []
-        for i, region in enumerate(cfgs[0]["regions"]):
-            packed = region["packed_bytes"]
-            blocks = max(cfg["regions"][i]["pool_blocks"] for cfg in cfgs)
-            shared.append((offset, packed, blocks * packed))
-            offset += blocks * packed
-        for cfg in cfgs:
-            for region, (base, packed, nbytes) in zip(cfg["regions"], shared):
-                region["base"] = base
-                region["pool_blocks"] = nbytes // packed
-        layout.extend(shared)
-    for cfg, _ in points:
-        cfg["pool_bytes"] = offset
-    return layout
+        cfg["pool_rows"], cfg["pool_bytes"] = rows, rows * row_bytes
+    return [(0, row_bytes, rows * row_bytes)]
 
 
 def main() -> int:
@@ -289,14 +269,9 @@ def main() -> int:
     reg_layout = _harmonize(points)
     ops = args.ops.split()
     pool_bytes = points[0][0]["pool_bytes"]  # _harmonize gives every cfg the union pool
+    row_bytes = points[0][0]["row_bytes"]
     preset = args.workload_name.removeprefix("kv-")
     pages = [int(v) for v in args.page_tokens.split()]
-    # One page family overruns the budget only by head-room (see _harmonize);
-    # several families each get their own slab and can overrun it outright.
-    if len({cfg["page_tokens"] for cfg, _ in points}) > 1 and pool_bytes > args.pool_budget:
-        print(f"ERROR: harmonized pool {pool_bytes} B across page sizes exceeds "
-              f"--pool-budget {args.pool_budget} B", file=sys.stderr)
-        return 2
     bulk_bytes = min(max(cfg["req_bytes"] for cfg, _ in points), BULK_CAP)
 
     # RDMA registration pins the whole pool; a small inherited soft memlock
@@ -322,11 +297,11 @@ def main() -> int:
 
     def repaint():
         pool.fill_pattern(salt=rank)
-        bulk.fill_byte(0xAB if role == "target" else 0xCD)
+        bulk.fill_pattern(salt=rank)
 
     repaint()
     backend = Backend(args, role, device)
-    backend.register(pool, bulk, reg_layout=reg_layout)
+    backend.register(pool, bulk, row_bytes, reg_layout=reg_layout)
     payloads = [None, None]
     dist.all_gather_object(payloads, backend.publish())
     backend.connect(payloads[1 - rank])
@@ -337,9 +312,9 @@ def main() -> int:
               f"batches={batches} pool={pool_bytes >> 20}MiB case={args.case_id}",
               flush=True)
         for cfg, allowed in points:
-            if allowed != batches:
-                print(f"[run_kv] budgets cap isl={cfg['isl']} "
-                      f"page={cfg['page_tokens']} at batch<={allowed[-1]}", flush=True)
+            if allowed != batches or cfg["table_sets"] != args.table_sets:
+                print(f"[run_kv] budgets cap isl={cfg['isl']} at batch<={allowed[-1]} "
+                      f"table_sets={cfg['table_sets']}", flush=True)
 
     rows: list[dict] = []
 
@@ -348,85 +323,103 @@ def main() -> int:
             rows.append(row)
             print(f"[run_kv] {json.dumps(row)}", flush=True)
 
-    def verify_burst(cfg, table_pairs):
-        """Every request in the burst must land: a passing request 0 says
-        nothing about the others, and concurrent same-session requests are
-        exactly where corruption would hide. The source is always the peer,
-        so its salt is the peer's rank."""
-        for r, (dst, src) in enumerate(table_pairs):
-            passed, detail = kv_workload.verify_transfer(pool.read8, cfg, dst, src,
-                                                         src_salt=1 - rank)
-            if not passed:
-                return False, f"request={r} {detail}"
-        return True, ""
-
-    def measure(make, cfg, cfg_row: dict, op: str, verify_side: str, table_pairs=None):
-        """One grid point: initiator times bursts, then the verifying side checks."""
-        if role == "initiator":
-            made = make()  # one (post, wait, prep_seconds) per request in the burst
-            prep_s = sum(m[2] for m in made)
-            pairs = [m[:2] for m in made]
-            samples: list[float] = []
-            request_samples: list[float] = []
-            for _ in range(args.trials):
-                burst_ms, request_ms = time_bursts(pairs, args.warmup, args.reps)
-                samples.extend(burst_ms)
-                request_samples.extend(request_ms)
-            backend.release()
-        dist.barrier()  # transfers complete before anyone inspects pools
-        verdict = exchange_verdict(
-            dist, role, verify_side,
-            lambda: verify_burst(cfg, table_pairs))
+    def measure(build, cfg_row: dict, op: str, verify_side: str, verify, wipe,
+                table_sets: int):
+        """One grid point. Each trial times warmup + reps-1 bursts, then the
+        destination owner wipes its buffer to SENTINEL, the initiator times
+        the trial's last burst, and the owner verifies that burst's table set,
+        so a timed rep that reported completion without landing its bytes
+        fails the row. ``build(rep)`` returns the burst's (post, wait) pairs
+        for table set rep % table_sets."""
+        samples: list[float] = []
+        request_samples: list[float] = []
+        verdict = {"passed": True, "detail": ""}
+        rep = 0
+        for _ in range(args.trials):
+            if role == "initiator":
+                burst_ms, request_ms = time_bursts(build, args.warmup, args.reps - 1,
+                                                   settle=backend.release, rep0=rep)
+                samples += burst_ms
+                request_samples += request_ms
+            rep += args.warmup + args.reps - 1
+            dist.barrier()
+            if role == verify_side:
+                wipe()
+            dist.barrier()
+            if role == "initiator":
+                burst_ms, request_ms = time_bursts(build, 0, 1, settle=backend.release,
+                                                   rep0=rep)
+                samples += burst_ms
+                request_samples += request_ms
+            final_set = rep % table_sets
+            rep += 1
+            dist.barrier()  # the last burst completes before anyone inspects it
+            verdict = exchange_verdict(dist, role, verify_side, lambda: verify(final_set))
+            if not verdict["passed"]:
+                break
         repaint()
         dist.barrier()
         if role != "initiator":
             return None
         stats = kv_workload.pcts(samples)
         request_stats = kv_workload.pcts(request_samples)
-        prep_ms = prep_s * 1e3
         gbps = cfg_row["req_bytes"] * cfg_row["batch"] / stats["p50"] / 1e6
-        # The cold-path rate: a burst whose descriptors and handles are built
-        # fresh (unique block tables, no prepped-handle reuse) pays prep once.
-        gbps_incl_prep = (cfg_row["req_bytes"] * cfg_row["batch"]
-                          / (stats["p50"] + prep_ms) / 1e6)
         return {
             **cfg_row,
             "op": op,
-            "prep_ms": round(prep_ms, 3),
             "latency_ms": {k: round(v, 3) for k, v in stats.items()},
             # Host-observed completion of each individual request within its
             # burst (waits drain in posting order, so each is an upper bound).
             "request_ms": {k: round(v, 3) for k, v in request_stats.items()},
             "gbps_p50": round(gbps, 2),
-            "gbps_p50_incl_prep": round(gbps_incl_prep, 2),
             "verify": verdict,
         }
 
+    peer = 1 - rank
     for cfg, allowed in points:
+        sets = cfg["table_sets"]
         seed_t = kv_workload.table_seed(cfg, "remote", args.seed)
         seed_i = kv_workload.table_seed(cfg, "local", args.seed)
-        target_tables = [kv_workload.block_table(cfg, seed_t, r) for r in range(allowed[-1])]
-        initiator_tables = [kv_workload.block_table(cfg, seed_i, r) for r in range(allowed[-1])]
+        target_tables = [[kv_workload.block_table(cfg, seed_t, r, k) for r in range(allowed[-1])]
+                         for k in range(sets)]
+        initiator_tables = [[kv_workload.block_table(cfg, seed_i, r, k)
+                             for r in range(allowed[-1])] for k in range(sets)]
+        # What one request moves in this backend's vLLM shape (NIXL: whole
+        # rows; Mooncake: per-layer pages), so rows state their own bytes.
+        _, _, sizes = backend.request_entries(cfg, initiator_tables[0][0],
+                                              target_tables[0][0])
         base = {
             "kind": "paged", "preset": cfg["preset"], "isl": cfg["isl"],
             "page_tokens": cfg["page_tokens"], "layers": cfg["layers"],
-            "page_bytes": cfg["page_bytes"], "descs": cfg["descs"],
-            "req_bytes": cfg["req_bytes"],
+            "row_bytes": cfg["row_bytes"], "descs": int(len(sizes)),
+            "req_bytes": int(sizes.sum()),
         }
         for batch in allowed:
             for op in ops:
                 # Called by measure on the initiator only, within this iteration.
-                make = lambda: [backend.make_paged(cfg, op, initiator_tables[r], target_tables[r])
-                                for r in range(batch)]
+                def build(rep, batch=batch, op=op):
+                    k = rep % sets
+                    return backend.make_burst(cfg, op, [
+                        (initiator_tables[k][r], target_tables[k][r], rep * batch + r)
+                        for r in range(batch)])
+
                 # pull lands on the initiator's pool; push on the target's.
                 # Every request in the burst is checked against its own tables.
                 verify_side = "initiator" if op == "pull" else "target"
-                table_pairs = [
-                    (initiator_tables[r], target_tables[r]) if op == "pull"
-                    else (target_tables[r], initiator_tables[r])
-                    for r in range(batch)]
-                record(measure(make, cfg, {**base, "batch": batch}, op, verify_side,
-                               table_pairs))
+
+                def verify(k, batch=batch, op=op):
+                    for r in range(batch):
+                        local, remote, sizes = backend.request_entries(
+                            cfg, initiator_tables[k][r], target_tables[k][r])
+                        dst, src = (local, remote) if op == "pull" else (remote, local)
+                        passed, detail = kv_workload.verify_entries(
+                            pool.words, dst, src, sizes, src_salt=peer)
+                        if not passed:
+                            return False, f"request={r} {detail}"
+                    return True, ""
+
+                record(measure(build, {**base, "batch": batch}, op, verify_side, verify,
+                               lambda: pool.fill_byte(SENTINEL), sets))
 
     for isl in isls:
         cfg = kv_workload.plan_config(preset, args.precision, isl, pages[0], args.pool_slack)
@@ -435,8 +428,12 @@ def main() -> int:
                 "layers": cfg["layers"], "page_bytes": None, "descs": 1, "batch": 1,
                 "req_bytes": nbytes}
         for op in ops:
-            record(measure(lambda: [backend.make_bulk(nbytes, op)], cfg, base, op,
-                           verify_side="none"))
+            record(measure(
+                lambda rep, op=op: [backend.make_bulk(nbytes, op)], base, op,
+                "initiator" if op == "pull" else "target",
+                lambda k, nbytes=nbytes: kv_workload.verify_bulk(bulk.words, nbytes,
+                                                                src_salt=peer),
+                lambda: bulk.fill_byte(SENTINEL), 1))
 
     backend.teardown()
 
@@ -456,11 +453,18 @@ def main() -> int:
                 "batch_sizes": batches,
                 "ops": ops,
                 "seed": args.seed,
+                "max_burst_tokens": args.max_burst_tokens or None,
                 "preset": kv_workload.PRESETS[preset],
+                "row_bytes": row_bytes,
             },
             measurement={
                 "payload_unit": "request-kv-bytes",
                 "rows": rows,
+                # What each point actually ran after the burst cap and the pool
+                # budget (the requested ladder is workload.batch_sizes).
+                "points": [{"isl": cfg["isl"], "batches": allowed,
+                            "table_sets": cfg["table_sets"]} for cfg, allowed in points],
+                "pool_budget": args.pool_budget,
                 "sampling": {
                     "reps_per_trial": args.reps,
                     "trials": args.trials,
@@ -474,11 +478,16 @@ def main() -> int:
                 "maturity": backend.maturity,
                 "nic_filter": backend.nic_filter,
                 "transport": backend.transport,
+                "engine_config": backend.engine_config,
             },
             topology={
                 "device_product": torch.cuda.get_device_name(device),
                 "gpus_per_node": args.gpus_per_node,
                 "hosts": hosts,
+                # The probed link layer (infiniband / roce / efa); mnnvl rows
+                # ride the NVLink domain regardless.
+                "network": ("mnnvl" if args.fabric == "mnnvl"
+                            else os.environ.get("COLLX_RDMA_LINK_LAYER") or None),
                 "nodes": 2,
                 "ranks_per_node": 1,
                 "scale_up_domain": args.scale_up_domain,

@@ -169,24 +169,24 @@ benchmark's return code.
 
 ## KV-Cache Transfer Suite
 
-`kv-transfer` legs run 2 nodes x 1 GPU, the per-worker prefill/decode pair a disaggregated
-deployment actually forms. Each moves bursts of 1 to 32 concurrent requests' paged KV (vLLM's
-packed block-major descriptor lists over seed-keyed random block tables) plus one contiguous bulk
-row as the wire-speed baseline. The workload is `kv-dsv4`, DeepSeek-V4-Pro's mixed fp8 cache as
-vLLM allocates it, at ISL 2k to 512k and vLLM's 256-token block. `pull` (READ, vLLM
-NixlConnector) and `push` (WRITE, SGLang disagg) are both timed from the initiator, with every
-request verified on the destination pool. The [methodology](docs/methodology.md#kv-cache-transfer-suite)
-has the geometry and verification model.
+`kv-transfer` legs run 2 nodes x 1 GPU, one prefill/decode GPU pair, moving each request's KV the
+way vLLM (32ad1400d7) moves it with each library. The workload is `kv-dsv4`, DeepSeek-V4-Pro's
+cache exactly as vLLM lays it out: five cache groups (MLA, two sliding-window, two compressor-state)
+over one allocation of 1,435,968 B block rows, `ceil(L/256) + 26` block ids per request, at ISL 2k
+to 512k. Bursts of up to 32 requests are capped at 131,072 prompt tokens, each rep uses fresh block
+ids, and every trial's last timed burst is verified word-exact on a destination wiped first. The
+[methodology](docs/methodology.md#kv-cache-transfer-suite) has the model, the timing, and what a
+row does not cover (one GPU pair in isolation: not node-level or TTFT cost).
 
-Backends are `nixl` (what Dynamo, vLLM, and SGLang ship), `mooncake` (the CUDA wheel links libcuda
-at import; mi355x runs AMD's atom-dev build push-only), and `mori-io` (AMD's native engine), where
-the registry's `kv_backends` map enables them. No entry, no legs, mirroring `ll_backends`. An entry
-may restrict ops, pin an image, set a NIC filter, or lower the pool budget. Fabrics are `rdma`
-(torch pools) and, on GB racks, `nixl` also runs `mnnvl` (cuMem FABRIC pools; see the methodology
-for the bulk-vs-paged lane inversion that row exists to publish). On b300's AWS EFA pool `nixl`
-rides its LIBFABRIC plugin instead of UCX, and `mooncake` runs the upstream EFA build
-(`mooncake-transfer-engine-efa-cuda13`, protocol `efa`) in place of the image's verbs-only one. The grid and per-pool scheduling
-live in `configs/kv_sweep.json`; dispatch with `suites: kv-transfer`.
+Backends follow vLLM's connectors, where the registry's `kv_backends` map enables them (no entry, no
+legs, mirroring `ll_backends`): `nixl` 1.3.2 posts one whole-row descriptor per block id, `pull`
+(READ) and `push` (WRITE), over UCX, or LIBFABRIC on b300's AWS EFA pool; `mooncake` 0.3.13.post1
+(cuda13 variant; the EFA variant on EFA; AMD's atom-dev build on mi355x) pushes one entry per layer
+page per block, one batch per burst. `mori-io` is not scheduled: vLLM's MoRIIO connector rejects
+DSV4's mixed block sizes. An entry may restrict ops, pin an image, set a NIC filter, or lower the
+pool budget. Fabrics are `rdma` (torch pools) and, on GB racks, `nixl` also runs `mnnvl` (cuMem
+FABRIC pools). The grid and per-pool scheduling live in `configs/kv_sweep.json`; dispatch with
+`suites: kv-transfer`.
 
 ## Workflow And Artifacts
 

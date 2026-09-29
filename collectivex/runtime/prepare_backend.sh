@@ -560,46 +560,60 @@ FICHECK
   [ "$rc" -eq 0 ] || { collx_log "ERROR: FlashInfer EP one-sided A2A unavailable in this image"; return 1; }
 }
 
-MOONCAKE_EFA_DIST=mooncake-transfer-engine-efa-cuda13
-MOONCAKE_VERBS_DISTS="mooncake-transfer-engine mooncake-transfer-engine-cuda13"
-
 # The kv-transfer wheels install into the named container, which persists for the job, so one
-# install here serves every case srun. nixl-cuXX directly: the `nixl` meta package depends on
-# BOTH cu12 and cu13 variants, and an unpinned install under the image's stale pip resolved 1.0.1.
+# install here serves every case srun. Versions follow vLLM (32ad1400d7): requirements pin
+# `nixl == 1.3.2`, whose meta package is a shim that loads nixl_cu<torch CUDA major>, so it goes
+# in without its cu12+cu13 hard dependency next to nixl-cu13 itself. Image-shipped copies are
+# replaced, never trusted: a stale image build is what let an unpinned version into published rows.
+NIXL_VERSION=1.3.2
 nixl_prepare() {
-  python3 -c "import nixl" 2>/dev/null && return 0
-  pip_install 'nixl-cu13==1.3.2' \
+  nixl_pinned && return 0
+  pip_install --no-deps "nixl==$NIXL_VERSION" "nixl-cu13==$NIXL_VERSION" \
     || { collx_log "ERROR: nixl wheel install failed"; return 1; }
-  python3 -c "import nixl" \
-    || { collx_log "ERROR: nixl import failed after install"; return 1; }
+  nixl_pinned || { collx_log "ERROR: nixl $NIXL_VERSION import failed after install"; return 1; }
 }
 
-# ROCm builds ship inside the image (upstream wheels link libcuda.so.1; AMD's atom-dev image
-# carries a working build), so an importable mooncake.engine wins. Otherwise install the pinned
-# CUDA wheel; it links libcudart.so.12, which the adapter dlopens from the runtime package at
-# import, so no LD_LIBRARY_PATH seam is needed. EFA pools are the exception: every other build
-# is verbs-RC only, so the EFA wheel (which links the host libfabric) replaces whatever the image
-# ships; both install the same `mooncake` package, so the image's copy is removed first.
+nixl_pinned() {
+  python3 - "$NIXL_VERSION" 2>/dev/null <<'PY'
+import importlib.metadata as md
+import sys
+assert md.version("nixl") == md.version("nixl-cu13") == sys.argv[1]
+import nixl._api  # noqa: F401
+PY
+}
+
+# Mooncake follows vLLM's image: the default wheel links libcudart.so.12, so on CUDA 13 the
+# cuda13 variant of the same version replaces it (uninstalled first; every variant ships the same
+# `mooncake` package). EFA pools take the EFA variant, the only build with a libfabric transport
+# (the rest are verbs-RC only, which EFA does not offer). ROCm has no upstream wheel (they link
+# libcuda.so.1), so AMD's image-provided build (atom-dev) runs there.
+MOONCAKE_VERSION=0.3.13.post1
+MOONCAKE_DISTS="mooncake-transfer-engine mooncake-transfer-engine-cuda13 mooncake-transfer-engine-efa-cuda13"
 mooncake_prepare() {
-  if [ "${COLLX_RDMA_FABRIC:-}" = efa ]; then
-    python3 -c "import importlib.metadata as m; m.version('$MOONCAKE_EFA_DIST')" 2>/dev/null \
-      && python3 -c "import mooncake.engine" 2>/dev/null && return 0
-    python3 -m pip uninstall -y -q $MOONCAKE_VERBS_DISTS 2>/dev/null \
-      || python3 -m pip uninstall -y -q --break-system-packages $MOONCAKE_VERBS_DISTS 2>/dev/null
-    pip_install "$MOONCAKE_EFA_DIST==0.3.13.post1" \
-      || { collx_log "ERROR: mooncake EFA wheel install failed"; return 1; }
+  local dist=mooncake-transfer-engine-cuda13
+  if python3 -c "import sys, torch; sys.exit(0 if torch.version.hip else 1)" 2>/dev/null; then
     python3 -c "import mooncake.engine" \
-      || { collx_log "ERROR: mooncake EFA import failed after install"; return 1; }
+      || { collx_log "ERROR: ROCm image carries no importable mooncake build"; return 1; }
+    collx_log "mooncake provided by the ROCm image"
     return 0
   fi
-  if python3 -c "import mooncake.engine" 2>/dev/null; then
-    collx_log "mooncake provided by the image"
-    return 0
-  fi
-  pip_install 'mooncake-transfer-engine==0.3.12.post1' 'nvidia-cuda-runtime-cu12==12.9.79' \
-    || { collx_log "ERROR: mooncake wheel install failed"; return 1; }
-  python3 -c "import mooncake.engine" \
-    || { collx_log "ERROR: mooncake import failed after install"; return 1; }
+  [ "${COLLX_RDMA_FABRIC:-}" = efa ] && dist=mooncake-transfer-engine-efa-cuda13
+  mooncake_pinned "$dist" && return 0
+  python3 -m pip uninstall -y -q $MOONCAKE_DISTS 2>/dev/null \
+    || python3 -m pip uninstall -y -q --break-system-packages $MOONCAKE_DISTS 2>/dev/null
+  pip_install --no-deps "$dist==$MOONCAKE_VERSION" \
+    || { collx_log "ERROR: $dist wheel install failed"; return 1; }
+  mooncake_pinned "$dist" \
+    || { collx_log "ERROR: $dist $MOONCAKE_VERSION import failed after install"; return 1; }
+}
+
+mooncake_pinned() {
+  python3 - "$1" "$MOONCAKE_VERSION" 2>/dev/null <<'PY'
+import importlib.metadata as md
+import sys
+assert md.version(sys.argv[1]) == sys.argv[2]
+import mooncake.engine  # noqa: F401
+PY
 }
 
 main() {

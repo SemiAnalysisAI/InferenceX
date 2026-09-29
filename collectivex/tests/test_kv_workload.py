@@ -1,16 +1,13 @@
 #!/usr/bin/env python3
 """Geometry and correctness math of the KV-transfer workload model.
 
-The packed block-major layout is the contract: per cache-group region, one
-contiguous descriptor covers all the group's layers for one physical block
-(vLLM's packed DSV4 NIXL shape), block tables are seed-keyed permutations both
-ranks derive independently (batched requests slicing disjoint ranges of one
-permutation), and an offset-derived, per-rank-salted pattern makes any byte's
-expected value computable from its source offset and source rank alone.
-These tests pin that math with hand-computed cases validated against vLLM commit 32ad1400d7 (state content 584 B, page
-padded to a 576 B multiple at block granularity, one descriptor per packed
-block); the torch fill path is exercised on metal by the suite itself (a wrong
-fill fails every verify row loudly).
+The contract is vLLM's (32ad1400d7) DSV4 KV layout: five cache groups over
+one shared block-row allocation as wide as the widest group, whole-row NIXL
+descriptors, per-group window tails, per-layer pages for layer-registering
+connectors, seed-keyed disjoint block tables, and a unique-word per-rank
+salted pattern whose every word follows from its source offset and source
+rank alone. The torch fill path runs on metal (a wrong fill fails every verify
+row); here a numpy pool stands in for the device.
 """
 from __future__ import annotations
 
@@ -25,193 +22,166 @@ sys.path[:0] = [str(ROOT), str(ROOT / "bench")]
 
 import kv_workload  # noqa: E402
 
-
-def _read8(pool: np.ndarray):
-    return lambda offset: pool[offset : offset + 8].tobytes()
+ROW = 1_435_968
 
 
 class Geometry(unittest.TestCase):
-    def test_dsv4_regions_by_hand(self):
-        # isl=512, block=256. Every token-state is 584 B (448 NoPE + 128 RoPE
-        # + 8 fp8 scale); pages pad to a 576 B multiple at BLOCK granularity.
-        # C4A: 64 states -> round_up(64*584, 576) = 37,440; its indexer keeps
-        # 132 B states -> round_up(64*132, 576) = 8,640; C128A: 2 states ->
-        # round_up(2*584, 576) = 1,728; the sliding window's block is fixed at
-        # 64 tokens (it shares C4A's physical tensor) -> 37,440 on all 61
-        # layers, capped at 128 window tokens. One descriptor per block spans
-        # the group's layers.
-        cfg = kv_workload.plan_config("dsv4", "fp8", 512, 256)
-        regions = {r["name"]: r for r in cfg["regions"]}
-        self.assertEqual([r["name"] for r in cfg["regions"]],
-                         ["c4a", "c4a-idx", "c128a", "swa"])
-        self.assertEqual(
-            (regions["c4a"]["layers"], regions["c4a"]["page_bytes"],
-             regions["c4a"]["packed_bytes"], regions["c4a"]["blocks_req"]),
-            (30, 37_440, 30 * 37_440, 2))
-        self.assertEqual(
-            (regions["c4a-idx"]["layers"], regions["c4a-idx"]["page_bytes"],
-             regions["c4a-idx"]["blocks_req"]), (30, 8_640, 2))
-        self.assertEqual(
-            (regions["c128a"]["layers"], regions["c128a"]["page_bytes"],
-             regions["c128a"]["blocks_req"]), (31, 1_728, 2))
-        # the window shares C4A's physical tensor, so its page equals C4A's
-        self.assertEqual(
-            (regions["swa"]["layers"], regions["swa"]["block_tokens"],
-             regions["swa"]["page_bytes"], regions["swa"]["blocks_req"]),
-            (61, 64, 37_440, 2))
-        self.assertEqual(cfg["descs"], 2 + 2 + 2 + 2)
-        self.assertEqual(cfg["req_bytes"],
-                         2 * (30 * 37_440 + 30 * 8_640 + 31 * 1_728 + 61 * 37_440))
-        # regions tile one contiguous pool
-        self.assertEqual(cfg["pool_bytes"],
-                         sum(r["pool_blocks"] * r["packed_bytes"]
-                             for r in cfg["regions"]))
+    def test_pages_follow_vllms_576_byte_padding(self):
+        # round_up(block / tokens_per_state * bytes_per_state, 576), per
+        # vLLM's kv_cache_interface: C4A 64 x 584, its indexer 64 x 132, C128A
+        # 2 x 584, SWA 64 x 584, the fp32 compressor states 4 x 8192,
+        # 4 x 2048 and 8 x 4096.
+        self.assertEqual({c: kv_workload.page_bytes(c) for c in kv_workload.DSV4_CACHES}, {
+            "c4a": 37_440, "c4a-indexer": 8_640, "c128a": 1_728, "swa": 37_440,
+            "c4a-state": 32_832, "c4a-indexer-state": 8_640, "c128a-state": 32_832})
 
-    def test_a_short_request_uses_only_its_own_window_tokens(self):
-        # min(isl, 128) = 64 tokens -> one 64-token window block
-        small = kv_workload.plan_config("dsv4", "fp8", 64, 256)
-        self.assertEqual({r["name"]: r for r in small["regions"]}["swa"]["blocks_req"], 1)
+    def test_the_row_is_the_widest_group(self):
+        groups = kv_workload.PRESETS["dsv4"]["groups"]
+        self.assertEqual({g["name"]: kv_workload.group_block_bytes(g) for g in groups}, {
+            "mla": 30 * 37_440 + 30 * 8_640 + 31 * 1_728,       # 1,435,968
+            "swa-a": 31 * 37_440, "swa-b": 30 * 37_440,
+            "c4a-state": 30 * 32_832 + 30 * 8_640, "c128a-state": 31 * 32_832})
+        cfg = kv_workload.plan_config("dsv4", "fp8", 2048, 256)
+        self.assertEqual((cfg["row_bytes"], cfg["page_bytes"]), (ROW, ROW))
 
-    def test_block_sizes_that_split_a_state_fail_closed(self):
-        # C128A's 128-token states force the model block size to a multiple
-        # of 128; vLLM serves DSV4 at 256. The old 16/64-token sweep values
-        # cannot hold a whole HCA state and must be rejected.
-        for block in (16, 64, 192):
-            with self.assertRaises(ValueError):
-                kv_workload.plan_config("dsv4", "fp8", 512, block)
-        self.assertEqual(
-            {r["name"]: r for r in
-             kv_workload.plan_config("dsv4", "fp8", 512, 128)["regions"]
-             }["c128a"]["page_bytes"], 1_152)  # 1 state, 584 -> padded
+    def test_block_counts_follow_the_window_tail_clip(self):
+        # MLA: every block; windowed groups: cdiv(window, block) + 1, clipped
+        # to the prompt. 2048 -> [8, 3, 3, 3, 17]; the table vLLM's own
+        # geometry derivation produced for the ladder.
+        for isl, blocks, descs in ((2048, [8, 3, 3, 3, 17], 34),
+                                   (131072, [512, 3, 3, 3, 17], 538),
+                                   (524288, [2048, 3, 3, 3, 17], 2074)):
+            with self.subTest(isl=isl):
+                cfg = kv_workload.plan_config("dsv4", "fp8", isl, 256)
+                self.assertEqual([g["blocks"] for g in cfg["groups"]], blocks)
+                self.assertEqual((cfg["descs"], cfg["req_bytes"]), (descs, descs * ROW))
+        # a prompt shorter than a window keeps only the blocks it fills
+        short = kv_workload.plan_config("dsv4", "fp8", 8, 256)
+        self.assertEqual([g["blocks"] for g in short["groups"]], [1, 1, 1, 2, 1])
 
-    def test_dsv4_precision_is_architectural(self):
+    def test_per_layer_pages_tile_each_groups_share_of_the_row(self):
+        for group in kv_workload.layer_layout("dsv4"):
+            with self.subTest(group=group["name"]):
+                offset = 0
+                for start, size in group["layers"]:
+                    self.assertEqual(start, offset)
+                    offset += size
+        # the MLA group lays out C128A, then the indexer, then C4A from byte 0
+        mla = kv_workload.layer_layout("dsv4")[0]["layers"]
+        self.assertEqual((mla[0], mla[31], mla[61], len(mla)),
+                         ((0, 1_728), (53_568, 8_640), (312_768, 37_440), 91))
+
+    def test_layer_entries_count_and_bytes(self):
+        # 91 x ceil(L/256) + 890 entries (31x3 + 30x3 + 60x3 + 31x17 window
+        # pages); pages carry no row padding, so bytes fall below descs x row
+        for isl, entries, nbytes in ((2048, 1_618, 39_374_208),
+                                     (524288, 187_258, 2_968_748_928)):
+            with self.subTest(isl=isl):
+                cfg = kv_workload.plan_config("dsv4", "fp8", isl, 256)
+                offsets, sizes = kv_workload.layer_entries(cfg, kv_workload.block_table(cfg, 1))
+                self.assertEqual((len(offsets), int(sizes.sum())), (entries, nbytes))
+
+    def test_only_the_served_block_size_and_precision_plan(self):
         with self.assertRaises(ValueError):
-            kv_workload.plan_config("dsv4", "bf16", 512, 256)
+            kv_workload.plan_config("dsv4", "fp8", 2048, 128)
+        with self.assertRaises(ValueError):
+            kv_workload.plan_config("dsv4", "bf16", 2048, 256)
 
-    def test_partial_last_block_rounds_up(self):
-        # 300 tokens at 256/block -> 2 blocks for every non-window group.
-        cfg = kv_workload.plan_config("dsv4", "fp8", 300, 256)
-        self.assertEqual(cfg["regions"][0]["blocks_req"], 2)
-
-    def test_batch_max_grows_the_pool_for_disjoint_requests(self):
-        cfg = kv_workload.plan_config("dsv4", "fp8", 512, 256, batch_max=16)
-        for region in cfg["regions"]:
-            self.assertGreaterEqual(region["pool_blocks"], 16 * region["blocks_req"])
+    def test_the_pool_holds_every_table_set_and_batch_disjointly(self):
+        one = kv_workload.plan_config("dsv4", "fp8", 8192, 256, table_sets=1)
+        four = kv_workload.plan_config("dsv4", "fp8", 8192, 256, batch_max=8)
+        self.assertEqual(one["pool_rows"], int(58 * 2.0) + 8)
+        self.assertEqual(four["pool_rows"], int(58 * 4 * 8 * 1.25) + 8)
 
 
 class Tables(unittest.TestCase):
     def test_deterministic_and_distinct_per_side_and_seed(self):
-        cfg = kv_workload.plan_config("dsv4", "fp8", 4096, 256)
+        cfg = kv_workload.plan_config("dsv4", "fp8", 8192, 256)
+        local = kv_workload.table_seed(cfg, "local", 67)
+        remote = kv_workload.table_seed(cfg, "remote", 67)
+        np.testing.assert_array_equal(kv_workload.block_table(cfg, local),
+                                      kv_workload.block_table(cfg, local))
+        self.assertFalse(np.array_equal(kv_workload.block_table(cfg, local),
+                                        kv_workload.block_table(cfg, remote)))
+        self.assertNotEqual(local, kv_workload.table_seed(cfg, "local", 68))
 
-        def table(side, seed=67):
-            return kv_workload.block_table(cfg, kv_workload.table_seed(cfg, side, seed))
-
-        local, remote, again, reseeded = table("local"), table("remote"), table("local"), \
-            table("local", seed=68)
-        for region in cfg["regions"]:
-            name, blocks_req = region["name"], region["blocks_req"]
-            self.assertTrue((local[name] == again[name]).all())
-            self.assertFalse((local[name] == remote[name]).all())
-            self.assertFalse((local[name] == reseeded[name]).all())
-            # distinct in-range blocks (fragmented, never aliased)
-            self.assertEqual(len(set(local[name].tolist())), blocks_req)
-            self.assertTrue((local[name] < region["pool_blocks"]).all())
-
-    def test_batched_requests_slice_disjoint_blocks(self):
-        cfg = kv_workload.plan_config("dsv4", "fp8", 512, 256, batch_max=4)
-        seed = kv_workload.table_seed(cfg, "local", 67)
-        tables = [kv_workload.block_table(cfg, seed, request=r) for r in range(4)]
-        for region in cfg["regions"]:
-            blocks = [t[region["name"]].tolist() for t in tables]
-            union = set().union(*map(set, blocks))
-            self.assertEqual(len(union), 4 * region["blocks_req"])
+    def test_every_table_set_and_request_takes_disjoint_rows(self):
+        cfg = kv_workload.plan_config("dsv4", "fp8", 2048, 256, batch_max=4)
+        rows = np.concatenate([kv_workload.block_table(cfg, 5, r, k)
+                               for k in range(cfg["table_sets"]) for r in range(4)])
+        self.assertEqual(len(rows), len(set(rows.tolist())))
+        self.assertLess(rows.max(), cfg["pool_rows"])
 
     def test_a_request_beyond_the_pool_fails_closed(self):
-        cfg = kv_workload.plan_config("dsv4", "fp8", 512, 256)  # slack for ~2 requests
+        cfg = kv_workload.plan_config("dsv4", "fp8", 2048, 256, table_sets=1)
         with self.assertRaises(ValueError):
-            kv_workload.block_table(cfg, 1, request=8)
-
-    def test_desc_array_carries_per_region_packed_sizes(self):
-        cfg = dict(regions=[
-            dict(name="a", packed_bytes=256, blocks_req=2, pool_blocks=4, base=0),
-            dict(name="b", packed_bytes=132, blocks_req=1, pool_blocks=4, base=1024),
-        ], descs=3)
-        tables = {"a": np.array([1, 3]), "b": np.array([2])}
-        descs = kv_workload.desc_array(10_000, cfg, tables, dev=5)
-        self.assertEqual(descs[:, 0].tolist(),
-                         [10_000 + 256, 10_000 + 768, 10_000 + 1024 + 264])
-        self.assertEqual(descs[:, 1].tolist(), [256, 256, 132])
-        self.assertEqual(descs[:, 2].tolist(), [5, 5, 5])
+            kv_workload.block_table(cfg, 5, request=0, table_set=5)
 
 
 class Verify(unittest.TestCase):
     SRC_SALT, DST_SALT = 1, 0
 
-    @staticmethod
-    def _pattern(nbytes, salt):
-        # The expected byte model, written independently of kv_workload.
-        chunks = np.arange(nbytes, dtype=np.int64) >> 8
-        return ((chunks * 131 + 7 + 101 * salt) & 0xFF).astype(np.uint8)
+    def _setup(self, entries="rows"):
+        cfg = kv_workload.plan_config("dsv4", "fp8", 2048, 256)
+        dst_rows = kv_workload.block_table(cfg, kv_workload.table_seed(cfg, "local", 67))
+        src_rows = kv_workload.block_table(cfg, kv_workload.table_seed(cfg, "remote", 67))
+        if entries == "rows":
+            dst, src = (kv_workload.page_offsets(cfg, r) for r in (dst_rows, src_rows))
+            sizes = kv_workload.desc_sizes(cfg)
+        else:
+            dst, sizes = kv_workload.layer_entries(cfg, dst_rows)
+            src, _ = kv_workload.layer_entries(cfg, src_rows)
+        words = cfg["pool_bytes"] // 8
+        pool = kv_workload.pattern_words(0, words, self.DST_SALT)
+        src_pool = kv_workload.pattern_words(0, words, self.SRC_SALT)
+        for d, s, n in zip(dst.astype(np.int64) // 8, src.astype(np.int64) // 8,
+                           sizes.astype(np.int64) // 8):
+            pool[d:d + n] = src_pool[s:s + n]
+        return pool, dst, src, sizes
 
-    def _painted_destination(self, cfg, dst_tables, src_tables):
-        """A destination pool where every dst block holds its src block's pattern."""
-        pool = self._pattern(cfg["pool_bytes"], self.DST_SALT)
-        src_pool = self._pattern(cfg["pool_bytes"], self.SRC_SALT)
-        for region in cfg["regions"]:
-            size = region["packed_bytes"]
-            for dst, src in zip(dst_tables[region["name"]], src_tables[region["name"]]):
-                dst_off = int(dst) * size + region["base"]
-                src_off = int(src) * size + region["base"]
-                pool[dst_off : dst_off + size] = src_pool[src_off : src_off + size]
-        return pool
-
-    def _setup(self):
-        cfg = kv_workload.plan_config("dsv4", "fp8", 512, 256)
-        dst = kv_workload.block_table(cfg, kv_workload.table_seed(cfg, "local", 67))
-        src = kv_workload.block_table(cfg, kv_workload.table_seed(cfg, "remote", 67))
-        return cfg, dst, src, self._painted_destination(cfg, dst, src)
-
-    def _verify(self, pool, cfg, dst, src, salt=SRC_SALT):
-        return kv_workload.verify_transfer(_read8(pool), cfg, dst, src, src_salt=salt)
-
-    def test_a_faithful_transfer_verifies_across_unaligned_pages(self):
-        # dsv4's page sizes are 576 B multiples, never 256 B multiples, so
-        # per-layer probes land at any byte alignment and exercise the
-        # per-byte expectation model.
-        cfg, dst, src, pool = self._setup()
-        ok, detail = self._verify(pool, cfg, dst, src)
-        self.assertTrue(ok, detail)
+    def test_a_faithful_transfer_verifies(self):
+        for entries in ("rows", "layers"):
+            with self.subTest(entries=entries):
+                pool, dst, src, sizes = self._setup(entries)
+                ok, detail = kv_workload.verify_entries(pool, dst, src, sizes, self.SRC_SALT)
+                self.assertTrue(ok, detail)
 
     def test_wrong_transfers_fail(self):
-        cfg, dst, src, pool = self._setup()
-        untouched = self._pattern(cfg["pool_bytes"], self.DST_SALT)
+        pool, dst, src, sizes = self._setup()
+        untouched = kv_workload.pattern_words(0, len(pool), self.DST_SALT)
+        wiped = np.full_like(pool, 0x5A5A5A5A5A5A5A5A)
+        shifted = pool.copy()
+        first = int(dst[0]) // 8
+        shifted[first:first + int(sizes[0]) // 8] = np.roll(
+            shifted[first:first + int(sizes[0]) // 8], 1)
+        truncated = pool.copy()
+        truncated[first + int(sizes[0]) // 8 - 1] = untouched[first + int(sizes[0]) // 8 - 1]
         for name, args in (
-            # a transfer that never happened leaves the destination's own
-            # repainted pattern, which the source salt tells apart
-            ("never happened", (untouched, cfg, dst, src)),
-            # dst blocks hold the src pattern, not their own
-            ("tables swapped", (pool, cfg, src, dst)),
-            # a loopback read of the destination's own pool
-            ("wrong source rank", (pool, cfg, dst, src, self.DST_SALT)),
+            # a rep that never happened leaves the destination's own pattern
+            ("never happened", (untouched, dst, src, sizes, self.SRC_SALT)),
+            # the sentinel wipe before a verified rep survives an empty rep
+            ("left the sentinel", (wiped, dst, src, sizes, self.SRC_SALT)),
+            ("tables swapped", (pool, src, dst, sizes, self.SRC_SALT)),
+            ("loopback", (pool, dst, src, sizes, self.DST_SALT)),
+            # one descriptor shifted by a single word, or missing its tail
+            ("shifted by 8 bytes", (shifted, dst, src, sizes, self.SRC_SALT)),
+            ("tail not moved", (truncated, dst, src, sizes, self.SRC_SALT)),
         ):
             with self.subTest(name):
-                ok, detail = self._verify(*args)
+                ok, detail = kv_workload.verify_entries(*args)
                 self.assertFalse(ok)
                 self.assertIn("expected", detail)
 
-    def test_the_fabric_pool_tile_matches_the_verify_model(self):
-        # FabricPool (the mnnvl fill path) doubles pattern_tile across the pool;
-        # it must agree byte for byte with the verify model, or every mnnvl row
-        # fails verify.
-        for salt in (0, 1):
-            tile = kv_workload.pattern_tile(salt)
-            self.assertEqual(tile.nbytes, kv_workload.PATTERN_PERIOD)
-            for offset in (0, 8, 256, 1016, kv_workload.PATTERN_PERIOD - 8):
-                expected = bytes(kv_workload._chunk_byte(offset + j, salt) for j in range(8))
-                self.assertEqual(tile[offset : offset + 8].tobytes(), expected, (salt, offset))
-            # periodic: the byte one period on is the same byte
-            self.assertEqual(kv_workload._chunk_byte(kv_workload.PATTERN_PERIOD + 300, salt),
-                             kv_workload._chunk_byte(300, salt))
+    def test_bulk_verifies_and_catches_a_stale_buffer(self):
+        words = 1 << 16
+        src = kv_workload.pattern_words(0, words, self.SRC_SALT)
+        self.assertTrue(kv_workload.verify_bulk(src, words * 8, self.SRC_SALT)[0])
+        stale = kv_workload.pattern_words(0, words, self.DST_SALT)
+        self.assertFalse(kv_workload.verify_bulk(stale, words * 8, self.SRC_SALT)[0])
+
+    def test_no_two_words_of_a_pool_share_a_value(self):
+        words = kv_workload.pattern_words(0, 1 << 20, 3)
+        self.assertEqual(len(np.unique(words)), len(words))
 
 
 class SweepConfigConsistency(unittest.TestCase):
