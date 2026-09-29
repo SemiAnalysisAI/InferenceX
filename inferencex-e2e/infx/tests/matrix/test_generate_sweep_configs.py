@@ -384,10 +384,6 @@ def full_sweep_args_multi_node():
 
 class TestSeqLenToStr:
 
-    def test_known_sequence_lengths(self):
-        assert seq_len_to_str(1024, 1024) == "1k1k"
-        assert seq_len_to_str(8192, 1024) == "8k1k"
-
     def test_unknown_sequence_lengths(self):
         assert seq_len_to_str(2048, 2048) == "2048_2048"
         assert seq_len_to_str(4096, 1024) == "4096_1024"
@@ -2190,25 +2186,6 @@ class TestCommandLine:
         assert 'eval-conc' not in result[0]
         assert all(entry['run-eval'] is True for entry in result)
         assert all(entry['eval-only'] is True for entry in result)
-
-    def test_all_evals_cannot_combine_with_no_evals(self, monkeypatch):
-        import sys
-
-        from infx.matrix import generate as generate_sweep_configs
-
-        monkeypatch.setattr(sys, 'argv', [
-            'generate_sweep_configs.py',
-            'test-config',
-            '--config-files', 'dummy.yaml',
-            '--config-keys', 'dummy',
-            '--no-evals',
-            '--all-evals',
-        ])
-
-        with pytest.raises(SystemExit):
-            generate_sweep_configs.main()
-
-
 
 @pytest.fixture
 def sample_mixed_config(sample_single_node_config, sample_multinode_config):

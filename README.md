@@ -21,6 +21,7 @@ Trusted by Operators of Trillion Dollar Token Factories such as OpenAI, Meta, Mi
 | [`InferenceX-e2e/`](inferencex-e2e/) | 🚀 End-to-end Inference Serving Benchmarks |
 | [`CollectiveX/`](collectivex/) | 🌐 Networking & Collective Communication Benchmarks (Experimental Beta) |
 | [`OperatorX/`](operatorx/) | ⚙️ Operator & Kernel Level Benchmarks (Experimental Beta) |
+| [`power_model/`](power_model/) | ⚡ OSS System Level Power Modelling |
 | [`shared/`](shared/) | 🧩 Home for shared components |
 | [`experimental/`](experimental/) | 🧪 Remaining experiments |
 

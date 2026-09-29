@@ -91,6 +91,15 @@ NGINX_SQUASH_FILE="/data/home/sa-shared/gharunners/squash/$(echo "$NGINX_IMAGE" 
 # The login node is x86_64 and the compute nodes aarch64, so import on a compute node.
 import_squash() {
     local squash="$1" image="$2"
+    # Enroot uses the digest as the manifest tag, not Docker's @ syntax.
+    if [[ "$image" == *@sha256:* ]]; then
+        local image_digest="${image##*@}"
+        image="${image%@*}"
+        if [[ "${image##*/}" == *:* ]]; then
+            image="${image%:*}"
+        fi
+        image="${image}:${image_digest}"
+    fi
     local lock="${squash}.lock"
     srun --account="$SLURM_ACCOUNT" --partition="$SLURM_PARTITION" --exclusive --time=180 bash -c "
         exec 9>\"$lock\"

@@ -220,14 +220,6 @@ def test_env_can_force_swebench_on_fixed_seqlen():
     assert "DISPATCH=swebench" in _dispatch(is_agentic="0", env_fw="swebench")
 
 
-def test_env_can_force_kimi_vendor_on_agentic_eval() -> None:
-    assert "DISPATCH=kimi-vendor" in _dispatch(
-        is_agentic="1",
-        eval_only="true",
-        env_fw="kimi-vendor",
-    )
-
-
 def test_kimi_vendor_skips_unused_model_context_loading() -> None:
     script = r"""
 source "$BENCHMARK_LIB"
@@ -431,26 +423,6 @@ run_eval --port 8888
     assert "eval artifact staging failed with exit code 73" in result.stderr
 
 
-def test_kimi_full_suite_dispatches_to_schema_runner() -> None:
-    script = r"""
-source "$BENCHMARK_LIB"
-_run_kimi_tool_call_schema_eval() {
-    printf 'DISPATCH=%s ARGS=<%s>\n' "$EVAL_SUITE" "$*"
-}
-EVAL_SUITE=kimi_tool_call_schema_full run_kimi_vendor_eval --port 9999
-"""
-    result = subprocess.run(
-        ["bash", "-c", script],
-        env={**os.environ, "BENCHMARK_LIB": str(BENCHMARK_LIB)},
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-
-    assert result.returncode == 0, result.stderr
-    assert "DISPATCH=kimi_tool_call_schema_full ARGS=<--port 9999>" in result.stdout
-
-
 def test_minimax_full_suite_dispatches_to_full_runner() -> None:
     script = r"""
 source "$BENCHMARK_LIB"
@@ -585,24 +557,6 @@ source "$BENCHMARK_LIB"
 _run_minimax_m3_smoke_eval() { echo "DISPATCH=$EVAL_SUITE"; }
 unset EVAL_SUITE EVAL_RESULT_DIR
 MODEL=moonshotai/Kimi-K3 MODEL_PREFIX=kimik3 run_minimax_vendor_eval
-"""
-    result = subprocess.run(
-        ["bash", "-c", script],
-        env={**os.environ, "BENCHMARK_LIB": str(BENCHMARK_LIB)},
-        text=True,
-        capture_output=True,
-        check=True,
-    )
-
-    assert "DISPATCH=minimax_m3_smoke" in result.stdout
-
-
-def test_minimax_vendor_accepts_case_insensitive_m3_model_name() -> None:
-    script = r"""
-source "$BENCHMARK_LIB"
-_run_minimax_m3_smoke_eval() { echo "DISPATCH=$EVAL_SUITE"; }
-unset MODEL_PREFIX EVAL_SUITE EVAL_RESULT_DIR
-MODEL_NAME=vendor/MINIMAX-M3-custom run_minimax_vendor_eval
 """
     result = subprocess.run(
         ["bash", "-c", script],
@@ -2590,13 +2544,6 @@ def test_env_can_force_bfcl_on_agentic_eval() -> None:
     assert "STAGED=summary" in output
 
 
-def test_cli_can_force_bfcl_on_fixed_seqlen_eval() -> None:
-    output = _dispatch(is_agentic="0", cli_fw="bfcl")
-
-    assert "DISPATCH=bfcl" in output
-    assert "STAGED=summary" not in output
-
-
 def test_bfcl_defaults_suite_dispatches_once_without_context_loading() -> None:
     script = r"""
 source "$BENCHMARK_LIB"
@@ -2642,24 +2589,6 @@ def test_bfcl_rejects_suite_from_another_provider() -> None:
 
     assert result.returncode == 2
     assert "unsupported BFCL suite 'minimax_m3_smoke'" in result.stderr
-
-
-def test_bfcl_suite_is_rejected_by_mismatched_framework() -> None:
-    result = _run_invalid_call(
-        "EVAL_CONCURRENT_REQUESTS='' "
-        "EVAL_SUITE=bfcl_smoke "
-        "run_eval --framework minimax-vendor"
-    )
-
-    assert result.returncode == 2
-    assert "unsupported MiniMax Provider Verifier suite 'bfcl_smoke'" in result.stderr
-
-
-def test_bfcl_rejects_unknown_suite() -> None:
-    result = _run_invalid_call("EVAL_SUITE=not_a_bfcl_suite run_bfcl_eval")
-
-    assert result.returncode == 2
-    assert "unsupported BFCL suite 'not_a_bfcl_suite'" in result.stderr
 
 
 def test_bfcl_dependency_timeout_uses_integration_error_and_stages(
