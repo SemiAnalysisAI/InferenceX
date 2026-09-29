@@ -24,8 +24,8 @@ if [ "$PRODUCT" = gb200 ]; then default_time=30; else default_time=90; fi
 TIME_MIN="${COLLX_TIME:-$default_time}"
 IMAGE="$COLLX_IMAGE"
 case "$COLLX_BENCH" in
-  deepep-v2 | nccl-ep | flashinfer-ep) ;;
-  *) collx_die "unsupported $PRODUCT EP backend: $COLLX_BENCH" ;;
+  deepep-v2 | nccl-ep | flashinfer-ep | swap-blocks) ;;
+  *) collx_die "unsupported $PRODUCT backend: $COLLX_BENCH" ;;
 esac
 collx_require_vars COLLX_IMAGE COLLX_IMAGE_PLATFORM COLLX_PARTITION COLLX_ACCOUNT COLLX_SQUASH_DIR COLLX_STAGE_DIR
 [ "$PRODUCT" != gb300 ] || collx_require_vars COLLX_ENROOT_CACHE_PATH

@@ -4,9 +4,10 @@ CollectiveX is an experimental MoE expert-parallel communication benchmark. It m
 combine, and paired roundtrip latency across EP libraries and accelerator systems, then uploads
 neutral result artifacts.
 
-A standalone [vLLM `swap_blocks` benchmark](docs/swap-blocks.md)
-([中文](docs/swap-blocks_zh.md)) measures pinned CPU↔GPU and same-GPU block copies,
-with its own correctness checks and latency/bandwidth JSON output.
+A second suite, the [vLLM `swap_blocks` benchmark](docs/swap-blocks.md)
+([中文](docs/swap-blocks_zh.md)), measures pinned CPU↔GPU and same-GPU block copies,
+with its own correctness checks and latency/bandwidth JSON output. It runs through the same
+sweep matrix and pool launchers (`suites: swap-blocks`).
 
 CollectiveX schedules benchmarks, executes them on real allocations, and uploads the neutral
 artifacts each run emits. It does not validate those artifacts, promote, rank, recommend, select, or
@@ -124,8 +125,11 @@ result it writes.
 The matrix covers H100, H200, B200, B300, GB200, GB300, MI300X, MI325X, and MI355X. `sweep_matrix.py` materializes
 the requested SKUs, backends, EP sizes, and token ladders, then extracts strict per-shard controls
 and rejects missing, stale, malformed, or altered shard controls. `--only-sku`, `--exclude-skus`,
-`--ep-sizes`, and `--precisions` select a subset. The matrix is generated per dispatch, with no
-frozen digest or locked case count.
+`--ep-sizes`, and `--precisions` select a subset. `--suites` picks the suites (`ep` by default;
+`swap-blocks` adds one single-GPU shard per pool from `configs/swap_sweep.json`). Every suite's
+shards take the same path: the pool launcher allocates, `runtime/config.py case-args` encodes each
+case as its entrypoint's argv, and the rank wrapper execs that entrypoint. The matrix is generated
+per dispatch, with no frozen digest or locked case count.
 
 | Systems | EP8 | EP16 |
 |---|---|---|
