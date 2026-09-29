@@ -70,7 +70,7 @@ if [[ "$LAUNCH_PATH" == "native-srt" ]]; then
     case "${MODEL_PREFIX}/${PRECISION}" in
         dsv4/fp4)
             if [[ "$MODEL" == "deepseek-ai/DeepSeek-V4-Pro-0813" ]]; then
-                export MODEL_PATH="$NSCALE_MODEL_ROOT/DeepSeek-V4-Pro-0813"
+                export MODEL_PATH="/scratch/models/DeepSeek-V4-Pro-0813"
                 export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro-0813"
             else
                 check_env_vars MODEL_PATH
