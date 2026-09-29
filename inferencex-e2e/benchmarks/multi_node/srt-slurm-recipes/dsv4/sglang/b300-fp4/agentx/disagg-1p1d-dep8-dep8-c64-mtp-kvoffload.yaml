@@ -1,9 +1,9 @@
 schema: 2
-name: "disagg-b300-2p1d-dep8-dep8-c480-mtp-kvoffload"
+name: "disagg-b300-1p1d-dep8-dep8-c64-mtp-kvoffload"
 
 # Agentic-coding SGLang disaggregated recipe for DeepSeek-V4-Pro-0813 on B300
-# (2P x DEP8 / 1D x DEP8, DSpark K=6 + hierarchical-cache KV offload),
-# tuned for concurrency 480. Concurrency is exported by the master config.
+# (1P x DEP8 / 1D x DEP8, DSpark K=6 + hierarchical-cache KV offload),
+# tuned for concurrency 64. Concurrency is exported by the master config.
 
 model:
   path: "deepseek-v4-pro-0813"
@@ -58,16 +58,16 @@ frontend:
 engine: sglang
 roles:
   prefill:
-    nodes: 2
-    workers: 2
+    nodes: 1
+    workers: 1
     gpus: 8
     env:
       SGLANG_ENABLE_PREFILL_WAR_READ_DONE: "1"
       SGLANG_RAGGED_VERIFY_MODE: "static"
       SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "900"
+      SGLANG_DSV4_MHC_PREWARM: '1'
       PIP_BREAK_SYSTEM_PACKAGES: '1'
       PYTHONUNBUFFERED: '1'
-      OMP_NUM_THREADS: '1'
       SGLANG_ENABLE_TP_MEMORY_INBALANCE_CHECK: '0'
       SGLANG_DG_CACHE_DIR: /configs/deepgemm_cache
       SGLANG_JIT_DEEPGEMM_PRECOMPILE: '1'
@@ -92,7 +92,6 @@ roles:
       SGLANG_LOG_MS: '1'
       SGLANG_REQUEST_STATE_WAIT_TIMEOUT: '60'
       SGLANG_NCCL_ALL_GATHER_IN_OVERLAP_SCHEDULER_SYNC_BATCH: '1'
-      SGLANG_DSV4_MHC_PREWARM: '1'
 
     args:
       host: 0.0.0.0
@@ -138,12 +137,12 @@ roles:
     nodes: 1
     workers: 1
     gpus: 8
+
     env:
       SGLANG_RAGGED_VERIFY_MODE: "static"
       SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "900"
       PIP_BREAK_SYSTEM_PACKAGES: '1'
       PYTHONUNBUFFERED: '1'
-      OMP_NUM_THREADS: '1'
       SGLANG_ENABLE_TP_MEMORY_INBALANCE_CHECK: '0'
       SGLANG_DG_CACHE_DIR: /configs/deepgemm_cache
       SGLANG_JIT_DEEPGEMM_PRECOMPILE: '1'
@@ -167,7 +166,6 @@ roles:
       SGLANG_LOG_FORWARD_ITERS: '1'
       SGLANG_LOG_MS: '1'
       SGLANG_REQUEST_STATE_WAIT_TIMEOUT: '60'
-      SGLANG_DSV4_MHC_PREWARM: '1'
 
     args:
       host: 0.0.0.0
@@ -193,7 +191,7 @@ roles:
       mem-fraction-static: 0.9
       page-size: 256
       swa-full-tokens-ratio: 0.02
-      max-running-requests: 960
+      max-running-requests: 128
       cuda-graph-max-bs-decode: 256
       disable-flashinfer-autotune: true
       model-loader-extra-config: '{"enable_multithread_load":true,"num_threads":8}'
