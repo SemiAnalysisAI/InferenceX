@@ -9092,3 +9092,9 @@
     - "在 Dynamo 前端启用 MiniMax-M3 推理解析器，使推理内容按一致方式分类，而不会作为普通内容返回。"
     - "在每个 TensorRT-LLM 引擎配置中设置 reasoning_parser: minimax_m3，使前端与引擎的解析器设置保持一致。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3195
+
+- config-keys:
+    - dsv4-fp4-b300-sglang-agentic-hicache-eagle
+  description:
+    - "Update the SGLang image from dev-cu13-nightly-09242 to nightly-dev-cu13-20260929-79cafec0."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3587
