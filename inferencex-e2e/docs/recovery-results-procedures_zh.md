@@ -282,9 +282,9 @@ export PYTHONDONTWRITEBYTECODE=1
 export PYTHONPYCACHEPREFIX="${PYTHONPYCACHEPREFIX:-/tmp/inferencex-pycache}"
 ```
 
-不要把这些路径重新覆盖到工作区。MI355X launcher 还会在启动前删除旧基准日志，并安装 EXIT trap：复制 Slurm stdout/stderr 证据、打印错误尾部，然后执行有范围限制的 `sudo rm -rf "$BENCHMARK_LOGS_DIR"`。`KEEP_LOGS=1` 只应在刻意进行本地调试时使用；它会禁用清理 trap。取消任务仍可能绕过 teardown，因此在出现 `EACCES` 清理错误后，应执行下述恢复扫描。
+不要把这些路径重新覆盖到工作区。MI355X `amd_utils` 通道还会在启动前删除旧基准日志，并注册退出清理：复制 Slurm stdout/stderr 证据、打印错误尾部，然后执行有范围限制的 `sudo rm -rf "$BENCHMARK_LOGS_DIR"`。收到 `SIGINT`/`SIGTERM` 时也会执行该清理。`KEEP_LOGS=1` 只应在刻意进行本地调试时使用；它会禁用该清理。强制终止仍可能绕过 teardown，因此在出现 `EACCES` 清理错误后，应执行下述恢复扫描。
 
-来源：[Python 缓存预防](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/benchmarks/benchmark_lib.sh#L5-L10)、[MI355X 清理 trap](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/runners/launch_mi355x-amds.sh#L49-L76)。
+来源：[Python 缓存预防](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/benchmarks/benchmark_lib.sh#L5-L10)、[MI355X 清理](../infx/launch/drivers/legacy.py)。
 
 ### 恢复 MI355X TW runner 工作区
 

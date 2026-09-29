@@ -27,6 +27,7 @@ from infx.matrix.generate import (
     seq_len_to_str,
     trim_conc,
 )
+from infx.matrix.validation import validate_runner_config
 
 
 def test_aggregated_multinode_node_count_uses_explicit_num_nodes():
@@ -182,6 +183,17 @@ def test_multinode_node_count_resolves_heterogeneous_worker_hardware(
     ) == 6
 
 
+def cluster_record(gpus_per_node, **facts):
+    """Minimal valid clusters: record carrying generation-time node facts."""
+    return {
+        "gpus-per-node": gpus_per_node,
+        **facts,
+        "arch": "x86_64",
+        "scheduler": "slurm",
+        "slurm": {"partition": "batch", "exclusive": True},
+    }
+
+
 @pytest.mark.parametrize("config_file", [
     "recipes/test.yaml",
     "benchmarks/multi_node/srt-slurm-recipes/test.yaml",
@@ -329,14 +341,14 @@ def sample_runner_config():
             "mi300x": ["mi300x-amd_0", "mi300x-amd_1", "mi300x-cr_0"],
             "gb200": ["gb200-nv_0"],
         },
-        "hardware": {
-            "cluster:h100-dgxc": {"available-cpu-dram-mib": 2063837, "gpus-per-node": 8},
-            "cluster:h200-dgxc": {"available-cpu-dram-mib": 1471356, "gpus-per-node": 8},
-            "cluster:b200-nscale": {"available-cpu-dram-mib": 3774874, "gpus-per-node": 8},
-            "cluster:b300-nv": {"available-cpu-dram-mib": 2964436, "gpus-per-node": 8},
-            "cluster:mi300x-amd": {"available-cpu-dram-mib": 1547820, "gpus-per-node": 8},
-            "cluster:mi355x-amds": {"available-cpu-dram-mib": 3095781, "gpus-per-node": 8},
-            "cluster:gb200-nv": {"available-cpu-dram-mib": 860160, "gpus-per-node": 4},
+        "clusters": {
+            "h100-dgxc": cluster_record(8, **{"available-cpu-dram-mib": 2063837}),
+            "h200-dgxc": cluster_record(8, **{"available-cpu-dram-mib": 1471356}),
+            "b200-nscale": cluster_record(8, **{"available-cpu-dram-mib": 3774874}),
+            "b300-nv": cluster_record(8, **{"available-cpu-dram-mib": 2964436}),
+            "mi300x-amd": cluster_record(8, **{"available-cpu-dram-mib": 1547820}),
+            "mi355x-amds": cluster_record(8, **{"available-cpu-dram-mib": 3095781}),
+            "gb200-nv": cluster_record(4, **{"available-cpu-dram-mib": 860160}),
         },
     }
 
@@ -1911,7 +1923,11 @@ class TestCommandLine:
     ):
         """The module entrypoint resolves caller-relative inputs from another directory."""
         (tmp_path / "master config.yaml").write_text(yaml.safe_dump(sample_single_node_config))
-        (tmp_path / "runners.yaml").write_text(yaml.safe_dump(sample_runner_config))
+        nodes = sample_runner_config["labels"]["mi300x"]
+        (tmp_path / "runners.yaml").write_text(yaml.safe_dump({
+            "labels": {"mi300x": nodes, "cluster:mi300x-amd": nodes},
+            "clusters": {"mi300x-amd": cluster_record(8)},
+        }))
         repo_root = Path(__file__).resolve().parents[3]
         args = [
             command, "--config-files", "master config.yaml",
@@ -1952,8 +1968,11 @@ class TestCommandLine:
         # An explicit override must not fall back to the default inventory.
         (tmp_path / "configs/runners.yaml").write_text("invalid: default inventory")
         selected_file = tmp_path / (runner_file or "configs/runners.yaml")
-        sample_runner_config["labels"]["mi300x"] = ["fixture-node-0", "fixture-node-1"]
-        selected_file.write_text(yaml.safe_dump(sample_runner_config))
+        nodes = ["fixture-node-0", "fixture-node-1"]
+        selected_file.write_text(yaml.safe_dump({
+            "labels": {"mi300x": nodes, "cluster:mi300x-amd": nodes},
+            "clusters": {"mi300x-amd": cluster_record(8)},
+        }))
         argv = [
             "generate_sweep_configs.py", "full-sweep",
             "--config-files", "master.yaml", "--single-node", "--no-evals",
@@ -2537,10 +2556,47 @@ class TestAgenticGeneration:
             },
         }
         runner_config = copy.deepcopy(sample_runner_config)
-        runner_config["hardware"]["cluster:b300-nv"]["gpus-per-node"] = 2
+        runner_config["clusters"]["b300-nv"]["gpus-per-node"] = 2
 
         with pytest.raises(ValueError, match="exceeds gpus-per-node"):
             generate_agentic_sweep(config, runner_config, **filters)
+
+    def test_cluster_records_supply_agentic_dram_budget(self, generate_agentic_sweep):
+        config = {
+            "dsv4-b300-agentic": {
+                "image": "vllm/vllm-openai:v0.23.0",
+                "model": "deepseek-ai/DeepSeek-V4-Pro",
+                "model-prefix": "dsv4",
+                "precision": "fp4",
+                "framework": "vllm",
+                "runner": "cluster:b300-nv",
+                "multinode": False,
+                "scenarios": {
+                    "agentic-coding": [{
+                        "dram-utilization": 0.80,
+                        "search-space": [
+                            {
+                                "tp": 4,
+                                "pp": pp,
+                                "kv-offloading": "dram",
+                                "kv-offload-backend": {"name": "native"},
+                                "conc-list": [32],
+                            }
+                            for pp in (1, 2)
+                        ],
+                    }],
+                },
+            },
+        }
+        cluster = cluster_record(8, **{"available-cpu-dram-mib": 2964436})
+        runners = {"labels": {"cluster:b300-nv": ["b300-nv_0"]}, "clusters": {"b300-nv": cluster}}
+
+        result = generate_agentic_sweep(config, validate_runner_config(runners))
+
+        assert {entry["pp"]: entry["total-cpu-dram-gb"] for entry in result} == {1: 1199, 2: 2399}
+        del cluster["available-cpu-dram-mib"]
+        with pytest.raises(ValueError, match="requires 'available-cpu-dram-mib'"):
+            generate_agentic_sweep(config, validate_runner_config(runners))
 
     def test_multinode_agentic_isolates_each_concurrency_per_search_entry(
         self, sample_runner_config, generate_agentic_sweep
@@ -3084,7 +3140,7 @@ def split_e2e_configs(tmp_path):
     script = re.sub(r"\$\{\{.*?\}\}", "fixture", step["run"])
     boundary_stubs = r"""#!/bin/bash
 case "$*" in
-  *generate_sweep_configs.py*|*infx.matrix.generate*) cat "$MATRIX_FIXTURE" ;;
+  *generate_sweep_configs.py*|*infx.matrix.generate*|*infx.matrix.revision\ generate*) cat "$MATRIX_FIXTURE" ;;
   *infx.workflows.benchmark_schema*) exec "$TEST_PYTHON" -P -m infx.workflows.benchmark_schema ;;
   *ci_priority.py*|*infx.workflows.ci_priority*) cat ;;
   *) exit 1 ;;

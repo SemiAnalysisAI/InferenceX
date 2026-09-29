@@ -16,6 +16,7 @@ import yaml
 
 from infx import github
 from infx.config import git_path_at_ref, git_repository_root, project_root
+from infx.matrix.revision import PLANNER, Revision
 
 from .validate_perf_changelog import (
     CANONICAL_PR_LINK,
@@ -419,30 +420,26 @@ def build_config(
         pr_number,
         changelog_path,
     )
-    result = run_command(
-        [
-            sys.executable,
-            "-P",
-            "-m",
-            "infx.matrix.plan",
-            "--changelog-file",
-            str(worktree / changelog_path),
-            "--base-ref",
-            base_ref,
-            "--head-ref",
-            fixed_sha,
-        ],
-        cwd=project_root(worktree),
-        env={
-            **os.environ,
-            "PYTHONPATH": str(Path(__file__).resolve().parents[2]),
-            "INFERENCEX_REPOSITORY_ROOT": str(worktree.resolve()),
-        },
-    )
+    revision = Revision(project_root(worktree))
+    try:
+        command, env = revision.invocation(
+            PLANNER,
+            [
+                "--changelog-file",
+                str(worktree / changelog_path),
+                "--base-ref",
+                base_ref,
+                "--head-ref",
+                fixed_sha,
+            ],
+        )
+    except ValueError as exc:
+        raise RecoveryError(str(exc)) from exc
+    result = run_command(command, cwd=revision.root, env=env)
     try:
         config = json.loads(result.stdout)
     except json.JSONDecodeError as exc:
-        raise RecoveryError(f"infx.matrix.plan returned invalid JSON: {exc}") from exc
+        raise RecoveryError(f"the merged revision's planner returned invalid JSON: {exc}") from exc
 
     expected_link = f"https://github.com/{DEFAULT_REPO}/pull/{pr_number}"
     metadata = config.get("changelog_metadata", {})

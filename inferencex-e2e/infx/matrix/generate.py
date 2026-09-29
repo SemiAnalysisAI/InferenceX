@@ -10,6 +10,7 @@ from typing import Any, Literal
 
 import yaml
 
+from infx.clusters import CLUSTER_LABEL_PREFIX
 from infx.config import repository_root
 
 from .validation import (
@@ -141,8 +142,14 @@ def runner_labels(runner_data: dict) -> dict:
 
 
 def runner_hardware(runner_data: dict) -> dict:
-    """Return runner hardware metadata, if present."""
-    return runner_data.get("hardware", {})
+    """Return node facts (gpus-per-node, available-cpu-dram-mib) keyed by ``cluster:<id>``."""
+    node_fields = (Fields.GPUS_PER_NODE.value, Fields.AVAILABLE_CPU_DRAM_MIB.value)
+    return {
+        f"{CLUSTER_LABEL_PREFIX}{cluster_id}": {
+            field: cluster[field] for field in node_fields if field in cluster
+        }
+        for cluster_id, cluster in runner_data.get("clusters", {}).items()
+    }
 
 
 def runner_nodes_for_label(runner: str, runner_data: dict) -> list[str]:

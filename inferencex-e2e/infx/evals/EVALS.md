@@ -620,7 +620,7 @@ Multi-node evals support two hardware paths:
   (same `EVAL_ONLY=true && IS_AGENTIC` auto-staging as single-node), not as a separate call.
 - Concurrency uses workflow-provided `EVAL_CONC` when set, otherwise falls back to max of `BENCH_MAX_CONCURRENCY` (x-separated values)
 - Eval artifacts copied to `/run_logs/slurm_job-*/eval_results/`
-- `runners/launch_mi355x-amds.sh` skips benchmark result collection when `EVAL_ONLY=true` and uses `find` to locate eval results
+- The MI355X `amd_utils` lane (`infx/launch/drivers/legacy.py`) copies eval results found under `$BENCHMARK_LOGS_DIR/logs/**/eval_results` when `RUN_EVAL=true`
 
 **NVIDIA Slurm multi-node (GB200, GB300, B200, B300, H100, H200)** runs through [srt-slurm](https://github.com/NVIDIA/srt-slurm) at the shared Git submodule revision at `utils/srt-slurm`. Native `post_eval.command` and `post_eval.passthrough_env` select the InferenceX eval dispatcher without modifying the upstream checkout.
 - `do_sweep.py` skips the benchmark stage when `EVAL_ONLY=true`, runs `_run_post_eval()` directly
