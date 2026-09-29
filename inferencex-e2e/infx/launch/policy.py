@@ -6,7 +6,9 @@ belong in the cluster record. :func:`table_problems` checks every table here aga
 
 from __future__ import annotations
 
+import contextlib
 import fnmatch
+import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
@@ -141,9 +143,23 @@ TILERT_ENV: dict[str, Mapping[str, str]] = {
 
 
 def runtime_env(cluster: Cluster, request: LaunchRequest) -> dict[str, str]:
-    """The launch environment on top of the runtime settings job scripts read."""
+    """The launch environment with the cluster's runtime settings applied over it.
+
+    They beat the runner host's own values; only the point's additional-settings beat them.
+    """
     settings = TILERT_ENV.get(cluster.id, {}) if request.framework == "tilert" else {}
-    return {**settings, **request.env}
+    chosen = {setting.partition("=")[0] for setting in _additional_settings(request.env)}
+    return {**request.env, **{k: v for k, v in settings.items() if k not in chosen}}
+
+
+def _additional_settings(env: Mapping[str, str]) -> list[str]:
+    """The point's NAME=value additional-settings, which the workflow exports."""
+    settings: list[str] = []
+    for name in ("PREFILL_ADDITIONAL_SETTINGS", "DECODE_ADDITIONAL_SETTINGS"):
+        with contextlib.suppress(ValueError):
+            values = json.loads(env.get(name) or "[]")
+            settings += [value for value in values or [] if isinstance(value, str)]
+    return settings
 
 
 @dataclass(frozen=True)

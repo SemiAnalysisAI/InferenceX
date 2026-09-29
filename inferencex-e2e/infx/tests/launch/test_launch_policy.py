@@ -187,3 +187,21 @@ def test_a_launch_checks_its_own_cluster_rows_before_any_work(monkeypatch, capsy
     monkeypatch.setitem(policy.LEGACY_TILERT, "c", policy.LEGACY_TILERT["b200-nscale"])
     assert launch(clusters["c"], _request(IS_MULTINODE="false")) == 1
     assert "LEGACY_TILERT['c']" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("framework", "env_value", "additional", "expected"),
+    [
+        ("tilert", "host-value", "[]", ",".join(f"mlx5_{i}:1" for i in range(8))),
+        # The workflow exports a point's additional-settings, so the env already holds them.
+        ("tilert", "mlx5_9:1", '["UCX_NET_DEVICES=mlx5_9:1"]', "mlx5_9:1"),
+        ("sglang", "host-value", "[]", "host-value"),
+    ],
+)
+def test_tilert_runtime_settings_beat_the_host_but_not_the_points_settings(framework, env_value, additional, expected):
+    record = {"gpus-per-node": 8, "arch": "x86_64", "scheduler": "slurm",
+              "slurm": {"partition": "p", "exclusive": True}}  # fmt: skip
+    cluster = load_inventory({"labels": {"cluster:b200-nscale": ["b_0"]},
+                              "clusters": {"b200-nscale": record}}).clusters["b200-nscale"]  # fmt: skip
+    request = _request(FRAMEWORK=framework, UCX_NET_DEVICES=env_value, PREFILL_ADDITIONAL_SETTINGS=additional)
+    assert policy.runtime_env(cluster, request)["UCX_NET_DEVICES"] == expected
