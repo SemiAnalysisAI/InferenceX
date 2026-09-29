@@ -167,10 +167,10 @@ admin-merge on your own judgment.
 Report the two things the user will decide on:
 
 1. **Sweep status.** Is it 100% of full-sweep jobs passing (green), or fail-fast-truncated or partial?
-2. **Perf delta** vs the most recent official `main` run for that SKU. Compare against the
+2. **Perf delta** vs the most recent official (published) results for that SKU. Compare against the
    latest main results, e.g. on inferencex.semianalysis.com
    (`https://inferencex.semianalysis.com/inference?...&i_active=<sku>_<engine>`) or the
-   stored results for that SKU's last main `run-id`.
+   stored results for that SKU's latest published `run-id`.
 
 Present green-ness and the perf comparison, then **wait for the user** to decide whether to merge.
 

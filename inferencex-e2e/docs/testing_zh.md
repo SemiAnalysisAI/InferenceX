@@ -24,7 +24,7 @@
 - [`.github/AGENT_OPERATIONS.md`](../../.github/AGENT_OPERATIONS.md#sweep-labels-and-reuse) 定义扫描标签与修饰标签；其[派发章节](../../.github/AGENT_OPERATIONS.md#workflow-dispatch-and-monitoring)定义手动运行与产物检查。
 - [`docs/configuration-procedures.md`](configuration-procedures.md#validate) 是聚焦配置验证的操作流程。
 - [`.github/workflows/README.md`](../../.github/workflows/README.md) 记录矩阵生成、`e2e-tests.yml`、PR 扫描和复用。
-- [`run-sweep.yml`](../../.github/workflows/run-sweep.yml) 是可执行的 PR/push 门禁；[`e2e-tests.yml`](../../.github/workflows/e2e-tests.yml) 是手动分发的端到端路径。
+- [`run-sweep.yml`](../../.github/workflows/run-sweep.yml) 是可执行的 PR 扫描门禁，[`merge-ingest.yml`](../../.github/workflows/merge-ingest.yml) 是推送到 `main` 时的复用与入库门禁；[`e2e-tests.yml`](../../.github/workflows/e2e-tests.yml) 是手动分发的端到端路径。
 - [`docs/PR_REVIEW_CHECKLIST.md`](PR_REVIEW_CHECKLIST.md) 是合并评审标准。[验证器提示词](../../.github/codeowner-signoff-verify-prompt.md#check-1--a-passing-sweep--evals-ran-on-a-commit-in-this-pr) 说明如何独立核验扫描和评测证据。
 
 当行为发生变化时，上述来源优先于本指南。先更新英文页面，再把相同结构和证据翻译到本页中文对应版本。

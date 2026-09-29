@@ -80,7 +80,7 @@ CODEOWNER 自动验证目前仅供审阅参考。工作流会核验新提交及�
 
 ## 使用 `/use` 在合并时复用 PR 的全绿 sweep
 
-完整基准测试 sweep 花费昂贵的 GPU 时间，且 runner 由所有打开的 PR 共享。如果不复用，一个已批准 PR 的 sweep 将运行**两次**，一次用于 PR 验证，另一次在合并后于 `main` 上运行。reuse 路径避免了重复运行：
+完整基准测试 sweep 花费昂贵的 GPU 时间，且 runner 由所有打开的 PR 共享，因此一个已批准 PR 的 sweep 只会为 PR 验证运行一次。合并后 `main` 不会重新运行它，而是通过 reuse 路径发布该 PR sweep：
 
 - 当你的 PR 拥有符合条件的全绿完整 sweep 后，授权维护者（`OWNER`/`MEMBER`/`COLLABORATOR`）在 PR 上评论 `/use <run_id>` 来指定该 Run。命令和 Run ID 必须放在同一行。
 - `/reuse-sweep-run <run_id>` 仍受支持，行为完全相同。不带 ID 的 `/reuse-sweep-run` 会自动选择源 Run；不带 ID 的 `/use` 会被拒绝。

@@ -43,13 +43,13 @@ Fail-fast is matrix-scoped: one matrix failure does not cancel other matrices, a
 
 Sweeps do not trigger while a PR has merge conflicts. For `inferencex-e2e/perf-changelog.yaml` conflicts, follow `inferencex-e2e/docs/KLAUD_DEBUG.md` section 1.1: merge `origin/main`, restore the file byte-for-byte from `origin/main`, then append only the PR's entry at the tail. Never 3-way merge the changelog.
 
-Pushes to `main` always enter sweep setup and either reuse approved artifacts or run an untrimmed full sweep. `[skip-sweep]` only skips PR benchmark setup. It never skips a main-branch sweep. It still permits changelog validation and reuse authorization checks.
+Pushes to `main` never run a sweep: `.github/workflows/run-sweep.yml` is PR-only. A push that changes `inferencex-e2e/perf-changelog.yaml` runs `.github/workflows/merge-ingest.yml` (Merge Ingest). Its single `ingest` job validates the merged PR's authorized `/use <run_id>` (or legacy `/reuse-sweep-run`) command and source run, then dispatches ingest of that reused PR sweep. Without valid reuse authorization the run fails, and nothing is benchmarked or ingested. `[skip-sweep]` only skips PR benchmark setup; changelog validation and reuse authorization checks still run, and Merge Ingest ignores it.
 
 Artifact reuse excludes runs with `evals-only` or `agentx-fast`. See `.github/workflows/README.md` and `uv run --project inferencex-e2e --extra workflows python -m infx.workflows.merge_with_reuse` for eligibility and merge behavior.
 
 ## Workflow dispatch and monitoring
 
-One-offs dispatch `.github/workflows/e2e-tests.yml`. `.github/workflows/run-sweep.yml` is push/PR-triggered and is not dispatchable.
+One-offs dispatch `.github/workflows/e2e-tests.yml`. `.github/workflows/run-sweep.yml` is PR-triggered and `.github/workflows/merge-ingest.yml` is push-triggered; neither is dispatchable.
 
 ```bash
 gh api -X POST \

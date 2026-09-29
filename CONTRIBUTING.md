@@ -143,7 +143,7 @@ The verdict records only the commit actually assessed; it does not carry approva
 
 ## Reusing your PR's green sweep at merge with `/use`
 
-A full benchmark sweep is expensive GPU time, and the runners are shared by every open PR. Without reuse, an approved PR's sweep would run **twice**, once for PR validation and again on `main` after merge. The reuse path avoids that:
+A full benchmark sweep is expensive GPU time, and the runners are shared by every open PR, so an approved PR's sweep runs only once, for PR validation. `main` never reruns it after merge; the reuse path publishes that PR sweep instead:
 
 - After your PR has an eligible green full sweep, an authorized maintainer (`OWNER`/`MEMBER`/`COLLABORATOR`) comments `/use <run_id>` on the PR to select that run. Keep the command and run ID on the same line.
 - `/reuse-sweep-run <run_id>` remains supported with identical behavior. Bare `/reuse-sweep-run` selects automatically; bare `/use` is rejected.

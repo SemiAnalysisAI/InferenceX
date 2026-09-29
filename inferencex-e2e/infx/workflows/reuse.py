@@ -1,8 +1,9 @@
 """Find an approved pull-request sweep run that can be reused after merge.
 
-This script is used by ``run-sweep.yml`` on push-to-main runs.  It only enables
-reuse when the merge commit maps unambiguously to one pull request and a
-maintainer has left a ``/use <run_id>`` or legacy ``/reuse-sweep-run`` comment.
+This script is used by ``merge-ingest.yml`` on push-to-main runs and by the
+``run-sweep.yml`` PR reuse gate.  On push it only enables reuse when the merge
+commit maps unambiguously to one pull request and a maintainer has left a
+``/use <run_id>`` or legacy ``/reuse-sweep-run`` comment.
 The legacy command may omit the source run ID; without one, the latest successful
 ``pull_request`` ``run-sweep.yml`` run for the PR head is used.
 """
