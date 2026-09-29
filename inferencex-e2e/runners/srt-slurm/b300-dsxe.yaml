@@ -41,3 +41,4 @@ reporting:
   status:
     endpoint: ${SRT_STATUS_ENDPOINT}
     token_env: SRTCTL_STATUS_TOKEN
+    logging-stream-interval: 5
