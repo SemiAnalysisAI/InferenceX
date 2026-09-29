@@ -155,8 +155,6 @@ benchmark:
     AIPERF_DATASET_MMAP_CACHE_DIR: /aiperf_mmap_cache
     AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
     WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126_256k
-    CLEAR_CACHE_BETWEEN_CONC: "1"
     RESULT_DIR: /logs/agentic
     AGENTIC_OUTPUT_DIR: /logs
     PORT: '8000'
-    FLUSH_DRAIN_TIMEOUT: '120'

@@ -274,18 +274,12 @@ The runner writes the command before replay and validates raw results after aggr
 
 ## 9. Debug long AgentX runs from live evidence
 
-Native SGLang routers advertise `SRTCTL_FRONTEND_TYPE=sglang-router`. Between points,
-the client requires three idle polls across all advertised workers, including
-running, waiting, and disaggregation transfer queues. Missing gauges or failed
-L1/L2 cache flushes fail the native run; L3 clearing remains optional. Qwen3.5
-MI300X AgentX runs use the committed golden acceptance curve through
+Qwen3.5 MI300X AgentX runs use the committed golden acceptance curve through
 `apply_srt_recipe`, including fast bring-up; recipes do not hard-code the length.
 Real-output diagnostics and evals are separate from golden-AL AgentX replay.
 The MI300X srt-slurm launcher requires a separate `EVAL_ONLY=true` job when
 evaluation is requested; it does not combine golden-AL throughput with accuracy
-evaluation on the same workers. Cache flushing is explicit opt-in through
-`CLEAR_CACHE_BETWEEN_CONC=1`, with an explicit `FLUSH_DRAIN_TIMEOUT`, as set by
-the native MI300X recipes. Existing consumers that do not opt in do not flush.
+evaluation on the same workers.
 Fast runs are not canonical frontier results.
 
 GitHub Actions is the orchestration/final-status view. The cluster is the live diagnostic source. Obtain the SSH alias, runner user, and access-controlled paths from the InferenceX Clusters canvas. Never guess or publish private infrastructure coordinates.
