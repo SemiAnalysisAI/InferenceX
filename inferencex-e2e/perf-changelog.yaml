@@ -9024,3 +9024,19 @@
   description:
     - "Pin B200 DeepSeek-V4.1-Flash vLLM to nightly ddd6fbca with FlashInfer sparse attention, MXFP4 indexer KV, sparse logits, fp8 KV cache, and a 7200 s readiness timeout."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3459
+
+- config-keys:
+    - glm5.2-fp8-mi325x-sglang-agentic-mtp
+    - minimaxm3-fp8-mi300x-vllm-agentic-mtp
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark
+    - dsv4-fp4-b200-sglang-agentic-hicache-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Align the single-node srt-slurm recipe model.container with the unchanged master image for four AgentX keys whose recipes #3428 ported from the legacy scripts as they were before the image bumps in #3361, #3362, #3334 and #3420; every point of these keys would fail before submission with 'Single-node SRT image: recipe/matrix'."
+    - "Recipe containers: glm5.2-fp8-mi325x-sglang-agentic-mtp lmsysorg/sglang:v0.5.19-rocm720-mi30x -> lmsysorg/sglang:v0.5.20-rocm720-mi30x; minimaxm3-fp8-mi300x-vllm-agentic-mtp vllm/vllm-openai-rocm:v0.29.0 -> vllm/vllm-openai-rocm:v0.30.0; dsv41flash-fp4-mi355x-vllm-agentic-dspark vllm/vllm-openai-rocm:nightly-rocm100-7f1a5398e9610d96c473931a26c0e12bbe0d0423 -> vllm/vllm-openai-rocm:nightly-rocm100-29468dde8b515031dc6d4d9d06bf0a2fa0442098; dsv4-fp4-b200-sglang-agentic-hicache-mtp lmsysorg/sglang:v0.5.19-cu130 -> lmsysorg/sglang:v0.5.20-cu130."
+    - "The two SGLang v0.5.20 recipes also rename cuda-graph-max-bs to cuda-graph-max-bs-decode, as #3362 and #3334 did in the legacy scripts, because v0.5.20 removed the deprecated alias (sgl-project/sglang#38375). All other serving flags and sweep points are unchanged."
+    - "将四个 AgentX key 的单节点 srt-slurm 配方 model.container 与未改动的主配置镜像对齐。这些配方由 #3428 从旧脚本移植而来，而移植所依据的是 #3361、#3362、#3334 和 #3420 升级镜像之前的版本；此前这些 key 的每个点都会在提交前以 'Single-node SRT image: recipe/matrix' 失败。"
+    - "配方镜像：glm5.2-fp8-mi325x-sglang-agentic-mtp lmsysorg/sglang:v0.5.19-rocm720-mi30x -> lmsysorg/sglang:v0.5.20-rocm720-mi30x；minimaxm3-fp8-mi300x-vllm-agentic-mtp vllm/vllm-openai-rocm:v0.29.0 -> vllm/vllm-openai-rocm:v0.30.0；dsv41flash-fp4-mi355x-vllm-agentic-dspark vllm/vllm-openai-rocm:nightly-rocm100-7f1a5398e9610d96c473931a26c0e12bbe0d0423 -> vllm/vllm-openai-rocm:nightly-rocm100-29468dde8b515031dc6d4d9d06bf0a2fa0442098；dsv4-fp4-b200-sglang-agentic-hicache-mtp lmsysorg/sglang:v0.5.19-cu130 -> lmsysorg/sglang:v0.5.20-cu130。"
+    - "两个 SGLang v0.5.20 配方同时将 cuda-graph-max-bs 改为 cuda-graph-max-bs-decode，与 #3362 和 #3334 对旧脚本的修改一致，因为 v0.5.20 已移除该弃用别名（sgl-project/sglang#38375）。其余服务参数和 sweep 点均保持不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
