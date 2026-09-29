@@ -6,7 +6,7 @@ base:
   name: dsv41flash-fp4-b200-vllm-agentic
   model:
     path: hf:deepseek-ai/DeepSeek-V4.1-Flash
-    container: vllm/vllm-openai:nightly-36768d1bfd39094681cdbc8cb37d4b31c0729c89@sha256:0ad6fa4178c34f4e04402452bbc4294df6dd2fb2785a0ecd402b2861aea2a189
+    container: vllm/vllm-openai:nightly-36768d1bfd39094681cdbc8cb37d4b31c0729c89
     precision: fp4
   resources:
     gpu_type: b200
