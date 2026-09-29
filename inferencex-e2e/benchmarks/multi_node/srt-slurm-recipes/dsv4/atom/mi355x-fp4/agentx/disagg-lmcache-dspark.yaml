@@ -3,8 +3,8 @@
 # amd_utils path (#3158; ATOM recipes/DeepSeek-V4-Agentic-PD-Max.md). Three tiers:
 # TP8 at concurrency 1-16, DP attention at 64-128, and DP attention plus ATOM's
 # in-process LMCache CPU offload on prefill at 256. srtctl generates the Mooncake
-# P/D connector; the offload tier adds lmcache_offload next to it
-# (runners/srt-slurm/patches/507-lmcache-server-atom-sglang.patch).
+# P/D connector; the offload tier adds lmcache_offload next to it through
+# extra-kv-connectors.
 base:
   schema: 2
   name: mi355x-dsv4-pro-0813-atom-agentx-lmcache
