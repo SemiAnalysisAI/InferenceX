@@ -312,7 +312,7 @@ case "$TILERT_ROLE" in
         ;;
     prefill)
         rdma_preflight || exit 1
-        if [[ "$TILERT_IS_AGENTIC" == "1" ]]; then
+        if [[ "$TILERT_IS_AGENTIC" == "1" && "$EVAL_ONLY" != true ]]; then
             resolve_trace_source
             install_agentic_deps
         fi
@@ -322,7 +322,7 @@ case "$TILERT_ROLE" in
         wait_for_tcp "$PREFILL_HOST" "$PREFILL_PORT" "${PREFILL_WAIT}" \
             || echo "[prefill] WARNING: timed out waiting for the vLLM port ($PREFILL_HOST:$PREFILL_PORT), continuing (see $BENCHMARK_LOGS_DIR/tilert_prefill.log)"
         start_router
-        if [[ "$TILERT_IS_AGENTIC" == "1" ]]; then
+        if [[ "$TILERT_IS_AGENTIC" == "1" && "$EVAL_ONLY" != true ]]; then
             run_agentic_replay; BENCH_RC=$?
         else
             run_bench_and_eval; BENCH_RC=$?
