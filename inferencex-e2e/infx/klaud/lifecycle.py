@@ -17,7 +17,6 @@ from .validation import verify_sweep
 
 BOT = "Klaud-Cold"
 SWEEP_LABELS = {
-    "sweep-enabled",
     "full-sweep-enabled",
     "non-canary-full-sweep-enabled",
     "full-sweep-fail-fast",

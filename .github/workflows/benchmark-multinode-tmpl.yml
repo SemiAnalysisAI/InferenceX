@@ -40,6 +40,7 @@ on:
         type: string
         default: ''
       conc-list:
+        description: "JSON concurrency list; AgentX throughput requires exactly one value per server deployment"
         required: true
         type: string
       run-eval:
@@ -93,7 +94,7 @@ on:
         required: false
         default: fixed-seq-len
       conc:
-        description: "First concurrency for agentic-coding scenarios; CONC_LIST carries the full batch"
+        description: "AgentX throughput concurrency; must equal the sole value in conc-list"
         type: string
         required: false
         default: ""
@@ -325,6 +326,7 @@ jobs:
 
       - name: Launch multi-node job script
         env:
+          VALIDATION_BENCHMARK_LIB: ${{ github.workspace }}/.result-tooling/inferencex-e2e/benchmarks/benchmark_lib.sh
           PREFILL_ADDITIONAL_SETTINGS: ${{ toJSON(fromJSON(inputs.config).prefill.additional-settings) }}
           DECODE_ADDITIONAL_SETTINGS: ${{ toJSON(fromJSON(inputs.config).decode.additional-settings) }}
           RUNNER_NAME: ${{ runner.name }}
@@ -370,6 +372,18 @@ jobs:
           while IFS= read -r -d '' setting; do
             export "$setting"
           done < <(jq -j '.[] + "\u0000"' <<< "$settings_json")
+          # Each AgentX throughput point owns a fresh server deployment.
+          # Fixed-sequence and graded eval jobs retain their batching semantics.
+          if [[ "$IS_AGENTIC" == 1 && "$EVAL_ONLY" != true ]]; then
+            source "$VALIDATION_BENCHMARK_LIB" --validation-only
+            check_env_vars CONC CONC_LIST
+            validate_agentic_concurrency "$CONC"
+            validate_agentic_concurrency "$CONC_LIST"
+            if [[ "$CONC" != "$CONC_LIST" ]]; then
+              echo "ERROR: AgentX CONC must match the single CONC_LIST value" >&2
+              exit 1
+            fi
+          fi
           # Resolve the workflow's documented automatic eval-concurrency selection.
           if [[ -z "$EVAL_CONC" ]]; then
             EVAL_CONC=$(python3 -c 'import os; print(max(map(int, os.environ["CONC_LIST"].split())))')

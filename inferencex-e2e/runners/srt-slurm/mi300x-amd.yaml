@@ -1,4 +1,4 @@
-default_partition: compute-0
+default_partition: MI300X-UBUNTU
 default_time_limit: ${SRT_DEFAULT_TIME_LIMIT}
 gpus_per_node: 8
 network_interface: ''
