@@ -144,9 +144,10 @@ def render(cluster: Cluster, job: SrtJob) -> dict[str, Any]:
     directives: dict[str, str] = {}
     if settings.exclude:
         directives["exclude"] = ",".join(settings.exclude)
-    # A whole-node CPU request cannot be granted to each of several tasks on one node.
-    if settings.cpus_per_task is not None and not job.task_per_gpu:
-        directives["cpus-per-task"] = str(settings.cpus_per_task)
+    if settings.cpus_per_task is not None:
+        # cpus-per-task is the cluster's per-node budget; per-GPU tasks share it.
+        tasks = cluster.gpus_per_node if job.task_per_gpu else 1
+        directives["cpus-per-task"] = str(settings.cpus_per_task // tasks)
     # Clusters whose GPUs are only schedulable by typed GRES opt out of --gpus-per-node.
     if srt.gpus_per_node_directive is False and (gres := settings.gres_for(cluster.gpus_per_node)):
         directives["gres"] = gres

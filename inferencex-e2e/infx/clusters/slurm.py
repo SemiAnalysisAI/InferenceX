@@ -225,6 +225,7 @@ class SlurmSettings(SchedulerSettings):
     exclude: tuple[str, ...] = ()
     # Template with a ``{gpus}`` placeholder, e.g. ``gpu:h200:{gpus}``.
     gres: str | None = None
+    # CPUs per node; jobs with one task per GPU split them evenly.
     cpus_per_task: int | None = Field(default=None, alias="cpus-per-task", gt=0)
     # Extra options for every containerized ``srun`` step (srt-slurm ``srun_options``).
     srun_args: tuple[LongOption, ...] = Field(default=(), alias="srun-args")
