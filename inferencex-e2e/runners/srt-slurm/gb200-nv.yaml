@@ -1,3 +1,4 @@
+cluster: gb200-nv
 default_account: ${SLURM_ACCOUNT}
 default_partition: ${SLURM_PARTITION}
 default_time_limit: "6:00:00"
