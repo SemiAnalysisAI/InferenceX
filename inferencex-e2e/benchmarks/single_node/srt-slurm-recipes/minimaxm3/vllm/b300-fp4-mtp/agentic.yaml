@@ -46,9 +46,9 @@ base:
         max-num-batched-tokens: 16384
         stream-interval: 20
         trust-remote-code: true
-        # Three-token EAGLE3 with the GQA draft head. Triton keeps FP8 draft KV
-        # and supports fused multi-step decode. Throughput uses golden-AL synthetic rejection.
-        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"TRITON_ATTN","use_local_argmax_reduction":true}'
+        # Three-token EAGLE3 with the GQA draft head. Throughput uses
+        # golden-AL synthetic rejection.
+        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASHINFER","use_local_argmax_reduction":true}'
       env:
         PYTHONNOUSERSITE: '1'
         VLLM_ENGINE_READY_TIMEOUT_S: '3600'
@@ -167,7 +167,7 @@ override_tp2_c24_dram:
         gpu-memory-utilization: 0.92
         max-num-seqs: 48
         max-cudagraph-capture-size: 192
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":749000000000,"lazy_offload":true}}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":804232626176,"lazy_offload":true}}'
       env:
         VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
   benchmark:
@@ -236,7 +236,7 @@ override_tp2_c32_dram:
         gpu-memory-utilization: 0.92
         max-num-seqs: 64
         max-cudagraph-capture-size: 256
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":749000000000,"lazy_offload":true}}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":804232626176,"lazy_offload":true}}'
       env:
         VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
   benchmark:
@@ -253,7 +253,7 @@ override_tp2_c40_dram:
         gpu-memory-utilization: 0.92
         max-num-seqs: 80
         max-cudagraph-capture-size: 320
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":749000000000,"lazy_offload":true}}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":804232626176,"lazy_offload":true}}'
       env:
         VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
   benchmark:
