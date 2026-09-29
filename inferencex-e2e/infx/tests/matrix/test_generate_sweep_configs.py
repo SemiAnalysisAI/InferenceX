@@ -2541,7 +2541,7 @@ class TestAgenticGeneration:
         with pytest.raises(ValueError, match="exceeds gpus-per-node"):
             generate_agentic_sweep(config, runner_config, **filters)
 
-    def test_multinode_agentic_groups_concurrencies_per_search_entry(
+    def test_multinode_agentic_isolates_each_concurrency_per_search_entry(
         self, sample_runner_config, generate_agentic_sweep
     ):
         """One server allocation should run exactly one concurrency (one task per conc)."""
