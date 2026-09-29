@@ -1,0 +1,40 @@
+schema: 2
+name: srt-raw-streaming-smoke
+enable_config_dump: false
+model:
+  path: hf:services-only-no-model
+  container: docker.io#library/python:3.12-slim
+  precision: bf16
+resources:
+  gpu_type: b300
+  gpus_per_node: 8
+frontend:
+  type: none
+services:
+  - name: process-exporter
+    type: process-exporter
+    critical: true
+    readiness:
+      port: 9256
+      timeout_seconds: 30
+benchmark:
+  type: custom
+  stream_output: true
+  command: |
+    python3 -u - <<'PY'
+    import sys
+    import time
+    for index in range(18):
+        print(f'SRT_STREAM_STDOUT {index:02d} ✓', flush=True)
+        print(f'SRT_STREAM_STDERR {index:02d} ✓', file=sys.stderr, flush=True)
+        time.sleep(5)
+    print('SRT_STREAM_COMPLETE', flush=True)
+    PY
+observability:
+  enabled: false
+  tachometer:
+    enabled: true
+    default_exporters: false
+    collect_interval_ms: 1000
+    sync_interval_secs: 30
+    shutdown_grace_secs: 30
