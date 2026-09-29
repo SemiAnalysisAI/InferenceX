@@ -25,7 +25,6 @@ from infx.launch.request import LaunchRequest
 VALID = "hsqs-fixture"
 IMAGE = "lmsysorg/sglang:v0.5.9@sha256:" + "a" * 64
 SQUASH_NAME = "lmsysorg_sglang_v0.5.9_sha256_" + "a" * 64 + ".sqsh"
-# The --container-image with which Pyxis imports IMAGE itself.
 REGISTRY_IMAGE = "registry-1.docker.io#lmsysorg/sglang:sha256:" + "a" * 64
 VALID_SHA256 = "b3f1af678620ca28d0ae61cdffe6c9017f923171b40fb7e11fc716d4be8d7468"
 
@@ -61,10 +60,8 @@ def tools(tmp_path, monkeypatch):
     install("unsquashfs", f'{recorder(logs["unsquashfs"])}\n'
             f'[ "$1" = -l ] && [ -r "$2" ] && [ "$(head -c 4 "$2")" = "{VALID[:4]}" ]')
     install("flock", "exit 0")
-    # umask 077 makes the world-readable result prove the launcher's chmod a+r.
     install("enroot", f'{recorder(logs["enroot"])}\n[ "$1" = import ] && [ "$2" = -o ]\n'
             f'umask 077\nprintf "{VALID}" > "$3"')
-    # srun drops its own options and runs the step locally, like one node would.
     install("srun", f'{recorder(logs["srun"])}\n'
             'while [ $# -gt 0 ] && [ "${1#-}" != "$1" ]; do shift; done\nexec "$@"')
     install("hostname", "echo node1")
@@ -91,7 +88,6 @@ def test_invalid_cache_is_atomically_reimported(tools, tmp_path):
     squash.write_text("truncated")
     stale = squash.with_name(squash.name + ".tmp.deadhost.1")
     stale.write_text("partial")
-    # Another importer's temp file (<squash>.tmp.<pid>) is not ours to delete.
     foreign = squash.with_name(squash.name + ".tmp.4242")
     foreign.write_text("in progress")
 
@@ -110,8 +106,8 @@ def test_invalid_cache_is_atomically_reimported(tools, tmp_path):
 
 
 @pytest.mark.parametrize(("lock_file", "lock_name"), [
-    ("beside-squash", f"{SQUASH_NAME}.lock"),  # the default
-    ("locks-dir", f".locks/{SQUASH_NAME.removesuffix('.sqsh')}.lock"),  # tilert_utils/submit.sh's lock
+    ("beside-squash", f"{SQUASH_NAME}.lock"),
+    ("locks-dir", f".locks/{SQUASH_NAME.removesuffix('.sqsh')}.lock"),
 ])  # fmt: skip
 def test_import_waits_while_another_importer_holds_its_lock(tools, tmp_path, lock_file, lock_name):
     _, logs = tools
@@ -130,7 +126,7 @@ def test_lock_file_this_account_cannot_write_is_opened_read_only(tools, tmp_path
     lock = tmp_path / "squash" / f"{SQUASH_NAME}.lock"
     lock.parent.mkdir()
     lock.write_text("")
-    lock.chmod(0o444)  # created by another account
+    lock.chmod(0o444)
     squash = ensure_image(IMAGE, policy(tmp_path, mode), job=Job("7") if mode == "compute" else None)
     assert Path(squash).read_text() == VALID
     assert stat.S_IMODE(lock.stat().st_mode) == 0o444
@@ -147,7 +143,7 @@ def test_import_producing_invalid_squash_fails_without_replacing(tools, tmp_path
 
 @pytest.mark.parametrize(("mode", "visibility", "job", "message", "steps"), [
     ("pre-staged", "shared", None, rf"pre-staged image .* missing or invalid at .*{SQUASH_NAME}", 0),
-    ("pre-staged", "node-local", Job("7"), "stage it there", 1),  # a missing image is not retried
+    ("pre-staged", "node-local", Job("7"), "stage it there", 1),
     ("compute", "node-local", None, "requires a job allocation", 0),
 ])  # fmt: skip
 def test_an_image_that_cannot_be_staged_fails_at_once(tools, tmp_path, mode, visibility, job, message, steps):
@@ -212,12 +208,10 @@ def test_squash_locations_override_the_cache_field_by_field():
         return str(squash_path(image, policy)), policy.import_mode
 
     assert located(squash.policy("sglang", "dsr1")) == ("/cache/nvcr.io+nvidia+sglang+0.9.sqsh", "unchecked")
-    # A model prefix's location replaces its framework's: what it leaves unset is the cache's.
     assert located(squash.policy("sglang", "dsv4")) == ("/cache/nvcr.io+nvidia+sglang+0.9.sqsh", "compute")
     assert located(squash.policy("sglang", "glm5.2")) == ("/other/nvcr.io_nvidia_sglang_0.9.sqsh", "compute")
     assert located(squash.policy("trt", "dsr1")) == ("/trt/nvidia+sglang+0.9.sqsh", "compute")
     assert located(squash.helper_policy("nginx")) == ("/cache/nvcr.io_nvidia_sglang_0.9.sqsh", "unchecked")
-    # Single-node images, and frameworks and helpers without a location, are the cache's.
     for policy in (squash.policy(), squash.policy("vllm"), squash.helper_policy("dcgm-exporter")):
         assert located(policy) == ("/cache/nvcr.io_nvidia_sglang_0.9.sqsh", "compute")
 
@@ -237,15 +231,12 @@ def test_srtctl_multi_node_jobs_import_first_unless_the_cluster_opts_out(tools, 
     squash = tmp_path / "squash" / SQUASH_NAME
 
     reusing = srtctl_backend(tmp_path, **{"multi-node-import": False})
-    # Cold cache: Pyxis imports the image inside the job; nothing is imported here.
     assert reusing.stage_image(IMAGE).reference == REGISTRY_IMAGE
     assert calls(logs["enroot"]) == []
-    # Single-node jobs follow single-node-import, which is off by default.
     importing = srtctl_backend(tmp_path)
     assert importing.stage_image(IMAGE, single_node=True).reference == REGISTRY_IMAGE
     assert importing.stage_image(IMAGE).reference == str(squash)
     assert len(calls(logs["enroot"])) == 1
-    # A valid squash is reused either way.
     assert reusing.stage_image(IMAGE).reference == str(squash)
 
 
@@ -259,14 +250,13 @@ def test_unchecked_images_are_handed_to_jobs_without_validation_or_import(tools,
     })  # fmt: skip
     squash = tmp_path / "squash" / ("lmsysorg+sglang+v0.5.9+sha256+" + "a" * 64 + ".sqsh")
     squash.parent.mkdir()
-    squash.write_text("truncated")  # a check would reject it
+    squash.write_text("truncated")
 
     assert backend.stage_image(IMAGE, framework="sglang", model_prefix="dsr1").reference == str(squash)
     nginx = backend.stage_image("nginx:1.27.4", helper="nginx")
     assert nginx.reference == str(tmp_path / "squash" / "nginx_1.27.4.sqsh")
     assert calls(logs["unsquashfs"]) == calls(logs["enroot"]) == calls(logs["srun"]) == []
     assert squash.read_text() == "truncated"
-    # A model prefix that inherits the cache's import mode replaces the invalid squash.
     assert backend.stage_image(IMAGE, framework="sglang", model_prefix="dsv4").reference == str(squash)
     assert len(calls(logs["enroot"])) == 1
     assert squash.read_text() == VALID

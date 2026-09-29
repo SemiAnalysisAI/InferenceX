@@ -23,8 +23,6 @@ CONTAINER_MODELS = PurePosixPath("/models")
 CONTAINER_HF_HOME = PurePosixPath("/hf_hub_cache")
 HF_HOME_VOLUME = "hf-home"
 RESULTS_DIR = PurePosixPath("speedbench_results")
-# These images install sglang editable under /workspace, where the checkout would mask the
-# install and break ``import sglang``, so it goes to /ix instead.
 EDITABLE_INSTALL_IMAGE_GLOBS = (
     "*deepseek-v4-blackwell*",
     "*deepseek-v4-bw-ultra*",
@@ -52,7 +50,6 @@ def resolve_model(cluster: Cluster, request: ScriptRequest) -> tuple[Checkpoint,
         raise LaunchError(
             f"cluster {cluster.id!r} stages no {basename!r} and has no models.download-root"
         )
-    # The download root is shared storage (cluster validation).
     return Checkpoint(root, basename, node_local=False), False
 
 
@@ -61,7 +58,7 @@ def script_outputs(request: ScriptRequest, workdir: PurePosixPath) -> tuple[Pure
     out_yaml = request.env.get("OUT_YAML")
     if not out_yaml:
         return (RESULTS_DIR,)
-    path = workdir / out_yaml  # an absolute OUT_YAML replaces workdir
+    path = workdir / out_yaml
     if not path.is_relative_to(workdir):
         raise LaunchError(f"OUT_YAML {out_yaml} lies outside the container workspace {workdir}")
     return (path.relative_to(workdir), RESULTS_DIR)
@@ -96,15 +93,13 @@ def run(launch: Launch) -> int:
             "HF_HUB_CACHE": str(CONTAINER_HF_HOME / "hub"),
             "HF_XET_CACHE": str(CONTAINER_HF_HOME / "xet"),
         },
-        # Mounting every model root would fail whenever an unused one is absent on the node.
         mounts=(
             Mount(model.volume, CONTAINER_MODELS, create=not staged),
             Mount(HF_HOME_VOLUME, CONTAINER_HF_HOME, create=True),
         ),
-        # A node-local checkpoint is visible only on the node that runs the script.
         required_paths=(model_path / "config.json",) if model.node_local else (),
         outputs=outputs,
-        exclude=(".git",),  # the collectors never read git metadata
+        exclude=(".git",),
     )
     job = backend.run_container(container)
     launch.life.callback(backend.fetch_outputs, job, request.workspace)

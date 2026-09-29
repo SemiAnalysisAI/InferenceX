@@ -35,7 +35,6 @@ KIMI_GB300 = "recipes/kimik3/vllm/gb300-fp4/agentx/deep/k.yaml"
 OTHER = "recipes/other.yaml"
 
 CASES = [
-    # cluster, path, agentic, prefix, precision, framework, recipe, expected
     ("gb200-nv", MULTI, "1", "glm5.2", "fp4", "dynamo-sglang", GB200_GLM, AGENTX),
     ("gb200-nv", MULTI, "1", "glm5.2", "fp4", "dynamo-sglang", OTHER, ERR),
     ("gb200-nv", MULTI, "1", "kimik3", "fp4", "dynamo-vllm", KIMI_GB200, AGENTX),
@@ -122,7 +121,6 @@ def test_nscale_eval_only_inspects_eval_recipe(tmp_path):
     )
     assert resolve_power("b200-nscale", MULTI, _request(**env, EVAL_ONLY="true")).dcgm
     assert not resolve_power("b200-nscale", MULTI, _request(**env, EVAL_ONLY="false")).dcgm
-    # Other launchers always read CONFIG_FILE.
     assert not resolve_power("b300-dsxe", MULTI, _request(**env, EVAL_ONLY="true")).dcgm
 
 
@@ -165,8 +163,6 @@ def test_every_row_the_inventory_contradicts_is_reported_at_once(monkeypatch):
     with pytest.raises(LaunchError) as raised:
         check_tables(clusters)
     problems = str(raised.value)
-    # One table of each module: the policy's needs a squash cache the record lacks, the
-    # srt driver's a cluster with an srt-slurm profile.
     assert "LEGACY_TILERT['c']" in problems and "OVERRIDES['c']" in problems
 
 
@@ -182,7 +178,6 @@ def test_a_launch_checks_its_own_cluster_rows_before_any_work(monkeypatch, capsy
         raise ReachedBackend
 
     monkeypatch.setattr(drivers, "backend_class", backend_class)
-    # Another cluster's contradicted row does not stop this cluster's launch.
     with pytest.raises(ReachedBackend), Lifecycle() as life:
         drivers.run(clusters["c"], _request(IS_MULTINODE="false"), life)
 
@@ -191,17 +186,13 @@ def test_a_launch_checks_its_own_cluster_rows_before_any_work(monkeypatch, capsy
     assert "LEGACY_TILERT['c']" in capsys.readouterr().err
 
 
-# One name per source, and SHARED, which every source sets.
 HOST = {"TILERT": "host", "CLUSTER": "host", "LATER": "host", "SHARED": "host"}
 
 
 @pytest.mark.parametrize(("framework", "chosen", "expected"), [
-    # Every cluster source beats the runner host; of several, the latest wins.
     ("tilert", {}, {"TILERT": "tilert", "CLUSTER": "cluster", "LATER": "later", "SHARED": "later"}),
-    # The workflow exports a point's additional-settings, so the env already holds them.
     ("tilert", {"TILERT": "point", "SHARED": "point"},
      {"TILERT": "point", "CLUSTER": "cluster", "LATER": "later", "SHARED": "point"}),
-    # TILERT_ENV is for TileRT points only.
     ("sglang", {}, {"TILERT": "host", "CLUSTER": "cluster", "LATER": "later", "SHARED": "later"}),
 ])  # fmt: skip
 def test_cluster_settings_beat_the_host_but_never_the_points_settings(monkeypatch, framework, chosen, expected):

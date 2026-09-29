@@ -29,7 +29,7 @@ class SrtRun:
     life: Lifecycle
     env: dict[str, str]
     srt: SrtSlurmSettings
-    account: str | None  # the Slurm account jobs are submitted under
+    account: str | None
 
     @classmethod
     def create(
@@ -41,14 +41,10 @@ class SrtRun:
         if srt is None:
             raise LaunchError(f"cluster {launch.cluster.id!r} has no slurm.srt-slurm settings")
         env = runtime_env(launch.cluster, request, srt.env, job_env or {})
-        # Slurm jobs build their own venv; the launcher's must not leak into them.
         env.pop("VIRTUAL_ENV", None)
         root = str(repository_root())
         env["PYTHONPATH"] = os.pathsep.join(filter(None, (root, env.get("PYTHONPATH"))))
-        # Read by srt-slurm's post-benchmark eval.
         env["INFMAX_WORKSPACE"] = str(request.workspace)
-        # Without an account, srtctl falls back to SLURM_ACCOUNT, then to "default", which
-        # some clusters reject; the user's Slurm default comes before that.
         account = backend.settings.account or env.get("SLURM_ACCOUNT") or cli.default_account()
         return cls(launch.cluster, backend, request, launch.life, env, srt, account)
 

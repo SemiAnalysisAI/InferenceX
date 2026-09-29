@@ -26,7 +26,6 @@ def _absolute(path: Path) -> Path:
     return path
 
 
-# A directory on the cluster's storage, as the launching host and the jobs name it.
 HostPath = Annotated[Path, AfterValidator(_absolute)]
 
 
@@ -39,19 +38,9 @@ def _long_option(arg: str) -> str:
 
 LongOption = Annotated[str, AfterValidator(_long_option)]
 
-# Squash file names: ``underscore`` turns ``/ : @ #`` into ``_``, ``plus`` into ``+``;
-# ``plus-strip-nvcr`` also drops a leading ``nvcr.io/`` (older dynamo-trt squashes).
 KeyStyle = Literal["underscore", "plus", "plus-strip-nvcr"]
-# ``submit-host`` imports on the launching host; ``compute`` once on one compute node;
-# ``all-nodes`` on every node of the job; ``pre-staged`` only validates what an operator
-# staged; ``unchecked`` hands jobs the squash path untouched (operators keep it staged).
 ImportMode = Literal["submit-host", "compute", "all-nodes", "pre-staged", "unchecked"]
-# ``beside-squash`` locks ``<squash>.lock``; ``locks-dir`` locks
-# ``<dir>/.locks/<key>.lock``, the lock benchmarks/multi_node/tilert_utils/submit.sh
-# takes when it imports into the same directory.
 LockFile = Literal["beside-squash", "locks-dir"]
-# Images every multi-node srt-slurm job stages besides its main one: the frontend's
-# nginx and, for DCGM power lanes, the exporter.
 HelperImage = Literal["nginx", "dcgm-exporter"]
 
 
@@ -88,8 +77,6 @@ class SquashLocation(Record):
 class FrameworkLocation(SquashLocation):
     """One framework's multi-node images, when they differ from the cache's."""
 
-    # Model prefixes whose images differ again. Such a location replaces the
-    # framework's: its unset fields are the cache's, not the framework's.
     model_prefixes: dict[str, SquashLocation] = Field(default_factory=dict, alias="model-prefixes")
 
 
@@ -102,18 +89,12 @@ class SquashCache(Record):
     lock_timeout_s: int = Field(default=1800, alias="lock-timeout-s", gt=0)
     key_style: KeyStyle = Field(default="underscore", alias="key-style")
     lock_file: LockFile = Field(default="beside-squash", alias="lock-file")
-    # Extra options for a standalone ``compute`` import step (e.g. the whole node).
     import_step_args: tuple[LongOption, ...] = Field(default=(), alias="import-step-args")
-    # Jobs srtctl submits allocate themselves, so nothing can be imported inside them.
-    # Where these are false, such jobs reuse a valid squash or let Pyxis import the image
-    # inside the job; where true, the image is imported before submission.
     single_node_import: bool = Field(default=False, alias="single-node-import")
     multi_node_import: bool = Field(default=True, alias="multi-node-import")
-    # Multi-node only: frameworks (and model prefixes) whose squashes differ from the cache's.
     framework_dirs: dict[str, FrameworkLocation] = Field(
         default_factory=dict, alias="framework-dirs"
     )
-    # Multi-node only: helper images whose squashes differ from the cache's.
     helper_dirs: dict[HelperImage, SquashLocation] = Field(
         default_factory=dict, alias="helper-dirs"
     )
@@ -155,7 +136,6 @@ class SquashCache(Record):
 class HostSetup(Record):
     """srt-slurm ``default_host_setup``: a repository hook run on allocated hosts."""
 
-    # Relative to the repository checkout (GITHUB_WORKSPACE).
     script: PurePosixPath
     env: dict[str, str] = Field(default_factory=dict)
     timeout_s: int | None = Field(default=None, alias="timeout-s", gt=0)
@@ -174,43 +154,25 @@ class SrtSlurmSettings(Record):
     """Cluster-owned srtslurm.yaml facts; job-specific values are added by the driver."""
 
     network_interface: str = Field(alias="network-interface")
-    # Fixed profile limit; None means the launcher supplies the job's limit.
     default_time_limit: str | None = Field(
         default=None, alias="default-time-limit", pattern=r"^\d+:\d{2}:\d{2}$"
     )
-    # Minutes a single-node job gets instead of SALLOC_TIME_LIMIT.
     single_node_time_limit: int | None = Field(default=None, alias="single-node-time-limit", gt=0)
-    # What a single-node recipe's hf:<MODEL> serves: the Hub, or MODEL's staged checkpoint.
     single_node_models: Literal["staged", "hub"] = Field(default="hub", alias="single-node-models")
-    # False where the submit host cannot stat model storage, which srtctl's preflight checks.
     preflight: bool = True
-    # Each SGLang role's dist-timeout, for model loads that outlast gloo's 600 s default.
     dist_timeout_s: int | None = Field(default=None, alias="dist-timeout-s", gt=0)
-    # None leaves srtctl's default (both directives on).
     gpus_per_node_directive: bool | None = Field(default=None, alias="gpus-per-node-directive")
     segment_directive: bool | None = Field(default=None, alias="segment-directive")
-    # Single-node jobs take the whole node unless the partition cannot grant --exclusive.
     single_node_exclusive: bool = Field(default=True, alias="single-node-exclusive")
-    # Recipe container names that resolve to the job's main image, and to the staged
-    # frontend nginx (none: no nginx is staged).
     container_aliases: tuple[str, ...] = Field(default=(), alias="container-aliases")
     nginx_aliases: tuple[str, ...] = Field(default=(), alias="nginx-aliases")
     host_setup: HostSetup | None = Field(default=None, alias="host-setup")
-    # Environment the srt-slurm launch (srtctl and the jobs it submits) runs with.
     env: dict[str, str] = Field(default_factory=dict)
-    # srtctl's ``output_dir`` (None: srtctl's default).
     outputs: HostPath | None = None
-    # Compute-visible scratch for srt-slurm checkouts/workspaces of one run.
     shared_run_root: HostPath | None = Field(default=None, alias="shared-run-root")
-    # uv's install (bin/), per-runner caches (cache-<runner>/) and managed Pythons (python/)
-    # of srtctl builds and the jobs they submit (default: the runner user's own).
     uv_cache_root: HostPath | None = Field(default=None, alias="uv-cache-root")
-    # Volumes (``slurm.volumes`` names) every job mounts, by container path.
     volume_mounts: dict[str, str] = Field(default_factory=dict, alias="volume-mounts")
-    # Host paths outside the cluster's volumes (devices, ...) every job mounts.
     mounts: dict[str, str] = Field(default_factory=dict)
-    # Literal srtslurm.yaml keys with no typed equivalent (no template expansion); they
-    # must not collide with a key the driver renders.
     extra: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -220,15 +182,11 @@ class SlurmSettings(SchedulerSettings):
     volumes: dict[str, HostVolume] = Field(default_factory=dict)
     partition: str = Field(min_length=1)
     account: str | None = Field(default=None, min_length=1)
-    # Multi-node srt-slurm ``use_exclusive_sbatch_directive`` and raw ``salloc --exclusive``.
     exclusive: bool
     exclude: tuple[str, ...] = ()
-    # Template with a ``{gpus}`` placeholder, e.g. ``gpu:h200:{gpus}``.
     gres: str | None = None
-    # Per-GPU suits clusters whose jobs place one task per GPU or one per node.
     cpus_per_task: int | None = Field(default=None, alias="cpus-per-task", gt=0)
     cpus_per_gpu: int | None = Field(default=None, alias="cpus-per-gpu", gt=0)
-    # Extra options for every containerized ``srun`` step (srt-slurm ``srun_options``).
     srun_args: tuple[LongOption, ...] = Field(default=(), alias="srun-args")
     salloc_args: tuple[LongOption, ...] = Field(default=(), alias="salloc-args")
     squash: SquashCache | None = None

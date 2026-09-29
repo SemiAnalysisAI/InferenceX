@@ -7,8 +7,6 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-# ``shared`` storage holds the same files on every node; ``node-local`` storage is a
-# per-node copy that one node can lack.
 Visibility = Literal["shared", "node-local"]
 
 

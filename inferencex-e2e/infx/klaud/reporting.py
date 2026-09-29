@@ -915,7 +915,6 @@ def publication(repository: str, context: dict, model: str) -> Publication:
             and (run_attempt is None or run_attempt <= int(producers[run_id]["run_attempt"]))
         )
         head = next(iter(heads[run_id])) if proven else None
-        # Only a commit SHA names the revision whose own tooling regenerates the family.
         if not (isinstance(head, str) and re.fullmatch(r"[0-9a-f]{40}", head)):
             head = None
         rows.append((row, run_id, run_attempt, head))

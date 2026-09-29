@@ -25,11 +25,8 @@ from infx.launch.drivers.srt import models
 from infx.launch.drivers.srt.run import slurm_backend
 from infx.launch.request import AmdUtilsRequest, LegacyRequest, RequestError
 
-# Wait after submission before looking for the job's log.
 SUBMIT_SETTLE_S = 10.0
-# The job must leave the queue, releasing its NFS handles, before the log tree is removed.
 CANCEL_TIMEOUT_S = 600.0
-# Cluster facts, policy defaults or additional-settings overrides the TileRT scripts require.
 _TILERT_REQUIRED = (
     "SLURM_PARTITION",
     "SLURM_ACCOUNT",
@@ -66,13 +63,11 @@ def run_tilert(launch: Launch) -> int:
     squash = backend.settings.squash
     if squash is None:
         raise LaunchError(f"TileRT disagg lane: cluster {cluster.id!r} has no slurm.squash")
-    # As for srt-slurm jobs: the point's MODEL_PATH setting, else the staged checkpoint.
     served = models.served_path(cluster, request, models.checkpoint(cluster, request))
     env = policy.runtime_env(cluster, request, models.job_env(cluster, request, served))
     env["SLURM_PARTITION"] = backend.settings.partition
     if backend.settings.account:
         env["SLURM_ACCOUNT"] = backend.settings.account
-    # The script imports squashes into this directory under the launcher's own locks.
     env[lane.squash_dir_env] = str(squash.dir)
     missing = [name for name in _TILERT_REQUIRED if not env.get(name)]
     if missing:
@@ -121,14 +116,12 @@ def run_amd_utils(launch: Launch) -> int:
             "SLURM_PARTITION": backend.settings.partition,
             "MODEL_NAME": request.model.rsplit("/", 1)[-1],
             "MODEL_PATH": str(model_dir),
-            "MODEL_DIR": str(model_dir),  # read by job.slurm
+            "MODEL_DIR": str(model_dir),
             "GPUS_PER_NODE": str(launch.cluster.gpus_per_node),
             **{name: host_env[name] for name in lane.host_setup_env},
             **lane.env,
         }
     )
-    # The exit cleanup removes BENCHMARK_LOGS_DIR wholesale, which must not take the
-    # checkout and the results copied into it along.
     if _is_within(workspace, logs_dir):
         print(
             f"ERROR: BENCHMARK_LOGS_DIR ({logs_dir}) must not be the checkout ({workspace}) "
@@ -140,7 +133,6 @@ def run_amd_utils(launch: Launch) -> int:
     _sudo_rm(logs_dir / "logs")
 
     submission = _Submission()
-    # Root-owned container output left behind makes the next job's checkout fail with EACCES.
     if not request.keep_logs:
         launch.life.callback(_save_logs_and_remove, backend, logs_dir, workspace, submission, env)
 
@@ -154,12 +146,10 @@ def run_amd_utils(launch: Launch) -> int:
     script = _script(lane.script, request)
     argv = ["bash", script]
     proc.echo(argv, env)
-    # The recipe prints the Slurm job id on stdout; its stderr streams through.
     submitted = subprocess.run(
         argv, stdout=subprocess.PIPE, text=True, env=env, cwd=workspace, check=False
     )
     job_id = submitted.stdout.strip()
-    # Without a job id the log wait would poll for the job's whole time limit.
     if not job_id:
         print(
             f"ERROR: {script} returned no Slurm job id; the recipe or submit.sh failed "
@@ -184,7 +174,6 @@ def run_amd_utils(launch: Launch) -> int:
     outputs = backend.fetch_outputs(job, logs_dir)
     if request.run_eval and _copy_eval_results(outputs / "logs", workspace) != 0:
         return 1
-    # benchmark-multinode-tmpl.yml uploads these; stage them before the log tree goes.
     _stage_agentic_artifacts(outputs / "logs" / f"slurm_job-{job_id}", workspace)
     print("All result files processed", flush=True)
     backend.cancel(job, wait_s=CANCEL_TIMEOUT_S)
@@ -210,7 +199,6 @@ def _copy_eval_results(logs_root: Path, workspace: Path) -> int:
         destination = workspace / eval_file.name
         with contextlib.suppress(OSError):
             destination.unlink(missing_ok=True)
-        # The artifacts are root-owned, and so may be stale copies from earlier runs.
         try:
             copied = proc.run(["sudo", "cp", eval_file, destination]).returncode == 0
         except OSError:
@@ -239,7 +227,6 @@ def _stage_agentic_artifacts(job_logs: Path, workspace: Path) -> None:
         staged = workspace / "LOGS"
         (staged / "agentic").mkdir(parents=True, exist_ok=True)
         proc.run(["cp", "-r", f"{agentic}/.", f"{staged / 'agentic'}/"])
-        # The copies are root-owned; later jobs, perhaps as another runner user, remove LOGS/.
         with contextlib.suppress(OSError):
             proc.run(["sudo", "chown", "-R", f"{os.getuid()}:{os.getgid()}", staged], capture=True)
         proc.run(["chmod", "-R", "a+rwX", staged], capture=True)

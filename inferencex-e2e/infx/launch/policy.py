@@ -32,10 +32,10 @@ class Match:
     prefixes: frozenset[str] | None = None
     precisions: frozenset[str] | None = None
     frameworks: frozenset[str] | None = None
-    specs: frozenset[str] | None = None  # SPEC_DECODING
+    specs: frozenset[str] | None = None
     agentic: bool | None = None
     multinode: bool | None = None
-    model_glob: str | None = None  # fnmatch over MODEL; ``*`` also matches ``/``
+    model_glob: str | None = None
 
     def __call__(self, request: LaunchRequest) -> bool:
         return (
@@ -57,13 +57,12 @@ class LaunchPath(StrEnum):
     SRT_SINGLE = "srt-single"
     SRT_MULTI = "srt-multi"
     SRT_NATIVE = "srt-native"
-    SRT_BATCH = "srt-batch"  # SRT_SINGLE re-entered inside a batch allocation
-    SCRIPT = "script"  # BENCH_SCRIPT_OVERRIDE (SpeedBench)
+    SRT_BATCH = "srt-batch"
+    SCRIPT = "script"
     LEGACY_TILERT = "legacy-tilert"
     LEGACY_AMD_UTILS = "legacy-amd-utils"
 
 
-# Multi-node requests whose recipes are maintained against the cluster itself.
 NATIVE_SRT_LANES: dict[str, tuple[Match, ...]] = {
     "b200-nscale": (
         Match(any_of("dsv4", "kimik3", "glm5.2"), any_of("fp4"), any_of("dynamo-vllm")),
@@ -73,7 +72,6 @@ NATIVE_SRT_LANES: dict[str, tuple[Match, ...]] = {
     ),
 }
 
-# salloc notifications fail on the b300 login node, so these re-enter the launch via sbatch.
 BATCH_WRAPPED_LANES: dict[str, Match] = {
     "b300-dsxe": Match(
         any_of("dsv41flash"), frameworks=any_of("sglang"), agentic=True, multinode=False
@@ -108,7 +106,6 @@ class TimeBump:
 
 
 SALLOC_TIME_BUMPS: dict[str, TimeBump] = {
-    # The EP1 baseline needs more than 8h of warmup plus the hour-long profile.
     "h200-dgxc": TimeBump(
         Match(any_of("dsv41flash"), frameworks=any_of("sglang"), agentic=True, multinode=False),
         min_conc=64,
@@ -131,9 +128,7 @@ def salloc_time_limit(cluster_id: str, request: LaunchRequest) -> int | None:
     return request.salloc_time_limit
 
 
-# The fabric settings the TileRT runtime needs; its master configs set TILERT_WEIGHTS_DIR.
 TILERT_ENV: dict[str, Mapping[str, str]] = {
-    # Nscale exposes eight RoCE HCAs, mlx5_0..mlx5_7.
     "b200-nscale": {
         "UCX_NET_DEVICES": ",".join(f"mlx5_{index}:1" for index in range(8)),
         "UCX_MEMTYPE_CACHE": "n",

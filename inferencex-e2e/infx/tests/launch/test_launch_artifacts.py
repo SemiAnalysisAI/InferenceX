@@ -50,7 +50,7 @@ def test_copy_onto_same_inode_is_a_noop(tmp_path):
     source.write_text("payload")
     link = tmp_path / "mounted.json"
     os.link(source, link)
-    source.chmod(stat.S_IRUSR)  # a real copy onto itself would need write access
+    source.chmod(stat.S_IRUSR)
     copy_to_workspace(source, link)
     copy_to_workspace(source, source)
     assert link.read_text() == "payload"
@@ -110,6 +110,5 @@ def test_power_collection_records_the_job_status_and_stages_results_either_way(t
         status, "42", logs, source, workspace, "point", "sha", [4], results_python="true",
     ) == rc  # fmt: skip
 
-    # The audit bundle records what the scheduler said about the job.
     assert (logs / "power" / "native-job-status.txt").read_text() == f"42|{status.raw}\n"
     assert (workspace / "point_conc4.json").exists()

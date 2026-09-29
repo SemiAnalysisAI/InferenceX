@@ -76,11 +76,9 @@ def test_a_registered_scheduler_parses_its_own_record_and_volumes(monkeypatch):
     cluster = load_inventory(inventory(alpha=fake)).clusters["alpha"]
 
     assert cluster.scheduler_settings.volumes["models"].claim == "ckpt"
-    # Volumes are the scheduler's own terms: a host-path spec is not one of them.
     fake["fake"]["volumes"]["models"] = {"path": "/models"}
     with pytest.raises(ValidationError, match="claim"):
         load_inventory(inventory(alpha=fake))
-    # A record for another registered scheduler is dead config, so it is refused.
     with pytest.raises(ValidationError, match="records for schedulers other than 'slurm'"):
         load_inventory(inventory(alpha={**CLUSTER, "fake": {"root": "/sandbox", "namespace": "bench"}}))
 

@@ -144,11 +144,8 @@ def test_single_node_point_stages_workflow_artifacts(harness):
     assert argv[argv.index("--file") + 1] == f"{workspace}/recipe.yaml:zip_override_conc[0]"
     assert {"--json", "--yes", "--output"} <= set(argv)
     assert (call["env"]["INFMAX_WORKSPACE"], call["env"]["VIRTUAL_ENV"]) == (str(workspace), None)
-    # The name only this repository's cleanup cancels, besides the runner's own.
     assert call["env"]["RUNNER_NAME"] == f"inferencex-{env['RUNNER_NAME']}"
-    # The job's HF_HUB_CACHE is where the cluster's Hub cache is mounted.
     assert "/hf" in srtslurm(workspace)["default_mounts"].values()
-    # Only the .patch file beside the patches README is applied.
     applied = [line.split()[-1] for line in lines(harness.logs, "git") if line.split()[2:3] == ["apply"]]
     assert applied == [str(workspace / "runners/srt-slurm/patches/001-fixture.patch")]
     assert lines(harness.logs, "scancel") == []
@@ -158,14 +155,13 @@ def test_single_node_eval_requires_a_successful_eval(harness):
     env = single_node_env(harness, "h100-cw", RUN_EVAL="true", MAX_MODEL_LEN="1024")
     assert_ok(launch(env, harness.config, harness.workspace))
     exit_file = next(harness.workspace.glob("srt-single.*/outputs/42/logs/infx-eval-exit-code"))
-    # A failed eval inside a completed job fails the launch.
     harness.logs.joinpath("srtctl.jsonl").unlink()
     srtctl = Path(harness.env["PATH"].split(os.pathsep)[0]) / "srtctl"
     srtctl.write_text(srtctl.read_text().replace('write_text("0\\n")', 'write_text("3\\n")'))
     result = launch(env, harness.config, harness.workspace)
     assert result.returncode == 1
     assert "eval did not succeed" in result.stderr
-    assert exit_file.read_text() == "0\n"  # the first run's outputs are untouched
+    assert exit_file.read_text() == "0\n"
 
 
 def test_single_node_failed_allocation_fails_the_launch(harness):
@@ -175,11 +171,6 @@ def test_single_node_failed_allocation_fails_the_launch(harness):
     assert (harness.workspace / "point-identity.json").is_file()
 
 
-# Two synthetic lanes on synthetic clusters that between them exercise each lane feature.
-# ``lab-a`` serves a node-local checkpoint, so srtctl's preflight is skipped, imports its
-# image on the submit host, and has a tag, a setup script, a mount, a time limit, a served
-# name and a dist-timeout. ``lab-b`` serves a shared checkpoint from the registry image
-# and checks out, and keeps srtctl's outputs, on shared storage.
 LABS = {
     "lab-a": dict(
         lane=SrtLane(
@@ -277,7 +268,6 @@ def test_multinode_lane_stages_workflow_artifacts(harness, monkeypatch, cluster_
     assert call["env"]["SERVED_MODEL_NAME"] == lab["served"]
 
     staged = yaml.safe_load((checkout / "recipes/test/lane.yaml").read_text())
-    # The job name only this repository's cleanup cancels, besides the runner's own.
     assert staged["name"] == call["env"]["RUNNER_NAME"] == f"inferencex-{runner}"
     dist = {"dist-timeout": 1800} if lab["dist_timeout"] else {}
     assert staged["roles"]["prefill"]["args"] == {"tensor-parallel-size": 8, "watchdog-timeout": 600, **dist}
@@ -292,7 +282,6 @@ def test_multinode_lane_stages_workflow_artifacts(harness, monkeypatch, cluster_
     else:
         assert config["containers"][env["IMAGE"]] == env["IMAGE"] and imported == []
     outputs = Path(json.loads((workspace / "srt-submission.json").read_text())["output_dir"])
-    # Only outputs inside the checkout are removed; a cluster's shared output_dir stays.
     assert outputs.exists() is not outputs.is_relative_to(checkout)
 
 
@@ -351,7 +340,6 @@ def test_submission_failure_code_propagates_and_cancels_the_job(harness, shape):
     assert result.returncode == 7, result.stderr[-4000:]
     assert lines(harness.logs, "scancel") == ["42"]
     if shape == "single":
-        # The job srtctl reported before failing still has its artifacts staged.
         assert (harness.workspace / "point-identity.json").is_file()
 
 
@@ -397,7 +385,6 @@ def test_b300_flash_agentx_reenters_inside_a_batch_allocation(harness):
     [submit] = lines(harness.logs, "sbatch")
     assert {"--nodes=1", "--ntasks=1", f"--chdir={harness.workspace}", "--time=10"} <= set(submit.split())
     assert (harness.logs / "batch-rc").read_text() == "0"
-    # The re-entered run did the single-node point inside the allocation.
     assert json.loads((harness.workspace / "point-identity.json").read_text()) == {"completed": 2}
     assert len(srtctl_calls(harness.logs)) == 1
     assert "4242" in lines(harness.logs, "scancel")
@@ -409,18 +396,14 @@ def test_tilert_native_lane_runs_on_its_fork_without_patches(harness):
         harness, "b200-nscale", MODEL_PREFIX="glm5.1", PRECISION="fp8", FRAMEWORK="tilert",
         MODEL="zai-org/GLM-5.1-FP8", SPEC_DECODING="mtp", IS_AGENTIC="1", ISL="0", OSL="0",
         FAKE_RESULTS="agentic", PREFILL_IMAGE="prefill:tag",
-        # The fake git reports this commit as the checked-out head.
         FAKE_SRT_COMMIT=SRT_FORKS["tilert"].commit,
     )  # fmt: skip
     assert_ok(launch(env, harness.config, harness.workspace))
 
-    # InferenceX patches target the pinned submodule, not the fork.
     assert not any(" apply " in f" {line} " for line in lines(harness.logs, "git"))
     [call] = srtctl_calls(harness.logs)
-    # The fork predates --json, --no-preflight and streamed benchmark output.
     assert not {"--json", "--no-preflight", "benchmark.stream_output=true"} & set(call["argv"])
     config = srtslurm(Path(call["cwd"]))
-    # Its jobs keep srtctl's own health-check default.
     assert "default_health_check" not in config
     assert config["containers"]["tilert-decode"].endswith("/test_tag.sqsh")
     assert config["containers"]["tilert-prefill"].endswith("/prefill_tag.sqsh")
@@ -439,7 +422,7 @@ def test_eval_only_runs_the_eval_recipe_with_real_verification(harness):
         harness, "gb300-nv", MODEL_PREFIX="dsv4", PRECISION="fp4", FRAMEWORK="dynamo-trt",
         MODEL="deepseek-ai/DeepSeek-V4-Pro", IS_AGENTIC="1", SPEC_DECODING="mtp", ISL="0", OSL="0",
         EVAL_ONLY="true", EVAL_CONFIG_FILE="recipes/test/eval.yaml", FAKE_RESULTS="eval",
-        EVAL_CONC="4 8",  # a list: batched multi-node lm-eval
+        EVAL_CONC="4 8",
     )  # fmt: skip
     assert_ok(launch(env, harness.config, harness.workspace))
 
@@ -474,8 +457,8 @@ def test_a_setup_failure_without_a_bad_archive_is_not_retried(harness):
         MODEL="deepseek-ai/DeepSeek-R1-0528", FAKE_MAKE_RC="2",
     )  # fmt: skip
     result = launch(env, harness.config, harness.workspace)
-    assert result.returncode == 2  # make's own exit code
-    assert "make setup broke" in result.stderr  # the setup log is shown on failure
+    assert result.returncode == 2
+    assert "make setup broke" in result.stderr
     assert len(lines(harness.logs, "make")) == 1
     assert srtctl_calls(harness.logs) == [] and lines(harness.logs, "scancel") == []
 
@@ -505,7 +488,7 @@ def test_a_missing_input_is_named_before_any_setup(harness, shape, overrides, mi
                        FRAMEWORK="dynamo-sglang", MODEL="deepseek-ai/DeepSeek-R1-0528")  # fmt: skip
     else:
         env = single_node_env(harness, "b300-dsxe" if shape == "batch" else "h200-cw")
-    if shape == "batch":  # the B300 AgentX lane that re-enters itself inside sbatch
+    if shape == "batch":
         env.update(MODEL_PREFIX="dsv41flash", PRECISION="fp8", IS_AGENTIC="1", DURATION="600")
     for name, value in overrides.items():
         env.pop(name) if value is None else env.update({name: value})

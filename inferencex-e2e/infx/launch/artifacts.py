@@ -22,7 +22,6 @@ from infx.results.result_filename import point_filename
 if TYPE_CHECKING:
     from infx.launch.backends.base import JobStatus
 
-# The project root, which the power adapter imports infx from.
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -53,8 +52,6 @@ def copy_to_workspace(source: Path, destination: Path) -> None:
     _say(f"Copied {source.name} to {destination}")
 
 
-# srt-slurm names each point results_concurrency_<conc>_gpus_<gpus>.json; disaggregated
-# points add _ctx_<prefill workers>_gen_<decode workers> before .json.
 _POINT_FIELDS = (
     re.compile(r"results_concurrency_([0-9]*)_gpus_"),
     re.compile(r"_gpus_([0-9]+)"),

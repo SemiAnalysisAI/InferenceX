@@ -57,7 +57,6 @@ def generation_repo(tmp_path, monkeypatch):
         git("commit", "-qm", name)
         git("tag", name)
 
-    # Neither uncommitted source nor inputs may leak into historical generation.
     (tmp_path / "configs/nvidia-master.yaml").write_text("invalid working tree\n")
     for path in (tmp_path / "infx").rglob("*.py"):
         path.write_text('raise RuntimeError("working tree source was used")\n')
@@ -117,8 +116,6 @@ def test_historical_generation_supports_legacy_script_layout(generation_repo, mo
     else:
         monkeypatch.delenv("PYTHONSAFEPATH", raising=False)
     git("rm", "-rf", "--ignore-unmatch", "infx")
-    # The historical command is an external collaborator: exercise extraction
-    # and sibling imports without freezing a past copy of the matrix algorithm.
     script = root / "utils/matrix_logic/generate_sweep_configs.py"
     schema = script.with_name("validation.py")
     script.parent.mkdir(parents=True, exist_ok=True)
@@ -138,7 +135,6 @@ def test_historical_generation_from_nested_project(generation_repo, monkeypatch,
     git("restore", ".")
     (root / "inferencex-e2e").mkdir()
     git("mv", "infx", "configs", "inferencex-e2e/")
-    # Unrelated root-level files cannot override the selected nested snapshot.
     (root / "infx/matrix").mkdir(parents=True)
     (root / "infx/matrix/generate.py").write_text(
         'raise RuntimeError("root-level decoy source was used")\n'
@@ -185,7 +181,6 @@ def test_snapshot_runs_pre_root_move_revisions_with_their_own_config_directory(t
     (configs / "nvidia-master.yaml").write_text(
         yaml.safe_dump({"fixture": {"runner": "fixture", "conc": [4, 8]}})
     )
-    # Runner inventories of this era were the flat label mapping itself.
     (configs / "runners.yaml").write_text("fixture: [node-a]\n")
     script = tmp_path / revision.GENERATOR.legacy_script
     script.parent.mkdir(parents=True)
@@ -234,7 +229,6 @@ def planner_checkout(root, layout):
 
 def run_cli(cwd, *args, **environment):
     env = {key: value for key, value in os.environ.items() if key != "PYTHONPATH"}
-    # The tooling checkout is importable too; the revision's own package must still win.
     env["PYTHONPATH"] = str(ROOT)
     return subprocess.run(
         [sys.executable, "-P", "-m", "infx.matrix.revision", *args],
@@ -275,7 +269,6 @@ def test_cli_runs_the_tool_without_the_callers_credentials(tmp_path):
     env = json.loads(result.stdout)["env"]
     assert not {"GH_TOKEN", "GITHUB_TOKEN", "AGENT_PAT", "KLAUD_DASHBOARD_API_KEY", "VIRTUAL_ENV"} & env.keys()
     assert (env["PATH"], env["LANG"], env["TMPDIR"]) == (os.environ["PATH"], "en_US.UTF-8", str(tmp_path))
-    # Only the revision is importable: the caller's tooling path is not inherited.
     assert env["PYTHONPATH"] == str(checkout.resolve())
 
 

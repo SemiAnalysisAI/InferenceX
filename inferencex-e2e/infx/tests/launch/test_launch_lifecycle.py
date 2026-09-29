@@ -29,7 +29,6 @@ def test_the_first_workload_failure_wins_and_a_failed_cleanup_fails_a_green_run(
             life.record(rc)
 
     assert life.returncode == returncode
-    # LIFO, and a failing cleanup does not stop the rest.
     assert ran == ["broken", "first-registered"]
 
 

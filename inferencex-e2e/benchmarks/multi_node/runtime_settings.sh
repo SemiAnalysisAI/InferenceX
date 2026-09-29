@@ -55,10 +55,7 @@ case "$FRAMEWORK" in
         # The MI355X TileRT recipe runs through the shared amd_utils chain
         # (submit.sh -> job.slurm -> server.sh -> setup_deps.sh), which validates
         # the same orchestration inputs the AMD SGLang arm receives.
-        # Without them submit.sh exits before sbatch and the launcher never gets
-        # a job id. The B200 TileRT lanes read none of these, so they are scoped
-        # to the AMD pool. The launcher replaces BENCHMARK_LOGS_DIR for that lane
-        # (infx.launch.policy.LEGACY_AMD_UTILS).
+        # Without them submit.sh exits before sbatch and the launcher never gets a job id.
         if [[ "$RUNNER_TYPE" == *mi355x-amds* ]]; then
             export SKIP_RDMA_CHECK=0 SKIP_GPU_SANITY=0
             export ROUTER_TYPE=tilert-pd-router ROUTER_PORT=30000 PROXY_PING_PORT=36367

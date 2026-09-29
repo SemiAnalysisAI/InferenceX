@@ -30,10 +30,7 @@ if TYPE_CHECKING:
 
 NGINX_IMAGE = "nginx:1.27.4"
 DCGM_EXPORTER_IMAGE = "nvcr.io/nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless"
-# The exporter image's provenance, which power lanes stage with their logs for the audit.
 EXPORTER_PROVENANCE = "exporter-image.sha256"
-# What recipes without a health check get (2 h of polls); multi-node lanes also raise a
-# recipe's own shorter budget (recipe.py).
 HEALTH_CHECK = {"max_attempts": HEALTH_ATTEMPTS, "interval_seconds": 10}
 
 
@@ -42,17 +39,17 @@ class SrtJob:
     """The job-local inputs of one srtslurm.yaml."""
 
     srtctl_root: Path
-    workspace: Path  # GITHUB_WORKSPACE: host-setup hooks are read from here
+    workspace: Path
     time_limit: str
-    image: str  # the matrix IMAGE, which recipes name as model.container
-    container: str  # what pyxis receives for IMAGE and the cluster's container aliases
-    nginx: str | None = None  # what pyxis receives for the cluster's nginx aliases
-    containers: Mapping[str, str] = field(default_factory=dict)  # more recipe containers
+    image: str
+    container: str
+    nginx: str | None = None
+    containers: Mapping[str, str] = field(default_factory=dict)
     model_paths: Mapping[str, str] = field(default_factory=dict)
-    mounts: Sequence[tuple[str, str]] = ()  # (host, container) added to the cluster's mounts
-    single_node: bool = False  # one node, so no segment directive
+    mounts: Sequence[tuple[str, str]] = ()
+    single_node: bool = False
     account: str | None = None
-    fork: bool = False  # a framework fork's srtctl, which gets no default health check
+    fork: bool = False
 
 
 def pyxis_spelling(image: str) -> str:
@@ -99,7 +96,7 @@ def render(cluster: Cluster, job: SrtJob) -> dict[str, Any]:
     srt = settings.srt_slurm
     if srt is None:
         raise LaunchError(f"cluster {cluster.id!r} has no slurm.srt-slurm settings")
-    config: dict[str, Any] = {"cluster": cluster.id}  # srtctl's status-reporting name
+    config: dict[str, Any] = {"cluster": cluster.id}
     if job.account:
         config["default_account"] = job.account
     config["default_partition"] = settings.partition
@@ -139,7 +136,6 @@ def render(cluster: Cluster, job: SrtJob) -> dict[str, Any]:
     if settings.exclude:
         directives["exclude"] = ",".join(settings.exclude)
     directives.update(settings.cpu_directives())
-    # Clusters whose GPUs are only schedulable by typed GRES opt out of --gpus-per-node.
     if srt.gpus_per_node_directive is False and (gres := settings.gres_for(cluster.gpus_per_node)):
         directives["gres"] = gres
     if directives:

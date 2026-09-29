@@ -68,7 +68,6 @@ def finish_single_node(run: SrtRun, submitted: Submitted, fetched: Path) -> int:
             except ArtifactError as error:
                 print(f"ERROR: {error}", file=sys.stderr)
                 rc = 1
-    # AgentX uploads its raw replay artifacts and power window from results/.
     if (logs / "agentic").is_dir():
         try:
             _copy_tree_into(logs / "agentic", run.workspace / "results")
@@ -170,7 +169,6 @@ def collect(
             if not request.is_agentic:
                 copy_fixed_sequence_results(logs, run.workspace, request.result_filename)
             elif not power.agentx:
-                # Aggregation writes <RESULT_FILENAME>_conc<N>.json into INFMAX_WORKSPACE.
                 copy_agentic_results(infmax, run.workspace, request.result_filename)
         except ArtifactError as error:
             print(f"ERROR: {error}", file=sys.stderr)

@@ -35,20 +35,14 @@ SINGLE_NODE_EVAL_COMMAND = (
     '["bash", "{infmax_workspace}/benchmarks/single_node/srt_eval.sh", "{endpoint}", '
     '"/logs/infx-eval-exit-code"]'
 )
-# The launch variables post-eval is handed by name, beyond the matrix inputs srtctl forwards
-# itself. srt-slurm re-exports each on its srun command line, where the node's process list
-# shows it, so no credential is forwarded but the Modal tokens SWE-bench's sandboxes need.
 WORKLOAD_ENV = (
     "EVAL_*", "SWEBENCH_*", "AIPERF_*", "AGENTIC_*",
     "MODAL_TOKEN_ID", "MODAL_TOKEN_SECRET",
-    # Topology and scenario inputs srtctl does not forward.
     "TP", "EP_SIZE", "DP_ATTENTION", "PP_SIZE", "DCP_SIZE", "PCP_SIZE", "CONC",
     "IS_AGENTIC", "SCENARIO_TYPE",
-    # benchmarks/runtime_settings.sh settings outside the families above.
     "OPENAI_API_KEY", "REQUIRE_POWER", "ENABLE_AGENTX_POWER", "VLLM_ENGINE_READY_TIMEOUT_S",
     "SGLANG_TORCH_PROFILER_DIR", "VLLM_TORCH_PROFILER_DIR",
 )  # fmt: skip
-# A name a shell cannot export aborts the ``export ... && exec`` command it would join.
 _SHELL_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 _PROSE_JOB_IDS = (re.compile(r"✅ Job ([0-9]+)"), re.compile(r"Job ([0-9]+)"))
 
@@ -102,7 +96,6 @@ def apply(
         str(checkout.venv / "bin/python"), "-m", "infx.srt_slurm.synthetic_acceptance",
         config, run.request.framework, "--", *arguments,
     ]  # fmt: skip
-    # srtctl names the job after RUNNER_NAME.
     env = {**run.env, "RUNNER_NAME": srtctl_job_name(run.request.runner_name)}
     if stdout is None:
         result = proc.run(argv, env=env, cwd=checkout.root, capture=True)
@@ -214,7 +207,7 @@ def multinode_arguments(
     if lane.tag is not None:
         isl, osl = request.env.get("ISL", ""), request.env.get("OSL", "")
         workload = "agentic" if request.is_agentic else f"{isl}x{osl}"
-        stamp = datetime.now().astimezone().strftime("%Y%m%d")  # local date
+        stamp = datetime.now().astimezone().strftime("%Y%m%d")
         arguments += [
             "--tags",
             f"{lane.tag},{request.model_prefix},{request.precision},{workload},infmax-{stamp}",

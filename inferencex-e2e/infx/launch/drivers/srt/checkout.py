@@ -38,7 +38,6 @@ class SrtFork:
 
 
 SRT_FORKS: dict[str, SrtFork] = {
-    # TileRT still needs its legacy runtime until the native backend and router land.
     "tilert": SrtFork(
         "https://github.com/SemiAnalysisAI/srt-slurm.git",
         "6bc3f306bdafa1edfb5dded2fcda8f1ccede1bde",
@@ -83,7 +82,6 @@ def checkout_dir(run: SrtRun, *, shared: bool) -> Path:
         attempt = request.env.get("GITHUB_RUN_ATTEMPT", "")
         return root / f"srt-slurm-{run_id}-{attempt}-{request.runner_name}-{os.getpid()}"
     require(request, "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT")
-    # A run's concurrent points share the workspace; their RESULT_FILENAMEs differ.
     digest = hashlib.sha1(request.result_filename.encode(), usedforsecurity=False)
     run_id, attempt = request.env["GITHUB_RUN_ID"], request.env["GITHUB_RUN_ATTEMPT"]
     return run.workspace / f"srt-slurm-{run_id}-{attempt}-{digest.hexdigest()[:12]}"
@@ -111,7 +109,6 @@ def prepare_checkout(run: SrtRun, destination: Path, *, power: bool) -> Checkout
                 "Missing srt-slurm submodule; run git submodule update --init before launching."
             )
         commit = _git("-C", source, "rev-parse", "HEAD", capture=True)
-        # --no-hardlinks keeps job writes out of the submodule.
         _git(
             "-c",
             "advice.detachedHead=false",
@@ -121,7 +118,6 @@ def prepare_checkout(run: SrtRun, destination: Path, *, power: bool) -> Checkout
             source,
             destination,
         )
-        # Temporary fixes awaiting upstream merge; see runners/srt-slurm/patches/README.md.
         for patch in sorted((run.workspace / PATCHES).glob("*.patch")):
             _git("-C", destination, "apply", patch)
     head = _git("-C", destination, "rev-parse", "HEAD", capture=True)
@@ -135,7 +131,6 @@ def prepare_checkout(run: SrtRun, destination: Path, *, power: bool) -> Checkout
     recipes = run.workspace / RECIPES_MIRROR
     (destination / "benchmarks/multi_node").mkdir(parents=True, exist_ok=True)
     shutil.copytree(recipes, destination / "recipes", symlinks=True, dirs_exist_ok=True)
-    # Both CONFIG_FILE spellings (recipes/... and the mirror path) occur in master configs.
     (destination / RECIPES_MIRROR).symlink_to("../../recipes")
     shutil.copytree(recipes / "configs", destination / "configs", symlinks=True, dirs_exist_ok=True)
     return Checkout(destination, commit, fork is not None)
@@ -160,14 +155,11 @@ def install_srtctl(run: SrtRun, checkout: Checkout, *, python: str | None = None
     uv = _uv(run)
     root = run.srt.uv_cache_root
     if root is not None:
-        # One cache per runner: concurrent builds in a shared NFS cache race.
         cache = root / f"cache-{run.request.runner_name}"
         cache.mkdir(parents=True, exist_ok=True)
         run.env["UV_CACHE_DIR"] = str(cache)
-        # The jobs srtctl submits find their Pythons here too.
         run.env["UV_PYTHON_INSTALL_DIR"] = str(root / "python")
     venv = checkout.venv
-    # --seed installs pip, which srtctl's dynamo wheel prefetch needs.
     argv = [uv, "venv", "--quiet", "--seed", *(["--python", python] if python else []), str(venv)]
     _checked(proc.run(argv, env=run.env, cwd=checkout.root), "uv venv")
     install = [
@@ -208,7 +200,7 @@ def _discard_corrupt_archives(configs: Path) -> bool:
         for archive in sorted(configs.glob(pattern)):
             try:
                 intact = proc.run([*check, archive], capture=True).returncode == 0
-            except OSError:  # no check tool: the archive cannot be trusted
+            except OSError:
                 intact = False
             if not intact:
                 print(f"Removing incomplete {name} archive: {archive}", file=sys.stderr)
@@ -228,7 +220,6 @@ def run_setup(run: SrtRun, checkout: Checkout) -> int:
             print("srt-slurm setup complete", flush=True)
             return 0
         sys.stderr.write(log.read_text(errors="replace"))
-        # Release downloads can truncate an archive yet succeed; only such a failure is retried.
         if not _discard_corrupt_archives(checkout.root / "configs"):
             return rc
         if attempt < SETUP_ATTEMPTS:

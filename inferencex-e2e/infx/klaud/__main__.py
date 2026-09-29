@@ -28,7 +28,6 @@ from .models import (
     normalized_image,
 )
 
-# Producer families regenerate-producers wrote for select, keyed by family and head.
 PRODUCERS = "producers.json"
 
 
@@ -616,7 +615,6 @@ def select(directory: Path, max_candidates: int, execution_file: Path | None = N
     from .reporting import BaselinePreflight, Prose, resolve_baseline
 
     contexts = json.loads((directory / "candidates.json").read_text())
-    # Written by regenerate-producers: selection holds credentials and runs no revision's code.
     producers = json.loads((directory / PRODUCERS).read_text())
     review, deferred = reviewed(contexts)
     decisions = {decision.candidate_id: decision for decision in review.decisions}

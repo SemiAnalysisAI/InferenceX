@@ -61,8 +61,8 @@ def srtctl_job_name(runner: str) -> str:
 class SlurmJob(Job):
     """A Slurm job: an allocation running one of our container steps, or an adopted job."""
 
-    log: Path | None = None  # file the job writes its log to (followed by stream_logs)
-    outputs: Path | None = None  # shared-storage directory holding its outputs
+    log: Path | None = None
+    outputs: Path | None = None
     step: subprocess.Popen[bytes] | None = field(default=None, compare=False, repr=False)
 
 
@@ -91,8 +91,6 @@ class SlurmBackend(Backend):
         """Serve ``request`` on the Slurm ``cluster``."""
         super().__init__(cluster, request, life)
         self.settings = slurm_settings(cluster)
-
-    # Generic operations.
 
     @override
     def prepare_image(self, image: str) -> Image:
@@ -125,7 +123,6 @@ class SlurmBackend(Backend):
         if squash is not None and squash.policy().needs_job():
             ensure_image(container.image.name, squash.policy(), job=allocation)
         for path in container.required_paths:
-            # Probe the allocated node: the path may be on storage this host cannot see.
             if cli.srun(allocation, ["test", "-r", str(_host_path(mounts, path))]) != 0:
                 raise BackendError(
                     f"readiness-blocked: {path} is unavailable on the allocated node"
@@ -164,7 +161,6 @@ class SlurmBackend(Backend):
             if rc is None:
                 return JobStatus(JobState.RUNNING, "srun step running")
             state = JobState.SUCCEEDED if rc == 0 else JobState.FAILED
-            # Popen reports death by signal N as -N.
             return JobStatus(state, f"srun exit {rc}", rc if rc >= 0 else 128 - rc)
         queued = cli.queue_state(job)
         if queued is None:
@@ -299,8 +295,6 @@ class SlurmBackend(Backend):
             raise BackendError(f"staging the workspace to {staging} failed (exit {rc})")
         print(f"Staged the node-local checkout to {staging} for compute nodes", flush=True)
         return staging
-
-    # Internals.
 
     def _volume_path(self, volume: str) -> Path:
         """Host path of one of the cluster's volumes."""

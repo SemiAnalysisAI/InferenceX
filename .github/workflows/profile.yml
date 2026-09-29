@@ -90,7 +90,6 @@ jobs:
           if [[ -f "$PRIORITY_ROOT/inferencex-e2e/configs/runners.yaml" ]]; then
             PRIORITY_ROOT="$PRIORITY_ROOT/inferencex-e2e"
           fi
-          # The profile job runs the measured revision's own `python -m infx.launch`.
           env PYTHONPATH="$PRIORITY_ROOT" python3 -P -m infx.workflows.require_launcher "$GITHUB_WORKSPACE"
           source "$PRIORITY_ROOT/benchmarks/benchmark_lib.sh" --validation-only
           check_env_vars INPUTS_CONFIG_FILE INPUTS_CONFIG_KEY INPUTS_CONC PR_LABELS
@@ -237,7 +236,6 @@ jobs:
       - name: Slurm cleanup
         run: |
           if command -v squeue >/dev/null 2>&1; then
-            # srtctl submits as inferencex-<runner> (infx.launch.backends.slurm.srtctl_job_name).
             for job_name in "${RUNNER_NAME}" "inferencex-${RUNNER_NAME}"; do
               echo "[Slurm] Cleaning up jobs with name: ${job_name} ..."
               scancel --name="${job_name}" || true
@@ -269,7 +267,6 @@ jobs:
           enable-cache: false
 
       - name: Prepare result-processing Python
-        # Keep uv's cache and Pythons per runner: some runner homes can't host uv's defaults.
         env: &uv-setup-env
           UV_CACHE_DIR: ${{ github.workspace }}/../.infx-uv-cache
           UV_PYTHON_INSTALL_DIR: ${{ github.workspace }}/../.infx-uv-python
@@ -282,7 +279,6 @@ jobs:
       - name: Prepare launcher Python
         env: *uv-setup-env
         run: |
-          # Never activated, so launched Slurm jobs inherit the runner's PATH and no VIRTUAL_ENV.
           launch_venv="$RUNNER_TEMP/infx-launch-venv"
           uv venv --quiet --python 3.12 "$launch_venv"
           uv pip install --quiet --exclude-newer PT12H --python "$launch_venv/bin/python" \
@@ -292,8 +288,6 @@ jobs:
       - name: Launcher cleanup
         env:
           PYTHONPATH: ${{ github.workspace }}/.result-tooling/inferencex-e2e
-        # Second pass after the shell cancel, which needs no Python: the cluster's backend
-        # removes what this runner left behind.
         run: |
           "$INFERENCEX_LAUNCH_PYTHON" -P -m infx.launch cleanup
 

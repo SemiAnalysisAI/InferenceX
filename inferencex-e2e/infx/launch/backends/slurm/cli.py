@@ -30,7 +30,6 @@ class ContainerSpec:
     image: str
     mounts: list[tuple[str, str]] = field(default_factory=list)
     workdir: str | None = None
-    # Appended to ``--export``, so the step sees it in the container.
     env: dict[str, str] = field(default_factory=dict)
 
     def srun_args(self) -> list[str]:
@@ -72,7 +71,6 @@ class Resources:
 def salloc(resources: Resources, *, extra: Sequence[str] = ()) -> Job:
     """``salloc --no-shell`` and return the granted job; raise ``SlurmError`` without a grant."""
     argv = ["salloc", *resources.args(), *extra, "--no-shell"]
-    # The grant line is parsed, so pin the message locale.
     result = proc.run(argv, env={**os.environ, "LC_ALL": "C"}, capture=True)
     output = result.stdout + result.stderr
     sys.stderr.write(output)
@@ -92,7 +90,6 @@ def srun_argv(
 ) -> list[str]:
     """One ``srun`` step exporting our environment; without ``job`` it allocates from ``extra``."""
     env = container.env if container else {}
-    # Slurm splits --export on commas.
     for name, value in env.items():
         if "," in value:
             raise ValueError(f"srun --export cannot carry {name}: value contains ','")
@@ -120,7 +117,6 @@ def sbatch(
     ]  # fmt: skip
     result = proc.run(argv, capture=True)
     sys.stderr.write(result.stderr)
-    # --parsable prints "<id>" or "<id>;<cluster>".
     job_id = result.stdout.strip().split(";", 1)[0]
     if result.returncode != 0 or not job_id.isdigit():
         raise SlurmError(f"sbatch failed to submit {script} (exit {result.returncode})")
@@ -192,8 +188,6 @@ def _observe(job: Job) -> tuple[str, str]:
     state, _, exit_code = first.partition("|")
     if state.strip():
         return state.strip(), exit_code.strip()
-    # Some pools do not expose slurmdbd; the controller retains recent terminal
-    # allocations. Require its exact JobId, state, and exit code.
     fields = dict(
         item.split("=", 1)
         for item in _query(["scontrol", "show", "job", "-o", job.id]).split()
@@ -262,8 +256,6 @@ def stream_log(job: Job, path: Path, *, wait_s: float = 5.0) -> None:
             raise SlurmError(f"job {job.id} ended before creating {path}")
         time.sleep(wait_s)
 
-    # inotify does not work on network storage, so tail polls. It exits after a final read
-    # once the sentinel dies, which it does when the job does.
     sentinel = subprocess.Popen(["sleep", "2147483647"])
     print(f"Tailing {path}", file=sys.stderr, flush=True)
     tail_argv = ["tail", "-F", "-s", "2", "-n+1", str(path), f"--pid={sentinel.pid}"]

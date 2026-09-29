@@ -604,14 +604,12 @@ def test_select_builds_baselines_from_regenerated_producers_without_starting_a_p
 ):
     _, head = commit_history(tmp_path, "inferencex-e2e")
     monkeypatch.chdir(tmp_path)
-    # The candidate base still carries the producer's recipe; current code owns that side.
     base_family = validation.producer_matrix("example/project", head, FAMILY)
     monkeypatch.setattr(validation, "canonical_matrix", lambda *_: base_family)
     forbid_current_config_parsing(monkeypatch)
     directory = tmp_path / "klaud"
     review_candidate(directory, monkeypatch, publish(monkeypatch, head))
     if regenerated:
-        # The credential-free step: the hardware-layout producer rebuilds its own family.
         klaud.regenerate_producers(directory)
     else:
         (directory / "producers.json").write_text("{}\n")
@@ -619,7 +617,6 @@ def test_select_builds_baselines_from_regenerated_producers_without_starting_a_p
     def no_process(args, *_args, **_kwargs):
         raise AssertionError(f"select started {args!r}")
 
-    # Selection holds the credentials, so it may only read the regenerated rows.
     monkeypatch.setattr(subprocess, "Popen", no_process)
     monkeypatch.setattr(klaud, "fetch_capacity", lambda _policy: {"cluster-a"})
     monkeypatch.setattr(claims, "claim_family", lambda *_args: True)
@@ -646,7 +643,6 @@ def test_producer_outside_the_local_clone_is_fetched_from_its_repository(tmp_pat
     def remote_git(*args):
         subprocess.run(["git", *args], cwd=remote, check=True, capture_output=True)
 
-    # Like a reused pull-request run, the producer is reachable only from a pull ref.
     remote_git("update-ref", "refs/pull/42/head", head)
     remote_git("reset", "-q", "--hard", base)
     remote_git("config", "uploadpack.allowReachableSHA1InWant", "true")
@@ -668,7 +664,6 @@ def test_producer_outside_the_local_clone_is_fetched_from_its_repository(tmp_pat
     ] == POINTS
     with pytest.raises(validation.ProducerRegenerationError) as failure:
         validation.producer_matrix("example/project", "f" * 40, FAMILY)
-    # git's own diagnostics are kept for the operator.
     assert f"not our ref {'f' * 40}" in failure.value.stderr
 
 
@@ -689,7 +684,6 @@ def test_failing_producer_keeps_its_stderr_and_never_sees_credentials(tmp_path, 
     with pytest.raises(validation.ProducerRegenerationError) as failure:
         validation.producer_matrix("example/project", head, FAMILY)
 
-    # The public reason stays fixed; the producer's own output is kept apart from it.
     assert str(failure.value) == "Baseline producer family cannot be regenerated"
     assert failure.value.stderr == "generator failed; token=None\n"
 

@@ -11,9 +11,6 @@ ROOT = Path(__file__).resolve().parents[4]
 RUNNER = "fixture-cluster_00"
 LAUNCH = "infx.launch run"
 
-# A stale job of this runner leaves the queue one poll after scancel, so each
-# cancel must wait through one squeue round. scancel records the workspace
-# listing at the time it ran.
 FAKES = {
     "scancel": (
         'printf \'%s|%s\\n\' "$*" "$(ls "$GITHUB_WORKSPACE" | tr "\\n" " ")" >> "$FAKE_DIR/scancel.log"\n'
@@ -71,11 +68,10 @@ def run_steps(tmp_path: Path, steps: list[dict]) -> dict[str, list[str]]:
 
 
 def assert_cancelled_and_waited(calls: dict[str, list[str]]) -> None:
-    # The runner's own jobs, and those srtctl submitted under the namespaced name.
     for name in (RUNNER, f"inferencex-{RUNNER}"):
         assert any(f"--name={name}" in line.split("|")[0].split() for line in calls["scancel"]), calls
     polls = [line for line in calls["squeue"] if f"--name={RUNNER}" in line.split()]
-    assert len(polls) >= 2, calls  # it kept polling until the job left the queue
+    assert len(polls) >= 2, calls
 
 
 @pytest.mark.parametrize(
@@ -88,14 +84,12 @@ def test_stale_runner_jobs_are_cancelled_before_checkout(tmp_path, workflow):
     checkout = next(
         index for index, step in enumerate(steps) if str(step.get("uses", "")).startswith("actions/checkout")
     )
-    # Conditional pre-run steps (the MI355X ownership repair) need sudo; they cancel nothing.
     pre_checkout = [step for step in steps[:checkout] if "run" in step and "if" not in step]
 
     calls = run_steps(tmp_path, pre_checkout)
 
     assert_cancelled_and_waited(calls)
     if workflow == "speedbench-al.yml":
-        # Cancelled while the stale outputs were still there, then they are removed.
         assert all("speedbench_results" in line.split("|")[1] for line in calls["scancel"])
         assert not (workspace / "speedbench_results").exists()
 
@@ -105,7 +99,6 @@ def test_post_run_cancellation_does_not_need_the_launcher_python(tmp_path, workf
     (tmp_path / "workspace").mkdir()
     steps = launch_job_steps(workflow)
     launch = next(index for index, step in enumerate(steps) if LAUNCH in step.get("run", ""))
-    # With INFERENCEX_LAUNCH_PYTHON unset only unconditional always() steps run.
     post_run = [step for step in steps[launch + 1:] if step.get("if") == "always()" and "run" in step]
 
     assert_cancelled_and_waited(run_steps(tmp_path, post_run))

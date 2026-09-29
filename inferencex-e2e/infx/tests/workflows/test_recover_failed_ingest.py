@@ -369,7 +369,6 @@ def test_build_recovery_config_from_current_and_historical_projects(
     project = repo / base_layout
     configs = project / "configs"
     configs.mkdir(parents=True)
-    # The recovered revision plans with its own package, here a copy of the current one.
     shutil.copytree(
         ROOT / "infx", project / "infx", ignore=shutil.ignore_patterns("tests", "__pycache__"),
     )

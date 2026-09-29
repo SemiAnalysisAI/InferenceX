@@ -407,7 +407,6 @@ def build_plan(
         base = None
         if has_append_only:
             base = stack.enter_context(snapshot(base_ref))
-            # Raw entries bound the edit scope; only the base's own generator validates them.
             base_master = load_config_files(base.master_configs, validate=False)
             selected_config_scenarios: dict[str, set[str]] = defaultdict(set)
             for entry, configs in resolved_entries:

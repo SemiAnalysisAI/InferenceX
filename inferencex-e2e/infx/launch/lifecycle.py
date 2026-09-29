@@ -10,7 +10,6 @@ from contextlib import ExitStack
 from types import FrameType, TracebackType
 from typing import Any, Self
 
-# SIGHUP: start_runners.sh kills the runner's tmux session (RUNNER_SETUP.md, Gotchas).
 _SIGNALS = (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
 
 
@@ -66,9 +65,6 @@ class Lifecycle:
         self._stack.callback(run)
 
     def _on_signal(self, signum: int, frame: FrameType | None) -> None:
-        # Inside __exit__ (at its first instruction, or delivered by pthread_sigmask for a
-        # signal that arrived just before) no body is left to unwind, and raising there
-        # would skip every cleanup.
         if self._exiting or (frame is not None and frame.f_code is _EXIT_CODE):
             self._signum = self._signum or signum
             return
@@ -88,7 +84,6 @@ class Lifecycle:
         tb: TracebackType | None,
     ) -> bool:
         self._exiting = True
-        # Cleanups (scancel, artifact copies) must not be aborted midway.
         mask = signal.pthread_sigmask(signal.SIG_BLOCK, _SIGNALS)
         if isinstance(exc, _Interrupted):
             self._signum = exc.signum
@@ -102,7 +97,6 @@ class Lifecycle:
         try:
             self._stack.close()
         finally:
-            # SIG_IGN drops the signals held off during the cleanups before the mask lifts.
             for sig in _SIGNALS:
                 signal.signal(sig, signal.SIG_IGN)
             signal.pthread_sigmask(signal.SIG_SETMASK, mask)

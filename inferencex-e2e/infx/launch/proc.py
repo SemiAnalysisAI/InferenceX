@@ -16,8 +16,6 @@ _SECRET_NAME = re.compile(r"TOKEN|SECRET", re.IGNORECASE)
 def echo(argv: Sequence[str | os.PathLike[str]], env: Mapping[str, str] | None = None) -> None:
     """Print ``+ <argv>`` to stderr, masking the values of ``*TOKEN*`` and ``*SECRET*`` variables."""
     text = shlex.join(map(os.fspath, argv))
-    # Longest first, so a secret containing another is masked whole. Values shorter than
-    # four characters are not credentials and would mangle unrelated text.
     secrets = {
         value
         for source in (os.environ, env or {})

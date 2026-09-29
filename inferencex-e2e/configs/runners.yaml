@@ -300,7 +300,6 @@ labels:
     - mi355x-amds_07
     - mi355x-amds_08
     - mi355x-amds_09
-# See CONFIGS.md. models.entries keys: MODEL basename or <basename>@<root>; node-local copies first.
 clusters:
   h100-cw:
     gpus-per-node: 8
@@ -309,7 +308,6 @@ clusters:
     scheduler: slurm
     slurm:
       partition: h100
-      # The partition rejects --exclusive (sbatch: Requested node configuration is not available).
       exclusive: false
       gres: "gpu:h100:{gpus}"
       volumes:
@@ -321,8 +319,8 @@ clusters:
         lock-timeout-s: 600
       srt-slurm:
         network-interface: ""
-        gpus-per-node-directive: false  # GPUs are requested by typed GRES (slurm.gres)
-        single-node-exclusive: false  # the partition rejects --exclusive
+        gpus-per-node-directive: false
+        single-node-exclusive: false
   h100-dgxc:
     gpus-per-node: 8
     available-cpu-dram-mib: 2_063_837
@@ -344,7 +342,6 @@ clusters:
         dir: /mnt/nfs/lustre/containers
         visibility: shared
         import: pre-staged
-        # Multi-node dynamo-trt squashes keep their older location and names.
         framework-dirs:
           dynamo-trt: {dir: /mnt/nfs/sa-shared/containers, key-style: plus-strip-nvcr}
         helper-dirs:
@@ -352,13 +349,11 @@ clusters:
       srt-slurm:
         network-interface: ""
         default-time-limit: "6:00:00"
-        # Model loads here outlast the 600 s TCPStore default of SGLang's torch-distributed.
         dist-timeout-s: 1800
         gpus-per-node-directive: true
         segment-directive: false
         container-aliases: [dynamo-trtllm, dynamo-sglang, latest]
         nginx-aliases: [nginx-sqsh]
-        # uv, per-runner caches and Pythons here: jobs cannot write the compute node's home.
         uv-cache-root: /mnt/nfs/sa-shared/.uv
   h200-cw:
     gpus-per-node: 8
@@ -367,7 +362,6 @@ clusters:
     scheduler: slurm
     slurm:
       partition: h200
-      # The partition rejects --exclusive (sbatch: Requested node configuration is not available).
       exclusive: false
       gres: "gpu:h200:{gpus}"
       volumes:
@@ -380,8 +374,8 @@ clusters:
         lock-timeout-s: 600
       srt-slurm:
         network-interface: ""
-        gpus-per-node-directive: false  # GPUs are requested by typed GRES (slurm.gres)
-        single-node-exclusive: false  # the partition rejects --exclusive
+        gpus-per-node-directive: false
+        single-node-exclusive: false
   h200-dgxc:
     gpus-per-node: 8
     available-cpu-dram-mib: 1_471_356
@@ -390,7 +384,6 @@ clusters:
       entries:
         DeepSeek-R1-0528: {root: models, dir: DeepSeek-R1-0528}
         GLM-5.2-FP8: {root: models, dir: GLM-5.2-FP8}
-        # The 0813 checkpoint, staged under the base model's name.
         DeepSeek-V4-Pro-0813: {root: hf-hub-cache, dir: DeepSeek-V4-Pro}
         Kimi-K3: {root: hf-hub-cache, dir: Kimi-K3}
         Qwen3.5-397B-A17B-FP8: {root: hf-hub-cache, dir: Qwen3.5-397B-A17B-FP8}
@@ -405,12 +398,10 @@ clusters:
         aiperf-cache: {path: /home/sa-shared/gharunners/ai-perf-cache}
         models: {path: /models}
       squash:
-        # Single-node squashes; multi-node ones are in framework-dirs.
         dir: /data/containers
         visibility: shared
         import: compute
         lock-timeout-s: 1800
-        # Multi-node images keep their staged names; only dsv4/glm5.2 SGLang and DCGM import.
         framework-dirs:
           dynamo-sglang:
             key-style: plus
@@ -438,21 +429,19 @@ clusters:
     scheduler: slurm
     slurm:
       partition: b200
-      # The partition rejects --exclusive (sbatch: Requested node configuration is not available).
       exclusive: false
       gres: "gpu:b200:{gpus}"
       volumes:
         hf-hub-cache: {path: /tmp/gharunner/hf-hub-cache, visibility: node-local}
       squash:
-        # Worker-node /tmp, invisible from the login host.
         dir: /tmp/gharunner/squash
         visibility: node-local
         import: all-nodes
         lock-timeout-s: 600
       srt-slurm:
         network-interface: ""
-        gpus-per-node-directive: false  # GPUs are requested by typed GRES (slurm.gres)
-        single-node-exclusive: false  # the partition rejects --exclusive
+        gpus-per-node-directive: false
+        single-node-exclusive: false
   b200-nb:
     gpus-per-node: 8
     arch: x86_64
@@ -475,7 +464,6 @@ clusters:
       entries:
         DeepSeek-R1-0528: {root: scratch, dir: DeepSeek-R1-0528}
         DeepSeek-R1-0528-NVFP4-v2: {root: scratch, dir: DeepSeek-R1-0528-NVFP4-v2}
-        # dsr1 FP4 configs name MODEL nvidia/DeepSeek-R1-0528-FP4-V2 or its served name.
         DeepSeek-R1-0528-FP4-V2: {root: scratch, dir: DeepSeek-R1-0528-NVFP4-v2}
         deepseek-r1-fp4: {root: scratch, dir: DeepSeek-R1-0528-NVFP4-v2}
         DeepSeek-V4-Pro: {root: scratch, dir: DeepSeek-V4-Pro}
@@ -506,9 +494,7 @@ clusters:
         dir: /data/home/sa-shared/containers
         visibility: shared
         import: submit-host
-        # Importing the vLLM image over the shared home is slow.
         lock-timeout-s: 3600
-        # tilert_utils/submit.sh imports here too and takes <dir>/.locks/<key>.lock.
         lock-file: locks-dir
       srt-slurm:
         network-interface: ""
@@ -525,11 +511,9 @@ clusters:
       entries:
         DeepSeek-R1-0528: {root: scratch, dir: DeepSeek-R1-0528}
         DeepSeek-R1-0528-NVFP4-v2: {root: scratch, dir: DeepSeek-R1-0528-NVFP4-v2}
-        # dsr1 FP4 configs name MODEL nvidia/DeepSeek-R1-0528-FP4-V2 or its served name.
         DeepSeek-R1-0528-FP4-V2: {root: scratch, dir: DeepSeek-R1-0528-NVFP4-v2}
         deepseek-r1-fp4: {root: scratch, dir: DeepSeek-R1-0528-NVFP4-v2}
         DeepSeek-V4-Pro: {root: scratch, dir: DeepSeek-V4-Pro}
-        # Also staged on NVMe (@scratch), but not on every node.
         DeepSeek-V4-Pro-0813: {root: data-models, dir: DeepSeek-V4-Pro-0813}
         DeepSeek-V4-Pro-0813@scratch: {root: scratch, dir: DeepSeek-V4-Pro-0813}
         DeepSeek-V4.1-Flash: {root: data-models, dir: DeepSeek-V4.1-Flash}
@@ -549,23 +533,19 @@ clusters:
       partition: batch_1
       account: benchmark
       exclusive: true
-      # gpu-16 retains a foreign 1.63 TB tmpfs allocation; rechecked 2026-09-21.
       exclude: [dsxe-sa-b300-prd0-gpu-16]
       gres: "gpu:{gpus}"
-      cpus-per-gpu: 24  # all 192 CPUs of a node, whether srtctl runs one task per node or per GPU
+      cpus-per-gpu: 24
       salloc-args: [--mem=0]
       volumes:
         hf-home: {path: ~/.cache/huggingface}
         hf-hub-cache: {path: ~/.cache/huggingface/hub}
         scratch: {path: /scratch/models, visibility: node-local}
         data-models: {path: /data/models}
-        # SPEED-Bench collectors download unstaged checkpoints here (models.download-root).
         writable-models: {path: /data/home/sa-gha-runner/models}
       squash:
-        # /data/squash is root-owned, hence the per-user directory.
         dir: /data/home/sa-gha-runner/squash
         visibility: shared
-        # enroot needs an overlay the shared FS cannot back; import on one compute node.
         import: compute
         lock-timeout-s: 3600
       srt-slurm:
@@ -612,13 +592,10 @@ clusters:
       srt-slurm:
         network-interface: ""
         default-time-limit: "6:00:00"
-        # The runner pod cannot stat the model Lustre paths or the compute nodes' NVMe.
         preflight: false
-        # The single NVL72 rack needs no contiguous segment placement.
         segment-directive: false
         container-aliases: [dynamo-trtllm, dynamo-sglang]
         nginx-aliases: [nginx-sqsh]
-        # Runner homes are not mounted on compute nodes, so some lanes check out here.
         shared-run-root: /mnt/lustre01/users-public/sa-shared/gha-runs
   gb300-nv:
     gpus-per-node: 4
@@ -636,7 +613,6 @@ clusters:
         MiniMax-M3-NVFP4: {root: scratch, dir: MiniMax-M3-NVFP4}
         Qwen3.5-397B-A17B-FP8: {root: scratch, dir: Qwen3.5-397B-A17B-FP8}
         Qwen3.5-397B-A17B-NVFP4-V2: {root: scratch, dir: Qwen3.5-397B-A17B-NVFP4-V2}
-        # Plain-NVFP4 configs are served the V2 export here.
         Qwen3.5-397B-A17B-NVFP4: {root: scratch, dir: Qwen3.5-397B-A17B-NVFP4-V2}
     scheduler: slurm
     slurm:
@@ -650,12 +626,10 @@ clusters:
         scratch: {path: /scratch/models, visibility: node-local}
         data-models: {path: /data/models}
       squash:
-        # /data, not /home/sa-shared: the /home mount of the same NFS store hits ELOOP.
         dir: /data/home/sa-shared/gharunners/squash
         visibility: shared
-        import: compute  # login is x86_64, compute aarch64
+        import: compute
         lock-timeout-s: 600
-        # The standalone compute import step takes a whole node.
         import-step-args: [--exclusive]
         single-node-import: true
       srt-slurm:
@@ -668,7 +642,6 @@ clusters:
         volume-mounts:
           aiperf-cache: /aiperf_mmap_cache
           hf-hub-cache: /hf_hub_cache
-          # srtctl's cache of hash-pinned dynamo wheels.
           dynamo-wheels: /configs/dynamo-wheels
   mi300x-amd:
     gpus-per-node: 8
@@ -713,7 +686,6 @@ clusters:
       cpus-per-task: 256
       srun-args: [--container-remap-root, --container-writable]
       volumes:
-        # /raid's locality is undocumented, so it counts as node-local, as on MI300X.
         hf-hub-cache: {path: /raid/hf-hub-cache, visibility: node-local}
       squash:
         dir: /raid/squash
@@ -740,7 +712,6 @@ clusters:
     models:
       entries:
         DeepSeek-V4-Pro-0813: {root: it-share-data, dir: DeepSeek-V4-Pro-0813}
-        # The Hub snapshot's config drops vision_config, which SGLang's Qwen-VL processor requires.
         Qwen3.5-397B-A17B-FP8: {root: it-share-data, dir: Qwen3.5-397B-A17B-FP8}
     scheduler: slurm
     slurm:
@@ -750,17 +721,14 @@ clusters:
       cpus-per-task: 128
       srun-args: [--container-remap-root, --container-writable]
       volumes:
-        hf-hub-cache: {path: /var/lib/hf-hub-cache, visibility: node-local}  # NVMe
-        # AgentX checkpoints read from the shared cache.
+        hf-hub-cache: {path: /var/lib/hf-hub-cache, visibility: node-local}
         shared-hf-hub-cache: {path: /it-share/hf-hub-cache}
         aiperf-cache: {path: /it-share/aiperf-cache}
         it-share-data: {path: /it-share/data}
       squash:
-        # /it-share is also on compute nodes, and a staged squash survives nightly pruning.
         dir: /it-share/gharunners2/srt-slurm/containers
         visibility: shared
         import: compute
-        # Multi-node jobs reuse a valid squash, else Pyxis imports the image in the job.
         multi-node-import: false
       srt-slurm:
         network-interface: eno0
@@ -772,11 +740,9 @@ clusters:
           script: runners/srt-slurm/hooks/mi355x-amds/setup.sh
           env:
             IBDEVICES: rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7
-          # The GPU-drain check alone can take 15 minutes.
           timeout-s: 1200
           nodes: all
         volume-mounts:
-          # This volume is already the Hub cache, not HF_HOME.
           shared-hf-hub-cache: /hf_hub_cache/hub
         mounts:
           /dev/kfd: /dev/kfd

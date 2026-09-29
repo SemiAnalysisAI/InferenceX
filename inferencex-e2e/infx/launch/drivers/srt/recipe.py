@@ -24,7 +24,6 @@ RECIPES_MIRROR = Path("benchmarks/multi_node/srt-slurm-recipes")
 HEALTH_ATTEMPTS = 720
 _HEALTH_CHECK = re.compile(r"( *)health_check:")
 _MAX_ATTEMPTS = re.compile(r"(\bmax_attempts:\s*)(\d+)")
-# Forced TRT speculative acceptance, which eval-only real-verification runs strip.
 FORCED_ACCEPTANCE_MARKER = "TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS"
 
 
@@ -46,7 +45,7 @@ def rename_job(text: str, name: str) -> str:
 def raise_health_attempts(text: str) -> str:
     """Raise each ``health_check`` block's ``max_attempts`` to at least HEALTH_ATTEMPTS."""
     lines = text.splitlines(keepends=True)
-    block: int | None = None  # the indentation of the health_check key being read
+    block: int | None = None
     for index, line in enumerate(lines):
         content = line.strip()
         indent = len(line) - len(line.lstrip(" "))
@@ -54,7 +53,7 @@ def raise_health_attempts(text: str) -> str:
             block = None
         if heading := _HEALTH_CHECK.match(line):
             block = len(heading[1])
-        if block is not None:  # a flow mapping's attempts are on the key's own line
+        if block is not None:
             lines[index] = _MAX_ATTEMPTS.sub(_at_least_the_floor, line)
     return "".join(lines)
 

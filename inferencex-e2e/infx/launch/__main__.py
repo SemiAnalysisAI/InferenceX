@@ -50,8 +50,6 @@ def _cleanup(runner_config: Path | None) -> int:
     try:
         cluster = resolve_cluster(runner, runner_config)
     except (OSError, ValueError, yaml.YAMLError) as error:
-        # Config drift must not fail the job. Without the record, only backends that find
-        # their jobs by runner name alone can clean up.
         print(f"WARNING: {error}", file=sys.stderr)
         for scheduler in BACKENDS:
             backend_class(scheduler).cleanup(None, runner)

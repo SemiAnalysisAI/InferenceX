@@ -14,8 +14,6 @@ from infx.launch.request import LaunchRequest
 from infx.tests.launch.fake_backend import FakeBackend, FakeSettings, containers_dir
 
 COLLECTOR = "benchmarks/single_node/speedbench/fixture.sh"
-# Records what the script saw into its result, writes a log the workflow uploads, and
-# leaves a file that is neither.
 SCRIPT = r"""printf 'model=%s\ncwd=%s\ngit=%s\nworkload=%s\ncluster=%s\ntoken=%s\n' \
     "$MODEL_PATH" "$PWD" "$([ -e .git ] && echo yes || echo no)" "${SPEEDBENCH_KNOB:-unset}" \
     "${UCX_NET_DEVICES:-unset}" "${GITHUB_TOKEN:-unset}" > "$OUT_YAML"
@@ -84,13 +82,9 @@ def test_a_script_point_runs_on_a_new_backend_through_its_volumes(fake, workspac
 
     assert rc == 0
     seen = result(workspace)
-    # MODEL_PATH named the checkpoint inside the volume the backend resolved the claim to.
     assert seen["model"] == str(tmp_path / "fake/volumes/ckpt/Kimi-K3")
-    # It ran in the backend's own copy of the checkout, delivered without git metadata.
     assert seen["cwd"] != str(workspace) and seen["git"] == "no"
-    # Workload and cluster env reach the container; runner credentials do not.
     assert (seen["workload"], seen["cluster"], seen["token"]) == ("7", "eth0", "unset")
-    # What the workflow reads came back; nothing else did.
     assert (workspace / "speedbench_results/server_0.log").read_text() == "serving\n"
     assert not (workspace / "draft_models").exists()
     assert (tmp_path / "fake/volumes/hf").is_dir()
@@ -140,7 +134,7 @@ def test_cleanup_hands_the_backend_the_runners_settings_when_it_has_a_record(
     config = tmp_path / "runners.yaml"
     config.write_text(yaml.safe_dump(fake))
     monkeypatch.setenv("RUNNER_NAME", runner)
-    monkeypatch.setenv("PATH", str(tmp_path))  # no Slurm here
+    monkeypatch.setenv("PATH", str(tmp_path))
 
     assert main(["--runner-config", str(config), "cleanup"]) == 0
 

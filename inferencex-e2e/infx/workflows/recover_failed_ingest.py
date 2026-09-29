@@ -411,7 +411,6 @@ def build_config(
         pr_number,
         changelog_path,
     )
-    # The merged revision's own planner reads its configs; base..synthetic selects the PR's entries.
     revision = Revision(project_root(worktree))
     try:
         command, env = revision.invocation(

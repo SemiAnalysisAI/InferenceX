@@ -26,15 +26,11 @@ from infx.launch.backends.base import BackendError, Job
 from infx.launch.backends.slurm.cli import srun
 
 IMPORT_ATTEMPTS = 3
-# Soft-mounted network storage recovers within minutes; wait attempt * this.
 RETRY_DELAY_S = 30.0
-# Exit codes of the node script that retrying cannot fix.
 _EXIT_NOT_STAGED = 66
 _EXIT_LOCK_TIMEOUT = 75
 _ENROOT_DIRS = ("ENROOT_TEMP_PATH", "ENROOT_CACHE_PATH", "ENROOT_DATA_PATH", "ENROOT_RUNTIME_PATH")
 _KEY_CHARACTERS = re.compile(r"[/:@#]")
-# Both importers write ``<squash>.tmp.<host>.<pid>``. Only leftovers matching this are
-# removed under the lock; other tools' temp files (``<squash>.tmp.<pid>``) are theirs.
 _TEMP_GLOB = ".tmp.*.[0-9]*"
 
 
@@ -165,8 +161,6 @@ def _import_here(image: str, policy: SquashPolicy) -> None:
                 f"Squash file already exists and is valid, skipping import: {path}", file=sys.stderr
             )
             return
-        # Under the lock none of our imports is in flight, so a temp file of ours is a
-        # dead one's. Temp files of other importers are left to them.
         stale = glob.glob(glob.escape(str(path)) + _TEMP_GLOB)
         for leftover in [path, *map(Path, stale)]:
             leftover.unlink(missing_ok=True)
@@ -179,21 +173,17 @@ def _import_here(image: str, policy: SquashPolicy) -> None:
                     directory.mkdir()
                     env[name] = str(directory)
                 uri = enroot_uri(image)
-                # Empty stdin: never block on an interactive credential prompt.
                 imported = proc.run(["enroot", "import", "-o", temporary, uri], env=env, input="")
             if imported.returncode != 0:
                 raise ImageError(f"enroot import failed for {uri}")
             if not is_valid_squash(temporary):
                 raise ImageError(f"enroot import produced an invalid squash file: {temporary}")
-            # World-readable so other accounts' pyxis can open the shared cache.
             temporary.chmod(temporary.stat().st_mode | stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
             temporary.replace(path)
         finally:
             temporary.unlink(missing_ok=True)
 
 
-# Runs on compute nodes, where infx may not be importable. Arguments: squash path,
-# lock path, enroot URI, lock timeout (s), action (import|validate).
 _NODE_SCRIPT = r"""
 set -eo pipefail
 sq="$1"; lock="$2"; uri="$3"; lock_timeout="$4"; action="$5"

@@ -20,34 +20,32 @@ class LaneMount:
     """A cluster volume the lane mounts for the requests ``when`` matches."""
 
     when: Match
-    volume: str  # a slurm.volumes name
-    target: str | None = None  # container path; None: the volume's host path
-    world_writable: bool = False  # containers write caches there as another user
+    volume: str
+    target: str | None = None
+    world_writable: bool = False
 
 
 @dataclass(frozen=True)
 class SrtLane:
     """How one cluster's multi-node srt-slurm lane differs from the others."""
 
-    tag: str | None  # first ``--tags`` field; None passes no --tags
-    frameworks: frozenset[str] | None = None  # FRAMEWORK values the lane accepts
-    rejects: tuple[tuple[Match, str], ...] = ()  # requests refused up front, with the error
-    setup_scripts: Mapping[str, str] = field(default_factory=dict)  # FRAMEWORK -> --setup-script
-    mounts: tuple[LaneMount, ...] = ()  # added to the cluster's srt-slurm mounts
-    # requests whose checkout lives on srt-slurm.shared-run-root
+    tag: str | None
+    frameworks: frozenset[str] | None = None
+    rejects: tuple[tuple[Match, str], ...] = ()
+    setup_scripts: Mapping[str, str] = field(default_factory=dict)
+    mounts: tuple[LaneMount, ...] = ()
     shared_run_root: tuple[Match, ...] = ()
-    eval_unsets: tuple[str, ...] = ()  # recipe keys unset for evals
-    real_verification: Match | None = None  # eval-only runs strip forced TRT acceptance
-    head_frontend: Match | None = None  # ... and colocate the frontend with post-eval
-    write_eval_meta: bool = False  # regenerate meta_env.json on the host
-    time_limit: str | None = None  # None: SALLOC_TIME_LIMIT
+    eval_unsets: tuple[str, ...] = ()
+    real_verification: Match | None = None
+    head_frontend: Match | None = None
+    write_eval_meta: bool = False
+    time_limit: str | None = None
     long_time_limit: str | None = None
-    long_time: Match | None = None  # requests that get long_time_limit
+    long_time: Match | None = None
 
 
 _DYNAMO = any_of("dynamo-sglang", "dynamo-trt", "dynamo-vllm")
 _AGENTIC = Match(agentic=True)
-# The aiperf dataset mmap and HF trace dataset caches, where the agentic recipes expect them.
 _AGENTIC_CACHES = (
     LaneMount(_AGENTIC, "aiperf-cache", "/aiperf_mmap_cache", world_writable=True),
     LaneMount(_AGENTIC, "hf-hub-cache", "/hf_hub_cache", world_writable=True),
@@ -76,7 +74,6 @@ SRT_LANES: dict[tuple[str, LaunchPath], SrtLane] = {
         setup_scripts={"dynamo-sglang": "install-torchao.sh"},
         mounts=(
             *_AGENTIC_CACHES,
-            # srtctl caches its hash-pinned dynamo wheels there.
             LaneMount(
                 Match(any_of("glm5.2"), any_of("fp4"), any_of("dynamo-sglang"), agentic=True),
                 "dynamo-wheels",
@@ -113,7 +110,6 @@ SRT_LANES: dict[tuple[str, LaunchPath], SrtLane] = {
     ("mi355x-amds", LaunchPath.SRT_MULTI): SrtLane(
         tag=None,
         mounts=(LaneMount(Match(), "aiperf-cache", "/aiperf_mmap_cache"),),
-        # Evals need real expert dispatch; throughput variants may use fake dispatch.
         eval_unsets=(
             "roles.prefill.args.ep-dispatch-algorithm",
             "roles.decode.args.ep-dispatch-algorithm",

@@ -56,7 +56,6 @@ if [[ " $* " == *" 4242 "* && "$(cat "$FAKE_LOG_DIR/batch-rc" 2>/dev/null)" != 0
 echo "$state"
 """,
     "scontrol": "exit 1",
-    # Accounting names no default account.
     "sacctmgr": "exit 0",
     "scancel": r"""
 printf '%s\n' "$*" >> "$FAKE_LOG_DIR/scancel.log"
@@ -92,8 +91,6 @@ printf '%s\n' "$*" >> "$FAKE_LOG_DIR/unsquashfs.log"
     "rsync": r"""printf '%s\n' "$*" >> "$FAKE_LOG_DIR/rsync.log" """,
 }
 
-# Stands in for srtctl on PATH: records each ``srtctl apply`` and writes the job
-# outputs srt-slurm would produce, then the --json manifest (or prose).
 _SRTCTL = r"""
 import json, os, pathlib, sys
 import yaml
@@ -143,7 +140,6 @@ else:
 sys.exit(int(os.environ.get("FAKE_SRTCTL_RC", "0")))
 """
 
-# The batch wrapper's re-entry runs the batch script as the job would.
 _SBATCH = r"""
 import os, subprocess, sys
 args = sys.argv[1:]

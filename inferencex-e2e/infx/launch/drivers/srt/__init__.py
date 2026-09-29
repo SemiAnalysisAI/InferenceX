@@ -60,7 +60,6 @@ def run_single_node(launch: Launch) -> int:
         time_limit=time_limit,
         image=request.image,
         container=run.backend.stage_image(request.image, single_node=True).reference,
-        # Pyxis pulls the registry nginx itself; only multi-node jobs stage it.
         nginx=config.NGINX_IMAGE if run.srt.nginx_aliases else None,
         model_paths={f"hf:{request.model}": model_path},
         mounts=[(str(hf_cache), request.hf_hub_cache)],
@@ -132,7 +131,6 @@ def run_multinode(launch: Launch) -> int:
     fork = request.framework in SRT_FORKS
     model_paths = models.model_paths(launch.cluster, request, config_file, served, fork=fork)
     run = SrtRun.create(launch, request, models.job_env(launch.cluster, request, served))
-    # srtctl's preflight stats aliased checkpoints from this host, which has no node-local copy.
     preflight = run.srt.preflight and not (model_paths and model and model.node_local)
     if request.framework == "tilert":
         require(request, "PREFILL_IMAGE")
@@ -140,7 +138,6 @@ def run_multinode(launch: Launch) -> int:
 
     checkout = prepare_checkout(run, checkout_dir(run, shared=shared), power=decision.dcgm)
     overrides = eval_overrides(checkout.root / "recipes", lane, request)
-    # Compute nodes run a shared checkout's venv, where a head-node-only python would dangle.
     system_python = (
         "/usr/bin/python3" if shared and os.access("/usr/bin/python3", os.X_OK) else None
     )
@@ -151,7 +148,6 @@ def run_multinode(launch: Launch) -> int:
     infmax = compute_workspace(run, checkout, shared=shared)
     run.env["INFMAX_WORKSPACE"] = str(infmax)
 
-    # Power lanes validate one power window per concurrency, so the job runs CONC_LIST.
     conc_list = request.env.get("CONC_LIST", "") if decision.dcgm else None
     job_name = srtctl_job_name(request.runner_name)
     prepare_recipe(checkout.root, config_file, job_name, run.srt.dist_timeout_s, conc_list)
@@ -214,7 +210,6 @@ def table_problems(clusters: Mapping[str, Cluster], only: str | None = None) -> 
     for cluster_id in filter(scoped, models.SHARED_HF_CACHE_LANES):
         if profile("SHARED_HF_CACHE_LANES", cluster_id) is not None:
             volume(f"SHARED_HF_CACHE_LANES[{cluster_id!r}]", cluster_id, "shared-hf-hub-cache")
-    # Bumps target single-node srt points; policy.table_problems checks their keys.
     for cluster_id in filter(scoped, policy.SALLOC_TIME_BUMPS):
         srt = _srt_settings(clusters.get(cluster_id))
         if srt is not None and (srt.default_time_limit or srt.single_node_time_limit):

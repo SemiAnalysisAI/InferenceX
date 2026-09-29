@@ -283,14 +283,12 @@ jobs:
                   if [[ -f "$PRIORITY_ROOT/inferencex-e2e/configs/runners.yaml" ]]; then
                     PRIORITY_ROOT="$PRIORITY_ROOT/inferencex-e2e"
                   fi
-                  # Every GPU job runs the measured revision's own `python -m infx.launch`.
                   env PYTHONPATH="$PRIORITY_ROOT" python3 -P -m infx.workflows.require_launcher "$GITHUB_WORKSPACE"
                   if [ -n "$CHANGELOG_BASE_REF" ] || [ -n "$CHANGELOG_HEAD_REF" ]; then
                     if [ -z "$CHANGELOG_BASE_REF" ] || [ -z "$CHANGELOG_HEAD_REF" ]; then
                       echo "Both changelog-base-ref and changelog-head-ref are required" >&2
                       exit 1
                     fi
-                    # The measured revision's own planner reads its configs; trusted tooling only isolates it.
                     CMD=(
                       env PYTHONPATH="$PRIORITY_ROOT"
                       uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml

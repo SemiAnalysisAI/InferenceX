@@ -32,14 +32,12 @@ class Override:
     """What differs for the requests ``when`` matches; per field, the first such row wins."""
 
     when: Match
-    entry: str | None = None  # the models.entries key served instead
-    served_name: str | None = None  # SERVED_MODEL_NAME, when the frontend registers another name
-    require_config: bool = False  # the checkpoint's config.json must be readable before submission
+    entry: str | None = None
+    served_name: str | None = None
+    require_config: bool = False
 
 
 OVERRIDES: dict[str, tuple[Override, ...]] = {
-    # vLLM reads the 0813 NVMe copy, which not every node holds; every other engine the
-    # shared one.
     "b300-dsxe": (
         Override(
             Match(frameworks=any_of("vllm"), model_glob="*/DeepSeek-V4-Pro-0813"),
@@ -48,7 +46,6 @@ OVERRIDES: dict[str, tuple[Override, ...]] = {
         Override(Match(model_glob="*/DeepSeek-V4-Pro-0813"), entry="DeepSeek-V4-Pro-0813"),
     ),
     "gb200-nv": (
-        # dsr1 SGLang and DSV4 vLLM read the Lustre copies; TRT and the DSV4 power lane NVMe.
         Override(
             Match(any_of("dsr1"), any_of("fp4"), any_of("dynamo-sglang")),
             entry="deepseek-r1-0528-fp4-v2",
@@ -74,7 +71,6 @@ OVERRIDES: dict[str, tuple[Override, ...]] = {
             served_name="GLM-5.2-NVFP4",
         ),
     ),
-    # Operators stage these checkpoints; a missing one fails before submission.
     "h100-dgxc": (
         Override(Match(), require_config=True),
         Override(
@@ -106,7 +102,7 @@ class Checkpoint:
 
     volume: str
     dir: str
-    node_local: bool  # each node holds its own copy, which a node can lack
+    node_local: bool
 
 
 def checkpoint(cluster: Cluster, request: LaunchRequest) -> Checkpoint | None:
@@ -132,7 +128,6 @@ def checkpoint(cluster: Cluster, request: LaunchRequest) -> Checkpoint | None:
         return None
     entry = entries[str(key)]
     model = Checkpoint(entry.root, entry.dir, node_local(str(key)))
-    # Only srt-slurm clusters have OVERRIDES rows (table_problems), so the host path exists.
     if _override(cluster, request, "require_config"):
         config = host_path(cluster, model) / "config.json"
         if not os.access(config, os.R_OK):
@@ -216,7 +211,6 @@ def single_node_model_path(cluster: Cluster, request: LaunchRequest) -> str:
     return str(host_path(cluster, model)) if model is not None else f"hf:{request.model}"
 
 
-# AgentX single-node points that read the shared Hub cache instead of the node-local one.
 SHARED_HF_CACHE_LANES: dict[str, tuple[Match, ...]] = {
     "mi355x-amds": (
         Match(agentic=True, model_glob="MiniMaxAI/MiniMax-M3*"),

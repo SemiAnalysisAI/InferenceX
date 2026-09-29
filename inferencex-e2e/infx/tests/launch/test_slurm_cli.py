@@ -86,13 +86,12 @@ def test_final_status_maps_allocation_accounting(fake_bin, tmp_path, record, sta
     fake_bin("sacct", f"{recorder(log)}\necho '{record}'")
     status = final_status(Job("42"), delay_s=0)
     assert (status.state, status.exit_code) == (state, exit_code)
-    # Terminal readings are final: no retry loop.
     assert calls(log) == [["-X", "-n", "-P", "-j", "42", "--format=State,ExitCode"]]
 
 
 @pytest.mark.parametrize("readings,state", [
     (["COMPLETING|0:0", "COMPLETING|0:0", "COMPLETED|0:0"], JobState.SUCCEEDED),
-    (["RUNNING|0:0"] * 3, JobState.RUNNING),  # never settles: the last reading stands
+    (["RUNNING|0:0"] * 3, JobState.RUNNING),
 ])
 def test_final_status_retries_unsettled_accounting_up_to_its_attempts(fake_bin, tmp_path, readings, state):
     counter = tmp_path / "count"
@@ -120,7 +119,7 @@ def test_queue_state_reads_only_the_named_job(fake_bin):
 
 def test_stream_log_fails_when_job_dies_before_its_log(fake_bin, tmp_path):
     log = tmp_path / "scontrol.log"
-    fake_bin("squeue", "exit 0")  # job no longer listed
+    fake_bin("squeue", "exit 0")
     fake_bin("scontrol", recorder(log))
     with pytest.raises(SlurmError, match="ended before creating"):
         stream_log(Job("77"), tmp_path / "missing.log", wait_s=0)
@@ -159,7 +158,6 @@ def test_workflow_cleanup_cancels_the_runners_jobs_and_those_srtctl_submitted(fa
     assert calls(scancel) == [
         ["--user=runner", "--name=b300-dsxe_03"], ["--user=runner", "--name=inferencex-b300-dsxe_03"],
     ]
-    # It waits until squeue lists neither.
     [query] = calls(squeue)
     assert "--name=b300-dsxe_03,inferencex-b300-dsxe_03" in query
 

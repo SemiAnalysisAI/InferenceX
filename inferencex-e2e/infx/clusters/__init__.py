@@ -27,7 +27,6 @@ from infx.config import RUNNER_CONFIG, repository_root
 
 CLUSTER_LABEL_PREFIX = "cluster:"
 
-# A scheduler also needs a backend of the same name in ``infx.launch.backends.BACKENDS``.
 SCHEDULERS: dict[str, type[SchedulerSettings]] = {"slurm": SlurmSettings}
 
 
@@ -51,7 +50,6 @@ class ClusterModels(Record):
     """Pre-staged checkpoints. Keys are checkpoint directory names (see runners.yaml)."""
 
     entries: dict[str, ModelEntry] = Field(default_factory=dict)
-    # Volume that receives checkpoints missing from ``entries`` (``<root>/<HF basename>``).
     download_root: str | None = Field(default=None, alias="download-root", min_length=1)
 
 
@@ -75,11 +73,9 @@ class Cluster(Record):
     gpus_per_node: int = Field(alias="gpus-per-node", gt=0)
     available_cpu_dram_mib: int | None = Field(default=None, alias="available-cpu-dram-mib", gt=0)
     arch: Literal["x86_64", "aarch64"]
-    # Environment every driver gives the workloads it runs on this cluster.
     env: dict[str, str] = Field(default_factory=dict)
     models: ClusterModels = Field(default_factory=ClusterModels)
     scheduler: str
-    # The ``<scheduler>:`` sub-record, parsed by the scheduler's settings model.
     scheduler_settings: SkipValidation[SchedulerSettings]
 
     _id: str = PrivateAttr(default="")
@@ -94,7 +90,6 @@ class Cluster(Record):
     @field_validator("env")
     @classmethod
     def _exportable(cls, env: dict[str, str]) -> dict[str, str]:
-        # Slurm hands this environment to jobs in ``srun --export``, which splits on commas.
         if names := sorted(name for name, value in env.items() if "," in value):
             raise ValueError(f"env values cannot contain ',' (srun --export splits on it): {names}")
         return env
@@ -130,7 +125,6 @@ class Cluster(Record):
         if download_root is not None:
             if download_root not in volumes:
                 raise ValueError(f"download-root names unknown volume {download_root!r}")
-            # Every node reads what one run downloaded, so the copy must be the same everywhere.
             if volumes[download_root].visibility != "shared":
                 raise ValueError(f"download-root {download_root!r} must be a shared volume")
         return self

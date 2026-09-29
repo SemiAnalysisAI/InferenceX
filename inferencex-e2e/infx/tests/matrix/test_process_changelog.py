@@ -466,7 +466,6 @@ def test_recovery_plans_with_the_checkouts_own_planner_and_recipes(
     subprocess.run(["git", "commit", "-qm", "recipe fixture"], cwd=root, check=True)
     head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
     if ambient:
-        # Neither ambient tooling nor an inherited recipe root may replace the checkout's own.
         shadow = tmp_path_factory.mktemp("ambient")
         (shadow / "infx").mkdir()
         (shadow / "infx/__init__.py").write_text("raise RuntimeError('ambient tooling imported')\n")

@@ -29,8 +29,6 @@ from infx.launch.backends.base import (
     JobStatus,
 )
 
-# Launching-host state as fnmatch patterns. In a container these would name host paths or
-# a host interpreter, or leak runner credentials; exporting bash's readonly ones fails.
 HOST_ENV = (
     "PATH", "HOME", "USER", "LOGNAME", "PWD", "OLDPWD", "SHELL", "SHLVL", "TERM", "TMPDIR",
     "HOSTNAME", "_", "LANG", "LC_*", "LD_*", "PYTHON*", "VIRTUAL_ENV", "CONDA_*", "UV_*",

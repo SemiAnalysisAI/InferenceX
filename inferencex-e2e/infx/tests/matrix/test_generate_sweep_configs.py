@@ -2593,7 +2593,6 @@ class TestAgenticGeneration:
         result = generate_agentic_sweep(config, validate_runner_config(runners))
 
         assert {entry["pp"]: entry["total-cpu-dram-gb"] for entry in result} == {1: 1199, 2: 2399}
-        # An unmeasured cluster has no DRAM budget; it is never borrowed from elsewhere.
         del cluster["available-cpu-dram-mib"]
         with pytest.raises(ValueError, match="requires 'available-cpu-dram-mib'"):
             generate_agentic_sweep(config, validate_runner_config(runners))

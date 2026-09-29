@@ -18,7 +18,6 @@ from infx.launch.request import SrtRequest
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "utils/srt-slurm/src"))
-# The pinned srtctl's own srtslurm.yaml defaults, without its serving dependencies.
 from srtctl.core.config import resolve_config_with_defaults  # noqa: E402
 
 
@@ -61,7 +60,6 @@ def test_the_profile_renders_its_facts_and_mounts_a_volume_at_a_second_target():
         entries={"Model-A": {"root": "data", "dir": "Model-A"}},
     )  # fmt: skip
     config = render(record, job(mounts=[("/share/hub", "/mnt/hf_hub_cache/")], single_node=True))
-    # One host directory mounted twice: the cluster's Hub view and the job's HF_HUB_CACHE.
     assert config["default_mounts"] == {
         "/share/hub": "/hf_hub_cache/hub",
         "/dev/kfd": "/dev/kfd",
@@ -126,7 +124,7 @@ def test_a_failed_write_keeps_the_previous_config(tmp_path):
     ("bench", "exported", "team", "bench"),
     (None, "exported", "team", "exported"),
     (None, None, "team", "team"),
-    (None, None, "", None),  # srtctl's own fallback, "default", applies
+    (None, None, "", None),
 ])  # fmt: skip
 def test_jobs_run_under_the_declared_else_exported_else_users_default_account(
     tmp_path, monkeypatch, declared, exported, users_default, expected
@@ -151,7 +149,7 @@ def test_jobs_run_under_the_declared_else_exported_else_users_default_account(
 
 
 @pytest.mark.parametrize(("health", "effective"), [
-    (None, {"max_attempts": HEALTH_ATTEMPTS, "interval_seconds": 10}),  # the rendered default
+    (None, {"max_attempts": HEALTH_ATTEMPTS, "interval_seconds": 10}),
     ({"max_attempts": 100, "interval_seconds": 5}, {"max_attempts": HEALTH_ATTEMPTS, "interval_seconds": 5}),
     ({"max_attempts": 2160, "interval_seconds": 5}, {"max_attempts": 2160, "interval_seconds": 5}),
 ])  # fmt: skip

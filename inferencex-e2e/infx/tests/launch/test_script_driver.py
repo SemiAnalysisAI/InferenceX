@@ -18,10 +18,6 @@ from infx.launch.request import LaunchRequest
 
 ROOT = Path(__file__).resolve().parents[3]
 
-# Every fake appends ``[name, *argv]`` to $FAKE_CALLS. srun emulates Pyxis for
-# container steps: the command runs in the host directory bound to the container
-# workdir, and path-valued variables are translated through the bind mounts, so a
-# script writing $OUT_YAML=/workspace/... lands in the mounted workspace.
 FAKE = r"""#!{python}
 import json, os, subprocess, sys
 
@@ -81,7 +77,6 @@ def fakes(tmp_path, monkeypatch):
     log = tmp_path / "calls.jsonl"
     monkeypatch.setenv("PATH", f"{binaries}:/usr/bin:/bin")
     monkeypatch.setenv("FAKE_CALLS", str(log))
-    # speedbench-al.yml points the collector at the container workspace.
     monkeypatch.setenv("OUT_YAML", "/workspace/speedbench-reference-al.yaml")
 
     def calls() -> list[list[str]]:
@@ -117,7 +112,6 @@ def launch_env(workspace: Path, **overrides: str) -> dict[str, str]:
         "BENCH_SCRIPT_OVERRIDE": COLLECTOR_PATH,
         "SALLOC_TIME_LIMIT": "480",
         "ENROOT_IMPORT_TIME_LIMIT": "120",
-        # speedbench-al.yml points the collector at the container workspace.
         "OUT_YAML": "/workspace/speedbench-reference-al.yaml",
         **overrides,
     }
@@ -175,14 +169,12 @@ def container_step(calls: list[list[str]]) -> list[str]:
 def test_collector_writes_the_reference_yaml_into_the_workspace(fakes, workspace, tmp_path):
     assert launch(cluster_for(tmp_path), request_for(workspace)) == 0
 
-    # The workflow's success check: the collector output lands in GITHUB_WORKSPACE.
     assert (workspace / "speedbench-reference-al.yaml").read_text() == "kimi-k3: {}\n"
     assert (workspace / "seen.txt").read_text().splitlines() == [
         f"cwd={workspace}", f"MODEL_PATH={tmp_path}/scratch/Kimi-K3", "PORT=8888",
     ]
     assert (tmp_path / "hf").is_dir()
 
-    # Cold shared cache: a one-node import step runs before the GPU allocation.
     importer, allocation, probe, container, cancel = fakes()
     assert importer[0] == "srun" and not any(arg.startswith("--jobid") for arg in importer)
     assert {"--partition=batch", "--account=bench", "--time=120", "--exclude=bad-node",
@@ -191,15 +183,12 @@ def test_collector_writes_the_reference_yaml_into_the_workspace(fakes, workspace
     assert {"--partition=batch", "--account=bench", "--nodes=1", "--gres=gpu:8", "--exclusive",
             "--mem=0", "--time=480", "--job-name=fixture_00", "--exclude=bad-node",
             "--no-shell"} <= set(allocation)
-    # The staged root is node-local, so readiness is checked on the allocated node.
     assert probe == ["srun", "--jobid=42", "--export=ALL", "test", "-r",
                      f"{tmp_path}/scratch/Kimi-K3/config.json"]
-    # Only the volume holding the checkpoint is mounted, not the download root.
     assert option(container, "--container-mounts").split(",") == [
         f"{workspace}:/workspace", f"{tmp_path}/scratch:/models", f"{tmp_path}/hf:/hf_hub_cache",
     ]
     assert option(container, "--container-image") == f"{tmp_path}/squash/vllm_vllm-openai_v0.21.0.sqsh"
-    # The cluster's workload env, then the driver's own settings.
     assert option(container, "--export").split(",") == [
         "ALL", "UCX_NET_DEVICES=eth0", "PORT=8888", "MODEL_PATH=/models/Kimi-K3", "HF_HOME=/hf_hub_cache",
         "HF_HUB_CACHE=/hf_hub_cache/hub", "HF_XET_CACHE=/hf_hub_cache/xet",
@@ -244,7 +233,6 @@ def test_unstaged_model_resolves_under_the_download_root_without_a_node_probe(
 
 
 def test_collectors_serve_the_checkpoint_srt_jobs_would(fakes, workspace, tmp_path):
-    # A shared copy keyed by the basename and a node-local one keyed <basename>@<root>.
     inventory = inventory_for(tmp_path)
     inventory["clusters"]["fixture"]["models"]["entries"] = {
         "Kimi-K3": {"root": "downloads", "dir": "Kimi-K3"},
@@ -252,7 +240,6 @@ def test_collectors_serve_the_checkpoint_srt_jobs_would(fakes, workspace, tmp_pa
     }
     assert launch(load_inventory(inventory).clusters["fixture"], request_for(workspace)) == 0
 
-    # The node-local copy wins, as for srt-slurm jobs.
     container = container_step(fakes())
     assert "MODEL_PATH=/models/kimi-k3" in option(container, "--export").split(",")
     assert f"{tmp_path}/scratch:/models" in option(container, "--container-mounts").split(",")
@@ -278,7 +265,6 @@ def test_editable_install_images_mount_the_workspace_at_ix(
 
     assert launch(cluster_for(tmp_path), request) == 0
 
-    # /workspace belongs to the image's editable install; the checkout is at /ix.
     assert (workspace / "speedbench-reference-al.yaml").exists()
     container = container_step(fakes())
     assert option(container, "--container-workdir") == "/ix"

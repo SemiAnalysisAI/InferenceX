@@ -262,7 +262,6 @@ jobs:
       - name: Slurm cleanup (pre-run)
         run: &slurm-cleanup |
           if command -v squeue >/dev/null 2>&1; then
-            # srtctl submits as inferencex-<runner> (infx.launch.backends.slurm.srtctl_job_name).
             for job_name in "${RUNNER_NAME}" "inferencex-${RUNNER_NAME}"; do
               echo "[Slurm] Cleaning up jobs named: $job_name ..."
               scancel --user="$USER" --name="$job_name" || true
@@ -319,7 +318,6 @@ jobs:
           enable-cache: false
 
       - name: Prepare result-processing Python
-        # Keep uv's cache and Pythons per runner: some runner homes can't host uv's defaults.
         env: &uv-setup-env
           UV_CACHE_DIR: ${{ github.workspace }}/../.infx-uv-cache
           UV_PYTHON_INSTALL_DIR: ${{ github.workspace }}/../.infx-uv-python
@@ -332,7 +330,6 @@ jobs:
       - name: Prepare launcher Python
         env: *uv-setup-env
         run: |
-          # Never activated, so launched Slurm jobs inherit the runner's PATH and no VIRTUAL_ENV.
           launch_venv="$RUNNER_TEMP/infx-launch-venv"
           uv venv --quiet --python 3.12 "$launch_venv"
           uv pip install --quiet --exclude-newer PT12H --python "$launch_venv/bin/python" \
@@ -342,9 +339,6 @@ jobs:
       - name: Launcher cleanup (pre-run)
         env:
           PYTHONPATH: ${{ github.workspace }}/.result-tooling/inferencex-e2e
-        # Second pass after the shell cancel in the first step, which needs no Python: the
-        # workflow revision's launcher has the cluster's backend remove what this runner
-        # left behind.
         run: &launcher-cleanup |
           "$INFERENCEX_LAUNCH_PYTHON" -P -m infx.launch cleanup
 

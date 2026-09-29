@@ -64,9 +64,6 @@ export VLLM_ENGINE_READY_TIMEOUT_S=3600
 mkdir -p "$RESULTS_DIR"
 nvidia-smi
 
-# The DSpark checkpoint has no models.entries record in the cluster's runners.yaml
-# record, so MODEL_PATH resolves under models.download-root and the ~960 GB download
-# runs once. Add a models.entries record once the weights are staged read-only.
 if [[ -n "${MODEL_PATH:-}" ]]; then
     if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
         if [[ ! -w "$(dirname "$MODEL_PATH")" ]]; then

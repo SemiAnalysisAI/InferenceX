@@ -32,7 +32,6 @@ def _int_list(value: Any) -> Any:
     return value.split() if isinstance(value, str) else value
 
 
-# Each flag is on only for the values the job scripts compare it against.
 OneFlag = Annotated[bool, _equals("1")]
 TrueFlag = Annotated[bool, _equals("true")]
 PowerFlag = Annotated[bool, _equals("1", "true", "TRUE", "yes", "YES")]
@@ -40,7 +39,6 @@ IntList = Annotated[list[int], BeforeValidator(_int_list)]
 
 
 def _describe(error: ValidationError) -> str:
-    # Never echo input values: the environment holds secrets.
     missing: list[str] = []
     invalid: list[str] = []
     for detail in error.errors(include_url=False, include_input=False):
@@ -54,7 +52,6 @@ def _describe(error: ValidationError) -> str:
     return "; ".join([*([RequestError.missing(*missing).args[0]] if missing else []), *invalid])
 
 
-# Set to 1 in a launch the srt driver re-entered inside a batch allocation.
 BATCH_REENTRY_ENV = "INFX_BATCH_REENTRY"
 
 
@@ -117,11 +114,9 @@ class SrtRequest(LaunchRequest):
     run_eval: TrueFlag = Field(alias="RUN_EVAL")
     eval_only: TrueFlag = Field(alias="EVAL_ONLY")
     thinking_mode: str | None = Field(None, alias="THINKING_MODE")
-    # Power lanes validate one power window per concurrency.
     conc_list: IntList = Field(default_factory=list, alias="CONC_LIST")
     require_power: PowerFlag = Field(False, alias="REQUIRE_POWER")
     inferencex_results_python: str | None = Field(None, alias="INFERENCEX_RESULTS_PYTHON")
-    # Forwarded verbatim: batched multi-node lm-eval passes a space-separated list.
     eval_conc: str | None = Field(None, alias="EVAL_CONC")
 
     @model_validator(mode="after")
@@ -179,7 +174,5 @@ class AmdUtilsRequest(LegacyRequest):
     """An MI355X AgentX job submitted through amd_utils, which serves ``MODEL``'s basename."""
 
     model: str = Field(alias="MODEL")
-    # The Slurm account when the cluster sets none.
     user: str | None = Field(None, alias="USER")
-    # Keeps the root-owned container log tree for local debugging.
     keep_logs: OneFlag = Field(False, alias="KEEP_LOGS")

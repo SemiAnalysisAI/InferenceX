@@ -23,7 +23,6 @@ import json, os, sys
 with open(os.environ["FAKE_CALLS"], "a") as log:
     log.write(json.dumps([os.path.basename(sys.argv[0]), *sys.argv[1:]]) + "\\n")
 """
-# GNU and BSD tail differ (--pid); print the named files instead of following them.
 TAIL = f"""#!{sys.executable}
 import os, sys
 for arg in sys.argv[1:]:
@@ -32,7 +31,6 @@ for arg in sys.argv[1:]:
 """
 
 AMD_RECIPE = "benchmarks/multi_node/agentic/dsv4_fp4_mi355x_atom-disagg.sh"
-# Submits "job 4242": writes what amd_utils/job.slurm leaves behind and prints the id.
 AMD_SUBMIT = """#!/usr/bin/env bash
 set -e
 env > "$GITHUB_WORKSPACE/submitted.env"
@@ -106,7 +104,6 @@ def fakes(tmp_path, monkeypatch):
     return calls
 
 
-# The master config's additional-settings, which the workflow also exports.
 SETTINGS = {"MODEL_PATH": "/hf/snapshots/glm-5.1", "TILERT_WEIGHTS_DIR": "/tilert-cache/glm5.1-fp8-8shard"}
 
 
@@ -158,14 +155,11 @@ def run_tilert(tmp_path: Path, workspace: Path, *, script: bool, settings: dict[
 @pytest.mark.parametrize("own_model_path", [True, False])
 def test_tilert_lane_replaces_the_launcher_with_the_disagg_script(tmp_path, own_model_path):
     workspace = tmp_path / "workspace"
-    # Without a MODEL_PATH setting of its own, the point gets the staged checkpoint, even
-    # over a MODEL_PATH the runner exports.
     settings = SETTINGS if own_model_path else {"TILERT_WEIGHTS_DIR": SETTINGS["TILERT_WEIGHTS_DIR"]}
     runner = {} if own_model_path else {"MODEL_PATH": "/runner/glm-5.1"}
 
     launcher, output = run_tilert(tmp_path, workspace, script=True, settings=settings, **runner)
 
-    # exec: the script runs as the launcher process and its exit code is the job's.
     assert launcher.returncode == 5, output
     served = SETTINGS["MODEL_PATH"] if own_model_path else str(tmp_path / "sandbox/scratch/models/GLM-5.1-FP8")
     assert (workspace / "seen.txt").read_text().splitlines() == [
@@ -175,7 +169,6 @@ def test_tilert_lane_replaces_the_launcher_with_the_disagg_script(tmp_path, own_
 
 
 @pytest.mark.parametrize(("script", "overrides", "message"), [
-    # The master config names the weights cache; there is no default to fall back to.
     (True, {"TILERT_WEIGHTS_DIR": ""}, "TILERT_WEIGHTS_DIR"),
     (False, {}, "tilert disagg script not found"),
 ])  # fmt: skip
@@ -239,28 +232,24 @@ def test_amd_utils_lane_follows_the_job_and_stages_its_artifacts(
         "MODEL_NAME": "DeepSeek-V4-Pro-0813", "MODEL_PATH": f"{tmp_path}/it-share",
         "MODEL_DIR": f"{tmp_path}/it-share", "GPUS_PER_NODE": "8",
         "BENCHMARK_LOGS_DIR": f"{amd_workspace}/benchmark_logs",
-        # The fabric the cluster's srt-slurm host setup is given.
         "IBDEVICES": "rdma0,rdma1",
     }
-    # Uploaded by benchmark-multinode-tmpl.yml: eval results, LOGS/agentic, server logs.
     assert json.loads((amd_workspace / "results_gsm8k.json").read_text()) == {"score": 1}
     assert (amd_workspace / "LOGS/agentic/conc_1/aiperf_artifacts/profile.json").exists()
     with tarfile.open(amd_workspace / "multinode_server_logs.tar.gz") as bundle:
         assert "./server.log" in bundle.getnames()
-    # The exit cleanup keeps the Slurm output, shows its stderr, then drops the log tree.
     artifacts = amd_workspace / "benchmark_artifacts"
     assert (artifacts / "slurm_job-4242.out").read_text() == "benchmark done\n"
     assert (artifacts / "slurm_job-4242.err").read_text() == "worker warning\n"
     assert not (amd_workspace / "benchmark_logs").exists()
     assert "worker warning" in capfd.readouterr().out
-    # The job had left the queue when its log ended, so nothing is left to cancel.
     assert not any(call[0] == "scancel" for call in fakes())
 
 
 @pytest.mark.parametrize(("overrides", "submitted"), [
     ({"NO_JOB_ID": "1"}, True),
-    ({"NO_JOB_LOG": "1"}, True),  # the job ended before writing its log
-    ({"IS_AGENTIC": "0"}, False),  # fixed-sequence points run through srt-slurm recipes
+    ({"NO_JOB_LOG": "1"}, True),
+    ({"IS_AGENTIC": "0"}, False),
 ], ids=["no-job-id", "no-job-log", "fixed-sequence"])  # fmt: skip
 def test_a_failed_amd_utils_launch_still_removes_the_log_tree(
     fakes, tmp_path, amd_workspace, monkeypatch, overrides, submitted
@@ -278,8 +267,6 @@ def test_an_inherited_log_dir_cannot_point_the_cleanup_at_the_checkout(
     keep = amd_workspace / "results.json"
     keep.write_text("{}")
 
-    # The B200 TileRT runtime settings export the checkout itself; the exit cleanup
-    # removes the log directory wholesale, so the lane uses its own.
     assert amd_launch(tmp_path, amd_workspace, monkeypatch, BENCHMARK_LOGS_DIR=str(amd_workspace)) == 0
 
     assert keep.read_text() == "{}"

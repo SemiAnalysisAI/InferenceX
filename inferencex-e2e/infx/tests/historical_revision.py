@@ -26,7 +26,6 @@ MASTER = {KEY: {
         "isl": 8192, "osl": 1024, "search-space": [{"tp": 1, "conc-list": [2, 6]}],
     }]},
 }}
-# (model, conc, image) of every point the revision's own tooling generates for KEY.
 POINTS = [("example/model", 2, "example/image:stable"), ("example/model", 6, "example/image:stable")]
 
 GENERATOR = '''\

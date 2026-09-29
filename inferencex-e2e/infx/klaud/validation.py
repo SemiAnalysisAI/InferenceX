@@ -73,7 +73,6 @@ def canonical_matrix(repository: str, head: str, family: str) -> dict:
     }
 
 
-# The fixed public reason when a producer family was not regenerated.
 PRODUCER_UNAVAILABLE = "Baseline producer family cannot be regenerated"
 
 
@@ -98,14 +97,12 @@ def producer_matrix(repository: str, head: str, family: str) -> dict:
     from infx.matrix.plan import recipe_fingerprint
     from infx.matrix.revision import snapshot
 
-    # Validates the family and head before git sees them.
     OwnedCandidate(id="0" * 16 + "-" + "0" * 16, family=family, base=head)
     try:
         missing = subprocess.run(
             ["git", "cat-file", "-e", f"{head}^{{commit}}"], capture_output=True, check=False
         ).returncode
         if missing:
-            # Reused pull-request runs publish heads that the default branch never contains.
             subprocess.run(
                 ["git", "fetch", "--quiet", "--no-tags", f"https://github.com/{repository}", head],
                 capture_output=True,

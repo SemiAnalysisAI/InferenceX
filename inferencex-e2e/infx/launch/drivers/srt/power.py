@@ -43,9 +43,9 @@ class PowerRule:
     """One allowed power combination."""
 
     when: Match
-    agentx: bool  # an AgentX power lane
-    recipe_glob: str | None = None  # fnmatch over the recipes/... path; ``*`` also matches ``/``
-    adapter: bool = False  # not AgentX: the power adapter validates each concurrency
+    agentx: bool
+    recipe_glob: str | None = None
+    adapter: bool = False
 
 
 @dataclass(frozen=True)
@@ -54,8 +54,8 @@ class PowerLane:
 
     rules: tuple[PowerRule, ...]
     error: str
-    agentic_error: str | None = None  # reported instead for agentic misses
-    eval_recipe_when_eval_only: bool = False  # inspect EVAL_CONFIG_FILE on eval-only runs
+    agentic_error: str | None = None
+    eval_recipe_when_eval_only: bool = False
 
 
 POWER_LANES: dict[tuple[str, LaunchPath], PowerLane] = {
@@ -156,7 +156,7 @@ POWER_LANES: dict[tuple[str, LaunchPath], PowerLane] = {
 class PowerDecision:
     """Outcome of power eligibility for one launch."""
 
-    dcgm: bool  # the recipe enables DCGM power on a lane that allows it
+    dcgm: bool
     agentx: bool
     adapter: bool = False
 

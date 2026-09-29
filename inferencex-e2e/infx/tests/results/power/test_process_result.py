@@ -1738,7 +1738,6 @@ def test_agentic_collector_preserves_archive_when_result_python_is_missing(
         )  # fmt: skip
         archive_name = "server-logs.tar.gz"
     else:
-        # h200 DCGM AgentX lanes validate each concurrency where the job left the aggregate.
         (workspace / "point_conc4.json").write_text(json.dumps(raw_result))
         rc = validate_agentic_power(
             pkg.logs_root, workspace, "point", PRODUCER_SHA, [4],

@@ -13,7 +13,6 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[4]
 
-# Records how the launcher ran, then writes the files each workflow checks after it.
 CAPTURE = """import json
 import os
 import sys
@@ -44,7 +43,6 @@ def measured_checkout(root: Path, launcher: str) -> tuple[Path, Path]:
     (project / "benchmarks" / "multi_node" / "runtime_settings.sh").write_text(
         "export FIXTURE_MULTI_NODE_SETTINGS=1\n"
     )
-    # A leftover shell launcher never runs: every revision launches through infx.launch.
     (project / "runners").mkdir()
     (project / "runners" / "launch_fixture.sh").write_text("#!/bin/bash\nexit 97\n")
     package = project / "infx" / "launch"
@@ -52,7 +50,6 @@ def measured_checkout(root: Path, launcher: str) -> tuple[Path, Path]:
     (project / "infx" / "__init__.py").write_text("")
     (package / "__init__.py").write_text("")
     (package / "__main__.py").write_text(launcher)
-    # The measured revision's own result-name helper; every launchable revision ships it.
     results = project / "infx" / "results"
     results.mkdir()
     (results / "__init__.py").write_text("")

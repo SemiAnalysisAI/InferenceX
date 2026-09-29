@@ -24,7 +24,6 @@ def run_get_jobs(tmp_path, *, launcher=True, **inputs):
     (workspace / ".ci-priority/inferencex-e2e").symlink_to(ROOT, target_is_directory=True)
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
-    # uv provisions the interpreter; the test environment already has its dependencies.
     (fake_bin / "uv").write_text(
         f'#!/bin/sh\nwhile [ "$1" != python ]; do shift; done\nshift\nexec "{sys.executable}" "$@"\n'
     )
@@ -42,7 +41,6 @@ def run_get_jobs(tmp_path, *, launcher=True, **inputs):
         "GITHUB_EVENT_NAME": "workflow_dispatch",
         "GITHUB_RUN_ID": "1",
         "GITHUB_RUN_ATTEMPT": "1",
-        # The workflow-level import path names the measured checkout, never the tooling.
         "PYTHONPATH": str(workspace / "inferencex-e2e"),
         "GENERATE_COMMAND": "",
         "PR_LABELS": "[]",

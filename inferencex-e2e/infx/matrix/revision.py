@@ -38,17 +38,14 @@ class Tool:
 GENERATOR = Tool("infx.matrix.generate", "utils/matrix_logic/generate_sweep_configs.py")
 PLANNER = Tool("infx.matrix.plan", "utils/process_changelog.py")
 TOOLS = {"generate": GENERATOR, "plan": PLANNER}
-# Newest first: before the move to the project root, configs lived under .github/.
 CONFIG_DIRS = ("configs", ".github/configs")
 NESTED_PROJECT = "inferencex-e2e/"
-# Everything a snapshot's generator reads, relative to the project root.
 SNAPSHOT_PATHS = (
     "infx",
     "utils/matrix_logic",
     *CONFIG_DIRS,
     "benchmarks/multi_node/srt-slurm-recipes",
 )
-# Executables, git's configuration, the locale and temporary storage; never credentials.
 INHERITED_ENV = ("PATH", "HOME", "LANG", "TMPDIR")
 
 
@@ -59,7 +56,6 @@ class Revision:
     root: Path
 
     def __post_init__(self) -> None:
-        # Tools run from the tree itself, where a relative root would re-anchor.
         object.__setattr__(self, "root", Path(self.root).resolve())
 
     @property
@@ -144,7 +140,6 @@ def snapshot(ref: str) -> Iterator[Revision]:
     for entry in listing.split(b"\0")[:-1]:
         metadata, path = entry.split(b"\t", 1)
         objects[os.fsdecode(path)] = metadata.split()[2]
-    # Never combine a historical root layout with the nested project snapshot.
     if any(path.startswith(NESTED_PROJECT) for path in objects):
         objects = {
             path.removeprefix(NESTED_PROJECT): oid
@@ -195,7 +190,6 @@ def main(argv: Sequence[str] | None = None) -> None:
         command, env = revision.invocation(TOOLS[options.tool], options.args)
     except ValueError as error:
         parser.error(str(error))
-    # Streams the tool's output and keeps its exit status for the calling workflow.
     raise SystemExit(subprocess.run(command, cwd=revision.root, env=env, check=False).returncode)
 
 

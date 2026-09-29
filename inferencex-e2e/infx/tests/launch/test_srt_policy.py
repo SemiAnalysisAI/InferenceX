@@ -81,9 +81,9 @@ OVERRIDES = (
 
 
 @pytest.mark.parametrize(("env", "path", "node_local", "served"), [
-    (dict(MODEL="org/M"), "nvme/m", True, None),  # a node-local copy wins
-    (dict(MODEL="org/M", FRAMEWORK="sglang"), "shared/m", False, None),  # an override names the copy
-    (dict(MODEL="org/M", FRAMEWORK="trt"), "nvme/m", True, "served-m"),  # served-name rows keep the lookup
+    (dict(MODEL="org/M"), "nvme/m", True, None),
+    (dict(MODEL="org/M", FRAMEWORK="sglang"), "shared/m", False, None),
+    (dict(MODEL="org/M", FRAMEWORK="trt"), "nvme/m", True, "served-m"),
     (dict(MODEL="org/Unstaged"), None, None, None),
 ])  # fmt: skip
 def test_models_resolve_by_basename_with_overrides(tmp_path, monkeypatch, env, path, node_local, served):
@@ -92,7 +92,6 @@ def test_models_resolve_by_basename_with_overrides(tmp_path, monkeypatch, env, p
     found = checkpoint(c, point)
     assert (found and (host_path(c, found), found.node_local)) == (path and (tmp_path / path, node_local))
     assert job_env(c, point, served_path(c, point, found)).get("SERVED_MODEL_NAME") == served
-    # Single-node points serve the same checkpoint, else the Hub; hub clusters always the Hub.
     assert single_node_model_path(c, point) == (str(tmp_path / path) if path else f"hf:{env['MODEL']}")
     assert single_node_model_path(cluster(tmp_path, "hub"), point) == f"hf:{env['MODEL']}"
 
@@ -110,9 +109,8 @@ def test_a_checkpoint_that_must_be_readable_fails_before_submission(tmp_path, mo
 def test_a_points_own_model_path_is_what_its_job_serves(tmp_path, monkeypatch):
     c = cluster(tmp_path)
     host = request(MODEL="org/M", MODEL_PATH="/host/m")
-    assert served_path(c, host, checkpoint(c, host)) == str(tmp_path / "nvme/m")  # the runner's own loses
+    assert served_path(c, host, checkpoint(c, host)) == str(tmp_path / "nvme/m")
     point = request(MODEL="org/M", MODEL_PATH="/point/m", PREFILL_ADDITIONAL_SETTINGS='["MODEL_PATH=/point/m"]')
-    # Where the staged copy must be readable here, a point serving its own path needs none.
     monkeypatch.setitem(models.OVERRIDES, "c", (Override(Match(), require_config=True),))
     served = served_path(c, point, checkpoint(c, point))
     assert served == "/point/m"
