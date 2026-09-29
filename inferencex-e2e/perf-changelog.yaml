@@ -9104,3 +9104,14 @@
     - "Restore the DCP8 LMCache bands on the native srt-slurm recipe: concurrency 14 and 16 (DSpark 3, ReplaySSM) and 48, 56 and 72 (no draft) run ATOM's in-process lmcache_offload connector through roles.agg.args.extra-kv-connectors (srt-slurm patch 507), with 128 GB/rank up to 48 and 192 GB/rank at 56 and 72. Concurrency 1 and 4 stay GPU-resident."
     - "No change to the Inferact/Kimi-K3-DSpark draft's precision: online_quant_config still excludes every draft linear (layers.*, context_proj), so its weights and activations stay BF16, and it keeps the target's FP8 KV cache (kv_cache_dtype fp8). FlyDSL FP8 prefill attention applies only to the target, since the draft runs its block pass as decode attention."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3407
+
+- config-keys:
+    - dsv41flash-fp4-gb300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the GB300 DeepSeek-V4.1-Flash vLLM AgentX image from nightly af1c0149 to nightly 36768d1b, with FlashInfer sparse attention, MXFP4 indexer KV, sparse logits, fp8 KV cache and FlashInfer autotuning disabled."
+    - "Use FULL_AND_PIECEWISE CUDA graphs with DSpark-aligned capture sizes up to 2046 tokens (2048-token batch budget) at CONC <= 4 and up to 8190 tokens (8192-token batch budget) otherwise; DEP2 at CONC 128 stops graph capture at 2046 tokens."
+    - "Run TP4 at concurrency 1, 4, 8 and 16 and TP2 at concurrency 2, 4, 8, 16 and 32, with Engram tables backed by transparent huge pages and max-num-seqs 2 x CONC (at least 8)."
+    - "Add DEP2 (TP1 x DP2 + EP2, MegaAttention/MegaMoE) at concurrency 16, 32, 48, 64 and 128 behind consistent-hash vLLM Router 0.1.14, admitting CONC sequences per DP rank."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3575

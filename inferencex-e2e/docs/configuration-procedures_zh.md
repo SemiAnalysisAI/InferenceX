@@ -281,7 +281,7 @@ B300 在 c1/c2/c4 使用相同的最小捕获范围。其 c1 CI 对比中，请�
 专家权重为 MXFP4，因此配方标记为 `precision: fp4`。
 
 各 GPU 入口共用纯文本服务行为，使用 `deepseek_v41` tokenizer 和解析器、1M 上下文，
-以及共享的 AgentX 轨迹回放、功耗、指标和 eval helper。TP4 的并发范围为 1–128。
+以及共享的 AgentX 轨迹回放、功耗、指标和 eval helper。除下文另有说明外，TP4 的并发范围为 1–128。
 共享脚本按六 token DSpark 验证块设置 CUDA graph capture。srt-slurm 单节点路径将检出挂载到 `/infmax-workspace`，避免在 `/workspace`
 下创建 AgentX 运行目录。沿用集群的模型路径和持久化缓存。配方在计算节点探测服务端口，首选端口被占用时选择可用端口，
 服务、回放、指标和 eval 共用同一端点。所有配方都必须获得 GPU sweep 和 eval
@@ -292,6 +292,20 @@ CUDA graph，并显式设置最大为 2046 或 8190 tokens 的捕获尺寸集合
 TP2 并发 128 使用 `--max-num-batched-tokens 2048`，其余情况使用 8192；
 `--max-num-seqs` 固定为 256。TP2 并发 128 还设置
 `--gpu-memory-utilization 0.97`。其他 SKU 继续使用共享脚本。
+
+GB300 条目（[#3575](https://github.com/SemiAnalysisAI/InferenceX/pull/3575)）使用
+`vllm/vllm-openai:nightly-36768d1bfd39094681cdbc8cb37d4b31c0729c89`，采用 FlashInfer
+稀疏 MLA attention、带稀疏 logits 的 MXFP4 indexer KV cache、fp8 KV cache，并关闭
+FlashInfer autotune。TP4 覆盖并发 1、4、8、16，TP2 覆盖 2、4、8、16、32，DEP2（TP1 x DP2，
+开启专家并行）覆盖 16、32、48、64、128。所有变体使用 `FULL_AND_PIECEWISE` CUDA graph，
+捕获尺寸均为六 token 验证块的倍数：并发 1–4 最大捕获 2046 tokens，并使用
+`--max-num-batched-tokens 2048`；其余并发最大捕获 8190 tokens，使用 8192；DEP2 并发 128
+最大捕获 2046 tokens，但保持 8192 batched tokens。TP 变体将 Engram 表放在透明大页上
+（`"use_thp":true`），`--max-num-seqs` 设为 2 x 并发且至少为 8，因为在并发 1 时 AgentX
+子 agent 最多会同时保持 3 x 并发个请求。DEP2 使用 MegaAttention（`FLASHMLA_MEGA_ATTN_DSV41`）、
+DeepGEMM MegaMoE，并将 Engram 嵌入表切分到各 DP rank；每个 DP rank 的 `--max-num-seqs`
+等于整个部署的并发，一致性哈希 vLLM Router 0.1.14 将每个会话固定到一个 rank。DP > 1 时
+会自动启用 Engram DP 共享内存，它与透明大页不兼容，因此 DEP2 不使用大页。
 
 GB300 launcher 将引擎就绪等待时间设为 7200 秒。在[运行 34504969146](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34504969146) 中，仅模型加载就耗时 18–23 分钟；Rust frontend 达到 3600 秒期限时，引擎仍在捕获 CUDA graph。此次仅延长启动等待时间，基准测试时长和解码设置保持不变。
 

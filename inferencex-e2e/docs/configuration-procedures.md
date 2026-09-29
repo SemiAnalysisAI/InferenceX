@@ -305,7 +305,7 @@ weights determine the recipe's `precision: fp4` label.
 
 The GPU-specific entry points share the text-only serving behavior, `deepseek_v41` tokenizer and
 parsers, 1M context, and the shared AgentX trace replay, power, metrics, and eval
-helpers. The TP4 concurrency range is 1–128. The shared script sizes graph capture
+helpers. Unless noted below, the TP4 concurrency range is 1–128. The shared script sizes graph capture
 for the six-token DSpark verification block. The srt-slurm single-node path mounts the checkout at `/infmax-workspace`, so
 AgentX runtime directories are not created under `/workspace`. Cluster model paths and persistent caches are reused.
 The recipe probes the serving port on the compute node and selects an available
@@ -318,6 +318,23 @@ at 2046 or 8190 tokens. It sets `--max-num-batched-tokens` to 2048 for concurren
 1–4 and TP2 concurrency 128, and to 8192 otherwise; `--max-num-seqs` is 256. The
 TP2 concurrency-128 variant also sets `--gpu-memory-utilization 0.97`. Other SKUs
 continue to use the shared script.
+
+The GB300 entry ([#3575](https://github.com/SemiAnalysisAI/InferenceX/pull/3575)) uses
+`vllm/vllm-openai:nightly-36768d1bfd39094681cdbc8cb37d4b31c0729c89` with FlashInfer sparse
+MLA attention, an MXFP4 indexer KV cache with sparse logits, an fp8 KV cache, and FlashInfer
+autotuning disabled. It runs TP4 at concurrency 1, 4, 8 and 16, TP2 at 2, 4, 8, 16 and 32,
+and DEP2 (TP1 x DP2 with expert parallelism) at 16, 32, 48, 64 and 128. All variants use
+`FULL_AND_PIECEWISE` CUDA graphs with capture sizes in multiples of the six-token
+verification block: concurrency 1–4 captures up to 2046 tokens with
+`--max-num-batched-tokens 2048`, other points capture up to 8190 tokens with 8192, and DEP2
+concurrency 128 captures up to 2046 tokens while keeping 8192 batched tokens. TP variants
+place Engram tables on transparent huge pages (`"use_thp":true`) and set `--max-num-seqs`
+to 2 x concurrency, at least 8, because AgentX subagents keep up to 3 x concurrency
+requests in flight at concurrency 1. DEP2 uses MegaAttention (`FLASHMLA_MEGA_ATTN_DSV41`),
+DeepGEMM MegaMoE, and Engram embeddings sharded across DP ranks; each DP rank admits
+`--max-num-seqs` equal to the deployment-wide concurrency, and a consistent-hash vLLM
+Router 0.1.14 pins each conversation to one rank. DEP2 does not use huge pages because
+Engram DP shared memory, enabled automatically when DP > 1, excludes them.
 
 The GB300 launcher allows 7200 seconds for engine readiness. In [run 34504969146](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34504969146), the Rust frontend exhausted its 3600-second deadline while the engine was still capturing graphs; model loading alone took 18–23 minutes. This extends startup time without changing the benchmark duration or decoding settings.
 
