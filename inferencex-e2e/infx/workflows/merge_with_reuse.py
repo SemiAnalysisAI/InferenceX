@@ -83,7 +83,6 @@ def changelog_path() -> str:
 
 SWEEP_LABEL_NAMES = frozenset(
     {
-        "sweep-enabled",
         "full-sweep-enabled",
         "non-canary-full-sweep-enabled",
         "full-sweep-fail-fast",

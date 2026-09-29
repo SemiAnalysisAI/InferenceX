@@ -28,7 +28,6 @@ Write natural technical Chinese used by ML infrastructure engineers. Preserve mo
 
 A PR sweep requires exactly one primary label:
 
-- `sweep-enabled`: trim every parallelism configuration to its lowest concurrency. Use for most lightweight validation.
 - `full-sweep-fail-fast`: canary-gated full sweep with matrix-scoped fail-fast. Recommended for image bumps, recipe changes, bring-up, and other full sweeps.
 - `full-sweep-enabled`: canary-gated full sweep without fail-fast. Use when a flaky job must not cancel its matrix's in-flight work.
 - `full-sweep-fail-fast-no-canary`: full, matrix-scoped fail-fast without the canary. Use when the canary is flaky or unrepresentative.

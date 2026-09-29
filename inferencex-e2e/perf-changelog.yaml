@@ -9005,6 +9005,38 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3477
 
 - config-keys:
+    - glm5.2-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the GLM-5.2 MXFP4 MI355X SGLang AgentX image from lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260923 to lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260924 (digest sha256:baadaba198e23c46c1dd651b5edefae8000bd5430943bd10b246b563905b3ecf); keep all serving flags, HiCache settings, and sweep points unchanged."
+    - "将 GLM-5.2 MXFP4 MI355X SGLang AgentX 镜像从 lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260923 更新到 lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260924（digest sha256:baadaba198e23c46c1dd651b5edefae8000bd5430943bd10b246b563905b3ecf）；其余服务参数、HiCache 设置与 sweep 点保持不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3446
+
+- config-keys:
+    - dsv41flash-fp4-b300-vllm-agentic-dspark
+  description:
+    - "Pin B300 DeepSeek-V4.1-Flash vLLM to nightly ddd6fbca with FlashInfer sparse attention, MXFP4 indexer KV, sparse logits, fp8 KV cache, and a 7200 s readiness timeout."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3458
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-agentic-dspark
+  description:
+    - "Pin B200 DeepSeek-V4.1-Flash vLLM to nightly ddd6fbca with FlashInfer sparse attention, MXFP4 indexer KV, sparse logits, fp8 KV cache, and a 7200 s readiness timeout."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3459
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update image to lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260926."
+    - "Switch attention to fp8 unified KV; enable grouped decode on TP8-only arms at conc >= 16."
+    - "Enable breakable CUDA-graph prefill (BCG) at conc <= 4."
+    - "Enable EP8 + MegaMoE for DP-attention arms at conc >= 128 (including conc 384)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3430
+
+- config-keys:
     - dsv4-fp4-b300-sglang-agentic-hicache-eagle
   scenario-type:
     - agentic-coding
