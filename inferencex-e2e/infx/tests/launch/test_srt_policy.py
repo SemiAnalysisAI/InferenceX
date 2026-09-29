@@ -161,8 +161,7 @@ def test_matching_single_node_points_read_the_shared_hub_cache(tmp_path, monkeyp
 
 
 BUMP = TimeBump(Match(agentic=True), min_conc=64, minutes=1440)
-LANE = SrtLane(tag=None, time_limit="4:00:00", long_time_limit="8:00:00",
-               long_time=Match(any_of("dsv4"), agentic=True))  # fmt: skip
+LANE = SrtLane(time_limit="4:00:00", long_time_limit="8:00:00", long_time=Match(any_of("dsv4"), agentic=True))
 BUMPED = dict(IS_AGENTIC="1", CONC="64")
 LONG = dict(MODEL_PREFIX="dsv4", IS_AGENTIC="1")
 
@@ -173,7 +172,7 @@ LONG = dict(MODEL_PREFIX="dsv4", IS_AGENTIC="1")
     ({"single-node-time-limit": 180}, None, BUMPED, "180"),
     ({}, LANE, LONG, "8:00:00"),
     ({}, LANE, dict(LONG, IS_AGENTIC="0"), "4:00:00"),
-    ({}, SrtLane(tag=None), BUMPED, "480"),
+    ({}, SrtLane(), BUMPED, "480"),
     ({"default-time-limit": "6:00:00", "single-node-time-limit": 180}, None, BUMPED, "6:00:00"),
 ], ids=[
     "single-node-salloc", "single-node-bump", "single-node-profile-limit", "lane-long-limit",

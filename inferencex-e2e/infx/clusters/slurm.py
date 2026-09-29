@@ -154,6 +154,7 @@ class SrtSlurmSettings(Record):
     """Cluster-owned srtslurm.yaml facts; job-specific values are added by the driver."""
 
     network_interface: str = Field(alias="network-interface")
+    job_tag: str | None = Field(default=None, alias="job-tag")
     default_time_limit: str | None = Field(
         default=None, alias="default-time-limit", pattern=r"^\d+:\d{2}:\d{2}$"
     )

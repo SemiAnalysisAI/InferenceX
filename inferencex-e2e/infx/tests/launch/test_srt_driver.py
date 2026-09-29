@@ -174,7 +174,7 @@ def test_single_node_failed_allocation_fails_the_launch(harness):
 LABS = {
     "lab-a": dict(
         lane=SrtLane(
-            tag="lab", setup_scripts={"dynamo-sglang": "setup.sh"},
+            setup_scripts={"dynamo-sglang": "setup.sh"},
             mounts=(LaneMount(Match(), "cache", "/cache"),), time_limit="2:00:00",
         ),
         env=dict(FRAMEWORK="dynamo-sglang"),
@@ -182,7 +182,7 @@ LABS = {
         served="served-model", dist_timeout=True, time="2:00:00", mounts=("/cache",), staging="import",
     ),
     "lab-b": dict(
-        lane=SrtLane(tag=None, shared_run_root=(Match(),)),
+        lane=SrtLane(shared_run_root=(Match(),)),
         env=dict(FRAMEWORK="dynamo-vllm", IS_AGENTIC="1", ISL="0", OSL="0", FAKE_RESULTS="agentic"),
         model="models/model", preflight=True, tag=None, setup_script=None, served=None,
         dist_timeout=False, time="10", mounts=(), staging="registry", shared_checkout=True,
@@ -199,7 +199,7 @@ def lab_config(tmp: Path) -> Path:
             "volumes": {"nvme": {"path": str(tmp / "nvme"), "visibility": "node-local"},
                         "cache": {"path": str(tmp / "cache")}},
             "squash": {"dir": str(tmp / "squash"), "import": "submit-host"},
-            "srt-slurm": {"network-interface": "", "dist-timeout-s": 1800},
+            "srt-slurm": {"network-interface": "", "job-tag": "lab", "dist-timeout-s": 1800},
         }},
         "lab-b": {**common, "models": {"entries": {"Model": {"root": "models", "dir": "model"}}}, "slurm": {
             "partition": "p", "exclusive": False,

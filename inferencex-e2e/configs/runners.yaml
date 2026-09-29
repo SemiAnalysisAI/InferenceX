@@ -348,6 +348,7 @@ clusters:
           nginx: {import: unchecked}
       srt-slurm:
         network-interface: ""
+        job-tag: h100
         default-time-limit: "6:00:00"
         dist-timeout-s: 1800
         gpus-per-node-directive: true
@@ -416,6 +417,7 @@ clusters:
           dcgm-exporter: {dir: /data/gharunners/containers}
       srt-slurm:
         network-interface: ""
+        job-tag: h200
         gpus-per-node-directive: true
         segment-directive: false
         container-aliases: [dynamo-trtllm, dynamo-sglang, dynamo-vllm, latest]
@@ -498,6 +500,7 @@ clusters:
         lock-file: locks-dir
       srt-slurm:
         network-interface: ""
+        job-tag: b200
         default-time-limit: "4:00:00"
         single-node-models: staged
         container-aliases: [dynamo-vllm, dynamo-sglang, dynamo-trtllm, sglang-v0.5.11-cu130]
@@ -550,6 +553,7 @@ clusters:
         lock-timeout-s: 3600
       srt-slurm:
         network-interface: ""
+        job-tag: b300
         single-node-models: staged
         container-aliases: [dynamo-trtllm, dynamo-sglang, dynamo-vllm]
         nginx-aliases: [nginx-sqsh]
@@ -591,6 +595,7 @@ clusters:
         single-node-import: true
       srt-slurm:
         network-interface: ""
+        job-tag: gb200
         default-time-limit: "6:00:00"
         preflight: false
         segment-directive: false
@@ -634,6 +639,7 @@ clusters:
         single-node-import: true
       srt-slurm:
         network-interface: ""
+        job-tag: gb300
         segment-directive: false
         container-aliases: [dynamo-trtllm, dynamo-sglang, v0.5.11, v0.5.13.post1]
         nginx-aliases: [nginx-sqsh]
@@ -709,6 +715,8 @@ clusters:
     gpus-per-node: 8
     available-cpu-dram-mib: 3_095_781
     arch: x86_64
+    env:
+      MORI_RDMA_TC: "104"
     models:
       entries:
         DeepSeek-V4-Pro-0813: {root: it-share-data, dir: DeepSeek-V4-Pro-0813}

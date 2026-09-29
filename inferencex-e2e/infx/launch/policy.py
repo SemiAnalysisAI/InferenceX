@@ -203,7 +203,7 @@ LEGACY_AMD_UTILS: dict[str, AmdUtilsLane] = {
         model_volume="it-share-data",
         logs_dir="benchmark_logs",
         host_setup_env=("IBDEVICES",),
-        env={"SLURM_JOB_NAME": "benchmark-sglang-disagg.job", "MORI_RDMA_TC": "104"},
+        env={"SLURM_JOB_NAME": "benchmark-sglang-disagg.job"},
     ),
 }
 

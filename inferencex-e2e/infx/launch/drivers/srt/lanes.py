@@ -29,7 +29,6 @@ class LaneMount:
 class SrtLane:
     """How one cluster's multi-node srt-slurm lane differs from the others."""
 
-    tag: str | None
     frameworks: frozenset[str] | None = None
     rejects: tuple[tuple[Match, str], ...] = ()
     setup_scripts: Mapping[str, str] = field(default_factory=dict)
@@ -53,11 +52,9 @@ _AGENTIC_CACHES = (
 
 SRT_LANES: dict[tuple[str, LaunchPath], SrtLane] = {
     ("b200-nscale", LaunchPath.SRT_NATIVE): SrtLane(
-        tag="b200",
         mounts=(*_AGENTIC_CACHES, LaneMount(Match(frameworks=any_of("tilert")), "tilert-cache")),
     ),
     ("b200-nscale", LaunchPath.SRT_MULTI): SrtLane(
-        tag="b200",
         frameworks=_DYNAMO,
         rejects=(
             (
@@ -67,9 +64,8 @@ SRT_LANES: dict[tuple[str, LaunchPath], SrtLane] = {
         ),
         mounts=_AGENTIC_CACHES,
     ),
-    ("b300-dsxe", LaunchPath.SRT_MULTI): SrtLane(tag="b300", frameworks=_DYNAMO),
+    ("b300-dsxe", LaunchPath.SRT_MULTI): SrtLane(frameworks=_DYNAMO),
     ("gb200-nv", LaunchPath.SRT_MULTI): SrtLane(
-        tag="gb200",
         frameworks=_DYNAMO,
         setup_scripts={"dynamo-sglang": "install-torchao.sh"},
         mounts=(
@@ -87,7 +83,6 @@ SRT_LANES: dict[tuple[str, LaunchPath], SrtLane] = {
         ),
     ),
     ("gb300-nv", LaunchPath.SRT_MULTI): SrtLane(
-        tag="gb300",
         real_verification=Match(frameworks=any_of("dynamo-trt"), agentic=True),
         head_frontend=Match(any_of("dsv4")),
         write_eval_meta=True,
@@ -97,18 +92,14 @@ SRT_LANES: dict[tuple[str, LaunchPath], SrtLane] = {
             any_of("dsv4"), frameworks=any_of("dynamo-sglang", "dynamo-trt"), agentic=True
         ),
     ),
-    ("h100-dgxc", LaunchPath.SRT_MULTI): SrtLane(
-        tag="h100", frameworks=any_of("dynamo-sglang", "dynamo-trt")
-    ),
+    ("h100-dgxc", LaunchPath.SRT_MULTI): SrtLane(frameworks=any_of("dynamo-sglang", "dynamo-trt")),
     ("h200-dgxc", LaunchPath.SRT_MULTI): SrtLane(
-        tag="h200",
         frameworks=any_of("dynamo-sglang", "dynamo-trt", "vllm"),
         time_limit="4:00:00",
         long_time_limit="8:00:00",
         long_time=Match(any_of("dsv4"), frameworks=any_of("dynamo-sglang"), agentic=True),
     ),
     ("mi355x-amds", LaunchPath.SRT_MULTI): SrtLane(
-        tag=None,
         mounts=(LaneMount(Match(), "aiperf-cache", "/aiperf_mmap_cache"),),
         eval_unsets=(
             "roles.prefill.args.ep-dispatch-algorithm",

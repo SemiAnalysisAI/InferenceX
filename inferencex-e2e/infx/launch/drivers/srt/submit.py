@@ -204,13 +204,13 @@ def multinode_arguments(
     ]
     if not checkout.fork and not preflight:
         arguments.append("--no-preflight")
-    if lane.tag is not None:
+    if run.srt.job_tag is not None:
         isl, osl = request.env.get("ISL", ""), request.env.get("OSL", "")
         workload = "agentic" if request.is_agentic else f"{isl}x{osl}"
         stamp = datetime.now().astimezone().strftime("%Y%m%d")
         arguments += [
             "--tags",
-            f"{lane.tag},{request.model_prefix},{request.precision},{workload},infmax-{stamp}",
+            f"{run.srt.job_tag},{request.model_prefix},{request.precision},{workload},infmax-{stamp}",
         ]
     if setup_script := lane.setup_scripts.get(request.framework):
         arguments += ["--setup-script", setup_script]
