@@ -5,6 +5,9 @@
 # validates them and never invents a default for caller-owned configuration.
 
 source "$(dirname "${BASH_SOURCE[0]}")/../../benchmark_lib.sh" --validation-only
+if [[ "${EVAL_ONLY:-}" != true ]]; then
+    validate_agentic_concurrency "${BENCH_MAX_CONCURRENCY:-}" || exit 1
+fi
 
 check_env_vars \
     NODE0_ADDR NODE_RANK MODEL_DIR MODEL_NAME MODEL_PATH xP yD IPADDRS \
@@ -432,28 +435,24 @@ run_agentic_replay() {
     mkdir -p "$result_dir"
 
     # Neither server.sh nor this script runs with errexit; a failed bootstrap
-    # must not fall through into the replay loop and its misleading cascade.
+    # must not fall through into replay and its misleading cascade.
     resolve_trace_source || return 1
     install_agentic_deps || return 1
 
-    local conc conc_result_dir
-    for conc in ${BENCH_MAX_CONCURRENCY//x/ }; do
-        echo "=========================================="
-        echo "Agentic trace replay: conc=$conc"
-        echo "=========================================="
-        conc_result_dir="$result_dir/conc_${conc}"
-        mkdir -p "$conc_result_dir"
-        export CONC="$conc" USERS="$conc"
-        build_replay_cmd "$conc_result_dir"
-        export RESULT_FILENAME="${result_filename_base}_conc${conc}"
-        if [[ "$DRY_RUN" -eq 1 ]]; then
-            echo "DRY RUN: $REPLAY_CMD"
-        elif ! run_agentic_replay_and_write_outputs "$conc_result_dir"; then
-            echo "WARNING: agentic trace replay for conc=$conc failed (replay or validation) after writing available results" >&2
-            rc=1
-        fi
-        echo "-----------------------------------------"
-    done
+    local conc="$BENCH_MAX_CONCURRENCY" conc_result_dir
+    validate_agentic_concurrency "$conc" || return 1
+    echo "Agentic trace replay: conc=$conc"
+    conc_result_dir="$result_dir/conc_${conc}"
+    mkdir -p "$conc_result_dir"
+    export CONC="$conc" USERS="$conc"
+    build_replay_cmd "$conc_result_dir"
+    export RESULT_FILENAME="${result_filename_base}_conc${conc}"
+    if [[ "$DRY_RUN" -eq 1 ]]; then
+        echo "DRY RUN: $REPLAY_CMD"
+    elif ! run_agentic_replay_and_write_outputs "$conc_result_dir"; then
+        echo "WARNING: agentic trace replay for conc=$conc failed (replay or validation) after writing available results" >&2
+        rc=1
+    fi
     export RESULT_FILENAME="$result_filename_base"
     return $rc
 }
