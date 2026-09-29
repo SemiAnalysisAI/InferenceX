@@ -1473,7 +1473,7 @@ dsv41flash-fp4-mi355x-sglang-agentic-dspark:
 
 # MI300X AgentX: homogeneous attention layouts with stock MORI transfer.
 qwen3.5-fp8-mi300x-sglang-disagg-dep8-agentic-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.19-rocm720-mi30x-20260910
+  image: lmsysorg/sglang-rocm:v0.5.20-rocm720-mi30x-20260929
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: cluster:mi300x-amd
@@ -1507,7 +1507,7 @@ qwen3.5-fp8-mi300x-sglang-disagg-dep8-agentic-mtp:
 
 # MI300X AgentX: homogeneous attention layouts with stock MORI transfer.
 qwen3.5-fp8-mi300x-sglang-disagg-pure-tp8-agentic-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.19-rocm720-mi30x-20260910
+  image: lmsysorg/sglang-rocm:v0.5.20-rocm720-mi30x-20260929
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: cluster:mi300x-amd
@@ -1541,7 +1541,7 @@ qwen3.5-fp8-mi300x-sglang-disagg-pure-tp8-agentic-mtp:
 
 # MI300X AgentX: homogeneous attention layouts with stock MORI transfer.
 qwen3.5-fp8-mi300x-sglang-disagg-tep8-agentic-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.19-rocm720-mi30x-20260910
+  image: lmsysorg/sglang-rocm:v0.5.20-rocm720-mi30x-20260929
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: cluster:mi300x-amd

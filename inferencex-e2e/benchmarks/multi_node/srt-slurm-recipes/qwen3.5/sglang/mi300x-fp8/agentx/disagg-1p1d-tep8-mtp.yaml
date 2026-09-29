@@ -1,7 +1,6 @@
 # AgentX Qwen3.5 FP8: native SGLang Router, MORI KV transfer, TP8/EP8 per role.
 # Uses the srt-slurm AMD runtime and native Qwen3.5 MTP.
-# Concurrency candidates are untuned; fast runs are not performance submissions.
-# The shared launcher supplies the cluster profile and workspace/results mounts.
+# The MI300X launcher supplies the cluster profile and workspace/results mounts.
 # srt-slurm and Pyxis own model caching and the container lifecycle.
 
 schema: 2
@@ -143,7 +142,6 @@ benchmark:
   command: bash /infmax-workspace/benchmarks/srt_agentic.sh
   env:
     INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
-    IMAGE: lmsysorg/sglang-rocm:v0.5.20-rocm720-mi30x-20260929
     IS_MULTINODE: "true"
     DISAGG: "true"
     HF_HOME: /hf-cache

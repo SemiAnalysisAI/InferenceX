@@ -65,11 +65,6 @@ if [[ "$EXECUTION_PATH" == multinode ]]; then
         --mount /raid/inferencex/aiperf-mmap-cache /aiperf_mmap_cache --exclusive
     run_srt_setup ARCH=x86_64
 
-    SRT_EVAL_OVERRIDES=()
-    if [[ "$EVAL_ONLY" == true ]]; then
-        SRT_EVAL_OVERRIDES=(--unset roles.prefill.args.ep-dispatch-algorithm
-            --unset roles.decode.args.ep-dispatch-algorithm)
-    fi
     SRT_SUBMISSION_FILE="$SRT_RUN_ROOT/submission.json"
     SRT_JOB_ID=""
     SRT_JOB_OUTPUT=""
@@ -107,9 +102,14 @@ if [[ "$EXECUTION_PATH" == multinode ]]; then
     trap 'exit 130' INT
     trap 'exit 143' TERM
 
+    submission_rc=0
     apply_srt_recipe "$CONFIG_FILE" "$FRAMEWORK" "${SRTCTL_EVAL_ARGS[@]}" \
-        "${SRT_EVAL_OVERRIDES[@]}" --json --yes --output "$SRT_RUN_ROOT/outputs" \
-        > "$SRT_SUBMISSION_FILE"
+        --json --yes --output "$SRT_RUN_ROOT/outputs" \
+        > "$SRT_SUBMISSION_FILE" || submission_rc=$?
+    if (( submission_rc != 0 )); then
+        cat "$SRT_SUBMISSION_FILE" >&2
+        exit "$submission_rc"
+    fi
     python3 -m infx.srt_slurm.single_node submission "$SRT_SUBMISSION_FILE" \
         > "$SRT_RUN_ROOT/submission-fields"
     mapfile -t SRT_SUBMISSION < "$SRT_RUN_ROOT/submission-fields"
