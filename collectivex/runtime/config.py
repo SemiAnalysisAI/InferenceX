@@ -134,42 +134,61 @@ def case_count(path: str) -> None:
     print(len(load(path)["cases"]), end="")
 
 
-def _emit_argv(case: dict, version: object, runner: str, ts: str, index: int) -> None:
-    """Emit one null-delimited run_ep.py argv — the only case-to-invocation codec."""
-    get = lambda key, default="": str(case.get(key) or default)
-    argv = [
-        "--backend", str(case["backend"]),
-        "--mode", str(case["mode"]),
-        "--precision", str(case["precision"]),
-        "--phase", str(case["phase"]),
-        "--routing", str(case["routing"]),
-        "--gpus-per-node", str(case["gpus_per_node"]),
-        "--scale-up-domain", str(case["scale_up_domain"]),
-        "--scope", str(case["scope"]),
-        "--scale-up-transport", str(case["scale_up_transport"]),
-        "--scale-out-transport", get("scale_out_transport"),
-        "--tokens-ladder", str(case["ladder"]),
-        "--hidden", str(case["hidden"]),
-        "--topk", str(case["topk"]),
-        "--experts", str(case["experts"]),
-        "--seed", str(case["seed"]),
-        "--runner", runner,
-        "--topology-class", str(case["topology_class"]),
-        "--transport", str(case["transport"]),
-        "--case-id", str(case["case_id"]),
-        "--suite", str(case["suite"]),
-        "--workload-name", str(case["workload"]),
-        "--version", str(version),
-    ]
+def _flag(field: str) -> str:
+    return "--" + field.replace("_", "-")
+
+
+def _flag_pairs(case: dict, fields: str, **renamed: str) -> list[str]:
+    """`--flag value` per space-separated field; the flag is spelled from the field name
+    (`gpus_per_node` -> `--gpus-per-node`) and reads the case key `renamed` maps it to."""
+    argv = []
+    for field in fields.split():
+        value = case[renamed.get(field, field)]
+        argv += [_flag(field), "" if value is None else str(value)]
+    return argv
+
+
+def _ep_argv(case: dict, version: object, runner: str) -> list[str]:
+    argv = _flag_pairs(
+        case,
+        "backend mode precision phase routing gpus_per_node scale_up_domain scope "
+        "scale_up_transport scale_out_transport tokens_ladder hidden topk experts seed "
+        "topology_class transport case_id suite workload_name",
+        tokens_ladder="ladder", workload_name="workload",
+    ) + ["--runner", runner, "--version", str(version)]
     timing = _migrate_timing(case["timing"])
     for key, flag in _TIMING_FLAGS:
         if key in timing:
             argv += [flag, str(timing[key])]
-    # case_id is the canonical identity (sku==runner, backend, workload, mode, phase, ep, routing,
-    # precision), so a new identity axis cannot be omitted from the filename the way mode once was.
-    # ts + the per-shard case index disambiguate legs that share one results/ directory.
+    return argv
+
+
+def _swap_argv(case: dict, version: object, runner: str) -> list[str]:
+    argv = []
+    for field in ("directions", "block_bytes", "num_blocks"):  # nargs="+" lists
+        argv += [_flag(field), *str(case[field]).split()]
+    return argv + _flag_pairs(case, "layout seed device max_payload_bytes warmup iterations")
+
+
+# suite -> (bench/<entrypoint>.py, argv codec, output flag). The rank wrapper in
+# runtime/common.sh execs the entrypoint the leading --entrypoint pair names.
+_SUITES = {
+    "ep-core": ("run_ep", _ep_argv, "--out"),
+    "swap-blocks": ("run_swap_blocks", _swap_argv, "--output"),
+}
+
+
+def _emit_argv(case: dict, version: object, runner: str, ts: str, index: int) -> None:
+    """Emit one null-delimited benchmark argv — the only case-to-invocation codec."""
+    if case.get("suite") not in _SUITES:
+        print(f"unknown suite {case.get('suite')!r}", file=sys.stderr)
+        raise SystemExit(1)
+    entrypoint, codec, out_flag = _SUITES[case["suite"]]
+    # case_id is the canonical identity, so a new identity axis cannot be omitted from the
+    # filename the way mode once was. ts + the per-shard case index disambiguate legs that share
+    # one results/ directory.
     out = f"results/{case['case_id']}_{ts}-c{index:03d}.json"
-    argv += ["--out", out]
+    argv = ["--entrypoint", entrypoint, *codec(case, version, runner), out_flag, out]
     sys.stdout.buffer.write(b"\0".join(part.encode() for part in argv) + b"\0")
 
 
@@ -182,9 +201,11 @@ def case_args(
     if not 0 <= index < len(cases):
         raise SystemExit(1)
     case = cases[index]
+    # EP cases name their rank count; other suites run one rank per allocated GPU.
+    ranks = case.get("ep", int(case.get("nodes", 0)) * int(case.get("gpus_per_node", 0)))
     placement = tuple(
-        str(case.get(field, ""))
-        for field in ("ep", "nodes", "gpus_per_node", "scale_up_domain")
+        str(value) for value in
+        (ranks, *(case.get(field, "") for field in ("nodes", "gpus_per_node", "scale_up_domain")))
     )
     if placement != (ngpus, nodes, gpus_per_node, scale_up_domain):
         print(f"case placement {placement} differs from the allocation", file=sys.stderr)
