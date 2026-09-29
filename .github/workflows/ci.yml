@@ -12,6 +12,7 @@ on:
       - 'inferencex-e2e/.python-version'
       - 'inferencex-e2e/infx/ruff.toml'
       - '**/pytest.ini'
+      - 'inferencex-e2e/configs/**'
       - 'inferencex-e2e/utils/srt-slurm'
   push:
     branches: [main]
