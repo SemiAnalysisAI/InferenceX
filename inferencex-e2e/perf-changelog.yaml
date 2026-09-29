@@ -9104,3 +9104,13 @@
     - "Restore the DCP8 LMCache bands on the native srt-slurm recipe: concurrency 14 and 16 (DSpark 3, ReplaySSM) and 48, 56 and 72 (no draft) run ATOM's in-process lmcache_offload connector through roles.agg.args.extra-kv-connectors (srt-slurm patch 507), with 128 GB/rank up to 48 and 192 GB/rank at 56 and 72. Concurrency 1 and 4 stay GPU-resident."
     - "No change to the Inferact/Kimi-K3-DSpark draft's precision: online_quant_config still excludes every draft linear (layers.*, context_proj), so its weights and activations stay BF16, and it keeps the target's FP8 KV cache (kv_cache_dtype fp8). FlyDSL FP8 prefill attention applies only to the target, since the draft runs its block pass as decode attention."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3407
+
+- config-keys:
+    - glm5.2-fp4-b300-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-b300-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GLM-5.2-NVFP4 B300 AgentX (agentic-coding) Dynamo-SGLang benchmarks: aggregated TP8 and disaggregated 1P2D/1P3D/1P4D/1P6D TP4-decode and 2P1D DEP8-decode."
+    - "Image: lmsysorg/sglang:nightly-dev-20260910-00840301"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2654
