@@ -60,6 +60,9 @@ base:
 
 # One variant per point. Admission is 2x CONC. TP4 shards the indexer across
 # ranks at the measured points (15, 20, 24, 28, and the DRAM points 40, 48).
+# The GPU-resident indexer-CP points turn off ATOM's default MiniMax-M3 mono
+# decode (ATOM_MONO_ENABLE=0): with it on they hung in an NCCL broadcast
+# mid-replay (run 36493321464). The LMCache points already run without mono.
 override_tp4_c1:
   roles:
     agg:
@@ -138,6 +141,7 @@ override_tp4_c15:
         max-num-seqs: 30
       env:
         ATOM_M3_INDEXER_CP: '1'
+        ATOM_MONO_ENABLE: '0'
   benchmark:
     env:
       CONC: '15'
@@ -150,6 +154,7 @@ override_tp4_c20:
         max-num-seqs: 40
       env:
         ATOM_M3_INDEXER_CP: '1'
+        ATOM_MONO_ENABLE: '0'
   benchmark:
     env:
       CONC: '20'
@@ -162,6 +167,7 @@ override_tp4_c24:
         max-num-seqs: 48
       env:
         ATOM_M3_INDEXER_CP: '1'
+        ATOM_MONO_ENABLE: '0'
   benchmark:
     env:
       CONC: '24'
@@ -174,6 +180,7 @@ override_tp4_c28:
         max-num-seqs: 56
       env:
         ATOM_M3_INDEXER_CP: '1'
+        ATOM_MONO_ENABLE: '0'
   benchmark:
     env:
       CONC: '28'
