@@ -27,6 +27,7 @@ config = {
     'gpus_per_node': 8,
     'network_interface': '',
     'srtctl_root': os.environ['SRT_ROOT'],
+    'model_paths': {'services-only': os.environ['SRT_ROOT']},
     'use_gpus_per_node_directive': False,
     'use_exclusive_sbatch_directive': True,
     'default_sbatch_directives': {'exclude': 'dsxe-sa-b300-prd0-gpu-16', 'cpus-per-task': '8'},

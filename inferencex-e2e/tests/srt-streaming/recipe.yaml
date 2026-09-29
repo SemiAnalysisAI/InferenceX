@@ -2,7 +2,7 @@ schema: 2
 name: srt-raw-streaming-smoke
 enable_config_dump: false
 model:
-  path: hf:services-only-no-model
+  path: services-only
   container: docker.io#library/python:3.12-slim
   precision: bf16
 resources:

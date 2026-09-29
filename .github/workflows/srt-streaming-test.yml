@@ -20,6 +20,7 @@ env:
 
 jobs:
   build:
+    name: Build pinned Tachometer
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event.pull_request.head.repo.full_name == github.repository &&
@@ -60,6 +61,7 @@ jobs:
           retention-days: 7
 
   stream:
+    name: Stream on B300
     needs: build
     if: >-
       github.event_name == 'workflow_dispatch' ||
@@ -71,9 +73,10 @@ jobs:
           toJSON(format('ci-attempt-{0}', github.run_attempt))) ||
         '["self-hosted","cluster:b300-dsxe"]') }}
     timeout-minutes: 20
+    # Repository secrets are shared with benchmark jobs; the same-repository gate and label opt in.
     env:
-      SRT_STATUS_ENDPOINT: ${{ secrets.SRT_STATUS_ENDPOINT }}
-      SRTCTL_STATUS_TOKEN: ${{ secrets.SRTCTL_STATUS_TOKEN }}
+      SRT_STATUS_ENDPOINT: ${{ secrets.SRT_STATUS_ENDPOINT }} # zizmor: ignore[secrets-outside-env]
+      SRTCTL_STATUS_TOKEN: ${{ secrets.SRTCTL_STATUS_TOKEN }} # zizmor: ignore[secrets-outside-env]
       SRT_ROOT: ${{ github.workspace }}/streaming-srt
       SRT_TEST_OUTPUT: ${{ github.workspace }}/streaming-output
     steps:
