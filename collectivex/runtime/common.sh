@@ -156,6 +156,9 @@ collx_load_operator_config() {
   done < "$parsed_path"
   rm -f -- "$parsed_path"
   unset COLLECTIVEX_OPERATOR_CONFIG
+  # A suite whose benchmark ships in its own image (swap-blocks runs official vLLM images) names
+  # it on the matrix shard; the pool's platform, storage and network settings still apply.
+  [ -z "${COLLX_IMAGE_OVERRIDE:-}" ] || export COLLX_IMAGE="$COLLX_IMAGE_OVERRIDE"
   COLLECTIVEX_OPERATOR_CONFIG_LOADED="$$"
 }
 
@@ -476,7 +479,11 @@ if [ "${COLLX_NODES:-1}" -gt 1 ] && [ "${COLLX_TRANSPORT:-}" != mnnvl ]; then
 fi
 export RANK="$SLURM_PROCID" WORLD_SIZE="$SLURM_NTASKS"
 export LOCAL_RANK="$SLURM_LOCALID" LOCAL_WORLD_SIZE="$COLLX_GPUS_PER_NODE"
-exec python3 bench/run_ep.py "$@"
+# config.py case-args leads every argv with the suite's entrypoint.
+[ "${1:-}" = --entrypoint ] || exit 67
+case "${2:-}" in run_ep|run_swap_blocks) ;; *) exit 67 ;; esac
+entry="$2"; shift 2
+exec python3 "bench/$entry.py" "$@"
 BASH
 }
 
@@ -699,10 +706,27 @@ collx_squash_verdict() {
   printf 'reuse'
 }
 
+# A shard may name an operator-staged image cache (COLLX_STAGED_IMAGE_DIR) for a pool that cannot
+# import its image itself. The file name is the serving launchers' image-tag convention. Echoes the
+# staged path, or fails when there is none or a refresh was requested.
+collx_staged_squash() {
+  local image="$1" staged
+  [ "${COLLX_IMAGE_REFRESH:-0}" = 0 ] && [ -n "${COLLX_STAGED_IMAGE_DIR:-}" ] || return 1
+  staged="$COLLX_STAGED_IMAGE_DIR/$(printf '%s' "$image" | sed 's#[/:@#]#_#g').sqsh"
+  if unsquashfs -l "$staged" >/dev/null 2>&1; then
+    collx_log "using operator-staged image: $staged"
+    printf '%s' "$staged"
+    return 0
+  fi
+  collx_log "requested image is not staged: $staged"
+  return 1
+}
+
 # Echoes the squash file path.
 collx_ensure_squash() {
   local squash_dir="$1" image="$2" key sq locks lock_fd log verdict refresh_epoch=""
   local enroot_local="" import_rc=0 machine
+  collx_staged_squash "$image" && return 0
   if [ "${COLLX_IMAGE_REFRESH:-0}" = 1 ]; then
     refresh_epoch="${COLLX_LAUNCH_EPOCH:-$(date +%s)}"
   fi
@@ -775,6 +799,7 @@ collx_ensure_squash() {
 collx_ensure_squash_on_job() {
   local job_id="$1" squash_dir="$2" image="$3" lock_dir="${4:-}" sq key lock
   local log_label log attempt rc refresh_epoch=""
+  collx_staged_squash "$image" && return 0
   if [ "${COLLX_IMAGE_REFRESH:-0}" = 1 ]; then
     refresh_epoch="${COLLX_LAUNCH_EPOCH:-$(date +%s)}"
   fi
@@ -977,7 +1002,7 @@ collx_cleanup_stage() {
   collx_log "removed generated per-execution stage directory"
 }
 
-# Per-case benchmark inputs travel as run_ep.py argv decoded from the shard control (config.py
+# Per-case benchmark inputs travel as benchmark argv decoded from the shard control (config.py
 # case-args), never as env; launchers supply only allocation/container policy.
 # shellcheck disable=SC2153
 collx_run_shard() {
@@ -1028,7 +1053,7 @@ collx_run_shard() {
     mapfile -d '' -t ep_args < "$argv_file"
     [ "${#ep_args[@]}" -gt 0 ] \
       || { rm -f "$argv_file"; collx_die "case $ci produced no benchmark arguments"; }
-    collx_log "EP${NGPUS}[$((ci + 1))/$expected_cases] $COLLX_BENCH"
+    collx_log "case[$((ci + 1))/$expected_cases] $COLLX_BENCH ranks=$NGPUS"
     runtime_log="$(collx_private_log_path "runtime-c$(printf '%03d' "$ci")")"
     # A hang guard, not a work budget: FP8 prefill and multi-node EP16 prefill on pools with
     # degraded GPU-NIC p2p (~34 GB/s per node; see docs/methodology.md) legitimately run past 30

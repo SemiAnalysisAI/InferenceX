@@ -26,15 +26,18 @@ def is_case_id(value) -> bool:
     return bool(isinstance(value, str) and _CASE_ID.fullmatch(value))
 
 
-def case_id(sku: str, case: dict) -> str:
-    parts = (
-        sku, case["backend"], case["workload"], case["mode"], case["phase"],
-        f"ep{int(case['ep'])}", case["routing"], case["precision"],
-    )
+def slug_id(parts) -> str:
     values = [_NON_SLUG.sub("-", str(part).lower()).strip("-") for part in parts]
     if not all(values):
         raise ValueError("case ID contains an empty factor")
     return "-".join(values)
+
+
+def case_id(sku: str, case: dict) -> str:
+    return slug_id((
+        sku, case["backend"], case["workload"], case["mode"], case["phase"],
+        f"ep{int(case['ep'])}", case["routing"], case["precision"],
+    ))
 
 
 # Workload and timing values arrive from configs/sweep.json through the matrix.
