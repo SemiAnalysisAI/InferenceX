@@ -186,18 +186,20 @@ def _create_dir(path: Path, *, world_writable: bool = False) -> None:
 
 
 def create_volume_mounts(run: SrtRun) -> None:
-    """Create the host side of the cluster's ``srt-slurm.volume-mounts`` before submission."""
+    """Create shared volume mounts here; node-local paths belong to allocated compute nodes."""
     for name in run.srt.volume_mounts:
-        _create_dir(volume_path(run.cluster, name))
+        if slurm_settings(run.cluster).volumes[name].visibility == "shared":
+            _create_dir(volume_path(run.cluster, name))
 
 
 def lane_mounts(run: SrtRun, lane: SrtLane) -> list[tuple[str, str]]:
-    """The (host, container) mounts the lane adds for this request; their hosts are created."""
+    """The lane's (host, container) mounts, creating only shared paths on the submit host."""
     mounts: list[tuple[str, str]] = []
     for mount in lane.mounts:
         if mount.when(run.request):
             host = volume_path(run.cluster, mount.volume)
-            _create_dir(host, world_writable=mount.world_writable)
+            if slurm_settings(run.cluster).volumes[mount.volume].visibility == "shared":
+                _create_dir(host, world_writable=mount.world_writable)
             mounts.append((str(host), mount.target or str(host)))
     if run.request.framework == "tilert":
         mounts.append((str(run.workspace), "/infmax-workspace"))
