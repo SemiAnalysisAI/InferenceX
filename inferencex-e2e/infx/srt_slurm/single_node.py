@@ -127,8 +127,8 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
     if engine == "atom":
         # Native ATOM derives -tp from the aggregate worker's GPU allocation.
         expected["ATOM TP"] = (role["gpus"], int(environment["TP"]))
-    # vLLM shards decode KV across its tensor-parallel ranks.
-    dcp = str(args.get("decode-context-parallel-size", 1)) if engine == "vllm" else "1"
+    # vLLM and ATOM shard decode KV across their tensor-parallel ranks.
+    dcp = str(args.get("decode-context-parallel-size", 1)) if engine in {"vllm", "atom"} else "1"
     for name, value in {"PP_SIZE": "1", "DCP_SIZE": dcp, "PCP_SIZE": "1"}.items():
         expected[name] = (environment[name], value)
     for name, (actual, wanted) in expected.items():

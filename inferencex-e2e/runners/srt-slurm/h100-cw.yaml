@@ -1,3 +1,4 @@
+cluster: h100-cw
 default_partition: h100
 default_time_limit: ${SRT_DEFAULT_TIME_LIMIT}
 gpus_per_node: 8
