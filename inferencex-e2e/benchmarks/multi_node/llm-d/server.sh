@@ -238,16 +238,14 @@ if [[ "$IS_AGGREGATED" -eq 0 ]]; then
     fi
     if [[ -n "${MOONCAKE_CONFIG_PATH}" ]]; then
         # MultiConnector on prefill: NixlConnector handles direct P/D KV transfer;
-        # SimpleCPUOffloadConnector stages KV in CPU DRAM (~38 GB) before writing
-        # to MooncakeStoreConnector for cross-node prefix-cache lookup via RDMA.
+        # MooncakeStoreConnector enables cross-node prefix-cache lookup via RDMA.
         # Decode uses NixlConnector only (matches agentX v13): Mooncake on decode
-        # would pollute the prefix cache with non-reusable decode blocks, and
-        # SimpleCPUOffload in EAGER mode would amplify that. kv_both on decode
-        # so it can serve speculative-decode prefills in DSpark.
+        # would pollute the prefix cache with non-reusable decode blocks. kv_both
+        # on decode so it can serve speculative-decode prefills in DSpark.
         _MC_EXTRA='"load_async":true,"lookup_async":true,"enable_cross_layers_blocks":false,"enable_offload":false'
         _NIXL_EXTRA='"enforce_handshake_compat":false,"enable_cross_layers_blocks":false,"kv_lease_duration":1800'
         if [[ "$ROLE" == "prefill" ]]; then
-            KV_TRANSFER_CONFIG="{\"kv_connector\":\"MultiConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"connectors\":[{\"kv_connector\":\"NixlConnector\",\"kv_role\":\"kv_both\",\"kv_load_failure_policy\":\"fail\",\"kv_buffer_device\":\"cuda\",\"kv_connector_extra_config\":{${_NIXL_EXTRA}}},{\"kv_connector\":\"SimpleCPUOffloadConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use\":40802189312}},{\"kv_connector\":\"MooncakeStoreConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{${_MC_EXTRA}}}]}}"
+            KV_TRANSFER_CONFIG="{\"kv_connector\":\"MultiConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"connectors\":[{\"kv_connector\":\"NixlConnector\",\"kv_role\":\"kv_both\",\"kv_load_failure_policy\":\"fail\",\"kv_buffer_device\":\"cuda\",\"kv_connector_extra_config\":{${_NIXL_EXTRA}}},{\"kv_connector\":\"MooncakeStoreConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{${_MC_EXTRA}}}]}}"
         else
             KV_TRANSFER_CONFIG="{\"kv_connector\":\"NixlConnector\",\"kv_role\":\"kv_both\",\"kv_load_failure_policy\":\"fail\",\"kv_buffer_device\":\"cuda\",\"kv_connector_extra_config\":{${_NIXL_EXTRA}}}"
         fi

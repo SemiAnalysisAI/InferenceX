@@ -4094,7 +4094,7 @@ dsv4-fp4-gb200-llmd-vllm-agentx:
   disagg: true
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.45
+    - dram-utilization: 0.666667
       search-space:
       # 1P DEP8 + 1D DEP8 (4 nodes / 16 GPUs). Always Mooncake.
       - spec-decoding: mtp
