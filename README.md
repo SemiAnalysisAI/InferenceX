@@ -21,6 +21,7 @@ Trusted by Operators of Trillion Dollar Token Factories such as OpenAI, Meta, Mi
 | [`InferenceX-e2e/`](inferencex-e2e/) | 🚀 End-to-end Inference Serving Benchmarks |
 | [`CollectiveX/`](collectivex/) | 🌐 Networking & Collective Communication Benchmarks (Experimental Beta) |
 | [`OperatorX/`](operatorx/) | ⚙️ Operator & Kernel Level Benchmarks (Experimental Beta) |
+| [`power_model/`](power_model/) | ⚡ OSS System Level Power Modelling |
 | [`shared/`](shared/) | 🧩 Home for shared components |
 | [`experimental/`](experimental/) | 🧪 Remaining experiments |
 
@@ -91,6 +92,10 @@ This pace of software advancement creates a challenge: benchmarks conducted at a
 
 PRs are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for more details on the PR review flow, the [PR Review Checklist](inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md), and the merge process.
 For the maintainer and agent documentation map, start with [`docs/index.md`](inferencex-e2e/docs/index.md). It links the architecture, configuration, workflow, eval, runner, and troubleshooting references.
+
+To benchmark an existing server without CI or Slurm, see
+[Run AgentX-Harness Standalone](inferencex-e2e/docs/agentx-standalone.md)
+for client installation and a direct `aiperf profile` command.
 
 ## Acknowledgements & Supporters
 Thank you to Lisa Su and Anush Elangovan for providing the MI355X and CDNA3 GPUs for this free and open-source project. We want to recognize the many AMD contributors for their responsiveness and for debugging, optimizing, and validating performance across AMD GPUs. 

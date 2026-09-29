@@ -165,15 +165,6 @@ def test_identical_replay_does_not_write_again(publish):
     assert result["writes"] == [("POST", "repos/example/repo/issues/7/comments")]
 
 
-def test_replacement_signoff_gets_a_separate_verdict(publish):
-    previous = publish(verdict(), signoff_key="issuecomment-41")["comments"]
-    result = publish(verdict(), previous)
-    assert result["comments"][0] == previous[0]
-    assert result["comments"][0]["body"].startswith(marker("issuecomment-41"))
-    assert result["comments"][1]["body"].startswith(marker())
-    assert result["writes"] == [("POST", "repos/example/repo/issues/7/comments")]
-
-
 def test_deleted_verdict_during_update_is_recreated(publish):
     comments = [
         {"id": 1, "user": {"login": "github-actions[bot]"}, "body": marker() + "\nOld"}

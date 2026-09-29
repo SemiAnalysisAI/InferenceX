@@ -9026,6 +9026,35 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3459
 
 - config-keys:
+    - dsv4-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update image to lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260926."
+    - "Switch attention to fp8 unified KV; enable grouped decode on TP8-only arms at conc >= 16."
+    - "Enable breakable CUDA-graph prefill (BCG) at conc <= 4."
+    - "Enable EP8 + MegaMoE for DP-attention arms at conc >= 128 (including conc 384)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3430
+
+- config-keys:
+    - dsv4-fp4-b300-sglang-agentic-hicache-eagle
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add B300 DeepSeek-V4-Pro SGLang AgentX with EAGLE (3 steps, 4 draft tokens, golden AL 2.49) on lmsysorg/sglang:dev-cu13-nightly-09242: TP4 and TP8 at c1-32 with GPU KV, and DEP8 with a HiCache DRAM tier (ratio 2) at c64-512."
+    - "DEP8 uses the dsv4 attention backend, mem-fraction-static 0.84, prefill-decode-interval 32, mixed chunking, shortest-prefill-first scheduling, DP speculative prefill coordination and a router with the circuit breaker disabled, without the DP LM head."
+    - "Runs on the native srt-slurm recipe benchmarks/single_node/srt-slurm-recipes/dsv4/sglang/b300-fp4-eagle/agentic.yaml."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3426
+
+- config-keys:
+    - dsv41flash-fp4-gb300-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the GB300 DeepSeek-V4.1-Flash SGLang AgentX curve to lmsysorg/sglang:dev-cu13-nightly-0924 (digest pinned): pure TP4 (EP1) at C1/C2 with Engram in HBM, and TP4/EP4 at C4+ with per-rank host Engram, 16K prefill chunks, no prefill-decode interval, 4096 SWA prefix tails and a 128 decode graph batch; all TP4 points use static ragged verify; TP2 is unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3421
+
+- config-keys:
     - qwen3.5-fp4-mi355x-sglang
     - qwen3.5-fp4-mi355x-sglang-mtp
   scenario-type:

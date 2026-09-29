@@ -21,6 +21,7 @@ Paths and shell commands in these guides are relative to `inferencex-e2e/` unles
 | [`configuration-procedures.md`](configuration-procedures.md) / [`configuration-procedures_zh.md`](configuration-procedures_zh.md) | Config, runner, image, recipe, llm-d, srt-slurm, and MTP changes |
 | [`ci-procedures.md`](ci-procedures.md) / [`ci-procedures_zh.md`](ci-procedures_zh.md) | Matrix generation, validation, dispatch, PR sweeps, reuse, staging, and artifact downloads |
 | [`eval-agentx-procedures.md`](eval-agentx-procedures.md) / [`eval-agentx-procedures_zh.md`](eval-agentx-procedures_zh.md) | Eval and AgentX selection, execution, scoring, evidence, and live-run diagnosis |
+| [`agentx-standalone.md`](agentx-standalone.md) / [`agentx-standalone_zh.md`](agentx-standalone_zh.md) | Install the pinned AgentX client and replay traces against an existing server without CI or Slurm |
 | [`results-and-ingestion.md`](results-and-ingestion.md) / [`results-and-ingestion_zh.md`](results-and-ingestion_zh.md) | Published-result lookup, artifact identities and schemas, app ingestion, dedupe, and provenance |
 | [`recovery-results-procedures.md`](recovery-results-procedures.md) / [`recovery-results-procedures_zh.md`](recovery-results-procedures_zh.md) | Result processing, ingest verification and recovery, runner cleanup, and failure classification |
 | [`testing.md`](testing.md) / [`testing_zh.md`](testing_zh.md) | Local checks, smoke runs, evidence standards, and review gates |
