@@ -38,7 +38,8 @@
 | 严格的 Master Config 与矩阵 Schema | [`infx.matrix.validation`](../infx/matrix/validation.py) |
 | 生成器示例与复用策略 | [`.github/workflows/README.md`](../../.github/workflows/README.md) |
 | 手动端到端输入与矩阵扇出 | [`.github/workflows/e2e-tests.yml`](../../.github/workflows/e2e-tests.yml) |
-| PR/main 扫描 Gate、Canary、收集与入库派发 | [`.github/workflows/run-sweep.yml`](../../.github/workflows/run-sweep.yml) |
+| PR 扫描 Gate、Canary 与收集 | [`.github/workflows/run-sweep.yml`](../../.github/workflows/run-sweep.yml) |
+| 合并时复用检查、Changelog Metadata 与入库派发 | [`.github/workflows/merge-ingest.yml`](../../.github/workflows/merge-ingest.yml) |
 | 单节点与多节点产物上传 | [`.github/workflows/benchmark-tmpl.yml`](../../.github/workflows/benchmark-tmpl.yml)、[`.github/workflows/benchmark-multinode-tmpl.yml`](../../.github/workflows/benchmark-multinode-tmpl.yml) |
 | 吞吐量与 Eval 聚合 | [`.github/workflows/collect-results.yml`](../../.github/workflows/collect-results.yml)、[`.github/workflows/collect-evals.yml`](../../.github/workflows/collect-evals.yml)、[`infx/results/collect_results.py`](../infx/results/collect_results.py)、[`infx/results/collect_eval_results.py`](../infx/results/collect_eval_results.py) |
 | Changelog 字节、Diff 与矩阵 Gate | [`infx/workflows/validate_perf_changelog.py`](../infx/workflows/validate_perf_changelog.py)、[`infx.matrix.plan`](../infx/matrix/plan.py) |
@@ -230,7 +231,6 @@ B200 Kimi 配方采用 DCP8，且关闭 Mooncake Offload。Master Config 记录 
 | --- | --- | --- | --- |
 | `full-sweep-fail-fast` | 完整 Changelog 矩阵 | 有 | 有；推荐的完整扫描默认值 |
 | `full-sweep-enabled` | 完整 Changelog 矩阵 | 有 | 无；需要每个矩阵点继续运行时使用 |
-| `full-sweep-fail-fast-no-canary` | 完整 Changelog 矩阵 | 无 | 有 |
 | `non-canary-full-sweep-enabled` | 完整 Changelog 矩阵 | 无 | 无 |
 
 可选修饰标签不能替代主标签：
@@ -241,16 +241,16 @@ B200 Kimi 配方采用 DCP8，且关闭 Mooncake Offload。Master Config 记录 
 | `evals-only` | 禁用吞吐量，仅运行选定 Eval 条目；与 `all-evals` 组合即只运行所有 Eval | 不可以 |
 | `agentx-fast` | 对 AgentX 吞吐量 Lane，在强制 Primer 后只加一次额外 Warmup Request，并使用 20 分钟 Profile；固定序列与 Eval 设置仍为规范值 | 不可以 |
 
-修改被识别的主标签或修饰标签会共享活动扫描的 Concurrency Group，通常会取消并重启当前 Run。`skip_queue`、Patchwork、Waiver 与 Checklist 标签是 Gate/优先级输入，不是主扫描模式。Head Commit 含 `[skip-sweep]` 只会跳过 PR 基准 Setup；Changelog/复用检查仍会运行，推送到 `main` 时则忽略该标记。
+修改被识别的主标签或修饰标签会共享活动扫描的 Concurrency Group，通常会取消并重启当前 Run。`skip_queue`、Patchwork、Waiver 与 Checklist 标签是 Gate/优先级输入，不是主扫描模式。Head Commit 含 `[skip-sweep]` 只会跳过 PR 基准 Setup；Changelog/复用检查仍会运行，推送到 `main` 时运行的 `merge-ingest.yml` 会忽略该标记。
 
 ## Canary 与 Fail-fast 语义
 
 Canary 和 Fail-fast 解决不同问题：
 
-1. 只有使用 `full-sweep-enabled` 或 `full-sweep-fail-fast` 的 PR 才创建 Canary。No-canary 标签会跳过它。
+1. 只有使用 `full-sweep-enabled` 或 `full-sweep-fail-fast` 的 PR 才创建 Canary。`non-canary-full-sweep-enabled` 会跳过它。
 2. Canary 首先检查单节点固定序列 `1k1k`、`8k1k` 和单节点 AgentX 条目；若没有合格条目，再检查多节点 AgentX 条目。它排除 Eval 条目，选取最低并发候选，使用对应的单节点或多节点工作流运行，并从后续矩阵移除该条目。
 3. 如果没有合格候选，Canary 会被跳过。否则所有 Benchmark/Eval 矩阵都要求 Canary 成功；Canary 失败会阻止其扇出。
-4. `full-sweep-fail-fast` 与 `full-sweep-fail-fast-no-canary` 会分别为每个矩阵 Job Family 设置 `strategy.fail-fast: true`。首个失败点会取消同一矩阵 Family 中排队或运行中的兄弟项；它不是跨所有独立 Family 的全局 Kill Switch。
+4. `full-sweep-fail-fast` 会分别为每个矩阵 Job Family 设置 `strategy.fail-fast: true`。首个失败点会取消同一矩阵 Family 中排队或运行中的兄弟项；它不是跨所有独立 Family 的全局 Kill Switch。
 5. 非 Fail-fast 标签会保持矩阵 Fail-fast 为 false，使其他点继续运行并保留更广泛的诊断覆盖。
 6. Fail-fast Run 可能因失败后兄弟项被取消而最终显示 `cancelled`。将取消归类为基础设施事件前，必须先识别第一个真实失败。
 
@@ -354,7 +354,7 @@ Klaud 和恢复工具继续使用现有的 `gh` 认证。GitHub CLI 跟随分页
 请求只有在全部满足下列条件时才可暂存：
 
 - 评论者具有仓库 `write`、`maintain` 或 `admin` 权限。
-- PR 当前具有四个完整扫描标签之一（`full-sweep-enabled`、`non-canary-full-sweep-enabled`、`full-sweep-fail-fast` 或 `full-sweep-fail-fast-no-canary`）。
+- PR 当前具有三个完整扫描标签之一（`full-sweep-enabled`、`non-canary-full-sweep-enabled` 或 `full-sweep-fail-fast`）。
 - 候选是已结束的 PR `run-sweep.yml` Run，创建时完整扫描标签处于活动状态，结论为 `success`、`failure` 或 `cancelled`。
 - 候选按照 Workflow 当前 Head/历史 Pin 规则与该 PR 关联。
 - 存在未过期的 `changelog-metadata`，并且至少存在 `results_bmk`、`eval_results_all` 或 `bmk_agentic_*` 之一。因此失败/取消的 Run 可以暂存有用的部分数据，但空 Run 或仅有 Metadata 的 Run 不行。
@@ -372,7 +372,7 @@ Klaud 和恢复工具继续使用现有的 `gh` 认证。GitHub CLI 跟随分页
 
 ## 产物复用与 merge-with-reuse
 
-复用可以避免已批准的完整 PR 扫描在 `main` 上再次运行；它不能绕过 Changelog 验证。
+复用是已批准 PR 扫描进入正式入库的唯一路径：`main` 从不重跑扫描，[`merge-ingest.yml`](../../.github/workflows/merge-ingest.yml) 只发布经有效复用的源 Run；它不能绕过 Changelog 验证。
 
 ### 资格与授权
 
@@ -390,7 +390,7 @@ Klaud 和恢复工具继续使用现有的 `gh` 认证。GitHub CLI 跟随分页
 
 接受表示验证当时存在合格的源 Run；表态本身不构成复用授权。PR 同步及合并时仍会重新验证源 Run，产物缺失、过期或源 Commit 无效时仍会 Fail Closed。不指定 Run ID 的请求保持现有规则，每次选择最新成功 Run；如需指定某次运行，请固定 Run ID。
 
-在之后的 PR `synchronize` 事件上，复用 Gate 只有在 Changelog 和源 Run 验证均通过后才会跳过另一轮 PR 扫描。在 `main` 上，映射不明确、指向无效 Run 或与标签冲突的授权会 Fail Closed。没有授权时，`main` 执行正常扫描。
+在之后的 PR `synchronize` 事件上，复用 Gate 只有在 Changelog 和源 Run 验证均通过后才会跳过另一轮 PR 扫描。合并时，`merge-ingest.yml` 会对映射不明确、指向无效 Run 或与标签冲突的授权 Fail Closed。没有授权时，Merge Ingest Run 会失败，既不会运行 Benchmark，也不会入库。
 
 ### 受支持的合并路径
 
@@ -404,10 +404,10 @@ uv run --extra workflows python -m infx.workflows.merge_with_reuse <pr-number>
 
 不要只手工复制该序列的一半。尤其是，只发表评论后直接 Squash Merge、却不执行 Synchronization/Check 阶段，可能导致 Merge Run 无法选择预期源 Run。
 
-在 `main` Run 中，[`run-sweep.yml`](../../.github/workflows/run-sweep.yml) 会向 InferenceX-app 发送两个不同 ID：
+合并时，[`merge-ingest.yml`](../../.github/workflows/merge-ingest.yml) 的 `ingest` Job 会向 InferenceX-app 发送两个不同 ID：
 
-- `source-run-id`：包含 Benchmark/Eval Artifact 的 PR Run。
-- `merge-run-id`：包含合并时 `changelog-metadata` 的 `main` Run。
+- `source-run-id`：包含 Benchmark/Eval Artifact 的被复用 PR `run-sweep.yml` Run。
+- `merge-run-id`：`main` 上包含合并时 `changelog-metadata` 的 Merge Ingest Run。
 
 公开数据行和链接保留源 Run 溯源。源产物覆盖范围是权威依据；后续矩阵策略变化不会凭空补出缺失点。
 
@@ -524,12 +524,12 @@ jq -r 'to_entries[] | [.key, .value.n_success, .value.total] | @tsv' \
 
 在 `main` 发布路径和下游入库均得到验证前，合并在运维层面并未完成。
 
-1. 只有 `perf-changelog.yaml` 发生变化时，推送到 `main` 才会触发 [`run-sweep.yml`](../../.github/workflows/run-sweep.yml)。确认 Merge Commit 确实产生该 Run；不要假设无关合并也会触发它。
-2. 没有有效复用授权时，`main` Run 会处理 Changelog Delta 并运行正常矩阵。PR Canary 逻辑不会在 `push` 上执行，PR 标签驱动的 Fail-fast 在该事件上也不可用。
-3. 使用复用时，Benchmark Job 会被跳过，Run 会组合源 Artifact 与 Merge Run Changelog Metadata。应确认 Setup Output 选择了预期源 Run，不能仅凭 Job 被跳过就推断复用成功。
-4. `upload-changelog-metadata` 必须产出 `changelog-metadata`。对于不含 Agentic 条目的 Search Space，`trigger-ingest` 派发 `ingest-results`；Agentic Search Space 遵循单独的 `trigger-agentic-ingest` 条件，并携带 `database-target: production` 派发 `ingest-agentic-results`。
+1. 只有 `perf-changelog.yaml` 发生变化时，推送到 `main` 才会触发 [`merge-ingest.yml`](../../.github/workflows/merge-ingest.yml)（Merge Ingest）。[`run-sweep.yml`](../../.github/workflows/run-sweep.yml) 仅用于 PR，从不在 `main` 上运行。确认 Merge Commit 确实产生了 Merge Ingest Run；不要假设无关合并也会触发它。
+2. 没有有效复用授权时，Merge Ingest Run 会在复用检查处失败。`main` 从不运行扫描，因此不会启动 GPU Job，不会上传 Changelog Metadata，也不会派发任何事件。合并消息中的 `[skip-sweep]` 不会改变这一点。
+3. 使用复用时，`ingest` Job 通过 `infx.workflows.reuse` 解析已合并 PR 及其源 Run。应确认 Step Output 与 Run Summary 标识了预期的 PR 与源 Run。
+4. `ingest` Job 必须先上传 `changelog-metadata` 再派发。它只发送一个事件：Changelog Delta 不含 Agentic 条目时派发 `ingest-results`；包含 Agentic 条目时携带 `database-target: production` 派发 `ingest-agentic-results`。
 5. 绿色 Dispatch Step 只证明 GitHub 接受了发往 InferenceX-app 的 Repository Dispatch。必须继续追踪下游 InferenceX-app Run，并验证预期数据行/链接和源 Run 溯源；其入库实现在本 Checkout 之外。
-6. 检查最终 `main` Run 结论、每次重跑 Attempt、聚合 Artifact、Metadata 与发布结果。PR 作者仍负责确保全部合并后 Actions Job 通过，包括需要有依据地重跑的偶发抖动。
+6. 检查最终 Merge Ingest Run 结论、每次重跑 Attempt、源 Run 的聚合 Artifact、合并时 Metadata 与发布结果。PR 作者仍负责确保全部合并后 Actions Job 通过，包括需要有依据地重跑的偶发抖动。
 7. 如果有效 Artifact 已存在，不能仅因下游入库失败就重跑 GPU Benchmark。对于失败的复用 **Agentic** 入库，授权维护者可使用 [`recover-reused-ingest.yml`](../../.github/workflows/recover-reused-ingest.yml)，传入原始 Source 与 Merge ID；该 Workflow 只派发 `ingest-agentic-results`，不是通用固定序列恢复工具：
 
    ```bash
