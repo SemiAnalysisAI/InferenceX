@@ -5,7 +5,7 @@ base:
   name: dsv41flash-fp4-gb300-sglang-agentic
   model:
     path: hf:deepseek-ai/DeepSeek-V4.1-Flash
-    container: lmsysorg/sglang:nightly-dev-cu13-20260922-582389ce@sha256:0e1b14e302619a42ef5581b87db6804651d4f946301cf543d74a3a1eb1c33b40
+    container: lmsysorg/sglang:dev-cu13-nightly-0924@sha256:d2c9929f8cc9889326203f6cbc46da48b69de42891b167592c9c76cc803d246e
     precision: fp4
   resources:
     gpu_type: gb300
@@ -52,6 +52,9 @@ base:
   health_check:
     max_attempts: 1440
     interval_seconds: 5
+  # Temporary: remove once im-gb300-r01-c001's corrupt container cache is fixed.
+  sbatch_directives:
+    exclude: im-gb300-r01-c001
   benchmark:
     type: custom
     command: bash /infmax-workspace/benchmarks/srt_agentic.sh
@@ -63,8 +66,11 @@ base:
 
 # One variant per point. Admission is 2x CONC, capped at the graph batch. SWA
 # prefix tails are 64x CONC up to 4096 from c2. TP2 keeps row-sharded Engram
-# tables in host DRAM (TP4 fits them in HBM) and doubles the prefill chunk from
-# c64. Saturation points get a longer warmup drain.
+# tables in host DRAM and doubles the prefill chunk from c64. TP4 uses static
+# ragged verify; pure TP4 c1/c2 keep Engram in HBM, while TP4/EP4 from c4 keeps
+# it in host DRAM with 16K chunks, no prefill-decode interval, 4096 SWA tails
+# and a 128 graph batch, as matched one-hour c64 runs favored. Saturation
+# points get a longer warmup drain.
 override_tp2_c1:
   roles:
     agg:
@@ -214,11 +220,12 @@ override_tp4_c1:
       gpus: 4
       args:
         tensor-parallel-size: 4
-        expert-parallel-size: 4
+        expert-parallel-size: 1
         chunked-prefill-size: 4096
         max-running-requests: 2
       env:
         SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '0'
+        SGLANG_RAGGED_VERIFY_MODE: static
   benchmark:
     env:
       CONC: '1'
@@ -230,12 +237,13 @@ override_tp4_c2:
       gpus: 4
       args:
         tensor-parallel-size: 4
-        expert-parallel-size: 4
+        expert-parallel-size: 1
         chunked-prefill-size: 4096
         swa-prefix-tails: 128
         max-running-requests: 4
       env:
         SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '0'
+        SGLANG_RAGGED_VERIFY_MODE: static
   benchmark:
     env:
       CONC: '2'
@@ -248,11 +256,15 @@ override_tp4_c4:
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 4
-        chunked-prefill-size: 4096
-        swa-prefix-tails: 256
-        max-running-requests: 8
+        chunked-prefill-size: 16384
+        prefill-decode-interval: 0
+        swa-prefix-tails: 4096
+        max-running-requests: 128
+        cuda-graph-max-bs-decode: 128
       env:
-        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '0'
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1'
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
+        SGLANG_RAGGED_VERIFY_MODE: static
   benchmark:
     env:
       CONC: '4'
@@ -265,11 +277,15 @@ override_tp4_c8:
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 4
-        chunked-prefill-size: 4096
-        swa-prefix-tails: 512
-        max-running-requests: 16
+        chunked-prefill-size: 16384
+        prefill-decode-interval: 0
+        swa-prefix-tails: 4096
+        max-running-requests: 128
+        cuda-graph-max-bs-decode: 128
       env:
-        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '0'
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1'
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
+        SGLANG_RAGGED_VERIFY_MODE: static
   benchmark:
     env:
       CONC: '8'
@@ -282,11 +298,15 @@ override_tp4_c16:
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 4
-        chunked-prefill-size: 4096
-        swa-prefix-tails: 1024
-        max-running-requests: 32
+        chunked-prefill-size: 16384
+        prefill-decode-interval: 0
+        swa-prefix-tails: 4096
+        max-running-requests: 128
+        cuda-graph-max-bs-decode: 128
       env:
-        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '0'
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1'
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
+        SGLANG_RAGGED_VERIFY_MODE: static
   benchmark:
     env:
       CONC: '16'
@@ -299,11 +319,15 @@ override_tp4_c32:
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 4
-        chunked-prefill-size: 4096
-        swa-prefix-tails: 2048
-        max-running-requests: 64
+        chunked-prefill-size: 16384
+        prefill-decode-interval: 0
+        swa-prefix-tails: 4096
+        max-running-requests: 128
+        cuda-graph-max-bs-decode: 128
       env:
-        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '0'
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1'
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
+        SGLANG_RAGGED_VERIFY_MODE: static
   benchmark:
     env:
       CONC: '32'
@@ -316,11 +340,15 @@ override_tp4_c64:
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 4
-        chunked-prefill-size: 4096
+        chunked-prefill-size: 16384
+        prefill-decode-interval: 0
         swa-prefix-tails: 4096
-        max-running-requests: 64
+        max-running-requests: 128
+        cuda-graph-max-bs-decode: 128
       env:
-        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '0'
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1'
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
+        SGLANG_RAGGED_VERIFY_MODE: static
   benchmark:
     env:
       CONC: '64'
@@ -333,11 +361,15 @@ override_tp4_c128:
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 4
-        chunked-prefill-size: 4096
+        chunked-prefill-size: 16384
+        prefill-decode-interval: 0
         swa-prefix-tails: 4096
-        max-running-requests: 64
+        max-running-requests: 128
+        cuda-graph-max-bs-decode: 128
       env:
-        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '0'
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1'
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
+        SGLANG_RAGGED_VERIFY_MODE: static
   benchmark:
     env:
       CONC: '128'
