@@ -9104,3 +9104,39 @@
     - "Restore the DCP8 LMCache bands on the native srt-slurm recipe: concurrency 14 and 16 (DSpark 3, ReplaySSM) and 48, 56 and 72 (no draft) run ATOM's in-process lmcache_offload connector through roles.agg.args.extra-kv-connectors (srt-slurm patch 507), with 128 GB/rank up to 48 and 192 GB/rank at 56 and 72. Concurrency 1 and 4 stay GPU-resident."
     - "No change to the Inferact/Kimi-K3-DSpark draft's precision: online_quant_config still excludes every draft linear (layers.*, context_proj), so its weights and activations stay BF16, and it keeps the target's FP8 KV cache (kv_cache_dtype fp8). FlyDSL FP8 prefill attention applies only to the target, since the draft runs its block pass as decode attention."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3407
+
+- config-keys:
+    - dsv4-fp8-h200-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-agg
+    - glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-1p1d-hicache
+    - glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-2p2d
+    - glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-agg
+    - kimik3-fp4-b200-dynamo-vllm-agentic-dspark
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-agg
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-mooncake-dcp16-agg
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
+    - kimik3-fp4-h200-vllm-agentic-balanced
+    - kimik3-fp4-h200-vllm-agentic-latency
+    - kimik3-fp4-h200-vllm-agentic-simple
+    - qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Hardcode the profiling-free DCGM counter file in every srt-slurm recipe with a DCGM power exporter, matching the H200 Kimi-K3 change. Power, energy and GPU utilization remain; DCGM_FI_PROF_* metrics are omitted. Exporter image, 100 ms sampling and strict power validation are unchanged."
+    - "所有带 DCGM 功耗 exporter 的 srt-slurm recipe 直接写死无 profiling 的 DCGM counters 文件，与 H200 Kimi-K3 的改动一致。保留功耗、能耗和 GPU 利用率，省略 DCGM_FI_PROF_* 指标；exporter 镜像、100 ms 采样和严格功耗校验不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3590
+
+- config-keys:
+    - qwen3.5-fp4-gb300-dynamo-sglang
+    - qwen3.5-fp8-gb200-dynamo-sglang
+    - qwen3.5-fp8-gb200-dynamo-sglang-mtp
+    - qwen3.5-fp8-gb300-dynamo-sglang
+    - qwen3.5-fp8-gb300-dynamo-sglang-mtp
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Hardcode the profiling-free DCGM counter file in every srt-slurm recipe with a DCGM power exporter, matching the H200 Kimi-K3 change. Power, energy and GPU utilization remain; DCGM_FI_PROF_* metrics are omitted. Exporter image, 100 ms sampling and strict power validation are unchanged."
+    - "所有带 DCGM 功耗 exporter 的 srt-slurm recipe 直接写死无 profiling 的 DCGM counters 文件，与 H200 Kimi-K3 的改动一致。保留功耗、能耗和 GPU 利用率，省略 DCGM_FI_PROF_* 指标；exporter 镜像、100 ms 采样和严格功耗校验不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3590
