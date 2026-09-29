@@ -9010,3 +9010,35 @@
     - "Force VLLM_ROCM_USE_AITER_TRITON_SPARSE_MLA=True for vllm-project/vllm#53492's Gluon sparse-MLA kernel. Unpin image to TBD pending #58208 (faster DSA candidate topk selection), #58655 (fused mHC Triton kernel) and #53492 (sparse MLA Gluon kernel) landing in a nightly release: better topk/mHC/MLA kernels with better compute/communication stream overlap. Does not include vllm-project/vllm#58671's MXFP4 sparse-logits indexer: it isn't merging in time, and reverting a dependency it exposed (#58208's DSA candidate-block topk, vllm-project/vllm#59125) showed the fp8 dense indexer path #58671 would otherwise replace costs roughly 15% interactivity and 10% tail e2e latency at TP2 c16, with no measurable throughput/GPU change."
     - "设置 VLLM_ROCM_USE_AITER_TRITON_SPARSE_MLA=True 以启用 vllm-project/vllm#53492 的 Gluon sparse-MLA kernel。将镜像取消固定为 TBD，待 #58208（更快的 DSA 候选块 topk 选择）、#58655（融合 mHC Triton kernel）与 #53492（sparse MLA Gluon kernel）合并至上游并随 nightly 镜像发布：更优的 topk/mHC/MLA kernel，以及更好的计算/通信流重叠模式。不包含 vllm-project/vllm#58671 的 MXFP4 稀疏 logits indexer：该 PR 未能及时合并；回滚它所暴露的一个依赖问题（#58208 的 DSA 候选块 topk，vllm-project/vllm#59125）后测得，#58671 本应替换的 fp8 稠密 indexer 路径在 TP2 c16 下约有 15% 的 interactivity 与 10% 的尾部 e2e 延迟损失，而 throughput/GPU 无明显变化。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3555
+
+- config-keys:
+    - glm5.2-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the GLM-5.2 MXFP4 MI355X SGLang AgentX image from lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260923 to lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260924 (digest sha256:baadaba198e23c46c1dd651b5edefae8000bd5430943bd10b246b563905b3ecf); keep all serving flags, HiCache settings, and sweep points unchanged."
+    - "将 GLM-5.2 MXFP4 MI355X SGLang AgentX 镜像从 lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260923 更新到 lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260924（digest sha256:baadaba198e23c46c1dd651b5edefae8000bd5430943bd10b246b563905b3ecf）；其余服务参数、HiCache 设置与 sweep 点保持不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3446
+
+- config-keys:
+    - dsv41flash-fp4-b300-vllm-agentic-dspark
+  description:
+    - "Pin B300 DeepSeek-V4.1-Flash vLLM to nightly ddd6fbca with FlashInfer sparse attention, MXFP4 indexer KV, sparse logits, fp8 KV cache, and a 7200 s readiness timeout."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3458
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-agentic-dspark
+  description:
+    - "Pin B200 DeepSeek-V4.1-Flash vLLM to nightly ddd6fbca with FlashInfer sparse attention, MXFP4 indexer KV, sparse logits, fp8 KV cache, and a 7200 s readiness timeout."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3459
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update image to lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260926."
+    - "Switch attention to fp8 unified KV; enable grouped decode on TP8-only arms at conc >= 16."
+    - "Enable breakable CUDA-graph prefill (BCG) at conc <= 4."
+    - "Enable EP8 + MegaMoE for DP-attention arms at conc >= 128 (including conc 384)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3430
