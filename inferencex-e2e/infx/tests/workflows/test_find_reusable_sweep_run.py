@@ -395,7 +395,7 @@ def test_validate_reusable_run_rejects_run_for_orphaned_commit(monkeypatch) -> N
 
 @pytest.mark.parametrize("labels,command", [
     ([], "/reuse-sweep-run"), ([], "/use"), (["documentation"], "/use"),
-    (["sweep-enabled"], "/use"), (["full-sweep-enabled"], "/use"),
+    (["full-sweep-enabled"], "/use"),
 ])
 def test_main_enables_pinned_reuse_without_sweep_label(monkeypatch, tmp_path, labels, command) -> None:
     comments = [

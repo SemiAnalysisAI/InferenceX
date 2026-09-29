@@ -802,7 +802,7 @@ class TestMergePrEligibility:
         assert "deleted fork" in captured.err
 
     def test_multiple_sweep_labels_exits_one(self):
-        pull = make_mock_pull(labels=["sweep-enabled", "full-sweep-enabled"])
+        pull = make_mock_pull(labels=["full-sweep-fail-fast", "full-sweep-enabled"])
         gh = make_mock_gh(pull)
         git_ops = make_mock_git_ops()
         result = merge_pr(7, repo="example/repo", _git_ops=git_ops, _gh=gh)
