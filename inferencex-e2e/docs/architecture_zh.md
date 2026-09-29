@@ -42,7 +42,8 @@
 | [`infx/matrix/validation.py`](../infx/matrix/validation.py) | 强制执行的 Pydantic 模式和跨字段不变量 |
 | [`infx/matrix/generate.py`](../infx/matrix/generate.py) | 搜索空间展开、默认值、过滤器、派生元数据、运行器解析和评测选择 |
 | [`infx/matrix/plan.py`](../infx/matrix/plan.py) | 变更日志选择、配置键展开、追加模式比较、矩阵分桶及最终验证；通过 `python -m infx.matrix.plan` 运行 |
-| [`.github/workflows/run-sweep.yml`](../../.github/workflows/run-sweep.yml) | 触发策略、矩阵扇出、收集依赖和跨仓库摄取分派 |
+| [`.github/workflows/run-sweep.yml`](../../.github/workflows/run-sweep.yml) | PR 触发策略、矩阵扇出和收集依赖 |
+| [`.github/workflows/merge-ingest.yml`](../../.github/workflows/merge-ingest.yml) | 合并时复用验证、变更日志元数据和跨仓库摄取分派 |
 | [`.github/workflows/benchmark-tmpl.yml`](../../.github/workflows/benchmark-tmpl.yml)、[`.github/workflows/benchmark-multinode-tmpl.yml`](../../.github/workflows/benchmark-multinode-tmpl.yml) | 可复用作业输入契约、环境映射、启动器调用、结果检查和单作业上传 |
 | [`infx/launch/`](../infx/launch) | `python -m infx.launch run`：根据运行器名称解析集群、选择启动路径（驱动）、工作负载策略、信号安全的清理以及工件暂存 |
 | [`infx/clusters/`](../infx/clusters)、[`infx/launch/backends/`](../infx/launch/backends) | 类型化集群记录（每个调度器一个设置模型），以及运行容器、跟踪作业的调度器后端（目前为使用 Pyxis squash 镜像的 Slurm） |
@@ -88,7 +89,7 @@ flowchart LR
   I --> J[基准测试、评测、日志、指标、追踪]
   J --> K[单作业 GitHub 工件]
   K --> L[运行级聚合工件]
-  L --> M[向 InferenceX-app 进行仓库分派]
+  L --> M[merge-ingest.yml 向 InferenceX-app 分派]
   M --> N[准备并下载工件]
   N --> O[映射、规范化并向上插入数据库行]
   O --> Q[验证数据库并刷新最新基准测试]
@@ -108,7 +109,8 @@ flowchart LR
 | 验证 | 接受的字段名称、类型以及拓扑或作用域不变量 | 运行哪个变更日志条目、调度优先级或运行时功能支持 |
 | 矩阵生成器 | 展开为可执行点、默认值、派生名称和长度、评测标记以及运行器解析 | 容器启动或基准测试实现 |
 | 变更日志处理器 | 选择发生变更的配置键，并将其分组到工作流矩阵桶中 | 每项配置的定义或其运行时行为 |
-| 扫描工作流 | 触发和标签策略、金丝雀与复用策略、矩阵扇出、依赖门控和摄取分派 | 特定于机群的启动细节或数据库映射 |
+| 扫描工作流 | PR 触发和标签策略、金丝雀与 PR 复用门控策略、矩阵扇出和依赖门控 | 特定于机群的启动细节、摄取分派或数据库映射 |
+| 合并摄取工作流 | 合并时复用验证、变更日志元数据上传和唯一一次摄取分派 | 基准测试执行或数据库映射 |
 | 可复用工作流 | 稳定的作业输入和环境契约、自托管调度、启动器调用、文件存在性检查和工件上传名称 | 模型路径选择或框架 CLI 标志 |
 | 启动器（`infx.launch`） | 依据集群记录的物理运行器行为、模型暂存、挂载、容器、Slurm 分配，以及选择驱动、运行时脚本或外部方案 | 逻辑搜索空间策略或数据库模式 |
 | 基准测试和评测代码 | 服务器标志、客户端负载、评分、可供聚合的文件和运行时清理 | 请求了哪些矩阵点或数据行如何在仪表板中显示 |
@@ -122,7 +124,7 @@ flowchart LR
 
 主 YAML 文件描述可能执行的工作。配置键将模型、镜像、模型前缀、精度、框架、运行器标签、场景定义以及一个或多个搜索空间条目绑定在一起。[`configs/runners.yaml`](../configs/runners.yaml) 解析调度标签，其中的 `clusters:` 记录提供生成时使用的节点形状，以及启动器使用的 Slurm、镜像、路径和模型信息。
 
-主条目在被选中之前不会生效。在主扫描路径上，[`perf-changelog.yaml`](../perf-changelog.yaml) 的新增内容会选择确切的配置键或键模式。[`infx.matrix.plan`](../infx/matrix/plan.py) 仅读取基础引用与头部引用之间新增的变更日志行。它会验证每个新增条目，针对已加载的主配置展开键模式，并为选中的键调用矩阵生成器。
+主条目在被选中之前不会生效。在由变更日志驱动的路径上，[`perf-changelog.yaml`](../perf-changelog.yaml) 的新增内容会选择确切的配置键或键模式。[`infx.matrix.plan`](../infx/matrix/plan.py) 仅读取基础引用与头部引用之间新增的变更日志行。它会验证每个新增条目，针对已加载的主配置展开键模式，并为选中的键调用矩阵生成器。
 
 这种拆分有两个结果。
 
@@ -184,15 +186,15 @@ flowchart LR
 
 ## 阶段 3：工作流分派
 
-[`.github/workflows/run-sweep.yml`](../../.github/workflows/run-sweep.yml) 是编排边界。
+[`.github/workflows/run-sweep.yml`](../../.github/workflows/run-sweep.yml) 是 PR 扫描的编排边界。
 
-1. 它由提交到 `main` 的 `perf-changelog.yaml` 变更和符合条件的拉取请求事件触发。
+1. 它仅由修改 `perf-changelog.yaml` 的符合条件的拉取请求事件触发。推送到 `main` 时改为运行 [`merge-ingest.yml`](../../.github/workflows/merge-ingest.yml)；参见[阶段 6](#阶段-6工件收集与交接)。
 2. 它验证新增的变更日志内容并应用 PR 标签策略。
 3. 其设置作业运行 `python -m infx.matrix.plan`，然后通过 [`infx/workflows/ci_priority.py`](../infx/workflows/ci_priority.py) 应用 CI 优先级元数据。
 4. 它将整个矩阵作为 `search-space-config` 作业输出公开。
 5. 矩阵作业使用相应的桶，并调用 `benchmark-tmpl.yml` 或 `benchmark-multinode-tmpl.yml`。
 6. 基准测试、评测和智能体数据行使用独立的扇出作业，因为它们所需的输入形态不同。
-7. 收集过程会等待相关作业。只有在所需的收集工作和变更日志元数据工作达到允许状态后，主分支运行才会分派摄取任务。
+7. 收集过程会等待相关作业。PR 运行只上传工件，从不分派摄取；合并后由 `merge-ingest.yml` 分派对被复用运行工件的摄取。
 
 可复用工作流在矩阵键与运行时环境变量之间构成显式适配器。单节点和多节点调用方通过一个 JSON `config` 输入传递已验证的 `infx.matrix` 数据行；`benchmark-tmpl.yml` 和 `benchmark-multinode-tmpl.yml` 负责将其映射为 `MODEL_PREFIX`、`DCP_SIZE`、`SPEC_DECODING` 等变量。因此，新增配方字段时，只需修改模式/生成器及使用该字段的模板/运行时代码，无需在每个调用方重复添加转发字段。模板显式读取已知字段，不会将任意 JSON 键导出为环境变量。
 
@@ -302,15 +304,15 @@ rows = build_rows(raw_eval, metadata, source="eval_job/results.json")
 
 - [`collect-results.yml`](../../.github/workflows/collect-results.yml) 下载 `bmk_*`，运行 [`infx/results/collect_results.py`](../infx/results/collect_results.py)，并上传 `results_bmk/agg_bmk.json`。
 - [`collect-evals.yml`](../../.github/workflows/collect-evals.yml) 下载 `eval_*`，运行 [`infx/results/collect_eval_results.py`](../infx/results/collect_eval_results.py)，并上传 `eval_results_all/agg_eval_all.json`。
-- `run-sweep.yml` 还会在适用时单独上传 `changelog-metadata/changelog_metadata.json` 和 `run-stats/run_stats.json`。
+- `run-sweep.yml` 还会在适用时单独上传 `changelog-metadata/changelog_metadata.json` 和 `run-stats/run_stats.json`。合并时，`merge-ingest.yml` 会上传自己的合并时 `changelog-metadata`。
 
 工件名称是跨仓库接口的一部分。InferenceX-app 的 `ingest-ci-run.ts` 会明确指定 `results_bmk`、`run-stats`、`eval_results_all` 和 `changelog-metadata`。它还会发现单作业 `bmk_*`、`eval_*`、日志和智能体同级目录。
 
-对于符合条件的 `main` 推送，`run-sweep.yml` 会向 `SemiAnalysisAI/InferenceX-app` 发送 GitHub `repository_dispatch`。
+对于符合条件的 `main` 推送，[`merge-ingest.yml`](../../.github/workflows/merge-ingest.yml) 的 `ingest` 作业会验证已合并 PR 的复用授权，并向 `SemiAnalysisAI/InferenceX-app` 发送且仅发送一次 GitHub `repository_dispatch`。没有有效授权时，该作业会失败，不发送任何分派。`run-sweep.yml` 从不分派摄取。
 
-- 普通基准测试和评测运行使用 `event_type: ingest-results`。
-- 智能体追踪运行使用 `event_type: ingest-agentic-results`，并采用具有更长超时时间的独立工作流。
-- 负载携带 `source-run-id` 和 `merge-run-id`。复用的 PR 扫描可以从源运行提供工件，同时由合并运行提供当前变更日志上下文。
+- 不含智能体条目的变更日志增量使用 `event_type: ingest-results`。
+- 包含智能体条目的增量使用 `event_type: ingest-agentic-results` 并携带 `database-target: production`，由具有更长超时时间的独立工作流处理。
+- 负载携带 `source-run-id` 和 `merge-run-id`。源运行始终是提供工件的被复用 PR `run-sweep.yml` 运行，Merge Ingest 运行则提供当前变更日志上下文。
 
 成功上传基准测试工件并不等同于成功摄取。仓库分派、工件准备、ETL、数据库验证和缓存失效都属于后续边界。
 
@@ -405,7 +407,7 @@ AgentX 追踪导出的体积更大，并且需要追踪发现、时间线处理�
 
 ### 为什么源运行 ID 和合并运行 ID 不同
 
-合并操作可以复用已授权的 PR 扫描，而无需重新运行昂贵的 GPU 工作。源运行标识实际的基准测试工件及其来源。合并运行提供当前触发和变更日志上下文。保留两者可以避免将旧工件归属于错误的执行，也可以避免丢失合并审计记录。
+每次合并都会复用已授权的 PR 扫描；`main` 从不重新运行昂贵的 GPU 工作。源运行标识实际的基准测试工件及其来源。合并运行提供当前触发和变更日志上下文。保留两者可以避免将旧工件归属于错误的执行，也可以避免丢失合并审计记录。
 
 ## 追踪并验证一项结果
 
@@ -428,7 +430,7 @@ AgentX 追踪导出的体积更大，并且需要追踪发现、时间线处理�
 6. **运行时：** 沿 `launch_path` 及所选驱动追踪到确切的基准测试脚本或外部方案。确认每个关键矩阵字段均到达实际被使用的环境变量或命令参数。
 7. **输出：** 验证工作流要求的原始结果存在。然后验证预期的 `bmk_*`、`eval_*`、`agentic_*`、日志或指标工件已上传。
 8. **收集：** 对于固定序列吞吐量，检查 `results_bmk/agg_bmk.json`。对于评测，检查 `eval_results_all/agg_eval_all.json` 和按配置划分的评测工件。还要确认 `changelog-metadata` 存在。
-9. **分派：** 对于主分支运行，验证正确的仓库分派作业已运行，并且其 `source-run-id` 和 `merge-run-id` 标识预期运行。
+9. **分派：** 在合并提交对应的 `merge-ingest.yml` 运行中，验证 `ingest` 作业发送了正确的事件类型，并且其 `source-run-id` 和 `merge-run-id` 标识预期运行。
 10. **摄取：** 在 InferenceX-app 中，验证工件准备过程选择了预期名称，ETL 报告的是已映射行而非跳过项，数据库验证已通过，并且已尝试使缓存失效。
 11. **使用方：** 仅在摄取完成后查询仪表板。如果该行不存在，请先使用 ETL 跳过和未映射实体输出，再修改前端代码。
 
@@ -444,7 +446,7 @@ AgentX 追踪导出的体积更大，并且需要追踪发现、时间线处理�
 - 具体运行器不在任何 `cluster:<id>` 标签中，或者没有支持该模型、精度、框架和拓扑的启动路径。
 - 基准测试或评测路径无法说明其预期结果文件名和工件名称。
 - 生产方工件名称不再与 InferenceX-app 使用的名称匹配。
-- 主分支运行在所需收集工作或变更日志元数据准备就绪之前进入分派阶段。
+- `merge-ingest.yml` 运行在缺少已验证且具备未过期结果工件的复用源运行时，或在其变更日志元数据上传之前，就进入分派阶段。
 - 摄取针对正在调查的数据行报告了未映射的模型、硬件、精度或必需数据集。
 - 数据库验证失败，或者最新基准测试刷新未完成。
 - 仪表板声明仅基于成功的基准测试作业，没有成功摄取和缓存失效的证据。

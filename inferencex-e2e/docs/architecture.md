@@ -42,7 +42,8 @@ The repository separates `inferencex-e2e/`, `collectivex/`, `operatorx/`, `share
 | [`infx/matrix/validation.py`](../infx/matrix/validation.py) | Enforced Pydantic schemas and cross-field invariants |
 | [`infx/matrix/generate.py`](../infx/matrix/generate.py) | Search-space expansion, defaults, filters, derived metadata, runner resolution, and eval selection |
 | [`infx/matrix/plan.py`](../infx/matrix/plan.py) | Changelog selection, config-key expansion, append-only comparison, matrix bucketing, and final validation; run with `python -m infx.matrix.plan` |
-| [`.github/workflows/run-sweep.yml`](../../.github/workflows/run-sweep.yml) | Trigger policy, matrix fan-out, collection dependencies, and cross-repository ingest dispatch |
+| [`.github/workflows/run-sweep.yml`](../../.github/workflows/run-sweep.yml) | PR trigger policy, matrix fan-out, and collection dependencies |
+| [`.github/workflows/merge-ingest.yml`](../../.github/workflows/merge-ingest.yml) | Merge-time reuse validation, changelog metadata, and cross-repository ingest dispatch |
 | [`.github/workflows/benchmark-tmpl.yml`](../../.github/workflows/benchmark-tmpl.yml), [`.github/workflows/benchmark-multinode-tmpl.yml`](../../.github/workflows/benchmark-multinode-tmpl.yml) | Reusable job input contract, environment projection, launcher invocation, result checks, and per-job uploads |
 | [`infx/launch/`](../infx/launch) | `python -m infx.launch run`: cluster resolution from the runner name, launch-path (driver) selection, workload policy, signal-safe cleanup, and artifact staging |
 | [`infx/clusters/`](../infx/clusters), [`infx/launch/backends/`](../infx/launch/backends) | Typed cluster records with one settings model per scheduler, and the scheduler backends that run containers and follow jobs (Slurm with Pyxis squash images today) |
@@ -88,7 +89,7 @@ flowchart LR
   I --> J[Benchmark, eval, logs, metrics, traces]
   J --> K[Per-job GitHub artifacts]
   K --> L[Run-level aggregate artifacts]
-  L --> M[Repository dispatch to InferenceX-app]
+  L --> M[merge-ingest.yml dispatch to InferenceX-app]
   M --> N[Prepare and download artifacts]
   N --> O[Map, normalize, and upsert DB rows]
   O --> Q[Verify DB and refresh latest benchmarks]
@@ -108,7 +109,8 @@ No single file owns the whole pipeline. Correctness comes from agreement at ever
 | Validation | Accepted field names, types, and topology or scope invariants | Which changelog entry runs, scheduling priority, or runtime feature support |
 | Matrix generator | Expansion into executable points, defaults, derived names and lengths, eval marking, and runner resolution | Container startup or benchmark implementation |
 | Changelog processor | The changed config-key selection and grouping into workflow matrix buckets | The definition of each config or its runtime behavior |
-| Sweep workflow | Trigger and label policy, canary and reuse policy, matrix fan-out, dependency gates, and ingest dispatch | Fleet-specific launch details or database mapping |
+| Sweep workflow | PR trigger and label policy, canary and PR reuse-gate policy, matrix fan-out, and dependency gates | Fleet-specific launch details, ingest dispatch, or database mapping |
+| Merge ingest workflow | Merge-time reuse validation, changelog metadata upload, and the single ingest dispatch | Benchmark execution or database mapping |
 | Reusable workflow | Stable job input and environment contract, self-hosted scheduling, launcher call, file existence checks, and artifact upload names | Model path choice or framework CLI flags |
 | Launcher (`infx.launch`) | Physical runner behavior from the cluster record, model staging, mounts, containers, Slurm allocation, and selection of a driver, runtime script, or external recipe | Logical search-space policy or database schema |
 | Benchmark and eval code | Server flags, client workload, scoring, aggregation-ready files, and runtime cleanup | Which matrix points were requested or how rows appear in the dashboard |
@@ -122,7 +124,7 @@ A field crossing a boundary is not automatically authoritative in the next layer
 
 The master YAML files describe possible work. A config key binds the model, image, model prefix, precision, framework, runner label, scenario definitions, and one or more search-space entries. [`configs/runners.yaml`](../configs/runners.yaml) resolves scheduling labels. Its `clusters:` records supply the generation-time node shape and the launcher's Slurm, image, path, and model facts.
 
-A master entry is inert until selected. On the main sweep path, additions to [`perf-changelog.yaml`](../perf-changelog.yaml) select exact config keys or key patterns. [`infx.matrix.plan`](../infx/matrix/plan.py) reads only added changelog lines between the base and head references. It validates each added entry, expands key patterns against the loaded master configs, and invokes the matrix generator for the selected keys.
+A master entry is inert until selected. On the changelog-driven path, additions to [`perf-changelog.yaml`](../perf-changelog.yaml) select exact config keys or key patterns. [`infx.matrix.plan`](../infx/matrix/plan.py) reads only added changelog lines between the base and head references. It validates each added entry, expands key patterns against the loaded master configs, and invokes the matrix generator for the selected keys.
 
 This split has two consequences.
 
@@ -184,15 +186,15 @@ The emitted matrix is the executable CI contract, but it is not a durable source
 
 ## Stage 3: workflow dispatch
 
-[`.github/workflows/run-sweep.yml`](../../.github/workflows/run-sweep.yml) is the orchestration boundary.
+[`.github/workflows/run-sweep.yml`](../../.github/workflows/run-sweep.yml) is the PR sweep orchestration boundary.
 
-1. It triggers on `perf-changelog.yaml` changes to `main` and eligible pull-request events.
+1. It triggers only on eligible pull-request events that change `perf-changelog.yaml`. Pushes to `main` run [`merge-ingest.yml`](../../.github/workflows/merge-ingest.yml) instead; see [Stage 6](#stage-6-artifact-collection-and-handoff).
 2. It validates changelog additions and applies PR label policy.
 3. Its setup job runs `python -m infx.matrix.plan`, then applies CI priority metadata with [`infx/workflows/ci_priority.py`](../infx/workflows/ci_priority.py).
 4. It exposes the entire matrix as the `search-space-config` job output.
 5. Matrix jobs consume the appropriate bucket and call either `benchmark-tmpl.yml` or `benchmark-multinode-tmpl.yml`.
 6. Benchmark, eval, and agentic rows use separate fan-out jobs because their required input shapes differ.
-7. Collection waits on the relevant jobs. Main-branch runs dispatch ingestion only after required collection and changelog-metadata work reaches an allowed state.
+7. Collection waits on the relevant jobs. The PR run uploads artifacts but never dispatches ingestion; after merge, `merge-ingest.yml` dispatches ingestion of the reused run's artifacts.
 
 The reusable workflows form an explicit adapter between matrix keys and runtime environment variables. Single-node and multinode callers pass the validated `infx.matrix` row as one JSON `config` input; `benchmark-tmpl.yml` and `benchmark-multinode-tmpl.yml` own its projection into variables such as `MODEL_PREFIX`, `DCP_SIZE`, and `SPEC_DECODING`. Adding a recipe field therefore requires its schema/generator and consuming template/runtime changes, without repeating the forwarding field in every caller. The template reads known fields explicitly rather than exporting arbitrary JSON keys.
 
@@ -302,15 +304,15 @@ Per-job artifacts remain useful for diagnosis and detailed ingestion. Two collec
 
 - [`collect-results.yml`](../../.github/workflows/collect-results.yml) downloads `bmk_*`, runs [`infx/results/collect_results.py`](../infx/results/collect_results.py), and uploads `results_bmk/agg_bmk.json`.
 - [`collect-evals.yml`](../../.github/workflows/collect-evals.yml) downloads `eval_*`, runs [`infx/results/collect_eval_results.py`](../infx/results/collect_eval_results.py), and uploads `eval_results_all/agg_eval_all.json`.
-- `run-sweep.yml` separately uploads `changelog-metadata/changelog_metadata.json` and `run-stats/run_stats.json` when applicable.
+- `run-sweep.yml` separately uploads `changelog-metadata/changelog_metadata.json` and `run-stats/run_stats.json` when applicable. At merge, `merge-ingest.yml` uploads its own merge-time `changelog-metadata`.
 
 Artifact names are part of the cross-repository interface. InferenceX-app's `ingest-ci-run.ts` names `results_bmk`, `run-stats`, `eval_results_all`, and `changelog-metadata` explicitly. It also discovers per-job `bmk_*`, `eval_*`, logs, and agentic sibling directories.
 
-On a qualifying push to `main`, `run-sweep.yml` sends a GitHub `repository_dispatch` to `SemiAnalysisAI/InferenceX-app`.
+On a qualifying push to `main`, the `ingest` job of [`merge-ingest.yml`](../../.github/workflows/merge-ingest.yml) validates the merged PR's reuse authorization and sends exactly one GitHub `repository_dispatch` to `SemiAnalysisAI/InferenceX-app`. Without valid authorization it fails and sends nothing. `run-sweep.yml` never dispatches ingest.
 
-- Normal benchmark and eval runs use `event_type: ingest-results`.
-- Agentic trace runs use `event_type: ingest-agentic-results` and a separate workflow with a longer timeout.
-- The payload carries `source-run-id` and `merge-run-id`. A reused PR sweep can supply artifacts from the source run while the merge run supplies current changelog context.
+- Changelog deltas without agentic entries use `event_type: ingest-results`.
+- Deltas with agentic entries use `event_type: ingest-agentic-results` with `database-target: production`, handled by a separate workflow with a longer timeout.
+- The payload carries `source-run-id` and `merge-run-id`. The source is always the reused PR `run-sweep.yml` run that supplies artifacts, while the Merge Ingest run supplies current changelog context.
 
 A successful benchmark artifact upload is not the same as a successful ingest. The repository dispatch, artifact preparation, ETL, database verification, and cache invalidation are later boundaries.
 
@@ -405,7 +407,7 @@ Invalidating before a verified write can expose partial data and then cache it. 
 
 ### Why source and merge run IDs are distinct
 
-A merge can reuse an authorized PR sweep instead of rerunning expensive GPU work. The source run identifies the actual benchmark artifacts and provenance. The merge run contributes the current trigger and changelog context. Keeping both avoids attributing old artifacts to the wrong execution or losing the merge audit trail.
+Every merge reuses an authorized PR sweep; `main` never reruns expensive GPU work. The source run identifies the actual benchmark artifacts and provenance. The merge run contributes the current trigger and changelog context. Keeping both avoids attributing old artifacts to the wrong execution or losing the merge audit trail.
 
 ## Trace and verify one result
 
@@ -428,7 +430,7 @@ Use this procedure when a row is missing, mislabeled, or unexpected.
 6. **Runtime:** Trace `launch_path` and the selected driver to the exact benchmark script or external recipe. Confirm every critical matrix field reaches a consumed environment variable or command argument.
 7. **Output:** Verify the workflow's required raw result exists. Then verify the expected `bmk_*`, `eval_*`, `agentic_*`, logs, or metrics artifact was uploaded.
 8. **Collection:** For fixed-sequence throughput, inspect `results_bmk/agg_bmk.json`. For eval, inspect `eval_results_all/agg_eval_all.json` and the per-config eval artifact. Also confirm `changelog-metadata` exists.
-9. **Dispatch:** On a main-branch run, verify the correct repository-dispatch job ran and its `source-run-id` and `merge-run-id` identify the intended runs.
+9. **Dispatch:** In the merge commit's `merge-ingest.yml` run, verify the `ingest` job sent the correct event type and its `source-run-id` and `merge-run-id` identify the intended runs.
 10. **Ingest:** In InferenceX-app, verify artifact preparation selected the expected names, ETL reported mapped rows rather than skips, database verification passed, and cache invalidation was attempted.
 11. **Consumer:** Query the dashboard only after ingest completion. If the row is absent, use the ETL skip and unmapped-entity output before changing frontend code.
 
@@ -444,7 +446,7 @@ Do not launch or approve a sweep when any of these conditions holds.
 - The concrete runner is in no `cluster:<id>` label, or no launch path supports the model, precision, framework, and topology.
 - The benchmark or eval path cannot state its expected result filename and artifact name.
 - Producer artifact names no longer match the names consumed by InferenceX-app.
-- A main-branch run reaches dispatch before required collection or changelog metadata is ready.
+- A `merge-ingest.yml` run reaches dispatch without a validated reuse source that has unexpired result artifacts, or before its changelog metadata is uploaded.
 - Ingest reports an unmapped model, hardware, precision, or required dataset for the row under investigation.
 - Database verification fails, or the latest-benchmark refresh does not complete.
 - A dashboard claim is based only on successful benchmark jobs without evidence of successful ingest and cache invalidation.

@@ -38,7 +38,8 @@ These files are the contract. Follow the target ref's source rather than copying
 | Strict master-config and matrix schemas | [`infx.matrix.validation`](../infx/matrix/validation.py) |
 | Generator examples and reuse policy | [`.github/workflows/README.md`](../../.github/workflows/README.md) |
 | Manual end-to-end inputs and matrix fan-out | [`.github/workflows/e2e-tests.yml`](../../.github/workflows/e2e-tests.yml) |
-| PR/main sweep gates, canary, collection, and ingest dispatch | [`.github/workflows/run-sweep.yml`](../../.github/workflows/run-sweep.yml) |
+| PR sweep gates, canary, and collection | [`.github/workflows/run-sweep.yml`](../../.github/workflows/run-sweep.yml) |
+| Merge-time reuse check, changelog metadata, and ingest dispatch | [`.github/workflows/merge-ingest.yml`](../../.github/workflows/merge-ingest.yml) |
 | Single- and multi-node artifact uploads | [`.github/workflows/benchmark-tmpl.yml`](../../.github/workflows/benchmark-tmpl.yml), [`.github/workflows/benchmark-multinode-tmpl.yml`](../../.github/workflows/benchmark-multinode-tmpl.yml) |
 | Throughput and eval aggregation | [`.github/workflows/collect-results.yml`](../../.github/workflows/collect-results.yml), [`.github/workflows/collect-evals.yml`](../../.github/workflows/collect-evals.yml), [`infx/results/collect_results.py`](../infx/results/collect_results.py), [`infx/results/collect_eval_results.py`](../infx/results/collect_eval_results.py) |
 | Changelog byte/diff/matrix gate | [`infx/workflows/validate_perf_changelog.py`](../infx/workflows/validate_perf_changelog.py), [`infx.matrix.plan`](../infx/matrix/plan.py) |
@@ -238,7 +239,6 @@ The same-repository check applies before checking out PR code in changelog valid
 | --- | --- | --- | --- |
 | `full-sweep-fail-fast` | Full changelog matrix | Yes | Yes. Recommended full-sweep default |
 | `full-sweep-enabled` | Full changelog matrix | Yes | No. Use when every matrix point must continue |
-| `full-sweep-fail-fast-no-canary` | Full changelog matrix | No | Yes |
 | `non-canary-full-sweep-enabled` | Full changelog matrix | No | No |
 
 Optional modifiers do not replace a primary label:
@@ -249,16 +249,16 @@ Optional modifiers do not replace a primary label:
 | `evals-only` | Suppress throughput and run only the selected eval entries. Combine with `all-evals` for all evals only | No |
 | `agentx-fast` | For AgentX throughput lanes, use one additional warmup request after mandatory primers and a 20-minute profile. Fixed-sequence and eval settings stay canonical | No |
 
-Changing a recognized primary or modifier label shares the active sweep concurrency group and normally cancels/restarts the active run. `skip_queue`, patchwork, waiver, and checklist labels are gating/priority inputs, not primary sweep modes. A head commit containing `[skip-sweep]` skips PR benchmark setup only. Changelog/reuse checks still run, and pushes to `main` ignore it.
+Changing a recognized primary or modifier label shares the active sweep concurrency group and normally cancels/restarts the active run. `skip_queue`, patchwork, waiver, and checklist labels are gating/priority inputs, not primary sweep modes. A head commit containing `[skip-sweep]` skips PR benchmark setup only. Changelog/reuse checks still run, and the push-to-`main` `merge-ingest.yml` run ignores it.
 
 ## Canary and fail-fast semantics
 
 Canary and fail-fast solve different problems:
 
-1. A canary is created only for `full-sweep-enabled` or `full-sweep-fail-fast` PRs. No-canary labels skip it.
+1. A canary is created only for `full-sweep-enabled` or `full-sweep-fail-fast` PRs. `non-canary-full-sweep-enabled` skips it.
 2. Canary selection first considers single-node fixed-sequence `1k1k` and `8k1k` entries and single-node AgentX entries. If none are eligible, it considers multi-node AgentX entries. It excludes eval entries, chooses the lowest-concurrency candidate, runs it with the matching single-node or multi-node workflow, and removes it from the later matrix.
 3. If there is no eligible candidate, the canary is skipped. Otherwise all benchmark/eval matrices require the canary to succeed. A failed canary prevents their fan-out.
-4. `full-sweep-fail-fast` and `full-sweep-fail-fast-no-canary` set `strategy.fail-fast: true` separately on each matrix job family. The first failing point cancels queued/in-progress siblings in that matrix family. It is not one global kill switch for every independent family.
+4. `full-sweep-fail-fast` sets `strategy.fail-fast: true` separately on each matrix job family. The first failing point cancels queued/in-progress siblings in that matrix family. It is not one global kill switch for every independent family.
 5. Non-fail-fast labels leave matrix fail-fast false so other points continue and preserve broader diagnostic coverage.
 6. A fail-fast run can conclude `cancelled` because sibling points were cancelled after a failure. Classify the first real failure before treating cancellation as an infrastructure event.
 
@@ -380,7 +380,7 @@ Each request, including all its pages, has a 60-second timeout.
 A request is stageable only when all of the following hold:
 
 - The commenter has `write`, `maintain`, or `admin` repository permission.
-- The PR currently has one of the four full-sweep labels (`full-sweep-enabled`, `non-canary-full-sweep-enabled`, `full-sweep-fail-fast`, or `full-sweep-fail-fast-no-canary`).
+- The PR currently has one of the three full-sweep labels (`full-sweep-enabled`, `non-canary-full-sweep-enabled`, or `full-sweep-fail-fast`).
 - The candidate is a completed `pull_request` run of `run-sweep.yml`, created while a full-sweep label was active, with conclusion `success`, `failure`, or `cancelled`.
 - The candidate is associated with the PR under the workflow's current-head/historical-pin rules.
 - Unexpired `changelog-metadata` and at least one of `results_bmk`, `eval_results_all`, or `bmk_agentic_*` exist. Failed/cancelled runs may therefore stage useful partial data, but empty or metadata-only runs cannot.
@@ -398,7 +398,7 @@ Staging preserves earlier staged runs. Staging the same run ID again updates tha
 
 ## Artifact reuse and merge-with-reuse
 
-Reuse prevents an approved full PR sweep from being rerun on `main`. It is not a way to bypass changelog validation.
+Reuse is the only path from an approved PR sweep to official ingest: `main` never reruns the sweep, and [`merge-ingest.yml`](../../.github/workflows/merge-ingest.yml) publishes only a validly reused source run. It is not a way to bypass changelog validation.
 
 ### Eligibility and authorization
 
@@ -416,7 +416,7 @@ The comment starts a lightweight validation workflow using default-branch code a
 
 Acceptance means the request has an eligible source at validation time. Reactions do not authorize reuse themselves. The source is revalidated on PR synchronization and merge, so missing/expired artifacts or invalid source commits still fail closed. An unpinned request retains its existing latest-successful-run selection; pin a run ID to select a particular run.
 
-On a later PR `synchronize` event, the reuse gate skips another PR sweep only after changelog and source-run validation. On `main`, authorization that maps ambiguously, points to an invalid run, or conflicts with labels fails closed. With no authorization, `main` performs the normal sweep.
+On a later PR `synchronize` event, the reuse gate skips another PR sweep only after changelog and source-run validation. At merge, `merge-ingest.yml` fails closed on authorization that maps ambiguously, points to an invalid run, or conflicts with labels. With no authorization, the Merge Ingest run fails; nothing is benchmarked or ingested.
 
 ### Supported merge path
 
@@ -430,10 +430,10 @@ uv run --extra workflows python -m infx.workflows.merge_with_reuse <pr-number>
 
 Do not manually reproduce only half of this sequence. In particular, posting the comment and squash-merging without the synchronization/check phase can leave the merge run unable to select the intended source.
 
-On the `main` run, [`run-sweep.yml`](../../.github/workflows/run-sweep.yml) sends two distinct IDs to InferenceX-app:
+At merge, the `ingest` job of [`merge-ingest.yml`](../../.github/workflows/merge-ingest.yml) sends two distinct IDs to InferenceX-app:
 
-- `source-run-id`: the PR run containing benchmark/eval artifacts.
-- `merge-run-id`: the `main` run containing merge-time `changelog-metadata`.
+- `source-run-id`: the reused PR `run-sweep.yml` run containing benchmark/eval artifacts.
+- `merge-run-id`: the Merge Ingest run on `main` containing merge-time `changelog-metadata`.
 
 Public rows and links retain source-run provenance. Source artifact coverage is authoritative. Later matrix-policy changes do not manufacture missing points.
 
@@ -550,12 +550,12 @@ For an unfamiliar or raw agentic artifact, start with `jq 'type, keys'` and read
 
 A merge is not complete operationally until the `main` publication path and downstream ingest are verified.
 
-1. A push to `main` triggers [`run-sweep.yml`](../../.github/workflows/run-sweep.yml) only when `perf-changelog.yaml` changed. Confirm the merge commit produced that run. Do not assume an unrelated merge invokes it.
-2. Without valid reuse authorization, the `main` run processes the changelog delta and runs its normal matrix. PR canary logic does not run on `push`, and PR label-driven fail-fast is not available on that event.
-3. With reuse, benchmark jobs are skipped and the run uses source artifacts plus merge-run changelog metadata. Confirm the setup outputs selected the intended source run rather than inferring reuse from skipped jobs alone.
-4. `upload-changelog-metadata` must produce `changelog-metadata`. For search spaces without agentic entries, `trigger-ingest` dispatches `ingest-results`. Agentic search spaces follow the separate `trigger-agentic-ingest` conditions and dispatch `ingest-agentic-results` with `database-target: production`.
+1. A push to `main` triggers [`merge-ingest.yml`](../../.github/workflows/merge-ingest.yml) (Merge Ingest) only when `perf-changelog.yaml` changed. [`run-sweep.yml`](../../.github/workflows/run-sweep.yml) is PR-only and never runs on `main`. Confirm the merge commit produced a Merge Ingest run. Do not assume an unrelated merge invokes it.
+2. Without valid reuse authorization, the Merge Ingest run fails at its reuse check. `main` never runs a sweep, so no GPU job starts, no changelog metadata is uploaded, and nothing is dispatched. `[skip-sweep]` in the merge message changes nothing.
+3. With reuse, the `ingest` job resolves the merged PR and its source run with `infx.workflows.reuse`. Confirm the step output and run summary identify the intended PR and source run.
+4. The `ingest` job must upload `changelog-metadata` before it dispatches. It sends exactly one event: `ingest-results` when the changelog delta has no agentic entries, or `ingest-agentic-results` with `database-target: production` when it does.
 5. A green dispatch step proves only that GitHub accepted the InferenceX-app repository dispatch. Follow the downstream InferenceX-app run and verify the expected rows/links and source-run provenance. Its ingest implementation is outside this checkout.
-6. Check the final `main` run conclusion, every rerun attempt, aggregate artifacts, metadata, and publication result. The PR author remains responsible for all post-merge Actions jobs passing, including flakes that require a justified rerun.
+6. Check the final Merge Ingest run conclusion, every rerun attempt, the source run's aggregate artifacts, the merge-time metadata, and the publication result. The PR author remains responsible for all post-merge Actions jobs passing, including flakes that require a justified rerun.
 7. Do not rerun GPU benchmarks merely because downstream ingestion failed while valid artifacts exist. For a failed reused **agentic** ingest, an authorized maintainer can use [`recover-reused-ingest.yml`](../../.github/workflows/recover-reused-ingest.yml) with the original source and merge IDs. That workflow dispatches only `ingest-agentic-results`, so it is not a generic fixed-sequence recovery tool:
 
    ```bash

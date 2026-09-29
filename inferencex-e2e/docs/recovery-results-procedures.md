@@ -10,7 +10,7 @@ Use this page after a throughput or eval job starts producing output, or when a 
 
 ## Safety gates
 
-1. **Identify the exact run, attempt, job, event, branch, head SHA, and runner before changing anything.** A green `trigger-ingest` job is not proof that valid benchmark rows reached the database.
+1. **Identify the exact run, attempt, job, event, branch, head SHA, and runner before changing anything.** A green dispatch job (`ingest` in `merge-ingest.yml`, or `trigger-ingest` on a legacy `run-sweep.yml` push run) is not proof that valid benchmark rows reached the database.
 2. **Inspect first, then mutate.** Reading GitHub logs, `sinfo`, `squeue`, sysctls, ownership, and artifacts is safe. Deleting shared files, changing a sysctl, draining nodes, restarting services, or editing cluster state requires explicit operator approval.
 3. **Never rerun a failed push-to-`main` target merely to repair official ingest.** Use the validated artifact-reuse recovery path. It avoids GPU work and preserves source-run provenance.
 4. **Rerun only diagnosed flakes.** A retry does not repair a bad image, recipe, model, launcher, config, missing artifact, expired artifact, or changed execution semantics.
@@ -93,7 +93,7 @@ Sources: [failed-row guard](https://github.com/SemiAnalysisAI/InferenceX-app/blo
 
 ## InferenceX-app handoff and ingest verification
 
-On a push to `main`, `run-sweep.yml` dispatches `ingest-results` only after setup and the applicable collection paths have resolved. Its payload is:
+On a push to `main`, the `ingest` job of [`merge-ingest.yml`](../../.github/workflows/merge-ingest.yml) dispatches only after it validates the merged PR's reuse authorization and source run and uploads merge-time `changelog-metadata`. A changelog delta with agentic entries dispatches `ingest-agentic-results` with the same IDs plus `database-target: production`; otherwise the payload is:
 
 ```json
 {
@@ -105,11 +105,11 @@ On a push to `main`, `run-sweep.yml` dispatches `ingest-results` only after setu
 }
 ```
 
-A normal run uses the current run for both IDs. Reuse points `source-run-id` to the validated PR sweep and keeps `merge-run-id` on the new push-to-main recovery run. InferenceX-app selects the newest unexpired upload for each exact artifact name from the source run. For reuse, it replaces source changelog metadata with `changelog-metadata` from the merge run. Preparation fails if the source has no unexpired artifacts or the merge run has no changelog artifact.
+`source-run-id` is always the validated, reused PR sweep, and `merge-run-id` is the new Merge Ingest run on `main` (for a recovery, the run for the recovery PR's merge). Because `main` never runs a sweep, official ingests no longer use one run for both IDs. InferenceX-app selects the newest unexpired upload for each exact artifact name from the source run. It replaces source changelog metadata with `changelog-metadata` from the merge run. Preparation fails if the source has no unexpired artifacts or the merge run has no changelog artifact.
 
 The app workflow then runs, in order: artifact preparation, migrations, database ingest, run overrides, database verification, cache invalidation, and unmapped-entity inspection. Database writes are idempotent (`ON CONFLICT DO UPDATE` or `DO NOTHING`), so a correctly targeted ingest can safely resume after a partial failure.
 
-Sources: [dispatch payload and gates](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.github/workflows/run-sweep.yml#L978-L1021), [artifact selection](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/lib/ci-artifact-preparation.ts#L10-L48), [app ingest stages](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/.github/workflows/ingest-results.yml#L50-L124), [idempotency rationale](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/docs/data-pipeline.md#L26-L34).
+Sources: [current dispatch](../../.github/workflows/merge-ingest.yml), [historical `run-sweep.yml` dispatch payload and gates](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.github/workflows/run-sweep.yml#L978-L1021) (before `merge-ingest.yml`), [artifact selection](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/lib/ci-artifact-preparation.ts#L10-L48), [app ingest stages](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/.github/workflows/ingest-results.yml#L50-L124), [idempotency rationale](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/docs/data-pipeline.md#L26-L34).
 
 ### Verify the exact downstream ingest
 
@@ -144,7 +144,7 @@ Require all of the following, not merely a green conclusion:
 
 The preparation script emits the authoritative `Source run:` and `Merge run:` lines. Reused ingests do not wait five minutes because their source run is already complete.
 
-Sources: [authoritative preparation logs](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/prepare-ci-artifacts.ts#L99-L152), [official verification sequence](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.claude/commands/recover-failed-ingest.md#L391-L429).
+Sources: [authoritative preparation logs](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/prepare-ci-artifacts.ts#L99-L152), [official verification sequence](../../.claude/commands/recover-failed-ingest.md#8-merge-and-verify-official-ingest) ([historical snapshot](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.claude/commands/recover-failed-ingest.md#L391-L429) from before `merge-ingest.yml`).
 
 ## Failed ingest recovery
 
@@ -193,7 +193,7 @@ python3 -m infx.workflows.recover_failed_ingest audit-changelog \
   --ref "$ORIGINAL_MERGE_SHA"
 ```
 
-**Target gate:** require a completed push event for `.github/workflows/run-sweep.yml` on `main`. A target can conclude `success` or `cancelled` and still have a bogus ingest: if reuse was forgotten, GPU jobs may be cancelled while `trigger-ingest` still succeeds against the target's own run ID. Leave that row alone. The correctly recovered publication uses a new run ID.
+**Target gate:** require a completed push run on `main` of `.github/workflows/merge-ingest.yml`, or of `.github/workflows/run-sweep.yml` for a legacy merge from before `merge-ingest.yml` existed. A forgotten reuse command makes a Merge Ingest run fail at its reuse check, before any metadata upload or dispatch, so it leaves no bogus ingest. A legacy `run-sweep.yml` target can conclude `success` or `cancelled` and still have a bogus ingest: if reuse was forgotten, GPU jobs may be cancelled while `trigger-ingest` still succeeds against the target's own run ID. Leave that row alone. The correctly recovered publication uses a new run ID.
 
 #### 2. Validate the source, ancestry, and artifacts
 
@@ -268,9 +268,9 @@ test "$(git diff --name-only origin/main...HEAD)" = "inferencex-e2e/perf-changel
 git diff --check origin/main...HEAD
 ```
 
-After pushing, never rebase, locally squash, amend, or force-push this carrier commit. Require the source SHA in the PR commit list, only `perf-changelog.yaml` in Files, passing `check-changelog` and `reuse-sweep-gate`, and skipped PR GPU jobs. Merge only with explicit authorization and never bypass failing or pending checks. Then verify the new push run and downstream app run with the handoff procedure above.
+After pushing, never rebase, locally squash, amend, or force-push this carrier commit. Require the source SHA in the PR commit list, only `perf-changelog.yaml` in Files, passing `check-changelog` and `reuse-sweep-gate`, and skipped PR GPU jobs. Merge only with explicit authorization and never bypass failing or pending checks. Then verify the new Merge Ingest push run and downstream app run with the handoff procedure above.
 
-Canonical source: [complete failed-ingest recovery command](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.claude/commands/recover-failed-ingest.md).
+Canonical source: [complete failed-ingest recovery command](../../.claude/commands/recover-failed-ingest.md) ([historical snapshot](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.claude/commands/recover-failed-ingest.md) from before `merge-ingest.yml`).
 
 ## AMD root-owned workspace prevention and recovery
 
@@ -390,7 +390,7 @@ gh run view "$RUN_ID" --repo SemiAnalysisAI/InferenceX --log-failed \
 | Transient runner pickup, network, or confirmed infrastructure flake on a PR sweep | `gh run rerun "$RUN_ID" --repo SemiAnalysisAI/InferenceX --failed` | Dispatch a fresh sweep and lose the original run context |
 | Cancelled run after MI355X workspace cleanup or MI300X repair | Try failed-only rerun. If GitHub refuses because the run was cancelled, `gh run rerun "$RUN_ID" --repo SemiAnalysisAI/InferenceX` | Full-rerun before fixing shared state can fail identically and spend GPU time |
 | Reproducible OOM, HIP/CUDA/RCCL/NCCL error, invalid result, bad score, image/recipe/config bug | Fix or validate the root cause first, then rerun the narrowest affected path | Label the incident a flake because a retry happens to pass once |
-| Correct InferenceX-app ingest, partial DB/migration/verification failure | Rerun failed jobs on that app run. A full app rerun is data-idempotent if needed | Rerun the GPU-producing InferenceX target |
+| Correct InferenceX-app ingest, partial DB/migration/verification failure | Rerun failed jobs on that app run. A full app rerun is data-idempotent if needed | Rerun the InferenceX target or its GPU-producing source sweep |
 | Wrong/missing/expired source artifacts or wrong source/merge pair | Repair selection or use the recovery PR procedure | Repeatedly rerun the same wrong ingest |
 | Missing, skipped, bogus, or failed official push-to-main ingest | Create the validated recovery PR and reuse the original PR artifacts | Rerun the failed target workflow/job or create a one-off ingest workflow |
 
@@ -409,7 +409,7 @@ Classify by the earliest broken boundary, not the final red job.
 | **Processing/collection** | raw JSON exists but `agg_*.json` is missing, collector cannot parse, or `results_bmk` or `eval_results_all` is absent | Inspect `infx.results.fixed_sequence`/collector logs and artifact layout. Rerun failed workflow jobs only after the format problem is understood |
 | **Runner workspace** | checkout cleanup `EACCES` under `_work/.../benchmark_logs/logs/slurm_job-*` | Read-only ownership scan, approved scoped deletion, zero-result verification, then rerun |
 | **MI300X provisioning** | pyxis/enroot namespace signature, with failing nodes reading sysctl `1` and working nodes reading `0` | Apply the approved node repair and escalate the provisioning-image fix, then rerun affected jobs |
-| **Dispatch/handoff** | no app run after `trigger-ingest`, curl/auth failure, or app preparation logs showing wrong IDs or missing/expired artifacts | Repair dispatch credentials/selection or use recovery. Do not rerun GPU work |
+| **Dispatch/handoff** | no app run after the `merge-ingest.yml` `ingest` dispatch (legacy `trigger-ingest`), curl/auth failure, or app preparation logs showing wrong IDs or missing/expired artifacts | Repair dispatch credentials/selection or use recovery. Do not rerun GPU work |
 | **ETL/database** | correct pair and artifacts prepared, followed by migration/ingest/verification failure | Rerun the same app ingest after diagnosing the database/service cause. Rely on idempotency, not manual deletes |
 | **Mapping/data quality** | app reports skipped failed rows, unmapped model/hardware/precision, missing eval rows, or implausible counts | Add or fix entity mapping or source metadata. A green workflow with unmapped data is not complete verification |
 | **Publication/provenance** | wrong changelog, source-run provenance, merge-run identity, or bogus run with no valid benchmark data | Use the append-only recovery PR. Preserve source ancestry and verify the exact downstream ingest |
