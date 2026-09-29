@@ -98,9 +98,23 @@ labels:
     - mi355x-amds_08
     - mi355x-amds_09
   gb200:
-    - gb200-nv_0
-    - gb200-nv_1
-    - gb200-nv_2
+    - gb200-nv_00
+    - gb200-nv_01
+    - gb200-nv_02
+    - gb200-nv_03
+    - gb200-nv_04
+    - gb200-nv_05
+    - gb200-nv_06
+    - gb200-nv_07
+    - gb200-nv_09
+    - gb200-nv_10
+    - gb200-nv_11
+    - gb200-nv_12
+    - gb200-nv_13
+    - gb200-nv_14
+    - gb200-nv_15
+    - gb200-nv_16
+    - gb200-nv_17
   b300:
     - b300-dsxe_00
     - b300-dsxe_01
@@ -200,10 +214,23 @@ labels:
     - b200-nscale-slurm_09
     - b200-nscale-slurm_10
   cluster:gb200-nv:
-    - gb200-nv_0
-    - gb200-nv_1
-    - gb200-nv_2
-    - gb200-nv_3
+    - gb200-nv_00
+    - gb200-nv_01
+    - gb200-nv_02
+    - gb200-nv_03
+    - gb200-nv_04
+    - gb200-nv_05
+    - gb200-nv_06
+    - gb200-nv_07
+    - gb200-nv_09
+    - gb200-nv_10
+    - gb200-nv_11
+    - gb200-nv_12
+    - gb200-nv_13
+    - gb200-nv_14
+    - gb200-nv_15
+    - gb200-nv_16
+    - gb200-nv_17
   cluster:b300-dsxe:
     - b300-dsxe_00
     - b300-dsxe_01
