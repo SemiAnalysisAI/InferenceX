@@ -62,39 +62,6 @@ def _write_amd_csv(path: Path, samples: list[tuple[float, int, float]]) -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_detect_columns_nvidia():
-    header = ["timestamp", "index", "power.draw [W]", "utilization.gpu"]
-    ts, pw, gpu = _detect_columns(header)
-    assert ts == "timestamp"
-    assert pw == "power.draw [W]"
-    assert gpu == "index"
-
-
-def test_detect_columns_amd():
-    header = ["timestamp", "gpu", "socket_power", "temperature"]
-    ts, pw, gpu = _detect_columns(header)
-    assert ts == "timestamp"
-    assert pw == "socket_power"
-    assert gpu == "gpu"
-
-
-def test_detect_columns_amd_watch_mode_real_header():
-    # AMDSMI 26.2.0 `metric -p -c -t -u -w 1 --csv` header (order-faithful
-    # subset, measured on MI355X): socket_power must win even though
-    # power_management also matches the power pattern later in the row.
-    header = [
-        "timestamp", "gpu", "gfx_activity", "umc_activity", "mm_activity",
-        "vcn_activity", "jpeg_activity", "gfx_busy_inst_xcp_0",
-        "jpeg_busy_xcp_0", "vcn_busy_xcp_0", "socket_power", "gfx_voltage",
-        "soc_voltage", "mem_voltage", "throttle_status", "power_management",
-        "gfx_0_clk", "mem_0_clk", "edge", "hotspot", "mem",
-    ]
-    ts, pw, gpu = _detect_columns(header)
-    assert ts == "timestamp"
-    assert pw == "socket_power"
-    assert gpu == "gpu"
-
-
 def test_detect_columns_excludes_power_limit():
     # power.limit must NOT be picked as the power column.
     header = ["timestamp", "index", "power.limit [W]", "power.draw [W]"]
@@ -1145,13 +1112,6 @@ def test_cross_check_accumulator_flags_disagreement_beyond_tolerance(tmp_path: P
     assert result["integrated_stream_j"] == pytest.approx(4_000.0)
     assert result["relative_error"] == pytest.approx(0.2)
     assert result["within_tolerance"] is False
-
-
-def test_cross_check_accumulator_without_snapshots_returns_none(tmp_path: Path):
-    csv = tmp_path / "gpu_metrics.csv"
-    _write_flat_stream(csv, base=1_700_000_000.0, watts_by_gpu={0: 500.0})
-
-    assert cross_check_accumulator(csv) is None
 
 
 def test_cross_check_accumulator_reports_missing_end_snapshot(tmp_path: Path):

@@ -414,12 +414,9 @@ if [ "$NODE_RANK" -eq 0 ]; then
     if [[ "$IS_AGENTIC_RUN" == "1" ]]; then
         # trace_replay.sh targets ROUTER_PORT and derives MODEL from
         # $MODEL_DIR/$MODEL_NAME, which matches the atom server's served-model
-        # name (its --model path). The atomesh router exposes no /flush_cache,
-        # and the CI matrix runs one concurrency per allocation, so disable the
-        # SGLang-specific between-conc cache clear.
+        # name (its --model path). Each allocation runs one concurrency.
         export ROUTER_PORT
         export DURATION="${DURATION:-1800}"
-        export CLEAR_CACHE_BETWEEN_CONC="${CLEAR_CACHE_BETWEEN_CONC:-0}"
         # trace_replay.sh / benchmark_lib.sh locate utils/aiperf under
         # INFMAX_CONTAINER_WORKSPACE (the container repo root).
         # The SGLang client-image path sets it in its env-file; the
