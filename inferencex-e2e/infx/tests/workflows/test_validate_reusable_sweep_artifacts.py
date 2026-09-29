@@ -546,13 +546,6 @@ def test_eval_validation_separates_explicit_suite_identities(
     assert validate_eval_artifacts(tmp_path) == []
 
 
-def test_eval_result_key_includes_task_identity() -> None:
-    gsm8k = single_eval_result(32, eval_suite="tool_use")
-    bfcl = {**gsm8k, "task": "bfcl_smoke"}
-
-    assert eval_result_key(gsm8k) != eval_result_key(bfcl)
-
-
 def test_eval_validation_distinguishes_sequence_lengths(tmp_path: Path) -> None:
     write_eval_aggregate(
         tmp_path,

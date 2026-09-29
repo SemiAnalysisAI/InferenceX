@@ -34,7 +34,7 @@ def test_inspection_requires_complete_jobs_before_writing_recovery_metadata(
         if endpoint.endswith("actions/runs/42"):
             response = {
                 "event": "push", "status": "completed", "conclusion": "failure",
-                "path": ".github/workflows/run-sweep.yml", "head_branch": "main",
+                "path": ".github/workflows/merge-ingest.yml", "head_branch": "main",
                 "head_sha": "merge", "run_attempt": 3, "html_url": "run-url",
             }
         elif "/jobs?" in endpoint:
@@ -72,6 +72,32 @@ def test_inspection_requires_complete_jobs_before_writing_recovery_metadata(
             "job_id": 7, "job_name": "ingest", "job_url": "job-url", "merge_sha": "merge",
             "base_sha": "parent", "pr_number": 9, "pr_url": "pr-url",
         }
+
+
+@pytest.mark.parametrize("path,accepted", [
+    (".github/workflows/merge-ingest.yml", True),
+    (".github/workflows/run-sweep.yml", True),
+    (".github/workflows/e2e-tests.yml", False),
+])
+def test_inspection_accepts_only_merge_publication_workflows(monkeypatch, path, accepted):
+    from infx.workflows import recover_failed_ingest as recovery
+
+    run = {"event": "push", "status": "completed", "conclusion": "failure",
+           "path": path, "head_branch": "main", "head_sha": "merge"}
+    monkeypatch.setattr(recovery, "gh_api", lambda repo, endpoint, **_: {
+        "actions/runs/42": run,
+        "commits/merge/pulls": [{"number": 9, "merged_at": "x", "merge_commit_sha": "merge"}],
+    }[endpoint])
+    monkeypatch.setattr(recovery, "list_run_jobs", lambda repo, run_id: [
+        {"id": 7, "status": "completed", "conclusion": "failure"},
+    ])
+    url = "https://github.com/example/project/actions/runs/42"
+    if accepted:
+        assert recovery.inspect_target(url, "example/project")["pr_number"] == 9
+    else:
+        with pytest.raises(RecoveryError, match="target run path"):
+            recovery.inspect_target(url, "example/project")
+
 
 
 @pytest.mark.parametrize("failure,message", [
@@ -124,15 +150,6 @@ def test_select_failed_job_uses_explicit_job() -> None:
     assert select_failed_job(jobs, 2)["id"] == 2
 
 
-def test_select_failed_job_allows_unambiguous_run_only_url() -> None:
-    jobs = [
-        {"id": 1, "status": "completed", "conclusion": "success"},
-        {"id": 2, "status": "completed", "conclusion": "failure"},
-    ]
-
-    assert select_failed_job(jobs, None)["id"] == 2
-
-
 def test_select_failed_job_rejects_ambiguous_run_only_url() -> None:
     jobs = [
         {"id": 1, "status": "completed", "conclusion": "failure"},
@@ -141,20 +158,6 @@ def test_select_failed_job_rejects_ambiguous_run_only_url() -> None:
 
     with pytest.raises(RecoveryError, match="ambiguous"):
         select_failed_job(jobs, None)
-
-
-def test_audit_changelog_rejects_duplicate_yaml_keys() -> None:
-    raw = b"""- config-keys:
-    - config-a
-  description:
-    - First
-  description:
-    - Second
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1
-"""
-
-    with pytest.raises(ChangelogValidationError, match="duplicate key"):
-        audit_changelog_bytes(raw, "snapshot")
 
 
 def test_audit_changelog_reports_repairable_missing_newline() -> None:

@@ -10,7 +10,7 @@
 
 ## 安全关卡
 
-1. **在做任何更改前，先确定准确的 run、attempt、job、event、branch、head SHA 和 runner。** `trigger-ingest` 任务绿色并不能证明有效基准结果行已经进入数据库。
+1. **在做任何更改前，先确定准确的 run、attempt、job、event、branch、head SHA 和 runner。** dispatch 任务绿色（`merge-ingest.yml` 中的 `ingest`，或旧版 `run-sweep.yml` push run 中的 `trigger-ingest`）并不能证明有效基准结果行已经进入数据库。
 2. **先检查，后变更。** 读取 GitHub 日志、`sinfo`、`squeue`、sysctl、文件所有者和制品是安全的。删除共享文件、更改 sysctl、drain 节点、重启服务或修改集群状态，都需要运维者明确批准。
 3. **绝不要仅为修复正式摄取而重跑失败的 push-to-`main` 目标。** 应使用经过验证的制品复用恢复路径；它既能避免 GPU 工作，也能保留源 run 的来源信息。
 4. **只重跑已经确诊的偶发故障。** 重试不会修复错误的镜像、recipe、模型、launcher、配置、缺失或过期的制品，也不会修复执行语义变化。
@@ -92,7 +92,7 @@ jq 'length' /tmp/infx-evals-$RUN_ID/agg_eval_all.json
 
 ## InferenceX-app 交接与摄取验证
 
-push 到 `main` 时，`run-sweep.yml` 只会在 setup 和适用的收集路径完成后 dispatch `ingest-results`。负载为：
+push 到 `main` 时，[`merge-ingest.yml`](../../.github/workflows/merge-ingest.yml) 的 `ingest` 任务只会在验证已合并 PR 的复用授权和 source run，并上传合并时的 `changelog-metadata` 之后才 dispatch。changelog 增量包含 agentic 条目时，会以相同 ID 加上 `database-target: production` dispatch `ingest-agentic-results`；否则负载为：
 
 ```json
 {
@@ -104,11 +104,11 @@ push 到 `main` 时，`run-sweep.yml` 只会在 setup 和适用的收集路径�
 }
 ```
 
-普通 run 的两个 ID 都指向当前 run。复用时，`source-run-id` 指向经过验证的 PR sweep，而 `merge-run-id` 仍指向新的 push-to-main 恢复 run。InferenceX-app 会从 source run 中为每个准确制品名称选择最新、未过期的上传；复用时，则用 merge run 的 `changelog-metadata` 替换 source 的 changelog 元数据。如果 source 没有未过期制品，或 merge run 没有 changelog 制品，准备步骤会失败。
+`source-run-id` 始终指向经过验证并被复用的 PR sweep，`merge-run-id` 指向 `main` 上新的 Merge Ingest run（恢复时即恢复 PR 合并产生的 run）。由于 `main` 从不运行 sweep，正式摄取不再让两个 ID 指向同一个 run。InferenceX-app 会从 source run 中为每个准确制品名称选择最新、未过期的上传，并用 merge run 的 `changelog-metadata` 替换 source 的 changelog 元数据。如果 source 没有未过期制品，或 merge run 没有 changelog 制品，准备步骤会失败。
 
 之后，应用工作流依次运行：制品准备、迁移、数据库摄取、run overrides、数据库验证、缓存失效和 unmapped entity 检查。数据库写入具有幂等性（`ON CONFLICT DO UPDATE` 或 `DO NOTHING`），因此指向正确目标的摄取在部分失败后可以安全恢复。
 
-来源：[dispatch 负载与关卡](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.github/workflows/run-sweep.yml#L978-L1021)、[制品选择](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/lib/ci-artifact-preparation.ts#L10-L48)、[应用摄取阶段](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/.github/workflows/ingest-results.yml#L50-L124)、[幂等性设计理由](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/docs/data-pipeline.md#L26-L34)。
+来源：[当前 dispatch](../../.github/workflows/merge-ingest.yml)、[历史 `run-sweep.yml` dispatch 负载与关卡](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.github/workflows/run-sweep.yml#L978-L1021)（`merge-ingest.yml` 启用前）、[制品选择](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/lib/ci-artifact-preparation.ts#L10-L48)、[应用摄取阶段](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/.github/workflows/ingest-results.yml#L50-L124)、[幂等性设计理由](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/docs/data-pipeline.md#L26-L34)。
 
 ### 验证准确的下游摄取
 
@@ -143,7 +143,7 @@ gh run watch "$INGEST_RUN_ID" \
 
 准备脚本输出的 `Source run:` 和 `Merge run:` 是权威匹配行。复用摄取的 source run 已经完成，所以不会等待五分钟。
 
-来源：[权威准备日志](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/prepare-ci-artifacts.ts#L99-L152)、[正式验证顺序](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.claude/commands/recover-failed-ingest.md#L391-L429)。
+来源：[权威准备日志](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/prepare-ci-artifacts.ts#L99-L152)、[正式验证顺序](../../.claude/commands/recover-failed-ingest.md#8-merge-and-verify-official-ingest)（[历史快照](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.claude/commands/recover-failed-ingest.md#L391-L429)，`merge-ingest.yml` 启用前）。
 
 ## 失败摄取恢复
 
@@ -192,7 +192,7 @@ python3 -m infx.workflows.recover_failed_ingest audit-changelog \
   --ref "$ORIGINAL_MERGE_SHA"
 ```
 
-**目标关卡：** 必须是 `main` 上 `.github/workflows/run-sweep.yml` 的已完成 push 事件。目标即使结论为 `success` 或 `cancelled`，仍可能包含无有效数据的摄取：忘记启用复用时，GPU 任务可能被取消，但 `trigger-ingest` 仍针对目标自己的 run ID 成功。不要删除该行；正确恢复后的发布会使用新的 run ID。
+**目标关卡：** 必须是 `main` 上 `.github/workflows/merge-ingest.yml` 的已完成 push run；若为 `merge-ingest.yml` 启用前的旧合并，则为 `.github/workflows/run-sweep.yml` 的已完成 push run。忘记复用命令时，Merge Ingest run 会在复用检查处失败，此时尚未上传元数据或 dispatch，因此不会留下无有效数据的摄取。旧版 `run-sweep.yml` 目标即使结论为 `success` 或 `cancelled`，仍可能包含无有效数据的摄取：忘记启用复用时，GPU 任务可能被取消，但 `trigger-ingest` 仍针对目标自己的 run ID 成功。不要删除该行；正确恢复后的发布会使用新的 run ID。
 
 #### 2. 验证 source、祖先关系和制品
 
@@ -267,9 +267,9 @@ test "$(git diff --name-only origin/main...HEAD)" = "inferencex-e2e/perf-changel
 git diff --check origin/main...HEAD
 ```
 
-推送后，绝不要对这个 carrier commit 执行 rebase、本地 squash、amend 或 force-push。必须确认 source SHA 出现在 PR commit 列表中、Files 中只有 `perf-changelog.yaml`、`check-changelog` 与 `reuse-sweep-gate` 通过，并且 PR GPU 任务被跳过。只有获得明确授权后才能合并，且绝不能绕过失败或等待中的检查。随后使用上文交接流程验证新的 push run 和下游应用 run。
+推送后，绝不要对这个 carrier commit 执行 rebase、本地 squash、amend 或 force-push。必须确认 source SHA 出现在 PR commit 列表中、Files 中只有 `perf-changelog.yaml`、`check-changelog` 与 `reuse-sweep-gate` 通过，并且 PR GPU 任务被跳过。只有获得明确授权后才能合并，且绝不能绕过失败或等待中的检查。随后使用上文交接流程验证新的 Merge Ingest push run 和下游应用 run。
 
-权威来源：[完整失败摄取恢复命令](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.claude/commands/recover-failed-ingest.md)。
+权威来源：[完整失败摄取恢复命令](../../.claude/commands/recover-failed-ingest.md)（[历史快照](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.claude/commands/recover-failed-ingest.md)，`merge-ingest.yml` 启用前）。
 
 ## AMD root-owned 工作区的预防与恢复
 
@@ -389,7 +389,7 @@ gh run view "$RUN_ID" --repo SemiAnalysisAI/InferenceX --log-failed \
 | PR sweep 上的临时 runner pickup、网络问题或已确认基础设施偶发故障 | `gh run rerun "$RUN_ID" --repo SemiAnalysisAI/InferenceX --failed` | dispatch 新 sweep 并丢失原始 run 上下文 |
 | MI355X 工作区清理或 MI300X 修复后的 cancelled run | 先尝试仅重跑失败任务；如果 GitHub 因 run 被取消而拒绝，运行 `gh run rerun "$RUN_ID" --repo SemiAnalysisAI/InferenceX` | 在修复共享状态前完整重跑；它可能以相同方式失败并消耗 GPU 时间 |
 | 可复现 OOM、HIP/CUDA/RCCL/NCCL 错误、无效结果、错误分数、镜像/recipe/配置缺陷 | 先修复或验证根因，再重跑最窄的受影响路径 | 仅因为某次重试通过就把事件标记为偶发故障 |
-| 正确的 InferenceX-app 摄取发生部分 DB/迁移/验证失败 | 重跑该应用 run 的失败任务；如有需要，完整应用重跑在数据层面具有幂等性 | 重跑生成 GPU 结果的 InferenceX 目标 |
+| 正确的 InferenceX-app 摄取发生部分 DB/迁移/验证失败 | 重跑该应用 run 的失败任务；如有需要，完整应用重跑在数据层面具有幂等性 | 重跑 InferenceX 目标或其生成 GPU 结果的 source sweep |
 | source 制品错误/缺失/过期，或 source/merge 对错误 | 修复制品选择，或使用恢复 PR 流程 | 反复重跑同一个错误摄取 |
 | 正式 push-to-main 摄取缺失、被跳过、无有效数据或失败 | 创建经过验证的恢复 PR，并复用原始 PR 制品 | 重跑失败目标工作流/任务，或创建一次性摄取工作流 |
 
@@ -408,7 +408,7 @@ gh run view "$RUN_ID" --repo SemiAnalysisAI/InferenceX --log-failed \
 | **处理/收集** | 原始 JSON 存在但缺少 `agg_*.json`；收集器无法解析；缺少 `results_bmk` 或 `eval_results_all` | 检查 `infx.results.fixed_sequence`/收集器日志和制品布局；理解格式问题后才重跑失败工作流任务 |
 | **Runner 工作区** | checkout 清理在 `_work/.../benchmark_logs/logs/slurm_job-*` 下报 `EACCES` | 只读所有者扫描、批准后的有范围删除、零结果验证，然后重跑 |
 | **MI300X provisioning** | pyxis/enroot 命名空间特征；失败节点 sysctl 为 `1`，工作节点为 `0` | 获批后修复节点并升级 provisioning image，然后重跑受影响任务 |
-| **Dispatch/交接** | `trigger-ingest` 后没有应用 run；curl/auth 失败；应用准备日志显示错误 ID 或制品缺失/过期 | 修复 dispatch 凭据/选择，或使用恢复流程；不要重跑 GPU 工作 |
+| **Dispatch/交接** | `merge-ingest.yml` 的 `ingest` dispatch（旧版为 `trigger-ingest`）后没有应用 run；curl/auth 失败；应用准备日志显示错误 ID 或制品缺失/过期 | 修复 dispatch 凭据/选择，或使用恢复流程；不要重跑 GPU 工作 |
 | **ETL/数据库** | 正确 source/merge 对和制品已准备，随后迁移/摄取/验证失败 | 诊断数据库/服务原因后重跑同一应用摄取；依靠幂等性，而非手动删除 |
 | **映射/数据质量** | 应用报告跳过失败行、unmapped model/hardware/precision、评测行缺失或数量不合理 | 新增/修复实体映射或源元数据；存在 unmapped 数据时，工作流绿色也不代表完成验证 |
 | **发布/来源** | changelog、source-run 来源、merge-run 身份错误，或无有效基准数据的伪造 run | 使用 append-only 恢复 PR；保留 source 祖先关系，并验证准确的下游摄取 |

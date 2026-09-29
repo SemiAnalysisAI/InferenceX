@@ -26,7 +26,7 @@ jobs:
         if: >-
             github.event.pull_request.head.repo.full_name != github.repository &&
             contains(
-              fromJson('["sweep-enabled","full-sweep-enabled","non-canary-full-sweep-enabled","full-sweep-fail-fast","full-sweep-fail-fast-no-canary"]'),
+              fromJson('["full-sweep-enabled","non-canary-full-sweep-enabled","full-sweep-fail-fast"]'),
               github.event.label.name
             )
         runs-on: ubuntu-latest
@@ -37,11 +37,9 @@ jobs:
                   github-token: ${{ github.token }}
                   script: |
                       const primaryLabels = new Set([
-                        'sweep-enabled',
                         'full-sweep-enabled',
                         'non-canary-full-sweep-enabled',
                         'full-sweep-fail-fast',
-                        'full-sweep-fail-fast-no-canary',
                       ]);
 
                       const {data: access} = await github.rest.repos.getCollaboratorPermissionLevel({
@@ -108,7 +106,7 @@ jobs:
                           'ref': pull.merge_commit_sha,
                           'changelog-base-ref': pull.base.sha,
                           'changelog-head-ref': pull.head.sha,
-                          'trim-conc': String(primary[0] === 'sweep-enabled'),
+                          'trim-conc': 'false',
                           'all-evals': String(labels.includes('all-evals')),
                           'evals-only': String(labels.includes('evals-only')),
                           'fail-fast': String(primary[0].includes('fail-fast')),

@@ -24,7 +24,7 @@ Use the narrowest check that can falsify the change, then widen only when the ch
 - [`.github/AGENT_OPERATIONS.md`](../../.github/AGENT_OPERATIONS.md#sweep-labels-and-reuse) defines sweep labels and modifiers. Its [dispatch section](../../.github/AGENT_OPERATIONS.md#workflow-dispatch-and-monitoring) defines manual runs and artifact inspection.
 - [`docs/configuration-procedures.md`](configuration-procedures.md#validate) is the focused configuration validation procedure.
 - [`.github/workflows/README.md`](../../.github/workflows/README.md) documents matrix generation, `e2e-tests.yml`, PR sweeps, and reuse.
-- [`run-sweep.yml`](../../.github/workflows/run-sweep.yml) is the executable PR/push gate. [`e2e-tests.yml`](../../.github/workflows/e2e-tests.yml) is the manually dispatched end-to-end path.
+- [`run-sweep.yml`](../../.github/workflows/run-sweep.yml) is the executable PR sweep gate, and [`merge-ingest.yml`](../../.github/workflows/merge-ingest.yml) is the push-to-`main` reuse and ingest gate. [`e2e-tests.yml`](../../.github/workflows/e2e-tests.yml) is the manually dispatched end-to-end path.
 - [`docs/PR_REVIEW_CHECKLIST.md`](PR_REVIEW_CHECKLIST.md) is the merge-review standard. [The verifier prompt](../../.github/codeowner-signoff-verify-prompt.md#check-1--a-passing-sweep--evals-ran-on-a-commit-in-this-pr) states how sweep and eval evidence is independently checked.
 
 These sources outrank this guide when behavior changes. Update the English page first, then translate the same structure and evidence into this page's Chinese counterpart.
@@ -41,7 +41,7 @@ Tests runs suites under `infx/tests/`, `utils/`, `runners/`, `../collectivex/tes
 | Schema and matrix | A config key validates and emits the intended matrix fields | Runner availability, server startup, or performance |
 | Focused Python tests | Changed generator, changelog, result, eval, collection, or reuse contracts behave on covered inputs | Container, accelerator, network, or Slurm behavior |
 | Smoke run | One tightly filtered path allocates, starts a server, runs a workload, and emits artifacts | The complete concurrency/search space or merge eligibility |
-| Trimmed PR sweep | Each selected single-node group runs its lowest concurrency (`sweep-enabled`) | Intermediate concurrency points required by a full sweep |
+| Trimmed PR sweep | Each selected single-node group runs its lowest concurrency (manual `--trim-conc` dispatch) | Intermediate concurrency points required by a full sweep |
 | Full sweep and eval | The selected untrimmed matrix and eval jobs execute on the reviewed commit | Correctness of evidence that was not inspected, or unrelated configurations |
 
 A green later layer does not erase missing earlier evidence. For example, a green collector can aggregate an empty set, so review must inspect the underlying executed jobs and artifacts.
@@ -188,10 +188,10 @@ A smoke run is not merge evidence: it intentionally omits configurations and con
 
 ### Trimmed and full sweeps
 
-- `sweep-enabled` trims each parallelism group to its lowest concurrency and is the default for most PR feedback.
 - `full-sweep-fail-fast` is the recommended full-sweep label. It uses the sequential single-node canary and stops each matrix after that matrix's first failure while preserving completed results.
-- Use a no-canary full-sweep label only when the canary is known to be flaky or unrepresentative. Use `full-sweep-enabled` instead of fail-fast only when every matrix job must continue despite a failure.
+- Use `non-canary-full-sweep-enabled` only when the canary is known to be flaky or unrepresentative. Use `full-sweep-enabled` instead of fail-fast only when every matrix job must continue despite a failure.
 - Apply exactly one primary sweep label. Modifier-only or conflicting primary labels do not constitute a valid sweep.
+- A trimmed sweep (lowest concurrency only) can be run manually via `e2e-tests.yml` with the `trim-conc` input.
 
 The current meanings and eligibility rules are defined in the [sweep-label reference](../../.github/AGENT_OPERATIONS.md#sweep-labels-and-reuse) and implemented by [`run-sweep.yml`](../../.github/workflows/run-sweep.yml).
 

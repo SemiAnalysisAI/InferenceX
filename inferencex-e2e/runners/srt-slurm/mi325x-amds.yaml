@@ -1,3 +1,4 @@
+cluster: mi325x-amds
 default_partition: compute
 default_time_limit: ${SRT_DEFAULT_TIME_LIMIT}
 gpus_per_node: 8

@@ -89,7 +89,7 @@ roles:
 benchmark:
   type: custom
   use_chat_template: true
-  command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
+  command: bash /infmax-workspace/benchmarks/srt_agentic.sh
   env:
     AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
     AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
