@@ -649,7 +649,7 @@ clusters:
     arch: x86_64
     scheduler: slurm
     slurm:
-      partition: compute-0
+      partition: MI300X-UBUNTU
       exclusive: true
       gres: "gpu:{gpus}"
       cpus-per-task: 128
