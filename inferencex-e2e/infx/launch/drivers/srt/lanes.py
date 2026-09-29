@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from infx.launch.context import LaunchError
 from infx.launch.policy import LaunchPath, Match, any_of, salloc_time_limit
@@ -41,6 +41,8 @@ class SrtLane:
     time_limit: str | None = None
     long_time_limit: str | None = None
     long_time: Match | None = None
+    separate_eval: bool = False
+    agentic_results: Literal["workspace", "logs"] = "workspace"
 
 
 _DYNAMO = any_of("dynamo-sglang", "dynamo-trt", "dynamo-vllm")
@@ -99,6 +101,17 @@ SRT_LANES: dict[tuple[str, LaunchPath], SrtLane] = {
         long_time_limit="8:00:00",
         long_time=Match(any_of("dsv4"), frameworks=any_of("dynamo-sglang"), agentic=True),
     ),
+    ("mi300x-amd", LaunchPath.SRT_MULTI): SrtLane(
+        frameworks=any_of("sglang-disagg"),
+        mounts=(
+            LaneMount(Match(), "hf-hub-cache", "/hf-cache/hub"),
+            LaneMount(Match(), "aiperf-cache", "/aiperf_mmap_cache"),
+        ),
+        shared_run_root=(Match(),),
+        separate_eval=True,
+        agentic_results="logs",
+        time_limit="24:00:00",
+    ),
     ("mi355x-amds", LaunchPath.SRT_MULTI): SrtLane(
         mounts=(LaneMount(Match(), "aiperf-cache", "/aiperf_mmap_cache"),),
         eval_unsets=(
@@ -119,6 +132,8 @@ def srt_lane(cluster_id: str, path: LaunchPath) -> SrtLane:
 
 def check_request(lane: SrtLane, request: SrtRequest) -> None:
     """Refuse requests the lane does not run, before any setup."""
+    if lane.separate_eval and request.run_eval and not request.eval_only:
+        raise LaunchError("This lane requires a separate eval-only job")
     framework = request.framework
     if lane.frameworks is not None and framework not in lane.frameworks:
         supported = ", ".join(sorted(lane.frameworks))

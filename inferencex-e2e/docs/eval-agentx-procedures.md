@@ -274,6 +274,14 @@ The runner writes the command before replay and validates raw results after aggr
 
 ## 9. Debug long AgentX runs from live evidence
 
+Qwen3.5 MI300X AgentX runs use the committed golden acceptance curve through
+`apply_srt_recipe`, including fast bring-up; recipes do not hard-code the length.
+Real-output diagnostics and evals are separate from golden-AL AgentX replay.
+The MI300X srt-slurm launcher requires a separate `EVAL_ONLY=true` job when
+evaluation is requested; it does not combine golden-AL throughput with accuracy
+evaluation on the same workers.
+Fast runs are not canonical frontier results.
+
 GitHub Actions is the orchestration/final-status view. The cluster is the live diagnostic source. Obtain the SSH alias, runner user, and access-controlled paths from the InferenceX Clusters canvas. Never guess or publish private infrastructure coordinates.
 
 Resolve the exact matrix job:

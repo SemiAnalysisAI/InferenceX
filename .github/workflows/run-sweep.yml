@@ -401,6 +401,8 @@ jobs:
                 config: ${{ fromJson(needs.canary-select.outputs.canary-config) }}
         secrets:
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
+            SRT_STATUS_ENDPOINT: ${{ secrets.SRT_STATUS_ENDPOINT }}
+            SRTCTL_STATUS_TOKEN: ${{ secrets.SRTCTL_STATUS_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
@@ -429,6 +431,8 @@ jobs:
                 config: ${{ fromJson(needs.canary-select.outputs.multi-node-canary-config) }}
         secrets:
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
+            SRT_STATUS_ENDPOINT: ${{ secrets.SRT_STATUS_ENDPOINT }}
+            SRTCTL_STATUS_TOKEN: ${{ secrets.SRTCTL_STATUS_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
@@ -465,6 +469,8 @@ jobs:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).multi_node['1k1k'] }}
         secrets:
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
+            SRT_STATUS_ENDPOINT: ${{ secrets.SRT_STATUS_ENDPOINT }}
+            SRTCTL_STATUS_TOKEN: ${{ secrets.SRTCTL_STATUS_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with: &multi-node-inputs
@@ -497,6 +503,8 @@ jobs:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).multi_node['8k1k'] }}
         secrets:
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
+            SRT_STATUS_ENDPOINT: ${{ secrets.SRT_STATUS_ENDPOINT }}
+            SRTCTL_STATUS_TOKEN: ${{ secrets.SRTCTL_STATUS_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with: *multi-node-inputs
@@ -520,6 +528,8 @@ jobs:
                 config: ${{ fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['1k1k'] }}
         secrets:
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
+            SRT_STATUS_ENDPOINT: ${{ secrets.SRT_STATUS_ENDPOINT }}
+            SRTCTL_STATUS_TOKEN: ${{ secrets.SRTCTL_STATUS_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with: &single-node-inputs
@@ -552,6 +562,8 @@ jobs:
                 config: ${{ fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['8k1k'] }}
         secrets:
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
+            SRT_STATUS_ENDPOINT: ${{ secrets.SRT_STATUS_ENDPOINT }}
+            SRTCTL_STATUS_TOKEN: ${{ secrets.SRTCTL_STATUS_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with: *single-node-inputs
@@ -575,6 +587,8 @@ jobs:
                 config: ${{ fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['agentic'] }}
         secrets:
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
+            SRT_STATUS_ENDPOINT: ${{ secrets.SRT_STATUS_ENDPOINT }}
+            SRTCTL_STATUS_TOKEN: ${{ secrets.SRTCTL_STATUS_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
@@ -609,6 +623,8 @@ jobs:
                 config: ${{ fromJson((needs.canary-multi-node-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).multi_node['agentic'] }}
         secrets:
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
+            SRT_STATUS_ENDPOINT: ${{ secrets.SRT_STATUS_ENDPOINT }}
+            SRTCTL_STATUS_TOKEN: ${{ secrets.SRTCTL_STATUS_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
@@ -646,6 +662,8 @@ jobs:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).evals }}
         secrets:
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
+            SRT_STATUS_ENDPOINT: ${{ secrets.SRT_STATUS_ENDPOINT }}
+            SRTCTL_STATUS_TOKEN: ${{ secrets.SRTCTL_STATUS_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
@@ -683,6 +701,8 @@ jobs:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).agentic_evals }}
         secrets:
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
+            SRT_STATUS_ENDPOINT: ${{ secrets.SRT_STATUS_ENDPOINT }}
+            SRTCTL_STATUS_TOKEN: ${{ secrets.SRTCTL_STATUS_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
@@ -719,6 +739,8 @@ jobs:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).multinode_evals }}
         secrets:
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
+            SRT_STATUS_ENDPOINT: ${{ secrets.SRT_STATUS_ENDPOINT }}
+            SRTCTL_STATUS_TOKEN: ${{ secrets.SRTCTL_STATUS_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
@@ -761,6 +783,8 @@ jobs:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).multinode_agentic_evals }}
         secrets:
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
+            SRT_STATUS_ENDPOINT: ${{ secrets.SRT_STATUS_ENDPOINT }}
+            SRTCTL_STATUS_TOKEN: ${{ secrets.SRTCTL_STATUS_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:

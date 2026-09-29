@@ -66,6 +66,7 @@ def run_single_node(launch: Launch) -> int:
         single_node=True,
         account=run.account,
         fork=checkout.fork,
+        status_endpoint=run.env.get("SRT_STATUS_ENDPOINT"),
     )
     config.create_volume_mounts(run)
     config.write(checkout.root / "srtslurm.yaml", config.render(run.cluster, job_config))

@@ -18,6 +18,7 @@ INFMAX_WORKSPACE=$2
 
 HOST=$(echo "$ENDPOINT" | sed -E 's|https?://||; s|:.*||')
 PORT=$(echo "$ENDPOINT" | sed -E 's|.*:([0-9]+).*|\1|')
+export EVAL_SERVER_HOST="$HOST"
 
 echo "Eval Config: endpoint=${ENDPOINT}; host=${HOST}; port=${PORT}; workspace=${INFMAX_WORKSPACE}"
 

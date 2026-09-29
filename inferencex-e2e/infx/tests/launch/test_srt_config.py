@@ -9,11 +9,14 @@ import yaml
 from infx.clusters import Cluster, load_inventory
 from infx.launch.backends.slurm import SlurmBackend
 from infx.launch.context import Launch
-from infx.launch.drivers.srt.config import SrtJob, pyxis_spelling, render, write
+from infx.launch.drivers.srt.config import (
+    SrtJob, create_volume_mounts, lane_mounts, pyxis_spelling, render, write,
+)
+from infx.launch.drivers.srt.lanes import LaneMount, SrtLane
 from infx.launch.drivers.srt.recipe import HEALTH_ATTEMPTS, prepare_recipe
 from infx.launch.drivers.srt.run import SrtRun
 from infx.launch.lifecycle import Lifecycle
-from infx.launch.policy import LaunchPath
+from infx.launch.policy import LaunchPath, Match
 from infx.launch.request import SrtRequest
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -182,3 +185,42 @@ def test_the_cpu_request_follows_the_clusters_unit():
     assert render(cluster(slurm={"cpus-per-gpu": 24}), job())["default_sbatch_directives"] == {"cpus-per-gpu": "24"}
     with pytest.raises(ValueError, match="not both"):
         cluster(slurm={"cpus-per-task": 192, "cpus-per-gpu": 24})
+
+
+def test_recipe_time_and_memory_requests_override_cluster_defaults():
+    defaults = render(cluster(slurm={"cpus-per-task": 128}), job(time_limit="12:00:00"))
+    recipe = {"slurm": {"time_limit": "24:00:00"}, "sbatch_directives": {"mem": "0"}}
+    resolved = resolve_config_with_defaults(recipe, defaults)
+    assert resolved["slurm"]["time_limit"] == "24:00:00"
+    assert resolved["sbatch_directives"] == {"cpus-per-task": "128", "mem": "0"}
+    assert "reporting" not in defaults
+
+
+@pytest.mark.parametrize("source", ["profile", "lane"])
+def test_volume_mount_preparation_creates_only_shared_paths_on_the_submit_host(tmp_path, source):
+    shared, local = tmp_path / "shared-cache", tmp_path / "compute-only-cache"
+    record = cluster(
+        slurm={"account": "benchmark", "volumes": {
+            "shared": {"path": str(shared), "visibility": "shared"},
+            "local": {"path": str(local), "visibility": "node-local"},
+        }},
+        srt={"volume-mounts": {"shared": "/shared", "local": "/local"}},
+    )
+    request = SrtRequest.from_env({
+        "RUNNER_NAME": "c_0", "GITHUB_WORKSPACE": str(tmp_path), "IMAGE": "i", "FRAMEWORK": "sglang",
+        "MODEL_PREFIX": "m", "PRECISION": "fp8", "SPEC_DECODING": "none", "RESULT_FILENAME": "r",
+        "IS_AGENTIC": "0", "RUN_EVAL": "false", "EVAL_ONLY": "false",
+    })
+    life = Lifecycle()
+    launch = Launch(record, SlurmBackend(record, request, life), request, life, LaunchPath.SRT_MULTI)
+    run = SrtRun.create(launch, request)
+    if source == "profile":
+        create_volume_mounts(run)
+    else:
+        mounts = lane_mounts(run, SrtLane(mounts=(
+            LaneMount(Match(), "shared", "/shared", world_writable=True),
+            LaneMount(Match(), "local", "/local", world_writable=True),
+        )))
+        assert mounts == [(str(shared), "/shared"), (str(local), "/local")]
+    assert shared.is_dir()
+    assert not local.exists()

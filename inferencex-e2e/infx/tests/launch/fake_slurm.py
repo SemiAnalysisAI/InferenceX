@@ -122,8 +122,8 @@ elif mode == "fixed":
     point = logs / "sweep_isl_1024_osl_1024"
     point.mkdir()
     (point / "results_concurrency_4_gpus_16_ctx_8_gen_8.json").write_text('{"conc": 4}')
-elif mode == "agentic":
-    workspace = pathlib.Path(os.environ["INFMAX_WORKSPACE"])
+elif mode in ("agentic", "agentic-logs"):
+    workspace = logs if mode == "agentic-logs" else pathlib.Path(os.environ["INFMAX_WORKSPACE"])
     for conc in os.environ["CONC_LIST"].split():
         (workspace / f"{result}_conc{conc}.json").write_text(json.dumps({"conc": int(conc)}))
         (logs / "agentic" / f"conc_{conc}").mkdir(parents=True)

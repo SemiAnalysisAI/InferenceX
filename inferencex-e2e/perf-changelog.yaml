@@ -9104,3 +9104,15 @@
     - "Restore the DCP8 LMCache bands on the native srt-slurm recipe: concurrency 14 and 16 (DSpark 3, ReplaySSM) and 48, 56 and 72 (no draft) run ATOM's in-process lmcache_offload connector through roles.agg.args.extra-kv-connectors (srt-slurm patch 507), with 128 GB/rank up to 48 and 192 GB/rank at 56 and 72. Concurrency 1 and 4 stay GPU-resident."
     - "No change to the Inferact/Kimi-K3-DSpark draft's precision: online_quant_config still excludes every draft linear (layers.*, context_proj), so its weights and activations stay BF16, and it keeps the target's FP8 KV cache (kv_cache_dtype fp8). FlyDSL FP8 prefill attention applies only to the target, since the draft runs its block pass as decode attention."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3407
+
+- config-keys:
+    - qwen3.5-fp8-mi300x-sglang-disagg-dep8-agentic-mtp
+    - qwen3.5-fp8-mi300x-sglang-disagg-pure-tp8-agentic-mtp
+    - qwen3.5-fp8-mi300x-sglang-disagg-tep8-agentic-mtp
+  no-evals: true
+  description:
+    - "Add MI300X Qwen3.5 FP8 AgentX MORI disaggregation through native srt-slurm and cache-aware SGLang routing, using one shared recipe with TP8, TEP8, and DEP8 variants."
+    - "Sweep homogeneous 1P/1D topologies: pure TP8/EP1 at c1 and c4, TEP8 at c1, c4, c8, and c16, and DEP8 at c32 and c64."
+    - "Use the September 29 SGLang v0.5.20 ROCm 7.2.0 MI30X nightly, BF16 KV/Mamba state, native MTP, and automatic golden acceptance."
+    - "Launch a fresh deployment per concurrency with full default warmup and 3600-second profiling; skip evals."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2984

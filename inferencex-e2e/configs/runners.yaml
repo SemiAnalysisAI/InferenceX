@@ -671,6 +671,7 @@ clusters:
       srt-slurm:
         network-interface: ""
         single-node-time-limit: 180
+        shared-run-root: ~/inferencex/srt-slurm
         gpus-per-node-directive: true
         segment-directive: false
         host-setup:
@@ -678,6 +679,7 @@ clusters:
         mounts:
           /dev/kfd: /dev/kfd
           /dev/dri: /dev/dri
+          /dev/infiniband: /dev/infiniband
         extra:
           visible_devices_env: ROCR_VISIBLE_DEVICES
   mi325x-amds:

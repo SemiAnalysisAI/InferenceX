@@ -131,7 +131,8 @@ def assert_ok(result: subprocess.CompletedProcess[str]) -> None:
 
 def test_single_node_point_stages_workflow_artifacts(harness):
     workspace = harness.workspace
-    env = single_node_env(harness, "h200-cw")
+    env = single_node_env(harness, "h200-cw", SRT_STATUS_ENDPOINT="https://status.example.test",
+                          SRTCTL_STATUS_TOKEN="fixture-status-token")
     assert_ok(launch(env, harness.config, workspace))
 
     assert json.loads((workspace / "point-identity.json").read_text()) == {"completed": 2}
@@ -146,6 +147,10 @@ def test_single_node_point_stages_workflow_artifacts(harness):
     assert (call["env"]["INFMAX_WORKSPACE"], call["env"]["VIRTUAL_ENV"]) == (str(workspace), None)
     assert call["env"]["RUNNER_NAME"] == f"inferencex-{env['RUNNER_NAME']}"
     assert "/hf" in srtslurm(workspace)["default_mounts"].values()
+    assert srtslurm(workspace)["reporting"] == {
+        "status": {"endpoint": "https://status.example.test", "token_env": "SRTCTL_STATUS_TOKEN"}
+    }
+    assert "fixture-status-token" not in json.dumps(srtslurm(workspace))
     applied = [line.split()[-1] for line in lines(harness.logs, "git") if line.split()[2:3] == ["apply"]]
     assert applied == [str(workspace / "runners/srt-slurm/patches/001-fixture.patch")]
     assert lines(harness.logs, "scancel") == []
@@ -283,6 +288,24 @@ def test_multinode_lane_stages_workflow_artifacts(harness, monkeypatch, cluster_
         assert config["containers"][env["IMAGE"]] == env["IMAGE"] and imported == []
     outputs = Path(json.loads((workspace / "srt-submission.json").read_text())["output_dir"])
     assert outputs.exists() is not outputs.is_relative_to(checkout)
+
+
+def test_multinode_lane_collects_agentic_points_from_job_logs(harness, monkeypatch):
+    monkeypatch.setitem(lanes.SRT_LANES, ("lab-b", LaunchPath.SRT_MULTI),
+                        SrtLane(agentic_results="logs", shared_run_root=(Match(),)))
+    env = lane_env(
+        harness, "lab-b", RUNNER_NAME="lab-b_00", MODEL_PREFIX="test", PRECISION="fp8",
+        MODEL="org/Model", FRAMEWORK="sglang-disagg", IS_AGENTIC="1", FAKE_RESULTS="agentic-logs",
+        SRT_STATUS_ENDPOINT="https://status.example.test", SRTCTL_STATUS_TOKEN="fixture-status-token",
+    )
+    assert launch_here(monkeypatch, env, lab_config(harness.tmp), harness.workspace) == 0
+    assert json.loads((harness.workspace / "point-identity_conc4.json").read_text()) == {"conc": 4}
+    [call] = srtctl_calls(harness.logs)
+    config = srtslurm(Path(call["cwd"]))
+    assert config["reporting"] == {
+        "status": {"endpoint": "https://status.example.test", "token_env": "SRTCTL_STATUS_TOKEN"}
+    }
+    assert (harness.workspace / "LOGS/point-identity_conc4.json").is_file()
 
 
 @pytest.mark.parametrize(("model_prefix", "precision", "framework", "model", "require_power", "lane"), [
@@ -479,6 +502,8 @@ def test_unsupported_multinode_requests_fail_before_any_setup(harness, cluster_i
 
 @pytest.mark.parametrize(("shape", "overrides", "missing"), [
     ("single", dict(IS_AGENTIC="1", SPEC_DECODING="mtp", THINKING_MODE=""), "THINKING_MODE"),
+    ("single", dict(SRT_STATUS_ENDPOINT="https://status.example.test", SRTCTL_STATUS_TOKEN=""),
+     "SRTCTL_STATUS_TOKEN"),
     ("multi", dict(SPEC_DECODING=None), "SPEC_DECODING"),
     ("batch", dict(SRT_RECIPE=None), "SRT_RECIPE"),
 ])  # fmt: skip

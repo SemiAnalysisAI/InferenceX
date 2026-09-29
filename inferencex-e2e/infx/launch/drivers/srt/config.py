@@ -50,6 +50,7 @@ class SrtJob:
     single_node: bool = False
     account: str | None = None
     fork: bool = False
+    status_endpoint: str | None = None
 
 
 def pyxis_spelling(image: str) -> str:
@@ -97,6 +98,10 @@ def render(cluster: Cluster, job: SrtJob) -> dict[str, Any]:
     if srt is None:
         raise LaunchError(f"cluster {cluster.id!r} has no slurm.srt-slurm settings")
     config: dict[str, Any] = {"cluster": cluster.id}
+    if job.status_endpoint:
+        config["reporting"] = {
+            "status": {"endpoint": job.status_endpoint, "token_env": "SRTCTL_STATUS_TOKEN"}
+        }
     if job.account:
         config["default_account"] = job.account
     config["default_partition"] = settings.partition
@@ -181,18 +186,20 @@ def _create_dir(path: Path, *, world_writable: bool = False) -> None:
 
 
 def create_volume_mounts(run: SrtRun) -> None:
-    """Create the host side of the cluster's ``srt-slurm.volume-mounts`` before submission."""
+    """Create shared volume mounts here; node-local paths belong to allocated compute nodes."""
     for name in run.srt.volume_mounts:
-        _create_dir(volume_path(run.cluster, name))
+        if slurm_settings(run.cluster).volumes[name].visibility == "shared":
+            _create_dir(volume_path(run.cluster, name))
 
 
 def lane_mounts(run: SrtRun, lane: SrtLane) -> list[tuple[str, str]]:
-    """The (host, container) mounts the lane adds for this request; their hosts are created."""
+    """The lane's (host, container) mounts, creating only shared paths on the submit host."""
     mounts: list[tuple[str, str]] = []
     for mount in lane.mounts:
         if mount.when(run.request):
             host = volume_path(run.cluster, mount.volume)
-            _create_dir(host, world_writable=mount.world_writable)
+            if slurm_settings(run.cluster).volumes[mount.volume].visibility == "shared":
+                _create_dir(host, world_writable=mount.world_writable)
             mounts.append((str(host), mount.target or str(host)))
     if run.request.framework == "tilert":
         mounts.append((str(run.workspace), "/infmax-workspace"))
@@ -237,6 +244,7 @@ def write_lane_config(
         mounts=lane_mounts(run, lane),
         account=run.account,
         fork=checkout.fork,
+        status_endpoint=run.env.get("SRT_STATUS_ENDPOINT"),
     )
     config_yaml = checkout.root / "srtslurm.yaml"
     write(config_yaml, render(run.cluster, job))

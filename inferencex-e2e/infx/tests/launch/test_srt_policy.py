@@ -7,7 +7,7 @@ from infx.clusters.slurm import SrtSlurmSettings
 from infx.launch import policy
 from infx.launch.context import LaunchError
 from infx.launch.drivers.srt import models
-from infx.launch.drivers.srt.lanes import SrtLane, srt_lane, srt_time_limit
+from infx.launch.drivers.srt.lanes import SrtLane, check_request, srt_lane, srt_time_limit
 from infx.launch.drivers.srt.models import (
     Override,
     checkpoint,
@@ -71,6 +71,13 @@ def test_each_cluster_routes_requests_to_its_launch_path(cluster_id, env, path):
 def test_a_path_without_a_lane_on_the_cluster_is_refused():
     with pytest.raises(LaunchError, match="cluster 'b200-cw' has no srt-multi srt-slurm lane"):
         srt_lane("b200-cw", LaunchPath.SRT_MULTI)
+
+
+def test_separate_eval_lane_rejects_evaluation_against_throughput_workers():
+    lane = SrtLane(separate_eval=True)
+    with pytest.raises(LaunchError, match="separate eval-only job"):
+        check_request(lane, request(RUN_EVAL="true", EVAL_ONLY="false"))
+    check_request(lane, request(RUN_EVAL="true", EVAL_ONLY="true"))
 
 
 OVERRIDES = (

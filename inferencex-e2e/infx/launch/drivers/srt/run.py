@@ -41,6 +41,8 @@ class SrtRun:
         if srt is None:
             raise LaunchError(f"cluster {launch.cluster.id!r} has no slurm.srt-slurm settings")
         env = runtime_env(launch.cluster, request, srt.env, job_env or {})
+        if env.get("SRT_STATUS_ENDPOINT") and not env.get("SRTCTL_STATUS_TOKEN"):
+            raise RequestError.missing("SRTCTL_STATUS_TOKEN")
         env.pop("VIRTUAL_ENV", None)
         root = str(repository_root())
         env["PYTHONPATH"] = os.pathsep.join(filter(None, (root, env.get("PYTHONPATH"))))

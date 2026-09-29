@@ -54,6 +54,14 @@ srt 驱动（[`infx/launch/drivers/srt/`](../infx/launch/drivers/srt)）在 `mak
 缓存挂载、时间上限，以及功耗作业所需的 DCGM exporter 镜像。取值以 YAML 数据写入，
 绝不替换进 shell 或 YAML 文本，`extra` 也不能覆盖类型化的键。
 
+状态上报使用两个共享的 GitHub Actions secret：`SRT_STATUS_ENDPOINT` 指定采集器的
+基础 URL，`SRTCTL_STATUS_TOKEN` 指定 bearer token。sweep 和端到端工作流通过基准
+模板传递这两个值。驱动在作业配置中写入集群标识、endpoint 和
+`token_env: SRTCTL_STATUS_TOKEN`；token 值仅保留在环境变量中。
+endpoint 为空时不启用上报；设置 endpoint 时必须提供 token。
+所有集群共用同一个 endpoint 和 token，采集器通过 `(metadata.cluster, job_id)`
+区分作业。
+
 模型选择、缓存准备以及依赖工作负载的时间上限保留在 srt 驱动的表中
 （[`lanes.py`](../infx/launch/drivers/srt/lanes.py)、[`models.py`](../infx/launch/drivers/srt/models.py)、[`power.py`](../infx/launch/drivers/srt/power.py)），不写进集群记录。
 

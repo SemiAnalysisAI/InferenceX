@@ -169,7 +169,8 @@ def collect(
             if not request.is_agentic:
                 copy_fixed_sequence_results(logs, run.workspace, request.result_filename)
             elif not power.agentx:
-                copy_agentic_results(infmax, run.workspace, request.result_filename)
+                source = logs if lane.agentic_results == "logs" else infmax
+                copy_agentic_results(source, run.workspace, request.result_filename)
         except ArtifactError as error:
             print(f"ERROR: {error}", file=sys.stderr)
             rc = rc or 1

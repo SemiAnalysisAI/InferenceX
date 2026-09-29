@@ -60,6 +60,15 @@ staged images, resolved model paths, cache mounts, the time limit, and the DCGM
 exporter image for power jobs. Values are written as YAML data, never substituted into
 shell or YAML text, and `extra` cannot shadow a typed key.
 
+Status reporting uses two shared GitHub Actions secrets: `SRT_STATUS_ENDPOINT` for
+the collector's base URL and `SRTCTL_STATUS_TOKEN` for its bearer token. The sweep
+and end-to-end workflows forward both through the benchmark templates. The driver
+writes the cluster identity, endpoint, and `token_env: SRTCTL_STATUS_TOKEN` into the
+job-local profile; the token value stays in the environment. An empty
+endpoint disables reporting. If an endpoint is configured, the token is required.
+All clusters use the same endpoint and token; the collector identifies jobs by
+`(metadata.cluster, job_id)`.
+
 Keep model selection, cache preparation, and workload-dependent time limits in the
 srt driver's tables ([`lanes.py`](../infx/launch/drivers/srt/lanes.py),
 [`models.py`](../infx/launch/drivers/srt/models.py),

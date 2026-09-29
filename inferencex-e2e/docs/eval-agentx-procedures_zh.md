@@ -271,6 +271,13 @@ Runner 会在 replay 前写入命令，并在聚合后校验原始结果（[执�
 
 ## 9. 用实时证据调试长时间 AgentX 运行
 
+Qwen3.5 MI300X AgentX 运行（包括快速验证）通过
+`apply_srt_recipe` 使用仓库中的 golden acceptance 曲线，不在 recipe 中写死长度。
+真实输出诊断和 eval 与 golden-AL AgentX replay 分开执行。
+MI300X srt-slurm launcher 要求 eval 使用独立的 `EVAL_ONLY=true` 作业，
+不在同一组 worker 上混合 golden-AL 吞吐测试和准确率评估。
+快速运行不能作为 canonical Pareto frontier 结果。
+
 GitHub Actions 是 orchestration/最终状态视图；cluster 是实时诊断来源。从 InferenceX Clusters canvas 获取 SSH alias、runner user 和受访问控制的路径。绝不要猜测或公开私有基础设施坐标。
 
 解析准确的矩阵作业：
