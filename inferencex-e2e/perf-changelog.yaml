@@ -9108,5 +9108,5 @@
 - config-keys:
     - kimik3-fp4-mi355x-vllm-agentic-mtp
   description:
-    - "Add Kimi-K3 MXFP4 vLLM agentic-coding on MI355X (TP8, DSpark): dcp1 c1/c4 GPU-resident and c8-c14 with SimpleCPUOffload DRAM offload, plus a new dcp8 c44/c48/c70 throughput band (mtp synthetic acceptance, no draft); vLLM ROCm image TBD."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+    - "Add Kimi-K3 MXFP4 vLLM agentic-coding on MI355X (TP8, DSpark): dcp1 c1/c4 GPU-resident and c8-c14 with SimpleCPUOffload DRAM offload, plus a new dcp8 c44/c48/c70 throughput band (mtp synthetic acceptance, no draft); vLLM ROCm image vllm/vllm-openai-rocm:nightly-rocm100-36768d1bfd39094681cdbc8cb37d4b31c0729c89"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3561
