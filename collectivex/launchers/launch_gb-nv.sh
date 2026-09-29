@@ -19,19 +19,13 @@ RUNNER="$PRODUCT"
 export COLLX_RUNNER="$RUNNER" COLLX_BENCH="${COLLX_BENCH:-deepep-v2}"
 export COLLX_VENDOR=nvidia
 collx_launcher_prologue "$RUNNER"
-NODES="${COLLX_NODES:-2}"; GPN="${COLLX_GPUS_PER_NODE:-4}"
-SCALE_UP_DOMAIN="${COLLX_SCALE_UP_DOMAIN:-72}"
-NGPUS="${COLLX_NGPUS:-$((NODES * GPN))}"
+collx_set_placement 2 4 72 mnnvl
 if [ "$PRODUCT" = gb200 ]; then default_time=30; else default_time=90; fi
 TIME_MIN="${COLLX_TIME:-$default_time}"
 IMAGE="$COLLX_IMAGE"
-TS="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
-export COLLX_TRANSPORT=mnnvl
-export COLLX_NODES="$NODES" COLLX_GPUS_PER_NODE="$GPN" COLLX_SCALE_UP_DOMAIN="$SCALE_UP_DOMAIN"
-export COLLX_NGPUS="$NGPUS"
 case "$COLLX_BENCH" in
-  deepep-v2 | nccl-ep | flashinfer-ep) ;;
-  *) collx_die "unsupported $PRODUCT EP backend: $COLLX_BENCH" ;;
+  deepep-v2 | nccl-ep | flashinfer-ep | swap-blocks) ;;
+  *) collx_die "unsupported $PRODUCT backend: $COLLX_BENCH" ;;
 esac
 collx_require_vars COLLX_IMAGE COLLX_IMAGE_PLATFORM COLLX_PARTITION COLLX_ACCOUNT COLLX_SQUASH_DIR COLLX_STAGE_DIR
 [ "$PRODUCT" != gb300 ] || collx_require_vars COLLX_ENROOT_CACHE_PATH
@@ -43,19 +37,7 @@ collx_apply_network_profile "$NODES" "$COLLX_TRANSPORT"
 collx_log "$PRODUCT nodes=$NODES x ${GPN}gpu world=$NGPUS bench=$COLLX_BENCH"
 collx_select_image "$IMAGE"
 
-MOUNT_SRC="$(collx_stage_path "$REPO_ROOT" "$COLLX_STAGE_DIR")"
-collx_stage_repo "$REPO_ROOT" "$MOUNT_SRC"
-CONTAINER_MOUNTS="$MOUNT_SRC:/ix"
-# nccl-ep is pip-only (nccl4py wheel; no source stage); deepep-v2 needs its pinned tree.
-if [ "$COLLX_BENCH" = deepep-v2 ]; then
-  collx_prepare_deepep_source "$MOUNT_SRC" \
-    || collx_die "cannot stage the pinned backend source"
-fi
-export COLLX_BACKEND_SOURCE_ROOT=/ix/collectivex/.collx_sources
-collx_prepare_backend_cache "$COLLX_SQUASH_DIR" \
-  || collx_die "cannot prepare the isolated backend cache"
-CONTAINER_MOUNTS="$CONTAINER_MOUNTS,$COLLX_PREPARED_BACKEND_CACHE:/cx-cache"
-export COLLX_BACKEND_CACHE_ROOT=/cx-cache
+collx_stage_with_backend_cache
 
 command -v salloc >/dev/null || collx_die "salloc not found"
 allocation=(--partition="$PARTITION" --account="$ACCOUNT" --nodes="$NODES"
