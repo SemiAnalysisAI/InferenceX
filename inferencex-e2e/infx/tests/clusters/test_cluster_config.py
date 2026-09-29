@@ -20,7 +20,7 @@ CLUSTER = {
         "exclusive": True,
         "volumes": {"scratch": {"path": "/scratch/models", "visibility": "node-local"}},
         "squash": {"dir": "/shared/squash", "import": "pre-staged"},
-        "srt-slurm": {"network-interface": "", "model-aliases": {"kimik3": "Kimi-K3"}},
+        "srt-slurm": {"network-interface": ""},
     },
 }
 
@@ -138,7 +138,6 @@ def test_inventory_rejects_inconsistent_labels(runner_config, message):
         ("models.entries", {"Kimi-K3": {"root": "scratch", "dir": "../Kimi-K3"}}, "relative to its root"),
         ("models.download-root", "writable", "unknown volume 'writable'"),
         ("models.download-root", "scratch", "must be a shared volume"),
-        ("slurm.srt-slurm.model-aliases", {"glm5.2": "GLM-5.2-FP8"}, "unknown entry 'GLM-5.2-FP8'"),
         ("slurm.srt-slurm.volume-mounts", {"hf-hub-cache": "/hf_hub_cache"}, "unknown volumes"),
         ("slurm.srt-slurm.host-setup", {"script": "/opt/setup.sh"}, "repository-relative"),
         ("partition", "batch", "Extra inputs"),

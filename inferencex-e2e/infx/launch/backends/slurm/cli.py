@@ -1,4 +1,4 @@
-"""Thin, echoed wrappers around the Slurm CLI (salloc, srun, sbatch, squeue, sacct, scontrol, scancel)."""
+"""Echoed wrappers around the Slurm CLI."""
 
 from __future__ import annotations
 
@@ -25,19 +25,15 @@ class SlurmError(BackendError):
 
 @dataclass(frozen=True)
 class ContainerSpec:
-    """Pyxis container options for one ``srun`` step.
-
-    Steps never mount the home directory, run as remapped root, and skip the image
-    entrypoint. ``env`` is appended to ``--export`` so the step sees it in the container.
-    """
+    """Pyxis options of one ``srun`` step: no home mount, remapped root, no image entrypoint."""
 
     image: str
     mounts: list[tuple[str, str]] = field(default_factory=list)
     workdir: str | None = None
+    # Appended to ``--export``, so the step sees it in the container.
     env: dict[str, str] = field(default_factory=dict)
 
     def srun_args(self) -> list[str]:
-        """Render the ``--container-*`` flags for this container."""
         args = [f"--container-image={self.image}"]
         if self.mounts:
             args.append(
@@ -48,14 +44,6 @@ class ContainerSpec:
             args.append(f"--container-workdir={self.workdir}")
         args.append("--no-container-entrypoint")
         return args
-
-
-def _export_arg(export: str, env: dict[str, str]) -> str:
-    """Build ``--export``; Slurm splits it on commas, so values must not contain one."""
-    for name, value in env.items():
-        if "," in value:
-            raise ValueError(f"srun --export cannot carry {name}: value contains ','")
-    return "--export=" + ",".join([export, *(f"{name}={value}" for name, value in env.items())])
 
 
 @dataclass(frozen=True)
@@ -70,7 +58,6 @@ class Resources:
     exclude: Sequence[str] = ()
 
     def args(self) -> list[str]:
-        """Render the flags."""
         args = [f"--partition={self.partition}"]
         if self.account:
             args.append(f"--account={self.account}")
@@ -83,11 +70,7 @@ class Resources:
 
 
 def salloc(resources: Resources, *, extra: Sequence[str] = ()) -> Job:
-    """Allocate nodes with ``salloc --no-shell`` and return the granted job.
-
-    Output is echoed to stderr; raises ``SlurmError`` if salloc fails or never
-    prints ``Granted job allocation <id>``.
-    """
+    """``salloc --no-shell`` and return the granted job; raise ``SlurmError`` without a grant."""
     argv = ["salloc", *resources.args(), *extra, "--no-shell"]
     # The grant line is parsed, so pin the message locale.
     result = proc.run(argv, env={**os.environ, "LC_ALL": "C"}, capture=True)
@@ -107,40 +90,34 @@ def srun_argv(
     container: ContainerSpec | None = None,
     extra: Sequence[str] = (),
 ) -> list[str]:
-    """The ``srun`` command for one step (inside ``job`` when given), exporting our environment.
-
-    Without a job, srun makes its own allocation from the flags in ``extra``.
-    """
+    """One ``srun`` step exporting our environment; without ``job`` it allocates from ``extra``."""
+    env = container.env if container else {}
+    # Slurm splits --export on commas.
+    for name, value in env.items():
+        if "," in value:
+            raise ValueError(f"srun --export cannot carry {name}: value contains ','")
     args = ["srun"]
     if job is not None:
         args.append(f"--jobid={job.id}")
     if container is not None:
         args += container.srun_args()
-    args.append(_export_arg("ALL", container.env if container else {}))
-    return [*args, *extra, *argv]
+    exported = [f"{name}={value}" for name, value in env.items()]
+    return [*args, "--export=" + ",".join(["ALL", *exported]), *extra, *argv]
 
 
 def srun(job: Job | None, argv: Sequence[str], *, extra: Sequence[str] = ()) -> int:
-    """Run one host (non-container) step to completion, streaming its output; return its exit code."""
+    """Run one host step to completion, streaming its output; return its exit code."""
     return proc.run(srun_argv(job, argv, extra=extra)).returncode
 
 
 def sbatch(
-    script: Path,
-    resources: Resources,
-    *,
-    output: Path,
-    chdir: Path | None = None,
-    extra: Sequence[str] = (),
+    script: Path, resources: Resources, *, output: Path, chdir: Path, extra: Sequence[str] = ()
 ) -> Job:
-    """Submit ``script`` with ``sbatch --parsable --export=ALL`` and return the job.
-
-    ``output`` receives the batch log (follow it with :func:`stream_log`).
-    """
-    argv = ["sbatch", "--parsable", *resources.args(), "--export=ALL", f"--output={output}"]
-    if chdir is not None:
-        argv.append(f"--chdir={chdir}")
-    argv += [*extra, os.fspath(script)]
+    """``sbatch --parsable --export=ALL`` with the batch log at ``output``; return the job."""
+    argv = [
+        "sbatch", "--parsable", *resources.args(), "--export=ALL", f"--output={output}",
+        f"--chdir={chdir}", *extra, os.fspath(script),
+    ]  # fmt: skip
     result = proc.run(argv, capture=True)
     sys.stderr.write(result.stderr)
     # --parsable prints "<id>" or "<id>;<cluster>".
@@ -151,10 +128,7 @@ def sbatch(
 
 
 def queue_state(job: Job, *, echo_command: bool = True) -> str | None:
-    """The job's squeue state (PENDING, RUNNING, ...), or None once squeue no longer lists it.
-
-    A failing or missing squeue counts as not listed.
-    """
+    """The job's squeue state, or None once squeue no longer lists it (or cannot run)."""
     argv = ["squeue", "-j", job.id, "--noheader", "--format=%i|%T"]
     try:
         result = proc.run(argv, capture=True, echo_command=echo_command)
@@ -170,17 +144,16 @@ def queue_state(job: Job, *, echo_command: bool = True) -> str | None:
 
 
 def is_active(job: Job) -> bool:
-    """Whether ``job`` is still queued or running."""
     return queue_state(job) is not None
 
 
 def cancel(job: Job) -> None:
-    """``scancel`` the job, ignoring failures (it may already be gone)."""
+    """``scancel`` the job, ignoring failures: it may already be gone."""
     with contextlib.suppress(FileNotFoundError):
         proc.run(["scancel", job.id])
 
 
-def cancel_named(names: Sequence[str], *, poll_s: float = 5.0) -> None:
+def cancel_named(names: Sequence[str]) -> None:
     """``scancel`` this user's jobs named any of ``names`` and wait until squeue drops them."""
     user = os.environ.get("USER") or getpass.getuser()
     for name in names:
@@ -194,11 +167,10 @@ def cancel_named(names: Sequence[str], *, poll_s: float = 5.0) -> None:
             f"Waiting for jobs {' '.join(result.stdout.split())} to leave the queue",
             file=sys.stderr,
         )
-        time.sleep(poll_s)
+        time.sleep(5)
 
 
 def _query(argv: list[str]) -> str:
-    """Captured stdout of a status query, or ``""`` when the command is unavailable or fails."""
     try:
         result = proc.run(argv, capture=True)
     except FileNotFoundError:
@@ -226,11 +198,7 @@ def _observe(job: Job) -> tuple[str, str]:
 
 
 def job_status(state: str, exit_code: str) -> JobStatus:
-    """Map a Slurm allocation reading onto the neutral states.
-
-    Only ``COMPLETED`` with exit code ``0:0`` succeeds; any other state Slurm reports
-    after the job left PENDING/CONFIGURING/RUNNING/COMPLETING is a failed end.
-    """
+    """Only ``COMPLETED`` with ``0:0`` succeeds; any other state after the job ran failed."""
     code, _, _ = exit_code.partition(":")
     raw = f"{state}|{exit_code}"
     exit_status = int(code) if code.isdigit() else None
@@ -251,12 +219,10 @@ _UNSETTLED = frozenset({JobState.UNKNOWN, JobState.PENDING, JobState.RUNNING})
 
 
 def final_status(job: Job, *, attempts: int = 10, delay_s: float = 1.0) -> JobStatus:
-    """Wait for the allocation's terminal state and return it (never raises).
+    """The allocation's terminal status (``sacct -X``: never its steps); never raises.
 
-    Only the top-level allocation is inspected (``sacct -X``), never service steps.
-    Unsettled readings (none, pending, running) are retried because accounting lags;
-    after ``attempts`` the last reading is returned. A non-success result is also
-    reported on stderr.
+    Accounting lags, so unsettled readings are retried; after ``attempts`` the last one is
+    returned. A non-success is also reported on stderr.
     """
     state, exit_code = "", ""
     for attempt in range(attempts):
@@ -276,12 +242,10 @@ def final_status(job: Job, *, attempts: int = 10, delay_s: float = 1.0) -> JobSt
     return status
 
 
-def stream_log(job: Job, path: Path, *, wait_s: float = 5.0, poll_s: float = 10.0) -> None:
-    """Wait for ``path`` to appear, then follow it until ``job`` leaves the queue.
+def stream_log(job: Job, path: Path, *, wait_s: float = 5.0) -> None:
+    """Wait for ``path``, then follow it until ``job`` leaves the queue.
 
-    The log is on network storage, where inotify does not work, so ``tail -F``
-    polls it. Raises ``SlurmError`` (after printing ``scontrol show job``) if the
-    job ends before creating the log.
+    Raises ``SlurmError``, after printing ``scontrol show job``, if the job ends first.
     """
     while not path.exists():
         if queue_state(job, echo_command=False) is None:
@@ -291,7 +255,8 @@ def stream_log(job: Job, path: Path, *, wait_s: float = 5.0, poll_s: float = 10.
             raise SlurmError(f"job {job.id} ended before creating {path}")
         time.sleep(wait_s)
 
-    # tail exits (after a final read) once the sentinel dies; it dies when the job does.
+    # inotify does not work on network storage, so tail polls. It exits after a final read
+    # once the sentinel dies, which it does when the job does.
     sentinel = subprocess.Popen(["sleep", "2147483647"])
     print(f"Tailing {path}", file=sys.stderr, flush=True)
     tail_argv = ["tail", "-F", "-s", "2", "-n+1", str(path), f"--pid={sentinel.pid}"]
@@ -299,7 +264,7 @@ def stream_log(job: Job, path: Path, *, wait_s: float = 5.0, poll_s: float = 10.
     tail = subprocess.Popen(tail_argv, stderr=subprocess.DEVNULL)
     try:
         while queue_state(job, echo_command=False) is not None:
-            time.sleep(poll_s)
+            time.sleep(10)
     finally:
         sentinel.kill()
         sentinel.wait()

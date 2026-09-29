@@ -849,10 +849,9 @@ def check_baseline_coverage(matrix: dict, baseline: Baseline | None) -> None:
 
 @dataclass(frozen=True)
 class Publication:
-    """The public rows of a candidate's source workload on its source date.
+    """A candidate's source-date public rows, each with its producer run ID, attempt and head.
 
-    Each row comes with its producer run ID and attempt and, when ``workflow-info``
-    proves which revision produced it, that producer head (None otherwise).
+    The head is None unless ``workflow-info`` proves which revision produced the row.
     """
 
     sources: list[str]
@@ -933,10 +932,10 @@ def resolve_baseline(
 ) -> Baseline:
     """Freeze source-date rows against their own producer's complete family.
 
-    ``producers`` maps producer heads to the families their own revisions regenerated
-    (``python -m infx.klaud regenerate-producers``); this function runs no revision's
-    code. Legacy fingerprints may be absent, but exact producer provenance and a unique
-    workload/topology/concurrency match are required. Raw API data stays private.
+    ``producers`` holds the families producer revisions regenerated themselves, so nothing
+    here runs a revision's code. Legacy fingerprints may be absent, but exact producer
+    provenance and a unique workload/topology/concurrency match are required. Raw API data
+    stays private.
     """
     from fnmatch import fnmatchcase
 
@@ -1036,10 +1035,9 @@ def resolve_baseline(
 
 
 def prepare_baseline(session: Session, context: dict, model: str, goal: Prose) -> Baseline:
-    """The planner's baseline preflight for the current owned session, with ``goal``.
+    """The baseline preflight selection froze for this session's candidate, with ``goal``.
 
-    Selection verified the complete roster before dispatch; the preflight must be bound
-    to this candidate, its base, its source observation and ``model``.
+    It must be bound to the candidate, its base, its source observation and ``model``.
     """
     preflight_file = Path(os.environ["KLAUD_EVIDENCE"]) / "baseline-preflight.json"
     if not preflight_file.exists():

@@ -1,8 +1,7 @@
-"""Workload policy the launch drivers share: tables keyed by cluster id and functions over them.
+"""Workload policy the launch drivers share: tables keyed by cluster id, and functions over them.
 
-Tables one driver reads alone live beside it (``infx.launch.drivers.srt.lanes``,
-``.models`` and ``.power``); cluster facts without a workload predicate belong in the
-cluster record. :func:`table_problems` checks every table here against the inventory.
+Tables one driver reads alone live beside it; cluster facts without a workload predicate
+belong in the cluster record. :func:`table_problems` checks every table here against it.
 """
 
 from __future__ import annotations
@@ -14,7 +13,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from infx.clusters.slurm import SlurmSettings, model_path
+from infx.clusters.slurm import SlurmSettings
 
 if TYPE_CHECKING:
     from infx.clusters import Cluster
@@ -22,18 +21,12 @@ if TYPE_CHECKING:
 
 
 def any_of(*values: str) -> frozenset[str]:
-    """The values one :class:`Match` field accepts."""
     return frozenset(values)
 
 
 @dataclass(frozen=True)
 class Match:
-    """A predicate over a launch request; ``None`` fields match anything.
-
-    ``dcgm`` constrains the launch's DCGM power decision, which the recipe makes
-    (``infx.launch.drivers.srt.power``): a predicate that sets it can only be evaluated
-    once that decision is known, and raises ``TypeError`` otherwise.
-    """
+    """A predicate over a launch request; ``None`` fields match anything."""
 
     prefixes: frozenset[str] | None = None
     precisions: frozenset[str] | None = None
@@ -42,12 +35,9 @@ class Match:
     agentic: bool | None = None
     multinode: bool | None = None
     model_glob: str | None = None  # fnmatch over MODEL; ``*`` also matches ``/``
-    dcgm: bool | None = None
 
-    def __call__(self, request: LaunchRequest, *, dcgm: bool | None = None) -> bool:
-        """Return True iff every constrained field matches ``request`` and ``dcgm``."""
-        if self.dcgm is not None and dcgm is None:
-            raise TypeError("this predicate needs the launch's DCGM power decision")
+    def __call__(self, request: LaunchRequest) -> bool:
+        """Return True iff every constrained field matches ``request``."""
         return (
             (self.prefixes is None or request.model_prefix in self.prefixes)
             and (self.precisions is None or request.precision in self.precisions)
@@ -58,17 +48,11 @@ class Match:
             and (
                 self.model_glob is None or fnmatch.fnmatchcase(request.model or "", self.model_glob)
             )
-            and (self.dcgm is None or dcgm == self.dcgm)
         )
 
 
-# --------------------------------------------------------------------------
-# Launch paths
-# --------------------------------------------------------------------------
-
-
 class LaunchPath(StrEnum):
-    """How ``python -m infx.launch run`` executes one request (``drivers.ROUTES`` runs it)."""
+    """How ``python -m infx.launch run`` executes one request; ``drivers.ROUTES`` has each driver."""
 
     SRT_SINGLE = "srt-single"  # one native srt-slurm single-node point
     SRT_MULTI = "srt-multi"  # the cluster's multi-node srt-slurm lane
@@ -79,7 +63,7 @@ class LaunchPath(StrEnum):
     LEGACY_AMD_UTILS = "legacy-amd-utils"
 
 
-# Multi-node requests whose recipes are maintained against the cluster.
+# Multi-node requests whose recipes are maintained against the cluster itself.
 NATIVE_SRT_LANES: dict[str, tuple[Match, ...]] = {
     "b200-nscale": (
         Match(any_of("dsv4", "kimik3", "glm5.2"), any_of("fp4"), any_of("dynamo-vllm")),
@@ -89,9 +73,8 @@ NATIVE_SRT_LANES: dict[str, tuple[Match, ...]] = {
     ),
 }
 
-# Interactive allocation notifications of this lane fail on the b300 login node while
-# batch submission works, so the run re-enters itself inside a batch allocation
-# (``request.BATCH_REENTRY_ENV`` marks the re-entered run).
+# Interactive allocation notifications fail on the b300 login node while batch submission
+# works, so these runs re-enter the launch inside a batch allocation.
 BATCH_WRAPPED_LANES: dict[str, Match] = {
     "b300-dsxe": Match(
         any_of("dsv41flash"), frameworks=any_of("sglang"), agentic=True, multinode=False
@@ -100,10 +83,7 @@ BATCH_WRAPPED_LANES: dict[str, Match] = {
 
 
 def launch_path(cluster_id: str, request: LaunchRequest) -> LaunchPath:
-    """Return the path ``request`` takes on cluster ``cluster_id``.
-
-    Every single-node request without an explicit script is an srt-slurm run.
-    """
+    """The path ``request`` takes on ``cluster_id``; single-node without a script is srt-slurm."""
     if request.is_multinode:
         if any(lane(request) for lane in NATIVE_SRT_LANES.get(cluster_id, ())):
             return LaunchPath.SRT_NATIVE
@@ -120,22 +100,16 @@ def launch_path(cluster_id: str, request: LaunchRequest) -> LaunchPath:
     return LaunchPath.SRT_SINGLE
 
 
-# --------------------------------------------------------------------------
-# Allocation time limits
-# --------------------------------------------------------------------------
-
-
 @dataclass(frozen=True)
 class TimeBump:
-    """A longer SALLOC_TIME_LIMIT for the throughput runs ``when`` matches at CONC >= ``min_conc``."""
+    """A longer SALLOC_TIME_LIMIT for throughput runs ``when`` matches at ``CONC >= min_conc``."""
 
     when: Match
     min_conc: int
     minutes: int
 
 
-# A fixed srt-slurm limit of the cluster would shadow its bump, so table_problems of
-# infx.launch.drivers.srt rejects that combination.
+# srt.table_problems rejects a fixed srt-slurm limit, which would shadow the bump.
 SALLOC_TIME_BUMPS: dict[str, TimeBump] = {
     # The EP1 baseline needs more than 8h of warmup plus the hour-long profile.
     "h200-dgxc": TimeBump(
@@ -147,10 +121,7 @@ SALLOC_TIME_BUMPS: dict[str, TimeBump] = {
 
 
 def salloc_time_limit(cluster_id: str, request: LaunchRequest) -> int | None:
-    """Return the effective SALLOC_TIME_LIMIT in minutes: the cluster's bump, or as requested.
-
-    Eval-only runs skip the throughput warmup the bumps exist for.
-    """
+    """SALLOC_TIME_LIMIT in minutes: the cluster's bump, or as requested (always for eval-only)."""
     bump = SALLOC_TIME_BUMPS.get(cluster_id)
     if (
         bump is not None
@@ -163,24 +134,7 @@ def salloc_time_limit(cluster_id: str, request: LaunchRequest) -> int | None:
     return request.salloc_time_limit
 
 
-# --------------------------------------------------------------------------
-# Runtime settings job scripts read
-# --------------------------------------------------------------------------
-
-# MODEL_PATH defaults (``models.entries`` keys); first match wins.
-RUNTIME_MODEL_ENTRIES: dict[str, tuple[tuple[Match, str], ...]] = {
-    "b200-nscale": (
-        (Match(any_of("dsv4"), frameworks=any_of("tilert")), "DeepSeek-V4-Pro-0813"),
-        (Match(any_of("dsv4"), multinode=True), "DeepSeek-V4-Pro"),
-        (Match(any_of("dsv4")), "DeepSeek-V4-Pro-0813"),
-        (Match(any_of("kimik3")), "Kimi-K3"),
-        (Match(any_of("glm5.1")), "GLM-5.1-FP8"),
-        (Match(any_of("glm5.2")), "GLM-5.2-NVFP4"),
-    ),
-}
-
-# The fabric settings the TileRT runtime needs; the TileRT master configs set
-# TILERT_WEIGHTS_DIR themselves.
+# The fabric settings the TileRT runtime needs; its master configs set TILERT_WEIGHTS_DIR.
 TILERT_ENV: dict[str, Mapping[str, str]] = {
     # Nscale exposes eight RoCE HCAs, mlx5_0..mlx5_7.
     "b200-nscale": {
@@ -192,31 +146,15 @@ TILERT_ENV: dict[str, Mapping[str, str]] = {
 
 
 def runtime_env(cluster: Cluster, request: LaunchRequest) -> dict[str, str]:
-    """The launch environment plus the runtime settings job scripts read.
-
-    Values the workflow already set win: master-config additional-settings are
-    exported after these defaults.
-    """
-    settings: dict[str, str] = {}
-    for when, entry in RUNTIME_MODEL_ENTRIES.get(cluster.id, ()):
-        if when(request):
-            settings["MODEL_PATH"] = str(model_path(cluster, entry))
-            break
-    if request.framework == "tilert":
-        settings.update(TILERT_ENV.get(cluster.id, {}))
+    """The launch environment on top of the runtime settings job scripts read."""
+    settings = TILERT_ENV.get(cluster.id, {}) if request.framework == "tilert" else {}
     return {**settings, **request.env}
 
 
-# --------------------------------------------------------------------------
-# The workload environment contract
-# --------------------------------------------------------------------------
-
-# The launch variables a job's containers are handed by name. srt-slurm's post-eval
-# re-exports each one inside its srun command line, so a value here is readable in the
-# node's process list; srtctl forwards the matrix inputs (MODEL, ISL, OSL, FRAMEWORK,
-# PRECISION, PREFILL_*, ...) itself. A new knob inside a family needs no edit; a new
-# family is one line. No credential is forwarded but the Modal tokens SWE-bench's
-# sandboxes need: never HF_TOKEN, GitHub tokens or other runner secrets.
+# The launch variables a job's containers get by name; srtctl forwards the matrix inputs
+# itself. srt-slurm's post-eval re-exports each on its srun command line, where the node's
+# process list shows it, so no credential is forwarded but the Modal tokens SWE-bench's
+# sandboxes need.
 WORKLOAD_ENV = (
     # Families: evals, SWE-bench, the AIPerf client, AgentX.
     "EVAL_*", "SWEBENCH_*", "AIPERF_*", "AGENTIC_*",
@@ -233,7 +171,7 @@ _SHELL_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
 
 def workload_env_names(env: Mapping[str, str]) -> list[str]:
-    """The sorted names of the non-empty variables in ``env`` that ``WORKLOAD_ENV`` covers."""
+    """The sorted names of the non-empty variables of ``env`` that ``WORKLOAD_ENV`` covers."""
     return sorted(
         name
         for name, value in env.items()
@@ -243,20 +181,12 @@ def workload_env_names(env: Mapping[str, str]) -> list[str]:
     )
 
 
-# --------------------------------------------------------------------------
-# Legacy lanes (infx.launch.drivers.legacy): delete together with that module
-# --------------------------------------------------------------------------
-
-
 @dataclass(frozen=True)
 class TileRTDirectLane:
-    """Fixed-sequence TileRT disagg run by its own script.
+    """Fixed-sequence TileRT disagg run by its own ``script`` (relative to the workspace).
 
-    ``script`` is relative to the workspace. Its fields are ``subdir`` (``multi_node``,
-    or ``multi_node/agentic`` for agentic scenarios), ``model`` (EXP_NAME up to its
-    first underscore), ``precision`` and ``framework``. The launcher sets
-    ``squash_dir_env`` to the cluster's ``slurm.squash.dir``, where the script imports
-    squashes under the launcher's own import locks.
+    The script imports squashes into ``$<squash_dir_env>`` (``slurm.squash.dir``) under the
+    launcher's own import locks.
     """
 
     script: str
@@ -267,12 +197,9 @@ class TileRTDirectLane:
 class AmdUtilsLane:
     """AgentX disagg submitted through amd_utils/submit.sh.
 
-    ``script`` takes the same ``model``/``precision``/``framework`` fields.
-    ``model_volume`` names the ``slurm.volumes`` entry exported as MODEL_PATH and
-    MODEL_DIR. ``logs_dir`` (under the workspace) is the BENCHMARK_LOGS_DIR the chain
-    writes its Slurm logs to. ``host_setup_env`` names the fabric settings taken from the
-    cluster's ``srt-slurm.host-setup.env``; ``env`` holds the remaining orchestration
-    inputs that amd_utils reads.
+    ``model_volume`` is exported as MODEL_PATH and MODEL_DIR, ``logs_dir`` (under the
+    workspace) as BENCHMARK_LOGS_DIR; ``host_setup_env`` names the fabric settings taken
+    from ``srt-slurm.host-setup.env``, and ``env`` holds the rest amd_utils reads.
     """
 
     script: str
@@ -300,18 +227,8 @@ LEGACY_AMD_UTILS: dict[str, AmdUtilsLane] = {
 }
 
 
-# --------------------------------------------------------------------------
-# Consistency with the cluster inventory
-# --------------------------------------------------------------------------
-
-
 def table_problems(clusters: Mapping[str, Cluster], only: str | None = None) -> list[str]:
-    """Rows of this module's cluster-keyed tables that ``clusters`` contradicts.
-
-    Every key must be a cluster id, and every checkpoint, volume and host-setup
-    variable a row names must exist on that cluster. ``only`` limits the check to the
-    rows keyed by that cluster id.
-    """
+    """Rows of this module's tables that ``clusters`` contradicts; only ``only``'s rows if given."""
 
     def keys(table: Mapping[str, object]) -> list[str]:
         return [key for key in table if only in (None, key)]
@@ -320,7 +237,6 @@ def table_problems(clusters: Mapping[str, Cluster], only: str | None = None) -> 
         "NATIVE_SRT_LANES": NATIVE_SRT_LANES,
         "BATCH_WRAPPED_LANES": BATCH_WRAPPED_LANES,
         "SALLOC_TIME_BUMPS": SALLOC_TIME_BUMPS,
-        "RUNTIME_MODEL_ENTRIES": RUNTIME_MODEL_ENTRIES,
         "TILERT_ENV": TILERT_ENV,
         "LEGACY_TILERT": LEGACY_TILERT,
         "LEGACY_AMD_UTILS": LEGACY_AMD_UTILS,
@@ -331,13 +247,6 @@ def table_problems(clusters: Mapping[str, Cluster], only: str | None = None) -> 
         for key in keys(table)
         if key not in clusters
     ]
-    for cluster_id in keys(RUNTIME_MODEL_ENTRIES):
-        if (cluster := clusters.get(cluster_id)) is not None:
-            problems += [
-                f"RUNTIME_MODEL_ENTRIES[{cluster_id!r}]: no models.entries {entry!r}"
-                for _, entry in RUNTIME_MODEL_ENTRIES[cluster_id]
-                if entry not in cluster.models.entries
-            ]
     for cluster_id in keys(LEGACY_TILERT):
         cluster = clusters.get(cluster_id)
         settings = cluster.scheduler_settings if cluster is not None else None

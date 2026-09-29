@@ -2,7 +2,7 @@
 
 **English** | [中文](RECIPES_zh.md)
 
-InferenceX owns the recipes in this directory. For every NVIDIA srt-slurm launch, the srt driver ([`infx/launch/drivers/srt.py`](../../../infx/launch/drivers/srt.py)) makes a job-local Git clone of the pinned submodule and copies this entire tree into `recipes/`. It records the actual revision in `srt-slurm-sha.txt`; power lanes copy that revision into `power-producer-sha.txt` for result validation.
+InferenceX owns the recipes in this directory. For every NVIDIA srt-slurm launch, the srt driver ([`infx/launch/drivers/srt/checkout.py`](../../../infx/launch/drivers/srt/checkout.py)) makes a job-local Git clone of the pinned submodule and copies this entire tree into `recipes/`. It records the actual revision in `srt-slurm-sha.txt`; power lanes copy that revision into `power-producer-sha.txt` for result validation.
 
 The shared version is the Git submodule pointer at [`utils/srt-slurm`](../../../utils/srt-slurm), currently [v2.30.0](https://github.com/NVIDIA/srt-slurm/releases/tag/v2.30.0) (`0b37c791fc95a7cb42e8d2b281d44b642cda75d3`). Update that submodule pointer when upgrading, then run the recipe and integration checks. Do not add model-specific checkout branches to launchers.
 

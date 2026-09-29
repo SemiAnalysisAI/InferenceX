@@ -196,14 +196,12 @@ LANES = {
         cluster="b200-nscale",
         env=dict(MODEL_PREFIX="kimik3", PRECISION="fp4", FRAMEWORK="dynamo-vllm", MODEL="moonshotai/Kimi-K3",
                  IS_AGENTIC="1", ISL="0", OSL="0", FAKE_RESULTS="agentic"),
-        no_preflight=True, tag="b200,kimik3,fp4,0x0,", health={"max_attempts": 720, "interval_seconds": 5},
-        served="moonshotai/Kimi-K3", mounts=("/aiperf_mmap_cache", "/hf_hub_cache"),
+        no_preflight=True, tag="b200,kimik3,fp4,agentic,", mounts=("/aiperf_mmap_cache", "/hf_hub_cache"),
     ),
     "b200-nscale-multinode": dict(
         cluster="b200-nscale",
         env=dict(MODEL_PREFIX="dsr1", PRECISION="fp8", FRAMEWORK="dynamo-trt", MODEL="deepseek-ai/DeepSeek-R1-0528"),
-        no_preflight=False, tag="b200,dsr1,fp8,1024x1024,", health={"max_attempts": 720, "interval_seconds": 5},
-        served="deepseek-ai/DeepSeek-R1-0528",
+        no_preflight=True, tag="b200,dsr1,fp8,1024x1024,",
     ),
     "b300-dsxe": dict(
         cluster="b300-dsxe",
@@ -213,20 +211,18 @@ LANES = {
     "gb200-nv": dict(
         cluster="gb200-nv",
         env=dict(MODEL_PREFIX="dsr1", PRECISION="fp8", FRAMEWORK="dynamo-sglang", MODEL="deepseek-ai/DeepSeek-R1-0528"),
-        no_preflight=True, tag="gb200,dsr1,fp8,1024x1024,",
-        job_name="inferencex-{runner}", setup_script="install-torchao.sh", cleans_outputs=False,
+        no_preflight=True, tag="gb200,dsr1,fp8,1024x1024,", setup_script="install-torchao.sh",
     ),
     "gb200-nv-shared": dict(
         cluster="gb200-nv",
         env=dict(MODEL_PREFIX="kimik3", PRECISION="fp4", FRAMEWORK="dynamo-vllm", MODEL="moonshotai/Kimi-K3",
                  IS_AGENTIC="1", ISL="0", OSL="0", FAKE_RESULTS="agentic"),
-        no_preflight=True, tag="gb200,kimik3,fp4,0x0,", job_name="inferencex-{runner}", cleans_outputs=False,
-        shared_checkout=True, mounts=("/aiperf_mmap_cache", "/hf_hub_cache"),
+        no_preflight=True, tag="gb200,kimik3,fp4,agentic,", shared_checkout=True, mounts=("/aiperf_mmap_cache", "/hf_hub_cache"),
     ),
     "gb300-nv": dict(
         cluster="gb300-nv",
         env=dict(MODEL_PREFIX="qwen3.5", PRECISION="fp4", FRAMEWORK="dynamo-trt", MODEL="nvidia/Qwen3.5-397B-A17B-NVFP4-V2"),
-        no_preflight=True, tag="gb300,qwen3.5,fp4,1024x1024,", time="4:00:00", per_run_checkout=True,
+        no_preflight=True, tag="gb300,qwen3.5,fp4,1024x1024,", time="4:00:00",
     ),
     "h100-dgxc": dict(
         cluster="h100-dgxc",
@@ -238,13 +234,13 @@ LANES = {
     "h200-dgxc": dict(
         cluster="h200-dgxc",
         env=dict(MODEL_PREFIX="dsr1", PRECISION="fp8", FRAMEWORK="dynamo-sglang", MODEL="deepseek-ai/DeepSeek-R1-0528"),
-        no_preflight=False, tag="h200,dsr1,fp8,1024x1024,", health={"max_attempts": 720, "interval_seconds": 10},
-        time="4:00:00", staging="unchecked",
+        no_preflight=False, tag="h200,dsr1,fp8,1024x1024,", time="4:00:00",
+        staging="unchecked",
     ),
     "mi355x-amds": dict(
         cluster="mi355x-amds",
-        env=dict(MODEL_PREFIX="dsr1", PRECISION="fp8", FRAMEWORK="sglang-disagg", MODEL="deepseek-ai/DeepSeek-R1-0528"),
-        no_preflight=False, tag=None, job_name=None, time="01:00:00", copies_logs=False, cleans_outputs=False,
+        env=dict(MODEL_PREFIX="dsv4", PRECISION="fp4", FRAMEWORK="sglang-disagg", MODEL="deepseek-ai/DeepSeek-V4-Pro-0813"),
+        no_preflight=False, tag=None, time="01:00:00",
         staging="registry",
     ),
 }  # fmt: skip
@@ -263,7 +259,7 @@ def test_multinode_lane_stages_workflow_artifacts(harness, lane_id):
         main = squash_path(env["IMAGE"], policy)
         main.parent.mkdir(parents=True, exist_ok=True)
         main.write_text("squash\n")
-        checkpoint = model_path(cluster, "dsr1-fp8")
+        checkpoint = model_path(cluster, "DeepSeek-R1-0528")
         checkpoint.mkdir(parents=True)
         (checkpoint / "config.json").write_text("{}")
     assert_ok(launch(env, harness.config, harness.workspace))
@@ -277,7 +273,7 @@ def test_multinode_lane_stages_workflow_artifacts(harness, lane_id):
     with tarfile.open(workspace / "multinode_server_logs.tar.gz") as bundle:
         assert "./sweep_42.log" in bundle.getnames()
     assert (workspace / "srt-slurm-sha.txt").read_text() == harness.env["FAKE_SRT_COMMIT"] + "\n"
-    assert (workspace / "LOGS/sweep_42.log").is_file() is lane.get("copies_logs", True)
+    assert (workspace / "LOGS/sweep_42.log").is_file()
     assert (workspace / "srt-submission.json").is_file()
 
     [call] = srtctl_calls(harness.logs)
@@ -286,11 +282,9 @@ def test_multinode_lane_stages_workflow_artifacts(harness, lane_id):
     if lane.get("shared_checkout"):
         assert checkout.name.startswith(f"srt-slurm-9001-1-{runner}-")
         assert not checkout.is_relative_to(workspace.resolve())
-    elif lane.get("per_run_checkout"):
+    else:
         assert checkout.parent == workspace.resolve()
         assert checkout.name.startswith("srt-slurm-9001-1-") and len(checkout.name) == len("srt-slurm-9001-1-") + 12
-    else:
-        assert checkout == (workspace / "srt-slurm").resolve()
     assert ("--no-preflight" in argv) is lane["no_preflight"]
     assert argv[argv.index("--file") + 1] == "recipes/test/lane.yaml"
     assert {"--json", "--yes", "benchmark.stream_output=true"} <= set(argv)
@@ -302,19 +296,17 @@ def test_multinode_lane_stages_workflow_artifacts(harness, lane_id):
         assert argv[argv.index("--setup-script") + 1] == setup_script
     else:
         assert "--setup-script" not in argv
-    job_name = lane.get("job_name", "{runner}")
-    assert call["env"]["RUNNER_NAME"] == (job_name or "{runner}").format(runner=runner)
+    assert call["env"]["RUNNER_NAME"] == runner
     assert call["env"]["SERVED_MODEL_NAME"] == lane.get("served")
 
     staged = yaml.safe_load((checkout / "recipes/test/lane.yaml").read_text())
-    assert staged["name"] == (job_name.format(runner=runner) if job_name else "fixture")
-    assert staged["health_check"] == lane.get("health", {"max_attempts": 100, "interval_seconds": 5})
+    assert staged["name"] == runner
+    assert staged["health_check"] == {"max_attempts": 720, "interval_seconds": 5}
     dist = {"dist-timeout": 1800} if lane.get("dist_timeout") else {}
     assert staged["roles"]["prefill"]["args"] == {"tensor-parallel-size": 8, "watchdog-timeout": 600, **dist}
-    if job_name and job_name.startswith("inferencex-"):
-        assert f"--user=runner --name=inferencex-{runner}" in lines(harness.logs, "scancel")
 
     config = srtslurm(checkout)
+    assert config["default_health_check"] == {"max_attempts": 720, "interval_seconds": 10}
     image = config["containers"][env["IMAGE"]]
     if staging == "registry":
         assert image == env["IMAGE"]
@@ -330,16 +322,17 @@ def test_multinode_lane_stages_workflow_artifacts(harness, lane_id):
         assert config["default_time_limit"] == lane["time"]
     assert set(lane.get("mounts", ())) <= set(config.get("default_mounts", {}).values())
     outputs = Path(json.loads((workspace / "srt-submission.json").read_text())["output_dir"])
-    assert outputs.exists() is not lane.get("cleans_outputs", True)
+    # Only outputs inside the checkout are removed; a cluster's shared output_dir stays.
+    assert outputs.exists() is not outputs.is_relative_to(checkout)
 
 
-@pytest.mark.parametrize(("model_prefix", "precision", "framework", "require_power", "lane"), [
-    ("kimik3", "fp4", "vllm", "0", "agentx"),
-    ("glm5.2", "fp8", "dynamo-sglang", "1", "adapter"),
-    ("glm5.2", "fp8", "dynamo-sglang", "0", "adapter"),
+@pytest.mark.parametrize(("model_prefix", "precision", "framework", "model", "require_power", "lane"), [
+    ("kimik3", "fp4", "vllm", "moonshotai/Kimi-K3", "0", "agentx"),
+    ("glm5.2", "fp8", "dynamo-sglang", "zai-org/GLM-5.2-FP8", "1", "adapter"),
+    ("glm5.2", "fp8", "dynamo-sglang", "zai-org/GLM-5.2-FP8", "0", "adapter"),
 ])  # fmt: skip
 def test_power_lane_stages_provenance_and_validates_each_concurrency(
-    harness, model_prefix, precision, framework, require_power, lane
+    harness, model_prefix, precision, framework, model, require_power, lane
 ):
     adapter = harness.tmp / "results-python"
     adapter.write_text(
@@ -348,7 +341,7 @@ def test_power_lane_stages_provenance_and_validates_each_concurrency(
     adapter.chmod(0o755)
     env = lane_env(
         harness, "h200-dgxc", LANE_RECIPE + POWER_TELEMETRY,
-        MODEL_PREFIX=model_prefix, PRECISION=precision, FRAMEWORK=framework, MODEL=f"org/{model_prefix}",
+        MODEL_PREFIX=model_prefix, PRECISION=precision, FRAMEWORK=framework, MODEL=model,
         IS_AGENTIC="1", ISL="0", OSL="0", CONC_LIST="4 8", FAKE_RESULTS="agentic",
         REQUIRE_POWER=require_power, INFERENCEX_RESULTS_PYTHON=str(adapter),
     )  # fmt: skip
@@ -357,12 +350,13 @@ def test_power_lane_stages_provenance_and_validates_each_concurrency(
     workspace = harness.workspace
     commit = harness.env["FAKE_SRT_COMMIT"]
     assert (workspace / "power-producer-sha.txt").read_text() == commit + "\n"
-    exporter = srtslurm(workspace / "srt-slurm")["containers"]["dcgm-exporter"]
+    [checkout] = workspace.glob("srt-slurm-9001-*")
+    exporter = srtslurm(checkout)["containers"]["dcgm-exporter"]
     provenance = (workspace / "exporter-image.sha256").read_text()
     assert provenance.endswith(f"  {exporter}\n")
     assert (workspace / "LOGS/power/exporter-image.sha256").read_text() == provenance
     assert (workspace / "LOGS/power/power-producer-sha.txt").read_text() == commit + "\n"
-    staged = yaml.safe_load((workspace / "srt-slurm/recipes/test/lane.yaml").read_text())
+    staged = yaml.safe_load((checkout / "recipes/test/lane.yaml").read_text())
     assert staged["benchmark"]["concurrencies"] == [4, 8]
 
     runs = lines(harness.logs, "adapter")
@@ -382,7 +376,7 @@ def test_submission_failure_code_propagates_and_cancels_the_job(harness, shape):
         env = single_node_env(harness, "mi355x-amds", FAKE_SRTCTL_RC="7", FAKE_ACTIVE=str(active))
     else:
         env = lane_env(harness, "b300-dsxe", MODEL_PREFIX="dsr1", PRECISION="fp4", FRAMEWORK="dynamo-trt",
-                       MODEL="m", FAKE_SRTCTL_RC="7", FAKE_ACTIVE=str(active))  # fmt: skip
+                       MODEL="deepseek-r1-fp4", FAKE_SRTCTL_RC="7", FAKE_ACTIVE=str(active))  # fmt: skip
     result = launch(env, harness.config, harness.workspace)
     assert result.returncode == 7, result.stderr[-4000:]
     assert lines(harness.logs, "scancel") == ["42"]
@@ -399,7 +393,7 @@ def test_sigterm_while_streaming_cancels_the_job_and_exits_143(harness, shape):
         env = single_node_env(harness, "h200-cw", **extra)
     else:
         env = lane_env(harness, "b300-dsxe", MODEL_PREFIX="dsr1", PRECISION="fp4", FRAMEWORK="dynamo-trt",
-                       MODEL="m", **extra)  # fmt: skip
+                       MODEL="deepseek-r1-fp4", **extra)  # fmt: skip
     command = [sys.executable, "-m", "infx.launch", "--runner-config", str(harness.config), "run"]
     process = subprocess.Popen(
         command, cwd=harness.workspace, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
@@ -455,7 +449,7 @@ def test_tilert_native_lane_runs_on_its_fork_without_patches(harness):
     [call] = srtctl_calls(harness.logs)
     # The fork predates --json, --no-preflight and streamed benchmark output.
     assert not {"--json", "--no-preflight", "benchmark.stream_output=true"} & set(call["argv"])
-    config = srtslurm(harness.workspace / "srt-slurm")
+    config = srtslurm(Path(call["cwd"]))
     assert config["containers"]["tilert-decode"].endswith("/test_tag.sqsh")
     assert config["containers"]["tilert-prefill"].endswith("/prefill_tag.sqsh")
     assert config["default_mounts"][str(harness.workspace)] == "/infmax-workspace"
@@ -499,7 +493,7 @@ def test_setup_retries_only_after_discarding_a_truncated_archive(harness):
     )  # fmt: skip
     assert_ok(launch(env, harness.config, harness.workspace))
     assert len(lines(harness.logs, "make")) == 2
-    assert not list((harness.workspace / "srt-slurm/configs").glob("nats-server-*.deb"))
+    assert not list(harness.workspace.glob("srt-slurm-9001-*/configs/nats-server-*.deb"))
 
 
 def test_setup_failure_without_a_bad_archive_fails_once(harness):
@@ -508,7 +502,7 @@ def test_setup_failure_without_a_bad_archive_fails_once(harness):
         MODEL="deepseek-ai/DeepSeek-R1-0528", FAKE_MAKE_RC="2",
     )  # fmt: skip
     result = launch(env, harness.config, harness.workspace)
-    assert result.returncode == 1
+    assert result.returncode == 2  # make's own exit code
     assert len(lines(harness.logs, "make")) == 1
     assert srtctl_calls(harness.logs) == []
 
@@ -516,7 +510,7 @@ def test_setup_failure_without_a_bad_archive_fails_once(harness):
 @pytest.mark.parametrize(("cluster_id", "env", "message"), [
     ("h100-dgxc", dict(MODEL_PREFIX="dsr1", PRECISION="fp8", FRAMEWORK="dynamo-vllm"), "Unsupported framework"),
     ("b200-nscale", dict(MODEL_PREFIX="dsv4", PRECISION="fp4", FRAMEWORK="dynamo-trt"), "only dynamo-vllm"),
-    ("gb300-nv", dict(MODEL_PREFIX="llama", PRECISION="fp8", FRAMEWORK="dynamo-sglang"), "Unsupported model"),
+    ("gb300-nv", dict(MODEL_PREFIX="llama", PRECISION="fp8", FRAMEWORK="dynamo-sglang"), "stages no checkpoint"),
     ("h200-dgxc", dict(MODEL_PREFIX="dsr1", PRECISION="fp8", FRAMEWORK="dynamo-sglang", CONFIG_FILE=""),
      "CONFIG_FILE is not set"),
 ])  # fmt: skip

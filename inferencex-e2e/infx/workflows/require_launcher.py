@@ -1,7 +1,7 @@
 """Fail a GPU dispatch whose measured checkout predates ``python -m infx.launch``.
 
-Every GPU job runs the measured revision's own launcher, so a revision without one would
-take a runner only to fail at launch. Workflows run this from their own tooling checkout.
+GPU jobs run the measured revision's own launcher; without one they would hold a runner
+only to fail.
 """
 
 from __future__ import annotations

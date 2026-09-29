@@ -111,7 +111,6 @@ class _Snapshot:
     """Staging of multi-node logs, run once on the normal path or on exit."""
 
     run: SrtRun
-    lane: SrtLane
     job: Job
     fetched: Path
     power: PowerDecision
@@ -138,11 +137,10 @@ class _Snapshot:
                     shutil.copyfile(workspace / name, power_dir / name)
                 except OSError as error:
                     print(f"WARNING: could not stage {name}: {error}", file=sys.stderr)
-        if self.lane.copy_logs:
-            try:
-                _copy_tree_into(logs, workspace / "LOGS")
-            except OSError as error:
-                print(f"WARNING: could not copy {logs} to LOGS: {error}", file=sys.stderr)
+        try:
+            _copy_tree_into(logs, workspace / "LOGS")
+        except OSError as error:
+            print(f"WARNING: could not copy {logs} to LOGS: {error}", file=sys.stderr)
         bundle_server_logs(logs, workspace / MULTINODE_LOGS)
 
     def on_exit(self) -> None:
@@ -156,15 +154,15 @@ def collect(
 ) -> int:
     """Stream the job, then stage power, logs, results and evals; return the first failure."""
     backend, request = run.backend, run.request
-    snapshot = _Snapshot(run, lane, job, checkout.root / "fetched-outputs", power)
+    snapshot = _Snapshot(run, job, checkout.root / "fetched-outputs", power)
     run.life.callback(snapshot.on_exit)
     rc = 0
     try:
         backend.stream_logs(job)
     except BackendError:
         rc = 1
-    verified = backend.state(job) if lane.verify_job else None
-    if verified is not None and not verified.succeeded:
+    status = backend.state(job)
+    if not status.succeeded:
         rc = rc or 1
     print(f"Job {job.id} completed!\nCollecting results...", flush=True)
     logs = snapshot.logs()
@@ -172,7 +170,7 @@ def collect(
         print(f"ERROR: Logs directory not found at {logs}", file=sys.stderr)
         return rc or 1
     if not request.eval_only and (power.agentx or power.adapter):
-        power_rc = _stage_power(run, checkout, job, logs, infmax, power, verified)
+        power_rc = _stage_power(run, checkout, job, logs, infmax, power, status)
         rc = rc or power_rc
     snapshot.take()
     if request.eval_only:
@@ -195,9 +193,8 @@ def collect(
             rc = rc or 1
         if lane.write_eval_meta:
             rc = rc or _write_eval_meta(run)
-    if lane.cleanup_outputs:
-        # NFS silly-rename files would otherwise block the next job's checkout.
-        cleanup_outputs(checkout.root)
+    # NFS silly-rename files would otherwise block the next job's checkout.
+    cleanup_outputs(checkout.root)
     return rc
 
 
@@ -208,14 +205,14 @@ def _stage_power(
     logs: Path,
     infmax: Path,
     power: PowerDecision,
-    status: JobStatus | None,
+    status: JobStatus,
 ) -> int:
     """Stage the AgentX power audit inputs and validate each concurrency's power window."""
     request = run.request
     require(request, "CONC_LIST")
     if power.agentx:
         rc = collect_agentic_power_results(
-            status if status is not None else run.backend.state(job), job.id, logs, infmax,
+            status, job.id, logs, infmax,
             run.workspace, request.result_filename, checkout.commit, request.conc_list,
             results_python=request.inferencex_results_python,
         )  # fmt: skip

@@ -90,11 +90,15 @@ def test_final_status_maps_allocation_accounting(fake_bin, tmp_path, record, sta
     assert calls(log) == [["-X", "-n", "-P", "-j", "42", "--format=State,ExitCode"]]
 
 
-def test_final_status_waits_for_accounting_to_settle(fake_bin, tmp_path):
+@pytest.mark.parametrize("readings,state", [
+    (["COMPLETING|0:0", "COMPLETING|0:0", "COMPLETED|0:0"], JobState.SUCCEEDED),
+    (["RUNNING|0:0"] * 3, JobState.RUNNING),  # never settles: the last reading stands
+])
+def test_final_status_retries_unsettled_accounting_up_to_its_attempts(fake_bin, tmp_path, readings, state):
     counter = tmp_path / "count"
     fake_bin("sacct", f"n=$(cat {counter} 2>/dev/null || echo 0); echo $((n+1)) > {counter}\n"
-             "if [ \"$n\" -lt 2 ]; then echo 'COMPLETING|0:0'; else echo 'COMPLETED|0:0'; fi")
-    assert final_status(Job("42"), delay_s=0).succeeded
+             f"readings=({' '.join(repr(reading) for reading in readings)}); echo \"${{readings[$n]}}\"")
+    assert final_status(Job("42"), attempts=3, delay_s=0).state is state
     assert counter.read_text().strip() == "3"
 
 
@@ -106,11 +110,6 @@ def test_final_status_waits_for_accounting_to_settle(fake_bin, tmp_path):
 def test_final_status_falls_back_to_controller_without_sacct(fake_bin, controller, state):
     fake_bin("scontrol", f"echo '{controller}'")
     assert final_status(Job("42"), attempts=3, delay_s=0).state is state
-
-
-def test_final_status_returns_last_unsettled_reading_after_retries(fake_bin):
-    fake_bin("sacct", "echo 'RUNNING|0:0'")
-    assert final_status(Job("42"), attempts=3, delay_s=0).state is JobState.RUNNING
 
 
 def test_queue_state_reads_only_the_named_job(fake_bin):
@@ -149,7 +148,7 @@ def test_backend_cancel_waits_until_a_listed_job_leaves_the_queue(fake_bin, tmp_
     assert queue_state(Job("4242")) is None
 
 
-def test_workflow_cleanup_cancels_the_runners_plain_and_namespaced_jobs(fake_bin, tmp_path, monkeypatch):
+def test_workflow_cleanup_cancels_the_jobs_named_after_the_runner(fake_bin, tmp_path, monkeypatch):
     log = tmp_path / "scancel.log"
     fake_bin("scancel", recorder(log))
     fake_bin("squeue", "exit 0")
@@ -157,10 +156,7 @@ def test_workflow_cleanup_cancels_the_runners_plain_and_namespaced_jobs(fake_bin
 
     slurm.SlurmBackend.cleanup(None, "b300-dsxe_03")
 
-    assert calls(log) == [
-        ["--user=runner", "--name=b300-dsxe_03"],
-        ["--user=runner", "--name=inferencex-b300-dsxe_03"],
-    ]
+    assert calls(log) == [["--user=runner", "--name=b300-dsxe_03"]]
 
 
 def test_a_container_step_killed_by_a_signal_reports_the_shell_exit_code():

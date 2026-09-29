@@ -93,12 +93,9 @@ env:
   SCENARIO_SUBDIR: fixed_seq_len/
   HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
   HF_HUB_CACHE: '/mnt/hf_hub_cache/'
-  # Run the collector through the script driver (infx/launch/drivers/script.py).
-  # MODEL is the HF id. If its basename (e.g. DeepSeek-V4-Pro) is a models.entries
-  # key of the cluster in configs/runners.yaml, MODEL_PATH resolves to the
-  # pre-staged weights and only that root is mounted. The collector serves from
-  # MODEL_PATH (see SERVE_MODEL), so nothing is downloaded. Unstaged models resolve
-  # under models.download-root, and the collector downloads them there.
+  # The script driver (infx/launch/drivers/script.py) runs the collector. A MODEL whose
+  # basename is a models.entries key of the cluster serves from those pre-staged weights;
+  # others resolve under models.download-root, where the collector downloads them.
   MODEL: ${{ inputs.model }}
   MODEL_PREFIX: ${{ inputs.model-prefix }}
   PRECISION: fp4
@@ -109,7 +106,7 @@ env:
   EP_SIZE: '1'
   DP_ATTENTION: 'false'
   SPEC_DECODING: mtp
-  # Run the AL-matrix collector through the script driver instead of an SRT recipe.
+  # The AL-matrix collector, instead of an SRT recipe.
   BENCH_SCRIPT_OVERRIDE: benchmarks/single_node/speedbench/${{ inputs.model-prefix }}_fp4_b300_vllm.sh
   SALLOC_TIME_LIMIT: ${{ inputs.salloc-time }}
   # Matrix-collector tunables (propagated into the container via srun --export=ALL).
@@ -247,8 +244,7 @@ jobs:
 
       - name: Prepare launcher Python
         run: |
-          # infx.launch needs pydantic and PyYAML. The venv is never activated, so
-          # launched Slurm jobs inherit the runner's PATH and no VIRTUAL_ENV.
+          # Never activated, so launched Slurm jobs inherit the runner's PATH and no VIRTUAL_ENV.
           launch_venv="$RUNNER_TEMP/infx-launch-venv"
           uv venv --quiet --python 3.12 "$launch_venv"
           uv pip install --quiet --exclude-newer PT12H --python "$launch_venv/bin/python" \
@@ -258,9 +254,8 @@ jobs:
       - name: Launcher cleanup (pre-run)
         env:
           PYTHONPATH: ${{ github.workspace }}/.launch-tooling/inferencex-e2e
-        # Second pass after the shell cancel in Resource cleanup, which needs no Python: the
-        # workflow revision's launcher has the cluster's backend remove what this runner
-        # left behind (on Slurm also its namespaced inferencex-<runner> jobs).
+        # Second pass after the shell cancel, which needs no Python: the cluster's backend
+        # removes what this runner left behind.
         run: &launcher-cleanup |
           "$INFERENCEX_LAUNCH_PYTHON" -P -m infx.launch cleanup
 

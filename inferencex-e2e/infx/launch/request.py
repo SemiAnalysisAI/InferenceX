@@ -1,13 +1,9 @@
 """Typed views of the workflow environment a launch reads.
 
-``LaunchRequest.from_env`` parses only the variables the launcher reads; children still get
-the raw environment (``LaunchRequest.env``). An empty variable counts as unset. Each launch
-path parses again with its own model, whose required fields are what that path and its job
-scripts cannot run without; ``from_env`` names every missing or invalid one.
-
-Flags keep the values the job scripts compare against: ``IS_AGENTIC``, ``KEEP_LOGS`` and
-``INFX_BATCH_REENTRY`` are on only for ``1``; ``IS_MULTINODE``, ``RUN_EVAL`` and
-``EVAL_ONLY`` only for ``true``; ``REQUIRE_POWER`` for ``1|true|TRUE|yes|YES``.
+An empty variable counts as unset. Each launch path parses the environment again with its
+own model, whose required fields are the inputs that path and its job scripts need, so a
+launch fails before any work naming every missing or invalid one. Children still get the
+raw environment (``LaunchRequest.env``).
 """
 
 from __future__ import annotations
@@ -25,20 +21,18 @@ class RequestError(ValueError):
 
     @classmethod
     def missing(cls, *names: str) -> RequestError:
-        """The error for required variables that are unset or empty."""
         return cls(f"required environment variables are not set: {', '.join(names)}")
 
 
 def _equals(*truthy: str) -> BeforeValidator:
-    """Build a validator mapping an env string to True iff it is one of ``truthy``."""
     return BeforeValidator(lambda value: value if isinstance(value, bool) else value in truthy)
 
 
 def _int_list(value: Any) -> Any:
-    """Split a whitespace-separated list of integers."""
     return value.split() if isinstance(value, str) else value
 
 
+# Each flag is on only for the values the job scripts compare it against.
 OneFlag = Annotated[bool, _equals("1")]
 TrueFlag = Annotated[bool, _equals("true")]
 PowerFlag = Annotated[bool, _equals("1", "true", "TRUE", "yes", "YES")]
@@ -46,7 +40,7 @@ IntList = Annotated[list[int], BeforeValidator(_int_list)]
 
 
 def _describe(error: ValidationError) -> str:
-    """Name every missing or invalid variable; never echo values (the env holds secrets)."""
+    # Never echo input values: the environment holds secrets.
     missing: list[str] = []
     invalid: list[str] = []
     for detail in error.errors(include_url=False, include_input=False):
@@ -60,45 +54,32 @@ def _describe(error: ValidationError) -> str:
     return "; ".join([*([RequestError.missing(*missing).args[0]] if missing else []), *invalid])
 
 
-# Set to 1 in a launch re-entered inside a batch allocation (the srt driver's batch path).
+# Set to 1 in a launch the srt driver re-entered inside a batch allocation.
 BATCH_REENTRY_ENV = "INFX_BATCH_REENTRY"
 
 
 class LaunchRequest(BaseModel):
-    """One benchmark launch as described by the workflow environment.
-
-    These fields are what routing, the shared policy and the backends read; each path's
-    model adds its own.
-    """
+    """What routing, the shared policy and the backends read; each path's model adds its own."""
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True, frozen=True)
 
-    # Identity (the launch steps of benchmark-tmpl.yml and benchmark-multinode-tmpl.yml).
     runner_name: str = Field(alias="RUNNER_NAME")
     github_workspace: Path | None = Field(None, alias="GITHUB_WORKSPACE")
-
-    # Model, image and engine.
     model: str | None = Field(None, alias="MODEL")
     model_prefix: str | None = Field(None, alias="MODEL_PREFIX")
     image: str | None = Field(None, alias="IMAGE")
     framework: str | None = Field(None, alias="FRAMEWORK")
     precision: str | None = Field(None, alias="PRECISION")
     spec_decoding: str | None = Field(None, alias="SPEC_DECODING")
-
-    # Scenario selection.
     is_multinode: TrueFlag = Field(False, alias="IS_MULTINODE")
     is_agentic: OneFlag = Field(False, alias="IS_AGENTIC")
     config_file: str | None = Field(None, alias="CONFIG_FILE")
     eval_config_file: str | None = Field(None, alias="EVAL_CONFIG_FILE")
     bench_script_override: str | None = Field(None, alias="BENCH_SCRIPT_OVERRIDE")
     batch_reentry: OneFlag = Field(False, alias=BATCH_REENTRY_ENV)
-
-    # Workload shape and evals.
     conc: int | None = Field(None, alias="CONC")
     run_eval: TrueFlag = Field(False, alias="RUN_EVAL")
     eval_only: TrueFlag = Field(False, alias="EVAL_ONLY")
-
-    # Runtime limits.
     salloc_time_limit: int | None = Field(None, alias="SALLOC_TIME_LIMIT")
     enroot_import_time_limit: int | None = Field(None, alias="ENROOT_IMPORT_TIME_LIMIT")
 
@@ -117,7 +98,6 @@ class LaunchRequest(BaseModel):
 
     @property
     def workspace(self) -> Path:
-        """Return ``GITHUB_WORKSPACE``; the launch step always sets it."""
         if self.github_workspace is None:
             raise RequestError.missing("GITHUB_WORKSPACE")
         return self.github_workspace
@@ -136,14 +116,12 @@ class SrtRequest(LaunchRequest):
     is_agentic: OneFlag = Field(alias="IS_AGENTIC")
     run_eval: TrueFlag = Field(alias="RUN_EVAL")
     eval_only: TrueFlag = Field(alias="EVAL_ONLY")
-    # Keys the golden acceptance curve of speculative AgentX throughput runs.
     thinking_mode: str | None = Field(None, alias="THINKING_MODE")
     # Power lanes validate one power window per concurrency.
     conc_list: IntList = Field(default_factory=list, alias="CONC_LIST")
     require_power: PowerFlag = Field(False, alias="REQUIRE_POWER")
     inferencex_results_python: str | None = Field(None, alias="INFERENCEX_RESULTS_PYTHON")
-    # One concurrency, or a space-separated list for batched multi-node lm-eval
-    # (run-sweep.yml eval-all-concs), forwarded verbatim.
+    # Forwarded verbatim: batched multi-node lm-eval passes a space-separated list.
     eval_conc: str | None = Field(None, alias="EVAL_CONC")
 
     @model_validator(mode="after")
@@ -203,5 +181,5 @@ class AmdUtilsRequest(LegacyRequest):
     model: str = Field(alias="MODEL")
     # The Slurm account when the cluster sets none.
     user: str | None = Field(None, alias="USER")
-    # Keep the root-owned container log tree for local debugging.
+    # Keeps the root-owned container log tree for local debugging.
     keep_logs: OneFlag = Field(False, alias="KEEP_LOGS")

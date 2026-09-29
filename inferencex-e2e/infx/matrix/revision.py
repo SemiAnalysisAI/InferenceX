@@ -1,13 +1,9 @@
-"""Run one repository revision's own matrix tooling in an isolated subprocess.
+"""Run a repository revision's own matrix generator or planner in a subprocess.
 
-Another revision's configs are interpreted only by that revision's generator or planner, never
-by this checkout's code, so config-format changes cannot break consumers of older revisions.
-The tree is either an existing checkout or a snapshot extracted from Git objects.
-
-The tool imports only its own tree and inherits only ``INHERITED_ENV``, so a caller's
-credentials are not passed on. That does not isolate the tool from its caller: callers
-that hold credentials must run another revision's tools where none are held (klaud
-regenerates producer families in a workflow step without secrets).
+Only that revision's tooling interprets its configs, so config-format changes cannot break
+consumers of older revisions. The tool imports only its own tree and inherits only
+``INHERITED_ENV``. That keeps a caller's credentials out of its environment but does not
+isolate it: callers holding credentials must run other revisions' tools where none are held.
 """
 
 from __future__ import annotations
@@ -42,7 +38,7 @@ class Tool:
 GENERATOR = Tool("infx.matrix.generate", "utils/matrix_logic/generate_sweep_configs.py")
 PLANNER = Tool("infx.matrix.plan", "utils/process_changelog.py")
 TOOLS = {"generate": GENERATOR, "plan": PLANNER}
-# Newest first: revisions before the move to the project root kept configs under .github/.
+# Newest first: before the move to the project root, configs lived under .github/.
 CONFIG_DIRS = ("configs", ".github/configs")
 NESTED_PROJECT = "inferencex-e2e/"
 # Everything a snapshot's generator reads, relative to the project root.
@@ -52,14 +48,13 @@ SNAPSHOT_PATHS = (
     *CONFIG_DIRS,
     "benchmarks/multi_node/srt-slurm-recipes",
 )
-# The caller's variables a tool still needs: executables, git's configuration, the
-# locale, and temporary storage. Credentials are never among them.
+# Executables, git's configuration, the locale and temporary storage; never credentials.
 INHERITED_ENV = ("PATH", "HOME", "LANG", "TMPDIR")
 
 
 @dataclass(frozen=True)
 class Revision:
-    """One revision's project tree: the working directory, import root and data root of its tools."""
+    """One revision's project tree: its tools' working directory, import root and data root."""
 
     root: Path
 
@@ -87,11 +82,7 @@ class Revision:
         )
 
     def invocation(self, tool: Tool, args: Sequence[str]) -> tuple[list[str], dict[str, str]]:
-        """Return the command and environment that run this tree's own ``tool`` from ``root``.
-
-        Only this tree (and a legacy script's sibling modules) is importable, and the
-        environment is ``INHERITED_ENV`` plus the import path and the tree's root.
-        """
+        """The command and environment that run this tree's own ``tool`` from ``root``."""
         script = self.root / tool.legacy_script
         if (self.root / tool.module_path).is_file():
             entrypoint, imports = ["-m", tool.module], [self.root]
@@ -127,10 +118,10 @@ class Revision:
 
 @contextmanager
 def snapshot(ref: str) -> Iterator[Revision]:
-    """Extract ``ref``'s committed generation inputs; the tree is removed on exit or failure.
+    """Extract ``ref``'s committed generation inputs into a tree removed on exit.
 
-    Working-tree files never replace committed ones, blobs are read by the listed object IDs so
-    a moving ref cannot mix revisions, and symlinks become plain files inside the tree.
+    Blobs are read by the listed object IDs, so a moving ref cannot mix revisions; working-tree
+    files never replace committed ones, and symlinks become plain files.
     """
     repository = git_repository_root()
     listing = subprocess.run(
@@ -204,7 +195,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         command, env = revision.invocation(TOOLS[options.tool], options.args)
     except ValueError as error:
         parser.error(str(error))
-    # Streams the tool's output and preserves its exit status for the calling workflow.
+    # Streams the tool's output and keeps its exit status for the calling workflow.
     raise SystemExit(subprocess.run(command, cwd=revision.root, env=env, check=False).returncode)
 
 

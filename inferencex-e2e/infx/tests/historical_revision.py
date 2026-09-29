@@ -1,8 +1,7 @@
 """A committed revision whose own tooling reads the retired ``hardware:`` runner layout.
 
-Current code rejects that layout, so a consumer can only succeed with this history by running
-the revision's own generator or planner. The stubs stand in for that revision's tooling without
-freezing a past copy of the matrix algorithm; they validate against their own runner facts.
+Current code rejects that layout, so only the revision's own generator or planner can use this
+history. The stubs stand in for that tooling without freezing a past matrix algorithm.
 """
 
 import subprocess

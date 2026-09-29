@@ -1,10 +1,7 @@
-"""ScriptDriver: run one explicit script in a container on one node, on any backend.
+"""The script driver: one ``BENCH_SCRIPT_OVERRIDE`` in a container on one node, on any backend.
 
-Every single-node request with ``BENCH_SCRIPT_OVERRIDE`` (the SPEED-Bench collectors of
-``speedbench-al.yml``) runs here, on clusters of every scheduler. The checkout is at the
-container workspace (``/workspace`` unless the image needs ``/ix``). The result
-``$OUT_YAML``, which must lie under that workspace, and ``speedbench_results/`` come back
-into ``$GITHUB_WORKSPACE`` on every exit path.
+It runs the SPEED-Bench collectors of speedbench-al.yml. ``$OUT_YAML``, which must lie under
+the container workspace, and ``speedbench_results/`` come back on every exit path.
 """
 
 from __future__ import annotations
@@ -22,41 +19,28 @@ from infx.launch.request import RequestError, ScriptRequest
 if TYPE_CHECKING:
     from infx.clusters import Cluster
 
-CONTAINER_WORKSPACE = PurePosixPath("/workspace")
-# The volume holding the checkpoint appears here, so MODEL_PATH is <this>/<dir>.
 CONTAINER_MODELS = PurePosixPath("/models")
-# The hf-home volume appears here, the container's HF_HOME.
 CONTAINER_HF_HOME = PurePosixPath("/hf_hub_cache")
 HF_HOME_VOLUME = "hf-home"
-SERVER_PORT = "8888"
-# Where the collectors leave server logs and per-request detail, relative to the workspace.
 RESULTS_DIR = PurePosixPath("speedbench_results")
-# The collectors never read git metadata, so copy-in backends skip it.
-WORKSPACE_EXCLUDE = (".git",)
-
-# These images install sglang editable under /workspace, so putting the checkout there
-# masks the install and breaks ``import sglang``. Drop entries once the images stop
-# doing that.
+# These images install sglang editable under /workspace, where the checkout would mask the
+# install and break ``import sglang``, so it goes to /ix instead.
 EDITABLE_INSTALL_IMAGE_GLOBS = (
     "*deepseek-v4-blackwell*",
     "*deepseek-v4-bw-ultra*",
     "*deepseek-v4-b300*",
     "*sglang-b300*",
 )
-EDITABLE_INSTALL_WORKSPACE = PurePosixPath("/ix")
 
 
 def container_workspace(image: str) -> PurePosixPath:
-    """Where the checkout goes in the container: /ix for editable-install images."""
     if any(fnmatch.fnmatchcase(image, glob) for glob in EDITABLE_INSTALL_IMAGE_GLOBS):
-        return EDITABLE_INSTALL_WORKSPACE
-    return CONTAINER_WORKSPACE
+        return PurePosixPath("/ix")
+    return PurePosixPath("/workspace")
 
 
 @dataclass(frozen=True)
 class ModelLocation:
-    """The volume that holds the script's checkpoint, and the checkpoint's dir inside it."""
-
     volume: str
     dir: PurePosixPath
     node_local: bool
@@ -64,11 +48,7 @@ class ModelLocation:
 
 
 def resolve_model(cluster: Cluster, model: str) -> ModelLocation:
-    """Map an HF model id to its staged checkpoint, or to the cluster's download root.
-
-    Unstaged models resolve to ``<download-root>/<basename>``, and the script downloads
-    them there.
-    """
+    """The staged checkpoint of HF id ``model``, else ``<download-root>/<basename>``, which the script fills."""
     basename = model.rsplit("/", 1)[-1]
     entry = cluster.models.entries.get(basename)
     if entry is not None:
@@ -95,7 +75,6 @@ def script_outputs(request: ScriptRequest, workdir: PurePosixPath) -> tuple[Pure
 
 
 def run(launch: Launch) -> int:
-    """Run ``bash $BENCH_SCRIPT_OVERRIDE`` in the request's image; return the script's exit code."""
     request = ScriptRequest.from_env(launch.request.env)
     cluster, backend = launch.cluster, launch.backend
     time_limit = policy.salloc_time_limit(cluster.id, request)
@@ -118,22 +97,21 @@ def run(launch: Launch) -> int:
         workdir=workdir,
         env={
             **cluster.env,
-            "PORT": SERVER_PORT,
+            "PORT": "8888",
             "MODEL_PATH": str(model_path),
             "HF_HOME": str(CONTAINER_HF_HOME),
             "HF_HUB_CACHE": str(CONTAINER_HF_HOME / "hub"),
             "HF_XET_CACHE": str(CONTAINER_HF_HOME / "xet"),
         },
-        # Only the checkpoint's volume is mounted: mounting every root fails whenever an
-        # unused one is absent on the node.
+        # Mounting every model root would fail whenever an unused one is absent on the node.
         mounts=(
             Mount(model.volume, CONTAINER_MODELS, create=not model.staged),
             Mount(HF_HOME_VOLUME, CONTAINER_HF_HOME, create=True),
         ),
-        # A node-local checkpoint is only visible on the node that runs the script.
+        # A node-local checkpoint is visible only on the node that runs the script.
         required_paths=(model_path / "config.json",) if model.node_local else (),
         outputs=outputs,
-        exclude=WORKSPACE_EXCLUDE,
+        exclude=(".git",),  # the collectors never read git metadata
     )
     job = backend.run_container(container)
     launch.life.callback(backend.fetch_outputs, job, request.workspace)

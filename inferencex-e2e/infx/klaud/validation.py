@@ -78,11 +78,10 @@ PRODUCER_UNAVAILABLE = "Baseline producer family cannot be regenerated"
 
 
 class ProducerRegenerationError(VerificationError):
-    """A producer family could not be regenerated with the producer revision's own tooling.
+    """A producer revision's own tooling could not regenerate its family.
 
-    The message is the fixed public reason. ``stderr`` keeps what the failing fetch or tool
-    wrote (or why it could not run) for the operator; it is output of another revision's
-    code and never part of the public reason.
+    The message is the fixed public reason; ``stderr`` holds the failing tool's output for
+    the operator and never becomes public.
     """
 
     def __init__(self, stderr: str) -> None:
@@ -93,14 +92,13 @@ class ProducerRegenerationError(VerificationError):
 def producer_matrix(repository: str, head: str, family: str) -> dict:
     """Regenerate a published producer's family with the producer revision's own generator.
 
-    This checkout never parses the producer's configs, so later config-format changes cannot
-    break or reinterpret its baseline. It runs another revision's code, which inherits only
-    ``infx.matrix.revision.INHERITED_ENV``: call it only where no credentials are held, as
-    klaud's ``regenerate-producers`` step does.
+    This runs another revision's code, which inherits only ``INHERITED_ENV``: call it only
+    where no credentials are held, as the ``regenerate-producers`` step does.
     """
     from infx.matrix.plan import recipe_fingerprint
     from infx.matrix.revision import snapshot
 
+    # Validates the family and head before git sees them.
     OwnedCandidate(id="0" * 16 + "-" + "0" * 16, family=family, base=head)
     try:
         missing = subprocess.run(

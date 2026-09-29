@@ -214,7 +214,7 @@ flowchart LR
 
 ## 阶段 4：启动器与运行时执行
 
-[`infx.launch`](../infx/launch) 将逻辑作业元数据适配到某个物理集群。它一次性解析工作流环境（[`LaunchRequest`](../infx/launch/request.py)），解析集群记录，再由 [`launch_path`](../infx/launch/policy.py) 决定运行哪个驱动。记录中的 `scheduler` 指定运行它的后端（[`infx/launch/backends/`](../infx/launch/backends)，接口见 `base.py`）；只有启动或清理需要时才会导入后端，因此读取记录（只需要 [`infx/clusters/`](../infx/clusters) 中该调度器的设置模型）不会导入任何启动代码。需要特定调度器的驱动会声明这一点，不匹配时在开始任何工作前失败：
+[`infx.launch`](../infx/launch) 将逻辑作业元数据适配到某个物理集群。它解析工作流环境（[`LaunchRequest`](../infx/launch/request.py)）和集群记录，再由 [`launch_path`](../infx/launch/policy.py) 决定运行哪个驱动。记录中的 `scheduler` 指定后端（[`infx/launch/backends/`](../infx/launch/backends)，接口见 `base.py`）；后端在首次使用时才导入，因此读取记录不会导入任何启动代码。需要特定调度器的驱动在其他调度器的集群上会在开始任何工作前失败：
 
 | 驱动 | 运行内容 |
 | --- | --- |
@@ -233,7 +233,7 @@ flowchart LR
 
 [`benchmarks/`](../benchmarks) 下的基准测试脚本负责实际的引擎和客户端命令。大多数脚本会引入 [`benchmarks/benchmark_lib.sh`](../benchmarks/benchmark_lib.sh)，后者集中处理服务器就绪检查、服务基准测试客户端、GPU 监控、lm-eval、SWE-bench、AgentX 重放和稳定输出辅助函数。
 
-这一边界是有意设计的。主配置保持可移植且便于审查。机器路径、调度器细节和镜像机制保存在集群的 `clusters:` 记录中（[模式](../configs/CONFIGS.md#runners)）；依赖模型、框架、精度或方案的规则保存在具名表中，共享表位于 `infx/launch/policy.py`，srt-slurm 表位于 `infx/launch/drivers/srt/`（`lanes.py`、`models.py`、`power.py`），驱动绝不按集群 id 分支。框架标志保持靠近基准测试方案，以便针对相应引擎进行测试。收到 `SIGINT` 或 `SIGTERM` 时，启动器会先运行已注册的清理（例如取消分配），再以 130 或 143 退出；第一个非零的工作负载退出码优先于清理失败。
+这一边界是有意设计的：主配置保持可移植且便于审查，启动机制保存在集群记录中（见[下文](#启动机制保存在集群记录中)），框架标志保持靠近基准测试方案，以便针对相应引擎进行测试。收到 `SIGINT`、`SIGTERM` 或 `SIGHUP` 时，启动器会先运行已注册的清理（例如取消分配），再以 128 加信号编号退出；第一个非零的工作负载退出码优先于清理失败。
 
 不要将 YAML 被接受视为能够执行的证明。某个字段可能有效且已发出，但如果工作流适配器、启动器或基准测试脚本未使用它，该字段仍可能被忽略。
 
@@ -355,7 +355,7 @@ rows = build_rows(raw_eval, metadata, source="eval_job/results.json")
 
 ### 启动机制保存在集群记录中
 
-模型根目录、Slurm 分区、squash 缓存和挂载属于 `configs/runners.yaml` 中该集群的 `clusters:` 记录；与模型、框架或方案相关的启动规则属于 `infx/launch/policy.py` 和 `infx/launch/drivers/srt/` 中的具名表。框架服务器和客户端标志属于基准测试脚本或外部方案。驱动中不出现按集群的分支。
+模型根目录、Slurm 分区、squash 缓存和挂载属于 `configs/runners.yaml` 中该集群的 `clusters:` 记录（[模式](../configs/CONFIGS.md#runners)）；与模型、框架或方案相关的启动规则属于 `infx/launch/policy.py` 和 `infx/launch/drivers/srt/` 中的具名表。框架服务器和客户端标志属于基准测试脚本或外部方案。驱动中不出现按集群的分支。
 
 ### 工件 JSON 是仓库边界
 
@@ -381,7 +381,7 @@ GitHub 工件是传输和恢复输入，而不是实时仪表板数据库。Infe
 
 ### 为什么从具体运行器名称启动
 
-调度标签选择兼容的运行器池，但已分配的运行器标识具体物理机群实例。稳定前缀用于路由到正确的机群适配器，而完整名称仍可用于避免冲突并记录结果来源。
+调度标签选择兼容的运行器池，但已分配的运行器标识具体物理集群：它所在的 `cluster:<id>` 标签选中集群记录，而完整名称仍可用于作业命名、避免冲突并记录结果来源。
 
 ### 为什么既聚合又保留单作业工件
 

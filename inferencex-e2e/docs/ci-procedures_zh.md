@@ -321,11 +321,10 @@ CPU 索引获取 PyTorch 包，其他依赖从 PyPI 获取，因为 CPU 索引�
 仅依赖标准库的辅助程序继续使用 Runner 自带的 Python。基准容器及其框架
 环境仍由现有启动器管理；此次 CI 依赖迁移不会修改这些环境。
 
-自托管的启动步骤使用 `INFERENCEX_LAUNCH_PYTHON` 运行 `python -m infx.launch`。该解释器由
-“Prepare launcher Python”步骤在 `$RUNNER_TEMP` 中构建为未激活的 venv：先 `uv venv --python 3.12`，
-再以 `uv pip install --exclude-newer PT12H` 安装工具 checkout 中 `inferencex-e2e/pyproject.toml`
-的依赖。不使用 `uv run`，因为它会导出 `VIRTUAL_ENV` 并把自身环境加到 `PATH` 前面，
-两者都会泄漏进 `srun --export=ALL` 作业。该步骤复用 runner 的 uv 缓存，缓存已热时耗时远低于一秒。
+自托管的启动步骤使用 `INFERENCEX_LAUNCH_PYTHON` 运行 `python -m infx.launch`。它是
+“Prepare launcher Python”步骤在 `$RUNNER_TEMP` 中依据工具 checkout 的 `inferencex-e2e/pyproject.toml`
+（`uv pip install --exclude-newer PT12H`）构建的未激活 venv。不使用 `uv run`：它对 `VIRTUAL_ENV`
+和 `PATH` 的修改会泄漏进 `srun --export=ALL` 作业。
 
 ## 基于仓库角色的授权
 

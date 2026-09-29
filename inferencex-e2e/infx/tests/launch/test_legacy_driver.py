@@ -50,11 +50,10 @@ echo 4242
 
 
 def inventory(tmp_path: Path) -> dict:
-    """Runner config with records for the two clusters that have legacy lanes.
+    """Runner config for the two clusters with legacy lanes.
 
-    A launch checks every table row keyed by its cluster, and b200-nscale's rows name most
-    of its staged checkpoints, so b200-nscale is its sandboxed checked-in record with the
-    Slurm facts the TileRT script reads replaced by known values.
+    A launch checks the table rows keyed by its cluster against its record, so b200-nscale
+    is its sandboxed checked-in record with the Slurm facts the TileRT script reads replaced.
     """
     sandbox = tmp_path / "sandbox"
     sandbox.mkdir(exist_ok=True)
@@ -107,12 +106,7 @@ def fakes(tmp_path, monkeypatch):
     return calls
 
 
-# --------------------------------------------------------------------------
-# B200 TileRT disagg: exec of the direct script
-# --------------------------------------------------------------------------
-
-
-def tilert_env(workspace: Path) -> dict[str, str]:
+def tilert_env(workspace: Path, **overrides: str) -> dict[str, str]:
     """glm5.1-fp8-b200-tilert as the multi-node workflow exports it."""
     return {
         **os.environ,
@@ -130,79 +124,63 @@ def tilert_env(workspace: Path) -> dict[str, str]:
         # Master-config additional-settings; MODEL_PATH wins over the cluster default.
         "MODEL_PATH": "/hf/snapshots/glm-5.1",
         "TILERT_WEIGHTS_DIR": "/tilert-cache/glm5.1-fp8-8shard",
+        **overrides,
     }
 
 
-def run_cli(tmp_path: Path, env: dict[str, str], cwd: Path) -> subprocess.Popen:
-    """Start ``python -m infx.launch run`` against the fixture runner config."""
+def run_tilert(tmp_path: Path, workspace: Path, *, script: bool, **overrides: str):
+    """Run ``python -m infx.launch run``; the disagg script records what it was handed and exits 5."""
+    if script:
+        path = workspace / "benchmarks/multi_node/glm5.1_fp8_b200_tilert-disagg.sh"
+        path.parent.mkdir(parents=True)
+        path.write_text(
+            "#!/usr/bin/env bash\n"
+            'printf "%s\\n" "$$" "$SLURM_PARTITION" "$SLURM_ACCOUNT" "$MODEL_PATH" '
+            '"$TILERT_WEIGHTS_DIR" "$B200_SQUASH_DIR" > "$GITHUB_WORKSPACE/seen.txt"\n'
+            "exit 5\n"
+        )
+    workspace.mkdir(exist_ok=True)
     config = tmp_path / "runners.yaml"
     config.write_text(yaml.safe_dump(inventory(tmp_path)))
-    return subprocess.Popen(
+    launcher = subprocess.Popen(
         [sys.executable, "-m", "infx.launch", "--runner-config", str(config), "run"],
-        env=env, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-    )
-
-
-def disagg_script(workspace: Path) -> Path:
-    """The TileRT disagg script of the glm5.1 point; it records what it was handed and exits 5."""
-    script = workspace / "benchmarks/multi_node/glm5.1_fp8_b200_tilert-disagg.sh"
-    script.parent.mkdir(parents=True)
-    script.write_text(
-        "#!/usr/bin/env bash\n"
-        'printf "%s\\n" "$$" "$SLURM_PARTITION" "$SLURM_ACCOUNT" "$MODEL_PATH" '
-        '"$TILERT_WEIGHTS_DIR" "$B200_SQUASH_DIR" > "$GITHUB_WORKSPACE/seen.txt"\n'
-        "exit 5\n"
-    )
-    return script
+        env=tilert_env(workspace, **overrides), cwd=workspace,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+    )  # fmt: skip
+    out, err = launcher.communicate(timeout=60)
+    return launcher, out + err
 
 
 def test_tilert_lane_replaces_the_launcher_with_the_disagg_script(tmp_path):
     workspace = tmp_path / "workspace"
-    disagg_script(workspace)
 
-    launcher = run_cli(tmp_path, tilert_env(workspace), workspace)
-    out, err = launcher.communicate(timeout=60)
+    launcher, output = run_tilert(tmp_path, workspace, script=True)
 
     # exec: the script runs as the launcher process and its exit code is the job's.
-    assert launcher.returncode == 5, out + err
+    assert launcher.returncode == 5, output
     assert (workspace / "seen.txt").read_text().splitlines() == [
         str(launcher.pid), "tilert-partition", "tilert-account", "/hf/snapshots/glm-5.1",
         "/tilert-cache/glm5.1-fp8-8shard", str(tmp_path / "squash"),
     ]
 
 
-def test_tilert_lane_requires_its_weights_dir(tmp_path):
-    workspace = tmp_path / "workspace"
-    disagg_script(workspace)
-
+@pytest.mark.parametrize(("script", "overrides", "message"), [
     # The master config names the weights cache; there is no default to fall back to.
-    launcher = run_cli(tmp_path, {**tilert_env(workspace), "TILERT_WEIGHTS_DIR": ""}, workspace)
-    out, err = launcher.communicate(timeout=60)
-
-    assert launcher.returncode == 1, out + err
-    assert "TILERT_WEIGHTS_DIR" in err
-    assert not (workspace / "seen.txt").exists()
-
-
-def test_tilert_lane_fails_when_the_disagg_script_is_missing(tmp_path):
+    (True, {"TILERT_WEIGHTS_DIR": ""}, "TILERT_WEIGHTS_DIR"),
+    (False, {}, "tilert disagg script not found"),
+])  # fmt: skip
+def test_tilert_lane_fails_without_its_weights_dir_or_script(tmp_path, script, overrides, message):
     workspace = tmp_path / "workspace"
-    workspace.mkdir()
 
-    launcher = run_cli(tmp_path, tilert_env(workspace), workspace)
-    out, err = launcher.communicate(timeout=60)
+    launcher, output = run_tilert(tmp_path, workspace, script=script, **overrides)
 
-    assert launcher.returncode == 1, out + err
-    assert "tilert disagg script not found" in out
-
-
-# --------------------------------------------------------------------------
-# MI355X amd_utils AgentX
-# --------------------------------------------------------------------------
+    assert launcher.returncode == 1, output
+    assert message in output
+    assert not (workspace / "seen.txt").exists()
 
 
 @pytest.fixture
 def amd_workspace(tmp_path):
-    """Measured checkout with a fake amd_utils AgentX recipe."""
     workspace = tmp_path / "workspace"
     recipe = workspace / AMD_RECIPE
     recipe.parent.mkdir(parents=True)
@@ -269,23 +247,19 @@ def test_amd_utils_lane_follows_the_job_and_stages_its_artifacts(
     assert not any(call[0] == "scancel" for call in fakes())
 
 
-def test_amd_utils_lane_without_a_job_id_fails_and_still_cleans_up(
-    fakes, tmp_path, amd_workspace, monkeypatch
+@pytest.mark.parametrize(("overrides", "submitted"), [
+    ({"NO_JOB_ID": "1"}, True),
+    ({"NO_JOB_LOG": "1"}, True),  # the job ended before writing its log
+    ({"IS_AGENTIC": "0"}, False),  # fixed-sequence points run through srt-slurm recipes
+], ids=["no-job-id", "no-job-log", "fixed-sequence"])  # fmt: skip
+def test_a_failed_amd_utils_launch_still_removes_the_log_tree(
+    fakes, tmp_path, amd_workspace, monkeypatch, overrides, submitted
 ):
-    assert amd_launch(tmp_path, amd_workspace, monkeypatch, NO_JOB_ID="1") == 1
+    assert amd_launch(tmp_path, amd_workspace, monkeypatch, **overrides) == 1
 
+    assert (amd_workspace / "submitted.env").exists() == submitted
     assert not (amd_workspace / "benchmark_logs").exists()
     assert not any(call[0] == "scancel" for call in fakes())
-
-
-def test_amd_utils_lane_fails_when_the_job_ends_before_its_log(
-    fakes, tmp_path, amd_workspace, monkeypatch
-):
-    assert amd_launch(tmp_path, amd_workspace, monkeypatch, NO_JOB_LOG="1") == 1
-
-    assert ["scontrol", "show", "job", "4242"] in fakes()
-    assert not any(call[0] == "scancel" for call in fakes())
-    assert not (amd_workspace / "benchmark_logs").exists()
 
 
 def test_an_inherited_log_dir_cannot_point_the_cleanup_at_the_checkout(
@@ -312,9 +286,3 @@ def test_amd_utils_lane_keeps_the_log_tree_with_keep_logs(
     logs = amd_workspace / "benchmark_logs"
     assert (logs / "slurm_job-4242.out").exists()
     assert not (amd_workspace / "benchmark_artifacts").exists()
-
-
-def test_amd_utils_lane_rejects_fixed_sequence_points(fakes, tmp_path, amd_workspace, monkeypatch):
-    assert amd_launch(tmp_path, amd_workspace, monkeypatch, IS_AGENTIC="0") == 1
-
-    assert not (amd_workspace / "submitted.env").exists()

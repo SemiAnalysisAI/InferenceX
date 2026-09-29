@@ -332,12 +332,10 @@ containers and their framework environments remain managed by their existing
 launchers; this CI dependency migration does not change those environments.
 
 Self-hosted launch steps run `python -m infx.launch` with `INFERENCEX_LAUNCH_PYTHON`,
-which the "Prepare launcher Python" step builds as an unactivated venv in
-`$RUNNER_TEMP`: `uv venv --python 3.12`, then `uv pip install --exclude-newer PT12H`
-of the tooling checkout's `inferencex-e2e/pyproject.toml` dependencies. It is not
-`uv run` because that exports `VIRTUAL_ENV` and prepends its environment to `PATH`, and
-both would leak into `srun --export=ALL` jobs. The step reuses the runner's uv cache,
-so a warm runner spends well under a second on it.
+an unactivated venv the "Prepare launcher Python" step builds in `$RUNNER_TEMP` from
+the tooling checkout's `inferencex-e2e/pyproject.toml`
+(`uv pip install --exclude-newer PT12H`). It is not `uv run`: its `VIRTUAL_ENV` and
+`PATH` changes would leak into `srun --export=ALL` jobs.
 
 ## Repository-role authorization
 

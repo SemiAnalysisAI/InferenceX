@@ -214,7 +214,7 @@ The first cleanup step, before checkout, cancels the runner's Slurm jobs with pl
 
 ## Stage 4: launcher and runtime execution
 
-[`infx.launch`](../infx/launch) adapts logical job metadata to one physical cluster. It parses the workflow environment once ([`LaunchRequest`](../infx/launch/request.py)), resolves the cluster record, and asks [`launch_path`](../infx/launch/policy.py) which driver to run. The record's `scheduler` names the backend ([`infx/launch/backends/`](../infx/launch/backends), interface in `base.py`) that runs it; backends are imported only when a launch or cleanup needs one, so reading records (which needs only the scheduler's settings model in [`infx/clusters/`](../infx/clusters)) imports no launch code. A driver that needs a particular scheduler declares it, and a mismatch fails before any work:
+[`infx.launch`](../infx/launch) adapts logical job metadata to one physical cluster. It parses the workflow environment ([`LaunchRequest`](../infx/launch/request.py)), resolves the cluster record, and asks [`launch_path`](../infx/launch/policy.py) which driver runs. The record's `scheduler` names the backend ([`infx/launch/backends/`](../infx/launch/backends), interface in `base.py`); backends are imported on first use, so reading records imports no launch code. A driver that needs a particular scheduler fails before any work on a cluster with another:
 
 | Driver | Runs |
 | --- | --- |
@@ -233,7 +233,7 @@ Depending on the driver, the launcher may:
 
 Benchmark scripts under [`benchmarks/`](../benchmarks) own the actual engine and client commands. Most source [`benchmarks/benchmark_lib.sh`](../benchmarks/benchmark_lib.sh), which centralizes server readiness, the serving benchmark client, GPU monitoring, lm-eval, SWE-bench, AgentX replay, and stable output helpers.
 
-The boundary is intentional. A master config remains portable and reviewable. Machine paths, scheduler details, and image mechanics live in the cluster's `clusters:` record ([schema](../configs/CONFIGS.md#runners)). Rules that depend on model, framework, precision, or recipe live in named tables, shared ones in `infx/launch/policy.py` and srt-slurm ones in `infx/launch/drivers/srt/` (`lanes.py`, `models.py`, `power.py`), and drivers never branch on a cluster id. Framework flags stay close to the benchmark recipe, where they can be tested against that engine. On `SIGINT` or `SIGTERM` the launcher runs its registered cleanups, such as cancelling the allocation, and exits 130 or 143. The first nonzero workload exit code wins over cleanup failures.
+The boundary is intentional: a master config stays portable and reviewable, launch mechanics stay in cluster records (see [below](#launch-mechanics-stay-in-cluster-records)), and framework flags stay close to the benchmark recipe, where they can be tested against that engine. On `SIGINT`, `SIGTERM` or `SIGHUP` the launcher runs its registered cleanups, such as cancelling the allocation, and exits with 128 plus the signal number. The first nonzero workload exit code wins over cleanup failures.
 
 Do not use YAML acceptance as proof of execution. A field can be valid and emitted yet still be ignored because a workflow adapter, launcher, or benchmark script does not consume it.
 
@@ -355,7 +355,7 @@ The `full-sweep` and `test-config` commands share fixed-sequence and AgentX row 
 
 ### Launch mechanics stay in cluster records
 
-Model roots, Slurm partitions, squash caches, and mounts belong in the cluster's `clusters:` record in `configs/runners.yaml`. Model-, framework-, or recipe-specific launch rules belong in the named tables of `infx/launch/policy.py` and `infx/launch/drivers/srt/`. Framework server and client flags belong in benchmark scripts or external recipes. Drivers stay free of per-cluster branches.
+Model roots, Slurm partitions, squash caches, and mounts belong in the cluster's `clusters:` record in `configs/runners.yaml` ([schema](../configs/CONFIGS.md#runners)). Model-, framework-, or recipe-specific launch rules belong in the named tables of `infx/launch/policy.py` and `infx/launch/drivers/srt/`. Framework server and client flags belong in benchmark scripts or external recipes. Drivers stay free of per-cluster branches.
 
 ### Artifact JSON is the repository boundary
 
@@ -381,7 +381,7 @@ The shapes differ. Multi-node rows carry prefill and decode workers. Fixed-seque
 
 ### Why launch from the concrete runner name
 
-The scheduling label selects a compatible pool, but the assigned runner identifies the physical fleet instance. The stable prefix routes to the correct fleet adapter while the full name remains available for collision avoidance and result provenance.
+The scheduling label selects a compatible pool, but the assigned runner identifies the physical cluster: its `cluster:<id>` label selects the cluster record, and the full name remains available for job names, collision avoidance and result provenance.
 
 ### Why aggregate and retain per-job artifacts
 

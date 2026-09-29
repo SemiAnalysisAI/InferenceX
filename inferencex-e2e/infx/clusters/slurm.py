@@ -1,14 +1,11 @@
 """The ``slurm:`` sub-record of a ``scheduler: slurm`` cluster.
 
-It holds the scheduler facts every submission uses, the cluster's volumes as host
-paths (Slurm jobs see a volume at the same path as the launching host), the Pyxis
-squash cache (absent: jobs start from registry references and Pyxis imports them),
-and the cluster's srt-slurm profile, which only exists on Slurm.
+Slurm jobs see each volume at the launching host's path. Without a Pyxis squash cache, jobs
+start from registry references and Pyxis imports them.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Annotated, Any, Literal, Self
@@ -40,16 +37,14 @@ def _long_option(arg: str) -> str:
     return arg
 
 
-# One Slurm command-line option, e.g. ``--container-remap-root``.
 LongOption = Annotated[str, AfterValidator(_long_option)]
 
 # Squash file names: ``underscore`` turns ``/ : @ #`` into ``_``, ``plus`` into ``+``;
 # ``plus-strip-nvcr`` also drops a leading ``nvcr.io/`` (older dynamo-trt squashes).
 KeyStyle = Literal["underscore", "plus", "plus-strip-nvcr"]
 # ``submit-host`` imports on the launching host; ``compute`` once on one compute node;
-# ``all-nodes`` on every node of the job (node-local storage); ``pre-staged`` only
-# validates files an operator staged; ``unchecked`` hands jobs the squash path without
-# validating or importing anything on this host (operators keep those files staged).
+# ``all-nodes`` on every node of the job; ``pre-staged`` only validates what an operator
+# staged; ``unchecked`` hands jobs the squash path untouched (operators keep it staged).
 ImportMode = Literal["submit-host", "compute", "all-nodes", "pre-staged", "unchecked"]
 # ``beside-squash`` locks ``<squash>.lock``; ``locks-dir`` locks
 # ``<dir>/.locks/<key>.lock``, the lock benchmarks/multi_node/tilert_utils/submit.sh
@@ -114,8 +109,7 @@ class SquashCache(Record):
     # inside the job; where true, the image is imported before submission.
     single_node_import: bool = Field(default=False, alias="single-node-import")
     multi_node_import: bool = Field(default=True, alias="multi-node-import")
-    # Multi-node only: frameworks (and their model prefixes) whose squashes live in
-    # another directory, under another naming, or get there another way.
+    # Multi-node only: frameworks (and model prefixes) whose squashes differ from the cache's.
     framework_dirs: dict[str, FrameworkLocation] = Field(
         default_factory=dict, alias="framework-dirs"
     )
@@ -186,6 +180,14 @@ class SrtSlurmSettings(Record):
     )
     # Minutes a single-node job gets instead of SALLOC_TIME_LIMIT.
     single_node_time_limit: int | None = Field(default=None, alias="single-node-time-limit", gt=0)
+    # What a single-node recipe's hf:<MODEL> serves: MODEL's staged checkpoint, or the Hub.
+    single_node_models: Literal["staged", "hub"] = Field(
+        default="staged", alias="single-node-models"
+    )
+    # False where the submit host cannot stat model storage, which srtctl's preflight checks.
+    preflight: bool = True
+    # Each SGLang role's dist-timeout, for model loads that outlast gloo's 600 s default.
+    dist_timeout_s: int | None = Field(default=None, alias="dist-timeout-s", gt=0)
     # None leaves srtctl's default (both directives on).
     gpus_per_node_directive: bool | None = Field(default=None, alias="gpus-per-node-directive")
     segment_directive: bool | None = Field(default=None, alias="segment-directive")
@@ -193,8 +195,6 @@ class SrtSlurmSettings(Record):
     # frontend nginx (none: no nginx is staged).
     container_aliases: tuple[str, ...] = Field(default=(), alias="container-aliases")
     nginx_aliases: tuple[str, ...] = Field(default=(), alias="nginx-aliases")
-    # Static recipe model aliases -> ``models.entries`` keys.
-    model_aliases: dict[str, str] = Field(default_factory=dict, alias="model-aliases")
     host_setup: HostSetup | None = Field(default=None, alias="host-setup")
     # Environment the srt-slurm launch (srtctl and the jobs it submits) runs with.
     env: dict[str, str] = Field(default_factory=dict)
@@ -262,11 +262,6 @@ class SlurmSettings(SchedulerSettings):
         """Host path of volume ``volume``, or None when the cluster declares no such volume."""
         declared = self.volumes.get(volume)
         return None if declared is None else declared.path
-
-    def model_references(self) -> Mapping[str, str]:
-        """srt-slurm model aliases name ``models.entries`` keys."""
-        aliases = self.srt_slurm.model_aliases if self.srt_slurm is not None else {}
-        return {f"srt-slurm model alias {alias!r}": key for alias, key in aliases.items()}
 
 
 def slurm_settings(cluster: Cluster) -> SlurmSettings:

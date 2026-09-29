@@ -273,7 +273,8 @@ labels:
     - mi355x-amds_07
     - mi355x-amds_08
     - mi355x-amds_09
-# Keyed by cluster:<id> (fields: CONFIGS.md); a "<dir>@<root>" entry is a checkpoint's second copy.
+# Keyed by cluster:<id> (fields: CONFIGS.md). models.entries are keyed by MODEL's basename;
+# "<basename>@<root>" names another copy, and jobs read a node-local copy first.
 clusters:
   h100-cw:
     gpus-per-node: 8
@@ -299,7 +300,7 @@ clusters:
     arch: x86_64
     models:
       entries:
-        dsr1-fp8: {root: lustre-models, dir: dsr1-fp8}
+        DeepSeek-R1-0528: {root: lustre-models, dir: dsr1-fp8}
     scheduler: slurm
     slurm:
       partition: hpc-gpu-1
@@ -322,6 +323,8 @@ clusters:
       srt-slurm:
         network-interface: ""
         default-time-limit: "6:00:00"
+        # Model loads here outlast the 600 s TCPStore default of SGLang's torch-distributed.
+        dist-timeout-s: 1800
         gpus-per-node-directive: true
         segment-directive: false
         container-aliases: [dynamo-trtllm, dynamo-sglang, latest]
@@ -355,7 +358,8 @@ clusters:
       entries:
         DeepSeek-R1-0528: {root: models, dir: DeepSeek-R1-0528}
         GLM-5.2-FP8: {root: models, dir: GLM-5.2-FP8}
-        DeepSeek-V4-Pro: {root: hf-hub-cache, dir: DeepSeek-V4-Pro}
+        # The 0813 checkpoint, staged under the base model's name.
+        DeepSeek-V4-Pro-0813: {root: hf-hub-cache, dir: DeepSeek-V4-Pro}
         Kimi-K3: {root: hf-hub-cache, dir: Kimi-K3}
         Qwen3.5-397B-A17B-FP8: {root: hf-hub-cache, dir: Qwen3.5-397B-A17B-FP8}
     scheduler: slurm
@@ -389,6 +393,8 @@ clusters:
           dcgm-exporter: {dir: /data/gharunners/containers}
       srt-slurm:
         network-interface: ""
+        # Single-node recipes were validated against the Hub snapshots.
+        single-node-models: hub
         gpus-per-node-directive: true
         segment-directive: false
         container-aliases: [dynamo-trtllm, dynamo-sglang, dynamo-vllm, latest]
@@ -436,6 +442,9 @@ clusters:
       entries:
         DeepSeek-R1-0528: {root: scratch, dir: DeepSeek-R1-0528}
         DeepSeek-R1-0528-NVFP4-v2: {root: scratch, dir: DeepSeek-R1-0528-NVFP4-v2}
+        # dsr1 FP4 configs name MODEL nvidia/DeepSeek-R1-0528-FP4-V2 or its served name.
+        DeepSeek-R1-0528-FP4-V2: {root: scratch, dir: DeepSeek-R1-0528-NVFP4-v2}
+        deepseek-r1-fp4: {root: scratch, dir: DeepSeek-R1-0528-NVFP4-v2}
         DeepSeek-V4-Pro: {root: scratch, dir: DeepSeek-V4-Pro}
         DeepSeek-V4-Pro-0813: {root: scratch, dir: DeepSeek-V4-Pro-0813}
         DeepSeek-V4-Pro-NVFP4: {root: scratch, dir: DeepSeek-V4-Pro-NVFP4}
@@ -446,7 +455,6 @@ clusters:
         MiniMax-M3-MXFP8: {root: scratch, dir: MiniMax-M3-MXFP8}
         MiniMax-M3-NVFP4: {root: scratch, dir: MiniMax-M3-NVFP4}
         Qwen3.5-397B-A17B-FP8: {root: scratch, dir: Qwen3.5-397B-A17B-FP8}
-        # SGLang recipes use V2; TRT configs still declare plain NVFP4.
         Qwen3.5-397B-A17B-NVFP4: {root: scratch, dir: Qwen3.5-397B-A17B-NVFP4}
         Qwen3.5-397B-A17B-NVFP4-V2: {root: scratch, dir: Qwen3.5-397B-A17B-NVFP4-V2}
         Qwen3.8-Flash-Next-NVFP4: {root: scratch, dir: Qwen3.8-Flash-Next-NVFP4}
@@ -483,12 +491,14 @@ clusters:
       entries:
         DeepSeek-R1-0528: {root: scratch, dir: DeepSeek-R1-0528}
         DeepSeek-R1-0528-NVFP4-v2: {root: scratch, dir: DeepSeek-R1-0528-NVFP4-v2}
-        # HF basename of nvidia/DeepSeek-R1-0528-FP4-V2.
+        # dsr1 FP4 configs name MODEL nvidia/DeepSeek-R1-0528-FP4-V2 or its served name.
         DeepSeek-R1-0528-FP4-V2: {root: scratch, dir: DeepSeek-R1-0528-NVFP4-v2}
+        deepseek-r1-fp4: {root: scratch, dir: DeepSeek-R1-0528-NVFP4-v2}
         DeepSeek-V4-Pro: {root: scratch, dir: DeepSeek-V4-Pro}
-        # Also staged on NVMe (@scratch); only native single-node vLLM reads that copy.
+        # Also staged on NVMe (@scratch), but not on every node.
         DeepSeek-V4-Pro-0813: {root: data-models, dir: DeepSeek-V4-Pro-0813}
         DeepSeek-V4-Pro-0813@scratch: {root: scratch, dir: DeepSeek-V4-Pro-0813}
+        DeepSeek-V4.1-Flash: {root: data-models, dir: DeepSeek-V4.1-Flash}
         DeepSeek-V4-Pro-NVFP4: {root: scratch, dir: DeepSeek-V4-Pro-NVFP4}
         GLM-5.2-FP8: {root: scratch, dir: GLM-5.2-FP8}
         GLM-5.2-NVFP4: {root: scratch, dir: GLM-5.2-NVFP4}
@@ -528,25 +538,6 @@ clusters:
         network-interface: ""
         container-aliases: [dynamo-trtllm, dynamo-sglang, dynamo-vllm]
         nginx-aliases: [nginx-sqsh]
-        model-aliases:
-          dsr1: DeepSeek-R1-0528-NVFP4-v2
-          dsr1-fp8: DeepSeek-R1-0528
-          deepseek-v4-pro: DeepSeek-V4-Pro
-          deepseek-ai/DeepSeek-V4-Pro: DeepSeek-V4-Pro
-          glm-5.2-fp4: GLM-5.2-NVFP4
-          glm-5.2-fp8: GLM-5.2-FP8
-          nvidia/GLM-5.2-NVFP4: GLM-5.2-NVFP4
-          zai-org/GLM-5.2-FP8: GLM-5.2-FP8
-          kimi-k3: Kimi-K3
-          kimik3: Kimi-K3
-          moonshotai/Kimi-K3: Kimi-K3
-          minimax-m3-nvfp4: MiniMax-M3-NVFP4
-          nvidia/MiniMax-M3-NVFP4: MiniMax-M3-NVFP4
-          minimax-m3-mxfp8: MiniMax-M3-MXFP8
-          MiniMaxAI/MiniMax-M3-MXFP8: MiniMax-M3-MXFP8
-          qwen3.5-fp4: Qwen3.5-397B-A17B-NVFP4-V2
-          qwen3.5-fp8: Qwen3.5-397B-A17B-FP8
-          nvidia/Qwen3.5-397B-A17B-NVFP4-V2: Qwen3.5-397B-A17B-NVFP4-V2
   gb200-nv:
     gpus-per-node: 4
     available-cpu-dram-mib: 860_160
@@ -555,8 +546,6 @@ clusters:
       entries:
         deepseek-r1-0528: {root: lustre-models, dir: deepseek-r1-0528}
         deepseek-r1-0528-fp4-v2: {root: lustre-models, dir: deepseek-r1-0528-fp4-v2}
-        # The lowercase Lustre directory is the FP8 checkpoint.
-        deepseek-v4-pro: {root: lustre-models, dir: deepseek-v4-pro}
         DeepSeek-V4-Pro: {root: lustre-models, dir: DeepSeek-V4-Pro}
         MiniMax-M3-MXFP8: {root: lustre-models, dir: MiniMax-M3-MXFP8}
         MiniMax-M3-NVFP4: {root: lustre-models, dir: MiniMax-M3-NVFP4}
@@ -588,6 +577,8 @@ clusters:
       srt-slurm:
         network-interface: ""
         default-time-limit: "6:00:00"
+        # The runner pod cannot stat the model Lustre paths or the compute nodes' NVMe.
+        preflight: false
         # The single NVL72 rack needs no contiguous segment placement.
         segment-directive: false
         container-aliases: [dynamo-trtllm, dynamo-sglang]
@@ -610,6 +601,8 @@ clusters:
         MiniMax-M3-NVFP4: {root: scratch, dir: MiniMax-M3-NVFP4}
         Qwen3.5-397B-A17B-FP8: {root: scratch, dir: Qwen3.5-397B-A17B-FP8}
         Qwen3.5-397B-A17B-NVFP4-V2: {root: scratch, dir: Qwen3.5-397B-A17B-NVFP4-V2}
+        # Plain-NVFP4 configs are served the V2 export here.
+        Qwen3.5-397B-A17B-NVFP4: {root: scratch, dir: Qwen3.5-397B-A17B-NVFP4-V2}
     scheduler: slurm
     slurm:
       partition: batch_1
@@ -685,10 +678,9 @@ clusters:
       cpus-per-task: 256
       srun-args: [--container-remap-root, --container-writable]
       volumes:
-        # /raid is treated as node-local, as for the squash cache below.
+        # /raid's locality is undocumented, so it counts as node-local, as on MI300X.
         hf-hub-cache: {path: /raid/hf-hub-cache, visibility: node-local}
       squash:
-        # Locality of /raid/squash is undocumented; treated as node-local like MI300X's /raid.
         dir: /raid/squash
         visibility: node-local
         import: compute
@@ -738,12 +730,11 @@ clusters:
       srt-slurm:
         network-interface: eno0
         single-node-time-limit: 500
+        # The staged Qwen copy's config is patched for SGLang; single-node recipes use the Hub's.
+        single-node-models: hub
         gpus-per-node-directive: true
         segment-directive: false
         outputs: /it-share/gharunners2/srt-slurm/outputs
-        model-aliases:
-          DeepSeek-V4-Pro-0813: DeepSeek-V4-Pro-0813
-          Qwen3.5-397B-A17B-FP8: Qwen3.5-397B-A17B-FP8
         host-setup:
           script: runners/srt-slurm/hooks/mi355x-amds/setup.sh
           env:

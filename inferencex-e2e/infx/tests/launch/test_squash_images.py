@@ -17,7 +17,6 @@ from infx.launch.backends.slurm.squash import (
     ImageError,
     enroot_uri,
     ensure_image,
-    registry_reference,
     squash_path,
 )
 from infx.launch.lifecycle import Lifecycle
@@ -146,10 +145,16 @@ def test_import_producing_invalid_squash_fails_without_replacing(tools, tmp_path
     assert sorted(p.name for p in (tmp_path / "squash").iterdir()) == [f"{SQUASH_NAME}.lock"]
 
 
-def test_missing_pre_staged_image_is_a_clear_error(tools, tmp_path):
+@pytest.mark.parametrize(("mode", "visibility", "job", "message", "steps"), [
+    ("pre-staged", "shared", None, rf"pre-staged image .* missing or invalid at .*{SQUASH_NAME}", 0),
+    ("pre-staged", "node-local", Job("7"), "stage it there", 1),  # a missing image is not retried
+    ("compute", "node-local", None, "requires a job allocation", 0),
+])  # fmt: skip
+def test_an_image_that_cannot_be_staged_fails_at_once(tools, tmp_path, mode, visibility, job, message, steps):
     _, logs = tools
-    with pytest.raises(ImageError, match=rf"pre-staged image .* missing or invalid at .*{SQUASH_NAME}"):
-        ensure_image(IMAGE, policy(tmp_path, "pre-staged"), job=None)
+    with pytest.raises(ImageError, match=message):
+        ensure_image(IMAGE, policy(tmp_path, mode, visibility), job=job)
+    assert len(calls(logs["srun"])) == steps
     assert calls(logs["enroot"]) == []
 
 
@@ -174,26 +179,6 @@ def test_node_import_retries_transient_step_failures(tools, tmp_path):
     squash = ensure_image(IMAGE, policy(tmp_path, "compute"), job=Job("7"))
     assert counter.read_text().strip() == "3"
     assert Path(squash).read_text() == VALID
-
-
-def test_node_local_pre_staged_missing_is_not_retried(tools, tmp_path):
-    install, _ = tools
-    counter = tmp_path / "attempts"
-    install("srun", f'n=$(cat {counter} 2>/dev/null || echo 0); echo $((n+1)) > {counter}\n'
-            'while [ $# -gt 0 ] && [ "${1#-}" != "$1" ]; do shift; done\nexec "$@"')
-    with pytest.raises(ImageError, match="stage it there"):
-        ensure_image(IMAGE, policy(tmp_path, "pre-staged", "node-local"), job=Job("7"))
-    assert counter.read_text().strip() == "1"
-
-
-def test_node_local_storage_requires_an_allocation(tools, tmp_path):
-    with pytest.raises(ImageError, match="requires a job allocation"):
-        ensure_image(IMAGE, policy(tmp_path, "compute", "node-local"), job=None)
-
-
-def test_registry_references_let_pyxis_import_the_image():
-    assert registry_reference("nvcr.io/nvidia/sglang:25.01") == "nvcr.io#nvidia/sglang:25.01"
-    assert registry_reference("nginx:1.27.4") == "nginx:1.27.4"
 
 
 @pytest.mark.parametrize("image,uri", [

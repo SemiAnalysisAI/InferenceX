@@ -1,8 +1,7 @@
-"""Launch drivers, the one map from a launch path to the driver that runs it, and dispatch.
+"""Launch drivers, and the one map from a launch path to the driver that runs it.
 
-A driver function runs one benchmark and returns the process exit code, registering its
-cleanups on the launch's Lifecycle. Drivers choose *what* runs; the cluster's backend
-runs it. ``ROUTES`` names each path's driver and the scheduler it needs (None: any).
+A driver runs one benchmark point and returns its exit code, registering cleanups on the
+launch's Lifecycle. Drivers say what runs; the cluster's backend runs it.
 """
 
 from __future__ import annotations
@@ -25,7 +24,7 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class Route:
-    """The driver of one launch path and the scheduler it requires (None: any)."""
+    """A launch path's driver and the scheduler it requires (None: any)."""
 
     scheduler: str | None
     run: Callable[[Launch], int]
@@ -43,10 +42,7 @@ ROUTES: dict[LaunchPath, Route] = {
 
 
 def check_tables(clusters: Mapping[str, Cluster], only: str | None = None) -> None:
-    """Raise ``LaunchError`` listing every workload-table row the cluster inventory contradicts.
-
-    ``only`` limits the check to the rows keyed by that cluster id.
-    """
+    """Raise ``LaunchError`` naming every policy-table row the cluster inventory contradicts."""
     problems = [*policy.table_problems(clusters, only), *srt.table_problems(clusters, only)]
     if problems:
         raise LaunchError(
@@ -55,12 +51,10 @@ def check_tables(clusters: Mapping[str, Cluster], only: str | None = None) -> No
 
 
 def run(cluster: Cluster, request: LaunchRequest, life: Lifecycle) -> int:
-    """Run ``request`` on ``cluster`` with the driver its launch path selects.
+    """Run ``request`` with the driver its launch path selects.
 
-    Before any work, the table rows keyed by the cluster are checked against its record,
-    so a checkpoint, volume or profile a row names but the record lacks fails with every
-    such row named; and a path whose driver requires another scheduler than the
-    cluster's fails, naming the paths that cluster can run.
+    Fails before any work if the cluster's own table rows contradict its record, or if the
+    path needs another scheduler than the cluster's.
     """
     check_tables({cluster.id: cluster}, only=cluster.id)
     path = launch_path(cluster.id, request)

@@ -1,8 +1,7 @@
-"""Launch lanes that predate srt-slurm: B200 TileRT disagg and MI355X amd_utils AgentX.
+"""Lanes that predate srt-slurm: B200 TileRT disagg and MI355X amd_utils AgentX.
 
-Once these lanes move to srt-slurm recipes, delete this module, the ``legacy-*`` launch
-paths, and the "Legacy lanes" section of ``infx.launch.policy``. Both lanes submit through
-their own Slurm scripts, so they run only on Slurm.
+Both submit through their own Slurm scripts. Once they move to srt-slurm recipes, delete this
+module, the ``legacy-*`` launch paths and the legacy tables of ``infx.launch.policy``.
 """
 
 from __future__ import annotations
@@ -22,15 +21,15 @@ from infx.launch import artifacts, policy, proc
 from infx.launch.backends.base import BackendError
 from infx.launch.backends.slurm import SlurmBackend, SlurmJob
 from infx.launch.context import Launch, LaunchError
+from infx.launch.drivers.srt import models
+from infx.launch.drivers.srt.run import slurm_backend
 from infx.launch.request import AmdUtilsRequest, LegacyRequest, RequestError
 
 # Wait after submission before looking for the job's log.
 SUBMIT_SETTLE_S = 10.0
-# Wait for the job to leave the queue so its NFS handles are released before the log
-# tree is removed.
+# The job must leave the queue, releasing its NFS handles, before the log tree is removed.
 CANCEL_TIMEOUT_S = 600.0
-# The lane environment the TileRT scripts require: cluster facts and policy defaults,
-# or additional-settings overrides.
+# Cluster facts, policy defaults or additional-settings overrides the TileRT scripts require.
 _TILERT_REQUIRED = (
     "SLURM_PARTITION",
     "SLURM_ACCOUNT",
@@ -44,20 +43,13 @@ _TILERT_REQUIRED = (
 
 @dataclass
 class _Submission:
-    """The amd_utils job, once known (read by the exit cleanup)."""
+    """The amd_utils job once known, for the exit cleanup."""
 
     job: SlurmJob | None = None
 
 
-def _slurm(launch: Launch) -> SlurmBackend:
-    """The launch's backend, which dispatch checked is Slurm's."""
-    if not isinstance(launch.backend, SlurmBackend):
-        raise TypeError(f"legacy lanes need the Slurm backend, got {type(launch.backend).__name__}")
-    return launch.backend
-
-
 def _script(template: str, request: LegacyRequest, **fields: str) -> str:
-    """Render a lane's script path; ``{model}`` is EXP_NAME up to its first underscore."""
+    """A lane's script path; ``{model}`` is EXP_NAME up to its first underscore."""
     return template.format(
         model=request.exp_name.split("_", 1)[0],
         precision=request.precision,
@@ -67,12 +59,8 @@ def _script(template: str, request: LegacyRequest, **fields: str) -> str:
 
 
 def run_tilert(launch: Launch) -> int:
-    """Replace this process with the TileRT disagg script.
-
-    Returns only when the script is missing. On success the script owns the process,
-    including its signal traps and exit code.
-    """
-    backend = _slurm(launch)
+    """Replace this process with the TileRT disagg script; returns only if it is missing."""
+    backend = slurm_backend(launch)
     request = LegacyRequest.from_env(launch.request.env)
     lane = policy.LEGACY_TILERT[launch.cluster.id]
     squash = backend.settings.squash
@@ -80,6 +68,8 @@ def run_tilert(launch: Launch) -> int:
         raise LaunchError(f"TileRT disagg lane: cluster {launch.cluster.id!r} has no slurm.squash")
     env = policy.runtime_env(launch.cluster, request)
     env.update(launch.cluster.env)
+    if (staged := models.checkpoint(launch.cluster, request)) is not None:
+        env.setdefault("MODEL_PATH", str(staged.path))
     env["SLURM_PARTITION"] = backend.settings.partition
     if backend.settings.account:
         env["SLURM_ACCOUNT"] = backend.settings.account
@@ -95,27 +85,25 @@ def run_tilert(launch: Launch) -> int:
         proc.echo(argv, env)
         sys.stdout.flush()
         sys.stderr.flush()
-        # Hand the process to the script with the lane environment.
         os.execvpe(argv[0], argv, env)  # noqa: S606 - deliberate exec of a trusted repository script
     print(f"tilert disagg script not found: {script}", flush=True)
     return 1
 
 
 def _is_within(path: Path, directory: Path) -> bool:
-    """Whether ``path`` is ``directory`` or lies under it, once symlinks and ``..`` resolve."""
-    path, directory = Path(path).resolve(), Path(directory).resolve()
+    path, directory = path.resolve(), directory.resolve()
     return path == directory or directory in path.parents
 
 
 def _sudo_rm(path: Path) -> None:
-    """Remove the tree ``path`` as root, best-effort: container output is root-owned."""
+    """Remove the root-owned tree ``path``, best-effort."""
     with contextlib.suppress(OSError):
         proc.run(["sudo", "rm", "-rf", path], capture=True)
 
 
 def run_amd_utils(launch: Launch) -> int:
     """Submit the amd_utils AgentX job, follow its log, and stage its artifacts."""
-    backend = _slurm(launch)
+    backend = slurm_backend(launch)
     request = AmdUtilsRequest.from_env(launch.request.env)
     lane = policy.LEGACY_AMD_UTILS[launch.cluster.id]
     workspace = request.workspace
@@ -135,16 +123,14 @@ def run_amd_utils(launch: Launch) -> int:
             "SLURM_PARTITION": backend.settings.partition,
             "MODEL_NAME": request.model.rsplit("/", 1)[-1],
             "MODEL_PATH": str(model_dir),
-            # job.slurm reads MODEL_DIR.
-            "MODEL_DIR": str(model_dir),
+            "MODEL_DIR": str(model_dir),  # read by job.slurm
             "GPUS_PER_NODE": str(launch.cluster.gpus_per_node),
             **{name: host_env[name] for name in lane.host_setup_env},
             **lane.env,
         }
     )
-    # The exit cleanup removes BENCHMARK_LOGS_DIR wholesale. Pointing it at the
-    # checkout, or at a parent of it, deletes the workspace and every result copied
-    # into it.
+    # The exit cleanup removes BENCHMARK_LOGS_DIR wholesale, which must not take the
+    # checkout and the results copied into it along.
     if _is_within(workspace, logs_dir):
         print(
             f"ERROR: BENCHMARK_LOGS_DIR ({logs_dir}) must not be the checkout ({workspace}) "
@@ -156,13 +142,10 @@ def run_amd_utils(launch: Launch) -> int:
     _sudo_rm(logs_dir / "logs")
 
     submission = _Submission()
-    # Root-owned container output must be removed even on an early exit, or the next
-    # job's checkout hits EACCES. Slurm logs are saved as artifacts first. KEEP_LOGS=1
-    # disables this for local debugging.
+    # Root-owned container output left behind makes the next job's checkout fail with EACCES.
     if not request.keep_logs:
         launch.life.callback(_save_logs_and_remove, backend, logs_dir, workspace, submission, env)
 
-    # Only AgentX recipes still use this lane; fixed-sequence runs use srt-slurm.
     if not request.is_agentic:
         print(
             f"ERROR: {launch.cluster.id} multi-node fixed-sequence jobs require a CONFIG_FILE "
@@ -178,8 +161,7 @@ def run_amd_utils(launch: Launch) -> int:
         argv, stdout=subprocess.PIPE, text=True, env=env, cwd=workspace, check=False
     )
     job_id = submitted.stdout.strip()
-    # With no job id the log wait below would poll forever, so fail here instead of
-    # burning the job's whole time limit.
+    # Without a job id the log wait would poll for the job's whole time limit.
     if not job_id:
         print(
             f"ERROR: {script} returned no Slurm job id; the recipe or submit.sh failed "
@@ -204,8 +186,7 @@ def run_amd_utils(launch: Launch) -> int:
     outputs = backend.fetch_outputs(job, logs_dir)
     if request.run_eval and _copy_eval_results(outputs / "logs", workspace) != 0:
         return 1
-    # benchmark-multinode-tmpl.yml uploads LOGS/agentic/conc_*/... and
-    # multinode_server_logs.tar.gz. Stage them before the log tree is removed.
+    # benchmark-multinode-tmpl.yml uploads these; stage them before the log tree goes.
     _stage_agentic_artifacts(outputs / "logs" / f"slurm_job-{job_id}", workspace)
     print("All result files processed", flush=True)
     backend.cancel(job, wait_s=CANCEL_TIMEOUT_S)
@@ -214,20 +195,12 @@ def run_amd_utils(launch: Launch) -> int:
     return 0
 
 
-def _first_directory_named(root: Path, name: str) -> Path | None:
-    """The first directory called ``name`` in a top-down walk of ``root`` (no symlinks)."""
-    for directory, _, _ in os.walk(root):
-        if Path(directory).name == name:
-            return Path(directory)
-    return None
-
-
 def _copy_eval_results(logs_root: Path, workspace: Path) -> int:
-    """Copy the job's eval results into the workspace as the runner user.
-
-    A missing eval directory is only a warning. A failed copy fails the launch.
-    """
-    eval_dir = _first_directory_named(logs_root, "eval_results")
+    """Copy the job's eval results into the workspace; a missing eval directory only warns."""
+    eval_dir = next(
+        (Path(path) for path, _, _ in os.walk(logs_root) if Path(path).name == "eval_results"),
+        None,
+    )
     if eval_dir is None:
         print(f"WARNING: RUN_EVAL=true but no eval results found under {logs_root}", flush=True)
         return 0
@@ -239,8 +212,7 @@ def _copy_eval_results(logs_root: Path, workspace: Path) -> int:
         destination = workspace / eval_file.name
         with contextlib.suppress(OSError):
             destination.unlink(missing_ok=True)
-        # Eval artifacts are root-owned from the container; sudo also overwrites stale
-        # root-owned files left by earlier runs.
+        # The artifacts are root-owned, and so may be stale copies from earlier runs.
         try:
             copied = proc.run(["sudo", "cp", eval_file, destination]).returncode == 0
         except OSError:
@@ -269,8 +241,7 @@ def _stage_agentic_artifacts(job_logs: Path, workspace: Path) -> None:
         staged = workspace / "LOGS"
         (staged / "agentic").mkdir(parents=True, exist_ok=True)
         proc.run(["cp", "-r", f"{agentic}/.", f"{staged / 'agentic'}/"])
-        # Container artifacts arrive root-owned; later jobs, possibly running as a
-        # different runner user, must be able to remove LOGS/.
+        # The copies are root-owned; later jobs, perhaps as another runner user, remove LOGS/.
         with contextlib.suppress(OSError):
             proc.run(["sudo", "chown", "-R", f"{os.getuid()}:{os.getgid()}", staged], capture=True)
         proc.run(["chmod", "-R", "a+rwX", staged], capture=True)

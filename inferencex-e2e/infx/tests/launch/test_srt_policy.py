@@ -9,13 +9,14 @@ from infx.launch.context import LaunchError
 from infx.launch.drivers.srt import models
 from infx.launch.drivers.srt.lanes import SrtLane, srt_lane, srt_time_limit
 from infx.launch.drivers.srt.models import (
-    ModelRule,
-    StagedBasenames,
-    resolve_model,
+    Override,
+    checkpoint,
+    job_env,
+    model_paths,
     single_node_hf_cache,
     single_node_model_path,
 )
-from infx.launch.policy import LaunchPath, Match, TimeBump, any_of, launch_path, runtime_env
+from infx.launch.policy import LaunchPath, Match, TimeBump, any_of, launch_path
 from infx.launch.request import LaunchRequest
 
 
@@ -24,17 +25,20 @@ def request(**env: str) -> LaunchRequest:
     return LaunchRequest.from_env({"RUNNER_NAME": "r_0", "GITHUB_WORKSPACE": "/ws", **env})
 
 
-def cluster(tmp_path) -> Cluster:
-    """Cluster ``c``: checkpoint ``M`` on shared storage, a node-local copy, and two Hub caches."""
+def cluster(tmp_path, single_node_models: str = "staged") -> Cluster:
+    """Cluster ``c``: ``M`` on shared storage with a node-local copy, ``S`` shared only, two Hub caches."""
     record = {
         "gpus-per-node": 8, "arch": "x86_64", "scheduler": "slurm",
-        "models": {"entries": {"M": {"root": "shared", "dir": "m"}, "M@nvme": {"root": "nvme", "dir": "m"}}},
+        "models": {"entries": {
+            "M": {"root": "shared", "dir": "m"}, "M@nvme": {"root": "nvme", "dir": "m"},
+            "S": {"root": "shared", "dir": "s"},
+        }},
         "slurm": {"partition": "p", "exclusive": True, "volumes": {
             "shared": {"path": str(tmp_path / "shared")},
             "nvme": {"path": str(tmp_path / "nvme"), "visibility": "node-local"},
             "hf-hub-cache": {"path": str(tmp_path / "hub"), "visibility": "node-local"},
             "shared-hf-hub-cache": {"path": str(tmp_path / "shared-hub")},
-        }},
+        }, "srt-slurm": {"network-interface": "", "single-node-models": single_node_models}},
     }  # fmt: skip
     return load_inventory({"labels": {"cluster:c": ["c_0"]}, "clusters": {"c": record}}).clusters["c"]
 
@@ -69,66 +73,71 @@ def test_a_path_without_a_lane_on_the_cluster_is_refused():
         srt_lane("b200-cw", LaunchPath.SRT_MULTI)
 
 
-def test_the_first_matching_rule_names_the_checkpoint_and_its_aliases(tmp_path):
+def test_a_path_without_a_lane_on_the_cluster_is_refused():
+    with pytest.raises(LaunchError, match="cluster 'b200-cw' has no srt-multi srt-slurm lane"):
+        srt_lane("b200-cw", LaunchPath.SRT_MULTI)
+
+
+OVERRIDES = (
+    Override(Match(frameworks=any_of("sglang")), entry="M"),
+    Override(Match(frameworks=any_of("trt")), served_name="served-m"),
+    Override(Match(model_glob="*/S"), require_config=True),
+)
+
+
+@pytest.mark.parametrize(("env", "path", "node_local", "served"), [
+    (dict(MODEL="org/M"), "nvme/m", True, None),  # a node-local copy wins
+    (dict(MODEL="org/M", FRAMEWORK="sglang"), "shared/m", False, None),  # an override names the copy
+    (dict(MODEL="org/M", FRAMEWORK="trt"), "nvme/m", True, "served-m"),  # served-name rows keep the lookup
+    (dict(MODEL="org/Unstaged"), None, None, None),
+])  # fmt: skip
+def test_models_resolve_by_basename_with_overrides(tmp_path, monkeypatch, env, path, node_local, served):
+    monkeypatch.setitem(models.OVERRIDES, "c", OVERRIDES)
+    c, point = cluster(tmp_path), request(**env)
+    found = checkpoint(c, point)
+    assert (found and (found.path, found.node_local)) == (path and (tmp_path / path, node_local))
+    assert job_env(c, point, found).get("SERVED_MODEL_NAME") == served
+    # Single-node points serve the same checkpoint, else the Hub; hub clusters always the Hub.
+    assert single_node_model_path(c, point) == (str(tmp_path / path) if path else f"hf:{env['MODEL']}")
+    assert single_node_model_path(cluster(tmp_path, "hub"), point) == f"hf:{env['MODEL']}"
+
+
+def test_a_checkpoint_that_must_be_readable_fails_before_submission(tmp_path, monkeypatch):
+    monkeypatch.setitem(models.OVERRIDES, "c", OVERRIDES)
+    with pytest.raises(LaunchError, match="no readable .*/s/config.json"):
+        checkpoint(cluster(tmp_path), request(MODEL="org/S"))
+    (tmp_path / "shared/s").mkdir(parents=True)
+    (tmp_path / "shared/s/config.json").write_text("{}")
+    assert checkpoint(cluster(tmp_path), request(MODEL="org/S")).path == tmp_path / "shared/s"
+
+
+BUNDLE = """base:
+  model: {path: alias-a}
+override_x:
+  model: {path: alias-b}
+zip_override_y:
+  model: {path: [alias-c, "hf:org/M"]}
+"""
+
+
+@pytest.mark.parametrize(("recipe", "model", "paths"), [
+    (BUNDLE, "org/M", {"alias-a": "nvme/m", "alias-b": "nvme/m", "alias-c": "nvme/m"}),
+    ("model: {path: hf:org/M}\n", "org/Unstaged", {}),
+    ("model: {path: /abs/m}\n", "org/Unstaged", {}),
+    ("model: {path: alias-a}\n", "org/Unstaged", LaunchError),
+])  # fmt: skip
+def test_every_recipe_alias_maps_to_the_checkpoint_and_literals_pass_through(tmp_path, recipe, model, paths):
+    mirror = tmp_path / "ws/benchmarks/multi_node/srt-slurm-recipes/r.yaml"
+    mirror.parent.mkdir(parents=True)
+    mirror.write_text(recipe)
     c = cluster(tmp_path)
-    rules = (
-        ModelRule(Match(any_of("m"), dcgm=True), "m-power", "M@nvme"),
-        ModelRule(Match(any_of("m")), "m", "M", served_name="org/M", extra_aliases=("m-alt",)),
-    )
-    power = resolve_model(c, rules, request(MODEL_PREFIX="m"), dcgm=True)
-    plain = resolve_model(c, rules, request(MODEL_PREFIX="m"))
-
-    assert (power.path, power.aliases) == (f"{tmp_path}/nvme/m", ("m-power",))
-    assert (plain.path, plain.aliases, plain.served_name) == (f"{tmp_path}/shared/m", ("m", "m-alt"), "org/M")
-    assert resolve_model(c, rules, request(MODEL_PREFIX="other")) is None
-
-
-def test_a_rule_can_defer_to_an_exported_path_the_hub_or_a_readable_config(tmp_path):
-    c = cluster(tmp_path)
-    exported = tmp_path / "exported"
-    exported.mkdir()
-    rules = (
-        ModelRule(Match(any_of("env")), None, "M", env_path=True),
-        ModelRule(Match(any_of("dir")), None, "M", env_path_if_dir=True),
-        ModelRule(Match(any_of("hub")), None, "M", hf_fallback="org/M"),
-        ModelRule(Match(any_of("config")), None, "M", require_config=True),
-    )
-
-    def path(prefix: str, **env: str) -> str:
-        return resolve_model(c, rules, request(MODEL_PREFIX=prefix, **env)).path
-
-    staged = f"{tmp_path}/shared/m"
-    assert path("env", MODEL_PATH="/absent") == "/absent"
-    assert path("dir", MODEL_PATH=str(exported)) == str(exported)
-    assert path("dir", MODEL_PATH="/absent") == staged
-    assert path("hub") == "hf:org/M"
-    with pytest.raises(ValueError, match="config.json"):
-        path("config")
-    (tmp_path / "shared/m").mkdir(parents=True)
-    (tmp_path / "shared/m/config.json").write_text("{}")
-    assert path("hub") == path("config") == staged
-
-
-def test_single_node_points_read_staged_checkpoints_or_the_hub(tmp_path, monkeypatch):
-    c = cluster(tmp_path)
-    copies = ((Match(frameworks=any_of("vllm"), model_glob="*/M"), "M@nvme"),)
-    monkeypatch.setitem(models.SINGLE_NODE_BASENAMES, "c", StagedBasenames("shared", any_of("org/Hub"), copies))
-
-    def path(model: str, **env: str) -> str:
-        return single_node_model_path(c, request(MODEL=model, **env))
-
-    # Found by HF basename: a Hub download, a copy for some requests, the entry, or the fallback root.
-    assert path("org/Hub") == "hf:org/Hub"
-    assert path("org/M", FRAMEWORK="vllm") == f"{tmp_path}/nvme/m"
-    assert path("org/M", FRAMEWORK="sglang") == f"{tmp_path}/shared/m"
-    assert path("org/Other") == f"{tmp_path}/shared/Other"
-    # Clusters with model rules serve a staged checkpoint, else hf:<MODEL>, and refuse the rest.
-    rules = (ModelRule(Match(any_of("staged")), None, "M"), ModelRule(Match(any_of("hub")), None, None))
-    monkeypatch.setitem(models.SINGLE_NODE_MODELS, "c", rules)
-    assert path("org/M", MODEL_PREFIX="staged") == f"{tmp_path}/shared/m"
-    assert path("org/M", MODEL_PREFIX="hub") == "hf:org/M"
-    with pytest.raises(ValueError, match="unsupported model"):
-        path("org/M", MODEL_PREFIX="other")
+    point = request(MODEL=model, GITHUB_WORKSPACE=str(tmp_path / "ws"))
+    if paths is LaunchError:
+        with pytest.raises(LaunchError, match="stages no checkpoint"):
+            model_paths(c, point, "recipes/r.yaml:override_x", checkpoint(c, point))
+        return
+    resolved = model_paths(c, point, "recipes/r.yaml:override_x", checkpoint(c, point))
+    assert resolved == {alias: str(tmp_path / path) for alias, path in paths.items()}
 
 
 def test_matching_single_node_points_read_the_shared_hub_cache(tmp_path, monkeypatch):
@@ -137,21 +146,6 @@ def test_matching_single_node_points_read_the_shared_hub_cache(tmp_path, monkeyp
 
     assert single_node_hf_cache(c, request(IS_AGENTIC="1")) == tmp_path / "shared-hub"
     assert single_node_hf_cache(c, request(IS_AGENTIC="0")) == tmp_path / "hub"
-
-
-def test_runtime_settings_fill_what_the_workflow_left_unset(tmp_path, monkeypatch):
-    c = cluster(tmp_path)
-    entries = ((Match(multinode=True), "M@nvme"), (Match(), "M"))
-    monkeypatch.setitem(policy.RUNTIME_MODEL_ENTRIES, "c", entries)
-    monkeypatch.setitem(policy.TILERT_ENV, "c", {"UCX_NET_DEVICES": "mlx5_0:1"})
-
-    tilert = runtime_env(c, request(IS_MULTINODE="true", FRAMEWORK="tilert"))
-    single = runtime_env(c, request(IS_MULTINODE="false", FRAMEWORK="sglang"))
-
-    assert (tilert["MODEL_PATH"], tilert["UCX_NET_DEVICES"]) == (f"{tmp_path}/nvme/m", "mlx5_0:1")
-    assert single["MODEL_PATH"] == f"{tmp_path}/shared/m" and "UCX_NET_DEVICES" not in single
-    # An exported MODEL_PATH (a master-config additional-setting) wins.
-    assert runtime_env(c, request(MODEL_PATH="/exported"))["MODEL_PATH"] == "/exported"
 
 
 # A controlled bump every AgentX point at CONC >= 64 would get, and a lane with a long

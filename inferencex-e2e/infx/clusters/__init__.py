@@ -1,11 +1,8 @@
-"""Static cluster configuration: the ``clusters:`` section of ``configs/runners.yaml``.
+"""The ``clusters:`` records of ``configs/runners.yaml``, keyed by their ``cluster:<id>`` label.
 
-A cluster is keyed by the id in its ``cluster:<id>`` runner label; launchers resolve theirs
-from ``RUNNER_NAME`` and the matrix generator reads node shape from the same records. A
-record holds scheduler-neutral facts and one ``<scheduler>:`` sub-record, parsed by the
-settings model :data:`SCHEDULERS` registers under that name, which also declares the
-cluster's volumes. Loading records imports no launch code. Workload policy (predicates
-over model, framework or request) belongs to ``infx.launch``.
+Launchers resolve their cluster from ``RUNNER_NAME``; the matrix generator reads node shape
+from the same records. Each record's ``<scheduler>:`` sub-record is parsed by the settings
+model :data:`SCHEDULERS` registers for that scheduler. Loading records imports no launch code.
 """
 
 from __future__ import annotations
@@ -30,8 +27,7 @@ from infx.config import RUNNER_CONFIG, repository_root
 
 CLUSTER_LABEL_PREFIX = "cluster:"
 
-# Settings models by ``scheduler:`` name. A scheduler also needs a backend under the
-# same name in ``infx.launch.backends.BACKENDS``.
+# A scheduler also needs a backend of the same name in ``infx.launch.backends.BACKENDS``.
 SCHEDULERS: dict[str, type[SchedulerSettings]] = {"slurm": SlurmSettings}
 
 
@@ -60,7 +56,7 @@ class ClusterModels(Record):
 
 
 def _relocated(error: ValidationError, key: str) -> ValidationError:
-    """``error`` with every location prefixed by ``key``, the record it was raised for."""
+    """``error`` with every location prefixed by ``key``, the sub-record it was raised for."""
     details: list[Any] = [
         {
             "type": detail["type"],
@@ -90,17 +86,15 @@ class Cluster(Record):
 
     @property
     def id(self) -> str:
-        """The ``cluster:<id>`` label suffix this record is keyed by."""
         return self._id
 
     def bind_id(self, cluster_id: str) -> None:
-        """Record the ``clusters:`` key this record is filed under (RunnerInventory does)."""
         self._id = cluster_id
 
     @field_validator("env")
     @classmethod
     def _exportable(cls, env: dict[str, str]) -> dict[str, str]:
-        """Slurm hands this environment to jobs in ``srun --export``, which splits on commas."""
+        # Slurm hands this environment to jobs in ``srun --export``, which splits on commas.
         if names := sorted(name for name, value in env.items() if "," in value):
             raise ValueError(f"env values cannot contain ',' (srun --export splits on it): {names}")
         return env
@@ -127,7 +121,7 @@ class Cluster(Record):
 
     @model_validator(mode="after")
     def _known_references(self) -> Self:
-        """Model entries and the download root name volumes; scheduler aliases name entries."""
+        """Model entries and the download root name volumes."""
         volumes = self.scheduler_settings.volumes
         for key, entry in self.models.entries.items():
             if entry.root not in volumes:
@@ -139,9 +133,6 @@ class Cluster(Record):
             # Every node reads what one run downloaded, so the copy must be the same everywhere.
             if volumes[download_root].visibility != "shared":
                 raise ValueError(f"download-root {download_root!r} must be a shared volume")
-        for where, key in self.scheduler_settings.model_references().items():
-            if key not in self.models.entries:
-                raise ValueError(f"{where} names unknown entry {key!r}")
         return self
 
 

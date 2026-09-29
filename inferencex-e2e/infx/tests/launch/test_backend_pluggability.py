@@ -1,9 +1,4 @@
-"""A new backend is its own modules, a cluster record and two registry entries: no driver edits.
-
-The fake backend (fake_backend.py) reaches volumes by claim, delivers the checkout by copy
-and fetches only declared outputs, unlike Slurm/Pyxis. On a cluster of any scheduler but
-Slurm, the script driver is the one that runs.
-"""
+"""A new scheduler backend needs no driver edits: the script driver runs on any of them."""
 
 import pytest
 import yaml
@@ -21,9 +16,9 @@ from infx.tests.launch.fake_backend import FakeBackend, FakeSettings, containers
 COLLECTOR = "benchmarks/single_node/speedbench/fixture.sh"
 # Records what the script saw into its result, writes a log the workflow uploads, and
 # leaves a file that is neither.
-SCRIPT = r"""printf 'model=%s\ncwd=%s\ngit=%s\nworkload=%s\ncluster=%s\nhost=%s\ntoken=%s\n' \
+SCRIPT = r"""printf 'model=%s\ncwd=%s\ngit=%s\nworkload=%s\ncluster=%s\ntoken=%s\n' \
     "$MODEL_PATH" "$PWD" "$([ -e .git ] && echo yes || echo no)" "${SPEEDBENCH_KNOB:-unset}" \
-    "${UCX_NET_DEVICES:-unset}" "${FAKE_HOST_STATE:-unset}" "${GITHUB_TOKEN:-unset}" > "$OUT_YAML"
+    "${UCX_NET_DEVICES:-unset}" "${GITHUB_TOKEN:-unset}" > "$OUT_YAML"
 mkdir -p speedbench_results && echo serving > speedbench_results/server_0.log
 mkdir -p draft_models && echo weights > draft_models/draft.bin
 """
@@ -59,7 +54,6 @@ def fake(tmp_path, monkeypatch):
 
 @pytest.fixture
 def workspace(tmp_path):
-    """A checkout whose collector writes its result under the container workspace."""
     root = tmp_path / "workspace"
     (root / COLLECTOR).parent.mkdir(parents=True)
     (root / COLLECTOR).write_text(SCRIPT)
@@ -73,12 +67,11 @@ def request(workspace, **overrides: str) -> LaunchRequest:
         "IMAGE": "vllm/vllm-openai:v0.21.0", "GPU_COUNT": "8", "IS_MULTINODE": "false",
         "BENCH_SCRIPT_OVERRIDE": COLLECTOR, "SALLOC_TIME_LIMIT": "30",
         "OUT_YAML": "/workspace/speedbench-reference-al.yaml", "SPEEDBENCH_KNOB": "7",
-        "FAKE_HOST_STATE": "host", "GITHUB_TOKEN": "ghs_secret", **overrides,
+        "GITHUB_TOKEN": "ghs_secret", **overrides,
     })  # fmt: skip
 
 
 def result(workspace) -> dict[str, str]:
-    """What the script recorded, as brought back into the checkout."""
     lines = (workspace / "speedbench-reference-al.yaml").read_text().splitlines()
     return dict(line.split("=", 1) for line in lines)
 
@@ -95,41 +88,40 @@ def test_a_script_point_runs_on_a_new_backend_through_its_volumes(fake, workspac
     assert seen["model"] == str(tmp_path / "fake/volumes/ckpt/Kimi-K3")
     # It ran in the backend's own copy of the checkout, delivered without git metadata.
     assert seen["cwd"] != str(workspace) and seen["git"] == "no"
-    # Workload and cluster env reach the container; host state of either kind does not.
-    assert (seen["workload"], seen["cluster"]) == ("7", "eth0")
-    assert (seen["host"], seen["token"]) == ("unset", "unset")
+    # Workload and cluster env reach the container; runner credentials do not.
+    assert (seen["workload"], seen["cluster"], seen["token"]) == ("7", "eth0", "unset")
     # What the workflow reads came back; nothing else did.
     assert (workspace / "speedbench_results/server_0.log").read_text() == "serving\n"
     assert not (workspace / "draft_models").exists()
     assert (tmp_path / "fake/volumes/hf").is_dir()
 
 
-def test_the_result_comes_back_when_the_script_fails(fake, workspace):
+def _script_fails(workspace, monkeypatch):
     (workspace / COLLECTOR).write_text(SCRIPT + "exit 7\n")
-    cluster = load_inventory(fake).clusters["local"]
-
-    with Lifecycle() as life:
-        assert drivers.run(cluster, request(workspace), life) == 7
-
-    assert result(workspace)["workload"] == "7"
 
 
-def test_the_result_comes_back_when_following_the_job_fails(fake, workspace, monkeypatch):
+def _log_stream_lost(workspace, monkeypatch):
     def lost(self, job):
         job.process.wait()
         raise BackendError("log stream lost")
 
     monkeypatch.setattr(FakeBackend, "stream_logs", lost)
 
-    assert launch(load_inventory(fake).clusters["local"], request(workspace)) == 1
+
+def _cancelled_with_exit_0(workspace, monkeypatch):
+    monkeypatch.setattr(
+        FakeBackend, "state", lambda self, job: JobStatus(JobState.CANCELLED, "cancelled|0:0", 0)
+    )
+
+
+@pytest.mark.parametrize(
+    ("failure", "rc"), [(_script_fails, 7), (_log_stream_lost, 1), (_cancelled_with_exit_0, 1)]
+)
+def test_a_failed_point_fails_the_launch_and_still_returns_its_result(fake, workspace, monkeypatch, failure, rc):
+    failure(workspace, monkeypatch)
+
+    assert launch(load_inventory(fake).clusters["local"], request(workspace)) == rc
     assert result(workspace)["workload"] == "7"
-
-
-def test_a_job_that_did_not_succeed_fails_even_when_it_reports_exit_0(fake, workspace, monkeypatch):
-    monkeypatch.setattr(FakeBackend, "state", lambda self, job: JobStatus(JobState.CANCELLED, "cancelled|0:0", 0))
-
-    with Lifecycle() as life:
-        assert drivers.run(load_inventory(fake).clusters["local"], request(workspace), life) == 1
 
 
 def test_points_without_a_script_refuse_a_non_slurm_cluster_before_any_work(fake, workspace):
@@ -141,23 +133,16 @@ def test_points_without_a_script_refuse_a_non_slurm_cluster_before_any_work(fake
     assert not containers_dir(cluster.scheduler_settings).exists()
 
 
-def test_cleanup_hands_the_backend_its_settings(fake, tmp_path, monkeypatch):
+@pytest.mark.parametrize(("runner", "namespace"), [("local_00", "bench"), ("unlisted_00", None)])
+def test_cleanup_hands_the_backend_the_runners_settings_when_it_has_a_record(
+    fake, tmp_path, monkeypatch, runner, namespace
+):
     config = tmp_path / "runners.yaml"
     config.write_text(yaml.safe_dump(fake))
-    monkeypatch.setenv("RUNNER_NAME", "local_00")
+    monkeypatch.setenv("RUNNER_NAME", runner)
+    monkeypatch.setenv("PATH", str(tmp_path))  # no Slurm here
 
     assert main(["--runner-config", str(config), "cleanup"]) == 0
 
-    [(received, runner)] = FakeBackend.cleaned
-    assert (received.namespace, runner) == ("bench", "local_00")
-
-
-def test_cleanup_without_the_runners_record_passes_no_settings(fake, tmp_path, monkeypatch):
-    config = tmp_path / "runners.yaml"
-    config.write_text(yaml.safe_dump(fake))
-    monkeypatch.setenv("RUNNER_NAME", "unlisted_00")
-    monkeypatch.setenv("PATH", str(tmp_path))  # no Slurm here either
-
-    assert main(["--runner-config", str(config), "cleanup"]) == 0
-
-    assert FakeBackend.cleaned == [(None, "unlisted_00")]
+    [(settings, cleaned)] = FakeBackend.cleaned
+    assert (getattr(settings, "namespace", None), cleaned) == (namespace, runner)

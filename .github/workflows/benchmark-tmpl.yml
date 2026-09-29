@@ -287,8 +287,7 @@ jobs:
 
       - name: Prepare launcher Python
         run: |
-          # infx.launch needs pydantic and PyYAML. The venv is never activated, so
-          # launched Slurm jobs inherit the runner's PATH and no VIRTUAL_ENV.
+          # Never activated, so launched Slurm jobs inherit the runner's PATH and no VIRTUAL_ENV.
           launch_venv="$RUNNER_TEMP/infx-launch-venv"
           uv venv --quiet --python 3.12 "$launch_venv"
           uv pip install --quiet --exclude-newer PT12H --python "$launch_venv/bin/python" \
@@ -298,9 +297,8 @@ jobs:
       - name: Launcher cleanup (pre-run)
         env:
           PYTHONPATH: ${{ github.workspace }}/.result-tooling/inferencex-e2e
-        # Second pass after the shell cancel in Slurm cleanup, which needs no Python: the
-        # workflow revision's launcher has the cluster's backend remove what this runner
-        # left behind (on Slurm also its namespaced inferencex-<runner> jobs).
+        # Second pass after the shell cancel, which needs no Python: the cluster's backend
+        # removes what this runner left behind.
         run: &launcher-cleanup |
           "$INFERENCEX_LAUNCH_PYTHON" -P -m infx.launch cleanup
 

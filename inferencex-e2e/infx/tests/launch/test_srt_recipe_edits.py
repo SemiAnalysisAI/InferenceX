@@ -9,7 +9,6 @@ from infx.launch.drivers.srt.recipe import (
     parse_concurrencies,
     raise_health_attempts,
     rename_job,
-    replace_health_check,
 )
 
 RECIPE = """name: "upstream"
@@ -34,23 +33,12 @@ def test_rename_touches_only_the_top_level_name():
     assert renamed["roles"]["prefill"]["name"] == "keep-me"
 
 
-def test_health_attempts_are_raised_but_never_shortened():
+def test_every_health_budget_is_raised_to_720_attempts_but_never_shortened():
     # A recipe may request more than 720 attempts, as GLM-5.2's 1440 x 10s does.
     assert raise_health_attempts(RECIPE) == RECIPE
-    short = RECIPE.replace("max_attempts: 1440", "max_attempts: 100")
-    assert yaml.safe_load(raise_health_attempts(short))["health_check"]["max_attempts"] == 720
-
-
-def test_health_check_block_is_replaced_and_later_keys_survive():
-    replaced = replace_health_check(RECIPE)
-    assert replaced.count("health_check:") == 1
-    parsed = yaml.safe_load(replaced)
-    assert parsed["health_check"] == {"max_attempts": 720, "interval_seconds": 10}
-    assert parsed["benchmark"] == {"type": "sa-bench"}
-    assert parsed["roles"]["prefill"]["args"] == {"watchdog-timeout": 600, "tp": 4}
-    # Without a block the budget is only appended.
-    bare = "name: x\nbenchmark:\n  type: custom\n"
-    assert yaml.safe_load(replace_health_check(bare))["health_check"]["max_attempts"] == 720
+    bundle = "base:\n  health_check:\n    max_attempts: 360\noverride_x:\n  health_check: {max_attempts: 100}\n"
+    raised = yaml.safe_load(raise_health_attempts(bundle))
+    assert raised["base"]["health_check"]["max_attempts"] == raised["override_x"]["health_check"]["max_attempts"] == 720
 
 
 def test_dist_timeout_follows_each_role_watchdog_timeout():

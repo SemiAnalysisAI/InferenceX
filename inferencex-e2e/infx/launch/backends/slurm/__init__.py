@@ -47,11 +47,6 @@ if TYPE_CHECKING:
 CANCEL_POLL_S = 10.0
 
 
-def namespaced_job_name(runner: str) -> str:
-    """The name of a runner's jobs that other repositories sharing the runner must not cancel."""
-    return f"inferencex-{runner}"
-
-
 @dataclass(frozen=True)
 class SlurmJob(Job):
     """A Slurm job: an allocation running one of our container steps, or an adopted job."""
@@ -195,22 +190,12 @@ class SlurmBackend(Backend):
     @override
     @classmethod
     def cleanup(cls, settings: SchedulerSettings | None, runner: str) -> None:
-        """Cancel this user's jobs named after ``runner``, plain and namespaced.
-
-        Slurm finds them by user and name alone, so no settings are needed.
-        """
-        cls.cancel_named((runner, namespaced_job_name(runner)))
-
-    # Operations of the Slurm-only drivers.
-
-    @classmethod
-    def cancel_named(cls, names: Sequence[str]) -> None:
-        """``scancel`` this user's jobs by name and wait until squeue drops them."""
+        """Cancel this user's jobs named ``runner``; Slurm finds them by user and name alone."""
         if shutil.which("squeue") is None:
-            print(f"No Slurm scheduler here; nothing to clean up for {', '.join(names)}")
+            print(f"No Slurm scheduler here; nothing to clean up for {runner}")
             return
-        print(f"[Slurm] Cleaning up jobs named {' and '.join(names)}")
-        cli.cancel_named(names)
+        print(f"[Slurm] Cleaning up jobs named {runner}")
+        cli.cancel_named((runner,))
 
     def stage_image(
         self,

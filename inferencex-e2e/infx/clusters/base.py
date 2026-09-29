@@ -19,25 +19,12 @@ class Record(BaseModel):
 
 
 class Volume(Record):
-    """One named cluster volume, in its scheduler's terms (``<scheduler>.volumes.<name>``).
-
-    Schedulers extend it with how their jobs reach the volume: a host path, a
-    persistent volume claim, ...
-    """
+    """A named checkpoint root or cache; each scheduler's subclass says how its jobs reach it."""
 
     visibility: Visibility = "shared"
 
 
 class SchedulerSettings(Record):
-    """Base of a scheduler sub-record (``<scheduler>:`` in a cluster record).
-
-    ``volumes`` are the cluster's checkpoint roots and caches by name; model entries and
-    drivers refer to them only by name. Subclasses narrow the value type to their own
-    :class:`Volume`.
-    """
+    """Base of a ``<scheduler>:`` sub-record; subclasses narrow ``volumes`` to their own Volume."""
 
     volumes: Mapping[str, Volume] = Field(default_factory=dict)
-
-    def model_references(self) -> Mapping[str, str]:
-        """``models.entries`` keys this record names, keyed by where it names them."""
-        return {}

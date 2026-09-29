@@ -1,10 +1,9 @@
 """A scheduler backend that runs each container as a local process.
 
-It is what a new backend is: this module, a settings model registered in
-``infx.clusters.SCHEDULERS``, one ``infx.launch.backends.BACKENDS`` entry, and a cluster
-record with ``scheduler: fake``. Unlike Slurm/Pyxis, volumes are claims it provisions
-under its own root, the checkout is copied in without the excluded entries, only the
-declared outputs are copied back, and containers get no host state.
+A new backend is this much: its module, a settings model in ``infx.clusters.SCHEDULERS``,
+an ``infx.launch.backends.BACKENDS`` entry, and a cluster record naming the scheduler.
+Unlike Slurm/Pyxis it reaches volumes by claim, copies the checkout in without the excluded
+entries, copies back only the declared outputs, and passes containers no host state.
 """
 
 import os
@@ -25,18 +24,15 @@ from infx.launch.backends.base import (
     Job,
     JobState,
     JobStatus,
+    container_env,
 )
 
 
 class FakeVolume(Volume):
-    """A volume claim the backend provisions under ``<root>/volumes/<claim>``."""
-
     claim: str
 
 
 class FakeSettings(SchedulerSettings):
-    """``fake:``: where the backend keeps volumes and, per namespace, containers."""
-
     root: Path
     namespace: str
     volumes: dict[str, FakeVolume] = Field(default_factory=dict)
@@ -54,7 +50,6 @@ class FakeJob(Job):
 
 
 class FakeBackend(Backend):
-    host_env = ("FAKE_HOST_*",)
     cleaned: list[tuple[FakeSettings | None, str]] = []
 
     def prepare_image(self, image: str) -> Image:
@@ -90,7 +85,7 @@ class FakeBackend(Backend):
                 raise BackendError(f"readiness-blocked: {path} is unavailable")
         env = {
             name: host(value)
-            for name, value in {**self.container_env(self.request.env), **container.env}.items()
+            for name, value in {**container_env(self.request.env), **container.env}.items()
         }
         process = subprocess.Popen(list(container.command), cwd=workdir, env={**env, "PATH": os.defpath})
         job = FakeJob(str(process.pid), process, workdir, tuple(container.outputs))

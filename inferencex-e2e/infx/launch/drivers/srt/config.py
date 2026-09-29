@@ -19,9 +19,10 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
-from infx.clusters.slurm import model_path, slurm_settings
+from infx.clusters.slurm import slurm_settings
 from infx.launch.context import LaunchError
 from infx.launch.drivers.srt.lanes import srt_time_limit
+from infx.launch.drivers.srt.recipe import HEALTH_ATTEMPTS
 
 if TYPE_CHECKING:
     from infx.clusters import Cluster
@@ -35,6 +36,8 @@ DCGM_EXPORTER_IMAGE = "nvcr.io/nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless"
 DCGM_EXPORTER_ALIAS = "dcgm-exporter"
 # The exporter image's provenance; power lanes stage it with their logs for the audit.
 EXPORTER_PROVENANCE = "exporter-image.sha256"
+# What multi-node recipes without a health check get; recipe.py raises lower budgets.
+HEALTH_CHECK = {"max_attempts": HEALTH_ATTEMPTS, "interval_seconds": 10}
 
 
 @dataclass(frozen=True)
@@ -50,6 +53,7 @@ class SrtJob:
     dcgm_exporter: str | None = None
     containers: Mapping[str, str] = field(default_factory=dict)  # more recipe containers
     model_paths: Mapping[str, str] = field(default_factory=dict)
+    health_check: Mapping[str, int] | None = None  # default_health_check
     mounts: Sequence[tuple[str, str]] = ()  # (host, container) added to the cluster's mounts
     exclusive: bool | None = None  # None: the cluster's multi-node directive
 
@@ -112,11 +116,10 @@ def render(cluster: Cluster, job: SrtJob) -> dict[str, Any]:
     config["srtctl_root"] = str(job.srtctl_root)
     if srt.outputs is not None:
         config["output_dir"] = str(srt.outputs)
-    # The table check keeps the cluster's static aliases and the lanes' aliases disjoint.
-    model_paths = {alias: str(model_path(cluster, key)) for alias, key in srt.model_aliases.items()}
-    model_paths.update(job.model_paths)
-    if model_paths:
-        config["model_paths"] = model_paths
+    if job.model_paths:
+        config["model_paths"] = dict(job.model_paths)
+    if job.health_check is not None:
+        config["default_health_check"] = dict(job.health_check)
     containers = dict.fromkeys(srt.container_aliases, job.container)
     containers[job.image] = job.container
     containers[pyxis_spelling(job.image)] = job.container
@@ -254,6 +257,7 @@ def write_lane_config(
         dcgm_exporter=dcgm,
         containers=containers,
         model_paths=model_paths,
+        health_check=HEALTH_CHECK,
         mounts=lane_mounts(run, lane),
     )
     config_yaml = checkout / "srtslurm.yaml"

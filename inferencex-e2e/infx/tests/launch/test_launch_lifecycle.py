@@ -13,7 +13,8 @@ from infx.launch.lifecycle import Lifecycle
 ROOT = Path(__file__).resolve().parents[3]
 
 
-def test_workload_rc_wins_over_failing_cleanups():
+@pytest.mark.parametrize(("recorded", "returncode"), [((3, 5), 3), ((0,), 1)])
+def test_the_first_workload_failure_wins_and_a_failed_cleanup_fails_a_green_run(recorded, returncode):
     ran = []
 
     def broken():
@@ -24,17 +25,12 @@ def test_workload_rc_wins_over_failing_cleanups():
         life.callback(ran.append, "first-registered")
         life.callback(broken)
         life.callback(lambda: 7)
-        life.record(3)
-        life.record(5)
-    assert life.returncode == 3
+        for rc in recorded:
+            life.record(rc)
+
+    assert life.returncode == returncode
+    # LIFO, and a failing cleanup does not stop the rest.
     assert ran == ["broken", "first-registered"]
-
-
-def test_cleanup_failure_fails_an_otherwise_green_run():
-    with Lifecycle() as life:
-        life.callback(lambda: 2)
-        life.record(0)
-    assert life.returncode == 1
 
 
 def test_body_exception_runs_cleanups_and_propagates():

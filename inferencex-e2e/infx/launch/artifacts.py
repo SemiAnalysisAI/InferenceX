@@ -1,7 +1,7 @@
-"""Stage launcher outputs into the runner workspace.
+"""Staging job outputs into the runner workspace.
 
-Every function reads a local directory: the one a backend's ``fetch_outputs`` returned
-for the job. Copy failures raise ``ArtifactError``; warnings stay warnings.
+Every function reads the local directory a backend's ``fetch_outputs`` returned. A failed copy
+raises ``ArtifactError``; warnings stay warnings.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from infx.results.result_filename import point_filename
 if TYPE_CHECKING:
     from infx.launch.backends.base import JobStatus
 
-# infx/launch/artifacts.py -> the project root the power adapter imports infx from.
+# The project root, which the power adapter imports infx from.
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -31,22 +31,18 @@ class ArtifactError(RuntimeError):
 
 
 def _say(message: str) -> None:
-    """Print a progress line to stdout, flushed so it interleaves with children."""
     print(message, flush=True)
 
 
 def _warn(message: str) -> None:
-    """Print a warning or error line to stderr."""
     print(message, file=sys.stderr, flush=True)
 
 
 def copy_to_workspace(source: Path, destination: Path) -> None:
-    """Copy ``source`` to ``destination`` unless both already name the same file.
+    """Copy ``source`` to ``destination`` unless it already is that file.
 
-    When the runner workspace is mounted into the container the staged result
-    already is the artifact; copying onto itself would fail.
+    It is when the container mounts the runner workspace, and copying onto itself would fail.
     """
-    source, destination = Path(source), Path(destination)
     if destination.exists() and source.samefile(destination):
         _say(f"Result already present at {destination}")
         return
@@ -68,12 +64,11 @@ _POINT_FIELDS = (
 
 
 def _point_fields(filename: str) -> list[str]:
-    """Concurrency, GPUs, ctx and gen of a point file name; an absent field is empty."""
     return [match.group(1) if (match := p.search(filename)) else "" for p in _POINT_FIELDS]
 
 
 def _result_subdirs(logs_dir: Path) -> list[Path]:
-    """``logs_dir`` or its subdirectories named ``*isl*osl*``, sorted (no symlinks)."""
+    """``logs_dir`` and its subdirectories named ``*isl*osl*``, sorted; no symlinks."""
     if not logs_dir.exists():
         raise ArtifactError(f"result directory not found at {logs_dir}")
     candidates = [logs_dir, *(entry for entry in logs_dir.iterdir())]
@@ -85,12 +80,7 @@ def _result_subdirs(logs_dir: Path) -> list[Path]:
 
 
 def copy_fixed_sequence_results(logs_dir: Path, workspace: Path, result_filename: str) -> None:
-    """Copy SRT ``results_concurrency_*.json`` points under bounded workspace names.
-
-    Aggregated (``..._gpus_G.json``) and disaggregated (``..._gpus_G_ctx_C_gen_D.json``)
-    names are renamed with ``infx.results.result_filename.point_filename``.
-    """
-    logs_dir, workspace = Path(logs_dir), Path(workspace)
+    """Copy srt-slurm's ``results_concurrency_*.json`` points under bounded workspace names."""
     subdirs = _result_subdirs(logs_dir)
     if not subdirs:
         _say(f"Warning: No result subdirectories found in {logs_dir}")
@@ -116,7 +106,6 @@ def copy_fixed_sequence_results(logs_dir: Path, workspace: Path, result_filename
 
 
 def _top_level_files(directory: Path, pattern: str = "*") -> list[Path]:
-    """Regular files directly in ``directory`` whose names match ``pattern``, sorted."""
     return sorted(
         entry
         for entry in directory.iterdir()
@@ -124,12 +113,8 @@ def _top_level_files(directory: Path, pattern: str = "*") -> list[Path]:
     )
 
 
-def copy_agentic_results(source_dir: Path, workspace: Path, result_filename: str) -> int:
-    """Copy ``{result_filename}_conc*.json`` from ``source_dir``; require at least one.
-
-    Returns the number of files copied.
-    """
-    source_dir, workspace = Path(source_dir), Path(workspace)
+def copy_agentic_results(source_dir: Path, workspace: Path, result_filename: str) -> None:
+    """Copy ``{result_filename}_conc*.json`` from ``source_dir``; at least one must exist."""
     if not source_dir.is_dir():
         raise ArtifactError(f"agentic result directory not found at {source_dir}")
     files = _top_level_files(source_dir, f"{result_filename}_conc*.json")
@@ -138,12 +123,10 @@ def copy_agentic_results(source_dir: Path, workspace: Path, result_filename: str
     if not files:
         raise ArtifactError(f"no {result_filename}_conc*.json results found in {source_dir}")
     _say(f"Copied {len(files)} agentic result file(s)")
-    return len(files)
 
 
 def copy_eval_artifacts(eval_dir: Path, workspace: Path) -> None:
-    """Copy every top-level file of ``eval_dir``; a missing dir is only a warning."""
-    eval_dir, workspace = Path(eval_dir), Path(workspace)
+    """Copy every top-level file of ``eval_dir``; a missing directory only warns."""
     if not eval_dir.is_dir():
         _warn(f"WARNING: eval results not found at {eval_dir}")
         return
@@ -152,11 +135,7 @@ def copy_eval_artifacts(eval_dir: Path, workspace: Path) -> None:
 
 
 def bundle_server_logs(logs_dir: Path, archive: Path) -> None:
-    """Write the contents of ``logs_dir`` to the gzipped tar ``archive``.
-
-    An empty or missing directory writes nothing; a failure only warns.
-    """
-    logs_dir = Path(logs_dir)
+    """Tar and gzip ``logs_dir`` into ``archive``, unless it is empty; a failure only warns."""
     if not logs_dir.is_dir() or next(logs_dir.iterdir(), None) is None:
         return
     try:
@@ -178,24 +157,21 @@ def collect_agentic_power_results(
     *,
     results_python: str | None,
 ) -> int:
-    """Stage AgentX power audit inputs and validate each concurrency's power.
+    """Stage the AgentX power audit inputs and validate each concurrency's power window.
 
-    ``status`` is the job's final status; ``power/native-job-status.txt`` records it
-    for the audit, and only a successful job passes. Every step runs even after a
-    failure; the return code is that of the last failing step, 0 if all passed.
-    Requires at least one concurrency.
+    ``power/native-job-status.txt`` records the job's final ``status`` for the audit, and
+    only a successful job passes. Every step runs; returns the last failing step's code.
     """
     if not concurrencies:
         return 1
-    logs_dir = Path(logs_dir).resolve()
-    workspace = Path(workspace).resolve()
+    logs_dir, workspace = logs_dir.resolve(), workspace.resolve()
     power_dir = logs_dir / "power"
     power_dir.mkdir(parents=True, exist_ok=True)
     (power_dir / "native-job-status.txt").write_text(f"{job_id}|{status.raw}\n")
     rc = 0 if status.succeeded else 1
 
     try:
-        copy_agentic_results(Path(source_dir), workspace, result_filename)
+        copy_agentic_results(source_dir, workspace, result_filename)
     except ArtifactError as error:
         _warn(f"ERROR: {error}")
         rc = 1
@@ -218,13 +194,12 @@ def validate_agentic_power(
     results_python: str | None,
     require_power: bool,
 ) -> int:
-    """Run the AgentX power adapter once per concurrency; return the last failing rc.
+    """Run the AgentX power adapter for every concurrency; return the last failing code.
 
-    ``require_power`` makes the adapter fail a concurrency without a valid power
-    window. Every concurrency runs; a missing ``results_python`` fails each one.
+    With ``require_power`` a concurrency without a valid power window fails.
     """
-    logs_dir = Path(logs_dir).resolve()
-    workspace = Path(workspace).resolve()
+    logs_dir = logs_dir.resolve()
+    workspace = workspace.resolve()
     rc = 0
     for concurrency in concurrencies:
         if not results_python:

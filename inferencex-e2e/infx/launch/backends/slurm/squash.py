@@ -1,8 +1,6 @@
-"""Enroot squash images for Pyxis: cache locations, locks, validation, and import.
+"""Enroot squash images for Pyxis: cache paths, import locks, validation and import.
 
-Clusters without a squash cache hand Pyxis the registry reference and it imports the
-image inside the job (:func:`registry_reference`). Otherwise an image is imported once
-into a shared or node-local squash file and every job starts from that file.
+Without a squash cache, jobs get the registry reference and Pyxis imports the image itself.
 """
 
 from __future__ import annotations
@@ -63,7 +61,6 @@ def squash_path(image: str, policy: SquashPolicy) -> Path:
 
 
 def lock_path(image: str, policy: SquashPolicy) -> Path:
-    """Per-image import lock, where the policy's lock file puts it."""
     path = squash_path(image, policy)
     if policy.lock_file == "locks-dir":
         return path.parent / ".locks" / f"{squash_key(image)}.lock"
@@ -71,12 +68,11 @@ def lock_path(image: str, policy: SquashPolicy) -> Path:
 
 
 def enroot_uri(image: str) -> str:
-    """Enroot import URI for a Docker-style reference, preserving digest pins.
+    """Enroot import URI for an image reference, keeping digest pins.
 
-    Enroot 3.x cannot parse ``tag@digest``, so digest-pinned images use its explicit
-    ``registry#repository:digest`` syntax (the tag is dropped; the digest is immutable).
-    Non-Docker-Hub registries use ``registry#repository``. Pyxis-style ``registry#repo``
-    input is accepted and treated as ``registry/repo``.
+    Enroot 3.x cannot parse ``tag@digest``, so a pinned image becomes
+    ``registry#repository:digest`` (the digest is immutable, so the tag is dropped).
+    Pyxis-style ``registry#repo`` input is read as ``registry/repo``.
     """
     image = image.replace("#", "/", 1)
     without_digest, digest = image, ""
@@ -105,7 +101,6 @@ def registry_reference(image: str) -> str:
 
 
 def is_valid_squash(path: Path) -> bool:
-    """Whether ``path`` is a readable squashfs that ``unsquashfs -l`` can list."""
     if not os.access(path, os.R_OK):
         return False
     try:
@@ -118,10 +113,8 @@ def is_valid_squash(path: Path) -> bool:
 def reuse_or_registry(image: str, policy: SquashPolicy) -> str:
     """``--container-image`` for a job that imports nothing first.
 
-    A valid shared squash of exactly this image is reused. Otherwise Pyxis gets the
-    registry reference and imports the image inside the job's own allocation: no
-    lock, no extra allocation. Node-local squashes are invisible from this host, so
-    those clusters always hand Pyxis the registry reference.
+    A valid shared squash is reused; otherwise Pyxis imports the registry reference inside
+    the job, with no lock and no extra allocation. Node-local squashes are invisible here.
     """
     if policy.visibility == "shared":
         path = squash_path(image, policy)
@@ -132,10 +125,9 @@ def reuse_or_registry(image: str, policy: SquashPolicy) -> str:
 
 @contextlib.contextmanager
 def _locked(path: Path, timeout_s: int) -> Iterator[None]:
-    """Hold an exclusive ``flock`` on ``path``, waiting at most ``timeout_s``.
+    """Hold an exclusive ``flock`` on ``path`` for at most ``timeout_s`` of waiting.
 
-    A lock file this account cannot write (another account created it) is opened
-    read-only: ``flock`` needs no write access.
+    A lock file another account created is opened read-only: ``flock`` needs no write access.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     try:
@@ -215,8 +207,7 @@ if [ "$action" = validate ]; then
   exit 66
 fi
 mkdir -p "$(dirname "$sq")" "$(dirname "$lock")"
-# Open a lock file this account cannot write (another account created it)
-# read-only: flock needs no write access.
+# Another account's lock file opens read-only; flock needs no write access.
 if ! { exec 9>"$lock"; } 2>/dev/null; then
   exec 9<"$lock" || { echo "$host: ERROR: cannot open image lock $lock" >&2; exit 1; }
 fi
@@ -312,12 +303,9 @@ def ensure_image(
 ) -> str:
     """Make the squash of ``image`` available and return its path for ``--container-image``.
 
-    ``unchecked`` returns the path without touching it; ``pre-staged`` only validates the
-    squash file; ``submit-host`` imports on this host; ``compute`` imports on one compute
-    node: ``job``'s, or without a job a standalone step allocated by ``alloc_args``;
-    ``all-nodes`` imports on ``job``'s node under a per-node lock. Valid shared squashes are
-    reused without an allocation. Raises ``ImageError`` when the image cannot be made
-    available.
+    Node-side modes run on ``job``'s node; a ``compute`` import without a job runs in a
+    one-node step allocated by ``alloc_args``. A valid shared squash is reused as is.
+    Raises ``ImageError`` when the image cannot be made available.
     """
     mode = policy.import_mode
     path = squash_path(image, policy)

@@ -244,14 +244,14 @@ def run_cli(cwd, *args, **environment):
 
 @pytest.mark.parametrize("layout,name", [("module", "checkout package"), ("legacy", "checkout script")])
 @pytest.mark.parametrize("safe_path", [False, True])
-def test_cli_runs_the_checkouts_own_planner_and_forwards_its_output(tmp_path, layout, name, safe_path):
+def test_cli_runs_the_checkouts_own_planner_and_forwards_its_output_and_status(tmp_path, layout, name, safe_path):
     checkout = planner_checkout(tmp_path / "checkout", layout)
-    arguments = ["--changelog-file", "perf-changelog.yaml", "--base-ref", "base", "--head-ref", "head"]
+    arguments = ["--changelog-file", "perf-changelog.yaml", "--base-ref", "base", "--head-ref", "head", "--exit", "3"]
 
     result = run_cli(tmp_path, "plan", str(checkout), *arguments,
                      **({"PYTHONSAFEPATH": "1"} if safe_path else {}))
 
-    assert result.returncode == 0, result.stderr
+    assert result.returncode == 3, result.stderr
     output = json.loads(result.stdout)
     del output["env"]
     assert output == {
@@ -277,15 +277,6 @@ def test_cli_runs_the_tool_without_the_callers_credentials(tmp_path):
     assert (env["PATH"], env["LANG"], env["TMPDIR"]) == (os.environ["PATH"], "en_US.UTF-8", str(tmp_path))
     # Only the revision is importable: the caller's tooling path is not inherited.
     assert env["PYTHONPATH"] == str(checkout.resolve())
-
-
-def test_cli_preserves_the_planners_failure_status(tmp_path):
-    checkout = planner_checkout(tmp_path / "checkout", "module")
-
-    result = run_cli(tmp_path, "plan", str(checkout), "--exit", "3")
-
-    assert result.returncode == 3
-    assert result.stderr == "planner diagnostics\n"
 
 
 def test_cli_rejects_a_checkout_without_the_tool(tmp_path):

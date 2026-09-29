@@ -25,7 +25,6 @@ if TYPE_CHECKING:
     from infx.launch.backends.slurm import SlurmBackend, SlurmJob
     from infx.launch.drivers.srt.checkout import Checkout
     from infx.launch.drivers.srt.lanes import SrtLane
-    from infx.launch.drivers.srt.power import PowerDecision
     from infx.launch.drivers.srt.run import SrtRun
 
 SINGLE_NODE_SUBMISSION = "srt-single-node-submission.json"
@@ -80,7 +79,6 @@ def apply(
     *,
     cwd: Path,
     stdout: Path | None = None,
-    env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run ``srtctl apply`` for ``config`` with ``arguments``.
 
@@ -91,15 +89,14 @@ def apply(
         str(venv / "bin/python"), "-m", "infx.srt_slurm.synthetic_acceptance",
         config, run.request.framework, "--", *arguments,
     ]  # fmt: skip
-    env = run.env if env is None else env
     if stdout is None:
-        result = proc.run(argv, env=env, cwd=cwd, capture=True)
+        result = proc.run(argv, env=run.env, cwd=cwd, capture=True)
         sys.stdout.write(result.stdout + result.stderr)
         sys.stdout.flush()
         return result
-    proc.echo(argv, env)
+    proc.echo(argv, run.env)
     with stdout.open("w") as handle:
-        rc = subprocess.run(argv, env=env, cwd=cwd, stdout=handle, check=False).returncode
+        rc = subprocess.run(argv, env=run.env, cwd=cwd, stdout=handle, check=False).returncode
     return subprocess.CompletedProcess(argv, rc, stdout.read_text(errors="replace"), "")
 
 
@@ -165,17 +162,16 @@ def submit_lane(
     checkout: Checkout,
     config_file: str,
     arguments: list[str],
-    env: dict[str, str],
 ) -> int:
     """Submit a multi-node lane job, record it in ``submitted``, and return srtctl's exit code."""
     if submitted.manifest is None:
-        applied = apply(run, venv, config_file, arguments, cwd=checkout.root, env=env)
+        applied = apply(run, venv, config_file, arguments, cwd=checkout.root)
         if applied.returncode:
             return applied.returncode
         submitted.job = _prose_job(run.backend, applied.stdout + applied.stderr, checkout)
     else:
         applied = apply(
-            run, venv, config_file, [*arguments, "--json", "--yes"], cwd=checkout.root, env=env,
+            run, venv, config_file, [*arguments, "--json", "--yes"], cwd=checkout.root,
             stdout=submitted.manifest,
         )  # fmt: skip
         print(applied.stdout, end="", flush=True)
@@ -192,9 +188,8 @@ def multinode_arguments(
     checkout: Checkout,
     config_file: str,
     overrides: list[str],
-    power: PowerDecision,
     *,
-    env: dict[str, str],
+    preflight: bool,
 ) -> list[str]:
     """The ``srtctl apply`` arguments of a multi-node lane submission.
 
@@ -202,15 +197,18 @@ def multinode_arguments(
     """
     request = run.request
     stream = [] if checkout.fork else ["--set", "benchmark.stream_output=true"]
-    arguments = [*eval_args(env, MULTINODE_EVAL_COMMAND), *stream, *overrides, "-f", config_file]
-    if not checkout.fork and any(match(request, dcgm=power.dcgm) for match in lane.no_preflight):
+    arguments = [
+        *eval_args(run.env, MULTINODE_EVAL_COMMAND),
+        *stream,
+        *overrides,
+        "-f",
+        config_file,
+    ]
+    if not checkout.fork and not preflight:
         arguments.append("--no-preflight")
     if lane.tag is not None:
-        workload = (
-            "agentic"
-            if lane.agentic_workload_tag and request.is_agentic
-            else f"{request.env.get('ISL', '')}x{request.env.get('OSL', '')}"
-        )
+        isl, osl = request.env.get("ISL", ""), request.env.get("OSL", "")
+        workload = "agentic" if request.is_agentic else f"{isl}x{osl}"
         stamp = datetime.now().astimezone().strftime("%Y%m%d")  # local date
         arguments += [
             "--tags",

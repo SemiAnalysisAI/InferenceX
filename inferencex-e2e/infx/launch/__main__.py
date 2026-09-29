@@ -1,9 +1,7 @@
-"""``python -m infx.launch {run,cleanup}``: the workflow entry points for benchmark launches.
+"""Run the benchmark point the workflow environment describes, or clean up after earlier ones.
 
-``run`` resolves the cluster that owns ``RUNNER_NAME``, runs the driver its launch path
-selects on the cluster's backend, and exits with its return code (130/143/129 after a
-SIGINT/SIGTERM/SIGHUP). ``cleanup`` has the cluster's backend remove what earlier
-launches on the runner left behind.
+``run`` exits with the point's return code (128 + N after signal N); ``cleanup`` has the
+runner's cluster backend remove what earlier launches on the runner left behind.
 """
 
 from __future__ import annotations
@@ -25,7 +23,7 @@ from infx.launch.request import LaunchRequest, RequestError
 
 
 def launch(cluster: Cluster, request: LaunchRequest) -> int:
-    """Run ``request`` on ``cluster``; report a launch error as one ``ERROR:`` line."""
+    """Run ``request`` on ``cluster``; a launch error is one ``ERROR:`` line, not a traceback."""
     with Lifecycle() as life:
         try:
             life.record(drivers.run(cluster, request, life))
@@ -36,7 +34,6 @@ def launch(cluster: Cluster, request: LaunchRequest) -> int:
 
 
 def _run(runner_config: Path | None) -> int:
-    """Run one launch described by the environment and return its exit code."""
     try:
         request = LaunchRequest.from_env()
     except RequestError as error:
@@ -46,7 +43,6 @@ def _run(runner_config: Path | None) -> int:
 
 
 def _cleanup(runner_config: Path | None) -> int:
-    """Have the runner's backend remove its leftovers and wait for them to go."""
     runner = os.environ.get("RUNNER_NAME", "")
     if not runner:
         print("ERROR: RUNNER_NAME is required", file=sys.stderr)
@@ -54,8 +50,8 @@ def _cleanup(runner_config: Path | None) -> int:
     try:
         cluster = resolve_cluster(runner, runner_config)
     except (OSError, ValueError, yaml.YAMLError) as error:
-        # Cleanup must not fail the job over config drift. Without the record, only
-        # backends that find their jobs by runner name alone can clean up.
+        # Config drift must not fail the job. Without the record, only backends that find
+        # their jobs by runner name alone can clean up.
         print(f"WARNING: {error}", file=sys.stderr)
         for scheduler in BACKENDS:
             backend_class(scheduler).cleanup(None, runner)
@@ -65,7 +61,6 @@ def _cleanup(runner_config: Path | None) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Parse the subcommand and dispatch."""
     parser = argparse.ArgumentParser(prog="python -m infx.launch", description=__doc__)
     parser.add_argument(
         "--runner-config",

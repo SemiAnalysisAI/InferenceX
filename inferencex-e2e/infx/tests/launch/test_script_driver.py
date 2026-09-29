@@ -124,7 +124,6 @@ def launch_env(workspace: Path, **overrides: str) -> dict[str, str]:
 
 
 def request_for(workspace: Path, **overrides: str) -> LaunchRequest:
-    """The parsed launch request for :func:`launch_env`."""
     return LaunchRequest.from_env(launch_env(workspace, **overrides))
 
 
@@ -160,18 +159,15 @@ def inventory_for(tmp_path: Path, slurm: dict | None = None, squash: dict | None
 
 
 def cluster_for(tmp_path: Path, slurm: dict | None = None, squash: dict | None = None):
-    """The fixture cluster of :func:`inventory_for`."""
     return load_inventory(inventory_for(tmp_path, slurm, squash)).clusters["fixture"]
 
 
 def option(argv: list[str], name: str) -> str:
-    """Value of ``--name=value`` in ``argv``."""
     [value] = [arg.split("=", 1)[1] for arg in argv if arg.startswith(f"{name}=")]
     return value
 
 
 def container_step(calls: list[list[str]]) -> list[str]:
-    """The one srun call that starts a container."""
     [step] = [call for call in calls if any(arg.startswith("--container-image=") for arg in call)]
     return step
 
@@ -247,13 +243,13 @@ def test_unstaged_model_resolves_under_the_download_root_without_a_node_probe(
     assert not any(call[0] == "srun" and "test" in call for call in fakes())
 
 
-def test_a_result_outside_the_container_workspace_fails_before_any_slurm_call(
-    fakes, workspace, tmp_path, capsys
-):
-    request = request_for(workspace, OUT_YAML="/tmp/speedbench-reference-al.yaml")
-
-    assert launch(cluster_for(tmp_path), request) == 1
-    assert "lies outside the container workspace" in capsys.readouterr().err
+@pytest.mark.parametrize(("overrides", "message"), [
+    ({"OUT_YAML": "/tmp/speedbench-reference-al.yaml"}, "lies outside the container workspace"),
+    ({"GPU_COUNT": ""}, "GPU_COUNT"),
+])  # fmt: skip
+def test_a_bad_input_fails_before_any_slurm_call(fakes, workspace, tmp_path, capsys, overrides, message):
+    assert launch(cluster_for(tmp_path), request_for(workspace, **overrides)) == 1
+    assert message in capsys.readouterr().err
     assert fakes() == []
 
 
@@ -296,12 +292,6 @@ def test_salloc_exclude_escape_hatch_extends_the_cluster_exclusions(fakes, works
 
     allocation = next(call for call in fakes() if call[0] == "salloc")
     assert option(allocation, "--exclude") == "bad-node,node[1,3]"
-
-
-def test_missing_gpu_count_fails_before_any_slurm_call(fakes, workspace, tmp_path, capsys):
-    assert launch(cluster_for(tmp_path), request_for(workspace, GPU_COUNT="")) == 1
-    assert "GPU_COUNT" in capsys.readouterr().err
-    assert fakes() == []
 
 
 def test_sigterm_during_the_collector_cancels_the_allocation_and_exits_143(

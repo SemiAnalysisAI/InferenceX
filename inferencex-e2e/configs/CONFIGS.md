@@ -147,8 +147,8 @@ Notes:
 
 ## Runners
 
-The `runners.yaml` config represents available runner labels and the static
-facts of each physical cluster. It has two top-level sections:
+`runners.yaml` holds the schedulable runner labels and the static facts of each
+physical cluster:
 
 ```yaml
 labels:
@@ -174,66 +174,50 @@ clusters:
       squash: {dir: /data/home/sa-gha-runner/squash, visibility: shared, import: compute}
 ```
 
-`labels` maps a schedulable runner label to the concrete runner node names that
-can satisfy that label. Every concrete runner must appear under exactly one
-`cluster:<id>` label, and every such label has a `clusters.<id>` record (and
-vice versa); launchers resolve their cluster from `RUNNER_NAME` through
-[`infx.clusters`](../infx/clusters/__init__.py), whose Pydantic models are the
-authoritative schema.
-Node shape, `env` and `models` are scheduler-neutral. `scheduler` names a
-scheduler registered in `infx.clusters.SCHEDULERS`, and the record's sub-record
-of the same name holds that scheduler's own settings, parsed by its settings
-model; records for other schedulers are rejected. For `scheduler: slurm` that is
-`slurm:` ([`infx/clusters/slurm.py`](../infx/clusters/slurm.py): partition,
-account, exclusivity, GRES, extra `srun`/`salloc` options, the volumes, the Pyxis
-squash cache in `slurm.squash`, and the srt-slurm profile in `slurm.srt-slurm`).
-Matrix generation reads `gpus-per-node` and `available-cpu-dram-mib` from the
-cluster named by the master config's `cluster:<id>` runner label; broad SKU
-labels fall back to the GPU family when its clusters agree. Agentic master
-configs must use a `cluster:<id>` runner label.
-`available-cpu-dram-mib` is the host CPU DRAM available to benchmark jobs, in
-MiB, and is optional for clusters where it has not been measured. Agentic DRAM
-KV-offload matrices combine it with `gpus-per-node` and the master config's
-`dram-utilization` to emit `total-cpu-dram-gb` for benchmark templates.
-`env` is set in the workload of every launch on the cluster, whatever the driver.
-Its values cannot contain commas, because Slurm hands them to jobs in an
-`srun --export` list.
-The scheduler sub-record's `volumes` names the cluster's checkpoint roots and
-caches in that scheduler's terms, each with its visibility (`shared`, the default,
-or `node-local`); for Slurm a volume is a host `path` that jobs see at the same
-place. Caches use the names `hf-home`, `hf-hub-cache`, `shared-hf-hub-cache`,
-`aiperf-cache`, `dynamo-wheels` and `tilert-cache`. `models.entries` keys
-pre-staged checkpoints by directory name and names the volume holding each as
-`root`. The optional `models.download-root` names the shared volume that receives
-checkpoints missing from `entries` (`<root>/<HF basename>`).
-`slurm.squash` holds the squash cache policy (`dir`, `visibility`, `import`,
-`lock-timeout-s`, and `key-style`: `underscore`, `plus`, or `plus-strip-nvcr`).
-`import` is `submit-host` (on the launching host), `compute` (once on one
-compute node), `all-nodes` (on every node of the job), `pre-staged` (only
-validate what operators staged), or `unchecked` (hand jobs the squash path
-without validating or importing anything).
-Imports lock `<squash>.lock`. Only `lock-file: locks-dir` (b200-nscale) locks
-`<dir>/.locks/<key>.lock` instead, the lock
-[`tilert_utils/submit.sh`](../benchmarks/multi_node/tilert_utils/submit.sh) takes
-when it imports into the same directory. Jobs srtctl submits allocate themselves,
-so nothing is imported inside them: native single-node runs reuse a valid squash
-of the exact image, or else hand Pyxis the registry image to import inside the
-job, and `single-node-import: true` imports with `import` first instead;
-multi-node jobs import first unless `multi-node-import: false`, which has them
-reuse a valid squash or hand Pyxis the registry image too. For multi-node
-images, `framework-dirs.<framework>` (`dir`, `key-style`, `import`, and
-`model-prefixes.<prefix>` for one model prefix) gives one framework's images
-another directory, naming scheme or import mode, and `helper-dirs.nginx` and
-`helper-dirs.dcgm-exporter` do the same for those helper images. A location's
-unset fields are the cache's own; a model prefix's location replaces its
-framework's.
-`import-step-args` adds options to a standalone `compute` import step. A cluster
-without `slurm.squash` imports nothing: every job starts from the registry
-image, which Pyxis imports inside the job.
-`slurm.srt-slurm` is the cluster's srt-slurm profile: `volume-mounts` maps
-volumes every job mounts to container paths, `mounts` does the same for host
-paths outside the volumes (devices), `env` is the environment of the srt-slurm
-launch, `container-aliases` and `nginx-aliases` name the recipe containers that
-resolve to the main image and to the staged nginx, and `outputs`,
-`shared-run-root` and `uv-cache-root` are the directories the srt-slurm launcher
-itself uses.
+The Pydantic models in [`infx/clusters/`](../infx/clusters) are the authoritative
+schema; unknown keys fail.
+
+- `labels` maps each schedulable label to concrete runner names. Every runner is in
+  exactly one `cluster:<id>` label, and every such label has a `clusters.<id>` record;
+  `python -m infx.launch` resolves its cluster from `RUNNER_NAME` this way.
+- Matrix generation reads `gpus-per-node` and `available-cpu-dram-mib` (host DRAM for
+  benchmark jobs, optional where unmeasured) from the cluster a master config's
+  `cluster:<id>` label names; broad SKU labels use the GPU family when its clusters
+  agree. Agentic master configs must use a `cluster:<id>` label; their DRAM KV-offload
+  matrices combine both fields with `dram-utilization` into `total-cpu-dram-gb`.
+- `env` is the workload environment of every launch on the cluster. Values cannot
+  contain commas: Slurm hands them to jobs in an `srun --export` list.
+- `models.entries` keys pre-staged checkpoints by directory name, each with its `root`
+  volume and `dir`. The optional `models.download-root` names the shared volume that
+  receives missing checkpoints as `<root>/<HF basename>`.
+- `scheduler` names a scheduler registered in `infx.clusters.SCHEDULERS`; the
+  sub-record of that name holds its settings, and records for other schedulers are
+  rejected. Its `volumes` name the checkpoint roots and caches (`hf-home`,
+  `hf-hub-cache`, `shared-hf-hub-cache`, `aiperf-cache`, `dynamo-wheels`,
+  `tilert-cache`), each `shared` (the default) or `node-local`.
+- `slurm:` ([`infx/clusters/slurm.py`](../infx/clusters/slurm.py)) holds the partition,
+  account, exclusivity, GRES, excluded nodes and extra `srun`/`salloc` options; its
+  volumes are host `path`s that jobs see at the same place.
+- `slurm.squash` is the Pyxis squash cache: `dir`, `visibility`, `lock-timeout-s`,
+  `key-style` (`underscore`, `plus` or `plus-strip-nvcr`) and `import`: `submit-host`
+  (on the launching host), `compute` (once on one compute node), `all-nodes` (on every
+  node of the job), `pre-staged` (only validate what operators staged) or `unchecked`
+  (use the squash path untouched). Imports lock `<squash>.lock`; `lock-file: locks-dir`
+  locks `<dir>/.locks/<key>.lock`, which
+  [`tilert_utils/submit.sh`](../benchmarks/multi_node/tilert_utils/submit.sh) also
+  takes. Jobs srtctl submits allocate themselves, so nothing is imported inside them:
+  they reuse a valid squash or let Pyxis import the registry image, unless
+  `single-node-import: true` or `multi-node-import` (the default) imports first.
+  `framework-dirs.<framework>` (and its `model-prefixes.<prefix>`) and
+  `helper-dirs.nginx`/`helper-dirs.dcgm-exporter` give multi-node images another `dir`,
+  `key-style` or `import`; unset fields are the cache's, and a model prefix's location
+  replaces its framework's. `import-step-args` adds options to a standalone `compute`
+  import step. Without `slurm.squash`, every job starts from the registry image, which
+  Pyxis imports inside the job.
+- `slurm.srt-slurm` is the cluster's srt-slurm profile: `volume-mounts` maps
+  volumes every job mounts to container paths, `mounts` does the same for host
+  paths outside the volumes (devices), `env` is the environment of the srt-slurm
+  launch, `container-aliases` and `nginx-aliases` name the recipe containers that
+  resolve to the main image and to the staged nginx, and `outputs`,
+  `shared-run-root` and `uv-cache-root` are the directories the srt-slurm launcher
+  itself uses.

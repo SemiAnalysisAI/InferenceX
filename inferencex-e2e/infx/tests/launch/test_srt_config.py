@@ -37,7 +37,6 @@ def test_the_profile_renders_its_facts_and_mounts_a_volume_at_a_second_target():
         srt={
             "network-interface": "eno0",
             "outputs": "/share/outputs",
-            "model-aliases": {"model-a": "Model-A"},
             "host-setup": {
                 "script": "runners/hooks/setup.sh", "env": {"IBDEVICES": "rdma0,rdma1"},
                 "timeout-s": 1200, "nodes": "all",
@@ -62,7 +61,7 @@ def test_the_profile_renders_its_facts_and_mounts_a_volume_at_a_second_target():
     }
     assert config["output_dir"] == "/share/outputs"
     assert config["default_sbatch_directives"] == {"cpus-per-task": "128"}
-    assert config["model_paths"] == {"model-a": "/share/data/Model-A"}
+    assert "model_paths" not in config and "default_health_check" not in config
     assert (config["visible_devices_env"], config["default_gpu_exporter"]) == ("ROCR_VISIBLE_DEVICES", None)
     assert (config["network_interface"], config["use_exclusive_sbatch_directive"]) == ("eno0", True)
     assert "default_account" not in config
@@ -83,22 +82,14 @@ def test_exclusivity_follows_the_shape():
     assert render(shared, job(exclusive=True))["use_exclusive_sbatch_directive"] is True
 
 
-def test_node_exclusions_cpus_static_aliases_and_image_aliases_are_rendered():
+def test_node_exclusions_cpus_and_image_aliases_are_rendered():
     record = cluster(
         slurm={"account": "bench", "exclude": ["node-1", "node-2"], "cpus-per-task": 192,
                "volumes": {"scratch": {"path": "/scratch/models"}}},
-        srt={"container-aliases": ["dynamo-sglang", "dynamo-vllm"], "nginx-aliases": ["nginx-sqsh"],
-             "model-aliases": {"dsr1": "DeepSeek-R1", "deepseek-ai/DeepSeek-R1": "DeepSeek-R1"}},
-        entries={"DeepSeek-R1": {"root": "scratch", "dir": "DeepSeek-R1-0528"}},
+        srt={"container-aliases": ["dynamo-sglang", "dynamo-vllm"], "nginx-aliases": ["nginx-sqsh"]},
     )  # fmt: skip
-    config = render(record, job(model_paths={"hf:org/model": "hf:org/model"}))
+    config = render(record, job())
     assert config["default_sbatch_directives"] == {"exclude": "node-1,node-2", "cpus-per-task": "192"}
-    # Static aliases name staged checkpoints; the job adds its own.
-    assert config["model_paths"] == {
-        "dsr1": "/scratch/models/DeepSeek-R1-0528",
-        "deepseek-ai/DeepSeek-R1": "/scratch/models/DeepSeek-R1-0528",
-        "hf:org/model": "hf:org/model",
-    }
     assert config["containers"] == {
         "dynamo-sglang": "/sq/image.sqsh",
         "dynamo-vllm": "/sq/image.sqsh",

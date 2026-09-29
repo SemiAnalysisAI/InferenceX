@@ -10,7 +10,6 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from infx.config import repository_root
 from infx.launch import proc
@@ -18,12 +17,10 @@ from infx.launch.context import LaunchError
 from infx.launch.drivers.srt.recipe import RECIPES_MIRROR
 from infx.launch.drivers.srt.run import SrtRun, require
 
-if TYPE_CHECKING:
-    from infx.launch.drivers.srt.lanes import SrtLane
-
 SUBMODULE = Path("utils/srt-slurm")
 PATCHES = Path("runners/srt-slurm/patches")
 SETUP_LOG = "srt-setup.log"
+SETUP_ATTEMPTS = 5
 UV_INSTALLER = "https://astral.sh/uv/install.sh"
 
 
@@ -73,8 +70,8 @@ def _checked(result: subprocess.CompletedProcess[str], action: str) -> None:
         raise LaunchError(f"{action} failed (exit {result.returncode})")
 
 
-def checkout_dir(run: SrtRun, lane: SrtLane, *, shared: bool) -> Path:
-    """Where the lane's checkout lives: shared-run-root, per-run, or ``<workspace>/srt-slurm``."""
+def checkout_dir(run: SrtRun, *, shared: bool) -> Path:
+    """Where a multi-node checkout lives, named for its run: shared-run-root or the workspace."""
     request = run.request
     if shared:
         root = run.srt.shared_run_root
@@ -83,13 +80,11 @@ def checkout_dir(run: SrtRun, lane: SrtLane, *, shared: bool) -> Path:
         run_id = request.env.get("GITHUB_RUN_ID", "")
         attempt = request.env.get("GITHUB_RUN_ATTEMPT", "")
         return root / f"srt-slurm-{run_id}-{attempt}-{request.runner_name}-{os.getpid()}"
-    if lane.per_run_checkout:
-        require(request, "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT")
-        # Twelve hex digits of the RESULT_FILENAME's SHA-1 keep concurrent points apart.
-        digest = hashlib.sha1(request.result_filename.encode(), usedforsecurity=False)
-        run_id, attempt = request.env["GITHUB_RUN_ID"], request.env["GITHUB_RUN_ATTEMPT"]
-        return run.workspace / f"srt-slurm-{run_id}-{attempt}-{digest.hexdigest()[:12]}"
-    return run.workspace / "srt-slurm"
+    require(request, "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT")
+    # Twelve hex digits of the RESULT_FILENAME's SHA-1 keep concurrent points apart.
+    digest = hashlib.sha1(request.result_filename.encode(), usedforsecurity=False)
+    run_id, attempt = request.env["GITHUB_RUN_ID"], request.env["GITHUB_RUN_ATTEMPT"]
+    return run.workspace / f"srt-slurm-{run_id}-{attempt}-{digest.hexdigest()[:12]}"
 
 
 def prepare_checkout(run: SrtRun, destination: Path, *, power: bool) -> Checkout:
@@ -230,34 +225,27 @@ def _discard_corrupt_archives(configs: Path) -> bool:
     return discarded
 
 
-def run_setup(run: SrtRun, checkout: Checkout, *, attempts: int) -> int:
+def run_setup(run: SrtRun, checkout: Checkout) -> int:
     """Run ``make setup`` in the checkout; return its exit code.
 
-    Output goes to ``srt-setup.log`` and is printed only on failure. With
-    ``attempts`` > 1, a failure is retried only after discarding a corrupt
-    NATS/etcd download.
+    Output goes to ``srt-setup.log`` and is printed only on failure. GitHub release
+    downloads occasionally return a truncated NATS/etcd archive with a successful status,
+    so a failure is retried only after discarding such an archive.
     """
     log = run.workspace / SETUP_LOG
-    for attempt in range(1, attempts + 1):
-        suffix = f" (attempt {attempt}/{attempts})" if attempts > 1 else ""
-        print(f"Setting up srt-slurm{suffix} (details: {SETUP_LOG})", flush=True)
+    for attempt in range(1, SETUP_ATTEMPTS + 1):
+        print(f"Setting up srt-slurm, attempt {attempt} (details: {SETUP_LOG})", flush=True)
         argv = ["make", "setup", f"ARCH={run.cluster.arch}"]
         rc = _run_logged(argv, log, env=run.env, cwd=checkout.root)
         if rc == 0:
             print("srt-slurm setup complete", flush=True)
             return 0
         sys.stderr.write(log.read_text(errors="replace"))
-        if attempts == 1:
-            return rc
         if not _discard_corrupt_archives(checkout.root / "configs"):
-            print(
-                "ERROR: srt-slurm setup failed without an invalid NATS/etcd archive; not retrying",
-                file=sys.stderr,
-            )
-            return 1
-        if attempt < attempts:
+            return rc
+        if attempt < SETUP_ATTEMPTS:
             time.sleep(attempt * 5)
-    print(f"ERROR: srt-slurm setup failed after {attempts} attempts", file=sys.stderr)
+    print(f"ERROR: srt-slurm setup failed after {SETUP_ATTEMPTS} attempts", file=sys.stderr)
     return 1
 
 

@@ -158,20 +158,20 @@ RECORD = {"gpus-per-node": 8, "arch": "x86_64", "scheduler": "slurm",
 
 def test_every_row_the_inventory_contradicts_is_reported_at_once(monkeypatch):
     clusters = load_inventory({"labels": {"cluster:c": ["c_0"]}, "clusters": {"c": RECORD}}).clusters
-    monkeypatch.setitem(policy.RUNTIME_MODEL_ENTRIES, "c", ((Match(), "Absent-Model"),))
-    monkeypatch.setitem(models.SINGLE_NODE_MODELS, "c", ())
+    monkeypatch.setitem(policy.LEGACY_TILERT, "c", policy.LEGACY_TILERT["b200-nscale"])
+    monkeypatch.setitem(models.OVERRIDES, "c", ())
     with pytest.raises(LaunchError) as raised:
         check_tables(clusters)
     problems = str(raised.value)
-    # One table of each module: the policy's names a missing checkpoint, the srt
-    # driver's a cluster without an srt-slurm profile.
-    assert "RUNTIME_MODEL_ENTRIES['c']" in problems and "SINGLE_NODE_MODELS['c']" in problems
+    # One table of each module: the policy's needs a squash cache the record lacks, the
+    # srt driver's a cluster with an srt-slurm profile.
+    assert "LEGACY_TILERT['c']" in problems and "OVERRIDES['c']" in problems
 
 
 def test_a_launch_checks_its_own_cluster_rows_before_any_work(monkeypatch, capsys):
     labels = {"cluster:c": ["c_0"], "cluster:d": ["d_0"]}
     clusters = load_inventory({"labels": labels, "clusters": {"c": RECORD, "d": RECORD}}).clusters
-    monkeypatch.setitem(policy.RUNTIME_MODEL_ENTRIES, "d", ((Match(), "Absent-Model"),))
+    monkeypatch.setitem(policy.LEGACY_TILERT, "d", policy.LEGACY_TILERT["b200-nscale"])
 
     class ReachedBackend(Exception):
         pass
@@ -184,6 +184,6 @@ def test_a_launch_checks_its_own_cluster_rows_before_any_work(monkeypatch, capsy
     with pytest.raises(ReachedBackend), Lifecycle() as life:
         drivers.run(clusters["c"], _request(IS_MULTINODE="false"), life)
 
-    monkeypatch.setitem(policy.RUNTIME_MODEL_ENTRIES, "c", ((Match(), "Absent-Model"),))
+    monkeypatch.setitem(policy.LEGACY_TILERT, "c", policy.LEGACY_TILERT["b200-nscale"])
     assert launch(clusters["c"], _request(IS_MULTINODE="false")) == 1
-    assert "RUNTIME_MODEL_ENTRIES['c']" in capsys.readouterr().err
+    assert "LEGACY_TILERT['c']" in capsys.readouterr().err
