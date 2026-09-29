@@ -4,7 +4,7 @@
 
 `bench/run_swap_blocks.py` measures `from vllm._custom_ops import swap_blocks`
 on one CUDA or ROCm GPU using an installed, compatible vLLM build. Run it directly
-with Python inside that environment, or select the isolated GPU Action below.
+with Python inside that environment, or dispatch the suite through the GitHub Action below.
 It does not use `torchrun` or execute EP workloads.
 The installed vLLM version is recorded. Both the older three-argument wrapper and
 the explicit `block_size_in_bytes` wrapper are supported.
@@ -53,64 +53,49 @@ python3 -m unittest discover collectivex/tests -p 'test_swap_blocks.py' -v
 
 CPU-only machines run measurement/mapping tests and skip the real GPU test.
 
-## Isolated GitHub GPU Action
+## GitHub GPU Action
 
-Select `backend: swap-blocks` in **CollectiveX Sweep**, or dispatch:
+swap-blocks is a suite of **CollectiveX Sweep**. Set `suites: swap-blocks` (or
+`ep,swap-blocks` to run both), or dispatch:
 
 ```bash
 gh workflow run collectivex-sweep.yml --ref main \
-  -f backend=swap-blocks -f swap_profile=smoke \
-  -f swap_image=vllm/vllm-openai:v0.25.1
+  -f suites=swap-blocks -f swap_profile=smoke
 ```
 
-Blank `only_sku` selects the nine current Slurm GPU pools;
-set it to `h200-dgxc`, `h100-dgxc`, `b200-nscale`, `b300`, `gb200`, `gb300`,
-`mi300x`, `mi325x`, or `mi355x` for an isolated GPU sweep. `exclude_skus`
-accepts a comma-separated exclusion list. Leave EP filters blank. Each cell requests
-`nodes:1` and runs one GPU process; Slurm cells allocate an exclusive node, while
-`-tw` cells use the runner's Docker host. `all` remains EP-only.
-CUDA pools use `swap_image`; AMD pools use `swap_rocm_image` (default
-`vllm/vllm-openai-rocm:v0.27.1`). GB pools select the image's ARM64 variant.
-Docker writes as the runner UID/GID, and each artifact records its SKU and source SHA.
+Blank `only_sku` selects every registered GPU pool; set it to `h200-dgxc`, `h100-dgxc`,
+`b200-nscale`, `b300`, `gb200`, `gb300`, `mi300x`, `mi325x`, or `mi355x` for one pool.
+`exclude_skus` accepts a comma-separated exclusion list. The EP filters (`backend`,
+`ep_sizes`, `modes`) apply to the `ep` suite only, and the matrix rejects them when that
+suite is not selected.
 
-The `smoke` profile covers all three directions, both layouts, block sizes
-257/4096/65536/262144 bytes (up to 256 KiB), and counts 1/4/16/64/256/1024/2048, with 4 warmups and 20 samples
-per point (168 points total). `standard` uses sizes 4096/65536/1048576 and the same
-block counts, 32 warmups, and 100 samples (126 points). Both check the actual GPU copies before and after
-timing and fail if a GPU or compatible vLLM is unavailable. Both existing profiles
-use a 2 GiB payload cap, which retains every point in their grids.
+Each pool gets one shard with two cases, one per layout. The shard runs on the pool's
+own launcher, so it inherits that pool's allocation, node validation, container import,
+and cleanup. It asks for one node and one GPU for 45 minutes. `config.py` encodes each
+case as `run_swap_blocks.py` argv, and the rank wrapper execs it in place of `run_ep.py`.
 
-For the byte-to-GiB sweep, dispatch with `-f swap_profile=large-blocks`. It uses
-257 B, 4 KiB, 64 KiB, 256 KiB, 1 MiB, 4 MiB, 16 MiB, 64 MiB, 256 MiB, and 1 GiB
-blocks with the same count ladder, 4 warmups, and 20 samples per point. A **1 GiB
-copied-payload cap** excludes larger products: 1 GiB blocks run with one block per
-call; 256 MiB blocks run with 1 or 4. This produces 294 measured points across
-both layouts and all directions, with 126 over-budget combinations explicitly
-recorded as excluded. Each transfer buffer also contains two guard blocks, so a
-1 GiB block case allocates 3 GiB per buffer plus CPU correctness references.
+The grid and the images are data in `configs/swap_sweep.json`. CUDA and AMD pools use the
+official vLLM images it names; GB pools get the ARM64 variant through the registry's
+`image_platform`, and `sku_images` pins a pool to its own image. To run another vLLM version,
+change the config on a branch and dispatch from it. Every profile covers all three directions and
+both layouts, and checks the actual GPU copies before and after timing; backend preparation asserts
+the `swap_blocks` import before any case runs. `smoke` (the default, up to 256 KiB blocks, 168
+points) and `standard` (4 KiB to 1 MiB, 126 points) keep every grid point under their 2 GiB
+payload cap. `large-blocks` sweeps 257 B to 1 GiB blocks under a **1 GiB copied-payload cap**, so
+larger products are excluded and recorded (294 measured points, 126 excluded); each buffer also
+holds two guard blocks, so a 1 GiB block case allocates 3 GiB per buffer plus CPU references.
 
-Download `cxshard-swap-<sku>-<run_id>-<attempt>` for the two JSON results.
-Each artifact records the actual GPU, framework versions, image, source SHA,
-correctness status, and measurements. The existing allocation/stage cleanup
-also runs on failure. CPU CI is separate and does not establish GPU correctness.
+Download `cxshard-<sku>-swap-blocks-<run_id>-<attempt>` for the two JSON results,
+named `<case_id>_<timestamp>-c<index>.json`. Each case_id is
+`<sku>-swap-blocks-<profile>-<layout>`. Each artifact records the actual GPU,
+framework versions, image, source SHA, correctness status, and measurements. The EP
+summary tables skip these documents. CPU CI is separate and does not establish GPU
+correctness.
 
-H100 first checks the operator-staged serving-image cache at
-`/mnt/nfs/lustre/containers` for the exact requested image tag, matching the serving
-launcher's filename convention. A valid staged squash is reused without importing
-inside the compute pod. If absent, the regular import path reports its failure.
-`refresh_image=true` bypasses the staged cache and requests a fresh import.
-`swap_h100_image` explicitly selects that pool's image (default
-`vllm/vllm-openai:v0.27.1`); the other CUDA pools use `swap_image`. The artifact
-records the selected image and installed vLLM version so cross-version results
-remain identifiable.
-The workflow selects `/var/tmp` for H100 container-import scratch and `/tmp` for
-other pools. Imports log the filesystem and enroot version to diagnose host-level
-whiteout conversion failures. Job-private import scratch is removed on exit. Slurm node exclusions are
-intersected with the current node inventory: retired names cannot invalidate the
-allocation, while exclusions of existing nodes are preserved. B300/GB300 use the
-partition default QoS, matching their serving launchers.
-
-`mi325x-tw` remains an explicitly selectable legacy Docker pool,
-subject to runner availability. It bypasses the Slurm priority scheduler because
-Docker-only hosts cannot advertise Slurm node capacity. The default sweep uses
-the current `mi300x` and `mi325x` Slurm pools; their EP backend registries remain empty.
+A pool that cannot import an image itself can name an operator-staged cache in
+`sku_images` (`staged_image_dir`). H100 does: it first looks in
+`/mnt/nfs/lustre/containers` for the exact requested tag, using the serving launchers'
+filename convention, and reuses a valid squash without importing inside the compute
+pod. If the file is absent, the regular import path runs. `refresh_image=true`
+bypasses the staged cache and requests a fresh import. The workflow selects
+`/var/tmp` for H100 container-import scratch and `/tmp` for other pools.

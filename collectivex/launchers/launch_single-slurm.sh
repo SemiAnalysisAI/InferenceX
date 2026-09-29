@@ -36,32 +36,20 @@ export COLLX_RUNNER="$RUNNER" COLLX_BENCH="${COLLX_BENCH:-deepep-v2}"
 export COLLX_VENDOR=nvidia
 collx_launcher_prologue "$RUNNER"
 
-NODES="${COLLX_NODES:-1}"; GPN="${COLLX_GPUS_PER_NODE:-8}"
-SCALE_UP_DOMAIN="${COLLX_SCALE_UP_DOMAIN:-8}"
-NGPUS="${COLLX_NGPUS:-$((NODES * GPN))}"
+collx_set_placement 1 8 8 nvlink
 TIME_MIN="${COLLX_TIME:-$DEFAULT_TIME}"
 IMAGE="$COLLX_IMAGE"
-TS="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
 case "$COLLX_BENCH" in
-  deepep-v2 | uccl-ep | nccl-ep) ;;
-  *) collx_die "unsupported $RUNNER EP backend: $COLLX_BENCH" ;;
+  deepep-v2 | uccl-ep | nccl-ep | swap-blocks) ;;
+  *) collx_die "unsupported $RUNNER backend: $COLLX_BENCH" ;;
 esac
 
-export COLLX_NGPUS="$NGPUS" COLLX_NODES="$NODES"
-export COLLX_GPUS_PER_NODE="$GPN" COLLX_SCALE_UP_DOMAIN="$SCALE_UP_DOMAIN"
-if [ "$NODES" -gt 1 ]; then
-  export COLLX_TRANSPORT=nvlink-rdma
-else
-  export COLLX_TRANSPORT=nvlink
-fi
 export NCCL_CUMEM_ENABLE=1
 collx_apply_network_profile "$NODES" "$COLLX_TRANSPORT"
 collx_require_vars COLLX_IMAGE COLLX_IMAGE_PLATFORM COLLX_PARTITION COLLX_SQUASH_DIR
 [ "$REQUIRE_ACCOUNT" = 0 ] || collx_require_vars COLLX_ACCOUNT
-# h100-dgxc /home is login-local (absent on compute nodes), so the implicit passwd-home
-# stage base is compute-invisible and the operator config must pin an explicit stage_dir.
-# b300 (DSXE) homes live on the shared Lustre /data, but the prologue still isolates its
-# stage per execution, so the variable must have resolved by now on both.
+# h100-dgxc /home is login-local (absent on compute nodes), so the operator config must pin an
+# explicit stage_dir; the b300 prologue resolves a per-execution stage. Both must be set by now.
 case "$RUNNER" in
   b300|h100-dgxc) collx_require_vars COLLX_STAGE_DIR ;;
 esac
@@ -69,21 +57,7 @@ esac
 collx_log "runner=$RUNNER nodes=$NODES x ${GPN}gpu world=$NGPUS bench=$COLLX_BENCH"
 collx_select_image "$IMAGE"
 
-MOUNT_SRC="$(collx_stage_path "$REPO_ROOT" "${COLLX_STAGE_DIR:-}")"
-collx_stage_repo "$REPO_ROOT" "$MOUNT_SRC"
-CONTAINER_MOUNTS="$MOUNT_SRC:/ix"
-# Stage pinned sources before allocation: the submit host has network; compute nodes may not.
-case "$COLLX_BENCH" in
-  deepep-v2) collx_prepare_deepep_source "$MOUNT_SRC" \
-    || collx_die "cannot stage the pinned DeepEP source" ;;
-  uccl-ep) collx_prepare_uccl_source "$MOUNT_SRC" \
-    || collx_die "cannot stage the pinned UCCL source" ;;
-esac
-export COLLX_BACKEND_SOURCE_ROOT=/ix/collectivex/.collx_sources
-collx_prepare_backend_cache "$COLLX_SQUASH_DIR" \
-  || collx_die "cannot prepare the isolated backend cache"
-CONTAINER_MOUNTS="$CONTAINER_MOUNTS,$COLLX_PREPARED_BACKEND_CACHE:/cx-cache"
-export COLLX_BACKEND_CACHE_ROOT=/cx-cache
+collx_stage_with_backend_cache
 
 command -v salloc >/dev/null || collx_die "salloc not found on this runner"
 allocation=(--partition="$COLLX_PARTITION" --nodes="$NODES" --gres=gpu:"$GPN"
@@ -138,7 +112,7 @@ done
 unset COLLX_SALLOC_ATTEMPT COLLX_NETWORK_VALIDATION_ATTEMPT
 
 if [ "$LOCAL_IMPORT" = 1 ]; then
-  SQUASH_FILE="$(COLLX_ENROOT_LOCAL_IMPORT=1 collx_ensure_squash "$COLLX_SQUASH_DIR" "$IMAGE")"
+  SQUASH_FILE="$(collx_ensure_squash "$COLLX_SQUASH_DIR" "$IMAGE")"
 else
   SQUASH_FILE="$(collx_ensure_squash_on_job "$JOB_ID" "$COLLX_SQUASH_DIR" "$IMAGE")"
 fi
