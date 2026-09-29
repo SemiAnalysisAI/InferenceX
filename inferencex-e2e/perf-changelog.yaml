@@ -9084,27 +9084,12 @@
 
 - config-keys:
     - qwen3.5-fp8-mi300x-sglang-disagg-dep8-agentic-mtp
-  no-evals: true
-  description:
-    - "Add focused MI300X Qwen3.5 AgentX MORI disaggregation: DEP8 prefill/decode at c32 and c64."
-    - "Use native srt-slurm coordination, cache-aware SGLang routing, and the September 29 SGLang v0.5.20 ROCm 7.2.0 MI30X nightly, with its digest recorded in recipe identity. Select golden acceptance automatically; accuracy jobs disable acceptance simulation."
-    - "Keep attention layouts homogeneous; mixed attention TP8-to-TP1 state transfer has not been revalidated on this nightly."
-    - "Forward the recipe fingerprint into benchmark artifacts and retain existing workflow scheduling and full-sweep policy."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2984
-
-- config-keys:
     - qwen3.5-fp8-mi300x-sglang-disagg-pure-tp8-agentic-mtp
-  no-evals: true
-  description:
-    - "Add low-concurrency MI300X Qwen3.5 AgentX MORI disaggregation with pure TP8/EP1 prefill and decode at c1 and c4."
-    - "Use the same September 29 nightly, BF16 KV/Mamba state, native dense-MLP TP defaults, and automatic golden acceptance; validate accuracy separately without acceptance simulation."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2984
-
-- config-keys:
     - qwen3.5-fp8-mi300x-sglang-disagg-tep8-agentic-mtp
   no-evals: true
   description:
-    - "Add homogeneous MI300X Qwen3.5 AgentX 1P TEP8 / 1D TEP8 at session concurrencies 1, 4, 8 and 16 to the official full sweep."
-    - "Use the September 29 nightly with MORI transfer, TP8/EP8 on both roles, 8192-token prefill chunks, memory fraction 0.75, and automatic golden acceptance."
-    - "Use full default warmup and 3600-second profiling; skip evals as requested."
+    - "Add MI300X Qwen3.5 FP8 AgentX MORI disaggregation through native srt-slurm and cache-aware SGLang routing, using one shared recipe with TP8, TEP8, and DEP8 variants."
+    - "Sweep homogeneous 1P/1D topologies: pure TP8/EP1 at c1 and c4, TEP8 at c1, c4, c8, and c16, and DEP8 at c32 and c64."
+    - "Use the September 29 SGLang v0.5.20 ROCm 7.2.0 MI30X nightly, BF16 KV/Mamba state, native MTP, and automatic golden acceptance."
+    - "Launch a fresh deployment per concurrency with full default warmup and 3600-second profiling; skip evals."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2984
