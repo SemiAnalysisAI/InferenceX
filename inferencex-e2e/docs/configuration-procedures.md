@@ -691,3 +691,16 @@ runtime directories stay out of `/workspace`. The MI300X launcher also raises it
 allocation from 180 to 480 minutes for this checkpoint: the HF cache there is node-local, so
 the first arm on each node downloads 511 GB before serving. GPU sweep and eval evidence is
 required before calling either arm validated.
+
+### Testing SRT raw streaming on B300
+
+PR #3591 applies NVIDIA/srt-slurm#539 to the pinned submodule in each job's
+checkout. The normal sweep builds the patched Tachometer on a GitHub-hosted runner
+once, verifies its checksum and base commit, and installs it before `make setup`;
+the released binary does not include the required atomic Arrow writer.
+
+The existing `glm5.2-fp8-b300-sglang-agentic-mtp` recipe collects Tachometer
+metrics every second and sends raw logs/captures every five seconds. The workflow
+forwards `SRT_STATUS_ENDPOINT` and `SRTCTL_STATUS_TOKEN` repository secrets into
+the B300 profile. Start its normal sweep with `non-canary-full-sweep-enabled`
+after the Dash collector is deployed.

@@ -18,7 +18,11 @@ base:
   observability:
     enabled: false
     tachometer:
-      enabled: false
+      enabled: true
+      collect_interval_ms: 1000
+  reporting:
+    status:
+      logging-stream-interval: 5
   engine: sglang
   roles:
     agg:

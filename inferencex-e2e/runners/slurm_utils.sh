@@ -28,6 +28,7 @@ write_srt_cluster_config() {
         --var SLURM_ACCOUNT "$SLURM_ACCOUNT" --var SLURM_PARTITION "$SLURM_PARTITION" \
         --var SRTCTL_ROOT "$SRTCTL_ROOT" --var SQUASH_FILE "$SQUASH_FILE" \
         --var NGINX_SQUASH_FILE "$NGINX_SQUASH_FILE" --var IMAGE "$IMAGE" \
+        --var SRT_STATUS_ENDPOINT "${SRT_STATUS_ENDPOINT:-}" \
         "$@" "${power_args[@]}"
 }
 
@@ -86,6 +87,15 @@ PYENV
     git rev-parse HEAD > "$GITHUB_WORKSPACE/srt-slurm-sha.txt" || return 1
     if [[ "$uses_power" == "1" ]]; then
         cp "$GITHUB_WORKSPACE/srt-slurm-sha.txt" "$GITHUB_WORKSPACE/power-producer-sha.txt" || return 1
+    fi
+    if [[ -n "${SRT_TACHOMETER_BUILD_DIR:-}" ]]; then
+        [[ "$(cat "$SRT_TACHOMETER_BUILD_DIR/base-commit.txt")" == "$SRT_SLURM_COMMIT" ]] || return 1
+        (cd "$SRT_TACHOMETER_BUILD_DIR" && sha256sum --check tachometer.sha256) || return 1
+        mkdir -p bin || return 1
+        install -m755 "$SRT_TACHOMETER_BUILD_DIR/tachometer-scraper" bin/tachometer-scraper || return 1
+    fi
+    if [[ -n "${SRT_STATUS_ENDPOINT:-}" ]]; then
+        check_env_vars SRTCTL_STATUS_TOKEN SRT_TACHOMETER_BUILD_DIR
     fi
     mkdir -p recipes benchmarks/multi_node || return 1
     cp -R "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/." recipes/ || return 1
@@ -191,6 +201,7 @@ launch_srt_single_node() {
         --var SRTCTL_ROOT "$SRTCTL_ROOT" --var SQUASH_FILE "$SRT_CONTAINER" \
         --var IMAGE "$IMAGE" --var NGINX_SQUASH_FILE nginx:1.27.4 \
         --var SRT_DEFAULT_TIME_LIMIT "$SALLOC_TIME_LIMIT" \
+        --var SRT_STATUS_ENDPOINT "${SRT_STATUS_ENDPOINT:-}" \
         --model "hf:$MODEL" "$SRT_MODEL_PATH" --container "$IMAGE" "$SRT_CONTAINER" \
         --mount "$HF_HUB_CACHE_MOUNT" "$HF_HUB_CACHE" --exclusive "$@"
     run_srt_setup "ARCH=${SRT_SETUP_ARCH:-x86_64}"
