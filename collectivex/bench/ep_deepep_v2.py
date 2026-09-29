@@ -146,6 +146,9 @@ class DeepEPV2Backend(LegacyBufferLL, EPBackend):
         self._normal_cpu_sync = self.mode == "normal" and args.phase != "decode"
         if self.mode == "normal" and not self._normal_cpu_sync:
             self.kernel_generation = "v2-elastic-buffer-nosync"
+        if (os.environ.get("EP_WIN_RELAXED_ORDERING") == "1" and self.mode == "normal"
+                and world_size > int(args.scale_up_domain)):
+            self.kernel_generation += "-relaxed-ordering"  # its own series; see methodology.md
         if self.mode == "low-latency":
             self._enable_ll("legacy-buffer-ll")  # the legacy Buffer IBGDA decode kernels
 

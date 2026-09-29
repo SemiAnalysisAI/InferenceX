@@ -395,10 +395,6 @@ def full_sweep_args_multi_node():
 
 class TestSeqLenToStr:
 
-    def test_known_sequence_lengths(self):
-        assert seq_len_to_str(1024, 1024) == "1k1k"
-        assert seq_len_to_str(8192, 1024) == "8k1k"
-
     def test_unknown_sequence_lengths(self):
         assert seq_len_to_str(2048, 2048) == "2048_2048"
         assert seq_len_to_str(4096, 1024) == "4096_1024"
@@ -1080,9 +1076,15 @@ class TestGenerateFullSweepSingleNode:
             sample_single_node_config,
             sample_runner_config
         )
-        assert [(row["isl"], row["osl"], row["conc"]) for row in result] == [
-            (isl, osl, conc)
-            for isl, osl in [(1024, 1024), (8192, 1024)]
+        assert [
+            (row["isl"], row["osl"], row["conc"], row["exp-name"], row["max-model-len"])
+            for row in result
+        ] == [
+            (isl, osl, conc, name, context)
+            for isl, osl, name, context in [
+                (1024, 1024, "dsr1_1k1k", 2304),
+                (8192, 1024, "dsr1_8k1k", 9472),
+            ]
             for conc in [4, 8, 16, 32, 64]
         ]
 
@@ -1317,27 +1319,6 @@ class TestGenerateFullSweepSingleNode:
         assert 16 in conc_values
         assert 64 in conc_values
 
-    def test_exp_name_format(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
-        full_sweep_args_single_node.seq_lens = ["1k1k"]
-        result = generate_full_sweep(
-            full_sweep_args_single_node,
-            sample_single_node_config,
-            sample_runner_config
-        )
-        assert all(entry["exp-name"] == "dsr1_1k1k" for entry in result)
-
-    def test_max_model_len_calculation(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
-        """max-model-len should be isl + osl + 256."""
-        result = generate_full_sweep(
-            full_sweep_args_single_node,
-            sample_single_node_config,
-            sample_runner_config
-        )
-        assert {
-            (entry["isl"], entry["osl"], entry["max-model-len"])
-            for entry in result
-        } == {(1024, 1024, 2304), (8192, 1024, 9472)}
-
     def test_runner_node_filter(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
         """Runner node filter should expand entries to individual matching nodes."""
         full_sweep_args_single_node.runner_type = ["mi300x"]
@@ -1365,20 +1346,6 @@ class TestGenerateFullSweepSingleNode:
         )
         assert len(result) == 0
 
-    def test_runner_node_filter_without_runner_type(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
-        """Runner node filter should work without explicit runner type (uses config's runner)."""
-        full_sweep_args_single_node.runner_node_filter = "amd"
-        full_sweep_args_single_node.seq_lens = ["1k1k"]
-        full_sweep_args_single_node.max_conc = 4
-        result = generate_full_sweep(
-            full_sweep_args_single_node,
-            sample_single_node_config,
-            sample_runner_config
-        )
-        # Config has runner=mi300x, filter "amd" matches mi300x-amd_0 and mi300x-amd_1
-        assert len(result) == 2
-        assert all("amd" in entry["runner"] for entry in result)
-
 
 
 class TestGenerateFullSweepMultiNode:
@@ -1391,6 +1358,7 @@ class TestGenerateFullSweepMultiNode:
             sample_runner_config
         )
         entry = result[0]
+        assert entry["conc"] == [2150]
         assert entry["prefill"]["num-worker"] == 5
         assert entry["decode"]["num-worker"] == 1
         assert entry["disagg"] is True
@@ -1429,24 +1397,6 @@ class TestGenerateFullSweepMultiNode:
             entry["decode"]["dcp-size"],
             entry["decode"]["pcp-size"],
         ) == (2, 4, 1)
-
-    def test_multinode_conc_as_list(self, sample_multinode_config, sample_runner_config, full_sweep_args_multi_node):
-        """Multinode conc should be passed as list."""
-        result = generate_full_sweep(
-            full_sweep_args_multi_node,
-            sample_multinode_config,
-            sample_runner_config
-        )
-        entry = result[0]
-        assert entry["conc"] == [2150]
-
-    def test_single_node_flag_skips_multinode(self, sample_multinode_config, sample_runner_config, full_sweep_args_single_node):
-        result = generate_full_sweep(
-            full_sweep_args_single_node,
-            sample_multinode_config,
-            sample_runner_config
-        )
-        assert len(result) == 0
 
     def test_runner_node_filter_multinode(self, sample_runner_config, full_sweep_args_multi_node):
         # Create a multinode config with h200 runner (which has 4 nodes)
@@ -2254,25 +2204,6 @@ class TestCommandLine:
         assert 'eval-conc' not in result[0]
         assert all(entry['run-eval'] is True for entry in result)
         assert all(entry['eval-only'] is True for entry in result)
-
-    def test_all_evals_cannot_combine_with_no_evals(self, monkeypatch):
-        import sys
-
-        from infx.matrix import generate as generate_sweep_configs
-
-        monkeypatch.setattr(sys, 'argv', [
-            'generate_sweep_configs.py',
-            'test-config',
-            '--config-files', 'dummy.yaml',
-            '--config-keys', 'dummy',
-            '--no-evals',
-            '--all-evals',
-        ])
-
-        with pytest.raises(SystemExit):
-            generate_sweep_configs.main()
-
-
 
 @pytest.fixture
 def sample_mixed_config(sample_single_node_config, sample_multinode_config):

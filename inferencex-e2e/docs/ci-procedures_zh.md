@@ -228,7 +228,6 @@ B200 Kimi 配方采用 DCP8，且关闭 Mooncake Offload。Master Config 记录 
 
 | 主标签 | 矩阵范围 | Canary | 矩阵 Fail-fast |
 | --- | --- | --- | --- |
-| `sweep-enabled` | Changelog 矩阵裁剪为每个配置的最低并发 | 无 | 无 |
 | `full-sweep-fail-fast` | 完整 Changelog 矩阵 | 有 | 有；推荐的完整扫描默认值 |
 | `full-sweep-enabled` | 完整 Changelog 矩阵 | 有 | 无；需要每个矩阵点继续运行时使用 |
 | `full-sweep-fail-fast-no-canary` | 完整 Changelog 矩阵 | 无 | 有 |
@@ -248,7 +247,7 @@ B200 Kimi 配方采用 DCP8，且关闭 Mooncake Offload。Master Config 记录 
 
 Canary 和 Fail-fast 解决不同问题：
 
-1. 只有使用 `full-sweep-enabled` 或 `full-sweep-fail-fast` 的 PR 才创建 Canary。No-canary 标签和 `sweep-enabled` 会跳过它。
+1. 只有使用 `full-sweep-enabled` 或 `full-sweep-fail-fast` 的 PR 才创建 Canary。No-canary 标签会跳过它。
 2. Canary 首先检查单节点固定序列 `1k1k`、`8k1k` 和单节点 AgentX 条目；若没有合格条目，再检查多节点 AgentX 条目。它排除 Eval 条目，选取最低并发候选，使用对应的单节点或多节点工作流运行，并从后续矩阵移除该条目。
 3. 如果没有合格候选，Canary 会被跳过。否则所有 Benchmark/Eval 矩阵都要求 Canary 成功；Canary 失败会阻止其扇出。
 4. `full-sweep-fail-fast` 与 `full-sweep-fail-fast-no-canary` 会分别为每个矩阵 Job Family 设置 `strategy.fail-fast: true`。首个失败点会取消同一矩阵 Family 中排队或运行中的兄弟项；它不是跨所有独立 Family 的全局 Kill Switch。
@@ -361,7 +360,7 @@ Klaud 和恢复工具继续使用现有的 `gh` 认证。GitHub CLI 跟随分页
 请求只有在全部满足下列条件时才可暂存：
 
 - 评论者具有仓库 `write`、`maintain` 或 `admin` 权限。
-- PR 当前具有四个完整扫描标签之一；`sweep-enabled` 不够。
+- PR 当前具有四个完整扫描标签之一（`full-sweep-enabled`、`non-canary-full-sweep-enabled`、`full-sweep-fail-fast` 或 `full-sweep-fail-fast-no-canary`）。
 - 候选是已结束的 PR `run-sweep.yml` Run，创建时完整扫描标签处于活动状态，结论为 `success`、`failure` 或 `cancelled`。
 - 候选按照 Workflow 当前 Head/历史 Pin 规则与该 PR 关联。
 - 存在未过期的 `changelog-metadata`，并且至少存在 `results_bmk`、`eval_results_all` 或 `bmk_agentic_*` 之一。因此失败/取消的 Run 可以暂存有用的部分数据，但空 Run 或仅有 Metadata 的 Run 不行。
@@ -391,7 +390,7 @@ Klaud 和恢复工具继续使用现有的 `gh` 认证。GitHub CLI 跟随分页
 4. `OWNER`、`MEMBER` 或 `COLLABORATOR` 通过 `/use <run_id>` 授权复用。必须提供 Run ID，并与命令放在同一行。原有的 `/reuse-sweep-run <run_id>` 仍然等效；不带 ID 的 `/reuse-sweep-run` 会自动选择源 Run。两种命令使用相同的授权、验证和表态规则，并以两者中最新的合格授权命令为准。
 5. 不指定 ID 时，自动选择要求最新的合格源 Run 成功。指定 Run 是维护者的明确决定，允许结论为 `success`、`failure` 或 `cancelled`；下游入库只保留存在且有效的行，因此应将其报告为部分数据，而不是绿色 Run。
 
-复用验证检查源 Run 的身份和可用产物，不检查完整矩阵覆盖范围。成功的 `sweep-enabled`（裁剪扫描）源 Run 也可复用，包括自动选择；在 `main` 上只会发布该 Run 已记录的数据点。请求被接受不代表已通过完整扫描，也不能代替评审中的完整扫描要求。如需复用某次完整扫描，请先确认其覆盖范围，再固定该 Run ID。
+复用验证检查源 Run 的身份和可用产物，不检查完整矩阵覆盖范围。请求被接受不代表已通过完整扫描，也不能代替评审中的完整扫描要求。如需复用某次完整扫描，请先确认其覆盖范围，再固定该 Run ID。
 
 评论会触发轻量验证工作流，使用默认分支代码和 `GITHUB_TOKEN`。接受后在原评论上添加 👍，拒绝时添加 👎；拒绝原因显示在 Actions 运行摘要中。不发布额外评论，也不启动 GPU 工作。编辑命令时会清除机器人的旧表态并检查新请求。用户的表态保持不变，仍以最新的合格授权命令为准。
 

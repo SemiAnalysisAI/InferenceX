@@ -173,7 +173,7 @@ def test_uses_label_history_at_run_creation(staging, created_at, accepted):
         {"event": "unlabeled", "label": {"name": "full-sweep-enabled"},
          "created_at": "2026-09-01T12:00:00Z"},
         {"event": "unlabeled", "label": {"name": "full-sweep-enabled"}, "created_at": "bad"},
-        {"event": "labeled", "label": {"name": "sweep-enabled"},
+        {"event": "labeled", "label": {"name": "documentation"},
          "created_at": "2026-09-01T10:00:00Z"},
     ])
     if accepted:
@@ -227,8 +227,8 @@ def test_malformed_permission_response_fails_closed(staging, access):
     assert staging["reads"] == ["/collaborators/reviewer/permission"]
 
 
-def test_current_trim_label_does_not_authorize_staging(staging):
-    staging["responses"]["/pulls/7"]["labels"] = [{"name": "sweep-enabled"}]
+def test_non_full_sweep_label_does_not_authorize_staging(staging):
+    staging["responses"]["/pulls/7"]["labels"] = [{"name": "documentation"}]
     with pytest.raises(RuntimeError, match="PR does not have a full-sweep label"):
         stage_results.request("example/project", staging["event"], "token")
     assert "requires a completed run from a PR using one of:" in staging["comments"][0]

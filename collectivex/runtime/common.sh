@@ -27,7 +27,7 @@ COLLX_DEEPEP_V2_TORCH_SPEC="torch==2.11.0"
 
 # Build-recipe generation for the DeepEP venv cache key: bump when build flags change without
 # any pin changing, so venvs that already carry .ready are not reused with a stale recipe.
-COLLX_DEEPEP_V2_BUILD_GEN="dlarch1"
+COLLX_DEEPEP_V2_BUILD_GEN="dlarch2"
 
 COLLX_UCCL_REPO="https://github.com/uccl-project/uccl"
 COLLX_UCCL_COMMIT="fc1b582031221645ea9fce58aeb57187713145e3"
@@ -128,6 +128,7 @@ collx_load_operator_config() {
   unset COLLX_EXCLUDE_NODES COLLX_NODELIST COLLX_LOCK_DIR COLLX_MASTER_PORT
   unset COLLX_SOCKET_IFNAME COLLX_RDMA_DEVICES COLLX_IB_GID_INDEX COLLX_RDMA_SERVICE_LEVEL
   unset COLLX_RDMA_TRAFFIC_CLASS COLLX_RAIL_ISOLATED COLLX_SINGLE_NODE_RDMA_DEVICES COLLX_RDMA_FABRIC
+  unset COLLX_RDMA_RELAXED_ORDERING
   unset MASTER_ADDR MASTER_PORT RANK WORLD_SIZE LOCAL_RANK LOCAL_WORLD_SIZE
   config_path="${COLLECTIVEX_OPERATOR_CONFIG:-${XDG_CONFIG_HOME:-${HOME}/.config}/inferencex/collectivex.json}"
   if [ ! -e "$config_path" ]; then
@@ -307,6 +308,9 @@ collx_apply_network_profile() {
     # black-hole at QP RTR.
     [ "$COLLX_RAIL_ISOLATED" != 1 ] || export NCCL_CROSS_NIC=0
   fi
+  # Opts the patched DeepEP GIN window out of strict ordering (deepep_install).
+  unset EP_WIN_RELAXED_ORDERING
+  [ "${COLLX_RDMA_RELAXED_ORDERING:-0}" != 1 ] || export EP_WIN_RELAXED_ORDERING=1
   if [ -n "${COLLX_IB_GID_INDEX:-}" ]; then
     [[ "$COLLX_IB_GID_INDEX" =~ ^[0-9]+$ ]] && [ "$COLLX_IB_GID_INDEX" -le 255 ] \
       || collx_die "invalid private IB GID index"
@@ -1056,8 +1060,8 @@ collx_run_shard() {
     collx_log "case[$((ci + 1))/$expected_cases] $COLLX_BENCH ranks=$NGPUS"
     runtime_log="$(collx_private_log_path "runtime-c$(printf '%03d' "$ci")")"
     # A hang guard, not a work budget: FP8 prefill and multi-node EP16 prefill on pools with
-    # degraded GPU-NIC p2p (~34 GB/s per node; see docs/methodology.md) legitimately run past 30
-    # minutes. 5400 stays inside the 300-minute allocation.
+    # slow GPU-NIC p2p (see docs/methodology.md) legitimately run past 30 minutes. 5400 stays
+    # inside the 300-minute allocation.
     if ! timeout -k 30 "${COLLX_RUN_TIMEOUT:-5400}" \
       srun --jobid="$JOB_ID" --nodes="$NODES" \
       --ntasks="$NGPUS" --ntasks-per-node="$GPN" --chdir=/tmp \

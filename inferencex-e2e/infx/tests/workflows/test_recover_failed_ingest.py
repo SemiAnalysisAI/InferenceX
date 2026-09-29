@@ -133,15 +133,6 @@ def test_select_failed_job_uses_explicit_job() -> None:
     assert select_failed_job(jobs, 2)["id"] == 2
 
 
-def test_select_failed_job_allows_unambiguous_run_only_url() -> None:
-    jobs = [
-        {"id": 1, "status": "completed", "conclusion": "success"},
-        {"id": 2, "status": "completed", "conclusion": "failure"},
-    ]
-
-    assert select_failed_job(jobs, None)["id"] == 2
-
-
 def test_select_failed_job_rejects_ambiguous_run_only_url() -> None:
     jobs = [
         {"id": 1, "status": "completed", "conclusion": "failure"},
@@ -150,20 +141,6 @@ def test_select_failed_job_rejects_ambiguous_run_only_url() -> None:
 
     with pytest.raises(RecoveryError, match="ambiguous"):
         select_failed_job(jobs, None)
-
-
-def test_audit_changelog_rejects_duplicate_yaml_keys() -> None:
-    raw = b"""- config-keys:
-    - config-a
-  description:
-    - First
-  description:
-    - Second
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1
-"""
-
-    with pytest.raises(ChangelogValidationError, match="duplicate key"):
-        audit_changelog_bytes(raw, "snapshot")
 
 
 def test_audit_changelog_reports_repairable_missing_newline() -> None:

@@ -426,6 +426,10 @@ Source: [upstream recipe](https://github.com/vllm-project/recipes/blob/main/mode
 
 ### DeepSeek-V4.1-Flash DSpark on SGLang
 
+The GB300 DeepSeek-V4.1-Flash SGLang curve uses `dev-cu13-nightly-0924`:
+TP4/EP1 at C1/C2 with GPU Engram and 4K prefill chunks, and TP4/EP4 at C4+
+with host Engram and 16K chunks. TP2 is unchanged. Full sweep validation is pending.
+
 The H100 SGLang candidate sweeps DSpark at concurrency 1/2/4/8/16/20. It retains 8 SWA prefix tails per concurrency at C1/C2 and 32 at C4 and above. A matched one-hour comparison rejected a blanket 128-tail floor: C2 throughput improved only 1.7% while interactivity fell 44.5%. Completed STP comparisons did not contribute a measured frontier point, so STP is excluded from the selected sweep. The recipe interleaves 16 decode steps between prefill chunks, preserving trace content and context limits.
 
 The same sweep also qualifies supported TP8/EP8/DP8 attention at C4/C8/C16/C20. DP uses a stock consistent-hash router with stable session keys, DP LM-head execution, and 64 SWA prefix tails per rank. Full C16 GSM8K passed on all 1,319 examples; its performance contribution remains under measurement. The native 1M context and the AgentX subagent/session semantics are preserved.
@@ -435,8 +439,8 @@ The nightly candidate uses `nightly-dev-cu13-20260922-582389ce`, native MXFP4 Ma
 `dsv41flash-fp4-<sku>-sglang-agentic-dspark` are the SGLang counterparts of the vLLM
 arms, one PR per SKU across h100, h200, b200, b300, gb200, gb300 and mi355x. They follow the
 [SGLang cookbook](https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1),
-which has no released SGLang version for this model yet. B200, B300, GB300 and H100 pin the CUDA 13 nightly
-`lmsysorg/sglang:nightly-dev-cu13-20260922-582389ce` by digest; GB200 and H200 use
+which has no released SGLang version for this model yet. B200, B300 and H100 pin the CUDA 13 nightly
+`lmsysorg/sglang:nightly-dev-cu13-20260922-582389ce` by digest; GB300 pins `lmsysorg/sglang:dev-cu13-nightly-0924` by digest; GB200 and H200 use
 `lmsysorg/sglang:nightly-dev-cu13-20260923-06008c17` (GB200 by digest), and MI355X pins
 `lmsysorg/sglang:dev-dsv41-mi35x` by digest. Each master entry's `image` is authoritative.
 

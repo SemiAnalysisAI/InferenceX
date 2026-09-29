@@ -236,7 +236,6 @@ The same-repository check applies before checking out PR code in changelog valid
 
 | Primary label | Matrix scope | Canary | Matrix fail-fast |
 | --- | --- | --- | --- |
-| `sweep-enabled` | Changelog matrix trimmed to the minimum concurrency per configuration | No | No |
 | `full-sweep-fail-fast` | Full changelog matrix | Yes | Yes. Recommended full-sweep default |
 | `full-sweep-enabled` | Full changelog matrix | Yes | No. Use when every matrix point must continue |
 | `full-sweep-fail-fast-no-canary` | Full changelog matrix | No | Yes |
@@ -256,7 +255,7 @@ Changing a recognized primary or modifier label shares the active sweep concurre
 
 Canary and fail-fast solve different problems:
 
-1. A canary is created only for `full-sweep-enabled` or `full-sweep-fail-fast` PRs. No-canary labels and `sweep-enabled` skip it.
+1. A canary is created only for `full-sweep-enabled` or `full-sweep-fail-fast` PRs. No-canary labels skip it.
 2. Canary selection first considers single-node fixed-sequence `1k1k` and `8k1k` entries and single-node AgentX entries. If none are eligible, it considers multi-node AgentX entries. It excludes eval entries, chooses the lowest-concurrency candidate, runs it with the matching single-node or multi-node workflow, and removes it from the later matrix.
 3. If there is no eligible candidate, the canary is skipped. Otherwise all benchmark/eval matrices require the canary to succeed. A failed canary prevents their fan-out.
 4. `full-sweep-fail-fast` and `full-sweep-fail-fast-no-canary` set `strategy.fail-fast: true` separately on each matrix job family. The first failing point cancels queued/in-progress siblings in that matrix family. It is not one global kill switch for every independent family.
@@ -381,7 +380,7 @@ Each request, including all its pages, has a 60-second timeout.
 A request is stageable only when all of the following hold:
 
 - The commenter has `write`, `maintain`, or `admin` repository permission.
-- The PR currently has one of the four full-sweep labels. `sweep-enabled` is not enough.
+- The PR currently has one of the four full-sweep labels (`full-sweep-enabled`, `non-canary-full-sweep-enabled`, `full-sweep-fail-fast`, or `full-sweep-fail-fast-no-canary`).
 - The candidate is a completed `pull_request` run of `run-sweep.yml`, created while a full-sweep label was active, with conclusion `success`, `failure`, or `cancelled`.
 - The candidate is associated with the PR under the workflow's current-head/historical-pin rules.
 - Unexpired `changelog-metadata` and at least one of `results_bmk`, `eval_results_all`, or `bmk_agentic_*` exist. Failed/cancelled runs may therefore stage useful partial data, but empty or metadata-only runs cannot.
@@ -411,7 +410,7 @@ Reuse prevents an approved full PR sweep from being rerun on `main`. It is not a
 4. An `OWNER`, `MEMBER`, or `COLLABORATOR` authorizes reuse with `/use <run_id>`. Keep the command and required run ID on one line. The legacy `/reuse-sweep-run <run_id>` remains equivalent; bare `/reuse-sweep-run` selects automatically. Both names share authorization, validation, and reactions. The newest authorized matching command across both names wins.
 5. Unpinned selection requires the latest eligible source run to be successful. A pinned run is an explicit maintainer decision and may have conclusion `success`, `failure`, or `cancelled`. Downstream ingestion keeps only available/valid rows, so report it as partial rather than green.
 
-Reuse validation checks source identity and available artifacts, not full-matrix coverage. A successful `sweep-enabled` (trimmed) source is eligible, including for automatic selection, and publishes only its recorded points on `main`. Acceptance does not certify a green full sweep or satisfy that review requirement. To reuse a full sweep specifically, verify its coverage and pin its run ID.
+Reuse validation checks source identity and available artifacts, not full-matrix coverage. Acceptance does not certify a green full sweep or satisfy that review requirement. To reuse a full sweep specifically, verify its coverage and pin its run ID.
 
 The comment starts a lightweight validation workflow using default-branch code and `GITHUB_TOKEN`. It adds 👍 to the original comment when accepted, or 👎 when rejected; the Actions run summary explains a rejection. It posts no separate comment and starts no GPU work. Editing the command clears the bot's old reaction and checks the new request. Human reactions are preserved; the newest authorized command still takes precedence.
 
