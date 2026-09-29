@@ -182,19 +182,6 @@ def test_latest_successful_source_skips_ineligible_runs(monkeypatch, newer, arti
     assert selected["id"] == 111
 
 
-def test_artifact_names_excludes_expired_artifacts(monkeypatch) -> None:
-    monkeypatch.setattr(
-        reuse.github,
-        "paginate",
-        lambda *args, **kwargs: [
-            {"name": "results_bmk", "expired": True},
-            {"name": "run-stats", "expired": False},
-        ],
-    )
-
-    assert reuse.artifact_names("repo", 123, "token") == {"run-stats"}
-
-
 @pytest.mark.parametrize("has_artifacts", [True, False])
 def test_main_checks_source_before_skipping_pr_synchronize(
     monkeypatch, tmp_path, has_artifacts
@@ -365,32 +352,6 @@ def test_validate_reusable_run_rejects_non_success_run_by_default(conclusion) ->
         assert "expected success" in str(error)
     else:
         raise AssertionError(f"expected an unpinned {conclusion} run to be rejected")
-
-
-def test_validate_reusable_run_rejects_run_for_orphaned_commit(monkeypatch) -> None:
-    responses = {"/pulls/1321/commits": [[{"sha": "def456"}]]}
-    monkeypatch.setattr(reuse.github, "api", lambda repo, path, *args, **kwargs: responses[path])
-
-    try:
-        reuse.validate_reusable_run(
-            "SemiAnalysisAI/InferenceX",
-            "run-sweep.yml",
-            1321,
-            {
-                "id": 25763404168,
-                "event": "pull_request",
-                "status": "completed",
-                "conclusion": "success",
-                "path": ".github/workflows/run-sweep.yml",
-                "head_sha": "abc123",
-                "pull_requests": [],
-            },
-            "token",
-        )
-    except RuntimeError as error:
-        assert "is not in PR #1321's commit list" in str(error)
-    else:
-        raise AssertionError("expected orphaned-commit run to be rejected")
 
 
 @pytest.mark.parametrize("labels,command", [

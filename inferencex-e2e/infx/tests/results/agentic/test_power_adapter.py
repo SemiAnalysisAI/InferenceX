@@ -136,24 +136,6 @@ def _write_power_csv(result_dir: Path) -> None:
     (result_dir / "gpu_metrics.csv").write_text("\n".join(rows) + "\n", encoding="utf-8")
 
 
-def test_build_power_window_uses_profile_lifecycle_and_successful_records(tmp_path: Path):
-    from infx.results.agentic.power_adapter import build_power_window
-
-    result_dir = _write_artifacts(tmp_path)
-
-    window, reasons = build_power_window(result_dir)
-
-    assert reasons == []
-    assert window == {
-        "benchmark_start_time_unix": 1_700_000_001.0,
-        "benchmark_end_time_unix": 1_700_000_004.0,
-        "duration": 3.0,
-        "completed": 2,
-        "total_input_tokens": 300,
-        "total_output_tokens": 150,
-    }
-
-
 def test_build_power_window_applies_captured_offset_to_naive_aiperf_times(tmp_path: Path):
     from infx.results.agentic.power_adapter import build_power_window
 

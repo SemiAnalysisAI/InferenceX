@@ -11,7 +11,7 @@ source "$HERE/../runtime/common.sh"
 
 RUNNER="${COLLX_SHARD_SKU:-}"
 case "$RUNNER" in
-  # mi300x's compute-0 nodes refuse the 256-CPU ask ("Requested node configuration is not
+  # mi300x's nodes refuse the 256-CPU ask ("Requested node configuration is not
   # available"), so that pool takes the whole node instead.
   mi300x) CPUS_PER_NODE=""; DEVICE_MOUNTS=",/dev/kfd:/dev/kfd,/dev/dri:/dev/dri" ;;
   mi325x) CPUS_PER_NODE=256; DEVICE_MOUNTS=",/dev/kfd:/dev/kfd,/dev/dri:/dev/dri" ;;
