@@ -293,6 +293,7 @@ clusters:
         lock-timeout-s: 600
       srt-slurm:
         network-interface: ""
+        gpus-per-node-directive: false  # GPUs are requested by typed GRES (slurm.gres)
   h100-dgxc:
     gpus-per-node: 8
     available-cpu-dram-mib: 2_063_837
@@ -349,6 +350,7 @@ clusters:
         lock-timeout-s: 600
       srt-slurm:
         network-interface: ""
+        gpus-per-node-directive: false  # GPUs are requested by typed GRES (slurm.gres)
   h200-dgxc:
     gpus-per-node: 8
     available-cpu-dram-mib: 1_471_356
@@ -419,6 +421,7 @@ clusters:
         lock-timeout-s: 600
       srt-slurm:
         network-interface: ""
+        gpus-per-node-directive: false  # GPUs are requested by typed GRES (slurm.gres)
   b200-nb:
     gpus-per-node: 8
     arch: x86_64

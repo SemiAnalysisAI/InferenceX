@@ -50,7 +50,7 @@ class SrtJob:
     model_paths: Mapping[str, str] = field(default_factory=dict)
     health_check: Mapping[str, int] | None = None
     mounts: Sequence[tuple[str, str]] = ()  # (host, container) added to the cluster's mounts
-    exclusive: bool | None = None  # None: the cluster's multi-node directive
+    single_node: bool = False  # one exclusive node; no segment directive
 
 
 def pyxis_spelling(image: str) -> str:
@@ -128,16 +128,19 @@ def render(cluster: Cluster, job: SrtJob) -> dict[str, Any]:
         config["default_mounts"] = mounts
     if srt.gpus_per_node_directive is not None:
         config["use_gpus_per_node_directive"] = srt.gpus_per_node_directive
-    if srt.segment_directive is not None:
+    if job.single_node:
+        config["use_segment_sbatch_directive"] = False
+    elif srt.segment_directive is not None:
         config["use_segment_sbatch_directive"] = srt.segment_directive
-    config["use_exclusive_sbatch_directive"] = (
-        settings.exclusive if job.exclusive is None else job.exclusive
-    )
+    config["use_exclusive_sbatch_directive"] = job.single_node or settings.exclusive
     directives: dict[str, str] = {}
     if settings.exclude:
         directives["exclude"] = ",".join(settings.exclude)
     if settings.cpus_per_task is not None:
         directives["cpus-per-task"] = str(settings.cpus_per_task)
+    # Clusters whose GPUs are only schedulable by typed GRES opt out of --gpus-per-node.
+    if srt.gpus_per_node_directive is False and (gres := settings.gres_for(cluster.gpus_per_node)):
+        directives["gres"] = gres
     if directives:
         config["default_sbatch_directives"] = directives
     if srt.host_setup is not None:

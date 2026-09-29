@@ -47,7 +47,7 @@ def test_the_profile_renders_its_facts_and_mounts_a_volume_at_a_second_target():
         },
         entries={"Model-A": {"root": "data", "dir": "Model-A"}},
     )  # fmt: skip
-    config = render(record, job(mounts=[("/share/hub", "/mnt/hf_hub_cache/")], exclusive=True))
+    config = render(record, job(mounts=[("/share/hub", "/mnt/hf_hub_cache/")], single_node=True))
     # One host directory mounted twice: the cluster's Hub view and the job's HF_HUB_CACHE.
     assert config["default_mounts"] == {
         "/share/hub": "/hf_hub_cache/hub",
@@ -71,15 +71,6 @@ def test_a_host_directory_cannot_be_mounted_at_three_targets():
     record = cluster(slurm={"volumes": {"hub": {"path": "/share/hub"}}}, srt={"volume-mounts": {"hub": "/hf_hub_cache"}})
     with pytest.raises(ValueError, match="conflicting container paths"):
         render(record, job(mounts=[("/share/hub", "/a"), ("/share/hub/", "/b")]))
-
-
-def test_exclusivity_follows_the_shape():
-    shared = cluster(slurm={"exclusive": False}, srt={"segment-directive": False})
-    multinode = render(shared, job())
-    assert multinode["use_exclusive_sbatch_directive"] is False
-    assert multinode["use_segment_sbatch_directive"] is False
-    assert "use_gpus_per_node_directive" not in multinode
-    assert render(shared, job(exclusive=True))["use_exclusive_sbatch_directive"] is True
 
 
 def test_node_exclusions_cpus_and_image_aliases_are_rendered():
@@ -129,3 +120,15 @@ def test_account_falls_back_to_the_users_slurm_default(tmp_path, monkeypatch, de
     monkeypatch.setenv("PATH", f"{tmp_path}:/usr/bin:/bin")
     config = render(cluster(slurm={"account": declared} if declared else None), job())
     assert config.get("default_account") == expected
+
+
+def test_single_node_jobs_skip_the_segment_and_typed_gres_replaces_gpus_per_node():
+    typed = cluster(slurm={"exclusive": False, "gres": "gpu:h100:{gpus}"}, srt={"gpus-per-node-directive": False})
+    single = render(typed, job(single_node=True))
+    assert single["use_segment_sbatch_directive"] is False
+    assert single["use_exclusive_sbatch_directive"] is True
+    assert single["use_gpus_per_node_directive"] is False
+    assert single["default_sbatch_directives"]["gres"] == "gpu:h100:8"
+    multi = render(cluster(slurm={"exclusive": False}, srt={"segment-directive": True}), job())
+    assert (multi["use_segment_sbatch_directive"], multi["use_exclusive_sbatch_directive"]) == (True, False)
+    assert "use_gpus_per_node_directive" not in multi and "default_sbatch_directives" not in multi

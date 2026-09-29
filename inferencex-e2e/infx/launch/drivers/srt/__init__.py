@@ -63,7 +63,7 @@ def run_single_node(launch: Launch) -> int:
         nginx=config.NGINX_IMAGE if run.srt.nginx_aliases else None,
         model_paths={f"hf:{request.model}": model_path},
         mounts=[(str(hf_cache), request.hf_hub_cache)],
-        exclusive=True,
+        single_node=True,
     )
     config.create_volume_mounts(run)
     config.write(checkout.root / "srtslurm.yaml", config.render(run.cluster, job_config))

@@ -279,6 +279,9 @@ jobs:
           enable-cache: false
 
       - name: Prepare result-processing Python
+        # Some runner homes hold a ~/.cache/uv that uv cannot create; keep one per runner.
+        env: &uv-setup-env
+          UV_CACHE_DIR: ${{ github.workspace }}/../.infx-uv-cache
         run: |
           uv python install --quiet --no-bin 3.12
           result_python=$(uv python find --system 3.12)
@@ -286,11 +289,10 @@ jobs:
           echo "INFERENCEX_RESULTS_PYTHON=$result_python" >> "$GITHUB_ENV"
 
       - name: Prepare launcher Python
+        env: *uv-setup-env
         run: |
           # Never activated, so launched Slurm jobs inherit the runner's PATH and no VIRTUAL_ENV.
           launch_venv="$RUNNER_TEMP/infx-launch-venv"
-          # Some runner homes hold a stale ~/.cache/uv that uv cannot create over.
-          export UV_CACHE_DIR="$RUNNER_TEMP/infx-launch-uv-cache"
           uv venv --quiet --python 3.12 "$launch_venv"
           uv pip install --quiet --exclude-newer PT12H --python "$launch_venv/bin/python" \
             -r "$GITHUB_WORKSPACE/.result-tooling/inferencex-e2e/pyproject.toml"
