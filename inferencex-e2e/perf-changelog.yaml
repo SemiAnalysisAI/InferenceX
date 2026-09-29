@@ -9106,12 +9106,33 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3407
 
 - config-keys:
+    - dsv4-fp4-b200-dynamo-sglang-agentic-agg
+    - dsv4-fp4-b200-dynamo-sglang-agentic-disagg
+    - dsv4-fp4-gb200-dynamo-vllm-agentic-mtp-agg
+    - dsv4-fp4-gb200-dynamo-vllm-agentic-mtp-disagg
+    - dsv4-fp4-gb200-dynamo-vllm-agentic-mtp2-agg
+    - dsv4-fp4-gb200-dynamo-vllm-agentic-mtp2-disagg
+    - dsv4-fp4-gb300-dynamo-sglang-agentic-agg
+    - dsv4-fp4-gb300-dynamo-sglang-agentic-disagg
+    - dsv4-fp4-gb300-dynamo-trt-agentx
+    - dsv4-fp4-gb300-dynamo-vllm-agentic
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-agg
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg
     - dsv4-fp8-h200-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-b200-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-b200-dynamo-sglang-agentic-disagg
     - glm5.2-fp4-gb200-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-disagg
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-mtp
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-mtp-agg
+    - glm5.2-fp4-gb300-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg
+    - glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp
     - glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-1p1d-hicache
     - glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-2p2d
     - glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-agg
     - kimik3-fp4-b200-dynamo-vllm-agentic-dspark
+    - kimik3-fp4-gb200-dynamo-vllm-agentic
     - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-agg
     - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2
     - kimik3-fp4-gb200-dynamo-vllm-agentic-mooncake-dcp16-agg
@@ -9120,16 +9141,49 @@
     - kimik3-fp4-h200-vllm-agentic-balanced
     - kimik3-fp4-h200-vllm-agentic-latency
     - kimik3-fp4-h200-vllm-agentic-simple
+    - minimaxm3-fp4-gb200-dynamo-trt-agentic-agg-mtp
+    - minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp
+    - minimaxm3-fp4-gb200-dynamo-vllm-agentic-disagg-mtp
+    - minimaxm3-fp4-gb300-dynamo-vllm-agentic-mtp-disagg
+    - qwen3.5-fp4-gb200-dynamo-sglang-agentic-mtp
+    - qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg
+    - qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg-pareto
+    - qwen3.5-fp4-gb300-dynamo-sglang-agentic-disagg
+    - qwen3.5-fp4-gb300-dynamo-sglang-agentic-pp-pareto
+    - qwen3.5-fp4-gb300-dynamo-trt-agentic-disagg
     - qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp
+    - qwen3.5-fp8-b300-dynamo-sglang-agentic-disagg
   scenario-type:
     - agentic-coding
   description:
-    - "Disable profiling and vGPU license counters in DCGM power exporters."
-    - "关闭 DCGM 功耗 exporter 的 profiling 和 vGPU license counters。"
+    - "Disable DCGM profiling and vGPU license counters."
+    - "关闭 DCGM profiling 和 vGPU license counters。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3590
 
 - config-keys:
+    - dsr1-fp4-b200-dynamo-sglang
+    - dsr1-fp4-b200-dynamo-sglang-mtp
+    - dsr1-fp4-b200-dynamo-trt
+    - dsr1-fp4-b300-dynamo-trt
+    - dsr1-fp4-gb200-dynamo-sglang
+    - dsr1-fp4-gb200-dynamo-trt
+    - dsr1-fp4-gb300-dynamo-sglang
+    - dsr1-fp4-gb300-dynamo-trt
+    - dsr1-fp8-b200-dynamo-sglang
+    - dsr1-fp8-b200-dynamo-sglang-mtp
+    - dsr1-fp8-b200-dynamo-trt
+    - dsr1-fp8-b300-dynamo-trt
+    - dsr1-fp8-gb200-dynamo-sglang
+    - dsr1-fp8-gb200-dynamo-trt
+    - dsr1-fp8-gb300-dynamo-sglang
+    - dsr1-fp8-gb300-dynamo-trt
+    - dsr1-fp8-h100-dynamo-sglang
+    - dsr1-fp8-h100-dynamo-trt
+    - dsr1-fp8-h200-dynamo-sglang
+    - dsr1-fp8-h200-dynamo-trt
     - qwen3.5-fp4-gb300-dynamo-sglang
+    - qwen3.5-fp4-gb300-dynamo-trt
+    - qwen3.5-fp4-gb300-dynamo-trt-mtp
     - qwen3.5-fp8-gb200-dynamo-sglang
     - qwen3.5-fp8-gb200-dynamo-sglang-mtp
     - qwen3.5-fp8-gb300-dynamo-sglang
@@ -9137,77 +9191,6 @@
   scenario-type:
     - fixed-seq-len
   description:
-    - "Disable profiling and vGPU license counters in DCGM power exporters."
-    - "关闭 DCGM 功耗 exporter 的 profiling 和 vGPU license counters。"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3590
-
-- config-keys:
-  - dsv4-fp4-b200-dynamo-sglang-agentic-agg
-  - dsv4-fp4-b200-dynamo-sglang-agentic-disagg
-  - dsv4-fp4-gb200-dynamo-vllm-agentic-mtp-agg
-  - dsv4-fp4-gb200-dynamo-vllm-agentic-mtp-disagg
-  - dsv4-fp4-gb200-dynamo-vllm-agentic-mtp2-agg
-  - dsv4-fp4-gb200-dynamo-vllm-agentic-mtp2-disagg
-  - dsv4-fp4-gb300-dynamo-sglang-agentic-agg
-  - dsv4-fp4-gb300-dynamo-sglang-agentic-disagg
-  - dsv4-fp4-gb300-dynamo-trt-agentx
-  - dsv4-fp4-gb300-dynamo-vllm-agentic
-  - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-agg
-  - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg
-  - glm5.2-fp4-b200-dynamo-sglang-agentic-agg
-  - glm5.2-fp4-b200-dynamo-sglang-agentic-disagg
-  - glm5.2-fp4-gb200-dynamo-sglang-agentic-disagg
-  - glm5.2-fp4-gb200-dynamo-sglang-agentic-mtp
-  - glm5.2-fp4-gb200-dynamo-sglang-agentic-mtp-agg
-  - glm5.2-fp4-gb300-dynamo-sglang-agentic-agg
-  - glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg
-  - glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp
-  - kimik3-fp4-gb200-dynamo-vllm-agentic
-  - minimaxm3-fp4-gb200-dynamo-trt-agentic-agg-mtp
-  - minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp
-  - minimaxm3-fp4-gb200-dynamo-vllm-agentic-disagg-mtp
-  - minimaxm3-fp4-gb300-dynamo-vllm-agentic-mtp-disagg
-  - qwen3.5-fp4-gb200-dynamo-sglang-agentic-mtp
-  - qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg
-  - qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg-pareto
-  - qwen3.5-fp4-gb300-dynamo-sglang-agentic-disagg
-  - qwen3.5-fp4-gb300-dynamo-sglang-agentic-pp-pareto
-  - qwen3.5-fp4-gb300-dynamo-trt-agentic-disagg
-  - qwen3.5-fp8-b300-dynamo-sglang-agentic-disagg
-  scenario-type:
-  - agentic-coding
-  description:
-  - Disable profiling and vGPU license counters in Tachometer DCGM exporters.
-  - 关闭 Tachometer DCGM exporter 的 profiling 和 vGPU license counters。
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3590
-- config-keys:
-  - dsr1-fp4-b200-dynamo-sglang
-  - dsr1-fp4-b200-dynamo-sglang-mtp
-  - dsr1-fp4-b200-dynamo-trt
-  - dsr1-fp4-b300-dynamo-trt
-  - dsr1-fp4-gb200-dynamo-sglang
-  - dsr1-fp4-gb200-dynamo-trt
-  - dsr1-fp4-gb300-dynamo-sglang
-  - dsr1-fp4-gb300-dynamo-trt
-  - dsr1-fp8-b200-dynamo-sglang
-  - dsr1-fp8-b200-dynamo-sglang-mtp
-  - dsr1-fp8-b200-dynamo-trt
-  - dsr1-fp8-b300-dynamo-trt
-  - dsr1-fp8-gb200-dynamo-sglang
-  - dsr1-fp8-gb200-dynamo-trt
-  - dsr1-fp8-gb300-dynamo-sglang
-  - dsr1-fp8-gb300-dynamo-trt
-  - dsr1-fp8-h100-dynamo-sglang
-  - dsr1-fp8-h100-dynamo-trt
-  - dsr1-fp8-h200-dynamo-sglang
-  - dsr1-fp8-h200-dynamo-trt
-  - qwen3.5-fp4-gb300-dynamo-trt
-  - qwen3.5-fp4-gb300-dynamo-trt-mtp
-  - qwen3.5-fp8-gb200-dynamo-sglang
-  - qwen3.5-fp8-gb300-dynamo-sglang
-  scenario-type:
-  - fixed-seq-len
-  description:
-  - Disable profiling and vGPU license counters in Tachometer DCGM exporters.
-  - 关闭 Tachometer DCGM exporter 的 profiling 和 vGPU license counters。
+    - "Disable DCGM profiling and vGPU license counters."
+    - "关闭 DCGM profiling 和 vGPU license counters。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3590
