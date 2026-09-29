@@ -9199,3 +9199,12 @@
     - "Skip the EFA installer's rdma-core upgrade on DSXE so the Pyxis-provided libibverbs and provider files remain intact; fail setup immediately if EFA installation fails."
     - "在 DSXE 上跳过 EFA 安装器对 rdma-core 的升级，保留 Pyxis 提供的 libibverbs 和 provider 文件；若 EFA 安装失败则立即终止初始化。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3190
+
+- config-keys:
+    - dsv4-fp4-b300-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Use only the Mooncake EFA CUDA 13 wheel in B300 disaggregated container setup. The EFA 1.50.0 installer fails in the DSXE Pyxis environment: libfabric1-aws requires rdma-core/ibverbs 64 while the mounted provider ABI is 50, and one launch reports a non-root container user. Rely on the cluster-provided verbs stack instead of modifying it in the container."
+    - "B300 分离式容器初始化仅安装 Mooncake EFA CUDA 13 wheel。EFA 1.50.0 安装器在 DSXE Pyxis 环境中失败：libfabric1-aws 要求 rdma-core/ibverbs 64，而挂载的 provider ABI 为 50，另有一次启动报告容器用户非 root。因此沿用集群提供的 verbs 软件栈，不在容器内改动。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3190
