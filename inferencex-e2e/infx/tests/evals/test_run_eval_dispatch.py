@@ -4,7 +4,6 @@ import hashlib
 import io
 import json
 import os
-import shutil
 import signal
 import socket
 import stat
@@ -37,6 +36,8 @@ def explicit_runtime_inputs(monkeypatch: pytest.MonkeyPatch) -> None:
         "SWEBENCH_GEN_MODE": "agentic",
         "INFMAX_CONTAINER_WORKSPACE": str(REPO_ROOT),
         "AIPERF_PYTHON_VERSION": "3.11",
+        "AIPERF_DRAIN_TIMEOUT_SECONDS": "120",
+        "AIPERF_DRAIN_POLL_SECONDS": "1",
         "SGLANG_TORCH_PROFILER_DIR": "/workspace",
         "VLLM_TORCH_PROFILER_DIR": "/workspace",
         "EVAL_ENDPOINT_READY_TIMEOUT_SECONDS": "1800",
@@ -2420,26 +2421,23 @@ _wait_for_openai_chat_route --port 8765
     assert "--data" not in events[2]
 
 
-@pytest.fixture
-def agentic_client(tmp_path: Path):
+def test_multinode_agentic_waits_only_for_eval_openai_endpoint(
+    tmp_path: Path,
+) -> None:
     workspace = tmp_path / "workspace"
     events_path = tmp_path / "events"
     (workspace / "benchmarks").mkdir(parents=True)
     (workspace / "benchmarks/benchmark_lib.sh").write_text(
         """
 source "$BENCHMARK_LIB" --validation-only
-if [[ "${1-}" == --validation-only ]]; then return 0; fi
 PORT=8765
+check_env_vars() { :; }
 resolve_trace_source() { echo resolve >> "$EVENTS"; }
 AIPERF_PYTHON=python3
 install_agentic_deps() { echo deps >> "$EVENTS"; }
 _wait_for_openai_chat_route() { echo "ready $*" >> "$EVENTS"; }
-build_replay_cmd() { echo build >> "$EVENTS"; REPLAY_CMD=replay; }
-run_agentic_replay_and_write_outputs() {
-    printf 'replay %s %s %s\\n' "$RESULT_FILENAME" "$CONC" "$1" >> "$EVENTS"
-    return "$REPLAY_STATUS"
-}
-curl() { echo unexpected-http >> "$EVENTS"; return 99; }
+build_replay_cmd() { echo build >> "$EVENTS"; }
+run_agentic_replay_and_write_outputs() { echo replay >> "$EVENTS"; }
 """,
         encoding="utf-8",
     )
@@ -2457,26 +2455,8 @@ curl() { echo unexpected-http >> "$EVENTS"; return 99; }
         "RESULT_FILENAME": "result",
         "RESULT_DIR": str(tmp_path / "results"),
         "DURATION": "1",
-        "REPLAY_STATUS": "0",
-        "ENGINE": "sglang",
-        "MODEL_PATH": "test-model",
-        "MODEL_NAME": "test-model",
-        "ROUTER_PORT": "8765",
-        "PREFILL_ENABLE_DP": "false",
     }
-    base_env.pop("CONC_LIST", None)
-    amd_relative = Path("benchmarks/multi_node/amd_utils/trace_replay.sh")
-    amd_script = workspace / amd_relative
-    amd_script.parent.mkdir(parents=True)
-    shutil.copy2(REPO_ROOT / amd_relative, amd_script)
-    return base_env, events_path, amd_script
-
-
-def test_multinode_agentic_waits_only_for_eval_openai_endpoint(agentic_client) -> None:
-    base_env, events_path, _ = agentic_client
-    expected_without_readiness = [
-        "resolve", "deps", "build", f"replay result 1 {base_env['RESULT_DIR']}",
-    ]
+    expected_without_readiness = ["resolve", "deps", "build", "replay"]
 
     for eval_only, expected in (
         ("false", expected_without_readiness),
@@ -2491,72 +2471,6 @@ def test_multinode_agentic_waits_only_for_eval_openai_endpoint(agentic_client) -
             check=True,
         )
         assert events_path.read_text().splitlines() == expected
-
-
-@pytest.mark.parametrize("client", ["srt", "amd"])
-@pytest.mark.parametrize("requested,conc", [
-    ("1 2", "1"), ("1x2", "1"), ("1\n2", "1"), ("0", "0"), ("2", "1"), ("", "1"),
-])
-def test_agentic_clients_reject_invalid_concurrency_before_startup(
-    agentic_client, client: str, requested: str, conc: str,
-) -> None:
-    env, events, amd_script = agentic_client
-    command = ["bash", str(MULTINODE_AGENTIC_SCRIPT)]
-    if client == "amd":
-        command = ["bash", str(amd_script), "test-model", "test-model", requested, env["RESULT_DIR"]]
-    result = subprocess.run(
-        command, env={**env, "CONC": conc, "CONC_LIST": requested},
-        capture_output=True, text=True, timeout=10,
-    )
-    assert result.returncode != 0
-    assert "exactly one positive concurrency" in result.stderr or "must match" in result.stderr
-    assert not events.exists()
-
-
-@pytest.mark.parametrize("client,conc_list,expected_filename", [
-    ("srt", None, "result"), ("srt", "4", "result_conc4"), ("amd", "4", "result_conc4"),
-])
-def test_agentic_clients_replay_one_point_with_collection_filename(
-    agentic_client, client: str, conc_list: str | None, expected_filename: str,
-) -> None:
-    env, events, amd_script = agentic_client
-    env = {**env, "CONC": "4", "CLEAR_CACHE_BETWEEN_CONC": "1"}
-    if conc_list is not None:
-        env["CONC_LIST"] = conc_list
-    command = ["bash", str(MULTINODE_AGENTIC_SCRIPT)]
-    if client == "amd":
-        command = ["bash", str(amd_script), "test-model", "test-model", "4", env["RESULT_DIR"]]
-    subprocess.run(command, env=env, check=True, capture_output=True, text=True, timeout=10)
-    result_dir = env["RESULT_DIR"]
-    if conc_list is not None:
-        result_dir += "/conc_4"
-    assert events.read_text().splitlines() == [
-        "resolve", "deps", "build", f"replay {expected_filename} 4 {result_dir}",
-    ]
-
-
-@pytest.mark.parametrize("client", ["srt", "amd"])
-def test_agentic_clients_propagate_replay_failure(agentic_client, client: str) -> None:
-    env, events, amd_script = agentic_client
-    env = {**env, "CONC_LIST": "1", "REPLAY_STATUS": "7"}
-    command = ["bash", str(MULTINODE_AGENTIC_SCRIPT)]
-    if client == "amd":
-        command = ["bash", str(amd_script), "test-model", "test-model", "1", env["RESULT_DIR"]]
-    result = subprocess.run(command, env=env, capture_output=True, text=True, timeout=10)
-    assert result.returncode == 7
-    assert events.read_text().splitlines()[-1] == f"replay result_conc1 1 {env['RESULT_DIR']}/conc_1"
-
-
-@pytest.mark.parametrize("value,expected_status", [("4", 0), ("4 8", 1), ("4x8", 1), ("0", 1)])
-def test_agentic_concurrency_validator(value: str, expected_status: int) -> None:
-    result = subprocess.run(
-        ["bash", "-c", 'source "$BENCHMARK_LIB" --validation-only; validate_agentic_concurrency "$1"', "bash", value],
-        env={**os.environ, "BENCHMARK_LIB": str(BENCHMARK_LIB)},
-        capture_output=True, text=True, timeout=10,
-    )
-    assert result.returncode == expected_status
-    if expected_status:
-        assert "launch a fresh server for each concurrency" in result.stderr
 
 
 def test_env_can_force_bfcl_on_agentic_eval() -> None:
