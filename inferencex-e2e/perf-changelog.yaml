@@ -9171,3 +9171,10 @@
   description:
     - "Retain the branch Kimi MI355X grid through native SRT-Slurm variants, including no-draft DCP8, after removal of its legacy launcher"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3156
+
+- config-keys:
+    - minimaxm3-fp4-mi355x-atom-stock-bfcl-sep29
+  description:
+    - "Qualify the official September 29 ATOM MiniMax image with native full BFCL diagnostics; retain the September 28 serving configuration for comparison"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3156
+  all-evals: true

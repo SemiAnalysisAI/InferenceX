@@ -1,0 +1,63 @@
+# Full BFCL diagnostic on an official prebuilt image; no engine setup installs.
+schema: 2
+name: minimaxm3-mi355x-atom-stock-sep29-bfcl
+model:
+  path: hf:amd/MiniMax-M3-MXFP4
+  container: rocm/atom-dev:nightly_202609291501
+  precision: fp4
+resources:
+  gpu_type: mi355x
+  gpus_per_node: 8
+frontend:
+  type: atomesh
+  container_image: rocm/atom-dev:nightly_202609291501
+  enable_multiple_frontends: false
+  args:
+    tool-call-parser: minimax
+observability:
+  enabled: false
+  tachometer:
+    enabled: false
+engine: atom
+host_setup:
+  timeout_seconds: 1200
+  nodes: all
+  commands:
+  - IBDEVICES=rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7 bash "$GITHUB_WORKSPACE"/runners/srt-slurm/hooks/mi355x-amds/check-rdma.sh
+  - bash -c 'source "$GITHUB_WORKSPACE"/runners/srt-slurm/hooks/common.sh; wait_for_amd_gpu_clean'
+roles:
+  agg:
+    nodes: 1
+    workers: 1
+    args:
+      served-model-name: amd/MiniMax-M3-MXFP4
+      trust-remote-code: true
+      kv_cache_dtype: fp8
+      block-size: 128
+      max-num-batched-tokens: 32768
+      gpu-memory-utilization: 0.95
+      cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,20,22,24,26,28,30,32,34,36,40,48,56,64]'
+      index-cache-dtype: fp8
+      online_quant_config: '{"global_quant_config":"ptpc_fp8","exclude_layer":["lm_head","model.embed_tokens","vision_tower","multi_modal_projector","patch_merge_mlp","*block_sparse_moe"]}'
+      default-chat-template-kwargs: '{"thinking_mode":"enabled"}'
+      method: eagle3
+      draft-model: Inferact/MiniMax-M3-EAGLE3-GQA
+      num-speculative-tokens: 3
+      max-num-seqs: 2
+    env:
+      PYTHONNOUSERSITE: '1'
+      AITER_LOG_LEVEL: WARNING
+      AITER_SITUV2_A4W4: '1'
+      AITER_QUICK_REDUCE_QUANTIZATION: INT4
+      AITER_FLYDSL_STAGE2_FP8: '1'
+      ATOM_FORCE_ATTN_TRITON: '1'
+    gpus: 4
+benchmark:
+  type: custom
+  command: bash /infmax-workspace/benchmarks/single_node/srt_agentic.sh
+  env:
+    MODEL: amd/MiniMax-M3-MXFP4
+    AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+    AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'atom:'
+    AIPERF_APPLY_CHAT_TEMPLATE: 'true'
+    CONC: '1'
