@@ -9024,3 +9024,13 @@
   description:
     - "Pin B200 DeepSeek-V4.1-Flash vLLM to nightly ddd6fbca with FlashInfer sparse attention, MXFP4 indexer KV, sparse logits, fp8 KV cache, and a 7200 s readiness timeout."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3459
+
+- config-keys:
+    - qwen3.5-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump the SGLang ROCm image from lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260915 to lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260927 (Docker Hub digest sha256:a2b277dff0be18113d4eb013b607aa281b6020c3fe3e240770eebe9935b2015f) in configs/amd-master.yaml and the srt-slurm AgentX recipe."
+    - "Move TP2 concurrency 16 from GPU-resident KV to HiCache and remove the TP2 GPU-resident concurrency-20 point. Keep TP4 GPU-resident [1, 4, 8, 12, 16]. The resulting TP2 grids are resident [1, 4, 8, 12] and HiCache [16, 20, 24, 28, 32, 36, 40]."
+    - "Pin the HiCache host pool with hicache-size 253 (overrides hicache-ratio) on every TP2 HiCache point."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
