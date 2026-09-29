@@ -219,8 +219,7 @@ selects the latest successful eligible run automatically; bare `/use` is rejecte
 Both names share authorization, validation, and reactions.
 
 Source validation checks identity and artifacts, not full-matrix coverage.
-A successful `sweep-enabled` trim sweep can also be selected automatically;
-reusing it publishes only its recorded points on `main`. Acceptance does not
+Acceptance does not
 certify a green full sweep. Verify coverage and pin the run ID when a full sweep
 is required by the review process.
 
