@@ -9199,3 +9199,12 @@
     - "Use only the Mooncake EFA CUDA 13 wheel in B300 disaggregated container setup. The EFA 1.50.0 installer fails in the DSXE Pyxis environment: libfabric1-aws requires rdma-core/ibverbs 64 while the mounted provider ABI is 50, and one launch reports a non-root container user. Rely on the cluster-provided verbs stack instead of modifying it in the container."
     - "B300 分离式容器初始化仅安装 Mooncake EFA CUDA 13 wheel。EFA 1.50.0 安装器在 DSXE Pyxis 环境中失败：libfabric1-aws 要求 rdma-core/ibverbs 64，而挂载的 provider ABI 为 50，另有一次启动报告容器用户非 root。因此沿用集群提供的 verbs 软件栈，不在容器内改动。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3190
+
+- config-keys:
+    - dsv4-fp4-b300-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Switch the B300 DeepSeek-V4-Pro Dynamo+SGLang disaggregated c64, c240, and c480 recipes from Mooncake to NIXL with the LIBFABRIC backend for Amazon EFA, and remove the runtime Mooncake-EFA installer and setup hooks."
+    - "将 B300 DeepSeek-V4-Pro Dynamo+SGLang 分离式 c64、c240 和 c480 配方从 Mooncake 切换到使用 LIBFABRIC 后端的 NIXL（适配 Amazon EFA），并移除运行时 Mooncake-EFA 安装脚本和 setup hook。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3597
