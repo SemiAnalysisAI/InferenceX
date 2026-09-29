@@ -129,6 +129,8 @@ def test_single_node_jobs_skip_the_segment_and_typed_gres_replaces_gpus_per_node
     assert single["use_exclusive_sbatch_directive"] is True
     assert single["use_gpus_per_node_directive"] is False
     assert single["default_sbatch_directives"]["gres"] == "gpu:h100:8"
+    shared = cluster(srt={"single-node-exclusive": False})
+    assert render(shared, job(single_node=True))["use_exclusive_sbatch_directive"] is False
     multi = render(cluster(slurm={"exclusive": False}, srt={"segment-directive": True}), job())
     assert (multi["use_segment_sbatch_directive"], multi["use_exclusive_sbatch_directive"]) == (True, False)
     assert "use_gpus_per_node_directive" not in multi and "default_sbatch_directives" not in multi

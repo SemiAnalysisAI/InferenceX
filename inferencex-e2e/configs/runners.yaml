@@ -294,6 +294,7 @@ clusters:
       srt-slurm:
         network-interface: ""
         gpus-per-node-directive: false  # GPUs are requested by typed GRES (slurm.gres)
+        single-node-exclusive: false  # as the old salloc path; the job's 8 GPUs fill the node
   h100-dgxc:
     gpus-per-node: 8
     available-cpu-dram-mib: 2_063_837
@@ -351,6 +352,7 @@ clusters:
       srt-slurm:
         network-interface: ""
         gpus-per-node-directive: false  # GPUs are requested by typed GRES (slurm.gres)
+        single-node-exclusive: false  # as the old salloc path; the job's 8 GPUs fill the node
   h200-dgxc:
     gpus-per-node: 8
     available-cpu-dram-mib: 1_471_356
@@ -422,6 +424,7 @@ clusters:
       srt-slurm:
         network-interface: ""
         gpus-per-node-directive: false  # GPUs are requested by typed GRES (slurm.gres)
+        single-node-exclusive: false  # as the old salloc path; the job's 8 GPUs fill the node
   b200-nb:
     gpus-per-node: 8
     arch: x86_64

@@ -191,6 +191,8 @@ class SrtSlurmSettings(Record):
     # None leaves srtctl's default (both directives on).
     gpus_per_node_directive: bool | None = Field(default=None, alias="gpus-per-node-directive")
     segment_directive: bool | None = Field(default=None, alias="segment-directive")
+    # Single-node jobs take the whole node unless the partition cannot grant --exclusive.
+    single_node_exclusive: bool = Field(default=True, alias="single-node-exclusive")
     # Recipe container names that resolve to the job's main image, and to the staged
     # frontend nginx (none: no nginx is staged).
     container_aliases: tuple[str, ...] = Field(default=(), alias="container-aliases")

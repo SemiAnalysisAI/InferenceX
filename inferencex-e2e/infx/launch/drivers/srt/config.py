@@ -132,7 +132,9 @@ def render(cluster: Cluster, job: SrtJob) -> dict[str, Any]:
         config["use_segment_sbatch_directive"] = False
     elif srt.segment_directive is not None:
         config["use_segment_sbatch_directive"] = srt.segment_directive
-    config["use_exclusive_sbatch_directive"] = job.single_node or settings.exclusive
+    config["use_exclusive_sbatch_directive"] = (
+        srt.single_node_exclusive if job.single_node else settings.exclusive
+    )
     directives: dict[str, str] = {}
     if settings.exclude:
         directives["exclude"] = ",".join(settings.exclude)
