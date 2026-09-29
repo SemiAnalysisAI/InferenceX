@@ -9140,3 +9140,74 @@
     - "Hardcode the profiling-free DCGM counter file in every srt-slurm recipe with a DCGM power exporter, matching the H200 Kimi-K3 change. Power, energy and GPU utilization remain; DCGM_FI_PROF_* metrics are omitted. Exporter image, 100 ms sampling and strict power validation are unchanged."
     - "所有带 DCGM 功耗 exporter 的 srt-slurm recipe 直接写死无 profiling 的 DCGM counters 文件，与 H200 Kimi-K3 的改动一致。保留功耗、能耗和 GPU 利用率，省略 DCGM_FI_PROF_* 指标；exporter 镜像、100 ms 采样和严格功耗校验不变。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3590
+
+- config-keys:
+  - dsv4-fp4-b200-dynamo-sglang-agentic-agg
+  - dsv4-fp4-b200-dynamo-sglang-agentic-disagg
+  - dsv4-fp4-gb200-dynamo-vllm-agentic-mtp-agg
+  - dsv4-fp4-gb200-dynamo-vllm-agentic-mtp-disagg
+  - dsv4-fp4-gb200-dynamo-vllm-agentic-mtp2-agg
+  - dsv4-fp4-gb200-dynamo-vllm-agentic-mtp2-disagg
+  - dsv4-fp4-gb300-dynamo-sglang-agentic-agg
+  - dsv4-fp4-gb300-dynamo-sglang-agentic-disagg
+  - dsv4-fp4-gb300-dynamo-trt-agentx
+  - dsv4-fp4-gb300-dynamo-vllm-agentic
+  - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-agg
+  - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg
+  - glm5.2-fp4-b200-dynamo-sglang-agentic-agg
+  - glm5.2-fp4-b200-dynamo-sglang-agentic-disagg
+  - glm5.2-fp4-gb200-dynamo-sglang-agentic-disagg
+  - glm5.2-fp4-gb200-dynamo-sglang-agentic-mtp
+  - glm5.2-fp4-gb200-dynamo-sglang-agentic-mtp-agg
+  - glm5.2-fp4-gb300-dynamo-sglang-agentic-agg
+  - glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg
+  - glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp
+  - kimik3-fp4-gb200-dynamo-vllm-agentic
+  - minimaxm3-fp4-gb200-dynamo-trt-agentic-agg-mtp
+  - minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp
+  - minimaxm3-fp4-gb200-dynamo-vllm-agentic-disagg-mtp
+  - minimaxm3-fp4-gb300-dynamo-vllm-agentic-mtp-disagg
+  - qwen3.5-fp4-gb200-dynamo-sglang-agentic-mtp
+  - qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg
+  - qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg-pareto
+  - qwen3.5-fp4-gb300-dynamo-sglang-agentic-disagg
+  - qwen3.5-fp4-gb300-dynamo-sglang-agentic-pp-pareto
+  - qwen3.5-fp4-gb300-dynamo-trt-agentic-disagg
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-disagg
+  scenario-type:
+  - agentic-coding
+  description:
+  - Use the shared profiling-free counters for implicit Tachometer DCGM exporters through NVIDIA cluster defaults; omit the vGPU license counter from the shared CSV. Preserve existing exporter images, ports and collection intervals.
+  - 通过 NVIDIA 集群默认配置，让 Tachometer 自动启动的 DCGM exporter 使用共享的无 profiling counters；共享 CSV 同时省略 vGPU license counter。保留原有 exporter 镜像、端口和采集间隔。
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3590
+- config-keys:
+  - dsr1-fp4-b200-dynamo-sglang
+  - dsr1-fp4-b200-dynamo-sglang-mtp
+  - dsr1-fp4-b200-dynamo-trt
+  - dsr1-fp4-b300-dynamo-trt
+  - dsr1-fp4-gb200-dynamo-sglang
+  - dsr1-fp4-gb200-dynamo-trt
+  - dsr1-fp4-gb300-dynamo-sglang
+  - dsr1-fp4-gb300-dynamo-trt
+  - dsr1-fp8-b200-dynamo-sglang
+  - dsr1-fp8-b200-dynamo-sglang-mtp
+  - dsr1-fp8-b200-dynamo-trt
+  - dsr1-fp8-b300-dynamo-trt
+  - dsr1-fp8-gb200-dynamo-sglang
+  - dsr1-fp8-gb200-dynamo-trt
+  - dsr1-fp8-gb300-dynamo-sglang
+  - dsr1-fp8-gb300-dynamo-trt
+  - dsr1-fp8-h100-dynamo-sglang
+  - dsr1-fp8-h100-dynamo-trt
+  - dsr1-fp8-h200-dynamo-sglang
+  - dsr1-fp8-h200-dynamo-trt
+  - qwen3.5-fp4-gb300-dynamo-trt
+  - qwen3.5-fp4-gb300-dynamo-trt-mtp
+  - qwen3.5-fp8-gb200-dynamo-sglang
+  - qwen3.5-fp8-gb300-dynamo-sglang
+  scenario-type:
+  - fixed-seq-len
+  description:
+  - Use the shared profiling-free counters for implicit Tachometer DCGM exporters through NVIDIA cluster defaults; omit the vGPU license counter from the shared CSV. Preserve existing exporter images, ports and collection intervals.
+  - 通过 NVIDIA 集群默认配置，让 Tachometer 自动启动的 DCGM exporter 使用共享的无 profiling counters；共享 CSV 同时省略 vGPU license counter。保留原有 exporter 镜像、端口和采集间隔。
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3590

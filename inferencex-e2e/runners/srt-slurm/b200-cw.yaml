@@ -1,4 +1,9 @@
 cluster: b200-cw
+# Tachometer uses this exporter when power telemetry does not own one.
+default_gpu_exporter:
+  container_image: nvcr.io#nvidia/k8s/dcgm-exporter:3.3.9-3.6.1-ubuntu22.04
+  port: 9401
+  command: "dcgm-exporter --collect-interval=1000 --address :{port} -f /configs/dcgm-counters-noprof-3.3.9.csv"
 default_partition: b200
 default_time_limit: ${SRT_DEFAULT_TIME_LIMIT}
 gpus_per_node: 8

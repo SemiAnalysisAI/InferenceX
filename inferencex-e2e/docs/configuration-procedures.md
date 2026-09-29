@@ -62,6 +62,16 @@ arguments add or override mapping entries. Power jobs add the staged DCGM image 
 the same writer. Missing variables fail before writing; values are substituted into
 parsed YAML scalars so quotes and punctuation remain data, not YAML or shell syntax.
 
+NVIDIA profiles set `default_gpu_exporter` to use the shared
+`/configs/dcgm-counters-noprof-3.3.9.csv` for Tachometer's implicit DCGM exporter.
+Power recipes select `dcgm-counters-noprof.csv` for exporter 4.6.0 through
+`telemetry.dcgm_exporter.command`; each CSV preserves its exporter's retained field types.
+Tachometer reuses the power exporter when power telemetry owns it. Power, energy and
+GPU utilization remain available; profiling and vGPU license counters are omitted.
+This does not enable telemetry in opted-out recipes or qualify Tachometer metrics
+as validated PowerX results. Exporter images and existing 1000 ms Tachometer /
+100 ms power-exporter collection intervals are preserved.
+
 Keep model selection, cache preparation, and workload-dependent time limits in the
 launcher. Do not add profiles for non-srt-slurm launchers or change their routing here.
 
