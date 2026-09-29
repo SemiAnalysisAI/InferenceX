@@ -9143,3 +9143,10 @@
   description:
     - "Retain the branch Kimi MI355X grid through native SRT-Slurm variants, including no-draft DCP8, after removal of its legacy launcher"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3156
+
+- config-keys:
+    - minimaxm3-fp4-mi355x-vllm-rocm-bf16index-sep29
+  description:
+    - "Qualify the official September 29 ROCm vLLM image with an isolated BF16-indexer MiniMax BFCL diagnostic; keep external plugins disabled"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3156
+  all-evals: true

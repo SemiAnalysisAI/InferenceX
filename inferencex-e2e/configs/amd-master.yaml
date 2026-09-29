@@ -1486,3 +1486,19 @@ dsv41flash-fp4-mi355x-sglang-agentic-dspark:
     - dram-utilization: 0.60
       search-space:
       - { tp: 4, ep: 4, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/sglang/mi355x-fp4-mtp/agentic.yaml }
+
+# Isolated stock-image BFCL diagnostic. BF16 indexer is a separate configuration
+# because the official ROCm vLLM build rejects FP8 indexer KV.
+minimaxm3-fp4-mi355x-vllm-rocm-bf16index-sep29:
+  image: vllm/vllm-openai-rocm:nightly-36768d1bfd39094681cdbc8cb37d4b31c0729c89
+  model: amd/MiniMax-M3-MXFP4
+  model-prefix: minimaxm3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.687
+      search-space:
+      - { tp: 4, ep: 1, kv-offloading: none, conc-list: [1], spec-decoding: mtp, srt-recipe: experimental/bfcl/minimax-mi355x-vllm-rocm-bf16index-sep29.yaml }
