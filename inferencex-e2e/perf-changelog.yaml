@@ -9104,3 +9104,47 @@
     - "Restore the DCP8 LMCache bands on the native srt-slurm recipe: concurrency 14 and 16 (DSpark 3, ReplaySSM) and 48, 56 and 72 (no draft) run ATOM's in-process lmcache_offload connector through roles.agg.args.extra-kv-connectors (srt-slurm patch 507), with 128 GB/rank up to 48 and 192 GB/rank at 56 and 72. Concurrency 1 and 4 stay GPU-resident."
     - "No change to the Inferact/Kimi-K3-DSpark draft's precision: online_quant_config still excludes every draft linear (layers.*, context_proj), so its weights and activations stay BF16, and it keeps the target's FP8 KV cache (kv_cache_dtype fp8). FlyDSL FP8 prefill attention applies only to the target, since the draft runs its block pass as decode attention."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3407
+
+- config-keys:
+    - minimaxm3-fp4-gb300-dynamo-vllm-agentic-mtp-agg
+    - minimaxm3-fp4-gb300-dynamo-vllm-agentic-mtp-disagg-mooncake
+  description:
+    - "Add GB300 MiniMax-M3 Dynamo-vLLM AgentX aggregate and disaggregated recipes with EAGLE3-GQA"
+    - "Use the current shared srt-slurm dependency for process-local Mooncake store configuration"
+    - "新增采用 EAGLE3-GQA 的 GB300 MiniMax-M3 Dynamo-vLLM AgentX 聚合与分离式部署配置；采用当前共享 srt-slurm 依赖为各工作进程配置 Mooncake 存储"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3232
+
+- config-keys:
+    - minimaxm3-fp4-gb300-dynamo-vllm-agentic-mtp-disagg-mooncake
+  description:
+    - "Isolate the checksum-pinned Mooncake wheel install from unrelated image package overrides"
+    - "将固定校验和的 Mooncake wheel 安装与镜像中无关的软件包版本覆盖项隔离"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3232
+
+- config-keys:
+    - minimaxm3-fp4-gb300-dynamo-vllm-agentic-mtp-disagg-mooncake
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Rename the TP2 max-num-seqs-4 disaggregated recipe and update its selected concurrency and references together"
+    - "重命名 TP2 max-num-seqs-4 分离式部署配方，并同步更新其选定并发度与引用"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3232
+
+- config-keys:
+    - minimaxm3-fp4-gb300-dynamo-vllm-agentic-mtp-disagg-mooncake
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the selected concurrency and matching recipe names for the TEP4 max-num-seqs-2 and TP2 max-num-seqs-2 disaggregated points"
+    - "更新 TEP4 max-num-seqs-2 与 TP2 max-num-seqs-2 分离式部署点的选定并发度及对应配方名称"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3232
+
+- config-keys:
+    - minimaxm3-fp4-gb300-dynamo-vllm-agentic-mtp-agg
+    - minimaxm3-fp4-gb300-dynamo-vllm-agentic-mtp-disagg-mooncake
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Point the GB300 MiniMax-M3 AgentX recipes to the shared SRT benchmark script"
+    - "将 GB300 MiniMax-M3 AgentX 配方指向共用的 SRT 基准测试脚本"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3232

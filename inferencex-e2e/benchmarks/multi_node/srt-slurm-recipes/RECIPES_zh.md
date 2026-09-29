@@ -8,6 +8,8 @@ InferenceX 负责维护本目录中的配置。所有 NVIDIA srt-slurm 启动器
 
 InferenceX 要求 srt-slurm 2.0 或更新版本，且配置必须声明 `schema: 2`。不支持旧版配置结构；加入本目录前必须先完成迁移。
 
+MiniMax-M3 的 Mooncake 安装脚本使用 `--no-deps` 和 `--require-hashes` 安装已发布的 wheel。仅对该命令清除 `UV_OVERRIDE`，避免镜像中无关的软件包版本覆盖项进入 wheel 的哈希校验。其他安装命令仍使用镜像的版本覆盖配置。
+
 ## 目录和文件命名规范
 
 所有配置统一存放在 `<model-prefix>/<engine>/<gpu>-<precision>/<workload>/<recipe>.yaml`：
