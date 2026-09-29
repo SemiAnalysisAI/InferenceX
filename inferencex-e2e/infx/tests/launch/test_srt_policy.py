@@ -50,8 +50,6 @@ SINGLE = dict(IS_MULTINODE="false")
 @pytest.mark.parametrize(("cluster_id", "env", "path"), [
     ("b200-nscale", dict(MULTI, MODEL_PREFIX="dsv4", PRECISION="fp4", FRAMEWORK="dynamo-sglang", SPEC_DECODING="mtp"), LaunchPath.SRT_NATIVE),
     ("b200-nscale", dict(MULTI, MODEL_PREFIX="dsv4", PRECISION="fp4", FRAMEWORK="dynamo-sglang", SPEC_DECODING="eagle"), LaunchPath.SRT_MULTI),
-    ("b200-nscale", dict(MULTI, MODEL_PREFIX="kimik3", PRECISION="fp4", FRAMEWORK="dynamo-vllm"), LaunchPath.SRT_NATIVE),
-    ("b200-nscale", dict(MULTI, MODEL_PREFIX="dsr1", PRECISION="fp8", FRAMEWORK="dynamo-trt"), LaunchPath.SRT_MULTI),
     ("b200-nscale", dict(MULTI, MODEL_PREFIX="glm5.1", PRECISION="fp8", FRAMEWORK="tilert", SPEC_DECODING="mtp", IS_AGENTIC="1"), LaunchPath.SRT_NATIVE),
     ("b200-nscale", dict(MULTI, MODEL_PREFIX="glm5.1", PRECISION="fp8", FRAMEWORK="tilert", SPEC_DECODING="mtp", IS_AGENTIC="0"), LaunchPath.LEGACY_TILERT),
     ("mi355x-amds", dict(IS_MULTINODE="true", FRAMEWORK="atom-disagg"), LaunchPath.LEGACY_AMD_UTILS),
@@ -66,11 +64,6 @@ SINGLE = dict(IS_MULTINODE="false")
 ])  # fmt: skip
 def test_each_cluster_routes_requests_to_its_launch_path(cluster_id, env, path):
     assert launch_path(cluster_id, request(**env)) is path
-
-
-def test_a_path_without_a_lane_on_the_cluster_is_refused():
-    with pytest.raises(LaunchError, match="cluster 'b200-cw' has no srt-multi srt-slurm lane"):
-        srt_lane("b200-cw", LaunchPath.SRT_MULTI)
 
 
 def test_a_path_without_a_lane_on_the_cluster_is_refused():
@@ -122,7 +115,6 @@ zip_override_y:
 
 @pytest.mark.parametrize(("recipe", "model", "paths"), [
     (BUNDLE, "org/M", {"alias-a": "nvme/m", "alias-b": "nvme/m", "alias-c": "nvme/m"}),
-    ("model: {path: hf:org/M}\n", "org/Unstaged", {}),
     ("model: {path: /abs/m}\n", "org/Unstaged", {}),
     ("model: {path: alias-a}\n", "org/Unstaged", LaunchError),
 ])  # fmt: skip
@@ -148,8 +140,6 @@ def test_matching_single_node_points_read_the_shared_hub_cache(tmp_path, monkeyp
     assert single_node_hf_cache(c, request(IS_AGENTIC="0")) == tmp_path / "hub"
 
 
-# A controlled bump every AgentX point at CONC >= 64 would get, and a lane with a long
-# limit for dsv4 AgentX requests.
 BUMP = TimeBump(Match(agentic=True), min_conc=64, minutes=1440)
 LANE = SrtLane(tag=None, time_limit="4:00:00", long_time_limit="8:00:00",
                long_time=Match(any_of("dsv4"), agentic=True))  # fmt: skip

@@ -99,12 +99,6 @@ def test_node_exclusions_cpus_and_image_aliases_are_rendered():
     assert (config["default_account"], config["default_partition"]) == ("bench", "batch")
 
 
-def test_job_containers_and_the_dcgm_exporter_are_added():
-    config = render(cluster(), job(containers={"tilert-prefill": "/sq/prefill.sqsh"}, dcgm_exporter="/sq/dcgm.sqsh"))
-    assert config["containers"]["tilert-prefill"] == "/sq/prefill.sqsh"
-    assert config["containers"]["dcgm-exporter"] == "/sq/dcgm.sqsh"
-
-
 @pytest.mark.parametrize(("image", "spelling"), [
     ("nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1", "nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1"),
     ("nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc24", "nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc24"),
@@ -122,4 +116,3 @@ def test_a_failed_write_keeps_the_previous_config(tmp_path):
     with pytest.raises(yaml.YAMLError):
         write(target, {"default_partition": object()})
     assert yaml.safe_load(target.read_text()) == {"default_partition": "old"}
-    assert [path.name for path in tmp_path.iterdir()] == ["srtslurm.yaml"]

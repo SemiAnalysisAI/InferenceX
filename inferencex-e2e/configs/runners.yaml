@@ -273,8 +273,7 @@ labels:
     - mi355x-amds_07
     - mi355x-amds_08
     - mi355x-amds_09
-# Keyed by cluster:<id> (fields: CONFIGS.md). models.entries are keyed by MODEL's basename;
-# "<basename>@<root>" names another copy, and jobs read a node-local copy first.
+# See CONFIGS.md. models.entries keys: MODEL basename or <basename>@<root>; node-local copies first.
 clusters:
   h100-cw:
     gpus-per-node: 8
@@ -633,7 +632,7 @@ clusters:
         volume-mounts:
           aiperf-cache: /aiperf_mmap_cache
           hf-hub-cache: /hf_hub_cache
-          # srtctl caches hash-pinned dynamo wheels at /configs/dynamo-wheels.
+          # srtctl's cache of hash-pinned dynamo wheels.
           dynamo-wheels: /configs/dynamo-wheels
   mi300x-amd:
     gpus-per-node: 8

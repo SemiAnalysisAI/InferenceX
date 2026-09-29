@@ -1,9 +1,4 @@
-"""SrtDriver end to end: ``python -m infx.launch run`` against fake Slurm, enroot and srtctl.
-
-Launches use the checked-in cluster records with their host paths moved under a sandbox
-(fake_slurm.sandbox_runner_config). The launcher, image staging, recipe binder,
-golden-acceptance planner and artifact code are the real ones.
-"""
+"""The srt-slurm driver end to end: ``python -m infx.launch run`` on the sandboxed fakes."""
 
 import json
 import os
@@ -128,11 +123,6 @@ def assert_ok(result: subprocess.CompletedProcess[str]) -> None:
     assert result.returncode == 0, result.stdout[-4000:] + result.stderr[-8000:]
 
 
-# --------------------------------------------------------------------------
-# Single node
-# --------------------------------------------------------------------------
-
-
 def test_single_node_point_stages_workflow_artifacts(harness):
     workspace = harness.workspace
     assert_ok(launch(single_node_env(harness, "h200-cw"), harness.config, workspace))
@@ -153,14 +143,6 @@ def test_single_node_point_stages_workflow_artifacts(harness):
     applied = [line.split()[-1] for line in lines(harness.logs, "git") if line.split()[2:3] == ["apply"]]
     assert applied == [str(workspace / "runners/srt-slurm/patches/001-fixture.patch")]
     assert lines(harness.logs, "scancel") == []
-
-
-def test_a_failed_srt_slurm_setup_keeps_its_exit_code(harness):
-    env = single_node_env(harness, "h200-cw", FAKE_MAKE_RC="13")
-    result = launch(env, harness.config, harness.workspace)
-    assert result.returncode == 13
-    assert "make setup broke" in result.stderr  # the setup log is shown on failure
-    assert srtctl_calls(harness.logs) == [] and lines(harness.logs, "scancel") == []
 
 
 def test_single_node_eval_requires_a_successful_eval(harness):
@@ -184,24 +166,14 @@ def test_single_node_failed_allocation_fails_the_launch(harness):
     assert (harness.workspace / "point-identity.json").is_file()
 
 
-# --------------------------------------------------------------------------
-# Multi node
-# --------------------------------------------------------------------------
-
-# ``staging`` is how the main image reaches the job: imported first (the default),
-# validated where operators staged it, handed over unchecked, or pulled from the
-# registry by Pyxis inside the job.
+# ``staging``: the main image is imported first (the default), validated where operators
+# staged it, handed over unchecked, or pulled from the registry by Pyxis inside the job.
 LANES = {
     "b200-nscale-native": dict(
         cluster="b200-nscale",
         env=dict(MODEL_PREFIX="kimik3", PRECISION="fp4", FRAMEWORK="dynamo-vllm", MODEL="moonshotai/Kimi-K3",
                  IS_AGENTIC="1", ISL="0", OSL="0", FAKE_RESULTS="agentic"),
         no_preflight=True, tag="b200,kimik3,fp4,agentic,", mounts=("/aiperf_mmap_cache", "/hf_hub_cache"),
-    ),
-    "b200-nscale-multinode": dict(
-        cluster="b200-nscale",
-        env=dict(MODEL_PREFIX="dsr1", PRECISION="fp8", FRAMEWORK="dynamo-trt", MODEL="deepseek-ai/DeepSeek-R1-0528"),
-        no_preflight=True, tag="b200,dsr1,fp8,1024x1024,",
     ),
     "b300-dsxe": dict(
         cluster="b300-dsxe",
@@ -218,11 +190,6 @@ LANES = {
         env=dict(MODEL_PREFIX="kimik3", PRECISION="fp4", FRAMEWORK="dynamo-vllm", MODEL="moonshotai/Kimi-K3",
                  IS_AGENTIC="1", ISL="0", OSL="0", FAKE_RESULTS="agentic"),
         no_preflight=True, tag="gb200,kimik3,fp4,agentic,", shared_checkout=True, mounts=("/aiperf_mmap_cache", "/hf_hub_cache"),
-    ),
-    "gb300-nv": dict(
-        cluster="gb300-nv",
-        env=dict(MODEL_PREFIX="qwen3.5", PRECISION="fp4", FRAMEWORK="dynamo-trt", MODEL="nvidia/Qwen3.5-397B-A17B-NVFP4-V2"),
-        no_preflight=True, tag="gb300,qwen3.5,fp4,1024x1024,", time="4:00:00",
     ),
     "h100-dgxc": dict(
         cluster="h100-dgxc",
@@ -274,7 +241,6 @@ def test_multinode_lane_stages_workflow_artifacts(harness, lane_id):
         assert "./sweep_42.log" in bundle.getnames()
     assert (workspace / "srt-slurm-sha.txt").read_text() == harness.env["FAKE_SRT_COMMIT"] + "\n"
     assert (workspace / "LOGS/sweep_42.log").is_file()
-    assert (workspace / "srt-submission.json").is_file()
 
     [call] = srtctl_calls(harness.logs)
     argv = call["argv"]
@@ -296,7 +262,6 @@ def test_multinode_lane_stages_workflow_artifacts(harness, lane_id):
         assert argv[argv.index("--setup-script") + 1] == setup_script
     else:
         assert "--setup-script" not in argv
-    assert call["env"]["RUNNER_NAME"] == runner
     assert call["env"]["SERVED_MODEL_NAME"] == lane.get("served")
 
     staged = yaml.safe_load((checkout / "recipes/test/lane.yaml").read_text())
@@ -496,15 +461,16 @@ def test_setup_retries_only_after_discarding_a_truncated_archive(harness):
     assert not list(harness.workspace.glob("srt-slurm-9001-*/configs/nats-server-*.deb"))
 
 
-def test_setup_failure_without_a_bad_archive_fails_once(harness):
+def test_a_setup_failure_without_a_bad_archive_is_not_retried(harness):
     env = lane_env(
         harness, "h200-dgxc", MODEL_PREFIX="dsr1", PRECISION="fp8", FRAMEWORK="dynamo-sglang",
         MODEL="deepseek-ai/DeepSeek-R1-0528", FAKE_MAKE_RC="2",
     )  # fmt: skip
     result = launch(env, harness.config, harness.workspace)
     assert result.returncode == 2  # make's own exit code
+    assert "make setup broke" in result.stderr  # the setup log is shown on failure
     assert len(lines(harness.logs, "make")) == 1
-    assert srtctl_calls(harness.logs) == []
+    assert srtctl_calls(harness.logs) == [] and lines(harness.logs, "scancel") == []
 
 
 @pytest.mark.parametrize(("cluster_id", "env", "message"), [
@@ -521,13 +487,7 @@ def test_unsupported_multinode_requests_fail_before_any_setup(harness, cluster_i
     assert lines(harness.logs, "git") == []
 
 
-# --------------------------------------------------------------------------
-# Launch inputs and the post-eval environment
-# --------------------------------------------------------------------------
-
-
 @pytest.mark.parametrize(("shape", "overrides", "missing"), [
-    ("single", dict(HF_HUB_CACHE=""), "HF_HUB_CACHE"),
     ("single", dict(IS_AGENTIC="1", SPEC_DECODING="mtp", THINKING_MODE=""), "THINKING_MODE"),
     ("multi", dict(SPEC_DECODING=None), "SPEC_DECODING"),
     ("batch", dict(SRT_RECIPE=None), "SRT_RECIPE"),

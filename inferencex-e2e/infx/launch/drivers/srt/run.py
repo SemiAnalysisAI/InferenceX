@@ -1,4 +1,4 @@
-"""One srt-slurm launch: its request, the Slurm backend, and the environment srtctl runs with."""
+"""One srt-slurm launch and the environment its children (git, uv, make, srtctl) run with."""
 
 from __future__ import annotations
 
@@ -22,8 +22,6 @@ if TYPE_CHECKING:
 
 @dataclass
 class SrtRun:
-    """One srt-slurm launch and the environment its children (git, uv, make, srtctl) get."""
-
     cluster: Cluster
     backend: SlurmBackend
     request: SrtRequest

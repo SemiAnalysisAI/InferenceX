@@ -1,23 +1,20 @@
-"""Submitting through ``srtctl apply`` and reading back the job it created.
-
-Submissions go through infx.srt_slurm.synthetic_acceptance, run with the checkout's
-interpreter, so golden AgentX acceptance is applied before ``srtctl apply``. The pinned
-submodule reports the job in a ``--json`` manifest; fork checkouts only print prose.
-"""
+"""Submitting through ``srtctl apply`` and reading back the job it created."""
 
 from __future__ import annotations
 
 import contextlib
+import fnmatch
 import json
 import re
 import subprocess
 import sys
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from infx.launch import policy, proc
+from infx.launch import proc
 from infx.launch.context import LaunchError
 from infx.srt_slurm.single_node import submission_fields
 
@@ -37,17 +34,33 @@ SINGLE_NODE_EVAL_COMMAND = (
     '["bash", "{infmax_workspace}/benchmarks/single_node/srt_eval.sh", "{endpoint}", '
     '"/logs/infx-eval-exit-code"]'
 )
+# The launch variables post-eval is handed by name, beyond the matrix inputs srtctl forwards
+# itself. srt-slurm re-exports each on its srun command line, where the node's process list
+# shows it, so no credential is forwarded but the Modal tokens SWE-bench's sandboxes need.
+WORKLOAD_ENV = (
+    "EVAL_*", "SWEBENCH_*", "AIPERF_*", "AGENTIC_*",
+    "MODAL_TOKEN_ID", "MODAL_TOKEN_SECRET",
+    # Topology and scenario inputs srtctl does not forward.
+    "TP", "EP_SIZE", "DP_ATTENTION", "PP_SIZE", "DCP_SIZE", "PCP_SIZE", "CONC",
+    "IS_AGENTIC", "SCENARIO_TYPE",
+    # benchmarks/runtime_settings.sh settings outside the families above.
+    "OPENAI_API_KEY", "REQUIRE_POWER", "ENABLE_AGENTX_POWER", "VLLM_ENGINE_READY_TIMEOUT_S",
+    "SGLANG_TORCH_PROFILER_DIR", "VLLM_TORCH_PROFILER_DIR",
+)  # fmt: skip
+# A name a shell cannot export aborts the ``export ... && exec`` command it would join.
+_SHELL_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 _PROSE_JOB_IDS = (re.compile(r"✅ Job ([0-9]+)"), re.compile(r"Job ([0-9]+)"))
 
 
-def eval_args(env: dict[str, str], command: str) -> list[str]:
-    """Post-eval ``--set`` arguments: the eval command and the variables it is handed.
-
-    srtctl forwards each named variable that is set and non-empty when the eval starts,
-    on top of its built-in matrix inputs: the workload environment contract
-    (``policy.WORKLOAD_ENV``) of ``env``, the environment srtctl runs with.
-    """
-    names = policy.workload_env_names(env)
+def eval_args(env: Mapping[str, str], command: str) -> list[str]:
+    """Post-eval ``--set`` arguments: ``command``, and the WORKLOAD_ENV names set in ``env``."""
+    names = sorted(
+        name
+        for name, value in env.items()
+        if value
+        and _SHELL_NAME.fullmatch(name)
+        and any(fnmatch.fnmatchcase(name, pattern) for pattern in WORKLOAD_ENV)
+    )
     return [
         "--set",
         f"post_eval.command={command}",
@@ -56,10 +69,10 @@ def eval_args(env: dict[str, str], command: str) -> list[str]:
     ]
 
 
-def bind_point(run: SrtRun, venv: Path, checkout: Checkout, arguments: Path) -> int:
+def bind_point(run: SrtRun, checkout: Checkout, arguments: Path) -> int:
     """Bind the single-node recipe variant for this point; the binder writes ``arguments``."""
     prepare = [
-        str(venv / "bin/python"), "-m", "infx.srt_slurm.single_node", "prepare",
+        str(checkout.venv / "bin/python"), "-m", "infx.srt_slurm.single_node", "prepare",
         f"{run.workspace}/{run.request.srt_recipe}", str(arguments),
     ]  # fmt: skip
     return proc.run(prepare, env=run.env, cwd=checkout.root).returncode
@@ -73,30 +86,31 @@ def bound_arguments(arguments: Path) -> tuple[str, list[str]]:
 
 def apply(
     run: SrtRun,
-    venv: Path,
+    checkout: Checkout,
     config: str,
     arguments: list[str],
     *,
-    cwd: Path,
     stdout: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    """Run ``srtctl apply`` for ``config`` with ``arguments``.
+    """Run ``srtctl apply`` for ``config``, through the golden AgentX acceptance planner.
 
     ``stdout`` receives srtctl's JSON manifest; without it stdout and stderr are
     captured and echoed.
-    """  # fmt: skip
+    """
     argv = [
-        str(venv / "bin/python"), "-m", "infx.srt_slurm.synthetic_acceptance",
+        str(checkout.venv / "bin/python"), "-m", "infx.srt_slurm.synthetic_acceptance",
         config, run.request.framework, "--", *arguments,
     ]  # fmt: skip
     if stdout is None:
-        result = proc.run(argv, env=run.env, cwd=cwd, capture=True)
+        result = proc.run(argv, env=run.env, cwd=checkout.root, capture=True)
         sys.stdout.write(result.stdout + result.stderr)
         sys.stdout.flush()
         return result
     proc.echo(argv, run.env)
     with stdout.open("w") as handle:
-        rc = subprocess.run(argv, env=run.env, cwd=cwd, stdout=handle, check=False).returncode
+        rc = subprocess.run(
+            argv, env=run.env, cwd=checkout.root, stdout=handle, check=False
+        ).returncode
     return subprocess.CompletedProcess(argv, rc, stdout.read_text(errors="replace"), "")
 
 
@@ -113,7 +127,7 @@ class Submitted:
     job: SlurmJob | None = None
 
     def read_manifest(self, backend: SlurmBackend) -> SlurmJob:
-        """Adopt the job srtctl reported in its ``--json`` manifest (never prose)."""
+        """Adopt the job srtctl reported in its ``--json`` manifest."""
         if self.manifest is None:
             raise LaunchError("this submission writes no manifest")
         try:
@@ -138,14 +152,13 @@ class Submitted:
             backend.cancel(job)
 
     def adopted(self) -> SlurmJob:
-        """The job, once the submission reported it."""
         if self.job is None:
             raise LaunchError("srtctl reported no submitted job")
         return self.job
 
 
 def _prose_job(backend: SlurmBackend, output: str, checkout: Checkout) -> SlurmJob:
-    """Adopt the one job id in srtctl's human-readable output (fork checkouts)."""
+    """Adopt the one job id in srtctl's human-readable output."""
     for pattern in _PROSE_JOB_IDS:
         ids = sorted(set(pattern.findall(output)))
         if len(ids) > 1:
@@ -156,24 +169,18 @@ def _prose_job(backend: SlurmBackend, output: str, checkout: Checkout) -> SlurmJ
 
 
 def submit_lane(
-    run: SrtRun,
-    submitted: Submitted,
-    venv: Path,
-    checkout: Checkout,
-    config_file: str,
-    arguments: list[str],
+    run: SrtRun, submitted: Submitted, checkout: Checkout, config_file: str, arguments: list[str]
 ) -> int:
     """Submit a multi-node lane job, record it in ``submitted``, and return srtctl's exit code."""
     if submitted.manifest is None:
-        applied = apply(run, venv, config_file, arguments, cwd=checkout.root)
+        applied = apply(run, checkout, config_file, arguments)
         if applied.returncode:
             return applied.returncode
         submitted.job = _prose_job(run.backend, applied.stdout + applied.stderr, checkout)
     else:
         applied = apply(
-            run, venv, config_file, [*arguments, "--json", "--yes"], cwd=checkout.root,
-            stdout=submitted.manifest,
-        )  # fmt: skip
+            run, checkout, config_file, [*arguments, "--json", "--yes"], stdout=submitted.manifest
+        )
         print(applied.stdout, end="", flush=True)
         if applied.returncode:
             return applied.returncode
@@ -191,10 +198,7 @@ def multinode_arguments(
     *,
     preflight: bool,
 ) -> list[str]:
-    """The ``srtctl apply`` arguments of a multi-node lane submission.
-
-    Fork checkouts predate streamed benchmark output and ``--no-preflight``.
-    """
+    """The ``srtctl apply`` arguments of a multi-node lane submission."""
     request = run.request
     stream = [] if checkout.fork else ["--set", "benchmark.stream_output=true"]
     arguments = [

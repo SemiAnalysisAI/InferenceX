@@ -1,17 +1,13 @@
 """The job-local ``srtslurm.yaml`` that ``srtctl`` reads, and the images and mounts it names.
 
-Cluster facts come from the cluster record and its Slurm settings; values that differ
-per job (checkout, time limit, staged images, model paths, mounts) come from
-:class:`SrtJob`. Host-setup hooks stay repository files under runners/srt-slurm/hooks/.
+Cluster facts come from the cluster record; what differs per job comes from :class:`SrtJob`.
 """
 
 from __future__ import annotations
 
 import contextlib
 import json
-import os
 import shlex
-import tempfile
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -33,8 +29,7 @@ if TYPE_CHECKING:
 
 NGINX_IMAGE = "nginx:1.27.4"
 DCGM_EXPORTER_IMAGE = "nvcr.io/nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless"
-DCGM_EXPORTER_ALIAS = "dcgm-exporter"
-# The exporter image's provenance; power lanes stage it with their logs for the audit.
+# The exporter image's provenance, which power lanes stage with their logs for the audit.
 EXPORTER_PROVENANCE = "exporter-image.sha256"
 # What multi-node recipes without a health check get; recipe.py raises lower budgets.
 HEALTH_CHECK = {"max_attempts": HEALTH_ATTEMPTS, "interval_seconds": 10}
@@ -50,19 +45,17 @@ class SrtJob:
     image: str  # the matrix IMAGE, which recipes name as model.container
     container: str  # what pyxis receives for IMAGE and the cluster's container aliases
     nginx: str | None = None  # what pyxis receives for the cluster's nginx aliases
-    dcgm_exporter: str | None = None
     containers: Mapping[str, str] = field(default_factory=dict)  # more recipe containers
     model_paths: Mapping[str, str] = field(default_factory=dict)
-    health_check: Mapping[str, int] | None = None  # default_health_check
+    health_check: Mapping[str, int] | None = None
     mounts: Sequence[tuple[str, str]] = ()  # (host, container) added to the cluster's mounts
     exclusive: bool | None = None  # None: the cluster's multi-node directive
 
 
 def pyxis_spelling(image: str) -> str:
-    """Return ``registry#path`` for a registry-qualified image, else ``image``.
+    """``registry#path`` for a registry-qualified image, else ``image``.
 
-    Recipes spell NGC images either way (``nvcr.io/...`` or ``nvcr.io#...``), so both
-    spellings are aliased to the staged image.
+    Recipes spell NGC images either way, so render aliases both to the staged image.
     """
     first, slash, rest = image.partition("/")
     if "#" not in image and slash and ("." in first or ":" in first or first == "localhost"):
@@ -98,10 +91,7 @@ def volume_path(cluster: Cluster, volume: str) -> Path:
 
 
 def render(cluster: Cluster, job: SrtJob) -> dict[str, Any]:
-    """Return the srtslurm.yaml mapping for ``job`` on ``cluster``.
-
-    ``srt-slurm.extra`` may only add keys this renders nothing for.
-    """
+    """The srtslurm.yaml mapping of ``job`` on ``cluster``; ``srt-slurm.extra`` only adds keys."""
     settings = slurm_settings(cluster)
     srt = settings.srt_slurm
     if srt is None:
@@ -126,8 +116,6 @@ def render(cluster: Cluster, job: SrtJob) -> dict[str, Any]:
     if job.nginx is not None:
         containers.update(dict.fromkeys(srt.nginx_aliases, job.nginx))
     containers.update(job.containers)
-    if job.dcgm_exporter is not None:
-        containers[DCGM_EXPORTER_ALIAS] = job.dcgm_exporter
     config["containers"] = containers
     volume_mounts = {
         str(volume_path(cluster, name)): target for name, target in srt.volume_mounts.items()
@@ -166,16 +154,8 @@ def render(cluster: Cluster, job: SrtJob) -> dict[str, Any]:
 
 
 def write(path: Path, config: Mapping[str, Any]) -> None:
-    """Atomically write ``config`` as YAML to ``path``."""
-    path = Path(path)
-    descriptor, temporary = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
-    try:
-        with os.fdopen(descriptor, "w") as handle:
-            yaml.safe_dump(dict(config), handle, sort_keys=False)
-        Path(temporary).replace(path)
-    except BaseException:
-        Path(temporary).unlink(missing_ok=True)
-        raise
+    """Write ``config`` as YAML; one that does not serialize leaves ``path`` untouched."""
+    path.write_text(yaml.safe_dump(dict(config), sort_keys=False))
 
 
 def srun_options(settings: SlurmSettings) -> str | None:
@@ -190,11 +170,7 @@ def srun_options(settings: SlurmSettings) -> str | None:
 
 
 def _create_dir(path: Path, *, world_writable: bool = False) -> None:
-    """Create ``path`` with its parents, so Pyxis can bind it.
-
-    With ``world_writable`` it is also opened to every user (containers write caches
-    as another user), best-effort: a directory another user owns keeps its mode.
-    """
+    """Create ``path`` for Pyxis to bind, opening it to all users (best-effort) if asked."""
     path.mkdir(parents=True, exist_ok=True)
     if world_writable:
         with contextlib.suppress(OSError):
@@ -227,11 +203,7 @@ def write_lane_config(
     power: PowerDecision,
     model_paths: dict[str, str],
 ) -> None:
-    """Stage a multi-node job's images and write its srtslurm.yaml into ``checkout``.
-
-    The main image, the cluster's nginx (where recipes alias one), the TileRT prefill
-    image and, for power lanes, the DCGM exporter are staged; the mounts are created.
-    """
+    """Stage a multi-node job's images, create its mounts, and write its srtslurm.yaml."""
     backend, request = run.backend, run.request
     container = backend.stage_image(
         request.image, framework=request.framework, model_prefix=request.model_prefix
@@ -245,7 +217,10 @@ def write_lane_config(
     if request.framework == "tilert":
         prefill = backend.stage_image(request.env["PREFILL_IMAGE"]).reference
         containers = {"tilert-decode": container, "tilert-prefill": prefill}
-    dcgm = _stage_dcgm_exporter(run) if power.dcgm else None
+    if power.dcgm:
+        exporter = backend.stage_image(DCGM_EXPORTER_IMAGE, helper="dcgm-exporter")
+        (run.workspace / EXPORTER_PROVENANCE).write_text(f"{backend.image_provenance(exporter)}\n")
+        containers["dcgm-exporter"] = exporter.reference
     create_volume_mounts(run)
     job = SrtJob(
         srtctl_root=checkout,
@@ -254,7 +229,6 @@ def write_lane_config(
         image=request.image,
         container=container,
         nginx=nginx,
-        dcgm_exporter=dcgm,
         containers=containers,
         model_paths=model_paths,
         health_check=HEALTH_CHECK,
@@ -263,11 +237,3 @@ def write_lane_config(
     config_yaml = checkout / "srtslurm.yaml"
     write(config_yaml, render(run.cluster, job))
     print(f"Generated srtslurm.yaml:\n{config_yaml.read_text()}", flush=True)
-
-
-def _stage_dcgm_exporter(run: SrtRun) -> str:
-    """Stage the DCGM exporter and record what exactly the jobs run, for the power audit."""
-    image = run.backend.stage_image(DCGM_EXPORTER_IMAGE, helper="dcgm-exporter")
-    provenance = run.backend.image_provenance(image)
-    (run.workspace / EXPORTER_PROVENANCE).write_text(f"{provenance}\n")
-    return image.reference

@@ -1,8 +1,6 @@
 """Staging what an srt-slurm job produced into the runner workspace.
 
-Every step reads the job's outputs from the local directory the backend returns
-(``fetch_outputs``). Logs are snapshotted on every exit path, and always before
-outputs are deleted.
+Logs are staged on every exit path, and always before the job's outputs are deleted.
 """
 
 from __future__ import annotations
@@ -13,7 +11,6 @@ import shutil
 import sys
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -34,7 +31,7 @@ from infx.launch.drivers.srt.run import SrtRun, require
 from infx.launch.request import RequestError
 
 if TYPE_CHECKING:
-    from infx.launch.backends.base import Job, JobStatus
+    from infx.launch.backends.base import Job
     from infx.launch.drivers.srt.checkout import Checkout
     from infx.launch.drivers.srt.lanes import SrtLane
     from infx.launch.drivers.srt.power import PowerDecision
@@ -52,12 +49,7 @@ def _copy_tree_into(source: Path, destination: Path) -> None:
 
 
 def finish_single_node(run: SrtRun, submitted: Submitted, fetched: Path) -> int:
-    """Exit cleanup of a single-node point: cancel a live job, then stage its artifacts.
-
-    The job is recovered from its manifest when the submission was interrupted. The
-    server-log bundle, the result, GPU metrics and AgentX replay artifacts are staged;
-    returns 1 if a copy failed.
-    """
+    """Exit cleanup of a single-node point: cancel a live job, then stage its artifacts."""
     job = submitted.recover(run.backend)
     if job is None:
         return 0
@@ -87,10 +79,9 @@ def finish_single_node(run: SrtRun, submitted: Submitted, fetched: Path) -> int:
 
 
 def check_single_node(run: SrtRun, logs: Path) -> int:
-    """Require every requested eval to have succeeded and the benchmark result to exist.
+    """Fail unless each requested eval succeeded and the benchmark result exists.
 
-    Native SRT treats post-throughput eval failure as non-fatal; InferenceX requires
-    every requested eval to finish successfully, including staging.
+    srt-slurm treats a failed post-benchmark eval as non-fatal; InferenceX does not.
     """
     request = run.request
     if request.run_eval or request.eval_only:
@@ -106,47 +97,24 @@ def check_single_node(run: SrtRun, logs: Path) -> int:
     return 0
 
 
-@dataclass
-class _Snapshot:
-    """Staging of multi-node logs, run once on the normal path or on exit."""
-
-    run: SrtRun
-    job: Job
-    fetched: Path
-    power: PowerDecision
-    done: bool = False
-
-    def logs(self) -> Path:
-        """The job's logs directory, as the backend makes it readable here."""
-        return self.run.backend.fetch_outputs(self.job, self.fetched) / "logs"
-
-    def take(self) -> None:
-        """Copy power provenance into the logs, then stage LOGS/ and the server-log bundle."""
-        self.done = True
-        logs = self.logs()
-        if not logs.is_dir():
-            return
-        workspace = self.run.workspace
-        if self.power.dcgm:
-            # Provenance travels in the bundle so the audit can tie artifacts to
-            # the exact producer SHA and exporter image.
-            power_dir = logs / "power"
-            power_dir.mkdir(parents=True, exist_ok=True)
-            for name in (EXPORTER_PROVENANCE, "power-producer-sha.txt"):
-                try:
-                    shutil.copyfile(workspace / name, power_dir / name)
-                except OSError as error:
-                    print(f"WARNING: could not stage {name}: {error}", file=sys.stderr)
-        try:
-            _copy_tree_into(logs, workspace / "LOGS")
-        except OSError as error:
-            print(f"WARNING: could not copy {logs} to LOGS: {error}", file=sys.stderr)
-        bundle_server_logs(logs, workspace / MULTINODE_LOGS)
-
-    def on_exit(self) -> None:
-        """Snapshot when the run ended before collection (signal or error)."""
-        if not self.done:
-            self.take()
+def _stage_logs(run: SrtRun, logs: Path, power: PowerDecision) -> None:
+    """Stage LOGS/ and the server-log bundle, which carries a power lane's audit provenance."""
+    if not logs.is_dir():
+        return
+    workspace = run.workspace
+    if power.dcgm:
+        power_dir = logs / "power"
+        power_dir.mkdir(parents=True, exist_ok=True)
+        for name in (EXPORTER_PROVENANCE, "power-producer-sha.txt"):
+            try:
+                shutil.copyfile(workspace / name, power_dir / name)
+            except OSError as error:
+                print(f"WARNING: could not stage {name}: {error}", file=sys.stderr)
+    try:
+        _copy_tree_into(logs, workspace / "LOGS")
+    except OSError as error:
+        print(f"WARNING: could not copy {logs} to LOGS: {error}", file=sys.stderr)
+    bundle_server_logs(logs, workspace / MULTINODE_LOGS)
 
 
 def collect(
@@ -154,8 +122,14 @@ def collect(
 ) -> int:
     """Stream the job, then stage power, logs, results and evals; return the first failure."""
     backend, request = run.backend, run.request
-    snapshot = _Snapshot(run, job, checkout.root / "fetched-outputs", power)
-    run.life.callback(snapshot.on_exit)
+    fetched = checkout.root / "fetched-outputs"
+    logs_staged = False
+
+    def stage_logs_on_exit() -> None:
+        if not logs_staged:
+            _stage_logs(run, backend.fetch_outputs(job, fetched) / "logs", power)
+
+    run.life.callback(stage_logs_on_exit)
     rc = 0
     try:
         backend.stream_logs(job)
@@ -163,16 +137,32 @@ def collect(
         rc = 1
     status = backend.state(job)
     if not status.succeeded:
-        rc = rc or 1
+        rc = 1
     print(f"Job {job.id} completed!\nCollecting results...", flush=True)
-    logs = snapshot.logs()
+    logs = backend.fetch_outputs(job, fetched) / "logs"
     if not logs.is_dir():
         print(f"ERROR: Logs directory not found at {logs}", file=sys.stderr)
-        return rc or 1
+        return 1
     if not request.eval_only and (power.agentx or power.adapter):
-        power_rc = _stage_power(run, checkout, job, logs, infmax, power, status)
+        require(request, "CONC_LIST")
+        audit = (run.workspace, request.result_filename, checkout.commit, request.conc_list)
+        python = request.inferencex_results_python
+        if power.agentx:
+            power_rc = collect_agentic_power_results(
+                status, job.id, logs, infmax, *audit, results_python=python
+            )
+        else:
+            power_rc = validate_agentic_power(
+                logs, *audit, results_python=python, require_power=request.require_power
+            )
+        if power_rc:
+            print(
+                "ERROR: AgentX power validation failed; staging audit and server artifacts",
+                file=sys.stderr,
+            )
         rc = rc or power_rc
-    snapshot.take()
+    logs_staged = True
+    _stage_logs(run, logs, power)
     if request.eval_only:
         print("EVAL_ONLY=true: Skipping benchmark result collection", flush=True)
     else:
@@ -193,39 +183,7 @@ def collect(
             rc = rc or 1
         if lane.write_eval_meta:
             rc = rc or _write_eval_meta(run)
-    # NFS silly-rename files would otherwise block the next job's checkout.
     cleanup_outputs(checkout.root)
-    return rc
-
-
-def _stage_power(
-    run: SrtRun,
-    checkout: Checkout,
-    job: Job,
-    logs: Path,
-    infmax: Path,
-    power: PowerDecision,
-    status: JobStatus,
-) -> int:
-    """Stage the AgentX power audit inputs and validate each concurrency's power window."""
-    request = run.request
-    require(request, "CONC_LIST")
-    if power.agentx:
-        rc = collect_agentic_power_results(
-            status, job.id, logs, infmax,
-            run.workspace, request.result_filename, checkout.commit, request.conc_list,
-            results_python=request.inferencex_results_python,
-        )  # fmt: skip
-    else:
-        rc = validate_agentic_power(
-            logs, run.workspace, request.result_filename, checkout.commit, request.conc_list,
-            results_python=request.inferencex_results_python, require_power=request.require_power,
-        )  # fmt: skip
-    if rc:
-        print(
-            "ERROR: AgentX power validation failed; staging audit and server artifacts",
-            file=sys.stderr,
-        )
     return rc
 
 
@@ -240,33 +198,26 @@ def _write_eval_meta(run: SrtRun) -> int:
     ]  # fmt: skip
     rc = proc.run(argv, env={**run.env, "IS_MULTINODE": "true"}).returncode
     if rc == 0:
-        print(f"Wrote meta_env.json (conc={conc}, prefix={run.request.model_prefix or 'unknown'})")
+        print(f"Wrote meta_env.json (conc={conc}, prefix={run.request.model_prefix})")
     return rc
 
 
-def cleanup_outputs(
-    root: Path,
-    *,
-    attempts: int = 5,
-    delay_s: float = 10,
-    sleep: Callable[[float], None] = time.sleep,
-) -> None:
-    """Remove ``root/outputs`` (retrying for NFS locks) then stray ``.nfs*`` files.
+def cleanup_outputs(root: Path, *, sleep: Callable[[float], None] = time.sleep) -> None:
+    """Remove ``root/outputs``, retrying while NFS holds locks, then stray ``.nfs*`` files.
 
-    NFS silly-rename files would otherwise block the next job's checkout on the
-    runner. Never raises.
+    NFS silly-rename files would otherwise block the next job's checkout. Never raises.
     """
-    outputs = root / "outputs"
+    attempts = 5
     print("Cleaning up srt-slurm outputs...", flush=True)
     for attempt in range(1, attempts + 1):
         try:
-            shutil.rmtree(outputs)
+            shutil.rmtree(root / "outputs")
             break
         except FileNotFoundError:
             break
         except OSError:
             print(f"Retry {attempt}/{attempts}: Waiting for NFS locks to release...", flush=True)
-            sleep(delay_s)
+            sleep(10)
     for directory, dirnames, filenames in os.walk(root, topdown=False):
         base = Path(directory)
         for name in filenames:

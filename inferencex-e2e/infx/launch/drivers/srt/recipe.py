@@ -1,16 +1,13 @@
-"""The workspace recipe mirror and the edits multi-node lanes make to a staged recipe copy.
+"""The workspace recipe mirror, and the edits multi-node lanes make to the job's recipe copy.
 
-Only the disposable copies staged in the job's srt-slurm checkout are edited. The text
-edits keep comments and layout; power concurrency injection rewrites the recipe through
-YAML, which drops comments.
+Only the disposable copy staged in the job's srt-slurm checkout is edited. Text edits keep
+its comments; concurrency injection rewrites it through YAML, which drops them.
 """
 
 from __future__ import annotations
 
 import fnmatch
-import os
 import re
-import tempfile
 from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -25,19 +22,18 @@ if TYPE_CHECKING:
 
 RECIPES_MIRROR = Path("benchmarks/multi_node/srt-slurm-recipes")
 HEALTH_ATTEMPTS = 720
-# Forced TRT acceptance: eval-only AgentX TRT runs strip it to verify drafts for real.
+# Forced TRT speculative acceptance, which eval-only real-verification runs strip.
 FORCED_ACCEPTANCE_MARKER = "TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS"
 
 
 def recipe_relpath(config_file: str) -> str:
-    """Return the recipe path of ``CONFIG_FILE``, without its ``:<override>`` selector."""
+    """The recipe path of ``CONFIG_FILE``, without its ``:<override>`` selector."""
     return config_file.split(":", 1)[0]
 
 
 def recipe_mirror_path(workspace: Path, config_file: str) -> Path:
-    """Return the workspace recipe mirror for ``CONFIG_FILE`` (``recipes/`` stripped)."""
-    rel = recipe_relpath(config_file).removeprefix("recipes/")
-    return Path(workspace) / RECIPES_MIRROR / rel
+    """The workspace mirror of ``CONFIG_FILE``'s recipe."""
+    return workspace / RECIPES_MIRROR / recipe_relpath(config_file).removeprefix("recipes/")
 
 
 def rename_job(text: str, name: str) -> str:
@@ -46,7 +42,7 @@ def rename_job(text: str, name: str) -> str:
 
 
 def raise_health_attempts(text: str) -> str:
-    """Raise each health-check ``max_attempts`` below 720 to 720; longer budgets stay."""
+    """Raise every health-check ``max_attempts`` to at least HEALTH_ATTEMPTS."""
     return re.sub(
         r"(\bmax_attempts:\s*)(\d+)",
         lambda match: f"{match[1]}{max(int(match[2]), HEALTH_ATTEMPTS)}",
@@ -64,14 +60,6 @@ def add_dist_timeout(text: str, seconds: int) -> str:
     return "".join(lines)
 
 
-def edit_recipe(config_path: Path, job_name: str, dist_timeout_s: int | None) -> None:
-    """Apply the text rewrites every lane makes to the staged recipe copy."""
-    text = raise_health_attempts(rename_job(config_path.read_text(), job_name))
-    if dist_timeout_s is not None:
-        text = add_dist_timeout(text, dist_timeout_s)
-    config_path.write_text(text)
-
-
 def prepare_recipe(
     checkout: Path,
     config_file: str,
@@ -79,14 +67,14 @@ def prepare_recipe(
     dist_timeout_s: int | None,
     conc_list: str | None,
 ) -> None:
-    """Edit the checkout's staged copy of ``config_file`` for this job.
-
-    ``conc_list`` is injected on power lanes, which validate one window per concurrency.
-    """
+    """Edit the checkout's staged copy of ``config_file`` for this job."""
     config_path = checkout / recipe_relpath(config_file)
     if not config_path.is_file():
         raise LaunchError(f"CONFIG_FILE does not exist after srt-slurm setup: {config_path}")
-    edit_recipe(config_path, job_name, dist_timeout_s)
+    text = raise_health_attempts(rename_job(config_path.read_text(), job_name))
+    if dist_timeout_s is not None:
+        text = add_dist_timeout(text, dist_timeout_s)
+    config_path.write_text(text)
     if conc_list is not None:
         try:
             inject_concurrencies(config_path, parse_concurrencies(conc_list))
@@ -105,11 +93,7 @@ def strip_forced_acceptance(recipes: Path) -> None:
 
 
 def eval_overrides(recipes: Path, lane: SrtLane, request: LaunchRequest) -> list[str]:
-    """srtctl overrides of an eval run; eval-only real verification also edits ``recipes``.
-
-    Accuracy runs use real speculative verification, so forced TRT acceptance is
-    stripped from the staged recipes where the lane says so.
-    """
+    """srtctl overrides of an eval run; eval-only real verification also edits ``recipes``."""
     overrides: list[str] = []
     if request.eval_only and lane.real_verification is not None and lane.real_verification(request):
         strip_forced_acceptance(recipes)
@@ -134,14 +118,11 @@ def parse_concurrencies(conc_list: str) -> list[int]:
 
 
 def inject_concurrencies(recipe_path: Path, concurrencies: Sequence[int]) -> None:
-    """Atomically set top-level ``benchmark.concurrencies`` in ``recipe_path``.
+    """Set the recipe's top-level ``benchmark.concurrencies``.
 
-    Power lanes validate one power window per requested concurrency, so the recipe
-    must benchmark exactly CONC_LIST. Raises ``ValueError`` for unreadable YAML or a recipe
-    without a top-level ``benchmark`` mapping (override-format recipes keep it under
-    ``base`` and are rejected).
+    Raises ``ValueError``, leaving the file untouched, for unreadable YAML or no top-level
+    ``benchmark`` mapping (override bundles keep theirs under ``base``).
     """
-    recipe_path = Path(recipe_path)
     try:
         recipe = yaml.safe_load(recipe_path.read_text(encoding="utf-8"))
     except (OSError, yaml.YAMLError) as error:
@@ -149,13 +130,4 @@ def inject_concurrencies(recipe_path: Path, concurrencies: Sequence[int]) -> Non
     if not isinstance(recipe, dict) or not isinstance(recipe.get("benchmark"), dict):
         raise ValueError(f"recipe {recipe_path} must contain a benchmark mapping")
     recipe["benchmark"]["concurrencies"] = list(concurrencies)
-    descriptor, temporary = tempfile.mkstemp(dir=recipe_path.parent, prefix=f".{recipe_path.name}.")
-    try:
-        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
-            yaml.safe_dump(recipe, handle, sort_keys=False)
-            handle.flush()
-            os.fsync(handle.fileno())
-        Path(temporary).replace(recipe_path)
-    except BaseException:
-        Path(temporary).unlink(missing_ok=True)
-        raise
+    recipe_path.write_text(yaml.safe_dump(recipe, sort_keys=False), encoding="utf-8")

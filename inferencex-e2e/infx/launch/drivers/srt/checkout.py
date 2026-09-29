@@ -26,11 +26,10 @@ UV_INSTALLER = "https://astral.sh/uv/install.sh"
 
 @dataclass(frozen=True)
 class SrtFork:
-    """A framework that runs on a fork of srt-slurm instead of the pinned submodule.
+    """A framework's srt-slurm fork, checked out instead of the pinned submodule.
 
-    Fork checkouts get no InferenceX patches and no ``benchmark.stream_output``;
-    their job id is read from srtctl's human-readable output, and they are never
-    passed ``--no-preflight``, which they predate.
+    Forks get no InferenceX patches, predate ``--json``, ``--no-preflight`` and
+    ``benchmark.stream_output``, and report their job only in prose.
     """
 
     url: str
@@ -54,9 +53,12 @@ class Checkout:
     commit: str
     fork: bool
 
+    @property
+    def venv(self) -> Path:
+        return self.root / ".venv"
+
 
 def _git(*args: str | Path, capture: bool = False) -> str:
-    """Run git, raising ``LaunchError`` on failure; return stdout when captured."""
     try:
         result = proc.run(["git", *args], check=True, capture=capture)
     except (OSError, subprocess.CalledProcessError) as error:
@@ -65,7 +67,6 @@ def _git(*args: str | Path, capture: bool = False) -> str:
 
 
 def _checked(result: subprocess.CompletedProcess[str], action: str) -> None:
-    """Raise ``LaunchError`` when ``result`` failed."""
     if result.returncode:
         raise LaunchError(f"{action} failed (exit {result.returncode})")
 
@@ -81,19 +82,16 @@ def checkout_dir(run: SrtRun, *, shared: bool) -> Path:
         attempt = request.env.get("GITHUB_RUN_ATTEMPT", "")
         return root / f"srt-slurm-{run_id}-{attempt}-{request.runner_name}-{os.getpid()}"
     require(request, "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT")
-    # Twelve hex digits of the RESULT_FILENAME's SHA-1 keep concurrent points apart.
+    # A run's concurrent points share the workspace; their RESULT_FILENAMEs differ.
     digest = hashlib.sha1(request.result_filename.encode(), usedforsecurity=False)
     run_id, attempt = request.env["GITHUB_RUN_ID"], request.env["GITHUB_RUN_ATTEMPT"]
     return run.workspace / f"srt-slurm-{run_id}-{attempt}-{digest.hexdigest()[:12]}"
 
 
 def prepare_checkout(run: SrtRun, destination: Path, *, power: bool) -> Checkout:
-    """Check out srt-slurm at ``destination`` and stage every InferenceX recipe into it.
+    """Check out srt-slurm at ``destination``, replacing an earlier run's, and stage the recipes.
 
-    A checkout left at ``destination`` by an earlier run is removed first. Clones the
-    pinned submodule (``--no-hardlinks`` keeps job writes out of it) and applies
-    runners/srt-slurm/patches, or checks out the framework's fork; records
-    ``srt-slurm-sha.txt`` (and ``power-producer-sha.txt`` for power lanes).
+    Records ``srt-slurm-sha.txt``, and for power lanes ``power-producer-sha.txt``.
     """
     if destination.exists():
         print(f"Removing existing {destination}...", flush=True)
@@ -112,6 +110,7 @@ def prepare_checkout(run: SrtRun, destination: Path, *, power: bool) -> Checkout
                 "Missing srt-slurm submodule; run git submodule update --init before launching."
             )
         commit = _git("-C", source, "rev-parse", "HEAD", capture=True)
+        # --no-hardlinks keeps job writes out of the submodule.
         _git(
             "-c",
             "advice.detachedHead=false",
@@ -142,7 +141,7 @@ def prepare_checkout(run: SrtRun, destination: Path, *, power: bool) -> Checkout
 
 
 def _uv(run: SrtRun) -> str:
-    """Return a uv binary, installing it (curl | sh) when none is on PATH."""
+    """The uv on PATH, else a fresh install."""
     found = shutil.which("uv", path=run.env.get("PATH"))
     if found:
         return found
@@ -155,11 +154,8 @@ def _uv(run: SrtRun) -> str:
     return str(install_dir / "uv")
 
 
-def install_srtctl(run: SrtRun, checkout: Checkout, *, python: str | None) -> Path:
-    """Create ``<checkout>/.venv``, install the checkout into it, and put it on PATH.
-
-    ``--seed`` installs pip, which srtctl's dynamo wheel prefetch needs.
-    """
+def install_srtctl(run: SrtRun, checkout: Checkout, *, python: str | None = None) -> None:
+    """Install the checkout into its venv and put the venv on PATH."""
     uv = _uv(run)
     root = run.srt.uv_cache_root
     if root is not None:
@@ -167,9 +163,10 @@ def install_srtctl(run: SrtRun, checkout: Checkout, *, python: str | None) -> Pa
         cache = root / f"cache-{run.request.runner_name}"
         cache.mkdir(parents=True, exist_ok=True)
         run.env["UV_CACHE_DIR"] = str(cache)
-        # Where uv installs Pythons, for this build and for the jobs srtctl submits.
+        # The jobs srtctl submits find their Pythons here too.
         run.env["UV_PYTHON_INSTALL_DIR"] = str(root / "python")
-    venv = checkout.root / ".venv"
+    venv = checkout.venv
+    # --seed installs pip, which srtctl's dynamo wheel prefetch needs.
     argv = [uv, "venv", "--quiet", "--seed", *(["--python", python] if python else []), str(venv)]
     _checked(proc.run(argv, env=run.env, cwd=checkout.root), "uv venv")
     install = [
@@ -189,24 +186,14 @@ def install_srtctl(run: SrtRun, checkout: Checkout, *, python: str | None) -> Pa
     run.prepend_path(venv / "bin")
     if shutil.which("srtctl", path=run.env["PATH"]) is None:
         raise LaunchError("Failed to install srtctl")
-    return venv
 
 
 def _run_logged(argv: list[str], log: Path, *, env: dict[str, str], cwd: Path) -> int:
-    """Echo ``argv`` and run it with stdout and stderr appended to ``log``."""
     proc.echo(argv, env)
     with log.open("a") as handle:
         return subprocess.run(
             argv, env=env, cwd=cwd, stdout=handle, stderr=subprocess.STDOUT, check=False
         ).returncode
-
-
-def _archive_ok(argv: list[str | Path]) -> bool:
-    """Whether an archive integrity check exits 0 (a missing tool counts as a failure)."""
-    try:
-        return proc.run(argv, capture=True).returncode == 0
-    except OSError:
-        return False
 
 
 def _discard_corrupt_archives(configs: Path) -> bool:
@@ -218,7 +205,11 @@ def _discard_corrupt_archives(configs: Path) -> bool:
     )
     for pattern, name, check in checks:
         for archive in sorted(configs.glob(pattern)):
-            if not _archive_ok([*check, archive]):
+            try:
+                intact = proc.run([*check, archive], capture=True).returncode == 0
+            except OSError:  # no check tool: the archive cannot be trusted
+                intact = False
+            if not intact:
                 print(f"Removing incomplete {name} archive: {archive}", file=sys.stderr)
                 archive.unlink()
                 discarded = True
@@ -226,12 +217,7 @@ def _discard_corrupt_archives(configs: Path) -> bool:
 
 
 def run_setup(run: SrtRun, checkout: Checkout) -> int:
-    """Run ``make setup`` in the checkout; return its exit code.
-
-    Output goes to ``srt-setup.log`` and is printed only on failure. GitHub release
-    downloads occasionally return a truncated NATS/etcd archive with a successful status,
-    so a failure is retried only after discarding such an archive.
-    """
+    """Run ``make setup`` in the checkout, logging to SETUP_LOG; return its exit code."""
     log = run.workspace / SETUP_LOG
     for attempt in range(1, SETUP_ATTEMPTS + 1):
         print(f"Setting up srt-slurm, attempt {attempt} (details: {SETUP_LOG})", flush=True)
@@ -241,6 +227,7 @@ def run_setup(run: SrtRun, checkout: Checkout) -> int:
             print("srt-slurm setup complete", flush=True)
             return 0
         sys.stderr.write(log.read_text(errors="replace"))
+        # Release downloads can truncate an archive yet succeed; only such a failure is retried.
         if not _discard_corrupt_archives(checkout.root / "configs"):
             return rc
         if attempt < SETUP_ATTEMPTS:
@@ -249,20 +236,14 @@ def run_setup(run: SrtRun, checkout: Checkout) -> int:
     return 1
 
 
-# Left out of a compute-visible workspace copy: this repository's history, srt-slurm
-# checkouts and outputs, staged logs, and squash images.
-_WORKSPACE_EXCLUDES = (".git/", "srt-slurm*/", "outputs/", "LOGS/", "*.sqsh")
-
-
 def compute_workspace(run: SrtRun, checkout: Checkout, *, shared: bool) -> Path:
     """INFMAX_WORKSPACE: the runner checkout as the job's compute nodes see it.
 
-    Lanes whose srt-slurm checkout sits on shared-run-root may run on runners whose
-    workspace compute nodes cannot see; the backend then stages a copy beside the
-    checkout.
+    Compute nodes may not see a shared-run-root lane's runner workspace; the backend then
+    stages a copy beside the checkout.
     """
     if not shared:
         return run.workspace
     name = checkout.root.name.replace("srt-slurm-", "infmax-workspace-", 1)
-    staging = checkout.root.parent / name
-    return run.backend.stage_workspace(run.workspace, staging, exclude=_WORKSPACE_EXCLUDES)
+    exclude = (".git/", "srt-slurm*/", "outputs/", "LOGS/", "*.sqsh")
+    return run.backend.stage_workspace(run.workspace, checkout.root.parent / name, exclude=exclude)

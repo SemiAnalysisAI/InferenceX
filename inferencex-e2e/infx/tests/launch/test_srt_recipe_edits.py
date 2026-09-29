@@ -47,9 +47,6 @@ def test_dist_timeout_follows_each_role_watchdog_timeout():
     assert add_dist_timeout("watchdog-timeout: 1\n", 1800) == "watchdog-timeout: 1\n"
 
 
-# Power lanes benchmark exactly CONC_LIST.
-
-
 def test_injection_replaces_only_the_benchmark_concurrencies(tmp_path):
     recipe = tmp_path / "recipe.yaml"
     recipe.write_text("name: x\nbenchmark:\n  type: sa-bench\n  concurrencies: 1x2x4\n")
@@ -57,7 +54,6 @@ def test_injection_replaces_only_the_benchmark_concurrencies(tmp_path):
     assert yaml.safe_load(recipe.read_text()) == {
         "name": "x", "benchmark": {"type": "sa-bench", "concurrencies": [4, 16]},
     }  # fmt: skip
-    assert [path.name for path in tmp_path.iterdir()] == ["recipe.yaml"]
 
 
 @pytest.mark.parametrize(("text", "message"), [

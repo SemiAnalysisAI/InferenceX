@@ -1,9 +1,4 @@
-"""How each cluster's multi-node srt-slurm lane runs a job.
-
-``SRT_LANES`` holds one row per (cluster, launch path) with what differs between lanes:
-the requests a lane accepts, its extra mounts, eval edits and time limits. Every lane
-names its jobs after the runner, verifies the allocation, stages logs and cleans outputs.
-"""
+"""Each cluster's multi-node srt-slurm lanes: one ``SRT_LANES`` row per (cluster, launch path)."""
 
 from __future__ import annotations
 
@@ -22,17 +17,12 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class LaneMount:
-    """A cluster volume (``slurm.volumes`` name) the lane mounts for requests ``when`` matches.
-
-    ``target`` is the container path (None: where the volume lies on the host). The
-    directory is created before submission and, with ``world_writable``, opened to the
-    containers' other users.
-    """
+    """A cluster volume the lane mounts for the requests ``when`` matches."""
 
     when: Match
-    volume: str
-    target: str | None = None
-    world_writable: bool = False
+    volume: str  # a slurm.volumes name
+    target: str | None = None  # container path; None: the volume's host path
+    world_writable: bool = False  # containers write caches there as another user
 
 
 @dataclass(frozen=True)
@@ -57,8 +47,7 @@ class SrtLane:
 
 _DYNAMO = any_of("dynamo-sglang", "dynamo-trt", "dynamo-vllm")
 _AGENTIC = Match(agentic=True)
-# Persistent caches for aiperf's dataset mmap files and the HF trace dataset; the
-# agentic recipes reference these container paths.
+# The aiperf dataset mmap and HF trace dataset caches, where the agentic recipes expect them.
 _AGENTIC_CACHES = (
     LaneMount(_AGENTIC, "aiperf-cache", "/aiperf_mmap_cache", world_writable=True),
     LaneMount(_AGENTIC, "hf-hub-cache", "/hf_hub_cache", world_writable=True),
@@ -81,15 +70,13 @@ SRT_LANES: dict[tuple[str, LaunchPath], SrtLane] = {
         mounts=_AGENTIC_CACHES,
     ),
     ("b300-dsxe", LaunchPath.SRT_MULTI): SrtLane(tag="b300", frameworks=_DYNAMO),
-    # The runner's home is not mounted on the compute nodes, so selected requests put
-    # the checkout on shared Lustre.
     ("gb200-nv", LaunchPath.SRT_MULTI): SrtLane(
         tag="gb200",
         frameworks=_DYNAMO,
         setup_scripts={"dynamo-sglang": "install-torchao.sh"},
         mounts=(
             *_AGENTIC_CACHES,
-            # srtctl caches hash-pinned dynamo wheels there (a shared-run-root lane).
+            # srtctl caches its hash-pinned dynamo wheels there.
             LaneMount(
                 Match(any_of("glm5.2"), any_of("fp4"), any_of("dynamo-sglang"), agentic=True),
                 "dynamo-wheels",
@@ -123,7 +110,6 @@ SRT_LANES: dict[tuple[str, LaunchPath], SrtLane] = {
         long_time_limit="8:00:00",
         long_time=Match(any_of("dsv4"), frameworks=any_of("dynamo-sglang"), agentic=True),
     ),
-    # output_dir is shared /it-share storage.
     ("mi355x-amds", LaunchPath.SRT_MULTI): SrtLane(
         tag=None,
         mounts=(LaneMount(Match(), "aiperf-cache", "/aiperf_mmap_cache"),),
@@ -138,7 +124,6 @@ SRT_LANES: dict[tuple[str, LaunchPath], SrtLane] = {
 
 
 def srt_lane(cluster_id: str, path: LaunchPath) -> SrtLane:
-    """Return the multi-node lane of ``path`` (SRT_NATIVE or SRT_MULTI) on the cluster."""
     try:
         return SRT_LANES[(cluster_id, path)]
     except KeyError:
@@ -159,11 +144,7 @@ def check_request(lane: SrtLane, request: SrtRequest) -> None:
 
 
 def config_file(request: SrtRequest) -> str:
-    """The recipe to submit: CONFIG_FILE, or EVAL_CONFIG_FILE for an eval-only run.
-
-    An eval row may use a real-verification recipe while its throughput row keeps
-    synthetic acceptance; only configs setting EVAL_CONFIG_FILE opt in.
-    """
+    """CONFIG_FILE, or on an eval-only run its real-verification EVAL_CONFIG_FILE."""
     if request.eval_only and request.eval_config_file:
         print(
             f"EVAL_ONLY=true: selecting real-verification recipe {request.eval_config_file}",
@@ -182,12 +163,9 @@ def config_file(request: SrtRequest) -> str:
 def srt_time_limit(
     cluster_id: str, request: LaunchRequest, lane: SrtLane | None, srt: SrtSlurmSettings
 ) -> str:
-    """Return the srtslurm.yaml ``default_time_limit`` of a job (``lane`` None: single-node).
+    """A job's srtslurm.yaml ``default_time_limit`` (``lane`` None: single-node).
 
-    A fixed ``srt-slurm.default-time-limit`` wins; single-node jobs then take the
-    cluster's ``single-node-time-limit`` or the (bumped) SALLOC_TIME_LIMIT, and
-    multi-node jobs their lane's limit or SALLOC_TIME_LIMIT. The table check rejects a
-    bump or lane limit such a fixed limit would shadow.
+    A fixed profile limit wins; table_problems rejects a bump or lane limit it would shadow.
     """
     if srt.default_time_limit is not None:
         return srt.default_time_limit

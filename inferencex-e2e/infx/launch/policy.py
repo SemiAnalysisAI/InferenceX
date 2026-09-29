@@ -7,7 +7,6 @@ belong in the cluster record. :func:`table_problems` checks every table here aga
 from __future__ import annotations
 
 import fnmatch
-import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
@@ -37,7 +36,6 @@ class Match:
     model_glob: str | None = None  # fnmatch over MODEL; ``*`` also matches ``/``
 
     def __call__(self, request: LaunchRequest) -> bool:
-        """Return True iff every constrained field matches ``request``."""
         return (
             (self.prefixes is None or request.model_prefix in self.prefixes)
             and (self.precisions is None or request.precision in self.precisions)
@@ -54,9 +52,9 @@ class Match:
 class LaunchPath(StrEnum):
     """How ``python -m infx.launch run`` executes one request; ``drivers.ROUTES`` has each driver."""
 
-    SRT_SINGLE = "srt-single"  # one native srt-slurm single-node point
-    SRT_MULTI = "srt-multi"  # the cluster's multi-node srt-slurm lane
-    SRT_NATIVE = "srt-native"  # multi-node recipes maintained against the cluster
+    SRT_SINGLE = "srt-single"
+    SRT_MULTI = "srt-multi"
+    SRT_NATIVE = "srt-native"
     SRT_BATCH = "srt-batch"  # SRT_SINGLE re-entered inside a batch allocation
     SCRIPT = "script"  # BENCH_SCRIPT_OVERRIDE (SpeedBench)
     LEGACY_TILERT = "legacy-tilert"
@@ -73,8 +71,7 @@ NATIVE_SRT_LANES: dict[str, tuple[Match, ...]] = {
     ),
 }
 
-# Interactive allocation notifications fail on the b300 login node while batch submission
-# works, so these runs re-enter the launch inside a batch allocation.
+# salloc notifications fail on the b300 login node, so these re-enter the launch via sbatch.
 BATCH_WRAPPED_LANES: dict[str, Match] = {
     "b300-dsxe": Match(
         any_of("dsv41flash"), frameworks=any_of("sglang"), agentic=True, multinode=False
@@ -83,7 +80,6 @@ BATCH_WRAPPED_LANES: dict[str, Match] = {
 
 
 def launch_path(cluster_id: str, request: LaunchRequest) -> LaunchPath:
-    """The path ``request`` takes on ``cluster_id``; single-node without a script is srt-slurm."""
     if request.is_multinode:
         if any(lane(request) for lane in NATIVE_SRT_LANES.get(cluster_id, ())):
             return LaunchPath.SRT_NATIVE
@@ -109,7 +105,6 @@ class TimeBump:
     minutes: int
 
 
-# srt.table_problems rejects a fixed srt-slurm limit, which would shadow the bump.
 SALLOC_TIME_BUMPS: dict[str, TimeBump] = {
     # The EP1 baseline needs more than 8h of warmup plus the hour-long profile.
     "h200-dgxc": TimeBump(
@@ -149,36 +144,6 @@ def runtime_env(cluster: Cluster, request: LaunchRequest) -> dict[str, str]:
     """The launch environment on top of the runtime settings job scripts read."""
     settings = TILERT_ENV.get(cluster.id, {}) if request.framework == "tilert" else {}
     return {**settings, **request.env}
-
-
-# The launch variables a job's containers get by name; srtctl forwards the matrix inputs
-# itself. srt-slurm's post-eval re-exports each on its srun command line, where the node's
-# process list shows it, so no credential is forwarded but the Modal tokens SWE-bench's
-# sandboxes need.
-WORKLOAD_ENV = (
-    # Families: evals, SWE-bench, the AIPerf client, AgentX.
-    "EVAL_*", "SWEBENCH_*", "AIPERF_*", "AGENTIC_*",
-    "MODAL_TOKEN_ID", "MODAL_TOKEN_SECRET",
-    # Topology and scenario inputs srtctl does not forward.
-    "TP", "EP_SIZE", "DP_ATTENTION", "PP_SIZE", "DCP_SIZE", "PCP_SIZE", "CONC",
-    "IS_AGENTIC", "SCENARIO_TYPE",
-    # benchmarks/runtime_settings.sh settings outside the families.
-    "OPENAI_API_KEY", "REQUIRE_POWER", "ENABLE_AGENTX_POWER", "VLLM_ENGINE_READY_TIMEOUT_S",
-    "SGLANG_TORCH_PROFILER_DIR", "VLLM_TORCH_PROFILER_DIR",
-)  # fmt: skip
-# A name a shell cannot export aborts the ``export ... && exec`` command it would join.
-_SHELL_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
-
-
-def workload_env_names(env: Mapping[str, str]) -> list[str]:
-    """The sorted names of the non-empty variables of ``env`` that ``WORKLOAD_ENV`` covers."""
-    return sorted(
-        name
-        for name, value in env.items()
-        if value
-        and _SHELL_NAME.fullmatch(name)
-        and any(fnmatch.fnmatchcase(name, pattern) for pattern in WORKLOAD_ENV)
-    )
 
 
 @dataclass(frozen=True)

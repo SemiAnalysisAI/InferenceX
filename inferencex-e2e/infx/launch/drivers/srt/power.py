@@ -1,20 +1,18 @@
 """DCGM power eligibility of the srt-slurm multi-node lanes.
 
-A recipe runs with DCGM power when its top-level ``telemetry:`` mapping is enabled and
-configures the dcgm exporter. Each (cluster, lane) lists the requests and recipes that
-may, and which of those are AgentX power lanes, whose job failure is deferred until the
-power audit is staged.
+A recipe asks for DCGM power in its top-level ``telemetry:`` mapping; each lane lists the
+requests and recipes that may have it.
 """
 
 from __future__ import annotations
 
 import fnmatch
 from dataclasses import dataclass
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import yaml
 
+from infx.launch.context import LaunchError
 from infx.launch.drivers.srt.recipe import recipe_mirror_path, recipe_relpath
 from infx.launch.policy import LaunchPath, Match, any_of
 
@@ -23,12 +21,7 @@ if TYPE_CHECKING:
 
 
 def recipe_enables_dcgm_power(text: str) -> bool:
-    """Return True iff the recipe's top-level ``telemetry`` enables a ``dcgm_exporter``.
-
-    That mapping must hold ``enabled: true`` and a ``dcgm_exporter`` key; ``enabled``
-    under another key or under the exporter itself does not count. Unparseable YAML
-    enables nothing.
-    """
+    """Whether the recipe's top-level ``telemetry`` is ``enabled: true`` with a ``dcgm_exporter``."""
     try:
         recipe = yaml.safe_load(text)
     except yaml.YAMLError:
@@ -41,35 +34,18 @@ def recipe_enables_dcgm_power(text: str) -> bool:
     )
 
 
-def uses_dcgm_power(workspace: Path, config_file: str | None) -> bool:
-    """Return True iff ``config_file`` is set and its workspace mirror enables dcgm.
-
-    Recipes that exist only upstream (no mirror) stay non-power.
-    """
-    if not config_file:
-        return False
-    path = recipe_mirror_path(workspace, config_file)
-    return path.is_file() and recipe_enables_dcgm_power(path.read_text())
-
-
-class PowerPolicyError(ValueError):
+class PowerPolicyError(LaunchError):
     """The recipe enables DCGM power on a lane that does not support it."""
 
 
 @dataclass(frozen=True)
 class PowerRule:
-    """One allowed power combination: the requests ``when`` matches whose inspected
-    recipe path (``recipes/...``) matches ``recipe_glob`` (fnmatch; ``*`` also matches
-    ``/``; None: any).
-
-    ``agentx`` marks an AgentX power lane. ``adapter`` marks a DCGM AgentX lane that is
-    not one: each concurrency is validated by the power adapter instead.
-    """
+    """One allowed power combination."""
 
     when: Match
-    agentx: bool
-    recipe_glob: str | None = None
-    adapter: bool = False
+    agentx: bool  # an AgentX power lane
+    recipe_glob: str | None = None  # fnmatch over the recipes/... path; ``*`` also matches ``/``
+    adapter: bool = False  # not AgentX: the power adapter validates each concurrency
 
 
 @dataclass(frozen=True)
@@ -158,7 +134,6 @@ POWER_LANES: dict[tuple[str, LaunchPath], PowerLane] = {
         error="B200 Nscale dcgm-power requires fixed-sequence DSV4 FP4 dynamo-vllm or Qwen3.5 FP8 AgentX dynamo-sglang",
         eval_recipe_when_eval_only=True,
     ),
-    # The Kimi-K3 vLLM rule is the AgentX power lane.
     ("h200-dgxc", LaunchPath.SRT_MULTI): PowerLane(
         rules=(
             PowerRule(
@@ -182,28 +157,19 @@ class PowerDecision:
     """Outcome of power eligibility for one launch."""
 
     dcgm: bool  # the recipe enables DCGM power on a lane that allows it
-    agentx: bool  # an AgentX power lane
-    adapter: bool = False  # per-concurrency power adapter (see PowerRule.adapter)
+    agentx: bool
+    adapter: bool = False
 
 
 NO_POWER = PowerDecision(dcgm=False, agentx=False)
 
 
-def power_config_file(lane: PowerLane, request: LaunchRequest) -> str | None:
-    """Return the recipe the lane inspects (EVAL_CONFIG_FILE on eval-only where it says so)."""
-    if lane.eval_recipe_when_eval_only and request.eval_only and request.eval_config_file:
-        return request.eval_config_file
-    return request.config_file
-
-
 def decide_power(
     cluster_id: str, path: LaunchPath, *, dcgm: bool, request: LaunchRequest, recipe: str
 ) -> PowerDecision:
-    """Apply ``POWER_LANES[(cluster_id, path)]`` to a detected dcgm recipe.
+    """Apply the lane's rules to the inspected ``recipe`` (``recipes/...``) when it enables dcgm.
 
-    ``recipe`` is ``recipe_relpath`` of the inspected config file. Lanes with
-    no table entry never run power. Raises ``PowerPolicyError`` when dcgm is
-    enabled on an unsupported combination.
+    Raises ``PowerPolicyError`` for a combination the lane does not allow.
     """
     lane = POWER_LANES.get((cluster_id, path))
     if not dcgm or lane is None:
@@ -218,16 +184,20 @@ def decide_power(
 
 
 def resolve_power(cluster_id: str, path: LaunchPath, request: LaunchRequest) -> PowerDecision:
-    """Detect dcgm from the workspace recipe mirror and apply the lane's policy."""
+    """Detect dcgm in the workspace mirror of the recipe the lane inspects, and decide.
+
+    A recipe only upstream (no mirror) stays non-power.
+    """
     lane = POWER_LANES.get((cluster_id, path))
     if lane is None:
         return NO_POWER
-    config_file = power_config_file(lane, request)
-    dcgm = uses_dcgm_power(request.workspace, config_file)
+    config_file = request.config_file
+    if lane.eval_recipe_when_eval_only and request.eval_only and request.eval_config_file:
+        config_file = request.eval_config_file
+    if not config_file:
+        return NO_POWER
+    mirror = recipe_mirror_path(request.workspace, config_file)
+    dcgm = mirror.is_file() and recipe_enables_dcgm_power(mirror.read_text())
     return decide_power(
-        cluster_id,
-        path,
-        dcgm=dcgm,
-        request=request,
-        recipe=recipe_relpath(config_file) if config_file else "",
+        cluster_id, path, dcgm=dcgm, request=request, recipe=recipe_relpath(config_file)
     )

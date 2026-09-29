@@ -1,9 +1,8 @@
 """Which checkpoint an srt-slurm job serves.
 
-A recipe's ``model.path`` is an ``hf:`` id or an absolute path, which srtctl reads as given,
-or an alias. Every alias the submitted recipe declares maps to the cluster's checkpoint for
-MODEL: the ``models.entries`` record keyed by MODEL's basename, or ``<basename>@<root>`` for
-another copy, where a node-local copy wins. ``OVERRIDES`` holds the exceptions.
+Every ``model.path`` alias of the recipe (anything but an ``hf:`` id or absolute path) maps
+to MODEL's ``models.entries`` record, keyed by its basename or ``<basename>@<root>``, a
+node-local copy first. ``OVERRIDES`` holds the exceptions.
 """
 
 from __future__ import annotations
@@ -17,6 +16,7 @@ import yaml
 
 from infx.clusters.slurm import model_path, slurm_settings
 from infx.launch.context import LaunchError
+from infx.launch.drivers.srt.config import volume_path
 from infx.launch.drivers.srt.recipe import recipe_mirror_path
 from infx.launch.policy import Match, any_of
 
@@ -178,8 +178,7 @@ def single_node_model_path(cluster: Cluster, request: LaunchRequest) -> str:
     return str(model.path) if model is not None else f"hf:{request.model}"
 
 
-# AgentX checkpoints these single-node jobs read from the shared Hub cache (the
-# ``shared-hf-hub-cache`` volume) rather than the node-local one.
+# AgentX single-node points that read the shared Hub cache instead of the node-local one.
 SHARED_HF_CACHE_LANES: dict[str, tuple[Match, ...]] = {
     "mi355x-amds": (
         Match(agentic=True, model_glob="MiniMaxAI/MiniMax-M3*"),
@@ -201,10 +200,6 @@ SHARED_HF_CACHE_LANES: dict[str, tuple[Match, ...]] = {
 
 
 def single_node_hf_cache(cluster: Cluster, request: LaunchRequest) -> Path:
-    """Return the HF hub cache mounted at HF_HUB_CACHE for a single-node job."""
+    """The HF hub cache a single-node job mounts at HF_HUB_CACHE."""
     shared = any(rule(request) for rule in SHARED_HF_CACHE_LANES.get(cluster.id, ()))
-    volume = "shared-hf-hub-cache" if shared else "hf-hub-cache"
-    path = slurm_settings(cluster).path(volume)
-    if path is None:
-        raise LaunchError(f"cluster {cluster.id!r} has no {volume} volume")
-    return path
+    return volume_path(cluster, "shared-hf-hub-cache" if shared else "hf-hub-cache")
