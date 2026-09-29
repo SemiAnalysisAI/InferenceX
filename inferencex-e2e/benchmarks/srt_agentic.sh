@@ -52,10 +52,6 @@ echo "Using srt-slurm frontend endpoint: $AIPERF_SERVER_URL"
 # A router frontend does not re-export engine metrics; read them from each worker.
 if [[ -z "${AIPERF_SERVER_METRICS_URLS:-}" && "${SRTCTL_FRONTEND_TYPE:-}" != dynamo ]]; then
     endpoints="${SRT_AGG_ENDPOINTS:-${SRT_PREFILL_ENDPOINTS:+$SRT_PREFILL_ENDPOINTS,}${SRT_DECODE_ENDPOINTS:-}}"
-    if [[ "${SRTCTL_FRONTEND_TYPE:-}" == tilert-router ]]; then
-        # TileRT decode has no Prometheus endpoint.
-        endpoints="${SRT_PREFILL_ENDPOINTS:-}"
-    fi
     if [[ -n "${endpoints%,}" ]]; then
         AIPERF_SERVER_METRICS_URLS=$(sed -E 's#([^,]+)#http://\1/metrics#g' <<< "${endpoints%,}")
         export AIPERF_SERVER_METRICS_URLS

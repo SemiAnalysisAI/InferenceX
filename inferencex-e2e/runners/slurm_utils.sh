@@ -59,7 +59,7 @@ PYENV
     local source="$INFERENCEX_SLURM_UTILS_DIR/../utils/srt-slurm"
     if [[ "$framework" == "tilert" ]]; then
         # Per-role engines and the TileRT router: SemiAnalysisAI/srt-slurm#33 and #29.
-        SRT_SLURM_COMMIT=f2b1e91d4193dab62ee568d70a85fc5587c72680
+        SRT_SLURM_COMMIT=b421420bc8ba6a4fa7a307cf5613350ffe5ce8f3
         git init --quiet "$destination" || return 1
         git -C "$destination" remote add origin https://github.com/SemiAnalysisAI/srt-slurm.git || return 1
         git -C "$destination" fetch --quiet --depth=1 origin "$SRT_SLURM_COMMIT" || return 1
