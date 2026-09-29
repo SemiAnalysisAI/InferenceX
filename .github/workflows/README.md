@@ -243,8 +243,9 @@ merge run. The normal ingestion code skips failed benchmark rows. Benchmark
 rows and public links retain source-run provenance. Source coverage is
 authoritative, so later matrix/eval policy changes do not invalidate reuse.
 
-Reuse fails closed when authorized but ineligible or invalid. Without
-authorization, `main` runs the normal full sweep.
+Reuse fails closed when authorized but ineligible or invalid. Pushes to `main`
+never run a sweep: without reuse authorization, the main run fails and nothing
+is benchmarked or ingested.
 
 ## Validation Architecture
 

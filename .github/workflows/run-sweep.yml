@@ -393,6 +393,12 @@ jobs:
                     --ref "${GITHUB_REF}" \
                     --workflow-id "run-sweep.yml"
 
+            - name: Require sweep reuse on main
+              if: github.event_name == 'push' && steps.setup.outputs.reuse-enabled != 'true'
+              run: |
+                  echo "::error::Pushes to main no longer run sweeps. Post an authorized /use <run_id> reuse command on the PR before merging."
+                  exit 1
+
             - name: Summarize reused source
               if: steps.setup.outputs.reuse-source-head-sha != ''
               uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
@@ -1060,14 +1066,7 @@ jobs:
 
     trigger-ingest:
         name: trigger-ingest
-        needs:
-            [
-                collect-results,
-                collect-evals,
-                calc-success-rate,
-                setup,
-                upload-changelog-metadata,
-            ]
+        needs: [setup, upload-changelog-metadata]
         if: >-
             always() &&
             github.event_name == 'push' &&
@@ -1082,18 +1081,13 @@ jobs:
                 toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['agentic']) == 'null' ||
                 toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['agentic']) == '[]'
               )
-            ) &&
-            (
-              needs.collect-results.result != 'skipped' ||
-              needs.collect-evals.result != 'skipped' ||
-              needs.setup.outputs.reuse-enabled == 'true'
             )
         runs-on: ubuntu-latest
         steps:
             - name: Trigger database ingest
               uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
               env:
-                SOURCE_RUN_ID: ${{ needs.setup.outputs.reuse-enabled == 'true' && needs.setup.outputs.reuse-source-run-id || github.run_id }}
+                SOURCE_RUN_ID: ${{ needs.setup.outputs.reuse-source-run-id }}
                 MERGE_RUN_ID: ${{ github.run_id }}
               with:
                 # Repository integration credential for the scoped sweep/ingest job.
@@ -1111,13 +1105,7 @@ jobs:
 
     trigger-agentic-ingest:
         name: trigger-agentic-ingest
-        needs:
-            [
-                setup,
-                sweep-agentic,
-                sweep-multi-node-agentic,
-                upload-changelog-metadata,
-            ]
+        needs: [setup, upload-changelog-metadata]
         if: >-
             always() &&
             github.event_name == 'push' &&
@@ -1126,31 +1114,12 @@ jobs:
             needs.upload-changelog-metadata.result == 'success' &&
             (
               (
-                needs.setup.outputs.reuse-enabled == 'true' &&
-                (
-                  (
-                    toJson(fromJson(needs.setup.outputs.search-space-config).single_node['agentic']) != 'null' &&
-                    toJson(fromJson(needs.setup.outputs.search-space-config).single_node['agentic']) != '[]'
-                  ) ||
-                  (
-                    toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['agentic']) != 'null' &&
-                    toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['agentic']) != '[]'
-                  )
-                )
+                toJson(fromJson(needs.setup.outputs.search-space-config).single_node['agentic']) != 'null' &&
+                toJson(fromJson(needs.setup.outputs.search-space-config).single_node['agentic']) != '[]'
               ) ||
               (
-                (
-                  needs.sweep-agentic.result == 'success' ||
-                  needs.sweep-multi-node-agentic.result == 'success'
-                ) &&
-                (
-                  needs.sweep-agentic.result == 'success' ||
-                  needs.sweep-agentic.result == 'skipped'
-                ) &&
-                (
-                  needs.sweep-multi-node-agentic.result == 'success' ||
-                  needs.sweep-multi-node-agentic.result == 'skipped'
-                )
+                toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['agentic']) != 'null' &&
+                toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['agentic']) != '[]'
               )
             )
         runs-on: ubuntu-latest
@@ -1158,7 +1127,7 @@ jobs:
             - name: Trigger agentic database ingest
               uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
               env:
-                SOURCE_RUN_ID: ${{ needs.setup.outputs.reuse-enabled == 'true' && needs.setup.outputs.reuse-source-run-id || github.run_id }}
+                SOURCE_RUN_ID: ${{ needs.setup.outputs.reuse-source-run-id }}
                 MERGE_RUN_ID: ${{ github.run_id }}
               with:
                 # Repository integration credential for the scoped sweep/ingest job.
