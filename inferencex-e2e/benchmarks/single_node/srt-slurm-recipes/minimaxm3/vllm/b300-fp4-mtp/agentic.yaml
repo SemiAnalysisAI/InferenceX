@@ -46,9 +46,9 @@ base:
         max-num-batched-tokens: 16384
         stream-interval: 20
         trust-remote-code: true
-        # Three-token EAGLE3 with the GQA draft head. Throughput runs switch to
-        # synthetic rejection at the golden acceptance length.
-        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASHINFER","use_local_argmax_reduction":true}'
+        # Three-token EAGLE3 with the GQA draft head. Triton keeps FP8 draft KV
+        # and supports fused multi-step decode. Throughput uses golden-AL synthetic rejection.
+        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"TRITON_ATTN","use_local_argmax_reduction":true}'
       env:
         PYTHONNOUSERSITE: '1'
         VLLM_ENGINE_READY_TIMEOUT_S: '3600'
