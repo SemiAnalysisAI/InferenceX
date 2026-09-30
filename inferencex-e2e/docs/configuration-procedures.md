@@ -334,12 +334,11 @@ ROCm 7.2.4). Every point selects the native srt-slurm recipe
 `benchmarks/single_node/srt-slurm-recipes/dsv41flash/atom/mi355x-fp4-mtp/agentic.yaml`;
 the legacy `dsv41flash_fp4_mi355x_atom_mtp.sh` launch from
 [#3387](https://github.com/SemiAnalysisAI/InferenceX/pull/3387) was removed in #3461 / #3463.
-TP2 covers concurrency `[1, 2, 8, 16, 32, 64]`; TP4 covers `[2, 8, 16, 32, 64]`,
+TP2 covers concurrency `[1, 2, 8, 16, 32, 64, 128]`; TP4 covers `[32]`,
 without expert parallelism or KV offload. Every point uses BF16 KV, FP8 index cache,
 128 maximum sequences, 16K batched-token/prefill chunks, prefix caching with block
-size 16, 8K state checkpoints, compilation level 3 and FULL graphs. Concurrency 32
-captures every size from 1 through 32 plus 48, 64 and 128; other points use the
-upstream sparse list. The recipe names only five-token DSpark with the checkpoint's
+size 16, 8K state checkpoints, compilation level 3 and FULL graphs, and every point
+captures every size from 1 through 32 plus 48, 64 and 128. The recipe names only five-token DSpark with the checkpoint's
 bundled draft; `infx/srt_slurm/synthetic_acceptance.py` adds
 `--spec-decode-acceptance-length 3.51` (the `thinking_on` K5 golden AL) to AgentX
 throughput runs and leaves evals on real acceptance. `dsml_v41` parses tool calls.

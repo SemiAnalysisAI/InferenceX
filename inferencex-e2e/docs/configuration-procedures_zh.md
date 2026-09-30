@@ -306,11 +306,10 @@ GB300 launcher 将引擎就绪等待时间设为 7200 秒。在[运行 345049691
 `benchmarks/single_node/srt-slurm-recipes/dsv41flash/atom/mi355x-fp4-mtp/agentic.yaml`；
 [#3387](https://github.com/SemiAnalysisAI/InferenceX/pull/3387) 的旧脚本
 `dsv41flash_fp4_mi355x_atom_mtp.sh` 已在 #3461／#3463 中删除。
-TP2 覆盖并发 `[1, 2, 8, 16, 32, 64]`，TP4 覆盖 `[2, 8, 16, 32, 64]`，不启用专家并行或
+TP2 覆盖并发 `[1, 2, 8, 16, 32, 64, 128]`，TP4 覆盖 `[32]`，不启用专家并行或
 KV 卸载。所有点均使用 BF16 KV、FP8 index cache、128 个最大序列、16K
 批处理 token／prefill chunk、block size 16 的前缀缓存、8K 状态检查点、
-编译 level 3 和 FULL graphs。并发 32 捕获 1 到 32 的全部尺寸以及 48、64、128，
-其他点使用上游稀疏列表。配方只声明使用检查点自带 draft 的 5-token DSpark；
+编译 level 3 和 FULL graphs，所有点均捕获 1 到 32 的全部尺寸以及 48、64、128。配方只声明使用检查点自带 draft 的 5-token DSpark；
 `infx/srt_slurm/synthetic_acceptance.py` 为 AgentX 吞吐测试添加
 `--spec-decode-acceptance-length 3.51`（`thinking_on` K5 golden AL），eval 保持真实
 acceptance。工具调用使用 `dsml_v41` 解析。

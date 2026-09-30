@@ -39,7 +39,7 @@ base:
         state-checkpoint-interval-tokens: 8192
         level: 3
         cudagraph-mode: FULL
-        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,16,32,48,64,128]'
+        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,48,64,128]'
         # The checkpoint's bundled DSpark head. Throughput runs get the golden
         # AL (dsv41flash_dspark thinking_on, K5) from infx/srt_slurm/synthetic_acceptance.py;
         # evals keep real acceptance.
@@ -65,8 +65,8 @@ base:
       AIPERF_TIMING_CANCEL_DRAIN_TIMEOUT: '300'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'atom:'
 
-# One variant per point. Every point admits 128 sequences; c32 captures every
-# decode size through 32, the others keep the recipe's sparse list.
+# One variant per point. Every point admits 128 sequences and captures every
+# decode size through 32 plus 48, 64 and 128.
 
 override_tp2_c1:
   roles:
@@ -104,8 +104,6 @@ override_tp2_c32:
   roles:
     agg:
       gpus: 2
-      args:
-        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,48,64,128]'
   benchmark:
     env:
       CONC: '32'
@@ -118,44 +116,18 @@ override_tp2_c64:
     env:
       CONC: '64'
 
-override_tp4_c2:
+override_tp2_c128:
   roles:
     agg:
-      gpus: 4
+      gpus: 2
   benchmark:
     env:
-      CONC: '2'
-
-override_tp4_c8:
-  roles:
-    agg:
-      gpus: 4
-  benchmark:
-    env:
-      CONC: '8'
-
-override_tp4_c16:
-  roles:
-    agg:
-      gpus: 4
-  benchmark:
-    env:
-      CONC: '16'
+      CONC: '128'
 
 override_tp4_c32:
   roles:
     agg:
       gpus: 4
-      args:
-        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,48,64,128]'
   benchmark:
     env:
       CONC: '32'
-
-override_tp4_c64:
-  roles:
-    agg:
-      gpus: 4
-  benchmark:
-    env:
-      CONC: '64'

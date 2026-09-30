@@ -1424,8 +1424,8 @@ dsv41flash-fp4-mi355x-atom-agentic-dspark:
   scenarios:
     agentic-coding:
     - search-space:
-      - { tp: 2, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 2, 8, 16, 32, 64], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/atom/mi355x-fp4-mtp/agentic.yaml }
-      - { tp: 4, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: draft_model, conc-list: [2, 8, 16, 32, 64], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/atom/mi355x-fp4-mtp/agentic.yaml }
+      - { tp: 2, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 2, 8, 16, 32, 64, 128], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/atom/mi355x-fp4-mtp/agentic.yaml }
+      - { tp: 4, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: draft_model, conc-list: [32], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/atom/mi355x-fp4-mtp/agentic.yaml }
 
 # Speculative decoding on an agentic scenario must run with simulated
 # synthetic acceptance at the committed golden AL for this model, thinking mode
