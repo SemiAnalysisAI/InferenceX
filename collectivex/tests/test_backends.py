@@ -585,6 +585,38 @@ class GraphReplayDefaults(unittest.TestCase):
         )
         self.assertTrue(ll.cuda_graph_supported)
 
+    def test_prefill_cpu_sync_hatch_is_off_by_default_and_keeps_the_ab_eager(self):
+        """`CX_PREFILL_CPU_SYNC` must not touch a normal run, and when it is thrown it must
+        move ONLY the sync -- not the timing regime, which keys off the same flag."""
+        module = _import_stubbed("ep_deepep_v2", deep_ep=_deep_ep("ElasticBuffer", "Buffer"))
+
+        def prefill(env):
+            with mock.patch.dict(os.environ, env, clear=True):
+                return module.DeepEPV2Backend(
+                    args(mode="normal", phase="prefill"), 0, 8, 0, "cpu"
+                )
+
+        # Absent, and explicitly "on", are the production path: exact-size sync, eager.
+        for env in ({}, {"CX_PREFILL_CPU_SYNC": "on"}):
+            backend = prefill(env)
+            self.assertTrue(backend._normal_cpu_sync)
+            self.assertEqual(backend.kernel_generation, "v2-elastic-buffer")
+
+        # "off" drops the sync, renames the series, and stays eager so the arm differs from
+        # its baseline in the sync alone rather than also swapping eager for graph replay.
+        thrown = prefill({"CX_PREFILL_CPU_SYNC": "off"})
+        self.assertFalse(thrown._normal_cpu_sync)
+        self.assertFalse(thrown.cuda_graph_supported)
+        self.assertEqual(thrown.kernel_generation, "v2-elastic-buffer-nosync")
+
+        # Decode is untouched: it is already no-sync, and must keep its graph replay.
+        with mock.patch.dict(os.environ, {"CX_PREFILL_CPU_SYNC": "off"}, clear=True):
+            decode = module.DeepEPV2Backend(args(mode="normal", phase="decode"), 0, 8, 0, "cpu")
+        self.assertTrue(decode.cuda_graph_supported)
+
+        with self.assertRaises(ValueError):
+            prefill({"CX_PREFILL_CPU_SYNC": "false"})
+
     def test_uccl_graphs_intranode_low_latency_except_b200_fp8(self):
         cls = _import_stubbed("ep_uccl", deep_ep=_deep_ep("Buffer", "Config")).UCCLEPBackend
         with mock.patch.dict(os.environ, {}, clear=True):

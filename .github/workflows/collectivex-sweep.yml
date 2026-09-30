@@ -40,6 +40,11 @@ on:
         description: "Force a fresh container image import even when a staged squash exists — only needed when a tag moved upstream and its digest could not be resolved from the submit host"
         type: boolean
         default: false
+      prefill_cpu_sync:
+        description: "DIAGNOSTIC ONLY. 'off' opts normal-mode prefill onto the decode path's no-host-sync dispatch (forces eager timing). Only the top ladder rung is a single-variable A/B; lower rungs also shrink the receive capacity."
+        type: choice
+        default: 'on'
+        options: ['on', 'off']
       fp8_consume:
         description: "DIAGNOSTIC ONLY. 'dequant' puts the FP8 dequant back inside the chain, so staging is no longer hoisted; changes what is measured. Use native for the production model."
         type: choice
@@ -169,6 +174,9 @@ jobs:
       # unrecognised value, and a blank input would set the variable to "" -- which is not
       # "unset", so os.environ.get's default never applies and every leg would die at import.
       CX_FP8_CONSUME: ${{ inputs.fp8_consume || 'native' }}
+      # Diagnostic hatch, "on" on every normal run; defaulted here for the same fail-closed
+      # reason as CX_FP8_CONSUME above (a blank input is not "unset").
+      CX_PREFILL_CPU_SYNC: ${{ inputs.prefill_cpu_sync || 'on' }}
       # The squash cache is content-keyed, so updates normally ride the digest;
       # this is the manual override for a moved tag with an unresolvable digest.
       COLLX_IMAGE_REFRESH: ${{ inputs.refresh_image && '1' || '0' }}
