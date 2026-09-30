@@ -9347,4 +9347,4 @@
   - Bind native SRT image, model, fixed-sequence lengths and selected concurrency from the master-derived runtime
     inputs after variant selection. Preserve recipe-owned topology and tuning; migrate the B300 Qwen3.5 FP8 and
     GB300 Kimi-K3 1P2D examples.
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3612
