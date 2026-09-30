@@ -1,0 +1,32 @@
+# RULER-style long-context probes at 64k and 128k tokens: multi-key retrieval,
+# multi-value retrieval and four-hop variable tracking, 50 prompts each per
+# length (300 total), generated deterministically by ruler_lite.py. A response
+# scores the fraction of expected values it contains. Unlike the bundled lm-eval
+# ruler tasks it needs no network, NLTK data or length-named metrics.
+task: ruler_lite
+dataset_path: ""
+dataset_name: ""
+custom_dataset: !function ruler_lite.dataset
+output_type: generate_until
+test_split: test
+doc_to_text: "{{input}}"
+doc_to_target: "{{outputs}}"
+process_results: !function ruler_lite.process_results
+metric_list:
+  - metric: exact_match
+    aggregation: mean
+    higher_is_better: true
+filter_list:
+  - name: "strict-match"
+    filter:
+      - function: "take_first"
+generation_kwargs:
+  until:
+    - "</s>"
+    - "<|im_end|>"
+  do_sample: false
+  temperature: 0.0
+repeats: 1
+num_fewshot: 0
+metadata:
+  version: 1.0

@@ -1,0 +1,35 @@
+# MMLU-Pro (https://arxiv.org/abs/2406.01574): a fixed, seeded sample of 200
+# questions from each of the 14 categories (2,800 total), graded by the upstream
+# "the answer is (X)" letter regex. Zero-shot chain of thought in one user turn;
+# run_lm_eval forces greedy decoding. See mmlu_pro_utils.py for why this is one
+# flat task instead of the bundled mmlu_pro group.
+task: mmlu_pro_2800
+dataset_path: TIGER-Lab/MMLU-Pro
+output_type: generate_until
+test_split: test
+process_docs: !function mmlu_pro_utils.process_docs
+doc_to_text: !function mmlu_pro_utils.doc_to_text
+doc_to_target: answer
+metric_list:
+  - metric: exact_match
+    aggregation: mean
+    higher_is_better: true
+    ignore_case: true
+    ignore_punctuation: true
+filter_list:
+  - name: "strict-match"
+    filter:
+      - function: "regex"
+        regex_pattern: 'answer is:?\s*\**\s*\(?([A-J])\)?'
+        group_select: -1
+      - function: "take_first"
+generation_kwargs:
+  until:
+    - "</s>"
+    - "<|im_end|>"
+  do_sample: false
+  temperature: 0.0
+repeats: 1
+num_fewshot: 0
+metadata:
+  version: 1.0
