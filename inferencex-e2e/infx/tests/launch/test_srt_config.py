@@ -1,5 +1,7 @@
 """srtslurm.yaml rendering from controlled cluster records."""
 
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -9,6 +11,7 @@ import yaml
 from infx.clusters import Cluster, load_inventory
 from infx.launch.backends.slurm import SlurmBackend
 from infx.launch.context import Launch
+from infx.launch.drivers.srt.checkout import WORKSPACE_EXCLUDE
 from infx.launch.drivers.srt.config import SrtJob, pyxis_spelling, render, write
 from infx.launch.drivers.srt.recipe import HEALTH_ATTEMPTS, prepare_recipe
 from infx.launch.drivers.srt.run import SrtRun
@@ -182,3 +185,17 @@ def test_the_cpu_request_follows_the_clusters_unit():
     assert render(cluster(slurm={"cpus-per-gpu": 24}), job())["default_sbatch_directives"] == {"cpus-per-gpu": "24"}
     with pytest.raises(ValueError, match="not both"):
         cluster(slurm={"cpus-per-task": 192, "cpus-per-gpu": 24})
+
+
+@pytest.mark.skipif(shutil.which("rsync") is None, reason="needs rsync")
+def test_the_staged_workspace_drops_run_artifacts_but_keeps_srt_slurm_sources(tmp_path):
+    workspace = tmp_path / "workspace"
+    kept = ["runners/srt-slurm/hooks/common.sh", "benchmarks/multi_node/srt-slurm-recipes/r.yaml"]
+    dropped = ["srt-slurm-1-1-abc/recipe.yaml", "outputs/42/log", "LOGS/sweep.log", "image.sqsh"]
+    for name in kept + dropped:
+        (workspace / name).parent.mkdir(parents=True, exist_ok=True)
+        (workspace / name).write_text("")
+    staged = tmp_path / "staged"
+    excludes = [f"--exclude={pattern}" for pattern in WORKSPACE_EXCLUDE]
+    subprocess.run(["rsync", "-a", *excludes, f"{workspace}/", f"{staged}/"], check=True)
+    assert sorted(str(p.relative_to(staged)) for p in staged.rglob("*") if p.is_file()) == sorted(kept)
