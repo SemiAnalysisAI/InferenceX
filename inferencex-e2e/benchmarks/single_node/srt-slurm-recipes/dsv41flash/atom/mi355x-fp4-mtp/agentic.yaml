@@ -1,0 +1,163 @@
+# DeepSeek-V4.1-Flash AgentX on MI355X with ATOM DSpark (five draft tokens),
+# following ROCm/ATOM recipes/DeepSeek-V4.1-Flash-Agentic.md at the image's
+# revision (74fd942b0a2240a99bbb8a737133dfd6e036e40c). TP2 and TP4, no expert
+# parallelism; the KV cache is GPU-resident.
+base:
+  schema: 2
+  name: dsv41flash-fp4-mi355x-atom-agentic
+  model:
+    path: hf:deepseek-ai/DeepSeek-V4.1-Flash
+    container: rocm/atom-dev:nightly_202609291501
+    precision: fp4
+  resources:
+    gpu_type: mi355x
+    gpus_per_node: 8
+  frontend:
+    type: atomesh
+    container_image: rocm/atom-dev@sha256:f00a9dc588a380038fdad54cd57a956043cb316ddda54ebb1b62a24f8caa343b
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: atom
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      args:
+        served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
+        trust-remote-code: true
+        # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
+        timeout-keep-alive: 900
+        kv_cache_dtype: bf16
+        index-cache-dtype: fp8
+        gpu-memory-utilization: 0.9
+        max-num-seqs: 128
+        max-num-batched-tokens: 16384
+        attn-prefill-chunk-size: 16384
+        enable_prefix_caching: true
+        block-size: 16
+        state-checkpoint-interval-tokens: 8192
+        level: 3
+        cudagraph-mode: FULL
+        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,16,32,48,64,128]'
+        # The checkpoint's bundled DSpark head. Throughput runs get the golden
+        # AL (dsv41flash_dspark thinking_on, K5) from infx/srt_slurm/synthetic_acceptance.py;
+        # evals keep real acceptance.
+        method: dspark
+        num-speculative-tokens: 5
+        tool-call-parser: dsml_v41
+      env:
+        OMP_NUM_THREADS: '4'
+        ATOM_NUMA_BIND: '0'
+        ATOM_DISABLE_MMAP: 'true'
+        AITER_LOG_LEVEL: WARNING
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
+    env:
+      MODEL: deepseek-ai/DeepSeek-V4.1-Flash
+      # Full-context corpus for this 1M-context recipe.
+      WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126
+      # The upstream one-hour profile warms five requests per lane.
+      AIPERF_WARMUP_REQUESTS_PER_LANE: '5'
+      # Long AgentX stalls exceed AIPerf's 30 s TCP_USER_TIMEOUT default.
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_TIMING_CANCEL_DRAIN_TIMEOUT: '300'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'atom:'
+
+# One variant per point. Every point admits 128 sequences; c32 captures every
+# decode size through 32, the others keep the recipe's sparse list.
+
+override_tp2_c1:
+  roles:
+    agg:
+      gpus: 2
+  benchmark:
+    env:
+      CONC: '1'
+
+override_tp2_c2:
+  roles:
+    agg:
+      gpus: 2
+  benchmark:
+    env:
+      CONC: '2'
+
+override_tp2_c8:
+  roles:
+    agg:
+      gpus: 2
+  benchmark:
+    env:
+      CONC: '8'
+
+override_tp2_c16:
+  roles:
+    agg:
+      gpus: 2
+  benchmark:
+    env:
+      CONC: '16'
+
+override_tp2_c32:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,48,64,128]'
+  benchmark:
+    env:
+      CONC: '32'
+
+override_tp2_c64:
+  roles:
+    agg:
+      gpus: 2
+  benchmark:
+    env:
+      CONC: '64'
+
+override_tp4_c2:
+  roles:
+    agg:
+      gpus: 4
+  benchmark:
+    env:
+      CONC: '2'
+
+override_tp4_c8:
+  roles:
+    agg:
+      gpus: 4
+  benchmark:
+    env:
+      CONC: '8'
+
+override_tp4_c16:
+  roles:
+    agg:
+      gpus: 4
+  benchmark:
+    env:
+      CONC: '16'
+
+override_tp4_c32:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,48,64,128]'
+  benchmark:
+    env:
+      CONC: '32'
+
+override_tp4_c64:
+  roles:
+    agg:
+      gpus: 4
+  benchmark:
+    env:
+      CONC: '64'
