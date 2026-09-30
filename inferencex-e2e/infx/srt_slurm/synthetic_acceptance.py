@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import copy
 import fnmatch
 import json
@@ -10,6 +11,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -17,6 +19,7 @@ from typing import Any
 import yaml
 
 from infx.golden_al_distribution import GOLDEN_DIR, golden_length
+from infx.srt_slurm.workload import bind_workload
 
 ENGINES = {
     "sglang": "sglang",
@@ -232,10 +235,11 @@ def plan_commands(
     environment: Mapping[str, str],
     *,
     golden_dir: Path = GOLDEN_DIR,
+    bound_dir: Path | None = None,
 ) -> list[list[str]]:
     """Build native arguments for every selected variant before submitting jobs."""
     command = ["srtctl", "apply", *arguments]
-    if framework not in ENGINES:
+    if framework not in ENGINES and bound_dir is None:
         return [[*command, "--file", config]]
     from srtctl.core.overrides import apply_overrides_to_recipe, parse_overrides
 
@@ -246,11 +250,14 @@ def plan_commands(
     parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
     parser.add_argument("--set", action="append")
     parser.add_argument("--unset", action="append")
-    existing, _ = parser.parse_known_args(arguments)
+    parser.add_argument("-f", "--file")
+    existing, remaining = parser.parse_known_args(arguments)
     caller_overrides = parse_overrides(existing.set, existing.unset)
     apply_overrides_to_recipe(raw, caller_overrides)
     commands = []
     for variant, recipe in selected_recipes(raw, selector or None):
+        if bound_dir is not None:
+            recipe = bind_workload(recipe, environment)
         arguments_to_add = build_overrides(recipe, framework, environment, golden_dir=golden_dir)
         parsed, _ = parser.parse_known_args(arguments_to_add)
         generated_overrides = parse_overrides(parsed.set, parsed.unset)
@@ -260,6 +267,15 @@ def plan_commands(
                 for item in generated_overrides
             ):
                 raise ValueError(f"Caller {removal.render()} conflicts with golden acceptance")
+        if bound_dir is not None:
+            # Caller options and variant expansion have already been applied.
+            # Add golden acceptance to the concrete recipe before submission.
+            apply_overrides_to_recipe(recipe, generated_overrides)
+            bound_dir.mkdir(parents=True, exist_ok=True)
+            bound = bound_dir / f"recipe-{len(commands)}.yaml"
+            bound.write_text(yaml.safe_dump(recipe, sort_keys=False))
+            commands.append(["srtctl", "apply", *remaining, "--file", str(bound)])
+            continue
         # SRT broadcasts overrides into zip groups. Reject a collapsed selection
         # before any job is submitted, rather than selecting the wrong variant.
         materialized = copy.deepcopy(raw)
@@ -272,20 +288,36 @@ def plan_commands(
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--bind-workload", action="store_true")
     parser.add_argument("config")
     parser.add_argument("framework")
     parser.add_argument("arguments", nargs=argparse.REMAINDER)
     args = parser.parse_args(argv)
     arguments = args.arguments[1:] if args.arguments[:1] == ["--"] else args.arguments
+    # srtctl copies the effective recipe into its job artifacts during apply.
+    # Keep the source beside its template until every submission has finished.
+    parent = Path(args.config.split(":", 1)[0]).resolve().parent
+    directory_context = (
+        tempfile.TemporaryDirectory(prefix="infx-bound-", dir=parent)
+        if args.bind_workload
+        else contextlib.nullcontext(None)
+    )
     try:
-        commands = plan_commands(args.config, args.framework, arguments, os.environ)
+        with directory_context as directory:
+            commands = plan_commands(
+                args.config,
+                args.framework,
+                arguments,
+                os.environ,
+                bound_dir=Path(directory) if directory is not None else None,
+            )
+            for command in commands:
+                result = subprocess.run(command, check=False)
+                if result.returncode:
+                    return result.returncode
     except (OSError, KeyError, ValueError, TypeError, yaml.YAMLError) as error:
-        print(f"ERROR: golden acceptance: {error}", file=sys.stderr)
+        print(f"ERROR: recipe submission: {error}", file=sys.stderr)
         return 1
-    for command in commands:
-        result = subprocess.run(command, check=False)
-        if result.returncode:
-            return result.returncode
     return 0
 
 

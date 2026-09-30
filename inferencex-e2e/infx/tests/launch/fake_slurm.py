@@ -98,6 +98,10 @@ argv = sys.argv[1:]
 keep = ("RUNNER_NAME", "INFMAX_WORKSPACE", "MODEL_PATH", "SERVED_MODEL_NAME", "VIRTUAL_ENV",
         "UCX_NET_DEVICES", "ENROOT_ROOTFS_WRITABLE", "SRT_SRUN_OPTIONS")
 record = {"argv": argv, "cwd": os.getcwd(), "env": {name: os.environ.get(name) for name in keep}}
+file_flag = "--file" if "--file" in argv else "-f"
+recipe_path = argv[argv.index(file_flag) + 1]
+if ":" not in recipe_path:
+    record["recipe"] = yaml.safe_load(pathlib.Path(recipe_path).read_text())
 with open(os.path.join(os.environ["FAKE_LOG_DIR"], "srtctl.jsonl"), "a") as handle:
     handle.write(json.dumps(record) + "\n")
 assert pathlib.Path("bin/uv").is_file(), "make setup did not run in the srtctl root"

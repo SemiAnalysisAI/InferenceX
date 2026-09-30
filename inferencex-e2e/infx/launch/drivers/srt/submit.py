@@ -93,6 +93,7 @@ def apply(
     """
     argv = [
         str(checkout.venv / "bin/python"), "-m", "infx.srt_slurm.synthetic_acceptance",
+        "--bind-workload",
         config, run.request.framework, "--",
         "--set", 'srun_options.container-workdir="/infmax-workspace"', *arguments,
     ]  # fmt: skip
