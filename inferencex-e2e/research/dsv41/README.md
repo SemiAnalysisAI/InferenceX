@@ -313,3 +313,11 @@ The pinned FlashInfer Mega adapter fails importing top-level `deep_gemm`;
 the selected native vLLM path loads its bundled library without an image patch.
 The native Mega implementation requires SM100-family hardware, so H200 is not
 an eligible A8W4 Mega comparison. This is not a claim that H200 cannot run MoE.
+
+A dedicated B200 global1536 follow-up keeps the same native token API, hybrid KV,
+DP8/EP8, input/output lengths, drafts and acceptance setting. It reduces prefill
+budget8192→4096, max sequences320→192 per DP and graph cap2048→1152 (192×6).
+GPU memory utilization stays0.95. This tests whether reservations sized for the
+larger2560 cohort unnecessarily excluded1536. Preserve the original capacity
+bound and identify the new configuration; only runtime validation can establish
+that it fits and provides a full-batch result.
