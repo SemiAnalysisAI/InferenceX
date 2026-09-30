@@ -193,3 +193,15 @@ BF16 KV，每个 query 选择 128 个窗口/原始条目和 512 个压缩条目�
 精确校验缩放值、检查所有反量化结果误差界及跨步存储保护区。
 十组相邻预热/目标调用保留内核时长之和的中位数、GPU scope 跨度及原始
 trace。此协议不清空缓存。
+
+## 原生 Attention 后处理
+
+`vllm_attention_epilogue.py` 调用生产 `deep_gemm_fp8_o_proj`，配合
+V4.1 量化配置的 `ColumnParallelLinear`/`RowParallelLinear`。
+输入 X[T,64,512]，八组4096→1024，再进行8192→5120投影，
+T=1/16/72/128/160/192/224/256。记录原生加载后的内核选择与权重类型，
+不强制后端。受控权重样例中 E8M0 字节127代表缩放1.0。
+计时前使用独立 FP32/BF16 参考计算检查有限输出及相对 L2 误差小于0.08，
+保留实测误差，不声称逐位一致。每个 T 测量192次；每次前执行256MiB
+FP16 ReduceSum（FP32累加），不计入目标时长。保留 GPU 内核时长之和
+与 eager scope 跨度。Mega Attention 将旋转/转换融合进 attention，计时边界不同。

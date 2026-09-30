@@ -9550,3 +9550,13 @@
     - "Measure native indexer K projection through paged quantized writes with numerical and strided-storage validation."
     - "测量原生 Indexer K 从投影到分页量化写入的完整流程，校验数值及跨步存储边界。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-8gpu-8k256
+    - dsv41flash-fp4-b300-vllm-8gpu-8k256
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Measure native attention epilogue across eight token counts, retaining backend precision, numerical error and 192-sample traces."
+    - "测量八个 token 数量下的原生 attention 后处理，保留后端精度、数值误差及192次采样 trace。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607

@@ -238,3 +238,17 @@ Validation checks BF16 projection against FP64 accumulation, exact scale values,
 all dequantized rows against quantization bounds, and untouched strided guards.
 Ten adjacent warmup/target pairs retain median summed kernel durations, GPU
 scope spans and raw traces. There is no cache eviction in this protocol.
+
+## Native attention epilogue
+
+`vllm_attention_epilogue.py` calls production `deep_gemm_fp8_o_proj` with
+V4.1 quantization-configured `ColumnParallelLinear`/`RowParallelLinear` modules.
+Shapes are X[T,64,512], eight groups4096→1024, then8192→5120, at
+T=1/16/72/128/160/192/224/256. Native post-load dispatch and weight dtypes are
+recorded; no backend is forced. E8M0 scale byte127 encodes1.0 in the controlled
+weight fixture. An independent FP32/BF16 reference checks finite outputs and
+relative L2 error below0.08 before timing; measured errors are retained, not
+presented as bitwise equivalence. Each T has192 samples with a256MiB FP16
+ReduceSum (FP32 accumulation) before each call, excluded from timing. Both
+summed GPU kernel durations and eager GPU scope spans are retained. Mega
+Attention fuses rotation/cast into attention and has a different boundary.
