@@ -16,7 +16,7 @@ base:
   observability:
     enabled: false
     tachometer:
-      enabled: false
+      enabled: true
   engine: sglang
   roles:
     agg:
