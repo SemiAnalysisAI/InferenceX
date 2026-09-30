@@ -5,14 +5,18 @@
 # One SGLang worker serves prefill and decode with the checkpoint's bundled DSpark
 # draft (block size 5); the Dynamo frontend routes with the KV-aware router and
 # session affinity. The aggregated arms cover the two ends of the curve; the
-# middle band (c8-c96) comes from the disaggregated recipes in disagg-variants.yaml.
-# Measured on GB300 NVL72 (tokens/s/GPU @ P90 interactivity, P90 TTFT):
-#   override_tp2_pdi16_c64 : 153,542 @ 83.3 tok/s/user, 15.2 s  (2 GPUs; GSM8K 0.9719)
-#   override_tp2_pdi8_c64  : 159,510 @ 62.7 tok/s/user,  6.0 s  (2 GPUs; GSM8K 0.9712)
-#   override_tp4_c1        : lowest-latency arm, the standalone recipe's pure TP4 (EP1)
-#                            c1 settings (../../gb300-fp4-mtp/agentic.yaml) behind Dynamo;
-#                            not measured in the campaign (4 GPUs)
-# The harness applies the golden acceptance length (3.51 at K=5) itself.
+# middle band (c16-c256) comes from the disaggregated recipes in disagg-variants.yaml.
+# Measured on GB300 NVL72 (tokens/s/GPU @ P90 interactivity, P90 TTFT; all GSM8K
+# gates passed):
+#   override_tp4_c1        :   6,215 @ 385.0 tok/s/user,  1.2 s  (4 GPUs; GSM8K 0.9735)
+#   override_tp2_c1        :  12,501 @ 377.1 tok/s/user,  0.9 s  (2 GPUs; GSM8K 0.9735)
+#   override_tp2_pdi16_c64 : 153,542 @  83.3 tok/s/user, 15.2 s  (2 GPUs; GSM8K 0.9719)
+#   override_tp2_pdi8_c64  : 159,510 @  62.7 tok/s/user,  6.0 s  (2 GPUs; GSM8K 0.9712)
+# The two c1 arms are the highest-interactivity points of the curve (above the
+# published MI355X ATOM curve's last vertex at 336.7 tok/s/user); at c1 the AgentX
+# client replays the trace's idle gaps, so a single lane is client-bound and a second
+# user on the same worker only lowers the P90 (TP2 c2: 12,538 @ 306.8). The harness
+# applies the golden acceptance length (3.51 at K=5) itself.
 
 schema: 2
 
@@ -140,6 +144,24 @@ override_tp4_c1:
     env:
       CONC: "1"
       TP: "4"
+      AGENTIC_WARMUP_GRACE_PERIOD: "1800"
+
+# Two-GPU c1 arm: the base TP2/EP2 worker with the Engram tables in host DRAM, static
+# ragged verify, 4096-token prefill chunks and admission 2x CONC: 12,501 tokens/s/GPU
+# @ 377.1 tok/s/user, P90 TTFT 0.90 s - twice the tokens/s/GPU of the TP4 c1 arm at a
+# 2% lower P90 interactivity.
+override_tp2_c1:
+  name: agg-gb300-tp2ep2-c1
+  roles:
+    agg:
+      args:
+        chunked-prefill-size: 4096
+        max-running-requests: 2
+      env:
+        SGLANG_RAGGED_VERIFY_MODE: static
+  benchmark:
+    env:
+      CONC: "1"
       AGENTIC_WARMUP_GRACE_PERIOD: "1800"
 
 # c64 with the default prefill-decode-interval 16 (512 prefill tokens per decode step):
