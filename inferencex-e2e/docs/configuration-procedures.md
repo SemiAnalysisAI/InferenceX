@@ -269,7 +269,7 @@ All ten AgentX throughput points use DSpark K6 (target verification length 7)
 and the committed golden AL 3.77. C1/2/4/8/16 use TP8/EP1;
 C48/64/96/128/256 use TP8/DPA8/EP8 with native RCCL. Each point runs for
 3600 seconds. The C256 full GSM8K eval omits forced acceptance. Keep the
-pinned `rocm/atom-dev:nightly_202609161445` image and GPU-only KV. C1 through C16 use
+pinned `rocm/atom-dev:nightly_202609291501` image and GPU-only KV. C1 through C16 use
 BF16 KV, while C48 and above retain FP8 KV; all points use the FP4 index cache,
 8192-token checkpoints and DEP dense FULL graph ladder. Fixed q7 graphs are
 captured in each new server; confirm target and DSpark draft capture in
@@ -282,8 +282,12 @@ record model/source identity and requested settings. Successful startup,
 graph capture and requests require runtime log evidence.
 
 The pinned image is the official ATOM nightly
-`rocm/atom-dev:nightly_202609161445`, which includes the merged
+`rocm/atom-dev:nightly_202609291501` (ATOM `0.1.7.dev46+g74fd942b0`, ROCm 7.2.4),
+which includes the merged
 [ROCm/ATOM#2233](https://github.com/ROCm/ATOM/pull/2233) inference-mode fix.
+From this image ATOM stores the checkpoint's `ue8m0` FP8 block scales as E8M0
+on gfx950 by default ([ROCm/ATOM#2419](https://github.com/ROCm/ATOM/pull/2419));
+the powers-of-two scales are represented exactly.
 The recipe does not patch AITER source at runtime; TP communication
 fusion, DSpark K6 and graph capture use the implementation shipped in the image.
 
