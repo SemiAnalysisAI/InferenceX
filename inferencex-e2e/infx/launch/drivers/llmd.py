@@ -1,4 +1,4 @@
-"""GB200 llm-d vLLM multinode jobs submitted through benchmarks/multi_node/llm-d/submit.sh."""
+"""llm-d vLLM multinode jobs submitted through benchmarks/multi_node/llm-d/submit.sh."""
 
 from __future__ import annotations
 
@@ -46,8 +46,8 @@ def run(launch: Launch) -> int:
     """Submit the llm-d Slurm job, follow its log, and stage benchmark artifacts."""
     backend = slurm_backend(launch)
     request = LlmdRequest.from_env(launch.request.env)
-    if launch.cluster.id not in policy.LLMD_CLUSTERS:
-        raise LaunchError(f"llmd-vllm is not configured for cluster {launch.cluster.id!r}")
+    if backend.settings.squash is None:
+        raise LaunchError(f"llmd-vllm: cluster {launch.cluster.id!r} has no slurm.squash")
     if not request.disagg:
         raise LaunchError("llmd-vllm supports only P/D disaggregated points")
 

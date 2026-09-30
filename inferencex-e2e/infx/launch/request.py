@@ -179,7 +179,7 @@ class AmdUtilsRequest(LegacyRequest):
 
 
 class LlmdRequest(SrtRequest):
-    """A GB200 llm-d vLLM multinode job submitted through benchmarks/multi_node/llm-d."""
+    """An llm-d vLLM multinode job submitted through benchmarks/multi_node/llm-d."""
 
     model: str = Field(alias="MODEL")
     disagg: TrueFlag = Field(alias="DISAGG")
