@@ -51,25 +51,20 @@ def _render(value: Any, parameters: Mapping[str, Any]) -> Any:
 
 
 def load_recipe(path: Path, environment: Mapping[str, str]) -> dict[str, Any]:
-    """Use a registered InferenceX source, otherwise read native YAML unchanged.
+    """Fill native fixed-sequence fragments using the workload's common block.
 
-    The registry and all interpolation live outside the SRT recipe directories.
-    The checked-in SRT files are concrete exports for direct upstream consumers.
+    AgentX and explicit alternate benchmark clients retain their native loading path.
+    Only shared YAML is interpolated; recipe-specific strings are native SRT data.
     """
-    root = repository_root().resolve()
-    try:
-        relative = path.resolve().relative_to(root).as_posix()
-    except ValueError:
-        return _mapping(path)
-    sources = root / "configs/srt-recipes"
-    registry = sources / "sources.yaml"
-    if not registry.exists():
-        return _mapping(path)
-    source = _mapping(registry).get(relative)
-    if source is None:
-        return _mapping(path)
-    if environment.get("IS_AGENTIC") != "0":
-        raise ValueError("Shared fixed-sequence sources require IS_AGENTIC=0")
+    recipe = _mapping(path)
+    base = recipe.get("base", recipe)
+    if (
+        environment.get("IS_AGENTIC") != "0"
+        or base.get("benchmark", {}).get("type", "custom") != "custom"
+    ):
+        return recipe
+    lane = "multi" if environment.get("IS_MULTINODE") == "true" else "single"
+    common = _mapping(repository_root() / f"configs/srt-recipes/fixed-sequence-{lane}.yaml")
     parameters: dict[str, Any] = {}
     for name in ("MODEL", "IMAGE", "PRECISION", "ISL", "OSL"):
         value = environment.get(name, "")
@@ -80,6 +75,5 @@ def load_recipe(path: Path, environment: Mapping[str, str]) -> dict[str, Any]:
         concurrencies = workload_concurrencies(environment)
         parameters["CONCURRENCIES"] = concurrencies
         parameters["CONC_LIST"] = " ".join(map(str, concurrencies))
-    common = _mapping(sources / source["common"])
-    tuning = _mapping(sources / source["tuning"])
-    return _render(merge_blocks(common, tuning), parameters)
+    rendered = _render(common, parameters)
+    return merge_blocks({"base": rendered} if "base" in recipe else rendered, recipe)

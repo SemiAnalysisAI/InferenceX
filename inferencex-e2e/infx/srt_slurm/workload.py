@@ -59,7 +59,7 @@ def bind_workload(recipe: dict[str, Any], environment: Mapping[str, str]) -> dic
 
     Call this after native variant expansion: binding a zip override before expansion
     would destroy the relationship between its concurrency and server tuning.
-    Role/frontend images, topology, precision, and engine tuning stay recipe-owned.
+    Role/frontend images, topology, and engine tuning stay recipe-owned.
     """
     image = _required(environment, "IMAGE")
     model = _required(environment, "MODEL")
@@ -91,6 +91,23 @@ def bind_workload(recipe: dict[str, Any], environment: Mapping[str, str]) -> dic
         previous.add(old_client_model)
     _replace_model_references(bound, previous, model)
     model_config.update({"path": f"hf:{model}", "container": image})
+    if agentic == "0":
+        engine = bound.get("engine")
+        engine_type = engine.get("type") if isinstance(engine, dict) else engine
+        if engine_type in {"sglang", "vllm"}:
+            roles = bound.get("roles", {}).values()
+            # Native backends share an explicit alias across roles. Keep it when present.
+            if not any(
+                key in role.get("args", {})
+                for role in roles
+                for key in ("served-model-name", "served_model_name")
+            ):
+                for role in roles:
+                    role.setdefault("args", {})["served-model-name"] = model
+        elif engine_type == "trtllm":
+            if isinstance(engine, str):
+                engine = bound["engine"] = {"type": engine}
+            engine.setdefault("served_model_name", model)
     if "identity" in bound:
         identity.setdefault("model", {})["repo"] = model
         identity.setdefault("container", {})["image"] = image

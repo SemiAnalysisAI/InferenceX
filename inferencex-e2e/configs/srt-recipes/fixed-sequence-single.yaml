@@ -1,13 +1,11 @@
-base:
-  model:
-    path: hf:${MODEL}
-    container: ${IMAGE}
-    precision: ${PRECISION}
-  benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/single_node/srt_fixed_sequence.sh
-    env:
-      MODEL: ${MODEL}
-      ISL: ${ISL}
-      OSL: ${OSL}
-      RANDOM_RANGE_RATIO: '0.8'
+model:
+  path: hf:${MODEL}
+  container: ${IMAGE}
+  precision: ${PRECISION}
+benchmark:
+  type: custom
+  command: bash /infmax-workspace/benchmarks/single_node/srt_fixed_sequence.sh
+  env:
+    MODEL: ${MODEL}
+    ISL: ${ISL}
+    OSL: ${OSL}

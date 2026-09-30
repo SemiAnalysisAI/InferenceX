@@ -136,7 +136,7 @@ def test_mtp_binding_uses_real_verification_and_preserves_expert_parallelism(poi
         "speculative-num-steps": 2, "speculative-num-draft-tokens": 3,
     })
     recipe["roles"]["agg"]["env"] = {"SGLANG_SIMULATE_ACC_LEN": "2.5"}
-    recipe["benchmark"]["env"]["USE_CHAT_TEMPLATE"] = "true"
+    recipe["benchmark"]["env"].pop("USE_CHAT_TEMPLATE", None)
     path.write_text(yaml.safe_dump({"base": recipe}))
     env = {**env, "EP_SIZE": "4", "SPEC_DECODING": "mtp"}
     argv = runtime_arguments(f"{path}:base", env)
@@ -145,10 +145,6 @@ def test_mtp_binding_uses_real_verification_and_preserves_expert_parallelism(poi
         "srtctl", "apply", "--json", *argv, "--file", f"{path}:base",
         "--unset", "roles.agg.env.SGLANG_SIMULATE_ACC_LEN",
     ]]
-    recipe["benchmark"]["env"]["USE_CHAT_TEMPLATE"] = "false"
-    path.write_text(yaml.safe_dump({"base": recipe}))
-    with pytest.raises(ValueError, match="USE_CHAT_TEMPLATE"):
-        runtime_arguments(f"{path}:base", env)
 
 
 def test_concurrency_selector_keeps_graph_capture_coupled_to_client(point):
@@ -211,7 +207,7 @@ def test_trt_binding_keeps_engine_options_and_sets_eval_token_budget(point):
         "cuda_graph_config": {"batch_sizes": [1, 2, 4]},
     }
     recipe["roles"]["agg"]["env"] = {"TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS": "3"}
-    recipe["benchmark"]["env"]["USE_CHAT_TEMPLATE"] = "true"
+    recipe["benchmark"]["env"].pop("USE_CHAT_TEMPLATE", None)
     path.write_text(yaml.safe_dump({"base": recipe}))
     env = {**env, "FRAMEWORK": "trt", "EP_SIZE": "4", "DP_ATTENTION": "true",
            "SPEC_DECODING": "mtp", "EVAL_ONLY": "true", "MAX_MODEL_LEN": "1024"}
@@ -239,7 +235,7 @@ def test_atom_binding_uses_allocation_tp_and_native_mtp_arguments(point):
         "method": "mtp", "num-speculative-tokens": 3, "kv_cache_dtype": "fp8",
         "enable-expert-parallel": True, "enable-dp-attention": True,
     }
-    recipe["benchmark"]["env"]["USE_CHAT_TEMPLATE"] = "true"
+    recipe["benchmark"]["env"].pop("USE_CHAT_TEMPLATE", None)
     path.write_text(yaml.safe_dump({"base": recipe}))
     env = {**env, "FRAMEWORK": "atom", "EP_SIZE": "4", "DP_ATTENTION": "true",
            "SPEC_DECODING": "mtp", "EVAL_ONLY": "true", "MAX_MODEL_LEN": "2048"}

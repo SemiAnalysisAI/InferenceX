@@ -1,10 +1,6 @@
 base:
   schema: 2
   name: dsr1-fp4-b200-sglang-mtp-8k1k
-  model:
-    path: hf:nvidia/DeepSeek-R1-0528-FP4-V2
-    container: lmsysorg/sglang:v0.5.16-cu130
-    precision: fp4
   resources:
     gpu_type: b200
     gpus_per_node: 8
@@ -42,21 +38,11 @@ base:
         speculative-num-steps: 2
         speculative-num-draft-tokens: 3
         speculative-eagle-topk: 1
-        served-model-name: nvidia/DeepSeek-R1-0528-FP4-V2
         enable-metrics: false
       env:
         SGLANG_ENABLE_SPEC_V2: '1'
         SGLANG_RADIX_FORCE_MISS: '1'
         PYTHONNOUSERSITE: '1'
-  benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/single_node/srt_fixed_sequence.sh
-    env:
-      MODEL: nvidia/DeepSeek-R1-0528-FP4-V2
-      ISL: '8192'
-      OSL: '1024'
-      RANDOM_RANGE_RATIO: '0.8'
-      USE_CHAT_TEMPLATE: 'true'
 zip_override_tp4_ep1:
   roles:
     agg:

@@ -49,13 +49,17 @@ TileRT 使用固定版本的上游 srt-slurm 子模块。配置指定 `roles.pre
 及所选并发数；InferenceX 在选择调优变体后绑定这些值。保留与调优设置配套的并发 zip
 选择器，并显式声明独立固定的角色/辅助服务镜像。
 
-本目录保存使用具体值的完整原生 srt-slurm YAML。共享参数化源文件放在
-`configs/srt-recipes/`，其中 `sources.yaml` 将原生配方路径映射到 common 和 tuning
-源。运行时与 `infx generate` 使用相同加载器：先加载 common，再合并 tuning，递归
-合并映射、替换列表，并在已解析的标量值中渲染参数、保留列表类型。B300 Qwen3.5
-FP8 基线和 MTP 共用单节点 common 源；GB300 Qwen3.5 FP4 1P1D 使用多节点 common
-源。`infx generate` 写入空输出目录；显式添加 `--refresh-exports` 可在验证后同时
-刷新已注册并纳入版本控制的原生配方集合快照。生成命令、受支持输入和生成器限制详见
+本目录中活跃的原生固定序列长度文件是不完整配方片段，仅按原生 YAML 结构保存
+配方特有设置。InferenceX 自动将其与扁平的
+`configs/srt-recipes/fixed-sequence-multi.yaml` 共享块组合；单节点片段使用
+`fixed-sequence-single.yaml`。无需逐配方源注册表、单独调优目录或 include/模板
+语法。运行时与 `infx generate` 共用加载器，递归合并映射、替换列表，并在变体集合的
+`base` 下应用共享字段。主配置提供模型、镜像、精度、长度和并发数；引擎调优及有意
+设置的覆盖项仍保留在片段中。
+
+固定序列脚本统一启用 chat template，使用 `0.8` 的 random-range ratio。
+`infx generate` 仅向空输出目录写入完整原生配方和 manifest；生成配方不纳入版本
+控制。命令及生成器范围详见
 [运行时工作负载绑定](../../../docs/configuration-procedures_zh.md#运行时工作负载绑定)。
 
 聚合式配置使用 `roles.agg`；`roles.decode.nodes: colocate` 表示解码角色与预填充
@@ -65,12 +69,12 @@ FP8 基线和 MTP 共用单节点 common 源；GB300 Qwen3.5 FP4 1P1D 使用多�
 
 ## 迁移与验证
 
-在隔离环境中安装统一版本，然后对完整原生配方使用其 CLI。InferenceX 专用的
-common/tuning 源必须先通过 `infx generate` 渲染，不能直接传给上游命令：
+在隔离环境中安装统一版本。运行上游验证命令前，先生成完整原生配方；已提交的
+固定序列片段不能作为独立的 `srtctl` 输入。例如，在 `inferencex-e2e/` 下运行：
 
 ```bash
-srtctl migrate --in-place -f benchmarks/multi_node/srt-slurm-recipes/dsr1/sglang
-# 对其他模型/引擎目录重复执行。
+uv run --extra recipes infx generate \
+  --config-key qwen3.5-fp4-gb300-dynamo-sglang --output-dir /tmp/infx-recipes
 python -m pytest infx/tests/matrix/ -q
 python -m infx.matrix.generate full-sweep \
   --config-files configs/nvidia-master.yaml \

@@ -1,11 +1,5 @@
-
 schema: 2
 name: "h100_8k1k_ctx1dep16_gen3tep16_batch2_eplb0_mtp0"
-
-model:
-  path: "DeepSeek-R1-0528"
-  container: "nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post3"
-  precision: "fp8"
 
 resources:
   gpu_type: "h100"
@@ -93,13 +87,8 @@ roles:
 
 
 benchmark:
-  type: custom
-  command: bash /infmax-workspace/benchmarks/multi_node/srt_fixed_sequence.sh
   env:
     TOKENIZER: /model
-    ISL: '8192'
-    OSL: '1024'
-
 frontend:
   type: "dynamo"
   enable_multiple_frontends: false # There are errors about colliding on port 8080, and others.

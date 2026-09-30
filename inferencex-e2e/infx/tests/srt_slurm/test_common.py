@@ -1,7 +1,5 @@
 """Behavioral checks for InferenceX composition before native SRT expansion."""
 
-from pathlib import Path
-
 import pytest
 import yaml
 
@@ -23,16 +21,12 @@ def source(tmp_path, monkeypatch):
     sources = tmp_path / "configs/srt-recipes"
     sources.mkdir(parents=True)
     recipe = tmp_path / "recipe.yaml"
-    recipe.write_text("stale: export\n")
-    (sources / "sources.yaml").write_text(
-        "recipe.yaml: {common: fixed.yaml, tuning: tuning.yaml}\n"
+    (sources / "fixed-sequence-single.yaml").write_text(
+        "model: {path: 'hf:${MODEL}', container: '${IMAGE}', precision: '${PRECISION}'}\n"
+        "benchmark: {type: custom, env: {ISL: '${ISL}', OSL: '${OSL}'}}\n"
     )
-    (sources / "fixed.yaml").write_text(
-        "base:\n  model: {path: 'hf:${MODEL}', container: '${IMAGE}', precision: '${PRECISION}'}\n"
-        "  benchmark: {type: custom, env: {ISL: '${ISL}', OSL: '${OSL}'}}\n"
-    )
-    (sources / "tuning.yaml").write_text(
-        "base:\n  roles: {agg: {args: {tokenizer-path: '${MODEL}', quantization: fp8}}}\n"
+    recipe.write_text(
+        "base:\n  roles: {agg: {args: {quantization: fp8}, env: {PATH: '${PATH}'}}}\n"
         "zip_override_conc:\n  benchmark: {env: {CONC: ['4', '8']}}\n"
     )
     monkeypatch.setenv("INFERENCEX_REPOSITORY_ROOT", str(tmp_path))
@@ -43,7 +37,7 @@ def source(tmp_path, monkeypatch):
     return recipe, env
 
 
-def test_registered_source_renders_data_and_preserves_native_variants(source):
+def test_common_fills_fragments_and_preserves_native_variants(source):
     recipe, env = source
     actual = load_recipe(recipe, env)
     assert actual["base"]["model"] == {
@@ -53,7 +47,7 @@ def test_registered_source_renders_data_and_preserves_native_variants(source):
         "type": "custom", "env": {"ISL": "8192", "OSL": "1024"},
     }
     assert actual["base"]["roles"]["agg"]["args"] == {
-        "tokenizer-path": "org/new-model", "quantization": "fp8",
+        "quantization": "fp8",
     }
     assert actual["zip_override_conc"] == {"benchmark": {"env": {"CONC": ["4", "8"]}}}
     # Values resembling YAML remain a scalar through serialization.
@@ -63,18 +57,16 @@ def test_registered_source_renders_data_and_preserves_native_variants(source):
     assert decoded["base"]["roles"]["agg"]["args"]["quantization"] == "fp8"
 
 
-@pytest.mark.parametrize("name,value", [("MODEL", ""), ("IS_AGENTIC", "1")])
-def test_source_requires_its_workload_parameters(source, name, value):
+def test_source_requires_its_workload_parameters(source):
     recipe, env = source
-    with pytest.raises(ValueError, match="Missing recipe parameter|require IS_AGENTIC"):
-        load_recipe(recipe, {**env, name: value})
+    with pytest.raises(ValueError, match="Missing recipe parameter"):
+        load_recipe(recipe, {**env, "MODEL": ""})
 
 
-def test_unregistered_native_recipe_is_not_interpolated(source):
+def test_agentic_recipe_bypasses_common_and_native_strings_are_not_rendered(source):
     recipe, env = source
-    native = Path(recipe.parent / "native.yaml")
-    native.write_text("roles: {agg: {env: {PATH: '${PATH}'}}}\n")
-    assert load_recipe(native, env) == {"roles": {"agg": {"env": {"PATH": "${PATH}"}}}}
+    assert load_recipe(recipe, {**env, "IS_AGENTIC": "1"}) == yaml.safe_load(recipe.read_text())
+    assert load_recipe(recipe, env)["base"]["roles"]["agg"]["env"]["PATH"] == "${PATH}"
 
 
 def test_multinode_staging_composes_before_applying_job_settings(source):
@@ -86,21 +78,18 @@ def test_multinode_staging_composes_before_applying_job_settings(source):
     relative = "benchmarks/multi_node/srt-slurm-recipes/demo.yaml"
     original = root / relative
     original.parent.mkdir(parents=True)
-    original.write_text("name: stale-export\n")
-    (sources / "sources.yaml").write_text(
-        yaml.safe_dump({relative: {"common": "fixed.yaml", "tuning": "tuning.yaml"}})
-    )
-    (sources / "fixed.yaml").write_text(
-        "name: shared\nmodel: {container: '${IMAGE}'}\n"
-        "benchmark: {concurrencies: '${CONCURRENCIES}'}\n"
-    )
-    (sources / "tuning.yaml").write_text(
-        "roles:\n  decode:\n    args: {watchdog-timeout: 30}\n"
+    original.write_text(
+        "name: specific\nroles:\n  decode:\n    args: {watchdog-timeout: 30}\n"
         "health_check: {max_attempts: 4}\n"
+    )
+    before = original.read_text()
+    (sources / "fixed-sequence-multi.yaml").write_text(
+        "model: {container: '${IMAGE}'}\n"
+        "benchmark: {concurrencies: '${CONCURRENCIES}'}\n"
     )
     checkout = root / "job-local-checkout"
     (checkout / "recipes").mkdir(parents=True)
-    compose_recipe(root, checkout, "recipes/demo.yaml", {**env, "CONC_LIST": "8 16"})
+    compose_recipe(root, checkout, "recipes/demo.yaml", {**env, "CONC_LIST": "8 16", "IS_MULTINODE": "true"})
     prepare_recipe(checkout, "recipes/demo.yaml", "job-42", 900, "8")
     actual = yaml.safe_load((checkout / "recipes/demo.yaml").read_text())
     assert actual["name"] == "job-42"
@@ -108,4 +97,4 @@ def test_multinode_staging_composes_before_applying_job_settings(source):
     assert actual["benchmark"]["concurrencies"] == [8]
     assert actual["health_check"]["max_attempts"] == 720
     assert actual["roles"]["decode"]["args"] == {"watchdog-timeout": 30, "dist-timeout": 900}
-    assert original.read_text() == "name: stale-export\n"
+    assert original.read_text() == before

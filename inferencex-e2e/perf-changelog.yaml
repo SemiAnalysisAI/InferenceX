@@ -9600,3 +9600,97 @@
     from the master configuration, including serving image, model, precision metadata, sequence lengths and
     selected concurrency. Preserve existing chat-template behavior and engine tuning.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3612
+
+- config-keys:
+  - dsr1-fp4-b200-dynamo-sglang
+  - dsr1-fp4-b200-dynamo-sglang-mtp
+  - dsr1-fp4-b200-dynamo-trt
+  - dsr1-fp4-b200-sglang
+  - dsr1-fp4-b200-sglang-mtp
+  - dsr1-fp4-b200-trt
+  - dsr1-fp4-b200-trt-mtp
+  - dsr1-fp4-b300-dynamo-trt
+  - dsr1-fp4-b300-sglang
+  - dsr1-fp4-gb200-dynamo-sglang
+  - dsr1-fp4-gb200-dynamo-trt
+  - dsr1-fp4-gb300-dynamo-sglang
+  - dsr1-fp4-gb300-dynamo-trt
+  - dsr1-fp4-mi355x-atom
+  - dsr1-fp4-mi355x-atom-mtp
+  - dsr1-fp4-mi355x-sglang
+  - dsr1-fp4-mi355x-sglang-disagg
+  - dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp
+  - dsr1-fp4-mi355x-sglang-disagg-mtp
+  - dsr1-fp4-mi355x-sglang-mtp
+  - dsr1-fp8-b200-dynamo-sglang
+  - dsr1-fp8-b200-dynamo-sglang-mtp
+  - dsr1-fp8-b200-dynamo-trt
+  - dsr1-fp8-b200-sglang
+  - dsr1-fp8-b200-sglang-mtp
+  - dsr1-fp8-b200-trt
+  - dsr1-fp8-b200-trt-mtp
+  - dsr1-fp8-b300-dynamo-trt
+  - dsr1-fp8-b300-sglang
+  - dsr1-fp8-b300-sglang-mtp
+  - dsr1-fp8-gb200-dynamo-sglang
+  - dsr1-fp8-gb200-dynamo-trt
+  - dsr1-fp8-gb300-dynamo-sglang
+  - dsr1-fp8-gb300-dynamo-trt
+  - dsr1-fp8-h100-dynamo-sglang
+  - dsr1-fp8-h100-dynamo-trt
+  - dsr1-fp8-h200-dynamo-sglang
+  - dsr1-fp8-h200-dynamo-trt
+  - dsr1-fp8-h200-sglang
+  - dsr1-fp8-h200-sglang-mtp
+  - dsr1-fp8-h200-trt
+  - dsr1-fp8-h200-trt-mtp
+  - dsr1-fp8-mi300x-sglang
+  - dsr1-fp8-mi325x-sglang
+  - dsr1-fp8-mi325x-sglang-mtp
+  - dsr1-fp8-mi355x-atom
+  - dsr1-fp8-mi355x-atom-mtp
+  - dsr1-fp8-mi355x-sglang
+  - dsr1-fp8-mi355x-sglang-disagg
+  - dsr1-fp8-mi355x-sglang-disagg-mtp
+  - dsr1-fp8-mi355x-sglang-mtp
+  - qwen3.5-fp4-b200-sglang
+  - qwen3.5-fp4-b200-sglang-mtp
+  - qwen3.5-fp4-b200-trt
+  - qwen3.5-fp4-b200-trt-mtp
+  - qwen3.5-fp4-b300-sglang
+  - qwen3.5-fp4-b300-sglang-mtp
+  - qwen3.5-fp4-gb300-dynamo-sglang
+  - qwen3.5-fp4-gb300-dynamo-trt
+  - qwen3.5-fp4-gb300-dynamo-trt-mtp
+  - qwen3.5-fp4-mi355x-atom
+  - qwen3.5-fp4-mi355x-sglang
+  - qwen3.5-fp4-mi355x-sglang-disagg
+  - qwen3.5-fp4-mi355x-sglang-mtp
+  - qwen3.5-fp8-b200-sglang
+  - qwen3.5-fp8-b200-sglang-mtp
+  - qwen3.5-fp8-b300-sglang
+  - qwen3.5-fp8-b300-sglang-mtp
+  - qwen3.5-fp8-gb200-dynamo-sglang
+  - qwen3.5-fp8-gb200-dynamo-sglang-mtp
+  - qwen3.5-fp8-gb300-dynamo-sglang
+  - qwen3.5-fp8-gb300-dynamo-sglang-mtp
+  - qwen3.5-fp8-h100-sglang
+  - qwen3.5-fp8-h100-sglang-mtp
+  - qwen3.5-fp8-h200-sglang
+  - qwen3.5-fp8-h200-sglang-mtp
+  - qwen3.5-fp8-mi300x-sglang
+  - qwen3.5-fp8-mi325x-sglang
+  - qwen3.5-fp8-mi325x-sglang-mtp
+  - qwen3.5-fp8-mi355x-atom
+  - qwen3.5-fp8-mi355x-atom-mtp
+  - qwen3.5-fp8-mi355x-sglang
+  - qwen3.5-fp8-mi355x-sglang-disagg
+  - qwen3.5-fp8-mi355x-sglang-mtp
+  description:
+  - Fill all active native fixed-sequence SRT recipe fragments automatically from shared single-node or
+    multi-node blocks and master workload values. Keep generated complete recipes untracked; preserve
+    topology, engine tuning and intentional model aliases. Model precision metadata follows the master
+    configuration, including six B300 TRT FP8 recipes previously labeled FP4.
+  - Enable chat templates for every fixed-sequence client, including non-speculative runs, and centralize
+    the existing random range ratio of 0.8 in the clients instead of per-recipe environment settings.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3612
