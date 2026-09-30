@@ -35,7 +35,7 @@ base:
         tensor-parallel-size: 8
         expert-parallel-size: 8
         data-parallel-size: 1
-        moe-runner-backend: deep_gemm
+        moe-runner-backend: flashinfer_mxfp4
         disable-shared-experts-fusion: true
         speculative-num-draft-tokens: 8
         chunked-prefill-size: 8192

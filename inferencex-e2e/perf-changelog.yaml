@@ -9149,3 +9149,13 @@
     - "Render the released V4.1 numeric high-effort system header in the fixed-sequence client; include the header in exact prompt-length accounting."
     - "在固定序列客户端中渲染 V4.1 发布版本的数字化 high-effort 系统前缀，并将其计入精确提示词长度。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607
+
+- config-keys:
+    - dsv41flash-fp4-b200-sglang-matched-8k256
+    - dsv41flash-fp4-b300-sglang-matched-8k256
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Use the native FlashInfer MXFP4 MoE runner on B200/B300 to avoid the DeepGEMM packed-scale layout assertion. Retain its default MXFP8 activations, checkpoint expert weights, seven draft tokens, and explicit dispatch AL."
+    - "B200/B300 改用原生 FlashInfer MXFP4 MoE 后端，避开 DeepGEMM 打包缩放因子的布局断言；保留默认 MXFP8 激活、检查点专家权重、七个草稿 token 及显式调度的 AL。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607

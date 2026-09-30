@@ -588,3 +588,5 @@ For requested research comparisons of `dsv41flash`, `e2e-tests.yml` accepts `fix
 These are research artifacts, not evidence that acceptance was measured on the synthetic prompt dataset. Record checkpoint, effective target/draft precision, cache formats, GPU count, exact prompt/output lengths, concurrency, configured and realized AL, and measured TPOT separately from throughput derived as concurrency divided by TPOT.
 
 The fixed-sequence `--dsv4` client path recognizes the V4.1 tokenizer name and includes its released numeric high-effort header (75), including that header in prompt-length accounting.
+
+The B200/B300 comparison recipes use `flashinfer_mxfp4` with its default MXFP8 activations and checkpoint MXFP4 expert weights. The pinned DeepGEMM path failed its packed-scale shape assertion. On H200, this backend defaults to W4A16; selecting `flashinfer-mxfp4-moe-precision: fp8` also lowers DSpark activations because the pinned DSpark worker shares the target MoE settings. Do not label the default H200 path W4A8 or silently apply that flag under the draft-as-shipped policy.

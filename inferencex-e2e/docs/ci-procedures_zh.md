@@ -569,3 +569,5 @@ H200 DeepSeek-V4.1 Flash SGLang AgentX 在并发 64 及以上的性能任务由�
 这些是研究产物，不代表在合成提示词数据集上实测得到的接受长度。需记录 checkpoint、目标和草稿的实际精度、缓存格式、GPU 数量、精确输入和输出长度、并发数、配置与实测 AL，并区分实测 TPOT 和由并发数除以 TPOT 推算的吞吐量。
 
 固定序列客户端的 `--dsv4` 路径会识别 V4.1 tokenizer 名称，加入发布版本的数字化 high-effort 前缀（75），并将该前缀计入提示词长度。
+
+B200/B300 对比配置使用 `flashinfer_mxfp4`，保留其默认 MXFP8 激活与检查点中的 MXFP4 专家权重。固定版本的 DeepGEMM 路径在打包缩放因子形状断言处失败。H200 上该后端默认为 W4A16；设置 `flashinfer-mxfp4-moe-precision: fp8` 也会降低 DSpark 激活精度，因为固定版本的 DSpark worker 与目标模型共享 MoE 设置。不得将 H200 默认路径标为 W4A8，也不得在草稿保持发布精度的规则下悄然启用该参数。
