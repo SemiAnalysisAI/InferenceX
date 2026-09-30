@@ -49,7 +49,10 @@ DECODE_DEADLINE_S = max(0.0, MEASURED_S - 150.0)
 # Measured replay before an early stop: aiperf fails a run with no results.
 MIN_MEASURED_S = 60.0
 CLOCK_WINDOW_MAX_S = 120.0  # a window's steps take seconds; stop sampling regardless
+# The GPU finishes a window's last step after its engine logs it (launches are
+# asynchronous): keep sampling for twice the window's longest step past that.
 CLOCK_TAIL_S = 0.5
+CLOCK_TAIL_MAX_S = 10.0
 
 
 def post(url: str) -> str:
@@ -141,7 +144,7 @@ class StepCounter:
     def __init__(self, steps_dir: str):
         self.steps_dir = steps_dir
         self.offsets: dict[str, int] = {}
-        self.times: dict[str, list[int]] = {}
+        self.times: dict[str, list[tuple[int, int]]] = {}  # (t0_ns, t1_ns) per step
 
     def counts_since(self, t_ns: int) -> dict[str, int]:
         for path in glob.glob(os.path.join(self.steps_dir, "*.jsonl")):
@@ -154,10 +157,19 @@ class StepCounter:
                         self.offsets[path] = f.tell()
                         record = json.loads(line)
                         if "t0_ns" in record:
-                            self.times.setdefault(path, []).append(record["t0_ns"])
+                            self.times.setdefault(path, []).append(
+                                (record["t0_ns"], record.get("t1_ns", record["t0_ns"])))
             except (OSError, ValueError):
                 continue
-        return {path: sum(t >= t_ns for t in times) for path, times in self.times.items()}
+        return {path: sum(t0 >= t_ns for t0, _ in times) for path, times in self.times.items()}
+
+    def longest_since(self, t_ns: int, steps: int) -> float:
+        """Seconds of the longest of each rank's first `steps` steps after t_ns."""
+        longest = 0
+        for times in self.times.values():
+            window = [t1 - t0 for t0, t1 in times if t0 >= t_ns][:steps]
+            longest = max([longest, *window])
+        return longest / 1e9
 
 
 def wait_for_window_steps(counter: StepCounter, t_ns: int, iterations: int) -> None:
@@ -229,7 +241,8 @@ def main() -> None:
                 note(event="start", window=index, server=server, iterations=iterations,
                      status=post(f"{server}/start_profile"))
             wait_for_window_steps(counter, int(window_t0 * 1e9), int(iterations))
-            time.sleep(CLOCK_TAIL_S)
+            tail = 2 * counter.longest_since(int(window_t0 * 1e9), int(iterations))
+            time.sleep(CLOCK_TAIL_S + min(tail, CLOCK_TAIL_MAX_S))
             clocks.stop()
             note(event="clocks", window=index, polls=clocks.polls,
                  seconds=round(time.time() - window_t0, 3))
