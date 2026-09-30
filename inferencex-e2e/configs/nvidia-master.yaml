@@ -1184,6 +1184,7 @@ dsv4-fp4-b300-dynamo-sglang-agentic-agg:
           dp-attn: false
           additional-settings:
           - "CONFIG_FILE=recipes/dsv4/sglang/b300-fp4/agentx/agg-tp8-c1-mtp.yaml"
+          - "MODEL_PATH=/scratch/models/DeepSeek-V4-Pro-0813"
       - spec-decoding: draft_model
         conc-list: [4]
         num-nodes: 1
@@ -1194,6 +1195,7 @@ dsv4-fp4-b300-dynamo-sglang-agentic-agg:
           dp-attn: false
           additional-settings:
           - "CONFIG_FILE=recipes/dsv4/sglang/b300-fp4/agentx/agg-tp4-c4-mtp.yaml"
+          - "MODEL_PATH=/scratch/models/DeepSeek-V4-Pro-0813"
 
 dsv4-fp4-b300-dynamo-sglang-agentic-disagg:
   image: lmsysorg/sglang:nightly-dev-20260916-c9a8fba9
@@ -1221,6 +1223,7 @@ dsv4-fp4-b300-dynamo-sglang-agentic-disagg:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/dsv4/sglang/b300-fp4/agentx/disagg-1p1d-dep8-dep8-c64-mtp-kvoffload.yaml"
+          - "MODEL_PATH=/scratch/models/DeepSeek-V4-Pro-0813"
         decode:
           num-worker: 1
           tp: 8
@@ -1237,6 +1240,7 @@ dsv4-fp4-b300-dynamo-sglang-agentic-disagg:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/dsv4/sglang/b300-fp4/agentx/disagg-1p1d-dep8-dep8-c240-mtp-kvoffload.yaml"
+          - "MODEL_PATH=/scratch/models/DeepSeek-V4-Pro-0813"
         decode:
           num-worker: 1
           tp: 8
@@ -1253,6 +1257,7 @@ dsv4-fp4-b300-dynamo-sglang-agentic-disagg:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/dsv4/sglang/b300-fp4/agentx/disagg-2p1d-dep8-dep8-c480-mtp-kvoffload.yaml"
+          - "MODEL_PATH=/scratch/models/DeepSeek-V4-Pro-0813"
         decode:
           num-worker: 1
           tp: 8
