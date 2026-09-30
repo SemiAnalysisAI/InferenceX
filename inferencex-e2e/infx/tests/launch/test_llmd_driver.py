@@ -1,4 +1,4 @@
-"""The llm-d driver: submit through the wrapper, attach, stage artifacts."""
+"""The llm-d driver: run submit.sh, attach, stage artifacts."""
 
 import json
 import subprocess
@@ -19,6 +19,7 @@ from infx.tests.launch.fake_slurm import (
 LLMD_SUBMIT = """#!/usr/bin/env bash
 set -e
 env > "$GITHUB_WORKSPACE/submitted.env"
+echo "$PWD $*" > "$GITHUB_WORKSPACE/submitted.args"
 logs="$BENCHMARK_LOGS_DIR"
 job="$logs/slurm_job-4299"
 mkdir -p "$logs/agentic/conc_128" "$job/eval_results"
@@ -36,12 +37,12 @@ echo 4299
 
 @pytest.fixture
 def harness(tmp_path):
-    """Sandboxed gb200-nv cluster, fake Slurm binaries, and a workspace with the llm-d wrapper."""
+    """Sandboxed gb200-nv cluster, fake Slurm binaries, and a workspace with a fake submit.sh."""
     sandbox = tmp_path / "sandbox"
     sandbox.mkdir()
     config = sandbox_runner_config(sandbox)
     workspace = make_workspace(tmp_path / "workspace")
-    wrapper = workspace / "benchmarks/multi_node/dsv4_fp4_gb200_llmd-vllm-disagg.sh"
+    wrapper = workspace / "benchmarks/multi_node/llm-d/submit.sh"
     wrapper.parent.mkdir(parents=True, exist_ok=True)
     wrapper.write_text(LLMD_SUBMIT)
     wrapper.chmod(0o755)
@@ -66,7 +67,12 @@ def harness(tmp_path):
         PRECISION="fp4",
         SPEC_DECODING="mtp",
         THINKING_MODE="thinking_on",
-        EXP_NAME="dsv4_agentic_p1x8",
+        PREFILL_NODES="2",
+        DECODE_NODES="2",
+        ISL="8192",
+        OSL="1024",
+        RANDOM_RANGE_RATIO="0.8",
+        CONC_LIST="256 512",
         DISAGG="true",
         IMAGE="vllm/vllm-openai:v0.21.0",
         RESULT_FILENAME="point-identity",
@@ -96,6 +102,12 @@ def test_llmd_driver_submits_the_wrapper_and_stages_artifacts(harness):
     assert submitted["BENCHMARK_LOGS_DIR"] == f"{workspace}/benchmark_logs"
     assert submitted["SLURM_PARTITION"] == "batch"
     assert submitted["SLURM_ACCOUNT"] == "benchmark"
+    assert submitted["GPUS_PER_NODE"] == "4"
+    assert submitted["CONTAINER_IMAGE"] == env["IMAGE"]
+    assert (workspace / "submitted.args").read_text().split() == [
+        str(workspace / "benchmarks/multi_node/llm-d"),
+        *"2 2 8192 1024 256x512 inf 0.8".split(),
+    ]
 
     assert json.loads((workspace / "point-identity_conc128.json").read_text()) == {"conc": 128}
     assert (workspace / "LOGS/agentic/conc_128/profile.json").read_text() == "trace\n"
@@ -112,4 +124,4 @@ def test_llmd_driver_fails_when_the_wrapper_prints_no_job_id(harness):
     result = launch(env, harness[0], workspace)
 
     assert result.returncode == 1
-    assert "failed before returning a Slurm job id" in result.stderr
+    assert "submit.sh failed before returning a Slurm job id" in result.stderr

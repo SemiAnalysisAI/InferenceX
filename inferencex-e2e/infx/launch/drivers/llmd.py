@@ -17,18 +17,8 @@ from infx.launch.drivers.srt.run import slurm_backend
 from infx.launch.request import LlmdRequest, RequestError
 
 CANCEL_TIMEOUT_S = 600.0
-
-
-def _bench_script(request: LlmdRequest) -> Path:
-    model_tag = request.exp_name.split("_", 1)[0]
-    kind = "disagg" if request.disagg else "agg"
-    script = (
-        request.workspace
-        / f"benchmarks/multi_node/{model_tag}_{request.precision}_gb200_llmd-vllm-{kind}.sh"
-    )
-    if not script.is_file():
-        raise LaunchError(f"llm-d wrapper not found: {script}")
-    return script
+DEFAULT_TIME_LIMIT = "08:00:00"
+LLMD_DIR = "benchmarks/multi_node/llm-d"
 
 
 def _find_eval_dir(logs_dir: Path) -> Path | None:
@@ -58,6 +48,8 @@ def run(launch: Launch) -> int:
     request = LlmdRequest.from_env(launch.request.env)
     if launch.cluster.id not in policy.LLMD_CLUSTERS:
         raise LaunchError(f"llmd-vllm is not configured for cluster {launch.cluster.id!r}")
+    if not request.disagg:
+        raise LaunchError("llmd-vllm supports only P/D disaggregated points")
 
     checkpoint = models.checkpoint(launch.cluster, request)
     if checkpoint is None:
@@ -85,14 +77,28 @@ def run(launch: Launch) -> int:
             "SLURM_ACCOUNT": account,
             "MODEL_PATH": str(model_path),
             "MODEL_NAME": request.model,
+            "CONTAINER_IMAGE": request.image,
+            "GPUS_PER_NODE": str(launch.cluster.gpus_per_node),
+            "TIME_LIMIT": request.env.get("TIME_LIMIT") or DEFAULT_TIME_LIMIT,
+            "PREFILL_WORKERS": str(request.prefill_num_workers),
+            "DECODE_WORKERS": str(request.decode_num_workers),
             "LLMD_CONTAINER_ENGINE": "pyxis",
             "LLMD_SQUASH_FILE": squash.reference,
             "BENCHMARK_LOGS_DIR": str(logs_dir),
         },
     )
 
-    script = _bench_script(request)
-    argv = ["bash", str(script)]
+    argv = [
+        "bash",
+        "submit.sh",
+        str(request.prefill_nodes),
+        str(request.decode_nodes),
+        str(request.isl),
+        str(request.osl),
+        "x".join(map(str, request.conc_list)),
+        "inf",
+        request.random_range_ratio,
+    ]
     proc.echo(argv, env)
     submitted = subprocess.run(
         argv,
@@ -100,16 +106,16 @@ def run(launch: Launch) -> int:
         stderr=sys.stderr,
         text=True,
         env=env,
-        cwd=request.workspace,
+        cwd=request.workspace / LLMD_DIR,
         check=False,
     )
     job_id = submitted.stdout.strip()
     if submitted.returncode != 0 or not job_id:
-        print("ERROR: llm-d submit wrapper failed before returning a Slurm job id", file=sys.stderr)
+        print("ERROR: llm-d submit.sh failed before returning a Slurm job id", file=sys.stderr)
         return 1
     if not (job_id.isascii() and job_id.isdigit()):
         print(
-            f"ERROR: llm-d submit wrapper printed {job_id!r} instead of a Slurm job id",
+            f"ERROR: llm-d submit.sh printed {job_id!r} instead of a Slurm job id",
             file=sys.stderr,
         )
         return 1
