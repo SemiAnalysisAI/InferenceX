@@ -77,6 +77,16 @@ on:
         required: false
         type: string
         default: ""
+      random-range-ratio:
+        description: "Fixed-sequence length variation; 1.0 uses exact lengths"
+        required: false
+        type: string
+        default: "0.8"
+      fixed-sequence-acceptance-length:
+        description: "Explicit research-only fixed-sequence acceptance target; never used for AgentX or evals"
+        required: false
+        type: string
+        default: ""
       require-power:
         description: "Fail fixed-sequence result processing when GPU power is invalid"
         type: boolean
@@ -119,6 +129,7 @@ on:
         type: string
 
 env:
+  FIXED_SEQUENCE_ACCEPTANCE_LENGTH: ${{ inputs.fixed-sequence-acceptance-length }}
   PYTHONPATH: ${{ github.workspace }}/inferencex-e2e
   INFERENCEX_E2E_ROOT: ${{ github.workspace }}
   PORT: '8888'
@@ -131,7 +142,7 @@ env:
   GPU_METRICS_CSV: 'gpu_metrics.csv'
   KEEP_LOGS: '0'
   IS_MULTINODE: 'true'
-  RANDOM_RANGE_RATIO: 0.8
+  RANDOM_RANGE_RATIO: ${{ inputs.random-range-ratio }}
   # Day-zero models resolved via hf: ids download from the Hub inside the
   # slurm job (srtctl pre-download + dynamo hub fetch). Anonymous requests
   # get 429-rate-limited when several workers pull a 444 GB snapshot at

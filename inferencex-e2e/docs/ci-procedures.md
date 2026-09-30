@@ -580,3 +580,9 @@ See [OperatorX GitHub Actions](../../operatorx/CI.md) for dispatch,
 coverage, artifacts, cancellation, and validation.
 
 For H200 DeepSeek-V4.1 Flash SGLang AgentX performance at concurrency 64 or above, the launch policy (`SALLOC_TIME_BUMPS` in `infx/launch/policy.py`) allows a 1440-minute Slurm allocation and the reusable workflow allows 1470 minutes. This accommodates normal warmup and the unchanged 3600-second profile; lower concurrencies and eval-only jobs retain the standard deadlines. Run `35775895782` exhausted the previous eight-hour allocation during progressing, error-free warmup. A failed-only retry retains the original workflow deadline, so deadline changes require a new workflow run.
+
+### Explicit fixed-sequence DSpark comparisons
+
+For requested research comparisons of `dsv41flash`, `e2e-tests.yml` accepts `fixed-sequence-acceptance-length` (mean committed tokens per verification step, including the verification token) and `random-range-ratio` (`1.0` uses exact configured lengths). Dispatch the workflow from the branch that defines these inputs, and use `--no-evals`. This optional mode requires fixed-sequence throughput, an explicit positive DSpark draft count, and a finite AL in `[1, draft count + 1]`; AgentX and eval requests reject it. The SRT connector injects native server settings and records the target and draft count in the benchmark environment. It does not modify or add measured golden curves. Without the input, existing golden-AgentX and real-verification behavior is unchanged.
+
+These are research artifacts, not evidence that acceptance was measured on the synthetic prompt dataset. Record checkpoint, effective target/draft precision, cache formats, GPU count, exact prompt/output lengths, concurrency, configured and realized AL, and measured TPOT separately from throughput derived as concurrency divided by TPOT.

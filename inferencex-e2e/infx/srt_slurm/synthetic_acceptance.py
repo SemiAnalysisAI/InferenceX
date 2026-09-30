@@ -1,4 +1,4 @@
-"""Select AgentX golden acceptance automatically and pass native srtctl overrides."""
+"""Plan native acceptance for AgentX and explicit fixed-sequence comparisons."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import argparse
 import copy
 import fnmatch
 import json
+import math
 import os
 import re
 import subprocess
@@ -35,6 +36,28 @@ SGLANG_VARIABLES = (
     "SGLANG_SIMULATE_ACC_TOKEN_MODE",
 )
 TRT_VARIABLE = "TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS"
+
+
+def fixed_sequence_acceptance(
+    spec: Mapping[str, Any], environment: Mapping[str, str]
+) -> float | None:
+    """Validate an explicit research comparison, separate from AgentX golden curves."""
+    value = environment.get("FIXED_SEQUENCE_ACCEPTANCE_LENGTH", "")
+    if not value:
+        return None
+    if environment.get("IS_AGENTIC", "").lower() not in {"0", "false"}:
+        raise ValueError("Fixed-sequence acceptance cannot override AgentX golden curves")
+    if any(environment.get(key) != "false" for key in ("RUN_EVAL", "EVAL_ONLY")):
+        raise ValueError("Fixed-sequence acceptance requires throughput-only execution")
+    if environment.get("MODEL_PREFIX") != "dsv41flash" or spec.get("method") != "dspark":
+        raise ValueError("Fixed-sequence acceptance supports dsv41flash DSpark comparisons only")
+    drafts = spec.get("num_speculative_tokens")
+    if type(drafts) is not int or drafts < 1:
+        raise ValueError("Fixed-sequence acceptance requires an explicit positive draft count")
+    acceptance = float(value)
+    if not math.isfinite(acceptance) or not 1 <= acceptance <= drafts + 1:
+        raise ValueError("Fixed-sequence acceptance must be finite and within [1, drafts + 1]")
+    return acceptance
 
 
 def spec_parameters(role: Mapping[str, Any], engine: str) -> dict[str, Any]:
@@ -97,9 +120,11 @@ def build_overrides(
     *,
     golden_dir: Path = GOLDEN_DIR,
 ) -> list[str]:
-    """Infer acceptance from generation parameters; never accept a caller AL."""
+    """Use golden AgentX acceptance or an explicit, isolated fixed-sequence comparison."""
     engine = ENGINES.get(framework)
     if engine is None:
+        if environment.get("FIXED_SEQUENCE_ACCEPTANCE_LENGTH"):
+            raise ValueError("Framework does not support fixed-sequence acceptance")
         return []
     roles = recipe.get("roles", {})
     synthetic = (
@@ -110,12 +135,19 @@ def build_overrides(
     # Prefill may have a different MTP depth; generation defines the AL target.
     generation = roles.get("decode", roles.get("agg", {}))
     spec = spec_parameters(generation, engine)
-    al = None
+    al = fixed_sequence_acceptance(spec, environment)
     if synthetic and spec:
         al = golden_length(
             environment["MODEL_PREFIX"], spec, environment["THINKING_MODE"], golden_dir
         )
     overrides = []
+    if environment.get("FIXED_SEQUENCE_ACCEPTANCE_LENGTH"):
+        overrides += [
+            "--set",
+            f"benchmark.env.FIXED_SEQUENCE_ACCEPTANCE_LENGTH={json.dumps(str(al))}",
+            "--set",
+            f"benchmark.env.FIXED_SEQUENCE_DRAFT_TOKENS={json.dumps(str(spec['num_speculative_tokens']))}",
+        ]
     variables = {"sglang": SGLANG_VARIABLES, "trtllm": (TRT_VARIABLE,)}.get(engine, ())
     # SRT applies recipe-wide environment after role environment. Keep simulation
     # role-local so global values cannot override the golden AL or leak into evals.

@@ -86,6 +86,77 @@ def vllm_recipe(method: str = "mtp", **extra: Any) -> dict[str, Any]:
     }
 
 
+@pytest.mark.parametrize("framework", ["vllm", "sglang"])
+def test_fixed_sequence_comparison_preserves_draft_work(framework: str, tmp_path: Path) -> None:
+    recipe = vllm_recipe("dspark", num_speculative_tokens=7, draft_sample_method="greedy")
+    if framework == "sglang":
+        recipe = {
+            "roles": {
+                "agg": {
+                    "args": {
+                        "speculative-algorithm": "DSPARK",
+                        "speculative-dspark-block-size": 7,
+                        "speculative-num-draft-tokens": 8,
+                    }
+                }
+            }
+        }
+    env = {
+        **ENV,
+        "MODEL_PREFIX": "dsv41flash",
+        "IS_AGENTIC": "0",
+        "RUN_EVAL": "false",
+        "FIXED_SEQUENCE_ACCEPTANCE_LENGTH": "5.7",
+    }
+    result = apply_native(recipe, build_overrides(recipe, framework, env, golden_dir=tmp_path))
+    assert result["benchmark"]["env"] == {
+        "FIXED_SEQUENCE_ACCEPTANCE_LENGTH": "5.7",
+        "FIXED_SEQUENCE_DRAFT_TOKENS": "7",
+    }
+    if framework == "vllm":
+        assert json.loads(result["roles"]["agg"]["args"]["speculative-config"]) == {
+            "method": "dspark",
+            "num_speculative_tokens": 7,
+            "draft_sample_method": "greedy",
+            "rejection_sample_method": "synthetic",
+            "synthetic_acceptance_length": 5.7,
+        }
+    else:
+        assert result["roles"]["agg"]["args"]["speculative-num-draft-tokens"] == 8
+        assert result["roles"]["agg"]["env"] == {
+            "SGLANG_SIMULATE_ACC_LEN": "5.7",
+            "SGLANG_SIMULATE_ACC_METHOD": "match-expected",
+            "SGLANG_SIMULATE_ACC_TOKEN_MODE": "real-draft-token",
+        }
+
+
+@pytest.mark.parametrize(
+    ("changed", "message"),
+    [
+        ({"IS_AGENTIC": "1"}, "AgentX golden"),
+        ({"RUN_EVAL": "true"}, "throughput-only"),
+        ({"EVAL_ONLY": "true"}, "throughput-only"),
+        ({"MODEL_PREFIX": "other"}, "dsv41flash DSpark"),
+        ({"FIXED_SEQUENCE_ACCEPTANCE_LENGTH": "nan"}, "finite"),
+        ({"FIXED_SEQUENCE_ACCEPTANCE_LENGTH": "0.9"}, "within"),
+        ({"FIXED_SEQUENCE_ACCEPTANCE_LENGTH": "4.1"}, "within"),
+    ],
+)
+def test_fixed_sequence_comparison_rejects_incompatible_work(
+    changed: dict[str, str], message: str, tmp_path: Path
+) -> None:
+    env = {
+        **ENV,
+        "MODEL_PREFIX": "dsv41flash",
+        "IS_AGENTIC": "0",
+        "RUN_EVAL": "false",
+        "FIXED_SEQUENCE_ACCEPTANCE_LENGTH": "3.0",
+        **changed,
+    }
+    with pytest.raises(ValueError, match=message):
+        build_overrides(vllm_recipe("dspark"), "vllm", env, golden_dir=tmp_path)
+
+
 @pytest.mark.parametrize(
     ("prefix", "method", "extra", "expected"),
     [

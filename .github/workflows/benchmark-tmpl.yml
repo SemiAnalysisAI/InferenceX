@@ -74,6 +74,11 @@ on:
         required: false
         type: string
         default: '3600'
+      fixed-sequence-acceptance-length:
+        description: "Explicit research-only fixed-sequence acceptance target; never used for AgentX or evals"
+        required: false
+        type: string
+        default: ""
       require-power:
         description: "Fail result processing when GPU power is invalid"
         required: false
@@ -95,6 +100,7 @@ on:
         type: string
         default: ""
 env:
+  FIXED_SEQUENCE_ACCEPTANCE_LENGTH: ${{ inputs.fixed-sequence-acceptance-length }}
   PYTHONPATH: ${{ github.workspace }}/inferencex-e2e
   INFERENCEX_E2E_ROOT: ${{ github.workspace }}
   PORT: '8888'
@@ -107,7 +113,7 @@ env:
   GPU_METRICS_CSV: 'gpu_metrics.csv'
   KEEP_LOGS: '0'
   IS_MULTINODE: 'false'
-  RANDOM_RANGE_RATIO: 0.8
+  RANDOM_RANGE_RATIO: ${{ inputs.random-range-ratio }}
   HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
   HF_HUB_CACHE: '/mnt/hf_hub_cache/'
   EXP_NAME: ${{ fromJSON(inputs.config).exp-name }}

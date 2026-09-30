@@ -31,6 +31,16 @@ on: # zizmor: ignore[concurrency-limits]
                 required: false
                 type: string
                 default: ""
+            random-range-ratio:
+                description: "Fixed-sequence length variation (1.0 means exact configured lengths)"
+                required: false
+                type: string
+                default: "0.8"
+            fixed-sequence-acceptance-length:
+                description: "Research-only mean committed tokens per verification step; fixed-sequence throughput only"
+                required: false
+                type: string
+                default: ""
             require-power:
                 description: "Fail benchmark jobs when GPU power is invalid"
                 required: false
@@ -130,6 +140,16 @@ on: # zizmor: ignore[concurrency-limits]
                 type: string
             duration-override:
                 description: "Override matrix.config.duration (seconds). Empty = use matrix value."
+                required: false
+                type: string
+                default: ""
+            random-range-ratio:
+                description: "Fixed-sequence length variation (1.0 means exact configured lengths)"
+                required: false
+                type: string
+                default: "0.8"
+            fixed-sequence-acceptance-length:
+                description: "Research-only mean committed tokens per verification step; fixed-sequence throughput only"
                 required: false
                 type: string
                 default: ""
@@ -373,6 +393,8 @@ jobs:
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
             config: ${{ toJSON(matrix.config) }}
+            fixed-sequence-acceptance-length: ${{ inputs.fixed-sequence-acceptance-length }}
+            random-range-ratio: ${{ inputs.random-range-ratio }}
             klaud-run: ${{ inputs.klaud-run }}
             runner: ${{ matrix.config.runner }}
             node-count: ${{ matrix.config.node-count }}
@@ -399,6 +421,8 @@ jobs:
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
             config: ${{ toJSON(matrix.config) }}
+            fixed-sequence-acceptance-length: ${{ inputs.fixed-sequence-acceptance-length }}
+            random-range-ratio: ${{ inputs.random-range-ratio }}
             klaud-run: ${{ inputs.klaud-run }}
             runner: ${{ matrix.config.runner }}
             node-count: ${{ matrix.config.node-count }}
@@ -429,6 +453,8 @@ jobs:
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
             config: ${{ toJSON(matrix.config) }}
+            fixed-sequence-acceptance-length: ${{ inputs.fixed-sequence-acceptance-length }}
+            random-range-ratio: ${{ inputs.random-range-ratio }}
             klaud-run: ${{ inputs.klaud-run }}
             runner: ${{ matrix.config.runner }}
             priority: ${{ matrix.config.priority }}
@@ -456,6 +482,8 @@ jobs:
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
             config: ${{ toJSON(matrix.config) }}
+            fixed-sequence-acceptance-length: ${{ inputs.fixed-sequence-acceptance-length }}
+            random-range-ratio: ${{ inputs.random-range-ratio }}
             klaud-run: ${{ inputs.klaud-run }}
             runner: ${{ matrix.config.runner }}
             priority: ${{ matrix.config.priority }}
@@ -487,6 +515,8 @@ jobs:
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
             config: ${{ toJSON(matrix.config) }}
+            fixed-sequence-acceptance-length: ${{ inputs.fixed-sequence-acceptance-length }}
+            random-range-ratio: ${{ inputs.random-range-ratio }}
             klaud-run: ${{ inputs.klaud-run }}
             runner: ${{ matrix.config.runner }}
             node-count: ${{ matrix.config.node-count }}
@@ -517,6 +547,8 @@ jobs:
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
             config: ${{ toJSON(matrix.config) }}
+            fixed-sequence-acceptance-length: ${{ inputs.fixed-sequence-acceptance-length }}
+            random-range-ratio: ${{ inputs.random-range-ratio }}
             klaud-run: ${{ inputs.klaud-run }}
             runner: ${{ matrix.config.runner }}
             node-count: ${{ matrix.config.node-count }}
@@ -550,6 +582,8 @@ jobs:
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
             config: ${{ toJSON(matrix.config) }}
+            fixed-sequence-acceptance-length: ${{ inputs.fixed-sequence-acceptance-length }}
+            random-range-ratio: ${{ inputs.random-range-ratio }}
             klaud-run: ${{ inputs.klaud-run }}
             runner: ${{ matrix.config.runner }}
             priority: ${{ matrix.config.priority }}
@@ -574,6 +608,8 @@ jobs:
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
             config: ${{ toJSON(matrix.config) }}
+            fixed-sequence-acceptance-length: ${{ inputs.fixed-sequence-acceptance-length }}
+            random-range-ratio: ${{ inputs.random-range-ratio }}
             klaud-run: ${{ inputs.klaud-run }}
             runner: ${{ matrix.config.runner }}
             priority: ${{ matrix.config.priority }}

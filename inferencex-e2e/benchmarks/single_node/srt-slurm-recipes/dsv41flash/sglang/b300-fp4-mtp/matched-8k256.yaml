@@ -1,0 +1,67 @@
+# Fixed-sequence DSpark comparison; acceptance is supplied explicitly at dispatch.
+base:
+  schema: 2
+  name: dsv41flash-fp4-b300-matched-8k256
+  model:
+    path: hf:deepseek-ai/DeepSeek-V4.1-Flash
+    container: lmsysorg/sglang:nightly-dev-cu13-20260922-582389ce@sha256:35ea4d321b0735051dcce2599fc495853ad1ef30f6a1908f0a75e74204362d14
+    precision: fp4
+  resources:
+    gpu_type: b300
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      args:
+        served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
+        trust-remote-code: true
+        chunked-prefill-size: 8192
+        prefill-decode-interval: 16
+        speculative-algorithm: DSPARK
+        speculative-dspark-block-size: 7
+        cuda-graph-max-bs-decode: 1
+        reasoning-parser: auto
+        tool-call-parser: auto
+        watchdog-timeout: 3600
+        enable-metrics: true
+        tensor-parallel-size: 8
+        expert-parallel-size: 8
+        data-parallel-size: 1
+        moe-runner-backend: deep_gemm
+        disable-shared-experts-fusion: true
+        speculative-num-draft-tokens: 8
+        context-length: 16384
+        max-running-requests: 1
+        mem-fraction-static: 0.8
+        swa-prefix-tails: 128
+        stream-interval: 1
+      env:
+        PYTHONNOUSERSITE: '1'
+        PYTHONUNBUFFERED: '1'
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        SGLANG_DEFAULT_THINKING: '1'
+        SGLANG_DSV41_REASONING_EFFORT: high
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1'
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
+        SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '0'
+      gpus: 8
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/single_node/srt_fixed_sequence.sh --trust-remote-code --dsv4
+    env:
+      MODEL: deepseek-ai/DeepSeek-V4.1-Flash
+      ISL: '8192'
+      OSL: '256'
+      RANDOM_RANGE_RATIO: '1.0'
+      USE_CHAT_TEMPLATE: 'true'
+      CONC: '1'
+override_tp8_c1: {}
