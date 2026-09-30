@@ -7,8 +7,7 @@ base:
   model:
     path: hf:deepseek-ai/DeepSeek-V4.1-Flash
     # Repinned to a nightly build that includes vllm-project/vllm#58655
-    # (mHC fused Triton seams), #53492 (sparse MLA Gluon kernel) and #58208
-    # (DSA candidate block-selection topk).
+    # (mHC fused Triton seams) and #53492 (sparse MLA Gluon kernel).
     container: vllm/vllm-openai-rocm:nightly-rocm100-36768d1bfd39094681cdbc8cb37d4b31c0729c89
     precision: fp4
   resources:
