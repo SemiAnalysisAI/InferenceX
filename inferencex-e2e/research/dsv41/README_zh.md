@@ -2,8 +2,9 @@
 
 [English](README.md) | [中文](README_zh.md)
 
-本实验仅用于研究对比，不作为正式性能提交。H200 的 W4A8 激活设置也作用于
-DSpark 草稿头，用户已明确要求在本次对比中启用。所有引擎均使用发布权重与原生
+本实验仅用于研究对比，不作为正式性能提交。历史 SGLang H200 测量按要求对
+目标模型和 DSpark 均使用 W4A8；原生 vLLM H200 则选择 Marlin BF16 MoE 激活
+和 FP8 Indexer，保留为明确标注条件的基线。所有引擎均使用发布权重与原生
 内核，不修改服务引擎。
 
 `experiment.py --mode both --output /logs/research --gpu-count 8` 先运行现有固定长度客户端，

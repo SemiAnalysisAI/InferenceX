@@ -3,9 +3,10 @@
 [English](README.md) | [中文](README_zh.md)
 
 Research-only experiments; these are not official performance submissions.
-The H200 W4A8 activation setting also applies to the DSpark head and was
-explicitly requested for the comparison. All engines use released weights and
-native kernels; no serving-engine patches are applied.
+Historical SGLang H200 runs used the requested W4A8 path for both target and
+DSpark. Native vLLM H200 runs instead select Marlin BF16 MoE activations and
+an FP8 indexer, and remain explicitly qualified baselines. All engines use
+released weights and native kernels; no serving-engine patches are applied.
 
 `experiment.py --mode both --output /logs/research --gpu-count 8` runs the existing fixed-length
 client first, then a separate 16-step CPU/GPU serving trace, then standalone
