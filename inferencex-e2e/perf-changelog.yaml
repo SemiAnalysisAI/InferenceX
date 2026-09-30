@@ -9540,3 +9540,13 @@
     - "Measure production V2 Engram hashing at 8K/16K with explicit token/history fixtures and exact all-index validation."
     - "测量生产 V2 Engram 在 8K/16K 的哈希性能，明确 token 与历史样例并逐一精确校验全部索引。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-8gpu-8k256
+    - dsv41flash-fp4-b300-vllm-8gpu-8k256
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Measure native indexer K projection through paged quantized writes with numerical and strided-storage validation."
+    - "测量原生 Indexer K 从投影到分页量化写入的完整流程，校验数值及跨步存储边界。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607

@@ -181,3 +181,15 @@ BF16 KV，每个 query 选择 128 个窗口/原始条目和 512 个压缩条目�
 历史解析，与接受预构造 n-gram 窗口的参考边界不同。所有输出整数均与独立
 标量计算逐一校验；三轮各保留 300 个内核时长样本及 trace。
 原生 gate 内核已包含权重转换和乘积计算，不额外添加独立权重准备时长。
+
+## 原生 Indexer K 前处理
+
+`vllm_indexer_k_prologue.py` 在 T=72、RoPE 维度64下，测量生产
+`ReplicatedLinear` 的 BF16 512→128 投影以及 `indexer_k_norm_rope_store`。
+使用正常单 rank vLLM 上下文，测试 page64/128 与跨步 page64 存储。
+所有 GPU 测量原生 FP8，Blackwell 额外测量 MXFP4。压缩比1保证每行
+输出一个 key；不计入 compressor 生成。缓存采用原生数值/缩放分区布局，
+不冒充参考实现的 mode0/mode1 变体。BF16 投影与 FP64 累加核对，
+精确校验缩放值、检查所有反量化结果误差界及跨步存储保护区。
+十组相邻预热/目标调用保留内核时长之和的中位数、GPU scope 跨度及原始
+trace。此协议不清空缓存。

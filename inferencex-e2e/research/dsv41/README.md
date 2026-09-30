@@ -224,3 +224,17 @@ n-gram windows. Every output integer is checked against independent scalar
 arithmetic; three rounds retain 300 kernel-duration samples and traces each.
 Native gate weight casts/products already occur inside the measured gate kernel;
 there is no separate production weight-preparation timing to add.
+
+## Native indexer K prologue
+
+`vllm_indexer_k_prologue.py` measures production `ReplicatedLinear` BF16
+512-to-128 projection followed by `indexer_k_norm_rope_store`, at T=72 with
+64 RoPE dimensions. It initializes a normal one-rank vLLM context. Cache page
+sizes 64/128 and a strided page64 backing are tested, with native FP8 on all
+GPUs and MXFP4 on Blackwell. Compression ratio1 makes every row emit a key;
+compressor generation is excluded. Cache layouts are native segregated values/
+scales, not reproductions of the reference's mode0/mode1 variants.
+Validation checks BF16 projection against FP64 accumulation, exact scale values,
+all dequantized rows against quantization bounds, and untouched strided guards.
+Ten adjacent warmup/target pairs retain median summed kernel durations, GPU
+scope spans and raw traces. There is no cache eviction in this protocol.
