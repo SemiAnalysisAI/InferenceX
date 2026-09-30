@@ -24,10 +24,6 @@ base:
     max_attempts: 1440
     interval_seconds: 10
 
-  # Starts the standalone Mooncake store daemons that lend decode-node host
-  # DRAM to the store (see MC_SIDECAR_* on the decode role).
-  setup_script: dsv4-gb300-mooncake-sidecar.sh
-
   # Tachometer's per-node exporters slow decode steps by a few percent and add
   # host memory on the head node; this ladder is a throughput measurement.
   observability:
@@ -51,6 +47,41 @@ base:
       type: mooncake-master
       args:
         - --eviction_high_watermark_ratio=0.90
+    # Decode ranks use a chunk cache, so their host DRAM only joins the store
+    # through standalone stores: four per decode node, so segments stay uniform
+    # with prefill's per-rank ones instead of one oversized segment per node.
+    - &decode-store
+      name: store-decode-0
+      type: mooncake-store
+      placement:
+        node: decode
+      args: ["--port", "8800"]
+      env:
+        MOONCAKE_PROTOCOL: rdma
+        MOONCAKE_DEVICE: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
+        MOONCAKE_GLOBAL_SEGMENT_SIZE: 180gb
+        MC_STORE_CLIENT_METRIC_INTERVAL: '5'
+        MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
+      preamble: |
+        ulimit -n 1048576
+        ulimit -l unlimited
+      readiness:
+        port: 8800
+    - <<: *decode-store
+      name: store-decode-1
+      args: ["--port", "8801"]
+      readiness:
+        port: 8801
+    - <<: *decode-store
+      name: store-decode-2
+      args: ["--port", "8802"]
+      readiness:
+        port: 8802
+    - <<: *decode-store
+      name: store-decode-3
+      args: ["--port", "8803"]
+      readiness:
+        port: 8803
   frontend:
     type: dynamo
     nginx_session_affinity: true
@@ -185,10 +216,6 @@ base:
         MC_STORE_CLIENT_METRIC_INTERVAL: '5'
         MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
         WITH_NVIDIA_PEERMEM: '0'
-        # Consumed by the setup script: each decode node starts this many
-        # standalone Mooncake store daemons of this size to lend its host DRAM.
-        MC_SIDECAR_SEGMENT_SIZE: 180GB
-        MC_SIDECAR_COUNT: '4'
       args:
         host: 0.0.0.0
         served-model-name: deepseek-ai/DeepSeek-V4-Pro-0813
