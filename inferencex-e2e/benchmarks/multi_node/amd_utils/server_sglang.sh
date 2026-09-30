@@ -310,15 +310,11 @@ PREFILL_ARGS=""
 # Per-worker Prometheus /metrics endpoints for aiperf's --server-metrics scrape;
 # the router on :30000 does not serve Prometheus (see ENABLE_METRICS).
 SERVER_METRICS_URLS=()
-# Per-worker base URLs for cache flushing between concurrency points; the router
-# does not fan /flush_cache out, so trace_replay.sh must POST to each worker.
-SERVER_FLUSH_URLS=()
 for i in $(seq 0 $((xP - 1))); do
     prefill_idx=$((i * PREFILL_NODES_PER_WORKER))
     PREFILL_HEADNODE_URLS[$i]="${IP_ARRAY[$prefill_idx]}:${HEADNODE_PORT}"
     PREFILL_ARGS="$PREFILL_ARGS --prefill http://${IP_ARRAY[$prefill_idx]}:8000"
     SERVER_METRICS_URLS+=("http://${IP_ARRAY[$prefill_idx]}:8000/metrics")
-    SERVER_FLUSH_URLS+=("http://${IP_ARRAY[$prefill_idx]}:8000")
 done
 
 DECODE_HEADNODE_URLS=()
@@ -328,13 +324,11 @@ for i in $(seq 0 $((yD - 1))); do
     DECODE_HEADNODE_URLS[$i]="${IP_ARRAY[$decode_idx]}:${HEADNODE_PORT}"
     DECODE_ARGS="$DECODE_ARGS --decode http://${IP_ARRAY[$decode_idx]}:8000"
     SERVER_METRICS_URLS+=("http://${IP_ARRAY[$decode_idx]}:8000/metrics")
-    SERVER_FLUSH_URLS+=("http://${IP_ARRAY[$decode_idx]}:8000")
 done
 
 echo "Prefill worker headnode list: ${PREFILL_HEADNODE_URLS[@]}"
 echo "Decode  worker headnode list: ${DECODE_HEADNODE_URLS[@]}"
 echo "Server metrics endpoints:     ${SERVER_METRICS_URLS[@]}"
-echo "Server flush endpoints:       ${SERVER_FLUSH_URLS[@]}"
 
 # KV_P2P_TRANSFER (from amd-master.yaml kv-p2p-transfer) overrides the
 # --disaggregation-transfer-backend baked into models.yaml base_flags.
@@ -1124,13 +1118,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
             export AIPERF_SERVER_METRICS_URLS
             echo "AIPERF_SERVER_METRICS_URLS=${AIPERF_SERVER_METRICS_URLS}"
         fi
-        # trace_replay.sh flushes these workers directly when CLEAR_CACHE_BETWEEN_CONC=1.
-        if [[ "${#SERVER_FLUSH_URLS[@]}" -gt 0 ]]; then
-            SERVER_FLUSH_URLS_CSV=$(IFS=,; echo "${SERVER_FLUSH_URLS[*]}")
-            export SERVER_FLUSH_URLS_CSV
-            echo "SERVER_FLUSH_URLS_CSV=${SERVER_FLUSH_URLS_CSV}"
-        fi
-        # trace_replay.sh signature: model_path model_name concurrency_list log_path
+        # trace_replay.sh signature: model_path model_name concurrency log_path
         BENCH_CMD="bash $SGLANG_WS_PATH/trace_replay.sh \
             $MODEL_DIR $MODEL_NAME $BENCH_MAX_CONCURRENCY /run_logs/slurm_job-${SLURM_JOB_ID}"
         echo "Benchmark runner: trace_replay.sh (agentic, KV_OFFLOADING=${KV_OFFLOADING}, backend=${KV_OFFLOAD_BACKEND:-none}, CONC=${BENCH_MAX_CONCURRENCY})"
@@ -1162,8 +1150,8 @@ if [ "$NODE_RANK" -eq 0 ]; then
             for _v in $INFERENCEX_RUNTIME_ENV_VARS \
                       ENGINE MODEL_NAME MODEL_PREFIX PRECISION FRAMEWORK SPEC_DECODING \
                       DURATION MAX_MODEL_LEN RESULT_FILENAME RUNNER_NAME RUNNER_TYPE IMAGE MODEL_PATH \
-                      AIPERF_SERVER_METRICS_URLS SERVER_FLUSH_URLS_CSV \
-                      ENABLE_METRICS IS_AGENTIC CLEAR_CACHE_BETWEEN_CONC FLUSH_DRAIN_TIMEOUT \
+                      AIPERF_SERVER_METRICS_URLS \
+                      ENABLE_METRICS IS_AGENTIC \
                       DISAGG IS_MULTINODE \
                       TP EP_SIZE DP_ATTENTION DCP_SIZE PCP_SIZE \
                       PREFILL_NUM_WORKERS PREFILL_TP PREFILL_EP PREFILL_DP_ATTN PREFILL_ENABLE_DP PREFILL_HARDWARE \

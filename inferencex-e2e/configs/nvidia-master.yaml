@@ -1145,6 +1145,22 @@ dsv4-fp4-b300-sglang-agentic-hicache-mtp:
   # Both paths share DSpark K=6 (1 step, 7 draft tokens) and
   # max-running-requests 2*CONC.
 
+dsv4-fp4-b300-sglang-agentic-hicache-eagle:
+  image: lmsysorg/sglang:dev-cu13-nightly-09242@sha256:c47bbe7448050608b4e08669c742df4835a45a95bf6b19f2c4e51a7f6609e9d5
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: cluster:b300-dsxe
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.95
+      search-space:
+      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv4/sglang/b300-fp4-eagle/agentic.yaml }
+      - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv4/sglang/b300-fp4-eagle/agentic.yaml }
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: mtp, conc-list: [64, 128, 256, 384, 512], router: { name: sglang-router, version: "0.3.2" }, srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv4/sglang/b300-fp4-eagle/agentic.yaml }
+
 qwen3.5-fp8-b200-sglang:
   image: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
   model: Qwen/Qwen3.5-397B-A17B-FP8
@@ -8175,7 +8191,6 @@ glm5.1-fp8-b200-tilert:
           - "PREFILL_IMAGE=vllm/vllm-openai:v0.26.0"
           - "PREFILL_NODES=1"
           - "SALLOC_TIME_LIMIT=45"
-          - "B200_SQUASH_DIR=/data/home/sa-shared/containers"
           - "MODEL_PATH=/data/home/sa-shared/gharunners/hf-hub-cache/hub/models--zai-org--GLM-5.1-FP8/snapshots/f396cf805182f4ca10fa675e1a99815b3ca384db"
           - "HF_HUB_CACHE_HOST_PATH=/data/home/sa-shared/gharunners/hf-hub-cache"
           - "TILERT_WEIGHTS_DIR=/data/home/sa-shared/gharunners/tilert-cache/glm5.1-fp8-8shard"
@@ -8201,7 +8216,6 @@ glm5.1-fp8-b200-tilert:
           - "PREFILL_IMAGE=vllm/vllm-openai:v0.26.0"
           - "PREFILL_NODES=1"
           - "SALLOC_TIME_LIMIT=90"
-          - "B200_SQUASH_DIR=/data/home/sa-shared/containers"
           - "MODEL_PATH=/data/home/sa-shared/gharunners/hf-hub-cache/hub/models--zai-org--GLM-5.1-FP8/snapshots/f396cf805182f4ca10fa675e1a99815b3ca384db"
           - "HF_HUB_CACHE_HOST_PATH=/data/home/sa-shared/gharunners/hf-hub-cache"
           - "TILERT_WEIGHTS_DIR=/data/home/sa-shared/gharunners/tilert-cache/glm5.1-fp8-8shard"
@@ -8324,7 +8338,7 @@ dsv41flash-fp4-gb200-sglang-agentic-dspark:
       - { tp: 2, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/sglang/gb200-fp4-mtp/agentic.yaml }
 
 dsv41flash-fp4-b300-vllm-agentic-dspark:
-  image: vllm/vllm-openai:deepseekv41-flash-0909
+  image: vllm/vllm-openai:nightly-ddd6fbca148a867aad1fcab7ec72f582b9977db4
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:b300-dsxe
@@ -8342,7 +8356,7 @@ dsv41flash-fp4-b300-vllm-agentic-dspark:
       - { tp: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [2, 4, 8, 16, 32, 64, 128], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/b300-fp4-mtp/agentic.yaml }
 
 dsv41flash-fp4-b200-vllm-agentic-dspark:
-  image: vllm/vllm-openai:nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3
+  image: vllm/vllm-openai:nightly-ddd6fbca148a867aad1fcab7ec72f582b9977db4
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:b200-nscale
@@ -8909,9 +8923,9 @@ dsv41flash-fp4-b300-sglang-agentic-dspark:
       - { tp: 4, ep: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/sglang/b300-fp4-mtp/agentic.yaml }
       - { tp: 2, ep: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/sglang/b300-fp4-mtp/agentic.yaml }
 
-# Official SGLang nightly; Engram weights in host DRAM, native DSpark draft.
+# Official SGLang nightly; TP4 C1/C2 use GPU Engram, other points use host DRAM.
 dsv41flash-fp4-gb300-sglang-agentic-dspark:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260922-582389ce@sha256:0e1b14e302619a42ef5581b87db6804651d4f946301cf543d74a3a1eb1c33b40
+  image: lmsysorg/sglang:dev-cu13-nightly-0924@sha256:d2c9929f8cc9889326203f6cbc46da48b69de42891b167592c9c76cc803d246e
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:gb300-nv
@@ -8923,4 +8937,5 @@ dsv41flash-fp4-gb300-sglang-agentic-dspark:
     - dram-utilization: 0.80
       search-space:
       - { tp: 2, ep: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/sglang/gb300-fp4-mtp/agentic.yaml }
-      - { tp: 4, ep: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/sglang/gb300-fp4-mtp/agentic.yaml }
+      - { tp: 4, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/sglang/gb300-fp4-mtp/agentic.yaml }
+      - { tp: 4, ep: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [4, 8, 16, 32, 64, 128], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/sglang/gb300-fp4-mtp/agentic.yaml }

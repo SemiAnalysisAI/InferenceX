@@ -40,7 +40,11 @@ def test_generator_uses_requested_checkout_with_safe_path(tmp_path, monkeypatch,
         shutil.copytree(source / "infx", root / "infx",
                         ignore=shutil.ignore_patterns("__pycache__", "tests"))
         (root / "configs").mkdir()
-        (root / "configs/runners.yaml").write_text("labels: {fixture: [node-a]}\nhardware: {}\n")
+        (root / "configs/runners.yaml").write_text(
+            'labels: {fixture: [node-a], "cluster:fixture": [node-a]}\n'
+            "clusters: {fixture: {gpus-per-node: 8, arch: x86_64, scheduler: slurm,"
+            " slurm: {partition: p, exclusive: false}}}\n"
+        )
         (root / "master.yaml").write_text(yaml.safe_dump({"fixture": {
             "image": "example/image:stable", "model": "selected revision",
             "model-prefix": "dsr1", "precision": "fp8", "framework": "sglang",

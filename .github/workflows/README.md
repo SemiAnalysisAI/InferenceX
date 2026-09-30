@@ -201,7 +201,7 @@ also fans out the selected matrix immediately. It does not reproduce
 ## Reusing an Approved PR Full Sweep
 
 `[skip-sweep]` skips PR benchmark setup only. Changelog and reuse checks still
-run. Pushes to `main` ignore it.
+run. The push-to-`main` `merge-ingest.yml` run ignores it.
 
 An authorized maintainer can reuse an eligible completed sweep without keeping
 a sweep label on the PR:
@@ -219,8 +219,7 @@ selects the latest successful eligible run automatically; bare `/use` is rejecte
 Both names share authorization, validation, and reactions.
 
 Source validation checks identity and artifacts, not full-matrix coverage.
-A successful `sweep-enabled` trim sweep can also be selected automatically;
-reusing it publishes only its recorded points on `main`. Acceptance does not
+Acceptance does not
 certify a green full sweep. Verify coverage and pin the run ID when a full sweep
 is required by the review process.
 
@@ -237,15 +236,26 @@ Remove and re-add the sweep label to force one.
 It merges `main`, preserves changelog bytes, fixes an appended `XXX` PR link,
 pushes a synchronization commit, waits for checks, then merges.
 
-The main run passes the selected source run ID and its own merge run ID directly
-to InferenceX-app. The app downloads source artifacts, keeps the newest upload
-for each exact artifact name, and ingests them with changelog metadata from the
-merge run. The normal ingestion code skips failed benchmark rows. Benchmark
-rows and public links retain source-run provenance. Source coverage is
-authoritative, so later matrix/eval policy changes do not invalidate reuse.
+At merge, `merge-ingest.yml` ("Merge Ingest") publishes the reused sweep. It
+runs on pushes to `main` that change `inferencex-e2e/perf-changelog.yaml`. Its
+single `ingest` job resolves the merge commit's PR, reuse command, and source
+run with `infx.workflows.reuse`, computes the changelog delta with
+`infx.matrix.plan`, and fails before uploading or dispatching anything unless
+reuse is validly authorized. It then uploads merge-time `changelog-metadata`
+and sends one `repository_dispatch` to InferenceX-app: `ingest-agentic-results`
+(with `database-target: production`) when the delta has agentic entries,
+otherwise `ingest-results`. The payload's `source-run-id` is the reused PR
+`run-sweep.yml` run and its `merge-run-id` is the Merge Ingest run.
 
-Reuse fails closed when authorized but ineligible or invalid. Without
-authorization, `main` runs the normal full sweep.
+The app downloads source artifacts, keeps the newest upload for each exact
+artifact name, and ingests them with changelog metadata from the merge run. The
+normal ingestion code skips failed benchmark rows. Benchmark rows and public
+links retain source-run provenance. Source coverage is authoritative, so later
+matrix/eval policy changes do not invalidate reuse.
+
+Reuse fails closed when authorized but ineligible or invalid. Pushes to `main`
+never run a sweep: `run-sweep.yml` is PR-only, and without reuse authorization
+the Merge Ingest run fails and nothing is benchmarked or ingested.
 
 ## Validation Architecture
 
