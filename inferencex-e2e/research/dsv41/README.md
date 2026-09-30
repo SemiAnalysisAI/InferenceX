@@ -288,3 +288,28 @@ rows verified. Ten warm and ten256MiB-ArgMax-evicted samples retain medians,
 range/median and eager spans. Hidden input quantization is included where the
 native backend uses it; the reference starts prequantized and uses scale1 KV.
 Mega Attention's fused Q RoPE is outside this standalone boundary.
+
+## Complete eight-rank MoE
+
+`vllm_complete_moe.py` runs installed `DeepseekV4MegaMoEExperts` with native
+`deep_gemm_mega_moe`, then `DeepseekV4MLP` for one shared expert and in-place
+addition, matching the native serial shared-expert order. Launch with torchrun
+on eight GPUs, DP8/EP8/TP1. Each case is a separate process group. All eight
+reported h×n/expert-count shapes are retained; the experiment explicitly
+interprets n as concatenated gate/up width (intermediate=n/2) and tokens per
+rank. These source-table ambiguities must remain qualified.
+
+A structured fixture gives each routed expert distinct representable FP4
+weights, six unique cyclic routes and nonuniform normalized weights. A closed-form
+FP64 reference checks all output values on all ranks before timing. One shared
+expert is included. Route selection and weight preparation are excluded.
+Twenty unprofiled CUDA-event samples and twenty profiled calls are separate;
+aggregate the maximum rank duration per iteration, then report its minimum and
+median. Never sum eight rank durations as latency. Traces contain each rank.
+The routed input is native FP8 with group128 scales; expert weights are MXFP4
+with E8M0 group32 scales. The shared MLP uses native MXFP8 dispatch.
+
+The pinned FlashInfer Mega adapter fails importing top-level `deep_gemm`;
+the selected native vLLM path loads its bundled library without an image patch.
+The native Mega implementation requires SM100-family hardware, so H200 is not
+an eligible A8W4 Mega comparison. This is not a claim that H200 cannot run MoE.

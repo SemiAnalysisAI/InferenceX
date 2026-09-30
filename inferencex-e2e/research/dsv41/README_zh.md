@@ -235,3 +235,24 @@ RoPE 尾部。全部 Q/KV 行与独立 FP32/BF16 参考核对（相对L2小于0.
 并检查未写入缓存行。热态及256MiB ArgMax驱逐后各测量十次，保留中位数、
 极差/中位数和 eager 跨度。原生后端使用输入量化时包含其成本；参考起点
 已量化，KV 使用scale1。Mega Attention 中融合的 Q RoPE 边界不同。
+
+## 完整八 rank MoE
+
+`vllm_complete_moe.py` 使用已安装的 `DeepseekV4MegaMoEExperts` 与原生
+`deep_gemm_mega_moe`，随后执行一个 `DeepseekV4MLP` shared expert 并原地
+相加，遵循原生串行 shared-expert 顺序。以 torchrun 在八张 GPU 上运行
+DP8/EP8/TP1，每个 case 单独建立进程组。保留八个 h×n/expert-count 形状；
+明确将 n 解释为 gate/up 拼接宽度（intermediate=n/2），token 数解释为每 rank。
+源表中这些定义不充分，必须保留限定说明。
+
+受控样例使用各专家不同、可精确表示的 FP4 权重，六条唯一循环路由和非均匀
+归一化路由权重。计时前用闭式 FP64 参考检查全部 rank 的所有输出。
+包含一个 shared expert，排除路由选择和权重准备。分别采集20次无 profiler
+CUDA-event 时长及20次带 profiler 调用；逐次取最慢 rank，再报告其最小值与
+中位数，不能把八个 rank 的时长相加当延迟。保留全部 rank 的 trace。
+路由输入为原生 FP8/group128，专家权重为 MXFP4/E8M0 group32，shared MLP
+使用原生 MXFP8 后端。
+
+固定镜像的 FlashInfer Mega 适配器无法导入顶层 `deep_gemm`；选择的原生 vLLM
+路径直接加载其内置库，不修改镜像。该 Mega 实现需要 SM100 系列硬件，H200
+不适用于此 A8W4 Mega 对比；这不意味着 H200 无法运行 MoE。

@@ -9590,3 +9590,13 @@
     - "Measure complete native attention prologue with packed-cache validation and warm/evicted timing protocols."
     - "测量完整原生 attention 前处理，校验分页缓存并保留热态及驱逐后计时。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-8gpu-8k256
+    - dsv41flash-fp4-b300-vllm-8gpu-8k256
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Add complete native eight-rank MoE with shared expert, distributed numerical validation and separate kernel/event timing."
+    - "新增包含 shared expert 的完整原生八 rank MoE，执行分布式数值校验并分别记录内核及 event 时长。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607
