@@ -601,4 +601,7 @@ uses W4A8 MegaMoE; H200 uses W4A8 FlashInfer. Each job requests four physical
 nodes. Record full active-batch evidence and separate steady decode from prefill
 interference before treating client TPOT as a decode-only comparison. The
 explicit AL input always means committed tokens including the verification token;
-source wording that does not specify inclusion remains a comparison qualification.
+the companion executor at the archived revision computes acceptance as accepted
+drafts / verification rounds + 1 and equivalent latency as target-plus-draft model
+execution time / that acceptance length. Its synchronized model timer and client
+streaming TPOT have different boundaries and must be reported separately.

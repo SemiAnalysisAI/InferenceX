@@ -47,6 +47,7 @@ base:
         max-running-requests: 32
         stream-interval: 1
         enable-dp-attention: true
+        enable-dp-lm-head: true
         max-prefill-tokens: 8192
         dist-timeout: 3600
       env:
@@ -59,6 +60,7 @@ base:
         SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
         SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '0'
         SGLANG_SIMULATE_ROUND_ROBIN_EXPERTS: '1'
+        SGLANG_RAGGED_VERIFY_MODE: static
         HF_HUB_CACHE: /hf_hub_cache
       gpus: 32
   benchmark:

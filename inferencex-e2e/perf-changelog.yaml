@@ -9197,3 +9197,17 @@
   - 新增研究专用原生 SGLang 四节点/32 GPU DSpark 对比：五个草稿 token、由调用方显式提供 AL、短拓扑验证及 128K 配置。原生轮转路由模拟均衡专家分配；Blackwell
     使用原生 W4A8 MegaMoE，H200 使用原生 W4A8 FlashInfer。
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607
+
+- config-keys:
+    - dsv41flash-fp4-h200-sglang-32gpu-smoke
+    - dsv41flash-fp4-h200-sglang-32gpu-128k256
+    - dsv41flash-fp4-b200-sglang-32gpu-smoke
+    - dsv41flash-fp4-b200-sglang-32gpu-128k256
+    - dsv41flash-fp4-b300-sglang-32gpu-smoke
+    - dsv41flash-fp4-b300-sglang-32gpu-128k256
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Enable the DP LM head and static DSpark verification required by the pinned native DP-attention implementation."
+    - "启用固定版本原生 DP attention 实现所要求的 DP LM head 和静态 DSpark 验证。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607
