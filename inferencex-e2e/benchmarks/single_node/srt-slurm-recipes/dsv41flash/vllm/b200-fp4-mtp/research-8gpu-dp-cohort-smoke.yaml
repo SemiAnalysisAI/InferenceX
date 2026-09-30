@@ -1,12 +1,12 @@
 base:
   schema: 2
-  name: dsv41flash-b300-vllm-8gpu-128k256
+  name: dsv41flash-b200-vllm-8gpu-dp-cohort-smoke
   model:
     path: hf:deepseek-ai/DeepSeek-V4.1-Flash
     container: vllm/vllm-openai:nightly-ddd6fbca148a867aad1fcab7ec72f582b9977db4
     precision: fp4
   resources:
-    gpu_type: b300
+    gpu_type: b200
     gpus_per_node: 8
   frontend:
     type: vllm
@@ -32,25 +32,27 @@ base:
         tool-call-parser: deepseek_v41
         enable-auto-tool-choice: true
         reasoning-parser: deepseek_v41
-        engram-config: '{"cpu_offload":true}'
+        engram-config: '{"cpu_offload": true, "dp_shared_memory": true}'
         attention-config: '{"backend":"FLASHINFER_MLA_SPARSE_DSV41","indexer_kv_dtype":"mxfp4","indexer_sparse_logits":true}'
         kv-cache-dtype: fp8
         speculative-config: '{"method": "dspark", "num_speculative_tokens": 5, "draft_sample_method":
           "probabilistic", "rejection_sample_method": "block", "enable_adaptive_verification":
           false}'
-        max-model-len: 132352
-        max-num-seqs: 384
+        max-model-len: 9472
         disable-uvicorn-access-log: true
-        tensor-parallel-size: 8
+        tensor-parallel-size: 1
         enable-expert-parallel: true
         max-num-batched-tokens: 8192
-        max-cudagraph-capture-size: 2048
+        max-num-seqs: 16
+        max-cudagraph-capture-size: 64
         gpu-memory-utilization: 0.85
         enable-prefix-caching: true
         profiler-config: '{"profiler": "torch", "torch_profiler_dir": "/logs/research/vllm-cohort-profiles",
           "torch_profiler_with_stack": false, "torch_profiler_record_shapes": true,
           "ignore_frontend": true, "max_iterations": 8, "detailed_trace_annotation":
           true}'
+        data-parallel-size: 8
+        all2all-backend: allgather_reducescatter
       env:
         VLLM_USE_RUST_FRONTEND: '0'
         PYTHONUNBUFFERED: '1'
@@ -60,22 +62,22 @@ base:
   benchmark:
     type: custom
     command: python3 /infmax-workspace/research/dsv41/vllm_cohort.py --output /logs
-      --profile-steps 8 --gpu-count 8 --dp-size 1 --result-layout single
+      --profile-steps 8 --gpu-count 8 --dp-size 8 --result-layout single
     env:
       MODEL: deepseek-ai/DeepSeek-V4.1-Flash
-      ISL: '131072'
+      ISL: '8192'
       OSL: '256'
-      CONC: '384'
-      CONC_LIST: '384'
+      CONC: '32'
+      CONC_LIST: '32'
       RANDOM_RANGE_RATIO: '1.0'
       USE_CHAT_TEMPLATE: 'true'
-override_tp8_c384:
+override_tp8_c32:
   roles:
     agg:
       args:
-        max-num-seqs: 384
-        max-cudagraph-capture-size: 2048
+        max-num-seqs: 16
+        max-cudagraph-capture-size: 64
   benchmark:
     env:
-      CONC: '384'
-      CONC_LIST: '384'
+      CONC: '32'
+      CONC_LIST: '32'

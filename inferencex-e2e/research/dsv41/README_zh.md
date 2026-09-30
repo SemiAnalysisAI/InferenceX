@@ -93,3 +93,7 @@ E8M0 scale 为 1，head weight 为 1/32，原生稠密权重使用 FP32。逐 qu
 原生 TopK 必须返回不重复的候选位置，且分数不低于原生 TopK 阈值。
 `analyze_trace.py` 也识别 vLLM 原生 `execute_` 标记，将关联 GPU 时间跨度标记为
 `VLLM_EXECUTE`，不假定其包含所有草稿或采样工作，也不将其等同于客户端 TPOT。
+
+原生 DP8/EP8 变体使用共享 CPU Engram 存储，每个 DP 副本内部为 TP1。
+客户端在前缀预热和测量间保持固定 DP rank；图捕获和序列预算按逐 DP batch 设置。
+DP 变体保留全局 batch 384/1536/2560，TP8 长上下文基线仅保留 batch384。

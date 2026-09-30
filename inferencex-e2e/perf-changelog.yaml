@@ -9370,3 +9370,28 @@
     - "Add native vLLM sparse-indexer pipeline diagnostics and recognize vLLM execution scopes in trace analysis; serving recipes unchanged."
     - "新增 vLLM 原生稀疏 Indexer 流水线诊断，并在 trace 分析中识别 vLLM 执行范围；服务配置不变。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607
+
+- config-keys:
+  - dsv41flash-fp4-b200-vllm-8gpu-dp-cohort-smoke
+  - dsv41flash-fp4-b200-vllm-8gpu-dp-128k256
+  - dsv41flash-fp4-b300-vllm-8gpu-dp-cohort-smoke
+  - dsv41flash-fp4-b300-vllm-8gpu-dp-128k256
+  scenario-type:
+  - fixed-seq-len
+  description:
+  - Add native vLLM DP8/EP8 research variants with shared CPU Engram tables, per-DP
+    concurrency and rank-affine prefix warmup; retain TP8 baseline.
+  - "\u65B0\u589E vLLM \u539F\u751F DP8/EP8 \u7814\u7A76\u53D8\u4F53\uFF0C\u4F7F\u7528\
+    \u5171\u4EAB CPU Engram \u8868\u3001\u9010 DP \u5E76\u53D1\u914D\u7F6E\u548C\u56FA\
+    \u5B9A rank \u7684\u524D\u7F00\u9884\u70ED\uFF0C\u4FDD\u7559 TP8 \u57FA\u7EBF\u3002"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-8gpu-128k256
+    - dsv41flash-fp4-b300-vllm-8gpu-128k256
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Keep TP8 long-context baseline at batch384; move larger global batches to native DP8/EP8 variants so per-engine token budgets preserve full decode batches."
+    - "TP8 长上下文基线仅保留 batch384；更大全局 batch 移至原生 DP8/EP8，确保逐引擎 token 预算能覆盖完整解码批次。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607

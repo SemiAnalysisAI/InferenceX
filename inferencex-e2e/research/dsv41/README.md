@@ -121,3 +121,8 @@ return unique candidate positions above the native score threshold.
 `analyze_trace.py` also recognizes native vLLM `execute_` annotations. Their
 correlated GPU spans are reported as `VLLM_EXECUTE`, without assuming that this
 scope includes all draft/sampling work or equating it to client TPOT.
+
+Native DP8/EP8 variants use shared CPU Engram storage and TP1 within each DP
+replica. The client pins requests to their DP rank across prefix warmup and
+measurement; graph/sequence budgets use per-DP batch. DP variants retain global
+batches 384/1536/2560. The TP8 long-context baseline is limited to batch384.

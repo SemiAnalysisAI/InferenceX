@@ -79,23 +79,3 @@ override_tp8_c384:
     env:
       CONC: '384'
       CONC_LIST: '384'
-override_tp8_c1536:
-  roles:
-    agg:
-      args:
-        max-num-seqs: 1536
-        max-cudagraph-capture-size: 2048
-  benchmark:
-    env:
-      CONC: '1536'
-      CONC_LIST: '1536'
-override_tp8_c2560:
-  roles:
-    agg:
-      args:
-        max-num-seqs: 2560
-        max-cudagraph-capture-size: 2048
-  benchmark:
-    env:
-      CONC: '2560'
-      CONC_LIST: '2560'
