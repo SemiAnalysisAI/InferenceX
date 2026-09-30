@@ -25,14 +25,16 @@
 # all. Devices are therefore left to the fabric, and UCX_TLS asks for srd, EFA's
 # transport, because EFA does not implement the verbs RC that rc requires.
 
+schema: 2
 name: kimi-k3-vllm-disagg-b300-1p1d-dcp8-dcp8-dspark4-mooncake-c48-agentic
 model:
   path: moonshotai/Kimi-K3
   container: vllm/vllm-openai:nightly-dev-x86_64-cu13-3696c77
   precision: fp4
 dynamo:
-  hash: ba83080ecd31c1ce918559e576d3c5bc9e092ff1
   install: true
+  source:
+    rev: ba83080ecd31c1ce918559e576d3c5bc9e092ff1
 slurm:
   time_limit: 06:00:00
 health_check:
@@ -41,15 +43,31 @@ health_check:
 resources:
   gpu_type: b300
   gpus_per_node: 8
-  prefill_nodes: 1
-  decode_nodes: 1
-  prefill_workers: 1
-  decode_workers: 1
-  gpus_per_prefill: 8
-  gpus_per_decode: 8
-infra:
-  etcd_nats_dedicated_node: false
-  nats_max_payload_mb: 32
+services:
+  - name: etcd
+    type: etcd
+    placement:
+      node: infra
+  - name: nats
+    type: nats
+    placement:
+      node: infra
+    options:
+      max_payload_mb: 32
+  - name: mooncake-master
+    type: mooncake-master
+    args:
+      - --default_kv_lease_ttl=60000
+      - --eviction_high_watermark_ratio=0.95
+      - --eviction_ratio=0.10
+    options:
+      store_config:
+        metadata_server: P2PHANDSHAKE
+        global_segment_size: 281GB
+        local_buffer_size: 4GB
+        protocol: rdma
+        mode: embedded
+        enable_offload: false
 frontend:
   type: dynamo
   enable_multiple_frontends: false
@@ -59,110 +77,58 @@ frontend:
   env:
     DYN_ROUTER_ACTIVE_REQUEST_EXPIRY_SECS: '3600'
     DYN_TOKENIZER_CACHE_BYTES: '8589934592'
-backend:
+engine:
   type: vllm
-  connector: null
+  connector:
   dp_launch_mode: per_node
-  kv_events_config:
-    prefill: true
-  mooncake_kv_store:
-    master_extra_args:
-    - --default_kv_lease_ttl=60000
-    - --eviction_high_watermark_ratio=0.95
-    - --eviction_ratio=0.10
-    store_config:
-      metadata_server: P2PHANDSHAKE
-      global_segment_size: 281GB
-      local_buffer_size: 4GB
-      protocol: rdma
-      mode: embedded
-      enable_offload: false
-  prefill_environment:
-    VLLM_USE_DIRECT_DCP_A2A: '1'
-    VLLM_USE_DIRECT_DCP_Q_GATHER: '1'
-    VLLM_USE_DIRECT_DCP_KV_GATHER: '1'
-    VLLM_ALLREDUCE_USE_FLASHINFER: '1'
-    VLLM_KIMI_K3_SHARD_SP_SHARED_EXPERT: '0'
-    DYN_REQUEST_PLANE: tcp
-    ETCD_LEASE_TTL: '600'
-    VLLM_ENGINE_READY_TIMEOUT_S: '3600'
-    VLLM_RPC_TIMEOUT: '600000'
-    TILELANG_CLEANUP_TEMP_FILES: '1'
-    VLLM_USE_NCCL_SYMM_MEM: '0'
-    NCCL_CUMEM_ENABLE: '1'
-    NCCL_MNNVL_ENABLE: '0'
-    NCCL_NVLS_ENABLE: '1'
-    VLLM_SERVER_DEV_MODE: '1'
-    VLLM_USE_V2_MODEL_RUNNER: '1'
-    VLLM_USE_RUST_FRONTEND: '1'
-    VLLM_MOONCAKE_LOAD_RECV_THREADS: '4'
-    MC_SLICE_SIZE: '1048576'
-    VLLM_CONNECTOR_PREFETCH_DEPTH: '8'
-    VLLM_CONNECTOR_PREFETCH_KV_CAP: '0.65'
-    VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: '1800'
-    VLLM_PREFIX_CACHE_RETENTION_INTERVAL: '0'
-    NCCL_P2P_LEVEL: NVL
-    MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
-    WITH_NVIDIA_PEERMEM: '0'
-    NCCL_NET_PLUGIN: none
-    UCX_MEMTYPE_CACHE: n
-    UCX_MEMTYPE_REG_WHOLE: n
-    UCX_RCACHE_MAX_UNRELEASED: '1024'
-    UCX_TCP_AF_PRIO: inet
-    VLLM_SSM_CONV_STATE_LAYOUT: DS
-    DG_JIT_CACHE_DIR: /tmp/dg-cache-kimi-k3-gb300-pd-dspark-mooncake-{job_id}
-    PYTHONHASHSEED: '42'
-    PYTHONNOUSERSITE: '1'
-    PYTHONUNBUFFERED: '1'
-    TORCH_CUDA_ARCH_LIST: '10.0'
-    MC_STORE_CLIENT_METRIC: '1'
-    MC_STORE_CLIENT_METRIC_INTERVAL: '5'
-    MC_TE_METRIC: '0'
-    UCX_TLS: srd,cuda_copy,cuda_ipc,sm,self
-  decode_environment:
-    VLLM_USE_DIRECT_DCP_A2A: '1'
-    VLLM_USE_DIRECT_DCP_Q_GATHER: '1'
-    VLLM_USE_DIRECT_DCP_KV_GATHER: '1'
-    VLLM_ALLREDUCE_USE_FLASHINFER: '1'
-    VLLM_KIMI_K3_SHARD_SP_SHARED_EXPERT: '0'
-    DYN_REQUEST_PLANE: tcp
-    ETCD_LEASE_TTL: '600'
-    VLLM_ENGINE_READY_TIMEOUT_S: '3600'
-    VLLM_RPC_TIMEOUT: '600000'
-    TILELANG_CLEANUP_TEMP_FILES: '1'
-    VLLM_USE_NCCL_SYMM_MEM: '0'
-    NCCL_CUMEM_ENABLE: '1'
-    NCCL_MNNVL_ENABLE: '0'
-    NCCL_NVLS_ENABLE: '1'
-    VLLM_SERVER_DEV_MODE: '1'
-    VLLM_USE_V2_MODEL_RUNNER: '1'
-    VLLM_USE_RUST_FRONTEND: '1'
-    VLLM_MOONCAKE_LOAD_RECV_THREADS: '4'
-    MC_SLICE_SIZE: '1048576'
-    VLLM_CONNECTOR_PREFETCH_DEPTH: '8'
-    VLLM_CONNECTOR_PREFETCH_KV_CAP: '0.65'
-    VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: '1800'
-    VLLM_PREFIX_CACHE_RETENTION_INTERVAL: '0'
-    NCCL_P2P_LEVEL: NVL
-    MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
-    WITH_NVIDIA_PEERMEM: '0'
-    NCCL_NET_PLUGIN: none
-    UCX_MEMTYPE_CACHE: n
-    UCX_MEMTYPE_REG_WHOLE: n
-    UCX_RCACHE_MAX_UNRELEASED: '1024'
-    UCX_TCP_AF_PRIO: inet
-    VLLM_SSM_CONV_STATE_LAYOUT: DS
-    DG_JIT_CACHE_DIR: /tmp/dg-cache-kimi-k3-gb300-pd-dspark-mooncake-{job_id}
-    PYTHONHASHSEED: '42'
-    PYTHONNOUSERSITE: '1'
-    PYTHONUNBUFFERED: '1'
-    TORCH_CUDA_ARCH_LIST: '10.0'
-    MC_STORE_CLIENT_METRIC: '1'
-    MC_STORE_CLIENT_METRIC_INTERVAL: '5'
-    MC_TE_METRIC: '0'
-    UCX_TLS: srd,cuda_copy,cuda_ipc,sm,self
-  vllm_config:
-    prefill:
+roles:
+  prefill:
+    nodes: 1
+    workers: 1
+    gpus: 8
+    env:
+      VLLM_USE_DIRECT_DCP_A2A: '1'
+      VLLM_USE_DIRECT_DCP_Q_GATHER: '1'
+      VLLM_USE_DIRECT_DCP_KV_GATHER: '1'
+      VLLM_ALLREDUCE_USE_FLASHINFER: '1'
+      VLLM_KIMI_K3_SHARD_SP_SHARED_EXPERT: '0'
+      DYN_REQUEST_PLANE: tcp
+      ETCD_LEASE_TTL: '600'
+      VLLM_ENGINE_READY_TIMEOUT_S: '3600'
+      VLLM_RPC_TIMEOUT: '600000'
+      TILELANG_CLEANUP_TEMP_FILES: '1'
+      VLLM_USE_NCCL_SYMM_MEM: '0'
+      NCCL_CUMEM_ENABLE: '1'
+      NCCL_MNNVL_ENABLE: '0'
+      NCCL_NVLS_ENABLE: '1'
+      VLLM_SERVER_DEV_MODE: '1'
+      VLLM_USE_V2_MODEL_RUNNER: '1'
+      VLLM_USE_RUST_FRONTEND: '1'
+      VLLM_MOONCAKE_LOAD_RECV_THREADS: '4'
+      MC_SLICE_SIZE: '1048576'
+      VLLM_CONNECTOR_PREFETCH_DEPTH: '8'
+      VLLM_CONNECTOR_PREFETCH_KV_CAP: '0.65'
+      VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: '1800'
+      VLLM_PREFIX_CACHE_RETENTION_INTERVAL: '0'
+      NCCL_P2P_LEVEL: NVL
+      MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
+      WITH_NVIDIA_PEERMEM: '0'
+      NCCL_NET_PLUGIN: none
+      UCX_MEMTYPE_CACHE: n
+      UCX_MEMTYPE_REG_WHOLE: n
+      UCX_RCACHE_MAX_UNRELEASED: '1024'
+      UCX_TCP_AF_PRIO: inet
+      VLLM_SSM_CONV_STATE_LAYOUT: DS
+      DG_JIT_CACHE_DIR: /tmp/dg-cache-kimi-k3-gb300-pd-dspark-mooncake-{job_id}
+      PYTHONHASHSEED: '42'
+      PYTHONNOUSERSITE: '1'
+      PYTHONUNBUFFERED: '1'
+      TORCH_CUDA_ARCH_LIST: '10.0'
+      MC_STORE_CLIENT_METRIC: '1'
+      MC_STORE_CLIENT_METRIC_INTERVAL: '5'
+      MC_TE_METRIC: '0'
+      UCX_TLS: srd,cuda_copy,cuda_ipc,sm,self
+    args:
       no-enable-flashinfer-autotune: true
       enable-logging-iteration-details: true
       kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"compact_group_io":true,"max_load_batch_keys":2,"enable_cross_layers_blocks":false,"enable_offload":false}}]}}'
@@ -183,7 +149,54 @@ backend:
       attention-config: '{"mla_prefill_backend": "TRTLLM_RAGGED", "use_prefill_query_quantization": true}'
       speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":4,"rejection_sample_method":"block","draft_sample_method":"probabilistic"}'
       enable-prefix-caching: true
-    decode:
+    kv_events: true
+  decode:
+    nodes: 1
+    workers: 1
+    gpus: 8
+    env:
+      VLLM_USE_DIRECT_DCP_A2A: '1'
+      VLLM_USE_DIRECT_DCP_Q_GATHER: '1'
+      VLLM_USE_DIRECT_DCP_KV_GATHER: '1'
+      VLLM_ALLREDUCE_USE_FLASHINFER: '1'
+      VLLM_KIMI_K3_SHARD_SP_SHARED_EXPERT: '0'
+      DYN_REQUEST_PLANE: tcp
+      ETCD_LEASE_TTL: '600'
+      VLLM_ENGINE_READY_TIMEOUT_S: '3600'
+      VLLM_RPC_TIMEOUT: '600000'
+      TILELANG_CLEANUP_TEMP_FILES: '1'
+      VLLM_USE_NCCL_SYMM_MEM: '0'
+      NCCL_CUMEM_ENABLE: '1'
+      NCCL_MNNVL_ENABLE: '0'
+      NCCL_NVLS_ENABLE: '1'
+      VLLM_SERVER_DEV_MODE: '1'
+      VLLM_USE_V2_MODEL_RUNNER: '1'
+      VLLM_USE_RUST_FRONTEND: '1'
+      VLLM_MOONCAKE_LOAD_RECV_THREADS: '4'
+      MC_SLICE_SIZE: '1048576'
+      VLLM_CONNECTOR_PREFETCH_DEPTH: '8'
+      VLLM_CONNECTOR_PREFETCH_KV_CAP: '0.65'
+      VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: '1800'
+      VLLM_PREFIX_CACHE_RETENTION_INTERVAL: '0'
+      NCCL_P2P_LEVEL: NVL
+      MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
+      WITH_NVIDIA_PEERMEM: '0'
+      NCCL_NET_PLUGIN: none
+      UCX_MEMTYPE_CACHE: n
+      UCX_MEMTYPE_REG_WHOLE: n
+      UCX_RCACHE_MAX_UNRELEASED: '1024'
+      UCX_TCP_AF_PRIO: inet
+      VLLM_SSM_CONV_STATE_LAYOUT: DS
+      DG_JIT_CACHE_DIR: /tmp/dg-cache-kimi-k3-gb300-pd-dspark-mooncake-{job_id}
+      PYTHONHASHSEED: '42'
+      PYTHONNOUSERSITE: '1'
+      PYTHONUNBUFFERED: '1'
+      TORCH_CUDA_ARCH_LIST: '10.0'
+      MC_STORE_CLIENT_METRIC: '1'
+      MC_STORE_CLIENT_METRIC_INTERVAL: '5'
+      MC_TE_METRIC: '0'
+      UCX_TLS: srd,cuda_copy,cuda_ipc,sm,self
+    args:
       no-enable-flashinfer-autotune: true
       enable-logging-iteration-details: true
       kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"compact_group_io":true,"max_load_batch_keys":2,"enable_cross_layers_blocks":false,"enable_offload":false}}]}}'
@@ -207,7 +220,8 @@ backend:
 sbatch_directives:
   cpus-per-task: '72'
   mem: '0'
-  comment: '''{"OccupiedIdleGPUsJobReaper":{"exemptIdleTimeMins":"60","reason":"model_loading","description":"Very large model will take extra loading time."}}'''
+  comment: '''{"OccupiedIdleGPUsJobReaper":{"exemptIdleTimeMins":"60","reason":"model_loading","description":"Very large model
+    will take extra loading time."}}'''
 srun_options:
   mem: '0'
   container-remap-root: ''

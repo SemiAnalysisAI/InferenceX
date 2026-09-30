@@ -25,6 +25,7 @@
 # all. Devices are therefore left to the fabric, and UCX_TLS asks for srd, EFA's
 # transport, because EFA does not implement the verbs RC that rc requires.
 
+schema: 2
 name: kimi-k3-vllm-agg-b300-dcp8-dspark7-maxseq2-mooncake-c1-agentic
 model:
   path: moonshotai/Kimi-K3
@@ -33,12 +34,31 @@ model:
 resources:
   gpu_type: b300
   gpus_per_node: 8
-  agg_nodes: 1
-  agg_workers: 1
-  gpus_per_agg: 8
-infra:
-  etcd_nats_dedicated_node: false
-  nats_max_payload_mb: 32
+services:
+  - name: etcd
+    type: etcd
+    placement:
+      node: infra
+  - name: nats
+    type: nats
+    placement:
+      node: infra
+    options:
+      max_payload_mb: 32
+  - name: mooncake-master
+    type: mooncake-master
+    args:
+      - --default_kv_lease_ttl=60000
+      - --eviction_high_watermark_ratio=0.95
+      - --eviction_ratio=0.10
+    options:
+      store_config:
+        metadata_server: P2PHANDSHAKE
+        global_segment_size: 281GB
+        local_buffer_size: 4GB
+        protocol: rdma
+        mode: embedded
+        enable_offload: false
 frontend:
   type: dynamo
   enable_multiple_frontends: false
@@ -49,45 +69,37 @@ frontend:
     DYN_ROUTER_ACTIVE_REQUEST_EXPIRY_SECS: '3600'
     DYN_TOKENIZER_CACHE_BYTES: '8589934592'
     PYTHONPYCACHEPREFIX: /tmp/vllm-pycache-kimi-k3
-backend:
+engine:
   type: vllm
-  connector: null
-  mooncake_kv_store:
-    master_extra_args:
-    - --default_kv_lease_ttl=60000
-    - --eviction_high_watermark_ratio=0.95
-    - --eviction_ratio=0.10
-    store_config:
-      metadata_server: P2PHANDSHAKE
-      global_segment_size: 281GB
-      local_buffer_size: 4GB
-      protocol: rdma
-      mode: embedded
-      enable_offload: false
-  aggregated_environment:
-    VLLM_ALLREDUCE_USE_FLASHINFER: '1'
-    VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION: '1'
-    VLLM_USE_DIRECT_DCP_A2A: '1'
-    VLLM_USE_DIRECT_DCP_Q_GATHER: '1'
-    VLLM_USE_DIRECT_DCP_KV_GATHER: '1'
-    ETCD_LEASE_TTL: '120'
-    VLLM_ENGINE_READY_TIMEOUT_S: '3600'
-    VLLM_RPC_TIMEOUT: '600000'
-    VLLM_USE_V2_MODEL_RUNNER: '1'
-    VLLM_USE_RUST_FRONTEND: '1'
-    VLLM_MOONCAKE_LOAD_RECV_THREADS: '4'
-    VLLM_PREFIX_CACHE_RETENTION_INTERVAL: '0'
-    VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS: '0'
-    MC_SLICE_SIZE: '1048576'
-    WITH_NVIDIA_PEERMEM: '0'
-    VLLM_LOG_STATS_INTERVAL: '1'
-    PYTHONHASHSEED: '42'
-    PYTHONNOUSERSITE: '1'
-    PYTHONUNBUFFERED: '1'
-    TORCH_CUDA_ARCH_LIST: '10.0'
-    UCX_TLS: srd,cuda_copy,cuda_ipc,sm,self
-  vllm_config:
-    aggregated:
+  connector:
+roles:
+  agg:
+    nodes: 1
+    workers: 1
+    gpus: 8
+    env:
+      VLLM_ALLREDUCE_USE_FLASHINFER: '1'
+      VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION: '1'
+      VLLM_USE_DIRECT_DCP_A2A: '1'
+      VLLM_USE_DIRECT_DCP_Q_GATHER: '1'
+      VLLM_USE_DIRECT_DCP_KV_GATHER: '1'
+      ETCD_LEASE_TTL: '120'
+      VLLM_ENGINE_READY_TIMEOUT_S: '3600'
+      VLLM_RPC_TIMEOUT: '600000'
+      VLLM_USE_V2_MODEL_RUNNER: '1'
+      VLLM_USE_RUST_FRONTEND: '1'
+      VLLM_MOONCAKE_LOAD_RECV_THREADS: '4'
+      VLLM_PREFIX_CACHE_RETENTION_INTERVAL: '0'
+      VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS: '0'
+      MC_SLICE_SIZE: '1048576'
+      WITH_NVIDIA_PEERMEM: '0'
+      VLLM_LOG_STATS_INTERVAL: '1'
+      PYTHONHASHSEED: '42'
+      PYTHONNOUSERSITE: '1'
+      PYTHONUNBUFFERED: '1'
+      TORCH_CUDA_ARCH_LIST: '10.0'
+      UCX_TLS: srd,cuda_copy,cuda_ipc,sm,self
+    args:
       kv-transfer-config: '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"compact_group_io":true,"max_load_batch_keys":2,"enable_offload":false}}'
       served-model-name: moonshotai/Kimi-K3
       load-format: fastsafetensors
@@ -130,8 +142,9 @@ benchmark:
     HF_HUB_CACHE: /hf_hub_cache
     WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126
 dynamo:
-  hash: ba83080ecd31c1ce918559e576d3c5bc9e092ff1
   install: true
+  source:
+    rev: ba83080ecd31c1ce918559e576d3c5bc9e092ff1
 identity:
   model:
     repo: moonshotai/Kimi-K3
@@ -144,7 +157,8 @@ slurm:
 sbatch_directives:
   mem: '0'
   cpus-per-task: '72'
-  comment: '''{"OccupiedIdleGPUsJobReaper":{"exemptIdleTimeMins":"60","reason":"model_loading","description":"Very large model will take extra loading time."}}'''
+  comment: '''{"OccupiedIdleGPUsJobReaper":{"exemptIdleTimeMins":"60","reason":"model_loading","description":"Very large model
+    will take extra loading time."}}'''
 srun_options:
   mem: '0'
   container-remap-root: ''
