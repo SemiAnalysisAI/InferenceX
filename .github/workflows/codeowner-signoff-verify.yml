@@ -42,7 +42,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: write # Publish PR feedback.
-      issues: write # Update the verdict comment.
+      issues: write # Post a new verdict comment.
       actions: read # Read workflow runs and artifacts.
     steps:
       - name: Checkout trusted workflow code
@@ -52,117 +52,37 @@ jobs:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
 
+      - name: Select Python project
+        run: |
+          python_project="$GITHUB_WORKSPACE"
+          if [[ -f "$python_project/inferencex-e2e/pyproject.toml" ]]; then
+            python_project="$python_project/inferencex-e2e"
+          fi
+          test -f "$python_project/pyproject.toml"
+          echo "INFERENCEX_PYTHON_PROJECT=$python_project" >> "$GITHUB_ENV"
+
       - name: Set up uv
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+            inferencex-e2e/pyproject.toml
+            inferencex-e2e/uv.lock
 
       - name: Check changed-file ownership
         id: scope
         env:
           GH_TOKEN: ${{ github.token }}
-        run: uv run --locked --extra workflows python -m infx.workflows.signoff_scope
+        run: uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked --extra workflows python -m infx.workflows.signoff_scope
 
       - name: Resolve PR state and sign-off metadata
         id: resolve
         if: steps.scope.outputs.required == 'true'
         env:
+          GH_TOKEN: ${{ github.token }}
           SCOPED_HEAD_SHA: ${{ steps.scope.outputs.head-sha }}
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        with:
-          script: |
-            const owner = context.repo.owner;
-            const repo = context.repo.repo;
-            const repoFull = `${owner}/${repo}`;
-            const eventName = context.eventName;
-            let prNumber, author, refId, kind, fetchCmd;
-            if (eventName === 'issue_comment') {
-              prNumber = context.payload.issue.number;
-              author = context.payload.comment.user.login;
-              refId = context.payload.comment.id;
-              kind = 'conversation comment';
-              fetchCmd = `gh api repos/${repoFull}/issues/comments/${refId} --jq .body`;
-            } else if (eventName === 'pull_request_review') {
-              prNumber = context.payload.pull_request.number;
-              author = context.payload.review.user.login;
-              refId = context.payload.review.id;
-              kind = 'review summary';
-              fetchCmd = `gh api repos/${repoFull}/pulls/${prNumber}/reviews/${refId} --jq .body`;
-            } else if (eventName === 'pull_request_review_comment') {
-              prNumber = context.payload.pull_request.number;
-              author = context.payload.comment.user.login;
-              refId = context.payload.comment.id;
-              kind = 'inline review comment';
-              fetchCmd = `gh api repos/${repoFull}/pulls/comments/${refId} --jq .body`;
-            } else if (eventName === 'workflow_dispatch') {
-              // Parse a sign-off URL like
-              //   https://github.com/OWNER/REPO/pull/123#issuecomment-456
-              //   .../pull/123#pullrequestreview-456
-              //   .../pull/123#discussion_r456
-              const url = (context.payload.inputs && context.payload.inputs.comment_url) || '';
-              const prMatch = url.match(/\/pull\/(\d+)/);
-              if (!prMatch) {
-                core.setOutput('proceed', 'false');
-                core.setFailed(`comment_url must contain /pull/<number>: ${url}`);
-                return;
-              }
-              prNumber = parseInt(prMatch[1], 10);
-              let m;
-              if ((m = url.match(/#issuecomment-(\d+)/))) {
-                refId = m[1];
-                kind = 'conversation comment';
-                fetchCmd = `gh api repos/${repoFull}/issues/comments/${refId} --jq .body`;
-                const c = await github.rest.issues.getComment({ owner, repo, comment_id: parseInt(refId, 10) });
-                author = c.data.user.login;
-              } else if ((m = url.match(/#pullrequestreview-(\d+)/))) {
-                refId = m[1];
-                kind = 'review summary';
-                fetchCmd = `gh api repos/${repoFull}/pulls/${prNumber}/reviews/${refId} --jq .body`;
-                const r = await github.rest.pulls.getReview({ owner, repo, pull_number: prNumber, review_id: parseInt(refId, 10) });
-                author = r.data.user.login;
-              } else if ((m = url.match(/#discussion_r(\d+)/))) {
-                refId = m[1];
-                kind = 'inline review comment';
-                fetchCmd = `gh api repos/${repoFull}/pulls/comments/${refId} --jq .body`;
-                const rc = await github.rest.pulls.getReviewComment({ owner, repo, comment_id: parseInt(refId, 10) });
-                author = rc.data.user.login;
-              } else {
-                core.setOutput('proceed', 'false');
-                core.setFailed(`comment_url must end with #issuecomment-<id>, #pullrequestreview-<id>, or #discussion_r<id>: ${url}`);
-                return;
-              }
-            } else {
-              core.setOutput('proceed', 'false');
-              return;
-            }
-
-            const { data: pr } = await github.rest.pulls.get({
-              owner, repo, pull_number: prNumber,
-            });
-
-            if (pr.head.sha !== process.env.SCOPED_HEAD_SHA) {
-              core.setFailed('PR head changed while determining sign-off scope; retry on the current head.');
-              return;
-            }
-
-            if (eventName !== 'workflow_dispatch' && (pr.state !== 'open' || pr.draft)) {
-              core.info(`PR #${prNumber} is not ready; skipping.`);
-              return;
-            }
-            const { data: permission } = await github.rest.repos.getCollaboratorPermissionLevel({
-              owner, repo, username: context.actor,
-            });
-            if (!['admin', 'write'].includes(permission?.permission) ||
-                !['admin', 'maintain', 'write'].includes(permission?.role_name) ||
-                context.actor.endsWith('[bot]') || context.payload.sender?.type === 'Bot') {
-              core.info(`Actor ${context.actor} cannot request verification.`);
-              return;
-            }
-
-            core.setOutput('proceed', 'true');
-            core.setOutput('pr-number', String(prNumber));
-            core.setOutput('head-sha', pr.head.sha);
-            core.setOutput('signoff-author', author);
-            core.setOutput('signoff-kind', kind);
-            core.setOutput('signoff-fetch-cmd', fetchCmd);
+        run: uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked --extra workflows python -m infx.workflows.signoff_resolve
 
       - name: Render verifier prompt
         if: steps.resolve.outputs.proceed == 'true'
@@ -182,16 +102,23 @@ jobs:
           grep -q "PR #${PR_NUMBER}" /tmp/codeowner-signoff-verify-prompt.md
           wc -c /tmp/codeowner-signoff-verify-prompt.md
 
+      - name: Install Claude Code 2.1.282
+        id: claude_cli
+        if: steps.resolve.outputs.proceed == 'true'
+        run: | # zizmor: ignore[adhoc-packages] Claude CLI and its native packages are pinned to 2.1.282
+          npm install --prefix "$RUNNER_TEMP/claude-code" --no-audit --no-fund @anthropic-ai/claude-code@2.1.282
+          claude_cli="$RUNNER_TEMP/claude-code/node_modules/.bin/claude"
+          test "$("$claude_cli" --version)" = "2.1.282 (Claude Code)"
+          echo "path=$claude_cli" >> "$GITHUB_OUTPUT"
       - name: Verify sign-off with Claude
         id: claude
         if: steps.resolve.outputs.proceed == 'true'
-        uses: anthropics/claude-code-action@0d0e0876d3eaa933f45dc692f7a4312c83caf36f # v1.0.218
+        uses: anthropics/claude-code-action@9171db3e57d6a3140a37ddc2ba92788584e0ead6 # v1.0.234
         env:
           # Repository verifier credential; trusted code checks writer authorization before this step.
           GH_TOKEN: ${{ secrets.AGENT_PAT }} # zizmor: ignore[secrets-outside-env]
           # Repository verifier credential; trusted code checks writer authorization before this step.
           GITHUB_TOKEN: ${{ secrets.AGENT_PAT }} # zizmor: ignore[secrets-outside-env]
-          INFERENCEMAX_ROOT: ${{ github.workspace }}
           BASH_DEFAULT_TIMEOUT_MS: "1800000"
           BASH_MAX_TIMEOUT_MS: "3600000"
         with:
@@ -199,6 +126,7 @@ jobs:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }} # zizmor: ignore[secrets-outside-env]
           # Repository verifier credential; trusted code checks writer authorization before this step.
           github_token: ${{ secrets.AGENT_PAT }} # zizmor: ignore[secrets-outside-env]
+          path_to_claude_code_executable: ${{ steps.claude_cli.outputs.path }}
           track_progress: false
           allowed_bots: ''
           additional_permissions: |
@@ -207,29 +135,22 @@ jobs:
             {"fastMode": true}
 
           claude_args: |
-            --model 'claude-fable-5-1'
-            --mcp-config .github/mcp-ci.json '{"mcpServers": {"fetch": {"command": "npx", "args": ["-y", "@anthropic-ai/mcp-server-fetch@latest"]}}}'
-            --allowedTools "Read,Write,Glob,Grep,WebFetch,mcp__github__*,mcp__github_ci__*,mcp__fetch__*,mcp__inferencemax-repos__*,Bash"
+            --model 'claude-opus-5-5'
+            --mcp-config '{"mcpServers": {"fetch": {"command": "npx", "args": ["-y", "@anthropic-ai/mcp-server-fetch@latest"]}}}'
+            --allowedTools "Read,Write,Glob,Grep,WebFetch,mcp__github__*,mcp__github_ci__*,mcp__fetch__*,Bash"
           prompt: |
             Read the file /tmp/codeowner-signoff-verify-prompt.md and follow the
             instructions in it exactly — it is your complete task specification,
             already rendered with this run's PR number, head SHA, and sign-off
             metadata.
 
-      - name: Update verdict comment
+      - name: Post verdict comment
         if: always() && steps.resolve.outputs.proceed == 'true'
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
+          GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ steps.scope.outputs.head-sha }}
           PR_NUMBER: ${{ steps.scope.outputs.pr-number }}
+          SIGNOFF_KEY: ${{ steps.resolve.outputs.signoff-key }}
           VERIFICATION_SUCCEEDED: ${{ steps.claude.outcome == 'success' }}
-        with:
-          script: |
-            const { publish } = require('./.github/scripts/codeowner-signoff.cjs');
-            await publish({
-              github, context, core,
-              prNumber: Number(process.env.PR_NUMBER),
-              headSha: process.env.HEAD_SHA,
-              verdictPath: '/tmp/codeowner-signoff-verdict.md',
-              verificationSucceeded: process.env.VERIFICATION_SUCCEEDED === 'true',
-            });
+          VERDICT_PATH: /tmp/codeowner-signoff-verdict.md
+        run: uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked --extra workflows python -m infx.workflows.signoff_publish
