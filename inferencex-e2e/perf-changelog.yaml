@@ -9158,3 +9158,11 @@
     - "Port the DeepSeek-V4-Pro-0813 MI355X ATOM 1P1D AgentX config from the legacy amd_utils path to a native srt-slurm recipe (benchmarks/multi_node/srt-slurm-recipes/dsv4/atom/mi355x-fp4/agentx/disagg-lmcache-dspark.yaml), one override variant per point. Server flags, env, AToMesh routing policies and decode CUDA-graph capture sizes match the legacy server_atom.sh for every tier: TP8 at concurrency 1 and 16, DP attention with prefill TBO at 64 and 128, and DP attention with ATOM's in-process LMCache CPU offload (lmcache_offload, 187 GB per prefill rank) at 256. Golden acceptance 3.01 for DSpark with three draft tokens is now injected by the srt-slurm path, the same value the legacy models_atom.yaml hardcoded."
     - "The LMCache tier uses srt-slurm's extra-kv-connectors (NVIDIA/srt-slurm#507, in v2.36.0) to add lmcache_offload next to the generated Mooncake connector."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3543
+
+- config-keys:
+    - glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Enable TensorRT-LLM iteration perf stats (enable_iter_perf_stats: true) on the prefill worker of the GB300 1P1D TP8 concurrency 1 MTP5 variant (override_1p1d_tp8_c1_b1_mtp5), matching the other GLM-5.2 GB300 disagg variants. No serving, parallelism, precision or draft-model change."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD

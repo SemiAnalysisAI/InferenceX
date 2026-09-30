@@ -206,6 +206,7 @@ override_1p1d_tp8_c1_b1_mtp5:
       workers: 1
       args:
         disable_overlap_scheduler: true
+        enable_iter_perf_stats: true
         scheduler_config:
           context_chunking_policy: EQUAL_PROGRESS
     decode:
