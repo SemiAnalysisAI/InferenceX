@@ -29,6 +29,9 @@ base:
         data-parallel-size: 1
         expert-parallel-size: 1
         attention-backend: aiter
+        # This arm does not use ROCm quick all-reduce, so AITER allreduce
+        # fusion stays on, as on the MI355X FP8 fixed-sequence recipes.
+        enable-aiter-allreduce-fusion: true
         mem-fraction-static: 0.8
         model-loader-extra-config: '{"enable_multithread_load": true}'
         watchdog-timeout: 1200
