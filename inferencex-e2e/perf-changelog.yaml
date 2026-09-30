@@ -9005,6 +9005,14 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3477
 
 - config-keys:
+    - minimaxm3-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update B200 AgentX to vLLM nightly-af7f9488c2210d67e1033ecdc845b087ee7fe92b and enable local argmax reduction for the FlashInfer EAGLE3 draft."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3435
+
+- config-keys:
     - glm5.2-fp4-mi355x-sglang-agentic-mtp
   scenario-type:
     - agentic-coding
@@ -9055,6 +9063,14 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3421
 
 - config-keys:
+    - minimaxm3-fp4-b300-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update B300 AgentX to vLLM nightly-af7f9488c2210d67e1033ecdc845b087ee7fe92b with local argmax reduction."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3547
+
+- config-keys:
     - minimaxm3-fp8-mi300x-vllm-agentic-mtp
   scenario-type:
     - agentic-coding
@@ -9083,6 +9099,36 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3559
 
 - config-keys:
+    - minimaxm3-fp4-gb200-dynamo-trt-agentic-agg-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Enable the MiniMax-M3 reasoning parser on the Dynamo frontend so reasoning blocks are classified consistently instead of being returned as ordinary content."
+    - "Set reasoning_parser: minimax_m3 in each TensorRT-LLM engine configuration to keep the frontend and engine parser settings aligned."
+    - "在 Dynamo 前端启用 MiniMax-M3 推理解析器，使推理内容按一致方式分类，而不会作为普通内容返回。"
+    - "在每个 TensorRT-LLM 引擎配置中设置 reasoning_parser: minimax_m3，使前端与引擎的解析器设置保持一致。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3195
+
+- config-keys:
+    - kimik3-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Move the MI355X Kimi-K3 FP4 ATOM AgentX submission to image rocm/atom-dev:nightly_202609251613, tracking recipes/Agentic-Kimi-K3.md as retuned in ROCm/ATOM#2382."
+    - "Enable FlyDSL FP8 prefill attention (ATOM_USE_FLYDSL_FP8_PREFILL_ATTN=1) on every concurrency; ATOM defaults it off."
+    - "Hold a ready prefill for four decode passes from concurrency 16 up (ATOM_PREFILL_DECODE_INTERVAL=4, ATOM_PREFILL_DELAYER_MAX_QUEUE_MS=5000). Concurrency 1, 4 and 14 are unchanged."
+    - "Restore the DCP8 LMCache bands on the native srt-slurm recipe: concurrency 14 and 16 (DSpark 3, ReplaySSM) and 48, 56 and 72 (no draft) run ATOM's in-process lmcache_offload connector through roles.agg.args.extra-kv-connectors (srt-slurm patch 507), with 128 GB/rank up to 48 and 192 GB/rank at 56 and 72. Concurrency 1 and 4 stay GPU-resident."
+    - "No change to the Inferact/Kimi-K3-DSpark draft's precision: online_quant_config still excludes every draft linear (layers.*, context_proj), so its weights and activations stay BF16, and it keeps the target's FP8 KV cache (kv_cache_dtype fp8). FlyDSL FP8 prefill attention applies only to the target, since the draft runs its block pass as decode attention."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3407
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  description:
+    - "Add Kimi-K3 MXFP4 vLLM agentic-coding on MI355X (TP8, DSpark): dcp1 c1/c4 GPU-resident and c8-c14 with SimpleCPUOffload DRAM offload, plus a new dcp8 c44/c48/c70 throughput band (mtp synthetic acceptance, no draft); vLLM ROCm image vllm/vllm-openai-rocm:nightly-rocm100-36768d1bfd39094681cdbc8cb37d4b31c0729c89"
+    - "The Inferact/Kimi-K3-DSpark draft (K3DSparkModel, model_type k3_dspark, 5 layers, hidden 7168, torch_dtype bfloat16, no quantization_config) keeps every layer at its pristine dtype. vLLM builds all its modules with quant_config from get_draft_quant_config() (vllm/models/kimi_k3/nvidia/dspark_mla.py), which returns None because K3DSparkModel is explicitly excluded from the DeepSeek-V4 branch that would set draft.quantization = target.quantization (vllm/config/speculative.py:1431); so context_proj (ReplicatedLinear), context_kv_proj (MergedColumnParallelLinear) and each decoder layer's MLA q/kv projections and dense KimiMLP (gate/up/down) load unquantized in BF16 -- no ptpc_fp8, no mxfp4, no INT4 weights. The draft has no FusedMoE/block_sparse_moe, so VLLM_ROCM_USE_AITER_MOE_SITUV2 (A8W4) never touches it, and its KV cache stays fp8 (kv_cache_dtype). This PR only changes draft depth (num_speculative_tokens 4->7) and enables INT4 custom quick all-reduce (VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4, vllm/distributed/device_communicators/quick_all_reduce.py); because the draft shares the target's TP8 group (vllm/v1/spec_decode/draft_model.py), that INT4 applies to its tensor-parallel reductions too -- a collective-reduction transport precision, not any draft weight, activation, or KV dtype."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3561
+
+- config-keys:
     - dsv4-fp4-gb200-llmd-vllm-agentx
     - dsv4-fp4-gb200-llmd-vllm-agentx-agg
   scenario-type:
@@ -9091,9 +9137,9 @@
     - "Add GB200 llm-d vLLM AgentX benchmarks for DeepSeek-V4-Pro-0813 DSpark FP4/FP8-KV: disagg Mooncake 1P1D DEP8/DEP8 (conc 64/128/160/256) and 2P1D DEP8/DEP16 (conc 256/384/576); agg TP8 (conc 1-12), DEP8 (conc 12-32), and DEP8 Mooncake (conc 52/72). DSpark uses adaptive verification with prefill K=1 and decode/agg K=3 (no golden AL)."
     - "Disagg: NIXL P/D KV (1800s leases), multi-port external LB for wide-EP DEP8, llm-d 0.10.0 prefix/token-load EPP routing, Mooncake RDMA prefix cache at 66.7% node DRAM (~140 GiB/GPU, matching Dynamo); prefill Nixl+MooncakeStore, decode Nixl-only. Multi-prefill coordinator waits up to 600s for prefill /health after decode readiness."
     - "Agg DEP8 Mooncake: gpu-memory-utilization 0.87, Mooncake DRAM segment at 45% utilization, MultiConnector (Nixl + SimpleCPUOffload + Mooncake). Route DeepGEMM MegaMoE symmetric memory over GB200 NVLink (NVSHMEM remote/IBGDA off, CUDA fabric handles, NCCL P2P NVL, UCX CUDA IPC over MNNVL). Scrape per-rank vLLM metrics without duplicate frontend counters."
-    - "Re-remove archived dsv4-fp4-gb200-llmd-vllm 8k1k master key reintroduced by upstream merge; add thin llm-d disagg SLURM scaffolding for AgentX P/D launches."
+    - "Route llm-d launches through infx.launch (gb200-nv LLMD driver) instead of runners/launch_gb200-nv.sh; re-remove archived dsv4-fp4-gb200-llmd-vllm 8k1k master key reintroduced by upstream merge."
     - "新增 GB200 llm-d vLLM AgentX 基准：DeepSeek-V4-Pro-0813 DSpark FP4/FP8-KV；分离式 Mooncake 1P1D DEP8/DEP8（并发 64/128/160/256）与 2P1D DEP8/DEP16（并发 256/384/576）；聚合 TP8（并发 1-12）、DEP8（并发 12-32）及 DEP8 Mooncake（并发 52/72）。DSpark 启用自适应验证，prefill K=1、decode/聚合 K=3（无 golden AL）。"
     - "分离式：NIXL P/D KV（租约 1800s）、DEP8 宽 EP 多端口外部 LB、llm-d 0.10.0 前缀/令牌负载 EPP 路由、66.7% 节点 DRAM 的 Mooncake RDMA 前缀缓存（约 140 GiB/GPU，与 Dynamo 对齐）；prefill 为 Nixl+MooncakeStore，decode 仅 Nixl。多预填充协调器在 decode 就绪后最多等待 600s 以轮询 prefill /health。"
     - "聚合 DEP8 Mooncake：gpu-memory-utilization 0.87、Mooncake DRAM 段 45% 利用率、MultiConnector（Nixl + SimpleCPUOffload + Mooncake）。DeepGEMM MegaMoE 对称内存经 GB200 NVLink 路由（关闭 NVSHMEM 远程/IBGDA、启用 CUDA fabric 句柄、NCCL P2P NVL、MNNVL 上 UCX CUDA IPC）。按 rank 抓取 vLLM 指标，避免重复的前端计数器。"
-    - "重新移除 upstream 合并误带回的已归档 dsv4-fp4-gb200-llmd-vllm 8k1k 主配置项；新增供 AgentX P/D 启动使用的 llm-d 分离式 SLURM 脚手架。"
+    - "通过 infx.launch（gb200-nv LLMD 驱动）路由 llm-d 启动，替代 runners/launch_gb200-nv.sh；重新移除 upstream 合并误带回的已归档 dsv4-fp4-gb200-llmd-vllm 8k1k 主配置项。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2719
