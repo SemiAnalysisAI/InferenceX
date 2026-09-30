@@ -69,3 +69,23 @@ def test_client_preserves_outcome_before_failure(
         assert 'error' not in outcome
         assert outcome['failed'] == {100: 0, 95: 5, 94: 6, 0: 100}[completed]
         assert outcome['max_failure_rate'] == 0.05
+
+
+@pytest.mark.parametrize(
+    ('model', 'expected'),
+    [
+        (
+            'deepseek-ai/DeepSeek-V4-Pro',
+            '<｜begin▁of▁sentence｜><｜User｜>hello\nworld<｜Assistant｜><think>',
+        ),
+        (
+            'deepseek-ai/DeepSeek-V4.1-Flash',
+            '<｜begin▁of▁sentence｜><｜System｜>Reasoning Effort: 75 '
+            '(range 1-100, the higher the value, the more thorough the reasoning)\n\n'
+            '<｜User｜>hello\nworld<｜Assistant｜><think>',
+        ),
+    ],
+)
+def test_fixed_sequence_chat_uses_checkpoint_family_header(model: str, expected: str) -> None:
+    tokenizer = Namespace(name_or_path=model)
+    assert client._apply_chat_template('hello\nworld', tokenizer, dsv4=True) == expected

@@ -567,3 +567,5 @@ H200 DeepSeek-V4.1 Flash SGLang AgentX 在并发 64 及以上的性能任务由�
 针对用户要求的 `dsv41flash` 研究对比，`e2e-tests.yml` 接受 `fixed-sequence-acceptance-length`（每次验证步骤平均提交的 token 数，包含验证 token）及 `random-range-ratio`（`1.0` 使用配置中的精确长度）。请从定义这些输入的分支调度工作流，并使用 `--no-evals`。此可选模式只允许固定序列吞吐测试，要求显式的正整数 DSpark 草稿数量，以及 `[1, 草稿数量 + 1]` 范围内的有限 AL；AgentX 和评测请求会被拒绝。SRT 连接器注入原生服务端设置，并在 benchmark 环境中记录目标 AL 和草稿数量，不修改或新增实测黄金曲线。未提供该输入时，现有 AgentX 黄金曲线和真实验证行为保持不变。
 
 这些是研究产物，不代表在合成提示词数据集上实测得到的接受长度。需记录 checkpoint、目标和草稿的实际精度、缓存格式、GPU 数量、精确输入和输出长度、并发数、配置与实测 AL，并区分实测 TPOT 和由并发数除以 TPOT 推算的吞吐量。
+
+固定序列客户端的 `--dsv4` 路径会识别 V4.1 tokenizer 名称，加入发布版本的数字化 high-effort 前缀（75），并将该前缀计入提示词长度。

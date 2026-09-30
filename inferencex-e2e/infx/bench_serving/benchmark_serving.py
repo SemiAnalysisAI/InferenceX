@@ -173,8 +173,22 @@ def _apply_chat_template(prompt: str, tokenizer: PreTrainedTokenizerBase, dsv4: 
     fall back to the tokenizer's built-in jinja chat template.
     """
     if dsv4:
+        messages = [{"role": "user", "content": prompt}]
+        if "deepseek-v4.1" in getattr(tokenizer, "name_or_path", "").lower():
+            # V4.1's released text encoder adds its numeric high-effort header.
+            # This client renders one user message; no multimodal/tool encoding is involved.
+            messages.insert(
+                0,
+                {
+                    "role": "system",
+                    "content": (
+                        "<｜System｜>Reasoning Effort: 75 "  # noqa: RUF001
+                        "(range 1-100, the higher the value, the more thorough the reasoning)\n\n"
+                    ),
+                },
+            )
         return dsv4_encode_messages(
-            [{"role": "user", "content": prompt}],
+            messages,
             thinking_mode="thinking",
         )
     return tokenizer.apply_chat_template(
