@@ -49,11 +49,9 @@ def run_single_node(launch: Launch) -> int:
     root = Path(tempfile.mkdtemp(prefix="srt-single.", dir=run.workspace))
     checkout = prepare_checkout(run, root / "checkout", power=False)
     install_srtctl(run, checkout)
-    # DRAM offload runs get the node's schedulable DRAM and cap each srun step at the
-    # serving GPUs' share of it (runners.yaml available-cpu-dram-mib / gpus-per-node).
-    node_mib = (
-        run.cluster.available_cpu_dram_mib if request.env.get("KV_OFFLOADING") == "dram" else None
-    )
+    # The job holds the node's schedulable DRAM; each srun step gets its GPUs' share of it
+    # (runners.yaml available-cpu-dram-mib / gpus-per-node * GPU_COUNT).
+    node_mib = run.cluster.available_cpu_dram_mib
     step_mib = node_mib and node_mib * request.gpu_count // run.cluster.gpus_per_node
     if (options := config.srun_options(run.backend.settings, step_mib)) is not None:
         run.env["SRT_SRUN_OPTIONS"] = options
