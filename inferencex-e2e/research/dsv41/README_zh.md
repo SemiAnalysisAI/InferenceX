@@ -80,8 +80,9 @@ shell 集成检查通过实际执行脚本验证客户端参数，不需要 GPU 
 
 `vllm_indexer.py` 导入 vLLM 的 DeepGEMM 包装层、原生 TopK 分派器及候选选择器。
 输入为 B12、六个 query、32 heads、D128、page128、TopK512，可选输出 2048 个
-候选块，每块八个位置。名义 S2 为 64K/128K，物理 K 为 S2/2；源文档的 S2
-约定尚未确认，因此不能据此宣称直接加速比。MXFP4 输入为独立随机的可表示编码，
+候选块，每块八个位置。使用 `--physical-lengths` 设置物理压缩 K=64K/128K；
+源集成传入的长度已压缩。不传该标志可复现早期半长度诊断，两者必须分开。
+源测试 fixture 未公开，因此不能据此宣称直接硬件加速比。MXFP4 输入为独立随机的可表示编码，
 E8M0 scale 为 1，head weight 为 1/32，原生稠密权重使用 FP32。逐 query 校验
 分数和 TopK 阈值；候选选择计入耗时，但未独立校验其输出。按正序、逆序、正序
 执行三轮，每轮预热三次、剖析 1000 次。报告 GPU 内核耗时之和的均值，不含
@@ -89,7 +90,8 @@ E8M0 scale 为 1，head weight 为 1/32，原生稠密权重使用 FP32。逐 qu
 
 `vllm_sparse_indexer.py` 测量原生分页稀疏流水线，包括候选展开及排序、调度构建、
 稀疏 logits、DeepSelect TopK 和逻辑索引映射。使用 72 个 query 行，每行 2048
-个独立且不重复的候选块，每块八个位置，物理 K=65536，head weight 为 BF16。
+个独立且不重复的候选块，每块八个位置；通过 `--physical-kv-tokens` 明确物理 K，
+例如 131072，或早期诊断的 65536。head weight 为 BF16。
 预热三次后测量三次，保留全部样本。分数按 BF16 容差 `rtol=atol=0.02` 校验；
 原生 TopK 必须返回不重复的候选位置，且分数不低于原生 TopK 阈值。
 `analyze_trace.py` 也识别 vLLM 原生 `execute_` 标记，将关联 GPU 时间跨度标记为
