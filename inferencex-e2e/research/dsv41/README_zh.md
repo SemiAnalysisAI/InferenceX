@@ -224,3 +224,14 @@ dense indexer 接口；缩放因子为1/sqrt128和1/sqrt32。
 包含输入 QR 量化，与已量化 QR 起点不同；原生 BF16 中间舍入也与 FP32
 直接传递不同。所有行先进行独立投影与后处理校验，再分析20次调用。
 同时发布最小值、中位数、eager 跨度与误差，不推断源样例完全一致。
+
+## 原生 Attention 前处理
+
+`vllm_attention_prologue.py` 测量合并 QA/KV 投影、原生 Q/KV 归一化
+（支持时融合 QR 量化）、QB 投影及分页缓存 Q/KV RoPE/写入。
+形状T72/H5120/R1280/heads64/D512/RoPE64，epsilon1e-6，block128。
+Blackwell 使用528字节 MXFP8 记录；Hopper 的584字节记录保留 BF16
+RoPE 尾部。全部 Q/KV 行与独立 FP32/BF16 参考核对（相对L2小于0.10），
+并检查未写入缓存行。热态及256MiB ArgMax驱逐后各测量十次，保留中位数、
+极差/中位数和 eager 跨度。原生后端使用输入量化时包含其成本；参考起点
+已量化，KV 使用scale1。Mega Attention 中融合的 Q RoPE 边界不同。

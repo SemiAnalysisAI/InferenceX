@@ -275,3 +275,16 @@ reference starting with already-quantized QR. Native BF16 intermediate rounding
 also differs from FP32 handoff. All rows undergo independent projection and
 postprocessing checks before20 profiled samples. Publish minima together with
 medians, eager spans and errors; do not infer identical source fixtures.
+
+## Native attention prologue
+
+`vllm_attention_prologue.py` measures merged QA/KV projection, native Q/KV
+normalization (with fused QR quantization when supported), QB projection and
+packed-cache Q/KV RoPE/insert. ShapeT72/H5120/R1280/heads64/D512/RoPE64,
+epsilon1e-6, block128. Blackwell uses528-byte MXFP8 records; Hopper584-byte
+records preserve the BF16 RoPE tail. All query/KV rows are checked against an
+independent FP32/BF16 reference (relativeL2 below0.10), with untouched cache
+rows verified. Ten warm and ten256MiB-ArgMax-evicted samples retain medians,
+range/median and eager spans. Hidden input quantization is included where the
+native backend uses it; the reference starts prequantized and uses scale1 KV.
+Mega Attention's fused Q RoPE is outside this standalone boundary.

@@ -9580,3 +9580,13 @@
     - "Measure full native indexer QW prologue at four token counts with projection, scale and quantized-output checks."
     - "测量四个 token 数量下完整原生 Indexer QW 前处理，校验投影、缩放与量化输出。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-8gpu-8k256
+    - dsv41flash-fp4-b300-vllm-8gpu-8k256
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Measure complete native attention prologue with packed-cache validation and warm/evicted timing protocols."
+    - "测量完整原生 attention 前处理，校验分页缓存并保留热态及驱逐后计时。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607
