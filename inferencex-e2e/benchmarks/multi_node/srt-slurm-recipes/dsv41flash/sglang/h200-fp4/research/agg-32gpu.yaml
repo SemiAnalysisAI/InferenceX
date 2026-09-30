@@ -61,6 +61,8 @@ base:
         SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '0'
         SGLANG_SIMULATE_ROUND_ROBIN_EXPERTS: '1'
         SGLANG_RAGGED_VERIFY_MODE: static
+        SGLANG_SHARED_EXPERT_TP1: '1'
+        SGLANG_DP_SHARED_EXPERT_LOCAL: '1'
         HF_HUB_CACHE: /hf_hub_cache
       gpus: 32
   benchmark:

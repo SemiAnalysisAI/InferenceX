@@ -597,7 +597,9 @@ The research branch also defines direct SGLang four-node/32-GPU points. Run the
 `*-sglang-32gpu-128k256` keys enumerate 384/1536/2560 concurrency and use five
 draft tokens (verification width six). Native round-robin expert routing is
 enabled as a balanced-routing experiment, not an accuracy workload. Blackwell
-uses W4A8 MegaMoE; H200 uses W4A8 FlashInfer. Each job requests four physical
+uses W4A8 FlashInfer, as does H200. The pinned V4.1 wrapper rejects MoE
+A2A. Shared experts use TP1 on local DP tokens to retain block-quantization
+alignment at global TP32. Each job requests four physical
 nodes. Record full active-batch evidence and separate steady decode from prefill
 interference before treating client TPOT as a decode-only comparison. The
 explicit AL input always means committed tokens including the verification token;

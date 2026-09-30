@@ -130,15 +130,15 @@ def engram_bench(output: Path, *, resident_server: bool) -> None:
             h = x.float()
             key = kv[:, :4 * 5120].float().reshape(tokens, 4, 5120)
             value = kv[:, 4 * 5120:].float()
-            rstd = torch.rsqrt(h.square().mean(-1) + 1e-6)
-            rstd = rstd * torch.rsqrt(key.square().mean(-1) + 1e-6)
+            rstd = torch.rsqrt(h.square().mean(-1) + 1e-20)
+            rstd = rstd * torch.rsqrt(key.square().mean(-1) + 1e-20)
             dot = (h * (qw * kw) * key).sum(-1) * rstd * (5120 ** -0.5)
             gate = torch.sigmoid(torch.copysign(dot.abs().clamp_min(1e-6).sqrt(), dot))
             result = (h + gate.unsqueeze(-1) * value.unsqueeze(-2)).to(x.dtype)
             return torch.where(image_mask, x, result) if masked else result
 
         def native():
-            result = fused_engram_gate(x, kv, qw, kw, 1e-6, 1e-6)
+            result = fused_engram_gate(x, kv, qw, kw, 1e-20, 1e-6)
             return torch.where(image_mask, x, result) if masked else result
 
         expected, actual = reference(), native()
@@ -174,7 +174,7 @@ def engram_bench(output: Path, *, resident_server: bool) -> None:
             row = {"operator": "engram_gate", "tokens": tokens, "hidden": 5120,
                    "hc": 4, "mask": "odd_positions" if masked else "none",
                    "provider": provider, "input_dtype": "bf16", "weight_dtype": "fp32",
-                   "epsilon": 1e-6, "clamp": 1e-6, "warmups": 3, "samples": 10,
+                   "epsilon": 1e-20, "clamp": 1e-6, "warmups": 3, "samples": 10,
                    "eviction": "256 MiB FP16 argmax before each target, excluded",
                    "kernel_sum_samples_us": samples,
                    "kernel_sum_median_us": statistics.median(samples),

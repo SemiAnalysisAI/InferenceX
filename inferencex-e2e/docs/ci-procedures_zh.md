@@ -577,7 +577,8 @@ B200/B300 对比配置使用 `flashinfer_mxfp4`，保留其默认 MXFP8 激活�
 `fixed-sequence-acceptance-length=4.1` 和 `random-range-ratio=1.0`。
 `*-sglang-32gpu-128k256` 包含并发 384/1536/2560，使用五个草稿 token
 （验证窗口宽度六）。原生轮转专家路由用于均衡路由实验，不用于精度评测。
-Blackwell 使用 W4A8 MegaMoE，H200 使用 W4A8 FlashInfer；每项任务申请四个物理
+Blackwell 与 H200 均使用 W4A8 FlashInfer。固定版本的 V4.1 包装层拒绝 MoE A2A；
+共享专家使用 TP1，仅计算本地 DP token，以保持全局 TP32 下的块量化对齐。每项任务申请四个物理
 节点。必须记录完整活跃 batch 的证据，并区分稳定 decode 与 prefill 干扰，才能
 将客户端 TPOT 用于纯 decode 对比。显式 AL 输入始终包含验证 token；归档版本的配套执行器将接受长度计算为
 接受的草稿 token 数 / 验证轮数 + 1，并以目标模型与草稿模型执行时间之和除以该

@@ -36,7 +36,7 @@ base:
         tensor-parallel-size: 32
         expert-parallel-size: 32
         data-parallel-size: 32
-        moe-runner-backend: deep_gemm
+        moe-runner-backend: flashinfer_mxfp4
         disable-shared-experts-fusion: true
         speculative-num-draft-tokens: 6
         context-length: 16384
@@ -48,7 +48,6 @@ base:
         enable-dp-lm-head: true
         max-prefill-tokens: 8192
         dist-timeout: 3600
-        moe-a2a-backend: megamoe
       env:
         PYTHONNOUSERSITE: '1'
         PYTHONUNBUFFERED: '1'
@@ -60,7 +59,8 @@ base:
         SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '0'
         SGLANG_SIMULATE_ROUND_ROBIN_EXPERTS: '1'
         SGLANG_RAGGED_VERIFY_MODE: static
-        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '9216'
+        SGLANG_SHARED_EXPERT_TP1: '1'
+        SGLANG_DP_SHARED_EXPERT_LOCAL: '1'
       gpus: 32
   benchmark:
     type: custom

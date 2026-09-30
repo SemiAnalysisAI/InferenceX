@@ -16,7 +16,7 @@ chat framing, exact lengths and DSpark settings, with seed 12345 and cache flush
 after its warmup. Its server-reported token usage is checked.
 
 Engram cases use T=1/72/128/512/1024/4096/8192/16384, D=5120, H=4,
-BF16 activations, FP32 normalization weights, epsilon=clamp=1e-6. Odd rows are
+BF16 activations, FP32 normalization weights, epsilon=1e-20, clamp=1e-6. Odd rows are
 masked at T=512 and 8192; an additional unmasked T=8192 case is measured. The
 native Triton gate has no mask input, so masked cases include a second
 `torch.where` operation. The native gate multiplies q/k normalization weights

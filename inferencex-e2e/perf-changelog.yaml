@@ -9211,3 +9211,28 @@
     - "Enable the DP LM head and static DSpark verification required by the pinned native DP-attention implementation."
     - "启用固定版本原生 DP attention 实现所要求的 DP LM head 和静态 DSpark 验证。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607
+
+- config-keys:
+    - dsv41flash-fp4-h200-sglang-32gpu-smoke
+    - dsv41flash-fp4-h200-sglang-32gpu-128k256
+    - dsv41flash-fp4-b200-sglang-32gpu-smoke
+    - dsv41flash-fp4-b200-sglang-32gpu-128k256
+    - dsv41flash-fp4-b300-sglang-32gpu-smoke
+    - dsv41flash-fp4-b300-sglang-32gpu-128k256
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Use native FlashInfer W4A8 without MoE A2A for the V4.1 checkpoint wrapper. Replicate shared experts and run them on local DP tokens, avoiding the unsupported 2304/32 shared-weight partition while retaining FP8 precision."
+    - "V4.1 检查点包装层改用无 MoE A2A 的原生 FlashInfer W4A8。复制共享专家并仅计算本地 DP token，避开不受支持的 2304/32 共享权重分片，同时保留 FP8 精度。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607
+
+- config-keys:
+    - dsv41flash-fp4-h200-sglang-profile-8k256
+    - dsv41flash-fp4-b200-sglang-profile-8k256
+    - dsv41flash-fp4-b300-sglang-profile-8k256
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Set standalone Engram normalization epsilon to the released checkpoint's 1e-20; retain clamp 1e-6. Earlier 1e-6 samples remain diagnostic only."
+    - "独立 Engram 归一化 epsilon 改为发布检查点的 1e-20，clamp 保持 1e-6；此前 epsilon=1e-6 的样本仅用于诊断。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607
