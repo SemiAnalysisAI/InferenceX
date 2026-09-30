@@ -271,5 +271,7 @@ def table_problems(clusters: Mapping[str, Cluster], only: str | None = None) -> 
         cluster = clusters.get(cluster_id)
         settings = cluster.scheduler_settings if cluster is not None else None
         if isinstance(settings, SlurmSettings) and settings.squash is None:
-            problems.append(f"LLMD_CLUSTERS[{cluster_id!r}]: no slurm.squash for Pyxis image import")
+            problems.append(
+                f"LLMD_CLUSTERS[{cluster_id!r}]: no slurm.squash for Pyxis image import"
+            )
     return problems

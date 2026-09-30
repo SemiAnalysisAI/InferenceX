@@ -22,7 +22,10 @@ CANCEL_TIMEOUT_S = 600.0
 def _bench_script(request: LlmdRequest) -> Path:
     model_tag = request.exp_name.split("_", 1)[0]
     kind = "disagg" if request.disagg else "agg"
-    script = request.workspace / f"benchmarks/multi_node/{model_tag}_{request.precision}_gb200_llmd-vllm-{kind}.sh"
+    script = (
+        request.workspace
+        / f"benchmarks/multi_node/{model_tag}_{request.precision}_gb200_llmd-vllm-{kind}.sh"
+    )
     if not script.is_file():
         raise LaunchError(f"llm-d wrapper not found: {script}")
     return script
@@ -105,7 +108,10 @@ def run(launch: Launch) -> int:
         print("ERROR: llm-d submit wrapper failed before returning a Slurm job id", file=sys.stderr)
         return 1
     if not (job_id.isascii() and job_id.isdigit()):
-        print(f"ERROR: llm-d submit wrapper printed {job_id!r} instead of a Slurm job id", file=sys.stderr)
+        print(
+            f"ERROR: llm-d submit wrapper printed {job_id!r} instead of a Slurm job id",
+            file=sys.stderr,
+        )
         return 1
 
     log_file = logs_dir / f"slurm_job-{job_id}.out"
