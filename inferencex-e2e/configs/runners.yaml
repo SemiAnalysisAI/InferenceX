@@ -686,7 +686,7 @@ clusters:
         extra:
           default_gpu_exporter:
             container_image: nvcr.io#nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless
-            port: 9401
+            port: 9402
             command: "dcgm-exporter --collect-interval=1000 --address :{port} -f /configs/dcgm-counters-noprof.csv"
         network-interface: ""
         job-tag: gb300
