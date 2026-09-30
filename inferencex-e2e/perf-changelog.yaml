@@ -9273,3 +9273,14 @@
     - "Add four-GPU H200 batch-1 8K/256 research measurement with TP4/EP4, native W4A8, DSpark seven drafts, and four-rank profiling."
     - "新增四卡 H200 单请求 8K/256 研究测试，使用 TP4/EP4、原生 W4A8、DSpark 七个草稿 token，并采集四个 rank 的性能分析。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607
+
+- config-keys:
+    - dsv41flash-fp4-h200-sglang-profile-8k256
+    - dsv41flash-fp4-b200-sglang-profile-8k256
+    - dsv41flash-fp4-b300-sglang-profile-8k256
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Add a separate production vLLM post-WKV gate microbenchmark with in-kernel masking, BF16/FP32 normalization weights, source provenance and per-case correctness checks; serving recipes unchanged."
+    - "新增独立 vLLM 生产版 post-WKV 门控微基准，测量内核内掩码和 BF16/FP32 归一化权重，记录源码溯源并逐项校验正确性；服务配置不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607

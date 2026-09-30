@@ -32,8 +32,8 @@ bit-exact preservation of masked rows. Record the observed error; this check is
 not a model-accuracy evaluation. A server remains resident during operator timing.
 
 The broader experiment inventory includes 32-GPU long-context serving,
-communication and complete MoE, attention/indexer prologues and epilogue, dense
-and sparse indexers, sparse MLA, Engram hashing, and single-GPU CPU offload.
+complete MoE, attention/indexer prologues and epilogue, dense
+and sparse indexers, sparse MLA, and Engram hashing.
 Their shapes, precision, timing boundary, cache protocol, warmups, repetitions,
 and statistical summaries must be recorded before cross-platform ratios are
 reported. Architecture-specific pipeline counters are not interchangeable.
@@ -57,3 +57,19 @@ CI now publishes `profiles_*` artifacts containing research traces and data
 directly. Older traces remain in the server-log tarball or the linked report's
 release downloads. `analyze_trace.py` uses CUDA launch correlation to associate
 GPU work with model phases; it preserves both overlapping sums and interval unions.
+
+## Production vLLM Engram gate
+
+`vllm_engram.py --output <directory> --image <image> --kernel-sha256 <hash>`
+imports the installed `_fused_engram_post_wkv_kernel` directly and uses the
+production grid, strides, block size and warp count. It verifies the kernel's
+source hash before running; it never patches or copies an engine kernel.
+The post-WKV scope excludes embedding lookup, WKV projection and allocation.
+BF16 normalization weights match production; a separate FP32-weight set
+preserves the earlier standalone input dtype. Each set measures no mask, an
+all-active mask, and odd-row masking at T=512/8192. Masking is inside the kernel.
+Three warmups and ten cold-cache samples follow the existing ArgMax protocol.
+Every case checks the reference formula, exact masked-row preservation and ten
+production kernel events. Raw traces, all timings, errors and versions are saved.
+These measurements do not replace the original SGLang measurements or constitute
+a full serving benchmark.

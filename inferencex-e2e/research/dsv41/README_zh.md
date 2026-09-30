@@ -24,8 +24,8 @@ FP16 ArgMax。报告 profiler 命名作用域内 GPU 内核耗时之和的中位
 BF16 容差与 PyTorch 公式对照，并要求掩码行与输入逐位一致；报告实际误差，该检查
 不等同于模型精度评测。算子计时期间服务模型仍驻留显存。
 
-更完整的实验清单包括 32 GPU 长上下文服务、通信与完整 MoE、Attention/Indexer
-前处理及后处理、稠密和稀疏 Indexer、Sparse MLA、Engram hash、单 GPU CPU offload。
+更完整的实验清单包括 32 GPU 长上下文服务、完整 MoE、Attention/Indexer
+前处理及后处理、稠密和稀疏 Indexer、Sparse MLA和 Engram hash。
 报告跨平台比值前，必须记录形状、精度、计时边界、缓存协议、预热、重复次数和统计
 口径。特定架构的流水线计数器不能直接相互替代。
 
@@ -43,3 +43,15 @@ BF16 容差与 PyTorch 公式对照，并要求掩码行与输入逐位一致；
 CI 现在直接发布含研究 trace 与数据的 `profiles_*` artifact。旧 trace 仍可从
 server-log tar 包或结果报告中的 release 下载。`analyze_trace.py` 根据 CUDA launch
 关联信息归属模型阶段，同时保留重叠耗时之和与区间并集。
+
+## vLLM 生产版 Engram 门控
+
+`vllm_engram.py --output <directory> --image <image> --kernel-sha256 <hash>`
+直接导入已安装的 `_fused_engram_post_wkv_kernel`，沿用生产路径的网格、步长、
+block 大小和 warp 数。运行前校验内核源码哈希，不修改或复制引擎内核。
+测量范围仅为 post-WKV 门控，不含 embedding 查表、WKV 投影和输出分配。
+BF16 归一化权重与生产路径一致；另测 FP32 权重以保留此前独立测试的数据类型。
+每组包含无掩码、全有效掩码，以及 T=512/8192 时的奇数行掩码，掩码在内核内部处理。
+沿用 ArgMax 缓存清理协议，预热三次后测量十次。每个用例检查参考公式、掩码行逐位
+保持不变，以及十次生产内核事件。保存原始 trace、全部计时、误差和软件版本。
+这些测量不替代原有 SGLang 数据，也不是完整的服务性能测试。
