@@ -607,7 +607,7 @@ attempt cannot replace a newer failed retry.
 | `RUN_EVAL` | `false` | Enable eval after throughput benchmark |
 | `EVAL_ONLY` | `false` | Skip throughput, only run evals (set by workflow) |
 | `EVAL_FRAMEWORK` | Workflow: `auto`; benchmark runner: `lm-eval` | Eval runner (`lm-eval`, `swebench`, `kimi-vendor`, `minimax-vendor`, or `bfcl`). `auto` resolves from matrix metadata before reusable workflow dispatch |
-| `EVAL_SUITE` | Matrix-selected for automatic vendor evals; otherwise basename of `EVAL_TASKS_DIR` or `gsm8k` | Provider suite selector and artifact identity. Explicit workflow overrides remain supported |
+| `EVAL_SUITE` | Matrix-selected for automatic vendor evals; otherwise basename of `EVAL_TASKS_DIR` or `gsm8k` | Provider suite selector and artifact identity. With `lm-eval` it names a repo task, `infx/evals/<suite>.yaml` (for example `cruxeval_output`), and sets `EVAL_TASKS_DIR`. Explicit workflow overrides remain supported |
 | `EVAL_TASKS_DIR` | `infx/evals/gsm8k.yaml` | Path to lm-eval task YAML |
 | `EVAL_RESULT_DIR` | `/tmp/eval_out-*` | Output directory for eval results |
 | `EVAL_MAX_MODEL_LEN` | `16384` | Max context for eval (set by `compute_eval_context_length`) |
@@ -620,8 +620,14 @@ attempt cannot replace a newer failed retry.
 ### Adding a new eval task
 
 1. Create a task YAML in `infx/evals/` following the lm-eval task format.
-2. Set `EVAL_TASKS_DIR=infx/evals/<your_task>.yaml` when running benchmarks.
-3. Update `infx/results/collect_eval_results.py` if new metrics need extraction.
+2. Select it with `eval-framework: lm-eval` and `eval-suite: <your_task>` on a
+   workflow dispatch, or `EVAL_SUITE=<your_task>` (or
+   `EVAL_TASKS_DIR=infx/evals/<your_task>.yaml`) when running benchmarks.
+3. Name a filter with `strict`, `flex`, or `extract` so collection finds the
+   score, and add a threshold to `thresholds.yaml`.
+4. Update `infx/results/collect_eval_results.py` if new metrics need extraction.
+5. A task that executes model output must set `unsafe_code: true`; only then
+   does `run_lm_eval` pass `--confirm_run_unsafe_code`.
 
 ### Adding a provider verifier
 
@@ -692,4 +698,12 @@ append_lm_eval_summary
 The following files are task definitions from lm-eval. More information on changes lives within the files:
 - `infx/evals/gsm8k.yaml`
 - `infx/evals/gpqa_diamond.yaml`
+- `infx/evals/cruxeval_output.yaml`, `infx/evals/cruxeval_input.yaml`
+  ([CRUXEval](https://arxiv.org/abs/2401.03065) output and input prediction,
+  800 Python functions each). Explicit only: select with `eval-suite`. Scored by
+  `cruxeval.py`, which executes the dataset function with the model's completed
+  assertion in an isolated, time- and memory-limited interpreter. Upstream
+  lm-eval's cruxeval utils strip quotes from string answers, so they are not
+  used. `run_lm_eval` forces greedy decoding, so the score is greedy pass@1.
+  Thresholds are `0.0` (diagnostic) until a baseline exists.
 - `infx/evals/swebench_lite.yaml` (generation only, scored by `swebench_score.py`)

@@ -2099,6 +2099,12 @@ run_lm_eval() {
 
     export EVAL_TASKS_DIR="$tasks_dir"
 
+    # Tasks that execute model predictions (CRUXEval) declare unsafe_code.
+    local unsafe_code=""
+    if [[ "$tasks_dir" == *.yaml ]] && grep -qE '^unsafe_code:[[:space:]]*true' "$tasks_dir" 2>/dev/null; then
+        unsafe_code="--confirm_run_unsafe_code"
+    fi
+
     if [ "${INFERENCEX_LM_EVAL_RUNTIME_READY:-false}" != "true" ]; then
         _install_lm_eval_deps
         _patch_lm_eval
@@ -2123,6 +2129,7 @@ run_lm_eval() {
     set -x
     run_server_client python3 -m lm_eval --model local-chat-completions --apply_chat_template \
       ${include_path:+--include_path "$include_path"} \
+      ${unsafe_code} \
       --tasks "${tasks_dir}" \
       --output_path "${results_dir}" \
       --log_samples \
@@ -2949,11 +2956,21 @@ run_eval() {
             ;;
     esac
 
-    if [ -n "${EVAL_SUITE:-}" ] \
+    # An lm-eval suite names a repo task YAML, which becomes the task and the
+    # artifact identity together.
+    if [ -n "${EVAL_SUITE:-}" ] && [[ "$framework" == "lm-eval" || "$framework" == "lm_eval" ]]; then
+        local suite_task="infx/evals/${EVAL_SUITE}.yaml"
+        if [ ! -f "${INFERENCEX_REPO_ROOT:-.}/$suite_task" ] && [ ! -f "$suite_task" ]; then
+            echo "ERROR: lm-eval EVAL_SUITE '${EVAL_SUITE}' has no task file ${suite_task}" >&2
+            return 2
+        fi
+        local EVAL_TASKS_DIR="$suite_task"
+        export EVAL_TASKS_DIR
+    elif [ -n "${EVAL_SUITE:-}" ] \
         && [ "$framework" != "kimi-vendor" ] \
         && [ "$framework" != "minimax-vendor" ] \
         && [ "$framework" != "bfcl" ]; then
-        echo "ERROR: EVAL_SUITE is only supported with kimi-vendor, minimax-vendor, or bfcl" >&2
+        echo "ERROR: EVAL_SUITE is only supported with lm-eval task files, kimi-vendor, minimax-vendor, or bfcl" >&2
         return 2
     fi
 

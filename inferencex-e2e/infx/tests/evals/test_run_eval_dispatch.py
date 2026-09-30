@@ -324,11 +324,51 @@ def test_run_eval_rejects_unsafe_suite_name() -> None:
     assert "EVAL_SUITE may contain only" in result.stderr
 
 
-def test_run_eval_rejects_suite_override_for_lm_eval() -> None:
-    result = _run_invalid_call("EVAL_SUITE=gpqa_diamond run_eval --framework lm-eval")
+def test_run_eval_rejects_lm_eval_suite_without_task_file() -> None:
+    result = _run_invalid_call("EVAL_SUITE=not_a_task run_eval --framework lm-eval")
 
     assert result.returncode == 2
-    assert "only supported with kimi-vendor, minimax-vendor, or bfcl" in result.stderr
+    assert "has no task file infx/evals/not_a_task.yaml" in result.stderr
+
+
+def test_run_eval_rejects_suite_override_for_swebench() -> None:
+    result = _run_invalid_call("EVAL_SUITE=cruxeval_output run_eval --framework swebench")
+
+    assert result.returncode == 2
+    assert "only supported with lm-eval task files" in result.stderr
+
+
+def test_run_eval_maps_lm_eval_suite_to_task_file() -> None:
+    script = r"""
+source "$BENCHMARK_LIB"
+run_lm_eval() {
+    echo "DISPATCH=lm-eval TASKS=$EVAL_TASKS_DIR SUITE=$EVAL_SUITE"
+}
+export EVAL_MAX_MODEL_LEN=16384
+export EVAL_CONCURRENT_REQUESTS=""
+export EVAL_ONLY=false
+export IS_AGENTIC=0
+export EVAL_FRAMEWORK=lm-eval
+export EVAL_SUITE=cruxeval_output
+run_eval --port 8888
+echo "COMPLETED=$EVAL_COMPLETED_SUITE"
+"""
+    result = subprocess.run(
+        ["bash", "-c", script],
+        env={
+            **os.environ,
+            "BENCHMARK_LIB": str(BENCHMARK_LIB),
+            "INFERENCEX_REPO_ROOT": str(REPO_ROOT),
+        },
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "DISPATCH=lm-eval TASKS=infx/evals/cruxeval_output.yaml SUITE=cruxeval_output" in result.stdout
+    assert "COMPLETED=cruxeval_output" in result.stdout
 
 
 def test_run_eval_scopes_runner_selected_suite_to_one_call() -> None:
