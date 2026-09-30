@@ -1,5 +1,7 @@
 [nvidia.vllm]
 image = "vllm/vllm-openai:nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3"
+# the tag's digest, used once the registry prunes the nightly tag (staged squashes are keyed by it)
+digest = "sha256:20a52b807cef7a3be15d2174d293b5642d437615b20b5930d78a927e709e6bb6"
 
 [amd.torch]
 image = "vllm/vllm-openai-rocm:v0.19.0"
