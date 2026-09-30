@@ -9609,3 +9609,12 @@
     - "Test global1536 with prefill4096, per-DP192 sequences and graph cap1152 while retaining0.95 memory utilization and all measurement gates."
     - "使用 prefill4096、每 DP192序列及 graph cap1152 测试 global1536，保留0.95内存比例和全部测量校验。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-8gpu-dp-128k1024-c2560
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Test global2560 with prefill2048, per-DP320 sequences and graph cap1920; preserve full decode width and0.95 memory utilization."
+    - "使用 prefill2048、每 DP320序列及 graph cap1920 测试 global2560，保留完整 decode 宽度和0.95内存比例。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607

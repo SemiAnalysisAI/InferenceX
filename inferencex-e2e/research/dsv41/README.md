@@ -321,3 +321,11 @@ GPU memory utilization stays0.95. This tests whether reservations sized for the
 larger2560 cohort unnecessarily excluded1536. Preserve the original capacity
 bound and identify the new configuration; only runtime validation can establish
 that it fits and provides a full-batch result.
+
+The dedicated B200 global2560 point uses prefill budget2048, max sequences320
+per DP and graph cap1920, keeping0.95 memory utilization. A full decode step
+needs320×6=1920 tokens and still fits this scheduler budget. Native sliding-window
+admission sizing depends on max in-flight tokens, so smaller prefill reservations
+can change capacity materially. Preserve earlier configured bounds; do not call
+them universal hardware limits. The full cohort must still pass real runtime
+measurement and every-worker profile validation.
