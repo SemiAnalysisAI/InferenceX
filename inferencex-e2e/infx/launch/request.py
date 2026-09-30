@@ -176,3 +176,11 @@ class AmdUtilsRequest(LegacyRequest):
     model: str = Field(alias="MODEL")
     user: str | None = Field(None, alias="USER")
     keep_logs: OneFlag = Field(False, alias="KEEP_LOGS")
+
+
+class LlmdRequest(SrtRequest):
+    """A GB200 llm-d vLLM multinode job submitted through benchmarks/multi_node/llm-d."""
+
+    model: str = Field(alias="MODEL")
+    exp_name: str = Field(alias="EXP_NAME")
+    disagg: TrueFlag = Field(alias="DISAGG")

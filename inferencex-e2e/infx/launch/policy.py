@@ -15,6 +15,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from infx.clusters.slurm import SlurmSettings
+from infx.launch.context import LaunchError
 
 if TYPE_CHECKING:
     from infx.clusters import Cluster
@@ -61,6 +62,7 @@ class LaunchPath(StrEnum):
     SCRIPT = "script"
     LEGACY_TILERT = "legacy-tilert"
     LEGACY_AMD_UTILS = "legacy-amd-utils"
+    LLMD = "llmd"
 
 
 NATIVE_SRT_LANES: dict[str, tuple[Match, ...]] = {
@@ -79,8 +81,18 @@ BATCH_WRAPPED_LANES: dict[str, Match] = {
 }
 
 
+LLMD_CLUSTERS: frozenset[str] = frozenset({"gb200-nv"})
+
+
 def launch_path(cluster_id: str, request: LaunchRequest) -> LaunchPath:
     if request.is_multinode:
+        if request.framework == "llmd-vllm":
+            if cluster_id not in LLMD_CLUSTERS:
+                raise LaunchError(
+                    f"llmd-vllm is not configured for cluster {cluster_id!r}; "
+                    f"supported clusters: {', '.join(sorted(LLMD_CLUSTERS))}"
+                )
+            return LaunchPath.LLMD
         if any(lane(request) for lane in NATIVE_SRT_LANES.get(cluster_id, ())):
             return LaunchPath.SRT_NATIVE
         if cluster_id in LEGACY_TILERT and request.framework == "tilert":
@@ -228,6 +240,11 @@ def table_problems(clusters: Mapping[str, Cluster], only: str | None = None) -> 
         for key in keys(table)
         if key not in clusters
     ]
+    problems += [
+        f"LLMD_CLUSTERS[{cluster_id!r}]: no such cluster"
+        for cluster_id in LLMD_CLUSTERS
+        if only in (None, cluster_id) and cluster_id not in clusters
+    ]
     for cluster_id in keys(LEGACY_TILERT):
         cluster = clusters.get(cluster_id)
         settings = cluster.scheduler_settings if cluster is not None else None
@@ -248,4 +265,13 @@ def table_problems(clusters: Mapping[str, Cluster], only: str | None = None) -> 
             for name in lane.host_setup_env
             if name not in host_env
         ]
+    for cluster_id in LLMD_CLUSTERS:
+        if only not in (None, cluster_id):
+            continue
+        cluster = clusters.get(cluster_id)
+        settings = cluster.scheduler_settings if cluster is not None else None
+        if isinstance(settings, SlurmSettings) and settings.squash is None:
+            problems.append(
+                f"LLMD_CLUSTERS[{cluster_id!r}]: no slurm.squash for Pyxis image import"
+            )
     return problems
