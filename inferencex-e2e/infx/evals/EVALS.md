@@ -708,4 +708,15 @@ The following files are task definitions from lm-eval. More information on chang
   lm-eval's cruxeval utils strip quotes from string answers, so they are not
   used. `run_lm_eval` forces greedy decoding, so the score is greedy pass@1.
   Thresholds are `0.0` (diagnostic) until a baseline exists.
+- `infx/evals/lm_eval_tasks/mmlu_pro_2800.yaml`
+  ([MMLU-Pro](https://arxiv.org/abs/2406.01574), a seeded sample of 200 questions
+  per category, 2,800 total, zero-shot chain of thought, upstream letter regex).
+  One flat task: the bundled `mmlu_pro` group applies `--limit` per subject and
+  its group row carries no task config for collection.
+- `infx/evals/lm_eval_tasks/ruler_lite.yaml`
+  ([RULER](https://arxiv.org/abs/2404.06654)-style multi-key, multi-value and
+  variable-tracking probes at 64k and 128k tokens, 50 per task and length, 300
+  total). Generated deterministically by `ruler_lite.py` with a unique haystack
+  per prompt and lengths measured with the served tokenizer; needs no network.
+  Both are explicit only, with `0.0` thresholds until a baseline exists.
 - `infx/evals/swebench_lite.yaml` (generation only, scored by `swebench_score.py`)
