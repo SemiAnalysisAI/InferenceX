@@ -70,9 +70,9 @@ base:
       AIPERF_APPLY_CHAT_TEMPLATE: 'true'
 
 # One variant per point. Admission is 2x CONC and the decode graph batch follows
-# it up to 128. HiCache holds 1.5x the device KV pool and skips non-reusable
-# blocks; the ratio keeps the host pool proportional to TP without pinning a
-# byte count.
+# it up to 128. HiCache skips non-reusable blocks and is sized in tiers: CONC 16
+# to 28 keep the 1.5x ratio, CONC 32 to 56 pin a 253 GB host pool, and CONC 64 to
+# 80 pin 400 GB. hicache-size overrides hicache-ratio where it is set.
 
 override_tp4_c1:
   roles:
@@ -149,7 +149,6 @@ override_tp4_hicache_c16:
         cuda-graph-max-bs-decode: 32
         enable-hierarchical-cache: true
         hicache-ratio: 1.5
-        hicache-size: 400
         hicache-write-policy: write_through_selective
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
@@ -168,7 +167,6 @@ override_tp4_hicache_c18:
         cuda-graph-max-bs-decode: 36
         enable-hierarchical-cache: true
         hicache-ratio: 1.5
-        hicache-size: 400
         hicache-write-policy: write_through_selective
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
@@ -187,7 +185,6 @@ override_tp4_hicache_c20:
         cuda-graph-max-bs-decode: 40
         enable-hierarchical-cache: true
         hicache-ratio: 1.5
-        hicache-size: 400
         hicache-write-policy: write_through_selective
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
@@ -206,7 +203,6 @@ override_tp4_hicache_c22:
         cuda-graph-max-bs-decode: 44
         enable-hierarchical-cache: true
         hicache-ratio: 1.5
-        hicache-size: 400
         hicache-write-policy: write_through_selective
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
@@ -225,7 +221,6 @@ override_tp4_hicache_c24:
         cuda-graph-max-bs-decode: 48
         enable-hierarchical-cache: true
         hicache-ratio: 1.5
-        hicache-size: 400
         hicache-write-policy: write_through_selective
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
@@ -244,7 +239,6 @@ override_tp4_hicache_c28:
         cuda-graph-max-bs-decode: 56
         enable-hierarchical-cache: true
         hicache-ratio: 1.5
-        hicache-size: 400
         hicache-write-policy: write_through_selective
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
@@ -263,7 +257,7 @@ override_tp4_hicache_c32:
         cuda-graph-max-bs-decode: 64
         enable-hierarchical-cache: true
         hicache-ratio: 1.5
-        hicache-size: 400
+        hicache-size: 253
         hicache-write-policy: write_through_selective
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
@@ -282,7 +276,7 @@ override_tp4_hicache_c36:
         cuda-graph-max-bs-decode: 72
         enable-hierarchical-cache: true
         hicache-ratio: 1.5
-        hicache-size: 400
+        hicache-size: 253
         hicache-write-policy: write_through_selective
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
@@ -301,7 +295,7 @@ override_tp4_hicache_c40:
         cuda-graph-max-bs-decode: 80
         enable-hierarchical-cache: true
         hicache-ratio: 1.5
-        hicache-size: 400
+        hicache-size: 253
         hicache-write-policy: write_through_selective
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
@@ -320,7 +314,7 @@ override_tp4_hicache_c48:
         cuda-graph-max-bs-decode: 96
         enable-hierarchical-cache: true
         hicache-ratio: 1.5
-        hicache-size: 400
+        hicache-size: 253
         hicache-write-policy: write_through_selective
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
@@ -339,7 +333,7 @@ override_tp4_hicache_c56:
         cuda-graph-max-bs-decode: 112
         enable-hierarchical-cache: true
         hicache-ratio: 1.5
-        hicache-size: 400
+        hicache-size: 253
         hicache-write-policy: write_through_selective
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
