@@ -21,11 +21,11 @@ Use this page for benchmark configuration, recipe, image, and runner changes. It
 | [`perf-changelog.yaml`](../perf-changelog.yaml) | Append-only benchmark trigger log |
 | [`AGENTS.md`](../../AGENTS.md) | Repository-wide config, MTP, changelog, and sweep rules |
 
-Delete retired entries from the active master configs; they are not archived. Git history and `perf-changelog.yaml` keep the historical settings. For partial retirements, remove only the retired scenarios. Delete retired AMD server-registry entries and model-specific setup from `benchmarks/multi_node/amd_utils/` as well. Preserve shared dependencies needed by retained SPEED-Bench collectors, including their scheduling scores. See the [deprecation rules](../../AGENTS.md#deprecating-benchmark-configs).
+Delete retired entries from the active master configs; they are not archived. Git history and `perf-changelog.yaml` keep the historical settings. For partial retirements, remove only the retired scenarios. Delete unused recipes and model-specific setup as well. Preserve shared dependencies needed by retained SPEED-Bench collectors, including their scheduling scores. See the [deprecation rules](../../AGENTS.md#deprecating-benchmark-configs).
 
 ## Dependency submodules
 
-Git records the exact dependency commits. [`.gitmodules`](../../.gitmodules) defines the repositories: AIPerf at `utils/aiperf`, NVIDIA srt-slurm at `utils/srt-slurm`. TileRT is a documented manual fork checkout in the srt driver ([`infx/launch/drivers/srt/checkout.py`](../infx/launch/drivers/srt/checkout.py)), not a separate submodule.
+Git records the exact dependency commits. [`.gitmodules`](../../.gitmodules) defines the repositories: AIPerf at `utils/aiperf`, NVIDIA srt-slurm at `utils/srt-slurm`. All srt-slurm jobs, including TileRT, use the pinned upstream submodule.
 
 Initialize them before running benchmarks locally:
 
@@ -33,7 +33,7 @@ Initialize them before running benchmarks locally:
 git submodule update --init
 ```
 
-To upgrade, fetch and check out the desired commit inside the relevant submodule, then commit the updated submodule pointer in InferenceX. Benchmark workflows already initialize submodules. Slurm launchers make a local Git clone for each job so recipe staging and runtime writes do not modify the submodule, and record the actual commit for result provenance. NVIDIA setup clones locally; TileRT setup fetches its pinned fork commit over the network.
+To upgrade, fetch and check out the desired commit inside the relevant submodule, then commit the updated submodule pointer in InferenceX. Benchmark workflows already initialize submodules. Slurm launchers make a local Git clone for each job so recipe staging and runtime writes do not modify the submodule, and record the actual commit for result provenance.
 
 Single-node fixed-sequence recipes use NVIDIA upstream srt-slurm. ATOM recipes use
 the native `atomesh` frontend with one aggregate worker and
@@ -59,6 +59,16 @@ renders the job-local `srtslurm.yaml` (`config.py`) from that record plus job va
 staged images, resolved model paths, cache mounts, the time limit, and the DCGM
 exporter image for power jobs. Values are written as YAML data, never substituted into
 shell or YAML text, and `extra` cannot shadow a typed key.
+
+NVIDIA profiles set `slurm.srt-slurm.extra.default_gpu_exporter` to the same `dcgm-exporter:4.6.0-4.8.3-distroless`
+image the power path uses, with `/configs/dcgm-counters-noprof.csv` for Tachometer's
+implicit DCGM exporter. Power recipes select the same CSV through
+`telemetry.dcgm_exporter.command`, so one exporter version and one counter file serve
+both paths. Tachometer reuses the power exporter when power telemetry owns it. Power,
+energy and GPU utilization remain available; profiling and vGPU license counters are
+omitted. This does not enable telemetry in opted-out recipes or qualify Tachometer
+metrics as validated PowerX results. The existing 1000 ms Tachometer / 100 ms
+power-exporter collection intervals and port 9401 are preserved.
 
 Keep model selection, cache preparation, and workload-dependent time limits in the
 srt driver's tables ([`lanes.py`](../infx/launch/drivers/srt/lanes.py),
@@ -186,17 +196,13 @@ Routing is by `cluster:<id>` label, not by runner-name prefix. Keep `<base-name>
 6. Verify every runner is **Idle** in [repository runner settings](https://github.com/SemiAnalysisAI/InferenceX/settings/actions/runners) before adding it to sweep traffic.
 7. Verify launcher mounts for `_work`, HF cache, staged weights, and squash images from a compute node. Root containers must not leave root-owned files in the shared workspace.
 
-## Native TileRT power
+## TileRT fixed-sequence recipes
 
-TileRT's shared importer preserves Docker Hub image names and converts explicit registries such as `ghcr.io/team/image:tag` to Enroot's `docker://ghcr.io#team/image:tag` syntax. Existing `#` references are preserved. Valid cached squash images are reused without importing; a cache hit does not validate the registry import path. Invalid cached images are removed under the import lock before retrying the import.
+The retained GLM-5.1 B200 Nscale 1k1k and 8k1k configurations use srt-slurm recipes with vLLM prefill, TileRT decode, and the TileRT router. The Python launcher stages both images and mounts the prepared shared checkpoint at `/model` and converted decode weights at `/tilert_weights`; their host paths belong in `configs/runners.yaml`. Checkpoint conversion is not part of job startup.
 
-The GLM-5.1 B200 Nscale 1k1k and 8k1k recipes select the prepared shared checkpoint, converted TileRT weights and squash cache, with allocation limits of 45 minutes for 1k1k and 90 minutes for 8k1k, including its full GSM8K eval. Since C1 is below automatic eval selection, use the PR `all-evals` label alongside `full-sweep-fail-fast` for full qualification. TileRT was added after the general GLM-5.1 retirement in [#2533](https://github.com/SemiAnalysisAI/InferenceX/pull/2533); [MODELS.md](MODELS.md) records this retained scope. Changes still require the normal PR sweep, applicable quality evidence, sign-off and reuse before publication.
+Both recipes use the shared custom fixed-sequence benchmark with streaming chat completions, 16 requests, and chat-template rendering. The 8k1k recipe requires srt-slurm DCGM telemetry from both worker nodes. Eval-only launches disable throughput telemetry and use the shared eval dispatcher.
 
-TileRT's eval wrapper calls the shared `run_eval` dispatcher without overriding its `run_lm_eval` client. It stages available artifacts after evaluation and preserves failures from either evaluation or staging. TCP readiness probes keep their socket inside a subshell and preserve the caller's diagnostic streams.
-
-For GLM-5.1 on B200 Nscale, `MODEL_PATH` can select an existing shared checkpoint instead of the default `/scratch/models/GLM-5.1-FP8`. When it selects an HF snapshot, also set `HF_HUB_CACHE_HOST_PATH` to the existing cache root; TileRT mounts that root at the same absolute path so snapshot links to sibling blobs remain readable. Keep `TILERT_WEIGHTS_DIR` pointed at the separately converted decode weights.
-
-Only fixed 8192/1024 `glm5.1-fp8-b200-tilert` requires native power. TileRT runs inside its returned `salloc` allocation, retains both role exit codes and drains collectors before staging audits. Exactly one physical node per role is supported. Other sequence lengths, AgentX and eval-only do not enable this collector. Hardware qualification and publication remain pending.
+Since C1 is below automatic eval selection, use `all-evals` alongside `full-sweep-fail-fast` for full qualification. TileRT was added after the general GLM-5.1 retirement in [#2533](https://github.com/SemiAnalysisAI/InferenceX/pull/2533); [MODELS.md](MODELS.md) records this retained scope.
 
 ## Register an srt-slurm recipe
 

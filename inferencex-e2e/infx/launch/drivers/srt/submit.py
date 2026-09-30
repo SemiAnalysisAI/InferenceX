@@ -7,7 +7,6 @@ import fnmatch
 import json
 import re
 import subprocess
-import sys
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
@@ -28,7 +27,8 @@ if TYPE_CHECKING:
 SINGLE_NODE_SUBMISSION = "srt-single-node-submission.json"
 MULTINODE_SUBMISSION = "srt-submission.json"
 MULTINODE_EVAL_COMMAND = (
-    '["bash", "{infmax_workspace}/benchmarks/multi_node/srt_eval.sh", "{endpoint}", '
+    '["env", "HF_HUB_OFFLINE=0", "HF_DATASETS_OFFLINE=0", "TRANSFORMERS_OFFLINE=0", '
+    '"MODEL_PATH=/model", "bash", "{infmax_workspace}/benchmarks/multi_node/srt_eval.sh", "{endpoint}", '
     '"{infmax_workspace}"]'
 )
 SINGLE_NODE_EVAL_COMMAND = (
@@ -44,7 +44,6 @@ WORKLOAD_ENV = (
     "SGLANG_TORCH_PROFILER_DIR", "VLLM_TORCH_PROFILER_DIR",
 )  # fmt: skip
 _SHELL_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
-_PROSE_JOB_IDS = (re.compile(r"✅ Job ([0-9]+)"), re.compile(r"Job ([0-9]+)"))
 
 
 def eval_args(env: Mapping[str, str], command: str) -> list[str]:
@@ -85,14 +84,13 @@ def apply(
     config: str,
     arguments: list[str],
     *,
-    stdout: Path | None = None,
+    stdout: Path,
 ) -> subprocess.CompletedProcess[str]:
     """Run ``srtctl apply`` for ``config``, through the golden AgentX acceptance planner.
 
     Every container starts in the workspace mount, as the legacy launchers did:
     PyTorch's generated module imports fail from / with PYTHONPYCACHEPREFIX set.
-    ``arguments`` still win. ``stdout`` receives srtctl's JSON manifest; without
-    it stdout and stderr are captured and echoed.
+    ``arguments`` still win. ``stdout`` receives srtctl's JSON manifest.
     """
     argv = [
         str(checkout.venv / "bin/python"), "-m", "infx.srt_slurm.synthetic_acceptance",
@@ -100,11 +98,6 @@ def apply(
         "--set", 'srun_options.container-workdir="/infmax-workspace"', *arguments,
     ]  # fmt: skip
     env = {**run.env, "RUNNER_NAME": srtctl_job_name(run.request.runner_name)}
-    if stdout is None:
-        result = proc.run(argv, env=env, cwd=checkout.root, capture=True)
-        sys.stdout.write(result.stdout + result.stderr)
-        sys.stdout.flush()
-        return result
     proc.echo(argv, env)
     with stdout.open("w") as handle:
         rc = subprocess.run(argv, env=env, cwd=checkout.root, stdout=handle, check=False).returncode
@@ -118,15 +111,13 @@ def _job(backend: SlurmBackend, job_id: str, output: Path) -> SlurmJob:
 
 @dataclass
 class Submitted:
-    """The job a submission created, once known; its ``--json`` manifest, if any."""
+    """The job a submission created, once known, and its ``--json`` manifest."""
 
-    manifest: Path | None = None
+    manifest: Path
     job: SlurmJob | None = None
 
     def read_manifest(self, backend: SlurmBackend) -> SlurmJob:
         """Adopt the job srtctl reported in its ``--json`` manifest."""
-        if self.manifest is None:
-            raise LaunchError("this submission writes no manifest")
         try:
             job_id, output = submission_fields(self.manifest)
         except (OSError, ValueError, KeyError, TypeError) as error:
@@ -138,7 +129,7 @@ class Submitted:
 
     def recover(self, backend: SlurmBackend) -> SlurmJob | None:
         """The job, read from the manifest when the submission was interrupted after writing it."""
-        if self.job is None and self.manifest is not None and self.manifest.is_file():
+        if self.job is None and self.manifest.is_file():
             with contextlib.suppress(LaunchError):
                 self.read_manifest(backend)
         return self.job
@@ -154,34 +145,17 @@ class Submitted:
         return self.job
 
 
-def _prose_job(backend: SlurmBackend, output: str, checkout: Checkout) -> SlurmJob:
-    """Adopt the one job id in srtctl's human-readable output."""
-    for pattern in _PROSE_JOB_IDS:
-        ids = sorted(set(pattern.findall(output)))
-        if len(ids) > 1:
-            raise LaunchError(f"srtctl submitted several jobs: {', '.join(ids)}")
-        if ids:
-            return _job(backend, ids[0], checkout.root / "outputs" / ids[0])
-    raise LaunchError("Failed to extract JOB_ID from srtctl output")
-
-
 def submit_lane(
     run: SrtRun, submitted: Submitted, checkout: Checkout, config_file: str, arguments: list[str]
 ) -> int:
     """Submit a multi-node lane job, record it in ``submitted``, and return srtctl's exit code."""
-    if submitted.manifest is None:
-        applied = apply(run, checkout, config_file, arguments)
-        if applied.returncode:
-            return applied.returncode
-        submitted.job = _prose_job(run.backend, applied.stdout + applied.stderr, checkout)
-    else:
-        applied = apply(
-            run, checkout, config_file, [*arguments, "--json", "--yes"], stdout=submitted.manifest
-        )
-        print(applied.stdout, end="", flush=True)
-        if applied.returncode:
-            return applied.returncode
-        submitted.read_manifest(run.backend)
+    applied = apply(
+        run, checkout, config_file, [*arguments, "--json", "--yes"], stdout=submitted.manifest
+    )
+    print(applied.stdout, end="", flush=True)
+    if applied.returncode:
+        return applied.returncode
+    submitted.read_manifest(run.backend)
     print(f"Extracted JOB_ID: {submitted.adopted().id}", flush=True)
     return 0
 
@@ -189,7 +163,6 @@ def submit_lane(
 def multinode_arguments(
     run: SrtRun,
     lane: SrtLane,
-    checkout: Checkout,
     config_file: str,
     overrides: list[str],
     *,
@@ -197,15 +170,15 @@ def multinode_arguments(
 ) -> list[str]:
     """The ``srtctl apply`` arguments of a multi-node lane submission."""
     request = run.request
-    stream = [] if checkout.fork else ["--set", "benchmark.stream_output=true"]
     arguments = [
         *eval_args(run.env, MULTINODE_EVAL_COMMAND),
-        *stream,
+        "--set",
+        "benchmark.stream_output=true",
         *overrides,
         "-f",
         config_file,
     ]
-    if not checkout.fork and not preflight:
+    if not preflight:
         arguments.append("--no-preflight")
     if run.srt.job_tag is not None:
         isl, osl = request.env.get("ISL", ""), request.env.get("OSL", "")
