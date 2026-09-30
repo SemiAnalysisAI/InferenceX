@@ -9130,4 +9130,5 @@
     - "Restore the LMCache DRAM-offload points: TP2 concurrency 20, 25 and 30, and TP4 concurrency 40 and 48 (in-process lmcache_offload, 257 GB CPU tier per rank)."
     - "Set ATOM_MONO_ENABLE=0 on TP4 concurrency 15, 20, 24 and 28; the new image enables mono decode by default, which hangs these indexer-CP points."
     - "Drop TP4 concurrency 32."
+    - "No data-type or precision change to the EAGLE3 draft model (Inferact/MiniMax-M3-EAGLE3-GQA): online_quant_config (ptpc_fp8, which ATOM also applies to the draft), kv_cache_dtype fp8 and index-cache-dtype fp8 are unchanged; the FlyDSL, mono-decode and lmcache_offload toggles affect the decode path and KV offload, not draft precision."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3388
