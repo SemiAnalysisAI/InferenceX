@@ -328,7 +328,7 @@ def test_run_eval_rejects_lm_eval_suite_without_task_file() -> None:
     result = _run_invalid_call("EVAL_SUITE=not_a_task run_eval --framework lm-eval")
 
     assert result.returncode == 2
-    assert "has no task file infx/evals/not_a_task.yaml" in result.stderr
+    assert "has no task file infx/evals/lm_eval_tasks/not_a_task.yaml" in result.stderr
 
 
 def test_run_eval_rejects_suite_override_for_swebench() -> None:
@@ -342,7 +342,7 @@ def test_run_eval_maps_lm_eval_suite_to_task_file() -> None:
     script = r"""
 source "$BENCHMARK_LIB"
 run_lm_eval() {
-    echo "DISPATCH=lm-eval TASKS=$EVAL_TASKS_DIR SUITE=$EVAL_SUITE"
+    echo "DISPATCH=lm-eval TASKS=$EVAL_TASKS_DIR INCLUDE=$EVAL_INCLUDE_PATH SUITE=$EVAL_SUITE"
 }
 export EVAL_MAX_MODEL_LEN=16384
 export EVAL_CONCURRENT_REQUESTS=""
@@ -367,7 +367,10 @@ echo "COMPLETED=$EVAL_COMPLETED_SUITE"
     )
 
     assert result.returncode == 0, result.stderr
-    assert "DISPATCH=lm-eval TASKS=infx/evals/cruxeval_output.yaml SUITE=cruxeval_output" in result.stdout
+    assert (
+        f"DISPATCH=lm-eval TASKS=cruxeval_output INCLUDE={REPO_ROOT}/infx/evals/lm_eval_tasks "
+        "SUITE=cruxeval_output"
+    ) in result.stdout
     assert "COMPLETED=cruxeval_output" in result.stdout
 
 
