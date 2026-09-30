@@ -9141,6 +9141,16 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3388
 
 - config-keys:
+    - qwen3.5-fp8-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Qwen3.5-397B-A17B-FP8 AgentX on MI355X with SGLang image lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260927 and a new srt-slurm recipe. TP4 has five GPU-resident points (c1, c4, c8, c12, c14) and nine HiCache DRAM points (c16, c18, c20, c22, c24, c28, c32, c36, c40)."
+    - "Use AITER attention and allreduce fusion, FP8 KV (fp8_e4m3), and EAGLE MTP (3 steps, topk 1, 4 draft tokens); do not enable ROCm INT4 quick all-reduce. HiCache uses ratio 1.5, write_through_selective, kernel I/O and page_first layout. The matching cookbook recipe is sgl-project/sglang#41849."
+    - "The embedded MTP head runs at its stored precision: block-FP8 expert weights and checkpoint dtype for mtp.fc and gates. No separate draft, draft dtype override or submission-side quantization is used."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3602
+
+- config-keys:
     - dsv4-fp4-mi355x-atom-disagg-agentic-lmcache-dspark
   scenario-type:
     - agentic-coding
