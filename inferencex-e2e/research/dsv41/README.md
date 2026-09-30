@@ -262,3 +262,16 @@ and full-batch validation. Other callers retain the completion endpoint. A
 local HTTP behavior test checks native request handling and stream accounting;
 the normal eight-rank runtime probe remains mandatory. This is a diagnostic
 protocol revision, not proof that detokenization caused prior coalescing.
+
+## Native indexer QW prologue
+
+`vllm_indexer_qw_prologue.py` runs production quantized query projection,
+BF16 scoring-weight projection and `fused_indexer_q_rope_quant` at
+T=72/128/4096/8192, H5120, R1280, 32 heads, D128 and RoPE64. The query
+projection uses the V4.1 quantization config; Blackwell emits MXFP4 queries,
+Hopper FP8. FP32 output weights describe the dense-indexer interface. Scale
+factors are1/sqrt128 and1/sqrt32. Input QR quantization is included, unlike a
+reference starting with already-quantized QR. Native BF16 intermediate rounding
+also differs from FP32 handoff. All rows undergo independent projection and
+postprocessing checks before20 profiled samples. Publish minima together with
+medians, eager spans and errors; do not infer identical source fixtures.

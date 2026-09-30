@@ -9570,3 +9570,13 @@
     - "Use native token-in/token-out API without detokenization for high-context cohorts; preserve admission and full-batch validation."
     - "长上下文批次改用原生 token 输入/输出 API 并关闭反分词，保留入队与全 batch 校验。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-8gpu-8k256
+    - dsv41flash-fp4-b300-vllm-8gpu-8k256
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Measure full native indexer QW prologue at four token counts with projection, scale and quantized-output checks."
+    - "测量四个 token 数量下完整原生 Indexer QW 前处理，校验投影、缩放与量化输出。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607

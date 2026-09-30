@@ -213,3 +213,14 @@ FP16 ReduceSum（FP32累加），不计入目标时长。保留 GPU 内核时长
 校验不变。其他调用者继续使用 completion 端点。本地 HTTP 行为测试检查原生
 请求及流式计数，仍要求执行八 rank 运行时探针。这是诊断性协议修改，并非已证明
 之前的合并输出由反分词导致。
+
+## 原生 Indexer QW 前处理
+
+`vllm_indexer_qw_prologue.py` 在 T=72/128/4096/8192、H5120、R1280、
+32 head、D128、RoPE64下，运行生产量化 query 投影、BF16评分权重投影
+及 `fused_indexer_q_rope_quant`。Query 投影使用 V4.1 量化配置；
+Blackwell 输出 MXFP4 query，Hopper 输出 FP8。FP32 权重输出对应
+dense indexer 接口；缩放因子为1/sqrt128和1/sqrt32。
+包含输入 QR 量化，与已量化 QR 起点不同；原生 BF16 中间舍入也与 FP32
+直接传递不同。所有行先进行独立投影与后处理校验，再分析20次调用。
+同时发布最小值、中位数、eager 跨度与误差，不推断源样例完全一致。
