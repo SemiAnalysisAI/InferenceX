@@ -9157,8 +9157,8 @@
   description:
     - "Add DeepSeek-V4-Pro-0813 FP4 B300 Dynamo+SGLang AgentX aggregate TP8 c1 and TP4 c4 recipes, plus disaggregated 1P1D DEP8 c64/c240 and 2P1D DEP8 c480 recipes, under the refactored inferencex-e2e project layout."
     - "Use NIXL with the LIBFABRIC backend for disaggregated KV transfer, relying on the networking stack provided by the pinned container and DSXE runtime without explicit host EFA/OFI mounts or runtime transport setup."
-    - "Use 192 logical CPUs per task, HiCache ratio 3, decode max-running-requests at twice concurrency, persistent AgentX/Hugging Face caches, and exclude the known degraded DSXE nodes."
+    - "Use the B300 DSXE runner's 24-CPUs-per-GPU policy, HiCache ratio 3, decode max-running-requests at twice concurrency, persistent AgentX/Hugging Face caches, and exclude the known degraded DSXE nodes."
     - "在重构后的 inferencex-e2e 项目布局中新增 DeepSeek-V4-Pro-0813 FP4 B300 Dynamo+SGLang AgentX 配方：聚合式 TP8 c1、TP4 c4，以及分离式 1P1D DEP8 c64/c240 和 2P1D DEP8 c480。"
     - "分离式 KV 传输使用 NIXL 的 LIBFABRIC 后端，依赖固定容器与 DSXE 运行时提供的网络栈，不显式挂载主机 EFA/OFI 目录，也不在运行时安装传输组件。"
-    - "每任务使用 192 个逻辑 CPU、HiCache 比例 3，decode 的 max-running-requests 为并发数两倍，挂载持久化 AgentX/Hugging Face 缓存，并排除已知异常 DSXE 节点。"
+    - "使用 B300 DSXE 运行器的每 GPU 24 个 CPU 策略、HiCache 比例 3，decode 的 max-running-requests 为并发数两倍，挂载持久化 AgentX/Hugging Face 缓存，并排除已知异常 DSXE 节点。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3597
