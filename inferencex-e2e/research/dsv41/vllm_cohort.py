@@ -471,7 +471,7 @@ async def run(args, prompts, tokenizer):
                 session,
                 base,
                 prompts,
-                1024,
+                max(1024, output_length),
                 output=out,
                 profile_steps=args.profile_steps,
                 dp_size=args.dp_size,
@@ -576,7 +576,9 @@ def main():
                     "FIXED_SEQUENCE_ACCEPTANCE_LENGTH"
                 ],
                 "draft_tokens": os.environ["FIXED_SEQUENCE_DRAFT_TOKENS"],
-                "profile_wave_osl": 1024 if args.profile_steps else None,
+                "profile_wave_osl": max(1024, int(os.environ["OSL"]))
+                if args.profile_steps
+                else None,
                 "dp_size": args.dp_size,
                 "prefix_warmup_tokens": args.warmup_output_tokens,
                 "framework": "vllm",

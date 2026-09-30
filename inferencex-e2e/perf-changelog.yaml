@@ -9618,3 +9618,12 @@
     - "Test global2560 with prefill2048, per-DP320 sequences and graph cap1920; preserve full decode width and0.95 memory utilization."
     - "使用 prefill2048、每 DP320序列及 graph cap1920 测试 global2560，保留完整 decode 宽度和0.95内存比例。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607
+
+- config-keys:
+    - dsv41flash-fp4-b300-vllm-8gpu-dp-128k2048-c2560
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Use2048 outputs for global2560 and matching profile-wave length after1024 outputs lacked a trimmed full-cohort interval; preserve all validation gates."
+    - "global2560 使用2048输出及对应 profile 长度，解决1024输出没有裁剪后完整区间的问题，保留全部校验。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607

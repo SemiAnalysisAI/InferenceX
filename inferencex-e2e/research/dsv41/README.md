@@ -329,3 +329,12 @@ admission sizing depends on max in-flight tokens, so smaller prefill reservation
 can change capacity materially. Preserve earlier configured bounds; do not call
 them universal hardware limits. The full cohort must still pass real runtime
 measurement and every-worker profile validation.
+
+A B300 global2560 follow-up uses2048 output tokens and max model length133376.
+The1024-output attempt completed all requests but had no common interval after
+mandatory trimming (raw overlap7.784s; trimmed overlap−3.623s). Keep every gate
+unchanged; longer generation supplies observation time rather than weakening
+validation. Source output length is unpublished, so report this choice explicitly.
+Profile waves now use max(1024, measured output length), preventing a longer
+measured case from silently reverting to a shorter profile cohort. Existing
+1024-output cases retain their original protocol and results.
