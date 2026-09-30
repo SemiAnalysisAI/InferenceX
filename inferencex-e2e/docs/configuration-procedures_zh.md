@@ -16,8 +16,8 @@
 | [`infx/matrix/validation.py`](../infx/matrix/validation.py) | 强制执行的 Pydantic schema 和拓扑不变量 |
 | [`infx/matrix/generate.py`](../infx/matrix/generate.py) | 矩阵展开、过滤、runner 查找和生成的作业元数据 |
 | [`configs/nvidia-master.yaml`](../configs/nvidia-master.yaml)、[`configs/amd-master.yaml`](../configs/amd-master.yaml) | 可执行的基准定义 |
-| [`configs/runners.yaml`](../configs/runners.yaml) | 可调度标签、具体 runner 名称和硬件事实 |
-| [`benchmarks/`](../benchmarks) 和 [`runners/`](../runners) | 运行时命令和 launcher 路由 |
+| [`configs/runners.yaml`](../configs/runners.yaml) | 可调度标签、具体 runner 名称和各集群记录（`clusters:`） |
+| [`benchmarks/`](../benchmarks) 和 [`infx/launch/`](../infx/launch) | 运行时命令、启动驱动和工作负载启动策略 |
 | [`perf-changelog.yaml`](../perf-changelog.yaml) | 只允许追加的基准触发日志 |
 | [`AGENTS.md`](../../AGENTS.md) | 仓库级配置、MTP、changelog 和 sweep 规则 |
 
@@ -25,7 +25,7 @@
 
 ## 依赖子模块
 
-Git 记录依赖的精确提交版本。[`.gitmodules`](../../.gitmodules) 定义各仓库：AIPerf 位于 `utils/aiperf`，NVIDIA srt-slurm 位于 `utils/srt-slurm`。TileRT 由 `setup_srt_slurm()` 手动检出已记录的分支仓库，不是独立子模块。
+Git 记录依赖的精确提交版本。[`.gitmodules`](../../.gitmodules) 定义各仓库：AIPerf 位于 `utils/aiperf`，NVIDIA srt-slurm 位于 `utils/srt-slurm`。TileRT 由 srt 驱动（[`infx/launch/drivers/srt/checkout.py`](../infx/launch/drivers/srt/checkout.py)）手动检出已记录的分支仓库，不是独立子模块。
 
 本地运行基准测试前，先初始化子模块：
 
@@ -41,6 +41,38 @@ frontend、一个聚合 worker，并设置 `enable_multiple_frontends: false`。
 `model.container` 必须与主配置中的 worker `image` 一致；更换路由器镜像无需更换 worker
 镜像。TRT-LLM 配方使用原生 `engine.served_model_name`，不再通过 `roles.agg.extra_args`
 重复传入该参数。不再依赖此前分叉中的 ATOM 直连 frontend。
+
+### 集群配置文件
+
+集群的 srt-slurm 设置保存在 [`configs/runners.yaml`](../configs/runners.yaml) 中该集群的
+`clusters.<id>.slurm.srt-slurm` 记录里（schema：[`infx/clusters/slurm.py`](../infx/clusters/slurm.py)）。
+srt-slurm 只在 Slurm 上运行，因此该配置属于 Slurm 子记录。原生设置
+（网络接口、调度指令、单节点时间上限、容器/nginx/模型别名、卷挂载与主机挂载、启动环境、主机设置以及字面量 `extra` 键）与工作负载配方分开维护。
+
+srt 驱动（[`infx/launch/drivers/srt/`](../infx/launch/drivers/srt)）在 `make setup` 之前（`config.py`）
+根据该记录和作业取值生成作业本地的 `srtslurm.yaml`。作业取值包括已暂存的镜像、解析后的模型路径、
+缓存挂载、时间上限，以及功耗作业所需的 DCGM exporter 镜像。取值以 YAML 数据写入，
+绝不替换进 shell 或 YAML 文本，`extra` 也不能覆盖类型化的键。
+
+模型选择、缓存准备以及依赖工作负载的时间上限保留在 srt 驱动的表中
+（[`lanes.py`](../infx/launch/drivers/srt/lanes.py)、[`models.py`](../infx/launch/drivers/srt/models.py)、[`power.py`](../infx/launch/drivers/srt/power.py)），不写进集群记录。
+
+每次分配的主机检查和准备放在 `runners/srt-slurm/hooks/<cluster>/setup.sh`，集群专用辅助脚本放在其旁边。
+目录名与集群 id 一致。在该集群的 `slurm.srt-slurm.host-setup` 记录（`script`、`env`、`timeout-s`、`nodes`）
+中登记脚本，驱动会将其生成为 `default_host_setup`。脚本不会被自动发现。srt-slurm 在选定的已分配节点上、
+容器之外、启动服务和 worker 之前运行这些脚本；检查失败默认会停止启动。通过 `host-setup.env` 显式传入配置。
+如果以后需要撤销步骤，请为 `HostSetup`（infx/clusters/slurm.py）增加 `teardown` 字段，并将其生成为
+`default_host_setup.teardown`；目前没有集群需要。这些是作业自有的 hook，不是管理员安装的
+Slurm Prolog/Epilog 脚本。只为确有需要的集群添加 hook，不要为每个集群添加空脚本。
+
+可复用的主机检查函数放在 `runners/srt-slurm/hooks/common.sh`，集群专用辅助函数放在 `setup.sh` 旁边。
+common 文件只定义函数：source 它不得运行检查、修改环境变量或初始化基准测试。setup hook 与基准脚本都可以复用
+这些函数，而不会把基准初始化带入主机设置。
+
+hook 只注入**集群专用的主机前提条件**，例如网络结构检查或必要的主机状态准备。保持其短小、与工作负载无关，
+并可安全重复运行。能用原生 srt-slurm 设置表达时，优先使用原生设置而不是 shell 代码。基准执行、模型选择、
+引擎参数、并发调优、评测、结果收集和作业编排都不属于 hook。不要用 hook 给引擎或容器打补丁、绕过失败的检查，
+或用重试和临时变通掩盖运行时缺陷；应修复负责的组件。主机改动只限于已分配节点，并保留其他作业正在使用的资源。
 
 ## 规程索引
 
@@ -117,13 +149,13 @@ STP（Single Token Prediction，单 Token 预测）是每次前向传播生成�
 
 ### 仓库注册
 
-1. 对新 fleet 创建 `runners/launch_<base-name>.sh`，或更新现有 launcher。
+1. 在 [`configs/runners.yaml`](../configs/runners.yaml) 中为 fleet 添加 `clusters.<id>` 记录（节点形状、工作负载环境、模型以及调度器子记录：Slurm 为分区、卷、squash 缓存和 srt-slurm 事实；schema 见 [`configs/CONFIGS.md#runners`](../configs/CONFIGS.md#runners)）。依赖模型、框架、精度或配方的启动规则写进 [`infx/launch/policy.py`](../infx/launch/policy.py) 或唯一读取它的驱动旁边，绝不在驱动中按集群 id 分支。新调度器上的集群需要在 [`infx/clusters/`](../infx/clusters) 下新增该调度器的设置模型、在 [`infx/launch/backends/`](../infx/launch/backends) 下新增其后端，各登记一行，无需修改驱动；这类集群只运行 script 驱动（`BENCH_SCRIPT_OVERRIDE`）的点。
 2. 在 [`configs/runners.yaml`](../configs/runners.yaml) 预期的 `labels:` key 下添加每个精确的已注册 runner 名称。新名称使用 `<base-name>_<NN>`，索引必须两位补零。
-3. 如果生成过程需要 fleet 事实，添加匹配的 `hardware:` 条目，并设置正数 `available-cpu-dram-mib` 和 `gpus-per-node`。
-4. 当事实依赖某个物理 fleet 时使用精确 `cluster:<name>` 标签；agentic 配置强制要求该标签。
+3. 把每个 runner 名称加入且仅加入一个与该记录对应的 `cluster:<id>` 标签。`python -m infx.launch run` 通过 runner 名称解析集群，因此不属于任何集群标签的 runner 会导致校验失败，并在启动时失败。
+4. 事实依赖某个物理 fleet 的主条目使用对应的精确 `cluster:<id>` 标签；agentic 配置强制要求该标签。
 5. 添加/更新主条目以使用该标签。生成目标矩阵并确认选择了正确的具体名称。
 
-runner 名称前缀是关键契约：workflow 通过 `launch_${RUNNER_NAME%%_*}.sh` 路由。因此 `<base-name>` 必须匹配一个 launcher，且不得包含 `_`。
+路由依据 `cluster:<id>` 标签，而不是 runner 名称前缀。`<base-name>` 不得包含 `_`：`_` 用于分隔名称与 runner 序号。
 
 ### 主机设置
 
@@ -134,12 +166,6 @@ runner 名称前缀是关键契约：workflow 通过 `launch_${RUNNER_NAME%%_*}.
 5. 用 [`start_runners.sh`](../utils/runner_setup/start_runners.sh) 启动。
 6. 将 runner 加入 sweep 流量前，在[仓库 runner 设置页](https://github.com/SemiAnalysisAI/InferenceX/settings/actions/runners)确认每个 runner 都是 **Idle**。
 7. 从计算节点验证 launcher 对 `_work`、HF cache、预置权重和 squash 镜像的挂载。root 容器不得在共享 workspace 留下 root 所有的文件。
-
-B300 DSXE 的 Kimi-K3 AgentX 路径在 `/scratch/models` 下挂载预置目标模型，
-另行导出并挂载 `WRITABLE_MODELS_DIR` 以保存 DSpark 权重。复用服务容器时，
-草稿模型目录应保留在该持久化挂载中；只读目标模型挂载无法保存草稿模型。
-并发任务通过模型专用锁串行准备草稿权重。每个任务在启动服务前由 `hf download`
-校验或续传现有缓存；目录非空不代表下载完成。
 
 ## TileRT 原生功耗
 
@@ -288,8 +314,8 @@ B300 在 c1/c2/c4 使用相同的最小捕获范围。其 c1 CI 对比中，请�
 
 各 GPU 入口共用纯文本服务行为，使用 `deepseek_v41` tokenizer 和解析器、1M 上下文，
 以及共享的 AgentX 轨迹回放、功耗、指标和 eval helper。TP4 的并发范围为 1–128。
-共享脚本按六 token DSpark 验证块设置 CUDA graph capture。launcher 都为该配方将仓库挂载到 `/ix`，避免在 `/workspace`
-下创建 AgentX 运行目录。沿用各 launcher 的模型路径和持久化缓存。配方在计算节点探测服务端口，首选端口被占用时选择可用端口，
+共享脚本按六 token DSpark 验证块设置 CUDA graph capture。srt-slurm 单节点路径将检出挂载到 `/infmax-workspace`，避免在 `/workspace`
+下创建 AgentX 运行目录。沿用集群的模型路径和持久化缓存。配方在计算节点探测服务端口，首选端口被占用时选择可用端口，
 服务、回放、指标和 eval 共用同一端点。所有配方都必须获得 GPU sweep 和 eval
 证据后才能视为已验证。
 
@@ -334,8 +360,8 @@ MI355X 分支保持一致。Hopper 没有 FP4 tensor core，因此这些权重�
 权重放得下，在 80 GB 卡上并发 1 也会失败。因此 H100 分支使用独立的配方设置并收窄 batched
 tokens，详见下文 H100 小节。
 
-launcher 为该配方将仓库挂载到 `/ix`，避免在 `/workspace` 下创建 AgentX 运行目录；它本来
-就挂载了共享 HF 缓存，因此脚本通过 `HF_HUB_CACHE` 解析模型，而不依赖各节点的独立路径。
+srt-slurm 单节点路径将检出挂载到 `/infmax-workspace`，避免在 `/workspace` 下创建 AgentX 运行目录；它还
+挂载了共享 HF 缓存，因此配方通过 `HF_HUB_CACHE` 解析模型，而不依赖各节点的独立路径。
 配方在计算节点探测服务端口，首选端口被占用时选择可用端口，服务、回放、指标和 eval 共用
 同一端点。
 
@@ -378,11 +404,8 @@ Maximum concurrency for 1,048,576 tokens per request: 6.70x
 这些点可能发生抢占。若要获得更多 KV，需要进一步缩小 indexer —— `--max-num-batched-tokens 2048` 可再释放约
 4 GiB —— 代价是长轨迹 prefill 的分块更细。待有跨并发的吞吐数据后可重新权衡。
 
-`runners/launch_h100-dgxc-slurm.sh` 此前只解析不带 framework 的 `_h100[_mtp].sh` 名称，
-因此该集群上根本无法运行任何带 framework 的脚本。现在它优先解析
-`_h100_<framework>[_mtp].sh`（与 h200 launcher 自 #392 起的行为一致），并对早于 framework
-标签的配方回退到不带 framework 的名称。它还为该配方将仓库挂载到 `/ix`，避免在
-`/workspace` 下创建 AgentX 运行目录。
+该分支通过其 srt-slurm 单节点配方（`srt-recipe:`）运行，配方将检出挂载到 `/infmax-workspace`，
+避免在 `/workspace` 下创建 AgentX 运行目录。
 
 来源：[上游配方](https://github.com/vllm-project/recipes/blob/main/models/deepseek-ai/DeepSeek-V4.1-Flash.yaml)。
 
@@ -428,8 +451,8 @@ TP2 每 GPU 加载约 147.76 GiB 的目标和草稿权重。配方校验固定�
 成功启动，并在 C8 完成全部 1,319 道 GSM8K，严格准确率为 97.65%。评测后的打包因
 诊断脚本缺少环境变量而失败，之后单独恢复；这不等于官方工作流全绿。仍需完成最新镜像
 的完整 sweep。草稿精度保留上游默认值。
-B200 启动器还将固定 Docker digest
-转为已安装 Enroot 支持的 manifest 引用格式，并在导入失败时立即停止。
+镜像暂存（[`infx/launch/backends/slurm/squash.py`](../infx/launch/backends/slurm/squash.py)）在所有集群上将固定 Docker digest
+转为 Enroot 的 `registry#repository:digest` 格式；遇到暂时性导入错误会重试，squash 仍无法校验通过时启动失败。
 
 DSpark 使用固定官方 nightly 默认提供的精度，不应用自定义草稿量化或精度补丁。STP 不加载草稿模型；完整准确率和性能验证仍然必需。
 
@@ -479,10 +502,8 @@ offload），prefill 分块上限设为 4096，即 vLLM H100 配方在 80 GB 显
 `AITER_FLYDSL_FORCE_REDUCE=1`、`ROCM_QUICK_REDUCE_QUANTIZATION=NONE`）、
 `--disable-radix-cache`，以及上限 4096 token 的 breakable prefill 图。
 
-所有配方的 KV cache 均常驻 GPU，因此 `kv-offloading: none`。launcher 对 `framework: sglang`
-的 `dsv41flash` 路由方式与 vLLM 相同：仓库挂载到 `/ix`，检查点通过各集群的持久 HF 缓存解析
-（b300 上为可写的 Lustre 模型目录）。`runners/launch_b200-nscale-compat.sh`、
-`launch_b300-dsxe.sh`、`launch_gb200-nv.sh` 与 `launch_gb300-nv.sh` 此前仅对 `vllm` 开放这些路径。
+所有配方的 KV cache 均常驻 GPU，因此 `kv-offloading: none`。srt-slurm 单节点路径对 `framework: sglang`
+的 `dsv41flash` 处理方式与 vLLM 相同：检出挂载到 `/infmax-workspace`，检查点通过各集群的持久 HF 缓存解析。
 
 在获得 GPU sweep 与 eval 证据之前，不得将这些配方视为已验证。
 
@@ -496,11 +517,12 @@ offload），prefill 分块上限设为 4096，即 vLLM H100 配方在 80 GB 显
 python3 -c "import yaml; yaml.safe_load(open('configs/<nvidia|amd>-master.yaml')); yaml.safe_load(open('configs/runners.yaml')); yaml.safe_load(open('perf-changelog.yaml'))"
 ```
 
-### 基准和 launcher 语法
+### 基准语法和启动检查
 
 ```bash
 bash -n benchmarks/<path>/<script>.sh
-bash -n runners/launch_<cluster>.sh
+uv run python -c 'from infx.clusters import load_clusters; load_clusters()'
+uv run pytest -q infx/tests/launch infx/tests/clusters
 ```
 
 ### 精确 key schema + 矩阵生成
@@ -585,13 +607,13 @@ python -m pytest infx/tests/matrix/ -v
 - 精确 checkpoint、精度、架构、原生上下文、框架、draft model/方法或镜像 tag 尚未验证。
 - 没有覆盖目标模型/backend/SKU 的已验证同类项，且所需运行时参数或内存限制仍未知。
 - runner 用户、共享挂载、预置模型路径、GPU 数、host DRAM、Slurm 行为或 root 文件清理未知。主机设置还必须先有 runner 注册凭据。
-- 已注册 runner 前缀没有匹配 launcher、矩阵解析到不存在的脚本，或 runner 不是 **Idle**。
+- 已注册 runner 不在任何 `cluster:<id>` 标签中、矩阵解析到不存在的脚本，或 runner 不是 **Idle**。
 - 计算出的拓扑超过 fleet、DCP 不能整除 TP、异构 hardware 元数据只写一侧，或生成拓扑与目标配方不一致。
 - srt-slurm 配方与主条目不一致、`model.container != image`，或尚未运行上游配方验证。
 - llm-d 配方缺失并会意外 fallback、allocation 数不一致，或 endpoint discovery 无法满足 IPv4 字面量/唯一名称/有效端口规则。
 - MTP 配方缺少 chat-template 基准、speculative 方法/token 数未验证，或 graph capture 超过 backend 上限。
 - changelog 变更会修改历史字节、没有位于 EOF、存在冲突，或 PR 已准备请求 sweep 但仍保留 `TBD`。
-- YAML、Bash、严格 schema、精确 key 生成、launcher 模拟或配方验证失败。
+- YAML、Bash、严格 schema、精确 key 生成、集群记录校验、启动测试或配方验证失败。
 
 只有当所有可执行文件一致、精确 key 能生成、运行时路由存在、changelog 能选择该 key，且以上各层检查全部通过时，配置才可以进入 sweep。
 
@@ -620,7 +642,6 @@ python -m pytest infx/tests/matrix/ -v
 配方的 16384 时 32 GiB）。两者并发均为 1–32。两个条目还包含更小的布局（MI300X 的 TP4；MI325X 的 TP2 与 TP4），
 通过 `--engram-config '{"cpu_offload":true}'` 将 Engram 表移至主机内存。
 
-`runners/launch_mi300x-amd.sh` 与 `runners/launch_mi325x-amds.sh` 与 MI355X launcher 一样，为该
-检查点将仓库挂载到 `/ix` 并重写 `RESULT_DIR`，使 AgentX 运行目录不落在 `/workspace` 下。MI300X
-launcher 还为该检查点将 Slurm 分配时长从 180 分钟提高到 480 分钟：那里的 HF 缓存为节点本地，
-每个节点上的首次运行需先下载 511 GB。在获得 GPU sweep 与 eval 证据之前，不得将任一配方视为已验证。
+srt-slurm 单节点路径将检出挂载到 `/infmax-workspace`，使 AgentX 运行目录不落在 `/workspace` 下。MI300X
+上的 HF 缓存为节点本地，每个节点上的首次运行需先下载 511 GB。在获得 GPU sweep 与 eval 证据之前，
+不得将任一配方视为已验证。

@@ -24,9 +24,9 @@ paths live in an access-controlled **InferenceX Clusters** Slack canvas, NOT in 
 
 Before SSHing to a cluster, look up that cluster's row in the canvas for: **login address**,
 **GHA runner user**, **runner directory**, any **jumpbox / ProxyJump**, whether it's
-**Slurm or bare-metal**, and the **per-node host RAM**. The matching
-`inferencex-e2e/runners/launch_<cluster>.sh` is the source of truth for the exact container image mounts
-and the benchmark command.
+**Slurm or bare-metal**, and the **per-node host RAM**. The cluster's `clusters.<id>` record in
+`inferencex-e2e/configs/runners.yaml` and the launch drivers under `inferencex-e2e/infx/launch/`
+are the source of truth for the exact container image, mounts and benchmark command.
 
 - If you **can't read the canvas** (no Slack access, or unsure), **ask the user** for the
   cluster's SSH target + runner user rather than guessing or pasting infra into the repo.
@@ -104,13 +104,12 @@ Steps:
 
 1. Use the job or runner name to identify the node. Look up that cluster's access details in
    the canvas, then SSH in with `ssh -A` when a jumpbox or agent forwarding is involved.
-2. Reproduce the exact benchmark the launcher runs. Single-node jobs take the
-   `native-single-node` path in `inferencex-e2e/runners/launch_<cluster>.sh`, which calls
-   `launch_srt_single_node <cluster>` in `inferencex-e2e/runners/slurm_utils.sh`: it validates the
+2. Reproduce the exact benchmark the launcher runs. Single-node jobs go through the srt driver
+   of `python -m infx.launch run` (`inferencex-e2e/infx/launch/drivers/srt/`): it binds the
    master row's `srt-recipe:` (`inferencex-e2e/benchmarks/single_node/srt-slurm-recipes/<model>/<engine>/<sku>-<precision>[-mtp]/<scenario>.yaml`)
-   with `python3 -m infx.srt_slurm.single_node prepare`, then submits it through srtctl
-   with the `inferencex-e2e/runners/srt-slurm/<cluster>.yaml` profile. Read the recipe for the image
-   (`model.container`), server args and env, and the launcher for mounts and the job env
+   with `python -m infx.srt_slurm.single_node prepare`, renders the job-local `srtslurm.yaml`
+   from the cluster's record, then submits it through srtctl. Read the recipe for the image
+   (`model.container`), server args and env, and the cluster record for mounts and the job env
    (`IMAGE`, `TP`, `PRECISION`, `SPEC_DECODING`, `CONC`, …). On Slurm clusters, use
    `salloc` or `srun` with the squash image. On the **bare-metal `-tw` pools, use `docker run`**
    on the node directly without `srun`.
@@ -167,10 +166,10 @@ admin-merge on your own judgment.
 Report the two things the user will decide on:
 
 1. **Sweep status.** Is it 100% of full-sweep jobs passing (green), or fail-fast-truncated or partial?
-2. **Perf delta** vs the most recent official `main` run for that SKU. Compare against the
+2. **Perf delta** vs the most recent official (published) results for that SKU. Compare against the
    latest main results, e.g. on inferencex.semianalysis.com
    (`https://inferencex.semianalysis.com/inference?...&i_active=<sku>_<engine>`) or the
-   stored results for that SKU's last main `run-id`.
+   stored results for that SKU's latest published `run-id`.
 
 Present green-ness and the perf comparison, then **wait for the user** to decide whether to merge.
 
