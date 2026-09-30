@@ -17,13 +17,13 @@ index 8aeea3a0..60659222 100644
  
      @property
 diff --git a/src/srtctl/core/schema.py b/src/srtctl/core/schema.py
-index aba6de72..a88fc0c8 100755
+index 16edddaf..915fcbc5 100755
 --- a/src/srtctl/core/schema.py
 +++ b/src/srtctl/core/schema.py
-@@ -3263,9 +3263,9 @@ class SrtConfig:
-         """Get the served model name from backend config or model path."""
-         default = Path(self.model.path).name
-         if isinstance(self.backend, AtomProtocol):
+@@ -3369,9 +3369,9 @@ class SrtConfig:
+             role = get_frontend(self.frontend.type).model_name_role or role
+         backend = self.backend_for_role(role)
+         if isinstance(backend, AtomProtocol):
 -            # ATOM advertises the literal --model argument; unlike SGLang/vLLM,
 -            # it has no separate served-model-name alias. Match the worker's
 -            # HF ID or container-visible path, including node-local staging.
