@@ -75,6 +75,8 @@ health_check:
   interval_seconds: 5
 benchmark:
   type: sa-bench
+  isl: 32
+  osl: 16
   concurrencies: [4]
 """
 POWER_TELEMETRY = "telemetry:\n  dcgm_exporter:\n    image: dcgm\n  enabled: true\n"
@@ -141,7 +143,15 @@ def test_single_node_point_stages_workflow_artifacts(harness):
     assert (workspace / "srt-slurm-sha.txt").read_text() == harness.env["FAKE_SRT_COMMIT"] + "\n"
     [call] = srtctl_calls(harness.logs)
     argv = call["argv"]
-    assert argv[argv.index("--file") + 1] == f"{workspace}/recipe.yaml:zip_override_conc[0]"
+    bound = call["recipe"]
+    assert bound["model"] == {"path": "hf:test/model", "container": "test:tag", "precision": "fp8"}
+    assert bound["benchmark"]["env"]["CONC"] == "2"
+    assert bound["benchmark"]["env"]["ISL"] == "256"
+    assert bound["benchmark"]["env"]["OSL"] == "64"
+    assert bound["roles"]["agg"]["args"] == {
+        "tensor-parallel-size": 4, "data-parallel-size": 1, "max-running-requests": 32,
+        "served-model-name": "test/model",
+    }
     assert {"--json", "--yes", "--output"} <= set(argv)
     assert (call["env"]["INFMAX_WORKSPACE"], call["env"]["VIRTUAL_ENV"]) == (str(workspace), None)
     assert call["env"]["RUNNER_NAME"] == f"inferencex-{env['RUNNER_NAME']}"
@@ -232,6 +242,8 @@ def test_multinode_lane_stages_workflow_artifacts(harness, monkeypatch, cluster_
     monkeypatch.setitem(models.OVERRIDES, "lab-a", (Override(Match(), served_name="served-model"),))
     env = lane_env(harness, cluster_id, RUNNER_NAME=f"{cluster_id}_00", MODEL_PREFIX="dsr1",
                    PRECISION="fp8", MODEL="org/Model", **lab["env"])  # fmt: skip
+    if env["IS_AGENTIC"] == "0":
+        env.update(CONC="", CONC_LIST="4 8")
     runner, tmp, workspace = env["RUNNER_NAME"], harness.tmp, harness.workspace
     assert launch_here(monkeypatch, env, lab_config(tmp), workspace) == 0
 
@@ -255,8 +267,13 @@ def test_multinode_lane_stages_workflow_artifacts(harness, monkeypatch, cluster_
         assert checkout.parent == workspace.resolve()
         assert checkout.name.startswith("srt-slurm-9001-1-") and len(checkout.name) == len("srt-slurm-9001-1-") + 12
     assert ("--no-preflight" in argv) is not lab["preflight"]
-    assert argv[argv.index("--file") + 1] == "recipes/test/lane.yaml"
-    assert {"--json", "--yes", "benchmark.stream_output=true"} <= set(argv)
+    bound = call["recipe"]
+    assert bound["model"] == {"path": "hf:org/Model", "container": "test:tag", "precision": "fp8"}
+    assert bound["benchmark"]["concurrencies"] == ([4, 8] if env["IS_AGENTIC"] == "0" else [4])
+    if env["IS_AGENTIC"] == "0":
+        assert (bound["benchmark"]["isl"], bound["benchmark"]["osl"]) == (1024, 1024)
+    assert bound["benchmark"]["stream_output"] is True
+    assert {"--json", "--yes"} <= set(argv)
     if lab["tag"] is None:
         assert "--tags" not in argv
     else:
@@ -267,13 +284,15 @@ def test_multinode_lane_stages_workflow_artifacts(harness, monkeypatch, cluster_
         assert argv[argv.index("--setup-script") + 1] == lab["setup_script"]
     assert call["env"]["SERVED_MODEL_NAME"] == lab["served"]
 
-    staged = yaml.safe_load((checkout / "recipes/test/lane.yaml").read_text())
-    assert staged["name"] == call["env"]["RUNNER_NAME"] == f"inferencex-{runner}"
+    assert bound["name"] == call["env"]["RUNNER_NAME"] == f"inferencex-{runner}"
     dist = {"dist-timeout": 1800} if lab["dist_timeout"] else {}
-    assert staged["roles"]["prefill"]["args"] == {"tensor-parallel-size": 8, "watchdog-timeout": 600, **dist}
+    assert bound["roles"]["prefill"]["args"] == {"tensor-parallel-size": 8, "watchdog-timeout": 600, **dist}
+    assert bound["health_check"] == {"max_attempts": 720, "interval_seconds": 5}
 
     config = srtslurm(checkout)
-    assert config["model_paths"] == {"alias": str(tmp / lab["model"])}
+    assert config["model_paths"] == {
+        "alias": str(tmp / lab["model"]), "hf:org/Model": str(tmp / lab["model"]),
+    }
     assert config["default_time_limit"] == lab["time"]
     assert set(lab["mounts"]) <= set(config.get("default_mounts", {}).values())
     imported = [line.split()[-1] for line in lines(harness.logs, "enroot")]
@@ -417,7 +436,9 @@ def test_eval_only_runs_the_eval_recipe_with_real_verification(harness):
     (mirror / "trtllm/forced.yaml").write_text(
         "roles:\n  decode:\n    env:\n      TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS: 2\n      KEEP: 1\n"
     )
-    (mirror / "eval.yaml").write_text(LANE_RECIPE)
+    eval_recipe = yaml.safe_load(LANE_RECIPE)
+    eval_recipe["roles"]["decode"]["args"]["max-num-seqs"] = 11
+    (mirror / "eval.yaml").write_text(yaml.safe_dump(eval_recipe))
     env = lane_env(
         harness, "gb300-nv", MODEL_PREFIX="dsv4", PRECISION="fp4", FRAMEWORK="dynamo-trt",
         MODEL="deepseek-ai/DeepSeek-V4-Pro", IS_AGENTIC="1", SPEC_DECODING="mtp", ISL="0", OSL="0",
@@ -427,9 +448,10 @@ def test_eval_only_runs_the_eval_recipe_with_real_verification(harness):
     assert_ok(launch(env, harness.config, harness.workspace))
 
     [call] = srtctl_calls(harness.logs)
-    argv = call["argv"]
-    assert argv[argv.index("--file") + 1] == "recipes/test/eval.yaml"
-    assert "frontend.placement.node=head" in argv
+    bound = call["recipe"]
+    assert bound["roles"]["decode"]["args"]["max-num-seqs"] == 11
+    assert bound["frontend"]["placement"]["node"] == "head"
+    assert bound["health_check"] == {"max_attempts": 720, "interval_seconds": 5}
     checkout = Path(call["cwd"])
     assert (checkout / "recipes/test/trtllm/forced.yaml").read_text() == (
         "roles:\n  decode:\n    env:\n      KEEP: 1\n"
@@ -507,7 +529,6 @@ def test_post_eval_is_handed_the_workload_contract_and_no_other_secret(harness):
     env = single_node_env(harness, "h200-cw", **handed, **withheld)
     assert_ok(launch(env, harness.config, harness.workspace))
     [call] = srtctl_calls(harness.logs)
-    [names] = [json.loads(arg.split("=", 1)[1]) for arg in call["argv"]
-               if arg.startswith("post_eval.passthrough_env=")]  # fmt: skip
+    names = call["recipe"]["post_eval"]["passthrough_env"]
     assert handed.keys() <= set(names)
     assert not {*withheld, "PATH", "HF_HUB_CACHE"} & set(names)

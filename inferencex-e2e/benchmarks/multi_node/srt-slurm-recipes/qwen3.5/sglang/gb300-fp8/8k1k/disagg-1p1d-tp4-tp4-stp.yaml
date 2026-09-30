@@ -15,11 +15,6 @@ frontend:
   num_additional_frontends: 1
   nginx_container: nginx
 
-model:
-  path: "qwen3.5-fp8"
-  container: "lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85"
-  precision: "fp8"
-
 resources:
   gpu_type: "gb300"
   gpus_per_node: 4
@@ -46,7 +41,6 @@ roles:
       MC_FORCE_MNNVL: "1"
 
     args:
-      served-model-name: "Qwen/Qwen3.5-397B-A17B-FP8"
       model-path: "/model/"
       quantization: "fp8"
       kv-cache-dtype: "fp8_e4m3"
@@ -94,7 +88,6 @@ roles:
       SGLANG_HACK_SEQ_BOOTSTRAP_ROOM: "1"
 
     args:
-      served-model-name: "Qwen/Qwen3.5-397B-A17B-FP8"
       model-path: "/model/"
       quantization: "fp8"
       kv-cache-dtype: "fp8_e4m3"
@@ -115,14 +108,8 @@ roles:
       disaggregation-mode: "decode"
 
 benchmark:
-  type: custom
-  concurrencies: "1x2x4x8x16x32x64x128"
-  command: bash /infmax-workspace/benchmarks/multi_node/srt_fixed_sequence.sh
   env:
     TOKENIZER: /model
-    ISL: '8192'
-    OSL: '1024'
-
 telemetry:
   enabled: true
   collect_interval_ms: 1000

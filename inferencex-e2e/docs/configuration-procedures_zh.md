@@ -38,8 +38,7 @@ git submodule update --init
 单节点固定序列长度配方使用 NVIDIA 上游 srt-slurm。ATOM 配方使用原生 `atomesh`
 frontend、一个聚合 worker，并设置 `enable_multiple_frontends: false`。旧版基准 worker
 镜像不包含 AToMesh，因此通过 `frontend.container_image` 单独固定路由器的官方镜像。
-`model.container` 必须与主配置中的 worker `image` 一致；更换路由器镜像无需更换 worker
-镜像。TRT-LLM 配方使用原生 `engine.served_model_name`，不再通过 `roles.agg.extra_args`
+启动器从主配置的 worker `image` 填入 `model.container`；独立的路由器镜像仍需显式声明。TRT-LLM 配方使用原生 `engine.served_model_name`，不再通过 `roles.agg.extra_args`
 重复传入该参数。不再依赖此前分叉中的 ATOM 直连 frontend。
 
 ### 集群配置文件
@@ -119,7 +118,7 @@ STP（Single Token Prediction，单 Token 预测）是每次前向传播生成�
 3. **添加 srt-slurm 配方。**放在 `benchmarks/single_node/srt-slurm-recipes/<model-prefix>/<engine>/<sku>-<precision>[-mtp]/8k1k.yaml`，每个矩阵点对应一个 `override_*` 变体。保留已验证同类项中的引擎参数、env、parser 参数、attention/MoE backend、KV-cache dtype、graph/eager 模式、`setup_script` 和上下文处理。
 4. **添加主配置条目。**`mi*` 使用 [`amd-master.yaml`](../configs/amd-master.yaml)，其他使用 [`nvidia-master.yaml`](../configs/nvidia-master.yaml)。精确设置 `image`、`model`、`model-prefix`、`runner`、`precision`、`framework`、scenario 和支持的搜索空间。
 5. **依据证据确定规模。**复制已验证的并行布局并删除不支持的布局。延迟型 TP 行通常从并发 1 开始；不要把大显存 SKU 的 TP/EP 布局复制到小显存 SKU。
-6. **检查变体选择。**每个搜索空间行都带有 `srt-recipe:`，每个矩阵点必须按 TP/GPU 数、`CONC`、`KV_OFFLOADING` 和镜像恰好匹配一个配方变体（`infx/srt_slurm/single_node.py::select_recipe`），无需 launcher 路由。
+6. **检查变体选择。**每个搜索空间行都带有 `srt-recipe:`，每个矩阵点必须按 TP/GPU 数、`CONC` 和 `KV_OFFLOADING`恰好匹配一个配方变体（`infx/srt_slurm/single_node.py::select_recipe`），无需 launcher 路由。
 7. **追加一条 changelog**，精确选择新 key；参见[安全追加 changelog](#安全追加-changelog)。
 8. **验证语法和生成结果。**检查 image、model、runner、ISL/OSL、`max-model-len`、并发、TP/PP/EP/DCP/PCP 和 `spec-decoding`。
 
@@ -187,11 +186,52 @@ B200 Nscale 的 GLM-5.1 可用 `MODEL_PATH` 指定已有共享权重，覆盖默
 2. 将 YAML 放在 `benchmarks/multi_node/srt-slurm-recipes/<model-prefix>/<engine>/<gpu>-<precision>/<workload>/` 下，遵循 `RECIPES_zh.md` 中的命名规范。阅读最接近的同类项和所选集群 launcher。
 3. 将来源字段映射到主配置搜索空间条目：资源 worker 数 → `num-worker`；TP/EP/DP-attention → worker 拓扑；基准并发 → `conc-list`；配方路径 → `additional-settings: ["CONFIG_FILE=..."]`。
 4. 在同一变更中添加/更新匹配的 [`nvidia-master.yaml`](../configs/nvidia-master.yaml) 条目。同步 worker 数、TP/PP/EP/DCP/PCP、hardware、router、传输引擎和并发标签。
-5. 更新镜像时，使配方 `model.container` 与主配置 `image` 完全相同；launcher 使用主配置镜像作为 container alias key。
-6. 运行配方所记录的 `srtctl` 验证，再生成主配置 key，并把每个前端标签/拓扑字段与配方逐一比对。
+5. 在主配置中设置服务镜像、模型、场景 ISL/OSL 和并发数。启动器在运行时将这些值填入所选配方；参见[运行时工作负载绑定](#运行时工作负载绑定)。
+6. 对已完成绑定的配方运行所记录的 `srtctl` 验证，再生成主配置 key，并把每个前端标签/拓扑字段与配方逐一比对。
 7. 追加 changelog 条目。
 
-不得只提交一侧：`srtctl` 读取配方，而矩阵生成读取主配置。仅改配方可能给结果贴错标签；仅改主配置不会改变实际部署的配方。
+两个文件中的拓扑和调优设置必须保持同步。以下运行时工作负载值由主配置负责；修改这些字段时，无需在配方中重复修改。
+
+## 运行时工作负载绑定
+
+所有活跃的原生固定序列长度配方仍保留在原有的
+`benchmarks/single_node/srt-slurm-recipes/` 和
+`benchmarks/multi_node/srt-slurm-recipes/` 路径下，只以原生 YAML 结构保存配方特有
+设置。共享字段放在扁平的
+[`fixed-sequence-single.yaml`](../configs/srt-recipes/fixed-sequence-single.yaml) 和
+[`fixed-sequence-multi.yaml`](../configs/srt-recipes/fixed-sequence-multi.yaml) 块中。
+InferenceX 根据 `IS_AGENTIC=0` 和 `IS_MULTINODE` 自动选择共享块；配方片段无需
+include、模板语法、注册表或单独的调优文件。
+
+运行时与 `infx generate` 均通过 `infx.srt_slurm.common.load_recipe` 合并共享块和
+配方片段。映射递归合并，片段中的列表替换共享列表；对于变体集合，加载器将共享块
+应用到 `base` 下。先选择调优变体，再绑定主配置值，保留与 CUDA graph 或批处理设置
+配套的并发 zip 选择器。
+
+| 主配置/运行时值 | 绑定的配方字段 |
+|---|---|
+| `image` / `IMAGE` | `model.container`，以及已有的 `identity.container.image` |
+| `model` / `MODEL` | `model.path`、已有的 `identity.model.repo`，以及自定义客户端的 `benchmark.env.MODEL` |
+| `precision` / `PRECISION` | 固定序列配方的 `model.precision` |
+| `isl`、`osl` / `ISL`、`OSL` | 内置客户端的 `benchmark.isl` / `benchmark.osl`，或自定义客户端的 `benchmark.env.ISL` / `OSL` |
+| 所选并发数 / `CONC`、`CONC_LIST` | 使用该字段时的 `benchmark.concurrencies`，以及自定义客户端的并发环境变量 |
+
+模型加载保留集群映射与预先准备机制；执行时使用镜像缓存，溯源仍保留原始引用。
+引擎量化、并行方式、调优、独立的角色/辅助服务镜像、有意设置的模型别名、tokenizer
+覆盖项和 draft model 仍在片段中显式声明。固定序列基准脚本统一为所有运行启用 chat
+template，并将 random-range ratio 设为 `0.8`；配方不再重复或切换这些设置。
+
+在 `inferencex-e2e/` 下为所选矩阵点生成完整原生 YAML：
+
+```bash
+uv run --extra recipes infx generate \
+  --config-key qwen3.5-fp8-b300-sglang --output-dir /tmp/infx-recipes
+```
+
+输出目录必须为空，将收到 manifest 和完整原生配方，供检查并使用固定上游版本验证。
+生成配方属于不纳入版本控制的输出，不要提交，也不要将不完整片段直接传给 `srtctl`。
+生成器支持原生固定序列长度的单节点和多节点路径，明确拒绝 AgentX、legacy 路径和
+fork。现有 AgentX 运行时绑定仍然可用。
 
 ## 注册 llm-d 配方
 
@@ -216,7 +256,7 @@ llm-d 不是 srt-slurm 路径：InferenceX 自己持有 Slurm allocation，并�
 1. 验证精确的上游 registry tag 或 digest 确实存在，并适用于 CUDA/ROCm 和目标架构。
 2. 找出所有受影响的配置 key、运行时脚本、Dockerfile 和检入配方。不要假设主 YAML 是唯一镜像引用。
 3. 将主配置 `image` 与所需 env、参数、软件包版本或补丁作为一个一致变更更新。
-4. 对 srt-slurm，更新 `model.container` 并保持其与主配置 `image` 完全一致。
+4. 对 srt-slurm，更新主配置的 `image`，启动器在运行时填入 `model.container`。单独检查独立固定的角色、路由器和辅助服务镜像。
 5. 对 llm-d，区分主配置选择的服务镜像和 [`benchmarks/llm-d/Dockerfile`](../benchmarks/llm-d/Dockerfile) 中的构建来源；仅在构建契约变化时同时更新两者。
 6. 追加选择全部受影响 key 的 changelog 条目（有意覆盖多个 key 时可以使用通配符），并列出旧/新版本及实质运行时变更。
 7. 生成每个受影响的配置族，确认其运行时路径中没有残留旧 tag。
@@ -227,7 +267,7 @@ llm-d 不是 srt-slurm 路径：InferenceX 自己持有 Slurm allocation，并�
 
 1. 确认使用原生 MTP 模块还是外部 draft。使用 draft 时，从模型/上游配方验证精确模型 ID、方法（例如 `eagle3`）和建议 speculative token 数。
 2. 复制相同模型和 backend 的可工作同类项。保留其 speculative config、attention backend、token 数、模型补丁和依赖设置。
-3. 每个投机解码的定长配方变体都必须设置 `benchmark.env.USE_CHAT_TEMPLATE: "true"`；`select_recipe` 会拒绝缺少该设置的投机解码变体，[`srt_fixed_sequence.sh`](../benchmarks/single_node/srt_fixed_sequence.sh) 会将其转换为传给 `run_benchmark_serving` 的 `--use-chat-template`。原始 prompt 会静默降低 acceptance。
+3. 固定序列基准脚本统一为所有运行（包括推测解码）传入 `--use-chat-template`。不要添加逐配方的 chat-template 开关；原始 prompt 会静默降低推测接受率。
 4. graph capture 至少按 `CONC * (1 + NUM_SPEC_TOKENS)` 确定规模，采用同类项的取整方式，并限制在框架上限内（当前 vLLM playbook 上限为 2048）。
 5. 保留 backend 差异：不要把 CUDA 专用 drafter attention pin 或补丁复制到 ROCm 配方。
 6. 在相应搜索空间条目设置 `spec-decoding: mtp`，并将其 `srt-recipe:` 指向 `-mtp` 配方；`select_recipe` 会据此校验配方的 speculative 配置。若使用 schema 支持的 draft-model 模式，要有意设置匹配的生成值；不要根据文件名推断。
@@ -609,7 +649,7 @@ python -m pytest infx/tests/matrix/ -v
 - runner 用户、共享挂载、预置模型路径、GPU 数、host DRAM、Slurm 行为或 root 文件清理未知。主机设置还必须先有 runner 注册凭据。
 - 已注册 runner 不在任何 `cluster:<id>` 标签中、矩阵解析到不存在的脚本，或 runner 不是 **Idle**。
 - 计算出的拓扑超过 fleet、DCP 不能整除 TP、异构 hardware 元数据只写一侧，或生成拓扑与目标配方不一致。
-- srt-slurm 配方与主条目不一致、`model.container != image`，或尚未运行上游配方验证。
+- srt-slurm 配方与主条目的拓扑或调优设置不一致、运行时工作负载绑定失败，或尚未对已绑定配方运行上游验证。
 - llm-d 配方缺失并会意外 fallback、allocation 数不一致，或 endpoint discovery 无法满足 IPv4 字面量/唯一名称/有效端口规则。
 - MTP 配方缺少 chat-template 基准、speculative 方法/token 数未验证，或 graph capture 超过 backend 上限。
 - changelog 变更会修改历史字节、没有位于 EOF、存在冲突，或 PR 已准备请求 sweep 但仍保留 `TBD`。

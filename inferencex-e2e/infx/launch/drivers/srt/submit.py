@@ -94,6 +94,7 @@ def apply(
     """
     argv = [
         str(checkout.venv / "bin/python"), "-m", "infx.srt_slurm.synthetic_acceptance",
+        *([] if checkout.fork else ["--bind-workload"]),
         config, run.request.framework, "--", *arguments,
     ]  # fmt: skip
     env = {**run.env, "RUNNER_NAME": srtctl_job_name(run.request.runner_name)}

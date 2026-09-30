@@ -187,8 +187,8 @@ external **`Inferact/MiniMax-M3-EAGLE3`** draft, `method: eagle3`, **3 speculati
 - **ROCm (mi*)**: no backend pin (server runs `TRITON_ATTN`). Use an image that already carries
   the upstream `SupportsEagle3` fix (`vllm-project/vllm#45546`); the old in-place model patch was
   retired with the legacy bash scripts. Copy the sibling `minimaxm3/vllm/mi*-mtp` recipe.
-- **All**: set `USE_CHAT_TEMPLATE: 'true'` in the recipe's `benchmark.env` (the single-node
-  adapter requires it whenever speculation is on). Raw random tokens tank spec-decode acceptance. Search space mirrors the non-MTP
+- **All**: fixed-sequence clients always enable chat templates; recipes need no toggle.
+  Raw random tokens tank spec-decode acceptance. Search space mirrors the non-MTP
   entry trimmed at the extreme-conc end, latency rows starting at conc 1, `tp2-ep2` dropped.
 - Other models may instead use **native MTP** (`method: mtp`, no external draft) when the
   checkpoint ships MTP modules (`num_mtp_modules > 0`), e.g. the DeepSeek-V4 recipes.

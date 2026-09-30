@@ -8,13 +8,14 @@ from __future__ import annotations
 
 import fnmatch
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import yaml
 
 from infx.launch.context import LaunchError
+from infx.srt_slurm.common import load_recipe
 
 if TYPE_CHECKING:
     from infx.launch.drivers.srt.lanes import SrtLane
@@ -35,6 +36,16 @@ def recipe_relpath(config_file: str) -> str:
 def recipe_mirror_path(workspace: Path, config_file: str) -> Path:
     """The workspace mirror of ``CONFIG_FILE``'s recipe."""
     return workspace / RECIPES_MIRROR / recipe_relpath(config_file).removeprefix("recipes/")
+
+
+def compose_recipe(
+    workspace: Path, checkout: Path, config_file: str, environment: Mapping[str, str]
+) -> None:
+    """Compose the source before job-specific edits to the disposable recipe copy."""
+    source = recipe_mirror_path(workspace, config_file)
+    recipe = load_recipe(source, environment)
+    destination = checkout / recipe_relpath(config_file)
+    destination.write_text(yaml.safe_dump(recipe, sort_keys=False))
 
 
 def rename_job(text: str, name: str) -> str:

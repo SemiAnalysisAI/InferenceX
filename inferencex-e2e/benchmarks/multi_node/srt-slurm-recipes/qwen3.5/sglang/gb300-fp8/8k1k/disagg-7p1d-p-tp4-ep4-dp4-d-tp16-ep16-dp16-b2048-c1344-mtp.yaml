@@ -17,11 +17,6 @@ frontend:
   num_additional_frontends: 6
   nginx_container: nginx
 
-model:
-  path: "qwen3.5-fp8"
-  container: "lmsysorg/sglang:v0.5.14-cu130@sha256:5027e95bf6ec536856b1b52a91d1f35ff5c564ab83e8a94758a169ff09bb8df3"
-  precision: "fp8"
-
 resources:
   gpu_type: "gb300"
   gpus_per_node: 4
@@ -53,7 +48,6 @@ roles:
       SGLANG_ENABLE_HEALTH_ENDPOINT_GENERATION: "0"
 
     args:
-      served-model-name: "Qwen/Qwen3.5-397B-A17B-FP8"
       model-path: "/model/"
       random-seed: 42
       quantization: "fp8"
@@ -116,7 +110,6 @@ roles:
       SGLANG_ENABLE_HEALTH_ENDPOINT_GENERATION: "0"
 
     args:
-      served-model-name: "Qwen/Qwen3.5-397B-A17B-FP8"
       model-path: "/model/"
       random-seed: 42
       trust-remote-code: true
@@ -164,14 +157,8 @@ roles:
       stream-interval: 50
 
 benchmark:
-  type: custom
-  concurrencies: "1344"
-  command: bash /infmax-workspace/benchmarks/multi_node/srt_fixed_sequence.sh
   env:
     TOKENIZER: /model
-    ISL: '8192'
-    OSL: '1024'
-
 telemetry:
   enabled: true
   collect_interval_ms: 1000

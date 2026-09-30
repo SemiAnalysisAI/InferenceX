@@ -12,7 +12,9 @@ from typing import Any
 
 import yaml
 
+from infx.srt_slurm.common import load_recipe
 from infx.srt_slurm.synthetic_acceptance import ENGINES, selected_recipes, spec_parameters
+from infx.srt_slurm.workload import bind_workload
 
 SINGLE_NODE_ENGINES = {**ENGINES, "atom": "atom"}
 
@@ -58,7 +60,7 @@ def parallelism_constraints(
 def select_recipe(config: str, environment: Mapping[str, str]) -> tuple[str, dict[str, Any]]:
     """Resolve a matrix point to one native variant, never submit an entire sweep."""
     path, _, selector = config.partition(":")
-    raw = yaml.safe_load(Path(path).read_text())
+    raw = load_recipe(Path(path), environment)
     if not isinstance(raw, dict):
         raise ValueError("Recipe must be a mapping")
     recipes = selected_recipes(raw, selector or None)
@@ -66,7 +68,16 @@ def select_recipe(config: str, environment: Mapping[str, str]) -> tuple[str, dic
     errors = []
     for name, recipe in recipes:
         try:
-            validate_recipe(recipe, environment)
+            # A bundle may couple concurrency to graph sizes or other tuning.
+            # Select that variant before binding caller-owned workload values.
+            concurrency = recipe.get("benchmark", {}).get("env", {}).get("CONC")
+            if (
+                name not in (None, "base")
+                and concurrency is not None
+                and str(concurrency) != environment["CONC"]
+            ):
+                raise ValueError(f"CONC: recipe {concurrency} != point {environment['CONC']}")
+            validate_recipe(bind_workload(recipe, environment), environment)
         except ValueError as exc:
             errors.append(f"{name}: {exc}")
         else:
@@ -117,8 +128,7 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
         "AgentX client": (benchmark.get("command", "").endswith("srt_agentic.sh"), agentic),
     }
     if not agentic:
-        expected["USE_CHAT_TEMPLATE"] = (workload["USE_CHAT_TEMPLATE"], "true" if spec else "false")
-        for name in ("ISL", "OSL", "RANDOM_RANGE_RATIO"):
+        for name in ("ISL", "OSL"):
             expected[name] = (str(workload[name]), environment[name])
     # A variant that names its point, or the host budget it sizes, must match the matrix.
     for name in ("CONC", "KV_OFFLOADING", "TOTAL_CPU_DRAM_GB"):
@@ -223,9 +233,13 @@ def main() -> None:
     parsed = parser.parse_args()
     try:
         if parsed.command == "prepare":
-            config, _ = select_recipe(parsed.recipe, os.environ)
+            _, recipe = select_recipe(parsed.recipe, os.environ)
             arguments = runtime_arguments(parsed.recipe, os.environ)
-            parsed.output.write_bytes("\0".join([config, *arguments, ""]).encode())
+            # Submit a concrete recipe, so later overrides cannot collapse a zip
+            # group and detach concurrency from its selected server tuning.
+            bound = parsed.output.with_suffix(".recipe.yaml")
+            bound.write_text(yaml.safe_dump(bind_workload(recipe, os.environ), sort_keys=False))
+            parsed.output.write_bytes("\0".join([str(bound), *arguments, ""]).encode())
         else:
             print("\n".join(submission_fields(parsed.manifest)))
     except (OSError, ValueError, KeyError, TypeError, yaml.YAMLError) as exc:

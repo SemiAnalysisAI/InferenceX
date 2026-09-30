@@ -42,23 +42,39 @@ qwen3.5/trtllm/gb300-fp4/agentx/disagg-variants.yaml
 | `roles.prefill.args.tp-size`（SGLang） | `prefill.tp` |
 | `roles.prefill.args.ep-size`（SGLang） | `prefill.ep` |
 | `roles.prefill.args.enable-dp-attention` | `prefill.dp-attn` |
-| `benchmark.concurrencies` | `conc-list` |
+| `benchmark.concurrencies`（运行时绑定） | 所选 `conc-list` |
 | 配置路径，可附带覆盖项选择器 | `additional-settings: CONFIG_FILE=recipes/...yaml` |
 
-配置文件和主配置必须同步更新。启动器执行配置文件；主配置提供结果标签和调度元数据。聚合式配置使用 `roles.agg`；`roles.decode.nodes: colocate` 表示解码角色与预填充角色共享节点，不增加调度所需的工作节点数。
+配方与主配置中的拓扑和调优设置必须保持同步。主配置提供服务镜像、模型、ISL/OSL
+及所选并发数；InferenceX 在选择调优变体后绑定这些值。保留与调优设置配套的并发 zip
+选择器，并显式声明独立固定的角色/辅助服务镜像。
+
+本目录中活跃的原生固定序列长度文件是不完整配方片段，仅按原生 YAML 结构保存
+配方特有设置。InferenceX 自动将其与扁平的
+`configs/srt-recipes/fixed-sequence-multi.yaml` 共享块组合；单节点片段使用
+`fixed-sequence-single.yaml`。无需逐配方源注册表、单独调优目录或 include/模板
+语法。运行时与 `infx generate` 共用加载器，递归合并映射、替换列表，并在变体集合的
+`base` 下应用共享字段。主配置提供模型、镜像、精度、长度和并发数；引擎调优及有意
+设置的覆盖项仍保留在片段中。
+
+固定序列脚本统一启用 chat template，使用 `0.8` 的 random-range ratio。
+`infx generate` 仅向空输出目录写入完整原生配方和 manifest；生成配方不纳入版本
+控制。命令及生成器范围详见
+[运行时工作负载绑定](../../../docs/configuration-procedures_zh.md#运行时工作负载绑定)。
+
+聚合式配置使用 `roles.agg`；`roles.decode.nodes: colocate` 表示解码角色与预填充
+角色共享节点，不增加调度所需的工作节点数。
 
 所有被引用的配置都必须纳入版本控制：srt-slurm 2 提供精选示例，不再携带历史 `recipes/` 目录。本次迁移补齐了 204 个此前依赖外部仓库的配置，并从 InferenceX 历史记录恢复了两个仍被引用的 AgentX 配置。主配置路径遵循上述目录结构，原有覆盖项选择器保持不变。
 
 ## 迁移与验证
 
-在隔离环境中安装统一版本，然后使用其 CLI：
+在隔离环境中安装统一版本。运行上游验证命令前，先生成完整原生配方；已提交的
+固定序列片段不能作为独立的 `srtctl` 输入。例如，在 `inferencex-e2e/` 下运行：
 
 ```bash
-# 重写前先验证每个受支持的配置目录。
-srtctl migrate --verify -f benchmarks/multi_node/srt-slurm-recipes/dsr1/sglang
-srtctl migrate --in-place -f benchmarks/multi_node/srt-slurm-recipes/dsr1/sglang
-# 对其他模型/引擎目录重复执行。
-# 迁移 tilert/ 配置目录时，使用固定提交的 TileRT 分支仓库。
+uv run --extra recipes infx generate \
+  --config-key qwen3.5-fp4-gb300-dynamo-sglang --output-dir /tmp/infx-recipes
 python -m pytest infx/tests/matrix/ -q
 python -m infx.matrix.generate full-sweep \
   --config-files configs/nvidia-master.yaml \
