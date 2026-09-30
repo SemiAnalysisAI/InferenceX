@@ -1,6 +1,9 @@
 """srtslurm.yaml rendering from controlled cluster records."""
 
+import shutil
+import subprocess
 import sys
+from types import SimpleNamespace
 from pathlib import Path
 
 import pytest
@@ -9,6 +12,7 @@ import yaml
 from infx.clusters import Cluster, load_inventory
 from infx.launch.backends.slurm import SlurmBackend
 from infx.launch.context import Launch
+from infx.launch.drivers.srt.checkout import Checkout, compute_workspace
 from infx.launch.drivers.srt.config import SrtJob, pyxis_spelling, render, write
 from infx.launch.drivers.srt.recipe import HEALTH_ATTEMPTS, prepare_recipe
 from infx.launch.drivers.srt.run import SrtRun
@@ -182,3 +186,27 @@ def test_the_cpu_request_follows_the_clusters_unit():
     assert render(cluster(slurm={"cpus-per-gpu": 24}), job())["default_sbatch_directives"] == {"cpus-per-gpu": "24"}
     with pytest.raises(ValueError, match="not both"):
         cluster(slurm={"cpus-per-task": 192, "cpus-per-gpu": 24})
+
+
+@pytest.mark.skipif(shutil.which("rsync") is None, reason="needs rsync")
+def test_the_staged_workspace_drops_run_artifacts_but_keeps_srt_slurm_sources(tmp_path):
+    workspace = tmp_path / "workspace"
+    kept = ["runners/srt-slurm/hooks/common.sh", "benchmarks/multi_node/srt-slurm-recipes/r.yaml"]
+    dropped = ["srt-slurm-1-1-abc/recipe.yaml", "utils/srt-slurm/pyproject.toml", ".venv/bin/python",
+               "outputs/42/log", "LOGS/sweep.log", "image.sqsh"]  # fmt: skip
+    for name in kept + dropped:
+        (workspace / name).parent.mkdir(parents=True, exist_ok=True)
+        (workspace / name).write_text("")
+
+    def rsync(source: Path, staging: Path, *, exclude: tuple[str, ...]) -> Path:
+        staging.mkdir(parents=True)
+        excludes = [f"--exclude={pattern}" for pattern in exclude]
+        subprocess.run(["rsync", "-a", *excludes, f"{source}/", f"{staging}/"], check=True)
+        return staging
+
+    run = SimpleNamespace(workspace=workspace, backend=SimpleNamespace(stage_workspace=rsync))
+    checkout = Checkout(tmp_path / "runs/srt-slurm-1-1-abc", "sha")
+    staged = compute_workspace(run, checkout, shared=True)
+
+    assert staged == tmp_path / "runs/infmax-workspace-1-1-abc"
+    assert sorted(str(p.relative_to(staged)) for p in staged.rglob("*") if p.is_file()) == sorted(kept)

@@ -67,9 +67,7 @@ def test_native_binding_submits_one_point_and_keeps_server_settings(point):
     overrides = parse_overrides(argv[1::2], [])
     actual = copy.deepcopy(recipe)
     apply_overrides_to_recipe(actual, overrides)
-    assert actual["srun_options"] == {
-        "gpus-per-node": "4", "container-workdir": "/infmax-workspace",
-    }
+    assert actual["srun_options"] == {"gpus-per-node": "4"}
     assert actual["benchmark"]["env"] == {
         "MODEL": "test/model", "ISL": "256", "OSL": "64", "RANDOM_RANGE_RATIO": "0.5",
         "USE_CHAT_TEMPLATE": "false",

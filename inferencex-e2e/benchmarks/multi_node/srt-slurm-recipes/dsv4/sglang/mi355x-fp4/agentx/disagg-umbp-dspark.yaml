@@ -41,9 +41,9 @@ base:
         page_kb=$(awk '/^Hugepagesize:/ {print $2}' /proc/meminfo);
         pages=$(( (1500000000000 / (page_kb * 1024) + 1) * 102 / 100 ));
         HUGEPAGES_TARGET=$pages HUGEPAGE_GROW_TOLERANCE_PCT=1
-        bash "${GITHUB_WORKSPACE}/benchmarks/multi_node/amd_utils/helpers/hugepage_sanity.sh"; fi
+        bash "${GITHUB_WORKSPACE}/runners/srt-slurm/hooks/mi355x-amds/hugepage_sanity.sh"; fi
     teardown:
-      - HUGEPAGES_TARGET=0 bash "${GITHUB_WORKSPACE}/benchmarks/multi_node/amd_utils/helpers/hugepage_sanity.sh"
+      - HUGEPAGES_TARGET=0 bash "${GITHUB_WORKSPACE}/runners/srt-slurm/hooks/mi355x-amds/hugepage_sanity.sh"
   # The per-allocation /logs mount is shared by the service and prefill
   # containers, so the socket cannot collide with another job's UMBP.
   services:

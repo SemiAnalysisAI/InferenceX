@@ -52,7 +52,10 @@ _AGENTIC_CACHES = (
 
 SRT_LANES: dict[tuple[str, LaunchPath], SrtLane] = {
     ("b200-nscale", LaunchPath.SRT_NATIVE): SrtLane(
-        mounts=(*_AGENTIC_CACHES, LaneMount(Match(frameworks=any_of("tilert")), "tilert-cache")),
+        mounts=(
+            *_AGENTIC_CACHES,
+            LaneMount(Match(frameworks=any_of("tilert")), "tilert-weights", "/tilert_weights"),
+        ),
     ),
     ("b200-nscale", LaunchPath.SRT_MULTI): SrtLane(
         frameworks=_DYNAMO,
@@ -100,7 +103,10 @@ SRT_LANES: dict[tuple[str, LaunchPath], SrtLane] = {
         long_time=Match(any_of("dsv4"), frameworks=any_of("dynamo-sglang"), agentic=True),
     ),
     ("mi355x-amds", LaunchPath.SRT_MULTI): SrtLane(
-        mounts=(LaneMount(Match(), "aiperf-cache", "/aiperf_mmap_cache"),),
+        mounts=(
+            LaneMount(Match(), "aiperf-cache", "/aiperf_mmap_cache"),
+            LaneMount(Match(frameworks=any_of("tilert")), "it-share-data", "/models"),
+        ),
         eval_unsets=(
             "roles.prefill.args.ep-dispatch-algorithm",
             "roles.decode.args.ep-dispatch-algorithm",

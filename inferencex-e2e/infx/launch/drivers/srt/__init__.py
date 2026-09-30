@@ -22,7 +22,6 @@ from infx.launch.backends.slurm import srtctl_job_name
 from infx.launch.context import Launch
 from infx.launch.drivers.srt import collect, config, lanes, models, power, submit
 from infx.launch.drivers.srt.checkout import (
-    SRT_FORKS,
     checkout_dir,
     compute_workspace,
     install_srtctl,
@@ -65,7 +64,6 @@ def run_single_node(launch: Launch) -> int:
         mounts=[(str(hf_cache), request.hf_hub_cache)],
         single_node=True,
         account=run.account,
-        fork=checkout.fork,
     )
     config.create_volume_mounts(run)
     config.write(checkout.root / "srtslurm.yaml", config.render(run.cluster, job_config))
@@ -128,8 +126,7 @@ def run_multinode(launch: Launch) -> int:
     decision = power.resolve_power(launch.cluster.id, launch.path, request)
     model = models.checkpoint(launch.cluster, request)
     served = models.served_path(launch.cluster, request, model)
-    fork = request.framework in SRT_FORKS
-    model_paths = models.model_paths(launch.cluster, request, config_file, served, fork=fork)
+    model_paths = models.model_paths(launch.cluster, request, config_file, served)
     run = SrtRun.create(launch, request, models.job_env(launch.cluster, request, served))
     preflight = run.srt.preflight and not (model_paths and model and model.node_local)
     if request.framework == "tilert":
@@ -151,10 +148,8 @@ def run_multinode(launch: Launch) -> int:
     conc_list = request.env.get("CONC_LIST", "") if decision.dcgm else None
     job_name = srtctl_job_name(request.runner_name)
     prepare_recipe(checkout.root, config_file, job_name, run.srt.dist_timeout_s, conc_list)
-    arguments = submit.multinode_arguments(
-        run, lane, checkout, config_file, overrides, preflight=preflight
-    )
-    manifest = None if checkout.fork else run.workspace / submit.MULTINODE_SUBMISSION
+    arguments = submit.multinode_arguments(run, lane, config_file, overrides, preflight=preflight)
+    manifest = run.workspace / submit.MULTINODE_SUBMISSION
     submitted = submit.Submitted(manifest=manifest)
     run.life.callback(submitted.cancel, run.backend)
     if rc := submit.submit_lane(run, submitted, checkout, config_file, arguments):

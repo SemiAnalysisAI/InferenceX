@@ -1,0 +1,96 @@
+schema: 2
+name: glm5.1-tilert-b200-8k1k-1p1d-tp8-mtp
+model:
+  path: glm5.1-fp8
+  container: ghcr.io/tile-ai/tilert:0.1.5
+  precision: fp8
+slurm:
+  time_limit: "01:30:00"
+resources:
+  gpu_type: b200
+  gpus_per_node: 8
+setup_script: tilert-b200-setup.sh
+environment:
+  NVIDIA_VISIBLE_DEVICES: all
+  NVIDIA_DRIVER_CAPABILITIES: compute,utility
+roles:
+  prefill:
+    engine:
+      type: vllm
+      set_visible_devices: true
+    container: vllm/vllm-openai:v0.26.0
+    nodes: 1
+    workers: 1
+    gpus: 8
+    env:
+      TILERT_ROLE: prefill
+    args:
+      served-model-name: glm5
+      tensor-parallel-size: 8
+      max-model-len: 9472
+      enforce-eager: true
+      trust-remote-code: true
+      return-tokens-as-token-ids: true
+      gpu-memory-utilization: 0.75
+      kv-cache-dtype: fp8_ds_mla
+      speculative-config: '{"method":"mtp","num_speculative_tokens":1}'
+      kv-transfer-config: >-
+        {"kv_connector":"TileRTConnector","kv_connector_module_path":"tilert.pd_vllm.prefill_connector",
+         "kv_role":"kv_producer","kv_connector_extra_config":{
+           "tilert_model":"glm5","tilert_max_seq_len":9472,"tilert_transport":"nixl"}}
+  decode:
+    engine: tilert
+    container: ghcr.io/tile-ai/tilert:0.1.5
+    nodes: 1
+    workers: 1
+    gpus: 8
+    env:
+      TILERT_ROLE: decode
+      PATH: /opt/conda/envs/tilert/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    args:
+      model: glm5
+      model-weights-dir: /tilert_weights
+      max-seq-len: 9472
+      kv-cache-dtype: fp8
+      transport: nixl
+      with-mtp: true
+frontend:
+  type: tilert-router
+  container_image: ghcr.io/tile-ai/tilert:0.1.5
+  enable_multiple_frontends: false
+  env:
+    TILERT_ROLE: router
+    PATH: /opt/conda/envs/tilert/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+  args:
+    model-path: /model
+    parser: none
+    queue-timeout: 0
+srun_options:
+  container-writable: ""
+  container-remap-root: ""
+health_check:
+  max_attempts: 720
+  interval_seconds: 5
+telemetry:
+  enabled: true
+  collect_interval_ms: 1000
+  storage_subdir: power
+  required: true
+  startup_timeout_seconds: 120
+  request_timeout_seconds: 2
+  dcgm_exporter:
+    container_image: dcgm-exporter
+    port: 9401
+benchmark:
+  type: custom
+  container_image: vllm/vllm-openai:v0.26.0
+  concurrencies: [1]
+  command: bash /infmax-workspace/benchmarks/multi_node/srt_fixed_sequence.sh
+  env:
+    ISL: "8192"
+    OSL: "1024"
+    CLIENT_BACKEND: openai-chat
+    BENCHMARK_SERVED_MODEL_NAME: glm5
+    USE_CHAT_TEMPLATE: "true"
+    TOKENIZER: /model
+    NUM_PROMPTS: "16"

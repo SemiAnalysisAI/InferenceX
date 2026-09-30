@@ -25,33 +25,11 @@ UV_INSTALLER = "https://astral.sh/uv/install.sh"
 
 
 @dataclass(frozen=True)
-class SrtFork:
-    """A framework's srt-slurm fork, checked out instead of the pinned submodule.
-
-    Forks get no InferenceX patches, predate ``--json``, ``--no-preflight`` and
-    ``benchmark.stream_output``, and report their job only in prose. Their jobs keep
-    srtctl's own health-check default, and may run recipes the workspace mirror lacks.
-    """
-
-    url: str
-    commit: str
-
-
-SRT_FORKS: dict[str, SrtFork] = {
-    "tilert": SrtFork(
-        "https://github.com/SemiAnalysisAI/srt-slurm.git",
-        "6bc3f306bdafa1edfb5dded2fcda8f1ccede1bde",
-    ),
-}
-
-
-@dataclass(frozen=True)
 class Checkout:
     """A job-local srt-slurm checkout with InferenceX recipes staged."""
 
     root: Path
     commit: str
-    fork: bool
 
     @property
     def venv(self) -> Path:
@@ -95,31 +73,17 @@ def prepare_checkout(run: SrtRun, destination: Path, *, power: bool) -> Checkout
     if destination.exists():
         print(f"Removing existing {destination}...", flush=True)
         shutil.rmtree(destination)
-    fork = SRT_FORKS.get(run.request.framework)
-    if fork is not None:
-        _git("init", "--quiet", destination)
-        _git("-C", destination, "remote", "add", "origin", fork.url)
-        _git("-C", destination, "fetch", "--quiet", "--depth=1", "origin", fork.commit)
-        _git("-C", destination, "checkout", "--quiet", "--detach", fork.commit)
-        commit = fork.commit
-    else:
-        source = repository_root() / SUBMODULE
-        if not (source / ".git").exists():
-            raise LaunchError(
-                "Missing srt-slurm submodule; run git submodule update --init before launching."
-            )
-        commit = _git("-C", source, "rev-parse", "HEAD", capture=True)
-        _git(
-            "-c",
-            "advice.detachedHead=false",
-            "clone",
-            "--quiet",
-            "--no-hardlinks",
-            source,
-            destination,
+    source = repository_root() / SUBMODULE
+    if not (source / ".git").exists():
+        raise LaunchError(
+            "Missing srt-slurm submodule; run git submodule update --init before launching."
         )
-        for patch in sorted((run.workspace / PATCHES).glob("*.patch")):
-            _git("-C", destination, "apply", patch)
+    commit = _git("-C", source, "rev-parse", "HEAD", capture=True)
+    _git(
+        "-c", "advice.detachedHead=false", "clone", "--quiet", "--no-hardlinks", source, destination
+    )
+    for patch in sorted((run.workspace / PATCHES).glob("*.patch")):
+        _git("-C", destination, "apply", patch)
     head = _git("-C", destination, "rev-parse", "HEAD", capture=True)
     if head != commit:
         raise LaunchError(f"srt-slurm checkout is at {head}, expected {commit}")
@@ -133,7 +97,7 @@ def prepare_checkout(run: SrtRun, destination: Path, *, power: bool) -> Checkout
     shutil.copytree(recipes, destination / "recipes", symlinks=True, dirs_exist_ok=True)
     (destination / RECIPES_MIRROR).symlink_to("../../recipes")
     shutil.copytree(recipes / "configs", destination / "configs", symlinks=True, dirs_exist_ok=True)
-    return Checkout(destination, commit, fork is not None)
+    return Checkout(destination, commit)
 
 
 def _uv(run: SrtRun) -> str:
@@ -237,5 +201,13 @@ def compute_workspace(run: SrtRun, checkout: Checkout, *, shared: bool) -> Path:
     if not shared:
         return run.workspace
     name = checkout.root.name.replace("srt-slurm-", "infmax-workspace-", 1)
-    exclude = (".git/", "srt-slurm*/", "outputs/", "LOGS/", "*.sqsh")
+    exclude = (
+        ".git/",
+        ".venv/",
+        "/utils/srt-slurm/",
+        "/srt-slurm*/",
+        "outputs/",
+        "LOGS/",
+        "*.sqsh",
+    )
     return run.backend.stage_workspace(run.workspace, checkout.root.parent / name, exclude=exclude)
