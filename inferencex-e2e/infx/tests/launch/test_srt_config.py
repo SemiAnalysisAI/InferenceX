@@ -199,6 +199,7 @@ def test_the_staged_workspace_drops_run_artifacts_but_keeps_srt_slurm_sources(tm
         (workspace / name).write_text("")
 
     def rsync(source: Path, staging: Path, *, exclude: tuple[str, ...]) -> Path:
+        staging.mkdir(parents=True)
         excludes = [f"--exclude={pattern}" for pattern in exclude]
         subprocess.run(["rsync", "-a", *excludes, f"{source}/", f"{staging}/"], check=True)
         return staging
