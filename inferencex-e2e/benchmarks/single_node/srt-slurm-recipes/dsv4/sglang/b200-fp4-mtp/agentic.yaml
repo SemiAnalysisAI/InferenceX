@@ -240,7 +240,6 @@ override_dep8_hicache_c64:
         load-snapshot-publish-interval: 1
         prefill-decode-interval: 24
         moe-a2a-backend: megamoe
-        enable-w4a4-mxfp4-megamoe: true
         disable-shared-experts-fusion: true
         mem-fraction-static: 0.88
         swa-full-tokens-ratio: 0.02
