@@ -9333,3 +9333,20 @@
     - "Accept vLLM in the shared fixed-sequence client framework dispatch; use its existing completion backend."
     - "共享定长客户端允许 vLLM 框架并使用已有 completion 后端。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607
+
+- config-keys:
+  - dsv41flash-fp4-b300-vllm-8gpu-8k256
+  - dsv41flash-fp4-b300-vllm-4gpu-8k256
+  - dsv41flash-fp4-h200-vllm-8gpu-8k256
+  - dsv41flash-fp4-h200-vllm-4gpu-8k256
+  - dsv41flash-fp4-b200-vllm-8gpu-8k256
+  - dsv41flash-fp4-b200-vllm-4gpu-8k256
+  scenario-type:
+  - fixed-seq-len
+  description:
+  - Explicitly emit --no-enable-prefix-caching for batch-1 vLLM runs; native SRT omits
+    false boolean arguments.
+  - "\u5355\u8BF7\u6C42 vLLM \u914D\u7F6E\u663E\u5F0F\u4F20\u5165 --no-enable-prefix-caching\uFF1B\
+    \u539F\u751F SRT \u4F1A\u7701\u7565\u503C\u4E3A false \u7684\u5E03\u5C14\u53C2\
+    \u6570\u3002"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607

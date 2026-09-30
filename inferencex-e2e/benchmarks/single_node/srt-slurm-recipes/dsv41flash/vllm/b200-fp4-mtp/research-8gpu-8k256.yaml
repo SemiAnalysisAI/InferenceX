@@ -46,7 +46,7 @@ base:
         max-num-seqs: 16
         max-cudagraph-capture-size: 64
         gpu-memory-utilization: 0.85
-        enable-prefix-caching: false
+        no-enable-prefix-caching: true
         profiler-config: '{"profiler": "torch", "torch_profiler_dir": "/logs/research/serving",
           "torch_profiler_with_stack": false, "torch_profiler_record_shapes": true,
           "ignore_frontend": true, "max_iterations": 16, "detailed_trace_annotation":
