@@ -9005,6 +9005,14 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3477
 
 - config-keys:
+    - minimaxm3-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update B200 AgentX to vLLM nightly-af7f9488c2210d67e1033ecdc845b087ee7fe92b and enable local argmax reduction for the FlashInfer EAGLE3 draft."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3435
+
+- config-keys:
     - glm5.2-fp4-mi355x-sglang-agentic-mtp
   scenario-type:
     - agentic-coding
@@ -9053,6 +9061,14 @@
   description:
     - "Update the GB300 DeepSeek-V4.1-Flash SGLang AgentX curve to lmsysorg/sglang:dev-cu13-nightly-0924 (digest pinned): pure TP4 (EP1) at C1/C2 with Engram in HBM, and TP4/EP4 at C4+ with per-rank host Engram, 16K prefill chunks, no prefill-decode interval, 4096 SWA prefix tails and a 128 decode graph batch; all TP4 points use static ragged verify; TP2 is unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3421
+
+- config-keys:
+    - minimaxm3-fp4-b300-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update B300 AgentX to vLLM nightly-af7f9488c2210d67e1033ecdc845b087ee7fe92b with local argmax reduction."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3547
 
 - config-keys:
     - minimaxm3-fp8-mi300x-vllm-agentic-mtp

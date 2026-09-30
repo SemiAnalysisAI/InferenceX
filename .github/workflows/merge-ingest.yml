@@ -1,0 +1,118 @@
+name: "Merge Ingest"
+run-name: Merge Ingest - ${{ github.event.head_commit.message }}
+
+# Publishes a merged PR's reused run-sweep.yml artifacts. Pushes to main never
+# run benchmarks: without a valid reuse authorization this run fails.
+
+concurrency:
+    group: merge-ingest-${{ github.sha }}
+    cancel-in-progress: false
+
+on:
+    push:
+        branches:
+            - main
+        paths:
+            - "inferencex-e2e/perf-changelog.yaml"
+
+permissions:
+  contents: read
+
+env:
+  PYTHONPATH: ${{ github.workspace }}/inferencex-e2e
+
+jobs:
+    ingest:
+        name: ingest
+        runs-on: ubuntu-latest
+        permissions:
+            actions: read # Read workflow runs and artifacts.
+            contents: read
+            issues: read # Read issue comments.
+            pull-requests: read # Read PR metadata.
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  fetch-depth: 0
+                  persist-credentials: false
+
+            - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+
+            - name: Resolve reused sweep
+              id: reuse
+              env:
+                  GH_TOKEN: ${{ github.token }}
+              run: |
+                  python3 -m infx.workflows.reuse \
+                    --repo "${GITHUB_REPOSITORY}" \
+                    --commit-sha "${GITHUB_SHA}" \
+                    --event-name "${GITHUB_EVENT_NAME}" \
+                    --ref "${GITHUB_REF}" \
+                    --workflow-id "run-sweep.yml"
+
+            - name: Require sweep reuse
+              if: steps.reuse.outputs.reuse-enabled != 'true'
+              run: |
+                  echo "::error::Pushes to main never run sweeps. Post an authorized /use <run_id> reuse command on the PR before merging."
+                  exit 1
+
+            - name: Summarize reused source
+              uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+              env:
+                  SOURCE_RUN_URL: ${{ steps.reuse.outputs.reuse-source-run-url }}
+                  SOURCE_PR: ${{ steps.reuse.outputs.reuse-source-pr-number }}
+                  SOURCE_SHA: ${{ steps.reuse.outputs.reuse-source-head-sha }}
+              with:
+                  script: |
+                      await core.summary.addTable([
+                        ['Source PR', `#${process.env.SOURCE_PR}`],
+                        ['Source run', process.env.SOURCE_RUN_URL],
+                        ['Reused benchmark source', process.env.SOURCE_SHA],
+                      ]).write();
+
+            - name: Extract changelog metadata
+              id: plan
+              env:
+                  PUSH_BEFORE: ${{ github.event.before }}
+                  PUSH_AFTER: ${{ github.event.after }}
+              run: |
+                  cd "$GITHUB_WORKSPACE/inferencex-e2e"
+                  uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
+                    python -m infx.matrix.plan \
+                    --changelog-file perf-changelog.yaml \
+                    --base-ref "$PUSH_BEFORE" \
+                    --head-ref "$PUSH_AFTER" > "$RUNNER_TEMP/plan.json"
+                  jq -c '.changelog_metadata' "$RUNNER_TEMP/plan.json" > "$GITHUB_WORKSPACE/changelog_metadata.json"
+                  agentic=$(jq '((.single_node.agentic // []) + (.multi_node.agentic // [])) | length > 0' "$RUNNER_TEMP/plan.json")
+                  echo "agentic=$agentic" >> "$GITHUB_OUTPUT"
+
+            - name: Upload changelog artifact
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                  name: changelog-metadata
+                  path: changelog_metadata.json
+                  if-no-files-found: error
+
+            - name: Trigger database ingest
+              uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+              env:
+                  AGENTIC: ${{ steps.plan.outputs.agentic }}
+                  SOURCE_RUN_ID: ${{ steps.reuse.outputs.reuse-source-run-id }}
+                  MERGE_RUN_ID: ${{ github.run_id }}
+              with:
+                  # Repository integration credential for the scoped ingest job.
+                  github-token: ${{ secrets.FRONTEND_PAT }} # zizmor: ignore[secrets-outside-env]
+                  script: |
+                    const agentic = process.env.AGENTIC === 'true';
+                    const client_payload = {
+                      "source-run-id": process.env.SOURCE_RUN_ID,
+                      "merge-run-id": process.env.MERGE_RUN_ID,
+                    };
+                    if (agentic) client_payload["database-target"] = "production";
+                    await github.rest.repos.createDispatchEvent({
+                      owner: "SemiAnalysisAI",
+                      repo: "InferenceX-app",
+                      event_type: agentic ? "ingest-agentic-results" : "ingest-results",
+                      client_payload,
+                    });

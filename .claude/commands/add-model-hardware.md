@@ -130,7 +130,7 @@ Confirm which master file by SKU: `mi*` → `amd-master.yaml`, everything else �
 
 ## Step 4 — no launcher routing
 
-Single-node points with an `srt-recipe:` go through `launch_srt_single_node`, which picks the
+Single-node points with an `srt-recipe:` go through the srt driver of `python -m infx.launch`, which picks the
 one recipe variant whose TP/GPU count, `CONC`, `KV_OFFLOADING` and image match the matrix
 point (`inferencex-e2e/infx/srt_slurm/single_node.py::select_recipe`). No per-script launcher routing is
 needed; if a point matches zero or several variants, fix the recipe, not the launcher.

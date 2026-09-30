@@ -49,24 +49,15 @@ case "$FRAMEWORK" in
         export DECODE_WAIT=3600 PREFILL_WAIT=3600 TILERT_QUEUE_TIMEOUT=0
         export TILERT_RDMA_STRICT=0 TILERT_CONVERT_LOCK_WAIT=21600 TILERT_DECODE_DRAIN=60
         export TILERT_VERSION=0.1.5.post3 TILERT_HTTP_DEPS='fastapi uvicorn httpx' TILERT_NIXL_VERSION=1.3.1
-        export B200_SQUASH_DIR=/home/sa-shared/containers
         if [[ "$IS_AGENTIC" == 1 || "$IS_AGENTIC" == true ]]; then
             export TILERT_QUEUE_TIMEOUT=1800
         fi
         # The MI355X TileRT recipe runs through the shared amd_utils chain
         # (submit.sh -> job.slurm -> server.sh -> setup_deps.sh), which validates
         # the same orchestration inputs the AMD SGLang arm receives.
-        # Without them submit.sh exits before sbatch and the launcher never gets
-        # a job id. The B200 TileRT lane goes through srt-slurm and reads none of
-        # these, so they are scoped to the AMD pool.
+        # Without them submit.sh exits before sbatch and the launcher never gets a job id.
         if [[ "$RUNNER_TYPE" == *mi355x-amds* ]]; then
             export SKIP_RDMA_CHECK=0 SKIP_GPU_SANITY=0
-            # The B200 profile above points BENCHMARK_LOGS_DIR at the workspace
-            # itself; launch_mi355x-amds.sh's EXIT trap does `rm -rf
-            # "$BENCHMARK_LOGS_DIR"`, which then deleted the whole checkout,
-            # results included (sweep 35704948491). Use the AMD launcher's own
-            # convention from runners/runtime_settings.sh.
-            export BENCHMARK_LOGS_DIR="$GITHUB_WORKSPACE/benchmark_logs"
             export ROUTER_TYPE=tilert-pd-router ROUTER_PORT=30000 PROXY_PING_PORT=36367
             export HEADNODE_PORT=20000 SERVER_PORT=2584 PROXY_STREAM_IDLE_TIMEOUT=300
             export ENABLE_METRICS=0 PREFILL_ROUTER_POLICY=random DECODE_ROUTER_POLICY=random

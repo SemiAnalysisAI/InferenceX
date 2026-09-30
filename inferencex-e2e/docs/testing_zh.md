@@ -24,7 +24,7 @@
 - [`.github/AGENT_OPERATIONS.md`](../../.github/AGENT_OPERATIONS.md#sweep-labels-and-reuse) 定义扫描标签与修饰标签；其[派发章节](../../.github/AGENT_OPERATIONS.md#workflow-dispatch-and-monitoring)定义手动运行与产物检查。
 - [`docs/configuration-procedures.md`](configuration-procedures.md#validate) 是聚焦配置验证的操作流程。
 - [`.github/workflows/README.md`](../../.github/workflows/README.md) 记录矩阵生成、`e2e-tests.yml`、PR 扫描和复用。
-- [`run-sweep.yml`](../../.github/workflows/run-sweep.yml) 是可执行的 PR/push 门禁；[`e2e-tests.yml`](../../.github/workflows/e2e-tests.yml) 是手动分发的端到端路径。
+- [`run-sweep.yml`](../../.github/workflows/run-sweep.yml) 是可执行的 PR 扫描门禁，[`merge-ingest.yml`](../../.github/workflows/merge-ingest.yml) 是推送到 `main` 时的复用与入库门禁；[`e2e-tests.yml`](../../.github/workflows/e2e-tests.yml) 是手动分发的端到端路径。
 - [`docs/PR_REVIEW_CHECKLIST.md`](PR_REVIEW_CHECKLIST.md) 是合并评审标准。[验证器提示词](../../.github/codeowner-signoff-verify-prompt.md#check-1--a-passing-sweep--evals-ran-on-a-commit-in-this-pr) 说明如何独立核验扫描和评测证据。
 
 当行为发生变化时，上述来源优先于本指南。先更新英文页面，再把相同结构和证据翻译到本页中文对应版本。
@@ -111,7 +111,7 @@ Auditor 模式也会报告有意保留的架构选择。豁免仅标注在对应
 ```bash
 python3 -c "import yaml; yaml.safe_load(open('configs/<nvidia|amd>-master.yaml')); yaml.safe_load(open('configs/runners.yaml')); yaml.safe_load(open('perf-changelog.yaml'))"
 bash -n benchmarks/<path>/<script>.sh
-bash -n runners/launch_<cluster>.sh
+uv run python -c 'from infx.clusters import load_clusters; load_clusters()'
 ```
 
 解析只是第一道门禁。不要把 YAML 解析结果报告为矩阵验证。
@@ -189,7 +189,7 @@ uv run --locked --all-extras --group test --no-editable \
 ### 精简与全量扫描
 
 - `full-sweep-fail-fast` 是推荐的全量扫描标签。它使用串行单节点 canary，并在每个矩阵首次失败后停止该矩阵，同时保留已完成结果。
-- 仅当 canary 已知不稳定或不具代表性时才使用无 canary 的全量扫描标签。仅当即使失败也必须让每个矩阵任务继续时，才用 `full-sweep-enabled` 代替 fail-fast。
+- 仅当 canary 已知不稳定或不具代表性时才使用 `non-canary-full-sweep-enabled`。仅当即使失败也必须让每个矩阵任务继续时，才用 `full-sweep-enabled` 代替 fail-fast。
 - 必须且只能应用一个主扫描标签。只有修饰标签或存在冲突主标签都不构成有效扫描。
 - 精简扫描（仅最低并发）可通过 `e2e-tests.yml` 的 `trim-conc` 输入手动运行。
 

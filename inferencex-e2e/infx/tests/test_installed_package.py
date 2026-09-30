@@ -55,7 +55,11 @@ def test_installed_tools_use_callers_repository(tmp_path, run_installed, layout)
     project.mkdir(exist_ok=True)
     configs = project / "configs"
     configs.mkdir()
-    (configs / "runners.yaml").write_text("labels:\n  cluster:fixture-gpu: [self-hosted]\n")
+    (configs / "runners.yaml").write_text(
+        "labels:\n  cluster:fixture-gpu: [self-hosted]\n"
+        "clusters:\n  fixture-gpu:\n    gpus-per-node: 8\n    arch: x86_64\n"
+        "    scheduler: slurm\n    slurm: {partition: batch, exclusive: true}\n"
+    )
     recipes = project / "benchmarks/multi_node/srt-slurm-recipes"
     recipes.mkdir(parents=True)
     (recipes / "fixture.yaml").write_text(

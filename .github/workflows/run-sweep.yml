@@ -1,15 +1,13 @@
 name: "Run Sweep"
-run-name: Run Sweep - ${{ github.event.pull_request.title || github.event.head_commit.message }}
+run-name: Run Sweep - ${{ github.event.pull_request.title }}
 
 concurrency:
     group: >-
-        sweep-${{ github.event.pull_request.number || github.sha }}-${{
-          github.event_name == 'pull_request' &&
+        sweep-${{ github.event.pull_request.number }}-${{
           (github.event.action == 'labeled' || github.event.action == 'unlabeled') &&
           github.event.label.name != 'full-sweep-enabled' &&
           github.event.label.name != 'non-canary-full-sweep-enabled' &&
           github.event.label.name != 'full-sweep-fail-fast' &&
-          github.event.label.name != 'full-sweep-fail-fast-no-canary' &&
           github.event.label.name != 'all-evals' &&
           github.event.label.name != 'evals-only' &&
           github.event.label.name != 'agentx-fast' &&
@@ -24,11 +22,6 @@ concurrency:
     cancel-in-progress: true
 
 on:
-    push:
-        branches:
-            - main
-        paths:
-            - "inferencex-e2e/perf-changelog.yaml"
     pull_request:
         branches:
             - main
@@ -53,14 +46,12 @@ jobs:
             contents: read
         # Labels opt into sweeps regardless of draft status; readiness only starts reviews.
         if: >-
-            github.event_name == 'pull_request' &&
             github.event.pull_request.head.repo.full_name == github.repository &&
             (
               (github.event.action != 'labeled' && github.event.action != 'unlabeled') ||
               github.event.label.name == 'full-sweep-enabled' ||
               github.event.label.name == 'non-canary-full-sweep-enabled' ||
               github.event.label.name == 'full-sweep-fail-fast' ||
-              github.event.label.name == 'full-sweep-fail-fast-no-canary' ||
               github.event.label.name == 'all-evals' ||
               github.event.label.name == 'evals-only' ||
               github.event.label.name == 'agentx-fast' ||
@@ -83,8 +74,7 @@ jobs:
                       select(
                         . == "full-sweep-enabled" or
                         . == "non-canary-full-sweep-enabled" or
-                        . == "full-sweep-fail-fast" or
-                        . == "full-sweep-fail-fast-no-canary"
+                        . == "full-sweep-fail-fast"
                       )
                     ] |
                     length
@@ -148,7 +138,6 @@ jobs:
         if: >-
             always() &&
             needs.check-changelog.result == 'success' &&
-            github.event_name == 'pull_request' &&
             github.event.action == 'synchronize' &&
             !contains(github.event.pull_request.labels.*.name, 'evals-only') &&
             !contains(github.event.pull_request.labels.*.name, 'agentx-fast')
@@ -188,10 +177,7 @@ jobs:
             pull-requests: read # Read PR metadata.
         if: >-
             always() &&
-            (
-              needs.check-changelog.result == 'success' ||
-              needs.check-changelog.result == 'skipped'
-            ) &&
+            needs.check-changelog.result == 'success' &&
             (
               needs.reuse-sweep-gate.result == 'skipped' ||
               (
@@ -199,47 +185,30 @@ jobs:
                 needs.reuse-sweep-gate.outputs.skip-pr-sweep != 'true'
               )
             ) &&
+            github.event.pull_request.head.repo.full_name == github.repository &&
+            needs.check-changelog.outputs.skip-pr-sweep != 'true' &&
             (
-              (
-                github.event_name == 'pull_request' &&
-                needs.check-changelog.result == 'success' &&
-                github.event.pull_request.head.repo.full_name == github.repository &&
-                needs.check-changelog.outputs.skip-pr-sweep != 'true' &&
-                (
-                  contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') ||
-                  contains(github.event.pull_request.labels.*.name, 'non-canary-full-sweep-enabled') ||
-                  contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') ||
-                  contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast-no-canary')
-                ) &&
-                (
-                  (github.event.action != 'labeled' && github.event.action != 'unlabeled') ||
-                  github.event.label.name == 'full-sweep-enabled' ||
-                  github.event.label.name == 'non-canary-full-sweep-enabled' ||
-                  github.event.label.name == 'full-sweep-fail-fast' ||
-                  github.event.label.name == 'full-sweep-fail-fast-no-canary' ||
-                  github.event.label.name == 'all-evals' ||
-                  github.event.label.name == 'evals-only' ||
-                  github.event.label.name == 'agentx-fast' ||
-                  github.event.label.name == 'skip_queue' ||
-                  github.event.label.name == 'ci-patchwork' ||
-                  github.event.label.name == 'engine-patch' ||
-                  github.event.label.name == 'ci-patchwork-waived' ||
-                  github.event.label.name == 'ci-checklist-complete'
-                )
-              ) ||
-              (
-                github.event_name == 'push'
-              )
+              contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') ||
+              contains(github.event.pull_request.labels.*.name, 'non-canary-full-sweep-enabled') ||
+              contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast')
+            ) &&
+            (
+              (github.event.action != 'labeled' && github.event.action != 'unlabeled') ||
+              github.event.label.name == 'full-sweep-enabled' ||
+              github.event.label.name == 'non-canary-full-sweep-enabled' ||
+              github.event.label.name == 'full-sweep-fail-fast' ||
+              github.event.label.name == 'all-evals' ||
+              github.event.label.name == 'evals-only' ||
+              github.event.label.name == 'agentx-fast' ||
+              github.event.label.name == 'skip_queue' ||
+              github.event.label.name == 'ci-patchwork' ||
+              github.event.label.name == 'engine-patch' ||
+              github.event.label.name == 'ci-patchwork-waived' ||
+              github.event.label.name == 'ci-checklist-complete'
             )
         outputs:
             tooling-ref: ${{ steps.tooling.outputs.result }}
             search-space-config: ${{ steps.setup.outputs.search-space-config }}
-            reuse-enabled: ${{ steps.setup.outputs.reuse-enabled }}
-            reuse-source-run-id: ${{ steps.setup.outputs.reuse-source-run-id }}
-            reuse-source-run-attempt: ${{ steps.setup.outputs.reuse-source-run-attempt }}
-            reuse-source-run-url: ${{ steps.setup.outputs.reuse-source-run-url }}
-            reuse-source-pr-number: ${{ steps.setup.outputs.reuse-source-pr-number }}
-            reuse-source-head-sha: ${{ steps.setup.outputs.reuse-source-head-sha }}
         steps:
             - name: Checkout code
               id: checkout
@@ -267,7 +236,7 @@ jobs:
             - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
             - name: Install Claude Code 2.1.282
               id: claude_cli
-              if: vars.PRIORITY_SCHEDULER_ENABLED == 'true' && github.event_name == 'pull_request'
+              if: vars.PRIORITY_SCHEDULER_ENABLED == 'true'
               run: | # zizmor: ignore[adhoc-packages] Claude CLI and its native packages are pinned to 2.1.282
                 npm install --prefix "$RUNNER_TEMP/claude-code" --no-audit --no-fund @anthropic-ai/claude-code@2.1.282
                 claude_cli="$RUNNER_TEMP/claude-code/node_modules/.bin/claude"
@@ -275,9 +244,7 @@ jobs:
                 echo "path=$claude_cli" >> "$GITHUB_OUTPUT"
             - name: Classify priority criteria
               id: classify
-              if: >-
-                  vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
-                  github.event_name == 'pull_request'
+              if: vars.PRIORITY_SCHEDULER_ENABLED == 'true'
               continue-on-error: true
               uses: anthropics/claude-code-action@9171db3e57d6a3140a37ddc2ba92788584e0ead6 # v1.0.234
               with:
@@ -293,7 +260,7 @@ jobs:
                       --effort low
                       --max-turns 8
                       --allowedTools "Read,Glob,Grep,Bash(git diff:*)"
-                      --json-schema '{"type":"object","properties":{"criteria":{"type":"array","items":{"type":"string","enum":["multi-node","agentic","eval-only","fp4","mtp","eagle","eagle3","sglang","vllm","dynamo-sglang","dynamo-vllm","glm5","glm5.1","kimik3","dsv4","minimaxm3","qwen3.5","dsr1","checklist-complete","patchwork"]},"uniqueItems":true},"reason":{"type":"string"}},"required":["criteria","reason"]}'
+                      --json-schema '{"type":"object","properties":{"criteria":{"type":"array","items":{"type":"string","enum":["multi-node","agentic","eval-only","fp4","mtp","eagle","eagle3","sglang","vllm","dynamo-sglang","dynamo-vllm","kimik3","dsv4","minimaxm3","qwen3.5","dsr1","checklist-complete","patchwork"]},"uniqueItems":true},"reason":{"type":"string"}},"required":["criteria","reason"]}'
                   prompt: |
                       Inspect this pull request's diff against its base branch.
 
@@ -305,7 +272,7 @@ jobs:
                       - fp4: FP4 precision
                       - mtp, eagle, eagle3: speculative decoding method
                       - sglang, vllm, dynamo-vllm: runtime framework
-                      - model criterion: matching configured model family; legacy criteria remain in the shared priority taxonomy for retained SPEED-Bench collectors and do not authorize deprecated master coverage
+                      - model criterion: matching configured model family
                       - checklist-complete: PR checklist is satisfied
                       - patchwork: modified upstream engine or runtime source
 
@@ -333,39 +300,20 @@ jobs:
             - id: setup
               env:
                   PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-                  PUSH_BEFORE: ${{ github.event.before }}
-                  PUSH_AFTER: ${{ github.event.after }}
-                  PR_NUMBER: ${{ github.event.pull_request.number || 0 }}
-                  GH_TOKEN: ${{ github.token }}
+                  PR_NUMBER: ${{ github.event.pull_request.number }}
                   PR_LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
                   PRIORITY_CRITERIA: ${{ steps.priority-criteria.outputs.criteria || '' }}
-                  ALL_EVALS: >-
-                      ${{
-                        github.event_name == 'pull_request' &&
-                        contains(github.event.pull_request.labels.*.name, 'all-evals')
-                      }}
-                  EVALS_ONLY: >-
-                      ${{
-                        github.event_name == 'pull_request' &&
-                        contains(github.event.pull_request.labels.*.name, 'evals-only')
-                      }}
+                  ALL_EVALS: ${{ contains(github.event.pull_request.labels.*.name, 'all-evals') }}
+                  EVALS_ONLY: ${{ contains(github.event.pull_request.labels.*.name, 'evals-only') }}
               run: |
                   cd "$GITHUB_WORKSPACE/inferencex-e2e"
-
-                  if [ "${GITHUB_EVENT_NAME}" == "pull_request" ]; then
-                      BASE_REF="origin/${GITHUB_BASE_REF}"
-                      HEAD_REF="${PR_HEAD_SHA}"
-                  else
-                      BASE_REF="${PUSH_BEFORE}"
-                      HEAD_REF="${PUSH_AFTER}"
-                  fi
 
                   CMD=(
                       uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
                       python -m infx.matrix.plan
                       --changelog-file "${GITHUB_WORKSPACE}/inferencex-e2e/perf-changelog.yaml"
-                      --base-ref "$BASE_REF"
-                      --head-ref "$HEAD_REF"
+                      --base-ref "origin/${GITHUB_BASE_REF}"
+                      --head-ref "${PR_HEAD_SHA}"
                   )
                   if [ "$ALL_EVALS" = "true" ]; then
                       CMD+=(--all-evals)
@@ -386,30 +334,11 @@ jobs:
                     --criteria-json "$PRIORITY_CRITERIA")
 
                   echo "search-space-config=$CONFIG_JSON" >> "$GITHUB_OUTPUT"
-                  python3 -m infx.workflows.reuse \
-                    --repo "${GITHUB_REPOSITORY}" \
-                    --commit-sha "${GITHUB_SHA}" \
-                    --event-name "${GITHUB_EVENT_NAME}" \
-                    --ref "${GITHUB_REF}" \
-                    --workflow-id "run-sweep.yml"
-
-            - name: Summarize reused source
-              if: steps.setup.outputs.reuse-source-head-sha != ''
-              uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-              env:
-                  REUSE_SHA: ${{ steps.setup.outputs.reuse-source-head-sha }}
-              with:
-                  script: |
-                      await core.summary.addTable([
-                        ['Reused benchmark source', process.env.REUSE_SHA],
-                      ]).write();
 
     canary-select:
         name: canary-select
         needs: setup
         if: >-
-            needs.setup.outputs.reuse-enabled != 'true' &&
-            github.event_name == 'pull_request' &&
             (
               contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') ||
               contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast')
@@ -477,7 +406,7 @@ jobs:
         with:
             config: ${{ toJSON(matrix.config) }}
             # Only same-repository PRs owned by Klaud receive background priority.
-            klaud-run: &klaud-run ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login == 'Klaud-Cold' && (startsWith(github.head_ref, 'klaud/auto-') || startsWith(github.head_ref, 'klaude/auto-')) }}
+            klaud-run: &klaud-run ${{ github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login == 'Klaud-Cold' && (startsWith(github.head_ref, 'klaud/auto-') || startsWith(github.head_ref, 'klaude/auto-')) }}
             require-power: ${{ matrix.config['require-power'] == true && matrix.config['eval-only'] != true }}
             runner: ${{ matrix.config.runner }}
             priority: ${{ matrix.config.priority }}
@@ -524,7 +453,6 @@ jobs:
             ${{
               !cancelled() &&
               needs.setup.result == 'success' &&
-              needs.setup.outputs.reuse-enabled != 'true' &&
               (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
               (needs.canary-multi-node-sweep.result == 'success' || needs.canary-multi-node-sweep.result == 'skipped') &&
               toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['1k1k']) != 'null'
@@ -532,7 +460,7 @@ jobs:
         uses: $/.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node 1k1k /
         strategy:
-            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') || contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast-no-canary') }}
+            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') }}
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).multi_node['1k1k'] }}
         secrets:
@@ -557,7 +485,6 @@ jobs:
             ${{
               !cancelled() &&
               needs.setup.result == 'success' &&
-              needs.setup.outputs.reuse-enabled != 'true' &&
               (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
               (needs.canary-multi-node-sweep.result == 'success' || needs.canary-multi-node-sweep.result == 'skipped') &&
               toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['8k1k']) != 'null'
@@ -565,7 +492,7 @@ jobs:
         uses: $/.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node 8k1k /
         strategy:
-            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') || contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast-no-canary') }}
+            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') }}
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).multi_node['8k1k'] }}
         secrets:
@@ -580,7 +507,6 @@ jobs:
             ${{
               !cancelled() &&
               needs.setup.result == 'success' &&
-              needs.setup.outputs.reuse-enabled != 'true' &&
               (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
               (needs.canary-multi-node-sweep.result == 'success' || needs.canary-multi-node-sweep.result == 'skipped') &&
               toJson(fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['1k1k']) != 'null' &&
@@ -589,7 +515,7 @@ jobs:
         uses: $/.github/workflows/benchmark-tmpl.yml
         name: single-node 1k1k /
         strategy:
-            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') || contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast-no-canary') }}
+            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') }}
             matrix:
                 config: ${{ fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['1k1k'] }}
         secrets:
@@ -613,7 +539,6 @@ jobs:
             ${{
               !cancelled() &&
               needs.setup.result == 'success' &&
-              needs.setup.outputs.reuse-enabled != 'true' &&
               (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
               (needs.canary-multi-node-sweep.result == 'success' || needs.canary-multi-node-sweep.result == 'skipped') &&
               toJson(fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['8k1k']) != 'null' &&
@@ -622,7 +547,7 @@ jobs:
         uses: $/.github/workflows/benchmark-tmpl.yml
         name: single-node 8k1k /
         strategy:
-            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') || contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast-no-canary') }}
+            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') }}
             matrix:
                 config: ${{ fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['8k1k'] }}
         secrets:
@@ -637,7 +562,6 @@ jobs:
             ${{
               !cancelled() &&
               needs.setup.result == 'success' &&
-              needs.setup.outputs.reuse-enabled != 'true' &&
               (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
               (needs.canary-multi-node-sweep.result == 'success' || needs.canary-multi-node-sweep.result == 'skipped') &&
               toJson(fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['agentic']) != 'null' &&
@@ -646,7 +570,7 @@ jobs:
         uses: $/.github/workflows/benchmark-tmpl.yml
         name: agentic /
         strategy:
-            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') || contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast-no-canary') }}
+            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') }}
             matrix:
                 config: ${{ fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['agentic'] }}
         secrets:
@@ -672,7 +596,6 @@ jobs:
             ${{
               !cancelled() &&
               needs.setup.result == 'success' &&
-              needs.setup.outputs.reuse-enabled != 'true' &&
               (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
               (needs.canary-multi-node-sweep.result == 'success' || needs.canary-multi-node-sweep.result == 'skipped') &&
               toJson(fromJson((needs.canary-multi-node-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).multi_node['agentic']) != 'null' &&
@@ -681,7 +604,7 @@ jobs:
         uses: $/.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node agentic /
         strategy:
-            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') || contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast-no-canary') }}
+            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') }}
             matrix:
                 config: ${{ fromJson((needs.canary-multi-node-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).multi_node['agentic'] }}
         secrets:
@@ -710,7 +633,6 @@ jobs:
             ${{
               !cancelled() &&
               needs.setup.result == 'success' &&
-              needs.setup.outputs.reuse-enabled != 'true' &&
               (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
               (needs.canary-multi-node-sweep.result == 'success' || needs.canary-multi-node-sweep.result == 'skipped') &&
               toJson(fromJson(needs.setup.outputs.search-space-config).evals) != '[]' &&
@@ -719,7 +641,7 @@ jobs:
         uses: $/.github/workflows/benchmark-tmpl.yml
         name: eval /
         strategy:
-            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') || contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast-no-canary') }}
+            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') }}
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).evals }}
         secrets:
@@ -748,7 +670,6 @@ jobs:
             ${{
               !cancelled() &&
               needs.setup.result == 'success' &&
-              needs.setup.outputs.reuse-enabled != 'true' &&
               (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
               (needs.canary-multi-node-sweep.result == 'success' || needs.canary-multi-node-sweep.result == 'skipped') &&
               toJson(fromJson(needs.setup.outputs.search-space-config).agentic_evals) != '[]' &&
@@ -757,7 +678,7 @@ jobs:
         uses: $/.github/workflows/benchmark-tmpl.yml
         name: agentic eval /
         strategy:
-            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') || contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast-no-canary') }}
+            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') }}
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).agentic_evals }}
         secrets:
@@ -785,7 +706,6 @@ jobs:
             ${{
               !cancelled() &&
               needs.setup.result == 'success' &&
-              needs.setup.outputs.reuse-enabled != 'true' &&
               (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
               (needs.canary-multi-node-sweep.result == 'success' || needs.canary-multi-node-sweep.result == 'skipped') &&
               toJson(fromJson(needs.setup.outputs.search-space-config).multinode_evals) != '[]' &&
@@ -794,7 +714,7 @@ jobs:
         uses: $/.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node eval /
         strategy:
-            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') || contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast-no-canary') }}
+            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') }}
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).multinode_evals }}
         secrets:
@@ -828,7 +748,6 @@ jobs:
             ${{
               !cancelled() &&
               needs.setup.result == 'success' &&
-              needs.setup.outputs.reuse-enabled != 'true' &&
               (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
               (needs.canary-multi-node-sweep.result == 'success' || needs.canary-multi-node-sweep.result == 'skipped') &&
               toJson(fromJson(needs.setup.outputs.search-space-config).multinode_agentic_evals) != '[]' &&
@@ -837,7 +756,7 @@ jobs:
         uses: $/.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node agentic eval /
         strategy:
-            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') || contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast-no-canary') }}
+            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') }}
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).multinode_agentic_evals }}
         secrets:
@@ -912,9 +831,8 @@ jobs:
             - name: Extract and save changelog metadata
               env:
                   SWEEP_MATRIX: ${{ needs.setup.outputs.search-space-config }}
-                  SWEEP_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+                  SWEEP_HEAD: ${{ github.event.pull_request.head.sha }}
                   SWEEP_LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
-                  FULL_SWEEP: ${{ github.event_name == 'pull_request' && needs.setup.outputs.reuse-enabled != 'true' }}
               run: |
                   python3 - <<'PY'
                   import json, os
@@ -923,14 +841,14 @@ jobs:
                   labels = set(json.loads(os.environ['SWEEP_LABELS']) or [])
                   sweep_labels = labels & {
                       'full-sweep-enabled', 'non-canary-full-sweep-enabled',
-                      'full-sweep-fail-fast', 'full-sweep-fail-fast-no-canary',
+                      'full-sweep-fail-fast',
                       'all-evals', 'evals-only', 'agentx-fast',
                   }
                   Path('changelog_metadata.json').write_text(json.dumps(matrix['changelog_metadata']))
                   Path('sweep_manifest.json').write_text(json.dumps({
                       'head': os.environ['SWEEP_HEAD'], 'run-id': int(os.environ['GITHUB_RUN_ID']),
                       'run-attempt': int(os.environ['GITHUB_RUN_ATTEMPT']),
-                      'full-sweep': os.environ['FULL_SWEEP'] == 'true' and sweep_labels in (
+                      'full-sweep': sweep_labels in (
                           {'full-sweep-fail-fast'}, {'full-sweep-enabled'},
                       ),
                       'matrix': matrix,
@@ -1015,7 +933,6 @@ jobs:
             ]
         if: >-
             always() &&
-            github.event_name == 'pull_request' &&
             needs.collect-results.result == 'success'
         runs-on: ubuntu-latest
 
@@ -1058,123 +975,6 @@ jobs:
                   uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked --extra results
                   python -m infx.results.compare_results results/ >> "$GITHUB_STEP_SUMMARY"
 
-    trigger-ingest:
-        name: trigger-ingest
-        needs:
-            [
-                collect-results,
-                collect-evals,
-                calc-success-rate,
-                setup,
-                upload-changelog-metadata,
-            ]
-        if: >-
-            always() &&
-            github.event_name == 'push' &&
-            github.ref == 'refs/heads/main' &&
-            needs.setup.result == 'success' &&
-            (
-              (
-                toJson(fromJson(needs.setup.outputs.search-space-config).single_node['agentic']) == 'null' ||
-                toJson(fromJson(needs.setup.outputs.search-space-config).single_node['agentic']) == '[]'
-              ) &&
-              (
-                toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['agentic']) == 'null' ||
-                toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['agentic']) == '[]'
-              )
-            ) &&
-            (
-              needs.collect-results.result != 'skipped' ||
-              needs.collect-evals.result != 'skipped' ||
-              needs.setup.outputs.reuse-enabled == 'true'
-            )
-        runs-on: ubuntu-latest
-        steps:
-            - name: Trigger database ingest
-              uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-              env:
-                SOURCE_RUN_ID: ${{ needs.setup.outputs.reuse-enabled == 'true' && needs.setup.outputs.reuse-source-run-id || github.run_id }}
-                MERGE_RUN_ID: ${{ github.run_id }}
-              with:
-                # Repository integration credential for the scoped sweep/ingest job.
-                github-token: ${{ secrets.FRONTEND_PAT }} # zizmor: ignore[secrets-outside-env]
-                script: |
-                  await github.rest.repos.createDispatchEvent({
-                    owner: "SemiAnalysisAI",
-                    repo: "InferenceX-app",
-                    event_type: "ingest-results",
-                    client_payload: {
-                      "source-run-id": process.env.SOURCE_RUN_ID,
-                      "merge-run-id": process.env.MERGE_RUN_ID
-                    }
-                  });
-
-    trigger-agentic-ingest:
-        name: trigger-agentic-ingest
-        needs:
-            [
-                setup,
-                sweep-agentic,
-                sweep-multi-node-agentic,
-                upload-changelog-metadata,
-            ]
-        if: >-
-            always() &&
-            github.event_name == 'push' &&
-            github.ref == 'refs/heads/main' &&
-            needs.setup.result == 'success' &&
-            needs.upload-changelog-metadata.result == 'success' &&
-            (
-              (
-                needs.setup.outputs.reuse-enabled == 'true' &&
-                (
-                  (
-                    toJson(fromJson(needs.setup.outputs.search-space-config).single_node['agentic']) != 'null' &&
-                    toJson(fromJson(needs.setup.outputs.search-space-config).single_node['agentic']) != '[]'
-                  ) ||
-                  (
-                    toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['agentic']) != 'null' &&
-                    toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['agentic']) != '[]'
-                  )
-                )
-              ) ||
-              (
-                (
-                  needs.sweep-agentic.result == 'success' ||
-                  needs.sweep-multi-node-agentic.result == 'success'
-                ) &&
-                (
-                  needs.sweep-agentic.result == 'success' ||
-                  needs.sweep-agentic.result == 'skipped'
-                ) &&
-                (
-                  needs.sweep-multi-node-agentic.result == 'success' ||
-                  needs.sweep-multi-node-agentic.result == 'skipped'
-                )
-              )
-            )
-        runs-on: ubuntu-latest
-        steps:
-            - name: Trigger agentic database ingest
-              uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-              env:
-                SOURCE_RUN_ID: ${{ needs.setup.outputs.reuse-enabled == 'true' && needs.setup.outputs.reuse-source-run-id || github.run_id }}
-                MERGE_RUN_ID: ${{ github.run_id }}
-              with:
-                # Repository integration credential for the scoped sweep/ingest job.
-                github-token: ${{ secrets.FRONTEND_PAT }} # zizmor: ignore[secrets-outside-env]
-                script: |
-                  await github.rest.repos.createDispatchEvent({
-                    owner: "SemiAnalysisAI",
-                    repo: "InferenceX-app",
-                    event_type: "ingest-agentic-results",
-                    client_payload: {
-                      "source-run-id": process.env.SOURCE_RUN_ID,
-                      "merge-run-id": process.env.MERGE_RUN_ID,
-                      "database-target": "production"
-                    }
-                  });
-
     comment-unofficial-run-visualizer:
         name: comment-unofficial-run-visualizer
         needs:
@@ -1188,19 +988,16 @@ jobs:
         if: >-
             always() &&
             needs.setup.result == 'success' &&
-            github.event_name == 'pull_request' &&
             (
               contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') ||
               contains(github.event.pull_request.labels.*.name, 'non-canary-full-sweep-enabled') ||
-              contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') ||
-              contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast-no-canary')
+              contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast')
             ) &&
             (
               (github.event.action != 'labeled' && github.event.action != 'unlabeled') ||
               github.event.label.name == 'full-sweep-enabled' ||
               github.event.label.name == 'non-canary-full-sweep-enabled' ||
               github.event.label.name == 'full-sweep-fail-fast' ||
-              github.event.label.name == 'full-sweep-fail-fast-no-canary' ||
               github.event.label.name == 'all-evals' ||
               github.event.label.name == 'evals-only' ||
               github.event.label.name == 'agentx-fast'
