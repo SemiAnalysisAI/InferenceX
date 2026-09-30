@@ -1,6 +1,6 @@
 import pytest
 
-from research.dsv41.analyze_trace import interval_union, summarize
+from research.dsv41.analyze_trace import family, interval_union, summarize
 
 
 def test_union_does_not_add_overlapping_kernels():
@@ -75,3 +75,11 @@ def test_model_span_follows_launch_correlation_not_cpu_scope_or_unrelated_work(
     assert row["device_active_union_us"] == 5
     assert row["uncovered_device_span_us"] == 3
     assert row["kernel_family_sums_us"] == {"dense_gemm": 2, "communication": 3}
+
+
+def test_fused_attention_is_not_misclassified_as_only_rope():
+    assert (
+        family("sm100::fused_norm_rope_attn_rope_cast_fwd::core_attn::fwd_kernel")
+        == "fused_attention_rope_cast"
+    )
+    assert family("standalone_rope_kernel") == "quantization_rope_norm"

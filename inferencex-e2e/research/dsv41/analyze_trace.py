@@ -39,6 +39,8 @@ def family(name: str) -> str:
         return "engram"
     if "_hc_" in n or "mhc" in n:
         return "hyper_connections"
+    if "fused_norm_rope_attn_rope_cast" in n:
+        return "fused_attention_rope_cast"
     if any(s in n for s in ("mqa_logits", "index_q_", "index_k_", "fp4_index")):
         return "indexer"
     if any(s in n for s in ("flash_fwd", "sparse_attn", "mla_")):

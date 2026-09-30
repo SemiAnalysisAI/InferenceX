@@ -177,3 +177,8 @@ to B200/B300; the native Hopper paths have different precision/layout support.
 Indexer manifests record minimum/maximum visible physical K. Dense input weights
 and scores are FP32; the reference describes BF16 intermediate rounding and
 head reduction, not necessarily BF16 API input weights.
+
+Trace classification keeps Mega Attention kernels in `fused_attention_rope_cast`
+because they include attention, RoPE and output quantization. Do not read shifts
+between that category and separate attention/quantization categories as latency
+savings without accounting for the changed fusion boundary.

@@ -141,3 +141,7 @@ Indexer 新测量使用 `--physical-lengths` 明确设置物理压缩 K=64K/128K
 稀疏脚本必须传入 `--physical-kv-tokens`，例如 131072 或早期诊断的 65536。
 清单记录最小及最大可见物理 K。稠密输入权重和分数为 FP32；源文档描述的是
 BF16 中间舍入及 head reduction，不应据此认定 API 输入权重就是 BF16。
+
+trace 分类将 Mega Attention 内核单列为 `fused_attention_rope_cast`，因为它们
+同时包含 Attention、RoPE 和输出量化。分类之间的耗时转移涉及融合边界变化，
+不能直接当作延迟收益。
