@@ -29,6 +29,7 @@ ENGINES = {
     "dynamo-trt": "trtllm",
     "atom": "atom",
     "atom-disagg": "atom",
+    "tilert": "tilert",
 }
 SGLANG_VARIABLES = (
     "SGLANG_SIMULATE_ACC_LEN",
@@ -36,10 +37,15 @@ SGLANG_VARIABLES = (
     "SGLANG_SIMULATE_ACC_TOKEN_MODE",
 )
 TRT_VARIABLE = "TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS"
+TILERT_VARIABLES = ("TILERT_SIMULATE_ACC_LEN", "TILERT_SIMULATE_ACC_METHOD")
 
 
 def spec_parameters(role: Mapping[str, Any], engine: str) -> dict[str, Any]:
     args = role.get("args", {})
+    if engine == "tilert":
+        if args.get("with-mtp") is not True:
+            return {}
+        return {"method": "mtp", "num_speculative_tokens": args.get("num-mtp")}
     if engine == "atom":
         method = args.get("method")
         if not method:
@@ -117,7 +123,11 @@ def build_overrides(
             environment["MODEL_PREFIX"], spec, environment["THINKING_MODE"], golden_dir
         )
     overrides = []
-    variables = {"sglang": SGLANG_VARIABLES, "trtllm": (TRT_VARIABLE,)}.get(engine, ())
+    variables = {
+        "sglang": SGLANG_VARIABLES,
+        "trtllm": (TRT_VARIABLE,),
+        "tilert": TILERT_VARIABLES,
+    }.get(engine, ())
     # SRT applies recipe-wide environment after role environment. Keep simulation
     # role-local so global values cannot override the golden AL or leak into evals.
     for key in variables:
@@ -127,13 +137,27 @@ def build_overrides(
         if name not in ("agg", "prefill", "decode"):
             continue
         prefix = f"roles.{name}"
-        worker_spec = spec_parameters(role, engine)
-        if engine == "vllm":
+        worker_engine = engine
+        worker_al = al
+        if engine == "tilert":
+            selected = role.get("engine", recipe.get("engine", "tilert"))
+            worker_engine = selected.get("type") if isinstance(selected, Mapping) else selected
+            # TileRT's first token and draft cache come from real vLLM prefill.
+            # Only its decode runtime simulates acceptance, using environment
+            # variables (decode_server has no --simulate-acc-* CLI options).
+            if name != "decode" or worker_engine != "tilert":
+                worker_al = None
+        worker_spec = spec_parameters(role, worker_engine)
+        if engine == "tilert" and (worker_al is None or not worker_spec):
+            for key in TILERT_VARIABLES:
+                if key in (role.get("env") or {}):
+                    overrides += ["--unset", f"{prefix}.env.{key}"]
+        if worker_engine == "vllm":
             if not worker_spec:
                 continue
-            if al is not None:
+            if worker_al is not None:
                 worker_spec.update(
-                    rejection_sample_method="synthetic", synthetic_acceptance_length=al
+                    rejection_sample_method="synthetic", synthetic_acceptance_length=worker_al
                 )
             elif (
                 worker_spec.get("rejection_sample_method") == "synthetic"
@@ -147,22 +171,24 @@ def build_overrides(
                 "--set",
                 f"{prefix}.args.speculative-config={json.dumps(worker_spec)}",
             ]
-        elif engine == "atom":
+        elif worker_engine == "atom":
             # ATOM forces acceptance with a server flag rather than environment.
             key = "spec-decode-acceptance-length"
-            if al is not None and worker_spec:
-                overrides += ["--set", f"{prefix}.args.{key}={al:g}"]
+            if worker_al is not None and worker_spec:
+                overrides += ["--set", f"{prefix}.args.{key}={worker_al:g}"]
             elif key in (role.get("args") or {}):
                 overrides += ["--unset", f"{prefix}.args.{key}"]
-        elif al is not None and worker_spec:
+        elif worker_al is not None and worker_spec:
             values = (
-                (f"{al:g}", "match-expected", "real-draft-token")
+                (f"{worker_al:g}", "match-expected", "real-draft-token")
                 if engine == "sglang"
-                else (f"{al - 1:g}",)
+                else (f"{worker_al:g}", "match-expected")
+                if engine == "tilert"
+                else (f"{worker_al - 1:g}",)
             )
             for key, value in zip(variables, values, strict=True):
                 overrides += ["--set", f"{prefix}.env.{key}={json.dumps(value)}"]
-        else:
+        elif engine != "tilert":
             for key in variables:
                 if key in (role.get("env") or {}):
                     overrides += ["--unset", f"{prefix}.env.{key}"]
