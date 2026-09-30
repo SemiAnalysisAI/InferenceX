@@ -73,6 +73,23 @@ def test_a_path_without_a_lane_on_the_cluster_is_refused():
         srt_lane("b200-cw", LaunchPath.SRT_MULTI)
 
 
+def test_b300_multinode_agentic_lane_mounts_standard_caches():
+    lane = srt_lane("b300-dsxe", LaunchPath.SRT_MULTI)
+    agentic = request(IS_AGENTIC="1")
+    regular = request(IS_AGENTIC="0")
+
+    matched = [
+        (mount.volume, mount.target, mount.world_writable)
+        for mount in lane.mounts
+        if mount.when(agentic)
+    ]
+    assert matched == [
+        ("aiperf-cache", "/aiperf_mmap_cache", True),
+        ("hf-hub-cache", "/hf_hub_cache", True),
+    ]
+    assert not any(mount.when(regular) for mount in lane.mounts)
+
+
 OVERRIDES = (
     Override(Match(frameworks=any_of("sglang")), entry="M"),
     Override(Match(frameworks=any_of("trt")), served_name="served-m"),

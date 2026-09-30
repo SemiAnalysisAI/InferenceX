@@ -64,7 +64,10 @@ SRT_LANES: dict[tuple[str, LaunchPath], SrtLane] = {
         ),
         mounts=_AGENTIC_CACHES,
     ),
-    ("b300-dsxe", LaunchPath.SRT_MULTI): SrtLane(frameworks=_DYNAMO),
+    ("b300-dsxe", LaunchPath.SRT_MULTI): SrtLane(
+        frameworks=_DYNAMO,
+        mounts=_AGENTIC_CACHES,
+    ),
     ("gb200-nv", LaunchPath.SRT_MULTI): SrtLane(
         frameworks=_DYNAMO,
         setup_scripts={"dynamo-sglang": "install-torchao.sh"},
