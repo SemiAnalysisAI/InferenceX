@@ -5,7 +5,7 @@ base:
   name: minimaxm3-fp4-b200-vllm-agentic
   model:
     path: hf:nvidia/MiniMax-M3-NVFP4
-    container: vllm/vllm-openai:nightly-af1c01499b289be555c475669ba50a88e96d846e
+    container: vllm/vllm-openai:nightly-af7f9488c2210d67e1033ecdc845b087ee7fe92b
     precision: fp4
   resources:
     gpu_type: b200
@@ -30,10 +30,11 @@ base:
       workers: 1
       args:
         served-model-name: nvidia/MiniMax-M3-NVFP4
-        gpu-memory-utilization: 0.9
+        gpu-memory-utilization: 0.95
         block-size: 128
         language-model-only: true
         enable-prefix-caching: true
+        enable-chunked-prefill: true
         no-enable-flashinfer-autotune: true
         reasoning-parser: minimax_m3
         tool-call-parser: minimax_m3
@@ -47,7 +48,7 @@ base:
         trust-remote-code: true
         # Three-token EAGLE3 with the GQA draft head. Throughput runs switch to
         # synthetic rejection at the golden acceptance length.
-        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASHINFER"}'
+        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASHINFER","use_local_argmax_reduction":true}'
       env:
         PYTHONNOUSERSITE: '1'
         VLLM_ENGINE_READY_TIMEOUT_S: '3600'
@@ -68,6 +69,8 @@ override_tp8_c1:
       gpus: 8
       args:
         tensor-parallel-size: 8
+        max-num-seqs: 2
+        max-cudagraph-capture-size: 8
   benchmark:
     env:
       CONC: '1'
@@ -79,6 +82,8 @@ override_tp4_c1:
       gpus: 4
       args:
         tensor-parallel-size: 4
+        max-num-seqs: 2
+        max-cudagraph-capture-size: 8
   benchmark:
     env:
       CONC: '1'
@@ -90,6 +95,8 @@ override_tp4_c5:
       gpus: 4
       args:
         tensor-parallel-size: 4
+        max-num-seqs: 10
+        max-cudagraph-capture-size: 40
   benchmark:
     env:
       CONC: '5'
@@ -101,6 +108,8 @@ override_tp4_c10:
       gpus: 4
       args:
         tensor-parallel-size: 4
+        max-num-seqs: 20
+        max-cudagraph-capture-size: 80
   benchmark:
     env:
       CONC: '10'
@@ -112,6 +121,8 @@ override_tp4_c15:
       gpus: 4
       args:
         tensor-parallel-size: 4
+        max-num-seqs: 30
+        max-cudagraph-capture-size: 120
   benchmark:
     env:
       CONC: '15'
@@ -123,6 +134,8 @@ override_tp4_c20:
       gpus: 4
       args:
         tensor-parallel-size: 4
+        max-num-seqs: 40
+        max-cudagraph-capture-size: 160
   benchmark:
     env:
       CONC: '20'
@@ -134,6 +147,8 @@ override_tp4_c15_dram:
       gpus: 4
       args:
         tensor-parallel-size: 4
+        max-num-seqs: 30
+        max-cudagraph-capture-size: 120
         kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1082000000000,"lazy_offload":true}}'
       env:
         VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
@@ -149,6 +164,8 @@ override_tp4_c20_dram:
       gpus: 4
       args:
         tensor-parallel-size: 4
+        max-num-seqs: 40
+        max-cudagraph-capture-size: 160
         kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1082000000000,"lazy_offload":true}}'
       env:
         VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
@@ -164,6 +181,8 @@ override_tp4_c25_dram:
       gpus: 4
       args:
         tensor-parallel-size: 4
+        max-num-seqs: 50
+        max-cudagraph-capture-size: 200
         kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1082000000000,"lazy_offload":true}}'
       env:
         VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
@@ -179,6 +198,8 @@ override_tp4_c30_dram:
       gpus: 4
       args:
         tensor-parallel-size: 4
+        max-num-seqs: 60
+        max-cudagraph-capture-size: 240
         kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1082000000000,"lazy_offload":true}}'
       env:
         VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
@@ -194,6 +215,8 @@ override_tp4_c32_dram:
       gpus: 4
       args:
         tensor-parallel-size: 4
+        max-num-seqs: 64
+        max-cudagraph-capture-size: 256
         kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1082000000000,"lazy_offload":true}}'
       env:
         VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
@@ -209,6 +232,8 @@ override_tp4_c34_dram:
       gpus: 4
       args:
         tensor-parallel-size: 4
+        max-num-seqs: 68
+        max-cudagraph-capture-size: 272
         kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1082000000000,"lazy_offload":true}}'
       env:
         VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
@@ -224,6 +249,8 @@ override_tp4_c36_dram:
       gpus: 4
       args:
         tensor-parallel-size: 4
+        max-num-seqs: 72
+        max-cudagraph-capture-size: 288
         kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1082000000000,"lazy_offload":true}}'
       env:
         VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
@@ -239,6 +266,8 @@ override_tp4_c38_dram:
       gpus: 4
       args:
         tensor-parallel-size: 4
+        max-num-seqs: 76
+        max-cudagraph-capture-size: 304
         kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1082000000000,"lazy_offload":true}}'
       env:
         VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
@@ -254,6 +283,8 @@ override_tp4_c40_dram:
       gpus: 4
       args:
         tensor-parallel-size: 4
+        max-num-seqs: 80
+        max-cudagraph-capture-size: 320
         kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1082000000000,"lazy_offload":true}}'
       env:
         VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
