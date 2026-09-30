@@ -54,17 +54,20 @@ base:
           true}'
         data-parallel-size: 8
         all2all-backend: allgather_reducescatter
+        api-server-count: 8
       env:
         VLLM_USE_RUST_FRONTEND: '0'
         PYTHONUNBUFFERED: '1'
         VLLM_ENGINE_READY_TIMEOUT_S: '7200'
         VLLM_MOE_ROUTING_SIMULATION_STRATEGY: uniform_random
+        VLLM_SERVER_DEV_MODE: '1'
       gpus: 8
   benchmark:
     type: custom
     command: python3 /infmax-workspace/research/dsv41/vllm_cohort_sweep.py --probe
       --output /logs --gpu-count 8 --dp-size 8 --profile-steps 8 --concurrencies 384
-      1536 2560
+      1536 2560 --admission-settle-seconds 5 --admission-timeout-seconds 300 --warmup-output-tokens
+      64
     env:
       MODEL: deepseek-ai/DeepSeek-V4.1-Flash
       ISL: '131072'

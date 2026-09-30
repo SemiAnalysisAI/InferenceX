@@ -34,31 +34,43 @@ def capacity_bounds(
     return bounds if set(bounds) == set(range(dp_size)) else None
 
 
-async def protocol_probe(output: Path, dp_size: int) -> None:
-    """Check native streaming usage on every DP rank before expensive prefixes."""
+async def protocol_probe(
+    output: Path, dp_size: int, settle_seconds: float, timeout_seconds: float
+) -> None:
+    """Exercise native admission pause and real streaming progress on every rank."""
     import aiohttp
-    from vllm_cohort import stream_request
+    from vllm_cohort import admit_wave
 
     base = f"http://{os.environ['SRT_FRONTEND_HOST']}:{os.environ['SRT_FRONTEND_PORT']}"
-    records = [
-        {"events": [], "success": False, "meta": {}, "error": ""}
-        for _ in range(dp_size)
-    ]
+    prompts = [([1] * 64, 64, 128, None) for _ in range(dp_size)]
     async with aiohttp.ClientSession(
-        timeout=aiohttp.ClientTimeout(total=60)
+        timeout=aiohttp.ClientTimeout(total=120)
     ) as session:
-        await asyncio.gather(
-            *[
-                stream_request(session, base, [1] * 64, 8, record, rank)
-                for rank, record in enumerate(records)
-            ]
+        records, tasks = await admit_wave(
+            session,
+            base,
+            prompts,
+            128,
+            output=output,
+            label="probe",
+            dp_size=dp_size,
+            barrier=True,
+            settle_seconds=settle_seconds,
+            timeout_seconds=timeout_seconds,
         )
+        await asyncio.gather(*tasks)
     (output / "protocol-probe.json").write_text(json.dumps(records, indent=2) + "\n")
-    if not all(r["success"] and r["meta"].get("prompt_tokens") == 64 for r in records):
+    if not all(
+        r["success"] and r["meta"].get("prompt_tokens") == 64 and len(r["events"]) >= 8
+        for r in records
+    ):
         raise RuntimeError(
-            "Native streaming-usage probe failed before long-context warmup"
+            "Admission/streaming probe failed: need multiple progress chunks on every DP rank"
         )
-    print(f"Native streaming usage verified on all {dp_size} DP ranks", flush=True)
+    print(
+        f"Native paused admission and streaming verified on all {dp_size} DP ranks",
+        flush=True,
+    )
 
 
 def main():
@@ -68,16 +80,21 @@ def main():
     parser.add_argument("--dp-size", type=int, required=True)
     parser.add_argument("--profile-steps", type=int, required=True)
     parser.add_argument("--probe", action="store_true")
+    parser.add_argument("--warmup-output-tokens", type=int, required=True)
+    parser.add_argument("--admission-settle-seconds", type=float, required=True)
+    parser.add_argument("--admission-timeout-seconds", type=float, required=True)
     parser.add_argument("--concurrencies", nargs="+", type=int, required=True)
     args = parser.parse_args()
+    if args.dp_size <= 0 or args.gpu_count <= 0:
+        parser.error("GPU and DP counts must be positive")
     if (
-        args.gpu_count <= 0
-        or args.dp_size <= 0
+        args.warmup_output_tokens <= 0
+        or args.admission_settle_seconds < 0
+        or args.admission_timeout_seconds <= 0
+        or args.gpu_count % args.dp_size
         or any(c <= 0 or c % args.dp_size for c in args.concurrencies)
     ):
-        parser.error(
-            "GPU/DP counts must be positive and DP must divide every concurrency"
-        )
+        parser.error("Invalid warmup/admission budget or GPU/concurrency divisibility")
     if args.concurrencies != sorted(set(args.concurrencies)):
         parser.error("Concurrencies must be unique and ascending")
     if int(os.environ["CONC"]) != args.concurrencies[0]:
@@ -86,7 +103,14 @@ def main():
     out = args.output / "research" / "cohort-sweep"
     out.mkdir(parents=True, exist_ok=True)
     if args.probe:
-        asyncio.run(protocol_probe(out, args.dp_size))
+        asyncio.run(
+            protocol_probe(
+                out,
+                args.dp_size,
+                args.admission_settle_seconds,
+                args.admission_timeout_seconds,
+            )
+        )
     manifest = []
     bounds = capacity_bounds(
         [p.read_text(errors="replace") for p in args.output.glob("*_agg_w0.out")],
@@ -145,6 +169,13 @@ def main():
             str(args.profile_steps),
             "--result-layout",
             "single",
+            "--warmup-output-tokens",
+            str(args.warmup_output_tokens),
+            "--admission-barrier",
+            "--admission-settle-seconds",
+            str(args.admission_settle_seconds),
+            "--admission-timeout-seconds",
+            str(args.admission_timeout_seconds),
             "--trace-dir",
             str(args.output / "research" / "vllm-cohort-profiles"),
         ]

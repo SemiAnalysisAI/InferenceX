@@ -122,7 +122,7 @@ token 后的乐观容量上界仍低于所需逐 DP batch 时跳过，并记录�
 会在首块回显完整 prompt，给 128K 大批次带来大量额外流量。完成 token 数
 仍使用服务端原生累计计数，最终 usage 块不会重复计数。
 
-长上下文配置在昂贵的前缀预热前，先对八个 rank 执行 64 输入/8 输出的协议
+长上下文配置在昂贵的前缀预热前，先对八个 rank 执行 64 输入/128 输出的协议
 探测，验证原生流式 usage 和 DP 路由，保存记录并在失败时提前退出。探测计时
 不作为性能结果。
 
@@ -145,3 +145,13 @@ BF16 中间舍入及 head reduction，不应据此认定 API 输入权重就是 
 trace 分类将 Mega Attention 内核单列为 `fused_attention_rope_cast`，因为它们
 同时包含 Attention、RoPE 和输出量化。分类之间的耗时转移涉及融合边界变化，
 不能直接当作延迟收益。
+
+长上下文入队现在通过原生 `/pause?mode=keep&clear_cache=false` 和 `/resume`
+控制。先编码请求体，收到所有 HTTP 响应头后再等待明确配置的五秒 IPC 稳定期，
+随后释放生成；暂停期间任何请求都不得推进。这是 HTTP 入队屏障，不是核心队列
+状态的证明，仍必须通过共同测量窗口及逐 worker 剖析 batch 校验。使用八个 API
+进程。前缀预热每个请求生成 64 个 token，同时预热 prefill 和 decode。协议探测
+在每个 DP rank 上使用 64 输入/128 输出，并要求至少八个进度块。客户端 TTFT
+包含人为暂停，不作为在线延迟基准；稳态解码计时排除入队过程。剖析校验要求每个
+DP/TP worker 都有真实 GPU 内核和目标生成 batch，观测值保存在
+`profile-validation.json`。

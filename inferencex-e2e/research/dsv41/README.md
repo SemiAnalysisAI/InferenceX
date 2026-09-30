@@ -158,7 +158,7 @@ vLLM token-ID responses include the full prompt in the first chunk, which would
 add substantial traffic for 128K batches. Cumulative completion-token counts
 remain native server counts; final usage chunks are not counted twice.
 
-The long-context recipes enable an eight-rank 64-input/8-output protocol probe
+The long-context recipes enable an eight-rank 64-input/128-output protocol probe
 before expensive prefix warmup. It verifies actual native streaming usage and
 DP routing, stores its records, and aborts early on failure. Probe timings are
 not benchmark results.
@@ -182,3 +182,16 @@ Trace classification keeps Mega Attention kernels in `fused_attention_rope_cast`
 because they include attention, RoPE and output quantization. Do not read shifts
 between that category and separate attention/quantization categories as latency
 savings without accounting for the changed fusion boundary.
+
+High-context admission is now controlled with native `/pause?mode=keep&clear_cache=false`
+and `/resume`. Request bodies are encoded before submission; all HTTP headers
+must arrive, then the explicit five-second IPC settling interval ends before
+release. No request may advance while paused. This is an HTTP admission barrier,
+not proof of core-queue state; the measured common window and per-worker profile
+batch checks remain mandatory. Eight API processes handle the cohort. Prefix
+warmup generates 64 tokens per request to exercise decode as well as prefill.
+The protocol probe uses 64 input /128 output tokens on each DP rank and requires
+at least eight progress chunks. Client TTFT includes the controlled hold and
+is not an online latency benchmark; steady-decode timing excludes admission.
+Profile validation requires real GPU kernels and the requested generation batch
+on every DP/TP worker, retaining observed counts in `profile-validation.json`.

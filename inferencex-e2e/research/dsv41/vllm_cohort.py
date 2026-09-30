@@ -8,6 +8,7 @@ import gzip
 import hashlib
 import json
 import os
+import re
 import sys
 import time
 from dataclasses import asdict
@@ -19,30 +20,127 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from research.dsv41.long_context import post, steady_decode_window
 
 
-async def stream_request(session, base, prompt, output_length, record, rank):
+def completion_body(prompt, output_length):
+    return json.dumps(
+        {
+            "model": os.environ["MODEL"],
+            "prompt": prompt,
+            "stream": True,
+            "temperature": 0,
+            "max_tokens": output_length,
+            "ignore_eos": True,
+            "stream_interval": 1,
+            "stream_options": {"include_usage": True, "continuous_usage_stats": True},
+        },
+        separators=(",", ":"),
+    ).encode()
+
+
+async def admit_wave(
+    session,
+    base,
+    prompts,
+    output_length,
+    *,
+    output,
+    label,
+    dp_size,
+    barrier,
+    settle_seconds,
+    timeout_seconds,
+):
+    """Pre-encode requests, then hold generation until every HTTP body is accepted."""
+    bodies = [completion_body(p[0], output_length) for p in prompts]
+    records = [
+        {"events": [], "success": False, "meta": {}, "error": ""} for _ in prompts
+    ]
+    marker = {
+        "label": label,
+        "requests": len(prompts),
+        "body_bytes": sum(map(len, bodies)),
+        "barrier": barrier,
+        "settle_seconds": settle_seconds,
+    }
+    tasks, paused = [], False
+    try:
+        if barrier:
+            paused = True
+            await post(session, base, "/pause?mode=keep&clear_cache=false", {})
+            async with session.get(base + "/is_paused") as response:
+                state = json.loads(await response.text())
+            if state.get("is_paused") is not True:
+                raise RuntimeError("Native engine did not enter keep-mode pause")
+        tasks = [
+            asyncio.create_task(
+                stream_request(
+                    session, base, p[0], output_length, r, i % dp_size, body=body
+                )
+            )
+            for i, (p, r, body) in enumerate(zip(prompts, records, bodies))
+        ]
+        if barrier:
+            deadline = time.perf_counter() + timeout_seconds
+            while not all("headers_received_at" in r for r in records):
+                if any(t.done() for t in tasks):
+                    raise RuntimeError(
+                        "Request finished or failed during paused admission"
+                    )
+                if time.perf_counter() >= deadline:
+                    raise RuntimeError(
+                        "Timed out waiting for all HTTP admission headers"
+                    )
+                await asyncio.sleep(0.01)
+            await asyncio.sleep(settle_seconds)
+            if any(r["events"] for r in records) or any(t.done() for t in tasks):
+                raise RuntimeError(
+                    "Generation advanced or a request ended while paused"
+                )
+            marker["headers_received"] = len(records)
+            marker["last_header_monotonic_s"] = max(
+                r["headers_received_at"] for r in records
+            )
+            marker["resume_start_monotonic_s"] = time.perf_counter()
+            await post(session, base, "/resume", {})
+            paused = False
+            marker["resume_done_monotonic_s"] = time.perf_counter()
+        return records, tasks
+    except BaseException as error:
+        marker["error"] = f"{type(error).__name__}: {error}"
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        raise
+    finally:
+        if paused:
+            try:
+                await post(session, base, "/resume", {})
+            except Exception as error:  # noqa: BLE001 - retain cleanup evidence without hiding the original failure
+                marker["resume_cleanup_error"] = str(error)
+        (output / f"admission-{label}.json").write_text(
+            json.dumps(marker, indent=2) + "\n"
+        )
+
+
+async def stream_request(
+    session, base, prompt, output_length, record, rank, *, body=None
+):
+    body = completion_body(prompt, output_length) if body is None else body
     record["start"] = time.perf_counter()
     try:
         count = 0
         async with session.post(
             base + "/v1/completions",
-            headers={"X-data-parallel-rank": str(rank)},
-            json={
-                "model": os.environ["MODEL"],
-                "prompt": prompt,
-                "stream": True,
-                "temperature": 0,
-                "max_tokens": output_length,
-                "ignore_eos": True,
-                "stream_options": {
-                    "include_usage": True,
-                    "continuous_usage_stats": True,
-                },
+            headers={
+                "X-data-parallel-rank": str(rank),
+                "Content-Type": "application/json",
             },
+            data=body,
         ) as response:
             if response.status != 200:
                 raise RuntimeError(
                     f"completion HTTP {response.status}: {(await response.text())[:500]}"
                 )
+            record["headers_received_at"] = time.perf_counter()
             async for raw in response.content:
                 text = raw.decode().strip()
                 if not text.startswith("data:"):
@@ -73,17 +171,31 @@ async def stream_request(session, base, prompt, output_length, record, rank):
 
 
 async def wave(
-    session, base, prompts, output_length, *, output, profile_steps, dp_size
+    session,
+    base,
+    prompts,
+    output_length,
+    *,
+    output,
+    profile_steps,
+    dp_size,
+    label,
+    barrier,
+    settle_seconds,
+    timeout_seconds,
 ):
-    records = [
-        {"events": [], "success": False, "meta": {}, "error": ""} for _ in prompts
-    ]
-    tasks = [
-        asyncio.create_task(
-            stream_request(session, base, p[0], output_length, r, i % dp_size)
-        )
-        for i, (p, r) in enumerate(zip(prompts, records))
-    ]
+    records, tasks = await admit_wave(
+        session,
+        base,
+        prompts,
+        output_length,
+        output=output,
+        label=label,
+        dp_size=dp_size,
+        barrier=barrier,
+        settle_seconds=settle_seconds,
+        timeout_seconds=timeout_seconds,
+    )
     profile_started = False
     marker = {}
     metric_names = (
@@ -97,10 +209,7 @@ async def wave(
         "is_cuda_graph",
     )
     with gzip.open(
-        output
-        / (
-            "profile-metrics.jsonl.gz" if profile_steps else "measured-metrics.jsonl.gz"
-        ),
+        output / f"{label}-metrics.jsonl.gz",
         "wt",
     ) as metrics_file:
         while not all(t.done() for t in tasks):
@@ -145,6 +254,56 @@ async def wave(
     return records
 
 
+def validate_cohort_profiles(
+    paths: list[Path], gpu_count: int, dp_size: int, batch: int
+) -> list[dict]:
+    """Require GPU work and the requested logical batch on every DP/TP worker."""
+    workers = set()
+    rows = []
+    for path in paths:
+        match = re.search(r"dp(\d+)_pp0_tp(\d+)_", path.name)
+        if match is None:
+            raise RuntimeError(f"Unknown worker identity in trace {path.name}")
+        identity = tuple(map(int, match.groups()))
+        if identity in workers:
+            raise RuntimeError("Duplicate worker trace")
+        workers.add(identity)
+        opener = gzip.open if path.suffix == ".gz" else open
+        with opener(path, "rt") as handle:
+            events = json.load(handle)["traceEvents"]
+        kernels = sum(e.get("cat") == "kernel" for e in events)
+        counts = []
+        for event in events:
+            name = event.get("name", "")
+            if (
+                event.get("cat") == "user_annotation"
+                and name.startswith("execute_")
+                and "_context_0(" in name
+            ):
+                found = re.search(r"_generation_(\d+)", name)
+                if found:
+                    counts.append(int(found.group(1)))
+        full = counts.count(batch // dp_size)
+        if not kernels or not full:
+            raise RuntimeError(
+                f"No full-batch GPU execution evidence in {path.name}: {counts}"
+            )
+        rows.append(
+            {
+                "file": path.name,
+                "dp": identity[0],
+                "tp": identity[1],
+                "kernel_events": kernels,
+                "generation_counts": counts,
+                "full_batch_execute_scopes": full,
+            }
+        )
+    expected = {(dp, tp) for dp in range(dp_size) for tp in range(gpu_count // dp_size)}
+    if workers != expected or len(paths) != gpu_count:
+        raise RuntimeError(f"Missing worker traces: expected {expected}, got {workers}")
+    return rows
+
+
 async def run(args, prompts, tokenizer):
     import aiohttp
 
@@ -163,7 +322,17 @@ async def run(args, prompts, tokenizer):
         timeout=aiohttp.ClientTimeout(total=14400),
     ) as session:
         warm = await wave(
-            session, base, prompts, 1, output=out, profile_steps=0, dp_size=args.dp_size
+            session,
+            base,
+            prompts,
+            args.warmup_output_tokens,
+            output=out,
+            profile_steps=0,
+            dp_size=args.dp_size,
+            label="warmup",
+            barrier=args.admission_barrier,
+            settle_seconds=args.admission_settle_seconds,
+            timeout_seconds=args.admission_timeout_seconds,
         )
         if not all(
             r["success"] and r["meta"].get("prompt_tokens") == input_length
@@ -181,6 +350,10 @@ async def run(args, prompts, tokenizer):
             output=out,
             profile_steps=0,
             dp_size=args.dp_size,
+            label="measured",
+            barrier=args.admission_barrier,
+            settle_seconds=args.admission_settle_seconds,
+            timeout_seconds=args.admission_timeout_seconds,
         )
         duration = max(r["end"] for r in records) - start
         with gzip.open(out / "measured-events.json.gz", "wt") as f:
@@ -229,15 +402,19 @@ async def run(args, prompts, tokenizer):
             max_concurrency=concurrency,
             model_id=os.environ["MODEL"],
             backend="vllm",
-            protocol="full-cohort prefix warmup; fixed native DP-rank affinity; separate measured wave",
+            protocol="pre-encoded requests; native keep-mode HTTP admission barrier when enabled; fixed DP rank; prefix warmup; client steady window (not model timer)",
+            admission_barrier=args.admission_barrier,
             request_rate="inf",
             benchmark_outcome=benchmark_outcome(concurrency, metrics.completed),
         )
         steady_error = None
         try:
-            result["steady_decode"] = steady_decode_window(
-                records, burn=8, tail=8, gpu_count=args.gpu_count
-            )
+            result["steady_decode"] = {
+                "valid": True,
+                **steady_decode_window(
+                    records, burn=8, tail=8, gpu_count=args.gpu_count
+                ),
+            }
         except ValueError as error:
             steady_error = str(error)
             result["steady_decode"] = {"valid": False, "reason": steady_error}
@@ -277,6 +454,10 @@ async def run(args, prompts, tokenizer):
                 output=out,
                 profile_steps=args.profile_steps,
                 dp_size=args.dp_size,
+                label="profile",
+                barrier=args.admission_barrier,
+                settle_seconds=args.admission_settle_seconds,
+                timeout_seconds=args.admission_timeout_seconds,
             )
             with gzip.open(out / "profile-events.json.gz", "wt") as f:
                 json.dump(profiled, f)
@@ -285,6 +466,12 @@ async def run(args, prompts, tokenizer):
             traces = sorted(set(trace_dir.rglob("*.trace.json*")) - previous_traces)
             (out / "trace-files.json").write_text(
                 json.dumps([str(p) for p in traces], indent=2) + "\n"
+            )
+            evidence = validate_cohort_profiles(
+                traces, args.gpu_count, args.dp_size, concurrency
+            )
+            (out / "profile-validation.json").write_text(
+                json.dumps(evidence, indent=2) + "\n"
             )
             if len(traces) != args.gpu_count:
                 raise RuntimeError(
@@ -306,8 +493,30 @@ def main():
     parser.add_argument("--gpu-count", type=int, required=True)
     parser.add_argument("--dp-size", type=int, required=True)
     parser.add_argument("--trace-dir", type=Path)
+    parser.add_argument("--warmup-output-tokens", type=int, default=1)
+    parser.add_argument("--admission-barrier", action="store_true")
+    parser.add_argument("--admission-settle-seconds", type=float)
+    parser.add_argument("--admission-timeout-seconds", type=float)
     parser.add_argument("--result-layout", choices=["single", "multi"], required=True)
     args = parser.parse_args()
+    if args.admission_barrier and (
+        args.admission_settle_seconds is None
+        or args.admission_settle_seconds < 0
+        or args.admission_timeout_seconds is None
+        or args.admission_timeout_seconds <= 0
+    ):
+        parser.error(
+            "Admission barrier requires explicit nonnegative settle and positive timeout"
+        )
+    if (
+        args.warmup_output_tokens <= 0
+        or args.gpu_count <= 0
+        or args.dp_size <= 0
+        or args.gpu_count % args.dp_size
+    ):
+        parser.error(
+            "Positive GPU/DP/warmup values are required; DP must divide GPU count"
+        )
     concurrency = int(os.environ["CONC_LIST"])
     if args.dp_size <= 0 or concurrency % args.dp_size:
         raise ValueError("Positive DP size must divide global concurrency")
@@ -348,7 +557,7 @@ def main():
                 "draft_tokens": os.environ["FIXED_SEQUENCE_DRAFT_TOKENS"],
                 "profile_wave_osl": 1024 if args.profile_steps else None,
                 "dp_size": args.dp_size,
-                "prefix_warmup_tokens": 1,
+                "prefix_warmup_tokens": args.warmup_output_tokens,
                 "framework": "vllm",
             },
             indent=2,

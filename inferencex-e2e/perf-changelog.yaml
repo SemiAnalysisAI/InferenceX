@@ -9495,3 +9495,18 @@
     - "Add explicit physical compressed-K lengths to standalone indexer measurements and record visible bounds; keep earlier half-length diagnostics separate."
     - "独立 Indexer 测量新增明确的物理压缩 K 长度及可见范围记录，早期半长度诊断单独保留。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607
+
+- config-keys:
+  - dsv41flash-fp4-b200-vllm-8gpu-dp-128k1024-sweep
+  - dsv41flash-fp4-b300-vllm-8gpu-dp-128k1024-sweep
+  scenario-type:
+  - fixed-seq-len
+  description:
+  - Separate HTTP admission from generation with native keep-mode pause/resume, pre-encoded
+    bodies, eight API workers, 64-token decode warmup, and per-rank full-batch profile
+    validation.
+  - "\u901A\u8FC7\u539F\u751F keep \u6A21\u5F0F\u6682\u505C/\u6062\u590D\u5206\u79BB\
+    \ HTTP \u5165\u961F\u548C\u751F\u6210\uFF0C\u9884\u7F16\u7801\u8BF7\u6C42\u4F53\
+    \uFF0C\u4F7F\u7528\u516B\u4E2A API \u8FDB\u7A0B\u300164 token \u89E3\u7801\u9884\
+    \u70ED\u53CA\u9010 rank \u5168 batch \u5256\u6790\u6821\u9A8C\u3002"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607
