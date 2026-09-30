@@ -10,7 +10,7 @@ base:
     container: dynamo-sglang
     precision: fp4
   slurm:
-    time_limit: '8:00:00'
+    time_limit: '00:19:00'
   health_check:
     max_attempts: 1440
     interval_seconds: 10

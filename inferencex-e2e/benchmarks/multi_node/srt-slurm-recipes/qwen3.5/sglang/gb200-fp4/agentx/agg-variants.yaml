@@ -12,7 +12,7 @@ base:
   identity:
     model: {repo: nvidia/Qwen3.5-397B-A17B-NVFP4-V2}
     container: {image: lmsysorg/sglang:nightly-dev-20260818-c0b6474b}
-  slurm: {time_limit: "8:00:00"}
+  slurm: {time_limit: "00:19:00"}
   health_check: {max_attempts: 2160, interval_seconds: 10}
   resources:
     gpu_type: gb200
