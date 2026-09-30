@@ -21,19 +21,32 @@ from research.dsv41.long_context import post, steady_decode_window
 
 
 def completion_body(prompt, output_length):
-    return json.dumps(
-        {
+    payload = {
+        "model": os.environ["MODEL"],
+        "prompt": prompt,
+        "stream": True,
+        "temperature": 0,
+        "max_tokens": output_length,
+        "ignore_eos": True,
+        "stream_interval": 1,
+        "stream_options": {"include_usage": True, "continuous_usage_stats": True},
+    }
+    if os.environ.get("VLLM_COHORT_TOKEN_API") == "1":
+        payload = {
             "model": os.environ["MODEL"],
-            "prompt": prompt,
+            "token_ids": prompt,
             "stream": True,
-            "temperature": 0,
-            "max_tokens": output_length,
-            "ignore_eos": True,
-            "stream_interval": 1,
+            "return_token_ids": False,
+            "sampling_params": {
+                "temperature": 0,
+                "max_tokens": output_length,
+                "ignore_eos": True,
+                "stream_interval": 1,
+                "detokenize": False,
+            },
             "stream_options": {"include_usage": True, "continuous_usage_stats": True},
-        },
-        separators=(",", ":"),
-    ).encode()
+        }
+    return json.dumps(payload, separators=(",", ":")).encode()
 
 
 async def admit_wave(
@@ -129,7 +142,12 @@ async def stream_request(
     try:
         count = 0
         async with session.post(
-            base + "/v1/completions",
+            base
+            + (
+                "/inference/v1/generate"
+                if os.environ.get("VLLM_COHORT_TOKEN_API") == "1"
+                else "/v1/completions"
+            ),
             headers={
                 "X-data-parallel-rank": str(rank),
                 "Content-Type": "application/json",
@@ -406,6 +424,7 @@ async def run(args, prompts, tokenizer):
             backend="vllm",
             protocol="pre-encoded requests; native keep-mode HTTP admission barrier when enabled; fixed DP rank; prefix warmup; client steady window (not model timer)",
             admission_barrier=args.admission_barrier,
+            token_api_no_detokenization=os.environ.get("VLLM_COHORT_TOKEN_API") == "1",
             request_rate="inf",
             benchmark_outcome=benchmark_outcome(concurrency, metrics.completed),
         )

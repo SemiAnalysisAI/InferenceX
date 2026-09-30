@@ -55,6 +55,7 @@ base:
         data-parallel-size: 8
         all2all-backend: allgather_reducescatter
         api-server-count: 8
+        enable-scale-out: true
       env:
         VLLM_USE_RUST_FRONTEND: '0'
         PYTHONUNBUFFERED: '1'
@@ -69,6 +70,7 @@ base:
       1536 2560 --admission-settle-seconds 5 --admission-timeout-seconds 300 --warmup-output-tokens
       64
     env:
+      VLLM_COHORT_TOKEN_API: '1'
       MODEL: deepseek-ai/DeepSeek-V4.1-Flash
       ISL: '131072'
       OSL: '1024'

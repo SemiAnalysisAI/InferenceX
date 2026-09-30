@@ -9560,3 +9560,13 @@
     - "Measure native attention epilogue across eight token counts, retaining backend precision, numerical error and 192-sample traces."
     - "测量八个 token 数量下的原生 attention 后处理，保留后端精度、数值误差及192次采样 trace。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-8gpu-dp-128k1024-sweep
+    - dsv41flash-fp4-b300-vllm-8gpu-dp-128k1024-sweep
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Use native token-in/token-out API without detokenization for high-context cohorts; preserve admission and full-batch validation."
+    - "长上下文批次改用原生 token 输入/输出 API 并关闭反分词，保留入队与全 batch 校验。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607

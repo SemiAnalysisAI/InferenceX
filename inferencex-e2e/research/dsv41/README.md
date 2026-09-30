@@ -252,3 +252,13 @@ presented as bitwise equivalence. Each T has192 samples with a256MiB FP16
 ReduceSum (FP32 accumulation) before each call, excluded from timing. Both
 summed GPU kernel durations and eager GPU scope spans are retained. Mega
 Attention fuses rotation/cast into attention and has a different boundary.
+
+High-context sweeps explicitly enable the native scale-out API and set
+`VLLM_COHORT_TOKEN_API=1` in the benchmark container. They submit token IDs to
+`/inference/v1/generate` with `sampling_params.detokenize=false`, continuous
+usage counters and no prompt-token echo. This isolates token generation from
+text detokenization while preserving sampling, lengths, DP routing, admission,
+and full-batch validation. Other callers retain the completion endpoint. A
+local HTTP behavior test checks native request handling and stream accounting;
+the normal eight-rank runtime probe remains mandatory. This is a diagnostic
+protocol revision, not proof that detokenization caused prior coalescing.

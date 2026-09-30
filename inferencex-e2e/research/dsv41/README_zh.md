@@ -205,3 +205,11 @@ T=1/16/72/128/160/192/224/256。记录原生加载后的内核选择与权重类
 保留实测误差，不声称逐位一致。每个 T 测量192次；每次前执行256MiB
 FP16 ReduceSum（FP32累加），不计入目标时长。保留 GPU 内核时长之和
 与 eager scope 跨度。Mega Attention 将旋转/转换融合进 attention，计时边界不同。
+
+长上下文 sweep 显式启用原生 scale-out API，并在 benchmark 容器设置
+`VLLM_COHORT_TOKEN_API=1`。向 `/inference/v1/generate` 提交 token ID，
+使用 `sampling_params.detokenize=false`、连续 usage 计数，不回显 prompt token。
+这样将 token 生成与文本反分词分开，保持采样、长度、DP 路由、入队和全 batch
+校验不变。其他调用者继续使用 completion 端点。本地 HTTP 行为测试检查原生
+请求及流式计数，仍要求执行八 rank 运行时探针。这是诊断性协议修改，并非已证明
+之前的合并输出由反分词导致。

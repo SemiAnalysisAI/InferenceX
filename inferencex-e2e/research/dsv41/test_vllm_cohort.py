@@ -179,3 +179,62 @@ def test_profile_validation_checks_actual_generation_batch(tmp_path, second_rank
             (0, 0, 1),
             (1, 0, 1),
         ]
+
+
+def test_native_token_endpoint_streams_without_text_or_prompt_echo(monkeypatch):
+    import aiohttp
+    from aiohttp import web
+
+    monkeypatch.setenv("MODEL", "test-model")
+    monkeypatch.setenv("VLLM_COHORT_TOKEN_API", "1")
+
+    async def exercise():
+        async def native_generate(request):
+            body = await request.json()
+            params = body.get("sampling_params", {})
+            if (
+                body.get("token_ids") != [11, 12, 13]
+                or body.get("return_token_ids") is not False
+                or params.get("detokenize") is not False
+                or params.get("max_tokens") != 3
+                or params.get("ignore_eos") is not True
+                or request.headers.get("X-data-parallel-rank") != "2"
+            ):
+                return web.Response(status=400, text="Invalid native token request")
+            chunks = [
+                {
+                    "choices": [{"token_ids": [41]}],
+                    "usage": {"prompt_tokens": 3, "completion_tokens": 1},
+                },
+                {
+                    "choices": [{"token_ids": [42, 43]}],
+                    "usage": {"prompt_tokens": 3, "completion_tokens": 3},
+                },
+            ]
+            return web.Response(
+                text="".join(f"data: {json.dumps(chunk)}\n\n" for chunk in chunks)
+                + "data: [DONE]\n\n",
+                content_type="text/event-stream",
+            )
+
+        app = web.Application()
+        app.router.add_post("/inference/v1/generate", native_generate)
+        runner = web.AppRunner(app)
+        await runner.setup()
+        site = web.TCPSite(runner, "127.0.0.1", 0)
+        await site.start()
+        port = runner.addresses[0][1]
+        record = {"events": [], "success": False, "meta": {}, "error": ""}
+        try:
+            async with aiohttp.ClientSession() as session:
+                await stream_request(
+                    session, f"http://127.0.0.1:{port}", [11, 12, 13], 3, record, 2
+                )
+        finally:
+            await runner.cleanup()
+        return record
+
+    result = asyncio.run(exercise())
+    assert result["success"] is True
+    assert [event[1] for event in result["events"]] == [1, 3]
+    assert result["meta"] == {"prompt_tokens": 3, "completion_tokens": 3}
