@@ -20,17 +20,17 @@ LLMD_SUBMIT = """#!/usr/bin/env bash
 set -e
 env > "$GITHUB_WORKSPACE/submitted.env"
 logs="$BENCHMARK_LOGS_DIR"
-job="$logs/slurm_job-4242"
+job="$logs/slurm_job-4299"
 mkdir -p "$logs/agentic/conc_128" "$job/eval_results"
 echo '{"conc": 128}' > "$logs/point-identity_conc128.json"
 echo trace > "$logs/agentic/conc_128/profile.json"
 echo '{"score": 1}' > "$job/eval_results/results_gsm8k.json"
 echo 'server log' > "$logs/server.log"
-echo 'benchmark done' > "$logs/slurm_job-4242.out"
-echo 'worker warning' > "$logs/slurm_job-4242.err"
+echo 'benchmark done' > "$logs/slurm_job-4299.out"
+echo 'worker warning' > "$logs/slurm_job-4299.err"
 echo 'submitting' >&2
 [[ "${NO_JOB_ID:-}" == 1 ]] && exit 1
-echo 4242
+echo 4299
 """
 
 
@@ -80,7 +80,7 @@ def run_launch(harness) -> subprocess.CompletedProcess[str]:
     return launch(env, config, workspace)
 
 
-def test_llmd_driver_submits_the_wrapper_and_stages_artifacts(harness, capfd):
+def test_llmd_driver_submits_the_wrapper_and_stages_artifacts(harness):
     result = run_launch(harness)
     config, workspace, env = harness
 
@@ -92,8 +92,8 @@ def test_llmd_driver_submits_the_wrapper_and_stages_artifacts(harness, capfd):
     assert submitted["MODEL_PATH"] == model_path
     assert submitted["MODEL_NAME"] == env["MODEL"]
     assert submitted["LLMD_CONTAINER_ENGINE"] == "pyxis"
+    assert submitted["LLMD_SQUASH_FILE"]
     assert submitted["BENCHMARK_LOGS_DIR"] == f"{workspace}/benchmark_logs"
-    assert "LLMD_SQUASH_FILE=" in submitted
     assert submitted["SLURM_PARTITION"] == "batch"
     assert submitted["SLURM_ACCOUNT"] == "benchmark"
 
@@ -102,7 +102,7 @@ def test_llmd_driver_submits_the_wrapper_and_stages_artifacts(harness, capfd):
     assert json.loads((workspace / "results_gsm8k.json").read_text()) == {"score": 1}
     with tarfile.open(workspace / "multinode_server_logs.tar.gz") as bundle:
         assert "./server.log" in bundle.getnames()
-    assert "worker warning" in capfd.readouterr().out
+    assert "submitting" in result.stderr
 
 
 def test_llmd_driver_fails_when_the_wrapper_prints_no_job_id(harness):
