@@ -101,6 +101,9 @@ base:
         SGLANG_REQUEST_STATE_WAIT_TIMEOUT: '60'
         SGLANG_NCCL_ALL_GATHER_IN_OVERLAP_SCHEDULER_SYNC_BATCH: '1'
         MOONCAKE_PROTOCOL: rdma
+        # The store only registers host buffers on RDMA; without an explicit list it
+        # falls back to NVLink for same-domain peers and aborts at the warmup put.
+        MOONCAKE_DEVICE: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
         MOONCAKE_GLOBAL_SEGMENT_SIZE: 140gb
         MOONCAKE_STANDALONE_STORAGE: '0'
         MC_STORE_CLIENT_METRIC_INTERVAL: '5'
@@ -176,6 +179,9 @@ base:
         SGLANG_LOG_MS: '1'
         SGLANG_REQUEST_STATE_WAIT_TIMEOUT: '60'
         MOONCAKE_PROTOCOL: rdma
+        # The store only registers host buffers on RDMA; without an explicit list it
+        # falls back to NVLink for same-domain peers and aborts at the warmup put.
+        MOONCAKE_DEVICE: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
         MC_STORE_CLIENT_METRIC_INTERVAL: '5'
         MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
         WITH_NVIDIA_PEERMEM: '0'

@@ -7,7 +7,7 @@ from infx.clusters.slurm import SrtSlurmSettings
 from infx.launch import policy
 from infx.launch.context import LaunchError
 from infx.launch.drivers.srt import models
-from infx.launch.drivers.srt.lanes import RoleEnv, SrtLane, role_env_overrides, srt_lane, srt_time_limit
+from infx.launch.drivers.srt.lanes import SrtLane, srt_lane, srt_time_limit
 from infx.launch.drivers.srt.models import (
     Override,
     checkpoint,
@@ -183,31 +183,3 @@ def test_srt_time_limits(monkeypatch, profile, lane, env, limit):
     srt = SrtSlurmSettings.model_validate({"network-interface": "", **profile})
     point = request(SALLOC_TIME_LIMIT="480", EVAL_ONLY="false", **env)
     assert srt_time_limit("c", point, lane, srt) == limit
-
-
-DISAGG = "recipes/dsv4/sglang/gb300-fp4/agentx/disagg-variants.yaml"
-
-
-@pytest.mark.parametrize(("config_file", "expected"), [
-    (f"{DISAGG}:override_4p1d_c1920", [
-        "--set", "roles.prefill.env.MOONCAKE_DEVICE=mlx5_0,mlx5_1,mlx5_2,mlx5_3",
-        "--set", "roles.decode.env.MOONCAKE_DEVICE=mlx5_0,mlx5_1,mlx5_2,mlx5_3",
-    ]),
-    (DISAGG, [
-        "--set", "roles.prefill.env.MOONCAKE_DEVICE=mlx5_0,mlx5_1,mlx5_2,mlx5_3",
-        "--set", "roles.decode.env.MOONCAKE_DEVICE=mlx5_0,mlx5_1,mlx5_2,mlx5_3",
-    ]),
-    ("recipes/dsv4/sglang/gb300-fp4/agentx/agg-variants.yaml:override_tp8", []),
-], ids=["disagg-variant", "disagg-file", "agg-recipe-untouched"])  # fmt: skip
-def test_gb300_sets_the_mooncake_devices_only_on_the_disagg_recipe_roles(config_file, expected):
-    lane = srt_lane("gb300-nv", LaunchPath.SRT_MULTI)
-    assert role_env_overrides(lane, config_file) == expected
-
-
-def test_role_env_applies_every_rule_whose_glob_matches():
-    lane = SrtLane(role_env=(
-        RoleEnv("recipes/a/*.yaml", ("decode",), {"X": "1"}),
-        RoleEnv("recipes/b/*.yaml", ("decode",), {"Y": "2"}),
-    ))  # fmt: skip
-    assert role_env_overrides(lane, "recipes/a/r.yaml:override_x") == ["--set", "roles.decode.env.X=1"]
-    assert role_env_overrides(SrtLane(), "recipes/a/r.yaml") == []
