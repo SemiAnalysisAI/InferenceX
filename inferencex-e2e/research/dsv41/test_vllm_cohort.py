@@ -34,14 +34,20 @@ class Session:
 
 
 @pytest.mark.parametrize("output_length, success", [(3, True), (4, False)])
-def test_stream_counts_delta_token_ids_and_retains_final_usage(
+def test_stream_uses_continuous_usage_without_recounting_final_chunk(
     monkeypatch, output_length, success
 ):
     monkeypatch.setenv("MODEL", "test-model")
     response = Response(
         [
-            {"choices": [{"token_ids": [10, 11]}]},
-            {"choices": [{"token_ids": [12]}]},
+            {
+                "choices": [{"text": "a"}],
+                "usage": {"prompt_tokens": 8, "completion_tokens": 2},
+            },
+            {
+                "choices": [{"text": "b"}],
+                "usage": {"prompt_tokens": 8, "completion_tokens": 3},
+            },
             {"choices": [], "usage": {"prompt_tokens": 8, "completion_tokens": 3}},
         ]
     )

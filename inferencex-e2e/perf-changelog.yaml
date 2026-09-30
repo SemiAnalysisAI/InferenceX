@@ -9445,3 +9445,13 @@
     - "Delete the unreferenced 256-output combined-sweep recipes after the explicit 1024-output replacements were selected."
     - "选择明确的 1024 输出替代配置后，删除已无引用的 256 输出合并扫描配置文件。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-8gpu-dp-128k1024-sweep
+    - dsv41flash-fp4-b300-vllm-8gpu-dp-128k1024-sweep
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Use native continuous usage counters without full-prompt token-ID echo in long-context streams; avoid large response serialization overhead."
+    - "长上下文流改用原生连续 usage 计数，避免回显完整 prompt token ID 所产生的大量序列化开销。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607

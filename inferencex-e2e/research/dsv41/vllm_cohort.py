@@ -33,7 +33,6 @@ async def stream_request(session, base, prompt, output_length, record, rank):
                 "temperature": 0,
                 "max_tokens": output_length,
                 "ignore_eos": True,
-                "return_token_ids": True,
                 "stream_options": {
                     "include_usage": True,
                     "continuous_usage_stats": True,
@@ -52,13 +51,14 @@ async def stream_request(session, base, prompt, output_length, record, rank):
                 if text == "[DONE]":
                     continue
                 item = json.loads(text)
-                for choice in item.get("choices", []):
-                    ids = choice.get("token_ids") or []
-                    if ids:
-                        count += len(ids)
+                usage = item.get("usage")
+                if usage:
+                    count = int(usage.get("completion_tokens", 0))
+                    if count and (
+                        not record["events"] or count > record["events"][-1][1]
+                    ):
                         record["events"].append([time.perf_counter(), count])
-                if item.get("usage"):
-                    record["meta"] = item["usage"]
+                    record["meta"] = usage
                 if item.get("error"):
                     raise RuntimeError(str(item["error"]))
         record["success"] = bool(

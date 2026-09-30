@@ -149,3 +149,8 @@ The combined high-context sweep uses ISL=131072 and OSL=1024, explicitly
 chosen because the reference does not publish its output length. The longer
 output leaves an interior full-batch window after HTTP admission; batch-1
 measurements remain 8192/256. Exact token lengths are checked in every case.
+
+The streaming client requests continuous usage counters without token-ID echo.
+vLLM token-ID responses include the full prompt in the first chunk, which would
+add substantial traffic for 128K batches. Cumulative completion-token counts
+remain native server counts; final usage chunks are not counted twice.
