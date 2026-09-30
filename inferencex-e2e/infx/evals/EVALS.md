@@ -607,7 +607,7 @@ attempt cannot replace a newer failed retry.
 | `RUN_EVAL` | `false` | Enable eval after throughput benchmark |
 | `EVAL_ONLY` | `false` | Skip throughput, only run evals (set by workflow) |
 | `EVAL_FRAMEWORK` | Workflow: `auto`; benchmark runner: `lm-eval` | Eval runner (`lm-eval`, `swebench`, `kimi-vendor`, `minimax-vendor`, or `bfcl`). `auto` resolves from matrix metadata before reusable workflow dispatch |
-| `EVAL_SUITE` | Matrix-selected for automatic vendor evals; otherwise basename of `EVAL_TASKS_DIR` or `gsm8k` | Provider suite selector and artifact identity. With `lm-eval` it names a repo task, `infx/evals/<suite>.yaml` (for example `cruxeval_output`), and sets `EVAL_TASKS_DIR`. Explicit workflow overrides remain supported |
+| `EVAL_SUITE` | Matrix-selected for automatic vendor evals; otherwise basename of `EVAL_TASKS_DIR` or `gsm8k` | Provider suite selector and artifact identity. With `lm-eval` it names a task in `infx/evals/lm_eval_tasks/<suite>.yaml` (for example `cruxeval_output`), selected by name through `--include_path`. Explicit workflow overrides remain supported |
 | `EVAL_TASKS_DIR` | `infx/evals/gsm8k.yaml` | Path to lm-eval task YAML |
 | `EVAL_RESULT_DIR` | `/tmp/eval_out-*` | Output directory for eval results |
 | `EVAL_MAX_MODEL_LEN` | `16384` | Max context for eval (set by `compute_eval_context_length`) |
@@ -619,10 +619,12 @@ attempt cannot replace a newer failed retry.
 
 ### Adding a new eval task
 
-1. Create a task YAML in `infx/evals/` following the lm-eval task format.
-2. Select it with `eval-framework: lm-eval` and `eval-suite: <your_task>` on a
-   workflow dispatch, or `EVAL_SUITE=<your_task>` (or
-   `EVAL_TASKS_DIR=infx/evals/<your_task>.yaml`) when running benchmarks.
+1. Create a task YAML following the lm-eval task format.
+2. To select it with `eval-framework: lm-eval` and `eval-suite: <your_task>`
+   (or `EVAL_SUITE=<your_task>`), put it in `infx/evals/lm_eval_tasks/` with
+   `task:` equal to the file name. lm-eval resolves tasks by name, and a bare
+   YAML path in `EVAL_TASKS_DIR` works only when lm-eval bundles a task of that
+   name (as it does for `gsm8k`).
 3. Name a filter with `strict`, `flex`, or `extract` so collection finds the
    score, and add a threshold to `thresholds.yaml`.
 4. Update `infx/results/collect_eval_results.py` if new metrics need extraction.
@@ -698,10 +700,10 @@ append_lm_eval_summary
 The following files are task definitions from lm-eval. More information on changes lives within the files:
 - `infx/evals/gsm8k.yaml`
 - `infx/evals/gpqa_diamond.yaml`
-- `infx/evals/cruxeval_output.yaml`, `infx/evals/cruxeval_input.yaml`
+- `infx/evals/lm_eval_tasks/cruxeval_output.yaml`, `infx/evals/lm_eval_tasks/cruxeval_input.yaml`
   ([CRUXEval](https://arxiv.org/abs/2401.03065) output and input prediction,
   800 Python functions each). Explicit only: select with `eval-suite`. Scored by
-  `cruxeval.py`, which executes the dataset function with the model's completed
+  `lm_eval_tasks/cruxeval.py`, which executes the dataset function with the model's completed
   assertion in an isolated, time- and memory-limited interpreter. Upstream
   lm-eval's cruxeval utils strip quotes from string answers, so they are not
   used. `run_lm_eval` forces greedy decoding, so the score is greedy pass@1.

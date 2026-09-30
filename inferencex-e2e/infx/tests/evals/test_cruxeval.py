@@ -6,7 +6,7 @@ from pathlib import Path
 
 import yaml
 
-from infx.evals import cruxeval
+from infx.evals.lm_eval_tasks import cruxeval
 
 EVALS = Path(cruxeval.__file__).parent
 DOC = {
