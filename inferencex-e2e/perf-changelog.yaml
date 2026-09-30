@@ -9166,4 +9166,4 @@
   description:
     - "Backfill measured power for the full Kimi-K3 B300 AgentX curve using the current recipes and non-profiling exporter defaults; retain the complete benchmark and eval matrix."
     - "使用当前配方和默认非 profiling exporter，补齐完整 Kimi-K3 B300 AgentX 曲线的实测功耗，保留完整吞吐与评估矩阵。"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3619
