@@ -13,7 +13,7 @@ from infx.clusters import Cluster, load_inventory
 from infx.launch.backends.slurm import SlurmBackend
 from infx.launch.context import Launch
 from infx.launch.drivers.srt.checkout import Checkout, compute_workspace
-from infx.launch.drivers.srt.config import SrtJob, pyxis_spelling, render, write
+from infx.launch.drivers.srt.config import SrtJob, pyxis_spelling, render, srun_options, write
 from infx.launch.drivers.srt.recipe import HEALTH_ATTEMPTS, prepare_recipe
 from infx.launch.drivers.srt.run import SrtRun
 from infx.launch.lifecycle import Lifecycle
@@ -166,6 +166,14 @@ def test_multinode_jobs_wait_at_least_the_health_floor_for_their_server(tmp_path
 
     resolved = resolve_config_with_defaults(yaml.safe_load(recipe.read_text()), render(cluster(), job()))
     assert resolved["health_check"] == effective
+
+
+def test_dram_offload_jobs_reserve_the_node_and_cap_each_srun_step():
+    record = cluster(slurm={"srun-args": ["--mpi=pmix"]})
+    assert render(record, job(single_node=True, mem_mib=8000))["default_sbatch_directives"] == {"mem": "8000M"}
+    assert srun_options(record.scheduler_settings, 2000) == '{"mpi": "pmix", "mem": "2000M"}'
+    assert srun_options(record.scheduler_settings) == '{"mpi": "pmix"}'
+    assert srun_options(cluster().scheduler_settings) is None
 
 
 def test_single_node_jobs_skip_the_segment_and_typed_gres_replaces_gpus_per_node():
