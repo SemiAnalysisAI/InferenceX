@@ -218,6 +218,7 @@ override_1p1d_tp8_c1_b1_mtp5:
             - 1
         max_batch_size: 1
         moe_expert_parallel_size: 1
+        enable_iter_perf_stats: true
         sparse_attention_config:
           use_cute_dsl_topk: true
         tensor_parallel_size: 8
