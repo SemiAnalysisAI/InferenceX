@@ -867,8 +867,9 @@ def main() -> None:
             find_recipe=recipes.find,
         )
         digests = {c["image"]: "" for c in result["include"]}
+        pinned = {v["image"]: v["digest"] for v in images.values() if v.get("digest")}
         for image in digests:
-            digests[image] = probe_module().resolve_image_digest(image)
+            digests[image] = probe_module().resolve_image_digest(image) or pinned.get(image, "")
         for cell in result["include"]:
             # recipe image tag gone from the registry (pruned nightly): backend image + recipe
             # env; the manifest records the swap
@@ -876,7 +877,8 @@ def main() -> None:
                 cell["recipe_image_unavailable"] = cell["image"]
                 cell["image"] = images[cell["backends"][0]]["image"]
                 if not digests.get(cell["image"]):
-                    digests[cell["image"]] = probe_module().resolve_image_digest(cell["image"])
+                    digests[cell["image"]] = (probe_module().resolve_image_digest(cell["image"])
+                                              or pinned.get(cell["image"], ""))
         for image in {c["image"] for c in result["include"]}:
             if not digests.get(image):
                 raise RuntimeError(f"cannot resolve image digest: {image}")
