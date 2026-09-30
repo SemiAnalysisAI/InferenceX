@@ -222,7 +222,6 @@ The first cleanup step, before checkout, cancels the runner's Slurm jobs with pl
 | --- | --- |
 | [`drivers/srt/`](../infx/launch/drivers/srt) | Single-node and multi-node srt-slurm recipes (`SRT_RECIPE`, `CONFIG_FILE`), including the cluster-maintained B200 Nscale lanes. Slurm only |
 | [`drivers/script.py`](../infx/launch/drivers/script.py) | Single-node runs with an explicit `BENCH_SCRIPT_OVERRIDE`, such as SPEED-Bench collectors: one container through the backend interface, on any backend. The only driver clusters on other schedulers run |
-| [`drivers/legacy.py`](../infx/launch/drivers/legacy.py) | The remaining MI355X `amd_utils` AgentX lanes. Slurm only |
 
 Depending on the driver, the launcher may:
 
@@ -296,7 +295,7 @@ The collector and reusable-artifact validator share format recognition, concurre
 
 Agentic throughput jobs have a different contract. They validate AIPerf output with [`infx/results/agentic/validate_agentic_result.py`](../infx/results/agentic/validate_agentic_result.py), upload an aggregate `bmk_agentic_<suffix>` artifact, and upload the raw `agentic_<suffix>` sibling containing trace-replay material. InferenceX-app pairs those siblings by their shared suffix. Agentic eval-only jobs follow the eval output contract instead and do not require a throughput result.
 
-Server logs and GPU metrics are diagnostic side artifacts. They are uploaded with `always()` so a failed run can still be investigated. Their presence does not turn a failed benchmark into a valid result. On the AMD Slurm fleet, `/run_logs` is node-local; after the server step finishes, `job.slurm` merges the closed log tree from every allocated node into shared storage so the diagnostic artifact includes prefill and decode logs from the full deployment.
+Server logs and GPU metrics are diagnostic side artifacts. They are uploaded with `always()` so a failed run can still be investigated. Their presence does not turn a failed benchmark into a valid result. The srt driver's [`collect.py`](../infx/launch/drivers/srt/collect.py) fetches job outputs through the scheduler backend and stages the multi-node log tree and `multinode_server_logs.tar.gz` before cleaning up the outputs.
 
 ## Stage 6: artifact collection and handoff
 
