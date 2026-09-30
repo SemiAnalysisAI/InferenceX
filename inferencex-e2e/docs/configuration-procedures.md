@@ -105,6 +105,8 @@ and preserve resources used by other jobs.
 
 ## Procedure index
 
+The Kimi-K3 native PD lane resolves the selected recipe before image provisioning, requires its worker image to match the matrix, and stages the recipe's frontend image through the same backend. This keeps router images recipe-owned and rejects mismatched inputs before an import allocation. Its staged target model, draft mount, fabric devices, worker network environment and memlock preamble are declared in the cluster record; image imports, submission, cancellation and artifact collection use the shared Python launcher.
+
 1. [Prepare a worktree](#prepare-a-worktree)
 2. [Add a model + hardware recipe](#add-a-model--hardware-recipe)
 3. [Change a master config](#change-a-master-config)

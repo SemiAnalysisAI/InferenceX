@@ -23,6 +23,7 @@ class LaneMount:
     volume: str
     target: str | None = None
     world_writable: bool = False
+    read_only: bool = False
 
 
 @dataclass(frozen=True)
@@ -41,6 +42,7 @@ class SrtLane:
     time_limit: str | None = None
     long_time_limit: str | None = None
     long_time: Match | None = None
+    stage_recipe_images: Match | None = None
 
 
 _DYNAMO = any_of("dynamo-sglang", "dynamo-trt", "dynamo-vllm")
@@ -104,6 +106,7 @@ SRT_LANES: dict[tuple[str, LaunchPath], SrtLane] = {
             LaneMount(Match(), "aiperf-cache", "/aiperf_mmap_cache"),
             LaneMount(Match(frameworks=any_of("tilert")), "it-share-data", "/models"),
         ),
+        stage_recipe_images=Match(any_of("kimik3"), frameworks=any_of("vllm-disagg")),
         eval_unsets=(
             "roles.prefill.args.ep-dispatch-algorithm",
             "roles.decode.args.ep-dispatch-algorithm",

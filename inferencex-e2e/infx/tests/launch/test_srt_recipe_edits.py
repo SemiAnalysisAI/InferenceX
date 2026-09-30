@@ -1,15 +1,19 @@
 """Edits the multi-node lanes apply to the staged recipe copy."""
 
+from pathlib import Path
+
 import pytest
 import yaml
 
 from infx.launch.drivers.srt.recipe import (
+    RECIPES_MIRROR,
     add_dist_timeout,
     inject_concurrencies,
     parse_concurrencies,
     raise_health_attempts,
     rename_job,
 )
+from infx.srt_slurm.recipe_images import resolve_images
 
 RECIPE = """name: "upstream"
 roles:
@@ -76,3 +80,42 @@ def test_conc_list_must_be_canonical_positive_integers():
     for bad in ("", "08", "0", "-4", "4.0", "4 4", "+4"):
         with pytest.raises(ValueError):
             parse_concurrencies(bad)
+
+
+def test_recipe_images_resolve_the_selected_override_and_deduplicate(tmp_path, monkeypatch):
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[3] / "utils/srt-slurm/src"))
+    path = tmp_path / RECIPES_MIRROR / "images.yaml"
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        yaml.safe_dump(
+            {
+                "base": {
+                    "model": {"container": "worker:base"},
+                    "frontend": {"container_image": "router:v1"},
+                },
+                "override_changed": {"model": {"container": "worker:v2"}},
+                "override_shared": {"frontend": {"container_image": "worker:base"}},
+            }
+        )
+    )
+    assert resolve_images(f"{path}:override_changed", "worker:v2") == [
+        "worker:v2",
+        "router:v1",
+    ]
+    assert resolve_images(f"{path}:override_shared", "worker:base") == [
+        "worker:base"
+    ]
+    with pytest.raises(ValueError, match="exactly one"):
+        resolve_images(str(path), "worker:base")
+    with pytest.raises(ValueError, match="must match"):
+        resolve_images(f"{path}:override_changed", "worker:base")
+
+
+@pytest.mark.parametrize("frontend", [{"container_image": "bad image"}, "not-a-mapping"])
+def test_recipe_images_reject_invalid_frontend_identities(tmp_path, frontend, monkeypatch):
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[3] / "utils/srt-slurm/src"))
+    path = tmp_path / RECIPES_MIRROR / "images.yaml"
+    path.parent.mkdir(parents=True)
+    path.write_text(yaml.safe_dump({"model": {"container": "worker:v1"}, "frontend": frontend}))
+    with pytest.raises(ValueError, match="invalid recipe images"):
+        resolve_images(str(path), "worker:v1")

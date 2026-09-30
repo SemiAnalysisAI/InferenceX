@@ -87,6 +87,8 @@ PowerX 严格校验。现有的 Tachometer 1000 ms / 功耗 exporter 100 ms 采�
 
 ## 规程索引
 
+Kimi-K3 原生 PD 路径在准备镜像前解析所选 recipe，要求 worker 镜像与矩阵一致，并通过同一后端准备 recipe 指定的 frontend 镜像。Router 镜像仍由 recipe 管理；输入不一致会在镜像导入任务申请资源前失败。已部署的目标模型、draft 挂载、网络设备、worker 网络环境及 memlock 前置命令由集群记录声明；镜像导入、任务提交、取消及产物收集沿用共享 Python launcher。
+
 1. [准备 worktree](#准备-worktree)
 2. [添加模型 + 硬件配方](#添加模型--硬件配方)
 3. [修改主配置](#修改主配置)

@@ -17,8 +17,8 @@ import yaml
 
 from infx.clusters.slurm import slurm_settings
 from infx.launch.context import LaunchError
-from infx.launch.drivers.srt.lanes import srt_time_limit
-from infx.launch.drivers.srt.recipe import HEALTH_ATTEMPTS
+from infx.launch.drivers.srt.lanes import config_file, srt_time_limit
+from infx.launch.drivers.srt.recipe import HEALTH_ATTEMPTS, recipe_images
 
 if TYPE_CHECKING:
     from infx.clusters import Cluster
@@ -185,13 +185,21 @@ def create_volume_mounts(run: SrtRun) -> None:
 
 
 def lane_mounts(run: SrtRun, lane: SrtLane) -> list[tuple[str, str]]:
-    """The (host, container) mounts the lane adds for this request; their hosts are created."""
+    """Request-selected mounts; only writable cache directories are created on the launcher.
+
+    Read-only assets may be files present only on compute nodes. Leave their paths and
+    permissions untouched; the container runtime validates them on the allocated host.
+    """
     mounts: list[tuple[str, str]] = []
     for mount in lane.mounts:
         if mount.when(run.request):
             host = volume_path(run.cluster, mount.volume)
-            _create_dir(host, world_writable=mount.world_writable)
-            mounts.append((str(host), mount.target or str(host)))
+            target = mount.target or str(host)
+            if mount.read_only:
+                target += ":ro"
+            else:
+                _create_dir(host, world_writable=mount.world_writable)
+            mounts.append((str(host), target))
     if run.request.framework == "tilert":
         mounts.append((str(run.workspace), "/infmax-workspace"))
     return mounts
@@ -206,6 +214,11 @@ def write_lane_config(
 ) -> None:
     """Stage a multi-node job's images, create its mounts, and write its srtslurm.yaml."""
     backend, request = run.backend, run.request
+    images = (
+        recipe_images(run, checkout, config_file(request))
+        if lane.stage_recipe_images is not None and lane.stage_recipe_images(request)
+        else [request.image]
+    )
     container = backend.stage_image(
         request.image, framework=request.framework, model_prefix=request.model_prefix
     ).reference
@@ -215,6 +228,11 @@ def write_lane_config(
         else None
     )
     containers: dict[str, str] = {}
+    for image in images[1:]:
+        staged = backend.stage_image(
+            image, framework=request.framework, model_prefix=request.model_prefix
+        ).reference
+        containers[image] = containers[pyxis_spelling(image)] = staged
     if request.framework == "tilert":
         prefill_image = request.env["PREFILL_IMAGE"]
         containers[prefill_image] = backend.stage_image(prefill_image).reference

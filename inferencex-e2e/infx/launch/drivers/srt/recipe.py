@@ -7,6 +7,7 @@ its comments; concurrency injection rewrites it through YAML, which drops them.
 from __future__ import annotations
 
 import fnmatch
+import json
 import re
 from collections.abc import Sequence
 from pathlib import Path
@@ -14,10 +15,13 @@ from typing import TYPE_CHECKING
 
 import yaml
 
+from infx.launch import proc
 from infx.launch.context import LaunchError
 
 if TYPE_CHECKING:
+    from infx.launch.drivers.srt.checkout import Checkout
     from infx.launch.drivers.srt.lanes import SrtLane
+    from infx.launch.drivers.srt.run import SrtRun
     from infx.launch.request import LaunchRequest
 
 RECIPES_MIRROR = Path("benchmarks/multi_node/srt-slurm-recipes")
@@ -35,6 +39,32 @@ def recipe_relpath(config_file: str) -> str:
 def recipe_mirror_path(workspace: Path, config_file: str) -> Path:
     """The workspace mirror of ``CONFIG_FILE``'s recipe."""
     return workspace / RECIPES_MIRROR / recipe_relpath(config_file).removeprefix("recipes/")
+
+
+def recipe_images(run: SrtRun, checkout: Checkout, config_file: str) -> list[str]:
+    """Resolve images in the installed srtctl environment, not the launcher's interpreter."""
+    path = recipe_mirror_path(run.workspace, config_file)
+    selector = config_file.partition(":")[2]
+    config = f"{path}:{selector}" if selector else str(path)
+    argv = [
+        str(checkout.venv / "bin/python"), "-m", "infx.srt_slurm.recipe_images",
+        config, run.request.image,
+    ]  # fmt: skip
+    try:
+        result = proc.run(argv, env=run.env, cwd=checkout.root, capture=True)
+        if result.returncode:
+            raise ValueError(f"resolver exited {result.returncode}: {result.stderr.strip()}")
+        images = json.loads(result.stdout)
+        if (
+            not isinstance(images, list)
+            or not images
+            or images[0] != run.request.image
+            or not all(isinstance(image, str) and image for image in images)
+        ):
+            raise ValueError("resolver did not return the expected image list")
+        return images
+    except (OSError, ValueError) as error:
+        raise LaunchError(f"recipe image resolution failed for {config_file}: {error}") from error
 
 
 def rename_job(text: str, name: str) -> str:
