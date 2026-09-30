@@ -10,6 +10,7 @@ from typing import Any, Literal
 
 import yaml
 
+from infx.clusters import CLUSTER_LABEL_PREFIX
 from infx.config import repository_root
 
 from .validation import (
@@ -29,9 +30,6 @@ AUTOMATIC_AGENTIC_VENDOR_EVALS = {
     "kimik3": ("kimi-vendor", "kimi_tool_call_schema_full"),
     "minimaxm3": ("minimax-vendor", "minimax_m3_full"),
 }
-# Bound how many multinode agentic conc points share one server allocation.
-# 1 = one task/SLURM allocation per concurrency (matches single-node agentic).
-MAX_MULTINODE_AGENTIC_CONCURRENCIES_PER_ALLOCATION = 1
 BYTES_PER_MIB = 1024 * 1024
 BYTES_PER_GB = 1_000_000_000
 # 3 TB decimal DRAM cap, expressed in MiB, before utilization scaling.
@@ -144,8 +142,14 @@ def runner_labels(runner_data: dict) -> dict:
 
 
 def runner_hardware(runner_data: dict) -> dict:
-    """Return runner hardware metadata, if present."""
-    return runner_data.get("hardware", {})
+    """Return node facts (gpus-per-node, available-cpu-dram-mib) keyed by ``cluster:<id>``."""
+    node_fields = (Fields.GPUS_PER_NODE.value, Fields.AVAILABLE_CPU_DRAM_MIB.value)
+    return {
+        f"{CLUSTER_LABEL_PREFIX}{cluster_id}": {
+            field: cluster[field] for field in node_fields if field in cluster
+        }
+        for cluster_id, cluster in runner_data.get("clusters", {}).items()
+    }
 
 
 def runner_nodes_for_label(runner: str, runner_data: dict) -> list[str]:
@@ -516,19 +520,12 @@ def component_metadata(benchmark: dict, config: dict) -> dict:
     return metadata
 
 
-def chunk_multinode_agentic_concurrencies(conc_values: list[int]) -> list[list[int]]:
-    """Bound sequential agentic profiles sharing one server allocation."""
-    size = MAX_MULTINODE_AGENTIC_CONCURRENCIES_PER_ALLOCATION
-    return [conc_values[index : index + size] for index in range(0, len(conc_values), size)]
-
-
 def _multinode_parallelism_key(entry: dict) -> tuple:
     """Identify a multi-node config independently of eval/concurrency fields.
 
     exp-name is derived from (and ignored alongside) conc: fixed-seq-len
     exp-names never embed conc, but agentic exp-names do (each concurrency
-    gets its own single-conc allocation, per
-    MAX_MULTINODE_AGENTIC_CONCURRENCIES_PER_ALLOCATION), so entries for the
+    gets its own single-conc allocation), so entries for the
     same topology at different concurrencies would otherwise falsely land in
     different groups.
     """
@@ -940,18 +937,15 @@ def _agentic_entries(
     if not conc_values:
         return []
 
-    # Multi-node batches are runner-major; single-node points are conc-major.
+    # Every AgentX point owns a server allocation. Multi-node points retain
+    # singleton lists for the reusable workflow's shared concurrency-list input.
     if is_multinode:
         offload_suffix = (
             f"_{agentic_kv_offload_suffix(kv_offloading, kv_offload_backend)}"
             if kv_offloading != "none"
             else ""
         )
-        points = (
-            (runner, batch)
-            for runner in runners
-            for batch in chunk_multinode_agentic_concurrencies(conc_values)
-        )
+        points = ((runner, [conc]) for runner in runners for conc in conc_values)
     else:
         points = ((runner, conc) for conc in conc_values for runner in runners)
 

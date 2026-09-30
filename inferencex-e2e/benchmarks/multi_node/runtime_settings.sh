@@ -6,7 +6,6 @@ source "$(dirname "${BASH_SOURCE[0]}")/../benchmark_lib.sh" --validation-only
 check_env_vars FRAMEWORK IS_AGENTIC MODEL_PREFIX
 
 export BENCH_NUM_PROMPTS_MULTIPLIER=10 DRY_RUN=0 KEEP_CONTAINERS=0
-export AIPERF_DRAIN_TIMEOUT_SECONDS=1800 AIPERF_DRAIN_POLL_SECONDS=10
 
 case "$FRAMEWORK" in
     sglang-disagg)
@@ -15,7 +14,6 @@ case "$FRAMEWORK" in
         export DECODE_MTP_SIZE=0
         export HEADNODE_PORT=20000 SERVER_PORT=2584 PROXY_STREAM_IDLE_TIMEOUT=300
         export ENABLE_METRICS=0 PREFILL_ROUTER_POLICY=random DECODE_ROUTER_POLICY=random
-        export FLUSH_DRAIN_TIMEOUT=120 CLEAR_CACHE_BETWEEN_CONC=1
         export ROCM_PATH=/opt/rocm UCX_HOME=/usr/local/ucx RIXL_HOME=/usr/local/rixl
         export MORI_IO_SQ_BACKOFF_TIMEOUT_US=50000 MORI_IO_QP_MAX_SEND_WR=16384
         export MORI_IO_QP_MAX_CQE=32768 MORI_IO_QP_MAX_SGE=2 MORI_IO_TC_DISABLE=0
@@ -51,28 +49,18 @@ case "$FRAMEWORK" in
         export DECODE_WAIT=3600 PREFILL_WAIT=3600 TILERT_QUEUE_TIMEOUT=0
         export TILERT_RDMA_STRICT=0 TILERT_CONVERT_LOCK_WAIT=21600 TILERT_DECODE_DRAIN=60
         export TILERT_VERSION=0.1.5.post3 TILERT_HTTP_DEPS='fastapi uvicorn httpx' TILERT_NIXL_VERSION=1.3.1
-        export B200_SQUASH_DIR=/home/sa-shared/containers
         if [[ "$IS_AGENTIC" == 1 || "$IS_AGENTIC" == true ]]; then
             export TILERT_QUEUE_TIMEOUT=1800
         fi
         # The MI355X TileRT recipe runs through the shared amd_utils chain
         # (submit.sh -> job.slurm -> server.sh -> setup_deps.sh), which validates
         # the same orchestration inputs the AMD SGLang arm receives.
-        # Without them submit.sh exits before sbatch and the launcher never gets
-        # a job id. The B200 TileRT lane goes through srt-slurm and reads none of
-        # these, so they are scoped to the AMD pool.
+        # Without them submit.sh exits before sbatch and the launcher never gets a job id.
         if [[ "$RUNNER_TYPE" == *mi355x-amds* ]]; then
             export SKIP_RDMA_CHECK=0 SKIP_GPU_SANITY=0
-            # The B200 profile above points BENCHMARK_LOGS_DIR at the workspace
-            # itself; launch_mi355x-amds.sh's EXIT trap does `rm -rf
-            # "$BENCHMARK_LOGS_DIR"`, which then deleted the whole checkout,
-            # results included (sweep 35704948491). Use the AMD launcher's own
-            # convention from runners/runtime_settings.sh.
-            export BENCHMARK_LOGS_DIR="$GITHUB_WORKSPACE/benchmark_logs"
             export ROUTER_TYPE=tilert-pd-router ROUTER_PORT=30000 PROXY_PING_PORT=36367
             export HEADNODE_PORT=20000 SERVER_PORT=2584 PROXY_STREAM_IDLE_TIMEOUT=300
             export ENABLE_METRICS=0 PREFILL_ROUTER_POLICY=random DECODE_ROUTER_POLICY=random
-            export FLUSH_DRAIN_TIMEOUT=120 CLEAR_CACHE_BETWEEN_CONC=1
             export DECODE_MTP_SIZE=0
             export ROCM_PATH=/opt/rocm UCX_HOME=/usr/local/ucx RIXL_HOME=/usr/local/rixl
         fi

@@ -60,8 +60,8 @@ aiperf profile \
 ```
 
 This profiles for one hour, plus dataset preparation, warmup, and drain time.
-To sweep, change `CONC` and rerun with a fresh output directory after prior
-requests drain; restart the server if its recipe changes. Match the target
+To sweep, restart the server for every `CONC` value and use a fresh output
+directory. Do not flush caches or reuse a live server across concurrency points. Match the target
 recipe's duration and warmup settings when reproducing a result.
 
 Add `--server-metrics "${SERVER_URL}/metrics"` if the server exposes metrics.
