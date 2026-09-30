@@ -23,6 +23,7 @@ class LaneMount:
     volume: str
     target: str | None = None
     world_writable: bool = False
+    read_only: bool = False
 
 
 @dataclass(frozen=True)
@@ -104,6 +105,18 @@ SRT_LANES: dict[tuple[str, LaunchPath], SrtLane] = {
         mounts=(
             LaneMount(Match(), "aiperf-cache", "/aiperf_mmap_cache"),
             LaneMount(Match(frameworks=any_of("tilert")), "it-share-data", "/models"),
+            LaneMount(
+                Match(any_of("kimik3"), frameworks=any_of("vllm-disagg")),
+                "k3-draft",
+                "/models/Inferact-Kimi-K3-DSpark",
+                read_only=True,
+            ),
+            # Match the allocated host's Ionic ABI without replacing libibverbs core.
+            LaneMount(
+                Match(any_of("kimik3"), frameworks=any_of("vllm-disagg")),
+                "ionic-provider",
+                read_only=True,
+            ),
         ),
         eval_unsets=(
             "roles.prefill.args.ep-dispatch-algorithm",

@@ -13,16 +13,19 @@ from infx.clusters import Cluster, load_inventory
 from infx.launch.backends.slurm import SlurmBackend
 from infx.launch.context import Launch
 from infx.launch.drivers.srt.checkout import Checkout, compute_workspace
-from infx.launch.drivers.srt.config import SrtJob, pyxis_spelling, render, write
+from infx.launch.drivers.srt.config import SrtJob, lane_mounts, pyxis_spelling, render, write
+from infx.launch.drivers.srt.lanes import LaneMount, SrtLane
 from infx.launch.drivers.srt.recipe import HEALTH_ATTEMPTS, prepare_recipe
 from infx.launch.drivers.srt.run import SrtRun
 from infx.launch.lifecycle import Lifecycle
-from infx.launch.policy import LaunchPath
+from infx.launch.policy import LaunchPath, Match, any_of
 from infx.launch.request import SrtRequest
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "utils/srt-slurm/src"))
 from srtctl.core.config import resolve_config_with_defaults  # noqa: E402
+from srtctl.core.schema import ClusterConfig  # noqa: E402
+from srtctl.core.slurm import get_container_mounts_str  # noqa: E402
 
 
 def cluster(slurm: dict | None = None, srt: dict | None = None, entries: dict | None = None) -> Cluster:
@@ -64,6 +67,9 @@ def test_the_profile_renders_its_facts_and_mounts_a_volume_at_a_second_target():
         entries={"Model-A": {"root": "data", "dir": "Model-A"}},
     )  # fmt: skip
     config = render(record, job(mounts=[("/share/hub", "/mnt/hf_hub_cache/")], single_node=True))
+    native = ClusterConfig.Schema().load(config)
+    assert native.default_bash_preamble is None
+    assert native.network_interface == "eno0"
     assert config["default_mounts"] == {
         "/share/hub": "/hf_hub_cache/hub",
         "/dev/kfd": "/dev/kfd",
@@ -86,6 +92,39 @@ def test_a_host_directory_cannot_be_mounted_at_three_targets():
     record = cluster(slurm={"volumes": {"hub": {"path": "/share/hub"}}}, srt={"volume-mounts": {"hub": "/hf_hub_cache"}})
     with pytest.raises(ValueError, match="conflicting container paths"):
         render(record, job(mounts=[("/share/hub", "/a"), ("/share/hub/", "/b")]))
+
+
+@pytest.mark.parametrize("asset_exists", [False, True])
+def test_read_only_lane_assets_are_forwarded_without_creating_or_chmodding_them(
+    tmp_path, asset_exists
+):
+    asset = tmp_path / "provider.so"
+    if asset_exists:
+        asset.write_bytes(b"host-owned asset")
+        asset.chmod(0o440)
+    record = cluster(slurm={"volumes": {
+        "provider": {"path": str(asset), "visibility": "node-local"},
+    }})
+    lane = SrtLane(mounts=(LaneMount(
+        Match(frameworks=any_of("vllm-disagg")), "provider", read_only=True,
+    ),))
+    run = SimpleNamespace(cluster=record, request=SimpleNamespace(framework="vllm-disagg"))
+    rendered = render(record, job(mounts=lane_mounts(run, lane)))
+    native = ClusterConfig.Schema().load(rendered)
+    command = get_container_mounts_str({
+        Path(host): Path(target) for host, target in native.default_mounts.items()
+    })
+    assert command == f"{asset}:{asset}:ro"
+    if asset_exists:
+        assert asset.read_bytes() == b"host-owned asset"
+        assert asset.stat().st_mode & 0o777 == 0o440
+    else:
+        assert not asset.exists()
+    run.request.framework = "sglang"
+    assert lane_mounts(run, lane) == []
+    unrelated = render(record, job(mounts=lane_mounts(run, lane)))
+    assert "default_mounts" not in unrelated
+    assert ClusterConfig.Schema().load(unrelated).default_bash_preamble is None
 
 
 def test_node_exclusions_cpus_and_image_aliases_are_rendered():

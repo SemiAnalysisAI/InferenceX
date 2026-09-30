@@ -185,13 +185,21 @@ def create_volume_mounts(run: SrtRun) -> None:
 
 
 def lane_mounts(run: SrtRun, lane: SrtLane) -> list[tuple[str, str]]:
-    """The (host, container) mounts the lane adds for this request; their hosts are created."""
+    """Request-selected mounts; only writable cache directories are created on the launcher.
+
+    Read-only assets may be files present only on compute nodes. Leave their paths and
+    permissions untouched; the container runtime validates them on the allocated host.
+    """
     mounts: list[tuple[str, str]] = []
     for mount in lane.mounts:
         if mount.when(run.request):
             host = volume_path(run.cluster, mount.volume)
-            _create_dir(host, world_writable=mount.world_writable)
-            mounts.append((str(host), mount.target or str(host)))
+            target = mount.target or str(host)
+            if mount.read_only:
+                target += ":ro"
+            else:
+                _create_dir(host, world_writable=mount.world_writable)
+            mounts.append((str(host), target))
     if run.request.framework == "tilert":
         mounts.append((str(run.workspace), "/infmax-workspace"))
     return mounts
