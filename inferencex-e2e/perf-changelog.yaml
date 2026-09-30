@@ -9455,3 +9455,13 @@
     - "Use native continuous usage counters without full-prompt token-ID echo in long-context streams; avoid large response serialization overhead."
     - "长上下文流改用原生连续 usage 计数，避免回显完整 prompt token ID 所产生的大量序列化开销。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-8gpu-dp-128k1024-sweep
+    - dsv41flash-fp4-b300-vllm-8gpu-dp-128k1024-sweep
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Probe native streaming usage on all DP ranks with tiny requests before long-context prefix warmup; exclude probe from measurements."
+    - "长上下文预热前使用小请求探测全部 DP rank 的原生流式 usage，探测不计入性能测量。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607

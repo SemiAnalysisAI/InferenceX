@@ -61,7 +61,7 @@ base:
       gpus: 8
   benchmark:
     type: custom
-    command: python3 /infmax-workspace/research/dsv41/vllm_cohort_sweep.py --output
+    command: python3 /infmax-workspace/research/dsv41/vllm_cohort_sweep.py --probe --output
       /logs --gpu-count 8 --dp-size 8 --profile-steps 8 --concurrencies 384 1536 2560
     env:
       MODEL: deepseek-ai/DeepSeek-V4.1-Flash

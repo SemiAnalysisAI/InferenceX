@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import os
 import re
@@ -33,12 +34,40 @@ def capacity_bounds(
     return bounds if set(bounds) == set(range(dp_size)) else None
 
 
+async def protocol_probe(output: Path, dp_size: int) -> None:
+    """Check native streaming usage on every DP rank before expensive prefixes."""
+    import aiohttp
+    from vllm_cohort import stream_request
+
+    base = f"http://{os.environ['SRT_FRONTEND_HOST']}:{os.environ['SRT_FRONTEND_PORT']}"
+    records = [
+        {"events": [], "success": False, "meta": {}, "error": ""}
+        for _ in range(dp_size)
+    ]
+    async with aiohttp.ClientSession(
+        timeout=aiohttp.ClientTimeout(total=60)
+    ) as session:
+        await asyncio.gather(
+            *[
+                stream_request(session, base, [1] * 64, 8, record, rank)
+                for rank, record in enumerate(records)
+            ]
+        )
+    (output / "protocol-probe.json").write_text(json.dumps(records, indent=2) + "\n")
+    if not all(r["success"] and r["meta"].get("prompt_tokens") == 64 for r in records):
+        raise RuntimeError(
+            "Native streaming-usage probe failed before long-context warmup"
+        )
+    print(f"Native streaming usage verified on all {dp_size} DP ranks", flush=True)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--gpu-count", type=int, required=True)
     parser.add_argument("--dp-size", type=int, required=True)
     parser.add_argument("--profile-steps", type=int, required=True)
+    parser.add_argument("--probe", action="store_true")
     parser.add_argument("--concurrencies", nargs="+", type=int, required=True)
     args = parser.parse_args()
     if (
@@ -56,6 +85,8 @@ def main():
     root_name = os.environ["RESULT_FILENAME"]
     out = args.output / "research" / "cohort-sweep"
     out.mkdir(parents=True, exist_ok=True)
+    if args.probe:
+        asyncio.run(protocol_probe(out, args.dp_size))
     manifest = []
     bounds = capacity_bounds(
         [p.read_text(errors="replace") for p in args.output.glob("*_agg_w0.out")],

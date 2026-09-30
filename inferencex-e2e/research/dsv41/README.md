@@ -154,3 +154,8 @@ The streaming client requests continuous usage counters without token-ID echo.
 vLLM token-ID responses include the full prompt in the first chunk, which would
 add substantial traffic for 128K batches. Cumulative completion-token counts
 remain native server counts; final usage chunks are not counted twice.
+
+The long-context recipes enable an eight-rank 64-input/8-output protocol probe
+before expensive prefix warmup. It verifies actual native streaming usage and
+DP routing, stores its records, and aborts early on failure. Probe timings are
+not benchmark results.
