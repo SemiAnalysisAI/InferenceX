@@ -12,6 +12,7 @@ from typing import Any
 
 import yaml
 
+from infx.srt_slurm.common import load_recipe
 from infx.srt_slurm.synthetic_acceptance import ENGINES, selected_recipes, spec_parameters
 from infx.srt_slurm.workload import bind_workload
 
@@ -59,7 +60,7 @@ def parallelism_constraints(
 def select_recipe(config: str, environment: Mapping[str, str]) -> tuple[str, dict[str, Any]]:
     """Resolve a matrix point to one native variant, never submit an entire sweep."""
     path, _, selector = config.partition(":")
-    raw = yaml.safe_load(Path(path).read_text())
+    raw = load_recipe(Path(path), environment)
     if not isinstance(raw, dict):
         raise ValueError("Recipe must be a mapping")
     recipes = selected_recipes(raw, selector or None)

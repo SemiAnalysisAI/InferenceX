@@ -194,9 +194,10 @@ B200 Nscale 的 GLM-5.1 可用 `MODEL_PATH` 指定已有共享权重，覆盖默
 
 ## 运行时工作负载绑定
 
-这些配方模板由 InferenceX 维护。主配置通过启动环境提供 `image`、`model`、场景
-`isl` / `osl` 和所选并发数（`IMAGE`、`MODEL`、`ISL`、`OSL` 以及 `CONC` /
-`CONC_LIST`）。启动器先选择已调优的配方变体，再为本次运行写出所有字段均已填入的配方。
+主配置通过 `IMAGE`、`MODEL`、`ISL`、`OSL` 及 `CONC` / `CONC_LIST` 提供 `image`、
+`model`、场景 `isl` / `osl` 和所选并发数。InferenceX 先选择调优变体，再绑定这些值，
+保留与 CUDA graph 或批处理设置配套的并发 zip 选择器。模型加载沿用现有集群映射和
+预先准备机制；使用缓存镜像时，溯源仍保留原始镜像引用。
 
 | 运行时输入 | 绑定的配方字段 |
 |---|---|
@@ -205,18 +206,38 @@ B200 Nscale 的 GLM-5.1 可用 `MODEL_PATH` 指定已有共享权重，覆盖默
 | `ISL`、`OSL`（固定序列运行） | 内置客户端的 `benchmark.isl` / `benchmark.osl`，或自定义客户端的 `benchmark.env.ISL` / `OSL` |
 | `CONC` / `CONC_LIST` | 使用该字段时的 `benchmark.concurrencies`，以及自定义客户端的并发环境变量 |
 
-模型加载继续使用现有的集群模型映射与预先准备机制。执行时即使使用缓存镜像，镜像溯源
-仍保留原始镜像引用。这些字段中已有的字面值会被覆盖，因此可以逐步迁移配方。新模板
-应省略重复字段。独立固定的角色和辅助服务镜像、有意设置的服务模型别名、tokenizer
-覆盖项和 draft model 仍需显式声明。受支持的服务模型名或 tokenizer 字段如需跟随
-`MODEL`，请使用完整字面值 `'${MODEL}'`；这是受支持的模型引用，不是通用 shell 展开。
+配方目录中保存完整的原生 srt-slurm YAML，使用具体值，不含 InferenceX 参数标记。
+共享源文件单独存放在 [`configs/srt-recipes/`](../configs/srt-recipes)。其中的
+`sources.yaml` 将配方路径映射到 common 源和 tuning 源。
+`infx.srt_slurm.common.load_recipe` 先加载 common，再合并 tuning：映射递归合并，
+tuning 中的列表替换 common 列表。它在这些 InferenceX 专用源文件已解析的标量值中
+替换 `MODEL`、`IMAGE`、`PRECISION`、`ISL`、`OSL`、`CONC_LIST`（字符串）和
+`CONCURRENCIES`（列表）参数，保留列表类型，不直接替换原始 YAML 文本。运行时和
+生成器使用同一组合路径。B300 Qwen3.5 FP8 基线与 MTP 源共用
+`fixed-sequence-single.yaml`；GB300 Qwen3.5 FP4 1P1D 使用
+`fixed-sequence-multi.yaml`，主配置 key 为 `qwen3.5-fp4-gb300-dynamo-sglang`。
+引擎调优保留在各自的源文件中。
 
-保留用于选择调优变体的并发值，包括与 CUDA graph 或批处理设置一起使用的 `CONC`
-zip 列表。绑定在变体选择之后执行，保证所选设置仍然配套。精度、并行方式、服务端
-限制和推测解码设置仍由配方负责，不根据这些工作负载输入推导。
+在 `inferencex-e2e/` 下为所选矩阵点生成完整的原生 YAML：
 
-直接调用上游 `srtctl` 时，需要使用已完成绑定的配方。省略工作负载字段的 InferenceX
-模板不能作为独立的上游配置；应使用固定的上游版本验证绑定后的输出。
+```bash
+uv run --extra recipes infx generate \
+  --config-key qwen3.5-fp8-b300-sglang --output-dir /tmp/infx-recipes
+```
+
+输出目录必须为空。输出包含 manifest 和完整原生配方，可供检查或交给固定版本的
+上游配方验证器。显式添加 `--refresh-exports` 可在验证后同时刷新已注册并纳入版本
+控制的原生配方集合快照；默认仅写入 `--output-dir`。此生成器概念验证支持
+原生固定序列长度的单节点和多节点配方；明确拒绝 AgentX、legacy 路径和 fork。
+现有 AgentX 运行时绑定仍然可用。
+
+已有的工作负载字面值会在运行时被覆盖。独立的角色/辅助服务镜像、有意设置的模型
+别名、tokenizer 覆盖项、draft model 和并行方式仍需显式声明。`PRECISION` 仅作为
+已注册源的 common 参数；引擎量化方式和调优设置保持不变。
+
+此组合机制保留现有基准行为：已审计的 random-range ratio 仍为 `0.8`，chat-template
+设置保持当前区别（非推测单节点运行使用 `false`，推测及多节点运行使用 `true`）。
+改变该行为需要另行决定并验证。
 
 ## 注册 llm-d 配方
 

@@ -19,6 +19,7 @@ from typing import Any
 import yaml
 
 from infx.golden_al_distribution import GOLDEN_DIR, golden_length
+from infx.srt_slurm.common import load_recipe
 from infx.srt_slurm.workload import bind_workload
 
 ENGINES = {
@@ -217,7 +218,11 @@ def plan_commands(
     from srtctl.core.overrides import apply_overrides_to_recipe, parse_overrides
 
     path, _, selector = config.partition(":")
-    raw = yaml.safe_load(Path(path).read_text())
+    raw = (
+        load_recipe(Path(path), environment)
+        if bound_dir is not None
+        else yaml.safe_load(Path(path).read_text())
+    )
     if not isinstance(raw, dict):
         raise ValueError("Recipe must be a mapping")
     parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False)

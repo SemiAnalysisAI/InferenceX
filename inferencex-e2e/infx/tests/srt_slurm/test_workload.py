@@ -86,10 +86,10 @@ def test_agentic_keeps_trace_lengths_and_requires_one_concurrency():
 def test_model_references_follow_new_model_without_changing_aliases_or_drafts():
     recipe = {
         "model": {"path": "hf:org/old-model"},
-        "engine": {"type": "trtllm", "served_model_name": "${MODEL}"},
+        "engine": {"type": "trtllm", "served_model_name": "org/old-model"},
         "roles": {
             "prefill": {"args": {
-                "served-model-name": "org/old-model", "tokenizer-path": "${MODEL}",
+                "served-model-name": "org/old-model", "tokenizer-path": "org/old-model",
                 "speculative-model": "org/old-model",
             }, "env": {"DYN_TRTLLM_SERVED_MODEL_NAME": "org/client-id"}},
             "decode": {"args": {

@@ -9348,3 +9348,13 @@
     inputs after variant selection. Preserve recipe-owned topology and tuning; migrate the B300 Qwen3.5 FP8 and
     GB300 Kimi-K3 1P2D examples.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3612
+
+- config-keys:
+  - qwen3.5-fp8-b300-sglang
+  - qwen3.5-fp8-b300-sglang-mtp
+  - qwen3.5-fp4-gb300-dynamo-sglang
+  description:
+  - Compose fixed-sequence common blocks and tuning sources in InferenceX. Generate complete native SRT recipes
+    from the master configuration, including serving image, model, precision metadata, sequence lengths and
+    selected concurrency. Preserve existing chat-template behavior and engine tuning.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3612

@@ -45,13 +45,17 @@ qwen3.5/trtllm/gb300-fp4/agentx/disagg-variants.yaml
 | `benchmark.concurrencies`（运行时绑定） | 所选 `conc-list` |
 | 配置路径，可附带覆盖项选择器 | `additional-settings: CONFIG_FILE=recipes/...yaml` |
 
-配方与主配置中的拓扑和调优设置必须保持同步。主配置还提供服务镜像、模型、ISL/OSL
-和所选并发数。InferenceX 在选择调优变体后，将这些值填入一个完整的运行配方。
-新模板可以省略 `model.container`、`model.path`、重复的 identity 镜像/模型字段及
-基准工作负载值；已有字面值会被覆盖。保留与调优设置配套的并发 zip 选择器，先选择
-调优设置，再绑定运行时并发数。独立固定的角色和辅助服务镜像、模型别名及 draft
-model 仍需显式声明。受支持的服务模型名或 tokenizer 字段如需跟随目标模型，使用
-完整的 `'${MODEL}'` 标记。环境变量与配方字段的映射及模型准备行为详见
+配方与主配置中的拓扑和调优设置必须保持同步。主配置提供服务镜像、模型、ISL/OSL
+及所选并发数；InferenceX 在选择调优变体后绑定这些值。保留与调优设置配套的并发 zip
+选择器，并显式声明独立固定的角色/辅助服务镜像。
+
+本目录保存使用具体值的完整原生 srt-slurm YAML。共享参数化源文件放在
+`configs/srt-recipes/`，其中 `sources.yaml` 将原生配方路径映射到 common 和 tuning
+源。运行时与 `infx generate` 使用相同加载器：先加载 common，再合并 tuning，递归
+合并映射、替换列表，并在已解析的标量值中渲染参数、保留列表类型。B300 Qwen3.5
+FP8 基线和 MTP 共用单节点 common 源；GB300 Qwen3.5 FP4 1P1D 使用多节点 common
+源。`infx generate` 写入空输出目录；显式添加 `--refresh-exports` 可在验证后同时
+刷新已注册并纳入版本控制的原生配方集合快照。生成命令、受支持输入和生成器限制详见
 [运行时工作负载绑定](../../../docs/configuration-procedures_zh.md#运行时工作负载绑定)。
 
 聚合式配置使用 `roles.agg`；`roles.decode.nodes: colocate` 表示解码角色与预填充
@@ -61,9 +65,8 @@ model 仍需显式声明。受支持的服务模型名或 tokenizer 字段如需
 
 ## 迁移与验证
 
-在隔离环境中安装统一版本，然后使用其 CLI。直接调用上游命令需要使用完整配方：
-省略运行时工作负载字段的模板必须先由 InferenceX 完成绑定。以下迁移命令适用于
-完整的上游配方：
+在隔离环境中安装统一版本，然后对完整原生配方使用其 CLI。InferenceX 专用的
+common/tuning 源必须先通过 `infx generate` 渲染，不能直接传给上游命令：
 
 ```bash
 # 重写前先验证每个受支持的配置目录。

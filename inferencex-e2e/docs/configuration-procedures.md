@@ -214,10 +214,11 @@ Keep topology and tuning synchronized between both files. The master owns the ru
 
 ## Runtime workload binding
 
-InferenceX owns these recipe templates. The master config supplies `image`, `model`,
-scenario `isl` / `osl`, and the selected concurrency through the launch environment
-(`IMAGE`, `MODEL`, `ISL`, `OSL`, and `CONC` / `CONC_LIST`). The launcher selects the
-tuned recipe variant first, then writes a fully materialized recipe for that run.
+The master config supplies `image`, `model`, scenario `isl` / `osl`, and the selected
+concurrency through `IMAGE`, `MODEL`, `ISL`, `OSL`, and `CONC` / `CONC_LIST`. InferenceX
+selects the tuned variant before binding these values, preserving concurrency selectors
+zipped with CUDA graph or batch settings. Model loading uses the existing cluster
+mapping and staging; cached images retain their original image reference for provenance.
 
 | Runtime input | Bound recipe fields |
 |---|---|
@@ -226,22 +227,41 @@ tuned recipe variant first, then writes a fully materialized recipe for that run
 | `ISL`, `OSL` (fixed-sequence runs) | Built-in `benchmark.isl` / `benchmark.osl`, or custom-client `benchmark.env.ISL` / `OSL` |
 | `CONC` / `CONC_LIST` | `benchmark.concurrencies` where consumed, and the custom client's concurrency environment |
 
-Model loading continues to use the existing cluster model mapping and staging. Image
-provenance retains the source image reference when execution uses a cached image.
-Existing literals in these fields are overridden, so recipes can migrate incrementally.
-Omit duplicated fields in new templates. Keep independently pinned role and helper
-images, deliberate served-model aliases, tokenizer overrides, and draft models explicit.
-Where a supported served-model or tokenizer field should follow `MODEL`, use the exact
-literal `'${MODEL}'`; this is a supported model reference, not general shell expansion.
+Recipe directories contain complete native srt-slurm YAML, with concrete values and no
+InferenceX parameter markers. Shared sources live separately under
+[`configs/srt-recipes/`](../configs/srt-recipes). Its `sources.yaml` registry maps a recipe
+path to a common source and a tuning source. `infx.srt_slurm.common.load_recipe` merges
+common then tuning: mappings merge recursively and tuning lists replace common lists.
+It substitutes `MODEL`, `IMAGE`, `PRECISION`, `ISL`, `OSL`, `CONC_LIST` (a string), and
+`CONCURRENCIES` (a typed list) in parsed scalar values, preserving lists instead of
+substituting raw YAML text. Runtime loading and the generator use the same composition
+path. B300 Qwen3.5 FP8 baseline and MTP sources share `fixed-sequence-single.yaml`;
+GB300 Qwen3.5 FP4 1P1D uses `fixed-sequence-multi.yaml` under config key
+`qwen3.5-fp4-gb300-dynamo-sglang`. Engine tuning stays in separate sources.
 
-Keep concurrency values that select tuning variants, including `CONC` lists zipped
-with CUDA graph or batch settings. Binding happens after variant selection so the
-selected settings stay together. Precision, parallelism, server limits, and speculative
-settings remain recipe-owned and are not inferred from these workload inputs.
+From `inferencex-e2e/`, generate complete native YAML for each selected matrix point:
 
-Direct upstream `srtctl` commands need the fully bound recipe. An InferenceX template
-with omitted workload fields is not a standalone upstream configuration; validate the
-materialized output through the pinned upstream version.
+```bash
+uv run --extra recipes infx generate \
+  --config-key qwen3.5-fp8-b300-sglang --output-dir /tmp/infx-recipes
+```
+
+The output directory must be empty. The output includes a manifest and complete native
+recipes that can be inspected or passed to the pinned upstream validator. Add
+`--refresh-exports` explicitly to also refresh registered checked-in native bundle
+snapshots after validation; the default only writes to `--output-dir`. The generator proof of concept supports native fixed-sequence
+single-node and multi-node recipes. It explicitly rejects AgentX, legacy paths, and
+forks; the existing AgentX runtime binding remains available.
+
+Existing workload literals are overridden at runtime. Keep independent role/helper
+images, deliberate model aliases, tokenizer overrides, draft models, and parallelism
+explicit. `PRECISION` is a common-source parameter for registered sources only; engine
+quantization and tuning remain unchanged.
+
+This composition preserves benchmark behavior: the audited random-range ratio remains
+`0.8`, and chat-template settings retain the current distinction (`false` for
+non-speculative single-node runs, `true` for speculative and multi-node runs). Changing
+that behavior requires a separate decision and validation.
 
 ## Register an llm-d recipe
 

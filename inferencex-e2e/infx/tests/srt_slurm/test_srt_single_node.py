@@ -97,10 +97,10 @@ def test_prepare_materializes_master_values_after_selecting_tuned_variant(point,
     from infx.srt_slurm.single_node import main
 
     path, recipe, env = point
-    recipe["model"] = {"precision": "fp8"}
+    recipe["model"] = {"path": "hf:test/model", "precision": "fp8"}
     for key in ("MODEL", "ISL", "OSL"):
         del recipe["benchmark"]["env"][key]
-    recipe["roles"]["agg"]["args"]["served-model-name"] = "${MODEL}"
+    recipe["roles"]["agg"]["args"]["served-model-name"] = "test/model"
     path.write_text(yaml.safe_dump({"base": recipe, "zip_override_conc": {
         "roles": {"agg": {"args": {"cuda-graph-max-bs": [2, 4]}}},
         "benchmark": {"env": {"CONC": ["2", "4"]}},
