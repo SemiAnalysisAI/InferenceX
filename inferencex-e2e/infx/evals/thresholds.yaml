@@ -28,6 +28,8 @@
     "gpqa_diamond_cot_n_shot": 0.30,
     "cruxeval_output": 0.0,
     "cruxeval_input": 0.0,
+    "mmlu_pro_2800": 0.0,
+    "ruler_lite": 0.0,
     "swebench_lite": 0.50
   },
   "models": {
