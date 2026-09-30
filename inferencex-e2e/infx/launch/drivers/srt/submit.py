@@ -27,7 +27,8 @@ if TYPE_CHECKING:
 SINGLE_NODE_SUBMISSION = "srt-single-node-submission.json"
 MULTINODE_SUBMISSION = "srt-submission.json"
 MULTINODE_EVAL_COMMAND = (
-    '["bash", "{infmax_workspace}/benchmarks/multi_node/srt_eval.sh", "{endpoint}", '
+    '["env", "HF_HUB_OFFLINE=0", "HF_DATASETS_OFFLINE=0", "TRANSFORMERS_OFFLINE=0", '
+    '"MODEL_PATH=/model", "bash", "{infmax_workspace}/benchmarks/multi_node/srt_eval.sh", "{endpoint}", '
     '"{infmax_workspace}"]'
 )
 SINGLE_NODE_EVAL_COMMAND = (

@@ -512,3 +512,50 @@ def test_post_eval_is_handed_the_workload_contract_and_no_other_secret(harness):
                if arg.startswith("post_eval.passthrough_env=")]  # fmt: skip
     assert handed.keys() <= set(names)
     assert not {*withheld, "PATH", "HF_HUB_CACHE"} & set(names)
+
+
+def test_multinode_eval_overrides_image_offline_mode_and_host_model_path(harness):
+    env = lane_env(
+        harness,
+        "h200-dgxc",
+        MODEL_PREFIX="dsr1",
+        PRECISION="fp8",
+        FRAMEWORK="dynamo-sglang",
+        MODEL="deepseek-ai/DeepSeek-R1-0528",
+    )
+    assert_ok(launch(env, harness.config, harness.workspace))
+    [call] = srtctl_calls(harness.logs)
+    [command] = [json.loads(arg.split("=", 1)[1]) for arg in call["argv"]
+                 if arg.startswith("post_eval.command=")]  # fmt: skip
+    # Stand in for the external evaluator and inspect the environment it receives.
+    script = harness.workspace / "benchmarks/multi_node/srt_eval.sh"
+    script.write_text(
+        'printf "%s\\n" "$HF_HUB_OFFLINE" "$HF_DATASETS_OFFLINE" '
+        '"$TRANSFORMERS_OFFLINE" "$MODEL_PATH" "$EVAL_MAX_MODEL_LEN" "$1" "$2"\n'
+    )
+    result = subprocess.run(
+        [
+            arg.format(infmax_workspace=harness.workspace, endpoint="http://worker:8000")
+            for arg in command
+        ],
+        env={
+            **os.environ,
+            "HF_HUB_OFFLINE": "1",
+            "HF_DATASETS_OFFLINE": "1",
+            "TRANSFORMERS_OFFLINE": "1",
+            "MODEL_PATH": "/host-only/checkpoint",
+            "EVAL_MAX_MODEL_LEN": "9472",
+        },
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert result.stdout.splitlines() == [
+        "0",
+        "0",
+        "0",
+        "/model",
+        "9472",
+        "http://worker:8000",
+        str(harness.workspace),
+    ]
