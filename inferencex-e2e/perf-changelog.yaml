@@ -9319,3 +9319,17 @@
     \u4E13\u5BB6\u8DEF\u7531\u3001\u5168\u6279\u6B21\u524D\u7F00\u9884\u70ED\u3001\
     token ID \u6D41\u53CA\u5B8C\u6574\u6279\u6B21\u7A97\u53E3\u6821\u9A8C\u3002"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607
+
+- config-keys:
+    - dsv41flash-fp4-h200-vllm-4gpu-8k256
+    - dsv41flash-fp4-h200-vllm-8gpu-8k256
+    - dsv41flash-fp4-b200-vllm-4gpu-8k256
+    - dsv41flash-fp4-b200-vllm-8gpu-8k256
+    - dsv41flash-fp4-b300-vllm-4gpu-8k256
+    - dsv41flash-fp4-b300-vllm-8gpu-8k256
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Accept vLLM in the shared fixed-sequence client framework dispatch; use its existing completion backend."
+    - "共享定长客户端允许 vLLM 框架并使用已有 completion 后端。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607

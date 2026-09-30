@@ -92,3 +92,7 @@ interior decode window is mandatory. Initial eight-GPU recipes use TP8/EP8,
 DP1 (not DP attention), native `uniform_random` routing, and five drafts.
 Uniform-random routing is not deterministic round-robin balancing. Profile
 capture is a separate 1024-output wave and must include every configured GPU.
+
+The shared fixed-sequence shell client accepts `FRAMEWORK=vllm` and selects its
+existing completion backend. A shell integration check verifies the generated
+client arguments without requiring a GPU or running pip.

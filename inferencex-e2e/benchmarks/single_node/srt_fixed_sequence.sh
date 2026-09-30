@@ -12,7 +12,7 @@ for name in RUN_EVAL EVAL_ONLY; do
     fi
 done
 case "$FRAMEWORK" in
-    sglang|atom) CLIENT_BACKEND=vllm ;;
+    sglang|atom|vllm) CLIENT_BACKEND=vllm ;;
     trt) CLIENT_BACKEND=openai ;;
     *) echo "ERROR: unsupported fixed-sequence FRAMEWORK: $FRAMEWORK" >&2; exit 1 ;;
 esac

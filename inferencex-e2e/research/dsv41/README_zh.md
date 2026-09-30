@@ -71,3 +71,6 @@ BF16 归一化权重与生产路径一致；另测 FP32 权重以保留此前独
 使用 TP8/EP8、DP1（不是 DP attention）、原生 `uniform_random` 路由及五个草稿。
 均匀随机路由不等同于确定性的轮转均衡。剖析单独生成 1024 个输出 token，
 并要求每个配置 GPU 都产出 trace。
+
+共享定长 shell 客户端支持 `FRAMEWORK=vllm`，并选择已有 completion 后端。
+shell 集成检查通过实际执行脚本验证客户端参数，不需要 GPU 或实际运行 pip。
