@@ -11,7 +11,7 @@ resources:
   gpus_per_node: 8
 setup_script: glm5.3-tilert-rocm.sh
 environment:
-  TILERT_VERSION: "0.1.6.post2"
+  TILERT_VERSION: "0.1.6.post3"
   RDMAV_FORK_SAFE: "1"
   PYTHONDONTWRITEBYTECODE: "1"
   NCCL_SOCKET_IFNAME: eno0
@@ -22,7 +22,7 @@ roles:
     engine:
       type: vllm
       set_visible_devices: true
-    container: ghcr.io/tile-ai/tilert-rocm-prefill:0.1.6
+    container: ghcr.io/tile-ai/tilert-rocm-prefill:0.1.6.post1
     nodes: 1
     workers: 1
     gpus: 8
@@ -32,16 +32,22 @@ roles:
       VLLM_ROCM_USE_AITER_MOE: "1"
       VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS: "1"
       VLLM_ENGINE_READY_TIMEOUT_S: "10800"
+      AITER_QUICK_REDUCE_QUANTIZATION: INT4
+      AITER_USE_FLYDSL_MOE_SORTING: "1"
     args:
       served-model-name: glm5_2
       tensor-parallel-size: 8
       max-model-len: 1048576
-      enforce-eager: true
       trust-remote-code: true
       return-tokens-as-token-ids: true
       gpu-memory-utilization: 0.85
       kv-cache-dtype: bfloat16
       block-size: 64
+      async-scheduling: true
+      load-format: fastsafetensors
+      compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE"}'
+      max-num-batched-tokens: 16384
+      enable-prefix-caching: true
       speculative-config: '{"method":"mtp","num_speculative_tokens":1}'
       kv-transfer-config: >-
         {"kv_connector":"TileRTConnector","kv_connector_module_path":"tilert.pd_vllm.prefill_connector",
