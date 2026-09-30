@@ -2,7 +2,7 @@ base:
   schema: 2
   name: qwen3.5-fp4-mi355x-sglang-8k1k
   model:
-    path: hf:amd/Qwen3.5-397B-A17B-MXFP4-AttnFP8-V2
+    path: hf:amd/Qwen3.5-397B-A17B-MXFP4-AttnFP8-V3
     container: lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260927
     precision: fp4
   resources:
@@ -34,7 +34,7 @@ base:
         kv-cache-dtype: fp8_e4m3
         data-parallel-size: 1
         expert-parallel-size: 1
-        served-model-name: amd/Qwen3.5-397B-A17B-MXFP4-AttnFP8-V2
+        served-model-name: amd/Qwen3.5-397B-A17B-MXFP4-AttnFP8-V3
         enable-metrics: false
       env:
         SGLANG_USE_AITER: '1'
@@ -46,7 +46,7 @@ base:
     type: custom
     command: bash /infmax-workspace/benchmarks/single_node/srt_fixed_sequence.sh
     env:
-      MODEL: amd/Qwen3.5-397B-A17B-MXFP4-AttnFP8-V2
+      MODEL: amd/Qwen3.5-397B-A17B-MXFP4-AttnFP8-V3
       ISL: '8192'
       OSL: '1024'
       RANDOM_RANGE_RATIO: '0.8'

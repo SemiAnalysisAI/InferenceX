@@ -4,7 +4,7 @@ base:
   schema: 2
   name: qwen3.5-fp4-mi355x-sglang-agentic
   model:
-    path: hf:amd/Qwen3.5-397B-A17B-MXFP4-AttnFP8-V2
+    path: hf:amd/Qwen3.5-397B-A17B-MXFP4-AttnFP8-V3
     container: lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260927
     precision: fp4
   resources:
@@ -23,8 +23,8 @@ base:
       nodes: 1
       workers: 1
       args:
-        served-model-name: amd/Qwen3.5-397B-A17B-MXFP4-AttnFP8-V2
-        tokenizer-path: amd/Qwen3.5-397B-A17B-MXFP4-AttnFP8-V2
+        served-model-name: amd/Qwen3.5-397B-A17B-MXFP4-AttnFP8-V3
+        tokenizer-path: amd/Qwen3.5-397B-A17B-MXFP4-AttnFP8-V3
         trust-remote-code: true
         data-parallel-size: 1
         expert-parallel-size: 1
@@ -58,7 +58,7 @@ base:
     type: custom
     command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
-      MODEL: amd/Qwen3.5-397B-A17B-MXFP4-AttnFP8-V2
+      MODEL: amd/Qwen3.5-397B-A17B-MXFP4-AttnFP8-V3
       # 256k-capped corpus within this model's context.
       WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126_256k
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
