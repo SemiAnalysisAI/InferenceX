@@ -1,0 +1,120 @@
+# Research-only direct SGLang, explicit synthetic acceptance supplied by caller.
+base:
+  schema: 2
+  name: dsv41flash-h200-32gpu-research
+  model:
+    path: hf:deepseek-ai/DeepSeek-V4.1-Flash
+    container: lmsysorg/sglang:nightly-dev-cu13-20260923-06008c17
+    precision: fp4
+  resources:
+    gpu_type: h200
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 4
+      workers: 1
+      args:
+        served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
+        trust-remote-code: true
+        data-parallel-size: 32
+        expert-parallel-size: 32
+        attention-backend: dsv4
+        moe-runner-backend: flashinfer_mxfp4
+        flashinfer-mxfp4-moe-precision: fp8
+        mem-fraction-static: 0.8
+        chunked-prefill-size: 8192
+        prefill-decode-interval: 16
+        swa-prefix-tails: 4096
+        speculative-algorithm: DSPARK
+        speculative-dspark-block-size: 5
+        cuda-graph-max-bs-decode: 1
+        reasoning-parser: auto
+        tool-call-parser: auto
+        watchdog-timeout: 3600
+        enable-metrics: true
+        tensor-parallel-size: 32
+        disable-shared-experts-fusion: true
+        speculative-num-draft-tokens: 6
+        context-length: 16384
+        max-running-requests: 32
+        stream-interval: 1
+        enable-dp-attention: true
+        max-prefill-tokens: 8192
+        dist-timeout: 3600
+      env:
+        PYTHONNOUSERSITE: '1'
+        PYTHONUNBUFFERED: '1'
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        SGLANG_DEFAULT_THINKING: '1'
+        SGLANG_DSV41_REASONING_EFFORT: high
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1'
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
+        SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '0'
+        SGLANG_SIMULATE_ROUND_ROBIN_EXPERTS: '1'
+        HF_HUB_CACHE: /hf_hub_cache
+      gpus: 32
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/multi_node/srt_fixed_sequence.sh --dsv4
+    env:
+      MODEL: deepseek-ai/DeepSeek-V4.1-Flash
+      TOKENIZER: deepseek-ai/DeepSeek-V4.1-Flash
+      HF_HUB_CACHE: /hf_hub_cache
+      ISL: '8192'
+      OSL: '64'
+      RANDOM_RANGE_RATIO: '1.0'
+      USE_CHAT_TEMPLATE: 'true'
+      CLIENT_BACKEND: openai
+      CONC_LIST: '32'
+      PREFILL_NUM_WORKERS: '1'
+      PREFILL_TP: '32'
+      DECODE_NUM_WORKERS: '0'
+      DECODE_TP: '32'
+override_smoke: {}
+override_c384:
+  name: dsv41flash-h200-32gpu-c384
+  roles:
+    agg:
+      args:
+        max-running-requests: 384
+        cuda-graph-max-bs-decode: 12
+        context-length: 132352
+  benchmark:
+    env:
+      ISL: '131072'
+      OSL: '256'
+      CONC_LIST: '384'
+override_c1536:
+  name: dsv41flash-h200-32gpu-c1536
+  roles:
+    agg:
+      args:
+        max-running-requests: 1536
+        cuda-graph-max-bs-decode: 48
+        context-length: 132352
+  benchmark:
+    env:
+      ISL: '131072'
+      OSL: '256'
+      CONC_LIST: '1536'
+override_c2560:
+  name: dsv41flash-h200-32gpu-c2560
+  roles:
+    agg:
+      args:
+        max-running-requests: 2560
+        cuda-graph-max-bs-decode: 80
+        context-length: 132352
+  benchmark:
+    env:
+      ISL: '131072'
+      OSL: '256'
+      CONC_LIST: '2560'

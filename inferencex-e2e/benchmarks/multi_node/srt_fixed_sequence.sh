@@ -8,6 +8,12 @@ source "$(dirname "${BASH_SOURCE[0]}")/../benchmark_lib.sh" --validation-only
 check_env_vars ISL OSL SRT_FRONTEND_HOST SRT_FRONTEND_PORT CONC_LIST \
     PREFILL_NUM_WORKERS PREFILL_TP DECODE_NUM_WORKERS DECODE_TP
 CLIENT_ARGS=(--trust-remote-code)
+for argument in "$@"; do
+    case "$argument" in
+        --dsv4) CLIENT_ARGS+=("$argument") ;;
+        *) echo "ERROR: unsupported fixed-sequence argument: $argument" >&2; exit 1 ;;
+    esac
+done
 case "${CLIENT_BACKEND:=openai}" in
     openai) endpoint=/v1/completions ;;
     openai-chat) endpoint=/v1/chat/completions ;;

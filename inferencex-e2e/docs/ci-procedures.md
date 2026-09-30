@@ -590,3 +590,15 @@ These are research artifacts, not evidence that acceptance was measured on the s
 The fixed-sequence `--dsv4` client path recognizes the V4.1 tokenizer name and includes its released numeric high-effort header (75), including that header in prompt-length accounting.
 
 The B200/B300 comparison recipes use `flashinfer_mxfp4` with its default MXFP8 activations and checkpoint MXFP4 expert weights. The pinned DeepGEMM path failed its packed-scale shape assertion. On H200, this backend defaults to W4A16; selecting `flashinfer-mxfp4-moe-precision: fp8` also lowers DSpark activations because the pinned DSpark worker shares the target MoE settings. The research-only H200 comparison explicitly selects this flag with user authorization for target and draft W4A8. It is excluded from contribution/official submission intent and does not satisfy the draft-as-shipped contribution rule. Do not use this recipe as precedent for production submissions.
+
+The research branch also defines direct SGLang four-node/32-GPU points. Run the
+`*-sglang-32gpu-smoke` keys first (8192/64, concurrency 32), with explicit
+`fixed-sequence-acceptance-length=4.1` and `random-range-ratio=1.0`. The
+`*-sglang-32gpu-128k256` keys enumerate 384/1536/2560 concurrency and use five
+draft tokens (verification width six). Native round-robin expert routing is
+enabled as a balanced-routing experiment, not an accuracy workload. Blackwell
+uses W4A8 MegaMoE; H200 uses W4A8 FlashInfer. Each job requests four physical
+nodes. Record full active-batch evidence and separate steady decode from prefill
+interference before treating client TPOT as a decode-only comparison. The
+explicit AL input always means committed tokens including the verification token;
+source wording that does not specify inclusion remains a comparison qualification.

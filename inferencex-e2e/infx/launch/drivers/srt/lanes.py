@@ -55,16 +55,32 @@ SRT_LANES: dict[tuple[str, LaunchPath], SrtLane] = {
         mounts=(*_AGENTIC_CACHES, LaneMount(Match(frameworks=any_of("tilert")), "tilert-cache")),
     ),
     ("b200-nscale", LaunchPath.SRT_MULTI): SrtLane(
-        frameworks=_DYNAMO,
+        frameworks=_DYNAMO | {"sglang"},
         rejects=(
             (
                 Match(any_of("dsv4"), frameworks=any_of("dynamo-sglang", "dynamo-trt")),
                 "multinode dsv4 supports only dynamo-vllm",
             ),
         ),
-        mounts=_AGENTIC_CACHES,
+        mounts=(
+            *_AGENTIC_CACHES,
+            LaneMount(
+                Match(any_of("dsv41flash"), frameworks=any_of("sglang")),
+                "hf-hub-cache",
+                "/hf_hub_cache",
+            ),
+        ),
     ),
-    ("b300-dsxe", LaunchPath.SRT_MULTI): SrtLane(frameworks=_DYNAMO),
+    ("b300-dsxe", LaunchPath.SRT_MULTI): SrtLane(
+        frameworks=_DYNAMO | {"sglang"},
+        mounts=(
+            LaneMount(
+                Match(any_of("dsv41flash"), frameworks=any_of("sglang")),
+                "hf-hub-cache",
+                "/hf_hub_cache",
+            ),
+        ),
+    ),
     ("gb200-nv", LaunchPath.SRT_MULTI): SrtLane(
         frameworks=_DYNAMO,
         setup_scripts={"dynamo-sglang": "install-torchao.sh"},
@@ -94,7 +110,7 @@ SRT_LANES: dict[tuple[str, LaunchPath], SrtLane] = {
     ),
     ("h100-dgxc", LaunchPath.SRT_MULTI): SrtLane(frameworks=any_of("dynamo-sglang", "dynamo-trt")),
     ("h200-dgxc", LaunchPath.SRT_MULTI): SrtLane(
-        frameworks=any_of("dynamo-sglang", "dynamo-trt", "vllm"),
+        frameworks=any_of("dynamo-sglang", "dynamo-trt", "vllm", "sglang"),
         time_limit="4:00:00",
         long_time_limit="8:00:00",
         long_time=Match(any_of("dsv4"), frameworks=any_of("dynamo-sglang"), agentic=True),

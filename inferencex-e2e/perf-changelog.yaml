@@ -9179,3 +9179,21 @@
     - "Add research-only eight-GPU serving profiles and nine standalone Engram gate cases. Run the normal serving measurement before profiling; retain raw traces, kernel-duration samples, cold-cache protocol, masks, and correctness comparisons."
     - "新增研究专用八 GPU 服务性能剖析及九组独立 Engram gate 配置。先执行常规服务测量，再采集剖析；保存原始 trace、内核耗时样本、冷缓存协议、掩码及正确性对比。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607
+
+- config-keys:
+  - dsv41flash-fp4-h200-sglang-32gpu-smoke
+  - dsv41flash-fp4-h200-sglang-32gpu-128k256
+  - dsv41flash-fp4-b200-sglang-32gpu-smoke
+  - dsv41flash-fp4-b200-sglang-32gpu-128k256
+  - dsv41flash-fp4-b300-sglang-32gpu-smoke
+  - dsv41flash-fp4-b300-sglang-32gpu-128k256
+  scenario-type:
+  - fixed-seq-len
+  description:
+  - Add research-only direct SGLang four-node/32-GPU DSpark comparisons with five
+    draft tokens, explicit caller AL, a short topology smoke, and 128K scenarios.
+    Native round-robin routing simulates balanced expert assignment; Blackwell uses
+    native W4A8 MegaMoE and H200 uses native W4A8 FlashInfer.
+  - 新增研究专用原生 SGLang 四节点/32 GPU DSpark 对比：五个草稿 token、由调用方显式提供 AL、短拓扑验证及 128K 配置。原生轮转路由模拟均衡专家分配；Blackwell
+    使用原生 W4A8 MegaMoE，H200 使用原生 W4A8 FlashInfer。
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607
