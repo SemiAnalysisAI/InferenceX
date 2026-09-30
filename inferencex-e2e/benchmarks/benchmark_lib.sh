@@ -2007,11 +2007,26 @@ get_native_max_context_length() {
     if [ -n "${MODEL_PATH:-}" ] && [ -d "${MODEL_PATH}" ]; then
         model_path="${MODEL_PATH}"
     fi
-    python3 -c "
+    python3 - "$model_path" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+fields = ['max_position_embeddings', 'max_sequence_length', 'seq_length', 'n_positions']
+try:
+    config = json.loads((Path(sys.argv[1]) / 'config.json').read_text())
+    for field in fields:
+        value = config.get(field)
+        if type(value) is int and value > 0:
+            print(value)
+            sys.exit(0)
+except (OSError, ValueError, AttributeError):
+    pass
+
 try:
     from transformers import AutoConfig
-    config = AutoConfig.from_pretrained('${model_path}', trust_remote_code=True)
-    for attr in ['max_position_embeddings', 'max_sequence_length', 'seq_length', 'n_positions']:
+    config = AutoConfig.from_pretrained(sys.argv[1], trust_remote_code=True)
+    for attr in fields:
         if hasattr(config, attr):
             print(getattr(config, attr))
             break
@@ -2019,7 +2034,7 @@ try:
         print(0)
 except Exception:
     print(0)
-"
+PY
 }
 
 # Requested benchmark context capped at the model's native max. Sets

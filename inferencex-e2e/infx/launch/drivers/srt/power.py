@@ -104,6 +104,10 @@ POWER_LANES: dict[tuple[str, LaunchPath], PowerLane] = {
     ("b200-nscale", LaunchPath.SRT_NATIVE): PowerLane(
         rules=(
             PowerRule(
+                Match(any_of("glm5.1"), any_of("fp8"), any_of("tilert"), agentic=False),
+                agentx=False,
+            ),
+            PowerRule(
                 Match(any_of("kimik3"), any_of("fp4"), any_of("dynamo-vllm"), agentic=True),
                 agentx=True,
             ),

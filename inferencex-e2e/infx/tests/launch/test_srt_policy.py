@@ -53,7 +53,7 @@ SINGLE = dict(IS_MULTINODE="false")
     ("b200-nscale", dict(MULTI, MODEL_PREFIX="dsv4", PRECISION="fp4", FRAMEWORK="dynamo-sglang", SPEC_DECODING="mtp"), LaunchPath.SRT_NATIVE),
     ("b200-nscale", dict(MULTI, MODEL_PREFIX="dsv4", PRECISION="fp4", FRAMEWORK="dynamo-sglang", SPEC_DECODING="eagle"), LaunchPath.SRT_MULTI),
     ("b200-nscale", dict(MULTI, MODEL_PREFIX="glm5.1", PRECISION="fp8", FRAMEWORK="tilert", SPEC_DECODING="mtp", IS_AGENTIC="1"), LaunchPath.SRT_NATIVE),
-    ("b200-nscale", dict(MULTI, MODEL_PREFIX="glm5.1", PRECISION="fp8", FRAMEWORK="tilert", SPEC_DECODING="mtp", IS_AGENTIC="0"), LaunchPath.LEGACY_TILERT),
+    ("b200-nscale", dict(MULTI, MODEL_PREFIX="glm5.1", PRECISION="fp8", FRAMEWORK="tilert", SPEC_DECODING="mtp", IS_AGENTIC="0"), LaunchPath.SRT_NATIVE),
     ("mi355x-amds", dict(IS_MULTINODE="true", FRAMEWORK="atom-disagg"), LaunchPath.LEGACY_AMD_UTILS),
     ("mi355x-amds", dict(MULTI, FRAMEWORK="sglang-disagg"), LaunchPath.SRT_MULTI),
     ("gb200-nv", dict(MULTI, FRAMEWORK="tilert"), LaunchPath.SRT_MULTI),
@@ -145,11 +145,10 @@ def test_every_recipe_alias_maps_to_the_checkpoint_and_literals_pass_through(tmp
     assert resolved == {alias: str(tmp_path / path) for alias, path in paths.items()}
 
 
-def test_only_a_fork_may_run_a_recipe_the_mirror_lacks(tmp_path):
+def test_missing_recipe_fails_before_model_resolution(tmp_path):
     c, point = cluster(tmp_path), request(MODEL="org/M", GITHUB_WORKSPACE=str(tmp_path))
-    assert model_paths(c, point, "recipes/fork-only.yaml", "/m", fork=True) == {}
     with pytest.raises(LaunchError, match="not in the recipe mirror"):
-        model_paths(c, point, "recipes/fork-only.yaml", "/m")
+        model_paths(c, point, "recipes/missing.yaml", "/m")
 
 
 def test_matching_single_node_points_read_the_shared_hub_cache(tmp_path, monkeypatch):

@@ -222,7 +222,7 @@ The first cleanup step, before checkout, cancels the runner's Slurm jobs with pl
 | --- | --- |
 | [`drivers/srt/`](../infx/launch/drivers/srt) | Single-node and multi-node srt-slurm recipes (`SRT_RECIPE`, `CONFIG_FILE`), including the cluster-maintained B200 Nscale lanes. Slurm only |
 | [`drivers/script.py`](../infx/launch/drivers/script.py) | Single-node runs with an explicit `BENCH_SCRIPT_OVERRIDE`, such as SPEED-Bench collectors: one container through the backend interface, on any backend. The only driver clusters on other schedulers run |
-| [`drivers/legacy.py`](../infx/launch/drivers/legacy.py) | The remaining pre-srt-slurm lanes (B200 TileRT disagg script, MI355X `amd_utils` AgentX), slated for removal. Slurm only |
+| [`drivers/legacy.py`](../infx/launch/drivers/legacy.py) | The remaining MI355X `amd_utils` AgentX lanes. Slurm only |
 
 Depending on the driver, the launcher may:
 
