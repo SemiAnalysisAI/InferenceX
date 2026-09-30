@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# DeepSeek-V4-Pro FP4 GB200 llm-d vLLM P/D disagg. infx.launch (drivers/llmd.py) runs this
-# and reads the Slurm job id submit.sh prints on stdout.
 set -eo pipefail
 
 export GPUS_PER_NODE=4 TIME_LIMIT="${TIME_LIMIT:-08:00:00}" CONTAINER_IMAGE="$IMAGE"

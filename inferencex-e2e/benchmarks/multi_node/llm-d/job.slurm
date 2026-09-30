@@ -63,10 +63,7 @@ export DOCKER_CONT_NAME
 : "${BENCHMARK_LOGS_DIR:?BENCHMARK_LOGS_DIR not set}"
 DOCKER_MOUNT_PATH="/workspace"
 
-# server.sh on the decode coordinator writes this marker once the benchmark and
-# eval are done. Workers keep vLLM up until stopped, so the step is stopped then
-# and the batch script exits 0: the job ends COMPLETED, the state infx.launch
-# accepts as success. Cancelling the allocation instead would end it CANCELLED.
+# Stop the step and exit 0 once the coordinator is done, so the job ends COMPLETED, not CANCELLED.
 BENCH_DONE_MARKER="$BENCHMARK_LOGS_DIR/.bench_done.$SLURM_JOB_ID"
 rm -f "$BENCH_DONE_MARKER"
 

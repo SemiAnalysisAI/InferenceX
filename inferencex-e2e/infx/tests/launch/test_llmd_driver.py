@@ -1,4 +1,4 @@
-"""GB200 llm-d vLLM launches through infx.launch instead of runners/launch_gb200-nv.sh."""
+"""The llm-d driver: submit through the wrapper, attach, stage artifacts."""
 
 import json
 import subprocess
