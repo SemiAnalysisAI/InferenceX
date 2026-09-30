@@ -20,6 +20,7 @@ base:
     gpus_per_node: 4
   engine:
     type: trtllm
+    publish_events_and_metrics: true
   roles:
     prefill:
       gpus: 4
