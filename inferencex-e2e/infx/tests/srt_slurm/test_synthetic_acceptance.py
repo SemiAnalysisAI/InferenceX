@@ -408,7 +408,7 @@ def test_caller_json_is_merged_before_golden_selection(tmp_path: Path, golden_di
     }
 
 
-def test_shell_forwards_options_and_submission_failure(tmp_path: Path) -> None:
+def test_cli_forwards_options_and_submission_failure(tmp_path: Path) -> None:
     recipe = tmp_path / "recipe.yaml"
     recipe.write_text(
         yaml.safe_dump(
@@ -422,13 +422,9 @@ def test_shell_forwards_options_and_submission_failure(tmp_path: Path) -> None:
     binary.chmod(0o755)
     result = subprocess.run(
         [
-            "bash",
-            "-c",
-            'source "$1"; apply_srt_recipe "$2" vllm -f "$2" --tags "a b"',
-            "bash",
-            str(ROOT / "runners/slurm_utils.sh"),
-            str(recipe),
-        ],
+            sys.executable, "-m", "infx.srt_slurm.synthetic_acceptance",
+            str(recipe), "vllm", "--", "-f", str(recipe), "--tags", "a b",
+        ],  # fmt: skip
         cwd=tmp_path,
         env={
             **os.environ,
@@ -443,15 +439,7 @@ def test_shell_forwards_options_and_submission_failure(tmp_path: Path) -> None:
     )
     assert result.returncode == 7, result.stderr
     argv = json.loads(result.stdout)
-    assert argv[:7] == [
-        "apply",
-        "--set",
-        'srun_options.container-workdir="/infmax-workspace"',
-        "-f",
-        str(recipe),
-        "--tags",
-        "a b",
-    ]
+    assert argv[:5] == ["apply", "-f", str(recipe), "--tags", "a b"]
     result_recipe = apply_native(yaml.safe_load(recipe.read_text()), argv)
     assert (
         json.loads(result_recipe["roles"]["agg"]["args"]["speculative-config"])[

@@ -19,7 +19,7 @@
 | [`infx/results/evals.py`](../infx/results/evals.py)、[`eval_artifacts.py`](../infx/results/eval_artifacts.py) | 供收集流程和 Klaud 共用的评测读取、结果选择、复用一致性检查及重跑去重 |
 | [`infx.results.agentic`](../infx/results/agentic/__init__.py)、[`request_metrics.py`](../infx/results/agentic/request_metrics.py)、[`artifacts.py`](../infx/results/agentic/artifacts.py) | AgentX 聚合架构、原始记录过滤、请求计数和派生指标 |
 | [`validate_agentic_result.py`](../infx/results/agentic/validate_agentic_result.py) | AgentX 上传前错误率门禁 |
-| [`run-sweep.yml`](../../.github/workflows/run-sweep.yml)、[`recover-reused-ingest.yml`](../../.github/workflows/recover-reused-ingest.yml) | 应用分发载荷及 source/merge 运行身份 |
+| [`merge-ingest.yml`](../../.github/workflows/merge-ingest.yml)、[`recover-reused-ingest.yml`](../../.github/workflows/recover-reused-ingest.yml) | 应用分发载荷及 source/merge 运行身份 |
 | [InferenceX-app `prepare-ci-artifacts.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/prepare-ci-artifacts.ts)、[`ci-artifact-preparation.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/lib/ci-artifact-preparation.ts) | 跨运行工件选择、attempt 及复用来源信息 |
 | [InferenceX-app `ingest-ci-run.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/ingest-ci-run.ts) | 端到端摄取顺序、配对、跳过、汇总和刷新 |
 | [InferenceX-app `benchmark-mapper.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/etl/benchmark-mapper.ts)、[`eval-mapper.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/etl/eval-mapper.ts)、[`agentic-v3-flatten.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/etl/agentic-v3-flatten.ts) | 工件到数据库的架构和规范化 |
@@ -55,7 +55,7 @@
 | 评测样本 | `(eval_result_id, doc_id)` | 单文档样本身份。 |
 | AgentX 原始旁表 | `benchmark_results.trace_replay_id` | 从规范化 AgentX 数据点指向保留及预计算 trace 数据的链接。 |
 
-复用时，这些区别尤其重要。工件字节可以来自 PR sweep，而变更日志元数据和摄取触发可以来自之后的 main 运行。存储后的基准记录仍归属于 source 运行及其 source attempt。
+由于每次正式摄取都复用 PR sweep，这些区别尤其重要。工件字节来自 PR sweep，而变更日志元数据和摄取触发来自之后 `main` 上的 Merge Ingest 运行。存储后的基准记录仍归属于 source 运行及其 source attempt。
 
 ## 吞吐量工件
 
@@ -258,12 +258,11 @@ AgentX 聚合的顶层身份和拓扑字段与基准摄取兼容。
 
 ## 应用交接和复用运行
 
-[`run-sweep.yml`](../../.github/workflows/run-sweep.yml) 向 InferenceX-app 分发 `ingest-results` 或 `ingest-agentic-results`。
+每次合并时，[`merge-ingest.yml`](../../.github/workflows/merge-ingest.yml) 只向 InferenceX-app 分发 `ingest-results` 或 `ingest-agentic-results` 之一。变更日志增量包含 agentic 条目时，它分发携带 `database-target: production` 的 `ingest-agentic-results`。`run-sweep.yml` 从不分发摄取。
 
-- `source-run-id` 标识提供基准、评测、AgentX、日志和统计工件的工作流运行。
-- `merge-run-id` 标识授权摄取并提供当前变更日志元数据的 main 分支工作流运行。
-- 对于普通 main 运行，两个 ID 都等于 `github.run_id`。
-- 对于复用的 PR sweep，`source-run-id` 是选定的 PR 运行，`merge-run-id` 是当前 main 运行。
+- `source-run-id` 标识被复用的 PR `run-sweep.yml` 运行，其基准、评测、AgentX、日志和统计工件提供测量数据。
+- `merge-run-id` 标识 `main` 上授权摄取并提供当前变更日志元数据的 Merge Ingest 运行。
+- 两个 ID 总是不同：`main` 从不运行 sweep，因此不存在同时提供测量工件和合并元数据的运行。
 
 InferenceX-app 的工件准备会从 source 运行中，为每个完全相同的工件名保留最新且未过期的上传。在复用模式下，它排除 source 运行的 `changelog-metadata`，要求 merge 运行中存在未过期的变更日志工件，并把该 merge 运行工件加入计划。没有未过期 source 工件，或复用时没有 merge 运行变更日志，都会直接失败。
 
