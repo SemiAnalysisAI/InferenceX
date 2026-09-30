@@ -89,6 +89,8 @@ PowerX 严格校验。现有的 Tachometer 1000 ms / 功耗 exporter 100 ms 采�
 
 Kimi-K3 原生 PD 路径在准备镜像前解析所选 recipe，要求 worker 镜像与矩阵一致，并通过同一后端准备 recipe 指定的 frontend 镜像。Router 镜像仍由 recipe 管理；输入不一致会在镜像导入任务申请资源前失败。已部署的目标模型、draft 挂载、网络设备、worker 网络环境及 memlock 前置命令由集群记录声明；镜像导入、任务提交、取消及产物收集沿用共享 Python launcher。
 
+共享 Slurm 镜像解析器将显式 Docker Hub 主机名（`docker.io`、`index.docker.io` 和 `registry-1.docker.io`）统一映射为 Enroot 的 `registry-1.docker.io#repository` 仓库端点，同时支持斜杠和 `#` 两种输入形式。即使输入还带有 tag，也会保留固定 digest。导入验证必须使用任务独享的空缓存，将解析后的引用交给真实仓库；命中已有 squash 缓存或模拟导入不能证明这一衔接有效。
+
 1. [准备 worktree](#准备-worktree)
 2. [添加模型 + 硬件配方](#添加模型--硬件配方)
 3. [修改主配置](#修改主配置)
