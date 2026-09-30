@@ -89,12 +89,15 @@ def apply(
 ) -> subprocess.CompletedProcess[str]:
     """Run ``srtctl apply`` for ``config``, through the golden AgentX acceptance planner.
 
-    ``stdout`` receives srtctl's JSON manifest; without it stdout and stderr are
-    captured and echoed.
+    Every container starts in the workspace mount, as the legacy launchers did:
+    PyTorch's generated module imports fail from / with PYTHONPYCACHEPREFIX set.
+    ``arguments`` still win. ``stdout`` receives srtctl's JSON manifest; without
+    it stdout and stderr are captured and echoed.
     """
     argv = [
         str(checkout.venv / "bin/python"), "-m", "infx.srt_slurm.synthetic_acceptance",
-        config, run.request.framework, "--", *arguments,
+        config, run.request.framework, "--",
+        "--set", 'srun_options.container-workdir="/infmax-workspace"', *arguments,
     ]  # fmt: skip
     env = {**run.env, "RUNNER_NAME": srtctl_job_name(run.request.runner_name)}
     if stdout is None:

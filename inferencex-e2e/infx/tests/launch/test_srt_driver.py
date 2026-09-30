@@ -124,6 +124,9 @@ def srtslurm(root: Path) -> dict:
     return yaml.safe_load(path.read_text())
 
 
+WORKDIR = 'srun_options.container-workdir="/infmax-workspace"'
+
+
 def assert_ok(result: subprocess.CompletedProcess[str]) -> None:
     """Fail with the launcher's output when it did not exit 0."""
     assert result.returncode == 0, result.stdout[-4000:] + result.stderr[-8000:]
@@ -142,7 +145,7 @@ def test_single_node_point_stages_workflow_artifacts(harness):
     [call] = srtctl_calls(harness.logs)
     argv = call["argv"]
     assert argv[argv.index("--file") + 1] == f"{workspace}/recipe.yaml:zip_override_conc[0]"
-    assert {"--json", "--yes", "--output"} <= set(argv)
+    assert {"--json", "--yes", "--output", WORKDIR} <= set(argv)
     assert (call["env"]["INFMAX_WORKSPACE"], call["env"]["VIRTUAL_ENV"]) == (str(workspace), None)
     assert call["env"]["RUNNER_NAME"] == f"inferencex-{env['RUNNER_NAME']}"
     assert "/hf" in srtslurm(workspace)["default_mounts"].values()
@@ -256,7 +259,7 @@ def test_multinode_lane_stages_workflow_artifacts(harness, monkeypatch, cluster_
         assert checkout.name.startswith("srt-slurm-9001-1-") and len(checkout.name) == len("srt-slurm-9001-1-") + 12
     assert ("--no-preflight" in argv) is not lab["preflight"]
     assert argv[argv.index("--file") + 1] == "recipes/test/lane.yaml"
-    assert {"--json", "--yes", "benchmark.stream_output=true"} <= set(argv)
+    assert {"--json", "--yes", "benchmark.stream_output=true", WORKDIR} <= set(argv)
     if lab["tag"] is None:
         assert "--tags" not in argv
     else:

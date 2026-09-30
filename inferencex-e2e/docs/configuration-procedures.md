@@ -287,6 +287,41 @@ The pinned image is the official ATOM nightly
 The recipe does not patch AITER source at runtime; TP communication
 fusion, DSpark K6 and graph capture use the implementation shipped in the image.
 
+### MiniMax-M3 ATOM FlyDSL paged decode and LMCache DRAM tier
+
+`minimaxm3-fp4-mi355x-atom-agentic-mtp` uses
+`rocm/atom-dev:nightly_202609281543` with `ATOM_PA_FLYDSL=1` and
+`ATOM_PA_FLYDSL_PLAN=1`, following [ROCm/ATOM#2366](https://github.com/ROCm/ATOM/pull/2366)
+and the [upstream recipe](https://github.com/ROCm/ATOM/blob/1423fceb08fbe88b2e35c77b320b3073b310a63f/recipes/MiniMax-M3-Agentic-InferenceX.md).
+FlyDSL handles supported paged-decode shapes; its work planner balances dense
+decode by actual context length. Unsupported shapes retain the Gluon fallback.
+Verify the selected route and capture-time work-plan creation in `server.log`.
+
+The TP2 C20/C25/C30 and TP4 C40/C48 points add LMCache's in-process CPU tier.
+The `*_lmcache` variants in
+`benchmarks/single_node/srt-slurm-recipes/minimaxm3/atom/mi355x-fp4-mtp/agentic.yaml`
+list `{kv_connector: lmcache_offload, kv_role: offload}` under
+`extra-kv-connectors`, which srtctl renders as
+`--kv-transfer-config '{"kv_connector":"lmcache_offload","kv_role":"offload"}'`
+(`runners/srt-slurm/patches/507-lmcache-server-atom-sglang.patch`). The
+`LMCACHE_*` environment variables configure the tier. Each variant declares
+`KV_OFFLOADING: dram` and the matrix `TOTAL_CPU_DRAM_GB`, and sizes
+`LMCACHE_MAX_LOCAL_CPU_SIZE` at `TOTAL_CPU_DRAM_GB / TP` (257 GB per rank).
+`PYTHONHASHSEED=0` is required: without it the ranks hash prompts to different
+keys and the offload hit rate is zero. Verify the composed `kv_transfer_config`
+line and non-zero `atom:lmcache_loaded_tokens` in `server.log`.
+
+srtctl masks a partial-node worker to GPUs `0..TP-1`, which sit on NUMA node 0,
+and HIP pins each rank's CPU tier on its GPU's node, so the tier and the weight
+staging buffers (about 720 GB at TP2 and 1.23 TB at TP4) all come from node 0's
+1.5 TB. `runners/srt-slurm/hooks/mi355x-amds/setup.sh` drops the page cache before
+a `KV_OFFLOADING=dram` job so these pages are free. Without it, pinning reclaims
+page cache, ranks finish minutes apart and ATOM's 300 s startup barrier times out
+([run 36454319395](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/36454319395)).
+
+TP4 C32 is dropped; the GPU-resident TP4 C1-C28 and TP2 C1-C2 points,
+EAGLE3 K3, golden AL 2.78 and indexer CP are unchanged.
+
 ### DeepSeek-V4.1-Flash DSpark
 
 The GB200 DSpark recipe uses a minimum CUDA graph capture size of 64 tokens to cover concurrent AgentX subagents. This raises c1/c2/c4 from 8/16/32 to 64; c8 and above retain their existing sizes. The full trace, AL 3.51, and Engram UVA settings are preserved; low-concurrency tail latency improvements require CI confirmation.
