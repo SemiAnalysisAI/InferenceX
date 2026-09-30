@@ -122,3 +122,13 @@ token 后的乐观容量上界仍低于所需逐 DP batch 时跳过，并记录�
 长上下文配置在昂贵的前缀预热前，先对八个 rank 执行 64 输入/8 输出的协议
 探测，验证原生流式 usage 和 DP 路由，保存记录并在失败时提前退出。探测计时
 不作为性能结果。
+
+## 明确的混合 KV 布局
+
+FlashInfer 稀疏 MLA 基线在两个 KV 池中均使用普通 FP8 行。更接近对应缓存位宽
+的变体显式选择 `FLASHMLA_MEGA_ATTN_DSV41` 和
+`kv-cache-dtype: nvfp4_ds_mla`：窗口记录使用 MXFP8 group32/E8M0 scale
+（D512 时为 528 字节），压缩记录使用 NVFP4 group16/E4M3 scale（288 字节）。
+这些 scale 格式与 BF16 scale 记录不同；数据位宽相同不代表数值完全一致。
+原 FP8-KV 结果仍保留为标明条件的基线。混合变体用于 B200/B300，Hopper
+原生路径支持的精度和布局不同。

@@ -1,6 +1,6 @@
 base:
   schema: 2
-  name: dsv41flash-b200-vllm-8gpu-dp-128k1024-sweep
+  name: dsv41flash-b200-vllm-hybrid-dp8-128k1024-sweep
   model:
     path: hf:deepseek-ai/DeepSeek-V4.1-Flash
     container: vllm/vllm-openai:nightly-ddd6fbca148a867aad1fcab7ec72f582b9977db4
@@ -33,8 +33,9 @@ base:
         enable-auto-tool-choice: true
         reasoning-parser: deepseek_v41
         engram-config: '{"cpu_offload": true, "dp_shared_memory": true}'
-        attention-config: '{"backend":"FLASHINFER_MLA_SPARSE_DSV41","indexer_kv_dtype":"mxfp4","indexer_sparse_logits":true}'
-        kv-cache-dtype: fp8
+        attention-config: '{"backend": "FLASHMLA_MEGA_ATTN_DSV41", "indexer_kv_dtype":
+          "mxfp4", "indexer_sparse_logits": true}'
+        kv-cache-dtype: nvfp4_ds_mla
         speculative-config: '{"method": "dspark", "num_speculative_tokens": 5, "draft_sample_method":
           "probabilistic", "rejection_sample_method": "block", "enable_adaptive_verification":
           false}'
@@ -61,8 +62,9 @@ base:
       gpus: 8
   benchmark:
     type: custom
-    command: python3 /infmax-workspace/research/dsv41/vllm_cohort_sweep.py --probe --output
-      /logs --gpu-count 8 --dp-size 8 --profile-steps 8 --concurrencies 384 1536 2560
+    command: python3 /infmax-workspace/research/dsv41/vllm_cohort_sweep.py --probe
+      --output /logs --gpu-count 8 --dp-size 8 --profile-steps 8 --concurrencies 384
+      1536 2560
     env:
       MODEL: deepseek-ai/DeepSeek-V4.1-Flash
       ISL: '131072'

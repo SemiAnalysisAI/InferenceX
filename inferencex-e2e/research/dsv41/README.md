@@ -159,3 +159,14 @@ The long-context recipes enable an eight-rank 64-input/8-output protocol probe
 before expensive prefix warmup. It verifies actual native streaming usage and
 DP routing, stores its records, and aborts early on failure. Probe timings are
 not benchmark results.
+
+## Explicit hybrid KV layout
+
+The FlashInfer sparse-MLA baselines use plain FP8 rows in both KV pools.
+The closer cache-bitwidth variants explicitly select
+`FLASHMLA_MEGA_ATTN_DSV41` with `kv-cache-dtype: nvfp4_ds_mla`: window records
+use MXFP8 group32/E8M0 scales (528 bytes at D512), and compressed records use
+NVFP4 group16/E4M3 scales (288 bytes). These scale formats differ from BF16
+scale records; matching data bit widths does not establish numerical identity.
+Keep the existing FP8-KV results labeled as baselines. Hybrid variants apply
+to B200/B300; the native Hopper paths have different precision/layout support.
