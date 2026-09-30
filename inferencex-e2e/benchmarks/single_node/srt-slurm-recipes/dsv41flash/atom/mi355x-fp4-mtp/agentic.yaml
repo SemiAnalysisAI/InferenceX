@@ -28,8 +28,6 @@ base:
       args:
         served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
         trust-remote-code: true
-        # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
-        timeout-keep-alive: 900
         kv_cache_dtype: bf16
         index-cache-dtype: fp8
         gpu-memory-utilization: 0.9
