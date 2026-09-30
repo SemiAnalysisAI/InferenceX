@@ -19,7 +19,7 @@ dynamo:
   install: false
 
 health_check:
-  max_attempts: 1440
+  max_attempts: 2880  # 8h: non-EP TP MoE startup took ~3h20m alone (TP8)
   interval_seconds: 10
 
 resources:
