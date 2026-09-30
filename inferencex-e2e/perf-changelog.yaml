@@ -9350,3 +9350,13 @@
     \u539F\u751F SRT \u4F1A\u7701\u7565\u503C\u4E3A false \u7684\u5E03\u5C14\u53C2\
     \u6570\u3002"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-8gpu-8k256
+    - dsv41flash-fp4-b300-vllm-8gpu-8k256
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Add standalone native vLLM dense-indexer diagnostics with explicit FP32-weight and compressed-length qualifications; no serving recipe changes."
+    - "新增 vLLM 原生稠密 Indexer 独立诊断，明确 FP32 权重及压缩长度的限定条件；服务配置不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607

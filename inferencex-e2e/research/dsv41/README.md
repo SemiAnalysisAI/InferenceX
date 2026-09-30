@@ -96,3 +96,17 @@ capture is a separate 1024-output wave and must include every configured GPU.
 The shared fixed-sequence shell client accepts `FRAMEWORK=vllm` and selects its
 existing completion backend. A shell integration check verifies the generated
 client arguments without requiring a GPU or running pip.
+
+## Native vLLM dense indexer
+
+`vllm_indexer.py` imports vLLM's DeepGEMM wrapper, native TopK dispatcher and
+candidate selector. The fixture uses B12, six queries, 32 heads, D128, page128,
+TopK512, and optional 2048 candidate blocks of eight positions. Nominal S2 is
+64K/128K and physical K is S2/2; the source's S2 convention remains unresolved,
+so do not claim direct speedups. Packed MXFP4 values are independently random
+representable codes with E8M0 scale 1 and head weights 1/32. Native dense weights
+are FP32. Every query's scores and TopK threshold are checked; candidate selection
+is timed but its output is not independently checked. Three rounds run in
+forward/reverse/forward order, each with three warmups and 1000 profiled calls.
+The reported mean is the sum of GPU kernel durations, excluding schedule and
+input preparation. All raw traces and samples are retained.
