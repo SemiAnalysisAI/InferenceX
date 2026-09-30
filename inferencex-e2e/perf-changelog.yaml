@@ -9135,3 +9135,4 @@
   description:
     - "Update B300 DSV4 DSpark performance with DP spec/prefill coordination, mixed 64K chunks and interval 32; retain TP4/TP8 low-latency coverage."
     - "更新 B300 DSV4 DSpark 性能，启用 DP 推测解码与预填充协调、64K 混合分块和间隔 32；保留 TP4/TP8 低延迟测试点。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3606
