@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths: &python-paths
+      - '**/*.py'
+      - '.github/scripts/**'
+      - '.github/workflows/ci.yml'
+      - 'inferencex-e2e/pyproject.toml'
+      - 'inferencex-e2e/uv.lock'
+      - 'inferencex-e2e/.python-version'
+      - 'inferencex-e2e/infx/ruff.toml'
+      - '**/pytest.ini'
+      - 'inferencex-e2e/configs/**'
+      - 'inferencex-e2e/utils/srt-slurm'
+  push:
+    branches: [main]
+    paths: *python-paths
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: ${{ matrix.check }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        check: [Lint, Tests]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          working-directory: inferencex-e2e
+          cache-suffix: ${{ matrix.check }}
+          cache-dependency-glob: |
+            .python-version
+            pyproject.toml
+            uv.lock
+
+      - name: Lint and format
+        if: matrix.check == 'Lint'
+        run: |
+          uvx --exclude-newer PT12H ruff@latest check --output-format=github inferencex-e2e/infx
+          uvx --exclude-newer PT12H ruff@latest format --check --diff inferencex-e2e/infx
+
+      - name: Prepare test environment
+        if: matrix.check == 'Tests'
+        run: |
+          git submodule update --init inferencex-e2e/utils/srt-slurm
+          uv sync --project inferencex-e2e --locked --all-extras --group test --no-editable
+          echo "$GITHUB_WORKSPACE/inferencex-e2e/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Run tests
+        if: matrix.check == 'Tests'
+        run: |
+          python -c "import torch; assert torch.version.cuda is None and torch.version.hip is None"
+          # SRT is initialized for our connector tests; its upstream suite runs in its own CI.
+          python -m pytest -c inferencex-e2e/pyproject.toml inferencex-e2e/infx/tests/ inferencex-e2e/utils/ inferencex-e2e/runners/ collectivex/tests/ operatorx/tests/ --ignore=inferencex-e2e/utils/srt-slurm -n 4

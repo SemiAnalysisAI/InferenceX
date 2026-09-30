@@ -1,9 +1,11 @@
 # How to Test Workflows
 
-In order to test configurations described in `configs`, the primary workflow file used is `.github/workflows/e2e-tests.yml`. As input, this workflow takes in the CLI arguments for the `utils/matrix_logic/generate_sweep_configs.py` script. The usage for this script is shown below:
+Run end-to-end commands from `inferencex-e2e/`, which owns `pyproject.toml`, `uv.lock`, and `.python-version`. Workflow dispatch generator arguments also resolve paths relative to that directory. The project-local `.python-version` selects its Python version.
+
+In order to test configurations described in `inferencex-e2e/configs`, the primary workflow file used is `.github/workflows/e2e-tests.yml`. As input, this workflow takes in the CLI arguments for the `python -m infx.matrix.generate` command. The command usage is shown below:
 
 ```
-usage: generate_sweep_configs.py [-h] {full-sweep,test-config} ...
+usage: python -m infx.matrix.generate [-h] {full-sweep,test-config} ...
 
 Generate benchmark configurations from YAML config files
 
@@ -14,8 +16,8 @@ positional arguments:
                         filtering by model, precision, framework, runner type,
                         and sequence lengths
     test-config         Generate full sweep for specific config keys.
-                        Supports wildcard patterns (* and ?) for matching
-                        multiple keys at once.
+                        Validates that all specified keys exist before
+                        generating.
 
 options:
   -h, --help            show this help message and exit
@@ -26,16 +28,20 @@ options:
 The `full-sweep` command generates benchmark configurations with optional filtering. You can specify `--single-node`, `--multi-node`, or both. If neither is specified, both types are generated.
 
 ```
-usage: generate_sweep_configs.py full-sweep
+usage: python -m infx.matrix.generate full-sweep
     --config-files CONFIG_FILES [CONFIG_FILES ...]
     [--runner-config RUNNER_CONFIG]
     [--no-evals | --evals-only] [--all-evals]
+    [--smoke] [--trim-conc]
+    [--runner-node-filter RUNNER_NODE_FILTER]
+    [--scenario-type {fixed-seq-len,agentic-coding} [{fixed-seq-len,agentic-coding} ...]]
     [--model-prefix MODEL_PREFIX [MODEL_PREFIX ...]]
     [--precision PRECISION [PRECISION ...]]
     [--framework FRAMEWORK [FRAMEWORK ...]]
     [--runner-type RUNNER_TYPE [RUNNER_TYPE ...]]
     [--seq-lens {1k1k,8k1k} [{1k1k,8k1k} ...]]
     [--step-size STEP_SIZE]
+    [--min-conc MIN_CONC]
     [--max-conc MAX_CONC]
     [--max-tp MAX_TP]
     [--max-ep MAX_EP]
@@ -55,9 +61,9 @@ By default, throughput runs for every generated config and eval-only jobs run fo
 full-sweep --config-files configs/nvidia-master.yaml
 ```
 
-**Test all single-node gptoss configurations on B200 with 1k1k sequence lengths:**
+**Test all single-node dsr1 configurations on B200 with 8k1k sequence lengths:**
 ```
-full-sweep --single-node --model-prefix gptoss --runner-type b200 --seq-lens 1k1k --config-files configs/nvidia-master.yaml
+full-sweep --single-node --model-prefix dsr1 --runner-type b200 --seq-lens 8k1k --config-files configs/nvidia-master.yaml
 ```
 
 **Test all single-node fp8 precision configs for 8k1k workloads:**
@@ -72,7 +78,7 @@ full-sweep --single-node --framework trt --runner-type h200 b200-trt --config-fi
 
 **Test specific single-node model on specific hardware with specific sequence lengths:**
 ```
-full-sweep --single-node --model-prefix dsr1 --runner-type b200 --precision fp4 --framework sglang --seq-lens 1k1k 8k1k --config-files configs/nvidia-master.yaml
+full-sweep --single-node --model-prefix dsr1 --runner-type b200 --precision fp4 --framework sglang --seq-lens 8k1k --config-files configs/nvidia-master.yaml
 ```
 
 **Limit concurrency and parallelism for faster testing:**
@@ -95,12 +101,17 @@ full-sweep --scenario-type agentic-coding --config-files configs/nvidia-master.y
 The `test-config` command generates the full sweep for one or more specific config keys. This is useful for testing individual configurations without filtering by model prefix, framework, etc.
 
 ```
-usage: generate_sweep_configs.py test-config
+usage: python -m infx.matrix.generate test-config
     --config-files CONFIG_FILES [CONFIG_FILES ...]
     [--runner-config RUNNER_CONFIG]
     [--no-evals | --evals-only] [--all-evals]
+    [--smoke] [--trim-conc]
+    [--runner-node-filter RUNNER_NODE_FILTER]
+    [--scenario-type {fixed-seq-len,agentic-coding} [{fixed-seq-len,agentic-coding} ...]]
     --config-keys CONFIG_KEYS [CONFIG_KEYS ...]
     [--conc CONC [CONC ...]]
+    [--exp-names EXP_NAMES [EXP_NAMES ...]]
+    [--seq-lens {1k1k,8k1k} [{1k1k,8k1k} ...]]
 ```
 
 Config keys support **wildcard patterns** using `*` (matches any characters) and `?` (matches a single character). Patterns that match no keys will raise an error.
@@ -134,7 +145,7 @@ test-config --config-keys dsr1* --config-files configs/nvidia-master.yaml
 
 **Mix exact keys and patterns:**
 ```
-test-config --config-keys dsr1-fp4-b200-sglang gptoss* --config-files configs/nvidia-master.yaml
+test-config --config-keys dsr1-fp4-b200-sglang qwen3.5* --config-files configs/nvidia-master.yaml
 ```
 
 **Override concurrency for targeted testing:**
@@ -183,36 +194,36 @@ dispatcher never checks out or executes PR code itself.
 
 This proof of concept produces benchmark and evaluation artifacts through the
 End-to-End Tests workflow. Those runs are not yet eligible for
-`/reuse-sweep-run`, which currently accepts only `run-sweep.yml` runs. The PoC
+`/use`, which currently accepts only `run-sweep.yml` runs. The PoC
 also fans out the selected matrix immediately. It does not reproduce
 `run-sweep.yml`'s canary-first sequencing.
 
 ## Reusing an Approved PR Full Sweep
 
 `[skip-sweep]` skips PR benchmark setup only. Changelog and reuse checks still
-run. Pushes to `main` ignore it.
+run. The push-to-`main` `merge-ingest.yml` run ignores it.
 
 An authorized maintainer can reuse an eligible completed sweep without keeping
 a sweep label on the PR:
 
 ```
-/reuse-sweep-run
+/use <run_id>
 ```
 
-This selects the latest successful `run-sweep.yml` PR run whose commit remains
-in the PR. A run ID can pin an eligible successful or failed run:
+Keep the command and required run ID on one line. This pins an eligible completed
+`run-sweep.yml` PR run whose commit remains in the PR, including failed or cancelled
+runs with usable results.
 
-```
-/reuse-sweep-run <run_id>
-```
+The legacy `/reuse-sweep-run <run_id>` remains equivalent. Bare `/reuse-sweep-run`
+selects the latest successful eligible run automatically; bare `/use` is rejected.
+Both names share authorization, validation, and reactions.
 
 Source validation checks identity and artifacts, not full-matrix coverage.
-A successful `sweep-enabled` trim sweep can also be selected automatically;
-reusing it publishes only its recorded points on `main`. Acceptance does not
+Acceptance does not
 certify a green full sweep. Verify coverage and pin the run ID when a full sweep
 is required by the review process.
 
-The latest matching comment by an `OWNER`, `MEMBER`, or `COLLABORATOR` wins.
+The latest matching comment across both names by an `OWNER`, `MEMBER`, or `COLLABORATOR` wins.
 The bot reacts with 👍 after validating the request, or 👎 on rejection; details
 are in the Actions run summary. Edits replace the bot's old reaction. No separate
 comment is posted. Comments do not trigger or cancel GPU sweeps. Later commits
@@ -221,29 +232,40 @@ validation remains authoritative; an acknowledgment cannot override expired or
 invalid artifacts. `evals-only` and `agentx-fast` remain incompatible with reuse.
 Remove and re-add the sweep label to force one.
 
-`utils/merge_with_reuse.sh <pr-number>` is the supported merge path for reuse.
+`uv run --extra workflows python -m infx.workflows.merge_with_reuse <pr-number>` is the supported merge path for reuse.
 It merges `main`, preserves changelog bytes, fixes an appended `XXX` PR link,
 pushes a synchronization commit, waits for checks, then merges.
 
-The main run passes the selected source run ID and its own merge run ID directly
-to InferenceX-app. The app downloads source artifacts, keeps the newest upload
-for each exact artifact name, and ingests them with changelog metadata from the
-merge run. The normal ingestion code skips failed benchmark rows. Benchmark
-rows and public links retain source-run provenance. Source coverage is
-authoritative, so later matrix/eval policy changes do not invalidate reuse.
+At merge, `merge-ingest.yml` ("Merge Ingest") publishes the reused sweep. It
+runs on pushes to `main` that change `inferencex-e2e/perf-changelog.yaml`. Its
+single `ingest` job resolves the merge commit's PR, reuse command, and source
+run with `infx.workflows.reuse`, computes the changelog delta with
+`infx.matrix.plan`, and fails before uploading or dispatching anything unless
+reuse is validly authorized. It then uploads merge-time `changelog-metadata`
+and sends one `repository_dispatch` to InferenceX-app: `ingest-agentic-results`
+(with `database-target: production`) when the delta has agentic entries,
+otherwise `ingest-results`. The payload's `source-run-id` is the reused PR
+`run-sweep.yml` run and its `merge-run-id` is the Merge Ingest run.
 
-Reuse fails closed when authorized but ineligible or invalid. Without
-authorization, `main` runs the normal full sweep.
+The app downloads source artifacts, keeps the newest upload for each exact
+artifact name, and ingests them with changelog metadata from the merge run. The
+normal ingestion code skips failed benchmark rows. Benchmark rows and public
+links retain source-run provenance. Source coverage is authoritative, so later
+matrix/eval policy changes do not invalidate reuse.
+
+Reuse fails closed when authorized but ineligible or invalid. Pushes to `main`
+never run a sweep: `run-sweep.yml` is PR-only, and without reuse authorization
+the Merge Ingest run fails and nothing is benchmarked or ingested.
 
 ## Validation Architecture
 
-The benchmarking system uses a strict validation methodology to ensure correctness at every stage. This is implemented in `utils/matrix_logic/validation.py` using Pydantic models.
+The benchmarking system uses a strict validation methodology to ensure correctness at every stage. This is implemented in `inferencex-e2e/infx/matrix/validation.py` using Pydantic models.
 
 ### Validation Methodology
 
 The system validates **both ends** of the configuration pipeline:
 
-1. **Input Validation (Master Configs)**: Validates the structure of `configs/*.yaml` files before any processing occurs
+1. **Input Validation (Master Configs)**: Validates the structure of `inferencex-e2e/configs/*.yaml` files before any processing occurs
 2. **Output Validation (Matrix Entries)**: Validates the generated matrix entries that are passed to workflow templates
 
 This dual-validation approach ensures:
@@ -299,7 +321,7 @@ The corresponding `SingleNodeMatrixEntry` enforces these same fields with approp
 ### Validation Flow
 
 ```
-configs/*.yaml
+inferencex-e2e/configs/*.yaml
         │
         ▼
 ┌─────────────────────────┐
@@ -308,7 +330,7 @@ configs/*.yaml
         │
         ▼
 ┌─────────────────────────┐
-│  generate_sweep_configs │  ← Matrix generation
+│  infx.matrix.generate   │  ← Matrix generation
 └─────────────────────────┘
         │
         ▼
