@@ -144,3 +144,8 @@ optimistic input-only capacity bound is below the requested per-DP batch. A
 skipped case is recorded as `not_run_capacity_bound`, never as a timing result.
 Missing per-rank capacity evidence leaves the normal measured-window validation
 in charge. Passing the estimate does not prove that a batch fits.
+
+The combined high-context sweep uses ISL=131072 and OSL=1024, explicitly
+chosen because the reference does not publish its output length. The longer
+output leaves an interior full-batch window after HTTP admission; batch-1
+measurements remain 8192/256. Exact token lengths are checked in every case.

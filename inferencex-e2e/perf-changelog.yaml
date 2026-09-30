@@ -9420,3 +9420,18 @@
     - "Use native 0.95 memory utilization for high-context capacity; skip oversized research cases only with complete per-DP runtime KV-capacity evidence, recording no fabricated metrics."
     - "长上下文使用原生 0.95 内存比例；仅在全部 DP 运行时 KV 容量证据齐全时跳过超限研究用例，不生成虚构指标。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607
+
+- config-keys:
+  - dsv41flash-fp4-b200-vllm-8gpu-dp-128k1024-sweep
+  - dsv41flash-fp4-b300-vllm-8gpu-dp-128k1024-sweep
+  scenario-type:
+  - fixed-seq-len
+  description:
+  - Use explicitly documented 1024-token outputs for high-context steady-window sweeps;
+    the published source output length is unspecified. Retire the unrun 256-output
+    combined-sweep entries.
+  - "\u957F\u4E0A\u4E0B\u6587\u7A33\u6001\u7A97\u53E3\u626B\u63CF\u660E\u786E\u4F7F\
+    \u7528 1024 \u4E2A\u8F93\u51FA token\uFF1B\u6E90\u8868\u672A\u8BF4\u660E\u8F93\
+    \u51FA\u957F\u5EA6\u3002\u79FB\u9664\u5C1A\u672A\u8FD0\u884C\u7684 256 \u8F93\u51FA\
+    \u5408\u5E76\u626B\u63CF\u914D\u7F6E\u3002"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607

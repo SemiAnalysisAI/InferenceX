@@ -9713,7 +9713,7 @@ dsv41flash-fp4-b300-vllm-8gpu-dp-128k256:
         - 2560
         srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/b300-fp4-mtp/research-8gpu-dp-128k256.yaml
 
-dsv41flash-fp4-b200-vllm-8gpu-dp-128k-sweep:
+dsv41flash-fp4-b200-vllm-8gpu-dp-128k1024-sweep:
   image: vllm/vllm-openai:nightly-ddd6fbca148a867aad1fcab7ec72f582b9977db4
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
@@ -9724,7 +9724,7 @@ dsv41flash-fp4-b200-vllm-8gpu-dp-128k-sweep:
   scenarios:
     fixed-seq-len:
     - isl: 131072
-      osl: 256
+      osl: 1024
       search-space:
       - tp: 8
         ep: 8
@@ -9732,8 +9732,8 @@ dsv41flash-fp4-b200-vllm-8gpu-dp-128k-sweep:
         spec-decoding: mtp
         conc-list:
         - 384
-        srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/b200-fp4-mtp/research-8gpu-dp-128k-sweep.yaml
-dsv41flash-fp4-b300-vllm-8gpu-dp-128k-sweep:
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/b200-fp4-mtp/research-8gpu-dp-128k1024-sweep.yaml
+dsv41flash-fp4-b300-vllm-8gpu-dp-128k1024-sweep:
   image: vllm/vllm-openai:nightly-ddd6fbca148a867aad1fcab7ec72f582b9977db4
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
@@ -9744,7 +9744,7 @@ dsv41flash-fp4-b300-vllm-8gpu-dp-128k-sweep:
   scenarios:
     fixed-seq-len:
     - isl: 131072
-      osl: 256
+      osl: 1024
       search-space:
       - tp: 8
         ep: 8
@@ -9752,4 +9752,4 @@ dsv41flash-fp4-b300-vllm-8gpu-dp-128k-sweep:
         spec-decoding: mtp
         conc-list:
         - 384
-        srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/b300-fp4-mtp/research-8gpu-dp-128k-sweep.yaml
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/b300-fp4-mtp/research-8gpu-dp-128k1024-sweep.yaml
