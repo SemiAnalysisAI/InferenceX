@@ -9166,4 +9166,4 @@
   description:
     - "Update the MiniMax-M3 H100 vLLM image, enable the FP8 MSA indexer cache, adjust CPU weight offload and GPU memory settings, and resize the Mooncake store segments."
     - "更新 MiniMax-M3 H100 的 vLLM 镜像，启用 FP8 MSA 索引缓存，调整 CPU 权重卸载与 GPU 内存设置，并调整 Mooncake 存储段大小。"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3620
