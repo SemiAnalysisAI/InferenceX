@@ -160,19 +160,13 @@ class ScriptRequest(LaunchRequest):
     salloc_time_limit: int = Field(alias="SALLOC_TIME_LIMIT")
 
 
-class LegacyRequest(LaunchRequest):
-    """A pre-srt-slurm lane; its script path is built from these inputs."""
+class AmdUtilsRequest(LaunchRequest):
+    """An MI355X AgentX job submitted through amd_utils, which serves ``MODEL``'s basename."""
 
     github_workspace: Path = Field(alias="GITHUB_WORKSPACE")
     exp_name: str = Field(alias="EXP_NAME")
     precision: str = Field(alias="PRECISION")
     framework: str = Field(alias="FRAMEWORK")
-    scenario_subdir: str | None = Field(None, alias="SCENARIO_SUBDIR")
-
-
-class AmdUtilsRequest(LegacyRequest):
-    """An MI355X AgentX job submitted through amd_utils, which serves ``MODEL``'s basename."""
-
     model: str = Field(alias="MODEL")
     user: str | None = Field(None, alias="USER")
     keep_logs: OneFlag = Field(False, alias="KEEP_LOGS")

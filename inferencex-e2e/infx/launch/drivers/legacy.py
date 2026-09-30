@@ -1,6 +1,6 @@
-"""Lanes that predate srt-slurm: B200 TileRT disagg and MI355X amd_utils AgentX.
+"""MI355X amd_utils AgentX lanes that predate srt-slurm.
 
-Both submit through their own Slurm scripts. Once they move to srt-slurm recipes, delete this
+These submit through their own Slurm scripts. Once they move to srt-slurm recipes, delete this
 module, the ``legacy-*`` launch paths and the legacy tables of ``infx.launch.policy``.
 """
 
@@ -20,22 +20,12 @@ from pathlib import Path
 from infx.launch import artifacts, policy, proc
 from infx.launch.backends.base import BackendError
 from infx.launch.backends.slurm import SlurmBackend, SlurmJob
-from infx.launch.context import Launch, LaunchError
-from infx.launch.drivers.srt import models
+from infx.launch.context import Launch
 from infx.launch.drivers.srt.run import slurm_backend
-from infx.launch.request import AmdUtilsRequest, LegacyRequest, RequestError
+from infx.launch.request import AmdUtilsRequest, RequestError
 
 SUBMIT_SETTLE_S = 10.0
 CANCEL_TIMEOUT_S = 600.0
-_TILERT_REQUIRED = (
-    "SLURM_PARTITION",
-    "SLURM_ACCOUNT",
-    "MODEL_PATH",
-    "TILERT_WEIGHTS_DIR",
-    "UCX_NET_DEVICES",
-    "UCX_MEMTYPE_CACHE",
-    "UCX_MEMTYPE_REG_WHOLE",
-)
 
 
 @dataclass
@@ -45,43 +35,13 @@ class _Submission:
     job: SlurmJob | None = None
 
 
-def _script(template: str, request: LegacyRequest, **fields: str) -> str:
+def _script(template: str, request: AmdUtilsRequest) -> str:
     """A lane's script path; ``{model}`` is EXP_NAME up to its first underscore."""
     return template.format(
         model=request.exp_name.split("_", 1)[0],
         precision=request.precision,
         framework=request.framework,
-        **fields,
     )
-
-
-def run_tilert(launch: Launch) -> int:
-    """Replace this process with the TileRT disagg script; returns only if it is missing."""
-    backend, cluster = slurm_backend(launch), launch.cluster
-    request = LegacyRequest.from_env(launch.request.env)
-    lane = policy.LEGACY_TILERT[cluster.id]
-    squash = backend.settings.squash
-    if squash is None:
-        raise LaunchError(f"TileRT disagg lane: cluster {cluster.id!r} has no slurm.squash")
-    served = models.served_path(cluster, request, models.checkpoint(cluster, request))
-    env = policy.runtime_env(cluster, request, models.job_env(cluster, request, served))
-    env["SLURM_PARTITION"] = backend.settings.partition
-    if backend.settings.account:
-        env["SLURM_ACCOUNT"] = backend.settings.account
-    env[lane.squash_dir_env] = str(squash.dir)
-    missing = [name for name in _TILERT_REQUIRED if not env.get(name)]
-    if missing:
-        raise LaunchError(f"TileRT disagg lane requires {', '.join(missing)}")
-    subdir = "multi_node/agentic" if request.scenario_subdir == "agentic/" else "multi_node"
-    script = request.workspace / _script(lane.script, request, subdir=subdir)
-    if script.is_file():
-        argv = ["bash", str(script)]
-        proc.echo(argv, env)
-        sys.stdout.flush()
-        sys.stderr.flush()
-        os.execvpe(argv[0], argv, env)  # noqa: S606 - deliberate exec of a trusted repository script
-    print(f"tilert disagg script not found: {script}", flush=True)
-    return 1
 
 
 def _is_within(path: Path, directory: Path) -> bool:

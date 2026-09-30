@@ -52,7 +52,10 @@ _AGENTIC_CACHES = (
 
 SRT_LANES: dict[tuple[str, LaunchPath], SrtLane] = {
     ("b200-nscale", LaunchPath.SRT_NATIVE): SrtLane(
-        mounts=(*_AGENTIC_CACHES, LaneMount(Match(frameworks=any_of("tilert")), "tilert-cache")),
+        mounts=(
+            *_AGENTIC_CACHES,
+            LaneMount(Match(frameworks=any_of("tilert")), "tilert-weights", "/tilert_weights"),
+        ),
     ),
     ("b200-nscale", LaunchPath.SRT_MULTI): SrtLane(
         frameworks=_DYNAMO,

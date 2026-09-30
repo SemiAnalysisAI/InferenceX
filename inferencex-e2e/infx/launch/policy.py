@@ -59,7 +59,6 @@ class LaunchPath(StrEnum):
     SRT_NATIVE = "srt-native"
     SRT_BATCH = "srt-batch"
     SCRIPT = "script"
-    LEGACY_TILERT = "legacy-tilert"
     LEGACY_AMD_UTILS = "legacy-amd-utils"
 
 
@@ -68,7 +67,7 @@ NATIVE_SRT_LANES: dict[str, tuple[Match, ...]] = {
         Match(any_of("dsv4", "kimik3", "glm5.2"), any_of("fp4"), any_of("dynamo-vllm")),
         Match(any_of("dsv4"), any_of("fp4"), any_of("dynamo-sglang"), specs=any_of("none", "mtp")),
         Match(any_of("glm5.2"), any_of("fp4"), any_of("dynamo-sglang"), specs=any_of("mtp")),
-        Match(any_of("glm5.1"), any_of("fp8"), any_of("tilert"), specs=any_of("mtp"), agentic=True),
+        Match(any_of("glm5.1"), any_of("fp8"), any_of("tilert"), specs=any_of("mtp")),
     ),
 }
 
@@ -83,8 +82,6 @@ def launch_path(cluster_id: str, request: LaunchRequest) -> LaunchPath:
     if request.is_multinode:
         if any(lane(request) for lane in NATIVE_SRT_LANES.get(cluster_id, ())):
             return LaunchPath.SRT_NATIVE
-        if cluster_id in LEGACY_TILERT and request.framework == "tilert":
-            return LaunchPath.LEGACY_TILERT
         if cluster_id in LEGACY_AMD_UTILS and not request.config_file:
             return LaunchPath.LEGACY_AMD_UTILS
         return LaunchPath.SRT_MULTI
@@ -163,18 +160,6 @@ def point_settings(request: LaunchRequest) -> frozenset[str]:
 
 
 @dataclass(frozen=True)
-class TileRTDirectLane:
-    """Fixed-sequence TileRT disagg run by its own ``script`` (relative to the workspace).
-
-    The script imports squashes into ``$<squash_dir_env>`` (``slurm.squash.dir``) under the
-    launcher's own import locks.
-    """
-
-    script: str
-    squash_dir_env: str
-
-
-@dataclass(frozen=True)
 class AmdUtilsLane:
     """AgentX disagg submitted through amd_utils/submit.sh.
 
@@ -189,13 +174,6 @@ class AmdUtilsLane:
     host_setup_env: tuple[str, ...]
     env: Mapping[str, str]
 
-
-LEGACY_TILERT: dict[str, TileRTDirectLane] = {
-    "b200-nscale": TileRTDirectLane(
-        script="benchmarks/{subdir}/{model}_{precision}_b200_{framework}-disagg.sh",
-        squash_dir_env="B200_SQUASH_DIR",
-    ),
-}
 
 LEGACY_AMD_UTILS: dict[str, AmdUtilsLane] = {
     "mi355x-amds": AmdUtilsLane(
@@ -219,7 +197,6 @@ def table_problems(clusters: Mapping[str, Cluster], only: str | None = None) -> 
         "BATCH_WRAPPED_LANES": BATCH_WRAPPED_LANES,
         "SALLOC_TIME_BUMPS": SALLOC_TIME_BUMPS,
         "TILERT_ENV": TILERT_ENV,
-        "LEGACY_TILERT": LEGACY_TILERT,
         "LEGACY_AMD_UTILS": LEGACY_AMD_UTILS,
     }
     problems = [
@@ -228,11 +205,6 @@ def table_problems(clusters: Mapping[str, Cluster], only: str | None = None) -> 
         for key in keys(table)
         if key not in clusters
     ]
-    for cluster_id in keys(LEGACY_TILERT):
-        cluster = clusters.get(cluster_id)
-        settings = cluster.scheduler_settings if cluster is not None else None
-        if isinstance(settings, SlurmSettings) and settings.squash is None:
-            problems.append(f"LEGACY_TILERT[{cluster_id!r}]: no slurm.squash for the script")
     for cluster_id in keys(LEGACY_AMD_UTILS):
         if (cluster := clusters.get(cluster_id)) is None:
             continue

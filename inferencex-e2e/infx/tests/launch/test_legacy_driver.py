@@ -1,22 +1,17 @@
-"""Legacy launch lanes (B200 TileRT disagg, MI355X amd_utils AgentX) with fake Slurm binaries."""
+"""MI355X amd_utils AgentX launch lanes with fake Slurm binaries."""
 
 import json
 import os
-import subprocess
 import sys
 import tarfile
 from pathlib import Path
 
 import pytest
-import yaml
 
 from infx.clusters import load_inventory
 from infx.launch.__main__ import launch
 from infx.launch.drivers import legacy
 from infx.launch.request import LaunchRequest
-from infx.tests.launch.fake_slurm import sandbox_runner_config
-
-ROOT = Path(__file__).resolve().parents[3]
 
 RECORD = f"""#!{sys.executable}
 import json, os, sys
@@ -48,24 +43,12 @@ echo 4242
 
 
 def inventory(tmp_path: Path) -> dict:
-    """Runner config for the two clusters with legacy lanes.
-
-    A launch checks the table rows keyed by its cluster against its record, so b200-nscale
-    is its sandboxed checked-in record with the Slurm facts the TileRT script reads replaced.
-    """
-    sandbox = tmp_path / "sandbox"
-    sandbox.mkdir(exist_ok=True)
-    checked_in = yaml.safe_load(sandbox_runner_config(sandbox).read_text())["clusters"]
-    b200 = checked_in["b200-nscale"]["slurm"]
-    b200.update(partition="tilert-partition", account="tilert-account")
-    b200["squash"]["dir"] = str(tmp_path / "squash")
+    """Runner config for the remaining amd_utils launch lane."""
     return {
         "labels": {
-            "cluster:b200-nscale": ["b200-nscale-slurm_00"],
             "cluster:mi355x-amds": ["mi355x-amds_00"],
         },
         "clusters": {
-            "b200-nscale": checked_in["b200-nscale"],
             "mi355x-amds": {
                 "gpus-per-node": 8, "arch": "x86_64", "scheduler": "slurm",
                 "slurm": {
@@ -102,84 +85,6 @@ def fakes(tmp_path, monkeypatch):
         return [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
 
     return calls
-
-
-SETTINGS = {"MODEL_PATH": "/hf/snapshots/glm-5.1", "TILERT_WEIGHTS_DIR": "/tilert-cache/glm5.1-fp8-8shard"}
-
-
-def tilert_env(workspace: Path, settings: dict[str, str], **overrides: str) -> dict[str, str]:
-    """glm5.1-fp8-b200-tilert as the multi-node workflow exports it."""
-    return {
-        **os.environ,
-        "PYTHONPATH": str(ROOT),
-        "RUNNER_NAME": "b200-nscale-slurm_00",
-        "GITHUB_WORKSPACE": str(workspace),
-        "IS_MULTINODE": "true",
-        "IS_AGENTIC": "0",
-        "FRAMEWORK": "tilert",
-        "MODEL": "zai-org/GLM-5.1-FP8",
-        "MODEL_PREFIX": "glm5.1",
-        "PRECISION": "fp8",
-        "SPEC_DECODING": "mtp",
-        "EXP_NAME": "glm5.1_1k1k",
-        "SCENARIO_SUBDIR": "fixed_seq_len/",
-        "PREFILL_ADDITIONAL_SETTINGS": json.dumps([f"{name}={value}" for name, value in settings.items()]),
-        **settings,
-        **overrides,
-    }
-
-
-def run_tilert(tmp_path: Path, workspace: Path, *, script: bool, settings: dict[str, str] = SETTINGS, **overrides: str):
-    """Run ``python -m infx.launch run``; the disagg script records what it was handed and exits 5."""
-    if script:
-        path = workspace / "benchmarks/multi_node/glm5.1_fp8_b200_tilert-disagg.sh"
-        path.parent.mkdir(parents=True)
-        path.write_text(
-            "#!/usr/bin/env bash\n"
-            'printf "%s\\n" "$$" "$SLURM_PARTITION" "$SLURM_ACCOUNT" "$MODEL_PATH" '
-            '"$TILERT_WEIGHTS_DIR" "$B200_SQUASH_DIR" > "$GITHUB_WORKSPACE/seen.txt"\n'
-            "exit 5\n"
-        )
-    workspace.mkdir(exist_ok=True)
-    config = tmp_path / "runners.yaml"
-    config.write_text(yaml.safe_dump(inventory(tmp_path)))
-    launcher = subprocess.Popen(
-        [sys.executable, "-m", "infx.launch", "--runner-config", str(config), "run"],
-        env=tilert_env(workspace, settings, **overrides), cwd=workspace,
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-    )  # fmt: skip
-    out, err = launcher.communicate(timeout=60)
-    return launcher, out + err
-
-
-@pytest.mark.parametrize("own_model_path", [True, False])
-def test_tilert_lane_replaces_the_launcher_with_the_disagg_script(tmp_path, own_model_path):
-    workspace = tmp_path / "workspace"
-    settings = SETTINGS if own_model_path else {"TILERT_WEIGHTS_DIR": SETTINGS["TILERT_WEIGHTS_DIR"]}
-    runner = {} if own_model_path else {"MODEL_PATH": "/runner/glm-5.1"}
-
-    launcher, output = run_tilert(tmp_path, workspace, script=True, settings=settings, **runner)
-
-    assert launcher.returncode == 5, output
-    served = SETTINGS["MODEL_PATH"] if own_model_path else str(tmp_path / "sandbox/scratch/models/GLM-5.1-FP8")
-    assert (workspace / "seen.txt").read_text().splitlines() == [
-        str(launcher.pid), "tilert-partition", "tilert-account", served,
-        "/tilert-cache/glm5.1-fp8-8shard", str(tmp_path / "squash"),
-    ]
-
-
-@pytest.mark.parametrize(("script", "overrides", "message"), [
-    (True, {"TILERT_WEIGHTS_DIR": ""}, "TILERT_WEIGHTS_DIR"),
-    (False, {}, "tilert disagg script not found"),
-])  # fmt: skip
-def test_tilert_lane_fails_without_its_weights_dir_or_script(tmp_path, script, overrides, message):
-    workspace = tmp_path / "workspace"
-
-    launcher, output = run_tilert(tmp_path, workspace, script=script, **overrides)
-
-    assert launcher.returncode == 1, output
-    assert message in output
-    assert not (workspace / "seen.txt").exists()
 
 
 @pytest.fixture

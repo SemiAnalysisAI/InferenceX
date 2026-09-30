@@ -222,7 +222,7 @@ flowchart LR
 | --- | --- |
 | [`drivers/srt/`](../infx/launch/drivers/srt) | 单节点和多节点 srt-slurm 方案（`SRT_RECIPE`、`CONFIG_FILE`），包括集群维护的 B200 Nscale 通道；仅限 Slurm |
 | [`drivers/script.py`](../infx/launch/drivers/script.py) | 带显式 `BENCH_SCRIPT_OVERRIDE` 的单节点运行，例如 SPEED-Bench 采集脚本：通过后端接口运行一个容器，适用于任何后端；其他调度器上的集群只运行这个驱动 |
-| [`drivers/legacy.py`](../infx/launch/drivers/legacy.py) | 剩余的 srt-slurm 之前的通道（B200 TileRT 解聚脚本、MI355X `amd_utils` AgentX），计划删除；仅限 Slurm |
+| [`drivers/legacy.py`](../infx/launch/drivers/legacy.py) | 尚未迁移的 MI355X `amd_utils` AgentX 通道；仅限 Slurm |
 
 根据驱动不同，启动器可能会：
 
