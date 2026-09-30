@@ -6,12 +6,12 @@ base:
   name: dsv41flash-fp4-mi355x-vllm-agentic
   model:
     path: hf:deepseek-ai/DeepSeek-V4.1-Flash
-    # TODO: repin once a nightly image is released that includes
-    # vllm-project/vllm#58671 (paged MXFP4 sparse indexer, merged upstream),
-    # in addition to #58655 (mHC fused Triton seams) and #53492 (sparse MLA
-    # Gluon kernel) already carried by the previous pin
-    # (nightly-rocm100-36768d1b).
-    container: vllm/vllm-openai-rocm:nightly-rocm100-TBD
+    # Mirror pin while nightly-rocm100 (TheRock/ROCm 10.0) hasn't rebuilt
+    # since #58671 merged: uses the apt-based nightly variant instead, which
+    # includes #58671, #58655 (mHC fused Triton seams) and #53492 (sparse MLA
+    # Gluon kernel). Re-pin to nightly-rocm100 once that variant catches up;
+    # see #3571.
+    container: vllm/vllm-openai-rocm:nightly-ac68c3087215e0a4f3cdfa218508c6aada57235d
     precision: fp4
   resources:
     gpu_type: mi355x
