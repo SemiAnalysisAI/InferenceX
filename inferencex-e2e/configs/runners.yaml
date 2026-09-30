@@ -578,6 +578,7 @@ clusters:
       cpus-per-gpu: 24
       salloc-args: [--mem=0]
       volumes:
+        aiperf-cache: {path: /data/home/sa-gha-runner/aiperf-cache}
         hf-home: {path: ~/.cache/huggingface}
         hf-hub-cache: {path: ~/.cache/huggingface/hub}
         scratch: {path: /scratch/models, visibility: node-local}

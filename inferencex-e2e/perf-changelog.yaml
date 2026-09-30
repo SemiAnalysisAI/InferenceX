@@ -9168,3 +9168,17 @@
     - "Relevant ATOM changes in the range: V4 decode reuses the sparse prefill ASM (ROCm/ATOM#2271), greedy sampler picks via aiter.topk_select (ROCm/ATOM#2244), and FP8 block scales declared scale_fmt ue8m0 are now stored as E8M0 on gfx950 by default (ROCm/ATOM#2419; previously FP32 unless ATOM_FP8_BLOCKSCALE_USE_E8M0_SCALE=1). The upstream DeepSeek-V4 recipes are unchanged across the range, and every recipe flag and choice (all2all-backend rccl, dp-load-balance least_tokens, moe-backend standard) remains valid."
     - "No data-type or precision change to the DeepSeek-V4-Pro-0813 DSpark draft: no online quantization is configured, so it keeps its checkpoint precision; the E8M0 scale storage represents the checkpoint's power-of-two block scales exactly. kv-cache-dtype and index-cache-dtype touch cache storage only."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3605
+
+- config-keys:
+    - dsv4-fp4-b300-dynamo-sglang-agentic-agg
+    - dsv4-fp4-b300-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add DeepSeek-V4-Pro-0813 FP4 B300 Dynamo+SGLang AgentX aggregate TP8 c1 and TP4 c4 recipes, plus disaggregated 1P1D DEP8 c64/c240 and 2P1D DEP8 c480 recipes."
+    - "Use Mooncake for disaggregated KV transfer and install mooncake-transfer-engine-efa-cuda13 0.3.13.post1 during container setup; rely on the DSXE-managed fabric injection without explicit host EFA/OFI mounts."
+    - "Use 192 logical CPUs per task, HiCache ratio 3, decode max-running-requests at twice concurrency, persistent AgentX/Hugging Face caches, and exclude the known degraded DSXE node."
+    - "新增 DeepSeek-V4-Pro-0813 FP4 B300 Dynamo+SGLang AgentX 配方：聚合式 TP8 c1、TP4 c4，以及分离式 1P1D DEP8 c64/c240 和 2P1D DEP8 c480。"
+    - "分离式 KV 传输使用 Mooncake，并在容器初始化时安装 mooncake-transfer-engine-efa-cuda13 0.3.13.post1；依赖 DSXE 管理的网络栈注入，不显式挂载主机 EFA/OFI 目录。"
+    - "每任务使用 192 个逻辑 CPU、HiCache 比例 3，decode 的 max-running-requests 为并发数两倍，挂载持久化 AgentX/Hugging Face 缓存，并排除已知异常 DSXE 节点。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3190
