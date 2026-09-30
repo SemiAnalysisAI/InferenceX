@@ -85,3 +85,11 @@ E8M0 scale 为 1，head weight 为 1/32，原生稠密权重使用 FP32。逐 qu
 分数和 TopK 阈值；候选选择计入耗时，但未独立校验其输出。按正序、逆序、正序
 执行三轮，每轮预热三次、剖析 1000 次。报告 GPU 内核耗时之和的均值，不含
 调度元数据及输入准备，保留全部原始 trace 与样本。
+
+`vllm_sparse_indexer.py` 测量原生分页稀疏流水线，包括候选展开及排序、调度构建、
+稀疏 logits、DeepSelect TopK 和逻辑索引映射。使用 72 个 query 行，每行 2048
+个独立且不重复的候选块，每块八个位置，物理 K=65536，head weight 为 BF16。
+预热三次后测量三次，保留全部样本。分数按 BF16 容差 `rtol=atol=0.02` 校验；
+原生 TopK 必须返回不重复的候选位置，且分数不低于原生 TopK 阈值。
+`analyze_trace.py` 也识别 vLLM 原生 `execute_` 标记，将关联 GPU 时间跨度标记为
+`VLLM_EXECUTE`，不假定其包含所有草稿或采样工作，也不将其等同于客户端 TPOT。

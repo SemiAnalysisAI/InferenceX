@@ -1,3 +1,5 @@
+import pytest
+
 from research.dsv41.analyze_trace import interval_union, summarize
 
 
@@ -5,12 +7,21 @@ def test_union_does_not_add_overlapping_kernels():
     assert interval_union([(0, 4), (2, 7), (10, 12)]) == 9
 
 
-def test_model_span_follows_launch_correlation_not_cpu_scope_or_unrelated_work():
+@pytest.mark.parametrize(
+    "scope, stage",
+    [
+        ("step[VERIFY bs=1]", "VERIFY"),
+        ("execute_8_context_0_generation_1", "VLLM_EXECUTE"),
+    ],
+)
+def test_model_span_follows_launch_correlation_not_cpu_scope_or_unrelated_work(
+    scope, stage
+):
     trace = {
         "traceEvents": [
             {
                 "cat": "user_annotation",
-                "name": "step[VERIFY bs=1]",
+                "name": scope,
                 "pid": 100,
                 "tid": 2,
                 "ts": 0,
@@ -57,7 +68,9 @@ def test_model_span_follows_launch_correlation_not_cpu_scope_or_unrelated_work()
             },
         ]
     }
-    row = summarize(trace)["iterations"][0]
+    result = summarize(trace)
+    assert result["stages"][stage]["samples"] == 1
+    row = result["iterations"][0]
     assert row["device_span_us"] == 8
     assert row["device_active_union_us"] == 5
     assert row["uncovered_device_span_us"] == 3

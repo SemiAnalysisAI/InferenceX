@@ -110,3 +110,14 @@ is timed but its output is not independently checked. Three rounds run in
 forward/reverse/forward order, each with three warmups and 1000 profiled calls.
 The reported mean is the sum of GPU kernel durations, excluding schedule and
 input preparation. All raw traces and samples are retained.
+
+`vllm_sparse_indexer.py` measures the native paged sparse pipeline including
+candidate expansion/sort, schedule construction, sparse logits, DeepSelect TopK
+and logical-index remapping. It uses 72 query rows, 2048 independent unique
+candidate blocks per row, eight positions per block, physical K=65536 and BF16
+head weights. Three warmups precede three timed calls; preserve each sample.
+Scores are checked with BF16 tolerance (`rtol=atol=0.02`), and native TopK must
+return unique candidate positions above the native score threshold.
+`analyze_trace.py` also recognizes native vLLM `execute_` annotations. Their
+correlated GPU spans are reported as `VLLM_EXECUTE`, without assuming that this
+scope includes all draft/sampling work or equating it to client TPOT.

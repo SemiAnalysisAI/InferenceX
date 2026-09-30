@@ -99,7 +99,8 @@ def summarize(trace: dict) -> dict:
     scopes = [
         e
         for e in events
-        if e.get("cat") == "user_annotation" and e.get("name", "").startswith("step[")
+        if e.get("cat") == "user_annotation"
+        and e.get("name", "").startswith(("step[", "execute_"))
     ]
     rows = []
     for scope in scopes:
@@ -124,8 +125,9 @@ def summarize(trace: dict) -> dict:
                 }
             )
     stages = {}
-    for stage in ("EXTEND", "DRAFT", "VERIFY"):
-        chosen = [r for r in rows if r["scope"].startswith("step[" + stage)]
+    for stage in ("EXTEND", "DRAFT", "VERIFY", "VLLM_EXECUTE"):
+        prefix = "execute_" if stage == "VLLM_EXECUTE" else "step[" + stage
+        chosen = [r for r in rows if r["scope"].startswith(prefix)]
         if not chosen:
             continue
         stages[stage] = {"samples": len(chosen)}

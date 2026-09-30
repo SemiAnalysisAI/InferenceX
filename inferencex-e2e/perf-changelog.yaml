@@ -9360,3 +9360,13 @@
     - "Add standalone native vLLM dense-indexer diagnostics with explicit FP32-weight and compressed-length qualifications; no serving recipe changes."
     - "新增 vLLM 原生稠密 Indexer 独立诊断，明确 FP32 权重及压缩长度的限定条件；服务配置不变。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-8gpu-8k256
+    - dsv41flash-fp4-b300-vllm-8gpu-8k256
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Add native vLLM sparse-indexer pipeline diagnostics and recognize vLLM execution scopes in trace analysis; serving recipes unchanged."
+    - "新增 vLLM 原生稀疏 Indexer 流水线诊断，并在 trace 分析中识别 vLLM 执行范围；服务配置不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607
