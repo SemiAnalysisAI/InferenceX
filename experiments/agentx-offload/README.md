@@ -60,9 +60,15 @@ lower with NVMe. Matched c448 also completed: NVMe delivered 8,839.499 versus
 to 8.973 tokens/s/user (+9.273%), and completed 1,204 versus 1,120 responses.
 P90 TTFT improved only 0.427%, while P90 E2E-normalized interactivity was 0.376%
 lower; average power fell 0.416% and energy per successful query fell 7.364%.
-The benefit remains positive but continues to narrow. The next probe is c480,
-midway between the matched c448 win and c512's canonical warmup feasibility
-failure. Pair it with an HBM-only c480 control if profiling completes.
+The benefit remains positive but continues to narrow. Matched c480 then showed
+another mixed NVMe win: 8,642.782 versus 8,104.248 total tokens/s/GPU (+6.645%),
+87.219 versus 74.494 output tokens/s/GPU (+17.083%), 8.547 versus 8.119 P90
+interactivity (+5.274%), and 2,815.145 versus 2,947.946 seconds P90 TTFT
+(-4.505%). NVMe completed 1,186 versus 1,097 responses and used 6.940% less
+energy per successful query, although P90 E2E-normalized interactivity was
+2.010% lower and average power was 0.610% higher. The next probe is c496,
+midway between this matched c480 win and c512's canonical warmup feasibility
+failure. Pair it with an HBM-only c496 control if profiling completes.
 
 The combined tier uses a different connector and storage policy. The pinned FS
 tier has no bounded LRU capacity setting: the 2 TiB value is an abort guard, not an
@@ -87,7 +93,7 @@ Inspect recorded corpus identity, full commands and actual allocated KV capacity
 before declaring a pair matched.
 
 Start with a matched four-arm probe at concurrency 16. Then build full curves for
-all four arms. Initial curve points are 1, 4, 8, 16, 32, 64, 128, 256, 320, 384, 448, 480, 512, 1,024,
+all four arms. Initial curve points are 1, 4, 8, 16, 32, 64, 128, 256, 320, 384, 448, 480, 496, 512, 1,024,
 4,096, 8,192 and 16,384. Add intermediate positive integers near observed changes, and
 repeat both sides of a candidate crossover on different nodes.
 Keep the maximum at 16,384. Failure or insufficient completed samples is a
