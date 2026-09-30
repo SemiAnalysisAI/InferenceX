@@ -9159,3 +9159,12 @@
     - "Use the native FlashInfer MXFP4 MoE runner on B200/B300 to avoid the DeepGEMM packed-scale layout assertion. Retain its default MXFP8 activations, checkpoint expert weights, seven draft tokens, and explicit dispatch AL."
     - "B200/B300 改用原生 FlashInfer MXFP4 MoE 后端，避开 DeepGEMM 打包缩放因子的布局断言；保留默认 MXFP8 激活、检查点专家权重、七个草稿 token 及显式调度的 AL。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607
+
+- config-keys:
+    - dsv41flash-fp4-h200-sglang-matched-8k256
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Research-only H200 comparison: select native FlashInfer MXFP4 MoE with FP8 activations for target and DSpark. Explicitly authorized for this comparison; not an official benchmark submission. Checkpoint weights and default wo_a conversion are retained."
+    - "仅用于研究的 H200 对比：目标模型和 DSpark 均选择原生 FlashInfer MXFP4 MoE 与 FP8 激活。用户已明确授权此对比用途，不作为正式基准提交；保留检查点权重及默认 wo_a 转换。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607
