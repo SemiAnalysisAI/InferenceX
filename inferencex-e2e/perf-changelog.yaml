@@ -9129,6 +9129,37 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3561
 
 - config-keys:
+    - minimaxm3-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the image from rocm/atom-dev:nightly_202609171455 to nightly_202609281543 and enable FlyDSL paged decode (ATOM_PA_FLYDSL=1, ATOM_PA_FLYDSL_PLAN=1)."
+    - "Restore the LMCache DRAM-offload points: TP2 concurrency 20, 25 and 30, and TP4 concurrency 40 and 48 (in-process lmcache_offload, 257 GB CPU tier per rank)."
+    - "Set ATOM_MONO_ENABLE=0 on TP4 concurrency 15, 20, 24 and 28; the new image enables mono decode by default, which hangs these indexer-CP points."
+    - "Drop TP4 concurrency 32."
+    - "No data-type or precision change to the EAGLE3 draft model (Inferact/MiniMax-M3-EAGLE3-GQA): online_quant_config (ptpc_fp8, which ATOM also applies to the draft), kv_cache_dtype fp8 and index-cache-dtype fp8 are unchanged; the FlyDSL, mono-decode and lmcache_offload toggles affect the decode path and KV offload, not draft precision."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3388
+
+- config-keys:
+    - qwen3.5-fp8-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Qwen3.5-397B-A17B-FP8 AgentX on MI355X with SGLang image lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260927 and a new srt-slurm recipe. TP4 has five GPU-resident points (c1, c4, c8, c12, c14) and nine HiCache DRAM points (c16, c18, c20, c22, c24, c28, c32, c36, c40)."
+    - "Use AITER attention and allreduce fusion, FP8 KV (fp8_e4m3), and EAGLE MTP (3 steps, topk 1, 4 draft tokens); do not enable ROCm INT4 quick all-reduce. HiCache uses ratio 1.5, write_through_selective, kernel I/O and page_first layout. The matching cookbook recipe is sgl-project/sglang#41849."
+    - "The embedded MTP head runs at its stored precision: block-FP8 expert weights and checkpoint dtype for mtp.fc and gates. No separate draft, draft dtype override or submission-side quantization is used."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3602
+
+- config-keys:
+    - dsv4-fp4-mi355x-atom-disagg-agentic-lmcache-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Port the DeepSeek-V4-Pro-0813 MI355X ATOM 1P1D AgentX config from the legacy amd_utils path to a native srt-slurm recipe (benchmarks/multi_node/srt-slurm-recipes/dsv4/atom/mi355x-fp4/agentx/disagg-lmcache-dspark.yaml), one override variant per point. Server flags, env, AToMesh routing policies and decode CUDA-graph capture sizes match the legacy server_atom.sh for every tier: TP8 at concurrency 1 and 16, DP attention with prefill TBO at 64 and 128, and DP attention with ATOM's in-process LMCache CPU offload (lmcache_offload, 187 GB per prefill rank) at 256. Golden acceptance 3.01 for DSpark with three draft tokens is now injected by the srt-slurm path, the same value the legacy models_atom.yaml hardcoded."
+    - "The LMCache tier uses srt-slurm's extra-kv-connectors (NVIDIA/srt-slurm#507, in v2.36.0) to add lmcache_offload next to the generated Mooncake connector."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3543
+
+- config-keys:
     - dsv4-fp4-mi355x-atom-agentic-mtp
   scenario-type:
     - agentic-coding

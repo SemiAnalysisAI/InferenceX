@@ -161,7 +161,6 @@ base:
         disaggregation-decode-retraction-backup: cpu_tensor
   sbatch_directives:
     mem: '0'
-    cpus-per-task: '144'
   benchmark:
     type: custom
     command: bash /infmax-workspace/benchmarks/srt_agentic.sh
