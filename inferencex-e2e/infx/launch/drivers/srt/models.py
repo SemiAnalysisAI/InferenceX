@@ -46,7 +46,7 @@ OVERRIDES: dict[str, tuple[Override, ...]] = {
     ),
     "b300-dsxe": (
         Override(
-            Match(frameworks=any_of("vllm"), model_glob="*/DeepSeek-V4-Pro-0813"),
+            Match(frameworks=any_of("vllm", "dynamo-sglang"), model_glob="*/DeepSeek-V4-Pro-0813"),
             entry="DeepSeek-V4-Pro-0813@scratch",
         ),
         Override(Match(model_glob="*/DeepSeek-V4-Pro-0813"), entry="DeepSeek-V4-Pro-0813"),
