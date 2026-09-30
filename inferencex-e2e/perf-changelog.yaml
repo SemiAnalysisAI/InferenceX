@@ -9530,3 +9530,13 @@
     - "Avoid reuse of expired HTTP connections after synchronous large-cohort encoding; retain native pause/resume and full-batch validation."
     - "避免大批次同步编码后复用过期 HTTP 连接，保留原生暂停/恢复及全 batch 校验。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-8gpu-8k256
+    - dsv41flash-fp4-b300-vllm-8gpu-8k256
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Measure production V2 Engram hashing at 8K/16K with explicit token/history fixtures and exact all-index validation."
+    - "测量生产 V2 Engram 在 8K/16K 的哈希性能，明确 token 与历史样例并逐一精确校验全部索引。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607

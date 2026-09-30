@@ -211,3 +211,16 @@ spans and traces are retained; these are warm repeated-input measurements.
 Use fresh HTTP connections for each request. Encoding the next large cohort can
 outlast server keepalive; do not reuse idle control sockets across waves. This
 changes client transport only and leaves engine execution and timing gates intact.
+
+## Native Engram hashing
+
+`vllm_engram_hash.py` times the installed `NgramHashState.forward` V2 path at
+8192/16384 tokens. It computes layers 1/14, n-grams 2/3/4 and eight heads,
+using the release bucket layout and an explicit identity compressed-token map.
+One prefill request has deterministic token IDs, no dead tokens and no external
+history. Tokenizer normalization/setup and embedding lookup are excluded.
+The native call resolves token history, unlike a reference accepting prebuilt
+n-gram windows. Every output integer is checked against independent scalar
+arithmetic; three rounds retain 300 kernel-duration samples and traces each.
+Native gate weight casts/products already occur inside the measured gate kernel;
+there is no separate production weight-preparation timing to add.

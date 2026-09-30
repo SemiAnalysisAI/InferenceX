@@ -170,3 +170,14 @@ BF16 KV，每个 query 选择 128 个窗口/原始条目和 512 个压缩条目�
 每个请求建立新的 HTTP 连接。下一批大请求体的编码可能超过服务端 keepalive
 时限，因此不跨测量阶段复用闲置控制连接。该修改仅影响客户端传输，
 不改变引擎执行或计时校验。
+
+## 原生 Engram 哈希
+
+`vllm_engram_hash.py` 在 8192/16384 token 下测量已安装的
+`NgramHashState.forward` V2 路径。采用发布模型的 bucket 布局与明确的
+恒等压缩 token 映射，计算第 1/14 层、2/3/4-gram 和八个 head。
+单个 prefill 请求使用确定性 token ID，没有 dead token 或外部历史。
+计时排除 tokenizer 归一化、初始化和 embedding 查询。原生调用包含 token
+历史解析，与接受预构造 n-gram 窗口的参考边界不同。所有输出整数均与独立
+标量计算逐一校验；三轮各保留 300 个内核时长样本及 trace。
+原生 gate 内核已包含权重转换和乘积计算，不额外添加独立权重准备时长。
