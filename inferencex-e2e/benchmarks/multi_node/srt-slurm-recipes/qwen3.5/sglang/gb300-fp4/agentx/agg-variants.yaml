@@ -10,7 +10,7 @@ base:
     container: dynamo-sglang
     precision: fp4
   slurm:
-    time_limit: '00:19:00'
+    time_limit: '00:30:00'
   health_check:
     max_attempts: 1440
     interval_seconds: 10
@@ -31,6 +31,7 @@ base:
         SGLANG_ENABLE_FLASHINFER_GEMM: 'true'
         SGL_ENABLE_JIT_DEEPGEMM: 'false'
         TORCH_CUDA_ARCH_LIST: '10.0'
+        SGLANG_PYSPY_DUMP_BEFORE_CRASH: '1'
       args:
         served-model-name: nvidia/Qwen3.5-397B-A17B-NVFP4
         enable-cache-report: true
@@ -62,6 +63,7 @@ base:
         stream-interval: 50
         scheduler-recv-interval: 10
         tokenizer-worker-num: 6
+        soft-watchdog-timeout: 120
         page-size: 64
         enable-hierarchical-cache: true
         hicache-ratio: 0.9
