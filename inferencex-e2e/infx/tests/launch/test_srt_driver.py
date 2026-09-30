@@ -176,16 +176,19 @@ LABS = {
         lane=SrtLane(
             setup_scripts={"dynamo-sglang": "setup.sh"},
             mounts=(LaneMount(Match(), "cache", "/cache"),), time_limit="2:00:00",
+            scheduler_routes=((Match(), "restricted"),),
         ),
         env=dict(FRAMEWORK="dynamo-sglang"),
         model="nvme/model", preflight=False, tag="lab,dsr1,fp8,1024x1024,", setup_script="setup.sh",
         served="served-model", dist_timeout=True, time="2:00:00", mounts=("/cache",), staging="import",
+        partition="p2", account="restricted", cache="restricted-cache", squash="restricted-squash",
     ),
     "lab-b": dict(
         lane=SrtLane(shared_run_root=(Match(),)),
         env=dict(FRAMEWORK="dynamo-vllm", IS_AGENTIC="1", ISL="0", OSL="0", FAKE_RESULTS="agentic"),
         model="models/model", preflight=True, tag=None, setup_script=None, served=None,
         dist_timeout=False, time="10", mounts=(), staging="registry", shared_checkout=True,
+        partition="p", account=None, cache=None, squash=None,
     ),
 }  # fmt: skip
 
@@ -199,6 +202,11 @@ def lab_config(tmp: Path) -> Path:
             "volumes": {"nvme": {"path": str(tmp / "nvme"), "visibility": "node-local"},
                         "cache": {"path": str(tmp / "cache")}},
             "squash": {"dir": str(tmp / "squash"), "import": "submit-host"},
+            "routes": {"restricted": {
+                "partition": "p2", "account": "restricted",
+                "volumes": {"cache": {"path": str(tmp / "restricted-cache")}},
+                "squash-dir": str(tmp / "restricted-squash"),
+            }},
             "srt-slurm": {"network-interface": "", "job-tag": "lab", "dist-timeout-s": 1800},
         }},
         "lab-b": {**common, "models": {"entries": {"Model": {"root": "models", "dir": "model"}}}, "slurm": {
@@ -275,10 +283,15 @@ def test_multinode_lane_stages_workflow_artifacts(harness, monkeypatch, cluster_
     config = srtslurm(checkout)
     assert config["model_paths"] == {"alias": str(tmp / lab["model"])}
     assert config["default_time_limit"] == lab["time"]
+    assert config["default_partition"] == lab["partition"]
+    assert config.get("default_account") == lab["account"]
     assert set(lab["mounts"]) <= set(config.get("default_mounts", {}).values())
+    if lab["cache"] is not None:
+        assert config["default_mounts"][str(tmp / lab["cache"])] == "/cache"
     imported = [line.split()[-1] for line in lines(harness.logs, "enroot")]
     if lab["staging"] == "import":
         assert config["containers"][env["IMAGE"]].endswith(".sqsh") and imported == ["docker://test:tag"]
+        assert Path(config["containers"][env["IMAGE"]]).parent == tmp / lab["squash"]
     else:
         assert config["containers"][env["IMAGE"]] == env["IMAGE"] and imported == []
     outputs = Path(json.loads((workspace / "srt-submission.json").read_text())["output_dir"])

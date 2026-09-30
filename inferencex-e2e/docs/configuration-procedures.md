@@ -169,6 +169,10 @@ Setup source: [`utils/runner_setup/RUNNER_SETUP.md`](../utils/runner_setup/RUNNE
 ### Repository registration
 
 1. Add the fleet's `clusters.<id>` record to [`configs/runners.yaml`](../configs/runners.yaml) (node shape, workload env, models, and the scheduler sub-record: for Slurm the partition, volumes, squash cache and srt-slurm facts; schema in [`configs/CONFIGS.md#runners`](../configs/CONFIGS.md#runners)). Put launch rules that depend on model, framework, precision or recipe in [`infx/launch/policy.py`](../infx/launch/policy.py) or beside the one driver that reads them, never in a driver branch on the cluster id. A cluster on a new scheduler needs that scheduler's settings model under [`infx/clusters/`](../infx/clusters) and its backend under [`infx/launch/backends/`](../infx/launch/backends), one registry entry each, and no driver change; it runs only script-driver (`BENCH_SCRIPT_OVERRIDE`) points.
+   When one physical Slurm pool exposes an alternate partition/account and storage root,
+   declare those facts as a named `slurm.routes` entry and select it from the applicable
+   named workload-policy table. Do not duplicate runner ownership or embed the alternate
+   cluster facts in driver control flow.
 2. Add each exact registered runner name under the intended `labels:` key in [`configs/runners.yaml`](../configs/runners.yaml). New names use `<base-name>_<NN>` with zero-padded indices.
 3. Add every runner name to exactly one `cluster:<id>` label matching that record. `python -m infx.launch run` resolves the cluster from the runner name, so a runner outside every cluster label fails validation and fails at launch.
 4. Master entries whose facts depend on one physical fleet use that exact `cluster:<id>` label. Agentic configs require it.

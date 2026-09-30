@@ -177,6 +177,15 @@ class SrtSlurmSettings(Record):
     extra: dict[str, Any] = Field(default_factory=dict)
 
 
+class SlurmRoute(Record):
+    """A workload-selected route through another partition and shared-storage root."""
+
+    partition: str = Field(min_length=1)
+    account: str = Field(min_length=1)
+    volumes: dict[str, HostVolume] = Field(default_factory=dict)
+    squash_dir: HostPath | None = Field(default=None, alias="squash-dir")
+
+
 class SlurmSettings(SchedulerSettings):
     """Scheduler facts shared by every Slurm submission on the cluster."""
 
@@ -192,6 +201,7 @@ class SlurmSettings(SchedulerSettings):
     salloc_args: tuple[LongOption, ...] = Field(default=(), alias="salloc-args")
     squash: SquashCache | None = None
     srt_slurm: SrtSlurmSettings | None = Field(default=None, alias="srt-slurm")
+    routes: dict[str, SlurmRoute] = Field(default_factory=dict)
 
     @field_validator("gres")
     @classmethod
@@ -238,6 +248,26 @@ class SlurmSettings(SchedulerSettings):
         """Host path of volume ``volume``, or None when the cluster declares no such volume."""
         declared = self.volumes.get(volume)
         return None if declared is None else declared.path
+
+    def routed(self, name: str) -> Self:
+        """Return these settings with the named route's scheduler and storage facts."""
+        try:
+            route = self.routes[name]
+        except KeyError:
+            raise ValueError(f"unknown Slurm route {name!r}") from None
+        squash = self.squash
+        if route.squash_dir is not None:
+            if squash is None:
+                raise ValueError(f"Slurm route {name!r} sets squash-dir without a squash cache")
+            squash = squash.model_copy(update={"dir": route.squash_dir})
+        return self.model_copy(
+            update={
+                "partition": route.partition,
+                "account": route.account,
+                "volumes": {**self.volumes, **route.volumes},
+                "squash": squash,
+            }
+        )
 
 
 def slurm_settings(cluster: Cluster) -> SlurmSettings:

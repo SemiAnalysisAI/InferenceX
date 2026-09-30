@@ -41,6 +41,7 @@ class SrtLane:
     time_limit: str | None = None
     long_time_limit: str | None = None
     long_time: Match | None = None
+    scheduler_routes: tuple[tuple[Match, str], ...] = ()
 
 
 _DYNAMO = any_of("dynamo-sglang", "dynamo-trt", "dynamo-vllm")
@@ -91,6 +92,17 @@ SRT_LANES: dict[tuple[str, LaunchPath], SrtLane] = {
         long_time=Match(
             any_of("dsv4"), frameworks=any_of("dynamo-sglang", "dynamo-trt"), agentic=True
         ),
+        scheduler_routes=(
+            (
+                Match(
+                    any_of("dsv41flash"),
+                    any_of("fp4"),
+                    frameworks=any_of("dynamo-sglang"),
+                    agentic=True,
+                ),
+                "restricted",
+            ),
+        ),
     ),
     ("h100-dgxc", LaunchPath.SRT_MULTI): SrtLane(frameworks=any_of("dynamo-sglang", "dynamo-trt")),
     ("h200-dgxc", LaunchPath.SRT_MULTI): SrtLane(
@@ -128,6 +140,14 @@ def check_request(lane: SrtLane, request: SrtRequest) -> None:
     for match, message in lane.rejects:
         if match(request):
             raise LaunchError(f"{message} (FRAMEWORK={framework})")
+
+
+def scheduler_route(lane: SrtLane, request: SrtRequest) -> str | None:
+    """The one named scheduler route selected for this request, if any."""
+    selected = [name for match, name in lane.scheduler_routes if match(request)]
+    if len(selected) > 1:
+        raise LaunchError(f"request selects several scheduler routes: {', '.join(selected)}")
+    return selected[0] if selected else None
 
 
 def config_file(request: SrtRequest) -> str:

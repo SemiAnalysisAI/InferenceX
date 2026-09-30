@@ -150,6 +150,9 @@ STP（Single Token Prediction，单 Token 预测）是每次前向传播生成�
 ### 仓库注册
 
 1. 在 [`configs/runners.yaml`](../configs/runners.yaml) 中为 fleet 添加 `clusters.<id>` 记录（节点形状、工作负载环境、模型以及调度器子记录：Slurm 为分区、卷、squash 缓存和 srt-slurm 事实；schema 见 [`configs/CONFIGS.md#runners`](../configs/CONFIGS.md#runners)）。依赖模型、框架、精度或配方的启动规则写进 [`infx/launch/policy.py`](../infx/launch/policy.py) 或唯一读取它的驱动旁边，绝不在驱动中按集群 id 分支。新调度器上的集群需要在 [`infx/clusters/`](../infx/clusters) 下新增该调度器的设置模型、在 [`infx/launch/backends/`](../infx/launch/backends) 下新增其后端，各登记一行，无需修改驱动；这类集群只运行 script 驱动（`BENCH_SCRIPT_OVERRIDE`）的点。
+   当同一个物理 Slurm 池提供备用分区/账号和存储根目录时，请将这些事实声明为命名的
+   `slurm.routes` 条目，并在相应的命名工作负载策略表中选择它。不要重复 runner 所有权，
+   也不要把备用集群事实嵌入驱动控制流。
 2. 在 [`configs/runners.yaml`](../configs/runners.yaml) 预期的 `labels:` key 下添加每个精确的已注册 runner 名称。新名称使用 `<base-name>_<NN>`，索引必须两位补零。
 3. 把每个 runner 名称加入且仅加入一个与该记录对应的 `cluster:<id>` 标签。`python -m infx.launch run` 通过 runner 名称解析集群，因此不属于任何集群标签的 runner 会导致校验失败，并在启动时失败。
 4. 事实依赖某个物理 fleet 的主条目使用对应的精确 `cluster:<id>` 标签；agentic 配置强制要求该标签。

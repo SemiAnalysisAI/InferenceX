@@ -621,6 +621,15 @@ clusters:
         Qwen3.5-397B-A17B-NVFP4: {root: scratch, dir: Qwen3.5-397B-A17B-NVFP4-V2}
     scheduler: slurm
     slurm:
+      routes:
+        restricted:
+          partition: batch_2
+          account: restricted
+          volumes:
+            hf-hub-cache: {path: /data/home/slurm-shared/gharunners/hf-hub-cache}
+            aiperf-cache: {path: /data/home/slurm-shared/gharunners/ai-perf-cache}
+            dynamo-wheels: {path: /data/home/slurm-shared/gharunners/dynamo-wheels}
+          squash-dir: /data/home/slurm-shared/gharunners/squash
       partition: batch_1
       account: benchmark
       exclusive: false

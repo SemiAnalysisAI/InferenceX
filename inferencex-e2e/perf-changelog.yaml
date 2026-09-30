@@ -9104,3 +9104,21 @@
     - "Restore the DCP8 LMCache bands on the native srt-slurm recipe: concurrency 14 and 16 (DSpark 3, ReplaySSM) and 48, 56 and 72 (no draft) run ATOM's in-process lmcache_offload connector through roles.agg.args.extra-kv-connectors (srt-slurm patch 507), with 128 GB/rank up to 48 and 192 GB/rank at 56 and 72. Concurrency 1 and 4 stay GPU-resident."
     - "No change to the Inferact/Kimi-K3-DSpark draft's precision: online_quant_config still excludes every draft linear (layers.*, context_proj), so its weights and activations stay BF16, and it keeps the target's FP8 KV cache (kv_cache_dtype fp8). FlyDSL FP8 prefill attention applies only to the target, since the draft runs its block pass as decode attention."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3407
+
+- config-keys:
+    - dsv41flash-fp4-gb300-dynamo-sglang-agentic-agg
+    - dsv41flash-fp4-gb300-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add DeepSeek-V4.1-Flash FP4 AgentX on GB300 with the Dynamo frontend (KV router, session affinity) and SGLang nightly-dev-20260928-81f27fb3 / ai-dynamo 1.6.0.dev20260928, DSpark block size 5."
+    - "Enable the GB300 multi-node launcher route for DeepSeek-V4.1-Flash FP4 with Dynamo + SGLang."
+    - "Use the mounted shared Hugging Face cache for every SGLang server role."
+    - "Aggregated arms: a pure TP4 (EP1) c1 lowest-latency point (the standalone recipe's TP4 c1 settings, static ragged verify and Engram in HBM, behind Dynamo) and the TP2/EP2 c64 prefill-decode-interval 16 and 8 variants (153,542 tok/s/GPU @ 83.3 tok/s/user P90 and 159,510 @ 62.7 measured on GB300 NVL72)."
+    - "Disaggregated curve with Mooncake KV transfer, one TP2/EP2 prefill worker feeding one, two or four TP2/EP2 decode workers: 1P1D at c8/c16/c64/c96 (15,724 @ 326.1, 28,810 @ 288.3, 114,682 @ 147.5 and 144,448 @ 132.2 tok/s/GPU @ tok/s/user P90; P90 TTFT 0.6-4.1 s), 1P2D at c64 (80,214 @ 202.9, 2.0 s) and 1P4D at c64 (49,846 @ 253.9, 1.9 s). The complete nine-point sweep passed, including GSM8K evaluation for all configured eval points."
+    - "新增 GB300 上 DeepSeek-V4.1-Flash FP4 AgentX 的 Dynamo 前端（KV 路由、会话亲和）+ SGLang nightly-dev-20260928-81f27fb3 / ai-dynamo 1.6.0.dev20260928 配方，DSpark block size 5。"
+    - "启用 GB300 多节点启动器中 DeepSeek-V4.1-Flash FP4 的 Dynamo + SGLang 路径。"
+    - "所有 SGLang server role 使用已挂载的共享 Hugging Face cache。"
+    - "聚合分支：纯 TP4（EP1）c1 最低延迟点（沿用单机配方的 TP4 c1 设置、static ragged verify 与 HBM 内 Engram，置于 Dynamo 之后）以及 TP2/EP2 c64 的 prefill-decode-interval 16/8 变体（GB300 NVL72 实测 153,542 tok/s/GPU @ 83.3 tok/s/user P90 与 159,510 @ 62.7）。"
+    - "分离式曲线（Mooncake KV 传输），一个 TP2/EP2 prefill worker 服务一个、两个或四个 TP2/EP2 decode worker：1P1D 的 c8/c16/c64/c96（15,724 @ 326.1、28,810 @ 288.3、114,682 @ 147.5、144,448 @ 132.2 tok/s/GPU @ tok/s/user P90；P90 TTFT 0.6-4.1 s）、1P2D 的 c64（80,214 @ 202.9，2.0 s）与 1P4D 的 c64（49,846 @ 253.9，1.9 s）。完整九点 sweep 已通过，包括所有已配置 eval 点的 GSM8K 评测。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3598
