@@ -158,15 +158,3 @@ class ScriptRequest(LaunchRequest):
     model: str = Field(alias="MODEL")
     gpu_count: int = Field(alias="GPU_COUNT")
     salloc_time_limit: int = Field(alias="SALLOC_TIME_LIMIT")
-
-
-class AmdUtilsRequest(LaunchRequest):
-    """An MI355X AgentX job submitted through amd_utils, which serves ``MODEL``'s basename."""
-
-    github_workspace: Path = Field(alias="GITHUB_WORKSPACE")
-    exp_name: str = Field(alias="EXP_NAME")
-    precision: str = Field(alias="PRECISION")
-    framework: str = Field(alias="FRAMEWORK")
-    model: str = Field(alias="MODEL")
-    user: str | None = Field(None, alias="USER")
-    keep_logs: OneFlag = Field(False, alias="KEEP_LOGS")

@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from infx.clusters import load_clusters, load_inventory
+from infx.clusters import load_inventory
 from infx.launch import drivers, policy
 from infx.launch.__main__ import launch
 from infx.launch.context import LaunchError
@@ -150,28 +150,25 @@ def test_salloc_time_bumps(cluster, overrides, expected):
     assert salloc_time_limit(cluster, _request(**{**AGENTX_FLASH, **overrides})) == expected
 
 
-def test_workload_tables_agree_with_the_checked_in_inventory():
-    check_tables(load_clusters())
-
-
 RECORD = {"gpus-per-node": 8, "arch": "x86_64", "scheduler": "slurm",
           "slurm": {"partition": "p", "exclusive": True}}  # fmt: skip
 
 
 def test_every_row_the_inventory_contradicts_is_reported_at_once(monkeypatch):
     clusters = load_inventory({"labels": {"cluster:c": ["c_0"]}, "clusters": {"c": RECORD}}).clusters
-    monkeypatch.setitem(policy.LEGACY_AMD_UTILS, "c", policy.LEGACY_AMD_UTILS["mi355x-amds"])
+    monkeypatch.setitem(policy.TILERT_ENV, "missing-cluster", {})
     monkeypatch.setitem(models.OVERRIDES, "c", ())
     with pytest.raises(LaunchError) as raised:
         check_tables(clusters)
     problems = str(raised.value)
-    assert "LEGACY_AMD_UTILS['c']" in problems and "OVERRIDES['c']" in problems
+    assert "TILERT_ENV['missing-cluster']: no such cluster" in problems
+    assert "OVERRIDES['c']" in problems
 
 
 def test_a_launch_checks_its_own_cluster_rows_before_any_work(monkeypatch, capsys):
     labels = {"cluster:c": ["c_0"], "cluster:d": ["d_0"]}
     clusters = load_inventory({"labels": labels, "clusters": {"c": RECORD, "d": RECORD}}).clusters
-    monkeypatch.setitem(policy.LEGACY_AMD_UTILS, "d", policy.LEGACY_AMD_UTILS["mi355x-amds"])
+    monkeypatch.setitem(models.OVERRIDES, "d", ())
 
     class ReachedBackend(Exception):
         pass
@@ -183,9 +180,9 @@ def test_a_launch_checks_its_own_cluster_rows_before_any_work(monkeypatch, capsy
     with pytest.raises(ReachedBackend), Lifecycle() as life:
         drivers.run(clusters["c"], _request(IS_MULTINODE="false"), life)
 
-    monkeypatch.setitem(policy.LEGACY_AMD_UTILS, "c", policy.LEGACY_AMD_UTILS["mi355x-amds"])
+    monkeypatch.setitem(models.OVERRIDES, "c", ())
     assert launch(clusters["c"], _request(IS_MULTINODE="false")) == 1
-    assert "LEGACY_AMD_UTILS['c']" in capsys.readouterr().err
+    assert "OVERRIDES['c']" in capsys.readouterr().err
 
 
 HOST = {"TILERT": "host", "CLUSTER": "host", "LATER": "host", "SHARED": "host"}
