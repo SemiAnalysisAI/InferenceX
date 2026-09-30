@@ -9236,3 +9236,31 @@
     - "Set standalone Engram normalization epsilon to the released checkpoint's 1e-20; retain clamp 1e-6. Earlier 1e-6 samples remain diagnostic only."
     - "独立 Engram 归一化 epsilon 改为发布检查点的 1e-20，clamp 保持 1e-6；此前 epsilon=1e-6 的样本仅用于诊断。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607
+
+- config-keys:
+  - dsv41flash-fp4-b200-sglang-4gpu-8k256
+  - dsv41flash-fp4-b200-sglang-8gpu-cohort-smoke
+  - dsv41flash-fp4-b200-sglang-8gpu-128k256
+  - dsv41flash-fp4-b300-sglang-4gpu-8k256
+  - dsv41flash-fp4-b300-sglang-8gpu-cohort-smoke
+  - dsv41flash-fp4-b300-sglang-8gpu-128k256
+  scenario-type:
+  - fixed-seq-len
+  description:
+  - 'Add requested reduced-chip comparisons: four-GPU batch-1 DSpark N7/8K and eight-GPU
+    DP/EP long-context N5. The new client checks a common full-batch decode window
+    and captures a separate profile wave; global batches stay 384/1536/2560.'
+  - 新增用户要求的减少芯片数量对比：四 GPU 单请求 DSpark N7/8K，以及八 GPU DP/EP 长上下文 N5。新客户端校验所有请求共同处于 decode
+    的窗口，并单独采集剖析；全局 batch 保持 384/1536/2560。
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607
+
+- config-keys:
+    - dsv41flash-fp4-h200-sglang-profile-8k256
+    - dsv41flash-fp4-b200-sglang-profile-8k256
+    - dsv41flash-fp4-b300-sglang-profile-8k256
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Require a trace from every configured rank and publish research profiles directly as profiles_* CI artifacts."
+    - "要求每个配置 rank 都产出 trace，并以 profiles_* CI artifact 直接发布研究剖析。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607

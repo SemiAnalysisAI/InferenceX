@@ -1,6 +1,6 @@
 base:
   schema: 2
-  name: dsv41flash-fp4-b300-profile-8k256
+  name: dsv41flash-b300-4gpu-8k256
   model:
     path: hf:deepseek-ai/DeepSeek-V4.1-Flash
     container: lmsysorg/sglang:nightly-dev-cu13-20260922-582389ce@sha256:35ea4d321b0735051dcce2599fc495853ad1ef30f6a1908f0a75e74204362d14
@@ -32,8 +32,8 @@ base:
         tool-call-parser: auto
         watchdog-timeout: 3600
         enable-metrics: true
-        tensor-parallel-size: 8
-        expert-parallel-size: 8
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
         data-parallel-size: 1
         moe-runner-backend: flashinfer_mxfp4
         disable-shared-experts-fusion: true
@@ -52,11 +52,11 @@ base:
         SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1'
         SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
         SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '0'
-      gpus: 8
+      gpus: 4
   benchmark:
     type: custom
     command: python3 /infmax-workspace/research/dsv41/experiment.py --mode both --output
-      /logs/research --gpu-count 8
+      /logs/research --gpu-count 4
     env:
       MODEL: deepseek-ai/DeepSeek-V4.1-Flash
       ISL: '8192'
@@ -64,4 +64,4 @@ base:
       RANDOM_RANGE_RATIO: '1.0'
       USE_CHAT_TEMPLATE: 'true'
       CONC: '1'
-override_tp8_c1: {}
+override_tp4_c1: {}

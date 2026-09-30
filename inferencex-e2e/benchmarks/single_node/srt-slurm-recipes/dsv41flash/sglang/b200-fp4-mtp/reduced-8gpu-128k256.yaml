@@ -1,0 +1,111 @@
+base:
+  schema: 2
+  name: dsv41flash-b200-8gpu-128k256
+  model:
+    path: hf:deepseek-ai/DeepSeek-V4.1-Flash
+    container: lmsysorg/sglang:nightly-dev-cu13-20260922-582389ce@sha256:0e1b14e302619a42ef5581b87db6804651d4f946301cf543d74a3a1eb1c33b40
+    precision: fp4
+  resources:
+    gpu_type: b200
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      args:
+        served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
+        trust-remote-code: true
+        prefill-decode-interval: 0
+        speculative-algorithm: DSPARK
+        speculative-dspark-block-size: 5
+        cuda-graph-max-bs-decode: 48
+        reasoning-parser: auto
+        tool-call-parser: auto
+        watchdog-timeout: 3600
+        enable-metrics: true
+        tensor-parallel-size: 8
+        expert-parallel-size: 8
+        data-parallel-size: 8
+        moe-runner-backend: flashinfer_mxfp4
+        disable-shared-experts-fusion: true
+        speculative-num-draft-tokens: 6
+        chunked-prefill-size: 8192
+        context-length: 132352
+        max-running-requests: 384
+        mem-fraction-static: 0.8
+        swa-prefix-tails: 4096
+        stream-interval: 1
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        max-prefill-tokens: 8192
+        dist-timeout: 3600
+      env:
+        PYTHONNOUSERSITE: '1'
+        PYTHONUNBUFFERED: '1'
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        SGLANG_DEFAULT_THINKING: '1'
+        SGLANG_DSV41_REASONING_EFFORT: high
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1'
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
+        SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '0'
+        SGLANG_SIMULATE_ROUND_ROBIN_EXPERTS: '1'
+        SGLANG_RAGGED_VERIFY_MODE: static
+        SGLANG_SHARED_EXPERT_TP1: '1'
+        SGLANG_DP_SHARED_EXPERT_LOCAL: '1'
+      gpus: 8
+  benchmark:
+    type: custom
+    command: python3 /infmax-workspace/research/dsv41/long_context.py --output /logs
+      --profile-steps 8 --gpu-count 8 --result-layout single
+    env:
+      MODEL: deepseek-ai/DeepSeek-V4.1-Flash
+      ISL: '131072'
+      OSL: '256'
+      RANDOM_RANGE_RATIO: '1.0'
+      USE_CHAT_TEMPLATE: 'true'
+      CONC: '384'
+      CONC_LIST: '384'
+override_c384: {}
+override_c1536:
+  roles:
+    agg:
+      args:
+        max-running-requests: 1536
+        cuda-graph-max-bs-decode: 192
+        mem-fraction-static: 0.85
+  benchmark:
+    env:
+      CONC: '1536'
+      CONC_LIST: '1536'
+override_c2560:
+  roles:
+    agg:
+      args:
+        max-running-requests: 2560
+        cuda-graph-max-bs-decode: 320
+        mem-fraction-static: 0.9
+  benchmark:
+    env:
+      CONC: '2560'
+      CONC_LIST: '2560'
+override_smoke:
+  name: dsv41flash-b200-8gpu-cohort-smoke
+  roles:
+    agg:
+      args:
+        max-running-requests: 32
+        cuda-graph-max-bs-decode: 4
+        context-length: 16384
+  benchmark:
+    env:
+      ISL: '8192'
+      CONC: '32'
+      CONC_LIST: '32'

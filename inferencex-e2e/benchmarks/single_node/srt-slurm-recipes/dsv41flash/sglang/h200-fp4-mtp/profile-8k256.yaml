@@ -1,4 +1,3 @@
-# Research-only: unprofiled measurement, then trace capture and isolated operator work.
 base:
   schema: 2
   name: dsv41flash-fp4-h200-profile-8k256
@@ -59,7 +58,7 @@ base:
   benchmark:
     type: custom
     command: python3 /infmax-workspace/research/dsv41/experiment.py --mode both --output
-      /logs/research
+      /logs/research --gpu-count 8
     env:
       MODEL: deepseek-ai/DeepSeek-V4.1-Flash
       ISL: '8192'

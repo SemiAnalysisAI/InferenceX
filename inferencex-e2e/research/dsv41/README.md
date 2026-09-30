@@ -7,7 +7,7 @@ The H200 W4A8 activation setting also applies to the DSpark head and was
 explicitly requested for the comparison. All engines use released weights and
 native kernels; no serving-engine patches are applied.
 
-`experiment.py --mode both --output /logs/research` runs the existing fixed-length
+`experiment.py --mode both --output /logs/research --gpu-count 8` runs the existing fixed-length
 client first, then a separate 16-step CPU/GPU serving trace, then standalone
 Engram gate cases on GPU 0 while the serving engine is idle. Only the initial,
 unprofiled measurement is a serving performance result. Raw traces and operator
@@ -37,3 +37,23 @@ and sparse indexers, sparse MLA, Engram hashing, and single-GPU CPU offload.
 Their shapes, precision, timing boundary, cache protocol, warmups, repetitions,
 and statistical summaries must be recorded before cross-platform ratios are
 reported. Architecture-specific pipeline counters are not interchangeable.
+
+## Reduced-chip serving and profile artifacts
+
+The primary comparison uses four B200/B300 GPUs for batch-1 8K and eight for
+128K global batches 384/1536/2560. The long-context client submits one unique
+full-concurrency wave, after a separate 32-token warmup and cache flush. It sends
+chat-templated token IDs, checks server-reported lengths, and retains every
+streamed token-count timestamp. A common interior decode window must exist for
+all requests after dropping eight leading and eight trailing decode chunks;
+otherwise the comparison fails rather than claiming the requested active batch.
+Ordinary client metrics and steady streaming metrics remain separate from model
+timing. Prefill/decode interleaving is disabled so queued prefixes fill first.
+A second, cached-prefix wave generates 1024 tokens and begins an eight-step
+profile after every request has generated at least 64 tokens. This wave is not a
+performance result.
+
+CI now publishes `profiles_*` artifacts containing research traces and data
+directly. Older traces remain in the server-log tarball or the linked report's
+release downloads. `analyze_trace.py` uses CUDA launch correlation to associate
+GPU work with model phases; it preserves both overlapping sums and interval unions.

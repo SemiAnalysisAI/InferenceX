@@ -6,7 +6,7 @@
 DSpark 草稿头，用户已明确要求在本次对比中启用。所有引擎均使用发布权重与原生
 内核，不修改服务引擎。
 
-`experiment.py --mode both --output /logs/research` 先运行现有固定长度客户端，
+`experiment.py --mode both --output /logs/research --gpu-count 8` 先运行现有固定长度客户端，
 再单独采集 16 步 CPU/GPU 服务 trace，最后在服务引擎空闲时用 GPU 0 测量独立
 Engram gate。只有最初未启用 profiler 的测量属于服务性能结果。原始 trace 和算子
 JSON 保存在 server-log artifact 中。剖析请求沿用相同聊天格式、精确长度及 DSpark
@@ -28,3 +28,18 @@ BF16 容差与 PyTorch 公式对照，并要求掩码行与输入逐位一致；
 前处理及后处理、稠密和稀疏 Indexer、Sparse MLA、Engram hash、单 GPU CPU offload。
 报告跨平台比值前，必须记录形状、精度、计时边界、缓存协议、预热、重复次数和统计
 口径。特定架构的流水线计数器不能直接相互替代。
+
+## 减少芯片数量的服务对比与剖析产物
+
+主要对比使用四张 B200/B300 测量单请求 8K，八张测量 128K、全局 batch
+384/1536/2560。长上下文客户端先单独预热 32 个输出 token 并清空缓存，再提交一批
+互不重复的完整并发请求。发送已渲染聊天模板的 token ID，校验服务端实际长度，
+并保留每个流式 token 计数的时间戳。去掉开头和末尾各八个 decode chunk 后，所有
+请求必须存在共同的内部 decode 窗口，否则判定对比无效。普通客户端指标、稳定流式
+指标和模型计时分别保留；禁用 prefill/decode 交替，使排队的前缀先完成。第二批复用
+缓存前缀并生成 1024 个 token，待所有请求至少生成 64 个 token 后采集八步剖析；
+该批不作为性能结果。
+
+CI 现在直接发布含研究 trace 与数据的 `profiles_*` artifact。旧 trace 仍可从
+server-log tar 包或结果报告中的 release 下载。`analyze_trace.py` 根据 CUDA launch
+关联信息归属模型阶段，同时保留重叠耗时之和与区间并集。

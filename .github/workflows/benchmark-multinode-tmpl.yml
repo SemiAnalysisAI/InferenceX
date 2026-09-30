@@ -483,6 +483,19 @@ jobs:
             ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/agentic/**/power_validation.json
           if-no-files-found: ignore
 
+      - name: Export research profiles
+        if: ${{ always() && env.MODEL_PREFIX == 'dsv41flash' }}
+        working-directory: ${{ env.INFERENCEX_E2E_ROOT }}
+        run: python3 research/dsv41/export_profiles.py --archive multinode_server_logs.tar.gz --output research-profiles
+
+      - name: Upload research profiles
+        if: ${{ always() && env.MODEL_PREFIX == 'dsv41flash' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: profiles_${{ env.RESULT_FILENAME }}
+          path: ${{ env.INFERENCEX_E2E_ROOT }}/research-profiles/
+          if-no-files-found: ignore
+
       - name: Upload server logs
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
