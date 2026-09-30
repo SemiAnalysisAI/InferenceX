@@ -73,3 +73,14 @@ Every case checks the reference formula, exact masked-row preservation and ten
 production kernel events. Raw traces, all timings, errors and versions are saved.
 These measurements do not replace the original SGLang measurements or constitute
 a full serving benchmark.
+
+## vLLM serving reruns
+
+`vllm_serving.py` runs the ordinary fixed-sequence client before enabling native
+vLLM profiling. Research recipes use the pinned `ddd6fbca` image, four/eight GPUs,
+TP/EP equal to the device count, DSpark seven drafts, and disabled prefix caching.
+Acceptance remains a launcher input. The Python API frontend is selected to
+expose profile endpoints. A separate warmed request records at most 16 engine
+iterations, then explicitly stops and exports profiling. The client validates
+8192/256 usage and a GPU-kernel trace for every configured rank. This is a new
+framework measurement; prior SGLang results are not relabeled as vLLM results.

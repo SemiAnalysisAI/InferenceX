@@ -9284,3 +9284,21 @@
     - "Add a separate production vLLM post-WKV gate microbenchmark with in-kernel masking, BF16/FP32 normalization weights, source provenance and per-case correctness checks; serving recipes unchanged."
     - "新增独立 vLLM 生产版 post-WKV 门控微基准，测量内核内掩码和 BF16/FP32 归一化权重，记录源码溯源并逐项校验正确性；服务配置不变。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607
+
+- config-keys:
+  - dsv41flash-fp4-h200-vllm-4gpu-8k256
+  - dsv41flash-fp4-h200-vllm-8gpu-8k256
+  - dsv41flash-fp4-b200-vllm-4gpu-8k256
+  - dsv41flash-fp4-b200-vllm-8gpu-8k256
+  - dsv41flash-fp4-b300-vllm-4gpu-8k256
+  - dsv41flash-fp4-b300-vllm-8gpu-8k256
+  scenario-type:
+  - fixed-seq-len
+  description:
+  - Add vLLM four/eight-GPU batch-1 research runs with DSpark seven drafts and native
+    per-rank profiling; retain prior framework measurements as history.
+  - "\u65B0\u589E vLLM \u56DB\u5361\u53CA\u516B\u5361\u5355\u8BF7\u6C42\u7814\u7A76\
+    \u6D4B\u8BD5\uFF0C\u4F7F\u7528 DSpark \u4E03\u4E2A\u8349\u7A3F token \u548C\u539F\
+    \u751F\u9010 rank \u5256\u6790\uFF1B\u4FDD\u7559\u539F\u6846\u67B6\u5386\u53F2\
+    \u6D4B\u91CF\u3002"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607

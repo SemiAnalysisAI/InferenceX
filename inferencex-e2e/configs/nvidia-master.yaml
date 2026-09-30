@@ -9425,3 +9425,124 @@ dsv41flash-fp4-h200-sglang-4gpu-8k256:
         conc-list:
         - 1
         srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/sglang/h200-fp4-mtp/reduced-4gpu-8k256.yaml
+
+dsv41flash-fp4-h200-vllm-4gpu-8k256:
+  image: vllm/vllm-openai:nightly-ddd6fbca148a867aad1fcab7ec72f582b9977db4
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:h200-dgxc
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 256
+      search-space:
+      - tp: 4
+        ep: 4
+        dp-attn: false
+        spec-decoding: mtp
+        conc-list:
+        - 1
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/h200-fp4-mtp/research-4gpu-8k256.yaml
+dsv41flash-fp4-h200-vllm-8gpu-8k256:
+  image: vllm/vllm-openai:nightly-ddd6fbca148a867aad1fcab7ec72f582b9977db4
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:h200-dgxc
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 256
+      search-space:
+      - tp: 8
+        ep: 8
+        dp-attn: false
+        spec-decoding: mtp
+        conc-list:
+        - 1
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/h200-fp4-mtp/research-8gpu-8k256.yaml
+dsv41flash-fp4-b200-vllm-4gpu-8k256:
+  image: vllm/vllm-openai:nightly-ddd6fbca148a867aad1fcab7ec72f582b9977db4
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:b200-nscale
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 256
+      search-space:
+      - tp: 4
+        ep: 4
+        dp-attn: false
+        spec-decoding: mtp
+        conc-list:
+        - 1
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/b200-fp4-mtp/research-4gpu-8k256.yaml
+dsv41flash-fp4-b200-vllm-8gpu-8k256:
+  image: vllm/vllm-openai:nightly-ddd6fbca148a867aad1fcab7ec72f582b9977db4
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:b200-nscale
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 256
+      search-space:
+      - tp: 8
+        ep: 8
+        dp-attn: false
+        spec-decoding: mtp
+        conc-list:
+        - 1
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/b200-fp4-mtp/research-8gpu-8k256.yaml
+dsv41flash-fp4-b300-vllm-4gpu-8k256:
+  image: vllm/vllm-openai:nightly-ddd6fbca148a867aad1fcab7ec72f582b9977db4
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:b300-dsxe
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 256
+      search-space:
+      - tp: 4
+        ep: 4
+        dp-attn: false
+        spec-decoding: mtp
+        conc-list:
+        - 1
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/b300-fp4-mtp/research-4gpu-8k256.yaml
+dsv41flash-fp4-b300-vllm-8gpu-8k256:
+  image: vllm/vllm-openai:nightly-ddd6fbca148a867aad1fcab7ec72f582b9977db4
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:b300-dsxe
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 256
+      search-space:
+      - tp: 8
+        ep: 8
+        dp-attn: false
+        spec-decoding: mtp
+        conc-list:
+        - 1
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/b300-fp4-mtp/research-8gpu-8k256.yaml
