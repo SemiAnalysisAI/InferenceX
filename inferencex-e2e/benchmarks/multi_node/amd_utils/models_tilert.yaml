@@ -1,0 +1,6 @@
+# Model-owned engine settings for ENGINE=tilert. Everything the caller owns
+# (profile, topology, ports, dtypes, draft depth) is set by the recipe, not here.
+GLM-5.3:
+  prefill_env: "VLLM_ROCM_USE_AITER=1 VLLM_ROCM_USE_AITER_MOE=1 VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1 VLLM_ENGINE_READY_TIMEOUT_S=10800"
+  prefill_extra_flags: ""
+  decode_extra_flags: ""
