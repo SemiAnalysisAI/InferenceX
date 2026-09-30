@@ -5,7 +5,7 @@ base:
   name: qwen3.5-fp8-mi355x-sglang-agentic
   model:
     path: hf:Qwen/Qwen3.5-397B-A17B-FP8
-    container: lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260927
+    container: lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260929
     precision: fp8
   resources:
     gpu_type: mi355x
@@ -149,6 +149,7 @@ override_tp4_hicache_c16:
         cuda-graph-max-bs-decode: 32
         enable-hierarchical-cache: true
         hicache-ratio: 1.5
+        hicache-size: 400
         hicache-write-policy: write_through_selective
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
@@ -167,6 +168,7 @@ override_tp4_hicache_c18:
         cuda-graph-max-bs-decode: 36
         enable-hierarchical-cache: true
         hicache-ratio: 1.5
+        hicache-size: 400
         hicache-write-policy: write_through_selective
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
@@ -185,6 +187,7 @@ override_tp4_hicache_c20:
         cuda-graph-max-bs-decode: 40
         enable-hierarchical-cache: true
         hicache-ratio: 1.5
+        hicache-size: 400
         hicache-write-policy: write_through_selective
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
@@ -203,6 +206,7 @@ override_tp4_hicache_c22:
         cuda-graph-max-bs-decode: 44
         enable-hierarchical-cache: true
         hicache-ratio: 1.5
+        hicache-size: 400
         hicache-write-policy: write_through_selective
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
@@ -221,6 +225,7 @@ override_tp4_hicache_c24:
         cuda-graph-max-bs-decode: 48
         enable-hierarchical-cache: true
         hicache-ratio: 1.5
+        hicache-size: 400
         hicache-write-policy: write_through_selective
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
@@ -239,6 +244,7 @@ override_tp4_hicache_c28:
         cuda-graph-max-bs-decode: 56
         enable-hierarchical-cache: true
         hicache-ratio: 1.5
+        hicache-size: 400
         hicache-write-policy: write_through_selective
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
@@ -257,6 +263,7 @@ override_tp4_hicache_c32:
         cuda-graph-max-bs-decode: 64
         enable-hierarchical-cache: true
         hicache-ratio: 1.5
+        hicache-size: 400
         hicache-write-policy: write_through_selective
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
@@ -275,6 +282,7 @@ override_tp4_hicache_c36:
         cuda-graph-max-bs-decode: 72
         enable-hierarchical-cache: true
         hicache-ratio: 1.5
+        hicache-size: 400
         hicache-write-policy: write_through_selective
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
@@ -293,10 +301,106 @@ override_tp4_hicache_c40:
         cuda-graph-max-bs-decode: 80
         enable-hierarchical-cache: true
         hicache-ratio: 1.5
+        hicache-size: 400
         hicache-write-policy: write_through_selective
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
   benchmark:
     env:
       CONC: '40'
+      KV_OFFLOADING: dram
+
+override_tp4_hicache_c48:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-running-requests: 96
+        cuda-graph-max-bs-decode: 96
+        enable-hierarchical-cache: true
+        hicache-ratio: 1.5
+        hicache-size: 400
+        hicache-write-policy: write_through_selective
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+  benchmark:
+    env:
+      CONC: '48'
+      KV_OFFLOADING: dram
+
+override_tp4_hicache_c56:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-running-requests: 112
+        cuda-graph-max-bs-decode: 112
+        enable-hierarchical-cache: true
+        hicache-ratio: 1.5
+        hicache-size: 400
+        hicache-write-policy: write_through_selective
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+  benchmark:
+    env:
+      CONC: '56'
+      KV_OFFLOADING: dram
+
+override_tp4_hicache_c64:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-running-requests: 128
+        cuda-graph-max-bs-decode: 128
+        enable-hierarchical-cache: true
+        hicache-ratio: 1.5
+        hicache-size: 400
+        hicache-write-policy: write_through_selective
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+  benchmark:
+    env:
+      CONC: '64'
+      KV_OFFLOADING: dram
+
+override_tp4_hicache_c72:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-running-requests: 144
+        cuda-graph-max-bs-decode: 128
+        enable-hierarchical-cache: true
+        hicache-ratio: 1.5
+        hicache-size: 400
+        hicache-write-policy: write_through_selective
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+  benchmark:
+    env:
+      CONC: '72'
+      KV_OFFLOADING: dram
+
+override_tp4_hicache_c80:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-running-requests: 160
+        cuda-graph-max-bs-decode: 128
+        enable-hierarchical-cache: true
+        hicache-ratio: 1.5
+        hicache-size: 400
+        hicache-write-policy: write_through_selective
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+  benchmark:
+    env:
+      CONC: '80'
       KV_OFFLOADING: dram
