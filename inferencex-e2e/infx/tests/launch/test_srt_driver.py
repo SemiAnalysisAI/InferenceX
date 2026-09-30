@@ -19,7 +19,6 @@ import yaml
 
 from infx.launch.__main__ import main
 from infx.launch.drivers.srt import lanes, models
-from infx.launch.drivers.srt.checkout import SRT_FORKS
 from infx.launch.drivers.srt.lanes import LaneMount, SrtLane
 from infx.launch.drivers.srt.models import Override
 from infx.launch.policy import LaunchPath, Match
@@ -394,22 +393,21 @@ def test_b300_flash_agentx_reenters_inside_a_batch_allocation(harness):
     assert list(runner_temp.glob("srt-batch.*.sh")) == []
 
 
-def test_tilert_native_lane_runs_on_its_fork_without_patches(harness):
+def test_tilert_native_lane_uses_upstream_submission_and_role_images(harness):
     env = lane_env(
         harness, "b200-nscale", MODEL_PREFIX="glm5.1", PRECISION="fp8", FRAMEWORK="tilert",
         MODEL="zai-org/GLM-5.1-FP8", SPEC_DECODING="mtp", IS_AGENTIC="1", ISL="0", OSL="0",
         FAKE_RESULTS="agentic", PREFILL_IMAGE="prefill:tag",
-        FAKE_SRT_COMMIT=SRT_FORKS["tilert"].commit,
     )  # fmt: skip
     assert_ok(launch(env, harness.config, harness.workspace))
 
-    assert not any(" apply " in f" {line} " for line in lines(harness.logs, "git"))
+    assert any(" apply " in f" {line} " for line in lines(harness.logs, "git"))
     [call] = srtctl_calls(harness.logs)
-    assert not {"--json", "--no-preflight", "benchmark.stream_output=true"} & set(call["argv"])
+    assert {"--json", "--no-preflight", "benchmark.stream_output=true"} <= set(call["argv"])
     config = srtslurm(Path(call["cwd"]))
-    assert "default_health_check" not in config
-    assert config["containers"]["tilert-decode"].endswith("/test_tag.sqsh")
-    assert config["containers"]["tilert-prefill"].endswith("/prefill_tag.sqsh")
+    assert config["default_health_check"]["max_attempts"] > 0
+    assert config["containers"]["test:tag"].endswith("/test_tag.sqsh")
+    assert config["containers"]["prefill:tag"].endswith("/prefill_tag.sqsh")
     assert config["default_mounts"][str(harness.workspace)] == "/infmax-workspace"
     assert json.loads((harness.workspace / "point-identity_conc4.json").read_text()) == {"conc": 4}
 

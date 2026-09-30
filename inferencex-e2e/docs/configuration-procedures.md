@@ -25,7 +25,7 @@ Delete retired entries from the active master configs; they are not archived. Gi
 
 ## Dependency submodules
 
-Git records the exact dependency commits. [`.gitmodules`](../../.gitmodules) defines the repositories: AIPerf at `utils/aiperf`, NVIDIA srt-slurm at `utils/srt-slurm`. TileRT is a documented manual fork checkout in the srt driver ([`infx/launch/drivers/srt/checkout.py`](../infx/launch/drivers/srt/checkout.py)), not a separate submodule.
+Git records the exact dependency commits. [`.gitmodules`](../../.gitmodules) defines the repositories: AIPerf at `utils/aiperf`, NVIDIA srt-slurm at `utils/srt-slurm`. All srt-slurm jobs, including TileRT, use the pinned upstream submodule.
 
 Initialize them before running benchmarks locally:
 
@@ -33,7 +33,7 @@ Initialize them before running benchmarks locally:
 git submodule update --init
 ```
 
-To upgrade, fetch and check out the desired commit inside the relevant submodule, then commit the updated submodule pointer in InferenceX. Benchmark workflows already initialize submodules. Slurm launchers make a local Git clone for each job so recipe staging and runtime writes do not modify the submodule, and record the actual commit for result provenance. NVIDIA setup clones locally; TileRT setup fetches its pinned fork commit over the network.
+To upgrade, fetch and check out the desired commit inside the relevant submodule, then commit the updated submodule pointer in InferenceX. Benchmark workflows already initialize submodules. Slurm launchers make a local Git clone for each job so recipe staging and runtime writes do not modify the submodule, and record the actual commit for result provenance.
 
 Single-node fixed-sequence recipes use NVIDIA upstream srt-slurm. ATOM recipes use
 the native `atomesh` frontend with one aggregate worker and

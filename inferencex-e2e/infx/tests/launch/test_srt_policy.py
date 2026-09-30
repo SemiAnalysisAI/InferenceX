@@ -145,11 +145,10 @@ def test_every_recipe_alias_maps_to_the_checkpoint_and_literals_pass_through(tmp
     assert resolved == {alias: str(tmp_path / path) for alias, path in paths.items()}
 
 
-def test_only_a_fork_may_run_a_recipe_the_mirror_lacks(tmp_path):
+def test_missing_recipe_fails_before_model_resolution(tmp_path):
     c, point = cluster(tmp_path), request(MODEL="org/M", GITHUB_WORKSPACE=str(tmp_path))
-    assert model_paths(c, point, "recipes/fork-only.yaml", "/m", fork=True) == {}
     with pytest.raises(LaunchError, match="not in the recipe mirror"):
-        model_paths(c, point, "recipes/fork-only.yaml", "/m")
+        model_paths(c, point, "recipes/missing.yaml", "/m")
 
 
 def test_matching_single_node_points_read_the_shared_hub_cache(tmp_path, monkeypatch):
