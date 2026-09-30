@@ -9264,3 +9264,12 @@
     - "Require a trace from every configured rank and publish research profiles directly as profiles_* CI artifacts."
     - "要求每个配置 rank 都产出 trace，并以 profiles_* CI artifact 直接发布研究剖析。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607
+
+- config-keys:
+    - dsv41flash-fp4-h200-sglang-4gpu-8k256
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Add four-GPU H200 batch-1 8K/256 research measurement with TP4/EP4, native W4A8, DSpark seven drafts, and four-rank profiling."
+    - "新增四卡 H200 单请求 8K/256 研究测试，使用 TP4/EP4、原生 W4A8、DSpark 七个草稿 token，并采集四个 rank 的性能分析。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607
