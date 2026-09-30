@@ -20,7 +20,7 @@ base:
     source:
       rev: 805a77f053d807b0d8def5d27f674a6df0ed839e
   slurm:
-    time_limit: '00:24:00'
+    time_limit: '00:30:00'
   health_check:
     max_attempts: 1440
     interval_seconds: 10
