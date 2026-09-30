@@ -9395,3 +9395,18 @@
     - "Keep TP8 long-context baseline at batch384; move larger global batches to native DP8/EP8 variants so per-engine token budgets preserve full decode batches."
     - "TP8 长上下文基线仅保留 batch384；更大全局 batch 移至原生 DP8/EP8，确保逐引擎 token 预算能覆盖完整解码批次。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607
+
+- config-keys:
+  - dsv41flash-fp4-b200-vllm-8gpu-dp-128k-sweep
+  - dsv41flash-fp4-b300-vllm-8gpu-dp-128k-sweep
+  scenario-type:
+  - fixed-seq-len
+  description:
+  - Run global batches 384/1536/2560 sequentially on one DP8/EP8 server sized for
+    batch2560, retaining separate results and new-trace manifests; only the first
+    case uses the standard CI result path.
+  - "\u5728\u6309 batch2560 \u914D\u7F6E\u7684\u540C\u4E00 DP8/EP8 \u670D\u52A1\u4E0A\
+    \u4F9D\u6B21\u6D4B\u91CF\u5168\u5C40 batch384/1536/2560\uFF0C\u5206\u522B\u4FDD\
+    \u7559\u7ED3\u679C\u548C\u65B0\u589E trace \u6E05\u5355\uFF1B\u4EC5\u9996\u4E2A\
+    \u7528\u4F8B\u4F7F\u7528\u6807\u51C6 CI \u7ED3\u679C\u8DEF\u5F84\u3002"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607

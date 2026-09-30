@@ -263,6 +263,10 @@ async def run(args, prompts, tokenizer):
         if steady_error or metrics.completed != concurrency:
             raise RuntimeError(steady_error or "Incomplete request cohort")
         if args.profile_steps:
+            trace_dir = args.trace_dir or (
+                args.output / "research" / "vllm-cohort-profiles"
+            )
+            previous_traces = set(trace_dir.rglob("*.trace.json*"))
             # Reuse the original prompt prefixes; longer outputs leave a stable
             # cohort for capture. This wave is never used as the performance result.
             profiled = await wave(
@@ -278,10 +282,9 @@ async def run(args, prompts, tokenizer):
                 json.dump(profiled, f)
             if not all(r["success"] for r in profiled):
                 raise RuntimeError("Incomplete profiling cohort")
-            traces = list(
-                (args.output / "research" / "vllm-cohort-profiles").rglob(
-                    "*.trace.json*"
-                )
+            traces = sorted(set(trace_dir.rglob("*.trace.json*")) - previous_traces)
+            (out / "trace-files.json").write_text(
+                json.dumps([str(p) for p in traces], indent=2) + "\n"
             )
             if len(traces) != args.gpu_count:
                 raise RuntimeError(
@@ -302,6 +305,7 @@ def main():
     parser.add_argument("--profile-steps", type=int, required=True)
     parser.add_argument("--gpu-count", type=int, required=True)
     parser.add_argument("--dp-size", type=int, required=True)
+    parser.add_argument("--trace-dir", type=Path)
     parser.add_argument("--result-layout", choices=["single", "multi"], required=True)
     args = parser.parse_args()
     concurrency = int(os.environ["CONC_LIST"])

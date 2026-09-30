@@ -126,3 +126,13 @@ Native DP8/EP8 variants use shared CPU Engram storage and TP1 within each DP
 replica. The client pins requests to their DP rank across prefix warmup and
 measurement; graph/sequence budgets use per-DP batch. DP variants retain global
 batches 384/1536/2560. The TP8 long-context baseline is limited to batch384.
+
+`vllm_cohort_sweep.py --concurrencies 384 1536 2560` reuses a DP8/EP8 server
+sized for 320 sequences per DP replica. Each case runs in a fresh client process
+and writes separate raw results, events and profile-file manifests. Only the
+first case uses the standard CI result path; every case is also copied into
+`research/cohort-sweep`. A failed case stops the sequence and keeps prior results.
+The profile validator counts only newly created files for each wave, so earlier
+case traces are preserved. Startup and prefix warmup are outside steady-decode
+timing. This is a research sweep, not three independently configured official
+CI matrix measurements.

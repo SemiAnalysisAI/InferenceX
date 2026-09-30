@@ -1,0 +1,85 @@
+"""Run explicit global batches sequentially against one native vLLM server."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--gpu-count", type=int, required=True)
+    parser.add_argument("--dp-size", type=int, required=True)
+    parser.add_argument("--profile-steps", type=int, required=True)
+    parser.add_argument("--concurrencies", nargs="+", type=int, required=True)
+    args = parser.parse_args()
+    if (
+        args.gpu_count <= 0
+        or args.dp_size <= 0
+        or any(c <= 0 or c % args.dp_size for c in args.concurrencies)
+    ):
+        parser.error(
+            "GPU/DP counts must be positive and DP must divide every concurrency"
+        )
+    if args.concurrencies != sorted(set(args.concurrencies)):
+        parser.error("Concurrencies must be unique and ascending")
+    if int(os.environ["CONC"]) != args.concurrencies[0]:
+        parser.error("The matrix concurrency must match the first sweep case")
+    root_name = os.environ["RESULT_FILENAME"]
+    out = args.output / "research" / "cohort-sweep"
+    out.mkdir(parents=True, exist_ok=True)
+    manifest = []
+    for i, concurrency in enumerate(args.concurrencies):
+        case_dir = args.output if i == 0 else out / f"batch{concurrency}"
+        case_dir.mkdir(parents=True, exist_ok=True)
+        name = root_name if i == 0 else f"research_batch{concurrency}"
+        environment = {
+            **os.environ,
+            "CONC": str(concurrency),
+            "CONC_LIST": str(concurrency),
+            "RESULT_FILENAME": name,
+        }
+        command = [
+            sys.executable,
+            str(Path(__file__).with_name("vllm_cohort.py")),
+            "--output",
+            str(case_dir),
+            "--gpu-count",
+            str(args.gpu_count),
+            "--dp-size",
+            str(args.dp_size),
+            "--profile-steps",
+            str(args.profile_steps),
+            "--result-layout",
+            "single",
+            "--trace-dir",
+            str(args.output / "research" / "vllm-cohort-profiles"),
+        ]
+        print(
+            f"Starting global batch {concurrency} on the same vLLM server", flush=True
+        )
+        result = subprocess.run(command, env=environment, check=False)
+        result_path = case_dir / f"{name}.json"
+        if result_path.exists():
+            shutil.copyfile(result_path, out / f"result_batch{concurrency}.json")
+        manifest.append(
+            {
+                "global_batch": concurrency,
+                "returncode": result.returncode,
+                "result_present": result_path.exists(),
+                "result_path": str(result_path),
+            }
+        )
+        (out / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+        if result.returncode:
+            raise subprocess.CalledProcessError(result.returncode, command)
+
+
+if __name__ == "__main__":
+    main()
