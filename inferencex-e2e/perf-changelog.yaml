@@ -9520,3 +9520,13 @@
     - "Add standalone native BF16 sparse MLA measurements with explicit original/compressed banks, all-query numerical validation and raw traces."
     - "新增独立原生 BF16 Sparse MLA 测量，明确原始与压缩 KV 分区，校验全部 query 并保留原始 trace。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-8gpu-dp-128k1024-sweep
+    - dsv41flash-fp4-b300-vllm-8gpu-dp-128k1024-sweep
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Avoid reuse of expired HTTP connections after synchronous large-cohort encoding; retain native pause/resume and full-batch validation."
+    - "避免大批次同步编码后复用过期 HTTP 连接，保留原生暂停/恢复及全 batch 校验。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607

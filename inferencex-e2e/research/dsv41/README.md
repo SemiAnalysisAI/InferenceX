@@ -207,3 +207,7 @@ dequantization are outside timing. Sink logits are zero. Native LSE excludes sin
 Every query/head is checked against an independent FP32 reference before three
 rounds of 3 warmups and 300 profiled calls. Raw GPU kernel durations, annotation
 spans and traces are retained; these are warm repeated-input measurements.
+
+Use fresh HTTP connections for each request. Encoding the next large cohort can
+outlast server keepalive; do not reuse idle control sockets across waves. This
+changes client transport only and leaves engine execution and timing gates intact.

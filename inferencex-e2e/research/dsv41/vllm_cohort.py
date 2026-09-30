@@ -318,7 +318,9 @@ async def run(args, prompts, tokenizer):
     out = args.output / "research" / f"batch{concurrency}"
     out.mkdir(parents=True, exist_ok=True)
     async with aiohttp.ClientSession(
-        connector=aiohttp.TCPConnector(limit=0),
+        # Encoding a large next-wave body can outlast the server keepalive.
+        # Open fresh sockets instead of reusing an idle connection across waves.
+        connector=aiohttp.TCPConnector(limit=0, force_close=True),
         timeout=aiohttp.ClientTimeout(total=14400),
     ) as session:
         warm = await wave(
