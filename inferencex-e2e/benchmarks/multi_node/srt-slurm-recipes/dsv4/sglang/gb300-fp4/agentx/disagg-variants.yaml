@@ -13,7 +13,7 @@ base:
     model:
       repo: "deepseek-ai/DeepSeek-V4-Pro-0813"
     container:
-      image: "lmsysorg/sglang:nightly-dev-cu13-20260829-89816a21"
+      image: "lmsysorg/sglang:nightly-dev-cu13-20260916-c9a8fba9"
   dynamo:
     install: true
     source:
@@ -23,6 +23,21 @@ base:
   health_check:
     max_attempts: 1440
     interval_seconds: 10
+
+  # Starts the standalone Mooncake store daemons that lend decode-node host
+  # DRAM to the store (see MC_SIDECAR_* on the decode role).
+  setup_script: dsv4-gb300-mooncake-sidecar.sh
+
+  # TEMPORARY: the pinned Dynamo wheel still calls ServerArgs.get_model_config,
+  # which this image's SGLang no longer has. Remove once the wheel catches up.
+  environment:
+    PYTHONPATH: /configs/sglang-server-args-compat
+
+  # Tachometer's per-node exporters slow decode steps by a few percent and add
+  # host memory on the head node; this ladder is a throughput measurement.
+  observability:
+    tachometer:
+      enabled: false
   resources:
     gpu_type: gb300
     gpus_per_node: 4
@@ -37,6 +52,10 @@ base:
         node: dedicated
       options:
         max_payload_mb: 32
+    - name: mooncake-master
+      type: mooncake-master
+      args:
+        - --eviction_high_watermark_ratio=0.90
   frontend:
     type: dynamo
     nginx_session_affinity: true
@@ -71,7 +90,7 @@ base:
         SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: "1"
         SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2: '1'
         SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE: '1'
-        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '9216'
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '17408'
         SGLANG_OPT_USE_ONLINE_COMPRESS: '0'
         NCCL_MNNVL_ENABLE: '1'
         NCCL_CUMEM_ENABLE: '1'
@@ -86,6 +105,13 @@ base:
         SGLANG_LOG_MS: '1'
         SGLANG_REQUEST_STATE_WAIT_TIMEOUT: '60'
         SGLANG_NCCL_ALL_GATHER_IN_OVERLAP_SCHEDULER_SYNC_BATCH: '1'
+        MOONCAKE_PROTOCOL: rdma
+        MOONCAKE_GLOBAL_SEGMENT_SIZE: 140gb
+        MOONCAKE_STANDALONE_STORAGE: '0'
+        MC_STORE_CLIENT_METRIC: '1'
+        MC_STORE_CLIENT_METRIC_INTERVAL: '5'
+        MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
+        WITH_NVIDIA_PEERMEM: '0'
       args:
         host: 0.0.0.0
         served-model-name: deepseek-ai/DeepSeek-V4-Pro-0813
@@ -107,10 +133,11 @@ base:
         disaggregation-transfer-backend: mooncake
         disaggregation-mode: prefill
         load-balance-method: total_tokens
-        mem-fraction-static: 0.85
+        # 16k-token chunks per DP rank need ~12 GiB more for the DSV4 indexer.
+        mem-fraction-static: 0.8
         page-size: 256
         swa-full-tokens-ratio: 0.02
-        chunked-prefill-size: 65536
+        chunked-prefill-size: 131072
         disable-flashinfer-autotune: true
         model-loader-extra-config: '{"enable_multithread_load":true,"num_threads":8}'
         kv-events-config: '{"publisher":"zmq","topic":"kv-events","endpoint":"tcp://*:5557"}'
@@ -119,10 +146,9 @@ base:
         speculative-num-steps: 1
         speculative-eagle-topk: 1
         speculative-num-draft-tokens: 7
-        enable-hierarchical-cache: true
-        hicache-write-policy: write_back
-        hicache-ratio: 1
-        hicache-io-backend: direct
+        enable-unified-cache-external-linker: true
+        unified-cache-external-linker-backend: mooncake
+        hicache-storage-backend-extra-config: '{"enable_group_semantics":true}'
     decode:
       nodes: 4
       workers: 1
@@ -155,6 +181,17 @@ base:
         SGLANG_LOG_FORWARD_ITERS: '1'
         SGLANG_LOG_MS: '1'
         SGLANG_REQUEST_STATE_WAIT_TIMEOUT: '60'
+        MOONCAKE_PROTOCOL: rdma
+        MOONCAKE_GLOBAL_SEGMENT_SIZE: 140gb
+        MOONCAKE_STANDALONE_STORAGE: '0'
+        MC_STORE_CLIENT_METRIC: '1'
+        MC_STORE_CLIENT_METRIC_INTERVAL: '5'
+        MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
+        WITH_NVIDIA_PEERMEM: '0'
+        # Consumed by the setup script: each decode node starts this many
+        # standalone Mooncake store daemons of this size to lend its host DRAM.
+        MC_SIDECAR_SEGMENT_SIZE: 180GB
+        MC_SIDECAR_COUNT: '4'
       args:
         host: 0.0.0.0
         served-model-name: deepseek-ai/DeepSeek-V4-Pro-0813
@@ -197,6 +234,10 @@ base:
   benchmark:
     type: custom
     command: bash /infmax-workspace/benchmarks/srt_agentic.sh
+    # The replay client holds ~300 GB of host memory; on the default head node it
+    # shares prefill_0's node and OOMs it. Put it on the etcd/nats node instead.
+    placement:
+      node: dedicated
     env:
       INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
       RESULT_DIR: /logs/agentic
@@ -224,11 +265,11 @@ override_1p1d_c480:
       gpus: 8
       args:
         max-running-requests: 256
-        cuda-graph-max-bs: 256
+        cuda-graph-max-bs-decode: 256
     decode:
       gpus: 16
       args:
-        cuda-graph-max-bs: 256
+        cuda-graph-max-bs-decode: 256
 
 # Agentic-coding SGLang disaggregated recipe for DeepSeek-V4-Pro on GB300
 # (4P x DEP8 / 4D x DEP16, DSpark K=6 + hierarchical-cache KV offload), tuned for concurrency 960.
@@ -247,13 +288,13 @@ override_2p1d_c960:
         OMP_NUM_THREADS: '1'
       args:
         max-running-requests: 256
-        cuda-graph-max-bs: 256
+        cuda-graph-max-bs-decode: 256
     decode:
       env:
         OMP_NUM_THREADS: '1'
         SGLANG_DSV4_MHC_PREWARM: '1'
       args:
-        cuda-graph-max-bs: 256
+        cuda-graph-max-bs-decode: 256
 
 # Agentic-coding SGLang disaggregated Pareto recipe for DeepSeek-V4-Pro on GB300
 # (6P x DEP8 / 4D x DEP16, DSpark K=6 + hierarchical-cache KV offload), tuned for concurrency 1440.
@@ -271,11 +312,11 @@ override_3p1d_c1440:
       gpus: 8
       args:
         max-running-requests: 512
-        cuda-graph-max-bs: 512
+        cuda-graph-max-bs-decode: 512
     decode:
       gpus: 16
       args:
-        cuda-graph-max-bs: 512
+        cuda-graph-max-bs-decode: 512
 
 # Agentic-coding SGLang disaggregated Pareto recipe for DeepSeek-V4-Pro on GB300
 # (8P x DEP8 / 4D x DEP16, DSpark K=6 + hierarchical-cache KV offload), tuned for concurrency 1920.
@@ -301,13 +342,13 @@ override_4p1d_c1920:
         SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "3600"
       args:
         max-running-requests: 1024
-        cuda-graph-max-bs: 1024
+        cuda-graph-max-bs-decode: 1024
     decode:
       gpus: 16
       env:
         SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "3600"
       args:
-        cuda-graph-max-bs: 192
+        cuda-graph-max-bs-decode: 192
   benchmark:
     env:
       AIPERF_HTTP_TCP_USER_TIMEOUT: "900000"

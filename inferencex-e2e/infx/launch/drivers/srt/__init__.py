@@ -138,6 +138,7 @@ def run_multinode(launch: Launch) -> int:
 
     checkout = prepare_checkout(run, checkout_dir(run, shared=shared), power=decision.dcgm)
     overrides = eval_overrides(checkout.root / "recipes", lane, request)
+    overrides += lanes.role_env_overrides(lane, config_file)
     system_python = (
         "/usr/bin/python3" if shared and os.access("/usr/bin/python3", os.X_OK) else None
     )

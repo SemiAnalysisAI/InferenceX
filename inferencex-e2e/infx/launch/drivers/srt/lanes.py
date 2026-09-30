@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import fnmatch
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
@@ -26,6 +27,15 @@ class LaneMount:
 
 
 @dataclass(frozen=True)
+class RoleEnv:
+    """Environment the lane sets on the worker roles of the recipes ``recipe`` globs."""
+
+    recipe: str
+    roles: tuple[str, ...]
+    env: Mapping[str, str]
+
+
+@dataclass(frozen=True)
 class SrtLane:
     """How one cluster's multi-node srt-slurm lane differs from the others."""
 
@@ -41,6 +51,7 @@ class SrtLane:
     time_limit: str | None = None
     long_time_limit: str | None = None
     long_time: Match | None = None
+    role_env: tuple[RoleEnv, ...] = ()
 
 
 _DYNAMO = any_of("dynamo-sglang", "dynamo-trt", "dynamo-vllm")
@@ -90,6 +101,17 @@ SRT_LANES: dict[tuple[str, LaunchPath], SrtLane] = {
         long_time_limit="8:00:00",
         long_time=Match(
             any_of("dsv4"), frameworks=any_of("dynamo-sglang", "dynamo-trt"), agentic=True
+        ),
+        # The Mooncake store transfers from host buffers that only the RDMA transport
+        # registers on the fly. Without an explicit device list the client falls back to
+        # NVLink for same-domain peers, whose address lookup fails and aborts every worker
+        # during the store warmup put. These are this cluster's RDMA devices.
+        role_env=(
+            RoleEnv(
+                "recipes/dsv4/sglang/gb300-fp4/agentx/disagg-variants.yaml",
+                ("prefill", "decode"),
+                {"MOONCAKE_DEVICE": "mlx5_0,mlx5_1,mlx5_2,mlx5_3"},
+            ),
         ),
     ),
     ("h100-dgxc", LaunchPath.SRT_MULTI): SrtLane(frameworks=any_of("dynamo-sglang", "dynamo-trt")),
@@ -145,6 +167,19 @@ def config_file(request: SrtRequest) -> str:
             f"FRAMEWORK={request.framework})"
         )
     return request.config_file
+
+
+def role_env_overrides(lane: SrtLane, config_file: str) -> list[str]:
+    """``--set`` arguments for the lane's role environment on the recipe ``config_file`` names."""
+    recipe = config_file.partition(":")[0]
+    overrides: list[str] = []
+    for rule in lane.role_env:
+        if not fnmatch.fnmatchcase(recipe, rule.recipe):
+            continue
+        for role in rule.roles:
+            for name, value in rule.env.items():
+                overrides += ["--set", f"roles.{role}.env.{name}={value}"]
+    return overrides
 
 
 def srt_time_limit(
