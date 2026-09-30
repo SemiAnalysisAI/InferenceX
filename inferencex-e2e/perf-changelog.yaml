@@ -9149,3 +9149,17 @@
     - "Use AITER attention and allreduce fusion, FP8 KV (fp8_e4m3), and EAGLE MTP (3 steps, topk 1, 4 draft tokens); do not enable ROCm INT4 quick all-reduce. HiCache uses ratio 1.5, write_through_selective, kernel I/O and page_first layout. The matching cookbook recipe is sgl-project/sglang#41849."
     - "The embedded MTP head runs at its stored precision: block-FP8 expert weights and checkpoint dtype for mtp.fc and gates. No separate draft, draft dtype override or submission-side quantization is used."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3602
+
+- config-keys:
+    - dsv4-fp4-b300-dynamo-sglang-agentic-agg
+    - dsv4-fp4-b300-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add DeepSeek-V4-Pro-0813 FP4 B300 Dynamo+SGLang AgentX aggregate TP8 c1 and TP4 c4 recipes, plus disaggregated 1P1D DEP8 c64/c240 and 2P1D DEP8 c480 recipes."
+    - "Use Mooncake for disaggregated KV transfer and install mooncake-transfer-engine-efa-cuda13 0.3.13.post1 during container setup; rely on the DSXE-managed fabric injection without explicit host EFA/OFI mounts."
+    - "Use 192 logical CPUs per task, HiCache ratio 3, decode max-running-requests at twice concurrency, persistent AgentX/Hugging Face caches, and exclude the known degraded DSXE node."
+    - "新增 DeepSeek-V4-Pro-0813 FP4 B300 Dynamo+SGLang AgentX 配方：聚合式 TP8 c1、TP4 c4，以及分离式 1P1D DEP8 c64/c240 和 2P1D DEP8 c480。"
+    - "分离式 KV 传输使用 Mooncake，并在容器初始化时安装 mooncake-transfer-engine-efa-cuda13 0.3.13.post1；依赖 DSXE 管理的网络栈注入，不显式挂载主机 EFA/OFI 目录。"
+    - "每任务使用 192 个逻辑 CPU、HiCache 比例 3，decode 的 max-running-requests 为并发数两倍，挂载持久化 AgentX/Hugging Face 缓存，并排除已知异常 DSXE 节点。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3190
