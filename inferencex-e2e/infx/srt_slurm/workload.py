@@ -78,7 +78,7 @@ def bind_workload(recipe: dict[str, Any], environment: Mapping[str, str]) -> dic
     if not isinstance(benchmark, dict):
         raise ValueError("Recipe must contain a benchmark mapping")
     workload = benchmark.setdefault("env", {})
-    previous = {"${MODEL}"}
+    previous: set[str] = set()
     old_path = model_config.get("path")
     if isinstance(old_path, str) and (old_path.startswith("hf:") or "/" in old_path):
         previous.add(old_path.removeprefix("hf:"))

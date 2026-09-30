@@ -46,16 +46,20 @@ Recipes use `schema: 2`, `engine`, and `roles`. Each worker role owns its node c
 | Recipe path, optionally with an override selector | `additional-settings: CONFIG_FILE=recipes/...yaml` |
 
 Keep topology and tuning synchronized between the recipe and master configuration.
-The master also supplies the serving image, model, ISL/OSL, and selected concurrency.
-InferenceX binds these into one fully materialized recipe after selecting the tuned
-variant. New templates can omit `model.container`, `model.path`, duplicated identity
-image/model fields, and benchmark workload values. Existing literals are overridden.
-Keep concurrency selectors zipped with tuning settings; their selected tuning is
-preserved before the runtime concurrency is bound. Independently pinned role and helper
-images, model aliases, and draft models remain explicit. Use the exact `'${MODEL}'`
-marker for supported served-model or tokenizer fields that follow the target model.
-See [runtime workload binding](../../../docs/configuration-procedures.md#runtime-workload-binding)
-for the environment-to-recipe mapping and model staging behavior.
+The master supplies the serving image, model, ISL/OSL, and selected concurrency;
+InferenceX binds these after selecting the tuned variant. Keep concurrency selectors
+zipped with tuning settings and independently pinned role/helper images explicit.
+
+This directory contains complete native srt-slurm YAML with concrete values. Shared
+parameterized sources belong in `configs/srt-recipes/`, where `sources.yaml` maps native
+recipe paths to common and tuning sources. Runtime and `infx generate` use the same
+loader: merge common then tuning, recursively merge mappings, replace lists, and render
+parameters in parsed scalar values, preserving typed lists. B300 Qwen3.5 FP8 baseline
+and MTP share the single-node common source; GB300 Qwen3.5 FP4 1P1D uses the multi-node
+common source. `infx generate` writes to an empty output directory; explicitly add
+`--refresh-exports` to also refresh registered checked-in native bundle snapshots after
+validation. See [runtime workload binding](../../../docs/configuration-procedures.md#runtime-workload-binding)
+for the generation command, supported inputs, and generator limitations.
 
 For aggregate recipes use `roles.agg`; `roles.decode.nodes: colocate` shares prefill
 nodes and contributes no additional worker nodes to scheduling.
@@ -64,10 +68,9 @@ All referenced recipes must be checked in: srt-slurm 2 ships curated examples in
 
 ## Migration and validation
 
-Install the shared pin in an isolated environment, then use its CLI. Direct upstream
-commands require fully bound recipes: templates that omit runtime workload fields must
-first be materialized by InferenceX. The migration commands below apply to complete
-upstream recipes:
+Install the shared pin in an isolated environment, then use its CLI on complete native
+recipes. InferenceX-only common/tuning sources must first be rendered with `infx generate`;
+do not pass them directly to upstream commands:
 
 ```bash
 srtctl migrate --in-place -f benchmarks/multi_node/srt-slurm-recipes/dsr1/sglang
