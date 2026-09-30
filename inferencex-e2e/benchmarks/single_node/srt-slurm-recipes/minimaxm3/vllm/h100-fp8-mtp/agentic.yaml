@@ -1,11 +1,11 @@
 # MiniMax-M3 MXFP8 AgentX on H100 with vLLM EAGLE3 (the GQA draft head) and
-# optional Mooncake DRAM KV offload. 26 GiB of weights per GPU live in host memory.
+# optional Mooncake DRAM KV offload and an FP8 MSA indexer cache.
 base:
   schema: 2
   name: minimaxm3-fp8-h100-vllm-agentic
   model:
     path: hf:MiniMaxAI/MiniMax-M3-MXFP8
-    container: vllm/vllm-openai:nightly-ddd6fbca148a867aad1fcab7ec72f582b9977db4
+    container: vllm/vllm-openai:nightly-36768d1bfd39094681cdbc8cb37d4b31c0729c89
     precision: fp8
   resources:
     gpu_type: h100
@@ -35,11 +35,12 @@ base:
         served-model-name: MiniMaxAI/MiniMax-M3-MXFP8
         tensor-parallel-size: 8
         data-parallel-size: 1
-        gpu-memory-utilization: 0.90
-        cpu-offload-gb: 26
+        gpu-memory-utilization: 0.93
+        cpu-offload-gb: 5
         attention-backend: TRITON_ATTN
         safetensors-load-strategy: lazy
         kv-cache-dtype: fp8
+        attention-config: '{"indexer_kv_dtype":"fp8"}'
         block-size: 128
         language-model-only: true
         enable-prefix-caching: true
@@ -55,6 +56,7 @@ base:
       env:
         PYTHONNOUSERSITE: '1'
         VLLM_ENGINE_READY_TIMEOUT_S: '7200'
+        VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS: '0'
   benchmark:
     type: custom
     command: bash /infmax-workspace/benchmarks/srt_agentic.sh
@@ -122,7 +124,7 @@ override_tp8_c5:
 
 # DRAM points offload KV to an embedded Mooncake store. Per rank: the host budget
 # (1731 GB = 1612 GiB) less the 414 GiB checkpoint page cache, over TP8, less the
-# 26 GiB CPU weight offload and the 4 GiB local buffer = 119 GB.
+# 5 GiB CPU weight offload and the 4 GiB local buffer = 140 GB.
 override_tp8_c6_dram:
   # The worker's Mooncake client and the master run the same pinned release.
   setup_script: vllm-mooncake-0.3.11.sh
@@ -144,7 +146,7 @@ override_tp8_c6_dram:
         store_config:
           mode: embedded
           metadata_server: P2PHANDSHAKE
-          global_segment_size: 119GB
+          global_segment_size: 140GB
           local_buffer_size: 4GB
           protocol: rdma
           device_name: ''
@@ -187,7 +189,7 @@ override_tp8_c8_dram:
         store_config:
           mode: embedded
           metadata_server: P2PHANDSHAKE
-          global_segment_size: 119GB
+          global_segment_size: 140GB
           local_buffer_size: 4GB
           protocol: rdma
           device_name: ''
