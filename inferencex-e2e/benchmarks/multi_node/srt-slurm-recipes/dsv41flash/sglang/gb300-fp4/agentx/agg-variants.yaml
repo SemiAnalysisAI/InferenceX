@@ -4,15 +4,16 @@
 #
 # One SGLang worker serves prefill and decode with the checkpoint's bundled DSpark
 # draft (block size 5); the Dynamo frontend routes with the KV-aware router and
-# session affinity. The aggregated arms cover the two ends of the curve; the
-# middle band (c16-c256) comes from the disaggregated recipes in disagg-variants.yaml.
-# Measured on GB300 NVL72 (tokens/s/GPU @ P90 interactivity, P90 TTFT; all GSM8K
-# gates passed):
-#   override_tp4_c1        :   6,215 @ 385.0 tok/s/user,  1.2 s  (4 GPUs; GSM8K 0.9735)
-#   override_tp2_c1        :  12,501 @ 377.1 tok/s/user,  0.9 s  (2 GPUs; GSM8K 0.9735)
-#   override_tp2_pdi16_c64 : 153,542 @  83.3 tok/s/user, 15.2 s  (2 GPUs; GSM8K 0.9719)
-#   override_tp2_pdi8_c64  : 159,510 @  62.7 tok/s/user,  6.0 s  (2 GPUs; GSM8K 0.9712)
-# The two c1 arms are the highest-interactivity points of the curve (above the
+# session affinity. The aggregated arms are the two lowest-latency points of the
+# curve; everything from c16 to c256 comes from the disaggregated recipes in
+# disagg-variants.yaml. Measured on GB300 NVL72 (tokens/s/GPU @ P90 interactivity,
+# P90 TTFT; both GSM8K gates passed):
+#   override_tp4_c1 :  6,215 @ 385.0 tok/s/user, 1.2 s  (4 GPUs; GSM8K 0.9735)
+#   override_tp2_c1 : 12,501 @ 377.1 tok/s/user, 0.9 s  (2 GPUs; GSM8K 0.9735)
+# The aggregated c64 cells (prefill-decode-interval 8: 159,510 @ 62.7; interval 16:
+# 153,542 @ 83.3) were measured as well but are dominated by the disaggregated
+# HiCache cells and are not shipped. The two c1 arms are the highest-interactivity
+# points of the curve (above the
 # published MI355X ATOM curve's last vertex at 336.7 tok/s/user); at c1 the AgentX
 # client replays the trace's idle gaps, so a single lane is client-bound and a second
 # user on the same worker only lowers the P90 (TP2 c2: 12,538 @ 306.8). The harness
@@ -163,37 +164,3 @@ override_tp2_c1:
     env:
       CONC: "1"
       AGENTIC_WARMUP_GRACE_PERIOD: "1800"
-
-# c64 with the default prefill-decode-interval 16 (512 prefill tokens per decode step):
-# 153,542 tokens/s/GPU @ 83.3 tok/s/user, P90 TTFT 15.2 s.
-override_tp2_pdi16_c64:
-  name: agg-gb300-tp2ep2-pdi16-c64
-  roles:
-    agg:
-      args:
-        chunked-prefill-size: 8192
-        prefill-decode-interval: 16
-        swa-prefix-tails: 4096
-        max-running-requests: 64
-  benchmark:
-    env:
-      CONC: "64"
-      AGENTIC_WARMUP_GRACE_PERIOD: "3600"
-
-# c64 with prefill-decode-interval 8 (1024 prefill tokens per decode step): the
-# throughput end of the aggregated curve, 159,510 tokens/s/GPU @ 62.7 tok/s/user,
-# P90 TTFT 6.0 s (+3.9% tokens/s/GPU and 2.5x lower TTFT than interval 16, at
-# -25% interactivity).
-override_tp2_pdi8_c64:
-  name: agg-gb300-tp2ep2-pdi8-c64
-  roles:
-    agg:
-      args:
-        chunked-prefill-size: 8192
-        prefill-decode-interval: 8
-        swa-prefix-tails: 4096
-        max-running-requests: 64
-  benchmark:
-    env:
-      CONC: "64"
-      AGENTIC_WARMUP_GRACE_PERIOD: "3600"
