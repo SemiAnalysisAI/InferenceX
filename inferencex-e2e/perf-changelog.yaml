@@ -9165,4 +9165,4 @@
     - agentic-coding
   description:
     - "Enable TensorRT-LLM iteration perf stats (enable_iter_perf_stats: true) on the prefill worker of the GB300 1P1D TP8 concurrency 1 MTP5 variant (override_1p1d_tp8_c1_b1_mtp5), matching the other GLM-5.2 GB300 disagg variants. No serving, parallelism, precision or draft-model change."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3621
