@@ -102,9 +102,10 @@ client arguments without requiring a GPU or running pip.
 
 `vllm_indexer.py` imports vLLM's DeepGEMM wrapper, native TopK dispatcher and
 candidate selector. The fixture uses B12, six queries, 32 heads, D128, page128,
-TopK512, and optional 2048 candidate blocks of eight positions. Nominal S2 is
-64K/128K and physical K is S2/2; the source's S2 convention remains unresolved,
-so do not claim direct speedups. Packed MXFP4 values are independently random
+TopK512, and optional 2048 candidate blocks of eight positions. Use `--physical-lengths` for physical compressed K=64K/128K. The source
+integration passes already-compressed lengths. Without that flag, the earlier
+half-length diagnostic remains reproducible; keep it separate. The published
+benchmark fixture is unavailable, so avoid direct hardware-speedup claims. Packed MXFP4 values are independently random
 representable codes with E8M0 scale 1 and head weights 1/32. Native dense weights
 are FP32. Every query's scores and TopK threshold are checked; candidate selection
 is timed but its output is not independently checked. Three rounds run in
@@ -115,8 +116,9 @@ input preparation. All raw traces and samples are retained.
 `vllm_sparse_indexer.py` measures the native paged sparse pipeline including
 candidate expansion/sort, schedule construction, sparse logits, DeepSelect TopK
 and logical-index remapping. It uses 72 query rows, 2048 independent unique
-candidate blocks per row, eight positions per block, physical K=65536 and BF16
-head weights. Three warmups precede three timed calls; preserve each sample.
+candidate blocks per row, eight positions per block, explicit
+`--physical-kv-tokens` (131072 for physical128K, 65536 for the earlier diagnostic),
+and BF16 head weights. Three warmups precede three timed calls; preserve each sample.
 Scores are checked with BF16 tolerance (`rtol=atol=0.02`), and native TopK must
 return unique candidate positions above the native score threshold.
 `analyze_trace.py` also recognizes native vLLM `execute_` annotations. Their
@@ -171,3 +173,7 @@ NVFP4 group16/E4M3 scales (288 bytes). These scale formats differ from BF16
 scale records; matching data bit widths does not establish numerical identity.
 Keep the existing FP8-KV results labeled as baselines. Hybrid variants apply
 to B200/B300; the native Hopper paths have different precision/layout support.
+
+Indexer manifests record minimum/maximum visible physical K. Dense input weights
+and scores are FP32; the reference describes BF16 intermediate rounding and
+head reduction, not necessarily BF16 API input weights.

@@ -9485,3 +9485,13 @@
     \u6C42\u57FA\u7EBF\uFF0C\u7F29\u653E\u683C\u5F0F\u5DEE\u5F02\u4ECD\u660E\u786E\
     \u8BB0\u5F55\u3002"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-8gpu-8k256
+    - dsv41flash-fp4-b300-vllm-8gpu-8k256
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Add explicit physical compressed-K lengths to standalone indexer measurements and record visible bounds; keep earlier half-length diagnostics separate."
+    - "独立 Indexer 测量新增明确的物理压缩 K 长度及可见范围记录，早期半长度诊断单独保留。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607

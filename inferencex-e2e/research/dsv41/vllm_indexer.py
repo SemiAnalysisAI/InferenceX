@@ -10,7 +10,7 @@ from pathlib import Path
 from experiment import kernel_samples
 
 
-def build_case(length: int, candidates: bool):
+def build_case(length: int, candidates: bool, *, physical_lengths: bool = False):
     import torch
     from vllm.model_executor.kernels.attention.dsa.candidate_blocks import (
         select_candidate_blocks,
@@ -23,7 +23,8 @@ def build_case(length: int, candidates: bool):
     )
 
     batch, queries, heads, dim, page, topk = 12, 6, 32, 128, 128, 512
-    rows, physical = batch * queries, length // 2
+    rows = batch * queries
+    physical = length if physical_lengths else length // 2
     torch.manual_seed(12345 + length)
     lut = torch.tensor(
         [0, 0.5, 1, 1.5, 2, 3, 4, 6, 0, -0.5, -1, -1.5, -2, -3, -4, -6], device="cuda"
@@ -50,7 +51,12 @@ def build_case(length: int, candidates: bool):
     cache = cache.view(pages, page, 1, 68)
     table = torch.arange(pages, device="cuda", dtype=torch.int32).reshape(batch, -1)
     lens = (
-        (torch.arange(length - queries, length, device="cuda", dtype=torch.int32) + 1)
+        (
+            torch.arange(
+                physical * 2 - queries, physical * 2, device="cuda", dtype=torch.int32
+            )
+            + 1
+        )
         // 2
     ).repeat(batch, 1)
     weights = torch.full((rows, heads), 1 / heads, device="cuda", dtype=torch.float32)
@@ -114,6 +120,12 @@ def build_case(length: int, candidates: bool):
     return run, {
         "nominal_sequence_length": length,
         "physical_kv_tokens": physical,
+        "min_visible_kv_tokens": int(lens.min()),
+        "max_visible_kv_tokens": int(lens.max()),
+        "length_convention": "physical compressed K"
+        if physical_lengths
+        else "legacy original-length assumption",
+        "uncompressed_context_equivalent": physical * 2,
         "batch": batch,
         "query_tokens": queries,
         "native_next_n": native_n,
@@ -129,7 +141,7 @@ def build_case(length: int, candidates: bool):
         "input_distribution": "uniform FP4 codes; scale 1; head weights 1/32",
         "max_abs_score_error": max_error,
         "scope": "native dense logits plus native TopK and optional candidate selection; excludes packed-input preparation and schedule construction",
-        "qualification": "S2 treated as original length before compression by 2; source interpretation unresolved; weights FP32 in native dense API",
+        "qualification": "Physical K is explicit. Native dense score arithmetic is FP32; the source describes BF16 intermediate rounding/reduction. Benchmark fixture details remain unpublished.",
     }
 
 
@@ -142,6 +154,7 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--image", required=True)
     parser.add_argument("--smoke", action="store_true")
+    parser.add_argument("--physical-lengths", action="store_true")
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     init_workspace_manager(torch.device("cuda:0"), num_ubatches=1, num_lanes=1)
@@ -159,7 +172,9 @@ def main():
     for round_id in range(1 if args.smoke else 3):
         order = cases[::-1] if round_id == 1 else cases
         for length, candidates in order:
-            run, info = build_case(length, candidates)
+            run, info = build_case(
+                length, candidates, physical_lengths=args.physical_lengths
+            )
             for _ in range(3):
                 run()
             torch.cuda.synchronize()

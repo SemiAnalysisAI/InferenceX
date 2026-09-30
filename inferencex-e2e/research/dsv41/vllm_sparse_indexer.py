@@ -26,11 +26,17 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--image", required=True)
+    parser.add_argument("--physical-kv-tokens", type=int, required=True)
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     init_workspace_manager(torch.device("cuda:0"), num_ubatches=1, num_lanes=1)
     torch.manual_seed(12345)
-    batch, queries, heads, dim, physical, page = 12, 6, 32, 128, 65536, 128
+    batch, queries, heads, dim, page = 12, 6, 32, 128, 128
+    physical = args.physical_kv_tokens
+    if physical < 16512 or physical % page:
+        parser.error(
+            "Physical KV length must be page-aligned and fit 2048 fully visible blocks"
+        )
     rows, blocks_per_row, topk = batch * queries, 2048, 512
     lut = torch.tensor(
         [0, 0.5, 1, 1.5, 2, 3, 4, 6, 0, -0.5, -1, -1.5, -2, -3, -4, -6], device="cuda"
@@ -162,8 +168,10 @@ def main():
         "query_tokens": queries,
         "heads": heads,
         "head_dim": dim,
-        "nominal_sequence_length": physical * 2,
+        "uncompressed_context_equivalent": physical * 2,
         "physical_kv_tokens": physical,
+        "min_visible_kv_tokens": int(lens.min()),
+        "max_visible_kv_tokens": int(lens.max()),
         "page_size": page,
         "topk": topk,
         "candidate_blocks_per_query": blocks_per_row,
@@ -178,7 +186,7 @@ def main():
         "kernel_sum_samples_us": samples,
         "kernel_sum_median_us": statistics.median(samples),
         "scope": "native candidate expansion/sort, schedule metadata, sparse logits, DeepSelect TopK and logical-index remap; excludes input packing",
-        "qualification": "source S2 convention unresolved; physical K is 65536 here; native pipeline layouts may differ",
+        "qualification": "Physical KV length is explicit; source benchmark fixture is unpublished; native pipeline/addressing layouts may differ",
         "trace": path.name,
     }
     (args.output / "results.json").write_text(json.dumps(result, indent=2) + "\n")
