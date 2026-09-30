@@ -9126,12 +9126,12 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Move the GB300 DeepSeek-V4-Pro AgentX disaggregated ladder from hierarchical cache to the Mooncake unified-cache external linker on the image's own SGLang, and bump the image to lmsysorg/sglang:nightly-dev-cu13-20260916-c9a8fba9."
+    - "Move the GB300 DeepSeek-V4-Pro AgentX disaggregated ladder from hierarchical cache to the Mooncake unified-cache external linker on the image's own SGLang, bump the image to lmsysorg/sglang:nightly-dev-cu13-20260916-c9a8fba9, and bump the Dynamo wheel to 1.5.0.dev20260914, whose SGLang worker no longer needs ServerArgs.get_model_config."
     - "Decode nodes lend host DRAM to the store through standalone mooncake_client daemons: the setup script starts four 180GB daemons per decode node, registered with the HTTP metadata server prefill writers resolve segments through, and fails the job unless every daemon is serving and its descriptor resolves. Prefill keeps a 140GB segment per rank."
     - "Prefill runs 16k-token chunks per DP rank (chunked-prefill-size 131072, SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK 17408) with mem-fraction-static 0.80, which the DSV4 indexer needs at that chunk size."
     - "The benchmark client runs on the dedicated etcd/nats node instead of the head prefill node, where its ~300GB of host memory OOM-killed prefill_0, and Tachometer's per-node exporters are off for this throughput ladder because they slowed decode steps by a few percent."
     - "The gb300-nv srt lane sets this cluster's RDMA devices (MOONCAKE_DEVICE=mlx5_0..3) on the recipe's prefill and decode roles: without an explicit list the store client falls back to NVLink for same-domain peers and aborts every worker at the warmup put."
-    - "将 GB300 DeepSeek-V4-Pro AgentX 分离式配置从 hierarchical cache 切换到镜像自带 SGLang 的 Mooncake unified-cache external linker，并将镜像升级到 lmsysorg/sglang:nightly-dev-cu13-20260916-c9a8fba9。"
+    - "将 GB300 DeepSeek-V4-Pro AgentX 分离式配置从 hierarchical cache 切换到镜像自带 SGLang 的 Mooncake unified-cache external linker，将镜像升级到 lmsysorg/sglang:nightly-dev-cu13-20260916-c9a8fba9，并将 Dynamo wheel 升级到 1.5.0.dev20260914，其 SGLang worker 不再依赖 ServerArgs.get_model_config。"
     - "decode 节点通过独立的 mooncake_client 守护进程向 store 借出主机 DRAM：setup 脚本在每个 decode 节点启动 4 个 180GB 守护进程，并注册到 prefill 写入方解析 segment 所用的 HTTP metadata server；任一守护进程未就绪或其描述符无法解析时作业直接失败。prefill 每个 rank 保留 140GB segment。"
     - "prefill 每个 DP rank 按 16k token 切分（chunked-prefill-size 131072，SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK 17408），并将 mem-fraction-static 降至 0.80，这是该切分大小下 DSV4 indexer 所需。"
     - "压测客户端改为运行在独立的 etcd/nats 节点上，而不是 head prefill 节点（其约 300GB 主机内存曾导致 prefill_0 被 OOM kill）；该吞吐阶梯关闭 Tachometer 的逐节点 exporter，因为它们会使 decode 单步变慢数个百分点。"

@@ -17,7 +17,7 @@ base:
   dynamo:
     install: true
     source:
-      wheel: "1.5.0.dev20260902"
+      wheel: "1.5.0.dev20260914"
   slurm:
     time_limit: "8:00:00"
   health_check:
@@ -27,11 +27,6 @@ base:
   # Starts the standalone Mooncake store daemons that lend decode-node host
   # DRAM to the store (see MC_SIDECAR_* on the decode role).
   setup_script: dsv4-gb300-mooncake-sidecar.sh
-
-  # TEMPORARY: the pinned Dynamo wheel still calls ServerArgs.get_model_config,
-  # which this image's SGLang no longer has. Remove once the wheel catches up.
-  environment:
-    PYTHONPATH: /configs/sglang-server-args-compat
 
   # Tachometer's per-node exporters slow decode steps by a few percent and add
   # host memory on the head node; this ladder is a throughput measurement.
