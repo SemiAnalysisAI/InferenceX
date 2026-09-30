@@ -39,12 +39,12 @@ and graph capture, then an AgentX warmup that grows with concurrency). Its
 throughput is not a result: windows pause the engine while they export, and
 profiled runs tolerate failed requests.
 
-At DSV4 DEP8 c192 on B200, a warmup window has preceded an engine fault both
-times it ran (`CUBLAS_STATUS_EXECUTION_FAILED` in the attention compressor's
+At DSV4 DEP8 c192 on B200, a warmup window has preceded an engine fault in two
+of three runs (`CUBLAS_STATUS_EXECUTION_FAILED` in the attention compressor's
 `torch.mm`, when warmup's cache-pressure requests arrive, minutes after the
 window closed); the same point without it (`{"windows": [["decode", 0, 32]]}`)
-and unprofiled production runs complete. Profile such a point's prefill and
-decode in separate runs.
+and unprofiled production runs complete. Profile such a point's prefill
+(`{"windows": [["warmup", 0, 32]]}`) and decode in separate runs.
 
 Deviations from the recipe, all recorded in the run's config: vLLM's torch
 profiler config, the patch's environment, a raised `VLLM_RPC_TIMEOUT`, and on
