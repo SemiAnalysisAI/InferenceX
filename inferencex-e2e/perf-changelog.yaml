@@ -9302,3 +9302,20 @@
     \u751F\u9010 rank \u5256\u6790\uFF1B\u4FDD\u7559\u539F\u6846\u67B6\u5386\u53F2\
     \u6D4B\u91CF\u3002"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607
+
+- config-keys:
+  - dsv41flash-fp4-b200-vllm-8gpu-cohort-smoke
+  - dsv41flash-fp4-b200-vllm-8gpu-128k256
+  - dsv41flash-fp4-b300-vllm-8gpu-cohort-smoke
+  - dsv41flash-fp4-b300-vllm-8gpu-128k256
+  scenario-type:
+  - fixed-seq-len
+  description:
+  - Add vLLM TP8/EP8 cohort smoke and long-context research points with native uniform-random
+    expert routing, complete-cohort prefix warmup, token-ID streaming and full-batch-window
+    validation.
+  - "\u65B0\u589E vLLM TP8/EP8 \u5168\u6279\u6B21\u5192\u70DF\u53CA\u957F\u4E0A\u4E0B\
+    \u6587\u7814\u7A76\u70B9\uFF0C\u4F7F\u7528\u539F\u751F\u5747\u5300\u968F\u673A\
+    \u4E13\u5BB6\u8DEF\u7531\u3001\u5168\u6279\u6B21\u524D\u7F00\u9884\u70ED\u3001\
+    token ID \u6D41\u53CA\u5B8C\u6574\u6279\u6B21\u7A97\u53E3\u6821\u9A8C\u3002"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607

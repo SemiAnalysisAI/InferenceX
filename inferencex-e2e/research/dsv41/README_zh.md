@@ -64,3 +64,10 @@ BF16 归一化权重与生产路径一致；另测 FP32 权重以保留此前独
 单独预热后的请求最多记录十六次引擎迭代，然后显式停止并导出剖析。客户端校验
 8192/256 token 用量及每个配置 rank 的 GPU 内核 trace。这是新框架的测量，
 不会将原有 SGLang 结果改标为 vLLM。
+
+`vllm_cohort.py` 使用原生 completion token ID 增量及
+`X-data-parallel-rank` 请求头。每个唯一 prompt 先生成一个 token 以预热，
+再单独测量并保持缓存亲和性；必须存在全批次共同解码窗口。初始八卡配置
+使用 TP8/EP8、DP1（不是 DP attention）、原生 `uniform_random` 路由及五个草稿。
+均匀随机路由不等同于确定性的轮转均衡。剖析单独生成 1024 个输出 token，
+并要求每个配置 GPU 都产出 trace。

@@ -84,3 +84,11 @@ expose profile endpoints. A separate warmed request records at most 16 engine
 iterations, then explicitly stops and exports profiling. The client validates
 8192/256 usage and a GPU-kernel trace for every configured rank. This is a new
 framework measurement; prior SGLang results are not relabeled as vLLM results.
+
+`vllm_cohort.py` uses native completion token-ID deltas and the
+`X-data-parallel-rank` header. It warms every unique prompt with one output
+token before a separate measured wave, preserving cache affinity. A full-batch
+interior decode window is mandatory. Initial eight-GPU recipes use TP8/EP8,
+DP1 (not DP attention), native `uniform_random` routing, and five drafts.
+Uniform-random routing is not deterministic round-robin balancing. Profile
+capture is a separate 1024-output wave and must include every configured GPU.
