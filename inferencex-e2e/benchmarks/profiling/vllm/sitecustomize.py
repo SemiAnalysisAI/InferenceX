@@ -409,8 +409,18 @@ def _patch_profiler_wrapper(module):
         return
     orig_start, orig_stop = cls._call_start, cls._call_stop
 
+    # Each rank's window, as its profiler saw it: the window client samples GPU
+    # clocks until every rank that started has stopped (the stop is logged
+    # before the trace export, which runs inside it).
+    def _log(event):
+        try:
+            _sink("profiler", _rank_tag()).write({"event": event, "t_ns": time.time_ns()})
+        except Exception:
+            _write_error(f"profiler {event} log")
+
     def _call_start(self, *args, **kwargs):
         result = orig_start(self, *args, **kwargs)
+        _log("start")
         try:
             _enable_module_markers()
         except Exception:
@@ -418,6 +428,7 @@ def _patch_profiler_wrapper(module):
         return result
 
     def _call_stop(self, *args, **kwargs):
+        _log("stop")
         try:
             _disable_module_markers()
         except Exception:

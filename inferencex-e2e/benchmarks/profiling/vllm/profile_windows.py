@@ -16,7 +16,8 @@ its own after its configured max_iterations, and a /stop_profile after a grace
 period closes a window that did not fill.
 
 Each window's GPU clocks are sampled through NVML (clock_sampler.py) from
-just before it opens until every active engine has logged its iterations.
+just before it opens until every engine that started profiling has stopped
+(logged by the engine patch under profiler/), plus the GPU's lag behind it.
 
 The measured phase is capped at INFX_PROFILE_DURATION seconds, long enough for
 steady decode at any concurrency. Once the last window has closed and the
@@ -49,10 +50,11 @@ DECODE_DEADLINE_S = max(0.0, MEASURED_S - 150.0)
 # Measured replay before an early stop: aiperf fails a run with no results.
 MIN_MEASURED_S = 60.0
 CLOCK_WINDOW_MAX_S = 120.0  # a window's steps take seconds; stop sampling regardless
-# The GPU finishes a window's last step after its engine logs it (launches are
-# asynchronous): keep sampling for twice the window's longest step past that.
+# The GPU finishes a window's last step after its engine stops profiling
+# (launches are asynchronous): keep sampling for twice its longest step past that.
 CLOCK_TAIL_S = 0.5
 CLOCK_TAIL_MAX_S = 10.0
+PROFILER_START_WAIT_S = 60.0  # engines that never log a start: fall back to step counts
 
 
 def post(url: str) -> str:
@@ -163,13 +165,40 @@ class StepCounter:
                 continue
         return {path: sum(t0 >= t_ns for t0, _ in times) for path, times in self.times.items()}
 
-    def longest_since(self, t_ns: int, steps: int) -> float:
-        """Seconds of the longest of each rank's first `steps` steps after t_ns."""
-        longest = 0
-        for times in self.times.values():
-            window = [t1 - t0 for t0, t1 in times if t0 >= t_ns][:steps]
-            longest = max([longest, *window])
-        return longest / 1e9
+    def longest_between(self, t0_ns: int, t1_ns: int) -> float:
+        """Seconds of the longest step any rank logged starting between t0_ns and t1_ns."""
+        self.counts_since(t0_ns)
+        return max((b - a for times in self.times.values() for a, b in times
+                    if t0_ns <= a <= t1_ns), default=0) / 1e9
+
+
+def profiler_events(prof_dir: str, t_ns: int) -> dict[str, list[tuple[str, int]]]:
+    """rank -> the engine's profiler start/stop events after t_ns."""
+    events = {}
+    for path in glob.glob(os.path.join(prof_dir, "profiler", "*.jsonl")):
+        try:
+            with open(path) as f:
+                rows = [json.loads(line) for line in f if line.endswith("\n")]
+        except (OSError, ValueError):
+            continue
+        events[os.path.basename(path)] = [(r["event"], r["t_ns"]) for r in rows if r["t_ns"] >= t_ns]
+    return events
+
+
+def wait_for_profilers(prof_dir: str, t_ns: int) -> int | None:
+    """Wall time (ns) the last engine that started profiling after t_ns stopped, else None."""
+    deadline = time.time() + CLOCK_WINDOW_MAX_S
+    while time.time() < deadline:
+        events = profiler_events(prof_dir, t_ns)
+        started = {rank: ev for rank, ev in events.items() if any(e == "start" for e, _ in ev)}
+        if not started and time.time() - t_ns / 1e9 > PROFILER_START_WAIT_S:
+            return None
+        stops = [max(t for e, t in ev if e == "stop") for ev in started.values()
+                 if any(e == "stop" for e, _ in ev)]
+        if started and len(stops) == len(started):
+            return max(stops)
+        time.sleep(0.2)
+    return None
 
 
 def wait_for_window_steps(counter: StepCounter, t_ns: int, iterations: int) -> None:
@@ -240,9 +269,14 @@ def main() -> None:
             for server in servers:
                 note(event="start", window=index, server=server, iterations=iterations,
                      status=post(f"{server}/start_profile"))
-            wait_for_window_steps(counter, int(window_t0 * 1e9), int(iterations))
-            tail = 2 * counter.longest_since(int(window_t0 * 1e9), int(iterations))
-            time.sleep(CLOCK_TAIL_S + min(tail, CLOCK_TAIL_MAX_S))
+            window_ns = int(window_t0 * 1e9)
+            stopped_ns = wait_for_profilers(os.path.dirname(steps_dir), window_ns)
+            if stopped_ns is None:  # no profiler log: the window's steps, as logged
+                wait_for_window_steps(counter, window_ns, int(iterations))
+                stopped_ns = time.time_ns()
+            tail = 2 * counter.longest_between(window_ns, stopped_ns)
+            time.sleep(max(0.0, stopped_ns / 1e9 + CLOCK_TAIL_S + min(tail, CLOCK_TAIL_MAX_S)
+                           - time.time()))
             clocks.stop()
             note(event="clocks", window=index, polls=clocks.polls,
                  seconds=round(time.time() - window_t0, 3))

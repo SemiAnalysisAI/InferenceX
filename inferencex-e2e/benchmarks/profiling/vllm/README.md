@@ -131,8 +131,9 @@ returned before it started (`prior_us` earlier) and every poll overlapping it
 (`samples`), as each clock's min and max and the OR of the event-reason
 bitmasks (NVML `nvmlClocksEventReason*`). The window client, not the engine,
 polls NVML, one thread per GPU, from just before each window opens until every
-engine has logged its iterations; the env record's GPU UUID ties a rank to its
-polls. On B200 an NVML poll occasionally blocks for 10 to 55 ms, more often
+engine that started profiling has stopped (`profiler/<rank>.jsonl`, logged by
+the patch) plus twice the window's longest step, as the GPU trails the engine;
+the env record's GPU UUID ties a rank to its polls. On B200 an NVML poll occasionally blocks for 10 to 55 ms, more often
 under prefill load; a reading is from somewhere inside its poll, and a kernel
 within such a poll shows it as a large `prior_us`.
 `report.json` gives each trace's clock coverage and `prior_us` percentiles.
