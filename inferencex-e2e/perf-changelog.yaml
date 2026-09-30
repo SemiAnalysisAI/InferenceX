@@ -9510,3 +9510,13 @@
     \uFF0C\u4F7F\u7528\u516B\u4E2A API \u8FDB\u7A0B\u300164 token \u89E3\u7801\u9884\
     \u70ED\u53CA\u9010 rank \u5168 batch \u5256\u6790\u6821\u9A8C\u3002"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-8gpu-8k256
+    - dsv41flash-fp4-b300-vllm-8gpu-8k256
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Add standalone native BF16 sparse MLA measurements with explicit original/compressed banks, all-query numerical validation and raw traces."
+    - "新增独立原生 BF16 Sparse MLA 测量，明确原始与压缩 KV 分区，校验全部 query 并保留原始 trace。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607

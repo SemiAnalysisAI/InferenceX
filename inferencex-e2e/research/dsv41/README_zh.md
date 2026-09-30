@@ -155,3 +155,14 @@ trace 分类将 Mega Attention 内核单列为 `fused_attention_rope_cast`，因
 包含人为暂停，不作为在线延迟基准；稳态解码计时排除入队过程。剖析校验要求每个
 DP/TP worker 都有真实 GPU 内核和目标生成 batch，观测值保存在
 `profile-validation.json`。
+
+## 原生 BF16 Sparse MLA
+
+`vllm_sparse_mla.py` 调用已安装的生产内核 `flash_mla_sparse_fwd`。
+输入为 4096 个 query、64 个 head、D512，以及 8192 行原始和 2048 行压缩
+BF16 KV，每个 query 选择 128 个窗口/原始条目和 512 个压缩条目。
+因果及无限制索引样例是明确限定的对应实验，不复现未公开的源索引分布。
+计时不包含索引构造、KV gather 和反量化。Sink logits 为零，原生 LSE 不包含 sink。
+先将所有 query/head 与独立 FP32 参考计算核对，再执行三轮测量，
+每轮预热 3 次、分析 300 次调用。保留 GPU 内核时长、标注跨度和原始 trace；
+这些数据属于重复相同输入的热态测量。

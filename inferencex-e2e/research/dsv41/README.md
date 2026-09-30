@@ -195,3 +195,15 @@ at least eight progress chunks. Client TTFT includes the controlled hold and
 is not an online latency benchmark; steady-decode timing excludes admission.
 Profile validation requires real GPU kernels and the requested generation batch
 on every DP/TP worker, retaining observed counts in `profile-validation.json`.
+
+## Native BF16 sparse MLA
+
+`vllm_sparse_mla.py` calls the installed production `flash_mla_sparse_fwd` kernel.
+It uses 4096 queries, 64 heads, D512, 8192 original and 2048 compressed
+BF16 KV rows, selecting 128 window/original and 512 compressed entries per query.
+Causal and unrestricted selected-index fixtures are explicit analogies; unpublished
+source index distributions are not reproduced. Index construction and KV gather/
+dequantization are outside timing. Sink logits are zero. Native LSE excludes sink.
+Every query/head is checked against an independent FP32 reference before three
+rounds of 3 warmups and 300 profiled calls. Raw GPU kernel durations, annotation
+spans and traces are retained; these are warm repeated-input measurements.
