@@ -9148,3 +9148,13 @@
   description:
     - "Use the HiCache kernel I/O backend for the c192 prefill recipe after public sweep run 36443508797 reproduced the direct-backend eviction stall and exhausted the four-hour Slurm limit during warmup."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3178
+
+- config-keys:
+    - glm5.2-fp4-gb300-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Remove recipe-local synthetic-acceptance overrides so the current srt-slurm connector selects the committed GLM-5.2 MTP golden curve for throughput and real verification for evals."
+    - "Remove SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE so the embedded GLM-5.2 EAGLE head runs at the precision shipped by the checkpoint under the pinned SGLang image."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3178
