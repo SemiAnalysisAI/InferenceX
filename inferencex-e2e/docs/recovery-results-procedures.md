@@ -24,6 +24,11 @@ Sources: [sweep debugging guardrails](../../.agents/skills/debug-runs/SKILL.md#L
 
 ### Throughput results
 
+With AgentX power collection enabled, single-node and aggregated recipes must supply
+`TP`, `PP_SIZE`, and `PCP_SIZE` in the benchmark environment to match the serving
+topology. Missing values fail before power monitoring and replay, even when
+`REQUIRE_POWER=0`.
+
 Reusable benchmark workflows prepare Python 3.12 before GPU launch and export its
 absolute path as `INFERENCEX_RESULTS_PYTHON`. Fixed-sequence processing and AgentX
 power processing, including the H200 DCGM path, validate and use this interpreter.

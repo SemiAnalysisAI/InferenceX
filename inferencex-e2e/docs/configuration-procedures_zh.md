@@ -74,6 +74,17 @@ hook 只注入**集群专用的主机前提条件**，例如网络结构检查�
 引擎参数、并发调优、评测、结果收集和作业编排都不属于 hook。不要用 hook 给引擎或容器打补丁、绕过失败的检查，
 或用重试和临时变通掩盖运行时缺陷；应修复负责的组件。主机改动只限于已分配节点，并保留其他作业正在使用的资源。
 
+### DCGM counters
+
+NVIDIA 集群配置通过 `slurm.srt-slurm.extra.default_gpu_exporter`，让 Tachometer 默认启动的 DCGM exporter
+使用与功耗路径相同的 `dcgm-exporter:4.6.0-4.8.3-distroless` 镜像和
+`/configs/dcgm-counters-noprof.csv`。功耗配方通过 `telemetry.dcgm_exporter.command`
+选择同一份 CSV，因此两条路径共用同一 exporter 版本和同一 counters 文件。当功耗采集
+已启动 exporter 时，Tachometer 复用该实例。保留功耗、能耗和 GPU 利用率，省略 profiling
+与 vGPU license counters。这不会开启配方已关闭的采集，也不代表 Tachometer 指标已通过
+PowerX 严格校验。现有的 Tachometer 1000 ms / 功耗 exporter 100 ms 采集间隔及 9401 端口
+保持不变。
+
 ## 规程索引
 
 1. [准备 worktree](#准备-worktree)

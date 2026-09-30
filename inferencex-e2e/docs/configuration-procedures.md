@@ -60,6 +60,16 @@ staged images, resolved model paths, cache mounts, the time limit, and the DCGM
 exporter image for power jobs. Values are written as YAML data, never substituted into
 shell or YAML text, and `extra` cannot shadow a typed key.
 
+NVIDIA profiles set `slurm.srt-slurm.extra.default_gpu_exporter` to the same `dcgm-exporter:4.6.0-4.8.3-distroless`
+image the power path uses, with `/configs/dcgm-counters-noprof.csv` for Tachometer's
+implicit DCGM exporter. Power recipes select the same CSV through
+`telemetry.dcgm_exporter.command`, so one exporter version and one counter file serve
+both paths. Tachometer reuses the power exporter when power telemetry owns it. Power,
+energy and GPU utilization remain available; profiling and vGPU license counters are
+omitted. This does not enable telemetry in opted-out recipes or qualify Tachometer
+metrics as validated PowerX results. The existing 1000 ms Tachometer / 100 ms
+power-exporter collection intervals and port 9401 are preserved.
+
 Keep model selection, cache preparation, and workload-dependent time limits in the
 srt driver's tables ([`lanes.py`](../infx/launch/drivers/srt/lanes.py),
 [`models.py`](../infx/launch/drivers/srt/models.py),

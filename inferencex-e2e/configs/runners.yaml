@@ -318,6 +318,11 @@ clusters:
         import: compute
         lock-timeout-s: 600
       srt-slurm:
+        extra:
+          default_gpu_exporter:
+            container_image: nvcr.io#nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless
+            port: 9401
+            command: "dcgm-exporter --collect-interval=1000 --address :{port} -f /configs/dcgm-counters-noprof.csv"
         network-interface: ""
         gpus-per-node-directive: false
         single-node-exclusive: false
@@ -347,6 +352,11 @@ clusters:
         helper-dirs:
           nginx: {import: unchecked}
       srt-slurm:
+        extra:
+          default_gpu_exporter:
+            container_image: nvcr.io#nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless
+            port: 9401
+            command: "dcgm-exporter --collect-interval=1000 --address :{port} -f /configs/dcgm-counters-noprof.csv"
         network-interface: ""
         job-tag: h100
         default-time-limit: "6:00:00"
@@ -374,6 +384,11 @@ clusters:
         import: compute
         lock-timeout-s: 600
       srt-slurm:
+        extra:
+          default_gpu_exporter:
+            container_image: nvcr.io#nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless
+            port: 9401
+            command: "dcgm-exporter --collect-interval=1000 --address :{port} -f /configs/dcgm-counters-noprof.csv"
         network-interface: ""
         gpus-per-node-directive: false
         single-node-exclusive: false
@@ -416,6 +431,11 @@ clusters:
           nginx: {key-style: plus, import: unchecked}
           dcgm-exporter: {dir: /data/gharunners/containers}
       srt-slurm:
+        extra:
+          default_gpu_exporter:
+            container_image: nvcr.io#nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless
+            port: 9401
+            command: "dcgm-exporter --collect-interval=1000 --address :{port} -f /configs/dcgm-counters-noprof.csv"
         network-interface: ""
         job-tag: h200
         gpus-per-node-directive: true
@@ -441,6 +461,11 @@ clusters:
         import: all-nodes
         lock-timeout-s: 600
       srt-slurm:
+        extra:
+          default_gpu_exporter:
+            container_image: nvcr.io#nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless
+            port: 9401
+            command: "dcgm-exporter --collect-interval=1000 --address :{port} -f /configs/dcgm-counters-noprof.csv"
         network-interface: ""
         gpus-per-node-directive: false
         single-node-exclusive: false
@@ -457,6 +482,11 @@ clusters:
       volumes:
         hf-hub-cache: {path: /mnt/data/gharunners/hf-hub-cache}
       srt-slurm:
+        extra:
+          default_gpu_exporter:
+            container_image: nvcr.io#nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless
+            port: 9401
+            command: "dcgm-exporter --collect-interval=1000 --address :{port} -f /configs/dcgm-counters-noprof.csv"
         network-interface: ""
   b200-nscale:
     gpus-per-node: 8
@@ -501,6 +531,11 @@ clusters:
         lock-timeout-s: 3600
         lock-file: locks-dir
       srt-slurm:
+        extra:
+          default_gpu_exporter:
+            container_image: nvcr.io#nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless
+            port: 9401
+            command: "dcgm-exporter --collect-interval=1000 --address :{port} -f /configs/dcgm-counters-noprof.csv"
         network-interface: ""
         job-tag: b200
         default-time-limit: "4:00:00"
@@ -554,6 +589,11 @@ clusters:
         import: compute
         lock-timeout-s: 3600
       srt-slurm:
+        extra:
+          default_gpu_exporter:
+            container_image: nvcr.io#nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless
+            port: 9401
+            command: "dcgm-exporter --collect-interval=1000 --address :{port} -f /configs/dcgm-counters-noprof.csv"
         network-interface: ""
         job-tag: b300
         single-node-models: staged
@@ -596,6 +636,11 @@ clusters:
         lock-timeout-s: 1800
         single-node-import: true
       srt-slurm:
+        extra:
+          default_gpu_exporter:
+            container_image: nvcr.io#nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless
+            port: 9401
+            command: "dcgm-exporter --collect-interval=1000 --address :{port} -f /configs/dcgm-counters-noprof.csv"
         network-interface: ""
         job-tag: gb200
         default-time-limit: "6:00:00"
@@ -640,6 +685,11 @@ clusters:
         import-step-args: [--exclusive]
         single-node-import: true
       srt-slurm:
+        extra:
+          default_gpu_exporter:
+            container_image: nvcr.io#nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless
+            port: 9402
+            command: "dcgm-exporter --collect-interval=1000 --address :{port} -f /configs/dcgm-counters-noprof.csv"
         network-interface: ""
         job-tag: gb300
         segment-directive: false
