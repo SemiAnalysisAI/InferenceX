@@ -1686,9 +1686,16 @@ def test_multinode_batch_rejects_unknown_point_filename(
 @pytest.mark.parametrize("collector", ["shared", "h200-dcgm"])
 @pytest.mark.parametrize("result_python", [None, "", sys.executable])
 def test_agentic_collector_preserves_archive_when_result_python_is_missing(
-    tmp_path: Path, result_python: str | None, collector: str
+    tmp_path: Path, monkeypatch, capfd, result_python: str | None, collector: str
 ) -> None:
     import tarfile
+
+    from infx.launch.artifacts import (
+        bundle_server_logs,
+        collect_agentic_power_results,
+        validate_agentic_power,
+    )
+    from infx.launch.backends.base import JobState, JobStatus
 
     pkg = build_package(tmp_path)
     result_dir = pkg.logs_root / "agentic/conc_4"
@@ -1722,61 +1729,23 @@ def test_agentic_collector_preserves_archive_when_result_python_is_missing(
         ambient_python = bin_dir / name
         ambient_python.write_text("#!/bin/sh\nexit 73\n")
         ambient_python.chmod(0o755)
-    env = {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
-    env.pop("INFERENCEX_RESULTS_PYTHON", None)
-    if result_python is not None:
-        env["INFERENCEX_RESULTS_PYTHON"] = result_python
-    command = (
-        'source "$1"; sacct() { printf "12345|COMPLETED|0:0\\n"; }; '
-        'rc=0; collect_agentic_power_results 12345 "$2" "$3" "$4" point "$5" 4 || rc=$?; '
-        'bundle_server_logs "$2" "$4/server-logs.tar.gz"; exit "$rc"'
-    )
-    archive_name = "server-logs.tar.gz"
-    if collector == "h200-dcgm":
-        # Provisioning and Slurm submission are outside this processing regression.
-        launcher = (REPO_ROOT / "runners/launch_h200-dgxc-slurm.sh").read_text()
-        start = launcher.index('    AGENTX_POWER_RC="$SRT_JOB_RC"')
-        end = launcher.index('    if [[ "${EVAL_ONLY}" != "true" ]]; then', start)
-        command = 'source "$1";\n' + launcher[start:end]
-        archive_name = "multinode_server_logs.tar.gz"
+    monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
+    if collector == "shared":
+        completed = JobStatus(JobState.SUCCEEDED, "COMPLETED|0:0", 0)
+        rc = collect_agentic_power_results(
+            completed, "12345", pkg.logs_root, source, workspace, "point", PRODUCER_SHA, [4],
+            results_python=result_python,
+        )  # fmt: skip
+        archive_name = "server-logs.tar.gz"
+    else:
         (workspace / "point_conc4.json").write_text(json.dumps(raw_result))
-        (workspace / "infx").symlink_to(REPO_ROOT / "infx", target_is_directory=True)
-        (workspace / "exporter-image.sha256").write_text("fixture-exporter\n")
-        (workspace / "power-producer-sha.txt").write_text(PRODUCER_SHA + "\n")
-        env.update(
-            GITHUB_WORKSPACE=str(workspace),
-            LOGS_DIR=str(pkg.logs_root),
-            RESULT_FILENAME="point",
-            CONC_LIST="4",
-            SRT_SLURM_COMMIT=PRODUCER_SHA,
-            SRT_JOB_RC="0",
-            USES_KIMIK3_POWER="0",
-            USES_DCGM_POWER="1",
-            EVAL_ONLY="false",
-            REQUIRE_POWER="true",
-        )
-    result = subprocess.run(
-        [
-            "bash",
-            "-eo",
-            "pipefail",
-            "-c",
-            command,
-            "bash",
-            str(REPO_ROOT / "runners/slurm_utils.sh"),
-            str(pkg.logs_root),
-            str(source),
-            str(workspace),
-            PRODUCER_SHA,
-        ],
-        env=env,
-        cwd=tmp_path,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    expected_rc = 0 if result_python else 1
-    assert result.returncode == expected_rc, result.stderr
+        rc = validate_agentic_power(
+            pkg.logs_root, workspace, "point", PRODUCER_SHA, [4],
+            results_python=result_python, require_power=True,
+        )  # fmt: skip
+        archive_name = "multinode_server_logs.tar.gz"
+    bundle_server_logs(pkg.logs_root, workspace / archive_name)
+    assert rc == (0 if result_python else 1)
     with tarfile.open(workspace / archive_name) as archive:
         if collector == "shared":
             assert "./power/native-job-status.txt" in archive.getnames()
@@ -1786,5 +1755,5 @@ def test_agentic_collector_preserves_archive_when_result_python_is_missing(
         assert aggregate["power_valid"] == 1
         assert aggregate["total_gpu_energy_j"] == pytest.approx(84_000)
     else:
-        assert "INFERENCEX_RESULTS_PYTHON" in result.stdout
+        assert "INFERENCEX_RESULTS_PYTHON" in capfd.readouterr().err
         assert aggregate == raw_result

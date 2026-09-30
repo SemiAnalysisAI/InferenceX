@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -8,6 +9,12 @@ from pathlib import Path
 import pytest
 import yaml
 
+from infx.tests.historical_revision import (
+    HEAD_LINK,
+    POINTS,
+    commit_history,
+    forbid_current_config_parsing,
+)
 from infx.workflows.recover_failed_ingest import (
     RecoveryError,
     audit_changelog_bytes,
@@ -19,6 +26,8 @@ from infx.workflows.recover_failed_ingest import (
     validate_recovery_workflow,
 )
 from infx.workflows.validate_perf_changelog import ChangelogValidationError
+
+ROOT = Path(__file__).resolve().parents[3]
 
 
 @pytest.mark.parametrize("truncated", [False, True])
@@ -34,7 +43,7 @@ def test_inspection_requires_complete_jobs_before_writing_recovery_metadata(
         if endpoint.endswith("actions/runs/42"):
             response = {
                 "event": "push", "status": "completed", "conclusion": "failure",
-                "path": ".github/workflows/run-sweep.yml", "head_branch": "main",
+                "path": ".github/workflows/merge-ingest.yml", "head_branch": "main",
                 "head_sha": "merge", "run_attempt": 3, "html_url": "run-url",
             }
         elif "/jobs?" in endpoint:
@@ -72,6 +81,32 @@ def test_inspection_requires_complete_jobs_before_writing_recovery_metadata(
             "job_id": 7, "job_name": "ingest", "job_url": "job-url", "merge_sha": "merge",
             "base_sha": "parent", "pr_number": 9, "pr_url": "pr-url",
         }
+
+
+@pytest.mark.parametrize("path,accepted", [
+    (".github/workflows/merge-ingest.yml", True),
+    (".github/workflows/run-sweep.yml", True),
+    (".github/workflows/e2e-tests.yml", False),
+])
+def test_inspection_accepts_only_merge_publication_workflows(monkeypatch, path, accepted):
+    from infx.workflows import recover_failed_ingest as recovery
+
+    run = {"event": "push", "status": "completed", "conclusion": "failure",
+           "path": path, "head_branch": "main", "head_sha": "merge"}
+    monkeypatch.setattr(recovery, "gh_api", lambda repo, endpoint, **_: {
+        "actions/runs/42": run,
+        "commits/merge/pulls": [{"number": 9, "merged_at": "x", "merge_commit_sha": "merge"}],
+    }[endpoint])
+    monkeypatch.setattr(recovery, "list_run_jobs", lambda repo, run_id: [
+        {"id": 7, "status": "completed", "conclusion": "failure"},
+    ])
+    url = "https://github.com/example/project/actions/runs/42"
+    if accepted:
+        assert recovery.inspect_target(url, "example/project")["pr_number"] == 9
+    else:
+        with pytest.raises(RecoveryError, match="target run path"):
+            recovery.inspect_target(url, "example/project")
+
 
 
 @pytest.mark.parametrize("failure,message", [
@@ -360,8 +395,15 @@ def test_build_recovery_config_from_current_and_historical_projects(
     project = repo / base_layout
     configs = project / "configs"
     configs.mkdir(parents=True)
+    shutil.copytree(
+        ROOT / "infx", project / "infx", ignore=shutil.ignore_patterns("tests", "__pycache__"),
+    )
     (configs / "amd-master.yaml").write_text("{}\n")
-    (configs / "runners.yaml").write_text("labels: {fixture: [node-a]}\nhardware: {}\n")
+    (configs / "runners.yaml").write_text(
+        "labels: {fixture: [node-a], 'cluster:fixture': [node-a]}\n"
+        "clusters:\n  fixture: {gpus-per-node: 8, arch: x86_64, scheduler: slurm,\n"
+        "    slurm: {partition: batch, exclusive: true}}\n"
+    )
     master = {"fixture": {
         "image": "example/image:stable", "model": "example/model", "model-prefix": "dsr1",
         "precision": "fp8", "framework": "sglang", "runner": "fixture", "multinode": False,
@@ -378,7 +420,7 @@ def test_build_recovery_config_from_current_and_historical_projects(
     if head_layout != base_layout:
         project = repo / head_layout
         project.mkdir()
-        git("mv", "configs", "perf-changelog.yaml", head_layout + "/")
+        git("mv", "configs", "infx", "perf-changelog.yaml", head_layout + "/")
     (project / "perf-changelog.yaml").write_bytes(
         base_bytes + b"\n" + block("fixture", "https://github.com/SemiAnalysisAI/InferenceX/pull/42")
     )
@@ -402,3 +444,25 @@ def test_build_recovery_config_from_current_and_historical_projects(
     assert [entry["pr-link"] for entry in metadata["entries"]] == [
         "https://github.com/SemiAnalysisAI/InferenceX/pull/42",
     ]
+
+
+@pytest.mark.parametrize("project", ["", "inferencex-e2e"])
+def test_build_config_plans_a_hardware_layout_revision_with_its_own_planner(
+    tmp_path, monkeypatch, project,
+):
+    repo = tmp_path / "checkout"
+    repo.mkdir()
+    base, head = commit_history(repo, project)
+    forbid_current_config_parsing(monkeypatch)
+    output, metadata_output = tmp_path / "config.json", tmp_path / "metadata.json"
+
+    result = build_config(repo, base, head, 42, "perf-changelog.yaml", output, metadata_output)
+
+    config = json.loads(output.read_text())
+    assert [
+        (row["model"], row["conc"], row["image"]) for row in config["single_node"]["8k1k"]
+    ] == POINTS
+    assert (result["appended_entries"], result["fixed_rows"]) == (1, 2)
+    metadata = json.loads(metadata_output.read_text())
+    assert (metadata["base_ref"], metadata["head_ref"]) == (base, head)
+    assert [entry["pr-link"] for entry in metadata["entries"]] == [HEAD_LINK]
