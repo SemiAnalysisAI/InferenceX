@@ -16,6 +16,21 @@ sys.path.insert(0, str(ROOT / "utils/srt-slurm/src"))
 from srtctl.core.overrides import apply_overrides_to_recipe, parse_overrides
 
 
+@pytest.mark.parametrize("sku,variant", [("gb200", "override_tp4"), ("gb300", "override_c1")])
+def test_qwen_aggregate_power_shape_matches_serving_gpus(sku, variant):
+    path = ROOT / (
+        "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/"
+        f"{sku}-fp4/agentx/agg-variants.yaml"
+    )
+    [(_, recipe)] = selected_recipes(yaml.safe_load(path.read_text()), variant)
+    env = recipe["benchmark"]["env"]
+    agg = recipe["roles"]["agg"]
+
+    assert env["IS_MULTINODE"] == "false"
+    assert int(env["TP"]) == agg["args"]["tensor-parallel-size"]
+    assert int(env["TP"]) * int(env["PP_SIZE"]) * int(env["PCP_SIZE"]) == agg["gpus"]
+
+
 @pytest.fixture
 def point(tmp_path):
     recipe = {

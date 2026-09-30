@@ -24,6 +24,10 @@
 
 ### 吞吐量结果
 
+启用 AgentX 功耗采集时，单节点和聚合式 recipe 必须在 benchmark 环境中提供与服务端
+拓扑一致的 `TP`、`PP_SIZE` 和 `PCP_SIZE`。缺少这些值时，即使 `REQUIRE_POWER=0`，
+也会在功耗监控和请求回放开始前报错。
+
 可复用基准工作流在启动 GPU 任务前准备 Python 3.12，并通过
 `INFERENCEX_RESULTS_PYTHON` 导出其绝对路径。固定序列结果处理和 AgentX 功耗处理
 （包括 H200 DCGM 路径）都会校验并使用该解释器。该设置缺失或为空时，处理失败；
