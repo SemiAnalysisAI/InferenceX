@@ -9435,3 +9435,13 @@
     \u51FA\u957F\u5EA6\u3002\u79FB\u9664\u5C1A\u672A\u8FD0\u884C\u7684 256 \u8F93\u51FA\
     \u5408\u5E76\u626B\u63CF\u914D\u7F6E\u3002"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-8gpu-dp-128k1024-sweep
+    - dsv41flash-fp4-b300-vllm-8gpu-dp-128k1024-sweep
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Delete the unreferenced 256-output combined-sweep recipes after the explicit 1024-output replacements were selected."
+    - "选择明确的 1024 输出替代配置后，删除已无引用的 256 输出合并扫描配置文件。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607
