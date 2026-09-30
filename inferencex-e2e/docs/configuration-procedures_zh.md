@@ -194,50 +194,44 @@ B200 Nscale 的 GLM-5.1 可用 `MODEL_PATH` 指定已有共享权重，覆盖默
 
 ## 运行时工作负载绑定
 
-主配置通过 `IMAGE`、`MODEL`、`ISL`、`OSL` 及 `CONC` / `CONC_LIST` 提供 `image`、
-`model`、场景 `isl` / `osl` 和所选并发数。InferenceX 先选择调优变体，再绑定这些值，
-保留与 CUDA graph 或批处理设置配套的并发 zip 选择器。模型加载沿用现有集群映射和
-预先准备机制；使用缓存镜像时，溯源仍保留原始镜像引用。
+所有活跃的原生固定序列长度配方仍保留在原有的
+`benchmarks/single_node/srt-slurm-recipes/` 和
+`benchmarks/multi_node/srt-slurm-recipes/` 路径下，只以原生 YAML 结构保存配方特有
+设置。共享字段放在扁平的
+[`fixed-sequence-single.yaml`](../configs/srt-recipes/fixed-sequence-single.yaml) 和
+[`fixed-sequence-multi.yaml`](../configs/srt-recipes/fixed-sequence-multi.yaml) 块中。
+InferenceX 根据 `IS_AGENTIC=0` 和 `IS_MULTINODE` 自动选择共享块；配方片段无需
+include、模板语法、注册表或单独的调优文件。
 
-| 运行时输入 | 绑定的配方字段 |
+运行时与 `infx generate` 均通过 `infx.srt_slurm.common.load_recipe` 合并共享块和
+配方片段。映射递归合并，片段中的列表替换共享列表；对于变体集合，加载器将共享块
+应用到 `base` 下。先选择调优变体，再绑定主配置值，保留与 CUDA graph 或批处理设置
+配套的并发 zip 选择器。
+
+| 主配置/运行时值 | 绑定的配方字段 |
 |---|---|
-| `IMAGE` | `model.container`，以及已有的 `identity.container.image` |
-| `MODEL` | `model.path`、已有的 `identity.model.repo`，以及自定义客户端的 `benchmark.env.MODEL` |
-| `ISL`、`OSL`（固定序列运行） | 内置客户端的 `benchmark.isl` / `benchmark.osl`，或自定义客户端的 `benchmark.env.ISL` / `OSL` |
-| `CONC` / `CONC_LIST` | 使用该字段时的 `benchmark.concurrencies`，以及自定义客户端的并发环境变量 |
+| `image` / `IMAGE` | `model.container`，以及已有的 `identity.container.image` |
+| `model` / `MODEL` | `model.path`、已有的 `identity.model.repo`，以及自定义客户端的 `benchmark.env.MODEL` |
+| `precision` / `PRECISION` | 固定序列配方的 `model.precision` |
+| `isl`、`osl` / `ISL`、`OSL` | 内置客户端的 `benchmark.isl` / `benchmark.osl`，或自定义客户端的 `benchmark.env.ISL` / `OSL` |
+| 所选并发数 / `CONC`、`CONC_LIST` | 使用该字段时的 `benchmark.concurrencies`，以及自定义客户端的并发环境变量 |
 
-配方目录中保存完整的原生 srt-slurm YAML，使用具体值，不含 InferenceX 参数标记。
-共享源文件单独存放在 [`configs/srt-recipes/`](../configs/srt-recipes)。其中的
-`sources.yaml` 将配方路径映射到 common 源和 tuning 源。
-`infx.srt_slurm.common.load_recipe` 先加载 common，再合并 tuning：映射递归合并，
-tuning 中的列表替换 common 列表。它在这些 InferenceX 专用源文件已解析的标量值中
-替换 `MODEL`、`IMAGE`、`PRECISION`、`ISL`、`OSL`、`CONC_LIST`（字符串）和
-`CONCURRENCIES`（列表）参数，保留列表类型，不直接替换原始 YAML 文本。运行时和
-生成器使用同一组合路径。B300 Qwen3.5 FP8 基线与 MTP 源共用
-`fixed-sequence-single.yaml`；GB300 Qwen3.5 FP4 1P1D 使用
-`fixed-sequence-multi.yaml`，主配置 key 为 `qwen3.5-fp4-gb300-dynamo-sglang`。
-引擎调优保留在各自的源文件中。
+模型加载保留集群映射与预先准备机制；执行时使用镜像缓存，溯源仍保留原始引用。
+引擎量化、并行方式、调优、独立的角色/辅助服务镜像、有意设置的模型别名、tokenizer
+覆盖项和 draft model 仍在片段中显式声明。固定序列基准脚本统一为所有运行启用 chat
+template，并将 random-range ratio 设为 `0.8`；配方不再重复或切换这些设置。
 
-在 `inferencex-e2e/` 下为所选矩阵点生成完整的原生 YAML：
+在 `inferencex-e2e/` 下为所选矩阵点生成完整原生 YAML：
 
 ```bash
 uv run --extra recipes infx generate \
   --config-key qwen3.5-fp8-b300-sglang --output-dir /tmp/infx-recipes
 ```
 
-输出目录必须为空。输出包含 manifest 和完整原生配方，可供检查或交给固定版本的
-上游配方验证器。显式添加 `--refresh-exports` 可在验证后同时刷新已注册并纳入版本
-控制的原生配方集合快照；默认仅写入 `--output-dir`。此生成器概念验证支持
-原生固定序列长度的单节点和多节点配方；明确拒绝 AgentX、legacy 路径和 fork。
-现有 AgentX 运行时绑定仍然可用。
-
-已有的工作负载字面值会在运行时被覆盖。独立的角色/辅助服务镜像、有意设置的模型
-别名、tokenizer 覆盖项、draft model 和并行方式仍需显式声明。`PRECISION` 仅作为
-已注册源的 common 参数；引擎量化方式和调优设置保持不变。
-
-此组合机制保留现有基准行为：已审计的 random-range ratio 仍为 `0.8`，chat-template
-设置保持当前区别（非推测单节点运行使用 `false`，推测及多节点运行使用 `true`）。
-改变该行为需要另行决定并验证。
+输出目录必须为空，将收到 manifest 和完整原生配方，供检查并使用固定上游版本验证。
+生成配方属于不纳入版本控制的输出，不要提交，也不要将不完整片段直接传给 `srtctl`。
+生成器支持原生固定序列长度的单节点和多节点路径，明确拒绝 AgentX、legacy 路径和
+fork。现有 AgentX 运行时绑定仍然可用。
 
 ## 注册 llm-d 配方
 
@@ -273,7 +267,7 @@ llm-d 不是 srt-slurm 路径：InferenceX 自己持有 Slurm allocation，并�
 
 1. 确认使用原生 MTP 模块还是外部 draft。使用 draft 时，从模型/上游配方验证精确模型 ID、方法（例如 `eagle3`）和建议 speculative token 数。
 2. 复制相同模型和 backend 的可工作同类项。保留其 speculative config、attention backend、token 数、模型补丁和依赖设置。
-3. 每个投机解码的定长配方变体都必须设置 `benchmark.env.USE_CHAT_TEMPLATE: "true"`；`select_recipe` 会拒绝缺少该设置的投机解码变体，[`srt_fixed_sequence.sh`](../benchmarks/single_node/srt_fixed_sequence.sh) 会将其转换为传给 `run_benchmark_serving` 的 `--use-chat-template`。原始 prompt 会静默降低 acceptance。
+3. 固定序列基准脚本统一为所有运行（包括推测解码）传入 `--use-chat-template`。不要添加逐配方的 chat-template 开关；原始 prompt 会静默降低推测接受率。
 4. graph capture 至少按 `CONC * (1 + NUM_SPEC_TOKENS)` 确定规模，采用同类项的取整方式，并限制在框架上限内（当前 vLLM playbook 上限为 2048）。
 5. 保留 backend 差异：不要把 CUDA 专用 drafter attention pin 或补丁复制到 ROCm 配方。
 6. 在相应搜索空间条目设置 `spec-decoding: mtp`，并将其 `srt-recipe:` 指向 `-mtp` 配方；`select_recipe` 会据此校验配方的 speculative 配置。若使用 schema 支持的 draft-model 模式，要有意设置匹配的生成值；不要根据文件名推断。

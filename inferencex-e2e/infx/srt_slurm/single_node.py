@@ -128,8 +128,7 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
         "AgentX client": (benchmark.get("command", "").endswith("srt_agentic.sh"), agentic),
     }
     if not agentic:
-        expected["USE_CHAT_TEMPLATE"] = (workload["USE_CHAT_TEMPLATE"], "true" if spec else "false")
-        for name in ("ISL", "OSL", "RANDOM_RANGE_RATIO"):
+        for name in ("ISL", "OSL"):
             expected[name] = (str(workload[name]), environment[name])
     # A variant that names its point, or the host budget it sizes, must match the matrix.
     for name in ("CONC", "KV_OFFLOADING", "TOTAL_CPU_DRAM_GB"):

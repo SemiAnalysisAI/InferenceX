@@ -150,6 +150,7 @@ def test_single_node_point_stages_workflow_artifacts(harness):
     assert bound["benchmark"]["env"]["OSL"] == "64"
     assert bound["roles"]["agg"]["args"] == {
         "tensor-parallel-size": 4, "data-parallel-size": 1, "max-running-requests": 32,
+        "served-model-name": "test/model",
     }
     assert {"--json", "--yes", "--output"} <= set(argv)
     assert (call["env"]["INFMAX_WORKSPACE"], call["env"]["VIRTUAL_ENV"]) == (str(workspace), None)

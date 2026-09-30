@@ -7,16 +7,11 @@ set -eo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/../benchmark_lib.sh" --validation-only
 check_env_vars ISL OSL SRT_FRONTEND_HOST SRT_FRONTEND_PORT CONC_LIST \
     PREFILL_NUM_WORKERS PREFILL_TP DECODE_NUM_WORKERS DECODE_TP
-CLIENT_ARGS=(--trust-remote-code)
+CLIENT_ARGS=(--trust-remote-code --use-chat-template)
 case "${CLIENT_BACKEND:=openai}" in
     openai) endpoint=/v1/completions ;;
     openai-chat) endpoint=/v1/chat/completions ;;
     *) echo "ERROR: unsupported CLIENT_BACKEND: $CLIENT_BACKEND" >&2; exit 1 ;;
-esac
-case "${USE_CHAT_TEMPLATE:=true}" in
-    true) CLIENT_ARGS+=(--use-chat-template) ;;
-    false) ;;
-    *) echo "ERROR: USE_CHAT_TEMPLATE must be true or false" >&2; exit 1 ;;
 esac
 
 repo_root="$(dirname "${BASH_SOURCE[0]}")/../.."
@@ -38,7 +33,7 @@ for concurrency in $CONC_LIST; do
         --dataset-name random \
         --random-input-len "$ISL" \
         --random-output-len "$OSL" \
-        --random-range-ratio "${RANDOM_RANGE_RATIO:-0.8}" \
+        --random-range-ratio 0.8 \
         --random-num-workers 1 \
         --num-warmups "$((concurrency * 2))" \
         --num-prompts "$((concurrency * 10))" \

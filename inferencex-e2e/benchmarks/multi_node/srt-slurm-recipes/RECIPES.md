@@ -50,16 +50,20 @@ The master supplies the serving image, model, ISL/OSL, and selected concurrency;
 InferenceX binds these after selecting the tuned variant. Keep concurrency selectors
 zipped with tuning settings and independently pinned role/helper images explicit.
 
-This directory contains complete native srt-slurm YAML with concrete values. Shared
-parameterized sources belong in `configs/srt-recipes/`, where `sources.yaml` maps native
-recipe paths to common and tuning sources. Runtime and `infx generate` use the same
-loader: merge common then tuning, recursively merge mappings, replace lists, and render
-parameters in parsed scalar values, preserving typed lists. B300 Qwen3.5 FP8 baseline
-and MTP share the single-node common source; GB300 Qwen3.5 FP4 1P1D uses the multi-node
-common source. `infx generate` writes to an empty output directory; explicitly add
-`--refresh-exports` to also refresh registered checked-in native bundle snapshots after
-validation. See [runtime workload binding](../../../docs/configuration-procedures.md#runtime-workload-binding)
-for the generation command, supported inputs, and generator limitations.
+Active native fixed-sequence files in this directory are partial fragments containing
+recipe-specific settings in the native YAML structure. InferenceX automatically combines
+them with the flat `configs/srt-recipes/fixed-sequence-multi.yaml` block; single-node
+fragments use `fixed-sequence-single.yaml`. There is no per-recipe source registry,
+separate tuning directory, or include/template syntax. Runtime and `infx generate` share
+the loader, which recursively merges mappings, replaces lists, and applies common fields
+under `base` for variant bundles. Master values supply model, image, precision, lengths,
+and concurrency; engine tuning and deliberate overrides stay in the fragments.
+
+The fixed-sequence scripts centrally enable chat templates and use random-range ratio
+`0.8`. `infx generate` writes complete native recipes and a manifest to an empty output
+directory only; generated recipes are not checked in. See
+[runtime workload binding](../../../docs/configuration-procedures.md#runtime-workload-binding)
+for the command and generator scope.
 
 For aggregate recipes use `roles.agg`; `roles.decode.nodes: colocate` shares prefill
 nodes and contributes no additional worker nodes to scheduling.
@@ -68,16 +72,13 @@ All referenced recipes must be checked in: srt-slurm 2 ships curated examples in
 
 ## Migration and validation
 
-Install the shared pin in an isolated environment, then use its CLI on complete native
-recipes. InferenceX-only common/tuning sources must first be rendered with `infx generate`;
-do not pass them directly to upstream commands:
+Install the shared pin in an isolated environment. Generate complete native recipes
+before using upstream validation commands; checked-in fixed-sequence fragments are not
+standalone `srtctl` inputs. For example, from `inferencex-e2e/`:
 
 ```bash
-# Verify each supported recipe directory before rewriting it.
-srtctl migrate --verify -f benchmarks/multi_node/srt-slurm-recipes/dsr1/sglang
-srtctl migrate --in-place -f benchmarks/multi_node/srt-slurm-recipes/dsr1/sglang
-# Repeat for the other model/engine directories.
-# Use the pinned TileRT fork for tilert/ recipe directories.
+uv run --extra recipes infx generate \
+  --config-key qwen3.5-fp4-gb300-dynamo-sglang --output-dir /tmp/infx-recipes
 python -m pytest infx/tests/matrix/ -q
 python -m infx.matrix.generate full-sweep \
   --config-files configs/nvidia-master.yaml \

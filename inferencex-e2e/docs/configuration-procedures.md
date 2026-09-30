@@ -214,30 +214,35 @@ Keep topology and tuning synchronized between both files. The master owns the ru
 
 ## Runtime workload binding
 
-The master config supplies `image`, `model`, scenario `isl` / `osl`, and the selected
-concurrency through `IMAGE`, `MODEL`, `ISL`, `OSL`, and `CONC` / `CONC_LIST`. InferenceX
-selects the tuned variant before binding these values, preserving concurrency selectors
-zipped with CUDA graph or batch settings. Model loading uses the existing cluster
-mapping and staging; cached images retain their original image reference for provenance.
+Active native fixed-sequence recipes stay at their existing paths under
+`benchmarks/single_node/srt-slurm-recipes/` and
+`benchmarks/multi_node/srt-slurm-recipes/`. They contain only recipe-specific settings
+in the native YAML structure. Shared fields live in the flat
+[`fixed-sequence-single.yaml`](../configs/srt-recipes/fixed-sequence-single.yaml) and
+[`fixed-sequence-multi.yaml`](../configs/srt-recipes/fixed-sequence-multi.yaml) blocks.
+InferenceX selects the block from `IS_AGENTIC=0` and `IS_MULTINODE`; fragments need no
+include or template syntax, registry, or separate tuning file.
 
-| Runtime input | Bound recipe fields |
+Runtime and `infx generate` use `infx.srt_slurm.common.load_recipe` to merge the common
+block with the fragment. Mappings merge recursively and fragment lists replace common
+lists; for variant bundles, the loader applies the common block under `base`. It selects
+the tuned variant before binding the master values, preserving concurrency selectors
+zipped with CUDA graph or batch settings.
+
+| Master/runtime value | Bound recipe fields |
 |---|---|
-| `IMAGE` | `model.container`, plus existing `identity.container.image` |
-| `MODEL` | `model.path`, existing `identity.model.repo`, and custom-client `benchmark.env.MODEL` |
-| `ISL`, `OSL` (fixed-sequence runs) | Built-in `benchmark.isl` / `benchmark.osl`, or custom-client `benchmark.env.ISL` / `OSL` |
-| `CONC` / `CONC_LIST` | `benchmark.concurrencies` where consumed, and the custom client's concurrency environment |
+| `image` / `IMAGE` | `model.container`, plus existing `identity.container.image` |
+| `model` / `MODEL` | `model.path`, existing `identity.model.repo`, and custom-client `benchmark.env.MODEL` |
+| `precision` / `PRECISION` | Fixed-sequence `model.precision` |
+| `isl`, `osl` / `ISL`, `OSL` | Built-in `benchmark.isl` / `benchmark.osl`, or custom-client `benchmark.env.ISL` / `OSL` |
+| Selected concurrency / `CONC`, `CONC_LIST` | `benchmark.concurrencies` where consumed, and the custom client's concurrency environment |
 
-Recipe directories contain complete native srt-slurm YAML, with concrete values and no
-InferenceX parameter markers. Shared sources live separately under
-[`configs/srt-recipes/`](../configs/srt-recipes). Its `sources.yaml` registry maps a recipe
-path to a common source and a tuning source. `infx.srt_slurm.common.load_recipe` merges
-common then tuning: mappings merge recursively and tuning lists replace common lists.
-It substitutes `MODEL`, `IMAGE`, `PRECISION`, `ISL`, `OSL`, `CONC_LIST` (a string), and
-`CONCURRENCIES` (a typed list) in parsed scalar values, preserving lists instead of
-substituting raw YAML text. Runtime loading and the generator use the same composition
-path. B300 Qwen3.5 FP8 baseline and MTP sources share `fixed-sequence-single.yaml`;
-GB300 Qwen3.5 FP4 1P1D uses `fixed-sequence-multi.yaml` under config key
-`qwen3.5-fp4-gb300-dynamo-sglang`. Engine tuning stays in separate sources.
+Model loading retains cluster mapping and staging; image provenance retains the original
+reference when execution uses a cache. Keep engine quantization, parallelism, tuning,
+independent role/helper images, deliberate model aliases, tokenizer overrides, and draft
+models explicit in the fragment. The fixed-sequence benchmark scripts centrally enable
+chat templates for every run and set random-range ratio to `0.8`; recipes do not repeat
+or toggle those settings.
 
 From `inferencex-e2e/`, generate complete native YAML for each selected matrix point:
 
@@ -246,22 +251,12 @@ uv run --extra recipes infx generate \
   --config-key qwen3.5-fp8-b300-sglang --output-dir /tmp/infx-recipes
 ```
 
-The output directory must be empty. The output includes a manifest and complete native
-recipes that can be inspected or passed to the pinned upstream validator. Add
-`--refresh-exports` explicitly to also refresh registered checked-in native bundle
-snapshots after validation; the default only writes to `--output-dir`. The generator proof of concept supports native fixed-sequence
-single-node and multi-node recipes. It explicitly rejects AgentX, legacy paths, and
-forks; the existing AgentX runtime binding remains available.
-
-Existing workload literals are overridden at runtime. Keep independent role/helper
-images, deliberate model aliases, tokenizer overrides, draft models, and parallelism
-explicit. `PRECISION` is a common-source parameter for registered sources only; engine
-quantization and tuning remain unchanged.
-
-This composition preserves benchmark behavior: the audited random-range ratio remains
-`0.8`, and chat-template settings retain the current distinction (`false` for
-non-speculative single-node runs, `true` for speculative and multi-node runs). Changing
-that behavior requires a separate decision and validation.
+The output directory must be empty. It receives a manifest and complete native recipes
+for inspection and validation with the pinned upstream version. Generated recipes are
+untracked outputs; do not commit them or pass partial fragments directly to `srtctl`.
+The generator supports native fixed-sequence single-node and multi-node paths and
+explicitly rejects AgentX, legacy paths, and forks. Existing AgentX runtime binding
+remains available.
 
 ## Register an llm-d recipe
 
@@ -297,7 +292,7 @@ Sources: [`AGENTS.md#non-negotiable-benchmark-invariants`](../../AGENTS.md#non-n
 
 1. Confirm native MTP modules versus an external draft. For a draft, verify exact model ID, method (for example `eagle3`), and recommended speculative-token count from the model/upstream recipe.
 2. Copy a working sibling for the same model and backend. Preserve its speculative config, attention backend, token count, model patches, and dependency setup.
-3. Every speculative fixed-sequence recipe variant must set `benchmark.env.USE_CHAT_TEMPLATE: "true"`; `select_recipe` rejects a speculative variant without it, and [`srt_fixed_sequence.sh`](../benchmarks/single_node/srt_fixed_sequence.sh) turns it into `--use-chat-template` for `run_benchmark_serving`. Raw prompts silently depress acceptance.
+3. Fixed-sequence benchmark scripts centrally pass `--use-chat-template` for every run, including speculative runs. Do not add per-recipe chat-template toggles; raw prompts silently depress speculative acceptance.
 4. Size graph capture for at least `CONC * (1 + NUM_SPEC_TOKENS)`, rounded as the sibling does and capped at the framework limit (the current vLLM playbook caps at 2048).
 5. Keep backend differences: do not copy CUDA-only drafter attention pins or patches into ROCm recipes.
 6. Set `spec-decoding: mtp` in the relevant search-space entries and point their `srt-recipe:` at the `-mtp` recipe; `select_recipe` checks the recipe's speculative config against it. For a draft-model mode supported by the schema, use the matching generated value deliberately. Do not infer it from a filename.

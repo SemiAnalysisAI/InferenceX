@@ -1,9 +1,0 @@
-benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/b300-fp8/8k1k.yaml:
-  common: fixed-sequence-single.yaml
-  tuning: tuning/qwen3.5-sglang-b300-fp8.yaml
-benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/b300-fp8-mtp/8k1k.yaml:
-  common: fixed-sequence-single.yaml
-  tuning: tuning/qwen3.5-sglang-b300-fp8-mtp.yaml
-? benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/gb300-fp4/8k1k/disagg-1p1d-p-tp4-d-tp4-b128-c1x4x8x16x32x64x256-stp.yaml
-: common: fixed-sequence-multi.yaml
-  tuning: tuning/qwen3.5-sglang-gb300-fp4-disagg.yaml

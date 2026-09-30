@@ -1,10 +1,6 @@
 base:
   schema: 2
   name: qwen3.5-fp8-b200-sglang-8k1k
-  model:
-    path: hf:Qwen/Qwen3.5-397B-A17B-FP8
-    container: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
-    precision: fp8
   resources:
     gpu_type: b200
     gpus_per_node: 8
@@ -43,19 +39,9 @@ base:
         scheduler-recv-interval: 10
         tokenizer-worker-num: 6
         context-length: 9236
-        served-model-name: Qwen/Qwen3.5-397B-A17B-FP8
         enable-metrics: false
       env:
         PYTHONNOUSERSITE: '1'
-  benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/single_node/srt_fixed_sequence.sh
-    env:
-      MODEL: Qwen/Qwen3.5-397B-A17B-FP8
-      ISL: '8192'
-      OSL: '1024'
-      RANDOM_RANGE_RATIO: '0.8'
-      USE_CHAT_TEMPLATE: 'false'
 zip_override_tp8_ep1:
   roles:
     agg:

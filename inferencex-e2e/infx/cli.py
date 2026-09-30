@@ -26,11 +26,6 @@ def main(argv: list[str] | None = None) -> int:
         "--config-file", type=Path, action="append", help="Master YAML; repeatable"
     )
     generate.add_argument("--runner-config", type=Path)
-    generate.add_argument(
-        "--refresh-exports",
-        action="store_true",
-        help="Refresh registered native recipe bundles after validating all outputs",
-    )
     generate.add_argument("--gpu-monitor-interval", type=int, default=1)
     args = parser.parse_args(argv)
     root = args.project_root.resolve()
@@ -42,7 +37,6 @@ def main(argv: list[str] | None = None) -> int:
             project=root,
             output=args.output_dir,
             gpu_monitor_interval=args.gpu_monitor_interval,
-            refresh_exports=args.refresh_exports,
         )
     except ImportError as error:
         parser.error(

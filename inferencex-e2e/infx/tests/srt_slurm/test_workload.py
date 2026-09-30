@@ -199,3 +199,26 @@ def test_removed_identity_fields_are_filled_while_frameworks_are_preserved():
         "model": {"repo": "org/new-model"},
         "container": {"image": "registry/server:new"},
     }
+
+
+@pytest.mark.parametrize("engine", ["sglang", "vllm", "trtllm"])
+def test_fixed_fragments_receive_served_model_name_and_keep_explicit_alias(engine):
+    recipe = {
+        "engine": engine,
+        "roles": {"prefill": {"args": {"tp": 8}}, "decode": {"args": {"tp": 4}}},
+        "benchmark": {"type": "custom"},
+    }
+    bound = bind_workload(recipe, runtime())
+    if engine == "trtllm":
+        assert bound["engine"] == {"type": "trtllm", "served_model_name": "org/new-model"}
+        recipe["engine"] = {"type": engine, "served_model_name": "stable-alias"}
+        assert bind_workload(recipe, runtime())["engine"]["served_model_name"] == "stable-alias"
+    else:
+        assert bound["roles"] == {
+            "prefill": {"args": {"tp": 8, "served-model-name": "org/new-model"}},
+            "decode": {"args": {"tp": 4, "served-model-name": "org/new-model"}},
+        }
+        recipe["roles"]["prefill"]["args"]["served-model-name"] = "stable-alias"
+        alias = bind_workload(recipe, runtime())
+        assert alias["roles"]["prefill"]["args"]["served-model-name"] == "stable-alias"
+        assert alias["roles"]["decode"]["args"] == {"tp": 4}

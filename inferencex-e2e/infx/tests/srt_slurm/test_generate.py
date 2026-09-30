@@ -19,18 +19,24 @@ def dump(path, value):
 def project(tmp_path):
     (tmp_path / "utils").mkdir()
     (tmp_path / "utils/srt-slurm").symlink_to(Path(__file__).resolve().parents[3] / "utils/srt-slurm", target_is_directory=True)
+    common = {
+        "model": {"path": "hf:${MODEL}", "container": "${IMAGE}", "precision": "${PRECISION}"},
+        "benchmark": {"type": "custom", "command": "bash /infmax-workspace/benchmarks/single_node/srt_fixed_sequence.sh", "env": {
+            "MODEL": "${MODEL}", "ISL": "${ISL}", "OSL": "${OSL}",
+        }},
+    }
+    dump(tmp_path / "configs/srt-recipes/fixed-sequence-single.yaml", common)
+    multi_common = deepcopy(common)
+    multi_common["benchmark"].update({"command": "bash /infmax-workspace/benchmarks/multi_node/srt_fixed_sequence.sh", "concurrencies": "${CONCURRENCIES}"})
+    multi_common["benchmark"]["env"]["CONC_LIST"] = "${CONC_LIST}"
+    dump(tmp_path / "configs/srt-recipes/fixed-sequence-multi.yaml", multi_common)
     recipe = {
         "schema": 2, "name": "controlled-test",
-        "model": {"path": "hf:org/old", "container": "old:image", "precision": "fp8"},
         "resources": {"gpu_type": "h200", "gpus_per_node": 8},
         "engine": "sglang", "frontend": {"type": "sglang", "enable_multiple_frontends": False},
         "roles": {"agg": {"nodes": 1, "workers": 1, "gpus": 2, "args": {
-            "tensor-parallel-size": 2, "served-model-name": "org/old", "max-running-requests": 8,
+            "tensor-parallel-size": 2, "max-running-requests": 8,
         }, "env": {"SGLANG_SIMULATE_ACC_LEN": "3"}}},
-        "benchmark": {"type": "custom", "command": "bash /infmax-workspace/benchmarks/single_node/srt_fixed_sequence.sh", "env": {
-            "MODEL": "org/old", "ISL": "8", "OSL": "4", "RANDOM_RANGE_RATIO": "0.8",
-            "USE_CHAT_TEMPLATE": "false",
-        }},
     }
     raw = {"base": recipe, "zip_override_conc": {
         "roles": {"agg": {"args": {"cuda-graph-max-bs": [16, 32]}}},
@@ -94,6 +100,7 @@ def test_multi_fixed_sequence_uses_selected_native_variant_and_list(project, sel
         "conc-list": [2, 4], "num-nodes": 1,
     }]
     recipe = deepcopy(raw["base"])
+    recipe["model"] = {"path": "hf:org/old", "container": "old:image", "precision": "fp8"}
     recipe["benchmark"] = {"type": "sa-bench", "isl": 8, "osl": 4, "concurrencies": [8]}
     dump(root / "benchmarks/multi_node/srt-slurm-recipes/test.yaml", {"base": recipe,
         "override_selected": {"roles": {"agg": {"args": {"max-running-requests": 19}}}},
@@ -138,40 +145,40 @@ def test_unsupported_or_missing_selection_is_an_actionable_error(project, mode, 
     assert not (root / "output").exists()
 
 
-def register(root, raw):
-    common = deepcopy(raw)
-    common["base"]["model"].update({"path": "hf:${MODEL}", "container": "${IMAGE}"})
-    common["base"]["benchmark"]["env"].update({"MODEL": "${MODEL}", "ISL": "${ISL}", "OSL": "${OSL}"})
-    dump(root / "configs/srt-recipes/common.yaml", common)
-    dump(root / "configs/srt-recipes/tuning.yaml", {})
-    dump(root / "configs/srt-recipes/sources.yaml", {"recipe.yaml": {"common": "common.yaml", "tuning": "tuning.yaml"}})
+def test_native_fragment_is_composed_automatically_without_rewriting_sources(project):
+    root, _, _ = project
+    source = root / "configs/srt-recipes/fixed-sequence-single.yaml"
+    common_before = source.read_bytes()
+    fragment = root / "recipe.yaml"
+    fragment_before = fragment.read_bytes()
+    assert main(argv(root)) == 0
+    manifest, recipes = outputs(root)
+    assert [recipe["model"]["path"] for recipe in recipes] == ["hf:org/new", "hf:org/new"]
+    assert [recipe["roles"]["agg"]["args"]["cuda-graph-max-bs"] for recipe in recipes] == [16, 32]
+    assert [record["variant"] for record in manifest["recipes"]] == ["zip_override_conc[0]", "zip_override_conc[1]"]
+    assert fragment.read_bytes() == fragment_before
+    assert source.read_bytes() == common_before
 
 
-def test_refresh_exports_produces_native_bundle_from_registered_sources(project):
-    root, _, raw = project
-    register(root, raw)
-    assert main(argv(root, "--refresh-exports")) == 0
-    exported = yaml.safe_load((root / "recipe.yaml").read_text())
-    assert exported["base"]["model"]["path"] == "hf:org/new"
-    assert exported["base"]["model"]["container"] == "registry/server:new"
-    assert exported["zip_override_conc"]["roles"]["agg"]["args"]["cuda-graph-max-bs"] == [16, 32]
-    manifest, _ = outputs(root)
-    assert manifest["refreshed-exports"] == [str(root / "recipe.yaml")]
-
-
-def test_conflicting_export_sources_leave_every_file_untouched(project, capsys):
-    root, master, raw = project
-    register(root, raw)
+def test_same_native_fragment_generates_distinct_master_workloads(project):
+    root, master, _ = project
     original = (root / "recipe.yaml").read_bytes()
     other = deepcopy(master["model-test"])
-    other["model"] = "org/different"
+    other.update({"model": "org/different", "image": "registry/server:other"})
+    other["scenarios"]["fixed-seq-len"][0].update({"isl": 2048, "osl": 256})
     master["other"] = other
     dump(root / "master.yaml", master)
-    with pytest.raises(SystemExit):
-        main(argv(root, "--config-key", "other", "--refresh-exports"))
-    assert "Conflicting selected workloads" in capsys.readouterr().err
+    assert main(argv(root, "--config-key", "other")) == 0
+    manifest, recipes = outputs(root)
+    assert len(recipes) == 4
+    assert {record["config-key"] for record in manifest["recipes"]} == {"model-test", "other"}
+    assert [(recipe["model"]["path"], recipe["model"]["container"], recipe["benchmark"]["env"]["ISL"], recipe["benchmark"]["env"]["OSL"]) for recipe in recipes] == [
+        ("hf:org/new", "registry/server:new", "1024", "128"),
+        ("hf:org/new", "registry/server:new", "1024", "128"),
+        ("hf:org/different", "registry/server:other", "2048", "256"),
+        ("hf:org/different", "registry/server:other", "2048", "256"),
+    ]
     assert (root / "recipe.yaml").read_bytes() == original
-    assert not (root / "output").exists()
 
 
 def test_nonempty_output_is_preserved(project, capsys):

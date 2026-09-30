@@ -11,5 +11,3 @@ benchmark:
     ISL: ${ISL}
     OSL: ${OSL}
     CONC_LIST: ${CONC_LIST}
-    RANDOM_RANGE_RATIO: '0.8'
-    USE_CHAT_TEMPLATE: 'true'
