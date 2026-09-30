@@ -9005,13 +9005,6 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3477
 
 - config-keys:
-    - dsv41flash-fp4-mi355x-vllm-agentic-dspark
-  description:
-    - "Force VLLM_ROCM_USE_AITER_TRITON_SPARSE_MLA=True for vllm-project/vllm#53492's Gluon sparse-MLA kernel. Unpin image to TBD pending #58208 (faster DSA candidate topk selection), #58655 (fused mHC Triton kernel) and #53492 (sparse MLA Gluon kernel) landing in a nightly release: better topk/mHC/MLA kernels with better compute/communication stream overlap. Does not include vllm-project/vllm#58671's MXFP4 sparse-logits indexer: it isn't merging in time, and reverting a dependency it exposed (#58208's DSA candidate-block topk, vllm-project/vllm#59125) showed the fp8 dense indexer path #58671 would otherwise replace costs roughly 15% interactivity and 10% tail e2e latency at TP2 c16, with no measurable throughput/GPU change."
-    - "设置 VLLM_ROCM_USE_AITER_TRITON_SPARSE_MLA=True 以启用 vllm-project/vllm#53492 的 Gluon sparse-MLA kernel。将镜像取消固定为 TBD，待 #58208（更快的 DSA 候选块 topk 选择）、#58655（融合 mHC Triton kernel）与 #53492（sparse MLA Gluon kernel）合并至上游并随 nightly 镜像发布：更优的 topk/mHC/MLA kernel，以及更好的计算/通信流重叠模式。不包含 vllm-project/vllm#58671 的 MXFP4 稀疏 logits indexer：该 PR 未能及时合并；回滚它所暴露的一个依赖问题（#58208 的 DSA 候选块 topk，vllm-project/vllm#59125）后测得，#58671 本应替换的 fp8 稠密 indexer 路径在 TP2 c16 下约有 15% 的 interactivity 与 10% 的尾部 e2e 延迟损失，而 throughput/GPU 无明显变化。"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3555
-
-- config-keys:
     - glm5.2-fp4-mi355x-sglang-agentic-mtp
   scenario-type:
     - agentic-coding
@@ -9111,3 +9104,10 @@
     - "Restore the DCP8 LMCache bands on the native srt-slurm recipe: concurrency 14 and 16 (DSpark 3, ReplaySSM) and 48, 56 and 72 (no draft) run ATOM's in-process lmcache_offload connector through roles.agg.args.extra-kv-connectors (srt-slurm patch 507), with 128 GB/rank up to 48 and 192 GB/rank at 56 and 72. Concurrency 1 and 4 stay GPU-resident."
     - "No change to the Inferact/Kimi-K3-DSpark draft's precision: online_quant_config still excludes every draft linear (layers.*, context_proj), so its weights and activations stay BF16, and it keeps the target's FP8 KV cache (kv_cache_dtype fp8). FlyDSL FP8 prefill attention applies only to the target, since the draft runs its block pass as decode attention."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3407
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark
+  description:
+    - "Force VLLM_ROCM_USE_AITER_TRITON_SPARSE_MLA=True for vllm-project/vllm#53492's Gluon sparse-MLA kernel. Unpin image to TBD pending #58208 (faster DSA candidate topk selection), #58655 (fused mHC Triton kernel) and #53492 (sparse MLA Gluon kernel) landing in a nightly release: better topk/mHC/MLA kernels with better compute/communication stream overlap. Does not include vllm-project/vllm#58671's MXFP4 sparse-logits indexer: it isn't merging in time, and reverting a dependency it exposed (#58208's DSA candidate-block topk, vllm-project/vllm#59125) showed the fp8 dense indexer path #58671 would otherwise replace costs roughly 15% interactivity and 10% tail e2e latency at TP2 c16, with no measurable throughput/GPU change."
+    - "设置 VLLM_ROCM_USE_AITER_TRITON_SPARSE_MLA=True 以启用 vllm-project/vllm#53492 的 Gluon sparse-MLA kernel。将镜像取消固定为 TBD，待 #58208（更快的 DSA 候选块 topk 选择）、#58655（融合 mHC Triton kernel）与 #53492（sparse MLA Gluon kernel）合并至上游并随 nightly 镜像发布：更优的 topk/mHC/MLA kernel，以及更好的计算/通信流重叠模式。不包含 vllm-project/vllm#58671 的 MXFP4 稀疏 logits indexer：该 PR 未能及时合并；回滚它所暴露的一个依赖问题（#58208 的 DSA 候选块 topk，vllm-project/vllm#59125）后测得，#58671 本应替换的 fp8 稠密 indexer 路径在 TP2 c16 下约有 15% 的 interactivity 与 10% 的尾部 e2e 延迟损失，而 throughput/GPU 无明显变化。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3555
