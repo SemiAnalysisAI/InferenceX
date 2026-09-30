@@ -5,10 +5,32 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+
+def capacity_bounds(
+    log_texts: list[str], dp_size: int, input_length: int
+) -> dict[int, float] | None:
+    """Optimistic input-only capacity bounds; require evidence from every DP engine."""
+    bounds = {}
+    pattern = re.compile(
+        r"EngineCore_DP(\d+).*Maximum concurrency for ([\d,]+) tokens per request: ([\d.]+)x"
+    )
+    for text in log_texts:
+        for line in text.splitlines():
+            match = pattern.search(line)
+            if match:
+                rank, length, concurrency = match.groups()
+                length = int(length.replace(",", ""))
+                if length >= input_length:
+                    bound = float(concurrency) * length / input_length
+                    rank = int(rank)
+                    bounds[rank] = min(bounds.get(rank, bound), bound)
+    return bounds if set(bounds) == set(range(dp_size)) else None
 
 
 def main():
@@ -35,7 +57,41 @@ def main():
     out = args.output / "research" / "cohort-sweep"
     out.mkdir(parents=True, exist_ok=True)
     manifest = []
+    bounds = capacity_bounds(
+        [p.read_text(errors="replace") for p in args.output.glob("*_agg_w0.out")],
+        args.dp_size,
+        int(os.environ["ISL"]),
+    )
+    (out / "runtime-capacity-bounds.json").write_text(
+        json.dumps(
+            {
+                "per_dp_input_only_upper_bound": bounds,
+                "qualification": "Native runtime KV-capacity estimates, scaled optimistically to input length only. Not proof that a batch fits; full-window validation still required.",
+            },
+            indent=2,
+        )
+        + "\n"
+    )
     for i, concurrency in enumerate(args.concurrencies):
+        if bounds is not None and concurrency / args.dp_size > min(bounds.values()):
+            manifest.append(
+                {
+                    "global_batch": concurrency,
+                    "status": "not_run_capacity_bound",
+                    "per_dp_requested": concurrency // args.dp_size,
+                    "per_dp_input_only_upper_bound": min(bounds.values()),
+                }
+            )
+            (out / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+            print(
+                f"Skipping global batch {concurrency}: exceeds native runtime KV capacity bound",
+                flush=True,
+            )
+            if i == 0:
+                raise RuntimeError(
+                    "First requested batch exceeds native runtime KV capacity"
+                )
+            continue
         case_dir = args.output if i == 0 else out / f"batch{concurrency}"
         case_dir.mkdir(parents=True, exist_ok=True)
         name = root_name if i == 0 else f"research_batch{concurrency}"

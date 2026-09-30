@@ -9410,3 +9410,13 @@
     \u7559\u7ED3\u679C\u548C\u65B0\u589E trace \u6E05\u5355\uFF1B\u4EC5\u9996\u4E2A\
     \u7528\u4F8B\u4F7F\u7528\u6807\u51C6 CI \u7ED3\u679C\u8DEF\u5F84\u3002"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-8gpu-dp-128k-sweep
+    - dsv41flash-fp4-b300-vllm-8gpu-dp-128k-sweep
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Use native 0.95 memory utilization for high-context capacity; skip oversized research cases only with complete per-DP runtime KV-capacity evidence, recording no fabricated metrics."
+    - "长上下文使用原生 0.95 内存比例；仅在全部 DP 运行时 KV 容量证据齐全时跳过超限研究用例，不生成虚构指标。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607

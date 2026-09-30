@@ -136,3 +136,11 @@ The profile validator counts only newly created files for each wave, so earlier
 case traces are preserved. Startup and prefix warmup are outside steady-decode
 timing. This is a research sweep, not three independently configured official
 CI matrix measurements.
+
+High-context sweeps reserve 95% of device memory through the native vLLM setting.
+Before each case, the driver reads KV-capacity estimates from all DP engines'
+startup logs at the configured long context. It only skips a case when even an
+optimistic input-only capacity bound is below the requested per-DP batch. A
+skipped case is recorded as `not_run_capacity_bound`, never as a timing result.
+Missing per-rank capacity evidence leaves the normal measured-window validation
+in charge. Passing the estimate does not prove that a batch fits.

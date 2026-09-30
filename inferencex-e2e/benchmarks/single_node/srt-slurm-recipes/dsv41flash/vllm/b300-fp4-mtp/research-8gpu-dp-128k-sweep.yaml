@@ -45,7 +45,7 @@ base:
         enable-expert-parallel: true
         max-num-batched-tokens: 8192
         max-cudagraph-capture-size: 2048
-        gpu-memory-utilization: 0.85
+        gpu-memory-utilization: 0.95
         enable-prefix-caching: true
         profiler-config: '{"profiler": "torch", "torch_profiler_dir": "/logs/research/vllm-cohort-profiles",
           "torch_profiler_with_stack": false, "torch_profiler_record_shapes": true,
