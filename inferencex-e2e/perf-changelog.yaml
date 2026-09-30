@@ -9127,3 +9127,34 @@
     - "Add Kimi-K3 MXFP4 vLLM agentic-coding on MI355X (TP8, DSpark): dcp1 c1/c4 GPU-resident and c8-c14 with SimpleCPUOffload DRAM offload, plus a new dcp8 c44/c48/c70 throughput band (mtp synthetic acceptance, no draft); vLLM ROCm image vllm/vllm-openai-rocm:nightly-rocm100-36768d1bfd39094681cdbc8cb37d4b31c0729c89"
     - "The Inferact/Kimi-K3-DSpark draft (K3DSparkModel, model_type k3_dspark, 5 layers, hidden 7168, torch_dtype bfloat16, no quantization_config) keeps every layer at its pristine dtype. vLLM builds all its modules with quant_config from get_draft_quant_config() (vllm/models/kimi_k3/nvidia/dspark_mla.py), which returns None because K3DSparkModel is explicitly excluded from the DeepSeek-V4 branch that would set draft.quantization = target.quantization (vllm/config/speculative.py:1431); so context_proj (ReplicatedLinear), context_kv_proj (MergedColumnParallelLinear) and each decoder layer's MLA q/kv projections and dense KimiMLP (gate/up/down) load unquantized in BF16 -- no ptpc_fp8, no mxfp4, no INT4 weights. The draft has no FusedMoE/block_sparse_moe, so VLLM_ROCM_USE_AITER_MOE_SITUV2 (A8W4) never touches it, and its KV cache stays fp8 (kv_cache_dtype). This PR only changes draft depth (num_speculative_tokens 4->7) and enables INT4 custom quick all-reduce (VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4, vllm/distributed/device_communicators/quick_all_reduce.py); because the draft shares the target's TP8 group (vllm/v1/spec_decode/draft_model.py), that INT4 applies to its tensor-parallel reductions too -- a collective-reduction transport precision, not any draft weight, activation, or KV dtype."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3561
+- config-keys:
+    - glm5.2-fp4-gb300-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh GLM-5.2 NVFP4 GB300 Dynamo-SGLang AgentX with lmsysorg/sglang:nightly-dev-20260914-4358a161 and one schema-2 recipe per benchmark point."
+    - "Run aggregate concurrency 1/2/4 and disaggregate 1P2D c48, 1P4D c45, 1P6D c45, and 2P1D DEP8-prefill/DEP16-decode c192."
+    - "Align prefill speculative steps and draft tokens with decode, use FlashInfer CuteDSL for disaggregate MoE/FP4 backends unless the existing backend is TensorRT-LLM, and run from the nightly's bundled Dynamo."
+    - "Set aggregate max-running-requests and cuda-graph-max-bs-decode to twice each point's concurrency: 2 for c1, 4 for c2, and 8 for c4."
+    - "Use mem-fraction-static 0.75 on disaggregate prefills, cap max-prefill-tokens at 8192, and set the SGLang scheduler watchdog to 1000000 seconds on all serving roles for long-running AgentX requests."
+    - "Enable DP-attention local control broadcast on both roles of the c192 recipe so scheduler control messages go to DP leaders without full-TP Gloo collectives on every iteration."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3178
+
+- config-keys:
+    - glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Use the HiCache kernel I/O backend for the c192 prefill recipe after public sweep run 36443508797 reproduced the direct-backend eviction stall and exhausted the four-hour Slurm limit during warmup."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3178
+
+- config-keys:
+    - glm5.2-fp4-gb300-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Remove recipe-local synthetic-acceptance overrides so the current srt-slurm connector selects the committed GLM-5.2 MTP golden curve for throughput and real verification for evals."
+    - "Remove SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE so the embedded GLM-5.2 EAGLE head runs at the precision shipped by the checkpoint under the pinned SGLang image."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3178
