@@ -1,12 +1,10 @@
-# DeepSeek-V4-Pro-0813 AgentX on B300 with SGLang DSpark (block 6). Two arms:
-# TP8 with the flashinfer MXFP4 MoE and GPU-resident KV, and DEP8 (attention
-# DP + Mega-MoE + FP4 indexer) behind the SGLang router with a HiCache DRAM tier.
+# Update B300 DSV4 performance with DSpark.
 base:
   schema: 2
   name: dsv4-fp4-b300-sglang-agentic
   model:
     path: hf:deepseek-ai/DeepSeek-V4-Pro-0813
-    container: lmsysorg/sglang:nightly-dev-20260901-07c8f729
+    container: lmsysorg/sglang:dev-cu13-nightly-0929@sha256:497d6ce4887830aad5382242b79c5cfc15faefa0bbb970b4580041d8b131775b
     precision: fp4
   resources:
     gpu_type: b300
@@ -43,7 +41,7 @@ base:
         speculative-num-steps: 1
         speculative-eagle-topk: 1
         speculative-num-draft-tokens: 7
-        attention-backend: compressed
+        attention-backend: dsv4
         page-size: 256
         disable-shared-experts-fusion: true
         enable-metrics: true
@@ -72,17 +70,104 @@ base:
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
 
-# One variant per point. TP8: admission is 2x CONC and the graph batch 4x
-# CONC, capped at 64.
+override_tp4_c1:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-running-requests: 2
+        cuda-graph-max-bs-decode: 4
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: none
+
+override_tp4_c2:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-running-requests: 4
+        cuda-graph-max-bs-decode: 8
+  benchmark:
+    env:
+      CONC: '2'
+      KV_OFFLOADING: none
+
+override_tp4_c4:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 16
+  benchmark:
+    env:
+      CONC: '4'
+      KV_OFFLOADING: none
+
+override_tp4_c8:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 32
+  benchmark:
+    env:
+      CONC: '8'
+      KV_OFFLOADING: none
+
+override_tp4_c16:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-running-requests: 32
+        cuda-graph-max-bs-decode: 64
+  benchmark:
+    env:
+      CONC: '16'
+      KV_OFFLOADING: none
+
+override_tp4_c32:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-running-requests: 64
+        cuda-graph-max-bs-decode: 64
+  benchmark:
+    env:
+      CONC: '32'
+      KV_OFFLOADING: none
+
 override_tp8_c1:
   roles:
     agg:
       args:
         max-running-requests: 2
-        cuda-graph-max-bs: 4
+        cuda-graph-max-bs-decode: 4
   benchmark:
     env:
       CONC: '1'
+      KV_OFFLOADING: none
+
+override_tp8_c2:
+  roles:
+    agg:
+      args:
+        max-running-requests: 4
+        cuda-graph-max-bs-decode: 8
+  benchmark:
+    env:
+      CONC: '2'
       KV_OFFLOADING: none
 
 override_tp8_c4:
@@ -90,7 +175,7 @@ override_tp8_c4:
     agg:
       args:
         max-running-requests: 8
-        cuda-graph-max-bs: 16
+        cuda-graph-max-bs-decode: 16
   benchmark:
     env:
       CONC: '4'
@@ -101,7 +186,7 @@ override_tp8_c8:
     agg:
       args:
         max-running-requests: 16
-        cuda-graph-max-bs: 32
+        cuda-graph-max-bs-decode: 32
   benchmark:
     env:
       CONC: '8'
@@ -112,7 +197,7 @@ override_tp8_c16:
     agg:
       args:
         max-running-requests: 32
-        cuda-graph-max-bs: 64
+        cuda-graph-max-bs-decode: 64
   benchmark:
     env:
       CONC: '16'
@@ -123,18 +208,12 @@ override_tp8_c32:
     agg:
       args:
         max-running-requests: 64
-        cuda-graph-max-bs: 64
+        cuda-graph-max-bs-decode: 64
   benchmark:
     env:
       CONC: '32'
       KV_OFFLOADING: none
 
-# DEP8 replaces the TP8 MoE path: the router keeps each session on the DP rank
-# holding its radix prefix, the global prefill chunk is 8192 per rank, decode
-# graphs cover the padded speculative batch across ranks, and AIPerf owns the
-# warmup. HiCache capacity is a host/device ratio; 3 keeps the tier near 2 TB.
-# Mega-MoE's transient workspace sits outside the static pool, so the static
-# fraction steps down with CONC: 0.90 to c256, 0.88 at c384, 0.86 from c512.
 override_dep8_c32:
   frontend: &dep8_frontend
     type: sglang-router
@@ -145,6 +224,7 @@ override_dep8_c32:
       connect-timeout-secs: 900
       request-timeout-secs: 14400
       disable-health-check: true
+      disable-circuit-breaker: true
       # A transient router-to-engine send failure would otherwise abort the run.
       retry-max-retries: 8
       retry-initial-backoff-ms: 500
@@ -158,7 +238,9 @@ override_dep8_c32:
           data-parallel-size: 8
           tokenizer-worker-num: 8
           enable-prefill-delayer: true
-          prefill-decode-interval: 20
+          prefill-decode-interval: 32
+          enable-mixed-chunk: true
+          schedule-policy: shortest-prefill-first
           enable-dp-attention: true
           enable-dp-lm-head: true
           enable-dp-attention-local-control-broadcast: true
@@ -172,14 +254,16 @@ override_dep8_c32:
           cuda-graph-max-bs-decode: 544
           swa-full-tokens-ratio: 0.075
           enable-hierarchical-cache: true
-          hicache-ratio: 3
+          hicache-ratio: 2
           hicache-write-policy: write_back
           hicache-io-backend: direct
           hicache-mem-layout: page_first_direct
           skip-server-warmup: true
         max-running-requests: 64
-        mem-fraction-static: 0.9
+        mem-fraction-static: 0.84
       env: &dep8_env
+        SGLANG_ENABLE_DP_SPEC_PREFILL_COORDINATION: '1'
+        SGLANG_RAGGED_VERIFY_MODE: static
         # Covers the 8192-token per-rank prefill budget.
         SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '8320'
   benchmark:
@@ -196,7 +280,7 @@ override_dep8_c64:
       args:
         <<: *dep8_args
         max-running-requests: 128
-        mem-fraction-static: 0.9
+        mem-fraction-static: 0.84
       env: *dep8_env
   benchmark:
     env:
@@ -210,7 +294,7 @@ override_dep8_c128:
       args:
         <<: *dep8_args
         max-running-requests: 256
-        mem-fraction-static: 0.9
+        mem-fraction-static: 0.84
       env: *dep8_env
   benchmark:
     env:
@@ -224,7 +308,7 @@ override_dep8_c256:
       args:
         <<: *dep8_args
         max-running-requests: 512
-        mem-fraction-static: 0.9
+        mem-fraction-static: 0.84
       env: *dep8_env
   benchmark:
     env:
@@ -238,7 +322,7 @@ override_dep8_c384:
       args:
         <<: *dep8_args
         max-running-requests: 768
-        mem-fraction-static: 0.88
+        mem-fraction-static: 0.84
       env: *dep8_env
   benchmark:
     env:
@@ -251,8 +335,8 @@ override_dep8_c512:
     agg:
       args:
         <<: *dep8_args
-        max-running-requests: 1024
-        mem-fraction-static: 0.86
+        max-running-requests: 768
+        mem-fraction-static: 0.84
       env: *dep8_env
   benchmark:
     env:
@@ -265,8 +349,8 @@ override_dep8_c576:
     agg:
       args:
         <<: *dep8_args
-        max-running-requests: 1152
-        mem-fraction-static: 0.86
+        max-running-requests: 768
+        mem-fraction-static: 0.84
       env: *dep8_env
   benchmark:
     env:
