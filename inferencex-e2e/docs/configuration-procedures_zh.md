@@ -38,8 +38,7 @@ git submodule update --init
 单节点固定序列长度配方使用 NVIDIA 上游 srt-slurm。ATOM 配方使用原生 `atomesh`
 frontend、一个聚合 worker，并设置 `enable_multiple_frontends: false`。旧版基准 worker
 镜像不包含 AToMesh，因此通过 `frontend.container_image` 单独固定路由器的官方镜像。
-`model.container` 必须与主配置中的 worker `image` 一致；更换路由器镜像无需更换 worker
-镜像。TRT-LLM 配方使用原生 `engine.served_model_name`，不再通过 `roles.agg.extra_args`
+启动器从主配置的 worker `image` 填入 `model.container`；独立的路由器镜像仍需显式声明。TRT-LLM 配方使用原生 `engine.served_model_name`，不再通过 `roles.agg.extra_args`
 重复传入该参数。不再依赖此前分叉中的 ATOM 直连 frontend。
 
 ### 集群配置文件
@@ -119,7 +118,7 @@ STP（Single Token Prediction，单 Token 预测）是每次前向传播生成�
 3. **添加 srt-slurm 配方。**放在 `benchmarks/single_node/srt-slurm-recipes/<model-prefix>/<engine>/<sku>-<precision>[-mtp]/8k1k.yaml`，每个矩阵点对应一个 `override_*` 变体。保留已验证同类项中的引擎参数、env、parser 参数、attention/MoE backend、KV-cache dtype、graph/eager 模式、`setup_script` 和上下文处理。
 4. **添加主配置条目。**`mi*` 使用 [`amd-master.yaml`](../configs/amd-master.yaml)，其他使用 [`nvidia-master.yaml`](../configs/nvidia-master.yaml)。精确设置 `image`、`model`、`model-prefix`、`runner`、`precision`、`framework`、scenario 和支持的搜索空间。
 5. **依据证据确定规模。**复制已验证的并行布局并删除不支持的布局。延迟型 TP 行通常从并发 1 开始；不要把大显存 SKU 的 TP/EP 布局复制到小显存 SKU。
-6. **检查变体选择。**每个搜索空间行都带有 `srt-recipe:`，每个矩阵点必须按 TP/GPU 数、`CONC`、`KV_OFFLOADING` 和镜像恰好匹配一个配方变体（`infx/srt_slurm/single_node.py::select_recipe`），无需 launcher 路由。
+6. **检查变体选择。**每个搜索空间行都带有 `srt-recipe:`，每个矩阵点必须按 TP/GPU 数、`CONC` 和 `KV_OFFLOADING`恰好匹配一个配方变体（`infx/srt_slurm/single_node.py::select_recipe`），无需 launcher 路由。
 7. **追加一条 changelog**，精确选择新 key；参见[安全追加 changelog](#安全追加-changelog)。
 8. **验证语法和生成结果。**检查 image、model、runner、ISL/OSL、`max-model-len`、并发、TP/PP/EP/DCP/PCP 和 `spec-decoding`。
 
@@ -187,11 +186,37 @@ B200 Nscale 的 GLM-5.1 可用 `MODEL_PATH` 指定已有共享权重，覆盖默
 2. 将 YAML 放在 `benchmarks/multi_node/srt-slurm-recipes/<model-prefix>/<engine>/<gpu>-<precision>/<workload>/` 下，遵循 `RECIPES_zh.md` 中的命名规范。阅读最接近的同类项和所选集群 launcher。
 3. 将来源字段映射到主配置搜索空间条目：资源 worker 数 → `num-worker`；TP/EP/DP-attention → worker 拓扑；基准并发 → `conc-list`；配方路径 → `additional-settings: ["CONFIG_FILE=..."]`。
 4. 在同一变更中添加/更新匹配的 [`nvidia-master.yaml`](../configs/nvidia-master.yaml) 条目。同步 worker 数、TP/PP/EP/DCP/PCP、hardware、router、传输引擎和并发标签。
-5. 更新镜像时，使配方 `model.container` 与主配置 `image` 完全相同；launcher 使用主配置镜像作为 container alias key。
-6. 运行配方所记录的 `srtctl` 验证，再生成主配置 key，并把每个前端标签/拓扑字段与配方逐一比对。
+5. 在主配置中设置服务镜像、模型、场景 ISL/OSL 和并发数。启动器在运行时将这些值填入所选配方；参见[运行时工作负载绑定](#运行时工作负载绑定)。
+6. 对已完成绑定的配方运行所记录的 `srtctl` 验证，再生成主配置 key，并把每个前端标签/拓扑字段与配方逐一比对。
 7. 追加 changelog 条目。
 
-不得只提交一侧：`srtctl` 读取配方，而矩阵生成读取主配置。仅改配方可能给结果贴错标签；仅改主配置不会改变实际部署的配方。
+两个文件中的拓扑和调优设置必须保持同步。以下运行时工作负载值由主配置负责；修改这些字段时，无需在配方中重复修改。
+
+## 运行时工作负载绑定
+
+这些配方模板由 InferenceX 维护。主配置通过启动环境提供 `image`、`model`、场景
+`isl` / `osl` 和所选并发数（`IMAGE`、`MODEL`、`ISL`、`OSL` 以及 `CONC` /
+`CONC_LIST`）。启动器先选择已调优的配方变体，再为本次运行写出所有字段均已填入的配方。
+
+| 运行时输入 | 绑定的配方字段 |
+|---|---|
+| `IMAGE` | `model.container`，以及已有的 `identity.container.image` |
+| `MODEL` | `model.path`、已有的 `identity.model.repo`，以及自定义客户端的 `benchmark.env.MODEL` |
+| `ISL`、`OSL`（固定序列运行） | 内置客户端的 `benchmark.isl` / `benchmark.osl`，或自定义客户端的 `benchmark.env.ISL` / `OSL` |
+| `CONC` / `CONC_LIST` | 使用该字段时的 `benchmark.concurrencies`，以及自定义客户端的并发环境变量 |
+
+模型加载继续使用现有的集群模型映射与预先准备机制。执行时即使使用缓存镜像，镜像溯源
+仍保留原始镜像引用。这些字段中已有的字面值会被覆盖，因此可以逐步迁移配方。新模板
+应省略重复字段。独立固定的角色和辅助服务镜像、有意设置的服务模型别名、tokenizer
+覆盖项和 draft model 仍需显式声明。受支持的服务模型名或 tokenizer 字段如需跟随
+`MODEL`，请使用完整字面值 `'${MODEL}'`；这是受支持的模型引用，不是通用 shell 展开。
+
+保留用于选择调优变体的并发值，包括与 CUDA graph 或批处理设置一起使用的 `CONC`
+zip 列表。绑定在变体选择之后执行，保证所选设置仍然配套。精度、并行方式、服务端
+限制和推测解码设置仍由配方负责，不根据这些工作负载输入推导。
+
+直接调用上游 `srtctl` 时，需要使用已完成绑定的配方。省略工作负载字段的 InferenceX
+模板不能作为独立的上游配置；应使用固定的上游版本验证绑定后的输出。
 
 ## 注册 llm-d 配方
 
@@ -216,7 +241,7 @@ llm-d 不是 srt-slurm 路径：InferenceX 自己持有 Slurm allocation，并�
 1. 验证精确的上游 registry tag 或 digest 确实存在，并适用于 CUDA/ROCm 和目标架构。
 2. 找出所有受影响的配置 key、运行时脚本、Dockerfile 和检入配方。不要假设主 YAML 是唯一镜像引用。
 3. 将主配置 `image` 与所需 env、参数、软件包版本或补丁作为一个一致变更更新。
-4. 对 srt-slurm，更新 `model.container` 并保持其与主配置 `image` 完全一致。
+4. 对 srt-slurm，更新主配置的 `image`，启动器在运行时填入 `model.container`。单独检查独立固定的角色、路由器和辅助服务镜像。
 5. 对 llm-d，区分主配置选择的服务镜像和 [`benchmarks/llm-d/Dockerfile`](../benchmarks/llm-d/Dockerfile) 中的构建来源；仅在构建契约变化时同时更新两者。
 6. 追加选择全部受影响 key 的 changelog 条目（有意覆盖多个 key 时可以使用通配符），并列出旧/新版本及实质运行时变更。
 7. 生成每个受影响的配置族，确认其运行时路径中没有残留旧 tag。
@@ -609,7 +634,7 @@ python -m pytest infx/tests/matrix/ -v
 - runner 用户、共享挂载、预置模型路径、GPU 数、host DRAM、Slurm 行为或 root 文件清理未知。主机设置还必须先有 runner 注册凭据。
 - 已注册 runner 不在任何 `cluster:<id>` 标签中、矩阵解析到不存在的脚本，或 runner 不是 **Idle**。
 - 计算出的拓扑超过 fleet、DCP 不能整除 TP、异构 hardware 元数据只写一侧，或生成拓扑与目标配方不一致。
-- srt-slurm 配方与主条目不一致、`model.container != image`，或尚未运行上游配方验证。
+- srt-slurm 配方与主条目的拓扑或调优设置不一致、运行时工作负载绑定失败，或尚未对已绑定配方运行上游验证。
 - llm-d 配方缺失并会意外 fallback、allocation 数不一致，或 endpoint discovery 无法满足 IPv4 字面量/唯一名称/有效端口规则。
 - MTP 配方缺少 chat-template 基准、speculative 方法/token 数未验证，或 graph capture 超过 backend 上限。
 - changelog 变更会修改历史字节、没有位于 EOF、存在冲突，或 PR 已准备请求 sweep 但仍保留 `TBD`。

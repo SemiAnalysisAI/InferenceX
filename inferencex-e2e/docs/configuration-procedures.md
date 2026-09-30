@@ -39,8 +39,8 @@ Single-node fixed-sequence recipes use NVIDIA upstream srt-slurm. ATOM recipes u
 the native `atomesh` frontend with one aggregate worker and
 `enable_multiple_frontends: false`. The router's pinned official image belongs in
 `frontend.container_image`: older benchmark worker images do not include AToMesh.
-Keep `model.container` aligned with the master config's worker `image`; changing the
-router image does not require changing the worker image. TRT-LLM recipes use native
+The launcher supplies `model.container` from the master config's worker `image`;
+keep the independent router image explicit. TRT-LLM recipes use native
 `engine.served_model_name`, without duplicating that flag in `roles.agg.extra_args`.
 The former fork's direct ATOM frontend is not required.
 
@@ -138,7 +138,7 @@ STP (Single Token Prediction) is vanilla autoregressive decoding with one token 
 3. **Add the srt-slurm recipe.** Put it at `benchmarks/single_node/srt-slurm-recipes/<model-prefix>/<engine>/<sku>-<precision>[-mtp]/8k1k.yaml`, with one `override_*` variant per matrix point. Preserve the proven sibling's engine args, env, parser flags, attention/MoE backend, KV-cache dtype, graph/eager mode, `setup_script`, and context handling.
 4. **Add the master entry.** Use [`amd-master.yaml`](../configs/amd-master.yaml) for `mi*`. Otherwise, use [`nvidia-master.yaml`](../configs/nvidia-master.yaml). Set exact `image`, `model`, `model-prefix`, `runner`, `precision`, `framework`, scenarios, and supported search spaces.
 5. **Size from evidence.** Mirror proven parallelism layouts and trim unsupported ones. Latency TP rows normally start at concurrency 1. Do not copy large-memory TP/EP layouts onto a smaller SKU.
-6. **Check variant selection.** Every search-space row carries `srt-recipe:`, and each matrix point must match exactly one recipe variant by TP/GPU count, `CONC`, `KV_OFFLOADING` and image (`infx/srt_slurm/single_node.py::select_recipe`). No launcher routing is needed.
+6. **Check variant selection.** Every search-space row carries `srt-recipe:`, and each matrix point must match exactly one recipe variant by TP/GPU count, `CONC` and `KV_OFFLOADING` (`infx/srt_slurm/single_node.py::select_recipe`). No launcher routing is needed.
 7. **Append one changelog entry** for the exact new key. See [Append the changelog safely](#append-the-changelog-safely).
 8. **Validate syntax and generated output.** Inspect image, model, runner, ISL/OSL, `max-model-len`, concurrency, TP/PP/EP/DCP/PCP, and `spec-decoding`.
 
@@ -206,11 +206,42 @@ Mapping source: [`benchmarks/multi_node/srt-slurm-recipes/RECIPES.md`](../benchm
 2. Stage the YAML under `benchmarks/multi_node/srt-slurm-recipes/<model-prefix>/<engine>/<gpu>-<precision>/<workload>/`, following the naming rules in `RECIPES.md`. Read the closest sibling and selected cluster launcher.
 3. Map source fields to the master search-space entry: resource worker counts → `num-worker`, TP/EP/DP-attention → worker topology, benchmark concurrencies → `conc-list`, and recipe path → `additional-settings: ["CONFIG_FILE=..."]`.
 4. Add/update the matching [`nvidia-master.yaml`](../configs/nvidia-master.yaml) entry in the same change. Keep worker counts, TP/PP/EP/DCP/PCP, hardware, router, transfer engine, and concurrency labels synchronized.
-5. For an image bump, make recipe `model.container` exactly equal master `image`. The launcher uses the master image as the container-alias key.
-6. Run the recipe's documented `srtctl` validation, then generate the master key and compare every frontend label/topology field with the recipe.
+5. Set the serving image, model, scenario ISL/OSL, and concurrency in the master config. The launcher binds these values into the selected recipe at runtime; see [runtime workload binding](#runtime-workload-binding).
+6. Run the recipe's documented `srtctl` validation on the fully bound recipe, then generate the master key and compare every frontend label/topology field with the recipe.
 7. Append the changelog entry.
 
-Do not ship one side alone. `srtctl` reads the recipe, while matrix generation reads the master config. Recipe-only changes can mislabel results. Master-only changes do not alter the deployed recipe.
+Keep topology and tuning synchronized between both files. The master owns the runtime workload values described below; changes to these fields take effect without repeating them in the recipe.
+
+## Runtime workload binding
+
+InferenceX owns these recipe templates. The master config supplies `image`, `model`,
+scenario `isl` / `osl`, and the selected concurrency through the launch environment
+(`IMAGE`, `MODEL`, `ISL`, `OSL`, and `CONC` / `CONC_LIST`). The launcher selects the
+tuned recipe variant first, then writes a fully materialized recipe for that run.
+
+| Runtime input | Bound recipe fields |
+|---|---|
+| `IMAGE` | `model.container`, plus existing `identity.container.image` |
+| `MODEL` | `model.path`, existing `identity.model.repo`, and custom-client `benchmark.env.MODEL` |
+| `ISL`, `OSL` (fixed-sequence runs) | Built-in `benchmark.isl` / `benchmark.osl`, or custom-client `benchmark.env.ISL` / `OSL` |
+| `CONC` / `CONC_LIST` | `benchmark.concurrencies` where consumed, and the custom client's concurrency environment |
+
+Model loading continues to use the existing cluster model mapping and staging. Image
+provenance retains the source image reference when execution uses a cached image.
+Existing literals in these fields are overridden, so recipes can migrate incrementally.
+Omit duplicated fields in new templates. Keep independently pinned role and helper
+images, deliberate served-model aliases, tokenizer overrides, and draft models explicit.
+Where a supported served-model or tokenizer field should follow `MODEL`, use the exact
+literal `'${MODEL}'`; this is a supported model reference, not general shell expansion.
+
+Keep concurrency values that select tuning variants, including `CONC` lists zipped
+with CUDA graph or batch settings. Binding happens after variant selection so the
+selected settings stay together. Precision, parallelism, server limits, and speculative
+settings remain recipe-owned and are not inferred from these workload inputs.
+
+Direct upstream `srtctl` commands need the fully bound recipe. An InferenceX template
+with omitted workload fields is not a standalone upstream configuration; validate the
+materialized output through the pinned upstream version.
 
 ## Register an llm-d recipe
 
@@ -235,7 +266,7 @@ Sources: [`AGENTS.md#non-negotiable-benchmark-invariants`](../../AGENTS.md#non-n
 1. Verify the exact upstream registry tag or digest exists and is appropriate for CUDA/ROCm and the target architecture.
 2. Find every affected config key, runtime script, Dockerfile, and checked-in recipe. Do not assume the master YAML is the only image reference.
 3. Update the master `image` and any required env vars, flags, package versions, or patches as one coherent change.
-4. For srt-slurm, update `model.container` and keep it identical to master `image`.
+4. For srt-slurm, update the master `image`; the launcher supplies `model.container` at runtime. Review independently pinned role, router, and helper images separately.
 5. For llm-d, distinguish the serving image selected by the master config from the build source in [`benchmarks/llm-d/Dockerfile`](../benchmarks/llm-d/Dockerfile). Update both only when the build contract changes.
 6. Append a changelog entry selecting all affected keys (wildcards are allowed when intentional), including old/new versions and material runtime changes.
 7. Generate each affected family and verify no stale tag survives in its runtime path.
@@ -674,7 +705,7 @@ Stop before dispatching GPU work or claiming the configuration complete when any
 - Runner user, shared mounts, staged model path, GPU count, host DRAM, Slurm behavior, or root-file cleanup is unknown. Runner registration credentials are also a hard prerequisite for host setup.
 - The registered runner is in no `cluster:<id>` label, a matrix resolves to a nonexistent script, or the runner is not **Idle**.
 - Calculated topology exceeds the fleet, DCP does not divide TP, heterogeneous hardware metadata is one-sided, or generated topology differs from the intended recipe.
-- An srt-slurm recipe and master entry disagree, `model.container != image`, or upstream recipe validation has not run.
+- An srt-slurm recipe and master entry disagree on topology or tuning, runtime workload binding fails, or upstream validation of the bound recipe has not run.
 - An llm-d recipe is missing and would fall back unintentionally, allocation counts disagree, or endpoint discovery cannot satisfy literal-IPv4/unique-name/valid-port rules.
 - An MTP recipe lacks chat-template benchmarking, the speculative method/token count is unverified, or graph capture exceeds the backend limit.
 - The changelog change would modify historical bytes, is not at EOF, has a conflict, or still has `TBD` when the PR is otherwise ready for sweep.

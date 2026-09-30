@@ -42,16 +42,32 @@ Recipes use `schema: 2`, `engine`, and `roles`. Each worker role owns its node c
 | `roles.prefill.args.tp-size` (SGLang) | `prefill.tp` |
 | `roles.prefill.args.ep-size` (SGLang) | `prefill.ep` |
 | `roles.prefill.args.enable-dp-attention` | `prefill.dp-attn` |
-| `benchmark.concurrencies` | `conc-list` |
+| `benchmark.concurrencies` (bound at runtime) | Selected `conc-list` |
 | Recipe path, optionally with an override selector | `additional-settings: CONFIG_FILE=recipes/...yaml` |
 
-Keep the recipe and master configuration synchronized. The launcher executes the recipe; the master configuration supplies result labels and scheduling metadata. For aggregate recipes use `roles.agg`; `roles.decode.nodes: colocate` shares prefill nodes and contributes no additional worker nodes to scheduling.
+Keep topology and tuning synchronized between the recipe and master configuration.
+The master also supplies the serving image, model, ISL/OSL, and selected concurrency.
+InferenceX binds these into one fully materialized recipe after selecting the tuned
+variant. New templates can omit `model.container`, `model.path`, duplicated identity
+image/model fields, and benchmark workload values. Existing literals are overridden.
+Keep concurrency selectors zipped with tuning settings; their selected tuning is
+preserved before the runtime concurrency is bound. Independently pinned role and helper
+images, model aliases, and draft models remain explicit. Use the exact `'${MODEL}'`
+marker for supported served-model or tokenizer fields that follow the target model.
+See [runtime workload binding](../../../docs/configuration-procedures.md#runtime-workload-binding)
+for the environment-to-recipe mapping and model staging behavior.
+
+For aggregate recipes use `roles.agg`; `roles.decode.nodes: colocate` shares prefill
+nodes and contributes no additional worker nodes to scheduling.
 
 All referenced recipes must be checked in: srt-slurm 2 ships curated examples instead of the historical `recipes/` archive. The initial migration restores 204 previously external recipes and two still-referenced AgentX recipes from InferenceX history. Master-config paths follow the layout above; existing override selectors are preserved.
 
 ## Migration and validation
 
-Install the shared pin in an isolated environment, then use its CLI:
+Install the shared pin in an isolated environment, then use its CLI. Direct upstream
+commands require fully bound recipes: templates that omit runtime workload fields must
+first be materialized by InferenceX. The migration commands below apply to complete
+upstream recipes:
 
 ```bash
 # Verify each supported recipe directory before rewriting it.

@@ -42,16 +42,28 @@ qwen3.5/trtllm/gb300-fp4/agentx/disagg-variants.yaml
 | `roles.prefill.args.tp-size`（SGLang） | `prefill.tp` |
 | `roles.prefill.args.ep-size`（SGLang） | `prefill.ep` |
 | `roles.prefill.args.enable-dp-attention` | `prefill.dp-attn` |
-| `benchmark.concurrencies` | `conc-list` |
+| `benchmark.concurrencies`（运行时绑定） | 所选 `conc-list` |
 | 配置路径，可附带覆盖项选择器 | `additional-settings: CONFIG_FILE=recipes/...yaml` |
 
-配置文件和主配置必须同步更新。启动器执行配置文件；主配置提供结果标签和调度元数据。聚合式配置使用 `roles.agg`；`roles.decode.nodes: colocate` 表示解码角色与预填充角色共享节点，不增加调度所需的工作节点数。
+配方与主配置中的拓扑和调优设置必须保持同步。主配置还提供服务镜像、模型、ISL/OSL
+和所选并发数。InferenceX 在选择调优变体后，将这些值填入一个完整的运行配方。
+新模板可以省略 `model.container`、`model.path`、重复的 identity 镜像/模型字段及
+基准工作负载值；已有字面值会被覆盖。保留与调优设置配套的并发 zip 选择器，先选择
+调优设置，再绑定运行时并发数。独立固定的角色和辅助服务镜像、模型别名及 draft
+model 仍需显式声明。受支持的服务模型名或 tokenizer 字段如需跟随目标模型，使用
+完整的 `'${MODEL}'` 标记。环境变量与配方字段的映射及模型准备行为详见
+[运行时工作负载绑定](../../../docs/configuration-procedures_zh.md#运行时工作负载绑定)。
+
+聚合式配置使用 `roles.agg`；`roles.decode.nodes: colocate` 表示解码角色与预填充
+角色共享节点，不增加调度所需的工作节点数。
 
 所有被引用的配置都必须纳入版本控制：srt-slurm 2 提供精选示例，不再携带历史 `recipes/` 目录。本次迁移补齐了 204 个此前依赖外部仓库的配置，并从 InferenceX 历史记录恢复了两个仍被引用的 AgentX 配置。主配置路径遵循上述目录结构，原有覆盖项选择器保持不变。
 
 ## 迁移与验证
 
-在隔离环境中安装统一版本，然后使用其 CLI：
+在隔离环境中安装统一版本，然后使用其 CLI。直接调用上游命令需要使用完整配方：
+省略运行时工作负载字段的模板必须先由 InferenceX 完成绑定。以下迁移命令适用于
+完整的上游配方：
 
 ```bash
 # 重写前先验证每个受支持的配置目录。

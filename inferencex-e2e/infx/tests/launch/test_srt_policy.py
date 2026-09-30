@@ -127,7 +127,8 @@ zip_override_y:
 
 
 @pytest.mark.parametrize(("recipe", "model", "paths"), [
-    (BUNDLE, "org/M", {"alias-a": "nvme/m", "alias-b": "nvme/m", "alias-c": "nvme/m"}),
+    (BUNDLE, "org/M", {"alias-a": "nvme/m", "alias-b": "nvme/m", "alias-c": "nvme/m", "hf:org/M": "nvme/m"}),
+    ("model: {precision: fp8}\n", "org/M", {"hf:org/M": "nvme/m"}),
     ("model: {path: /abs/m}\n", "org/Unstaged", {}),
     ("model: {path: alias-a}\n", "org/Unstaged", LaunchError),
 ])  # fmt: skip

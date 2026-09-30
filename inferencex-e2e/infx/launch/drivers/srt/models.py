@@ -190,7 +190,12 @@ def model_paths(
             f"cluster {cluster.id!r} stages no checkpoint for MODEL={request.model}, "
             f"which recipe aliases {sorted(aliases)} name"
         )
-    return dict.fromkeys(sorted(aliases), served) if served is not None else {}
+    if served is None:
+        return {}
+    paths = dict.fromkeys(sorted(aliases), served)
+    if not fork and request.model:
+        paths[f"hf:{request.model}"] = served
+    return paths
 
 
 def job_env(cluster: Cluster, request: LaunchRequest, served: str | None) -> dict[str, str]:
