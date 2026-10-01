@@ -5684,10 +5684,12 @@ minimaxm3-fp4-b200-vllm-agentic-mtp:
   scenarios:
     agentic-coding:
     - dram-utilization: 0.683
+      require-power: true
       search-space:
       - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1], srt-recipe: benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/b200-fp4-mtp/agentic.yaml }
       - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 5, 10, 15, 20], srt-recipe: benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/b200-fp4-mtp/agentic.yaml }
     - dram-utilization: 1.0
+      require-power: true
       search-space:
       - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [15, 20, 25, 30, 32, 34, 36, 38, 40], srt-recipe: benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/b200-fp4-mtp/agentic.yaml }
 minimaxm3-fp4-b200-trtllm-agentic-mtp:
@@ -5704,6 +5706,7 @@ minimaxm3-fp4-b200-trtllm-agentic-mtp:
     # every point, so dram-utilization only reports a nominal budget here and
     # does not size the pool.
     - dram-utilization: 0.8
+      require-power: true
       search-space:
       - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: native }, conc-list: [5, 10, 15, 20, 25, 30, 35, 40, 45], srt-recipe: benchmarks/single_node/srt-slurm-recipes/minimaxm3/trtllm/b200-fp4-mtp/agentic.yaml }
       - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: native }, conc-list: [1, 5], srt-recipe: benchmarks/single_node/srt-slurm-recipes/minimaxm3/trtllm/b200-fp4-mtp/agentic.yaml }
