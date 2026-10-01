@@ -29,14 +29,14 @@ There are two distinct layers: the matrix generator decides **which jobs exist**
 
 | Need | Generator/workflow mode | Runtime behavior |
 |---|---|---|
-| Normal sweep | no eval option | Throughput jobs plus the selected 8k/1k eval subset |
+| Normal sweep | no eval option | Throughput jobs plus the selected 8k/1k eval subset and agentic GSM8K subset |
 | Throughput only | `--no-evals` | No eval jobs |
 | Selected eval subset only | `--evals-only` | Jobs have `RUN_EVAL=true`, `EVAL_ONLY=true` |
 | Every eligible eval only | `--all-evals` | Equivalent to `--evals-only --all-evals` and includes all fixed-sequence 8k/1k rows plus single-node and multi-node agentic GSM8K rows |
 | Throughput then eval in one recipe | `RUN_EVAL=true`, `EVAL_ONLY=false` | Server starts, throughput runs, then `run_eval` runs |
 | Eval against a freshly started server | `RUN_EVAL=true`, `EVAL_ONLY=true` | Launcher expands eval context, skips throughput, and runs the eval |
 
-Default selection is scenario-aware. Single-node fixed-sequence evals use the median and highest eligible concurrency for each 8k/1k model/runner/framework/precision/parallelism group. Multi-node evals use the highest eligible concurrency per topology. Fixed-sequence concurrency below 16 is not selected. Kimi K3 and MiniMax M3 AgentX rows automatically select vendor evals at every generated point, including lower concurrencies. Other agentic evals are opt-in and select the highest eligible concurrency per deployment group. See [`mark_eval_entries()` and `mark_all_eval_entries()`](../infx/matrix/generate.py).
+Default selection is scenario-aware. Single-node fixed-sequence evals use the median and highest eligible concurrency for each 8k/1k model/runner/framework/precision/parallelism group. Multi-node evals use the highest eligible concurrency per topology. Fixed-sequence concurrency below 16 is not selected. Kimi K3 and MiniMax M3 AgentX rows automatically select vendor evals at every generated point, including lower concurrencies. Other agentic rows select GSM8K by default at the highest eligible concurrency per deployment group; the eval runs as a separate eval-only job, so agentic throughput coverage is unchanged. See [`mark_eval_entries()` and `mark_all_eval_entries()`](../infx/matrix/generate.py).
 
 Kimi K3 automatically runs `kimi-vendor` / `kimi_tool_call_schema_full` on AMD and NVIDIA, for single-node and multi-node recipes. This runs 204 unique schema cases in streaming and non-streaming modes, producing 408 checks. An explicit `eval-framework=kimi-vendor` and `eval-suite=kimi_tool_call_schema` workflow override retains the one-case, two-check smoke for fast diagnosis. `--trim-conc` trims deployment points, not the suite's case count. MiniMax M3 automatically runs `minimax-vendor` / `minimax_m3_full` across both vendors, covering all 102 provider cases. Its one-case `minimax_m3_smoke` is available through an explicit override. Fixed-sequence GSM8K selection is unchanged.
 
