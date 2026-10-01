@@ -154,6 +154,7 @@ override_tp8_c6_dram:
       args:
         # Leave room for Mooncake TCP CUDA contexts on GPU 0 during KV transfers.
         gpu-memory-utilization: 0.85
+        max-model-len: 655360
         max-num-seqs: 12
         max-cudagraph-capture-size: 48
         kv-transfer-config: '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"load_async":true}}'
@@ -167,6 +168,7 @@ override_tp8_c6_dram:
       CONC: '6'
       KV_OFFLOADING: dram
       TOTAL_CPU_DRAM_GB: '1676'
+      AIPERF_MAX_CONTEXT_LENGTH: '655360'
 
 override_tp8_c8_dram:
   # The worker's Mooncake client and the master run the same pinned release.
@@ -199,6 +201,7 @@ override_tp8_c8_dram:
       args:
         # Leave room for Mooncake TCP CUDA contexts on GPU 0 during KV transfers.
         gpu-memory-utilization: 0.85
+        max-model-len: 655360
         max-num-seqs: 16
         max-cudagraph-capture-size: 64
         kv-transfer-config: '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"load_async":true}}'
@@ -212,3 +215,4 @@ override_tp8_c8_dram:
       CONC: '8'
       KV_OFFLOADING: dram
       TOTAL_CPU_DRAM_GB: '1676'
+      AIPERF_MAX_CONTEXT_LENGTH: '655360'
