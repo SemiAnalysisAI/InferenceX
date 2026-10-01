@@ -612,7 +612,8 @@ def regenerate_producers(directory: Path) -> None:
 
 def select(directory: Path, max_candidates: int, execution_file: Path | None = None) -> None:
     from . import claims
-    from .reporting import BaselinePreflight, Prose, resolve_baseline
+    from .reporting import BaselinePreflight, Prose, check_baseline_coverage, resolve_baseline
+    from .validation import canonical_matrix
 
     contexts = json.loads((directory / "candidates.json").read_text())
     producers = json.loads((directory / PRODUCERS).read_text())
@@ -650,6 +651,14 @@ def select(directory: Path, max_candidates: int, execution_file: Path | None = N
                     zh="在调度候选任务前验证完整的已发布基线。",
                 ),
                 producers.get(candidate["family"], {}),
+            )
+            # A reconstructable historical roster is not necessarily runnable by the
+            # current family. Reject it before claiming the family or launching Klaud.
+            check_baseline_coverage(
+                canonical_matrix(
+                    os.environ["GITHUB_REPOSITORY"], candidate["base"], candidate["family"]
+                ),
+                baseline,
             )
             preflight = BaselinePreflight(
                 candidate_id=candidate["id"],
