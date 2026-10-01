@@ -505,7 +505,8 @@ that classifies that label. The selected Qwen3.5 and Kimi-K3 CPU-telemetry recip
 `CPU_POWER_EXPORTER_RELEASE=v2.40.2` from their master-config `additional-settings` to
 `make setup`. This release includes legacy ACPI hwmon discovery. Setup verifies the downloaded
 asset checksum, replaces a cached binary with a different release marker, and fails on a pinned
-download error; submission also rejects a missing, non-executable, or wrong-architecture binary.
+download error. The local srt-slurm submission patch passes the resolved recipe to setup
+validation, which rejects a missing, non-executable, or wrong-architecture binary.
 Qualification still needs the setup log and actual exporter identity, complete same-window
 samples, and verified firmware sensor boundaries. A source pin or successful setup alone does
 not establish valid measurements. A package without `cpu/` adds no CPU metrics or CPU verdict.

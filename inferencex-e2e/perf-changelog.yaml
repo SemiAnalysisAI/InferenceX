@@ -9209,3 +9209,15 @@
   description:
     - "Pin cpu-power-exporter v2.40.2 for the existing Qwen3.5 and Kimi-K3 NVL72 CPU-telemetry recipes. The fixed binary discovers legacy ACPI hwmon meters; setup verifies the release asset checksum and fails if the pinned download cannot be installed. Preserve the merged noprof GPU profile and independent best-effort CPU verdict. Other recipe variants retain their current runtime settings."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3296
+
+- config-keys:
+    - qwen3.5-fp8-gb200-dynamo-sglang
+    - qwen3.5-fp8-gb300-dynamo-sglang
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-agg
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-mooncake-dcp16-agg
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg
+  description:
+    - "Apply NVIDIA/srt-slurm#553 to the pinned submitter: pass the resolved recipe into setup validation so CPU-enabled jobs fail before sbatch when the exporter is missing, non-executable, or built for the wrong compute architecture."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3296
