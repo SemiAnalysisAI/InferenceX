@@ -313,9 +313,12 @@ InfiniBand 使用 GID 索引 0，RoCE 保留索引 3。若没有可用的活动�
 DSXE 上容器的 libibverbs 来自 enroot EFA hook 挂载的主机库，因此
 `configs/runners.yaml` 将主机库目录挂到 `/host-usr-lib`，setup 脚本通过
 `RDMAV_DRIVERS` 强制加载其 mlx5 provider。保留 `max_load_batch_keys: 1` 且
-`load_async: false`（tip 860c1ccf 的 c48 / tip e51c58f5 的 c32 在异步 load、
+`load_async: true`（tip 860c1ccf 的 c48 / tip e51c58f5 的 c32 在异步 load、
 Mooncake 指标干净时，于约 98–100% GPU KV 下挂起在 DCP PYNCCL
-`_ALLGATHER_BASE`，`last started work: -1`），但不要在该 DSXE 单 rail 路径上启用
+`_ALLGATHER_BASE`，`last started work: -1`；tip ea88d652 的 canary c1 在
+`load_async: false` 时于 Mooncake `get_finished` 直接
+`AssertionError: load_async must be True for better performance`，故恢复必需的
+stock true），但不要在该 DSXE 单 rail 路径上启用
 `compact_group_io`（c8 上曾对约 25 MiB 的 compact-group put 产生大量失败）。
 Direct DCP KV gather 关闭（`VLLM_USE_DIRECT_DCP_KV_GATHER=0`）。不要在此设置
 `MC_MAX_MR_SIZE`：设为 4GiB 时各 rank 对约 40 GiB KV 区域报

@@ -340,11 +340,13 @@ mooncake_store_config" line is the pre-patch dump). On DSXE the container's
 libibverbs comes from the host through the enroot EFA hook, so
 `configs/runners.yaml` mounts the host library directory at `/host-usr-lib` and
 the setup script requires `RDMAV_DRIVERS` to load its mlx5 provider. Keep
-`max_load_batch_keys: 1` and `load_async: false` (tips 860c1ccf c48 /
+`max_load_batch_keys: 1` and `load_async: true` (tips 860c1ccf c48 /
 e51c58f5 c32 hung in DCP PYNCCL `_ALLGATHER_BASE` under ~98–100% GPU KV with
-async loads and clean Mooncake metrics; `last started work: -1`), but do not
-enable `compact_group_io` on this DSXE single-rail path (it storm-failed ~25 MiB
-compact-group puts at c8). Direct DCP KV gather is off
+async loads and clean Mooncake metrics; `last started work: -1`. Tip ea88d652
+canary c1 crashed with Mooncake `AssertionError: load_async must be True for
+better performance` when `load_async` was set false, so restore the required
+stock true), but do not enable `compact_group_io` on this DSXE single-rail path
+(it storm-failed ~25 MiB compact-group puts at c8). Direct DCP KV gather is off
 (`VLLM_USE_DIRECT_DCP_KV_GATHER=0`). Do not set `MC_MAX_MR_SIZE` here: with 4GiB
 every rank hit `register_buffer failed ... -600` on the ~40 GiB KV region and
 stormed `AddressNotRegistered` TRANSFER_FAIL (c2/c32); pre-`MC_MAX_MR` tips
