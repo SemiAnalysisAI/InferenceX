@@ -65,23 +65,29 @@ base:
       preamble: |
         ulimit -n 1048576
         ulimit -l unlimited
+      # Cold container starts on a decode node have exceeded srtctl's 120 s default;
+      # the <<: merge is shallow, so every store repeats the timeout.
       readiness:
         port: 8800
+        timeout_seconds: 600
     - <<: *decode-store
       name: store-decode-1
       args: ["--port", "8801"]
       readiness:
         port: 8801
+        timeout_seconds: 600
     - <<: *decode-store
       name: store-decode-2
       args: ["--port", "8802"]
       readiness:
         port: 8802
+        timeout_seconds: 600
     - <<: *decode-store
       name: store-decode-3
       args: ["--port", "8803"]
       readiness:
         port: 8803
+        timeout_seconds: 600
   frontend:
     type: dynamo
     nginx_session_affinity: true
@@ -290,6 +296,28 @@ override_1p1d_c480:
       args:
         cuda-graph-max-bs-decode: 256
 
+# Low-latency point: 1P x DEP8 prefill / 1D x DEP32 decode (8 nodes; 384 experts / 32 = 12 per
+# rank) at concurrency 480. Wider expert parallelism shortens the decode step, filling the
+# interactivity range between the DEP16 c480 point and the aggregate recipes.
+override_1p1d_dep8_dep32_c480:
+  name: "disagg-gb300-2p8d-dep8-dep32-c480-mtp-kvoffload"
+  roles:
+    prefill:
+      nodes: 2
+      workers: 1
+      gpus: 8
+      args:
+        max-running-requests: 256
+        cuda-graph-max-bs-decode: 256
+    decode:
+      nodes: 8
+      gpus: 32
+      args:
+        tp-size: 32
+        dp-size: 32
+        ep-size: 32
+        cuda-graph-max-bs-decode: 256
+
 # Agentic-coding SGLang disaggregated recipe for DeepSeek-V4-Pro on GB300
 # (4P x DEP8 / 4D x DEP16, DSpark K=6 + hierarchical-cache KV offload), tuned for concurrency 960.
 #
@@ -338,14 +366,14 @@ override_3p1d_c1440:
         cuda-graph-max-bs-decode: 512
 
 # Agentic-coding SGLang disaggregated Pareto recipe for DeepSeek-V4-Pro on GB300
-# (8P x DEP8 / 4D x DEP16, DSpark K=6 + hierarchical-cache KV offload), tuned for concurrency 1920.
+# (8P x DEP8 / 4D x DEP16, DSpark K=6 + hierarchical-cache KV offload), tuned for concurrency 2400.
 #
 # Uses the flat single-variant srtctl schema the agentic CI flow expects;
 # resources + backend (prefill/decode env + sglang_config) are normalized
 # from the Pareto run.
 # Concurrency is exported into srt_agentic.sh from the master-config conc-list.
-override_4p1d_c1920:
-  name: "disagg-gb300-8p4d-dep8-dep16-c1920-mtp-kvoffload"
+override_4p1d_c2400:
+  name: "disagg-gb300-8p4d-dep8-dep16-c2400-mtp-kvoffload"
   frontend:
     nginx_keepalive_timeout: "900s"
     env:
