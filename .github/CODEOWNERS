@@ -4,7 +4,7 @@
 inferencex-e2e/configs/amd-master.yaml @billishyahao @chunfangamd @seungrokj @yctseng0211 @1am9trash
 
 # NVIDIA master config
-inferencex-e2e/configs/nvidia-master.yaml @ankur-singh @kedarpotdar-nv @SemiAnalysisAI/core
+inferencex-e2e/configs/nvidia-master.yaml @ankur-singh @kedarpotdar-nv @wzhao18 @nvpohanh @RohitNagraj @SemiAnalysisAI/core
 
 # PoR for Models & general direction
 inferencex-e2e/docs/MODELS.md @ankur-singh @chunfangamd @SemiAnalysisAI/core
@@ -18,3 +18,6 @@ operatorx/ @hbarclay
 
 # Experimental
 experimental/ @functionstackx
+
+# SRT Slurm patches
+/inferencex-e2e/runners/srt-slurm/patches/ @cquil11 @SemiAnalysisAI/core

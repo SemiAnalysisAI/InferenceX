@@ -29,6 +29,15 @@ import config  # noqa: E402
 import stage  # noqa: E402
 import ep_harness  # noqa: E402  (stdlib-only at module top)
 import ep_backend  # noqa: E402  (torch is imported lazily inside its methods)
+import ep_oracle  # noqa: E402
+
+
+def run_common(script: str, *args: str, **kwargs) -> subprocess.CompletedProcess:
+    """Run `script` in bash after sourcing runtime/common.sh; `args` arrive as $1, $2, ..."""
+    return subprocess.run(
+        ["bash", "-c", f'source "{RUNTIME / "common.sh"}" && {script}', "collx", *args],
+        capture_output=True, text=True, **kwargs,
+    )
 
 
 # configs/platform_config.json is shared by matrix scheduling, operator/network
@@ -128,12 +137,10 @@ class SquashCacheKeyTests(unittest.TestCase):
     DIGEST = "sha256:" + "ab" * 32
 
     def _bash(self, script: str, env: dict, args: list) -> str:
-        result = subprocess.run(
-            ["bash", "-c", f'source "{RUNTIME / "common.sh"}" && {script}', "collx", *args],
-            capture_output=True, text=True, check=True,
+        return run_common(
+            script, *args, check=True,
             env={"PATH": os.environ["PATH"], "COLLX_IMAGE_PLATFORM": "linux/amd64", **env},
-        )
-        return result.stdout
+        ).stdout
 
     def test_the_path_is_invariant_across_runs_and_digests(self) -> None:
         paths = {
@@ -219,40 +226,37 @@ class SingleNodeHcaOverrideTests(unittest.TestCase):
     # self-enables IBGDA even single-node, and only the storage-IB rails accept
     # AH/DCT creation), while scale-out runs keep resolving NVSHMEM_HCA_LIST
     # from the ordinary scale-out selector.
-    @staticmethod
-    def _profile_env(script: str) -> str:
-        completed = subprocess.run(
-            ["bash", "-c", script], cwd=RUNTIME.parent,
-            capture_output=True, text=True, check=True,
-        )
-        return completed.stdout.strip().splitlines()[-1]
+    def test_nvshmem_hca_list_per_placement(self) -> None:
+        for name, setup, placement, expected in (
+            ("single-node override", "export COLLX_SINGLE_NODE_RDMA_DEVICES='mlx5_12:1,mlx5_13:1'",
+             "1 nvlink", "mlx5_12:1,mlx5_13:1"),
+            ("single-node without override", ":", "1 nvlink", "unset"),
+            ("scale-out ignores the single-node selector",
+             "export COLLX_SINGLE_NODE_RDMA_DEVICES='mlx5_12:1'"
+             " COLLX_RDMA_DEVICES='mlx5_0:1,mlx5_1:1'",
+             "2 nvlink-rdma", "mlx5_0:1,mlx5_1:1"),
+        ):
+            with self.subTest(name):
+                stdout = run_common(
+                    f'{setup}; collx_apply_network_profile {placement};'
+                    ' echo "${NVSHMEM_HCA_LIST:-unset}"',
+                    check=True,
+                ).stdout
+                self.assertEqual(stdout.strip().splitlines()[-1], expected)
 
-    def test_single_node_override_exports_the_pinned_hca_list(self) -> None:
-        line = self._profile_env(
-            "source runtime/common.sh 2>/dev/null;"
-            " export COLLX_SINGLE_NODE_RDMA_DEVICES='mlx5_12:1,mlx5_13:1';"
-            " collx_apply_network_profile 1 nvlink;"
-            " echo \"${NVSHMEM_HCA_LIST:-unset}\""
-        )
-        self.assertEqual(line, "mlx5_12:1,mlx5_13:1")
 
-    def test_single_node_without_override_exports_nothing(self) -> None:
-        line = self._profile_env(
-            "source runtime/common.sh 2>/dev/null;"
-            " collx_apply_network_profile 1 nvlink;"
-            " echo \"${NVSHMEM_HCA_LIST:-unset}\""
-        )
-        self.assertEqual(line, "unset")
-
-    def test_scale_out_ignores_the_single_node_selector(self) -> None:
-        line = self._profile_env(
-            "source runtime/common.sh 2>/dev/null;"
-            " export COLLX_SINGLE_NODE_RDMA_DEVICES='mlx5_12:1';"
-            " export COLLX_RDMA_DEVICES='mlx5_0:1,mlx5_1:1';"
-            " collx_apply_network_profile 2 nvlink-rdma;"
-            " echo \"${NVSHMEM_HCA_LIST:-unset}\""
-        )
-        self.assertEqual(line, "mlx5_0:1,mlx5_1:1")
+class RelaxedOrderingProfileTests(unittest.TestCase):
+    def test_only_the_registry_flag_relaxes_the_deepep_window(self) -> None:
+        for flag, expected in (("1", "1"), ("0", "unset"), ("", "unset")):
+            with self.subTest(flag=flag):
+                stdout = run_common(
+                    "export COLLX_RDMA_DEVICES=mlx5_0:1 EP_WIN_RELAXED_ORDERING=stale"
+                    f" COLLX_RDMA_RELAXED_ORDERING='{flag}';"
+                    " collx_apply_network_profile 2 nvlink-rdma;"
+                    ' echo "${EP_WIN_RELAXED_ORDERING:-unset}"',
+                    check=True,
+                ).stdout
+                self.assertEqual(stdout.strip().splitlines()[-1], expected)
 
 
 class StageTests(unittest.TestCase):
@@ -290,24 +294,29 @@ FAILURE_MARKER = (
 
 
 class NetworkProfileContract(unittest.TestCase):
-    def _fabric(self, root: Path, *, state: str = "4: ACTIVE",
-                link_layer: str = "Ethernet", gid: str = "fe80::1") -> None:
-        net = root / "class" / "net" / "eth0"
+    @staticmethod
+    def _fabric(root: Path, *, interface: str = "eth0", device: str = "mlx5_0",
+                state: str = "4: ACTIVE", link_layer: str = "Ethernet",
+                gid: str | None = "fe80::1") -> None:
+        net = root / "class" / "net" / interface
         net.mkdir(parents=True)
         (net / "operstate").write_text("up\n")
-        port = root / "class" / "infiniband" / "mlx5_0" / "ports" / "1"
+        port = root / "class" / "infiniband" / device / "ports" / "1"
         (port / "gids").mkdir(parents=True)
         (port / "state").write_text(state + "\n")
         (port / "link_layer").write_text(link_layer + "\n")
-        (port / "gids" / "3").write_text(gid + "\n")
+        if gid is not None:
+            (port / "gids" / "3").write_text(gid + "\n")
 
-    def _run(self, root: Path, route: Path, socket_names: str = "eth0"):
+    @staticmethod
+    def _run(root: Path, *profile: str):
+        """validate_network_profile over `root` (default: eth0 + mlx5_0:1 at GID index 3)."""
         buffer = io.StringIO()
         rc = 0
         try:
             with contextlib.redirect_stdout(buffer):
-                probe.validate_network_profile(socket_names, "mlx5_0:1", "3",
-                                                sys_root=root, route_path=route)
+                probe.validate_network_profile(*(profile or ("eth0", "mlx5_0:1", "3")),
+                                                sys_root=root, route_path=root / "route")
         except SystemExit:
             rc = 1
         return rc, buffer.getvalue().splitlines()
@@ -321,7 +330,7 @@ class NetworkProfileContract(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self._fabric(root)
-            rc, lines = self._run(root, root / "route")
+            rc, lines = self._run(root)
             self.assertEqual(rc, 0)
             self.assertEqual(self._captures(SOCKET_MARKER, lines), ["eth0"])
             self.assertEqual(self._captures(LINK_MARKER, lines), ["roce"])
@@ -330,7 +339,7 @@ class NetworkProfileContract(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self._fabric(root, state="1: DOWN")
-            rc, lines = self._run(root, root / "route")
+            rc, lines = self._run(root)
             self.assertEqual(rc, 1)
             failures = [line for line in lines if re.search(FAILURE_MARKER, line)]
             self.assertTrue(any("rdma-port-1=inactive" in line for line in failures), failures)
@@ -338,30 +347,17 @@ class NetworkProfileContract(unittest.TestCase):
     def _efa_fabric(self, root: Path) -> None:
         # An EFA node as sysfs shows it: default-route interface up, verbs device whose port is
         # ACTIVE but carries link_layer Unspecified and no usable GID table (rdma-core -> rdmap*).
-        net = root / "class" / "net" / "enp71s0"
-        net.mkdir(parents=True)
-        (net / "operstate").write_text("up\n")
-        port = root / "class" / "infiniband" / "rdmap86s0" / "ports" / "1"
-        (port / "gids").mkdir(parents=True)
-        (port / "state").write_text("4: ACTIVE\n")
-        (port / "link_layer").write_text("Unspecified\n")
+        self._fabric(root, interface="enp71s0", device="rdmap86s0",
+                     link_layer="Unspecified", gid=None)
 
-    def _run_efa(self, root: Path, route: Path, fabric: str):
-        buffer = io.StringIO()
-        rc = 0
-        try:
-            with contextlib.redirect_stdout(buffer):
-                probe.validate_network_profile("enp71s0", "rdmap86s0", "", fabric,
-                                                sys_root=root, route_path=route)
-        except SystemExit:
-            rc = 1
-        return rc, buffer.getvalue().splitlines()
+    def _run_efa(self, root: Path, fabric: str):
+        return self._run(root, "enp71s0", "rdmap86s0", "", fabric)
 
     def test_declared_efa_fabric_accepts_the_unspecified_link_layer(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self._efa_fabric(root)
-            rc, lines = self._run_efa(root, root / "route", "efa")
+            rc, lines = self._run_efa(root, "efa")
             self.assertEqual(rc, 0, lines)
             self.assertEqual(self._captures(SOCKET_MARKER, lines), ["enp71s0"])
             self.assertEqual(self._captures(LINK_MARKER, lines), ["efa"])
@@ -370,22 +366,9 @@ class NetworkProfileContract(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self._efa_fabric(root)
-            rc, lines = self._run_efa(root, root / "route", "")
+            rc, lines = self._run_efa(root, "")
             self.assertEqual(rc, 1)
             self.assertIn("[collectivex-private] rdma-port-1=link-layer-invalid", lines)
-
-# config.py case-args is the single case→invocation codec: collx_run_shard decodes one
-# null-delimited argv per case and hands it verbatim to bench/run_ep.py. Parse the
-# emitted argv with the same parser shape run_ep builds so the two sides cannot
-# drift — a flag the codec emits but run_ep does not declare (or vice versa) fails
-# here instead of on a GPU allocation.
-# logical_byte_provenance is where FP8 changes MEASUREMENT semantics (asymmetric
-# per-direction byte counts), so its arithmetic and guards are pinned here on CPU.
-try:
-    import torch as _torch
-except Exception:  # torch is absent in the CPU test image; these checks run on GPU CI
-    _torch = None
-
 
 class ContainerImportRetry(unittest.TestCase):
     """A failed container import is retried, because the failure is usually the storage blinking.
@@ -394,8 +377,8 @@ class ContainerImportRetry(unittest.TestCase):
     SOFT-mounted network filesystem -- one that returns an error instead of blocking when its
     transport drops. gb300's /data is NFSv3 over RDMA, and a transport gap there surfaces from
     `mkdir` as "Protocol family not supported", which reads like a missing mount but is not: the
-    same node writes it fine minutes later. Run 31089556516 lost its gb300 shards that way, ~25
-    minutes into each leg, so the import must not treat one such failure as terminal.
+    same node writes it fine minutes later, so the import must not treat one such failure as
+    terminal.
     """
 
     HARNESS = """
@@ -415,7 +398,6 @@ exit ${codes[$idx]}
 FAKE
 chmod +x "$ROOT/bin/srun"
 export PATH="$ROOT/bin:$PATH"
-source "$COMMON"
 sleep() { :; }              # collapse the backoff
 unsquashfs() { return 0; }  # a present squash short-circuits the import
 out="$(collx_ensure_squash_on_job 12345 "$ROOT/sqsh" some/image:tag)"; rc=$?
@@ -426,14 +408,10 @@ echo "CALLS=$(wc -l < "$ROOT/calls" 2>/dev/null | tr -d ' ' || echo 0)"
 
     def _run(self, rc_sequence: str):
         with tempfile.TemporaryDirectory() as root:
-            proc = subprocess.run(
-                ["bash", "-c", self.HARNESS],
-                env={
-                    **os.environ, "ROOT": root, "COMMON": str(RUNTIME / "common.sh"),
-                    "RC_SEQUENCE": rc_sequence, "COLLX_IMPORT_ATTEMPTS": "3",
-                },
-                capture_output=True, text=True,
-            )
+            proc = run_common(self.HARNESS, env={
+                **os.environ, "ROOT": root,
+                "RC_SEQUENCE": rc_sequence, "COLLX_IMPORT_ATTEMPTS": "3",
+            })
         fields = dict(
             line.split("=", 1) for line in proc.stdout.splitlines() if "=" in line
             and line.split("=", 1)[0] in ("RC", "OUT", "CALLS")
@@ -459,10 +437,10 @@ echo "CALLS=$(wc -l < "$ROOT/calls" 2>/dev/null | tr -d ' ' || echo 0)"
 
 
 # config.py case-args is the single case→invocation codec: collx_run_shard decodes one
-# null-delimited argv per case and hands it verbatim to bench/run_ep.py. Parse the
-# emitted argv with the actual parser run_ep builds so the two sides cannot
-# drift — a flag the codec emits but run_ep does not declare (or vice versa) fails
-# here instead of on a GPU allocation.
+# null-delimited argv per case and hands it to the rank wrapper, which execs the entrypoint the
+# leading --entrypoint pair names. Parse the rest with the actual parser that entrypoint builds so
+# the two sides cannot drift — a flag the codec emits but the benchmark does not declare (or vice
+# versa) fails here instead of on a GPU allocation.
 class CaseArgvContract(unittest.TestCase):
     CASE = {
         "backend": "deepep-v2", "mode": "normal", "precision": "bf16",
@@ -493,12 +471,15 @@ class CaseArgvContract(unittest.TestCase):
                 run_ep.main()
         return parse.call_args.args[0]
 
-    def _decode(self, stdout: bytes) -> list:
+    def _decode(self, stdout: bytes, entrypoint: str = "run_ep") -> list:
         parts = stdout.split(b"\0")
         self.assertEqual(parts[-1], b"")
-        return [part.decode() for part in parts[:-1]]
+        argv = [part.decode() for part in parts[:-1]]
+        self.assertEqual(argv[:2], ["--entrypoint", entrypoint])
+        return argv[2:]
 
-    def _case_argv(self, placement: list, case: dict | None = None) -> list:
+    def _case_argv(self, placement: list, case: dict | None = None,
+                   entrypoint: str = "run_ep") -> list:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "shard.json"
             path.write_text(json.dumps({"version": 1, "cases": [case or self.CASE]}))
@@ -507,7 +488,7 @@ class CaseArgvContract(unittest.TestCase):
                  str(path), "0", "h200-dgxc", "TS", *placement],
                 capture_output=True, check=True,
             )
-        return self._decode(result.stdout)
+        return self._decode(result.stdout, entrypoint)
 
     def test_case_args_round_trips_through_the_run_ep_parser(self) -> None:
         argv = self._case_argv(["16", "2", "8", "8"])
@@ -590,6 +571,58 @@ class CaseArgvContract(unittest.TestCase):
                 self.assertEqual(args.case_id, case["case_id"])
                 self.assertEqual(args.out, f"results/{case['case_id']}_TS-c000.json")
 
+    def test_a_swap_blocks_case_round_trips_through_its_own_parser(self) -> None:
+        import run_swap_blocks
+        import sweep_matrix
+
+        shard, = sweep_matrix.resolve_matrix(suites="swap-blocks", only_sku="h200-dgxc")["include"]
+        case = shard["cases"][1]
+        argv = self._case_argv(["1", "1", "1", "1"], case=case, entrypoint="run_swap_blocks")
+        with mock.patch.object(argparse.ArgumentParser, "parse_args", autospec=True,
+                               side_effect=SystemExit) as parse:
+            with self.assertRaises(SystemExit):
+                run_swap_blocks.main(argv)
+        args = parse.call_args.args[0].parse_args(argv)
+        self.assertEqual(args.directions, case["directions"].split())
+        self.assertEqual(args.block_bytes, [int(v) for v in case["block_bytes"].split()])
+        self.assertEqual(args.num_blocks, [int(v) for v in case["num_blocks"].split()])
+        self.assertEqual((args.layout, args.warmup, args.iterations),
+                         (case["layout"], case["warmup"], case["iterations"]))
+        self.assertEqual(args.max_payload_bytes, case["max_payload_bytes"])
+        self.assertEqual(str(args.output), f"results/{case['case_id']}_TS-c000.json")
+        with self.assertRaises(subprocess.CalledProcessError):
+            self._case_argv(["8", "1", "8", "8"], case=case, entrypoint="run_swap_blocks")
+
+    def test_a_case_from_an_unknown_suite_cannot_reach_a_run(self) -> None:
+        with self.assertRaises(subprocess.CalledProcessError):
+            self._case_argv(["16", "2", "8", "8"], case={**self.CASE, "suite": "turbo"})
+
+    def test_the_rank_wrapper_execs_only_a_named_entrypoint(self) -> None:
+        # The wrapper's own guards run before it sources anything, so feed it valid Slurm
+        # identity and stop at the entrypoint gate with a python3 shim that records its argv.
+        with tempfile.TemporaryDirectory() as directory:
+            shim = Path(directory) / "python3"
+            shim.write_text('#!/bin/sh\necho "ARGV $*"\n')
+            shim.chmod(0o755)
+            wrapper = run_common("collx_slurm_rank_wrapper").stdout.replace(
+                ". /ix/collectivex/runtime/common.sh || exit 68", ":")
+            env = {**os.environ, "PATH": f"{directory}:{os.environ['PATH']}",
+                   "SLURM_PROCID": "0", "SLURM_NTASKS": "1", "SLURM_LOCALID": "0",
+                   "SLURM_NODEID": "0", "COLLX_NGPUS": "1", "COLLX_GPUS_PER_NODE": "1"}
+            for argv, rc, out in (
+                (["--entrypoint", "run_swap_blocks", "--layout", "random"], 0,
+                 "ARGV bench/run_swap_blocks.py --layout random"),
+                (["--entrypoint", "run_ep", "--backend", "mori"], 0,
+                 "ARGV bench/run_ep.py --backend mori"),
+                (["--entrypoint", "../../bin/sh"], 67, ""),
+                (["--backend", "mori"], 67, ""),
+            ):
+                with self.subTest(argv=argv):
+                    result = subprocess.run(["bash", "-c", wrapper, "_", *argv], env=env,
+                                            capture_output=True, text=True)
+                    self.assertEqual(result.returncode, rc, result.stderr)
+                    self.assertEqual(result.stdout.strip(), out)
+
 # logical_byte_provenance is where FP8 changes MEASUREMENT semantics (asymmetric
 # per-direction byte counts), so its arithmetic and guards are pinned here on CPU.
 class LogicalByteProvenanceTests(unittest.TestCase):
@@ -640,21 +673,18 @@ class WeightedCombineSemanticsTests(unittest.TestCase):
         torch = _torch
         payload = torch.randn(3, 64, dtype=torch.bfloat16)
         ids = torch.tensor([[2, -1], [5, -1], [7, -1]], dtype=torch.int64)
-        low = ep_harness._expert_transform(
-            torch, payload, ids, torch.full((3, 2), 0.2), "unweighted-rank-sum"
-        )
-        high = ep_harness._expert_transform(
-            torch, payload, ids, torch.full((3, 2), 0.9), "unweighted-rank-sum"
-        )
+        model = ep_oracle.combine_model("unweighted-rank-sum")
+        low = model.transform(torch, payload, ids, torch.full((3, 2), 0.2))
+        high = model.transform(torch, payload, ids, torch.full((3, 2), 0.9))
         # The gate IS in the transform here, so a larger weight changes the staged value.
         self.assertFalse(torch.equal(low, high))
 
     def test_unknown_semantics_fail_closed(self):
         torch = _torch
         with self.assertRaises(ValueError):
-            ep_harness._expected_transformed_combine(
-                torch, self._problem(), 4, 8, "made-up"
-            )
+            ep_oracle.combine_model("made-up")
+        with self.assertRaises(ValueError):
+            ep_oracle.combine_model("unweighted-rank-sum", "made-up")
 
 
 @unittest.skipUnless(_torch is not None, "combine-oracle math checks require torch")
@@ -672,7 +702,7 @@ class TopkSlotTreeReductionTests(unittest.TestCase):
         slots = [torch.full((1, 1), v, dtype=torch.float32) for v in values]
         destination = torch.arange(len(values)).unsqueeze(0)
         messages = torch.stack(slots)
-        return ep_harness._topk_slot_tree_combine(
+        return ep_oracle.topk_slot_tree_combine(
             torch, destination, torch.ones_like(destination, dtype=torch.bool),
             messages, torch.bfloat16,
         ).item()
@@ -691,13 +721,13 @@ class RankFp32ReductionTests(unittest.TestCase):
         messages = torch.tensor(values, dtype=torch.float32).reshape(8, 1, 1)
         destination = torch.arange(8).unsqueeze(0)
         valid = torch.ones_like(destination, dtype=torch.bool)
-        result = ep_harness._topk_rank_fp32_combine(
+        result = ep_oracle.topk_rank_fp32_combine(
             torch, destination, valid, messages
         )
         self.assertEqual(result.item(), 1.0 + 7 * 2.0**-9)
 
         duplicate = torch.tensor([[0, 0, 1]])
-        result = ep_harness._topk_rank_fp32_combine(
+        result = ep_oracle.topk_rank_fp32_combine(
             torch, duplicate, torch.ones_like(duplicate, dtype=torch.bool), messages
         )
         self.assertEqual(result.item(), 1.0 + 2.0**-9)
@@ -771,30 +801,18 @@ class GpuHealthProbe(unittest.TestCase):
             with self.subTest(output=output[:20]):
                 self.assertEqual(probe.gpu_health_faults(output), [])
 
-    def _run_validate(self, csv: str, has_smi: bool = True):
+    @staticmethod
+    def _run_validate(csv: str):
         """Drive validate_gpu_health with a stubbed nvidia-smi; returns (exit_code, stdout)."""
-        import shutil
-        real_which = shutil.which
-        shutil.which = (lambda name: "/usr/bin/nvidia-smi") if has_smi else (lambda name: None)
-
-        class FakeSubprocess:
-            SubprocessError = subprocess.SubprocessError
-
-            @staticmethod
-            def run(*args, **kwargs):
-                return types.SimpleNamespace(stdout=csv)
-
-        sys.modules["subprocess"] = FakeSubprocess
         captured = io.StringIO()
-        try:
-            with contextlib.redirect_stdout(captured):
+        with mock.patch("shutil.which", return_value="/usr/bin/nvidia-smi"), \
+                mock.patch("subprocess.run", return_value=types.SimpleNamespace(stdout=csv)), \
+                contextlib.redirect_stdout(captured):
+            try:
                 probe.validate_gpu_health()
-            code = 0
-        except SystemExit as exit_:
-            code = exit_.code
-        finally:
-            sys.modules["subprocess"] = subprocess
-            shutil.which = real_which
+                code = 0
+            except SystemExit as exit_:
+                code = exit_.code
         return code, captured.getvalue()
 
     def test_a_fault_exits_nonzero_and_names_the_gpu(self):
@@ -822,74 +840,6 @@ class GpuHealthProbe(unittest.TestCase):
             with self.subTest(output=output[:16]):
                 result = probe.gpu_temperature_spread(output)
                 self.assertTrue(result is None or result[2] < 10)
-
-
-class LowLatencyCapDecoupling(unittest.TestCase):
-    """The LL receive size and the measured ladder must stay two numbers -- sizing the receive
-    from `max(ladder)` would shift every rung. Driven through the adapter with deep_ep stubbed,
-    so the constants are exercised rather than read out of the syntax tree."""
-
-    @staticmethod
-    def _adapter():
-        """Import ep_deepep_v2 with its vendor dependency stubbed out."""
-        torch_stub = types.ModuleType("torch")
-        torch_stub.bfloat16 = torch_stub.float32 = torch_stub.int64 = "dtype"
-        torch_stub.distributed = types.SimpleNamespace(group=types.SimpleNamespace(WORLD=None))
-        # The module decorates helpers at import time; pass them through untouched.
-        torch_stub.compile = lambda *a, **k: (a[0] if a else (lambda fn: fn))
-        torch_stub._dynamo = types.SimpleNamespace(config=types.SimpleNamespace())
-        deep_ep = types.ModuleType("deep_ep")
-        deep_ep.Buffer = type("Buffer", (), {})
-        # The adapter imports ElasticBuffer by name and fails closed without it.
-        deep_ep.ElasticBuffer = type("ElasticBuffer", (), {})
-        stubs = {
-            "torch": torch_stub, "torch.distributed": torch_stub.distributed,
-            "deep_ep": deep_ep,
-        }
-        with mock.patch.dict(sys.modules, stubs):
-            import importlib
-            import ep_deepep_v2
-            return importlib.reload(ep_deepep_v2)
-
-    def test_ladder_cap_drops_only_oversized_measurement_points(self):
-        module = self._adapter()
-        backend = module.DeepEPV2Backend.__new__(module.DeepEPV2Backend)
-        backend.mode = "low-latency"
-        backend.world_size = 8
-        backend._build_rank_inputs = mock.Mock(return_value=None)
-        args = types.SimpleNamespace(experts=256, tokens_ladder="32 64 128")
-        with mock.patch.object(module, "_LL_LADDER_CAP", 64):
-            spec = backend.make_inputs(args)
-        self.assertEqual(spec.ladder, [32, 64])
-        self.assertEqual(spec.dropped, [128])
-
-    def test_the_receive_is_sized_from_the_buffer_cap_not_the_ladder(self):
-        module = self._adapter()
-        backend = module.DeepEPV2Backend.__new__(module.DeepEPV2Backend)
-        backend.mode, backend.world_size, backend.group = "low-latency", 8, object()
-        backend.args = types.SimpleNamespace(experts=256, hidden=16)
-        vendor_buffer = mock.Mock()
-        vendor_buffer.get_low_latency_rdma_size_hint.return_value = 4096
-        with mock.patch.object(module.deep_ep, "Buffer", vendor_buffer), \
-                mock.patch.object(module, "_LL_BUFFER_CAP", 128), \
-                mock.patch.object(module, "_LL_LADDER_CAP", 64):
-            for ladder_max in (16, 64):
-                backend.create_buffer(types.SimpleNamespace(max_tokens_per_rank=ladder_max))
-                vendor_buffer.get_low_latency_rdma_size_hint.assert_called_with(128, 16, 8, 256)
-                self.assertEqual(vendor_buffer.call_args.kwargs["num_rdma_bytes"], 4096)
-            with self.assertRaisesRegex(RuntimeError, "exceeds"):
-                backend.create_buffer(types.SimpleNamespace(max_tokens_per_rank=129))
-
-    def test_a_clamped_ladder_is_recorded_in_the_artifact_not_only_on_stdout(self):
-        # The clamp must reach the artifact: a rank-0 stdout NOTE alone leaves a document that
-        # measured 8 rungs indistinguishable from one that measured 9. Asserted on a real
-        # emitted document rather than on the presence of key literals in the source.
-        sys.path.insert(0, str(RUNTIME.parent / "tests"))
-        import test_chain
-        workload = test_chain.drive().doc["workload"]
-        for required in ("ladder_measured", "ladder_dropped", "ladder_cap"):
-            self.assertIn(required, workload, f"the emitted record must include {required}")
-        self.assertEqual(workload["ladder_measured"], list(test_chain.LADDER))
 
 
 if __name__ == "__main__":

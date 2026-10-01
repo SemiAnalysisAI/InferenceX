@@ -9,6 +9,9 @@
 
 使用本页添加和运行评分 eval、操作 AgentX trace replay、保留证据，并判断长时间运行是否应继续。命令均假定当前目录为 `inferencex-e2e/`；请替换 `<ANGLE_BRACKETS>` 中的值。
 
+若只需对已有服务运行回放客户端，请参阅[独立运行 AgentX-Harness](agentx-standalone_zh.md)。
+该指南包含安装步骤和直接执行的 `aiperf profile` 命令，无需 CI 或 Slurm。
+
 ## 1. 选择正确的执行模式
 
 若 PR sweep 只需测试吞吐量，请在相应的 `perf-changelog.yaml` 条目中设置
@@ -62,7 +65,7 @@ uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with p
   --config-files configs/nvidia-master.yaml | jq .
 ```
 
-正确的 AgentX eval 行包含 `"scenario-type": "agentic-coding"`、`"run-eval": true` 和 `"eval-only": true`。工作流会在 [`.github/workflows/e2e-tests.yml`](../../.github/workflows/e2e-tests.yml#L278-L293) 中将生成的行拆分到吞吐量、定长序列 eval 和 agentic eval 作业。
+正确的 AgentX eval 行包含 `"scenario-type": "agentic-coding"`、`"run-eval": true` 和 `"eval-only": true`。工作流会在 [`.github/workflows/e2e-tests.yml`](../../.github/workflows/e2e-tests.yml#L351-L358) 中将生成的行拆分到吞吐量、定长序列 eval 和 agentic eval 作业。
 
 ## 2. 添加评分 eval
 
@@ -99,7 +102,7 @@ append_lm_eval_summary
 python3 -m infx.evals.validate_scores --model-prefix "$MODEL_PREFIX"
 ```
 
-`run_lm_eval` 通过 `--model_args` 中的 `num_concurrent` 传递并发；它刻意采用环境变量，而不是 `run_eval` CLI 选项。准确调用见 [`run_lm_eval()`](../benchmarks/benchmark_lib.sh#L1080-L1162)。
+`run_lm_eval` 通过 `--model_args` 中的 `num_concurrent` 传递并发；它刻意采用环境变量，而不是 `run_eval` CLI 选项。准确调用见 [`run_lm_eval()`](../benchmarks/benchmark_lib.sh#L2044-L2128)。
 
 ## 3. `EVAL_ONLY` 是 launcher 约定
 
@@ -111,9 +114,11 @@ python3 -m infx.evals.validate_scores --model-prefix "$MODEL_PREFIX"
 4. 吞吐量路径立即返回或被跳过。
 5. 运行 `run_eval` 和 artifact staging。
 
-相关实现：[context 设置](../benchmarks/benchmark_lib.sh#L1049-L1078)、[eval 分派与失败策略](../benchmarks/benchmark_lib.sh#L1789-L1923) 和[工作流输入](../../.github/workflows/benchmark-tmpl.yml#L79-L97)。
+原生多节点 post-eval 从 `/model` 读取挂载的检查点，并仅在评估进程中启用数据集下载，不改变工作进程环境。上下文查询先读取本地 `config.json` 中的数值上限，再回退到 Transformers；显式设置的 `EVAL_MAX_MODEL_LEN` 仍优先。
 
-不要在吞吐量规格的服务已经运行后才切换 `EVAL_ONLY`，并假定 context 会随之变化。应通过 recipe 重启。Eval-only 模式会在暂存已有 artifact 后返回 eval 失败；在工作流中，上传步骤使用 `always()`，并位于分数校验前，因此失败证据仍会保留（[单节点上传与 gate](../../.github/workflows/benchmark-tmpl.yml#L399-L417)、[多节点上传与 gate](../../.github/workflows/benchmark-multinode-tmpl.yml#L466-L488)）。
+相关实现：[context 设置](../benchmarks/benchmark_lib.sh#L2016-L2042)、[eval 分派与失败策略](../benchmarks/benchmark_lib.sh#L2893-L3073) 和[工作流输入](../../.github/workflows/benchmark-tmpl.yml#L40-L57)。
+
+不要在吞吐量规格的服务已经运行后才切换 `EVAL_ONLY`，并假定 context 会随之变化。应通过 recipe 重启。Eval-only 模式会在暂存已有 artifact 后返回 eval 失败；在工作流中，上传步骤使用 `always()`，并位于分数校验前，因此失败证据仍会保留（[单节点上传与 gate](../../.github/workflows/benchmark-tmpl.yml#L467-L494)、[多节点上传与 gate](../../.github/workflows/benchmark-multinode-tmpl.yml#L487-L518)）。
 
 ## 4. 批量 eval 并发
 
@@ -135,9 +140,9 @@ python3 -m infx.evals.validate_scores --expected-concs '16 32 64'
 - `completed_eval_concs`：eval 与 staging 均成功的点；
 - `failed_eval_concs`：eval 或 staging 失败的点。
 
-失败点会延迟报错，使所有已尝试点的 artifact 都能上传；随后 post-upload validator 会使作业失败。批量模式只接受正整数，且仅支持 `lm-eval`。参见 [`run_eval` batching](../benchmarks/benchmark_lib.sh#L1839-L1900)、[artifact 后缀处理](../benchmarks/benchmark_lib.sh#L1163-L1222) 和[manifest 校验](../infx/evals/validate_scores.py#L72-L171)。
+失败点会延迟报错，使所有已尝试点的 artifact 都能上传；随后 post-upload validator 会使作业失败。批量模式只接受正整数，且仅支持 `lm-eval`。参见 [`run_eval` batching](../benchmarks/benchmark_lib.sh#L2980-L3031)、[artifact 后缀处理](../benchmarks/benchmark_lib.sh#L2130-L2188) 和[manifest 校验](../infx/evals/validate_scores.py#L119-L216)。
 
-对于多节点 `all-evals`，工作流通过连接拓扑的并发列表构造 `EVAL_CONC`（[分派](../../.github/workflows/e2e-tests.yml#L397-L400)）。如果缺少某点的 `_conc<N>` 结果或 completed manifest 条目，绝不能比较该点。
+对于多节点 `all-evals`，工作流通过连接拓扑的并发列表构造 `EVAL_CONC`（[分派](../../.github/workflows/e2e-tests.yml#L417-L419)）。如果缺少某点的 `_conc<N>` 结果或 completed manifest 条目，绝不能比较该点。
 
 ## 5. 校验分数，而不只是检查文件存在
 
@@ -158,7 +163,7 @@ python3 -m infx.evals.validate_scores \
   --thresholds infx/evals/thresholds.yaml
 ```
 
-阈值按以下顺序解析：`models.<prefix>.<task>`、`default.<task>`，最后是 `--min-score`（默认 `0.85`）。默认检查名称以 `exact_match,` 开头、数值类型且非 stderr 的指标。当分数低于阈值、没有匹配指标、缺少请求的并发、metadata 有重复或无效值、任何点被标记为失败，或结果后缀与 manifest 不一致时，校验都会失败。当前权威下限位于 [`thresholds.yaml`](../infx/evals/thresholds.yaml)。参见[阈值解析](../infx/evals/validate_scores.py#L61-L69)与[校验流程](../infx/evals/validate_scores.py#L174-L302)。
+阈值按以下顺序解析：`models.<prefix>.<task>`、`default.<task>`，最后是 `--min-score`（默认 `0.85`）。默认检查名称以 `exact_match,` 开头、数值类型且非 stderr 的指标。当分数低于阈值、没有匹配指标、缺少请求的并发、metadata 有重复或无效值、任何点被标记为失败，或结果后缀与 manifest 不一致时，校验都会失败。当前权威下限位于 [`thresholds.yaml`](../infx/evals/thresholds.yaml)。参见[阈值解析](../infx/evals/validate_scores.py#L63-L73)与[校验流程](../infx/evals/validate_scores.py#L219-L373)。
 
 手动的吞吐量+eval 组合 recipe 会上传 eval 输出，但模板的自动分数 gate 专用于 eval-only 作业。对手动或组合运行必须显式执行 validator。
 
@@ -189,9 +194,11 @@ gh run download "$RUN_ID" --repo SemiAnalysisAI/InferenceX \
 
 [`install_agentic_deps()`](../benchmarks/benchmark_lib.sh) 在安装可编辑模式的 `utils/aiperf` 时直接声明 AgentX client 所需的依赖，并使用调用方提供的 `AIPERF_PYTHON_VERSION` 将它们安装到隔离的 `AIPERF_RUNTIME_DIR` 环境中。
 
-AgentX 是 AIPerf `inferencex-agentx-mvp` trace replay，不是固定 token 的合成 benchmark。仓库默认设置对每条 trajectory lane 额外执行十个 warmup 请求，并使用 recipe 配置的 profile 时长。`agentx-fast` 强制每条 lane 只运行一个 warmup 请求，并将 profile 设为 1,200 秒。它只影响单节点和多节点 AgentX 吞吐量；定长序列吞吐量与 eval 保持 canonical。Fast 运行不符合 artifact reuse 条件（[工作流策略](../../.github/workflows/README.md#agentx-fast-mode)、[fast replay 设置](../benchmarks/benchmark_lib.sh#L2104-L2128)）。
+AgentX 是 AIPerf `inferencex-agentx-mvp` trace replay，不是固定 token 的合成 benchmark。仓库默认设置对每条 trajectory lane 额外执行十个 warmup 请求，并使用 recipe 配置的 profile 时长。`agentx-fast` 强制每条 lane 只运行一个 warmup 请求，并将 profile 设为 1,200 秒。它只影响单节点和多节点 AgentX 吞吐量；定长序列吞吐量与 eval 保持 canonical。Fast 运行不符合 artifact reuse 条件（[工作流策略](../../.github/workflows/README.md#agentx-fast-mode)、[fast replay 设置](../benchmarks/benchmark_lib.sh#L3255-L3259)）。
 
-对于多节点 srt-slurm 作业，benchmark client 与 frontend 可能运行在不同主机上。`srt_agentic.sh` 会优先使用显式提供的 `AIPERF_SERVER_URL`；否则从 `SRT_FRONTEND_HOST` 和 `SRT_FRONTEND_PORT` 推导地址；仅在没有远端 endpoint 时回退到 `localhost:$PORT`。Trace replay 和并发点之间的 drain 检查必须使用同一个解析后的 endpoint。
+每个 AgentX 吞吐量并发点都必须使用新启动的服务。矩阵为每个点生成独立作业，replay client 会拒绝多个并发值。AgentX 不清空缓存，也不复用正在运行的服务来测试另一个并发点。同一测试点的预热和正式测量共用服务。此规则不改变定长序列 sweep 或评分 eval 的批量执行行为。
+
+对于多节点 srt-slurm 作业，benchmark client 与 frontend 可能运行在不同主机上。`srt_agentic.sh` 会优先使用显式提供的 `AIPERF_SERVER_URL`；否则从 `SRT_FRONTEND_HOST` 和 `SRT_FRONTEND_PORT` 推导地址；仅在没有远端 endpoint 时回退到 `localhost:$PORT`。
 
 对于未发布到 package index 的 engine 或 router wheel，必须保证构建可复现且 artifact 不可变：在 launcher 旁签入源码 patch 与构建器，打 patch 前校验上游 wheel 的 digest，分配明确的 local version，并通过带 SHA256 fragment 的精确 URL 安装已发布 artifact。本地 backport 不得冒用尚未发布的上游版本号。
 
@@ -226,11 +233,11 @@ gh workflow run e2e-tests.yml --repo SemiAnalysisAI/InferenceX --ref "$REF" \
 
 要得到可发布的 SWE-bench 分数，省略 `eval-limit`；不要使用 `single-shot`，它只是诊断逃生选项。SWE-bench generation/scoring 控制项以及完整 split 的 `0.50` 阈值在实现旁的 [`infx/evals/EVALS.md`](../infx/evals/EVALS.md#swe-bench-lite---framework-swebench) 中说明。
 
-Fast 结果只能作为 bring-up 证据，绝不能替代 canonical candidate。小于 900 秒的 duration 或 `AIPERF_UNSAFE_OVERRIDE=true` 会添加 AIPerf 的 `--unsafe-override` 并将 submission 标记为无效；只能用于 smoke 诊断（[源码](../benchmarks/benchmark_lib.sh#L2266-L2268)）。Fast 运行健康后，必须对完全相同的 candidate 进行 canonical 运行，才能宣称 benchmark 成功。
+Fast 结果只能作为 bring-up 证据，绝不能替代 canonical candidate。小于 900 秒的 duration 或 `AIPERF_UNSAFE_OVERRIDE=true` 会添加 AIPerf 的 `--unsafe-override` 并将 submission 标记为无效；只能用于 smoke 诊断（[源码](../benchmarks/benchmark_lib.sh#L3362-L3364)）。Fast 运行健康后，必须对完全相同的 candidate 进行 canonical 运行，才能宣称 benchmark 成功。
 
 ## 8. 保留 trace 与运行 provenance
 
-AgentX 默认 replay 已记录的 assistant response。实时服务输出会被测量，但构造后续 turn 时会丢弃。只有在明确要进行不同的 live-assistant 实验时，才设置 `AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES=1`。除非用 `WEKA_LOADER_OVERRIDE` 固定，否则所选 trace corpus 依赖模型 family；resolver 会同时记录 loader 与 Hugging Face dataset（[trace 解析](../benchmarks/benchmark_lib.sh#L2023-L2102)、[replay 语义](../benchmarks/benchmark_lib.sh#L2104-L2270)）。
+AgentX 默认 replay 已记录的 assistant response。实时服务输出会被测量，但构造后续 turn 时会丢弃。只有在明确要进行不同的 live-assistant 实验时，才设置 `AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES=1`。除非用 `WEKA_LOADER_OVERRIDE` 固定，否则所选 trace corpus 依赖模型 family；resolver 会同时记录 loader 与 Hugging Face dataset（[trace 解析](../benchmarks/benchmark_lib.sh#L3165-L3234)、[replay 语义](../benchmarks/benchmark_lib.sh#L3236-L3366)）。
 
 立即记录 orchestration provenance：
 
@@ -262,7 +269,7 @@ gh run download "$RUN_ID" --repo SemiAnalysisAI/InferenceX \
 - server/frontend 日志以及所代表的每个 metrics endpoint；
 - run URL/ID、attempt、head SHA、recipe/config 标识、image、topology、fast 标志和所有 override。
 
-Runner 会在 replay 前写入命令，并在聚合后校验原始结果（[执行路径](../benchmarks/benchmark_lib.sh#L2320-L2360)）。聚合会保留 dataset provenance 以及硬件/模型/拓扑字段（[aggregate 构造](../infx/results/agentic/__init__.py)）。工作流的 raw upload 会有意排除体积很大的 `inputs.json` 和 `profile_export_raw.jsonl`；如果调查需要这些文件，应在清理前从实时 allocation 保存（[单节点 artifact 约定](../../.github/workflows/benchmark-tmpl.yml#L349-L358)、[多节点约定](../../.github/workflows/benchmark-multinode-tmpl.yml#L455-L464)）。
+Runner 会在 replay 前写入命令，并在聚合后校验原始结果（[执行路径](../benchmarks/benchmark_lib.sh#L3412-L3566)）。聚合会保留 dataset provenance 以及硬件/模型/拓扑字段（[aggregate 构造](../infx/results/agentic/__init__.py)）。工作流的 raw upload 会有意排除体积很大的 `inputs.json` 和 `profile_export_raw.jsonl`；如果调查需要这些文件，应在清理前从实时 allocation 保存（[单节点 artifact 约定](../../.github/workflows/benchmark-tmpl.yml#L400-L409)、[多节点约定](../../.github/workflows/benchmark-multinode-tmpl.yml#L476-L485)）。
 
 ## 9. 用实时证据调试长时间 AgentX 运行
 
@@ -311,7 +318,7 @@ curl -fsS '<METRICS_URL>' | \
   rg -i 'request|queue|cache|token|prefill|decode|error|fail'
 ```
 
-通过重复 sample 跟踪趋势：running/waiting request、KV usage、prefix hit、input/output token rate、completed/cancelled/errored request、frontend routing balance，以及 disaggregated KV transfer。AIPerf 会为每条 server series 记录 endpoint identity（[metrics 接线](../benchmarks/benchmark_lib.sh#L2236-L2260)）。
+通过重复 sample 跟踪趋势：running/waiting request、KV usage、prefix hit、input/output token rate、completed/cancelled/errored request、frontend routing balance，以及 disaggregated KV transfer。AIPerf 会为每条 server series 记录 endpoint identity（[metrics 接线](../benchmarks/benchmark_lib.sh#L3344-L3359)）。
 
 应使用 phase marker，而不是 Slurm 总运行时间：
 
@@ -332,7 +339,7 @@ date -u
 - KV usage 长期接近 100%，queue 持续增长且 latency 已不可用；
 - 吞吐量已经平台化，而更高并发只会恶化 TTFT/TPOT；
 - 任意 disaggregated pool 或必需 metrics source 始终未注册；
-- AIPerf 校验显示 completed request 为零，或错误率超过配置的 `0.10` 上限（[validator](../infx/results/agentic/validate_agentic_result.py#L49-L87)）。
+- AIPerf 校验显示 completed request 为零，或错误率超过配置的 `0.10` 上限（[validator](../infx/results/agentic/validate_agentic_result.py#L48-L88)）。
 
 如果 completion 持续增加且 queue 稳定，不要仅因模型加载、dataset 配置、warmup、cutoff drain 或 profiling 较慢而停止。任何取消前，都要捕获时间戳、准确拓扑、相关日志行、至少两个体现趋势的 metric sample、当前 phase 和诊断结论。
 

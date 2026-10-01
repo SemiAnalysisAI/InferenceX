@@ -4,9 +4,10 @@ CollectiveX is an experimental MoE expert-parallel communication benchmark. It m
 combine, and paired roundtrip latency across EP libraries and accelerator systems, then uploads
 neutral result artifacts.
 
-A standalone [vLLM `swap_blocks` benchmark](docs/swap-blocks.md)
-([中文](docs/swap-blocks_zh.md)) measures pinned CPU↔GPU and same-GPU block copies,
-with its own correctness checks and latency/bandwidth JSON output.
+A second suite, the [vLLM `swap_blocks` benchmark](docs/swap-blocks.md)
+([中文](docs/swap-blocks_zh.md)), measures pinned CPU↔GPU and same-GPU block copies,
+with its own correctness checks and latency/bandwidth JSON output. It runs through the same
+sweep matrix and pool launchers (`suites: swap-blocks`).
 
 CollectiveX schedules benchmarks, executes them on real allocations, and uploads the neutral
 artifacts each run emits. It does not validate those artifacts, promote, rank, recommend, select, or
@@ -38,7 +39,7 @@ in one of two modes:
   H100/H200 and at EP8 *and EP16* on B200 (the nscale bare-metal pool, whose gdrdrv-backed IBGDA
   over native IB is what a low-latency scale-out needs and no virtualized pool has) and on
   GB200/GB300, whose EP16 stays inside the MNNVL scale-up domain,
-  plus MoRI EP8 on MI300X/MI325X/MI355X and UCCL-EP EP8 on H100/H200/B200 only (UCCL's low-latency host
+  plus MoRI EP8 on MI355X only (the MI300X/MI325X registries carry no low-latency rows) and UCCL-EP EP8 on H100/H200/B200 only (UCCL's low-latency host
   assert `kNumMaxTopK + 1 <= num_warp_groups * num_warps_per_group` cannot hold on AMD, where
   `kNumMaxWarpGroups` is 16, since upstream raised `kNumMaxTopK` 9 -> 16 (uccl#1016, 2026-07-13) and
   our pin is six days later. The product is 16 for every CU count, so this is a dated regression
@@ -62,7 +63,10 @@ samples per component) with 32 synchronized full roundtrip warmups before each m
 every trial/point. Component measurement order rotates each trial so every timed component occupies
 every position in the sequence, and each iteration takes the cross-rank maximum before nearest-rank
 p50/p90/p95/p99. A keyed BLAKE2b counter produces
-byte-identical routing and gate weights on every runtime.
+byte-identical routing and gate weights on every runtime. Graph-compatible backend/mode pairs (mostly decode; MoRI and prefill
+stay eager) run these measurements under CUDA graph replay by default, where graphed fresh-entry
+components publish only p50; `COLLX_CUDA_GRAPH=0` restores eager (see the methodology's CUDA Graph
+Replay section).
 
 Those components all measure **fresh entry** (the GPU is drained around every timed window), the
 latency of an idle pipeline, not what a decode loop pays. So every row also carries the **chained
@@ -121,8 +125,11 @@ result it writes.
 The matrix covers H100, H200, B200, B300, GB200, GB300, MI300X, MI325X, and MI355X. `sweep_matrix.py` materializes
 the requested SKUs, backends, EP sizes, and token ladders, then extracts strict per-shard controls
 and rejects missing, stale, malformed, or altered shard controls. `--only-sku`, `--exclude-skus`,
-`--ep-sizes`, and `--precisions` select a subset. The matrix is generated per dispatch, with no
-frozen digest or locked case count.
+`--ep-sizes`, and `--precisions` select a subset. `--suites` picks the suites (`ep` by default;
+`swap-blocks` adds one single-GPU shard per pool from `configs/swap_sweep.json`). Every suite's
+shards take the same path: the pool launcher allocates, `runtime/config.py case-args` encodes each
+case as its entrypoint's argv, and the rank wrapper execs that entrypoint. The matrix is generated
+per dispatch, with no frozen digest or locked case count.
 
 | Systems | EP8 | EP16 |
 |---|---|---|

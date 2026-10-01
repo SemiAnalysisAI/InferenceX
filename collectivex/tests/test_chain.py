@@ -19,30 +19,14 @@ import tempfile
 from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path[:0] = [str(ROOT), str(ROOT / "bench")]
-sys.path[:0] = [str(ROOT)]
+sys.path[:0] = [str(ROOT), str(ROOT / "bench"), str(ROOT / "tests")]
 
 import ep_backend  # noqa: E402
 import ep_harness  # noqa: E402
+import ep_oracle  # noqa: E402
+import ep_timing  # noqa: E402
 import summarize  # noqa: E402
-
-
-# ---- from test_chain_period.py ----------------------------------------------------
-# Per-operation device cost in the stub clock (ms). Distinct primes so that any window
-# reports a sum unique to the operations it actually brackets.
-DISPATCH_MS = 3.0
-STAGE_MS = 7.0
-COMBINE_MS = 5.0
-
-
-class _Clock:
-    """Stub device clock; only the fake backend's operations advance it."""
-
-    def __init__(self):
-        self.now_ms = 0.0
-
-    def advance(self, ms):
-        self.now_ms += ms
+from _fakes import COMBINE_MS, DISPATCH_MS, _ChainBackend, _Combined  # noqa: E402
 
 
 class _TraceEvent:
@@ -130,75 +114,14 @@ def trace_torch(clock, log):
         yield torch
 
 
-class _Combined:
-    """Just enough combined-output tensor for the chain's final-output capture."""
-
-    def __init__(self, value):
-        self.value = value
-        self.cloned = False
-
-    def fill_(self, value):
-        self.value = value
-        return self
-
-    def clone(self):
-        detached = _Combined(self.value)
-        detached.cloned = True
-        return detached
-
-
-class _ChainBackend(ep_backend.EPBackend):
-    """Records the call order and charges each operation a fixed slice of the stub clock."""
-
-    name = "chain-stub"
-
-    def __init__(self, stage_device_work=True, fp8_consume="native", precision="fp8",
-                 dispatch_schedule=None):
-        self.calls: list[str] = []
-        self.consumed: list = []
-        self.clock = _Clock()
-        self.stage_device_work = stage_device_work
-        self.fp8_consume = fp8_consume
-        self.precision = precision
-        self.device = "cpu"
-        self.rank = 0
-        self.world_size = 2
-        # Per-dispatch cost overrides, consumed in order; the constant cost applies after.
-        self._dispatch_schedule = list(dispatch_schedule or [])
-
-    def create_buffer(self, spec):  # pragma: no cover - unused
-        raise NotImplementedError
-
-    def dispatch(self, problem):
-        self.calls.append("dispatch")
-        cost = self._dispatch_schedule.pop(0) if self._dispatch_schedule else DISPATCH_MS
-        self.clock.advance(cost)
-        return types.SimpleNamespace(combine_input=None)
-
-    def stage(self, problem, handle):
-        self.calls.append("stage")
-        self.clock.advance(STAGE_MS)
-        handle.combine_input = "staged-by-stage"
-
-    def combine(self, problem, handle):
-        self.calls.append("combine")
-        self.consumed.append(handle.combine_input)
-        self.clock.advance(COMBINE_MS)
-        return _Combined(handle.combine_input)
-
-    def recv_tokens(self, handle):
-        return 0
-
-    def inspect_dispatch(self, problem, handle):  # pragma: no cover - unused
-        return {}
-
-    def combine_transformed(self, problem, handle, transformed):  # pragma: no cover
-        return transformed
-
-
 def new_problem():
     """A problem the backend can hang cached state on -- `warm` caches recv_tokens there."""
     return types.SimpleNamespace()
+
+
+def run_chain(backend, iters, drop):
+    with trace_torch(backend.clock, backend.calls):
+        return backend.benchmark_chain(new_problem(), 0, iters, drop)
 
 
 def timed_tail(calls, iters, per_pair):
@@ -229,8 +152,7 @@ class ChainedPairPeriod(unittest.TestCase):
         # the very stagger the chain exists to amortise. Neither may appear.
         iters = 6
         backend = _ChainBackend()
-        with trace_torch(backend.clock, backend.calls):
-            backend.benchmark_chain(new_problem(), 0, iters, 2)
+        run_chain(backend, iters, 2)
         self.assertEqual(
             timed_tail(backend.calls, iters, 2), ["dispatch", "combine"] * iters
         )
@@ -247,8 +169,7 @@ class ChainedPairPeriod(unittest.TestCase):
                     stage_device_work=True, fp8_consume=consume, precision=precision
                 )
                 self.assertTrue(backend.stage_excluded_from_roundtrip)
-                with trace_torch(backend.clock, backend.calls):
-                    series = backend.benchmark_chain(new_problem(), 0, iters, 2)
+                series = run_chain(backend, iters, 2)
                 self.assertEqual(backend.calls.count("stage"), 1)
                 self.assertEqual(backend.consumed, ["staged-by-stage"] * (2 * iters + 1))
                 floors, period = chain_sections(backend.calls)
@@ -267,9 +188,7 @@ class ChainedPairPeriod(unittest.TestCase):
     def test_returns_one_sample_per_kept_iteration(self):
         for iters, drop, kept, gaps in ((8, 0, 8, 7), (8, 2, 6, 5), (6, 5, 1, 0)):
             with self.subTest(iters=iters, drop=drop):
-                backend = _ChainBackend()
-                with trace_torch(backend.clock, backend.calls):
-                    series = backend.benchmark_chain(new_problem(), 0, iters, drop)
+                series = run_chain(_ChainBackend(), iters, drop)
                 self.assertEqual(
                     sorted(series),
                     ["combine", "combined", "dispatch", "pair", "start_to_start"],
@@ -288,8 +207,7 @@ class ChainedPairPeriod(unittest.TestCase):
             stage_device_work=False, fp8_consume="native", precision="bf16",
             dispatch_schedule=slow_head * 2,  # floors chain runs first, then the period chain
         )
-        with trace_torch(backend.clock, backend.calls):
-            series = backend.benchmark_chain(new_problem(), 0, iters, drop)
+        series = run_chain(backend, iters, drop)
         self.assertEqual(len(series["dispatch"]), 4)
         for value in series["dispatch"]:
             self.assertAlmostEqual(value, 3000.0)
@@ -299,11 +217,7 @@ class ChainedPairPeriod(unittest.TestCase):
 
 class CudaGraphRoundtrip(unittest.TestCase):
     def test_each_graph_component_uses_its_own_capture(self):
-        backend = _ChainBackend(
-            stage_device_work=True, fp8_consume="native", precision="bf16"
-        )
-        backend.mode = "normal"
-        backend.CUDA_GRAPH_MODES = ("normal",)
+        backend = self._graph_backend(stage_device_work=True)
         problem = new_problem()
         samples = {}
         with mock.patch.dict(os.environ, {}, clear=True), \
@@ -322,8 +236,8 @@ class CudaGraphRoundtrip(unittest.TestCase):
         self.assertTrue(problem._cuda_graph_output.cloned)
         self.assertTrue(problem._cuda_graph_output_rewritten)
 
-    def _graph_backend(self):
-        backend = _ChainBackend(stage_device_work=False, fp8_consume="native", precision="bf16")
+    def _graph_backend(self, stage_device_work=False, precision="bf16"):
+        backend = _ChainBackend(stage_device_work=stage_device_work, precision=precision)
         backend.mode, backend.CUDA_GRAPH_MODES = "normal", ("normal",)
         return backend
 
@@ -344,9 +258,8 @@ class CudaGraphRoundtrip(unittest.TestCase):
     def test_the_graph_chain_is_one_capture_of_unrolled_pairs_per_sibling(self):
         iters, drop = 5, 1
         backend = self._graph_backend()
-        with mock.patch.dict(os.environ, {}, clear=True), \
-                trace_torch(backend.clock, backend.calls):
-            series = backend.benchmark_chain(new_problem(), 0, iters, drop)
+        with mock.patch.dict(os.environ, {}, clear=True):
+            series = run_chain(backend, iters, drop)
         calls = backend.calls
         begin = [i for i, call in enumerate(calls) if call == "capture_begin"]
         end = [i for i, call in enumerate(calls) if call == "capture_end"]
@@ -362,9 +275,7 @@ class CudaGraphRoundtrip(unittest.TestCase):
         self.assertTrue(series["combined"].cloned)
 
     def test_external_switch_restores_the_eager_component_pipeline(self):
-        backend = _ChainBackend()
-        backend.mode = "normal"
-        backend.CUDA_GRAPH_MODES = ("normal",)
+        backend = self._graph_backend(stage_device_work=True, precision="fp8")
         with mock.patch.dict(os.environ, {}, clear=True):
             self.assertEqual(
                 backend.timed_components(), ["roundtrip", "dispatch", "combine"]
@@ -389,12 +300,12 @@ class GraphAlignmentAndValueCheck(unittest.TestCase):
                 record=lambda: None, elapsed_time=lambda other: probe_ms,
             ),
         ))
-        backend = _ChainBackend()
+        timing = ep_timing.GraphTiming(_ChainBackend())
         results = {}
         for probe_ms in (0.1, 0.05):  # the 200k-cycle probe took 100us, then 50us
             with mock.patch.dict(sys.modules, {"torch": fake}):
-                backend._calibrate_align_spin()
-            results[probe_ms] = backend._graph_align_cycles
+                timing.calibrate_align_spin()
+            results[probe_ms] = timing.align_cycles
         self.assertEqual(results[0.1], 200_000)  # the default 100us spin at 2 cycles/ns
         self.assertEqual(results[0.05], 2 * results[0.1])
 
@@ -404,15 +315,16 @@ class GraphAlignmentAndValueCheck(unittest.TestCase):
         handle = types.SimpleNamespace(recv_x="recv", recv_scales=None, combine_input=None)
         graph = types.SimpleNamespace(replay=lambda: order.append("replay"))
         backend.warm = lambda problem, count: order.append("warm")
-        backend._capture_pairs = lambda problem, staged, pairs, marks: (
+        timing = ep_timing.GraphTiming(backend)
+        timing.capture_pairs = lambda problem, staged, pairs, marks: (
             order.append(("capture", staged)) or (graph, {}, combined, handle)
         )
-        backend._poison = lambda tensor: order.append(("poison", tensor))
         dist = types.SimpleNamespace(barrier=lambda: order.append("barrier"))
         fake = types.SimpleNamespace(cuda=types.SimpleNamespace(synchronize=lambda: None),
                                      distributed=dist)
-        with mock.patch.dict(sys.modules, {"torch": fake, "torch.distributed": dist}):
-            result = backend.graph_replay_output(new_problem())
+        with mock.patch.dict(sys.modules, {"torch": fake, "torch.distributed": dist}), \
+                mock.patch.object(ep_timing, "poison", lambda tensor: order.append(("poison", tensor))):
+            result = timing.replay_output(new_problem())
         # Staging runs INSIDE the capture (staged=None). Between the upload replay and the
         # returned one, dispatch's output and the result are poisoned, then every rank barriers:
         # peers write into each other's buffers, so an unbarriered replay races a slow poison.
@@ -444,8 +356,8 @@ class RocmGraphEventRecord(unittest.TestCase):
         hip = types.SimpleNamespace(hipEventRecordWithFlags=lambda e, s, f: calls.append(
             (e.value, s.value, f.value)) or rc)
         with mock.patch.dict(sys.modules, {"torch": fake}), \
-                mock.patch.object(ep_backend.EPBackend, "_hip_runtime", lambda: hip):
-            ep_backend.EPBackend._record_graph_event(ep_backend.EPBackend._graph_event())
+                mock.patch.object(ep_timing, "_hip_runtime", lambda: hip):
+            ep_timing.record_graph_event(ep_timing.graph_event())
         return records, calls
 
     def test_rocm_events_are_recorded_once_outside_then_captured_through_hip(self):
@@ -464,8 +376,7 @@ class EventPlacement(unittest.TestCase):
     def _sections(self, **backend_kwargs):
         iters = 4
         backend = _ChainBackend(**backend_kwargs)
-        with trace_torch(backend.clock, backend.calls):
-            backend.benchmark_chain(new_problem(), 0, iters, 1)
+        run_chain(backend, iters, 1)
         floors, period = chain_sections(backend.calls)
         return iters, floors, period
 
@@ -545,7 +456,6 @@ class ChainComponentContract(unittest.TestCase):
         self.assertEqual(overridden["sample_count"], 3)
 
 
-# ---- from test_run_sweep_chain.py -------------------------------------------------
 LADDER = [4, 8]
 CHAIN_ITERS, CHAIN_DROP, CHAIN_TRIALS = 8, 2, 2
 # What the stub backend reports for every chained iteration, distinct so a published number is
@@ -707,12 +617,16 @@ class _SweepBackend(ep_backend.EPBackend):
     def benchmark_component(self, component, problem, warmup, iters):
         return [10.0] * iters
 
+    def pair_series(self, kept):
+        return [PAIR_US] * kept
+
     def benchmark_chain(self, problem, warmup, iters, drop):
         self.events.append(("chain", problem.T))
         kept = iters - drop
+        pair = self.pair_series(kept)
         return {
-            "pair": [PAIR_US] * kept,
-            "start_to_start": [PAIR_US + GAP_US] * (kept - 1),
+            "pair": pair,
+            "start_to_start": [value + GAP_US for value in pair[:-1]],
             "dispatch": [DISPATCH_FLOOR_US] * kept,
             "combine": [COMBINE_FLOOR_US] * kept,
             "combined": f"chained-{problem.T}",
@@ -800,11 +714,11 @@ def _sweep(fail_indices, error_indices, chain_error, backend_factory=None,
         events.append(("oracle", problem.T))
         oracle_calls.append((index, problem.T, (problem, *rest)))
         passed = index not in fail_indices
-        return ep_harness._oracle_report(
+        return ep_oracle.oracle_report(
             passed=passed,
             receive_count=8,
             max_elementwise_relative_error=chain_error if index in error_indices else 0.0,
-            checks=dict.fromkeys(ep_harness._ORACLE_CHECKS, passed),
+            checks=dict.fromkeys(ep_oracle.ORACLE_CHECKS, passed),
         )
 
     def fake_output_match(chained, drained):
@@ -816,8 +730,8 @@ def _sweep(fail_indices, error_indices, chain_error, backend_factory=None,
         stdout = io.StringIO()
         with mock.patch.dict(sys.modules, {"routing": fake_routing()}), \
                 mock.patch.dict(os.environ, {"COLLX_ATTEMPT_ID": "1"}), \
-                mock.patch.object(ep_harness, "_run_expert_oracle", fake_oracle), \
-                mock.patch.object(ep_harness, "_chain_output_matches", fake_output_match), \
+                mock.patch.object(ep_harness, "run_expert_oracle", fake_oracle), \
+                mock.patch.object(ep_harness, "chain_output_matches", fake_output_match), \
                 contextlib.redirect_stdout(stdout):
             rc = ep_harness.run_sweep(
                 make_args(out), backend, value_torch(), _FakeDist(), "cuda:0", 0, 1
@@ -845,6 +759,29 @@ def drive(*, fail_phases=(), chain_error=0.0, backend_factory=None, chain_output
         selected({"chain"}) if chain_error else frozenset(), chain_error, backend_factory,
         chain_output_ok=chain_output_ok,
     )
+
+
+class CombineModelGate(unittest.TestCase):
+    def test_a_bad_reduction_from_create_buffer_fails_before_any_dispatch(self):
+        # create_buffer may set the reduction (FlashInfer does, by wheel version), so the harness
+        # resolves the model after it; the oracle would otherwise raise with a dispatch in flight.
+        class _BadReduction(_SweepBackend):
+            def create_buffer(self, spec):
+                self.combine_reduction = "not-a-reduction"
+
+        backend = _BadReduction()
+        self.assertEqual(backend.combine_weight_semantics, "unweighted-rank-sum")
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch.dict(sys.modules, {"routing": fake_routing()}), \
+                mock.patch.dict(os.environ, {"COLLX_ATTEMPT_ID": "1"}), \
+                contextlib.redirect_stdout(io.StringIO()) as out:
+            rc = ep_harness.run_sweep(
+                make_args(Path(directory) / "result.json"), backend, value_torch(), _FakeDist(),
+                "cuda:0", 0, 1,
+            )
+        self.assertEqual(rc, 2)
+        self.assertIn("not-a-reduction", out.getvalue())
+        self.assertEqual(backend.events, [])
 
 
 class ChainedRegimeOracleGate(unittest.TestCase):
@@ -1030,18 +967,9 @@ class CudaGraphPublication(unittest.TestCase):
 class _DriftingBackend(_SweepBackend):
     """A chain whose late half runs DRIFT_US slower -- an unconverged (or down-clocking) run."""
 
-    def benchmark_chain(self, problem, warmup, iters, drop):
-        self.events.append(("chain", problem.T))
-        kept = iters - drop
+    def pair_series(self, kept):
         half = kept // 2
-        pair = [PAIR_US] * half + [PAIR_US + DRIFT_US] * (kept - half)
-        return {
-            "pair": pair,
-            "start_to_start": [value + GAP_US for value in pair[:-1]],
-            "dispatch": [DISPATCH_FLOOR_US] * kept,
-            "combine": [COMBINE_FLOOR_US] * kept,
-            "combined": f"chained-{problem.T}",
-        }
+        return [PAIR_US] * half + [PAIR_US + DRIFT_US] * (kept - half)
 
 
 class SettleDrift(unittest.TestCase):
@@ -1115,25 +1043,24 @@ class ChainOutputCheck(unittest.TestCase):
             ("shape", [1.0, 2.0], [1.0, 2.0, 3.0], False, float("inf")),
         ):
             with self.subTest(label):
-                got, error = ep_harness._chain_output_matches(_Vec(chained), _Vec(drained))
+                got, error = ep_oracle.chain_output_matches(_Vec(chained), _Vec(drained))
                 self.assertIs(got, ok)
                 self.assertAlmostEqual(error, expected_error)
 
     def test_a_non_finite_output_is_an_unbounded_mismatch_not_zero_error(self):
         # NaN would vanish from the cross-rank MAX and publish "failed, error 0.0".
-        got, error = ep_harness._chain_output_matches(_Vec([float("nan"), 1.0]), _Vec([1.0, 1.0]))
+        got, error = ep_oracle.chain_output_matches(_Vec([float("nan"), 1.0]), _Vec([1.0, 1.0]))
         self.assertIs(got, False)
         self.assertEqual(error, float("inf"))
 
     def test_near_zero_elements_are_judged_against_the_magnitude_floor(self):
         # Relative error against a denominator of 1e-6 would be huge; the floor keeps
         # numerically-tiny elements from redding a healthy chain.
-        got, error = ep_harness._chain_output_matches(_Vec([0.000101]), _Vec([0.000001]))
+        got, error = ep_oracle.chain_output_matches(_Vec([0.000101]), _Vec([0.000001]))
         self.assertTrue(got)
         self.assertAlmostEqual(error, 0.005)  # 0.0001 difference under the 0.02 magnitude floor
 
 
-# ---- from test_summarize_headline.py ----------------------------------------------
 ROUNDTRIP = {"p50": 100.0, "p90": 110.0, "p95": 115.0, "p99": 120.0}
 PERIOD = {"p50": 60.0, "p90": 66.0, "p95": 69.0, "p99": 72.0}
 

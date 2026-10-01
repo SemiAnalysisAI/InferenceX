@@ -121,14 +121,16 @@ case count.
 | GB200/GB300 | 2x4 MNNVL, scale-up | 4x4 MNNVL, scale-up |
 
 **A virtualized pool can make a scale-out row measure the hypervisor rather than the fabric.**
-h200-dgxc EP16 pays roughly three times the cross-node cost of b300 or h100 on identical topology
-and identical traffic, while its EP8 rows are correct. The deficit is confined to the hop. It
-sustains ~34 GB/s per node against a nominal 8x400G (~4.2 GB/s per GPU-NIC pair) where bare-metal
-h100 reaches wire rate. Reordering the NIC-PE mapping to pair each rank with its socket-local NIC
-changed nothing (478µs against a 480µs baseline), which rules the selector out and points at the
-GDR path being degraded wholesale inside the guest. The retired b200-nscale pool showed the same
-shape. Treat EP16 rows from a virtualized pool as a lower bound on the hardware until the host's
-ACS/IOMMU configuration is confirmed.
+h200-dgxc EP16 on deepep-v2 paid three to eight times h100's cross-node cost while nccl-ep on the
+same nodes ran at h100 rates. ElasticBuffer registers its GIN window `NCCL_WIN_STRICT_ORDERING`,
+which strips PCIe relaxed ordering, and in h200's KVM guests strict-ordered GPU-NIC writes cap the
+hop near 10 GB/s per GPU. The DeepEP build patches the registration behind a switch that a pool
+opts into with `rdma_relaxed_ordering` in its `network` block. On h200-dgxc, bf16 decode at 512
+tokens per rank drops from 3088µs to 620µs per round trip and the oracle passes in bf16 and fp8.
+Upstream made the window strict on purpose (DeepEP #661/#674): with relaxed ordering a GIN signal
+can in principle overtake the data it announces. That race has not been reproduced, and a passing
+oracle does not rule it out. Those rows carry a `-relaxed-ordering` `kernel_generation` suffix and
+never pool with the strict series; every other pool keeps upstream's registration.
 
 Physical host count does not define scope. Both GB cells remain inside one 72-GPU MNNVL scale-up
 domain.
@@ -313,9 +315,12 @@ under `CUDAGraph.replay()` by default: each library's best measured configuratio
 every check, without changing its contract.
 
 - **nccl-ep** low-latency and HT **decode**. HT decode replays as a captured decode step would
-  run it, although it is 3-11% slower than eager at h100/h200 EP16: captured, the per-step routing
-  `ncclAllGather` is a proxy-driven cross-node collective that NCCL fronts with a host-callback
-  node on every replay (about +50 µs of dispatch; nothing within one node). HT prefill stays eager.
+  run it. Its per-step routing `ncclAllGather` is the one host NCCL collective in any capture, so
+  nccl-ep's communicator runs NCCL graph usage mode 1 (one graph at a time): the default mixing
+  mode wraps every captured collective in an external event wait and record, which left ~14 µs
+  idle before each all-gather (h100 EP8 trace). Rows carry the `-gum1` generation suffix. Across
+  nodes the captured all-gather is still proxy-driven, and NCCL fronts it with a host-callback
+  node on every replay (about +50 µs of dispatch at EP16). HT prefill stays eager.
 - **flashinfer-ep** decode; prefill stays eager (graphs change nothing there).
 - **uccl-ep** low-latency, intranode only, except b200 FP8 (faster eager). Normal mode host-syncs.
 - **deepep-v2** low-latency and normal **decode**, run as vLLM's graphed `deepep_v2` decode runs

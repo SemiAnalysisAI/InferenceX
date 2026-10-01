@@ -4,8 +4,7 @@ set -x
 
 # Client-only AgentX trace replay for single- and multi-node srt-slurm jobs.
 # srt-slurm owns server startup; this script runs as benchmark.type=custom
-# against the already-ready frontend. Multi-node batches replay each CONC_LIST
-# point in turn; a single-node job replays its one CONC point.
+# against a fresh, already-ready frontend for exactly one concurrency.
 
 # Jobs inherit the legacy scripts' /workspace, which srt-slurm does not mount;
 # fall back to the repo mount this client runs from.
@@ -15,7 +14,15 @@ fi
 : "${IS_MULTINODE:=false}" "${PORT:=8000}"
 export INFMAX_CONTAINER_WORKSPACE IS_MULTINODE PORT
 source "$INFMAX_CONTAINER_WORKSPACE/benchmarks/benchmark_lib.sh" --validation-only
-check_env_vars RESULT_DIR EVAL_ONLY
+check_env_vars RESULT_DIR EVAL_ONLY CONC
+validate_agentic_concurrency "$CONC"
+if [[ "${CONC_LIST+x}" ]]; then
+    validate_agentic_concurrency "$CONC_LIST"
+    if [[ "$CONC_LIST" != "$CONC" ]]; then
+        echo "ERROR: CONC must match the single CONC_LIST value" >&2
+        exit 1
+    fi
+fi
 source "$INFMAX_CONTAINER_WORKSPACE/benchmarks/benchmark_lib.sh"
 
 if [[ -n "${SRT_FRONTEND_HOST:-}" ]]; then
@@ -58,148 +65,48 @@ if [[ -z "${AIPERF_SERVER_METRICS_URLS:-}" && "${SRTCTL_FRONTEND_TYPE:-}" != dyn
     fi
 fi
 
-BASE_RESULT_DIR="${RESULT_DIR}"
-BASE_RESULT_FILENAME="$RESULT_FILENAME"
-read -r -a CONCURRENCIES <<< "${CONC_LIST:-$CONC}"
-if (( ${#CONCURRENCIES[@]} > 1 )); then
-    check_env_vars AIPERF_DRAIN_TIMEOUT_SECONDS AIPERF_DRAIN_POLL_SECONDS
-fi
-
-if [ "${#CONCURRENCIES[@]}" -eq 0 ]; then
-    echo "ERROR: CONC_LIST must contain at least one concurrency" >&2
-    exit 1
-fi
-for concurrency in "${CONCURRENCIES[@]}"; do
-    if ! [[ "$concurrency" =~ ^[1-9][0-9]*$ ]]; then
-        echo "ERROR: invalid agentic concurrency: $concurrency" >&2
-        exit 1
-    fi
-done
-
 resolve_trace_source
 install_agentic_deps
 if [[ "${EVAL_ONLY}" == "true" ]]; then
     _wait_for_openai_chat_route --port "$PORT"
 fi
 
-wait_for_agentic_servers_idle() {
-    local timeout_seconds="${AIPERF_DRAIN_TIMEOUT_SECONDS}"
-    local poll_seconds="${AIPERF_DRAIN_POLL_SECONDS}"
-    local frontend_metrics_url="${AIPERF_SERVER_URL%/}/metrics"
+# Keep the multi-node artifact suffix; single-node collection uses the caller's name.
+if [[ -n "${CONC_LIST:-}" ]]; then
+    export RESULT_FILENAME="${RESULT_FILENAME}_conc${CONC}"
+    RESULT_DIR="${RESULT_DIR}/conc_${CONC}"
+fi
+mkdir -p "$RESULT_DIR"
 
-    "$AIPERF_PYTHON" - \
-        "$timeout_seconds" \
-        "$poll_seconds" \
-        "$frontend_metrics_url" \
-        "${AIPERF_SERVER_METRICS_URLS:-}" <<'PY'
-import sys
-import time
-import urllib.request
-
-timeout_seconds = int(sys.argv[1])
-poll_seconds = int(sys.argv[2])
-frontend_url = sys.argv[3]
-worker_urls = [url for url in sys.argv[4].split(",") if url]
-deadline = time.monotonic() + timeout_seconds
-idle_polls = 0
-
-def fetch_metrics(url: str) -> str:
-    with urllib.request.urlopen(url, timeout=10) as response:
-        return response.read().decode("utf-8")
-
-def metric_sum(metrics: str, name: str) -> float:
-    total = 0.0
-    for line in metrics.splitlines():
-        if not line or line.startswith("#"):
-            continue
-        fields = line.split()
-        if len(fields) < 2 or fields[0].split("{", 1)[0] != name:
-            continue
-        total += float(fields[1])
-    return total
-
-while time.monotonic() < deadline:
-    try:
-        frontend_metrics = fetch_metrics(frontend_url)
-        frontend_active = metric_sum(frontend_metrics, "dynamo_frontend_active_requests")
-        worker_active = 0.0
-        for worker_url in worker_urls:
-            worker_metrics = fetch_metrics(worker_url)
-            worker_active += metric_sum(worker_metrics, "vllm:num_requests_running")
-            worker_active += metric_sum(worker_metrics, "vllm:num_requests_waiting")
-            worker_active += metric_sum(worker_metrics, "trtllm_num_requests_running")
-            worker_active += metric_sum(worker_metrics, "trtllm_num_requests_waiting")
-        print(
-            f"Agentic drain status: frontend_active={frontend_active:g} "
-            f"worker_running_or_waiting={worker_active:g}",
-            flush=True,
-        )
-        if frontend_active == 0 and worker_active == 0:
-            idle_polls += 1
-            if idle_polls >= 3:
-                print("Agentic servers remained idle for three polls", flush=True)
-                raise SystemExit(0)
-        else:
-            idle_polls = 0
-    except Exception as error:
-        idle_polls = 0
-        print(f"Agentic drain metrics query failed: {error}", file=sys.stderr, flush=True)
-    time.sleep(poll_seconds)
-
-raise SystemExit(f"Agentic servers did not drain within {timeout_seconds} seconds")
-PY
-}
-
-# The AgentX scenario's first-turn cache-bust marker includes AIPerf's unique
-# per-invocation benchmark ID. Each point therefore gets a disjoint KV keyspace
-# while its own warmup and profile phases share markers. This makes sequential
-# points comparable without restarting the engines or inheriting warmed trace
-# prefixes from an earlier concurrency.
-for index in "${!CONCURRENCIES[@]}"; do
-    concurrency="${CONCURRENCIES[$index]}"
-    export CONC="$concurrency"
-    # Multi-node collection expects per-point names; a single-node job keeps the workflow's.
-    if [[ -n "${CONC_LIST:-}" ]]; then
-        export RESULT_FILENAME="${BASE_RESULT_FILENAME}_conc${concurrency}"
-        RESULT_DIR="${BASE_RESULT_DIR}/conc_${concurrency}"
-    fi
-
-    mkdir -p "$RESULT_DIR"
-
-    echo "Running agentic concurrency $concurrency of: ${CONCURRENCIES[*]}"
-    build_replay_cmd "$RESULT_DIR"
-    # Recipes whose legacy launch rendered prompts client-side opt in here.
-    if [[ "${AIPERF_APPLY_CHAT_TEMPLATE:-}" == true ]]; then
-        REPLAY_CMD+=" --apply-chat-template"
-    fi
-    # Bounded post-window drain for long responses admitted near the end.
-    if [[ -n "${AIPERF_BENCHMARK_GRACE_PERIOD:-}" ]]; then
-        REPLAY_CMD+=" --benchmark-grace-period $AIPERF_BENCHMARK_GRACE_PERIOD"
-    fi
-    # Op-attribution profiling (INFX_PROFILE): torch windows on every worker.
-    profile_windows_pid=""
-    if [[ -n "${INFX_PROFILE_WINDOWS:-}" ]]; then
-        mkdir -p "$INFX_PROF_DIR"
-        # srt-slurm's logical worker endpoints: each vLLM server's control port.
-        profile_servers=()
-        IFS=',' read -r -a profile_endpoints <<< "${SRT_AGG_ENDPOINTS:-}"
-        for endpoint in "${profile_endpoints[@]}"; do
-            [[ -n "$endpoint" ]] && profile_servers+=("http://$endpoint")
-        done
-        (( ${#profile_servers[@]} )) || profile_servers=("$AIPERF_SERVER_URL")
-        python3 "$INFMAX_CONTAINER_WORKSPACE/benchmarks/profiling/vllm/profile_windows.py" \
-            "$INFX_PROFILE_WINDOWS" "$INFX_PROF_DIR/windows_conc${concurrency}.jsonl" \
-            "$RESULT_DIR/aiperf_artifacts/logs/aiperf.log" "$INFX_PROF_DIR/steps" \
-            "${profile_servers[@]}" &
-        profile_windows_pid=$!
-    fi
-    run_agentic_replay_and_write_outputs "$RESULT_DIR"
-    if [[ -n "$profile_windows_pid" ]]; then
-        kill "$profile_windows_pid" 2>/dev/null || true
-        wait "$profile_windows_pid" 2>/dev/null || true
-    fi
-
-    if [ "$index" -lt "$(( ${#CONCURRENCIES[@]} - 1 ))" ]; then
-        wait_for_agentic_servers_idle
-    fi
-done
+echo "Running agentic concurrency $CONC on this server deployment"
+build_replay_cmd "$RESULT_DIR"
+# Recipes whose legacy launch rendered prompts client-side opt in here.
+if [[ "${AIPERF_APPLY_CHAT_TEMPLATE:-}" == true ]]; then
+    REPLAY_CMD+=" --apply-chat-template"
+fi
+# Let this point's admitted responses finish before the deployment is torn down.
+if [[ -n "${AIPERF_BENCHMARK_GRACE_PERIOD:-}" ]]; then
+    REPLAY_CMD+=" --benchmark-grace-period $AIPERF_BENCHMARK_GRACE_PERIOD"
+fi
+# Op-attribution profiling (INFX_PROFILE): torch windows on every worker.
+profile_windows_pid=""
+if [[ -n "${INFX_PROFILE_WINDOWS:-}" ]]; then
+    mkdir -p "$INFX_PROF_DIR"
+    # srt-slurm's logical worker endpoints: each vLLM server's control port.
+    profile_servers=()
+    IFS=',' read -r -a profile_endpoints <<< "${SRT_AGG_ENDPOINTS:-}"
+    for endpoint in "${profile_endpoints[@]}"; do
+        [[ -n "$endpoint" ]] && profile_servers+=("http://$endpoint")
+    done
+    (( ${#profile_servers[@]} )) || profile_servers=("$AIPERF_SERVER_URL")
+    python3 "$INFMAX_CONTAINER_WORKSPACE/benchmarks/profiling/vllm/profile_windows.py" \
+        "$INFX_PROFILE_WINDOWS" "$INFX_PROF_DIR/windows_conc${CONC}.jsonl" \
+        "$RESULT_DIR/aiperf_artifacts/logs/aiperf.log" "$INFX_PROF_DIR/steps" \
+        "${profile_servers[@]}" &
+    profile_windows_pid=$!
+fi
+run_agentic_replay_and_write_outputs "$RESULT_DIR"
+if [[ -n "$profile_windows_pid" ]]; then
+    kill "$profile_windows_pid" 2>/dev/null || true
+    wait "$profile_windows_pid" 2>/dev/null || true
+fi

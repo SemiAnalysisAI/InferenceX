@@ -23,22 +23,18 @@ Only additions to the changelog are permitted. Found deleted line: ...
 ```
 **Root cause:** Cron-PR branches go stale. When main merges new changelog entries, the PR's local snapshot of `perf-changelog.yaml` no longer covers them, so the validator sees the missing lines as deletions. A naive rebase can also strip trailing whitespace from unrelated entries with the same effect (e.g. `pr-link: ...1311  ` → `pr-link: ...1311`).
 
-**Fix (canonical):**
+**Fix (canonical):** use the byte-preserving helper while the three conflict stages are still present (see [CI procedures](ci-procedures.md#changelog-conflict-recovery) for the full procedure):
 ```bash
 # In the PR's worktree, after `git merge origin/main` conflicts on perf-changelog.yaml:
-git checkout origin/main -- perf-changelog.yaml          # take main's bytes verbatim
-cat >> perf-changelog.yaml <<EOF                          # then append THIS PR's entry at tail
-
-- config-keys:
-    - <recipe-key>
-  description:
-    - "<one-line summary>"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/<N>
-EOF
-python3 -c "import yaml; yaml.safe_load(open('perf-changelog.yaml'))"
+python3 -m infx.workflows.prepare_perf_changelog_merge resolve-conflict \
+  --changelog-file perf-changelog.yaml \
+  --pr-number <N> \
+  --repo SemiAnalysisAI/InferenceX
+git add perf-changelog.yaml
+git commit --no-edit
 ```
 
-Do **not** try a 3-way merge of `perf-changelog.yaml`. Whitespace edits will silently re-trigger the deletion check.
+The helper starts from main's bytes, re-appends only this PR's unique contributions and validates the result. Do **not** hand-merge or reformat `perf-changelog.yaml`, and stop if the helper refuses. Whitespace edits will silently re-trigger the deletion check.
 
 After committing and pushing the resolution, the synchronize run checks the
 changelog with the same matrix processor used by setup, then checks the reuse
@@ -165,13 +161,13 @@ Seen on #1422.
 If a sweep job lands on any of these, it'll never start. Nothing can be done at the recipe level. These stay drained until ops fixes them.
 
 ### 5.2 `mia1-p01-g11 / g12 / g31` — docker socket perms
-**Symptom:** mi355x jobs fail with `permission denied while trying to connect to the docker API at unix:///var/run/docker.sock` during the `docker stop $(docker ps -a -q)` cleanup step, cascading into SLURM job expiration.
+**Historical symptom:** mi355x jobs that drove Docker on the node failed with `permission denied while trying to connect to the docker API at unix:///var/run/docker.sock`, cascading into SLURM job expiration. Both the raw single-node launcher and the AMD Docker multi-node launcher are now retired; active MI355X recipes use srt-slurm.
 **Fix:** ops needs to fix docker group / socket perms on these nodes. Recipe-level workaround: none.
 
 ### 5.3 `chi-mi300x-049` — `/nvme_home` disk-full
 **Symptom:** pyxis container extraction fails with `No space left on device` writing to `/nvme_home/gharunner/.local/share/enroot/pyxis_*/opt/rocm-*/...`. The `/nvme_home` partition is hosted under `/` on this node and has been chronically near-full.
 
-**Fix already landed:** `runners/launch_mi300x-amds.sh` now pins salloc to only known-good mi300x nodes (`chi-mi300x-[034-036,054,057-058]`). See PR #1462. `chi-mi300x-049` is held in `State=DOWN` by a watchdog on the controller (`/home/gharunner/_audit/drain_049_watchdog.sh`) that re-applies the drain every 10s if SLURM auto-clears it (which it does on dynamic-norm nodes).
+**Fix:** `chi-mi300x-049` is held in `State=DOWN` by a watchdog on the controller (`/home/gharunner/_audit/drain_049_watchdog.sh`) that re-applies the drain every 10s if SLURM auto-clears it (which it does on dynamic-norm nodes). The launcher pins no nodes; to keep jobs off a node, list it in the cluster's `slurm.exclude` in `configs/runners.yaml`.
 
 ### 5.4 `chi-mi325x-pod1-017` — orphaned port-8888 process
 **Symptom:** sglang server bind fails with `[Errno 98] Address already in use` on port 8888. Held by an MLPerf accuracy run started outside SLURM.
@@ -225,7 +221,7 @@ Or check whether any other recipe on main uses the proposed tag. If zero recipes
   git commit --allow-empty -m "Re-trigger sweep"
   git push
   ```
-  The old run will be auto-cancelled by `workflow/cancel-sweep-on-merge` (provided the head SHA changed).
+  The old run will be auto-cancelled by the per-PR `concurrency` group in `run-sweep.yml` (`cancel-in-progress: true`).
 - For a `cancelled` run (not `failure`), use `gh run rerun <id>` without `--failed` to re-run everything.
 
 ### 7.1 Reuse after matrix-generation policy changes
@@ -260,7 +256,7 @@ handoff remains untouched.
 ### 7.3 Final reusable sweeps stay draft until reporting finishes
 
 `run-sweep.yml` permits labeled same-repository drafts. After the smoke, append
-the changelog, check the full matrix and apply `full-sweep-enabled` while DRAFT.
+the changelog, check the full matrix and apply `full-sweep-fail-fast` while DRAFT (`full-sweep-enabled` only for a documented infrastructure exception).
 Only `finish` marks ready after full validation and final report publication.
 If that sweep fails, remove the label and return the PR to draft before pushing
 a repair, or each intermediate push starts another full sweep. The Klaud Stop
@@ -290,7 +286,7 @@ are skipped; dispatch a new autosweep so recovery checks the old session first.
 ## 9. PR conventions for this repo
 
 - Image-bump / new-recipe PRs I open on behalf of the user (or that the user creates) get the **`[Klaud Cold]`** title prefix.
-- Klaud Cold keeps targeted attempts draft and unlabeled; final validation keeps the PR draft with `full-sweep-enabled` as its sole sweep label; `finish` publishes verified results before readiness. Wait for successful completion on the exact head and reusable artifacts. See [the current Klaud guide](klaud.md); generic manual-sweep recommendations do not override this flow.
+- Klaud Cold keeps targeted attempts draft and unlabeled; final validation keeps the PR draft with `full-sweep-fail-fast` as its sole sweep label; `finish` publishes verified results before readiness. Wait for successful completion on the exact head and reusable artifacts. See [the current Klaud guide](klaud.md); generic manual-sweep recommendations do not override this flow.
 - After any code change that shifts a PR's scope (drops a recipe, changes an image tag), **update the PR title AND body in the same step** and **verify** with `gh pr view <N> --json title,body`. `gh pr edit` silently fails (see §8).
 - `uv run --extra workflows python -m infx.workflows.merge_with_reuse <N>` is the merge entrypoint. It handles the `perf-changelog.yaml` auto-append.
 

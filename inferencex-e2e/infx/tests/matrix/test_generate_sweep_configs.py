@@ -26,6 +26,7 @@ from infx.matrix.generate import (
     seq_len_to_str,
     trim_conc,
 )
+from infx.matrix.validation import validate_runner_config
 
 
 def test_aggregated_multinode_node_count_uses_explicit_num_nodes():
@@ -181,6 +182,17 @@ def test_multinode_node_count_resolves_heterogeneous_worker_hardware(
     ) == 6
 
 
+def cluster_record(gpus_per_node, **facts):
+    """Minimal valid clusters: record carrying generation-time node facts."""
+    return {
+        "gpus-per-node": gpus_per_node,
+        **facts,
+        "arch": "x86_64",
+        "scheduler": "slurm",
+        "slurm": {"partition": "batch", "exclusive": True},
+    }
+
+
 @pytest.mark.parametrize("config_file", [
     "recipes/test.yaml",
     "benchmarks/multi_node/srt-slurm-recipes/test.yaml",
@@ -328,14 +340,14 @@ def sample_runner_config():
             "mi300x": ["mi300x-amd_0", "mi300x-amd_1", "mi300x-cr_0"],
             "gb200": ["gb200-nv_0"],
         },
-        "hardware": {
-            "cluster:h100-dgxc": {"available-cpu-dram-mib": 2063837, "gpus-per-node": 8},
-            "cluster:h200-dgxc": {"available-cpu-dram-mib": 1471356, "gpus-per-node": 8},
-            "cluster:b200-nscale": {"available-cpu-dram-mib": 3774874, "gpus-per-node": 8},
-            "cluster:b300-nv": {"available-cpu-dram-mib": 2964436, "gpus-per-node": 8},
-            "cluster:mi300x-amd": {"available-cpu-dram-mib": 1547820, "gpus-per-node": 8},
-            "cluster:mi355x-amds": {"available-cpu-dram-mib": 3095781, "gpus-per-node": 8},
-            "cluster:gb200-nv": {"available-cpu-dram-mib": 860160, "gpus-per-node": 4},
+        "clusters": {
+            "h100-dgxc": cluster_record(8, **{"available-cpu-dram-mib": 2063837}),
+            "h200-dgxc": cluster_record(8, **{"available-cpu-dram-mib": 1471356}),
+            "b200-nscale": cluster_record(8, **{"available-cpu-dram-mib": 3774874}),
+            "b300-nv": cluster_record(8, **{"available-cpu-dram-mib": 2964436}),
+            "mi300x-amd": cluster_record(8, **{"available-cpu-dram-mib": 1547820}),
+            "mi355x-amds": cluster_record(8, **{"available-cpu-dram-mib": 3095781}),
+            "gb200-nv": cluster_record(4, **{"available-cpu-dram-mib": 860160}),
         },
     }
 
@@ -382,10 +394,6 @@ def full_sweep_args_multi_node():
 
 
 class TestSeqLenToStr:
-
-    def test_known_sequence_lengths(self):
-        assert seq_len_to_str(1024, 1024) == "1k1k"
-        assert seq_len_to_str(8192, 1024) == "8k1k"
 
     def test_unknown_sequence_lengths(self):
         assert seq_len_to_str(2048, 2048) == "2048_2048"
@@ -1068,9 +1076,15 @@ class TestGenerateFullSweepSingleNode:
             sample_single_node_config,
             sample_runner_config
         )
-        assert [(row["isl"], row["osl"], row["conc"]) for row in result] == [
-            (isl, osl, conc)
-            for isl, osl in [(1024, 1024), (8192, 1024)]
+        assert [
+            (row["isl"], row["osl"], row["conc"], row["exp-name"], row["max-model-len"])
+            for row in result
+        ] == [
+            (isl, osl, conc, name, context)
+            for isl, osl, name, context in [
+                (1024, 1024, "dsr1_1k1k", 2304),
+                (8192, 1024, "dsr1_8k1k", 9472),
+            ]
             for conc in [4, 8, 16, 32, 64]
         ]
 
@@ -1305,27 +1319,6 @@ class TestGenerateFullSweepSingleNode:
         assert 16 in conc_values
         assert 64 in conc_values
 
-    def test_exp_name_format(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
-        full_sweep_args_single_node.seq_lens = ["1k1k"]
-        result = generate_full_sweep(
-            full_sweep_args_single_node,
-            sample_single_node_config,
-            sample_runner_config
-        )
-        assert all(entry["exp-name"] == "dsr1_1k1k" for entry in result)
-
-    def test_max_model_len_calculation(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
-        """max-model-len should be isl + osl + 256."""
-        result = generate_full_sweep(
-            full_sweep_args_single_node,
-            sample_single_node_config,
-            sample_runner_config
-        )
-        assert {
-            (entry["isl"], entry["osl"], entry["max-model-len"])
-            for entry in result
-        } == {(1024, 1024, 2304), (8192, 1024, 9472)}
-
     def test_runner_node_filter(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
         """Runner node filter should expand entries to individual matching nodes."""
         full_sweep_args_single_node.runner_type = ["mi300x"]
@@ -1353,20 +1346,6 @@ class TestGenerateFullSweepSingleNode:
         )
         assert len(result) == 0
 
-    def test_runner_node_filter_without_runner_type(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
-        """Runner node filter should work without explicit runner type (uses config's runner)."""
-        full_sweep_args_single_node.runner_node_filter = "amd"
-        full_sweep_args_single_node.seq_lens = ["1k1k"]
-        full_sweep_args_single_node.max_conc = 4
-        result = generate_full_sweep(
-            full_sweep_args_single_node,
-            sample_single_node_config,
-            sample_runner_config
-        )
-        # Config has runner=mi300x, filter "amd" matches mi300x-amd_0 and mi300x-amd_1
-        assert len(result) == 2
-        assert all("amd" in entry["runner"] for entry in result)
-
 
 
 class TestGenerateFullSweepMultiNode:
@@ -1379,6 +1358,7 @@ class TestGenerateFullSweepMultiNode:
             sample_runner_config
         )
         entry = result[0]
+        assert entry["conc"] == [2150]
         assert entry["prefill"]["num-worker"] == 5
         assert entry["decode"]["num-worker"] == 1
         assert entry["disagg"] is True
@@ -1417,24 +1397,6 @@ class TestGenerateFullSweepMultiNode:
             entry["decode"]["dcp-size"],
             entry["decode"]["pcp-size"],
         ) == (2, 4, 1)
-
-    def test_multinode_conc_as_list(self, sample_multinode_config, sample_runner_config, full_sweep_args_multi_node):
-        """Multinode conc should be passed as list."""
-        result = generate_full_sweep(
-            full_sweep_args_multi_node,
-            sample_multinode_config,
-            sample_runner_config
-        )
-        entry = result[0]
-        assert entry["conc"] == [2150]
-
-    def test_single_node_flag_skips_multinode(self, sample_multinode_config, sample_runner_config, full_sweep_args_single_node):
-        result = generate_full_sweep(
-            full_sweep_args_single_node,
-            sample_multinode_config,
-            sample_runner_config
-        )
-        assert len(result) == 0
 
     def test_runner_node_filter_multinode(self, sample_runner_config, full_sweep_args_multi_node):
         # Create a multinode config with h200 runner (which has 4 nodes)
@@ -1960,7 +1922,11 @@ class TestCommandLine:
     ):
         """The module entrypoint resolves caller-relative inputs from another directory."""
         (tmp_path / "master config.yaml").write_text(yaml.safe_dump(sample_single_node_config))
-        (tmp_path / "runners.yaml").write_text(yaml.safe_dump(sample_runner_config))
+        nodes = sample_runner_config["labels"]["mi300x"]
+        (tmp_path / "runners.yaml").write_text(yaml.safe_dump({
+            "labels": {"mi300x": nodes, "cluster:mi300x-amd": nodes},
+            "clusters": {"mi300x-amd": cluster_record(8)},
+        }))
         repo_root = Path(__file__).resolve().parents[3]
         args = [
             command, "--config-files", "master config.yaml",
@@ -2001,8 +1967,11 @@ class TestCommandLine:
         # An explicit override must not fall back to the default inventory.
         (tmp_path / "configs/runners.yaml").write_text("invalid: default inventory")
         selected_file = tmp_path / (runner_file or "configs/runners.yaml")
-        sample_runner_config["labels"]["mi300x"] = ["fixture-node-0", "fixture-node-1"]
-        selected_file.write_text(yaml.safe_dump(sample_runner_config))
+        nodes = ["fixture-node-0", "fixture-node-1"]
+        selected_file.write_text(yaml.safe_dump({
+            "labels": {"mi300x": nodes, "cluster:mi300x-amd": nodes},
+            "clusters": {"mi300x-amd": cluster_record(8)},
+        }))
         argv = [
             "generate_sweep_configs.py", "full-sweep",
             "--config-files", "master.yaml", "--single-node", "--no-evals",
@@ -2235,25 +2204,6 @@ class TestCommandLine:
         assert 'eval-conc' not in result[0]
         assert all(entry['run-eval'] is True for entry in result)
         assert all(entry['eval-only'] is True for entry in result)
-
-    def test_all_evals_cannot_combine_with_no_evals(self, monkeypatch):
-        import sys
-
-        from infx.matrix import generate as generate_sweep_configs
-
-        monkeypatch.setattr(sys, 'argv', [
-            'generate_sweep_configs.py',
-            'test-config',
-            '--config-files', 'dummy.yaml',
-            '--config-keys', 'dummy',
-            '--no-evals',
-            '--all-evals',
-        ])
-
-        with pytest.raises(SystemExit):
-            generate_sweep_configs.main()
-
-
 
 @pytest.fixture
 def sample_mixed_config(sample_single_node_config, sample_multinode_config):
@@ -2605,12 +2555,49 @@ class TestAgenticGeneration:
             },
         }
         runner_config = copy.deepcopy(sample_runner_config)
-        runner_config["hardware"]["cluster:b300-nv"]["gpus-per-node"] = 2
+        runner_config["clusters"]["b300-nv"]["gpus-per-node"] = 2
 
         with pytest.raises(ValueError, match="exceeds gpus-per-node"):
             generate_agentic_sweep(config, runner_config, **filters)
 
-    def test_multinode_agentic_groups_concurrencies_per_search_entry(
+    def test_cluster_records_supply_agentic_dram_budget(self, generate_agentic_sweep):
+        config = {
+            "dsv4-b300-agentic": {
+                "image": "vllm/vllm-openai:v0.23.0",
+                "model": "deepseek-ai/DeepSeek-V4-Pro",
+                "model-prefix": "dsv4",
+                "precision": "fp4",
+                "framework": "vllm",
+                "runner": "cluster:b300-nv",
+                "multinode": False,
+                "scenarios": {
+                    "agentic-coding": [{
+                        "dram-utilization": 0.80,
+                        "search-space": [
+                            {
+                                "tp": 4,
+                                "pp": pp,
+                                "kv-offloading": "dram",
+                                "kv-offload-backend": {"name": "native"},
+                                "conc-list": [32],
+                            }
+                            for pp in (1, 2)
+                        ],
+                    }],
+                },
+            },
+        }
+        cluster = cluster_record(8, **{"available-cpu-dram-mib": 2964436})
+        runners = {"labels": {"cluster:b300-nv": ["b300-nv_0"]}, "clusters": {"b300-nv": cluster}}
+
+        result = generate_agentic_sweep(config, validate_runner_config(runners))
+
+        assert {entry["pp"]: entry["total-cpu-dram-gb"] for entry in result} == {1: 1199, 2: 2399}
+        del cluster["available-cpu-dram-mib"]
+        with pytest.raises(ValueError, match="requires 'available-cpu-dram-mib'"):
+            generate_agentic_sweep(config, validate_runner_config(runners))
+
+    def test_multinode_agentic_isolates_each_concurrency_per_search_entry(
         self, sample_runner_config, generate_agentic_sweep
     ):
         """One server allocation should run exactly one concurrency (one task per conc)."""

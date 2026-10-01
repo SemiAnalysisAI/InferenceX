@@ -25,18 +25,6 @@ except Exception as exc:  # pragma: no cover - requires the benchmark image
     raise
 
 
-def _project_local_metadata(torch_module, raw_expert_ids, raw_weights, rank, experts_per_rank):
-    local_start = rank * experts_per_rank
-    local = (raw_expert_ids >= local_start) & (
-        raw_expert_ids < local_start + experts_per_rank
-    )
-    expert_ids = torch_module.where(
-        local, raw_expert_ids, torch_module.full_like(raw_expert_ids, -1)
-    )
-    weights = torch_module.where(local, raw_weights, torch_module.zeros_like(raw_weights))
-    return expert_ids, weights, raw_expert_ids[local] - local_start
-
-
 class MoRIBackend(EPBackend):
     name = "mori"
     maturity = "production"  # vLLM --all2all-backend mori_*; SGLang --moe-a2a-backend mori
@@ -71,9 +59,7 @@ class MoRIBackend(EPBackend):
                 raise RuntimeError(f"MoRI FP8 dispatch unsupported on arch {arch!r}")
             self.dispatch_value_bytes = 1
             self.dispatch_scale_bytes_per_copy = 0  # plain e4m3 cast: no scale payload
-        self.ep_size = world_size
-        self.experts_per_rank = args.experts // self.ep_size
-        gpus_per_node = int(args.gpus_per_node)
+        self.experts_per_rank = args.experts // world_size
         scale_out = args.scope == "scale-out"
 
         # NORMAL mode: the kernel is a pinned function of the cell, not an operator
@@ -93,14 +79,11 @@ class MoRIBackend(EPBackend):
             # SGLang's moriep dispatcher maps EpMode.LOW_LATENCY to AsyncLL (split-phase
             # dispatch_send/dispatch_recv + combine_send/combine_recv) with block_num 64,
             # rdma_block_num 32, warp_num_per_block 8, and its low-latency impl asserts the
-            # kernel IS AsyncLL. The previous adapter measured IntraNodeLL, a kernel no engine
-            # deploys for LL, so those rows described an off-production path (their
-            # kernel_generation "intranode-ll" is the discriminator). AsyncLL must be driven
-            # split-phase: mori.ops' dispatch()/combine() under this kernel_type launch only
-            # the SEND side and return without the payload landing (the earlier "fails
-            # silently single-call" finding), so the timed dispatch here is send+recv
-            # back-to-back — the full transport the serving step pays, merely without the
-            # expert GEMM interleaved between the phases.
+            # kernel IS AsyncLL. AsyncLL must be driven split-phase: mori.ops'
+            # dispatch()/combine() under this kernel_type launch only the SEND side and return
+            # without the payload landing, so the timed dispatch here is send+recv back-to-back
+            # — the full transport the serving step pays, merely without the expert GEMM
+            # interleaved between the phases.
             # Combine keeps weights=None (gate not applied in-kernel), and the receive is the
             # same compact rank-deduplicated [max_recv, hidden] layout, so semantics stay
             # "unweighted-rank-sum" over "token-rank" and the wire basis stays
@@ -132,34 +115,18 @@ class MoRIBackend(EPBackend):
         # its own; under FP8 it still dequantizes the received fp8 payload to BF16, so it is a
         # timed device component in that precision only.
         self.stage_device_work = self._fp8
-        # Stash the __init__-only locals the moved create_buffer body reads back.
-        self._gpus_per_node = gpus_per_node
-
-    def buffer_cap(self, args):
-        if self.mode == "low-latency":
-            # 256 tokens/rank, matching deepep-v2, uccl-ep and nccl-ep so every backend's
-            # low-latency ladder ends at the same rung. MoRI imposes no bound of its own; 256 is
-            # also vLLM's DEFAULT_MAX_NUM_BATCHED_TOKENS_FOR_BATCHED_DP.
-            return 256
-        return None
 
     def create_buffer(self, spec):
         args, world_size, rank = self.args, self.world_size, self.rank
-        gpus_per_node = self._gpus_per_node
+        gpus_per_node = int(args.gpus_per_node)
 
         world_group = torch.distributed.group.WORLD
         torch._C._distributed_c10d._register_process_group("default", world_group)
         # Every path, scale-out EP16 included, runs MoRI's default STATIC_HEAP: one
-        # contiguous uncached allocation registered as a single MR. This adapter used to
-        # force VMM_HEAP for scale-out after a 2026-07 EINVAL registering the 6 GiB static
-        # heap on the Ionic stack; that registration succeeds on the current firmware
-        # (1.117.5), and VMM_HEAP was itself the cause of the residual EP16 combine
-        # corruption: ROCm 7.2's clr leaves VMM allocations requested uncached in the
-        # cached pool, so cross-node partials landed in stale lines (ROCm/mori#610).
-        # CI A/B on the same branch, same nodes pool and harness: STATIC_HEAP all-green
-        # on bf16+fp8 decode 1..512 and prefill 1024..8192 (run 34939333022); VMM_HEAP
-        # corrupts (run 34941185534). Nothing is set here so the mode stays whatever
-        # MoRI ships as default; the guard below fails closed if that ever changes.
+        # contiguous uncached allocation registered as a single MR. VMM_HEAP corrupts EP16
+        # combine: ROCm 7.2's clr leaves VMM allocations requested uncached in the cached pool,
+        # so cross-node partials land in stale lines (ROCm/mori#610). Nothing is set here so the
+        # mode stays whatever MoRI ships as default; the guard below fails closed if that changes.
         heap_mode = os.environ.get("MORI_SHMEM_MODE", "STATIC_HEAP").upper()
         if self._inter_node and heap_mode != "STATIC_HEAP":
             raise RuntimeError(
@@ -173,9 +140,9 @@ class MoRIBackend(EPBackend):
                 f"MoRI realized {realized_qps} QPs per PE; {self.num_qps} required"
             )
 
-        # MoRI preallocates one communicator buffer for the case's entire ladder; 256 is the
+        # MoRI preallocates one communicator buffer for the case's entire ladder, at least the
         # low-latency cap (see `buffer_cap`). Normal mode still takes the larger ladder maximum.
-        self._cap = max(256, spec.max_tokens_per_rank)
+        self._cap = max(self.LL_LADDER_CAP, spec.max_tokens_per_rank)
         # quant_type stays "none" for both precisions: dispatch precision is carried by
         # the passed tensor dtype (caller-prequantized e4m3 under FP8, BF16 otherwise),
         # and "none" keeps combine a genuine BF16 send. data_type is deprecated upstream
@@ -205,9 +172,8 @@ class MoRIBackend(EPBackend):
         if self._kernel_type is not None:
             config_kwargs["kernel_type"] = self._kernel_type
         # Only InterNodeV1 carries explicit launch/topology fields (and the heap-mode + realized-
-        # config asserts). IntraNodeLL follows the IntraNode path unchanged: base config
-        # plus kernel_type, the registered staging buffer, the default STATIC heap, and the
-        # per-call block/warp launch args.
+        # config asserts). IntraNode and AsyncLL take the base config (plus kernel_type for
+        # AsyncLL), the default STATIC heap, and the per-call block/warp launch args.
         if self._inter_node:
             config_kwargs.update({
                 "block_num": self.block_num,
@@ -256,25 +222,19 @@ class MoRIBackend(EPBackend):
             return x
         return x.to(self._fp8_dtype).to(torch.bfloat16)
 
+    def _topk_idx_dtype(self):
+        return torch.int32
+
     def make_problem(self, T, idx, weights, x):
-        indices = idx.to(torch.int32)
-        gate_weights = weights.to(torch.float32)
-        return types.SimpleNamespace(
-            T=T,
-            x=x,
-            dispatch_x=x,
-            oracle_x=self.semantic_payload(x),
-            topk_idx=indices,
-            topk_weights=gate_weights,
-            indices=indices,
-            weights=gate_weights,
-            scales=torch.empty((T, 0), dtype=torch.uint8, device=self.device),
-        )
+        problem = super().make_problem(T, idx, weights, x)
+        problem.indices, problem.weights = problem.topk_idx, problem.topk_weights
+        problem.scales = torch.empty((T, 0), dtype=torch.uint8, device=self.device)
+        return problem
 
     def dispatch(self, p):
         # Cast inside dispatch, where production pays it: vLLM and SGLang both run an aiter quant
         # immediately before mori's dispatch. MoRI's cast is a single eager elementwise kernel, so
-        # it needs no compile. Low-latency casts here too: MoRI's IntraNodeLL takes a
+        # it needs no compile. Low-latency casts here too: MoRI's AsyncLL takes a
         # caller-prequantized tensor, unlike deepep-v2/uccl-ep whose LL kernels quantise in-kernel.
         dispatch_x = p.dispatch_x.to(self._fp8_dtype) if self._fp8 else p.dispatch_x
         dispatch_output, dispatch_weights, _scales, dispatch_indices, recv_num = (
@@ -343,25 +303,15 @@ class MoRIBackend(EPBackend):
             for tensor in (h.dispatch_output, h.dispatch_indices, h.dispatch_weights)
         ):
             raise RuntimeError("MoRI receive count exceeds dispatch metadata")
-        raw_expert_ids = h.dispatch_indices[:count].to(torch.int64)
-        expert_ids, weights, local_expert_ids = _project_local_metadata(
-            torch,
-            raw_expert_ids,
-            h.dispatch_weights[:count].to(torch.float32),
-            self.rank,
-            self.experts_per_rank,
-        )
         # FP8: the oracle compares a BF16 payload, so dequantize the received fp8 slice.
         payload = h.dispatch_output[:count]
         if self._fp8:
             payload = payload.to(torch.bfloat16)
-        return types.SimpleNamespace(
-            payload=payload,
-            expert_ids=expert_ids,
-            weights=weights,
-            local_expert_counts=torch.bincount(
-                local_expert_ids, minlength=self.experts_per_rank
-            ),
+        return self._global_id_view(
+            payload,
+            h.dispatch_indices[:count].to(torch.int64),
+            h.dispatch_weights[:count].to(torch.float32),
+            self.experts_per_rank,
         )
 
     def combine_transformed(self, p, h, transformed):

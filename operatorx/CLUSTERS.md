@@ -145,16 +145,25 @@ one LNC=2 unit (1 HBM bank + 2 paired NC-v4 cores).
 
 ```python
 CLUSTER_PLATFORMS = {
-    "b200_dgx_8x": "nvidia",
-    "b300_hgx_8x": "nvidia",
-    "b200_nvl72":  "nvidia",
-    "mi355x_8x":   "amd",
-    "v6e_1x":      "tpu",
-    "v6e_4x":      "tpu",
-    "v6e_pod":     "tpu",
-    "trn3_1x":     "trainium",
-    "trn3_8x":     "trainium",
-    "trn3_16x":    "trainium",
+    "h100_dgxc_8x":   "nvidia",
+    "h200_dgxc_8x":   "nvidia",
+    "b200_dgx_8x":    "nvidia",
+    "b200_nscale_8x": "nvidia",
+    "b300_dsxe_8x":   "nvidia",
+    "gb200_nvl72_4x": "nvidia",
+    "gb300_nvl72_4x": "nvidia",
+    "b300_hgx_8x":    "nvidia",
+    "b200_nvl72":     "nvidia",
+    "mi355x_8x":      "amd",
+    "mi300x_amds_8x": "amd",
+    "mi325x_amds_8x": "amd",
+    "v6e_1x":         "tpu",
+    "v6e_4x":         "tpu",
+    "v6e_pod":        "tpu",
+    "v7x_4x":         "tpu",
+    "trn3_1x":        "trainium",
+    "trn3_8x":        "trainium",
+    "trn3_16x":       "trainium",
 }
 ```
 
