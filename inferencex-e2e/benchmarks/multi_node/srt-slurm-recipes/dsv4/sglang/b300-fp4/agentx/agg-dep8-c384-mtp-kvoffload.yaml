@@ -50,6 +50,9 @@ frontend:
   env:
     PIP_BREAK_SYSTEM_PACKAGES: "1"
     DYN_NATS_REQUEST_TIMEOUT_SECS: "1800"
+    # The 5 s default request-plane ack timeout expires while the worker
+    # ingests the c384 warmup burst; match the disaggregated recipes.
+    DYN_TCP_REQUEST_TIMEOUT: "60"
   args:
     router-mode: "kv"
     router-session-affinity-ttl-secs: "3600"
