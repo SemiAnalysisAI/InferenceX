@@ -124,6 +124,8 @@ base:
       # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
       AIPERF_HTTP_TCP_USER_TIMEOUT: "900000"
       TP: "2"
+      PP_SIZE: "1"
+      PCP_SIZE: "1"
 
 # Lowest-latency arm: one pure TP4 (EP1) worker on all four GPUs at c1, the standalone
 # recipe's override_tp4_c1 behind the Dynamo frontend: static ragged verify, Engram
