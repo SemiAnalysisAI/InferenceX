@@ -9203,3 +9203,13 @@
     - "Rerun the four DeepSeek-V4-Pro cache-source points with vLLM PR56318 commit 6ce00ee2ebcf29076d671786c36bf8f8ca71bd0b: B200 native DRAM c8, Simple NVMe c14, native DRAM+NVMe c14, and GB300 NIXL plus Mooncake Store c256."
     - "Keep the prior runtimes and serving settings, 3600-second AIPerf AgentX profiles, Python frontend, and Prometheus source collection. Update the attribution overlay for bounded attention ranges and sweep-line accounting."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3491
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-agentic-cache-sources-mtp
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-cache-sources-mtp-disagg
+  scenario-type:
+    - agentic-coding
+  no-evals: true
+  description:
+    - "Restore the original B200 single-node vLLM DeepSeek-V4-Pro-NVFP4 checkpoint mapping after the launcher migration. Repeat the four cache-source validation points with unchanged images and serving settings."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3491
