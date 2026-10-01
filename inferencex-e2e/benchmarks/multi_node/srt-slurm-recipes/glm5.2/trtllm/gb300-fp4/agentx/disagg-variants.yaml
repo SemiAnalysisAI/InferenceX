@@ -71,6 +71,7 @@ base:
           event_buffer_max_size: 0
           free_gpu_memory_fraction: 0.75
           host_cache_size: 137438953472
+          iteration_stats_interval: 40
           tokens_per_block: 64
         max_batch_size: 256
         max_num_tokens: 8192
@@ -134,6 +135,7 @@ base:
           enable_block_reuse: false
           event_buffer_max_size: 0
           free_gpu_memory_fraction: 0.8
+          iteration_stats_interval: 40
           tokens_per_block: 64
         max_num_tokens: 128
         max_seq_len: 1048576
