@@ -164,10 +164,8 @@ permissions:
 
 jobs:
   benchmark:
-    # DSXE runners currently advertise h100-dgxc-new without a cluster label.
     runs-on: >-
       ${{ fromJSON(
-        inputs.runner == 'cluster:h100-dsxe' && '["self-hosted","h100-dgxc-new"]' ||
         vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
         (
           vars.NODE_SLOT_SCHEDULER_ENABLED == 'true' &&
