@@ -197,7 +197,7 @@ Retain `meta_env.json`, `results*.json`, and `sample*.jsonl`. Agentic SWE-bench 
 
 [`install_agentic_deps()`](../benchmarks/benchmark_lib.sh) declares the AgentX client dependencies directly alongside the editable `utils/aiperf` install. It installs them into the isolated `AIPERF_RUNTIME_DIR` environment with the caller-supplied `AIPERF_PYTHON_VERSION`.
 
-AgentX is AIPerf `inferencex-agentx-mvp` trace replay, not a fixed-token synthetic benchmark. The checked-in default uses ten additional warmup requests per trajectory lane and the recipe's configured profile duration. `agentx-fast` forces one warmup request per lane and a 1,200-second profile. It affects single- and multi-node AgentX throughput only. Fixed-sequence throughput and evals remain canonical. Fast runs are not eligible for artifact reuse ([workflow policy](../../.github/workflows/README.md#agentx-fast-mode), [fast replay settings](../benchmarks/benchmark_lib.sh#L3255-L3259)).
+AgentX is AIPerf `agentx` trace replay, not a fixed-token synthetic benchmark. The checked-in default uses ten additional warmup requests per trajectory lane and the recipe's configured profile duration. `agentx-fast` forces one warmup request per lane and a 1,200-second profile. It affects single- and multi-node AgentX throughput only. Fixed-sequence throughput and evals remain canonical. Fast runs are not eligible for artifact reuse ([workflow policy](../../.github/workflows/README.md#agentx-fast-mode), [fast replay settings](../benchmarks/benchmark_lib.sh#L3255-L3259)).
 
 Every AgentX throughput concurrency runs against a fresh server deployment. The matrix creates a separate job per point; replay clients reject multiple concurrency values. AgentX does not flush caches or reuse a running server for another point. Warmup and profiling for the same point share the deployment. This does not change fixed-sequence sweeps or graded-eval batching.
 
@@ -240,7 +240,7 @@ Treat fast results as bring-up evidence, never as a replacement for the canonica
 
 ## 8. Preserve trace and run provenance
 
-AgentX defaults to recorded assistant-response replay. Live server outputs are measured but discarded when constructing later turns. Set `AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES=1` only for an explicitly different live-assistant experiment. The selected trace corpus is model-family dependent unless `WEKA_LOADER_OVERRIDE` pins it. The resolver logs both loader and Hugging Face dataset ([trace resolution](../benchmarks/benchmark_lib.sh#L3165-L3234), [replay semantics](../benchmarks/benchmark_lib.sh#L3236-L3366)).
+AgentX defaults to recorded assistant-response replay. Live server outputs are measured but discarded when constructing later turns. The selected trace corpus is model-family dependent unless `WEKA_LOADER_OVERRIDE` pins it. The resolver logs both loader and Hugging Face dataset ([trace resolution](../benchmarks/benchmark_lib.sh#L3165-L3234), [replay semantics](../benchmarks/benchmark_lib.sh#L3236-L3366)).
 
 Capture orchestration provenance immediately:
 
