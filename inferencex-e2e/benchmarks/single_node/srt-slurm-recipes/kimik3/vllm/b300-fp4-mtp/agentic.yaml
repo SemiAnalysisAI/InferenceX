@@ -85,6 +85,9 @@ base:
         VLLM_USE_DIRECT_DCP_KV_GATHER: '1'
         VLLM_ENGINE_READY_TIMEOUT_S: '3600'
         VLLM_RPC_TIMEOUT: '600000'
+        # Mooncake loads can block inside execute_model past the 300s default;
+        # c40 on run 36800796192 went silent ~279s then EngineDead at the cap.
+        VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: '1800'
         VLLM_PREFIX_CACHE_RETENTION_INTERVAL: '0'
         VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS: '0'
         PYTHONNOUSERSITE: '1'
