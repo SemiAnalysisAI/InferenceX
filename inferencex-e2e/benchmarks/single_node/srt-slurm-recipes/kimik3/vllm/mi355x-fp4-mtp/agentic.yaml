@@ -40,7 +40,9 @@ base:
         trust-remote-code: true
         moe-backend: auto
         tensor-parallel-size: 8
-        load-format: fastsafetensors
+        # Plain safetensors: fastsafetensors' GPU staging plus the online FP8
+        # quantization buffers ran rank 4 out of memory at shard 10/12.
+        load-format: safetensors
         gpu-memory-utilization: 0.9
         language-model-only: true
         enable-auto-tool-choice: true
@@ -57,7 +59,6 @@ base:
         # Upstream AMD recipe environment.
         VLLM_ROCM_AITER_MLA_ASM_PADDING: asm
         VLLM_ROCM_USE_AITER: '1'
-        SAFETENSORS_FAST_GPU: '1'
         VLLM_ROCM_USE_AITER_MOE_SITUV2: '1'
         AITER_BF16_FP8_MOE_BOUND: '0'
         VLLM_ROCM_QUICK_REDUCE_QUANTIZATION: INT4
