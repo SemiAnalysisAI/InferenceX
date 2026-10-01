@@ -9179,3 +9179,14 @@
     - "Kimi-K3 H200 latency 功耗遥测改用无 profiling 的 DCGM counters，避免同步恢复 profiling watch 导致采样卡顿；保留功耗和 GPU 利用率，省略 profiling 指标。"
     - "保持原 exporter 镜像、100 ms watch 间隔、1 s 抓取间隔、2 s 超时与严格功耗校验不变。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3550
+
+- config-keys:
+    - kimik3-fp4-h200-vllm-agentic-latency
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Raise AgentX benchmark grace period to 1800s on the H200 Kimi-K3 latency recipe so in-flight long responses admitted near the 3600s cutoff can finish and extend TTFT/ITL coverage past the 95% ProfileMetricCoverage gate without changing admission duration, concurrency, or topology."
+    - "Matches the stock srt_agentic.sh AIPERF_BENCHMARK_GRACE_PERIOD wiring and the MI325X GLM-5.2 agentic precedent; leaves the one-hour profile window and noprof power path unchanged."
+    - "将 H200 Kimi-K3 latency AgentX 的 benchmark grace 提到 1800s，使接近 3600s 截止时已准入的长响应可完成并延续 TTFT/ITL 覆盖至 ≥95%，不改变 admission 时长、并发或拓扑。"
+    - "对齐 srt_agentic.sh 的 AIPERF_BENCHMARK_GRACE_PERIOD 接线与 MI325X GLM-5.2 agentic 先例；保持一小时 profile 窗口与 noprof 功耗路径不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3550

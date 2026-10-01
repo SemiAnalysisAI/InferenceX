@@ -106,5 +106,9 @@ benchmark:
     IS_MULTINODE: "true"
     AIPERF_DATASET_MMAP_CACHE_DIR: "/aiperf_mmap_cache"
     AIPERF_TRACE_IDLE_GAP_CAP_SECONDS: "300"
+    # Long responses admitted near the end of the measurement window can take
+    # minutes to finish; bound their drain without extending admission.
+    # Default 30s grace cancels mid-response and fails ProfileMetricCoverage (~94%).
+    AIPERF_BENCHMARK_GRACE_PERIOD: "1800"
     HF_HUB_CACHE: "/hf_hub_cache"
     WEKA_LOADER_OVERRIDE: "semianalysis_cc_traces_weka_062126"
