@@ -38,6 +38,12 @@ class Override:
 
 
 OVERRIDES: dict[str, tuple[Override, ...]] = {
+    "b200-nscale": (
+        Override(
+            Match(any_of("glm5.1"), frameworks=any_of("tilert")),
+            entry="GLM-5.1-FP8@shared",
+        ),
+    ),
     "b300-dsxe": (
         Override(
             Match(frameworks=any_of("vllm"), model_glob="*/DeepSeek-V4-Pro-0813"),
@@ -172,17 +178,10 @@ def model_paths(
     request: LaunchRequest,
     config_file: str,
     served: str | None,
-    *,
-    fork: bool = False,
 ) -> dict[str, str]:
-    """srtslurm.yaml ``model_paths``: each alias of ``config_file``'s recipe mapped to ``served``.
-
-    A ``fork`` may run a recipe of its own, which the workspace mirror lacks; it maps none.
-    """
+    """srtslurm.yaml ``model_paths``: each recipe alias mapped to ``served``."""
     recipe = recipe_mirror_path(request.workspace, config_file)
     if not recipe.is_file():
-        if fork:
-            return {}
         raise LaunchError(f"CONFIG_FILE {config_file} is not in the recipe mirror: {recipe}")
     aliases = recipe_aliases(recipe)
     if aliases and served is None:

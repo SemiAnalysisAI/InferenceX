@@ -477,10 +477,15 @@ worker 主机拓扑，GPU 侧的任何结论都不会传导过来，因此 produ
 `cpu_sample_gap_exceeded`、`cpu_window_not_bracketed` 以及 `cpu_window_unavailable`（没有已完成的窗口
 与该结果绑定，或窗口自身的契约检查失败）。CPU 积分溢出沿用 GPU 侧的 `non_finite_power_metric`；聚合
 结果本身无法写入时，`aggregate_result_missing` 或 `aggregate_result_unwritable` 会同时出现在两侧的审计
-中。当前固定的 srt-slurm 版本（`7b5863a7`）写出宽格式，exporter 尚不识别 Module 标签，因此
-这些产物包只会得到 Grace socket 总功耗；需要 producer 支持该标签后才会出现模块字段。没有
-`cpu/` 的产物包不新增 CPU 指标或 CPU 有效性结论；通过 GPU 校验的产物包仍发布上文所述的
-逐主机 `workers` 条目。
+中。固定的 srt-slurm 源码版本（`098e15ac`）写出宽格式，exporter 尚不识别 Module 标签，因此
+这些产物包只会得到 Grace socket 总功耗；需要 producer 支持该标签后才会出现模块字段。
+选中的 Qwen3.5 与 Kimi-K3 CPU 采集配方通过主配置的 `additional-settings`，向 `make setup`
+传入 `CPU_POWER_EXPORTER_RELEASE=v2.40.2`。该版本包含旧版 ACPI hwmon 传感器发现修复。
+安装过程校验下载工件的校验和，替换版本标记不匹配的缓存二进制，并在固定版本下载失败时退出；
+提交前还会拒绝缺失、不可执行或架构不匹配的二进制。验收仍需保留安装日志与实际 exporter
+身份，检查完整的同窗口样本，并核实固件传感器的测量范围。源码版本或安装成功均不能证明
+测量有效。没有 `cpu/` 的产物包不新增 CPU 指标或 CPU 有效性结论；通过 GPU 校验的产物包
+仍发布上文所述的逐主机 `workers` 条目。
 
 ## 验证和停止条件
 

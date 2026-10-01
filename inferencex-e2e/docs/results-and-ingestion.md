@@ -499,9 +499,16 @@ keys, leaves every GPU field byte-identical, and never fails `REQUIRE_POWER=1`. 
 window binds to the result, or the window's own contract checks failed). An overflowed CPU
 integration reuses the GPU leg's `non_finite_power_metric`, and `aggregate_result_missing` or
 `aggregate_result_unwritable` appears in both audits when the aggregate itself cannot be patched.
-The current srt-slurm pin (`7b5863a7`) writes the wide format and does not classify the
+The srt-slurm source pin (`098e15ac`) writes the wide format and does not classify the
 Module label, so these packages yield the Grace socket total; module keys require a producer
-that classifies that label. A package without `cpu/` adds no CPU metrics or CPU verdict.
+that classifies that label. The selected Qwen3.5 and Kimi-K3 CPU-telemetry recipes pass
+`CPU_POWER_EXPORTER_RELEASE=v2.40.2` from their master-config `additional-settings` to
+`make setup`. This release includes legacy ACPI hwmon discovery. Setup verifies the downloaded
+asset checksum, replaces a cached binary with a different release marker, and fails on a pinned
+download error; submission also rejects a missing, non-executable, or wrong-architecture binary.
+Qualification still needs the setup log and actual exporter identity, complete same-window
+samples, and verified firmware sensor boundaries. A source pin or successful setup alone does
+not establish valid measurements. A package without `cpu/` adds no CPU metrics or CPU verdict.
 Validated GPU packages still publish the per-host `workers` entries described above.
 
 ## Verification and stop conditions

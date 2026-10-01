@@ -1,5 +1,5 @@
 #!/bin/bash
-# Hugepage pre-flight, run on each allocated node before any container starts.
+# Hugepage setup/teardown for recipe-owned host memory reservations.
 # A stale hugepage reservation is carved out of normal RAM and can make
 # HiCache host-pool sizing fail at startup; this reclaims it, or grows the
 # pool when a caller (the UMBP DRAM tier) needs hugepages.

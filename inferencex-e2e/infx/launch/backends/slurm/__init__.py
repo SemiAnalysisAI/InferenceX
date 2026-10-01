@@ -4,7 +4,7 @@ A container runs as one ``srun`` step in a one-node ``salloc`` allocation that i
 when the launch ends. The checkout and volumes are bind-mounted, so outputs need no
 copying, and steps inherit the whole launching environment (``srun --export=ALL``). Jobs
 are named after the runner, or :func:`srtctl_job_name` when srtctl submits them, which is
-how :meth:`SlurmBackend.cleanup` finds leftovers. srt-slurm and the legacy lanes also use
+how :meth:`SlurmBackend.cleanup` finds leftovers. srt-slurm also uses
 the Slurm-only operations below the generic ones.
 """
 

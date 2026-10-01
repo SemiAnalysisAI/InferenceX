@@ -49,7 +49,6 @@ class SrtJob:
     mounts: Sequence[tuple[str, str]] = ()
     single_node: bool = False
     account: str | None = None
-    fork: bool = False
 
 
 def pyxis_spelling(image: str) -> str:
@@ -108,8 +107,7 @@ def render(cluster: Cluster, job: SrtJob) -> dict[str, Any]:
         config["output_dir"] = str(srt.outputs)
     if job.model_paths:
         config["model_paths"] = dict(job.model_paths)
-    if not job.fork:
-        config["default_health_check"] = dict(HEALTH_CHECK)
+    config["default_health_check"] = dict(HEALTH_CHECK)
     containers = dict.fromkeys(srt.container_aliases, job.container)
     containers[job.image] = job.container
     containers[pyxis_spelling(job.image)] = job.container
@@ -218,8 +216,8 @@ def write_lane_config(
     )
     containers: dict[str, str] = {}
     if request.framework == "tilert":
-        prefill = backend.stage_image(request.env["PREFILL_IMAGE"]).reference
-        containers = {"tilert-decode": container, "tilert-prefill": prefill}
+        prefill_image = request.env["PREFILL_IMAGE"]
+        containers[prefill_image] = backend.stage_image(prefill_image).reference
     if power.dcgm:
         exporter = backend.stage_image(DCGM_EXPORTER_IMAGE, helper="dcgm-exporter")
         (run.workspace / EXPORTER_PROVENANCE).write_text(f"{backend.image_provenance(exporter)}\n")
@@ -236,7 +234,6 @@ def write_lane_config(
         model_paths=model_paths,
         mounts=lane_mounts(run, lane),
         account=run.account,
-        fork=checkout.fork,
     )
     config_yaml = checkout.root / "srtslurm.yaml"
     write(config_yaml, render(run.cluster, job))
