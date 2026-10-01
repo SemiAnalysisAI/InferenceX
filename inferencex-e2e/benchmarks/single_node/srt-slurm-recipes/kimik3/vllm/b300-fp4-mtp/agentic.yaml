@@ -68,7 +68,11 @@ base:
         load-format: fastsafetensors
         moe-backend: auto
         no-enable-flashinfer-autotune: true
-        enable-cumem-allocator: true
+        # Do NOT enable cuMem/VMM on DSXE Mooncake RDMA: tip 15820fd2e c2 (and the
+        # passing c1 canary) logged register_buffer failed ... len ~39GiB: -600 on
+        # every rank, then AddressNotRegistered TRANSFER_FAIL on puts inside that
+        # region. c1 recomputed through it; c2 hung at 0 tok/s until sample_tokens.
+        # Same class as LMCache dropping cumem when VMM buffers cannot be exported.
         enable-prefix-caching: true
         prefix-match-unit: 128
         kv-cache-dtype: fp8
