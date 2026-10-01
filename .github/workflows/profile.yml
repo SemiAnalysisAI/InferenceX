@@ -107,6 +107,12 @@ jobs:
             uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
             python -P "${GENERATOR[@]}" \
             test-config --config-files "$INPUTS_CONFIG_FILE" --config-keys "$INPUTS_CONFIG_KEY" --conc "$INPUTS_CONC")
+          # srtctl comes from the trusted tree; the measured tree is only read as data.
+          git -C "$PRIORITY_ROOT" submodule update --init utils/srt-slurm
+          CONFIG_JSON=$(printf '%s' "$CONFIG_JSON" | env PYTHONPATH="$PRIORITY_ROOT:$PRIORITY_ROOT/utils/srt-slurm/src" \
+            uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
+            --with marshmallow --with marshmallow-dataclass --with ruamel.yaml --with requests \
+            python -P -m infx.srt_slurm.preflight --root "$MEASURED_ROOT")
           CONFIG_JSON=$(printf '%s' "$CONFIG_JSON" | env PYTHONPATH="$PRIORITY_ROOT" uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml \
             python -P -m infx.workflows.ci_priority \
             --policy "${PRIORITY_ROOT}/configs/ci-priority.yaml" \
