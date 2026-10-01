@@ -246,13 +246,17 @@ Their cache root is `/home/ext-cjquilici/inferencex-mi325x-amd`, on persistent
 NFS available to the compute nodes. Image imports run on compute nodes, not
 the shared login. No benchmark configurations are migrated by this setup.
 
-The adjacent `mi325x-amd-runner@.service` supervises these listeners separately
-from the existing MI300X runners. Install it in `/etc/systemd/system/`, then
-run `systemctl daemon-reload`. Keep the instances stopped and disabled until
-the new runner inventory/profile is merged. After merge, enable and start
-instances `mi325x-amd-runner@00.service` through
-`mi325x-amd-runner@08.service`. Do not use the default `github-actions` tmux
-session on this host: the existing pool may already own it.
+Use the existing `setup.sh` registration and `start_runners.sh` tmux workflow.
+Keep listeners stopped until the new runner inventory/profile is merged.
+After merge, start them with:
+
+```sh
+bash start_runners.sh 0 8 /home/ext-cjquilici/gharunners-mi325x-amd mi325x-amd-runners
+```
+
+The explicit session name isolates these runners from MI300X. Do not use the
+default `github-actions` tmux session on this shared host: the existing pool
+may already own it. No custom runner service is required.
 
 Run one dashboard collector per pool with distinct environment files and
 service names. The MI325X collector must select only `MI325X-UBUNTU` for both
