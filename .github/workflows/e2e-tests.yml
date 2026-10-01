@@ -263,7 +263,7 @@ jobs:
                 path: .ci-priority
                 persist-credentials: false
 
-            - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+            - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
             - id: get-jobs
               env:
                   GENERATE_COMMAND: ${{ inputs.generate-cli-command || github.event.inputs.generate-cli-command }}
@@ -641,7 +641,7 @@ jobs:
                 echo "INFERENCEX_PYTHON_PROJECT=$python_project" >> "$GITHUB_ENV"
 
             - name: Set up uv
-              uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+              uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
               with:
                   cache-dependency-glob: |
                       pyproject.toml

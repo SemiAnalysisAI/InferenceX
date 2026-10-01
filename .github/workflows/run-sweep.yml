@@ -102,7 +102,7 @@ jobs:
                   fi
 
             - name: Set up uv
-              uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+              uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
 
             - name: Validate perf-changelog matrix
               env:
@@ -233,7 +233,7 @@ jobs:
                         ['infx tooling', data.sha],
                       ]).write();
                       return data.sha;
-            - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+            - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
             - name: Install Claude Code 2.1.282
               id: claude_cli
               if: vars.PRIORITY_SCHEDULER_ENABLED == 'true'
@@ -906,7 +906,7 @@ jobs:
                 echo "INFERENCEX_PYTHON_PROJECT=$python_project" >> "$GITHUB_ENV"
 
             - name: Set up uv
-              uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+              uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
               with:
                   cache-dependency-glob: |
                       pyproject.toml
@@ -962,7 +962,7 @@ jobs:
                 echo "INFERENCEX_PYTHON_PROJECT=$python_project" >> "$GITHUB_ENV"
 
             - name: Set up uv
-              uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+              uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
               with:
                   cache-dependency-glob: |
                       pyproject.toml
