@@ -9416,4 +9416,4 @@
     - "分离式 KV 传输使用 Mooncake，并在容器初始化时安装 mooncake-transfer-engine-efa-cuda13 0.3.13.post1；依赖 DSXE 管理的网络栈注入，不显式挂载主机 EFA/OFI 目录。"
     - "使用 DSXE 集群的每 GPU 24 个 CPU、HiCache 比例 3，decode 的 max-running-requests 为并发数两倍，挂载持久化 AgentX/Hugging Face 缓存，并排除已知异常 DSXE 节点。"
     - "B300 DSXE Dynamo+SGLang 的 DeepSeek-V4-Pro-0813 权重改为从节点本地 NVMe 副本（DeepSeek-V4-Pro-0813@scratch，与 vLLM 相同）加载，而非共享的 /data/models 副本；后者在多个测试点并发加载时会使启动慢数小时。"
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3631
