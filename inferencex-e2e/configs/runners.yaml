@@ -77,6 +77,15 @@ labels:
     - mi300x-amd_06
     - mi300x-amd_07
   mi325x:
+    - mi325x-amd_00
+    - mi325x-amd_01
+    - mi325x-amd_02
+    - mi325x-amd_03
+    - mi325x-amd_04
+    - mi325x-amd_05
+    - mi325x-amd_06
+    - mi325x-amd_07
+    - mi325x-amd_08
     - mi325x-amds_00
     - mi325x-amds_01
     - mi325x-amds_02
@@ -289,6 +298,16 @@ labels:
     - mi325x-amds_07
     - mi325x-amds_08
     - mi325x-amds_09
+  cluster:mi325x-amd:
+    - mi325x-amd_00
+    - mi325x-amd_01
+    - mi325x-amd_02
+    - mi325x-amd_03
+    - mi325x-amd_04
+    - mi325x-amd_05
+    - mi325x-amd_06
+    - mi325x-amd_07
+    - mi325x-amd_08
   cluster:mi355x-amds:
     - mi355x-amds_00
     - mi355x-amds_01
@@ -728,6 +747,39 @@ clusters:
           /dev/dri: /dev/dri
         extra:
           visible_devices_env: ROCR_VISIBLE_DEVICES
+  # Barite shares its login and NFS with mi300x-amd, but not its GPU partition.
+  mi325x-amd:
+    gpus-per-node: 8
+    available-cpu-dram-mib: 2_321_549
+    arch: x86_64
+    scheduler: slurm
+    slurm:
+      partition: MI325X-UBUNTU
+      exclusive: true
+      gres: "gpu:{gpus}"
+      cpus-per-task: 384
+      srun-args: [--container-remap-root, --container-writable]
+      volumes:
+        hf-hub-cache: {path: /home/ext-cjquilici/inferencex-mi325x-amd/hf-hub-cache}
+        aiperf-cache: {path: /home/ext-cjquilici/inferencex-mi325x-amd/aiperf-cache}
+      squash:
+        dir: /home/ext-cjquilici/inferencex-mi325x-amd/squash
+        visibility: shared
+        import: compute
+        lock-timeout-s: 600
+      srt-slurm:
+        network-interface: ""
+        single-node-time-limit: 480
+        gpus-per-node-directive: true
+        segment-directive: false
+        mounts:
+          /dev/kfd: /dev/kfd
+          /dev/dri: /dev/dri
+        extra:
+          visible_devices_env: ROCR_VISIBLE_DEVICES
+          default_bash_preamble: |-
+            export XDG_CACHE_HOME="/tmp/xdg-cache-$SLURM_JOB_ID"
+            export TRITON_CACHE_DIR="/tmp/triton-cache-$SLURM_JOB_ID"
   mi325x-amds:
     gpus-per-node: 8
     available-cpu-dram-mib: 3_091_589
