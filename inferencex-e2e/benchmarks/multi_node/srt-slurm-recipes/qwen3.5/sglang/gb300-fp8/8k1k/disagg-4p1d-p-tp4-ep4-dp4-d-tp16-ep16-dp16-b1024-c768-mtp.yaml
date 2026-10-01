@@ -182,3 +182,4 @@ telemetry:
   dcgm_exporter:
     container_image: dcgm-exporter
     port: 19401
+    command: "dcgm-exporter --collect-interval=100 --address :{port} -f /configs/dcgm-counters-noprof.csv"

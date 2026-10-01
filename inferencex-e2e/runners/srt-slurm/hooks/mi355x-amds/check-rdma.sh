@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
 set -eo pipefail
 
-# Fast, per-node fabric preflight for MI355X srt-slurm allocations. This keeps
-# the meaningful QoS/DCQCN gate from the retired amd_utils launcher without its
-# Docker or job-control plumbing.
+# Per-node QoS/DCQCN fabric checks for MI355X srt-slurm allocations.
 
 log() { printf '[%s] %s\n' "$(hostname -s)" "$*"; }
 fail() { log "RDMA preflight failed: $*" >&2; exit 1; }

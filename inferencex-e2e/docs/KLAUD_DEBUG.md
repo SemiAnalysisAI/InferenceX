@@ -161,7 +161,7 @@ Seen on #1422.
 If a sweep job lands on any of these, it'll never start. Nothing can be done at the recipe level. These stay drained until ops fixes them.
 
 ### 5.2 `mia1-p01-g11 / g12 / g31` — docker socket perms
-**Symptom:** mi355x jobs that drive Docker on the node fail with `permission denied while trying to connect to the docker API at unix:///var/run/docker.sock`, cascading into SLURM job expiration. The retired raw single-node launcher hit this in its `docker stop $(docker ps -a -q)` cleanup; the `amd_utils` legacy lane still runs Docker on its nodes.
+**Historical symptom:** mi355x jobs that drove Docker on the node failed with `permission denied while trying to connect to the docker API at unix:///var/run/docker.sock`, cascading into SLURM job expiration. Both the raw single-node launcher and the AMD Docker multi-node launcher are now retired; active MI355X recipes use srt-slurm.
 **Fix:** ops needs to fix docker group / socket perms on these nodes. Recipe-level workaround: none.
 
 ### 5.3 `chi-mi300x-049` — `/nvme_home` disk-full

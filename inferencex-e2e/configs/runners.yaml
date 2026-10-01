@@ -318,6 +318,11 @@ clusters:
         import: compute
         lock-timeout-s: 600
       srt-slurm:
+        extra:
+          default_gpu_exporter:
+            container_image: nvcr.io#nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless
+            port: 9401
+            command: "dcgm-exporter --collect-interval=1000 --address :{port} -f /configs/dcgm-counters-noprof.csv"
         network-interface: ""
         gpus-per-node-directive: false
         single-node-exclusive: false
@@ -347,6 +352,11 @@ clusters:
         helper-dirs:
           nginx: {import: unchecked}
       srt-slurm:
+        extra:
+          default_gpu_exporter:
+            container_image: nvcr.io#nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless
+            port: 9401
+            command: "dcgm-exporter --collect-interval=1000 --address :{port} -f /configs/dcgm-counters-noprof.csv"
         network-interface: ""
         job-tag: h100
         default-time-limit: "6:00:00"
@@ -374,6 +384,11 @@ clusters:
         import: compute
         lock-timeout-s: 600
       srt-slurm:
+        extra:
+          default_gpu_exporter:
+            container_image: nvcr.io#nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless
+            port: 9401
+            command: "dcgm-exporter --collect-interval=1000 --address :{port} -f /configs/dcgm-counters-noprof.csv"
         network-interface: ""
         gpus-per-node-directive: false
         single-node-exclusive: false
@@ -416,6 +431,11 @@ clusters:
           nginx: {key-style: plus, import: unchecked}
           dcgm-exporter: {dir: /data/gharunners/containers}
       srt-slurm:
+        extra:
+          default_gpu_exporter:
+            container_image: nvcr.io#nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless
+            port: 9401
+            command: "dcgm-exporter --collect-interval=1000 --address :{port} -f /configs/dcgm-counters-noprof.csv"
         network-interface: ""
         job-tag: h200
         gpus-per-node-directive: true
@@ -441,6 +461,11 @@ clusters:
         import: all-nodes
         lock-timeout-s: 600
       srt-slurm:
+        extra:
+          default_gpu_exporter:
+            container_image: nvcr.io#nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless
+            port: 9401
+            command: "dcgm-exporter --collect-interval=1000 --address :{port} -f /configs/dcgm-counters-noprof.csv"
         network-interface: ""
         gpus-per-node-directive: false
         single-node-exclusive: false
@@ -457,6 +482,11 @@ clusters:
       volumes:
         hf-hub-cache: {path: /mnt/data/gharunners/hf-hub-cache}
       srt-slurm:
+        extra:
+          default_gpu_exporter:
+            container_image: nvcr.io#nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless
+            port: 9401
+            command: "dcgm-exporter --collect-interval=1000 --address :{port} -f /configs/dcgm-counters-noprof.csv"
         network-interface: ""
   b200-nscale:
     gpus-per-node: 8
@@ -472,6 +502,7 @@ clusters:
         DeepSeek-V4-Pro-0813: {root: scratch, dir: DeepSeek-V4-Pro-0813}
         DeepSeek-V4-Pro-NVFP4: {root: scratch, dir: DeepSeek-V4-Pro-NVFP4}
         GLM-5.1-FP8: {root: scratch, dir: GLM-5.1-FP8}
+        GLM-5.1-FP8@shared: {root: shared-models, dir: GLM-5.1-FP8-f396cf805182}
         GLM-5.2-FP8: {root: scratch, dir: GLM-5.2-FP8}
         GLM-5.2-NVFP4: {root: scratch, dir: GLM-5.2-NVFP4}
         Kimi-K3: {root: scratch, dir: Kimi-K3}
@@ -490,7 +521,8 @@ clusters:
       volumes:
         hf-hub-cache: {path: /data/home/sa-shared/gharunners/hf-hub-cache}
         aiperf-cache: {path: /data/home/sa-shared/gharunners/aiperf-cache}
-        tilert-cache: {path: /data/home/sa-shared/gharunners/tilert-cache}
+        shared-models: {path: /data/home/sa-shared/gharunners/models}
+        tilert-weights: {path: /data/home/sa-shared/gharunners/models/GLM-5.1-FP8-TileRT-8shard}
         scratch: {path: /scratch/models, visibility: node-local}
       squash:
         dir: /data/home/sa-shared/containers
@@ -499,6 +531,11 @@ clusters:
         lock-timeout-s: 3600
         lock-file: locks-dir
       srt-slurm:
+        extra:
+          default_gpu_exporter:
+            container_image: nvcr.io#nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless
+            port: 9401
+            command: "dcgm-exporter --collect-interval=1000 --address :{port} -f /configs/dcgm-counters-noprof.csv"
         network-interface: ""
         job-tag: b200
         default-time-limit: "4:00:00"
@@ -552,6 +589,11 @@ clusters:
         import: compute
         lock-timeout-s: 3600
       srt-slurm:
+        extra:
+          default_gpu_exporter:
+            container_image: nvcr.io#nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless
+            port: 9401
+            command: "dcgm-exporter --collect-interval=1000 --address :{port} -f /configs/dcgm-counters-noprof.csv"
         network-interface: ""
         job-tag: b300
         single-node-models: staged
@@ -594,6 +636,11 @@ clusters:
         lock-timeout-s: 1800
         single-node-import: true
       srt-slurm:
+        extra:
+          default_gpu_exporter:
+            container_image: nvcr.io#nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless
+            port: 9401
+            command: "dcgm-exporter --collect-interval=1000 --address :{port} -f /configs/dcgm-counters-noprof.csv"
         network-interface: ""
         job-tag: gb200
         default-time-limit: "6:00:00"
@@ -638,6 +685,11 @@ clusters:
         import-step-args: [--exclusive]
         single-node-import: true
       srt-slurm:
+        extra:
+          default_gpu_exporter:
+            container_image: nvcr.io#nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless
+            port: 9402
+            command: "dcgm-exporter --collect-interval=1000 --address :{port} -f /configs/dcgm-counters-noprof.csv"
         network-interface: ""
         job-tag: gb300
         segment-directive: false
@@ -720,6 +772,7 @@ clusters:
     models:
       entries:
         DeepSeek-V4-Pro-0813: {root: it-share-data, dir: DeepSeek-V4-Pro-0813}
+        GLM-5.3: {root: it-share-data, dir: GLM-5.3}
         Qwen3.5-397B-A17B-FP8: {root: it-share-data, dir: Qwen3.5-397B-A17B-FP8}
     scheduler: slurm
     slurm:

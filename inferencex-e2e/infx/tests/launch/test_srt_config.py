@@ -205,7 +205,7 @@ def test_the_staged_workspace_drops_run_artifacts_but_keeps_srt_slurm_sources(tm
         return staging
 
     run = SimpleNamespace(workspace=workspace, backend=SimpleNamespace(stage_workspace=rsync))
-    checkout = Checkout(tmp_path / "runs/srt-slurm-1-1-abc", "sha", False)
+    checkout = Checkout(tmp_path / "runs/srt-slurm-1-1-abc", "sha")
     staged = compute_workspace(run, checkout, shared=True)
 
     assert staged == tmp_path / "runs/infmax-workspace-1-1-abc"
