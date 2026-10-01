@@ -9185,3 +9185,12 @@
     - "Move select_mooncake_rdma_device above benchmark_lib.sh's --validation-only gate so kimik3-b300-mooncake.sh can resolve the helper (exit 127 / command not found previously cancelled the fail-fast canary)"
     - "将 select_mooncake_rdma_device 移到 benchmark_lib.sh 的 --validation-only 门禁之上，使 kimik3-b300-mooncake.sh 能解析该辅助函数（此前 exit 127 / command not found 导致 fail-fast canary 取消）"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3088
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Restore VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS=1800 on the B300 Mooncake AgentX recipe. Tip fail-fast run 36800796192 killed agentic c40 after ~279s of engine silence (shm_broadcast 60s waits from 04:57:58-05:00:58 PT window, then EngineCore TimeoutError / EngineDeadError at 05:01:56) under the default 300s execute_model cap; AIPerf then ProfileAborted at 30/292 = 10.3% failed requests. Keep the existing 60s Mooncake master lease (--default_kv_lease_ttl=60000). Sibling Kimi Mooncake recipes already set this timeout."
+    - "将 B300 Mooncake AgentX 配方的 VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS 恢复为 1800。tip fail-fast 运行 36800796192 在默认 300 秒 execute_model 上限下，于约 279 秒引擎静默后杀死 agentic c40（shm_broadcast 60 秒等待，随后 EngineCore TimeoutError / EngineDeadError）；AIPerf 随即以 30/292 = 10.3% 失败请求触发 ProfileAborted。保留既有的 60 秒 Mooncake master 租约。同系列 Kimi Mooncake 配方已设置该超时。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3088
