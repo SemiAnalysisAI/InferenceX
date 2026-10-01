@@ -14,10 +14,6 @@ on:
       - '**/pytest.ini'
       - 'inferencex-e2e/configs/**'
       - 'inferencex-e2e/utils/srt-slurm'
-      # Tests check recipe containers against master images.
-      - 'inferencex-e2e/configs/*-master.yaml'
-      - 'inferencex-e2e/benchmarks/single_node/srt-slurm-recipes/**'
-      - 'inferencex-e2e/benchmarks/multi_node/srt-slurm-recipes/**'
   push:
     branches: [main]
     paths: *python-paths
