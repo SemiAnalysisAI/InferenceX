@@ -9488,3 +9488,13 @@
     - "No data-type or precision change to the EAGLE3 draft model (Inferact/MiniMax-M3-EAGLE3-GQA): online_quant_config (ptpc_fp8), kv_cache_dtype fp8 and index-cache-dtype fp8 are unchanged; mono decode changes the target model's decode kernels, not draft precision."
     - "更新镜像至 rocm/atom-dev:nightly_202610070333（ATOM 0.1.7.dev60+g7fc0926c6，含 ROCm/ATOM#2483 的 mono step fence 修复）；去掉 TP4 C15/C20/C24/C28 的 ATOM_MONO_ENABLE=0，所有 TP4 点位启用 MiniMax-M3 mono decode（每步最多 16 个 token，即 EAGLE3 K3 下 4 个请求，覆盖 C1/C2/C4）；ATOM 只为 TP4 构建 mono，TP2 走非融合路径。新增 TP2 C4，LMCache 版本记录为 0.5.6.dev139+gf22dec28。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3750
+
+- config-keys:
+  - qwen3.5-fp8-b200-sglang
+  scenario-type:
+  - fixed-seq-len
+  description:
+  - "Lower Qwen3.5 FP8 B200 TP4 conc-start from 2 to 1 and prepend recipe zip_override concurrency 1 (cuda-graph-max-bs-decode 1, scheduler-recv-interval 10) so matrix cell c1 matches the single-node prepare path."
+  - "Add an E2E-only TP4/EP1 article repeat selector (configs/powerx-article-b200.yaml) that excludes the master config TP8 rows while reusing the existing B200 FP8 8k1k recipe."
+  - "Do not set require-power on this single-node config; after #3675 SingleNodeSeqLenConfig rejects the field (extra=forbid). Measured single-node power is expected later from #3781 native telemetry."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3378
