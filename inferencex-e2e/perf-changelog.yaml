@@ -9523,3 +9523,12 @@
     - "Align B300 DCP8 Mooncake connector with proven GB300 DCP8 settings: compact_group_io + max_load_batch_keys=2 and MC_MAX_MR_SIZE=4GiB. Tip fail-fast run 36820538765 agentic c48 (job 110258065670, Slurm 6544) had a real rail (setup patched device_name to ibp198s0f0; srt-slurm Wrote line is pre-patch) then died with GPU memcpy fail / direct DCP kv-gather multimem timeout under high KV pressure. Also fail loud if the host mlx5 provider mount is missing or device_name would stay empty."
     - "将 B300 DCP8 Mooncake 连接器与已验证的 GB300 DCP8 设置对齐：compact_group_io、max_load_batch_keys=2 以及 MC_MAX_MR_SIZE=4GiB。tip fail-fast 运行 36820538765 的 agentic c48（job 110258065670，Slurm 6544）已有真实 rail（setup 将 device_name 写成 ibp198s0f0；srt-slurm 的 Wrote 行为 patch 前转储），随后在高 KV 压力下因 GPU memcpy 失败 / direct DCP kv-gather multimem timeout 崩溃。主机 mlx5 provider 挂载缺失或 device_name 仍为空时改为明确失败。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3088
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Revert compact_group_io on B300 DSXE Mooncake (keep max_load_batch_keys=2) and set VLLM_USE_DIRECT_DCP_KV_GATHER=0. Tip ee33eeba fail-fast run 36838397438 agentic c8 patched device_name to ibp198s0f0 (GH Wrote line is pre-setup), then Compact Mooncake group I/O (~25MiB puts) stormed 7177 TRANSFER_FAIL / save_put_failed_keys up to 3782 and hung at 0 tok/s until the 1800s sample_tokens timeout. Prior tip c48 multimem/memcpy with KV_GATHER=1 motivates disabling direct KV gather."
+    - "撤销 B300 DSXE Mooncake 上的 compact_group_io（保留 max_load_batch_keys=2），并将 VLLM_USE_DIRECT_DCP_KV_GATHER 设为 0。tip ee33eeba fail-fast 运行 36838397438 的 agentic c8 已将 device_name 写成 ibp198s0f0（GH Wrote 行为 setup 前转储），随后 Compact Mooncake group I/O（约 25MiB put）触发 7177 次 TRANSFER_FAIL / save_put_failed_keys 最高 3782，并以 0 tok/s 挂起直至 1800 秒 sample_tokens 超时。此前 tip c48 在 KV_GATHER=1 下出现 multimem/memcpy，因此关闭 direct KV gather。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3088

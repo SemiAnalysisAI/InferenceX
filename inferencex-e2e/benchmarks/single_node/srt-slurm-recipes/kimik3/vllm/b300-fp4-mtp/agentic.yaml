@@ -76,10 +76,11 @@ base:
         attention-backend: TOKENSPEED_MLA
         attention-config: '{"mla_prefill_backend":"TRTLLM_RAGGED","use_prefill_query_quantization":true}'
         disable-uvicorn-access-log: true
-        # compact_group_io + max_load_batch_keys match proven GB300 DCP8 Mooncake
-        # recipes; without them tip c48 died in Mooncake GPU memcpy concurrent with
-        # direct DCP kv-gather multimem timeout under high KV pressure.
-        kv-transfer-config: '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"compact_group_io":true,"max_load_batch_keys":2,"enable_offload":false}}'
+        # Do NOT enable compact_group_io on DSXE single-rail Mooncake: tip ee33eeba
+        # c8 (run 36838397438) enabled it and immediately stormed TRANSFER_FAIL on
+        # compact-group-io-v1 ~25MiB puts (7177 fails), then hung at 0 tok/s until
+        # the 1800s sample_tokens cap. Keep max_load_batch_keys=2 only.
+        kv-transfer-config: '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"max_load_batch_keys":2,"enable_offload":false}}'
       env:
         VLLM_ALLREDUCE_USE_FLASHINFER: '1'
         VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION: '1'
@@ -87,7 +88,9 @@ base:
         # These default to auto; name them so the measured DCP a2a path runs.
         VLLM_USE_DIRECT_DCP_A2A: '1'
         VLLM_USE_DIRECT_DCP_Q_GATHER: '1'
-        VLLM_USE_DIRECT_DCP_KV_GATHER: '1'
+        # Prior tip c48 hit direct DCP kv-gather multimem timeout then GPU memcpy
+        # failure; disable direct KV gather (same as GB200 DCP16 / MI355X lanes).
+        VLLM_USE_DIRECT_DCP_KV_GATHER: '0'
         VLLM_ENGINE_READY_TIMEOUT_S: '3600'
         VLLM_RPC_TIMEOUT: '600000'
         # Mooncake loads can block inside execute_model past the 300s default;
