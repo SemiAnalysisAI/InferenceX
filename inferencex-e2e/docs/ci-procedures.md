@@ -239,7 +239,7 @@ The same-repository check applies before checking out PR code in changelog valid
 | --- | --- | --- | --- |
 | `full-sweep-fail-fast` | Full changelog matrix | Yes | Yes. Recommended full-sweep default |
 | `full-sweep-enabled` | Full changelog matrix | Yes | No. Use when every matrix point must continue |
-| `full-sweep-fail-fast-no-canary` | Full changelog matrix | No | Yes |
+| `non-canary-full-sweep-enabled` | Full changelog matrix | No | No |
 
 Optional modifiers do not replace a primary label:
 
@@ -255,10 +255,10 @@ Changing a recognized primary or modifier label shares the active sweep concurre
 
 Canary and fail-fast solve different problems:
 
-1. A canary is created only for `full-sweep-enabled` or `full-sweep-fail-fast` PRs. No-canary labels skip it.
+1. A canary is created only for `full-sweep-enabled` or `full-sweep-fail-fast` PRs. `non-canary-full-sweep-enabled` skips it.
 2. Canary selection first considers single-node fixed-sequence `1k1k` and `8k1k` entries and single-node AgentX entries. If none are eligible, it considers multi-node AgentX entries. It excludes eval entries, chooses the lowest-concurrency candidate, runs it with the matching single-node or multi-node workflow, and removes it from the later matrix.
 3. If there is no eligible candidate, the canary is skipped. Otherwise all benchmark/eval matrices require the canary to succeed. A failed canary prevents their fan-out.
-4. `full-sweep-fail-fast` and `full-sweep-fail-fast-no-canary` set `strategy.fail-fast: true` separately on each matrix job family. The first failing point cancels queued/in-progress siblings in that matrix family. It is not one global kill switch for every independent family.
+4. `full-sweep-fail-fast` sets `strategy.fail-fast: true` separately on each matrix job family. The first failing point cancels queued/in-progress siblings in that matrix family. It is not one global kill switch for every independent family.
 5. Non-fail-fast labels leave matrix fail-fast false so other points continue and preserve broader diagnostic coverage.
 6. A fail-fast run can conclude `cancelled` because sibling points were cancelled after a failure. Classify the first real failure before treating cancellation as an infrastructure event.
 
@@ -380,7 +380,7 @@ Each request, including all its pages, has a 60-second timeout.
 A request is stageable only when all of the following hold:
 
 - The commenter has `write`, `maintain`, or `admin` repository permission.
-- The PR currently has one of the three full-sweep labels (`full-sweep-enabled`, `full-sweep-fail-fast`, or `full-sweep-fail-fast-no-canary`).
+- The PR currently has one of the three full-sweep labels (`full-sweep-enabled`, `non-canary-full-sweep-enabled`, or `full-sweep-fail-fast`).
 - The candidate is a completed `pull_request` run of `run-sweep.yml`, created while a full-sweep label was active, with conclusion `success`, `failure`, or `cancelled`.
 - The candidate is associated with the PR under the workflow's current-head/historical-pin rules.
 - Unexpired `changelog-metadata` and at least one of `results_bmk`, `eval_results_all`, or `bmk_agentic_*` exist. Failed/cancelled runs may therefore stage useful partial data, but empty or metadata-only runs cannot.

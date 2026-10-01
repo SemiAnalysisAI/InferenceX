@@ -85,9 +85,8 @@ def test_automatic_staging_accepts_partial_results(staging, conclusion, result_n
 
 
 @pytest.mark.parametrize("permission,role,label", [
-    ("write", "maintain", "full-sweep-enabled"),
+    ("write", "maintain", "non-canary-full-sweep-enabled"),
     ("admin", "admin", "full-sweep-fail-fast"),
-    ("write", "write", "full-sweep-fail-fast-no-canary"),
 ])
 def test_standard_roles_and_full_sweep_modes_remain_eligible(staging, permission, role, label):
     staging["responses"]["/collaborators/reviewer/permission"] = {

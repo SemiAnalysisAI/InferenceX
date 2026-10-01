@@ -247,8 +247,8 @@ gh pr comment "$RECOVERY_PR" \
   --body "/reuse-sweep-run $SOURCE_RUN_ID"
 ```
 
-Keep exactly one of `full-sweep-enabled`, `full-sweep-fail-fast`, or
-`full-sweep-fail-fast-no-canary`.
+Keep exactly one of `full-sweep-enabled`,
+`non-canary-full-sweep-enabled`, or `full-sweep-fail-fast`.
 
 ## 5. Append and validate the recovery changelog
 
