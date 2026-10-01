@@ -178,14 +178,6 @@ STP（Single Token Prediction，单 Token 预测）是每次前向传播生成�
 6. 将 runner 加入 sweep 流量前，在[仓库 runner 设置页](https://github.com/SemiAnalysisAI/InferenceX/settings/actions/runners)确认每个 runner 都是 **Idle**。
 7. 从计算节点验证 launcher 对 `_work`、HF cache、预置权重和 squash 镜像的挂载。root 容器不得在共享 workspace 留下 root 所有的文件。
 
-## TileRT 固定序列长度配方
-
-保留的 GLM-5.1 B200 Nscale 1k1k 和 8k1k 配置使用 srt-slurm 配方，分别由 vLLM 执行 prefill、TileRT 执行 decode，并使用 TileRT router。Python launcher 准备两个镜像，将预先准备的共享 checkpoint 挂载到 `/model`，将转换后的 decode 权重挂载到 `/tilert_weights`；主机路径统一记录在 `configs/runners.yaml` 中。作业启动时不转换 checkpoint。
-
-两个配方均使用共享的自定义固定序列长度基准脚本，以流式 chat completions 发送 16 个请求并应用 chat template。8k1k 配方要求 srt-slurm 从两个 worker 节点采集 DCGM 功耗。eval-only 作业关闭吞吐测试的遥测，并使用共享 eval 分发器。
-
-C1 低于自动 eval 选择门槛，完整资格验证应同时使用 `all-evals` 和 `full-sweep-fail-fast`。TileRT 在 GLM-5.1 一般退役之后由 [#2533](https://github.com/SemiAnalysisAI/InferenceX/pull/2533) 加入；[MODELS_zh.md](MODELS_zh.md) 记录了保留范围。
-
 ## 注册 srt-slurm 配方
 
 映射来源：[`benchmarks/multi_node/srt-slurm-recipes/RECIPES.md`](../benchmarks/multi_node/srt-slurm-recipes/RECIPES.md)。检入的配方：[`benchmarks/multi_node/srt-slurm-recipes/`](../benchmarks/multi_node/srt-slurm-recipes)。
@@ -255,7 +247,7 @@ DSpark Markov/confidence head、全部 66 个分片的 header 与 payload 边界
 全部十个 AgentX 性能点使用 DSpark K6（target 验证长度为 7）和已提交的
 golden AL 3.77。C1/2/4/8/16 使用 TP8/EP1；C48/64/96/128/256 使用
 TP8/DPA8/EP8 原生 RCCL。每个性能点运行 3600 秒。C256 全量 GSM8K 不传强制
-接受率参数。保留固定的 `rocm/atom-dev:nightly_202609161445` 镜像和 GPU KV；C1 至 C16
+接受率参数。保留固定的 `rocm/atom-dev:nightly_202609291501` 镜像和 GPU KV；C1 至 C16
 使用 BF16 KV，C48 及以上继续使用 FP8 KV，所有任务均使用 FP4 index cache、
 8192-token checkpoint 和 DEP dense FULL graph 阶梯。每个新服务进程重新捕获固定
 q7 图；必须从 `server.log` 确认 target 和 DSpark draft capture 完成。confidence
@@ -266,8 +258,11 @@ schedule 和 ragged verification 保持关闭。
 `runtime_manifest.json` 和 `server_command.txt` 保存模型/源码身份及请求的配置。
 成功启动、graph capture 和请求执行仍需运行时日志证明。
 
-固定镜像为官方 ATOM nightly `rocm/atom-dev:nightly_202609161445`，已包含已合入的
+固定镜像为官方 ATOM nightly `rocm/atom-dev:nightly_202609291501`（ATOM `0.1.7.dev46+g74fd942b0`，
+ROCm 7.2.4），已包含已合入的
 [ROCm/ATOM#2233](https://github.com/ROCm/ATOM/pull/2233) inference-mode 修复。
+自该镜像起，ATOM 在 gfx950 上默认以 E8M0 存储检查点的 `ue8m0` FP8 block scale
+（[ROCm/ATOM#2419](https://github.com/ROCm/ATOM/pull/2419)），2 的幂次 scale 可被精确表示。
 配方不再在运行时修改 AITER 源码；TP 通信融合、DSpark K6 和 graph capture
 直接使用镜像内实现。
 
@@ -555,8 +550,6 @@ uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with p
   --runner-type <runner> \
   --seq-lens 8k1k
 ```
-
-仅在明确选择保留的 `glm5.1-fp8-b200-tilert` 配置时使用 `--seq-lens 1k1k`；其他 1k1k 场景已退役。
 
 必须检查而非仅计数所生成的 `model`、`image`、`runner`、scenario、并发、`max-model-len`、TP/PP/EP/DCP/PCP、prefill/decode worker block、hardware、router、KV transfer、eval flag、`additional-settings` 和 `spec-decoding`。
 

@@ -26,14 +26,14 @@ modifier 中的任意一个。这类运行提供吞吐量证据，不提供模�
 
 | 需求 | 生成器/工作流模式 | 运行时行为 |
 |---|---|---|
-| 常规 sweep | 不加 eval 选项 | 吞吐量作业，加上选定的 8k/1k eval 子集 |
+| 常规 sweep | 不加 eval 选项 | 吞吐量作业，加上选定的 8k/1k eval 子集和 agentic GSM8K 子集 |
 | 仅吞吐量 | `--no-evals` | 不生成 eval 作业 |
 | 仅选定的 eval 子集 | `--evals-only` | 作业带有 `RUN_EVAL=true`、`EVAL_ONLY=true` |
 | 仅运行所有符合条件的 eval | `--all-evals` | 等价于 `--evals-only --all-evals`；包含全部定长序列 8k/1k 行，以及单节点和多节点 agentic GSM8K 行 |
 | 在一个 recipe 中先跑吞吐量再跑 eval | `RUN_EVAL=true`、`EVAL_ONLY=false` | 启动服务，运行吞吐量，然后执行 `run_eval` |
 | 对新启动的服务仅运行 eval | `RUN_EVAL=true`、`EVAL_ONLY=true` | launcher 扩大 eval context，跳过吞吐量并运行 eval |
 
-默认选择会区分场景。单节点定长序列 eval 对每个 8k/1k 的模型/runner/framework/precision/并行配置分组选取符合条件的中位和最高并发；多节点 eval 对每种拓扑选取符合条件的最高并发。定长序列中低于 16 的并发不会被选中。Kimi K3 和 MiniMax M3 的 AgentX 行在每个生成的测试点自动运行厂商评估，包括低并发测试点。其他 agentic 评估需要显式启用，并选取每个部署分组中符合条件的最高并发。参见 [`mark_eval_entries()` 和 `mark_all_eval_entries()`](../infx/matrix/generate.py)。
+默认选择会区分场景。单节点定长序列 eval 对每个 8k/1k 的模型/runner/framework/precision/并行配置分组选取符合条件的中位和最高并发；多节点 eval 对每种拓扑选取符合条件的最高并发。定长序列中低于 16 的并发不会被选中。Kimi K3 和 MiniMax M3 的 AgentX 行在每个生成的测试点自动运行厂商评估，包括低并发测试点。其他 agentic 行默认选择 GSM8K，并选取每个部署分组中符合条件的最高并发；该评估作为独立的 eval-only 作业运行，因此 agentic 吞吐量覆盖范围不变。参见 [`mark_eval_entries()` 和 `mark_all_eval_entries()`](../infx/matrix/generate.py)。
 
 Kimi K3 在 AMD 和 NVIDIA 的单节点及多节点 recipe 上自动运行 `kimi-vendor` / `kimi_tool_call_schema_full`。完整套件对 204 个独立 schema 用例分别执行流式和非流式请求，共产生 408 项检查。快速诊断时，仍可显式设置工作流输入 `eval-framework=kimi-vendor` 和 `eval-suite=kimi_tool_call_schema`，运行一个用例、两项检查的冒烟评估。`--trim-conc` 只裁剪部署测试点，不缩减套件用例数。MiniMax M3 在两家硬件厂商上自动运行 `minimax-vendor` / `minimax_m3_full`，覆盖全部 102 个厂商用例；仍可通过显式覆盖选择单用例 `minimax_m3_smoke`。定长序列的 GSM8K 选择策略保持不变。
 
@@ -194,7 +194,7 @@ gh run download "$RUN_ID" --repo SemiAnalysisAI/InferenceX \
 
 [`install_agentic_deps()`](../benchmarks/benchmark_lib.sh) 在安装可编辑模式的 `utils/aiperf` 时直接声明 AgentX client 所需的依赖，并使用调用方提供的 `AIPERF_PYTHON_VERSION` 将它们安装到隔离的 `AIPERF_RUNTIME_DIR` 环境中。
 
-AgentX 是 AIPerf `inferencex-agentx-mvp` trace replay，不是固定 token 的合成 benchmark。仓库默认设置对每条 trajectory lane 额外执行十个 warmup 请求，并使用 recipe 配置的 profile 时长。`agentx-fast` 强制每条 lane 只运行一个 warmup 请求，并将 profile 设为 1,200 秒。它只影响单节点和多节点 AgentX 吞吐量；定长序列吞吐量与 eval 保持 canonical。Fast 运行不符合 artifact reuse 条件（[工作流策略](../../.github/workflows/README.md#agentx-fast-mode)、[fast replay 设置](../benchmarks/benchmark_lib.sh#L3255-L3259)）。
+AgentX 是 AIPerf `agentx` trace replay，不是固定 token 的合成 benchmark。仓库默认设置对每条 trajectory lane 额外执行十个 warmup 请求，并使用 recipe 配置的 profile 时长。`agentx-fast` 强制每条 lane 只运行一个 warmup 请求，并将 profile 设为 1,200 秒。它只影响单节点和多节点 AgentX 吞吐量；定长序列吞吐量与 eval 保持 canonical。Fast 运行不符合 artifact reuse 条件（[工作流策略](../../.github/workflows/README.md#agentx-fast-mode)、[fast replay 设置](../benchmarks/benchmark_lib.sh#L3255-L3259)）。
 
 每个 AgentX 吞吐量并发点都必须使用新启动的服务。矩阵为每个点生成独立作业，replay client 会拒绝多个并发值。AgentX 不清空缓存，也不复用正在运行的服务来测试另一个并发点。同一测试点的预热和正式测量共用服务。此规则不改变定长序列 sweep 或评分 eval 的批量执行行为。
 
@@ -237,7 +237,7 @@ Fast 结果只能作为 bring-up 证据，绝不能替代 canonical candidate。
 
 ## 8. 保留 trace 与运行 provenance
 
-AgentX 默认 replay 已记录的 assistant response。实时服务输出会被测量，但构造后续 turn 时会丢弃。只有在明确要进行不同的 live-assistant 实验时，才设置 `AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES=1`。除非用 `WEKA_LOADER_OVERRIDE` 固定，否则所选 trace corpus 依赖模型 family；resolver 会同时记录 loader 与 Hugging Face dataset（[trace 解析](../benchmarks/benchmark_lib.sh#L3165-L3234)、[replay 语义](../benchmarks/benchmark_lib.sh#L3236-L3366)）。
+AgentX 默认 replay 已记录的 assistant response。实时服务输出会被测量，但构造后续 turn 时会丢弃。除非用 `WEKA_LOADER_OVERRIDE` 固定，否则所选 trace corpus 依赖模型 family；resolver 会同时记录 loader 与 Hugging Face dataset（[trace 解析](../benchmarks/benchmark_lib.sh#L3165-L3234)、[replay 语义](../benchmarks/benchmark_lib.sh#L3236-L3366)）。
 
 立即记录 orchestration provenance：
 

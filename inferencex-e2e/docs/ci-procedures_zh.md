@@ -241,7 +241,7 @@ B200 Kimi 配方采用 DCP8，且关闭 Mooncake Offload。Master Config 记录 
 | `evals-only` | 禁用吞吐量，仅运行选定 Eval 条目；与 `all-evals` 组合即只运行所有 Eval | 不可以 |
 | `agentx-fast` | 对 AgentX 吞吐量 Lane，在强制 Primer 后只加一次额外 Warmup Request，并使用 20 分钟 Profile；固定序列与 Eval 设置仍为规范值 | 不可以 |
 
-修改被识别的主标签或修饰标签会共享活动扫描的 Concurrency Group，通常会取消并重启当前 Run。`skip_queue`、Patchwork、Waiver 与 Checklist 标签是 Gate/优先级输入，不是主扫描模式。Head Commit 含 `[skip-sweep]` 只会跳过 PR 基准 Setup；Changelog/复用检查仍会运行，推送到 `main` 时运行的 `merge-ingest.yml` 会忽略该标记。
+修改被识别的主标签或修饰标签会共享活动扫描的 Concurrency Group，通常会取消并重启当前 Run。Head Commit 含 `[skip-sweep]` 只会跳过 PR 基准 Setup；Changelog/复用检查仍会运行，推送到 `main` 时运行的 `merge-ingest.yml` 会忽略该标记。
 
 ## Canary 与 Fail-fast 语义
 
@@ -374,6 +374,8 @@ Klaud 和恢复工具继续使用现有的 `gh` 认证。GitHub CLI 跟随分页
 ```
 
 不提供 ID 时，Workflow 会选择 PR Branch 上最新的可暂存已结束 Run，并要求其 Head SHA 仍在 PR Commit 列表中。指定 ID 时允许使用明确关联的历史 Run。Workflow 会确认所选 Run，向 InferenceX-app 派发 `stage-results` 事件，并由 [`stage-results-callback.yml`](../../.github/workflows/stage-results-callback.yml) 用成功图表或失败链接替换确认评论。
+
+格式正确的 `/use <run-id>` 复用请求也会触发此 Workflow，并按相同规则暂存所指定的 Run，同时保留正常的复用处理。格式错误的 `/use` 评论交由复用 Workflow 处理，不会触发暂存。
 
 预发布会保留之前已暂存的 Run。再次暂存同一个 Run ID 会更新该 Run 的预发布数据。必须保留源 Run ID 与下游 App Workflow 链接；预发布成功不证明生产复用资格或合并后入库成功。
 

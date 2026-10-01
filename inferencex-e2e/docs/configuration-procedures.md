@@ -196,14 +196,6 @@ Routing is by `cluster:<id>` label, not by runner-name prefix. Keep `<base-name>
 6. Verify every runner is **Idle** in [repository runner settings](https://github.com/SemiAnalysisAI/InferenceX/settings/actions/runners) before adding it to sweep traffic.
 7. Verify launcher mounts for `_work`, HF cache, staged weights, and squash images from a compute node. Root containers must not leave root-owned files in the shared workspace.
 
-## TileRT fixed-sequence recipes
-
-The retained GLM-5.1 B200 Nscale 1k1k and 8k1k configurations use srt-slurm recipes with vLLM prefill, TileRT decode, and the TileRT router. The Python launcher stages both images and mounts the prepared shared checkpoint at `/model` and converted decode weights at `/tilert_weights`; their host paths belong in `configs/runners.yaml`. Checkpoint conversion is not part of job startup.
-
-Both recipes use the shared custom fixed-sequence benchmark with streaming chat completions, 16 requests, and chat-template rendering. The 8k1k recipe requires srt-slurm DCGM telemetry from both worker nodes. Eval-only launches disable throughput telemetry and use the shared eval dispatcher.
-
-Since C1 is below automatic eval selection, use `all-evals` alongside `full-sweep-fail-fast` for full qualification. TileRT was added after the general GLM-5.1 retirement in [#2533](https://github.com/SemiAnalysisAI/InferenceX/pull/2533); [MODELS.md](MODELS.md) records this retained scope.
-
 ## Register an srt-slurm recipe
 
 Mapping source: [`benchmarks/multi_node/srt-slurm-recipes/RECIPES.md`](../benchmarks/multi_node/srt-slurm-recipes/RECIPES.md). Checked-in recipes: [`benchmarks/multi_node/srt-slurm-recipes/`](../benchmarks/multi_node/srt-slurm-recipes).
@@ -275,7 +267,7 @@ All ten AgentX throughput points use DSpark K6 (target verification length 7)
 and the committed golden AL 3.77. C1/2/4/8/16 use TP8/EP1;
 C48/64/96/128/256 use TP8/DPA8/EP8 with native RCCL. Each point runs for
 3600 seconds. The C256 full GSM8K eval omits forced acceptance. Keep the
-pinned `rocm/atom-dev:nightly_202609161445` image and GPU-only KV. C1 through C16 use
+pinned `rocm/atom-dev:nightly_202609291501` image and GPU-only KV. C1 through C16 use
 BF16 KV, while C48 and above retain FP8 KV; all points use the FP4 index cache,
 8192-token checkpoints and DEP dense FULL graph ladder. Fixed q7 graphs are
 captured in each new server; confirm target and DSpark draft capture in
@@ -288,8 +280,12 @@ record model/source identity and requested settings. Successful startup,
 graph capture and requests require runtime log evidence.
 
 The pinned image is the official ATOM nightly
-`rocm/atom-dev:nightly_202609161445`, which includes the merged
+`rocm/atom-dev:nightly_202609291501` (ATOM `0.1.7.dev46+g74fd942b0`, ROCm 7.2.4),
+which includes the merged
 [ROCm/ATOM#2233](https://github.com/ROCm/ATOM/pull/2233) inference-mode fix.
+From this image ATOM stores the checkpoint's `ue8m0` FP8 block scales as E8M0
+on gfx950 by default ([ROCm/ATOM#2419](https://github.com/ROCm/ATOM/pull/2419));
+the powers-of-two scales are represented exactly.
 The recipe does not patch AITER source at runtime; TP communication
 fusion, DSpark K6 and graph capture use the implementation shipped in the image.
 
@@ -619,8 +615,6 @@ uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with p
   --runner-type <runner> \
   --seq-lens 8k1k
 ```
-
-Use `--seq-lens 1k1k` only when explicitly selecting the retained `glm5.1-fp8-b200-tilert` configuration; other 1k1k coverage is retired.
 
 Inspect, do not merely count, the emitted `model`, `image`, `runner`, scenario, concurrency, `max-model-len`, TP/PP/EP/DCP/PCP, prefill/decode worker blocks, hardware, router, KV transfer, eval flags, `additional-settings`, and `spec-decoding`.
 

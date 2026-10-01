@@ -96,11 +96,6 @@ on: # zizmor: ignore[concurrency-limits]
                 required: false
                 type: boolean
                 default: false
-            pr-labels-json:
-                description: "Labels from the source PR for priority scoring"
-                required: false
-                type: string
-                default: "[]"
     workflow_call:
         secrets:
           INFERENCEX_OFFICIAL_RO_HF_TOKEN:
@@ -198,11 +193,6 @@ on: # zizmor: ignore[concurrency-limits]
                 required: false
                 type: boolean
                 default: false
-            pr-labels-json:
-                description: "Labels from the source PR for priority scoring"
-                required: false
-                type: string
-                default: "[]"
 
 env:
   PYTHONPATH: ${{ github.workspace }}/inferencex-e2e
@@ -267,7 +257,6 @@ jobs:
             - id: get-jobs
               env:
                   GENERATE_COMMAND: ${{ inputs.generate-cli-command || github.event.inputs.generate-cli-command }}
-                  PR_LABELS: ${{ inputs.pr-labels-json || toJson(github.event.pull_request.labels.*.name) }}
                   CHANGELOG_BASE_REF: ${{ inputs.changelog-base-ref }}
                   CHANGELOG_HEAD_REF: ${{ inputs.changelog-head-ref }}
                   TRIM_CONC: ${{ inputs.trim-conc }}
@@ -336,8 +325,7 @@ jobs:
                       python -P -m infx.workflows.ci_priority \
                       --policy "${PRIORITY_ROOT}/configs/ci-priority.yaml" \
                       --event-name "${GITHUB_EVENT_NAME}" \
-                      --queue-namespace "${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}:${family}" \
-                      --labels-json "$PR_LABELS"
+                      --queue-namespace "${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}:${family}"
                   }
                   AGENTIC=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if x.get('scenario-type') == 'agentic-coding' and 'prefill' not in x and not x.get('eval-only', False)]))" | score_matrix agentic)
                   AGENTIC_EVAL=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if x.get('scenario-type') == 'agentic-coding' and 'prefill' not in x and x.get('run-eval', False)]))" | score_matrix agentic-eval)
