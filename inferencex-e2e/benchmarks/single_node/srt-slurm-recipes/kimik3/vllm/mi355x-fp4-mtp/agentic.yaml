@@ -298,3 +298,24 @@ override_tp8_c75_dcp8_simple:
       KV_OFFLOADING: 'dram'
       TOTAL_CPU_DRAM_GB: '1799'
       SPEC_DECODING: 'mtp'
+
+override_tp8_c80_dcp8_simple:
+  roles:
+    agg:
+      args:
+        decode-context-parallel-size: 8
+        dcp-comm-backend: a2a
+        max-num-seqs: 160
+        max-num-batched-tokens: 8192
+        gpu-memory-utilization: 0.9
+        compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,127,128,129,130,131,132,133,134,135,136,137,138,139,140,141,142,143,144,145,146,147,148,149,150,151,152,153,154,155,156,157,158,159,160,256,512,1024,2048,4096,8192]}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":224875000000,"lazy_offload":false}}'
+      env:
+        VLLM_USE_BREAKABLE_CUDAGRAPH: '0'
+        PYTHONHASHSEED: '42'
+  benchmark:
+    env:
+      CONC: '80'
+      KV_OFFLOADING: 'dram'
+      TOTAL_CPU_DRAM_GB: '1799'
+      SPEC_DECODING: 'mtp'
