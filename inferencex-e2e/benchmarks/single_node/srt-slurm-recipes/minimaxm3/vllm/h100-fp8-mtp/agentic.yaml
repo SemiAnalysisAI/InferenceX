@@ -152,6 +152,8 @@ override_tp8_c6_dram:
   roles:
     agg:
       args:
+        # Leave room for Mooncake TCP CUDA contexts on GPU 0 during KV transfers.
+        gpu-memory-utilization: 0.85
         max-num-seqs: 12
         max-cudagraph-capture-size: 48
         kv-transfer-config: '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"load_async":true}}'
@@ -195,6 +197,8 @@ override_tp8_c8_dram:
   roles:
     agg:
       args:
+        # Leave room for Mooncake TCP CUDA contexts on GPU 0 during KV transfers.
+        gpu-memory-utilization: 0.85
         max-num-seqs: 16
         max-cudagraph-capture-size: 64
         kv-transfer-config: '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"load_async":true}}'

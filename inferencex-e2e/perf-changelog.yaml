@@ -9216,3 +9216,12 @@
     - "Use TCP transport for the single-node Mooncake DRAM store in the concurrency 6 and 8 variants."
     - "将并发数为 6 和 8 的单节点 Mooncake DRAM 存储变体切换为 TCP 传输。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3620
+
+- config-keys:
+    - minimaxm3-fp8-h100-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Reserve GPU memory for Mooncake TCP transfers in the MiniMax-M3 H100 DRAM variants."
+    - "为 MiniMax-M3 H100 DRAM 变体的 Mooncake TCP 传输预留 GPU 内存。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3620
