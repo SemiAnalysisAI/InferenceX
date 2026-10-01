@@ -29,11 +29,6 @@ on:
         description: "One-shot queue token generated for this job"
         required: true
         type: string
-      skip-queue-pr:
-        description: "Requested skip_queue PR number"
-        required: false
-        type: string
-        default: ''
       dp-attn:
         required: true
         type: boolean
@@ -169,39 +164,18 @@ jobs:
         vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
         (
           vars.NODE_SLOT_SCHEDULER_ENABLED == 'true' &&
-          (
-            inputs.skip-queue-pr != '' &&
-            format(
-              '["self-hosted",{0},{1},{2},{3},{4}]',
-              toJSON(inputs.runner),
-              '"nodes:1"',
-              toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
-              toJSON(format('ci-attempt-{0}', github.run_attempt)),
-              toJSON(format('ci-skip-queue-pr-{0}', inputs.skip-queue-pr))
-            ) ||
-            format(
-              '["self-hosted",{0},{1},{2},{3}]',
-              toJSON(inputs.runner),
-              '"nodes:1"',
-              toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
-              toJSON(format('ci-attempt-{0}', github.run_attempt))
-            )
+          format(
+            '["self-hosted",{0},{1},{2},{3}]',
+            toJSON(inputs.runner),
+            '"nodes:1"',
+            toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
+            toJSON(format('ci-attempt-{0}', github.run_attempt))
           ) ||
-          (
-            inputs.skip-queue-pr != '' &&
-            format(
-              '["self-hosted",{0},{1},{2},{3}]',
-              toJSON(inputs.runner),
-              toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
-              toJSON(format('ci-attempt-{0}', github.run_attempt)),
-              toJSON(format('ci-skip-queue-pr-{0}', inputs.skip-queue-pr))
-            ) ||
-            format(
-              '["self-hosted",{0},{1},{2}]',
-              toJSON(inputs.runner),
-              toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
-              toJSON(format('ci-attempt-{0}', github.run_attempt))
-            )
+          format(
+            '["self-hosted",{0},{1},{2}]',
+            toJSON(inputs.runner),
+            toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
+            toJSON(format('ci-attempt-{0}', github.run_attempt))
           )
         ) ||
         format('[{0}]', toJSON(inputs.runner))

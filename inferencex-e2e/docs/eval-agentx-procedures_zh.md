@@ -194,7 +194,7 @@ gh run download "$RUN_ID" --repo SemiAnalysisAI/InferenceX \
 
 [`install_agentic_deps()`](../benchmarks/benchmark_lib.sh) 在安装可编辑模式的 `utils/aiperf` 时直接声明 AgentX client 所需的依赖，并使用调用方提供的 `AIPERF_PYTHON_VERSION` 将它们安装到隔离的 `AIPERF_RUNTIME_DIR` 环境中。
 
-AgentX 是 AIPerf `inferencex-agentx-mvp` trace replay，不是固定 token 的合成 benchmark。仓库默认设置对每条 trajectory lane 额外执行十个 warmup 请求，并使用 recipe 配置的 profile 时长。`agentx-fast` 强制每条 lane 只运行一个 warmup 请求，并将 profile 设为 1,200 秒。它只影响单节点和多节点 AgentX 吞吐量；定长序列吞吐量与 eval 保持 canonical。Fast 运行不符合 artifact reuse 条件（[工作流策略](../../.github/workflows/README.md#agentx-fast-mode)、[fast replay 设置](../benchmarks/benchmark_lib.sh#L3255-L3259)）。
+AgentX 是 AIPerf `agentx` trace replay，不是固定 token 的合成 benchmark。仓库默认设置对每条 trajectory lane 额外执行十个 warmup 请求，并使用 recipe 配置的 profile 时长。`agentx-fast` 强制每条 lane 只运行一个 warmup 请求，并将 profile 设为 1,200 秒。它只影响单节点和多节点 AgentX 吞吐量；定长序列吞吐量与 eval 保持 canonical。Fast 运行不符合 artifact reuse 条件（[工作流策略](../../.github/workflows/README.md#agentx-fast-mode)、[fast replay 设置](../benchmarks/benchmark_lib.sh#L3255-L3259)）。
 
 每个 AgentX 吞吐量并发点都必须使用新启动的服务。矩阵为每个点生成独立作业，replay client 会拒绝多个并发值。AgentX 不清空缓存，也不复用正在运行的服务来测试另一个并发点。同一测试点的预热和正式测量共用服务。此规则不改变定长序列 sweep 或评分 eval 的批量执行行为。
 
@@ -237,7 +237,7 @@ Fast 结果只能作为 bring-up 证据，绝不能替代 canonical candidate。
 
 ## 8. 保留 trace 与运行 provenance
 
-AgentX 默认 replay 已记录的 assistant response。实时服务输出会被测量，但构造后续 turn 时会丢弃。只有在明确要进行不同的 live-assistant 实验时，才设置 `AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES=1`。除非用 `WEKA_LOADER_OVERRIDE` 固定，否则所选 trace corpus 依赖模型 family；resolver 会同时记录 loader 与 Hugging Face dataset（[trace 解析](../benchmarks/benchmark_lib.sh#L3165-L3234)、[replay 语义](../benchmarks/benchmark_lib.sh#L3236-L3366)）。
+AgentX 默认 replay 已记录的 assistant response。实时服务输出会被测量，但构造后续 turn 时会丢弃。除非用 `WEKA_LOADER_OVERRIDE` 固定，否则所选 trace corpus 依赖模型 family；resolver 会同时记录 loader 与 Hugging Face dataset（[trace 解析](../benchmarks/benchmark_lib.sh#L3165-L3234)、[replay 语义](../benchmarks/benchmark_lib.sh#L3236-L3366)）。
 
 立即记录 orchestration provenance：
 
