@@ -608,6 +608,20 @@ class GraphReplayDefaults(unittest.TestCase):
         self.assertTrue(_gate(nccl, "low-latency", phase="decode").cuda_graph_supported)
 
 
+class GinWindowOrdering(unittest.TestCase):
+    """Relaxed-ordering rows must not merge into the strict-ordered series they would replace."""
+
+    def test_only_relaxed_scale_out_rows_carry_the_suffix(self):
+        module = _import_stubbed("ep_deepep_v2", deep_ep=_deep_ep("ElasticBuffer", "Buffer"))
+        relaxed = {"EP_WIN_RELAXED_ORDERING": "1"}
+        for world_size, env, suffixed in ((16, relaxed, True), (16, {}, False), (8, relaxed, False)):
+            with self.subTest(world_size=world_size, env=env), \
+                    mock.patch.dict(os.environ, env, clear=True):
+                backend = module.DeepEPV2Backend(
+                    args(scale_up_domain=8, runner="h200-dgxc"), 0, world_size, 0, "cpu")
+                self.assertEqual(backend.kernel_generation.endswith("-relaxed-ordering"), suffixed)
+
+
 class LowLatencyCapDecoupling(unittest.TestCase):
     """The LL receive size and the measured ladder must stay two numbers -- sizing the receive
     from `max(ladder)` would shift every rung. Driven through the adapter with deep_ep stubbed,

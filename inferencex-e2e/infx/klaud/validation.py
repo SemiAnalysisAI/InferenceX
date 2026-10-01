@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import tempfile
 from copy import deepcopy
 from pathlib import Path
@@ -32,7 +33,7 @@ def benchmark_points(entries: list[dict]) -> set[tuple]:
     }
 
 
-def canonical_matrix(repository: str, head: str, family: str, *, historical: bool = False) -> dict:
+def canonical_matrix(repository: str, head: str, family: str) -> dict:
     """Generate the unfiltered family from exact-head YAML using trusted local code.
 
     Candidate source is data only. A future generator-policy change can require manual
@@ -51,13 +52,8 @@ def canonical_matrix(repository: str, head: str, family: str, *, historical: boo
     paths = {item["path"] for item in tree["tree"]}
     if "inferencex-e2e" in paths:
         prefix = "inferencex-e2e/"
-    elif historical and "configs" not in paths:
-        prefix = ".github/"
     master = yaml.safe_load(github.file_at(repository, head, prefix + source))
     runners = yaml.safe_load(github.file_at(repository, head, prefix + "configs/runners.yaml"))
-    # Old runner files were the labels mapping itself. Never synthesize hardware facts.
-    if historical and "labels" not in runners:
-        runners = {"labels": runners}
     # Only the selected family is relevant; retired sibling schemas may have changed.
     entries = generate_test_config_sweep(
         SimpleNamespace(config_keys=[key]),
@@ -74,6 +70,59 @@ def canonical_matrix(repository: str, head: str, family: str, *, historical: boo
             "all": [{**row, "recipe-fingerprint": recipe_fingerprint(row)} for row in entries]
         },
         "evals": evals,
+    }
+
+
+PRODUCER_UNAVAILABLE = "Baseline producer family cannot be regenerated"
+
+
+class ProducerRegenerationError(VerificationError):
+    """A producer revision's own tooling could not regenerate its family.
+
+    The message is the fixed public reason; ``stderr`` holds the failing tool's output for
+    the operator and never becomes public.
+    """
+
+    def __init__(self, stderr: str) -> None:
+        super().__init__(PRODUCER_UNAVAILABLE)
+        self.stderr = stderr
+
+
+def producer_matrix(repository: str, head: str, family: str) -> dict:
+    """Regenerate a published producer's family with the producer revision's own generator.
+
+    This runs another revision's code, which inherits only ``INHERITED_ENV``: call it only
+    where no credentials are held, as the ``regenerate-producers`` step does.
+    """
+    from infx.matrix.plan import recipe_fingerprint
+    from infx.matrix.revision import snapshot
+
+    OwnedCandidate(id="0" * 16 + "-" + "0" * 16, family=family, base=head)
+    try:
+        missing = subprocess.run(
+            ["git", "cat-file", "-e", f"{head}^{{commit}}"], capture_output=True, check=False
+        ).returncode
+        if missing:
+            subprocess.run(
+                ["git", "fetch", "--quiet", "--no-tags", f"https://github.com/{repository}", head],
+                capture_output=True,
+                check=True,
+                timeout=300,
+            )
+        with snapshot(head) as producer:
+            rows = producer.generate([family.split(":", 1)[1]], ["--no-evals"])
+    except subprocess.SubprocessError as error:
+        stderr = getattr(error, "stderr", None) or b""
+        text = stderr.decode(errors="replace") if isinstance(stderr, bytes) else stderr
+        raise ProducerRegenerationError(text) from error
+    except (OSError, ValueError) as error:
+        raise ProducerRegenerationError(str(error)) from error
+    if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
+        raise ProducerRegenerationError("the generator did not print a list of matrix rows")
+    return {
+        "single_node": {
+            "all": [{**row, "recipe-fingerprint": recipe_fingerprint(row)} for row in rows]
+        }
     }
 
 

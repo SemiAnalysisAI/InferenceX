@@ -9,6 +9,9 @@
 
 使用本页添加和运行评分 eval、操作 AgentX trace replay、保留证据，并判断长时间运行是否应继续。命令均假定当前目录为 `inferencex-e2e/`；请替换 `<ANGLE_BRACKETS>` 中的值。
 
+若只需对已有服务运行回放客户端，请参阅[独立运行 AgentX-Harness](agentx-standalone_zh.md)。
+该指南包含安装步骤和直接执行的 `aiperf profile` 命令，无需 CI 或 Slurm。
+
 ## 1. 选择正确的执行模式
 
 若 PR sweep 只需测试吞吐量，请在相应的 `perf-changelog.yaml` 条目中设置
@@ -111,6 +114,8 @@ python3 -m infx.evals.validate_scores --model-prefix "$MODEL_PREFIX"
 4. 吞吐量路径立即返回或被跳过。
 5. 运行 `run_eval` 和 artifact staging。
 
+原生多节点 post-eval 从 `/model` 读取挂载的检查点，并仅在评估进程中启用数据集下载，不改变工作进程环境。上下文查询先读取本地 `config.json` 中的数值上限，再回退到 Transformers；显式设置的 `EVAL_MAX_MODEL_LEN` 仍优先。
+
 相关实现：[context 设置](../benchmarks/benchmark_lib.sh#L2016-L2042)、[eval 分派与失败策略](../benchmarks/benchmark_lib.sh#L2893-L3073) 和[工作流输入](../../.github/workflows/benchmark-tmpl.yml#L40-L57)。
 
 不要在吞吐量规格的服务已经运行后才切换 `EVAL_ONLY`，并假定 context 会随之变化。应通过 recipe 重启。Eval-only 模式会在暂存已有 artifact 后返回 eval 失败；在工作流中，上传步骤使用 `always()`，并位于分数校验前，因此失败证据仍会保留（[单节点上传与 gate](../../.github/workflows/benchmark-tmpl.yml#L467-L494)、[多节点上传与 gate](../../.github/workflows/benchmark-multinode-tmpl.yml#L487-L518)）。
@@ -191,7 +196,9 @@ gh run download "$RUN_ID" --repo SemiAnalysisAI/InferenceX \
 
 AgentX 是 AIPerf `inferencex-agentx-mvp` trace replay，不是固定 token 的合成 benchmark。仓库默认设置对每条 trajectory lane 额外执行十个 warmup 请求，并使用 recipe 配置的 profile 时长。`agentx-fast` 强制每条 lane 只运行一个 warmup 请求，并将 profile 设为 1,200 秒。它只影响单节点和多节点 AgentX 吞吐量；定长序列吞吐量与 eval 保持 canonical。Fast 运行不符合 artifact reuse 条件（[工作流策略](../../.github/workflows/README.md#agentx-fast-mode)、[fast replay 设置](../benchmarks/benchmark_lib.sh#L3255-L3259)）。
 
-对于多节点 srt-slurm 作业，benchmark client 与 frontend 可能运行在不同主机上。`srt_agentic.sh` 会优先使用显式提供的 `AIPERF_SERVER_URL`；否则从 `SRT_FRONTEND_HOST` 和 `SRT_FRONTEND_PORT` 推导地址；仅在没有远端 endpoint 时回退到 `localhost:$PORT`。Trace replay 和并发点之间的 drain 检查必须使用同一个解析后的 endpoint。
+每个 AgentX 吞吐量并发点都必须使用新启动的服务。矩阵为每个点生成独立作业，replay client 会拒绝多个并发值。AgentX 不清空缓存，也不复用正在运行的服务来测试另一个并发点。同一测试点的预热和正式测量共用服务。此规则不改变定长序列 sweep 或评分 eval 的批量执行行为。
+
+对于多节点 srt-slurm 作业，benchmark client 与 frontend 可能运行在不同主机上。`srt_agentic.sh` 会优先使用显式提供的 `AIPERF_SERVER_URL`；否则从 `SRT_FRONTEND_HOST` 和 `SRT_FRONTEND_PORT` 推导地址；仅在没有远端 endpoint 时回退到 `localhost:$PORT`。
 
 对于未发布到 package index 的 engine 或 router wheel，必须保证构建可复现且 artifact 不可变：在 launcher 旁签入源码 patch 与构建器，打 patch 前校验上游 wheel 的 digest，分配明确的 local version，并通过带 SHA256 fragment 的精确 URL 安装已发布 artifact。本地 backport 不得冒用尚未发布的上游版本号。
 
