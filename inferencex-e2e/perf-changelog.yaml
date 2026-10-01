@@ -9176,4 +9176,4 @@
   description:
     - "Enable strict measured power (require-power) for the full Kimi-K3 B300 AgentX curve (conc-list [1,2,4,8,16,24,32,40,48,56,70])."
     - "为完整 Kimi-K3 B300 AgentX 曲线（conc-list [1,2,4,8,16,24,32,40,48,56,70]）启用严格实测功耗（require-power）。"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/0
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3632
