@@ -3280,6 +3280,10 @@ build_replay_cmd() {
         duration=1200
         warmup_requests_per_lane=1
     fi
+    # Op-attribution profiling replays only as long as its windows need.
+    if [[ -n "${INFX_PROFILE_DURATION:-}" ]]; then
+        duration="$INFX_PROFILE_DURATION"
+    fi
 
     export AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES="${AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES}"
     # Dataset configuration takes 4-5 min on fast /tmp (B300) but reached 14 min

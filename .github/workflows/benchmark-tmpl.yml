@@ -94,6 +94,11 @@ on:
         required: false
         type: string
         default: ""
+      profile:
+        description: "Op-attribution profiling settings (JSON, vLLM srt-slurm recipes); empty disables"
+        required: false
+        type: string
+        default: ""
 env:
   PYTHONPATH: ${{ github.workspace }}/inferencex-e2e
   INFERENCEX_E2E_ROOT: ${{ github.workspace }}
@@ -150,6 +155,7 @@ env:
   AIPERF_EXPERIMENTAL_FAST: ${{ inputs.agentx-fast && '1' || '0' }}
   EVAL_LIMIT: ${{ inputs.eval-limit }}
   SWEBENCH_GEN_MODE: ${{ inputs.swebench-gen-mode || 'agentic' }}
+  INFX_PROFILE: ${{ inputs.profile }}
   AIPERF_FAILED_REQUEST_THRESHOLD: '0.10'
   RESULT_DIR: /workspace/results
   PYTHONDONTWRITEBYTECODE: '1'
@@ -403,6 +409,48 @@ jobs:
             !${{ env.INFERENCEX_E2E_ROOT }}/results/aiperf_artifacts/inputs.json
             !${{ env.INFERENCEX_E2E_ROOT }}/results/aiperf_artifacts/profile_export_raw.jsonl
           if-no-files-found: ignore
+
+      - name: Upload op-attribution profile
+        if: ${{ always() && inputs.profile != '' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: profile_${{ env.RESULT_FILENAME }}
+          path: ${{ env.INFERENCEX_E2E_ROOT }}/infx-profile.tar
+          compression-level: 1
+          if-no-files-found: warn
+
+      # Per-step breakdown of the profile above: one file per step and rank,
+      # with index.json and report.json. Best effort: the raw profile is the record.
+      - name: Extract op-attribution profile by step
+        if: ${{ always() && inputs.profile != '' }}
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          cd "$INFERENCEX_E2E_ROOT"
+          if [[ ! -f infx-profile.tar ]]; then
+            echo "No profile to extract"
+            exit 0
+          fi
+          rm -rf infx-profile-raw infx-profile-steps
+          mkdir -p infx-profile-raw
+          tar xf infx-profile.tar -C infx-profile-raw
+          if ! "${INFERENCEX_RESULTS_PYTHON:-python3}" benchmarks/profiling/vllm/extract.py \
+              infx-profile-raw/infx_profile infx-profile-steps > infx-profile-extract.log 2>&1; then
+            tail -50 infx-profile-extract.log
+            exit 1
+          fi
+          cp infx-profile-extract.log infx-profile-steps/extract.log
+          python3 -c "import json; r = json.load(open('infx-profile-steps/report.json')); print(json.dumps({k: v for k, v in r.items() if k != 'traces'}, indent=1)); [print(json.dumps(t)) for t in r['traces']]"
+          rm -rf infx-profile-raw
+
+      - name: Upload op-attribution profile by step
+        if: ${{ always() && inputs.profile != '' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: profile_steps_${{ env.RESULT_FILENAME }}
+          path: ${{ env.INFERENCEX_E2E_ROOT }}/infx-profile-steps/
+          compression-level: 0
+          if-no-files-found: warn
 
       - name: Upload server logs
         if: always()

@@ -136,6 +136,123 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
             raise ValueError(f"Single-node SRT {name}: recipe/matrix {actual!r} != {wanted!r}")
 
 
+PROFILE_DIR = "/logs/infx_profile"
+PROFILE_DEFAULTS: dict[str, Any] = {
+    # [anchor, seconds after it, engine iterations] per torch window. Anchors are
+    # aiperf phases ("warmup", "profiling") or "decode", the first steady decode
+    # (FULL CUDA graph replays) after warmup starts. AgentX warmup is the lanes'
+    # long first turns, all sent at its start (prefill-heavy; at low concurrency
+    # they have drained within a minute); each measured-phase turn re-prefills
+    # first, so steady decode's arrival depends on concurrency.
+    "windows": [["warmup", 0, 32], ["decode", 0, 32]],
+    # workers whose CUDA graph capture is profiled; "all" profiles every rank
+    "capture_ranks": "dp0_tp0",
+    # Host memory kept free of CPU KV offload for the profiler's trace buffers;
+    # offload recipes otherwise size the pool to nearly the whole host.
+    "host_headroom_gib": 128,
+}
+PROFILE_PHASES = ("warmup", "decode", "profiling")
+# Cap on the measured replay past its last phase-anchored window's start. Steady
+# decode can take minutes to arrive under data parallelism; the window client
+# ends the replay once its windows close. A profiled run's throughput is not a result.
+PROFILE_MEASURED_CAP_SECONDS = 600
+
+
+def offload_headroom_arguments(role_args: Mapping[str, Any], headroom_gib: float) -> list[str]:
+    """Shrink a CPU KV-offload pool so profiling leaves the host headroom_gib free."""
+    raw = role_args.get("kv-transfer-config")
+    if not raw or headroom_gib <= 0:
+        return []
+    transfer = json.loads(raw) if isinstance(raw, str) else dict(raw)
+    extra = transfer.get("kv_connector_extra_config") or {}
+    per_rank = extra.get("cpu_bytes_to_use_per_rank")
+    if per_rank is None:
+        return []
+    ranks = int(role_args.get("data-parallel-size", 1)) * int(
+        role_args.get("tensor-parallel-size", 1)
+    )
+    shrunk = int(per_rank) - int(headroom_gib * 2**30 / ranks)
+    if shrunk <= 0:
+        raise ValueError("INFX_PROFILE host_headroom_gib exceeds the recipe's CPU offload pool")
+    transfer["kv_connector_extra_config"] = {**extra, "cpu_bytes_to_use_per_rank": shrunk}
+    return ["--set", f"roles.agg.args.kv-transfer-config={json.dumps(transfer)}"]
+
+
+def profiling_arguments(
+    environment: Mapping[str, str], role_args: Mapping[str, Any] | None = None
+) -> list[str]:
+    """Op-attribution profiling for vLLM: capture hooks, step log and torch windows.
+
+    INFX_PROFILE is a JSON object overriding PROFILE_DEFAULTS; empty disables.
+    Everything lands in PROFILE_DIR, which the launcher uploads as its own artifact.
+    """
+    raw = environment.get("INFX_PROFILE", "")
+    if not raw:
+        return []
+    if environment["FRAMEWORK"] != "vllm":
+        raise ValueError("INFX_PROFILE supports only vLLM recipes")
+    settings = {**PROFILE_DEFAULTS, **json.loads(raw)}
+    windows = settings["windows"]
+    if not windows or any(
+        len(window) != 3
+        or window[0] not in PROFILE_PHASES
+        or int(window[1]) < 0
+        or int(window[2]) <= 0
+        for window in windows
+    ):
+        raise ValueError(
+            f"INFX_PROFILE windows must be [phase in {PROFILE_PHASES}, delay_seconds, iterations]"
+        )
+    if [PROFILE_PHASES.index(w[0]) for w in windows] != sorted(
+        PROFILE_PHASES.index(w[0]) for w in windows
+    ):
+        raise ValueError("INFX_PROFILE windows must be ordered by phase")
+    # vLLM's profiler window length is fixed per engine; every window uses the first's.
+    profiler_config = {
+        "profiler": "torch",
+        "torch_profiler_dir": f"{PROFILE_DIR}/torch",
+        "torch_profiler_record_shapes": True,
+        # Python stacks make exports of eager steps outlast the RPC timeout;
+        # modules mark themselves instead (benchmarks/profiling/vllm).
+        "torch_profiler_with_stack": False,
+        # The summary table walks every event in Python on all ranks at once;
+        # on offload-sized hosts that exhausted memory. The raw trace suffices.
+        "torch_profiler_dump_cuda_time_total": False,
+        "ignore_frontend": True,
+        "max_iterations": int(windows[0][2]),
+    }
+    worker_env = {
+        "INFX_PROF_DIR": PROFILE_DIR,
+        "INFX_PROF_CAPTURE_RANKS": settings["capture_ranks"],
+        "PYTHONPATH": "/infmax-workspace/benchmarks/profiling/vllm",
+        # A window's trace export blocks its worker; keep peers from timing out.
+        "VLLM_RPC_TIMEOUT": "1800000",
+    }
+    overrides = ["--set", f"roles.agg.args.profiler-config={json.dumps(profiler_config)}"]
+    overrides += offload_headroom_arguments(role_args or {}, float(settings["host_headroom_gib"]))
+    for name, value in worker_env.items():
+        overrides += ["--set", f"roles.agg.env.{name}={json.dumps(value)}"]
+    measured = [int(w[1]) for w in windows if w[0] == "profiling"]
+    duration = int(
+        settings.get("duration") or max(measured, default=0) + PROFILE_MEASURED_CAP_SECONDS
+    )
+    overrides += [
+        "--set",
+        f"benchmark.env.INFX_PROFILE_DURATION={json.dumps(str(duration))}",
+        "--set",
+        f"benchmark.env.INFX_PROFILE_WINDOWS={json.dumps(json.dumps(windows))}",
+        "--set",
+        f"benchmark.env.INFX_PROF_DIR={json.dumps(PROFILE_DIR)}",
+    ]
+    # A window's export pauses the engine; its requests must not abort the replay.
+    for name in ("AIPERF_FAILED_REQUEST_THRESHOLD", "AIPERF_LIVE_FAILED_REQUEST_THRESHOLD"):
+        overrides += ["--set", f'benchmark.env.{name}="1.0"']
+    # The window client ends the replay with a user cancel, after which aiperf
+    # exports results but not server metrics; a profiled run charts none.
+    overrides += ["--set", 'benchmark.env.AIPERF_REQUIRED_SERVER_METRIC_PREFIX=""']
+    return overrides
+
+
 def runtime_arguments(config: str, environment: Mapping[str, str]) -> list[str]:
     """Bind only runtime-owned values after validating the selected recipe."""
     _, recipe = select_recipe(config, environment)
@@ -145,6 +262,7 @@ def runtime_arguments(config: str, environment: Mapping[str, str]) -> list[str]:
     # Exclusive nodes include idle GPUs. Restrict each server/client step to
     # the serving GPU count so client-side power collection sees the same set.
     overrides = ["--set", f"srun_options.gpus-per-node={json.dumps(environment['GPU_COUNT'])}"]
+    overrides += profiling_arguments(environment, recipe["roles"]["agg"]["args"])
     if environment.get("SRT_SRUN_OPTIONS"):
         options = json.loads(environment["SRT_SRUN_OPTIONS"])
         if not isinstance(options, dict) or any(

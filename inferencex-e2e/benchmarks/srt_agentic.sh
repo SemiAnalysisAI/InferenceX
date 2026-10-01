@@ -88,4 +88,25 @@ fi
 if [[ -n "${AIPERF_BENCHMARK_GRACE_PERIOD:-}" ]]; then
     REPLAY_CMD+=" --benchmark-grace-period $AIPERF_BENCHMARK_GRACE_PERIOD"
 fi
+# Op-attribution profiling (INFX_PROFILE): torch windows on every worker.
+profile_windows_pid=""
+if [[ -n "${INFX_PROFILE_WINDOWS:-}" ]]; then
+    mkdir -p "$INFX_PROF_DIR"
+    # srt-slurm's logical worker endpoints: each vLLM server's control port.
+    profile_servers=()
+    IFS=',' read -r -a profile_endpoints <<< "${SRT_AGG_ENDPOINTS:-}"
+    for endpoint in "${profile_endpoints[@]}"; do
+        [[ -n "$endpoint" ]] && profile_servers+=("http://$endpoint")
+    done
+    (( ${#profile_servers[@]} )) || profile_servers=("$AIPERF_SERVER_URL")
+    python3 "$INFMAX_CONTAINER_WORKSPACE/benchmarks/profiling/vllm/profile_windows.py" \
+        "$INFX_PROFILE_WINDOWS" "$INFX_PROF_DIR/windows_conc${CONC}.jsonl" \
+        "$RESULT_DIR/aiperf_artifacts/logs/aiperf.log" "$INFX_PROF_DIR/steps" \
+        "${profile_servers[@]}" &
+    profile_windows_pid=$!
+fi
 run_agentic_replay_and_write_outputs "$RESULT_DIR"
+if [[ -n "$profile_windows_pid" ]]; then
+    kill "$profile_windows_pid" 2>/dev/null || true
+    wait "$profile_windows_pid" 2>/dev/null || true
+fi

@@ -153,6 +153,17 @@ def test_single_node_point_stages_workflow_artifacts(harness):
     assert lines(harness.logs, "scancel") == []
 
 
+def test_single_node_profile_stages_its_own_archive(harness):
+    workspace = harness.workspace
+    env = {**single_node_env(harness, "h200-cw"), "FAKE_PROFILE": "1"}
+    assert_ok(launch(env, harness.config, workspace))
+
+    with tarfile.open(workspace / "infx-profile.tar") as archive:
+        assert "infx_profile/steps/dp0_tp0.jsonl" in archive.getnames()
+    with tarfile.open(workspace / "srt-single-node-logs.tar.gz") as logs:
+        assert not any("infx_profile" in name for name in logs.getnames())
+
+
 def test_single_node_eval_requires_a_successful_eval(harness):
     env = single_node_env(harness, "h100-cw", RUN_EVAL="true", MAX_MODEL_LEN="1024")
     assert_ok(launch(env, harness.config, harness.workspace))

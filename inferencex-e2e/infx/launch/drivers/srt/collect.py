@@ -9,6 +9,7 @@ import contextlib
 import os
 import shutil
 import sys
+import tarfile
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -39,6 +40,8 @@ if TYPE_CHECKING:
 
 SINGLE_NODE_LOGS = "srt-single-node-logs.tar.gz"
 MULTINODE_LOGS = "multinode_server_logs.tar.gz"
+PROFILE_DIR = "infx_profile"
+PROFILE_ARCHIVE = "infx-profile.tar"
 
 
 def _copy_tree_into(source: Path, destination: Path) -> None:
@@ -58,8 +61,18 @@ def finish_single_node(run: SrtRun, submitted: Submitted, fetched: Path) -> int:
     if not output.is_dir():
         return 0
     rc = 0
-    bundle_server_logs(output, run.workspace / SINGLE_NODE_LOGS)
     logs = output / "logs"
+    # Op-attribution profiles (INFX_PROFILE) upload as their own artifact.
+    profile = logs / PROFILE_DIR
+    if profile.is_dir():
+        try:
+            with tarfile.open(run.workspace / PROFILE_ARCHIVE, "w") as archive:
+                archive.add(profile, arcname=PROFILE_DIR)
+            shutil.rmtree(profile)
+        except OSError as error:
+            print(f"ERROR: failed to stage the op-attribution profile: {error}", file=sys.stderr)
+            rc = 1
+    bundle_server_logs(output, run.workspace / SINGLE_NODE_LOGS)
     result = logs / f"{run.request.result_filename}.json"
     for artifact in [result, *sorted(logs.glob("gpu_metrics*"))]:
         if artifact.is_file():
