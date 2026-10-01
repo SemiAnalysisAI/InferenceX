@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 
 from research.dsv41.long_context import post, steady_decode_window
+from research.dsv41.window_diagnostics import progress_diagnostics
 
 
 def completion_body(prompt, output_length):
@@ -224,6 +225,9 @@ async def wave(
         "generation_tokens_total",
         "prefix_cache",
         "retract",
+        "preempt",
+        "kv_cache",
+        "gpu_cache",
         "is_cuda_graph",
     )
     with gzip.open(
@@ -439,6 +443,11 @@ async def run(args, prompts, tokenizer):
         except ValueError as error:
             steady_error = str(error)
             result["steady_decode"] = {"valid": False, "reason": steady_error}
+        if result["steady_decode"]["valid"]:
+            window = result["steady_decode"]
+            result["window_diagnostics"] = progress_diagnostics(
+                records, window["start_monotonic_s"], window["end_monotonic_s"]
+            )
         if args.result_layout == "single":
             result_path = args.output / f"{os.environ['RESULT_FILENAME']}.json"
         else:
