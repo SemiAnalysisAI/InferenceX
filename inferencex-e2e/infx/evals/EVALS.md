@@ -19,9 +19,12 @@ from throughput. Selection lives in `mark_eval_entries()` in
 - **MiniMax M3 agentic:** every generated point automatically runs
   `minimax-vendor` with `minimax_m3_full` (102 provider cases). The one-case
   smoke requires an explicit override.
-- **Other agentic models (GSM8K):** selected by default at the highest
-  concurrency per deployment group, as a separate eval-only job. Throughput
-  for every agentic point still runs. Scores use the same GSM8K floors in
+- **Other agentic models (GSM8K):** selected by default as a separate
+  eval-only job at the highest concurrency of each single-node group of model,
+  runner, framework, precision, spec-decoding, dp-attn and image (the 8k1k
+  keys plus image). TP/EP and KV offloading do not split groups. Multi-node
+  rows use the highest eligible concurrency per topology. Throughput for every
+  agentic point still runs. Scores use the same GSM8K floors in
   `thresholds.yaml` as fixed-sequence 8k1k evals.
 - **BFCL:** explicit only. No automatic model mapping selects BFCL.
 

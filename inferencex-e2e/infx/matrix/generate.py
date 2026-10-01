@@ -559,9 +559,11 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
     """Apply the default eval selection policy.
 
     Kimi K3 and MiniMax M3 agentic rows use their full vendor suites at every
-    generated concurrency. Other agentic rows use GSM8K at the highest
-    concurrency in each deployment group. Eval rows run as separate eval-only
-    jobs, so every agentic throughput point is still benchmarked.
+    generated concurrency. Other single-node agentic rows use GSM8K at the
+    highest concurrency in each group of model, runner, framework, precision,
+    spec-decoding, dp-attn and image (the fixed-sequence keys plus image).
+    Eval rows run as separate eval-only jobs, so every agentic throughput
+    point is still benchmarked.
 
     Fixed-sequence selection is unchanged: single-node 8k1k rows use the
     highest and median concurrency per model/runtime group, while multi-node
@@ -660,11 +662,16 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
             continue
         conc = entry[Fields.CONC.value]
         conc_val = max(conc) if isinstance(conc, list) else conc
+        # Same keys as single-node 8k1k, plus image so configs that differ
+        # only by image (e.g. an image bump) each get their own eval.
         key = (
             entry[Fields.MODEL.value],
             entry[Fields.RUNNER.value],
             entry[Fields.FRAMEWORK.value],
             entry[Fields.PRECISION.value],
+            entry[Fields.SPEC_DECODING.value],
+            entry[Fields.DP_ATTN.value],
+            entry[Fields.IMAGE.value],
         )
         ag_sn_groups[key].append((i, conc_val))
     for entries in ag_sn_groups.values():

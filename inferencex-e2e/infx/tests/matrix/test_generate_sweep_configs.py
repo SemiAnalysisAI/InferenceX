@@ -403,25 +403,33 @@ class TestSeqLenToStr:
 
 class TestMarkEvalEntries:
 
-    def test_marks_agentic_entry_for_gsm8k(self):
-        matrix_values = [
-            {
-                "scenario-type": "agentic-coding",
-                "model": "m", "runner": "b300", "framework": "vllm",
-                "precision": "fp4", "tp": 8, "conc": 32,
-            },
-            {
-                "scenario-type": "agentic-coding",
-                "model": "m", "runner": "b300", "framework": "vllm",
-                "precision": "fp4", "tp": 8, "conc": 64,
-            },
+    def test_agentic_gsm8k_groups_by_fixed_seq_keys_and_image(self):
+        base = {
+            "scenario-type": "agentic-coding",
+            "model": "m", "runner": "b300", "framework": "vllm",
+            "precision": "fp4", "tp": 8, "spec-decoding": "none",
+            "dp-attn": False, "image": "img:a",
+        }
+        variants = [
+            {},
+            {"spec-decoding": "mtp"},
+            {"dp-attn": True},
+            {"image": "img:b"},
         ]
+        matrix_values = [
+            dict(base, **variant, conc=conc, variant=n)
+            for n, variant in enumerate(variants)
+            for conc in (16, 64)
+        ]
+        # A different TP is the same group: only its highest conc is evaluated.
+        matrix_values.append(dict(base, tp=4, conc=128, variant=0))
 
         result = mark_eval_entries(matrix_values)
 
-        marked = [e for e in result if e.get("run-eval")]
-        assert len(marked) == 1
-        assert marked[0]["conc"] == 64
+        marked = sorted(
+            (e["variant"], e["tp"], e["conc"]) for e in result if e.get("run-eval")
+        )
+        assert marked == [(0, 4, 128), (1, 8, 64), (2, 8, 64), (3, 8, 64)]
 
     def test_marks_multinode_agentic_entry_at_highest_eligible_conc(self):
         """Multi-node agentic (SWE-bench) eval selection mirrors the
@@ -489,11 +497,13 @@ class TestMarkEvalEntries:
                 "scenario-type": "agentic-coding",
                 "model": "m", "runner": "b300", "framework": "vllm",
                 "precision": "fp4", "tp": 8, "conc": 32,
+                "spec-decoding": "none", "dp-attn": False, "image": "img",
             },
             {
                 "scenario-type": "agentic-coding",
                 "model": "m", "runner": "b300", "framework": "vllm",
                 "precision": "fp4", "tp": 8, "conc": 64,
+                "spec-decoding": "none", "dp-attn": False, "image": "img",
             },
         ]
 
@@ -531,6 +541,9 @@ class TestMarkEvalEntries:
             "precision": "fp4",
             "tp": 8,
             "conc": 64,
+            "spec-decoding": "none",
+            "dp-attn": False,
+            "image": "img",
         })
 
         result = mark_eval_entries(matrix_values)
