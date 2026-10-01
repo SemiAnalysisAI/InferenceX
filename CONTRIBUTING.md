@@ -2,7 +2,7 @@
 
 <div align="center">
 
-**English** | [中文](./CONTRIBUTING_zh.md)
+**English** | [中文](CONTRIBUTING_zh.md)
 
 </div>
 
@@ -17,7 +17,7 @@ Every PR description must include an **AI model disclosure** section. Name the e
 3. Ping a core maintainer on Slack for final approval, after obtaining the checklist sign-off when required.
 4. An authorized maintainer posts `/use <run_id>` (see below) and the PR is merged via the reuse path.
 
-**Performance changelog requirement:** Every change that can affect benchmark performance and every recipe addition or modification **MUST** append a new entry to the physical end of `perf-changelog.yaml`. Historical entries **MUST NOT** be edited.
+**Performance changelog requirement:** Every change that can affect benchmark performance and every recipe addition or modification **MUST** append a new entry to the physical end of `inferencex-e2e/perf-changelog.yaml`. Historical entries **MUST NOT** be edited.
 
 ## Draft-model precision
 
@@ -103,7 +103,7 @@ For speculative-decoding changes, the CODEOWNER's additional detail section must
 identify the draft checkpoint/revision (or embedded head), the precision it ships in,
 how the pinned upstream image handles it by default, and its effective serving
 precision, so the reviewer can confirm the last two match. If this cannot be
-verified, the criterion is not satisfied. See the [review checklist](docs/PR_REVIEW_CHECKLIST.md) and
+verified, the criterion is not satisfied. See the [review checklist](inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md) and
 [verifier Check 13](.github/codeowner-signoff-verify-prompt.md#check-13--draft-runs-as-shipped).
 
 This follows the same principle as
@@ -120,13 +120,13 @@ Automated CODEOWNER verification is advisory for now. The workflow checks submit
 
 Sign-off is required only when a changed file has a CODEOWNER other than a repository admin or `@SemiAnalysisAI/core`. Ownership comes from the current tip of the PR target branch, resolved once and pinned to the same SHA for CODEOWNERS validation and content reads, using the last matching rule; renames check both old and new paths. The PR head and its potentially stale recorded base SHA do not supply ownership rules. A matching core owner does not exempt another owner on the same file. Individual admins must have both repository `permission: admin` and `role_name: admin`; other teams and email owners require sign-off. Missing ownership data or failed permission lookups cannot grant an exemption. Changes without a qualifying owner skip verification.
 
-One eligible CODEOWNER reviewer fills in the latest [PR_REVIEW_CHECKLIST.md](docs/PR_REVIEW_CHECKLIST.md) template in their approval comment.
+One eligible CODEOWNER reviewer fills in the latest [PR_REVIEW_CHECKLIST.md](inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md) template in their approval comment.
 
 **Only one eligible CODEOWNER reviewer needs to post the checklist for each PR.** Check for an existing checklist before posting; additional reviewers do not need to post their own copies. For corrections or missing evidence, the original reviewer must **edit their existing checklist comment** instead of adding a new one. Create a replacement only if the original comment was deleted.
 
 A friendly reminder. Please follow the latest checklist template **correctly**:
 
-- Always copy the template from the **current** [docs/PR_REVIEW_CHECKLIST.md](docs/PR_REVIEW_CHECKLIST.md) on `main`. The checklist evolves, and a sign-off made from a stale copy will be flagged as missing items.
+- Always copy the template from the **current** [inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md](inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md) on `main`. The checklist evolves, and a sign-off made from a stale copy will be flagged as missing items.
 - Keep the template's opening phrase intact:
 
   > As a PR reviewer and CODEOWNER, I have reviewed this and have:
@@ -143,15 +143,15 @@ The verdict records only the commit actually assessed; it does not carry approva
 
 ## Reusing your PR's green sweep at merge with `/use`
 
-A full benchmark sweep is expensive GPU time, and the runners are shared by every open PR. Without reuse, an approved PR's sweep would run **twice**, once for PR validation and again on `main` after merge. The reuse path avoids that:
+A full benchmark sweep is expensive GPU time, and the runners are shared by every open PR, so an approved PR's sweep runs only once, for PR validation. `main` never reruns it after merge; the reuse path publishes that PR sweep instead:
 
 - After your PR has an eligible green full sweep, an authorized maintainer (`OWNER`/`MEMBER`/`COLLABORATOR`) comments `/use <run_id>` on the PR to select that run. Keep the command and run ID on the same line.
 - `/reuse-sweep-run <run_id>` remains supported with identical behavior. Bare `/reuse-sweep-run` selects automatically; bare `/use` is rejected.
-- The merge-to-`main` run then validates and ingests the PR sweep's artifacts instead of re-running the whole sweep on `main`.
-- **This reduces CI queue time for everyone.** Each reused merge frees hours of GPU runner time for other PRs, so please prefer the reuse path over merging without it. A green sweep alone is not enough. The reuse command must be on record (the sign-off verification checks for it), otherwise `main` silently re-runs the full sweep.
+- The merge-to-`main` run then validates and ingests the PR sweep's artifacts; `main` never re-runs the sweep itself.
+- **Reuse is mandatory.** A green sweep alone is not enough. The reuse command must be on record (the sign-off verification checks for it), otherwise the `main` run fails and the PR's results are never ingested.
 - Reuse does not require retaining a sweep label. The bot reacts to the command with 👍 when accepted or 👎 when rejected, with details in the Actions run summary; source artifacts are revalidated at merge.
 - A missing authorized reuse command produces a Check 4 **WARN**, not a rejection. The warning stays visible in the sign-off verdict; posting an authorized command is still required to reuse artifacts.
-- `uv run --extra workflows python -m infx.workflows.merge_with_reuse <pr-number>` is the supported merge path. It posts the command, syncs the branch with `main`, waits for checks, and squash-merges. See the [workflows README](.github/workflows/README.md#reusing-an-approved-pr-full-sweep) for eligibility details.
+- From the repository root, `uv run --project inferencex-e2e --extra workflows python -m infx.workflows.merge_with_reuse <pr-number>` is the supported merge path. It posts the command, syncs the branch with `main`, waits for checks, and squash-merges. See the [workflows README](.github/workflows/README.md#reusing-an-approved-pr-full-sweep) for eligibility details.
 
 ## Adding points to the latest curve with `append-only`
 

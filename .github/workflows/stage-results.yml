@@ -31,14 +31,29 @@ jobs:
           ref: ${{ github.sha }}
           persist-credentials: false
 
+      - name: Select Python project
+        run: |
+          python_project="$GITHUB_WORKSPACE"
+          if [[ -f "$python_project/inferencex-e2e/pyproject.toml" ]]; then
+            python_project="$python_project/inferencex-e2e"
+          fi
+          test -f "$python_project/pyproject.toml"
+          echo "INFERENCEX_PYTHON_PROJECT=$python_project" >> "$GITHUB_ENV"
+
       - name: Set up uv
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+            inferencex-e2e/pyproject.toml
+            inferencex-e2e/uv.lock
 
       - name: Authorize request and resolve source run
         id: request
         env:
           GH_TOKEN: ${{ github.token }}
-        run: uv run --locked python -m infx.workflows.stage_results
+        run: uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked python -m infx.workflows.stage_results
 
       - name: Acknowledge staging request
         id: acknowledge

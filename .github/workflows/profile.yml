@@ -32,6 +32,8 @@ permissions:
   contents: read
 
 env:
+  PYTHONPATH: ${{ github.workspace }}/inferencex-e2e
+  INFERENCEX_E2E_ROOT: ${{ github.workspace }}
   PORT: '8888'
   INFMAX_CONTAINER_WORKSPACE: '/workspace'
   DSV41_MIN_CUDAGRAPH_CAPTURE_SIZE: '1'
@@ -79,18 +81,24 @@ jobs:
       - id: gen
         name: Generate matrix via script
         run: |
+          if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
+          MEASURED_ROOT="$PWD"
           PRIORITY_ROOT="${GITHUB_WORKSPACE}"
           if [ -d "${GITHUB_WORKSPACE}/.ci-priority" ]; then
             PRIORITY_ROOT="${GITHUB_WORKSPACE}/.ci-priority"
           fi
+          if [[ -f "$PRIORITY_ROOT/inferencex-e2e/configs/runners.yaml" ]]; then
+            PRIORITY_ROOT="$PRIORITY_ROOT/inferencex-e2e"
+          fi
+          env PYTHONPATH="$PRIORITY_ROOT" python3 -P -m infx.workflows.require_launcher "$GITHUB_WORKSPACE"
           source "$PRIORITY_ROOT/benchmarks/benchmark_lib.sh" --validation-only
           check_env_vars INPUTS_CONFIG_FILE INPUTS_CONFIG_KEY INPUTS_CONC PR_LABELS
-          GENERATOR_PATH="${GITHUB_WORKSPACE}"
-          if [ -f "${GITHUB_WORKSPACE}/infx/matrix/generate.py" ]; then
+          GENERATOR_PATH="${MEASURED_ROOT}"
+          if [ -f "${MEASURED_ROOT}/infx/matrix/generate.py" ]; then
             GENERATOR=(-m infx.matrix.generate)
-          elif [ -f "${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py" ]; then
-            GENERATOR=("${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py")
-            GENERATOR_PATH="${GITHUB_WORKSPACE}/utils/matrix_logic:${GITHUB_WORKSPACE}"
+          elif [ -f "${MEASURED_ROOT}/utils/matrix_logic/generate_sweep_configs.py" ]; then
+            GENERATOR=("${MEASURED_ROOT}/utils/matrix_logic/generate_sweep_configs.py")
+            GENERATOR_PATH="${MEASURED_ROOT}/utils/matrix_logic:${MEASURED_ROOT}"
           else
             echo "Matrix generator not found in selected checkout" >&2
             exit 1
@@ -225,26 +233,16 @@ jobs:
       MOE_DEBUG: '0'
       MOE_DEBUG_LOG: ${{ (inputs.moe-debug) && '/workspace/moe_debug.tp0.log' || '' }}
     steps:
-      - name: Resource cleanup
+      - name: Slurm cleanup
         run: |
-          # Cleanup Docker resources
-          if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
-            echo "[Docker] Cleaning up resources ..."
-            docker ps -aq | xargs -r docker rm -f
-            docker network prune -f
-            while [ -n "$(docker ps -aq)" ]; do
-              docker ps -a
-              sleep 5
-            done
-          fi
-
-          # Cleanup SLURM resources
           if command -v squeue >/dev/null 2>&1; then
-            echo "[Slurm] Cleaning up jobs with name: ${RUNNER_NAME} ..."
-            scancel --name="${RUNNER_NAME}" || true
-            while [ -n "$(squeue --name="${RUNNER_NAME}" --noheader --format='%i')" ]; do
-              squeue --name="${RUNNER_NAME}"
-              sleep 5
+            for job_name in "${RUNNER_NAME}" "inferencex-${RUNNER_NAME}"; do
+              echo "[Slurm] Cleaning up jobs with name: ${job_name} ..."
+              scancel --name="${job_name}" || true
+              while [ -n "$(squeue --name="${job_name}" --noheader --format='%i')" ]; do
+                squeue --name="${job_name}"
+                sleep 5
+              done
             done
           fi
 
@@ -263,17 +261,35 @@ jobs:
           path: .result-tooling
           persist-credentials: false
 
-      - name: Set up uv for result processing
+      - name: Set up uv
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           enable-cache: false
 
       - name: Prepare result-processing Python
+        env: &uv-setup-env
+          UV_CACHE_DIR: ${{ github.workspace }}/../.infx-uv-cache
+          UV_PYTHON_INSTALL_DIR: ${{ github.workspace }}/../.infx-uv-python
         run: |
           uv python install --quiet --no-bin 3.12
           result_python=$(uv python find --system 3.12)
           "$result_python" --version
           echo "INFERENCEX_RESULTS_PYTHON=$result_python" >> "$GITHUB_ENV"
+
+      - name: Prepare launcher Python
+        env: *uv-setup-env
+        run: |
+          launch_venv="$RUNNER_TEMP/infx-launch-venv"
+          uv venv --quiet --python 3.12 "$launch_venv"
+          uv pip install --quiet --exclude-newer PT12H --python "$launch_venv/bin/python" \
+            -r "$GITHUB_WORKSPACE/.result-tooling/inferencex-e2e/pyproject.toml"
+          echo "INFERENCEX_LAUNCH_PYTHON=$launch_venv/bin/python" >> "$GITHUB_ENV"
+
+      - name: Launcher cleanup
+        env:
+          PYTHONPATH: ${{ github.workspace }}/.result-tooling/inferencex-e2e
+        run: |
+          "$INFERENCEX_LAUNCH_PYTHON" -P -m infx.launch cleanup
 
       - name: Launch + Profile (single-node sglang/vllm)
         id: run
@@ -285,6 +301,9 @@ jobs:
           VLLM_RPC_TIMEOUT: '1800000'
         shell: bash
         run: |
+          if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
+          export GITHUB_WORKSPACE="$PWD"
+          echo "INFERENCEX_E2E_ROOT=$PWD" >> "$GITHUB_ENV"
           set -eo pipefail
           export GPU_COUNT=$((TP * PP_SIZE * PCP_SIZE))
           echo "GPU_COUNT=${GPU_COUNT}" >> "$GITHUB_ENV"
@@ -293,14 +312,8 @@ jobs:
           export RESULT_FILENAME="${res_name}"
           echo "RESULT_FILENAME=${res_name}" >> "$GITHUB_ENV"
 
-          # Historical measured revisions own their configuration in the launchers.
-          if [[ -f benchmarks/runtime_settings.sh ]]; then
-            source benchmarks/runtime_settings.sh
-          fi
-          if [[ -f runners/runtime_settings.sh ]]; then
-            source runners/runtime_settings.sh
-          fi
-          bash ./runners/launch_${RUNNER_NAME%%_*}.sh
+          source benchmarks/runtime_settings.sh
+          "$INFERENCEX_LAUNCH_PYTHON" -m infx.launch run
 
           if [ ! -f "${res_name}.json" ]; then
             echo "Run failed: Benchmark result ${res_name}.json not found." >&2
@@ -309,7 +322,7 @@ jobs:
 
           trace_path="profile_${res_name}.trace.json.gz"
           if [ -f "$trace_path" ]; then
-            echo "trace=$trace_path" >> "$GITHUB_OUTPUT"
+            echo "trace=$PWD/$trace_path" >> "$GITHUB_OUTPUT"
             if [ "${FRAMEWORK}" = "sglang" ]; then
               # Try to locate corresponding TP-0 traces produced by SGLang profiler
               merged_latest=$(ls -t profiles/merged-*.trace.json.gz 2>/dev/null | head -n1 || true)
@@ -320,10 +333,10 @@ jobs:
                 tp0_decode="profiles/${ts_name}-TP-0-DECODE.trace.json.gz"
                 tp0_extend="profiles/${ts_name}-TP-0-EXTEND.trace.json.gz"
                 if [ -f "${tp0_decode}" ]; then
-                  echo "tp0_decode=${tp0_decode}" >> "$GITHUB_OUTPUT"
+                  echo "tp0_decode=$PWD/${tp0_decode}" >> "$GITHUB_OUTPUT"
                 fi
                 if [ -f "${tp0_extend}" ]; then
-                  echo "tp0_extend=${tp0_extend}" >> "$GITHUB_OUTPUT"
+                  echo "tp0_extend=$PWD/${tp0_extend}" >> "$GITHUB_OUTPUT"
                 fi
               fi
             fi
@@ -334,9 +347,10 @@ jobs:
       - name: Process result (json -> agg)
         env:
           RUNNER_TYPE: ${{ matrix.config.runner }}
-          PYTHONPATH: ${{ github.workspace }}/.result-tooling
+          PYTHONPATH: ${{ github.workspace }}/.result-tooling/inferencex-e2e
         run: |
-          source .result-tooling/benchmarks/benchmark_lib.sh --validation-only
+          if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
+          source "$PYTHONPATH/benchmarks/benchmark_lib.sh" --validation-only
           check_env_vars INFERENCEX_RESULTS_PYTHON
           "$INFERENCEX_RESULTS_PYTHON" -P -m infx.results.fixed_sequence
 
@@ -345,7 +359,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: profile_${{ env.RESULT_FILENAME }}
-          path: profile_${{ env.RESULT_FILENAME }}.trace.json.gz
+          path: ${{ steps.run.outputs.trace }}
           if-no-files-found: ignore
 
       - name: Upload TP-0-DECODE trace as artifact
@@ -369,7 +383,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: moe_debug_${{ env.RESULT_FILENAME }}
-          path: "moe_debug.tp0.log"
+          path: ${{ env.INFERENCEX_E2E_ROOT }}/moe_debug.tp0.log
           if-no-files-found: ignore
 
       - name: Checkout storage repo
