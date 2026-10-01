@@ -28,8 +28,10 @@ base:
   # Embedded Mooncake: each TP rank contributes TOTAL_CPU_DRAM_GB / 8 GB. The
   # setup script pins the client, backports load-failure recovery, selects one
   # active Mellanox rail by driver (ibp* or mlx5_*), sets MC_GID_INDEX from the
-  # link layer, and loads the host mlx5 provider via RDMAV_DRIVERS when
-  # /host-usr-lib is mounted. Master lease is 60s (see mooncake-master args).
+  # link layer, requires the host mlx5 provider via RDMAV_DRIVERS at
+  # /host-usr-lib, and refuses an empty device_name. Master lease is 60s.
+  # device_name starts empty; kimik3-b300-mooncake.sh patches it before engines
+  # start (srt-slurm's "Wrote mooncake_store_config" line is the pre-patch dump).
   setup_script: kimik3-b300-mooncake.sh
   services:
     - name: mooncake-master
@@ -74,7 +76,10 @@ base:
         attention-backend: TOKENSPEED_MLA
         attention-config: '{"mla_prefill_backend":"TRTLLM_RAGGED","use_prefill_query_quantization":true}'
         disable-uvicorn-access-log: true
-        kv-transfer-config: '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_offload":false}}'
+        # compact_group_io + max_load_batch_keys match proven GB300 DCP8 Mooncake
+        # recipes; without them tip c48 died in Mooncake GPU memcpy concurrent with
+        # direct DCP kv-gather multimem timeout under high KV pressure.
+        kv-transfer-config: '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"compact_group_io":true,"max_load_batch_keys":2,"enable_offload":false}}'
       env:
         VLLM_ALLREDUCE_USE_FLASHINFER: '1'
         VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION: '1'
@@ -99,6 +104,7 @@ base:
         MC_STORE_MEMCPY: '1'
         MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
         MC_SLICE_SIZE: '1048576'
+        MC_MAX_MR_SIZE: '4294967296'
         MC_WORKERS_PER_CTX: '4'
         WITH_NVIDIA_PEERMEM: '0'
         VLLM_MOONCAKE_LOAD_RECV_THREADS: '4'

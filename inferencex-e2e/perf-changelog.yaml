@@ -9514,3 +9514,12 @@
     - "Restore VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS=1800 on the B300 Mooncake AgentX recipe. Tip fail-fast run 36800796192 killed agentic c40 after ~279s of engine silence (shm_broadcast 60s waits from 04:57:58-05:00:58 PT window, then EngineCore TimeoutError / EngineDeadError at 05:01:56) under the default 300s execute_model cap; AIPerf then ProfileAborted at 30/292 = 10.3% failed requests. Keep the existing 60s Mooncake master lease (--default_kv_lease_ttl=60000). Sibling Kimi Mooncake recipes already set this timeout."
     - "将 B300 Mooncake AgentX 配方的 VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS 恢复为 1800。tip fail-fast 运行 36800796192 在默认 300 秒 execute_model 上限下，于约 279 秒引擎静默后杀死 agentic c40（shm_broadcast 60 秒等待，随后 EngineCore TimeoutError / EngineDeadError）；AIPerf 随即以 30/292 = 10.3% 失败请求触发 ProfileAborted。保留既有的 60 秒 Mooncake master 租约。同系列 Kimi Mooncake 配方已设置该超时。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3088
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Align B300 DCP8 Mooncake connector with proven GB300 DCP8 settings: compact_group_io + max_load_batch_keys=2 and MC_MAX_MR_SIZE=4GiB. Tip fail-fast run 36820538765 agentic c48 (job 110258065670, Slurm 6544) had a real rail (setup patched device_name to ibp198s0f0; srt-slurm Wrote line is pre-patch) then died with GPU memcpy fail / direct DCP kv-gather multimem timeout under high KV pressure. Also fail loud if the host mlx5 provider mount is missing or device_name would stay empty."
+    - "将 B300 DCP8 Mooncake 连接器与已验证的 GB300 DCP8 设置对齐：compact_group_io、max_load_batch_keys=2 以及 MC_MAX_MR_SIZE=4GiB。tip fail-fast 运行 36820538765 的 agentic c48（job 110258065670，Slurm 6544）已有真实 rail（setup 将 device_name 写成 ibp198s0f0；srt-slurm 的 Wrote 行为 patch 前转储），随后在高 KV 压力下因 GPU memcpy 失败 / direct DCP kv-gather multimem timeout 崩溃。主机 mlx5 provider 挂载缺失或 device_name 仍为空时改为明确失败。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3088
