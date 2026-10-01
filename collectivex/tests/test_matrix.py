@@ -18,6 +18,18 @@ def matrix(**options):
 
 
 class MatrixTests(unittest.TestCase):
+    def test_nccl_fp8_only_low_latency_decode(self):
+        document = matrix(backend="nccl-ep", precisions="fp8")
+        cases = [case for shard in document["include"] for case in shard["cases"]]
+        self.assertTrue(cases)
+        self.assertEqual({case["phase"] for case in cases}, {"decode"})
+        self.assertEqual({case["precision"] for case in cases}, {"fp8"})
+        self.assertEqual({case["mode"] for case in cases}, {"low-latency"})
+
+    def test_nccl_normal_fp8_emits_no_shards(self):
+        document = matrix(backend="nccl-ep", precisions="fp8", modes="normal")
+        self.assertEqual(document["include"], [])
+
     def test_every_shard_has_an_exact_positive_node_request(self):
         document = matrix(backend="all")
         self.assertTrue(document["include"])
