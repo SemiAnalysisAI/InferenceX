@@ -366,6 +366,7 @@ clusters:
             port: 9401
             command: "dcgm-exporter --collect-interval=1000 --address :{port} -f /configs/dcgm-counters-noprof.csv"
         network-interface: ""
+        single-node-models: staged
   h100-dgxc:
     gpus-per-node: 8
     available-cpu-dram-mib: 2_063_837
