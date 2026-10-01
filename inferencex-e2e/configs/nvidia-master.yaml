@@ -8385,7 +8385,7 @@ dsv41flash-fp4-b200-sglang-agentic-dspark:
 
 # PR56318: rerun the four successful hybrid cache-source validation points.
 dsv4-fp4-b200-vllm-agentic-cache-sources-mtp:
-  image: cquil11/vllm-cache-sources@sha256:6f9e476f6a1e1c25ac9bc1a863329538db465812fb4ac18c6553e988eae09a56
+  image: cquil11/vllm-cache-sources@sha256:873b8bcb4cc734cfc3e3b7f9d2c1495be329439a944f76a7b356448be6a61641
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:b200-nscale
@@ -8404,7 +8404,7 @@ dsv4-fp4-b200-vllm-agentic-cache-sources-mtp:
       - { tp: 8, kv-offloading: [dram, nvme], kv-offload-backend: { name: vllm-native }, spec-decoding: mtp, conc-list: [14], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv4/vllm/b200-fp4-mtp/cache-sources.yaml }
 
 dsv4-fp4-gb300-dynamo-vllm-agentic-cache-sources-mtp-disagg:
-  image: cquil11/vllm-cache-sources@sha256:6ce87fcb9ef8b929f7a8270bc6fbba3c219c3440cd77d3bf1ae74db5a1cb5715
+  image: cquil11/vllm-cache-sources@sha256:188445e9835a0ed9cd022f0e70c61dd3fd9d24792008841d4747da1797e7fe4b
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:gb300-nv

@@ -6,7 +6,7 @@ base:
   name: dsv4-fp4-b200-vllm-cache-sources
   model:
     path: hf:deepseek-ai/DeepSeek-V4-Pro
-    container: cquil11/vllm-cache-sources@sha256:6f9e476f6a1e1c25ac9bc1a863329538db465812fb4ac18c6553e988eae09a56
+    container: cquil11/vllm-cache-sources@sha256:873b8bcb4cc734cfc3e3b7f9d2c1495be329439a944f76a7b356448be6a61641
     precision: fp4
   resources:
     gpu_type: b200

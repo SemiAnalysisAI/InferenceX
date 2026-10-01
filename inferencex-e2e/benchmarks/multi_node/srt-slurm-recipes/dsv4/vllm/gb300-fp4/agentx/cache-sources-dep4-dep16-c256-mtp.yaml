@@ -9,14 +9,14 @@ name: "dsv4-vllm-cache-sources-gb300-dep4-dep16-c256"
 
 model:
   path: "deepseek-v4-pro"
-  container: "cquil11/vllm-cache-sources@sha256:6ce87fcb9ef8b929f7a8270bc6fbba3c219c3440cd77d3bf1ae74db5a1cb5715"
+  container: "cquil11/vllm-cache-sources@sha256:188445e9835a0ed9cd022f0e70c61dd3fd9d24792008841d4747da1797e7fe4b"
   precision: "fp4"
 
 identity:
   model:
     repo: "deepseek-ai/DeepSeek-V4-Pro"
   container:
-    image: "cquil11/vllm-cache-sources@sha256:6ce87fcb9ef8b929f7a8270bc6fbba3c219c3440cd77d3bf1ae74db5a1cb5715"
+    image: "cquil11/vllm-cache-sources@sha256:188445e9835a0ed9cd022f0e70c61dd3fd9d24792008841d4747da1797e7fe4b"
   frameworks:
     dynamo: "1.4.0"
 
