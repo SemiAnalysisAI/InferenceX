@@ -51,8 +51,6 @@ CASES = [
     ("b200-nscale", NATIVE, "1", "kimik3", "fp4", "dynamo-vllm", OTHER, AGENTX),
     ("b200-nscale", NATIVE, "0", "dsv4", "fp4", "dynamo-sglang", OTHER, DCGM),
     ("b200-nscale", NATIVE, "0", "glm5.2", "fp4", "dynamo-vllm", OTHER, ERR),
-    ("b200-nscale", NATIVE, "0", "glm5.1", "fp8", "tilert", OTHER, DCGM),
-    ("b200-nscale", NATIVE, "1", "glm5.1", "fp8", "tilert", OTHER, ERR),
     ("b200-nscale", MULTI, "1", "qwen3.5", "fp8", "dynamo-sglang", OTHER, AGENTX),
     ("b200-nscale", MULTI, "1", "kimik3", "fp4", "dynamo-vllm", OTHER, ERR),
     ("b200-nscale", MULTI, "0", "dsv4", "fp4", "dynamo-vllm", OTHER, DCGM),
@@ -156,12 +154,12 @@ RECORD = {"gpus-per-node": 8, "arch": "x86_64", "scheduler": "slurm",
 
 def test_every_row_the_inventory_contradicts_is_reported_at_once(monkeypatch):
     clusters = load_inventory({"labels": {"cluster:c": ["c_0"]}, "clusters": {"c": RECORD}}).clusters
-    monkeypatch.setitem(policy.TILERT_ENV, "missing-cluster", {})
+    monkeypatch.setitem(policy.SALLOC_TIME_BUMPS, "missing-cluster", None)
     monkeypatch.setitem(models.OVERRIDES, "c", ())
     with pytest.raises(LaunchError) as raised:
         check_tables(clusters)
     problems = str(raised.value)
-    assert "TILERT_ENV['missing-cluster']: no such cluster" in problems
+    assert "SALLOC_TIME_BUMPS['missing-cluster']: no such cluster" in problems
     assert "OVERRIDES['c']" in problems
 
 
@@ -185,21 +183,18 @@ def test_a_launch_checks_its_own_cluster_rows_before_any_work(monkeypatch, capsy
     assert "OVERRIDES['c']" in capsys.readouterr().err
 
 
-HOST = {"TILERT": "host", "CLUSTER": "host", "LATER": "host", "SHARED": "host"}
+HOST = {"CLUSTER": "host", "LATER": "host", "SHARED": "host"}
 
 
-@pytest.mark.parametrize(("framework", "chosen", "expected"), [
-    ("tilert", {}, {"TILERT": "tilert", "CLUSTER": "cluster", "LATER": "later", "SHARED": "later"}),
-    ("tilert", {"TILERT": "point", "SHARED": "point"},
-     {"TILERT": "point", "CLUSTER": "cluster", "LATER": "later", "SHARED": "point"}),
-    ("sglang", {}, {"TILERT": "host", "CLUSTER": "cluster", "LATER": "later", "SHARED": "later"}),
+@pytest.mark.parametrize(("chosen", "expected"), [
+    ({}, {"CLUSTER": "cluster", "LATER": "later", "SHARED": "later"}),
+    ({"SHARED": "point"}, {"CLUSTER": "cluster", "LATER": "later", "SHARED": "point"}),
 ])  # fmt: skip
-def test_cluster_settings_beat_the_host_but_never_the_points_settings(monkeypatch, framework, chosen, expected):
+def test_cluster_settings_beat_the_host_but_never_the_points_settings(chosen, expected):
     record = {**RECORD, "env": {"CLUSTER": "cluster", "SHARED": "cluster"}}
     cluster = load_inventory({"labels": {"cluster:c": ["c_0"]}, "clusters": {"c": record}}).clusters["c"]
-    monkeypatch.setitem(policy.TILERT_ENV, "c", {"TILERT": "tilert", "SHARED": "tilert"})
     settings = json.dumps([f"{name}={value}" for name, value in chosen.items()])
-    request = _request(FRAMEWORK=framework, DECODE_ADDITIONAL_SETTINGS=settings, **{**HOST, **chosen})
+    request = _request(DECODE_ADDITIONAL_SETTINGS=settings, **{**HOST, **chosen})
 
     env = policy.runtime_env(cluster, request, {"LATER": "later", "SHARED": "later"})
 
