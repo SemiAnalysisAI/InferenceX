@@ -113,22 +113,6 @@ base:
       AIPERF_DATASET_MMAP_CACHE_DIR: "/aiperf_mmap_cache"
       HF_HUB_CACHE: "/hf_hub_cache"
 
-# Low-latency AgentX aggregate topology: one TP4 worker occupies one
-# four-GPU GB300 node and serves both prefill and decode with DSpark K=6.
-override_tp4:
-  name: "agg-gb300-tp4-mtp-lowlatency"
-  roles:
-    agg:
-      nodes: 1
-      gpus: 4
-      args:
-        max-running-requests: 32
-        cuda-graph-max-bs-decode: 32
-        tp-size: 4
-  benchmark:
-    env:
-      TP: "4"
-
 # Low-latency AgentX aggregate topology: one TP8 worker spans two
 # four-GPU GB300 nodes and serves both prefill and decode with DSpark K=6.
 override_tp8:

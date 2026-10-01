@@ -6661,17 +6661,6 @@ dsv4-fp4-gb300-dynamo-sglang-agentic-agg:
           dp-attn: false
           additional-settings:
           - "CONFIG_FILE=recipes/dsv4/sglang/gb300-fp4/agentx/agg-variants.yaml:override_tp8"
-    - search-space:
-      - spec-decoding: draft_model
-        conc-list: [8]
-        num-nodes: 1
-        worker:
-          num-worker: 1
-          tp: 4
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/dsv4/sglang/gb300-fp4/agentx/agg-variants.yaml:override_tp4"
 dsv4-fp4-gb300-dynamo-sglang-agentic-disagg:
   image: lmsysorg/sglang:nightly-dev-cu13-20260916-c9a8fba9
   model: deepseek-ai/DeepSeek-V4-Pro-0813
@@ -6688,7 +6677,7 @@ dsv4-fp4-gb300-dynamo-sglang-agentic-disagg:
     - dram-utilization: 0.80
       search-space:
       - spec-decoding: draft_model
-        conc-list: [480]
+        conc-list: [120, 480]
         kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: "0.3.13" }
         prefill:
@@ -6702,22 +6691,6 @@ dsv4-fp4-gb300-dynamo-sglang-agentic-disagg:
           num-worker: 1
           tp: 16
           ep: 16
-          dp-attn: true
-      - spec-decoding: draft_model
-        conc-list: [480]
-        kv-offloading: dram
-        kv-offload-backend: { name: mooncake, version: "0.3.13" }
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "CONFIG_FILE=recipes/dsv4/sglang/gb300-fp4/agentx/disagg-variants.yaml:override_1p1d_dep8_dep32_c480"
-        decode:
-          num-worker: 1
-          tp: 32
-          ep: 32
           dp-attn: true
       - spec-decoding: draft_model
         conc-list: [960]
