@@ -9180,3 +9180,31 @@
     - "Update the SGLang ROCm image from lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260927 to lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260929 on this arm only. The other MI355X arms are left on their current tags."
     - "No serving flag outside the HiCache block changes, and no other config key is touched. Each of the 19 matrix points resolves to exactly one recipe override, with no override left unused."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3611
+
+- config-keys:
+  - qwen3.5-fp8-b200-sglang
+  scenario-type:
+  - fixed-seq-len
+  description:
+  - Preserve Qwen3.5 FP8 b200 coverage and require validated power; include the article
+    ladder where missing.
+  - 保留现有覆盖并要求通过验证的功耗，补齐缺失的文章并发梯度。
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3378
+
+- config-keys:
+  - qwen3.5-fp8-b200-sglang
+  scenario-type:
+  - fixed-seq-len
+  description:
+  - Add an E2E-only TP4/EP1 article repeat selector using the existing Qwen3.5 FP8 B200 recipe.
+  - 新增文章复测专用的 TP4/EP1 E2E 选择配置，沿用现有 Qwen3.5 FP8 B200 配方。
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3378
+
+- config-keys:
+  - qwen3.5-fp8-b200-sglang
+  scenario-type:
+  - fixed-seq-len
+  description:
+  - Prepend TP4/EP1 concurrency 1 to the B200 FP8 8k1k single-node recipe zip_override so matrix cell c1 matches (cuda-graph-max-bs-decode 1, scheduler-recv-interval 10).
+  - 在 B200 FP8 8k1k 单节点配方的 zip_override 中为 TP4/EP1 补上并发 1，使矩阵 c1 与 cuda-graph-max-bs-decode 1、scheduler-recv-interval 10 对齐。
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3378
