@@ -58,6 +58,12 @@ CPU-offload recipes an offload pool smaller by `host_headroom_gib`.
   - `steps/<rank>.jsonl`: every step's batch composition on that rank.
   - `copies/<rank>.jsonl`: every CPU KV-offload block copy the rank queued
     (direction, blocks, bytes, step, vLLM callers).
+  - `routing/<rank>/step<k>.npz`, `routing/<rank>/meta.json`: each profiled
+    step's MoE routing: `counts` (tokens per expert per layer, int32
+    `[layers, experts]`), `tokens`, `t0_ns`, and `ids` (each token's top-k
+    expert ids per layer, int16 `[tokens, layers, topk]`, -1 for none) when
+    the step has at most 1024 tokens. `meta.json` maps layer ids to module
+    names and lists layers the capture could not bind.
   - `clocks/window<w>.csv`, `clocks/gpus.json`: every GPU's graphics, SM,
     memory and video clocks and clock event reasons, polled through NVML every
     250 us per GPU for the length of each window, each poll stamped when it
@@ -78,6 +84,8 @@ CPU-offload recipes an offload pool smaller by `host_headroom_gib`.
      "summary": {"kernels", "busy_us", "t0_us", "t1_us", "span_us", "sources"},
      "batch":   {"total_tokens", "reqs": [{"req", "scheduled", "computed", "spec",
                                            "new", "prompt_len"}], "dispatch": [...]},
+     "routing": {"source_rank", "tokens", "topk", "num_experts", "has_ids", "file",
+                 "expert_tokens": {"<MoE module>": [[expert, tokens], ...]}},
      "kernels": [{"kernel", "cat", "stream", "device", "ts_us", "dur_us",
                   "source": "eager" | "graph" | "offload_copy" | "unattributed",
                   "module_stack": [[qualified name, [[shape, dtype], ...]], ...],
@@ -137,3 +145,15 @@ the env record's GPU UUID ties a rank to its polls. On B200 an NVML poll occasio
 under prefill load; a reading is from somewhere inside its poll, and a kernel
 within such a poll shows it as a large `prior_us`.
 `report.json` gives each trace's clock coverage and `prior_us` percentiles.
+
+MoE routing is dynamic, so each step records what its router chose. vLLM's
+`RoutedExpertsCapturer` is bound to every MoE layer of the target model (not
+the draft) before CUDA graph capture: each layer's `capture_fn` copies its
+top-k expert ids into a device buffer, a GPU copy that graphs capture and
+replay. Inside a window, every step's rows are copied to pinned host memory
+asynchronously (`infx_routing_copy`) and written at the window's stop. The ids
+are logical expert ids before EPLB remapping, for this DP rank's tokens; TP
+ranks route the same tokens, so TP rank 0 writes for its group. A step file's
+`routing.expert_tokens` is keyed by the MoE module name, which joins to the
+`module_stack` of that layer's MoE kernels. The capture adds one small copy
+kernel per MoE layer per step to every profiled run.

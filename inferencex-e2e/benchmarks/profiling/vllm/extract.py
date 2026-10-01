@@ -5,7 +5,8 @@ Usage: extract.py PROFILE_DIR OUT_DIR
 PROFILE_DIR is an unpacked profile artifact (infx_profile/): torch/ holds the
 engine's per-rank torch traces, capture/ the CUDA graph capture trace,
 steps/ the per-step batch log, copies/ the CPU KV-offload copy log, clocks/
-the window client's NVML clock samples and env/ the per-rank environment.
+the window client's NVML clock samples, routing/ the MoE routing of each
+profiled step and env/ the per-rank environment.
 
 A kernel launched eagerly joins its CPU launch through the CUDA correlation
 id. A kernel replayed from CUDA graph n carries a ``graph node id``; ordered
@@ -23,6 +24,7 @@ and steps.jsonl (per step: batch composition and device time), plus
 report.json with the join checks.
 """
 
+import ast
 import bisect
 import collections
 import glob
@@ -30,7 +32,10 @@ import gzip
 import json
 import os
 import re
+import shutil
+import struct
 import sys
+import zipfile
 
 MARK = re.compile(r"^infx_(step|dummy|graph_replay|graph_capture|piece)#(\d+)$")
 MODULE_MARK = "infx_mod#"
@@ -297,6 +302,72 @@ def load_steps(profile_dir):
     return steps
 
 
+def read_npz(path):
+    """name -> (shape, flat values) for an .npz of little-endian int arrays (stdlib only)."""
+    out = {}
+    with zipfile.ZipFile(path) as z:
+        for member in z.namelist():
+            data = z.read(member)
+            assert data[:6] == b"\x93NUMPY", member
+            major = data[6]
+            header_len = struct.unpack("<H" if major == 1 else "<I",
+                                       data[8:10] if major == 1 else data[8:12])[0]
+            start = (10 if major == 1 else 12) + header_len
+            header = ast.literal_eval(data[(10 if major == 1 else 12):start].decode("latin1"))
+            code = {"<i2": "h", "<i4": "i", "<i8": "q", "|i1": "b"}[header["descr"]]
+            shape = tuple(header["shape"])
+            count = 1
+            for dim in shape:
+                count *= dim
+            values = struct.unpack(f"<{count}{code}", data[start:start + count * struct.calcsize(code)])
+            out[member[: -len(".npy")]] = (shape, values)
+    return out
+
+
+def load_routing(profile_dir):
+    """rank -> (routing dir, meta) for ranks whose MoE routing was captured.
+
+    Tensor-parallel ranks route the same tokens, so only TP rank 0 writes; the
+    others take their DP group's TP rank 0.
+    """
+    found = {}
+    for meta_path in glob.glob(os.path.join(profile_dir, "routing", "*", "meta.json")):
+        with open(meta_path) as f:
+            meta = json.load(f)
+        found[meta["rank"]] = (os.path.dirname(meta_path), meta)
+    routing = {}
+    for rank, (path, meta) in found.items():
+        source = rank if meta.get("write") else re.sub(r"_tp\d+$", "_tp0", rank)
+        if source in found and found[source][1].get("write"):
+            routing[rank] = (source, *found[source])
+    return routing
+
+
+def step_routing(routing, step, out_dir):
+    """A step's per-layer expert token counts; copies its routing file into out_dir."""
+    if routing is None or step is None:
+        return None
+    source, path, meta = routing
+    npz = os.path.join(path, f"step{step:06d}.npz")
+    if not os.path.exists(npz):
+        return None
+    arrays = read_npz(npz)
+    (layers, experts), counts = arrays["counts"]
+    names = meta.get("bound", {})
+    per_layer = {}
+    for layer in range(layers):
+        row = counts[layer * experts:(layer + 1) * experts]
+        if any(row):
+            per_layer[names.get(str(layer), str(layer))] = [[e, n] for e, n in enumerate(row) if n]
+    dest = os.path.join(out_dir, "routing", source, os.path.basename(npz))
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    if not os.path.exists(dest):
+        shutil.copyfile(npz, dest)
+    return {"source_rank": source, "tokens": arrays["tokens"][1][0], "topk": meta.get("topk"),
+            "num_experts": meta.get("num_experts"), "has_ids": "ids" in arrays,
+            "file": os.path.relpath(dest, out_dir), "expert_tokens": per_layer}
+
+
 def load_copies(profile_dir, ranks):
     """rank -> logged CPU KV-offload copies (one memcpy each), in issue order.
 
@@ -451,7 +522,8 @@ def match_copies(trace, orphans, copies, offset_us):
     return matched
 
 
-def extract_replay(trace, captured, rank, window, step_log, copies, clocks, out_dir, pairs):
+def extract_replay(trace, captured, rank, window, step_log, copies, clocks, routing, out_dir,
+                   pairs):
     """Attribute every device activity of one replay trace; write one file per step.
 
     Returns the trace's report entry and its index entries. `pairs` accumulates
@@ -539,10 +611,11 @@ def extract_replay(trace, captured, rank, window, step_log, copies, clocks, out_
         }
         name = f"{key[0]}{key[1]:06d}.json.gz" if key else "unstepped.json.gz"
         batch = step_log.get(key) if key else None
+        moe = step_routing(routing, key[1], out_dir) if key and key[0] == "step" else None
         with gzip.open(os.path.join(rank_dir, name), "wt") as f:
             json.dump({"rank": rank, "window": window, "kind": key[0] if key else None,
                        "step": key[1] if key else None, "summary": summary, "batch": batch,
-                       "kernels": kernels}, f, separators=(",", ":"))
+                       "routing": moe, "kernels": kernels}, f, separators=(",", ":"))
         reqs = (batch or {}).get("reqs") or []
         index.append({
             "window": window, "rank": rank, "kind": key[0] if key else None,
@@ -550,6 +623,7 @@ def extract_replay(trace, captured, rank, window, step_log, copies, clocks, out_
             "file": os.path.relpath(os.path.join(rank_dir, name), out_dir),
             **summary, "total_tokens": (batch or {}).get("total_tokens"), "num_reqs": len(reqs),
             "cudagraph": [d.get("cg_mode") for d in (batch or {}).get("dispatch") or []],
+            "routing": bool(moe),
         })
     entry = {
         "trace": os.path.basename(trace.path), "rank": rank, "window": window,
@@ -558,6 +632,7 @@ def extract_replay(trace, captured, rank, window, step_log, copies, clocks, out_
         "sources": dict(collections.Counter(r["source"] for r in rows)),
         "steps": sum(1 for k in by_step if k is not None),
         "clocks": clock_coverage(rows),
+        "steps_with_routing": sum(1 for e in index if e["routing"]),
     }
     return entry, index
 
@@ -598,6 +673,9 @@ def main():
     steps = load_steps(profile_dir)
     copies = load_copies(profile_dir, ranks)
     clocks = load_clocks(profile_dir)
+    routing = load_routing(profile_dir)
+    report["routing"] = {rank: {"bound_layers": len(meta.get("bound", {})), "failed": meta.get("failed")}
+                         for rank, (_, _, meta) in sorted(routing.items())}
     traces = sorted(glob.glob(os.path.join(profile_dir, "torch", "**", "*.pt.trace.json*"),
                               recursive=True), key=trace_time)
     windows_seen = collections.Counter()
@@ -608,8 +686,8 @@ def main():
         window = windows_seen[rank]
         windows_seen[rank] += 1
         entry, entries = extract_replay(trace, captured, rank, window, steps.get(rank, {}),
-                                        copies.get(rank, []), clocks.get(rank), out_dir,
-                                        pairs)
+                                        copies.get(rank, []), clocks.get(rank),
+                                        routing.get(rank), out_dir, pairs)
         report["traces"].append(entry)
         index += entries
         del trace

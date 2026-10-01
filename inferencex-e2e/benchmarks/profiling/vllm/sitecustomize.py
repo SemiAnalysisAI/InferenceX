@@ -430,6 +430,10 @@ def _patch_profiler_wrapper(module):
     def _call_stop(self, *args, **kwargs):
         _log("stop")
         try:
+            _routing_flush()
+        except Exception:
+            _write_error("routing flush")
+        try:
             _disable_module_markers()
         except Exception:
             _write_error("disable module markers")
@@ -462,6 +466,116 @@ def _patch_piecewise_backend(module):
 _current_step = None  # the scheduled step executing on this worker
 
 
+# --- MoE routing ----------------------------------------------------------------
+# vLLM's RoutedExpertsCapturer writes each MoE layer's top-k expert ids into a
+# device buffer from the layer's capture_fn; the write is a GPU copy, so CUDA
+# graphs capture it and every replay records its routing. It is bound to the
+# target model before graph capture. While a window is open, each step's rows
+# are copied to pinned host memory asynchronously; at the window's stop every
+# step's per-layer expert token counts are written, and its per-token ids when
+# it has at most ROUTING_IDS_MAX_TOKENS tokens (decode steps; a 4k-token prefill
+# step's ids are ~3 MB per DP rank).
+
+ROUTING_IDS_MAX_TOKENS = 1024
+_routing = {"capturer": None, "pending": [], "rank": None, "write": False}
+
+
+def _bind_routing(runner, tag):
+    """Attach a routed-experts capturer to every MoE layer of the target model."""
+    from functools import partial
+
+    from vllm.model_executor.layers.fused_moe.routed_experts_capturer import (
+        RoutedExpertsCaptureSource,
+        RoutedExpertsCapturer,
+    )
+
+    capturer = RoutedExpertsCapturer(runner.scheduler_config.max_num_batched_tokens,
+                                     runner.vllm_config)
+    try:
+        from vllm.model_executor.layers.fused_moe.layer import MoERunner
+    except Exception:
+        MoERunner = ()
+    bound, failed = {}, {}
+    for name, module in runner.model.named_modules(prefix="model"):
+        try:
+            if isinstance(module, RoutedExpertsCaptureSource):
+                module.capture_fn = partial(capturer.capture, module.layer_id)
+            elif MoERunner and isinstance(module, MoERunner):
+                fn = partial(capturer.capture, module.layer_id)
+                quant_method = module._quant_method
+                if quant_method.is_monolithic:
+                    impl = getattr(getattr(quant_method, "moe_kernel", None), "impl", None)
+                    getattr(impl, "fused_experts").set_capture_fn(fn)
+                else:
+                    module.router.set_capture_fn(fn)
+            else:
+                continue
+            bound[module.layer_id] = name
+        except Exception as e:
+            failed[name] = repr(e)
+    try:
+        from vllm.distributed import parallel_state as ps
+
+        write = ps.get_tensor_model_parallel_rank() == 0  # TP ranks route the same tokens
+    except Exception:
+        write = True
+    meta = {"rank": tag, "write": write, "layers": capturer.device_buffer.shape[1],
+            "topk": capturer.device_buffer.shape[2],
+            "num_experts": runner.vllm_config.model_config.get_num_experts(),
+            "max_tokens": capturer.device_buffer.shape[0],
+            "bound": {str(k): v for k, v in sorted(bound.items())}, "failed": failed}
+    path = os.path.join(_DIR, "routing", tag, "meta.json")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as f:
+        json.dump(meta, f, indent=1)
+    if bound:
+        _routing.update(capturer=capturer, rank=tag, write=write)
+
+
+def _routing_snapshot(step, num_tokens, t0_ns):
+    """Queue this step's routing rows for the host (asynchronous)."""
+    import torch
+
+    capturer = _routing["capturer"]
+    if capturer is None or not _routing["write"] or not num_tokens:
+        return
+    with torch.autograd.profiler.record_function("infx_routing_copy"):
+        rows = capturer.device_buffer[:num_tokens].to(torch.int16)
+        host = torch.empty(rows.shape, dtype=torch.int16, pin_memory=True)
+        host.copy_(rows, non_blocking=True)
+    _routing["pending"].append((step, num_tokens, t0_ns, host, rows))
+
+
+def _routing_flush():
+    """Write the window's queued routing: per-layer expert counts, and ids for small steps."""
+    pending, _routing["pending"] = _routing["pending"], []
+    if not pending:
+        return
+    import numpy as np
+    import torch
+
+    if torch.cuda.is_available():
+        torch.cuda.current_stream().synchronize()  # the queued host copies
+    num_experts = None
+    try:
+        with open(os.path.join(_DIR, "routing", _routing["rank"], "meta.json")) as f:
+            num_experts = json.load(f)["num_experts"]
+    except Exception:
+        pass
+    out_dir = os.path.join(_DIR, "routing", _routing["rank"])
+    for step, num_tokens, t0_ns, host, _ in pending:
+        ids = host.numpy().astype(np.int32)  # [tokens, layers, topk]; -1 marks no expert
+        experts = num_experts or int(ids.max()) + 1
+        counts = np.zeros((ids.shape[1], experts), dtype=np.int32)
+        for layer in range(ids.shape[1]):
+            valid = ids[:, layer][ids[:, layer] >= 0]
+            counts[layer] = np.bincount(valid, minlength=experts)[:experts]
+        arrays = {"counts": counts, "t0_ns": np.array(t0_ns), "tokens": np.array(num_tokens)}
+        if num_tokens <= ROUTING_IDS_MAX_TOKENS:
+            arrays["ids"] = ids.astype(np.int16)
+        np.savez_compressed(os.path.join(out_dir, f"step{step:06d}.npz"), **arrays)
+
+
 def _patch_model_runner(module):
     import torch
 
@@ -479,6 +593,10 @@ def _patch_model_runner(module):
             _register_module_names(self)
         except Exception:
             _write_error("register module names")
+        try:
+            _bind_routing(self, tag)
+        except Exception:
+            _write_error("bind routing")
         if tag not in _capture_ranks() and "all" not in _capture_ranks():
             try:
                 return orig_capture(self, *args, **kwargs)
@@ -526,7 +644,12 @@ def _patch_model_runner(module):
             if not _profiling():
                 return orig_execute(self, scheduler_output, *args, **kwargs)
             with torch.autograd.profiler.record_function(f"infx_step#{k}"):
-                return orig_execute(self, scheduler_output, *args, **kwargs)
+                result = orig_execute(self, scheduler_output, *args, **kwargs)
+            try:
+                _routing_snapshot(k, record.get("total_tokens") if record else None, t0)
+            except Exception:
+                _write_error("routing snapshot")
+            return result
         finally:
             try:
                 if record is not None:
