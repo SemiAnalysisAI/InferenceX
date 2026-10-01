@@ -9151,6 +9151,59 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3602
 
 - config-keys:
+    - dsv4-fp4-mi355x-atom-disagg-agentic-lmcache-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Port the DeepSeek-V4-Pro-0813 MI355X ATOM 1P1D AgentX config from the legacy amd_utils path to a native srt-slurm recipe (benchmarks/multi_node/srt-slurm-recipes/dsv4/atom/mi355x-fp4/agentx/disagg-lmcache-dspark.yaml), one override variant per point. Server flags, env, AToMesh routing policies and decode CUDA-graph capture sizes match the legacy server_atom.sh for every tier: TP8 at concurrency 1 and 16, DP attention with prefill TBO at 64 and 128, and DP attention with ATOM's in-process LMCache CPU offload (lmcache_offload, 187 GB per prefill rank) at 256. Golden acceptance 3.01 for DSpark with three draft tokens is now injected by the srt-slurm path, the same value the legacy models_atom.yaml hardcoded."
+    - "The LMCache tier uses srt-slurm's extra-kv-connectors (NVIDIA/srt-slurm#507, in v2.36.0) to add lmcache_offload next to the generated Mooncake connector."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3543
+
+- config-keys:
+    - dsv4-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the ATOM image from rocm/atom-dev:nightly_202609161445 (ATOM 0.1.6rc1.dev477+g709c25be0) to rocm/atom-dev:nightly_202609291501 (digest sha256:e0d7134efff68c251acdc2612a9b6c238bc4da5d613832b2bd1251f34bd93355; ATOM 0.1.7.dev46+g74fd942b0, ROCm 7.2.4). Image-only change on the existing native srt-slurm recipe: all ten points (TP8/EP1 at concurrency 1, 2, 4, 8, 16; TP8/DPA8/EP8 native RCCL at 48, 64, 96, 128, 256), DSpark K6 with the thinking_on golden AL 3.77 for throughput and real acceptance for eval, KV and index-cache dtypes, graph capture and all environment settings are unchanged."
+    - "Relevant ATOM changes in the range: V4 decode reuses the sparse prefill ASM (ROCm/ATOM#2271), greedy sampler picks via aiter.topk_select (ROCm/ATOM#2244), and FP8 block scales declared scale_fmt ue8m0 are now stored as E8M0 on gfx950 by default (ROCm/ATOM#2419; previously FP32 unless ATOM_FP8_BLOCKSCALE_USE_E8M0_SCALE=1). The upstream DeepSeek-V4 recipes are unchanged across the range, and every recipe flag and choice (all2all-backend rccl, dp-load-balance least_tokens, moe-backend standard) remains valid."
+    - "No data-type or precision change to the DeepSeek-V4-Pro-0813 DSpark draft: no online quantization is configured, so it keeps its checkpoint precision; the E8M0 scale storage represents the checkpoint's power-of-two block scales exactly. kv-cache-dtype and index-cache-dtype touch cache storage only."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3605
+
+- config-keys:
+    - qwen3.5-fp8-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Extend the TP4 HiCache band from concurrency 40 up to 80, adding concurrency 48, 56, 64, 72 and 80. The arm goes from 14 to 19 points; the GPU-resident band [1, 4, 8, 12, 14] and the existing HiCache points [16, 18, 20, 22, 24, 28, 32, 36, 40] are unchanged. The original grid was copied from the TP4 band of qwen3.5-fp8-b200-sglang-agentic-mtp, which stops at 32 because a B200 node has far less HBM per GPU; MI355X at 288 GB per GPU has the device KV headroom to keep feeding the host-DRAM tier past that, and these five points sample the throughput end the tier makes available."
+    - "Size the HiCache host pool in tiers by concurrency instead of by ratio alone. Concurrency 16 through 28 keep ratio-only sizing and are unchanged from what merged in #3602. Concurrency 32 through 56 pin hicache-size 253, the value already used by the MI355X MXFP4 AgentX arm. Concurrency 64 through 80 pin hicache-size 400, since the largest points need the deepest host tier to hold prefix across the 256k-capped corpus. hicache-size overrides hicache-ratio where it is set. Of the points that merged in #3602 only concurrency 32, 36 and 40 change behaviour; their numbers are expected to move."
+    - "The five new points reuse the existing HiCache override shape: enable-hierarchical-cache, hicache-ratio 1.5, hicache-size 400, hicache-write-policy write_through_selective, hicache-io-backend kernel and hicache-mem-layout page_first. Admission continues to follow 2x CONC, and the decode graph batch follows it capped at 128, so concurrency 72 and 80 both clamp cuda-graph-max-bs-decode to 128 while max-running-requests reaches 144 and 160."
+    - "Update the SGLang ROCm image from lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260927 to lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260929 on this arm only. The other MI355X arms are left on their current tags."
+    - "No serving flag outside the HiCache block changes, and no other config key is touched. Each of the 19 matrix points resolves to exactly one recipe override, with no override left unused."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3611
+
+- config-keys:
+    - dsr1-fp8-mi325x-sglang
+    - dsr1-fp8-mi325x-sglang-mtp
+    - qwen3.5-fp8-mi325x-sglang
+    - qwen3.5-fp8-mi325x-sglang-mtp
+    - qwen3.5-fp8-mi325x-sglang-agentic-mtp
+    - glm5.2-fp8-mi325x-sglang-agentic-mtp
+    - minimaxm3-fp8-mi325x-vllm-agentic-mtp
+    - dsv41flash-fp4-mi325x-vllm-agentic-dspark
+  description:
+    - "Retire the mi325x-amds runner pool and route MI325X workloads to the Barite mi325x-amd pool in MI325X-UBUNTU. Keep model recipes unchanged; generated host-DRAM budgets now use the replacement cluster's declared memory capacity."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3644
+
+- config-keys:
+    - "*"
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump AgentX Harness from agentx-v1.0.5 (754356e9a39acc6cc6afb242d123bb57c3fb6f75) to agentx-v1.0.6 (89b21867872a5bbc4b0676bf5005c404da5e9f94) and use --scenario agentx for shared replay and runtime defaults. Preserve recipe duration, warmup, failure threshold, trace cap, routing and corpus selection as explicit inputs."
+    - "The preset supplies a 900000 ms TCP user timeout when unset; explicit AIPERF environment settings take precedence over preset defaults."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3646
+
+- config-keys:
     - dsv4-fp4-gb200-llmd-vllm
   description:
     - "Re-add the GB200 llm-d low-latency 8k1k point (1P DEP8 + 1D TP8, conc 1) to validate llm-d on infx.launch"

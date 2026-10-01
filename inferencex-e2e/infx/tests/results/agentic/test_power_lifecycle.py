@@ -26,6 +26,7 @@ def _run_lifecycle(
     require_power: bool = False,
     formal_multinode_power: bool = False,
     real_power_adapter: bool = False,
+    missing_power_env: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
     result_dir = tmp_path / "results"
     result_dir.mkdir()
@@ -82,6 +83,7 @@ ENABLE_AGENTX_POWER={'1' if enable_power else '0'}
 REQUIRE_POWER={'1' if require_power else '0'}
 CONC=8
 SRT_MEASUREMENT_WINDOW_DIR={formal_window_dir!r}
+{f'unset {missing_power_env}' if missing_power_env else ''}
 set +e
 run_agentic_replay_and_write_outputs {str(result_dir)!r}
 rc=$?
@@ -138,10 +140,25 @@ def test_single_node_invokes_adapter_with_gpu_shape_and_strict_mode(tmp_path: Pa
     assert "--require-power" in adapter_event
 
 
+@pytest.mark.parametrize("missing_power_env", ["TP", "PP_SIZE", "PCP_SIZE"])
+@pytest.mark.parametrize("require_power", [False, True])
+def test_missing_power_shape_fails_before_monitor_or_replay(
+    tmp_path: Path, missing_power_env: str, require_power: bool
+):
+    result = _run_lifecycle(
+        tmp_path, missing_power_env=missing_power_env, require_power=require_power
+    )
+
+    assert result.returncode == 1
+    assert f"  - {missing_power_env}" in result.stdout
+    assert _events(tmp_path) == ["parent-exit"]
+
+
 def test_explicit_opt_out_skips_power(tmp_path: Path):
     result = _run_lifecycle(
         tmp_path,
         enable_power=False,
+        missing_power_env="PP_SIZE",
     )
 
     assert result.returncode == 0, result.stderr
@@ -288,6 +305,9 @@ REPLAY_CMD=fake_replay
 ENABLE_AGENTX_POWER=1
 REQUIRE_POWER=0
 IS_MULTINODE=false
+TP=1
+PP_SIZE=1
+PCP_SIZE=1
 run_agentic_replay_and_write_outputs {str(result_dir)!r}
 """
     proc = subprocess.Popen(

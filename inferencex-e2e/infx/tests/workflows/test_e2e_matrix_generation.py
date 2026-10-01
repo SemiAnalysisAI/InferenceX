@@ -43,7 +43,6 @@ def run_get_jobs(tmp_path, *, launcher=True, **inputs):
         "GITHUB_RUN_ATTEMPT": "1",
         "PYTHONPATH": str(workspace / "inferencex-e2e"),
         "GENERATE_COMMAND": "",
-        "PR_LABELS": "[]",
         "CHANGELOG_BASE_REF": "",
         "CHANGELOG_HEAD_REF": "",
         "TRIM_CONC": "false",

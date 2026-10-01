@@ -19,14 +19,16 @@ from throughput. Selection lives in `mark_eval_entries()` in
 - **MiniMax M3 agentic:** every generated point automatically runs
   `minimax-vendor` with `minimax_m3_full` (102 provider cases). The one-case
   smoke requires an explicit override.
-- **Other agentic models (GSM8K):** opt-in through `--evals-only` or
-  `--all-evals`, at the highest concurrency per deployment group.
+- **Other agentic models (GSM8K):** selected by default at the highest
+  concurrency per deployment group, as a separate eval-only job. Throughput
+  for every agentic point still runs. Scores use the same GSM8K floors in
+  `thresholds.yaml` as fixed-sequence 8k1k evals.
 - **BFCL:** explicit only. No automatic model mapping selects BFCL.
 
 Generator eval modes:
 
-- Default: throughput plus the fixed-sequence subset and every automatically
-  selected Kimi K3 or MiniMax M3 vendor eval.
+- Default: throughput plus the fixed-sequence subset, the agentic GSM8K
+  subset, and every automatically selected Kimi K3 or MiniMax M3 vendor eval.
 - `--no-evals`: throughput only, including no automatic vendor evals.
 - `--evals-only`: selected evals only.
 - `--all-evals`: every eligible fixed-sequence and agentic eval. This is
@@ -515,28 +517,12 @@ precedence over the scenario default.
 For default lm-eval jobs in eval-only mode (`EVAL_ONLY=true`), the benchmark script computes `EVAL_MAX_MODEL_LEN` via `compute_eval_context_length`, starts the server with that context length, skips throughput, and runs lm-eval. Each framework wires that context differently (`--context-length` for SGLang, `--max_seq_len` for TRT-LLM).
 
 ### Multi-node
-Multi-node evals support two hardware paths:
-
-**MI355X (AMD)** — `benchmarks/multi_node/amd_utils/server_sglang.sh`
-- Skips throughput when `EVAL_ONLY=true`
-- Fixed-seq-len: runs lm-eval via `run_eval --framework lm-eval` against the router on port 30000
-- Agentic-coding (disaggregated, `IS_AGENTIC=1`): follows the same GSM8K/lm-eval path via
-  `run_eval --framework lm-eval`. Since there's no single "TP" for a disaggregated topology,
-  and the workflow spells a couple of metadata fields differently
-  (`PREFILL_DP_ATTN`/`DECODE_DP_ATTN`) than `append_lm_eval_summary` expects
-  (`PREFILL_DP_ATTENTION`/`DECODE_DP_ATTENTION`), the agentic branch bridges those before
-  calling `run_eval`; `append_lm_eval_summary` itself runs automatically inside `run_eval()`
-  (same `EVAL_ONLY=true && IS_AGENTIC` auto-staging as single-node), not as a separate call.
-- Concurrency uses workflow-provided `EVAL_CONC` when set, otherwise falls back to max of `BENCH_MAX_CONCURRENCY` (x-separated values)
-- Eval artifacts copied to `/run_logs/slurm_job-*/eval_results/`
-- The MI355X `amd_utils` lane (`infx/launch/drivers/legacy.py`) copies eval results found under `$BENCHMARK_LOGS_DIR/logs/**/eval_results` when `RUN_EVAL=true`
-
-**NVIDIA Slurm multi-node (GB200, GB300, B200, B300, H100, H200)** runs through [srt-slurm](https://github.com/NVIDIA/srt-slurm) at the shared Git submodule revision at `utils/srt-slurm`. Native `post_eval.command` and `post_eval.passthrough_env` select the InferenceX eval dispatcher without modifying the upstream checkout.
+Multi-node evals on AMD and NVIDIA Slurm clusters run through [srt-slurm](https://github.com/NVIDIA/srt-slurm) at the shared Git submodule revision at `utils/srt-slurm`. Native `post_eval.command` and `post_eval.passthrough_env` select the InferenceX eval dispatcher without modifying the upstream checkout.
 - `do_sweep.py` skips the benchmark stage when `EVAL_ONLY=true`, runs `_run_post_eval()` directly
 - In eval-only mode, uses the full `wait_for_model()` health check (same as benchmark stage) since the benchmark health check was skipped
-- The registered srt-slurm `lm-eval` post-runner sources InferenceX's `benchmark_lib.sh` from the mounted workspace (`/infmax-workspace`). Kimi-selected launches patch that hook to use generic `run_eval` dispatch while preserving lm-eval as the default.
-- Eval artifacts written to `/logs/eval_results/` inside the container, collected by launch scripts
-- NVIDIA Slurm launch scripts always collect server logs for debugging but skip benchmark result collection when `EVAL_ONLY=true`
+- Native `post_eval.command` invokes `benchmarks/multi_node/srt_eval.sh` from the mounted InferenceX workspace (`/infmax-workspace`). It sources `benchmark_lib.sh` and calls `run_eval`, which selects the eval implementation from `EVAL_FRAMEWORK` without patching upstream runners.
+- Eval artifacts written to `/logs/eval_results/` inside the container, collected by `infx/launch/drivers/srt/collect.py` when `RUN_EVAL=true` or `EVAL_ONLY=true`
+- The srt driver always collects server logs for debugging but skips benchmark result collection when `EVAL_ONLY=true`
 - Env vars threaded: `RUN_EVAL`, `EVAL_ONLY`, `EVAL_FRAMEWORK`, `EVAL_SUITE`, `IS_MULTINODE`, `FRAMEWORK`, `PRECISION`, `MODEL_PREFIX`, `RUNNER_TYPE`, `RESULT_FILENAME`, `SPEC_DECODING`, `ISL`, `OSL`, `PREFILL_TP/EP/NUM_WORKERS/DP_ATTN`, `DECODE_TP/EP/NUM_WORKERS/DP_ATTN`, `MODEL_NAME`, `EVAL_CONC`
 
 For multi-node `all-evals`, `EVAL_CONC` is a space-separated list. When it contains multiple values, `run_eval` runs those concurrency points sequentially against the same live engine, stages each result with a `_concN` filename suffix, and records expected/completed/failed points in `meta_env.json`.

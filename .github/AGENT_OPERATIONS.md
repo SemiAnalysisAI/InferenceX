@@ -78,7 +78,7 @@ The dispatch POST returns no body or run ID.
 
 Full details live in `inferencex-e2e/infx/evals/EVALS.md`.
 
-`mark_eval_entries()` in `inferencex-e2e/infx/matrix/generate.py` selects evals, which default to the 8k1k subset and run separately from throughput with `EVAL_ONLY=true`.
+`mark_eval_entries()` in `inferencex-e2e/infx/matrix/generate.py` selects evals, which default to the 8k1k subset plus AgentX GSM8K at the highest concurrency per deployment group, and run separately from throughput with `EVAL_ONLY=true`. AgentX GSM8K uses the same `thresholds.yaml` floors as 8k1k.
 
 - `--no-evals`: skip evals.
 - `--evals-only`: run the default selected eval subset and suppress throughput.
@@ -94,7 +94,7 @@ Multinode disaggregated results add `prefill_gpu_energy_j`, `decode_gpu_energy_j
 
 Every power result — valid or invalid, single-node or multinode — carries `power_metric_schema_version`. Version 2 defines each unprefixed `joules_per_*` field as whole-deployment GPU-board energy over the named denominator; role-scoped energy uses the explicit `prefill_*` / `decode_*` keys. Rows without the field predate the whole-deployment switch and their unprefixed joules are not comparable across topologies.
 
-For srt-slurm recipes, `telemetry.enabled: true` with `telemetry.dcgm_exporter` enables official energy collection. The Git submodule pointer at `inferencex-e2e/utils/srt-slurm` is the source of truth for the shared srt-slurm commit, used by both power and non-power NVIDIA lanes. TileRT is the single documented fork exception. CI derives `POWER_PRODUCER_SHA` from the launcher stamp. The aggregate-power and AgentX power tests validate telemetry and provenance. These local tests do not prove hardware power collection. Eligible recipe-gated `dynamo-sglang` dcgm-power lanes are validated.
+For srt-slurm recipes, `telemetry.enabled: true` with `telemetry.dcgm_exporter` enables official energy collection. The Git submodule pointer at `inferencex-e2e/utils/srt-slurm` is the source of truth for every srt-slurm job, including TileRT. CI derives `POWER_PRODUCER_SHA` from the launcher stamp. The aggregate-power and AgentX power tests validate telemetry and provenance. These local tests do not prove hardware power collection. Eligible recipe-gated `dynamo-sglang` dcgm-power lanes are validated.
 
 Power audit artifacts are named `power_audit_<result>` and contain `power_validation_<result>.json` for single-node runs or `power_validation_<result>_*.json` for multinode runs. They are uploaded even when validation fails.
 

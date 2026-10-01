@@ -29,14 +29,14 @@ There are two distinct layers: the matrix generator decides **which jobs exist**
 
 | Need | Generator/workflow mode | Runtime behavior |
 |---|---|---|
-| Normal sweep | no eval option | Throughput jobs plus the selected 8k/1k eval subset |
+| Normal sweep | no eval option | Throughput jobs plus the selected 8k/1k eval subset and agentic GSM8K subset |
 | Throughput only | `--no-evals` | No eval jobs |
 | Selected eval subset only | `--evals-only` | Jobs have `RUN_EVAL=true`, `EVAL_ONLY=true` |
 | Every eligible eval only | `--all-evals` | Equivalent to `--evals-only --all-evals` and includes all fixed-sequence 8k/1k rows plus single-node and multi-node agentic GSM8K rows |
 | Throughput then eval in one recipe | `RUN_EVAL=true`, `EVAL_ONLY=false` | Server starts, throughput runs, then `run_eval` runs |
 | Eval against a freshly started server | `RUN_EVAL=true`, `EVAL_ONLY=true` | Launcher expands eval context, skips throughput, and runs the eval |
 
-Default selection is scenario-aware. Single-node fixed-sequence evals use the median and highest eligible concurrency for each 8k/1k model/runner/framework/precision/parallelism group. Multi-node evals use the highest eligible concurrency per topology. Fixed-sequence concurrency below 16 is not selected. Kimi K3 and MiniMax M3 AgentX rows automatically select vendor evals at every generated point, including lower concurrencies. Other agentic evals are opt-in and select the highest eligible concurrency per deployment group. See [`mark_eval_entries()` and `mark_all_eval_entries()`](../infx/matrix/generate.py).
+Default selection is scenario-aware. Single-node fixed-sequence evals use the median and highest eligible concurrency for each 8k/1k model/runner/framework/precision/parallelism group. Multi-node evals use the highest eligible concurrency per topology. Fixed-sequence concurrency below 16 is not selected. Kimi K3 and MiniMax M3 AgentX rows automatically select vendor evals at every generated point, including lower concurrencies. Other agentic rows select GSM8K by default at the highest eligible concurrency per deployment group; the eval runs as a separate eval-only job, so agentic throughput coverage is unchanged. See [`mark_eval_entries()` and `mark_all_eval_entries()`](../infx/matrix/generate.py).
 
 Kimi K3 automatically runs `kimi-vendor` / `kimi_tool_call_schema_full` on AMD and NVIDIA, for single-node and multi-node recipes. This runs 204 unique schema cases in streaming and non-streaming modes, producing 408 checks. An explicit `eval-framework=kimi-vendor` and `eval-suite=kimi_tool_call_schema` workflow override retains the one-case, two-check smoke for fast diagnosis. `--trim-conc` trims deployment points, not the suite's case count. MiniMax M3 automatically runs `minimax-vendor` / `minimax_m3_full` across both vendors, covering all 102 provider cases. Its one-case `minimax_m3_smoke` is available through an explicit override. Fixed-sequence GSM8K selection is unchanged.
 
@@ -119,6 +119,8 @@ Set `EVAL_ONLY=true` **before server launch**. It is not merely a switch inside 
 
 Relevant implementation: [context setup](../benchmarks/benchmark_lib.sh#L2016-L2042), [eval dispatch and failure policy](../benchmarks/benchmark_lib.sh#L2893-L3073), and [workflow inputs](../../.github/workflows/benchmark-tmpl.yml#L40-L57).
 
+Native multi-node post-eval reads the mounted checkpoint at `/model` and enables dataset downloads in the eval process, without changing worker environments. Context lookup reads numeric limits from local `config.json` before falling back to Transformers; an explicit `EVAL_MAX_MODEL_LEN` still takes precedence.
+
 Do not toggle `EVAL_ONLY` after a throughput-sized server is already running and assume the context changed. Restart through the recipe. In eval-only mode an eval failure is returned after available artifacts are staged. In a workflow, upload happens with `always()` before score validation so failed evidence survives ([single-node upload and gate](../../.github/workflows/benchmark-tmpl.yml#L467-L494), [multi-node upload and gate](../../.github/workflows/benchmark-multinode-tmpl.yml#L487-L518)).
 
 ## 4. Batched eval concurrency
@@ -195,7 +197,7 @@ Retain `meta_env.json`, `results*.json`, and `sample*.jsonl`. Agentic SWE-bench 
 
 [`install_agentic_deps()`](../benchmarks/benchmark_lib.sh) declares the AgentX client dependencies directly alongside the editable `utils/aiperf` install. It installs them into the isolated `AIPERF_RUNTIME_DIR` environment with the caller-supplied `AIPERF_PYTHON_VERSION`.
 
-AgentX is AIPerf `inferencex-agentx-mvp` trace replay, not a fixed-token synthetic benchmark. The checked-in default uses ten additional warmup requests per trajectory lane and the recipe's configured profile duration. `agentx-fast` forces one warmup request per lane and a 1,200-second profile. It affects single- and multi-node AgentX throughput only. Fixed-sequence throughput and evals remain canonical. Fast runs are not eligible for artifact reuse ([workflow policy](../../.github/workflows/README.md#agentx-fast-mode), [fast replay settings](../benchmarks/benchmark_lib.sh#L3255-L3259)).
+AgentX is AIPerf `agentx` trace replay, not a fixed-token synthetic benchmark. The checked-in default uses ten additional warmup requests per trajectory lane and the recipe's configured profile duration. `agentx-fast` forces one warmup request per lane and a 1,200-second profile. It affects single- and multi-node AgentX throughput only. Fixed-sequence throughput and evals remain canonical. Fast runs are not eligible for artifact reuse ([workflow policy](../../.github/workflows/README.md#agentx-fast-mode), [fast replay settings](../benchmarks/benchmark_lib.sh#L3255-L3259)).
 
 Every AgentX throughput concurrency runs against a fresh server deployment. The matrix creates a separate job per point; replay clients reject multiple concurrency values. AgentX does not flush caches or reuse a running server for another point. Warmup and profiling for the same point share the deployment. This does not change fixed-sequence sweeps or graded-eval batching.
 
@@ -238,7 +240,7 @@ Treat fast results as bring-up evidence, never as a replacement for the canonica
 
 ## 8. Preserve trace and run provenance
 
-AgentX defaults to recorded assistant-response replay. Live server outputs are measured but discarded when constructing later turns. Set `AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES=1` only for an explicitly different live-assistant experiment. The selected trace corpus is model-family dependent unless `WEKA_LOADER_OVERRIDE` pins it. The resolver logs both loader and Hugging Face dataset ([trace resolution](../benchmarks/benchmark_lib.sh#L3165-L3234), [replay semantics](../benchmarks/benchmark_lib.sh#L3236-L3366)).
+AgentX defaults to recorded assistant-response replay. Live server outputs are measured but discarded when constructing later turns. The selected trace corpus is model-family dependent unless `WEKA_LOADER_OVERRIDE` pins it. The resolver logs both loader and Hugging Face dataset ([trace resolution](../benchmarks/benchmark_lib.sh#L3165-L3234), [replay semantics](../benchmarks/benchmark_lib.sh#L3236-L3366)).
 
 Capture orchestration provenance immediately:
 
