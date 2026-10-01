@@ -114,6 +114,8 @@ python3 -m infx.evals.validate_scores --model-prefix "$MODEL_PREFIX"
 4. 吞吐量路径立即返回或被跳过。
 5. 运行 `run_eval` 和 artifact staging。
 
+原生多节点 post-eval 从 `/model` 读取挂载的检查点，并仅在评估进程中启用数据集下载，不改变工作进程环境。上下文查询先读取本地 `config.json` 中的数值上限，再回退到 Transformers；显式设置的 `EVAL_MAX_MODEL_LEN` 仍优先。
+
 相关实现：[context 设置](../benchmarks/benchmark_lib.sh#L2016-L2042)、[eval 分派与失败策略](../benchmarks/benchmark_lib.sh#L2893-L3073) 和[工作流输入](../../.github/workflows/benchmark-tmpl.yml#L40-L57)。
 
 不要在吞吐量规格的服务已经运行后才切换 `EVAL_ONLY`，并假定 context 会随之变化。应通过 recipe 重启。Eval-only 模式会在暂存已有 artifact 后返回 eval 失败；在工作流中，上传步骤使用 `always()`，并位于分数校验前，因此失败证据仍会保留（[单节点上传与 gate](../../.github/workflows/benchmark-tmpl.yml#L467-L494)、[多节点上传与 gate](../../.github/workflows/benchmark-multinode-tmpl.yml#L487-L518)）。
