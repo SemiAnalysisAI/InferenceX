@@ -125,3 +125,12 @@ def test_llmd_driver_fails_when_the_wrapper_prints_no_job_id(harness):
 
     assert result.returncode == 1
     assert "submit.sh failed before returning a Slurm job id" in result.stderr
+
+
+def test_llmd_driver_leaves_node_local_checkpoints_to_the_job(harness):
+    config, workspace, env = harness
+    (config.parent / "mnt/numa1/models/DeepSeek-V4-Pro/config.json").unlink()
+
+    result = launch(env, config, workspace)
+
+    assert result.returncode == 0, result.stdout + result.stderr

@@ -57,7 +57,7 @@ def run(launch: Launch) -> int:
             f"cluster {launch.cluster.id!r} stages no checkpoint for MODEL={request.model}"
         )
     model_path = models.host_path(launch.cluster, checkpoint)
-    if not (model_path / "config.json").is_file():
+    if not checkpoint.node_local and not (model_path / "config.json").is_file():
         raise LaunchError(f"model checkpoint is unavailable: {model_path / 'config.json'}")
 
     squash = backend.prepare_image(request.image)
