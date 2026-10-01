@@ -9160,6 +9160,16 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3543
 
 - config-keys:
+    - dsv4-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the ATOM image from rocm/atom-dev:nightly_202609161445 (ATOM 0.1.6rc1.dev477+g709c25be0) to rocm/atom-dev:nightly_202609291501 (digest sha256:e0d7134efff68c251acdc2612a9b6c238bc4da5d613832b2bd1251f34bd93355; ATOM 0.1.7.dev46+g74fd942b0, ROCm 7.2.4). Image-only change on the existing native srt-slurm recipe: all ten points (TP8/EP1 at concurrency 1, 2, 4, 8, 16; TP8/DPA8/EP8 native RCCL at 48, 64, 96, 128, 256), DSpark K6 with the thinking_on golden AL 3.77 for throughput and real acceptance for eval, KV and index-cache dtypes, graph capture and all environment settings are unchanged."
+    - "Relevant ATOM changes in the range: V4 decode reuses the sparse prefill ASM (ROCm/ATOM#2271), greedy sampler picks via aiter.topk_select (ROCm/ATOM#2244), and FP8 block scales declared scale_fmt ue8m0 are now stored as E8M0 on gfx950 by default (ROCm/ATOM#2419; previously FP32 unless ATOM_FP8_BLOCKSCALE_USE_E8M0_SCALE=1). The upstream DeepSeek-V4 recipes are unchanged across the range, and every recipe flag and choice (all2all-backend rccl, dp-load-balance least_tokens, moe-backend standard) remains valid."
+    - "No data-type or precision change to the DeepSeek-V4-Pro-0813 DSpark draft: no online quantization is configured, so it keeps its checkpoint precision; the E8M0 scale storage represents the checkpoint's power-of-two block scales exactly. kv-cache-dtype and index-cache-dtype touch cache storage only."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3605
+
+- config-keys:
     - kimik3-fp4-mi355x-vllm-agentic-mtp
     - minimaxm3-fp4-b200-vllm-agentic-mtp
     - minimaxm3-fp4-b300-vllm-agentic-mtp
