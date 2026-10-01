@@ -241,7 +241,7 @@ B200 Kimi 配方采用 DCP8，且关闭 Mooncake Offload。Master Config 记录 
 | `evals-only` | 禁用吞吐量，仅运行选定 Eval 条目；与 `all-evals` 组合即只运行所有 Eval | 不可以 |
 | `agentx-fast` | 对 AgentX 吞吐量 Lane，在强制 Primer 后只加一次额外 Warmup Request，并使用 20 分钟 Profile；固定序列与 Eval 设置仍为规范值 | 不可以 |
 
-修改被识别的主标签或修饰标签会共享活动扫描的 Concurrency Group，通常会取消并重启当前 Run。`skip_queue`、Patchwork、Waiver 与 Checklist 标签是 Gate/优先级输入，不是主扫描模式。Head Commit 含 `[skip-sweep]` 只会跳过 PR 基准 Setup；Changelog/复用检查仍会运行，推送到 `main` 时运行的 `merge-ingest.yml` 会忽略该标记。
+修改被识别的主标签或修饰标签会共享活动扫描的 Concurrency Group，通常会取消并重启当前 Run。Head Commit 含 `[skip-sweep]` 只会跳过 PR 基准 Setup；Changelog/复用检查仍会运行，推送到 `main` 时运行的 `merge-ingest.yml` 会忽略该标记。
 
 ## Canary 与 Fail-fast 语义
 
