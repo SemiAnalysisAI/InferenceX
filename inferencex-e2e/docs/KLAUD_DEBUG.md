@@ -161,13 +161,13 @@ Seen on #1422.
 If a sweep job lands on any of these, it'll never start. Nothing can be done at the recipe level. These stay drained until ops fixes them.
 
 ### 5.2 `mia1-p01-g11 / g12 / g31` — docker socket perms
-**Symptom:** mi355x jobs fail with `permission denied while trying to connect to the docker API at unix:///var/run/docker.sock` during the `docker stop $(docker ps -a -q)` cleanup step, cascading into SLURM job expiration.
+**Historical symptom:** mi355x jobs that drove Docker on the node failed with `permission denied while trying to connect to the docker API at unix:///var/run/docker.sock`, cascading into SLURM job expiration. Both the raw single-node launcher and the AMD Docker multi-node launcher are now retired; active MI355X recipes use srt-slurm.
 **Fix:** ops needs to fix docker group / socket perms on these nodes. Recipe-level workaround: none.
 
 ### 5.3 `chi-mi300x-049` — `/nvme_home` disk-full
 **Symptom:** pyxis container extraction fails with `No space left on device` writing to `/nvme_home/gharunner/.local/share/enroot/pyxis_*/opt/rocm-*/...`. The `/nvme_home` partition is hosted under `/` on this node and has been chronically near-full.
 
-**Fix already landed:** `runners/launch_mi300x-amds.sh` now pins salloc to only known-good mi300x nodes (`chi-mi300x-[034-036,054,057-058]`). See PR #1462. `chi-mi300x-049` is held in `State=DOWN` by a watchdog on the controller (`/home/gharunner/_audit/drain_049_watchdog.sh`) that re-applies the drain every 10s if SLURM auto-clears it (which it does on dynamic-norm nodes).
+**Fix:** `chi-mi300x-049` is held in `State=DOWN` by a watchdog on the controller (`/home/gharunner/_audit/drain_049_watchdog.sh`) that re-applies the drain every 10s if SLURM auto-clears it (which it does on dynamic-norm nodes). The launcher pins no nodes; to keep jobs off a node, list it in the cluster's `slurm.exclude` in `configs/runners.yaml`.
 
 ### 5.4 `chi-mi325x-pod1-017` — orphaned port-8888 process
 **Symptom:** sglang server bind fails with `[Errno 98] Address already in use` on port 8888. Held by an MLPerf accuracy run started outside SLURM.

@@ -50,6 +50,7 @@ def golden_dir(tmp_path: Path) -> Path:
         ),
         ("minimaxm3_eagle3.yaml", "minimax-m3", 2.5),
         ("minimaxm3_eagle3_gqa.yaml", "minimax-m3", 2.6),
+        ("glm5.3_mtp.yaml", "glm-5.3", 3.2),
     ]:
         (directory / filename).write_text(
             yaml.safe_dump(
@@ -289,6 +290,118 @@ def test_atom_forces_golden_acceptance_by_server_flag(
     assert "spec-decode-acceptance-length" not in evaluated["roles"]["agg"]["args"]
 
 
+def tilert_recipe() -> dict[str, Any]:
+    return {
+        "roles": {
+            "prefill": {
+                "engine": "vllm",
+                "args": {
+                    "speculative-config": '{"method":"mtp","num_speculative_tokens":1}',
+                },
+            },
+            "decode": {
+                "engine": {"type": "tilert"},
+                "args": {"with-mtp": True, "num-mtp": 3},
+                "env": {"GLM5_AR_N": "2"},
+            },
+        },
+    }
+
+
+def test_tilert_plan_uses_caller_decode_depth_and_keeps_prefill_real(
+    tmp_path: Path, golden_dir: Path
+) -> None:
+    recipe = tilert_recipe()
+    recipe["roles"]["decode"]["args"]["num-mtp"] = 2
+    recipe["environment"] = {
+        "KEEP": "global",
+        "TILERT_SIMULATE_ACC_LEN": "99",
+        "TILERT_SIMULATE_ACC_METHOD": "stale-method",
+    }
+    path = tmp_path / "tilert.yaml"
+    path.write_text(yaml.safe_dump(recipe))
+    commands = plan_commands(
+        str(path),
+        "tilert",
+        ["--set", "roles.decode.args.num-mtp=3"],
+        {**ENV, "MODEL_PREFIX": "glm5.3", "RUN_EVAL": "true"},
+        golden_dir=golden_dir,
+    )
+    assert len(commands) == 1
+    result = apply_native(recipe, commands[0])
+    assert result["roles"]["decode"]["env"] == {
+        "GLM5_AR_N": "2",
+        "TILERT_SIMULATE_ACC_LEN": "3.2",
+        "TILERT_SIMULATE_ACC_METHOD": "match-expected",
+    }
+    assert result["roles"]["decode"]["args"] == {"with-mtp": True, "num-mtp": 3}
+    assert result["environment"] == {"KEEP": "global"}
+    assert json.loads(result["roles"]["prefill"]["args"]["speculative-config"]) == {
+        "method": "mtp",
+        "num_speculative_tokens": 1,
+    }
+
+
+@pytest.mark.parametrize(
+    "environment",
+    [{"EVAL_ONLY": "true"}, {"IS_AGENTIC": "0"}, {"SPEC_DECODING": "none"}, {}],
+)
+def test_tilert_real_verification_removes_stale_role_and_global_simulation(
+    tmp_path: Path, environment: dict[str, str]
+) -> None:
+    recipe = tilert_recipe()
+    if not environment:
+        recipe["roles"]["decode"]["args"]["with-mtp"] = False
+    stale = {"TILERT_SIMULATE_ACC_LEN": "99", "TILERT_SIMULATE_ACC_METHOD": "match-expected"}
+    recipe["environment"] = {"KEEP": "global", **stale}
+    for role in recipe["roles"].values():
+        role.setdefault("env", {}).update(stale)
+    recipe["roles"]["prefill"]["engine"] = {"type": "vllm"}
+    recipe["roles"]["prefill"]["args"]["speculative-config"] = json.dumps(
+        {
+            "method": "mtp",
+            "num_speculative_tokens": 1,
+            "rejection_sample_method": "synthetic",
+            "synthetic_acceptance_length": 99,
+        }
+    )
+    result = apply_native(
+        recipe,
+        build_overrides(
+            recipe,
+            "tilert",
+            {**ENV, "MODEL_PREFIX": "glm5.3", **environment},
+            golden_dir=tmp_path / "missing",
+        ),
+    )
+    assert result["environment"] == {"KEEP": "global"}
+    assert result["roles"]["decode"]["env"] == {"GLM5_AR_N": "2"}
+    assert result["roles"]["prefill"]["env"] == {}
+    assert json.loads(result["roles"]["prefill"]["args"]["speculative-config"]) == {
+        "method": "mtp",
+        "num_speculative_tokens": 1,
+        "rejection_sample_method": "block",
+    }
+
+
+@pytest.mark.parametrize("depth", [None, 7])
+def test_tilert_requires_explicit_measured_decode_depth(
+    golden_dir: Path, depth: int | None
+) -> None:
+    recipe = tilert_recipe()
+    if depth is None:
+        del recipe["roles"]["decode"]["args"]["num-mtp"]
+    else:
+        recipe["roles"]["decode"]["args"]["num-mtp"] = depth
+    with pytest.raises(ValueError, match="positive integer draft length|No golden acceptance"):
+        build_overrides(
+            recipe,
+            "tilert",
+            {**ENV, "MODEL_PREFIX": "glm5.3"},
+            golden_dir=golden_dir,
+        )
+
+
 @pytest.mark.parametrize(
     "curve",
     [
@@ -408,7 +521,7 @@ def test_caller_json_is_merged_before_golden_selection(tmp_path: Path, golden_di
     }
 
 
-def test_shell_forwards_options_and_submission_failure(tmp_path: Path) -> None:
+def test_cli_forwards_options_and_submission_failure(tmp_path: Path) -> None:
     recipe = tmp_path / "recipe.yaml"
     recipe.write_text(
         yaml.safe_dump(
@@ -422,13 +535,9 @@ def test_shell_forwards_options_and_submission_failure(tmp_path: Path) -> None:
     binary.chmod(0o755)
     result = subprocess.run(
         [
-            "bash",
-            "-c",
-            'source "$1"; apply_srt_recipe "$2" vllm -f "$2" --tags "a b"',
-            "bash",
-            str(ROOT / "runners/slurm_utils.sh"),
-            str(recipe),
-        ],
+            sys.executable, "-m", "infx.srt_slurm.synthetic_acceptance",
+            str(recipe), "vllm", "--", "-f", str(recipe), "--tags", "a b",
+        ],  # fmt: skip
         cwd=tmp_path,
         env={
             **os.environ,

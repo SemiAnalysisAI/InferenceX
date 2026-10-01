@@ -19,7 +19,7 @@ Use this page to identify benchmark artifacts, inspect their contracts, and deci
 | [`infx/results/evals.py`](../infx/results/evals.py), [`eval_artifacts.py`](../infx/results/eval_artifacts.py) | Shared eval reading, result selection, reuse consistency checks, and rerun deduplication for collection and Klaud |
 | [`infx.results.agentic`](../infx/results/agentic/__init__.py), [`request_metrics.py`](../infx/results/agentic/request_metrics.py), [`artifacts.py`](../infx/results/agentic/artifacts.py) | AgentX aggregate schema, raw-record filtering, request accounting, and derived metrics |
 | [`validate_agentic_result.py`](../infx/results/agentic/validate_agentic_result.py) | AgentX pre-upload error-rate gate |
-| [`run-sweep.yml`](../../.github/workflows/run-sweep.yml), [`recover-reused-ingest.yml`](../../.github/workflows/recover-reused-ingest.yml) | App dispatch payload and source/merge run identities |
+| [`merge-ingest.yml`](../../.github/workflows/merge-ingest.yml), [`recover-reused-ingest.yml`](../../.github/workflows/recover-reused-ingest.yml) | App dispatch payload and source/merge run identities |
 | [InferenceX-app `prepare-ci-artifacts.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/prepare-ci-artifacts.ts), [`ci-artifact-preparation.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/lib/ci-artifact-preparation.ts) | Cross-run artifact selection, attempts, and reuse provenance |
 | [InferenceX-app `ingest-ci-run.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/ingest-ci-run.ts) | End-to-end ingest ordering, pairing, skips, summaries, and refresh |
 | [InferenceX-app `benchmark-mapper.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/etl/benchmark-mapper.ts), [`eval-mapper.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/etl/eval-mapper.ts), [`agentic-v3-flatten.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/etl/agentic-v3-flatten.ts) | Artifact-to-database schemas and normalization |
@@ -55,7 +55,7 @@ Do not use one identifier as a substitute for another.
 | Eval sample | `(eval_result_id, doc_id)` | Per-document sample identity. |
 | AgentX raw sidecar | `benchmark_results.trace_replay_id` | Link from a normalized AgentX point to retained and precomputed trace data. |
 
-The distinction matters during reuse. Artifact bytes can come from a PR sweep while changelog metadata and the ingest trigger come from a later main run. The stored benchmark row still belongs to the source run and source attempt.
+The distinction matters because every official ingest reuses a PR sweep. Artifact bytes come from the PR sweep while changelog metadata and the ingest trigger come from the later Merge Ingest run on `main`. The stored benchmark row still belongs to the source run and source attempt.
 
 ## Throughput artifacts
 
@@ -269,12 +269,11 @@ Before normal upload, the single-node workflow runs [`validate_agentic_result.py
 
 ## App handoff and reused runs
 
-[`run-sweep.yml`](../../.github/workflows/run-sweep.yml) dispatches either `ingest-results` or `ingest-agentic-results` to InferenceX-app.
+[`merge-ingest.yml`](../../.github/workflows/merge-ingest.yml) dispatches exactly one of `ingest-results` or `ingest-agentic-results` to InferenceX-app per merge. It chooses `ingest-agentic-results`, with `database-target: production`, when the changelog delta has agentic entries. `run-sweep.yml` never dispatches ingest.
 
-- `source-run-id` identifies the workflow run whose benchmark, eval, AgentX, log, and stats artifacts supply measured data.
-- `merge-run-id` identifies the main-branch workflow run that authorized the ingest and supplies current changelog metadata.
-- For an ordinary main run, both IDs equal `github.run_id`.
-- For a reused PR sweep, `source-run-id` is the selected PR run and `merge-run-id` is the current main run.
+- `source-run-id` identifies the reused PR `run-sweep.yml` run whose benchmark, eval, AgentX, log, and stats artifacts supply measured data.
+- `merge-run-id` identifies the Merge Ingest run on `main` that authorized the ingest and supplies current changelog metadata.
+- The two IDs always differ: `main` never runs a sweep, so no run supplies both the measured artifacts and the merge metadata.
 
 InferenceX-app's artifact preparation keeps the newest unexpired upload for each exact artifact name from the source run. In reuse mode it excludes source-run `changelog-metadata`, requires an unexpired changelog artifact from the merge run, and adds that merge-run artifact to the plan. No unexpired source artifacts, or no merge-run changelog during reuse, is a hard failure.
 
