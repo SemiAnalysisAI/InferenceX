@@ -87,7 +87,13 @@ async def admit_wave(
         tasks = [
             asyncio.create_task(
                 stream_request(
-                    session, base, p[0], output_length, r, i % dp_size, body=body
+                    session,
+                    base,
+                    p[0],
+                    output_length,
+                    r,
+                    i % dp_size if dp_size > 1 else None,
+                    body=body,
                 )
             )
             for i, (p, r, body) in enumerate(zip(prompts, records, bodies))
@@ -120,6 +126,7 @@ async def admit_wave(
         return records, tasks
     except BaseException as error:
         marker["error"] = f"{type(error).__name__}: {error}"
+        marker["request_errors"] = [r["error"] for r in records if r["error"]]
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
@@ -150,7 +157,7 @@ async def stream_request(
                 else "/v1/completions"
             ),
             headers={
-                "X-data-parallel-rank": str(rank),
+                **({"X-data-parallel-rank": str(rank)} if rank is not None else {}),
                 "Content-Type": "application/json",
             },
             data=body,

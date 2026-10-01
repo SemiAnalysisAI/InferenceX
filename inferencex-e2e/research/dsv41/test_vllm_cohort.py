@@ -181,7 +181,8 @@ def test_profile_validation_checks_actual_generation_batch(tmp_path, second_rank
         ]
 
 
-def test_native_token_endpoint_streams_without_text_or_prompt_echo(monkeypatch):
+@pytest.mark.parametrize("rank", [None, 2])
+def test_native_token_endpoint_streams_without_text_or_prompt_echo(monkeypatch, rank):
     import aiohttp
     from aiohttp import web
 
@@ -198,7 +199,8 @@ def test_native_token_endpoint_streams_without_text_or_prompt_echo(monkeypatch):
                 or params.get("detokenize") is not False
                 or params.get("max_tokens") != 3
                 or params.get("ignore_eos") is not True
-                or request.headers.get("X-data-parallel-rank") != "2"
+                or request.headers.get("X-data-parallel-rank")
+                != (None if rank is None else "2")
             ):
                 return web.Response(status=400, text="Invalid native token request")
             chunks = [
@@ -228,7 +230,7 @@ def test_native_token_endpoint_streams_without_text_or_prompt_echo(monkeypatch):
         try:
             async with aiohttp.ClientSession() as session:
                 await stream_request(
-                    session, f"http://127.0.0.1:{port}", [11, 12, 13], 3, record, 2
+                    session, f"http://127.0.0.1:{port}", [11, 12, 13], 3, record, rank
                 )
         finally:
             await runner.cleanup()

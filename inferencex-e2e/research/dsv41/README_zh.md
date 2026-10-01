@@ -283,3 +283,6 @@ max(1024, 实测输出长度)，避免长输出案例的 profile 暗中缩回较
 
 
 B200 TP4 global384 profile 使用四张 GPU、TP4/EP4/DP1、131072/2048、prefill4096、max-sequences384、graph cap2304，采用原生混合 KV 并校验四个 rank。此配置不是 DP4。
+
+
+失败复测：B200 global2560 在2048输出下裁剪区间无交集，改为4096输出，单独标记为诊断结果。TP4预填充降至2304（384×6验证宽度），使用单 API worker；DP1省略路由头，admission失败保留原始请求错误。修改仍需运行验证，区间和profile校验不变。

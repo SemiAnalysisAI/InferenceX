@@ -346,3 +346,6 @@ Review recipes use matched 2048 outputs and 2048/320/1920 prefill/sequence/graph
 
 
 The B200 TP4 global384 profile uses four active GPUs, TP4/EP4/DP1, 131072/2048, prefill4096, max-sequences384 and graph cap2304, with native hybrid KV and four-rank validation. It is not a DP4 run.
+
+
+Failure follow-up: B200 global2560 uses4096 outputs after a negative trimmed overlap at2048; this is a separate diagnostic, not an output-length-matched result. TP4 reduces prefill to2304 (384×6 verification width), uses one API worker, omits the DP routing header for DP1 and retains original request errors on failed admission. These changes require runtime confirmation; overlap/profile gates are unchanged.
