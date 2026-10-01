@@ -52,8 +52,11 @@ base:
         enable-prefix-caching: true
         kv-cache-dtype: fp8
         # Online FP8 per-channel for the target's linear layers; the routed
-        # experts stay MXFP4 and the DSpark draft stays BF16.
-        quantization-config: '{"linear":"fp8_per_channel","ignore":["*kv_b_proj","*vision_tower*","*mm_projector*"]}'
+        # experts stay MXFP4 and the DSpark draft stays BF16. in_proj_qkvgfab
+        # and fused_qkv_a_proj have no tuned AITER FP8 shape on this image
+        # (torch._scaled_mm fallback); f_b_proj, MLA g_proj and the dense
+        # down_proj do not gain from FP8 at decode, so all five stay BF16.
+        quantization-config: '{"linear":"fp8_per_channel","ignore":["*kv_b_proj","*vision_tower*","*mm_projector*","*in_proj_qkvgfab","*f_b_proj","*fused_qkv_a_proj","*self_attn.g_proj","*.layers.0.mlp.down_proj"]}'
         attention-config: '{"mla_prefill_backend":"ROCM_AITER_FA"}'
       env:
         # Upstream AMD recipe environment.
