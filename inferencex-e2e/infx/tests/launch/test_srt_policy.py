@@ -106,6 +106,44 @@ def test_a_checkpoint_that_must_be_readable_fails_before_submission(tmp_path, mo
     assert host_path(c, checkpoint(c, request(MODEL="org/S"))) == tmp_path / "shared/s"
 
 
+@pytest.mark.parametrize(
+    ("model", "framework", "multinode", "directory"),
+    [
+        ("DeepSeek-V4-Pro", "vllm", "false", "converted"),
+        ("DeepSeek-V4-Pro-0813", "vllm", "false", "august"),
+        ("DeepSeek-V4-Pro", "vllm", "true", "original"),
+        ("DeepSeek-V4-Pro", "sglang", "false", "original"),
+    ],
+)
+def test_b200_original_pro_single_node_vllm_keeps_converted_checkpoint(
+    tmp_path,
+    model,
+    framework,
+    multinode,
+    directory,
+):
+    c = cluster(tmp_path)
+    c.bind_id("b200-nscale")
+    entry = c.models.entries["M"]
+    entries = {
+        name: entry.model_copy(update={"dir": path})
+        for name, path in {
+            "DeepSeek-V4-Pro": "original",
+            "DeepSeek-V4-Pro-NVFP4": "converted",
+            "DeepSeek-V4-Pro-0813": "august",
+        }.items()
+    }
+    c = c.model_copy(update={"models": c.models.model_copy(update={"entries": entries})})
+    point = request(
+        MODEL=f"deepseek-ai/{model}",
+        MODEL_PREFIX="dsv4",
+        PRECISION="fp4",
+        FRAMEWORK=framework,
+        IS_MULTINODE=multinode,
+    )
+    assert single_node_model_path(c, point) == str(tmp_path / "shared" / directory)
+
+
 def test_a_points_own_model_path_is_what_its_job_serves(tmp_path, monkeypatch):
     c = cluster(tmp_path)
     host = request(MODEL="org/M", MODEL_PATH="/host/m")

@@ -84,6 +84,12 @@ def prepare_checkout(run: SrtRun, destination: Path, *, power: bool) -> Checkout
     )
     for patch in sorted((run.workspace / PATCHES).glob("*.patch")):
         _git("-C", destination, "apply", patch)
+    if run.request.config_file == (
+        "recipes/dsv4/vllm/gb300-fp4/agentx/cache-sources-dep4-dep16-c256-mtp.yaml"
+    ):
+        _git(
+            "-C", destination, "apply", run.workspace / "runners/srt-slurm/validation/pr56318.patch"
+        )
     head = _git("-C", destination, "rev-parse", "HEAD", capture=True)
     if head != commit:
         raise LaunchError(f"srt-slurm checkout is at {head}, expected {commit}")

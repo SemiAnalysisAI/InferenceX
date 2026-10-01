@@ -23,6 +23,12 @@
 
 退役的配置项直接从启用的主配置中删除，不再归档；历史设置由 Git 历史和 `perf-changelog.yaml` 保留。仅弃用部分场景时，只删除已退役的场景。同时删除不再使用的配方和模型专用初始化逻辑。保留 SPEED-Bench 采集器仍需使用的共享依赖，包括调度评分。参见[弃用规则](../../AGENTS.md#deprecating-benchmark-configs)。
 
+## 缓存来源验证
+
+单节点 AgentX 配置除了 `none` 和 `dram`，还接受 `kv-offloading: nvme` 或 `[dram, nvme]`。分层配置仍须提供 `dram-utilization`，且该值仅用于分配主机内存。专用 DeepSeek-V4-Pro B200 验证配方支持 Simple NVMe 和原生 DRAM/NVMe。launcher 挂载作业专属的 `/scratch/inferencex-kv-<job-id>` 目录，并在释放资源前将其删除。其他配方必须显式启用 NVMe 模式。
+
+专用 GB300 缓存来源配方在作业本地的 srt-slurm 副本中应用补丁，采集每个物理 DP worker 的指标，包括非 leader 节点。依赖安装后会验证镜像中 PR 覆盖文件的校验和。其他配方不会应用此补丁。
+
 ## 依赖子模块
 
 Git 记录依赖的精确提交版本。[`.gitmodules`](../../.gitmodules) 定义各仓库：AIPerf 位于 `utils/aiperf`，NVIDIA srt-slurm 位于 `utils/srt-slurm`。包括 TileRT 在内的所有 srt-slurm 作业均使用固定的上游子模块。

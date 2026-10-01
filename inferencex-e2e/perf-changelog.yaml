@@ -9180,3 +9180,36 @@
     - "Update the SGLang ROCm image from lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260927 to lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260929 on this arm only. The other MI355X arms are left on their current tags."
     - "No serving flag outside the HiCache block changes, and no other config key is touched. Each of the 19 matrix points resolves to exactly one recipe override, with no override left unused."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3611
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-agentic-cache-sources-mtp
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-cache-sources-mtp-disagg
+  scenario-type:
+    - agentic-coding
+  no-evals: true
+  description:
+    - "Rerun vLLM PR56318 at bd57138f9b98eb64c44ea6a0f10d08c8f639820e with the four proven DeepSeek-V4-Pro hybrid cache-source points: B200 TP8 MTP3 native DRAM c8, Simple NVMe c14, and native DRAM+NVMe c14; GB300 MTP3 NIXL plus Mooncake c256."
+    - "Preserve B200 GPU utilization 0.85, native DRAM utilization 0.0592, the dedicated 1 TB Simple NVMe budget, 3600-second AgentX profiles, and disabled evals. GB300 is one DEP4 prefill worker on one node plus one DEP16 decode worker across four nodes: five nodes and twenty GPUs total."
+    - "Keep existing benchmark curves unchanged. Adapt the isolated old-Pro validation recipes to current InferenceX paths and current vLLM flag names, use the Python frontend, and collect all raw backend metrics with the cached-prompt source counter required."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3491
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-agentic-cache-sources-mtp
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-cache-sources-mtp-disagg
+  scenario-type:
+    - agentic-coding
+  no-evals: true
+  description:
+    - "Rerun the four DeepSeek-V4-Pro cache-source points with vLLM PR56318 commit 6ce00ee2ebcf29076d671786c36bf8f8ca71bd0b: B200 native DRAM c8, Simple NVMe c14, native DRAM+NVMe c14, and GB300 NIXL plus Mooncake Store c256."
+    - "Keep the prior runtimes and serving settings, 3600-second AIPerf AgentX profiles, Python frontend, and Prometheus source collection. Update the attribution overlay for bounded attention ranges and sweep-line accounting."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3491
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-agentic-cache-sources-mtp
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-cache-sources-mtp-disagg
+  scenario-type:
+    - agentic-coding
+  no-evals: true
+  description:
+    - "Restore the original B200 single-node vLLM DeepSeek-V4-Pro-NVFP4 checkpoint mapping after the launcher migration. Repeat the four cache-source validation points with unchanged images and serving settings."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3491

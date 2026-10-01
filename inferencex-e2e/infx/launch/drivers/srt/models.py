@@ -40,6 +40,16 @@ class Override:
 OVERRIDES: dict[str, tuple[Override, ...]] = {
     "b200-nscale": (
         Override(
+            Match(
+                any_of("dsv4"),
+                any_of("fp4"),
+                any_of("vllm"),
+                multinode=False,
+                model_glob="deepseek-ai/DeepSeek-V4-Pro",
+            ),
+            entry="DeepSeek-V4-Pro-NVFP4",
+        ),
+        Override(
             Match(any_of("glm5.1"), frameworks=any_of("tilert")),
             entry="GLM-5.1-FP8@shared",
         ),
