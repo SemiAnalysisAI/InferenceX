@@ -9496,3 +9496,12 @@
     - "Backport vLLM #55297 for request-local recompute after failed asynchronous Mooncake loads on B300; see docs/waiver/3088.md"
     - "Raise the Mooncake master lease from the 5s default to 60s (--default_kv_lease_ttl=60000): at concurrency >= 32 gets took 10-30s at p90, so 60-75% of transferred keys were discarded as LEASE_EXPIRED and recomputed; 60s matches the client's own 60s transfer cap. vLLM's execute_model timeout stays at its 300s default"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3088
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Move select_mooncake_rdma_device above benchmark_lib.sh's --validation-only gate so kimik3-b300-mooncake.sh can resolve the helper (exit 127 / command not found previously cancelled the fail-fast canary)"
+    - "将 select_mooncake_rdma_device 移到 benchmark_lib.sh 的 --validation-only 门禁之上，使 kimik3-b300-mooncake.sh 能解析该辅助函数（此前 exit 127 / command not found 导致 fail-fast canary 取消）"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3088
