@@ -9551,3 +9551,11 @@
     - "从 B300 DSXE Mooncake 移除 MC_MAX_MR_SIZE。tip 1d9c54d fail-fast 运行 36870807626 的 agentic c32（job 110437058728，Slurm 6614，gpu-01）已有真实 rail（Mooncake rail: ibp198s0f0 / Patched；GH Wrote 行为 setup 前转储）且 cumem 已关，但各 rank 仍对约 43.7GiB KV 区域报 register_buffer failed（-600），随后约 12.8 万次 AddressNotRegistered TRANSFER_FAIL；约 40 分钟降级服务后 NCCL ALLGATHER watchdog（600 秒）杀死 VllmWorker-2（worker_crash:8）→ EngineDead / ProfileAborted。加入 MC_MAX_MR 之前的 tip（旧 c40/c48）无 register_buffer -600；该 4GiB 上限来自 ee33eeba 的 GB300 对齐，是已验证根因。保留不启用 compact_group_io、max_load_batch_keys=2、KV_GATHER=0、关闭 cumem。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3088
 
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Cut Mooncake max_load_batch_keys from 2 to 1 on B300 DSXE. Tip 860c1ccf fail-fast run 36894040300 agentic c48 (job 110510865864, Slurm 6639, gpu-03) had a real rail (Mooncake rail: ibp198s0f0 / Patched device_name; GH Wrote line is pre-setup), zero register_buffer -600 / AddressNotRegistered / TRANSFER_FAIL / multimem, and clean Mooncake load/save metrics (failed_keys=0) through ~35m of serve; then under GPU KV ~100% the engine hung at 0 tok/s (Running: 4, Waiting: 46) and NCCL _ALLGATHER_BASE on PG ID 3 timed out after 600s (last started work: -1) → VllmWorker-4 died (worker_crash:8) → EngineDead / ProfileAborted. Keep no compact_group_io, no MC_MAX_MR_SIZE, KV_GATHER=0, cumem off, load_async true."
+    - "将 B300 DSXE 上的 Mooncake max_load_batch_keys 从 2 降为 1。tip 860c1ccf fail-fast 运行 36894040300 的 agentic c48（job 110510865864，Slurm 6639，gpu-03）已有真实 rail（Mooncake rail: ibp198s0f0 / Patched；GH Wrote 行为 setup 前转储），无 register_buffer -600 / AddressNotRegistered / TRANSFER_FAIL / multimem，且 Mooncake load/save 指标干净（failed_keys=0）约 35 分钟；随后在 GPU KV ~100% 下引擎以 0 tok/s 挂起（Running: 4，Waiting: 46），PG ID 3 上的 NCCL _ALLGATHER_BASE 在 600 秒后超时（last started work: -1）→ VllmWorker-4 死亡（worker_crash:8）→ EngineDead / ProfileAborted。保留不启用 compact_group_io、不设 MC_MAX_MR_SIZE、KV_GATHER=0、关闭 cumem、load_async true。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3088
