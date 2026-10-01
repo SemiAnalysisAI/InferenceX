@@ -1173,6 +1173,7 @@ qwen3.5-fp8-b200-sglang:
     fixed-seq-len:
     - isl: 8192
       osl: 1024
+      require-power: true
       search-space:
       - tp: 8
         conc-start: 1
@@ -1180,7 +1181,7 @@ qwen3.5-fp8-b200-sglang:
         srt-recipe: benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/b200-fp8/8k1k.yaml
       - tp: 4
         ep: 1
-        conc-start: 2
+        conc-start: 1
         conc-end: 512
         srt-recipe: benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/b200-fp8/8k1k.yaml
       - tp: 4

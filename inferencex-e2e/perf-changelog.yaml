@@ -9180,3 +9180,13 @@
     - "Update the SGLang ROCm image from lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260927 to lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260929 on this arm only. The other MI355X arms are left on their current tags."
     - "No serving flag outside the HiCache block changes, and no other config key is touched. Each of the 19 matrix points resolves to exactly one recipe override, with no override left unused."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3611
+
+- config-keys:
+  - qwen3.5-fp8-b200-sglang
+  scenario-type:
+  - fixed-seq-len
+  description:
+  - Preserve Qwen3.5 FP8 b200 coverage and require validated power; include the article
+    ladder where missing.
+  - 保留现有覆盖并要求通过验证的功耗，补齐缺失的文章并发梯度。
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3378
