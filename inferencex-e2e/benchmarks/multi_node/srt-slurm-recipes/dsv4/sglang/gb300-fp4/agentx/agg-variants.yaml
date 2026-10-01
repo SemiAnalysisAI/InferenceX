@@ -13,7 +13,7 @@ base:
     model:
       repo: "deepseek-ai/DeepSeek-V4-Pro-0813"
     container:
-      image: "lmsysorg/sglang:nightly-dev-20260916-c9a8fba9"
+      image: "lmsysorg/sglang:nightly-dev-20261001-b37e6f79"
   dynamo:
     install: true
     source:
@@ -62,7 +62,6 @@ base:
         PIP_BREAK_SYSTEM_PACKAGES: "1"
         SGLANG_JIT_DEEPGEMM_PRECOMPILE: "1"
         SGLANG_ENABLE_PREFILL_WAR_READ_DONE: "1"
-        SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: "1"
         SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: "1"
         SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2: "1"
         SGLANG_OPT_USE_ONLINE_COMPRESS: "0"
