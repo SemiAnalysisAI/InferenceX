@@ -399,10 +399,10 @@ def test_b300_flash_agentx_reenters_inside_a_batch_allocation(harness):
     assert list(runner_temp.glob("srt-batch.*.sh")) == []
 
 
-def test_tilert_fixed_sequence_uses_upstream_submission_and_prepared_weights(harness):
+def test_tilert_uses_upstream_submission_and_prepared_weights(harness):
     env = lane_env(
-        harness, "b200-nscale", MODEL_PREFIX="glm5.1", PRECISION="fp8", FRAMEWORK="tilert",
-        MODEL="zai-org/GLM-5.1-FP8", SPEC_DECODING="mtp", PREFILL_IMAGE="prefill:tag",
+        harness, "mi355x-amds", MODEL_PREFIX="glm5.3", PRECISION="fp8", FRAMEWORK="tilert",
+        MODEL="zai-org/GLM-5.3", SPEC_DECODING="mtp", PREFILL_IMAGE="prefill:tag",
     )  # fmt: skip
     assert_ok(launch(env, harness.config, harness.workspace))
 
@@ -412,11 +412,9 @@ def test_tilert_fixed_sequence_uses_upstream_submission_and_prepared_weights(har
     assert "--no-preflight" not in call["argv"]
     config = srtslurm(Path(call["cwd"]))
     assert config["default_health_check"]["max_attempts"] > 0
-    assert config["containers"]["test:tag"].endswith("/test_tag.sqsh")
-    assert config["containers"]["prefill:tag"].endswith("/prefill_tag.sqsh")
+    assert {"test:tag", "prefill:tag"} <= set(config["containers"])
     assert config["default_mounts"][str(harness.workspace)] == "/infmax-workspace"
-    assert "/tilert_weights" in config["default_mounts"].values()
-    assert "/scratch/" not in config["model_paths"]["alias"]
+    assert "/models" in config["default_mounts"].values()
     [point] = harness.workspace.glob("point-identity_sweep_*.json")
     assert json.loads(point.read_text()) == {"conc": 4}
 

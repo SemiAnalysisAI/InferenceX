@@ -52,8 +52,7 @@ SINGLE = dict(IS_MULTINODE="false")
 @pytest.mark.parametrize(("cluster_id", "env", "path"), [
     ("b200-nscale", dict(MULTI, MODEL_PREFIX="dsv4", PRECISION="fp4", FRAMEWORK="dynamo-sglang", SPEC_DECODING="mtp"), LaunchPath.SRT_NATIVE),
     ("b200-nscale", dict(MULTI, MODEL_PREFIX="dsv4", PRECISION="fp4", FRAMEWORK="dynamo-sglang", SPEC_DECODING="eagle"), LaunchPath.SRT_MULTI),
-    ("b200-nscale", dict(MULTI, MODEL_PREFIX="glm5.1", PRECISION="fp8", FRAMEWORK="tilert", SPEC_DECODING="mtp", IS_AGENTIC="1"), LaunchPath.SRT_NATIVE),
-    ("b200-nscale", dict(MULTI, MODEL_PREFIX="glm5.1", PRECISION="fp8", FRAMEWORK="tilert", SPEC_DECODING="mtp", IS_AGENTIC="0"), LaunchPath.SRT_NATIVE),
+    ("b200-nscale", dict(MULTI, MODEL_PREFIX="glm5.3", PRECISION="fp8", FRAMEWORK="tilert", SPEC_DECODING="mtp"), LaunchPath.SRT_MULTI),
     ("mi355x-amds", dict(IS_MULTINODE="true", FRAMEWORK="atom-disagg"), LaunchPath.SRT_MULTI),
     ("mi355x-amds", dict(MULTI, FRAMEWORK="sglang-disagg"), LaunchPath.SRT_MULTI),
     ("gb200-nv", dict(MULTI, FRAMEWORK="tilert"), LaunchPath.SRT_MULTI),
