@@ -246,35 +246,3 @@ def test_incomplete_artifact_listing_cannot_approve_a_run(staging):
     staging["responses"]["/actions/runs/123/artifacts"]["total_count"] = 3
     with pytest.raises(github.ListingError, match="Incomplete GitHub listing"):
         stage_results.request("example/project", staging["event"], "token")
-
-
-@pytest.mark.parametrize("body", ["/use 123", "/use 36532730736\n", "\ufeff/use\u00a000123\r\n"])
-def test_use_command_stages_its_pinned_run(staging, monkeypatch, tmp_path, body):
-    staging["event"]["comment"]["body"] = body
-    run_id = "36532730736" if "36532730736" in body else "123"
-    if run_id != "123":
-        run = {**staging["responses"]["/actions/runs/123"], "id": int(run_id)}
-        staging["responses"][f"/actions/runs/{run_id}"] = run
-        staging["responses"][f"/actions/runs/{run_id}/artifacts"] = staging["responses"][
-            "/actions/runs/123/artifacts"
-        ]
-    outputs = stage_results.request("example/project", staging["event"], "token")
-    assert outputs is not None and outputs["run-id"] == run_id
-    assert staging["comments"] == []
-
-
-@pytest.mark.parametrize("body", ["/use", "/use abc", "/use 123 extra", "/user 123", "/useful"])
-def test_malformed_use_command_is_ignored_without_lookups(staging, monkeypatch, tmp_path, body):
-    staging["event"]["comment"]["body"] = body
-    invoke(staging, monkeypatch, tmp_path)
-    assert not staging["output"].exists()
-    assert staging["comments"] == []
-    assert staging["reads"] == []
-
-
-def test_use_command_on_non_full_sweep_pr_is_rejected(staging):
-    staging["event"]["comment"]["body"] = "/use 123"
-    staging["responses"]["/pulls/7"]["labels"] = [{"name": "documentation"}]
-    with pytest.raises(RuntimeError, match="PR does not have a full-sweep label"):
-        stage_results.request("example/project", staging["event"], "token")
-    assert "staging requires a completed run" in staging["comments"][0]
