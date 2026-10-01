@@ -4311,7 +4311,7 @@
       "repeat": 1,
       "attempt": 1,
       "head_sha": "81f6a0dc0cf7ea1c018fec03e7ea1813da158de6",
-      "status": "queued",
+      "status": "in_progress",
       "workflow_name": "offload-v1-none-c488-r1-branchwf-20261001",
       "dispatched_at": "2026-10-01T14:47:37Z",
       "queued_at": "2026-10-01T14:47:57Z",
@@ -4319,25 +4319,28 @@
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/36879140816/job/110426286301",
       "performance_result": false,
       "matched_nvme_run_id": 36796500128,
-      "dispatch_evidence": "The exact matrix preview resolved MiniMax-M3 NVFP4, vLLM, TP4, four GPUs, canonical AgentX c488, 3,600-second profiling, kv-offloading=none, zero CPU DRAM, and experiment=agentx-offload. Immediately before dispatch, a fresh inventory of every queued and active workflow job found zero jobs carrying cluster:b200-nscale. The completed NVMe c488 artifacts and hashes were pushed at 81f6a0dc0, and offload_cleanup.json recorded deletion of its exact task-owned scratch. The generated control job carries cluster:b200-nscale and nodes:1 and is now the single queued B200 job."
+      "dispatch_evidence": "The exact matrix preview resolved MiniMax-M3 NVFP4, vLLM, TP4, four GPUs, canonical AgentX c488, 3,600-second profiling, kv-offloading=none, zero CPU DRAM, and experiment=agentx-offload. Immediately before dispatch, a fresh inventory of every queued and active workflow job found zero jobs carrying cluster:b200-nscale. The completed NVMe c488 artifacts and hashes were pushed at 81f6a0dc0, and offload_cleanup.json recorded deletion of its exact task-owned scratch. The generated control job carries cluster:b200-nscale and nodes:1 and is now the single queued B200 job.",
+      "started_at": "2026-10-01T14:48:20Z",
+      "runner": "b200-nscale-slurm_00",
+      "phase": "Launch job script; Slurm allocation pending"
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894",
-  "status": "Matched HBM-only c488 control run 36879140816 is queued as the single cluster:b200-nscale job after the NVMe c488 result and cleanup evidence were recorded.",
+  "status": "Matched HBM-only c488 control run 36879140816 is active in the launch step on b200-nscale-slurm_00. Dispatch nothing else while it remains active.",
   "last_capacity_check": {
-    "checked_at": "2026-10-01T14:47:57Z",
-    "active_study_run_ids": [],
-    "pending_study_run_ids": [
+    "checked_at": "2026-10-01T14:49:53Z",
+    "active_study_run_ids": [
       36879140816
     ],
+    "pending_study_run_ids": [],
     "dispatch_allowed": false,
-    "b200_priority_jobs_queued": 1,
+    "b200_priority_jobs_queued": 0,
     "b200_nodes_allocated": null,
     "b200_nodes_idle": null,
     "target_node": "im-b200-c001",
-    "target_node_state": "HBM-only c488 queued; allocation pending",
+    "target_node_state": "HBM-only c488 launch active on scheduler runner; Slurm allocation pending",
     "observed_free_bytes": null,
-    "reason": "The matched HBM-only c488 control is the single queued cluster:b200-nscale job; dispatch nothing else."
+    "reason": "The matched HBM-only c488 control is active; dispatch nothing else."
   },
   "next_dispatch": {
     "requires": "Wait for matched HBM-only c488 run 36879140816 to complete canonical warmup and 3,600-second profiling, then capture artifacts, compare matched cohorts, verify cleanup, and choose the next adaptive control."
