@@ -733,7 +733,7 @@ def test_main_accepts_all_evals_with_non_canary_full_sweep_label(
             return {
                 "merged_at": "2026-05-13T00:01:00Z",
                 "labels": [
-                    {"name": "non-canary-full-sweep-enabled"},
+                    {"name": "full-sweep-fail-fast-no-canary"},
                     {"name": "all-evals"},
                 ],
                 "head": {"sha": "abc123"},

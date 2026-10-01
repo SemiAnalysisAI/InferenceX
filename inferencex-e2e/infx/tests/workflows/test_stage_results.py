@@ -85,7 +85,7 @@ def test_automatic_staging_accepts_partial_results(staging, conclusion, result_n
 
 
 @pytest.mark.parametrize("permission,role,label", [
-    ("write", "maintain", "non-canary-full-sweep-enabled"),
+    ("write", "maintain", "full-sweep-enabled"),
     ("admin", "admin", "full-sweep-fail-fast"),
     ("write", "write", "full-sweep-fail-fast-no-canary"),
 ])

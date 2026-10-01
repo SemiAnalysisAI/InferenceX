@@ -232,7 +232,6 @@ B200 Kimi 配方采用 DCP8，且关闭 Mooncake Offload。Master Config 记录 
 | `full-sweep-fail-fast` | 完整 Changelog 矩阵 | 有 | 有；推荐的完整扫描默认值 |
 | `full-sweep-enabled` | 完整 Changelog 矩阵 | 有 | 无；需要每个矩阵点继续运行时使用 |
 | `full-sweep-fail-fast-no-canary` | 完整 Changelog 矩阵 | 无 | 有 |
-| `non-canary-full-sweep-enabled` | 完整 Changelog 矩阵 | 无 | 无 |
 
 可选修饰标签不能替代主标签：
 
@@ -362,7 +361,7 @@ Klaud 和恢复工具继续使用现有的 `gh` 认证。GitHub CLI 跟随分页
 请求只有在全部满足下列条件时才可暂存：
 
 - 评论者具有仓库 `write`、`maintain` 或 `admin` 权限。
-- PR 当前具有四个完整扫描标签之一（`full-sweep-enabled`、`non-canary-full-sweep-enabled`、`full-sweep-fail-fast` 或 `full-sweep-fail-fast-no-canary`）。
+- PR 当前具有三个完整扫描标签之一（`full-sweep-enabled`、`full-sweep-fail-fast` 或 `full-sweep-fail-fast-no-canary`）。
 - 候选是已结束的 PR `run-sweep.yml` Run，创建时完整扫描标签处于活动状态，结论为 `success`、`failure` 或 `cancelled`。
 - 候选按照 Workflow 当前 Head/历史 Pin 规则与该 PR 关联。
 - 存在未过期的 `changelog-metadata`，并且至少存在 `results_bmk`、`eval_results_all` 或 `bmk_agentic_*` 之一。因此失败/取消的 Run 可以暂存有用的部分数据，但空 Run 或仅有 Metadata 的 Run 不行。

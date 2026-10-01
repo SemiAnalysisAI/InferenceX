@@ -240,7 +240,6 @@ The same-repository check applies before checking out PR code in changelog valid
 | `full-sweep-fail-fast` | Full changelog matrix | Yes | Yes. Recommended full-sweep default |
 | `full-sweep-enabled` | Full changelog matrix | Yes | No. Use when every matrix point must continue |
 | `full-sweep-fail-fast-no-canary` | Full changelog matrix | No | Yes |
-| `non-canary-full-sweep-enabled` | Full changelog matrix | No | No |
 
 Optional modifiers do not replace a primary label:
 
@@ -381,7 +380,7 @@ Each request, including all its pages, has a 60-second timeout.
 A request is stageable only when all of the following hold:
 
 - The commenter has `write`, `maintain`, or `admin` repository permission.
-- The PR currently has one of the four full-sweep labels (`full-sweep-enabled`, `non-canary-full-sweep-enabled`, `full-sweep-fail-fast`, or `full-sweep-fail-fast-no-canary`).
+- The PR currently has one of the three full-sweep labels (`full-sweep-enabled`, `full-sweep-fail-fast`, or `full-sweep-fail-fast-no-canary`).
 - The candidate is a completed `pull_request` run of `run-sweep.yml`, created while a full-sweep label was active, with conclusion `success`, `failure`, or `cancelled`.
 - The candidate is associated with the PR under the workflow's current-head/historical-pin rules.
 - Unexpired `changelog-metadata` and at least one of `results_bmk`, `eval_results_all`, or `bmk_agentic_*` exist. Failed/cancelled runs may therefore stage useful partial data, but empty or metadata-only runs cannot.

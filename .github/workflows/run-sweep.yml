@@ -6,7 +6,6 @@ concurrency:
         sweep-${{ github.event.pull_request.number }}-${{
           (github.event.action == 'labeled' || github.event.action == 'unlabeled') &&
           github.event.label.name != 'full-sweep-enabled' &&
-          github.event.label.name != 'non-canary-full-sweep-enabled' &&
           github.event.label.name != 'full-sweep-fail-fast' &&
           github.event.label.name != 'full-sweep-fail-fast-no-canary' &&
           github.event.label.name != 'all-evals' &&
@@ -46,7 +45,6 @@ jobs:
             (
               (github.event.action != 'labeled' && github.event.action != 'unlabeled') ||
               github.event.label.name == 'full-sweep-enabled' ||
-              github.event.label.name == 'non-canary-full-sweep-enabled' ||
               github.event.label.name == 'full-sweep-fail-fast' ||
               github.event.label.name == 'full-sweep-fail-fast-no-canary' ||
               github.event.label.name == 'all-evals' ||
@@ -65,7 +63,6 @@ jobs:
                       .[] |
                       select(
                         . == "full-sweep-enabled" or
-                        . == "non-canary-full-sweep-enabled" or
                         . == "full-sweep-fail-fast" or
                         . == "full-sweep-fail-fast-no-canary"
                       )
@@ -182,14 +179,12 @@ jobs:
             needs.check-changelog.outputs.skip-pr-sweep != 'true' &&
             (
               contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') ||
-              contains(github.event.pull_request.labels.*.name, 'non-canary-full-sweep-enabled') ||
               contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') ||
               contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast-no-canary')
             ) &&
             (
               (github.event.action != 'labeled' && github.event.action != 'unlabeled') ||
               github.event.label.name == 'full-sweep-enabled' ||
-              github.event.label.name == 'non-canary-full-sweep-enabled' ||
               github.event.label.name == 'full-sweep-fail-fast' ||
               github.event.label.name == 'full-sweep-fail-fast-no-canary' ||
               github.event.label.name == 'all-evals' ||
@@ -816,7 +811,7 @@ jobs:
                   matrix = json.loads(os.environ['SWEEP_MATRIX'])
                   labels = set(json.loads(os.environ['SWEEP_LABELS']) or [])
                   sweep_labels = labels & {
-                      'full-sweep-enabled', 'non-canary-full-sweep-enabled',
+                      'full-sweep-enabled',
                       'full-sweep-fail-fast', 'full-sweep-fail-fast-no-canary',
                       'all-evals', 'evals-only', 'agentx-fast',
                   }
@@ -966,14 +961,12 @@ jobs:
             needs.setup.result == 'success' &&
             (
               contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') ||
-              contains(github.event.pull_request.labels.*.name, 'non-canary-full-sweep-enabled') ||
               contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') ||
               contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast-no-canary')
             ) &&
             (
               (github.event.action != 'labeled' && github.event.action != 'unlabeled') ||
               github.event.label.name == 'full-sweep-enabled' ||
-              github.event.label.name == 'non-canary-full-sweep-enabled' ||
               github.event.label.name == 'full-sweep-fail-fast' ||
               github.event.label.name == 'full-sweep-fail-fast-no-canary' ||
               github.event.label.name == 'all-evals' ||
