@@ -19,7 +19,6 @@ import yaml
 
 from infx.launch.__main__ import main
 from infx.launch.drivers.srt import lanes, models
-from infx.launch.drivers.srt.checkout import SRT_FORKS
 from infx.launch.drivers.srt.lanes import LaneMount, SrtLane
 from infx.launch.drivers.srt.models import Override
 from infx.launch.policy import LaunchPath, Match
@@ -124,6 +123,9 @@ def srtslurm(root: Path) -> dict:
     return yaml.safe_load(path.read_text())
 
 
+WORKDIR = 'srun_options.container-workdir="/infmax-workspace"'
+
+
 def assert_ok(result: subprocess.CompletedProcess[str]) -> None:
     """Fail with the launcher's output when it did not exit 0."""
     assert result.returncode == 0, result.stdout[-4000:] + result.stderr[-8000:]
@@ -142,7 +144,7 @@ def test_single_node_point_stages_workflow_artifacts(harness):
     [call] = srtctl_calls(harness.logs)
     argv = call["argv"]
     assert argv[argv.index("--file") + 1] == f"{workspace}/recipe.yaml:zip_override_conc[0]"
-    assert {"--json", "--yes", "--output"} <= set(argv)
+    assert {"--json", "--yes", "--output", WORKDIR} <= set(argv)
     assert (call["env"]["INFMAX_WORKSPACE"], call["env"]["VIRTUAL_ENV"]) == (str(workspace), None)
     assert call["env"]["RUNNER_NAME"] == f"inferencex-{env['RUNNER_NAME']}"
     assert "/hf" in srtslurm(workspace)["default_mounts"].values()
@@ -256,7 +258,7 @@ def test_multinode_lane_stages_workflow_artifacts(harness, monkeypatch, cluster_
         assert checkout.name.startswith("srt-slurm-9001-1-") and len(checkout.name) == len("srt-slurm-9001-1-") + 12
     assert ("--no-preflight" in argv) is not lab["preflight"]
     assert argv[argv.index("--file") + 1] == "recipes/test/lane.yaml"
-    assert {"--json", "--yes", "benchmark.stream_output=true"} <= set(argv)
+    assert {"--json", "--yes", "benchmark.stream_output=true", WORKDIR} <= set(argv)
     if lab["tag"] is None:
         assert "--tags" not in argv
     else:
@@ -391,24 +393,26 @@ def test_b300_flash_agentx_reenters_inside_a_batch_allocation(harness):
     assert list(runner_temp.glob("srt-batch.*.sh")) == []
 
 
-def test_tilert_native_lane_runs_on_its_fork_without_patches(harness):
+def test_tilert_fixed_sequence_uses_upstream_submission_and_prepared_weights(harness):
     env = lane_env(
         harness, "b200-nscale", MODEL_PREFIX="glm5.1", PRECISION="fp8", FRAMEWORK="tilert",
-        MODEL="zai-org/GLM-5.1-FP8", SPEC_DECODING="mtp", IS_AGENTIC="1", ISL="0", OSL="0",
-        FAKE_RESULTS="agentic", PREFILL_IMAGE="prefill:tag",
-        FAKE_SRT_COMMIT=SRT_FORKS["tilert"].commit,
+        MODEL="zai-org/GLM-5.1-FP8", SPEC_DECODING="mtp", PREFILL_IMAGE="prefill:tag",
     )  # fmt: skip
     assert_ok(launch(env, harness.config, harness.workspace))
 
-    assert not any(" apply " in f" {line} " for line in lines(harness.logs, "git"))
+    assert any(" apply " in f" {line} " for line in lines(harness.logs, "git"))
     [call] = srtctl_calls(harness.logs)
-    assert not {"--json", "--no-preflight", "benchmark.stream_output=true"} & set(call["argv"])
+    assert {"--json", "benchmark.stream_output=true"} <= set(call["argv"])
+    assert "--no-preflight" not in call["argv"]
     config = srtslurm(Path(call["cwd"]))
-    assert "default_health_check" not in config
-    assert config["containers"]["tilert-decode"].endswith("/test_tag.sqsh")
-    assert config["containers"]["tilert-prefill"].endswith("/prefill_tag.sqsh")
+    assert config["default_health_check"]["max_attempts"] > 0
+    assert config["containers"]["test:tag"].endswith("/test_tag.sqsh")
+    assert config["containers"]["prefill:tag"].endswith("/prefill_tag.sqsh")
     assert config["default_mounts"][str(harness.workspace)] == "/infmax-workspace"
-    assert json.loads((harness.workspace / "point-identity_conc4.json").read_text()) == {"conc": 4}
+    assert "/tilert_weights" in config["default_mounts"].values()
+    assert "/scratch/" not in config["model_paths"]["alias"]
+    [point] = harness.workspace.glob("point-identity_sweep_*.json")
+    assert json.loads(point.read_text()) == {"conc": 4}
 
 
 def test_eval_only_runs_the_eval_recipe_with_real_verification(harness):
@@ -511,3 +515,50 @@ def test_post_eval_is_handed_the_workload_contract_and_no_other_secret(harness):
                if arg.startswith("post_eval.passthrough_env=")]  # fmt: skip
     assert handed.keys() <= set(names)
     assert not {*withheld, "PATH", "HF_HUB_CACHE"} & set(names)
+
+
+def test_multinode_eval_overrides_image_offline_mode_and_host_model_path(harness):
+    env = lane_env(
+        harness,
+        "h200-dgxc",
+        MODEL_PREFIX="dsr1",
+        PRECISION="fp8",
+        FRAMEWORK="dynamo-sglang",
+        MODEL="deepseek-ai/DeepSeek-R1-0528",
+    )
+    assert_ok(launch(env, harness.config, harness.workspace))
+    [call] = srtctl_calls(harness.logs)
+    [command] = [json.loads(arg.split("=", 1)[1]) for arg in call["argv"]
+                 if arg.startswith("post_eval.command=")]  # fmt: skip
+    # Stand in for the external evaluator and inspect the environment it receives.
+    script = harness.workspace / "benchmarks/multi_node/srt_eval.sh"
+    script.write_text(
+        'printf "%s\\n" "$HF_HUB_OFFLINE" "$HF_DATASETS_OFFLINE" '
+        '"$TRANSFORMERS_OFFLINE" "$MODEL_PATH" "$EVAL_MAX_MODEL_LEN" "$1" "$2"\n'
+    )
+    result = subprocess.run(
+        [
+            arg.format(infmax_workspace=harness.workspace, endpoint="http://worker:8000")
+            for arg in command
+        ],
+        env={
+            **os.environ,
+            "HF_HUB_OFFLINE": "1",
+            "HF_DATASETS_OFFLINE": "1",
+            "TRANSFORMERS_OFFLINE": "1",
+            "MODEL_PATH": "/host-only/checkpoint",
+            "EVAL_MAX_MODEL_LEN": "9472",
+        },
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert result.stdout.splitlines() == [
+        "0",
+        "0",
+        "0",
+        "/model",
+        "9472",
+        "http://worker:8000",
+        str(harness.workspace),
+    ]

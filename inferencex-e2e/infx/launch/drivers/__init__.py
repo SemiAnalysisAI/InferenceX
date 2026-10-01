@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 from infx.launch import policy
 from infx.launch.backends import backend_class
 from infx.launch.context import Launch, LaunchError
-from infx.launch.drivers import legacy, script, srt
+from infx.launch.drivers import script, srt
 from infx.launch.policy import LaunchPath, launch_path
 
 if TYPE_CHECKING:
@@ -36,8 +36,6 @@ ROUTES: dict[LaunchPath, Route] = {
     LaunchPath.SRT_MULTI: Route("slurm", srt.run_multinode),
     LaunchPath.SRT_NATIVE: Route("slurm", srt.run_multinode),
     LaunchPath.SCRIPT: Route(None, script.run),
-    LaunchPath.LEGACY_TILERT: Route("slurm", legacy.run_tilert),
-    LaunchPath.LEGACY_AMD_UTILS: Route("slurm", legacy.run_amd_utils),
 }
 
 

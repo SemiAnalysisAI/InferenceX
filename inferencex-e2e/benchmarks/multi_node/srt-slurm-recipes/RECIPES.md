@@ -27,9 +27,9 @@ qwen3.5/trtllm/gb300-fp4/agentx/disagg-variants.yaml
 
 Shared runtime assets stay under `configs/` beside the model directories; they are not standalone recipes. The four files in `configs/dsv4-moe-load-balancer-configs/` are copied verbatim from NVIDIA/srt-slurm commit `deb1dfd9934398664f92d194169c183e009da83b`, preserving the EPLB initial expert assignments formerly used by the DSV4 TRT recipes; no checked-in recipe currently references them. The srt driver ([`infx/launch/drivers/srt/checkout.py`](../../../infx/launch/drivers/srt/checkout.py)) stages them into the job checkout's `configs/` directory for the recipes' bind mounts. Keeping a recipe in this tree does not activate it; the master configs determine the benchmark matrix.
 
-## TileRT exception
+## TileRT
 
-For `FRAMEWORK=tilert`, the srt driver checks out the SemiAnalysisAI/srt-slurm fork directly at `6bc3f306bdafa1edfb5dded2fcda8f1ccede1bde` into the job checkout. This is the schema-2 TileRT port in [SemiAnalysisAI/srt-slurm#13](https://github.com/SemiAnalysisAI/srt-slurm/pull/13). It is the only alternate checkout; its pin lives in `SRT_FORKS` in [`infx/launch/drivers/srt/checkout.py`](../../../infx/launch/drivers/srt/checkout.py) because the TileRT backend and router are absent from the NVIDIA pin. TileRT uses the same schema-2 recipe layout and native post-eval dispatch as NVIDIA. TileRT jobs need network access to the fork at setup time. Remove the fork exception once those features are available upstream.
+TileRT uses the pinned upstream srt-slurm submodule. Recipes select `roles.prefill.engine: vllm`, `roles.decode.engine: tilert`, and `frontend.type: tilert-router`.
 
 ## Schema 2 and master configuration
 
@@ -58,7 +58,6 @@ Install the shared pin in an isolated environment, then use its CLI:
 srtctl migrate --verify -f benchmarks/multi_node/srt-slurm-recipes/dsr1/sglang
 srtctl migrate --in-place -f benchmarks/multi_node/srt-slurm-recipes/dsr1/sglang
 # Repeat for the other model/engine directories.
-# Use the pinned TileRT fork for tilert/ recipe directories.
 python -m pytest infx/tests/matrix/ -q
 python -m infx.matrix.generate full-sweep \
   --config-files configs/nvidia-master.yaml \

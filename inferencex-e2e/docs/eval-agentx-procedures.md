@@ -119,6 +119,8 @@ Set `EVAL_ONLY=true` **before server launch**. It is not merely a switch inside 
 
 Relevant implementation: [context setup](../benchmarks/benchmark_lib.sh#L2016-L2042), [eval dispatch and failure policy](../benchmarks/benchmark_lib.sh#L2893-L3073), and [workflow inputs](../../.github/workflows/benchmark-tmpl.yml#L40-L57).
 
+Native multi-node post-eval reads the mounted checkpoint at `/model` and enables dataset downloads in the eval process, without changing worker environments. Context lookup reads numeric limits from local `config.json` before falling back to Transformers; an explicit `EVAL_MAX_MODEL_LEN` still takes precedence.
+
 Do not toggle `EVAL_ONLY` after a throughput-sized server is already running and assume the context changed. Restart through the recipe. In eval-only mode an eval failure is returned after available artifacts are staged. In a workflow, upload happens with `always()` before score validation so failed evidence survives ([single-node upload and gate](../../.github/workflows/benchmark-tmpl.yml#L467-L494), [multi-node upload and gate](../../.github/workflows/benchmark-multinode-tmpl.yml#L487-L518)).
 
 ## 4. Batched eval concurrency
