@@ -19,12 +19,13 @@ def add_device(
 
 
 def select(root: Path) -> subprocess.CompletedProcess[str]:
+    # Match kimik3-b300-mooncake.sh: the helper must resolve under --validation-only.
     return subprocess.run(
         [
             "bash",
             "-ec",
             (
-                'source "$1"; select_mooncake_rdma_device "$2"; '
+                'source "$1" --validation-only; select_mooncake_rdma_device "$2"; '
                 'printf "%s %s\n" "$MOONCAKE_RAIL" "$MC_GID_INDEX"'
             ),
             "bash",
