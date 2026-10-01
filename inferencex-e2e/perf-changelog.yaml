@@ -9231,3 +9231,14 @@
     - "从 B300 DSXE Mooncake 移除 MC_MAX_MR_SIZE。tip 1d9c54d fail-fast 运行 36870807626 的 agentic c32（job 110437058728，Slurm 6614，gpu-01）已有真实 rail（Mooncake rail: ibp198s0f0 / Patched；GH Wrote 行为 setup 前转储）且 cumem 已关，但各 rank 仍对约 43.7GiB KV 区域报 register_buffer failed（-600），随后约 12.8 万次 AddressNotRegistered TRANSFER_FAIL；约 40 分钟降级服务后 NCCL ALLGATHER watchdog（600 秒）杀死 VllmWorker-2（worker_crash:8）→ EngineDead / ProfileAborted。加入 MC_MAX_MR 之前的 tip（旧 c40/c48）无 register_buffer -600；该 4GiB 上限来自 ee33eeba 的 GB300 对齐，是已验证根因。保留不启用 compact_group_io、max_load_batch_keys=2、KV_GATHER=0、关闭 cumem。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3088
 
+- config-keys:
+    - qwen3.5-fp8-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Extend the TP4 HiCache band from concurrency 40 up to 80, adding concurrency 48, 56, 64, 72 and 80. The arm goes from 14 to 19 points; the GPU-resident band [1, 4, 8, 12, 14] and the existing HiCache points [16, 18, 20, 22, 24, 28, 32, 36, 40] are unchanged. The original grid was copied from the TP4 band of qwen3.5-fp8-b200-sglang-agentic-mtp, which stops at 32 because a B200 node has far less HBM per GPU; MI355X at 288 GB per GPU has the device KV headroom to keep feeding the host-DRAM tier past that, and these five points sample the throughput end the tier makes available."
+    - "Size the HiCache host pool in tiers by concurrency instead of by ratio alone. Concurrency 16 through 28 keep ratio-only sizing and are unchanged from what merged in #3602. Concurrency 32 through 56 pin hicache-size 253, the value already used by the MI355X MXFP4 AgentX arm. Concurrency 64 through 80 pin hicache-size 400, since the largest points need the deepest host tier to hold prefix across the 256k-capped corpus. hicache-size overrides hicache-ratio where it is set. Of the points that merged in #3602 only concurrency 32, 36 and 40 change behaviour; their numbers are expected to move."
+    - "The five new points reuse the existing HiCache override shape: enable-hierarchical-cache, hicache-ratio 1.5, hicache-size 400, hicache-write-policy write_through_selective, hicache-io-backend kernel and hicache-mem-layout page_first. Admission continues to follow 2x CONC, and the decode graph batch follows it capped at 128, so concurrency 72 and 80 both clamp cuda-graph-max-bs-decode to 128 while max-running-requests reaches 144 and 160."
+    - "Update the SGLang ROCm image from lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260927 to lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260929 on this arm only. The other MI355X arms are left on their current tags."
+    - "No serving flag outside the HiCache block changes, and no other config key is touched. Each of the 19 matrix points resolves to exactly one recipe override, with no override left unused."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3611
