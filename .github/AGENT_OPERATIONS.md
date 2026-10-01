@@ -78,7 +78,7 @@ The dispatch POST returns no body or run ID.
 
 Full details live in `inferencex-e2e/infx/evals/EVALS.md`.
 
-`mark_eval_entries()` in `inferencex-e2e/infx/matrix/generate.py` selects evals, which default to the 8k1k subset and run separately from throughput with `EVAL_ONLY=true`.
+`mark_eval_entries()` in `inferencex-e2e/infx/matrix/generate.py` selects evals, which default to the 8k1k subset plus AgentX GSM8K at the highest concurrency per deployment group, and run separately from throughput with `EVAL_ONLY=true`. AgentX GSM8K uses the same `thresholds.yaml` floors as 8k1k.
 
 - `--no-evals`: skip evals.
 - `--evals-only`: run the default selected eval subset and suppress throughput.

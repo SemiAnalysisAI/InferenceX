@@ -417,7 +417,7 @@ class TestMarkEvalEntries:
             },
         ]
 
-        result = mark_eval_entries(matrix_values, include_agentic=True)
+        result = mark_eval_entries(matrix_values)
 
         marked = [e for e in result if e.get("run-eval")]
         assert len(marked) == 1
@@ -446,7 +446,7 @@ class TestMarkEvalEntries:
             {**common, "conc": [32], "exp-name": "p1x8_d1x8_conc32"},
         ]
 
-        result = mark_eval_entries(matrix_values, include_agentic=True)
+        result = mark_eval_entries(matrix_values)
 
         marked = [e for e in result if e.get("run-eval")]
         assert len(marked) == 1
@@ -476,14 +476,14 @@ class TestMarkEvalEntries:
             {**base, **topology_b, "conc": [96], "exp-name": "b_conc96"},
         ]
 
-        result = mark_eval_entries(matrix_values, include_agentic=True)
+        result = mark_eval_entries(matrix_values)
 
         marked = {e["exp-name"]: e for e in result if e.get("run-eval")}
         assert set(marked) == {"a_conc32", "b_conc96"}
         assert marked["a_conc32"]["eval-conc"] == 32
         assert marked["b_conc96"]["eval-conc"] == 96
 
-    def test_default_mode_does_not_mark_agentic(self):
+    def test_default_mode_marks_agentic_at_highest_conc(self):
         matrix_values = [
             {
                 "scenario-type": "agentic-coding",
@@ -500,9 +500,10 @@ class TestMarkEvalEntries:
         result = mark_eval_entries(matrix_values)
 
         marked = [e for e in result if e.get("run-eval")]
-        assert len(marked) == 0, (
-            f"Expected 0 agentic entries marked run-eval in default mode, got {len(marked)}"
+        assert [e["conc"] for e in marked] == [64], (
+            f"Expected only the highest-conc agentic entry marked in default mode, got {marked}"
         )
+        assert marked[0]["eval-framework"] == "lm-eval"
 
     @pytest.mark.parametrize("all_evals", [False, True])
     @pytest.mark.parametrize("runner", ["mi355x", "b300"])
@@ -549,12 +550,9 @@ class TestMarkEvalEntries:
             } == {eval_spec}
 
         unsupported = result[-1]
-        assert unsupported["run-eval"] is all_evals
-        if all_evals:
-            assert unsupported["eval-framework"] == "lm-eval"
-            assert unsupported["eval-suite"] == ""
-        else:
-            assert "eval-framework" not in unsupported
+        assert unsupported["run-eval"] is True
+        assert unsupported["eval-framework"] == "lm-eval"
+        assert unsupported["eval-suite"] == ""
         assert all(row.get("eval-framework") != "bfcl" for row in result)
 
     def test_default_marks_every_multinode_vendor_point(self):
