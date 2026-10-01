@@ -15,7 +15,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from infx.clusters.slurm import SlurmSettings, slurm_settings
+from infx.clusters.slurm import SlurmSettings
 from infx.launch import policy
 from infx.launch.backends.base import BackendError
 from infx.launch.backends.slurm import srtctl_job_name
@@ -30,7 +30,7 @@ from infx.launch.drivers.srt.checkout import (
     run_setup,
 )
 from infx.launch.drivers.srt.recipe import eval_overrides, prepare_recipe
-from infx.launch.drivers.srt.run import SrtRun, require, routed_launch, slurm_backend
+from infx.launch.drivers.srt.run import SrtRun, require, slurm_backend
 from infx.launch.request import BATCH_REENTRY_ENV, RequestError, SingleNodeRequest, SrtRequest
 
 if TYPE_CHECKING:
@@ -124,7 +124,6 @@ def run_multinode(launch: Launch) -> int:
     lane = lanes.srt_lane(launch.cluster.id, launch.path)
     request = SrtRequest.from_env(launch.request.env)
     lanes.check_request(lane, request)
-    launch = routed_launch(launch, lanes.scheduler_route(lane, request))
     config_file = lanes.config_file(request)
     decision = power.resolve_power(launch.cluster.id, launch.path, request)
     model = models.checkpoint(launch.cluster, request)
@@ -191,10 +190,6 @@ def table_problems(clusters: Mapping[str, Cluster], only: str | None = None) -> 
         where = f"SRT_LANES[{cluster_id!r}, {path}]"
         for mount in lane.mounts:
             volume(where, cluster_id, mount.volume)
-        settings = slurm_settings(clusters[cluster_id])
-        for _, route in lane.scheduler_routes:
-            if route not in settings.routes:
-                problems.append(f"{where}: no Slurm route {route!r}")
         if lane.shared_run_root and srt.shared_run_root is None:
             problems.append(f"{where}: no srt-slurm.shared-run-root")
         if srt.default_time_limit is not None and (lane.time_limit or lane.long_time_limit):

@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from infx.clusters.slurm import slurm_settings
 from infx.config import repository_root
 from infx.launch.backends.slurm import SlurmBackend, cli
 from infx.launch.context import Launch, LaunchError
@@ -70,14 +69,3 @@ def slurm_backend(launch: Launch) -> SlurmBackend:
             f"{launch.path} needs the Slurm backend, got {type(launch.backend).__name__}"
         )
     return launch.backend
-
-
-def routed_launch(launch: Launch, route: str | None) -> Launch:
-    """Apply a named cluster-declared Slurm route without changing the physical cluster."""
-    if route is None:
-        return launch
-    settings = slurm_settings(launch.cluster).routed(route)
-    cluster = launch.cluster.model_copy(update={"scheduler_settings": settings})
-    cluster.bind_id(launch.cluster.id)
-    backend = SlurmBackend(cluster, launch.request, launch.life)
-    return Launch(cluster, backend, launch.request, launch.life, launch.path)

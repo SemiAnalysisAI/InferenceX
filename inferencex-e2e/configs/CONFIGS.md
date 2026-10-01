@@ -200,10 +200,6 @@ schema; unknown keys fail.
 - `slurm:` ([`infx/clusters/slurm.py`](../infx/clusters/slurm.py)) holds the partition,
   account, exclusivity, GRES, excluded nodes and extra `srun`/`salloc` options; its
   volumes are host `path`s that jobs see at the same place.
-- `slurm.routes` declares named alternate partition/account/storage routes for the same
-  physical runner pool. A route may replace selected volume paths and the squash-cache
-  directory. Workload matching stays in the applicable named launcher policy table; the
-  route itself contains only cluster facts.
 - `slurm.squash` is the Pyxis squash cache: `dir`, `visibility`, `lock-timeout-s`,
   `key-style` (`underscore`, `plus` or `plus-strip-nvcr`) and `import`: `submit-host`
   (on the launching host), `compute` (once on one compute node), `all-nodes` (on every
