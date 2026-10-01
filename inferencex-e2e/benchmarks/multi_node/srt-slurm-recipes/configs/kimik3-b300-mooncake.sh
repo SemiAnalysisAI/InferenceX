@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
-# Pin the worker's Mooncake client and point its store at one active RDMA rail.
+# Pin the worker's Mooncake client, backport load-failure recovery, and point
+# the store at one active Mellanox RDMA rail (driver-selected, including ibp*).
 set -euo pipefail
+
+ws=/infmax-workspace
+# Temporary upstream #55297 backport; docs/waiver/3088.md is pending review.
+python3 "$ws/runners/patch_kimik3_mooncake_recovery.py"
+
 pip_install=(python3 -m pip install)
 if python3 -m pip install --help 2>/dev/null | grep -q -- --break-system-packages; then
     pip_install+=(--break-system-packages)
@@ -10,25 +16,23 @@ fi
 python3 -c "from mooncake.store import MooncakeDistributedStore" >/dev/null
 
 # Rail-isolated nodes: two RNICs cannot reach each other even within a node, so
-# every rank uses one rail. mlx5_0 is down on some nodes, and topology discovery
-# then finds no HCA, so take the first active rail at runtime. DSXE nodes name
-# their rails rdmap*.
-rail=""
-for device in mlx5_0 mlx5_1 mlx5_2 mlx5_3 mlx5_4 mlx5_5 mlx5_8 mlx5_9 \
-              mlx5_10 mlx5_11 mlx5_16 mlx5_17 mlx5_20 mlx5_21 mlx5_22 mlx5_23 \
-              $(ls /sys/class/infiniband 2>/dev/null | grep '^rdmap' | sort -V); do
-    if grep -q ACTIVE "/sys/class/infiniband/$device/ports/1/state" 2>/dev/null; then
-        rail="$device"
-        break
-    fi
-done
-if [[ -z "$rail" ]]; then
-    echo "Error: no active RDMA rail on $(hostname); Mooncake cannot initialise" >&2
-    for state in /sys/class/infiniband/*/ports/*/state; do
-        echo "$state: $(cat "$state" 2>&1)" >&2
-    done
-    exit 1
+# every rank uses one Mellanox rail. Identify by driver (mlx5_core) rather than
+# assuming mlx5_* names — DSXE may rename them ibp*. EFA rails are skipped.
+# shellcheck source=/dev/null
+source "$ws/benchmarks/benchmark_lib.sh" --validation-only
+select_mooncake_rdma_device
+rail="$MOONCAKE_RAIL"
+echo "Mooncake rail: $rail (MC_GID_INDEX=$MC_GID_INDEX)"
+
+# The enroot EFA hook binds the host libibverbs over the image's, and
+# libibverbs only loads providers built against its own private ABI, so the
+# image's mlx5 provider never loads and the Mellanox rail vanishes.
+# runners.yaml mounts the host library directory at /host-usr-lib; libibverbs
+# appends its own -rdmavNN suffix to an absolute RDMAV_DRIVERS entry.
+if [[ -d /host-usr-lib/libibverbs ]]; then
+    export RDMAV_DRIVERS=/host-usr-lib/libibverbs/libmlx5
 fi
+
 config="${MOONCAKE_CONFIG_PATH:-/logs/mooncake_store_config.json}"
 python3 - "$config" "$rail" <<'PY'
 import json, sys
@@ -39,4 +43,3 @@ config["device_name"] = rail
 with open(path, "w") as handle:
     json.dump(config, handle, indent=2)
 PY
-echo "Mooncake rail: $rail"

@@ -9488,3 +9488,11 @@
     - "No data-type or precision change to the EAGLE3 draft model (Inferact/MiniMax-M3-EAGLE3-GQA): online_quant_config (ptpc_fp8), kv_cache_dtype fp8 and index-cache-dtype fp8 are unchanged; mono decode changes the target model's decode kernels, not draft precision."
     - "更新镜像至 rocm/atom-dev:nightly_202610070333（ATOM 0.1.7.dev60+g7fc0926c6，含 ROCm/ATOM#2483 的 mono step fence 修复）；去掉 TP4 C15/C20/C24/C28 的 ATOM_MONO_ENABLE=0，所有 TP4 点位启用 MiniMax-M3 mono decode（每步最多 16 个 token，即 EAGLE3 K3 下 4 个请求，覆盖 C1/C2/C4）；ATOM 只为 TP4 构建 mono，TP2 走非融合路径。新增 TP2 C4，LMCache 版本记录为 0.5.6.dev139+gf22dec28。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3750
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  description:
+    - "Discover active Mellanox RDMA devices by driver on DSXE, select the link-layer GID, and load the host mlx5 provider so Mooncake sees the rail"
+    - "Backport vLLM #55297 for request-local recompute after failed asynchronous Mooncake loads on B300; see docs/waiver/3088.md"
+    - "Raise the Mooncake master lease from the 5s default to 60s (--default_kv_lease_ttl=60000): at concurrency >= 32 gets took 10-30s at p90, so 60-75% of transferred keys were discarded as LEASE_EXPIRED and recomputed; 60s matches the client's own 60s transfer cap. vLLM's execute_model timeout stays at its 300s default"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3088
