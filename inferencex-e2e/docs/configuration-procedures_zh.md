@@ -323,10 +323,10 @@ DSXE 上容器的 libibverbs 来自 enroot EFA hook 挂载的主机库，因此
 `RDMAV_DRIVERS` 强制加载其 mlx5 provider。保留 `max_load_batch_keys: 2`，但不要在
 该 DSXE 单 rail 路径上启用 `compact_group_io`（c8 上曾对约 25 MiB 的
 compact-group put 产生大量失败）。Direct DCP KV gather 关闭
-（`VLLM_USE_DIRECT_DCP_KV_GATHER=0`）。不要启用 `enable-cumem-allocator`：tip c2
-（运行 36852970338）与通过的 c1 canary 均在约 39 GiB 的 KV 区域上出现
-`register_buffer failed ... -600`，随后 put 触发 `AddressNotRegistered`
-TRANSFER_FAIL；c2 挂起直至 `sample_tokens`。
+（`VLLM_USE_DIRECT_DCP_KV_GATHER=0`）。不要在此设置 `MC_MAX_MR_SIZE`：设为 4GiB
+时各 rank 对约 40 GiB KV 区域报 `register_buffer failed ... -600`，并引发
+`AddressNotRegistered` TRANSFER_FAIL（c2/c32）；加入该变量之前的 tip 注册正常。
+此路径保持关闭 `enable-cumem-allocator`。
 
 
 仅运行 AgentX 的 `dsv41flash-fp4-<sku>-vllm-agentic-dspark` 配方使用

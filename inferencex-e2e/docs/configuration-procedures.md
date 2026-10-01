@@ -350,10 +350,11 @@ libibverbs comes from the host through the enroot EFA hook, so
 the setup script requires `RDMAV_DRIVERS` to load its mlx5 provider. Keep
 `max_load_batch_keys: 2`, but do not enable `compact_group_io` on this DSXE
 single-rail path (it storm-failed ~25 MiB compact-group puts at c8). Direct DCP
-KV gather is off (`VLLM_USE_DIRECT_DCP_KV_GATHER=0`). Do not enable
-`enable-cumem-allocator`: tip c2 (run 36852970338) and the passing c1 canary both
-saw `register_buffer failed ... -600` on the ~39 GiB KV region, then
-`AddressNotRegistered` TRANSFER_FAIL on puts; c2 hung until `sample_tokens`.
+KV gather is off (`VLLM_USE_DIRECT_DCP_KV_GATHER=0`). Do not set
+`MC_MAX_MR_SIZE` here: with 4GiB every rank hit `register_buffer failed ... -600`
+on the ~40 GiB KV region and stormed `AddressNotRegistered` TRANSFER_FAIL
+(c2/c32); pre-`MC_MAX_MR` tips registered cleanly. Keep `enable-cumem-allocator`
+off on this path.
 
 
 The AgentX-only `dsv41flash-fp4-<sku>-vllm-agentic-dspark` recipes use the per-SKU
