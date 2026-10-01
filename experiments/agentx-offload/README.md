@@ -80,8 +80,17 @@ tokens/s/GPU, 8.904 P90 interactivity, 2,904.031 seconds P90 TTFT, and
 11,170.326 joules per successful query. External cache served 1.443% of prompt
 tokens. The workflow concluded failure only after exports completed because the
 launch step exited 143; all result, raw AgentX, server-log, GPU, and power
-artifacts uploaded, so c488 is a valid local performance point. Run a matched
-HBM-only c488 control before attributing the result to NVMe.
+artifacts uploaded, so c488 is a valid local performance point. The matched
+HBM-only c488 control also completed canonical warmup and the full profile before
+the same post-export time-limit termination. NVMe delivered 8,541.085 versus
+8,052.723 total tokens/s/GPU (+6.065%), 81.795 versus 71.868 output
+tokens/s/GPU (+13.813%), 8.904 versus 8.153 P90 interactivity (+9.206%), and
+2,904.031 versus 2,998.848 seconds P90 TTFT (-3.162%). It completed 1,168
+versus 1,071 responses, used 8.685% less energy per successful query, and
+computed 0.847% fewer prompt tokens while serving 1.443% externally. Average
+power was 0.415% lower, but P90 E2E-normalized interactivity was 3.729% lower.
+Treat c488 as another mixed local NVMe win and run the native DRAM c488 control
+next to separate added cache capacity from the storage tier.
 
 The combined tier uses a different connector and storage policy. The pinned FS
 tier has no bounded LRU capacity setting: the 2 TiB value is an abort guard, not an

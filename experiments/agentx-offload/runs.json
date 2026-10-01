@@ -4311,39 +4311,131 @@
       "repeat": 1,
       "attempt": 1,
       "head_sha": "81f6a0dc0cf7ea1c018fec03e7ea1813da158de6",
-      "status": "in_progress",
+      "status": "failure",
       "workflow_name": "offload-v1-none-c488-r1-branchwf-20261001",
       "dispatched_at": "2026-10-01T14:47:37Z",
       "queued_at": "2026-10-01T14:47:57Z",
       "job_id": 110426286301,
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/36879140816/job/110426286301",
-      "performance_result": false,
+      "performance_result": true,
       "matched_nvme_run_id": 36796500128,
       "dispatch_evidence": "The exact matrix preview resolved MiniMax-M3 NVFP4, vLLM, TP4, four GPUs, canonical AgentX c488, 3,600-second profiling, kv-offloading=none, zero CPU DRAM, and experiment=agentx-offload. Immediately before dispatch, a fresh inventory of every queued and active workflow job found zero jobs carrying cluster:b200-nscale. The completed NVMe c488 artifacts and hashes were pushed at 81f6a0dc0, and offload_cleanup.json recorded deletion of its exact task-owned scratch. The generated control job carries cluster:b200-nscale and nodes:1 and is now the single queued B200 job.",
       "started_at": "2026-10-01T14:48:20Z",
       "runner": "b200-nscale-slurm_00",
-      "phase": "Launch job script; Slurm allocation pending"
+      "completed_at": "2026-10-01T22:52:54Z",
+      "allocation_id": 18196,
+      "node": "im-b200-c001",
+      "scratch": "/offload-scratch/inferencex-offload-36879140816-1-18196-f3a69f283426",
+      "failure_stage": "post-profile Slurm time-limit termination / exit 143",
+      "performance": {
+        "num_requests_total": 6472,
+        "num_requests_successful": 1071,
+        "num_requests_warmup_dropped": 5401,
+        "num_requests_error_dropped": 8,
+        "request_error_categories": {
+          "InvalidInferenceResultError": 8
+        },
+        "duration_seconds": 3628.14055,
+        "output_tokens_per_second": 287.47012,
+        "output_tokens_per_second_per_gpu": 71.86753,
+        "input_tokens_per_second": 31923.42044,
+        "total_tokens_per_second": 32210.89055,
+        "total_tokens_per_second_per_gpu": 8052.72264,
+        "p90_e2e_latency_seconds": 3025.75035,
+        "p90_ttft_seconds": 2998.84816,
+        "p90_tpot_seconds": 0.12265,
+        "p90_interactivity_tokens_per_second_per_user": 8.15324,
+        "p90_e2e_normalized_interactivity_tokens_per_second_per_user": 0.08382,
+        "mean_e2e_latency_seconds": 1211.82369,
+        "avg_power_w_per_gpu": 899.81089,
+        "joules_per_successful_query": 12232.732382
+      },
+      "cache_evidence": {
+        "gpu_cache_hit_rate": 0.01225,
+        "external_cache_hit_rate": 0.0,
+        "overall_cache_hit_rate": 0.01225,
+        "theoretical_cache_hit_rate": 0.94091,
+        "gpu_cache_hit_prompt_tokens": 13308288,
+        "external_cache_hit_prompt_tokens": 0,
+        "computed_prompt_tokens": 1073260715,
+        "prompt_tokens_total": 1086569003,
+        "generation_tokens_total": 1203248,
+        "gpu_cache_usage_pct": 1.0
+      },
+      "delta_nvme_vs_hbm_percent": {
+        "total_tokens_per_second_per_gpu": 6.06457,
+        "output_tokens_per_second_per_gpu": 13.81291,
+        "p90_interactivity_tokens_per_second_per_user": 9.20609,
+        "p90_e2e_normalized_interactivity_tokens_per_second_per_user": -3.72856,
+        "p90_ttft_seconds": -3.16178,
+        "p90_e2e_latency_seconds": -2.74837,
+        "num_requests_successful": 9.05696,
+        "avg_power_w_per_gpu": -0.41463,
+        "joules_per_successful_query": -8.68495,
+        "computed_prompt_tokens": -0.84732
+      },
+      "artifacts": [
+        {
+          "id": 11199055294,
+          "name": "gpu_metrics_minimaxm3_tp4_conc488_kvnone_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-false_spec-mtp-62e05e524dd352fa5dfb",
+          "size_bytes": 1155904,
+          "sha256": "9b37a7e6a585575e66997eb91215bf34ab80fa62f23a11a9aeefa1963c1d3bfd"
+        },
+        {
+          "id": 11198419812,
+          "name": "agentic_minimaxm3_tp4_conc488_kvnone_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-false_spec-mtp-62e05e524dd352fa5dfb",
+          "size_bytes": 35658557,
+          "sha256": "50991d44721309c52e031689876e9f3340f4b5e98c6d81ed7e5adb4fa7d86e30"
+        },
+        {
+          "id": 11198404619,
+          "name": "server_logs_minimaxm3_tp4_conc488_kvnone_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-false_spec-mtp-62e05e524dd352fa5dfb",
+          "size_bytes": 240505,
+          "sha256": "6df980be18e839f42bd21376a776d9be0e8d97dc7dc202af78b831dc3762f636"
+        },
+        {
+          "id": 11198364707,
+          "name": "power_audit_minimaxm3_tp4_conc488_kvnone_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-false_spec-mtp-62e05e524dd352fa5dfb",
+          "size_bytes": 1156086,
+          "sha256": "6a1db828efcf802a7f8f8dd0dbf735d4b9cf00ae311fd67d161d71a4fdfdbed1"
+        }
+      ],
+      "runtime_evidence": "Canonical warmup completed all 5,401 requests after 24,639.30 seconds; eight retained warmup records were InvalidInferenceResultError classifications. Profiling completed the full 3,600-second send window, retained 1,071 successful responses with zero profiling errors, passed 100% metric coverage, finalized all results, and exported the raw profile. The Slurm allocation reached its fixed time limit after export, so the launch step exited 143 and the workflow concluded failure. This post-profile termination does not erase the completed performance result. Under the matched protocol, NVMe improved total throughput per GPU by 6.065%, output throughput per GPU by 13.813%, P90 interactivity by 9.206%, P90 TTFT by 3.162%, completions by 9.057%, and energy per successful query by 8.685%; P90 E2E-normalized interactivity was 3.729% lower.",
+      "storage_evidence": "offload_config.json resolved zero DRAM bytes, zero NVMe bytes, no connector, and an empty exact task-owned scratch. The run landed on allowlisted im-b200-c001 as Slurm allocation 18196. After the post-profile time-limit termination and workflow resource cleanup, a read-only node check independently confirmed /offload-scratch/inferencex-offload-36879140816-1-18196-f3a69f283426 absent.",
+      "power_evidence": "The post-profile time limit prevented the in-workflow power adapter from writing power_validation.json. Replaying the repository power adapter with TZ=UTC against the uploaded raw AIPerf lifecycle, 4-GPU telemetry, and captured +0000 offset passed strict validation over the 3,640.003-second completed-response window: 899.810894 W/GPU and 12,232.732382 J/successful query.",
+      "evidence_sha256": {
+        "benchmark.log": "9c4c56192214ccab9a33e72690c81511785cccf746fd2ec3bc4d2099c71fe0a9",
+        "profile_export.jsonl": "64a18cfe6d8a0e4a121bdf2f2361411b46e5513e423796a3eef4fa6c0c08cfef",
+        "profile_export_aiperf.json": "2d7918d7d4ad6f507858933125dd2671e4d572466eb120e5bd4965bc83b132b6",
+        "server_metrics_export.json": "45d43244e7797c39934dff56d5f151b143f8c7db4b0d72d19ee32651a08aa2d6",
+        "server.log": "6964f4ae918035f7d2af20de799d5c525523d108456ba3ef64e6be2270756bee",
+        "offload-telemetry.jsonl": "657dfd9a7c0c2d1d7a36e63211f571d5cbb607c6da35cabdd4f94fc3d1df4003",
+        "offload_config.json": "2babb5cdde6526c768bc6bfe939132ab879bf61b603889140e17fb048e945b3f",
+        "gpu_metrics.csv": "9fe765f0a4c546086c0df8f5117dee4a8502f2916ef094762bd1fcc9a1ed2ec0",
+        "benchmark_command.txt": "5b65a7911c7f75f4d1f60f4a60304e5683686474392878765526c4b6f3fb8bb7",
+        "vllm_command.txt": "f5c5aca54dbbc45ebb3b4aab39bbd34bd6e60e503249facf340e5248adb425c8"
+      }
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894",
-  "status": "Matched HBM-only c488 control run 36879140816 is active in the launch step on b200-nscale-slurm_00. Dispatch nothing else while it remains active.",
+  "status": "Matched c488 is complete as a mixed local NVMe win. Prepare the native DRAM c488 control, then dispatch only after a fresh cluster-wide B200 inventory is clear.",
   "last_capacity_check": {
-    "checked_at": "2026-10-01T14:49:53Z",
-    "active_study_run_ids": [
-      36879140816
-    ],
+    "checked_at": "2026-10-01T22:53:19Z",
+    "active_study_run_ids": [],
     "pending_study_run_ids": [],
-    "dispatch_allowed": false,
-    "b200_priority_jobs_queued": 0,
+    "dispatch_allowed": null,
+    "b200_priority_jobs_queued": null,
     "b200_nodes_allocated": null,
     "b200_nodes_idle": null,
     "target_node": "im-b200-c001",
-    "target_node_state": "HBM-only c488 launch active on scheduler runner; Slurm allocation pending",
+    "target_node_state": "c488 HBM terminal; exact task-owned scratch independently absent",
     "observed_free_bytes": null,
-    "reason": "The matched HBM-only c488 control is active; dispatch nothing else."
+    "reason": "A fresh cluster-wide B200 job-label inventory is required immediately before the next dispatch."
   },
   "next_dispatch": {
-    "requires": "Wait for matched HBM-only c488 run 36879140816 to complete canonical warmup and 3,600-second profiling, then capture artifacts, compare matched cohorts, verify cleanup, and choose the next adaptive control."
+    "arm": "dram",
+    "concurrency": 488,
+    "requires": "Commit and push matched c488 evidence, then dispatch the native DRAM c488 control only if a fresh cluster-wide inventory finds zero queued cluster:b200-nscale jobs."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-21T05:30:00Z",
