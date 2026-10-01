@@ -348,13 +348,14 @@ mooncake_store_config" line is the pre-patch dump). On DSXE the container's
 libibverbs comes from the host through the enroot EFA hook, so
 `configs/runners.yaml` mounts the host library directory at `/host-usr-lib` and
 the setup script requires `RDMAV_DRIVERS` to load its mlx5 provider. Keep
-`max_load_batch_keys: 2`, but do not enable `compact_group_io` on this DSXE
-single-rail path (it storm-failed ~25 MiB compact-group puts at c8). Direct DCP
-KV gather is off (`VLLM_USE_DIRECT_DCP_KV_GATHER=0`). Do not set
-`MC_MAX_MR_SIZE` here: with 4GiB every rank hit `register_buffer failed ... -600`
-on the ~40 GiB KV region and stormed `AddressNotRegistered` TRANSFER_FAIL
-(c2/c32); pre-`MC_MAX_MR` tips registered cleanly. Keep `enable-cumem-allocator`
-off on this path.
+`max_load_batch_keys: 1` (tip 860c1ccf c48 hung in DCP PYNCCL `_ALLGATHER_BASE`
+under ~100% GPU KV with batch keys=2 and clean Mooncake metrics), but do not
+enable `compact_group_io` on this DSXE single-rail path (it storm-failed ~25 MiB
+compact-group puts at c8). Direct DCP KV gather is off
+(`VLLM_USE_DIRECT_DCP_KV_GATHER=0`). Do not set `MC_MAX_MR_SIZE` here: with 4GiB
+every rank hit `register_buffer failed ... -600` on the ~40 GiB KV region and
+stormed `AddressNotRegistered` TRANSFER_FAIL (c2/c32); pre-`MC_MAX_MR` tips
+registered cleanly. Keep `enable-cumem-allocator` off on this path.
 
 
 The AgentX-only `dsv41flash-fp4-<sku>-vllm-agentic-dspark` recipes use the per-SKU

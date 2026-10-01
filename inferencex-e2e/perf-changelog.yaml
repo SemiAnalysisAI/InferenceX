@@ -9242,3 +9242,12 @@
     - "Update the SGLang ROCm image from lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260927 to lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260929 on this arm only. The other MI355X arms are left on their current tags."
     - "No serving flag outside the HiCache block changes, and no other config key is touched. Each of the 19 matrix points resolves to exactly one recipe override, with no override left unused."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3611
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Cut Mooncake max_load_batch_keys from 2 to 1 on B300 DSXE. Tip 860c1ccf fail-fast run 36894040300 agentic c48 (job 110510865864, Slurm 6639, gpu-03) had a real rail (Mooncake rail: ibp198s0f0 / Patched device_name; GH Wrote line is pre-setup), zero register_buffer -600 / AddressNotRegistered / TRANSFER_FAIL / multimem, and clean Mooncake load/save metrics (failed_keys=0) through ~35m of serve; then under GPU KV ~100% the engine hung at 0 tok/s (Running: 4, Waiting: 46) and NCCL _ALLGATHER_BASE on PG ID 3 timed out after 600s (last started work: -1) → VllmWorker-4 died (worker_crash:8) → EngineDead / ProfileAborted. Keep no compact_group_io, no MC_MAX_MR_SIZE, KV_GATHER=0, cumem off, load_async true."
+    - "将 B300 DSXE 上的 Mooncake max_load_batch_keys 从 2 降为 1。tip 860c1ccf fail-fast 运行 36894040300 的 agentic c48（job 110510865864，Slurm 6639，gpu-03）已有真实 rail（Mooncake rail: ibp198s0f0 / Patched；GH Wrote 行为 setup 前转储），无 register_buffer -600 / AddressNotRegistered / TRANSFER_FAIL / multimem，且 Mooncake load/save 指标干净（failed_keys=0）约 35 分钟；随后在 GPU KV ~100% 下引擎以 0 tok/s 挂起（Running: 4，Waiting: 46），PG ID 3 上的 NCCL _ALLGATHER_BASE 在 600 秒后超时（last started work: -1）→ VllmWorker-4 死亡（worker_crash:8）→ EngineDead / ProfileAborted。保留不启用 compact_group_io、不设 MC_MAX_MR_SIZE、KV_GATHER=0、关闭 cumem、load_async true。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3088
