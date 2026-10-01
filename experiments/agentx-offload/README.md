@@ -72,9 +72,16 @@ last progress sample had returned 5,091 of 5,500 responses, sent 5,459, retained
 368 in flight, and reported zero request errors after 22,834.1 seconds; all
 5,093 retained request records are warmup and profiling never started. Treat
 this as local canonical-warmup infeasibility under the current execution budget,
-not as a zero-throughput result. The next probe is c488, midway between the
-matched c480 win and c496's feasibility failure. Pair it with an HBM-only c488
-control if profiling completes.
+not as a zero-throughput result. The c488 midpoint then completed all 5,401
+canonical warmup requests without request errors after 24,559.47 seconds and
+finished the full 3,600-second profiling window. It retained 1,168 successful
+responses and delivered 8,541.085 total tokens/s/GPU, 81.795 output
+tokens/s/GPU, 8.904 P90 interactivity, 2,904.031 seconds P90 TTFT, and
+11,170.326 joules per successful query. External cache served 1.443% of prompt
+tokens. The workflow concluded failure only after exports completed because the
+launch step exited 143; all result, raw AgentX, server-log, GPU, and power
+artifacts uploaded, so c488 is a valid local performance point. Run a matched
+HBM-only c488 control before attributing the result to NVMe.
 
 The combined tier uses a different connector and storage policy. The pinned FS
 tier has no bounded LRU capacity setting: the 2 TiB value is an abort guard, not an

@@ -4203,40 +4203,124 @@
       "repeat": 1,
       "attempt": 1,
       "head_sha": "81ec4d29c0c89e8a0fd1e80016861173dc0a8642",
-      "status": "queued",
+      "status": "failure",
       "workflow_name": "offload-v1-nvme4tib-c488-r1-branchwf-20261001",
       "dispatched_at": "2026-10-01T00:30:12Z",
       "queued_at": "2026-10-01T00:30:39Z",
       "job_id": 110161164504,
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/36796500128/job/110161164504",
-      "performance_result": false,
+      "performance_result": true,
       "target_node": "im-b200-c001",
       "capacity_bytes_per_node": 4398046511104,
       "capacity_reserve_bytes": 137438953472,
       "capacity_required_bytes": 4535485464576,
       "matched_hbm_required_on_success": true,
-      "dispatch_evidence": "The exact matrix preview resolved MiniMax-M3 NVFP4, vLLM, TP4, four GPUs, canonical AgentX c488, 3,600-second profiling, kv-offloading=nvme with the vllm-simple backend, and experiment=agentx-offload. c488 is the midpoint between the matched c480 mixed NVMe win and c496 canonical warmup infeasibility. Immediately before dispatch, a fresh GitHub Actions inventory found zero queued workflows and no active jobs carrying cluster:b200-nscale or an NVMe-bearing study configuration. This workflow is the single queued B200 job and the only active-or-queued NVMe-bearing study workflow."
+      "dispatch_evidence": "The exact matrix preview resolved MiniMax-M3 NVFP4, vLLM, TP4, four GPUs, canonical AgentX c488, 3,600-second profiling, kv-offloading=nvme with the vllm-simple backend, and experiment=agentx-offload. c488 is the midpoint between the matched c480 mixed NVMe win and c496 canonical warmup infeasibility. Immediately before dispatch, a fresh GitHub Actions inventory found zero queued workflows and no active jobs carrying cluster:b200-nscale or an NVMe-bearing study configuration. This workflow is the single queued B200 job and the only active-or-queued NVMe-bearing study workflow.",
+      "started_at": "2026-10-01T00:31:00Z",
+      "completed_at": "2026-10-01T08:34:23Z",
+      "runner": "b200-nscale-slurm_00",
+      "allocation_id": 18109,
+      "node": "im-b200-c001",
+      "scratch": "/offload-scratch/inferencex-offload-36796500128-1-18109-2b61cbf1ec37",
+      "failure_stage": "post-profile launch termination / exit 143",
+      "performance": {
+        "num_requests_total": 6569,
+        "num_requests_successful": 1168,
+        "num_requests_warmup_dropped": 5401,
+        "num_requests_error_dropped": 8,
+        "request_error_categories": {
+          "InvalidInferenceResultError": 8
+        },
+        "duration_seconds": 3629.17625,
+        "output_tokens_per_second": 327.1781,
+        "output_tokens_per_second_per_gpu": 81.79453,
+        "input_tokens_per_second": 33837.16375,
+        "total_tokens_per_second": 34164.34185,
+        "total_tokens_per_second_per_gpu": 8541.08546,
+        "p90_e2e_latency_seconds": 2942.59152,
+        "p90_ttft_seconds": 2904.03107,
+        "p90_tpot_seconds": 0.11231,
+        "p90_interactivity_tokens_per_second_per_user": 8.90383,
+        "p90_e2e_normalized_interactivity_tokens_per_second_per_user": 0.08069,
+        "mean_e2e_latency_seconds": 1208.78923,
+        "avg_power_w_per_gpu": 896.08,
+        "joules_per_successful_query": 11170.325654
+      },
+      "cache_evidence": {
+        "gpu_cache_hit_rate": 0.01212,
+        "external_cache_hit_rate": 0.01443,
+        "overall_cache_hit_rate": 0.02654,
+        "theoretical_cache_hit_rate": 0.93901,
+        "gpu_cache_hit_prompt_tokens": 13247744,
+        "external_cache_hit_prompt_tokens": 15769984,
+        "computed_prompt_tokens": 1064166726,
+        "prompt_tokens_total": 1093184454,
+        "generation_tokens_total": 1317820,
+        "gpu_cache_usage_pct": 1.0
+      },
+      "artifacts": [
+        {
+          "id": 11149756851,
+          "name": "bmk_agentic_minimaxm3_tp4_conc488_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-362d1dbeebcccde8a4f7",
+          "size_bytes": 2262,
+          "sha256": "9006d0eaf307e0af1e57b405529883c9661d5beceddc9aaaf56b9bde1102dc28"
+        },
+        {
+          "id": 11149727137,
+          "name": "power_audit_minimaxm3_tp4_conc488_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-362d1dbeebcccde8a4f7",
+          "size_bytes": 1158863,
+          "sha256": "6c6cdd46bf447af4454765d62036459a9b243bef8bf0a1d0a3cfdd3fd5309458"
+        },
+        {
+          "id": 11149637230,
+          "name": "server_logs_minimaxm3_tp4_conc488_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-362d1dbeebcccde8a4f7",
+          "size_bytes": 236784,
+          "sha256": "d3d4e5ee5d7294b5fde9630485e75a00cd674ae081adf6b6e17f3c17d5a42b72"
+        },
+        {
+          "id": 11149547426,
+          "name": "gpu_metrics_minimaxm3_tp4_conc488_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-362d1dbeebcccde8a4f7",
+          "size_bytes": 1155260,
+          "sha256": "986cb3089fd63a8039a854f9fcb689a9afadce683bdfb44f00e4b31f66191032"
+        },
+        {
+          "id": 11149118068,
+          "name": "agentic_minimaxm3_tp4_conc488_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-362d1dbeebcccde8a4f7",
+          "size_bytes": 36903379,
+          "sha256": "cf3a9711575fd54a83124d22fba3cc936f1546a07381e7d6c0f175c5f072f6a8"
+        }
+      ],
+      "runtime_evidence": "Canonical warmup completed all 5,401 requests with zero request errors after 24,559.47 seconds. Profiling then completed the full 3,600-second send window and retained 1,168 successful responses with eight InvalidInferenceResultError classifications. Metric coverage passed at 100% for TTFT and inter-token latency, the full result and power exports completed, and all diagnostic artifacts uploaded. The GitHub workflow concluded failure because the launch step exited 143 after export and server shutdown; this post-profile termination does not erase the completed performance result.",
+      "storage_evidence": "Slurm allocation 18109 landed on allowlisted im-b200-c001. Runtime preflight observed 13,266,883,678,208 free bytes on xfs /dev/md0 over eight non-rotating NVMe leaves, exceeded the 4 TiB budget plus 128 GiB reserve, and verified O_DIRECT before creating the exact task-owned scratch. Final telemetry observed four cache files totaling 4,398,044,086,272 logical bytes and 4,398,046,527,488 allocated bytes. offload_cleanup.json recorded deleted=true for /offload-scratch/inferencex-offload-36796500128-1-18109-2b61cbf1ec37; the cleanup inherited exit code 143 after the completed profile.",
+      "evidence_sha256": {
+        "benchmark.log": "41becb3ea3396bb7e111b7a5f9b77d50fe538194ae24b61462104b0fde9d2b35",
+        "profile_export.jsonl": "e9e70caedce1360e2f5cd2360c23ad01a3da5dd5c5697a9e8c036029abf58eae",
+        "server.log": "5928b2db8ef37be3932dd20e3300e69bdee41726ce26b85197a4cfce7acaca9a",
+        "offload-telemetry.jsonl": "99c39c354108b6a47a930521785fd260a6c4611b40206fc4680c523e2bbe104b",
+        "offload_config.json": "b2492bdc9d3fb0ca26d906e2502801e148914cfd5ebf3dd19797b25c8fd1ec7b",
+        "gpu_metrics.csv": "5d4f09958430a734606c63ec2ce3c89884c0aea14b122220e58f6faef022a190",
+        "offload_cleanup.json": "612b1a12d1afc0f978ed4534f526dc499cb4f7168fa720f11bda9165909e5f5c",
+        "power_validation.json": "ec4a57563826fe6b17548a67b5be98562c868a0819d7a35343df6a22df367b75"
+      }
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894",
-  "status": "c488 4 TiB HBM+NVMe run 36796500128 is queued as the single B200 job after c496 established local canonical-warmup infeasibility. If c488 completes profiling, run a matched HBM-only c488 control.",
+  "status": "c488 4 TiB HBM+NVMe completed canonical warmup and the full 3,600-second profiling window with a valid performance result. Its workflow failed only after export with launch exit 143. Capture the result and dispatch the matched HBM-only c488 control after a fresh B200 queue inventory.",
   "last_capacity_check": {
-    "checked_at": "2026-10-01T00:30:39Z",
+    "checked_at": "2026-10-01T08:35:00Z",
     "active_study_run_ids": [],
-    "pending_study_run_ids": [
-      36796500128
-    ],
+    "pending_study_run_ids": [],
     "dispatch_allowed": false,
-    "b200_priority_jobs_queued": 1,
+    "b200_priority_jobs_queued": null,
     "b200_nodes_allocated": null,
     "b200_nodes_idle": null,
     "target_node": "im-b200-c001",
-    "target_node_state": "c488 queued; allocation and NVMe admission not yet observed",
-    "observed_free_bytes": null,
-    "reason": "c488 is now the single queued cluster:b200-nscale job and the only active-or-queued NVMe-bearing study workflow; dispatch nothing else."
+    "target_node_state": "c488 NVMe run terminal; offload_cleanup.json records exact scratch deletion",
+    "observed_free_bytes": 13266883678208,
+    "reason": "Record and validate the c488 NVMe result, then obtain a fresh cluster-wide B200 job-label inventory before dispatching its matched HBM-only control."
   },
   "next_dispatch": {
-    "requires": "Wait for c488 run 36796500128. On allocation require im-b200-c001, more than 4,535,485,464,576 free bytes, and O_DIRECT before exact task-owned scratch creation. If canonical profiling completes, analyze artifacts and dispatch a matched HBM-only c488 control only after cleanup and a fresh queue inventory."
+    "requires": "Commit and push the c488 NVMe evidence. Then require zero queued cluster:b200-nscale jobs and no conflicting active study workflow before dispatching the canonical HBM-only c488 control."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-21T05:30:00Z",
