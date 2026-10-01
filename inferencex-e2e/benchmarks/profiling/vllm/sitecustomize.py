@@ -467,30 +467,49 @@ _current_step = None  # the scheduled step executing on this worker
 
 
 # --- MoE routing ----------------------------------------------------------------
-# vLLM's RoutedExpertsCapturer writes each MoE layer's top-k expert ids into a
-# device buffer from the layer's capture_fn; the write is a GPU copy, so CUDA
-# graphs capture it and every replay records its routing. It is bound to the
-# target model before graph capture. While a window is open, each step's rows
-# are copied to pinned host memory asynchronously; at the window's stop every
-# step's per-layer expert token counts are written, and its per-token ids when
-# it has at most ROUTING_IDS_MAX_TOKENS tokens (decode steps; a 4k-token prefill
-# step's ids are ~3 MB per DP rank).
+# vLLM's MoE layers and routers call a capture_fn with each step's top-k expert
+# ids (its routed-experts capture hook). The patch binds its own capturer to
+# every MoE layer of the target model before graph capture: it copies the ids
+# into a device buffer, a GPU copy that CUDA graphs capture, so every replay
+# records its routing. (vLLM's own RoutedExpertsCapturer changes constructor
+# across versions.) While a window is open, each step's rows are copied to
+# pinned host memory asynchronously; at the window's stop every step's per-layer
+# expert token counts are written, and its per-token ids when it has at most
+# ROUTING_IDS_MAX_TOKENS tokens (decode steps; a 4k-token prefill step's ids are
+# ~3 MB per DP rank).
 
 ROUTING_IDS_MAX_TOKENS = 1024
 _routing = {"capturer": None, "pending": [], "rank": None, "write": False}
 
 
+class _RoutingCapturer:
+    """Each MoE layer's top-k expert ids for the current step's tokens, on the GPU.
+
+    A layer sees this rank's tokens: all of them under tensor parallelism, this
+    DP rank's under the DP+EP mega-MoE path. -1 marks a row no layer wrote.
+    """
+
+    def __init__(self, max_tokens, num_layers, topk):
+        import torch
+
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.device_buffer = torch.full((max_tokens, num_layers, topk), -1, dtype=torch.int32,
+                                        device=device)
+
+    def capture(self, layer_id, topk_ids):
+        n = min(topk_ids.shape[0], self.device_buffer.shape[0])
+        if 0 <= layer_id < self.device_buffer.shape[1]:
+            self.device_buffer[:n, layer_id] = topk_ids[:n]
+
+
 def _bind_routing(runner, tag):
-    """Attach a routed-experts capturer to every MoE layer of the target model."""
+    """Attach a routing capturer to every MoE layer of the target model."""
     from functools import partial
 
-    from vllm.model_executor.layers.fused_moe.routed_experts_capturer import (
-        RoutedExpertsCaptureSource,
-        RoutedExpertsCapturer,
-    )
-
-    capturer = RoutedExpertsCapturer(runner.scheduler_config.max_num_batched_tokens,
-                                     runner.vllm_config)
+    model_config = runner.vllm_config.model_config
+    capturer = _RoutingCapturer(runner.scheduler_config.max_num_batched_tokens,
+                                model_config.get_total_num_hidden_layers(),
+                                model_config.get_num_experts_per_tok())
     try:
         from vllm.model_executor.layers.fused_moe.layer import MoERunner
     except Exception:
@@ -498,9 +517,7 @@ def _bind_routing(runner, tag):
     bound, failed = {}, {}
     for name, module in runner.model.named_modules(prefix="model"):
         try:
-            if isinstance(module, RoutedExpertsCaptureSource):
-                module.capture_fn = partial(capturer.capture, module.layer_id)
-            elif MoERunner and isinstance(module, MoERunner):
+            if MoERunner and isinstance(module, MoERunner):
                 fn = partial(capturer.capture, module.layer_id)
                 quant_method = module._quant_method
                 if quant_method.is_monolithic:
@@ -508,6 +525,9 @@ def _bind_routing(runner, tag):
                     getattr(impl, "fused_experts").set_capture_fn(fn)
                 else:
                     module.router.set_capture_fn(fn)
+            elif hasattr(module, "capture_fn") and hasattr(module, "layer_id"):
+                # A capture source (e.g. DSV4's mega-MoE experts) calls it with its ids.
+                module.capture_fn = partial(capturer.capture, module.layer_id)
             else:
                 continue
             bound[module.layer_id] = name

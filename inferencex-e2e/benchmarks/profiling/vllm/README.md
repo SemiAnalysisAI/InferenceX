@@ -158,11 +158,12 @@ under prefill load; a reading is from somewhere inside its poll, and a kernel
 within such a poll shows it as a large `prior_us`.
 `report.json` gives each trace's clock coverage and `prior_us` percentiles.
 
-MoE routing is dynamic, so each step records what its router chose. vLLM's
-`RoutedExpertsCapturer` is bound to every MoE layer of the target model (not
-the draft) before CUDA graph capture: each layer's `capture_fn` copies its
-top-k expert ids into a device buffer, a GPU copy that graphs capture and
-replay. Inside a window, every step's rows are copied to pinned host memory
+MoE routing is dynamic, so each step records what its router chose. vLLM's MoE
+layers and routers call a `capture_fn` with their top-k expert ids (the
+routed-experts capture hook); the patch binds its own capturer there, on every
+MoE layer of the target model (not the draft), before CUDA graph capture. It
+copies the ids into a device buffer, a GPU copy that graphs capture and replay.
+Inside a window, every step's rows are copied to pinned host memory
 asynchronously (`infx_routing_copy`) and written at the window's stop. The ids
 are logical expert ids before EPLB remapping, for this DP rank's tokens; TP
 ranks route the same tokens, so TP rank 0 writes for its group. A step file's
