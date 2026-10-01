@@ -340,10 +340,16 @@ B300 uses the same minimum capture size at c1/c2/c4. Its c1 CI comparison reduce
 Kimi-K3 on B300 selects one active Mellanox adapter by its sysfs driver, including
 DSXE `ibp*` names; EFA devices are excluded from this RDMA recipe. The embedded
 Mooncake ranks share that adapter. InfiniBand uses GID index 0 and RoCE retains
-index 3. If no compatible active adapter exists, startup fails before serving.
-On DSXE the container's libibverbs comes from the host through the enroot EFA
-hook, so `configs/runners.yaml` mounts the host library directory at `/host-usr-lib`
-and the setup script loads its mlx5 provider through `RDMAV_DRIVERS`.
+index 3. If no compatible active adapter exists, or if the host mlx5 provider mount
+is missing, startup fails before serving. The recipe YAML may leave `device_name`
+empty; `kimik3-b300-mooncake.sh` patches a real rail into the store config and
+refuses to continue with an empty name (srt-slurm's earlier "Wrote
+mooncake_store_config" line is the pre-patch dump). On DSXE the container's
+libibverbs comes from the host through the enroot EFA hook, so
+`configs/runners.yaml` mounts the host library directory at `/host-usr-lib` and
+the setup script requires `RDMAV_DRIVERS` to load its mlx5 provider. The DCP8
+connector also sets `compact_group_io` and `max_load_batch_keys: 2` like the
+proven GB300 DCP8 Mooncake recipes.
 
 
 The AgentX-only `dsv41flash-fp4-<sku>-vllm-agentic-dspark` recipes use the per-SKU

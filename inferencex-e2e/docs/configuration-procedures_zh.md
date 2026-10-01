@@ -314,10 +314,14 @@ B300 在 c1/c2/c4 使用相同的最小捕获范围。其 c1 CI 对比中，请�
 
 B300 上的 Kimi-K3 按 sysfs 驱动选择一块活动的 Mellanox 网卡，包括 DSXE 的
 `ibp*` 命名；本 RDMA 配方排除 EFA。嵌入式 Mooncake 各 rank 共用该网卡。
-InfiniBand 使用 GID 索引 0，RoCE 保留索引 3。若没有可用的活动适配器，则在
-服务启动前失败。DSXE 上容器的 libibverbs 来自 enroot EFA hook 挂载的主机库，
-因此 `configs/runners.yaml` 将主机库目录挂到 `/host-usr-lib`，setup 脚本通过
-`RDMAV_DRIVERS` 加载其 mlx5 provider。
+InfiniBand 使用 GID 索引 0，RoCE 保留索引 3。若没有可用的活动适配器，或缺少
+主机 mlx5 provider 挂载，则在服务启动前失败。配方 YAML 可将 `device_name` 留空；
+`kimik3-b300-mooncake.sh` 会在引擎启动前把真实 rail 写入 store config，并拒绝
+空名称（srt-slurm 较早的 `Wrote mooncake_store_config` 行是 patch 前的转储）。
+DSXE 上容器的 libibverbs 来自 enroot EFA hook 挂载的主机库，因此
+`configs/runners.yaml` 将主机库目录挂到 `/host-usr-lib`，setup 脚本通过
+`RDMAV_DRIVERS` 强制加载其 mlx5 provider。DCP8 连接器还设置与已验证的 GB300
+DCP8 Mooncake 配方相同的 `compact_group_io` 与 `max_load_batch_keys: 2`。
 
 
 仅运行 AgentX 的 `dsv41flash-fp4-<sku>-vllm-agentic-dspark` 配方使用

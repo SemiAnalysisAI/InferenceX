@@ -152,6 +152,11 @@ select_mooncake_rdma_device() {
             *) continue ;;
         esac
         MOONCAKE_RAIL="${device##*/}"
+        if [[ -z "$MOONCAKE_RAIL" || "$MOONCAKE_RAIL" == "*" ]]; then
+            echo "Error: resolved an empty Mooncake RDMA rail name from $device" >&2
+            return 1
+        fi
+        export MOONCAKE_RAIL
         export MC_GID_INDEX
         return 0
     done
