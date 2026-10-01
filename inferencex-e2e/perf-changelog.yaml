@@ -9180,3 +9180,16 @@
     - "Update the SGLang ROCm image from lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260927 to lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260929 on this arm only. The other MI355X arms are left on their current tags."
     - "No serving flag outside the HiCache block changes, and no other config key is touched. Each of the 19 matrix points resolves to exactly one recipe override, with no override left unused."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3611
+
+- config-keys:
+    - dsr1-fp8-mi325x-sglang
+    - dsr1-fp8-mi325x-sglang-mtp
+    - qwen3.5-fp8-mi325x-sglang
+    - qwen3.5-fp8-mi325x-sglang-mtp
+    - qwen3.5-fp8-mi325x-sglang-agentic-mtp
+    - glm5.2-fp8-mi325x-sglang-agentic-mtp
+    - minimaxm3-fp8-mi325x-vllm-agentic-mtp
+    - dsv41flash-fp4-mi325x-vllm-agentic-dspark
+  description:
+    - "Retire the mi325x-amds runner pool and route MI325X workloads to the Barite mi325x-amd pool in MI325X-UBUNTU. Keep model recipes unchanged; generated host-DRAM budgets now use the replacement cluster's declared memory capacity."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3644
