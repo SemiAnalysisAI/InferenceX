@@ -1452,7 +1452,7 @@ dsv4-fp4-mi355x-sglang-agentic-mtp:
 # tag predates vllm-project/vllm#56503, which moves the mHC delayed pre block off
 # the eager Torch reference and onto AITER. MI355X run 34710937012 passed the
 # full concurrency 1-32 sweep and eval-only concurrency 32.
-# TP=2 joins TP=4, and both extend to concurrency 128. TP=2 became feasible on
+# TP=2 joins TP=4, and both extend to concurrency 64. TP=2 became feasible on
 # this SKU once the Engram tables moved to host memory: they cost 47.2 GiB of
 # device memory per rank, which is what previously forced four GPUs per server.
 # Two GPUs per server doubles the servers per node and is the layout that
