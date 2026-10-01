@@ -421,15 +421,20 @@ class TestMarkEvalEntries:
             for n, variant in enumerate(variants)
             for conc in (16, 64)
         ]
-        # A different TP is the same group: only its highest conc is evaluated.
+        # TP and KV offloading do not split a group: only the group's highest
+        # conc is evaluated, whichever variant it belongs to.
         matrix_values.append(dict(base, tp=4, conc=128, variant=0))
+        matrix_values.append(dict(base, conc=256, variant=0, **{"kv-offloading": "dram"}))
 
         result = mark_eval_entries(matrix_values)
 
         marked = sorted(
-            (e["variant"], e["tp"], e["conc"]) for e in result if e.get("run-eval")
+            (e["variant"], e["tp"], e.get("kv-offloading"), e["conc"])
+            for e in result if e.get("run-eval")
         )
-        assert marked == [(0, 4, 128), (1, 8, 64), (2, 8, 64), (3, 8, 64)]
+        assert marked == [
+            (0, 8, "dram", 256), (1, 8, None, 64), (2, 8, None, 64), (3, 8, None, 64),
+        ]
 
     def test_marks_multinode_agentic_entry_at_highest_eligible_conc(self):
         """Multi-node agentic (SWE-bench) eval selection mirrors the
