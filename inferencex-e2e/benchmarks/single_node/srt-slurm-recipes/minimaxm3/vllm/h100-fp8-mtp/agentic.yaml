@@ -146,7 +146,7 @@ override_tp8_c6_dram:
           metadata_server: P2PHANDSHAKE
           global_segment_size: 134GB
           local_buffer_size: 4GB
-          protocol: rdma
+          protocol: tcp
           device_name: ''
           enable_offload: false
   roles:
@@ -189,7 +189,7 @@ override_tp8_c8_dram:
           metadata_server: P2PHANDSHAKE
           global_segment_size: 134GB
           local_buffer_size: 4GB
-          protocol: rdma
+          protocol: tcp
           device_name: ''
           enable_offload: false
   roles:
