@@ -4194,25 +4194,49 @@
         "offload_config.json": "788bc90d776bd6ac9b576dc2589ee122ed14a1cdf91ac6c147c4216022fa08c6",
         "gpu_metrics.csv": "182411ba7b331ff79465537fad2d66a8f615504f160cca8b93a42d8c71b396f8"
       }
+    },
+    {
+      "run_id": 36796500128,
+      "url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/36796500128",
+      "arm": "nvme",
+      "concurrency": 488,
+      "repeat": 1,
+      "attempt": 1,
+      "head_sha": "81ec4d29c0c89e8a0fd1e80016861173dc0a8642",
+      "status": "queued",
+      "workflow_name": "offload-v1-nvme4tib-c488-r1-branchwf-20261001",
+      "dispatched_at": "2026-10-01T00:30:12Z",
+      "queued_at": "2026-10-01T00:30:39Z",
+      "job_id": 110161164504,
+      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/36796500128/job/110161164504",
+      "performance_result": false,
+      "target_node": "im-b200-c001",
+      "capacity_bytes_per_node": 4398046511104,
+      "capacity_reserve_bytes": 137438953472,
+      "capacity_required_bytes": 4535485464576,
+      "matched_hbm_required_on_success": true,
+      "dispatch_evidence": "The exact matrix preview resolved MiniMax-M3 NVFP4, vLLM, TP4, four GPUs, canonical AgentX c488, 3,600-second profiling, kv-offloading=nvme with the vllm-simple backend, and experiment=agentx-offload. c488 is the midpoint between the matched c480 mixed NVMe win and c496 canonical warmup infeasibility. Immediately before dispatch, a fresh GitHub Actions inventory found zero queued workflows and no active jobs carrying cluster:b200-nscale or an NVMe-bearing study configuration. This workflow is the single queued B200 job and the only active-or-queued NVMe-bearing study workflow."
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894",
-  "status": "c496 established a local canonical-warmup feasibility failure under the reusable workflow's 500-minute execution budget: profiling never started, so no performance result exists. The next adaptive midpoint is c488 between the matched c480 mixed NVMe win and c496 infeasibility.",
+  "status": "c488 4 TiB HBM+NVMe run 36796500128 is queued as the single B200 job after c496 established local canonical-warmup infeasibility. If c488 completes profiling, run a matched HBM-only c488 control.",
   "last_capacity_check": {
-    "checked_at": "2026-10-01T00:10:00Z",
+    "checked_at": "2026-10-01T00:30:39Z",
     "active_study_run_ids": [],
-    "pending_study_run_ids": [],
+    "pending_study_run_ids": [
+      36796500128
+    ],
     "dispatch_allowed": false,
-    "b200_priority_jobs_queued": null,
+    "b200_priority_jobs_queued": 1,
     "b200_nodes_allocated": null,
     "b200_nodes_idle": null,
     "target_node": "im-b200-c001",
-    "target_node_state": "c496 run 36739077310 terminal; exact task-owned scratch independently confirmed absent",
-    "observed_free_bytes": 17665665126400,
-    "reason": "Record and validate the c496 feasibility result and prepare c488 before obtaining a fresh cluster-wide queue inventory."
+    "target_node_state": "c488 queued; allocation and NVMe admission not yet observed",
+    "observed_free_bytes": null,
+    "reason": "c488 is now the single queued cluster:b200-nscale job and the only active-or-queued NVMe-bearing study workflow; dispatch nothing else."
   },
   "next_dispatch": {
-    "requires": "Prepare and validate the c488 midpoint. Before dispatching its 4 TiB HBM+NVMe arm, require zero queued cluster:b200-nscale jobs, no other active-or-queued NVMe-bearing study workflow, allowlisted im-b200-c001 placement, more than 4,535,485,464,576 free bytes, and O_DIRECT."
+    "requires": "Wait for c488 run 36796500128. On allocation require im-b200-c001, more than 4,535,485,464,576 free bytes, and O_DIRECT before exact task-owned scratch creation. If canonical profiling completes, analyze artifacts and dispatch a matched HBM-only c488 control only after cleanup and a fresh queue inventory."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-21T05:30:00Z",
