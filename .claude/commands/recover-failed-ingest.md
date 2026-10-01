@@ -248,7 +248,8 @@ gh pr comment "$RECOVERY_PR" \
 ```
 
 Keep exactly one of `full-sweep-enabled`,
-`non-canary-full-sweep-enabled`, or `full-sweep-fail-fast`.
+`non-canary-full-sweep-enabled`, `full-sweep-fail-fast`, or
+`full-sweep-fail-fast-no-canary`.
 
 ## 5. Append and validate the recovery changelog
 

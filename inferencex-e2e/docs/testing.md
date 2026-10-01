@@ -189,7 +189,7 @@ A smoke run is not merge evidence: it intentionally omits configurations and con
 ### Trimmed and full sweeps
 
 - `full-sweep-fail-fast` is the recommended full-sweep label. It uses the sequential single-node canary and stops each matrix after that matrix's first failure while preserving completed results.
-- Use `non-canary-full-sweep-enabled` only when the canary is known to be flaky or unrepresentative. Use `full-sweep-enabled` instead of fail-fast only when every matrix job must continue despite a failure.
+- Use a no-canary full-sweep label only when the canary is known to be flaky or unrepresentative. Use `full-sweep-enabled` instead of fail-fast only when every matrix job must continue despite a failure.
 - Apply exactly one primary sweep label. Modifier-only or conflicting primary labels do not constitute a valid sweep.
 - A trimmed sweep (lowest concurrency only) can be run manually via `e2e-tests.yml` with the `trim-conc` input.
 

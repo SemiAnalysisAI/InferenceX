@@ -86,6 +86,7 @@ SWEEP_LABEL_NAMES = frozenset(
         "full-sweep-enabled",
         "non-canary-full-sweep-enabled",
         "full-sweep-fail-fast",
+        "full-sweep-fail-fast-no-canary",
     }
 )
 

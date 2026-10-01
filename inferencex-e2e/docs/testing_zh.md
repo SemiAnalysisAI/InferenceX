@@ -189,7 +189,7 @@ uv run --locked --all-extras --group test --no-editable \
 ### 精简与全量扫描
 
 - `full-sweep-fail-fast` 是推荐的全量扫描标签。它使用串行单节点 canary，并在每个矩阵首次失败后停止该矩阵，同时保留已完成结果。
-- 仅当 canary 已知不稳定或不具代表性时才使用 `non-canary-full-sweep-enabled`。仅当即使失败也必须让每个矩阵任务继续时，才用 `full-sweep-enabled` 代替 fail-fast。
+- 仅当 canary 已知不稳定或不具代表性时才使用无 canary 的全量扫描标签。仅当即使失败也必须让每个矩阵任务继续时，才用 `full-sweep-enabled` 代替 fail-fast。
 - 必须且只能应用一个主扫描标签。只有修饰标签或存在冲突主标签都不构成有效扫描。
 - 精简扫描（仅最低并发）可通过 `e2e-tests.yml` 的 `trim-conc` 输入手动运行。
 

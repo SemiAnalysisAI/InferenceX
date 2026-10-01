@@ -26,7 +26,7 @@ jobs:
         if: >-
             github.event.pull_request.head.repo.full_name != github.repository &&
             contains(
-              fromJson('["full-sweep-enabled","non-canary-full-sweep-enabled","full-sweep-fail-fast"]'),
+              fromJson('["full-sweep-enabled","non-canary-full-sweep-enabled","full-sweep-fail-fast","full-sweep-fail-fast-no-canary"]'),
               github.event.label.name
             )
         runs-on: ubuntu-latest
@@ -40,6 +40,7 @@ jobs:
                         'full-sweep-enabled',
                         'non-canary-full-sweep-enabled',
                         'full-sweep-fail-fast',
+                        'full-sweep-fail-fast-no-canary',
                       ]);
 
                       const {data: access} = await github.rest.repos.getCollaboratorPermissionLevel({

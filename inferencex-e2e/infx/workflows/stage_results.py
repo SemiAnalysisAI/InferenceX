@@ -18,6 +18,7 @@ FULL_SWEEP_LABELS = (
     "full-sweep-enabled",
     "non-canary-full-sweep-enabled",
     "full-sweep-fail-fast",
+    "full-sweep-fail-fast-no-canary",
 )
 COMMAND_SPACE = "\t\n\v\f\r \u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff"
 
