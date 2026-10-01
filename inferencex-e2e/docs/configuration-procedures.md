@@ -347,9 +347,10 @@ refuses to continue with an empty name (srt-slurm's earlier "Wrote
 mooncake_store_config" line is the pre-patch dump). On DSXE the container's
 libibverbs comes from the host through the enroot EFA hook, so
 `configs/runners.yaml` mounts the host library directory at `/host-usr-lib` and
-the setup script requires `RDMAV_DRIVERS` to load its mlx5 provider. The DCP8
-connector also sets `compact_group_io` and `max_load_batch_keys: 2` like the
-proven GB300 DCP8 Mooncake recipes.
+the setup script requires `RDMAV_DRIVERS` to load its mlx5 provider. Keep
+`max_load_batch_keys: 2`, but do not enable `compact_group_io` on this DSXE
+single-rail path (it storm-failed ~25 MiB compact-group puts at c8). Direct DCP
+KV gather is off (`VLLM_USE_DIRECT_DCP_KV_GATHER=0`).
 
 
 The AgentX-only `dsv41flash-fp4-<sku>-vllm-agentic-dspark` recipes use the per-SKU

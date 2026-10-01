@@ -320,8 +320,10 @@ InfiniBand 使用 GID 索引 0，RoCE 保留索引 3。若没有可用的活动�
 空名称（srt-slurm 较早的 `Wrote mooncake_store_config` 行是 patch 前的转储）。
 DSXE 上容器的 libibverbs 来自 enroot EFA hook 挂载的主机库，因此
 `configs/runners.yaml` 将主机库目录挂到 `/host-usr-lib`，setup 脚本通过
-`RDMAV_DRIVERS` 强制加载其 mlx5 provider。DCP8 连接器还设置与已验证的 GB300
-DCP8 Mooncake 配方相同的 `compact_group_io` 与 `max_load_batch_keys: 2`。
+`RDMAV_DRIVERS` 强制加载其 mlx5 provider。保留 `max_load_batch_keys: 2`，但不要在
+该 DSXE 单 rail 路径上启用 `compact_group_io`（c8 上曾对约 25 MiB 的
+compact-group put 产生大量失败）。Direct DCP KV gather 关闭
+（`VLLM_USE_DIRECT_DCP_KV_GATHER=0`）。
 
 
 仅运行 AgentX 的 `dsv41flash-fp4-<sku>-vllm-agentic-dspark` 配方使用
