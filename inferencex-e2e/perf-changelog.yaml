@@ -9188,4 +9188,4 @@
   description:
     - "Update the vLLM ROCm image from vllm/vllm-openai-rocm:nightly-rocm100-36768d1bfd39094681cdbc8cb37d4b31c0729c89 to vllm/vllm-openai-rocm:nightly-rocm100-ac9126e58aa7bbab1856ba6593ba4d5003fea516 in both the master config image and the recipe model.container."
     - "No recipe flag, environment variable, search-space point or concurrency changes. The Inferact/Kimi-K3-DSpark draft's data types and precision are unchanged: it still loads unquantized in BF16 with an fp8 KV cache, and every arm keeps its existing num_speculative_tokens."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3635
