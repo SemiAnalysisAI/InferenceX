@@ -195,8 +195,8 @@ schema; unknown keys fail.
 - `scheduler` names a scheduler registered in `infx.clusters.SCHEDULERS`; the
   sub-record of that name holds its settings, and records for other schedulers are
   rejected. Its `volumes` name the checkpoint roots and caches (`hf-home`,
-  `hf-hub-cache`, `shared-hf-hub-cache`, `aiperf-cache`, `dynamo-wheels`,
-  `tilert-weights`), each `shared` (the default) or `node-local`.
+  `hf-hub-cache`, `shared-hf-hub-cache`, `aiperf-cache`, `dynamo-wheels`),
+  each `shared` (the default) or `node-local`.
 - `slurm:` ([`infx/clusters/slurm.py`](../infx/clusters/slurm.py)) holds the partition,
   account, exclusivity, GRES, excluded nodes and extra `srun`/`salloc` options; its
   volumes are host `path`s that jobs see at the same place.

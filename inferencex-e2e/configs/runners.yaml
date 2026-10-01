@@ -501,8 +501,6 @@ clusters:
         DeepSeek-V4-Pro: {root: scratch, dir: DeepSeek-V4-Pro}
         DeepSeek-V4-Pro-0813: {root: scratch, dir: DeepSeek-V4-Pro-0813}
         DeepSeek-V4-Pro-NVFP4: {root: scratch, dir: DeepSeek-V4-Pro-NVFP4}
-        GLM-5.1-FP8: {root: scratch, dir: GLM-5.1-FP8}
-        GLM-5.1-FP8@shared: {root: shared-models, dir: GLM-5.1-FP8-f396cf805182}
         GLM-5.2-FP8: {root: scratch, dir: GLM-5.2-FP8}
         GLM-5.2-NVFP4: {root: scratch, dir: GLM-5.2-NVFP4}
         Kimi-K3: {root: scratch, dir: Kimi-K3}
@@ -521,8 +519,6 @@ clusters:
       volumes:
         hf-hub-cache: {path: /data/home/sa-shared/gharunners/hf-hub-cache}
         aiperf-cache: {path: /data/home/sa-shared/gharunners/aiperf-cache}
-        shared-models: {path: /data/home/sa-shared/gharunners/models}
-        tilert-weights: {path: /data/home/sa-shared/gharunners/models/GLM-5.1-FP8-TileRT-8shard}
         scratch: {path: /scratch/models, visibility: node-local}
       squash:
         dir: /data/home/sa-shared/containers

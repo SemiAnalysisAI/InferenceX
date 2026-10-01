@@ -375,6 +375,8 @@ Klaud 和恢复工具继续使用现有的 `gh` 认证。GitHub CLI 跟随分页
 
 不提供 ID 时，Workflow 会选择 PR Branch 上最新的可暂存已结束 Run，并要求其 Head SHA 仍在 PR Commit 列表中。指定 ID 时允许使用明确关联的历史 Run。Workflow 会确认所选 Run，向 InferenceX-app 派发 `stage-results` 事件，并由 [`stage-results-callback.yml`](../../.github/workflows/stage-results-callback.yml) 用成功图表或失败链接替换确认评论。
 
+格式正确的 `/use <run-id>` 复用请求也会触发此 Workflow，并按相同规则暂存所指定的 Run，同时保留正常的复用处理。格式错误的 `/use` 评论交由复用 Workflow 处理，不会触发暂存。
+
 预发布会保留之前已暂存的 Run。再次暂存同一个 Run ID 会更新该 Run 的预发布数据。必须保留源 Run ID 与下游 App Workflow 链接；预发布成功不证明生产复用资格或合并后入库成功。
 
 ## 产物复用与 merge-with-reuse

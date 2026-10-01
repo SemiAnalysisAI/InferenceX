@@ -394,6 +394,8 @@ An authorized maintainer comments exactly one of:
 
 Without an ID, the workflow selects the latest stageable completed run on the PR branch whose head SHA remains in the PR commit list. A pinned ID permits an explicitly associated historical run. The workflow acknowledges the run, dispatches the `stage-results` event to InferenceX-app, and [`stage-results-callback.yml`](../../.github/workflows/stage-results-callback.yml) replaces the acknowledgement with a success chart or failure link.
 
+A well-formed `/use <run-id>` reuse request also triggers this workflow and stages that pinned run under the same rules, in addition to the normal reuse handling. Malformed `/use` comments are left to the reuse workflow and do not stage.
+
 Staging preserves earlier staged runs. Staging the same run ID again updates that run's staged data. Always keep the source run ID and downstream app workflow link. A staging success does not prove production reuse eligibility or post-merge ingestion.
 
 ## Artifact reuse and merge-with-reuse
