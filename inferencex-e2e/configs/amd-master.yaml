@@ -248,7 +248,7 @@ qwen3.5-fp8-mi325x-sglang-agentic-mtp:
   image: lmsysorg/sglang:v0.5.16-rocm720-mi30x
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
-  runner: cluster:mi325x-amds
+  runner: cluster:mi325x-amd
   precision: fp8
   framework: sglang
   multinode: false
@@ -1083,7 +1083,7 @@ glm5.2-fp8-mi325x-sglang-agentic-mtp:
   image: lmsysorg/sglang:v0.5.20-rocm720-mi30x
   model: zai-org/GLM-5.2-FP8
   model-prefix: glm5.2
-  runner: cluster:mi325x-amds
+  runner: cluster:mi325x-amd
   precision: fp8
   framework: sglang
   multinode: false
@@ -1097,7 +1097,7 @@ minimaxm3-fp8-mi325x-vllm-agentic-mtp:
   image: vllm/vllm-openai-rocm:v0.27.1
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
-  runner: cluster:mi325x-amds
+  runner: cluster:mi325x-amd
   precision: fp8
   framework: vllm
   multinode: false
@@ -1118,7 +1118,7 @@ dsv41flash-fp4-mi325x-vllm-agentic-dspark:
   image: vllm/vllm-openai-rocm:nightly-rocm100-3df4ae153eb385e27b52f26c81f8edb9e20b9984
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
-  runner: cluster:mi325x-amds
+  runner: cluster:mi325x-amd
   precision: fp4
   framework: vllm
   multinode: false

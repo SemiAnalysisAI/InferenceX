@@ -249,7 +249,7 @@ Optional modifiers do not replace a primary label:
 | `evals-only` | Suppress throughput and run only the selected eval entries. Combine with `all-evals` for all evals only | No |
 | `agentx-fast` | For AgentX throughput lanes, use one additional warmup request after mandatory primers and a 20-minute profile. Fixed-sequence and eval settings stay canonical | No |
 
-Changing a recognized primary or modifier label shares the active sweep concurrency group and normally cancels/restarts the active run. `skip_queue`, patchwork, waiver, and checklist labels are gating/priority inputs, not primary sweep modes. A head commit containing `[skip-sweep]` skips PR benchmark setup only. Changelog/reuse checks still run, and the push-to-`main` `merge-ingest.yml` run ignores it.
+Changing a recognized primary or modifier label shares the active sweep concurrency group and normally cancels/restarts the active run. A head commit containing `[skip-sweep]` skips PR benchmark setup only. Changelog/reuse checks still run, and the push-to-`main` `merge-ingest.yml` run ignores it.
 
 ## Canary and fail-fast semantics
 
