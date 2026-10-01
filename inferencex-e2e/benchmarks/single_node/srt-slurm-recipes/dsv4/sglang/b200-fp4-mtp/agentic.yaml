@@ -6,7 +6,7 @@ base:
   name: dsv4-fp4-b200-sglang-agentic
   model:
     path: hf:deepseek-ai/DeepSeek-V4-Pro-0813
-    container: lmsysorg/sglang:v0.5.19-cu130
+    container: lmsysorg/sglang:v0.5.20-cu130
     precision: fp4
   resources:
     gpu_type: b200
@@ -85,7 +85,7 @@ override_tp8_c1:
         swa-full-tokens-ratio: 0.1
         chunked-prefill-size: 8192
         max-running-requests: 2
-        cuda-graph-max-bs: 2
+        cuda-graph-max-bs-decode: 2
   benchmark:
     env:
       CONC: '1'
@@ -100,7 +100,7 @@ override_tp8_c2:
         swa-full-tokens-ratio: 0.1
         chunked-prefill-size: 8192
         max-running-requests: 4
-        cuda-graph-max-bs: 4
+        cuda-graph-max-bs-decode: 4
   benchmark:
     env:
       CONC: '2'
@@ -115,7 +115,7 @@ override_tp8_c3:
         swa-full-tokens-ratio: 0.1
         chunked-prefill-size: 8192
         max-running-requests: 6
-        cuda-graph-max-bs: 6
+        cuda-graph-max-bs-decode: 6
   benchmark:
     env:
       CONC: '3'
@@ -130,7 +130,7 @@ override_tp8_c4:
         swa-full-tokens-ratio: 0.1
         chunked-prefill-size: 8192
         max-running-requests: 8
-        cuda-graph-max-bs: 8
+        cuda-graph-max-bs-decode: 8
   benchmark:
     env:
       CONC: '4'
@@ -145,7 +145,7 @@ override_tp8_c5:
         swa-full-tokens-ratio: 0.1
         chunked-prefill-size: 8192
         max-running-requests: 10
-        cuda-graph-max-bs: 10
+        cuda-graph-max-bs-decode: 10
   benchmark:
     env:
       CONC: '5'
@@ -160,7 +160,7 @@ override_tp8_hicache_c8:
         swa-full-tokens-ratio: 0.1
         chunked-prefill-size: 8192
         max-running-requests: 16
-        cuda-graph-max-bs: 16
+        cuda-graph-max-bs-decode: 16
         enable-hierarchical-cache: true
         hicache-write-policy: write_through
         hicache-io-backend: direct
@@ -181,7 +181,7 @@ override_tp8_hicache_c10:
         swa-full-tokens-ratio: 0.1
         chunked-prefill-size: 8192
         max-running-requests: 20
-        cuda-graph-max-bs: 20
+        cuda-graph-max-bs-decode: 20
         enable-hierarchical-cache: true
         hicache-write-policy: write_through
         hicache-io-backend: direct
@@ -202,7 +202,7 @@ override_tp8_hicache_c16:
         swa-full-tokens-ratio: 0.1
         chunked-prefill-size: 8192
         max-running-requests: 32
-        cuda-graph-max-bs: 32
+        cuda-graph-max-bs-decode: 32
         enable-hierarchical-cache: true
         hicache-write-policy: write_through
         hicache-io-backend: direct
@@ -246,7 +246,7 @@ override_dep8_hicache_c64:
         swa-full-tokens-ratio: 0.02
         chunked-prefill-size: 49152
         max-running-requests: 128
-        cuda-graph-max-bs: 32
+        cuda-graph-max-bs-decode: 32
         enable-hierarchical-cache: true
         hicache-write-policy: write_through
         hicache-io-backend: direct
@@ -294,7 +294,7 @@ override_dep8_hicache_c96:
         swa-full-tokens-ratio: 0.02
         chunked-prefill-size: 49152
         max-running-requests: 192
-        cuda-graph-max-bs: 32
+        cuda-graph-max-bs-decode: 32
         enable-hierarchical-cache: true
         hicache-write-policy: write_through
         hicache-io-backend: direct
@@ -342,7 +342,7 @@ override_dep8_hicache_c128:
         swa-full-tokens-ratio: 0.02
         chunked-prefill-size: 49152
         max-running-requests: 256
-        cuda-graph-max-bs: 32
+        cuda-graph-max-bs-decode: 32
         enable-hierarchical-cache: true
         hicache-write-policy: write_through
         hicache-io-backend: direct
@@ -391,7 +391,7 @@ override_dep8_hicache_c160:
         swa-full-tokens-ratio: 0.02
         chunked-prefill-size: 49152
         max-running-requests: 320
-        cuda-graph-max-bs: 32
+        cuda-graph-max-bs-decode: 32
         enable-hierarchical-cache: true
         hicache-write-policy: write_through
         hicache-io-backend: direct

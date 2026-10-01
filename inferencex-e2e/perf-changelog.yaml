@@ -9180,3 +9180,17 @@
     - "Update the SGLang ROCm image from lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260927 to lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260929 on this arm only. The other MI355X arms are left on their current tags."
     - "No serving flag outside the HiCache block changes, and no other config key is touched. Each of the 19 matrix points resolves to exactly one recipe override, with no override left unused."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3611
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark
+    - dsv4-fp4-b200-sglang-agentic-hicache-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Align the single-node srt-slurm recipe model.container with the unchanged master image for two AgentX keys whose recipes #3428 ported from the legacy scripts as they were before the image bumps in #3420 and #3334; every point of these keys would fail before submission with 'Single-node SRT image: recipe/matrix'."
+    - "Recipe containers: dsv41flash-fp4-mi355x-vllm-agentic-dspark vllm/vllm-openai-rocm:nightly-rocm100-7f1a5398e9610d96c473931a26c0e12bbe0d0423 -> vllm/vllm-openai-rocm:nightly-rocm100-29468dde8b515031dc6d4d9d06bf0a2fa0442098; dsv4-fp4-b200-sglang-agentic-hicache-mtp lmsysorg/sglang:v0.5.19-cu130 -> lmsysorg/sglang:v0.5.20-cu130."
+    - "The B200 SGLang v0.5.20 recipe also renames cuda-graph-max-bs to cuda-graph-max-bs-decode, as #3334 did in the legacy script, because v0.5.20 removed the deprecated alias (sgl-project/sglang#38375). All other serving flags and sweep points are unchanged."
+    - "将两个 AgentX key 的单节点 srt-slurm 配方 model.container 与未改动的主配置镜像对齐。这些配方由 #3428 从旧脚本移植而来，而移植所依据的是 #3420 和 #3334 升级镜像之前的版本；此前这些 key 的每个点都会在提交前以 'Single-node SRT image: recipe/matrix' 失败。"
+    - "配方镜像：dsv41flash-fp4-mi355x-vllm-agentic-dspark vllm/vllm-openai-rocm:nightly-rocm100-7f1a5398e9610d96c473931a26c0e12bbe0d0423 -> vllm/vllm-openai-rocm:nightly-rocm100-29468dde8b515031dc6d4d9d06bf0a2fa0442098；dsv4-fp4-b200-sglang-agentic-hicache-mtp lmsysorg/sglang:v0.5.19-cu130 -> lmsysorg/sglang:v0.5.20-cu130。"
+    - "B200 的 SGLang v0.5.20 配方同时将 cuda-graph-max-bs 改为 cuda-graph-max-bs-decode，与 #3334 对旧脚本的修改一致，因为 v0.5.20 已移除该弃用别名（sgl-project/sglang#38375）。其余服务参数和 sweep 点均保持不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3567
