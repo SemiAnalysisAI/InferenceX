@@ -9168,3 +9168,25 @@
     - "Relevant ATOM changes in the range: V4 decode reuses the sparse prefill ASM (ROCm/ATOM#2271), greedy sampler picks via aiter.topk_select (ROCm/ATOM#2244), and FP8 block scales declared scale_fmt ue8m0 are now stored as E8M0 on gfx950 by default (ROCm/ATOM#2419; previously FP32 unless ATOM_FP8_BLOCKSCALE_USE_E8M0_SCALE=1). The upstream DeepSeek-V4 recipes are unchanged across the range, and every recipe flag and choice (all2all-backend rccl, dp-load-balance least_tokens, moe-backend standard) remains valid."
     - "No data-type or precision change to the DeepSeek-V4-Pro-0813 DSpark draft: no online quantization is configured, so it keeps its checkpoint precision; the E8M0 scale storage represents the checkpoint's power-of-two block scales exactly. kv-cache-dtype and index-cache-dtype touch cache storage only."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3605
+
+- config-keys:
+    - kimik3-fp4-h200-vllm-agentic-latency
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Use profiling-free DCGM counters for Kimi-K3 H200 latency power telemetry to avoid synchronous profiling-watch recovery stalls. Retain power and GPU utilization; omit profiling metrics."
+    - "Keep the stock exporter image, 100 ms watch interval, 1 s scrape interval, 2 s timeout, and strict power validation unchanged."
+    - "Kimi-K3 H200 latency 功耗遥测改用无 profiling 的 DCGM counters，避免同步恢复 profiling watch 导致采样卡顿；保留功耗和 GPU 利用率，省略 profiling 指标。"
+    - "保持原 exporter 镜像、100 ms watch 间隔、1 s 抓取间隔、2 s 超时与严格功耗校验不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3550
+
+- config-keys:
+    - kimik3-fp4-h200-vllm-agentic-latency
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Raise AgentX benchmark grace period to 1800s on the H200 Kimi-K3 latency recipe so in-flight long responses admitted near the 3600s cutoff can finish and extend TTFT/ITL coverage past the 95% ProfileMetricCoverage gate without changing admission duration, concurrency, or topology."
+    - "Matches the stock srt_agentic.sh AIPERF_BENCHMARK_GRACE_PERIOD wiring and the MI325X GLM-5.2 agentic precedent; leaves the one-hour profile window and noprof power path unchanged."
+    - "将 H200 Kimi-K3 latency AgentX 的 benchmark grace 提到 1800s，使接近 3600s 截止时已准入的长响应可完成并延续 TTFT/ITL 覆盖至 ≥95%，不改变 admission 时长、并发或拓扑。"
+    - "对齐 srt_agentic.sh 的 AIPERF_BENCHMARK_GRACE_PERIOD 接线与 MI325X GLM-5.2 agentic 先例；保持一小时 profile 窗口与 noprof 功耗路径不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3550
