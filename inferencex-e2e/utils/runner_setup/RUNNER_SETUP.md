@@ -20,7 +20,7 @@ InferenceX benchmark jobs on the GPU clusters.
 > defaults all differ. If you're an agent (or new team member) following this doc,
 > **ask the user for clarification** whenever a step's specifics aren't obvious for the
 > target cluster rather than guessing. The per-cluster choices are ultimately encoded in
-> that cluster's `runners/launch_<cluster>.sh`.
+> that cluster's `clusters.<id>` record in [`configs/runners.yaml`](../../configs/runners.yaml).
 
 ## Viewing the current runners
 
@@ -135,16 +135,17 @@ Runner names are **load-bearing**. Each runner is named `<BASE_RUNNER_NAME>_<NN>
 (zero-padded two-digit index), e.g. `b300-dsxe_07`, and two pieces of CI infrastructure
 key off that name:
 
-1. **The launch script is selected from the name prefix.** The benchmark workflows run
+1. **The cluster is resolved from the runner's `cluster:<id>` label.** The benchmark workflows run
 
    ```bash
-   bash ./runners/launch_${RUNNER_NAME%%_*}.sh
+   python -m infx.launch run
    ```
 
-   Everything before the first `_` must match an existing script in
-   [`runners/`](../../runners). For example, runner `b300-dsxe_07` maps to `runners/launch_b300-dsxe.sh`.
-   For a brand-new cluster, add a `runners/launch_<BASE_RUNNER_NAME>.sh` first.
-   Corollary: `BASE_RUNNER_NAME` itself must not contain `_` (use hyphens).
+   which finds the single `cluster:<id>` label in [`configs/runners.yaml`](../../configs/runners.yaml)
+   that lists the runner and reads that cluster's record under `clusters:`. For example, runner
+   `b300-dsxe_07` resolves to `clusters.b300-dsxe`. For a brand-new cluster, add a `cluster:<id>` label
+   and a `clusters.<id>` record first. Keep `BASE_RUNNER_NAME` free of `_` (use hyphens): `_`
+   separates it from the runner index.
 
 2. **Sweep scheduling looks runner nodes up by label.** Jobs are distributed across the
    runner names listed under each `labels` entry in
@@ -237,27 +238,27 @@ run) exchange everything through the filesystem, so every path the CI touches mu
 visible from the compute node that the job lands on. Each path must either live on
 **shared storage** or **exist identically on every compute node**, such as local
 NVMe at the same mount point. There are four classes of paths to set up per cluster.
-The host side of each is defined in that cluster's `runners/launch_<cluster>.sh`:
+The host side of each is defined in that cluster's `clusters.<id>` record in `configs/runners.yaml`:
 
 1. **Runner home / `_work` directories** must be on shared storage (see Prerequisites).
    The job checkout, scripts, and result artifacts live here and are bind-mounted into
    the benchmark container (`$GITHUB_WORKSPACE`).
 2. **HF hub cache.** The workflows set the *container-side* path globally
-   (`HF_HUB_CACHE=/mnt/hf_hub_cache/` in `benchmark-tmpl.yml`). Each launch script
-   bind-mounts a per-cluster *host* path `HF_HUB_CACHE_MOUNT` over it. Examples in use:
+   (`HF_HUB_CACHE=/mnt/hf_hub_cache/` in `benchmark-tmpl.yml`). The launcher mounts the
+   cluster's *host* `slurm.volumes.hf-hub-cache` over it. Examples in use:
    `/mnt/nfs/sa-shared/gharunners/hf-hub-cache/` (h100, shared NFS),
    `/mnt/vast/gharunner/hf-hub-cache` (CoreWeave, shared VAST),
    `/tmp/gharunner/hf-hub-cache` (b200-cw, node-local at the same path on every node, but
    each node downloads its own copy, so prefer shared storage where available).
 3. **Pre-staged model weights.** Large models are not downloaded from HF in CI. The
-   launch scripts override `MODEL_PATH` to per-cluster staging directories
+   cluster's `slurm.volumes` and `models.entries` name the per-cluster staging directories
    (e.g. `/scratch/models/...` on b200-nscale, `/data/models/...` on b300,
    read-only `/scratch/models/` on b300 multinode). Bringing up a new model on a
    cluster means staging the weights there first.
-4. **Squash images.** Launch scripts `enroot import` each Docker image once into a
-   `.sqsh` file under a shared `SQUASH_DIR` (e.g. `/data/home/sa-shared/containers` on
+4. **Squash images.** The launcher `enroot import`s each Docker image once into a
+   `.sqsh` file under the cluster's `slurm.squash.dir` (e.g. `/data/home/sa-shared/containers` on
    b200-nscale, `/mnt/lustre01/users-public/sa-shared`
-   on gb200), then launch with `--container-image=<file>.sqsh`. This must be on shared
+   on gb200), then launches with `--container-image=<file>.sqsh`. This must be on shared
    storage because pyxis reads the file on the **compute** node, and it lets concurrent
    jobs reuse one import instead of each pulling the registry image. Note
    `ENROOT_CACHE_PATH` (import scratch space) defaults under `$HOME/.cache/enroot`.
@@ -267,7 +268,7 @@ Size accordingly: weights run hundreds of GB to TB per model, `.sqsh` files are
 HF cache grows with datasets/tokenizers.
 
 When provisioning a **new cluster**, decide these locations up front and encode them in
-the new `runners/launch_<cluster>.sh`.
+the new `clusters.<id>` record.
 
 ## Gotchas
 

@@ -24,6 +24,10 @@
 
 ### 吞吐量结果
 
+启用 AgentX 功耗采集时，单节点和聚合式 recipe 必须在 benchmark 环境中提供与服务端
+拓扑一致的 `TP`、`PP_SIZE` 和 `PCP_SIZE`。缺少这些值时，即使 `REQUIRE_POWER=0`，
+也会在功耗监控和请求回放开始前报错。
+
 可复用基准工作流在启动 GPU 任务前准备 Python 3.12，并通过
 `INFERENCEX_RESULTS_PYTHON` 导出其绝对路径。固定序列结果处理和 AgentX 功耗处理
 （包括 H200 DCGM 路径）都会校验并使用该解释器。该设置缺失或为空时，处理失败；
@@ -282,9 +286,9 @@ export PYTHONDONTWRITEBYTECODE=1
 export PYTHONPYCACHEPREFIX="${PYTHONPYCACHEPREFIX:-/tmp/inferencex-pycache}"
 ```
 
-不要把这些路径重新覆盖到工作区。MI355X launcher 还会在启动前删除旧基准日志，并安装 EXIT trap：复制 Slurm stdout/stderr 证据、打印错误尾部，然后执行有范围限制的 `sudo rm -rf "$BENCHMARK_LOGS_DIR"`。`KEEP_LOGS=1` 只应在刻意进行本地调试时使用；它会禁用清理 trap。取消任务仍可能绕过 teardown，因此在出现 `EACCES` 清理错误后，应执行下述恢复扫描。
+不要把这些路径重新覆盖到工作区。出现 `EACCES` 清理错误后，应执行下述恢复扫描，包括由已退役启动器遗留的日志导致的错误。
 
-来源：[Python 缓存预防](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/benchmarks/benchmark_lib.sh#L5-L10)、[MI355X 清理 trap](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/runners/launch_mi355x-amds.sh#L49-L76)。
+来源：[Python 缓存预防](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/benchmarks/benchmark_lib.sh#L5-L10)。
 
 ### 恢复 MI355X TW runner 工作区
 
