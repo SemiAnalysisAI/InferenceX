@@ -21,7 +21,7 @@
 | [`perf-changelog.yaml`](../perf-changelog.yaml) | 只允许追加的基准触发日志 |
 | [`AGENTS.md`](../../AGENTS.md) | 仓库级配置、MTP、changelog 和 sweep 规则 |
 
-退役的配置项直接从启用的主配置中删除，不再归档；历史设置由 Git 历史和 `perf-changelog.yaml` 保留。仅弃用部分场景时，只删除已退役的场景。退役的 AMD 服务注册项和模型专用初始化逻辑也应从 `benchmarks/multi_node/amd_utils/` 中删除。保留 SPEED-Bench 采集器仍需使用的共享依赖，包括调度评分。参见[弃用规则](../../AGENTS.md#deprecating-benchmark-configs)。
+退役的配置项直接从启用的主配置中删除，不再归档；历史设置由 Git 历史和 `perf-changelog.yaml` 保留。仅弃用部分场景时，只删除已退役的场景。同时删除不再使用的配方和模型专用初始化逻辑。保留 SPEED-Bench 采集器仍需使用的共享依赖，包括调度评分。参见[弃用规则](../../AGENTS.md#deprecating-benchmark-configs)。
 
 ## 依赖子模块
 
@@ -73,6 +73,17 @@ hook 只注入**集群专用的主机前提条件**，例如网络结构检查�
 并可安全重复运行。能用原生 srt-slurm 设置表达时，优先使用原生设置而不是 shell 代码。基准执行、模型选择、
 引擎参数、并发调优、评测、结果收集和作业编排都不属于 hook。不要用 hook 给引擎或容器打补丁、绕过失败的检查，
 或用重试和临时变通掩盖运行时缺陷；应修复负责的组件。主机改动只限于已分配节点，并保留其他作业正在使用的资源。
+
+### DCGM counters
+
+NVIDIA 集群配置通过 `slurm.srt-slurm.extra.default_gpu_exporter`，让 Tachometer 默认启动的 DCGM exporter
+使用与功耗路径相同的 `dcgm-exporter:4.6.0-4.8.3-distroless` 镜像和
+`/configs/dcgm-counters-noprof.csv`。功耗配方通过 `telemetry.dcgm_exporter.command`
+选择同一份 CSV，因此两条路径共用同一 exporter 版本和同一 counters 文件。当功耗采集
+已启动 exporter 时，Tachometer 复用该实例。保留功耗、能耗和 GPU 利用率，省略 profiling
+与 vGPU license counters。这不会开启配方已关闭的采集，也不代表 Tachometer 指标已通过
+PowerX 严格校验。现有的 Tachometer 1000 ms / 功耗 exporter 100 ms 采集间隔及 9401 端口
+保持不变。
 
 ## 规程索引
 
@@ -167,17 +178,13 @@ STP（Single Token Prediction，单 Token 预测）是每次前向传播生成�
 6. 将 runner 加入 sweep 流量前，在[仓库 runner 设置页](https://github.com/SemiAnalysisAI/InferenceX/settings/actions/runners)确认每个 runner 都是 **Idle**。
 7. 从计算节点验证 launcher 对 `_work`、HF cache、预置权重和 squash 镜像的挂载。root 容器不得在共享 workspace 留下 root 所有的文件。
 
-## TileRT 原生功耗
+## TileRT 固定序列长度配方
 
-TileRT 的共享导入器保留 Docker Hub 镜像名称，并将 `ghcr.io/team/image:tag` 等显式仓库地址转换为 Enroot 的 `docker://ghcr.io#team/image:tag` 格式。已有的 `#` 地址保持不变。有效的缓存 squash 镜像会直接复用；命中缓存不能证明仓库导入路径有效。无效的缓存镜像会在持有导入锁时删除，再重新导入。
+保留的 GLM-5.1 B200 Nscale 1k1k 和 8k1k 配置使用 srt-slurm 配方，分别由 vLLM 执行 prefill、TileRT 执行 decode，并使用 TileRT router。Python launcher 准备两个镜像，将预先准备的共享 checkpoint 挂载到 `/model`，将转换后的 decode 权重挂载到 `/tilert_weights`；主机路径统一记录在 `configs/runners.yaml` 中。作业启动时不转换 checkpoint。
 
-GLM-5.1 B200 Nscale 1k1k 和 8k1k 配方使用已准备的共享 checkpoint、TileRT 转换权重和 squash 缓存，1k1k 的分配时限为 45 分钟，8k1k 为 90 分钟，以容纳完整 GSM8K eval。C1 低于自动 eval 选择门槛，完整资格验证应同时使用 PR 标签 `all-evals` 和 `full-sweep-fail-fast`。TileRT 在 GLM-5.1 一般退役之后由 [#2533](https://github.com/SemiAnalysisAI/InferenceX/pull/2533) 加入；[MODELS_zh.md](MODELS_zh.md) 记录了这部分保留范围。相关改动仍须完成正常 PR sweep、适用质量验证、签核和复用，才能发布。
+两个配方均使用共享的自定义固定序列长度基准脚本，以流式 chat completions 发送 16 个请求并应用 chat template。8k1k 配方要求 srt-slurm 从两个 worker 节点采集 DCGM 功耗。eval-only 作业关闭吞吐测试的遥测，并使用共享 eval 分发器。
 
-TileRT 的 eval 封装调用共享 `run_eval` 分发器，不覆盖其中的 `run_lm_eval` 客户端。评测后保存可用产物，并保留评测或产物保存阶段的失败状态。TCP 就绪探测只在子 shell 中使用 socket，不改变调用方的诊断输出流。
-
-B200 Nscale 的 GLM-5.1 可用 `MODEL_PATH` 指定已有共享权重，覆盖默认的 `/scratch/models/GLM-5.1-FP8`。若指定 HF snapshot，还需把 `HF_HUB_CACHE_HOST_PATH` 设为现有缓存根目录；TileRT 按相同绝对路径挂载整个缓存，使 snapshot 指向同级 blobs 的软链接可读。`TILERT_WEIGHTS_DIR` 仍指向单独转换的 decode 权重。
-
-仅固定 8192/1024 的 `glm5.1-fp8-b200-tilert` 要求原生功耗。TileRT 在 `salloc` 返回的分配内运行，保留两个角色的退出码，并在保存审计数据前等待采集器排空。每个角色仅支持一个物理节点。其他序列长度、AgentX 和 eval-only 不启用此采集器。硬件资格验证与发布仍待完成。
+C1 低于自动 eval 选择门槛，完整资格验证应同时使用 `all-evals` 和 `full-sweep-fail-fast`。TileRT 在 GLM-5.1 一般退役之后由 [#2533](https://github.com/SemiAnalysisAI/InferenceX/pull/2533) 加入；[MODELS_zh.md](MODELS_zh.md) 记录了保留范围。
 
 ## 注册 srt-slurm 配方
 
@@ -248,7 +255,7 @@ DSpark Markov/confidence head、全部 66 个分片的 header 与 payload 边界
 全部十个 AgentX 性能点使用 DSpark K6（target 验证长度为 7）和已提交的
 golden AL 3.77。C1/2/4/8/16 使用 TP8/EP1；C48/64/96/128/256 使用
 TP8/DPA8/EP8 原生 RCCL。每个性能点运行 3600 秒。C256 全量 GSM8K 不传强制
-接受率参数。保留固定的 `rocm/atom-dev:nightly_202609161445` 镜像和 GPU KV；C1 至 C16
+接受率参数。保留固定的 `rocm/atom-dev:nightly_202609291501` 镜像和 GPU KV；C1 至 C16
 使用 BF16 KV，C48 及以上继续使用 FP8 KV，所有任务均使用 FP4 index cache、
 8192-token checkpoint 和 DEP dense FULL graph 阶梯。每个新服务进程重新捕获固定
 q7 图；必须从 `server.log` 确认 target 和 DSpark draft capture 完成。confidence
@@ -259,8 +266,11 @@ schedule 和 ragged verification 保持关闭。
 `runtime_manifest.json` 和 `server_command.txt` 保存模型/源码身份及请求的配置。
 成功启动、graph capture 和请求执行仍需运行时日志证明。
 
-固定镜像为官方 ATOM nightly `rocm/atom-dev:nightly_202609161445`，已包含已合入的
+固定镜像为官方 ATOM nightly `rocm/atom-dev:nightly_202609291501`（ATOM `0.1.7.dev46+g74fd942b0`，
+ROCm 7.2.4），已包含已合入的
 [ROCm/ATOM#2233](https://github.com/ROCm/ATOM/pull/2233) inference-mode 修复。
+自该镜像起，ATOM 在 gfx950 上默认以 E8M0 存储检查点的 `ue8m0` FP8 block scale
+（[ROCm/ATOM#2419](https://github.com/ROCm/ATOM/pull/2419)），2 的幂次 scale 可被精确表示。
 配方不再在运行时修改 AITER 源码；TP 通信融合、DSpark K6 和 graph capture
 直接使用镜像内实现。
 

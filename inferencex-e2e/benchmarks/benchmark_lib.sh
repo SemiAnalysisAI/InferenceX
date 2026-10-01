@@ -3452,6 +3452,7 @@ run_agentic_replay_and_write_outputs() (
                     agentx_multinode_contract_missing=1
                 fi
             else
+                check_env_vars TP PP_SIZE PCP_SIZE
                 agentx_power_enabled=1
             fi
             ;;
@@ -3541,7 +3542,6 @@ run_agentic_replay_and_write_outputs() (
         if [ "$agentx_multinode_contract_missing" = "1" ]; then
             power_args+=(--multinode-contract-missing)
         else
-            check_env_vars TP PP_SIZE PCP_SIZE
             expected_num_gpus=$((TP * PP_SIZE * PCP_SIZE))
             power_args+=(--expected-num-gpus "$expected_num_gpus")
         fi
