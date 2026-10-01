@@ -9177,7 +9177,7 @@
     - "Add GB200 Dynamo+SGLang AgentX TP8 aggregate HiCache recipes at concurrency 1 and 4."
     - "Use lmsysorg/sglang:nightly-dev-20260916-c9a8fba9 with the checkpoint's bundled DSpark head at block size 6 (golden AL 3.77, thinking_on) and max-running-request/CUDA-graph limits set to twice each concurrency."
     - "Use the compute-visible Watchtower workspace and node-local DeepSeek-V4-Pro checkpoint staging."
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3629
 
 - config-keys:
     - dsv4-fp4-gb200-dynamo-sglang-agentic-disagg
@@ -9191,4 +9191,4 @@
     - "Lower the DEP8/DEP16 concurrency-128 prefill mem-fraction-static from 0.85 to 0.80 after the 0.85 run exhausted GPU memory while allocating a 6.81 GiB prefill workspace, leaving about 9.2 GiB more per GPU for runtime allocations."
     - "Use lmsysorg/sglang:nightly-dev-20260916-c9a8fba9 with the Dynamo 1.5.0.dev20260910 wheel and the checkpoint's bundled DSpark head at block size 6 (golden AL 3.77, thinking_on)."
     - "Use the compute-visible Watchtower workspace and node-local DeepSeek-V4-Pro checkpoint staging."
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3629
