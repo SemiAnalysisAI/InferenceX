@@ -77,13 +77,6 @@ OVERRIDES: dict[str, tuple[Override, ...]] = {
             served_name="GLM-5.2-NVFP4",
         ),
     ),
-    "h100-dgxc": (
-        Override(Match(), require_config=True),
-        Override(
-            Match(any_of("dsr1"), any_of("fp8"), any_of("dynamo-trt")),
-            served_name="DeepSeek-R1-0528",
-        ),
-    ),
     "h200-dgxc": (
         Override(Match(any_of("dsv4")), require_config=True),
         Override(

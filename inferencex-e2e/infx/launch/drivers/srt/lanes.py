@@ -95,7 +95,6 @@ SRT_LANES: dict[tuple[str, LaunchPath], SrtLane] = {
             any_of("dsv4"), frameworks=any_of("dynamo-sglang", "dynamo-trt"), agentic=True
         ),
     ),
-    ("h100-dgxc", LaunchPath.SRT_MULTI): SrtLane(frameworks=any_of("dynamo-sglang", "dynamo-trt")),
     ("h200-dgxc", LaunchPath.SRT_MULTI): SrtLane(
         frameworks=any_of("dynamo-sglang", "dynamo-trt", "vllm"),
         time_limit="4:00:00",

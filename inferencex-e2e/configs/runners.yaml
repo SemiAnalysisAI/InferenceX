@@ -5,26 +5,6 @@ labels:
     - h100-dgxc-new_00
     - h100-dgxc-new_01
     - h100-dgxc-new_02
-    - h100-dgxc-slurm_00
-    - h100-dgxc-slurm_01
-    - h100-dgxc-slurm_02
-    - h100-dgxc-slurm_03
-    - h100-dgxc-slurm_04
-    - h100-dgxc-slurm_05
-    - h100-dgxc-slurm_06
-    - h100-dgxc-slurm_07
-    - h100-dgxc-slurm_08
-    - h100-dgxc-slurm_09
-    - h100-dgxc-slurm_10
-    - h100-dgxc-slurm_11
-    - h100-dgxc-slurm_12
-    - h100-dgxc-slurm_13
-    - h100-dgxc-slurm_14
-    - h100-dgxc-slurm_15
-    - h100-dgxc-slurm_16
-    - h100-dgxc-slurm_17
-    - h100-dgxc-slurm_18
-    - h100-dgxc-slurm_19
   h200:
     - h200-cw_00
     - h200-cw_01
@@ -167,27 +147,6 @@ labels:
     - h100-dgxc-new_00
     - h100-dgxc-new_01
     - h100-dgxc-new_02
-  cluster:h100-dgxc:
-    - h100-dgxc-slurm_00
-    - h100-dgxc-slurm_01
-    - h100-dgxc-slurm_02
-    - h100-dgxc-slurm_03
-    - h100-dgxc-slurm_04
-    - h100-dgxc-slurm_05
-    - h100-dgxc-slurm_06
-    - h100-dgxc-slurm_07
-    - h100-dgxc-slurm_08
-    - h100-dgxc-slurm_09
-    - h100-dgxc-slurm_10
-    - h100-dgxc-slurm_11
-    - h100-dgxc-slurm_12
-    - h100-dgxc-slurm_13
-    - h100-dgxc-slurm_14
-    - h100-dgxc-slurm_15
-    - h100-dgxc-slurm_16
-    - h100-dgxc-slurm_17
-    - h100-dgxc-slurm_18
-    - h100-dgxc-slurm_19
   cluster:h200-cw:
     - h200-cw_00
     - h200-cw_01
@@ -343,7 +302,9 @@ clusters:
     arch: x86_64
     models:
       entries:
+        DeepSeek-V4.1-Flash: {root: data-models, dir: DeepSeek-V4.1-Flash}
         MiniMax-M3-MXFP8: {root: data-models, dir: MiniMax-M3-MXFP8}
+        Qwen3.5-397B-A17B-FP8: {root: data-models, dir: Qwen3.5-397B-A17B-FP8}
     scheduler: slurm
     slurm:
       partition: batch_1
@@ -367,46 +328,6 @@ clusters:
             command: "dcgm-exporter --collect-interval=1000 --address :{port} -f /configs/dcgm-counters-noprof.csv"
         network-interface: ""
         single-node-models: staged
-  h100-dgxc:
-    gpus-per-node: 8
-    available-cpu-dram-mib: 2_063_837
-    arch: x86_64
-    models:
-      entries:
-        DeepSeek-R1-0528: {root: lustre-models, dir: dsr1-fp8}
-    scheduler: slurm
-    slurm:
-      partition: hpc-gpu-1
-      account: customer
-      exclusive: false
-      gres: "gpu:{gpus}"
-      volumes:
-        hf-hub-cache: {path: /mnt/nfs/sa-shared/gharunners/hf-hub-cache}
-        aiperf-cache: {path: /mnt/nfs/sa-shared/gharunners/ai-perf-cache}
-        lustre-models: {path: /mnt/nfs/lustre/models}
-      squash:
-        dir: /mnt/nfs/lustre/containers
-        visibility: shared
-        import: pre-staged
-        framework-dirs:
-          dynamo-trt: {dir: /mnt/nfs/sa-shared/containers, key-style: plus-strip-nvcr}
-        helper-dirs:
-          nginx: {import: unchecked}
-      srt-slurm:
-        extra:
-          default_gpu_exporter:
-            container_image: nvcr.io#nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless
-            port: 9401
-            command: "dcgm-exporter --collect-interval=1000 --address :{port} -f /configs/dcgm-counters-noprof.csv"
-        network-interface: ""
-        job-tag: h100
-        default-time-limit: "6:00:00"
-        dist-timeout-s: 1800
-        gpus-per-node-directive: true
-        segment-directive: false
-        container-aliases: [dynamo-trtllm, dynamo-sglang, latest]
-        nginx-aliases: [nginx-sqsh]
-        uv-cache-root: /mnt/nfs/sa-shared/.uv
   h200-cw:
     gpus-per-node: 8
     available-cpu-dram-mib: 1_998_848
