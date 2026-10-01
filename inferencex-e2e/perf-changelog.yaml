@@ -9237,4 +9237,4 @@
   description:
     - "Move the remaining H100 AgentX configs from the retired cluster:h100-dgxc pool to cluster:h100-dsxe, serving the checkpoints staged under /data/models."
     - "将其余 H100 AgentX 配置从已下线的 cluster:h100-dgxc 资源池迁移到 cluster:h100-dsxe，并使用 /data/models 下预置的模型权重。"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3647
