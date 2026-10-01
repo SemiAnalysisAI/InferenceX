@@ -9291,3 +9291,12 @@
     - "Restore Mooncake load_async=true on B300 DSXE (keep max_load_batch_keys=1). Tip ea88d652 fail-fast run 36935627690 canary c1 (job 110615439146, Slurm 6679, gpu-00) reached health OK then aborted warmup: WorkerProc AssertionError in mooncake/store/worker.py get_finished — 'load_async must be True for better performance' — then EngineCore Internal Server Error / ProfileAborted. Ingest nccl_error:16 was init-only ibv_query_port_speed WARN (false positive), not runtime ALLGATHER. Tip 670fb9f0 disable load_async is incompatible with this vLLM Mooncake connector assert; restore stock true."
     - "在 B300 DSXE 上恢复 Mooncake load_async=true（保留 max_load_batch_keys=1）。tip ea88d652 fail-fast 运行 36935627690 的 canary c1（job 110615439146，Slurm 6679，gpu-00）健康检查通过后 warmup 中止：WorkerProc 在 mooncake/store/worker.py get_finished 断言 AssertionError: load_async must be True for better performance，随后 EngineCore Internal Server Error / ProfileAborted。ingest 的 nccl_error:16 仅为初始化期 ibv_query_port_speed WARN（误报），非运行时 ALLGATHER。tip 670fb9f0 关闭 load_async 与该 vLLM Mooncake 连接器断言不兼容；恢复 stock true。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3088
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Set VLLM_USE_DIRECT_DCP_Q_GATHER=0 on B300 DSXE (keep load_async=true, max_load_batch_keys=1, KV_GATHER=0). After tip ea88d652b canary c1 AssertionError forced restoring load_async, tip d7176e6 would otherwise re-run the Q_GATHER=1 + KV_GATHER=0 mix that hung tips 860c1ccf c48 / e51c58f5 c32 in DCP PYNCCL _ALLGATHER_BASE under ~98-100% GPU KV (last started work: -1; Mooncake metrics clean). Align Q gather off with KV gather (MI355X-style). Keep no compact_group_io, no MC_MAX_MR_SIZE, cumem off."
+    - "在 B300 DSXE 上将 VLLM_USE_DIRECT_DCP_Q_GATHER 设为 0（保留 load_async=true、max_load_batch_keys=1、KV_GATHER=0）。tip ea88d652b canary c1 的 AssertionError 已强制恢复 load_async 后，tip d7176e6 否则会重跑 tip 860c1ccf c48 / e51c58f5 c32 在约 98–100% GPU KV 下挂起于 DCP PYNCCL _ALLGATHER_BASE 的 Q_GATHER=1 + KV_GATHER=0 混用路径（last started work: -1；Mooncake 指标干净）。将 Q gather 与 KV gather 一并关闭（对齐 MI355X）。保留不启用 compact_group_io、不设 MC_MAX_MR_SIZE、关闭 cumem。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3088
