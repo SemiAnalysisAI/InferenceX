@@ -4105,25 +4105,114 @@
         "gpu_metrics.csv": "61b24e117344a9f47e0a75e35d6d79e921d9fc9cce152cbfe5b461e08e2c6ecd",
         "power_validation.json": "41175dae4de76c27b3fe66e97cfd940913d1f3c2e1a7998eb7f4cb14936d8652"
       }
+    },
+    {
+      "run_id": 36738057860,
+      "url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/36738057860",
+      "arm": "nvme",
+      "concurrency": 496,
+      "repeat": 1,
+      "attempt": 1,
+      "head_sha": "1bdaf3e1a972ef5c868727e00fba5b6d19b62c09",
+      "status": "failure",
+      "workflow_name": "offload-v1-nvme4tib-c496-r1-20260930",
+      "dispatched_at": "2026-09-30T15:36:43Z",
+      "completed_at": "2026-09-30T15:37:35Z",
+      "performance_result": false,
+      "failure_stage": "get-jobs launcher compatibility gate",
+      "runtime_evidence": "No B200 job or scratch was created. The current-main workflow rejected the pinned experiment revision because it predates infx/launch. The corrected branch-local workflow dispatch is recorded separately."
+    },
+    {
+      "run_id": 36739077310,
+      "url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/36739077310",
+      "arm": "nvme",
+      "concurrency": 496,
+      "repeat": 1,
+      "attempt": 2,
+      "retry_of": 36738057860,
+      "head_sha": "1bdaf3e1a972ef5c868727e00fba5b6d19b62c09",
+      "status": "cancelled",
+      "workflow_name": "offload-v1-nvme4tib-c496-r1-branchwf-20260930",
+      "dispatched_at": "2026-09-30T15:44:53Z",
+      "queued_at": "2026-09-30T15:45:10Z",
+      "started_at": "2026-09-30T15:46:26Z",
+      "completed_at": "2026-10-01T00:09:45Z",
+      "job_id": 109968472840,
+      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/36739077310/job/109968472840",
+      "runner": "b200-nscale-slurm_01",
+      "allocation_id": 17967,
+      "node": "im-b200-c001",
+      "scratch": "/offload-scratch/inferencex-offload-36739077310-1-17967-768068a68a88",
+      "capacity_bytes_per_node": 4398046511104,
+      "capacity_required_bytes": 4535485464576,
+      "performance_result": false,
+      "failure_stage": "canonical warmup / reusable workflow 500-minute execution limit",
+      "warmup": {
+        "planned_requests": 5500,
+        "last_reported_returned": 5091,
+        "last_reported_sent": 5459,
+        "last_reported_in_flight": 368,
+        "last_reported_errors": 0,
+        "last_reported_elapsed_seconds": 22834.1,
+        "retained_records": 5093,
+        "retained_record_phase": "warmup",
+        "profiling_started": false
+      },
+      "artifacts": [
+        {
+          "id": 11133022319,
+          "name": "server_logs_minimaxm3_tp4_conc496_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-f5c300971829de9bc0ad",
+          "size_bytes": 159370,
+          "sha256": "164ecea9ae3a52d444686fe9a70d8608186f14df5a6e28d88eba6972c2b4de50"
+        },
+        {
+          "id": 11132912330,
+          "name": "power_audit_minimaxm3_tp4_conc496_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-f5c300971829de9bc0ad",
+          "size_bytes": 929692,
+          "sha256": "367fdb0ba776c89e98818ec1588e19b12bfd8d11bc3f7dea995cd51e5a4666b2"
+        },
+        {
+          "id": 11132807441,
+          "name": "gpu_metrics_minimaxm3_tp4_conc496_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-f5c300971829de9bc0ad",
+          "size_bytes": 929510,
+          "sha256": "5c9d86bef0a58c980d88ca462ac5f81058bf4ee75cb78161613dc4276d527329"
+        },
+        {
+          "id": 11132682675,
+          "name": "agentic_minimaxm3_tp4_conc496_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-f5c300971829de9bc0ad",
+          "size_bytes": 2831229,
+          "sha256": "1a520ef1ec2157554792a8c056da30f82021dd1ef28290165445348e2f35c743"
+        }
+      ],
+      "runtime_evidence": "Canonical c496 warmup made error-free progress until the reusable single-node benchmark job reached its fixed 500-minute execution limit. The last progress sample returned 5,091 of 5,500 responses, sent 5,459, retained 368 in flight, and reported zero request errors after 22,834.1 seconds. All 5,093 retained request records are warmup; profiling never started and no performance result exists. The retained server log contains no EngineDead, CUDA out-of-memory, traceback, or error signature. This is local canonical-warmup infeasibility under the current workflow budget and will not be retried unchanged.",
+      "storage_evidence": "Slurm allocation 17967 landed on allowlisted im-b200-c001. Runtime preflight observed 17,665,665,126,400 free bytes on xfs /dev/md0 over eight non-rotating NVMe leaves, exceeded the 4 TiB budget plus 128 GiB reserve, and verified O_DIRECT before creating the exact task-owned scratch. Final telemetry observed four cache files totaling 4,398,044,086,272 logical bytes and 4,398,048,202,752 allocated bytes. Post-cancellation resource cleanup completed, and an independent node check confirmed /offload-scratch/inferencex-offload-36739077310-1-17967-768068a68a88 absent.",
+      "evidence_sha256": {
+        "benchmark.log": "61b2bb269fc08d79eb26ebadd6d51bd4afe52a22026e1d5df811552d9e94586e",
+        "profile_export.jsonl": "1751feccc18e59ac3e456c78e821cce7d956ad7835438f3bd282b2726c2f7776",
+        "server.log": "12dea07aa7b82abb6ef654f7060efc6d15759fcf60516945169cb8b03b59379e",
+        "offload-telemetry.jsonl": "ab3e91c17dcbfdcac5997c231b83790b7cc8987f9d75cf5d65f714f52dfc5d74",
+        "offload_config.json": "788bc90d776bd6ac9b576dc2589ee122ed14a1cdf91ac6c147c4216022fa08c6",
+        "gpu_metrics.csv": "182411ba7b331ff79465537fad2d66a8f615504f160cca8b93a42d8c71b396f8"
+      }
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894",
-  "status": "Matched c480 is complete. The 4 TiB HBM+NVMe arm beat HBM-only on total and output throughput per GPU, P90 interactivity, P90 TTFT, completed responses, and energy per successful query, while P90 E2E-normalized interactivity and average power were slightly worse. The next adaptive midpoint is c496 between the matched c480 win and c512 canonical warmup feasibility failure.",
+  "status": "c496 established a local canonical-warmup feasibility failure under the reusable workflow's 500-minute execution budget: profiling never started, so no performance result exists. The next adaptive midpoint is c488 between the matched c480 mixed NVMe win and c496 infeasibility.",
   "last_capacity_check": {
-    "checked_at": "2026-09-24T16:21:27Z",
+    "checked_at": "2026-10-01T00:10:00Z",
     "active_study_run_ids": [],
     "pending_study_run_ids": [],
     "dispatch_allowed": false,
-    "b200_priority_jobs_queued": 0,
+    "b200_priority_jobs_queued": null,
     "b200_nodes_allocated": null,
     "b200_nodes_idle": null,
     "target_node": "im-b200-c001",
-    "target_node_state": "matched HBM-only c480 run 35972536894 completed and its exact task-owned scratch is absent",
-    "observed_free_bytes": 17712233512960,
-    "reason": "Matched c480 is complete and cleaned up. Prepare the c496 midpoint, then require a fresh cluster-wide B200 queue inventory and valid 4 TiB NVMe admission before dispatch."
+    "target_node_state": "c496 run 36739077310 terminal; exact task-owned scratch independently confirmed absent",
+    "observed_free_bytes": 17665665126400,
+    "reason": "Record and validate the c496 feasibility result and prepare c488 before obtaining a fresh cluster-wide queue inventory."
   },
   "next_dispatch": {
-    "requires": "Prepare and validate the c496 midpoint. Before dispatching its 4 TiB HBM+NVMe arm, require zero queued cluster:b200-nscale jobs, no other active-or-queued NVMe-bearing study workflow, allowlisted im-b200-c001 placement, more than 4,535,485,464,576 free bytes, and O_DIRECT."
+    "requires": "Prepare and validate the c488 midpoint. Before dispatching its 4 TiB HBM+NVMe arm, require zero queued cluster:b200-nscale jobs, no other active-or-queued NVMe-bearing study workflow, allowlisted im-b200-c001 placement, more than 4,535,485,464,576 free bytes, and O_DIRECT."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-21T05:30:00Z",
