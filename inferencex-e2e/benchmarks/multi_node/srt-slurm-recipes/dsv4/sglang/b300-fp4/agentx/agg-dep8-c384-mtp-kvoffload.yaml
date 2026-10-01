@@ -115,7 +115,8 @@ roles:
       swa-full-tokens-ratio: 0.075
       chunked-prefill-size: 65536
       max-running-requests: 768
-      cuda-graph-max-bs-decode: 544
+      # Per-rank graph limit: max-running-requests / dp-size = 768 / 8.
+      cuda-graph-max-bs-decode: 96
       kv-events-config: '{"publisher":"zmq","topic":"kv-events","endpoint":"tcp://*:5557"}'
       speculative-algorithm: DSPARK
       speculative-dspark-block-size: 6

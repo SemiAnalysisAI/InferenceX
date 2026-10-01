@@ -9405,13 +9405,13 @@
     - agentic-coding
   description:
     - "Add DeepSeek-V4-Pro-0813 FP4 B300 Dynamo+SGLang AgentX aggregate TP8 c1, TP4 c4 and DEP8 c384 recipes, plus disaggregated 1P1D DEP8 c64/c240 recipes."
-    - "The aggregate DEP8 c384 recipe follows the single-node SGLang DEP8 c384 point (attention DP8 + EP8 Mega-MoE, FP4 indexer, prefill delayer with interval 20, chunked prefill 65536, max-running-requests 768, mem-fraction-static 0.88, HiCache ratio 3 write_back DRAM tier) on the newer image, behind the Dynamo KV router with per-DP-rank KV events and session affinity."
+    - "The aggregate DEP8 c384 recipe follows the single-node SGLang DEP8 c384 point (attention DP8 + EP8 Mega-MoE, FP4 indexer, prefill delayer with interval 20, chunked prefill 65536, max-running-requests 768, mem-fraction-static 0.88, HiCache ratio 3 write_back DRAM tier) on the newer image, with cuda-graph-max-bs-decode set to the 96-request per-rank cap (768 / 8), behind the Dynamo KV router with per-DP-rank KV events and session affinity."
     - "Mega-MoE uses the default FP8xFP4 kernels in every DEP8 recipe; the W4A4 MXFP4 Mega-MoE path is not enabled."
     - "Use Mooncake for disaggregated KV transfer and install mooncake-transfer-engine-efa-cuda13 0.3.13.post1 during container setup; rely on the DSXE-managed fabric injection without explicit host EFA/OFI mounts."
     - "Use the DSXE cluster's 24 CPUs per GPU, HiCache ratio 3, decode max-running-requests at twice concurrency, persistent AgentX/Hugging Face caches, and exclude the known degraded DSXE node."
     - "Serve B300 DSXE Dynamo+SGLang DeepSeek-V4-Pro-0813 weights from the node-local NVMe copy (DeepSeek-V4-Pro-0813@scratch, as for vLLM) instead of the shared /data/models copy, which slowed startup by hours when several points loaded concurrently."
     - "新增 DeepSeek-V4-Pro-0813 FP4 B300 Dynamo+SGLang AgentX 配方：聚合式 TP8 c1、TP4 c4 和 DEP8 c384，以及分离式 1P1D DEP8 c64/c240。"
-    - "聚合式 DEP8 c384 配方沿用单节点 SGLang DEP8 c384 测试点（注意力 DP8 + EP8 Mega-MoE、FP4 indexer、间隔为 20 的 prefill delayer、chunked prefill 65536、max-running-requests 768、mem-fraction-static 0.88、HiCache 比例 3 的 write_back DRAM 层），改用更新的镜像，并由 Dynamo KV 路由器基于各 DP rank 的 KV 事件和会话亲和性进行路由。"
+    - "聚合式 DEP8 c384 配方沿用单节点 SGLang DEP8 c384 测试点（注意力 DP8 + EP8 Mega-MoE、FP4 indexer、间隔为 20 的 prefill delayer、chunked prefill 65536、max-running-requests 768、mem-fraction-static 0.88、HiCache 比例 3 的 write_back DRAM 层），改用更新的镜像，并将 cuda-graph-max-bs-decode 设为每个 rank 96 个请求的上限（768 / 8），并由 Dynamo KV 路由器基于各 DP rank 的 KV 事件和会话亲和性进行路由。"
     - "所有 DEP8 配方的 Mega-MoE 均使用默认的 FP8xFP4 kernel，不启用 W4A4 MXFP4 Mega-MoE 路径。"
     - "分离式 KV 传输使用 Mooncake，并在容器初始化时安装 mooncake-transfer-engine-efa-cuda13 0.3.13.post1；依赖 DSXE 管理的网络栈注入，不显式挂载主机 EFA/OFI 目录。"
     - "使用 DSXE 集群的每 GPU 24 个 CPU、HiCache 比例 3，decode 的 max-running-requests 为并发数两倍，挂载持久化 AgentX/Hugging Face 缓存，并排除已知异常 DSXE 节点。"
