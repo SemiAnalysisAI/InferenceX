@@ -9168,3 +9168,12 @@
     - "Relevant ATOM changes in the range: V4 decode reuses the sparse prefill ASM (ROCm/ATOM#2271), greedy sampler picks via aiter.topk_select (ROCm/ATOM#2244), and FP8 block scales declared scale_fmt ue8m0 are now stored as E8M0 on gfx950 by default (ROCm/ATOM#2419; previously FP32 unless ATOM_FP8_BLOCKSCALE_USE_E8M0_SCALE=1). The upstream DeepSeek-V4 recipes are unchanged across the range, and every recipe flag and choice (all2all-backend rccl, dp-load-balance least_tokens, moe-backend standard) remains valid."
     - "No data-type or precision change to the DeepSeek-V4-Pro-0813 DSpark draft: no online quantization is configured, so it keeps its checkpoint precision; the E8M0 scale storage represents the checkpoint's power-of-two block scales exactly. kv-cache-dtype and index-cache-dtype touch cache storage only."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3605
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Enable strict measured power (require-power) for the full Kimi-K3 B300 AgentX curve (conc-list [1,2,4,8,16,24,32,40,48,56,70])."
+    - "为完整 Kimi-K3 B300 AgentX 曲线（conc-list [1,2,4,8,16,24,32,40,48,56,70]）启用严格实测功耗（require-power）。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3632
