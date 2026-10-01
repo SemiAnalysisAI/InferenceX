@@ -11,7 +11,7 @@ base:
   name: kimik3-fp4-mi355x-vllm-agentic
   model:
     path: hf:moonshotai/Kimi-K3
-    container: vllm/vllm-openai-rocm:nightly-rocm100-36768d1bfd39094681cdbc8cb37d4b31c0729c89
+    container: vllm/vllm-openai-rocm:nightly-rocm100-ac9126e58aa7bbab1856ba6593ba4d5003fea516
     precision: fp4
   resources:
     gpu_type: mi355x

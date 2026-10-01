@@ -9180,3 +9180,12 @@
     - "Update the SGLang ROCm image from lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260927 to lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260929 on this arm only. The other MI355X arms are left on their current tags."
     - "No serving flag outside the HiCache block changes, and no other config key is touched. Each of the 19 matrix points resolves to exactly one recipe override, with no override left unused."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3611
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the vLLM ROCm image from vllm/vllm-openai-rocm:nightly-rocm100-36768d1bfd39094681cdbc8cb37d4b31c0729c89 to vllm/vllm-openai-rocm:nightly-rocm100-ac9126e58aa7bbab1856ba6593ba4d5003fea516 in both the master config image and the recipe model.container."
+    - "No recipe flag, environment variable, search-space point or concurrency changes. The Inferact/Kimi-K3-DSpark draft's data types and precision are unchanged: it still loads unquantized in BF16 with an fp8 KV cache, and every arm keeps its existing num_speculative_tokens."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
