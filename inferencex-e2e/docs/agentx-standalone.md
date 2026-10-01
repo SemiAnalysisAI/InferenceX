@@ -51,6 +51,9 @@ environment variables override preset defaults. Model, tokenizer, dataset,
 concurrency, and output remain caller inputs; `--tokenizer-trust-remote-code` is
 needed only for tokenizers with custom code.
 
+The default random seed is **42**. Keep this seed when reproducing AgentX results,
+or pass `--random-seed 123` to use a different seed.
+
 Allow additional time for dataset preparation, warmup, and draining requests.
 To sweep, restart the server for every `CONC` value and use a fresh output
 directory. Do not flush caches or reuse a live server across concurrency points. Match the target
