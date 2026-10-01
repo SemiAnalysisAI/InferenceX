@@ -113,7 +113,6 @@ roles:
       moe-dense-tp-size: 1
       moe-a2a-backend: megamoe
       enable-deepseek-v4-fp4-indexer: true
-      enable-w4a4-mxfp4-megamoe: true
       disaggregation-transfer-backend: mooncake
       disaggregation-mode: prefill
       load-balance-method: total_tokens
@@ -188,7 +187,6 @@ roles:
       moe-dense-tp-size: 1
       moe-a2a-backend: megamoe
       enable-deepseek-v4-fp4-indexer: true
-      enable-w4a4-mxfp4-megamoe: true
       disaggregation-transfer-backend: mooncake
       disaggregation-mode: decode
       load-balance-method: total_tokens
