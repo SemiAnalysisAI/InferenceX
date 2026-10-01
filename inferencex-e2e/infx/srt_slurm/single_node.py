@@ -127,8 +127,8 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
     if engine == "atom":
         # Native ATOM derives -tp from the aggregate worker's GPU allocation.
         expected["ATOM TP"] = (role["gpus"], int(environment["TP"]))
-    # vLLM shards decode KV across its tensor-parallel ranks.
-    dcp = str(args.get("decode-context-parallel-size", 1)) if engine == "vllm" else "1"
+    # vLLM and ATOM shard decode KV across their tensor-parallel ranks.
+    dcp = str(args.get("decode-context-parallel-size", 1)) if engine in {"vllm", "atom"} else "1"
     for name, value in {"PP_SIZE": "1", "DCP_SIZE": dcp, "PCP_SIZE": "1"}.items():
         expected[name] = (environment[name], value)
     for name, (actual, wanted) in expected.items():
@@ -145,9 +145,6 @@ def runtime_arguments(config: str, environment: Mapping[str, str]) -> list[str]:
     # Exclusive nodes include idle GPUs. Restrict each server/client step to
     # the serving GPU count so client-side power collection sees the same set.
     overrides = ["--set", f"srun_options.gpus-per-node={json.dumps(environment['GPU_COUNT'])}"]
-    # Match the legacy container working directory using the existing repo mount.
-    # PyTorch's generated module imports fail from / with PYTHONPYCACHEPREFIX set.
-    overrides += ["--set", 'srun_options.container-workdir="/infmax-workspace"']
     if environment.get("SRT_SRUN_OPTIONS"):
         options = json.loads(environment["SRT_SRUN_OPTIONS"])
         if not isinstance(options, dict) or any(

@@ -23,6 +23,42 @@ BENCHMARK_LIB = REPO_ROOT / "benchmarks" / "benchmark_lib.sh"
 MULTINODE_AGENTIC_SCRIPT = REPO_ROOT / "benchmarks/srt_agentic.sh"
 
 
+@pytest.mark.parametrize("use_model_path", [False, True])
+def test_local_context_does_not_require_registered_transformers_model(tmp_path, use_model_path):
+    model = tmp_path / "new model's weights"
+    model.mkdir()
+    (model / "config.json").write_text(
+        json.dumps(
+            {
+                "model_type": "not_registered_yet",
+                "max_position_embeddings": 1048576,
+                "seq_length": 4096,
+            }
+        )
+    )
+    (tmp_path / "transformers.py").write_text('raise RuntimeError("model not registered")\n')
+    env = {
+        **os.environ,
+        "BENCHMARK_LIB": str(BENCHMARK_LIB),
+        "PYTHONPATH": str(tmp_path),
+        "MODEL_PATH": str(model) if use_model_path else "",
+        "MODEL_ARG": "served-alias" if use_model_path else str(model),
+        "KV_OFFLOADING": "none",
+    }
+    result = subprocess.run(
+        [
+            "bash",
+            "-c",
+            'source "$BENCHMARK_LIB"; get_native_max_context_length "$MODEL_ARG"',
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert result.stdout.strip() == "1048576"
+
+
 @pytest.fixture(autouse=True)
 def explicit_runtime_inputs(monkeypatch: pytest.MonkeyPatch) -> None:
     """Provide explicit caller inputs before each case applies its overrides."""
@@ -2429,6 +2465,7 @@ def test_multinode_agentic_waits_only_for_eval_openai_endpoint(
     (workspace / "benchmarks").mkdir(parents=True)
     (workspace / "benchmarks/benchmark_lib.sh").write_text(
         """
+source "$BENCHMARK_LIB" --validation-only
 PORT=8765
 check_env_vars() { :; }
 resolve_trace_source() { echo resolve >> "$EVENTS"; }
@@ -2443,6 +2480,7 @@ run_agentic_replay_and_write_outputs() { echo replay >> "$EVENTS"; }
 
     base_env = {
         **os.environ,
+        "BENCHMARK_LIB": str(BENCHMARK_LIB),
         "INFMAX_CONTAINER_WORKSPACE": str(workspace),
         "EVENTS": str(events_path),
         "MODEL": "test-model",

@@ -16,16 +16,16 @@ Use this page for benchmark configuration, recipe, image, and runner changes. It
 | [`infx/matrix/validation.py`](../infx/matrix/validation.py) | Enforced Pydantic schema and topology invariants |
 | [`infx/matrix/generate.py`](../infx/matrix/generate.py) | Matrix expansion, filtering, runner lookup, and emitted job metadata |
 | [`configs/nvidia-master.yaml`](../configs/nvidia-master.yaml), [`configs/amd-master.yaml`](../configs/amd-master.yaml) | Executable benchmark definitions |
-| [`configs/runners.yaml`](../configs/runners.yaml) | Schedulable labels, concrete runner names, and hardware facts |
-| [`benchmarks/`](../benchmarks) and [`runners/`](../runners) | Runtime commands and launcher routing |
+| [`configs/runners.yaml`](../configs/runners.yaml) | Schedulable labels, concrete runner names, and per-cluster records (`clusters:`) |
+| [`benchmarks/`](../benchmarks) and [`infx/launch/`](../infx/launch) | Runtime commands, launch drivers, and workload launch policy |
 | [`perf-changelog.yaml`](../perf-changelog.yaml) | Append-only benchmark trigger log |
 | [`AGENTS.md`](../../AGENTS.md) | Repository-wide config, MTP, changelog, and sweep rules |
 
-Delete retired entries from the active master configs; they are not archived. Git history and `perf-changelog.yaml` keep the historical settings. For partial retirements, remove only the retired scenarios. Delete retired AMD server-registry entries and model-specific setup from `benchmarks/multi_node/amd_utils/` as well. Preserve shared dependencies needed by retained SPEED-Bench collectors, including their scheduling scores. See the [deprecation rules](../../AGENTS.md#deprecating-benchmark-configs).
+Delete retired entries from the active master configs; they are not archived. Git history and `perf-changelog.yaml` keep the historical settings. For partial retirements, remove only the retired scenarios. Delete unused recipes and model-specific setup as well. Preserve shared dependencies needed by retained SPEED-Bench collectors, including their scheduling scores. See the [deprecation rules](../../AGENTS.md#deprecating-benchmark-configs).
 
 ## Dependency submodules
 
-Git records the exact dependency commits. [`.gitmodules`](../../.gitmodules) defines the repositories: AIPerf at `utils/aiperf`, NVIDIA srt-slurm at `utils/srt-slurm`. TileRT is a documented manual fork checkout in `setup_srt_slurm()`, not a separate submodule.
+Git records the exact dependency commits. [`.gitmodules`](../../.gitmodules) defines the repositories: AIPerf at `utils/aiperf`, NVIDIA srt-slurm at `utils/srt-slurm`. All srt-slurm jobs, including TileRT, use the pinned upstream submodule.
 
 Initialize them before running benchmarks locally:
 
@@ -33,7 +33,7 @@ Initialize them before running benchmarks locally:
 git submodule update --init
 ```
 
-To upgrade, fetch and check out the desired commit inside the relevant submodule, then commit the updated submodule pointer in InferenceX. Benchmark workflows already initialize submodules. Slurm launchers make a local Git clone for each job so recipe staging and runtime writes do not modify the submodule, and record the actual commit for result provenance. NVIDIA setup clones locally; TileRT setup fetches its pinned fork commit over the network.
+To upgrade, fetch and check out the desired commit inside the relevant submodule, then commit the updated submodule pointer in InferenceX. Benchmark workflows already initialize submodules. Slurm launchers make a local Git clone for each job so recipe staging and runtime writes do not modify the submodule, and record the actual commit for result provenance.
 
 Single-node fixed-sequence recipes use NVIDIA upstream srt-slurm. ATOM recipes use
 the native `atomesh` frontend with one aggregate worker and
@@ -46,35 +46,47 @@ The former fork's direct ATOM frontend is not required.
 
 ### Cluster profiles
 
-Launchers that use srt-slurm keep their cluster configuration in
-[`runners/srt-slurm/<launcher>.yaml`](../runners/srt-slurm). The native settings
-(GPU count, scheduling directives, aliases, and mounts) are separate from workload recipes.
-Only launchers with an existing srt-slurm path have a profile. Both B200 Nscale
-srt-slurm paths share one profile, with path-specific container aliases supplied by
-the launcher.
+A cluster's srt-slurm settings live in its `clusters.<id>.slurm.srt-slurm` record in
+[`configs/runners.yaml`](../configs/runners.yaml) (schema:
+[`infx/clusters/slurm.py`](../infx/clusters/slurm.py)).
+srt-slurm only runs on Slurm, so the profile is part of the Slurm sub-record. The native
+settings (network interface, scheduling directives, the single-node time limit,
+container, nginx and model aliases, volume and host mounts, the launch environment,
+host setup, and literal `extra` keys) stay separate from workload recipes.
 
-Call `write_srt_cluster_config <profile> srtslurm.yaml <uses_power>` from
-[`runners/slurm_utils.sh`](../runners/slurm_utils.sh) after staging images and paths.
-It writes the job-local config before `make setup`. `${NAME}` placeholders receive
-explicit `--var NAME VALUE` inputs, never implicit process-environment substitution.
-Optional `--model ALIAS PATH`, `--container ALIAS PATH`, and `--mount HOST CONTAINER`
-arguments add or override mapping entries. Power jobs add the staged DCGM image through
-the same writer. Missing variables fail before writing; values are substituted into
-parsed YAML scalars so quotes and punctuation remain data, not YAML or shell syntax.
+Before `make setup`, the srt driver ([`infx/launch/drivers/srt/`](../infx/launch/drivers/srt))
+renders the job-local `srtslurm.yaml` (`config.py`) from that record plus job values:
+staged images, resolved model paths, cache mounts, the time limit, and the DCGM
+exporter image for power jobs. Values are written as YAML data, never substituted into
+shell or YAML text, and `extra` cannot shadow a typed key.
+
+NVIDIA profiles set `slurm.srt-slurm.extra.default_gpu_exporter` to the same `dcgm-exporter:4.6.0-4.8.3-distroless`
+image the power path uses, with `/configs/dcgm-counters-noprof.csv` for Tachometer's
+implicit DCGM exporter. Power recipes select the same CSV through
+`telemetry.dcgm_exporter.command`, so one exporter version and one counter file serve
+both paths. Tachometer reuses the power exporter when power telemetry owns it. Power,
+energy and GPU utilization remain available; profiling and vGPU license counters are
+omitted. This does not enable telemetry in opted-out recipes or qualify Tachometer
+metrics as validated PowerX results. The existing 1000 ms Tachometer / 100 ms
+power-exporter collection intervals and port 9401 are preserved.
 
 Keep model selection, cache preparation, and workload-dependent time limits in the
-launcher. Do not add profiles for non-srt-slurm launchers or change their routing here.
+srt driver's tables ([`lanes.py`](../infx/launch/drivers/srt/lanes.py),
+[`models.py`](../infx/launch/drivers/srt/models.py),
+[`power.py`](../infx/launch/drivers/srt/power.py)), not in the cluster record.
 
 Put per-allocation host checks and setup in
 `runners/srt-slurm/hooks/<cluster>/setup.sh`, with cluster-specific helpers beside it.
-The directory name matches the cluster profile's filename stem. Invoke the script
-explicitly through `default_host_setup.commands` in that profile; scripts are not
-auto-discovered. srt-slurm runs them on the selected allocated nodes, outside containers,
-before starting services and workers. A failed check stops startup by default.
-Pass configuration explicitly from the profile. If setup needs an undo step, keep it
-in `teardown.sh` beside `setup.sh` and register it in `default_host_setup.teardown`.
-These are job-owned hooks, not administrator-installed Slurm Prolog/Epilog scripts.
-Only add hooks for clusters that need them; do not add empty scripts for every profile.
+The directory name matches the cluster id. Register the script in the cluster's
+`slurm.srt-slurm.host-setup` record (`script`, `env`, `timeout-s`, `nodes`), which the driver
+renders as `default_host_setup`. Scripts are not auto-discovered. srt-slurm runs them on
+the selected allocated nodes, outside containers, before starting services and workers.
+A failed check stops startup by default. Pass configuration explicitly through
+`host-setup.env`. If setup ever needs an undo step, add a `teardown` field to
+`HostSetup` (infx/clusters/slurm.py) and render it as `default_host_setup.teardown`; no cluster
+needs one today. These are job-owned hooks, not administrator-installed Slurm
+Prolog/Epilog scripts. Only add hooks for clusters that need them; do not add empty
+scripts for every cluster.
 
 Put reusable host-check functions in `runners/srt-slurm/hooks/common.sh`; keep
 cluster-only helpers beside `setup.sh`. The common file only defines functions:
@@ -166,13 +178,13 @@ Setup source: [`utils/runner_setup/RUNNER_SETUP.md`](../utils/runner_setup/RUNNE
 
 ### Repository registration
 
-1. Create `runners/launch_<base-name>.sh` for a new fleet, or update the existing launcher.
+1. Add the fleet's `clusters.<id>` record to [`configs/runners.yaml`](../configs/runners.yaml) (node shape, workload env, models, and the scheduler sub-record: for Slurm the partition, volumes, squash cache and srt-slurm facts; schema in [`configs/CONFIGS.md#runners`](../configs/CONFIGS.md#runners)). Put launch rules that depend on model, framework, precision or recipe in [`infx/launch/policy.py`](../infx/launch/policy.py) or beside the one driver that reads them, never in a driver branch on the cluster id. A cluster on a new scheduler needs that scheduler's settings model under [`infx/clusters/`](../infx/clusters) and its backend under [`infx/launch/backends/`](../infx/launch/backends), one registry entry each, and no driver change; it runs only script-driver (`BENCH_SCRIPT_OVERRIDE`) points.
 2. Add each exact registered runner name under the intended `labels:` key in [`configs/runners.yaml`](../configs/runners.yaml). New names use `<base-name>_<NN>` with zero-padded indices.
-3. If generation needs fleet facts, add a matching `hardware:` entry with positive `available-cpu-dram-mib` and `gpus-per-node`.
-4. Use an exact `cluster:<name>` label when facts depend on one physical fleet. Agentic configs require it.
+3. Add every runner name to exactly one `cluster:<id>` label matching that record. `python -m infx.launch run` resolves the cluster from the runner name, so a runner outside every cluster label fails validation and fails at launch.
+4. Master entries whose facts depend on one physical fleet use that exact `cluster:<id>` label. Agentic configs require it.
 5. Add/update master entries to use that label. Generate a targeted matrix and confirm the selected concrete names.
 
-The runner-name prefix is load-bearing: workflow routing uses `launch_${RUNNER_NAME%%_*}.sh`. Therefore `<base-name>` must match a launcher and must not contain `_`.
+Routing is by `cluster:<id>` label, not by runner-name prefix. Keep `<base-name>` free of `_`: `_` separates it from the runner index.
 
 ### Host setup
 
@@ -183,26 +195,6 @@ The runner-name prefix is load-bearing: workflow routing uses `launch_${RUNNER_N
 5. Start with [`start_runners.sh`](../utils/runner_setup/start_runners.sh).
 6. Verify every runner is **Idle** in [repository runner settings](https://github.com/SemiAnalysisAI/InferenceX/settings/actions/runners) before adding it to sweep traffic.
 7. Verify launcher mounts for `_work`, HF cache, staged weights, and squash images from a compute node. Root containers must not leave root-owned files in the shared workspace.
-
-The B300 DSXE Kimi-K3 AgentX path mounts its pre-staged target under
-`/scratch/models` and separately exports and mounts `WRITABLE_MODELS_DIR` for
-DSpark weights. Keep the draft directory on that persistent mount when reusing
-the serving container; the read-only target mount cannot hold the draft.
-Concurrent cells serialize draft staging with a per-model lock. Each cell lets
-`hf download` validate or resume the existing cache before serving; a nonempty
-directory is not a completion signal.
-
-## Native TileRT power
-
-TileRT's shared importer preserves Docker Hub image names and converts explicit registries such as `ghcr.io/team/image:tag` to Enroot's `docker://ghcr.io#team/image:tag` syntax. Existing `#` references are preserved. Valid cached squash images are reused without importing; a cache hit does not validate the registry import path. Invalid cached images are removed under the import lock before retrying the import.
-
-The GLM-5.1 B200 Nscale 1k1k and 8k1k recipes select the prepared shared checkpoint, converted TileRT weights and squash cache, with allocation limits of 45 minutes for 1k1k and 90 minutes for 8k1k, including its full GSM8K eval. Since C1 is below automatic eval selection, use the PR `all-evals` label alongside `full-sweep-fail-fast` for full qualification. TileRT was added after the general GLM-5.1 retirement in [#2533](https://github.com/SemiAnalysisAI/InferenceX/pull/2533); [MODELS.md](MODELS.md) records this retained scope. Changes still require the normal PR sweep, applicable quality evidence, sign-off and reuse before publication.
-
-TileRT's eval wrapper calls the shared `run_eval` dispatcher without overriding its `run_lm_eval` client. It stages available artifacts after evaluation and preserves failures from either evaluation or staging. TCP readiness probes keep their socket inside a subshell and preserve the caller's diagnostic streams.
-
-For GLM-5.1 on B200 Nscale, `MODEL_PATH` can select an existing shared checkpoint instead of the default `/scratch/models/GLM-5.1-FP8`. When it selects an HF snapshot, also set `HF_HUB_CACHE_HOST_PATH` to the existing cache root; TileRT mounts that root at the same absolute path so snapshot links to sibling blobs remain readable. Keep `TILERT_WEIGHTS_DIR` pointed at the separately converted decode weights.
-
-Only fixed 8192/1024 `glm5.1-fp8-b200-tilert` requires native power. TileRT runs inside its returned `salloc` allocation, retains both role exit codes and drains collectors before staging audits. Exactly one physical node per role is supported. Other sequence lengths, AgentX and eval-only do not enable this collector. Hardware qualification and publication remain pending.
 
 ## Register an srt-slurm recipe
 
@@ -275,7 +267,7 @@ All ten AgentX throughput points use DSpark K6 (target verification length 7)
 and the committed golden AL 3.77. C1/2/4/8/16 use TP8/EP1;
 C48/64/96/128/256 use TP8/DPA8/EP8 with native RCCL. Each point runs for
 3600 seconds. The C256 full GSM8K eval omits forced acceptance. Keep the
-pinned `rocm/atom-dev:nightly_202609161445` image and GPU-only KV. C1 through C16 use
+pinned `rocm/atom-dev:nightly_202609291501` image and GPU-only KV. C1 through C16 use
 BF16 KV, while C48 and above retain FP8 KV; all points use the FP4 index cache,
 8192-token checkpoints and DEP dense FULL graph ladder. Fixed q7 graphs are
 captured in each new server; confirm target and DSpark draft capture in
@@ -288,10 +280,49 @@ record model/source identity and requested settings. Successful startup,
 graph capture and requests require runtime log evidence.
 
 The pinned image is the official ATOM nightly
-`rocm/atom-dev:nightly_202609161445`, which includes the merged
+`rocm/atom-dev:nightly_202609291501` (ATOM `0.1.7.dev46+g74fd942b0`, ROCm 7.2.4),
+which includes the merged
 [ROCm/ATOM#2233](https://github.com/ROCm/ATOM/pull/2233) inference-mode fix.
+From this image ATOM stores the checkpoint's `ue8m0` FP8 block scales as E8M0
+on gfx950 by default ([ROCm/ATOM#2419](https://github.com/ROCm/ATOM/pull/2419));
+the powers-of-two scales are represented exactly.
 The recipe does not patch AITER source at runtime; TP communication
 fusion, DSpark K6 and graph capture use the implementation shipped in the image.
+
+### MiniMax-M3 ATOM FlyDSL paged decode and LMCache DRAM tier
+
+`minimaxm3-fp4-mi355x-atom-agentic-mtp` uses
+`rocm/atom-dev:nightly_202609281543` with `ATOM_PA_FLYDSL=1` and
+`ATOM_PA_FLYDSL_PLAN=1`, following [ROCm/ATOM#2366](https://github.com/ROCm/ATOM/pull/2366)
+and the [upstream recipe](https://github.com/ROCm/ATOM/blob/1423fceb08fbe88b2e35c77b320b3073b310a63f/recipes/MiniMax-M3-Agentic-InferenceX.md).
+FlyDSL handles supported paged-decode shapes; its work planner balances dense
+decode by actual context length. Unsupported shapes retain the Gluon fallback.
+Verify the selected route and capture-time work-plan creation in `server.log`.
+
+The TP2 C20/C25/C30 and TP4 C40/C48 points add LMCache's in-process CPU tier.
+The `*_lmcache` variants in
+`benchmarks/single_node/srt-slurm-recipes/minimaxm3/atom/mi355x-fp4-mtp/agentic.yaml`
+list `{kv_connector: lmcache_offload, kv_role: offload}` under
+`extra-kv-connectors`, which srtctl renders as
+`--kv-transfer-config '{"kv_connector":"lmcache_offload","kv_role":"offload"}'`
+(`runners/srt-slurm/patches/507-lmcache-server-atom-sglang.patch`). The
+`LMCACHE_*` environment variables configure the tier. Each variant declares
+`KV_OFFLOADING: dram` and the matrix `TOTAL_CPU_DRAM_GB`, and sizes
+`LMCACHE_MAX_LOCAL_CPU_SIZE` at `TOTAL_CPU_DRAM_GB / TP` (257 GB per rank).
+`PYTHONHASHSEED=0` is required: without it the ranks hash prompts to different
+keys and the offload hit rate is zero. Verify the composed `kv_transfer_config`
+line and non-zero `atom:lmcache_loaded_tokens` in `server.log`.
+
+srtctl masks a partial-node worker to GPUs `0..TP-1`, which sit on NUMA node 0,
+and HIP pins each rank's CPU tier on its GPU's node, so the tier and the weight
+staging buffers (about 720 GB at TP2 and 1.23 TB at TP4) all come from node 0's
+1.5 TB. `runners/srt-slurm/hooks/mi355x-amds/setup.sh` drops the page cache before
+a `KV_OFFLOADING=dram` job so these pages are free. Without it, pinning reclaims
+page cache, ranks finish minutes apart and ATOM's 300 s startup barrier times out
+([run 36454319395](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/36454319395)).
+
+TP4 C32 is dropped; the GPU-resident TP4 C1-C28 and TP2 C1-C2 points,
+EAGLE3 K3, golden AL 2.78 and indexer CP are unchanged.
 
 ### DeepSeek-V4.1-Flash DSpark
 
@@ -312,8 +343,8 @@ weights determine the recipe's `precision: fp4` label.
 The GPU-specific entry points share the text-only serving behavior, `deepseek_v41` tokenizer and
 parsers, 1M context, and the shared AgentX trace replay, power, metrics, and eval
 helpers. The TP4 concurrency range is 1–128. The shared script sizes graph capture
-for the six-token DSpark verification block. The launchers mount the repository at `/ix` for this recipe so
-AgentX runtime directories are not created under `/workspace`. Launcher-specific model paths and persistent caches are reused.
+for the six-token DSpark verification block. The srt-slurm single-node path mounts the checkout at `/infmax-workspace`, so
+AgentX runtime directories are not created under `/workspace`. Cluster model paths and persistent caches are reused.
 The recipe probes the serving port on the compute node and selects an available
 port if the preferred one is occupied. Serving, replay, metrics, and eval share
 that endpoint.
@@ -369,9 +400,9 @@ it fails at concurrency 1 on an 80 GB card even though the resident weights fit.
 arm therefore ships its own recipe settings with capped batched tokens; see the H100
 section below.
 
-The launcher mounts the repository at `/ix` for this recipe so AgentX runtime directories
-are not created under `/workspace`, and it already mounts the shared HF cache, so the
-script resolves the model through `HF_HUB_CACHE` rather than a per-node path. The recipe
+The srt-slurm single-node path mounts the checkout at `/infmax-workspace`, so AgentX runtime
+directories are not created under `/workspace`. It also mounts the shared HF cache, so the
+recipe resolves the model through `HF_HUB_CACHE` rather than a per-node path. The recipe
 probes the serving port on the compute node and selects an available one if the preferred
 port is occupied; serving, replay, metrics, and eval share that endpoint.
 
@@ -424,12 +455,9 @@ shrinking the indexer further — `--max-num-batched-tokens 2048` would free abo
 more — at the cost of chunking long-trace prefill harder. That trade is worth revisiting
 once there is throughput data across the range.
 
-`runners/launch_h100-dgxc-slurm.sh` previously resolved only the untagged
-`_h100[_mtp].sh` script name, so no framework-tagged script could run on this cluster at
-all. It now prefers `_h100_<framework>[_mtp].sh` first, as the h200 launchers have since
-#392, and falls back to the untagged name for the recipes that predate framework tags. It
-also mounts the repository at `/ix` for this recipe so AgentX runtime directories are not
-created under `/workspace`.
+This arm runs through its srt-slurm single-node recipe (`srt-recipe:`), which mounts the
+checkout at `/infmax-workspace`, so AgentX runtime directories are not created under
+`/workspace`.
 
 Source: [upstream recipe](https://github.com/vllm-project/recipes/blob/main/models/deepseek-ai/DeepSeek-V4.1-Flash.yaml).
 
@@ -479,8 +507,9 @@ startup and all 1,319 GSM8K examples at C8 (97.65% strict accuracy) in an isolat
 Slurm diagnostic. Its post-eval packaging was recovered separately after a missing
 wrapper variable; this is not a green official workflow. The full latest-image
 sweep remains required. Draft precision remains upstream default.
-The B200 launcher also converts pinned Docker digests to the installed Enroot
-manifest-reference syntax and stops immediately on import failure.
+Image staging ([`infx/launch/backends/slurm/squash.py`](../infx/launch/backends/slurm/squash.py)) converts pinned Docker
+digests to Enroot's `registry#repository:digest` syntax on every cluster. It retries
+transient import errors and fails the launch if the squash still does not validate.
 
 DSpark uses the default precision shipped by the pinned official nightly, without custom draft quantization or precision patches. STP loads no draft; full accuracy and performance validation are still required.
 
@@ -538,12 +567,10 @@ cookbook's ROCm environment (`SGLANG_USE_AITER=1`, `SGLANG_MOE_PADDING=1`,
 `AITER_FLYDSL_FORCE_REDUCE=1`, `ROCM_QUICK_REDUCE_QUANTIZATION=NONE`),
 `--disable-radix-cache`, and breakable prefill graphs capped at 4096 tokens.
 
-The KV cache is GPU-resident on every arm, so `kv-offloading: none`. The launchers route
-`dsv41flash` for `framework: sglang` the same way as for vLLM: the repository is mounted at
-`/ix`, and the checkpoint resolves through each cluster's persistent HF cache (the writable
-Lustre models directory on b300). `runners/launch_b200-nscale-compat.sh`,
-`launch_b300-dsxe.sh`, `launch_gb200-nv.sh` and `launch_gb300-nv.sh` previously gated
-those paths on `vllm` only.
+The KV cache is GPU-resident on every arm, so `kv-offloading: none`. The srt-slurm
+single-node path treats `framework: sglang` for `dsv41flash` the same way as vLLM: the
+checkout is mounted at `/infmax-workspace`, and the checkpoint resolves through each
+cluster's persistent HF cache.
 
 GPU sweep and eval evidence is required before calling any of these arms validated.
 
@@ -557,11 +584,12 @@ Run the smallest checks that cover the edited layers.
 python3 -c "import yaml; yaml.safe_load(open('configs/<nvidia|amd>-master.yaml')); yaml.safe_load(open('configs/runners.yaml')); yaml.safe_load(open('perf-changelog.yaml'))"
 ```
 
-### Benchmark and launcher syntax
+### Benchmark syntax and launch checks
 
 ```bash
 bash -n benchmarks/<path>/<script>.sh
-bash -n runners/launch_<cluster>.sh
+uv run python -c 'from infx.clusters import load_clusters; load_clusters()'
+uv run pytest -q infx/tests/launch infx/tests/clusters
 ```
 
 ### Exact-key schema + matrix generation
@@ -587,8 +615,6 @@ uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with p
   --runner-type <runner> \
   --seq-lens 8k1k
 ```
-
-Use `--seq-lens 1k1k` only when explicitly selecting the retained `glm5.1-fp8-b200-tilert` configuration; other 1k1k coverage is retired.
 
 Inspect, do not merely count, the emitted `model`, `image`, `runner`, scenario, concurrency, `max-model-len`, TP/PP/EP/DCP/PCP, prefill/decode worker blocks, hardware, router, KV transfer, eval flags, `additional-settings`, and `spec-decoding`.
 
@@ -646,13 +672,13 @@ Stop before dispatching GPU work or claiming the configuration complete when any
 - Exact checkpoint, precision, architecture, native context, framework, draft model/method, or image tag is unverified.
 - No proven sibling covers the target model/backend/SKU, and required runtime flags or memory limits remain unknown.
 - Runner user, shared mounts, staged model path, GPU count, host DRAM, Slurm behavior, or root-file cleanup is unknown. Runner registration credentials are also a hard prerequisite for host setup.
-- The registered runner prefix has no matching launcher, a matrix resolves to a nonexistent script, or the runner is not **Idle**.
+- The registered runner is in no `cluster:<id>` label, a matrix resolves to a nonexistent script, or the runner is not **Idle**.
 - Calculated topology exceeds the fleet, DCP does not divide TP, heterogeneous hardware metadata is one-sided, or generated topology differs from the intended recipe.
 - An srt-slurm recipe and master entry disagree, `model.container != image`, or upstream recipe validation has not run.
 - An llm-d recipe is missing and would fall back unintentionally, allocation counts disagree, or endpoint discovery cannot satisfy literal-IPv4/unique-name/valid-port rules.
 - An MTP recipe lacks chat-template benchmarking, the speculative method/token count is unverified, or graph capture exceeds the backend limit.
 - The changelog change would modify historical bytes, is not at EOF, has a conflict, or still has `TBD` when the PR is otherwise ready for sweep.
-- YAML, Bash, strict schema, exact-key generation, launcher simulation, or recipe validation fails.
+- YAML, Bash, strict schema, exact-key generation, cluster-record validation, launch tests, or recipe validation fails.
 
 A configuration is ready for sweep only when the executable files agree, the exact key generates, the runtime route exists, the changelog selects it, and all layer-specific checks above pass.
 
@@ -685,9 +711,7 @@ the MI355X arm's 16384). Concurrency is 1–32 on both. Both entries also carry 
 layouts (MI300X TP4; MI325X TP2 and TP4) that move the Engram tables to host memory with
 `--engram-config '{"cpu_offload":true}'`.
 
-`runners/launch_mi300x-amd.sh` and `runners/launch_mi325x-amds.sh` mount the checkout at
-`/ix` for this checkpoint and rewrite `RESULT_DIR`, as the MI355X launcher does, so AgentX
-runtime directories stay out of `/workspace`. The MI300X launcher also raises its Slurm
-allocation from 180 to 480 minutes for this checkpoint: the HF cache there is node-local, so
-the first arm on each node downloads 511 GB before serving. GPU sweep and eval evidence is
-required before calling either arm validated.
+The srt-slurm single-node path mounts the checkout at `/infmax-workspace`, so AgentX runtime
+directories stay out of `/workspace`. The HF cache on MI300X is node-local, so the first arm
+on each node downloads 511 GB before serving. GPU sweep and eval evidence is required before
+calling either arm validated.

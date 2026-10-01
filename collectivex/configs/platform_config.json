@@ -146,7 +146,7 @@
         "switch": "n/a (single-node scale-up)"
       },
       "operator": {
-        "partition": "compute-0",
+        "partition": "MI300X-UBUNTU",
         "squash_dir": "/raid/inferencex/squash"
       }
     },

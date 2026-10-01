@@ -1,13 +1,13 @@
 # MiniMax-M3 MXFP4 AgentX on MI355X with ATOM EAGLE3 (GQA draft, three tokens)
-# and GPU-resident KV at TP2 and TP4. The LMCache bands were removed with the
-# legacy script (#3461): srtctl reserves ATOM's kv-transfer-config for
-# disaggregated workers.
+# at TP2 and TP4, with GPU-resident KV or an in-process LMCache DRAM tier.
+# The DRAM variants add ATOM's lmcache_offload connector through
+# extra-kv-connectors (runners/srt-slurm/patches/507-lmcache-server-atom-sglang.patch).
 base:
   schema: 2
   name: minimaxm3-fp4-mi355x-atom-agentic
   model:
     path: hf:amd/MiniMax-M3-MXFP4
-    container: rocm/atom-dev:nightly_202609171455
+    container: rocm/atom-dev:nightly_202609281543
     precision: fp4
   resources:
     gpu_type: mi355x
@@ -47,6 +47,8 @@ base:
         AITER_QUICK_REDUCE_QUANTIZATION: INT4
         AITER_FLYDSL_STAGE2_FP8: '1'
         ATOM_FORCE_ATTN_TRITON: '1'
+        ATOM_PA_FLYDSL: '1'
+        ATOM_PA_FLYDSL_PLAN: '1'
   benchmark:
     type: custom
     command: bash /infmax-workspace/benchmarks/srt_agentic.sh
@@ -57,7 +59,10 @@ base:
       AIPERF_APPLY_CHAT_TEMPLATE: 'true'
 
 # One variant per point. Admission is 2x CONC. TP4 shards the indexer across
-# ranks at the measured points (15, 20, 24, 28, 32).
+# ranks at the measured points (15, 20, 24, 28, and the DRAM points 40, 48).
+# The GPU-resident indexer-CP points turn off ATOM's default MiniMax-M3 mono
+# decode (ATOM_MONO_ENABLE=0): with it on they hung in an NCCL broadcast
+# mid-replay (run 36493321464). The LMCache points already run without mono.
 override_tp4_c1:
   roles:
     agg:
@@ -136,6 +141,7 @@ override_tp4_c15:
         max-num-seqs: 30
       env:
         ATOM_M3_INDEXER_CP: '1'
+        ATOM_MONO_ENABLE: '0'
   benchmark:
     env:
       CONC: '15'
@@ -148,6 +154,7 @@ override_tp4_c20:
         max-num-seqs: 40
       env:
         ATOM_M3_INDEXER_CP: '1'
+        ATOM_MONO_ENABLE: '0'
   benchmark:
     env:
       CONC: '20'
@@ -160,6 +167,7 @@ override_tp4_c24:
         max-num-seqs: 48
       env:
         ATOM_M3_INDEXER_CP: '1'
+        ATOM_MONO_ENABLE: '0'
   benchmark:
     env:
       CONC: '24'
@@ -172,21 +180,10 @@ override_tp4_c28:
         max-num-seqs: 56
       env:
         ATOM_M3_INDEXER_CP: '1'
+        ATOM_MONO_ENABLE: '0'
   benchmark:
     env:
       CONC: '28'
-
-override_tp4_c32:
-  roles:
-    agg:
-      gpus: 4
-      args:
-        max-num-seqs: 64
-      env:
-        ATOM_M3_INDEXER_CP: '1'
-  benchmark:
-    env:
-      CONC: '32'
 
 override_tp2_c1:
   roles:
@@ -207,3 +204,129 @@ override_tp2_c2:
   benchmark:
     env:
       CONC: '2'
+
+# DRAM variants: LMCache's in-process CPU tier with ATOM's segmented LRU and
+# all-rank lookup, sized at TOTAL_CPU_DRAM_GB / TP (257 GB) per rank.
+# PYTHONHASHSEED keeps every rank's chunk keys identical; without it the
+# offload hit rate is zero.
+override_tp2_c20_lmcache:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        max-num-seqs: 40
+        extra-kv-connectors:
+          - kv_connector: lmcache_offload
+            kv_role: offload
+      env:
+        PYTHONHASHSEED: '0'
+        LMCACHE_LOCAL_CPU: 'True'
+        LMCACHE_MAX_LOCAL_CPU_SIZE: '257'
+        LMCACHE_CHUNK_SIZE: '256'
+        LMCACHE_CACHE_POLICY: ATOM_SLRU
+        LMCACHE_LOOKUP_SERVER_WORKER_IDS: '0,1'
+        ATOM_PREFIX_CACHE_POLICY: slru
+        ATOM_PREFIX_CACHE_PROTECTED_RATIO: '0.5'
+  benchmark:
+    env:
+      CONC: '20'
+      KV_OFFLOADING: 'dram'
+      TOTAL_CPU_DRAM_GB: '515'
+
+override_tp2_c25_lmcache:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        max-num-seqs: 50
+        extra-kv-connectors:
+          - kv_connector: lmcache_offload
+            kv_role: offload
+      env:
+        PYTHONHASHSEED: '0'
+        LMCACHE_LOCAL_CPU: 'True'
+        LMCACHE_MAX_LOCAL_CPU_SIZE: '257'
+        LMCACHE_CHUNK_SIZE: '256'
+        LMCACHE_CACHE_POLICY: ATOM_SLRU
+        LMCACHE_LOOKUP_SERVER_WORKER_IDS: '0,1'
+        ATOM_PREFIX_CACHE_POLICY: slru
+        ATOM_PREFIX_CACHE_PROTECTED_RATIO: '0.5'
+  benchmark:
+    env:
+      CONC: '25'
+      KV_OFFLOADING: 'dram'
+      TOTAL_CPU_DRAM_GB: '515'
+
+override_tp2_c30_lmcache:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        max-num-seqs: 60
+        extra-kv-connectors:
+          - kv_connector: lmcache_offload
+            kv_role: offload
+      env:
+        PYTHONHASHSEED: '0'
+        LMCACHE_LOCAL_CPU: 'True'
+        LMCACHE_MAX_LOCAL_CPU_SIZE: '257'
+        LMCACHE_CHUNK_SIZE: '256'
+        LMCACHE_CACHE_POLICY: ATOM_SLRU
+        LMCACHE_LOOKUP_SERVER_WORKER_IDS: '0,1'
+        ATOM_PREFIX_CACHE_POLICY: slru
+        ATOM_PREFIX_CACHE_PROTECTED_RATIO: '0.5'
+  benchmark:
+    env:
+      CONC: '30'
+      KV_OFFLOADING: 'dram'
+      TOTAL_CPU_DRAM_GB: '515'
+
+override_tp4_c40_lmcache:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        max-num-seqs: 80
+        extra-kv-connectors:
+          - kv_connector: lmcache_offload
+            kv_role: offload
+      env:
+        ATOM_M3_INDEXER_CP: '1'
+        PYTHONHASHSEED: '0'
+        LMCACHE_LOCAL_CPU: 'True'
+        LMCACHE_MAX_LOCAL_CPU_SIZE: '257'
+        LMCACHE_CHUNK_SIZE: '256'
+        LMCACHE_CACHE_POLICY: ATOM_SLRU
+        LMCACHE_LOOKUP_SERVER_WORKER_IDS: '0,1,2,3'
+        ATOM_PREFIX_CACHE_POLICY: slru
+        ATOM_PREFIX_CACHE_PROTECTED_RATIO: '0.5'
+  benchmark:
+    env:
+      CONC: '40'
+      KV_OFFLOADING: 'dram'
+      TOTAL_CPU_DRAM_GB: '1030'
+
+override_tp4_c48_lmcache:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        max-num-seqs: 96
+        extra-kv-connectors:
+          - kv_connector: lmcache_offload
+            kv_role: offload
+      env:
+        ATOM_M3_INDEXER_CP: '1'
+        PYTHONHASHSEED: '0'
+        LMCACHE_LOCAL_CPU: 'True'
+        LMCACHE_MAX_LOCAL_CPU_SIZE: '257'
+        LMCACHE_CHUNK_SIZE: '256'
+        LMCACHE_CACHE_POLICY: ATOM_SLRU
+        LMCACHE_LOOKUP_SERVER_WORKER_IDS: '0,1,2,3'
+        ATOM_PREFIX_CACHE_POLICY: slru
+        ATOM_PREFIX_CACHE_PROTECTED_RATIO: '0.5'
+  benchmark:
+    env:
+      CONC: '48'
+      KV_OFFLOADING: 'dram'
+      TOTAL_CPU_DRAM_GB: '1030'
