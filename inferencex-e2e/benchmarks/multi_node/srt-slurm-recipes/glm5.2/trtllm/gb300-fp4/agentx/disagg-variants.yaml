@@ -20,7 +20,7 @@ base:
     gpus_per_node: 4
   engine:
     type: trtllm
-    publish_events_and_metrics: true
+    publish_metrics: true
   roles:
     prefill:
       gpus: 4
@@ -199,7 +199,8 @@ override_1p1d_tp8_c1_b1_mtp5:
   name: dynamo-disagg-gb300-1p1d-tp8-c1-b1-mtp5
   dynamo:
     source:
-      wheel: 1.4.0.dev20260807
+      git: https://github.com/cquil11/dynamo.git
+      rev: 2cbbdc863c336c2cfffa2a3668e2a6661801b259
   roles:
     prefill:
       nodes: 1
