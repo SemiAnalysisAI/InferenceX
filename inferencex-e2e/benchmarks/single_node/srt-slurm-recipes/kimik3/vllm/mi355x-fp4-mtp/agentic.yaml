@@ -49,6 +49,9 @@ base:
         max-model-len: 1048576
         enable-prefix-caching: true
         kv-cache-dtype: fp8
+        # Online FP8 per-channel for the target's linear layers; the routed
+        # experts stay MXFP4 and the DSpark draft stays BF16.
+        quantization-config: '{"linear":"fp8_per_channel","ignore":["*kv_b_proj","*vision_tower*","*mm_projector*"]}'
         attention-config: '{"mla_prefill_backend":"ROCM_AITER_FA"}'
       env:
         # Upstream AMD recipe environment.
