@@ -5370,7 +5370,7 @@ minimaxm3-fp8-h100-vllm-agentic-mtp:
   image: vllm/vllm-openai:nightly-36768d1bfd39094681cdbc8cb37d4b31c0729c89
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
-  runner: cluster:h100-cw
+  runner: cluster:h100-dsxe
   precision: fp8
   framework: vllm
   multinode: false

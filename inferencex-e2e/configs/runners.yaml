@@ -2,6 +2,9 @@ labels:
   h100:
     - h100-cw_00
     - h100-cw_01
+    - h100-dgxc-new_00
+    - h100-dgxc-new_01
+    - h100-dgxc-new_02
     - h100-dgxc-slurm_00
     - h100-dgxc-slurm_01
     - h100-dgxc-slurm_02
@@ -156,6 +159,14 @@ labels:
   cluster:h100-cw:
     - h100-cw_00
     - h100-cw_01
+  h100-dgxc-new:
+    - h100-dgxc-new_00
+    - h100-dgxc-new_01
+    - h100-dgxc-new_02
+  cluster:h100-dsxe:
+    - h100-dgxc-new_00
+    - h100-dgxc-new_01
+    - h100-dgxc-new_02
   cluster:h100-dgxc:
     - h100-dgxc-slurm_00
     - h100-dgxc-slurm_01
@@ -326,6 +337,35 @@ clusters:
         network-interface: ""
         gpus-per-node-directive: false
         single-node-exclusive: false
+  h100-dsxe:
+    gpus-per-node: 8
+    available-cpu-dram-mib: 1_998_848
+    arch: x86_64
+    models:
+      entries:
+        MiniMax-M3-MXFP8: {root: data-models, dir: MiniMax-M3-MXFP8}
+    scheduler: slurm
+    slurm:
+      partition: batch_1
+      account: benchmark
+      exclusive: false
+      gres: "gpu:{gpus}"
+      volumes:
+        hf-hub-cache: {path: /data/home/sa-gha-runner/gharunners/hf-hub-cache}
+        aiperf-cache: {path: /data/home/sa-gha-runner/gharunners/ai-perf-cache}
+        data-models: {path: /data/models}
+      squash:
+        dir: /data/home/sa-gha-runner/gharunners/squash
+        visibility: shared
+        import: compute
+        lock-timeout-s: 600
+      srt-slurm:
+        extra:
+          default_gpu_exporter:
+            container_image: nvcr.io#nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless
+            port: 9401
+            command: "dcgm-exporter --collect-interval=1000 --address :{port} -f /configs/dcgm-counters-noprof.csv"
+        network-interface: ""
   h100-dgxc:
     gpus-per-node: 8
     available-cpu-dram-mib: 2_063_837
