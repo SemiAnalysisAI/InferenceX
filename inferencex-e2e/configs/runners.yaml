@@ -599,6 +599,11 @@ clusters:
         single-node-models: staged
         container-aliases: [dynamo-trtllm, dynamo-sglang, dynamo-vllm]
         nginx-aliases: [nginx-sqsh]
+        # Host libibverbs ABI for Mooncake RDMA: enroot EFA hook overlays the
+        # image provider, so mount the host library tree and load mlx5 via
+        # RDMAV_DRIVERS in kimik3-b300-mooncake.sh.
+        mounts:
+          /usr/lib/x86_64-linux-gnu: /host-usr-lib
   gb200-nv:
     gpus-per-node: 4
     available-cpu-dram-mib: 860_160

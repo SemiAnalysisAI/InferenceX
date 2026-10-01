@@ -26,9 +26,10 @@ base:
     interval_seconds: 10
     max_attempts: 360
   # Embedded Mooncake: each TP rank contributes TOTAL_CPU_DRAM_GB / 8 GB. The
-  # setup script pins the client to the master's version and fills in the
-  # node's active RDMA rail. DSXE rails are InfiniBand without a netdev, so the
-  # transfer engine picks its own GID (a RoCE v2 index 3 does not exist).
+  # setup script pins the client, backports load-failure recovery, selects one
+  # active Mellanox rail by driver (ibp* or mlx5_*), sets MC_GID_INDEX from the
+  # link layer, and loads the host mlx5 provider via RDMAV_DRIVERS when
+  # /host-usr-lib is mounted. Master lease is 60s (see mooncake-master args).
   setup_script: kimik3-b300-mooncake.sh
   services:
     - name: mooncake-master
@@ -36,7 +37,7 @@ base:
       preamble: >-
         python3 -m pip install --break-system-packages --quiet --no-cache-dir --no-deps
         --force-reinstall mooncake-transfer-engine-cuda13==0.3.11.post1
-      args: ["--eviction_high_watermark_ratio=0.95", "--eviction_ratio=0.10"]
+      args: ["--eviction_high_watermark_ratio=0.95", "--eviction_ratio=0.10", "--default_kv_lease_ttl=60000"]
       options:
         store_config:
           mode: embedded

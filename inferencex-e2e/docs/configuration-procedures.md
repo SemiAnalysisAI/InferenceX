@@ -275,7 +275,7 @@ All ten AgentX throughput points use DSpark K6 (target verification length 7)
 and the committed golden AL 3.77. C1/2/4/8/16 use TP8/EP1;
 C48/64/96/128/256 use TP8/DPA8/EP8 with native RCCL. Each point runs for
 3600 seconds. The C256 full GSM8K eval omits forced acceptance. Keep the
-pinned `rocm/atom-dev:nightly_202609291501` image and GPU-only KV. C1 through C16 use
+pinned `rocm/atom-dev:nightly_202609161445` image and GPU-only KV. C1 through C16 use
 BF16 KV, while C48 and above retain FP8 KV; all points use the FP4 index cache,
 8192-token checkpoints and DEP dense FULL graph ladder. Fixed q7 graphs are
 captured in each new server; confirm target and DSpark draft capture in
@@ -288,12 +288,8 @@ record model/source identity and requested settings. Successful startup,
 graph capture and requests require runtime log evidence.
 
 The pinned image is the official ATOM nightly
-`rocm/atom-dev:nightly_202609291501` (ATOM `0.1.7.dev46+g74fd942b0`, ROCm 7.2.4),
-which includes the merged
+`rocm/atom-dev:nightly_202609161445`, which includes the merged
 [ROCm/ATOM#2233](https://github.com/ROCm/ATOM/pull/2233) inference-mode fix.
-From this image ATOM stores the checkpoint's `ue8m0` FP8 block scales as E8M0
-on gfx950 by default ([ROCm/ATOM#2419](https://github.com/ROCm/ATOM/pull/2419));
-the powers-of-two scales are represented exactly.
 The recipe does not patch AITER source at runtime; TP communication
 fusion, DSpark K6 and graph capture use the implementation shipped in the image.
 
@@ -340,6 +336,15 @@ The GB300 DSpark recipe uses the same minimum capture size and preserves the sam
 The H200 DSpark recipe uses the same minimum capture size and preserves the same workload settings.
 
 B300 uses the same minimum capture size at c1/c2/c4. Its c1 CI comparison reduced request ITL P90/P99 from 38.74/41.42 ms to 2.62/3.45 ms; c2/c4 require CI confirmation.
+
+Kimi-K3 on B300 selects one active Mellanox adapter by its sysfs driver, including
+DSXE `ibp*` names; EFA devices are excluded from this RDMA recipe. The embedded
+Mooncake ranks share that adapter. InfiniBand uses GID index 0 and RoCE retains
+index 3. If no compatible active adapter exists, startup fails before serving.
+On DSXE the container's libibverbs comes from the host through the enroot EFA
+hook, so `configs/runners.yaml` mounts the host library directory at `/host-usr-lib`
+and the setup script loads its mlx5 provider through `RDMAV_DRIVERS`.
+
 
 The AgentX-only `dsv41flash-fp4-<sku>-vllm-agentic-dspark` recipes use the per-SKU
 `image` pinned in [`nvidia-master.yaml`](../configs/nvidia-master.yaml) (originally `vllm/vllm-openai:deepseekv41-flash-0909`, which B300 still uses) at TP4 on Blackwell SKUs with native five-token DSpark,

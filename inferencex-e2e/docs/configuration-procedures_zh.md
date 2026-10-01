@@ -255,7 +255,7 @@ DSpark Markov/confidence head、全部 66 个分片的 header 与 payload 边界
 全部十个 AgentX 性能点使用 DSpark K6（target 验证长度为 7）和已提交的
 golden AL 3.77。C1/2/4/8/16 使用 TP8/EP1；C48/64/96/128/256 使用
 TP8/DPA8/EP8 原生 RCCL。每个性能点运行 3600 秒。C256 全量 GSM8K 不传强制
-接受率参数。保留固定的 `rocm/atom-dev:nightly_202609291501` 镜像和 GPU KV；C1 至 C16
+接受率参数。保留固定的 `rocm/atom-dev:nightly_202609161445` 镜像和 GPU KV；C1 至 C16
 使用 BF16 KV，C48 及以上继续使用 FP8 KV，所有任务均使用 FP4 index cache、
 8192-token checkpoint 和 DEP dense FULL graph 阶梯。每个新服务进程重新捕获固定
 q7 图；必须从 `server.log` 确认 target 和 DSpark draft capture 完成。confidence
@@ -266,11 +266,8 @@ schedule 和 ragged verification 保持关闭。
 `runtime_manifest.json` 和 `server_command.txt` 保存模型/源码身份及请求的配置。
 成功启动、graph capture 和请求执行仍需运行时日志证明。
 
-固定镜像为官方 ATOM nightly `rocm/atom-dev:nightly_202609291501`（ATOM `0.1.7.dev46+g74fd942b0`，
-ROCm 7.2.4），已包含已合入的
+固定镜像为官方 ATOM nightly `rocm/atom-dev:nightly_202609161445`，已包含已合入的
 [ROCm/ATOM#2233](https://github.com/ROCm/ATOM/pull/2233) inference-mode 修复。
-自该镜像起，ATOM 在 gfx950 上默认以 E8M0 存储检查点的 `ue8m0` FP8 block scale
-（[ROCm/ATOM#2419](https://github.com/ROCm/ATOM/pull/2419)），2 的幂次 scale 可被精确表示。
 配方不再在运行时修改 AITER 源码；TP 通信融合、DSpark K6 和 graph capture
 直接使用镜像内实现。
 
@@ -314,6 +311,14 @@ GB300 的 DSpark 配方使用相同的最小捕获范围，并保持相同的工
 H200 的 DSpark 配方使用相同的最小捕获范围，并保持相同的工作负载配置。
 
 B300 在 c1/c2/c4 使用相同的最小捕获范围。其 c1 CI 对比中，请求 ITL P90/P99 从 38.74/41.42 ms 降至 2.62/3.45 ms；c2/c4 仍需 CI 验证。
+
+B300 上的 Kimi-K3 按 sysfs 驱动选择一块活动的 Mellanox 网卡，包括 DSXE 的
+`ibp*` 命名；本 RDMA 配方排除 EFA。嵌入式 Mooncake 各 rank 共用该网卡。
+InfiniBand 使用 GID 索引 0，RoCE 保留索引 3。若没有可用的活动适配器，则在
+服务启动前失败。DSXE 上容器的 libibverbs 来自 enroot EFA hook 挂载的主机库，
+因此 `configs/runners.yaml` 将主机库目录挂到 `/host-usr-lib`，setup 脚本通过
+`RDMAV_DRIVERS` 加载其 mlx5 provider。
+
 
 仅运行 AgentX 的 `dsv41flash-fp4-<sku>-vllm-agentic-dspark` 配方使用
 [`nvidia-master.yaml`](../configs/nvidia-master.yaml) 中按 SKU 固定的 `image`（最初为 `vllm/vllm-openai:deepseekv41-flash-0909`，B300 仍在使用），在 Blackwell SKU 上采用 TP4、原生五 token DSpark、

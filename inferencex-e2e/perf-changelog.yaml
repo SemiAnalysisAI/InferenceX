@@ -9168,3 +9168,11 @@
     - "Relevant ATOM changes in the range: V4 decode reuses the sparse prefill ASM (ROCm/ATOM#2271), greedy sampler picks via aiter.topk_select (ROCm/ATOM#2244), and FP8 block scales declared scale_fmt ue8m0 are now stored as E8M0 on gfx950 by default (ROCm/ATOM#2419; previously FP32 unless ATOM_FP8_BLOCKSCALE_USE_E8M0_SCALE=1). The upstream DeepSeek-V4 recipes are unchanged across the range, and every recipe flag and choice (all2all-backend rccl, dp-load-balance least_tokens, moe-backend standard) remains valid."
     - "No data-type or precision change to the DeepSeek-V4-Pro-0813 DSpark draft: no online quantization is configured, so it keeps its checkpoint precision; the E8M0 scale storage represents the checkpoint's power-of-two block scales exactly. kv-cache-dtype and index-cache-dtype touch cache storage only."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3605
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  description:
+    - "Discover active Mellanox RDMA devices by driver on DSXE, select the link-layer GID, and load the host mlx5 provider so Mooncake sees the rail"
+    - "Backport vLLM #55297 for request-local recompute after failed asynchronous Mooncake loads on B300; see docs/waiver/3088.md"
+    - "Raise the Mooncake master lease from the 5s default to 60s (--default_kv_lease_ttl=60000): at concurrency >= 32 gets took 10-30s at p90, so 60-75% of transferred keys were discarded as LEASE_EXPIRED and recomputed; 60s matches the client's own 60s transfer cap. vLLM's execute_model timeout stays at its 300s default"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3088
