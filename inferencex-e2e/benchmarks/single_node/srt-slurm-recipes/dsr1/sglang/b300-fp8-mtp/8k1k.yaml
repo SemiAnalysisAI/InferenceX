@@ -1,0 +1,68 @@
+base:
+  schema: 2
+  name: dsr1-fp8-b300-sglang-mtp-8k1k
+  model:
+    path: hf:deepseek-ai/DeepSeek-R1-0528
+    container: lmsysorg/sglang:v0.5.15.post1-cu130
+    precision: fp8
+  resources:
+    gpu_type: b300
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        served-model-name: deepseek-ai/DeepSeek-R1-0528
+        tensor-parallel-size: 8
+        data-parallel-size: 1
+        cuda-graph-max-bs: 512
+        max-running-requests: 512
+        mem-fraction-static: 0.82
+        kv-cache-dtype: fp8_e4m3
+        chunked-prefill-size: 16384
+        max-prefill-tokens: 16384
+        enable-flashinfer-allreduce-fusion: true
+        scheduler-recv-interval: 10
+        disable-radix-cache: true
+        fp8-gemm-backend: flashinfer_trtllm
+        attention-backend: trtllm_mla
+        stream-interval: 30
+        expert-parallel-size: 1
+        moe-runner-backend: flashinfer_trtllm
+        quantization: fp8
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 2
+        speculative-num-draft-tokens: 3
+        speculative-eagle-topk: 1
+        enable-metrics: false
+      env:
+        SGLANG_ENABLE_JIT_DEEPGEMM: 'false'
+        SGLANG_ENABLE_SPEC_V2: '1'
+        PYTHONNOUSERSITE: '1'
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/single_node/srt_fixed_sequence.sh
+    env:
+      MODEL: deepseek-ai/DeepSeek-R1-0528
+      ISL: '8192'
+      OSL: '1024'
+      RANDOM_RANGE_RATIO: '0.8'
+      USE_CHAT_TEMPLATE: 'true'
+zip_override_concurrency:
+  roles:
+    agg:
+      args:
+        scheduler-recv-interval: [10, 10, 10, 10, 30, 30, 30, 30, 30, 30]
+  benchmark:
+    env:
+      CONC: ['1', '2', '4', '8', '16', '32', '64', '128', '256', '512']

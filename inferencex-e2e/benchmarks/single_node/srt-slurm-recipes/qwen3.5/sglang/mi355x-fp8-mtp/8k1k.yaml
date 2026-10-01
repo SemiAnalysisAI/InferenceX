@@ -1,0 +1,67 @@
+base:
+  schema: 2
+  name: qwen3.5-fp8-mi355x-sglang-mtp-8k1k
+  model:
+    path: hf:Qwen/Qwen3.5-397B-A17B-FP8
+    container: lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260924
+    precision: fp8
+  resources:
+    gpu_type: mi355x
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      args:
+        attention-backend: aiter
+        tensor-parallel-size: 4
+        expert-parallel-size: 1
+        trust-remote-code: true
+        tokenizer-worker-num: 6
+        enable-aiter-allreduce-fusion: true
+        max-running-requests: 4
+        cuda-graph-max-bs-decode: 4
+        disable-radix-cache: true
+        chunked-prefill-size: 32768
+        scheduler-recv-interval: 30
+        mem-fraction-static: 0.8
+        model-loader-extra-config: '{"enable_multithread_load": true}'
+        page-size: 16
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 3
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 4
+        context-length: 9236
+        data-parallel-size: 1
+        served-model-name: Qwen/Qwen3.5-397B-A17B-FP8
+        enable-metrics: false
+      env:
+        SGLANG_USE_AITER_UNIFIED_ATTN: '1'
+        SGLANG_USE_AITER: '1'
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/single_node/srt_fixed_sequence.sh
+    env:
+      MODEL: Qwen/Qwen3.5-397B-A17B-FP8
+      ISL: '8192'
+      OSL: '1024'
+      RANDOM_RANGE_RATIO: '0.8'
+      USE_CHAT_TEMPLATE: 'true'
+zip_override_concurrency:
+  roles:
+    agg:
+      args:
+        cuda-graph-max-bs-decode: [4, 8, 16, 32, 64, 128, 256]
+        max-running-requests: [4, 8, 16, 32, 64, 128, 256]
+  benchmark:
+    env:
+      CONC: ['4', '8', '16', '32', '64', '128', '256']
