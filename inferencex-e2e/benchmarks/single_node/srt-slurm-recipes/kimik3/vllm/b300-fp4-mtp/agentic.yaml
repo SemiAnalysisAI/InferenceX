@@ -68,11 +68,10 @@ base:
         load-format: fastsafetensors
         moe-backend: auto
         no-enable-flashinfer-autotune: true
-        # Do NOT enable cuMem/VMM on DSXE Mooncake RDMA: tip 15820fd2e c2 (and the
-        # passing c1 canary) logged register_buffer failed ... len ~39GiB: -600 on
-        # every rank, then AddressNotRegistered TRANSFER_FAIL on puts inside that
-        # region. c1 recomputed through it; c2 hung at 0 tok/s until sample_tokens.
-        # Same class as LMCache dropping cumem when VMM buffers cannot be exported.
+        # Keep cuMem/VMM off on this DSXE Mooncake path (LMCache-style caution for
+        # VMM buffers). The register_buffer -600 / AddressNotRegistered storm on
+        # tip 15820fd2e/1d9c54d was driven by MC_MAX_MR_SIZE=4GiB (removed below),
+        # not by cumem alone — pre-MC_MAX_MR tips registered with cumem on.
         enable-prefix-caching: true
         prefix-match-unit: 128
         kv-cache-dtype: fp8
@@ -111,7 +110,9 @@ base:
         MC_STORE_MEMCPY: '1'
         MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
         MC_SLICE_SIZE: '1048576'
-        MC_MAX_MR_SIZE: '4294967296'
+        # Do NOT set MC_MAX_MR_SIZE on DSXE: tip ee33eeba+ (4GiB) made every rank
+        # register_buffer fail (-600) on the ~40GiB KV region, then AddressNotRegistered
+        # TRANSFER_FAIL. Pre-MC_MAX_MR tips (c40/c48) registered cleanly without it.
         MC_WORKERS_PER_CTX: '4'
         WITH_NVIDIA_PEERMEM: '0'
         VLLM_MOONCAKE_LOAD_RECV_THREADS: '4'
