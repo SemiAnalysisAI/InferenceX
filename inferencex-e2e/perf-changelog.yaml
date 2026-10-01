@@ -9181,4 +9181,4 @@
     - "将 DeepSeek-V4-Pro-0813 GB300 Dynamo+SGLang AgentX 更新至 nightly-dev-20261001-b37e6f79 和 Dynamo 1.5.0.dev20260914。聚合配置保留 TP8 c1 与 TP4 c4；DEP8 预填充、DEP16 解码配置覆盖 c64、c240、c480、c960、c1440 和 c1920。"
     - "将首 token 延迟较长的 1P1D c480 替换为 1P1D c240 与 2P1D c480，在预填充和解码阶段均使用 DSpark K=6，并采用当前的 SGLang CUDA graph 参数。配方和注册项适配 inferencex-e2e/ 下的共享变体布局。"
     - "分离式配方移除 enable-w4a4-mxfp4-megamoe；将已弃用的 dp-size 加 enable-dp-attention 写法改为 attn-dp-size；并移除已随 SWA radix cache 删除而失效的 SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT。"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3218
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3630
