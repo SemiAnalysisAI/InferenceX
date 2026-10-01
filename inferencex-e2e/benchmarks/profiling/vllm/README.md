@@ -50,6 +50,18 @@ Deviations from the recipe, all recorded in the run's config: vLLM's torch
 profiler config, the patch's environment, a raised `VLLM_RPC_TIMEOUT`, and on
 CPU-offload recipes an offload pool smaller by `host_headroom_gib`.
 
+## Example
+
+DSV4-Pro FP4 on B200, TP8 c4. A decode step: one FULL CUDA-graph replay,
+every kernel joined to the op, launcher and module that launched it:
+
+![Decode step timeline with per-kernel host attribution](docs/decode_step.png)
+
+A prefill step with each kernel's SM clock; the SW power cap engages and the
+clock steps on NVML's ~100 ms grid:
+
+![Prefill step timeline with per-kernel SM clock](docs/prefill_step.png)
+
 ## Artifacts
 
 - `profile_<result>`: `infx-profile.tar`, the full record.
