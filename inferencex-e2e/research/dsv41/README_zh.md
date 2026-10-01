@@ -280,3 +280,6 @@ max(1024, 实测输出长度)，避免长输出案例的 profile 暗中缩回较
 ## 测量区间代表性复核
 
 复核配置在 B200/B300 的 global2560 使用相同2048输出及2048/320/1920 prefill/sequence/graph预算。B300 global1536 与 B200 使用相同4096/192/1152预算及1024输出。保留抢占和 KV-cache 指标，记录整个区间及四个固定子区间的逐请求进度。请求完成及独立 profile 通过不代表稳态性能成立；新结果须经过代表性复核后才可发布。
+
+
+B200 TP4 global384 profile 使用四张 GPU、TP4/EP4/DP1、131072/2048、prefill4096、max-sequences384、graph cap2304，采用原生混合 KV 并校验四个 rank。此配置不是 DP4。

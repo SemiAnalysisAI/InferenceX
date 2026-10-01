@@ -9636,3 +9636,10 @@
     - "Match cohort budgets and output lengths; record fixed-window progress diagnostics, preemption and KV-cache metrics; hold publication for review."
     - "对齐 cohort 预算与输出长度；记录固定区间进度、抢占和 KV-cache 指标；结果待复核后发布。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-tp4-128k2048-c384-profile
+  description:
+    - "Add four-GPU TP4/EP4 DP1 global384 128K/2048 profiling with native hybrid KV and all-rank validation."
+    - "新增四卡 TP4/EP4 DP1 global384 128K/2048 profile，使用原生混合 KV 并校验全部 rank。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607

@@ -343,3 +343,6 @@ measured case from silently reverting to a shorter profile cohort. Existing
 ## Window representativeness review
 
 Review recipes use matched 2048 outputs and 2048/320/1920 prefill/sequence/graph budgets at global2560 on B200/B300. The B300 global1536 recipe matches the B200 4096/192/1152 budgets and1024 outputs. Metrics retain preemption and KV-cache families. Fixed quarter-window and whole-window per-request progress diagnostics are recorded; successful completion and profiling do not authorize a steady-performance claim. New results remain held for representativeness review.
+
+
+The B200 TP4 global384 profile uses four active GPUs, TP4/EP4/DP1, 131072/2048, prefill4096, max-sequences384 and graph cap2304, with native hybrid KV and four-rank validation. It is not a DP4 run.
