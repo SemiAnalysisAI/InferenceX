@@ -43,7 +43,8 @@ base:
         disable-uvicorn-access-log: true
         tensor-parallel-size: 4
         enable-expert-parallel: true
-        max-num-batched-tokens: 2304
+        max-num-batched-tokens: 3840
+        max-num-scheduled-tokens: 2304
         max-num-seqs: 384
         max-cudagraph-capture-size: 2304
         gpu-memory-utilization: 0.95
@@ -54,6 +55,7 @@ base:
           true}'
         data-parallel-size: 1
         all2all-backend: allgather_reducescatter
+        enable-scale-out: true
         api-server-count: 1
       env:
         VLLM_USE_RUST_FRONTEND: '0'

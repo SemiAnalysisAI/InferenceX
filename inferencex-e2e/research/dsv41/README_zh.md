@@ -286,3 +286,6 @@ B200 TP4 global384 profile 使用四张 GPU、TP4/EP4/DP1、131072/2048、prefil
 
 
 失败复测：B200 global2560 在2048输出下裁剪区间无交集，改为4096输出，单独标记为诊断结果。TP4预填充降至2304（384×6验证宽度），使用单 API worker；DP1省略路由头，admission失败保留原始请求错误。修改仍需运行验证，区间和profile校验不变。
+
+
+修正原生 DSpark 预算：五个草稿需每请求六个验证 token 加四个额外输入槽位。DP320使用 input3200/scheduled1920；TP4 batch384使用 input3840/scheduled2304。原2048/2304输入预算仅覆盖验证，不能覆盖草稿。TP4必须设置 `enable-scale-out: true` 注册 token 端点，此开关与 DP 数量无关。

@@ -9651,3 +9651,11 @@
     - "Extend B200 global2560 observation to4096 outputs; TP4 uses2304 prefill budget and one API worker; omit DP header for DP1 and preserve admission errors."
     - "B200 global2560 延长至4096输出；TP4使用2304预填充预算和单 API worker；DP1不传路由头并保留 admission 错误。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-8gpu-dp-128k4096-c2560-review
+    - dsv41flash-fp4-b200-vllm-tp4-128k2048-c384-profile
+  description:
+    - "Budget DSpark six verification plus four extra drafting slots per request: input3200/scheduled1920 for DP320 and3840/2304 for TP4 batch384. Restore token endpoint registration on TP4."
+    - "为 DSpark 每请求六个验证及四个额外草稿槽位配置预算：DP320为3200/1920，TP4 batch384为3840/2304；恢复 TP4 token 端点注册。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607

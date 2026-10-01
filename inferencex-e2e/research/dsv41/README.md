@@ -349,3 +349,6 @@ The B200 TP4 global384 profile uses four active GPUs, TP4/EP4/DP1, 131072/2048, 
 
 
 Failure follow-up: B200 global2560 uses4096 outputs after a negative trimmed overlap at2048; this is a separate diagnostic, not an output-length-matched result. TP4 reduces prefill to2304 (384×6 verification width), uses one API worker, omits the DP routing header for DP1 and retains original request errors on failed admission. These changes require runtime confirmation; overlap/profile gates are unchanged.
+
+
+Corrected native DSpark budgeting: five drafts require six scheduled verification tokens plus four additional input slots per request. DP320 therefore uses input3200/scheduled1920; TP4 batch384 uses input3840/scheduled2304. Prior2048/2304 input budgets were insufficient even though they covered verification alone. TP4 requires `enable-scale-out: true` to register the native token endpoint independently of DP size.
