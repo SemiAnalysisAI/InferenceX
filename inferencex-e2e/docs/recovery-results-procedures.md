@@ -24,6 +24,11 @@ Sources: [sweep debugging guardrails](../../.agents/skills/debug-runs/SKILL.md#L
 
 ### Throughput results
 
+With AgentX power collection enabled, single-node and aggregated recipes must supply
+`TP`, `PP_SIZE`, and `PCP_SIZE` in the benchmark environment to match the serving
+topology. Missing values fail before power monitoring and replay, even when
+`REQUIRE_POWER=0`.
+
 Reusable benchmark workflows prepare Python 3.12 before GPU launch and export its
 absolute path as `INFERENCEX_RESULTS_PYTHON`. Fixed-sequence processing and AgentX
 power processing, including the H200 DCGM path, validate and use this interpreter.
@@ -283,9 +288,9 @@ export PYTHONDONTWRITEBYTECODE=1
 export PYTHONPYCACHEPREFIX="${PYTHONPYCACHEPREFIX:-/tmp/inferencex-pycache}"
 ```
 
-Do not override these paths back into the workspace. The MI355X `amd_utils` lane also deletes stale benchmark logs before launch and registers an exit cleanup that copies Slurm output/error evidence, prints the error tail, then runs scoped `sudo rm -rf "$BENCHMARK_LOGS_DIR"`. The cleanup also runs on `SIGINT`/`SIGTERM`. Keep `KEEP_LOGS=1` for deliberate local debugging only. It disables the cleanup. A hard kill can still bypass teardown, so use the recovery scan below after an `EACCES` cleanup failure.
+Do not override these paths back into the workspace. Use the recovery scan below after an `EACCES` cleanup failure, including failures caused by logs left by retired launchers.
 
-Sources: [Python-cache prevention](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/benchmarks/benchmark_lib.sh#L5-L10), [MI355X cleanup](../infx/launch/drivers/legacy.py).
+Source: [Python-cache prevention](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/benchmarks/benchmark_lib.sh#L5-L10).
 
 ### Recover an MI355X TW runner workspace
 

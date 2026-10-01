@@ -92,6 +92,8 @@ base:
       RESULT_DIR: /logs/agentic
       PORT: "8000"
       IS_MULTINODE: "false"
+      PP_SIZE: "1"
+      PCP_SIZE: "1"
       AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
       AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
       WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126_256k
