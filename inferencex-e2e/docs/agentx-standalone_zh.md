@@ -11,12 +11,12 @@
 ## 安装
 
 安装 Git 和 [uv](https://docs.astral.sh/uv/getting-started/installation/) 后，
-克隆测试工具并检出锁定的提交。其 CLI 名为 `aiperf`。
+克隆测试工具并检出锁定的 `agentx-v1.0.6` 发布提交。其 CLI 名为 `aiperf`。
 
 ```bash
 git clone --filter=blob:none --no-checkout https://github.com/SemiAnalysisAI/agentx-harness.git
 cd agentx-harness
-git checkout --detach 754356e9a39acc6cc6afb242d123bb57c3fb6f75
+git checkout --detach 89b21867872a5bbc4b0676bf5005c404da5e9f94
 uv venv --python 3.11 .venv-agentx
 uv pip install --python .venv-agentx/bin/python -e . 'datasets>=4.7.0'
 source .venv-agentx/bin/activate
@@ -33,33 +33,23 @@ DATASET="semianalysis_cc_traces_weka_062126"
 CONC=8
 OUTPUT_DIR="$PWD/results/agentx-c${CONC}-$(date -u +%Y%m%dT%H%M%SZ)"
 
-export AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES=0
-export AIPERF_DATASET_CONFIGURATION_TIMEOUT=1800
-export AIPERF_SERVICE_PROFILE_CONFIGURE_TIMEOUT=1800
-export AIPERF_UI_REALTIME_METRICS_ENABLED=true
-export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
-
 mkdir -p "$OUTPUT_DIR"
 aiperf profile \
-  --scenario inferencex-agentx-mvp \
+  --scenario agentx \
   --url "$SERVER_URL" --endpoint /v1/chat/completions \
-  --endpoint-type chat --streaming \
   --model "$SERVED_MODEL_NAME" --tokenizer "$TOKENIZER" \
   --tokenizer-trust-remote-code \
-  --concurrency "$CONC" --benchmark-duration 3600 \
-  --stats-interval 30 --random-seed 42 \
-  --failed-request-threshold 0.10 \
-  --trajectory-start-min-ratio 0.25 --trajectory-start-max-ratio 0.75 \
-  --warmup-requests-per-lane 10 --warmup-grace-period 1800 \
-  --trace-idle-gap-cap-seconds 300 \
-  --use-server-token-count --no-gpu-telemetry \
-  --num-dataset-entries 393 --slice-duration 1.0 \
+  --concurrency "$CONC" \
   --public-dataset "$DATASET" \
   --output-artifact-dir "$OUTPUT_DIR/aiperf_artifacts" \
   2>&1 | tee "$OUTPUT_DIR/aiperf.log"
 ```
 
-测量窗口为一小时，另需数据集准备、预热和请求排空时间。
+`agentx` 预设提供一小时测量窗口、每条 lane 十个预热请求，以及共享的报告和运行时设置。
+显式 CLI 参数和 `AIPERF_*` 环境变量优先于预设默认值。
+模型、tokenizer、数据集、并发和输出路径仍由调用方指定；只有 tokenizer 需要自定义代码时，才需使用 `--tokenizer-trust-remote-code`。
+
+测量之外还需数据集准备、预热和请求排空时间。
 扫描并发时，每个 `CONC` 值都必须重启服务并使用新的输出目录。
 不要清空缓存或在不同并发点之间复用正在运行的服务。复现结果时，使用目标 recipe 的测量时长和预热设置。
 

@@ -9193,3 +9193,12 @@
   description:
     - "Retire the mi325x-amds runner pool and route MI325X workloads to the Barite mi325x-amd pool in MI325X-UBUNTU. Keep model recipes unchanged; generated host-DRAM budgets now use the replacement cluster's declared memory capacity."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3644
+
+- config-keys:
+    - "*"
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump AgentX Harness from agentx-v1.0.5 (754356e9a39acc6cc6afb242d123bb57c3fb6f75) to agentx-v1.0.6 (89b21867872a5bbc4b0676bf5005c404da5e9f94) and use --scenario agentx for shared replay and runtime defaults. Preserve recipe duration, warmup, failure threshold, trace cap, routing and corpus selection as explicit inputs."
+    - "The preset supplies a 900000 ms TCP user timeout when unset; explicit AIPERF environment settings take precedence over preset defaults."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3646

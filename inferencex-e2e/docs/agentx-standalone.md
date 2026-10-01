@@ -11,12 +11,12 @@ Run the AgentX client against an already-running OpenAI-compatible server.
 ## Install
 
 With Git and [uv](https://docs.astral.sh/uv/getting-started/installation/) installed,
-clone the harness at the pinned commit. Its CLI is named `aiperf`.
+clone the harness at the pinned `agentx-v1.0.6` release commit. Its CLI is named `aiperf`.
 
 ```bash
 git clone --filter=blob:none --no-checkout https://github.com/SemiAnalysisAI/agentx-harness.git
 cd agentx-harness
-git checkout --detach 754356e9a39acc6cc6afb242d123bb57c3fb6f75
+git checkout --detach 89b21867872a5bbc4b0676bf5005c404da5e9f94
 uv venv --python 3.11 .venv-agentx
 uv pip install --python .venv-agentx/bin/python -e . 'datasets>=4.7.0'
 source .venv-agentx/bin/activate
@@ -33,33 +33,25 @@ DATASET="semianalysis_cc_traces_weka_062126"
 CONC=8
 OUTPUT_DIR="$PWD/results/agentx-c${CONC}-$(date -u +%Y%m%dT%H%M%SZ)"
 
-export AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES=0
-export AIPERF_DATASET_CONFIGURATION_TIMEOUT=1800
-export AIPERF_SERVICE_PROFILE_CONFIGURE_TIMEOUT=1800
-export AIPERF_UI_REALTIME_METRICS_ENABLED=true
-export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
-
 mkdir -p "$OUTPUT_DIR"
 aiperf profile \
-  --scenario inferencex-agentx-mvp \
+  --scenario agentx \
   --url "$SERVER_URL" --endpoint /v1/chat/completions \
-  --endpoint-type chat --streaming \
   --model "$SERVED_MODEL_NAME" --tokenizer "$TOKENIZER" \
   --tokenizer-trust-remote-code \
-  --concurrency "$CONC" --benchmark-duration 3600 \
-  --stats-interval 30 --random-seed 42 \
-  --failed-request-threshold 0.10 \
-  --trajectory-start-min-ratio 0.25 --trajectory-start-max-ratio 0.75 \
-  --warmup-requests-per-lane 10 --warmup-grace-period 1800 \
-  --trace-idle-gap-cap-seconds 300 \
-  --use-server-token-count --no-gpu-telemetry \
-  --num-dataset-entries 393 --slice-duration 1.0 \
+  --concurrency "$CONC" \
   --public-dataset "$DATASET" \
   --output-artifact-dir "$OUTPUT_DIR/aiperf_artifacts" \
   2>&1 | tee "$OUTPUT_DIR/aiperf.log"
 ```
 
-This profiles for one hour, plus dataset preparation, warmup, and drain time.
+The `agentx` preset supplies a one-hour profile, ten warmup requests per lane,
+and shared reporting and runtime settings. Explicit CLI arguments and `AIPERF_*`
+environment variables override preset defaults. Model, tokenizer, dataset,
+concurrency, and output remain caller inputs; `--tokenizer-trust-remote-code` is
+needed only for tokenizers with custom code.
+
+Allow additional time for dataset preparation, warmup, and draining requests.
 To sweep, restart the server for every `CONC` value and use a fresh output
 directory. Do not flush caches or reuse a live server across concurrency points. Match the target
 recipe's duration and warmup settings when reproducing a result.
