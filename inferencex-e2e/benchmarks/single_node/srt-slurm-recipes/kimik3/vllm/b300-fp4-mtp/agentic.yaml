@@ -82,10 +82,11 @@ base:
         # Do NOT enable compact_group_io on DSXE single-rail Mooncake: tip ee33eeba
         # c8 (run 36838397438) enabled it and immediately stormed TRANSFER_FAIL on
         # compact-group-io-v1 ~25MiB puts (7177 fails), then hung at 0 tok/s until
-        # the 1800s sample_tokens cap. Tip 860c1ccf c48 (run 36894040300) had clean
-        # Mooncake metrics then hung in DCP PYNCCL _ALLGATHER_BASE (PG 3) under
-        # ~100% GPU KV with max_load_batch_keys=2 async loads; cut to 1.
-        kv-transfer-config: '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"max_load_batch_keys":1,"enable_offload":false}}'
+        # the 1800s sample_tokens cap. Tips 860c1ccf c48 / e51c58f5 c32 had clean
+        # Mooncake metrics then hung in DCP PYNCCL _ALLGATHER_BASE (PG 3, last
+        # started work: -1) under ~98-100% GPU KV with load_async=true; disable
+        # async loads (keep max_load_batch_keys=1, lookup_async).
+        kv-transfer-config: '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":false,"lookup_async":true,"max_load_batch_keys":1,"enable_offload":false}}'
       env:
         VLLM_ALLREDUCE_USE_FLASHINFER: '1'
         VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION: '1'
