@@ -4418,24 +4418,31 @@
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894",
-  "status": "Matched c488 is complete as a mixed local NVMe win. Prepare the native DRAM c488 control, then dispatch only after a fresh cluster-wide B200 inventory is clear.",
+  "status": "Matched c488 is complete as a mixed local NVMe win. Native DRAM c488 is prepared but deferred because a fresh cluster-wide inventory found three queued cluster:b200-nscale jobs.",
   "last_capacity_check": {
-    "checked_at": "2026-10-01T22:53:19Z",
+    "checked_at": "2026-10-01T23:08:47Z",
     "active_study_run_ids": [],
     "pending_study_run_ids": [],
-    "dispatch_allowed": null,
-    "b200_priority_jobs_queued": null,
+    "dispatch_allowed": false,
+    "b200_priority_jobs_queued": 3,
+    "b200_priority_jobs_in_progress": 10,
+    "b200_active_or_queued_run_ids": [
+      36934474004,
+      36934477240,
+      36935909920,
+      36935917755
+    ],
     "b200_nodes_allocated": null,
     "b200_nodes_idle": null,
     "target_node": "im-b200-c001",
     "target_node_state": "c488 HBM terminal; exact task-owned scratch independently absent",
     "observed_free_bytes": null,
-    "reason": "A fresh cluster-wide B200 job-label inventory is required immediately before the next dispatch."
+    "reason": "Three cluster:b200-nscale jobs are queued cluster-wide, so the c488 DRAM control was not dispatched."
   },
   "next_dispatch": {
     "arm": "dram",
     "concurrency": 488,
-    "requires": "Commit and push matched c488 evidence, then dispatch the native DRAM c488 control only if a fresh cluster-wide inventory finds zero queued cluster:b200-nscale jobs."
+    "requires": "Wait until a fresh cluster-wide inventory finds zero queued cluster:b200-nscale jobs, then dispatch the native DRAM c488 control from head 329ebdb3d3ca3cd8b4e4a630588188e6cdb5191e."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-21T05:30:00Z",
