@@ -21,7 +21,8 @@ from throughput. Selection lives in `mark_eval_entries()` in
   smoke requires an explicit override.
 - **Other agentic models (GSM8K):** selected by default at the highest
   concurrency per deployment group, as a separate eval-only job. Throughput
-  for every agentic point still runs.
+  for every agentic point still runs. Scores use the same GSM8K floors in
+  `thresholds.yaml` as fixed-sequence 8k1k evals.
 - **BFCL:** explicit only. No automatic model mapping selects BFCL.
 
 Generator eval modes:
