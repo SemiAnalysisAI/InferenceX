@@ -3,7 +3,7 @@ base:
   name: dsr1-fp8-mi325x-sglang-mtp-8k1k
   model:
     path: hf:deepseek-ai/DeepSeek-R1-0528
-    container: lmsysorg/sglang:v0.5.12-rocm700-mi30x
+    container: lmsysorg/sglang:v0.5.20-rocm720-mi30x@sha256:4abecde156b531809c7f597e501930ea2023deb2c822b69f92efb66f3fdada86
     precision: fp8
   resources:
     gpu_type: mi325x
@@ -26,7 +26,7 @@ base:
         tensor-parallel-size: 8
         expert-parallel-size: 1
         mem-fraction-static: 0.8
-        cuda-graph-max-bs: 128
+        cuda-graph-max-bs-decode: 128
         chunked-prefill-size: 131072
         num-continuous-decode-steps: 4
         max-prefill-tokens: 131072
@@ -43,7 +43,6 @@ base:
       env:
         SGLANG_USE_AITER: '1'
         SGLANG_AITER_MLA_PERSIST: '1'
-        SGLANG_ENABLE_SPEC_V2: '1'
   benchmark:
     type: custom
     command: bash /infmax-workspace/benchmarks/single_node/srt_fixed_sequence.sh
