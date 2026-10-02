@@ -361,7 +361,11 @@ cleanly. Keep `enable-cumem-allocator` off on this path. Keep
 Application startup with KV 45.2 GiB at 0.92 under
 `VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0`, then OOMed in flashinfer FP4 MoE
 `prepare_moe` allocating ~2.89 GiB with ~2.3 GiB free; vLLM suggested ~36.78 GiB
-KV once CUDA graphs are counted).
+KV once CUDA graphs are counted). Cap `max-num-seqs` at 1×CONC for CONC 48+
+(tip 031de17bf c56 with A2A/Q/KV all direct and util 0.85 packed GPU KV to
+~99.7% under 2× admission, then hung workers through the 1800s
+`sample_tokens` RPC timeout with no Watchdog / ALLGATHER / ALLTOALL / CUDA OOM;
+ingest `nccl_error:16` was init-only `ibv_query_port_speed` WARN).
 
 
 The AgentX-only `dsv41flash-fp4-<sku>-vllm-agentic-dspark` recipes use the per-SKU
