@@ -9242,4 +9242,4 @@
     - agentic-coding
   description:
     - "Set MC_ENABLE_DEST_DEVICE_AFFINITY=1 in both GB300 Kimi-K3 aggregated Mooncake recipes (agg-dcp8-dspark4-mooncake.yaml and agg-dcp8-dspark7-maxseq2-mooncake.yaml), matching every other Mooncake recipe, including the GB300 Kimi-K3 disaggregated recipes. Mooncake then selects the RDMA NIC local to the destination GPU. Also add a comment noting that Kubernetes deployments need numa-bind. Images, arguments and grids are unchanged."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3683
