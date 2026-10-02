@@ -52,7 +52,7 @@ Do not rerun first: reruns can replace logs, change runner/node placement, or ma
 | Server | Process exits, log never appears, health never passes, OOM/kernel/port error | Server log, PID exit, `/health`, image digest/tag, and GPU/Slurm logs | Match the exact signature. Change one evidence-backed runtime/image setting or roll back |
 | Eval | `eval /` fails, batch incomplete, score below threshold, result missing | `meta_env.json`, each `results*.json`, validator output, image and task | Fix eval/server/task cause and rerun the exact eval config |
 | Collection | “No eval results found,” empty aggregate, collector green after skipped evals | Underlying `eval /` conclusions, artifact tree and metadata, and collector output | Restore or fix the upstream artifact contract. Do not diagnose serving from collector output alone |
-| Ingest | Dashboard rows absent/wrong, with target `trigger-ingest` green but no valid data | Target and source run metadata, unexpired artifacts, app workflow/ETL logs, and changelog scope | Use the guarded recovery procedure. Never rerun the failed target workflow |
+| Ingest | Dashboard rows absent/wrong, with a failed `merge-ingest.yml` target or a green dispatch job but no valid data | Target and source run metadata, unexpired artifacts, app workflow/ETL logs, and changelog scope | Use the guarded recovery procedure. Never rerun the failed target workflow |
 
 ## Changelog and matrix
 
@@ -66,7 +66,7 @@ Do not 3-way merge or normalize `perf-changelog.yaml`. Stop if the intended conf
 
 Re-run the exact workflow `generate-cli-command` locally. Start with exact-key `test-config`, then the same filtered `full-sweep` command. Inspect emitted image, runner, scenario, topology, concurrency, eval flags, and additional settings. The commands and inspection list are in [`testing.md`](testing.md#exact-config-then-filtered-family).
 
-If no GPU jobs start, inspect setup before investigating a runner. [`run-sweep.yml`](../../.github/workflows/run-sweep.yml) rejects conflicting primary labels, does not run from eval modifiers alone, honors `[skip-sweep]` only for PR heads, and waits for merge conflicts to be resolved. Fix the input or label state. Do not manually dispatch a different matrix and call it equivalent evidence.
+If no GPU jobs start, inspect setup before investigating a runner. [`run-sweep.yml`](../../.github/workflows/run-sweep.yml) rejects conflicting primary labels, does not run from modifier labels (`all-evals`, `evals-only`, `agentx-fast`) alone, honors `[skip-sweep]` only for PR heads, and waits for merge conflicts to be resolved. Fix the input or label state. Do not manually dispatch a different matrix and call it equivalent evidence.
 
 Stop when the local matrix does not exactly match the intended PR scope. A successful generator with the wrong config is not a recovery.
 
@@ -132,11 +132,11 @@ Repair the producer or artifact layout. Do not add fake metadata, mark failed co
 
 ## Ingest
 
-A successful `trigger-ingest` does not prove valid benchmark rows exist: [`run-sweep.yml`](../../.github/workflows/run-sweep.yml) can trigger downstream handling after collection, and a cancelled/no-result target may still reach that job. Verify the target run's event, workflow, branch, head SHA, changelog delta, result artifacts, and downstream InferenceX-app logs.
+A successful dispatch does not prove valid benchmark rows exist. The `ingest` job in [`merge-ingest.yml`](../../.github/workflows/merge-ingest.yml) dispatches only after validating the reused PR source run and its unexpired result artifacts, not full coverage or row validity; without reuse authorization it fails before dispatching. On legacy push runs of [`run-sweep.yml`](../../.github/workflows/run-sweep.yml), `trigger-ingest` could fire after collection even for a cancelled/no-result target. Verify the target run's event, workflow, branch, head SHA, changelog delta, the source run's result artifacts, and downstream InferenceX-app logs.
 
 The app workflow prepares, migrates, ingests, applies overrides, and verifies data in [`ingest-results.yml`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/main/.github/workflows/ingest-results.yml). [`prepare-ci-artifacts.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/main/packages/db/src/prepare-ci-artifacts.ts) selects and downloads source/merge artifacts and writes reuse metadata. [`ingest-ci-run.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/main/packages/db/src/ingest-ci-run.ts) owns database ingestion. The failed-row guard in [`benchmark-mapper.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/main/packages/db/src/etl/benchmark-mapper.ts) skips a row only when numeric `num_requests_successful` is zero and `num_requests_total` is numeric.
 
-Use the guarded [failed-ingest recovery procedure](../../.claude/commands/recover-failed-ingest.md), not a rerun of the failed target. It requires a completed pull-request `run-sweep.yml` source, unexpired result artifacts, source membership in the original PR, unchanged execution semantics, unambiguous changelog scope, and preserved recovery ancestry.
+Use the guarded [failed-ingest recovery procedure](../../.claude/commands/recover-failed-ingest.md), not a rerun of the failed target. Its target is a failed push-to-`main` `merge-ingest.yml` run (legacy `run-sweep.yml` push runs are also accepted). It requires a completed pull-request `run-sweep.yml` source, unexpired result artifacts, source membership in the original PR, unchanged execution semantics, unambiguous changelog scope, and preserved recovery ancestry.
 
 Stop recovery if the source run or artifacts are ineligible, source ancestry cannot be proved, config/recipe/image semantics changed after the source SHA, or the intended changelog scope is ambiguous. Never bypass pending/failing checks, rewrite the recovery branch after attaching source ancestry, or trust the target's green trigger without inspecting data.
 

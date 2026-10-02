@@ -15,25 +15,27 @@
 ## 1. 选择正确的执行模式
 
 若 PR sweep 只需测试吞吐量，请在相应的 `perf-changelog.yaml` 条目中设置
-`no-evals: true`，并使用常规主要标签（包括 `full-sweep-enabled`）。这会跳过
+`no-evals: true`，并使用一个主要 sweep label（通常为 `full-sweep-fail-fast`）。这会跳过
 这些条目的所有 eval 作业，不改变 benchmark 时长或 Prometheus 产物。
 该选项默认为 false，且保留在 changelog 元数据中。其他条目仍可为同一配置
-选择 eval；若需完全禁用，请在所有相关条目中设置该选项。条目中不能同时使用
-`all-evals`、`evals-only` 或 `eval-min-prefill-ep`，PR 也不能同时使用两个 eval
-modifier 中的任意一个。这类运行提供吞吐量证据，不提供模型评估证据。
+选择 eval；若需完全禁用，请在所有相关条目中设置该选项。设置 `no-evals` 的条目
+不能同时设置 `all-evals`、`evals-only` 或 `eval-min-prefill-ep`，PR 也不能带有任一
+eval modifier，这些组合都会被拒绝。这类运行提供吞吐量证据，不提供模型评估证据。
 
 这里有两个不同层次：矩阵生成器决定**存在哪些作业**，运行时变量决定**已启动作业执行什么操作**。
 
-| 需求 | 生成器/工作流模式 | 运行时行为 |
+| 需求 | 生成器参数（`infx.matrix.generate`）或工作流变量 | 运行时行为 |
 |---|---|---|
-| 常规 sweep | 不加 eval 选项 | 吞吐量作业，加上选定的 8k/1k eval 子集 |
+| 常规 sweep | 不加 eval 选项 | 吞吐量作业，加上选定的 8k/1k eval 子集和 agentic GSM8K 子集 |
 | 仅吞吐量 | `--no-evals` | 不生成 eval 作业 |
 | 仅选定的 eval 子集 | `--evals-only` | 作业带有 `RUN_EVAL=true`、`EVAL_ONLY=true` |
 | 仅运行所有符合条件的 eval | `--all-evals` | 等价于 `--evals-only --all-evals`；包含全部定长序列 8k/1k 行，以及单节点和多节点 agentic GSM8K 行 |
 | 在一个 recipe 中先跑吞吐量再跑 eval | `RUN_EVAL=true`、`EVAL_ONLY=false` | 启动服务，运行吞吐量，然后执行 `run_eval` |
 | 对新启动的服务仅运行 eval | `RUN_EVAL=true`、`EVAL_ONLY=true` | launcher 扩大 eval context，跳过吞吐量并运行 eval |
 
-默认选择会区分场景。单节点定长序列 eval 对每个 8k/1k 的模型/runner/framework/precision/并行配置分组选取符合条件的中位和最高并发；多节点 eval 对每种拓扑选取符合条件的最高并发。定长序列中低于 16 的并发不会被选中。Kimi K3 和 MiniMax M3 的 AgentX 行在每个生成的测试点自动运行厂商评估，包括低并发测试点。其他 agentic 评估需要显式启用，并选取每个部署分组中符合条件的最高并发。参见 [`mark_eval_entries()` 和 `mark_all_eval_entries()`](../infx/matrix/generate.py)。
+PR 上的 `all-evals` 标签则通过 [`infx.matrix.plan`](../infx/matrix/plan.py) 生成矩阵，会扩大 eval 选择范围并保留吞吐量作业。
+
+默认选择会区分场景。单节点定长序列 eval 对每个 8k/1k 的模型/runner/framework/precision/并行配置分组选取符合条件的中位和最高并发；多节点 eval 对每种拓扑选取符合条件的最高并发。定长序列中低于 16 的并发不会被选中。所有 AgentX 模型（包括 Kimi K3 和 MiniMax M3）默认都会运行 GSM8K。单节点 agentic 行按模型/runner/framework/precision/spec-decoding/dp-attn/镜像分组，并在每组最高并发处评估：MTP、DP attention 和镜像不同的变体各自单独评估，而 TP/EP 和 KV offloading 不同的变体共用一次评估。多节点 agentic 行对每种拓扑选取符合条件的最高并发；若某个部署没有任何并发不低于 16 的拓扑，则在其最高并发处评估一次。Kimi K3 和 MiniMax M3 的行还会在每个生成的测试点（包括低并发测试点）额外运行厂商评估，因此它们的 GSM8K 是一条额外的 eval-only 行。所有评估都作为独立的 eval-only 作业运行，因此 agentic 吞吐量覆盖范围不变。参见 [`mark_eval_entries()` 和 `mark_all_eval_entries()`](../infx/matrix/generate.py)。
 
 Kimi K3 在 AMD 和 NVIDIA 的单节点及多节点 recipe 上自动运行 `kimi-vendor` / `kimi_tool_call_schema_full`。完整套件对 204 个独立 schema 用例分别执行流式和非流式请求，共产生 408 项检查。快速诊断时，仍可显式设置工作流输入 `eval-framework=kimi-vendor` 和 `eval-suite=kimi_tool_call_schema`，运行一个用例、两项检查的冒烟评估。`--trim-conc` 只裁剪部署测试点，不缩减套件用例数。MiniMax M3 在两家硬件厂商上自动运行 `minimax-vendor` / `minimax_m3_full`，覆盖全部 102 个厂商用例；仍可通过显式覆盖选择单用例 `minimax_m3_smoke`。定长序列的 GSM8K 选择策略保持不变。
 
@@ -114,6 +116,8 @@ python3 -m infx.evals.validate_scores --model-prefix "$MODEL_PREFIX"
 4. 吞吐量路径立即返回或被跳过。
 5. 运行 `run_eval` 和 artifact staging。
 
+原生多节点 post-eval 从 `/model` 读取挂载的检查点，并仅在评估进程中启用数据集下载，不改变工作进程环境。上下文查询先读取本地 `config.json` 中的数值上限，再回退到 Transformers；显式设置的 `EVAL_MAX_MODEL_LEN` 仍优先。
+
 相关实现：[context 设置](../benchmarks/benchmark_lib.sh#L2016-L2042)、[eval 分派与失败策略](../benchmarks/benchmark_lib.sh#L2893-L3073) 和[工作流输入](../../.github/workflows/benchmark-tmpl.yml#L40-L57)。
 
 不要在吞吐量规格的服务已经运行后才切换 `EVAL_ONLY`，并假定 context 会随之变化。应通过 recipe 重启。Eval-only 模式会在暂存已有 artifact 后返回 eval 失败；在工作流中，上传步骤使用 `always()`，并位于分数校验前，因此失败证据仍会保留（[单节点上传与 gate](../../.github/workflows/benchmark-tmpl.yml#L467-L494)、[多节点上传与 gate](../../.github/workflows/benchmark-multinode-tmpl.yml#L487-L518)）。
@@ -192,9 +196,11 @@ gh run download "$RUN_ID" --repo SemiAnalysisAI/InferenceX \
 
 [`install_agentic_deps()`](../benchmarks/benchmark_lib.sh) 在安装可编辑模式的 `utils/aiperf` 时直接声明 AgentX client 所需的依赖，并使用调用方提供的 `AIPERF_PYTHON_VERSION` 将它们安装到隔离的 `AIPERF_RUNTIME_DIR` 环境中。
 
-AgentX 是 AIPerf `inferencex-agentx-mvp` trace replay，不是固定 token 的合成 benchmark。仓库默认设置对每条 trajectory lane 额外执行十个 warmup 请求，并使用 recipe 配置的 profile 时长。`agentx-fast` 强制每条 lane 只运行一个 warmup 请求，并将 profile 设为 1,200 秒。它只影响单节点和多节点 AgentX 吞吐量；定长序列吞吐量与 eval 保持 canonical。Fast 运行不符合 artifact reuse 条件（[工作流策略](../../.github/workflows/README.md#agentx-fast-mode)、[fast replay 设置](../benchmarks/benchmark_lib.sh#L3255-L3259)）。
+AgentX 是 AIPerf `agentx` trace replay，不是固定 token 的合成 benchmark。仓库默认设置对每条 trajectory lane 额外执行十个 warmup 请求，并使用 recipe 配置的 profile 时长。`agentx-fast` 强制每条 lane 只运行一个 warmup 请求，并将 profile 设为 1,200 秒。它只影响单节点和多节点 AgentX 吞吐量；定长序列吞吐量与 eval 保持 canonical。Fast 运行不符合 artifact reuse 条件（[工作流策略](../../.github/workflows/README.md#agentx-fast-mode)、[fast replay 设置](../benchmarks/benchmark_lib.sh#L3255-L3259)）。
 
-对于多节点 srt-slurm 作业，benchmark client 与 frontend 可能运行在不同主机上。`srt_agentic.sh` 会优先使用显式提供的 `AIPERF_SERVER_URL`；否则从 `SRT_FRONTEND_HOST` 和 `SRT_FRONTEND_PORT` 推导地址；仅在没有远端 endpoint 时回退到 `localhost:$PORT`。Trace replay 和并发点之间的 drain 检查必须使用同一个解析后的 endpoint。
+每个 AgentX 吞吐量并发点都必须使用新启动的服务。矩阵为每个点生成独立作业，replay client 会拒绝多个并发值。AgentX 不清空缓存，也不复用正在运行的服务来测试另一个并发点。同一测试点的预热和正式测量共用服务。此规则不改变定长序列 sweep 或评分 eval 的批量执行行为。
+
+对于多节点 srt-slurm 作业，benchmark client 与 frontend 可能运行在不同主机上。`srt_agentic.sh` 会优先使用显式提供的 `AIPERF_SERVER_URL`；否则从 `SRT_FRONTEND_HOST` 和 `SRT_FRONTEND_PORT` 推导地址；仅在没有远端 endpoint 时回退到 `localhost:$PORT`。
 
 对于未发布到 package index 的 engine 或 router wheel，必须保证构建可复现且 artifact 不可变：在 launcher 旁签入源码 patch 与构建器，打 patch 前校验上游 wheel 的 digest，分配明确的 local version，并通过带 SHA256 fragment 的精确 URL 安装已发布 artifact。本地 backport 不得冒用尚未发布的上游版本号。
 
@@ -233,7 +239,7 @@ Fast 结果只能作为 bring-up 证据，绝不能替代 canonical candidate。
 
 ## 8. 保留 trace 与运行 provenance
 
-AgentX 默认 replay 已记录的 assistant response。实时服务输出会被测量，但构造后续 turn 时会丢弃。只有在明确要进行不同的 live-assistant 实验时，才设置 `AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES=1`。除非用 `WEKA_LOADER_OVERRIDE` 固定，否则所选 trace corpus 依赖模型 family；resolver 会同时记录 loader 与 Hugging Face dataset（[trace 解析](../benchmarks/benchmark_lib.sh#L3165-L3234)、[replay 语义](../benchmarks/benchmark_lib.sh#L3236-L3366)）。
+AgentX 默认 replay 已记录的 assistant response。实时服务输出会被测量，但构造后续 turn 时会丢弃。除非用 `WEKA_LOADER_OVERRIDE` 固定，否则所选 trace corpus 依赖模型 family；resolver 会同时记录 loader 与 Hugging Face dataset（[trace 解析](../benchmarks/benchmark_lib.sh#L3165-L3234)、[replay 语义](../benchmarks/benchmark_lib.sh#L3236-L3366)）。
 
 立即记录 orchestration provenance：
 

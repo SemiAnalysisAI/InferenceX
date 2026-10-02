@@ -20,7 +20,6 @@ SWEEP_LABELS = {
     "full-sweep-enabled",
     "non-canary-full-sweep-enabled",
     "full-sweep-fail-fast",
-    "full-sweep-fail-fast-no-canary",
     "all-evals",
     "evals-only",
     "agentx-fast",

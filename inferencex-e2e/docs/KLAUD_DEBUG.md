@@ -161,13 +161,13 @@ Seen on #1422.
 If a sweep job lands on any of these, it'll never start. Nothing can be done at the recipe level. These stay drained until ops fixes them.
 
 ### 5.2 `mia1-p01-g11 / g12 / g31` — docker socket perms
-**Symptom:** mi355x jobs fail with `permission denied while trying to connect to the docker API at unix:///var/run/docker.sock` during the `docker stop $(docker ps -a -q)` cleanup step, cascading into SLURM job expiration.
+**Historical symptom:** mi355x jobs that drove Docker on the node failed with `permission denied while trying to connect to the docker API at unix:///var/run/docker.sock`, cascading into SLURM job expiration. Both the raw single-node launcher and the AMD Docker multi-node launcher are now retired; active MI355X recipes use srt-slurm.
 **Fix:** ops needs to fix docker group / socket perms on these nodes. Recipe-level workaround: none.
 
 ### 5.3 `chi-mi300x-049` — `/nvme_home` disk-full
 **Symptom:** pyxis container extraction fails with `No space left on device` writing to `/nvme_home/gharunner/.local/share/enroot/pyxis_*/opt/rocm-*/...`. The `/nvme_home` partition is hosted under `/` on this node and has been chronically near-full.
 
-**Fix already landed:** `runners/launch_mi300x-amds.sh` now pins salloc to only known-good mi300x nodes (`chi-mi300x-[034-036,054,057-058]`). See PR #1462. `chi-mi300x-049` is held in `State=DOWN` by a watchdog on the controller (`/home/gharunner/_audit/drain_049_watchdog.sh`) that re-applies the drain every 10s if SLURM auto-clears it (which it does on dynamic-norm nodes).
+**Fix:** `chi-mi300x-049` is held in `State=DOWN` by a watchdog on the controller (`/home/gharunner/_audit/drain_049_watchdog.sh`) that re-applies the drain every 10s if SLURM auto-clears it (which it does on dynamic-norm nodes). The launcher pins no nodes; to keep jobs off a node, list it in the cluster's `slurm.exclude` in `configs/runners.yaml`.
 
 ### 5.4 `chi-mi325x-pod1-017` — orphaned port-8888 process
 **Symptom:** sglang server bind fails with `[Errno 98] Address already in use` on port 8888. Held by an MLPerf accuracy run started outside SLURM.
@@ -286,7 +286,7 @@ are skipped; dispatch a new autosweep so recovery checks the old session first.
 ## 9. PR conventions for this repo
 
 - Image-bump / new-recipe PRs I open on behalf of the user (or that the user creates) get the **`[Klaud Cold]`** title prefix.
-- Klaud Cold keeps targeted attempts draft and unlabeled; final validation keeps the PR draft with `full-sweep-fail-fast` as its sole sweep label; `finish` publishes verified results before readiness. Wait for successful completion on the exact head and reusable artifacts. See [the current Klaud guide](klaud.md); generic manual-sweep recommendations do not override this flow.
+- Klaud Cold keeps targeted attempts draft and unlabeled; final validation keeps the PR draft with `full-sweep-fail-fast` as its sole sweep label (or `full-sweep-enabled` for a documented infrastructure exception); `finish` publishes verified results before readiness. Wait for successful completion on the exact head and reusable artifacts. See [the current Klaud guide](klaud.md); generic manual-sweep recommendations do not override this flow.
 - After any code change that shifts a PR's scope (drops a recipe, changes an image tag), **update the PR title AND body in the same step** and **verify** with `gh pr view <N> --json title,body`. `gh pr edit` silently fails (see §8).
 - `uv run --extra workflows python -m infx.workflows.merge_with_reuse <N>` is the merge entrypoint. It handles the `perf-changelog.yaml` auto-append.
 

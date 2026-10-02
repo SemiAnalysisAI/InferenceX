@@ -120,7 +120,7 @@ Validate as you go: `python3 -c "import yaml; yaml.safe_load(open('<recipe>'))"`
 
 Append `<model>-<precision>-<sku>[-<engine>][-mtp]` after the sibling, with the correct
 `image`, `model`, `model-prefix`, `runner`, `precision`, `framework`. The **search space** is
-`{tp, ep, dp-attn} × concurrency` per supported scenario from `inferencex-e2e/docs/MODELS.md` (8k1k or AgentX as applicable; 1k1k is only retained for GLM-5.1 B200 TileRT):
+`{tp, ep, dp-attn} × concurrency` per supported scenario from `inferencex-e2e/docs/MODELS.md` (8k1k or AgentX as applicable; 1k1k is retired for all models):
 - Mirror a sibling's parallelism layouts. Trim concurrency ranges to what the SKU's memory
   supports (small-mem SKUs → TP8-only, drop tp2/tp4 and DEP).
 - Latency (TP-only) rows should start at conc 1. TEP/DEP rows start higher (they only pay off
@@ -130,7 +130,7 @@ Confirm which master file by SKU: `mi*` → `amd-master.yaml`, everything else �
 
 ## Step 4 — no launcher routing
 
-Single-node points with an `srt-recipe:` go through `launch_srt_single_node`, which picks the
+Single-node points with an `srt-recipe:` go through the srt driver of `python -m infx.launch`, which picks the
 one recipe variant whose TP/GPU count, `CONC`, `KV_OFFLOADING` and image match the matrix
 point (`inferencex-e2e/infx/srt_slurm/single_node.py::select_recipe`). No per-script launcher routing is
 needed; if a point matches zero or several variants, fix the recipe, not the launcher.
