@@ -61,7 +61,7 @@ override_tp8_c1:
     agg:
       args:
         max-running-requests: 2
-        cuda-graph-max-bs: 2
+        cuda-graph-max-bs-decode: 2
   benchmark:
     env:
       CONC: "1"
