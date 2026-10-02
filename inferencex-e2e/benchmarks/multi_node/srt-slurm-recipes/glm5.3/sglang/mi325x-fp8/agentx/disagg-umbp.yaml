@@ -200,3 +200,25 @@ override_prefill_tp8_decode_dep8_c8:
   benchmark:
     env:
       CONC: "8"
+
+override_prefill_tp8_decode_dep8_fp8kv_c4:
+  frontend:
+    args:
+      dp-aware: true
+  roles:
+    prefill:
+      args:
+        kv-cache-dtype: fp8_e4m3
+        max-running-requests: 8
+    decode:
+      env:
+        # STP graph batch two per attention rank fits the native dispatch bound.
+        SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "128"
+      args:
+        <<: *dep8_decode_args
+        kv-cache-dtype: fp8_e4m3
+        # Native FP8 TileLang uses 16-head blocks that fit gfx942 shared memory.
+        dsa-decode-backend: tilelang
+  benchmark:
+    env:
+      CONC: "4"
