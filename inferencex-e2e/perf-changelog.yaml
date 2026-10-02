@@ -9237,6 +9237,46 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3629
 
 - config-keys:
+    - glm5.2-fp4-b200-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-b200-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Disable FP8 conversion of the GLM-5.2 NextN/MTP draft MoE on B200 AgentX so the draft runs at its shipped precision; images, topology, workload and acceptance are unchanged."
+    - "关闭 B200 GLM-5.2 AgentX 对 NextN/MTP draft MoE 的 FP8 转换，使 draft 保持原始发布精度；镜像、拓扑、工作负载和验收不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3400
+
+- config-keys:
+    - glm5.2-fp4-gb300-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Disable FP8 conversion of the GLM-5.2 NextN/MTP draft MoE on GB300 AgentX so the draft runs at its shipped precision; images, topology, workload and acceptance are unchanged."
+    - "Disaggregated prefill and decode use the 1800 s scheduler watchdog of the GLM-5.2 B200/GB200 recipes instead of the 300 s default."
+    - "关闭 GB300 GLM-5.2 AgentX 对 NextN/MTP draft MoE 的 FP8 转换，使 draft 保持原始发布精度；镜像、拓扑、工作负载和验收不变。"
+    - "分离式 prefill 和 decode 采用 GLM-5.2 B200/GB200 配方的 1800 秒调度 watchdog，替代默认 300 秒。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3402
+
+- config-keys:
+    - dsv41flash-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the B300 DeepSeek-V4.1-Flash vLLM AgentX image from nightly ddd6fbca to nightly-dev-x86_64-cu130-ac9126e58aa7 and enable FlashInfer autotuning."
+    - "Run TP4 at concurrency 1-16 and replace TP2 with DEP2 (TP1 x DP2 + EP2, DeepGEMM MegaMoE) at concurrency 8-192 behind a consistent-hash vLLM Router."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3653
+
+- config-keys:
+    - dsv41flash-fp4-gb300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the GB300 DeepSeek-V4.1-Flash vLLM AgentX image from nightly ac68c308 to nightly-dev-arm64-cu130-ac9126e58aa7 and enable FlashInfer autotuning."
+    - "Run TP4 at concurrency 1-16 and replace TP2 with DEP2 (TP1 x DP2 + EP2, DeepGEMM MegaMoE) at concurrency 8-192 behind a consistent-hash vLLM Router."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3652
+
+- config-keys:
     - kimik3-fp4-b300-vllm-agentic-dspark
   description:
     - "Discover active Mellanox RDMA devices by driver on DSXE, select the link-layer GID, and load the host mlx5 provider so Mooncake sees the rail"
