@@ -136,6 +136,13 @@ Direct priority-scheduled workflows that do not use the master-config generator
 must publish their own exact demand (for example, CollectiveX uses each shard's
 generated `nodes` value).
 
+For checked-in disaggregated srt-slurm recipes, demand includes worker nodes,
+enabled service pools, and dedicated frontend, discovery, or benchmark nodes.
+Dedicated components share one additional node by default; setting
+`benchmark.colocate_with_frontend: false` reserves one per dedicated component
+(etcd and NATS share the discovery node). Named recipe overrides are resolved
+before counting. This changes the lease size, not the benchmark topology.
+
 Eval switches are exact:
 
 - Default: throughput entries plus the selected default fixed-sequence eval subset.
