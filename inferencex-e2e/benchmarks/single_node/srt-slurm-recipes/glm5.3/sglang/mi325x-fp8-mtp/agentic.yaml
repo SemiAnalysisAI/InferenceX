@@ -96,3 +96,20 @@ override_tp8_c3:
     env:
       CONC: '3'
       KV_OFFLOADING: none
+
+override_tp4_fp8kv_c1:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        kv-cache-dtype: fp8_e4m3
+        max-total-tokens: null
+        chunked-prefill-size: 8192
+        mem-fraction-static: 0.90
+        max-running-requests: 2
+        cuda-graph-max-bs-decode: 2
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: none

@@ -9214,6 +9214,7 @@
 
 - config-keys:
     - glm5.3-fp8-mi325x-sglang-agentic-mtp
+    - glm5.3-fp8-mi325x-sglang-agentic-mtp-tp4-fp8kv
     - glm5.3-fp8-mi325x-sglang-agentic-stp
     - glm5.3-fp8-mi325x-sglang-disagg-agentic-umbp
     - glm5.3-fp8-mi325x-sglang-disagg-agentic-umbp-dep8
