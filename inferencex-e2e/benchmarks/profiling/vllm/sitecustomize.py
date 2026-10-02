@@ -224,12 +224,22 @@ def _write_env(runner, tag):
             info["device_name"] = torch.cuda.get_device_name()
         except Exception as e:
             info["device_name"] = f"unavailable: {e}"
+        # Join this rank to the window client's per-GPU clock samples (by UUID, else PCI address).
         try:
-            # Joins this rank to the window client's per-GPU clock samples (NVML UUIDs).
-            info["device_uuid"] = str(torch.cuda.get_device_properties(
-                torch.cuda.current_device()).uuid)
+            props = torch.cuda.get_device_properties(torch.cuda.current_device())
         except Exception as e:
+            props = None
             info["device_uuid"] = f"unavailable: {e}"
+        if props is not None:
+            try:
+                info["device_uuid"] = str(props.uuid)
+            except Exception as e:
+                info["device_uuid"] = f"unavailable: {e}"
+            try:
+                info["device_bdf"] = (f"{props.pci_domain_id:04x}:{props.pci_bus_id:02x}:"
+                                      f"{props.pci_device_id:02x}.0")
+            except Exception as e:
+                info["device_bdf"] = f"unavailable: {e}"
         info["runner_class"] = f"{type(runner).__module__}.{type(runner).__qualname__}"
         info["env"] = {k: v for k, v in os.environ.items()
                        if k.startswith(("VLLM_", "INFX_", "TORCH", "CUDA", "NCCL", "INDUCTOR"))}

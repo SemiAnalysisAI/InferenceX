@@ -415,14 +415,21 @@ def load_clocks(profile_dir):
     clock_dir = os.path.join(profile_dir, "clocks")
     try:
         with open(os.path.join(clock_dir, "gpus.json")) as f:
-            gpu_of_uuid = {normalize_uuid(u): int(i) for i, u in json.load(f).items()}
+            gpus = json.load(f)
     except (OSError, ValueError):
         return {}
+    gpu_of = {}  # normalized UUID or PCI address -> sampler GPU index
+    for i, info in gpus.items():
+        info = info if isinstance(info, dict) else {"uuid": info}  # older files: index -> UUID
+        for key in (info.get("uuid"), info.get("bdf")):
+            if key:
+                gpu_of[normalize_uuid(key)] = int(i)
     rank_of_gpu = {}
     for path in glob.glob(os.path.join(profile_dir, "env", "*.json")):
         with open(path) as f:
             info = json.load(f)
-        gpu = gpu_of_uuid.get(normalize_uuid(info.get("device_uuid", "")))
+        gpu = next((gpu_of[k] for k in (normalize_uuid(info.get("device_uuid", "")),
+                                        normalize_uuid(info.get("device_bdf", ""))) if k in gpu_of), None)
         if gpu is not None:
             rank_of_gpu[gpu] = info["rank"]
     samples = collections.defaultdict(list)

@@ -33,6 +33,8 @@ One concurrency selects one recipe variant (for DSV4 on B200: `tp8_c*` or
 | `capture_ranks` | `"dp0_tp0"` | Workers whose CUDA graph capture is profiled (`"all"` for every rank) |
 | `host_headroom_gib` | `128` | Host memory taken from a CPU KV-offload pool for the profiler's buffers |
 | `duration` | last `profiling` delay + 600 s | Cap on the measured replay. Once its last window closes (and the measured phase has run 60 s), the window client SIGINTs aiperf, which exports what it measured and exits zero, so the run does not replay past its windows |
+| `mode` | `"agentic"` | `"agentic"` replays AgentX; `"synthetic"` drives fixed shapes (`synthetic_load.py`): CONC random-token prompts of `isl` tokens with one-token outputs while the prefill window is open, then `osl`-token generations until the decode window closes. No trace dataset or AgentX warmup: a point takes minutes after engine start-up |
+| `isl`, `osl` | `8192`, `4096` | Synthetic prompt and output lengths. `isl` stands in for the KV context: decode steps attend over `isl` plus the tokens generated so far |
 
 A profiled point holds its node for 30 to 60 minutes on B200 (engine start-up
 and graph capture, then an AgentX warmup that grows with concurrency). Its
@@ -145,6 +147,12 @@ run in queue order, and `copies/` logs each one as it is queued. Per direction,
 the extractor pairs the memcpys in order with the logged copies issued before
 them (with equal bytes), taking the pairing with the least total issue lag.
 The step markers put the log's wall clock on the trace clock.
+
+On AMD the sampler reads `amdsmi`'s gpu_metrics instead of NVML: the graphics
+clock fills both `graphics_mhz` and `sm_mhz`, and `event_reasons` holds the
+gpu_metrics throttle status (AMD's bit meanings, not NVML's). `gpus.json`
+records which metrics fields were read; ranks join to GPUs by UUID or PCI
+address.
 
 A kernel's `clocks` are its GPU's polls over its lifetime: the last poll that
 returned before it started (`prior_us` earlier) and every poll overlapping it

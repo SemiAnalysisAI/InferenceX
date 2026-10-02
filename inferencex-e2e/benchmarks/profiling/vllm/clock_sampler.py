@@ -1,17 +1,21 @@
-"""Sample every GPU's clocks through NVML, for one profile window.
+"""Sample every GPU's clocks, for one profile window: NVML on NVIDIA, amdsmi on AMD.
 
 Runs in the window client's process, not the engine's. One thread per GPU
 polls, every POLL_INTERVAL_S, the graphics, SM, memory and video clocks and
-the clock event reasons (power cap, thermal, sync boost, ...). A poll is
-stamped with the wall clock (the one the engines' step log uses) before and
-after its NVML calls: those occasionally block for tens of milliseconds, and
-the reading is from somewhere inside that interval. Samples are kept in memory
-and written when the window's sampling stops. Output, under OUT_DIR:
+the clock event (throttle) reasons. On NVIDIA the reasons are NVML's
+nvmlClocksEventReason* bits; on AMD, gpu_metrics' throttle status, and the
+graphics clock fills both graphics_mhz and sm_mhz (AMD has no separate SM
+clock). A poll is stamped with the wall clock (the one the engines' step log
+uses) before and after its calls: those occasionally block for tens of
+milliseconds, and the reading is from somewhere inside that interval. Samples
+are kept in memory and written when the window's sampling stops. Output,
+under OUT_DIR:
 
-  gpus.json          {"<nvml index>": "<uuid>"}
+  gpus.json          {"<index>": {"uuid", "bdf", "backend", ...}}
   window<w>.csv      t0_ns,t1_ns,gpu,graphics_mhz,sm_mhz,mem_mhz,video_mhz,event_reasons
 
-The extractor puts each kernel's lifetime on this timeline.
+The extractor puts each kernel's lifetime on this timeline, matching a rank to
+its GPU by UUID or PCI address.
 """
 
 import array
@@ -47,12 +51,12 @@ class Nvml:
         if status != 0:
             raise RuntimeError(f"NVML error {status}")
 
-    def uuids(self):
+    def gpus(self):
         out = {}
         buf = ctypes.create_string_buffer(96)
         for i, handle in enumerate(self.handles):
             self._check(self.lib.nvmlDeviceGetUUID(handle, buf, len(buf)))
-            out[str(i)] = buf.value.decode()
+            out[str(i)] = {"uuid": buf.value.decode(), "bdf": None, "backend": "nvml"}
         return out
 
     def poller(self, i):
@@ -71,6 +75,66 @@ class Nvml:
         return poll
 
 
+class AmdSmi:
+    """amdsmi (ROCm's Python bindings): clocks and throttle status from gpu_metrics.
+
+    gpu_metrics field names vary with the ASIC and amdsmi version (MI300-class
+    parts report per-XCC lists), so the first read picks the fields present.
+    """
+
+    CLOCK_FIELDS = {  # column -> candidate gpu_metrics keys, first present wins
+        "graphics_mhz": ("current_gfxclk", "current_gfxclks", "average_gfxclk_frequency"),
+        "mem_mhz": ("current_uclk", "average_uclk_frequency"),
+        "video_mhz": ("current_vclk0", "current_vclk0s", "average_vclk0_frequency"),
+        "event_reasons": ("throttle_status", "indep_throttle_status"),
+    }
+
+    def __init__(self):
+        import amdsmi
+
+        self.lib = amdsmi
+        amdsmi.amdsmi_init()
+        self.handles = list(amdsmi.amdsmi_get_processor_handles())
+        if not self.handles:
+            raise RuntimeError("amdsmi found no GPUs")
+        sample = amdsmi.amdsmi_get_gpu_metrics_info(self.handles[0])
+        self.fields = {column: next((k for k in keys if self._value(sample.get(k)) is not None), None)
+                       for column, keys in self.CLOCK_FIELDS.items()}
+
+    @staticmethod
+    def _value(raw):
+        """A gpu_metrics value as an int: the first valid entry of a per-XCC list."""
+        if isinstance(raw, (list, tuple)):
+            raw = next((v for v in raw if isinstance(v, int) and 0 < v < 0xFFFF), None)
+        return raw if isinstance(raw, int) and raw != 0xFFFF and raw != 0xFFFFFFFF else None
+
+    def gpus(self):
+        out = {}
+        for i, handle in enumerate(self.handles):
+            info = {"backend": "amdsmi", "fields": self.fields}
+            for key, call in (("uuid", "amdsmi_get_gpu_device_uuid"), ("bdf", "amdsmi_get_gpu_device_bdf")):
+                try:
+                    info[key] = str(getattr(self.lib, call)(handle))
+                except Exception:
+                    info[key] = None
+            out[str(i)] = info
+        return out
+
+    def poller(self, i):
+        handle, lib, fields, value = self.handles[i], self.lib, self.fields, self._value
+
+        def poll():
+            try:
+                metrics = lib.amdsmi_get_gpu_metrics_info(handle)
+            except Exception:
+                return [-1] * 5
+            got = {c: (value(metrics.get(k)) if k else None) for c, k in fields.items()}
+            gfx = got["graphics_mhz"]
+            return [v if v is not None else -1
+                    for v in (gfx, gfx, got["mem_mhz"], got["video_mhz"], got["event_reasons"])]
+        return poll
+
+
 class ClockSampler:
     """Polls every GPU, one thread each, between start(window) and stop()."""
 
@@ -78,13 +142,22 @@ class ClockSampler:
         self.out_dir = out_dir
         self.nvml = None
         self.error = None
-        try:
-            self.nvml = Nvml()
-            os.makedirs(out_dir, exist_ok=True)
-            with open(os.path.join(out_dir, "gpus.json"), "w") as f:
-                json.dump(self.nvml.uuids(), f)
-        except Exception as e:  # no NVML here: windows still profile, without clocks
-            self.error = str(e)
+        errors = []
+        for backend in (Nvml, AmdSmi):
+            try:
+                self.nvml = backend()
+                break
+            except Exception as e:
+                errors.append(f"{backend.__name__}: {e}")
+        if self.nvml is None:  # no GPU telemetry here: windows still profile, without clocks
+            self.error = "; ".join(errors)
+        else:
+            try:
+                os.makedirs(out_dir, exist_ok=True)
+                with open(os.path.join(out_dir, "gpus.json"), "w") as f:
+                    json.dump(self.nvml.gpus(), f)
+            except Exception as e:
+                self.error, self.nvml = str(e), None
         self._threads = []
         self._samples = []
         self._stop = threading.Event()

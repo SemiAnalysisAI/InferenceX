@@ -150,7 +150,16 @@ PROFILE_DEFAULTS: dict[str, Any] = {
     # Host memory kept free of CPU KV offload for the profiler's trace buffers;
     # offload recipes otherwise size the pool to nearly the whole host.
     "host_headroom_gib": 128,
+    # "agentic" replays AgentX; "synthetic" drives fixed shapes instead: CONC
+    # random-token prompts of `isl` tokens, one-token outputs for the prefill
+    # window, then `osl`-token generations for the decode window. No trace
+    # dataset or AgentX warmup, so a point takes minutes after engine start-up;
+    # `isl` stands in for the KV context decode steps attend over.
+    "mode": "agentic",
+    "isl": 8192,
+    "osl": 4096,
 }
+PROFILE_MODES = ("agentic", "synthetic")
 PROFILE_PHASES = ("warmup", "decode", "profiling")
 # Cap on the measured replay past its last phase-anchored window's start. Steady
 # decode can take minutes to arrive under data parallelism; the window client
@@ -244,6 +253,15 @@ def profiling_arguments(
         "--set",
         f"benchmark.env.INFX_PROF_DIR={json.dumps(PROFILE_DIR)}",
     ]
+    if settings["mode"] not in PROFILE_MODES:
+        raise ValueError(f"INFX_PROFILE mode must be one of {PROFILE_MODES}")
+    if settings["mode"] == "synthetic":
+        for name in ("isl", "osl"):
+            if not isinstance(settings[name], int) or settings[name] <= 0:
+                raise ValueError(f"INFX_PROFILE {name} must be a positive integer")
+        for name, value in (("INFX_PROFILE_MODE", "synthetic"), ("INFX_SYNTH_ISL", settings["isl"]),
+                            ("INFX_SYNTH_OSL", settings["osl"])):
+            overrides += ["--set", f"benchmark.env.{name}={json.dumps(str(value))}"]
     # A window's export pauses the engine; its requests must not abort the replay.
     for name in ("AIPERF_FAILED_REQUEST_THRESHOLD", "AIPERF_LIVE_FAILED_REQUEST_THRESHOLD"):
         overrides += ["--set", f'benchmark.env.{name}="1.0"']

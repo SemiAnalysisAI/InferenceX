@@ -56,6 +56,39 @@ if [[ -z "${AIPERF_SERVER_URL:-}" ]]; then
 fi
 echo "Using srt-slurm frontend endpoint: $AIPERF_SERVER_URL"
 
+# srt-slurm's logical worker endpoints: each vLLM server's control port.
+profile_servers=()
+if [[ -n "${INFX_PROFILE_WINDOWS:-}" ]]; then
+    IFS=',' read -r -a profile_endpoints <<< "${SRT_AGG_ENDPOINTS:-}"
+    for endpoint in "${profile_endpoints[@]}"; do
+        [[ -n "$endpoint" ]] && profile_servers+=("http://$endpoint")
+    done
+    (( ${#profile_servers[@]} )) || profile_servers=("$AIPERF_SERVER_URL")
+fi
+
+# Synthetic op-attribution profiling (INFX_PROFILE mode=synthetic): fixed-shape
+# prefill then decode load in place of the AgentX replay; no trace dataset or aiperf.
+if [[ "${INFX_PROFILE_MODE:-}" == "synthetic" ]]; then
+    mkdir -p "$INFX_PROF_DIR"
+    synth_phases="$INFX_PROF_DIR/synthetic_phases.log"
+    synth_windows="$INFX_PROF_DIR/windows_conc${CONC}.jsonl"
+    export INFX_SYNTH_STOP_FILE="$INFX_PROF_DIR/synthetic.stop"
+    : > "$synth_phases"
+    rm -f "$INFX_SYNTH_STOP_FILE"
+    python3 "$INFMAX_CONTAINER_WORKSPACE/benchmarks/profiling/vllm/profile_windows.py" \
+        "$INFX_PROFILE_WINDOWS" "$synth_windows" "$synth_phases" "$INFX_PROF_DIR/steps" \
+        "${profile_servers[@]}" &
+    synth_windows_pid=$!
+    python3 "$INFMAX_CONTAINER_WORKSPACE/benchmarks/profiling/vllm/synthetic_load.py" \
+        "$AIPERF_SERVER_URL" "$synth_phases" "$synth_windows" \
+        "${AGENTIC_OUTPUT_DIR:-/logs}/${RESULT_FILENAME}.json" &
+    synth_load_pid=$!
+    wait "$synth_windows_pid" || true
+    touch "$INFX_SYNTH_STOP_FILE"
+    wait "$synth_load_pid"
+    exit $?
+fi
+
 # A router frontend does not re-export engine metrics; read them from each worker.
 if [[ -z "${AIPERF_SERVER_METRICS_URLS:-}" && "${SRTCTL_FRONTEND_TYPE:-}" != dynamo ]]; then
     endpoints="${SRT_AGG_ENDPOINTS:-${SRT_PREFILL_ENDPOINTS:+$SRT_PREFILL_ENDPOINTS,}${SRT_DECODE_ENDPOINTS:-}}"
@@ -92,13 +125,6 @@ fi
 profile_windows_pid=""
 if [[ -n "${INFX_PROFILE_WINDOWS:-}" ]]; then
     mkdir -p "$INFX_PROF_DIR"
-    # srt-slurm's logical worker endpoints: each vLLM server's control port.
-    profile_servers=()
-    IFS=',' read -r -a profile_endpoints <<< "${SRT_AGG_ENDPOINTS:-}"
-    for endpoint in "${profile_endpoints[@]}"; do
-        [[ -n "$endpoint" ]] && profile_servers+=("http://$endpoint")
-    done
-    (( ${#profile_servers[@]} )) || profile_servers=("$AIPERF_SERVER_URL")
     python3 "$INFMAX_CONTAINER_WORKSPACE/benchmarks/profiling/vllm/profile_windows.py" \
         "$INFX_PROFILE_WINDOWS" "$INFX_PROF_DIR/windows_conc${CONC}.jsonl" \
         "$RESULT_DIR/aiperf_artifacts/logs/aiperf.log" "$INFX_PROF_DIR/steps" \

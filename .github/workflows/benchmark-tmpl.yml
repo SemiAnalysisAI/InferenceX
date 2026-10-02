@@ -359,7 +359,8 @@ jobs:
           fi
 
       - name: Validate agentic result
-        if: ${{ !inputs.eval-only && inputs.scenario-type == 'agentic-coding' }}
+        # A synthetic profile (INFX_PROFILE mode=synthetic) replays no AgentX traces.
+        if: ${{ !inputs.eval-only && inputs.scenario-type == 'agentic-coding' && !contains(inputs.profile, 'synthetic') }}
         env:
           PYTHONPATH: ${{ github.workspace }}/.result-tooling/inferencex-e2e
         run: |
