@@ -9225,3 +9225,9 @@
     - "Use the image's native sgl-kernel DSA top-k backend on gfx942 without overriding packed top-k defaults."
     - "Keep native GLM reasoning parsing while omitting a tool-call parser for AgentX's raw-message replay, which does not supply structured tools."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3656
+
+- config-keys:
+    - glm5.3-fp8-mi325x-sglang-disagg-resident-mtp-diagnostic
+  description:
+    - "Isolate genuine greedy quality of native symmetric TP8 EAGLE MTP over MORI with resident FP8 KV, without UMBP, decode radix caching, or simulated acceptance."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3656
