@@ -70,6 +70,8 @@ base:
         MORI_IB_GID_INDEX: "3"
         MORI_RDMA_TC: "104"
         MORI_RDMA_SL: "3"
+        # Restore MoRI's native SQ backoff budget for long-context KV transfers.
+        MORI_IO_SQ_BACKOFF_TIMEOUT_US: "5000000"
         MORI_IO_TC: "104"
         MORI_IO_SL: "3"
         NCCL_IB_TC: "104"
