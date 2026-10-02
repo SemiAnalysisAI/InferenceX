@@ -268,6 +268,38 @@ Do not replace the existing `github-actions` tmux session. No custom runner
 service or second collector identity is needed. Existing historical telemetry
 for `gb300-nv` is preserved.
 
+### Barite MI325X on the shared MI300X login host
+
+`mi325x-amd` is the nine-node `MI325X-UBUNTU` partition on Barite, not the
+existing `mi325x-amds` pool. Both Barite pools use `ext-cjquilici@ccs1salogin01`
+via the same jump host. The shared login does not make their capacity shared:
+each pool has a distinct `cluster:` label and an explicit Slurm partition.
+
+The new runners are `mi325x-amd_00` through `mi325x-amd_08`, under
+`/home/ext-cjquilici/gharunners-mi325x-amd/gharunnerNN/actions-runner`.
+Their cache root is `/home/ext-cjquilici/inferencex-mi325x-amd`, on persistent
+NFS available to the compute nodes. Image imports run on compute nodes, not
+the shared login. No benchmark configurations are migrated by this setup.
+
+Use the existing `setup.sh` registration and `start_runners.sh` tmux workflow.
+Keep listeners stopped until the new runner inventory/profile is merged.
+After merge, start them with:
+
+```sh
+bash start_runners.sh 0 8 /home/ext-cjquilici/gharunners-mi325x-amd mi325x-amd-runners
+```
+
+The explicit session name isolates these runners from MI300X. Do not use the
+default `github-actions` tmux session on this shared host: the existing pool
+may already own it. No custom runner service is required.
+
+Run one dashboard collector per pool with distinct environment files and
+service names. The MI325X collector must select only `MI325X-UBUNTU` for both
+nodes and jobs; the MI300X collector must retain only `MI300X-UBUNTU`.
+`quanta-ccs-aus-k11-45` is included in the nine-node pool. The provider validated
+it for single-node use but had not yet qualified its multi-node fabric at
+handoff; GPU enumeration alone does not validate cross-node collectives.
+
 The login node (where the runners live) and the Slurm compute nodes (where benchmarks
 run) exchange everything through the filesystem, so every path the CI touches must be
 visible from the compute node that the job lands on. Each path must either live on

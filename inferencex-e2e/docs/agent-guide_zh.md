@@ -25,6 +25,7 @@
 | 任务与参考页面路由 | [`index_zh.md`](index_zh.md) |
 | 常见运维清单 | [`procedures_zh.md`](procedures_zh.md) |
 | PR 审阅、扫描复用与合并政策 | [`CONTRIBUTING_zh.md`](../../CONTRIBUTING_zh.md) |
+| PR 扫描标签、修饰标签、Canary 与 Fail-fast | [`ci-procedures_zh.md`](ci-procedures_zh.md#pr-主标签与修饰标签) |
 | 验证深度与证据标准 | [`testing_zh.md`](testing_zh.md) |
 | 故障分类与安全修复 | [`troubleshooting_zh.md`](troubleshooting_zh.md) |
 

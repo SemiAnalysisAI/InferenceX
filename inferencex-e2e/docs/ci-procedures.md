@@ -245,17 +245,21 @@ Optional modifiers do not replace a primary label:
 
 | Modifier | Effect | Reusable after merge? |
 | --- | --- | --- |
-| `all-evals` | Expand eval selection to every generated fixed-sequence configuration. Alone, it is an eval-only shorthand | Yes, if the run otherwise satisfies full-sweep reuse rules |
+| `all-evals` | Expand eval selection to every eligible eval. Throughput still runs. Combine with `evals-only` for all evals only | Yes, if the run otherwise satisfies full-sweep reuse rules |
 | `evals-only` | Suppress throughput and run only the selected eval entries. Combine with `all-evals` for all evals only | No |
 | `agentx-fast` | For AgentX throughput lanes, use one additional warmup request after mandatory primers and a 20-minute profile. Fixed-sequence and eval settings stay canonical | No |
 
-Changing a recognized primary or modifier label shares the active sweep concurrency group and normally cancels/restarts the active run. `skip_queue`, patchwork, waiver, and checklist labels are gating/priority inputs, not primary sweep modes. A head commit containing `[skip-sweep]` skips PR benchmark setup only. Changelog/reuse checks still run, and the push-to-`main` `merge-ingest.yml` run ignores it.
+Every primary label runs the full concurrency sweep, and no label trims concurrency. For a lowest-concurrency smoke, [dispatch `e2e-tests.yml` manually](#manual-end-to-end-dispatch) with `trim-conc: true`.
+
+Changing a recognized primary or modifier label shares the active sweep concurrency group and cancels the active run. A new sweep starts only while a primary label remains. A head commit containing `[skip-sweep]` skips PR benchmark setup only. Changelog/reuse checks still run, and the push-to-`main` `merge-ingest.yml` run ignores it.
+
+Queue priority comes from the PR diff. There are no priority labels. When the priority scheduler is enabled, `run-sweep.yml` setup classifies the diff, and [`ci_priority.py`](../infx/workflows/ci_priority.py) scores each job from those criteria with [`configs/ci-priority.yaml`](../configs/ci-priority.yaml). A satisfied PR checklist (`checklist-complete`) raises the score. A diff that modifies upstream engine or runtime source (`patchwork`) gets the lowest score, and a failed classification counts as `patchwork`. Manual priority overrides go through the InferenceX Dash priority scheduler.
 
 ## Canary and fail-fast semantics
 
 Canary and fail-fast solve different problems:
 
-1. A canary is created only for `full-sweep-enabled` or `full-sweep-fail-fast` PRs. `non-canary-full-sweep-enabled` skips it.
+1. A canary is created only for same-repository `full-sweep-enabled` or `full-sweep-fail-fast` PRs. `non-canary-full-sweep-enabled` skips it. For fork PRs, [`trusted-external-sweep.yml`](../../.github/workflows/trusted-external-sweep.yml) dispatches `e2e-tests.yml` instead, which runs no canary for any label. There, only `full-sweep-fail-fast` sets fail-fast.
 2. Canary selection first considers single-node fixed-sequence `1k1k` and `8k1k` entries and single-node AgentX entries. If none are eligible, it considers multi-node AgentX entries. It excludes eval entries, chooses the lowest-concurrency candidate, runs it with the matching single-node or multi-node workflow, and removes it from the later matrix.
 3. If there is no eligible candidate, the canary is skipped. Otherwise all benchmark/eval matrices require the canary to succeed. A failed canary prevents their fan-out.
 4. `full-sweep-fail-fast` sets `strategy.fail-fast: true` separately on each matrix job family. The first failing point cancels queued/in-progress siblings in that matrix family. It is not one global kill switch for every independent family.
@@ -394,6 +398,8 @@ An authorized maintainer comments exactly one of:
 
 Without an ID, the workflow selects the latest stageable completed run on the PR branch whose head SHA remains in the PR commit list. A pinned ID permits an explicitly associated historical run. The workflow acknowledges the run, dispatches the `stage-results` event to InferenceX-app, and [`stage-results-callback.yml`](../../.github/workflows/stage-results-callback.yml) replaces the acknowledgement with a success chart or failure link.
 
+A well-formed `/use <run-id>` reuse request also triggers this workflow and stages that pinned run under the same rules, in addition to the normal reuse handling. Malformed `/use` comments are left to the reuse workflow and do not stage.
+
 Staging preserves earlier staged runs. Staging the same run ID again updates that run's staged data. Always keep the source run ID and downstream app workflow link. A staging success does not prove production reuse eligibility or post-merge ingestion.
 
 ## Artifact reuse and merge-with-reuse
@@ -405,7 +411,7 @@ Reuse is the only path from an approved PR sweep to official ingest: `main` neve
 `infx.github` provides repository-scoped REST calls, pagination, and comment-reaction primitives. It contains no sweep policy. `infx.workflows.sweep_runs` shares PR commit lookup, completed-run listing, and unexpired result-artifact discovery between staging and reuse. Each caller keeps its own eligibility rules. `infx.workflows.reuse` owns command parsing, authorization lookup, and source-run selection/validation. `infx.workflows.reuse_comment` uses those same rules for reaction feedback. Workflows run these modules with `python3 -m`. These helpers use Python’s standard library and the GitHub CLI; no Python package installation is needed when running them from a checkout.
 
 1. Reuse does not require a sweep label. Labels select new GPU work; removing a primary label does not invalidate an existing source run. Conflicting primary labels remain rejected by changelog validation and the merge helper.
-2. `evals-only` and `agentx-fast` make the run ineligible. A default full sweep and a full sweep with `all-evals` remain eligible.
+2. Reuse is rejected while the PR currently carries `evals-only` or `agentx-fast`. The check reads current PR labels when `/use` is acknowledged, in the merge helper, and at merge, not the source run's label history, so pin only runs produced without them. On a push, these labels skip the reuse gate, so a primary label starts a fresh sweep. A default full sweep and a full sweep with `all-evals` remain eligible.
 3. The source must be a completed PR `run-sweep.yml` run whose head SHA is still in the PR commit list and which has an unexpired `results_bmk`, `eval_results_all`, or `bmk_agentic_*` result artifact.
 4. An `OWNER`, `MEMBER`, or `COLLABORATOR` authorizes reuse with `/use <run_id>`. Keep the command and required run ID on one line. The legacy `/reuse-sweep-run <run_id>` remains equivalent; bare `/reuse-sweep-run` selects automatically. Both names share authorization, validation, and reactions. The newest authorized matching command across both names wins.
 5. Unpinned selection requires the latest eligible source run to be successful. A pinned run is an explicit maintainer decision and may have conclusion `success`, `failure`, or `cancelled`. Downstream ingestion keeps only available/valid rows, so report it as partial rather than green.

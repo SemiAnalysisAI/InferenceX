@@ -222,11 +222,12 @@ qwen3.5-fp8-mi355x-sglang-mtp:
 
 # MI355X FP8 AgentX, TP4 only. The grid follows the TP4 band of the B200 FP8
 # AgentX arm so the two SKUs are directly comparable point for point, with the
-# HiCache band extended to concurrency 36 and 40. TP2 is out of reach: the
-# ~400 GB FP8 checkpoint leaves too little KV headroom there for the
-# 256k-capped AgentX corpus.
+# HiCache band extended to concurrency 80 to reach into the throughput end that
+# the host-DRAM tier makes available. TP2 is out of reach: the ~400 GB FP8
+# checkpoint leaves too little KV headroom there for the 256k-capped AgentX
+# corpus.
 qwen3.5-fp8-mi355x-sglang-agentic-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260927
+  image: lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260929
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: cluster:mi355x-amds
@@ -238,7 +239,7 @@ qwen3.5-fp8-mi355x-sglang-agentic-mtp:
     - dram-utilization: 0.80
       search-space:
       - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 14], srt-recipe: benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/mi355x-fp8-mtp/agentic.yaml }
-      - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [16, 18, 20, 22, 24, 28, 32, 36, 40], srt-recipe: benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/mi355x-fp8-mtp/agentic.yaml }
+      - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [16, 18, 20, 22, 24, 28, 32, 36, 40, 48, 56, 64, 72, 80], srt-recipe: benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/mi355x-fp8-mtp/agentic.yaml }
 
 # MI325X official matrix selected from the complete 62-point fast sweep. TP2
 # peaks at c4, TP4/TEP4 at c40, and TP8/TEP8 at c64; the next point beyond each
@@ -247,7 +248,7 @@ qwen3.5-fp8-mi325x-sglang-agentic-mtp:
   image: lmsysorg/sglang:v0.5.16-rocm720-mi30x
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
-  runner: cluster:mi325x-amds
+  runner: cluster:mi325x-amd
   precision: fp8
   framework: sglang
   multinode: false
@@ -1082,7 +1083,7 @@ glm5.2-fp8-mi325x-sglang-agentic-mtp:
   image: lmsysorg/sglang:v0.5.20-rocm720-mi30x
   model: zai-org/GLM-5.2-FP8
   model-prefix: glm5.2
-  runner: cluster:mi325x-amds
+  runner: cluster:mi325x-amd
   precision: fp8
   framework: sglang
   multinode: false
@@ -1096,7 +1097,7 @@ minimaxm3-fp8-mi325x-vllm-agentic-mtp:
   image: vllm/vllm-openai-rocm:v0.27.1
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
-  runner: cluster:mi325x-amds
+  runner: cluster:mi325x-amd
   precision: fp8
   framework: vllm
   multinode: false
@@ -1117,7 +1118,7 @@ dsv41flash-fp4-mi325x-vllm-agentic-dspark:
   image: vllm/vllm-openai-rocm:nightly-rocm100-3df4ae153eb385e27b52f26c81f8edb9e20b9984
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
-  runner: cluster:mi325x-amds
+  runner: cluster:mi325x-amd
   precision: fp4
   framework: vllm
   multinode: false
@@ -1451,14 +1452,15 @@ dsv4-fp4-mi355x-sglang-agentic-mtp:
 # tag predates vllm-project/vllm#56503, which moves the mHC delayed pre block off
 # the eager Torch reference and onto AITER. MI355X run 34710937012 passed the
 # full concurrency 1-32 sweep and eval-only concurrency 32.
-# TP=2 joins TP=4, and both extend to concurrency 128. TP=2 became feasible on
+# TP=2 joins TP=4, and both extend to concurrency 64. TP=2 became feasible on
 # this SKU once the Engram tables moved to host memory: they cost 47.2 GiB of
 # device memory per rank, which is what previously forced four GPUs per server.
 # Two GPUs per server doubles the servers per node and is the layout that
 # decides whether DSv4.1-Flash is throughput- or interactivity-bound here.
 dsv41flash-fp4-mi355x-vllm-agentic-dspark:
-  # ROCm 10.0 nightly channel, shared with kimik3-fp4-mi355x-vllm-agentic-mtp.
-  image: vllm/vllm-openai-rocm:nightly-rocm100-29468dde8b515031dc6d4d9d06bf0a2fa0442098
+  # Repinned to a nightly build that includes vllm-project/vllm#58671,
+  # #58655 and #53492 (see agentic.yaml).
+  image: vllm/vllm-openai-rocm:nightly-rocm100-ac9126e58aa7bbab1856ba6593ba4d5003fea516
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:mi355x-amds
@@ -1470,12 +1472,12 @@ dsv41flash-fp4-mi355x-vllm-agentic-dspark:
     - dram-utilization: 0.60
       search-space:
       # The recipe only changes the memory split where a point ran short of KV:
-      # TP=4 offloads the engram tables at c128, and the prefill chunk shrinks at
-      # TP=2 c64, TP=4 c128 and TP=2 c128. Every point is measured here rather
-      # than combined from the earlier run: the image move leaves concurrency
-      # 1-32 measured only on the superseded nightly-eed1f3d0 pin.
-      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/mi355x-fp4-mtp/agentic.yaml }
-      - { tp: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/mi355x-fp4-mtp/agentic.yaml }
+      # the prefill chunk shrinks at TP=2 c64. c128 is excluded for both TP=2
+      # and TP=4. Every point is measured here rather than combined from the
+      # earlier run: the image move leaves concurrency 1-32 measured only on
+      # the superseded nightly-eed1f3d0 pin.
+      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/mi355x-fp4-mtp/agentic.yaml }
+      - { tp: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/mi355x-fp4-mtp/agentic.yaml }
 
 # The golden acceptance curve remains the provisional GLM-5.2-derived curve
 # documented in infx/golden_al_distribution/glm5.3_mtp.yaml.
