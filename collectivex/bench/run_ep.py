@@ -86,13 +86,7 @@ def main() -> int:
     device_name = torch.cuda.get_device_name(device)
     args.runtime_device_product = device_name
     args.image = os.environ.get("COLLECTIVEX_IMAGE", "")
-    _run = {
-        "run_id": os.environ.get("GITHUB_RUN_ID"),
-        "run_attempt": os.environ.get("GITHUB_RUN_ATTEMPT"),
-        "source_sha": os.environ.get("COLLECTIVEX_SOURCE_SHA")
-        or os.environ.get("GITHUB_SHA"),
-    }
-    args.git_run = _run if any(_run.values()) else None
+    args.git_run = ep_harness.git_run()
 
     module, class_name = BACKENDS[args.backend]
     Backend = getattr(importlib.import_module(module), class_name)
