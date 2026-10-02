@@ -40,6 +40,8 @@ The debug layer also retains the cluster-declared, read-only single-file `ionic-
 
 ## Evidence and remaining qualification
 
+The current PR sweep temporarily retains all five one-hour throughput points and only the generated 1P2D c48 full GSM8K evaluation. A separate debug commit filters the PR #3582 plan after native generation; it does not change evaluator inputs, real block rejection, sample limits, score thresholds or benchmark gates. It rejects an unexpected scope rather than silently reducing it. Other PRs and manual workflows are unaffected. Remove this selection commit before claiming the repository's full evaluation coverage; the omitted vendor checks remain unqualified.
+
 EOF is excluded from the current candidate. Earlier EOF regression and throughput results remain historical evidence for a different parser stack, not qualification of this candidate.
 
 The matched [1P1D c48 one-hour run](https://github.com/billishyahao/InferenceMINI/actions/runs/36847087330) used the same immutable worker image, #59164 and byte-identical EOF runtime. Warmup: 531 valid / 0 empty; profile: 4040 valid / 4 empty (0.0989%). Submission, result export and native cleanup completed. This is supporting runtime evidence from a separately adapted harness, not a sweep on this PR's current commit or an accuracy certification.

@@ -40,6 +40,8 @@ Debug 层还保留集群声明的单文件只读 `ionic-provider` 挂载，用�
 
 ## 证据与剩余验收
 
+本轮 PR sweep 临时保留全部五个一小时吞吐点，仅选取原生生成的 1P2D c48 完整 GSM8K 精度任务。独立 debug commit 在原生矩阵生成后收窄 PR #3582 的评测范围，不改变 evaluator 输入、真实 block rejection、样本上限、分数门槛或 benchmark 判据；遇到意外范围会直接报错，不静默缩减。其他 PR 和手动 workflow 不受影响。宣称满足仓库完整评测覆盖之前必须删除该选择提交；本轮省略的厂商检查不视为已验收。
+
 当前候选不带 EOF。此前 EOF 回归和吞吐结果仅作为另一套 parser 栈的历史证据，不代表当前候选已通过验证。
 
 配对 [1P1D c48 一小时作业](https://github.com/billishyahao/InferenceMINI/actions/runs/36847087330) 使用相同不可变 worker 镜像、#59164 和字节一致的 EOF 运行时代码。Warmup 为 531 valid / 0 empty；profile 为 4040 valid / 4 empty（0.0989%），完成提交、结果导出及原生收尾。这是另一套适配 harness 的运行支持证据，不是本 PR 当前 commit 的 sweep 或精度认证。
