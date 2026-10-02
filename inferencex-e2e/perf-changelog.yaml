@@ -9211,3 +9211,93 @@
     - "Add --attention-config '{\"indexer_kv_dtype\":\"mxfp4\",\"indexer_sparse_logits\":true}' and --block-size 128 to enable the vllm-project/vllm#58671 ROCm paged MXFP4 sparse-logits indexer, replacing the dense fp8 indexer path. A live A/B test (TP2 c16, matched 900s window, vllm-project/vllm#58208 reverted via vllm-project/vllm#59125 so the dense fallback doesn't crash) measured +14.7/+14.9% p50/p90 interactivity and -9.5/-10.8% p50/p90 e2e latency over the dense path, with throughput/GPU unchanged."
     - "Drop c128 from both TP2 and TP4. Neither c128 point was on the Pareto frontier in #3555's run 36528242520: TP2 c64 dominated both (P90 E2EL 58 s against 185 s and 85 s, at 111k against 85k and 79k total tok/s/GPU)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3571
+
+- config-keys:
+    - minimaxm3-fp8-h100-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the MiniMax-M3 H100 vLLM image, enable the FP8 MSA indexer cache, adjust CPU weight offload and GPU memory settings, and resize the Mooncake store segments."
+    - "更新 MiniMax-M3 H100 的 vLLM 镜像，启用 FP8 MSA 索引缓存，调整 CPU 权重卸载与 GPU 内存设置，并调整 Mooncake 存储段大小。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3620
+
+- config-keys:
+    - minimaxm3-fp8-h100-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Route the MiniMax-M3 H100 AgentX config to cluster:h100-cw and align the Mooncake DRAM store size with that cluster's host-memory budget."
+    - "将 MiniMax-M3 H100 AgentX 配置切换到 cluster:h100-cw，并根据该集群的主机内存预算调整 Mooncake DRAM 存储段大小。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3620
+
+- config-keys:
+    - minimaxm3-fp8-h100-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Route the MiniMax-M3 H100 AgentX config to the DSXE runner group and add its Slurm cluster profile."
+    - "将 MiniMax-M3 H100 AgentX 配置切换到 DSXE 运行器组，并添加对应的 Slurm 集群配置。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3620
+
+- config-keys:
+    - minimaxm3-fp8-h100-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Use TCP transport for the single-node Mooncake DRAM store in the concurrency 6 and 8 variants."
+    - "将并发数为 6 和 8 的单节点 Mooncake DRAM 存储变体切换为 TCP 传输。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3620
+
+- config-keys:
+    - minimaxm3-fp8-h100-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Reserve GPU memory for Mooncake TCP transfers in the MiniMax-M3 H100 DRAM variants."
+    - "为 MiniMax-M3 H100 DRAM 变体的 Mooncake TCP 传输预留 GPU 内存。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3620
+
+- config-keys:
+    - minimaxm3-fp8-h100-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Set matching 640K service and replay context limits for the MiniMax-M3 H100 Mooncake DRAM variants."
+    - "为 MiniMax-M3 H100 Mooncake DRAM 变体设置一致的 640K 服务与重放上下文上限。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3620
+
+- config-keys:
+    - minimaxm3-fp8-h100-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Reuse Mooncake TCP connections in the MiniMax-M3 H100 DRAM variants."
+    - "在 MiniMax-M3 H100 DRAM 变体中复用 Mooncake TCP 连接。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3620
+
+- config-keys:
+    - minimaxm3-fp8-h100-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Use larger Mooncake transfer slices and a separate live replay error threshold for the MiniMax-M3 H100 DRAM variants; retain the final result validation threshold."
+    - "为 MiniMax-M3 H100 DRAM 变体使用更大的 Mooncake 传输分片，并单独设置重放过程中的实时错误阈值；最终结果校验阈值保持不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3620
+
+- config-keys:
+    - minimaxm3-fp8-h100-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Pin the H100 DRAM variants to Mooncake 0.3.13.post1 with bounded TCP connection lanes."
+    - "将 H100 DRAM 变体固定为 Mooncake 0.3.13.post1，并使用有上限的 TCP 连接通道。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3620
+
+- config-keys:
+    - minimaxm3-fp8-h100-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Set TCP transfer slice size and bounded lane admission settings for the MiniMax-M3 H100 DRAM variants."
+    - "为 MiniMax-M3 H100 DRAM 变体设置 TCP 传输分片大小和有上限的连接通道接纳参数。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3620
