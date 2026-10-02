@@ -9226,3 +9226,9 @@
     - "Use the image's native sgl-kernel DSA top-k backend on gfx942 without overriding packed top-k defaults."
     - "Keep native GLM reasoning parsing while omitting a tool-call parser for AgentX's raw-message replay, which does not supply structured tools."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3656
+
+- config-keys:
+    - glm5.3-fp8-mi325x-sglang-colocated-tp4-umbp-diagnostic
+  description:
+    - "Prepare a native one-node TP4 prefill plus TP4 decode STP diagnostic with MORI, prefill-only UMBP, matching FP8 KV and experimental decode radix caching."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3656
