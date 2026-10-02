@@ -54,6 +54,8 @@ By default, throughput runs for every generated config and eval-only jobs run fo
 
 `--step-size` must be greater than 1 and applies to concurrency ranges. Explicit `conc-list` values are emitted directly and are filtered by `--min-conc` / `--max-conc` when provided. When both bounds are set, `--min-conc` must not exceed `--max-conc`.
 
+`--trim-conc` (the `trim-conc` input of `e2e-tests.yml`) keeps only the minimum concurrency of every generated single- and multi-node deployment shape, after eval selection, for a lowest-concurrency smoke run; in changelog-ref mode only throughput rows are trimmed, and evals keep their selected concurrency. No PR label enables trimming.
+
 ### Examples
 
 **Generate all single-node and multi-node configurations (default):**
@@ -158,15 +160,35 @@ test-config --config-keys *-b200-* --conc 4 8 --config-files configs/nvidia-mast
 test-config --config-keys dsr1-fp8-h200-sglang --evals-only --all-evals --config-files configs/nvidia-master.yaml
 ```
 
+## PR Sweep Labels
+
+`run-sweep.yml` sweeps only same-repository PRs that change
+`inferencex-e2e/perf-changelog.yaml`, using the appended entries as the matrix.
+Fork PRs use the [trusted dispatch](#trusted-external-fork-sweep-dispatch-poc)
+instead. Apply exactly one primary sweep label; more than one fails
+`check-changelog`.
+
+| Label | Canary | Per-matrix fail-fast |
+| --- | --- | --- |
+| `full-sweep-fail-fast` (recommended) | Yes | Yes |
+| `full-sweep-enabled` | Yes | No |
+| `non-canary-full-sweep-enabled` | No | No |
+
+No label trims concurrency. For canary selection (some sweeps have no
+candidate) and label-change cancellation, see
+[CI procedures](../../inferencex-e2e/docs/ci-procedures.md#pr-primary-and-modifier-labels).
+
 ## PR Eval Modifiers
 
-Use `all-evals` and/or `evals-only` with one primary sweep label. `full-sweep-fail-fast` is the strongly recommended primary for full sweeps. Use `full-sweep-enabled` only when jobs must keep running past a failure. `all-evals`
+Use `all-evals` and/or `evals-only` with one primary sweep label. `full-sweep-fail-fast` is the strongly recommended primary. Use `full-sweep-enabled` only when jobs must keep running past a failure. `all-evals`
 covers every fixed-sequence config. Each multi-node topology runs all
 `conc-list` values on one engine. `evals-only` suppresses throughput. Together
 they run all evals only. The primary label still controls canary/fail-fast.
-`all-evals` full sweeps are reusable. Runs with `evals-only`, including runs
-with both modifiers, are not. Default full sweeps, including default evals,
-are also reusable.
+Default full sweeps, including their default evals, and `all-evals` sweeps are
+reusable; [reuse is rejected](#reusing-an-approved-pr-full-sweep) while the PR
+carries `evals-only`, alone or with `all-evals`. Either modifier fails
+`check-changelog` when the changelog additions include `append-only: true` or
+`no-evals: true` entries.
 
 ## AgentX Fast Mode
 
@@ -174,19 +196,22 @@ Add `agentx-fast` alongside one primary sweep label to run one additional
 warmup request per AgentX lane after mandatory primers and a 20-minute profile
 for single- and multi-node AgentX throughput jobs. Fixed-sequence throughput
 and eval jobs retain their canonical settings. Adding or removing the modifier
-restarts the active sweep. Fast-mode runs are not eligible for artifact reuse
-after merge.
+restarts the active sweep. [Reuse is rejected](#reusing-an-approved-pr-full-sweep)
+while the PR carries `agentx-fast`.
 
 ## Trusted External-Fork Sweep Dispatch (PoC)
 
-Public-fork `pull_request` workflows receive no repository secrets. For an
-external PR, the ordinary `run-sweep.yml` run therefore validates the
-changelog but does not fan out onto GPU runners. A maintainer with `write`,
-`maintain`, or `admin` permission can add any modifier labels first, then apply
-one primary sweep label to approve the PR's exact current head SHA.
-`trusted-external-sweep.yml` then dispatches `e2e-tests.yml` from `main`, pins
-both the approved head and GitHub's merge SHA, and runs the generated matrix
-with the trusted workflow's secrets.
+Public-fork `pull_request` workflows receive no repository secrets, and every
+`run-sweep.yml` job requires a same-repository head. For an external PR,
+`run-sweep.yml` therefore runs no jobs: it neither validates the changelog nor
+fans out onto GPU runners. A maintainer with `write`, `maintain`, or `admin`
+permission can add any modifier labels first, then apply one primary sweep
+label to approve the PR's exact current head SHA. The PR must be open and
+non-draft, and dispatch is refused until GitHub reports `merge_commit_sha`;
+resolve conflicts first. `trusted-external-sweep.yml` then dispatches
+`e2e-tests.yml` from `main` and pins both the approved head and GitHub's merge
+SHA. `e2e-tests.yml` plans the changelog matrix itself and runs it with the
+trusted workflow's secrets.
 
 The approval is revision-specific. A later push is not trusted automatically.
 Remove and re-add the primary sweep label to approve the new SHA. The trusted
@@ -196,7 +221,9 @@ This proof of concept produces benchmark and evaluation artifacts through the
 End-to-End Tests workflow. Those runs are not yet eligible for
 `/use`, which currently accepts only `run-sweep.yml` runs. The PoC
 also fans out the selected matrix immediately. It does not reproduce
-`run-sweep.yml`'s canary-first sequencing.
+`run-sweep.yml`'s canary-first sequencing: no label runs a canary here, and
+only `full-sweep-fail-fast` sets fail-fast, so the other two primary labels
+behave identically.
 
 ## Reusing an Approved PR Full Sweep
 
@@ -204,7 +231,7 @@ also fans out the selected matrix immediately. It does not reproduce
 run. The push-to-`main` `merge-ingest.yml` run ignores it.
 
 An authorized maintainer can reuse an eligible completed sweep without keeping
-a sweep label on the PR:
+a primary sweep label on the PR, although staging its results requires one:
 
 ```
 /use <run_id>
@@ -225,12 +252,19 @@ is required by the review process.
 
 The latest matching comment across both names by an `OWNER`, `MEMBER`, or `COLLABORATOR` wins.
 The bot reacts with 👍 after validating the request, or 👎 on rejection; details
-are in the Actions run summary. Edits replace the bot's old reaction. No separate
-comment is posted. Comments do not trigger or cancel GPU sweeps. Later commits
+are in the Actions run summary. Edits replace the bot's old reaction. The reuse
+check posts no comment, but `/use <run_id>` also triggers `stage-results.yml`.
+Staging requires a primary sweep label on the PR and a source run created while
+one was applied. It posts a staging comment, or a rejection comment when the PR
+has no primary label. Comments do not trigger or cancel GPU sweeps. Later commits
 skip a new sweep after changelog/matrix and source-run validation. Merge-time
 validation remains authoritative; an acknowledgment cannot override expired or
-invalid artifacts. `evals-only` and `agentx-fast` remain incompatible with reuse.
-Remove and re-add the sweep label to force one.
+invalid artifacts. Reuse is rejected while the PR currently carries
+`evals-only` or `agentx-fast`, checked when `/use` is acknowledged and at merge
+(and by `merge_with_reuse`). On a push these labels skip the reuse gate, so a
+primary label starts a fresh sweep. Source-run label history is not inspected,
+so pin only runs produced without them. To force a fresh sweep after a reuse
+command, remove and re-add the primary sweep label.
 
 `uv run --extra workflows python -m infx.workflows.merge_with_reuse <pr-number>` is the supported merge path for reuse.
 It merges `main`, preserves changelog bytes, fixes an appended `XXX` PR link,

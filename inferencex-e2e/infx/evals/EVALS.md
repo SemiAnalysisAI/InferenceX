@@ -13,17 +13,32 @@ from throughput. Selection lives in `mark_eval_entries()` in
 - **Fixed-sequence, multi-node:** 8k1k only, with one job per parallelism
   topology at its highest eligible concurrency. Rows differing only by
   concurrency share a topology.
-- **Kimi K3 agentic:** every generated point automatically runs
+- **Agentic GSM8K (every model, including Kimi K3 and MiniMax M3):** selected
+  by default as a separate eval-only job at the highest concurrency of each
+  single-node group of model, runner, framework, precision, spec-decoding,
+  dp-attn and image (the 8k1k keys plus image). TP/EP and KV offloading do not
+  split groups. Multi-node rows use the highest eligible concurrency per
+  topology; a deployment with no topology at concurrency 16 or above gets one
+  eval at its highest concurrency. Throughput for every agentic point still
+  runs. Scores use the same GSM8K floors in `thresholds.yaml` as
+  fixed-sequence 8k1k evals.
+- **Kimi K3 agentic, in addition:** every generated point automatically runs
   `kimi-vendor` with `kimi_tool_call_schema_full` (204 schema cases in two
   stream modes, 408 checks). The two-check smoke requires an explicit override.
-- **MiniMax M3 agentic:** every generated point automatically runs
-  `minimax-vendor` with `minimax_m3_full` (102 provider cases). The one-case
-  smoke requires an explicit override.
-- **Other agentic models (GSM8K):** selected by default at the highest
-  concurrency per deployment group, as a separate eval-only job. Throughput
-  for every agentic point still runs. Scores use the same GSM8K floors in
-  `thresholds.yaml` as fixed-sequence 8k1k evals.
+- **MiniMax M3 agentic, in addition:** every generated point automatically
+  runs `minimax-vendor` with `minimax_m3_full` (102 provider cases). The
+  one-case smoke requires an explicit override.
 - **BFCL:** explicit only. No automatic model mapping selects BFCL.
+
+Every mode, including each sweep's combined changelog entries, schedules at
+most one eval per InferenceX-app eval identity: model, runner, framework,
+precision, spec-decoding, disaggregation, per-role TP/EP/DP-attention/workers,
+eval suite, sequence lengths, and concurrency. The app stores one result per
+identity in a run, so rows that differ only by image, KV offloading, or recipe
+file would overwrite each other's result there, and InferenceX's rerun
+deduplication would delete one raw result. The first row without KV offloading
+keeps the eval; a batched multi-node eval keeps only its unclaimed
+concurrencies. Throughput coverage is unchanged.
 
 Generator eval modes:
 
@@ -36,12 +51,15 @@ Generator eval modes:
   topologies run all `conc-list` values sequentially on one engine.
 - `--trim-conc`: after eval selection, retain the minimum concurrency for each
   single-node or multi-node deployment shape and move that shape's selected eval
-  to the retained row. This is the deployment smoke mode, not a throughput sweep.
+  to the retained row. Standalone eval-only rows (the Kimi K3 and MiniMax M3
+  GSM8K evals) keep their own concurrency. This is the deployment smoke mode,
+  not a throughput sweep.
 
 Changelog entries use `evals-only: true` and `all-evals: true`. The `all-evals`
 setting implies eval-only there. On PRs, the same names are modifier labels:
 `all-evals` expands coverage without suppressing throughput, while `evals-only`
-suppresses it. Modifier runs cannot be reused.
+suppresses it. `all-evals` runs remain reusable, but `evals-only` and
+`agentx-fast` runs are not.
 
 Deduplication is scenario-aware: fixed-sequence coverage does not suppress
 agentic coverage, and `all-evals` wins over default eval coverage.
@@ -101,7 +119,8 @@ artifact paths; a smoke result does not establish full-suite quality.
 
 ### Artifact reuse
 
-Default full sweeps may reuse their eval subset. Source coverage is
+Full sweeps with default or `all-evals` eval selection may reuse their eval
+artifacts. Source coverage is
 authoritative. Raw `meta_env.json` identities must match `eval_results_all`,
 and batched evals use `completed_eval_concs`. Policy drift is allowed, but
 malformed metadata, duplicates, and raw/aggregate mismatches are not. See

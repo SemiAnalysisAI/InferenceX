@@ -328,13 +328,13 @@ EAGLE3 K3, golden AL 2.78 and indexer CP are unchanged.
 
 The GB200 DSpark recipe uses a minimum CUDA graph capture size of 64 tokens to cover concurrent AgentX subagents. This raises c1/c2/c4 from 8/16/32 to 64; c8 and above retain their existing sizes. The full trace, AL 3.51, and Engram UVA settings are preserved; low-concurrency tail latency improvements require CI confirmation.
 The B200 DSpark recipe uses the same minimum capture size and preserves the same workload settings.
-The GB300 DSpark recipe uses the same minimum capture size and preserves the same workload settings.
+The GB300 DSpark recipe sets explicit capture sizes per point, described below.
 The H200 DSpark recipe uses the same minimum capture size and preserves the same workload settings.
 
-B300 uses the same minimum capture size at c1/c2/c4. Its c1 CI comparison reduced request ITL P90/P99 from 38.74/41.42 ms to 2.62/3.45 ms; c2/c4 require CI confirmation.
+The B300 DSpark recipe sets explicit capture sizes per point, described below.
 
 The AgentX-only `dsv41flash-fp4-<sku>-vllm-agentic-dspark` recipes use the per-SKU
-`image` pinned in [`nvidia-master.yaml`](../configs/nvidia-master.yaml) (originally `vllm/vllm-openai:deepseekv41-flash-0909`, which B300 still uses) at TP4 on Blackwell SKUs with native five-token DSpark,
+`image` pinned in [`nvidia-master.yaml`](../configs/nvidia-master.yaml) (originally `vllm/vllm-openai:deepseekv41-flash-0909`) at TP4 on Blackwell SKUs with native five-token DSpark,
 probabilistic drafting. Throughput uses the [committed golden AL](../infx/golden_al_distribution/dsv41flash_dspark.yaml) of 3.51 for thinking on and five draft tokens, with synthetic rejection sampling and adaptive verification disabled. Accuracy evals retain real block rejection and adaptive verification. `--engram-config '{"cpu_offload":true}'`
 stores Engram embedding tables in pinned host DRAM accessed through UVA;
 `kv-offloading: none` describes the separate, GPU-resident KV cache. MXFP4 expert
@@ -342,19 +342,23 @@ weights determine the recipe's `precision: fp4` label.
 
 The GPU-specific entry points share the text-only serving behavior, `deepseek_v41` tokenizer and
 parsers, 1M context, and the shared AgentX trace replay, power, metrics, and eval
-helpers. The TP4 concurrency range is 1–128. The shared script sizes graph capture
+helpers. Unless noted below, the TP4 concurrency range is 1–128. The shared script sizes graph capture
 for the six-token DSpark verification block. The srt-slurm single-node path mounts the checkout at `/infmax-workspace`, so
 AgentX runtime directories are not created under `/workspace`. Cluster model paths and persistent caches are reused.
 The recipe probes the serving port on the compute node and selects an available
 port if the preferred one is occupied. Serving, replay, metrics, and eval share
 that endpoint.
 
-The B300 entry also includes a TP2 variant at concurrency 2–128. Its dedicated
-script uses `FULL_AND_PIECEWISE` CUDA graphs with explicit capture-size sets ending
-at 2046 or 8190 tokens. It sets `--max-num-batched-tokens` to 2048 for concurrency
-1–4 and TP2 concurrency 128, and to 8192 otherwise; `--max-num-seqs` is 256. The
-TP2 concurrency-128 variant also sets `--gpu-memory-utilization 0.97`. Other SKUs
-continue to use the shared script.
+The B300 entry uses `vllm/vllm-openai:nightly-dev-x86_64-cu130-ac9126e58aa7` with FlashInfer
+autotuning. TP4 covers concurrency 1–16; DEP2 (TP1 x DP2 + EP2, DeepGEMM MegaMoE) covers 8–192
+behind a consistent-hash vLLM Router, switching to MegaAttention at 128 and above. All points use
+`FULL_AND_PIECEWISE` CUDA graphs sized in multiples of the six-token verification block.
+Other SKUs continue to use the shared script.
+
+The GB300 entry uses `vllm/vllm-openai:nightly-dev-arm64-cu130-ac9126e58aa7` with FlashInfer
+autotuning. TP4 covers concurrency 1–16; DEP2 (TP1 x DP2 + EP2, DeepGEMM MegaMoE) covers 8–192
+behind a consistent-hash vLLM Router, switching to MegaAttention at 128 and above. All points use
+`FULL_AND_PIECEWISE` CUDA graphs sized in multiples of the six-token verification block.
 
 The GB300 launcher allows 7200 seconds for engine readiness. In [run 34504969146](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34504969146), the Rust frontend exhausted its 3600-second deadline while the engine was still capturing graphs; model loading alone took 18–23 minutes. This extends startup time without changing the benchmark duration or decoding settings.
 
@@ -663,7 +667,7 @@ Sources: [`AGENTS.md#non-negotiable-benchmark-invariants`](../../AGENTS.md#non-n
 4. Never prepend, insert chronologically, sort, reformat, or run a formatter over the file.
 5. Never delete or normalize existing whitespace, including trailing spaces on blank separators. CI depends on historical bytes.
 6. If the file conflicts with `main`, restore the current `main` version and re-append only this branch's entries. Do not hand-merge reordered history.
-7. Parse the file and confirm the generated changelog selection includes the intended keys before requesting a sweep.
+7. Parse the file and confirm the generated changelog selection includes the intended keys before requesting a sweep. Request it by applying exactly one primary sweep label, normally `full-sweep-fail-fast` (see [PR primary and modifier labels](ci-procedures.md#pr-primary-and-modifier-labels)).
 
 ## Stop conditions
 
@@ -684,11 +688,11 @@ A configuration is ready for sweep only when the executable files agree, the exa
 
 ## DeepSeek-V4.1-Flash on MI355X
 
-The `dsv41flash-fp4-mi355x-vllm-agentic-dspark` recipe extends [#2958](https://github.com/SemiAnalysisAI/InferenceX/pull/2958) to MI355X AgentX: TP4 and TP2, concurrency 1–128, native five-token DSpark. Throughput uses the [committed golden AL](../infx/golden_al_distribution/dsv41flash_dspark.yaml) of 3.51 for thinking on and five draft tokens, with synthetic rejection sampling and adaptive verification disabled. Accuracy evals retain real block rejection but, unlike the CUDA arms, also keep adaptive verification disabled: it trims verification requests on device, which the ROCm `DeepseekV4IndexerBackend` does not support, and the engine refused to start with it enabled ([run 34651830283](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34651830283)). FP4 describes the MXFP4 experts; the checkpoint also contains MXFP8 weights.
+The `dsv41flash-fp4-mi355x-vllm-agentic-dspark` recipe extends [#2958](https://github.com/SemiAnalysisAI/InferenceX/pull/2958) to MI355X AgentX: TP4 and TP2, concurrency 1–64, native five-token DSpark. Throughput uses the [committed golden AL](../infx/golden_al_distribution/dsv41flash_dspark.yaml) of 3.51 for thinking on and five draft tokens, with synthetic rejection sampling and adaptive verification disabled. Accuracy evals retain real block rejection but, unlike the CUDA arms, also keep adaptive verification disabled: it trims verification requests on device, which the ROCm `DeepseekV4IndexerBackend` does not support, and the engine refused to start with it enabled ([run 34651830283](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34651830283)). FP4 describes the MXFP4 experts; the checkpoint also contains MXFP8 weights.
 
-Follow the AMD overrides in the merged [upstream recipe #968](https://github.com/vllm-project/recipes/pull/968): `VLLM_ROCM_USE_AITER=1`, `VLLM_ROCM_USE_AITER_MOE=1`, and `--moe-backend aiter`. The generic AITER selector lets vLLM pick the CK a8w4 experts, matching the DSV4-Pro MI355X recipe. The recipe pins `semianalysis_cc_traces_weka_062126` (the unfiltered corpus) via `WEKA_LOADER_OVERRIDE`. KV stays GPU-resident. Engram stayed on GPU under the upstream AMD defaults until [vllm-project/vllm#57491](https://github.com/vllm-project/vllm/pull/57491) widened the two `is_cuda()` gates to `is_cuda_alike()`. From that commit on, ROCm resolves an `EngramConfig` and `cpu_offload` defaults to on through `VLLM_PLE_CPU_OFFLOAD`, so the recipe sets `--engram-config` explicitly rather than leaning on that default. TP=2 always offloads, since the tables need 94.4 GiB per rank there; TP=4 keeps them resident through concurrency 64, where the KV pool is not the constraint, and offloads only at 128. The recipe likewise trims `--max-num-batched-tokens` only above concurrency 32, to 8192 at TP=2 c64 and TP=4 c128 and to 4096 at TP=2 c128, because the sparse-attention indexer and its companion per-rank buffers grow at roughly 4.4 MiB per batched token. Where that chunk falls below six times the API-server default of 1024 sequences, `--max-num-seqs` is capped at the graph-capture shape: DSpark verifies 1+5 tokens per sequence, and at 4096 against 1024 sequences the engram projection faults during profiling. The rule in every case is to spend device memory on KV only at the concurrencies that ran short of it, leaving the validated low-concurrency settings alone. Images built before that merge still reject the option on ROCm. The MI355X launcher uses the shared HF cache and mounts this model's repository at `/ix`, and exports `INFMAX_CONTAINER_WORKSPACE=/ix` so AgentX dependencies and outputs resolve inside that mount.
+Follow the AMD overrides in the merged [upstream recipe #968](https://github.com/vllm-project/recipes/pull/968): `VLLM_ROCM_USE_AITER=1`, `VLLM_ROCM_USE_AITER_MOE=1`, and `--moe-backend aiter`. The generic AITER selector lets vLLM pick the CK a8w4 experts, matching the DSV4-Pro MI355X recipe. The recipe pins `semianalysis_cc_traces_weka_062126` (the unfiltered corpus) via `WEKA_LOADER_OVERRIDE`. KV stays GPU-resident. Engram stayed on GPU under the upstream AMD defaults until [vllm-project/vllm#57491](https://github.com/vllm-project/vllm/pull/57491) widened the two `is_cuda()` gates to `is_cuda_alike()`. From that commit on, ROCm resolves an `EngramConfig` and `cpu_offload` defaults to on through `VLLM_PLE_CPU_OFFLOAD`, so the recipe sets `--engram-config` explicitly rather than leaning on that default. TP=2 always offloads, since the tables need 94.4 GiB per rank there; TP=4 keeps them resident, since its KV pool is not the constraint through concurrency 64. The recipe likewise trims `--max-num-batched-tokens` only above concurrency 32, to 8192 at TP=2 c64, because the sparse-attention indexer and its companion per-rank buffers grow at roughly 4.4 MiB per batched token. Where that chunk falls below six times the API-server default of 1024 sequences, `--max-num-seqs` is capped at the graph-capture shape: DSpark verifies 1+5 tokens per sequence, and at 4096 against 1024 sequences the engram projection faults during profiling. The rule in every case is to spend device memory on KV only at the concurrencies that ran short of it, leaving the validated low-concurrency settings alone. Images built before that merge still reject the option on ROCm. The MI355X launcher uses the shared HF cache and mounts this model's repository at `/ix`, and exports `INFMAX_CONTAINER_WORKSPACE=/ix` so AgentX dependencies and outputs resolve inside that mount.
 
-**GPU validation:** The recipe uses `vllm/vllm-openai-rocm:nightly-rocm100-29468dde8b515031dc6d4d9d06bf0a2fa0442098`, the first ROCm 10.0 nightly carrying vllm#58510, re-swept in [#3420](https://github.com/SemiAnalysisAI/InferenceX/pull/3420). The sweep in [#3326](https://github.com/SemiAnalysisAI/InferenceX/pull/3326) qualified the earlier `nightly-rocm100-3df4ae153eb385e27b52f26c81f8edb9e20b9984` pin (digest `sha256:eccb72b7…`, published 2026-09-21) across TP4 and TP2 at concurrency 1–128, and was the only evidence for it: [run 34710937012](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34710937012) covered TP4 concurrency 1–32 plus eval-only concurrency 32 on the superseded `nightly-eed1f3d0c6043bd494424a22443ee198dd56f657`, so its points do not carry onto this image. The merged [upstream recipe #1006](https://github.com/vllm-project/recipes/pull/1006) documents the MI355X TP2 Engram offload and `--no-swa-bounded-replay`, and the merged [#968](https://github.com/vllm-project/recipes/pull/968) records the original AMD overrides and the complete InferenceX command. Follow the [AgentX procedure](./eval-agentx-procedures.md#7-run-agentx-fast-feedback-versus-canonical-evidence) for future runtime evidence; local generation and registry metadata alone are not GPU proof.
+**GPU validation:** The recipe uses `vllm/vllm-openai-rocm:nightly-rocm100-ac9126e58aa7bbab1856ba6593ba4d5003fea516`, a ROCm 10.0 nightly carrying vllm#58671 (paged MXFP4 sparse indexer), vllm#58655 (fused mHC Triton seams) and vllm#53492 (Gluon sparse-MLA kernel). [Run 36824408313](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/36824408313) from [#3571](https://github.com/SemiAnalysisAI/InferenceX/pull/3571) validated it across TP4 and TP2 at concurrency 1–64, and its eval-only TP4 concurrency 64 point scored GSM8K 0.9712 strict / 0.9704 flexible. Earlier sweeps qualified superseded pins, so their points do not carry onto this image: [#3420](https://github.com/SemiAnalysisAI/InferenceX/pull/3420) re-swept `nightly-rocm100-29468dde8b515031dc6d4d9d06bf0a2fa0442098`, [#3326](https://github.com/SemiAnalysisAI/InferenceX/pull/3326) qualified `nightly-rocm100-3df4ae153eb385e27b52f26c81f8edb9e20b9984`, and [run 34710937012](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34710937012) covered `nightly-eed1f3d0c6043bd494424a22443ee198dd56f657`. The merged [upstream recipe #1049](https://github.com/vllm-project/recipes/pull/1049) documents the MI355X sparse-MLA Gluon kernel, the MXFP4 sparse indexer and `--block-size 128`; the merged [#1006](https://github.com/vllm-project/recipes/pull/1006) documents the MI355X TP2 Engram offload and `--no-swa-bounded-replay`, and the merged [#968](https://github.com/vllm-project/recipes/pull/968) records the original AMD overrides and the complete InferenceX command. Follow the [AgentX procedure](./eval-agentx-procedures.md#7-run-agentx-fast-feedback-versus-canonical-evidence) for future runtime evidence; local generation and registry metadata alone are not GPU proof.
 
 ## DeepSeek-V4.1-Flash on MI300X and MI325X
 
