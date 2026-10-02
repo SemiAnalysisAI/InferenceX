@@ -214,6 +214,7 @@ override_prefill_tp8_decode_dep8_fp8kv_c4:
       env:
         # STP graph batch two per attention rank fits the native dispatch bound.
         SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "128"
+        AMD_SERIALIZE_KERNEL: "3"
       args:
         <<: *dep8_decode_args
         kv-cache-dtype: fp8_e4m3
