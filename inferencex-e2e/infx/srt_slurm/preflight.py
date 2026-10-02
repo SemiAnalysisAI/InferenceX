@@ -302,7 +302,9 @@ def main() -> None:
         except (OSError, ValueError, yaml.YAMLError) as exc:
             print(
                 f"srt-slurm recipe preflight cannot read {runner_config} "
-                f"with this tooling's runner schema: {exc}",
+                f"with this tooling's runner schema: {exc}\n"
+                "Multi-node points are checked only for revisions whose runner config this "
+                "workflow revision can read; choose a newer ref.",
                 file=sys.stderr,
             )
             sys.exit(1)

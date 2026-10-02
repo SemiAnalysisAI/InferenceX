@@ -129,6 +129,7 @@ def test_cli_reads_the_runner_inventory_only_for_multi_node_points(tmp_path):
     assert failed.stderr.startswith(
         f"srt-slurm recipe preflight cannot read {inventory} with this tooling's runner schema: "
     )
+    assert failed.stderr.rstrip().endswith("choose a newer ref.")
 
 
 def test_shared_recipe_rejects_variant_images_swapped_between_its_master_keys(tmp_path):
