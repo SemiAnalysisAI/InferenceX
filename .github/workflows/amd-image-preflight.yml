@@ -1,0 +1,38 @@
+name: AMD exporter image preflight
+
+on:
+  push:
+    branches: [fix/amd-dme-e2e-launch]
+    paths: [.github/workflows/amd-image-preflight.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read # Download the pinned upstream build artifact.
+
+concurrency:
+  group: amd-image-preflight-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  download:
+    name: Verify official image download without GPU allocation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Download official AMD exporter image
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          repository: ROCm/device-metrics-exporter
+          run-id: 36867107435
+          name: build-dme-10.2.0a20261001
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/amd-exporter-image
+
+      - name: Record downloaded image files
+        env:
+          IMAGE_DIR: ${{ runner.temp }}/amd-exporter-image
+        run: |
+          find "$IMAGE_DIR" -type f -printf '%P %s bytes\n'
+          cd "$IMAGE_DIR"
+          printf '%s\n' '0ba397bc31abc1c538e24f8d7264fb421cc5fb8dd59b2e1c493a8efec404c2ba  device-metrics-exporter-v1.5.4-10.2.0a20261001.tar.gz' | sha256sum --check
