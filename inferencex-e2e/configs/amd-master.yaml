@@ -1528,7 +1528,7 @@ dsv41flash-fp4-mi355x-sglang-agentic-dspark:
       - { tp: 4, ep: 4, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/sglang/mi355x-fp4-mtp/agentic.yaml }
 
 glm5.3-fp8-mi300x-sglang-agentic:
-  image: lmsysorg/sglang-rocm:v0.5.21-rocm724-mi30x-20261001
+  image: lmsysorg/sglang-rocm:v0.5.21-rocm724-mi30x-20261001@sha256:0f59a7f04fbd3a4d2d7c1de6c89345069125650651018726279e209e54f6977f
   model: zai-org/GLM-5.3
   model-prefix: glm5.3
   runner: cluster:mi300x-amd
@@ -1541,7 +1541,7 @@ glm5.3-fp8-mi300x-sglang-agentic:
       - { tp: 8, ep: 1, kv-offloading: none, spec-decoding: none, conc-list: [1], srt-recipe: benchmarks/single_node/srt-slurm-recipes/glm5.3/sglang/mi300x-fp8/agentic.yaml }
 
 glm5.3-fp8-mi300x-sglang-disagg-agentic-umbp:
-  image: lmsysorg/sglang-rocm:v0.5.21-rocm724-mi30x-20261001
+  image: lmsysorg/sglang-rocm:v0.5.21-rocm724-mi30x-20261001@sha256:0f59a7f04fbd3a4d2d7c1de6c89345069125650651018726279e209e54f6977f
   model: zai-org/GLM-5.3
   model-prefix: glm5.3
   runner: cluster:mi300x-amd
@@ -1552,7 +1552,7 @@ glm5.3-fp8-mi300x-sglang-disagg-agentic-umbp:
   disagg: true
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.35
+    - dram-utilization: 0.32
       search-space:
       - spec-decoding: none
         conc-list: [1]

@@ -4,7 +4,7 @@ base:
   name: mi300x-glm53-agentx-mori-umbp
   model:
     path: hf:zai-org/GLM-5.3
-    container: lmsysorg/sglang-rocm:v0.5.21-rocm724-mi30x-20261001
+    container: lmsysorg/sglang-rocm:v0.5.21-rocm724-mi30x-20261001@sha256:0f59a7f04fbd3a4d2d7c1de6c89345069125650651018726279e209e54f6977f
     precision: fp8
   identity:
     model:
@@ -43,7 +43,7 @@ base:
         - /sgl-workspace/mori/python/mori/umbp_standalone_server
         - unix:///logs/umbp.sock
       env:
-        UMBP_DRAM_CAPACITY: "512000000000"
+        UMBP_DRAM_CAPACITY: "519000000000"
         UMBP_DRAM_USE_HUGEPAGES: "0"
         UMBP_SSD_ENABLED: "0"
         MORI_UMBP_LOG_LEVEL: info
