@@ -331,10 +331,10 @@ The B200 DSpark recipe uses the same minimum capture size and preserves the same
 The GB300 DSpark recipe uses the same minimum capture size and preserves the same workload settings.
 The H200 DSpark recipe uses the same minimum capture size and preserves the same workload settings.
 
-B300 uses the same minimum capture size at c1/c2/c4. Its c1 CI comparison reduced request ITL P90/P99 from 38.74/41.42 ms to 2.62/3.45 ms; c2/c4 require CI confirmation.
+The B300 DSpark recipe sets explicit capture sizes per point, described below.
 
 The AgentX-only `dsv41flash-fp4-<sku>-vllm-agentic-dspark` recipes use the per-SKU
-`image` pinned in [`nvidia-master.yaml`](../configs/nvidia-master.yaml) (originally `vllm/vllm-openai:deepseekv41-flash-0909`, which B300 still uses) at TP4 on Blackwell SKUs with native five-token DSpark,
+`image` pinned in [`nvidia-master.yaml`](../configs/nvidia-master.yaml) (originally `vllm/vllm-openai:deepseekv41-flash-0909`) at TP4 on Blackwell SKUs with native five-token DSpark,
 probabilistic drafting. Throughput uses the [committed golden AL](../infx/golden_al_distribution/dsv41flash_dspark.yaml) of 3.51 for thinking on and five draft tokens, with synthetic rejection sampling and adaptive verification disabled. Accuracy evals retain real block rejection and adaptive verification. `--engram-config '{"cpu_offload":true}'`
 stores Engram embedding tables in pinned host DRAM accessed through UVA;
 `kv-offloading: none` describes the separate, GPU-resident KV cache. MXFP4 expert
@@ -349,12 +349,11 @@ The recipe probes the serving port on the compute node and selects an available
 port if the preferred one is occupied. Serving, replay, metrics, and eval share
 that endpoint.
 
-The B300 entry also includes a TP2 variant at concurrency 2–128. Its dedicated
-script uses `FULL_AND_PIECEWISE` CUDA graphs with explicit capture-size sets ending
-at 2046 or 8190 tokens. It sets `--max-num-batched-tokens` to 2048 for concurrency
-1–4 and TP2 concurrency 128, and to 8192 otherwise; `--max-num-seqs` is 256. The
-TP2 concurrency-128 variant also sets `--gpu-memory-utilization 0.97`. Other SKUs
-continue to use the shared script.
+The B300 entry uses `vllm/vllm-openai:nightly-dev-x86_64-cu130-ac9126e58aa7` with FlashInfer
+autotuning. TP4 covers concurrency 1–16; DEP2 (TP1 x DP2 + EP2, DeepGEMM MegaMoE) covers 8–192
+behind a consistent-hash vLLM Router, switching to MegaAttention at 128 and above. All points use
+`FULL_AND_PIECEWISE` CUDA graphs sized in multiples of the six-token verification block.
+Other SKUs continue to use the shared script.
 
 The GB300 launcher allows 7200 seconds for engine readiness. In [run 34504969146](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34504969146), the Rust frontend exhausted its 3600-second deadline while the engine was still capturing graphs; model loading alone took 18–23 minutes. This extends startup time without changing the benchmark duration or decoding settings.
 
