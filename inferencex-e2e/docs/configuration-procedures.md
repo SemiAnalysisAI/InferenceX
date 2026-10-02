@@ -346,13 +346,14 @@ async loads and clean Mooncake metrics; `last started work: -1`. Tip ea88d652
 canary c1 crashed with Mooncake `AssertionError: load_async must be True for
 better performance` when `load_async` was set false, so restore the required
 stock true), but do not enable `compact_group_io` on this DSXE single-rail path
-(it storm-failed ~25 MiB compact-group puts at c8). Direct DCP KV and Q gather
-are off (`VLLM_USE_DIRECT_DCP_KV_GATHER=0`, `VLLM_USE_DIRECT_DCP_Q_GATHER=0`);
-prior tips with Q_GATHER=1 + KV_GATHER=0 hung in DCP PYNCCL `_ALLGATHER_BASE`
-under ~98–100% GPU KV. Do not set `MC_MAX_MR_SIZE` here: with 4GiB every rank
-hit `register_buffer failed ... -600` on the ~40 GiB KV region and stormed
-`AddressNotRegistered` TRANSFER_FAIL (c2/c32); pre-`MC_MAX_MR` tips registered
-cleanly. Keep `enable-cumem-allocator` off on this path.
+(it storm-failed ~25 MiB compact-group puts at c8). Direct DCP KV gather is off
+(`VLLM_USE_DIRECT_DCP_KV_GATHER=0`) and direct DCP A2A is off
+(`VLLM_USE_DIRECT_DCP_A2A=0`); keep `VLLM_USE_DIRECT_DCP_Q_GATHER=1` (tip
+1f837c46 eval-only c8 hung ~8.5m after `dcp:0` then failed EP
+`ncclCommInitRank` with Q gather off). Do not set `MC_MAX_MR_SIZE` here: with
+4GiB every rank hit `register_buffer failed ... -600` on the ~40 GiB KV region
+and stormed `AddressNotRegistered` TRANSFER_FAIL (c2/c32); pre-`MC_MAX_MR` tips
+registered cleanly. Keep `enable-cumem-allocator` off on this path.
 
 
 The AgentX-only `dsv41flash-fp4-<sku>-vllm-agentic-dspark` recipes use the per-SKU

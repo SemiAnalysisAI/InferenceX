@@ -320,13 +320,13 @@ Mooncake 指标干净时，于约 98–100% GPU KV 下挂起在 DCP PYNCCL
 `AssertionError: load_async must be True for better performance`，故恢复必需的
 stock true），但不要在该 DSXE 单 rail 路径上启用
 `compact_group_io`（c8 上曾对约 25 MiB 的 compact-group put 产生大量失败）。
-Direct DCP KV 与 Q gather 均关闭（`VLLM_USE_DIRECT_DCP_KV_GATHER=0`、
-`VLLM_USE_DIRECT_DCP_Q_GATHER=0`）；此前在 Q_GATHER=1 + KV_GATHER=0 下 tip 于约
-98–100% GPU KV 挂起在 DCP PYNCCL `_ALLGATHER_BASE`。不要在此设置
-`MC_MAX_MR_SIZE`：设为 4GiB 时各 rank 对约 40 GiB KV 区域报
-`register_buffer failed ... -600`，并引发 `AddressNotRegistered` TRANSFER_FAIL
-（c2/c32）；加入该变量之前的 tip 注册正常。此路径保持关闭
-`enable-cumem-allocator`。
+Direct DCP KV gather 关闭（`VLLM_USE_DIRECT_DCP_KV_GATHER=0`），Direct DCP A2A
+关闭（`VLLM_USE_DIRECT_DCP_A2A=0`）；保持 `VLLM_USE_DIRECT_DCP_Q_GATHER=1`
+（tip 1f837c46 的 eval-only c8 在关闭 Q gather 后于 `dcp:0` 之后挂起约 8.5
+分钟，随后 EP `ncclCommInitRank` 失败）。不要在此设置 `MC_MAX_MR_SIZE`：设为
+4GiB 时各 rank 对约 40 GiB KV 区域报 `register_buffer failed ... -600`，并引发
+`AddressNotRegistered` TRANSFER_FAIL（c2/c32）；加入该变量之前的 tip 注册正常。
+此路径保持关闭 `enable-cumem-allocator`。
 
 
 仅运行 AgentX 的 `dsv41flash-fp4-<sku>-vllm-agentic-dspark` 配方使用

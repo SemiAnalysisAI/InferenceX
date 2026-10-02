@@ -93,13 +93,13 @@ base:
         VLLM_ALLREDUCE_USE_FLASHINFER: '1'
         VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION: '1'
         VLLM_USE_V2_MODEL_RUNNER: '1'
-        # These default to auto; name them so the measured DCP a2a path runs.
-        VLLM_USE_DIRECT_DCP_A2A: '1'
-        # Tips 860c1ccf c48 / e51c58f5 c32 hung in DCP PYNCCL _ALLGATHER_BASE
-        # under ~98-100% GPU KV with Q_GATHER=1 + KV_GATHER=0 mixed; align Q
-        # gather off with KV gather (MI355X-style). load_async must stay true
-        # (tip ea88d652 AssertionError).
-        VLLM_USE_DIRECT_DCP_Q_GATHER: '0'
+        # Tip 1f837c46 eval-only c8 hung ~8.5m after dcp:0 then failed EP
+        # PyNccl ncclCommInitRank (remote process exited) with Q_GATHER=0;
+        # restore Q gather. Disable direct A2A instead as the next probe for
+        # prior DCP PYNCCL _ALLGATHER_BASE hangs under ~98% GPU KV
+        # (tips 860c1ccf/e51c58f5). load_async must stay true.
+        VLLM_USE_DIRECT_DCP_A2A: '0'
+        VLLM_USE_DIRECT_DCP_Q_GATHER: '1'
         # Prior tip c48 hit direct DCP kv-gather multimem timeout then GPU memcpy
         # failure; disable direct KV gather (same as GB200 DCP16 / MI355X lanes).
         VLLM_USE_DIRECT_DCP_KV_GATHER: '0'
