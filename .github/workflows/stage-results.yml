@@ -17,7 +17,8 @@ jobs:
     name: Authorize and dispatch staging
     if: >-
       github.event.issue.pull_request &&
-      startsWith(github.event.comment.body, '/stage-results')
+      (startsWith(github.event.comment.body, '/stage-results') ||
+       startsWith(github.event.comment.body, '/use'))
     runs-on: ubuntu-latest
     permissions:
       actions: read # Validate the source workflow run and its artifacts
@@ -56,6 +57,7 @@ jobs:
         run: uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked python -m infx.workflows.stage_results
 
       - name: Acknowledge staging request
+        if: steps.request.outputs.run-id != ''
         id: acknowledge
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
@@ -75,6 +77,7 @@ jobs:
             core.setOutput('comment-id', String(comment.data.id));
 
       - name: Dispatch InferenceX-app staging workflow
+        if: steps.request.outputs.run-id != ''
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           RUN_ID: ${{ steps.request.outputs.run-id }}

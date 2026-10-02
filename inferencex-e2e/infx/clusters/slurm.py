@@ -182,6 +182,7 @@ class SlurmSettings(SchedulerSettings):
 
     volumes: dict[str, HostVolume] = Field(default_factory=dict)
     partition: str = Field(min_length=1)
+    partitions: tuple[Annotated[str, Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]*$")], ...] = ()
     account: str | None = Field(default=None, min_length=1)
     exclusive: bool
     exclude: tuple[str, ...] = ()

@@ -9170,6 +9170,49 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3605
 
 - config-keys:
+    - qwen3.5-fp8-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Extend the TP4 HiCache band from concurrency 40 up to 80, adding concurrency 48, 56, 64, 72 and 80. The arm goes from 14 to 19 points; the GPU-resident band [1, 4, 8, 12, 14] and the existing HiCache points [16, 18, 20, 22, 24, 28, 32, 36, 40] are unchanged. The original grid was copied from the TP4 band of qwen3.5-fp8-b200-sglang-agentic-mtp, which stops at 32 because a B200 node has far less HBM per GPU; MI355X at 288 GB per GPU has the device KV headroom to keep feeding the host-DRAM tier past that, and these five points sample the throughput end the tier makes available."
+    - "Size the HiCache host pool in tiers by concurrency instead of by ratio alone. Concurrency 16 through 28 keep ratio-only sizing and are unchanged from what merged in #3602. Concurrency 32 through 56 pin hicache-size 253, the value already used by the MI355X MXFP4 AgentX arm. Concurrency 64 through 80 pin hicache-size 400, since the largest points need the deepest host tier to hold prefix across the 256k-capped corpus. hicache-size overrides hicache-ratio where it is set. Of the points that merged in #3602 only concurrency 32, 36 and 40 change behaviour; their numbers are expected to move."
+    - "The five new points reuse the existing HiCache override shape: enable-hierarchical-cache, hicache-ratio 1.5, hicache-size 400, hicache-write-policy write_through_selective, hicache-io-backend kernel and hicache-mem-layout page_first. Admission continues to follow 2x CONC, and the decode graph batch follows it capped at 128, so concurrency 72 and 80 both clamp cuda-graph-max-bs-decode to 128 while max-running-requests reaches 144 and 160."
+    - "Update the SGLang ROCm image from lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260927 to lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260929 on this arm only. The other MI355X arms are left on their current tags."
+    - "No serving flag outside the HiCache block changes, and no other config key is touched. Each of the 19 matrix points resolves to exactly one recipe override, with no override left unused."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3611
+
+- config-keys:
+    - dsr1-fp8-mi325x-sglang
+    - dsr1-fp8-mi325x-sglang-mtp
+    - qwen3.5-fp8-mi325x-sglang
+    - qwen3.5-fp8-mi325x-sglang-mtp
+    - qwen3.5-fp8-mi325x-sglang-agentic-mtp
+    - glm5.2-fp8-mi325x-sglang-agentic-mtp
+    - minimaxm3-fp8-mi325x-vllm-agentic-mtp
+    - dsv41flash-fp4-mi325x-vllm-agentic-dspark
+  description:
+    - "Retire the mi325x-amds runner pool and route MI325X workloads to the Barite mi325x-amd pool in MI325X-UBUNTU. Keep model recipes unchanged; generated host-DRAM budgets now use the replacement cluster's declared memory capacity."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3644
+
+- config-keys:
+    - "*"
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump AgentX Harness from agentx-v1.0.5 (754356e9a39acc6cc6afb242d123bb57c3fb6f75) to agentx-v1.0.6 (89b21867872a5bbc4b0676bf5005c404da5e9f94) and use --scenario agentx for shared replay and runtime defaults. Preserve recipe duration, warmup, failure threshold, trace cap, routing and corpus selection as explicit inputs."
+    - "The preset supplies a 900000 ms TCP user timeout when unset; explicit AIPERF environment settings take precedence over preset defaults."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3646
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark
+  description:
+    - "Repin to vllm/vllm-openai-rocm:nightly-rocm100-ac9126e58aa7bbab1856ba6593ba4d5003fea516, which includes vllm-project/vllm#58671, vllm-project/vllm#58655 and vllm-project/vllm#53492."
+    - "Set VLLM_ROCM_USE_AITER_TRITON_SPARSE_MLA=True to enable the vllm-project/vllm#53492 gfx950 Gluon sparse-MLA kernel."
+    - "Add --attention-config '{\"indexer_kv_dtype\":\"mxfp4\",\"indexer_sparse_logits\":true}' and --block-size 128 to enable the vllm-project/vllm#58671 ROCm paged MXFP4 sparse-logits indexer, replacing the dense fp8 indexer path. A live A/B test (TP2 c16, matched 900s window, vllm-project/vllm#58208 reverted via vllm-project/vllm#59125 so the dense fallback doesn't crash) measured +14.7/+14.9% p50/p90 interactivity and -9.5/-10.8% p50/p90 e2e latency over the dense path, with throughput/GPU unchanged."
+    - "Drop c128 from both TP2 and TP4. Neither c128 point was on the Pareto frontier in #3555's run 36528242520: TP2 c64 dominated both (P90 E2EL 58 s against 185 s and 85 s, at 111k against 85k and 79k total tok/s/GPU)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3571
+
+- config-keys:
     - dsv4-fp4-gb300-dynamo-sglang-agentic-disagg
     - dsv4-fp4-gb300-dynamo-sglang-agentic-agg
   scenario-type:
