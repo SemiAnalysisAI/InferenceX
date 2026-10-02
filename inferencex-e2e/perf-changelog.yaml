@@ -9212,6 +9212,7 @@
     - "Drop c128 from both TP2 and TP4. Neither c128 point was on the Pareto frontier in #3555's run 36528242520: TP2 c64 dominated both (P90 E2EL 58 s against 185 s and 85 s, at 111k against 85k and 79k total tok/s/GPU)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3571
 
+- config-keys:
     - dsv41flash-fp4-mi355x-atom-agentic-dspark
   scenario-type:
     - agentic-coding
