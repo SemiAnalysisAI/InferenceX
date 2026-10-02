@@ -4,7 +4,15 @@
 inferencex-e2e/configs/amd-master.yaml @billishyahao @chunfangamd @seungrokj @yctseng0211 @1am9trash
 
 # NVIDIA master config
-inferencex-e2e/configs/nvidia-master.yaml @ankur-singh @kedarpotdar-nv @SemiAnalysisAI/core
+inferencex-e2e/configs/nvidia-master.yaml @ankur-singh @kedarpotdar-nv @wzhao18 @nvpohanh @RohitNagraj @SemiAnalysisAI/core
+
+# NVIDIA srt-slurm recipes in the single-node and multi-node trees
+/inferencex-e2e/benchmarks/*_node/srt-slurm-recipes/**/b200-*/ @ankur-singh @kedarpotdar-nv @wzhao18 @nvpohanh @RohitNagraj @SemiAnalysisAI/core
+/inferencex-e2e/benchmarks/*_node/srt-slurm-recipes/**/b300-*/ @ankur-singh @kedarpotdar-nv @wzhao18 @nvpohanh @RohitNagraj @SemiAnalysisAI/core
+/inferencex-e2e/benchmarks/*_node/srt-slurm-recipes/**/gb200-*/ @ankur-singh @kedarpotdar-nv @wzhao18 @nvpohanh @RohitNagraj @SemiAnalysisAI/core
+/inferencex-e2e/benchmarks/*_node/srt-slurm-recipes/**/gb300-*/ @ankur-singh @kedarpotdar-nv @wzhao18 @nvpohanh @RohitNagraj @SemiAnalysisAI/core
+/inferencex-e2e/benchmarks/*_node/srt-slurm-recipes/**/h100-*/ @ankur-singh @kedarpotdar-nv @wzhao18 @nvpohanh @RohitNagraj @SemiAnalysisAI/core
+/inferencex-e2e/benchmarks/*_node/srt-slurm-recipes/**/h200-*/ @ankur-singh @kedarpotdar-nv @wzhao18 @nvpohanh @RohitNagraj @SemiAnalysisAI/core
 
 # PoR for Models & general direction
 inferencex-e2e/docs/MODELS.md @ankur-singh @chunfangamd @SemiAnalysisAI/core
