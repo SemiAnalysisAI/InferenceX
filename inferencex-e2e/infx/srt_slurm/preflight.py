@@ -27,6 +27,7 @@ from infx.clusters import CLUSTER_LABEL_PREFIX, RunnerInventory, load_inventory
 from infx.clusters.slurm import slurm_settings
 from infx.launch.drivers.srt.config import pyxis_spelling
 from infx.launch.drivers.srt.recipe import RECIPES_MIRROR, recipe_mirror_path
+from infx.launch.policy import LLMD_FRAMEWORKS
 from infx.srt_slurm.single_node import select_recipe
 from infx.srt_slurm.synthetic_acceptance import selected_recipes
 
@@ -276,22 +277,29 @@ def check_multi_node(point: Mapping[str, Any], root: Path, inventory: RunnerInve
     return problems
 
 
+def srt_slurm_point(point: Mapping[str, Any]) -> bool:
+    """Whether the launcher runs ``point`` through srt-slurm."""
+    if "prefill" in point:
+        return point.get("framework") not in LLMD_FRAMEWORKS
+    return bool(point.get("srt-recipe"))
+
+
 def check_matrix(
     matrix: Any, root: Path, inventory: RunnerInventory | None
 ) -> dict[str, list[str]]:
     """Each problem found, mapped to the points it affects."""
     problems: dict[str, list[str]] = {}
     for point in matrix_points(matrix):
+        if not srt_slurm_point(point):
+            continue
         if "prefill" in point:
             found = (
                 check_multi_node(point, root, inventory)
                 if inventory is not None
                 else ["multi-node points need a runner inventory"]
             )
-        elif point.get("srt-recipe"):
-            found = check_single_node(point, root)
         else:
-            continue
+            found = check_single_node(point, root)
         label = point_label(point)
         for problem in found:
             points = problems.setdefault(problem, [])
@@ -315,7 +323,8 @@ def main() -> None:
     raw = sys.stdin.read()
     matrix = json.loads(raw)
     inventory = None
-    if any("prefill" in point for point in matrix_points(matrix)):
+    checked = [point for point in matrix_points(matrix) if srt_slurm_point(point)]
+    if any("prefill" in point for point in checked):
         runner_config = args.runner_config or args.root / "configs/runners.yaml"
         try:
             inventory = load_inventory(runner_config)
@@ -340,9 +349,6 @@ def main() -> None:
             for label in points:
                 print(f"    - {label}", file=sys.stderr)
         sys.exit(1)
-    checked = [
-        point for point in matrix_points(matrix) if "prefill" in point or point.get("srt-recipe")
-    ]
     references = {reference for point in checked for reference in recipe_references(point)}
     print(
         f"srt-slurm recipe preflight passed {len(checked)} point(s) "

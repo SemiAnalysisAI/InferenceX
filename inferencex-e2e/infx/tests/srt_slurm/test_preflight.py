@@ -192,6 +192,11 @@ def test_multi_node_point_needs_the_recipe_its_launcher_selects(
     assert check_matrix([point], tmp_path, load_inventory(INVENTORY)) == expected
 
 
+def test_llmd_multi_node_points_are_left_to_their_own_launcher(tmp_path):
+    point = multi_node_point(framework="llmd-vllm")
+    assert check_matrix([point], tmp_path, None) == {}
+
+
 def test_override_recipe_without_overrides_selects_nothing_unless_base_is_named(tmp_path):
     write_yaml(tmp_path, f"{MULTI}/b.yaml",
                {"base": {"name": "b", "model": {"path": "hf:t/m", "container": "img:1", "precision": "fp8"}}})  # fmt: skip
