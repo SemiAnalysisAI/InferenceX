@@ -9222,6 +9222,7 @@
     - "Add native MORI prefill/decode disaggregation with TP8 per role and a prefill-side UMBP DRAM tier through SGLang's unified-cache external linker."
     - "Restore the pinned MORI five-second send-queue backoff for both disaggregated roles instead of the shared launch boundary's 50-millisecond setting."
     - "Use FP8 KV for aggregate TP4/TP8 MTP and native TP8 STP UMBP DRAM offloading; retain the qualified capacity families and remove exploratory BF16 controls."
+    - "Retain TP4 C3 and remove TP4 C2, which the canonical TP8 FP8-KV C4 point dominates on both per-GPU throughput and P90 E2E-normalized interactivity."
     - "Use the image's native sgl-kernel DSA top-k backend on gfx942 without overriding packed top-k defaults."
     - "Keep native GLM reasoning parsing while omitting a tool-call parser for AgentX's raw-message replay, which does not supply structured tools."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3656
