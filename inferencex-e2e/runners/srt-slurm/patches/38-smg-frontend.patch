@@ -1,0 +1,418 @@
+diff --git a/docs/config-reference.md b/docs/config-reference.md
+index db321a70..716b46a0 100644
+--- a/docs/config-reference.md
++++ b/docs/config-reference.md
+@@ -701,7 +701,7 @@ frontend:
+ 
+ | Field                       | Type | Default       | Description                         |
+ | --------------------------- | ---- | ------------- | ----------------------------------- |
+-| `type`                      | str  | dynamo        | `dynamo`; static routers `sglang-router`, `vllm-router`; direct (one aggregate worker binds the public port, no router process) `sglang`, `vllm`, `trtllm_serve` |
++| `type`                      | str  | dynamo        | `dynamo`; static routers `sglang-router`, `vllm-router`, `smg` (any backend, see [SMG](smg.md)); direct (one aggregate worker binds the public port, no router process) `sglang`, `vllm`, `trtllm_serve` |
+ | `placement.node`            | str  | head          | `head`, `first_decode`, or `dedicated`; see [placement](#placement) |
+ | `enable_multiple_frontends` | bool | true          | Scale with nginx + multiple routers |
+ | `num_additional_frontends`  | int  | 9             | Additional routers beyond master    |
+diff --git a/docs/schema-reference.md b/docs/schema-reference.md
+index c78f327f..fdcb23ac 100644
+--- a/docs/schema-reference.md
++++ b/docs/schema-reference.md
+@@ -118,7 +118,7 @@ Frontend/router configuration.
+ 
+ | Key | Type | Default | Description |
+ |---|---|---|---|
+-| `type` | str | `'dynamo'` | Frontend type - "dynamo" (default); "sglang-router" (SGLang Model Gateway), "vllm-router", "atomesh", and "tilert-router" (static routers); "sglang", "vllm", and "trtllm_serve" (direct: the single aggregate worker binds the public port, no router process); "none" (services-only job: no router, no OpenAI endpoint, no worker-count health gate; requires no engine roles). In schema 1 recipes "sglang" still means the router and loads as "sglang-router". |
++| `type` | str | `'dynamo'` | Frontend type - "dynamo" (default); "sglang-router" (SGLang Model Gateway), "vllm-router", "smg" (Shepherd Model Gateway, any backend), "atomesh", and "tilert-router" (static routers); "sglang", "vllm", and "trtllm_serve" (direct: the single aggregate worker binds the public port, no router process); "none" (services-only job: no router, no OpenAI endpoint, no worker-count health gate; requires no engine roles). In schema 1 recipes "sglang" still means the router and loads as "sglang-router". |
+ | `enable_multiple_frontends` | bool | `True` | Scale with nginx + multiple routers. When ``True`` (default), srtctl stands up nginx and fans out to ``num_additional_frontends + 1`` router replicas. When ``False``, there is NO nginx proxy — the benchmark must target the single master router (or a worker) directly at ``http://localhost:<port>``. ``benchmark.command`` has no placeholder substitution, so write the URL out literally. |
+ | `num_additional_frontends` | int | `9` | Additional routers beyond master (default: 9) |
+ | `nginx_container` | str | `'nginx:1.27.4'` | Custom nginx container image (default: nginx:1.27.4) |
+diff --git a/docs/smg.md b/docs/smg.md
+new file mode 100644
+index 00000000..b3e9bd9f
+--- /dev/null
++++ b/docs/smg.md
+@@ -0,0 +1,94 @@
++# Shepherd Model Gateway (SMG)
++
++`frontend.type: smg` runs the [Shepherd Model Gateway](https://github.com/smg-project/smg)
++in front of direct engine workers. SMG is an engine-agnostic Rust gateway with an
++OpenAI-compatible API; srtctl hands it the statically allocated worker URLs, the same
++way it does for the other static routers. No Dynamo, NATS, or etcd is involved.
++
++Upstream references below are pinned to SMG
++[v1.11.0](https://github.com/smg-project/smg/tree/3be823a700fabaff3add8a390cf78f163479d686).
++
++## Supported topologies
++
++| Topology | Backends | What srtctl launches |
++| --- | --- | --- |
++| Aggregated | any engine whose workers serve HTTP (`sglang`, `vllm`, `trtllm`, ...) | `smg launch --worker-urls <url> ...` |
++| Prefill/decode | `sglang` | `smg launch --pd-disaggregation --prefill <url> <bootstrap-port> --decode <url>` |
++
++SMG detects each HTTP worker's engine itself (`/v1/models` `owned_by`, then `/version`
++and `/server_info`) and reads the served model name from the worker
++([`detect_backend.rs`](https://github.com/smg-project/smg/blob/3be823a700fabaff3add8a390cf78f163479d686/model_gateway/src/workflow/steps/local/detect_backend.rs#L182-L191),
++[`discover_metadata.rs`](https://github.com/smg-project/smg/blob/3be823a700fabaff3add8a390cf78f163479d686/model_gateway/src/workflow/steps/local/discover_metadata.rs#L230-L239)),
++so srtctl passes no `--backend` and no model name. SMG routes a request only to workers
++serving the model it names
++([`router.rs`](https://github.com/smg-project/smg/blob/3be823a700fabaff3add8a390cf78f163479d686/model_gateway/src/routers/http/router.rs#L249-L252)),
++so clients send the workers' served model name, as srtctl's benchmarks do.
++
++P/D is listed for SGLang only. SMG's HTTP P/D router hands the KV cache over through
++SGLang's bootstrap rendezvous (`bootstrap_host` / `bootstrap_port` / `bootstrap_room`,
++[`pd_router.rs`](https://github.com/smg-project/smg/blob/3be823a700fabaff3add8a390cf78f163479d686/model_gateway/src/routers/http/pd_router.rs#L303-L305)).
++A vLLM worker registered by URL carries no KV connector, so SMG sends the request through
++and the decode worker recomputes the prompt
++([upstream test note](https://github.com/smg-project/smg/blob/3be823a700fabaff3add8a390cf78f163479d686/e2e_test/router/test_pd_topologies.py#L105-L110)).
++srtctl does not reject that layout, but it is not a KV-disaggregated run.
++
++## Configuration
++
++```yaml
++frontend:
++  type: smg
++  container_image: smg # an image that ships SMG, e.g. lightseekorg/smg:1.11.0
++  enable_multiple_frontends: false
++  args:
++    policy: cache_aware # any `smg launch` flag
++```
++
++- `container_image`: an engine image need not ship SMG. Point this at an image
++  with the `smg` command (the official `lightseekorg/smg` image, or any image where
++  `pip install smg` was run). Without it the model container is reused.
++- `args`: passed to `smg launch` as `--<key> <value>`; `true` adds a bare flag and a
++  list repeats the flag. `prometheus-port` is managed by srtctl and rejected here.
++- `enable_multiple_frontends` / `num_additional_frontends`: as for every router,
++  several SMG replicas behind nginx, or one SMG on the public port.
++
++See [`examples/vllm/smg-agg.yaml`](../examples/vllm/smg-agg.yaml) (vLLM, aggregated)
++and [`examples/sglang/smg-disagg.yaml`](../examples/sglang/smg-disagg.yaml) (SGLang, P/D).
++
++## Launch and readiness
++
++- **Command.** `smg launch`
++  ([subcommand](https://github.com/smg-project/smg/blob/3be823a700fabaff3add8a390cf78f163479d686/model_gateway/src/main.rs#L153-L160)) with `--host 0.0.0.0 --port <frontend port>` and the
++  workers from the allocated topology: `--worker-urls` for aggregated workers;
++  `--pd-disaggregation`, one `--prefill URL BOOTSTRAP_PORT` per prefill worker and one
++  `--decode URL` per decode worker for P/D
++  ([`main.rs`](https://github.com/smg-project/smg/blob/3be823a700fabaff3add8a390cf78f163479d686/model_gateway/src/main.rs#L35-L72),
++  [CLI arguments](https://github.com/smg-project/smg/blob/3be823a700fabaff3add8a390cf78f163479d686/model_gateway/src/main.rs#L213-L237),
++  [P/D arguments](https://github.com/smg-project/smg/blob/3be823a700fabaff3add8a390cf78f163479d686/model_gateway/src/main.rs#L494-L509)).
++  The Python package (what `pip install smg` and the official image install) provides
++  the same `smg launch` subcommand and flags
++  ([`cli.py`](https://github.com/smg-project/smg/blob/3be823a700fabaff3add8a390cf78f163479d686/bindings/python/src/smg/cli.py#L76-L82),
++  [`router_args.py`](https://github.com/smg-project/smg/blob/3be823a700fabaff3add8a390cf78f163479d686/bindings/python/src/smg/router_args.py#L843-L876)).
++- **Worker probe before start.** SMG waits at most `--worker-startup-timeout-secs`
++  (1800 s by default,
++  [`main.rs`](https://github.com/smg-project/smg/blob/3be823a700fabaff3add8a390cf78f163479d686/model_gateway/src/main.rs#L522-L524))
++  for a startup worker to register, and a large model can load for longer, so srtctl
++  waits for every advertised worker's `/health` to answer 200 before it starts SMG.
++- **Readiness.** srtctl polls SMG's `GET /workers` and waits until
++  `stats.prefill_count`, `stats.decode_count` and `stats.regular_count` cover the
++  expected workers; aggregated workers count as `regular`
++  ([route](https://github.com/smg-project/smg/blob/3be823a700fabaff3add8a390cf78f163479d686/model_gateway/src/server.rs#L993),
++  [response](https://github.com/smg-project/smg/blob/3be823a700fabaff3add8a390cf78f163479d686/model_gateway/src/worker/service.rs#L204-L241)).
++- **Metrics.** SMG serves Prometheus on its own listener. srtctl passes
++  `--prometheus-port 29000` (on every interface, SMG's default host) and points
++  tachometer's frontend target there
++  ([`main.rs`](https://github.com/smg-project/smg/blob/3be823a700fabaff3add8a390cf78f163479d686/model_gateway/src/main.rs#L741-L748)).
++  Workers are scraped on their own HTTP ports, as with the other static routers.
++- **Logs.** Each replica writes `<node>_smg_<index>.out` in the job log directory and
++  runs as the Slurm step `smg_<index>`.
++
++## Not wired
++
++srtctl advertises every worker over HTTP. SMG's gRPC, ZMQ and encode (EPD) worker
++modes, its Kubernetes service discovery, mesh, and the cloud-provider, history, MCP
++and WASM features are not configured by srtctl; `frontend.args` can still pass any
++`smg launch` flag that needs no srtctl-managed process or port.
+diff --git a/examples/README.md b/examples/README.md
+index cc454b34..0359a922 100644
+--- a/examples/README.md
++++ b/examples/README.md
+@@ -6,13 +6,13 @@ Small, runnable starting points, one per frontend and topology. Every example se
+ 
+ | Backend | Dynamo frontend | Native router | Router-free direct |
+ | --- | --- | --- | --- |
+-| SGLang | `sglang/dynamo-agg.yaml`, `sglang/dynamo-disagg.yaml` | `sglang/sglang-router-agg.yaml`, `sglang/sglang-router-disagg.yaml` | `sglang/sglang-direct-agg.yaml` |
+-| vLLM | `vllm/dynamo-agg.yaml`, `vllm/dynamo-disagg.yaml` | `vllm/vllm-router-agg.yaml`, `vllm/vllm-router-disagg.yaml`, `vllm/vllm-router-moriio-disagg.yaml` (ROCm, MoRI-IO discovery) | `vllm/vllm-direct-agg.yaml` |
++| SGLang | `sglang/dynamo-agg.yaml`, `sglang/dynamo-disagg.yaml` | `sglang/sglang-router-agg.yaml`, `sglang/sglang-router-disagg.yaml`, `sglang/smg-disagg.yaml` (SMG) | `sglang/sglang-direct-agg.yaml` |
++| vLLM | `vllm/dynamo-agg.yaml`, `vllm/dynamo-disagg.yaml` | `vllm/vllm-router-agg.yaml`, `vllm/vllm-router-disagg.yaml`, `vllm/vllm-router-moriio-disagg.yaml` (ROCm, MoRI-IO discovery), `vllm/smg-agg.yaml` (SMG) | `vllm/vllm-direct-agg.yaml` |
+ | TRT-LLM | `trtllm/dynamo-agg.yaml`, `trtllm/dynamo-disagg.yaml` | `trtllm/trtllm-serve-disagg.yaml` | `trtllm/trtllm-serve-agg.yaml` |
+ | Mocker | `mocker/dynamo-agg.yaml` | | |
+ 
+ - **Dynamo frontend**: workers register with etcd and the Dynamo frontend routes (KV-aware here); the request plane is tcp and NATS is not started unless a plane asks for it. Dynamo is installed at job start via `dynamo.source` (`pypi:` here) unless the container ships it (`dynamo.install: false`, as the TRT-LLM examples do).
+-- **Native router**: the engine's own router in front of plain engine workers. No Dynamo, NATS, or etcd. SGLang uses the Model Gateway (`frontend.type: sglang-router`), vLLM the official vLLM Router (`vllm-router`), TRT-LLM `trtllm-serve disaggregated` with a generated `ser.yaml`.
++- **Native router**: the engine's own router in front of plain engine workers. No Dynamo, NATS, or etcd. SGLang uses the Model Gateway (`frontend.type: sglang-router`), vLLM the official vLLM Router (`vllm-router`), TRT-LLM `trtllm-serve disaggregated` with a generated `ser.yaml`. The `smg` examples put the engine-agnostic [Shepherd Model Gateway](../docs/smg.md) (`frontend.type: smg`) in front of the same workers, run from its own image.
+ - **Router-free direct**: one worker owns the public port. `frontend.type: sglang`, `frontend.type: vllm`, and `frontend.type: trtllm_serve` in aggregate mode launch no router process.
+ - **Mocker**: `dynamo.mocker` stands in for an engine, so the whole orchestration path runs without loading weights. The fastest way to validate a cluster config.
+ 
+@@ -52,6 +52,7 @@ containers:
+   dynamo-vllm: /path/to/vllm-runtime.sqsh   # Dynamo vLLM runtime image (ships ai-dynamo and gpu_memory_service), for features/vllm-failover.yaml
+   vllm-lmcache: /path/to/vllm-lmcache.sqsh  # vLLM image with LMCache installed, for features/lmcache-server.yaml and -disagg.yaml
+   sglang-lmcache: /path/to/sglang-lmcache.sqsh  # SGLang image with LMCache installed, for features/lmcache-server-sglang.yaml
++  smg: /path/to/smg.sqsh                    # Shepherd Model Gateway image (lightseekorg/smg), the router for the smg examples
+ ```
+ 
+ `resources.gpu_type` and `gpus_per_node` are set to `h100` and `8`; change them to match the partition you submit to.
+diff --git a/examples/sglang/smg-disagg.yaml b/examples/sglang/smg-disagg.yaml
+new file mode 100644
+index 00000000..7ae710d9
+--- /dev/null
++++ b/examples/sglang/smg-disagg.yaml
+@@ -0,0 +1,63 @@
++# SGLang disaggregated prefill/decode behind the Shepherd Model Gateway (SMG).
++#
++# One TP1 prefill worker and one TP1 decode worker sharing a node (`nodes: colocate`
++# places decode on the prefill node's spare GPUs). srtctl adds `--disaggregation-mode`
++# and the prefill bootstrap port; SMG is launched with `--pd-disaggregation`, gets the
++# prefill URL with that bootstrap port, and pairs each request across the two workers.
++# SMG runs from its own image (`frontend.container_image`).
++#
++# Aliases (`qwen3-0.6b`, `sglang`, `smg`) resolve through srtslurm.yaml; see examples/README.md.
++
++schema: 2
++name: "qwen3-0.6b-sglang-smg-disagg"
++
++slurm:
++  time_limit: "00:30:00"
++
++model:
++  path: "qwen3-0.6b"
++  container: "sglang"
++  precision: "bf16"
++
++resources:
++  gpu_type: "h100"
++  gpus_per_node: 8
++frontend:
++  type: smg
++  container_image: smg
++  enable_multiple_frontends: false
++  args:
++    policy: "cache_aware"
++
++engine: sglang
++roles:
++  prefill:
++    nodes: 1
++    workers: 1
++    gpus: 1
++    env:
++      PYTHONUNBUFFERED: "1"
++    args:
++      served-model-name: "Qwen/Qwen3-0.6B"
++      tensor-parallel-size: 1
++      mem-fraction-static: 0.5
++      context-length: 4096
++      disable-piecewise-cuda-graph: true
++  decode:
++    nodes: colocate
++    workers: 1
++    gpus: 1
++    env:
++      PYTHONUNBUFFERED: "1"
++    args:
++      served-model-name: "Qwen/Qwen3-0.6B"
++      tensor-parallel-size: 1
++      mem-fraction-static: 0.5
++      context-length: 4096
++      disable-piecewise-cuda-graph: true
++
++benchmark:
++  type: "sa-bench"
++  isl: 128
++  osl: 128
++  concurrencies: "4x8"
+diff --git a/examples/vllm/smg-agg.yaml b/examples/vllm/smg-agg.yaml
+new file mode 100644
+index 00000000..aa38d839
+--- /dev/null
++++ b/examples/vllm/smg-agg.yaml
+@@ -0,0 +1,49 @@
++# vLLM aggregated behind the Shepherd Model Gateway (SMG).
++#
++# Two TP1 `vllm serve` workers on one node; SMG receives them through
++# `--worker-urls`, detects the engine from each worker, and routes with its
++# cache-aware policy. No Dynamo, NATS, or etcd. SMG runs from its own image
++# (`frontend.container_image`), so the model container needs no router package.
++#
++# Aliases (`qwen3-0.6b`, `vllm`, `smg`) resolve through srtslurm.yaml; see examples/README.md.
++
++schema: 2
++name: "qwen3-0.6b-vllm-smg-agg"
++
++slurm:
++  time_limit: "00:30:00"
++
++model:
++  path: "qwen3-0.6b"
++  container: "vllm"
++  precision: "bf16"
++
++resources:
++  gpu_type: "h100"
++  gpus_per_node: 8
++frontend:
++  type: smg
++  container_image: smg
++  enable_multiple_frontends: false
++  args:
++    policy: "cache_aware"
++
++engine: vllm
++roles:
++  agg:
++    nodes: 1
++    workers: 2
++    gpus: 1
++    env:
++      PYTHONUNBUFFERED: "1"
++    args:
++      served-model-name: "Qwen/Qwen3-0.6B"
++      tensor-parallel-size: 1
++      gpu-memory-utilization: 0.5
++      max-model-len: 4096
++
++benchmark:
++  type: "sa-bench"
++  isl: 128
++  osl: 128
++  concurrencies: "4x8"
+diff --git a/mkdocs.yml b/mkdocs.yml
+index 2467fda1..53f31af7 100644
+--- a/mkdocs.yml
++++ b/mkdocs.yml
+@@ -59,6 +59,7 @@ nav:
+       - Architecture: architecture.md
+       - SGLang Router: sglang-router.md
+       - vLLM Router: vllm-router.md
++      - Shepherd Model Gateway: smg.md
+       - TileRT: tilert.md
+       - Mooncake KV Store: mooncake-kv-store.md
+       - Services: services.md
+diff --git a/src/srtctl/core/schema.py b/src/srtctl/core/schema.py
+index 16edddaf..6f37c625 100755
+--- a/src/srtctl/core/schema.py
++++ b/src/srtctl/core/schema.py
+@@ -2140,7 +2140,8 @@ class FrontendConfig:
+ 
+     Attributes:
+         type: Frontend type - "dynamo" (default); "sglang-router" (SGLang Model
+-            Gateway), "vllm-router", "atomesh", and "tilert-router" (static routers); "sglang", "vllm", and
++            Gateway), "vllm-router", "smg" (Shepherd Model Gateway, any backend), "atomesh", and
++            "tilert-router" (static routers); "sglang", "vllm", and
+             "trtllm_serve" (direct: the single aggregate worker binds the public
+             port, no router process); "none" (services-only job: no router, no
+             OpenAI endpoint, no worker-count health gate; requires no engine
+diff --git a/src/srtctl/frontends/AGENTS.md b/src/srtctl/frontends/AGENTS.md
+index 745f4369..8bdd1fc0 100644
+--- a/src/srtctl/frontends/AGENTS.md
++++ b/src/srtctl/frontends/AGENTS.md
+@@ -4,7 +4,7 @@ Rules for `src/srtctl/frontends/`. The Design Rules in the root `CLAUDE.md` appl
+ 
+ ## Frontends and readiness
+ 
+-The frontend is the process that owns the public OpenAI port (`FRONTEND_PUBLIC_PORT`) and decides when the job is ready. Implementations live under `src/srtctl/frontends/`, register with `@register_frontend("<type>")`, and are imported from the package `__init__`; `frontend.type` resolves through that registry (`get_frontend`, `list_frontend_types`) and nowhere else. Registered today: `dynamo` (etcd/NATS discovery), `sglang-router` and `vllm-router` (static URL routers, both built on `StaticRouterFrontend`), `trtllm_serve` (direct aggregate or the disaggregated orchestrator), `sglang` and `vllm` (one direct worker owns the port); `none` is the services-only job with no implementation and no gate.
++The frontend is the process that owns the public OpenAI port (`FRONTEND_PUBLIC_PORT`) and decides when the job is ready. Implementations live under `src/srtctl/frontends/`, register with `@register_frontend("<type>")`, and are imported from the package `__init__`; `frontend.type` resolves through that registry (`get_frontend`, `list_frontend_types`) and nowhere else. Registered today: `dynamo` (etcd/NATS discovery), `sglang-router`, `vllm-router` and `smg` (static URL routers built on `StaticRouterFrontend`; `smg` pairs with any backend), `trtllm_serve` (direct aggregate or the disaggregated orchestrator), `sglang` and `vllm` (one direct worker owns the port); `none` is the services-only job with no implementation and no gate.
+ 
+ `FrontendProtocol` hooks: `required_backend` and `validate(config)` (recipe rules, run by `SrtConfig._validate_frontend` at load so dry-run catches them; raise `ValueError` with the user-facing message), `health_endpoint` and `parse_health` (readiness), `get_backend_health_urls` (second gate: every advertised worker URL must answer 200 before traffic), `start_frontends` (launch on `topology.frontend_nodes`, one `ManagedProcess` per node with a `step_name`), `get_frontend_args_list` (`frontend.args` to CLI). The schema knows no individual frontend: pairing and per-type rules come from these two members.
+ 
+diff --git a/src/srtctl/frontends/__init__.py b/src/srtctl/frontends/__init__.py
+index 1a0e055b..b27058ba 100644
+--- a/src/srtctl/frontends/__init__.py
++++ b/src/srtctl/frontends/__init__.py
+@@ -12,6 +12,7 @@ Supported frontend types:
+ - dynamo: Dynamo frontend with NATS/etcd communication
+ - sglang: Direct sglang.launch_server for a single aggregate worker (no router)
+ - sglang-router: SGLang Model Gateway router in front of static workers
++- smg: Shepherd Model Gateway in front of any engine's static workers
+ - tilert-router: TileRT P/D router in front of vLLM prefill and TileRT decode
+ - trtllm_serve: Direct trtllm-serve worker or the disaggregated orchestrator
+ - vllm: Direct vLLM OpenAI server for aggregate jobs
+@@ -30,6 +31,7 @@ from srtctl.frontends.dynamic_frontend import DynamicFrontend
+ from srtctl.frontends.dynamo import DynamoFrontend
+ from srtctl.frontends.sglang import SGLangRouterFrontend
+ from srtctl.frontends.sglang_direct import SGLangFrontend
++from srtctl.frontends.smg import SMGFrontend
+ from srtctl.frontends.tilert_router import TileRTRouterFrontend
+ from srtctl.frontends.trtllm_serve import TRTLLMServeFrontend
+ from srtctl.frontends.vllm import VLLMFrontend
+@@ -43,6 +45,7 @@ __all__ = [
+     "FrontendProtocol",
+     "SGLangFrontend",
+     "SGLangRouterFrontend",
++    "SMGFrontend",
+     "TRTLLMServeFrontend",
+     "TileRTRouterFrontend",
+     "VLLMFrontend",
+diff --git a/src/srtctl/frontends/smg.py b/src/srtctl/frontends/smg.py
+new file mode 100644
+index 00000000..0ac22aa8
+--- /dev/null
++++ b/src/srtctl/frontends/smg.py
+@@ -0,0 +1,51 @@
++# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
++# SPDX-License-Identifier: Apache-2.0
++
++"""Shepherd Model Gateway router frontend (`frontend.type: smg`).
++
++SMG (https://github.com/smg-project/smg) takes its workers as static URLs on the
++command line (``smg launch --worker-urls ...`` or ``--pd-disaggregation --prefill
++URL [BOOTSTRAP_PORT] --decode URL``), lists them at ``GET /workers`` with
++``stats.{prefill,decode,regular}_count``, and detects each HTTP worker's engine
++itself, so the static-router base covers launch, readiness, and worker shape for
++every backend.
++"""
++
++from typing import TYPE_CHECKING, Any, ClassVar
++
++from srtctl.frontends.base import register_frontend
++from srtctl.frontends.static_router import StaticRouterFrontend
++from srtctl.ports import SMG_METRICS_PORT
++
++if TYPE_CHECKING:
++    from srtctl.core.topology import Process
++
++
++@register_frontend("smg")
++class SMGFrontend(StaticRouterFrontend):
++    """Shepherd Model Gateway in front of any engine's direct HTTP workers."""
++
++    type: ClassVar[str] = "smg"
++    required_backend: ClassVar[str | None] = None
++    executable: ClassVar[tuple[str, ...]] = ("smg", "launch")
++    pd_flag: ClassVar[str] = "--pd-disaggregation"
++    process_name: ClassVar[str] = "smg"
++    # SMG waits at most --worker-startup-timeout-secs (1800 s by default) for a startup
++    # worker to register; a large model can load for longer, so every worker is probed first.
++    wait_for_workers_before_start: ClassVar[bool] = True
++
++    def frontend_metrics_port(self, frontend_args: dict[str, Any] | None) -> int | None:
++        """SMG serves Prometheus on its own listener, not on the routing port."""
++        return SMG_METRICS_PORT
++
++    def get_managed_frontend_args(
++        self,
++        config: Any,
++        backend: Any,
++        backend_processes: "list[Process]",
++    ) -> list[str]:
++        """Bind SMG's Prometheus listener on srtctl's port instead of upstream's default."""
++        normalized = {str(key).replace("_", "-") for key in (config.frontend.args or {})}
++        if "prometheus-port" in normalized:
++            raise ValueError("frontend.args.prometheus-port is managed by srtctl for smg")
++        return ["--prometheus-port", str(SMG_METRICS_PORT)]
+diff --git a/src/srtctl/ports.py b/src/srtctl/ports.py
+index 3de5f4b0..ae74afeb 100644
+--- a/src/srtctl/ports.py
++++ b/src/srtctl/ports.py
+@@ -35,6 +35,10 @@ SGLANG_NCCL_PORT_BASE = 17500
+ # Only started when --prometheus-port is passed, which srtctl does so tachometer can scrape it.
+ SGLANG_ROUTER_METRICS_PORT = 29000
+ 
++# Shepherd Model Gateway (frontend.type: smg) Prometheus listener on each router node,
++# passed as --prometheus-port so srtctl, not upstream's default, owns it.
++SMG_METRICS_PORT = 29000
++
+ # TRT-LLM torch.distributed bootstrap, one port per MPI endpoint.
+ TRTLLM_DIST_INIT_PORT_BASE = 29500
+ 

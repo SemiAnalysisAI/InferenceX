@@ -1,0 +1,79 @@
+# [DNM] agentic.yaml's TP4 c1 point behind the Shepherd Model Gateway (SMG).
+base:
+  schema: 2
+  name: qwen3.5-fp8-b300-sglang-agentic-smg
+  model:
+    path: hf:Qwen/Qwen3.5-397B-A17B-FP8
+    container: lmsysorg/sglang:v0.5.16-cu130
+    precision: fp8
+  resources:
+    gpu_type: b300
+    gpus_per_node: 8
+  frontend:
+    type: smg
+    container_image: lightseekorg/smg:1.11.0
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      args:
+        served-model-name: Qwen/Qwen3.5-397B-A17B-FP8
+        trust-remote-code: true
+        data-parallel-size: 1
+        enable-symm-mem: true
+        quantization: fp8
+        kv-cache-dtype: fp8_e4m3
+        mamba-ssm-dtype: bfloat16
+        attention-backend: trtllm_mha
+        moe-runner-backend: flashinfer_trtllm
+        max-prefill-tokens: 16384
+        chunked-prefill-size: 16384
+        mem-fraction-static: 0.8
+        stream-interval: 50
+        scheduler-recv-interval: 10
+        tokenizer-path: Qwen/Qwen3.5-397B-A17B-FP8
+        reasoning-parser: qwen3
+        tool-call-parser: qwen3_coder
+        speculative-algorithm: NEXTN
+        speculative-num-steps: 3
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 4
+        enable-metrics: true
+        enable-cache-report: true
+      env:
+        TORCH_CUDA_ARCH_LIST: '10.0'
+        PYTHONNOUSERSITE: '1'
+        NCCL_NVLS_ENABLE: '1'
+        SGL_ENABLE_JIT_DEEPGEMM: 'false'
+        SGLANG_ENABLE_FLASHINFER_GEMM: 'true'
+        # Outlast AIPerf's 300 s client connection pool.
+        SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
+    env:
+      MODEL: Qwen/Qwen3.5-397B-A17B-FP8
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+      # 256k-capped corpus, within this model's context.
+      WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126_256k
+
+override_tp4_c1:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 1
+        tokenizer-worker-num: 6
+        max-running-requests: 2
+        cuda-graph-max-bs: 1
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: 'none'
