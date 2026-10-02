@@ -95,14 +95,17 @@ base:
         VLLM_USE_V2_MODEL_RUNNER: '1'
         # Tip 1f837c46 eval-only c8 hung ~8.5m after dcp:0 then failed EP
         # PyNccl ncclCommInitRank (remote process exited) with Q_GATHER=0;
-        # restore Q gather. Disable direct A2A instead as the next probe for
-        # prior DCP PYNCCL _ALLGATHER_BASE hangs under ~98% GPU KV
-        # (tips 860c1ccf/e51c58f5). load_async must stay true.
+        # restore Q gather. Keep A2A off (dcp allreduce stays PYNCCL). load_async
+        # must stay true.
         VLLM_USE_DIRECT_DCP_A2A: '0'
         VLLM_USE_DIRECT_DCP_Q_GATHER: '1'
-        # Prior tip c48 hit direct DCP kv-gather multimem timeout then GPU memcpy
-        # failure; disable direct KV gather (same as GB200 DCP16 / MI355X lanes).
-        VLLM_USE_DIRECT_DCP_KV_GATHER: '0'
+        # Tip bed9f1ce c40 (Slurm 6765): with KV_GATHER=0 the hang is PyNCCL
+        # kv_gather _ALLGATHER_BASE (dcp.py:1413; last started work: -1) after
+        # ~42m serve / GPU KV ~86-100%, Mooncake failed_keys=0. A2A=0 and util
+        # 0.85 did not clear it. Re-enable direct KV gather (GB300 DCP8 /
+        # B200 Mooncake stock); prior multimem/memcpy with KV_GATHER=1 was under
+        # util 0.92 before the 0.85 headroom cut.
+        VLLM_USE_DIRECT_DCP_KV_GATHER: '1'
         VLLM_ENGINE_READY_TIMEOUT_S: '3600'
         VLLM_RPC_TIMEOUT: '600000'
         # Mooncake loads can block inside execute_model past the 300s default;
