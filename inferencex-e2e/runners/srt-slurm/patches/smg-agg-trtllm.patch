@@ -1,0 +1,564 @@
+diff --git a/src/srtctl/backends/AGENTS.md b/src/srtctl/backends/AGENTS.md
+index b306d600..aedf5fb6 100644
+--- a/src/srtctl/backends/AGENTS.md
++++ b/src/srtctl/backends/AGENTS.md
+@@ -17,6 +17,7 @@ Rules for `src/srtctl/backends/`. Every consumer asks a backend through `Backend
+    - `failover` / `get_failover_environment(...)` - shadow engine recovery; `None` / `{}` without it
+    - `should_set_visible_devices()` - `True` unless the engine takes its devices on the command line; the variable is the cluster's `visible_devices_env`
+    - `get_served_model_name(default)`
++   - `native_metrics_path` - where the engine's own OpenAI server serves Prometheus text (`/metrics`, trtllm-serve `/prometheus/metrics`)
+ 3. Export from `backends/__init__.py`
+ 4. Add polymorphic deserialization in `BackendConfigField` in `schema.py`
+ 
+diff --git a/src/srtctl/backends/atom.py b/src/srtctl/backends/atom.py
+index 8aeea3a0..1a3069e2 100644
+--- a/src/srtctl/backends/atom.py
++++ b/src/srtctl/backends/atom.py
+@@ -42,6 +42,7 @@ class AtomProtocol:
+     """Launch ``atom.entrypoints.openai_server`` on ROCm workers."""
+ 
+     type: Literal["atom"] = "atom"
++    native_metrics_path: ClassVar[str] = "/metrics"
+     prefill_environment: dict[str, str] = field(default_factory=dict)
+     decode_environment: dict[str, str] = field(default_factory=dict)
+     aggregated_environment: dict[str, str] = field(default_factory=dict)
+diff --git a/src/srtctl/backends/base.py b/src/srtctl/backends/base.py
+index 538cf9e0..74adcf7c 100644
+--- a/src/srtctl/backends/base.py
++++ b/src/srtctl/backends/base.py
+@@ -8,7 +8,7 @@ Base types and protocols for backend configurations.
+ from collections.abc import Sequence
+ from dataclasses import dataclass
+ from enum import Enum
+-from typing import TYPE_CHECKING, Any, Optional, Protocol
++from typing import TYPE_CHECKING, Any, ClassVar, Optional, Protocol
+ 
+ from srtctl.ports import DYN_SYSTEM_PORT_BASE
+ 
+@@ -74,6 +74,11 @@ class BackendProtocol(Protocol):
+         """Backend type identifier."""
+         ...
+ 
++    #: Path where the engine's own OpenAI server (a ``direct`` worker) serves
++    #: Prometheus text on its HTTP port. Frontends whose workers are the engine's
++    #: own server read it for the metrics URLs (``worker_metrics_path``).
++    native_metrics_path: ClassVar[str]
++
+     @property
+     def mooncake_kv_store(self) -> "MooncakeKVStoreConfig | VLLMMooncakeKVStoreConfig | None":
+         """The recipe's Mooncake KV store block, or None when the engine has none.
+diff --git a/src/srtctl/backends/mocker.py b/src/srtctl/backends/mocker.py
+index 826b243b..28cc6e6b 100644
+--- a/src/srtctl/backends/mocker.py
++++ b/src/srtctl/backends/mocker.py
+@@ -86,6 +86,7 @@ class MockerProtocol:
+     """
+ 
+     type: Literal["mocker"] = "mocker"
++    native_metrics_path: ClassVar[str] = "/metrics"
+ 
+     # Simulation parameters
+     engine_type: str = "vllm"
+diff --git a/src/srtctl/backends/sglang.py b/src/srtctl/backends/sglang.py
+index e7e0d618..ab03f432 100644
+--- a/src/srtctl/backends/sglang.py
++++ b/src/srtctl/backends/sglang.py
+@@ -136,6 +136,7 @@ class SGLangProtocol:
+     """
+ 
+     type: Literal["sglang"] = "sglang"
++    native_metrics_path: ClassVar[str] = "/metrics"
+     gpu_type: str | None = None
+ 
+     # Environment variables per mode
+diff --git a/src/srtctl/backends/tilert.py b/src/srtctl/backends/tilert.py
+index a2a164fe..06cfb474 100644
+--- a/src/srtctl/backends/tilert.py
++++ b/src/srtctl/backends/tilert.py
+@@ -36,6 +36,7 @@ class TileRTProtocol:
+     """Launch TileRT's decode server with recipe-owned model and transport settings."""
+ 
+     type: Literal["tilert"] = "tilert"
++    native_metrics_path: ClassVar[str] = "/metrics"
+     served_model_name: str | None = None
+     prefill_environment: dict[str, str] = field(default_factory=dict)
+     decode_environment: dict[str, str] = field(default_factory=dict)
+diff --git a/src/srtctl/backends/trtllm.py b/src/srtctl/backends/trtllm.py
+index 41a7ce98..1fc6aa19 100644
+--- a/src/srtctl/backends/trtllm.py
++++ b/src/srtctl/backends/trtllm.py
+@@ -74,6 +74,9 @@ class TRTLLMProtocol:
+     """
+ 
+     type: Literal["trtllm"] = "trtllm"
++    # trtllm-serve serves Prometheus text at /prometheus/metrics (mounted when
++    # return_perf_metrics is true); its /metrics route is JSON iteration stats.
++    native_metrics_path: ClassVar[str] = "/prometheus/metrics"
+ 
+     prefill_environment: dict[str, str] = field(default_factory=dict)
+     decode_environment: dict[str, str] = field(default_factory=dict)
+diff --git a/src/srtctl/backends/vllm.py b/src/srtctl/backends/vllm.py
+index 36318f7b..175bd01c 100644
+--- a/src/srtctl/backends/vllm.py
++++ b/src/srtctl/backends/vllm.py
+@@ -340,6 +340,7 @@ class VLLMProtocol:
+     """
+ 
+     type: Literal["vllm"] = "vllm"
++    native_metrics_path: ClassVar[str] = "/metrics"
+ 
+     # Environment variables per mode
+     prefill_environment: dict[str, str] = field(default_factory=dict)
+diff --git a/src/srtctl/cli/mixins/benchmark_stage.py b/src/srtctl/cli/mixins/benchmark_stage.py
+index a6f37ce2..1c26986a 100644
+--- a/src/srtctl/cli/mixins/benchmark_stage.py
++++ b/src/srtctl/cli/mixins/benchmark_stage.py
+@@ -740,7 +740,7 @@ class BenchmarkStageMixin:
+                 (not self.config.dynamo.sidecar and backend.dynamo_metrics_flags) or backend.publish_events_and_metrics
+             )
+         )
+-        metrics_path = frontend.metrics_path
++        metrics_path = frontend.worker_metrics_path(backend)
+         if logical_workers_only:
+             # Sidecars use native worker commands, so publish_metrics does not
+             # control their existing logical-worker URL discovery. Their native
+@@ -763,7 +763,7 @@ class BenchmarkStageMixin:
+         elif frontend.worker_launch == "direct":
+             # Every rank the frontend says serves metrics. trtllm-serve mounts its
+             # Prometheus route only when the engine runs with return_perf_metrics
+-            # (expand_trtllm_serve_defaults sets it on every trtllm_serve recipe;
++            # (expand_trtllm_serve_defaults sets it on every direct-worker recipe;
+             # an explicit false opts out), so gate each worker on its own engine
+             # config -- publish_events_and_metrics is a dynamo.trtllm flag that
+             # never reaches a trtllm-serve worker.
+diff --git a/src/srtctl/cli/mixins/telemetry_stage.py b/src/srtctl/cli/mixins/telemetry_stage.py
+index 65d44de4..c4280b70 100644
+--- a/src/srtctl/cli/mixins/telemetry_stage.py
++++ b/src/srtctl/cli/mixins/telemetry_stage.py
+@@ -551,6 +551,14 @@ class TelemetryStageMixin:
+             return None
+         return get_frontend(self.config.frontend.type).frontend_metrics_port(self.config.frontend.args)
+ 
++    def _worker_metrics_path(self) -> str:
++        """Path the workers serve Prometheus metrics at; a services-only job has no workers to scrape."""
++        from srtctl.frontends import FRONTEND_NONE, get_frontend
++
++        if self.config.frontend.type == FRONTEND_NONE:
++            return "/metrics"
++        return get_frontend(self.config.frontend.type).worker_metrics_path(self.config.backend)
++
+     def _service_metrics_targets(self) -> list[ServiceMetricsTarget]:
+         """One tachometer target per node for every service that serves metrics.
+ 
+@@ -628,6 +636,7 @@ class TelemetryStageMixin:
+                 tachometer=tachometer,
+                 frontend_type=self.config.frontend.type,
+                 frontend_metrics_port=self._frontend_metrics_port(),
++                worker_metrics_path=self._worker_metrics_path(),
+                 service_targets=[*self._service_metrics_targets(), *self._power_dcgm_targets()],
+             )
+         )
+diff --git a/src/srtctl/core/config.py b/src/srtctl/core/config.py
+index ac883cd8..7f5e6315 100755
+--- a/src/srtctl/core/config.py
++++ b/src/srtctl/core/config.py
+@@ -865,18 +865,24 @@ def expand_trtllm_serve_defaults(cfg: dict) -> dict:
+     default every trtllm-serve worker endpoint answers HTTP 404 and the capture
+     silently has no worker-level data.
+ 
+-    Applies to every ``frontend.type: trtllm_serve`` recipe with a TRT-LLM
+-    backend, independent of ``observability.enabled``. The engine sections for
+-    the modes the recipe uses (prefill + decode for a disaggregated
++    Applies to every recipe whose frontend launches ``direct`` workers
++    (``trtllm_serve``, or a router such as ``smg``) with a TRT-LLM backend,
++    independent of ``observability.enabled``. The engine sections for the modes
++    the recipe uses (prefill + decode for a disaggregated
+     ``resources`` block, ``aggregated`` otherwise) are created when absent, so a
+     recipe with no ``trtllm_config`` gets the default too. Every write is a
+     ``setdefault``: an explicit ``return_perf_metrics: false`` in the recipe
+     wins, but is reported loudly. Mutates ``cfg`` in place and returns it.
+     """
+     from srtctl.core.schema import TRTLLM_SERVE_ENGINE_DEFAULTS
++    from srtctl.frontends import FRONTEND_NONE, get_frontend, list_frontend_types
+ 
+     frontend = cfg.get("frontend")
+-    if not isinstance(frontend, dict) or frontend.get("type") != "trtllm_serve":
++    frontend_type = frontend.get("type") if isinstance(frontend, dict) else None
++    # An unset type is Dynamo; an unknown one is reported by schema validation.
++    if frontend_type in (None, FRONTEND_NONE) or frontend_type not in list_frontend_types():
++        return cfg
++    if get_frontend(frontend_type).worker_launch != "direct":
+         return cfg
+     backend = cfg.get("backend")
+     if not isinstance(backend, dict) or backend.get("type", "sglang") != "trtllm":
+@@ -886,10 +892,11 @@ def expand_trtllm_serve_defaults(cfg: dict) -> dict:
+     opted_out = [mode for mode, section in sections.items() if section.get("return_perf_metrics") is False]
+     if opted_out:
+         logger.warning(
+-            "frontend.type: trtllm_serve with return_perf_metrics: false on %s — those "
++            "frontend.type: %s with return_perf_metrics: false on %s — those "
+             "trtllm-serve workers will NOT mount /prometheus/metrics (HTTP 404), so the "
+             "Tachometer backend_* endpoints and the per-request Prometheus histograms "
+             "will be empty for them. Remove the line to keep the default.",
++            frontend_type,
+             ", ".join(opted_out),
+         )
+     return cfg
+diff --git a/src/srtctl/core/schema.py b/src/srtctl/core/schema.py
+index 16edddaf..6f37c625 100755
+--- a/src/srtctl/core/schema.py
++++ b/src/srtctl/core/schema.py
+@@ -2140,7 +2140,8 @@ class FrontendConfig:
+ 
+     Attributes:
+         type: Frontend type - "dynamo" (default); "sglang-router" (SGLang Model
+-            Gateway), "vllm-router", "atomesh", and "tilert-router" (static routers); "sglang", "vllm", and
++            Gateway), "vllm-router", "smg" (Shepherd Model Gateway, any backend), "atomesh", and
++            "tilert-router" (static routers); "sglang", "vllm", and
+             "trtllm_serve" (direct: the single aggregate worker binds the public
+             port, no router process); "none" (services-only job: no router, no
+             OpenAI endpoint, no worker-count health gate; requires no engine
+diff --git a/src/srtctl/core/telemetry.py b/src/srtctl/core/telemetry.py
+index 5fd64a54..900d833d 100644
+--- a/src/srtctl/core/telemetry.py
++++ b/src/srtctl/core/telemetry.py
+@@ -69,6 +69,7 @@ def generate_tachometer_config(
+     tachometer: TachometerConfig,
+     frontend_type: str = "dynamo",
+     frontend_metrics_port: int | None = None,
++    worker_metrics_path: str = "/metrics",
+     service_targets: Sequence[ServiceMetricsTarget] = (),
+ ) -> str:
+     """Generate Tachometer TOML from the worker and frontend topology plus the services' metrics.
+@@ -104,8 +105,9 @@ def generate_tachometer_config(
+     """
+     from srtctl.frontends import FRONTEND_NONE, get_frontend
+ 
+-    # The frontend says which rank serves metrics on which port and at what path;
+-    # a services-only job has no frontend and no worker processes.
++    # The frontend says which rank serves metrics on which port, and at what path
++    # (``worker_metrics_path``, resolved by the caller with the backend); a
++    # services-only job has no frontend and no worker processes.
+     frontend = None if frontend_type == FRONTEND_NONE else get_frontend(frontend_type)
+     metrics_path = frontend.metrics_path if frontend is not None else "/metrics"
+     endpoints: list[TelemetryEndpoint] = []
+@@ -129,7 +131,7 @@ def generate_tachometer_config(
+         if port is None:
+             continue
+         node_ip = get_hostname_ip(process.node, runtime.network_interface)
+-        url = f"http://{url_host(node_ip)}:{port}{metrics_path}"
++        url = f"http://{url_host(node_ip)}:{port}{worker_metrics_path}"
+         node_metadata = {
+             "hostname": process.node,
+             "worker_index": str(process.endpoint_index),
+diff --git a/src/srtctl/frontends/AGENTS.md b/src/srtctl/frontends/AGENTS.md
+index 745f4369..23dec74f 100644
+--- a/src/srtctl/frontends/AGENTS.md
++++ b/src/srtctl/frontends/AGENTS.md
+@@ -4,7 +4,7 @@ Rules for `src/srtctl/frontends/`. The Design Rules in the root `CLAUDE.md` appl
+ 
+ ## Frontends and readiness
+ 
+-The frontend is the process that owns the public OpenAI port (`FRONTEND_PUBLIC_PORT`) and decides when the job is ready. Implementations live under `src/srtctl/frontends/`, register with `@register_frontend("<type>")`, and are imported from the package `__init__`; `frontend.type` resolves through that registry (`get_frontend`, `list_frontend_types`) and nowhere else. Registered today: `dynamo` (etcd/NATS discovery), `sglang-router` and `vllm-router` (static URL routers, both built on `StaticRouterFrontend`), `trtllm_serve` (direct aggregate or the disaggregated orchestrator), `sglang` and `vllm` (one direct worker owns the port); `none` is the services-only job with no implementation and no gate.
++The frontend is the process that owns the public OpenAI port (`FRONTEND_PUBLIC_PORT`) and decides when the job is ready. Implementations live under `src/srtctl/frontends/`, register with `@register_frontend("<type>")`, and are imported from the package `__init__`; `frontend.type` resolves through that registry (`get_frontend`, `list_frontend_types`) and nowhere else. Registered today: `dynamo` (etcd/NATS discovery), `sglang-router`, `vllm-router` and `smg` (static URL routers built on `StaticRouterFrontend`; `smg` pairs with any backend), `trtllm_serve` (direct aggregate or the disaggregated orchestrator), `sglang` and `vllm` (one direct worker owns the port); `none` is the services-only job with no implementation and no gate.
+ 
+ `FrontendProtocol` hooks: `required_backend` and `validate(config)` (recipe rules, run by `SrtConfig._validate_frontend` at load so dry-run catches them; raise `ValueError` with the user-facing message), `health_endpoint` and `parse_health` (readiness), `get_backend_health_urls` (second gate: every advertised worker URL must answer 200 before traffic), `start_frontends` (launch on `topology.frontend_nodes`, one `ManagedProcess` per node with a `step_name`), `get_frontend_args_list` (`frontend.args` to CLI). The schema knows no individual frontend: pairing and per-type rules come from these two members.
+ 
+@@ -14,7 +14,7 @@ Readiness runs in `BenchmarkStageMixin._wait_for_service_ready`: `wait_for_model
+ 
+ The frontend also owns the worker shape, and backends read it instead of comparing names: `worker_launch` (`dynamo` workers register with the Dynamo runtime, `direct` workers are the engine's own server), `worker_api_port(mode)` (`public` when the worker is itself the endpoint and binds `runtime.frontend_port`, `allocated` when a router fronts it on `Process.http_port`), and `expands_node_local_dp` (vLLM Router expands per-node hybrid-LB pools, so the vLLM backend launches one API per node and refuses `per_gpu`). `build_worker_command` still takes `frontend_type` and resolves it through `get_frontend`; a new router mode is therefore one frontend override plus, at most, a new attribute on the protocol.
+ 
+-Which rank serves what is the frontend's call too, one method per consumer: `worker_metrics_port(process, runtime)` and `metrics_path` feed the tachometer scrape targets and the AIPerf metrics URLs (Dynamo: every rank on its system port; native servers: the leader or each routable pool on its HTTP port), `worker_endpoint_port(process, config, runtime)` feeds the `PREFILL_IPS`-style benchmark env (one per logical worker), `profiling_control_port` and `profiling_control_is_leader_only` feed iteration-triggered nsys control, `direct_endpoint_nodes(processes)` names the nodes whose worker is itself the public endpoint, and `worker_ready_port(process)` is what sequential endpoint start polls. `core/telemetry.py` and the benchmark stage contain no frontend-name checks; `BenchmarkStageMixin.frontend` is `None` for a services-only job.
++Which rank serves what is the frontend's call too, one method per consumer: `worker_metrics_port(process, runtime)` and `worker_metrics_path(backend)` feed the tachometer scrape targets and the AIPerf metrics URLs (a direct worker answers at `backend.native_metrics_path`; `metrics_path` is the router's own) (Dynamo: every rank on its system port; native servers: the leader or each routable pool on its HTTP port), `worker_endpoint_port(process, config, runtime)` feeds the `PREFILL_IPS`-style benchmark env (one per logical worker), `profiling_control_port` and `profiling_control_is_leader_only` feed iteration-triggered nsys control, `direct_endpoint_nodes(processes)` names the nodes whose worker is itself the public endpoint, and `worker_ready_port(process)` is what sequential endpoint start polls. `core/telemetry.py` and the benchmark stage contain no frontend-name checks; `BenchmarkStageMixin.frontend` is `None` for a services-only job.
+ 
+ Expected counts come from the frontend too: `health_expectations(config, processes)` returns `(prefill, decode, description)` in the units its endpoint reports. Aggregate workers count as decode; Dynamo counts vLLM DP registrations, vLLM Router counts the ranks it expands each URL into, everything else counts logical workers.
+ 
+diff --git a/src/srtctl/frontends/__init__.py b/src/srtctl/frontends/__init__.py
+index 1a0e055b..b27058ba 100644
+--- a/src/srtctl/frontends/__init__.py
++++ b/src/srtctl/frontends/__init__.py
+@@ -12,6 +12,7 @@ Supported frontend types:
+ - dynamo: Dynamo frontend with NATS/etcd communication
+ - sglang: Direct sglang.launch_server for a single aggregate worker (no router)
+ - sglang-router: SGLang Model Gateway router in front of static workers
++- smg: Shepherd Model Gateway in front of any engine's static workers
+ - tilert-router: TileRT P/D router in front of vLLM prefill and TileRT decode
+ - trtllm_serve: Direct trtllm-serve worker or the disaggregated orchestrator
+ - vllm: Direct vLLM OpenAI server for aggregate jobs
+@@ -30,6 +31,7 @@ from srtctl.frontends.dynamic_frontend import DynamicFrontend
+ from srtctl.frontends.dynamo import DynamoFrontend
+ from srtctl.frontends.sglang import SGLangRouterFrontend
+ from srtctl.frontends.sglang_direct import SGLangFrontend
++from srtctl.frontends.smg import SMGFrontend
+ from srtctl.frontends.tilert_router import TileRTRouterFrontend
+ from srtctl.frontends.trtllm_serve import TRTLLMServeFrontend
+ from srtctl.frontends.vllm import VLLMFrontend
+@@ -43,6 +45,7 @@ __all__ = [
+     "FrontendProtocol",
+     "SGLangFrontend",
+     "SGLangRouterFrontend",
++    "SMGFrontend",
+     "TRTLLMServeFrontend",
+     "TileRTRouterFrontend",
+     "VLLMFrontend",
+diff --git a/src/srtctl/frontends/base.py b/src/srtctl/frontends/base.py
+index 1dec35a1..b2c7742d 100644
+--- a/src/srtctl/frontends/base.py
++++ b/src/srtctl/frontends/base.py
+@@ -38,7 +38,8 @@ class FrontendProtocol(Protocol):
+        (``worker_launch``, ``worker_api_port``, ``expands_node_local_dp``)
+     3. Which rank serves metrics, an endpoint, or profiler control, and where
+        (``worker_metrics_port``, ``worker_endpoint_port``, ``profiling_control_port``,
+-       ``direct_endpoint_nodes``, ``worker_ready_port``, ``metrics_path``)
++       ``direct_endpoint_nodes``, ``worker_ready_port``, ``metrics_path``,
++       ``worker_metrics_path``)
+     4. How readiness is probed and counted (``probe_ready``, ``health_expectations``,
+        ``get_backend_health_urls``)
+     5. What it brings along (``implied_services``, ``frontend_metrics_port``)
+@@ -84,11 +85,19 @@ class FrontendProtocol(Protocol):
+         """
+         ...
+ 
+-    #: Path where this frontend's workers and router serve Prometheus metrics.
++    #: Path where this frontend's router (or its direct endpoint) serves Prometheus metrics.
+     metrics_path: ClassVar[str]
+ 
++    def worker_metrics_path(self, backend: Any) -> str:
++        """Path a worker serves Prometheus metrics at on ``worker_metrics_port``.
++
++        A Dynamo worker's system server answers ``/metrics`` for every engine; a
++        direct worker is the engine's own server, so ``backend.native_metrics_path``.
++        """
++        ...
++
+     def worker_metrics_port(self, process: "Process", runtime: "RuntimeContext") -> int | None:
+-        """Port on ``process.node`` serving Prometheus metrics at ``metrics_path`` for this rank.
++        """Port on ``process.node`` serving Prometheus metrics at ``worker_metrics_path`` for this rank.
+ 
+         ``None`` when the rank serves none: a follower of a native multi-node
+         server, or a layout the frontend does not scrape. Every rank of a Dynamo
+diff --git a/src/srtctl/frontends/dynamic_frontend.py b/src/srtctl/frontends/dynamic_frontend.py
+index 73ebd73a..acd25f73 100644
+--- a/src/srtctl/frontends/dynamic_frontend.py
++++ b/src/srtctl/frontends/dynamic_frontend.py
+@@ -43,6 +43,10 @@ class DynamicFrontend:
+     expands_node_local_dp: ClassVar[bool] = False
+     metrics_path: ClassVar[str] = "/metrics"
+ 
++    def worker_metrics_path(self, backend: Any) -> str:
++        """Every rank's Dynamo system server answers ``/metrics``, whatever the engine."""
++        return self.metrics_path
++
+     @property
+     def health_endpoint(self) -> str:
+         """The frontend reports its registered workers here; ``parse_health`` counts them."""
+diff --git a/src/srtctl/frontends/sglang_direct.py b/src/srtctl/frontends/sglang_direct.py
+index f996da58..1c25d106 100644
+--- a/src/srtctl/frontends/sglang_direct.py
++++ b/src/srtctl/frontends/sglang_direct.py
+@@ -50,6 +50,10 @@ class SGLangFrontend:
+ 
+     metrics_path: ClassVar[str] = "/metrics"
+ 
++    def worker_metrics_path(self, backend: Any) -> str:
++        """The worker is the engine's own server."""
++        return backend.native_metrics_path
++
+     def worker_metrics_port(self, process: Process, runtime: RuntimeContext) -> int | None:
+         """The aggregate leader binds the public port; its followers serve nothing."""
+         if process.endpoint_mode == "agg" and process.is_leader:
+diff --git a/src/srtctl/frontends/smg.py b/src/srtctl/frontends/smg.py
+new file mode 100644
+index 00000000..53383559
+--- /dev/null
++++ b/src/srtctl/frontends/smg.py
+@@ -0,0 +1,55 @@
++# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
++# SPDX-License-Identifier: Apache-2.0
++
++"""Shepherd Model Gateway router frontend (`frontend.type: smg`).
++
++SMG (https://github.com/smg-project/smg) takes its workers as static URLs on the
++command line (``smg launch --worker-urls ...`` or ``--pd-disaggregation --prefill
++URL [BOOTSTRAP_PORT] --decode URL``), lists them at ``GET /workers`` with
++``stats.{prefill,decode,regular}_count``, and detects each HTTP worker's engine
++itself, so the static-router base covers launch, readiness, and worker shape for
++every backend.
++"""
++
++from typing import TYPE_CHECKING, Any, ClassVar
++
++from srtctl.frontends.base import register_frontend
++from srtctl.frontends.static_router import StaticRouterFrontend, setup_script_preamble
++from srtctl.ports import SMG_METRICS_PORT
++
++if TYPE_CHECKING:
++    from srtctl.core.topology import Process
++
++
++@register_frontend("smg")
++class SMGFrontend(StaticRouterFrontend):
++    """Shepherd Model Gateway in front of any engine's direct HTTP workers."""
++
++    type: ClassVar[str] = "smg"
++    required_backend: ClassVar[str | None] = None
++    executable: ClassVar[tuple[str, ...]] = ("smg", "launch")
++    pd_flag: ClassVar[str] = "--pd-disaggregation"
++    process_name: ClassVar[str] = "smg"
++    # SMG waits at most --worker-startup-timeout-secs (1800 s by default) for a startup
++    # worker to register; a large model can load for longer, so every worker is probed first.
++    wait_for_workers_before_start: ClassVar[bool] = True
++
++    def frontend_metrics_port(self, frontend_args: dict[str, Any] | None) -> int | None:
++        """SMG serves Prometheus on its own listener, not on the routing port."""
++        return SMG_METRICS_PORT
++
++    def build_bash_preamble(self, config: Any) -> str | None:
++        """Run the recipe setup script in SMG's container, e.g. to ``pip install smg``."""
++        return setup_script_preamble(config)
++
++    def get_managed_frontend_args(
++        self,
++        config: Any,
++        backend: Any,
++        backend_processes: "list[Process]",
++    ) -> list[str]:
++        """Bind SMG's Prometheus listener on srtctl's port instead of upstream's default."""
++        normalized = {str(key).replace("_", "-") for key in (config.frontend.args or {})}
++        if "prometheus-port" in normalized:
++            raise ValueError("frontend.args.prometheus-port is managed by srtctl for smg")
++        return ["--prometheus-port", str(SMG_METRICS_PORT)]
+diff --git a/src/srtctl/frontends/static_router.py b/src/srtctl/frontends/static_router.py
+index 8c0ea166..5b60f633 100644
+--- a/src/srtctl/frontends/static_router.py
++++ b/src/srtctl/frontends/static_router.py
+@@ -38,6 +38,28 @@ class RouterWorker:
+     bootstrap_port: int | None = None
+ 
+ 
++def setup_script_preamble(config: Any) -> str | None:
++    """Shell that runs the recipe's ``setup_script`` in a router's own container.
++
++    A router that ships as a package (``pip install``) rather than in the model
++    image installs itself this way; the script is looked up in ``/configs`` and
++    then ``/configs/patches``, as for the workers.
++    """
++    setup_script = getattr(config, "setup_script", None)
++    if not setup_script:
++        return None
++    script_name = shlex.quote(setup_script)
++    return (
++        f"setup_script={script_name} && "
++        'script_path="/configs/${setup_script}" && '
++        'patch_script_path="/configs/patches/${setup_script}" && '
++        'echo "Running setup script: ${script_path} (fallback ${patch_script_path})" && '
++        'if [ -f "${script_path}" ]; then bash "${script_path}"; '
++        'elif [ -f "${patch_script_path}" ]; then bash "${patch_script_path}"; '
++        'else echo "WARNING: ${script_path} or ${patch_script_path} not found"; fi'
++    )
++
++
+ class StaticRouterFrontend:
+     """Base class for routers whose worker topology is supplied on the CLI.
+ 
+@@ -73,6 +95,10 @@ class StaticRouterFrontend:
+ 
+     metrics_path: ClassVar[str] = "/metrics"
+ 
++    def worker_metrics_path(self, backend: Any) -> str:
++        """A routed worker is the engine's own server."""
++        return backend.native_metrics_path
++
+     def worker_metrics_port(self, process: Process, runtime: RuntimeContext) -> int | None:
+         """A native server's leader rank binds the HTTP server that carries /metrics; followers serve nothing."""
+         if process.is_leader and process.http_port > 0:
+diff --git a/src/srtctl/frontends/trtllm_serve.py b/src/srtctl/frontends/trtllm_serve.py
+index b7df9d2c..d433f5b5 100644
+--- a/src/srtctl/frontends/trtllm_serve.py
++++ b/src/srtctl/frontends/trtllm_serve.py
+@@ -58,10 +58,14 @@ class TRTLLMServeFrontend:
+         """The aggregate worker is the endpoint; P/D workers sit behind the disaggregated orchestrator."""
+         return "public" if mode == "agg" else "allocated"
+ 
+-    # trtllm-serve (worker and disaggregated orchestrator alike) serves Prometheus
+-    # text at /prometheus/metrics; GET /metrics on a worker is JSON iteration stats.
++    # The disaggregated orchestrator serves Prometheus text at /prometheus/metrics, as
++    # its trtllm-serve workers do (TRTLLMProtocol.native_metrics_path).
+     metrics_path: ClassVar[str] = "/prometheus/metrics"
+ 
++    def worker_metrics_path(self, backend: Any) -> str:
++        """The workers are the engine's own servers."""
++        return backend.native_metrics_path
++
+     def worker_metrics_port(self, process: "Process", runtime: "RuntimeContext") -> int | None:
+         """P/D leaders serve Prometheus on their OpenAI port; followers bind nothing. Aggregate is out of scope."""
+         if process.endpoint_mode == "agg" or process.http_port <= 0:
+diff --git a/src/srtctl/frontends/vllm.py b/src/srtctl/frontends/vllm.py
+index 0640abef..e81be578 100644
+--- a/src/srtctl/frontends/vllm.py
++++ b/src/srtctl/frontends/vllm.py
+@@ -51,6 +51,10 @@ class VLLMFrontend:
+ 
+     metrics_path: ClassVar[str] = "/metrics"
+ 
++    def worker_metrics_path(self, backend: Any) -> str:
++        """The worker is the engine's own server."""
++        return backend.native_metrics_path
++
+     def worker_metrics_port(self, process: Process, runtime: RuntimeContext) -> int | None:
+         """The aggregate leader binds the public port; its followers serve nothing."""
+         if process.endpoint_mode == "agg" and process.is_leader:
+diff --git a/src/srtctl/frontends/vllm_router.py b/src/srtctl/frontends/vllm_router.py
+index 2a2fad5c..aa2d7cc3 100644
+--- a/src/srtctl/frontends/vllm_router.py
++++ b/src/srtctl/frontends/vllm_router.py
+@@ -5,12 +5,11 @@
+ 
+ from __future__ import annotations
+ 
+-import shlex
+ from typing import TYPE_CHECKING, Any, ClassVar
+ 
+ from srtctl.core.health import WorkerHealthResult, probe_http_ok
+ from srtctl.frontends.base import logical_health_expectations, register_frontend
+-from srtctl.frontends.static_router import RouterWorker, StaticRouterFrontend
++from srtctl.frontends.static_router import RouterWorker, StaticRouterFrontend, setup_script_preamble
+ from srtctl.ports import VLLM_DISCOVERY_PORT
+ 
+ if TYPE_CHECKING:
+@@ -234,19 +233,7 @@ class VLLMRouterFrontend(StaticRouterFrontend):
+ 
+     def build_bash_preamble(self, config: Any) -> str | None:
+         """Run the recipe setup script in the vLLM Router container."""
+-        setup_script = getattr(config, "setup_script", None)
+-        if not setup_script:
+-            return None
+-        script_name = shlex.quote(setup_script)
+-        return (
+-            f"setup_script={script_name} && "
+-            'script_path="/configs/${setup_script}" && '
+-            'patch_script_path="/configs/patches/${setup_script}" && '
+-            'echo "Running setup script: ${script_path} (fallback ${patch_script_path})" && '
+-            'if [ -f "${script_path}" ]; then bash "${script_path}"; '
+-            'elif [ -f "${patch_script_path}" ]; then bash "${patch_script_path}"; '
+-            'else echo "WARNING: ${script_path} or ${patch_script_path} not found"; fi'
+-        )
++        return setup_script_preamble(config)
+ 
+     def get_backend_health_urls(
+         self,
+diff --git a/src/srtctl/ports.py b/src/srtctl/ports.py
+index 3de5f4b0..ae74afeb 100644
+--- a/src/srtctl/ports.py
++++ b/src/srtctl/ports.py
+@@ -35,6 +35,10 @@ SGLANG_NCCL_PORT_BASE = 17500
+ # Only started when --prometheus-port is passed, which srtctl does so tachometer can scrape it.
+ SGLANG_ROUTER_METRICS_PORT = 29000
+ 
++# Shepherd Model Gateway (frontend.type: smg) Prometheus listener on each router node,
++# passed as --prometheus-port so srtctl, not upstream's default, owns it.
++SMG_METRICS_PORT = 29000
++
+ # TRT-LLM torch.distributed bootstrap, one port per MPI endpoint.
+ TRTLLM_DIST_INIT_PORT_BASE = 29500
+ 
