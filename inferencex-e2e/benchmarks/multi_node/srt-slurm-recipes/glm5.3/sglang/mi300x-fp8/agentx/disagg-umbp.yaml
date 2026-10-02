@@ -158,7 +158,7 @@ override_p_tp8_d_dep8_c4:
         max-running-requests: 8
         cuda-graph-max-bs-decode: 8
     decode: &dep8_decode
-      env:
+      env: &dep8_decode_env
         # STP decode is bounded by 16 requests, not the prefill-sized default.
         SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "128"
       args:
@@ -181,6 +181,8 @@ override_p_dep8_d_dep8_c8:
   roles:
     prefill:
       env:
+        # Cache-aware routing chooses P ranks independently of bootstrap-room IDs.
+        SGLANG_DISAGGREGATION_FORCE_QUERY_PREFILL_DP_RANK: "1"
         # Attention DP divides the 8192-token prefill budget across eight ranks.
         SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "1024"
       args:
@@ -193,7 +195,11 @@ override_p_dep8_d_dep8_c8:
         chunked-prefill-size: 8192
         max-running-requests: 16
         cuda-graph-max-bs-decode: 16
-    decode: *dep8_decode
+    decode:
+      <<: *dep8_decode
+      env:
+        <<: *dep8_decode_env
+        SGLANG_DISAGGREGATION_FORCE_QUERY_PREFILL_DP_RANK: "1"
   benchmark:
     env:
       CONC: "8"
