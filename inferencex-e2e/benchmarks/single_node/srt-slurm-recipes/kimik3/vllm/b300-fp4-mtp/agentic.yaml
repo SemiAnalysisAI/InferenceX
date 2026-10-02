@@ -139,15 +139,20 @@ base:
       KV_OFFLOADING: dram
       TOTAL_CPU_DRAM_GB: '2249'
 
-# One variant per point. Admission is 2x CONC through CONC 40; CONC 48+ use 1x
+# One variant per point. Admission is 2x CONC through CONC 24; CONC 32+ use 1x
 # CONC. Tip 031de17bf c56 (Slurm 6848) with A2A/Q/KV all direct, util 0.85, and
 # max-num-seqs=112 packed GPU KV to ~99.7% (Running: 1, Waiting: 12, Deferred:
 # 12) then hung workers for the full VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS=1800 —
 # shm_broadcast starvation from 15:28, then TimeoutError: RPC call to
 # sample_tokens timed out (no Watchdog / ALLGATHER / ALLTOALL / CUDA OOM; ingest
-# nccl_error:16 was init-only ibv_query_port_speed WARN). Cap high-conc
-# admission so prefix+deferred loads cannot pin the pool before decode. CONC
-# 8+ use gpu-memory-utilization 0.85: with
+# nccl_error:16 was init-only ibv_query_port_speed WARN). Tip 861a1512 c32
+# (Slurm 6916) repeated the same kill under max-num-seqs=64 (2x): GPU KV pinned
+# ~99–100% for tens of minutes, then hung at 0 tok/s (Running: 23, Waiting: 11,
+# Deferred: 11) with shm_broadcast starvation from 21:03 through the 1800s
+# sample_tokens timeout → EngineDead / ProfileAborted (20 empty streams + 62
+# ClientConnectorError after shutdown; ingest nccl_error:16 again init-only).
+# Cap CONC 32+ admission so prefix+deferred loads cannot pin the pool before
+# decode. CONC 8+ use gpu-memory-utilization 0.85: with
 # VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0, tip b70e4260a c48 (Slurm 6737)
 # over-allocated GPU KV to 45.2 GiB (vLLM suggested 36.78 GiB once CUDA graphs
 # are counted) and OOMed in flashinfer FP4 MoE prepare_moe (~2.89 GiB needed,
@@ -236,9 +241,9 @@ override_c32:
   roles:
     agg:
       args:
-        max-num-seqs: 64
+        max-num-seqs: 32
         gpu-memory-utilization: 0.85
-        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,128,256,512,1024,2048,4096,8192]}'
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,64,128,256,512,1024,2048,4096,8192]}'
   benchmark:
     env:
       CONC: '32'
@@ -248,9 +253,9 @@ override_c40:
   roles:
     agg:
       args:
-        max-num-seqs: 80
+        max-num-seqs: 40
         gpu-memory-utilization: 0.85
-        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,128,256,512,1024,2048,4096,8192]}'
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,64,128,256,512,1024,2048,4096,8192]}'
   benchmark:
     env:
       CONC: '40'

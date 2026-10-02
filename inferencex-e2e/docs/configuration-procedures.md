@@ -364,11 +364,15 @@ Application startup with KV 45.2 GiB at 0.92 under
 KV once CUDA graphs are counted. Tip 5ab41690 c8 then soft-OOMed at util 0.92
 during warmup — CUDACachingAllocator failed a ~3.03 GiB alloc with ~1.16 GiB
 free — yielding empty streams and ProfileAborted at 2/11 > 10%; keep 0.92 only
-on c1–c4). Cap `max-num-seqs` at 1×CONC for CONC 48+
+on c1–c4). Cap `max-num-seqs` at 1×CONC for CONC 32+
 (tip 031de17bf c56 with A2A/Q/KV all direct and util 0.85 packed GPU KV to
 ~99.7% under 2× admission, then hung workers through the 1800s
 `sample_tokens` RPC timeout with no Watchdog / ALLGATHER / ALLTOALL / CUDA OOM;
-ingest `nccl_error:16` was init-only `ibv_query_port_speed` WARN).
+ingest `nccl_error:16` was init-only `ibv_query_port_speed` WARN. Tip 861a1512
+c32 repeated the same kill under `max-num-seqs=64`: GPU KV pinned ~99–100%,
+then hung at 0 tok/s with shm_broadcast starvation from 21:03 through the
+1800s `sample_tokens` timeout → EngineDead / ProfileAborted; keep 2× only
+through CONC 24).
 
 
 The AgentX-only `dsv41flash-fp4-<sku>-vllm-agentic-dspark` recipes use the per-SKU
