@@ -70,10 +70,9 @@ override_tp8_c1:
 override_tp8_mtp_c1:
   roles:
     agg:
-      args:
+      args: &mtp_args
         max-running-requests: 2
         cuda-graph-max-bs-decode: 2
-        max-total-tokens: 1048576
         speculative-algorithm: EAGLE
         speculative-num-steps: 3
         speculative-eagle-topk: 1
@@ -81,6 +80,18 @@ override_tp8_mtp_c1:
   benchmark:
     env:
       CONC: "1"
+      KV_OFFLOADING: none
+
+zip_override_tp8_mtp_concurrency:
+  roles:
+    agg:
+      args:
+        <<: *mtp_args
+        max-running-requests: [4, 6]
+        cuda-graph-max-bs-decode: [4, 8]
+  benchmark:
+    env:
+      CONC: ["2", "3"]
       KV_OFFLOADING: none
 
 override_tp8_umbp_c1:
