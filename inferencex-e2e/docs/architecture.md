@@ -48,7 +48,7 @@ The repository separates `inferencex-e2e/`, `collectivex/`, `operatorx/`, `share
 | [`infx/launch/`](../infx/launch) | `python -m infx.launch run`: cluster resolution from the runner name, launch-path (driver) selection, workload policy, signal-safe cleanup, and artifact staging |
 | [`infx/clusters/`](../infx/clusters), [`infx/launch/backends/`](../infx/launch/backends) | Typed cluster records with one settings model per scheduler, and the scheduler backends that run containers and follow jobs (Slurm with Pyxis squash images today) |
 | [`runners/srt-slurm/`](../runners/srt-slurm) | srt-slurm host-setup hooks and temporary upstream patches |
-| [`benchmarks/benchmark_lib.sh`](../benchmarks/benchmark_lib.sh) | Shared server readiness, benchmark client, eval, AgentX replay, and output behavior |
+| [`infx/bench/`](../infx/bench) | Container-side `python3 -m infx.bench` commands (`wait`, `fixed-seq`, `agentic`, `eval`) for server readiness, the benchmark client, AgentX replay, and evals |
 | [`benchmarks/`](../benchmarks) | Framework and topology-specific server and client commands |
 | [`infx/github.py`](../infx/github.py) | GitHub REST, pagination, and comment reactions shared by workflow operations |
 | [`infx/workflows/`](../infx/workflows) | Reuse command parsing, authorization lookup, source-run validation, and reaction feedback; the existing reuse CLI remains compatible |
@@ -85,7 +85,7 @@ flowchart LR
   E --> F[run-sweep.yml fan-out]
   F --> G[Reusable benchmark workflow]
   G --> H[infx.launch driver]
-  H --> I[Benchmark script and benchmark_lib]
+  H --> I[Recipe or script and infx.bench commands]
   I --> J[Benchmark, eval, logs, metrics, traces]
   J --> K[Per-job GitHub artifacts]
   K --> L[Run-level aggregate artifacts]
@@ -232,7 +232,7 @@ Depending on the driver, the launcher may:
 - pass the workflow environment into the runtime container or allocation.
 - stream the job log, verify the allocation's terminal state, and stage results.
 
-Benchmark scripts under [`benchmarks/`](../benchmarks) own the actual engine and client commands. Most source [`benchmarks/benchmark_lib.sh`](../benchmarks/benchmark_lib.sh), which centralizes server readiness, the serving benchmark client, GPU monitoring, lm-eval, SWE-bench, AgentX replay, and stable output helpers.
+srt-slurm recipes and the scripts under [`benchmarks/`](../benchmarks) own the actual engine commands. The client side that every lane shares runs inside the serving container as `python3 -m infx.bench <command>` from [`infx/bench/`](../infx/bench). Its commands are `wait` (server readiness), `fixed-seq` (the serving benchmark client), `agentic` (AgentX replay), and `eval` (lm-eval and the vendor eval runners). They are stdlib-only and Python 3.10 compatible, take their inputs from environment variables or flags, and write the artifact names the collectors read. Recipes reach them through thin shims such as [`benchmarks/srt_agentic.sh`](../benchmarks/srt_agentic.sh) and the `srt_fixed_sequence.sh` and `srt_eval.sh` scripts under `benchmarks/single_node/` and `benchmarks/multi_node/`. Bash callers validate required inputs with `check_env_vars` from [`benchmarks/check_env.sh`](../benchmarks/check_env.sh).
 
 The boundary is intentional: a master config stays portable and reviewable, launch mechanics stay in cluster records (see [below](#launch-mechanics-stay-in-cluster-records)), and framework flags stay close to the benchmark recipe, where they can be tested against that engine. On `SIGINT`, `SIGTERM` or `SIGHUP` the launcher runs its registered cleanups, such as cancelling the allocation, and exits with 128 plus the signal number. The first nonzero workload exit code wins over cleanup failures.
 

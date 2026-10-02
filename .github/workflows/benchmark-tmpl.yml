@@ -318,7 +318,7 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}/.result-tooling/inferencex-e2e
         run: |
           if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
-          source "$PYTHONPATH/benchmarks/benchmark_lib.sh" --validation-only
+          source "$PYTHONPATH/benchmarks/check_env.sh"
           check_env_vars INFERENCEX_RESULTS_PYTHON AIPERF_FAILED_REQUEST_THRESHOLD
           "$INFERENCEX_RESULTS_PYTHON" -P -m infx.results.agentic.validate_agentic_result \
             results/aiperf_artifacts \
@@ -331,7 +331,7 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}/.result-tooling/inferencex-e2e
         run: |
           if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
-          source "$PYTHONPATH/benchmarks/benchmark_lib.sh" --validation-only
+          source "$PYTHONPATH/benchmarks/check_env.sh"
           check_env_vars INFERENCEX_RESULTS_PYTHON
           if [ ! -f "$RESULT_FILENAME.json" ]; then
             echo "no raw result to process: $RESULT_FILENAME.json" >&2
@@ -440,7 +440,7 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}/.result-tooling/inferencex-e2e
         run: |
           if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
-          source "$PYTHONPATH/benchmarks/benchmark_lib.sh" --validation-only
+          source "$PYTHONPATH/benchmarks/check_env.sh"
           check_env_vars INFERENCEX_RESULTS_PYTHON
           "$INFERENCEX_RESULTS_PYTHON" -P -m infx.evals.validate_scores
 

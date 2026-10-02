@@ -91,7 +91,7 @@ jobs:
             PRIORITY_ROOT="$PRIORITY_ROOT/inferencex-e2e"
           fi
           env PYTHONPATH="$PRIORITY_ROOT" python3 -P -m infx.workflows.require_launcher "$GITHUB_WORKSPACE"
-          source "$PRIORITY_ROOT/benchmarks/benchmark_lib.sh" --validation-only
+          source "$PRIORITY_ROOT/benchmarks/check_env.sh"
           check_env_vars INPUTS_CONFIG_FILE INPUTS_CONFIG_KEY INPUTS_CONC
           GENERATOR_PATH="${MEASURED_ROOT}"
           if [ -f "${MEASURED_ROOT}/infx/matrix/generate.py" ]; then
@@ -350,7 +350,7 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}/.result-tooling/inferencex-e2e
         run: |
           if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
-          source "$PYTHONPATH/benchmarks/benchmark_lib.sh" --validation-only
+          source "$PYTHONPATH/benchmarks/check_env.sh"
           check_env_vars INFERENCEX_RESULTS_PYTHON
           "$INFERENCEX_RESULTS_PYTHON" -P -m infx.results.fixed_sequence
 

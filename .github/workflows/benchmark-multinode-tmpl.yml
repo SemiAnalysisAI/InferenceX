@@ -304,7 +304,6 @@ jobs:
 
       - name: Launch multi-node job script
         env:
-          VALIDATION_BENCHMARK_LIB: ${{ github.workspace }}/.result-tooling/inferencex-e2e/benchmarks/benchmark_lib.sh
           PREFILL_ADDITIONAL_SETTINGS: ${{ toJSON(fromJSON(inputs.config).prefill.additional-settings) }}
           DECODE_ADDITIONAL_SETTINGS: ${{ toJSON(fromJSON(inputs.config).decode.additional-settings) }}
           RUNNER_NAME: ${{ runner.name }}
@@ -335,18 +334,6 @@ jobs:
           while IFS= read -r -d '' setting; do
             export "$setting"
           done < <(jq -j '.[] + "\u0000"' <<< "$settings_json")
-          # Each AgentX throughput point owns a fresh server deployment.
-          # Fixed-sequence and graded eval jobs retain their batching semantics.
-          if [[ "$IS_AGENTIC" == 1 && "$EVAL_ONLY" != true ]]; then
-            source "$VALIDATION_BENCHMARK_LIB" --validation-only
-            check_env_vars CONC CONC_LIST
-            validate_agentic_concurrency "$CONC"
-            validate_agentic_concurrency "$CONC_LIST"
-            if [[ "$CONC" != "$CONC_LIST" ]]; then
-              echo "ERROR: AgentX CONC must match the single CONC_LIST value" >&2
-              exit 1
-            fi
-          fi
           # Resolve the workflow's documented automatic eval-concurrency selection.
           if [[ -z "$EVAL_CONC" ]]; then
             EVAL_CONC=$(python3 -c 'import os; print(max(map(int, os.environ["CONC_LIST"].split())))')
@@ -397,7 +384,7 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}/.result-tooling/inferencex-e2e
         run: |
           if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
-          source "$PYTHONPATH/benchmarks/benchmark_lib.sh" --validation-only
+          source "$PYTHONPATH/benchmarks/check_env.sh"
           check_env_vars INFERENCEX_RESULTS_PYTHON
           # Launcher stamp supplies the producer SHA unless the
           # power-producer-sha input is set as a manual override
@@ -481,7 +468,7 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}/.result-tooling/inferencex-e2e
         run: |
           if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
-          source "$PYTHONPATH/benchmarks/benchmark_lib.sh" --validation-only
+          source "$PYTHONPATH/benchmarks/check_env.sh"
           check_env_vars INFERENCEX_RESULTS_PYTHON
           expected_concs="${EVAL_CONC}"
           if [[ -z "${expected_concs}" ]]; then

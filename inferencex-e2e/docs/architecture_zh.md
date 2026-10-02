@@ -48,7 +48,7 @@
 | [`infx/launch/`](../infx/launch) | `python -m infx.launch run`：根据运行器名称解析集群、选择启动路径（驱动）、工作负载策略、信号安全的清理以及工件暂存 |
 | [`infx/clusters/`](../infx/clusters)、[`infx/launch/backends/`](../infx/launch/backends) | 类型化集群记录（每个调度器一个设置模型），以及运行容器、跟踪作业的调度器后端（目前为使用 Pyxis squash 镜像的 Slurm） |
 | [`runners/srt-slurm/`](../runners/srt-slurm) | srt-slurm 主机设置 hook 和临时上游补丁 |
-| [`benchmarks/benchmark_lib.sh`](../benchmarks/benchmark_lib.sh) | 共享的服务器就绪检查、基准测试客户端、评测、AgentX 重放和输出行为 |
+| [`infx/bench/`](../infx/bench) | 在容器内运行的 `python3 -m infx.bench` 命令（`wait`、`fixed-seq`、`agentic`、`eval`），负责服务器就绪检查、基准测试客户端、AgentX 重放和评估 |
 | [`benchmarks/`](../benchmarks) | 特定于框架和拓扑的服务器与客户端命令 |
 | [`infx/github.py`](../infx/github.py) | 工作流操作共用的 GitHub REST、分页和评论表态基础操作 |
 | [`infx/workflows/`](../infx/workflows) | 复用命令解析、授权查找、源 Run 验证及表态反馈；现有复用 CLI 保持兼容 |
@@ -85,7 +85,7 @@ flowchart LR
   E --> F[run-sweep.yml 扇出]
   F --> G[可复用基准测试工作流]
   G --> H[infx.launch 驱动]
-  H --> I[基准测试脚本和 benchmark_lib]
+  H --> I[配方或脚本与 infx.bench 命令]
   I --> J[基准测试、评测、日志、指标、追踪]
   J --> K[单作业 GitHub 工件]
   K --> L[运行级聚合工件]
@@ -232,7 +232,7 @@ flowchart LR
 - 将工作流环境传入运行时容器或分配环境；
 - 跟踪作业日志、核验分配的最终状态并暂存结果。
 
-[`benchmarks/`](../benchmarks) 下的基准测试脚本负责实际的引擎和客户端命令。大多数脚本会引入 [`benchmarks/benchmark_lib.sh`](../benchmarks/benchmark_lib.sh)，后者集中处理服务器就绪检查、服务基准测试客户端、GPU 监控、lm-eval、SWE-bench、AgentX 重放和稳定输出辅助函数。
+srt-slurm 配方和 [`benchmarks/`](../benchmarks) 下的脚本负责实际的引擎命令。各通道共用的客户端逻辑以 `python3 -m infx.bench <command>` 的形式在服务容器内运行，代码位于 [`infx/bench/`](../infx/bench)。其命令包括 `wait`（服务器就绪检查）、`fixed-seq`（服务基准测试客户端）、`agentic`（AgentX 重放）和 `eval`（lm-eval 与厂商评估运行器）。这些命令只依赖标准库并兼容 Python 3.10，从环境变量或命令行参数读取输入，并写出收集器读取的产物文件名。配方通过薄封装脚本调用它们，例如 [`benchmarks/srt_agentic.sh`](../benchmarks/srt_agentic.sh)，以及 `benchmarks/single_node/` 和 `benchmarks/multi_node/` 下的 `srt_fixed_sequence.sh` 与 `srt_eval.sh`。Bash 调用方使用 [`benchmarks/check_env.sh`](../benchmarks/check_env.sh) 中的 `check_env_vars` 校验必需输入。
 
 这一边界是有意设计的：主配置保持可移植且便于审查，启动机制保存在集群记录中（见[下文](#启动机制保存在集群记录中)），框架标志保持靠近基准测试方案，以便针对相应引擎进行测试。收到 `SIGINT`、`SIGTERM` 或 `SIGHUP` 时，启动器会先运行已注册的清理（例如取消分配），再以 128 加信号编号退出；第一个非零的工作负载退出码优先于清理失败。
 
