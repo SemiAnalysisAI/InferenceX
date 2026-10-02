@@ -148,6 +148,21 @@ override_tp8_c1:
     env:
       CONC: "1"
 
+override_tp8_fp8kv_c4:
+  roles:
+    prefill:
+      args:
+        kv-cache-dtype: fp8_e4m3
+        max-running-requests: 8
+    decode:
+      args:
+        kv-cache-dtype: fp8_e4m3
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
+  benchmark:
+    env:
+      CONC: "4"
+
 override_prefill_tp8_decode_dep8_c1:
   frontend:
     args:
