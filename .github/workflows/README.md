@@ -50,7 +50,7 @@ usage: python -m infx.matrix.generate full-sweep
 
 If neither `--single-node` nor `--multi-node` is specified, both types are generated.
 
-By default, throughput runs for every generated config and eval-only jobs run for the selected 8k1k subset. `--no-evals` disables eval jobs, `--evals-only` emits only that selected subset, and adding `--all-evals` expands it to every fixed-sequence config. `--all-evals` alone is an equivalent eval-only shorthand, but it cannot be combined with `--no-evals`.
+By default, throughput runs for every generated config and eval-only jobs run for the selected 8k1k subset and the AgentX GSM8K subset. `--no-evals` disables eval jobs, `--evals-only` emits only that selected subset, and adding `--all-evals` expands it to every fixed-sequence config. `--all-evals` alone is an equivalent eval-only shorthand, but it cannot be combined with `--no-evals`.
 
 `--step-size` must be greater than 1 and applies to concurrency ranges. Explicit `conc-list` values are emitted directly and are filtered by `--min-conc` / `--max-conc` when provided. When both bounds are set, `--min-conc` must not exceed `--max-conc`.
 

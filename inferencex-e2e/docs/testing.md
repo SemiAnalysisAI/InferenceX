@@ -195,7 +195,7 @@ The current meanings and eligibility rules are in [PR primary and modifier label
 
 ### Eval
 
-Throughput and evals are separate jobs. The default sweep evaluates the selected 8k1k subset. `all-evals` expands eval selection, and `evals-only` suppresses throughput. Choose modifiers from the changed scope, but do not substitute an eval-only or preflight run for the required full sweep.
+Throughput and evals are separate jobs. The default sweep evaluates the selected 8k1k subset and the AgentX GSM8K subset. `all-evals` expands eval selection, and `evals-only` suppresses throughput. Choose modifiers from the changed scope, but do not substitute an eval-only or preflight run for the required full sweep.
 
 Eval completion is not just a green job. Preserve and inspect `meta_env.json`, the `results*.json` files, the score-validation output, the inference image, and the aggregated eval artifact. [`infx/evals/EVALS.md`](../infx/evals/EVALS.md) owns task and artifact behavior. [`validate_scores.py`](../infx/evals/validate_scores.py) rejects missing result files, below-threshold scores, and runs with no checked metrics. When expected concurrency metadata is available, it also rejects invalid/incomplete/failed batches. The single-node workflow invokes it without `--expected-concs`, so reviewers must verify `meta_env.json` independently for single-concurrency artifacts.
 

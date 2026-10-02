@@ -555,12 +555,15 @@ def automatic_agentic_vendor_eval(entry: dict) -> tuple[str, str] | None:
     return AUTOMATIC_AGENTIC_VENDOR_EVALS.get(entry.get(Fields.MODEL_PREFIX.value))
 
 
-def mark_eval_entries(matrix_values: list[dict], include_agentic: bool = False) -> list[dict]:
+def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
     """Apply the default eval selection policy.
 
     Kimi K3 and MiniMax M3 agentic rows use their full vendor suites at every
-    generated concurrency. Other agentic rows remain opt-in and use GSM8K at
-    the highest concurrency in each deployment group.
+    generated concurrency. Other single-node agentic rows use GSM8K at the
+    highest concurrency in each group of model, runner, framework, precision,
+    spec-decoding, dp-attn and image (the fixed-sequence keys plus image).
+    Eval rows run as separate eval-only jobs, so every agentic throughput
+    point is still benchmarked.
 
     Fixed-sequence selection is unchanged: single-node 8k1k rows use the
     highest and median concurrency per model/runtime group, while multi-node
@@ -639,39 +642,44 @@ def mark_eval_entries(matrix_values: list[dict], include_agentic: bool = False) 
         eval_indices.add(best_idx)
         mn_eval_conc[best_idx] = best_eval_conc
 
-    # Default sweeps preserve every agentic throughput result.
-    if include_agentic:
-        ag_sn_groups = defaultdict(list)
-        # Multi-node agentic: same "highest eligible conc per distinct
-        # parallelism config" policy as the fixed-seq-len mn_groups above.
-        # The selected eval subset uses exactly one conc per group.
-        ag_mn_groups = defaultdict(list)
-        for i, entry in enumerate(matrix_values):
-            if i in automatic_eval_specs:
+    # Agentic GSM8K: the eval runs as a separate eval-only job, so every
+    # agentic throughput result is preserved.
+    ag_sn_groups = defaultdict(list)
+    # Multi-node agentic: same "highest eligible conc per distinct
+    # parallelism config" policy as the fixed-seq-len mn_groups above.
+    # The selected eval subset uses exactly one conc per group.
+    ag_mn_groups = defaultdict(list)
+    for i, entry in enumerate(matrix_values):
+        if i in automatic_eval_specs:
+            continue
+        if entry.get(Fields.SCENARIO_TYPE.value) != "agentic-coding":
+            continue
+        if Fields.PREFILL.value in entry:
+            eval_concs = _eligible_eval_concs(entry)
+            if not eval_concs:
                 continue
-            if entry.get(Fields.SCENARIO_TYPE.value) != "agentic-coding":
-                continue
-            if Fields.PREFILL.value in entry:
-                eval_concs = _eligible_eval_concs(entry)
-                if not eval_concs:
-                    continue
-                ag_mn_groups[_multinode_parallelism_key(entry)].append((i, eval_concs[-1]))
-                continue
-            conc = entry[Fields.CONC.value]
-            conc_val = max(conc) if isinstance(conc, list) else conc
-            key = (
-                entry[Fields.MODEL.value],
-                entry[Fields.RUNNER.value],
-                entry[Fields.FRAMEWORK.value],
-                entry[Fields.PRECISION.value],
-            )
-            ag_sn_groups[key].append((i, conc_val))
-        for entries in ag_sn_groups.values():
-            eval_indices.add(max(entries, key=lambda item: item[1])[0])
-        for entries in ag_mn_groups.values():
-            best_idx, best_eval_conc = max(entries, key=lambda item: item[1])
-            eval_indices.add(best_idx)
-            mn_eval_conc[best_idx] = best_eval_conc
+            ag_mn_groups[_multinode_parallelism_key(entry)].append((i, eval_concs[-1]))
+            continue
+        conc = entry[Fields.CONC.value]
+        conc_val = max(conc) if isinstance(conc, list) else conc
+        # Same keys as single-node 8k1k, plus image so configs that differ
+        # only by image (e.g. an image bump) each get their own eval.
+        key = (
+            entry[Fields.MODEL.value],
+            entry[Fields.RUNNER.value],
+            entry[Fields.FRAMEWORK.value],
+            entry[Fields.PRECISION.value],
+            entry[Fields.SPEC_DECODING.value],
+            entry[Fields.DP_ATTN.value],
+            entry[Fields.IMAGE.value],
+        )
+        ag_sn_groups[key].append((i, conc_val))
+    for entries in ag_sn_groups.values():
+        eval_indices.add(max(entries, key=lambda item: item[1])[0])
+    for entries in ag_mn_groups.values():
+        best_idx, best_eval_conc = max(entries, key=lambda item: item[1])
+        eval_indices.add(best_idx)
+        mn_eval_conc[best_idx] = best_eval_conc
 
     for i, entry in enumerate(matrix_values):
         run_eval = i in eval_indices
@@ -1397,7 +1405,7 @@ def select_matrix_evals(
     if mode == "smoke" and trim:
         raise ValueError("smoke cannot be combined with trimming")
     if mode != "none":
-        rows = mark_eval_entries(rows, include_agentic=mode in ("subset", "all", "smoke"))
+        rows = mark_eval_entries(rows)
         if mode == "all":
             rows = mark_all_eval_entries(rows)
     if mode == "smoke":

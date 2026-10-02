@@ -19,14 +19,19 @@ from throughput. Selection lives in `mark_eval_entries()` in
 - **MiniMax M3 agentic:** every generated point automatically runs
   `minimax-vendor` with `minimax_m3_full` (102 provider cases). The one-case
   smoke requires an explicit override.
-- **Other agentic models (GSM8K):** opt-in through `--evals-only` or
-  `--all-evals`, at the highest concurrency per deployment group.
+- **Other agentic models (GSM8K):** selected by default as a separate
+  eval-only job at the highest concurrency of each single-node group of model,
+  runner, framework, precision, spec-decoding, dp-attn and image (the 8k1k
+  keys plus image). TP/EP and KV offloading do not split groups. Multi-node
+  rows use the highest eligible concurrency per topology. Throughput for every
+  agentic point still runs. Scores use the same GSM8K floors in
+  `thresholds.yaml` as fixed-sequence 8k1k evals.
 - **BFCL:** explicit only. No automatic model mapping selects BFCL.
 
 Generator eval modes:
 
-- Default: throughput plus the fixed-sequence subset and every automatically
-  selected Kimi K3 or MiniMax M3 vendor eval.
+- Default: throughput plus the fixed-sequence subset, the agentic GSM8K
+  subset, and every automatically selected Kimi K3 or MiniMax M3 vendor eval.
 - `--no-evals`: throughput only, including no automatic vendor evals.
 - `--evals-only`: selected evals only.
 - `--all-evals`: every eligible fixed-sequence and agentic eval. This is
