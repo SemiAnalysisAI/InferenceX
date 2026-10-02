@@ -4713,7 +4713,7 @@
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894,36796500128,36879140816,37027095833",
-  "status": "Corrected combined-tier c488 guard requalification succeeded operationally: the run stopped promptly near 2 TiB during warmup and deleted exact scratch. It produced no performance result.",
+  "status": "c492 is prepared across all four study arms as the next adaptive point between completed c488 and warmup-infeasible c496; dispatch remains gated on local validation and a fresh cluster-wide B200 inventory.",
   "last_capacity_check": {
     "checked_at": "2026-10-02T21:34:44Z",
     "active_study_run_ids": [],
@@ -4730,7 +4730,7 @@
   "next_dispatch": {
     "arm": "nvme",
     "concurrency": 492,
-    "requires": "Prepare c492 as the midpoint between completed c488 and warmup-infeasible c496, validate configs and synchronized docs, then refresh the cluster-wide B200 queue before dispatch."
+    "requires": "Validate the prepared c492 configs, synchronized docs, focused expectation, study metadata, and append-only perf-changelog entry, then refresh the cluster-wide B200 queue before dispatch."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-21T05:30:00Z",

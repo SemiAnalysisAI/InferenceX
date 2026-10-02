@@ -8102,3 +8102,12 @@
     - "Make the branch-only native HBM+DRAM+NVMe filesystem stop guard terminate active workload descendants before signaling the owning shell. Run 37027095833 crossed the declared 2 TiB guard but the parent-only signal remained deferred while its benchmark child ran, allowing scratch to grow to 13,255,648,681,519 logical bytes and reach ENOSPC. The corrected guard records termination targets, stops descendants deepest-first, and preserves the shell cleanup trap. This is still an abort guard rather than an LRU quota; model, engine, TP4, cache budgets, AgentX corpus, warmup policy, and 3,600-second profiling are unchanged."
     - "分支内原生 HBM+DRAM+NVMe 文件系统停止保护现在会先终止活动工作负载的后代进程，再向拥有清理逻辑的 shell 发送信号。运行 37027095833 越过声明的 2 TiB 保护阈值后，原先仅发送给父 shell 的信号因 benchmark 子进程仍在运行而延迟处理，导致 scratch 增长到 13,255,648,681,519 逻辑字节并触发 ENOSPC。修复后的保护会记录终止目标，按最深层优先顺序停止后代进程，并保留 shell 清理 trap。该机制仍是中止保护而非 LRU 配额；模型、引擎、TP4、缓存预算、AgentX 语料、warmup 策略及 3,600 秒 profiling 均保持不变。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/tree/experiment/agentx-b200-offload
+
+- config-keys:
+    - minimaxm3-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add c492 to all four branch-only MiniMax-M3 AgentX offload arms after matched c488 runs showed another mixed 4 TiB HBM+NVMe win, while c496 exhausted the canonical workflow execution budget during warmup before profiling. This midpoint narrows the local c488-c496 feasibility boundary without changing the model, engine, TP4 layout, storage budgets, AgentX corpus, warmup policy, or 3,600-second profiling window."
+    - "匹配的 c488 运行显示 4 TiB HBM+NVMe 再次取得混合优势，而 c496 在 profiling 前的规范 warmup 阶段耗尽了工作流执行预算。因此为四组分支内 MiniMax-M3 AgentX 卸载实验新增 c492，以进一步缩小 c488 到 c496 之间的局部可运行性边界。模型、引擎、TP4 布局、存储预算、AgentX 语料、warmup 策略及 3,600 秒 profiling 窗口均保持不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/tree/experiment/agentx-b200-offload

@@ -122,7 +122,7 @@ def test_study_uses_one_expanded_nvme_run_at_a_time():
     assert study["nvme_bytes_per_node"] == 4 * 2**40
     assert study["max_concurrent_nvme_bearing_runs"] == 1
     assert study["nvme_node_allowlist"] == ["im-b200-c001"]
-    assert study["expanded_nvme_probe_concurrency"] == [256, 320, 384, 448, 480, 488, 496, 512]
+    assert study["expanded_nvme_probe_concurrency"] == [256, 320, 384, 448, 480, 488, 492, 496, 512]
     assert study["maintenance_probe_nodes"] == {
         "none-c1": "im-b200-c001",
         "none-c4": "im-b200-c008",
