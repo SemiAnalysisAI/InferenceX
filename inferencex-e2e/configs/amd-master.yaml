@@ -1542,7 +1542,7 @@ glm5.3-fp8-mi300x-sglang-agentic:
       - { tp: 8, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [1], srt-recipe: benchmarks/single_node/srt-slurm-recipes/glm5.3/sglang/mi300x-fp8/agentic.yaml }
     - dram-utilization: 0.32
       search-space:
-      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: umbp-linker }, spec-decoding: none, conc-list: [1, 4], srt-recipe: benchmarks/single_node/srt-slurm-recipes/glm5.3/sglang/mi300x-fp8/agentic.yaml }
+      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: umbp-linker }, spec-decoding: none, conc-list: [1, 4, 8], srt-recipe: benchmarks/single_node/srt-slurm-recipes/glm5.3/sglang/mi300x-fp8/agentic.yaml }
 
 glm5.3-fp8-mi300x-sglang-disagg-agentic-umbp:
   image: lmsysorg/sglang-rocm:v0.5.21-rocm720-mi30x-20261001@sha256:8190c29f67bdb65f41e0254efc72e60daa5117b7212e86a46aad5bf4b145f1b4
