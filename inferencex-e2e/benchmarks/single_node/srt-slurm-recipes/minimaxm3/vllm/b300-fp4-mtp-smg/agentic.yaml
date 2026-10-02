@@ -1,0 +1,79 @@
+# [DNM] MiniMax-M3 NVFP4 AgentX on B300 with vLLM EAGLE3, served through the
+# Shepherd Model Gateway (SMG 1.11.0) instead of the direct vLLM frontend.
+# Copy of b300-fp4-mtp/agentic.yaml, TP4 c10 only. smg-1.11.0.sh installs SMG
+# into the vLLM image for the router step.
+base:
+  schema: 2
+  name: minimaxm3-fp4-b300-vllm-smg-agentic
+  model:
+    path: hf:nvidia/MiniMax-M3-NVFP4
+    container: vllm/vllm-openai:nightly-af7f9488c2210d67e1033ecdc845b087ee7fe92b
+    precision: fp4
+  resources:
+    gpu_type: b300
+    gpus_per_node: 8
+  frontend:
+    type: smg
+    enable_multiple_frontends: false
+    args:
+      policy: cache_aware
+  setup_script: smg-1.11.0.sh
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine:
+    type: vllm
+    connector: null
+  # The engine may take the full VLLM_ENGINE_READY_TIMEOUT_S to become ready.
+  health_check:
+    interval_seconds: 10
+    max_attempts: 360
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      args:
+        served-model-name: nvidia/MiniMax-M3-NVFP4
+        gpu-memory-utilization: 0.95
+        block-size: 128
+        language-model-only: true
+        enable-prefix-caching: true
+        enable-chunked-prefill: true
+        no-enable-flashinfer-autotune: true
+        reasoning-parser: minimax_m3
+        tool-call-parser: minimax_m3
+        enable-auto-tool-choice: true
+        default-chat-template-kwargs: '{"thinking_mode":"enabled"}'
+        attention-config: '{"backend":"FLASHINFER","use_trtllm_attention":true,"indexer_kv_dtype":"fp8"}'
+        kv-cache-dtype: fp8
+        max-num-batched-tokens: 16384
+        stream-interval: 20
+        trust-remote-code: true
+        # Three-token EAGLE3 with the GQA draft head. Throughput uses
+        # golden-AL synthetic rejection.
+        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASHINFER","use_local_argmax_reduction":true}'
+      env:
+        PYTHONNOUSERSITE: '1'
+        VLLM_ENGINE_READY_TIMEOUT_S: '3600'
+        VLLM_FLOAT32_MATMUL_PRECISION: high
+        VLLM_FLASHINFER_ALLREDUCE_BACKEND: trtllm
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
+    env:
+      MODEL: nvidia/MiniMax-M3-NVFP4
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
+
+override_tp4_c10:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-num-seqs: 15
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[8,12,16,20,24,28,32,36,40,44,48,52,56,60,256,512,1024,2048]}'
+  benchmark:
+    env:
+      CONC: '10'
+      KV_OFFLOADING: none
