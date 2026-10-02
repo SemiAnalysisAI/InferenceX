@@ -121,3 +121,5 @@ benchmark:
     AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
     AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
     TP: '4'
+    PP_SIZE: '1'
+    PCP_SIZE: '1'
