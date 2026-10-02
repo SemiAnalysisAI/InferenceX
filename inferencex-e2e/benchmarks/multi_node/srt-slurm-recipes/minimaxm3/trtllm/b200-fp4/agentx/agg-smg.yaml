@@ -1,0 +1,125 @@
+# [DNM] AgentX MiniMax-M3 NVFP4 on B200: one TensorRT-LLM aggregated worker
+# across two 8-GPU nodes (TP16, EP16) behind the Shepherd Model Gateway.
+# Engine settings follow gb200-fp4/agentx/agg-variants.yaml without torch.compile,
+# speculative decoding, or host KV offload. Select with
+# CONFIG_FILE=recipes/minimaxm3/trtllm/b200-fp4/agentx/agg-smg.yaml:override_tep16_c5.
+
+schema: 2
+
+base:
+  model:
+    path: minimax-m3-nvfp4
+    container: nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc23.post1
+    precision: fp4
+  health_check:
+    max_attempts: 720
+    interval_seconds: 5
+  resources:
+    gpu_type: b200
+    gpus_per_node: 8
+  engine:
+    type: trtllm
+    served_model_name: nvidia/MiniMax-M3-NVFP4
+  # Prepares the TensorRT-LLM workers and installs SMG; it also runs in SMG's step.
+  setup_script: minimaxm3-trtllm-agentx-smg.sh
+  roles:
+    agg:
+      nodes: 2
+      workers: 1
+      gpus: 16
+      extra_args: [--chat_template, /model/chat_template.jinja]
+      env:
+        HF_HUB_OFFLINE: '1'
+        TRANSFORMERS_OFFLINE: '1'
+        HF_HUB_CACHE: /hf_hub_cache
+        TQDM_DISABLE: '1'
+        HF_HUB_DISABLE_PROGRESS_BARS: '1'
+        TLLM_LOG_LEVEL: INFO
+        TLLM_PROFILE_LOG_RANKS: all
+        TRTLLM_SERVER_DISABLE_GC: '1'
+        TRTLLM_WORKER_DISABLE_GC: '1'
+        TRTLLM_ENABLE_PDL: '1'
+        NCCL_GRAPH_MIXING_SUPPORT: '0'
+        MIMALLOC_PURGE_DELAY: '0'
+        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+        PYTHONNOUSERSITE: '1'
+        TRTLLM_SERVE_ENABLE_MSGSPEC: '1'
+      args:
+        max_seq_len: 1048576
+        max_num_tokens: 16384
+        cuda_graph_config:
+          enable_padding: true
+        moe_config:
+          backend: TRTLLM
+          use_low_precision_moe_combine: true
+        sparse_attention_config:
+          algorithm: minimax_m3
+          implementation: msa
+          indexer_kv_dtype: fp8
+          sparse_disable_index_value: true
+          fuse_qkv_index_projection: true
+        kv_cache_config:
+          free_gpu_memory_fraction: 0.9
+          enable_block_reuse: true
+          block_reuse_policy: per_conversation
+          tokens_per_block: 128
+          use_kv_cache_manager_v2: true
+          dtype: fp8
+          event_buffer_max_size: 0
+        scheduler_config:
+          capacity_scheduler_policy: MAX_UTILIZATION
+        enable_chunked_prefill: true
+        enable_autotuner: true
+        trust_remote_code: true
+        stream_interval: 20
+        reasoning_parser: minimax_m3
+        print_iter_log: true
+        enable_iter_perf_stats: true
+        return_perf_metrics: true
+        num_postprocess_workers: 8
+        enable_attention_dp: false
+        tensor_parallel_size: 16
+        moe_expert_parallel_size: 16
+  frontend:
+    type: smg
+    enable_multiple_frontends: false
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
+    env:
+      INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
+      RESULT_DIR: /logs/agentic
+      PORT: '8000'
+      IS_MULTINODE: 'true'
+      AIPERF_DATASET_MMAP_CACHE_DIR: /aiperf_mmap_cache
+      HF_HUB_CACHE: /hf_hub_cache
+      WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126
+      AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES: '0'
+      SERVED_MODEL_NAME: nvidia/MiniMax-M3-NVFP4
+      MAX_MODEL_LEN: '1048576'
+      OPENAI_API_KEY: EMPTY
+      # srtctl points AIPerf at the TP16 worker's own /prometheus/metrics, not at SMG.
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: trtllm_kv_cache_utilization
+      KV_OFFLOADING: none
+      MODEL: nvidia/MiniMax-M3-NVFP4
+      MODEL_PREFIX: minimaxm3
+      FRAMEWORK: trt
+      PRECISION: fp4
+      DURATION: '3600'
+
+override_tep16_c5:
+  name: smg-agg-b200-tep16-c5
+  roles:
+    agg:
+      args:
+        max_batch_size: 5
+        cuda_graph_config:
+          batch_sizes:
+            - 1
+            - 2
+            - 3
+            - 4
+            - 5
+  benchmark:
+    env:
+      CONC: '5'
