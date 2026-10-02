@@ -9327,3 +9327,28 @@
   description:
     - "Enable SGLANG_OPT_USE_TOPK_V2 (false -> true) so the DSA indexer uses the top-k v2 kernel."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3724
+
+- config-keys:
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Image: vllm/vllm-openai:nightly-ac9126e58aa7bbab1856ba6593ba4d5003fea516 (upstream vLLM nightly of 2026-10-01, CUDA 13.0.2, the first nightly that includes vLLM PR 54442, the fix for issue 54437 which made structured-output requests accept draft tokens the grammar rejects under speculative decoding with async scheduling and pipeline parallelism; replaces the Inferact build nightly-dev-arm64-cu13.0.1-728d3ad). No engine patches. The tuning below was measured on nightly 2671fedfc7ae604761990603fc736c0c4f21de57, whose plain tag Docker Hub has since pruned. A single c48 check on ac9126e5 on the same cluster and srt-slurm gave 10,282 total tokens/s/GPU at 1/ITL p90 29.8 (versus 10,758 at 33.9 on 2671fed): the newer vLLM build spends about 8 percent longer per decode step at the same batch, with prefill, queueing and draft acceptance unchanged; the B200 TP8 PP2 arm moved by the same proportions on the same image change. The CI runs on this PR are the submitted numbers."
+    - "Kimi K3 FP4 on GB200 NVL72, Dynamo + vLLM aggregated on 16 GPUs (TP8 PP2 DCP8) with Mooncake DRAM offload: add mamba-ssm-cache-dtype bfloat16 and DSpark speculative decoding with synthetic acceptance, matching the B200 TP8 PP2 arm: depth 7 at 3.84 for concurrency 1, 4, 8 and 14; depth 4 at 3.36 for concurrency 24, 32, 48 and 56. max-num-seqs stays at 2x concurrency."
+    - "Replace the concurrency 16, 32, 48, 72 and 96 candidates with the eight Pareto points concurrency 1, 4, 8 and 14 (depth 7) and 24, 32, 48 and 56 (depth 4); the c16, c72 and c96 recipes are removed. Measured on a GB200 NVL72 system with srt-slurm 984180e5, one-hour phases: c48 rises from 8,131 to 10,758 total tokens/s/GPU while 1/ITL p90 improves from 20.4 to 33.9; c32 rises from 6,817 to 9,249 at 44.0 (was 28.0); c56 reaches 10,830 at 27.2; c24 7,845 at 57.8; c14 4,368 at 88.0; c8 2,976 at 130.6; c4 1,697 at 184.1; c1 1,052 at 230.6. Concurrency 72, 80 and 96 are excluded as dominated on GB200: the draft shares the KV pool, so speculation above c56 loses on both axes (c72 depth 4 9,930 at 15.3), and non-speculative c96 (8,742 at 8.4) is below c56 on both axes. No engine patches."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+
+
+- config-keys:
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Image: vllm/vllm-openai:nightly-dev-arm64-cu13-3696c77 (Inferact Kimi-K3 build of vLLM 3696c772, the same build as the GB300 B300 DSpark arms); Dynamo ba83080e."
+    - "Kimi K3 FP4 on GB200 NVL72, Dynamo + vLLM disaggregated serving on 32 GPUs: one TP16/DCP16 prefill role and one TP16/DCP16 decode role (four 4-GPU nodes each), NIXL prefill-to-decode KV transfer, Mooncake DRAM tier at 128 GB per rank, DSpark depth 4 with probabilistic draft sampling and the golden acceptance selected by the launcher (3.36). Prefill gpu-memory-utilization 0.88; decode 0.92 with cudagraph capture up to 320 tokens and 0.90 above; max-num-seqs at 2x concurrency on both roles."
+    - "Three Pareto points measured on a GB200 NVL72 system with the same image (one-hour phases, 0 errors): c16 2,859 total tokens/s/GPU at 1/ITL p90 131.0; c32 5,450 at 95.9; c48 6,686 at 79.2 (from the aiperf exports: average input length x request rate plus output token rate, over 32 GPUs). c56 (6,742 at 72.8) and c64 (6,457 at 71.1) are excluded as dominated by c48, and c80 and 2P1D layouts are excluded because the decode role fails once its KV pool fills. Evals pass on the internal CI at every point: GSM8K exact match 0.969 to 0.974 (threshold 0.9) and the Kimi tool-call schema verifier 1.0."
+    - "镜像：vllm/vllm-openai:nightly-dev-arm64-cu13-3696c77（Inferact 的 Kimi-K3 vLLM 3696c772 构建，与 GB300/B300 DSpark 配置相同）；Dynamo ba83080e。"
+    - "GB200 NVL72 上的 Kimi K3 FP4，Dynamo + vLLM 分解式服务，32 GPU：一个 TP16/DCP16 prefill 角色和一个 TP16/DCP16 decode 角色（各四个 4-GPU 节点），NIXL 传输 prefill 到 decode 的 KV，Mooncake DRAM 层每 rank 128 GB，DSpark 深度 4、概率草稿采样，接受长度由启动器自动选取（3.36）。prefill gpu-memory-utilization 0.88；decode 在捕获尺寸不超过 320 token 时为 0.92，超过时为 0.90；两个角色的 max-num-seqs 均为并发的两倍。"
+    - "在 GB200 NVL72 系统上用同一镜像实测的三个 Pareto 点（一小时阶段，0 错误）：c16 每 GPU 2,859 总 tokens/s、1/ITL p90 131.0；c32 5,450 @ 95.9；c48 6,686 @ 79.2（按 aiperf 导出：平均输入长度 x 请求速率 加 输出 token 速率，除以 32 GPU）。c56（6,742 @ 72.8）与 c64（6,457 @ 71.1）被 c48 支配而不包含；c80 与 2P1D 布局因 decode 角色在 KV 池满时失败而不包含。内部 CI 评测在每个点均通过：GSM8K exact match 0.969 至 0.974（阈值 0.9），Kimi 工具调用 schema 校验 1.0。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
