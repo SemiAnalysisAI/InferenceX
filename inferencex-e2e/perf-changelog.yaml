@@ -9256,3 +9256,12 @@
     - "Set matching 640K service and replay context limits for the MiniMax-M3 H100 Mooncake DRAM variants."
     - "为 MiniMax-M3 H100 Mooncake DRAM 变体设置一致的 640K 服务与重放上下文上限。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3620
+
+- config-keys:
+    - minimaxm3-fp8-h100-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Reuse Mooncake TCP connections in the MiniMax-M3 H100 DRAM variants."
+    - "在 MiniMax-M3 H100 DRAM 变体中复用 Mooncake TCP 连接。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3620
