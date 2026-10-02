@@ -1,4 +1,4 @@
-# GLM-5.3 aggregate reference and native UMBP offload comparison.
+# GLM-5.3 FP8 TP8 MTP AgentX.
 base:
   schema: 2
   name: glm5.3-fp8-mi300x-sglang-agentic
@@ -57,23 +57,12 @@ base:
       AIPERF_BENCHMARK_GRACE_PERIOD: "1800"
       AIPERF_DATASET_MMAP_CACHE_DIR: /aiperf_mmap_cache
 
-override_tp8_c1:
+zip_override_tp8_mtp_concurrency:
   roles:
     agg:
       args:
-        max-running-requests: 2
-        cuda-graph-max-bs-decode: 2
-  benchmark:
-    env:
-      CONC: "1"
-      KV_OFFLOADING: none
-
-override_tp8_mtp_c1:
-  roles:
-    agg:
-      args: &mtp_args
-        max-running-requests: 2
-        cuda-graph-max-bs-decode: 2
+        max-running-requests: [4, 6, 8]
+        cuda-graph-max-bs-decode: [4, 8, 8]
         chunked-prefill-size: 32768
         speculative-algorithm: EAGLE
         speculative-num-steps: 3
@@ -81,99 +70,5 @@ override_tp8_mtp_c1:
         speculative-num-draft-tokens: 4
   benchmark:
     env:
-      CONC: "1"
-      KV_OFFLOADING: none
-
-zip_override_tp8_mtp_concurrency:
-  roles:
-    agg:
-      args:
-        <<: *mtp_args
-        max-running-requests: [4, 6, 8]
-        cuda-graph-max-bs-decode: [4, 8, 8]
-  benchmark:
-    env:
       CONC: ["2", "3", "4"]
       KV_OFFLOADING: none
-
-override_tp8_umbp_c1:
-  services: &umbp_services
-    - name: umbp
-      type: generic
-      placement:
-        node: agg
-      start: before_workers
-      critical: true
-      inherit_discovery_env: false
-      command:
-        - /sgl-workspace/mori/python/mori/umbp_standalone_server
-        - unix:///logs/umbp.sock
-      env:
-        UMBP_DRAM_CAPACITY: "519000000000"
-        UMBP_DRAM_USE_HUGEPAGES: "0"
-        UMBP_SSD_ENABLED: "0"
-        MORI_UMBP_LOG_LEVEL: info
-      preamble: |
-        export LD_LIBRARY_PATH="/sgl-workspace/mori/python/mori:${LD_LIBRARY_PATH}"
-      readiness:
-        log:
-          pattern: host memory registered for GPU access
-        timeout_seconds: 5400
-        interval_seconds: 1
-  roles:
-    agg:
-      args: &umbp_args
-        max-running-requests: 2
-        cuda-graph-max-bs-decode: 2
-        enable-unified-cache-external-linker: true
-        unified-cache-external-linker-backend: mori
-        hicache-storage-backend-extra-config: '{"standalone_startup_timeout_ms":120000}'
-      env: &umbp_env
-        UMBP_STANDALONE_ADDRESS: unix:///logs/umbp.sock
-  benchmark:
-    env: &umbp_benchmark
-      CONC: "1"
-      KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: "519"
-
-override_tp8_umbp_c4:
-  services: *umbp_services
-  roles:
-    agg:
-      args:
-        <<: *umbp_args
-        max-running-requests: 8
-        cuda-graph-max-bs-decode: 8
-      env: *umbp_env
-  benchmark:
-    env:
-      <<: *umbp_benchmark
-      CONC: "4"
-
-override_tp8_umbp_c8:
-  services: *umbp_services
-  roles:
-    agg:
-      args:
-        <<: *umbp_args
-        max-running-requests: 16
-        cuda-graph-max-bs-decode: 16
-      env: *umbp_env
-  benchmark:
-    env:
-      <<: *umbp_benchmark
-      CONC: "8"
-
-override_tp8_umbp_c16:
-  services: *umbp_services
-  roles:
-    agg:
-      args:
-        <<: *umbp_args
-        max-running-requests: 32
-        cuda-graph-max-bs-decode: 32
-      env: *umbp_env
-  benchmark:
-    env:
-      <<: *umbp_benchmark
-      CONC: "16"
