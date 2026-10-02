@@ -20,8 +20,6 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
-      IMAGE_DIR: ${{ runner.temp }}/amd-exporter-image
-      OUTPUT_DIR: ${{ runner.temp }}/amd-exporter-squash
       ARCHIVE_NAME: device-metrics-exporter-v1.5.4-10.2.0a20261001.tar.gz
       ARCHIVE_SHA256: 0ba397bc31abc1c538e24f8d7264fb421cc5fb8dd59b2e1c493a8efec404c2ba
       IMAGE_REF: rocm/device-metrics-exporter:10.2.0a20261001
@@ -44,6 +42,9 @@ jobs:
           path: ${{ runner.temp }}/amd-exporter-image
 
       - name: Verify and convert image without starting the container
+        env:
+          IMAGE_DIR: ${{ runner.temp }}/amd-exporter-image
+          OUTPUT_DIR: ${{ runner.temp }}/amd-exporter-squash
         run: |
           set -eo pipefail
           source inferencex-e2e/benchmarks/benchmark_lib.sh --validation-only
