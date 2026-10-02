@@ -302,7 +302,7 @@ TP4 约 1.23 TB）全部来自节点 0 的 1.5 TB 内存。`runners/srt-slurm/ho
 
 GB200 的 DSpark 配方将 CUDA graph 最小捕获范围设为 64 tokens，以覆盖 AgentX 子代理并发。这会将 c1/c2/c4 的上限从 8/16/32 提升至 64；c8 及以上保持原有大小。完整轨迹、AL 3.51 和 Engram UVA 配置保持不变；需通过 CI 验证低并发尾延迟改善。
 B200 的 DSpark 配方使用相同的最小捕获范围，并保持相同的工作负载配置。
-GB300 的 DSpark 配方使用相同的最小捕获范围，并保持相同的工作负载配置。
+GB300 的 DSpark 配方按测试点显式设置捕获尺寸，详见下文。
 H200 的 DSpark 配方使用相同的最小捕获范围，并保持相同的工作负载配置。
 
 B300 在 c1/c2/c4 使用相同的最小捕获范围。其 c1 CI 对比中，请求 ITL P90/P99 从 38.74/41.42 ms 降至 2.62/3.45 ms；c2/c4 仍需 CI 验证。
@@ -315,7 +315,7 @@ B300 在 c1/c2/c4 使用相同的最小捕获范围。其 c1 CI 对比中，请�
 专家权重为 MXFP4，因此配方标记为 `precision: fp4`。
 
 各 GPU 入口共用纯文本服务行为，使用 `deepseek_v41` tokenizer 和解析器、1M 上下文，
-以及共享的 AgentX 轨迹回放、功耗、指标和 eval helper。TP4 的并发范围为 1–128。
+以及共享的 AgentX 轨迹回放、功耗、指标和 eval helper。除下文另有说明外，TP4 的并发范围为 1–128。
 共享脚本按六 token DSpark 验证块设置 CUDA graph capture。srt-slurm 单节点路径将检出挂载到 `/infmax-workspace`，避免在 `/workspace`
 下创建 AgentX 运行目录。沿用集群的模型路径和持久化缓存。配方在计算节点探测服务端口，首选端口被占用时选择可用端口，
 服务、回放、指标和 eval 共用同一端点。所有配方都必须获得 GPU sweep 和 eval
@@ -326,6 +326,11 @@ CUDA graph，并显式设置最大为 2046 或 8190 tokens 的捕获尺寸集合
 TP2 并发 128 使用 `--max-num-batched-tokens 2048`，其余情况使用 8192；
 `--max-num-seqs` 固定为 256。TP2 并发 128 还设置
 `--gpu-memory-utilization 0.97`。其他 SKU 继续使用共享脚本。
+
+GB300 条目使用 `vllm/vllm-openai:nightly-dev-arm64-cu130-ac9126e58aa7`，开启 FlashInfer autotune。
+TP4 覆盖并发 1–16；DEP2（TP1 x DP2 + EP2，DeepGEMM MegaMoE）覆盖 8–192，前置一致性哈希 vLLM
+Router，并发 128 及以上改用 MegaAttention。所有测试点使用 `FULL_AND_PIECEWISE` CUDA graph，捕获尺寸为
+六 token 验证块的倍数。
 
 GB300 launcher 将引擎就绪等待时间设为 7200 秒。在[运行 34504969146](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34504969146) 中，仅模型加载就耗时 18–23 分钟；Rust frontend 达到 3600 秒期限时，引擎仍在捕获 CUDA graph。此次仅延长启动等待时间，基准测试时长和解码设置保持不变。
 

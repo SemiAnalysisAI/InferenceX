@@ -9211,3 +9211,12 @@
     - "Add --attention-config '{\"indexer_kv_dtype\":\"mxfp4\",\"indexer_sparse_logits\":true}' and --block-size 128 to enable the vllm-project/vllm#58671 ROCm paged MXFP4 sparse-logits indexer, replacing the dense fp8 indexer path. A live A/B test (TP2 c16, matched 900s window, vllm-project/vllm#58208 reverted via vllm-project/vllm#59125 so the dense fallback doesn't crash) measured +14.7/+14.9% p50/p90 interactivity and -9.5/-10.8% p50/p90 e2e latency over the dense path, with throughput/GPU unchanged."
     - "Drop c128 from both TP2 and TP4. Neither c128 point was on the Pareto frontier in #3555's run 36528242520: TP2 c64 dominated both (P90 E2EL 58 s against 185 s and 85 s, at 111k against 85k and 79k total tok/s/GPU)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3571
+
+- config-keys:
+    - dsv41flash-fp4-gb300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the GB300 DeepSeek-V4.1-Flash vLLM AgentX image from nightly af1c0149 to nightly-dev-arm64-cu130-ac9126e58aa7 and enable FlashInfer autotuning."
+    - "Run TP4 at concurrency 1-16 and replace TP2 with DEP2 (TP1 x DP2 + EP2, DeepGEMM MegaMoE) at concurrency 8-192 behind a consistent-hash vLLM Router."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3652
