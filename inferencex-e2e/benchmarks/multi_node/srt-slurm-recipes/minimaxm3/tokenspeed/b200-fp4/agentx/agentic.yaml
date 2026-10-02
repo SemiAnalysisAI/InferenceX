@@ -1,9 +1,11 @@
-# [DNM] AgentX MiniMax-M3 NVFP4 on one B300 node with one TP4 TokenSpeed worker
-# (engine: tokenspeed, SemiAnalysisAI/srt-slurm#37 and its SMG follow-up) behind two routers:
-#   override_dynamo_agg_c8     Dynamo frontend, dynamo.tokenspeed worker
-#   override_smg_agg_c8        SMG, TokenSpeed gRPC engine
-# Prefill/decode runs on B200 (b200-fp4/agentx/agentic.yaml): TokenSpeed's Mooncake
-# engine speaks RDMA verbs only, and B300 DSXE exposes EFA devices.
+# [DNM] AgentX MiniMax-M3 NVFP4 on one B200 node with TokenSpeed prefill/decode
+# (engine: tokenspeed, SemiAnalysisAI/srt-slurm#37 and its SMG follow-up), TP4 prefill
+# + TP4 decode, KV over Mooncake RDMA, behind two routers:
+#   override_dynamo_disagg_c8  Dynamo frontend, dynamo.tokenspeed workers
+#   override_smg_disagg_c8     SMG, TokenSpeed gRPC engines
+# Same engine settings as b300-fp4/agentx/agentic.yaml. TokenSpeed's Mooncake engine
+# speaks RDMA verbs only (runtime/pd/base/mooncake_engine.py); B300 DSXE exposes EFA
+# devices, B200 Nscale ConnectX HCAs.
 # Engine flags follow TokenSpeed's MiniMax M3 recipe without speculative decoding:
 # https://github.com/lightseekorg/tokenspeed/blob/22251686ff26a2b2f495263b348db80980b8ac9e/docs/recipes/models.md#minimax-m3
 # tokenspeed-0.1.0.post20260930.sh installs TokenSpeed (and with it the gRPC engine and
@@ -24,7 +26,7 @@ base:
     max_attempts: 720
     interval_seconds: 5
   resources:
-    gpu_type: b300
+    gpu_type: b200
     gpus_per_node: 8
   observability:
     enabled: false
@@ -65,8 +67,8 @@ base:
       OPENAI_API_KEY: EMPTY
       CONC: '8'
 
-override_dynamo_agg_c8:
-  name: minimaxm3-b300-tokenspeed-dynamo-agg-tp4-c8
+override_dynamo_disagg_c8:
+  name: minimaxm3-b200-tokenspeed-dynamo-disagg-tp4-tp4-c8
   dynamo:
     install: true
     source:
@@ -75,7 +77,7 @@ override_dynamo_agg_c8:
     type: dynamo
     enable_multiple_frontends: false
   roles:
-    agg:
+    prefill:
       nodes: 1
       workers: 1
       gpus: 4
@@ -99,17 +101,31 @@ override_dynamo_agg_c8:
         moe-backend: flashinfer_trtllm
         disable-kvstore: true
         block-size: 128
+        # The eight external HCAs, as dsv4/sglang/b200-fp4/agentx/disagg-variants.yaml.
+        disaggregation-ib-device: mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_10,mlx5_11
+    decode:
+      nodes: colocate
+      workers: 1
+      gpus: 4
+      env: *env
+      args: *args
 
-override_smg_agg_c8:
-  name: minimaxm3-b300-tokenspeed-smg-agg-tp4-c8
+override_smg_disagg_c8:
+  name: minimaxm3-b200-tokenspeed-smg-disagg-tp4-tp4-c8
   dynamo:
     install: false
   frontend:
     type: smg
     enable_multiple_frontends: false
   roles:
-    agg:
+    prefill:
       nodes: 1
+      workers: 1
+      gpus: 4
+      env: *env
+      args: *args
+    decode:
+      nodes: colocate
       workers: 1
       gpus: 4
       env: *env

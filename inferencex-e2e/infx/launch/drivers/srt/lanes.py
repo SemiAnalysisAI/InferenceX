@@ -55,7 +55,8 @@ SRT_LANES: dict[tuple[str, LaunchPath], SrtLane] = {
         mounts=_AGENTIC_CACHES,
     ),
     ("b200-nscale", LaunchPath.SRT_MULTI): SrtLane(
-        frameworks=_DYNAMO,
+        # [DNM] TokenSpeed: dynamo.tokenspeed workers, or gRPC engines behind SMG.
+        frameworks=any_of("dynamo-sglang", "dynamo-trt", "dynamo-vllm", "dynamo-tokenspeed", "tokenspeed"),
         rejects=(
             (
                 Match(any_of("dsv4"), frameworks=any_of("dynamo-sglang", "dynamo-trt")),
