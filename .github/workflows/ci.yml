@@ -6,7 +6,7 @@ on:
     paths: &python-paths
       - '**/*.py'
       - '.github/scripts/**'
-      - '.github/workflows/ci.yml'
+      - '.github/workflows/**'
       - 'inferencex-e2e/pyproject.toml'
       - 'inferencex-e2e/uv.lock'
       - 'inferencex-e2e/.python-version'

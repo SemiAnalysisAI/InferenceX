@@ -60,6 +60,10 @@ class LaunchPath(StrEnum):
     LLMD = "llmd"
 
 
+# Multi-node frameworks the llm-d driver launches instead of srt-slurm.
+LLMD_FRAMEWORKS = frozenset({"llmd-vllm"})
+
+
 NATIVE_SRT_LANES: dict[str, tuple[Match, ...]] = {
     "b200-nscale": (
         Match(any_of("dsv4", "kimik3", "glm5.2"), any_of("fp4"), any_of("dynamo-vllm")),
@@ -77,7 +81,7 @@ BATCH_WRAPPED_LANES: dict[str, Match] = {
 
 def launch_path(cluster_id: str, request: LaunchRequest) -> LaunchPath:
     if request.is_multinode:
-        if request.framework == "llmd-vllm":
+        if request.framework in LLMD_FRAMEWORKS:
             return LaunchPath.LLMD
         if any(lane(request) for lane in NATIVE_SRT_LANES.get(cluster_id, ())):
             return LaunchPath.SRT_NATIVE
