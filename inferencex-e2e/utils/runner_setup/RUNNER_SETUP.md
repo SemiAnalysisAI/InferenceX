@@ -233,6 +233,41 @@ and allocations submitted outside this admission path.
 
 ## Storage layout
 
+### GB300: one cluster, two allocation partitions
+
+All 36 GB300 runners belong to `cluster:gb300-nv` and use the same runtime
+profile and launcher policies. `gb300-nv_00` through `gb300-nv_17` carry
+`partition:batch_1`; the additional `gb300-nv_18` through `gb300-nv_35`
+carry `partition:batch_3`. Both ranges also carry `gb300` and `slurm`.
+
+The partitions are separate 18-node NVLink domains. The partition-aware
+dashboard controller keeps each complete lease inside one partition and
+checks its own Slurm availability, while grouping fleet/queue data under
+`gb300-nv`. A four-node job cannot use two idle nodes from each partition.
+Normal jobs still request `gb300` or `cluster:gb300-nv`; no master-config
+duplication is needed. The launcher reads the anchor's `partition:` label
+from this inventory and submits exclusively to that partition.
+
+New listeners run as `sa-shared@im-gb300-login-02`, using persistent NFS at
+`/data/home/sa-shared/gharunners-batch3`. Shared caches and staged models stay
+at the existing GB300 paths. Provision with `setup.sh` and tags
+`slurm,gb300,cluster:gb300-nv,partition:batch_3`. Keep new listeners stopped
+until both the dashboard's partition-aware admission and this inventory
+routing are deployed, all runner labels agree, and the existing `gb300-nv`
+collector reports `batch_1` and `batch_3` (never their overlapping `batch_All`).
+Relabel existing runners only outside active leases.
+
+After those checks, start the new range with isolated nine-pane tmux sessions:
+
+```sh
+bash start_runners.sh 18 26 /data/home/sa-shared/gharunners-batch3 gb300-runners-batch3-a
+bash start_runners.sh 27 35 /data/home/sa-shared/gharunners-batch3 gb300-runners-batch3-b
+```
+
+Do not replace the existing `github-actions` tmux session. No custom runner
+service or second collector identity is needed. Existing historical telemetry
+for `gb300-nv` is preserved.
+
 The login node (where the runners live) and the Slurm compute nodes (where benchmarks
 run) exchange everything through the filesystem, so every path the CI touches must be
 visible from the compute node that the job lands on. Each path must either live on
