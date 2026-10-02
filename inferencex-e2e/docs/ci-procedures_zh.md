@@ -130,6 +130,8 @@ jq -r '
 
 每个生成的多节点行都必须包含严格校验的正整数 `node-count`。启用节点槽位调度时，可复用 Workflow 会将该值发布为 `nodes:N` 请求标签；需求缺失或无效会导致矩阵验证失败，而不会静默进入单节点队列。不使用 Master Config 生成器、直接接入优先级调度的 Workflow 必须自行发布准确需求（例如 CollectiveX 使用每个分片生成的 `nodes` 值）。
 
+对于仓库内的解耦式 srt-slurm Recipe，节点需求包括 Worker 节点、已启用的 Service Pool，以及 Frontend、服务发现或 Benchmark 的专用节点。专用组件默认共用一个额外节点；设置 `benchmark.colocate_with_frontend: false` 后，每个专用组件分别占用一个节点（etcd 和 NATS 仍共用服务发现节点）。计数前先解析命名 Override。此变更只修正租约大小，不改变 Benchmark 拓扑。
+
 Eval 开关语义是明确的：
 
 - 默认：吞吐量条目加选定的默认固定序列 Eval 子集。
