@@ -4,6 +4,10 @@ English | [中文](MODELS_zh.md)
 
 This document tracks every model benchmarked by InferenceX-e2e: when it was added, which benchmark scenarios are currently active for it, and which scenarios are deprecated. Results for active scenarios are published to <https://inferencex.com/>.
 
+## Review and merge SLO
+
+Following the principles of fairness and equitableness, the service-level objective (SLO) we aim for when reviewing and merging PRs is `max(1 day, vendor response time)`, measured from when we are pinged in Slack. Vendor response time is the time vendors take to respond to InferenceX core maintainers' questions, messages, PRs, requests for follow-up reviews, etc. We will probably review and merge PRs sooner than this formula allows, but this is the SLO we aim for.
+
 ## Deprecation Notice
 
 InferenceX-e2e runs on a fixed, limited pool of GPUs and is maintained by a small team. Every scenario, precision, and recipe variant we keep alive consumes cluster hours and maintainer attention that would otherwise go to new frontier models. The deprecations below free that capacity. When retiring redundant A/B baselines, we retain configurations that contribute to the Pareto frontier, whether speculative decoding is enabled or disabled.
