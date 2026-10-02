@@ -9178,3 +9178,13 @@
     - "Add GLM-5.2-NVFP4 B300 AgentX (agentic-coding) Dynamo-SGLang benchmarks: aggregated TP8 and disaggregated 1P2D/1P3D/1P4D/1P6D TP4-decode and 2P1D DEP8-decode."
     - "Image: lmsysorg/sglang:nightly-dev-20260910-00840301"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2654
+
+- config-keys:
+    - glm5.2-fp4-b300-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-b300-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Fix the B300 AgentX canary failure (exit 127: /aiperf-venv/bin/aiperf not found) by running the benchmark through srt_agentic.sh with one schema-2 recipe per benchmark point."
+    - "Remove recipe-local synthetic-acceptance overrides and SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE, and set aggregate max-running-requests and cuda-graph-max-bs-decode to twice each point's concurrency."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2654
