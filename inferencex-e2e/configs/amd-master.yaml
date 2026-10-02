@@ -1076,6 +1076,32 @@ dsv41flash-fp4-mi300x-vllm-agentic-dspark:
       # -13.51 GiB" and refused to start. A 192 GB card cannot hold this
       # checkpoint at TP2 with a usable KV pool; MI325X does it on 256 GB.
 
+glm5.3-fp8-mi325x-sglang-agentic-mtp-dual-tp4:
+  image: lmsysorg/sglang-rocm:v0.5.21-rocm720-mi30x-20261001@sha256:8190c29f67bdb65f41e0254efc72e60daa5117b7212e86a46aad5bf4b145f1b4
+  model: zai-org/GLM-5.3
+  model-prefix: glm5.3
+  runner: cluster:mi325x-amd
+  precision: fp8
+  framework: sglang
+  router: { name: sglang-router, version: '0.3.2' }
+  multinode: true
+  disagg: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [4]
+        num-nodes: 1
+        worker:
+          num-worker: 2
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/glm5.3/sglang/mi325x-fp8/agentx/agg-dual-tp4-mtp.yaml"
+
 glm5.3-fp8-mi325x-sglang-disagg-agentic-umbp:
   image: lmsysorg/sglang-rocm:v0.5.21-rocm720-mi30x-20261001@sha256:8190c29f67bdb65f41e0254efc72e60daa5117b7212e86a46aad5bf4b145f1b4
   model: zai-org/GLM-5.3
