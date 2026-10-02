@@ -106,7 +106,7 @@ override_tp4_fp8kv_c1:
         kv-cache-dtype: fp8_e4m3
         max-total-tokens: null
         chunked-prefill-size: 8192
-        mem-fraction-static: 0.90
+        mem-fraction-static: 0.92
         max-running-requests: 2
         cuda-graph-max-bs-decode: 2
   benchmark:
