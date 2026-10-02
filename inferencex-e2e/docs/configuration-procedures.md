@@ -353,7 +353,12 @@ stock true), but do not enable `compact_group_io` on this DSXE single-rail path
 `ncclCommInitRank` with Q gather off). Do not set `MC_MAX_MR_SIZE` here: with
 4GiB every rank hit `register_buffer failed ... -600` on the ~40 GiB KV region
 and stormed `AddressNotRegistered` TRANSFER_FAIL (c2/c32); pre-`MC_MAX_MR` tips
-registered cleanly. Keep `enable-cumem-allocator` off on this path.
+registered cleanly. Keep `enable-cumem-allocator` off on this path. Keep
+`gpu-memory-utilization` at 0.85 for CONC 24+ (tip b70e4260a c48 reached
+Application startup with KV 45.2 GiB at 0.92 under
+`VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0`, then OOMed in flashinfer FP4 MoE
+`prepare_moe` allocating ~2.89 GiB with ~2.3 GiB free; vLLM suggested ~36.78 GiB
+KV once CUDA graphs are counted).
 
 
 The AgentX-only `dsv41flash-fp4-<sku>-vllm-agentic-dspark` recipes use the per-SKU

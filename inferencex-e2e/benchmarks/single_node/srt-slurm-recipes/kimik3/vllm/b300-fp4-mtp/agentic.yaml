@@ -135,8 +135,12 @@ base:
       KV_OFFLOADING: dram
       TOTAL_CPU_DRAM_GB: '2249'
 
-# One variant per point. Admission is 2x CONC; CONC 56 and 70 keep more memory
-# headroom. Graphs capture (1 + drafts) x 1..min(2x CONC, 128) tokens, then the
+# One variant per point. Admission is 2x CONC. CONC 24+ use gpu-memory-utilization
+# 0.85: with VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0, tip b70e4260a c48
+# (Slurm 6737) over-allocated GPU KV to 45.2 GiB (vLLM suggested 36.78 GiB once
+# CUDA graphs are counted) and OOMed in flashinfer FP4 MoE prepare_moe (~2.89 GiB
+# needed, ~2.3 GiB free) ~4m after Application startup. Keep 0.92 on speculative
+# c1–c16. Graphs capture (1 + drafts) x 1..min(2x CONC, 128) tokens, then the
 # larger powers of two to 8192. Throughput runs switch DSpark to synthetic
 # rejection at the golden acceptance length; points above CONC 16 do not draft
 # and keep the matrix's mtp label.
@@ -205,7 +209,7 @@ override_c24:
     agg:
       args:
         max-num-seqs: 48
-        gpu-memory-utilization: 0.92
+        gpu-memory-utilization: 0.85
         compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,64,128,256,512,1024,2048,4096,8192]}'
   benchmark:
     env:
@@ -217,7 +221,7 @@ override_c32:
     agg:
       args:
         max-num-seqs: 64
-        gpu-memory-utilization: 0.92
+        gpu-memory-utilization: 0.85
         compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,128,256,512,1024,2048,4096,8192]}'
   benchmark:
     env:
@@ -229,7 +233,7 @@ override_c40:
     agg:
       args:
         max-num-seqs: 80
-        gpu-memory-utilization: 0.92
+        gpu-memory-utilization: 0.85
         compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,128,256,512,1024,2048,4096,8192]}'
   benchmark:
     env:
@@ -241,7 +245,7 @@ override_c48:
     agg:
       args:
         max-num-seqs: 96
-        gpu-memory-utilization: 0.92
+        gpu-memory-utilization: 0.85
         compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,128,256,512,1024,2048,4096,8192]}'
   benchmark:
     env:
@@ -253,7 +257,7 @@ override_c56:
     agg:
       args:
         max-num-seqs: 112
-        gpu-memory-utilization: 0.9
+        gpu-memory-utilization: 0.85
         compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,128,256,512,1024,2048,4096,8192]}'
   benchmark:
     env:
@@ -265,7 +269,7 @@ override_c70:
     agg:
       args:
         max-num-seqs: 140
-        gpu-memory-utilization: 0.9
+        gpu-memory-utilization: 0.85
         compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,127,128,256,512,1024,2048,4096,8192]}'
   benchmark:
     env:

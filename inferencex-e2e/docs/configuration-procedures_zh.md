@@ -326,7 +326,11 @@ Direct DCP KV gather 关闭（`VLLM_USE_DIRECT_DCP_KV_GATHER=0`），Direct DCP 
 分钟，随后 EP `ncclCommInitRank` 失败）。不要在此设置 `MC_MAX_MR_SIZE`：设为
 4GiB 时各 rank 对约 40 GiB KV 区域报 `register_buffer failed ... -600`，并引发
 `AddressNotRegistered` TRANSFER_FAIL（c2/c32）；加入该变量之前的 tip 注册正常。
-此路径保持关闭 `enable-cumem-allocator`。
+此路径保持关闭 `enable-cumem-allocator`。CONC 24+ 将 `gpu-memory-utilization`
+保持为 0.85（tip b70e4260a 的 c48 在 `VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0`
+与 0.92 下以 45.2 GiB KV 完成 Application startup，随后在 flashinfer FP4 MoE
+`prepare_moe` 申请约 2.89 GiB 时仅剩约 2.3 GiB 空闲而 OOM；vLLM 在计入 CUDA
+graph 后建议约 36.78 GiB KV）。
 
 
 仅运行 AgentX 的 `dsv41flash-fp4-<sku>-vllm-agentic-dspark` 配方使用
