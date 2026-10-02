@@ -1,0 +1,1408 @@
+diff --git a/docs/config-reference.md b/docs/config-reference.md
+index db321a70..716b46a0 100644
+--- a/docs/config-reference.md
++++ b/docs/config-reference.md
+@@ -701,7 +701,7 @@ frontend:
+ 
+ | Field                       | Type | Default       | Description                         |
+ | --------------------------- | ---- | ------------- | ----------------------------------- |
+-| `type`                      | str  | dynamo        | `dynamo`; static routers `sglang-router`, `vllm-router`; direct (one aggregate worker binds the public port, no router process) `sglang`, `vllm`, `trtllm_serve` |
++| `type`                      | str  | dynamo        | `dynamo`; static routers `sglang-router`, `vllm-router`, `smg` (any backend, see [SMG](smg.md)); direct (one aggregate worker binds the public port, no router process) `sglang`, `vllm`, `trtllm_serve` |
+ | `placement.node`            | str  | head          | `head`, `first_decode`, or `dedicated`; see [placement](#placement) |
+ | `enable_multiple_frontends` | bool | true          | Scale with nginx + multiple routers |
+ | `num_additional_frontends`  | int  | 9             | Additional routers beyond master    |
+diff --git a/docs/schema-reference.md b/docs/schema-reference.md
+index c78f327f..fdcb23ac 100644
+--- a/docs/schema-reference.md
++++ b/docs/schema-reference.md
+@@ -118,7 +118,7 @@ Frontend/router configuration.
+ 
+ | Key | Type | Default | Description |
+ |---|---|---|---|
+-| `type` | str | `'dynamo'` | Frontend type - "dynamo" (default); "sglang-router" (SGLang Model Gateway), "vllm-router", "atomesh", and "tilert-router" (static routers); "sglang", "vllm", and "trtllm_serve" (direct: the single aggregate worker binds the public port, no router process); "none" (services-only job: no router, no OpenAI endpoint, no worker-count health gate; requires no engine roles). In schema 1 recipes "sglang" still means the router and loads as "sglang-router". |
++| `type` | str | `'dynamo'` | Frontend type - "dynamo" (default); "sglang-router" (SGLang Model Gateway), "vllm-router", "smg" (Shepherd Model Gateway, any backend), "atomesh", and "tilert-router" (static routers); "sglang", "vllm", and "trtllm_serve" (direct: the single aggregate worker binds the public port, no router process); "none" (services-only job: no router, no OpenAI endpoint, no worker-count health gate; requires no engine roles). In schema 1 recipes "sglang" still means the router and loads as "sglang-router". |
+ | `enable_multiple_frontends` | bool | `True` | Scale with nginx + multiple routers. When ``True`` (default), srtctl stands up nginx and fans out to ``num_additional_frontends + 1`` router replicas. When ``False``, there is NO nginx proxy — the benchmark must target the single master router (or a worker) directly at ``http://localhost:<port>``. ``benchmark.command`` has no placeholder substitution, so write the URL out literally. |
+ | `num_additional_frontends` | int | `9` | Additional routers beyond master (default: 9) |
+ | `nginx_container` | str | `'nginx:1.27.4'` | Custom nginx container image (default: nginx:1.27.4) |
+diff --git a/docs/smg.md b/docs/smg.md
+new file mode 100644
+index 00000000..bcc65837
+--- /dev/null
++++ b/docs/smg.md
+@@ -0,0 +1,114 @@
++# Shepherd Model Gateway (SMG)
++
++`frontend.type: smg` runs the [Shepherd Model Gateway](https://github.com/smg-project/smg)
++in front of direct engine workers. SMG is an engine-agnostic Rust gateway with an
++OpenAI-compatible API; srtctl hands it the statically allocated worker URLs, the same
++way it does for the other static routers. No Dynamo, NATS, or etcd is involved.
++
++Upstream references below are pinned to SMG
++[v1.11.0](https://github.com/smg-project/smg/tree/3be823a700fabaff3add8a390cf78f163479d686).
++
++## Supported topologies
++
++| Topology | Backends | What srtctl launches |
++| --- | --- | --- |
++| Aggregated | any engine whose workers serve HTTP (`sglang`, `vllm`, `trtllm`, ...) | `smg launch --worker-urls <url> ...` |
++| Prefill/decode | `sglang` | `smg launch --pd-disaggregation --prefill <url> <bootstrap-port> --decode <url>` |
++
++SMG detects each HTTP worker's engine itself (`/v1/models` `owned_by`, then `/version`
++and `/server_info`) and reads the served model name from the worker
++([`detect_backend.rs`](https://github.com/smg-project/smg/blob/3be823a700fabaff3add8a390cf78f163479d686/model_gateway/src/workflow/steps/local/detect_backend.rs#L182-L191),
++[`discover_metadata.rs`](https://github.com/smg-project/smg/blob/3be823a700fabaff3add8a390cf78f163479d686/model_gateway/src/workflow/steps/local/discover_metadata.rs#L230-L239)),
++so srtctl passes no `--backend` and no model name. SMG routes a request only to workers
++serving the model it names
++([`router.rs`](https://github.com/smg-project/smg/blob/3be823a700fabaff3add8a390cf78f163479d686/model_gateway/src/routers/http/router.rs#L249-L252)),
++so clients send the workers' served model name, as srtctl's benchmarks do.
++
++P/D is listed for SGLang only. SMG's HTTP P/D router hands the KV cache over through
++SGLang's bootstrap rendezvous (`bootstrap_host` / `bootstrap_port` / `bootstrap_room`,
++[`pd_router.rs`](https://github.com/smg-project/smg/blob/3be823a700fabaff3add8a390cf78f163479d686/model_gateway/src/routers/http/pd_router.rs#L303-L305)).
++A vLLM worker registered by URL carries no KV connector, so SMG sends the request through
++and the decode worker recomputes the prompt
++([upstream test note](https://github.com/smg-project/smg/blob/3be823a700fabaff3add8a390cf78f163479d686/e2e_test/router/test_pd_topologies.py#L105-L110)).
++srtctl does not reject that layout, but it is not a KV-disaggregated run.
++
++## vLLM data parallel
++
++A vLLM aggregated role with `data-parallel-size` (DP, optionally with
++`enable-expert-parallel`) is one `vllm serve` that load-balances its DP ranks itself.
++Across nodes, the leader node serves the API and the other nodes run headless engine
++ranks (`--nnodes`/`--node-rank`), so SMG receives one worker URL per DP deployment.
++This is the layout `frontend.type: vllm` uses, with the API on an allocated port.
++
++SMG's `--dp-aware` rank pinning is not used: it discovers `dp_size` over HTTP only
++from SGLang workers and registers any other HTTP worker as a plain worker
++([`discover_dp.rs`](https://github.com/smg-project/smg/blob/3be823a700fabaff3add8a390cf78f163479d686/model_gateway/src/workflow/steps/local/discover_dp.rs#L145-L156));
++for vLLM it needs gRPC workers
++([`discover_dp.rs`](https://github.com/smg-project/smg/blob/3be823a700fabaff3add8a390cf78f163479d686/model_gateway/src/workflow/steps/local/discover_dp.rs#L127-L141)),
++which srtctl does not configure. See
++[`examples/vllm/smg-dep16.yaml`](../examples/vllm/smg-dep16.yaml).
++
++## Configuration
++
++```yaml
++frontend:
++  type: smg
++  container_image: smg # an image that ships SMG, e.g. lightseekorg/smg:1.11.0
++  enable_multiple_frontends: false
++  args:
++    policy: cache_aware # any `smg launch` flag
++```
++
++- `container_image`: an engine image need not ship SMG. Point this at an image
++  with the `smg` command (the official `lightseekorg/smg` image, or any image where
++  `pip install smg` was run). Without it the model container is reused.
++- `setup_script`: the recipe's setup script also runs in SMG's container before
++  `smg launch`, so a script that runs `pip install smg==1.11.0` (a manylinux wheel)
++  makes the model image serve as the router image.
++- `args`: passed to `smg launch` as `--<key> <value>`; `true` adds a bare flag and a
++  list repeats the flag. `prometheus-port` is managed by srtctl and rejected here.
++- `enable_multiple_frontends` / `num_additional_frontends`: as for every router,
++  several SMG replicas behind nginx, or one SMG on the public port.
++
++See [`examples/vllm/smg-agg.yaml`](../examples/vllm/smg-agg.yaml) (vLLM, aggregated),
++[`examples/vllm/smg-dep16.yaml`](../examples/vllm/smg-dep16.yaml) (vLLM, two-node DP16 with EP)
++and [`examples/sglang/smg-disagg.yaml`](../examples/sglang/smg-disagg.yaml) (SGLang, P/D).
++
++## Launch and readiness
++
++- **Command.** `smg launch`
++  ([subcommand](https://github.com/smg-project/smg/blob/3be823a700fabaff3add8a390cf78f163479d686/model_gateway/src/main.rs#L153-L160)) with `--host 0.0.0.0 --port <frontend port>` and the
++  workers from the allocated topology: `--worker-urls` for aggregated workers;
++  `--pd-disaggregation`, one `--prefill URL BOOTSTRAP_PORT` per prefill worker and one
++  `--decode URL` per decode worker for P/D
++  ([`main.rs`](https://github.com/smg-project/smg/blob/3be823a700fabaff3add8a390cf78f163479d686/model_gateway/src/main.rs#L35-L72),
++  [CLI arguments](https://github.com/smg-project/smg/blob/3be823a700fabaff3add8a390cf78f163479d686/model_gateway/src/main.rs#L213-L237),
++  [P/D arguments](https://github.com/smg-project/smg/blob/3be823a700fabaff3add8a390cf78f163479d686/model_gateway/src/main.rs#L494-L509)).
++  The Python package (what `pip install smg` and the official image install) provides
++  the same `smg launch` subcommand and flags
++  ([`cli.py`](https://github.com/smg-project/smg/blob/3be823a700fabaff3add8a390cf78f163479d686/bindings/python/src/smg/cli.py#L76-L82),
++  [`router_args.py`](https://github.com/smg-project/smg/blob/3be823a700fabaff3add8a390cf78f163479d686/bindings/python/src/smg/router_args.py#L843-L876)).
++- **Worker probe before start.** SMG waits at most `--worker-startup-timeout-secs`
++  (1800 s by default,
++  [`main.rs`](https://github.com/smg-project/smg/blob/3be823a700fabaff3add8a390cf78f163479d686/model_gateway/src/main.rs#L522-L524))
++  for a startup worker to register, and a large model can load for longer, so srtctl
++  waits for every advertised worker's `/health` to answer 200 before it starts SMG.
++- **Readiness.** srtctl polls SMG's `GET /workers` and waits until
++  `stats.prefill_count`, `stats.decode_count` and `stats.regular_count` cover the
++  expected workers; aggregated workers count as `regular`
++  ([route](https://github.com/smg-project/smg/blob/3be823a700fabaff3add8a390cf78f163479d686/model_gateway/src/server.rs#L993),
++  [response](https://github.com/smg-project/smg/blob/3be823a700fabaff3add8a390cf78f163479d686/model_gateway/src/worker/service.rs#L204-L241)).
++- **Metrics.** SMG serves Prometheus on its own listener. srtctl passes
++  `--prometheus-port 29000` (on every interface, SMG's default host) and points
++  tachometer's frontend target there
++  ([`main.rs`](https://github.com/smg-project/smg/blob/3be823a700fabaff3add8a390cf78f163479d686/model_gateway/src/main.rs#L741-L748)).
++  Workers are scraped on their own HTTP ports, as with the other static routers.
++- **Logs.** Each replica writes `<node>_smg_<index>.out` in the job log directory and
++  runs as the Slurm step `smg_<index>`.
++
++## Not wired
++
++srtctl advertises every worker over HTTP. SMG's gRPC, ZMQ and encode (EPD) worker
++modes, its Kubernetes service discovery, mesh, and the cloud-provider, history, MCP
++and WASM features are not configured by srtctl; `frontend.args` can still pass any
++`smg launch` flag that needs no srtctl-managed process or port.
+diff --git a/examples/README.md b/examples/README.md
+index cc454b34..9626a741 100644
+--- a/examples/README.md
++++ b/examples/README.md
+@@ -6,13 +6,13 @@ Small, runnable starting points, one per frontend and topology. Every example se
+ 
+ | Backend | Dynamo frontend | Native router | Router-free direct |
+ | --- | --- | --- | --- |
+-| SGLang | `sglang/dynamo-agg.yaml`, `sglang/dynamo-disagg.yaml` | `sglang/sglang-router-agg.yaml`, `sglang/sglang-router-disagg.yaml` | `sglang/sglang-direct-agg.yaml` |
+-| vLLM | `vllm/dynamo-agg.yaml`, `vllm/dynamo-disagg.yaml` | `vllm/vllm-router-agg.yaml`, `vllm/vllm-router-disagg.yaml`, `vllm/vllm-router-moriio-disagg.yaml` (ROCm, MoRI-IO discovery) | `vllm/vllm-direct-agg.yaml` |
++| SGLang | `sglang/dynamo-agg.yaml`, `sglang/dynamo-disagg.yaml` | `sglang/sglang-router-agg.yaml`, `sglang/sglang-router-disagg.yaml`, `sglang/smg-disagg.yaml` (SMG) | `sglang/sglang-direct-agg.yaml` |
++| vLLM | `vllm/dynamo-agg.yaml`, `vllm/dynamo-disagg.yaml` | `vllm/vllm-router-agg.yaml`, `vllm/vllm-router-disagg.yaml`, `vllm/vllm-router-moriio-disagg.yaml` (ROCm, MoRI-IO discovery), `vllm/smg-agg.yaml`, `vllm/smg-dep16.yaml` (SMG) | `vllm/vllm-direct-agg.yaml` |
+ | TRT-LLM | `trtllm/dynamo-agg.yaml`, `trtllm/dynamo-disagg.yaml` | `trtllm/trtllm-serve-disagg.yaml` | `trtllm/trtllm-serve-agg.yaml` |
+ | Mocker | `mocker/dynamo-agg.yaml` | | |
+ 
+ - **Dynamo frontend**: workers register with etcd and the Dynamo frontend routes (KV-aware here); the request plane is tcp and NATS is not started unless a plane asks for it. Dynamo is installed at job start via `dynamo.source` (`pypi:` here) unless the container ships it (`dynamo.install: false`, as the TRT-LLM examples do).
+-- **Native router**: the engine's own router in front of plain engine workers. No Dynamo, NATS, or etcd. SGLang uses the Model Gateway (`frontend.type: sglang-router`), vLLM the official vLLM Router (`vllm-router`), TRT-LLM `trtllm-serve disaggregated` with a generated `ser.yaml`.
++- **Native router**: the engine's own router in front of plain engine workers. No Dynamo, NATS, or etcd. SGLang uses the Model Gateway (`frontend.type: sglang-router`), vLLM the official vLLM Router (`vllm-router`), TRT-LLM `trtllm-serve disaggregated` with a generated `ser.yaml`. The `smg` examples put the engine-agnostic [Shepherd Model Gateway](../docs/smg.md) (`frontend.type: smg`) in front of the same workers, run from its own image.
+ - **Router-free direct**: one worker owns the public port. `frontend.type: sglang`, `frontend.type: vllm`, and `frontend.type: trtllm_serve` in aggregate mode launch no router process.
+ - **Mocker**: `dynamo.mocker` stands in for an engine, so the whole orchestration path runs without loading weights. The fastest way to validate a cluster config.
+ 
+@@ -52,6 +52,7 @@ containers:
+   dynamo-vllm: /path/to/vllm-runtime.sqsh   # Dynamo vLLM runtime image (ships ai-dynamo and gpu_memory_service), for features/vllm-failover.yaml
+   vllm-lmcache: /path/to/vllm-lmcache.sqsh  # vLLM image with LMCache installed, for features/lmcache-server.yaml and -disagg.yaml
+   sglang-lmcache: /path/to/sglang-lmcache.sqsh  # SGLang image with LMCache installed, for features/lmcache-server-sglang.yaml
++  smg: /path/to/smg.sqsh                    # Shepherd Model Gateway image (lightseekorg/smg), the router for the smg examples
+ ```
+ 
+ `resources.gpu_type` and `gpus_per_node` are set to `h100` and `8`; change them to match the partition you submit to.
+diff --git a/examples/sglang/smg-disagg.yaml b/examples/sglang/smg-disagg.yaml
+new file mode 100644
+index 00000000..7ae710d9
+--- /dev/null
++++ b/examples/sglang/smg-disagg.yaml
+@@ -0,0 +1,63 @@
++# SGLang disaggregated prefill/decode behind the Shepherd Model Gateway (SMG).
++#
++# One TP1 prefill worker and one TP1 decode worker sharing a node (`nodes: colocate`
++# places decode on the prefill node's spare GPUs). srtctl adds `--disaggregation-mode`
++# and the prefill bootstrap port; SMG is launched with `--pd-disaggregation`, gets the
++# prefill URL with that bootstrap port, and pairs each request across the two workers.
++# SMG runs from its own image (`frontend.container_image`).
++#
++# Aliases (`qwen3-0.6b`, `sglang`, `smg`) resolve through srtslurm.yaml; see examples/README.md.
++
++schema: 2
++name: "qwen3-0.6b-sglang-smg-disagg"
++
++slurm:
++  time_limit: "00:30:00"
++
++model:
++  path: "qwen3-0.6b"
++  container: "sglang"
++  precision: "bf16"
++
++resources:
++  gpu_type: "h100"
++  gpus_per_node: 8
++frontend:
++  type: smg
++  container_image: smg
++  enable_multiple_frontends: false
++  args:
++    policy: "cache_aware"
++
++engine: sglang
++roles:
++  prefill:
++    nodes: 1
++    workers: 1
++    gpus: 1
++    env:
++      PYTHONUNBUFFERED: "1"
++    args:
++      served-model-name: "Qwen/Qwen3-0.6B"
++      tensor-parallel-size: 1
++      mem-fraction-static: 0.5
++      context-length: 4096
++      disable-piecewise-cuda-graph: true
++  decode:
++    nodes: colocate
++    workers: 1
++    gpus: 1
++    env:
++      PYTHONUNBUFFERED: "1"
++    args:
++      served-model-name: "Qwen/Qwen3-0.6B"
++      tensor-parallel-size: 1
++      mem-fraction-static: 0.5
++      context-length: 4096
++      disable-piecewise-cuda-graph: true
++
++benchmark:
++  type: "sa-bench"
++  isl: 128
++  osl: 128
++  concurrencies: "4x8"
+diff --git a/examples/vllm/smg-agg.yaml b/examples/vllm/smg-agg.yaml
+new file mode 100644
+index 00000000..aa38d839
+--- /dev/null
++++ b/examples/vllm/smg-agg.yaml
+@@ -0,0 +1,49 @@
++# vLLM aggregated behind the Shepherd Model Gateway (SMG).
++#
++# Two TP1 `vllm serve` workers on one node; SMG receives them through
++# `--worker-urls`, detects the engine from each worker, and routes with its
++# cache-aware policy. No Dynamo, NATS, or etcd. SMG runs from its own image
++# (`frontend.container_image`), so the model container needs no router package.
++#
++# Aliases (`qwen3-0.6b`, `vllm`, `smg`) resolve through srtslurm.yaml; see examples/README.md.
++
++schema: 2
++name: "qwen3-0.6b-vllm-smg-agg"
++
++slurm:
++  time_limit: "00:30:00"
++
++model:
++  path: "qwen3-0.6b"
++  container: "vllm"
++  precision: "bf16"
++
++resources:
++  gpu_type: "h100"
++  gpus_per_node: 8
++frontend:
++  type: smg
++  container_image: smg
++  enable_multiple_frontends: false
++  args:
++    policy: "cache_aware"
++
++engine: vllm
++roles:
++  agg:
++    nodes: 1
++    workers: 2
++    gpus: 1
++    env:
++      PYTHONUNBUFFERED: "1"
++    args:
++      served-model-name: "Qwen/Qwen3-0.6B"
++      tensor-parallel-size: 1
++      gpu-memory-utilization: 0.5
++      max-model-len: 4096
++
++benchmark:
++  type: "sa-bench"
++  isl: 128
++  osl: 128
++  concurrencies: "4x8"
+diff --git a/examples/vllm/smg-dep16.yaml b/examples/vllm/smg-dep16.yaml
+new file mode 100644
+index 00000000..9bd1c5ad
+--- /dev/null
++++ b/examples/vllm/smg-dep16.yaml
+@@ -0,0 +1,49 @@
++# vLLM data parallel 16 with expert parallelism across two nodes, behind the
++# Shepherd Model Gateway (SMG).
++#
++# One `vllm serve` spans both nodes: node 0 serves the API and balances requests
++# over all 16 DP ranks itself, node 1 runs headless engine ranks. SMG therefore
++# receives a single worker URL. SMG's --dp-aware rank pinning discovers dp_size
++# from SGLang HTTP or gRPC workers only, not from vLLM HTTP workers (docs/smg.md).
++#
++# Aliases (`vllm`, `smg`) resolve through srtslurm.yaml; see examples/README.md.
++
++schema: 2
++name: "qwen3-30b-a3b-vllm-smg-dep16"
++
++slurm:
++  time_limit: "00:30:00"
++
++model:
++  path: "hf:Qwen/Qwen3-30B-A3B"
++  container: "vllm"
++  precision: "bf16"
++
++resources:
++  gpu_type: "h100"
++  gpus_per_node: 8
++frontend:
++  type: smg
++  container_image: smg
++  enable_multiple_frontends: false
++
++engine: vllm
++roles:
++  agg:
++    nodes: 2
++    workers: 1
++    gpus: 16
++    env:
++      PYTHONUNBUFFERED: "1"
++    args:
++      served-model-name: "Qwen/Qwen3-30B-A3B"
++      tensor-parallel-size: 1
++      data-parallel-size: 16
++      enable-expert-parallel: true
++      max-model-len: 4096
++
++benchmark:
++  type: "sa-bench"
++  isl: 128
++  osl: 128
++  concurrencies: "16x32"
+diff --git a/mkdocs.yml b/mkdocs.yml
+index 2467fda1..53f31af7 100644
+--- a/mkdocs.yml
++++ b/mkdocs.yml
+@@ -59,6 +59,7 @@ nav:
+       - Architecture: architecture.md
+       - SGLang Router: sglang-router.md
+       - vLLM Router: vllm-router.md
++      - Shepherd Model Gateway: smg.md
+       - TileRT: tilert.md
+       - Mooncake KV Store: mooncake-kv-store.md
+       - Services: services.md
+diff --git a/src/srtctl/backends/vllm.py b/src/srtctl/backends/vllm.py
+index 36318f7b..ad640be9 100644
+--- a/src/srtctl/backends/vllm.py
++++ b/src/srtctl/backends/vllm.py
+@@ -987,9 +987,10 @@ class VLLMProtocol:
+     ) -> list[Process]:
+         """Convert endpoints to processes.
+ 
+-        Dynamo DP+EP mode uses the configured per-GPU or per-node process layout.
+-        For direct vLLM aggregate jobs, `vllm serve` manages local DP ranks from
+-        one process, so keep the standard one-process-per-node topology.
++        Dynamo DP+EP mode and routers that expand node-local DP pools use the
++        configured per-GPU or per-node process layout. Any other direct worker is
++        one `vllm serve` that manages its DP ranks itself (headless on the other
++        nodes), so it keeps the standard topology: one API on the leader node.
+         For standard TP mode, creates one process per node. Every process then
+         gets the listeners its KV connector needs from the allocator (see
+         ``_with_connector_ports``).
+@@ -998,9 +999,10 @@ class VLLMProtocol:
+         from srtctl.frontends import get_frontend
+ 
+         allocator = port_allocator_for(port_allocator, base_sys_port)
+-        if get_frontend(frontend_type).worker_api_port("agg") == "public":
+-            # The worker is the public endpoint: one `vllm serve` per node owns
+-            # its local DP ranks, so the standard topology applies.
++        frontend = get_frontend(frontend_type)
++        if frontend.worker_launch == "direct" and not frontend.expands_node_local_dp:
++            # One `vllm serve` owns every DP rank of the endpoint, and only the
++            # leader serves the API, so the standard topology applies.
+             processes = endpoints_to_processes(endpoints, port_allocator=allocator, sidecar_grpc=dynamo_sidecar)
+         elif not any(self._is_dp_mode(ep.mode) for ep in endpoints):
+             # Standard TP mode: one process per node, or one per engine of the
+diff --git a/src/srtctl/core/schema.py b/src/srtctl/core/schema.py
+index 915fcbc5..6f9b1d81 100755
+--- a/src/srtctl/core/schema.py
++++ b/src/srtctl/core/schema.py
+@@ -2140,7 +2140,8 @@ class FrontendConfig:
+ 
+     Attributes:
+         type: Frontend type - "dynamo" (default); "sglang-router" (SGLang Model
+-            Gateway), "vllm-router", "atomesh", and "tilert-router" (static routers); "sglang", "vllm", and
++            Gateway), "vllm-router", "smg" (Shepherd Model Gateway, any backend), "atomesh", and
++            "tilert-router" (static routers); "sglang", "vllm", and
+             "trtllm_serve" (direct: the single aggregate worker binds the public
+             port, no router process); "none" (services-only job: no router, no
+             OpenAI endpoint, no worker-count health gate; requires no engine
+diff --git a/src/srtctl/frontends/AGENTS.md b/src/srtctl/frontends/AGENTS.md
+index 745f4369..8bdd1fc0 100644
+--- a/src/srtctl/frontends/AGENTS.md
++++ b/src/srtctl/frontends/AGENTS.md
+@@ -4,7 +4,7 @@ Rules for `src/srtctl/frontends/`. The Design Rules in the root `CLAUDE.md` appl
+ 
+ ## Frontends and readiness
+ 
+-The frontend is the process that owns the public OpenAI port (`FRONTEND_PUBLIC_PORT`) and decides when the job is ready. Implementations live under `src/srtctl/frontends/`, register with `@register_frontend("<type>")`, and are imported from the package `__init__`; `frontend.type` resolves through that registry (`get_frontend`, `list_frontend_types`) and nowhere else. Registered today: `dynamo` (etcd/NATS discovery), `sglang-router` and `vllm-router` (static URL routers, both built on `StaticRouterFrontend`), `trtllm_serve` (direct aggregate or the disaggregated orchestrator), `sglang` and `vllm` (one direct worker owns the port); `none` is the services-only job with no implementation and no gate.
++The frontend is the process that owns the public OpenAI port (`FRONTEND_PUBLIC_PORT`) and decides when the job is ready. Implementations live under `src/srtctl/frontends/`, register with `@register_frontend("<type>")`, and are imported from the package `__init__`; `frontend.type` resolves through that registry (`get_frontend`, `list_frontend_types`) and nowhere else. Registered today: `dynamo` (etcd/NATS discovery), `sglang-router`, `vllm-router` and `smg` (static URL routers built on `StaticRouterFrontend`; `smg` pairs with any backend), `trtllm_serve` (direct aggregate or the disaggregated orchestrator), `sglang` and `vllm` (one direct worker owns the port); `none` is the services-only job with no implementation and no gate.
+ 
+ `FrontendProtocol` hooks: `required_backend` and `validate(config)` (recipe rules, run by `SrtConfig._validate_frontend` at load so dry-run catches them; raise `ValueError` with the user-facing message), `health_endpoint` and `parse_health` (readiness), `get_backend_health_urls` (second gate: every advertised worker URL must answer 200 before traffic), `start_frontends` (launch on `topology.frontend_nodes`, one `ManagedProcess` per node with a `step_name`), `get_frontend_args_list` (`frontend.args` to CLI). The schema knows no individual frontend: pairing and per-type rules come from these two members.
+ 
+diff --git a/src/srtctl/frontends/__init__.py b/src/srtctl/frontends/__init__.py
+index 1a0e055b..b27058ba 100644
+--- a/src/srtctl/frontends/__init__.py
++++ b/src/srtctl/frontends/__init__.py
+@@ -12,6 +12,7 @@ Supported frontend types:
+ - dynamo: Dynamo frontend with NATS/etcd communication
+ - sglang: Direct sglang.launch_server for a single aggregate worker (no router)
+ - sglang-router: SGLang Model Gateway router in front of static workers
++- smg: Shepherd Model Gateway in front of any engine's static workers
+ - tilert-router: TileRT P/D router in front of vLLM prefill and TileRT decode
+ - trtllm_serve: Direct trtllm-serve worker or the disaggregated orchestrator
+ - vllm: Direct vLLM OpenAI server for aggregate jobs
+@@ -30,6 +31,7 @@ from srtctl.frontends.dynamic_frontend import DynamicFrontend
+ from srtctl.frontends.dynamo import DynamoFrontend
+ from srtctl.frontends.sglang import SGLangRouterFrontend
+ from srtctl.frontends.sglang_direct import SGLangFrontend
++from srtctl.frontends.smg import SMGFrontend
+ from srtctl.frontends.tilert_router import TileRTRouterFrontend
+ from srtctl.frontends.trtllm_serve import TRTLLMServeFrontend
+ from srtctl.frontends.vllm import VLLMFrontend
+@@ -43,6 +45,7 @@ __all__ = [
+     "FrontendProtocol",
+     "SGLangFrontend",
+     "SGLangRouterFrontend",
++    "SMGFrontend",
+     "TRTLLMServeFrontend",
+     "TileRTRouterFrontend",
+     "VLLMFrontend",
+diff --git a/src/srtctl/frontends/smg.py b/src/srtctl/frontends/smg.py
+new file mode 100644
+index 00000000..53383559
+--- /dev/null
++++ b/src/srtctl/frontends/smg.py
+@@ -0,0 +1,55 @@
++# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
++# SPDX-License-Identifier: Apache-2.0
++
++"""Shepherd Model Gateway router frontend (`frontend.type: smg`).
++
++SMG (https://github.com/smg-project/smg) takes its workers as static URLs on the
++command line (``smg launch --worker-urls ...`` or ``--pd-disaggregation --prefill
++URL [BOOTSTRAP_PORT] --decode URL``), lists them at ``GET /workers`` with
++``stats.{prefill,decode,regular}_count``, and detects each HTTP worker's engine
++itself, so the static-router base covers launch, readiness, and worker shape for
++every backend.
++"""
++
++from typing import TYPE_CHECKING, Any, ClassVar
++
++from srtctl.frontends.base import register_frontend
++from srtctl.frontends.static_router import StaticRouterFrontend, setup_script_preamble
++from srtctl.ports import SMG_METRICS_PORT
++
++if TYPE_CHECKING:
++    from srtctl.core.topology import Process
++
++
++@register_frontend("smg")
++class SMGFrontend(StaticRouterFrontend):
++    """Shepherd Model Gateway in front of any engine's direct HTTP workers."""
++
++    type: ClassVar[str] = "smg"
++    required_backend: ClassVar[str | None] = None
++    executable: ClassVar[tuple[str, ...]] = ("smg", "launch")
++    pd_flag: ClassVar[str] = "--pd-disaggregation"
++    process_name: ClassVar[str] = "smg"
++    # SMG waits at most --worker-startup-timeout-secs (1800 s by default) for a startup
++    # worker to register; a large model can load for longer, so every worker is probed first.
++    wait_for_workers_before_start: ClassVar[bool] = True
++
++    def frontend_metrics_port(self, frontend_args: dict[str, Any] | None) -> int | None:
++        """SMG serves Prometheus on its own listener, not on the routing port."""
++        return SMG_METRICS_PORT
++
++    def build_bash_preamble(self, config: Any) -> str | None:
++        """Run the recipe setup script in SMG's container, e.g. to ``pip install smg``."""
++        return setup_script_preamble(config)
++
++    def get_managed_frontend_args(
++        self,
++        config: Any,
++        backend: Any,
++        backend_processes: "list[Process]",
++    ) -> list[str]:
++        """Bind SMG's Prometheus listener on srtctl's port instead of upstream's default."""
++        normalized = {str(key).replace("_", "-") for key in (config.frontend.args or {})}
++        if "prometheus-port" in normalized:
++            raise ValueError("frontend.args.prometheus-port is managed by srtctl for smg")
++        return ["--prometheus-port", str(SMG_METRICS_PORT)]
+diff --git a/src/srtctl/frontends/static_router.py b/src/srtctl/frontends/static_router.py
+index 8c0ea166..ba67ab17 100644
+--- a/src/srtctl/frontends/static_router.py
++++ b/src/srtctl/frontends/static_router.py
+@@ -38,6 +38,28 @@ class RouterWorker:
+     bootstrap_port: int | None = None
+ 
+ 
++def setup_script_preamble(config: Any) -> str | None:
++    """Shell that runs the recipe's ``setup_script`` in a router's own container.
++
++    A router that ships as a package (``pip install``) rather than in the model
++    image installs itself this way; the script is looked up in ``/configs`` and
++    then ``/configs/patches``, as for the workers.
++    """
++    setup_script = getattr(config, "setup_script", None)
++    if not setup_script:
++        return None
++    script_name = shlex.quote(setup_script)
++    return (
++        f"setup_script={script_name} && "
++        'script_path="/configs/${setup_script}" && '
++        'patch_script_path="/configs/patches/${setup_script}" && '
++        'echo "Running setup script: ${script_path} (fallback ${patch_script_path})" && '
++        'if [ -f "${script_path}" ]; then bash "${script_path}"; '
++        'elif [ -f "${patch_script_path}" ]; then bash "${patch_script_path}"; '
++        'else echo "WARNING: ${script_path} or ${patch_script_path} not found"; fi'
++    )
++
++
+ class StaticRouterFrontend:
+     """Base class for routers whose worker topology is supplied on the CLI.
+ 
+diff --git a/src/srtctl/frontends/vllm_router.py b/src/srtctl/frontends/vllm_router.py
+index 2a2fad5c..aa2d7cc3 100644
+--- a/src/srtctl/frontends/vllm_router.py
++++ b/src/srtctl/frontends/vllm_router.py
+@@ -5,12 +5,11 @@
+ 
+ from __future__ import annotations
+ 
+-import shlex
+ from typing import TYPE_CHECKING, Any, ClassVar
+ 
+ from srtctl.core.health import WorkerHealthResult, probe_http_ok
+ from srtctl.frontends.base import logical_health_expectations, register_frontend
+-from srtctl.frontends.static_router import RouterWorker, StaticRouterFrontend
++from srtctl.frontends.static_router import RouterWorker, StaticRouterFrontend, setup_script_preamble
+ from srtctl.ports import VLLM_DISCOVERY_PORT
+ 
+ if TYPE_CHECKING:
+@@ -234,19 +233,7 @@ class VLLMRouterFrontend(StaticRouterFrontend):
+ 
+     def build_bash_preamble(self, config: Any) -> str | None:
+         """Run the recipe setup script in the vLLM Router container."""
+-        setup_script = getattr(config, "setup_script", None)
+-        if not setup_script:
+-            return None
+-        script_name = shlex.quote(setup_script)
+-        return (
+-            f"setup_script={script_name} && "
+-            'script_path="/configs/${setup_script}" && '
+-            'patch_script_path="/configs/patches/${setup_script}" && '
+-            'echo "Running setup script: ${script_path} (fallback ${patch_script_path})" && '
+-            'if [ -f "${script_path}" ]; then bash "${script_path}"; '
+-            'elif [ -f "${patch_script_path}" ]; then bash "${patch_script_path}"; '
+-            'else echo "WARNING: ${script_path} or ${patch_script_path} not found"; fi'
+-        )
++        return setup_script_preamble(config)
+ 
+     def get_backend_health_urls(
+         self,
+diff --git a/src/srtctl/ports.py b/src/srtctl/ports.py
+index 3de5f4b0..ae74afeb 100644
+--- a/src/srtctl/ports.py
++++ b/src/srtctl/ports.py
+@@ -35,6 +35,10 @@ SGLANG_NCCL_PORT_BASE = 17500
+ # Only started when --prometheus-port is passed, which srtctl does so tachometer can scrape it.
+ SGLANG_ROUTER_METRICS_PORT = 29000
+ 
++# Shepherd Model Gateway (frontend.type: smg) Prometheus listener on each router node,
++# passed as --prometheus-port so srtctl, not upstream's default, owns it.
++SMG_METRICS_PORT = 29000
++
+ # TRT-LLM torch.distributed bootstrap, one port per MPI endpoint.
+ TRTLLM_DIST_INIT_PORT_BASE = 29500
+ 
+diff --git a/tests/snapshots/launch/sglang__smg-disagg.txt b/tests/snapshots/launch/sglang__smg-disagg.txt
+new file mode 100644
+index 00000000..eafc081b
+--- /dev/null
++++ b/tests/snapshots/launch/sglang__smg-disagg.txt
+@@ -0,0 +1,176 @@
++# examples/sglang/smg-disagg.yaml
++# exit_code: 0
++# srun calls: 11
++
++## prefill_0_node-01
++nodelist: node-01
++output: <output>/logs/node-01_prefill_w0.out
++container_image: sglang
++container_mounts:
++    <repo>/src/srtctl/benchmarks/scripts: /srtctl-benchmarks
++    <repo>/src/srtctl/runtime_scripts: /srtctl-runtime
++    <model>: /model
++    <output>/logs: /logs
++env_to_set:
++    CUDA_VISIBLE_DEVICES: 0
++    HEAD_NODE_IP: 127.0.0.1
++    PYTHONUNBUFFERED: 1
++    SGLANG_CUDA_COREDUMP_BEFORE_CRASH: 0
++    SGLANG_PYSPY_DUMP_BEFORE_CRASH: 0
++bash_preamble: |
++    ( python3 <(cat <<'__FINGERPRINT_EOF__'
++    <fingerprint script>
++    __FINGERPRINT_EOF__
++    ) || true )
++command: |
++    python3 -m sglang.launch_server --model-path /model --served-model-name Qwen/Qwen3-0.6B --host 0.0.0.0 --port 6100 --nccl-port 17500 --enable-metrics --disaggregation-mode prefill --skip-server-warmup --disaggregation-bootstrap-port 7200 --context-length 4096 --disable-piecewise-cuda-graph --mem-fraction-static 0.5 --tensor-parallel-size 1
++
++## decode_0_node-02
++nodelist: node-02
++output: <output>/logs/node-02_decode_w0.out
++container_image: sglang
++container_mounts:
++    <repo>/src/srtctl/benchmarks/scripts: /srtctl-benchmarks
++    <repo>/src/srtctl/runtime_scripts: /srtctl-runtime
++    <model>: /model
++    <output>/logs: /logs
++env_to_set:
++    CUDA_VISIBLE_DEVICES: 0
++    HEAD_NODE_IP: 127.0.0.1
++    PYTHONUNBUFFERED: 1
++    SGLANG_CUDA_COREDUMP_BEFORE_CRASH: 0
++    SGLANG_PYSPY_DUMP_BEFORE_CRASH: 0
++bash_preamble: |
++    ( python3 <(cat <<'__FINGERPRINT_EOF__'
++    <fingerprint script>
++    __FINGERPRINT_EOF__
++    ) || true )
++command: |
++    python3 -m sglang.launch_server --model-path /model --served-model-name Qwen/Qwen3-0.6B --host 0.0.0.0 --port 6100 --nccl-port 17501 --enable-metrics --disaggregation-mode decode --skip-server-warmup --context-length 4096 --disable-piecewise-cuda-graph --mem-fraction-static 0.5 --tensor-parallel-size 1
++
++## smg_0
++nodelist: node-01
++output: <output>/logs/node-01_smg_0.out
++container_image: smg
++container_mounts:
++    <repo>/src/srtctl/benchmarks/scripts: /srtctl-benchmarks
++    <repo>/src/srtctl/runtime_scripts: /srtctl-runtime
++    <model>: /model
++    <output>/logs: /logs
++command: |
++    smg launch --pd-disaggregation --prefill http://127.0.0.1:6100 7200 --decode http://127.0.0.1:6100 --host 0.0.0.0 --port 8000 --prometheus-port 29000 --policy cache_aware
++
++## service_dcgm-exporter_node-01
++nodelist: node-01
++output: <output>/logs/service_dcgm-exporter_node-01.out
++container_image: nvcr.io#nvidia/k8s/dcgm-exporter:3.3.9-3.6.1-ubuntu22.04
++container_mounts:
++    <repo>/src/srtctl/benchmarks/scripts: /srtctl-benchmarks
++    <repo>/src/srtctl/runtime_scripts: /srtctl-runtime
++    <model>: /model
++    <output>/logs: /logs
++srun_export_env:
++    ETCD_ENDPOINTS: http://127.0.0.1:2379
++use_bash_wrapper: False
++command: |
++    dcgm-exporter --collect-interval=1000 --address :9401
++
++## service_dcgm-exporter_node-02
++nodelist: node-02
++output: <output>/logs/service_dcgm-exporter_node-02.out
++container_image: nvcr.io#nvidia/k8s/dcgm-exporter:3.3.9-3.6.1-ubuntu22.04
++container_mounts:
++    <repo>/src/srtctl/benchmarks/scripts: /srtctl-benchmarks
++    <repo>/src/srtctl/runtime_scripts: /srtctl-runtime
++    <model>: /model
++    <output>/logs: /logs
++srun_export_env:
++    ETCD_ENDPOINTS: http://127.0.0.1:2379
++use_bash_wrapper: False
++command: |
++    dcgm-exporter --collect-interval=1000 --address :9401
++
++## service_dcgm-exporter_node-03
++nodelist: node-03
++output: <output>/logs/service_dcgm-exporter_node-03.out
++container_image: nvcr.io#nvidia/k8s/dcgm-exporter:3.3.9-3.6.1-ubuntu22.04
++container_mounts:
++    <repo>/src/srtctl/benchmarks/scripts: /srtctl-benchmarks
++    <repo>/src/srtctl/runtime_scripts: /srtctl-runtime
++    <model>: /model
++    <output>/logs: /logs
++srun_export_env:
++    ETCD_ENDPOINTS: http://127.0.0.1:2379
++use_bash_wrapper: False
++command: |
++    dcgm-exporter --collect-interval=1000 --address :9401
++
++## service_node-exporter_node-01
++nodelist: node-01
++output: <output>/logs/service_node-exporter_node-01.out
++container_image: quay.io#prometheus/node-exporter:v1.8.2
++container_mounts:
++    <repo>/src/srtctl/benchmarks/scripts: /srtctl-benchmarks
++    <repo>/src/srtctl/runtime_scripts: /srtctl-runtime
++    <model>: /model
++    <output>/logs: /logs
++srun_export_env:
++    ETCD_ENDPOINTS: http://127.0.0.1:2379
++use_bash_wrapper: False
++command: |
++    /bin/node_exporter --web.listen-address=:9101 --collector.disable-defaults --collector.cpu --collector.infiniband --collector.meminfo --collector.processes --collector.stat --collector.vmstat --collector.pressure --collector.meminfo_numa '--collector.vmstat.fields=^(oom_kill|pgpg|pswp|pgsteal|pg.*fault).*'
++
++## service_node-exporter_node-02
++nodelist: node-02
++output: <output>/logs/service_node-exporter_node-02.out
++container_image: quay.io#prometheus/node-exporter:v1.8.2
++container_mounts:
++    <repo>/src/srtctl/benchmarks/scripts: /srtctl-benchmarks
++    <repo>/src/srtctl/runtime_scripts: /srtctl-runtime
++    <model>: /model
++    <output>/logs: /logs
++srun_export_env:
++    ETCD_ENDPOINTS: http://127.0.0.1:2379
++use_bash_wrapper: False
++command: |
++    /bin/node_exporter --web.listen-address=:9101 --collector.disable-defaults --collector.cpu --collector.infiniband --collector.meminfo --collector.processes --collector.stat --collector.vmstat --collector.pressure --collector.meminfo_numa '--collector.vmstat.fields=^(oom_kill|pgpg|pswp|pgsteal|pg.*fault).*'
++
++## service_node-exporter_node-03
++nodelist: node-03
++output: <output>/logs/service_node-exporter_node-03.out
++container_image: quay.io#prometheus/node-exporter:v1.8.2
++container_mounts:
++    <repo>/src/srtctl/benchmarks/scripts: /srtctl-benchmarks
++    <repo>/src/srtctl/runtime_scripts: /srtctl-runtime
++    <model>: /model
++    <output>/logs: /logs
++srun_export_env:
++    ETCD_ENDPOINTS: http://127.0.0.1:2379
++use_bash_wrapper: False
++command: |
++    /bin/node_exporter --web.listen-address=:9101 --collector.disable-defaults --collector.cpu --collector.infiniband --collector.meminfo --collector.processes --collector.stat --collector.vmstat --collector.pressure --collector.meminfo_numa '--collector.vmstat.fields=^(oom_kill|pgpg|pswp|pgsteal|pg.*fault).*'
++
++## tachometer
++nodelist: node-01
++output: <output>/logs/tachometer.out
++srun_export_env:
++    POLARS_MAX_THREADS: 4
++use_bash_wrapper: False
++command: |
++    tachometer-scraper --config <output>/logs/tachometer_config.toml --local-dir <output>/logs/tachometer/local --sync-interval 120
++
++## <unnamed>
++nodelist: node-01
++output: <output>/logs/benchmark.out
++container_image: sglang
++container_mounts:
++    <repo>/src/srtctl/benchmarks/scripts: /srtctl-benchmarks
++    <repo>/src/srtctl/runtime_scripts: /srtctl-runtime
++    <model>: /model
++    <output>/logs: /logs
++env_to_set:
++    SRTCTL_FRONTEND_TYPE: smg
++    SRT_FRONTEND_HOST: 127.0.0.1
++    SRT_FRONTEND_PORT: 8000
++command: |
++    bash /srtctl-benchmarks/sa-bench/bench.sh http://localhost:8000 128 128 4x8 inf /model Qwen/Qwen3-0.6B true 2 1 1 0.8 10 2 '' true random '' false
+diff --git a/tests/snapshots/launch/vllm__smg-agg.txt b/tests/snapshots/launch/vllm__smg-agg.txt
+new file mode 100644
+index 00000000..162cea85
+--- /dev/null
++++ b/tests/snapshots/launch/vllm__smg-agg.txt
+@@ -0,0 +1,178 @@
++# examples/vllm/smg-agg.yaml
++# exit_code: 0
++# srun calls: 11
++
++## agg_0_node-01
++nodelist: node-01
++output: <output>/logs/node-01_agg_w0.out
++container_image: vllm
++container_mounts:
++    <repo>/src/srtctl/benchmarks/scripts: /srtctl-benchmarks
++    <repo>/src/srtctl/runtime_scripts: /srtctl-runtime
++    <model>: /model
++    <output>/logs: /logs
++env_to_set:
++    DYN_VLLM_KV_EVENT_PORT: 5200
++    HEAD_NODE_IP: 127.0.0.1
++    PYTHONUNBUFFERED: 1
++    VLLM_NIXL_SIDE_CHANNEL_HOST: 127.0.0.1
++    VLLM_NIXL_SIDE_CHANNEL_PORT: 5400
++    VLLM_PORT: 20000
++bash_preamble: |
++    ( python3 <(cat <<'__FINGERPRINT_EOF__'
++    <fingerprint script>
++    __FINGERPRINT_EOF__
++    ) || true )
++command: |
++    vllm serve /model --host 0.0.0.0 --port 6100 --device-ids 0 --gpu-memory-utilization 0.5 --max-model-len 4096 --served-model-name Qwen/Qwen3-0.6B --tensor-parallel-size 1
++
++## agg_1_node-01
++nodelist: node-01
++output: <output>/logs/node-01_agg_w1.out
++container_image: vllm
++container_mounts:
++    <repo>/src/srtctl/benchmarks/scripts: /srtctl-benchmarks
++    <repo>/src/srtctl/runtime_scripts: /srtctl-runtime
++    <model>: /model
++    <output>/logs: /logs
++env_to_set:
++    DYN_VLLM_KV_EVENT_PORT: 5201
++    HEAD_NODE_IP: 127.0.0.1
++    PYTHONUNBUFFERED: 1
++    VLLM_NIXL_SIDE_CHANNEL_HOST: 127.0.0.1
++    VLLM_NIXL_SIDE_CHANNEL_PORT: 5401
++    VLLM_PORT: 20050
++bash_preamble: |
++    ( python3 <(cat <<'__FINGERPRINT_EOF__'
++    <fingerprint script>
++    __FINGERPRINT_EOF__
++    ) || true )
++command: |
++    vllm serve /model --host 0.0.0.0 --port 6132 --device-ids 1 --gpu-memory-utilization 0.5 --max-model-len 4096 --served-model-name Qwen/Qwen3-0.6B --tensor-parallel-size 1
++
++## smg_0
++nodelist: node-01
++output: <output>/logs/node-01_smg_0.out
++container_image: smg
++container_mounts:
++    <repo>/src/srtctl/benchmarks/scripts: /srtctl-benchmarks
++    <repo>/src/srtctl/runtime_scripts: /srtctl-runtime
++    <model>: /model
++    <output>/logs: /logs
++command: |
++    smg launch --worker-urls http://127.0.0.1:6100 http://127.0.0.1:6132 --host 0.0.0.0 --port 8000 --prometheus-port 29000 --policy cache_aware
++
++## service_dcgm-exporter_node-01
++nodelist: node-01
++output: <output>/logs/service_dcgm-exporter_node-01.out
++container_image: nvcr.io#nvidia/k8s/dcgm-exporter:3.3.9-3.6.1-ubuntu22.04
++container_mounts:
++    <repo>/src/srtctl/benchmarks/scripts: /srtctl-benchmarks
++    <repo>/src/srtctl/runtime_scripts: /srtctl-runtime
++    <model>: /model
++    <output>/logs: /logs
++srun_export_env:
++    ETCD_ENDPOINTS: http://127.0.0.1:2379
++use_bash_wrapper: False
++command: |
++    dcgm-exporter --collect-interval=1000 --address :9401
++
++## service_dcgm-exporter_node-02
++nodelist: node-02
++output: <output>/logs/service_dcgm-exporter_node-02.out
++container_image: nvcr.io#nvidia/k8s/dcgm-exporter:3.3.9-3.6.1-ubuntu22.04
++container_mounts:
++    <repo>/src/srtctl/benchmarks/scripts: /srtctl-benchmarks
++    <repo>/src/srtctl/runtime_scripts: /srtctl-runtime
++    <model>: /model
++    <output>/logs: /logs
++srun_export_env:
++    ETCD_ENDPOINTS: http://127.0.0.1:2379
++use_bash_wrapper: False
++command: |
++    dcgm-exporter --collect-interval=1000 --address :9401
++
++## service_dcgm-exporter_node-03
++nodelist: node-03
++output: <output>/logs/service_dcgm-exporter_node-03.out
++container_image: nvcr.io#nvidia/k8s/dcgm-exporter:3.3.9-3.6.1-ubuntu22.04
++container_mounts:
++    <repo>/src/srtctl/benchmarks/scripts: /srtctl-benchmarks
++    <repo>/src/srtctl/runtime_scripts: /srtctl-runtime
++    <model>: /model
++    <output>/logs: /logs
++srun_export_env:
++    ETCD_ENDPOINTS: http://127.0.0.1:2379
++use_bash_wrapper: False
++command: |
++    dcgm-exporter --collect-interval=1000 --address :9401
++
++## service_node-exporter_node-01
++nodelist: node-01
++output: <output>/logs/service_node-exporter_node-01.out
++container_image: quay.io#prometheus/node-exporter:v1.8.2
++container_mounts:
++    <repo>/src/srtctl/benchmarks/scripts: /srtctl-benchmarks
++    <repo>/src/srtctl/runtime_scripts: /srtctl-runtime
++    <model>: /model
++    <output>/logs: /logs
++srun_export_env:
++    ETCD_ENDPOINTS: http://127.0.0.1:2379
++use_bash_wrapper: False
++command: |
++    /bin/node_exporter --web.listen-address=:9101 --collector.disable-defaults --collector.cpu --collector.infiniband --collector.meminfo --collector.processes --collector.stat --collector.vmstat --collector.pressure --collector.meminfo_numa '--collector.vmstat.fields=^(oom_kill|pgpg|pswp|pgsteal|pg.*fault).*'
++
++## service_node-exporter_node-02
++nodelist: node-02
++output: <output>/logs/service_node-exporter_node-02.out
++container_image: quay.io#prometheus/node-exporter:v1.8.2
++container_mounts:
++    <repo>/src/srtctl/benchmarks/scripts: /srtctl-benchmarks
++    <repo>/src/srtctl/runtime_scripts: /srtctl-runtime
++    <model>: /model
++    <output>/logs: /logs
++srun_export_env:
++    ETCD_ENDPOINTS: http://127.0.0.1:2379
++use_bash_wrapper: False
++command: |
++    /bin/node_exporter --web.listen-address=:9101 --collector.disable-defaults --collector.cpu --collector.infiniband --collector.meminfo --collector.processes --collector.stat --collector.vmstat --collector.pressure --collector.meminfo_numa '--collector.vmstat.fields=^(oom_kill|pgpg|pswp|pgsteal|pg.*fault).*'
++
++## service_node-exporter_node-03
++nodelist: node-03
++output: <output>/logs/service_node-exporter_node-03.out
++container_image: quay.io#prometheus/node-exporter:v1.8.2
++container_mounts:
++    <repo>/src/srtctl/benchmarks/scripts: /srtctl-benchmarks
++    <repo>/src/srtctl/runtime_scripts: /srtctl-runtime
++    <model>: /model
++    <output>/logs: /logs
++srun_export_env:
++    ETCD_ENDPOINTS: http://127.0.0.1:2379
++use_bash_wrapper: False
++command: |
++    /bin/node_exporter --web.listen-address=:9101 --collector.disable-defaults --collector.cpu --collector.infiniband --collector.meminfo --collector.processes --collector.stat --collector.vmstat --collector.pressure --collector.meminfo_numa '--collector.vmstat.fields=^(oom_kill|pgpg|pswp|pgsteal|pg.*fault).*'
++
++## tachometer
++nodelist: node-01
++output: <output>/logs/tachometer.out
++srun_export_env:
++    POLARS_MAX_THREADS: 4
++use_bash_wrapper: False
++command: |
++    tachometer-scraper --config <output>/logs/tachometer_config.toml --local-dir <output>/logs/tachometer/local --sync-interval 120
++
++## <unnamed>
++nodelist: node-01
++output: <output>/logs/benchmark.out
++container_image: vllm
++container_mounts:
++    <repo>/src/srtctl/benchmarks/scripts: /srtctl-benchmarks
++    <repo>/src/srtctl/runtime_scripts: /srtctl-runtime
++    <model>: /model
++    <output>/logs: /logs
++env_to_set:
++    SRTCTL_FRONTEND_TYPE: smg
++    SRT_FRONTEND_HOST: 127.0.0.1
++    SRT_FRONTEND_PORT: 8000
++command: |
++    bash /srtctl-benchmarks/sa-bench/bench.sh http://localhost:8000 128 128 4x8 inf /model Qwen/Qwen3-0.6B false 8 0 0 0.8 10 2 '' true random '' false
+diff --git a/tests/snapshots/launch/vllm__smg-dep16.txt b/tests/snapshots/launch/vllm__smg-dep16.txt
+new file mode 100644
+index 00000000..ea8fd682
+--- /dev/null
++++ b/tests/snapshots/launch/vllm__smg-dep16.txt
+@@ -0,0 +1,210 @@
++# examples/vllm/smg-dep16.yaml
++# exit_code: 0
++# srun calls: 13
++
++## agg_0_node-01
++nodelist: node-01
++output: <output>/logs/node-01_agg_w0.out
++container_image: vllm
++container_mounts:
++    <repo>/src/srtctl/benchmarks/scripts: /srtctl-benchmarks
++    <repo>/src/srtctl/runtime_scripts: /srtctl-runtime
++    <model>: /model
++    <output>/logs: /logs
++env_to_set:
++    DYN_VLLM_KV_EVENT_PORT: 5200
++    HEAD_NODE_IP: 127.0.0.1
++    PYTHONUNBUFFERED: 1
++    VLLM_NIXL_SIDE_CHANNEL_HOST: 127.0.0.1
++    VLLM_NIXL_SIDE_CHANNEL_PORT: 5400
++    VLLM_PORT: 20000
++env_to_unset: VLLM_PORT
++bash_preamble: |
++    ( python3 <(cat <<'__FINGERPRINT_EOF__'
++    <fingerprint script>
++    __FINGERPRINT_EOF__
++    ) || true )
++command: |
++    vllm serve /model --host 0.0.0.0 --port 6100 --master-addr 127.0.0.1 --nnodes 2 --node-rank 0 --device-ids 0,1,2,3,4,5,6,7 --data-parallel-size 16 --enable-expert-parallel --max-model-len 4096 --served-model-name Qwen/Qwen3-30B-A3B --tensor-parallel-size 1
++
++## agg_0_node-02
++nodelist: node-02
++output: <output>/logs/node-02_agg_w0.out
++container_image: vllm
++container_mounts:
++    <repo>/src/srtctl/benchmarks/scripts: /srtctl-benchmarks
++    <repo>/src/srtctl/runtime_scripts: /srtctl-runtime
++    <model>: /model
++    <output>/logs: /logs
++env_to_set:
++    DYN_VLLM_KV_EVENT_PORT: 5201
++    HEAD_NODE_IP: 127.0.0.1
++    PYTHONUNBUFFERED: 1
++    VLLM_NIXL_SIDE_CHANNEL_HOST: 127.0.0.1
++    VLLM_NIXL_SIDE_CHANNEL_PORT: 5401
++    VLLM_PORT: 20050
++env_to_unset: VLLM_PORT
++bash_preamble: |
++    ( python3 <(cat <<'__FINGERPRINT_EOF__'
++    <fingerprint script>
++    __FINGERPRINT_EOF__
++    ) || true )
++command: |
++    vllm serve /model --master-addr 127.0.0.1 --nnodes 2 --node-rank 1 --headless --device-ids 0,1,2,3,4,5,6,7 --data-parallel-size 16 --enable-expert-parallel --max-model-len 4096 --served-model-name Qwen/Qwen3-30B-A3B --tensor-parallel-size 1
++
++## smg_0
++nodelist: node-01
++output: <output>/logs/node-01_smg_0.out
++container_image: smg
++container_mounts:
++    <repo>/src/srtctl/benchmarks/scripts: /srtctl-benchmarks
++    <repo>/src/srtctl/runtime_scripts: /srtctl-runtime
++    <model>: /model
++    <output>/logs: /logs
++command: |
++    smg launch --worker-urls http://127.0.0.1:6100 --host 0.0.0.0 --port 8000 --prometheus-port 29000
++
++## service_dcgm-exporter_node-01
++nodelist: node-01
++output: <output>/logs/service_dcgm-exporter_node-01.out
++container_image: nvcr.io#nvidia/k8s/dcgm-exporter:3.3.9-3.6.1-ubuntu22.04
++container_mounts:
++    <repo>/src/srtctl/benchmarks/scripts: /srtctl-benchmarks
++    <repo>/src/srtctl/runtime_scripts: /srtctl-runtime
++    <model>: /model
++    <output>/logs: /logs
++srun_export_env:
++    ETCD_ENDPOINTS: http://127.0.0.1:2379
++use_bash_wrapper: False
++command: |
++    dcgm-exporter --collect-interval=1000 --address :9401
++
++## service_dcgm-exporter_node-02
++nodelist: node-02
++output: <output>/logs/service_dcgm-exporter_node-02.out
++container_image: nvcr.io#nvidia/k8s/dcgm-exporter:3.3.9-3.6.1-ubuntu22.04
++container_mounts:
++    <repo>/src/srtctl/benchmarks/scripts: /srtctl-benchmarks
++    <repo>/src/srtctl/runtime_scripts: /srtctl-runtime
++    <model>: /model
++    <output>/logs: /logs
++srun_export_env:
++    ETCD_ENDPOINTS: http://127.0.0.1:2379
++use_bash_wrapper: False
++command: |
++    dcgm-exporter --collect-interval=1000 --address :9401
++
++## service_dcgm-exporter_node-03
++nodelist: node-03
++output: <output>/logs/service_dcgm-exporter_node-03.out
++container_image: nvcr.io#nvidia/k8s/dcgm-exporter:3.3.9-3.6.1-ubuntu22.04
++container_mounts:
++    <repo>/src/srtctl/benchmarks/scripts: /srtctl-benchmarks
++    <repo>/src/srtctl/runtime_scripts: /srtctl-runtime
++    <model>: /model
++    <output>/logs: /logs
++srun_export_env:
++    ETCD_ENDPOINTS: http://127.0.0.1:2379
++use_bash_wrapper: False
++command: |
++    dcgm-exporter --collect-interval=1000 --address :9401
++
++## service_dcgm-exporter_node-04
++nodelist: node-04
++output: <output>/logs/service_dcgm-exporter_node-04.out
++container_image: nvcr.io#nvidia/k8s/dcgm-exporter:3.3.9-3.6.1-ubuntu22.04
++container_mounts:
++    <repo>/src/srtctl/benchmarks/scripts: /srtctl-benchmarks
++    <repo>/src/srtctl/runtime_scripts: /srtctl-runtime
++    <model>: /model
++    <output>/logs: /logs
++srun_export_env:
++    ETCD_ENDPOINTS: http://127.0.0.1:2379
++use_bash_wrapper: False
++command: |
++    dcgm-exporter --collect-interval=1000 --address :9401
++
++## service_node-exporter_node-01
++nodelist: node-01
++output: <output>/logs/service_node-exporter_node-01.out
++container_image: quay.io#prometheus/node-exporter:v1.8.2
++container_mounts:
++    <repo>/src/srtctl/benchmarks/scripts: /srtctl-benchmarks
++    <repo>/src/srtctl/runtime_scripts: /srtctl-runtime
++    <model>: /model
++    <output>/logs: /logs
++srun_export_env:
++    ETCD_ENDPOINTS: http://127.0.0.1:2379
++use_bash_wrapper: False
++command: |
++    /bin/node_exporter --web.listen-address=:9101 --collector.disable-defaults --collector.cpu --collector.infiniband --collector.meminfo --collector.processes --collector.stat --collector.vmstat --collector.pressure --collector.meminfo_numa '--collector.vmstat.fields=^(oom_kill|pgpg|pswp|pgsteal|pg.*fault).*'
++
++## service_node-exporter_node-02
++nodelist: node-02
++output: <output>/logs/service_node-exporter_node-02.out
++container_image: quay.io#prometheus/node-exporter:v1.8.2
++container_mounts:
++    <repo>/src/srtctl/benchmarks/scripts: /srtctl-benchmarks
++    <repo>/src/srtctl/runtime_scripts: /srtctl-runtime
++    <model>: /model
++    <output>/logs: /logs
++srun_export_env:
++    ETCD_ENDPOINTS: http://127.0.0.1:2379
++use_bash_wrapper: False
++command: |
++    /bin/node_exporter --web.listen-address=:9101 --collector.disable-defaults --collector.cpu --collector.infiniband --collector.meminfo --collector.processes --collector.stat --collector.vmstat --collector.pressure --collector.meminfo_numa '--collector.vmstat.fields=^(oom_kill|pgpg|pswp|pgsteal|pg.*fault).*'
++
++## service_node-exporter_node-03
++nodelist: node-03
++output: <output>/logs/service_node-exporter_node-03.out
++container_image: quay.io#prometheus/node-exporter:v1.8.2
++container_mounts:
++    <repo>/src/srtctl/benchmarks/scripts: /srtctl-benchmarks
++    <repo>/src/srtctl/runtime_scripts: /srtctl-runtime
++    <model>: /model
++    <output>/logs: /logs
++srun_export_env:
++    ETCD_ENDPOINTS: http://127.0.0.1:2379
++use_bash_wrapper: False
++command: |
++    /bin/node_exporter --web.listen-address=:9101 --collector.disable-defaults --collector.cpu --collector.infiniband --collector.meminfo --collector.processes --collector.stat --collector.vmstat --collector.pressure --collector.meminfo_numa '--collector.vmstat.fields=^(oom_kill|pgpg|pswp|pgsteal|pg.*fault).*'
++
++## service_node-exporter_node-04
++nodelist: node-04
++output: <output>/logs/service_node-exporter_node-04.out
++container_image: quay.io#prometheus/node-exporter:v1.8.2
++container_mounts:
++    <repo>/src/srtctl/benchmarks/scripts: /srtctl-benchmarks
++    <repo>/src/srtctl/runtime_scripts: /srtctl-runtime
++    <model>: /model
++    <output>/logs: /logs
++srun_export_env:
++    ETCD_ENDPOINTS: http://127.0.0.1:2379
++use_bash_wrapper: False
++command: |
++    /bin/node_exporter --web.listen-address=:9101 --collector.disable-defaults --collector.cpu --collector.infiniband --collector.meminfo --collector.processes --collector.stat --collector.vmstat --collector.pressure --collector.meminfo_numa '--collector.vmstat.fields=^(oom_kill|pgpg|pswp|pgsteal|pg.*fault).*'
++
++## tachometer
++nodelist: node-01
++output: <output>/logs/tachometer.out
++srun_export_env:
++    POLARS_MAX_THREADS: 4
++use_bash_wrapper: False
++command: |
++    tachometer-scraper --config <output>/logs/tachometer_config.toml --local-dir <output>/logs/tachometer/local --sync-interval 120
++
++## <unnamed>
++nodelist: node-01
++output: <output>/logs/benchmark.out
++container_image: vllm
++container_mounts:
++    <repo>/src/srtctl/benchmarks/scripts: /srtctl-benchmarks
++    <repo>/src/srtctl/runtime_scripts: /srtctl-runtime
++    <model>: /model
++    <output>/logs: /logs
++env_to_set:
++    SRTCTL_FRONTEND_TYPE: smg
++    SRT_FRONTEND_HOST: 127.0.0.1
++    SRT_FRONTEND_PORT: 8000
++command: |
++    bash /srtctl-benchmarks/sa-bench/bench.sh http://localhost:8000 128 128 16x32 inf /model Qwen/Qwen3-30B-A3B false 16 0 0 0.8 10 2 '' true random '' false
+diff --git a/tests/test_configs.py b/tests/test_configs.py
+index 391b64fe..69686201 100644
+--- a/tests/test_configs.py
++++ b/tests/test_configs.py
+@@ -2976,6 +2976,29 @@ class TestVLLMDataParallelMode:
+         assert processes[0].node == "node0"
+         assert processes[0].gpu_indices == frozenset(range(8))
+ 
++    @pytest.mark.parametrize("frontend_type", ["vllm", "smg"])
++    def test_direct_multi_node_dp_serves_one_api_on_the_leader(self, frontend_type):
++        """A direct worker that no router expands owns every DP rank; only its leader node serves the API."""
++        from srtctl.backends import VLLMProtocol
++        from srtctl.core.topology import Endpoint
++
++        backend = VLLMProtocol(
++            roles={"agg": RoleConfig(args={"data-parallel-size": 16, "enable-expert-parallel": True})}
++        )
++        endpoint = Endpoint(
++            mode="agg",
++            index=0,
++            nodes=("node0", "node1"),
++            gpu_indices=frozenset(range(8)),
++            gpus_per_node=8,
++        )
++
++        processes = backend.endpoints_to_processes([endpoint], frontend_type=frontend_type)
++
++        assert [process.node for process in processes] == ["node0", "node1"]
++        assert processes[0].http_port > 0
++        assert processes[1].http_port == 0
++
+     def test_direct_vllm_command_preserves_current_main_device_binding(self):
+         """Direct vllm serve uses the public port and main's --device-ids binding."""
+         from pathlib import Path
+diff --git a/tests/test_e2e.py b/tests/test_e2e.py
+index 009e7905..e787e37f 100644
+--- a/tests/test_e2e.py
++++ b/tests/test_e2e.py
+@@ -30,7 +30,7 @@ def test_interactive_discovers_curated_examples():
+ 
+     assert SGLANG_ROUTER_DISAGG in examples
+     assert MOCKER_EXAMPLE in examples
+-    assert len(TOPOLOGY_EXAMPLES) == 15
++    assert len(TOPOLOGY_EXAMPLES) == 18
+ 
+ 
+ # =============================================================================
+diff --git a/tests/test_frontends.py b/tests/test_frontends.py
+index 04a4b761..1e1864f3 100644
+--- a/tests/test_frontends.py
++++ b/tests/test_frontends.py
+@@ -72,6 +72,7 @@ class TestFrontendRegistry:
+             "none",
+             "sglang",
+             "sglang-router",
++            "smg",
+             "tilert-router",
+             "trtllm_serve",
+             "vllm",
+diff --git a/tests/test_smg_frontend.py b/tests/test_smg_frontend.py
+new file mode 100644
+index 00000000..dc20f838
+--- /dev/null
++++ b/tests/test_smg_frontend.py
+@@ -0,0 +1,160 @@
++# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
++# SPDX-License-Identifier: Apache-2.0
++
++"""Shepherd Model Gateway frontend (`frontend.type: smg`)."""
++
++from pathlib import Path
++from types import SimpleNamespace
++from unittest.mock import MagicMock, patch
++
++import pytest
++
++from srtctl.backends import SGLangProtocol, TRTLLMProtocol, VLLMProtocol
++from srtctl.core.config import load_config
++from srtctl.core.health import check_static_router_health
++from srtctl.core.schema import FrontendConfig, ResourceConfig, RoleConfig, SrtConfig
++from srtctl.core.topology import Process
++from srtctl.frontends import SMGFrontend, get_frontend
++from srtctl.ports import SMG_METRICS_PORT
++from tests.launch_snapshots import EXAMPLES_DIR, render_launch_plan
++
++
++def _config(args: dict | None = None) -> SimpleNamespace:
++    return SimpleNamespace(
++        frontend=SimpleNamespace(type="smg", args=args, env=None, numa_bind=False, container_image="smg"),
++        health_check=None,
++    )
++
++
++def test_registry_resolves_smg_for_every_backend() -> None:
++    frontend = get_frontend("smg")
++    assert isinstance(frontend, SMGFrontend)
++    assert frontend.required_backend is None
++    assert frontend.worker_launch == "direct"
++    assert frontend.worker_api_port("agg") == "allocated"
++    assert frontend.frontend_metrics_port(None) == SMG_METRICS_PORT
++
++
++@pytest.mark.parametrize("engine", [SGLangProtocol(), VLLMProtocol(), TRTLLMProtocol()])
++def test_schema_pairs_smg_with_any_backend(engine) -> None:
++    config = SrtConfig(
++        name="smg",
++        model={"path": "model", "container": "image", "precision": "bf16"},
++        resources=ResourceConfig(gpu_type="h100", gpus_per_node=8),
++        roles={"agg": RoleConfig(nodes=1, workers=2, gpus=1)},
++        frontend=FrontendConfig(type="smg", enable_multiple_frontends=False),
++        engine=engine,
++    )
++    assert config.frontend.type == "smg"
++
++
++def test_pd_command_advertises_prefill_bootstrap_port() -> None:
++    frontend = SMGFrontend()
++    processes = [
++        Process("node0", frozenset({0}), 7500, 6100, "prefill", 0, bootstrap_port=7200),
++        Process("node1", frozenset({0}), 7501, 6100, "decode", 0),
++    ]
++    with patch("srtctl.frontends.static_router.get_hostname_ip", side_effect=["10.0.0.1", "10.0.0.2"]):
++        workers = frontend.collect_workers(SGLangProtocol(), processes)
++    command = frontend.build_router_command(workers, "0.0.0.0", 8000, SGLangProtocol())
++    command.extend(frontend.get_managed_frontend_args(_config(), SGLangProtocol(), processes))
++
++    assert command == [
++        "smg",
++        "launch",
++        "--pd-disaggregation",
++        "--prefill",
++        "http://10.0.0.1:6100",
++        "7200",
++        "--decode",
++        "http://10.0.0.2:6100",
++        "--host",
++        "0.0.0.0",
++        "--port",
++        "8000",
++        "--prometheus-port",
++        str(SMG_METRICS_PORT),
++    ]
++
++
++@pytest.mark.parametrize("key", ["prometheus-port", "prometheus_port"])
++def test_recipe_cannot_move_the_metrics_listener(key: str) -> None:
++    with pytest.raises(ValueError, match="managed by srtctl for smg"):
++        SMGFrontend().get_managed_frontend_args(_config({key: 31000}), VLLMProtocol(), [])
++
++
++def test_readiness_counts_the_workers_registry() -> None:
++    """SMG's GET /workers carries stats.{prefill,decode,regular}_count; aggregate workers are regular."""
++    frontend = SMGFrontend()
++    assert frontend.health_endpoint == "/workers"
++    response = {"workers": [], "total": 2, "stats": {"prefill_count": 0, "decode_count": 0, "regular_count": 2}}
++    assert frontend.parse_health(response, 0, 2) == check_static_router_health(response, 0, 2)
++    assert frontend.parse_health(response, 0, 2).ready
++
++
++def test_start_frontends_launches_smg_in_its_own_image(tmp_path: Path) -> None:
++    runtime = SimpleNamespace(
++        network_interface=None,
++        log_dir=tmp_path,
++        container_image="model.sqsh",
++        container_mounts={},
++        environment={},
++        srun_options={},
++        nodes=SimpleNamespace(het_group_for=lambda node: None),
++    )
++    processes = [Process("node1", frozenset({0}), 7500, 6100, "agg", 0)]
++    frontend = SMGFrontend()
++    with (
++        patch("srtctl.frontends.static_router.get_hostname_ip", return_value="10.0.0.1"),
++        patch.object(SMGFrontend, "start_process", return_value=MagicMock()) as start,
++    ):
++        managed = frontend.start_frontends(
++            SimpleNamespace(frontend_nodes=["node0"], frontend_port=8000),
++            runtime,
++            _config({"policy": "cache_aware"}),
++            VLLMProtocol(),
++            processes,
++        )
++
++    assert [process.name for process in managed] == ["smg_0"]
++    kwargs = start.call_args.kwargs
++    assert kwargs["container_image"] == "smg"
++    assert kwargs["step_name"] == "smg_0"
++    assert kwargs["command"][:4] == ["smg", "launch", "--worker-urls", "http://10.0.0.1:6100"]
++    assert kwargs["command"][-2:] == ["--policy", "cache_aware"]
++
++
++def test_setup_script_runs_in_the_smg_container() -> None:
++    """A recipe can install SMG into the model image (``pip install smg``) with its setup script."""
++    frontend = SMGFrontend()
++    assert frontend.build_bash_preamble(SimpleNamespace(setup_script=None)) is None
++    preamble = frontend.build_bash_preamble(SimpleNamespace(setup_script="smg-1.11.0.sh"))
++    assert preamble is not None
++    assert preamble.startswith("setup_script=smg-1.11.0.sh && ")
++    assert 'bash "${script_path}"' in preamble
++
++
++@pytest.mark.parametrize("recipe", ["vllm/smg-agg.yaml", "vllm/smg-dep16.yaml", "sglang/smg-disagg.yaml"])
++def test_examples_launch_smg_through_the_orchestrator(recipe: str) -> None:
++    """The mock orchestrator starts the workers, then one SMG router fronting them."""
++    path = EXAMPLES_DIR / recipe
++    assert load_config(path).frontend.type == "smg"
++    plan = render_launch_plan(path)
++
++    assert "# exit_code: 0" in plan
++    assert "## smg_0" in plan
++    launch = next(line.strip() for line in plan.splitlines() if line.strip().startswith("smg launch"))
++    expected = "--pd-disaggregation --prefill" if "disagg" in recipe else "--worker-urls"
++    assert expected in launch
++    assert f"--prometheus-port {SMG_METRICS_PORT}" in launch
++
++
++def test_multi_node_vllm_dp_is_one_smg_worker() -> None:
++    """vLLM balances its 16 DP ranks itself; SMG gets the leader's API and nothing from the headless node."""
++    plan = render_launch_plan(EXAMPLES_DIR / "vllm/smg-dep16.yaml")
++    serves = [line.strip() for line in plan.splitlines() if line.strip().startswith("vllm serve")]
++    assert len(serves) == 2
++    assert "--headless" in serves[1] and "--port" not in serves[1]
++    launch = next(line.strip() for line in plan.splitlines() if line.strip().startswith("smg launch"))
++    port = serves[0].split("--port ")[1].split()[0]
++    assert launch.startswith(f"smg launch --worker-urls http://127.0.0.1:{port} --host")
