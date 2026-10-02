@@ -26,10 +26,10 @@ index c78f327f..fdcb23ac 100644
  | `nginx_container` | str | `'nginx:1.27.4'` | Custom nginx container image (default: nginx:1.27.4) |
 diff --git a/docs/smg.md b/docs/smg.md
 new file mode 100644
-index 00000000..bcc65837
+index 00000000..c94f24a5
 --- /dev/null
 +++ b/docs/smg.md
-@@ -0,0 +1,114 @@
+@@ -0,0 +1,135 @@
 +# Shepherd Model Gateway (SMG)
 +
 +`frontend.type: smg` runs the [Shepherd Model Gateway](https://github.com/smg-project/smg)
@@ -46,6 +46,7 @@ index 00000000..bcc65837
 +| --- | --- | --- |
 +| Aggregated | any engine whose workers serve HTTP (`sglang`, `vllm`, `trtllm`, ...) | `smg launch --worker-urls <url> ...` |
 +| Prefill/decode | `sglang` | `smg launch --pd-disaggregation --prefill <url> <bootstrap-port> --decode <url>` |
++| Prefill/decode | `vllm` with `grpc: true` and `connector: nixl` | `smg launch --pd-disaggregation --prefill grpc://<host:port> ... --decode grpc://<host:port>` |
 +
 +SMG detects each HTTP worker's engine itself (`/v1/models` `owned_by`, then `/version`
 +and `/server_info`) and reads the served model name from the worker
@@ -56,13 +57,29 @@ index 00000000..bcc65837
 +([`router.rs`](https://github.com/smg-project/smg/blob/3be823a700fabaff3add8a390cf78f163479d686/model_gateway/src/routers/http/router.rs#L249-L252)),
 +so clients send the workers' served model name, as srtctl's benchmarks do.
 +
-+P/D is listed for SGLang only. SMG's HTTP P/D router hands the KV cache over through
++SGLang P/D runs over HTTP. SMG's HTTP P/D router hands the KV cache over through
 +SGLang's bootstrap rendezvous (`bootstrap_host` / `bootstrap_port` / `bootstrap_room`,
 +[`pd_router.rs`](https://github.com/smg-project/smg/blob/3be823a700fabaff3add8a390cf78f163479d686/model_gateway/src/routers/http/pd_router.rs#L303-L305)).
 +A vLLM worker registered by URL carries no KV connector, so SMG sends the request through
 +and the decode worker recomputes the prompt
 +([upstream test note](https://github.com/smg-project/smg/blob/3be823a700fabaff3add8a390cf78f163479d686/e2e_test/router/test_pd_topologies.py#L105-L110)).
 +srtctl does not reject that layout, but it is not a KV-disaggregated run.
++
++vLLM P/D therefore runs over gRPC. With `grpc: true` in both roles' `args` each worker is
++`vllm serve --grpc`, vLLM's gRPC server, which the `smg-grpc-servicer` package provides
++(vLLM's `grpc` extra), and srtctl advertises it as `grpc://`. The servicer reports the
++worker's `kv_transfer_config` connector in `GetServerInfo`
++([`servicer.py`](https://github.com/smg-project/smg/blob/3be823a700fabaff3add8a390cf78f163479d686/grpc_servicer/smg_grpc_servicer/vllm/servicer.py#L702-L709)), so for
++`NixlConnector` SMG tags the prefill leg with `do_remote_decode` and relays the
++`kv_transfer_params` the prefill returns to the decode leg, which pulls the KV cache over
++NIXL
++([`request_execution.rs`](https://github.com/smg-project/smg/blob/3be823a700fabaff3add8a390cf78f163479d686/model_gateway/src/routers/grpc/common/stages/request_execution.rs#L962-L1010),
++[`kv_transfer.rs`](https://github.com/smg-project/smg/blob/3be823a700fabaff3add8a390cf78f163479d686/model_gateway/src/routers/common/kv_transfer.rs#L16-L19),
++[upstream test](https://github.com/smg-project/smg/blob/3be823a700fabaff3add8a390cf78f163479d686/e2e_test/router/test_pd_nixl.py#L1-L11)). `engine.connector: nixl`
++gives both roles `NixlConnector` and the per-worker NIXL side channel. In gRPC mode SMG
++tokenizes and applies the chat template itself; pass `tool-call-parser` /
++`reasoning-parser` in `frontend.args` when the model needs them. See
++[`examples/vllm/smg-disagg-grpc.yaml`](../examples/vllm/smg-disagg-grpc.yaml).
 +
 +## vLLM data parallel
 +
@@ -124,7 +141,8 @@ index 00000000..bcc65837
 +  (1800 s by default,
 +  [`main.rs`](https://github.com/smg-project/smg/blob/3be823a700fabaff3add8a390cf78f163479d686/model_gateway/src/main.rs#L522-L524))
 +  for a startup worker to register, and a large model can load for longer, so srtctl
-+  waits for every advertised worker's `/health` to answer 200 before it starts SMG.
++  waits for every advertised worker's `/health` to answer 200 (a gRPC worker: its port to
++  accept connections) before it starts SMG.
 +- **Readiness.** srtctl polls SMG's `GET /workers` and waits until
 +  `stats.prefill_count`, `stats.decode_count` and `stats.regular_count` cover the
 +  expected workers; aggregated workers count as `regular`
@@ -140,12 +158,15 @@ index 00000000..bcc65837
 +
 +## Not wired
 +
-+srtctl advertises every worker over HTTP. SMG's gRPC, ZMQ and encode (EPD) worker
-+modes, its Kubernetes service discovery, mesh, and the cloud-provider, history, MCP
++srtctl advertises a worker over HTTP unless its backend reports gRPC for the role
++(`BackendProtocol.is_grpc_mode`: SGLang `grpc-mode: true`, vLLM `grpc: true`), and
++then as `grpc://`. Before SMG starts, a gRPC worker is probed by connecting to its
++port (vLLM's gRPC server binds it only once the engine is up), an HTTP worker on `/health`.
++SMG's ZMQ and encode (EPD) worker modes, its Kubernetes service discovery, mesh, and the cloud-provider, history, MCP
 +and WASM features are not configured by srtctl; `frontend.args` can still pass any
 +`smg launch` flag that needs no srtctl-managed process or port.
 diff --git a/examples/README.md b/examples/README.md
-index cc454b34..9626a741 100644
+index cc454b34..53b93497 100644
 --- a/examples/README.md
 +++ b/examples/README.md
 @@ -6,13 +6,13 @@ Small, runnable starting points, one per frontend and topology. Every example se
@@ -155,7 +176,7 @@ index cc454b34..9626a741 100644
 -| SGLang | `sglang/dynamo-agg.yaml`, `sglang/dynamo-disagg.yaml` | `sglang/sglang-router-agg.yaml`, `sglang/sglang-router-disagg.yaml` | `sglang/sglang-direct-agg.yaml` |
 -| vLLM | `vllm/dynamo-agg.yaml`, `vllm/dynamo-disagg.yaml` | `vllm/vllm-router-agg.yaml`, `vllm/vllm-router-disagg.yaml`, `vllm/vllm-router-moriio-disagg.yaml` (ROCm, MoRI-IO discovery) | `vllm/vllm-direct-agg.yaml` |
 +| SGLang | `sglang/dynamo-agg.yaml`, `sglang/dynamo-disagg.yaml` | `sglang/sglang-router-agg.yaml`, `sglang/sglang-router-disagg.yaml`, `sglang/smg-disagg.yaml` (SMG) | `sglang/sglang-direct-agg.yaml` |
-+| vLLM | `vllm/dynamo-agg.yaml`, `vllm/dynamo-disagg.yaml` | `vllm/vllm-router-agg.yaml`, `vllm/vllm-router-disagg.yaml`, `vllm/vllm-router-moriio-disagg.yaml` (ROCm, MoRI-IO discovery), `vllm/smg-agg.yaml`, `vllm/smg-dep16.yaml` (SMG) | `vllm/vllm-direct-agg.yaml` |
++| vLLM | `vllm/dynamo-agg.yaml`, `vllm/dynamo-disagg.yaml` | `vllm/vllm-router-agg.yaml`, `vllm/vllm-router-disagg.yaml`, `vllm/vllm-router-moriio-disagg.yaml` (ROCm, MoRI-IO discovery), `vllm/smg-agg.yaml`, `vllm/smg-dep16.yaml`, `vllm/smg-disagg-grpc.yaml` (SMG; P/D over gRPC with NIXL) | `vllm/vllm-direct-agg.yaml` |
  | TRT-LLM | `trtllm/dynamo-agg.yaml`, `trtllm/dynamo-disagg.yaml` | `trtllm/trtllm-serve-disagg.yaml` | `trtllm/trtllm-serve-agg.yaml` |
  | Mocker | `mocker/dynamo-agg.yaml` | | |
  
@@ -352,6 +373,77 @@ index 00000000..9bd1c5ad
 +  isl: 128
 +  osl: 128
 +  concurrencies: "16x32"
+diff --git a/examples/vllm/smg-disagg-grpc.yaml b/examples/vllm/smg-disagg-grpc.yaml
+new file mode 100644
+index 00000000..d613978c
+--- /dev/null
++++ b/examples/vllm/smg-disagg-grpc.yaml
+@@ -0,0 +1,65 @@
++# vLLM disaggregated prefill/decode behind the Shepherd Model Gateway (SMG), over gRPC
++# with the NIXL KV connector.
++#
++# `grpc: true` makes each worker `vllm serve --grpc` (vLLM's gRPC server, provided by
++# the smg-grpc-servicer package, which the vLLM image must have). srtctl advertises the
++# workers as grpc:// URLs; SMG reads each worker's KV connector over gRPC, tags the
++# prefill leg for a remote decode and relays the returned NIXL handoff to the decode
++# worker, which pulls the prompt's KV cache instead of recomputing it. Over HTTP SMG
++# cannot learn a vLLM worker's connector, so vLLM P/D needs gRPC (docs/smg.md).
++#
++# Aliases (`qwen3-0.6b`, `vllm`, `smg`) resolve through srtslurm.yaml; see examples/README.md.
++
++schema: 2
++name: "qwen3-0.6b-vllm-smg-disagg-grpc"
++
++slurm:
++  time_limit: "00:30:00"
++
++model:
++  path: "qwen3-0.6b"
++  container: "vllm"
++  precision: "bf16"
++
++resources:
++  gpu_type: "h100"
++  gpus_per_node: 8
++frontend:
++  type: smg
++  container_image: smg
++  enable_multiple_frontends: false
++
++engine:
++  type: vllm
++  connector: nixl
++roles:
++  prefill:
++    nodes: 1
++    workers: 1
++    gpus: 1
++    env:
++      PYTHONUNBUFFERED: "1"
++    args:
++      served-model-name: "Qwen/Qwen3-0.6B"
++      grpc: true
++      tensor-parallel-size: 1
++      gpu-memory-utilization: 0.5
++      max-model-len: 4096
++  decode:
++    nodes: colocate
++    workers: 1
++    gpus: 1
++    env:
++      PYTHONUNBUFFERED: "1"
++    args:
++      served-model-name: "Qwen/Qwen3-0.6B"
++      grpc: true
++      tensor-parallel-size: 1
++      gpu-memory-utilization: 0.5
++      max-model-len: 4096
++
++benchmark:
++  type: "sa-bench"
++  isl: 128
++  osl: 128
++  concurrencies: "4x8"
 diff --git a/mkdocs.yml b/mkdocs.yml
 index 2467fda1..53f31af7 100644
 --- a/mkdocs.yml
@@ -364,11 +456,111 @@ index 2467fda1..53f31af7 100644
        - TileRT: tilert.md
        - Mooncake KV Store: mooncake-kv-store.md
        - Services: services.md
+diff --git a/src/srtctl/backends/AGENTS.md b/src/srtctl/backends/AGENTS.md
+index b306d600..a8d5b75a 100644
+--- a/src/srtctl/backends/AGENTS.md
++++ b/src/srtctl/backends/AGENTS.md
+@@ -17,6 +17,7 @@ Rules for `src/srtctl/backends/`. Every consumer asks a backend through `Backend
+    - `failover` / `get_failover_environment(...)` - shadow engine recovery; `None` / `{}` without it
+    - `should_set_visible_devices()` - `True` unless the engine takes its devices on the command line; the variable is the cluster's `visible_devices_env`
+    - `get_served_model_name(default)`
++   - `is_grpc_mode(mode)` - whether the mode's workers serve gRPC; static routers advertise `grpc://` from it. `False` for an HTTP-only engine
+ 3. Export from `backends/__init__.py`
+ 4. Add polymorphic deserialization in `BackendConfigField` in `schema.py`
+ 
+diff --git a/src/srtctl/backends/atom.py b/src/srtctl/backends/atom.py
+index 60659222..ee564c28 100644
+--- a/src/srtctl/backends/atom.py
++++ b/src/srtctl/backends/atom.py
+@@ -81,6 +81,10 @@ class AtomProtocol:
+     def get_process_environment(self, process: Process) -> dict[str, str]:
+         return {}
+ 
++    def is_grpc_mode(self, mode: str) -> bool:
++        """ATOM workers serve HTTP only."""
++        return False
++
+     def get_served_model_name(self, default: str) -> str:
+         """The name ATOM serves: a role's ``served-model-name``, else its literal ``--model``."""
+         if self.atom_config:
+diff --git a/src/srtctl/backends/base.py b/src/srtctl/backends/base.py
+index 538cf9e0..235d619f 100644
+--- a/src/srtctl/backends/base.py
++++ b/src/srtctl/backends/base.py
+@@ -207,3 +207,11 @@ class BackendProtocol(Protocol):
+     def get_served_model_name(self, default: str) -> str:
+         """Get served model name from backend config, or return default."""
+         ...
++
++    def is_grpc_mode(self, mode: str) -> bool:
++        """Whether the mode's workers serve gRPC instead of HTTP.
++
++        A static router reads it to advertise ``grpc://`` worker URLs. False for
++        an engine without a gRPC server.
++        """
++        ...
+diff --git a/src/srtctl/backends/mocker.py b/src/srtctl/backends/mocker.py
+index 826b243b..05779948 100644
+--- a/src/srtctl/backends/mocker.py
++++ b/src/srtctl/backends/mocker.py
+@@ -177,6 +177,10 @@ class MockerProtocol:
+         """
+         return {}
+ 
++    def is_grpc_mode(self, mode: str) -> bool:
++        """Mocker workers serve HTTP only."""
++        return False
++
+     def get_served_model_name(self, default: str) -> str:
+         """Get served model name — mocker uses default (model path basename)."""
+         return default
+diff --git a/src/srtctl/backends/tilert.py b/src/srtctl/backends/tilert.py
+index a2a164fe..78676542 100644
+--- a/src/srtctl/backends/tilert.py
++++ b/src/srtctl/backends/tilert.py
+@@ -67,6 +67,10 @@ class TileRTProtocol:
+     def fatal_log_patterns(self, mode: str) -> tuple[str, ...]:
+         return ()
+ 
++    def is_grpc_mode(self, mode: str) -> bool:
++        """TileRT workers serve HTTP only."""
++        return False
++
+     def get_served_model_name(self, default: str) -> str:
+         return self.served_model_name or default
+ 
+diff --git a/src/srtctl/backends/trtllm.py b/src/srtctl/backends/trtllm.py
+index 41a7ce98..99662e92 100644
+--- a/src/srtctl/backends/trtllm.py
++++ b/src/srtctl/backends/trtllm.py
+@@ -265,6 +265,10 @@ class TRTLLMProtocol:
+         """
+         return {}
+ 
++    def is_grpc_mode(self, mode: str) -> bool:
++        """TRT-LLM workers serve HTTP only."""
++        return False
++
+     def get_served_model_name(self, default: str) -> str:
+         """Get the configured served model name, or return default."""
+         return self.served_model_name or default
 diff --git a/src/srtctl/backends/vllm.py b/src/srtctl/backends/vllm.py
-index 36318f7b..ad640be9 100644
+index 36318f7b..4e2131e0 100644
 --- a/src/srtctl/backends/vllm.py
 +++ b/src/srtctl/backends/vllm.py
-@@ -987,9 +987,10 @@ class VLLMProtocol:
+@@ -709,6 +709,11 @@ class VLLMProtocol:
+         filename = "mooncake_store_config_gpu" + "-".join(map(str, gpu_ids)) + ".json"
+         return filename, payload
+ 
++    def is_grpc_mode(self, mode: WorkerMode) -> bool:
++        """``roles.<role>.args.grpc: true`` renders ``vllm serve --grpc`` (served by smg-grpc-servicer)."""
++        config = self.get_config_for_mode(mode)
++        return any(normalize_vllm_config_key(key) == "grpc" and value is True for key, value in config.items())
++
+     def get_served_model_name(self, default: str) -> str:
+         """Get served model name from vLLM config, or return default."""
+         if self.vllm_config:
+@@ -987,9 +992,10 @@ class VLLMProtocol:
      ) -> list[Process]:
          """Convert endpoints to processes.
  
@@ -382,7 +574,7 @@ index 36318f7b..ad640be9 100644
          For standard TP mode, creates one process per node. Every process then
          gets the listeners its KV connector needs from the allocator (see
          ``_with_connector_ports``).
-@@ -998,9 +999,10 @@ class VLLMProtocol:
+@@ -998,9 +1004,10 @@ class VLLMProtocol:
          from srtctl.frontends import get_frontend
  
          allocator = port_allocator_for(port_allocator, base_sys_port)
@@ -411,10 +603,10 @@ index 915fcbc5..6f9b1d81 100755
              port, no router process); "none" (services-only job: no router, no
              OpenAI endpoint, no worker-count health gate; requires no engine
 diff --git a/src/srtctl/frontends/AGENTS.md b/src/srtctl/frontends/AGENTS.md
-index 745f4369..8bdd1fc0 100644
+index 745f4369..ac1dd5f4 100644
 --- a/src/srtctl/frontends/AGENTS.md
 +++ b/src/srtctl/frontends/AGENTS.md
-@@ -4,7 +4,7 @@ Rules for `src/srtctl/frontends/`. The Design Rules in the root `CLAUDE.md` appl
+@@ -4,11 +4,11 @@ Rules for `src/srtctl/frontends/`. The Design Rules in the root `CLAUDE.md` appl
  
  ## Frontends and readiness
  
@@ -422,6 +614,11 @@ index 745f4369..8bdd1fc0 100644
 +The frontend is the process that owns the public OpenAI port (`FRONTEND_PUBLIC_PORT`) and decides when the job is ready. Implementations live under `src/srtctl/frontends/`, register with `@register_frontend("<type>")`, and are imported from the package `__init__`; `frontend.type` resolves through that registry (`get_frontend`, `list_frontend_types`) and nowhere else. Registered today: `dynamo` (etcd/NATS discovery), `sglang-router`, `vllm-router` and `smg` (static URL routers built on `StaticRouterFrontend`; `smg` pairs with any backend), `trtllm_serve` (direct aggregate or the disaggregated orchestrator), `sglang` and `vllm` (one direct worker owns the port); `none` is the services-only job with no implementation and no gate.
  
  `FrontendProtocol` hooks: `required_backend` and `validate(config)` (recipe rules, run by `SrtConfig._validate_frontend` at load so dry-run catches them; raise `ValueError` with the user-facing message), `health_endpoint` and `parse_health` (readiness), `get_backend_health_urls` (second gate: every advertised worker URL must answer 200 before traffic), `start_frontends` (launch on `topology.frontend_nodes`, one `ManagedProcess` per node with a `step_name`), `get_frontend_args_list` (`frontend.args` to CLI). The schema knows no individual frontend: pairing and per-type rules come from these two members.
+ 
+-Two base classes cover the two ways a frontend learns about its workers. `DynamicFrontend` (`frontends/dynamic_frontend.py`) is for frontends whose workers register themselves over a discovery plane: it fronts any engine, needs no per-worker URL gate, and no worker is the public endpoint; Dynamo is its only implementation. A router binary that can also take static URLs (vLLM Router's ZMQ discovery mode) is a mode of a static router, not a dynamic frontend. `StaticRouterFrontend` (`frontends/static_router.py`) is the base for routers that take worker URLs on the command line. Subclasses set `executable`, `pd_flag`, `process_name` and override only what differs: `worker_scheme` (http or grpc per mode), `worker_bootstrap_port` (the P/D port advertised next to a prefill URL), `resolve_worker_host`, `get_managed_frontend_args` (arguments derived from the allocated topology; a conflicting user value raises instead of being overwritten), `build_bash_preamble`, `build_router_command`, `start_process` (test seam). `collect_workers` treats a positive `Process.http_port` as the definition of a routable worker.
++Two base classes cover the two ways a frontend learns about its workers. `DynamicFrontend` (`frontends/dynamic_frontend.py`) is for frontends whose workers register themselves over a discovery plane: it fronts any engine, needs no per-worker URL gate, and no worker is the public endpoint; Dynamo is its only implementation. A router binary that can also take static URLs (vLLM Router's ZMQ discovery mode) is a mode of a static router, not a dynamic frontend. `StaticRouterFrontend` (`frontends/static_router.py`) is the base for routers that take worker URLs on the command line. Subclasses set `executable`, `pd_flag`, `process_name` and override only what differs: `worker_scheme` (http, or grpc when `backend.is_grpc_mode(mode)`; the base answers that for every backend), `worker_bootstrap_port` (the P/D port advertised next to a prefill URL), `resolve_worker_host`, `get_managed_frontend_args` (arguments derived from the allocated topology; a conflicting user value raises instead of being overwritten), `build_bash_preamble`, `build_router_command`, `start_process` (test seam). `collect_workers` treats a positive `Process.http_port` as the definition of a routable worker.
+ 
+ Readiness runs in `BenchmarkStageMixin._wait_for_service_ready`: `wait_for_model` owns timing, abort, and progress logging, and calls the frontend's `probe_ready(host, port, n_prefill, n_decode, config)` once per poll with counts from the frontend's `health_expectations(config, processes)`; then `get_backend_health_urls` are polled with `wait_for_http_endpoints`. A probe raises `requests.RequestException` while the endpoint is down and otherwise returns a `WorkerHealthResult`. `core/health.py` has the three probe shapes to build on: `probe_json_health` (a JSON worker count through `parse_health`), `probe_http_ok` (a bare 200), `probe_direct_server` (`/health` then `/v1/models`). No frontend name appears in `wait_for_model` or `_get_health_expectations`.
  
 diff --git a/src/srtctl/frontends/__init__.py b/src/srtctl/frontends/__init__.py
 index 1a0e055b..b27058ba 100644
@@ -451,6 +648,20 @@ index 1a0e055b..b27058ba 100644
      "TRTLLMServeFrontend",
      "TileRTRouterFrontend",
      "VLLMFrontend",
+diff --git a/src/srtctl/frontends/sglang.py b/src/srtctl/frontends/sglang.py
+index 6c12c4ff..0cabe537 100644
+--- a/src/srtctl/frontends/sglang.py
++++ b/src/srtctl/frontends/sglang.py
+@@ -66,9 +66,6 @@ class SGLangRouterFrontend(StaticRouterFrontend):
+             managed.extend(["--prometheus-host", "0.0.0.0"])
+         return managed
+ 
+-    def worker_scheme(self, backend: Any, mode: str) -> str:
+-        return "grpc" if backend.is_grpc_mode(mode) else "http"
+-
+     def resolve_worker_host(self, node: str, network_interface: str | None) -> str:
+         return get_hostname_ip(node, network_interface)
+ 
 diff --git a/src/srtctl/frontends/smg.py b/src/srtctl/frontends/smg.py
 new file mode 100644
 index 00000000..53383559
@@ -513,10 +724,28 @@ index 00000000..53383559
 +            raise ValueError("frontend.args.prometheus-port is managed by srtctl for smg")
 +        return ["--prometheus-port", str(SMG_METRICS_PORT)]
 diff --git a/src/srtctl/frontends/static_router.py b/src/srtctl/frontends/static_router.py
-index 8c0ea166..ba67ab17 100644
+index 8c0ea166..3585fc56 100644
 --- a/src/srtctl/frontends/static_router.py
 +++ b/src/srtctl/frontends/static_router.py
-@@ -38,6 +38,28 @@ class RouterWorker:
+@@ -8,14 +8,17 @@ from __future__ import annotations
+ import logging
+ import shlex
+ import threading
++import time
+ from dataclasses import dataclass
+ from typing import TYPE_CHECKING, Any, ClassVar, Literal
++from urllib.parse import urlsplit
+ 
+ from srtctl.core.health import (
+     WorkerHealthResult,
+     check_static_router_health,
+     probe_json_health,
+     wait_for_http_endpoints,
++    wait_for_port,
+ )
+ from srtctl.core.slurm import get_hostname_ip, start_srun_process
+ from srtctl.frontends.base import logical_health_expectations, numactl_prefix
+@@ -38,6 +41,28 @@ class RouterWorker:
      bootstrap_port: int | None = None
  
  
@@ -545,6 +774,61 @@ index 8c0ea166..ba67ab17 100644
  class StaticRouterFrontend:
      """Base class for routers whose worker topology is supplied on the CLI.
  
+@@ -150,8 +175,8 @@ class StaticRouterFrontend:
+         return []
+ 
+     def worker_scheme(self, backend: Any, mode: str) -> str:
+-        """Return the protocol used to reach one worker endpoint."""
+-        return "http"
++        """Return the protocol used to reach one worker endpoint: gRPC when the backend's mode serves it."""
++        return "grpc" if backend.is_grpc_mode(mode) else "http"
+ 
+     def worker_bootstrap_port(self, backend: Any, process: Process) -> int | None:
+         """Return the optional P/D bootstrap port advertised for a worker."""
+@@ -265,24 +290,31 @@ class StaticRouterFrontend:
+ 
+         workers = self.collect_workers(backend, backend_processes, runtime.network_interface)
+         if self.wait_for_workers_before_start and config.health_check is not None:
++            health_check = config.health_check
++            timeout = float(health_check.max_attempts * health_check.interval_seconds)
+             health_urls = [
+                 f"{worker.url.rstrip('/')}/health"
+                 for worker in workers
+                 if worker.url.startswith(("http://", "https://"))
+             ]
+-            if health_urls:
+-                logger.info(
+-                    "Waiting for %d advertised backend endpoints before starting %s", len(health_urls), self.type
++            # A gRPC worker serves no HTTP /health; its port accepting connections is the signal.
++            grpc_targets = [urlsplit(worker.url) for worker in workers if worker.url.startswith("grpc://")]
++            logger.info("Waiting for %d advertised backend endpoints before starting %s", len(workers), self.type)
++            deadline = time.monotonic() + timeout
++            ready = all(
++                wait_for_port(
++                    str(target.hostname), int(target.port or 0), timeout=max(deadline - time.monotonic(), 0.0)
+                 )
+-                health_check = config.health_check
+-                if not wait_for_http_endpoints(
+-                    health_urls,
+-                    poll_interval=float(health_check.interval_seconds),
+-                    timeout=float(health_check.max_attempts * health_check.interval_seconds),
+-                    report_every=60.0,
+-                    stop_event=stop_event,
+-                ):
+-                    raise RuntimeError(f"Advertised backend endpoints did not become ready before {self.type} startup")
++                for target in grpc_targets
++            ) and wait_for_http_endpoints(
++                health_urls,
++                poll_interval=float(health_check.interval_seconds),
++                timeout=max(deadline - time.monotonic(), 0.0),
++                report_every=60.0,
++                stop_event=stop_event,
++            )
++            if not ready:
++                raise RuntimeError(f"Advertised backend endpoints did not become ready before {self.type} startup")
+ 
+         processes: list[ManagedProcess] = []
+         for idx, node in enumerate(topology.frontend_nodes):
 diff --git a/src/srtctl/frontends/vllm_router.py b/src/srtctl/frontends/vllm_router.py
 index 2a2fad5c..aa2d7cc3 100644
 --- a/src/srtctl/frontends/vllm_router.py
@@ -584,6 +868,18 @@ index 2a2fad5c..aa2d7cc3 100644
  
      def get_backend_health_urls(
          self,
+diff --git a/src/srtctl/mock.py b/src/srtctl/mock.py
+index 74901354..1bcd92a7 100644
+--- a/src/srtctl/mock.py
++++ b/src/srtctl/mock.py
+@@ -298,6 +298,7 @@ def mock_infrastructure(*, options: MockOptions, output_dir: Path):
+         ("srtctl.cli.mixins.benchmark_stage.wait_for_model", _fake_wait_for_model),
+         ("srtctl.core.health.wait_for_http_endpoints", _fake_wait_for_port),
+         ("srtctl.frontends.static_router.wait_for_http_endpoints", _fake_wait_for_port),
++        ("srtctl.frontends.static_router.wait_for_port", _fake_wait_for_port),
+         ("srtctl.cli.mixins.worker_stage.wait_for_health", _fake_wait_for_port),
+         ("srtctl.frontends.trtllm_serve.wait_for_health", _fake_wait_for_port),
+         # Service readiness probes (etcd, NATS, exporters, declared services).
 diff --git a/src/srtctl/ports.py b/src/srtctl/ports.py
 index 3de5f4b0..ae74afeb 100644
 --- a/src/srtctl/ports.py
@@ -1181,6 +1477,210 @@ index 00000000..ea8fd682
 +    SRT_FRONTEND_PORT: 8000
 +command: |
 +    bash /srtctl-benchmarks/sa-bench/bench.sh http://localhost:8000 128 128 16x32 inf /model Qwen/Qwen3-30B-A3B false 16 0 0 0.8 10 2 '' true random '' false
+diff --git a/tests/snapshots/launch/vllm__smg-disagg-grpc.txt b/tests/snapshots/launch/vllm__smg-disagg-grpc.txt
+new file mode 100644
+index 00000000..6d1a4874
+--- /dev/null
++++ b/tests/snapshots/launch/vllm__smg-disagg-grpc.txt
+@@ -0,0 +1,178 @@
++# examples/vllm/smg-disagg-grpc.yaml
++# exit_code: 0
++# srun calls: 11
++
++## prefill_0_node-01
++nodelist: node-01
++output: <output>/logs/node-01_prefill_w0.out
++container_image: vllm
++container_mounts:
++    <repo>/src/srtctl/benchmarks/scripts: /srtctl-benchmarks
++    <repo>/src/srtctl/runtime_scripts: /srtctl-runtime
++    <model>: /model
++    <output>/logs: /logs
++env_to_set:
++    DYN_VLLM_KV_EVENT_PORT: 5200
++    HEAD_NODE_IP: 127.0.0.1
++    PYTHONUNBUFFERED: 1
++    VLLM_NIXL_SIDE_CHANNEL_HOST: 127.0.0.1
++    VLLM_NIXL_SIDE_CHANNEL_PORT: 5400
++    VLLM_PORT: 20000
++bash_preamble: |
++    ( python3 <(cat <<'__FINGERPRINT_EOF__'
++    <fingerprint script>
++    __FINGERPRINT_EOF__
++    ) || true )
++command: |
++    vllm serve /model --host 0.0.0.0 --port 6100 --device-ids 0 --gpu-memory-utilization 0.5 --grpc --kv-transfer-config '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}' --max-model-len 4096 --served-model-name Qwen/Qwen3-0.6B --tensor-parallel-size 1
++
++## decode_0_node-02
++nodelist: node-02
++output: <output>/logs/node-02_decode_w0.out
++container_image: vllm
++container_mounts:
++    <repo>/src/srtctl/benchmarks/scripts: /srtctl-benchmarks
++    <repo>/src/srtctl/runtime_scripts: /srtctl-runtime
++    <model>: /model
++    <output>/logs: /logs
++env_to_set:
++    DYN_VLLM_KV_EVENT_PORT: 5201
++    HEAD_NODE_IP: 127.0.0.1
++    PYTHONUNBUFFERED: 1
++    VLLM_NIXL_SIDE_CHANNEL_HOST: 127.0.0.1
++    VLLM_NIXL_SIDE_CHANNEL_PORT: 5401
++    VLLM_PORT: 20050
++bash_preamble: |
++    ( python3 <(cat <<'__FINGERPRINT_EOF__'
++    <fingerprint script>
++    __FINGERPRINT_EOF__
++    ) || true )
++command: |
++    vllm serve /model --host 0.0.0.0 --port 6100 --device-ids 0 --gpu-memory-utilization 0.5 --grpc --kv-transfer-config '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}' --max-model-len 4096 --served-model-name Qwen/Qwen3-0.6B --tensor-parallel-size 1
++
++## smg_0
++nodelist: node-01
++output: <output>/logs/node-01_smg_0.out
++container_image: smg
++container_mounts:
++    <repo>/src/srtctl/benchmarks/scripts: /srtctl-benchmarks
++    <repo>/src/srtctl/runtime_scripts: /srtctl-runtime
++    <model>: /model
++    <output>/logs: /logs
++command: |
++    smg launch --pd-disaggregation --prefill grpc://127.0.0.1:6100 7200 --decode grpc://127.0.0.1:6100 --host 0.0.0.0 --port 8000 --prometheus-port 29000
++
++## service_dcgm-exporter_node-01
++nodelist: node-01
++output: <output>/logs/service_dcgm-exporter_node-01.out
++container_image: nvcr.io#nvidia/k8s/dcgm-exporter:3.3.9-3.6.1-ubuntu22.04
++container_mounts:
++    <repo>/src/srtctl/benchmarks/scripts: /srtctl-benchmarks
++    <repo>/src/srtctl/runtime_scripts: /srtctl-runtime
++    <model>: /model
++    <output>/logs: /logs
++srun_export_env:
++    ETCD_ENDPOINTS: http://127.0.0.1:2379
++use_bash_wrapper: False
++command: |
++    dcgm-exporter --collect-interval=1000 --address :9401
++
++## service_dcgm-exporter_node-02
++nodelist: node-02
++output: <output>/logs/service_dcgm-exporter_node-02.out
++container_image: nvcr.io#nvidia/k8s/dcgm-exporter:3.3.9-3.6.1-ubuntu22.04
++container_mounts:
++    <repo>/src/srtctl/benchmarks/scripts: /srtctl-benchmarks
++    <repo>/src/srtctl/runtime_scripts: /srtctl-runtime
++    <model>: /model
++    <output>/logs: /logs
++srun_export_env:
++    ETCD_ENDPOINTS: http://127.0.0.1:2379
++use_bash_wrapper: False
++command: |
++    dcgm-exporter --collect-interval=1000 --address :9401
++
++## service_dcgm-exporter_node-03
++nodelist: node-03
++output: <output>/logs/service_dcgm-exporter_node-03.out
++container_image: nvcr.io#nvidia/k8s/dcgm-exporter:3.3.9-3.6.1-ubuntu22.04
++container_mounts:
++    <repo>/src/srtctl/benchmarks/scripts: /srtctl-benchmarks
++    <repo>/src/srtctl/runtime_scripts: /srtctl-runtime
++    <model>: /model
++    <output>/logs: /logs
++srun_export_env:
++    ETCD_ENDPOINTS: http://127.0.0.1:2379
++use_bash_wrapper: False
++command: |
++    dcgm-exporter --collect-interval=1000 --address :9401
++
++## service_node-exporter_node-01
++nodelist: node-01
++output: <output>/logs/service_node-exporter_node-01.out
++container_image: quay.io#prometheus/node-exporter:v1.8.2
++container_mounts:
++    <repo>/src/srtctl/benchmarks/scripts: /srtctl-benchmarks
++    <repo>/src/srtctl/runtime_scripts: /srtctl-runtime
++    <model>: /model
++    <output>/logs: /logs
++srun_export_env:
++    ETCD_ENDPOINTS: http://127.0.0.1:2379
++use_bash_wrapper: False
++command: |
++    /bin/node_exporter --web.listen-address=:9101 --collector.disable-defaults --collector.cpu --collector.infiniband --collector.meminfo --collector.processes --collector.stat --collector.vmstat --collector.pressure --collector.meminfo_numa '--collector.vmstat.fields=^(oom_kill|pgpg|pswp|pgsteal|pg.*fault).*'
++
++## service_node-exporter_node-02
++nodelist: node-02
++output: <output>/logs/service_node-exporter_node-02.out
++container_image: quay.io#prometheus/node-exporter:v1.8.2
++container_mounts:
++    <repo>/src/srtctl/benchmarks/scripts: /srtctl-benchmarks
++    <repo>/src/srtctl/runtime_scripts: /srtctl-runtime
++    <model>: /model
++    <output>/logs: /logs
++srun_export_env:
++    ETCD_ENDPOINTS: http://127.0.0.1:2379
++use_bash_wrapper: False
++command: |
++    /bin/node_exporter --web.listen-address=:9101 --collector.disable-defaults --collector.cpu --collector.infiniband --collector.meminfo --collector.processes --collector.stat --collector.vmstat --collector.pressure --collector.meminfo_numa '--collector.vmstat.fields=^(oom_kill|pgpg|pswp|pgsteal|pg.*fault).*'
++
++## service_node-exporter_node-03
++nodelist: node-03
++output: <output>/logs/service_node-exporter_node-03.out
++container_image: quay.io#prometheus/node-exporter:v1.8.2
++container_mounts:
++    <repo>/src/srtctl/benchmarks/scripts: /srtctl-benchmarks
++    <repo>/src/srtctl/runtime_scripts: /srtctl-runtime
++    <model>: /model
++    <output>/logs: /logs
++srun_export_env:
++    ETCD_ENDPOINTS: http://127.0.0.1:2379
++use_bash_wrapper: False
++command: |
++    /bin/node_exporter --web.listen-address=:9101 --collector.disable-defaults --collector.cpu --collector.infiniband --collector.meminfo --collector.processes --collector.stat --collector.vmstat --collector.pressure --collector.meminfo_numa '--collector.vmstat.fields=^(oom_kill|pgpg|pswp|pgsteal|pg.*fault).*'
++
++## tachometer
++nodelist: node-01
++output: <output>/logs/tachometer.out
++srun_export_env:
++    POLARS_MAX_THREADS: 4
++use_bash_wrapper: False
++command: |
++    tachometer-scraper --config <output>/logs/tachometer_config.toml --local-dir <output>/logs/tachometer/local --sync-interval 120
++
++## <unnamed>
++nodelist: node-01
++output: <output>/logs/benchmark.out
++container_image: vllm
++container_mounts:
++    <repo>/src/srtctl/benchmarks/scripts: /srtctl-benchmarks
++    <repo>/src/srtctl/runtime_scripts: /srtctl-runtime
++    <model>: /model
++    <output>/logs: /logs
++env_to_set:
++    SRTCTL_FRONTEND_TYPE: smg
++    SRT_FRONTEND_HOST: 127.0.0.1
++    SRT_FRONTEND_PORT: 8000
++command: |
++    bash /srtctl-benchmarks/sa-bench/bench.sh http://localhost:8000 128 128 4x8 inf /model Qwen/Qwen3-0.6B true 2 1 1 0.8 10 2 '' true random '' false
+diff --git a/tests/test_backend_protocol.py b/tests/test_backend_protocol.py
+index f5b932c5..047a7cf5 100644
+--- a/tests/test_backend_protocol.py
++++ b/tests/test_backend_protocol.py
+@@ -52,6 +52,15 @@ def test_optional_features_read_as_absent_by_default(backend_cls):
+     assert backend.get_mooncake_worker_env("10.0.0.1", "10.0.0.2") == {}
+     assert backend.get_failover_environment(_process(), "12345") == {}
+     assert backend.get_srun_config().sequential_node_start == 0
++    assert not any(backend.is_grpc_mode(mode) for mode in ("prefill", "decode", "agg"))
++
++
++def test_vllm_grpc_role_arg_selects_grpc_mode():
++    from srtctl.core.schema import RoleConfig
++
++    backend = VLLMProtocol(roles={"prefill": RoleConfig(args={"grpc": True}), "decode": RoleConfig(args={})})
++    assert backend.is_grpc_mode("prefill")
++    assert not backend.is_grpc_mode("decode")
+ 
+ 
+ def test_sglang_mooncake_env_reaches_workers_through_the_protocol():
 diff --git a/tests/test_configs.py b/tests/test_configs.py
 index 391b64fe..69686201 100644
 --- a/tests/test_configs.py
@@ -1216,7 +1716,7 @@ index 391b64fe..69686201 100644
          """Direct vllm serve uses the public port and main's --device-ids binding."""
          from pathlib import Path
 diff --git a/tests/test_e2e.py b/tests/test_e2e.py
-index 009e7905..e787e37f 100644
+index 009e7905..afe61907 100644
 --- a/tests/test_e2e.py
 +++ b/tests/test_e2e.py
 @@ -30,7 +30,7 @@ def test_interactive_discovers_curated_examples():
@@ -1224,7 +1724,7 @@ index 009e7905..e787e37f 100644
      assert SGLANG_ROUTER_DISAGG in examples
      assert MOCKER_EXAMPLE in examples
 -    assert len(TOPOLOGY_EXAMPLES) == 15
-+    assert len(TOPOLOGY_EXAMPLES) == 18
++    assert len(TOPOLOGY_EXAMPLES) == 19
  
  
  # =============================================================================
@@ -1242,10 +1742,10 @@ index 04a4b761..1e1864f3 100644
              "vllm",
 diff --git a/tests/test_smg_frontend.py b/tests/test_smg_frontend.py
 new file mode 100644
-index 00000000..dc20f838
+index 00000000..84cbfca3
 --- /dev/null
 +++ b/tests/test_smg_frontend.py
-@@ -0,0 +1,160 @@
+@@ -0,0 +1,232 @@
 +# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 +# SPDX-License-Identifier: Apache-2.0
 +
@@ -1294,6 +1794,65 @@ index 00000000..dc20f838
 +        engine=engine,
 +    )
 +    assert config.frontend.type == "smg"
++
++
++def test_grpc_workers_are_advertised_as_grpc_urls() -> None:
++    """A backend whose mode serves gRPC (vLLM ``grpc: true``) is advertised as ``grpc://``."""
++    from srtctl.core.schema import RoleConfig
++
++    backend = VLLMProtocol(
++        roles={"prefill": RoleConfig(args={"grpc": True}), "decode": RoleConfig(args={"grpc": True})}
++    )
++    processes = [
++        Process("node0", frozenset({0}), 7500, 6100, "prefill", 0),
++        Process("node1", frozenset({0}), 7501, 6100, "decode", 0),
++    ]
++    frontend = SMGFrontend()
++    with patch("srtctl.frontends.static_router.get_hostname_ip", side_effect=["10.0.0.1", "10.0.0.2"]):
++        workers = frontend.collect_workers(backend, processes)
++    command = frontend.build_router_command(workers, "0.0.0.0", 8000, backend)
++    assert command[:7] == [
++        "smg",
++        "launch",
++        "--pd-disaggregation",
++        "--prefill",
++        "grpc://10.0.0.1:6100",
++        "--decode",
++        "grpc://10.0.0.2:6100",
++    ]
++
++
++def test_grpc_workers_are_probed_on_their_port_before_smg_starts(tmp_path: Path) -> None:
++    """A gRPC worker has no HTTP /health: SMG starts once its port accepts connections."""
++    from srtctl.core.schema import RoleConfig
++
++    backend = VLLMProtocol(roles={"agg": RoleConfig(args={"grpc": True})})
++    runtime = SimpleNamespace(
++        network_interface=None,
++        log_dir=tmp_path,
++        container_image="model.sqsh",
++        container_mounts={},
++        environment={},
++        srun_options={},
++        nodes=SimpleNamespace(het_group_for=lambda node: None),
++    )
++    config = _config()
++    config.health_check = SimpleNamespace(max_attempts=3, interval_seconds=1)
++    with (
++        patch("srtctl.frontends.static_router.get_hostname_ip", return_value="10.0.0.1"),
++        patch("srtctl.frontends.static_router.wait_for_port", return_value=True) as port_probe,
++        patch.object(SMGFrontend, "start_process", return_value=MagicMock()) as start,
++    ):
++        SMGFrontend().start_frontends(
++            SimpleNamespace(frontend_nodes=["node0"], frontend_port=8000),
++            runtime,
++            config,
++            backend,
++            [Process("node1", frozenset({0}), 7500, 6100, "agg", 0)],
++        )
++
++    assert port_probe.call_args.args == ("10.0.0.1", 6100)
++    assert start.call_args.kwargs["command"][:4] == ["smg", "launch", "--worker-urls", "grpc://10.0.0.1:6100"]
 +
 +
 +def test_pd_command_advertises_prefill_bootstrap_port() -> None:
@@ -1382,7 +1941,9 @@ index 00000000..dc20f838
 +    assert 'bash "${script_path}"' in preamble
 +
 +
-+@pytest.mark.parametrize("recipe", ["vllm/smg-agg.yaml", "vllm/smg-dep16.yaml", "sglang/smg-disagg.yaml"])
++@pytest.mark.parametrize(
++    "recipe", ["vllm/smg-agg.yaml", "vllm/smg-dep16.yaml", "vllm/smg-disagg-grpc.yaml", "sglang/smg-disagg.yaml"]
++)
 +def test_examples_launch_smg_through_the_orchestrator(recipe: str) -> None:
 +    """The mock orchestrator starts the workers, then one SMG router fronting them."""
 +    path = EXAMPLES_DIR / recipe
@@ -1406,3 +1967,14 @@ index 00000000..dc20f838
 +    launch = next(line.strip() for line in plan.splitlines() if line.strip().startswith("smg launch"))
 +    port = serves[0].split("--port ")[1].split()[0]
 +    assert launch.startswith(f"smg launch --worker-urls http://127.0.0.1:{port} --host")
++
++
++def test_vllm_pd_runs_grpc_workers_with_nixl() -> None:
++    """vLLM P/D: both roles serve gRPC with NixlConnector, and SMG pairs them by grpc:// URL."""
++    plan = render_launch_plan(EXAMPLES_DIR / "vllm/smg-disagg-grpc.yaml")
++    serves = [line.strip() for line in plan.splitlines() if line.strip().startswith("vllm serve")]
++    assert len(serves) == 2
++    assert all("--grpc" in serve and '"kv_connector": "NixlConnector"' in serve for serve in serves)
++    launch = next(line.strip() for line in plan.splitlines() if line.strip().startswith("smg launch"))
++    assert launch.startswith("smg launch --pd-disaggregation --prefill grpc://")
++    assert " --decode grpc://" in launch
