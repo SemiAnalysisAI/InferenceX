@@ -9235,3 +9235,13 @@
     - "Add DSV4-Pro GB200 Dynamo+SGLang AgentX: TP8 aggregate C1/C4, 1P1D DEP8/DEP16 C64/C128, 1P1D DEP16/DEP32 C256, and 2P1D DEP16/DEP32 C768/C1024/C1280."
     - "Use SGLang nightly-dev-20260916-c9a8fba9, DSpark block size 6, and HiCache; omit enable-w4a4-mxfp4-megamoe while retaining the MegaMoE all-to-all backend and FP4 indexer."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3629
+
+- config-keys:
+    - qwen3.5-fp8-gb300-dynamo-sglang-agentic-pp-pareto
+    - qwen3.5-fp8-gb300-dynamo-sglang-agentic-agg-pareto
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GB300 Qwen3.5-397B-A17B-FP8 AgentX recipes: four disaggregated TP1xPP4 MTP prefill / DEP4 MTP decode points and five aggregate TP4/TP8 MTP points."
+    - "New recipes and matrix entries only; existing Qwen3.5 GB300 entries are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3231
