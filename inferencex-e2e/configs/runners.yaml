@@ -709,6 +709,7 @@ clusters:
       srun-args: [--container-remap-root, --container-writable]
       volumes:
         hf-hub-cache: {path: /raid/inferencex/models/hub, visibility: node-local}
+        shared-hf-hub-cache: {path: /home/ext-cjquilici/inferencex-mi325x-amd/hf-hub-cache}
         aiperf-cache: {path: /raid/inferencex/aiperf-mmap-cache, visibility: node-local}
       squash:
         dir: /raid/inferencex/squash
