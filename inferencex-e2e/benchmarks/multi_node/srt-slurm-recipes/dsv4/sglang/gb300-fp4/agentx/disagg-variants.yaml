@@ -62,6 +62,10 @@ base:
         MOONCAKE_GLOBAL_SEGMENT_SIZE: 180gb
         MC_STORE_CLIENT_METRIC_INTERVAL: '5'
         MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
+        # Advertise the store transfer engine on the node address instead of the first active
+        # interface: some GB300 nodes expose a BMC Redfish interface (bmc_redfish0, the same
+        # 10.0.1.2 on every node) ahead of the fabric interface.
+        MC_TCP_BIND_ADDRESS: "{node_ip}"
       preamble: |
         ulimit -n 1048576
         ulimit -l unlimited
@@ -145,6 +149,10 @@ base:
         MOONCAKE_STANDALONE_STORAGE: '0'
         MC_STORE_CLIENT_METRIC_INTERVAL: '5'
         MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
+        # Advertise the store transfer engine on the node address instead of the first active
+        # interface: some GB300 nodes expose a BMC Redfish interface (bmc_redfish0, the same
+        # 10.0.1.2 on every node) ahead of the fabric interface.
+        MC_TCP_BIND_ADDRESS: "{node}"
         WITH_NVIDIA_PEERMEM: '0'
       args:
         host: 0.0.0.0
