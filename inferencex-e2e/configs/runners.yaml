@@ -153,6 +153,24 @@ labels:
     - gb300-nv_15
     - gb300-nv_16
     - gb300-nv_17
+    - gb300-nv-batch3_00
+    - gb300-nv-batch3_01
+    - gb300-nv-batch3_02
+    - gb300-nv-batch3_03
+    - gb300-nv-batch3_04
+    - gb300-nv-batch3_05
+    - gb300-nv-batch3_06
+    - gb300-nv-batch3_07
+    - gb300-nv-batch3_08
+    - gb300-nv-batch3_09
+    - gb300-nv-batch3_10
+    - gb300-nv-batch3_11
+    - gb300-nv-batch3_12
+    - gb300-nv-batch3_13
+    - gb300-nv-batch3_14
+    - gb300-nv-batch3_15
+    - gb300-nv-batch3_16
+    - gb300-nv-batch3_17
   cluster:h100-cw:
     - h100-cw_00
     - h100-cw_01
@@ -269,6 +287,62 @@ labels:
     - gb300-nv_15
     - gb300-nv_16
     - gb300-nv_17
+    - gb300-nv-batch3_00
+    - gb300-nv-batch3_01
+    - gb300-nv-batch3_02
+    - gb300-nv-batch3_03
+    - gb300-nv-batch3_04
+    - gb300-nv-batch3_05
+    - gb300-nv-batch3_06
+    - gb300-nv-batch3_07
+    - gb300-nv-batch3_08
+    - gb300-nv-batch3_09
+    - gb300-nv-batch3_10
+    - gb300-nv-batch3_11
+    - gb300-nv-batch3_12
+    - gb300-nv-batch3_13
+    - gb300-nv-batch3_14
+    - gb300-nv-batch3_15
+    - gb300-nv-batch3_16
+    - gb300-nv-batch3_17
+  partition:batch_1:
+    - gb300-nv_00
+    - gb300-nv_01
+    - gb300-nv_02
+    - gb300-nv_03
+    - gb300-nv_04
+    - gb300-nv_05
+    - gb300-nv_06
+    - gb300-nv_07
+    - gb300-nv_08
+    - gb300-nv_09
+    - gb300-nv_10
+    - gb300-nv_11
+    - gb300-nv_12
+    - gb300-nv_13
+    - gb300-nv_14
+    - gb300-nv_15
+    - gb300-nv_16
+    - gb300-nv_17
+  partition:batch_3:
+    - gb300-nv-batch3_00
+    - gb300-nv-batch3_01
+    - gb300-nv-batch3_02
+    - gb300-nv-batch3_03
+    - gb300-nv-batch3_04
+    - gb300-nv-batch3_05
+    - gb300-nv-batch3_06
+    - gb300-nv-batch3_07
+    - gb300-nv-batch3_08
+    - gb300-nv-batch3_09
+    - gb300-nv-batch3_10
+    - gb300-nv-batch3_11
+    - gb300-nv-batch3_12
+    - gb300-nv-batch3_13
+    - gb300-nv-batch3_14
+    - gb300-nv-batch3_15
+    - gb300-nv-batch3_16
+    - gb300-nv-batch3_17
   cluster:mi300x-amd:
     - mi300x-amd_00
     - mi300x-amd_01
@@ -664,6 +738,8 @@ clusters:
     scheduler: slurm
     slurm:
       partition: batch_1
+      # Each runner's partition: label selects one of these allocation domains.
+      partitions: [batch_1, batch_3]
       account: benchmark
       exclusive: false
       volumes:
