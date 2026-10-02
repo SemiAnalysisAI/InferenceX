@@ -9264,3 +9264,16 @@
   description:
     - "Apply NVIDIA/srt-slurm#553 to the pinned submitter: pass the resolved recipe into setup validation so CPU-enabled jobs fail before sbatch when the exporter is missing, non-executable, or built for the wrong compute architecture."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3296
+
+- config-keys:
+    - qwen3.5-fp8-gb200-dynamo-sglang
+    - qwen3.5-fp8-gb300-dynamo-sglang
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-agg
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-mooncake-dcp16-agg
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg
+  description:
+    - "Collect ACPI CPU power on Qwen3.5 NVL72 4P1D and 8P1D recipes, including noprof DCGM collection on 8P1D, with the pinned v2.40.2 CPU exporter. Place the 8P1D frontend, benchmark client, and infra on the reserved head so power and benchmark timestamps share its clock; retain 13 allocated nodes and 12 GPU workers. Require valid power for all selected Qwen3.5 fixed-sequence points."
+    - "During strict power qualification, require the CPU source declared by each selected recipe; reject missing or invalid CPU totals without changing the independent GPU verdict. Preserve best-effort behavior when no CPU source is declared."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3296

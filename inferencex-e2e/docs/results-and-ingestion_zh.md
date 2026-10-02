@@ -457,7 +457,7 @@ HBM、LPDDR5X 及稳压损耗）；`Grace Power Socket N` 或 `CPU<n>:cpuSidePow
 
 | 字段 | 含义 |
 | --- | --- |
-| `cpu_power_valid` | CPU 侧测量的有效性，`1` 或 `0`；产物包没有 `cpu/` 时不出现 |
+| `cpu_power_valid` | CPU 侧测量的有效性，`1` 或 `0`；仅在未声明 CPU 来源且没有 `cpu/` 时不出现 |
 | `avg_cpu_socket_power_w` | 各 socket 窗口平均 Grace 侧功耗的均值 |
 | `avg_total_cpu_power_w` | 各 socket 窗口平均 Grace 侧功耗之和 |
 | `total_cpu_energy_j` | 窗口内所有 socket 的 Grace 侧能耗 |
@@ -471,8 +471,8 @@ HBM、LPDDR5X 及稳压损耗）；`Grace Power Socket N` 或 `CPU<n>:cpuSidePow
 该测量环节尽力而为，其结论与 `power_valid` 相互独立：它只从 GPU 产物包借用已绑定的正式测量窗口和
 worker 主机拓扑，GPU 侧的任何结论都不会传导过来，因此 producer 固定版本校验失败或 GPU 覆盖不足只会
 使 GPU 能耗不予发布，`cpu_power_valid` 仍按 CPU 采样自身给出结论。CPU 侧的任何失败都会记录
-`cpu_power_valid: 0` 且不输出 CPU 字段，所有 GPU 字段保持逐字节不变，也不会使 `REQUIRE_POWER=1` 失败。
-原因码包括 `cpu_samples_missing`、`cpu_samples_header_mismatch`、`cpu_samples_malformed`、
+`cpu_power_valid: 0` 且不输出 CPU 字段，所有 GPU 字段保持不变。设置 `REQUIRE_POWER=1` 时，配方声明的 CPU 来源必须有效；ACPI 必须提供完整的 Grace socket 或模块总功耗，缺失 CPU 产物会生成独立的无效 CPU 审计。仅采集 GPU 的配方保留原有行为。
+原因码包括 `cpu_artifacts_missing`、`cpu_sensor_source_mismatch`、`cpu_samples_missing`、`cpu_samples_header_mismatch`、`cpu_samples_malformed`、
 `cpu_manifest_invalid`、`cpu_socket_count_mismatch`、`cpu_sensor_kind_mixed`、
 `cpu_sample_gap_exceeded`、`cpu_window_not_bracketed` 以及 `cpu_window_unavailable`（没有已完成的窗口
 与该结果绑定，或窗口自身的契约检查失败）。CPU 积分溢出沿用 GPU 侧的 `non_finite_power_metric`；聚合
@@ -480,12 +480,12 @@ worker 主机拓扑，GPU 侧的任何结论都不会传导过来，因此 produ
 中。固定的 srt-slurm 源码版本（`098e15ac`）写出宽格式；采集与写出链路尚不识别 Module 标签，因此
 这些产物包只会得到 Grace socket 总功耗；需要 producer 支持该标签后才会出现模块字段。
 选中的 Qwen3.5 与 Kimi-K3 CPU 采集配方通过主配置的 `additional-settings`，向 `make setup`
-传入 `CPU_POWER_EXPORTER_RELEASE=v2.40.2`。该版本包含旧版 ACPI hwmon 传感器发现修复。
+传入 `CPU_POWER_EXPORTER_RELEASE=v2.40.2`。Qwen3.5 8P1D 将前端、压测客户端和基础服务放在预留的 head 节点，与采集器共用时钟；仍分配 13 个节点，其中 12 个为 GPU worker。该版本包含旧版 ACPI hwmon 传感器发现修复。
 安装过程校验下载工件的校验和，替换版本标记不匹配的缓存二进制，并在固定版本下载失败时退出。
 本地 srt-slurm 提交补丁将已解析的配方传入安装检查，从而在提交前拒绝缺失、不可执行或架构
 不匹配的二进制。验收仍需保留安装日志与实际 exporter
 身份，检查完整的同窗口样本，并核实固件传感器的测量范围。源码版本或安装成功均不能证明
-测量有效。没有 `cpu/` 的产物包不新增 CPU 指标或 CPU 有效性结论；通过 GPU 校验的产物包
+测量有效。未声明 CPU 来源时，没有 `cpu/` 的产物包不新增 CPU 指标或 CPU 有效性结论；通过 GPU 校验的产物包
 仍发布上文所述的逐主机 `workers` 条目。
 
 ## 验证和停止条件

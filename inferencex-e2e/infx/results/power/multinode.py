@@ -31,8 +31,9 @@ and aggregate power metrics remain blocked.
 Grace CPU-side leg: when the package also carries ``power/cpu/`` (see
 :mod:`.cpu_side`), each socket's Grace-side (and, when exposed, whole-module)
 power is integrated over the same bound formal window and published under
-``cpu_power_valid``. That verdict is independent of ``power_valid`` and of
-``REQUIRE_POWER``; a package without ``cpu/`` adds no CPU metrics or verdict.
+``cpu_power_valid``. That verdict is independent of ``power_valid``. Strict
+power qualification fails when a recipe-declared CPU source is missing or invalid;
+GPU-only callers retain best-effort CPU behavior.
 """
 
 from __future__ import annotations
@@ -933,6 +934,7 @@ def validate_and_integrate(
     decode_gpus: int,
     aggregate_gpus: int,
     expected_producer_sha: str | None,
+    expected_cpu_source: str | None = None,
 ) -> MultinodePowerAudit:
     """Recompute package validity, cross-check verdicts, and integrate energy.
 
@@ -958,6 +960,7 @@ def validate_and_integrate(
         power_dir / CPU_DIRNAME,
         window=window,
         expected_hosts=audit.expected_worker_hosts,
+        expected_source=expected_cpu_source,
     )
     return audit
 
@@ -1456,6 +1459,7 @@ def run(
     aggregate_gpus: int = 0,
     validation_result: Path | None = None,
     require_power: bool = False,
+    expected_cpu_source: str | None = None,
 ) -> int:
     """Validate multinode power artifacts, patch metrics, and audit the verdict."""
     validation_result = validation_result or bench_result.with_name(
@@ -1476,6 +1480,7 @@ def run(
         decode_gpus=decode_gpus,
         aggregate_gpus=aggregate_gpus,
         expected_producer_sha=expected_producer_sha,
+        expected_cpu_source=expected_cpu_source,
     )
     for reason in benchmark_reasons:
         _add_reason(audit, reason)
@@ -1523,6 +1528,14 @@ def run(
             f"total_cpu_energy_j={cpu.metrics.get('total_cpu_energy_j', 0.0):.2f} "
             f"reasons={','.join(cpu.reason_codes) or '-'}"
         )
+
+    if (
+        require_power
+        and expected_cpu_source is not None
+        and (audit.cpu is None or not audit.cpu.valid)
+    ):
+        print("[aggregate_power_multinode] Required CPU power is invalid", file=sys.stderr)
+        return 1
 
     if not audit.power_valid:
         print(
@@ -1602,8 +1615,9 @@ def main() -> int:
         "--require-power",
         action="store_true",
         default=os.environ.get("REQUIRE_POWER", "").lower() in {"1", "true", "yes"},
-        help="Fail when power telemetry is invalid (also enabled by REQUIRE_POWER=1)",
+        help="Fail invalid GPU power and any expected CPU source (also REQUIRE_POWER=1)",
     )
+    parser.add_argument("--expected-cpu-source", choices=("acpi", "dcgm"))
     args = parser.parse_args()
     return run(
         args.power_dir,
@@ -1616,6 +1630,7 @@ def main() -> int:
         logs_root=args.logs_root,
         validation_result=args.validation_result,
         require_power=args.require_power,
+        expected_cpu_source=args.expected_cpu_source,
     )
 
 

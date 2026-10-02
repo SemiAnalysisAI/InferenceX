@@ -476,7 +476,7 @@ are:
 
 | Key | Meaning |
 | --- | --- |
-| `cpu_power_valid` | `1` or `0` for the CPU-side leg; absent when the package has no `cpu/` |
+| `cpu_power_valid` | `1` or `0` for the CPU-side leg; absent only when CPU is undeclared and the package has no `cpu/` |
 | `avg_cpu_socket_power_w` | Mean over sockets of each socket's window-mean Grace-side watts |
 | `avg_total_cpu_power_w` | Sum over sockets of window-mean Grace-side watts |
 | `total_cpu_energy_j` | Grace-side energy over the window, all sockets |
@@ -488,11 +488,12 @@ The sidecar's `cpu` block and the aggregate's `power_audit.cpu` record `sensor_k
 `grace_socket`, or `dcgm_cpu_rail`), `source` (`acpi` or `dcgm`), expected and observed socket
 counts, the parsed row count, and reason codes. `power_metric_schema_version` stays `2`.
 
-The leg is best effort and its verdict is independent of `power_valid`: it borrows only the bound
+The CPU verdict is independent of `power_valid`: it borrows only the bound
 formal window and the worker-host topology from the GPU package, and no GPU verdict reaches it, so
 an unpinned producer or failed GPU coverage withholds GPU energy while `cpu_power_valid` still
 judges the CPU samples on their own. Any CPU-leg failure records `cpu_power_valid: 0` with no CPU
-keys, leaves every GPU field byte-identical, and never fails `REQUIRE_POWER=1`. Reason codes:
+keys and leaves every GPU field unchanged. With `REQUIRE_POWER=1`, a recipe-declared CPU source must be valid; ACPI requires complete Grace socket or module totals, and missing CPU artifacts produce an independent invalid CPU audit. GPU-only recipes retain their existing behavior. Reason codes:
+`cpu_artifacts_missing`, `cpu_sensor_source_mismatch`,
 `cpu_samples_missing`, `cpu_samples_header_mismatch`, `cpu_samples_malformed`,
 `cpu_manifest_invalid`, `cpu_socket_count_mismatch`, `cpu_sensor_kind_mixed`,
 `cpu_sample_gap_exceeded`, `cpu_window_not_bracketed`, and `cpu_window_unavailable` (no completed
@@ -503,13 +504,13 @@ The srt-slurm source pin (`098e15ac`) writes the wide format and does not classi
 Module label, so these packages yield the Grace socket total; module keys require a producer
 that classifies that label. The selected Qwen3.5 and Kimi-K3 CPU-telemetry recipes pass
 `CPU_POWER_EXPORTER_RELEASE=v2.40.2` from their master-config `additional-settings` to
-`make setup`. This release includes legacy ACPI hwmon discovery. Setup verifies the downloaded
+`make setup`. Qwen3.5 8P1D keeps its frontend, benchmark client, and infra on the reserved head so their timestamps share the collector clock; its 13-node allocation still contains 12 GPU-worker nodes. This release includes legacy ACPI hwmon discovery. Setup verifies the downloaded
 asset checksum, replaces a cached binary with a different release marker, and fails on a pinned
 download error. The local srt-slurm submission patch passes the resolved recipe to setup
 validation, which rejects a missing, non-executable, or wrong-architecture binary.
 Qualification still needs the setup log and actual exporter identity, complete same-window
 samples, and verified firmware sensor boundaries. A source pin or successful setup alone does
-not establish valid measurements. A package without `cpu/` adds no CPU metrics or CPU verdict.
+not establish valid measurements. Without an expected CPU source, a package without `cpu/` adds no CPU metrics or CPU verdict.
 Validated GPU packages still publish the per-host `workers` entries described above.
 
 ## Verification and stop conditions

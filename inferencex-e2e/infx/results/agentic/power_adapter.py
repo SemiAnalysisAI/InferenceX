@@ -420,6 +420,7 @@ def run_multinode_agentic_power(
     logs_root: Path,
     expected_producer_sha: str,
     require_power: bool = False,
+    expected_cpu_source: str | None = None,
 ) -> int:
     """Join one AgentX aggregate to the finalized central multinode package."""
     validation_result = result_dir / "power_validation.json"
@@ -491,6 +492,7 @@ def run_multinode_agentic_power(
         logs_root=logs_root,
         validation_result=validation_result,
         require_power=require_power,
+        expected_cpu_source=expected_cpu_source,
     )
 
 
@@ -510,6 +512,7 @@ def main() -> int:
         action="store_true",
         default=os.environ.get("REQUIRE_POWER", "").lower() in {"1", "true", "yes"},
     )
+    parser.add_argument("--expected-cpu-source", choices=("acpi", "dcgm"))
     args = parser.parse_args()
     if args.multinode_contract_missing:
         if args.agg_result is None:
@@ -560,6 +563,7 @@ def main() -> int:
             logs_root=args.logs_root,
             expected_producer_sha=args.expected_producer_sha,
             require_power=args.require_power,
+            expected_cpu_source=args.expected_cpu_source,
         )
     if args.agg_result is None:
         parser.error("--agg-result is required for single-node AgentX power")

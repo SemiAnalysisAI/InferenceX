@@ -62,6 +62,7 @@ class Package:
         aggregate_gpus=0,
         sha=PRODUCER_SHA,
         require_power=False,
+        expected_cpu_source=None,
     ):
         return apm.run(
             self.power_dir,
@@ -74,6 +75,7 @@ class Package:
             logs_root=self.logs_root,
             validation_result=self.validation_result,
             require_power=require_power,
+            expected_cpu_source=expected_cpu_source,
         )
 
     def agg(self):
@@ -941,6 +943,31 @@ class TestCpuSidePower:
         assert "avg_total_module_power_w" not in agg
         assert "total_module_energy_j" not in agg
         assert pkg.sidecar()["cpu"]["sensor_kind"] == "grace_socket"
+
+    @pytest.mark.parametrize("require_power", [False, True])
+    @pytest.mark.parametrize("cpu", ["complete", "missing", "rail_only", "corrupt"])
+    def test_expected_acpi_cpu_controls_strict_exit_without_changing_gpu(
+        self, tmp_path, cpu, require_power
+    ):
+        pkg = build_package(tmp_path)
+        if cpu == "complete":
+            add_cpu_package(pkg, _cpu_rows())
+        elif cpu == "rail_only":
+            add_cpu_package(pkg, _cpu_rows({host: {"dcgm": DCGM_W} for host in CPU_HOSTS}))
+        elif cpu == "corrupt":
+            cpu_dir = add_cpu_package(pkg, _cpu_rows())
+            (cpu_dir / "samples.csv").write_text("broken\n")
+        assert pkg.run(require_power=require_power, expected_cpu_source="acpi") == int(
+            require_power and cpu != "complete"
+        )
+        assert _gpu_fields(pkg.agg()) == _reference_agg(tmp_path)
+        assert pkg.sidecar()["power_valid"] is True
+        assert pkg.agg()["cpu_power_valid"] == int(cpu == "complete")
+        if cpu == "complete":
+            assert_grace_keys(pkg.agg())
+        else:
+            assert set(apm.CPU_METRIC_KEYS).isdisjoint(pkg.agg())
+            assert pkg.sidecar()["cpu"]["reason_codes"]
 
     def test_package_without_cpu_dir_emits_no_cpu_fields(self, tmp_path):
         pkg = build_package(tmp_path)

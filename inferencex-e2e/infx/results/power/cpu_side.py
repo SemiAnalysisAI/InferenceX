@@ -11,8 +11,9 @@ Each (hostname, socket) headline series is integrated over the GPU leg's
 bound formal window with the shared trapezoid and boundary interpolation and
 published as additive metrics next to the GPU-board numbers. The leg is
 best-effort by contract: any failure records ``cpu_power_valid=0`` with
-reason codes and leaves every GPU field untouched, and ``REQUIRE_POWER``
-never fails a run because of it. A package without ``cpu/`` emits nothing.
+reason codes and leaves every GPU field untouched. Strict qualification also
+requires a recipe-declared CPU source; GPU-only callers keep best-effort CPU
+behavior. A package without ``cpu/`` emits nothing unless a source is expected.
 """
 
 from __future__ import annotations
@@ -247,10 +248,15 @@ def validate_cpu_leg(
     *,
     window: tuple[float, float] | None,
     expected_hosts: Iterable[str],
+    expected_source: str | None = None,
 ) -> CpuPowerAudit | None:
     """Validate and integrate the CPU sub-package; None when the run carried none."""
     if not cpu_dir.is_dir():
-        return None
+        if expected_source is None:
+            return None
+        audit = CpuPowerAudit()
+        audit.invalidate("cpu_artifacts_missing")
+        return audit
     audit = CpuPowerAudit()
     if not _manifest_is_object(cpu_dir / CPU_MANIFEST_FILENAME):
         audit.invalidate("cpu_manifest_invalid")
@@ -280,6 +286,12 @@ def validate_cpu_leg(
         return audit
     audit.sensor_kind = selected
     audit.source = next(iter(sources[selected]))
+    if expected_source is not None and (
+        audit.source != expected_source
+        or (expected_source == "acpi" and selected not in {SENSOR_GRACE, SENSOR_MODULE})
+    ):
+        audit.invalidate("cpu_sensor_source_mismatch")
+        return audit
 
     start, end = window
     energy: dict[str, float] = {}

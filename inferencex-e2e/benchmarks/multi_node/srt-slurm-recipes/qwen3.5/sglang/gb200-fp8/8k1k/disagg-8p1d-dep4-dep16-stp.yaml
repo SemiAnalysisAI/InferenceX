@@ -10,11 +10,11 @@ services:
   - name: etcd
     type: etcd
     placement:
-      node: dedicated
+      node: head
   - name: nats
     type: nats
     placement:
-      node: dedicated
+      node: head
 dynamo:
   install: true
 
@@ -22,6 +22,7 @@ dynamo:
     wheel: "1.5.0.dev20260917"
 frontend:
   type: dynamo
+  dedicated_node: true
   enable_multiple_frontends: true
   num_additional_frontends: 4
   nginx_container: nginx
@@ -166,3 +167,18 @@ benchmark:
     TOKENIZER: /model
     ISL: '8192'
     OSL: '1024'
+
+telemetry:
+  enabled: true
+  collect_interval_ms: 1000
+  storage_subdir: power
+  required: true
+  startup_timeout_seconds: 120
+  request_timeout_seconds: 2
+  dcgm_exporter:
+    container_image: dcgm-exporter
+    port: 9401
+    command: "dcgm-exporter --collect-interval=100 --address :{port} -f /configs/dcgm-counters-noprof.csv"
+  cpu_power_exporter:
+    port: 9405
+    source: acpi

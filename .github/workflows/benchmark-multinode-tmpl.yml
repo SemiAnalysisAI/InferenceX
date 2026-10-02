@@ -367,6 +367,7 @@ jobs:
           fi
           export EVAL_CONC
           export IS_MULTINODE=true
+          echo "POWER_EXPECTED_CPU_SOURCE=" >> "$GITHUB_ENV"
           "$INFERENCEX_LAUNCH_PYTHON" -m infx.launch run
           if [ "${EVAL_ONLY}" = "true" ]; then
             echo "Eval-only mode: skipping benchmark result file check"
