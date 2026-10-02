@@ -113,8 +113,9 @@ def read_steps(steps_dir: str) -> list[tuple[float, bool]]:
                     _offsets[path] = f.tell()
                     record = json.loads(line)
                     if "step" in record and record.get("dispatch"):
+                        # the step's final dispatch (V1 dispatches again after the DP sync)
                         _steps.append((record["t0_ns"] / 1e9,
-                                       record["dispatch"][0].get("cg_mode") == "FULL"))
+                                       record["dispatch"][-1].get("cg_mode") == "FULL"))
         except (OSError, ValueError):
             continue
     return _steps

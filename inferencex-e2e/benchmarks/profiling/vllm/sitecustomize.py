@@ -288,6 +288,36 @@ def _patch_dp_utils(module):
     module.dispatch_cg_and_sync_dp = dispatch_cg_and_sync_dp
 
 
+def _patch_cudagraph_dispatcher(module):
+    """V1 runner steps: each CudagraphDispatcher.dispatch, the last being the step's mode.
+
+    V1 dispatches before and again after the DP batch sync; V2 steps are logged
+    by dispatch_cg_and_sync_dp instead, so only V1 steps record these.
+    """
+    cls = getattr(module, "CudagraphDispatcher", None)
+    if cls is None or getattr(cls, "_infx_patched", False):
+        return
+    orig = cls.dispatch
+
+    def dispatch(self, *args, **kwargs):
+        result = orig(self, *args, **kwargs)
+        try:
+            calls = getattr(_dispatch_log, "calls", None)
+            if calls is not None and getattr(_dispatch_log, "v1", False):
+                mode, batch_desc = result
+                record = {"batch_desc": repr(batch_desc), "cg_mode": str(getattr(mode, "name", mode))}
+                for field in ("num_tokens", "num_reqs", "uniform"):
+                    if hasattr(batch_desc, field):
+                        record[field] = str(getattr(batch_desc, field))
+                calls.append(record)
+        except Exception:
+            pass
+        return result
+
+    cls.dispatch = dispatch
+    cls._infx_patched = True
+
+
 def _step_record(scheduler_output):
     reqs = []
     computed = {}
@@ -330,7 +360,7 @@ def _register_module_names(runner):
     global _module_names, _module_hooks_allowed
     names = weakref.WeakKeyDictionary()
     roots = [("model", getattr(runner, "model", None))]
-    speculator = getattr(runner, "speculator", None)
+    speculator = getattr(runner, "speculator", None) or getattr(runner, "drafter", None)  # V2 / V1
     if speculator is not None:
         roots.append(("draft", getattr(speculator, "model", None)))
     for prefix, root in roots:
@@ -606,11 +636,11 @@ def _routing_flush():
         np.savez_compressed(os.path.join(out_dir, f"step{step:06d}.npz"), **arrays)
 
 
-def _patch_model_runner(module):
+def _patch_model_runner(module, v1=False):
     import torch
 
     cls = module.GPUModelRunner
-    if getattr(cls, "_infx_patched", False):
+    if vars(cls).get("_infx_patched", False):  # its own flag: one runner may subclass the other
         return
     orig_capture, orig_execute = cls.capture_model, cls.execute_model
     orig_sample = getattr(cls, "sample_tokens", None)
@@ -669,6 +699,7 @@ def _patch_model_runner(module):
         except Exception:
             _write_error("step record")
         _dispatch_log.calls = []
+        _dispatch_log.v1 = v1
         t0 = time.time_ns()
         try:
             if not _profiling():
@@ -894,6 +925,8 @@ _HOOKS = {
     "torch.cuda.graphs": _patch_cuda_graph,
     "vllm.v1.worker.gpu.dp_utils": _patch_dp_utils,
     "vllm.v1.worker.gpu.model_runner": _patch_model_runner,
+    "vllm.v1.worker.gpu_model_runner": lambda m: _patch_model_runner(m, v1=True),
+    "vllm.v1.cudagraph_dispatcher": _patch_cudagraph_dispatcher,
     "vllm.profiler.wrapper": _patch_profiler_wrapper,
     "vllm.compilation.piecewise_backend": _patch_piecewise_backend,
     "vllm.v1.worker.gpu_worker": _patch_gpu_worker,
