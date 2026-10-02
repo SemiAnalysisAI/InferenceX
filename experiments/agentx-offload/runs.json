@@ -4432,12 +4432,25 @@
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/36943237877/job/110639430931",
       "runner": "b200-nscale-slurm_02",
       "performance_result": false,
-      "phase": "runner admitted; awaiting Slurm allocation and canonical warmup",
-      "dispatch_evidence": "Immediately before dispatch, a fresh cluster-wide inventory found zero queued cluster:b200-nscale jobs and no active-or-queued study workflow. The generated job carries cluster:b200-nscale and nodes:1."
+      "phase": "canonical warmup in progress",
+      "dispatch_evidence": "Immediately before dispatch, a fresh cluster-wide inventory found zero queued cluster:b200-nscale jobs and no active-or-queued study workflow. The generated job carries cluster:b200-nscale and nodes:1.",
+      "node": "im-b200-c007",
+      "allocation_id": "18371",
+      "scratch": "/offload-scratch/inferencex-offload-36943237877-1-18371-2024c66fbce8",
+      "warmup_progress": {
+        "returned": 153,
+        "target": 5401,
+        "sent": 521,
+        "in_flight": 368,
+        "errors": 0,
+        "elapsed_seconds": 660.1,
+        "observed_at": "2026-10-02T00:24:37Z"
+      },
+      "storage_evidence": "offload_config.json verifies arm=dram, 739,000,000,000 DRAM bytes, zero NVMe bytes, SimpleCPUOffloadConnector with cpu backend and lazy offload, and O_DIRECT not required. Slurm allocation 18371 is active on im-b200-c007."
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894",
-  "status": "Matched c488 is complete as a mixed local NVMe win. Native DRAM c488 run 36943237877 is in progress on runner b200-nscale-slurm_02.",
+  "status": "Native DRAM c488 run 36943237877 is in canonical warmup on im-b200-c007; the latest sample returned 153/5,401 with zero errors.",
   "last_capacity_check": {
     "checked_at": "2026-10-01T23:54:46Z",
     "active_study_run_ids": [
@@ -4455,7 +4468,7 @@
     "b200_nodes_allocated": null,
     "b200_nodes_idle": null,
     "target_node": "im-b200-c001",
-    "target_node_state": "DRAM control does not require NVMe node allowlisting; compute placement pending",
+    "target_node_state": "DRAM c488 allocated on im-b200-c007 as Slurm job 18371; canonical warmup active",
     "observed_free_bytes": null,
     "reason": "A fresh inventory found zero queued cluster:b200-nscale jobs and no active-or-queued study workflow, so native DRAM c488 was dispatched and admitted with nodes:1."
   },
