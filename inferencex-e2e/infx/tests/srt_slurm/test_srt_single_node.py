@@ -284,3 +284,36 @@ def test_runtime_container_options_remain_native_mapping(point):
     }
     with pytest.raises(ValueError, match='must map option names to string values'):
         runtime_arguments(f"{path}:base", {**env, 'SRT_SRUN_OPTIONS': '{"container-remap-root": true}'})
+
+
+@pytest.mark.parametrize("suite,offload,eval_only,mode,server_env,details", [
+    ("bfcl_kimi_diagnostic", "none", "true", "kimi-metrics", {"VLLM_COMPUTE_NANS_IN_LOGITS": "1"}, False),
+    ("bfcl_smoke", "dram", "true", "native-cpu-restore", {"VLLM_SERVER_DEV_MODE": "1"}, True),
+    ("bfcl_smoke", "none", "true", "none", {}, False),
+    ("bfcl", "dram", "true", "none", {}, False),
+    ("bfcl_kimi_diagnostic", "none", "false", "none", {}, False),
+])
+def test_native_bfcl_diagnostics_bind_server_and_callback_together(
+    point, suite, offload, eval_only, mode, server_env, details
+):
+    path, recipe, env = point
+    recipe["engine"] = "vllm"
+    recipe["resources"]["gpu_type"] = "mi355x"
+    recipe["benchmark"]["command"] = "bash /repo/benchmarks/srt_agentic.sh"
+    recipe["roles"]["agg"]["args"] = {"tensor-parallel-size": 4}
+    path.write_text(yaml.safe_dump(recipe))
+    env.update(
+        FRAMEWORK="vllm", IS_AGENTIC="1", EVAL_ONLY=eval_only, RUN_EVAL="true",
+        MODEL_PREFIX="kimik3", DURATION="60", EVAL_FRAMEWORK="bfcl", EVAL_SUITE=suite,
+        KV_OFFLOADING=offload, KV_OFFLOAD_BACKEND="vllm-simple",
+    )
+    argv = runtime_arguments(str(path), env)
+    apply_overrides_to_recipe(recipe, parse_overrides(argv[1::2], []))
+    assert recipe["post_eval"]["command"] == [
+        "bash", "{infmax_workspace}/benchmarks/single_node/srt_eval.sh",
+        "{endpoint}", "/logs/infx-eval-exit-code", mode,
+    ]
+    role = recipe["roles"]["agg"]
+    assert role.get("env", {}) == server_env
+    assert role["args"].get("enable-prompt-tokens-details", False) == details
+    assert role["args"]["tensor-parallel-size"] == 4

@@ -73,7 +73,8 @@ def run_single_node(launch: Launch) -> int:
     fetched = root / "fetched-outputs"
     submitted = submit.Submitted(manifest=run.workspace / submit.SINGLE_NODE_SUBMISSION)
     run.life.callback(collect.finish_single_node, run, submitted, fetched)
-    eval_args = submit.eval_args(run.env, submit.SINGLE_NODE_EVAL_COMMAND)
+    # The single-node binder supplies the callback, including opt-in BFCL diagnostics.
+    eval_args = submit.eval_args(run.env)
     arguments = ["--json", "--yes", "--output", str(root / "outputs"), *runtime_args, *eval_args]
     applied = submit.apply(run, checkout, selected, arguments, stdout=submitted.manifest)
     if applied.returncode:

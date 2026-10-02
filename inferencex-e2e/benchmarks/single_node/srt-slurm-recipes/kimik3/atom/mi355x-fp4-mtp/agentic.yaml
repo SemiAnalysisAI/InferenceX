@@ -3,8 +3,8 @@
 #   interactive (1, 4)        DCP1, DSpark 7, GPU-resident KV.
 #   mid         (14, 16)      DCP8, DSpark 3, ReplaySSM, LMCache 128 GB/rank.
 #   throughput  (48, 56, 72)  DCP8, no draft, LMCache 128 or 192 GB/rank.
-# LMCache is ATOM's in-process lmcache_offload connector
-# (runners/srt-slurm/patches/507-lmcache-server-atom-sglang.patch).
+# LMCache is ATOM's in-process lmcache_offload connector, passed through
+# upstream srt-slurm's native extra-kv-connectors support.
 base:
   schema: 2
   name: kimik3-fp4-mi355x-atom-agentic

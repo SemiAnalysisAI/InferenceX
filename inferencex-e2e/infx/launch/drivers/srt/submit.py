@@ -31,10 +31,6 @@ MULTINODE_EVAL_COMMAND = (
     '"MODEL_PATH=/model", "bash", "{infmax_workspace}/benchmarks/multi_node/srt_eval.sh", "{endpoint}", '
     '"{infmax_workspace}"]'
 )
-SINGLE_NODE_EVAL_COMMAND = (
-    '["bash", "{infmax_workspace}/benchmarks/single_node/srt_eval.sh", "{endpoint}", '
-    '"/logs/infx-eval-exit-code"]'
-)
 WORKLOAD_ENV = (
     "EVAL_*", "SWEBENCH_*", "AIPERF_*", "AGENTIC_*",
     "MODAL_TOKEN_ID", "MODAL_TOKEN_SECRET",
@@ -46,8 +42,8 @@ WORKLOAD_ENV = (
 _SHELL_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
 
-def eval_args(env: Mapping[str, str], command: str) -> list[str]:
-    """Post-eval ``--set`` arguments: ``command``, and the WORKLOAD_ENV names set in ``env``."""
+def eval_args(env: Mapping[str, str], command: str | None = None) -> list[str]:
+    """Post-eval passthrough names and an optional command for multi-node lanes."""
     names = sorted(
         name
         for name, value in env.items()
@@ -55,12 +51,10 @@ def eval_args(env: Mapping[str, str], command: str) -> list[str]:
         and _SHELL_NAME.fullmatch(name)
         and any(fnmatch.fnmatchcase(name, pattern) for pattern in WORKLOAD_ENV)
     )
-    return [
-        "--set",
-        f"post_eval.command={command}",
-        "--set",
-        f"post_eval.passthrough_env={json.dumps(names)}",
-    ]
+    args = ["--set", f"post_eval.passthrough_env={json.dumps(names)}"]
+    if command is not None:
+        args[:0] = ["--set", f"post_eval.command={command}"]
+    return args
 
 
 def bind_point(run: SrtRun, checkout: Checkout, arguments: Path) -> int:

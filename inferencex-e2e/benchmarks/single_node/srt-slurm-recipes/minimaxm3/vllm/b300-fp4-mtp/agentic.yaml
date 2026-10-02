@@ -166,7 +166,7 @@ override_tp2_c24_dram:
         gpu-memory-utilization: 0.92
         max-num-seqs: 36
         compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,256,512,1024,2048]}'
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":804232626176,"lazy_offload":true}}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":749000000000,"lazy_offload":true}}'
       env:
         VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
   benchmark:
@@ -235,7 +235,7 @@ override_tp2_c32_dram:
         gpu-memory-utilization: 0.92
         max-num-seqs: 48
         compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,148,152,156,160,164,168,172,176,180,184,188,192,256,512,1024,2048]}'
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":804232626176,"lazy_offload":true}}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":749000000000,"lazy_offload":true}}'
       env:
         VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
   benchmark:
@@ -252,7 +252,7 @@ override_tp2_c40_dram:
         gpu-memory-utilization: 0.92
         max-num-seqs: 60
         compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,148,152,156,160,164,168,172,176,180,184,188,192,196,200,204,208,212,216,220,224,228,232,236,240,256,512,1024,2048]}'
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":804232626176,"lazy_offload":true}}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":749000000000,"lazy_offload":true}}'
       env:
         VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
   benchmark:

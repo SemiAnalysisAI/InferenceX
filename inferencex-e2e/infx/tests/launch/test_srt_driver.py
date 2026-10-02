@@ -145,6 +145,12 @@ def test_single_node_point_stages_workflow_artifacts(harness):
     argv = call["argv"]
     assert argv[argv.index("--file") + 1] == f"{workspace}/recipe.yaml:zip_override_conc[0]"
     assert {"--json", "--yes", "--output", WORKDIR} <= set(argv)
+    [callback] = [json.loads(arg.split("=", 1)[1]) for arg in argv
+                  if arg.startswith("post_eval.command=")]  # fmt: skip
+    assert callback == [
+        "bash", "{infmax_workspace}/benchmarks/single_node/srt_eval.sh",
+        "{endpoint}", "/logs/infx-eval-exit-code", "none",
+    ]
     assert (call["env"]["INFMAX_WORKSPACE"], call["env"]["VIRTUAL_ENV"]) == (str(workspace), None)
     assert call["env"]["RUNNER_NAME"] == f"inferencex-{env['RUNNER_NAME']}"
     assert "/hf" in srtslurm(workspace)["default_mounts"].values()
