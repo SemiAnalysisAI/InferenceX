@@ -94,8 +94,13 @@ roles:
       VLLM_HTTP_TIMEOUT_KEEP_ALIVE: "900"
       MC_SLICE_SIZE: "1048576"
       MC_MAX_MR_SIZE: "4294967296"
+      MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
       WITH_NVIDIA_PEERMEM: "0"
       VLLM_MOONCAKE_LOAD_RECV_THREADS: "4"
+    # Kubernetes: add `numa-bind: true` to args when the kubelet does not pin
+    # pods to a NUMA node (cpuManagerPolicy: none). On a 2-node GB300 GKE
+    # cluster it raised c48/c52 throughput by 10-14%. Slurm reference runs
+    # match without it, so it is not set by default.
     args:
       served-model-name: "moonshotai/Kimi-K3"
       tensor-parallel-size: 8

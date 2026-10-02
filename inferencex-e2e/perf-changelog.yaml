@@ -9235,3 +9235,11 @@
     - "Add DSV4-Pro GB200 Dynamo+SGLang AgentX: TP8 aggregate C1/C4, 1P1D DEP8/DEP16 C64/C128, 1P1D DEP16/DEP32 C256, and 2P1D DEP16/DEP32 C768/C1024/C1280."
     - "Use SGLang nightly-dev-20260916-c9a8fba9, DSpark block size 6, and HiCache; omit enable-w4a4-mxfp4-megamoe while retaining the MegaMoE all-to-all backend and FP4 indexer."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3629
+
+- config-keys:
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Set MC_ENABLE_DEST_DEVICE_AFFINITY=1 in both GB300 Kimi-K3 aggregated Mooncake recipes (agg-dcp8-dspark4-mooncake.yaml and agg-dcp8-dspark7-maxseq2-mooncake.yaml), matching every other Mooncake recipe, including the GB300 Kimi-K3 disaggregated recipes. Mooncake then selects the RDMA NIC local to the destination GPU. Also add a comment noting that Kubernetes deployments need numa-bind. Images, arguments and grids are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
