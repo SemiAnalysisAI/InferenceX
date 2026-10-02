@@ -146,3 +146,24 @@ override_tp8_c1:
   benchmark:
     env:
       CONC: "1"
+
+override_prefill_tp8_decode_dep8_c1:
+  frontend:
+    args:
+      dp-aware: true
+  roles:
+    decode:
+      args:
+        data-parallel-size: 8
+        expert-parallel-size: 8
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        moe-a2a-backend: mori
+        # Native normal mode uses intra-node MoRI for this eight-GPU EP group.
+        deepep-mode: normal
+        moe-dense-tp-size: 1
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 2
+  benchmark:
+    env:
+      CONC: "1"
