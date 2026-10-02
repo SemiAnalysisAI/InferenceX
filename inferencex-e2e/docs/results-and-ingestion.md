@@ -111,6 +111,8 @@ Processing and diagnostic power-audit uploads run after launcher or validation f
 
 ### SRT multinode window retention
 
+SRT samples CSV versions 1, 2 and 3 are accepted. Version 3 adds optional `temperature_c` in Celsius; temperature is retained in the uploaded artifact for the app and does not enter the GPU-energy calculation. Missing values stay empty. Malformed temperature cells invalidate the package under the existing strict artifact checks. Deploy this reader before a producer that emits version 3.
+
 Power audit sidecars retain independently validated measurements in `selected_window`;
 `package_integrity_valid` records shared evidence checks and `window_validations` records
 per-window verdicts. Retention requires trusted evidence, matching topology and result binding.
