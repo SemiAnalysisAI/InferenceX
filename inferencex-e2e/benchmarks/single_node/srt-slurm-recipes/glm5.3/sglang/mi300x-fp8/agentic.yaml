@@ -4,7 +4,7 @@ base:
   name: glm5.3-fp8-mi300x-sglang-agentic
   model:
     path: hf:zai-org/GLM-5.3
-    container: lmsysorg/sglang-rocm:v0.5.21-rocm724-mi30x-20261001@sha256:0f59a7f04fbd3a4d2d7c1de6c89345069125650651018726279e209e54f6977f
+    container: lmsysorg/sglang-rocm:v0.5.21-rocm720-mi30x-20261001@sha256:8190c29f67bdb65f41e0254efc72e60daa5117b7212e86a46aad5bf4b145f1b4
     precision: fp8
   resources:
     gpu_type: mi300x
@@ -100,7 +100,6 @@ override_tp8_umbp_c1:
         unified-cache-external-linker-backend: mori
         hicache-storage-backend-extra-config: '{"standalone_startup_timeout_ms":120000}'
       env:
-        SGLANG_ENABLE_UNIFIED_RADIX_TREE: "1"
         UMBP_STANDALONE_ADDRESS: unix:///logs/umbp.sock
   benchmark:
     env:
