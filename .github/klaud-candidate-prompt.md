@@ -60,8 +60,12 @@ concurrency/dataset identities. Use the reporting guide's prepare-baseline/repor
 candidate.json provides the planner-verified exact `baseline-model`; use that value unchanged.
 The planner supplies `baseline-preflight.json` beside candidate.json. It contains the verified
 benchmark roster bound to the selected candidate, base SHA, source observation and model.
-After resolving the exact old/new image goal, prepare-baseline checks this binding and uses
-that roster without refetching it. If the preflight is absent or invalid, stop with
+Selection has also checked that the base family's full matrix can reproduce every point
+in that roster. After resolving the exact old/new image goal, run prepare-baseline before
+editing or opening a PR. It checks the binding and uses the selected roster without
+refetching it. Do not independently reconstruct a competing roster or classify a mismatch
+from a partial API view, changed point names, or counts alone. If the helper rejects the
+preflight, stop with
 `baseline-preflight-mismatch`.
 The preflight is not a published or final baseline. Supplement verified public
 eval/dataset evidence before freezing; never replace a failed lookup with a partial roster.
@@ -105,6 +109,8 @@ Wait for complete run-sweep.yml coverage on the exact head, all points/default e
 reusable artifacts. Check BOTH the final matrix before dispatch and completed final artifacts
 against EVERY frozen baseline point by identity, not count alone; extra points cannot replace
 missing ones. check-final and finish enforce this roster as well as the current family.
+Once all owned jobs are terminal, update the attempt report and call finish promptly; do not
+spend the remaining agent job time re-deriving a baseline or waiting on a completed run.
 If any baseline point is omitted, or lacks a successful verified updated-image result at final validation, report
 the affected points and finish with outcome=failed: clean up owned runs and close the PR,
 never mark ready/validated. Smoke subsets remain allowed only for targeted attempts.
