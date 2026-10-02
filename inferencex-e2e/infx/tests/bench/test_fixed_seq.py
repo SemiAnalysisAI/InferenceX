@@ -1,4 +1,4 @@
-"""Fixed-sequence lanes against a stub client, pip3, nvidia-smi, and a local frontend."""
+"""Fixed-sequence lanes against a stub client, pip3, and a local frontend."""
 
 from __future__ import annotations
 
@@ -127,7 +127,7 @@ def single_node_env(tmp_path: Path, tools: Path, **overrides: str | None) -> dic
         "SRT_FRONTEND_PORT": "8000",
         "RUN_EVAL": "false",
         "EVAL_ONLY": "false",
-        "GPU_MONITOR_INTERVAL": "1",
+        "SRT_MEASUREMENT_WINDOW_DIR": None,
         "USE_CHAT_TEMPLATE": "false",
         "FRAMEWORK": "sglang",
         **overrides,
@@ -166,6 +166,25 @@ def frontend(*models: str):
     )
 
 
+@pytest.mark.parametrize("client_failed", [True, False])
+def test_single_node_does_not_report_success_without_a_completed_window(
+    tmp_path, tools, client_failed,
+):
+    windows = tmp_path / "logs" / "power" / "windows"
+    if client_failed:
+        windows.mkdir(parents=True)
+    env = single_node_env(
+        tmp_path, tools, SRT_MEASUREMENT_WINDOW_DIR=str(windows),
+        FAKE_CLIENT_FAIL_CONC="4" if client_failed else "",
+    )
+
+    result = run_shim("single_node/srt_fixed_sequence.sh", env)
+
+    assert result.returncode == (3 if client_failed else 1)
+    assert len(client_runs(tmp_path)) == 1
+    assert not (windows / "point_conc4.json").exists()
+
+
 @pytest.mark.parametrize(
     ("framework", "chat_template", "args", "flags"),
     [
@@ -173,10 +192,15 @@ def frontend(*models: str):
         ("trt", "false", ["--trust-remote-code"], {"--backend": "openai", "--trust-remote-code": True}),
     ],
 )
-def test_single_node_shim_runs_one_point_under_the_monitor(
+def test_single_node_shim_runs_one_point_with_native_power(
     tmp_path, tools, framework, chat_template, args, flags
 ):
-    env = single_node_env(tmp_path, tools, FRAMEWORK=framework, USE_CHAT_TEMPLATE=chat_template)
+    windows = tmp_path / "logs" / "power" / "windows"
+    windows.mkdir(parents=True)
+    env = single_node_env(
+        tmp_path, tools, FRAMEWORK=framework, USE_CHAT_TEMPLATE=chat_template,
+        SRT_MEASUREMENT_WINDOW_DIR=str(windows),
+    )
 
     result = run_shim("single_node/srt_fixed_sequence.sh", env, *args)
 
@@ -198,11 +222,15 @@ def test_single_node_shim_runs_one_point_under_the_monitor(
         **flags,
     }
     assert (logs / "point_conc4.json").is_file()
-    # The sampler was already writing when the client started and stopped after it.
-    assert run["monitored"]
+    assert not run["monitored"]
     # The shim sets PYTHONSAFEPATH for infx.bench only; Python-script tools break under it.
     assert run["safe_path"] is None
-    assert (logs / "gpu_metrics.csv").read_text().endswith(FINAL_SAMPLE + "\n")
+    assert not (logs / "gpu_metrics.csv").exists()
+    window = json.loads((windows / "point_conc4.json").read_text())
+    assert window["result_path"] == "point_conc4.json"
+    assert window["concurrency"] == 4
+    assert (window["benchmark_start_time_unix"], window["benchmark_end_time_unix"]) == (100, 160)
+    assert window["status"] == "completed"
     assert (tmp_path / "pip3.log").read_text() == (
         "install --break-system-packages sentencepiece datasets pandas\n"
     )
@@ -216,8 +244,10 @@ def test_single_node_shim_runs_one_point_under_the_monitor(
         ({"FRAMEWORK": "vllm"}, 1, "ERROR: unsupported fixed-sequence FRAMEWORK: vllm\n"),
         ({"USE_CHAT_TEMPLATE": "yes"}, 1, "ERROR: USE_CHAT_TEMPLATE must be true or false, got 'yes'\n"),
         ({"RESULT_DIR": "/nonexistent/logs"}, 1, "ERROR: RESULT_DIR must be an existing"),
+        ({}, 1, "SRT_MEASUREMENT_WINDOW_DIR"),
     ],
-    ids=["eval-only", "missing", "unsupported-framework", "malformed-flag", "no-result-dir"],
+    ids=["eval-only", "missing", "unsupported-framework", "malformed-flag", "no-result-dir",
+         "missing-native-power"],
 )
 def test_single_node_point_runs_nothing_when_eval_only_or_misconfigured(
     tmp_path, tools, monkeypatch, capsys, overrides, returncode, reported

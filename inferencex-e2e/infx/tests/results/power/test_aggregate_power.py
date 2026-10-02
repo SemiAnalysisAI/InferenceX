@@ -1062,7 +1062,7 @@ def _write_snapshot_pair(
     start: dict[str, float],
     end: dict[str, float],
 ) -> None:
-    """Sidecars named exactly as infx.bench.gpu_monitor writes them."""
+    """Retained sidecars from the legacy direct-SMI collector."""
     _write_energy_snapshot(csv.parent / "gpu_metrics_energy_start.csv", start)
     _write_energy_snapshot(csv.parent / "gpu_metrics_energy_end.csv", end)
 

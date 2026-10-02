@@ -9211,3 +9211,10 @@
     - "Add --attention-config '{\"indexer_kv_dtype\":\"mxfp4\",\"indexer_sparse_logits\":true}' and --block-size 128 to enable the vllm-project/vllm#58671 ROCm paged MXFP4 sparse-logits indexer, replacing the dense fp8 indexer path. A live A/B test (TP2 c16, matched 900s window, vllm-project/vllm#58208 reverted via vllm-project/vllm#59125 so the dense fallback doesn't crash) measured +14.7/+14.9% p50/p90 interactivity and -9.5/-10.8% p50/p90 e2e latency over the dense path, with throughput/GPU unchanged."
     - "Drop c128 from both TP2 and TP4. Neither c128 point was on the Pareto frontier in #3555's run 36528242520: TP2 c64 dominated both (P90 E2EL 58 s against 185 s and 85 s, at 111k against 85k and 79k total tok/s/GPU)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3571
+
+- config-keys:
+    - "*"
+  description:
+    - "Remove client-side GPU sampling from SRT fixed-sequence and AgentX benchmarks. Use native telemetry measurement windows and route single-node native power packages through the shared artifact consumer; retain the legacy CSV result reader."
+    - "Requires native telemetry enablement, artifact retention and AgentX finalization in the launcher before rollout across affected single-node lanes."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX

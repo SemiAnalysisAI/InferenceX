@@ -6,7 +6,7 @@ import argparse
 from dataclasses import dataclass
 from pathlib import Path
 
-from infx.bench import env, gpu_monitor, proc, server
+from infx.bench import env, proc, server
 
 # The client needs numpy and transformers, so it runs in a child, never in this process.
 PYTHON = "python3"
@@ -83,11 +83,11 @@ def served_model(base_url: str) -> str:
 
 
 def srt_single(args: argparse.Namespace) -> int:
-    """One srt-slurm single-node point under the GPU monitor; srt-slurm owns the server."""
+    """One single-node point; srt-slurm owns the server and power sampling."""
     values = env.require(
         "MODEL", "CONC", "ISL", "OSL", "RANDOM_RANGE_RATIO", "RESULT_FILENAME", "RESULT_DIR",
         "SRT_FRONTEND_HOST", "SRT_FRONTEND_PORT", "RUN_EVAL", "EVAL_ONLY",
-        "GPU_MONITOR_INTERVAL", "USE_CHAT_TEMPLATE", "FRAMEWORK",
+        "USE_CHAT_TEMPLATE", "FRAMEWORK",
     )  # fmt: skip
     env.flag("RUN_EVAL")
     eval_only = env.flag("EVAL_ONLY")
@@ -109,16 +109,21 @@ def srt_single(args: argparse.Namespace) -> int:
         use_chat_template=env.flag("USE_CHAT_TEMPLATE"),
         trust_remote_code=args.trust_remote_code,
     )
-    interval = env.positive_int("GPU_MONITOR_INTERVAL")
     if not result_dir.is_dir():
         raise env.InputError("RESULT_DIR must be an existing runtime-provided directory")
     if eval_only:
         print("EVAL_ONLY mode: skipping throughput benchmark", flush=True)
         return 0
+    # Removing the local sampler must not silently turn measured points into unmeasured ones.
+    env.require("SRT_MEASUREMENT_WINDOW_DIR")
     rc = proc.call(SINGLE_NODE_DEPENDENCIES)
     if rc:
         return rc
-    return gpu_monitor.run(result_dir / "gpu_metrics.csv", interval, client_argv(point))
+    with proc.RelaySignals() as relay:
+        rc = relay.run(client_argv(point))
+        if rc:
+            return rc
+        return relay.run([PYTHON, "-m", "infx.results.power.window", str(point.result), str(conc)])
 
 
 def srt_sweep(args: argparse.Namespace) -> int:
