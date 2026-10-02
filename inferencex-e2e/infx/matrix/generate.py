@@ -797,7 +797,8 @@ def mark_all_eval_entries(matrix_values: list[dict]) -> list[dict]:
             entry = {
                 key: value
                 for key, value in entry.items()
-                if key not in (
+                if key
+                not in (
                     Fields.EVAL_FRAMEWORK.value,
                     Fields.EVAL_SUITE.value,
                     Fields.EVAL_CONC.value,
