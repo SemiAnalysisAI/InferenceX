@@ -25,6 +25,7 @@ This is the short orientation page for agents modifying InferenceX. [`AGENTS.md`
 | Task and reference routing | [`index.md`](index.md) |
 | Recurring operational checklists | [`procedures.md`](procedures.md) |
 | PR review, sweep reuse, and merge policy | [`CONTRIBUTING.md`](../../CONTRIBUTING.md) |
+| PR sweep labels, modifiers, canary, and fail-fast | [`ci-procedures.md`](ci-procedures.md#pr-primary-and-modifier-labels) |
 | Verification depth and evidence standards | [`testing.md`](testing.md) |
 | Failure classification and safe remediation | [`troubleshooting.md`](troubleshooting.md) |
 
