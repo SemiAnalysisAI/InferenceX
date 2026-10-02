@@ -1077,7 +1077,7 @@ dsv41flash-fp4-mi300x-vllm-agentic-dspark:
       # checkpoint at TP2 with a usable KV pool; MI325X does it on 256 GB.
 
 glm5.3-fp8-mi325x-sglang-disagg-agentic-umbp:
-  image: lmsysorg/sglang-rocm:v0.5.21-rocm724-mi30x-20261001@sha256:0f59a7f04fbd3a4d2d7c1de6c89345069125650651018726279e209e54f6977f
+  image: lmsysorg/sglang-rocm:v0.5.21-rocm720-mi30x-20261001@sha256:8190c29f67bdb65f41e0254efc72e60daa5117b7212e86a46aad5bf4b145f1b4
   model: zai-org/GLM-5.3
   model-prefix: glm5.3
   runner: cluster:mi325x-amd
@@ -1108,7 +1108,7 @@ glm5.3-fp8-mi325x-sglang-disagg-agentic-umbp:
           dp-attn: false
 
 glm5.3-fp8-mi325x-sglang-agentic-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.21-rocm724-mi30x-20261001@sha256:0f59a7f04fbd3a4d2d7c1de6c89345069125650651018726279e209e54f6977f
+  image: lmsysorg/sglang-rocm:v0.5.21-rocm720-mi30x-20261001@sha256:8190c29f67bdb65f41e0254efc72e60daa5117b7212e86a46aad5bf4b145f1b4
   model: zai-org/GLM-5.3
   model-prefix: glm5.3
   runner: cluster:mi325x-amd
