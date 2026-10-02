@@ -113,3 +113,15 @@ override_tp4_fp8kv_c1:
     env:
       CONC: '1'
       KV_OFFLOADING: none
+
+override_tp8_c4:
+  roles:
+    agg:
+      args:
+        max-total-tokens: null
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
+  benchmark:
+    env:
+      CONC: '4'
+      KV_OFFLOADING: none
