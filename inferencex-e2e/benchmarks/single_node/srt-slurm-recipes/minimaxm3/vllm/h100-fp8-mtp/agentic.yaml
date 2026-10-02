@@ -125,7 +125,7 @@ override_tp8_c5:
 # 5 GiB CPU weight offload and the 4 GiB local buffer = 134 GB.
 override_tp8_c6_dram:
   # The worker's Mooncake client and the master run the same pinned release.
-  setup_script: vllm-mooncake-0.3.11.sh
+  setup_script: vllm-mooncake-0.3.13.sh
   services:
     - name: mooncake-master
       type: mooncake-master
@@ -136,7 +136,7 @@ override_tp8_c6_dram:
       preamble: >-
         pip_install=(python3 -m pip install);
         python3 -m pip install --help 2>/dev/null | grep -q -- --break-system-packages && pip_install+=(--break-system-packages);
-        "${pip_install[@]}" --no-cache-dir --no-deps --force-reinstall mooncake-transfer-engine-cuda13==0.3.11.post1
+        "${pip_install[@]}" --no-cache-dir --no-deps --force-reinstall mooncake-transfer-engine-cuda13==0.3.13.post1
       args:
         - '--eviction_high_watermark_ratio=0.80'
         - '--eviction_ratio=0.10'
@@ -163,6 +163,7 @@ override_tp8_c6_dram:
         MC_SLICE_SIZE: '8388608'
         MC_WORKERS_PER_CTX: '4'
         MC_TCP_ENABLE_CONNECTION_POOL: '1'
+        MC_TCP_LANES_PER_PEER: '4'
         MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
   benchmark:
     env:
@@ -174,7 +175,7 @@ override_tp8_c6_dram:
 
 override_tp8_c8_dram:
   # The worker's Mooncake client and the master run the same pinned release.
-  setup_script: vllm-mooncake-0.3.11.sh
+  setup_script: vllm-mooncake-0.3.13.sh
   services:
     - name: mooncake-master
       type: mooncake-master
@@ -185,7 +186,7 @@ override_tp8_c8_dram:
       preamble: >-
         pip_install=(python3 -m pip install);
         python3 -m pip install --help 2>/dev/null | grep -q -- --break-system-packages && pip_install+=(--break-system-packages);
-        "${pip_install[@]}" --no-cache-dir --no-deps --force-reinstall mooncake-transfer-engine-cuda13==0.3.11.post1
+        "${pip_install[@]}" --no-cache-dir --no-deps --force-reinstall mooncake-transfer-engine-cuda13==0.3.13.post1
       args:
         - '--eviction_high_watermark_ratio=0.80'
         - '--eviction_ratio=0.10'
@@ -212,6 +213,7 @@ override_tp8_c8_dram:
         MC_SLICE_SIZE: '8388608'
         MC_WORKERS_PER_CTX: '4'
         MC_TCP_ENABLE_CONNECTION_POOL: '1'
+        MC_TCP_LANES_PER_PEER: '4'
         MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
   benchmark:
     env:
