@@ -320,17 +320,18 @@ Mooncake 指标干净时，于约 98–100% GPU KV 下挂起在 DCP PYNCCL
 `AssertionError: load_async must be True for better performance`，故恢复必需的
 stock true），但不要在该 DSXE 单 rail 路径上启用
 `compact_group_io`（c8 上曾对约 25 MiB 的 compact-group put 产生大量失败）。
-Direct DCP A2A 关闭（`VLLM_USE_DIRECT_DCP_A2A=0`）；保持
-`VLLM_USE_DIRECT_DCP_Q_GATHER=1` 与 `VLLM_USE_DIRECT_DCP_KV_GATHER=1`
-（tip 1f837c46 的 eval-only c8 在关闭 Q gather 后于 `dcp:0` 之后挂起约 8.5
-分钟，随后 EP `ncclCommInitRank` 失败；tip bed9f1ce 的 c40 在关闭 KV gather
-时于 PyNCCL `kv_gather` `_ALLGATHER_BASE` 挂起，`last started work: -1`，A2A=0
-与 util 0.85 未能消除）。不要在此设置 `MC_MAX_MR_SIZE`：设为 4GiB 时各 rank
-对约 40 GiB KV 区域报 `register_buffer failed ... -600`，并引发
-`AddressNotRegistered` TRANSFER_FAIL（c2/c32）；加入该变量之前的 tip 注册正常。
-此路径保持关闭 `enable-cumem-allocator`。CONC 24+ 将 `gpu-memory-utilization`
-保持为 0.85（tip b70e4260a 的 c48 在 `VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0`
-与 0.92 下以 45.2 GiB KV 完成 Application startup，随后在 flashinfer FP4 MoE
+保持 `VLLM_USE_DIRECT_DCP_A2A=1`、`VLLM_USE_DIRECT_DCP_Q_GATHER=1` 与
+`VLLM_USE_DIRECT_DCP_KV_GATHER=1`（tip 1f837c46 的 eval-only c8 在关闭 Q gather
+后于 `dcp:0` 之后挂起约 8.5 分钟，随后 EP `ncclCommInitRank` 失败；tip
+bed9f1ce 的 c40 在关闭 KV gather 时于 PyNCCL `kv_gather` `_ALLGATHER_BASE`
+挂起，`last started work: -1`；tip 68cdcc58 的 c24 在关闭 A2A 且 Q/KV direct
+gather 已生效时，于 PyNCCL `ALLTOALL_BASE` / `dcp_a2a_lse_reduce` 挂起）。
+不要在此设置 `MC_MAX_MR_SIZE`：设为 4GiB 时各 rank 对约 40 GiB KV 区域报
+`register_buffer failed ... -600`，并引发 `AddressNotRegistered`
+TRANSFER_FAIL（c2/c32）；加入该变量之前的 tip 注册正常。此路径保持关闭
+`enable-cumem-allocator`。CONC 24+ 将 `gpu-memory-utilization` 保持为 0.85
+（tip b70e4260a 的 c48 在 `VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0` 与 0.92
+下以 45.2 GiB KV 完成 Application startup，随后在 flashinfer FP4 MoE
 `prepare_moe` 申请约 2.89 GiB 时仅剩约 2.3 GiB 空闲而 OOM；vLLM 在计入 CUDA
 graph 后建议约 36.78 GiB KV）。
 

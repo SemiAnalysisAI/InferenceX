@@ -94,17 +94,18 @@ base:
         VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION: '1'
         VLLM_USE_V2_MODEL_RUNNER: '1'
         # Tip 1f837c46 eval-only c8 hung ~8.5m after dcp:0 then failed EP
-        # PyNccl ncclCommInitRank (remote process exited) with Q_GATHER=0;
-        # restore Q gather. Keep A2A off (dcp allreduce stays PYNCCL). load_async
-        # must stay true.
-        VLLM_USE_DIRECT_DCP_A2A: '0'
+        # PyNccl ncclCommInitRank with Q_GATHER=0; keep Q gather on. Tip
+        # 68cdcc58 c24 (Slurm 6814): with A2A=0 the hang moved to PyNCCL
+        # ALLTOALL_BASE in dcp_a2a_lse_reduce (dcp.py:765; last started work:
+        # -1) after ~43m serve — direct Q/KV gathers were already active.
+        # Enable direct A2A (GB300 DCP8 / B200 stock). load_async must stay true.
+        VLLM_USE_DIRECT_DCP_A2A: '1'
         VLLM_USE_DIRECT_DCP_Q_GATHER: '1'
         # Tip bed9f1ce c40 (Slurm 6765): with KV_GATHER=0 the hang is PyNCCL
         # kv_gather _ALLGATHER_BASE (dcp.py:1413; last started work: -1) after
-        # ~42m serve / GPU KV ~86-100%, Mooncake failed_keys=0. A2A=0 and util
-        # 0.85 did not clear it. Re-enable direct KV gather (GB300 DCP8 /
-        # B200 Mooncake stock); prior multimem/memcpy with KV_GATHER=1 was under
-        # util 0.92 before the 0.85 headroom cut.
+        # ~42m serve / GPU KV ~86-100%, Mooncake failed_keys=0. Re-enable direct
+        # KV gather (GB300 DCP8 / B200 Mooncake stock); tip 68cdcc58 confirmed
+        # "Using direct symmetric-memory DCP chunked-context KV gather".
         VLLM_USE_DIRECT_DCP_KV_GATHER: '1'
         VLLM_ENGINE_READY_TIMEOUT_S: '3600'
         VLLM_RPC_TIMEOUT: '600000'

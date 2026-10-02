@@ -346,15 +346,17 @@ async loads and clean Mooncake metrics; `last started work: -1`. Tip ea88d652
 canary c1 crashed with Mooncake `AssertionError: load_async must be True for
 better performance` when `load_async` was set false, so restore the required
 stock true), but do not enable `compact_group_io` on this DSXE single-rail path
-(it storm-failed ~25 MiB compact-group puts at c8). Direct DCP A2A is off (`VLLM_USE_DIRECT_DCP_A2A=0`); keep
-`VLLM_USE_DIRECT_DCP_Q_GATHER=1` and `VLLM_USE_DIRECT_DCP_KV_GATHER=1` (tip
-1f837c46 eval-only c8 hung ~8.5m after `dcp:0` then failed EP
-`ncclCommInitRank` with Q gather off; tip bed9f1ce c40 hung in PyNCCL
-`kv_gather` `_ALLGATHER_BASE` with `last started work: -1` when KV gather was
-off — A2A=0 and util 0.85 did not clear it). Do not set `MC_MAX_MR_SIZE` here:
-with 4GiB every rank hit `register_buffer failed ... -600` on the ~40 GiB KV
-region and stormed `AddressNotRegistered` TRANSFER_FAIL (c2/c32); pre-`MC_MAX_MR`
-tips registered cleanly. Keep `enable-cumem-allocator` off on this path. Keep
+(it storm-failed ~25 MiB compact-group puts at c8). Keep
+`VLLM_USE_DIRECT_DCP_A2A=1`, `VLLM_USE_DIRECT_DCP_Q_GATHER=1`, and
+`VLLM_USE_DIRECT_DCP_KV_GATHER=1` (tip 1f837c46 eval-only c8 hung ~8.5m after
+`dcp:0` then failed EP `ncclCommInitRank` with Q gather off; tip bed9f1ce c40
+hung in PyNCCL `kv_gather` `_ALLGATHER_BASE` with `last started work: -1` when
+KV gather was off; tip 68cdcc58 c24 then hung in PyNCCL `ALLTOALL_BASE` inside
+`dcp_a2a_lse_reduce` with A2A off while direct Q/KV gathers were already active).
+Do not set `MC_MAX_MR_SIZE` here: with 4GiB every rank hit
+`register_buffer failed ... -600` on the ~40 GiB KV region and stormed
+`AddressNotRegistered` TRANSFER_FAIL (c2/c32); pre-`MC_MAX_MR` tips registered
+cleanly. Keep `enable-cumem-allocator` off on this path. Keep
 `gpu-memory-utilization` at 0.85 for CONC 24+ (tip b70e4260a c48 reached
 Application startup with KV 45.2 GiB at 0.92 under
 `VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0`, then OOMed in flashinfer FP4 MoE
