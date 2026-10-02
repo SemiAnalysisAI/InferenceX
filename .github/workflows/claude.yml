@@ -149,7 +149,7 @@ jobs:
             **IMPORTANT: Keep runs precise and efficient:**
             - Use `full-sweep` with filter flags to narrow down the benchmark scope - "full-sweep" does NOT mean running everything
             - When using `full-sweep`, you must use `--min-conc` and `--max-conc` together to specify a single concurrency value. Unless prompted otherwise, use `--min-conc 4 --max-conc 4`
-            - For fixed-sequence runs, use `--seq-lens 8k1k`. Use `1k1k` only for the explicitly retained GLM-5.1 B200 TileRT config. Consult `inferencex-e2e/docs/MODELS.md` for model-specific scenario eligibility.
+            - For fixed-sequence runs, use `--seq-lens 8k1k`; 1k1k is retired for all models. Consult `inferencex-e2e/docs/MODELS.md` for model-specific scenario eligibility.
             - Use `test-config` ONLY when given specific config keys to test - Use `--config-files`, `--config-keys`, and `--conc` flags ONLY
             - Always filter by specific models, frameworks, precision, conc, or config keys when possible
 
@@ -566,6 +566,6 @@ jobs:
 
             **Deprecation validation:**
             - Reject new active entries for retired models, scenarios, or precisions unless `inferencex-e2e/docs/MODELS.md` explicitly documents an exception.
-            - Preserve the GLM-5.1 B200 TileRT exception and the conditional non-speculative AgentX policy; do not infer retirement from the existence of a speculative counterpart.
+            - Preserve the conditional non-speculative AgentX policy; do not infer retirement from the existence of a speculative counterpart.
             - Retired entries are deleted from the master configs, not archived, following `AGENTS.md`; git history and `inferencex-e2e/perf-changelog.yaml` are the historical record.
             - For a newly supported model, require matching updates to `inferencex-e2e/docs/MODELS.md` and `inferencex-e2e/docs/MODELS_zh.md` rather than rejecting it against an obsolete model list.
