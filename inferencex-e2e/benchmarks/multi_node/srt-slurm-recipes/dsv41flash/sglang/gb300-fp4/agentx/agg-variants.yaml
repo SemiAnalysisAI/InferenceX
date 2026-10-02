@@ -1,0 +1,168 @@
+# AgentX dsv41flash sglang gb300-fp4 recipes (Dynamo frontend + SGLang, AGGREGATED
+# topology): shared settings in base, one override per benchmark point. Select one
+# with CONFIG_FILE=recipes/dsv41flash/sglang/gb300-fp4/agentx/agg-variants.yaml:override_<name>.
+#
+# One SGLang worker serves prefill and decode with the checkpoint's bundled DSpark
+# draft (block size 5); the Dynamo frontend routes with the KV-aware router and
+# session affinity. The aggregated arms are the two lowest-latency points of the
+# curve; everything from c16 to c256 comes from the disaggregated recipes in
+# disagg-variants.yaml. Measured on GB300 NVL72 (tokens/s/GPU @ P90 interactivity,
+# P90 TTFT; both GSM8K gates passed):
+#   override_tp4_c1 :  6,215 @ 385.0 tok/s/user, 1.2 s  (4 GPUs; GSM8K 0.9735)
+#   override_tp2_c1 : 12,501 @ 377.1 tok/s/user, 0.9 s  (2 GPUs; GSM8K 0.9735)
+# The aggregated c64 cells (prefill-decode-interval 8: 159,510 @ 62.7; interval 16:
+# 153,542 @ 83.3) were measured as well but are dominated by the disaggregated
+# HiCache cells and are not shipped. The two c1 arms are the highest-interactivity
+# points of the curve (above the
+# published MI355X ATOM curve's last vertex at 336.7 tok/s/user); at c1 the AgentX
+# client replays the trace's idle gaps, so a single lane is client-bound and a second
+# user on the same worker only lowers the P90 (TP2 c2: 12,538 @ 306.8). The harness
+# applies the golden acceptance length (3.51 at K=5) itself.
+
+schema: 2
+
+base:
+  name: dsv41flash-fp4-gb300-dynamo-sglang-agentx-agg
+  model:
+    path: hf:deepseek-ai/DeepSeek-V4.1-Flash
+    container: lmsysorg/sglang:nightly-dev-20260928-81f27fb3@sha256:d9e4917808cfaa4b3be033a0c85a3a73d71eb93c17accbfa2ac3e96f551f3a33
+    precision: fp4
+  identity:
+    model:
+      repo: deepseek-ai/DeepSeek-V4.1-Flash
+  dynamo:
+    install: true
+    source:
+      wheel: "1.6.0.dev20260928"
+  slurm:
+    time_limit: "4:00:00"
+  # Cold weight loads from the shared HF cache plus graph capture take 15-20 min.
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 10
+  resources:
+    gpu_type: gb300
+    gpus_per_node: 4
+  # Dynamo 1.6 uses the TCP request plane; etcd is the only discovery service needed.
+  services:
+    - name: etcd
+      type: etcd
+      placement:
+        node: infra
+  frontend:
+    type: dynamo
+    enable_multiple_frontends: false
+    env:
+      PIP_BREAK_SYSTEM_PACKAGES: "1"
+      DYN_NATS_REQUEST_TIMEOUT_SECS: "1800"
+    args:
+      router-mode: kv
+      router-session-affinity-ttl-secs: "3600"
+      active-decode-blocks-threshold: "None"
+      active-prefill-tokens-threshold: "None"
+      active-prefill-tokens-threshold-frac: "None"
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 2
+      env:
+        PIP_BREAK_SYSTEM_PACKAGES: "1"
+        PYTHONNOUSERSITE: "1"
+        PYTHONUNBUFFERED: "1"
+        HF_HUB_CACHE: /hf_hub_cache
+        # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
+        SGLANG_TIMEOUT_KEEP_ALIVE: "900"
+        # AgentX measures thinking on, the regime of the golden acceptance curve.
+        SGLANG_DEFAULT_THINKING: "1"
+        SGLANG_DSV41_REASONING_EFFORT: high
+        SGLANG_DSPARK_OPT_MARKOV_W2_BF16: "True"
+        # TP2 keeps the row-sharded Engram tables in host DRAM.
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: "1"
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
+      args:
+        served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
+        trust-remote-code: true
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        mem-fraction-static: 0.8
+        # Keep active decode requests progressing while long prefixes are queued.
+        prefill-decode-interval: 16
+        # Admission never exceeds the captured decode graph batch.
+        cuda-graph-max-bs-decode: 64
+        # DSpark is the checkpoint's bundled draft; the block size is its only knob.
+        speculative-algorithm: DSPARK
+        speculative-dspark-block-size: 5
+        reasoning-parser: auto
+        tool-call-parser: auto
+        # Draft passes under long-context load outlast the 1800 s default watchdog.
+        watchdog-timeout: 3600
+        enable-metrics: true
+        weight-loader-prefetch-checkpoints: true
+        weight-loader-drop-cache-after-load: false
+        model-loader-extra-config: '{"enable_multithread_load":true}'
+  sbatch_directives:
+    mem: "0"
+    exclusive: ""
+  srun_options:
+    container-remap-root: ""
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
+    env:
+      INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
+      RESULT_DIR: /logs/agentic
+      PORT: "8000"
+      IS_MULTINODE: "false"
+      MODEL: deepseek-ai/DeepSeek-V4.1-Flash
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
+      AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
+      AIPERF_DATASET_MMAP_CACHE_DIR: /aiperf_mmap_cache
+      HF_HUB_CACHE: /hf_hub_cache
+      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
+      AIPERF_HTTP_TCP_USER_TIMEOUT: "900000"
+      TP: "2"
+      PP_SIZE: "1"
+      PCP_SIZE: "1"
+
+# Lowest-latency arm: one pure TP4 (EP1) worker on all four GPUs at c1, the standalone
+# recipe's override_tp4_c1 behind the Dynamo frontend: static ragged verify, Engram
+# tables in HBM (host-table path off), admission 2x CONC, 4096-token prefill chunks.
+override_tp4_c1:
+  name: agg-gb300-tp4ep1-c1
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 1
+        chunked-prefill-size: 4096
+        max-running-requests: 2
+      env:
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: "0"
+        SGLANG_RAGGED_VERIFY_MODE: static
+  benchmark:
+    env:
+      CONC: "1"
+      TP: "4"
+      AGENTIC_WARMUP_GRACE_PERIOD: "1800"
+
+# Two-GPU c1 arm: the base TP2/EP2 worker with the Engram tables in host DRAM, static
+# ragged verify, 4096-token prefill chunks and admission 2x CONC: 12,501 tokens/s/GPU
+# @ 377.1 tok/s/user, P90 TTFT 0.90 s - twice the tokens/s/GPU of the TP4 c1 arm at a
+# 2% lower P90 interactivity.
+override_tp2_c1:
+  name: agg-gb300-tp2ep2-c1
+  roles:
+    agg:
+      args:
+        chunked-prefill-size: 4096
+        max-running-requests: 2
+      env:
+        SGLANG_RAGGED_VERIFY_MODE: static
+  benchmark:
+    env:
+      CONC: "1"
+      AGENTIC_WARMUP_GRACE_PERIOD: "1800"
