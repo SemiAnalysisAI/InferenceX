@@ -1,4 +1,4 @@
-# GPU-resident GLM-5.3 reference for the MoRI/UMBP P/D comparison.
+# GLM-5.3 aggregate reference and native UMBP offload comparison.
 base:
   schema: 2
   name: glm5.3-fp8-mi300x-sglang-agentic
@@ -65,3 +65,45 @@ override_tp8_c1:
   benchmark:
     env:
       CONC: "1"
+      KV_OFFLOADING: none
+
+override_tp8_umbp_c1:
+  services:
+    - name: umbp
+      type: generic
+      placement:
+        node: agg
+      start: before_workers
+      critical: true
+      inherit_discovery_env: false
+      command:
+        - /sgl-workspace/mori/python/mori/umbp_standalone_server
+        - unix:///logs/umbp.sock
+      env:
+        UMBP_DRAM_CAPACITY: "519000000000"
+        UMBP_DRAM_USE_HUGEPAGES: "0"
+        UMBP_SSD_ENABLED: "0"
+        MORI_UMBP_LOG_LEVEL: info
+      preamble: |
+        export LD_LIBRARY_PATH="/sgl-workspace/mori/python/mori:${LD_LIBRARY_PATH}"
+      readiness:
+        log:
+          pattern: host memory registered for GPU access
+        timeout_seconds: 5400
+        interval_seconds: 1
+  roles:
+    agg:
+      args:
+        max-running-requests: 2
+        cuda-graph-max-bs-decode: 2
+        enable-unified-cache-external-linker: true
+        unified-cache-external-linker-backend: mori
+        hicache-storage-backend-extra-config: '{"standalone_startup_timeout_ms":120000}'
+      env:
+        SGLANG_ENABLE_UNIFIED_RADIX_TREE: "1"
+        UMBP_STANDALONE_ADDRESS: unix:///logs/umbp.sock
+  benchmark:
+    env:
+      CONC: "1"
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: "519"
