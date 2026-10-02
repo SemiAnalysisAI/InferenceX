@@ -6,7 +6,7 @@ This document tracks every model benchmarked by InferenceX-e2e: when it was adde
 
 ## Review and merge SLO
 
-Following the principles of fairness and equitableness, the service-level objective (SLO) we aim for when reviewing and merging PRs is `max(1 day, vendor response time)`, measured from when we are pinged in Slack. Vendor response time is the time vendors take to respond to InferenceX core maintainers' questions, messages, PRs, requests for follow-up reviews, etc. We will probably review and merge PRs sooner than this formula allows, but this is the SLO we aim for.
+Following the principles of fairness and equitableness, the service-level objective (SLO) we aim for when reviewing and merging PRs is `max(1 day from when pinged on slack, vendor response time)`. Vendor response time is the time vendors take to respond to InferenceX core maintainers' questions, messages, PRs, requests for follow-up reviews, etc. We will probably review and merge PRs sooner than this formula allows, but this is the SLO we aim for.
 
 ## Deprecation Notice
 
