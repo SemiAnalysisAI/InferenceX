@@ -9214,6 +9214,8 @@
 
 - config-keys:
     - glm5.3-fp8-mi325x-sglang-agentic-mtp
+    - glm5.3-fp8-mi325x-sglang-disagg-agentic-umbp
   description:
     - "Add GLM-5.3 FP8 AgentX on MI325X using the pinned October 1 SGLang ROCm 7.2.4 MI30X image and native three-step EAGLE MTP."
+    - "Add native MORI prefill/decode disaggregation with TP8 per role and a prefill-side UMBP DRAM tier through SGLang's unified-cache external linker."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3656
