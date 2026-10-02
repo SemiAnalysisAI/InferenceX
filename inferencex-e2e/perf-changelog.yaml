@@ -9292,3 +9292,12 @@
     - "Pin the H100 DRAM variants to Mooncake 0.3.13.post1 with bounded TCP connection lanes."
     - "将 H100 DRAM 变体固定为 Mooncake 0.3.13.post1，并使用有上限的 TCP 连接通道。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3620
+
+- config-keys:
+    - minimaxm3-fp8-h100-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Set TCP transfer slice size and bounded lane admission settings for the MiniMax-M3 H100 DRAM variants."
+    - "为 MiniMax-M3 H100 DRAM 变体设置 TCP 传输分片大小和有上限的连接通道接纳参数。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3620
