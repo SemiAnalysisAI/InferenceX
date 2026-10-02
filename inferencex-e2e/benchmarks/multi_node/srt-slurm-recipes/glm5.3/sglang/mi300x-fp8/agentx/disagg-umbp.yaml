@@ -82,8 +82,6 @@ base:
         SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "14400"
         SGLANG_HEALTH_CHECK_TIMEOUT: "600"
         SGLANG_TIMEOUT_KEEP_ALIVE: "1800"
-        SGLANG_DSA_FUSE_TOPK: "false"
-        SGLANG_OPT_USE_TOPK_V2: "false"
         UMBP_STANDALONE_ADDRESS: unix:///logs/umbp.sock
       args: &worker_args
         served-model-name: zai-org/GLM-5.3
@@ -93,7 +91,7 @@ base:
         expert-parallel-size: 1
         dsa-prefill-backend: tilelang
         dsa-decode-backend: tilelang
-        dsa-topk-backend: torch
+        dsa-topk-backend: sgl-kernel
         kv-cache-dtype: fp8_e4m3
         page-size: 64
         tool-call-parser: glm47
