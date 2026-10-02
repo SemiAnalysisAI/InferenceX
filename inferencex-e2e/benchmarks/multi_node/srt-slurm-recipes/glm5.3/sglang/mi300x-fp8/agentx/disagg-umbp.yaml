@@ -157,7 +157,7 @@ override_p_tp8_d_dep8_c4:
       args:
         max-running-requests: 8
         cuda-graph-max-bs-decode: 8
-    decode:
+    decode: &dep8_decode
       env:
         # STP decode is bounded by 16 requests, not the prefill-sized default.
         SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "128"
@@ -172,3 +172,26 @@ override_p_tp8_d_dep8_c4:
   benchmark:
     env:
       CONC: "4"
+
+override_p_dep8_d_dep8_c8:
+  frontend:
+    args:
+      dp-aware: true
+  roles:
+    prefill:
+      env:
+        # Attention DP divides the 8192-token prefill budget across eight ranks.
+        SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "1024"
+      args:
+        expert-parallel-size: 8
+        data-parallel-size: 8
+        enable-dp-attention: true
+        moe-a2a-backend: mori
+        deepep-mode: normal
+        chunked-prefill-size: 8192
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 16
+    decode: *dep8_decode
+  benchmark:
+    env:
+      CONC: "8"
