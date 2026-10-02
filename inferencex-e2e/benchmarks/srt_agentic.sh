@@ -56,14 +56,7 @@ if [[ -z "${AIPERF_SERVER_URL:-}" ]]; then
 fi
 echo "Using srt-slurm frontend endpoint: $AIPERF_SERVER_URL"
 
-# A router frontend does not re-export engine metrics; read them from each worker.
-if [[ -z "${AIPERF_SERVER_METRICS_URLS:-}" && "${SRTCTL_FRONTEND_TYPE:-}" != dynamo ]]; then
-    endpoints="${SRT_AGG_ENDPOINTS:-${SRT_PREFILL_ENDPOINTS:+$SRT_PREFILL_ENDPOINTS,}${SRT_DECODE_ENDPOINTS:-}}"
-    if [[ -n "${endpoints%,}" ]]; then
-        AIPERF_SERVER_METRICS_URLS=$(sed -E 's#([^,]+)#http://\1/metrics#g' <<< "${endpoints%,}")
-        export AIPERF_SERVER_METRICS_URLS
-    fi
-fi
+resolve_srt_worker_server_metrics_urls
 
 resolve_trace_source
 install_agentic_deps

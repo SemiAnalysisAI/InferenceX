@@ -3370,6 +3370,33 @@ write_agentic_result_json() {
     PYTHONPATH="$INFMAX_CONTAINER_WORKSPACE${PYTHONPATH:+:$PYTHONPATH}" "$AIPERF_PYTHON" -m infx.results.generate_aiperf_plots "$result_dir" 2>&1 || true
 }
 
+# A router frontend does not re-export engine metrics; read them from each
+# worker's srt-slurm endpoint. For Dynamo frontends srt-slurm injects worker
+# URLs itself while its TRT-LLM publication flags are on; a recipe that turns
+# them off, but whose workers still serve engine metrics, sets
+# AIPERF_SCRAPE_WORKER_METRICS=true to derive the URLs here instead.
+resolve_srt_worker_server_metrics_urls() {
+    local endpoints
+    case "${AIPERF_SCRAPE_WORKER_METRICS:-}" in
+        ""|true|false) ;;
+        *)
+            echo "ERROR: AIPERF_SCRAPE_WORKER_METRICS must be true or false" >&2
+            return 1
+            ;;
+    esac
+    if [[ -n "${AIPERF_SERVER_METRICS_URLS:-}" ]]; then
+        return 0
+    fi
+    if [[ "${SRTCTL_FRONTEND_TYPE:-}" == dynamo && "${AIPERF_SCRAPE_WORKER_METRICS:-}" != true ]]; then
+        return 0
+    fi
+    endpoints="${SRT_AGG_ENDPOINTS:-${SRT_PREFILL_ENDPOINTS:+$SRT_PREFILL_ENDPOINTS,}${SRT_DECODE_ENDPOINTS:-}}"
+    if [[ -n "${endpoints%,}" ]]; then
+        AIPERF_SERVER_METRICS_URLS=$(sed -E 's#([^,]+)#http://\1/metrics#g' <<< "${endpoints%,}")
+        export AIPERF_SERVER_METRICS_URLS
+    fi
+}
+
 validate_required_agentic_server_metrics() {
     local result_dir="$1"
     local required_prefix="${AIPERF_REQUIRED_SERVER_METRIC_PREFIX:-}"
