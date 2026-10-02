@@ -9275,9 +9275,3 @@
     - "Update the GB300 DeepSeek-V4.1-Flash vLLM AgentX image from nightly ac68c308 to nightly-dev-arm64-cu130-ac9126e58aa7 and enable FlashInfer autotuning."
     - "Run TP4 at concurrency 1-16 and replace TP2 with DEP2 (TP1 x DP2 + EP2, DeepGEMM MegaMoE) at concurrency 8-192 behind a consistent-hash vLLM Router."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3652
-
-- config-keys:
-    - dsv4-fp4-gb200-llmd-vllm
-  description:
-    - "Re-add the GB200 llm-d low-latency 8k1k point (1P DEP8 + 1D TP8, conc 1) to validate llm-d on infx.launch"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3613
