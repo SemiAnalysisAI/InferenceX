@@ -66,7 +66,7 @@ Setup 阶段的删除错误通常意味着陈旧分支或改变空白的合并�
 
 在本地重跑与工作流完全相同的 `generate-cli-command`。先运行精确键 `test-config`，再运行同样过滤的 `full-sweep` 命令；检查发出的镜像、运行器、场景、拓扑、并发、评测标志和附加设置。命令与检查清单位于 [`testing_zh.md`](testing_zh.md#先精确配置再过滤配置族)。
 
-如果没有 GPU 任务启动，先检查 setup，再调查运行器。[`run-sweep.yml`](../../.github/workflows/run-sweep.yml) 会拒绝冲突主标签，不会仅凭评测修饰标签运行，只在 PR head 上接受 `[skip-sweep]`，并等待合并冲突解决。修复输入或标签状态；不要手动分发不同矩阵并把它称为等价证据。
+如果没有 GPU 任务启动，先检查 setup，再调查运行器。[`run-sweep.yml`](../../.github/workflows/run-sweep.yml) 会拒绝冲突主标签，不会仅凭修饰标签（`all-evals`、`evals-only`、`agentx-fast`）运行，只在 PR head 上接受 `[skip-sweep]`，并等待合并冲突解决。修复输入或标签状态；不要手动分发不同矩阵并把它称为等价证据。
 
 当本地矩阵与预期 PR 范围不完全一致时停止。生成器成功但配置错误并不是恢复成功。
 
@@ -157,7 +157,7 @@ Setup 阶段的删除错误通常意味着陈旧分支或改变空白的合并�
 | `gh run rerun --failed` 被拒绝 | [§7](KLAUD_DEBUG.md#7-ci-rerun-mechanics)：检查运行状态/结论；仅已完成的失败支持只重跑失败任务，取消运行需要完整重跑 |
 | MiniMax M3 B300 MSA 报告 `q2k_indices` 不连续 | [§11](KLAUD_DEBUG.md#11-minimax-m3-b300-msa-top-k-slice-is-non-contiguous)：识别 TP1/data-parallel-attention 暴露条件；优先使用上游已修复镜像。提交记录中的引擎补丁须符合当前清单/豁免要求 |
 
-历史 KLAUD 标签或合并建议不能覆盖当前[扫描标签政策](../../.github/AGENT_OPERATIONS.md#sweep-labels-and-reuse)、[`CONTRIBUTING.md`](../../CONTRIBUTING.md) 或 [PR 清单](PR_REVIEW_CHECKLIST.md)。
+历史 KLAUD 标签或合并建议不能覆盖当前[扫描标签政策](../../.github/AGENT_OPERATIONS.md#sweep-labels-and-reuse)、[`CONTRIBUTING_zh.md`](../../CONTRIBUTING_zh.md) 或 [PR 清单](PR_REVIEW_CHECKLIST_zh.md)。
 
 ## 验证与停止条件
 

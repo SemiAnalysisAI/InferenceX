@@ -9182,6 +9182,101 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3611
 
 - config-keys:
+    - dsr1-fp8-mi325x-sglang
+    - dsr1-fp8-mi325x-sglang-mtp
+    - qwen3.5-fp8-mi325x-sglang
+    - qwen3.5-fp8-mi325x-sglang-mtp
+    - qwen3.5-fp8-mi325x-sglang-agentic-mtp
+    - glm5.2-fp8-mi325x-sglang-agentic-mtp
+    - minimaxm3-fp8-mi325x-vllm-agentic-mtp
+    - dsv41flash-fp4-mi325x-vllm-agentic-dspark
+  description:
+    - "Retire the mi325x-amds runner pool and route MI325X workloads to the Barite mi325x-amd pool in MI325X-UBUNTU. Keep model recipes unchanged; generated host-DRAM budgets now use the replacement cluster's declared memory capacity."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3644
+
+- config-keys:
+    - "*"
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump AgentX Harness from agentx-v1.0.5 (754356e9a39acc6cc6afb242d123bb57c3fb6f75) to agentx-v1.0.6 (89b21867872a5bbc4b0676bf5005c404da5e9f94) and use --scenario agentx for shared replay and runtime defaults. Preserve recipe duration, warmup, failure threshold, trace cap, routing and corpus selection as explicit inputs."
+    - "The preset supplies a 900000 ms TCP user timeout when unset; explicit AIPERF environment settings take precedence over preset defaults."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3646
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark
+  description:
+    - "Repin to vllm/vllm-openai-rocm:nightly-rocm100-ac9126e58aa7bbab1856ba6593ba4d5003fea516, which includes vllm-project/vllm#58671, vllm-project/vllm#58655 and vllm-project/vllm#53492."
+    - "Set VLLM_ROCM_USE_AITER_TRITON_SPARSE_MLA=True to enable the vllm-project/vllm#53492 gfx950 Gluon sparse-MLA kernel."
+    - "Add --attention-config '{\"indexer_kv_dtype\":\"mxfp4\",\"indexer_sparse_logits\":true}' and --block-size 128 to enable the vllm-project/vllm#58671 ROCm paged MXFP4 sparse-logits indexer, replacing the dense fp8 indexer path. A live A/B test (TP2 c16, matched 900s window, vllm-project/vllm#58208 reverted via vllm-project/vllm#59125 so the dense fallback doesn't crash) measured +14.7/+14.9% p50/p90 interactivity and -9.5/-10.8% p50/p90 e2e latency over the dense path, with throughput/GPU unchanged."
+    - "Drop c128 from both TP2 and TP4. Neither c128 point was on the Pareto frontier in #3555's run 36528242520: TP2 c64 dominated both (P90 E2EL 58 s against 185 s and 85 s, at 111k against 85k and 79k total tok/s/GPU)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3571
+
+- config-keys:
+    - kimik3-fp4-b200-dynamo-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update Kimi-K3 B200 AgentX to vllm/vllm-openai:nightly-ac9126e58aa7bbab1856ba6593ba4d5003fea516, set bfloat16 KDA state, and add concurrency 32/56/72/80 with TP8/PP2/DCP8 and DSpark K4."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3087
+
+- config-keys:
+    - dsv41flash-fp4-gb300-vllm-agentic-dspark
+  description:
+    - "Pin GB300 DeepSeek-V4.1-Flash vLLM to nightly ac68c308 with FlashInfer sparse attention, MXFP4 indexer KV, sparse logits, fp8 KV cache, and B300's batching and CUDA graph tiers; use FlashInfer CUTLASS for MXFP8 GEMMs to avoid the CuTe-DSL split-K startup failure."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3396
+
+- config-keys:
+    - dsv4-fp4-gb200-dynamo-sglang-agentic-agg
+    - dsv4-fp4-gb200-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add DSV4-Pro GB200 Dynamo+SGLang AgentX: TP8 aggregate C1/C4, 1P1D DEP8/DEP16 C64/C128, 1P1D DEP16/DEP32 C256, and 2P1D DEP16/DEP32 C768/C1024/C1280."
+    - "Use SGLang nightly-dev-20260916-c9a8fba9, DSpark block size 6, and HiCache; omit enable-w4a4-mxfp4-megamoe while retaining the MegaMoE all-to-all backend and FP4 indexer."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3629
+
+- config-keys:
+    - glm5.2-fp4-b200-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-b200-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Disable FP8 conversion of the GLM-5.2 NextN/MTP draft MoE on B200 AgentX so the draft runs at its shipped precision; images, topology, workload and acceptance are unchanged."
+    - "关闭 B200 GLM-5.2 AgentX 对 NextN/MTP draft MoE 的 FP8 转换，使 draft 保持原始发布精度；镜像、拓扑、工作负载和验收不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3400
+
+- config-keys:
+    - glm5.2-fp4-gb300-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Disable FP8 conversion of the GLM-5.2 NextN/MTP draft MoE on GB300 AgentX so the draft runs at its shipped precision; images, topology, workload and acceptance are unchanged."
+    - "Disaggregated prefill and decode use the 1800 s scheduler watchdog of the GLM-5.2 B200/GB200 recipes instead of the 300 s default."
+    - "关闭 GB300 GLM-5.2 AgentX 对 NextN/MTP draft MoE 的 FP8 转换，使 draft 保持原始发布精度；镜像、拓扑、工作负载和验收不变。"
+    - "分离式 prefill 和 decode 采用 GLM-5.2 B200/GB200 配方的 1800 秒调度 watchdog，替代默认 300 秒。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3402
+
+- config-keys:
+    - dsv41flash-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the B300 DeepSeek-V4.1-Flash vLLM AgentX image from nightly ddd6fbca to nightly-dev-x86_64-cu130-ac9126e58aa7 and enable FlashInfer autotuning."
+    - "Run TP4 at concurrency 1-16 and replace TP2 with DEP2 (TP1 x DP2 + EP2, DeepGEMM MegaMoE) at concurrency 8-192 behind a consistent-hash vLLM Router."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3653
+
+- config-keys:
+    - dsv41flash-fp4-gb300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the GB300 DeepSeek-V4.1-Flash vLLM AgentX image from nightly ac68c308 to nightly-dev-arm64-cu130-ac9126e58aa7 and enable FlashInfer autotuning."
+    - "Run TP4 at concurrency 1-16 and replace TP2 with DEP2 (TP1 x DP2 + EP2, DeepGEMM MegaMoE) at concurrency 8-192 behind a consistent-hash vLLM Router."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3652
+
+- config-keys:
     - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-agg
     - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg
   scenario-type:

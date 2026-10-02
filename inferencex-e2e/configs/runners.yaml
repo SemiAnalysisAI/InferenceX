@@ -77,15 +77,15 @@ labels:
     - mi300x-amd_06
     - mi300x-amd_07
   mi325x:
-    - mi325x-amds_00
-    - mi325x-amds_01
-    - mi325x-amds_02
-    - mi325x-amds_03
-    - mi325x-amds_04
-    - mi325x-amds_05
-    - mi325x-amds_06
-    - mi325x-amds_07
-    - mi325x-amds_08
+    - mi325x-amd_00
+    - mi325x-amd_01
+    - mi325x-amd_02
+    - mi325x-amd_03
+    - mi325x-amd_04
+    - mi325x-amd_05
+    - mi325x-amd_06
+    - mi325x-amd_07
+    - mi325x-amd_08
   mi355x:
     - mi355x-amds_00
     - mi355x-amds_01
@@ -153,6 +153,24 @@ labels:
     - gb300-nv_15
     - gb300-nv_16
     - gb300-nv_17
+    - gb300-nv_18
+    - gb300-nv_19
+    - gb300-nv_20
+    - gb300-nv_21
+    - gb300-nv_22
+    - gb300-nv_23
+    - gb300-nv_24
+    - gb300-nv_25
+    - gb300-nv_26
+    - gb300-nv_27
+    - gb300-nv_28
+    - gb300-nv_29
+    - gb300-nv_30
+    - gb300-nv_31
+    - gb300-nv_32
+    - gb300-nv_33
+    - gb300-nv_34
+    - gb300-nv_35
   cluster:h100-cw:
     - h100-cw_00
     - h100-cw_01
@@ -269,6 +287,62 @@ labels:
     - gb300-nv_15
     - gb300-nv_16
     - gb300-nv_17
+    - gb300-nv_18
+    - gb300-nv_19
+    - gb300-nv_20
+    - gb300-nv_21
+    - gb300-nv_22
+    - gb300-nv_23
+    - gb300-nv_24
+    - gb300-nv_25
+    - gb300-nv_26
+    - gb300-nv_27
+    - gb300-nv_28
+    - gb300-nv_29
+    - gb300-nv_30
+    - gb300-nv_31
+    - gb300-nv_32
+    - gb300-nv_33
+    - gb300-nv_34
+    - gb300-nv_35
+  partition:batch_1:
+    - gb300-nv_00
+    - gb300-nv_01
+    - gb300-nv_02
+    - gb300-nv_03
+    - gb300-nv_04
+    - gb300-nv_05
+    - gb300-nv_06
+    - gb300-nv_07
+    - gb300-nv_08
+    - gb300-nv_09
+    - gb300-nv_10
+    - gb300-nv_11
+    - gb300-nv_12
+    - gb300-nv_13
+    - gb300-nv_14
+    - gb300-nv_15
+    - gb300-nv_16
+    - gb300-nv_17
+  partition:batch_3:
+    - gb300-nv_18
+    - gb300-nv_19
+    - gb300-nv_20
+    - gb300-nv_21
+    - gb300-nv_22
+    - gb300-nv_23
+    - gb300-nv_24
+    - gb300-nv_25
+    - gb300-nv_26
+    - gb300-nv_27
+    - gb300-nv_28
+    - gb300-nv_29
+    - gb300-nv_30
+    - gb300-nv_31
+    - gb300-nv_32
+    - gb300-nv_33
+    - gb300-nv_34
+    - gb300-nv_35
   cluster:mi300x-amd:
     - mi300x-amd_00
     - mi300x-amd_01
@@ -278,17 +352,16 @@ labels:
     - mi300x-amd_05
     - mi300x-amd_06
     - mi300x-amd_07
-  cluster:mi325x-amds:
-    - mi325x-amds_00
-    - mi325x-amds_01
-    - mi325x-amds_02
-    - mi325x-amds_03
-    - mi325x-amds_04
-    - mi325x-amds_05
-    - mi325x-amds_06
-    - mi325x-amds_07
-    - mi325x-amds_08
-    - mi325x-amds_09
+  cluster:mi325x-amd:
+    - mi325x-amd_00
+    - mi325x-amd_01
+    - mi325x-amd_02
+    - mi325x-amd_03
+    - mi325x-amd_04
+    - mi325x-amd_05
+    - mi325x-amd_06
+    - mi325x-amd_07
+    - mi325x-amd_08
   cluster:mi355x-amds:
     - mi355x-amds_00
     - mi355x-amds_01
@@ -604,6 +677,7 @@ clusters:
         deepseek-r1-0528: {root: lustre-models, dir: deepseek-r1-0528}
         deepseek-r1-0528-fp4-v2: {root: lustre-models, dir: deepseek-r1-0528-fp4-v2}
         DeepSeek-V4-Pro: {root: lustre-models, dir: DeepSeek-V4-Pro}
+        DeepSeek-V4-Pro-0813: {root: lustre-models, dir: DeepSeek-V4-Pro-0813}
         MiniMax-M3-MXFP8: {root: lustre-models, dir: MiniMax-M3-MXFP8}
         MiniMax-M3-NVFP4: {root: lustre-models, dir: MiniMax-M3-NVFP4}
         Qwen3.5-397B-A17B-FP8: {root: lustre-models, dir: Qwen3.5-397B-A17B-FP8}
@@ -665,6 +739,8 @@ clusters:
     scheduler: slurm
     slurm:
       partition: batch_1
+      # Each runner's partition: label selects one of these allocation domains.
+      partitions: [batch_1, batch_3]
       account: benchmark
       exclusive: false
       volumes:
@@ -728,22 +804,24 @@ clusters:
           /dev/dri: /dev/dri
         extra:
           visible_devices_env: ROCR_VISIBLE_DEVICES
-  mi325x-amds:
+  # Barite shares its login and NFS with mi300x-amd, but not its GPU partition.
+  mi325x-amd:
     gpus-per-node: 8
-    available-cpu-dram-mib: 3_091_589
+    available-cpu-dram-mib: 2_321_549
     arch: x86_64
     scheduler: slurm
     slurm:
-      partition: compute
+      partition: MI325X-UBUNTU
       exclusive: true
       gres: "gpu:{gpus}"
-      cpus-per-task: 256
+      cpus-per-task: 384
       srun-args: [--container-remap-root, --container-writable]
       volumes:
-        hf-hub-cache: {path: /raid/hf-hub-cache, visibility: node-local}
+        hf-hub-cache: {path: /home/ext-cjquilici/inferencex-mi325x-amd/hf-hub-cache}
+        aiperf-cache: {path: /home/ext-cjquilici/inferencex-mi325x-amd/aiperf-cache}
       squash:
-        dir: /raid/squash
-        visibility: node-local
+        dir: /home/ext-cjquilici/inferencex-mi325x-amd/squash
+        visibility: shared
         import: compute
         lock-timeout-s: 600
       srt-slurm:
