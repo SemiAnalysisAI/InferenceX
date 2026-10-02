@@ -111,7 +111,6 @@ jobs:
                           'evals-only': String(labels.includes('evals-only')),
                           'fail-fast': String(primary[0].includes('fail-fast')),
                           'agentx-fast': String(labels.includes('agentx-fast')),
-                          'pr-labels-json': JSON.stringify(labels),
                         },
                       });
 
