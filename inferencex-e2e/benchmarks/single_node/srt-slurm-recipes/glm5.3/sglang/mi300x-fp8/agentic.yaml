@@ -197,3 +197,17 @@ override_tp8_umbp_c8:
     env:
       <<: *umbp_benchmark
       CONC: "8"
+
+override_tp8_umbp_c16:
+  services: *umbp_services
+  roles:
+    agg:
+      args:
+        <<: *umbp_args
+        max-running-requests: 32
+        cuda-graph-max-bs-decode: 32
+      env: *umbp_env
+  benchmark:
+    env:
+      <<: *umbp_benchmark
+      CONC: "16"
