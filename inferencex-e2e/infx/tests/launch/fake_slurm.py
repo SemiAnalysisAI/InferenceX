@@ -29,13 +29,6 @@ case " $* " in
   *" rev-parse HEAD"*) echo "$FAKE_SRT_COMMIT" ;;
 esac
 """,
-    "uv": r"""
-printf '%s\n' "$*" >> "$FAKE_LOG_DIR/uv.log"
-if [[ "$1" == venv ]]; then
-  dest="${@: -1}"; mkdir -p "$dest/bin"
-  printf '#!/bin/bash\nexec "%s" "$@"\n' "$FAKE_PYTHON" > "$dest/bin/python"; chmod +x "$dest/bin/python"
-fi
-""",
     "make": r"""
 printf '%s\n' "$*" >> "$FAKE_LOG_DIR/make.log"
 if [[ -n "${FAKE_MAKE_RC:-}" ]]; then echo "make setup broke"; exit "$FAKE_MAKE_RC"; fi
@@ -90,6 +83,24 @@ printf '%s\n' "$*" >> "$FAKE_LOG_DIR/unsquashfs.log"
     "findmnt": r"""echo "${FAKE_FSTYPE:-lustre}" """,
     "rsync": r"""printf '%s\n' "$*" >> "$FAKE_LOG_DIR/rsync.log" """,
 }
+
+_UV = r"""
+import os, pathlib, subprocess, sys, sysconfig
+argv = sys.argv[1:]
+with open(os.path.join(os.environ["FAKE_LOG_DIR"], "uv.log"), "a") as handle:
+    handle.write(" ".join(argv) + "\n")
+if argv[0] == "venv":
+    subprocess.run([sys.executable, "-m", "venv", "--without-pip", argv[-1]], check=True)
+elif argv[:2] == ["pip", "install"]:
+    python = argv[argv.index("--python") + 1]
+    site = subprocess.check_output(
+        [python, "-c", "import sysconfig; print(sysconfig.get_path('purelib'))"], text=True
+    ).strip()
+    # Ordinary dependencies are shared, but srtctl is visible only in the job venv.
+    pathlib.Path(site, "fixture-dependencies.pth").write_text(
+        sysconfig.get_path("purelib") + "\n" + os.environ["FAKE_SRT_SOURCE"] + "/src\n"
+    )
+"""
 
 _SRTCTL = r"""
 import json, os, pathlib, sys
@@ -163,7 +174,7 @@ def install_fakes(directory: Path) -> Path:
         binary = directory / name
         binary.write_text(f"#!/bin/bash\n{body.strip()}\n")
         binary.chmod(0o755)
-    for name, body in {"srtctl": _SRTCTL, "sbatch": _SBATCH}.items():
+    for name, body in {"uv": _UV, "srtctl": _SRTCTL, "sbatch": _SBATCH}.items():
         binary = directory / name
         binary.write_text(f"#!{sys.executable}\n{body.lstrip()}")
         binary.chmod(0o755)
@@ -241,12 +252,12 @@ def base_env(*, fakes: Path, logs: Path, workspace: Path, sandbox: Path) -> dict
     }
     env.update(
         PATH=f"{fakes}{os.pathsep}{Path(sys.executable).parent}{os.pathsep}/usr/bin{os.pathsep}/bin",
-        PYTHONPATH=f"{ROOT}{os.pathsep}{ROOT / 'utils/srt-slurm/src'}",
+        PYTHONPATH=str(ROOT),
         HOME=str(sandbox / "home"),
         USER="runner",
         GITHUB_WORKSPACE=str(workspace),
         FAKE_LOG_DIR=str(logs),
-        FAKE_PYTHON=sys.executable,
+        FAKE_SRT_SOURCE=str(ROOT / "utils/srt-slurm"),
         FAKE_SRT_COMMIT="0123456789abcdef0123456789abcdef01234567",
         ENROOT_IMPORT_TIME_LIMIT="10",
         SALLOC_TIME_LIMIT="10",

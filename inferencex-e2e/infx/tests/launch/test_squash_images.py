@@ -191,6 +191,29 @@ def test_enroot_uri_normalization(image, uri):
     assert enroot_uri(image) == uri
 
 
+@pytest.mark.parametrize("registry", ["docker.io", "index.docker.io", "registry-1.docker.io"])
+@pytest.mark.parametrize("separator", ["/", "#"])
+@pytest.mark.parametrize(("repository", "resolved"), [
+    ("team/image:dev", "team/image:dev"),
+    ("team/image:dev@sha256:" + "e" * 64, "team/image:sha256:" + "e" * 64),
+    ("nginx@sha256:" + "e" * 64, "library/nginx:sha256:" + "e" * 64),
+])  # fmt: skip
+def test_docker_hub_aliases_use_the_registry_api(registry, separator, repository, resolved):
+    assert enroot_uri(f"{registry}{separator}{repository}") == (
+        f"docker://registry-1.docker.io#{resolved}"
+    )
+
+
+@pytest.mark.parametrize("mode", ["submit-host", "compute"])
+def test_digest_pinned_docker_hub_alias_reaches_the_importer(tools, tmp_path, mode):
+    _, logs = tools
+    image = "docker.io/team/router@sha256:" + "e" * 64
+    squash = ensure_image(image, policy(tmp_path, mode), job=Job("7") if mode == "compute" else None)
+    [imported] = calls(logs["enroot"])
+    assert imported["argv"][-1] == "docker://registry-1.docker.io#team/router:sha256:" + "e" * 64
+    assert Path(squash).read_text() == VALID
+
+
 def test_squash_locations_override_the_cache_field_by_field():
     squash = SquashCache.model_validate({
         "dir": "/cache", "import": "compute",

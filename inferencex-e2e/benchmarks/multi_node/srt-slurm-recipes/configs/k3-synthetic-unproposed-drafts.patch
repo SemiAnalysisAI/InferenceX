@@ -1,0 +1,32 @@
+diff --git a/vllm/v1/worker/gpu/spec_decode/rejection_sampler.py b/vllm/v1/worker/gpu/spec_decode/rejection_sampler.py
+--- a/vllm/v1/worker/gpu/spec_decode/rejection_sampler.py
++++ b/vllm/v1/worker/gpu/spec_decode/rejection_sampler.py
+@@ -365,14 +365,20 @@ class RejectionSampler:
+         # that num_nans is computed before applying penalties and temperature.
+         num_nans = get_num_nans(logits) if self.sampler.compute_nans else None
+ 
+-        draft_sampled, pos = gather_draft_sampled(
+-            input_batch.input_ids,
+-            input_batch.positions,
+-            input_batch.logits_indices,
+-            input_batch.expanded_idx_mapping,
+-            input_batch.expanded_local_pos,
+-            self.sampler.req_states.prefill_len.gpu,
+-        )
++        if self.synthetic_conditional_rates is not None:
++            # Benchmark compatibility: restore pre-#58784 synthetic gathering.
++            # Real verification must still reject never-proposed draft slots.
++            draft_sampled = input_batch.input_ids[input_batch.logits_indices]
++            pos = input_batch.positions[input_batch.logits_indices]
++        else:
++            draft_sampled, pos = gather_draft_sampled(
++                input_batch.input_ids,
++                input_batch.positions,
++                input_batch.logits_indices,
++                input_batch.expanded_idx_mapping,
++                input_batch.expanded_local_pos,
++                self.sampler.req_states.prefill_len.gpu,
++            )
+ 
+         max_num_logprobs = self.sampler.sampling_states.max_num_logprobs(
+             input_batch.idx_mapping_np

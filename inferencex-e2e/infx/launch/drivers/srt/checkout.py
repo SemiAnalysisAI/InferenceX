@@ -24,6 +24,14 @@ SETUP_ATTEMPTS = 5
 UV_INSTALLER = "https://astral.sh/uv/install.sh"
 
 
+# Temporary debug layer: delete after the srt-slurm pin includes NVIDIA/srt-slurm#508.
+SRT_DEBUG_PRS = {
+    ("kimik3", "vllm-disagg"): (
+        ("https://github.com/NVIDIA/srt-slurm.git", "51cee8904a0b402a834887a26008adb79b8cd26b"),
+    ),
+}
+
+
 @dataclass(frozen=True)
 class Checkout:
     """A job-local srt-slurm checkout with InferenceX recipes staged."""
@@ -47,6 +55,15 @@ def _git(*args: str | Path, capture: bool = False) -> str:
 def _checked(result: subprocess.CompletedProcess[str], action: str) -> None:
     if result.returncode:
         raise LaunchError(f"{action} failed (exit {result.returncode})")
+
+
+def apply_debug_prs(destination: Path, model_prefix: str, framework: str) -> None:
+    """Apply pinned upstream commits only to the matching job's disposable checkout."""
+    for repository, commit in SRT_DEBUG_PRS.get((model_prefix, framework), ()):
+        # Cherry-pick needs the parent; depth=1 makes the change look like a root commit.
+        _git("-C", destination, "fetch", "--no-tags", "--depth=2", repository, commit)
+        _git("-C", destination, "cherry-pick", "--no-commit", commit)
+        print(f"Applied temporary upstream change {repository}@{commit}", flush=True)
 
 
 def checkout_dir(run: SrtRun, *, shared: bool) -> Path:
@@ -84,6 +101,7 @@ def prepare_checkout(run: SrtRun, destination: Path, *, power: bool) -> Checkout
     )
     for patch in sorted((run.workspace / PATCHES).glob("*.patch")):
         _git("-C", destination, "apply", patch)
+    apply_debug_prs(destination, run.request.model_prefix, run.request.framework)
     head = _git("-C", destination, "rev-parse", "HEAD", capture=True)
     if head != commit:
         raise LaunchError(f"srt-slurm checkout is at {head}, expected {commit}")

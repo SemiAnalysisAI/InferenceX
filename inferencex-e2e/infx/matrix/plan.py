@@ -13,6 +13,7 @@ from contextlib import ExitStack
 import yaml
 
 from infx.config import MASTER_CONFIGS, RUNNER_CONFIG, git_path_at_ref
+from infx.workflows.k3_pd_debug_eval import select_debug_eval
 
 from .generate import (
     EvalMode,
@@ -494,7 +495,7 @@ def build_plan(
             suffix = "agentic_evals" if result.get("scenario-type") == "agentic-coding" else "evals"
             final_results[prefix + suffix].append(result)
 
-        return ChangelogMatrixEntry.model_validate(final_results)
+        return ChangelogMatrixEntry.model_validate(select_debug_eval(final_results))
 
 
 def main() -> None:

@@ -87,6 +87,14 @@ PowerX 严格校验。现有的 Tachometer 1000 ms / 功耗 exporter 100 ms 采�
 
 ## 规程索引
 
+Kimi-K3 原生 PD 路径在准备镜像前解析所选 recipe，要求 worker 镜像与矩阵一致，并通过同一后端准备 recipe 指定的 frontend 镜像。Router 镜像仍由 recipe 管理；输入不一致会在镜像导入任务申请资源前失败。已部署的目标模型、draft 挂载、网络设备、worker 网络环境及 memlock 前置命令由集群记录声明；镜像导入、任务提交、取消及产物收集沿用共享 Python launcher。
+
+Kimi-K3 vLLM debug setup 使用按 digest 固定且已包含 #57700 的官方 ROCm nightly `ac68c3087215e0a4f3cdfa218508c6aada57235d`，仅叠加 #59164 READ-zeroing 和 K3 streaming-EOF 运行时子集，不携带心跳或 #58968 其他特性组。固定版本、已验证范围及独立删除条件统一记录于[原生 Kimi-K3 PD](k3-pd-native_zh.md)。Serving 设置、自动选择的 DSpark acceptance 及 benchmark 判据不变。
+
+Kimi-K3 vLLM PD 路径还会选择集群声明的节点本地 `ionic-provider` 卷，以只读方式挂载单个文件。这是固定镜像内的 Ionic 用户态 provider 与主机内核 ABI 之间的临时兼容前置条件，与 shared-MR 无关；其他模型和框架不选择此挂载。Launcher 不会在提交主机上创建只读资产或修改其权限，由容器运行时在已分配的计算节点上验证。保留镜像原有的 `libibverbs` 核心库及其他 provider。只有替换镜像在不挂载 provider 的情况下，能在目标集群枚举并成功打开、关闭全部预期 RDMA 设备，才可移除该卷及路径选择项。设备打开成功不能代替 MR、实际传输、吞吐或退出验证。
+
+共享 Slurm 镜像解析器将显式 Docker Hub 主机名（`docker.io`、`index.docker.io` 和 `registry-1.docker.io`）统一映射为 Enroot 的 `registry-1.docker.io#repository` 仓库端点，同时支持斜杠和 `#` 两种输入形式。即使输入还带有 tag，也会保留固定 digest。导入验证必须使用任务独享的空缓存，将解析后的引用交给真实仓库；命中已有 squash 缓存或模拟导入不能证明这一衔接有效。
+
 1. [准备 worktree](#准备-worktree)
 2. [添加模型 + 硬件配方](#添加模型--硬件配方)
 3. [修改主配置](#修改主配置)

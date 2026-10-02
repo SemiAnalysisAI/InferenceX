@@ -68,7 +68,8 @@ def enroot_uri(image: str) -> str:
 
     Enroot 3.x cannot parse ``tag@digest``, so a pinned image becomes
     ``registry#repository:digest`` (the digest is immutable, so the tag is dropped).
-    Pyxis-style ``registry#repo`` input is read as ``registry/repo``.
+    Pyxis-style ``registry#repo`` input is read as ``registry/repo``. Docker Hub's
+    public aliases resolve to its registry API, not the docker.io website.
     """
     image = image.replace("#", "/", 1)
     without_digest, digest = image, ""
@@ -79,8 +80,10 @@ def enroot_uri(image: str) -> str:
         registry, repository = first, without_digest.split("/", 1)[1]
     else:
         registry, repository = "registry-1.docker.io", without_digest
+    if registry in {"docker.io", "index.docker.io"}:
+        registry = "registry-1.docker.io"
     if not digest:
-        if registry == "registry-1.docker.io":
+        if registry == "registry-1.docker.io" and image == repository:
             return f"docker://{image}"
         return f"docker://{registry}#{repository}"
     directory, _, name = repository.rpartition("/")

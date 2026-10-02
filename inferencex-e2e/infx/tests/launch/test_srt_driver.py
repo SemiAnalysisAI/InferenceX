@@ -226,6 +226,56 @@ def launch_here(monkeypatch, env: dict[str, str], config: Path, cwd: Path) -> in
     return main(["--runner-config", str(config), "run"])
 
 
+@pytest.mark.parametrize("worker", ["test:tag", "mismatched:tag"])
+def test_multinode_recipe_images_are_validated_before_import_and_frontend_is_staged(
+    harness, worker
+):
+    recipe = yaml.safe_load(LANE_RECIPE)
+    router = "docker.io/example/router@sha256:" + "d" * 64
+    recipe["frontend"] = {"container_image": router}
+    env = lane_env(
+        harness,
+        "lab-a",
+        yaml.safe_dump({"base": recipe, "override_image": {"model": {"container": worker}}}),
+        RUNNER_NAME="lab-a_00",
+        FRAMEWORK="vllm-disagg",
+        MODEL_PREFIX="kimik3",
+        MODEL="org/Model",
+        PRECISION="fp4",
+        CONFIG_FILE="recipes/test/lane.yaml:override_image",
+    )
+    # A fresh launcher must not inherit test_srt_config's in-process srtctl imports.
+    completed = subprocess.run(
+        [sys.executable, "-c", """
+from infx.launch.drivers.srt import lanes
+from infx.launch.drivers.srt.lanes import SrtLane
+from infx.launch.policy import LaunchPath, Match
+from infx.launch.__main__ import main
+lanes.SRT_LANES[("lab-a", LaunchPath.SRT_MULTI)] = SrtLane(stage_recipe_images=Match())
+raise SystemExit(main())
+""", "--runner-config", str(lab_config(harness.tmp)), "run"],
+        env=env, cwd=harness.workspace, capture_output=True, text=True, timeout=120,
+    )
+    rc = completed.returncode
+    imported = [line.split()[-1] for line in lines(harness.logs, "enroot")]
+    if worker != "test:tag":
+        assert rc == 1
+        assert "must match" in completed.stderr
+        assert imported == []
+        assert srtctl_calls(harness.logs) == []
+        return
+    assert rc == 0, completed.stdout + completed.stderr
+    assert imported == [
+        "docker://test:tag",
+        "docker://registry-1.docker.io#example/router:sha256:" + "d" * 64,
+    ]
+    config = srtslurm(harness.workspace)
+    assert config["containers"]["test:tag"].endswith("test_tag.sqsh")
+    assert config["containers"][router].endswith("docker.io_example_router_sha256_" + "d" * 64 + ".sqsh")
+    assert config["containers"][router] == config["containers"][router.replace("/", "#", 1)]
+    assert (harness.workspace / "multinode_server_logs.tar.gz").is_file()
+
+
 @pytest.mark.parametrize("cluster_id", LABS)
 def test_multinode_lane_stages_workflow_artifacts(harness, monkeypatch, cluster_id):
     lab = LABS[cluster_id]
