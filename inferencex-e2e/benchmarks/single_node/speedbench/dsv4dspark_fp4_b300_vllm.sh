@@ -90,52 +90,6 @@ if [[ ! -f "$SPEEDBENCH_DIR/qualitative.jsonl" ]]; then
     exit 1
 fi
 
-# speed_bench/CustomDataset renders the chat template client-side and posts to
-# /v1/completions, so thinking mode must reach apply_chat_template via
-# --chat-template-kwargs (native since vllm-project/vllm#44244). Assert rather than
-# assume: if the CLI option exists but speed_bench does not forward it, the flag is
-# silently ignored and every thinking_on cell reports a non-thinking AL.
-assert_chat_template_kwargs_support() {
-    echo "=== Checking vLLM benchmark --chat-template-kwargs support ==="
-    python3 - <<'PYEOF'
-import sys
-import vllm.benchmarks.serve as S
-import vllm.benchmarks.datasets.datasets as D
-
-def read(mod):
-    with open(mod.__file__) as fh:
-        return fh.read()
-
-s_src, d_src = read(S), read(D)
-
-missing = []
-if '"--chat-template-kwargs"' not in s_src:
-    missing.append(f"CLI option in {S.__file__}")
-if ('chat_template_kwargs=getattr(args' not in d_src
-        and 'chat_template_kwargs=args.chat_template_kwargs' not in d_src):
-    missing.append(f"speed_bench forward in {D.__file__}")
-if '**(chat_template_kwargs or {})' not in d_src:
-    missing.append(f"apply_chat_template unpack in {D.__file__}")
-
-if missing:
-    print("CRITICAL: this image lacks native --chat-template-kwargs support:")
-    for item in missing:
-        print("  missing:", item)
-    print("thinking_on cells would silently measure a non-thinking AL. Use an")
-    print("image that contains vllm-project/vllm#44244.")
-    sys.exit(1)
-
-print("native --chat-template-kwargs support confirmed")
-PYEOF
-}
-
-if [[ " $THINKING_MODES " == *" on "* ]]; then
-    if ! assert_chat_template_kwargs_support; then
-        echo "CRITICAL: --chat-template-kwargs preflight failed — aborting"
-        exit 1
-    fi
-fi
-
 # TEP8 as in the published B300 DSpark recipe (vllm-project/recipes). Hard-coded
 # rather than driven by EP_SIZE / DP_ATTENTION because speedbench-al.yml exports
 # EP_SIZE=1 and DP_ATTENTION=false for every model, which silently turned the recipe

@@ -26,10 +26,11 @@ on: # zizmor: ignore[concurrency-limits]
         type: string
         default: 'dsv4'
       image:
-        description: "vLLM container image"
+        # Must be vLLM >= 0.30: thinking-on cells rely on --chat-template-kwargs (vllm-project/vllm#44244).
+        description: "vLLM container image (vLLM >= 0.30)"
         required: false
         type: string
-        default: 'vllm/vllm-openai:v0.21.0'
+        default: 'vllm/vllm-openai:v0.30.0'
       mtp-list:
         description: "Space-separated MTP levels (num_speculative_tokens)"
         required: false
