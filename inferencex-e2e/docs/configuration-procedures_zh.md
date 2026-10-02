@@ -54,6 +54,10 @@ srt 驱动（[`infx/launch/drivers/srt/`](../infx/launch/drivers/srt)）在 `mak
 缓存挂载、时间上限，以及功耗作业所需的 DCGM exporter 镜像。取值以 YAML 数据写入，
 绝不替换进 shell 或 YAML 文本，`extra` 也不能覆盖类型化的键。
 
+GB200/GB300 集群通过 `power-telemetry` 为所有 benchmark 配方（包括原生单节点和 AgentX）默认采集 noprof GPU 与 ACPI CPU 功耗，并固定 `CPU_POWER_EXPORTER_RELEASE=v2.40.2`；原生 CLI 覆盖项贯穿预检并保存在实际运行配方中。纯评估作业不采集；GPU 和 CPU 有效性保持独立，all-in 估算要求两者均有效，已有严格功耗资格检查仍拒绝缺失的 CPU 数据。
+
+遥测要求 benchmark 客户端与采集器使用分配首节点的时钟：原本预留 infra 或客户端节点的配方改为预留 frontend/head，并将客户端放在同一节点；相关 DSV4 配方将 frontend/客户端从 decode 节点移至 head。worker 和总节点数不变，但此放置变化需要新的性能结果。
+
 模型选择、缓存准备以及依赖工作负载的时间上限保留在 srt 驱动的表中
 （[`lanes.py`](../infx/launch/drivers/srt/lanes.py)、[`models.py`](../infx/launch/drivers/srt/models.py)、[`power.py`](../infx/launch/drivers/srt/power.py)），不写进集群记录。
 

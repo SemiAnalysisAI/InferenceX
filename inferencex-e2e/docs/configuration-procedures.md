@@ -70,6 +70,10 @@ omitted. This does not enable telemetry in opted-out recipes or qualify Tachomet
 metrics as validated PowerX results. The existing 1000 ms Tachometer / 100 ms
 power-exporter collection intervals and port 9401 are preserved.
 
+GB200/GB300 profiles set `power-telemetry` to collect noprof GPU and ACPI CPU power for every benchmark recipe, including native single-node and AgentX, with `CPU_POWER_EXPORTER_RELEASE=v2.40.2`; native CLI overrides carry these settings through preflight into the retained effective recipe. Eval-only jobs omit collection; GPU and CPU validity stay independent, all-in estimates require both, and existing strict power qualification rejects missing CPU data.
+
+Telemetry requires the benchmark client and collector on the first allocation host: recipes with reserved infra or clients place the frontend and client together on that reserved head, and affected DSV4 recipes move their frontend/client from decode hosts to head. Worker and allocation counts stay unchanged, but this placement change needs fresh performance results.
+
 Keep model selection, cache preparation, and workload-dependent time limits in the
 srt driver's tables ([`lanes.py`](../infx/launch/drivers/srt/lanes.py),
 [`models.py`](../infx/launch/drivers/srt/models.py),

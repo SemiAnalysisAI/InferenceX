@@ -456,6 +456,8 @@ supply P75 or P90. The validation sidecar records `power_percentile_method`.
 
 ## Measured Grace CPU-side power (NVL72)
 
+GB200/GB300 cluster defaults enable GPU and ACPI CPU collection for ordinary fixed-sequence and AgentX submissions, including native single-node recipes; eval-only jobs have no benchmark power window. The Grace socket total includes CPU/SoC, LPDDR5X and regulator losses, not a separate RAM measurement; validated totals supply the measured part of system-power estimates, while unmeasured rack components remain modeled.
+
 GB200 and GB300 NVL72 recipes that enable srt-slurm's `telemetry.cpu_power_exporter` leg write
 `LOGS/power/cpu/samples.csv` and a non-authoritative `cpu_manifest.json` beside the GPU DCGM
 package. The multinode validator accepts the historical v2.2.1 long format (one row per sensor

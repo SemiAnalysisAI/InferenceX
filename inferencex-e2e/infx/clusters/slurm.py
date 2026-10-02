@@ -150,6 +150,14 @@ class HostSetup(Record):
         return script
 
 
+class PowerTelemetrySettings(Record):
+    """Cluster power sensors used by normal SRT benchmark submissions."""
+
+    dcgm_port: int = Field(alias="dcgm-port", ge=1, le=65535)
+    cpu_port: int = Field(default=9405, alias="cpu-port", ge=1, le=65535)
+    cpu_source: Literal["acpi", "dcgm"] = Field(alias="cpu-source")
+
+
 class SrtSlurmSettings(Record):
     """Cluster-owned srtslurm.yaml facts; job-specific values are added by the driver."""
 
@@ -168,6 +176,7 @@ class SrtSlurmSettings(Record):
     container_aliases: tuple[str, ...] = Field(default=(), alias="container-aliases")
     nginx_aliases: tuple[str, ...] = Field(default=(), alias="nginx-aliases")
     host_setup: HostSetup | None = Field(default=None, alias="host-setup")
+    power_telemetry: PowerTelemetrySettings | None = Field(default=None, alias="power-telemetry")
     env: dict[str, str] = Field(default_factory=dict)
     outputs: HostPath | None = None
     shared_run_root: HostPath | None = Field(default=None, alias="shared-run-root")

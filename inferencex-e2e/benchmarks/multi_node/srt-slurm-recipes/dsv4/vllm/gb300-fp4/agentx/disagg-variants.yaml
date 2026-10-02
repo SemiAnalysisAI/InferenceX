@@ -26,14 +26,15 @@ base:
     - name: etcd
       type: etcd
       placement:
-        node: dedicated
+        node: head
     - name: nats
       type: nats
       placement:
-        node: dedicated
+        node: head
       options:
         max_payload_mb: 32
   frontend:
+    dedicated_node: true
     type: dynamo
     enable_multiple_frontends: false
   engine:

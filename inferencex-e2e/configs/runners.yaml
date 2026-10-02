@@ -705,6 +705,11 @@ clusters:
         lock-timeout-s: 1800
         single-node-import: true
       srt-slurm:
+        env:
+          CPU_POWER_EXPORTER_RELEASE: v2.40.2
+        power-telemetry:
+          dcgm-port: 9401
+          cpu-source: acpi
         extra:
           default_gpu_exporter:
             container_image: nvcr.io#nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless
@@ -756,6 +761,9 @@ clusters:
         import-step-args: [--exclusive]
         single-node-import: true
       srt-slurm:
+        power-telemetry:
+          dcgm-port: 19401
+          cpu-source: acpi
         extra:
           default_gpu_exporter:
             container_image: nvcr.io#nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless
@@ -767,6 +775,7 @@ clusters:
         container-aliases: [dynamo-trtllm, dynamo-sglang, v0.5.11, v0.5.13.post1]
         nginx-aliases: [nginx-sqsh]
         env:
+          CPU_POWER_EXPORTER_RELEASE: v2.40.2
           ENROOT_ROOTFS_WRITABLE: "1"
         volume-mounts:
           aiperf-cache: /aiperf_mmap_cache

@@ -173,6 +173,107 @@ def test_single_node_failed_allocation_fails_the_launch(harness):
     assert (harness.workspace / "point-identity.json").is_file()
 
 
+@pytest.mark.parametrize(
+    ("gpu_count", "has_cpu", "require_power"),
+    [(2, True, True), (4, True, True), (4, False, True), (4, False, False)],
+)
+def test_native_agentx_collects_declared_cpu_with_serving_gpu_count(
+    harness, monkeypatch, gpu_count, has_cpu, require_power
+):
+    from infx.tests.results.power import test_aggregate_power_multinode as packages
+
+    monkeypatch.setattr(
+        packages, "DEVICES",
+        tuple(("node-native", index, "agg", 0, 300.0) for index in range(gpu_count)),
+    )
+    monkeypatch.setattr(packages, "CPU_HOSTS", ("node-native",))
+    pkg = packages.build_package(harness.tmp / "captured")
+    result_dir = pkg.logs_root / "agentic"
+    result_dir.mkdir()
+    formal_result = result_dir / "agentic_power_concurrency_4.json"
+    formal_result.write_bytes(pkg.original_result.read_bytes())
+    [window_path] = pkg.windows_dir.glob("*.json")
+    window = json.loads(window_path.read_text())
+    window["result_path"] = str(formal_result.relative_to(pkg.logs_root))
+    window_path.unlink()
+    (pkg.windows_dir / formal_result.name).write_text(json.dumps(window))
+    manifest_path = pkg.power_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["window_validations"][0]["window_file"] = f"windows/{formal_result.name}"
+    manifest_path.write_text(json.dumps(manifest))
+    if has_cpu:
+        packages.add_cpu_package(
+            pkg, packages._cpu_rows({"node-native": {"grace": 500.0}}, hosts=("node-native",))
+        )
+    (pkg.logs_root / "point-identity.json").write_text(json.dumps({
+        "disagg": False, "is_multinode": False, "num_gpus": gpu_count,
+    }))
+
+    env = single_node_env(
+        harness, "gb200-nv", IS_AGENTIC="1", ISL="0", OSL="0", CONC="4", DURATION="60",
+        TP=str(gpu_count), GPU_COUNT=str(gpu_count),
+        REQUIRE_POWER=str(int(require_power)), INFERENCEX_RESULTS_PYTHON=sys.executable,
+        FAKE_SRT_COMMIT=packages.PRODUCER_SHA, FAKE_SRT_OUTPUT_FIXTURE=str(pkg.logs_root),
+        GITHUB_ENV=str(harness.tmp / "github-env"),
+    )
+    recipe_path = harness.workspace / "recipe.yaml"
+    recipe = yaml.safe_load(recipe_path.read_text())
+    recipe["base"]["benchmark"]["command"] = "bash /infmax-workspace/benchmarks/srt_agentic.sh"
+    recipe["base"]["roles"]["agg"]["gpus"] = gpu_count
+    recipe["base"]["roles"]["agg"]["args"]["tensor-parallel-size"] = gpu_count
+    recipe_path.write_text(yaml.safe_dump(recipe))
+    config_data = yaml.safe_load(harness.config.read_text())
+    config_data["clusters"]["gb200-nv"]["slurm"]["srt-slurm"]["power-telemetry"] = {
+        "dcgm-port": 9401, "cpu-port": 9405, "cpu-source": "acpi",
+    }
+    harness.config.write_text(yaml.safe_dump(config_data))
+
+    completed = launch(env, harness.config, harness.workspace)
+    assert completed.returncode == int(require_power and not has_cpu), completed.stderr
+    result = json.loads((harness.workspace / "point-identity.json").read_text())
+    assert result["is_multinode"] is False
+    assert result["num_gpus"] == gpu_count
+    assert result["power_valid"] == 1
+    assert result["cpu_power_valid"] == int(has_cpu)
+    assert result["total_gpu_energy_j"] == 18000.0 * gpu_count
+    assert (harness.workspace / "LOGS/agentic/power_validation.json").is_file()
+    assert result["power_audit"]["source"] == "results/power_validation.json"
+    assert (harness.workspace / result["power_audit"]["source"]).is_file()
+    cpu = result["power_audit"]["cpu"]
+    if has_cpu:
+        assert cpu["sensor_kind"] == "grace_socket"
+        assert cpu["source"] == "acpi"
+        assert cpu["expected_sockets"] == cpu["observed_sockets"] == 2
+        assert cpu["reason_codes"] == []
+    else:
+        assert cpu["reason_codes"] == ["cpu_artifacts_missing"]
+    assert (harness.workspace / "LOGS/power/native-job-status.txt").read_text() == "42|COMPLETED|0:0\n"
+    assert (harness.workspace / "LOGS/power/power-producer-sha.txt").read_text() == packages.PRODUCER_SHA + "\n"
+    exporter = srtslurm(harness.workspace)["containers"]["dcgm-exporter"]
+    assert (harness.workspace / "LOGS/power/exporter-image.sha256").read_text().endswith(f"  {exporter}\n")
+    [submitted] = srtctl_calls(harness.logs)
+    assert "benchmark.concurrencies=[4]" in submitted["argv"]
+    assert 'benchmark.env.ENABLE_AGENTX_POWER="1"' in submitted["argv"]
+    assert 'telemetry.cpu_power_exporter.source="acpi"' in submitted["argv"]
+
+
+def test_native_eval_only_disables_default_power_collection(harness):
+    env = single_node_env(
+        harness, "gb300-nv", EVAL_ONLY="true", MAX_MODEL_LEN="1024", REQUIRE_POWER="1"
+    )
+    config_data = yaml.safe_load(harness.config.read_text())
+    config_data["clusters"]["gb300-nv"]["slurm"]["srt-slurm"]["power-telemetry"] = {
+        "dcgm-port": 9401, "cpu-port": 9405, "cpu-source": "acpi",
+    }
+    harness.config.write_text(yaml.safe_dump(config_data))
+
+    assert_ok(launch(env, harness.config, harness.workspace))
+    [submitted] = srtctl_calls(harness.logs)
+    assert "telemetry.enabled=false" in submitted["argv"]
+    assert not (harness.workspace / "power-producer-sha.txt").exists()
+    assert "dcgm-exporter" not in srtslurm(harness.workspace)["containers"]
+
+
 LABS = {
     "lab-a": dict(
         lane=SrtLane(

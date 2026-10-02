@@ -440,6 +440,8 @@ rm -rf -- "$tmp"
 
 ## NVL72 Grace CPU 侧实测功耗
 
+GB200/GB300 集群默认配置为普通 fixed-sequence 和 AgentX 提交（包括原生单节点配方）启用 GPU 与 ACPI CPU 采集；纯评估作业没有 benchmark 功耗窗口。Grace socket 总功耗包含 CPU/SoC、LPDDR5X 和稳压损耗，并非单独的 RAM 测量；有效总量构成系统功耗估算的实测部分，未测量的机架组件仍采用模型。
+
 启用了 srt-slurm `telemetry.cpu_power_exporter` 的 GB200 和 GB300 NVL72 recipe 会在 GPU DCGM
 产物包旁写入 `LOGS/power/cpu/samples.csv` 和一份非权威的 `cpu_manifest.json`。多节点校验器接受
 历史版本 v2.2.1 写出的长格式（每个传感器读数一行，表头为

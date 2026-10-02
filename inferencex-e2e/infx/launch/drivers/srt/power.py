@@ -1,12 +1,10 @@
-"""DCGM power eligibility of the srt-slurm multi-node lanes.
-
-A recipe asks for DCGM power in its top-level ``telemetry:`` mapping; each lane lists the
-requests and recipes that may have it.
-"""
+"""Cluster power defaults and legacy recipe opt-ins for srt-slurm launches."""
 
 from __future__ import annotations
 
 import fnmatch
+import json
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
@@ -17,6 +15,7 @@ from infx.launch.drivers.srt.recipe import recipe_mirror_path, recipe_relpath
 from infx.launch.policy import LaunchPath, Match, any_of
 
 if TYPE_CHECKING:
+    from infx.clusters.slurm import PowerTelemetrySettings
     from infx.launch.request import LaunchRequest
 
 
@@ -160,6 +159,7 @@ class PowerDecision:
     agentx: bool
     adapter: bool = False
     expected_cpu_source: str | None = None
+    require_power: bool = False
 
 
 NO_POWER = PowerDecision(dcgm=False, agentx=False)
@@ -179,30 +179,54 @@ def decide_power(
         if rule.when(request) and (
             rule.recipe_glob is None or fnmatch.fnmatchcase(recipe, rule.recipe_glob)
         ):
-            return PowerDecision(dcgm=True, agentx=rule.agentx, adapter=rule.adapter)
+            return PowerDecision(
+                dcgm=True,
+                agentx=rule.agentx,
+                adapter=rule.adapter,
+                require_power=request.require_power or rule.agentx,
+            )
     message = lane.agentic_error if request.is_agentic and lane.agentic_error else lane.error
     raise PowerPolicyError(message)
 
 
-def resolve_power(cluster_id: str, path: LaunchPath, request: LaunchRequest) -> PowerDecision:
-    """Detect dcgm in the workspace mirror of the recipe the lane inspects, and decide.
-
-    A recipe only upstream (no mirror) stays non-power.
-    """
+def resolve_power(
+    cluster_id: str,
+    path: LaunchPath,
+    request: LaunchRequest,
+    *,
+    settings: PowerTelemetrySettings | None = None,
+) -> PowerDecision:
+    """Use cluster defaults when configured; otherwise inspect the mirrored recipe opt-in."""
     lane = POWER_LANES.get((cluster_id, path))
-    if lane is None:
+    if settings is not None and request.eval_only:
+        return NO_POWER
+    if lane is None and settings is None:
         return NO_POWER
     config_file = request.config_file
-    if lane.eval_recipe_when_eval_only and request.eval_only and request.eval_config_file:
+    if lane and lane.eval_recipe_when_eval_only and request.eval_only and request.eval_config_file:
         config_file = request.eval_config_file
-    if not config_file:
-        return NO_POWER
-    mirror = recipe_mirror_path(request.workspace, config_file)
-    text = mirror.read_text() if mirror.is_file() else ""
+    mirror = recipe_mirror_path(request.workspace, config_file) if config_file else None
+    text = mirror.read_text() if mirror and mirror.is_file() else ""
     dcgm = recipe_enables_dcgm_power(text)
-    decision = decide_power(
-        cluster_id, path, dcgm=dcgm, request=request, recipe=recipe_relpath(config_file)
-    )
+    try:
+        decision = decide_power(
+            cluster_id,
+            path,
+            dcgm=dcgm,
+            request=request,
+            recipe=recipe_relpath(config_file) if config_file else "",
+        )
+    except PowerPolicyError:
+        if settings is None:
+            raise
+        decision = NO_POWER
+    if settings is not None:
+        return PowerDecision(
+            dcgm=True,
+            agentx=request.is_agentic,
+            expected_cpu_source=settings.cpu_source,
+            require_power=decision.require_power or request.require_power,
+        )
     if decision.dcgm:
         telemetry = yaml.safe_load(text)["telemetry"]
         cpu = telemetry.get("cpu_power_exporter")
@@ -210,3 +234,28 @@ def resolve_power(cluster_id: str, path: LaunchPath, request: LaunchRequest) -> 
         if source in {"acpi", "dcgm"}:
             decision = replace(decision, expected_cpu_source=source)
     return decision
+
+
+def telemetry_arguments(
+    settings: PowerTelemetrySettings, concurrencies: Sequence[int]
+) -> list[str]:
+    """Bind cluster sensors to the selected native recipe, after variant expansion."""
+    if not concurrencies or any(value <= 0 for value in concurrencies):
+        raise PowerPolicyError("power telemetry requires positive benchmark concurrencies")
+    values = {
+        "telemetry.enabled": True,
+        "telemetry.collect_interval_ms": 1000,
+        "telemetry.storage_subdir": "power",
+        "telemetry.startup_timeout_seconds": 120,
+        "telemetry.request_timeout_seconds": 2,
+        "telemetry.dcgm_exporter.container_image": "dcgm-exporter",
+        "telemetry.dcgm_exporter.port": settings.dcgm_port,
+        "telemetry.dcgm_exporter.command": (
+            "dcgm-exporter --collect-interval=100 --address :{port} "
+            "-f /configs/dcgm-counters-noprof.csv"
+        ),
+        "telemetry.cpu_power_exporter.port": settings.cpu_port,
+        "telemetry.cpu_power_exporter.source": settings.cpu_source,
+        "benchmark.concurrencies": list(concurrencies),
+    }
+    return [arg for key, value in values.items() for arg in ("--set", f"{key}={json.dumps(value)}")]

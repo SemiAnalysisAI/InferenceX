@@ -172,7 +172,7 @@ base:
       active-prefill-tokens-threshold: None
       active-prefill-tokens-threshold-frac: None
     placement:
-      node: head
+      node: dedicated
   benchmark:
     type: custom
     command: bash /infmax-workspace/benchmarks/srt_agentic.sh
@@ -193,7 +193,7 @@ base:
       OPENAI_API_KEY: EMPTY
       KV_OFFLOADING: dram
     placement:
-      node: dedicated
+      node: head
 
 override_1p1d_tp8_c1_b1_mtp5:
   name: dynamo-disagg-gb300-1p1d-tp8-c1-b1-mtp5

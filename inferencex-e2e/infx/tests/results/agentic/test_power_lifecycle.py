@@ -235,10 +235,11 @@ stop_gpu_monitor
     assert "Stopped" in result.stdout
 
 
-def test_multinode_formal_window_wraps_replay_without_local_monitor(tmp_path: Path):
+@pytest.mark.parametrize("is_multinode", [False, True])
+def test_srt_formal_window_wraps_replay_without_local_monitor(tmp_path: Path, is_multinode):
     result = _run_lifecycle(
         tmp_path,
-        is_multinode=True,
+        is_multinode=is_multinode,
         formal_multinode_power=True,
         require_power=True,
     )

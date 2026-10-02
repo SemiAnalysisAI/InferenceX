@@ -9,6 +9,65 @@ from pathlib import Path
 import pytest
 
 
+def _run_native_fixed_client(tmp_path, script):
+    """Run the real wrapper and window writer with only external clients stubbed."""
+    root = Path(__file__).resolve().parents[3]
+    binaries = tmp_path / "bin"
+    binaries.mkdir()
+    logs = tmp_path / "logs"
+    windows = logs / "power/windows"
+    windows.mkdir(parents=True)
+    scripts = {
+        "python3": (
+            f"#!{sys.executable}\n"
+            "import json, os, sys\nfrom pathlib import Path\n"
+            "if sys.argv[1:3] == ['-m', 'infx.bench_serving.benchmark_serving']:\n"
+            "    result = Path(sys.argv[sys.argv.index('--result-dir') + 1])\n"
+            "    result /= sys.argv[sys.argv.index('--result-filename') + 1]\n"
+            "    result.write_text(json.dumps({'benchmark_start_time_unix': 1000.0, "
+            "'benchmark_end_time_unix': 1060.0, 'duration': 60.0}))\n"
+            "else:\n"
+            f"    os.execv({sys.executable!r}, [{sys.executable!r}, *sys.argv[1:]])\n"
+        ),
+        "pip3": "#!/bin/sh\nexit 0\n",
+        "nvidia-smi": '#!/bin/sh\nprintf called > "$MONITOR_CALLED_FILE"\n',
+    }
+    for name, source in scripts.items():
+        binary = binaries / name
+        binary.write_text(source)
+        binary.chmod(0o755)
+    env = {
+        "PATH": f"{binaries}{os.pathsep}/usr/bin:/bin",
+        "PYTHONPATH": str(root),
+        "PYTHONPYCACHEPREFIX": str(tmp_path / "pycache"),
+        "MONITOR_CALLED_FILE": str(tmp_path / "monitor-called"),
+        "MODEL": "test/model", "CONC": "4", "ISL": "128", "OSL": "64",
+        "RANDOM_RANGE_RATIO": "0.5", "RESULT_FILENAME": "native-point",
+        "RESULT_DIR": str(logs), "SRT_MEASUREMENT_WINDOW_DIR": str(windows),
+        "SRT_FRONTEND_HOST": "router", "SRT_FRONTEND_PORT": "8123",
+        "RUN_EVAL": "false", "EVAL_ONLY": "false", "GPU_MONITOR_INTERVAL": "3",
+        "USE_CHAT_TEMPLATE": "false", "FRAMEWORK": "sglang", "IS_AGENTIC": "0",
+    }
+    return subprocess.run(
+        ["bash", str(script)], env=env, cwd=tmp_path, capture_output=True, text=True
+    )
+
+
+def test_native_fixed_client_publishes_formal_window_without_local_sampler(tmp_path):
+    script = Path(__file__).resolve().parents[3] / "benchmarks/single_node/srt_fixed_sequence.sh"
+    completed = _run_native_fixed_client(tmp_path, script)
+    assert completed.returncode == 0, completed.stderr
+    window = json.loads((tmp_path / "logs/power/windows/native-point.json").read_text())
+    assert window == {
+        "schema_version": 1, "benchmark_type": "custom", "clock_source": "head_node_unix_clock",
+        "status": "completed", "reason": None, "result_path": "native-point.json",
+        "concurrency": 4, "benchmark_start_time_unix": 1000.0,
+        "benchmark_end_time_unix": 1060.0, "duration": 60.0,
+    }
+    assert not (tmp_path / "monitor-called").exists()
+    assert not (tmp_path / "logs/gpu_metrics.csv").exists()
+
+
 @pytest.mark.parametrize("explicit", [True, False])
 def test_client_model_discovery_and_explicit_request_count(tmp_path, explicit):
     binaries = tmp_path / "bin"

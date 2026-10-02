@@ -43,16 +43,38 @@ def run_single_node(launch: Launch) -> int:
     model_path = models.single_node_model_path(launch.cluster, request)
     staged = {"MODEL_PATH": model_path} if model_path.startswith("/") else {}
     run = SrtRun.create(launch, request, staged)
+    decision = power.resolve_power(
+        launch.cluster.id, launch.path, request, settings=run.srt.power_telemetry
+    )
     hf_cache = models.single_node_hf_cache(run.cluster, request)
     time_limit = lanes.srt_time_limit(run.cluster.id, request, None, run.srt)
     root = Path(tempfile.mkdtemp(prefix="srt-single.", dir=run.workspace))
-    checkout = prepare_checkout(run, root / "checkout", power=False)
+    checkout = prepare_checkout(run, root / "checkout", power=decision.dcgm)
     install_srtctl(run, checkout)
     if (options := config.srun_options(run.backend.settings)) is not None:
         run.env["SRT_SRUN_OPTIONS"] = options
     if rc := submit.bind_point(run, checkout, root / "arguments"):
         return rc
     selected, runtime_args = submit.bound_arguments(root / "arguments")
+    if request.eval_only and run.srt.power_telemetry is not None:
+        runtime_args += ["--set", "telemetry.enabled=false"]
+    containers = {}
+    if decision.dcgm:
+        exporter = run.backend.stage_image(config.DCGM_EXPORTER_IMAGE, helper="dcgm-exporter")
+        (run.workspace / config.EXPORTER_PROVENANCE).write_text(
+            f"{run.backend.image_provenance(exporter)}\n"
+        )
+        containers["dcgm-exporter"] = exporter.reference
+        runtime_args += power.telemetry_arguments(run.srt.power_telemetry, [request.conc])
+        runtime_args += ["--set", 'benchmark.env.ENABLE_AGENTX_POWER="1"']
+        runtime_args += ["--set", f'benchmark.env.REQUIRE_POWER="{int(request.require_power)}"']
+        if github_env := request.env.get("GITHUB_ENV"):
+            with Path(github_env).open("a") as handle:
+                handle.write(
+                    "POWER_ARTIFACT_DIR=LOGS/power\nPOWER_RESULT_ROOT=LOGS\n"
+                    f"POWER_EXPECTED_CPU_SOURCE={decision.expected_cpu_source or ''}\n"
+                    f"POWER_PRODUCER_SHA={checkout.commit}\n"
+                )
     job_config = config.SrtJob(
         srtctl_root=checkout.root,
         workspace=run.workspace,
@@ -60,6 +82,7 @@ def run_single_node(launch: Launch) -> int:
         image=request.image,
         container=run.backend.stage_image(request.image, single_node=True).reference,
         nginx=config.NGINX_IMAGE if run.srt.nginx_aliases else None,
+        containers=containers,
         model_paths={f"hf:{request.model}": model_path},
         mounts=[(str(hf_cache), request.hf_hub_cache)],
         single_node=True,
@@ -72,7 +95,7 @@ def run_single_node(launch: Launch) -> int:
 
     fetched = root / "fetched-outputs"
     submitted = submit.Submitted(manifest=run.workspace / submit.SINGLE_NODE_SUBMISSION)
-    run.life.callback(collect.finish_single_node, run, submitted, fetched)
+    run.life.callback(collect.finish_single_node, run, submitted, fetched, decision)
     eval_args = submit.eval_args(run.env, submit.SINGLE_NODE_EVAL_COMMAND)
     arguments = ["--json", "--yes", "--output", str(root / "outputs"), *runtime_args, *eval_args]
     applied = submit.apply(run, checkout, selected, arguments, stdout=submitted.manifest)
@@ -84,9 +107,13 @@ def run_single_node(launch: Launch) -> int:
         run.backend.stream_logs(job)
     except BackendError:
         return 1
-    if not run.backend.state(job).succeeded:
-        return 1
-    return collect.check_single_node(run, run.backend.fetch_outputs(job, fetched) / "logs")
+    status = run.backend.state(job)
+    logs = run.backend.fetch_outputs(job, fetched) / "logs"
+    if decision.dcgm:
+        (logs / "power").mkdir(parents=True, exist_ok=True)
+        (logs / "power/native-job-status.txt").write_text(f"{job.id}|{status.raw}\n")
+    rc = collect.check_single_node(run, logs, decision, checkout.commit)
+    return rc or int(not status.succeeded)
 
 
 def run_batch(launch: Launch) -> int:
@@ -123,7 +150,9 @@ def run_multinode(launch: Launch) -> int:
     request = SrtRequest.from_env(launch.request.env)
     lanes.check_request(lane, request)
     config_file = lanes.config_file(request)
-    decision = power.resolve_power(launch.cluster.id, launch.path, request)
+    settings = _srt_settings(launch.cluster)
+    telemetry = settings.power_telemetry if settings else None
+    decision = power.resolve_power(launch.cluster.id, launch.path, request, settings=telemetry)
     if github_env := request.env.get("GITHUB_ENV"):
         with Path(github_env).open("a") as handle:
             handle.write(f"POWER_EXPECTED_CPU_SOURCE={decision.expected_cpu_source or ''}\n")
@@ -138,6 +167,17 @@ def run_multinode(launch: Launch) -> int:
 
     checkout = prepare_checkout(run, checkout_dir(run, shared=shared), power=decision.dcgm)
     overrides = eval_overrides(checkout.root / "recipes", lane, request)
+    if telemetry is not None:
+        if request.eval_only:
+            overrides += ["--set", "telemetry.enabled=false"]
+        else:
+            overrides += power.telemetry_arguments(telemetry, request.conc_list)
+            if request.is_agentic:
+                overrides += ["--set", 'benchmark.env.ENABLE_AGENTX_POWER="1"']
+                overrides += [
+                    "--set",
+                    f'benchmark.env.REQUIRE_POWER="{int(decision.require_power)}"',
+                ]
     system_python = (
         "/usr/bin/python3" if shared and os.access("/usr/bin/python3", os.X_OK) else None
     )
@@ -148,7 +188,7 @@ def run_multinode(launch: Launch) -> int:
     infmax = compute_workspace(run, checkout, shared=shared)
     run.env["INFMAX_WORKSPACE"] = str(infmax)
 
-    conc_list = request.env.get("CONC_LIST", "") if decision.dcgm else None
+    conc_list = request.env.get("CONC_LIST", "") if decision.dcgm and telemetry is None else None
     job_name = srtctl_job_name(request.runner_name)
     prepare_recipe(checkout.root, config_file, job_name, run.srt.dist_timeout_s, conc_list)
     arguments = submit.multinode_arguments(run, lane, config_file, overrides, preflight=preflight)
