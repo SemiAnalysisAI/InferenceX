@@ -131,7 +131,8 @@ jobs:
 
       - id: filter
         name: Take first generated job
-        shell: python
+        # Isolated mode: the workflow PYTHONPATH points into the measured checkout.
+        shell: python -I {0}
         env:
           STEPS_GEN_OUTPUTS_RAW: ${{ steps.gen.outputs.raw }}
         run: |
