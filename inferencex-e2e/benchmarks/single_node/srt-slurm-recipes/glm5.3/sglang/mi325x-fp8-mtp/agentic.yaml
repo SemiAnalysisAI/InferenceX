@@ -112,3 +112,28 @@ override_tp8_mtp_umbp_c1:
       CONC: '1'
       KV_OFFLOADING: dram
       TOTAL_CPU_DRAM_GB: '513'
+
+override_tp8_c2:
+  roles:
+    agg:
+      args:
+        # Let the native allocator use the remaining HBM within the 0.85 budget.
+        max-total-tokens: null
+        max-running-requests: 4
+        cuda-graph-max-bs-decode: 4
+  benchmark:
+    env:
+      CONC: '2'
+      KV_OFFLOADING: none
+
+override_tp8_c3:
+  roles:
+    agg:
+      args:
+        max-total-tokens: null
+        max-running-requests: 6
+        cuda-graph-max-bs-decode: 6
+  benchmark:
+    env:
+      CONC: '3'
+      KV_OFFLOADING: none
