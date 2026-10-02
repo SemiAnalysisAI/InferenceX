@@ -4710,27 +4710,50 @@
         "benchmark_command.txt": "3e7d6bf12e1a87cd80a2a2a01199c4fbe023918e15579f885ba7360ca3a96569",
         "vllm_command.txt": "bf2d272f99197d60cd10548a37711fb9b80a4492e48df6443f3224bc7ae1b2b8"
       }
+    },
+    {
+      "run_id": 37070896182,
+      "url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37070896182",
+      "arm": "nvme",
+      "concurrency": 492,
+      "repeat": 1,
+      "attempt": 1,
+      "head_sha": "3fc82e34a179739987f17d8f7061ff5cf600e712",
+      "status": "in_progress",
+      "workflow_name": "offload-v1-nvme4tib-c492-r1-branchwf-20261002",
+      "dispatched_at": "2026-10-02T22:08:55Z",
+      "started_at": "2026-10-02T22:09:18Z",
+      "job_id": 111049895150,
+      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37070896182/job/111049895150",
+      "runner": "b200-nscale-slurm_00",
+      "performance_result": false,
+      "phase": "admitted to B200 runner; awaiting Slurm allocation and node preflight",
+      "dispatch_evidence": "Focused experiment tests passed 26/26 and matrix-generation tests passed 331/331. The exact generator preview resolved MiniMax-M3 NVFP4, vLLM, TP4, four GPUs, canonical AgentX c492, 3,600-second profiling, kv-offloading=nvme with the vllm-simple backend, zero host DRAM, and experiment=agentx-offload. Immediately before dispatch at 2026-10-02T22:08:42Z, a fresh cluster-wide inventory found zero queued or in-progress jobs carrying cluster:b200-nscale and no active-or-queued study workflow. The generated job carries cluster:b200-nscale and nodes:1 and was admitted to b200-nscale-slurm_00."
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894,36796500128,36879140816,37027095833",
-  "status": "c492 is prepared across all four study arms as the next adaptive point between completed c488 and warmup-infeasible c496; dispatch remains gated on local validation and a fresh cluster-wide B200 inventory.",
+  "status": "4 TiB HBM+NVMe c492 run 37070896182 is active after a clear cluster-wide B200 queue gate and admission to b200-nscale-slurm_00; Slurm allocation and node preflight are pending.",
   "last_capacity_check": {
-    "checked_at": "2026-10-02T21:34:44Z",
-    "active_study_run_ids": [],
+    "checked_at": "2026-10-02T22:08:42Z",
+    "active_study_run_ids": [
+      37070896182
+    ],
     "pending_study_run_ids": [],
     "dispatch_allowed": false,
-    "b200_priority_jobs_queued": null,
-    "b200_priority_jobs_in_progress": null,
-    "b200_active_or_queued_run_ids": [],
+    "b200_priority_jobs_queued": 0,
+    "b200_priority_jobs_in_progress": 1,
+    "b200_active_or_queued_run_ids": [
+      37070896182
+    ],
     "target_node": "im-b200-c001",
-    "target_node_state": "guard-fix requalification cleanup independently verified",
+    "target_node_state": "allocation pending; require allowlisted node, more than 4,535,485,464,576 free bytes, and O_DIRECT before scratch creation",
     "observed_free_bytes": null,
-    "reason": "The corrected guard behavior is verified. Refresh cluster-wide queue state before the next adaptive dispatch."
+    "reason": "c492 is the single active B200 study job. Dispatch nothing else while it remains active or queued."
   },
   "next_dispatch": {
-    "arm": "nvme",
-    "concurrency": 492,
-    "requires": "Validate the prepared c492 configs, synchronized docs, focused expectation, study metadata, and append-only perf-changelog entry, then refresh the cluster-wide B200 queue before dispatch."
+    "arm": null,
+    "concurrency": null,
+    "requires": "Wait for c492 allocation, canonical warmup, 3,600-second profiling, artifact capture, exact scratch cleanup, and adaptive comparison before selecting another point or matched control."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-21T05:30:00Z",
