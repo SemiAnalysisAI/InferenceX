@@ -9213,6 +9213,30 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3571
 
 - config-keys:
+    - kimik3-fp4-b200-dynamo-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update Kimi-K3 B200 AgentX to vllm/vllm-openai:nightly-ac9126e58aa7bbab1856ba6593ba4d5003fea516, set bfloat16 KDA state, and add concurrency 32/56/72/80 with TP8/PP2/DCP8 and DSpark K4."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3087
+
+- config-keys:
+    - dsv41flash-fp4-gb300-vllm-agentic-dspark
+  description:
+    - "Pin GB300 DeepSeek-V4.1-Flash vLLM to nightly ac68c308 with FlashInfer sparse attention, MXFP4 indexer KV, sparse logits, fp8 KV cache, and B300's batching and CUDA graph tiers; use FlashInfer CUTLASS for MXFP8 GEMMs to avoid the CuTe-DSL split-K startup failure."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3396
+
+- config-keys:
+    - dsv4-fp4-gb200-dynamo-sglang-agentic-agg
+    - dsv4-fp4-gb200-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add DSV4-Pro GB200 Dynamo+SGLang AgentX: TP8 aggregate C1/C4, 1P1D DEP8/DEP16 C64/C128, 1P1D DEP16/DEP32 C256, and 2P1D DEP16/DEP32 C768/C1024/C1280."
+    - "Use SGLang nightly-dev-20260916-c9a8fba9, DSpark block size 6, and HiCache; omit enable-w4a4-mxfp4-megamoe while retaining the MegaMoE all-to-all backend and FP4 indexer."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3629
+
+- config-keys:
     - qwen3.5-fp8-gb200-dynamo-sglang-mtp
   description:
     - "Update SGLang image to v0.5.21-cu130 and rename the TP memory-imbalance check env to its new enable form."
