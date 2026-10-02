@@ -117,9 +117,43 @@ def iter_trace_events(path, chunk_size=1 << 22):
                 buf, pos = buf[pos:], 0
 
 
-def load_events(path):
+def load_events(path, keep=None):
     names = {}
-    return [Event(raw, names) for raw in iter_trace_events(path) if raw.get("ph") == "X"]
+    return [Event(raw, names) for raw in iter_trace_events(path)
+            if raw.get("ph") == "X" and (keep is None or keep(raw))]
+
+
+def replayed_graphs(paths):
+    """Graph ordinals the replay traces replay (their infx_graph_replay#n markers)."""
+    graphs = set()
+    for path in paths:
+        for raw in iter_trace_events(path):
+            m = MARK.match(raw.get("name", "")) if raw.get("ph") == "X" else None
+            if m and m.group(1) == "graph_replay":
+                graphs.add(int(m.group(2)))
+    return graphs
+
+
+def capture_ranges(path, graphs):
+    """Sorted (start, end) of the infx_graph_capture#n ranges for the given ordinals."""
+    ranges = []
+    for raw in iter_trace_events(path):
+        m = MARK.match(raw.get("name", "")) if raw.get("ph") == "X" else None
+        if m and m.group(1) == "graph_capture" and int(m.group(2)) in graphs:
+            ranges.append((raw["ts"], raw["ts"] + raw.get("dur", 0)))
+    return sorted(ranges)
+
+
+def overlapping(ranges):
+    """Predicate: a raw event overlaps one of the sorted, disjoint ranges."""
+    starts = [a for a, _ in ranges]
+
+    def keep(raw):
+        ts = raw.get("ts", 0)
+        end = ts + raw.get("dur", 0)
+        k = bisect.bisect_right(starts, end) - 1  # last range starting at or before the event's end
+        return k >= 0 and ranges[k][1] >= ts
+    return keep
 
 
 def parse_signature(sig):
@@ -155,9 +189,9 @@ def launch_kind(name):
 class Trace:
     """One Kineto trace with each CPU launch resolved to its enclosing context."""
 
-    def __init__(self, path):
+    def __init__(self, path, keep=None):
         self.path = path
-        self.events = load_events(path)
+        self.events = load_events(path, keep)
         self._index()
 
     def _index(self):
@@ -258,21 +292,6 @@ def capture_launches(trace):
             ctx["kind"] = launch_kind(trace.events[i]["name"])
             graphs[gid].append(ctx)
     return graphs
-
-
-def eager_kernel_names(trace):
-    """(op, input dims) -> kernel names seen from eager launches, for name checks."""
-    names = collections.defaultdict(set)
-    for i in trace.device:
-        e = trace.events[i]
-        launch = trace.launches.get(e.get("args", {}).get("correlation"))
-        if launch is None or launch_kind(trace.events[launch]["name"]) is None:
-            continue
-        ctx = trace.context(launch)
-        if "graph_capture" in ctx["marks"]:
-            continue
-        names[ctx["op"]].add(e["name"])
-    return names
 
 
 def rank_of_pid(profile_dir):
@@ -665,14 +684,18 @@ def main():
     os.makedirs(out_dir, exist_ok=True)
     report = {"traces": []}
     pairs = {"eager": collections.Counter(), "graph": collections.Counter()}
+    traces = sorted(glob.glob(os.path.join(profile_dir, "torch", "**", "*.pt.trace.json*"),
+                              recursive=True), key=trace_time)
     captured = {}
+    # A capture trace records every CUDA graph size the engine captured, with
+    # Python stacks (GBs with many sizes); load only the graphs the windows replay.
+    needed = replayed_graphs(traces)
     for path in sorted(glob.glob(os.path.join(profile_dir, "capture", "*.json*"))):
-        trace = Trace(path)
-        captured = capture_launches(trace)  # identical on every rank; the first suffices
-        for op, names in eager_kernel_names(trace).items():
-            for name in names:
-                pairs["eager"][(op, name)] += 1
+        ranges = capture_ranges(path, needed)
+        trace = Trace(path, overlapping(ranges)) if ranges else None
+        captured = capture_launches(trace) if trace else {}  # identical on every rank
         report["capture"] = {"path": os.path.relpath(path, profile_dir), "graphs": len(captured),
+                             "graphs_replayed": len(needed),
                              "launches": sum(map(len, captured.values()))}
         del trace
         break
@@ -683,8 +706,6 @@ def main():
     routing = load_routing(profile_dir)
     report["routing"] = {rank: {"bound_layers": len(meta.get("bound", {})), "failed": meta.get("failed")}
                          for rank, (_, _, meta) in sorted(routing.items())}
-    traces = sorted(glob.glob(os.path.join(profile_dir, "torch", "**", "*.pt.trace.json*"),
-                              recursive=True), key=trace_time)
     windows_seen = collections.Counter()
     index = []
     for path in traces:
