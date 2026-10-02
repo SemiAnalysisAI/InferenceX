@@ -46,6 +46,34 @@ the files at that SHA), and note in your verdict that the new commit was not
 assessed. A PASS describes only the pinned commit, not later changes. This keeps
 Check 3 (recipe) consistent with Checks 1-2.
 
+## General review rules (apply to every check)
+These rules raise the bar for every check below. Report a violation under the most
+relevant numbered check; do not add new check rows.
+- EFFECTIVE CONFIGURATION, NOT THE DIFF. For every affected benchmark, resolve the
+  complete effective launch at the pinned SHA: server flags, environment variables
+  (including inherited, base-recipe, launcher/helper, runner and image defaults),
+  harness/client settings, resource allocation and scenario defaults. Unchanged
+  referenced files are in scope. Never sample a large diff; if a PR is too large to
+  resolve completely, FAIL the affected check as "could not be verified" and name
+  what was not resolved.
+- EVIDENCE OVER CONFIGURATION. Where a rule can be confirmed from run artifacts or
+  job logs (rendered configs, logged environments, server startup logs, metric
+  files), confirm it there. Configuration that looks correct but is contradicted or
+  unconfirmed by the run evidence does not PASS.
+- UNKNOWN IS NOT PASS. If you cannot determine a value, a default or a provenance,
+  say so and fail the relevant check rather than assuming the benign case.
+- NO NAMED-KNOB ALLOWLISTS. Named flags and env vars in this prompt are examples of
+  a class of behavior. Apply each rule to any setting with the same effect, on any
+  framework or vendor, even if it is not named here.
+- SHARED-PATH CHANGES. When a PR changes shared launchers, harness code, scenario
+  defaults, runner/cluster configs, workflows or metric/telemetry collection, assess
+  the blast radius across every benchmark path those files reach, not just the
+  configs the PR adds. Verify that existing behavior is preserved for each vendor and
+  path: canary/gating order before full sweeps, telemetry and power collection,
+  eval scheduling, result upload/ingestion and scheduled (cron) triggers. Any newly
+  added scheduled or automatically triggered sweep/ingest workflow must be called
+  out explicitly in the verdict.
+
 ## Check 0 — The sign-off author is a CODEOWNER for the changed files
 The sign-off must come from a CODEOWNER for what the PR changes. Read
 `.github/CODEOWNERS` (in the checked-out default branch) and, for each changed file,
@@ -67,6 +95,13 @@ Then decide:
 - FAIL only when the signer is not a CODEOWNER for a SPECIFIC
   (non-catch-all) changed path, such as an AMD owner signing an NVIDIA-only change.
   Name the path and its real owners in one line.
+- REVIEW-INFRASTRUCTURE CHANGES. If the PR changes the review machinery itself (this
+  prompt, the sign-off verify/publish workflows or their Python modules, the review
+  checklist, CODEOWNERS, or merge/reuse gating code), the signer must be a repository
+  admin or a member of the core maintainer team, not only a path owner of benchmark
+  files. Also FAIL if such a change relaxes, exempts or narrows an existing rule and
+  the PR body does not state the rationale for the relaxation in plain terms. Name
+  the relaxed rule.
 
 ## Check 1 — A passing sweep + evals ran on a commit IN this PR
 The merge standard (and InferenceX's own reuse gate) requires a green full sweep,
@@ -99,6 +134,8 @@ NOT need to list `run-sweep.yml` runs or parse reuse logs.
 - PASS if ANY commit currently in the PR has green (success, non-skipped) `single-node */`
   AND `eval /` check-runs. Remember the run id behind a passing `eval /` check (its
   `details_url` contains `/actions/runs/<run_id>/...`). Check 2 needs it.
+  For AgentX and multi-node submissions apply the same rule to the corresponding
+  `agentic /`, `multi-node */` and their eval check-runs.
 - Otherwise FAIL. State the ROOT ISSUE plainly and keep it actionable:
   "No passing sweep/eval was found on any commit in this PR."
   Do NOT write a confusing message like "it technically passed but the commit isn't in
@@ -107,6 +144,19 @@ NOT need to list `run-sweep.yml` runs or parse reuse logs.
   `/use <run_id>` or the legacy `/reuse-sweep-run`) a passing full sweep on a commit
   currently in this PR. You may add an offending run/SHA as a short supporting detail
   AFTER the root-issue line.
+- SWEPT COMMIT vs PINNED HEAD. If the passing sweep ran on a commit other than the
+  pinned head, diff the two (`gh api repos/${REPO}/compare/<sweep_sha>...${HEAD_SHA}`),
+  including commits brought in by merging the default branch. FAIL if anything between
+  them can change a measured result for the affected configs: recipes, master-config
+  entries, benchmark scripts, launchers/helpers, harness or scenario defaults, runner
+  configs, metric computation or eval code. Changelog-only or unrelated-path changes are
+  fine; name them in one line.
+- HARNESS FRESHNESS. Compare the harness/scenario/metric code the sweep ran with
+  against the current default branch. FAIL if the default branch has since changed
+  harness, scenario defaults, metric computation or result-schema code in a way that
+  affects these configs and invalidates or makes the results incomparable with
+  results produced on the current harness. Name the change and require a re-sweep on a
+  commit that includes it.
 
 ## Check 2 — Evals actually pass (accuracy), on that in-PR commit's run
 For the commit that passed Check 1, confirm the eval numbers are real and meet the bar,
@@ -122,21 +172,38 @@ not merely that the job is green:
   accuracy is present and meets the expected bar for the model, and that the run used
   the same inference-engine image as this PR's config. FAIL if evals are
   skipped, failed, empty, below bar, or use a different image. Say exactly which condition applies.
+- EVAL COVERAGE. Determine from the pinned eval-selection code and configs which eval
+  suites are required for each affected model/scenario (for example a default suite
+  plus any model- or vendor-specific suites) and which configs must be evaluated.
+  FAIL if any required suite or required config has no executed, passing result, even
+  when other suites passed. A green aggregator over a partial set is not coverage.
+- RUN ARTIFACTS ARE COMPLETE. The passing run must be publishable as-is. FAIL if:
+  - any configured benchmark point failed, timed out, was skipped or produced no
+    result file, unless the sign-off documents its intentional removal from the config;
+  - required server-side metrics are missing from the artifacts. For agentic
+    workloads this includes prefix/KV cache-hit metrics; for every workload it includes
+    the server metrics the harness requires. A config that disables or fails to
+    export them FAILs regardless of the framework-specific knob that caused it;
+  - power/energy telemetry is missing for a SKU and path where the pinned harness
+    collects it, or a shared-path change removed that collection for any vendor;
+  - results contain non-finite, zero or physically implausible values (for example
+    throughput far above the hardware's prior published range for the same model).
+  Name the point, the missing artifact and the run link.
 
-## Check 3 — Recipe linked, MERGED, AND complete (SINGLE-NODE recipes only)
-APPLICABILITY. Read this first. The recipe-link requirement covers SINGLE-NODE
-recipes only, because the official upstream recipe sources (vLLM recipes, SGLang
-cookbook) publish single-node serve commands. Disaggregated / multi-node
-submissions have NO recipe-link requirement. If the PR's benchmark changes are
-exclusively multi-node/disagg, with files under `inferencex-e2e/benchmarks/multi_node/**` (including
-`srt-slurm-recipes/**`), and/or master-config entries with `multinode: true` or
-`disagg: true`, and/or disagg frameworks (`dynamo-trt`, `dynamo-sglang`,
-`sglang-disagg`, vLLM disagg, ATOM/ATOMesh disagg), report this check as
-`N/A — disaggregated/multi-node submission; the recipe-link requirement applies to
-single-node recipes only` and DO NOT fail it. A sign-off note like "this is a
-disagg submission, no recipe update required" is a legitimate statement of that
-fact, not a violation. If the PR touches BOTH single-node and multi-node recipes,
-apply (a)/(b)/(c) below to the single-node portion only.
+## Check 3 — Recipe linked, MERGED, complete, and configuration parity
+APPLICABILITY. Read this first. The recipe-LINK requirements (a) and (b) cover
+SINGLE-NODE recipes only, because the official upstream recipe sources (vLLM recipes,
+SGLang cookbook) publish single-node serve commands. Disaggregated / multi-node
+submissions have NO recipe-link requirement: files under
+`inferencex-e2e/benchmarks/multi_node/**` (including `srt-slurm-recipes/**`),
+master-config entries with `multinode: true` or `disagg: true`, and disagg frameworks
+(`dynamo-trt`, `dynamo-sglang`, `sglang-disagg`, vLLM disagg, ATOM/ATOMesh disagg).
+A sign-off note like "this is a disagg submission, no recipe update required" is a
+legitimate statement of that fact for (a)/(b), not a violation.
+
+The PARITY requirement (d) below applies to EVERY submission, single-node and
+multi-node alike. Multi-node/disagg submissions are never N/A for this check unless the
+PR changes no benchmark configuration at all.
 
 The InferenceX "recipe" for this PR = the files it changes under
 `inferencex-e2e/benchmarks/single_node/**` plus its entry in `inferencex-e2e/configs/*-master.yaml`. The merge
@@ -170,16 +237,43 @@ public upstream documentation.
       - kernel-selection backends: `--attention-backend`, `--moe-runner-backend`,
         `--enable-flashinfer-allreduce-fusion` and similar
       - other flags that materially change the served model or its throughput
+      - environment variables with any of the effects above. Classify env vars by
+        EFFECT, never by being an env var: anything that selects, enables or disables
+        kernels or kernel families, chooses the attention/MoE/communication path,
+        changes quantization or precision, changes speculative-decoding behavior, or
+        changes scheduling/batching semantics is MAJOR.
     INFERENCEX-SPECIFIC (do NOT require a match, and list as informational only, never a
-    failure): per-lane sweep tuning and harness plumbing such as
+    failure): per-lane sweep tuning and harness plumbing whose effect is limited to
+    throughput/latency tuning of the same computation and kernels, such as
     `--scheduler-recv-interval`, `--chunked-prefill-size`, `--disable-piecewise-cuda-graph`,
-    `SGLANG_RADIX_FORCE_MISS` and similar env toggles, concurrency / sequence-length
-    sweep ranges, ports, result filenames, and image tag/version.
+    cache-isolation toggles required by the harness (e.g. `SGLANG_RADIX_FORCE_MISS`),
+    concurrency / sequence-length sweep ranges, ports, result filenames, and image
+    tag/version. A setting is only InferenceX-specific if you can state why it does not
+    change which kernels run or what is computed.
   FAIL if a MAJOR arg in this PR is missing from (or contradicts) the merged/published
-  recipe. List exactly those. Treat the InferenceX-specific diffs as expected and
-  mention them only as a brief informational note, not as blockers. If a flag's effect
-  is equivalent to a recipe default (e.g. quantization auto-detected from an FP4
-  model), say so and do not count it against the recipe.
+  recipe. OMISSIONS COUNT: a MAJOR flag or env var present in the reference but absent
+  from this PR is a mismatch, even if the PR description announces the omission. List
+  exactly those. Treat the InferenceX-specific diffs as expected and mention them only
+  as a brief informational note, not as blockers. If a flag's effect is equivalent to a
+  recipe default (e.g. quantization auto-detected from an FP4 model), say so and do not
+  count it against the recipe. A setting described as a workaround (e.g. disabling a
+  kernel to avoid a startup failure) is MAJOR, not informational: it needs an upstream
+  issue/PR link and a statement of which path runs instead.
+- (d) CONFIGURATION PARITY (ALL submissions). For your own analysis, compare every
+  server flag AND every environment variable in the effective launch (per role:
+  aggregated, prefill, decode) side by side with the authoritative reference. In the
+  verdict, report only the MAJOR differences. The reference, in order of preference:
+    1. the merged/published upstream recipe from (a)-(c), for single-node;
+    2. for multi-node/disagg, the framework or hardware vendor's published deployment
+       recipe for the same model, SKU and topology (e.g. upstream srt-slurm/Dynamo
+       recipes, SGLang cookbook or vLLM recipe disagg sections, vendor model cards),
+       fetched and linked;
+    3. otherwise, the most recent merged InferenceX recipe for the same model,
+       framework and SKU on the default branch.
+  Link the reference used. FAIL if any MAJOR difference (including an omission) is not
+  justified in the sign-off's additional detail section with a concrete reason and,
+  where it works around an engine limitation, an upstream issue/PR link. FAIL if no
+  reference can be identified and the sign-off does not explain why none exists.
 - Note: a bare "recipes are already similar to the official ones" claim WITHOUT a
   link to merged/published upstream documentation does not pass this workflow's
   standard.
@@ -287,6 +381,37 @@ production by accuracy-sensitive customers.
 - FAIL with the exact flag/value if architecture FLOPs are reduced without native
   model support.
 
+MEASUREMENT INTEGRITY. Also FAIL Check 8 if anything in the effective configuration
+makes the measured workload easier, or the reported metrics better, than what the
+benchmark defines, independent of model architecture. Inspect at least:
+- Streaming/output granularity: settings that batch or delay streamed tokens (e.g.
+  stream intervals, output chunking, detokenization batching) beyond what production
+  serving uses, which distort TTFT, inter-token latency or interactivity. Values beyond
+  common production practice need explicit justification.
+- Context and request limits: the served max context length, max model length, max
+  input/output tokens and similar limits must accommodate the scenario's dataset. FAIL
+  if a limit is below the dataset's maximum request length so that requests are
+  truncated, rejected, or silently shortened, unless the harness filters those requests
+  identically for every submission.
+- Request semantics: overrides of output-length control, stop/EOS handling, sampling
+  parameters, prompt/chat templates or tool-call handling that differ from the
+  scenario definition.
+- Error handling: configs where failed, rejected or errored requests are dropped from
+  the metric denominators instead of being counted as failures.
+- Resource allocation: CPU cores, memory, GPU visibility, NUMA/affinity, container
+  limits and similar runner settings must match the cluster profile and not starve or
+  privilege the server. Verify from logs where possible (e.g. thread/CPU counts at
+  startup). Under-provisioning that yields wrong results FAILs just like
+  over-provisioning that games them.
+- Harness/scenario overrides: per-config overrides of the scenario definition,
+  warm-up, cache-reuse, inter-turn delay or percentile computation.
+Name the setting, its effective value, where it comes from, and what the benchmark
+requires.
+
+TELEMETRY PROHIBITION (generic). No submission may disable or suppress the
+server-side events or metrics the harness relies on (cache-hit, KV events, server
+metrics), whatever the framework-specific knob. The named rule below is one instance.
+
 EXPLICIT PROHIBITION: `publish_events_and_metrics: false` is not allowed.
 FAIL Check 8 if an affected benchmark's effective serving configuration disables
 `publish_events_and_metrics`, including equivalent false values recognized by the
@@ -393,9 +518,28 @@ Verify BOTH:
   unless the sign-off documents a sanctioned exception.
 - N/A if the PR has no agentic speculative-decoding changes (state that in one line).
 
-## Check 12 — Append-only changes only add new points to an unchanged curve
-APPLICABILITY: this check applies when any new `inferencex-e2e/perf-changelog.yaml` entry contains
-`append-only: true`. If none does, report N/A.
+## Check 12 — Curve integrity (append-only isolation and published-curve regression)
+This check has two parts. Part A applies to append-only submissions. Part B applies to
+every performance-affecting submission. Report N/A only when neither applies.
+
+PART B — PUBLISHED-CURVE REGRESSION (all performance-affecting submissions). For
+each affected model/scenario/hardware/framework/precision curve, compare the new
+results against the curve currently published by the InferenceX app (live API or the
+latest ingested run for that curve):
+- COVERAGE: FAIL if ingesting this run would replace a published curve with fewer
+  points, a narrower concurrency range, fewer topologies/arms, or missing metrics
+  (e.g. power) that the published curve has, unless the submission is append-only or
+  the sign-off states the coverage reduction is intentional and why. Partial or
+  validation-only sweeps must not supersede fuller published curves.
+- PERFORMANCE: compare throughput at matched interactivity/latency. FAIL if any
+  affected curve regresses materially (roughly 20% or more at comparable points)
+  without an explanation in the sign-off's additional detail section (for example a
+  known upstream regression with a link, or a methodology change). Unexplained large
+  regressions, and unexplained large improvements, are signs of misconfiguration.
+- Show the published and new point counts and the largest deltas, with links.
+
+PART A — APPEND-ONLY. Applies when any new `inferencex-e2e/perf-changelog.yaml` entry
+contains `append-only: true`.
 - Confirm every new changelog entry in the sweep is append-only; mixed regular and
   append-only entries are not allowed.
 - Inspect the complete PR diff without using a file allowlist. Supporting code,
@@ -546,6 +690,17 @@ its separate speculative-algorithm/configuration requirements.
   If evidence is missing or inaccessible, FAIL as "Draft precision could not be
   verified", naming the missing evidence; do not assert that a precision change was
   proven.
+- DRAFT IS FUNCTIONAL. Simulated/synthetic acceptance (Check 11) hides a broken draft
+  in throughput runs, so verify the draft actually works from a run that uses real
+  acceptance (eval runs or any non-synthetic path). Report the measured acceptance
+  length or acceptance rate from those logs/metrics. FAIL if it is at or near the
+  floor (about 1 token per step, i.e. drafts essentially always rejected) or far below
+  the committed golden/reference value for that model and draft length, and require
+  fixing the draft before benchmarking. Also verify the speculative algorithm and draft
+  source match what the checkpoint ships (e.g. an EAGLE/NextN/MTP/DSpark algorithm
+  pointed at the matching head or draft weights for this exact target checkpoint and
+  revision). If real acceptance cannot be found, FAIL as "Draft function could not be
+  verified".
 - N/A only when the PR does not affect any speculative-decoding benchmark.
   A change that removes speculative decoding entirely is also N/A; verify that no
   affected speculative path remains.
@@ -639,6 +794,9 @@ unchanged. It records only the assessed commit and does not publish commit statu
 verdict forward to later commits.
 Do not include a hidden marker or assessed-commit footer; the publisher adds them.
 Always write your full current assessment, even if it matches a previous verdict.
+A PASS is valid only for the pinned SHA. If the PR head later gains commits that touch
+any benchmark-affecting path listed in Check 1, the sign-off must be re-verified
+before merge.
 
 KEEP IT TIGHT. A busy reviewer should get it in ~15 seconds. Do not write a novel or a
 single terse line. Rules:
