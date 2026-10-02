@@ -1757,3 +1757,32 @@ def test_agentic_collector_preserves_archive_when_result_python_is_missing(
     else:
         assert "INFERENCEX_RESULTS_PYTHON" in capfd.readouterr().err
         assert aggregate == raw_result
+
+
+@pytest.mark.parametrize('cpu_present,strict', [(True, True), (False, True), (False, False)])
+def test_native_fixed_sequence_uses_srt_cpu_package_without_multinode_metadata(
+    tmp_path, monkeypatch, single_node_env_vars, cpu_present, strict
+):
+    from infx.tests.results.power import test_aggregate_power_multinode as fixture
+
+    monkeypatch.setattr(fixture, 'DEVICES', tuple(
+        ('node-d', index, 'agg', None, 300.0) for index in range(4)
+    ))
+    pkg = fixture.build_package(tmp_path, bench_extra=TestMultinodePower.BENCH_EXTRA)
+    if cpu_present:
+        fixture.add_cpu_package(pkg, fixture._cpu_rows(hosts=('node-d',)))
+    env = {
+        **single_node_env_vars, 'TP': '4', 'GPU_COUNT': '4',
+        'POWER_ARTIFACT_DIR': 'LOGS/power', 'POWER_RESULT_ROOT': 'LOGS',
+        'POWER_PRODUCER_SHA': PRODUCER_SHA, 'POWER_EXPECTED_CPU_SOURCE': 'acpi',
+        'REQUIRE_POWER': str(int(strict)),
+    }
+    result = run_script(tmp_path, env, json.loads(pkg.original_result.read_text()))
+    assert result.returncode == int(strict and not cpu_present), result.stderr
+    aggregate = json.loads((tmp_path / 'agg_benchmark_result.json').read_text())
+    assert aggregate['is_multinode'] is False
+    assert aggregate['tp'] == 4
+    assert aggregate['power_valid'] == 1
+    assert aggregate['cpu_power_valid'] == int(cpu_present)
+    if cpu_present:
+        assert aggregate['avg_total_cpu_power_w'] == 1000

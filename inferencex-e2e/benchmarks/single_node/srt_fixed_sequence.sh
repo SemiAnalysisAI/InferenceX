@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
-# SRT owns the server lifecycle; retain the existing InferenceX client and sampler.
+# SRT owns the server lifecycle and, when telemetry is enabled, the power sampler.
+# Keep the InferenceX client and use its local sampler only without native telemetry.
 set -eo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/../benchmark_lib.sh" --validation-only
 check_env_vars MODEL CONC ISL OSL RANDOM_RANGE_RATIO RESULT_FILENAME RESULT_DIR \
@@ -46,8 +47,10 @@ source "$(dirname "${BASH_SOURCE[0]}")/../benchmark_lib.sh"
 cd "$INFERENCEX_REPO_ROOT"
 pip3 install --break-system-packages sentencepiece datasets pandas
 
-start_gpu_monitor --output "$RESULT_DIR/gpu_metrics.csv" --interval "$SRT_MONITOR_INTERVAL"
-trap 'rc=$?; stop_gpu_monitor; exit "$rc"' EXIT
+if [[ -z "${SRT_MEASUREMENT_WINDOW_DIR:-}" ]]; then
+    start_gpu_monitor --output "$RESULT_DIR/gpu_metrics.csv" --interval "$SRT_MONITOR_INTERVAL"
+    trap 'rc=$?; stop_gpu_monitor; exit "$rc"' EXIT
+fi
 
 run_benchmark_serving \
     --model "$MODEL" \
@@ -62,3 +65,7 @@ run_benchmark_serving \
     --result-filename "$RESULT_FILENAME" \
     --result-dir "$RESULT_DIR" \
     "${CLIENT_ARGS[@]}"
+
+if [[ -n "${SRT_MEASUREMENT_WINDOW_DIR:-}" ]]; then
+    python3 -m infx.results.power.window "$RESULT_DIR/$RESULT_FILENAME.json" "$CONC"
+fi

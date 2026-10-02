@@ -103,7 +103,7 @@ frontend:
     active-prefill-tokens-threshold-frac: "None"
     tokenizer: "fastokens"
   placement:
-    node: first_decode
+    node: head
 engine:
   type: vllm
   connector:
@@ -188,8 +188,7 @@ srun_options:
   container-remap-root: ""
 
 benchmark:
-  # The AgentX client uses localhost:8000, so colocate it with the Dynamo
-  # frontend launched on the first decode node.
+  # Keep the client, frontend and telemetry collector on the head clock.
   type: custom
   command: bash /infmax-workspace/benchmarks/srt_agentic.sh
   env:
@@ -231,4 +230,4 @@ benchmark:
     HF_WEKA_DATASET: "semianalysisai/cc-traces-weka-062126"
     PUBLIC_DATASET: "semianalysis_cc_traces_weka_062126"
   placement:
-    node: first_decode
+    node: head

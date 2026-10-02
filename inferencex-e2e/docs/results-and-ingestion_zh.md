@@ -440,6 +440,8 @@ rm -rf -- "$tmp"
 
 ## NVL72 Grace CPU 侧实测功耗
 
+GB200/GB300 集群默认配置为普通 fixed-sequence 和 AgentX 提交（包括原生单节点配方）启用 GPU 与 ACPI CPU 采集；纯评估作业没有 benchmark 功耗窗口。Grace socket 总功耗包含 CPU/SoC、LPDDR5X 和稳压损耗，并非单独的 RAM 测量；有效总量构成系统功耗估算的实测部分，未测量的机架组件仍采用模型。
+
 启用了 srt-slurm `telemetry.cpu_power_exporter` 的 GB200 和 GB300 NVL72 recipe 会在 GPU DCGM
 产物包旁写入 `LOGS/power/cpu/samples.csv` 和一份非权威的 `cpu_manifest.json`。多节点校验器接受
 历史版本 v2.2.1 写出的长格式（每个传感器读数一行，表头为
@@ -471,7 +473,10 @@ HBM、LPDDR5X 及稳压损耗）；`Grace Power Socket N` 或 `CPU<n>:cpuSidePow
 该测量环节尽力而为，其结论与 `power_valid` 相互独立：它只从 GPU 产物包借用已绑定的正式测量窗口和
 worker 主机拓扑，GPU 侧的任何结论都不会传导过来，因此 producer 固定版本校验失败或 GPU 覆盖不足只会
 使 GPU 能耗不予发布，`cpu_power_valid` 仍按 CPU 采样自身给出结论。CPU 侧的任何失败都会记录
-`cpu_power_valid: 0` 且不输出 CPU 字段，所有 GPU 字段保持不变。设置 `REQUIRE_POWER=1` 时，配方声明的 CPU 来源必须有效；ACPI 必须提供完整的 Grace socket 或模块总功耗，缺失 CPU 产物会生成独立的无效 CPU 审计。仅采集 GPU 的配方保留原有行为。
+`cpu_power_valid: 0` 且不输出 CPU 字段，所有 GPU 字段保持不变。当 `REQUIRE_POWER=1` 或严格的
+执行路径策略要求功耗有效时，已配置的 CPU 来源也必须有效；ACPI 必须提供完整的 Grace socket 或
+模块总功耗，缺失 CPU 产物会生成独立的无效 CPU 审计。`gb200-nv` 和 `gb300-nv` 在集群级声明
+`acpi`，因此每个严格校验的数据点都必须有有效的 CPU 审计。其他集群中仅采集 GPU 的配方保留原有行为。
 原因码包括 `cpu_artifacts_missing`、`cpu_sensor_source_mismatch`、`cpu_samples_missing`、`cpu_samples_header_mismatch`、`cpu_samples_malformed`、
 `cpu_manifest_invalid`、`cpu_socket_count_mismatch`、`cpu_sensor_kind_mixed`、
 `cpu_sample_gap_exceeded`、`cpu_window_not_bracketed` 以及 `cpu_window_unavailable`（没有已完成的窗口

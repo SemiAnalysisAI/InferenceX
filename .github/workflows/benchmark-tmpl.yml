@@ -432,6 +432,8 @@ jobs:
             ${{ env.INFERENCEX_E2E_ROOT }}/results/agentic_power_window.json
             ${{ env.INFERENCEX_E2E_ROOT }}/results/agentic_power_timezone_offset.txt
             ${{ env.INFERENCEX_E2E_ROOT }}/results/power_validation.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/power
+            ${{ env.INFERENCEX_E2E_ROOT }}/power-producer-sha.txt
           if-no-files-found: ignore
 
       - name: Upload eval results (if any)

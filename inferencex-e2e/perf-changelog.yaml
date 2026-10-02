@@ -9277,3 +9277,61 @@
     - "Collect ACPI CPU power on Qwen3.5 NVL72 4P1D and 8P1D recipes, including noprof DCGM collection on 8P1D, with the pinned v2.40.2 CPU exporter. Place the 8P1D frontend, benchmark client, and infra on the reserved head so power and benchmark timestamps share its clock; retain 13 allocated nodes and 12 GPU workers. Require valid power for all selected Qwen3.5 fixed-sequence points."
     - "During strict power qualification, require the CPU source declared by each selected recipe; reject missing or invalid CPU totals without changing the independent GPU verdict. Preserve best-effort behavior when no CPU source is declared."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3296
+
+- config-keys:
+    - dsr1-fp4-gb200-dynamo-trt
+    - dsr1-fp8-gb200-dynamo-trt
+    - dsr1-fp8-gb200-dynamo-sglang
+    - dsr1-fp8-gb300-dynamo-sglang
+    - dsr1-fp4-gb200-dynamo-sglang
+    - dsr1-fp4-gb300-dynamo-trt
+    - dsr1-fp4-gb300-dynamo-sglang
+    - dsr1-fp8-gb300-dynamo-trt
+    - qwen3.5-fp8-gb200-dynamo-sglang
+    - qwen3.5-fp4-gb300-dynamo-sglang
+    - qwen3.5-fp4-gb300-dynamo-trt
+    - qwen3.5-fp4-gb300-dynamo-trt-mtp
+    - qwen3.5-fp4-gb300-dynamo-trt-agentic-disagg
+    - qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg
+    - qwen3.5-fp4-gb300-dynamo-sglang-agentic-disagg
+    - qwen3.5-fp4-gb300-dynamo-sglang-agentic-pp-pareto
+    - qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg-pareto
+    - dsv4-fp4-gb300-dynamo-vllm-agentic
+    - qwen3.5-fp4-gb200-dynamo-sglang-agentic-mtp
+    - minimaxm3-fp4-gb300-dynamo-vllm-agentic-mtp-disagg
+    - minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp
+    - minimaxm3-fp4-gb200-dynamo-vllm-agentic-disagg-mtp
+    - minimaxm3-fp4-gb200-dynamo-trt-agentic-agg-mtp
+    - dsv4-fp4-gb200-dynamo-vllm-agentic-mtp-agg
+    - dsv4-fp4-gb200-dynamo-vllm-agentic-mtp-disagg
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-agg
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg
+    - dsv4-fp4-gb200-dynamo-vllm-agentic-mtp2-agg
+    - dsv4-fp4-gb200-dynamo-vllm-agentic-mtp2-disagg
+    - kimik3-fp4-gb200-dynamo-vllm-agentic
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-agg
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-mooncake-dcp16-agg
+    - dsv4-fp4-gb300-dynamo-trt-agentx
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2
+    - dsv4-fp4-gb300-dynamo-sglang-agentic-agg
+    - dsv4-fp4-gb300-dynamo-sglang-agentic-disagg
+    - qwen3.5-fp8-gb300-dynamo-sglang
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-disagg
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-mtp
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-mtp-agg
+    - glm5.2-fp4-gb300-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg
+    - glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp
+    - qwen3.5-fp8-gb200-dynamo-sglang-mtp
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg
+    - qwen3.5-fp8-gb300-dynamo-sglang-mtp
+    - dsv41flash-fp4-gb200-vllm-agentic-dspark
+    - dsv41flash-fp4-gb200-sglang-agentic-dspark
+    - dsv41flash-fp4-gb300-vllm-agentic-dspark
+    - dsv41flash-fp4-gb300-sglang-agentic-dspark
+  description:
+    - "Enable noprof GPU and ACPI CPU collection by default for GB200/GB300 benchmark recipes, including native single-node and AgentX, with cpu-power-exporter v2.40.2. Preserve independent GPU/CPU validity and existing strict qualification; eval-only jobs omit collection."
+    - "Place benchmark clients and telemetry on the head clock without changing worker or allocation counts. Native single-node results retain their real topology and power audit. Placement changes require fresh performance results."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3670

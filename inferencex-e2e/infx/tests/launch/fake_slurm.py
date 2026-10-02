@@ -134,6 +134,9 @@ if os.environ.get("RUN_EVAL") == "true" or os.environ.get("EVAL_ONLY") == "true"
     (logs / "infx-eval-exit-code").write_text("0\n")
 if os.environ.get("FAKE_ACTIVE"):
     pathlib.Path(os.environ["FAKE_ACTIVE"]).touch()
+if fixture := os.environ.get("FAKE_SRT_OUTPUT_FIXTURE"):
+    import shutil
+    shutil.copytree(fixture, logs, dirs_exist_ok=True)
 if "--json" in argv:
     print(json.dumps({"status": "submitted", "slurm_job_id": "42", "output_dir": str(output)}))
 else:
