@@ -197,7 +197,6 @@ def test_agentic_dependency_install_is_rootless_without_git(tmp_path: Path) -> N
         "tqdm>=4.66",
         "datasets>=4.7.0",
         "tiktoken",
-        "matplotlib",
         "huggingface_hub[cli]>=0.25.0",
         "urllib3",
         "requests",
