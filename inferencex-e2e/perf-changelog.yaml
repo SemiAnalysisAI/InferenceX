@@ -9216,4 +9216,4 @@
     - glm5.3-fp8-mi325x-sglang-agentic-mtp
   description:
     - "Add GLM-5.3 FP8 AgentX on MI325X using the pinned October 1 SGLang ROCm 7.2.4 MI30X image and native three-step EAGLE MTP."
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3656
