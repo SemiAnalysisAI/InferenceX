@@ -187,8 +187,38 @@ def offload_headroom_arguments(role_args: Mapping[str, Any], headroom_gib: float
     return ["--set", f"roles.agg.args.kv-transfer-config={json.dumps(transfer)}"]
 
 
+def mooncake_headroom_arguments(
+    recipe: Mapping[str, Any], role_args: Mapping[str, Any], headroom_gib: float
+) -> list[str]:
+    """Shrink an embedded Mooncake store's per-rank segment so profiling leaves the host headroom_gib.
+
+    Each TP rank registers global_segment_size of host memory for RDMA; with the
+    profiler's buffers on top, B300 Kimi K3 ran out registering it.
+    """
+    if headroom_gib <= 0:
+        return []
+    ranks = int(role_args.get("data-parallel-size", 1)) * int(role_args.get("tensor-parallel-size", 1))
+    overrides = []
+    for index, service in enumerate(recipe.get("services") or []):
+        if not isinstance(service, Mapping) or service.get("type") != "mooncake-master":
+            continue
+        size = ((service.get("options") or {}).get("store_config") or {}).get("global_segment_size")
+        match = re.fullmatch(r"(\d+(?:\.\d+)?)\s*([KMGT]?B)", str(size or ""), re.IGNORECASE)
+        if not match:
+            continue
+        scale = {"KB": 1 / 2**20, "MB": 1 / 2**10, "GB": 1, "TB": 2**10}[match.group(2).upper()]
+        shrunk = float(match.group(1)) * scale - headroom_gib / ranks
+        if shrunk <= 0:
+            raise ValueError("INFX_PROFILE host_headroom_gib exceeds the recipe's Mooncake segment")
+        overrides += ["--set", f"services[{index}].options.store_config.global_segment_size="
+                               f"{json.dumps(f'{int(shrunk)}GB')}"]
+    return overrides
+
+
 def profiling_arguments(
-    environment: Mapping[str, str], role_args: Mapping[str, Any] | None = None
+    environment: Mapping[str, str],
+    role_args: Mapping[str, Any] | None = None,
+    recipe: Mapping[str, Any] | None = None,
 ) -> list[str]:
     """Op-attribution profiling for vLLM: capture hooks, step log and torch windows.
 
@@ -239,6 +269,8 @@ def profiling_arguments(
     }
     overrides = ["--set", f"roles.agg.args.profiler-config={json.dumps(profiler_config)}"]
     overrides += offload_headroom_arguments(role_args or {}, float(settings["host_headroom_gib"]))
+    overrides += mooncake_headroom_arguments(recipe or {}, role_args or {},
+                                             float(settings["host_headroom_gib"]))
     for name, value in worker_env.items():
         overrides += ["--set", f"roles.agg.env.{name}={json.dumps(value)}"]
     measured = [int(w[1]) for w in windows if w[0] == "profiling"]
@@ -280,7 +312,7 @@ def runtime_arguments(config: str, environment: Mapping[str, str]) -> list[str]:
     # Exclusive nodes include idle GPUs. Restrict each server/client step to
     # the serving GPU count so client-side power collection sees the same set.
     overrides = ["--set", f"srun_options.gpus-per-node={json.dumps(environment['GPU_COUNT'])}"]
-    overrides += profiling_arguments(environment, recipe["roles"]["agg"]["args"])
+    overrides += profiling_arguments(environment, recipe["roles"]["agg"]["args"], recipe)
     if environment.get("SRT_SRUN_OPTIONS"):
         options = json.loads(environment["SRT_SRUN_OPTIONS"])
         if not isinstance(options, dict) or any(
