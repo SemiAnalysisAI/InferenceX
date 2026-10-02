@@ -7691,7 +7691,7 @@ glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp:
           dp-attn: true
 
 qwen3.5-fp8-gb200-dynamo-sglang-mtp:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
+  image: lmsysorg/sglang:v0.5.21-cu130@sha256:b1259f3ea3275f66237c498ea388919729018bc9f01c3d638391e06e2cf3f469
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: gb200
