@@ -63,14 +63,15 @@ def finish_single_node(
     logs = output / "logs"
     if power is not None and power.dcgm:
         power_dir = logs / "power"
-        power_dir.mkdir(parents=True, exist_ok=True)
         try:
+            power_dir.mkdir(parents=True, exist_ok=True)
             for name in (EXPORTER_PROVENANCE, "power-producer-sha.txt"):
                 shutil.copyfile(run.workspace / name, power_dir / name)
             shutil.copytree(logs, run.workspace / "LOGS", dirs_exist_ok=True)
         except OSError as error:
-            print(f"ERROR: failed to stage power artifacts: {error}", file=sys.stderr)
-            rc = 1
+            level = "ERROR" if power.require_power else "WARNING"
+            print(f"{level}: failed to stage power artifacts: {error}", file=sys.stderr)
+            rc = int(power.require_power)
     bundle_server_logs(output, run.workspace / SINGLE_NODE_LOGS)
     result = logs / f"{run.request.result_filename}.json"
     for artifact in [result, *sorted(logs.glob("gpu_metrics*"))]:
@@ -92,7 +93,7 @@ def finish_single_node(
 def check_single_node(
     run: SrtRun, logs: Path, power: PowerDecision | None = None, producer_sha: str = ""
 ) -> int:
-    """Fail unless each requested eval succeeded and the benchmark result exists.
+    """Validate requested evals, benchmark output and AgentX power requirements.
 
     srt-slurm treats a failed post-benchmark eval as non-fatal; InferenceX does not.
     """

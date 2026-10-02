@@ -174,6 +174,61 @@ def test_single_node_failed_allocation_fails_the_launch(harness):
 
 
 @pytest.mark.parametrize(
+    ("failure", "require_power", "expected_rc"),
+    [
+        ("power_dir", False, 0), ("power_dir", True, 1),
+        ("provenance", False, 0), ("provenance", True, 1),
+        ("power_tree", False, 0), ("power_tree", True, 1),
+        ("result", False, 1), ("agentic", False, 1),
+    ],
+)
+def test_native_cleanup_keeps_optional_power_failures_best_effort(
+    tmp_path, failure, require_power, expected_rc
+):
+    from infx.launch.backends.base import Job
+    from infx.launch.drivers.srt.collect import finish_single_node
+    from infx.launch.drivers.srt.power import PowerDecision
+    from infx.launch.drivers.srt.submit import Submitted
+    from infx.launch.lifecycle import Lifecycle
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    output = tmp_path / "output"
+    logs = output / "logs"
+    (logs / "agentic").mkdir(parents=True)
+    (logs / "point.json").write_text('{"completed": 2}')
+    (logs / "agentic/replay.json").write_text('{"requests": 2}')
+    (workspace / "power-producer-sha.txt").write_text("a" * 40)
+    if failure != "provenance":
+        (workspace / "exporter-image.sha256").write_text("exporter digest")
+    if failure == "power_dir":
+        (logs / "power").write_text("blocks directory creation")
+    elif failure == "power_tree":
+        (workspace / "LOGS").write_text("blocks tree copy")
+    elif failure == "result":
+        (workspace / "point.json").symlink_to(tmp_path / "missing/point.json")
+    elif failure == "agentic":
+        (workspace / "results").write_text("blocks AgentX copy")
+    run = SimpleNamespace(
+        workspace=workspace,
+        request=SimpleNamespace(result_filename="point", require_power=False),
+        backend=SimpleNamespace(cancel=lambda job: None, fetch_outputs=lambda *args: output),
+    )
+    submitted = Submitted(manifest=tmp_path / "submission.json", job=Job("42"))
+    with Lifecycle() as life:
+        life.callback(
+            finish_single_node, run, submitted, tmp_path / "fetched",
+            PowerDecision(dcgm=True, agentx=True, require_power=require_power),
+        )
+
+    assert life.returncode == expected_rc
+    if failure != "result":
+        assert json.loads((workspace / "point.json").read_text()) == {"completed": 2}
+    if failure != "agentic":
+        assert json.loads((workspace / "results/replay.json").read_text()) == {"requests": 2}
+
+
+@pytest.mark.parametrize(
     ("gpu_count", "has_cpu", "require_power"),
     [(2, True, True), (4, True, True), (4, False, True), (4, False, False)],
 )

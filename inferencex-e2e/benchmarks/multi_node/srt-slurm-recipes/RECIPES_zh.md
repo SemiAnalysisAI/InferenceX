@@ -70,7 +70,8 @@ python -m infx.matrix.generate full-sweep \
 
 - SGLang Model Gateway 配置使用 `frontend.type: sglang-router`；在 v2.36.0 中，`sglang` 表示不经过路由器的独立工作进程。
 - 对重复的 YAML 键，保留原 PyYAML 加载器实际采用的值。
-- DCGM 遥测使用 `collect_interval_ms: 1000`，替代 `provider` 和 `default_frequency`。采集器自动推导退出等待时间；原先显式设置的十秒不满足当前校验要求。保留原配置中服务发现进程的专用节点部署方式。固定的上游版本不支持在专用基础设施节点上启用遥测；该功耗兼容性问题仍待解决，不通过改变原有拓扑来绕过校验。H200 自定义配置声明默认并发数，提交前由启动器替换。
+- DCGM 遥测使用 `collect_interval_ms: 1000`，替代 `provider` 和 `default_frequency`。采集器自动推导退出等待时间；原先显式设置的十秒不满足当前校验要求。H200 自定义配置声明默认并发数，提交前由启动器替换。
+- 当前启用的 GB200/GB300 配方将 benchmark 客户端与遥测采集器放在分配的 head 节点：原本为服务发现或客户端预留的节点改为专用 frontend/head，相关 DSV4 配方的 frontend/客户端也从 decode 节点移至 head。总分配节点数与 GPU worker 节点数不变；主机资源竞争发生变化，仍需新的硬件性能结果验证。
 - DeepSeek-V4 vLLM 基准测试使用受支持的 `custom_tokenizer` 加载器。删除已废弃的 `warmup_req_rate: inf` 字段；当前上游客户端的预热速率固定为每秒 250 个请求。
 - 功耗读取器兼容两代 samples CSV，校验利用率字段，并继续根据瓦特数计算 GPU 板级能耗。
 - 评估选择通过原生 `post_eval.command` 和 `post_eval.passthrough_env` 调用 [`srt_eval.sh`](../srt_eval.sh)。TRT AgentX 配置通过 `dynamo.source.git` 声明原有的 Dynamo 分支仓库，启动器不再改写 srt-slurm 源码。
