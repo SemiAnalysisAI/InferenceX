@@ -1,4 +1,4 @@
-# GLM-5.3 FP8 on MI325X. Native EAGLE uses the committed K3 golden curve.
+# GLM-5.3 FP8 TP4 on MI325X. Native EAGLE uses the committed K3 golden curve.
 base:
   schema: 2
   name: glm5.3-fp8-mi325x-sglang-agentic
@@ -24,23 +24,22 @@ base:
     agg:
       nodes: 1
       workers: 1
-      gpus: 8
+      gpus: 4
       args:
         served-model-name: zai-org/GLM-5.3
         revision: aca966e4e02791568aa6a4ced368624b3d897f42
         trust-remote-code: true
-        tensor-parallel-size: 8
+        tensor-parallel-size: 4
         expert-parallel-size: 1
         dsa-prefill-backend: tilelang
         dsa-decode-backend: tilelang
         dsa-topk-backend: sgl-kernel
-        kv-cache-dtype: bfloat16
+        kv-cache-dtype: fp8_e4m3
         # AgentX WEKA replays raw messages without structured tools; no tool parser.
         reasoning-parser: glm45
         context-length: 1048576
-        max-total-tokens: 1048576
-        chunked-prefill-size: 16384
-        mem-fraction-static: 0.85
+        chunked-prefill-size: 8192
+        mem-fraction-static: 0.92
         speculative-algorithm: EAGLE
         speculative-num-steps: 3
         speculative-eagle-topk: 1
@@ -61,71 +60,6 @@ base:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
       AIPERF_BENCHMARK_GRACE_PERIOD: '1800'
 
-override_tp8_c1:
-  roles:
-    agg:
-      args:
-        max-running-requests: 2
-        cuda-graph-max-bs-decode: 2
-  benchmark:
-    env:
-      CONC: '1'
-      KV_OFFLOADING: none
-
-override_tp8_c2:
-  roles:
-    agg:
-      args:
-        # Let the native allocator use the remaining HBM within the 0.85 budget.
-        max-total-tokens: null
-        max-running-requests: 4
-        cuda-graph-max-bs-decode: 4
-  benchmark:
-    env:
-      CONC: '2'
-      KV_OFFLOADING: none
-
-override_tp8_c3:
-  roles:
-    agg:
-      args:
-        max-total-tokens: null
-        max-running-requests: 6
-        cuda-graph-max-bs-decode: 6
-  benchmark:
-    env:
-      CONC: '3'
-      KV_OFFLOADING: none
-
-override_tp4_fp8kv_c1:
-  roles:
-    agg:
-      gpus: 4
-      args:
-        tensor-parallel-size: 4
-        kv-cache-dtype: fp8_e4m3
-        max-total-tokens: null
-        chunked-prefill-size: 8192
-        mem-fraction-static: 0.92
-        max-running-requests: 2
-        cuda-graph-max-bs-decode: 2
-  benchmark:
-    env:
-      CONC: '1'
-      KV_OFFLOADING: none
-
-override_tp8_c4:
-  roles:
-    agg:
-      args:
-        max-total-tokens: null
-        max-running-requests: 8
-        cuda-graph-max-bs-decode: 8
-  benchmark:
-    env:
-      CONC: '4'
-      KV_OFFLOADING: none
-
 override_tp4_fp8kv_c2:
   roles:
     agg:
@@ -141,18 +75,6 @@ override_tp4_fp8kv_c2:
   benchmark:
     env:
       CONC: '2'
-      KV_OFFLOADING: none
-
-override_tp8_c8:
-  roles:
-    agg:
-      args:
-        max-total-tokens: null
-        max-running-requests: 16
-        cuda-graph-max-bs-decode: 16
-  benchmark:
-    env:
-      CONC: '8'
       KV_OFFLOADING: none
 
 override_tp4_fp8kv_c3:

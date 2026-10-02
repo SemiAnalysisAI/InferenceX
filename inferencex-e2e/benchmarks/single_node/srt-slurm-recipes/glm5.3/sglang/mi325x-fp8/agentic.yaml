@@ -1,4 +1,4 @@
-# Matched STP reference and native UMBP offload comparison on MI325X.
+# Native STP with FP8 KV and UMBP DRAM offloading on MI325X.
 base:
   schema: 2
   name: glm5.3-fp8-mi325x-sglang-agentic-stp
@@ -34,12 +34,11 @@ base:
         dsa-prefill-backend: tilelang
         dsa-decode-backend: tilelang
         dsa-topk-backend: sgl-kernel
-        kv-cache-dtype: bfloat16
+        kv-cache-dtype: fp8_e4m3
         page-size: 64
         # AgentX WEKA replays raw messages without structured tools; no tool parser.
         reasoning-parser: glm45
         context-length: 1048576
-        max-total-tokens: 1048576
         chunked-prefill-size: 16384
         mem-fraction-static: 0.85
         watchdog-timeout: 1800
@@ -58,18 +57,7 @@ base:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
       AIPERF_BENCHMARK_GRACE_PERIOD: '1800'
 
-override_tp8_c1:
-  roles:
-    agg:
-      args:
-        max-running-requests: 2
-        cuda-graph-max-bs-decode: 2
-  benchmark:
-    env:
-      CONC: '1'
-      KV_OFFLOADING: none
-
-override_tp8_umbp_c1:
+override_tp8_umbp_fp8kv_c8:
   services: &umbp_services
     - name: umbp
       type: generic
@@ -96,25 +84,6 @@ override_tp8_umbp_c1:
   roles:
     agg:
       args:
-        max-running-requests: 2
-        cuda-graph-max-bs-decode: 2
-        enable-unified-cache-external-linker: true
-        unified-cache-external-linker-backend: mori
-        hicache-storage-backend-extra-config: '{"standalone_startup_timeout_ms":120000}'
-      env:
-        UMBP_STANDALONE_ADDRESS: unix:///logs/umbp.sock
-  benchmark:
-    env:
-      CONC: '1'
-      KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '513'
-
-override_tp8_umbp_fp8kv_c8:
-  services: *umbp_services
-  roles:
-    agg:
-      args:
-        kv-cache-dtype: fp8_e4m3
         max-total-tokens: null
         chunked-prefill-size: 131072
         max-running-requests: 16

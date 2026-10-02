@@ -94,7 +94,7 @@ base:
         dsa-prefill-backend: tilelang
         dsa-decode-backend: tilelang
         dsa-topk-backend: sgl-kernel
-        kv-cache-dtype: bfloat16
+        kv-cache-dtype: fp8_e4m3
         page-size: 64
         # AgentX WEKA replays raw messages without structured tools; no tool parser.
         reasoning-parser: glm45
@@ -144,11 +144,6 @@ base:
       AIPERF_BENCHMARK_GRACE_PERIOD: "1800"
       WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126
       TOKENIZERS_PARALLELISM: "false"
-
-override_tp8_c1:
-  benchmark:
-    env:
-      CONC: "1"
 
 override_tp8_fp8kv_c4:
   roles:

@@ -9213,7 +9213,7 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3571
 
 - config-keys:
-    - glm5.3-fp8-mi325x-sglang-agentic-mtp
+    - glm5.3-fp8-mi325x-sglang-agentic-mtp-tp8-fp8kv
     - glm5.3-fp8-mi325x-sglang-agentic-mtp-tp4-fp8kv
     - glm5.3-fp8-mi325x-sglang-agentic-stp
     - glm5.3-fp8-mi325x-sglang-disagg-agentic-umbp
@@ -9221,7 +9221,7 @@
     - "Add GLM-5.3 FP8 AgentX on MI325X using the pinned October 1 SGLang ROCm 7.2.0 MI30X image and native three-step EAGLE MTP."
     - "Add native MORI prefill/decode disaggregation with TP8 per role and a prefill-side UMBP DRAM tier through SGLang's unified-cache external linker."
     - "Restore the pinned MORI five-second send-queue backoff for both disaggregated roles instead of the shared launch boundary's 50-millisecond setting."
-    - "Include aggregate TP8 STP references with GPU-resident KV and native UMBP DRAM offloading, including FP8-KV concurrency-eight and concurrency-sixteen capacity candidates."
+    - "Use FP8 KV for aggregate TP4/TP8 MTP and native TP8 STP UMBP DRAM offloading; retain the qualified capacity families and remove exploratory BF16 controls."
     - "Use the image's native sgl-kernel DSA top-k backend on gfx942 without overriding packed top-k defaults."
     - "Keep native GLM reasoning parsing while omitting a tool-call parser for AgentX's raw-message replay, which does not supply structured tools."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3656

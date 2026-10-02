@@ -61,17 +61,6 @@ base:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
       AIPERF_BENCHMARK_GRACE_PERIOD: '1800'
 
-override_tp8_c1:
-  roles:
-    agg:
-      args:
-        max-running-requests: 2
-        cuda-graph-max-bs-decode: 2
-  benchmark:
-    env:
-      CONC: '1'
-      KV_OFFLOADING: none
-
 override_tp8_c2:
   roles:
     agg:
