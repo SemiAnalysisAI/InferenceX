@@ -14,7 +14,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from infx.launch import proc
+from infx.bench.env import InputError
+from infx.bench.eval import meta as eval_meta
 from infx.launch.artifacts import (
     ArtifactError,
     bundle_server_logs,
@@ -28,7 +29,6 @@ from infx.launch.artifacts import (
 from infx.launch.backends.base import BackendError
 from infx.launch.drivers.srt.config import EXPORTER_PROVENANCE
 from infx.launch.drivers.srt.run import SrtRun, require
-from infx.launch.request import RequestError
 
 if TYPE_CHECKING:
     from infx.launch.backends.base import Job
@@ -186,18 +186,22 @@ def collect(
 
 
 def _write_eval_meta(run: SrtRun) -> int:
-    """Regenerate meta_env.json with the canonical writer in benchmark_lib.sh."""
-    conc = run.request.eval_conc
-    if conc is None:
-        raise RequestError.missing("EVAL_CONC")
-    argv = [
-        "bash", "-c", 'source "$1"; _write_lm_eval_meta_json "$2" "" "$3"', "bash",
-        str(run.workspace / "benchmarks/benchmark_lib.sh"), str(run.workspace / "meta_env.json"), conc,
-    ]  # fmt: skip
-    rc = proc.run(argv, env={**run.env, "IS_MULTINODE": "true"}).returncode
-    if rc == 0:
-        print(f"Wrote meta_env.json (conc={conc}, prefix={run.request.model_prefix})")
-    return rc
+    """Refresh the staged meta_env.json's identity and topology from the workflow inputs.
+
+    The eval container does not receive every workflow input (e.g. RECIPE_FINGERPRINT).
+    The suite, concurrency and batch manifest the eval recorded are kept.
+    """
+    path = run.workspace / "meta_env.json"
+    if not path.is_file():
+        print(f"WARNING: no staged eval metadata to refresh at {path}", file=sys.stderr)
+        return 0
+    try:
+        eval_meta.refresh(path, {**run.env, "IS_MULTINODE": "true"})
+    except (OSError, ValueError, KeyError, InputError) as error:
+        print(f"ERROR: failed to refresh {path}: {error}", file=sys.stderr)
+        return 1
+    print(f"Refreshed meta_env.json (prefix={run.request.model_prefix})")
+    return 0
 
 
 def cleanup_outputs(root: Path, *, sleep: Callable[[float], None] = time.sleep) -> None:

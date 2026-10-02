@@ -58,7 +58,7 @@ Sources: [single-node process/upload](https://github.com/SemiAnalysisAI/Inferenc
 
 ### Eval results
 
-Eval jobs upload per-config artifacts named `eval_${EXP_NAME}_${RESULT_FILENAME}`. They contain the files that exist for that evaluator, including `meta_env.json`, `results*.json`, `sample*.jsonl`, and, for supported agentic evaluators, predictions, reports, or trajectories. The workflow behavior is deliberate:
+Eval jobs upload per-config artifacts named `eval_${EXP_NAME}_${RESULT_FILENAME}`. They contain the files the eval command staged for that evaluator under the allow-list in [`infx/bench/eval/stage.py`](../infx/bench/eval/stage.py), namely `meta_env.json`, `results*.json`, `sample*.jsonl`, and native vendor-eval reports (`*_report.json`), detailed results (`*_results.jsonl`), and archives (`*_artifacts.tar.gz`). The workflow behavior is deliberate:
 
 - an eval-only job errors when no eval files are found.
 - eval files upload under `always()`, preserving partial evidence from a failed job.
@@ -281,16 +281,16 @@ Canonical source: [complete failed-ingest recovery command](../../.claude/comman
 
 ### Prevent recurrence
 
-Containers can run as root while the GitHub workspace is bind-mounted. The shared benchmark library prevents root-owned Python cache directories by setting:
+Containers can run as root while the GitHub workspace is bind-mounted. The benchmark workflows keep Python bytecode caches out of the workspace by setting these variables for every job:
 
-```bash
-export PYTHONDONTWRITEBYTECODE=1
-export PYTHONPYCACHEPREFIX="${PYTHONPYCACHEPREFIX:-/tmp/inferencex-pycache}"
+```yaml
+PYTHONDONTWRITEBYTECODE: '1'
+PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
 ```
 
 Do not override these paths back into the workspace. Use the recovery scan below after an `EACCES` cleanup failure, including failures caused by logs left by retired launchers.
 
-Source: [Python-cache prevention](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/benchmarks/benchmark_lib.sh#L5-L10).
+Source: [Python-cache prevention](../../.github/workflows/benchmark-tmpl.yml#L145-L146).
 
 ### Recover an MI355X TW runner workspace
 
@@ -436,20 +436,6 @@ Remaining durable fix:
 ```
 
 This evidence is the completion gate. “Workflow green” without artifact identity, source/merge identity, and ingest counts is not a verified result recovery.
-
-### AMD multi-node SGLang teardown
-
-On exit, including a failed startup/readiness check, the AMD SGLang launcher sends
-TERM only to its recorded `setsid` process groups. Normal completion stages results
-before this cleanup. It allows 30 seconds for graceful
-exit, then sends KILL to surviving groups and checks for exit for another five
-seconds. This handles orphaned or TERM-resistant workers that otherwise hold log
-pipes open. These cleanup deadlines do not change profiling, evaluation, or server
-readiness deadlines. A failed client retains its exit status; unresolved cleanup
-fails an otherwise successful node. Kernel-blocked processes may still require
-separately authorized node repair. Do not change or discard completed metrics to
-work around teardown failures. A single EXIT handler owns group cleanup and the
-existing UMBP standalone PID cleanup; the latter still runs if group cleanup fails.
 
 ### AMD multi-node GPU preflight coordination
 

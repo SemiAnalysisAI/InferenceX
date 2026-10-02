@@ -56,7 +56,7 @@ DECODE_GPUS="$decode_gpus" \
 
 ### 评测结果
 
-评测任务上传以 `eval_${EXP_NAME}_${RESULT_FILENAME}` 命名的逐配置制品。制品包含该评测器实际生成的文件，例如 `meta_env.json`、`results*.json`、`sample*.jsonl`；对于受支持的 agentic 评测器，还可能包含 predictions、reports 或 trajectories。工作流的以下行为都是有意设计的：
+评测任务上传以 `eval_${EXP_NAME}_${RESULT_FILENAME}` 命名的逐配置制品。制品包含评估命令按 [`infx/bench/eval/stage.py`](../infx/bench/eval/stage.py) 中的允许列表为该评测器暂存的文件，即 `meta_env.json`、`results*.json`、`sample*.jsonl`，以及厂商评估的原生报告（`*_report.json`）、详细结果（`*_results.jsonl`）和归档（`*_artifacts.tar.gz`）。工作流的以下行为都是有意设计的：
 
 - eval-only 任务没有任何评测文件时会报错；
 - 评测文件在 `always()` 条件下上传，以保留失败任务的部分证据；
@@ -279,16 +279,16 @@ git diff --check origin/main...HEAD
 
 ### 防止复发
 
-容器可能以 root 身份运行，同时 GitHub 工作区被 bind mount。共享基准库通过以下设置防止工作区中出现 root-owned Python 缓存目录：
+容器可能以 root 身份运行，同时 GitHub 工作区被 bind mount。基准测试工作流为每个作业设置以下变量，使 Python 字节码缓存不写入工作区：
 
-```bash
-export PYTHONDONTWRITEBYTECODE=1
-export PYTHONPYCACHEPREFIX="${PYTHONPYCACHEPREFIX:-/tmp/inferencex-pycache}"
+```yaml
+PYTHONDONTWRITEBYTECODE: '1'
+PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
 ```
 
 不要把这些路径重新覆盖到工作区。出现 `EACCES` 清理错误后，应执行下述恢复扫描，包括由已退役启动器遗留的日志导致的错误。
 
-来源：[Python 缓存预防](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/benchmarks/benchmark_lib.sh#L5-L10)。
+来源：[Python 缓存预防](../../.github/workflows/benchmark-tmpl.yml#L145-L146)。
 
 ### 恢复 MI355X TW runner 工作区
 
@@ -434,17 +434,6 @@ Remaining durable fix:
 ```
 
 这些证据就是完成关卡。如果没有制品身份、source/merge 身份和摄取数量，仅仅“工作流绿色”并不代表结果恢复已经验证。
-
-### AMD 多节点 SGLang 清理
-
-退出时（包括启动或就绪检查失败），AMD SGLang 启动器仅向其记录的 `setsid`
-进程组发送 TERM，等待最多 30 秒。正常完成时，先暂存结果再进行清理。随后向仍存活的进程组发送 KILL，再等待最多
-5 秒并检查退出状态。这可以清理已成为孤儿进程或忽略 TERM 的工作进程，避免其
-持续占用日志管道。这些清理期限不会改变性能采集、评估或服务器就绪检查的期限。
-客户端失败时保留原退出码；若客户端成功但清理仍未完成，则节点任务失败。
-内核阻塞的进程仍可能需要另行授权的节点修复。不要为绕过清理失败而修改或丢弃
-已完成的指标。单一 EXIT 处理器统一负责进程组清理和现有 UMBP 独立进程 PID
-清理；即使进程组清理失败，后者仍会执行。
 
 ### AMD 多节点 GPU 预检协调
 

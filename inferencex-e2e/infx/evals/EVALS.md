@@ -128,13 +128,30 @@ malformed metadata, duplicates, and raw/aggregate mismatches are not. See
 
 ## How?
 
-`run_eval` in `benchmarks/benchmark_lib.sh` dispatches to the selected eval
-runner. `e2e-tests.yml` defaults `eval-framework` to `auto`, then reads the
-concrete framework and suite from each eval matrix row. Fixed-sequence and
-opted-in generic agentic evals use
+`python3 -m infx.bench eval` ([`infx/bench/eval/`](../bench/eval/__init__.py)) runs
+the selected eval framework against a ready server. `e2e-tests.yml` defaults
+`eval-framework` to `auto`, then reads the concrete framework and suite from each
+eval matrix row. Fixed-sequence and opted-in generic agentic evals use
 [lm-evaluation-harness](https://github.com/EleutherAI/lm-evaluation-harness)
 (`lm-eval`) with GSM8K. Workflow inputs can explicitly override the
 matrix-selected framework or suite for manual diagnostics.
+
+To run it by hand, use Python 3.10 or newer from `inferencex-e2e/`, normally inside
+the serving container:
+
+```text
+PYTHONSAFEPATH=1 PYTHONPATH="$PWD${PYTHONPATH:+:$PYTHONPATH}" python3 -m infx.bench eval \
+  --endpoint URL --concurrency "N [N ...]" --stage-to DIR [--framework NAME]
+```
+
+The command requires `MODEL` and the `true`/`false` flags `EVAL_ONLY` and
+`IS_MULTINODE`. `MODEL_NAME` is the served name sent in requests and defaults to
+`MODEL`. The framework is `EVAL_FRAMEWORK`, else `--framework`, else `lm-eval`.
+lm-eval also requires `OPENAI_API_KEY` (the workflows set `EMPTY`) and pip-installs
+its pinned harness into the running `python3`. Each run writes into a fresh temporary
+directory, then copies the allow-listed artifacts into `--stage-to` and writes
+`meta_env.json` there, also when the eval fails. `EVAL_CONCURRENT_REQUESTS` and
+`EVAL_RESULT_DIR` are no longer read.
 
 The Kimi full suite runs automatically for every generated `kimik3` agentic point.
 The matrix selects `eval-framework: kimi-vendor` and
@@ -142,14 +159,20 @@ The matrix selects `eval-framework: kimi-vendor` and
 `inferencex-e2e/` directory after a server is ready:
 
 ```bash
-source benchmarks/benchmark_lib.sh
+export MODEL='<HF model ID>' MODEL_NAME='<served model identifier>'
+export MODEL_PREFIX='<model prefix>' PORT='<server port>' CONC='<benchmark concurrency>'
+export EVAL_ONLY=false IS_MULTINODE=false
 export EVAL_FRAMEWORK=kimi-vendor
 export EVAL_SUITE=kimi_tool_call_schema_full
-export EVAL_RESULT_DIR="$(mktemp -d /tmp/eval_out-XXXXXX)"
-run_eval --port "$PORT"
-append_lm_eval_summary
-python3 -m infx.evals.validate_scores
+EVAL_DIR="$(mktemp -d /tmp/eval_out-XXXXXX)"
+PYTHONSAFEPATH=1 PYTHONPATH="$PWD${PYTHONPATH:+:$PYTHONPATH}" python3 -m infx.bench eval \
+  --endpoint "http://localhost:$PORT" --concurrency "$CONC" --stage-to "$EVAL_DIR"
+python3 -m infx.evals.validate_scores \
+  --meta-env "$EVAL_DIR/meta_env.json" --results-glob "$EVAL_DIR/results*.json"
 ```
+
+Vendor suites do not use the concurrency for their requests. For them,
+`--concurrency` only records the point's `conc` in `meta_env.json`.
 
 For a short endpoint check, explicitly set `EVAL_SUITE=kimi_tool_call_schema`
 instead (or the same `eval-suite` workflow input). Historical smoke artifacts
@@ -170,10 +193,14 @@ is diagnostic, while missing outcomes and integration failures fail the job.
 
 The framework selects a suite-specific subprocess adapter, while the suite
 selects a case set understood by that adapter. Each adapter owns its endpoint
-format, dependencies, native report, metrics, and integration-failure policy.
-Kimi, MiniMax, and BFCL use separate explicit `run_eval` cases rather than a
-shared request or report abstraction. Automatic selection chooses only the Kimi
-and MiniMax vendor cases; BFCL remains an explicit workflow override.
+format, native report, metrics, and integration-failure policy. Kimi, MiniMax,
+and BFCL are data entries in `PROVIDERS` in
+[`infx/bench/eval/vendor.py`](../bench/eval/vendor.py), run by one generic runner
+that provisions the verifier interpreter, installs the suite's pinned runtime,
+runs the adapter under the suite deadline, and has the adapter write an
+integration-error result when a step fails. There is no shared request or report
+abstraction. Automatic selection chooses only the Kimi and MiniMax vendor cases;
+BFCL remains an explicit workflow override.
 Agentic eval jobs forward the matrix `spec-decoding` value, so MTP entries
 launch their existing `*_mtp.sh` server instead of silently falling back to STP.
 
@@ -252,14 +279,16 @@ agentic points select the full 102-case suite. To invoke the smoke manually from
 the `inferencex-e2e/` directory against an already-ready server:
 
 ```bash
-source benchmarks/benchmark_lib.sh
+export MODEL='<HF model ID>' MODEL_NAME="<served MiniMax-M3 model identifier>"
+export PORT='<server port>' CONC='<benchmark concurrency>'
+export EVAL_ONLY=false IS_MULTINODE=false
 export EVAL_FRAMEWORK=minimax-vendor
-export MODEL_NAME="<served MiniMax-M3 model identifier>"
 export EVAL_SUITE=minimax_m3_smoke
-export EVAL_RESULT_DIR="$(mktemp -d /tmp/eval_out-XXXXXX)"
-run_eval --port "$PORT"
-append_lm_eval_summary
-python3 -m infx.evals.validate_scores
+EVAL_DIR="$(mktemp -d /tmp/eval_out-XXXXXX)"
+PYTHONSAFEPATH=1 PYTHONPATH="$PWD${PYTHONPATH:+:$PYTHONPATH}" python3 -m infx.bench eval \
+  --endpoint "http://localhost:$PORT" --concurrency "$CONC" --stage-to "$EVAL_DIR"
+python3 -m infx.evals.validate_scores \
+  --meta-env "$EVAL_DIR/meta_env.json" --results-glob "$EVAL_DIR/results*.json"
 ```
 
 `infx/evals/minimax_m3_smoke.json` is derived from
@@ -312,13 +341,16 @@ It covers all 102 rows in the pinned MiniMax Provider Verifier dataset; complete
 quality scores remain diagnostic. It can also be selected explicitly:
 
 ```bash
-source benchmarks/benchmark_lib.sh
+export MODEL='<HF model ID>' MODEL_NAME='<served model identifier>'
+export PORT='<server port>' CONC='<benchmark concurrency>'
+export EVAL_ONLY=false IS_MULTINODE=false
 export EVAL_FRAMEWORK=minimax-vendor
 export EVAL_SUITE=minimax_m3_full
-export MODEL_NAME='<served model identifier>'
-run_eval --port "$PORT"
-append_lm_eval_summary
-python3 -m infx.evals.validate_scores
+EVAL_DIR="$(mktemp -d /tmp/eval_out-XXXXXX)"
+PYTHONSAFEPATH=1 PYTHONPATH="$PWD${PYTHONPATH:+:$PYTHONPATH}" python3 -m infx.bench eval \
+  --endpoint "http://localhost:$PORT" --concurrency "$CONC" --stage-to "$EVAL_DIR"
+python3 -m infx.evals.validate_scores \
+  --meta-env "$EVAL_DIR/meta_env.json" --results-glob "$EVAL_DIR/results*.json"
 ```
 
 The runner downloads only the eight source and validator files allowlisted in
@@ -344,14 +376,16 @@ chat-completions endpoint. Select `eval-framework: bfcl` and
 against an already-ready server:
 
 ```bash
-source benchmarks/benchmark_lib.sh
+export MODEL='<HF model ID>' MODEL_NAME="<served model identifier>"
+export PORT='<server port>' CONC='<benchmark concurrency>'
+export EVAL_ONLY=false IS_MULTINODE=false
 export EVAL_FRAMEWORK=bfcl
-export MODEL_NAME="<served model identifier>"
 export EVAL_SUITE=bfcl_smoke
-export EVAL_RESULT_DIR="$(mktemp -d /tmp/eval_out-XXXXXX)"
-run_eval --port "$PORT"
-append_lm_eval_summary
-python3 -m infx.evals.validate_scores
+EVAL_DIR="$(mktemp -d /tmp/eval_out-XXXXXX)"
+PYTHONSAFEPATH=1 PYTHONPATH="$PWD${PYTHONPATH:+:$PYTHONPATH}" python3 -m infx.bench eval \
+  --endpoint "http://localhost:$PORT" --concurrency "$CONC" --stage-to "$EVAL_DIR"
+python3 -m infx.evals.validate_scores \
+  --meta-env "$EVAL_DIR/meta_env.json" --results-glob "$EVAL_DIR/results*.json"
 ```
 
 The validator reads BFCL's declared `acc` metric from the compatibility result,
@@ -422,8 +456,8 @@ installed engine version are authoritative; BFCL does not replace a missing or
 mismatched parser/chat template.
 
 `bfcl_report.json` is the native report. `results_bfcl.json` is the
-`inferencex-eval-v1` compatibility result consumed by the existing artifact
-upload, `append_lm_eval_summary`, collector, and score validator. It projects
+`inferencex-eval-v1` compatibility result consumed by the eval command's artifact
+staging, the workflow upload, the collector, and the score validator. It projects
 the four-case aggregate as task `bfcl_smoke` and the four one-case diagnostic
 tasks shown above. Every row uses lm-eval-compatible `acc,none` (plus
 `acc_stderr,none`); BFCL workflows therefore validate with metric prefix
@@ -483,68 +517,52 @@ case IDs, failure records, and sampling settings. The compatibility
 `results_bfcl.json` remains the only input to the normal InferenceX eval
 collector and dashboard path.
 
-### Benchmark script flow
+### Benchmark and eval flow
 
-All benchmark scripts in `benchmarks/` follow one of two flows:
+Every lane runs its eval with `python3 -m infx.bench eval` against the job's own
+server. In combined mode (`RUN_EVAL=true`, `EVAL_ONLY=false`) the server starts,
+throughput runs, and then the eval runs against the same server. In eval-only mode
+(`EVAL_ONLY=true`) the server starts with its eval-only settings, throughput is
+skipped, and the eval runs.
 
-```bash
-# Combined mode (benchmark + eval):
-# 1. Start server (with context-length expansion if EVAL_ONLY=true)
-# 2. wait_for_server_ready
-# 3. run_benchmark_serving (skipped automatically when EVAL_ONLY=true)
-# 4. Run evals:
-if [ "${RUN_EVAL}" = "true" ]; then
-    run_eval --framework lm-eval --port "$PORT"
-    append_lm_eval_summary  # Writes meta_env.json and stages artifacts
-fi
+| Lane | Eval entrypoint | `--concurrency` | `--stage-to` |
+|------|-----------------|-----------------|--------------|
+| srt-slurm single-node | `post_eval.command` runs `benchmarks/single_node/srt_eval.sh <endpoint> /logs/infx-eval-exit-code` | `CONC` | The checkout root |
+| srt-slurm multi-node | `post_eval.command` runs `benchmarks/multi_node/srt_eval.sh <endpoint> /infmax-workspace` | `EVAL_CONC` | `/logs/eval_results` |
 
-# Eval-only mode (EVAL_ONLY=true):
-# 1. Compute eval context via compute_eval_context_length
-# 2. Start server with that context (--context-length or --max-model-len)
-# 3. wait_for_server_ready
-# 4. run_benchmark_serving returns immediately (skipped)
-# 5. run_eval + append_lm_eval_summary
-```
+Key eval modules in `infx/bench/eval/`:
 
-Key eval functions in `benchmarks/benchmark_lib.sh`:
+| Module | Description |
+|--------|-------------|
+| `__init__.py` (`evaluate`) | The `eval` command. Selects the framework, checks `EVAL_SUITE`, waits for the chat route before vendor evals in eval-only jobs, batches lm-eval concurrencies, stages artifacts, writes `meta_env.json`, and sets the exit code |
+| `lm_eval.py` | lm-eval framework. `install` installs the pinned harness commit, `context_length` and `native_context_length` size each request, and `run` drives `local-chat-completions` with the sitecustomize patch |
+| `vendor.py` | One generic `run` for the Kimi, MiniMax, and BFCL entries in `PROVIDERS`. `_provision` chooses the verifier interpreter (the image `python3` when new enough, otherwise a venv built with pinned `uv`, and always a system-site-packages venv for BFCL). The `_prepare_kimi`, `_prepare_minimax`, and `_prepare_bfcl` hooks install the pinned runtimes, and failed steps get integration-error results |
+| `meta.py` | `build` and `write` produce `meta_env.json`. `_disaggregated` maps the multi-node `PREFILL_*`/`DECODE_*` topology, and `refresh` serves the host-side srt collector |
+| `stage.py` | `copy` applies the artifact allow-list and the `_conc<N>` suffixes |
+| `context.py` | `EvalContext` and `EvalOutcome`, the contract each framework's `run(ctx)` implements |
 
-| Function | Description |
-|----------|-------------|
-| `run_eval` | Unified entrypoint - dispatches to framework-specific runner |
-| `run_lm_eval` | Runs lm-eval harness against the OpenAI-compatible endpoint |
-| `run_kimi_vendor_eval` | Selects and runs a pinned Kimi Vendor Verifier suite |
-| `run_minimax_vendor_eval` | Selects the pinned MiniMax smoke or full diagnostic |
-| `run_bfcl_eval` | Selects a pinned BFCL V4 smoke or model-quality suite |
-| `append_lm_eval_summary` | Writes `meta_env.json` and stages eval artifacts in the workspace |
-| `_install_lm_eval_deps` | Installs lm-eval dependencies |
-| `_prepare_vendor_verifier_python` | Uses system Python 3.12+ or provisions an isolated pinned Python 3.12 runtime for provider verifiers |
-| `_prepare_kimi_vendor_runtime` | Installs the pinned verifier dependencies in an isolated temp path |
-| `_prepare_minimax_m3_full_runtime` | Downloads hash-verified stock MiniMax sources and installs their pinned dependencies for smoke and full suites |
-| `_prepare_bfcl_runtime` | Installs the verified BFCL wheel in a temporary virtual environment |
-| `_install_bfcl_eval_deps` | Downloads, verifies, and installs the pinned BFCL wheel |
-| `_prepare_kimi_vendor_verifier` | Downloads, hash-verifies, and safely extracts a fresh subset of the pinned source archive |
-| `_patch_lm_eval` | Patches lm-eval for reasoning tokens and TRT compatibility |
-| `compute_eval_context_length` | Computes eval context length (requested benchmark context, capped at model native max) |
-| `get_native_max_context_length` | Extracts model's native max context length from HF config |
+The exit code is the framework's (a child killed by signal N reports 128+N), else 1
+when metadata or staging failed. A batched run exits 0 and records failed
+concurrencies in `meta_env.json`. An invalid environment input or flag value exits 1
+with an `ERROR:` line before anything is staged, and a malformed command line exits 2.
 
-`EVAL_FRAMEWORK` is the orchestration-level selection and takes precedence over
-legacy `--framework lm-eval` arguments embedded in fixed-sequence recipes.
-Without that environment variable, an explicit `--framework` argument takes
-precedence over the scenario default.
+`EVAL_FRAMEWORK` is the orchestration-level selection and takes precedence over a
+`--framework` argument. Without that environment variable, `--framework` selects the
+framework, and the default is `lm-eval`.
 
 ### Single-node
-For default lm-eval jobs in eval-only mode (`EVAL_ONLY=true`), the benchmark script computes `EVAL_MAX_MODEL_LEN` via `compute_eval_context_length`, starts the server with that context length, skips throughput, and runs lm-eval. Each framework wires that context differently (`--context-length` for SGLang, `--max_seq_len` for TRT-LLM).
+Single-node jobs run through srt-slurm recipes. For a fixed-sequence eval-only job, `runtime_arguments` in `infx/srt_slurm/single_node.py` starts the server with the matrix `MAX_MODEL_LEN` (`isl + osl + 256`) as its context (`context-length` for SGLang, `max_seq_len` and `max_num_tokens` for TRT-LLM, `max-model-len` for vLLM and ATOM), and srt-slurm skips the benchmark stage. AgentX evals keep the recipe context and receive `MAX_MODEL_LEN=0`. lm-eval sizes each request from `EVAL_MAX_MODEL_LEN` when set, otherwise from `MAX_MODEL_LEN` capped at the model's native maximum (`0` means the native maximum), and falls back to 16384 when neither is known. The shim writes the eval's exit code to `/logs/infx-eval-exit-code`, and the srt collector fails the job unless it is `0`.
 
 ### Multi-node
-Multi-node evals on AMD and NVIDIA Slurm clusters run through [srt-slurm](https://github.com/NVIDIA/srt-slurm) at the shared Git submodule revision at `utils/srt-slurm`. Native `post_eval.command` and `post_eval.passthrough_env` select the InferenceX eval dispatcher without modifying the upstream checkout.
+Multi-node evals on AMD and NVIDIA Slurm clusters run through [srt-slurm](https://github.com/NVIDIA/srt-slurm) at the shared Git submodule revision at `utils/srt-slurm`. Native `post_eval.command` and `post_eval.passthrough_env` select the InferenceX eval entrypoint without modifying the upstream checkout.
 - `do_sweep.py` skips the benchmark stage when `EVAL_ONLY=true`, runs `_run_post_eval()` directly
 - In eval-only mode, uses the full `wait_for_model()` health check (same as benchmark stage) since the benchmark health check was skipped
-- Native `post_eval.command` invokes `benchmarks/multi_node/srt_eval.sh` from the mounted InferenceX workspace (`/infmax-workspace`). It sources `benchmark_lib.sh` and calls `run_eval`, which selects the eval implementation from `EVAL_FRAMEWORK` without patching upstream runners.
+- InferenceX always sets `post_eval.command` to `benchmarks/multi_node/srt_eval.sh` (single-node jobs use `benchmarks/single_node/srt_eval.sh`), which runs `python3 -m infx.bench eval` from the mounted workspace (`/infmax-workspace`). srt-slurm falls back to its own registered `lm-eval` runner only when `post_eval.command` is unset, which InferenceX launches never do, and that runner expects a shell helper this repository no longer ships. `EVAL_FRAMEWORK` and `EVAL_SUITE` reach the eval through `post_eval.passthrough_env`, so vendor frameworks need no hook changes
 - Eval artifacts written to `/logs/eval_results/` inside the container, collected by `infx/launch/drivers/srt/collect.py` when `RUN_EVAL=true` or `EVAL_ONLY=true`
 - The srt driver always collects server logs for debugging but skips benchmark result collection when `EVAL_ONLY=true`
 - Env vars threaded: `RUN_EVAL`, `EVAL_ONLY`, `EVAL_FRAMEWORK`, `EVAL_SUITE`, `IS_MULTINODE`, `FRAMEWORK`, `PRECISION`, `MODEL_PREFIX`, `RUNNER_TYPE`, `RESULT_FILENAME`, `SPEC_DECODING`, `ISL`, `OSL`, `PREFILL_TP/EP/NUM_WORKERS/DP_ATTN`, `DECODE_TP/EP/NUM_WORKERS/DP_ATTN`, `MODEL_NAME`, `EVAL_CONC`
 
-For multi-node `all-evals`, `EVAL_CONC` is a space-separated list. When it contains multiple values, `run_eval` runs those concurrency points sequentially against the same live engine, stages each result with a `_concN` filename suffix, and records expected/completed/failed points in `meta_env.json`.
+For multi-node `all-evals`, `EVAL_CONC` is a space-separated list. When it contains multiple values, `python3 -m infx.bench eval` runs those concurrency points sequentially against the same live engine, stages each result with a `_concN` filename suffix, and records expected/completed/failed points in `meta_env.json`.
 
 ### Workflow structure
 - `e2e-tests.yml`: `test-sweep-evals` (single-node fixed-seq-len), `test-sweep-multi-node-evals`
@@ -630,21 +648,27 @@ attempt cannot replace a newer failed retry.
 ### Adding a provider verifier
 
 1. Add a provider-specific adapter under `infx/evals/`.
-2. Add an explicit framework case in `run_eval`; keep suite-specific policy in
-   that adapter's shell runner.
-3. Install dependencies in a provider-specific isolated runtime.
-4. Emit `result_format: inferencex-eval-v1`, preserve the native report in an
-   explicitly uploaded suite-specific path, set `EVAL_SUITE`, and add a threshold.
+2. Add a `Provider` entry, with its `Suite` specs and `prepare` hook, to `PROVIDERS`
+   in `infx/bench/eval/vendor.py`. `infx.bench.eval.FRAMEWORKS` registers it with
+   the eval command. Keep suite-specific request and report policy in the adapter.
+3. Install dependencies in a provider-specific isolated runtime from the `prepare`
+   hook.
+4. Emit `result_format: inferencex-eval-v1`, name the native report so it matches the
+   staging allow-list in `infx/bench/eval/stage.py` and the workflow upload paths,
+   set `EVAL_SUITE`, and add a threshold.
+5. Keep the adapter's integration-error path stdlib-only and Python 3.10
+   compatible. When provisioning fails, the runner invokes it under the image's
+   `python3`.
 
 ### Runtime patches (`infx/evals/patches/`)
 
-The benchmark helpers invoke these standalone scripts against pinned dependencies.
-Source rewrites are anchor-checked, idempotent, and atomic.
+`infx.bench.eval.lm_eval` applies this standalone patch to the pinned lm-eval.
 
-- `lm_eval_sitecustomize.py` (`_patch_lm_eval`): reasoning-token handling
+- `lm_eval_sitecustomize.py`: reasoning-token handling
   (extracts `reasoning_content` when `message.content` is empty) and TRT
   compatibility (no `{"type": "text"}` injection for non-HF tokenizers).
-  Copied into a temp dir as `sitecustomize.py` on `PYTHONPATH`.
+  Each lm-eval run copies it into a temp dir as `sitecustomize.py` on `PYTHONPATH`.
+
 ## Task files
 The following files are task definitions from lm-eval. More information on changes lives within the files:
 - `infx/evals/gsm8k.yaml`

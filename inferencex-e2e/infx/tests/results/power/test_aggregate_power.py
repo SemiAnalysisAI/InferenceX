@@ -1062,7 +1062,7 @@ def _write_snapshot_pair(
     start: dict[str, float],
     end: dict[str, float],
 ) -> None:
-    """Sidecars named exactly as start_gpu_monitor/stop_gpu_monitor write them."""
+    """Sidecars named exactly as infx.bench.gpu_monitor writes them."""
     _write_energy_snapshot(csv.parent / "gpu_metrics_energy_start.csv", start)
     _write_energy_snapshot(csv.parent / "gpu_metrics_energy_end.csv", end)
 

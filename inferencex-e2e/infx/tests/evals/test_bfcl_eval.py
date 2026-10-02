@@ -1,10 +1,13 @@
 import builtins
+import hashlib
 import json
 import os
 import shutil
 import subprocess
 import sys
+import threading
 from dataclasses import replace
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -658,6 +661,59 @@ def test_integration_error_cli_is_stdlib_only_and_returns_nonzero(
     native = _native(output_dir)
     assert native["completed"] is False
     assert native["integration_error"] == compatibility["integration_error"]
+
+
+@pytest.mark.parametrize("verified", [True, False])
+def test_install_runtime_installs_only_the_verified_wheel(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    verified: bool,
+) -> None:
+    payload = b"pinned wheel bytes"
+
+    class Wheel(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def log_message(self, *args: object) -> None:
+            pass
+
+    installs: list[tuple[list[str], bytes]] = []
+
+    def pip(argv: list[str], **kwargs: Any) -> None:
+        [wheel] = [arg for arg in argv if arg.endswith(".whl")]
+        installs.append((argv, Path(wheel).read_bytes()))
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Wheel)
+    thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01})
+    thread.start()
+    url = f"http://127.0.0.1:{server.server_port}/bfcl_eval-2026.3.23-py3-none-any.whl"
+    monkeypatch.setattr(be, "BFCL_WHEEL_URL", url)
+    expected = payload if verified else b"different bytes"
+    monkeypatch.setattr(be, "BFCL_WHEEL_SHA256", hashlib.sha256(expected).hexdigest())
+    monkeypatch.setattr(be.subprocess, "run", pip)
+    download_dir = tmp_path / "download"
+    try:
+        return_code = be.main(["--install-runtime", str(download_dir)])
+    finally:
+        server.shutdown()
+        thread.join()
+        server.server_close()
+
+    if verified:
+        assert return_code == 0
+        [(argv, installed)] = installs
+        assert argv[:4] == [sys.executable, "-m", "pip", "install"]
+        assert installed == payload
+    else:
+        assert return_code == 1
+        assert installs == []
+        assert list(download_dir.iterdir()) == []
+        assert "SHA256 mismatch" in capsys.readouterr().err
 
 
 def test_full_suite_sets_project_root_before_dataset_import(
