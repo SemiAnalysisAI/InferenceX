@@ -6639,7 +6639,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2:
           additional-settings:
           - "CONFIG_FILE=recipes/kimik3/vllm/gb200-fp4/agentx/agg-tp8pp2-mooncake-c96.yaml"
 dsv4-fp4-gb300-dynamo-sglang-agentic-agg:
-  image: lmsysorg/sglang:nightly-dev-20261001-b37e6f79
+  image: lmsysorg/sglang:nightly-dev-20260916-c9a8fba9
   model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
   runner: cluster:gb300-nv
@@ -6673,7 +6673,7 @@ dsv4-fp4-gb300-dynamo-sglang-agentic-agg:
           additional-settings:
           - "CONFIG_FILE=recipes/dsv4/sglang/gb300-fp4/agentx/agg-variants.yaml:override_tp4_c4"
 dsv4-fp4-gb300-dynamo-sglang-agentic-disagg:
-  image: lmsysorg/sglang:nightly-dev-20261001-b37e6f79
+  image: lmsysorg/sglang:nightly-dev-20260916-c9a8fba9
   model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
   runner: cluster:gb300-nv

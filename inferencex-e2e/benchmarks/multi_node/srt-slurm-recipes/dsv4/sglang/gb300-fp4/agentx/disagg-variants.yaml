@@ -13,7 +13,7 @@ base:
     model:
       repo: "deepseek-ai/DeepSeek-V4-Pro-0813"
     container:
-      image: "lmsysorg/sglang:nightly-dev-20261001-b37e6f79"
+      image: "lmsysorg/sglang:nightly-dev-20260916-c9a8fba9"
   dynamo:
     install: true
     source:
@@ -67,6 +67,7 @@ base:
         SGLANG_JIT_DEEPGEMM_FAST_WARMUP: '1'
         SGLANG_DEFAULT_THINKING: '1'
         SGLANG_DSV4_REASONING_EFFORT: high
+        SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: '1'
         SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: "1"
         SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2: '1'
         SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE: '1'
@@ -95,8 +96,9 @@ base:
         watchdog-timeout: 86400
         stream-interval: 60
         tp-size: 8
-        attn-dp-size: 8
+        dp-size: 8
         ep-size: 8
+        enable-dp-attention: true
         enable-dp-lm-head: true
         moe-dense-tp-size: 1
         moe-a2a-backend: megamoe
@@ -134,6 +136,7 @@ base:
         SGLANG_JIT_DEEPGEMM_FAST_WARMUP: '1'
         SGLANG_DEFAULT_THINKING: '1'
         SGLANG_DSV4_REASONING_EFFORT: high
+        SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: '1'
         SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: "1"
         SGLANG_OPT_DEEPGEMM_MEGA_MOE: '1'
         SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '4096'
@@ -161,8 +164,9 @@ base:
         watchdog-timeout: 86400
         stream-interval: 60
         tp-size: 16
-        attn-dp-size: 16
+        dp-size: 16
         ep-size: 16
+        enable-dp-attention: true
         enable-dp-lm-head: true
         moe-dense-tp-size: 1
         moe-a2a-backend: megamoe
