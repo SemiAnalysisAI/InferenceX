@@ -67,6 +67,11 @@ def finish_single_node(
             power_dir.mkdir(parents=True, exist_ok=True)
             for name in (EXPORTER_PROVENANCE, "power-producer-sha.txt"):
                 shutil.copyfile(run.workspace / name, power_dir / name)
+        except OSError as error:
+            level = "ERROR" if power.require_power else "WARNING"
+            print(f"{level}: failed to stage power provenance: {error}", file=sys.stderr)
+            rc = int(power.require_power)
+        try:
             shutil.copytree(logs, run.workspace / "LOGS", dirs_exist_ok=True)
         except OSError as error:
             level = "ERROR" if power.require_power else "WARNING"

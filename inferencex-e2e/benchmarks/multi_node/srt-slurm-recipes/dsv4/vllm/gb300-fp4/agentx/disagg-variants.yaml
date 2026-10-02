@@ -148,7 +148,7 @@ base:
 
 # Agentic-coding variant of dsv4/vllm/gb300-fp4/8k1k/disagg-1p6d-dep4-tp4-stp.yaml.
 # Topology is identical (1 prefill DEP=4 + 6 decode TP=4, 28 GPUs across 7
-# GB300 nodes + 1 dedicated NATS/etcd infra node) so we can compare against
+# GB300 nodes + 1 dedicated frontend/client head node) so we can compare against
 # the fixed-seq-len 1p6d baseline at the same concurrency point (192).
 #
 # Divergence vs the 8k1k sibling:
@@ -182,7 +182,7 @@ override_1p6d_dep4_tp4:
 
 # Agentic-coding variant of dsv4/vllm/gb300-fp4/8k1k/disagg-4p1d-dep4-dep8-24-c4096-stp.yaml.
 # Max-throughput shape: 4 prefill (DEP=4 each) + 1 decode (DEP=8). 6 GB300
-# nodes (4P + 2D = 24 GPUs at 4 GPUs/node) plus a dedicated NATS/etcd infra
+# nodes (4P + 2D = 24 GPUs at 4 GPUs/node) plus a dedicated frontend/client head
 # node. Sized for concurrency 4096 with deep_gemm_mega_moe on both workers.
 #
 # Divergence vs the 8k1k sibling:

@@ -203,7 +203,10 @@ def test_native_cleanup_keeps_optional_power_failures_best_effort(
         (workspace / "exporter-image.sha256").write_text("exporter digest")
     if failure == "power_dir":
         (logs / "power").write_text("blocks directory creation")
-    elif failure == "power_tree":
+    else:
+        (logs / "power").mkdir()
+        (logs / "power/samples.csv").write_text("timestamp,power_w\n1,120\n")
+    if failure == "power_tree":
         (workspace / "LOGS").write_text("blocks tree copy")
     elif failure == "result":
         (workspace / "point.json").symlink_to(tmp_path / "missing/point.json")
@@ -226,6 +229,8 @@ def test_native_cleanup_keeps_optional_power_failures_best_effort(
         assert json.loads((workspace / "point.json").read_text()) == {"completed": 2}
     if failure != "agentic":
         assert json.loads((workspace / "results/replay.json").read_text()) == {"requests": 2}
+    if failure not in {"power_dir", "power_tree"}:
+        assert (workspace / "LOGS/power/samples.csv").read_text() == "timestamp,power_w\n1,120\n"
 
 
 @pytest.mark.parametrize(

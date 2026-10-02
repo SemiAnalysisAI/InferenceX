@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
-# SRT owns the server lifecycle; retain the existing InferenceX client and sampler.
+# SRT owns the server lifecycle and, when telemetry is enabled, the power sampler.
+# Keep the InferenceX client and use its local sampler only without native telemetry.
 set -eo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/../benchmark_lib.sh" --validation-only
 check_env_vars MODEL CONC ISL OSL RANDOM_RANGE_RATIO RESULT_FILENAME RESULT_DIR \

@@ -196,7 +196,7 @@ def resolve_power(
     *,
     settings: PowerTelemetrySettings | None = None,
 ) -> PowerDecision:
-    """Use cluster defaults when configured; otherwise inspect the mirrored recipe opt-in."""
+    """Resolve recipe power policy, then apply cluster defaults while preserving strictness."""
     lane = POWER_LANES.get((cluster_id, path))
     if settings is not None and request.eval_only:
         return NO_POWER

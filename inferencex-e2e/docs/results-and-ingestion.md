@@ -494,7 +494,11 @@ The CPU verdict is independent of `power_valid`: it borrows only the bound
 formal window and the worker-host topology from the GPU package, and no GPU verdict reaches it, so
 an unpinned producer or failed GPU coverage withholds GPU energy while `cpu_power_valid` still
 judges the CPU samples on their own. Any CPU-leg failure records `cpu_power_valid: 0` with no CPU
-keys and leaves every GPU field unchanged. With `REQUIRE_POWER=1`, a recipe-declared CPU source must be valid; ACPI requires complete Grace socket or module totals, and missing CPU artifacts produce an independent invalid CPU audit. GPU-only recipes retain their existing behavior. Reason codes:
+keys and leaves every GPU field unchanged. When power is required by `REQUIRE_POWER=1` or a strict
+lane policy, a configured CPU source must be valid; ACPI requires complete Grace socket or module
+totals, and missing CPU artifacts produce an independent invalid CPU audit. On `gb200-nv` and
+`gb300-nv`, the cluster declares `acpi`, so every strict point requires a valid CPU audit.
+GPU-only recipes on other clusters retain their existing behavior. Reason codes:
 `cpu_artifacts_missing`, `cpu_sensor_source_mismatch`,
 `cpu_samples_missing`, `cpu_samples_header_mismatch`, `cpu_samples_malformed`,
 `cpu_manifest_invalid`, `cpu_socket_count_mismatch`, `cpu_sensor_kind_mixed`,
