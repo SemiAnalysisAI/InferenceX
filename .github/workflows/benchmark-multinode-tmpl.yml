@@ -125,6 +125,8 @@ env:
   GPU_MONITOR_INTERVAL: '1'
   GPU_METRICS_CSV: 'gpu_metrics.csv'
   KEEP_LOGS: '0'
+  SRT_RECIPE: ${{ fromJSON(inputs.config).srt-recipe || '' }}
+  EVAL_SRT_RECIPE: ${{ fromJSON(inputs.config).eval-srt-recipe || '' }}
   IS_MULTINODE: 'true'
   RANDOM_RANGE_RATIO: 0.8
   # Day-zero models resolved via hf: ids download from the Hub inside the

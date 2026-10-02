@@ -126,7 +126,7 @@ startup.
 ## Recipe files
 
 `benchmarks/multi_node/llm-d-recipes/<name>.yaml` is selected via
-`CONFIG_FILE=<name>.yaml` in the master config's `additional-settings`.
+`LLMD_RECIPE=<name>.yaml` in the master config's `additional-settings`.
 Each recipe carries:
 
 - top-level `plugins:` / `schedulingProfiles:` / `dataLayer:` - fed into
@@ -137,6 +137,6 @@ Each recipe carries:
   vLLM starts).
 - `slurm.time_limit` - overrides `TIME_LIMIT` for that recipe.
 
-When `CONFIG_FILE` is unset or the file is missing, the EPP falls back
+When `LLMD_RECIPE` is unset or the file is missing, the EPP falls back
 to `/etc/epp/config.yaml` baked into the image, and vLLM runs with no
 extra flags beyond the wide-EP common set in `server.sh`.

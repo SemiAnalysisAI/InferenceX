@@ -191,13 +191,13 @@ def resolve_power(cluster_id: str, path: LaunchPath, request: LaunchRequest) -> 
     lane = POWER_LANES.get((cluster_id, path))
     if lane is None:
         return NO_POWER
-    config_file = request.config_file
-    if lane.eval_recipe_when_eval_only and request.eval_only and request.eval_config_file:
-        config_file = request.eval_config_file
-    if not config_file:
+    srt_recipe = request.srt_recipe
+    if lane.eval_recipe_when_eval_only and request.eval_only and request.eval_srt_recipe:
+        srt_recipe = request.eval_srt_recipe
+    if not srt_recipe:
         return NO_POWER
-    mirror = recipe_mirror_path(request.workspace, config_file)
+    mirror = recipe_mirror_path(request.workspace, srt_recipe)
     dcgm = mirror.is_file() and recipe_enables_dcgm_power(mirror.read_text())
     return decide_power(
-        cluster_id, path, dcgm=dcgm, request=request, recipe=recipe_relpath(config_file)
+        cluster_id, path, dcgm=dcgm, request=request, recipe=recipe_relpath(srt_recipe)
     )

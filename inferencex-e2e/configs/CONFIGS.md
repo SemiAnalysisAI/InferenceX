@@ -99,6 +99,8 @@ The below list describes what each field is:
     - `isl`: An integer representing the input sequence length, e.g., `1024`
     - `osl`: An integer representing the output sequence length, e.g., `8192`
     - `search-space`: A list of configurations to run with respective `isl` and `osl`, each entry must be a dict with the following fields:
+      - `srt-recipe`: Recipe path for srt-slurm, declared directly on the search-space entry for single-node, multi-node aggregate, and disaggregated jobs. Multi-node paths use `recipes/<model>/<engine>/<sku>-<precision>/<workload>/<file>.yaml`, optionally followed by `:override_<name>`; single-node paths use `benchmarks/single_node/srt-slurm-recipes/...yaml`.
+      - (Optional) `eval-srt-recipe`: Separate recipe path and optional selector for eval jobs. If omitted, eval uses `srt-recipe`.
       - `tp`: An integer representing the tensor parallelism level that the configuration will be served at.
       - `conc-start`: An integer representing the starting level of concurrency e.g., `4`
       - `conc-end`: An integer representing the ending level of concurrency (inclusive) e.g., `128`

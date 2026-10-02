@@ -122,11 +122,11 @@ def run_multinode(launch: Launch) -> int:
     lane = lanes.srt_lane(launch.cluster.id, launch.path)
     request = SrtRequest.from_env(launch.request.env)
     lanes.check_request(lane, request)
-    config_file = lanes.config_file(request)
+    srt_recipe = lanes.selected_recipe(request)
     decision = power.resolve_power(launch.cluster.id, launch.path, request)
     model = models.checkpoint(launch.cluster, request)
     served = models.served_path(launch.cluster, request, model)
-    model_paths = models.model_paths(launch.cluster, request, config_file, served)
+    model_paths = models.model_paths(launch.cluster, request, srt_recipe, served)
     run = SrtRun.create(launch, request, models.job_env(launch.cluster, request, served))
     preflight = run.srt.preflight and not (model_paths and model and model.node_local)
     if request.framework == "tilert":
@@ -147,12 +147,12 @@ def run_multinode(launch: Launch) -> int:
 
     conc_list = request.env.get("CONC_LIST", "") if decision.dcgm else None
     job_name = srtctl_job_name(request.runner_name)
-    prepare_recipe(checkout.root, config_file, job_name, run.srt.dist_timeout_s, conc_list)
-    arguments = submit.multinode_arguments(run, lane, config_file, overrides, preflight=preflight)
+    prepare_recipe(checkout.root, srt_recipe, job_name, run.srt.dist_timeout_s, conc_list)
+    arguments = submit.multinode_arguments(run, lane, srt_recipe, overrides, preflight=preflight)
     manifest = run.workspace / submit.MULTINODE_SUBMISSION
     submitted = submit.Submitted(manifest=manifest)
     run.life.callback(submitted.cancel, run.backend)
-    if rc := submit.submit_lane(run, submitted, checkout, config_file, arguments):
+    if rc := submit.submit_lane(run, submitted, checkout, srt_recipe, arguments):
         return rc
     return collect.collect(run, lane, checkout, submitted.adopted(), decision, infmax)
 

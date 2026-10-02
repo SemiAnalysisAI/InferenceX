@@ -237,7 +237,7 @@ def base_env(*, fakes: Path, logs: Path, workspace: Path, sandbox: Path) -> dict
         key: value
         for key, value in os.environ.items()
         if not key.startswith(("SLURM_", "FAKE_", "SRT_", "INFERENCEX_", "INFX_", "UV_"))
-        and key not in {"VIRTUAL_ENV", "MODEL_PATH", "CONFIG_FILE", "EVAL_CONFIG_FILE", "BENCH_SCRIPT_OVERRIDE"}
+        and key not in {"VIRTUAL_ENV", "MODEL_PATH", "SRT_RECIPE", "EVAL_SRT_RECIPE", "BENCH_SCRIPT_OVERRIDE"}
     }
     env.update(
         PATH=f"{fakes}{os.pathsep}{Path(sys.executable).parent}{os.pathsep}/usr/bin{os.pathsep}/bin",

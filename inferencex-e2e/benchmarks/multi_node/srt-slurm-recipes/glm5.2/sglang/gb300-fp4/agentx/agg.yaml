@@ -2,7 +2,7 @@
 # (single aggregated worker, TP8, EAGLE MTP + hierarchical-cache KV).
 #
 # Flat single-variant schema the agentic CI flow expects: applied via
-# CONFIG_FILE=<this file> with no zip_override selector, so it must NOT be
+# srt-recipe: <this file> with no zip_override selector, so it must NOT be
 # base:-wrapped. Concurrency is not a recipe field; the GHA matrix fans out
 # one job per concurrency from the master-config conc-list into srt_agentic.sh.
 schema: 2

@@ -1360,3 +1360,46 @@ labels:
         with pytest.raises(ValueError) as exc_info:
             load_runner_file(str(runner_file))
         assert "must be a list" in str(exc_info.value)
+
+
+@pytest.mark.parametrize("role", ["prefill", "decode", "worker"])
+@pytest.mark.parametrize("setting, field", [
+    ("CONFIG_FILE=recipes/legacy.yaml", "srt-recipe"),
+    ("EVAL_CONFIG_FILE=recipes/legacy-eval.yaml", "eval-srt-recipe"),
+    ("SRT_RECIPE=recipes/legacy.yaml", "srt-recipe"),
+    ("EVAL_SRT_RECIPE=recipes/legacy-eval.yaml", "eval-srt-recipe"),
+])
+def test_master_rejects_recipe_environment_settings(
+    valid_multinode_master_config, role, setting, field,
+):
+    search = valid_multinode_master_config["scenarios"]["fixed-seq-len"][0]["search-space"][0]
+    if role == "worker":
+        valid_multinode_master_config["disagg"] = False
+        search["worker"] = search.pop("prefill")
+        search["worker"].pop("hardware")
+        del search["decode"]
+        search["num-nodes"] = 2
+    search[role]["additional-settings"] = [setting]
+
+    with pytest.raises(ValueError, match=field):
+        validate_master_config({"fixture": valid_multinode_master_config})
+
+
+@pytest.mark.parametrize("agentic", [False, True])
+def test_historical_matrix_preserves_recipe_settings_and_fingerprint(
+    valid_multinode_matrix_entry, agentic,
+):
+    row = copy.deepcopy(MULTINODE_AGENTIC_EVAL_ROW if agentic else valid_multinode_matrix_entry)
+    row["prefill"]["additional-settings"] = [
+        "CONFIG_FILE=recipes/historical.yaml",
+        "EVAL_CONFIG_FILE=recipes/historical-eval.yaml",
+    ]
+    row["recipe-fingerprint"] = "a" * 64
+
+    restored = (validate_agentic_matrix_entry(row) if agentic else validate_matrix_entry(row, True))
+
+    assert restored["prefill"]["additional-settings"] == [
+        "CONFIG_FILE=recipes/historical.yaml",
+        "EVAL_CONFIG_FILE=recipes/historical-eval.yaml",
+    ]
+    assert restored["recipe-fingerprint"] == "a" * 64

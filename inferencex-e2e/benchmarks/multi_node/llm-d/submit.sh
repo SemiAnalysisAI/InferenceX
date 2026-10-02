@@ -86,11 +86,11 @@ export RUNNER_TYPE="${RUNNER_TYPE:-}"
 export RESULT_FILENAME="${RESULT_FILENAME:-}"
 export SPEC_DECODING
 export IS_MULTINODE
-export CONFIG_FILE="${CONFIG_FILE:-}"
+export LLMD_RECIPE="${LLMD_RECIPE:-}"
 
 # Recipe may override SLURM time limit (longer topologies need more wall time).
-if [[ -n "$CONFIG_FILE" ]]; then
-    RECIPE_PATH="${REPO_ROOT}/benchmarks/multi_node/llm-d-recipes/${CONFIG_FILE}"
+if [[ -n "$LLMD_RECIPE" ]]; then
+    RECIPE_PATH="${REPO_ROOT}/benchmarks/multi_node/llm-d-recipes/${LLMD_RECIPE}"
     if [[ -f "$RECIPE_PATH" ]]; then
         RECIPE_TIME=$(python3 -c "
 import yaml, sys

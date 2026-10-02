@@ -1,4 +1,4 @@
-# Default EPP scheduling config (fallback when CONFIG_FILE is unset).
+# Default EPP scheduling config (fallback when LLMD_RECIPE is unset).
 #
 # Mirrors the upstream llm-d well-lit-path P/D guide:
 #   guides/pd-disaggregation/router/pd-disaggregation.values.yaml

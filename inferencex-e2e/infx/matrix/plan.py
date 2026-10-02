@@ -100,24 +100,47 @@ def get_config_keys_from_master(config_keys: list[str], master_config: dict) -> 
     return list(resolved_keys)
 
 
-def _matrix_curve_key(entry: dict) -> tuple:
-    """Identify one curve while deliberately excluding point-level fields."""
-    return tuple(
-        sorted(
-            (key, freeze_config_value(value))
-            for key, value in entry.items()
-            if key not in {"conc", "exp-name", "recipe-fingerprint"}
-        )
-    )
+def _recipe_identity(entry: dict) -> dict:
+    """Normalize historical recipe selectors for cross-revision comparisons.
 
-
-def recipe_fingerprint(entry: dict) -> str:
-    """Hash the generated recipe independently of point-level concurrency/name."""
+    Old generated rows carried selectors in worker environment settings. Read
+    that artifact representation here without restoring it as a launch input.
+    """
     recipe = {
         key: value
         for key, value in entry.items()
         if key not in {"conc", "exp-name", "recipe-fingerprint"}
     }
+    for role in ("prefill", "decode"):
+        worker = recipe.get(role)
+        if not isinstance(worker, dict) or not worker.get("additional-settings"):
+            continue
+        remaining = []
+        for setting in worker["additional-settings"]:
+            name, _, value = setting.partition("=")
+            field = {"CONFIG_FILE": "srt-recipe", "EVAL_CONFIG_FILE": "eval-srt-recipe"}.get(name)
+            if field is None:
+                remaining.append(setting)
+                continue
+            if field in recipe and recipe[field] != value:
+                raise ValueError(f"Conflicting historical {field} selectors")
+            recipe[field] = value
+        recipe[role] = {key: value for key, value in worker.items() if key != "additional-settings"}
+        if remaining:
+            recipe[role]["additional-settings"] = remaining
+    return recipe
+
+
+def _matrix_curve_key(entry: dict) -> tuple:
+    """Identify one curve while deliberately excluding point-level fields."""
+    return tuple(
+        sorted((key, freeze_config_value(value)) for key, value in _recipe_identity(entry).items())
+    )
+
+
+def recipe_fingerprint(entry: dict) -> str:
+    """Hash the generated recipe independently of point-level concurrency/name."""
+    recipe = _recipe_identity(entry)
     canonical = json.dumps(
         recipe,
         sort_keys=True,

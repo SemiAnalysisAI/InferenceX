@@ -45,7 +45,7 @@ def cluster(tmp_path, single_node_models: str = "staged") -> Cluster:
     return load_inventory({"labels": {"cluster:c": ["c_0"]}, "clusters": {"c": record}}).clusters["c"]
 
 
-MULTI = dict(IS_MULTINODE="true", CONFIG_FILE="recipes/x.yaml")
+MULTI = dict(IS_MULTINODE="true", SRT_RECIPE="recipes/x.yaml")
 SINGLE = dict(IS_MULTINODE="false")
 
 

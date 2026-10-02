@@ -116,8 +116,8 @@ echo "ROLE=$ROLE DP_SIZE=$DP_SIZE DP_ADDR=$DP_ADDR LWS_WORKER_INDEX=$LWS_WORKER_
 # verbatim), env (map, exported before vllm serve). Absent keys keep the
 # defaults above, so a recipe with neither tp nor EP is a plain TP=1 DP+EP run.
 ROLE_EXTRA_ARGS=""
-if [[ -n "${CONFIG_FILE:-}" ]]; then
-    RECIPE_PATH="/etc/llmd-recipes/${CONFIG_FILE}"
+if [[ -n "${LLMD_RECIPE:-}" ]]; then
+    RECIPE_PATH="/etc/llmd-recipes/${LLMD_RECIPE}"
     if [[ -f "$RECIPE_PATH" ]]; then
         echo "Loading $ROLE recipe from $RECIPE_PATH"
         eval "$(python3 - <<PY
@@ -137,7 +137,7 @@ for k, v in (section.get('env') or {}).items():
 PY
 )"
     else
-        echo "WARNING: CONFIG_FILE=$CONFIG_FILE but $RECIPE_PATH not found; using defaults" >&2
+        echo "WARNING: LLMD_RECIPE=$LLMD_RECIPE but $RECIPE_PATH not found; using defaults" >&2
     fi
 fi
 echo "Resolved $ROLE TP_SIZE=$TP_SIZE ROLE_ENABLE_EP=$ROLE_ENABLE_EP"
@@ -347,11 +347,11 @@ PY
     # Config: when a recipe is set, project it down to the keys EPP's strict
     # decoder accepts (it rejects the per-role vLLM / slurm keys); else use the
     # default mounted at /etc/epp/config.yaml.
-    if [[ -n "$CONFIG_FILE" && -f "/etc/llmd-recipes/$CONFIG_FILE" ]]; then
+    if [[ -n "$LLMD_RECIPE" && -f "/etc/llmd-recipes/$LLMD_RECIPE" ]]; then
         EPP_CONFIG="/tmp/epp-config-from-recipe.yaml"
         python3 - <<PY
 import yaml
-recipe = yaml.safe_load(open('/etc/llmd-recipes/${CONFIG_FILE}'))
+recipe = yaml.safe_load(open('/etc/llmd-recipes/${LLMD_RECIPE}'))
 keep = {'apiVersion', 'kind', 'plugins', 'schedulingProfiles', 'dataLayer'}
 yaml.safe_dump({k: v for k, v in recipe.items() if k in keep},
                open('${EPP_CONFIG}', 'w'))

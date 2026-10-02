@@ -46,6 +46,7 @@ class Fields(Enum):
     # Search-space/benchmark fields
     TP = "tp"
     SRT_RECIPE = "srt-recipe"
+    EVAL_SRT_RECIPE = "eval-srt-recipe"
     PP = "pp"
     DCP_SIZE = "dcp-size"
     PCP_SIZE = "pcp-size"
@@ -164,6 +165,9 @@ class SingleNodeMatrixEntry(BaseModel):
 
     image: str
     srt_recipe: str | None = Field(default=None, alias=Fields.SRT_RECIPE.value, min_length=1)
+    eval_srt_recipe: str | None = Field(
+        default=None, alias=Fields.EVAL_SRT_RECIPE.value, min_length=1
+    )
     model: str
     model_prefix: str = Field(alias=Fields.MODEL_PREFIX.value)
     precision: str
@@ -259,6 +263,11 @@ class MultiNodeMatrixEntry(BaseModel):
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
+    srt_recipe: str | None = Field(default=None, alias=Fields.SRT_RECIPE.value, min_length=1)
+    eval_srt_recipe: str | None = Field(
+        default=None, alias=Fields.EVAL_SRT_RECIPE.value, min_length=1
+    )
+
     image: str
     model: str
     model_prefix: str = Field(alias=Fields.MODEL_PREFIX.value)
@@ -310,6 +319,9 @@ class SingleNodeAgenticMatrixEntry(BaseModel):
 
     image: str
     srt_recipe: str | None = Field(default=None, alias=Fields.SRT_RECIPE.value, min_length=1)
+    eval_srt_recipe: str | None = Field(
+        default=None, alias=Fields.EVAL_SRT_RECIPE.value, min_length=1
+    )
     model: str
     model_prefix: str = Field(alias=Fields.MODEL_PREFIX.value)
     precision: str
@@ -359,6 +371,11 @@ class MultiNodeAgenticMatrixEntry(BaseModel):
     """Pydantic model for validating multinode agentic coding matrix entries."""
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    srt_recipe: str | None = Field(default=None, alias=Fields.SRT_RECIPE.value, min_length=1)
+    eval_srt_recipe: str | None = Field(
+        default=None, alias=Fields.EVAL_SRT_RECIPE.value, min_length=1
+    )
 
     image: str
     model: str
@@ -538,6 +555,9 @@ class SingleNodeSearchSpaceEntry(BaseModel):
 
     tp: int
     srt_recipe: str | None = Field(default=None, alias=Fields.SRT_RECIPE.value, min_length=1)
+    eval_srt_recipe: str | None = Field(
+        default=None, alias=Fields.EVAL_SRT_RECIPE.value, min_length=1
+    )
     pp: int = Field(default=1, gt=0, strict=True)
     dcp_size: int = Field(default=1, alias=Fields.DCP_SIZE.value, gt=0, strict=True)
     pcp_size: int = Field(default=1, alias=Fields.PCP_SIZE.value, gt=0, strict=True)
@@ -564,6 +584,11 @@ class MultiNodeSearchSpaceEntry(BaseModel):
     """Multinode search space configuration."""
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    srt_recipe: str | None = Field(default=None, alias=Fields.SRT_RECIPE.value, min_length=1)
+    eval_srt_recipe: str | None = Field(
+        default=None, alias=Fields.EVAL_SRT_RECIPE.value, min_length=1
+    )
 
     spec_decoding: Literal["mtp", "draft_model", "none"] = Field(
         default="none", alias=Fields.SPEC_DECODING.value
@@ -630,6 +655,9 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
 
     tp: int | None = None
     srt_recipe: str | None = Field(default=None, alias=Fields.SRT_RECIPE.value, min_length=1)
+    eval_srt_recipe: str | None = Field(
+        default=None, alias=Fields.EVAL_SRT_RECIPE.value, min_length=1
+    )
     pp: int = Field(default=1, gt=0, strict=True)
     dcp_size: int = Field(default=1, alias=Fields.DCP_SIZE.value, gt=0, strict=True)
     pcp_size: int = Field(default=1, alias=Fields.PCP_SIZE.value, gt=0, strict=True)
@@ -836,6 +864,17 @@ def _validate_multinode_entry_scope(self: BaseModel) -> BaseModel:
         prefill = getattr(entry, "prefill", None)
         decode = getattr(entry, "decode", None)
         num_nodes = getattr(entry, "num_nodes", None)
+
+        # Historical matrix artifacts still parse with WorkerConfig. Reject the
+        # retired environment contract only when validating active master input.
+        for role in (worker, prefill, decode):
+            for setting in getattr(role, "additional_settings", None) or []:
+                name = setting.partition("=")[0]
+                if name in {"CONFIG_FILE", "EVAL_CONFIG_FILE", "SRT_RECIPE", "EVAL_SRT_RECIPE"}:
+                    raise ValueError(
+                        "Recipe selection belongs in srt-recipe/eval-srt-recipe, "
+                        "not worker additional-settings"
+                    )
 
         if not self.multinode:
             if (

@@ -451,9 +451,9 @@ def test_recovery_plans_with_the_checkouts_own_planner_and_recipes(
     root, base, head = committed_planning_repo
     master_path = root / "configs/nvidia-master.yaml"
     master = yaml.safe_load(master_path.read_text())
-    master["multi"]["scenarios"]["fixed-seq-len"][0]["search-space"][0]["prefill"][
-        "additional-settings"
-    ] = ["CONFIG_FILE=recipes/recovery-fixture.yaml"]
+    master["multi"]["scenarios"]["fixed-seq-len"][0]["search-space"][0][
+        "srt-recipe"
+    ] = "recipes/recovery-fixture.yaml"
     master_path.write_text(yaml.safe_dump(master, sort_keys=False))
     recipe = root / "benchmarks/multi_node/srt-slurm-recipes/recovery-fixture.yaml"
     recipe.parent.mkdir(parents=True)
@@ -494,9 +494,9 @@ def test_historical_generator_uses_snapshot_recipes_not_inherited_recovery_root(
     planning_repo, monkeypatch, nested_layout
 ):
     root, master, _ = planning_repo
-    master["multi"]["scenarios"]["fixed-seq-len"][0]["search-space"][0]["prefill"][
-        "additional-settings"
-    ] = ["CONFIG_FILE=recipes/snapshot.yaml"]
+    master["multi"]["scenarios"]["fixed-seq-len"][0]["search-space"][0][
+        "srt-recipe"
+    ] = "recipes/snapshot.yaml"
     (root / "configs/nvidia-master.yaml").write_text(yaml.safe_dump(master, sort_keys=False))
     recipe = root / "benchmarks/multi_node/srt-slurm-recipes/snapshot.yaml"
     recipe.parent.mkdir(parents=True)
@@ -817,3 +817,50 @@ def test_changelog_move_preserves_history_and_selects_only_additions(tmp_path, m
     git("commit", "-qam", "append entry")
     monkeypatch.chdir(tmp_path / "inferencex-e2e")
     assert process_changelog.get_added_lines(base, "HEAD", "perf-changelog.yaml") == "new entry"
+
+
+@pytest.mark.parametrize("role", ["prefill", "decode"])
+@pytest.mark.parametrize("selector_first", [False, True])
+def test_recipe_identity_normalizes_historical_selectors(role, selector_first):
+    current = {
+        **_fixed_matrix_row(4),
+        "prefill": {"num-worker": 1, "tp": 8},
+        "decode": {"num-worker": 1, "tp": 8},
+        "srt-recipe": "recipes/model.yaml:override_perf",
+        "eval-srt-recipe": "recipes/model.yaml:override_eval",
+    }
+    current[role]["additional-settings"] = ["CUSTOM_SETTING=value"]
+    historical = json.loads(json.dumps(current))
+    settings = [
+        "CONFIG_FILE=" + historical.pop("srt-recipe"),
+        "EVAL_CONFIG_FILE=" + historical.pop("eval-srt-recipe"),
+    ]
+    if selector_first:
+        historical[role]["additional-settings"] = settings + ["CUSTOM_SETTING=value"]
+    else:
+        historical[role]["additional-settings"] += settings
+    unchanged_historical = json.loads(json.dumps(historical))
+
+    assert process_changelog.recipe_fingerprint(historical) == process_changelog.recipe_fingerprint(current)
+    added = {**current, "conc": 8}
+    assert process_changelog.append_only_delta([historical], [current, added]) == [added]
+    assert historical == unchanged_historical
+    changed = {**current, "srt-recipe": "recipes/model.yaml:override_different"}
+    assert process_changelog.recipe_fingerprint(changed) != process_changelog.recipe_fingerprint(current)
+
+
+def test_append_only_recipe_migration_removes_empty_worker_settings():
+    historical = {
+        **_fixed_matrix_row(4),
+        "prefill": {"num-worker": 1, "tp": 8, "additional-settings": ["CONFIG_FILE=recipes/model.yaml"]},
+        "decode": {"num-worker": 1, "tp": 8},
+    }
+    current = {
+        **_fixed_matrix_row(4),
+        "prefill": {"num-worker": 1, "tp": 8},
+        "decode": {"num-worker": 1, "tp": 8},
+        "srt-recipe": "recipes/model.yaml",
+    }
+    added = {**current, "conc": 8}
+
+    assert process_changelog.append_only_delta([historical], [current, added]) == [added]

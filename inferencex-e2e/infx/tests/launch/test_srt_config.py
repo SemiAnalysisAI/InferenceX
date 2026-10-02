@@ -141,7 +141,7 @@ def test_jobs_run_under_the_declared_else_exported_else_users_default_account(
     request = SrtRequest.from_env({
         "RUNNER_NAME": "c_0", "GITHUB_WORKSPACE": str(tmp_path), "IMAGE": "i", "FRAMEWORK": "sglang",
         "MODEL_PREFIX": "m", "PRECISION": "fp8", "SPEC_DECODING": "none", "RESULT_FILENAME": "r",
-        "IS_AGENTIC": "0", "RUN_EVAL": "false", "EVAL_ONLY": "false",
+        "IS_AGENTIC": "0", "RUN_EVAL": "false", "EVAL_ONLY": "false", "SRT_RECIPE": "recipes/r.yaml",
         **({"SLURM_ACCOUNT": exported} if exported else {}),
     })  # fmt: skip
     life = Lifecycle()
@@ -157,7 +157,7 @@ def test_selected_partition_overrides_inherited_and_point_environment(tmp_path):
     request = SrtRequest.from_env({
         "RUNNER_NAME": "c_0", "GITHUB_WORKSPACE": str(tmp_path), "IMAGE": "i", "FRAMEWORK": "sglang",
         "MODEL_PREFIX": "m", "PRECISION": "fp8", "SPEC_DECODING": "none", "RESULT_FILENAME": "r",
-        "IS_AGENTIC": "0", "RUN_EVAL": "false", "EVAL_ONLY": "false",
+        "IS_AGENTIC": "0", "RUN_EVAL": "false", "EVAL_ONLY": "false", "SRT_RECIPE": "recipes/r.yaml",
         "SBATCH_PARTITION": "batch_1", "SLURM_PARTITION": "batch_1",
         "PREFILL_ADDITIONAL_SETTINGS": '["SBATCH_PARTITION=batch_1"]',
     })
