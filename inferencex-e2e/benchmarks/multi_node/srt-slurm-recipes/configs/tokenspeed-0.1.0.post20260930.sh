@@ -25,5 +25,7 @@ pip_install=(python3 -m pip install --break-system-packages --quiet --progress-b
 "${pip_install[@]}" "torchvision==0.29.0" --index-url https://download.pytorch.org/whl/cu130
 "${pip_install[@]}" "tokenspeed==0.1.0.post20260930" --extra-index-url https://lightseek.org/whl/nightly
 rm -f "$constraints"
-# Fail here, not at engine start, if a component is missing.
-python3 -c "import tokenspeed_kernel, smg_grpc_servicer.tokenspeed.server, smg"
+# Fail here, not at engine start, if a component is missing. Importing the engine
+# needs a GPU, and the router containers have none, so check the distributions.
+python3 -c "import importlib.metadata as m; [m.version(d) for d in ('tokenspeed', 'tokenspeed-kernel', 'tokenspeed-smg', 'tokenspeed-smg-grpc-servicer')]"
+command -v smg >/dev/null

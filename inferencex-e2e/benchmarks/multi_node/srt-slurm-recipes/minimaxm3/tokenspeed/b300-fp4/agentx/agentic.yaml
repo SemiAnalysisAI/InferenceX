@@ -31,6 +31,12 @@ base:
     tachometer:
       enabled: false
   setup_script: tokenspeed-0.1.0.post20260930.sh
+  # The runner image is not built on an NVIDIA CUDA base image, so it sets neither
+  # variable and enroot's NVIDIA hook would expose no GPU. The job script exports
+  # these, and the containers inherit them.
+  environment:
+    NVIDIA_VISIBLE_DEVICES: all
+    NVIDIA_DRIVER_CAPABILITIES: compute,utility
   engine: tokenspeed
   sbatch_directives:
     mem: '0'
