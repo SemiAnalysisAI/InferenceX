@@ -328,8 +328,8 @@ Source: [upstream recipe](https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4.1-Flas
 ### DeepSeek-V4.1-Flash DSpark on ATOM
 
 `dsv41flash-fp4-mi355x-atom-agentic-dspark` follows the
-[ATOM upstream recipe](https://github.com/ROCm/ATOM/blob/74fd942b0a2240a99bbb8a737133dfd6e036e40c/recipes/DeepSeek-V4.1-Flash-Agentic.md)
-with `rocm/atom-dev:nightly_202609291501` (ATOM `0.1.7.dev46+g74fd942b0`,
+[ATOM upstream recipe](https://github.com/ROCm/ATOM/blob/922b3519628a002ae9dbdd4d30683e17d372ff00/recipes/DeepSeek-V4.1-Flash-Agentic.md)
+with `rocm/atom-dev:nightly_202610011450` (ATOM `0.1.7.dev51+g922b35196`,
 ROCm 7.2.4). Every point selects the native srt-slurm recipe
 `benchmarks/single_node/srt-slurm-recipes/dsv41flash/atom/mi355x-fp4-mtp/agentic.yaml`;
 the legacy `dsv41flash_fp4_mi355x_atom_mtp.sh` launch from
