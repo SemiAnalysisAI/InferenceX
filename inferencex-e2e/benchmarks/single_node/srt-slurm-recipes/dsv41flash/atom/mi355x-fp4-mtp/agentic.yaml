@@ -112,6 +112,10 @@ override_tp2_c64:
   roles:
     agg:
       gpus: 2
+      # Run at least 4 decode passes after each prefill and batch the prefills
+      # that arrive meanwhile; at this load the batching also raises throughput.
+      env:
+        ATOM_PREFILL_DECODE_INTERVAL: '4'
   benchmark:
     env:
       CONC: '64'

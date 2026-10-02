@@ -345,7 +345,8 @@ throughput runs and leaves evals on real acceptance. `dsml_v41` parses tool call
 TP4 concurrency 32 also sets `ATOM_PREFILL_DECODE_INTERVAL=16`. After each prefill,
 ATOM runs at least 16 decode passes and batches the prefills that arrive in the
 meantime, so prefill interrupts decode less often. Interactivity rises, TTFT rises,
-and throughput stays the same.
+and throughput stays the same. TP2 concurrency 64 sets the interval to 4; at that
+load the batched prefills also raise throughput.
 
 AgentX replays `semianalysis_cc_traces_weka_062126` for 3600 seconds per point with
 five warmup requests per lane. srtctl pins each partial-node worker to GPUs `0..TP-1`

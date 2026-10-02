@@ -315,6 +315,7 @@ KV 卸载。所有点均使用 BF16 KV、FP8 index cache、128 个最大序列�
 acceptance。工具调用使用 `dsml_v41` 解析。
 TP4 并发 32 另设 `ATOM_PREFILL_DECODE_INTERVAL=16`：每次 prefill 后，ATOM 至少先跑 16 步 decode，
 并把这期间到达的 prefill 攒到一起，减少 prefill 打断 decode 的次数；交互性提升，TTFT 变长，吞吐不变。
+TP2 并发 64 设为 4；该负载下攒批 prefill 还能提升吞吐。
 
 AgentX 回放 `semianalysis_cc_traces_weka_062126`，每个点测量 3600 秒，每条 lane
 预热 5 个请求。srtctl 将非整节点 worker 固定在 GPU `0..TP-1`，并按该分配传入 `-tp`。
