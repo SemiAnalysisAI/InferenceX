@@ -21,6 +21,7 @@
 | [`InferenceX-e2e/`](inferencex-e2e/) | 🚀 端到端推理服务基准测试 |
 | [`CollectiveX/`](collectivex/) | 🌐 网络与集合通信基准测试（实验性 Beta 版本） |
 | [`OperatorX/`](operatorx/) | ⚙️ 算子与内核级基准测试（实验性 Beta 版本） |
+| [`power_model/`](power_model/) | ⚡ 开源系统级功耗建模 |
 | [`shared/`](shared/) | 🧩 共享组件目录 |
 | [`experimental/`](experimental/) | 🧪 其余实验 |
 
@@ -90,6 +91,10 @@ SGLang、vLLM、TensorRT-LLM、CUDA、ROCm 等 AI 软件通过核函式優化、
 
 欢迎提交 PR！有关 PR 审阅流程、[PR 审阅清单](inferencex-e2e/docs/PR_REVIEW_CHECKLIST_zh.md)与合并流程的更多详情，请参阅 [CONTRIBUTING_zh.md](CONTRIBUTING_zh.md)。
 维护者与 Agent 的文档导航请从 [`docs/index_zh.md`](inferencex-e2e/docs/index_zh.md) 开始，其中集中链接架构、配置、Workflow、评估、Runner 与故障排查参考。
+
+无需 CI 或 Slurm 即可对已有服务进行基准测试，请参阅
+[独立运行 AgentX-Harness](inferencex-e2e/docs/agentx-standalone_zh.md)，
+其中包含客户端安装步骤和直接执行的 `aiperf profile` 命令。
 
 ## 致谢与支持者
 感谢 Lisa Su 与 Anush Elangovan 为这一免费开源项目提供 MI355X 与 CDNA3 GPU。我们也要感谢众多 AMD 贡献者的积极响应，以及他们在各类 AMD GPU 上进行调试、优化与性能验证所付出的努力。

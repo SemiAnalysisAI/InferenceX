@@ -52,7 +52,7 @@
 | 服务器 | 进程退出、日志未出现、健康检查未通过、OOM/内核/端口错误 | 服务器日志、PID 退出、`/health`、镜像 digest/tag、GPU/Slurm 日志 | 匹配精确特征；只修改一个有证据支持的运行时/镜像设置，或回退 |
 | 评测 | `eval /` 失败、批次不完整、分数低于阈值、结果缺失 | `meta_env.json`、每个 `results*.json`、验证器输出、镜像与任务 | 修复评测/服务器/任务根因，重跑精确评测配置 |
 | 收集 | “No eval results found”、聚合为空、评测被跳过但收集器绿色 | 底层 `eval /` 结论；制品树与元数据；收集器输出 | 恢复/修复上游制品契约；不要只依据收集器输出诊断服务层 |
-| 摄取 | 面板行缺失/错误；目标 `trigger-ingest` 绿色但无有效数据 | 目标与来源运行元数据；未过期制品；应用工作流/ETL 日志；changelog 范围 | 使用带防护的恢复流程；绝不重跑失败的目标工作流 |
+| 摄取 | 面板行缺失/错误；`merge-ingest.yml` 目标失败，或分发任务绿色但无有效数据 | 目标与来源运行元数据；未过期制品；应用工作流/ETL 日志；changelog 范围 | 使用带防护的恢复流程；绝不重跑失败的目标工作流 |
 
 ## Changelog 与矩阵
 
@@ -66,7 +66,7 @@ Setup 阶段的删除错误通常意味着陈旧分支或改变空白的合并�
 
 在本地重跑与工作流完全相同的 `generate-cli-command`。先运行精确键 `test-config`，再运行同样过滤的 `full-sweep` 命令；检查发出的镜像、运行器、场景、拓扑、并发、评测标志和附加设置。命令与检查清单位于 [`testing_zh.md`](testing_zh.md#先精确配置再过滤配置族)。
 
-如果没有 GPU 任务启动，先检查 setup，再调查运行器。[`run-sweep.yml`](../../.github/workflows/run-sweep.yml) 会拒绝冲突主标签，不会仅凭评测修饰标签运行，只在 PR head 上接受 `[skip-sweep]`，并等待合并冲突解决。修复输入或标签状态；不要手动分发不同矩阵并把它称为等价证据。
+如果没有 GPU 任务启动，先检查 setup，再调查运行器。[`run-sweep.yml`](../../.github/workflows/run-sweep.yml) 会拒绝冲突主标签，不会仅凭修饰标签（`all-evals`、`evals-only`、`agentx-fast`）运行，只在 PR head 上接受 `[skip-sweep]`，并等待合并冲突解决。修复输入或标签状态；不要手动分发不同矩阵并把它称为等价证据。
 
 当本地矩阵与预期 PR 范围不完全一致时停止。生成器成功但配置错误并不是恢复成功。
 
@@ -132,11 +132,11 @@ Setup 阶段的删除错误通常意味着陈旧分支或改变空白的合并�
 
 ## 摄取
 
-`trigger-ingest` 成功不能证明存在有效基准结果行：[`run-sweep.yml`](../../.github/workflows/run-sweep.yml) 可以在收集之后触发下游处理，而取消/无结果目标仍可能到达该任务。验证目标运行的 event、workflow、branch、head SHA、changelog 差异、结果制品和下游 InferenceX-app 日志。
+分发成功不能证明存在有效基准结果行。[`merge-ingest.yml`](../../.github/workflows/merge-ingest.yml) 中的 `ingest` 任务只会在验证被复用的 PR 来源运行及其未过期结果制品后分发，不会验证完整覆盖或结果行有效性；没有复用授权时，它会在分发前失败。在旧版 [`run-sweep.yml`](../../.github/workflows/run-sweep.yml) push 运行中，即使目标已取消或无结果，`trigger-ingest` 也可能在收集之后触发。验证目标运行的 event、workflow、branch、head SHA、changelog 差异、来源运行的结果制品和下游 InferenceX-app 日志。
 
 应用工作流在 [`ingest-results.yml`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/main/.github/workflows/ingest-results.yml) 中准备、迁移、摄取、应用覆盖并验证数据。[`prepare-ci-artifacts.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/main/packages/db/src/prepare-ci-artifacts.ts) 负责选择和下载来源/合并制品并写入复用元数据；[`ingest-ci-run.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/main/packages/db/src/ingest-ci-run.ts) 负责数据库摄取。[`benchmark-mapper.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/main/packages/db/src/etl/benchmark-mapper.ts) 中的失败行 guard 仅在 `num_requests_successful` 为数值零且 `num_requests_total` 为数值时跳过该行。
 
-使用带防护的[失败摄取恢复流程](../../.claude/commands/recover-failed-ingest.md)，不要重跑失败目标。它要求来源是已完成的 pull-request `run-sweep.yml`，结果制品未过期，来源提交属于原 PR，执行语义未变化，changelog 范围明确，并保留恢复 ancestry。
+使用带防护的[失败摄取恢复流程](../../.claude/commands/recover-failed-ingest.md)，不要重跑失败目标。其目标是失败的 push-to-`main` `merge-ingest.yml` 运行（也接受旧版 `run-sweep.yml` push 运行）。它要求来源是已完成的 pull-request `run-sweep.yml`，结果制品未过期，来源提交属于原 PR，执行语义未变化，changelog 范围明确，并保留恢复 ancestry。
 
 如果来源运行或制品不合格、无法证明来源 ancestry、来源 SHA 后配置/配方/镜像语义发生变化，或预期 changelog 范围不明确，请停止恢复。绝不要绕过 pending/失败检查，不要在挂接来源 ancestry 后重写恢复分支，也不要在未检查数据时相信目标的绿色 trigger。
 
@@ -157,7 +157,7 @@ Setup 阶段的删除错误通常意味着陈旧分支或改变空白的合并�
 | `gh run rerun --failed` 被拒绝 | [§7](KLAUD_DEBUG.md#7-ci-rerun-mechanics)：检查运行状态/结论；仅已完成的失败支持只重跑失败任务，取消运行需要完整重跑 |
 | MiniMax M3 B300 MSA 报告 `q2k_indices` 不连续 | [§11](KLAUD_DEBUG.md#11-minimax-m3-b300-msa-top-k-slice-is-non-contiguous)：识别 TP1/data-parallel-attention 暴露条件；优先使用上游已修复镜像。提交记录中的引擎补丁须符合当前清单/豁免要求 |
 
-历史 KLAUD 标签或合并建议不能覆盖当前[扫描标签政策](../../.github/AGENT_OPERATIONS.md#sweep-labels-and-reuse)、[`CONTRIBUTING.md`](../../CONTRIBUTING.md) 或 [PR 清单](PR_REVIEW_CHECKLIST.md)。
+历史 KLAUD 标签或合并建议不能覆盖当前[扫描标签政策](../../.github/AGENT_OPERATIONS.md#sweep-labels-and-reuse)、[`CONTRIBUTING_zh.md`](../../CONTRIBUTING_zh.md) 或 [PR 清单](PR_REVIEW_CHECKLIST_zh.md)。
 
 ## 验证与停止条件
 

@@ -245,6 +245,20 @@ class SingleNodeHcaOverrideTests(unittest.TestCase):
                 self.assertEqual(stdout.strip().splitlines()[-1], expected)
 
 
+class RelaxedOrderingProfileTests(unittest.TestCase):
+    def test_only_the_registry_flag_relaxes_the_deepep_window(self) -> None:
+        for flag, expected in (("1", "1"), ("0", "unset"), ("", "unset")):
+            with self.subTest(flag=flag):
+                stdout = run_common(
+                    "export COLLX_RDMA_DEVICES=mlx5_0:1 EP_WIN_RELAXED_ORDERING=stale"
+                    f" COLLX_RDMA_RELAXED_ORDERING='{flag}';"
+                    " collx_apply_network_profile 2 nvlink-rdma;"
+                    ' echo "${EP_WIN_RELAXED_ORDERING:-unset}"',
+                    check=True,
+                ).stdout
+                self.assertEqual(stdout.strip().splitlines()[-1], expected)
+
+
 class StageTests(unittest.TestCase):
     def test_create_copy_and_validate_cleanup(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

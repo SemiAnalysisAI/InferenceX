@@ -149,7 +149,7 @@ jobs:
             **IMPORTANT: Keep runs precise and efficient:**
             - Use `full-sweep` with filter flags to narrow down the benchmark scope - "full-sweep" does NOT mean running everything
             - When using `full-sweep`, you must use `--min-conc` and `--max-conc` together to specify a single concurrency value. Unless prompted otherwise, use `--min-conc 4 --max-conc 4`
-            - For fixed-sequence runs, use `--seq-lens 8k1k`. Use `1k1k` only for the explicitly retained GLM-5.1 B200 TileRT config. Consult `inferencex-e2e/docs/MODELS.md` for model-specific scenario eligibility.
+            - For fixed-sequence runs, use `--seq-lens 8k1k`; 1k1k is retired for all models. Consult `inferencex-e2e/docs/MODELS.md` for model-specific scenario eligibility.
             - Use `test-config` ONLY when given specific config keys to test - Use `--config-files`, `--config-keys`, and `--conc` flags ONLY
             - Always filter by specific models, frameworks, precision, conc, or config keys when possible
 
@@ -466,18 +466,11 @@ jobs:
             - Comment: "Image must be publicly accessible on NGC, Docker Hub, or another public registry. Local paths like `/scratch/...` or `.sqsh` files are generally not accepted. Please push the container to a public registry (e.g., `nvcr.io/nvidia/...` for NGC) and update the config with the public image reference."
             - Link to the specific line with the invalid image path
 
-            ## Enroot Import Validation for Launch Scripts:
-            When reviewing changes to `inferencex-e2e/runners/launch_*.sh` files, verify that the script properly transforms public Docker images to enroot local images for reproducibility.
+            ## Enroot Import Validation for Launch Code:
+            When reviewing changes to `inferencex-e2e/infx/launch/` (including `infx/launch/backends/`) or a cluster's `slurm.squash` record in `inferencex-e2e/configs/runners.yaml`, verify that public Docker images still reach containers through the cluster's backend for reproducibility, and that no driver hand-rolls its own `enroot import`.
 
             **Expected pattern:**
-            The script should include an enroot import command like:
-            ```bash
-            srun --jobid=$JOB_ID bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
-            ```
-            or similar variations such as:
-            ```bash
-            srun -N 1 -A $SLURM_ACCOUNT -p $SLURM_PARTITION bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
-            ```
+            Drivers get images from the backend: `backend.prepare_image(image)` for containers the backend runs, or, in the Slurm-only srt driver, `SlurmBackend.stage_image(...)`. On Slurm these call `ensure_image` in `infx/launch/backends/slurm/squash.py`, which imports `docker://` references into `.sqsh` files according to the cluster's `slurm.squash.import` mode (`submit-host`, `compute`, `all-nodes`, `pre-staged`). A cluster without `slurm.squash` hands Pyxis the registry reference to import inside the job.
 
             **Why this matters:**
             - Ensures the exact same public NGC/Docker Hub image is used
@@ -485,13 +478,13 @@ jobs:
             - Prevents reliance on pre-existing local container images that others cannot access
 
             **Validation Steps:**
-            1. Look for `enroot import` commands that convert `docker://` images to local `.sqsh` files
-            2. The image source should be a public registry (NGC, Docker Hub, etc.), not a local path
-            3. If the script uses containers but does NOT have an `enroot import docker://` pattern:
+            1. Look for container images started without going through the backend's image preparation.
+            2. The image source should be a public registry (NGC, Docker Hub, etc.), not a local path.
+            3. If a driver starts a container without the backend, or a cluster switches to `pre-staged` without explanation:
                - This is a 🟡 **WARNING** issue
-               - Comment: "This launch script uses container images but does not appear to transform a public Docker image to an enroot local image using `enroot import -o $SQUASH_FILE docker://$IMAGE`. For reproducibility, please either:
-                 1. Add the enroot import pattern to pull from a public registry, OR
-                 2. Explain why this script has a different workflow (e.g., uses a different container runtime, pre-built images are acceptable for this use case, etc.)"
+               - Comment: "This launch code starts a container image without staging it through the cluster backend (`prepare_image` / `stage_image`). For reproducibility, please either:
+                 1. Stage the public registry image through the backend, OR
+                 2. Explain why this path has a different workflow (e.g., pre-staged images are acceptable for this cluster)"
                - Ask the developer to provide a reasonable explanation if the pattern is intentionally omitted
 
             ## Line Count Report for the matrix generator:
@@ -573,6 +566,6 @@ jobs:
 
             **Deprecation validation:**
             - Reject new active entries for retired models, scenarios, or precisions unless `inferencex-e2e/docs/MODELS.md` explicitly documents an exception.
-            - Preserve the GLM-5.1 B200 TileRT exception and the conditional non-speculative AgentX policy; do not infer retirement from the existence of a speculative counterpart.
+            - Preserve the conditional non-speculative AgentX policy; do not infer retirement from the existence of a speculative counterpart.
             - Retired entries are deleted from the master configs, not archived, following `AGENTS.md`; git history and `inferencex-e2e/perf-changelog.yaml` are the historical record.
             - For a newly supported model, require matching updates to `inferencex-e2e/docs/MODELS.md` and `inferencex-e2e/docs/MODELS_zh.md` rather than rejecting it against an obsolete model list.
