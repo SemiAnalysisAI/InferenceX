@@ -1100,7 +1100,18 @@ glm5.3-fp8-mi325x-sglang-agentic-mtp-dual-tp4:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "CONFIG_FILE=recipes/glm5.3/sglang/mi325x-fp8/agentx/agg-dual-tp4-mtp.yaml"
+          - "CONFIG_FILE=recipes/glm5.3/sglang/mi325x-fp8/agentx/agg-dual-tp4-mtp.yaml:override_c4"
+      - spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [6]
+        num-nodes: 1
+        worker:
+          num-worker: 2
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/glm5.3/sglang/mi325x-fp8/agentx/agg-dual-tp4-mtp.yaml:override_c6"
 
 glm5.3-fp8-mi325x-sglang-disagg-agentic-umbp:
   image: lmsysorg/sglang-rocm:v0.5.21-rocm720-mi30x-20261001@sha256:8190c29f67bdb65f41e0254efc72e60daa5117b7212e86a46aad5bf4b145f1b4
