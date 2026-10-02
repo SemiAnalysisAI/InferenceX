@@ -156,6 +156,7 @@ override_tp8_umbp_c8:
     agg:
       args:
         <<: *umbp_args
+        chunked-prefill-size: 32768
         max-running-requests: 16
         cuda-graph-max-bs-decode: 16
       env: *umbp_env
