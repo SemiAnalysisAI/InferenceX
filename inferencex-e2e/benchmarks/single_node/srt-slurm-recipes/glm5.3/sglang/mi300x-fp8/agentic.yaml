@@ -95,6 +95,39 @@ zip_override_tp8_mtp_concurrency:
       CONC: ["2", "3"]
       KV_OFFLOADING: none
 
+override_dep8_mtp_c8:
+  frontend:
+    type: sglang-router
+    args:
+      policy: cache_aware
+      dp-aware: true
+      health-check-timeout-secs: 600
+      request-timeout-secs: 14400
+      disable-retries: true
+  roles:
+    agg:
+      args:
+        <<: *mtp_args
+        expert-parallel-size: 8
+        data-parallel-size: 8
+        enable-dp-attention: true
+        moe-a2a-backend: mori
+        deepep-mode: normal
+        chunked-prefill-size: 8192
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 16
+      env:
+        GLOO_SOCKET_IFNAME: ens50f1np1
+        NCCL_SOCKET_IFNAME: ens50f1np1
+        MORI_SOCKET_IFNAME: ens50f1np1
+        MORI_SHMEM_MODE: ISOLATION
+        # Covers the local 1024-token prefill chunk and four-token verification.
+        SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "1024"
+  benchmark:
+    env:
+      CONC: "8"
+      KV_OFFLOADING: none
+
 override_tp8_umbp_c1:
   services: &umbp_services
     - name: umbp

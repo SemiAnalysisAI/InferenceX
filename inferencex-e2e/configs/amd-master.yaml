@@ -1540,6 +1540,7 @@ glm5.3-fp8-mi300x-sglang-agentic:
     - search-space:
       - { tp: 8, ep: 1, kv-offloading: none, spec-decoding: none, conc-list: [1], srt-recipe: benchmarks/single_node/srt-slurm-recipes/glm5.3/sglang/mi300x-fp8/agentic.yaml }
       - { tp: 8, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 3], srt-recipe: benchmarks/single_node/srt-slurm-recipes/glm5.3/sglang/mi300x-fp8/agentic.yaml }
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [8], router: { name: sglang-router, version: "0.3.2" }, srt-recipe: benchmarks/single_node/srt-slurm-recipes/glm5.3/sglang/mi300x-fp8/agentic.yaml }
     - dram-utilization: 0.32
       search-space:
       - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: umbp-linker }, spec-decoding: none, conc-list: [1, 4, 8], srt-recipe: benchmarks/single_node/srt-slurm-recipes/glm5.3/sglang/mi300x-fp8/agentic.yaml }
@@ -1551,6 +1552,7 @@ glm5.3-fp8-mi300x-sglang-disagg-agentic-umbp:
   runner: cluster:mi300x-amd
   precision: fp8
   framework: sglang-disagg
+  router: { name: sglang-router, version: "0.3.2" }
   kv-p2p-transfer: mori
   multinode: true
   disagg: true
