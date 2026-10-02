@@ -243,10 +243,10 @@ override_1p1d_dep4_dep16_c128:
         compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[7,14,21,28,35,42,49,56,63,70,77,84,91,98,105,112],"mode":0}'
         max-cudagraph-capture-size: 112
 
-# One DEP4 prefill and one DEP16 decode worker at concurrency 256,
-# DSpark K=6 (tuning run 3158855).
-override_1p1d_dep4_dep16_c256:
-  name: "svf-vllm-disagg-gb300-1p1d-dep4-dep16-c256-mtp-agentic"
+# One DEP8 prefill and one DEP16 decode worker at concurrency 384,
+# DSpark K=6.
+override_1p1d_dep8_dep16_c384:
+  name: "svf-vllm-disagg-gb300-1p1d-dep8-dep16-c384-mtp-agentic"
   services:
   - name: "etcd"
     type: "etcd"
@@ -271,27 +271,27 @@ override_1p1d_dep4_dep16_c256:
         enable_offload: false
   roles:
     prefill:
-      nodes: 1
+      nodes: 2
       workers: 1
-      gpus: 4
+      gpus: 8
       env:
-        DG_JIT_CACHE_DIR: "/tmp/dg-cache-dsv4-gb300-1p1d-dep4-prefill-c256-{job_id}"
+        DG_JIT_CACHE_DIR: "/tmp/dg-cache-dsv4-gb300-1p1d-dep8-prefill-c384-{job_id}"
       args:
-        data-parallel-size: 4
-        max-num-seqs: 256
-        max-num-batched-tokens: 8192
+        data-parallel-size: 8
+        max-num-seqs: 128
+        max-num-batched-tokens: 16384
     decode:
       nodes: 4
       gpus: 16
       env:
-        VLLM_V2_WARMUP_MAX_NUM_SEQS: "32"
-        DG_JIT_CACHE_DIR: "/tmp/dg-cache-dsv4-gb300-1p1d-dep16-decode-c256-{job_id}"
+        VLLM_V2_WARMUP_MAX_NUM_SEQS: "48"
+        DG_JIT_CACHE_DIR: "/tmp/dg-cache-dsv4-gb300-1p1d-dep16-decode-c384-{job_id}"
       args:
         data-parallel-size: 16
-        max-num-seqs: 32
-        max-num-batched-tokens: 224
-        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[7,14,21,28,35,42,49,56,63,70,77,84,91,98,105,112,119,126,133,140,147,154,161,168,175,182,189,196,203,210,217,224],"mode":0}'
-        max-cudagraph-capture-size: 224
+        max-num-seqs: 48
+        max-num-batched-tokens: 336
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[7,14,21,28,35,42,49,56,63,70,77,84,91,98,105,112,119,126,133,140,147,154,161,168,175,182,189,196,203,210,217,224,231,238,245,252,259,266,273,280,287,294,301,308,315,322,329,336],"mode":0}'
+        max-cudagraph-capture-size: 336
 
 # One DEP8 prefill and one DEP16 decode worker at concurrency 512,
 # DSpark K=6 (tuning run 3150583).
