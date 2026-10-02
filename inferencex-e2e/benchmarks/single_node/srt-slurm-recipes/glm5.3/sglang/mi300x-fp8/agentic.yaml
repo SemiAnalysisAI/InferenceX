@@ -34,7 +34,7 @@ base:
         dsa-prefill-backend: tilelang
         dsa-decode-backend: tilelang
         dsa-topk-backend: torch
-        kv-cache-dtype: bfloat16
+        kv-cache-dtype: fp8_e4m3
         page-size: 64
         tool-call-parser: glm47
         reasoning-parser: glm45
