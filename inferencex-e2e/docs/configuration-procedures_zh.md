@@ -331,6 +331,30 @@ GB300 launcher 将引擎就绪等待时间设为 7200 秒。在[运行 345049691
 
 来源：[上游配方](https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4.1-Flash)。
 
+### ATOM 上的 DeepSeek-V4.1-Flash DSpark
+
+`dsv41flash-fp4-mi355x-atom-agentic-dspark` 按照
+[ATOM 上游配方](https://github.com/ROCm/ATOM/blob/922b3519628a002ae9dbdd4d30683e17d372ff00/recipes/DeepSeek-V4.1-Flash-Agentic.md)
+使用 `rocm/atom-dev:nightly_202610011450`（ATOM `0.1.7.dev51+g922b35196`，ROCm 7.2.4）。
+所有点均选择原生 srt-slurm 配方
+`benchmarks/single_node/srt-slurm-recipes/dsv41flash/atom/mi355x-fp4-mtp/agentic.yaml`；
+[#3387](https://github.com/SemiAnalysisAI/InferenceX/pull/3387) 的旧脚本
+`dsv41flash_fp4_mi355x_atom_mtp.sh` 已在 #3461／#3463 中删除。
+TP2 覆盖并发 `[1, 2, 8, 16, 32, 64, 128]`，TP4 覆盖 `[32]`，不启用专家并行或
+KV 卸载。所有点均使用 BF16 KV、FP8 index cache、128 个最大序列、16K
+批处理 token／prefill chunk、block size 16 的前缀缓存、8K 状态检查点、
+编译 level 3 和 FULL graphs，所有点均捕获 1 到 32 的全部尺寸以及 48、64、128。配方只声明使用检查点自带 draft 的 5-token DSpark；
+`infx/srt_slurm/synthetic_acceptance.py` 为 AgentX 吞吐测试添加
+`--spec-decode-acceptance-length 3.51`（`thinking_on` K5 golden AL），eval 保持真实
+acceptance。工具调用使用 `dsml_v41` 解析。
+TP4 并发 32 另设 `ATOM_PREFILL_DECODE_INTERVAL=16`：每次 prefill 后，ATOM 至少先跑 16 步 decode，
+并把这期间到达的 prefill 攒到一起，减少 prefill 打断 decode 的次数；交互性提升，TTFT 变长，吞吐不变。
+TP2 并发 64 设为 4；该负载下攒批 prefill 还能提升吞吐。
+
+AgentX 回放 `semianalysis_cc_traces_weka_062126`，每个点测量 3600 秒，每条 lane
+预热 5 个请求。srtctl 将非整节点 worker 固定在 GPU `0..TP-1`，并按该分配传入 `-tp`。
+GPU sweep 和 eval 尚待验证。
+
 ### H200 上的 DeepSeek-V4.1-Flash DSpark
 
 `dsv41flash-fp4-h200-vllm-agentic-dspark` 是 DeepSeek-V4.1-Flash 配方的 H200 AgentX
