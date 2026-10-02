@@ -179,3 +179,12 @@ def test_agentic_collection_requires_declared_cpu_and_keeps_gpu_valid(tmp_path, 
     assert result["cpu_power_valid"] == int(has_cpu)
     assert result["total_gpu_energy_j"] == 84000.0
     assert (result_dir / "power_validation.json").is_file()
+    assert result["power_audit"]["source"] == "LOGS/agentic/conc_4/power_validation.json"
+    cpu = result["power_audit"]["cpu"]
+    if has_cpu:
+        assert cpu["sensor_kind"] == "grace_socket"
+        assert cpu["source"] == "acpi"
+        assert cpu["expected_sockets"] == cpu["observed_sockets"] == 4
+        assert cpu["reason_codes"] == []
+    else:
+        assert cpu["reason_codes"] == ["cpu_artifacts_missing"]

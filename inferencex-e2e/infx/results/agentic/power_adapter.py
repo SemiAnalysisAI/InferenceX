@@ -20,6 +20,7 @@ from infx.results.power import (
     POWER_METRIC_SCHEMA_VERSION,
     with_power_metrics,
 )
+from infx.results.power.audit import audit_summary
 from infx.results.power.multinode import WINDOWS_DIRNAME, run as run_multinode_power
 from infx.results.power.single_node import (
     _patch_power_result,
@@ -481,7 +482,7 @@ def run_multinode_agentic_power(
         aggregate_gpus = prefill_gpus + decode_gpus
         prefill_gpus = 0
         decode_gpus = 0
-    return run_multinode_power(
+    status = run_multinode_power(
         power_dir=power_dir,
         bench_result=bench_result,
         agg_result=agg_result,
@@ -494,6 +495,16 @@ def run_multinode_agentic_power(
         require_power=require_power,
         expected_cpu_source=expected_cpu_source,
     )
+    try:
+        result = json.loads(agg_result.read_text())
+        validation = json.loads(validation_result.read_text())
+        source = "LOGS/" + validation_result.resolve().relative_to(logs_root.resolve()).as_posix()
+        result.update(audit_summary(validation, source))
+        _write_json_atomic(agg_result, result)
+    except (OSError, ValueError, TypeError) as exc:
+        print(f"[agentx_power] Audit summary unavailable: {exc}", file=sys.stderr)
+        status = max(status, int(require_power))
+    return status
 
 
 def main() -> int:
