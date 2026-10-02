@@ -92,7 +92,7 @@ jobs:
           fi
           env PYTHONPATH="$PRIORITY_ROOT" python3 -P -m infx.workflows.require_launcher "$GITHUB_WORKSPACE"
           source "$PRIORITY_ROOT/benchmarks/benchmark_lib.sh" --validation-only
-          check_env_vars INPUTS_CONFIG_FILE INPUTS_CONFIG_KEY INPUTS_CONC PR_LABELS
+          check_env_vars INPUTS_CONFIG_FILE INPUTS_CONFIG_KEY INPUTS_CONC
           GENERATOR_PATH="${MEASURED_ROOT}"
           if [ -f "${MEASURED_ROOT}/infx/matrix/generate.py" ]; then
             GENERATOR=(-m infx.matrix.generate)
@@ -112,11 +112,11 @@ jobs:
             --policy "${PRIORITY_ROOT}/configs/ci-priority.yaml" \
             --event-name "${GITHUB_EVENT_NAME}" \
             --queue-namespace "${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}" \
-            --labels-json "${PR_LABELS}")
+            --criteria-json "${PRIORITY_CRITERIA}")
           echo "raw=$CONFIG_JSON" >> "$GITHUB_OUTPUT"
 
         env:
-          PR_LABELS: ${{ inputs.moe-debug && '["ci-patchwork"]' || '[]' }}
+          PRIORITY_CRITERIA: ${{ inputs.moe-debug && '["patchwork"]' || '' }}
           INPUTS_CONFIG_FILE: ${{ inputs.config-file }}
           INPUTS_CONFIG_KEY: ${{ inputs.config-key }}
           INPUTS_CONC: ${{ inputs.conc }}

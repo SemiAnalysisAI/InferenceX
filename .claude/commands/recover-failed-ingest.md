@@ -44,8 +44,13 @@ Run from a clean InferenceX checkout with authenticated `gh`, `git`, `jq`, and
   policy drift are allowed because source coverage is authoritative.
 - Preserve all historical `inferencex-e2e/perf-changelog.yaml` bytes. Append recovery entries
   only at the end.
-- Keep exactly one full-sweep label on the recovery PR and pin the source run
-  with `/reuse-sweep-run <run_id>` before pushing the changelog change.
+- Pin the source run with `/reuse-sweep-run <run_id>` before pushing the
+  changelog change. Reuse needs no sweep label. If one is applied, keep at most
+  one primary label (`full-sweep-fail-fast`, `full-sweep-enabled`, or
+  `non-canary-full-sweep-enabled`). Never add `evals-only` or `agentx-fast`:
+  they skip the PR reuse gate, so a primary label would start a GPU sweep, and
+  merge-time reuse rejects them. Reuse checks only current PR labels, so also
+  never pin a source run produced while the original PR carried either one.
 - The final recovery branch head must have the recovery commit as its first
   parent, the source run SHA as its second parent, and the recovery commit's
   file tree unchanged.
@@ -247,8 +252,9 @@ gh pr comment "$RECOVERY_PR" \
   --body "/reuse-sweep-run $SOURCE_RUN_ID"
 ```
 
-Keep exactly one of `full-sweep-enabled`,
-`non-canary-full-sweep-enabled`, or `full-sweep-fail-fast`.
+Reuse does not need this label. Keep at most one of `full-sweep-fail-fast`,
+`full-sweep-enabled`, or `non-canary-full-sweep-enabled`, and never add
+`evals-only` or `agentx-fast` (see the safety rules).
 
 ## 5. Append and validate the recovery changelog
 

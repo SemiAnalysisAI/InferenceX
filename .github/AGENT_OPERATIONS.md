@@ -32,11 +32,18 @@ A PR sweep requires exactly one primary label:
 - `full-sweep-enabled`: canary-gated full sweep without fail-fast. Use when a flaky job must not cancel its matrix's in-flight work.
 - `non-canary-full-sweep-enabled`: full sweep without canary or fail-fast. Use when both canary gating and fail-fast are unsuitable.
 
+`run-sweep.yml` sweeps run only on same-repository PRs that change `inferencex-e2e/perf-changelog.yaml`; the matrix comes from the appended entries. More than one primary label fails `check-changelog`, and modifiers alone start no GPU sweep (`check-changelog` still runs). Adding or removing any primary or modifier label cancels the in-progress sweep; a new one starts only while a primary label remains.
+
+Fork PRs run no `run-sweep.yml` jobs, not even changelog validation. A maintainer with `write`, `maintain`, or `admin` permission applies one primary label to an open, non-draft, conflict-free PR, and `.github/workflows/trusted-external-sweep.yml` dispatches `e2e-tests.yml` for that exact head SHA. That path runs no canary for any label, and only `full-sweep-fail-fast` sets fail-fast. Remove and re-add the primary label after each push to approve the new head.
+
+The canary is the lowest-concurrency non-eval single-node `1k1k`, `8k1k`, or AgentX entry, or a multi-node AgentX entry when there is no single-node candidate. If it fails, every other matrix is skipped. A sweep with only multi-node fixed-sequence or eval entries has no canary, so every matrix fans out at once and fail-fast is the only guard. No label trims concurrency; for a lowest-concurrency smoke run, dispatch `e2e-tests.yml` with `trim-conc: true`.
+
 Modifiers:
 
 - `all-evals` expands eval selection to every generated fixed-sequence configuration without suppressing throughput. It remains reuse-eligible; artifact reuse does not require a current sweep label.
-- `evals-only` suppresses throughput. Combining it with `all-evals` runs every eval and no throughput. It is not reuse-eligible.
-- `agentx-fast` uses one deterministic warmup request per lane and a 20-minute AgentX profile. It does not affect fixed-sequence or eval jobs and is not reuse-eligible.
+- `evals-only` suppresses throughput. Combining it with `all-evals` runs every eval and no throughput. Reuse is rejected while the PR carries it.
+- `agentx-fast` uses one deterministic warmup request per lane and a 20-minute AgentX profile. It does not affect fixed-sequence or eval jobs. Reuse is rejected while the PR carries it.
+- `all-evals` and `evals-only` fail `check-changelog` when the changelog additions include `append-only: true` or `no-evals: true` entries.
 
 Fail-fast is matrix-scoped: one matrix failure does not cancel other matrices, and completed results remain valid. The failed job remains red.
 
@@ -44,7 +51,7 @@ Sweeps do not trigger while a PR has merge conflicts. For `inferencex-e2e/perf-c
 
 Pushes to `main` never run a sweep: `.github/workflows/run-sweep.yml` is PR-only. A push that changes `inferencex-e2e/perf-changelog.yaml` runs `.github/workflows/merge-ingest.yml` (Merge Ingest). Its single `ingest` job validates the merged PR's authorized `/use <run_id>` (or legacy `/reuse-sweep-run`) command and source run, then dispatches ingest of that reused PR sweep. Without valid reuse authorization the run fails, and nothing is benchmarked or ingested. `[skip-sweep]` only skips PR benchmark setup; changelog validation and reuse authorization checks still run, and Merge Ingest ignores it.
 
-Artifact reuse excludes runs with `evals-only` or `agentx-fast`. See `.github/workflows/README.md` and `uv run --project inferencex-e2e --extra workflows python -m infx.workflows.merge_with_reuse` for eligibility and merge behavior.
+Reuse is rejected while the PR currently carries `evals-only` or `agentx-fast`; this is checked when `/use` is acknowledged and at merge (and by `merge_with_reuse`). On a push these labels skip the reuse gate, so a primary label starts a fresh sweep. Source-run label history is not inspected, so pin only runs produced without those labels. Staging (`/stage-results`, also triggered by `/use <run_id>`) still requires a primary label on the PR and a source run created while one was applied. See `.github/workflows/README.md` and `uv run --project inferencex-e2e --extra workflows python -m infx.workflows.merge_with_reuse` for eligibility and merge behavior.
 
 ## Workflow dispatch and monitoring
 
@@ -78,11 +85,11 @@ The dispatch POST returns no body or run ID.
 
 Full details live in `inferencex-e2e/infx/evals/EVALS.md`.
 
-`mark_eval_entries()` in `inferencex-e2e/infx/matrix/generate.py` selects evals, which default to the 8k1k subset and run separately from throughput with `EVAL_ONLY=true`.
+`mark_eval_entries()` in `inferencex-e2e/infx/matrix/generate.py` selects evals, which default to the 8k1k subset plus AgentX GSM8K for every model, and run separately from throughput with `EVAL_ONLY=true`. Single-node AgentX GSM8K runs at the highest concurrency of each model/runner/framework/precision/spec-decoding/dp-attn/image group and uses the same `thresholds.yaml` floors as 8k1k. Kimi K3 and MiniMax M3 also run their vendor suites at every point, with GSM8K as an extra eval-only row.
 
 - `--no-evals`: skip evals.
 - `--evals-only`: run the default selected eval subset and suppress throughput.
-- `--all-evals`: expand selection to every generated fixed-sequence configuration. It composes with `--evals-only`.
+- `--all-evals`: expand selection to every generated fixed-sequence configuration. In `infx.matrix.generate`, it is eval-only even without `--evals-only`; in `infx.matrix.plan` (the PR label path), it only expands selection and composes with `--evals-only`.
 
 For multi-node configurations, `--all-evals` creates one eval job per engine topology and runs every distinct `conc-list` value sequentially against that engine. Changelog `all-evals: true` suppresses throughput for that entry. The PR `all-evals` label expands selection only, while the `evals-only` label suppresses throughput. `inferencex-e2e/infx/results/collect_eval_results.py` produces aggregated output.
 
@@ -94,7 +101,7 @@ Multinode disaggregated results add `prefill_gpu_energy_j`, `decode_gpu_energy_j
 
 Every power result — valid or invalid, single-node or multinode — carries `power_metric_schema_version`. Version 2 defines each unprefixed `joules_per_*` field as whole-deployment GPU-board energy over the named denominator; role-scoped energy uses the explicit `prefill_*` / `decode_*` keys. Rows without the field predate the whole-deployment switch and their unprefixed joules are not comparable across topologies.
 
-For srt-slurm recipes, `telemetry.enabled: true` with `telemetry.dcgm_exporter` enables official energy collection. The Git submodule pointer at `inferencex-e2e/utils/srt-slurm` is the source of truth for the shared srt-slurm commit, used by both power and non-power NVIDIA lanes. TileRT is the single documented fork exception. CI derives `POWER_PRODUCER_SHA` from the launcher stamp. The aggregate-power and AgentX power tests validate telemetry and provenance. These local tests do not prove hardware power collection. Eligible recipe-gated `dynamo-sglang` dcgm-power lanes are validated.
+For srt-slurm recipes, `telemetry.enabled: true` with `telemetry.dcgm_exporter` enables official energy collection. The Git submodule pointer at `inferencex-e2e/utils/srt-slurm` is the source of truth for every srt-slurm job, including TileRT. CI derives `POWER_PRODUCER_SHA` from the launcher stamp. The aggregate-power and AgentX power tests validate telemetry and provenance. These local tests do not prove hardware power collection. Eligible recipe-gated `dynamo-sglang` dcgm-power lanes are validated.
 
 Power audit artifacts are named `power_audit_<result>` and contain `power_validation_<result>.json` for single-node runs or `power_validation_<result>_*.json` for multinode runs. They are uploaded even when validation fails.
 

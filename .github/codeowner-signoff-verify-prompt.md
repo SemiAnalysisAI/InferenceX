@@ -272,7 +272,28 @@ production by accuracy-sensitive customers.
   present, determine whether the override changes computed FLOPs vs the model's native
   config and whether the model natively supports that mode.
 - FAIL with the exact flag/value if architecture FLOPs are reduced without native
-  model support. PASS in one line otherwise. Use N/A if the PR touches no server args.
+  model support.
+
+EXPLICIT PROHIBITION: `publish_events_and_metrics: false` is not allowed.
+FAIL Check 8 if an affected benchmark's effective serving configuration disables
+`publish_events_and_metrics`, including equivalent false values recognized by the
+pinned implementation in YAML/JSON, CLI overrides, inherited configuration, shared
+launchers/helpers, or container/image defaults. Apply this to added, modified, and
+re-enabled benchmarks, including image-only bumps, across agentic/non-agentic and
+single-node/multi-node paths. Inspect the effective recipe at the PINNED head SHA,
+including unchanged referenced files; do not limit review to added diff lines.
+- Where the setting is supported, verify that it is enabled. An omitted setting
+  is compliant only when the pinned implementation confirms its effective default
+  is enabled. If the effective value cannot be verified, FAIL as
+  "Event/metric publication could not be verified", naming the missing evidence.
+- Report the affected config/script, the disabling value, and where it comes from.
+  Require enabling publication and verifying the effective setting. Passing evals,
+  an upstream recipe, or historical runs do not exempt the prohibition.
+- Comments, documentation examples, and removed diff lines are not runtime
+  disablement. A framework that does not support this setting need not add it.
+- PASS Check 8 only when both the architecture rule and this prohibition are
+  satisfied. Use N/A only if the PR affects no benchmark serving configuration,
+  image, or launch path.
 
 ## Check 9 — Speculative-decoding configs benchmark through chat templates
 If this PR adds or changes a speculative-decoding config (MTP / EAGLE / draft-model
