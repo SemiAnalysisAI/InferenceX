@@ -153,7 +153,7 @@ override_prefill_tp8_decode_dep8_c1:
       dp-aware: true
   roles:
     decode:
-      args:
+      args: &dep8_decode_args
         data-parallel-size: 8
         expert-parallel-size: 8
         enable-dp-attention: true
@@ -169,3 +169,33 @@ override_prefill_tp8_decode_dep8_c1:
   benchmark:
     env:
       CONC: "1"
+
+override_prefill_tp8_decode_dep8_c4:
+  frontend:
+    args:
+      dp-aware: true
+  roles:
+    prefill:
+      args:
+        max-running-requests: 8
+    decode:
+      args:
+        <<: *dep8_decode_args
+  benchmark:
+    env:
+      CONC: "4"
+
+override_prefill_tp8_decode_dep8_c8:
+  frontend:
+    args:
+      dp-aware: true
+  roles:
+    prefill:
+      args:
+        max-running-requests: 16
+    decode:
+      args:
+        <<: *dep8_decode_args
+  benchmark:
+    env:
+      CONC: "8"
