@@ -726,7 +726,7 @@ clusters:
           /dev/kfd: /dev/kfd
           /dev/dri: /dev/dri
           /dev/infiniband: /dev/infiniband
-          /raid/inferencex/models/hub: /hf-cache/hub
+          /raid/inferencex/models: /hf-cache
           /raid/inferencex/aiperf-mmap-cache: /aiperf_mmap_cache
         extra:
           visible_devices_env: ROCR_VISIBLE_DEVICES
