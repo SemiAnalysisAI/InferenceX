@@ -50,6 +50,7 @@ base:
         DYN_ENGINE_CONV_AFFINITY: "1"
         DYN_TOKENIZER: fastokens
         DYN_PUBLISH_KV_EVENTS: "0"
+        DYN_TRTLLM_PUBLISH_KV_EVENTS: "false"
       args:
         attention_dp_config:
           enable_kv_cache_aware_routing: false
@@ -120,6 +121,7 @@ base:
         DYN_ENGINE_CONV_AFFINITY: "1"
         DYN_TOKENIZER: fastokens
         DYN_PUBLISH_KV_EVENTS: "0"
+        DYN_TRTLLM_PUBLISH_KV_EVENTS: "false"
       args:
         cache_transceiver_config:
           backend: NIXL
