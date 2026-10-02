@@ -20,10 +20,10 @@ from infx.results.power import (
     POWER_METRIC_SCHEMA_VERSION,
     with_power_metrics,
 )
+from infx.results.power.common import _write_json_atomic
 from infx.results.power.multinode import WINDOWS_DIRNAME, run as run_multinode_power
 from infx.results.power.single_node import (
     _patch_power_result,
-    _write_json_atomic,
     invalid_validation_payload,
     run as run_power,
 )

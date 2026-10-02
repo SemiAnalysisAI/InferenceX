@@ -839,7 +839,7 @@ def main() -> int:
         "--csv",
         type=Path,
         default=Path("/workspace/gpu_metrics.csv"),
-        help="Path to gpu_metrics.csv from infx.bench.gpu_monitor (default: /workspace/gpu_metrics.csv)",
+        help="Path to a retained legacy gpu_metrics.csv (default: /workspace/gpu_metrics.csv)",
     )
     parser.add_argument(
         "--bench-result",

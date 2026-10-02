@@ -65,14 +65,15 @@ case "$2" in
     *) echo "unexpected $*" >> "$EVENTS"; exit 99 ;;
 esac
 """
-FAKE_AIPERF = r"""#!/bin/sh
-echo replay >> "$EVENTS"
-sleep "${REPLAY_SECONDS:-0}"
-exit "${REPLAY_RC:-0}"
+FAKE_AIPERF = f"""#!{sys.executable}
+import os, time
+with open(os.environ["EVENTS"], "a") as events:
+    events.write("replay\\n")
+time.sleep(float(os.environ.get("REPLAY_SECONDS", "0")))
+raise SystemExit(int(os.environ.get("REPLAY_RC", "0")))
 """
 FAKE_HF = '#!/bin/sh\nexit "${HF_RC:-0}"\n'
-# The GPU monitor's identity and final-sample queries log themselves; its 1 s stream runs
-# until the monitor stops it.
+# Record accidental use of the retired sampler without touching real GPUs.
 FAKE_NVIDIA_SMI = r"""#!/bin/sh
 case " $* " in
     *" -l 1 "*) exec sleep 60 ;;
@@ -91,7 +92,7 @@ sys.exit(execute(Plan.from_env(os.environ), Runtime(Path(sys.argv[1])), os.envir
 
 @pytest.fixture(autouse=True)
 def fake_gpu(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """The in-process GPU monitor finds ``nvidia-smi`` through this process's environment."""
+    """Keep an accidental sampler invocation observable and isolated from hardware."""
     tools = tmp_path / "gpu"
     tools.mkdir()
     executable(tools / "nvidia-smi", FAKE_NVIDIA_SMI)
@@ -154,10 +155,6 @@ def _events(tmp_path: Path) -> list[str]:
         ({"CONC": "4 8", "CONC_LIST": "4 8"}, "CONC must be a positive integer"),
         ({"IS_MULTINODE": "1"}, "IS_MULTINODE must be true or false"),
         ({"EVAL_ONLY": "true"}, "  - EVAL_ENDPOINT_READY_TIMEOUT_SECONDS"),
-        (
-            {"ENABLE_AGENTX_POWER": "1", "PP_SIZE": None, "PCP_SIZE": None},
-            "  - PP_SIZE\n  - PCP_SIZE",
-        ),
     ],
 )
 def test_points_that_cannot_be_measured_fail_before_setup(tmp_path, overrides, message):
@@ -169,6 +166,19 @@ WINDOW = {"IS_MULTINODE": "true", "ENABLE_AGENTX_POWER": "1", "SRT_MEASUREMENT_W
 MARK = "adapter --result-dir {results}/conc_8 --concurrency 8 --write-multinode-window"
 OFFSET = "agentic_power_timezone_offset.txt"
 REPLAYED = {"benchmark.log", "benchmark_command.txt"}
+
+
+def test_single_node_native_power_records_windows_without_local_sampler(tmp_path):
+    rc = _run(tmp_path, ENABLE_AGENTX_POWER="1", SRT_MEASUREMENT_WINDOW_DIR="/w")
+
+    assert rc == 0
+    results = tmp_path / "results"
+    mark = f"adapter --result-dir {results} --concurrency 8 --write-multinode-window"
+    assert _events(tmp_path) == [
+        f"{mark} running", "replay", "aggregate agentx", f"{mark} completed",
+        "analyze", "validate",
+    ]
+    assert not (results / "gpu_metrics.csv").exists()
 
 
 @pytest.mark.parametrize(
@@ -195,12 +205,12 @@ REPLAYED = {"benchmark.log", "benchmark_command.txt"}
             {"ENABLE_AGENTX_POWER": "1", "REQUIRE_POWER": "1"},
             0,
             [
-                "gpu-identity", "replay", "gpu-final-sample", "aggregate agentx", "adapter --result-dir {results} --agg-result {out}/agentx.json"
-                " --expected-num-gpus 12 --require-power",
+                "replay", "aggregate agentx", "adapter --result-dir {results} --agg-result {out}/agentx.json"
+                " --multinode-contract-missing --require-power",
                 "analyze", "validate",
             ],
-            {OFFSET, *REPLAYED, "gpu_metrics.csv", "gpu_metrics_identity.csv"},
-            id="single-node-monitor",
+            REPLAYED,
+            id="single-node-without-native-window",
         ),
         pytest.param(
             WINDOW,
@@ -272,7 +282,7 @@ def test_every_step_runs_and_the_first_failure_in_precedence_wins(
 
     assert rc == expected
     assert [event.split()[0] for event in _events(tmp_path)] == [
-        "gpu-identity", "replay", "gpu-final-sample", "aggregate", "adapter", "analyze",
+        "replay", "aggregate", "adapter", "analyze",
         "validate",
     ]  # fmt: skip
 
@@ -326,8 +336,7 @@ def test_signal_during_the_replay_skips_scoring_and_exits_128_plus_n(tmp_path, s
         driver.communicate()
 
     assert driver.returncode == expected_rc, stderr
-    # The signal may reach the monitor's sampler first, so its final sample is optional.
-    assert [e for e in _events(tmp_path) if e != "gpu-final-sample"] == ["gpu-identity", "replay"]
+    assert _events(tmp_path) == ["replay"]
 
 
 # The replay records its argv, writes one profiled request, and prints progress.

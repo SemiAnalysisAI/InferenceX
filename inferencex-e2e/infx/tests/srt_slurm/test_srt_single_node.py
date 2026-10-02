@@ -71,7 +71,7 @@ def test_native_binding_submits_one_point_and_keeps_server_settings(point):
     assert actual["benchmark"]["env"] == {
         "MODEL": "test/model", "ISL": "256", "OSL": "64", "RANDOM_RANGE_RATIO": "0.5",
         "USE_CHAT_TEMPLATE": "false",
-        "CONC": "2", "RESULT_FILENAME": "point-identity", "GPU_MONITOR_INTERVAL": "3",
+        "CONC": "2", "RESULT_FILENAME": "point-identity",
         "RUN_EVAL": "false", "EVAL_ONLY": "false", "RESULT_DIR": "/logs",
         "FRAMEWORK": "sglang",
     }

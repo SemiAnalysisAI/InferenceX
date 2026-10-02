@@ -267,11 +267,14 @@ def aggregate_power_result(
     require_power = env.get("REQUIRE_POWER", "").lower() in {"1", "true", "yes"}
     validation_path = Path(f"power_validation_{env['RESULT_FILENAME']}.json")
     is_multinode = env.get("IS_MULTINODE", "false").lower() == "true"
-    if is_multinode:
+    srt_power = bool(env.get("POWER_ARTIFACT_DIR"))
+    if is_multinode or srt_power:
         source = Path(env.get("POWER_ARTIFACT_DIR", "LOGS/power"))
-        prefill_gpus = int(env["PREFILL_GPUS"])
-        decode_gpus = int(env["DECODE_GPUS"])
-        aggregate_gpus = int(env.get("AGGREGATE_GPUS", "0"))
+        prefill_gpus = int(env["PREFILL_GPUS"]) if is_multinode else 0
+        decode_gpus = int(env["DECODE_GPUS"]) if is_multinode else 0
+        aggregate_gpus = (
+            int(env.get("AGGREGATE_GPUS", "0")) if is_multinode else int(env["GPU_COUNT"])
+        )
         expected_num_gpus = prefill_gpus + decode_gpus + aggregate_gpus
     else:
         candidates = [
@@ -287,9 +290,9 @@ def aggregate_power_result(
             int(env["TP"]) * int(env.get("PP_SIZE", "1")) * int(env.get("PCP_SIZE", "1"))
         )
     try:
-        if is_multinode:
+        if is_multinode or srt_power:
             native_dir = Path(env.get("POWERX_NATIVE_DIR", "LOGS/native_power"))
-            if env.get("POWERX_NATIVE_DIR") or native_dir.is_dir():
+            if is_multinode and (env.get("POWERX_NATIVE_DIR") or native_dir.is_dir()):
                 if source.is_dir() and source != native_dir:
                     raise ValueError("Both native and SRT power packages are present")
                 source = native_dir
