@@ -113,7 +113,7 @@ python3 -m infx.evals.validate_scores --model-prefix "$MODEL_PREFIX"
 
 Set `EVAL_ONLY=true` **before server launch**. It is not merely a switch inside `run_eval`:
 
-1. `compute_eval_context_length`/`setup_eval_context` chooses the requested eval context capped by the model's native maximum.
+1. `compute_eval_context_length` chooses the requested eval context capped by the model's native maximum.
 2. The launcher wires it to the server (`--context-length`, `--max-model-len`, or the framework equivalent).
 3. The health check still runs.
 4. Throughput returns immediately or is skipped.

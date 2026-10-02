@@ -110,7 +110,7 @@ python3 -m infx.evals.validate_scores --model-prefix "$MODEL_PREFIX"
 
 必须在**启动服务前**设置 `EVAL_ONLY=true`。它不仅是 `run_eval` 内部的开关：
 
-1. `compute_eval_context_length`/`setup_eval_context` 选择请求的 eval context，并以模型原生上限为界。
+1. `compute_eval_context_length` 选择请求的 eval context，并以模型原生上限为界。
 2. launcher 将其连接到服务参数（`--context-length`、`--max-model-len` 或 framework 对应参数）。
 3. 仍会运行健康检查。
 4. 吞吐量路径立即返回或被跳过。

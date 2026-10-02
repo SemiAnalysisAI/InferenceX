@@ -26,115 +26,6 @@ validate_agentic_concurrency() {
     fi
 }
 
-# Report live members of explicitly owned process groups. Zombies cannot hold
-# output pipes open. Do not use leader liveness: a router can orphan its workers.
-_background_process_groups_alive() {
-    local groups=" $* "
-    local listing
-    listing=$(ps -eo pgid=,stat=) || return 1
-    awk -v groups="$groups" '
-        index(groups, " " $1 " ") && $2 !~ /^[ZX]/ { alive[$1] = 1 }
-        END { for (group in alive) print group }
-    ' <<< "$listing"
-}
-
-# Called only after benchmark/eval work ends. Preserve its exit status while
-# bounding teardown of the setsid groups recorded by the launcher. Grace periods
-# are explicit arguments, independent of benchmark duration and server readiness.
-stop_background_process_groups() {
-    local work_status="$1" term_grace="$2" kill_grace="$3"
-    shift 3
-    local pgid own_pgid remaining deadline cleanup_status=0
-    local groups=("$@")
-    if [[ ! "$work_status" =~ ^[0-9]+$ || ! "$term_grace" =~ ^[0-9]+$ || ! "$kill_grace" =~ ^[0-9]+$ ]]; then
-        echo "ERROR: invalid process-group cleanup status or grace period" >&2
-        return 1
-    fi
-    if ! own_pgid=$(ps -o pgid= -p "$$"); then
-        if [[ "$work_status" -ne 0 ]]; then return "$work_status"; fi
-        return 1
-    fi
-    own_pgid="${own_pgid//[[:space:]]/}"
-    for pgid in "${groups[@]}"; do
-        if [[ ! "$pgid" =~ ^[1-9][0-9]*$ || "$pgid" -le 1 || "$pgid" == "$own_pgid" ]]; then
-            echo "ERROR: refusing unsafe process-group cleanup: '$pgid'" >&2
-            if [[ "$work_status" -ne 0 ]]; then return "$work_status"; fi
-            return 1
-        fi
-    done
-    if [[ ${#groups[@]} -eq 0 ]]; then return "$work_status"; fi
-
-    echo "Stopping owned process groups: ${groups[*]}"
-    for pgid in "${groups[@]}"; do
-        kill -TERM -- "-$pgid" 2>/dev/null || true
-    done
-    deadline=$((SECONDS + term_grace))
-    while true; do
-        remaining=$(_background_process_groups_alive "${groups[@]}") || { cleanup_status=1; break; }
-        [[ -n "$remaining" && $SECONDS -lt $deadline ]] || break
-        sleep 1
-    done
-    if [[ -n "$remaining" ]]; then
-        echo "TERM grace expired; force-stopping owned process groups: $remaining"
-        for pgid in $remaining; do
-            kill -KILL -- "-$pgid" 2>/dev/null || true
-        done
-        deadline=$((SECONDS + kill_grace))
-        while true; do
-            remaining=$(_background_process_groups_alive "${groups[@]}") || { cleanup_status=1; break; }
-            [[ -n "$remaining" && $SECONDS -lt $deadline ]] || break
-            sleep 1
-        done
-        if [[ -n "$remaining" ]]; then
-            echo "ERROR: process groups still alive after KILL grace: $remaining" >&2
-            cleanup_status=1
-        fi
-    fi
-    if [[ "$work_status" -ne 0 ]]; then return "$work_status"; fi
-    return "$cleanup_status"
-}
-
-# EXIT handler for launchers that own explicit setsid groups and optionally one
-# auxiliary daemon PID. Disable this handler before exiting to avoid recursion.
-# Run auxiliary cleanup even when group cleanup fails, preserving the work code.
-exit_after_background_process_cleanup() {
-    local work_status="$1" term_grace="$2" kill_grace="$3" auxiliary_pid="$4"
-    shift 4
-    local final_status
-    trap - EXIT
-    if stop_background_process_groups "$work_status" "$term_grace" "$kill_grace" "$@"; then
-        final_status=0
-    else
-        final_status=$?
-    fi
-    if [[ -n "$auxiliary_pid" ]]; then
-        kill "$auxiliary_pid" 2>/dev/null || true
-    fi
-    exit "$final_status"
-}
-
-# Finish preflight on every allocated node before any server container starts its
-# peer-readiness deadline. A failed node prevents the entire serving step.
-run_amd_multinode_after_preflight() {
-    local nodelist="$1" node_count="$2" preflight_script="$3"
-    local container_filter="$4" skip_gpu_sanity="$5"
-    shift 5
-    local preflight_rc
-    if srun --nodelist="$nodelist" \
-        --nodes="$node_count" --ntasks="$node_count" --ntasks-per-node=1 \
-        --kill-on-bad-exit=1 --unbuffered \
-        bash "$preflight_script" "$container_filter" "$skip_gpu_sanity"; then
-        echo "[preflight] all nodes ready; launching server containers"
-    else
-        preflight_rc=$?
-        echo "[preflight][ERROR] node preflight failed; no server containers launched" >&2
-        return "$preflight_rc"
-    fi
-    srun --nodelist="$nodelist" \
-        --nodes="$node_count" --ntasks="$node_count" --ntasks-per-node=1 \
-        --kill-on-bad-exit=1 --signal=TERM@30 --unbuffered "$@"
-}
-
 # Launchers may load only input validation, without benchmark initialization.
 if [[ "${1-}" == "--validation-only" ]]; then
     return 0
@@ -154,80 +45,6 @@ INFERENCEX_REPO_ROOT="$(
 )"
 
 # Workflows supply PORT; launchers may select a cluster-specific port.
-
-# Opt-in for recipes running in the host network namespace. Probe the preferred
-# port on the compute node; fall back to an OS-selected port if it is occupied.
-# Call immediately before server launch and construct client URLs afterward.
-select_available_server_port() {
-    check_env_vars PORT
-    PORT=$(python3 - "${PORT}" <<'PYPORT'
-import errno
-import socket
-import sys
-
-with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-    try:
-        sock.bind(("0.0.0.0", int(sys.argv[1])))
-    except OSError as exc:
-        if exc.errno != errno.EADDRINUSE:
-            raise
-        sock.bind(("0.0.0.0", 0))
-    print(sock.getsockname()[1])
-PYPORT
-    ) || return $?
-    export PORT
-}
-
-agentic_kv_offload_enabled() {
-    if [[ -z "${KV_OFFLOADING+x}" || -z "$KV_OFFLOADING" ]]; then
-        echo "Error: KV_OFFLOADING must be set for agentic benchmarks" >&2
-        exit 1
-    fi
-    [[ "$KV_OFFLOADING" != "none" ]]
-}
-
-require_agentic_kv_offload_none() {
-    if agentic_kv_offload_enabled; then
-        echo "Error: expected KV_OFFLOADING=none, got '$KV_OFFLOADING'" >&2
-        exit 1
-    fi
-    if [[ -n "${KV_OFFLOAD_BACKEND:-}" ]]; then
-        echo "Error: KV_OFFLOAD_BACKEND must be empty when KV_OFFLOADING=none" >&2
-        exit 1
-    fi
-}
-
-require_agentic_kv_offload_backend() {
-    local expected_backend="$1"
-    if [[ -z "${KV_OFFLOADING+x}" || -z "$KV_OFFLOADING" ]]; then
-        echo "Error: KV_OFFLOADING must be set for agentic benchmarks" >&2
-        exit 1
-    fi
-    case "$KV_OFFLOADING" in
-        none)
-            if [[ -n "${KV_OFFLOAD_BACKEND:-}" ]]; then
-                echo "Error: KV_OFFLOAD_BACKEND must be empty when KV_OFFLOADING=none" >&2
-                exit 1
-            fi
-            return 1
-            ;;
-        dram)
-            if [[ "${KV_OFFLOAD_BACKEND:-}" != "$expected_backend" ]]; then
-                echo "Error: expected KV_OFFLOAD_BACKEND=$expected_backend when KV_OFFLOADING=dram, got '${KV_OFFLOAD_BACKEND:-}'" >&2
-                exit 1
-            fi
-            if [[ ! "${TOTAL_CPU_DRAM_GB:-}" =~ ^[1-9][0-9]*$ ]]; then
-                echo "Error: DRAM KV offloading requires a positive TOTAL_CPU_DRAM_GB capacity" >&2
-                exit 1
-            fi
-            return 0
-            ;;
-        *)
-            echo "Error: unsupported KV_OFFLOADING value '$KV_OFFLOADING' (expected one of: none, dram)" >&2
-            exit 1
-            ;;
-    esac
-}
 
 # Agentic replays must use the model's native context limit. Ignore inherited
 # workflow or shell overrides so neither the server nor AIPerf applies a cap.
@@ -411,71 +228,6 @@ _write_amd_smi_sidecar() {
 # shellcheck source=runners/srt-slurm/hooks/common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/../runners/srt-slurm/hooks/common.sh" || return 1
 
-# Return success only while a PID exists and is not a zombie waiting to be
-# reaped. `kill -0` alone treats zombies as live processes.
-_background_process_is_running() {
-    local pid="$1"
-    local state
-    kill -0 "$pid" 2>/dev/null || return 1
-    state=$(ps -o stat= -p "$pid" 2>/dev/null) || return 1
-    [[ -n "$state" && "${state:0:1}" != "Z" ]]
-}
-
-_background_process_descendants() {
-    local parent_pid="$1"
-    local child_pid
-    while read -r child_pid; do
-        [[ -n "$child_pid" ]] || continue
-        echo "$child_pid"
-        _background_process_descendants "$child_pid"
-    done < <(pgrep -P "$parent_pid" 2>/dev/null || true)
-}
-
-# Stop a background service and every process that descended from it. Capture
-# descendants before terminating the root because orphaned workers are
-# reparented and can otherwise keep a Slurm step alive after the benchmark
-# script exits.
-stop_background_process_tree() {
-    local root_pid="${1:-}"
-    local label="${2:-background process}"
-    local grace_seconds="${3:-30}"
-
-    if [[ ! "$root_pid" =~ ^[1-9][0-9]*$ ]] || ! _background_process_is_running "$root_pid"; then
-        return 0
-    fi
-
-    local descendants
-    local child_pid
-    descendants=$(_background_process_descendants "$root_pid")
-
-    echo "Stopping $label (PID=$root_pid)..."
-    kill -TERM "$root_pid" 2>/dev/null || true
-
-    local deadline=$((SECONDS + grace_seconds))
-    while _background_process_is_running "$root_pid" && [[ $SECONDS -lt $deadline ]]; do
-        sleep 1
-    done
-
-    local forced_stop=false
-    while read -r child_pid; do
-        [[ -n "$child_pid" ]] || continue
-        if _background_process_is_running "$child_pid"; then
-            if [[ "$forced_stop" == "false" ]]; then
-                echo "Force-stopping remaining $label processes."
-                forced_stop=true
-            fi
-            echo "  PID=$child_pid"
-            kill -KILL "$child_pid" 2>/dev/null || true
-        fi
-    done <<EOF
-$root_pid
-$descendants
-EOF
-
-    wait "$root_pid" 2>/dev/null || true
-    echo "Stopped $label."
-}
-
 
 # Poll an HTTP endpoint while streaming the owning process log.
 # Required: --endpoint, --log, --pid. A zero timeout waits indefinitely.
@@ -613,21 +365,6 @@ run_server_client() {
     else
         "$@"
     fi
-}
-
-# Persist an argv array in shell-replayable form.
-write_command() {
-    local output_file="$1"
-    shift
-    printf '%q ' "$@" | tee "$output_file"
-    printf '\n' | tee -a "$output_file"
-}
-
-append_command() {
-    local output_file="$1"
-    shift
-    printf '%q ' "$@" >> "$output_file"
-    printf '\n' >> "$output_file"
 }
 
 # --dsv4 renders prompts with the DeepSeek-V4 template (encoding_dsv4.py) instead
@@ -1900,12 +1637,6 @@ compute_eval_context_length() {
     echo "$eval_ctx"
 }
 
-# Call directly, not in a subshell, so the EVAL_MAX_MODEL_LEN export persists.
-setup_eval_context() {
-    EVAL_MAX_MODEL_LEN=$(compute_eval_context_length "$MODEL" "$((ISL + OSL + 256))")
-    export EVAL_MAX_MODEL_LEN
-}
-
 run_lm_eval() {
     check_env_vars OPENAI_API_KEY PORT
     local port="${PORT}"
@@ -2215,14 +1946,6 @@ ${batch_metadata}  "ep": ${EP_SIZE:-1},
   "osl": "${OSL:-0}"
 }
 META
-}
-
-rewrite_lm_eval_meta_env() {
-    if [ -n "${EVAL_BATCHED_CONCS:-}" ]; then
-        append_lm_eval_summary
-    else
-        _write_lm_eval_meta_json "./meta_env.json" "" "${CONC:-1}"
-    fi
 }
 
 append_lm_eval_summary() {
@@ -2601,15 +2324,6 @@ AIPERF_CLI="${AIPERF_VENV}/bin/aiperf"
 AIPERF_HF_CLI="${AIPERF_VENV}/bin/hf"
 AIPERF_DEPS_READY=0
 
-agentic_pip_install() {
-    local pip_install=(python3 -m pip install)
-    if python3 -m pip install --help 2>/dev/null | grep -q -- "--break-system-packages"; then
-        pip_install+=(--break-system-packages)
-    fi
-
-    "${pip_install[@]}" "$@"
-}
-
 ensure_agentic_uv() {
     if command -v uv >/dev/null 2>&1; then
         AIPERF_UV_BIN="$(command -v uv)"
@@ -2846,50 +2560,6 @@ build_replay_cmd() {
         REPLAY_CMD+=" --unsafe-override"
     fi
     REPLAY_CMD+=" $TRACE_SOURCE_FLAG"
-}
-
-write_agentic_result_json() {
-    check_env_vars INFMAX_CONTAINER_WORKSPACE
-    # Writes $AGENTIC_OUTPUT_DIR/$RESULT_FILENAME.json; the workflow checks that
-    # file exists, and the caller separately rejects high error rates.
-    local result_dir="$1"
-    (
-        cd "$INFMAX_CONTAINER_WORKSPACE"
-        RESULT_DIR="$result_dir" AGENTIC_OUTPUT_DIR="${AGENTIC_OUTPUT_DIR:-$INFMAX_CONTAINER_WORKSPACE}" \
-            "$AIPERF_PYTHON" -m infx.results.agentic.process_agentic_result
-    )
-
-    # Best-effort metrics_plots.png (matplotlib may be missing in stripped-down
-    # images); the agg JSON above is the success gate.
-    PYTHONPATH="$INFMAX_CONTAINER_WORKSPACE${PYTHONPATH:+:$PYTHONPATH}" "$AIPERF_PYTHON" -m infx.results.generate_aiperf_plots "$result_dir" 2>&1 || true
-}
-
-validate_required_agentic_server_metrics() {
-    local result_dir="$1"
-    local required_prefix="${AIPERF_REQUIRED_SERVER_METRIC_PREFIX:-}"
-    local metrics_dir="$result_dir/aiperf_artifacts"
-    local metrics_json="$metrics_dir/server_metrics_export.json"
-    local metrics_csv="$metrics_dir/server_metrics_export.csv"
-
-    # Opt-in: recipes that require trace charts set a metric prefix (for example
-    # `sglang:`) and fail loudly instead of publishing a partial trace artifact.
-    if [ -z "$required_prefix" ]; then
-        return 0
-    fi
-
-    if [ ! -s "$metrics_json" ] || [ ! -s "$metrics_csv" ]; then
-        echo "ERROR: required AIPerf server metrics artifacts are missing or empty in $metrics_dir" >&2
-        return 1
-    fi
-
-    # The JSON can be multi-GiB, so scan for the key instead of parsing; metric
-    # names are object keys, so a hit proves backend engine metrics were captured.
-    if ! grep -F -m 1 -q "\"${required_prefix}" "$metrics_json"; then
-        echo "ERROR: $metrics_json contains no metric with required prefix '$required_prefix'" >&2
-        return 1
-    fi
-
-    echo "Validated required AIPerf server metrics prefix '$required_prefix'"
 }
 
 run_agentic_replay_and_write_outputs() (
