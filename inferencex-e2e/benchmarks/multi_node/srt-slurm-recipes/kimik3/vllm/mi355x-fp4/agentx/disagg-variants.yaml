@@ -2,6 +2,8 @@
 base:
   schema: 2
   name: kimik3-fp4-mi355x-vllm-disagg-agentic
+  # Temporary #59164 and K3 EOF backports; remove as qualified nightlies ship them.
+  setup_script: k3-moriio-debug.sh
   model:
     path: Kimi-K3
     container: vllm/vllm-openai-rocm:nightly-ac68c3087215e0a4f3cdfa218508c6aada57235d@sha256:e3fdfb382f2b567718ab6de49a14f5d5695dad84efc6dfd9c38f661b1a763e19

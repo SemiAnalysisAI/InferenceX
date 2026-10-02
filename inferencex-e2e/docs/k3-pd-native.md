@@ -2,32 +2,46 @@
 
 **English** | [中文](k3-pd-native_zh.md)
 
-This configuration uses InferenceX's Python launcher and native srt-slurm orchestration for Kimi-K3 prefill/decode disaggregation. The master config and selected recipe own benchmark topology and tuning; there is no alternate Bash launcher.
+This draft integrates Kimi-K3 prefill/decode disaggregation through InferenceX's shared Python launcher and native srt-slurm lifecycle. There is no alternate launcher or router algorithm.
 
 ## Configuration ownership
 
 - `configs/amd-master.yaml` selects `kimik3-fp4-mi355x-vllm-disagg-agentic` and supplies matrix identity and result metadata.
-- `benchmarks/multi_node/srt-slurm-recipes/kimik3/vllm/mi355x-fp4/agentx/disagg-variants.yaml` owns roles, graph settings, concurrency, the worker and router images, and FP32 SSM state. Target weights remain MXFP4, KV is FP8, and GPU memory utilization is 0.90.
-- The draft checkpoint runs through the upstream DSpark path without weight conversion. Throughput uses InferenceX's measured golden acceptance selection; eval uses real verification. The latency variant uses DSpark K7 without CPU offload; other variants use K4 with prefill SimpleCPUOffload.
-- `configs/runners.yaml` owns staged models, the draft mount, fabric devices, worker network settings, memlock and image-import policy. The named srt lane enables recipe-image staging for this workload.
-- `infx/launch/` owns imports, setup, submission, cancellation and result preservation. Recipe images are resolved with the job-local srt-slurm Python environment, not the launcher interpreter. Worker-image disagreement is rejected before image import, and the selected recipe's router image is staged using the existing backend.
+- `benchmarks/multi_node/srt-slurm-recipes/kimik3/vllm/mi355x-fp4/agentx/disagg-variants.yaml` owns the topology, worker/router images and serving settings: MXFP4 target weights, FP32 SSM, FP8 KV and GMU 0.90.
+- The existing variants remain 1P1D c1/c10/c48 and 1P2D c24/c48. The latency variant uses DSpark K7 without CPU offload; the others use K4 with prefill SimpleCPUOffload. Draft weights and precision are unchanged. Throughput uses automatic golden acceptance selection; eval uses real verification.
+- `configs/runners.yaml` declares staged models, draft/fabric mounts, worker network settings, memlock and image-import policy. `infx/launch/` uses the job-local srt-slurm Python to resolve recipe images, rejects worker-image disagreement before import, stages the recipe-owned router image, and retains shared submission, cancellation and result collection.
 
-The high-concurrency prefill configuration retains `HSA_NO_SCRATCH_RECLAIM=0`; decode is unchanged. That setting is an explicit runtime policy, not a temporary source patch. No BF16 SSM, workspace-development, READ-credit/QP or router-algorithm changes are introduced.
+High-concurrency prefill retains `HSA_NO_SCRATCH_RECLAIM=0`. Existing graph modes, transport settings and 1% request-error gates are unchanged. No BF16 SSM, workspace-development, shared-MR, QP/credit implementation or client cancellation patch is added.
 
-## Official image and temporary integration
+## Pinned runtime and removable debug layer
 
-The worker uses the official `vllm/vllm-openai-rocm:nightly-ac68c3087215e0a4f3cdfa218508c6aada57235d` image, pinned to amd64 digest `sha256:e3fdfb382f2b567718ab6de49a14f5d5695dad84efc6dfd9c38f661b1a763e19`. The master and recipe use exactly the same identity. This replaces the custom worker build without a shared-MR modification.
+The worker image is `vllm/vllm-openai-rocm:nightly-ac68c3087215e0a4f3cdfa218508c6aada57235d@sha256:e3fdfb382f2b567718ab6de49a14f5d5695dad84efc6dfd9c38f661b1a763e19`. Master and recipe use the same immutable identity. This image already includes vLLM #57700; no backport of that PR remains.
 
-That nightly contains [vLLM#57700](https://github.com/vllm-project/vllm/pull/57700). Discovery templates also require [srt-slurm#508](https://github.com/NVIDIA/srt-slurm/pull/508), which is not in the pinned srt-slurm revision. Required engine backports and image/provider compatibility prerequisites belong in a separate, removable debug commit, not in the framework or configuration commits.
+The temporary engine setup applies two checked-in Python runtime patches: synchronous READ zeroing and synthetic-only draft gathering. It verifies SHA256 and `git apply --check` before applying each, without replacing compiled extensions or downloading a moving PR head. The parser is the unmodified nightly implementation; no EOF backport is applied. A standalone router skips engine setup; a worker with missing vLLM or an incompatible patch fails startup.
 
-The temporary changes are not merge-ready engine policy. Remove them once their upstream dependencies ship:
+| Dependency | Pinned source | Purpose |
+| --- | --- | --- |
+| [vLLM #59164](https://github.com/vllm-project/vllm/pull/59164) | `c5b1350f1f2bf10a128127a9b85e93d5f9f18e62` | Exclude synchronous READ destinations from newly allocated KV-page zeroing. |
+| Synthetic draft-gathering experiment | `k3-synthetic-unproposed-drafts.patch`, against the pinned nightly | Restore pre-#58784 input gathering only when synthetic acceptance is active. Normal/block verification still rejects never-proposed slots. This is benchmark compatibility, not a general correctness fix. |
+| [srt-slurm #508](https://github.com/NVIDIA/srt-slurm/pull/508) | tested revision `51cee8904a0b402a834887a26008adb79b8cd26b` | Bind discovery topology inside connector templates in the matching job's disposable checkout. |
 
-1. Resolve an official ROCm nightly that contains the required engine fixes, update both worker-image references, and remove the corresponding temporary setup and patch assets after qualification.
-2. Independently advance the srt-slurm submodule to a revision containing PR #508, then remove the temporary job-local cherry-pick and its tests. Updating the worker image does not update srt-slurm.
-3. Append the performance changelog and validate the new source/image pair through the normal smoke, sweep and eval gates. Removing temporary patches makes the source stack clean; it does not replace runtime qualification or review.
+READ-zeroing patch hash: `3da3746e85d53e4a3b17062b4113475d31a86cc07418e87ef5b4bb0c906cad20`. The setup does not include EOF, heartbeat, FULL-context, draft-fence or transfer-ownership patches from #58968.
 
-## Validation scope
+Synthetic experiment hash: `33a6f792b13d39705a50562ca037a1d3c49dc054a8bdd8539fd8a154667f39df`. The automatic golden acceptance curve, draft model/count, parser and error gates are unchanged. This restores historical treatment of bootstrap placeholders, which can change the first visible token and subsequent generation. Its results require separate interpretation from ordinary model-quality evaluation and are not yet qualified as performance-equivalent.
 
-The Python-launcher migration is covered by behavior tests of selected images, pre-import rejection, real launch entrypoints with external scheduler/install commands stubbed, result staging, failure propagation and cancellation. Registry/source checks establish image identity and upstream inclusion, not device/provider compatibility or RDMA stability.
+The debug layer also retains the cluster-declared, read-only single-file `ionic-provider` mount. This is image/kernel ABI compatibility, not shared-MR. Keep the image's libibverbs core and unrelated providers unchanged. The srt-slurm dependency URL, submodule pin and AIPerf source are not replaced by this integration.
 
-The earlier [c48 run](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/36556488243) used a different harness revision and custom image. It is historical evidence only, not qualification of this official-nightly candidate. No new GPU run, throughput, correctness or fully graceful shutdown result is claimed here.
+## Removal conditions
+
+1. Once a qualified official worker image contains #59164, update master and recipe together and remove that patch/application step. Remove the separate synthetic experiment once its compatibility question is resolved; it is not an upstream fix awaiting inclusion. Delete the worker setup script, recipe reference and its tests once no runtime patch remains.
+2. Independently update the shared srt-slurm pin to a revision containing #508, then remove the job-local cherry-pick and its focused tests. A worker-image update does not upgrade srt-slurm.
+3. Remove the provider mount only after the replacement image opens all expected RDMA devices without it on the target fleet. Device enumeration alone does not qualify RDMA traffic.
+4. Append the performance changelog and complete the applicable smoke, sweep and eval gates before merge. These temporary engine patches remain a draft debug integration, not an exception to upstream-image policy.
+
+## Evidence and remaining qualification
+
+EOF is excluded from the current candidate. Earlier EOF regression and throughput results remain historical evidence for a different parser stack, not qualification of this candidate.
+
+The matched [1P1D c48 one-hour run](https://github.com/billishyahao/InferenceMINI/actions/runs/36847087330) used the same immutable worker image, #59164 and byte-identical EOF runtime. Warmup: 531 valid / 0 empty; profile: 4040 valid / 4 empty (0.0989%). Submission, result export and native cleanup completed. This is supporting runtime evidence from a separately adapted harness, not a sweep on this PR's current commit or an accuracy certification.
+
+The earlier [InferenceX full-feature control](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/36800732704) used a broader stack. The later #59164-only [InferenceX run](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/36814088271) was cancelled while queued, without a GPU runner. Neither qualifies the consolidated candidate. The minimal combination still needs current-PR 1P2D, sweep/eval and loaded-service teardown qualification; omission of other independently identified fixes is not proof that their failure modes are impossible.

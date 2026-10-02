@@ -9222,3 +9222,83 @@
     - "通过 Python launcher 增加原生 Kimi-K3 PD，使用 FP32 SSM、FP8 KV、GMU0.90 和上游 DSpark 校验，保留 recipe 管理的并发与拓扑配置。"
     - "使用固定 digest 的官方 ROCm nightly 替换自定义镜像，不携带 shared-MR 或候选 provider bind；新镜像仍待运行验收。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3582
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-disagg-agentic
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Temporarily apply pinned upstream srt-slurm#508 to the job-local clone and merged vLLM#57700 Python changes to the official-nightly worker containers. Fail startup if the online fetch, checksum or patch application fails; remove this debug layer after advancing the respective upstream pins."
+    - "临时在任务内应用固定的上游 srt-slurm#508，以及已合入的 vLLM#57700 纯 Python 修改；在线获取、校验或应用失败即终止启动，待分别升级上游 pin 后删除该 debug 层。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3582
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-disagg-agentic
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Restore the Kimi-K3 vLLM PD lane's single-file Ionic provider bind as a read-only node-local volume after the official nightly rejected the host kernel ABI. Keep the image's libibverbs core, serving settings and router unchanged; no shared-MR patch. Current-image device-open and end-to-end qualification remain required."
+    - "官方 nightly 的 Ionic provider 拒绝主机内核 ABI，因此为 Kimi-K3 vLLM PD 路径恢复节点本地单文件只读挂载。保留镜像原有 libibverbs 核心库、serving 参数与 router，不加入 shared-MR；仍需验证当前镜像的设备打开及端到端运行。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3582
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-disagg-agentic
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Temporarily backport only vLLM#58968's independent-heartbeat helper and worker lifecycle at 9cb82832079ede6638b5a5f35ba0d60d203f57a0 to prevent compute-worker GIL stalls from expiring discovery registration. Preserve payloads, intervals, FP32 SSM, GMU0.90, router and data-plane settings; exclude the rest of that PR. Remove this debug subset once the official image contains the upstream fix."
+    - "临时提取固定版本 vLLM#58968 的独立心跳 helper 与 worker 生命周期，避免计算线程持有 GIL 时 discovery 注册过期。保留 payload、间隔、FP32 SSM、GMU0.90、router 及数据面设置，不携带该 PR 其余修改；官方镜像包含上游修复后删除此 debug 子集。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3582
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-disagg-agentic
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Temporarily backport only the FULL pre-forward context from vLLM#58968 at 7595667abf90c03b546c92189d05e5d73392910e so the existing MoRIIO READ completion wait runs before FULL graph replay. Preserve the pinned image, heartbeat backport, FP32 SSM, GMU0.90, graph modes, DSpark, router and benchmark acceptance criteria; omit all other changes from that PR."
+    - "临时仅提取固定版本 vLLM#58968 的 FULL pre-forward 上下文，使现有 MoRIIO READ 完成等待发生在 FULL graph replay 之前。保留镜像、既有心跳补丁、FP32 SSM、GMU0.90、图模式、DSpark、router 和 benchmark 验收标准，不携带该 PR 其余修改。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3582
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-disagg-agentic
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Run a diagnostic full-feature control with vLLM#58968 at 7595667abf90c03b546c92189d05e5d73392910e and extracted synchronous READ zeroing fix #59164 at d5e6faa954024d3f3090edd1e769b9efe4feb1cb, retaining merged #57700 and the existing independent heartbeat. Preserve the image, FP32 SSM, GMU0.90, graphs, DSpark, router and benchmark criteria. This is a baseline experiment before patch reduction, not production qualification."
+    - "使用固定版本 vLLM#58968 的完整运行时代码与已拆出的 #59164 同步 READ zeroing 修复建立实验对照，保留已合入的 #57700 和独立心跳。镜像、FP32 SSM、GMU0.90、图模式、DSpark、router 及 benchmark 判据不变；这是精简补丁前的基线实验，不代表生产验证通过。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3582
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-disagg-agentic
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Move the minimal Kimi-K3 FP32 PD diagnostic candidate from official ROCm nightly 36768d1b to digest-pinned ac68c308, which includes #57700. Retain only #59164's synchronous READ zeroing backport; omit #58968 and independent heartbeat. Preserve serving settings, DSpark synthetic acceptance and benchmark criteria. The previous full-feature control remains in history; this image-changing experiment is not production qualification or a strict single-variable comparison."
+    - "将 Kimi-K3 FP32 PD 最小依赖诊断候选从官方 ROCm nightly 36768d1b 更新为按 digest 固定且已包含 #57700 的 ac68c308。仅保留 #59164 同步 READ zeroing 回补，省略 #58968 与独立心跳；serving 参数、DSpark synthetic acceptance 和 benchmark 判据不变。历史中保留完整特性对照；本次换镜像实验不代表生产验证通过，也不是严格单变量比较。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3582
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-disagg-agentic
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Consolidate the debug engine stack to immutable official ROCm nightly ac68c308 plus pinned #59164 and the Kimi-K3 streaming-EOF subset, runtime-equivalent to YukioZzz/vllm@535727bcc. Preserve FP32 SSM, GMU0.90, topology, automatic acceptance and 1% error gates; no heartbeat or full #58968 backport. Supporting matched 1P1D c48 evidence does not qualify the current InferenceX 1P2D candidate."
+    - "将 debug engine 栈收束为不可变官方 ROCm nightly ac68c308，加固定 #59164 与和 YukioZzz/vllm@535727bcc 运行时等价的 Kimi-K3 streaming-EOF 子集。保留 FP32 SSM、GMU0.90、拓扑、自动 acceptance 和 1% 错误门槛，不加入心跳或全量 #58968。配对 1P1D c48 证据不等于当前 InferenceX 1P2D 候选已通过验证。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3582
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-disagg-agentic
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add a diagnostic synthetic-only rollback of vLLM #58784 input gathering on the pinned nightly + #59164 + EOF stack. Normal/block verification retains invalid-slot rejection. Preserve golden acceptance selection, FP32 SSM, GMU0.90, recipes and 1% error gates; the experiment is not a general correctness fix or a claim of performance equivalence."
+    - "在固定 nightly + #59164 + EOF 栈上新增仅针对 synthetic 的 vLLM #58784 输入 gather 回退实验；普通/block 验证仍拒绝无效槽位。保持 golden acceptance 自动选择、FP32 SSM、GMU0.90、recipe 和 1% 错误门槛；该实验不是通用正确性修复，也不代表已证明性能口径等价。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3582
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-disagg-agentic
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Remove the EOF backport from the Kimi-K3 FP32 PD candidate. Retain immutable official nightly ac68c308, pinned #59164 and synthetic-only legacy draft gathering; use the upstream parser unchanged. Preserve all serving settings, automatic golden acceptance and request-error gates. Earlier EOF-enabled results do not qualify this candidate."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3582

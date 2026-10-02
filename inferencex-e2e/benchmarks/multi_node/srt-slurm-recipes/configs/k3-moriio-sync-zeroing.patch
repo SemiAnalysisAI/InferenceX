@@ -1,0 +1,92 @@
+diff --git a/vllm/distributed/kv_transfer/kv_connector/v1/base.py b/vllm/distributed/kv_transfer/kv_connector/v1/base.py
+index 6df9d1cfb..192b4ea91 100644
+--- a/vllm/distributed/kv_transfer/kv_connector/v1/base.py
++++ b/vllm/distributed/kv_transfer/kv_connector/v1/base.py
+@@ -543,6 +543,16 @@ class KVConnectorBase_V1(ABC):
+         """
+         pass
+ 
++    def get_sync_load_block_ids(self, request: "Request") -> list[int]:
++        """Return blocks whose synchronous load replaces worker zeroing.
++
++        Called after update_state_after_alloc. Each returned block must be
++        fully initialized before forward consumes it. A failed load must abort
++        forward instead of recomputing with uninitialized blocks.
++        Defaults to no blocks.
++        """
++        return []
++
+     @abstractmethod
+     def build_connector_meta(
+         self, scheduler_output: SchedulerOutput
+diff --git a/vllm/distributed/kv_transfer/kv_connector/v1/moriio/moriio_connector.py b/vllm/distributed/kv_transfer/kv_connector/v1/moriio/moriio_connector.py
+index b482e6a8c..a6d7ffedc 100644
+--- a/vllm/distributed/kv_transfer/kv_connector/v1/moriio/moriio_connector.py
++++ b/vllm/distributed/kv_transfer/kv_connector/v1/moriio/moriio_connector.py
+@@ -303,6 +303,24 @@ class MoRIIOConnector(KVConnectorBase_V1, SupportsHMA):
+         assert self.connector_scheduler is not None
+         self.connector_scheduler.on_new_request(request)
+ 
++    def get_sync_load_block_ids(self, request: "Request") -> list[int]:
++        scheduler = self.connector_scheduler
++        if (
++            self.mode != MoRIIOMode.READ
++            or not self.kv_transfer_config.is_kv_consumer
++            or scheduler is None
++            or not scheduler._has_mamba
++            or self._vllm_config.cache_config.get_resolved_kv_cache_layout().name
++            not in ("LBHNC", "LBNHC")
++        ):
++            return []
++        pending = scheduler._reqs_need_recv.get(request.request_id)
++        if pending is None:
++            return []
++        # Hybrid READ fills these entire attention pages and aborts on failure.
++        # The scheduler excludes these IDs only from newly allocated page zeroing.
++        return pending[1][0]
++
+     def build_connector_meta(
+         self,
+         scheduler_output: SchedulerOutput,
+diff --git a/vllm/distributed/kv_transfer/kv_connector/v1/multi_connector.py b/vllm/distributed/kv_transfer/kv_connector/v1/multi_connector.py
+index 73b6b0ccf..5cb75e17a 100644
+--- a/vllm/distributed/kv_transfer/kv_connector/v1/multi_connector.py
++++ b/vllm/distributed/kv_transfer/kv_connector/v1/multi_connector.py
+@@ -463,6 +463,12 @@ class MultiConnector(KVConnectorBase_V1, SupportsHMA):
+         for c in self._connectors:
+             c.on_new_request(request)
+ 
++    def get_sync_load_block_ids(self, request: "Request") -> list[int]:
++        chosen = self._requests_to_connector.get(request.request_id)
++        if chosen is None:
++            return []
++        return self._connectors[chosen].get_sync_load_block_ids(request)
++
+     def build_connector_meta(
+         self, scheduler_output: SchedulerOutput
+     ) -> MultiKVConnectorMetadata:
+diff --git a/vllm/v1/core/sched/scheduler.py b/vllm/v1/core/sched/scheduler.py
+index fcb1421b1..a86e0810a 100644
+--- a/vllm/v1/core/sched/scheduler.py
++++ b/vllm/v1/core/sched/scheduler.py
+@@ -349,7 +349,7 @@ class Scheduler(SchedulerInterface):
+ 
+         self.has_mamba_layers = kv_cache_config.has_mamba_layers
+         self.needs_kv_cache_zeroing = kv_cache_config.needs_kv_cache_zeroing
+-        # Blocks that async KV loads will overwrite this step, skipped from
++        # Blocks that KV loads will overwrite this step, skipped from
+         # zeroing since the zeroing could race the out-of-band write.
+         self._skip_zero_block_ids: set[int] = set()
+         self.need_mamba_block_aligned_split = (
+@@ -1295,6 +1295,11 @@ class Scheduler(SchedulerInterface):
+                 if num_external_computed_tokens > 0:
+                     # load_kv_async is False here
+                     has_sync_kv_loads = True
++                    if self.needs_kv_cache_zeroing:
++                        assert self.connector is not None
++                        self._skip_zero_block_ids.update(
++                            self.connector.get_sync_load_block_ids(request)
++                        )
+                 if self.log_stats:
+                     request.record_event(
+                         EngineCoreEventType.SCHEDULED, scheduled_timestamp

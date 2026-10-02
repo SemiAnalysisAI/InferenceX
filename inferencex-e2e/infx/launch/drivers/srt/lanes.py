@@ -105,6 +105,12 @@ SRT_LANES: dict[tuple[str, LaunchPath], SrtLane] = {
         mounts=(
             LaneMount(Match(), "aiperf-cache", "/aiperf_mmap_cache"),
             LaneMount(Match(frameworks=any_of("tilert")), "it-share-data", "/models"),
+            # Temporary image/kernel ABI prerequisite, not a shared-MR or engine patch.
+            LaneMount(
+                Match(any_of("kimik3"), frameworks=any_of("vllm-disagg")),
+                "ionic-provider",
+                read_only=True,
+            ),
         ),
         stage_recipe_images=Match(any_of("kimik3"), frameworks=any_of("vllm-disagg")),
         eval_unsets=(

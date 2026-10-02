@@ -861,6 +861,8 @@ clusters:
         aiperf-cache: {path: /it-share/aiperf-cache}
         it-share-data: {path: /it-share/data}
         k3-draft: {path: /it-share/data/Inferact-Kimi-K3-DSpark}
+        # Selected only by the Kimi-K3 vLLM PD lane; never replace libibverbs core.
+        ionic-provider: {path: /usr/lib/x86_64-linux-gnu/libibverbs/libionic-rdmav34.so, visibility: node-local}
       squash:
         dir: /it-share/gharunners2/srt-slurm/containers
         visibility: shared
