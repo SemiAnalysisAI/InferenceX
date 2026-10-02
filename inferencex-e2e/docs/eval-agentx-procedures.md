@@ -193,7 +193,7 @@ gh run download "$RUN_ID" --repo SemiAnalysisAI/InferenceX \
   --pattern 'eval_*' --dir ./evals/raw
 ```
 
-Retain `meta_env.json`, `results*.json`, and `sample*.jsonl`. Agentic SWE-bench additionally uploads `agent_preds.json`, `predictions.jsonl`, `swebench_report_*.json`, and trajectory files in the single-node template. The aggregate is a navigation aid, not a substitute for raw samples and batch completeness.
+Retain `meta_env.json`, `results*.json`, and `sample*.jsonl`. The aggregate is a navigation aid, not a substitute for raw samples and batch completeness.
 
 ## 7. Run AgentX: fast feedback versus canonical evidence
 
@@ -224,19 +224,6 @@ gh workflow run e2e-tests.yml --repo SemiAnalysisAI/InferenceX --ref "$REF" \
   -f test-name='agentx-fast-qwen35-c1' \
   -f agentx-fast=true
 ```
-
-Targeted AgentX SWE-bench smoke eval (first ten instances, real agentic generation):
-
-```bash
-gh workflow run e2e-tests.yml --repo SemiAnalysisAI/InferenceX --ref "$REF" \
-  -f generate-cli-command='test-config --config-keys qwen3.5-fp8-b200-sglang-agentic --conc 1 --evals-only --config-files configs/nvidia-master.yaml' \
-  -f test-name='swebench-smoke-qwen35-c1' \
-  -f eval-framework=swebench \
-  -f eval-limit='10' \
-  -f swebench-gen-mode='agentic'
-```
-
-For a publishable SWE-bench score, omit `eval-limit`. Do not use `single-shot`, which is only a debugging escape hatch. SWE-bench generation/scoring controls and its `0.50` full-split threshold are documented next to the implementation in [`infx/evals/EVALS.md`](../infx/evals/EVALS.md#swe-bench-lite---framework-swebench).
 
 Treat fast results as bring-up evidence, never as a replacement for the canonical candidate. A duration below 900 seconds or `AIPERF_UNSAFE_OVERRIDE=true` adds AIPerf's `--unsafe-override` and flags the submission invalid. Use it only for smoke diagnosis ([source](../benchmarks/benchmark_lib.sh#L3362-L3364)). After a fast run is healthy, run the exact candidate canonically before claiming benchmark success.
 

@@ -121,15 +121,15 @@ these do not authorize publication. Replay never rewrites inputs or repairs inco
 
 ### Native multinode telemetry
 
-`native_power_collect.sh` and `native_power_lifecycle.sh` provide per-node collection and bounded ready/stop receipts. Launchers opt into the native package under `LOGS/native_power`; this prerequisite enables no new recipe. The adapter validates serving GPU identity, synchronized clocks, collector completion, and complete formal-window coverage. It preserves per-node failures, sample counts, and collector revision in the audit.
+The adapter accepts a per-node native package under `LOGS/native_power`; no checked-in launcher produces one. It validates serving GPU identity, synchronized clocks, collector completion, and complete formal-window coverage. It preserves per-node failures, sample counts, and collector revision in the audit.
 
-The native collector sets UTC and records context beside its CSV for portable replay; existing benchmark monitors keep their current behavior. Its launcher integration requires separate hardware qualification. The offline adapter accepts this context without changing producers. Unusable samples outside the formal window do not establish coverage; `boundary_degenerate_rows` retains their per-GPU counts.
+Unusable samples outside the formal window do not establish coverage; `boundary_degenerate_rows` retains their per-GPU counts.
 
 ## Eval artifacts
 
 ### Per-config identity and collection
 
-Each eval upload is named `eval_<EXP_NAME>_<RESULT_FILENAME>`. Its current allowed payload includes `meta_env.json`, `results*.json`, sample JSONL, predictions, SWE-bench reports, and trajectory files. The collector uses only the metadata and lm-eval result JSON for aggregate rows.
+Each eval upload is named `eval_<EXP_NAME>_<RESULT_FILENAME>`. Its current allowed payload includes `meta_env.json`, `results*.json`, sample JSONL, and native vendor-eval reports, detailed results, and archives. The collector uses only the metadata and lm-eval result JSON for aggregate rows.
 
 Collection and reuse share result reading and selection, but retain different validation policies. Collection can report completed points from a failed batch; reuse rejects failed or incomplete batches. Each phase uses its loaded JSON for selection and validation. After deduplication rewrites or removes artifacts, validation reads the resulting files afresh.
 

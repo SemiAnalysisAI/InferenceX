@@ -3,7 +3,6 @@ import json
 import os
 import subprocess
 import sys
-import time
 from pathlib import Path
 
 import pytest
@@ -134,52 +133,6 @@ def test_utc_context_replays_in_a_different_timezone(tmp_path):
                    env={**os.environ, "TZ": "America/Los_Angeles"}, check=True, timeout=10)
 
 
-@pytest.mark.parametrize("clock_value, synchronized", [
-    ("yes", True), ("true", True), ("no", False), ("false", False), ("", False),
-])
-def test_native_supervisor_reaps_monitor_and_writes_completion(tmp_path, collector_bin, clock_value, synchronized):
-    binary = collector_bin
-    fake = binary / "nvidia-smi"
-    fake.write_text(f'''#!{sys.executable}
-import datetime, os, sys, time
-if any("index,uuid" in arg for arg in sys.argv):
-    print("index, uuid, pci.bus_id"); print("0, gpu-0, 0000:01:00.0")
-else:
-    with open({str(tmp_path / 'monitor.pid')!r}, "w") as stream: stream.write(str(os.getpid()))
-    if "-l" in sys.argv: print("timestamp,index,power.draw [W]", flush=True)
-    while True:
-        print(datetime.datetime.now(datetime.timezone.utc).strftime("%Y/%m/%d %H:%M:%S.%f") + ",0,100", flush=True)
-        if "-l" not in sys.argv: break
-        time.sleep(0.1)
-''')
-    fake.chmod(0o755)
-    control = tmp_path / "control"; control.mkdir()
-    node = tmp_path / "node-0"
-    process = subprocess.Popen(["bash", str(REPO / "benchmarks/native_power_collect.sh"),
-                                str(node), str(control), "nvidia", "0", "aggregate", "0", "1"],
-                               env={**os.environ, "PATH": f"{binary}:{os.environ['PATH']}",
-                                    "SLURM_JOB_ID": "test-job", "POWERX_COLLECTOR_REVISION": "revision",
-                                    "POWERX_CLOCK_SYNCHRONIZED": clock_value}, stdout=subprocess.PIPE,
-                               stderr=subprocess.PIPE, text=True)
-    try:
-        deadline = time.monotonic() + 10
-        while not (control / "ready-0").exists():
-            assert process.poll() is None
-            assert time.monotonic() < deadline
-            time.sleep(0.02)
-        (control / "stop").write_text("stop")
-        stdout, stderr = process.communicate(timeout=10)
-        assert process.returncode == 0, (stdout, stderr)
-        assert (control / "done-0").read_text().strip() == "0"
-        manifest = json.loads((node / "manifest.json").read_text())
-        assert manifest["lifecycle"] == "complete"
-        assert manifest["clock_synchronized"] is synchronized
-        assert (node / "gpu_metrics_identity_end.csv").exists()
-    finally:
-        if process.poll() is None:
-            process.terminate(); process.communicate(timeout=10)
-
-
 def test_result_processor_discovers_staged_native_package(tmp_path, monkeypatch):
     from infx.results.fixed_sequence import aggregate_power_result
 
@@ -218,59 +171,6 @@ def test_native_single_role_preserves_whole_fleet_and_role_metrics(tmp_path, rol
     opposite = 'decode' if role == 'prefill' else 'prefill'
     assert f'{opposite}_gpu_energy_j' not in actual
     assert json.loads((tmp_path / 'power_validation_result.json').read_text())['power_valid']
-
-
-@pytest.fixture
-def collector_bin(tmp_path):
-    binary = tmp_path / 'bin'
-    binary.mkdir()
-    (binary / 'python3').symlink_to(sys.executable)
-    sleep = binary / 'sleep'
-    sleep.write_text('#!/bin/sh\nexec /bin/sleep 0.01\n')
-    sleep.chmod(0o755)
-    return binary
-
-
-def test_native_amd_abort_publishes_receipt_before_reaper_deadline(tmp_path, collector_bin):
-    binary = collector_bin
-    fake = binary / 'amd-smi'
-    fake.write_text(f'''#!{sys.executable}
-import sys, time
-if "-w" in sys.argv:
-    print("timestamp,gpu,socket_power", flush=True)
-    while True:
-        print(str(int(time.time())) + ",0,100", flush=True)
-        time.sleep(0.1)
-else:
-    print("[]")
-''')
-    fake.chmod(0o755)
-    control = tmp_path / 'control'
-    control.mkdir()
-    node = tmp_path / 'node-0'
-    process = subprocess.Popen(['bash', '-c', '\n'.join([
-        'source "$1"',
-        'bash "$4" "$2" "$3" amd 0 aggregate 0 1 &',
-        'POWERX_COLLECTOR_PID=$! POWERX_CONTROL_DIR=$3 POWERX_NUM_NODES=1',
-        'POWERX_BARRIER_TIMEOUT_S=5',
-        'powerx_wait_collectors ready || exit 1',
-        'POWERX_BARRIER_TIMEOUT_S=0',
-        'powerx_reap_collector',
-    ]), 'bash', str(REPO / 'benchmarks/native_power_lifecycle.sh'), str(node), str(control), str(REPO / 'benchmarks/native_power_collect.sh')],
-        env={**os.environ, 'PATH': f'{binary}:/usr/bin:/bin', 'SLURM_JOB_ID': 'test-job'},
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True)
-    try:
-        stdout, stderr = process.communicate(timeout=8)
-        assert process.returncode == 143, (stdout, stderr)
-        assert (control / 'done-0').read_text().strip() == '143'
-        assert json.loads((node / 'manifest.json').read_text())['lifecycle'] == 'failed'
-    finally:
-        import signal
-        try:
-            os.killpg(process.pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
-        process.communicate()
 
 
 def test_native_prefill_only_rejects_aggregate_role_devices(tmp_path):

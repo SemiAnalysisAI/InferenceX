@@ -281,7 +281,7 @@ Test builders with small, independently worked examples and read-only inputs. Fo
 
 ### Eval and AgentX outputs
 
-For eval-only jobs, throughput output is not required. The workflow instead requires at least one `results*.json`. For jobs marked to run eval, uploads may contain `meta_env.json`, `results*.json`, `sample*.jsonl`, SWE-bench predictions and reports, and trajectory files. [`infx/evals/validate_scores.py`](../infx/evals/validate_scores.py) checks produced eval scores.
+For eval-only jobs, throughput output is not required. The workflow instead requires at least one `results*.json`. For jobs marked to run eval, uploads may contain `meta_env.json`, `results*.json`, `sample*.jsonl`, and native vendor-eval reports, detailed results, and archives. [`infx/evals/validate_scores.py`](../infx/evals/validate_scores.py) checks produced eval scores.
 
 [`infx.results.evals`](../infx/results/evals.py) provides `extract_metrics` for loaded eval JSON and `build_rows` for collector output. Both accept explicit inputs without file I/O or input mutation. The builder applies metadata defaults and primary-score precedence, retaining failed evaluations as diagnostic rows. The CLI owns file discovery, concurrency eligibility, reporting, and artifact writes.
 

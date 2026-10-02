@@ -17,7 +17,7 @@
 | 新增模型或 GPU 基准测试 | [配置流程](configuration-procedures_zh.md#添加模型--硬件配方) | 最近的基准测试脚本、启动器、主 YAML、变更日志 |
 | 修改已有配置 | [配置流程](configuration-procedures_zh.md#修改主配置) | `CONFIGS.md`、校验 Schema、生成器、运行时消费者 |
 | 新增 Runner | [配置流程](configuration-procedures_zh.md#注册并设置-runner) | Runner 初始化、`configs/runners.yaml`、启动器 |
-| 修改 srt-slurm 或 llm-d | [配置流程](configuration-procedures_zh.md#注册-srt-slurm-配方) | Recipe YAML、主配置、`srtctl` 映射、启动器 |
+| 修改 srt-slurm 配方 | [配置流程](configuration-procedures_zh.md#注册-srt-slurm-配方) | Recipe YAML、主配置、`srtctl` 映射、启动器 |
 | 修改 MTP | [配置流程](configuration-procedures_zh.md#添加或修改-mtp) | MTP 同类实现、draft model、聊天模板路径 |
 | 校验矩阵 | [CI 流程](ci-procedures_zh.md#本地矩阵生成) | 生成器 CLI 与 Pydantic 校验 |
 | 派发或监控任务 | [CI 流程](ci-procedures_zh.md#手动端到端派发) | `e2e-tests.yml`、运行日志、产物 |

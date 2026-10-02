@@ -92,13 +92,12 @@ PowerX 严格校验。现有的 Tachometer 1000 ms / 功耗 exporter 100 ms 采�
 3. [修改主配置](#修改主配置)
 4. [注册并设置 runner](#注册并设置-runner)
 5. [注册 srt-slurm 配方](#注册-srt-slurm-配方)
-6. [注册 llm-d 配方](#注册-llm-d-配方)
-7. [更新镜像](#更新镜像)
-8. [添加或修改 MTP](#添加或修改-mtp)
-9. [验证](#验证)
-10. [避开 schema 和拓扑陷阱](#避开-schema-和拓扑陷阱)
-11. [安全追加 changelog](#安全追加-changelog)
-12. [停止条件](#停止条件)
+6. [更新镜像](#更新镜像)
+7. [添加或修改 MTP](#添加或修改-mtp)
+8. [验证](#验证)
+9. [避开 schema 和拓扑陷阱](#避开-schema-和拓扑陷阱)
+10. [安全追加 changelog](#安全追加-changelog)
+11. [停止条件](#停止条件)
 
 ## 准备 worktree
 
@@ -149,7 +148,7 @@ STP（Single Token Prediction，单 Token 预测）是每次前向传播生成�
    - launcher：路由、挂载、模型路径、镜像启动和集群行为；
    - 外部/检入的配方：框架特定的多节点运行时。
 5. 对拓扑变更，先计算 GPU 用量，再与目标 fleet 对照。
-6. srt-slurm 必须同时更新配方和主条目；llm-d 必须同时更新 llm-d 配方/编排和主条目。
+6. srt-slurm 必须同时更新配方和主条目。
 7. 追加触发条目，先只生成受影响的 key，并检查每个生成点。
 
 固定序列 `8192/1024` 场景可设置 `require-power: true`，要求经过验证的实测功耗。矩阵将此标记传递给标准 sweep 和手动 E2E 吞吐作业；eval-only 和 AgentX 行不继承该标记。省略此字段可保留现有行为。仅在对应 runtime 和结果适配器同时交付时启用，然后验证完整选定范围。
@@ -192,22 +191,6 @@ STP（Single Token Prediction，单 Token 预测）是每次前向传播生成�
 
 不得只提交一侧：`srtctl` 读取配方，而矩阵生成读取主配置。仅改配方可能给结果贴错标签；仅改主配置不会改变实际部署的配方。
 
-## 注册 llm-d 配方
-
-来源：[`benchmarks/llm-d/README.md`](../benchmarks/llm-d/README.md)、[`benchmarks/multi_node/llm-d/README.md`](../benchmarks/multi_node/llm-d/README.md)、和 [`llm-d-recipes/`](../benchmarks/multi_node/llm-d-recipes)。
-
-llm-d 不是 srt-slurm 路径：InferenceX 自己持有 Slurm allocation，并在每个节点启动一个容器。
-
-1. 复制 [`benchmarks/multi_node/llm-d-recipes/`](../benchmarks/multi_node/llm-d-recipes) 下最接近的 YAML，设置 EPP plugin/scheduling、角色特定 `extra-args`/`env`，以及可选 `slurm.time_limit`。
-2. 添加/更新 `llmd-vllm` 主条目。设置 `multinode: true`、`disagg: true`、router 元数据、`kv-p2p-transfer`、prefill/decode worker 拓扑、并发，以及 `additional-settings` 中的 `CONFIG_FILE=<basename>.yaml`。
-3. 保持 `PREFILL_NODES`、`DECODE_NODES`、`GPUS_PER_NODE` 和 worker 数与 allocation 及各角色 DP/TP/EP 布局一致。
-4. 确认 [`submit.sh`](../benchmarks/multi_node/llm-d/submit.sh) → [`job.slurm`](../benchmarks/multi_node/llm-d/job.slurm) → [`server.sh`](../benchmarks/multi_node/llm-d/server.sh) 的传递，以及所选 wrapper/launcher 路由。
-5. 验证文件发现：decode leader 生成 `/tmp/endpoints.yaml`；prefill endpoint 使用 vLLM 端口 8200，decode endpoint 使用 sidecar 端口 8000；名称唯一；地址为 IPv4 字面量；端口是 `1..65535` 范围内的字符串。
-6. 确认 EPP 在 Envoy 收到流量前完成 discovery 加载，且角色标签为请求阶段选择正确的 prefill/decode backend。
-7. 生成 key，检查拓扑和 `additional-settings`，再追加 changelog。
-
-`CONFIG_FILE` 未设置或文件缺失时，会静默选择镜像内 `/etc/epp/config.yaml` fallback，并移除配方特定 vLLM 参数。除非明确打算使用 fallback，否则应将其视为验证失败。
-
 ## 更新镜像
 
 来源：[`AGENTS.md#non-negotiable-benchmark-invariants`](../../AGENTS.md#non-negotiable-benchmark-invariants)、对应主配置、运行时脚本与检入的 Recipe。
@@ -216,9 +199,8 @@ llm-d 不是 srt-slurm 路径：InferenceX 自己持有 Slurm allocation，并�
 2. 找出所有受影响的配置 key、运行时脚本、Dockerfile 和检入配方。不要假设主 YAML 是唯一镜像引用。
 3. 将主配置 `image` 与所需 env、参数、软件包版本或补丁作为一个一致变更更新。
 4. 对 srt-slurm，更新 `model.container` 并保持其与主配置 `image` 完全一致。
-5. 对 llm-d，区分主配置选择的服务镜像和 [`benchmarks/llm-d/Dockerfile`](../benchmarks/llm-d/Dockerfile) 中的构建来源；仅在构建契约变化时同时更新两者。
-6. 追加选择全部受影响 key 的 changelog 条目（有意覆盖多个 key 时可以使用通配符），并列出旧/新版本及实质运行时变更。
-7. 生成每个受影响的配置族，确认其运行时路径中没有残留旧 tag。
+5. 追加选择全部受影响 key 的 changelog 条目（有意覆盖多个 key 时可以使用通配符），并列出旧/新版本及实质运行时变更。
+6. 生成每个受影响的配置族，确认其运行时路径中没有残留旧 tag。
 
 ## 添加或修改 MTP
 
@@ -559,7 +541,7 @@ uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with p
 python -m pytest infx/tests/matrix/ -v
 ```
 
-对 srt-slurm，还要运行该配方文档指定的上游 recipe checker/`srtctl` 命令。对 llm-d，要验证配方 YAML 并在目标 Slurm fleet 上实际检查 allocation/discovery 路径；本地矩阵生成无法证明 endpoint discovery。
+对 srt-slurm，还要运行该配方文档指定的上游 recipe checker/`srtctl` 命令。本地矩阵生成无法证明 Slurm allocation 或实际部署的拓扑。
 
 ## 避开 schema 和拓扑陷阱
 
@@ -610,7 +592,6 @@ python -m pytest infx/tests/matrix/ -v
 - 已注册 runner 不在任何 `cluster:<id>` 标签中、矩阵解析到不存在的脚本，或 runner 不是 **Idle**。
 - 计算出的拓扑超过 fleet、DCP 不能整除 TP、异构 hardware 元数据只写一侧，或生成拓扑与目标配方不一致。
 - srt-slurm 配方与主条目不一致、`model.container != image`，或尚未运行上游配方验证。
-- llm-d 配方缺失并会意外 fallback、allocation 数不一致，或 endpoint discovery 无法满足 IPv4 字面量/唯一名称/有效端口规则。
 - MTP 配方缺少 chat-template 基准、speculative 方法/token 数未验证，或 graph capture 超过 backend 上限。
 - changelog 变更会修改历史字节、没有位于 EOF、存在冲突，或 PR 已准备请求 sweep 但仍保留 `TBD`。
 - YAML、Bash、严格 schema、精确 key 生成、集群记录校验、启动测试或配方验证失败。
