@@ -162,6 +162,7 @@ override_p_tp8_d_dep8_c4:
         # STP decode is bounded by 16 requests, not the prefill-sized default.
         SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "128"
       args:
+        mem-fraction-static: 0.88
         expert-parallel-size: 8
         data-parallel-size: 8
         enable-dp-attention: true
@@ -183,6 +184,7 @@ override_p_dep8_d_dep8_c8:
         # Attention DP divides the 8192-token prefill budget across eight ranks.
         SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "1024"
       args:
+        mem-fraction-static: 0.91
         expert-parallel-size: 8
         data-parallel-size: 8
         enable-dp-attention: true
