@@ -13,7 +13,7 @@ model:
   precision: fp4
 identity:
   container:
-    image: lmsysorg/sglang:nightly-dev-20260918-20518d85
+    image: lmsysorg/sglang:nightly-dev-20260914-4358a161
 resources:
   gpu_type: gb300
   gpus_per_node: 4
