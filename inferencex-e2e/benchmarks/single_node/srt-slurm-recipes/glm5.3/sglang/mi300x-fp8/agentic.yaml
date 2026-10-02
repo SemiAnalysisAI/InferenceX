@@ -124,6 +124,7 @@ override_dep8_mtp_c8:
         NCCL_SOCKET_IFNAME: ens50f1np1
         MORI_SOCKET_IFNAME: ens50f1np1
         MORI_SHMEM_MODE: ISOLATION
+        SGLANG_MORI_DISPATCH_DTYPE: bf16
         # Covers the local 1024-token prefill chunk and four-token verification.
         SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "1024"
   benchmark:
