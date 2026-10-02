@@ -196,9 +196,10 @@ def _write_json_atomic(path: str, value) -> None:
 
 
 def kernel_generation(backend) -> str:
-    """The adapter's kernel family; `-cudagraph` keeps replayed rows a separate series."""
+    """Identify the kernel family and captured-all-reduce measurement regime."""
     family = backend.kernel_generation or "n-a"
-    return f"{family}-cudagraph" if backend.cuda_graph_enabled else family
+    # Historical -cudagraph rows used an external barrier and alignment spin.
+    return f"{family}-cudagraph-in-graph-ar" if backend.cuda_graph_enabled else family
 
 
 class _Collectives:

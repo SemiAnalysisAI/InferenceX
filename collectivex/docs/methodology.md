@@ -332,9 +332,10 @@ every check, without changing its contract.
 Only the launch mechanism changes; every family keeps its eager meaning:
 
 - **Fresh-entry components** (`roundtrip`, `dispatch`, `combine`) capture one pair with event
-  nodes around the timed window. Each timed replay starts behind a device-side rank barrier (an
-  all-reduce, then a spin of fixed wall time, calibrated per GPU because `torch.cuda._sleep`
-  counts SM cycles); without it b200 EP16 ranks entered ~75 µs apart. A rank whose host launches
+  nodes around the timed window. An all-reduce is captured before the first timing event,
+  including its stream dependencies, so alignment stays outside the measured interval without
+  a host-side handoff or spin kernel. This reduces skew but does not guarantee simultaneous
+  release across ranks. A rank whose host launches
   late still stalls the others, so these series publish **only p50** (p90/p95/p99 and the matching
   token rate are null). Component origin is `cuda-graph-replay`.
 - **The chained family** (`pair_period`, floors, health) captures each sibling chain as one graph
