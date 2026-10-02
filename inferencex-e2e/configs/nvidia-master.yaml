@@ -5006,6 +5006,7 @@ qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg-smg:
   runner: cluster:gb300-nv
   precision: fp4
   framework: dynamo-sglang
+  router: { name: smg, version: "1.11.0" }
   multinode: true
   disagg: false
   scenarios:
@@ -5103,6 +5104,7 @@ qwen3.5-fp8-b300-sglang-agentic-mtp-smg:
   runner: cluster:b300-dsxe
   precision: fp8
   framework: sglang
+  router: { name: smg, version: "1.11.0" }
   multinode: false
   scenarios:
     agentic-coding:
