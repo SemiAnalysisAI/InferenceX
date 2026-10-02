@@ -437,9 +437,11 @@ class TestMarkEvalEntries:
         ]
 
     def test_marks_multinode_agentic_entry_at_highest_eligible_conc(self):
-        """Multi-node agentic (SWE-bench) eval selection mirrors the
-        fixed-seq-len multi-node policy: one eval row per parallelism
-        topology, at its highest eligible (>= MIN_EVAL_CONC) concurrency.
+        """Multi-node agentic GSM8K runs once per parallelism topology, at its
+        highest eligible (>= MIN_EVAL_CONC) concurrency. A deployment with no
+        eligible topology at all (e.g. a conc-1-only engine) still gets one
+        eval at its highest concurrency; low topologies of a covered
+        deployment do not.
 
         Each concurrency is its own matrix entry (chunk size 1) whose
         exp-name embeds that concurrency, unlike fixed-seq-len multi-node
@@ -453,18 +455,21 @@ class TestMarkEvalEntries:
             "prefill": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
             "decode": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
         }
+        low_topology = {**common, "prefill": {**common["prefill"], "tp": 4}}
+        low_deployment = {**common, "model": "latency-engine"}
         matrix_values = [
             {**common, "conc": [8], "exp-name": "p1x8_d1x8_conc8"},
             {**common, "conc": [16], "exp-name": "p1x8_d1x8_conc16"},
             {**common, "conc": [32], "exp-name": "p1x8_d1x8_conc32"},
+            {**low_topology, "conc": [2], "exp-name": "p1x4_d1x8_conc2"},
+            {**low_deployment, "conc": [1], "exp-name": "latency_conc1"},
+            {**low_deployment, "conc": [2], "exp-name": "latency_conc2"},
         ]
 
         result = mark_eval_entries(matrix_values)
 
-        marked = [e for e in result if e.get("run-eval")]
-        assert len(marked) == 1
-        assert marked[0]["conc"] == [32]
-        assert marked[0]["eval-conc"] == 32
+        marked = [(e["exp-name"], e["eval-conc"]) for e in result if e.get("run-eval")]
+        assert marked == [("p1x8_d1x8_conc32", 32), ("latency_conc2", 2)]
 
     def test_multinode_agentic_groups_are_independent_per_topology(self):
         """Two distinct multi-node agentic topologies (e.g. differing by
@@ -522,34 +527,20 @@ class TestMarkEvalEntries:
 
     @pytest.mark.parametrize("all_evals", [False, True])
     @pytest.mark.parametrize("runner", ["mi355x", "b300"])
-    def test_marks_every_supported_vendor_point(self, all_evals, runner):
+    def test_vendor_models_run_vendor_suite_everywhere_plus_gsm8k(self, all_evals, runner):
+        shape = {
+            "scenario-type": "agentic-coding", "runner": runner, "framework": "vllm",
+            "precision": "fp4", "tp": 8, "spec-decoding": "none", "dp-attn": False,
+            "image": "img",
+        }
         matrix_values = [
-            {
-                "scenario-type": "agentic-coding",
-                "model-prefix": model_prefix,
-                "model": model_prefix,
-                "runner": runner,
-                "framework": "vllm",
-                "precision": "fp4",
-                "tp": 8,
-                "conc": conc,
-            }
+            dict(shape, **{"model-prefix": model_prefix, "model": model_prefix, "conc": conc})
             for model_prefix in ("kimik3", "minimaxm3")
             for conc in (1, 64)
         ]
-        matrix_values.append({
-            "scenario-type": "agentic-coding",
-            "model-prefix": "minimaxm3-bfcl",
-            "model": "unsupported",
-            "runner": "b300",
-            "framework": "vllm",
-            "precision": "fp4",
-            "tp": 8,
-            "conc": 64,
-            "spec-decoding": "none",
-            "dp-attn": False,
-            "image": "img",
-        })
+        matrix_values.append(
+            dict(shape, **{"model-prefix": "minimaxm3-bfcl", "model": "unsupported", "conc": 64})
+        )
 
         result = mark_eval_entries(matrix_values)
         if all_evals:
@@ -559,18 +550,24 @@ class TestMarkEvalEntries:
             "kimik3": ("kimi-vendor", "kimi_tool_call_schema_full"),
             "minimaxm3": ("minimax-vendor", "minimax_m3_full"),
         }
+        gsm8k_concs = {1, 64} if all_evals else {64}
         for model_prefix, eval_spec in expected.items():
             rows = [row for row in result if row["model-prefix"] == model_prefix]
-            assert {row["conc"] for row in rows} == {1, 64}
             assert all(row["run-eval"] is True for row in rows)
-            assert {
-                (row["eval-framework"], row["eval-suite"]) for row in rows
-            } == {eval_spec}
+            evals = {(row["eval-framework"], row["eval-suite"], row["conc"]) for row in rows}
+            assert evals == {(*eval_spec, conc) for conc in (1, 64)} | {
+                ("lm-eval", "", conc) for conc in gsm8k_concs
+            }
+            if not all_evals:
+                # By default only the vendor rows carry throughput; GSM8K is a
+                # standalone eval-only row. (--all-evals output is eval-only anyway.)
+                throughput = [row for row in rows if not row.get("eval-only")]
+                assert {row["eval-framework"] for row in throughput} == {eval_spec[0]}
 
-        unsupported = result[-1]
-        assert unsupported["run-eval"] is True
-        assert unsupported["eval-framework"] == "lm-eval"
-        assert unsupported["eval-suite"] == ""
+        unsupported = [row for row in result if row["model-prefix"] == "minimaxm3-bfcl"]
+        assert [(r["run-eval"], r["eval-framework"], r["eval-suite"]) for r in unsupported] == [
+            (True, "lm-eval", ""),
+        ]
         assert all(row.get("eval-framework") != "bfcl" for row in result)
 
     def test_default_marks_every_multinode_vendor_point(self):
@@ -593,13 +590,15 @@ class TestMarkEvalEntries:
 
         result = mark_eval_entries(matrix_values)
 
-        assert len(result) == 2
-        assert all(row["run-eval"] is True for row in result)
-        assert [row["eval-conc"] for row in result] == [2, 32]
-        assert all(row["eval-framework"] == "kimi-vendor" for row in result)
-        assert all(
-            row["eval-suite"] == "kimi_tool_call_schema_full" for row in result
-        )
+        vendor = [row for row in result if row["eval-framework"] == "kimi-vendor"]
+        assert [row["eval-conc"] for row in vendor] == [2, 32]
+        assert all(row["run-eval"] is True and not row.get("eval-only") for row in vendor)
+        assert all(row["eval-suite"] == "kimi_tool_call_schema_full" for row in vendor)
+        # Plus one standalone GSM8K at the topology's highest eligible conc.
+        gsm8k = [row for row in result if row["eval-framework"] == "lm-eval"]
+        assert [(row["eval-conc"], row["eval-suite"], row["eval-only"]) for row in gsm8k] == [
+            (32, "", True),
+        ]
 
     @pytest.mark.parametrize("all_evals", [False, True])
     def test_kv_offload_variants_share_one_vendor_eval(self, all_evals):
@@ -622,11 +621,18 @@ class TestMarkEvalEntries:
         if all_evals:
             result = mark_all_eval_entries(result)
 
-        assert [(row["kv-offloading"], row["conc"], row["run-eval"]) for row in result] == [
-            ("dram", 15, False), ("none", 15, True), ("dram", 20, True),
+        evals = sorted(
+            (row["eval-framework"], row["conc"], row["kv-offloading"])
+            for row in result if row["run-eval"]
+        )
+        # Each suite keeps one eval per concurrency; at c15 the no-offload row wins.
+        vendor = [("minimax-vendor", 15, "none"), ("minimax-vendor", 20, "dram")]
+        gsm8k = [("lm-eval", 15, "none"), ("lm-eval", 20, "dram")] if all_evals else [
+            ("lm-eval", 20, "dram"),
         ]
-        assert "eval-suite" not in result[0]
-        assert result[1]["eval-suite"] == result[2]["eval-suite"] == "minimax_m3_full"
+        assert evals == sorted(gsm8k + vendor)
+        assert all(row["eval-suite"] == "minimax_m3_full"
+                   for row in result if row.get("eval-framework") == "minimax-vendor")
 
     def test_fixed_sequence_eval_uses_lm_eval_metadata(self):
         matrix_values = [{
@@ -1100,7 +1106,7 @@ class TestMarkAllEvalEntries:
             ("minimaxm3", "minimax-vendor", "minimax_m3_full"),
         ],
     )
-    def test_keeps_every_multinode_vendor_point_separate(
+    def test_keeps_every_multinode_vendor_point_separate_plus_gsm8k(
         self, model_prefix, eval_framework, eval_suite
     ):
         common = {
@@ -1122,11 +1128,16 @@ class TestMarkAllEvalEntries:
 
         result = mark_all_eval_entries(mark_eval_entries(entries))
 
-        assert len(result) == 2
-        assert [row["conc"] for row in result] == [[2], [32]]
-        assert [row["eval-conc"] for row in result] == [2, 32]
-        assert all(row["eval-framework"] == eval_framework for row in result)
-        assert all(row["eval-suite"] == eval_suite for row in result)
+        vendor = [row for row in result if row["eval-framework"] == eval_framework]
+        assert [row["conc"] for row in vendor] == [[2], [32]]
+        assert [row["eval-conc"] for row in vendor] == [2, 32]
+        assert all(row["eval-suite"] == eval_suite for row in vendor)
+        # GSM8K merges the topology like any other agentic model.
+        gsm8k = [row for row in result if row["eval-framework"] == "lm-eval"]
+        assert [(row["conc"], row["eval-conc"], row["eval-suite"]) for row in gsm8k] == [
+            ([2, 32], 32, ""),
+        ]
+        assert len(result) == 3
 
 
 
@@ -2187,6 +2198,20 @@ class TestCommandLine:
         assert result[0]['conc'] == [4]
         assert result[0]['eval-conc'] == 4
         assert result[0]['run-eval'] is True
+
+    def test_trim_conc_never_merges_a_standalone_eval_into_another_suite(self):
+        shape = {'tp': 8, 'model': 'm'}
+        vendor = {**shape, 'conc': 16, 'run-eval': True,
+                  'eval-framework': 'kimi-vendor', 'eval-suite': 'kimi_tool_call_schema_full'}
+        vendor_low = {**vendor, 'conc': 1}
+        gsm8k = {**shape, 'conc': 16, 'run-eval': True, 'eval-only': True,
+                 'eval-framework': 'lm-eval', 'eval-suite': ''}
+
+        result = trim_conc([vendor, vendor_low, gsm8k])
+
+        assert sorted(
+            (row['eval-framework'], row['conc'], bool(row.get('eval-only'))) for row in result
+        ) == [('kimi-vendor', 1, False), ('lm-eval', 16, True)]
 
     @pytest.mark.parametrize('entrypoint', ['cli', 'api'])
     def test_smoke_keeps_canonical_eval_instead_of_throughput_minimum(

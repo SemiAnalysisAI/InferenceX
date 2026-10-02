@@ -98,6 +98,16 @@ def trim_conc(entries: list[dict]) -> list[dict]:
                 if key not in ignored_fields
             )
         )
+        if entry.get("eval-only"):
+            # A standalone eval job (e.g. GSM8K beside a vendor suite) is its
+            # own shape: never merge it with throughput or another suite.
+            key += (
+                (
+                    "eval-only",
+                    entry.get(Fields.EVAL_FRAMEWORK.value),
+                    entry.get(Fields.EVAL_SUITE.value),
+                ),
+            )
         groups.setdefault(key, []).append(len(out))
         out.append(entry)
 
@@ -642,12 +652,15 @@ def drop_app_colliding_evals(rows: list[dict]) -> list[dict]:
 def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
     """Apply the default eval selection policy.
 
-    Kimi K3 and MiniMax M3 agentic rows use their full vendor suites at every
-    generated concurrency. Other single-node agentic rows use GSM8K at the
+    Every agentic model gets GSM8K. Single-node agentic rows use it at the
     highest concurrency in each group of model, runner, framework, precision,
-    spec-decoding, dp-attn and image (the fixed-sequence keys plus image).
-    Eval rows run as separate eval-only jobs, so every agentic throughput
-    point is still benchmarked.
+    spec-decoding, dp-attn and image (the fixed-sequence keys plus image);
+    multi-node agentic rows at the highest eligible concurrency per topology,
+    falling back to one highest-concurrency eval for a deployment with none.
+    Kimi K3 and MiniMax M3 additionally run their full vendor suites at every
+    generated concurrency; where such a row is also the GSM8K pick, an extra
+    eval-only GSM8K row is appended. Eval rows run as separate eval-only jobs,
+    so every agentic throughput point is still benchmarked.
 
     Fixed-sequence selection is unchanged: single-node 8k1k rows use the
     highest and median concurrency per model/runtime group, while multi-node
@@ -727,22 +740,32 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
         mn_eval_conc[best_idx] = best_eval_conc
 
     # Agentic GSM8K: the eval runs as a separate eval-only job, so every
-    # agentic throughput result is preserved.
+    # agentic throughput result is preserved. Vendor-suite models take part
+    # too; their GSM8K pick becomes an extra eval-only row below.
     ag_sn_groups = defaultdict(list)
     # Multi-node agentic: same "highest eligible conc per distinct
-    # parallelism config" policy as the fixed-seq-len mn_groups above.
-    # The selected eval subset uses exactly one conc per group.
+    # parallelism config" policy as the fixed-seq-len mn_groups above. A
+    # deployment with no topology at MIN_EVAL_CONC or above (e.g. a
+    # conc-1-only engine) still gets one GSM8K, at its highest conc overall.
     ag_mn_groups = defaultdict(list)
+    ag_mn_fallback: dict[tuple, tuple[int, int]] = {}
     for i, entry in enumerate(matrix_values):
-        if i in automatic_eval_specs:
-            continue
         if entry.get(Fields.SCENARIO_TYPE.value) != "agentic-coding":
             continue
         if Fields.PREFILL.value in entry:
+            conc = entry[Fields.CONC.value]
+            top_conc = max(conc) if isinstance(conc, list) else conc
+            deployment = (
+                entry[Fields.MODEL.value],
+                entry[Fields.RUNNER.value],
+                entry[Fields.FRAMEWORK.value],
+                entry[Fields.PRECISION.value],
+            )
+            if top_conc > ag_mn_fallback.get(deployment, (-1, -1))[1]:
+                ag_mn_fallback[deployment] = (i, top_conc)
             eval_concs = _eligible_eval_concs(entry)
-            if not eval_concs:
-                continue
-            ag_mn_groups[_multinode_parallelism_key(entry)].append((i, eval_concs[-1]))
+            if eval_concs:
+                ag_mn_groups[_multinode_parallelism_key(entry)].append((i, eval_concs[-1]))
             continue
         conc = entry[Fields.CONC.value]
         conc_val = max(conc) if isinstance(conc, list) else conc
@@ -758,12 +781,33 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
             entry[Fields.IMAGE.value],
         )
         ag_sn_groups[key].append((i, conc_val))
+    gsm8k_picks: dict[int, int | None] = {}  # index -> multinode eval conc
     for entries in ag_sn_groups.values():
-        eval_indices.add(max(entries, key=lambda item: item[1])[0])
+        gsm8k_picks[max(entries, key=lambda item: item[1])[0]] = None
     for entries in ag_mn_groups.values():
         best_idx, best_eval_conc = max(entries, key=lambda item: item[1])
-        eval_indices.add(best_idx)
-        mn_eval_conc[best_idx] = best_eval_conc
+        gsm8k_picks[best_idx] = best_eval_conc
+    covered = {
+        (
+            matrix_values[i][Fields.MODEL.value],
+            matrix_values[i][Fields.RUNNER.value],
+            matrix_values[i][Fields.FRAMEWORK.value],
+            matrix_values[i][Fields.PRECISION.value],
+        )
+        for i, eval_conc in gsm8k_picks.items()
+        if eval_conc is not None
+    }
+    for deployment, (i, top_conc) in ag_mn_fallback.items():
+        if deployment not in covered:
+            gsm8k_picks[i] = top_conc
+    extra_gsm8k: dict[int, int | None] = {}
+    for i, eval_conc in gsm8k_picks.items():
+        if i in automatic_eval_specs:
+            extra_gsm8k[i] = eval_conc
+            continue
+        eval_indices.add(i)
+        if eval_conc is not None:
+            mn_eval_conc[i] = eval_conc
 
     for i, entry in enumerate(matrix_values):
         run_eval = i in eval_indices
@@ -775,16 +819,40 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
         if i in mn_eval_conc:
             entry[Fields.EVAL_CONC.value] = mn_eval_conc[i]
 
-    return drop_app_colliding_evals(matrix_values)
+    for i, eval_conc in extra_gsm8k.items():
+        matrix_values.append(_gsm8k_eval_only_row(matrix_values[i], eval_conc))
+
+    # An eval-only GSM8K copy that loses its app identity has nothing left to run.
+    return [
+        row
+        for row in drop_app_colliding_evals(matrix_values)
+        if row.get(Fields.RUN_EVAL.value) or not row.get(Fields.EVAL_ONLY.value)
+    ]
+
+
+def _gsm8k_eval_only_row(entry: dict, eval_conc: int | None = None) -> dict:
+    """An eval-only GSM8K copy of ``entry``, alongside its vendor-suite eval."""
+    row = {
+        **entry,
+        Fields.RUN_EVAL.value: True,
+        Fields.EVAL_ONLY.value: True,
+        Fields.EVAL_FRAMEWORK.value: DEFAULT_EVAL_FRAMEWORK,
+        Fields.EVAL_SUITE.value: "",
+    }
+    row.pop(Fields.REQUIRE_POWER.value, None)
+    if eval_conc is not None:
+        row[Fields.EVAL_CONC.value] = eval_conc
+    return row
 
 
 def mark_all_eval_entries(matrix_values: list[dict]) -> list[dict]:
     """Expand eval selection across all eligible entries.
 
-    Kimi K3 and MiniMax M3 agentic rows remain one eval job per generated
-    concurrency, using the model's vendor validator. Other agentic entries use
-    GSM8K through lm-eval. Their multi-node rows are merged by topology and
-    select the highest resulting concurrency.
+    Every agentic entry runs GSM8K through lm-eval. Kimi K3 and MiniMax M3
+    rows also keep one vendor-suite eval job per generated concurrency.
+    Agentic multi-node GSM8K rows are merged by topology and select the
+    highest resulting concurrency. Eval-only GSM8K copies from
+    ``mark_eval_entries`` are dropped and regenerated here.
 
     Fixed-sequence evals only run at 8k1k. Multi-node rows with the same engine
     topology are merged into one eval row that runs every concurrency
@@ -797,6 +865,8 @@ def mark_all_eval_entries(matrix_values: list[dict]) -> list[dict]:
     target_isl, target_osl = seq_len_stoi["8k1k"]
 
     for entry in matrix_values:
+        if entry.get(Fields.EVAL_ONLY.value):
+            continue
         automatic_eval = automatic_agentic_vendor_eval(entry)
         if automatic_eval is not None:
             eval_framework, eval_suite = automatic_eval
@@ -812,7 +882,17 @@ def mark_all_eval_entries(matrix_values: list[dict]) -> list[dict]:
                 eval_entry[Fields.CONC.value] = sorted(set(conc_values))
                 eval_entry[Fields.EVAL_CONC.value] = max(conc_values)
             expanded_entries.append(eval_entry)
-            continue
+            # GSM8K too: continue with a copy free of the vendor eval fields.
+            entry = {
+                key: value
+                for key, value in entry.items()
+                if key
+                not in (
+                    Fields.EVAL_FRAMEWORK.value,
+                    Fields.EVAL_SUITE.value,
+                    Fields.EVAL_CONC.value,
+                )
+            }
 
         if entry.get(Fields.SCENARIO_TYPE.value) == "agentic-coding":
             if Fields.PREFILL.value not in entry:
