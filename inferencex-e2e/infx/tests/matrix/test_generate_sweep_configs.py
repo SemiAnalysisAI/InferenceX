@@ -600,6 +600,40 @@ class TestMarkEvalEntries:
             (32, "", True),
         ]
 
+    @pytest.mark.parametrize("all_evals", [False, True])
+    def test_kv_offload_variants_share_one_vendor_eval(self, all_evals):
+        # MiniMax M3 on b200-nscale runs each point with and without DRAM
+        # offload; the app keeps one eval per config and concurrency.
+        common = {
+            "scenario-type": "agentic-coding", "model-prefix": "minimaxm3",
+            "model": "MiniMaxAI/MiniMax-M3", "runner": "cluster:b200-nscale",
+            "framework": "vllm", "precision": "fp4", "tp": 4, "ep": 1,
+            "spec-decoding": "mtp", "dp-attn": False, "image": "img",
+        }
+        dram = {"kv-offloading": "dram", "kv-offload-backend": {"name": "vllm-simple"}}
+        matrix_values = [
+            {**common, **dram, "conc": 15},
+            {**common, "kv-offloading": "none", "conc": 15},
+            {**common, **dram, "conc": 20},
+        ]
+
+        result = mark_eval_entries(matrix_values)
+        if all_evals:
+            result = mark_all_eval_entries(result)
+
+        evals = sorted(
+            (row["eval-framework"], row["conc"], row["kv-offloading"])
+            for row in result if row["run-eval"]
+        )
+        # Each suite keeps one eval per concurrency; at c15 the no-offload row wins.
+        vendor = [("minimax-vendor", 15, "none"), ("minimax-vendor", 20, "dram")]
+        gsm8k = [("lm-eval", 15, "none"), ("lm-eval", 20, "dram")] if all_evals else [
+            ("lm-eval", 20, "dram"),
+        ]
+        assert evals == sorted(gsm8k + vendor)
+        assert all(row["eval-suite"] == "minimax_m3_full"
+                   for row in result if row.get("eval-framework") == "minimax-vendor")
+
     def test_fixed_sequence_eval_uses_lm_eval_metadata(self):
         matrix_values = [{
             "model": "m",
@@ -920,6 +954,26 @@ class TestMarkAllEvalEntries:
         ]
         assert all(entry['eval-all-concs'] is True for entry in result)
         assert all('eval-conc' not in entry for entry in result)
+
+    def test_image_variant_batch_keeps_only_unclaimed_concurrencies(self):
+        common = {
+            'model': 'm', 'model-prefix': 'm', 'runner': 'r', 'framework': 'f',
+            'precision': 'fp8', 'isl': 8192, 'osl': 1024, 'spec-decoding': 'none',
+            'prefill': {'tp': 8, 'dp-attn': False}, 'decode': {'tp': 8, 'dp-attn': False},
+            'run-eval': False,
+        }
+        entries = [
+            {**common, 'image': 'old', 'conc': [4, 8]},
+            {**common, 'image': 'new', 'conc': [8, 16]},
+            {**common, 'image': 'newer', 'conc': [4]},
+        ]
+
+        result = mark_all_eval_entries(entries)
+
+        assert [(row['image'], row['conc'], row['run-eval']) for row in result] == [
+            ('old', [4, 8], True), ('new', [16], True), ('newer', [4], False),
+        ]
+        assert 'eval-all-concs' not in result[2]
 
     def test_default_eval_selection_does_not_collapse_all_evals_expansion(self):
         entries = [

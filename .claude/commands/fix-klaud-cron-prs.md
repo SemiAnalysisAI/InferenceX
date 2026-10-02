@@ -10,8 +10,10 @@ This command modifies remote PR branches. **Pause for user confirmation** after 
 
 A PR qualifies only if:
 - `headRefName` starts with `klaud/`, `klaud-cold/`, or `klaude/`
-- At least one `Run Sweep` check has conclusion `SUCCESS` **or** `FAILURE` (i.e. the sweep was enabled and produced real results, rather than all checks being skipped)
+- At least one `Run Sweep` check has conclusion `SUCCESS` **or** `FAILURE` (rather than all checks being skipped). This alone does not prove a sweep label: `check-changelog` runs, and normally succeeds, on every push.
 - At least one check has conclusion `FAILURE`, `CANCELLED`, or `TIMED_OUT`
+
+Also confirm each candidate has exactly one primary sweep label (`full-sweep-fail-fast`, `full-sweep-enabled`, or `non-canary-full-sweep-enabled`), e.g. with `gh pr view <PR> --repo SemiAnalysisAI/InferenceX --json labels --jq '.labels[].name'`. Without one, a pushed fix starts no GPU sweep. With more than one, `check-changelog` fails (see 2c). A Klaud-Cold PR's sweep labels must be exactly `full-sweep-fail-fast` (or `full-sweep-enabled` for a documented infrastructure exception), with no modifiers, or Klaud validation fails.
 
 `gh pr list --json statusCheckRollup` truncates rollups, so enumerate candidates first, then re-query each PR individually.
 
@@ -86,6 +88,7 @@ Inspect the PR diff (`git -C "$WT" diff origin/main...HEAD`) and the failing-log
 - New required env var or container path → patch the recipe.
 - Resource ask too high for the runner → drop concurrency or tp.
 - Flaky infra (network, runner pickup) → not a code fix. Flag and skip.
+- `check-changelog` fails with `PR has multiple conflicting sweep labels. Pick exactly one.` → not a code fix. After user confirmation, remove each extra primary label with `gh api -X DELETE repos/SemiAnalysisAI/InferenceX/issues/<PR>/labels/<name>` so exactly one remains; on a Klaud-Cold PR, keep `full-sweep-fail-fast` (or the documented `full-sweep-enabled` exception) and also remove any modifiers. Removing the last extra label starts the sweep, so push nothing.
 
 State the suspected root cause in one or two sentences before proposing any edit.
 
