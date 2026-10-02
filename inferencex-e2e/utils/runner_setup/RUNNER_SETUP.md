@@ -237,9 +237,8 @@ and allocations submitted outside this admission path.
 
 All 36 GB300 runners belong to `cluster:gb300-nv` and use the same runtime
 profile and launcher policies. `gb300-nv_00` through `gb300-nv_17` carry
-`partition:batch_1`; the additional `gb300-nv-batch3_00` through
-`gb300-nv-batch3_17` carry `partition:batch_3`. The suffix identifies runner
-instances, not a second cluster. Both ranges also carry `gb300` and `slurm`.
+`partition:batch_1`; the additional `gb300-nv_18` through `gb300-nv_35`
+carry `partition:batch_3`. Both ranges also carry `gb300` and `slurm`.
 
 The partitions are separate 18-node NVLink domains. The partition-aware
 dashboard controller keeps each complete lease inside one partition and
@@ -261,8 +260,8 @@ Relabel existing runners only outside active leases.
 After those checks, start the new range with isolated nine-pane tmux sessions:
 
 ```sh
-bash start_runners.sh 0 8 /data/home/sa-shared/gharunners-batch3 gb300-runners-batch3-a
-bash start_runners.sh 9 17 /data/home/sa-shared/gharunners-batch3 gb300-runners-batch3-b
+bash start_runners.sh 18 26 /data/home/sa-shared/gharunners-batch3 gb300-runners-batch3-a
+bash start_runners.sh 27 35 /data/home/sa-shared/gharunners-batch3 gb300-runners-batch3-b
 ```
 
 Do not replace the existing `github-actions` tmux session. No custom runner
