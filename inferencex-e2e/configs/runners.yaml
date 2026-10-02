@@ -725,6 +725,9 @@ clusters:
         mounts:
           /dev/kfd: /dev/kfd
           /dev/dri: /dev/dri
+          /dev/infiniband: /dev/infiniband
+          /raid/inferencex/models/hub: /hf-cache/hub
+          /raid/inferencex/aiperf-mmap-cache: /aiperf_mmap_cache
         extra:
           visible_devices_env: ROCR_VISIBLE_DEVICES
   # Barite shares its login and NFS with mi300x-amd, but not its GPU partition.
