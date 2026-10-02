@@ -4512,7 +4512,7 @@
       "repeat": 1,
       "attempt": 1,
       "head_sha": "fc9026e8383191ccb02750950aa790cf3ab26086",
-      "status": "in_progress",
+      "status": "failure",
       "workflow_name": "offload-v1-dram-nvme-c488-r1-branchwf-20261002",
       "dispatched_at": "2026-10-02T15:27:24Z",
       "started_at": "2026-10-02T15:28:12Z",
@@ -4522,8 +4522,8 @@
       "node": "im-b200-c001",
       "allocation_id": "19378",
       "scratch": "/offload-scratch/inferencex-offload-37027095833-1-19378-77ad2f31a3bb",
-      "performance_result": false,
-      "phase": "3,600-second profiling in progress",
+      "performance_result": true,
+      "phase": "terminal after full profile; invalidated by filesystem capacity guard",
       "warmup_started_at": "2026-10-02T17:15:47Z",
       "warmup_completed_at": "2026-10-02T19:10:18Z",
       "warmup_returned": 5401,
@@ -4535,35 +4535,132 @@
       "profiling_started_at": "2026-10-02T19:10:18Z",
       "profile_seconds": 3600,
       "dispatch_evidence": "Immediately before dispatch, a fresh cluster-wide inventory found zero queued cluster:b200-nscale jobs and no active-or-queued study workflow. One unrelated nodes:1 B200 job was in progress. The generated study job carries cluster:b200-nscale and nodes:1.",
-      "storage_evidence": "Slurm allocated the run to allowlisted im-b200-c001 at 2026-10-02T16:53:21Z. offload_config.json records xfs /dev/md0 over eight non-rotating NVMe leaves, 13,257,138,135,040 free bytes before scratch creation, O_DIRECT verified, 739,000,000,000 DRAM bytes, 2,199,023,255,552 NVMe bytes, and the native OffloadingConnector TieringOffloadingSpec."
+      "storage_evidence": "Preflight on allowlisted im-b200-c001 recorded 13,257,138,135,040 free bytes on xfs /dev/md0, O_DIRECT, 739,000,000,000 DRAM bytes, and a declared 2,199,023,255,552-byte native filesystem stop guard. offload-guard.json recorded the guard crossing at 2,234,874,994,223 logical bytes. The native tier continued growing and late-profile writes reported ENOSPC; cleanup observed 13,255,648,681,519 logical bytes, 13,255,678,025,728 allocated bytes, and 1,117,488 files. offload_cleanup.json records deleted=true, and an independent node check confirmed the exact scratch absent. The native 2 TiB setting was not an enforced capacity or eviction quota.",
+      "completed_at": "2026-10-02T20:14:55Z",
+      "comparison_eligible": false,
+      "failure_stage": "native filesystem capacity guard / late-profile ENOSPC; workflow exit 1 after full profile",
+      "performance": {
+        "num_requests_total": 7305,
+        "num_requests_successful": 1904,
+        "num_requests_warmup_dropped": 5401,
+        "num_requests_error_dropped": 11,
+        "request_error_categories": {
+          "InvalidInferenceResultError": 11
+        },
+        "duration_seconds": 3629.6931,
+        "output_tokens_per_second_per_gpu": 144.64288,
+        "total_tokens_per_second_per_gpu": 13026.73249,
+        "p90_e2e_latency_seconds": 1958.12867,
+        "p90_ttft_seconds": 1806.7664,
+        "p90_interactivity_tokens_per_second_per_user": 12.89788,
+        "p90_e2e_normalized_interactivity_tokens_per_second_per_user": 0.26118,
+        "avg_power_w_per_gpu": 750.37203,
+        "joules_per_successful_query": 5738.145245
+      },
+      "cache_evidence": {
+        "gpu_cache_hit_rate": 0.61767,
+        "external_cache_hit_rate": 0.11769,
+        "overall_cache_hit_rate": 0.73536,
+        "theoretical_cache_hit_rate": 0.94558,
+        "gpu_cache_hit_prompt_tokens": 711710336,
+        "external_cache_hit_prompt_tokens": 135607296,
+        "computed_prompt_tokens": 304924047,
+        "prompt_tokens_total": 1152241679,
+        "generation_tokens_total": 2148988,
+        "gpu_cache_usage_pct": 1.0
+      },
+      "delta_tiered_vs_hbm_percent": {
+        "total_tokens_per_second_per_gpu": 61.76805,
+        "output_tokens_per_second_per_gpu": 101.26319,
+        "p90_interactivity_tokens_per_second_per_user": 58.19331,
+        "p90_e2e_normalized_interactivity_tokens_per_second_per_user": 211.59628,
+        "p90_ttft_seconds": -39.75132,
+        "num_requests_successful": 77.77778,
+        "avg_power_w_per_gpu": -16.60781,
+        "joules_per_successful_query": -53.09188,
+        "computed_prompt_tokens": -71.58901
+      },
+      "delta_tiered_vs_nvme_percent": {
+        "total_tokens_per_second_per_gpu": 52.51847,
+        "output_tokens_per_second_per_gpu": 76.83686,
+        "p90_interactivity_tokens_per_second_per_user": 44.85766,
+        "p90_e2e_normalized_interactivity_tokens_per_second_per_user": 223.68323,
+        "p90_ttft_seconds": -37.78419,
+        "num_requests_successful": 63.0137,
+        "avg_power_w_per_gpu": -16.2606,
+        "joules_per_successful_query": -48.63046,
+        "computed_prompt_tokens": -71.34621
+      },
+      "artifacts": [
+        {
+          "id": 11249577394,
+          "name": "bmk_agentic_minimaxm3_tp4_conc488_kvdram-nvme-vllm-native_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disa-cf9304b14bde15b4e205",
+          "size_bytes": 2259,
+          "sha256": "30e64fda0622b8cd5cbd110255a5c9dd38d4a41e5c195154b3ca0033ca88db94"
+        },
+        {
+          "id": 11249572504,
+          "name": "server_logs_minimaxm3_tp4_conc488_kvdram-nvme-vllm-native_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disa-cf9304b14bde15b4e205",
+          "size_bytes": 613908,
+          "sha256": "e246e82a6bbdafcd81c443ef6ccbf605a2ba11684616f234953db1d0f91851d5"
+        },
+        {
+          "id": 11249517519,
+          "name": "gpu_metrics_minimaxm3_tp4_conc488_kvdram-nvme-vllm-native_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disa-cf9304b14bde15b4e205",
+          "size_bytes": 460231,
+          "sha256": "f66dc5be19f718eeaec2c53410d8b4ee317e5c134ce534634d8423c0aa83e7e9"
+        },
+        {
+          "id": 11249437614,
+          "name": "agentic_minimaxm3_tp4_conc488_kvdram-nvme-vllm-native_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disa-cf9304b14bde15b4e205",
+          "size_bytes": 26051988,
+          "sha256": "afc0a749dc673e0670e1a40352ee43bcad7ddba627b8ee6a2a6afa5fd30d15da"
+        },
+        {
+          "id": 11249397611,
+          "name": "power_audit_minimaxm3_tp4_conc488_kvdram-nvme-vllm-native_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disa-cf9304b14bde15b4e205",
+          "size_bytes": 463825,
+          "sha256": "753d8d988202c647d644b7d764f48b11f12665f2875a268202ab85319fed1d96"
+        }
+      ],
+      "runtime_evidence": "Canonical warmup completed all 5,401 requests with zero request errors after 6,871.3 seconds. Profiling completed the full 3,600-second send window and retained 1,904 successful responses with eleven InvalidInferenceResultError classifications. Metric coverage and strict four-GPU power validation passed, and all result, AgentX, server-log, GPU, and power artifacts uploaded. The workflow concluded failure because the native filesystem capacity guard invalidated the run after the full profile; the exported metrics remain qualified local evidence but are not eligible as a clean capacity-matched comparison.",
+      "power_evidence": "Strict power validation passed over the 3,640.004-second completed-response window with four GPUs: 750.37203 W/GPU and 5,738.145245 J/successful query.",
+      "evidence_sha256": {
+        "benchmark.log": "da4c3d605ded89e92885e2d4ed52493a3f7befded3f298d73d05aa9bcf1de40a",
+        "profile_export.jsonl": "6a24ea22ce1824dd8f3ea79a1c5f184b0c0d2e2ca31cf148064e34a735c736af",
+        "profile_export_aiperf.json": "0ef9226ea1fd377388ef5a91d1fd4f428dd8fd6f4aaa8e3520a1c6f944ef21fd",
+        "server_metrics_export.json": "7f5b89e077f9b75ced7fa0a5fc64a9e708ea631aff3c6bb35e76515476398d99",
+        "server.log": "c3ddaeef3ce64debe0ad842b972c10c49516b53b6b96820080ec53bafdadb2d7",
+        "offload-telemetry.jsonl": "ff5e7c0f302bf98a15b9623ff03b38214171e6638039a89d5c0ae64ce15dd374",
+        "offload_config.json": "f3c321468594cbcf836b568bc37c3879bb98a627b4179a760de0ddd8edcd1f8f",
+        "offload_cleanup.json": "d7c162fd121440c4c7bb38e24dfa003cbd34ae4c53a861315f874ceb511fe224",
+        "gpu_metrics.csv": "4c664ca14d3051f21081fc86c43507b750683eb370903821e1f47b9875795034",
+        "benchmark_command.txt": "b53ce69ceb318b31614ecc7ff0b3e8cf6f776730d9cdbc3736d6077a6ef04013",
+        "vllm_command.txt": "668197691f497edf95f1cca7be146250a0689c7530e2912f4e0149d83b7a5e6c",
+        "power_validation.json": "4efb70d6e57c5bafab4ddcec1f086b3f1e6dfed5819415562a43c6fe0406fb79",
+        "offload-guard.json": "2bdcd81245e5becbb21cf7b47a7f85ae6d9d405004f0d2037d763e54876fda77"
+      }
     }
   ],
-  "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894",
-  "status": "Native DRAM c488 is a local canonical-warmup feasibility failure. HBM+DRAM+NVMe c488 run 37027095833 is admitted on runner b200-nscale-slurm_01.",
+  "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894,36796500128,36879140816,37027095833",
+  "status": "c488 combined-tier completed a full profile but was invalidated after crossing the native filesystem stop guard and later exhausting node-local storage; its metrics are qualified local evidence, not a clean capacity-matched control.",
   "last_capacity_check": {
-    "checked_at": "2026-10-02T15:28:12Z",
-    "active_study_run_ids": [
-      37027095833
-    ],
+    "checked_at": "2026-10-02T20:14:55Z",
+    "active_study_run_ids": [],
     "pending_study_run_ids": [],
     "dispatch_allowed": false,
-    "b200_priority_jobs_queued": 0,
-    "b200_priority_jobs_in_progress": 2,
-    "b200_active_or_queued_run_ids": [
-      37025761564,
-      37027095833
-    ],
-    "b200_nodes_allocated": null,
-    "b200_nodes_idle": null,
+    "b200_priority_jobs_queued": null,
+    "b200_priority_jobs_in_progress": null,
+    "b200_active_or_queued_run_ids": [],
     "target_node": "im-b200-c001",
-    "target_node_state": "combined-tier c488 admitted; NVMe allowlist placement and storage preflight pending",
+    "target_node_state": "exact c488 tiered scratch independently confirmed absent",
     "observed_free_bytes": null,
-    "reason": "Fresh inventory found zero queued cluster:b200-nscale jobs and no active-or-queued study workflow, so HBM+DRAM+NVMe c488 was dispatched and admitted with nodes:1."
+    "reason": "No further combined-tier dispatch is allowed until the native filesystem capacity bound or stop mechanism is corrected; current cluster queue state has not been refreshed because no dispatch is eligible."
   },
   "next_dispatch": {
     "arm": "dram-nvme",
     "concurrency": 488,
-    "requires": "Allow run 37027095833 to complete allowlisted allocation, storage preflight, canonical warmup, and the 3,600-second profile. Dispatch nothing else while it is active."
+    "requires": "First implement and validate an enforced native filesystem capacity bound or prompt stop-at-guard behavior. Do not repeat the unchanged combined-tier configuration; its nominal 2 TiB setting allowed 13.26 TB of scratch growth and ENOSPC."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-21T05:30:00Z",

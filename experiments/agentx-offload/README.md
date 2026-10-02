@@ -96,9 +96,23 @@ errors, but six wire requests remained after 25,174.7 seconds when the fixed
 warmup, including eight InvalidInferenceResultError classifications; profiling
 never started, so this is a local warmup-feasibility failure rather than a
 performance result. The exact task-owned scratch was deleted and independently
-confirmed absent. Run the HBM+DRAM+NVMe c488 control next to test whether the
-filesystem tier changes feasibility when the same 739 GB host DRAM tier is
-present; treat that run as local evidence, not a universal threshold.
+confirmed absent. The HBM+DRAM+NVMe c488 control then completed all 5,401
+warmup requests without request errors and the full 3,600-second profile. It
+retained 1,904 successful responses and measured 13,026.732 total tokens/s/GPU,
+144.643 output tokens/s/GPU, 12.898 P90 interactivity, 1,806.766 seconds P90
+TTFT, and 5,738.145 joules per successful query. Compared with HBM-only, these
+are gains of 61.768%, 101.263%, and 58.193% in total throughput, output
+throughput, and P90 interactivity, with 39.751% lower P90 TTFT, 77.778% more
+completed responses, and 53.092% lower energy per successful query. However,
+the native filesystem tier crossed its 2 TiB stop guard at 2,234,874,994,223
+logical bytes and continued growing until cleanup observed 13,255,648,681,519
+logical bytes across 1,117,488 files. Late-profile writes then reported ENOSPC.
+The full performance export remains useful local evidence of native tiering and
+the larger completed cohort, but it is not a clean 2 TiB capacity-matched
+control and cannot isolate the storage-tier contribution. The exact scratch was
+deleted and independently confirmed absent. Do not dispatch another combined
+tier run until the filesystem tier has an enforced capacity bound or a monitor
+that stops the workload promptly at the declared guard.
 
 The combined tier uses a different connector and storage policy. The pinned FS
 tier has no bounded LRU capacity setting: the 2 TiB value is an abort guard, not an
