@@ -257,6 +257,12 @@ routing are deployed, all runner labels agree, and the existing `gb300-nv`
 collector reports `batch_1` and `batch_3` (never their overlapping `batch_All`).
 Relabel existing runners only outside active leases.
 
+The launcher sets both `SBATCH_PARTITION` and `SLURM_PARTITION` to the selected
+runner partition in its child environment. This is required even when the
+generated batch script names that partition: Slurm's `SBATCH_PARTITION`
+environment option takes precedence over the script's `#SBATCH` directive.
+Do not rely on the login shell's defaults when verifying routing.
+
 After those checks, start the new range with isolated nine-pane tmux sessions:
 
 ```sh
