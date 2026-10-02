@@ -32,6 +32,7 @@ class SrtLane:
     frameworks: frozenset[str] | None = None
     rejects: tuple[tuple[Match, str], ...] = ()
     setup_scripts: Mapping[str, str] = field(default_factory=dict)
+    recipe_setup_scripts: Mapping[tuple[str, str], str] = field(default_factory=dict)
     mounts: tuple[LaneMount, ...] = ()
     shared_run_root: tuple[Match, ...] = ()
     eval_unsets: tuple[str, ...] = ()
@@ -68,6 +69,24 @@ SRT_LANES: dict[tuple[str, LaunchPath], SrtLane] = {
     ("gb200-nv", LaunchPath.SRT_MULTI): SrtLane(
         frameworks=_DYNAMO,
         setup_scripts={"dynamo-sglang": "install-torchao.sh"},
+        recipe_setup_scripts={
+            (
+                "dynamo-sglang",
+                "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-mtp-variants.yaml",
+            ): "glm52-gb200-nixl-prefill.sh",
+            (
+                "dynamo-sglang",
+                "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-dep8-mtp-variants.yaml",
+            ): "glm52-gb200-nixl-prefill.sh",
+            (
+                "dynamo-sglang",
+                "recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-mtp-variants.yaml",
+            ): "glm52-gb200-nixl-prefill.sh",
+            (
+                "dynamo-sglang",
+                "recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-dep8-mtp-variants.yaml",
+            ): "glm52-gb200-nixl-prefill.sh",
+        },
         mounts=(
             *_AGENTIC_CACHES,
             LaneMount(
@@ -119,6 +138,14 @@ def srt_lane(cluster_id: str, path: LaunchPath) -> SrtLane:
         return SRT_LANES[(cluster_id, path)]
     except KeyError:
         raise LaunchError(f"cluster {cluster_id!r} has no {path} srt-slurm lane") from None
+
+
+def setup_script(lane: SrtLane, request: SrtRequest, config_file: str) -> str | None:
+    """Select an exact recipe override before the lane's framework setup."""
+    recipe = config_file.split(":", 1)[0]
+    return lane.recipe_setup_scripts.get(
+        (request.framework, recipe), lane.setup_scripts.get(request.framework)
+    )
 
 
 def check_request(lane: SrtLane, request: SrtRequest) -> None:
