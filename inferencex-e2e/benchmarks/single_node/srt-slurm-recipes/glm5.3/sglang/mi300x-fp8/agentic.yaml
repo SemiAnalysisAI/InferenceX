@@ -56,6 +56,7 @@ base:
       MODEL: zai-org/GLM-5.3
       WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
+      AIPERF_DATASET_MMAP_CACHE_DIR: /aiperf_mmap_cache
 
 override_tp8_c1:
   roles:
