@@ -4523,7 +4523,14 @@
       "allocation_id": "19378",
       "scratch": "/offload-scratch/inferencex-offload-37027095833-1-19378-77ad2f31a3bb",
       "performance_result": false,
-      "phase": "allocated on allowlisted node; storage preflight passed; engine startup in progress",
+      "phase": "canonical warmup in progress",
+      "warmup_started_at": "2026-10-02T17:15:47Z",
+      "warmup_returned": 263,
+      "warmup_target": 5401,
+      "warmup_sent": 521,
+      "warmup_in_flight": 258,
+      "warmup_errors": 0,
+      "warmup_elapsed_seconds": 1080.2,
       "dispatch_evidence": "Immediately before dispatch, a fresh cluster-wide inventory found zero queued cluster:b200-nscale jobs and no active-or-queued study workflow. One unrelated nodes:1 B200 job was in progress. The generated study job carries cluster:b200-nscale and nodes:1.",
       "storage_evidence": "Slurm allocated the run to allowlisted im-b200-c001 at 2026-10-02T16:53:21Z. offload_config.json records xfs /dev/md0 over eight non-rotating NVMe leaves, 13,257,138,135,040 free bytes before scratch creation, O_DIRECT verified, 739,000,000,000 DRAM bytes, 2,199,023,255,552 NVMe bytes, and the native OffloadingConnector TieringOffloadingSpec."
     }
