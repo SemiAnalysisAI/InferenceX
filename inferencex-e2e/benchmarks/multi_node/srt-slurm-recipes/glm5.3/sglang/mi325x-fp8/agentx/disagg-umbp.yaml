@@ -161,6 +161,8 @@ override_prefill_tp8_decode_dep8_c1:
         moe-a2a-backend: mori
         # Native normal mode uses intra-node MoRI for this eight-GPU EP group.
         deepep-mode: normal
+        # Native HIP default; TileLang BF16 H64 decode exceeds gfx942 LDS.
+        dsa-decode-backend: triton
         moe-dense-tp-size: 1
         max-running-requests: 16
         cuda-graph-max-bs-decode: 2
