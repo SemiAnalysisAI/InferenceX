@@ -3,7 +3,7 @@ base:
   name: qwen3.5-fp8-mi355x-atom-8k1k
   model:
     path: hf:Qwen/Qwen3.5-397B-A17B-FP8
-    container: rocm/atom:rocm7.2.3_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom20260511
+    container: rocm/atom-dev:nightly_202609220547@sha256:5670943afe8296c9b903c3ee8d1f390483446cc0d50737e05652cee3c67e5342
     precision: fp8
   resources:
     gpu_type: mi355x
