@@ -161,6 +161,32 @@ def test_eval_recipe_is_checked_alongside_the_throughput_recipe(tmp_path):
     }
 
 
+@pytest.mark.parametrize(
+    ("eval_only", "settings", "launches"),
+    [
+        (False, [], False),
+        (False, ["EVAL_CONFIG_FILE=recipes/m/eval.yaml"], False),
+        (True, ["EVAL_CONFIG_FILE=recipes/m/eval.yaml"], True),
+        (True, [], False),
+        (True, ["CONFIG_FILE=recipes/m/eval.yaml"], True),
+    ],
+    ids=["throughput-none", "throughput-eval-only-recipe", "eval-only-eval-recipe", "eval-only-none",
+         "eval-only-config-recipe"],
+)  # fmt: skip
+def test_multi_node_point_needs_the_recipe_its_launcher_selects(
+    tmp_path, eval_only, settings, launches
+):
+    write_yaml(tmp_path, f"{MULTI}/m/eval.yaml",
+               {"name": "e", "model": {"path": "hf:t/m", "container": "img:1", "precision": "fp8"}})  # fmt: skip
+    point = {**multi_node_point(*settings), "eval-only": eval_only}
+    label = "disagg on cluster:c" + (" | eval-only" if eval_only else "")
+    missing = (
+        "CONFIG_FILE is not set; only an eval-only point may launch its EVAL_CONFIG_FILE instead"
+    )
+    expected = {} if launches else {missing: [label]}
+    assert check_matrix([point], tmp_path, load_inventory(INVENTORY)) == expected
+
+
 def test_override_recipe_without_overrides_selects_nothing_unless_base_is_named(tmp_path):
     write_yaml(tmp_path, f"{MULTI}/b.yaml",
                {"base": {"name": "b", "model": {"path": "hf:t/m", "container": "img:1", "precision": "fp8"}}})  # fmt: skip

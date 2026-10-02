@@ -2,8 +2,9 @@
 
 Sweep entry points pipe their matrix through this check after ``infx.workflows.benchmark_schema``.
 A single-node point must select exactly one variant through the runtime's ``select_recipe``,
-which compares the variant's ``model.container`` with the point's image. Every multi-node recipe a
-point can launch (``CONFIG_FILE`` and ``EVAL_CONFIG_FILE``) must select at least one variant, and
+which compares the variant's ``model.container`` with the point's image. A multi-node point must
+set ``CONFIG_FILE``, unless it is eval-only and sets ``EVAL_CONFIG_FILE``, the recipe the launcher
+then selects. Every multi-node recipe a point can launch must select at least one variant, and
 each variant's worker containers must resolve to an image the launcher stages for the job: the
 point's image, or ``PREFILL_IMAGE`` for a TileRT prefill role. A TileRT frontend or client must
 run one of those images, and any other benchmark client that names another tag of the point's
@@ -212,6 +213,12 @@ def check_multi_node(point: Mapping[str, Any], root: Path, inventory: RunnerInve
         if prefill is None:
             return ["TileRT needs a PREFILL_IMAGE setting for its prefill role"]
     problems = []
+    if not settings.get("CONFIG_FILE") and not (
+        point.get("eval-only") and settings.get("EVAL_CONFIG_FILE")
+    ):
+        problems.append(
+            "CONFIG_FILE is not set; only an eval-only point may launch its EVAL_CONFIG_FILE instead"
+        )
     mirror = (root / RECIPES_MIRROR).resolve()
     for name in RECIPE_SETTINGS:
         reference = settings.get(name)
