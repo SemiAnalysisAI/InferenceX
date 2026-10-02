@@ -9217,4 +9217,4 @@
   description:
     - "Remove client-side GPU sampling from SRT fixed-sequence and AgentX benchmarks. Use native telemetry measurement windows and route single-node native power packages through the shared artifact consumer; retain the legacy CSV result reader."
     - "Requires native telemetry enablement, artifact retention and AgentX finalization in the launcher before rollout across affected single-node lanes."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3684
