@@ -68,7 +68,7 @@ override_tp8_c1:
       KV_OFFLOADING: none
 
 override_tp8_umbp_c1:
-  services:
+  services: &umbp_services
     - name: umbp
       type: generic
       placement:
@@ -93,16 +93,30 @@ override_tp8_umbp_c1:
         interval_seconds: 1
   roles:
     agg:
-      args:
+      args: &umbp_args
         max-running-requests: 2
         cuda-graph-max-bs-decode: 2
         enable-unified-cache-external-linker: true
         unified-cache-external-linker-backend: mori
         hicache-storage-backend-extra-config: '{"standalone_startup_timeout_ms":120000}'
-      env:
+      env: &umbp_env
         UMBP_STANDALONE_ADDRESS: unix:///logs/umbp.sock
   benchmark:
-    env:
+    env: &umbp_benchmark
       CONC: "1"
       KV_OFFLOADING: dram
       TOTAL_CPU_DRAM_GB: "519"
+
+override_tp8_umbp_c4:
+  services: *umbp_services
+  roles:
+    agg:
+      args:
+        <<: *umbp_args
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
+      env: *umbp_env
+  benchmark:
+    env:
+      <<: *umbp_benchmark
+      CONC: "4"
