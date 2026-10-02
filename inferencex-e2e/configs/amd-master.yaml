@@ -1539,7 +1539,7 @@ glm5.3-fp8-mi300x-sglang-agentic:
     agentic-coding:
     - search-space:
       - { tp: 8, ep: 1, kv-offloading: none, spec-decoding: none, conc-list: [1], srt-recipe: benchmarks/single_node/srt-slurm-recipes/glm5.3/sglang/mi300x-fp8/agentic.yaml }
-      - { tp: 8, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 3, 4], srt-recipe: benchmarks/single_node/srt-slurm-recipes/glm5.3/sglang/mi300x-fp8/agentic.yaml }
+      - { tp: 8, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 3, 4, 5, 6], srt-recipe: benchmarks/single_node/srt-slurm-recipes/glm5.3/sglang/mi300x-fp8/agentic.yaml }
     - dram-utilization: 0.32
       search-space:
       - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: umbp-linker }, spec-decoding: none, conc-list: [1, 4, 8, 16], srt-recipe: benchmarks/single_node/srt-slurm-recipes/glm5.3/sglang/mi300x-fp8/agentic.yaml }

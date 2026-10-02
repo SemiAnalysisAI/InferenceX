@@ -89,11 +89,11 @@ zip_override_tp8_mtp_concurrency:
     agg:
       args:
         <<: *mtp_args
-        max-running-requests: [4, 6, 8]
-        cuda-graph-max-bs-decode: [4, 8, 8]
+        max-running-requests: [4, 6, 8, 10, 12]
+        cuda-graph-max-bs-decode: [4, 8, 8, 16, 16]
   benchmark:
     env:
-      CONC: ["2", "3", "4"]
+      CONC: ["2", "3", "4", "5", "6"]
       KV_OFFLOADING: none
 
 override_tp8_umbp_c1:
