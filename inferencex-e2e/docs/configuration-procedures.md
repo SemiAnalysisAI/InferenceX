@@ -342,6 +342,10 @@ captures every size from 1 through 32 plus 48, 64 and 128. The recipe names only
 bundled draft; `infx/srt_slurm/synthetic_acceptance.py` adds
 `--spec-decode-acceptance-length 3.51` (the `thinking_on` K5 golden AL) to AgentX
 throughput runs and leaves evals on real acceptance. `dsml_v41` parses tool calls.
+TP4 concurrency 32 also sets `ATOM_PREFILL_DECODE_INTERVAL=16`. After each prefill,
+ATOM runs at least 16 decode passes and batches the prefills that arrive in the
+meantime, so prefill interrupts decode less often. Interactivity rises, TTFT rises,
+and throughput stays the same.
 
 AgentX replays `semianalysis_cc_traces_weka_062126` for 3600 seconds per point with
 five warmup requests per lane. srtctl pins each partial-node worker to GPUs `0..TP-1`
