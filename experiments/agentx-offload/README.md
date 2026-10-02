@@ -89,8 +89,16 @@ tokens/s/GPU (+13.813%), 8.904 versus 8.153 P90 interactivity (+9.206%), and
 versus 1,071 responses, used 8.685% less energy per successful query, and
 computed 0.847% fewer prompt tokens while serving 1.443% externally. Average
 power was 0.415% lower, but P90 E2E-normalized interactivity was 3.729% lower.
-Treat c488 as another mixed local NVMe win and run the native DRAM c488 control
-next to separate added cache capacity from the storage tier.
+Treat c488 as another mixed local NVMe win. The native DRAM c488 control then
+sent all 5,401 canonical warmup requests and returned 5,395 with zero request
+errors, but six wire requests remained after 25,174.7 seconds when the fixed
+1,800-second accelerated drain timeout expired. All 5,395 retained records are
+warmup, including eight InvalidInferenceResultError classifications; profiling
+never started, so this is a local warmup-feasibility failure rather than a
+performance result. The exact task-owned scratch was deleted and independently
+confirmed absent. Run the HBM+DRAM+NVMe c488 control next to test whether the
+filesystem tier changes feasibility when the same 739 GB host DRAM tier is
+present; treat that run as local evidence, not a universal threshold.
 
 The combined tier uses a different connector and storage policy. The pinned FS
 tier has no bounded LRU capacity setting: the 2 TiB value is an abort guard, not an

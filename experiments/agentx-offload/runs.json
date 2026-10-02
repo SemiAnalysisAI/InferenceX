@@ -4424,7 +4424,7 @@
       "repeat": 1,
       "attempt": 1,
       "head_sha": "fb0d00e938ce510708e2bf68bcc10bb8d849ec90",
-      "status": "in_progress",
+      "status": "failure",
       "workflow_name": "offload-v1-dram-c488-r1-branchwf-20261001",
       "dispatched_at": "2026-10-01T23:54:09Z",
       "started_at": "2026-10-01T23:54:46Z",
@@ -4432,30 +4432,84 @@
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/36943237877/job/110639430931",
       "runner": "b200-nscale-slurm_02",
       "performance_result": false,
-      "phase": "canonical warmup in progress",
+      "phase": "terminal; artifacts captured and cleanup verified",
       "dispatch_evidence": "Immediately before dispatch, a fresh cluster-wide inventory found zero queued cluster:b200-nscale jobs and no active-or-queued study workflow. The generated job carries cluster:b200-nscale and nodes:1.",
       "node": "im-b200-c007",
       "allocation_id": "18371",
       "scratch": "/offload-scratch/inferencex-offload-36943237877-1-18371-2024c66fbce8",
       "warmup_progress": {
-        "returned": 153,
+        "returned": 5395,
         "target": 5401,
-        "sent": 521,
-        "in_flight": 368,
+        "sent": 5401,
+        "in_flight": 6,
         "errors": 0,
-        "elapsed_seconds": 660.1,
-        "observed_at": "2026-10-02T00:24:37Z"
+        "elapsed_seconds": 25174.7,
+        "observed_at": "2026-10-02T07:13:11Z"
       },
-      "storage_evidence": "offload_config.json verifies arm=dram, 739,000,000,000 DRAM bytes, zero NVMe bytes, SimpleCPUOffloadConnector with cpu backend and lazy offload, and O_DIRECT not required. Slurm allocation 18371 is active on im-b200-c007."
+      "storage_evidence": "offload_config.json verifies 739,000,000,000 DRAM bytes, zero NVMe bytes, and SimpleCPUOffloadConnector with cpu backend and lazy offload. offload_cleanup.json records deleted=true, zero scratch files, and exit_code=1 for the exact task-owned path. A separate read-only node check confirmed that path absent.",
+      "completed_at": "2026-10-02T07:15:47Z",
+      "failure_stage": "canonical warmup accelerated-drain timeout before profiling",
+      "request_accounting": {
+        "records_total": 5395,
+        "records_profiled": 0,
+        "records_warmup_dropped": 5395,
+        "records_error_dropped": 8,
+        "error_categories": {
+          "InvalidInferenceResultError": 8
+        }
+      },
+      "runtime_evidence": "Canonical warmup sent all 5,401 requests, returned 5,395 with zero request errors, and left six wire requests outstanding after 25,174.7 seconds. The fixed 1,800-second accelerated drain timeout then failed warmup, so profiling never started and no performance result exists. The eight InvalidInferenceResultError records are warmup classifications. The shutdown-only EngineDeadError followed benchmark failure and is not the root cause.",
+      "artifacts": [
+        {
+          "id": 11213753590,
+          "name": "bmk_agentic_minimaxm3_tp4_conc488_kvdram-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-d2ad9bf075cc1a849c95",
+          "size_bytes": 1328,
+          "sha256": "1b92e6a6ae3e75ebcccff6a06a44addbc270acf587bf1983b152232da1a33ac0"
+        },
+        {
+          "id": 11214027191,
+          "name": "agentic_minimaxm3_tp4_conc488_kvdram-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-d2ad9bf075cc1a849c95",
+          "size_bytes": 3243352,
+          "sha256": "161539bb50d395488f6c5fa15047ad45179b7d787c32ba229d3c0100fb230572"
+        },
+        {
+          "id": 11214032034,
+          "name": "server_logs_minimaxm3_tp4_conc488_kvdram-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-d2ad9bf075cc1a849c95",
+          "size_bytes": 166153,
+          "sha256": "99da335cf9f3ea1a3261d71da370895f4edbd5b7582d789f60bdf40093cf4c94"
+        },
+        {
+          "id": 11213773343,
+          "name": "gpu_metrics_minimaxm3_tp4_conc488_kvdram-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-d2ad9bf075cc1a849c95",
+          "size_bytes": 1041287,
+          "sha256": "e51b14dcfe482431ba4ad913ab87fb256bb14c80a58ac0a9e55a58fc1ef5b3db"
+        },
+        {
+          "id": 11213753621,
+          "name": "power_audit_minimaxm3_tp4_conc488_kvdram-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-d2ad9bf075cc1a849c95",
+          "size_bytes": 1043292,
+          "sha256": "c5c92034fb254fc500932f9a16ab326653aebccfb527452f48021ae53ce21701"
+        }
+      ],
+      "evidence_sha256": {
+        "benchmark.log": "3ade37517cf7a008773355b8dde37ad28290da7a34d8450a2e989240382a6b5a",
+        "profile_export.jsonl": "fd93fc897344c46ecbc8c5b0768fd73adf5501037eb5b668c0b754517922f410",
+        "server.log": "acfaa894cc2f812dd2b527682e3a9ea509790b3cab3de79c795e1b7277b67cd4",
+        "offload-telemetry.jsonl": "88dd6513ec46d35969e86bbde94ba707f8e6a8e6f9427018cd672d93e1507775",
+        "offload_config.json": "5dd3727c83098b580e7e17735112e1d47e41f8986b71cb4cb41788bd4a5219ba",
+        "offload_cleanup.json": "f42300962e74c63110ff8f6499beb2ddbd13a8bb82a94a97576a0d944e6b82d0",
+        "gpu_metrics.csv": "710161f1ba9631e5027716d09bcfcecce5625d08160e259c8fad67f83a9349c2",
+        "benchmark_command.txt": "93b1f3adc4ce28dc6b8a14976cdea4b299284ec2542ee451ea3208eda5afeba4",
+        "vllm_command.txt": "57d1a9f281533702acccbd88e35ae66df14c8fedbc3391d768d0f0634cd03f4e",
+        "power_validation.json": "057c4cd15d89bd5298a7ac6c295b9c97e72487755d145a072dfc3f79fb043066"
+      }
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894",
-  "status": "Native DRAM c488 run 36943237877 is in canonical warmup on im-b200-c007; the latest sample returned 153/5,401 with zero errors.",
+  "status": "Native DRAM c488 is a local canonical-warmup feasibility failure: six of 5,401 wire requests remained after the fixed drain timeout, so profiling never started. The next adaptive control is HBM+DRAM+NVMe c488.",
   "last_capacity_check": {
     "checked_at": "2026-10-01T23:54:46Z",
-    "active_study_run_ids": [
-      36943237877
-    ],
+    "active_study_run_ids": [],
     "pending_study_run_ids": [],
     "dispatch_allowed": false,
     "b200_priority_jobs_queued": 0,
@@ -4468,14 +4522,14 @@
     "b200_nodes_allocated": null,
     "b200_nodes_idle": null,
     "target_node": "im-b200-c001",
-    "target_node_state": "DRAM c488 allocated on im-b200-c007 as Slurm job 18371; canonical warmup active",
+    "target_node_state": "DRAM c488 terminal on im-b200-c007; exact task-owned scratch independently absent",
     "observed_free_bytes": null,
     "reason": "A fresh inventory found zero queued cluster:b200-nscale jobs and no active-or-queued study workflow, so native DRAM c488 was dispatched and admitted with nodes:1."
   },
   "next_dispatch": {
-    "arm": "dram",
+    "arm": "dram-nvme",
     "concurrency": 488,
-    "requires": "Allow run 36943237877 to complete canonical warmup and the 3,600-second profile, then capture artifacts, verify active DRAM and zero NVMe, confirm exact scratch cleanup, and compare the three c488 arms."
+    "requires": "Preview the exact combined-tier c488 generator output, validate the study files, then dispatch only after a fresh cluster-wide inventory finds zero queued cluster:b200-nscale jobs and no active-or-queued study workflow."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-21T05:30:00Z",
