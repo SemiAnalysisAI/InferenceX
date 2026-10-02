@@ -326,7 +326,13 @@ EAGLE3 K3, golden AL 2.78 and indexer CP are unchanged.
 
 ### DeepSeek-V4.1-Flash DSpark
 
-The GB200 DSpark recipe uses a minimum CUDA graph capture size of 64 tokens to cover concurrent AgentX subagents. This raises c1/c2/c4 from 8/16/32 to 64; c8 and above retain their existing sizes. The full trace, AL 3.51, and Engram UVA settings are preserved; low-concurrency tail latency improvements require CI confirmation.
+The GB200 DSpark recipe sets explicit capture sizes per point. It uses
+`vllm/vllm-openai:nightly-dev-arm64-cu130-ac9126e58aa7` with FlashInfer autotuning. TP4 covers
+concurrency 1–128. DEP2 (TP1 x DP2 + EP2, DeepGEMM MegaMoE) covers 8–32 and DEP4 (TP1 x DP4 + EP4,
+MegaMoE) covers 64–128, both behind a consistent-hash vLLM Router. DEP2 keeps about 150 GiB of weights
+per GB200 rank, so it caps batched tokens at 4096 and graph capture at 576 tokens. All GB200 points set
+`--gpu-memory-utilization 0.97` and use `FULL_AND_PIECEWISE` CUDA graphs sized in multiples of the
+six-token verification block.
 The B200 DSpark recipe uses the same minimum capture size and preserves the same workload settings.
 The GB300 DSpark recipe sets explicit capture sizes per point, described below.
 The H200 DSpark recipe uses the same minimum capture size and preserves the same workload settings.
@@ -369,7 +375,7 @@ Source: [upstream recipe](https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4.1-Flas
 ### DeepSeek-V4.1-Flash DSpark on H200
 
 `dsv41flash-fp4-h200-vllm-agentic-dspark` is the H200 AgentX arm of the
-DeepSeek-V4.1-Flash recipe. It pins `vllm/vllm-openai:nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3` (shared with B200 and GB200) and shares the
+DeepSeek-V4.1-Flash recipe. It pins `vllm/vllm-openai:nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3` and shares the
 text-only serving settings with the Blackwell arms: `deepseek_v41` tokenizer and parsers,
 1M context, native five-token DSpark with probabilistic drafting. Throughput uses the [committed golden AL](../infx/golden_al_distribution/dsv41flash_dspark.yaml) of 3.51 for thinking on and five draft tokens, with synthetic rejection sampling and adaptive verification disabled. Accuracy evals retain real block rejection and adaptive verification.
 
