@@ -94,7 +94,7 @@ base:
         dsa-topk-backend: sgl-kernel
         kv-cache-dtype: fp8_e4m3
         page-size: 64
-        tool-call-parser: glm47
+        # AgentX synthetic replay carries no tool schema.
         reasoning-parser: glm45
         context-length: 1048576
         chunked-prefill-size: 131072
