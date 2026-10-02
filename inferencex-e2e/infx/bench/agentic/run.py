@@ -198,11 +198,9 @@ def _open_power_window(plan: Plan, python: str, env: Mapping[str, str]) -> int:
 
 
 def _score(plan: Plan, python: str, env: Mapping[str, str], replay_rc: int) -> int:
-    """Aggregate, plot, audit power, and validate; return the first failure by precedence."""
+    """Aggregate, audit power, and validate; return the first failure by precedence."""
     result_dir, artifacts = str(plan.result_dir), str(plan.replay.artifact_dir)
     aggregate_rc = _results(python, env, "agentic.process_agentic_result")
-    # Best effort: the aggregate JSON is the success gate.
-    _results(python, env, "generate_aiperf_plots", result_dir)
     audit = _power_audit(plan, replay_rc)
     power_rc = _power_adapter(plan, python, env, *audit) if audit else 0
     _results(python, env, "agentic.analyze_benchmark_distributions", artifacts, "-o", result_dir)

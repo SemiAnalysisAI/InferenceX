@@ -62,7 +62,6 @@ case "$2" in
     infx.results.agentic.validate_agentic_result)
         echo validate >> "$EVENTS"; exit "${VALIDATE_RC:-0}" ;;
     infx.results.agentic.analyze_benchmark_distributions) echo analyze >> "$EVENTS" ;;
-    infx.results.generate_aiperf_plots) echo plots >> "$EVENTS" ;;
     *) echo "unexpected $*" >> "$EVENTS"; exit 99 ;;
 esac
 """
@@ -178,7 +177,7 @@ REPLAYED = {"benchmark.log", "benchmark_command.txt"}
         pytest.param(
             {},
             0,
-            ["replay", "aggregate agentx", "plots", "analyze", "validate"],
+            ["replay", "aggregate agentx", "analyze", "validate"],
             REPLAYED,
             id="power-off",
         ),
@@ -188,7 +187,7 @@ REPLAYED = {"benchmark.log", "benchmark_command.txt"}
             {"CONC_LIST": "8", "KV_OFFLOADING": "dram", "KV_OFFLOAD_BACKEND": "lmcache",
              "TOTAL_CPU_DRAM_GB": "2400"},
             0,
-            ["replay", "aggregate agentx_conc8", "plots", "analyze", "validate"],
+            ["replay", "aggregate agentx_conc8", "analyze", "validate"],
             {f"conc_8/{name}" for name in REPLAYED},
             id="conc-list-point",
         ),
@@ -196,8 +195,7 @@ REPLAYED = {"benchmark.log", "benchmark_command.txt"}
             {"ENABLE_AGENTX_POWER": "1", "REQUIRE_POWER": "1"},
             0,
             [
-                "gpu-identity", "replay", "gpu-final-sample", "aggregate agentx", "plots",
-                "adapter --result-dir {results} --agg-result {out}/agentx.json"
+                "gpu-identity", "replay", "gpu-final-sample", "aggregate agentx", "adapter --result-dir {results} --agg-result {out}/agentx.json"
                 " --expected-num-gpus 12 --require-power",
                 "analyze", "validate",
             ],
@@ -207,7 +205,7 @@ REPLAYED = {"benchmark.log", "benchmark_command.txt"}
         pytest.param(
             WINDOW,
             0,
-            [f"{MARK} running", "replay", "aggregate agentx_conc8", "plots", f"{MARK} completed",
+            [f"{MARK} running", "replay", "aggregate agentx_conc8", f"{MARK} completed",
              "analyze", "validate"],
             {f"conc_8/{name}" for name in (OFFSET, *REPLAYED)},
             id="multi-node-window",
@@ -215,7 +213,7 @@ REPLAYED = {"benchmark.log", "benchmark_command.txt"}
         pytest.param(
             {**WINDOW, "REPLAY_RC": "143"},
             143,
-            [f"{MARK} running", "replay", "aggregate agentx_conc8", "plots", "analyze", "validate"],
+            [f"{MARK} running", "replay", "aggregate agentx_conc8", "analyze", "validate"],
             {f"conc_8/{name}" for name in (OFFSET, *REPLAYED)},
             id="failed-replay-leaves-the-window-running",
         ),
@@ -230,8 +228,7 @@ REPLAYED = {"benchmark.log", "benchmark_command.txt"}
             {"IS_MULTINODE": "true", "ENABLE_AGENTX_POWER": "1"},
             0,
             [
-                "replay", "aggregate agentx_conc8", "plots",
-                "adapter --result-dir {results}/conc_8 --agg-result {out}/agentx_conc8.json"
+                "replay", "aggregate agentx_conc8", "adapter --result-dir {results}/conc_8 --agg-result {out}/agentx_conc8.json"
                 " --multinode-contract-missing",
                 "analyze", "validate",
             ],
@@ -275,7 +272,7 @@ def test_every_step_runs_and_the_first_failure_in_precedence_wins(
 
     assert rc == expected
     assert [event.split()[0] for event in _events(tmp_path)] == [
-        "gpu-identity", "replay", "gpu-final-sample", "aggregate", "plots", "adapter", "analyze",
+        "gpu-identity", "replay", "gpu-final-sample", "aggregate", "adapter", "analyze",
         "validate",
     ]  # fmt: skip
 

@@ -24,7 +24,6 @@ DEPENDENCIES = (
     "tqdm>=4.66",
     "datasets>=4.7.0",
     "tiktoken",
-    "matplotlib",
     "huggingface_hub[cli]>=0.25.0",
     "urllib3",
     "requests",
