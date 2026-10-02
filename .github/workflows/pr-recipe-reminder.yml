@@ -43,7 +43,7 @@ jobs:
             Thanks for the contribution!
 
             - **Review:** If this PR changes files owned by someone other than a repository admin or \`@SemiAnalysisAI/core\`, ask one eligible [CODEOWNER](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/CODEOWNERS) to complete the latest [PR_REVIEW_CHECKLIST.md](https://github.com/SemiAnalysisAI/InferenceX/blob/main/inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md) before contacting a core maintainer on Slack. Follow the template exactly, including \`As a PR reviewer and CODEOWNER, I have reviewed this and have\`, so sign-off verification triggers.
-            - **PR verification:** Sweeps only run on labeled PRs. Add \`full-sweep-fail-fast\` (strongly recommended); use \`full-sweep-enabled\` only when matrix jobs should continue after a failure.
+            - **PR verification:** Sweeps run only when the PR appends an \`inferencex-e2e/perf-changelog.yaml\` entry and carries exactly one primary label: \`full-sweep-fail-fast\` (strongly recommended; canary plus per-matrix fail-fast), \`full-sweep-enabled\` (canary; matrix jobs continue after a failure), or \`non-canary-full-sweep-enabled\` (no canary or fail-fast). The modifiers \`all-evals\`, \`evals-only\`, and \`agentx-fast\` require a primary label. On fork PRs, a maintainer applies the label. See [sweep labels and reuse](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/AGENT_OPERATIONS.md#sweep-labels-and-reuse).
             - **After merging:** PR authors must ensure all GitHub Actions jobs pass. Transient failures often pass on rerun; see [how to rerun failed jobs](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs#re-running-failed-jobs-in-a-workflow).
 
             <details>
@@ -52,7 +52,7 @@ jobs:
             感谢你的贡献！
 
             - **审阅：**如果 PR 修改的文件归属于仓库管理员及 \`@SemiAnalysisAI/core\` 之外的 CODEOWNER，请先联系一位有资格的 [CODEOWNER](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/CODEOWNERS) 填写最新的 [PR_REVIEW_CHECKLIST.md](https://github.com/SemiAnalysisAI/InferenceX/blob/main/inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md)，再通过 Slack 联系核心维护者。必须严格遵循模板，并保留 \`As a PR reviewer and CODEOWNER, I have reviewed this and have\`，才能触发签核验证。
-            - **PR 验证：**扫描仅在带有标签的 PR 上运行。强烈建议添加 \`full-sweep-fail-fast\`；仅当需要矩阵任务在失败后继续运行时才使用 \`full-sweep-enabled\`。
+            - **PR 验证：**只有当 PR 在 \`inferencex-e2e/perf-changelog.yaml\` 末尾追加了条目，并且恰好带有一个主标签时，才会运行扫描：\`full-sweep-fail-fast\`（强烈推荐；canary 加逐矩阵 fail-fast）、\`full-sweep-enabled\`（有 canary；矩阵任务在失败后继续运行）或 \`non-canary-full-sweep-enabled\`（无 canary，也无 fail-fast）。修饰标签 \`all-evals\`、\`evals-only\` 和 \`agentx-fast\` 必须与主标签一起使用。fork PR 的标签由维护者添加。参见[扫描标签与复用](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/AGENT_OPERATIONS.md#sweep-labels-and-reuse)。
             - **合并后：**PR 作者必须确保所有 GitHub Actions 任务通过。临时性失败通常可以通过重新运行恢复；参见[重新运行失败任务的说明](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs#re-running-failed-jobs-in-a-workflow)。
 
             </details>`.replace(/^            /gm, '');

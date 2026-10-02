@@ -52,10 +52,7 @@ _AGENTIC_CACHES = (
 
 SRT_LANES: dict[tuple[str, LaunchPath], SrtLane] = {
     ("b200-nscale", LaunchPath.SRT_NATIVE): SrtLane(
-        mounts=(
-            *_AGENTIC_CACHES,
-            LaneMount(Match(frameworks=any_of("tilert")), "tilert-weights", "/tilert_weights"),
-        ),
+        mounts=_AGENTIC_CACHES,
     ),
     ("b200-nscale", LaunchPath.SRT_MULTI): SrtLane(
         frameworks=_DYNAMO,
@@ -83,6 +80,7 @@ SRT_LANES: dict[tuple[str, LaunchPath], SrtLane] = {
         shared_run_root=(
             Match(any_of("minimaxm3", "kimik3", "qwen3.5", "glm5.2")),
             Match(any_of("dsv4"), frameworks=any_of("dynamo-vllm")),
+            Match(any_of("dsv4"), frameworks=any_of("dynamo-sglang"), agentic=True),
         ),
     ),
     ("gb300-nv", LaunchPath.SRT_MULTI): SrtLane(

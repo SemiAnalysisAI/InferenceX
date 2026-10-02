@@ -41,6 +41,10 @@ class SrtRun:
         if srt is None:
             raise LaunchError(f"cluster {launch.cluster.id!r} has no slurm.srt-slurm settings")
         env = runtime_env(launch.cluster, request, srt.env, job_env or {})
+        # sbatch environment options override #SBATCH directives. A login shell's
+        # default must never move a lease into another allocation partition.
+        env["SBATCH_PARTITION"] = backend.settings.partition
+        env["SLURM_PARTITION"] = backend.settings.partition
         env.pop("VIRTUAL_ENV", None)
         root = str(repository_root())
         env["PYTHONPATH"] = os.pathsep.join(filter(None, (root, env.get("PYTHONPATH"))))
