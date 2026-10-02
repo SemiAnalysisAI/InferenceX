@@ -32,12 +32,22 @@ COLLX_DEEPEP_V2_BUILD_GEN="dlarch2"
 COLLX_UCCL_REPO="https://github.com/uccl-project/uccl"
 COLLX_UCCL_COMMIT="fc1b582031221645ea9fce58aeb57187713145e3"
 
-# nccl-extensions (github.com/NVIDIA/nccl-extensions) owns nccl.ep, which nccl4py >= 0.4 does
-# not bundle; its combine-recv fence (DeepEP's LOW_LATENCY_COMBINE_RECV analogue) releases the
-# low-latency ladder clamp. nccl4py is pinned alongside so a rebuild resolves the same tree. Two
-# whitespace-separated pip specs: the install site word-splits this deliberately, and the whole
-# string keys the shared cache dir.
-COLLX_NCCL_EP_SPEC="nccl-extensions[cu13]==0.1.0 nccl4py[cu13]==0.5.0"
+# NCCL EP is built from this exact upstream-main revision. nccl4py supplies nccl.core and the
+# matching packaged NCCL used to link the extension; nccl-extensions supplies nccl.ep from source.
+# The commit, exact wheel dependencies, and recipe generation all key the shared backend cache.
+COLLX_NCCL_EXTENSIONS_REPO="https://github.com/NVIDIA/nccl-extensions"
+COLLX_NCCL_EXTENSIONS_COMMIT="afeda104ed5ffe6cc2b119d10bb3926cbb817d8c"
+COLLX_NCCL4PY_SPEC="nccl4py[cu13]==0.6.0"
+COLLX_NCCL_SPEC="nvidia-nccl-cu13==2.32.3"
+COLLX_NCCL_EP_SETUPTOOLS_SPEC="setuptools==81.0.0"
+COLLX_NCCL_EP_CYTHON_SPEC="Cython==3.3.0"
+COLLX_NCCL_EP_WHEEL_SPEC="wheel==0.48.0"
+COLLX_NCCL_EP_CUDA_CORE_SPEC="cuda-core==1.2.1"
+COLLX_NCCL_EP_CUDA_PATHFINDER_SPEC="cuda-pathfinder==1.8.2"
+COLLX_NCCL_EP_CUDA_BINDINGS_SPEC="cuda-bindings==13.2.0"
+COLLX_NCCL_EP_CUTLASS_SPEC="nvidia-cutlass-dsl[cu13]==4.8.0"
+# Bump when the local source-build or packaging recipe changes without either pin changing.
+COLLX_NCCL_EP_BUILD_RECIPE="source-v1"
 
 collx_log_tail() {
   local log_path="$1"
@@ -86,6 +96,8 @@ collx_stage_with_backend_cache() {
       || collx_die "cannot stage the pinned DeepEP source" ;;
     uccl-ep) collx_prepare_uccl_source "$MOUNT_SRC" \
       || collx_die "cannot stage the pinned UCCL source" ;;
+    nccl-ep) collx_prepare_nccl_extensions_source "$MOUNT_SRC" \
+      || collx_die "cannot stage the pinned NCCL Extensions source" ;;
   esac
   export COLLX_BACKEND_SOURCE_ROOT=/ix/collectivex/.collx_sources
   collx_prepare_backend_cache "$COLLX_SQUASH_DIR" \
@@ -621,6 +633,11 @@ collx_prepare_deepep_source() {
 # the ROCm path (common_hip.hpp) includes top-level util/gpu_rt.h.
 collx_prepare_uccl_source() {
   collx_prepare_pinned_source "$1" uccl "$COLLX_UCCL_REPO" "$COLLX_UCCL_COMMIT" UCCL
+}
+
+collx_prepare_nccl_extensions_source() {
+  collx_prepare_pinned_source "$1" nccl-extensions "$COLLX_NCCL_EXTENSIONS_REPO" \
+    "$COLLX_NCCL_EXTENSIONS_COMMIT" "NCCL Extensions"
 }
 
 # Copies a staged <name>-<commit> tree (see collx_prepare_pinned_source) to $2.
