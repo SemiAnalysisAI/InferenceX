@@ -28,6 +28,16 @@ from throughput. Selection lives in `mark_eval_entries()` in
   `thresholds.yaml` as fixed-sequence 8k1k evals.
 - **BFCL:** explicit only. No automatic model mapping selects BFCL.
 
+Every mode, including each sweep's combined changelog entries, schedules at
+most one eval per InferenceX-app eval identity: model, runner, framework,
+precision, spec-decoding, disaggregation, per-role TP/EP/DP-attention/workers,
+eval suite, sequence lengths, and concurrency. The app stores one result per
+identity in a run, so rows that differ only by image, KV offloading, or recipe
+file would overwrite each other's result there, and InferenceX's rerun
+deduplication would delete one raw result. The first row without KV offloading
+keeps the eval; a batched multi-node eval keeps only its unclaimed
+concurrencies. Throughput coverage is unchanged.
+
 Generator eval modes:
 
 - Default: throughput plus the fixed-sequence subset, the agentic GSM8K

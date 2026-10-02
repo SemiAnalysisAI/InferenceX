@@ -601,6 +601,33 @@ class TestMarkEvalEntries:
             row["eval-suite"] == "kimi_tool_call_schema_full" for row in result
         )
 
+    @pytest.mark.parametrize("all_evals", [False, True])
+    def test_kv_offload_variants_share_one_vendor_eval(self, all_evals):
+        # MiniMax M3 on b200-nscale runs each point with and without DRAM
+        # offload; the app keeps one eval per config and concurrency.
+        common = {
+            "scenario-type": "agentic-coding", "model-prefix": "minimaxm3",
+            "model": "MiniMaxAI/MiniMax-M3", "runner": "cluster:b200-nscale",
+            "framework": "vllm", "precision": "fp4", "tp": 4, "ep": 1,
+            "spec-decoding": "mtp", "dp-attn": False, "image": "img",
+        }
+        dram = {"kv-offloading": "dram", "kv-offload-backend": {"name": "vllm-simple"}}
+        matrix_values = [
+            {**common, **dram, "conc": 15},
+            {**common, "kv-offloading": "none", "conc": 15},
+            {**common, **dram, "conc": 20},
+        ]
+
+        result = mark_eval_entries(matrix_values)
+        if all_evals:
+            result = mark_all_eval_entries(result)
+
+        assert [(row["kv-offloading"], row["conc"], row["run-eval"]) for row in result] == [
+            ("dram", 15, False), ("none", 15, True), ("dram", 20, True),
+        ]
+        assert "eval-suite" not in result[0]
+        assert result[1]["eval-suite"] == result[2]["eval-suite"] == "minimax_m3_full"
+
     def test_fixed_sequence_eval_uses_lm_eval_metadata(self):
         matrix_values = [{
             "model": "m",
@@ -921,6 +948,26 @@ class TestMarkAllEvalEntries:
         ]
         assert all(entry['eval-all-concs'] is True for entry in result)
         assert all('eval-conc' not in entry for entry in result)
+
+    def test_image_variant_batch_keeps_only_unclaimed_concurrencies(self):
+        common = {
+            'model': 'm', 'model-prefix': 'm', 'runner': 'r', 'framework': 'f',
+            'precision': 'fp8', 'isl': 8192, 'osl': 1024, 'spec-decoding': 'none',
+            'prefill': {'tp': 8, 'dp-attn': False}, 'decode': {'tp': 8, 'dp-attn': False},
+            'run-eval': False,
+        }
+        entries = [
+            {**common, 'image': 'old', 'conc': [4, 8]},
+            {**common, 'image': 'new', 'conc': [8, 16]},
+            {**common, 'image': 'newer', 'conc': [4]},
+        ]
+
+        result = mark_all_eval_entries(entries)
+
+        assert [(row['image'], row['conc'], row['run-eval']) for row in result] == [
+            ('old', [4, 8], True), ('new', [16], True), ('newer', [4], False),
+        ]
+        assert 'eval-all-concs' not in result[2]
 
     def test_default_eval_selection_does_not_collapse_all_evals_expansion(self):
         entries = [

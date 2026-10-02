@@ -555,6 +555,90 @@ def automatic_agentic_vendor_eval(entry: dict) -> tuple[str, str] | None:
     return AUTOMATIC_AGENTIC_VENDOR_EVALS.get(entry.get(Fields.MODEL_PREFIX.value))
 
 
+def app_eval_identity(entry: dict, conc: int) -> tuple:
+    """Return the InferenceX-app eval identity of one eval point.
+
+    The app stores one eval result per run for each config natural key
+    (model, hardware, framework, precision, speculative method, disaggregation
+    and per-role TP/EP/DP-attention/workers), task, sequence lengths and
+    concurrency. Image and KV offloading are not part of it.
+    """
+    if Fields.PREFILL.value in entry:
+        topology = tuple(
+            tuple(
+                entry[role].get(field.value)
+                for field in (Fields.TP, Fields.EP, Fields.DP_ATTN, Fields.NUM_WORKER)
+            )
+            for role in (Fields.PREFILL.value, Fields.DECODE.value)
+        )
+    else:
+        topology = tuple(entry.get(field.value) for field in (Fields.TP, Fields.EP, Fields.DP_ATTN))
+    return (
+        *(
+            entry.get(field.value)
+            for field in (
+                Fields.MODEL,
+                Fields.MODEL_PREFIX,
+                Fields.RUNNER,
+                Fields.FRAMEWORK,
+                Fields.PRECISION,
+            )
+        ),
+        entry.get(Fields.SPEC_DECODING.value, "none"),
+        entry.get(Fields.DISAGG.value, False),
+        topology,
+        entry.get(Fields.EVAL_FRAMEWORK.value),
+        entry.get(Fields.EVAL_SUITE.value),
+        entry.get(Fields.ISL.value),
+        entry.get(Fields.OSL.value),
+        conc,
+    )
+
+
+def _eval_concs(entry: dict) -> list[int]:
+    """Return the concurrencies one eval row evaluates."""
+    conc = entry[Fields.CONC.value]
+    conc_values = conc if isinstance(conc, list) else [conc]
+    if Fields.PREFILL.value in entry and not entry.get(Fields.EVAL_ALL_CONCS.value):
+        return [entry[Fields.EVAL_CONC.value]]
+    return sorted(set(conc_values))
+
+
+def drop_app_colliding_evals(rows: list[dict]) -> list[dict]:
+    """Keep at most one eval per InferenceX-app eval identity.
+
+    Rows that differ only by image or KV offloading share an app identity, so
+    the app would keep one of their results and overwrite the other. The
+    first row without KV offloading keeps the eval, otherwise the first row.
+    A losing row stops evaluating; a batched eval that loses only some
+    concurrencies keeps the rest. Throughput selection is unchanged.
+    """
+    claimed: set[tuple] = set()
+    candidates = sorted(
+        (row for row in rows if row.get(Fields.RUN_EVAL.value)),
+        key=lambda row: row.get(Fields.KV_OFFLOADING.value, "none") != "none",
+    )
+    for row in candidates:
+        concs = _eval_concs(row)
+        free = [conc for conc in concs if app_eval_identity(row, conc) not in claimed]
+        claimed.update(app_eval_identity(row, conc) for conc in free)
+        if free == concs:
+            continue
+        if free:
+            # Only batched all-concurrency evals cover several concurrencies.
+            row[Fields.CONC.value] = free
+            continue
+        row[Fields.RUN_EVAL.value] = False
+        for field in (
+            Fields.EVAL_FRAMEWORK,
+            Fields.EVAL_SUITE,
+            Fields.EVAL_CONC,
+            Fields.EVAL_ALL_CONCS,
+        ):
+            row.pop(field.value, None)
+    return rows
+
+
 def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
     """Apply the default eval selection policy.
 
@@ -691,7 +775,7 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
         if i in mn_eval_conc:
             entry[Fields.EVAL_CONC.value] = mn_eval_conc[i]
 
-    return matrix_values
+    return drop_app_colliding_evals(matrix_values)
 
 
 def mark_all_eval_entries(matrix_values: list[dict]) -> list[dict]:
@@ -793,7 +877,7 @@ def mark_all_eval_entries(matrix_values: list[dict]) -> list[dict]:
         if entry.get(Fields.EVAL_SUITE.value) is None:
             entry[Fields.EVAL_SUITE.value] = ""
 
-    return expanded_entries
+    return drop_app_colliding_evals(expanded_entries)
 
 
 def _concurrency_range(start: int, end: int, step: int) -> list[int]:
