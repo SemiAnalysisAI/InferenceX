@@ -66,7 +66,7 @@ Do not 3-way merge or normalize `perf-changelog.yaml`. Stop if the intended conf
 
 Re-run the exact workflow `generate-cli-command` locally. Start with exact-key `test-config`, then the same filtered `full-sweep` command. Inspect emitted image, runner, scenario, topology, concurrency, eval flags, and additional settings. The commands and inspection list are in [`testing.md`](testing.md#exact-config-then-filtered-family).
 
-If no GPU jobs start, inspect setup before investigating a runner. [`run-sweep.yml`](../../.github/workflows/run-sweep.yml) rejects conflicting primary labels, does not run from eval modifiers alone, honors `[skip-sweep]` only for PR heads, and waits for merge conflicts to be resolved. Fix the input or label state. Do not manually dispatch a different matrix and call it equivalent evidence.
+If no GPU jobs start, inspect setup before investigating a runner. [`run-sweep.yml`](../../.github/workflows/run-sweep.yml) rejects conflicting primary labels, does not run from modifier labels (`all-evals`, `evals-only`, `agentx-fast`) alone, honors `[skip-sweep]` only for PR heads, and waits for merge conflicts to be resolved. Fix the input or label state. Do not manually dispatch a different matrix and call it equivalent evidence.
 
 Stop when the local matrix does not exactly match the intended PR scope. A successful generator with the wrong config is not a recovery.
 

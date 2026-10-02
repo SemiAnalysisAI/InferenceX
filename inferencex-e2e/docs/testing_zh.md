@@ -41,7 +41,7 @@ Tests 使用四个 pytest worker 运行 `infx/tests/`、`utils/`、`runners/`、
 | 模式与矩阵 | 配置键通过验证并发出预期矩阵字段 | 运行器可用性、服务器启动或性能 |
 | 聚焦 Python 测试 | 变更后的生成器、changelog、结果、评测、收集或复用契约在覆盖输入上行为正确 | 容器、加速器、网络或 Slurm 行为 |
 | 冒烟运行 | 一条严格过滤的路径可完成分配、启动服务器、运行工作负载并产生制品 | 完整并发/搜索空间或合并资格 |
-| 精简 PR 扫描 | 每个选中单节点分组运行其最低并发（手动 `--trim-conc` 派发） | 全量扫描所要求的中间并发点 |
+| 手动精简运行 | 每个选中的单节点和多节点部署形态运行其最低并发（`e2e-tests.yml` 设置 `trim-conc: true`；changelog-ref 模式下只精简吞吐行，评测保留选定的并发）。没有任何 PR 标签会精简并发 | 全量扫描所要求的中间并发点 |
 | 全量扫描与评测 | 选中的未精简矩阵和评测任务在被评审提交上实际执行 | 未检查证据的正确性或无关配置 |
 
 较后层级变绿不会弥补较早层级缺少证据。例如，绿色收集器可能只聚合了空集合，因此评审必须检查底层实际执行的任务和制品。
@@ -186,12 +186,12 @@ uv run --locked --all-extras --group test --no-editable \
 
 ### 精简与全量扫描
 
-- `full-sweep-fail-fast` 是推荐的全量扫描标签。它使用串行单节点 canary，并在每个矩阵首次失败后停止该矩阵，同时保留已完成结果。
-- 仅当 canary 已知不稳定或不具代表性时才使用 `non-canary-full-sweep-enabled`。仅当即使失败也必须让每个矩阵任务继续时，才用 `full-sweep-enabled` 代替 fail-fast。
+- `full-sweep-fail-fast` 是推荐的全量扫描标签。除非扫描只含多节点固定序列条目或评测条目，它会先运行一个 canary（最低并发的非评测单节点条目；没有符合条件的单节点条目时改用多节点 AgentX 条目），然后在每个矩阵首次失败后停止该矩阵，同时保留已完成结果。
+- 仅当 canary 已知不稳定或不具代表性时才使用 `non-canary-full-sweep-enabled`。它也不启用 fail-fast。仅当即使失败也必须让每个矩阵任务继续时，才用 `full-sweep-enabled` 代替 fail-fast。
 - 必须且只能应用一个主扫描标签。只有修饰标签或存在冲突主标签都不构成有效扫描。
 - 精简扫描（仅最低并发）可通过 `e2e-tests.yml` 的 `trim-conc` 输入手动运行。
 
-当前含义和资格规则由[扫描标签参考](../../.github/AGENT_OPERATIONS.md#sweep-labels-and-reuse)定义，并由 [`run-sweep.yml`](../../.github/workflows/run-sweep.yml) 实现。
+当前含义和资格规则见 [PR 主标签与修饰标签](ci-procedures_zh.md#pr-主标签与修饰标签)，并由 [`run-sweep.yml`](../../.github/workflows/run-sweep.yml) 实现。
 
 ### 评测
 

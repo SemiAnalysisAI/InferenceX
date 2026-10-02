@@ -663,7 +663,7 @@ Sources: [`AGENTS.md#non-negotiable-benchmark-invariants`](../../AGENTS.md#non-n
 4. Never prepend, insert chronologically, sort, reformat, or run a formatter over the file.
 5. Never delete or normalize existing whitespace, including trailing spaces on blank separators. CI depends on historical bytes.
 6. If the file conflicts with `main`, restore the current `main` version and re-append only this branch's entries. Do not hand-merge reordered history.
-7. Parse the file and confirm the generated changelog selection includes the intended keys before requesting a sweep.
+7. Parse the file and confirm the generated changelog selection includes the intended keys before requesting a sweep. Request it by applying exactly one primary sweep label, normally `full-sweep-fail-fast` (see [PR primary and modifier labels](ci-procedures.md#pr-primary-and-modifier-labels)).
 
 ## Stop conditions
 

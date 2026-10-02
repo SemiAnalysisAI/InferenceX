@@ -16,8 +16,8 @@ and a direct `aiperf profile` command without CI or Slurm.
 ## 1. Pick the correct execution mode
 
 For a throughput-only PR sweep, set `no-evals: true` on its
-`perf-changelog.yaml` entries and use a normal primary sweep label, including
-`full-sweep-enabled`. This skips all eval job families for those entries without
+`perf-changelog.yaml` entries and use one primary sweep label (normally
+`full-sweep-fail-fast`). This skips all eval job families for those entries without
 changing benchmark duration or Prometheus artifacts. The flag defaults to false
 and is retained in changelog metadata. Another entry requesting the same config
 can still select its evals; mark every applicable entry to suppress them entirely.
@@ -27,7 +27,7 @@ throughput evidence, not model-evaluation evidence.
 
 There are two distinct layers: the matrix generator decides **which jobs exist**, while runtime variables decide **what a launched job does**.
 
-| Need | Generator/workflow mode | Runtime behavior |
+| Need | Generator flag (`infx.matrix.generate`) or workflow variables | Runtime behavior |
 |---|---|---|
 | Normal sweep | no eval option | Throughput jobs plus the selected 8k/1k eval subset and agentic GSM8K subset |
 | Throughput only | `--no-evals` | No eval jobs |
@@ -35,6 +35,8 @@ There are two distinct layers: the matrix generator decides **which jobs exist**
 | Every eligible eval only | `--all-evals` | Equivalent to `--evals-only --all-evals` and includes all fixed-sequence 8k/1k rows plus single-node and multi-node agentic GSM8K rows |
 | Throughput then eval in one recipe | `RUN_EVAL=true`, `EVAL_ONLY=false` | Server starts, throughput runs, then `run_eval` runs |
 | Eval against a freshly started server | `RUN_EVAL=true`, `EVAL_ONLY=true` | Launcher expands eval context, skips throughput, and runs the eval |
+
+The PR `all-evals` label instead goes through [`infx.matrix.plan`](../infx/matrix/plan.py), which expands eval selection and keeps throughput.
 
 Default selection is scenario-aware. Single-node fixed-sequence evals use the median and highest eligible concurrency for each 8k/1k model/runner/framework/precision/parallelism group. Multi-node evals use the highest eligible concurrency per topology. Fixed-sequence concurrency below 16 is not selected. Kimi K3 and MiniMax M3 AgentX rows automatically select vendor evals at every generated point, including lower concurrencies. Other single-node agentic rows select GSM8K by default at the highest concurrency of each model/runner/framework/precision/spec-decoding/dp-attn/image group, so MTP, DP-attention and image variants each get their own eval while TP/EP and KV-offloading variants share one; multi-node agentic rows use the highest eligible concurrency per topology. The eval runs as a separate eval-only job, so agentic throughput coverage is unchanged. See [`mark_eval_entries()` and `mark_all_eval_entries()`](../infx/matrix/generate.py).
 

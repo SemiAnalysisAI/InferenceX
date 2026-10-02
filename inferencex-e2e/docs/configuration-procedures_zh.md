@@ -598,7 +598,7 @@ python -m pytest infx/tests/matrix/ -v
 4. 绝不能 prepend、在中间按时间插入、排序、重新格式化，也不能对文件运行 formatter。
 5. 绝不能删除或标准化现有空白，包括空白分隔行上的尾随空格。CI 依赖历史字节。
 6. 如果文件与 `main` 冲突，恢复当前 `main` 版本，只重新追加本分支条目。不要手动合并已经重排的历史。
-7. 请求 sweep 前解析文件，并确认生成的 changelog 选择包含预期 key。
+7. 请求 sweep 前解析文件，并确认生成的 changelog 选择包含预期 key。请求时必须且只能添加一个主 sweep 标签，通常为 `full-sweep-fail-fast`（参见 [PR 主标签与修饰标签](ci-procedures_zh.md#pr-主标签与修饰标签)）。
 
 ## 停止条件
 
