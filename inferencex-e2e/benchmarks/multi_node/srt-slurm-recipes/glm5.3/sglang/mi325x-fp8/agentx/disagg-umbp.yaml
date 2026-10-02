@@ -120,6 +120,7 @@ base:
         UMBP_STANDALONE_ADDRESS: ""
       args:
         <<: *worker_args
+        disaggregation-decode-enable-radix-cache: true
         enable-unified-cache-external-linker: false
         unified-cache-external-linker-backend: null
         hicache-storage-backend-extra-config: null
