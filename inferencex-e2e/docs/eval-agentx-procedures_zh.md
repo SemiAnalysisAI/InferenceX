@@ -35,7 +35,7 @@ eval modifier，这些组合都会被拒绝。这类运行提供吞吐量证据�
 
 PR 上的 `all-evals` 标签则通过 [`infx.matrix.plan`](../infx/matrix/plan.py) 生成矩阵，会扩大 eval 选择范围并保留吞吐量作业。
 
-默认选择会区分场景。单节点定长序列 eval 对每个 8k/1k 的模型/runner/framework/precision/并行配置分组选取符合条件的中位和最高并发；多节点 eval 对每种拓扑选取符合条件的最高并发。定长序列中低于 16 的并发不会被选中。Kimi K3 和 MiniMax M3 的 AgentX 行在每个生成的测试点自动运行厂商评估，包括低并发测试点。其他单节点 agentic 行默认选择 GSM8K，按模型/runner/framework/precision/spec-decoding/dp-attn/镜像分组，并选取每组的最高并发：MTP、DP attention 和镜像不同的变体各自单独评估，而 TP/EP 和 KV offloading 不同的变体共用一次评估；多节点 agentic 行对每种拓扑选取符合条件的最高并发。该评估作为独立的 eval-only 作业运行，因此 agentic 吞吐量覆盖范围不变。参见 [`mark_eval_entries()` 和 `mark_all_eval_entries()`](../infx/matrix/generate.py)。
+默认选择会区分场景。单节点定长序列 eval 对每个 8k/1k 的模型/runner/framework/precision/并行配置分组选取符合条件的中位和最高并发；多节点 eval 对每种拓扑选取符合条件的最高并发。定长序列中低于 16 的并发不会被选中。所有 AgentX 模型（包括 Kimi K3 和 MiniMax M3）默认都会运行 GSM8K。单节点 agentic 行按模型/runner/framework/precision/spec-decoding/dp-attn/镜像分组，并在每组最高并发处评估：MTP、DP attention 和镜像不同的变体各自单独评估，而 TP/EP 和 KV offloading 不同的变体共用一次评估。多节点 agentic 行对每种拓扑选取符合条件的最高并发；若某个部署没有任何并发不低于 16 的拓扑，则在其最高并发处评估一次。Kimi K3 和 MiniMax M3 的行还会在每个生成的测试点（包括低并发测试点）额外运行厂商评估，因此它们的 GSM8K 是一条额外的 eval-only 行。所有评估都作为独立的 eval-only 作业运行，因此 agentic 吞吐量覆盖范围不变。参见 [`mark_eval_entries()` 和 `mark_all_eval_entries()`](../infx/matrix/generate.py)。
 
 Kimi K3 在 AMD 和 NVIDIA 的单节点及多节点 recipe 上自动运行 `kimi-vendor` / `kimi_tool_call_schema_full`。完整套件对 204 个独立 schema 用例分别执行流式和非流式请求，共产生 408 项检查。快速诊断时，仍可显式设置工作流输入 `eval-framework=kimi-vendor` 和 `eval-suite=kimi_tool_call_schema`，运行一个用例、两项检查的冒烟评估。`--trim-conc` 只裁剪部署测试点，不缩减套件用例数。MiniMax M3 在两家硬件厂商上自动运行 `minimax-vendor` / `minimax_m3_full`，覆盖全部 102 个厂商用例；仍可通过显式覆盖选择单用例 `minimax_m3_smoke`。定长序列的 GSM8K 选择策略保持不变。
 
