@@ -113,6 +113,7 @@ override_dep8_mtp_c8:
         data-parallel-size: 8
         enable-dp-attention: true
         enable-dp-lm-head: true
+        moe-dense-tp-size: 1
         moe-a2a-backend: mori
         deepep-mode: normal
         chunked-prefill-size: 8192
