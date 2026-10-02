@@ -6,7 +6,7 @@ Guidance for AI agents working with InferenceX.
 
 1. **Start every task with [`inferencex-e2e/docs/index.md`](inferencex-e2e/docs/index.md).** Choose the one focused guide that matches the task. Do not load every documentation page.
 2. Repository source, schemas, workflows, launchers, and collectors are authoritative. If documentation disagrees with implementation, follow the implementation and update the nearest English guide plus its Chinese counterpart.
-3. Read [`CONTRIBUTING.md`](CONTRIBUTING.md) before opening or reviewing a PR or changing review, sweep, or merge policy.
+3. Read [`CONTRIBUTING.md`](CONTRIBUTING.md) before opening or reviewing a PR or changing review, sweep, or merge policy. Sweep labels and modifiers: see [`.github/AGENT_OPERATIONS.md`](.github/AGENT_OPERATIONS.md#sweep-labels-and-reuse).
 4. Read [`inferencex-e2e/docs/KLAUD_DEBUG.md`](inferencex-e2e/docs/KLAUD_DEBUG.md) before debugging a Klaud-Cold or `claude/*` image-bump PR.
 
 The end-to-end Python project owns `inferencex-e2e/pyproject.toml`, `inferencex-e2e/uv.lock`, and `inferencex-e2e/.python-version`. Run its `uv` commands from `inferencex-e2e/`; root-level automation can select it with `uv run --project inferencex-e2e`.
