@@ -117,10 +117,14 @@ that stops the workload promptly at the declared guard.
 The monitor now resolves the shell's live process tree when a guard is crossed,
 signals workload descendants deepest-first, and then signals the shell so its
 owned cleanup trap can run. The guard receipt records the intended termination
-targets. This makes the existing stop guard prompt and deterministic; it does
-not turn the native filesystem tier into a bounded LRU cache. Requalify the
-corrected behavior with a c488 combined-tier run before using its metrics in a
-capacity-matched comparison.
+targets. Corrected c488 requalification run `37064957726` then triggered the
+guard during canonical warmup at 2,295,157,759,535 logical bytes. Cleanup
+observed 2,299,783,945,775 logical bytes, only 4.626 GB beyond the guard sample,
+deleted the exact task-owned scratch, and an independent check confirmed it
+absent. The run retained 153 warmup records with zero cancellations; profiling
+never started. This verifies prompt deterministic termination and cleanup, but
+does not turn the native filesystem tier into a bounded LRU cache. Combined-tier
+metrics remain ineligible for a capacity-matched comparison.
 
 The combined tier uses a different connector and storage policy. The pinned FS
 tier has no bounded LRU capacity setting: the 2 TiB value is an abort guard, not an

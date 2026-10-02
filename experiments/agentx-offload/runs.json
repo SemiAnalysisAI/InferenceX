@@ -4650,41 +4650,87 @@
       "attempt": 1,
       "retry_of": 37027095833,
       "head_sha": "523a02a868984ffc18cd1ce0d19021c12741ddd9",
-      "status": "queued",
+      "status": "failure",
       "workflow_name": "offload-v1-dram-nvme-c488-r2-guardfix-20261002",
       "dispatched_at": "2026-10-02T21:07:49Z",
       "job_id": 111030480409,
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37064957726/job/111030480409",
       "performance_result": false,
-      "phase": "queued for corrected stop-guard requalification",
+      "phase": "capacity guard requalification complete during canonical warmup",
       "dispatch_evidence": "Immediately before dispatch, a fresh cluster-wide inventory found zero queued cluster:b200-nscale jobs and no active-or-queued study workflow; one unrelated B200 job was in progress. The exact generator preview resolved MiniMax-M3 NVFP4, vLLM TP4, c488, 739 GB DRAM, native tiering, canonical warmup, and 3,600-second profiling. The generated job carries cluster:b200-nscale and nodes:1.",
-      "guard_fix_evidence": "Head 523a02a86 makes the storage monitor enumerate live descendants, signal workload leaves deepest-first, then signal the owning shell so exact scratch cleanup can run. Focused tests pass 26/26 and matrix-generation tests pass 331/331."
+      "guard_fix_evidence": "Head 523a02a86 makes the storage monitor enumerate live descendants, signal workload leaves deepest-first, then signal the owning shell so exact scratch cleanup can run. Focused tests pass 26/26 and matrix-generation tests pass 331/331.",
+      "completed_at": "2026-10-02T21:34:44Z",
+      "runner": "b200-nscale-slurm_01",
+      "node": "im-b200-c001",
+      "allocation_id": "19447",
+      "scratch": "/offload-scratch/inferencex-offload-37064957726-1-19447-3a617c6c2830",
+      "failure_stage": "expected native filesystem stop-guard termination during warmup",
+      "warmup_returned": 153,
+      "warmup_target": 5401,
+      "warmup_sent": 521,
+      "warmup_errors": 0,
+      "warmup_cancelled_records": 0,
+      "artifacts": [
+        {
+          "id": 11253785777,
+          "name": "server_logs_minimaxm3_tp4_conc488_kvdram-nvme-vllm-native_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disa-cf9304b14bde15b4e205",
+          "size_bytes": 49555,
+          "sha256": "0b80a68539fcc62d77fecf35340a137f08061fd3d24b130005b6b0b8c1fce95a"
+        },
+        {
+          "id": 11253696228,
+          "name": "gpu_metrics_minimaxm3_tp4_conc488_kvdram-nvme-vllm-native_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disa-cf9304b14bde15b4e205",
+          "size_bytes": 29080,
+          "sha256": "3f1f5e8ef20e19a858d487826cd0aebc0466796ae205adcd9a2915e3c1bd92dd"
+        },
+        {
+          "id": 11253151871,
+          "name": "agentic_minimaxm3_tp4_conc488_kvdram-nvme-vllm-native_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disa-cf9304b14bde15b4e205",
+          "size_bytes": 167585,
+          "sha256": "33e2c230b9d0655b80569682f63f0084ef9b8c913481409e8553cea02c1a464b"
+        },
+        {
+          "id": 11253116763,
+          "name": "power_audit_minimaxm3_tp4_conc488_kvdram-nvme-vllm-native_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disa-cf9304b14bde15b4e205",
+          "size_bytes": 29262,
+          "sha256": "ebcc8858027b2a348d4303db43567af8d0e7d2e5bfcd7baea5627e0d68a70b7b"
+        }
+      ],
+      "runtime_evidence": "The corrected monitor stopped the run during canonical warmup after the declared 2 TiB filesystem guard was crossed. It retained 153 warmup records, all non-cancelled, with zero request errors; profiling never started. offload-guard.json records 58 workload termination targets, proving the monitor enumerated and signaled descendants before the owning shell. The workflow failure is the expected guard classification, not a performance result.",
+      "storage_evidence": "Slurm allocation 19447 landed on allowlisted im-b200-c001. Preflight recorded 13,256,177,459,200 free bytes on xfs /dev/md0 over eight NVMe leaves, verified O_DIRECT, and configured 739 GB DRAM plus the 2 TiB native filesystem stop guard. The guard fired at 2,295,157,759,535 logical bytes; cleanup observed 2,299,783,945,775 logical bytes and 193,879 files, only 4,626,186,240 bytes beyond the guard sample. offload_cleanup.json records deleted=true, and an independent node check confirmed the exact scratch absent.",
+      "evidence_sha256": {
+        "benchmark.log": "825e22e4cdb151b9e42e2c5ee29b370415b60e0fe6dd879a87290ee482ef2b03",
+        "profile_export.jsonl": "441c1bc896ac809b263e06a846ddaaad7c3b73e5f389cbd7452b701e04b81bf7",
+        "server.log": "0ad565b213afe5ca1419266e95fdbeb5678c52eecac100325b86d02032c045b0",
+        "offload-telemetry.jsonl": "796cf7675a586462786b8e5475071175533e9802bff63ba6b634364a79119292",
+        "offload_config.json": "da657e050f9780b62ee3a51685f01c748c4d4056ae1704f223c67cf3b4cb847c",
+        "offload-guard.json": "f3999a703ae23bedbc76ea0cc4b6747f776571c09dced75d313c11fffb15f26e",
+        "offload_cleanup.json": "e17327c11fb11d914cd62b32722d834852d2957458aaea510a70df541ecc1a76",
+        "gpu_metrics.csv": "e34bf1a7f6dbab11490a3cece5aa9323d8de4ab4c7380a83dcb0356c5b61cdbf",
+        "benchmark_command.txt": "3e7d6bf12e1a87cd80a2a2a01199c4fbe023918e15579f885ba7360ca3a96569",
+        "vllm_command.txt": "bf2d272f99197d60cd10548a37711fb9b80a4492e48df6443f3224bc7ae1b2b8"
+      }
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894,36796500128,36879140816,37027095833",
-  "status": "Corrected HBM+DRAM+NVMe c488 requalification run 37064957726 is the single queued B200 job and only active-or-queued study workflow.",
+  "status": "Corrected combined-tier c488 guard requalification succeeded operationally: the run stopped promptly near 2 TiB during warmup and deleted exact scratch. It produced no performance result.",
   "last_capacity_check": {
-    "checked_at": "2026-10-02T21:07:30Z",
+    "checked_at": "2026-10-02T21:34:44Z",
     "active_study_run_ids": [],
-    "pending_study_run_ids": [
-      37064957726
-    ],
+    "pending_study_run_ids": [],
     "dispatch_allowed": false,
-    "b200_priority_jobs_queued": 1,
-    "b200_priority_jobs_in_progress": 1,
-    "b200_active_or_queued_run_ids": [
-      37048681242,
-      37064957726
-    ],
+    "b200_priority_jobs_queued": null,
+    "b200_priority_jobs_in_progress": null,
+    "b200_active_or_queued_run_ids": [],
     "target_node": "im-b200-c001",
-    "target_node_state": "guard-fix requalification queued; allocation and preflight pending",
+    "target_node_state": "guard-fix requalification cleanup independently verified",
     "observed_free_bytes": null,
-    "reason": "Before dispatch there were zero queued cluster:b200-nscale jobs and no active-or-queued study workflow. The corrected run is now the single queued B200 job; dispatch nothing else."
+    "reason": "The corrected guard behavior is verified. Refresh cluster-wide queue state before the next adaptive dispatch."
   },
   "next_dispatch": {
-    "arm": "dram-nvme",
-    "concurrency": 488,
-    "requires": "Allow corrected run 37064957726 to allocate on im-b200-c001, verify storage preflight, and demonstrate prompt stop at the 2 TiB guard. Dispatch nothing else while it remains active or queued."
+    "arm": "nvme",
+    "concurrency": 492,
+    "requires": "Prepare c492 as the midpoint between completed c488 and warmup-infeasible c496, validate configs and synchronized docs, then refresh the cluster-wide B200 queue before dispatch."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-21T05:30:00Z",
