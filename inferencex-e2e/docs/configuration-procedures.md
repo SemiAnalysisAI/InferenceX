@@ -357,11 +357,14 @@ Do not set `MC_MAX_MR_SIZE` here: with 4GiB every rank hit
 `register_buffer failed ... -600` on the ~40 GiB KV region and stormed
 `AddressNotRegistered` TRANSFER_FAIL (c2/c32); pre-`MC_MAX_MR` tips registered
 cleanly. Keep `enable-cumem-allocator` off on this path. Keep
-`gpu-memory-utilization` at 0.85 for CONC 24+ (tip b70e4260a c48 reached
+`gpu-memory-utilization` at 0.85 for CONC 8+ (tip b70e4260a c48 reached
 Application startup with KV 45.2 GiB at 0.92 under
 `VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0`, then OOMed in flashinfer FP4 MoE
 `prepare_moe` allocating ~2.89 GiB with ~2.3 GiB free; vLLM suggested ~36.78 GiB
-KV once CUDA graphs are counted). Cap `max-num-seqs` at 1×CONC for CONC 48+
+KV once CUDA graphs are counted. Tip 5ab41690 c8 then soft-OOMed at util 0.92
+during warmup — CUDACachingAllocator failed a ~3.03 GiB alloc with ~1.16 GiB
+free — yielding empty streams and ProfileAborted at 2/11 > 10%; keep 0.92 only
+on c1–c4). Cap `max-num-seqs` at 1×CONC for CONC 48+
 (tip 031de17bf c56 with A2A/Q/KV all direct and util 0.85 packed GPU KV to
 ~99.7% under 2× admission, then hung workers through the 1800s
 `sample_tokens` RPC timeout with no Watchdog / ALLGATHER / ALLTOALL / CUDA OOM;

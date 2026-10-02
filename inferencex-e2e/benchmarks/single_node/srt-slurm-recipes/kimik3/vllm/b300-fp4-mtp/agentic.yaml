@@ -147,15 +147,19 @@ base:
 # sample_tokens timed out (no Watchdog / ALLGATHER / ALLTOALL / CUDA OOM; ingest
 # nccl_error:16 was init-only ibv_query_port_speed WARN). Cap high-conc
 # admission so prefix+deferred loads cannot pin the pool before decode. CONC
-# 24+ use gpu-memory-utilization 0.85: with
+# 8+ use gpu-memory-utilization 0.85: with
 # VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0, tip b70e4260a c48 (Slurm 6737)
 # over-allocated GPU KV to 45.2 GiB (vLLM suggested 36.78 GiB once CUDA graphs
 # are counted) and OOMed in flashinfer FP4 MoE prepare_moe (~2.89 GiB needed,
-# ~2.3 GiB free) ~4m after Application startup. Keep 0.92 on speculative
-# c1–c16. Graphs capture every size up to max-num-seqs, then the larger powers
-# of two to 8192. Throughput runs switch DSpark to synthetic rejection at the
-# golden acceptance length; points above CONC 16 do not draft and keep the
-# matrix's mtp label.
+# ~2.3 GiB free) ~4m after Application startup. Tip 5ab41690 c8 (Slurm 6877)
+# then soft-OOMed at util 0.92 during warmup (CUDACachingAllocator ~3.03 GiB
+# alloc with ~1.16 GiB free on ranks 1–7) → empty streamed responses →
+# InvalidInferenceResultError / ProfileAborted at 2/11 > 10% (engine stayed
+# up; ingest nccl_error:16 again init-only WARN). Keep 0.92 only on c1–c4.
+# Graphs capture every size up to max-num-seqs, then the larger powers of two
+# to 8192. Throughput runs switch DSpark to synthetic rejection at the golden
+# acceptance length; points above CONC 16 do not draft and keep the matrix's
+# mtp label.
 override_c1:
   roles:
     agg:
@@ -197,7 +201,7 @@ override_c8:
     agg:
       args:
         max-num-seqs: 16
-        gpu-memory-utilization: 0.92
+        gpu-memory-utilization: 0.85
         compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[8,16,24,32,40,48,56,64,72,80,88,96,104,112,120,128,256,512,1024,2048,4096,8192]}'
         speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":7,"attention_backend":"TOKENSPEED_MLA","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
   benchmark:
@@ -209,7 +213,7 @@ override_c16:
     agg:
       args:
         max-num-seqs: 32
-        gpu-memory-utilization: 0.92
+        gpu-memory-utilization: 0.85
         compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,256,512,1024,2048,4096,8192]}'
         speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":3,"attention_backend":"TOKENSPEED_MLA","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
   benchmark:

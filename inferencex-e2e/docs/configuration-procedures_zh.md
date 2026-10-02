@@ -329,15 +329,17 @@ gather 已生效时，于 PyNCCL `ALLTOALL_BASE` / `dcp_a2a_lse_reduce` 挂起�
 不要在此设置 `MC_MAX_MR_SIZE`：设为 4GiB 时各 rank 对约 40 GiB KV 区域报
 `register_buffer failed ... -600`，并引发 `AddressNotRegistered`
 TRANSFER_FAIL（c2/c32）；加入该变量之前的 tip 注册正常。此路径保持关闭
-`enable-cumem-allocator`。CONC 24+ 将 `gpu-memory-utilization` 保持为 0.85
+`enable-cumem-allocator`。CONC 8+ 将 `gpu-memory-utilization` 保持为 0.85
 （tip b70e4260a 的 c48 在 `VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0` 与 0.92
 下以 45.2 GiB KV 完成 Application startup，随后在 flashinfer FP4 MoE
 `prepare_moe` 申请约 2.89 GiB 时仅剩约 2.3 GiB 空闲而 OOM；vLLM 在计入 CUDA
-graph 后建议约 36.78 GiB KV）。CONC 48+ 将 `max-num-seqs` 限制为 1×CONC
-（tip 031de17bf 的 c56 在 A2A/Q/KV 均已 direct 且 util 0.85 时，2× 准入把
-GPU KV 堆到约 99.7%，随后 worker 挂满 1800 秒 `sample_tokens` RPC 超时，无
-Watchdog / ALLGATHER / ALLTOALL / CUDA OOM；ingest 的 `nccl_error:16` 仅为
-初始化期 `ibv_query_port_speed` WARN）。
+graph 后建议约 36.78 GiB KV。tip 5ab41690 的 c8 在 util 0.92 的 warmup 中软
+OOM——CUDACachingAllocator 申请约 3.03 GiB 时仅剩约 1.16 GiB——导致空流与
+ProfileAborted（2/11 > 10%）；仅 c1–c4 保留 0.92）。CONC 48+ 将
+`max-num-seqs` 限制为 1×CONC（tip 031de17bf 的 c56 在 A2A/Q/KV 均已 direct
+且 util 0.85 时，2× 准入把 GPU KV 堆到约 99.7%，随后 worker 挂满 1800 秒
+`sample_tokens` RPC 超时，无 Watchdog / ALLGATHER / ALLTOALL / CUDA OOM；
+ingest 的 `nccl_error:16` 仅为初始化期 `ibv_query_port_speed` WARN）。
 
 
 仅运行 AgentX 的 `dsv41flash-fp4-<sku>-vllm-agentic-dspark` 配方使用
