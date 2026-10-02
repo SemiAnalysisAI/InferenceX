@@ -125,6 +125,8 @@ NVIDIA DCGM 与 AMD device-metrics-exporter 产物共用原生校验器，检查
 
 ### SRT 多节点窗口保留
 
+SRT samples CSV 支持版本 1、2 和 3。版本 3 新增可选的 `temperature_c`（摄氏度）；温度保留在上传产物中供应用读取，不参与 GPU 能量计算。缺失值保持为空。格式错误的温度单元格会按现有严格产物校验规则使该包无效。应先部署此读取器，再升级到输出版本 3 的采集器。
+
 功耗审计文件在 `selected_window` 中保留独立验证后的测量；`package_integrity_valid`
 记录共享证据检查，`window_validations` 记录逐窗口结论。保留测量仍要求证据可信、
 拓扑匹配且结果绑定正确。其他窗口失败时，顶层及聚合结果的 `power_valid` 仍为 false，

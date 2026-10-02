@@ -9384,3 +9384,9 @@
     - "Enable native NVIDIA and AMD power collection for single-node throughput and AgentX jobs, retaining measurement windows, formal results and exporter provenance. Finalize AgentX metrics against the single-node GPU count; leave eval-only collection disabled and preserve required-power failure behavior."
     - "Use the current srt-slurm pin with the AMD exporter profile patch and stage the verified prepared AMD exporter on shared or allocated-node caches."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3684
+
+- config-keys:
+    - "*"
+  description:
+    - "Accept native SRT power samples v3 with optional GPU temperature while preserving v1/v2 replay and existing energy validation. Temperature remains in raw telemetry for ingestion and display."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
