@@ -67,6 +67,22 @@ override_tp8_c1:
       CONC: "1"
       KV_OFFLOADING: none
 
+override_tp8_mtp_c1:
+  roles:
+    agg:
+      args:
+        max-running-requests: 2
+        cuda-graph-max-bs-decode: 2
+        max-total-tokens: 1048576
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 3
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 4
+  benchmark:
+    env:
+      CONC: "1"
+      KV_OFFLOADING: none
+
 override_tp8_umbp_c1:
   services: &umbp_services
     - name: umbp
