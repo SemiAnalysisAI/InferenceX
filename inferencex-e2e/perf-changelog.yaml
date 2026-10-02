@@ -9217,8 +9217,6 @@
     - glm5.3-fp8-mi325x-sglang-agentic-mtp-tp4-fp8kv
     - glm5.3-fp8-mi325x-sglang-agentic-stp
     - glm5.3-fp8-mi325x-sglang-disagg-agentic-umbp
-    - glm5.3-fp8-mi325x-sglang-disagg-agentic-umbp-dep8
-    - glm5.3-fp8-mi325x-sglang-disagg-agentic-umbp-dep8-fp8kv
   description:
     - "Add GLM-5.3 FP8 AgentX on MI325X using the pinned October 1 SGLang ROCm 7.2.0 MI30X image and native three-step EAGLE MTP."
     - "Add native MORI prefill/decode disaggregation with TP8 per role and a prefill-side UMBP DRAM tier through SGLang's unified-cache external linker."
