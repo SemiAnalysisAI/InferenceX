@@ -91,6 +91,10 @@ launcher 挂载仓库中的 exporter 配置，在有效缓存可用时复用镜�
 Qwen3.5 FP8 诊断的 Slurm 时限为 45 分钟。此候选修复了 255 W sentinel，但仍保留 15 秒 GPUGet 缓存；
 成功入库不代表每秒新读数已经通过验收。
 
+诊断流程通过不使用 GPU 的 CI job 获取 AMD 官方构建产物，校验归档与 Docker 镜像身份，
+再用 Enroot 转换。benchmark runner 校验 squash 文件后，从配置中的共享缓存复用；
+功耗审计产物保留原始构建与转换的来源信息。
+
 ## 规程索引
 
 1. [准备 worktree](#准备-worktree)

@@ -79,6 +79,11 @@ bundle in `power_audit_*`. The Qwen3.5 FP8 diagnostic has a 45-minute Slurm limi
 This candidate fixes the 255 W sentinel but retains the 15-second GPUGet cache;
 successful ingestion is not one-second measurement qualification.
 
+The diagnostic stages the official AMD build artifact through a CPU-only CI job,
+verifies the archive and Docker image identities, and converts it with Enroot.
+The benchmark runner checks the resulting squash checksum before reusing it from
+the configured shared cache. The power audit retains this source provenance.
+
 Keep model selection, cache preparation, and workload-dependent time limits in the
 srt driver's tables ([`lanes.py`](../infx/launch/drivers/srt/lanes.py),
 [`models.py`](../infx/launch/drivers/srt/models.py),

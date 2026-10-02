@@ -153,9 +153,12 @@ env:
   SWEBENCH_USE_MODAL: 'true'
   MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
   MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+  # Successful CPU-only amd-image-preflight.yml conversion of the official nightly.
+  AMD_DME_PREPARATION_RUN_ID: '36985488002'
 
 permissions:
   contents: read
+  actions: read # Download the exact CPU-prepared exporter artifact.
 
 jobs:
   benchmark:
@@ -278,6 +281,64 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}/.result-tooling/inferencex-e2e
         run: &launcher-cleanup |
           "$INFERENCEX_LAUNCH_PYTHON" -P -m infx.launch cleanup
+
+      - name: Download prepared AMD exporter
+        if: ${{ inputs.runner == 'cluster:mi355x-amds' }}
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          repository: ${{ github.repository }}
+          run-id: ${{ env.AMD_DME_PREPARATION_RUN_ID }}
+          name: amd-dme-nightly-squash
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/amd-dme-nightly-squash
+
+      - name: Stage verified AMD exporter in shared cache
+        if: ${{ inputs.runner == 'cluster:mi355x-amds' }}
+        working-directory: inferencex-e2e
+        env:
+          AMD_DME_ARTIFACT_DIR: ${{ runner.temp }}/amd-dme-nightly-squash
+        run: |
+          set -eo pipefail
+          source benchmarks/benchmark_lib.sh --validation-only
+          check_env_vars AMD_DME_ARTIFACT_DIR INFERENCEX_LAUNCH_PYTHON RUNNER_NAME
+          (cd "$AMD_DME_ARTIFACT_DIR" && sha256sum --check SHA256SUMS)
+          "$INFERENCEX_LAUNCH_PYTHON" - <<'PY'
+          import filecmp
+          import json
+          import os
+          import shutil
+          import tempfile
+          from pathlib import Path
+
+          from infx.clusters import resolve_cluster
+          from infx.clusters.slurm import slurm_settings
+          from infx.launch.backends.slurm.squash import squash_path
+
+          artifact = Path(os.environ["AMD_DME_ARTIFACT_DIR"])
+          source = artifact / "amd-exporter.sqsh"
+          provenance = json.loads((artifact / "provenance.json").read_text())
+          settings = slurm_settings(resolve_cluster(os.environ["RUNNER_NAME"], "configs/runners.yaml"))
+          image = settings.srt_slurm.extra["default_gpu_exporter"]["container_image"]
+          if not image.endswith("@" + provenance["image"]["upstream_reported_registry_digest"]):
+              raise SystemExit("Prepared exporter does not match the configured image digest")
+          policy = settings.squash.policy()
+          if policy.visibility != "shared":
+              raise SystemExit("Prepared exporter requires a shared squash cache")
+          destination = squash_path(image, policy)
+          destination.parent.mkdir(parents=True, exist_ok=True)
+          if not destination.exists():
+              with tempfile.TemporaryDirectory(prefix=".amd-dme-", dir=destination.parent) as staging:
+                  staged = Path(staging) / source.name
+                  shutil.copyfile(source, staged)
+                  try:
+                      os.link(staged, destination)
+                  except FileExistsError:
+                      pass  # A concurrent publisher won; require identical bytes below.
+          if not filecmp.cmp(source, destination, shallow=False):
+              raise SystemExit(f"Refusing to replace a different cached exporter: {destination}")
+          shutil.copyfile(artifact / "provenance.json", "power-exporter-source.json")
+          print(f"Verified prepared AMD exporter: {destination}")
+          PY
 
       - name: Launch job script
         env:
@@ -430,6 +491,7 @@ jobs:
             ${{ env.INFERENCEX_E2E_ROOT }}/gpu_metrics_identity.json
             ${{ env.INFERENCEX_E2E_ROOT }}/gpu_metrics_identity.csv
             ${{ env.INFERENCEX_E2E_ROOT }}/power_validation_${{ env.RESULT_FILENAME }}.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/power-exporter-source.json
             ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/power/**
             ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/${{ env.RESULT_FILENAME }}.json
             ${{ env.INFERENCEX_E2E_ROOT }}/results/gpu_metrics*.csv

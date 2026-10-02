@@ -885,7 +885,7 @@ clusters:
         extra:
           visible_devices_env: ROCR_VISIBLE_DEVICES
           default_gpu_exporter:
-            container_image: docker.io#amdpsdo/device-metrics-exporter@sha256:31308aecb0ef0f1f1e69ab6e83ea467c381fcfa927e9d0a4ff2763b203e5b8e5
+            container_image: docker.io#amdpsdo/device-metrics-exporter@sha256:698a3da79b5e11223b4909804ddb47f93c71775cd9eca6db86b41a0a10a7894a
             port: 19500
             power_profile: amd-device-metrics
           nginx_raise_ulimit: false
