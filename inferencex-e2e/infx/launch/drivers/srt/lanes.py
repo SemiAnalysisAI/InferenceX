@@ -101,7 +101,11 @@ SRT_LANES: dict[tuple[str, LaunchPath], SrtLane] = {
     ),
     ("mi325x-amd", LaunchPath.SRT_MULTI): SrtLane(
         frameworks=any_of("sglang-disagg"),
-        mounts=_AGENTIC_CACHES,
+        mounts=(
+            LaneMount(_AGENTIC, "aiperf-cache", "/aiperf_mmap_cache", world_writable=True),
+            LaneMount(_AGENTIC, "hf-home", "/hf_hub_cache", world_writable=True),
+            LaneMount(_AGENTIC, "hf-hub-cache", "/hf_hub_cache/hub", world_writable=True),
+        ),
         time_limit="12:00:00",
     ),
     ("mi355x-amds", LaunchPath.SRT_MULTI): SrtLane(

@@ -61,7 +61,7 @@ base:
       gpus: 8
       env: &worker_env
         HF_HOME: /hf_hub_cache
-        HF_HUB_CACHE: /hf_hub_cache
+        HF_HUB_CACHE: /hf_hub_cache/hub
         PYTHONNOUSERSITE: "1"
         PYTHONUNBUFFERED: "1"
         GLOO_SOCKET_IFNAME: enp193s0f0np0
@@ -87,6 +87,7 @@ base:
         UMBP_STANDALONE_ADDRESS: unix:///logs/umbp.sock
       args: &worker_args
         served-model-name: zai-org/GLM-5.3
+        revision: aca966e4e02791568aa6a4ced368624b3d897f42
         trust-remote-code: true
         tensor-parallel-size: 8
         expert-parallel-size: 1
@@ -137,7 +138,7 @@ base:
       RESULT_DIR: /infmax-workspace/LOGS/agentic
       AGENTIC_OUTPUT_DIR: /infmax-workspace
       HF_HOME: /hf_hub_cache
-      HF_HUB_CACHE: /hf_hub_cache
+      HF_HUB_CACHE: /hf_hub_cache/hub
       AIPERF_DATASET_MMAP_CACHE_DIR: /aiperf_mmap_cache
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
       WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126
