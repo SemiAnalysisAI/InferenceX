@@ -443,6 +443,16 @@ def test_eval_only_runs_the_eval_recipe_with_real_verification(harness):
     assert list(workspace.glob("point-identity_*.json")) == []
 
 
+def test_point_cpu_exporter_release_reaches_setup(harness):
+    env = lane_env(
+        harness, "gb200-nv", MODEL_PREFIX="qwen3.5", PRECISION="fp8", FRAMEWORK="dynamo-sglang",
+        MODEL="Qwen/Qwen3.5-397B-A17B-FP8", CPU_POWER_EXPORTER_RELEASE="fixture-release",
+        PREFILL_ADDITIONAL_SETTINGS='["CPU_POWER_EXPORTER_RELEASE=fixture-release"]',
+    )  # fmt: skip
+    assert_ok(launch(env, harness.config, harness.workspace))
+    assert lines(harness.logs, "cpu-exporter-release") == ["fixture-release"]
+
+
 def test_setup_retries_only_after_discarding_a_truncated_archive(harness):
     env = lane_env(
         harness, "h200-dgxc", MODEL_PREFIX="dsr1", PRECISION="fp8", FRAMEWORK="dynamo-sglang",
@@ -560,3 +570,49 @@ def test_multinode_eval_overrides_image_offline_mode_and_host_model_path(harness
         "http://worker:8000",
         str(harness.workspace),
     ]
+
+
+@pytest.mark.parametrize("has_cpu", [False, True])
+def test_launch_cpu_expectation_reaches_fixed_sequence_processor(harness, monkeypatch, has_cpu):
+    from infx.results.fixed_sequence import aggregate_power_result
+    from infx.tests.results.power.test_aggregate_power_multinode import (
+        PRODUCER_SHA,
+        _cpu_rows,
+        add_cpu_package,
+        build_package,
+    )
+
+    github_env = harness.tmp / "github-env"
+    recipe = LANE_RECIPE + POWER_TELEMETRY + "  cpu_power_exporter:\n    source: acpi\n"
+    env = lane_env(
+        harness,
+        "gb300-nv",
+        recipe,
+        MODEL_PREFIX="qwen3.5",
+        PRECISION="fp8",
+        FRAMEWORK="dynamo-sglang",
+        MODEL="Qwen/Qwen3.5-397B-A17B-FP8",
+        REQUIRE_POWER="1",
+        GITHUB_ENV=str(github_env),
+    )
+    assert_ok(launch(env, harness.config, harness.workspace))
+    exported = dict(line.split("=", 1) for line in github_env.read_text().splitlines())
+    pkg = build_package(harness.tmp / "power-input")
+    if has_cpu:
+        add_cpu_package(pkg, _cpu_rows())
+    monkeypatch.chdir(harness.tmp)
+    result_env = {
+        **exported,
+        "REQUIRE_POWER": "1",
+        "IS_MULTINODE": "true",
+        "RESULT_FILENAME": "fixture",
+        "PREFILL_GPUS": "2",
+        "DECODE_GPUS": "2",
+        "POWER_PRODUCER_SHA": PRODUCER_SHA,
+        "POWER_ARTIFACT_DIR": str(pkg.power_dir),
+        "POWER_RESULT_ROOT": str(pkg.logs_root),
+    }
+    assert aggregate_power_result(result_env, pkg.bench_result, pkg.agg_result) == int(not has_cpu)
+    aggregate = pkg.agg()
+    assert aggregate["power_valid"] == 1
+    assert aggregate["cpu_power_valid"] == int(has_cpu)

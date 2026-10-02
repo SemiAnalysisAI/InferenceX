@@ -20,6 +20,7 @@ from infx.results.power import (
     POWER_METRIC_SCHEMA_VERSION,
     with_power_metrics,
 )
+from infx.results.power.audit import audit_summary
 from infx.results.power.multinode import WINDOWS_DIRNAME, run as run_multinode_power
 from infx.results.power.single_node import (
     _patch_power_result,
@@ -420,6 +421,7 @@ def run_multinode_agentic_power(
     logs_root: Path,
     expected_producer_sha: str,
     require_power: bool = False,
+    expected_cpu_source: str | None = None,
 ) -> int:
     """Join one AgentX aggregate to the finalized central multinode package."""
     validation_result = result_dir / "power_validation.json"
@@ -480,7 +482,7 @@ def run_multinode_agentic_power(
         aggregate_gpus = prefill_gpus + decode_gpus
         prefill_gpus = 0
         decode_gpus = 0
-    return run_multinode_power(
+    status = run_multinode_power(
         power_dir=power_dir,
         bench_result=bench_result,
         agg_result=agg_result,
@@ -491,7 +493,18 @@ def run_multinode_agentic_power(
         logs_root=logs_root,
         validation_result=validation_result,
         require_power=require_power,
+        expected_cpu_source=expected_cpu_source,
     )
+    try:
+        result = json.loads(agg_result.read_text())
+        validation = json.loads(validation_result.read_text())
+        source = "LOGS/" + validation_result.resolve().relative_to(logs_root.resolve()).as_posix()
+        result.update(audit_summary(validation, source))
+        _write_json_atomic(agg_result, result)
+    except (OSError, ValueError, TypeError) as exc:
+        print(f"[agentx_power] Audit summary unavailable: {exc}", file=sys.stderr)
+        status = max(status, int(require_power))
+    return status
 
 
 def main() -> int:
@@ -510,6 +523,7 @@ def main() -> int:
         action="store_true",
         default=os.environ.get("REQUIRE_POWER", "").lower() in {"1", "true", "yes"},
     )
+    parser.add_argument("--expected-cpu-source", choices=("acpi", "dcgm"))
     args = parser.parse_args()
     if args.multinode_contract_missing:
         if args.agg_result is None:
@@ -560,6 +574,7 @@ def main() -> int:
             logs_root=args.logs_root,
             expected_producer_sha=args.expected_producer_sha,
             require_power=args.require_power,
+            expected_cpu_source=args.expected_cpu_source,
         )
     if args.agg_result is None:
         parser.error("--agg-result is required for single-node AgentX power")

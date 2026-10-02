@@ -53,6 +53,16 @@ def _interpolate_power(samples: list[tuple[float, float]], timestamp: float) -> 
     return left_power + fraction * (right_power - left_power)
 
 
+def _bracketing_sequence(times: tuple[float, ...], start: float, end: float) -> list[float] | None:
+    """Samples covering ``[start, end]``: the last at/before, the inside, the first at/after."""
+    before = [value for value in times if value <= start]
+    after = [value for value in times if value >= end]
+    if not before or not after:
+        return None
+    inside = [value for value in times if start < value < end]
+    return [before[-1], *inside, after[0]]
+
+
 def _integrate_device(
     samples: list[tuple[float, float]],
     *,
@@ -242,6 +252,8 @@ def patch_power_metrics(
     metric_keys: Iterable[str],
     power_valid: bool,
     metrics: Mapping[str, float],
+    cpu_power_valid: bool | None = None,
+    cpu_metrics: Mapping[str, float] | None = None,
 ) -> None:
     """Validate replacement metrics before atomically updating an aggregate."""
     data = json.loads(path.read_text(encoding="utf-8"))
@@ -251,5 +263,7 @@ def patch_power_metrics(
         schema_version=POWER_METRIC_SCHEMA_VERSION,
         power_valid=power_valid,
         metrics=metrics,
+        cpu_power_valid=cpu_power_valid,
+        cpu_metrics=cpu_metrics,
     )
     _write_json_atomic(path, data)

@@ -101,7 +101,7 @@ InferenceX-app 将路由字段作为列或配置维度，并把数值测量存�
 
 服务客户端在保存原始结果前写入 `benchmark_outcome`，保留现有的 5% 最大请求失败率，以及请求总数、完成数和失败数。处理器检查该记录并复制到聚合结果中；即使遥测有效，请求失败率超限仍返回失败。零成功请求会保留诊断聚合结果，但不会生成不存在的延迟倒数。请求计数无效时，失败诊断状态保留原始 `requested`/`completed` 值和 `error`，不生成无依据的失败数或失败率；客户端先保存原始 JSON 再退出，处理器仍拒绝该结果。没有状态元数据的历史结果仍可区分；功耗有效不能证明基准成功或答案质量。
 
-`power_invalid_reasons` 和 `power_audit` 在数值指标旁携带有界摘要，包括可用的测量窗口、预期与观测 GPU 数、采样诊断、观测设备标识和生产者版本。`source` 指向保留的 `power_validation_*.json` 工件名称。设备标识保留采集器原有语义，本地 SMI 序号不是物理 UUID 的证明。
+`power_invalid_reasons` 和 `power_audit` 在数值指标旁携带有界摘要，包括可用的测量窗口、预期与观测 GPU 数、采样诊断、观测设备标识和生产者版本。`source` 指向保留的 `power_validation_*.json` 工件名称。设备标识保留采集器原有语义，本地 SMI 序号不是物理 UUID 的证明。当产物包包含 Grace CPU 侧测量环节时，`power_audit.cpu` 会附带其传感器类型、来源、socket 数、行数和原因码；见 [NVL72 Grace CPU 侧实测功耗](#nvl72-grace-cpu-侧实测功耗)。
 
 对于多节点固定序列任务，`python -m infx.results.fixed_sequence --all` 先处理所有已有结果，再返回失败。它接受 `_c<N>_gpus_...`、`_conc<N>_gpus_...` 和 AMD 的 `_concurrency_<N>_req_rate_<R>_gpus_...` 文件名，也支持 `inf` 请求速率。它将结果并发度与 `CONC_LIST` 比较，拒绝重复或矛盾的点身份，并将遗漏和错误记录到 `result_processing_<RESULT_FILENAME>.json`。共享工作池通过 `AGGREGATE_GPUS` 及零值角色 GPU 数进行遥测验证；独立的 prefill/decode 能耗保持缺失。当 `DISAGG=true` 的配置组中某个点没有 decode worker 时，聚合行会有意设置 `disagg: false` 并记录 `num_aggregate_gpu`；文件名、工件名和工作流输入仍保留配置组身份。下游应按聚合行的拓扑解释测量结果。
 
@@ -198,6 +198,12 @@ raw tree:           results/**, excluding inputs.json and profile_export_raw.jso
 向自定义基准命令导出 `SRT_MEASUREMENT_WINDOW_DIR`；InferenceX 据此目录和回放本身推导结果根目录与并发数。
 缺少测量窗口接口时，聚合结果记录 `power_valid: 0`，审计原因标记为
 `multinode_power_contract_missing`；设置 `REQUIRE_POWER=1` 还会在保留已有结果后使任务失败。
+
+通过验证的多节点聚合结果还会按物理主机和角色输出 `workers` 功耗记录。
+`num_gpus` 取该主机审计确认的 GPU UUID 数量；`avg_power_w` 为这些 GPU 在
+同一正式测量窗口内的积分能耗除以窗口时长和卡数。跨两台主机的服务 worker 输出
+两条功耗记录，这里的索引不替代服务拓扑中的 worker 数量。重新校验会先删除旧
+记录；GPU 功耗无效时不发布逐主机功耗。CPU 遥测仍使用独立的有效性判断。
 
 `power_valid: 1` 与 `power_metric_schema_version: 2` 只表示 GPU 遥测有效，
 不代表请求计数或模型质量通过验证。用于可靠对比前，应将已发出、已完成、已取消及
@@ -431,6 +437,56 @@ rm -rf -- "$tmp"
 功耗分位数除以参与测量的 GPU 数量，因此既不是单个 GPU 的分位数，也不是
 各设备分位数的平均值。遥测验证失败时，四项指标都不发布。旧结果需要使用原始
 遥测重新计算；不能从平均功耗推算 P75 或 P90。验证 sidecar 会记录 `power_percentile_method`。
+
+## NVL72 Grace CPU 侧实测功耗
+
+启用了 srt-slurm `telemetry.cpu_power_exporter` 的 GB200 和 GB300 NVL72 recipe 会在 GPU DCGM
+产物包旁写入 `LOGS/power/cpu/samples.csv` 和一份非权威的 `cpu_manifest.json`。多节点校验器接受
+历史版本 v2.2.1 写出的长格式（每个传感器读数一行，表头为
+`schema_version,timestamp_unix,hostname,source,sensor,socket_id,power_w,total_power_w`），以及当前
+版本的宽格式（每次采集、每台主机、每个 socket 一行，另带 `cpu_rail_w`、`soc_w`、`dram_w` 参考列）。
+它按 `sensor` 单元格对每行分类：`Module Power Socket N` 是整模块读数（Grace、两颗 Blackwell GPU、
+HBM、LPDDR5X 及稳压损耗）；`Grace Power Socket N` 或 `CPU<n>:cpuSidePowerUsageW` 是 Grace 侧 socket
+总功耗（CPU、SoC 和 LPDDR5X）；`CPU<n>:cpuPowerUsageW` 是 DCGM 字段 1130，仅含 CPU 供电轨。组件供电轨
+（`CPU Power Socket N`、`SysIO Power Socket N`、DRAM）永远不会进入发布指标。
+
+每个 socket 的主序列按模块、Grace socket 总功耗、DCGM CPU 供电轨的顺序选取，且所有 socket 必须具备
+同一种传感器类型。每条参与计算的序列都在与 GPU 能耗相同的正式测量窗口内积分，采用同样的梯形法、
+线性边界插值和 3.0 秒最大采样间隔。预期 socket 数为 manifest 拓扑中每台不同 worker 主机两个（每台
+主机一个 compute tray）。新增字段与 GPU 字段采用相同的取整规则，重新运行时会先清除旧值：
+
+| 字段 | 含义 |
+| --- | --- |
+| `cpu_power_valid` | CPU 侧测量的有效性，`1` 或 `0`；仅在未声明 CPU 来源且没有 `cpu/` 时不出现 |
+| `avg_cpu_socket_power_w` | 各 socket 窗口平均 Grace 侧功耗的均值 |
+| `avg_total_cpu_power_w` | 各 socket 窗口平均 Grace 侧功耗之和 |
+| `total_cpu_energy_j` | 窗口内所有 socket 的 Grace 侧能耗 |
+| `avg_total_module_power_w`、`total_module_energy_j` | 模块功耗与能耗；仅当每个 socket 都有模块序列时输出 |
+
+即使优先选用模块传感器，Grace 侧字段仍来自 Grace socket 总功耗（没有 ACPI 时来自 DCGM CPU 供电轨），
+因此模块读数永远不会被当作 Grace 侧读数发布。sidecar 的 `cpu` 块和聚合结果的 `power_audit.cpu`
+记录 `sensor_kind`（`module`、`grace_socket` 或 `dcgm_cpu_rail`）、`source`（`acpi` 或 `dcgm`）、
+预期与观测 socket 数、解析行数和原因码。`power_metric_schema_version` 保持为 `2`。
+
+该测量环节尽力而为，其结论与 `power_valid` 相互独立：它只从 GPU 产物包借用已绑定的正式测量窗口和
+worker 主机拓扑，GPU 侧的任何结论都不会传导过来，因此 producer 固定版本校验失败或 GPU 覆盖不足只会
+使 GPU 能耗不予发布，`cpu_power_valid` 仍按 CPU 采样自身给出结论。CPU 侧的任何失败都会记录
+`cpu_power_valid: 0` 且不输出 CPU 字段，所有 GPU 字段保持不变。设置 `REQUIRE_POWER=1` 时，配方声明的 CPU 来源必须有效；ACPI 必须提供完整的 Grace socket 或模块总功耗，缺失 CPU 产物会生成独立的无效 CPU 审计。仅采集 GPU 的配方保留原有行为。
+原因码包括 `cpu_artifacts_missing`、`cpu_sensor_source_mismatch`、`cpu_samples_missing`、`cpu_samples_header_mismatch`、`cpu_samples_malformed`、
+`cpu_manifest_invalid`、`cpu_socket_count_mismatch`、`cpu_sensor_kind_mixed`、
+`cpu_sample_gap_exceeded`、`cpu_window_not_bracketed` 以及 `cpu_window_unavailable`（没有已完成的窗口
+与该结果绑定，或窗口自身的契约检查失败）。CPU 积分溢出沿用 GPU 侧的 `non_finite_power_metric`；聚合
+结果本身无法写入时，`aggregate_result_missing` 或 `aggregate_result_unwritable` 会同时出现在两侧的审计
+中。固定的 srt-slurm 源码版本（`098e15ac`）写出宽格式；采集与写出链路尚不识别 Module 标签，因此
+这些产物包只会得到 Grace socket 总功耗；需要 producer 支持该标签后才会出现模块字段。
+选中的 Qwen3.5 与 Kimi-K3 CPU 采集配方通过主配置的 `additional-settings`，向 `make setup`
+传入 `CPU_POWER_EXPORTER_RELEASE=v2.40.2`。Qwen3.5 8P1D 将前端、压测客户端和基础服务放在预留的 head 节点，与采集器共用时钟；仍分配 13 个节点，其中 12 个为 GPU worker。该版本包含旧版 ACPI hwmon 传感器发现修复。
+安装过程校验下载工件的校验和，替换版本标记不匹配的缓存二进制，并在固定版本下载失败时退出。
+本地 srt-slurm 提交补丁将已解析的配方传入安装检查，从而在提交前拒绝缺失、不可执行或架构
+不匹配的二进制。验收仍需保留安装日志与实际 exporter
+身份，检查完整的同窗口样本，并核实固件传感器的测量范围。源码版本或安装成功均不能证明
+测量有效。未声明 CPU 来源时，没有 `cpu/` 的产物包不新增 CPU 指标或 CPU 有效性结论；通过 GPU 校验的产物包
+仍发布上文所述的逐主机 `workers` 条目。
 
 ## 验证和停止条件
 

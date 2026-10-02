@@ -9275,3 +9275,69 @@
     - "Update the GB300 DeepSeek-V4.1-Flash vLLM AgentX image from nightly ac68c308 to nightly-dev-arm64-cu130-ac9126e58aa7 and enable FlashInfer autotuning."
     - "Run TP4 at concurrency 1-16 and replace TP2 with DEP2 (TP1 x DP2 + EP2, DeepGEMM MegaMoE) at concurrency 8-192 behind a consistent-hash vLLM Router."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3652
+
+- config-keys:
+    - qwen3.5-fp8-gb200-dynamo-sglang
+    - qwen3.5-fp8-gb300-dynamo-sglang
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Enable srt-slurm's independent, best-effort CPU power leg on the 1P1D TP4/TP4 STP Qwen3.5 FP8 GB200 and GB300 recipes: telemetry.cpu_power_exporter with port 9405 (the schema default) and source acpi. Nothing else in either recipe changes; image, serving flags, topology, concurrency list, and the GPU DCGM exporter (port 9401 on GB200, 19401 on GB300, required: true) are untouched."
+    - "At the pinned srt-slurm v2.2.1 (984180e5) srtctl launches cpu-power-exporter --port 9405 --source acpi through srun on the bare host of every worker node, falling back to the ACPI-only Python exporter when make setup did not install the release binary, and the head-node collector writes LOGS/power/cpu/samples.csv plus cpu_manifest.json beside the GPU DCGM package. The leg has no required flag: a missing hwmon sensor or a dead exporter only leaves gaps in samples.csv and cannot fail the job or the GPU power verdict."
+    - "The multinode power validator integrates the Grace Power Socket series over the same formal window as GPU energy and adds cpu_power_valid plus the CPU-side keys (docs/results-and-ingestion.md, Measured Grace CPU-side power); power_valid and every GPU field stay unchanged. The v2.2.1 exporter classifies only the CPU, Grace, and SysIO socket labels, so these runs yield the Grace-side total rather than the module reading."
+    - "These are the smallest active non-Kimi-K3 NVL72 power lanes (2 nodes, 1 prefill + 1 decode host, 4 Grace sockets). The DSV4 8k1k GB200/GB300 lanes are not used: Single-turn 8k1k on DeepSeek-V4-Pro was deprecated after 2026-09-08 (MODELS.md; configs/deprecated/nvidia-dsv4-8k1k-master.yaml), so no sweep would exercise them."
+    - "在 Qwen3.5 FP8 GB200 与 GB300 的 1P1D TP4/TP4 STP recipe 上启用 srt-slurm 独立、尽力而为的 CPU 功耗测量环节：telemetry.cpu_power_exporter，port 9405（schema 默认值），source acpi。两份 recipe 其余内容不变：镜像、服务参数、拓扑、并发列表以及 GPU DCGM exporter（GB200 端口 9401、GB300 端口 19401，required: true）均未改动。在固定版本 srt-slurm v2.2.1（984180e5）下，srtctl 通过 srun 在每个 worker 节点的裸主机上启动 cpu-power-exporter --port 9405 --source acpi，若 make setup 未安装发布的二进制则回退到仅支持 ACPI 的 Python exporter；头节点采集器把 LOGS/power/cpu/samples.csv 和 cpu_manifest.json 写在 GPU DCGM 产物包旁。该环节没有 required 开关：缺少 hwmon 传感器或 exporter 失效只会让 samples.csv 出现空缺，不会导致作业失败或改变 GPU 功耗结论。多节点功耗校验器在与 GPU 能耗相同的正式测量窗口内对 Grace Power Socket 序列积分，新增 cpu_power_valid 与 CPU 侧字段（见 docs/results-and-ingestion_zh.md「NVL72 Grace CPU 侧实测功耗」）；power_valid 与所有 GPU 字段保持不变。v2.2.1 的 exporter 只识别 CPU、Grace、SysIO 三种 socket 标签，因此这些运行得到的是 Grace 侧总功耗而非模块读数。"
+    - "选择这两条 lane 是因为它们是当前活跃、非 Kimi-K3 的最小 NVL72 功耗 lane（2 个节点，1 台 prefill 主机 + 1 台 decode 主机，4 个 Grace socket）。未采用 DSV4 8k1k 的 GB200/GB300 lane：DeepSeek-V4-Pro 的单轮 8k1k 场景已于 2026-09-08 之后弃用（见 MODELS.md 与 configs/deprecated/nvidia-dsv4-8k1k-master.yaml），sweep 不会再执行它们。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3296
+
+- config-keys:
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-agg
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-mooncake-dcp16-agg
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Enable the independent best-effort ACPI CPU power exporter on existing Kimi K3 GB200 and GB300 power recipes. Preserve GPU sampling, serving parameters, topology, and concurrency; publish validated per-host GPU power from the same measurement window so cross-host workers can be modeled as physical trays."
+    - "Replace the four GB300 recipes legacy provider/default_frequency keys with collect_interval_ms: 1000 for the pinned srt-slurm 2 schema; the intended one-second sampling cadence is unchanged."
+    - "将四份 GB300 配方中的旧 provider/default_frequency 字段改为固定版本 srt-slurm 2 接受的 collect_interval_ms: 1000，保留一秒采样间隔。"
+    - "在已有 GPU 功耗采集的 Kimi K3 GB200 与 GB300 配方中启用独立、尽力而为的 ACPI CPU 功耗采集；保留 GPU 采样、服务参数、拓扑和并发。根据同一测量窗口的已验证能耗发布逐物理主机 GPU 功耗，使跨主机 worker 可以按实际计算 tray 建模。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3296
+
+- config-keys:
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-agg
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-mooncake-dcp16-agg
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
+    - qwen3.5-fp8-gb200-dynamo-sglang
+    - qwen3.5-fp8-gb300-dynamo-sglang
+  description:
+    - "Pin cpu-power-exporter v2.40.2 for the existing Qwen3.5 and Kimi-K3 NVL72 CPU-telemetry recipes. The fixed binary discovers legacy ACPI hwmon meters; setup verifies the release asset checksum and fails if the pinned download cannot be installed. Preserve the merged noprof GPU profile and independent best-effort CPU verdict. Other recipe variants retain their current runtime settings."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3296
+
+- config-keys:
+    - qwen3.5-fp8-gb200-dynamo-sglang
+    - qwen3.5-fp8-gb300-dynamo-sglang
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-agg
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-mooncake-dcp16-agg
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg
+  description:
+    - "Apply NVIDIA/srt-slurm#553 to the pinned submitter: pass the resolved recipe into setup validation so CPU-enabled jobs fail before sbatch when the exporter is missing, non-executable, or built for the wrong compute architecture."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3296
+
+- config-keys:
+    - qwen3.5-fp8-gb200-dynamo-sglang
+    - qwen3.5-fp8-gb300-dynamo-sglang
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-agg
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-mooncake-dcp16-agg
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg
+  description:
+    - "Collect ACPI CPU power on Qwen3.5 NVL72 4P1D and 8P1D recipes, including noprof DCGM collection on 8P1D, with the pinned v2.40.2 CPU exporter. Place the 8P1D frontend, benchmark client, and infra on the reserved head so power and benchmark timestamps share its clock; retain 13 allocated nodes and 12 GPU workers. Require valid power for all selected Qwen3.5 fixed-sequence points."
+    - "During strict power qualification, require the CPU source declared by each selected recipe; reject missing or invalid CPU totals without changing the independent GPU verdict. Preserve best-effort behavior when no CPU source is declared."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3296

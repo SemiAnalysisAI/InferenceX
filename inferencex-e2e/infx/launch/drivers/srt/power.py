@@ -7,7 +7,7 @@ requests and recipes that may have it.
 from __future__ import annotations
 
 import fnmatch
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
 import yaml
@@ -159,6 +159,7 @@ class PowerDecision:
     dcgm: bool
     agentx: bool
     adapter: bool = False
+    expected_cpu_source: str | None = None
 
 
 NO_POWER = PowerDecision(dcgm=False, agentx=False)
@@ -197,7 +198,15 @@ def resolve_power(cluster_id: str, path: LaunchPath, request: LaunchRequest) -> 
     if not config_file:
         return NO_POWER
     mirror = recipe_mirror_path(request.workspace, config_file)
-    dcgm = mirror.is_file() and recipe_enables_dcgm_power(mirror.read_text())
-    return decide_power(
+    text = mirror.read_text() if mirror.is_file() else ""
+    dcgm = recipe_enables_dcgm_power(text)
+    decision = decide_power(
         cluster_id, path, dcgm=dcgm, request=request, recipe=recipe_relpath(config_file)
     )
+    if decision.dcgm:
+        telemetry = yaml.safe_load(text)["telemetry"]
+        cpu = telemetry.get("cpu_power_exporter")
+        source = cpu.get("source") if isinstance(cpu, dict) else None
+        if source in {"acpi", "dcgm"}:
+            decision = replace(decision, expected_cpu_source=source)
+    return decision
