@@ -139,7 +139,6 @@ base:
       HF_HUB_CACHE: /hf-cache/hub
       AIPERF_DATASET_MMAP_CACHE_DIR: /aiperf_mmap_cache
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
-      AIPERF_DATASET_MMAP_CACHE_DIR: /aiperf_mmap_cache
       WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126
       TOKENIZERS_PARALLELISM: "false"
 
@@ -147,3 +146,22 @@ override_tp8_c1:
   benchmark:
     env:
       CONC: "1"
+
+override_p_tp8_d_dep8_c4:
+  roles:
+    prefill:
+      args:
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
+    decode:
+      args:
+        expert-parallel-size: 8
+        data-parallel-size: 8
+        enable-dp-attention: true
+        moe-a2a-backend: mori
+        deepep-mode: normal
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 16
+  benchmark:
+    env:
+      CONC: "4"
