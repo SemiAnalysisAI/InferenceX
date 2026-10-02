@@ -236,13 +236,26 @@ and read its `framework:`, `runner:`, and `image:` fields.
   backed by vLLM/SGLang community maintainers). Name the offending image and the
   missing justification when you FAIL. (Note: some entries write the registry
   separator as `#`, e.g. `nvcr.io#nvidia/...`. Treat `#` as `/`.)
-- (b) ENGINE-FIRST ORDERING: if this PR adds a config entry for a NON-vLLM/SGLang
-  framework (`framework:` of `trtllm`, `atom`, dynamo variants, etc., including images like
-  `rocm/atom*` and `nvcr.io...tensorrt-llm...`), check whether `inferencex-e2e/configs/*-master.yaml`
-  already contains a vLLM or SGLang entry for the same model (`model-prefix`) and SKU
-  (`runner`). If none exists and no exception is documented in the sign-off, FAIL.
-  vLLM/SGLang submissions must land before additional frameworks. Otherwise PASS with
-  the matching entry named.
+- (b) ENGINE-FIRST ORDERING: the ordering rule separates open-source engines from
+  vendor-specific frameworks. Open-source engine entries are every vLLM or SGLang
+  deployment, whether served directly or through Dynamo or disaggregated serving:
+  `framework:` of `vllm`, `dynamo-vllm`, `sglang`, `sglang-disagg`, or `dynamo-sglang`.
+  Dynamo is a deployment layer, not a separate engine, so these entries are never
+  subject to this ordering rule. Vendor-specific framework entries are every other
+  engine, including `framework:` of `trt`, `dynamo-trt`, `atom`, or `atom-disagg`, and
+  images like `rocm/atom*` and `nvcr.io...tensorrt-llm...`.
+  - If this PR adds a vendor-specific framework entry, check whether
+    `inferencex-e2e/configs/*-master.yaml` already contains an open-source engine entry
+    (any of the frameworks listed above) for the same model (`model-prefix`) and SKU
+    (`runner`). If none exists and the sign-off documents no exception, FAIL.
+    Open-source engine submissions must land before vendor-specific frameworks.
+    Otherwise PASS with the matching entry named.
+  - Valid exceptions are truly new or preview hardware (e.g. Rubin GPUs such as Vera
+    Rubin NVL72 and Rubin NVL8, or MI455X UALoE72) and new model architectures that
+    vLLM/SGLang do not fundamentally support yet.
+  - PASS if the PR adds only open-source engine entries. For example, a
+    `dynamo-sglang` entry does not need an existing `sglang` entry for the same model
+    and SKU.
 - N/A if the PR changes no master-config entries (state that in one line).
 
 ## Check 7 — No submissions for deprecated models or scenarios
@@ -272,7 +285,28 @@ production by accuracy-sensitive customers.
   present, determine whether the override changes computed FLOPs vs the model's native
   config and whether the model natively supports that mode.
 - FAIL with the exact flag/value if architecture FLOPs are reduced without native
-  model support. PASS in one line otherwise. Use N/A if the PR touches no server args.
+  model support.
+
+EXPLICIT PROHIBITION: `publish_events_and_metrics: false` is not allowed.
+FAIL Check 8 if an affected benchmark's effective serving configuration disables
+`publish_events_and_metrics`, including equivalent false values recognized by the
+pinned implementation in YAML/JSON, CLI overrides, inherited configuration, shared
+launchers/helpers, or container/image defaults. Apply this to added, modified, and
+re-enabled benchmarks, including image-only bumps, across agentic/non-agentic and
+single-node/multi-node paths. Inspect the effective recipe at the PINNED head SHA,
+including unchanged referenced files; do not limit review to added diff lines.
+- Where the setting is supported, verify that it is enabled. An omitted setting
+  is compliant only when the pinned implementation confirms its effective default
+  is enabled. If the effective value cannot be verified, FAIL as
+  "Event/metric publication could not be verified", naming the missing evidence.
+- Report the affected config/script, the disabling value, and where it comes from.
+  Require enabling publication and verifying the effective setting. Passing evals,
+  an upstream recipe, or historical runs do not exempt the prohibition.
+- Comments, documentation examples, and removed diff lines are not runtime
+  disablement. A framework that does not support this setting need not add it.
+- PASS Check 8 only when both the architecture rule and this prohibition are
+  satisfied. Use N/A only if the PR affects no benchmark serving configuration,
+  image, or launch path.
 
 ## Check 9 — Speculative-decoding configs benchmark through chat templates
 If this PR adds or changes a speculative-decoding config (MTP / EAGLE / draft-model
