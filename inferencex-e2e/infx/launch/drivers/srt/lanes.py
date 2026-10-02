@@ -51,6 +51,7 @@ _AGENTIC_CACHES = (
 )
 
 SRT_LANES: dict[tuple[str, LaunchPath], SrtLane] = {
+    ("h100-dsxe", LaunchPath.SRT_MULTI): SrtLane(frameworks=any_of("sglang")),
     ("b200-nscale", LaunchPath.SRT_NATIVE): SrtLane(
         mounts=_AGENTIC_CACHES,
     ),

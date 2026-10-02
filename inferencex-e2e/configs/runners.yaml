@@ -174,6 +174,10 @@ labels:
   cluster:h100-cw:
     - h100-cw_00
     - h100-cw_01
+  cluster:h100-dsxe:
+    - h100-dgxc-new_00
+    - h100-dgxc-new_01
+    - h100-dgxc-new_02
   cluster:h100-dgxc:
     - h100-dgxc-slurm_00
     - h100-dgxc-slurm_01
@@ -374,6 +378,32 @@ labels:
     - mi355x-amds_08
     - mi355x-amds_09
 clusters:
+  h100-dsxe:
+    gpus-per-node: 8
+    arch: x86_64
+    models:
+      entries:
+        Qwen3-0.6B:
+          root: pr459-models
+          dir: models--Qwen--Qwen3-0.6B/snapshots/c1899de289a04d12100db370d81485cdf75e47ca
+    scheduler: slurm
+    slurm:
+      partition: batch_1
+      account: benchmark
+      exclusive: false
+      gres: "gpu:{gpus}"
+      volumes:
+        pr459-models: {path: /data/home/sa-gha-runner/gharunners/hf-hub-cache}
+      squash:
+        dir: /data/home/sa-gha-runner/gharunners/squash
+        visibility: shared
+        import: submit-host
+        lock-timeout-s: 600
+      srt-slurm:
+        network-interface: ""
+        default-time-limit: "00:30:00"
+        gpus-per-node-directive: true
+        segment-directive: false
   h100-cw:
     gpus-per-node: 8
     available-cpu-dram-mib: 1_998_848

@@ -59,6 +59,16 @@ class PowerLane:
 
 
 POWER_LANES: dict[tuple[str, LaunchPath], PowerLane] = {
+    ("h100-dsxe", LaunchPath.SRT_MULTI): PowerLane(
+        rules=(
+            PowerRule(
+                Match(any_of("qwen3"), any_of("bf16"), any_of("sglang"), agentic=False),
+                agentx=False,
+                recipe_glob="recipes/diagnostics/pr459-h100-clock.yaml",
+            ),
+        ),
+        error="This diagnostic branch only admits the PR459 clock recipe on H100",
+    ),
     ("gb200-nv", LaunchPath.SRT_MULTI): PowerLane(
         rules=(
             PowerRule(

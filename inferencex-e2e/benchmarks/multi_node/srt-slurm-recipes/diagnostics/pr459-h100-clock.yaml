@@ -1,0 +1,84 @@
+schema: 2
+name: pr459-two-host-clock-validation
+slurm:
+  account: benchmark
+  partition: batch_1
+  time_limit: '00:30:00'
+sbatch_directives:
+  qos: normal
+  cpus-per-task: '8'
+  mem: 32G
+model:
+  path: pr459-qwen
+  container: lmsysorg/sglang:v0.5.19-cu130@sha256:37bbbd3444732a464bbc68dee4fb0164e0ce9e18e2f027f3fc967f1152d3c262
+  precision: bf16
+identity:
+  model:
+    repo: Qwen/Qwen3-0.6B
+    revision: c1899de289a04d12100db370d81485cdf75e47ca
+  frameworks:
+    sglang: 0.5.19
+resources:
+  gpu_type: h100
+  gpus_per_node: 1
+frontend:
+  type: sglang-router
+  enable_multiple_frontends: false
+  placement:
+    node: dedicated
+  args:
+    policy: round_robin
+engine: sglang
+roles:
+  agg:
+    nodes: 1
+    workers: 1
+    gpus: 1
+    args:
+      served-model-name: Qwen/Qwen3-0.6B
+      tensor-parallel-size: 1
+      mem-fraction-static: 0.5
+      context-length: 4096
+      disable-piecewise-cuda-graph: true
+benchmark:
+  type: sa-bench
+  placement:
+    node: dedicated
+  colocate_with_frontend: true
+  isl: 128
+  osl: 128
+  concurrencies: [4]
+  num_prompts_mult: 10
+  num_warmup_mult: 1
+health_check:
+  max_attempts: 60
+  interval_seconds: 5
+observability:
+  enabled: false
+  tachometer:
+    enabled: false
+telemetry:
+  enabled: true
+  required: true
+  clock_sync_check: true
+  collect_interval_ms: 1000
+  startup_timeout_seconds: 120
+  dcgm_exporter:
+    container_image: dcgm-exporter
+    port: 9401
+    command: dcgm-exporter --collect-interval=100 --address :{port} --devices g:0 --collectors /infmax-workspace/benchmarks/multi_node/srt-slurm-recipes/configs/pr459-gpu-power.csv
+extra_mount:
+  - '${INFMAX_WORKSPACE}:/infmax-workspace'
+environment:
+  PATH: /opt/sglang/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+  HF_HUB_OFFLINE: '1'
+  TRANSFORMERS_OFFLINE: '1'
+host_setup:
+  commands:
+    - hostname
+    - 'printf "SLURM_JOB_GPUS=%s SLURM_STEP_GPUS=%s CUDA_VISIBLE_DEVICES=%s\n" "${SLURM_JOB_GPUS:-}" "${SLURM_STEP_GPUS:-}" "${CUDA_VISIBLE_DEVICES:-}"'
+    - nvidia-smi --query-gpu=index,uuid,name --format=csv,noheader
+    - 'test "${SLURM_STEP_GPUS:-${SLURM_JOB_GPUS:-}}" = 0'
+  nodes: all
+  ignore_failure: false
+  timeout_seconds: 30

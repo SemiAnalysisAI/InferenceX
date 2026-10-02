@@ -29,7 +29,7 @@ if TYPE_CHECKING:
     from infx.launch.drivers.srt.run import SrtRun
 
 NGINX_IMAGE = "nginx:1.27.4"
-DCGM_EXPORTER_IMAGE = "nvcr.io/nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless"
+DCGM_EXPORTER_IMAGE = "nvcr.io/nvidia/k8s/dcgm-exporter:3.3.9-3.6.1-ubuntu22.04@sha256:19a6d4fe59676b8f36ffa59bcbfd9b984bd201621793ae349121dde1a920682e"
 EXPORTER_PROVENANCE = "exporter-image.sha256"
 HEALTH_CHECK = {"max_attempts": HEALTH_ATTEMPTS, "interval_seconds": 10}
 
