@@ -100,6 +100,7 @@ override_dep8_stp_quality:
         MORI_SHMEM_MODE: ISOLATION
         # Native DP-local prefill chunks contain at most 8192 / 8 tokens.
         SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: '1024'
+        SGLANG_MORI_DISPATCH_DTYPE: bf16
   benchmark:
     env:
       CONC: '8'
