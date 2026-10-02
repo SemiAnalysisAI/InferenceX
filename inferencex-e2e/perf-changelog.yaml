@@ -9274,3 +9274,12 @@
     - "Reuse Mooncake TCP connections in the MiniMax-M3 H100 DRAM variants."
     - "在 MiniMax-M3 H100 DRAM 变体中复用 Mooncake TCP 连接。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3620
+
+- config-keys:
+    - minimaxm3-fp8-h100-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Use larger Mooncake transfer slices and a separate live replay error threshold for the MiniMax-M3 H100 DRAM variants; retain the final result validation threshold."
+    - "为 MiniMax-M3 H100 DRAM 变体使用更大的 Mooncake 传输分片，并单独设置重放过程中的实时错误阈值；最终结果校验阈值保持不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3620
