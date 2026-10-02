@@ -9,3 +9,5 @@ Each patch is a temporary fix for an open upstream PR. When the PR merges and th
 | Patch | Upstream PR | Fix |
 |-------|-------------|-----|
 | `548-atom-served-model-name.patch` | [NVIDIA/srt-slurm#548](https://github.com/NVIDIA/srt-slurm/pull/548) | ATOM serves evals the role's `served-model-name` instead of the literal `--model` path, so AToMesh accepts eval requests |
+| `smg-frontend.patch` | [SemiAnalysisAI/srt-slurm#38](https://github.com/SemiAnalysisAI/srt-slurm/pull/38) (with #41 and #42) | [DNM] `frontend.type: smg` (Shepherd Model Gateway) |
+| `tokenspeed.patch` | [SemiAnalysisAI/srt-slurm#37](https://github.com/SemiAnalysisAI/srt-slurm/pull/37) and its SMG follow-up | [DNM] `engine: tokenspeed`: `dynamo.tokenspeed` workers behind Dynamo, or TokenSpeed gRPC engines behind SMG, aggregated or prefill/decode |

@@ -1,0 +1,912 @@
+diff --git a/README.md b/README.md
+index a4cc1cff..e5048e11 100644
+--- a/README.md
++++ b/README.md
+@@ -1,6 +1,6 @@
+ # srtctl
+ 
+-Command-line tool for distributed LLM inference benchmarks on SLURM clusters using SGLang, vLLM, TensorRT LLM, TileRT and AMD's ATOM. Replace complex shell scripts and 50+ CLI flags with a declarative `schema: 2` YAML recipe: `engine:` names the engine, `roles:` describes each worker role, and `services:` covers everything launched next to the workers.
++Command-line tool for distributed LLM inference benchmarks on SLURM clusters using SGLang, vLLM, TensorRT LLM, TileRT, TokenSpeed and AMD's ATOM. Replace complex shell scripts and 50+ CLI flags with a declarative `schema: 2` YAML recipe: `engine:` names the engine, `roles:` describes each worker role, and `services:` covers everything launched next to the workers.
+ 
+ ## Quick Start
+ 
+diff --git a/docs/config-reference.md b/docs/config-reference.md
+index 716b46a0..25ea9ba1 100644
+--- a/docs/config-reference.md
++++ b/docs/config-reference.md
+@@ -43,6 +43,15 @@ This page is the prose guide: what each block means, how the pieces interact, an
+ 
+ ## Overview
+ 
++### TokenSpeed with Dynamo
++
++Use `engine: tokenspeed` with `frontend.type: dynamo` to launch
++`python3 -m dynamo.tokenspeed` workers, aggregated or prefill/decode. TokenSpeed flags
++go under `roles.<role>.args`; srtctl sets the model, host, ports and multi-node
++rendezvous. See [TokenSpeed](tokenspeed.md) and the
++[aggregated](../examples/tokenspeed/dynamo-agg.yaml) and
++[prefill/decode](../examples/tokenspeed/dynamo-disagg.yaml) recipes.
++
+ ### ATOM with AToMesh
+ 
+ Use `engine: atom` with `frontend.type: atomesh` to launch native
+diff --git a/docs/tokenspeed.md b/docs/tokenspeed.md
+new file mode 100644
+index 00000000..74ab7112
+--- /dev/null
++++ b/docs/tokenspeed.md
+@@ -0,0 +1,122 @@
++# TokenSpeed
++
++Use `engine: tokenspeed` with `frontend.type: dynamo` or `frontend.type: smg`.
++
++- **Dynamo.** Every worker runs Dynamo's TokenSpeed backend, `python3 -m dynamo.tokenspeed`,
++  which registers with the Dynamo frontend like the other Dynamo engines.
++- **SMG.** Every worker runs TokenSpeed's gRPC engine, `python3 -m smg_grpc_servicer.tokenspeed`,
++  and srtctl hands SMG its `grpc://` URL. This is the pair `ts serve` runs on one node: the
++  same engine module with `--host`/`--port`, and `smg launch --worker-urls grpc://<host:port>`
++  ([`_proc.py`](https://github.com/lightseekorg/tokenspeed/blob/22251686ff26a2b2f495263b348db80980b8ac9e/python/tokenspeed/cli/_proc.py#L39-L104)).
++
++Recipes:
++
++- Dynamo: [aggregated](../examples/tokenspeed/dynamo-agg.yaml), [prefill/decode](../examples/tokenspeed/dynamo-disagg.yaml)
++- SMG: [aggregated](../examples/tokenspeed/smg-agg.yaml), [prefill/decode](../examples/tokenspeed/smg-disagg.yaml)
++
++Configuration loading rejects the engine-specific routers (`sglang-router`,
++`vllm-router`, ...), `dynamo.sidecar`, and `roles.<role>.kv_events`.
++
++The backend follows
++[TokenSpeed](https://github.com/lightseekorg/tokenspeed/tree/22251686ff26a2b2f495263b348db80980b8ac9e),
++Dynamo's
++[`dynamo.tokenspeed`](https://github.com/ai-dynamo/dynamo/tree/7778c8d0cddb2a1ab7b2782c92cf97b30b2a5dcd/components/src/dynamo/tokenspeed)
++and SMG [v1.11.0](https://github.com/smg-project/smg/tree/3be823a700fabaff3add8a390cf78f163479d686).
++
++## Image
++
++The worker image must contain TokenSpeed and an `ai-dynamo` build with
++`dynamo.tokenspeed`. Aggregated serving needs Dynamo 1.2.0 or newer; prefill/decode
++needs a build that includes [ai-dynamo/dynamo#9237](https://github.com/ai-dynamo/dynamo/pull/9237),
++which Dynamo 1.5.0 does not. Dynamo's
++[TokenSpeed Dockerfile](https://github.com/ai-dynamo/dynamo/blob/7778c8d0cddb2a1ab7b2782c92cf97b30b2a5dcd/recipes/kimi-k2.5/tokenspeed/agg/nvidia/Dockerfile)
++builds such an image from a TokenSpeed runner and the Dynamo checkout. The examples
++set `dynamo.install: false` because the image already ships Dynamo.
++
++Behind SMG the image needs TokenSpeed only. Installing it pulls in the gRPC engine
++(`tokenspeed-smg-grpc-servicer`) and the SMG build it pins (`tokenspeed-smg`, which
++provides the `smg` command)
++([`pyproject.toml`](https://github.com/lightseekorg/tokenspeed/blob/22251686ff26a2b2f495263b348db80980b8ac9e/python/pyproject.toml#L75-L77)), so SMG runs in the model
++container and needs no `frontend.container_image`.
++
++## Arguments
++
++`roles.<role>.args` are TokenSpeed
++[server flags](https://github.com/lightseekorg/tokenspeed/blob/22251686ff26a2b2f495263b348db80980b8ac9e/docs/configuration/server.md),
++such as `tensor-parallel-size`, `data-parallel-size`, `enable-expert-parallel`,
++`max-model-len` and `gpu-memory-utilization`. Set the parallelism to match the
++role's `gpus`. A role's `served-model-name` is the name every worker serves; without
++one, workers serve the model directory name.
++
++srtctl sets these flags on every worker, under either frontend:
++
++| Flag | Value |
++| --- | --- |
++| `--model` | `/model`, the staged model path, or the Hugging Face ID |
++| `--served-model-name` | the role's `served-model-name`, else the model directory name |
++| `--host` | the worker's own IP on `network_interface` |
++| `--port` | an allocated port, 10000 and up, 1024 apart on a node; behind SMG, the leader's gRPC port |
++| `--dist-init-addr` | the endpoint leader's IP and an allocated port |
++| `--nnodes`, `--node-rank` | the endpoint's node count and this node's rank |
++| `--disaggregation-mode` | `prefill` or `decode`, on prefill/decode workers |
++| `--disaggregation-bootstrap-port` | an allocated port, on prefill workers |
++
++TokenSpeed derives several listeners from two of these. Its
++[`PortArgs.init_new`](https://github.com/lightseekorg/tokenspeed/blob/22251686ff26a2b2f495263b348db80980b8ac9e/python/tokenspeed/runtime/utils/server_args.py#L2513-L2602)
++picks the NCCL port 100 to 1000 above `--port`, and binds a control-plane cluster
++on the leader that starts at the `--dist-init-addr` port: six ports, plus one per
++attention-DP rank
++([`data_parallel_controller.py`](https://github.com/lightseekorg/tokenspeed/blob/22251686ff26a2b2f495263b348db80980b8ac9e/python/tokenspeed/runtime/engine/data_parallel_controller.py#L293-L294)).
++srtctl reserves a block of six ports plus the endpoint's GPU count for that cluster,
++and spaces `--port` 1024 apart, so workers sharing a node do not collide. A
++follower node serves its health check on `--host` and `--port`
++([`engine.py`](https://github.com/lightseekorg/tokenspeed/blob/22251686ff26a2b2f495263b348db80980b8ac9e/python/tokenspeed/runtime/entrypoints/engine.py#L636-L642)).
++Each node runs its own single-node srun step, so srtctl passes `--nnodes`,
++`--node-rank` and `--dist-init-addr` instead of relying on TokenSpeed's
++[Slurm step detection](https://github.com/lightseekorg/tokenspeed/blob/22251686ff26a2b2f495263b348db80980b8ac9e/docs/serving/parallelism.md#under-a-launcher).
++
++## Prefill/decode
++
++TokenSpeed moves the KV cache with Mooncake. A prefill worker advertises its
++bootstrap server at `--host` and the bootstrap port
++([`runtime_disaggregated_endpoint`](https://github.com/ai-dynamo/dynamo/blob/7778c8d0cddb2a1ab7b2782c92cf97b30b2a5dcd/components/src/dynamo/tokenspeed/disagg.py#L71-L105));
++the Dynamo frontend passes it to the decode worker with each request. Prefill
++workers register as the `prefill` component and decode workers as `backend`
++([`args.py`](https://github.com/ai-dynamo/dynamo/blob/7778c8d0cddb2a1ab7b2782c92cf97b30b2a5dcd/components/src/dynamo/tokenspeed/args.py#L105-L108)).
++
++Dynamo checks the remaining requirements when the worker starts
++([`validate_disagg_compatibility`](https://github.com/ai-dynamo/dynamo/blob/7778c8d0cddb2a1ab7b2782c92cf97b30b2a5dcd/components/src/dynamo/tokenspeed/disagg.py#L50-L68)):
++the transfer backend is Mooncake, attention DP is 1, and `prefix-granularity` is
++positive (TokenSpeed's default is 64). Scale prefill or decode with more workers.
++Set `disaggregation-ib-device` in the role's args when Mooncake does not pick the
++right RDMA device.
++
++## SMG
++
++The engine's `--host` and `--port` are its gRPC listener
++([`server.py`](https://github.com/smg-project/smg/blob/3be823a700fabaff3add8a390cf78f163479d686/grpc_servicer/smg_grpc_servicer/tokenspeed/server.py)), so srtctl
++advertises the leader of each worker as `grpc://<host>:<port>`
++(`TokenSpeedProtocol.is_grpc_mode` is always true: TokenSpeed has no HTTP-only engine
++server). A follower node of a multi-node worker runs the same module, as `ts serve` does
++on a non-zero node rank
++([`serve_smg.py`](https://github.com/lightseekorg/tokenspeed/blob/22251686ff26a2b2f495263b348db80980b8ac9e/python/tokenspeed/cli/serve_smg.py#L873-L879)), and is not routed.
++Before SMG starts, srtctl waits for every gRPC port to accept connections.
++
++For prefill/decode srtctl passes `--pd-disaggregation --prefill grpc://<host:port>
++<bootstrap-port> --decode grpc://<host:port>`. SMG's gRPC P/D table gives TokenSpeed
++parallel dispatch with a KV bootstrap room
++([`pd_protocol.rs`](https://github.com/smg-project/smg/blob/3be823a700fabaff3add8a390cf78f163479d686/model_gateway/src/routers/grpc/common/stages/pd_protocol.rs#L63-L85)):
++it mints one room per request and sends both workers the prefill worker's host and
++bootstrap port
++([`helpers.rs`](https://github.com/smg-project/smg/blob/3be823a700fabaff3add8a390cf78f163479d686/model_gateway/src/routers/grpc/common/stages/helpers.rs#L764-L824)),
++which the engine hands to Mooncake
++([`servicer.py`](https://github.com/smg-project/smg/blob/3be823a700fabaff3add8a390cf78f163479d686/grpc_servicer/smg_grpc_servicer/tokenspeed/servicer.py#L1031-L1071)).
++The prefill engine serves that bootstrap port
++([`async_llm.py`](https://github.com/lightseekorg/tokenspeed/blob/22251686ff26a2b2f495263b348db80980b8ac9e/python/tokenspeed/runtime/engine/async_llm.py#L245-L253)).
++
++In gRPC mode SMG tokenizes and applies the chat template itself; pass
++`tool-call-parser` / `reasoning-parser` in `frontend.args` when the model needs them.
++The gRPC engine starts no HTTP listener, so these workers serve no Prometheus
++`/metrics`; SMG's own metrics stay on its Prometheus port. TokenSpeed's ZMQ engine
++(`ts serve --headless`) is not used: SMG reaches a ZMQ engine only over local `ipc://`
++sockets.
+diff --git a/examples/README.md b/examples/README.md
+index 0bedc2cb..9a52d1b8 100644
+--- a/examples/README.md
++++ b/examples/README.md
+@@ -9,6 +9,7 @@ Small, runnable starting points, one per frontend and topology. Every example se
+ | SGLang | `sglang/dynamo-agg.yaml`, `sglang/dynamo-disagg.yaml` | `sglang/sglang-router-agg.yaml`, `sglang/sglang-router-disagg.yaml`, `sglang/smg-disagg.yaml` (SMG) | `sglang/sglang-direct-agg.yaml` |
+ | vLLM | `vllm/dynamo-agg.yaml`, `vllm/dynamo-disagg.yaml` | `vllm/vllm-router-agg.yaml`, `vllm/vllm-router-disagg.yaml`, `vllm/vllm-router-moriio-disagg.yaml` (ROCm, MoRI-IO discovery), `vllm/smg-agg.yaml`, `vllm/smg-dep16.yaml`, `vllm/smg-disagg-grpc.yaml` (SMG; P/D over gRPC with NIXL) | `vllm/vllm-direct-agg.yaml` |
+ | TRT-LLM | `trtllm/dynamo-agg.yaml`, `trtllm/dynamo-disagg.yaml` | `trtllm/trtllm-serve-disagg.yaml`, `trtllm/smg-agg.yaml` (SMG) | `trtllm/trtllm-serve-agg.yaml` |
++| TokenSpeed | `tokenspeed/dynamo-agg.yaml`, `tokenspeed/dynamo-disagg.yaml` | `tokenspeed/smg-agg.yaml`, `tokenspeed/smg-disagg.yaml` (SMG, gRPC engines) | |
+ | Mocker | `mocker/dynamo-agg.yaml` | | |
+ 
+ - **Dynamo frontend**: workers register with etcd and the Dynamo frontend routes (KV-aware here); the request plane is tcp and NATS is not started unless a plane asks for it. Dynamo is installed at job start via `dynamo.source` (`pypi:` here) unless the container ships it (`dynamo.install: false`, as the TRT-LLM examples do).
+@@ -49,6 +50,7 @@ containers:
+   sglang: /path/to/sglang.sqsh              # SGLang image; Dynamo examples pip-install ai-dynamo into it
+   vllm: /path/to/vllm.sqsh                  # vLLM image with the vllm-router executable
+   trtllm: /path/to/tensorrtllm-runtime.sqsh # Dynamo TRT-LLM runtime image (ships ai-dynamo and trtllm-serve)
++  tokenspeed: /path/to/dynamo-tokenspeed.sqsh # TokenSpeed image with ai-dynamo's dynamo.tokenspeed (see ../docs/tokenspeed.md)
+   dynamo-vllm: /path/to/vllm-runtime.sqsh   # Dynamo vLLM runtime image (ships ai-dynamo and gpu_memory_service), for features/vllm-failover.yaml
+   vllm-lmcache: /path/to/vllm-lmcache.sqsh  # vLLM image with LMCache installed, for features/lmcache-server.yaml and -disagg.yaml
+   sglang-lmcache: /path/to/sglang-lmcache.sqsh  # SGLang image with LMCache installed, for features/lmcache-server-sglang.yaml
+diff --git a/examples/tokenspeed/dynamo-agg.yaml b/examples/tokenspeed/dynamo-agg.yaml
+new file mode 100644
+index 00000000..9c0b62a7
+--- /dev/null
++++ b/examples/tokenspeed/dynamo-agg.yaml
+@@ -0,0 +1,51 @@
++# TokenSpeed aggregated behind the Dynamo frontend with KV-aware routing.
++#
++# Two TP1 `dynamo.tokenspeed` workers on one node register with etcd; the Dynamo
++# frontend routes with `--router-mode kv`. The `tokenspeed` container must ship
++# TokenSpeed and Dynamo's TokenSpeed backend (`python3 -m dynamo.tokenspeed`), so
++# Dynamo is not installed at job start. See docs/tokenspeed.md.
++#
++# Aliases (`qwen3-0.6b`, `tokenspeed`) resolve through srtslurm.yaml; see examples/README.md.
++
++schema: 2
++name: "qwen3-0.6b-tokenspeed-dynamo-agg"
++
++slurm:
++  time_limit: "00:30:00"
++
++model:
++  path: "qwen3-0.6b"
++  container: "tokenspeed"
++  precision: "bf16"
++
++resources:
++  gpu_type: "h100"
++  gpus_per_node: 8
++dynamo:
++  install: false
++
++frontend:
++  type: dynamo
++  enable_multiple_frontends: false
++  args:
++    router-mode: "kv"
++
++engine: tokenspeed
++roles:
++  agg:
++    nodes: 1
++    workers: 2
++    gpus: 1
++    env:
++      PYTHONUNBUFFERED: "1"
++    args:
++      served-model-name: "Qwen/Qwen3-0.6B"
++      tensor-parallel-size: 1
++      gpu-memory-utilization: 0.5
++      max-model-len: 4096
++
++benchmark:
++  type: "sa-bench"
++  isl: 128
++  osl: 128
++  concurrencies: "4x8"
+diff --git a/examples/tokenspeed/dynamo-disagg.yaml b/examples/tokenspeed/dynamo-disagg.yaml
+new file mode 100644
+index 00000000..9105c6c5
+--- /dev/null
++++ b/examples/tokenspeed/dynamo-disagg.yaml
+@@ -0,0 +1,63 @@
++# TokenSpeed disaggregated prefill/decode behind the Dynamo frontend.
++#
++# One TP1 prefill worker and one TP1 decode worker sharing a node (`nodes: colocate`
++# places decode on the prefill node's spare GPUs). Both run `dynamo.tokenspeed`, which
++# moves the KV cache with Mooncake; the Dynamo frontend dispatches prefill to the
++# prefill pool. srtctl adds `--disaggregation-mode` and the prefill bootstrap port.
++# P/D needs a Dynamo build that includes ai-dynamo/dynamo#9237; see docs/tokenspeed.md.
++#
++# Aliases (`qwen3-0.6b`, `tokenspeed`) resolve through srtslurm.yaml; see examples/README.md.
++
++schema: 2
++name: "qwen3-0.6b-tokenspeed-dynamo-disagg"
++
++slurm:
++  time_limit: "00:30:00"
++
++model:
++  path: "qwen3-0.6b"
++  container: "tokenspeed"
++  precision: "bf16"
++
++resources:
++  gpu_type: "h100"
++  gpus_per_node: 8
++dynamo:
++  install: false
++
++frontend:
++  type: dynamo
++  enable_multiple_frontends: false
++  args:
++    router-mode: "kv"
++
++engine: tokenspeed
++roles:
++  prefill:
++    nodes: 1
++    workers: 1
++    gpus: 1
++    env:
++      PYTHONUNBUFFERED: "1"
++    args:
++      served-model-name: "Qwen/Qwen3-0.6B"
++      tensor-parallel-size: 1
++      gpu-memory-utilization: 0.5
++      max-model-len: 4096
++  decode:
++    nodes: colocate
++    workers: 1
++    gpus: 1
++    env:
++      PYTHONUNBUFFERED: "1"
++    args:
++      served-model-name: "Qwen/Qwen3-0.6B"
++      tensor-parallel-size: 1
++      gpu-memory-utilization: 0.5
++      max-model-len: 4096
++
++benchmark:
++  type: "sa-bench"
++  isl: 128
++  osl: 128
++  concurrencies: "4x8"
+diff --git a/examples/tokenspeed/smg-agg.yaml b/examples/tokenspeed/smg-agg.yaml
+new file mode 100644
+index 00000000..2d45f821
+--- /dev/null
++++ b/examples/tokenspeed/smg-agg.yaml
+@@ -0,0 +1,48 @@
++# TokenSpeed aggregated behind the Shepherd Model Gateway (SMG).
++#
++# Two TP1 workers on one node, each TokenSpeed's gRPC engine
++# (`python3 -m smg_grpc_servicer.tokenspeed`), the engine `ts serve` runs behind its
++# bundled SMG. srtctl advertises them to SMG as grpc:// URLs. The `tokenspeed`
++# container must ship TokenSpeed, which installs the gRPC servicer and the `smg`
++# command it pins; SMG runs in the same container. See docs/tokenspeed.md.
++#
++# Aliases (`qwen3-0.6b`, `tokenspeed`) resolve through srtslurm.yaml; see examples/README.md.
++
++schema: 2
++name: "qwen3-0.6b-tokenspeed-smg-agg"
++
++slurm:
++  time_limit: "00:30:00"
++
++model:
++  path: "qwen3-0.6b"
++  container: "tokenspeed"
++  precision: "bf16"
++
++resources:
++  gpu_type: "h100"
++  gpus_per_node: 8
++
++frontend:
++  type: smg
++  enable_multiple_frontends: false
++
++engine: tokenspeed
++roles:
++  agg:
++    nodes: 1
++    workers: 2
++    gpus: 1
++    env:
++      PYTHONUNBUFFERED: "1"
++    args:
++      served-model-name: "Qwen/Qwen3-0.6B"
++      tensor-parallel-size: 1
++      gpu-memory-utilization: 0.5
++      max-model-len: 4096
++
++benchmark:
++  type: "sa-bench"
++  isl: 128
++  osl: 128
++  concurrencies: "4x8"
+diff --git a/examples/tokenspeed/smg-disagg.yaml b/examples/tokenspeed/smg-disagg.yaml
+new file mode 100644
+index 00000000..cf2a395a
+--- /dev/null
++++ b/examples/tokenspeed/smg-disagg.yaml
+@@ -0,0 +1,59 @@
++# TokenSpeed disaggregated prefill/decode behind the Shepherd Model Gateway (SMG).
++#
++# One TP1 prefill and one TP1 decode gRPC engine sharing a node (`nodes: colocate`).
++# srtctl passes SMG `--prefill grpc://<host:port> <bootstrap-port> --decode grpc://<host:port>`;
++# SMG mints a bootstrap room per request and sends both workers the prefill's Mooncake
++# bootstrap address, and the decode worker pulls the KV cache from the prefill worker.
++# srtctl adds `--disaggregation-mode` and the prefill bootstrap port. See docs/tokenspeed.md.
++#
++# Aliases (`qwen3-0.6b`, `tokenspeed`) resolve through srtslurm.yaml; see examples/README.md.
++
++schema: 2
++name: "qwen3-0.6b-tokenspeed-smg-disagg"
++
++slurm:
++  time_limit: "00:30:00"
++
++model:
++  path: "qwen3-0.6b"
++  container: "tokenspeed"
++  precision: "bf16"
++
++resources:
++  gpu_type: "h100"
++  gpus_per_node: 8
++
++frontend:
++  type: smg
++  enable_multiple_frontends: false
++
++engine: tokenspeed
++roles:
++  prefill:
++    nodes: 1
++    workers: 1
++    gpus: 1
++    env:
++      PYTHONUNBUFFERED: "1"
++    args:
++      served-model-name: "Qwen/Qwen3-0.6B"
++      tensor-parallel-size: 1
++      gpu-memory-utilization: 0.5
++      max-model-len: 4096
++  decode:
++    nodes: colocate
++    workers: 1
++    gpus: 1
++    env:
++      PYTHONUNBUFFERED: "1"
++    args:
++      served-model-name: "Qwen/Qwen3-0.6B"
++      tensor-parallel-size: 1
++      gpu-memory-utilization: 0.5
++      max-model-len: 4096
++
++benchmark:
++  type: "sa-bench"
++  isl: 128
++  osl: 128
++  concurrencies: "4x8"
+diff --git a/src/srtctl/backends/AGENTS.md b/src/srtctl/backends/AGENTS.md
+index d8e8eb4a..9c24f9ec 100644
+--- a/src/srtctl/backends/AGENTS.md
++++ b/src/srtctl/backends/AGENTS.md
+@@ -26,6 +26,7 @@ Rules for `src/srtctl/backends/`. Every consumer asks a backend through `Backend
+ - **ATOM**: Native ROCm servers behind AToMesh, with one Slurm node per logical worker and allocator-owned Mooncake handshake ports
+ - **SGLang**: Per-process srun launching, supports prefill/decode/aggregated modes
+ - **TileRT**: Decode workers behind `tilert-router`, paired with an explicit prefill engine and image.
++- **TokenSpeed**: `dynamo.tokenspeed` workers behind the Dynamo frontend, or the gRPC engine `smg_grpc_servicer.tokenspeed` behind SMG (`is_grpc_mode` is always true), aggregated or prefill/decode; allocator-owned `--port` scan base and a dist-init block sized for its control-plane cluster
+ - **TRTLLM**: MPI-style launching (one srun per endpoint with all nodes), prefill/decode only
+ - **vLLM**: Per-process srun launching, prefill/decode/aggregated, `per_node` DP; `frontend_type` selects Dynamo registration or a direct `vllm serve` server, and `_CONNECTOR_MAP` owns the KV connector table
+ 
+diff --git a/src/srtctl/backends/__init__.py b/src/srtctl/backends/__init__.py
+index 498a36f4..d532c21e 100644
+--- a/src/srtctl/backends/__init__.py
++++ b/src/srtctl/backends/__init__.py
+@@ -14,11 +14,14 @@ from .base import BackendProtocol, BackendType, SrunConfig
+ from .mocker import MockerProtocol, MockerServerConfig
+ from .sglang import MooncakeKVStoreConfig, SGLangProtocol, SGLangServerConfig
+ from .tilert import TileRTProtocol, TileRTServerConfig
++from .tokenspeed import TokenSpeedProtocol, TokenSpeedServerConfig
+ from .trtllm import TRTLLMProtocol, TRTLLMServerConfig
+ from .vllm import VLLMFailoverConfig, VLLMMooncakeKVStoreConfig, VLLMProtocol, VLLMServerConfig
+ 
+ # Union type for all backend configs
+-BackendConfig = AtomProtocol | SGLangProtocol | TileRTProtocol | TRTLLMProtocol | VLLMProtocol | MockerProtocol
++BackendConfig = (
++    AtomProtocol | SGLangProtocol | TileRTProtocol | TokenSpeedProtocol | TRTLLMProtocol | VLLMProtocol | MockerProtocol
++)
+ 
+ __all__ = [
+     # ATOM
+@@ -42,6 +45,9 @@ __all__ = [
+     # TileRT
+     "TileRTProtocol",
+     "TileRTServerConfig",
++    # TokenSpeed
++    "TokenSpeedProtocol",
++    "TokenSpeedServerConfig",
+     # vLLM
+     "VLLMFailoverConfig",
+     "VLLMMooncakeKVStoreConfig",
+diff --git a/src/srtctl/backends/base.py b/src/srtctl/backends/base.py
+index adc202fc..18010359 100644
+--- a/src/srtctl/backends/base.py
++++ b/src/srtctl/backends/base.py
+@@ -31,6 +31,7 @@ class BackendType(str, Enum):
+     MOCKER = "mocker"
+     ATOM = "atom"
+     TILERT = "tilert"
++    TOKENSPEED = "tokenspeed"
+ 
+ 
+ @dataclass
+diff --git a/src/srtctl/backends/tokenspeed.py b/src/srtctl/backends/tokenspeed.py
+new file mode 100644
+index 00000000..17ffa6e8
+--- /dev/null
++++ b/src/srtctl/backends/tokenspeed.py
+@@ -0,0 +1,253 @@
++# SPDX-FileCopyrightText: Copyright (c) 2026 SemiAnalysis LLC. All rights reserved.
++# SPDX-License-Identifier: Apache-2.0
++
++"""TokenSpeed inference backend.
++
++Behind the Dynamo frontend each worker is ``python3 -m dynamo.tokenspeed``; behind a
++static router (SMG) it is TokenSpeed's gRPC engine, ``python3 -m smg_grpc_servicer.tokenspeed``.
++"""
++
++from __future__ import annotations
++
++import builtins
++from collections.abc import Sequence
++from dataclasses import field, replace
++from pathlib import Path
++from typing import TYPE_CHECKING, Any, ClassVar, Literal
++
++from marshmallow import Schema
++from marshmallow_dataclass import dataclass
++
++from srtctl.backends.sglang import _config_to_cli_args
++from srtctl.ports import DIST_INIT_PORTS, DYN_SYSTEM_PORT_BASE, TOKENSPEED_PORTS
++
++if TYPE_CHECKING:
++    from srtctl.backends.base import SrunConfig
++    from srtctl.core.runtime import RuntimeContext
++    from srtctl.core.schema import ProfilingConfig
++    from srtctl.core.topology import Endpoint, NodePortAllocator, Process
++
++WorkerMode = Literal["prefill", "decode", "agg"]
++
++# TokenSpeed's leader binds a control-plane cluster from its --dist-init-addr port:
++# the port itself, five ports above it, and one scheduler port per attention-DP rank.
++# Attention DP never exceeds the endpoint's GPU count.
++_RENDEZVOUS_PORTS = 6
++
++# The worker module per frontend launch mode. TokenSpeed's engine-only server is its
++# gRPC servicer, what `ts serve` runs behind its bundled SMG; it has no HTTP-only server.
++_WORKER_MODULE = {"dynamo": "dynamo.tokenspeed", "direct": "smg_grpc_servicer.tokenspeed"}
++
++
++@dataclass(frozen=True)
++class TokenSpeedServerConfig:
++    """TokenSpeed CLI arguments per mode, normalized from ``roles.<role>.args``."""
++
++    prefill: dict[str, Any] | None = None
++    decode: dict[str, Any] | None = None
++    aggregated: dict[str, Any] | None = None
++
++    Schema: ClassVar[type[Schema]] = Schema
++
++
++@dataclass(frozen=True)
++class TokenSpeedProtocol:
++    """Launch TokenSpeed workers behind the Dynamo frontend or a static router such as SMG.
++
++    Example YAML:
++        engine: tokenspeed
++        frontend:
++          type: dynamo
++        roles:
++          agg:
++            args:
++              tensor-parallel-size: 1
++              max-model-len: 4096
++    """
++
++    type: Literal["tokenspeed"] = "tokenspeed"
++    # The gRPC engine starts no HTTP listener, so a direct worker serves no Prometheus text.
++    native_metrics_path: ClassVar[str] = "/metrics"
++    prefill_environment: dict[str, str] = field(default_factory=dict)
++    decode_environment: dict[str, str] = field(default_factory=dict)
++    aggregated_environment: dict[str, str] = field(default_factory=dict)
++    tokenspeed_config: TokenSpeedServerConfig | None = None
++
++    Schema: ClassVar[builtins.type[Schema]] = Schema
++
++    def get_srun_config(self) -> SrunConfig:
++        from srtctl.backends.base import SrunConfig
++
++        return SrunConfig(mpi=None, oversubscribe=False, launch_per_endpoint=False)
++
++    def fatal_log_patterns(self, mode: WorkerMode) -> tuple[str, ...]:
++        """The srun step exits with the engine; its exit code is the whole story."""
++        return ()
++
++    def get_config_for_mode(self, mode: WorkerMode) -> dict[str, Any]:
++        """The role's TokenSpeed CLI arguments (``roles.<role>.args``)."""
++        if not self.tokenspeed_config:
++            return {}
++        config = {"prefill": self.tokenspeed_config.prefill, "decode": self.tokenspeed_config.decode}.get(
++            mode, self.tokenspeed_config.aggregated
++        )
++        return dict(config or {})
++
++    def get_environment_for_mode(self, mode: WorkerMode) -> dict[str, str]:
++        """The role's environment (``roles.<role>.env``)."""
++        return dict(
++            {"prefill": self.prefill_environment, "decode": self.decode_environment}.get(
++                mode, self.aggregated_environment
++            )
++        )
++
++    def get_process_environment(self, process: Process) -> dict[str, str]:
++        return {}
++
++    def is_grpc_mode(self, mode: str) -> bool:
++        """A direct TokenSpeed worker is always the gRPC engine (``smg_grpc_servicer.tokenspeed``)."""
++        return True
++
++    def get_served_model_name(self, default: str) -> str:
++        """A role's ``served-model-name``, else ``default``; srtctl always passes the result."""
++        for mode in ("prefill", "agg", "decode"):
++            args = self.get_config_for_mode(mode)
++            name = args.get("served-model-name") or args.get("served_model_name")
++            if name:
++                return name
++        return default
++
++    @property
++    def mooncake_kv_store(self) -> None:
++        return None
++
++    @property
++    def failover(self) -> None:
++        return None
++
++    def get_mooncake_worker_env(self, infra_node_ip: str, local_hostname: str) -> dict[str, str]:
++        return {}
++
++    def get_failover_environment(self, process: Process, job_id: str) -> dict[str, str]:
++        return {}
++
++    def should_set_visible_devices(self) -> bool:
++        return True
++
++    def allocate_endpoints(
++        self,
++        num_prefill: int,
++        num_decode: int,
++        num_agg: int,
++        gpus_per_prefill: int,
++        gpus_per_decode: int,
++        gpus_per_agg: int,
++        gpus_per_node: int,
++        available_nodes: Sequence[str],
++        spread_workers: bool = False,
++    ) -> list[Endpoint]:
++        from srtctl.core.topology import allocate_endpoints
++
++        return allocate_endpoints(
++            num_prefill=num_prefill,
++            num_decode=num_decode,
++            num_agg=num_agg,
++            gpus_per_prefill=gpus_per_prefill,
++            gpus_per_decode=gpus_per_decode,
++            gpus_per_agg=gpus_per_agg,
++            gpus_per_node=gpus_per_node,
++            available_nodes=available_nodes,
++            spread_workers=spread_workers,
++        )
++
++    def endpoints_to_processes(
++        self,
++        endpoints: list[Endpoint],
++        base_sys_port: int = DYN_SYSTEM_PORT_BASE,
++        port_allocator: NodePortAllocator | None = None,
++        frontend_type: str = "dynamo",
++        dynamo_sidecar: bool = False,
++    ) -> list[Process]:
++        """Each process gets its own ``--port``; each endpoint a rendezvous block on its leader node.
++
++        A direct worker's leader serves gRPC on that ``--port``, so it is also the
++        process's routable port (``http_port``).
++        """
++        if dynamo_sidecar:
++            raise ValueError("TokenSpeed does not support Dynamo sidecars")
++        from srtctl.core.topology import endpoints_to_processes, port_allocator_for
++        from srtctl.frontends import get_frontend
++
++        direct = get_frontend(frontend_type).worker_launch == "direct"
++        allocator = port_allocator_for(port_allocator, base_sys_port)
++        processes = endpoints_to_processes(endpoints, port_allocator=allocator)
++        dist_init_ports = {
++            (endpoint.mode, endpoint.index): allocator.next(
++                DIST_INIT_PORTS, endpoint.nodes[0], size=_RENDEZVOUS_PORTS + endpoint.total_gpus
++            )
++            for endpoint in endpoints
++        }
++        result = []
++        for process in processes:
++            port = allocator.next(TOKENSPEED_PORTS, process.node)
++            result.append(
++                replace(
++                    process,
++                    tokenspeed_port=port,
++                    http_port=port if direct and process.http_port > 0 else process.http_port,
++                    dist_init_port=dist_init_ports[(process.endpoint_mode, process.endpoint_index)],
++                )
++            )
++        return result
++
++    def build_worker_command(
++        self,
++        process: Process,
++        endpoint_processes: list[Process],
++        runtime: RuntimeContext,
++        frontend_type: str = "dynamo",
++        nsys_prefix: list[str] | None = None,
++        dump_config_path: Path | None = None,
++        profiling: ProfilingConfig | None = None,
++    ) -> list[str]:
++        from srtctl.core.slurm import get_hostname_ip
++        from srtctl.frontends import get_frontend
++
++        if process.tokenspeed_port is None or process.dist_init_port is None:
++            raise ValueError("build the topology with TokenSpeedProtocol.endpoints_to_processes")
++
++        mode = process.endpoint_mode
++        config = self.get_config_for_mode(mode)
++        for key in ("model", "model-path", "model_path", "served-model-name", "served_model_name"):
++            config.pop(key, None)
++
++        endpoint_nodes = list(dict.fromkeys(p.node for p in endpoint_processes))
++        leader_ip = get_hostname_ip(endpoint_nodes[0], runtime.network_interface)
++        cmd = [
++            *(nsys_prefix or []),
++            "python3",
++            "-m",
++            _WORKER_MODULE[get_frontend(frontend_type).worker_launch],
++            "--model",
++            runtime.worker_model_arg,
++            "--served-model-name",
++            self.get_served_model_name(runtime.model_path.name),
++            # A prefill worker advertises this host for the Mooncake bootstrap; a direct
++            # worker also binds its gRPC server on it.
++            "--host",
++            get_hostname_ip(process.node, runtime.network_interface),
++            "--port",
++            str(process.tokenspeed_port),
++            "--dist-init-addr",
++            f"{leader_ip}:{process.dist_init_port}",
++            "--nnodes",
++            str(len(endpoint_nodes)),
++            "--node-rank",
++            str(endpoint_nodes.index(process.node)),
++        ]
++        if mode != "agg":
++            cmd.extend(["--disaggregation-mode", mode])
++        if mode == "prefill" and process.bootstrap_port is not None:
++            cmd.extend(["--disaggregation-bootstrap-port", str(process.bootstrap_port)])
++        cmd.extend(_config_to_cli_args(config))
++        return cmd
+diff --git a/src/srtctl/core/AGENTS.md b/src/srtctl/core/AGENTS.md
+index f0afde74..f300a5bf 100644
+--- a/src/srtctl/core/AGENTS.md
++++ b/src/srtctl/core/AGENTS.md
+@@ -4,7 +4,7 @@ Rules for `src/srtctl/core/` (schema, runtime, topology, processes, health). Sta
+ 
+ ## Ports
+ 
+-Fixed ports are constants in `src/srtctl/ports.py`. Every port a worker process binds is a `PortKind` in the same module (`name`, `base`, `stride`, `per_node`) and is handed out by `NodePortAllocator.next(kind, node, size)` in `src/srtctl/core/topology.py`: per-node counters for listeners only bound on that node (`HTTP_PORTS`, `BOOTSTRAP_PORTS`, `DP_RPC_PORTS`, `DIST_INIT_PORTS`) and global counters for side channels peers address (`SYS_PORTS`, `KV_EVENTS_PORTS`, `NIXL_PORTS`, `KVBM_ZMQ_PORTS`, `NCCL_PORTS`, `VLLM_SCAN_PORTS`, `MORIIO_HANDSHAKE_PORTS`, `MORIIO_NOTIFY_PORTS`, `TRTLLM_DIST_INIT_PORTS`, `SIDECAR_GRPC_PORTS`). `size > 1` reserves a block when the engine adds a rank offset to the port it is given (MoRI-IO adds the local DP and TP rank to its notify base). `endpoints_to_processes` allocates the generic kinds and stores them on `Process`; a backend adds its engine-specific kinds with `dataclasses.replace` on the way out (SGLang `nccl_port` and `dist_init_port`, vLLM `vllm_scan_port` or, for a discovery connector, `moriio_handshake_port` and `moriio_notify_port`, TRT-LLM `trtllm_dist_init_port`). `do_sweep` builds the one allocator per job, seeding the sidecar gRPC base from `dynamo.sidecar_port`.
++Fixed ports are constants in `src/srtctl/ports.py`. Every port a worker process binds is a `PortKind` in the same module (`name`, `base`, `stride`, `per_node`) and is handed out by `NodePortAllocator.next(kind, node, size)` in `src/srtctl/core/topology.py`: per-node counters for listeners only bound on that node (`HTTP_PORTS`, `BOOTSTRAP_PORTS`, `DP_RPC_PORTS`, `DIST_INIT_PORTS`, `TOKENSPEED_PORTS`) and global counters for side channels peers address (`SYS_PORTS`, `KV_EVENTS_PORTS`, `NIXL_PORTS`, `KVBM_ZMQ_PORTS`, `NCCL_PORTS`, `VLLM_SCAN_PORTS`, `MORIIO_HANDSHAKE_PORTS`, `MORIIO_NOTIFY_PORTS`, `TRTLLM_DIST_INIT_PORTS`, `SIDECAR_GRPC_PORTS`). `size > 1` reserves a block when the engine adds a rank offset to the port it is given (MoRI-IO adds the local DP and TP rank to its notify base). `endpoints_to_processes` allocates the generic kinds and stores them on `Process`; a backend adds its engine-specific kinds with `dataclasses.replace` on the way out (SGLang `nccl_port` and `dist_init_port`, vLLM `vllm_scan_port` or, for a discovery connector, `moriio_handshake_port` and `moriio_notify_port`, TRT-LLM `trtllm_dist_init_port`, TokenSpeed `tokenspeed_port` and a `dist_init_port` block). `do_sweep` builds the one allocator per job, seeding the sidecar gRPC base from `dynamo.sidecar_port`.
+ 
+ Rules that follow: a new listener is a new `PortKind` plus a `Process` field, allocated in the topology builder, never `some_base + (sys_port - DYN_SYSTEM_PORT_BASE)` or any other arithmetic on another port at command-build time. Consumers read the field; a `None` means the topology was built without that kind, and a consumer that needs it raises rather than guessing. A worker's own address is `get_hostname_ip(node, runtime.network_interface)`, not upstream's interface guess. Fixed scan bases such as `VLLM_PORT` exist only to keep co-located `get_open_port()` scans apart; if a connector allocates inside forked children, leave the base unset so the kernel assigns ports. Frontends bind `FRONTEND_PUBLIC_PORT` (8000), or `FRONTEND_INTERNAL_PORT` (8180) behind nginx when `enable_multiple_frontends` is set. Service ports are `ServiceKind` defaults overridden by `options`. `tests/test_port_allocator.py` asserts over every example recipe that no two processes on a node share a port and global kinds never repeat.
+ 
+diff --git a/src/srtctl/core/fingerprint.py b/src/srtctl/core/fingerprint.py
+index debf90b3..a2219f32 100644
+--- a/src/srtctl/core/fingerprint.py
++++ b/src/srtctl/core/fingerprint.py
+@@ -47,6 +47,7 @@ UNAVAILABLE = "unavailable"
+ FRAMEWORK_PACKAGES: dict[str, str] = {
+     "vllm": "vllm",
+     "tilert": "tilert",
++    "tokenspeed": "tokenspeed",
+     "sglang": "sglang",
+     "sglang-router": "sglang-router",
+     "amd-mori": "amd_mori",
+diff --git a/src/srtctl/core/roles.py b/src/srtctl/core/roles.py
+index a796b937..4daf15d3 100644
+--- a/src/srtctl/core/roles.py
++++ b/src/srtctl/core/roles.py
+@@ -61,6 +61,7 @@ ENGINE_CONFIG_KEY: dict[str, str] = {
+     "atom": "atom_config",
+     "sglang": "sglang_config",
+     "tilert": "tilert_config",
++    "tokenspeed": "tokenspeed_config",
+     "vllm": "vllm_config",
+     "trtllm": "trtllm_config",
+     "mocker": "mocker_config",
+diff --git a/src/srtctl/core/schema.py b/src/srtctl/core/schema.py
+index 6f9b1d81..10673adb 100755
+--- a/src/srtctl/core/schema.py
++++ b/src/srtctl/core/schema.py
+@@ -42,6 +42,7 @@ from srtctl.backends import (
+     MockerProtocol,
+     SGLangProtocol,
+     TileRTProtocol,
++    TokenSpeedProtocol,
+     TRTLLMProtocol,
+     VLLMMooncakeKVStoreConfig,
+     VLLMProtocol,
+@@ -467,7 +468,14 @@ class BackendConfigField(fields.Field):
+             return SGLangProtocol()
+ 
+         if isinstance(
+-            value, AtomProtocol | SGLangProtocol | TileRTProtocol | TRTLLMProtocol | VLLMProtocol | MockerProtocol
++            value,
++            AtomProtocol
++            | SGLangProtocol
++            | TileRTProtocol
++            | TokenSpeedProtocol
++            | TRTLLMProtocol
++            | VLLMProtocol
++            | MockerProtocol,
+         ):
+             return value
+ 
+@@ -481,6 +489,8 @@ class BackendConfigField(fields.Field):
+             return AtomProtocol.Schema().load(value)
+         elif backend_type == "tilert":
+             return TileRTProtocol.Schema().load(value)
++        elif backend_type == "tokenspeed":
++            return TokenSpeedProtocol.Schema().load(value)
+         elif backend_type == "sglang":
+             schema = SGLangProtocol.Schema()
+             return schema.load(value)
+@@ -495,7 +505,7 @@ class BackendConfigField(fields.Field):
+             return schema.load(value)
+         else:
+             raise ValidationError(
+-                f"Unknown backend type: {backend_type!r}. Supported types: atom, sglang, tilert, trtllm, vllm, mocker"
++                f"Unknown backend type: {backend_type!r}. Supported types: atom, sglang, tilert, tokenspeed, trtllm, vllm, mocker"
+             )
+ 
+     def _serialize(self, value: Any | None, attr: str | None, obj: Any, **kwargs) -> Any:
+@@ -506,6 +516,8 @@ class BackendConfigField(fields.Field):
+             return AtomProtocol.Schema().dump(value)
+         if isinstance(value, TileRTProtocol):
+             return TileRTProtocol.Schema().dump(value)
++        if isinstance(value, TokenSpeedProtocol):
++            return TokenSpeedProtocol.Schema().dump(value)
+         if isinstance(value, SGLangProtocol):
+             return SGLangProtocol.Schema().dump(value)
+         if isinstance(value, TRTLLMProtocol):
+diff --git a/src/srtctl/core/schema_docs.py b/src/srtctl/core/schema_docs.py
+index 39f0a3b6..1fe84c05 100644
+--- a/src/srtctl/core/schema_docs.py
++++ b/src/srtctl/core/schema_docs.py
+@@ -51,6 +51,8 @@ from srtctl.backends import (
+     SGLangServerConfig,
+     TileRTProtocol,
+     TileRTServerConfig,
++    TokenSpeedProtocol,
++    TokenSpeedServerConfig,
+     TRTLLMProtocol,
+     TRTLLMServerConfig,
+     VLLMProtocol,
+@@ -86,6 +88,7 @@ BACKEND_TYPES: tuple[tuple[str, type], ...] = (
+     ("atom", AtomProtocol),
+     ("sglang", SGLangProtocol),
+     ("tilert", TileRTProtocol),
++    ("tokenspeed", TokenSpeedProtocol),
+     ("trtllm", TRTLLMProtocol),
+     ("vllm", VLLMProtocol),
+     ("mocker", MockerProtocol),
+@@ -109,7 +112,7 @@ _V2_TOP_LEVEL_ROWS = (
+         type_label="str \\| mapping",
+         default="optional when every role sets `engine`",
+         description=(
+-            "The engine type (`atom`, `sglang`, `tilert`, `trtllm`, `vllm`, `mocker`) as a string, or a mapping with `type` "
++            "The engine type (`atom`, `sglang`, `tilert`, `tokenspeed`, `trtllm`, `vllm`, `mocker`) as a string, or a mapping with `type` "
+             "plus the engine-wide knobs listed under [Engine types](#engine-types)."
+         ),
+     ),
+@@ -448,8 +451,9 @@ INTERNAL_FIELDS = {
+     SrtConfig: {"role_backends": "`roles.<role>.engine`", "role_containers": "`roles.<role>.container`"},
+     AtomProtocol: _present(AtomProtocol, _backend_legacy_fields(ENGINE_CONFIG_KEY["atom"])),
+     TileRTProtocol: _present(TileRTProtocol, _backend_legacy_fields(ENGINE_CONFIG_KEY["tilert"])),
++    TokenSpeedProtocol: _present(TokenSpeedProtocol, _backend_legacy_fields(ENGINE_CONFIG_KEY["tokenspeed"])),
+ }
+-INTERNAL_CLASSES = frozenset({AtomServerConfig, TileRTServerConfig})
++INTERNAL_CLASSES = frozenset({AtomServerConfig, TileRTServerConfig, TokenSpeedServerConfig})
+ 
+ 
+ def _row(row: FieldDoc) -> str:
+diff --git a/src/srtctl/core/topology.py b/src/srtctl/core/topology.py
+index d6897331..cbe010db 100644
+--- a/src/srtctl/core/topology.py
++++ b/src/srtctl/core/topology.py
+@@ -171,6 +171,7 @@ class Process:
+         moriio_handshake_port: MoRI-IO handshake listener of a vLLM discovery-connector worker
+         moriio_notify_port: first port of that worker's MoRI-IO notify block (one port per local rank)
+         trtllm_dist_init_port: TRT-LLM torch.distributed bootstrap port; the leader's is used
++        tokenspeed_port: TokenSpeed ``--port``, the base of the engine's own free-port scan
+ 
+     Every port is allocated by ``NodePortAllocator`` in ``endpoints_to_processes``;
+     consumers read these fields and never derive one port from another.
+@@ -196,6 +197,7 @@ class Process:
+     dist_init_port: int | None = None
+     vllm_scan_port: int | None = None
+     trtllm_dist_init_port: int | None = None
++    tokenspeed_port: int | None = None
+     moriio_handshake_port: int | None = None
+     moriio_notify_port: int | None = None
+ 
+diff --git a/src/srtctl/ports.py b/src/srtctl/ports.py
+index ae74afeb..a2d9ed27 100644
+--- a/src/srtctl/ports.py
++++ b/src/srtctl/ports.py
+@@ -42,6 +42,11 @@ SMG_METRICS_PORT = 29000
+ # TRT-LLM torch.distributed bootstrap, one port per MPI endpoint.
+ TRTLLM_DIST_INIT_PORT_BASE = 29500
+ 
++# TokenSpeed --port, one per process: a follower node's health listener and the base
++# of the engine's own NCCL free-port scan, which starts 100 to 1000 ports above it.
++TOKENSPEED_PORT_BASE = 10000
++TOKENSPEED_PORT_STRIDE = 1024
++
+ # Mooncake transfer-engine ports (shared by SGLang and vLLM backends).
+ MOONCAKE_MASTER_PORT = 8700
+ MOONCAKE_HTTP_METADATA_PORT = 8701
+@@ -125,3 +130,4 @@ VLLM_SCAN_PORTS = PortKind("vllm_scan", VLLM_PORT_BASE, VLLM_PORT_STRIDE)
+ MORIIO_HANDSHAKE_PORTS = PortKind("moriio_handshake", VLLM_MORIIO_HANDSHAKE_PORT_BASE)
+ MORIIO_NOTIFY_PORTS = PortKind("moriio_notify", VLLM_MORIIO_NOTIFY_PORT_BASE)
+ TRTLLM_DIST_INIT_PORTS = PortKind("trtllm_dist_init", TRTLLM_DIST_INIT_PORT_BASE)
++TOKENSPEED_PORTS = PortKind("tokenspeed", TOKENSPEED_PORT_BASE, TOKENSPEED_PORT_STRIDE, per_node=True)
