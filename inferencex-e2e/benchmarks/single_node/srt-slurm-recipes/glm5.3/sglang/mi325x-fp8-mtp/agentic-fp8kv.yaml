@@ -75,7 +75,7 @@ override_tp8_c1:
 override_tp8_c2:
   roles:
     agg:
-      args:
+      args: &natural_kv_args
         # Let the native allocator use the remaining HBM within the 0.85 budget.
         max-total-tokens: null
         max-running-requests: 4
@@ -83,4 +83,22 @@ override_tp8_c2:
   benchmark:
     env:
       CONC: '2'
+      KV_OFFLOADING: none
+
+override_tp8_c3:
+  roles:
+    agg:
+      args: *natural_kv_args
+  benchmark:
+    env:
+      CONC: '3'
+      KV_OFFLOADING: none
+
+override_tp8_c4:
+  roles:
+    agg:
+      args: *natural_kv_args
+  benchmark:
+    env:
+      CONC: '4'
       KV_OFFLOADING: none
