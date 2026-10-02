@@ -39,7 +39,8 @@ Generator eval modes:
 Changelog entries use `evals-only: true` and `all-evals: true`. The `all-evals`
 setting implies eval-only there. On PRs, the same names are modifier labels:
 `all-evals` expands coverage without suppressing throughput, while `evals-only`
-suppresses it. Modifier runs cannot be reused.
+suppresses it. `all-evals` runs remain reusable, but `evals-only` and
+`agentx-fast` runs are not.
 
 Deduplication is scenario-aware: fixed-sequence coverage does not suppress
 agentic coverage, and `all-evals` wins over default eval coverage.
@@ -99,7 +100,8 @@ artifact paths; a smoke result does not establish full-suite quality.
 
 ### Artifact reuse
 
-Default full sweeps may reuse their eval subset. Source coverage is
+Full sweeps with default or `all-evals` eval selection may reuse their eval
+artifacts. Source coverage is
 authoritative. Raw `meta_env.json` identities must match `eval_results_all`,
 and batched evals use `completed_eval_concs`. Policy drift is allowed, but
 malformed metadata, duplicates, and raw/aggregate mismatches are not. See
