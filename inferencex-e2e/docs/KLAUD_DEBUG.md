@@ -286,7 +286,7 @@ are skipped; dispatch a new autosweep so recovery checks the old session first.
 ## 9. PR conventions for this repo
 
 - Image-bump / new-recipe PRs I open on behalf of the user (or that the user creates) get the **`[Klaud Cold]`** title prefix.
-- Klaud Cold keeps targeted attempts draft and unlabeled; final validation keeps the PR draft with `full-sweep-fail-fast` as its sole sweep label; `finish` publishes verified results before readiness. Wait for successful completion on the exact head and reusable artifacts. See [the current Klaud guide](klaud.md); generic manual-sweep recommendations do not override this flow.
+- Klaud Cold keeps targeted attempts draft and unlabeled; final validation keeps the PR draft with `full-sweep-fail-fast` as its sole sweep label (or `full-sweep-enabled` for a documented infrastructure exception); `finish` publishes verified results before readiness. Wait for successful completion on the exact head and reusable artifacts. See [the current Klaud guide](klaud.md); generic manual-sweep recommendations do not override this flow.
 - After any code change that shifts a PR's scope (drops a recipe, changes an image tag), **update the PR title AND body in the same step** and **verify** with `gh pr view <N> --json title,body`. `gh pr edit` silently fails (see §8).
 - `uv run --extra workflows python -m infx.workflows.merge_with_reuse <N>` is the merge entrypoint. It handles the `perf-changelog.yaml` auto-append.
 

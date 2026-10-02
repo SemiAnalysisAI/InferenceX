@@ -195,11 +195,19 @@ schema; unknown keys fail.
 - `scheduler` names a scheduler registered in `infx.clusters.SCHEDULERS`; the
   sub-record of that name holds its settings, and records for other schedulers are
   rejected. Its `volumes` name the checkpoint roots and caches (`hf-home`,
-  `hf-hub-cache`, `shared-hf-hub-cache`, `aiperf-cache`, `dynamo-wheels`,
-  `tilert-weights`), each `shared` (the default) or `node-local`.
+  `hf-hub-cache`, `shared-hf-hub-cache`, `aiperf-cache`, `dynamo-wheels`),
+  each `shared` (the default) or `node-local`.
 - `slurm:` ([`infx/clusters/slurm.py`](../infx/clusters/slurm.py)) holds the partition,
   account, exclusivity, GRES, excluded nodes and extra `srun`/`salloc` options; its
   volumes are host `path`s that jobs see at the same place.
+- Optional `slurm.partitions` lists independent allocation partitions inside one
+  cluster. When nonempty, every runner in that cluster must have exactly one
+  `partition:<name>` inventory label naming an allowed partition, and the default
+  `slurm.partition` must be in the allowlist. The launcher resolves its actual
+  partition from the selected anchor's `RUNNER_NAME`, without changing the cluster
+  identity, model paths, or workload policies. Inventory labels must match GitHub.
+  The dashboard controller must support partition-aware leases before enabling
+  these runners; it must never combine capacity across partition labels.
 - `slurm.squash` is the Pyxis squash cache: `dir`, `visibility`, `lock-timeout-s`,
   `key-style` (`underscore`, `plus` or `plus-strip-nvcr`) and `import`: `submit-host`
   (on the launching host), `compute` (once on one compute node), `all-nodes` (on every
