@@ -114,6 +114,14 @@ deleted and independently confirmed absent. Do not dispatch another combined
 tier run until the filesystem tier has an enforced capacity bound or a monitor
 that stops the workload promptly at the declared guard.
 
+The monitor now resolves the shell's live process tree when a guard is crossed,
+signals workload descendants deepest-first, and then signals the shell so its
+owned cleanup trap can run. The guard receipt records the intended termination
+targets. This makes the existing stop guard prompt and deterministic; it does
+not turn the native filesystem tier into a bounded LRU cache. Requalify the
+corrected behavior with a c488 combined-tier run before using its metrics in a
+capacity-matched comparison.
+
 The combined tier uses a different connector and storage policy. The pinned FS
 tier has no bounded LRU capacity setting: the 2 TiB value is an abort guard, not an
 eviction quota. It was raised independently of the NVMe-only capacity after

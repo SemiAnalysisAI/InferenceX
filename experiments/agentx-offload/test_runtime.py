@@ -9,8 +9,10 @@ import runtime
 from cleanup_stale import TARGETS, cleanup_owned
 from runtime import (
     connector_config,
+    descendant_pids,
     nvme_limit,
     sysfs_backing_devices,
+    terminate_workload,
     verify_nvme_backing,
 )
 
@@ -83,6 +85,35 @@ def test_nvme_capacity_and_tiered_stop_guard_are_independent():
     assert nvme_limit(study, "dram") == 0
     assert nvme_limit(study, "nvme") == 1024
     assert nvme_limit(study, "dram-nvme") == 2048
+
+
+def test_capacity_guard_targets_workload_descendants_before_parent(
+    tmp_path, monkeypatch
+):
+    proc = tmp_path / "proc"
+    # 100 is the shell, 101 the monitor, 102 the benchmark, and 103 its server.
+    for pid, ppid, comm in (
+        (100, 1, "bash"),
+        (101, 100, "runtime monitor"),
+        (102, 100, "benchmark (worker)"),
+        (103, 102, "server"),
+    ):
+        entry = proc / str(pid)
+        entry.mkdir(parents=True)
+        (entry / "stat").write_text(f"{pid} ({comm}) S {ppid} 0 0 0\n")
+
+    descendants = descendant_pids(100, proc)
+    assert descendants == [101, 103, 102]
+
+    signals = []
+    monkeypatch.setattr(runtime.os, "getpid", lambda: 101)
+    monkeypatch.setattr(runtime.os, "kill", lambda pid, sig: signals.append((pid, sig)))
+    assert terminate_workload(100, descendants) == [103, 102]
+    assert signals == [
+        (103, runtime.signal.SIGTERM),
+        (102, runtime.signal.SIGTERM),
+        (100, runtime.signal.SIGTERM),
+    ]
 
 
 def test_study_uses_one_expanded_nvme_run_at_a_time():

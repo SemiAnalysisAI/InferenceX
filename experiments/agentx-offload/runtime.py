@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parent
 GIB = 2**30
 SCRATCH_ROOT = Path("/offload-scratch")
 SYS_BLOCK_ROOT = Path("/sys/class/block")
+PROC_ROOT = Path("/proc")
 
 
 def connector_config(
@@ -269,6 +270,49 @@ def cache_usage(cache: Path) -> dict[str, int]:
     return {"logical_bytes": logical, "allocated_bytes": allocated, "files": files}
 
 
+def descendant_pids(parent: int, proc_root: Path = PROC_ROOT) -> list[int]:
+    """Return live descendants deepest-first so active workload leaves stop first."""
+    children: dict[int, list[int]] = {}
+    for entry in proc_root.iterdir():
+        if not entry.name.isdigit():
+            continue
+        try:
+            stat = (entry / "stat").read_text()
+            # comm is parenthesized and may contain spaces or parentheses. The
+            # fields after its final ')' begin with state followed by ppid.
+            fields = stat[stat.rfind(")") + 2 :].split()
+            ppid = int(fields[1])
+        except (FileNotFoundError, IndexError, ValueError):
+            continue
+        children.setdefault(ppid, []).append(int(entry.name))
+
+    descendants: list[int] = []
+
+    def visit(pid: int) -> None:
+        for child in sorted(children.get(pid, [])):
+            visit(child)
+            descendants.append(child)
+
+    visit(parent)
+    return descendants
+
+
+def terminate_workload(parent: int, descendants: list[int]) -> list[int]:
+    """Stop workload children before signaling the shell that owns cleanup."""
+    signaled: list[int] = []
+    monitor_pid = os.getpid()
+    for pid in descendants:
+        if pid == monitor_pid:
+            continue
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            continue
+        signaled.append(pid)
+    os.kill(parent, signal.SIGTERM)
+    return signaled
+
+
 def monitor(parent: int) -> None:
     result, cfg = read_config()
     cache = Path(cfg["scratch"]) / "cache"
@@ -294,11 +338,18 @@ def monitor(parent: int) -> None:
             # the declared NVMe capacity or filesystem stop guard. Raw bytes are
             # retained for review.
             if cfg["nvme_bytes"] and usage["logical_bytes"] > cfg["nvme_bytes"] * 1.01:
+                descendants = descendant_pids(parent)
                 write_json(
                     result / "offload-guard.json",
-                    {"reason": "NVMe capacity guard exceeded", **usage},
+                    {
+                        "reason": "NVMe capacity guard exceeded",
+                        **usage,
+                        "termination_targets": [
+                            pid for pid in descendants if pid != os.getpid()
+                        ],
+                    },
                 )
-                os.kill(parent, signal.SIGTERM)
+                terminate_workload(parent, descendants)
                 return
             time.sleep(30)
 
@@ -348,7 +399,7 @@ def main() -> None:
                 Path(os.environ["RESULT_DIR"]) / "offload-guard.json",
                 {"reason": "Offload monitor failed", "error": str(exc)},
             )
-            os.kill(args.parent, signal.SIGTERM)
+            terminate_workload(args.parent, descendant_pids(args.parent))
             raise
     else:
         if args.exit_code is None:
