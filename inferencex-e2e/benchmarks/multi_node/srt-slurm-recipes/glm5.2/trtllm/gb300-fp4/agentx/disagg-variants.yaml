@@ -20,7 +20,8 @@ base:
     gpus_per_node: 4
   engine:
     type: trtllm
-    publish_metrics: true
+    publish_metrics: false
+    publish_events_and_metrics: false
   roles:
     prefill:
       gpus: 4
@@ -194,6 +195,7 @@ base:
       AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
       OPENAI_API_KEY: EMPTY
       KV_OFFLOADING: dram
+      AIPERF_SCRAPE_WORKER_METRICS: 'true'
     placement:
       node: dedicated
 
