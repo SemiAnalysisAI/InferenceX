@@ -74,6 +74,7 @@ override_tp8_mtp_c1:
       args: &mtp_args
         max-running-requests: 2
         cuda-graph-max-bs-decode: 2
+        chunked-prefill-size: 32768
         speculative-algorithm: EAGLE
         speculative-num-steps: 3
         speculative-eagle-topk: 1
@@ -90,6 +91,7 @@ zip_override_tp8_mtp_concurrency:
         <<: *mtp_args
         max-running-requests: [4, 6]
         cuda-graph-max-bs-decode: [4, 8]
+        chunked-prefill-size: 131072
   benchmark:
     env:
       CONC: ["2", "3"]
