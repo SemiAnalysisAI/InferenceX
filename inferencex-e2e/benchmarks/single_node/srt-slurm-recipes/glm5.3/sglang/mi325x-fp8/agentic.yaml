@@ -69,6 +69,42 @@ override_tp8_c1:
       CONC: '1'
       KV_OFFLOADING: none
 
+override_dep8_stp_quality:
+  frontend:
+    type: sglang-router
+    args:
+      policy: cache_aware
+      dp-aware: true
+      health-check-timeout-secs: 600
+      request-timeout-secs: 14400
+      disable-retries: true
+  roles:
+    agg:
+      args:
+        expert-parallel-size: 8
+        data-parallel-size: 8
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        moe-dense-tp-size: 1
+        moe-a2a-backend: mori
+        deepep-mode: normal
+        kv-cache-dtype: fp8_e4m3
+        max-total-tokens: null
+        chunked-prefill-size: 8192
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 16
+      env:
+        GLOO_SOCKET_IFNAME: enp193s0f0np0
+        NCCL_SOCKET_IFNAME: enp193s0f0np0
+        MORI_SOCKET_IFNAME: enp193s0f0np0
+        MORI_SHMEM_MODE: ISOLATION
+        # Native DP-local prefill chunks contain at most 8192 / 8 tokens.
+        SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: '1024'
+  benchmark:
+    env:
+      CONC: '8'
+      KV_OFFLOADING: none
+
 override_tp8_umbp_c1:
   services: &umbp_services
     - name: umbp
