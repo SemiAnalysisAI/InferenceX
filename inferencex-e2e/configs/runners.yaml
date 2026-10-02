@@ -749,15 +749,13 @@ clusters:
         lock-timeout-s: 600
       srt-slurm:
         network-interface: ""
-        env:
-          XDG_RUNTIME_DIR: /tmp/inferencex-mi325x-runtime-20004
-          ENROOT_RUNTIME_PATH: /tmp/inferencex-mi325x-runtime-20004/enroot
         single-node-time-limit: 480
         gpus-per-node-directive: true
         segment-directive: false
         mounts:
           /dev/kfd: /dev/kfd
           /dev/dri: /dev/dri
+          /dev/infiniband: /dev/infiniband
         extra:
           visible_devices_env: ROCR_VISIBLE_DEVICES
           default_bash_preamble: |-
