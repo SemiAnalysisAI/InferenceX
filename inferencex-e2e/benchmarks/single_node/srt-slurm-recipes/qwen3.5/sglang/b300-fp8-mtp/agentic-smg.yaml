@@ -11,13 +11,14 @@ base:
     gpus_per_node: 8
   frontend:
     type: smg
-    container_image: lightseekorg/smg:1.11.0
     enable_multiple_frontends: false
   observability:
     enabled: false
     tachometer:
       enabled: false
   engine: sglang
+  # pip install smg in the worker and SMG containers.
+  setup_script: smg-1.11.0.sh
   roles:
     agg:
       nodes: 1

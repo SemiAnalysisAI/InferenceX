@@ -26,10 +26,10 @@ index c78f327f..fdcb23ac 100644
  | `nginx_container` | str | `'nginx:1.27.4'` | Custom nginx container image (default: nginx:1.27.4) |
 diff --git a/docs/smg.md b/docs/smg.md
 new file mode 100644
-index 00000000..b3e9bd9f
+index 00000000..6df71fd0
 --- /dev/null
 +++ b/docs/smg.md
-@@ -0,0 +1,94 @@
+@@ -0,0 +1,97 @@
 +# Shepherd Model Gateway (SMG)
 +
 +`frontend.type: smg` runs the [Shepherd Model Gateway](https://github.com/smg-project/smg)
@@ -78,6 +78,9 @@ index 00000000..b3e9bd9f
 +- `container_image`: an engine image need not ship SMG. Point this at an image
 +  with the `smg` command (the official `lightseekorg/smg` image, or any image where
 +  `pip install smg` was run). Without it the model container is reused.
++- `setup_script`: the recipe's setup script also runs in SMG's container before
++  `smg launch`, so a script that runs `pip install smg==1.11.0` (a manylinux wheel)
++  makes the model image serve as the router image.
 +- `args`: passed to `smg launch` as `--<key> <value>`; `true` adds a bare flag and a
 +  list repeats the flag. `prometheus-port` is managed by srtctl and rejected here.
 +- `enable_multiple_frontends` / `num_additional_frontends`: as for every router,
@@ -346,10 +349,10 @@ index 1a0e055b..b27058ba 100644
      "VLLMFrontend",
 diff --git a/src/srtctl/frontends/smg.py b/src/srtctl/frontends/smg.py
 new file mode 100644
-index 00000000..0ac22aa8
+index 00000000..53383559
 --- /dev/null
 +++ b/src/srtctl/frontends/smg.py
-@@ -0,0 +1,51 @@
+@@ -0,0 +1,55 @@
 +# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 +# SPDX-License-Identifier: Apache-2.0
 +
@@ -366,7 +369,7 @@ index 00000000..0ac22aa8
 +from typing import TYPE_CHECKING, Any, ClassVar
 +
 +from srtctl.frontends.base import register_frontend
-+from srtctl.frontends.static_router import StaticRouterFrontend
++from srtctl.frontends.static_router import StaticRouterFrontend, setup_script_preamble
 +from srtctl.ports import SMG_METRICS_PORT
 +
 +if TYPE_CHECKING:
@@ -390,6 +393,10 @@ index 00000000..0ac22aa8
 +        """SMG serves Prometheus on its own listener, not on the routing port."""
 +        return SMG_METRICS_PORT
 +
++    def build_bash_preamble(self, config: Any) -> str | None:
++        """Run the recipe setup script in SMG's container, e.g. to ``pip install smg``."""
++        return setup_script_preamble(config)
++
 +    def get_managed_frontend_args(
 +        self,
 +        config: Any,
@@ -401,6 +408,78 @@ index 00000000..0ac22aa8
 +        if "prometheus-port" in normalized:
 +            raise ValueError("frontend.args.prometheus-port is managed by srtctl for smg")
 +        return ["--prometheus-port", str(SMG_METRICS_PORT)]
+diff --git a/src/srtctl/frontends/static_router.py b/src/srtctl/frontends/static_router.py
+index 8c0ea166..ba67ab17 100644
+--- a/src/srtctl/frontends/static_router.py
++++ b/src/srtctl/frontends/static_router.py
+@@ -38,6 +38,28 @@ class RouterWorker:
+     bootstrap_port: int | None = None
+ 
+ 
++def setup_script_preamble(config: Any) -> str | None:
++    """Shell that runs the recipe's ``setup_script`` in a router's own container.
++
++    A router that ships as a package (``pip install``) rather than in the model
++    image installs itself this way; the script is looked up in ``/configs`` and
++    then ``/configs/patches``, as for the workers.
++    """
++    setup_script = getattr(config, "setup_script", None)
++    if not setup_script:
++        return None
++    script_name = shlex.quote(setup_script)
++    return (
++        f"setup_script={script_name} && "
++        'script_path="/configs/${setup_script}" && '
++        'patch_script_path="/configs/patches/${setup_script}" && '
++        'echo "Running setup script: ${script_path} (fallback ${patch_script_path})" && '
++        'if [ -f "${script_path}" ]; then bash "${script_path}"; '
++        'elif [ -f "${patch_script_path}" ]; then bash "${patch_script_path}"; '
++        'else echo "WARNING: ${script_path} or ${patch_script_path} not found"; fi'
++    )
++
++
+ class StaticRouterFrontend:
+     """Base class for routers whose worker topology is supplied on the CLI.
+ 
+diff --git a/src/srtctl/frontends/vllm_router.py b/src/srtctl/frontends/vllm_router.py
+index 2a2fad5c..aa2d7cc3 100644
+--- a/src/srtctl/frontends/vllm_router.py
++++ b/src/srtctl/frontends/vllm_router.py
+@@ -5,12 +5,11 @@
+ 
+ from __future__ import annotations
+ 
+-import shlex
+ from typing import TYPE_CHECKING, Any, ClassVar
+ 
+ from srtctl.core.health import WorkerHealthResult, probe_http_ok
+ from srtctl.frontends.base import logical_health_expectations, register_frontend
+-from srtctl.frontends.static_router import RouterWorker, StaticRouterFrontend
++from srtctl.frontends.static_router import RouterWorker, StaticRouterFrontend, setup_script_preamble
+ from srtctl.ports import VLLM_DISCOVERY_PORT
+ 
+ if TYPE_CHECKING:
+@@ -234,19 +233,7 @@ class VLLMRouterFrontend(StaticRouterFrontend):
+ 
+     def build_bash_preamble(self, config: Any) -> str | None:
+         """Run the recipe setup script in the vLLM Router container."""
+-        setup_script = getattr(config, "setup_script", None)
+-        if not setup_script:
+-            return None
+-        script_name = shlex.quote(setup_script)
+-        return (
+-            f"setup_script={script_name} && "
+-            'script_path="/configs/${setup_script}" && '
+-            'patch_script_path="/configs/patches/${setup_script}" && '
+-            'echo "Running setup script: ${script_path} (fallback ${patch_script_path})" && '
+-            'if [ -f "${script_path}" ]; then bash "${script_path}"; '
+-            'elif [ -f "${patch_script_path}" ]; then bash "${patch_script_path}"; '
+-            'else echo "WARNING: ${script_path} or ${patch_script_path} not found"; fi'
+-        )
++        return setup_script_preamble(config)
+ 
+     def get_backend_health_urls(
+         self,
 diff --git a/src/srtctl/ports.py b/src/srtctl/ports.py
 index 3de5f4b0..ae74afeb 100644
 --- a/src/srtctl/ports.py
