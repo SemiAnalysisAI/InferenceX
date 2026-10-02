@@ -148,6 +148,10 @@ override_tp8_c1:
       CONC: "1"
 
 override_p_tp8_d_dep8_c4:
+  frontend:
+    args:
+      dp-aware: true
+      decode-policy: cache_aware
   roles:
     prefill:
       args:
