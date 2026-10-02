@@ -4519,9 +4519,13 @@
       "job_id": 110904495933,
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37027095833/job/110904495933",
       "runner": "b200-nscale-slurm_01",
+      "node": "im-b200-c001",
+      "allocation_id": "19378",
+      "scratch": "/offload-scratch/inferencex-offload-37027095833-1-19378-77ad2f31a3bb",
       "performance_result": false,
-      "phase": "runner admitted; awaiting Slurm allocation and storage preflight",
-      "dispatch_evidence": "Immediately before dispatch, a fresh cluster-wide inventory found zero queued cluster:b200-nscale jobs and no active-or-queued study workflow. One unrelated nodes:1 B200 job was in progress. The generated study job carries cluster:b200-nscale and nodes:1."
+      "phase": "allocated on allowlisted node; storage preflight passed; engine startup in progress",
+      "dispatch_evidence": "Immediately before dispatch, a fresh cluster-wide inventory found zero queued cluster:b200-nscale jobs and no active-or-queued study workflow. One unrelated nodes:1 B200 job was in progress. The generated study job carries cluster:b200-nscale and nodes:1.",
+      "storage_evidence": "Slurm allocated the run to allowlisted im-b200-c001 at 2026-10-02T16:53:21Z. offload_config.json records xfs /dev/md0 over eight non-rotating NVMe leaves, 13,257,138,135,040 free bytes before scratch creation, O_DIRECT verified, 739,000,000,000 DRAM bytes, 2,199,023,255,552 NVMe bytes, and the native OffloadingConnector TieringOffloadingSpec."
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894",
