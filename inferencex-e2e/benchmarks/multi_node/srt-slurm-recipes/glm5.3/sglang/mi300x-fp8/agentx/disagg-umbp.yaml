@@ -157,6 +157,9 @@ override_p_tp8_d_dep8_c4:
         max-running-requests: 8
         cuda-graph-max-bs-decode: 8
     decode:
+      env:
+        # STP decode is bounded by 16 requests, not the prefill-sized default.
+        SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "128"
       args:
         expert-parallel-size: 8
         data-parallel-size: 8
