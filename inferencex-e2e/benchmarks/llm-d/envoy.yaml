@@ -44,6 +44,13 @@ static_resources:
                     - name: vh
                       domains: ["*"]
                       routes:
+                        # Scrape metrics per node, never through load balancing.
+                        - match: { path: "/metrics" }
+                          direct_response: { status: 404 }
+                          typed_per_filter_config:
+                            envoy.filters.http.ext_proc:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.ext_proc.v3.ExtProcPerRoute
+                              disabled: true
                         - match: { prefix: "/" }
                           route:
                             cluster: original_dst

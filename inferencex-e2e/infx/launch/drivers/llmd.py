@@ -6,6 +6,7 @@ import os
 import shutil
 import subprocess
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 from infx.launch import artifacts, policy, proc
@@ -43,13 +44,32 @@ def _stage_agentic(logs_dir: Path, workspace: Path) -> None:
 
 
 def run(launch: Launch) -> int:
-    """Submit the llm-d Slurm job, follow its log, and stage benchmark artifacts."""
+    """Run throughput and accuracy on separate servers when throughput uses synthetic AL."""
+    request = LlmdRequest.from_env(launch.request.env)
+    logs_dir = request.workspace / "benchmark_logs"
+    launch.life.callback(
+        artifacts.bundle_server_logs, logs_dir, request.workspace / "multinode_server_logs.tar.gz"
+    )
+    if (
+        request.is_agentic
+        and request.spec_decoding != "none"
+        and request.run_eval
+        and not request.eval_only
+    ):
+        throughput = LlmdRequest.from_env({**request.env, "RUN_EVAL": "false"})
+        if rc := _run_job(replace(launch, request=throughput), logs_dir / "throughput"):
+            return rc
+        accuracy = LlmdRequest.from_env({**request.env, "RUN_EVAL": "true", "EVAL_ONLY": "true"})
+        return _run_job(replace(launch, request=accuracy), logs_dir / "eval")
+    return _run_job(launch, logs_dir)
+
+
+def _run_job(launch: Launch, logs_dir: Path) -> int:
+    """Submit one llm-d Slurm job, follow its log, and stage its artifacts."""
     backend = slurm_backend(launch)
     request = LlmdRequest.from_env(launch.request.env)
     if backend.settings.squash is None:
         raise LaunchError(f"llmd-vllm: cluster {launch.cluster.id!r} has no slurm.squash")
-    if not request.disagg:
-        raise LaunchError("llmd-vllm supports only P/D disaggregated points")
 
     checkpoint = models.checkpoint(launch.cluster, request)
     if checkpoint is None:
@@ -61,7 +81,6 @@ def run(launch: Launch) -> int:
         raise LaunchError(f"model checkpoint is unavailable: {model_path / 'config.json'}")
 
     squash = backend.prepare_image(request.image)
-    logs_dir = request.workspace / "benchmark_logs"
     logs_dir.mkdir(parents=True, exist_ok=True)
 
     account = backend.settings.account or cli.default_account()
@@ -81,7 +100,7 @@ def run(launch: Launch) -> int:
             "GPUS_PER_NODE": str(launch.cluster.gpus_per_node),
             "TIME_LIMIT": request.env.get("TIME_LIMIT") or DEFAULT_TIME_LIMIT,
             "PREFILL_WORKERS": str(request.prefill_num_workers),
-            "DECODE_WORKERS": str(request.decode_num_workers),
+            "DECODE_WORKERS": str(request.decode_num_workers if request.disagg else 1),
             "LLMD_CONTAINER_ENGINE": "pyxis",
             "LLMD_SQUASH_FILE": squash.reference,
             "BENCHMARK_LOGS_DIR": str(logs_dir),
@@ -124,9 +143,6 @@ def run(launch: Launch) -> int:
     job = backend.attach(job_id, log=log_file, outputs=logs_dir)
     print(f"Submitted llm-d job: {job_id}", flush=True)
 
-    launch.life.callback(
-        artifacts.bundle_server_logs, logs_dir, request.workspace / "multinode_server_logs.tar.gz"
-    )
     launch.life.callback(backend.cancel, job, wait_s=CANCEL_TIMEOUT_S)
 
     try:
@@ -137,7 +153,8 @@ def run(launch: Launch) -> int:
     status = backend.state(job)
     rc = 0 if status.succeeded else 1
 
-    for result_file in sorted(logs_dir.glob(f"{request.result_filename}*.json")):
+    results = [] if request.eval_only else sorted(logs_dir.glob(f"{request.result_filename}*.json"))
+    for result_file in results:
         try:
             artifacts.copy_to_workspace(result_file, request.workspace / result_file.name)
         except artifacts.ArtifactError as error:

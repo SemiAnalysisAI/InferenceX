@@ -199,14 +199,22 @@ STP（Single Token Prediction，单 Token 预测）是每次前向传播生成�
 llm-d 不是 srt-slurm 路径：InferenceX 自己持有 Slurm allocation，并在每个节点启动一个容器。
 
 1. 复制 [`benchmarks/multi_node/llm-d-recipes/`](../benchmarks/multi_node/llm-d-recipes) 下最接近的 YAML，设置 EPP plugin/scheduling、角色特定 `extra-args`/`env`，以及可选 `slurm.time_limit`。
-2. 添加/更新 `llmd-vllm` 主条目。设置 `multinode: true`、`disagg: true`、router 元数据、`kv-p2p-transfer`、prefill/decode worker 拓扑、并发，以及 `additional-settings` 中的 `CONFIG_FILE=<basename>.yaml`。
+2. 添加/更新 `llmd-vllm` 主条目。设置 `multinode: true`、router 元数据、并发，以及 `additional-settings` 中的 `CONFIG_FILE=<basename>.yaml`。P/D 模式使用 `disagg: true`、`kv-p2p-transfer` 和 prefill/decode worker 拓扑；聚合模式使用 `disagg: false`、`worker`、`num-nodes` 和 `DECODE_NODES=0`。
 3. 保持 `PREFILL_NODES`、`DECODE_NODES`、`GPUS_PER_NODE` 和 worker 数与 allocation 及各角色 DP/TP/EP 布局一致。
-4. 确认 [`submit.sh`](../benchmarks/multi_node/llm-d/submit.sh) → [`job.slurm`](../benchmarks/multi_node/llm-d/job.slurm) → [`server.sh`](../benchmarks/multi_node/llm-d/server.sh) 的传递，以及所选 wrapper/launcher 路由。
+4. 确认 [`submit.sh`](../benchmarks/multi_node/llm-d/submit.sh) → [`job.slurm`](../benchmarks/multi_node/llm-d/job.slurm) → [`server.sh`](../benchmarks/multi_node/llm-d/server.sh) 的传递；Python llm-d 驱动为 P/D 和聚合作业直接调用 `submit.sh`。
 5. 验证文件发现：decode leader 生成 `/tmp/endpoints.yaml`；prefill endpoint 使用 vLLM 端口 8200，decode endpoint 使用 sidecar 端口 8000；名称唯一；地址为 IPv4 字面量；端口是 `1..65535` 范围内的字符串。
 6. 确认 EPP 在 Envoy 收到流量前完成 discovery 加载，且角色标签为请求阶段选择正确的 prefill/decode backend。
 7. 生成 key，检查拓扑和 `additional-settings`，再追加 changelog。
 
 `CONFIG_FILE` 未设置或文件缺失时，会静默选择镜像内 `/etc/epp/config.yaml` fallback，并移除配方特定 vLLM 参数。除非明确打算使用 fallback，否则应将其视为验证失败。
+
+GB200 DSpark AgentX 配置使用 `cluster:gb200-nv`：聚合 TP8/DEP8 跨两个节点（8 GPU）；解耦 1P-DEP8/1D-DEP8 跨四个节点（16 GPU）；解耦 2P-DEP8/1D-DEP16 跨八个节点（32 GPU）。ARM64 镜像摘要包含 router v0.10.0；AgentX 不挂载旧版路由器二进制文件。使用 `token-load-scorer` 的配置必须显式声明 `inflight-load-producer`，以提供其依赖的未缓存 token 数据。launcher 使用预先存储的 `DeepSeek-V4-Pro-0813` checkpoint，而非旧版 V4-Pro 权重。DEP8 使用 `gpu-memory-utilization=0.88`，TP8 使用 `0.85`。长上下文回放分别在 0.92 和 0.90 时耗尽稀疏注意力索引器内存；应保留工作区余量，而不是缩短模型上下文或过滤轨迹。 NIXL+Mooncake P/D 使用 1,800 秒 KV 租约，与模型执行超时一致；默认的 30 秒租约在 c192 长上下文解码停顿期间过期。
+
+所有 GB200 llm-d AgentX MTP 吞吐测试均使用模拟接受长度，并关闭自适应验证。配方保留各角色的草稿 token 数：解耦 prefill 为 K=1，解耦 decode 与聚合 DEP8 为 K=3，聚合 TP8 为 K=5。运行时，`recipe.py` 调用 `infx.golden_al_distribution.golden_length`，从 [`infx/golden_al_distribution/dsv4-pro-0813-dspark.yaml`](../infx/golden_al_distribution/dsv4-pro-0813-dspark.yaml) 读取对应的已提交 golden AL，分别为 1.84、3.01 和 3.61。这些数值只维护在 golden 数据中，不写入配方。`EVAL_ONLY=true` 会移除模拟接受长度，并使用真实的 block 拒绝采样。对于同时请求吞吐和准确率评估的运行（`RUN_EVAL=true`、`EVAL_ONLY=false`），launcher 会提交两个独立的 Slurm 作业：先运行模拟接受长度的吞吐测试，再重新部署使用真实验证的服务进行准确率评估。
+
+Mooncake 嵌入式存储即使设置 `enable_offload: false` 也属于 DRAM 卸载（该开关控制 SSD）。需声明 `kv-offloading: dram`、`kv-offload-backend: { name: mooncake }` 和 `dram-utilization`；运行时将每节点预算均分给四个 GPU rank。Rank 0 在端口 50051 启动本次作业专用的 Mooncake master（指标端口为 50052）；所有 rank 等待其就绪后再启动 vLLM。`P2PHANDSHAKE` 不能替代存储 master。Mooncake 使用 InfiniBand HCA `mlx5_0,mlx5_1,mlx5_3,mlx5_4`；`mlx5_2` 和 `mlx5_5` 为以太网设备。普通 TP8/DEP8 声明 `none`。
+
+服务发现排除无 API 的 TP follower。`agentic.sh` 检查各服务节点的 vLLM `/metrics`，导出 `AIPERF_METRIC_URLS` 和 `AIPERF_SERVER_METRICS_URLS`，再通过 AIPerf 的 `--server-metrics` 传递。Envoy 在 EPP 路由前拒绝 `/metrics`，避免 AIPerf 自动抓取前端时重复统计 worker 计数器。适配器在回放前验证此端点返回 404，并要求导出结果包含 `vllm:` 指标。原始 AgentX 工件包含 `llmd_metrics_endpoints.json`，将各抓取 URL 映射到服务发现名称及 `prefill`、`decode` 或 `combined` 角色；仅凭 engine ID 无法区分 P/D 组。此清单不会添加 Prometheus 标签或改变应用的摄取逻辑。Envoy 和 P/D sidecar 的指标不能替代 vLLM 指标。
 
 ## 更新镜像
 
