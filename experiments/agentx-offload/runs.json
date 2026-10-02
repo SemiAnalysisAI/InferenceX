@@ -4503,33 +4503,53 @@
         "vllm_command.txt": "57d1a9f281533702acccbd88e35ae66df14c8fedbc3391d768d0f0634cd03f4e",
         "power_validation.json": "057c4cd15d89bd5298a7ac6c295b9c97e72487755d145a072dfc3f79fb043066"
       }
+    },
+    {
+      "run_id": 37027095833,
+      "url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37027095833",
+      "arm": "dram-nvme",
+      "concurrency": 488,
+      "repeat": 1,
+      "attempt": 1,
+      "head_sha": "fc9026e8383191ccb02750950aa790cf3ab26086",
+      "status": "in_progress",
+      "workflow_name": "offload-v1-dram-nvme-c488-r1-branchwf-20261002",
+      "dispatched_at": "2026-10-02T15:27:24Z",
+      "started_at": "2026-10-02T15:28:12Z",
+      "job_id": 110904495933,
+      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37027095833/job/110904495933",
+      "runner": "b200-nscale-slurm_01",
+      "performance_result": false,
+      "phase": "runner admitted; awaiting Slurm allocation and storage preflight",
+      "dispatch_evidence": "Immediately before dispatch, a fresh cluster-wide inventory found zero queued cluster:b200-nscale jobs and no active-or-queued study workflow. One unrelated nodes:1 B200 job was in progress. The generated study job carries cluster:b200-nscale and nodes:1."
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894",
-  "status": "Native DRAM c488 is a local canonical-warmup feasibility failure: six of 5,401 wire requests remained after the fixed drain timeout, so profiling never started. The next adaptive control is HBM+DRAM+NVMe c488.",
+  "status": "Native DRAM c488 is a local canonical-warmup feasibility failure. HBM+DRAM+NVMe c488 run 37027095833 is admitted on runner b200-nscale-slurm_01.",
   "last_capacity_check": {
-    "checked_at": "2026-10-01T23:54:46Z",
-    "active_study_run_ids": [],
+    "checked_at": "2026-10-02T15:28:12Z",
+    "active_study_run_ids": [
+      37027095833
+    ],
     "pending_study_run_ids": [],
     "dispatch_allowed": false,
     "b200_priority_jobs_queued": 0,
-    "b200_priority_jobs_in_progress": 3,
+    "b200_priority_jobs_in_progress": 2,
     "b200_active_or_queued_run_ids": [
-      36934474004,
-      36935917755,
-      36943237877
+      37025761564,
+      37027095833
     ],
     "b200_nodes_allocated": null,
     "b200_nodes_idle": null,
     "target_node": "im-b200-c001",
-    "target_node_state": "DRAM c488 terminal on im-b200-c007; exact task-owned scratch independently absent",
+    "target_node_state": "combined-tier c488 admitted; NVMe allowlist placement and storage preflight pending",
     "observed_free_bytes": null,
-    "reason": "A fresh inventory found zero queued cluster:b200-nscale jobs and no active-or-queued study workflow, so native DRAM c488 was dispatched and admitted with nodes:1."
+    "reason": "Fresh inventory found zero queued cluster:b200-nscale jobs and no active-or-queued study workflow, so HBM+DRAM+NVMe c488 was dispatched and admitted with nodes:1."
   },
   "next_dispatch": {
     "arm": "dram-nvme",
     "concurrency": 488,
-    "requires": "Preview the exact combined-tier c488 generator output, validate the study files, then dispatch only after a fresh cluster-wide inventory finds zero queued cluster:b200-nscale jobs and no active-or-queued study workflow."
+    "requires": "Allow run 37027095833 to complete allowlisted allocation, storage preflight, canonical warmup, and the 3,600-second profile. Dispatch nothing else while it is active."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-21T05:30:00Z",
