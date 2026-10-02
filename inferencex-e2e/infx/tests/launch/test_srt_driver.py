@@ -166,6 +166,21 @@ def test_single_node_eval_requires_a_successful_eval(harness):
     assert exit_file.read_text() == "0\n"
 
 
+@pytest.mark.parametrize("require_power", ["0", "1"])
+def test_single_node_native_power_keeps_bundle_and_result_paths(harness, require_power):
+    workspace = harness.workspace
+    env = single_node_env(harness, "mi355x-amds", FAKE_RESULTS="native-power", REQUIRE_POWER=require_power)
+    assert_ok(launch(env, harness.config, workspace))
+
+    manifest = json.loads((workspace / "LOGS/power/manifest.json").read_text())
+    assert manifest["power_profile"] == "amd-device-metrics"
+    window = json.loads((workspace / "LOGS/power/windows/point-identity.json").read_text())
+    assert json.loads((workspace / "LOGS" / window["result_path"]).read_text()) == {"completed": 2}
+    assert (workspace / "LOGS/power/samples.csv").read_text().endswith("host,0,300\n")
+    assert not (workspace / "gpu_metrics.csv").exists()
+    assert (workspace / "power-producer-sha.txt").read_text().strip() == env["FAKE_SRT_COMMIT"]
+
+
 def test_single_node_failed_allocation_fails_the_launch(harness):
     env = single_node_env(harness, "b200-nb", FAKE_STATE="FAILED|1:0")
     result = launch(env, harness.config, harness.workspace)

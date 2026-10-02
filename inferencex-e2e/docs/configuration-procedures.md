@@ -70,6 +70,15 @@ omitted. This does not enable telemetry in opted-out recipes or qualify Tachomet
 metrics as validated PowerX results. The existing 1000 ms Tachometer / 100 ms
 power-exporter collection intervals and port 9401 are preserved.
 
+The MI355X diagnostic uses the `amd-device-metrics` profile with a digest-pinned
+AMD exporter on port 19500. The launcher mounts its checked-in exporter config,
+reuses a valid cached image when available, and binds native telemetry to the
+selected single-node concurrency. Native collection replaces the direct sampler
+for that point; the benchmark writes its measured window and CI retains the native
+bundle in `power_audit_*`. The Qwen3.5 FP8 diagnostic has a 45-minute Slurm limit.
+This candidate fixes the 255 W sentinel but retains the 15-second GPUGet cache;
+successful ingestion is not one-second measurement qualification.
+
 Keep model selection, cache preparation, and workload-dependent time limits in the
 srt driver's tables ([`lanes.py`](../infx/launch/drivers/srt/lanes.py),
 [`models.py`](../infx/launch/drivers/srt/models.py),

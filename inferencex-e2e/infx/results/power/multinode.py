@@ -1,8 +1,8 @@
-"""Validate and aggregate multinode srt-slurm DCGM power artifacts.
+"""Validate and aggregate srt-slurm GPU power artifacts.
 
 Consumes the srt-slurm ``dcgm-power`` artifact package (v1 wire contract:
 ``power/{manifest.json, samples.csv, windows/*.json}``) produced for
-multinode runs, re-validates it independently, and patches whole-deployment
+single- or multi-node runs, re-validates it independently, and patches whole-deployment
 energy metrics plus role-level metrics for disaggregated deployments into the
 aggregate JSON.
 
@@ -69,6 +69,13 @@ PRODUCER = "srt-slurm.dcgm-power"
 POWER_METRIC = "DCGM_FI_DEV_POWER_USAGE"
 POWER_UNIT = "W"
 POWER_SCOPE = "gpu_device_board_as_reported_by_dcgm"
+POWER_PROFILES = {
+    "dcgm": (POWER_METRIC, POWER_SCOPE),
+    "amd-device-metrics": (
+        "gpu_power_usage",
+        "gpu_device_power_as_reported_by_amd_device_metrics_exporter",
+    ),
+}
 CLOCK_SOURCE = "head_node_unix_clock"
 
 MANIFEST_FILENAME = "manifest.json"
@@ -281,12 +288,18 @@ def _parse_expected_windows(manifest: dict) -> list[ExpectedWindow]:
 def _check_wire_contract(manifest: dict) -> list[str]:
     """Mirror srt-slurm's manifest wire/lifecycle checks (verdict excluded)."""
     failures: list[str] = []
+    profile = manifest.get("power_profile", "dcgm")
+    if not isinstance(profile, str) or profile not in POWER_PROFILES:
+        failures.append(f"unknown power_profile: {profile!r}")
+        expected_metric, expected_scope = POWER_METRIC, POWER_SCOPE
+    else:
+        expected_metric, expected_scope = POWER_PROFILES[profile]
     for key, expected in (
         ("schema_version", SCHEMA_VERSION),
         ("producer", PRODUCER),
-        ("source_metric", POWER_METRIC),
+        ("source_metric", expected_metric),
         ("unit", POWER_UNIT),
-        ("power_scope", POWER_SCOPE),
+        ("power_scope", expected_scope),
         ("timestamp_source", CLOCK_SOURCE),
     ):
         if manifest.get(key) != expected:

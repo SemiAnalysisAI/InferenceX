@@ -1,0 +1,8 @@
+{
+  "ServerPort": 19500,
+  "CommonConfig": {"MetricsFieldPrefix": ""},
+  "GPUConfig": {
+    "Fields": ["GPU_POWER_USAGE", "GPU_GFX_ACTIVITY"],
+    "Labels": ["GPU_ID", "SERIAL_NUMBER", "GPU_COMPUTE_PARTITION_TYPE", "GPU_MEMORY_PARTITION_TYPE"]
+  }
+}

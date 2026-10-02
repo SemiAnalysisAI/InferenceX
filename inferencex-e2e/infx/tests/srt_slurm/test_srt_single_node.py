@@ -82,6 +82,16 @@ def test_native_binding_submits_one_point_and_keeps_server_settings(point):
     assert commands == [["srtctl", "apply", "--json", "--yes", *argv, "--file", f"{path}:base"]]
 
 
+def test_native_power_window_tracks_the_selected_concurrency(point):
+    path, recipe, env = point
+    recipe["telemetry"] = {"enabled": True, "required": True}
+    path.write_text(yaml.safe_dump({"base": recipe}))
+    argv = runtime_arguments(f"{path}:base", env)
+    apply_overrides_to_recipe(recipe, parse_overrides(argv[1::2], []))
+    assert recipe["benchmark"]["concurrencies"] == [2]
+    assert recipe["roles"]["agg"]["gpus"] == 4
+
+
 @pytest.mark.parametrize("field,value,message", [
     ("TP", "2", "tensor-parallel-size"), ("IMAGE", "other:tag", "image"),
     ("ISL", "128", "ISL"), ("RUN_EVAL", "yes", "RUN_EVAL"),

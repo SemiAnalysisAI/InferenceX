@@ -17,6 +17,42 @@ REPO_ROOT = Path(__file__).resolve().parents[4]
 MODULE_COMMAND = [sys.executable, "-m", "infx.results.fixed_sequence"]
 
 
+@pytest.mark.parametrize("profile,metric,scope", [
+    ("dcgm", "DCGM_FI_DEV_POWER_USAGE", "gpu_device_board_as_reported_by_dcgm"),
+    ("amd-device-metrics", "gpu_power_usage", "gpu_device_power_as_reported_by_amd_device_metrics_exporter"),
+])
+def test_single_host_srt_bundle_uses_participating_gpu_power(
+    tmp_path, monkeypatch, single_node_env_vars, profile, metric, scope,
+):
+    import test_aggregate_power_multinode as package_fixture
+    from infx.results.fixed_sequence import aggregate_power_result
+
+    monkeypatch.setattr(package_fixture, "DEVICES", tuple(
+        ("node-a", index, "agg", None, 300.0) for index in range(4)
+    ))
+    pkg = build_package(tmp_path)
+    manifest_path = pkg.power_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest.update(power_profile=profile, source_metric=metric, power_scope=scope)
+    manifest_path.write_text(json.dumps(manifest))
+    monkeypatch.chdir(tmp_path)
+    env = {**single_node_env_vars, "TP": "4", "REQUIRE_POWER": "true",
+           "POWER_PRODUCER_SHA": PRODUCER_SHA}
+
+    assert aggregate_power_result(env, pkg.bench_result, pkg.agg_result) == 0
+    result = pkg.agg()
+    assert result["power_valid"] == 1
+    assert result["avg_power_w"] == pytest.approx(300.0)
+    sidecar = json.loads((tmp_path / "power_validation_benchmark_result.json").read_text())
+    assert sidecar["expected_gpu_count"] == sidecar["observed_gpu_count"] == 4
+
+    manifest["source_metric"] = "wrong_sensor"
+    manifest_path.write_text(json.dumps(manifest))
+    assert aggregate_power_result(env, pkg.bench_result, pkg.agg_result) == 1
+    assert pkg.agg()["power_valid"] == 0
+    assert "avg_power_w" not in pkg.agg()
+
+
 @pytest.mark.parametrize('fingerprint', ['', 'a' * 64, 'a' * 16 + 'b' * 48])
 def test_long_multinode_names_survive_result_and_power_processing(
     tmp_path, multinode_env_vars, sample_benchmark_result, fingerprint

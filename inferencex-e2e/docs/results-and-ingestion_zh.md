@@ -111,6 +111,14 @@ PR changelog 选择具有代表性的 NVIDIA 和 AMD 覆盖，并非所有受影
 
 ### SRT 多节点窗口保留
 
+SRT 功耗包也支持单节点运行。存在 `LOGS/power/manifest.json` 时，定长结果处理会
+根据 producer pin 和实际参与的 GPU 数量校验该包，不再读取旧 SMI CSV。
+manifest 的 `power_profile` 选择 NVIDIA DCGM 或 AMD Device Metrics Exporter，
+指标名称和测量边界必须与所选 profile 一致。单节点 `power_audit_*` artifact 保留
+`LOGS/power` 及其原始结果绑定，供 InferenceX-app 入库同一份样本。
+没有该包的历史路径仍使用直接采集的 CSV。每秒抓取一次不代表硬件读数每秒更新，
+exporter 数据新鲜度需要单独验收。
+
 功耗审计文件在 `selected_window` 中保留独立验证后的测量；`package_integrity_valid`
 记录共享证据检查，`window_validations` 记录逐窗口结论。保留测量仍要求证据可信、
 拓扑匹配且结果绑定正确。其他窗口失败时，顶层及聚合结果的 `power_valid` 仍为 false，

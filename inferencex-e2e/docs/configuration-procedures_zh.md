@@ -85,6 +85,12 @@ NVIDIA 集群配置通过 `slurm.srt-slurm.extra.default_gpu_exporter`，让 Tac
 PowerX 严格校验。现有的 Tachometer 1000 ms / 功耗 exporter 100 ms 采集间隔及 9401 端口
 保持不变。
 
+MI355X 诊断使用 `amd-device-metrics` profile，按 digest 固定 AMD exporter，端口为 19500。
+launcher 挂载仓库中的 exporter 配置，在有效缓存可用时复用镜像，并把原生采集绑定到选定的单节点并发点。
+该点的原生采集取代直接采样器；benchmark 写入实际测量窗口，CI 将原生数据包保存在 `power_audit_*`。
+Qwen3.5 FP8 诊断的 Slurm 时限为 45 分钟。此候选修复了 255 W sentinel，但仍保留 15 秒 GPUGet 缓存；
+成功入库不代表每秒新读数已经通过验收。
+
 ## 规程索引
 
 1. [准备 worktree](#准备-worktree)

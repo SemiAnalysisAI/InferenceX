@@ -46,13 +46,22 @@ def run_single_node(launch: Launch) -> int:
     hf_cache = models.single_node_hf_cache(run.cluster, request)
     time_limit = lanes.srt_time_limit(run.cluster.id, request, None, run.srt)
     root = Path(tempfile.mkdtemp(prefix="srt-single.", dir=run.workspace))
-    checkout = prepare_checkout(run, root / "checkout", power=False)
+    checkout = prepare_checkout(run, root / "checkout", power=True)
     install_srtctl(run, checkout)
     if (options := config.srun_options(run.backend.settings)) is not None:
         run.env["SRT_SRUN_OPTIONS"] = options
     if rc := submit.bind_point(run, checkout, root / "arguments"):
         return rc
     selected, runtime_args = submit.bound_arguments(root / "arguments")
+    containers = {}
+    exporter = run.srt.extra.get("default_gpu_exporter")
+    if exporter and exporter.get("power_profile") == "amd-device-metrics":
+        image = exporter["container_image"]
+        staged_exporter = run.backend.stage_image(image, single_node=True)
+        containers[image] = staged_exporter.reference
+        (run.workspace / config.EXPORTER_PROVENANCE).write_text(
+            f"{run.backend.image_provenance(staged_exporter)}\n"
+        )
     job_config = config.SrtJob(
         srtctl_root=checkout.root,
         workspace=run.workspace,
@@ -60,6 +69,7 @@ def run_single_node(launch: Launch) -> int:
         image=request.image,
         container=run.backend.stage_image(request.image, single_node=True).reference,
         nginx=config.NGINX_IMAGE if run.srt.nginx_aliases else None,
+        containers=containers,
         model_paths={f"hf:{request.model}": model_path},
         mounts=[(str(hf_cache), request.hf_hub_cache)],
         single_node=True,

@@ -88,6 +88,16 @@ def test_a_host_directory_cannot_be_mounted_at_three_targets():
         render(record, job(mounts=[("/share/hub", "/a"), ("/share/hub/", "/b")]))
 
 
+def test_amd_profile_mounts_its_exporter_config_in_the_job_workspace():
+    exporter = {"container_image": "test@sha256:abc", "port": 19500,
+                "power_profile": "amd-device-metrics"}
+    config = render(cluster(srt={"extra": {"default_gpu_exporter": exporter}}), job())
+    assert config["default_gpu_exporter"] == exporter
+    assert config["default_mounts"] == {
+        "/ws/runners/srt-slurm/exporters/amd-power.json": "/etc/metrics/config.json",
+    }
+
+
 def test_node_exclusions_cpus_and_image_aliases_are_rendered():
     record = cluster(
         slurm={"exclude": ["node-1", "node-2"], "cpus-per-task": 192,
@@ -179,7 +189,7 @@ def test_selected_partition_overrides_inherited_and_point_environment(tmp_path):
 def test_multinode_jobs_wait_at_least_the_health_floor_for_their_server(tmp_path, health, effective):
     recipe = tmp_path / "recipes/r.yaml"
     recipe.parent.mkdir()
-    recipe.write_text(yaml.safe_dump({"name": "r", **({"health_check": health} if health else {})}))
+    recipe.write_text(yaml.safe_dump({"schema": 2, "name": "r", **({"health_check": health} if health else {})}))
 
     prepare_recipe(tmp_path, "recipes/r.yaml", "job", None, None)
 

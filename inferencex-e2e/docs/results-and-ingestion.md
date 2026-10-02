@@ -111,6 +111,16 @@ Processing and diagnostic power-audit uploads run after launcher or validation f
 
 ### SRT multinode window retention
 
+SRT power packages also support single-node runs. When `LOGS/power/manifest.json`
+is present, fixed-sequence processing validates that package against the producer
+pin and the participating GPU count instead of reading a legacy SMI CSV. The
+manifest's `power_profile` selects NVIDIA DCGM or AMD Device Metrics Exporter;
+its metric name and measurement scope must match that profile. The single-node
+`power_audit_*` upload retains `LOGS/power` and its original result bindings so
+InferenceX-app can ingest the same samples. A legacy run without this package
+continues to use its direct CSV. A one-second scrape interval does not establish
+one-second hardware updates; exporter freshness requires separate qualification.
+
 Power audit sidecars retain independently validated measurements in `selected_window`;
 `package_integrity_valid` records shared evidence checks and `window_validations` records
 per-window verdicts. Retention requires trusted evidence, matching topology and result binding.

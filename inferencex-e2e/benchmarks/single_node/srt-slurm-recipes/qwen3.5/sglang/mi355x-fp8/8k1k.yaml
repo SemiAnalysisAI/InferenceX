@@ -16,6 +16,12 @@ base:
     tachometer:
       enabled: false
   engine: sglang
+  slurm:
+    time_limit: "00:45:00"
+  telemetry:
+    enabled: true
+    required: true
+    startup_timeout_seconds: 180
   roles:
     agg:
       nodes: 1

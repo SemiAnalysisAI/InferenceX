@@ -114,7 +114,14 @@ logs.mkdir(parents=True, exist_ok=True)
 (logs / "sweep_42.log").write_text("benchmark complete\n")
 result = os.environ["RESULT_FILENAME"]
 mode = os.environ["FAKE_RESULTS"]
-if mode == "single":
+if mode == "native-power":
+    (logs / f"{result}.json").write_text('{"completed": 2}')
+    (logs / "power" / "windows").mkdir(parents=True)
+    (logs / "power" / "samples.csv").write_text("hostname,gpu_index,power_w\nhost,0,300\n")
+    (logs / "power" / "manifest.json").write_text('{"power_profile": "amd-device-metrics"}')
+    (logs / "power" / "windows" / f"{result}.json").write_text(
+        json.dumps({"result_path": f"{result}.json"}))
+elif mode == "single":
     (logs / f"{result}.json").write_text('{"completed": 2}')
     (logs / "gpu_metrics.csv").write_text("gpu,power\n0,300\n")
     (logs / "gpu_metrics_context.json").write_text('{"device_count": 4}')

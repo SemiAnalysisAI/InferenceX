@@ -58,8 +58,13 @@ def finish_single_node(run: SrtRun, submitted: Submitted, fetched: Path) -> int:
     if not output.is_dir():
         return 0
     rc = 0
-    bundle_server_logs(output, run.workspace / SINGLE_NODE_LOGS)
     logs = output / "logs"
+    if (logs / "power").is_dir():
+        for name in (EXPORTER_PROVENANCE, "power-producer-sha.txt"):
+            if (run.workspace / name).is_file():
+                shutil.copyfile(run.workspace / name, logs / "power" / name)
+        shutil.copytree(logs, run.workspace / "LOGS", symlinks=True, dirs_exist_ok=True)
+    bundle_server_logs(output, run.workspace / SINGLE_NODE_LOGS)
     result = logs / f"{run.request.result_filename}.json"
     for artifact in [result, *sorted(logs.glob("gpu_metrics*"))]:
         if artifact.is_file():

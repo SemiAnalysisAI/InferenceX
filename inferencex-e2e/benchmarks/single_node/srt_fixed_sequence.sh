@@ -46,8 +46,10 @@ source "$(dirname "${BASH_SOURCE[0]}")/../benchmark_lib.sh"
 cd "$INFERENCEX_REPO_ROOT"
 pip3 install --break-system-packages sentencepiece datasets pandas
 
-start_gpu_monitor --output "$RESULT_DIR/gpu_metrics.csv" --interval "$SRT_MONITOR_INTERVAL"
-trap 'rc=$?; stop_gpu_monitor; exit "$rc"' EXIT
+if [[ -z "${SRT_MEASUREMENT_WINDOW_DIR:-}" ]]; then
+    start_gpu_monitor --output "$RESULT_DIR/gpu_metrics.csv" --interval "$SRT_MONITOR_INTERVAL"
+    trap 'rc=$?; stop_gpu_monitor; exit "$rc"' EXIT
+fi
 
 run_benchmark_serving \
     --model "$MODEL" \
@@ -62,3 +64,8 @@ run_benchmark_serving \
     --result-filename "$RESULT_FILENAME" \
     --result-dir "$RESULT_DIR" \
     "${CLIENT_ARGS[@]}"
+
+if [[ -n "${SRT_MEASUREMENT_WINDOW_DIR:-}" && "$EVAL_ONLY" == false ]]; then
+    PYTHONPATH="$INFERENCEX_REPO_ROOT" python3 -m infx.results.power.window \
+        "$RESULT_DIR/$RESULT_FILENAME.json" "$CONC"
+fi

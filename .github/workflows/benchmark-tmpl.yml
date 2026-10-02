@@ -351,6 +351,10 @@ jobs:
             echo "no raw result to process: $RESULT_FILENAME.json" >&2
             exit 1
           fi
+          if [ -z "$POWER_PRODUCER_SHA" ] && [ -f power-producer-sha.txt ]; then
+            export POWER_PRODUCER_SHA="$(cat power-producer-sha.txt)"
+            echo "POWER_PRODUCER_SHA derived from launcher stamp: $POWER_PRODUCER_SHA"
+          fi
           "$INFERENCEX_RESULTS_PYTHON" -P -m infx.results.fixed_sequence
 
       - name: Upload result
@@ -426,6 +430,8 @@ jobs:
             ${{ env.INFERENCEX_E2E_ROOT }}/gpu_metrics_identity.json
             ${{ env.INFERENCEX_E2E_ROOT }}/gpu_metrics_identity.csv
             ${{ env.INFERENCEX_E2E_ROOT }}/power_validation_${{ env.RESULT_FILENAME }}.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/power/**
+            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/${{ env.RESULT_FILENAME }}.json
             ${{ env.INFERENCEX_E2E_ROOT }}/results/gpu_metrics*.csv
             ${{ env.INFERENCEX_E2E_ROOT }}/results/gpu_metrics*_context.json
             ${{ env.INFERENCEX_E2E_ROOT }}/results/gpu_metrics_identity.json

@@ -884,5 +884,8 @@ clusters:
           /it-share/hf_home: /it-share/hf_home
         extra:
           visible_devices_env: ROCR_VISIBLE_DEVICES
-          default_gpu_exporter: null
+          default_gpu_exporter:
+            container_image: docker.io#amdpsdo/device-metrics-exporter@sha256:31308aecb0ef0f1f1e69ab6e83ea467c381fcfa927e9d0a4ff2763b203e5b8e5
+            port: 19500
+            power_profile: amd-device-metrics
           nginx_raise_ulimit: false

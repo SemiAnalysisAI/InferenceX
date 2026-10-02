@@ -151,6 +151,11 @@ def render(cluster: Cluster, job: SrtJob) -> dict[str, Any]:
     if shadowed := sorted(config.keys() & srt.extra.keys()):
         raise LaunchError(f"cluster {cluster.id!r} srt-slurm.extra sets rendered keys {shadowed}")
     config.update(srt.extra)
+    exporter = config.get("default_gpu_exporter")
+    if exporter and exporter.get("power_profile") == "amd-device-metrics":
+        config.setdefault("default_mounts", {})[
+            str(job.workspace / "runners/srt-slurm/exporters/amd-power.json")
+        ] = "/etc/metrics/config.json"
     return config
 
 
