@@ -18,7 +18,7 @@ Paths and shell commands in these guides are relative to `inferencex-e2e/` unles
 | [`agent-guide.md`](agent-guide.md) / [`agent-guide_zh.md`](agent-guide_zh.md) | Agent onboarding, safe start, invariants, and verification |
 | [`procedures.md`](procedures.md) / [`procedures_zh.md`](procedures_zh.md) | Routing from a recurring task to one focused operational checklist |
 | [`architecture.md`](architecture.md) / [`architecture_zh.md`](architecture_zh.md) | Config-to-result flow, ownership boundaries, artifacts, and InferenceX-app handoff |
-| [`configuration-procedures.md`](configuration-procedures.md) / [`configuration-procedures_zh.md`](configuration-procedures_zh.md) | Config, runner, image, recipe, llm-d, srt-slurm, and MTP changes |
+| [`configuration-procedures.md`](configuration-procedures.md) / [`configuration-procedures_zh.md`](configuration-procedures_zh.md) | Config, runner, image, recipe, srt-slurm, and MTP changes |
 | [`ci-procedures.md`](ci-procedures.md) / [`ci-procedures_zh.md`](ci-procedures_zh.md) | Matrix generation, validation, dispatch, PR sweeps, reuse, staging, and artifact downloads |
 | [`eval-agentx-procedures.md`](eval-agentx-procedures.md) / [`eval-agentx-procedures_zh.md`](eval-agentx-procedures_zh.md) | Eval and AgentX selection, execution, scoring, evidence, and live-run diagnosis |
 | [`agentx-standalone.md`](agentx-standalone.md) / [`agentx-standalone_zh.md`](agentx-standalone_zh.md) | Install the pinned AgentX client and replay traces against an existing server without CI or Slurm |
@@ -39,7 +39,7 @@ Paths and shell commands in these guides are relative to `inferencex-e2e/` unles
 | [`.github/AGENT_OPERATIONS.md`](../../.github/AGENT_OPERATIONS.md) | Translation terms, sweep labels, dispatch, eval selection, power, metrics, and artifacts |
 | [`configs/CONFIGS.md`](../configs/CONFIGS.md) | Master-config schema, search spaces, runners, and topology fields |
 | [`.github/workflows/README.md`](../../.github/workflows/README.md) | Generator examples, workflow operation, and reuse policy |
-| [`infx/evals/EVALS.md`](../infx/evals/EVALS.md) | Eval task, execution, collection, validation, and SWE-bench contracts |
+| [`infx/evals/EVALS.md`](../infx/evals/EVALS.md) | Eval task, execution, collection, and validation contracts |
 | [`benchmarks/multi_node/srt-slurm-recipes/RECIPES.md`](../benchmarks/multi_node/srt-slurm-recipes/RECIPES.md) | Disaggregated recipe registration and master-config coupling |
 | [`utils/runner_setup/RUNNER_SETUP.md`](../utils/runner_setup/RUNNER_SETUP.md) | Runner provisioning and setup |
 | [`MODELS.md`](MODELS.md) | Supported models, hardware coverage, and naming |

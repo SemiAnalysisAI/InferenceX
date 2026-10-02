@@ -17,7 +17,7 @@ The repository source, workflow YAML, launcher scripts, and result collectors ar
 | Add a model or GPU benchmark | [Configuration procedures](configuration-procedures.md#add-a-model--hardware-recipe) | closest benchmark script, launcher, master YAML, changelog |
 | Modify an existing config | [Configuration procedures](configuration-procedures.md#change-a-master-config) | `CONFIGS.md`, validation schema, generator, runtime consumer |
 | Add a runner | [Configuration procedures](configuration-procedures.md#register-and-set-up-a-runner) | runner setup, `configs/runners.yaml`, launcher |
-| Change srt-slurm or llm-d | [Configuration procedures](configuration-procedures.md#register-an-srt-slurm-recipe) | Recipe YAML, master config, `srtctl` mapping, launcher |
+| Change an srt-slurm recipe | [Configuration procedures](configuration-procedures.md#register-an-srt-slurm-recipe) | Recipe YAML, master config, `srtctl` mapping, launcher |
 | Change MTP | [Configuration procedures](configuration-procedures.md#add-or-change-mtp) | MTP sibling, draft model, chat-template path |
 | Validate a matrix | [CI procedures](ci-procedures.md#local-matrix-generation) | generator CLI and Pydantic validation |
 | Dispatch or monitor a run | [CI procedures](ci-procedures.md#manual-end-to-end-dispatch) | `e2e-tests.yml`, run logs, artifacts |

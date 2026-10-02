@@ -5,7 +5,6 @@ import io
 import json
 import os
 import signal
-import socket
 import stat
 import subprocess
 import sys
@@ -69,7 +68,6 @@ def explicit_runtime_inputs(monkeypatch: pytest.MonkeyPatch) -> None:
         "PORT": "8888",
         "CONC": "64",
         "VENDOR_VERIFIER_PYTHON": "python3",
-        "SWEBENCH_GEN_MODE": "agentic",
         "INFMAX_CONTAINER_WORKSPACE": str(REPO_ROOT),
         "AIPERF_PYTHON_VERSION": "3.11",
         "AIPERF_DRAIN_TIMEOUT_SECONDS": "120",
@@ -79,17 +77,6 @@ def explicit_runtime_inputs(monkeypatch: pytest.MonkeyPatch) -> None:
         "EVAL_ENDPOINT_READY_TIMEOUT_SECONDS": "1800",
         "EVAL_MODEL_STABILIZATION_SECONDS": "0",
         "OPENAI_API_KEY": "EMPTY",
-        "SWEBENCH_USE_MODAL": "false",
-        "SWEBENCH_AGENT_STEP_LIMIT": "250",
-        "SWEBENCH_EXPECTED_INSTANCES": "300",
-        "SWEBENCH_AGENT_TIMEOUT": "21600",
-        "SWEBENCH_AGENT_EXIT_GRACE": "300",
-        "SWEBENCH_WATCHDOG_POLL": "30",
-        "SWEBENCH_SANDBOX_SWEEP": "1",
-        "SWEBENCH_SKIP_SCORE": "false",
-        "SWEBENCH_EVAL_TIMEOUT": "900",
-        "SWEBENCH_SCORE_TIMEOUT": "7200",
-        "SWEBENCH_MAX_WORKERS": "4",
     }.items():
         monkeypatch.setenv(name, value)
 
@@ -98,7 +85,6 @@ _SCRIPT = r"""
 source "$BENCHMARK_LIB"
 _wait_for_openai_chat_route() { echo "READY=$*"; }
 run_lm_eval()       { echo "DISPATCH=lm-eval"; }
-run_swebench_eval() { echo "DISPATCH=swebench"; }
 run_kimi_vendor_eval() { echo "DISPATCH=kimi-vendor"; }
 run_minimax_vendor_eval() { echo "DISPATCH=minimax-vendor"; }
 run_bfcl_eval() { echo "DISPATCH=bfcl"; }
@@ -211,7 +197,6 @@ def test_agentic_dependency_install_is_rootless_without_git(tmp_path: Path) -> N
         "tqdm>=4.66",
         "datasets>=4.7.0",
         "tiktoken",
-        "matplotlib",
         "huggingface_hub[cli]>=0.25.0",
         "urllib3",
         "requests",
@@ -248,10 +233,6 @@ def test_environment_framework_overrides_legacy_recipe_argument() -> None:
         cli_fw="bfcl",
         env_fw="kimi-vendor",
     )
-
-
-def test_env_can_force_swebench_on_fixed_seqlen():
-    assert "DISPATCH=swebench" in _dispatch(is_agentic="0", env_fw="swebench")
 
 
 def test_kimi_vendor_skips_unused_model_context_loading() -> None:
@@ -1647,10 +1628,6 @@ def test_stage_eval_artifacts_copies_eval_outputs_only(tmp_path: Path) -> None:
         "bfcl_report.json",
         "bfcl_upstream_artifacts.tar.gz",
         "sample_eval.jsonl",
-        "agent_preds.json",
-        "predictions.jsonl",
-        "swebench_report_eval.json",
-        "trace.traj.json",
     }
     for filename in expected:
         source = source_one if filename.endswith(".json") else source_two
@@ -1875,106 +1852,6 @@ done
     ]
 
 
-_MODAL_CREDS_SCRIPT = r"""
-source "$BENCHMARK_LIB"
-_ensure_modal_credentials
-echo "HOME_AFTER=$HOME"
-if [ -f "$HOME/.modal.toml" ]; then
-    echo "TOML_EXISTS=true"
-    PERMS=$(stat -c '%a' "$HOME/.modal.toml" 2>/dev/null || stat -f '%A' "$HOME/.modal.toml" 2>/dev/null)
-    echo "TOML_PERMS=$PERMS"
-fi
-"""
-
-
-def _run_modal_creds(
-    tmp_path: Path, *, home: str, token_id="tok-id", token_secret="tok-secret"
-) -> str:
-    env = {
-        **os.environ,
-        "BENCHMARK_LIB": str(BENCHMARK_LIB),
-        "KV_OFFLOADING": "none",
-        "SWEBENCH_USE_MODAL": "true",
-        "MODAL_TOKEN_ID": token_id,
-        "MODAL_TOKEN_SECRET": token_secret,
-        "HOME": home,
-    }
-    res = subprocess.run(
-        ["bash", "-c", _MODAL_CREDS_SCRIPT],
-        env=env,
-        text=True,
-        capture_output=True,
-        check=True,
-    )
-    return res.stdout + res.stderr
-
-
-def test_modal_creds_no_remap_when_home_writable(tmp_path):
-    home = str(tmp_path / "writable_home")
-    Path(home).mkdir()
-    out = _run_modal_creds(tmp_path, home=home)
-    assert f"HOME_AFTER={home}" in out, f"HOME should not be remapped:\n{out}"
-    assert "TOML_EXISTS=true" in out
-    toml_path = Path(home) / ".modal.toml"
-    assert toml_path.exists()
-    mode = oct(stat.S_IMODE(toml_path.stat().st_mode))
-    assert mode == "0o600", f"Expected 0o600 got {mode}"
-
-
-def test_modal_creds_remaps_home_when_not_writable_parent(tmp_path):
-    readonly_parent = tmp_path / "readonly_parent"
-    readonly_parent.mkdir(mode=0o555)
-    nested_home = str(readonly_parent / "nested_home")
-    try:
-        out = _run_modal_creds(tmp_path, home=nested_home)
-        assert "HOME_AFTER=/tmp/inferencex-modal-home" in out, (
-            f"Expected HOME remap:\n{out}"
-        )
-        assert "remapped" in out.lower() or "HOME remapped" in out
-        assert "TOML_EXISTS=true" in out
-        toml_path = Path("/tmp/inferencex-modal-home/.modal.toml")
-        assert toml_path.exists()
-        mode = oct(stat.S_IMODE(toml_path.stat().st_mode))
-        assert mode == "0o600", f"Expected 0o600 got {mode}"
-    finally:
-        readonly_parent.chmod(0o755)
-
-
-def test_modal_creds_remaps_home_when_not_writable(tmp_path):
-    readonly_home = tmp_path / "readonly_home"
-    readonly_home.mkdir(mode=0o555)
-    try:
-        out = _run_modal_creds(tmp_path, home=str(readonly_home))
-        assert "HOME_AFTER=/tmp/inferencex-modal-home" in out, (
-            f"Expected HOME remap:\n{out}"
-        )
-        assert "TOML_EXISTS=true" in out
-    finally:
-        readonly_home.chmod(0o755)
-
-
-def test_modal_creds_no_remap_when_disabled(tmp_path):
-    env = {
-        **os.environ,
-        "BENCHMARK_LIB": str(BENCHMARK_LIB),
-        "KV_OFFLOADING": "none",
-        "SWEBENCH_USE_MODAL": "false",
-        "MODAL_TOKEN_ID": "tok",
-        "MODAL_TOKEN_SECRET": "sec",
-        "HOME": str(tmp_path),
-    }
-    res = subprocess.run(
-        ["bash", "-c", _MODAL_CREDS_SCRIPT],
-        env=env,
-        text=True,
-        capture_output=True,
-        check=True,
-    )
-    out = res.stdout + res.stderr
-    assert "remapped" not in out.lower()
-    assert "TOML_EXISTS" not in out
-
-
 _INCLUDE_PATH_SCRIPT = r"""
 set -e
 SHIM_DIR=$(mktemp -d)
@@ -2029,13 +1906,13 @@ def _run_lm_eval_with_include_path(
 def test_include_path_injected_when_eval_include_path_set():
     out = _run_lm_eval_with_include_path(
         eval_include_path="infx/evals",
-        eval_tasks_dir="swebench_lite",
+        eval_tasks_dir="custom_task",
     )
     assert "--include_path infx/evals" in out, (
         f"Expected '--include_path infx/evals' in output:\n{out}"
     )
-    assert "--tasks swebench_lite" in out, (
-        f"Expected '--tasks swebench_lite' in output:\n{out}"
+    assert "--tasks custom_task" in out, (
+        f"Expected '--tasks custom_task' in output:\n{out}"
     )
     assert ".yaml" not in out.split("--tasks")[1].split()[0], (
         f"--tasks must not contain a .yaml path when include_path is set:\n{out}"
@@ -2052,367 +1929,8 @@ def test_include_path_absent_when_eval_include_path_unset():
     )
 
 
-def test_swebench_single_shot_registers_task_yaml():
-    script = r"""
-source "$BENCHMARK_LIB"
-run_lm_eval() {
-    echo "TASK=$EVAL_TASKS_DIR"
-    echo "INCLUDE=$EVAL_INCLUDE_PATH"
-    return 9
-}
-export SWEBENCH_GEN_MODE=single-shot
-export EVAL_TASKS_DIR="$TASK_YAML"
-export MODEL=test-model
-run_swebench_eval
-"""
-    env = {
-        **os.environ,
-        "BENCHMARK_LIB": str(BENCHMARK_LIB),
-        "TASK_YAML": str(BENCHMARK_LIB.parents[1] / "infx/evals/swebench_lite.yaml"),
-        "KV_OFFLOADING": "none",
-    }
-    result = subprocess.run(
-        ["bash", "-c", script],
-        env=env,
-        text=True,
-        capture_output=True,
-    )
-    assert result.returncode == 9
-    assert "TASK=swebench_lite" in result.stdout
-    assert f"INCLUDE={BENCHMARK_LIB.parents[1] / 'infx/evals'}" in result.stdout
-
-
-def test_modal_credentials_sanitizes_whitespace_contaminated_tokens(tmp_path):
-    home = tmp_path / "home"
-    home.mkdir()
-    script = r"""
-source "$BENCHMARK_LIB" 2>/dev/null
-export SWEBENCH_USE_MODAL=true
-_ensure_modal_credentials
-grep -q '^token_id = "ak-clean123"$' "$HOME/.modal.toml" || { echo ID_DIRTY; exit 1; }
-grep -q '^token_secret = "as-clean456"$' "$HOME/.modal.toml" || { echo FILE_DIRTY; exit 1; }
-[ "$MODAL_TOKEN_ID" = "ak-clean123" ] && [ "$MODAL_TOKEN_SECRET" = "as-clean456" ] || { echo ENV_DIRTY; exit 1; }
-echo SANITIZED_OK
-"""
-    env = {
-        **os.environ,
-        "BENCHMARK_LIB": str(BENCHMARK_LIB),
-        "HOME": str(home),
-        "MODAL_TOKEN_ID": " \t'ak-clean123'\r\n",
-        "MODAL_TOKEN_SECRET": ' \t"as-clean456"\r\n',
-    }
-    res = subprocess.run(
-        ["bash", "-c", script], env=env, text=True, capture_output=True
-    )
-    assert res.returncode == 0, res.stdout + res.stderr
-    assert "SANITIZED_OK" in res.stdout
-
-
 # Advance the watchdog's clock by requested waits. The small real yield lets
 # child processes run; their sleep, signal handling, and exit status stay real.
-_AGENTIC_TEST_CLOCK = r"""
-_test_now=0
-date() {
-    if [[ "$*" == "+%s" ]]; then printf '%s\n' "$_test_now"; else command date "$@"; fi
-}
-sleep() {
-    _test_now=$((_test_now + $1))
-    command sleep 0.01
-}
-"""
-
-
-def test_agentic_generation_invokes_mini_swe_agent(tmp_path):
-    shim = tmp_path / "shim"
-    shim.mkdir()
-    (shim / "mini-extra").write_text(
-        "#!/bin/bash\n"
-        'echo "MINI_ARGV: $*" >> ' + str(shim / "argv.log") + "\n"
-        'out=""; prev=""\n'
-        'for a in "$@"; do [ "$prev" = "-o" ] && out="$a"; prev="$a"; done\n'
-        'mkdir -p "$out"\n'
-        'printf \'{"i1": {"instance_id": "i1", "model_name_or_path": "m", "model_patch": "d"}}\' > "$out/preds.json"\n'
-    )
-    (shim / "mini-extra").chmod(0o755)
-    default_yaml = shim / "default.yaml"
-    default_yaml.write_text("agent: {}\n")
-    (shim / "python3").write_text(
-        "#!/bin/bash\n"
-        f'if [[ "$*" == *minisweagent* ]]; then echo "This is mini-swe-agent."; echo "Check the v2 migration guide"; echo "{default_yaml}"; else exec "$TEST_PYTHON" "$@"; fi\n'
-    )
-    (shim / "python3").chmod(0o755)
-
-    gen_dir = tmp_path / "gen"
-    gen_dir.mkdir()
-    script = _AGENTIC_TEST_CLOCK + r"""
-source "$BENCHMARK_LIB" 2>/dev/null
-_install_swebench_agent_deps() { :; }
-_ensure_modal_credentials() { :; }
-export EVAL_LIMIT=10 MODEL_NAME=test-model SWEBENCH_SANDBOX_SWEEP=0 SWEBENCH_WATCHDOG_POLL=1
-_run_swebench_agentic_generation "$GEN_DIR" --port 8899 || exit 1
-[ -s "$GEN_DIR/agent_out/preds.json" ] || { echo NO_PREDS; exit 1; }
-grep -q 'api_base: http://0.0.0.0:8899/v1' "$GEN_DIR/mini_swebench_overrides.yaml" || { echo BAD_PORT; exit 1; }
-grep -q 'openai/test-model' "$GEN_DIR/mini_swebench_overrides.yaml" || { echo BAD_MODEL; exit 1; }
-echo AGENTIC_GEN_OK
-"""
-    env = {
-        **os.environ,
-        "BENCHMARK_LIB": str(BENCHMARK_LIB),
-        "GEN_DIR": str(gen_dir),
-        "TEST_PYTHON": sys.executable,
-        "PATH": f"{shim}:{os.environ['PATH']}",
-    }
-    res = subprocess.run(
-        ["bash", "-c", script], env=env, text=True, capture_output=True
-    )
-    assert res.returncode == 0, res.stdout + res.stderr
-    assert "AGENTIC_GEN_OK" in res.stdout
-    argv = (shim / "argv.log").read_text()
-    assert "--slice 0:10" in argv
-    assert "--environment-class swerex_modal" in argv
-    assert "--subset lite" in argv
-
-
-def _agentic_shim(tmp_path, mini_body):
-    shim = tmp_path / "shim"
-    shim.mkdir()
-    (shim / "mini-extra").write_text("#!/bin/bash\n" + mini_body)
-    (shim / "mini-extra").chmod(0o755)
-    default_yaml = shim / "default.yaml"
-    default_yaml.write_text("agent: {}\n")
-    (shim / "python3").write_text(
-        "#!/bin/bash\n"
-        f'if [[ "$*" == *minisweagent* ]]; then echo "{default_yaml}"; else exec "$TEST_PYTHON" "$@"; fi\n'
-    )
-    (shim / "python3").chmod(0o755)
-    gen_dir = tmp_path / "gen"
-    gen_dir.mkdir()
-    return shim, gen_dir
-
-
-def _run_agentic(shim, gen_dir, extra_env=None):
-    script = _AGENTIC_TEST_CLOCK + r"""
-source "$BENCHMARK_LIB" 2>/dev/null
-_install_swebench_agent_deps() { :; }
-_ensure_modal_credentials() { :; }
-_run_swebench_agentic_generation "$GEN_DIR" --port 8899
-echo "GEN_RC=$?"
-"""
-    env = {
-        **os.environ,
-        "BENCHMARK_LIB": str(BENCHMARK_LIB),
-        "GEN_DIR": str(gen_dir),
-        "TEST_PYTHON": sys.executable,
-        "MODEL_NAME": "test-model",
-        "SWEBENCH_SANDBOX_SWEEP": "0",
-        "SWEBENCH_WATCHDOG_POLL": "1",
-        "PATH": f"{shim}:{os.environ['PATH']}",
-        **(extra_env or {}),
-    }
-    return subprocess.run(
-        ["bash", "-c", script], env=env, text=True, capture_output=True, timeout=10
-    )
-
-
-def test_agentic_watchdog_kills_hung_mini(tmp_path):
-    shim, gen_dir = _agentic_shim(
-        tmp_path,
-        'out=""; prev=""\n'
-        'for a in "$@"; do [ "$prev" = "-o" ] && out="$a"; prev="$a"; done\n'
-        'mkdir -p "$out"\n'
-        'printf "%s\\n" "$$" > "$out/mini.pid"\n'
-        'printf \'{"i1": {"instance_id": "i1", "model_patch": "d"}}\' > "$out/preds.json"\n'
-        "exec sleep 600 </dev/null >/dev/null 2>&1\n",
-    )
-    pid_file = gen_dir / "agent_out/mini.pid"
-    try:
-        res = _run_agentic(
-            shim, gen_dir, {"EVAL_LIMIT": "1", "SWEBENCH_AGENT_EXIT_GRACE": "2"}
-        )
-        assert "GEN_RC=0" in res.stdout, res.stdout + res.stderr
-        assert "hung after completing all instances" in res.stdout + res.stderr
-        with pytest.raises(ProcessLookupError):
-            os.kill(int(pid_file.read_text()), 0)
-    finally:
-        if pid_file.exists():
-            try:
-                os.kill(int(pid_file.read_text()), signal.SIGKILL)
-            except ProcessLookupError:
-                pass
-
-
-def test_agentic_salvage_partial_preds_on_failure(tmp_path):
-    shim, gen_dir = _agentic_shim(
-        tmp_path,
-        'out=""; prev=""\n'
-        'for a in "$@"; do [ "$prev" = "-o" ] && out="$a"; prev="$a"; done\n'
-        'mkdir -p "$out"\n'
-        'printf \'{"i1": {"instance_id": "i1", "model_patch": "d"}}\' > "$out/preds.json"\n'
-        "exit 7\n",
-    )
-    res = _run_agentic(shim, gen_dir, {"EVAL_LIMIT": "2"})
-    assert "GEN_RC=0" in res.stdout, res.stdout + res.stderr
-    assert "scoring the partial set" in res.stdout + res.stderr
-
-
-def test_agentic_no_preds_still_fails(tmp_path):
-    shim, gen_dir = _agentic_shim(tmp_path, "exit 7\n")
-    res = _run_agentic(shim, gen_dir, {"EVAL_LIMIT": "2"})
-    assert "GEN_RC=7" in res.stdout, res.stdout + res.stderr
-
-
-def test_agentic_eval_limit_defaults_to_full_split(tmp_path):
-    shim, gen_dir = _agentic_shim(
-        tmp_path,
-        'echo "MINI_ARGV: $*" >> ' + "ARGVLOG" + "\n"
-        'out=""; prev=""\n'
-        'for a in "$@"; do [ "$prev" = "-o" ] && out="$a"; prev="$a"; done\n'
-        'mkdir -p "$out"\n'
-        'printf \'{"i1": {"instance_id": "i1", "model_patch": "d"}}\' > "$out/preds.json"\n',
-    )
-    body = (shim / "mini-extra").read_text().replace("ARGVLOG", str(shim / "argv.log"))
-    (shim / "mini-extra").write_text(body)
-    res = _run_agentic(shim, gen_dir)
-    argv = (shim / "argv.log").read_text()
-    assert "--slice" not in argv, argv
-    assert "GEN_RC=0" in res.stdout, res.stdout + res.stderr
-
-
-_GENMODE_SCRIPT = r"""
-source "$BENCHMARK_LIB" 2>/dev/null
-_install_swebench_agent_deps() { :; }
-_ensure_modal_credentials() { :; }
-_run_swebench_agentic_generation() {
-    echo "GEN=agentic"
-    echo "SUITE=$EVAL_SUITE"
-    return 42
-}
-run_lm_eval() {
-    echo "GEN=single-shot"
-    echo "SUITE=$EVAL_SUITE"
-    return 42
-}
-run_swebench_eval --port 8888
-echo "RC=$?"
-"""
-
-
-def _gen_mode(
-    tmp_path: Path,
-    *,
-    is_agentic,
-    gen_mode,
-    eval_suite=None,
-) -> str:
-    env = {
-        **os.environ,
-        "BENCHMARK_LIB": str(BENCHMARK_LIB),
-        "KV_OFFLOADING": "none",
-        "IS_AGENTIC": is_agentic,
-        "EVAL_RESULT_DIR": str(tmp_path / "out"),
-    }
-    env.pop("SWEBENCH_GEN_MODE", None)
-    env.pop("SCENARIO_TYPE", None)
-    env.pop("EVAL_SUITE", None)
-    if gen_mode is not None:
-        env["SWEBENCH_GEN_MODE"] = gen_mode
-    if eval_suite is not None:
-        env["EVAL_SUITE"] = eval_suite
-    res = subprocess.run(
-        ["bash", "-c", _GENMODE_SCRIPT],
-        env=env,
-        text=True,
-        capture_output=True,
-        cwd=BENCHMARK_LIB.parents[1],
-    )
-    assert "RC=42" in res.stdout, res.stdout + res.stderr
-    return res.stdout
-
-
-def test_explicit_agentic_generation_mode(tmp_path):
-    output = _gen_mode(tmp_path, is_agentic="1", gen_mode="agentic")
-    assert "GEN=agentic" in output
-    assert "SUITE=swebench_lite" in output
-
-
-def test_explicit_single_shot_escape_hatch(tmp_path):
-    output = _gen_mode(tmp_path, is_agentic="1", gen_mode="single-shot")
-    assert "GEN=single-shot" in output
-    assert "SUITE=swebench_lite" in output
-
-
-def test_swebench_generation_modes_preserve_explicit_suite(tmp_path):
-    for gen_mode in ("agentic", "single-shot"):
-        output = _gen_mode(
-            tmp_path / gen_mode,
-            is_agentic="1",
-            gen_mode=gen_mode,
-            eval_suite="explicit_swebench",
-        )
-        assert "SUITE=explicit_swebench" in output
-
-
-def test_agent_sandbox_cpu_knob(tmp_path):
-    shim, gen_dir = _agentic_shim(
-        tmp_path,
-        'out=""; prev=""\n'
-        'for a in "$@"; do [ "$prev" = "-o" ] && out="$a"; prev="$a"; done\n'
-        'mkdir -p "$out"\n'
-        'printf \'{"i1": {"instance_id": "i1", "model_patch": "d"}}\' > "$out/preds.json"\n',
-    )
-    res = _run_agentic(
-        shim, gen_dir, {"EVAL_LIMIT": "1", "SWEBENCH_AGENT_SANDBOX_CPU": "1"}
-    )
-    assert "GEN_RC=0" in res.stdout, res.stdout + res.stderr
-    cfg = yaml.safe_load((gen_dir / "mini_swebench_overrides.yaml").read_text())
-    assert cfg["environment"]["modal_sandbox_kwargs"]["cpu"] == 1
-
-    gen_dir2 = tmp_path / "gen2"
-    gen_dir2.mkdir()
-    res2 = _run_agentic(shim, gen_dir2, {"EVAL_LIMIT": "1"})
-    assert "GEN_RC=0" in res2.stdout, res2.stdout + res2.stderr
-    cfg2 = yaml.safe_load((gen_dir2 / "mini_swebench_overrides.yaml").read_text())
-    assert "modal_sandbox_kwargs" not in cfg2["environment"]
-
-
-def test_eval_limit_rejects_non_positive_integer(tmp_path):
-    shim, gen_dir = _agentic_shim(
-        tmp_path,
-        'out=""; prev=""\n'
-        'for a in "$@"; do [ "$prev" = "-o" ] && out="$a"; prev="$a"; done\n'
-        'mkdir -p "$out"\n'
-        'printf \'{"i1": {"instance_id": "i1", "model_patch": "d"}}\' > "$out/preds.json"\n',
-    )
-    for bad in ("-5", "abc", "3.5"):
-        gd = tmp_path / f"gen_{bad.replace('-', 'neg').replace('.', '_')}"
-        gd.mkdir()
-        res = _run_agentic(shim, gd, {"EVAL_LIMIT": bad})
-        assert "GEN_RC=1" in res.stdout, (
-            f"EVAL_LIMIT={bad!r} should fail: {res.stdout}{res.stderr}"
-        )
-        assert "must be a positive integer" in res.stdout + res.stderr
-
-
-def test_eval_limit_full_and_zero_accepted(tmp_path):
-    shim, gen_dir = _agentic_shim(
-        tmp_path,
-        'echo "MINI_ARGV: $*" >> ' + "ARGVLOG" + "\n"
-        'out=""; prev=""\n'
-        'for a in "$@"; do [ "$prev" = "-o" ] && out="$a"; prev="$a"; done\n'
-        'mkdir -p "$out"\n'
-        'printf \'{"i1": {"instance_id": "i1", "model_patch": "d"}}\' > "$out/preds.json"\n',
-    )
-    body = (shim / "mini-extra").read_text().replace("ARGVLOG", str(shim / "argv.log"))
-    (shim / "mini-extra").write_text(body)
-    for sentinel in ("full", "0"):
-        gd = tmp_path / f"gen_{sentinel}"
-        gd.mkdir()
-        res = _run_agentic(shim, gd, {"EVAL_LIMIT": sentinel})
-        assert "GEN_RC=0" in res.stdout, (
-            f"EVAL_LIMIT={sentinel!r}: {res.stdout}{res.stderr}"
-        )
-    argv = (shim / "argv.log").read_text()
-    assert "--slice" not in argv
 
 
 def test_chat_route_readiness_requires_model_and_active_route(tmp_path: Path) -> None:
@@ -3052,27 +2570,3 @@ _cleanup_vendor_eval "$cleanup_dir"
     assert f"SELECTED_PYTHON=<{python_root / 'venv/bin/python'}>" in result.stdout
     assert "--prefix" not in result.stdout
     assert not python_root.exists()
-
-
-@pytest.mark.parametrize("occupied", [False, True])
-def test_select_available_server_port_avoids_an_existing_listener(occupied: bool) -> None:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
-        listener.bind(("0.0.0.0", 0))
-        preferred = listener.getsockname()[1]
-        if occupied:
-            listener.listen()
-        else:
-            listener.close()
-        result = subprocess.run(
-            ["bash", "-c", 'source "$BENCHMARK_LIB"; select_available_server_port; '
-             'python3 -c \'import os; print(os.environ["PORT"])\''],
-            env={**os.environ, "BENCHMARK_LIB": str(BENCHMARK_LIB), "PORT": str(preferred)},
-            text=True, capture_output=True, check=True,
-        )
-        selected = int(result.stdout.strip())
-        if occupied:
-            assert selected != preferred
-        else:
-            assert selected == preferred
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
-            server.bind(("0.0.0.0", selected))

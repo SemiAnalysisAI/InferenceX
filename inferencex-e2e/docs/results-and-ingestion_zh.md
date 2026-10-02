@@ -121,15 +121,15 @@ PR changelog 选择具有代表性的 NVIDIA 和 AMD 覆盖，并非所有受影
 
 ### 原生多节点遥测
 
-`native_power_collect.sh` 和 `native_power_lifecycle.sh` 提供每节点采集及有时限的就绪/停止状态文件。启动器可使用 `LOGS/native_power` 下的原生产物；此前置改动不会启用新 recipe。适配器验证服务 GPU 身份、时钟同步、采集完成及正式窗口完整覆盖，并在审计中保留节点故障、样本数和采集器版本。
+适配器接受 `LOGS/native_power` 下的每节点原生产物；仓库内没有启动器生成该产物。适配器验证服务 GPU 身份、时钟同步、采集完成及正式窗口完整覆盖，并在审计中保留节点故障、样本数和采集器版本。
 
-原生采集器单独设置 UTC，并在 CSV 旁记录上下文以支持跨环境回放；现有基准监控行为保持不变。启动器接入需要另行完成硬件验证。离线适配器接受该上下文，不改变现有生产端。正式窗口外的无效样本不能构成覆盖；`boundary_degenerate_rows` 保留其逐 GPU 计数。
+正式窗口外的无效样本不能构成覆盖；`boundary_degenerate_rows` 保留其逐 GPU 计数。
 
 ## 评测工件
 
 ### 单配置身份和收集
 
-每个评测上传名为 `eval_<EXP_NAME>_<RESULT_FILENAME>`。当前允许的载荷包括 `meta_env.json`、`results*.json`、样本 JSONL、预测、SWE-bench 报告和轨迹文件。收集器只使用元数据和 lm-eval 结果 JSON 来生成聚合记录。
+每个评测上传名为 `eval_<EXP_NAME>_<RESULT_FILENAME>`。当前允许的载荷包括 `meta_env.json`、`results*.json`、样本 JSONL，以及厂商评估的原生报告、详细结果和归档。收集器只使用元数据和 lm-eval 结果 JSON 来生成聚合记录。
 
 收集与复用共用结果读取和选择逻辑，但保留各自的校验规则。收集可以输出失败批次中已完成的点；复用则拒绝失败或不完整的批次。每个阶段使用已读取的 JSON 完成选择和校验。去重改写或删除工件后，校验会重新读取最终文件。
 
