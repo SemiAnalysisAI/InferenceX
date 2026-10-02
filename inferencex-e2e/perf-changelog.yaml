@@ -9211,3 +9211,17 @@
     - "Add --attention-config '{\"indexer_kv_dtype\":\"mxfp4\",\"indexer_sparse_logits\":true}' and --block-size 128 to enable the vllm-project/vllm#58671 ROCm paged MXFP4 sparse-logits indexer, replacing the dense fp8 indexer path. A live A/B test (TP2 c16, matched 900s window, vllm-project/vllm#58208 reverted via vllm-project/vllm#59125 so the dense fallback doesn't crash) measured +14.7/+14.9% p50/p90 interactivity and -9.5/-10.8% p50/p90 e2e latency over the dense path, with throughput/GPU unchanged."
     - "Drop c128 from both TP2 and TP4. Neither c128 point was on the Pareto frontier in #3555's run 36528242520: TP2 c64 dominated both (P90 E2EL 58 s against 185 s and 85 s, at 111k against 85k and 79k total tok/s/GPU)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3571
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-sglang-agentic-agg
+    - dsv4-fp4-gb300-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh DeepSeek-V4-Pro-0813 GB300 Dynamo+SGLang AgentX on nightly-dev-20260916-c9a8fba9 and Dynamo 1.5.0.dev20260914. Keep TP8 c1 and TP4 c4 aggregate points, and DEP8 prefill / DEP16 decode points at c64, c240, c480, c960, c1440 and c1920."
+    - "Replace the long-TTFT 1P1D c480 point with 1P1D c240 and 2P1D c480, retain DSpark K=6 on both serving stages, and use the current SGLang CUDA graph flags. Adapt the recipes and registry to the shared variant layout under inferencex-e2e/."
+    - "Drop enable-w4a4-mxfp4-megamoe from the disaggregated recipes, and set PP_SIZE and PCP_SIZE in the aggregate benchmark environment."
+    - "将 DeepSeek-V4-Pro-0813 GB300 Dynamo+SGLang AgentX 更新至 nightly-dev-20260916-c9a8fba9 和 Dynamo 1.5.0.dev20260914。聚合配置保留 TP8 c1 与 TP4 c4；DEP8 预填充、DEP16 解码配置覆盖 c64、c240、c480、c960、c1440 和 c1920。"
+    - "将首 token 延迟较长的 1P1D c480 替换为 1P1D c240 与 2P1D c480，在预填充和解码阶段均使用 DSpark K=6，并采用当前的 SGLang CUDA graph 参数。配方和注册项适配 inferencex-e2e/ 下的共享变体布局。"
+    - "分离式配方移除 enable-w4a4-mxfp4-megamoe；聚合配置的基准测试环境设置 PP_SIZE 与 PCP_SIZE。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3630
