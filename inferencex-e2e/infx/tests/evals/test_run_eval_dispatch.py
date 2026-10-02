@@ -66,6 +66,7 @@ def explicit_runtime_inputs(monkeypatch: pytest.MonkeyPatch) -> None:
         "EVAL_ONLY": "false",
         "IS_AGENTIC": "0",
         "IS_MULTINODE": "false",
+        "IMAGE": "test-image:tag",
         "PORT": "8888",
         "CONC": "64",
         "VENDOR_VERIFIER_PYTHON": "python3",
@@ -1763,6 +1764,48 @@ def test_summary_metadata_preserves_lm_eval_gsm8k_defaults(tmp_path: Path) -> No
 
     assert meta["eval_suite"] == "gsm8k"
     assert meta["conc"] == 7
+
+
+_IDENTITY_ENTRY = {
+    "image": "vllm/vllm-openai:v1", "runner": "b200-nscale", "model-prefix": "minimaxm3",
+    "framework": "vllm", "precision": "fp4", "spec-decoding": "mtp", "tp": 4, "ep": 1,
+    "dp-attn": False, "conc": 15, "eval-suite": "minimax_m3_full",
+}
+
+
+@pytest.mark.parametrize("entry,env", [
+    pytest.param(
+        {**_IDENTITY_ENTRY, "kv-offloading": "dram", "kv-offload-backend": {"name": "vllm-simple"}},
+        {"KV_OFFLOADING": "dram",
+         "KV_OFFLOAD_BACKEND_METADATA": json.dumps({"name": "vllm-simple"}, indent=2)},
+        id="agentic-dram-offload",
+    ),
+    pytest.param(
+        {**_IDENTITY_ENTRY, "isl": 8192, "osl": 1024},
+        {"KV_OFFLOADING": "", "ISL": "8192", "OSL": "1024"},
+        id="fixed-sequence",
+    ),
+])
+def test_summary_metadata_matches_the_planned_eval_identity(
+    tmp_path: Path, entry: dict, env: dict,
+) -> None:
+    from infx.klaud.validation import expected_evals
+    from infx.results.eval_artifacts import eval_key
+
+    meta = _summary_metadata(
+        tmp_path, IMAGE="vllm/vllm-openai:v1", RUNNER_TYPE="b200-nscale",
+        MODEL_PREFIX="minimaxm3", FRAMEWORK="vllm", PRECISION="fp4", SPEC_DECODING="mtp",
+        TP="4", EP_SIZE="1", DP_ATTENTION="false", CONC="15", EVAL_SUITE="minimax_m3_full",
+        **env,
+    )
+
+    assert meta["image"] == "vllm/vllm-openai:v1"
+    assert expected_evals({"evals": [entry]}) == {eval_key(meta)}
+
+
+def test_summary_metadata_requires_offload_backend_metadata(tmp_path: Path) -> None:
+    with pytest.raises(subprocess.CalledProcessError):
+        _summary_metadata(tmp_path, KV_OFFLOADING="dram", KV_OFFLOAD_BACKEND_METADATA="")
 
 
 def test_summary_metadata_preserves_single_node_expert_parallelism(

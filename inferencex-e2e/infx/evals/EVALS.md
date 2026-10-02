@@ -110,6 +110,14 @@ and batched evals use `completed_eval_concs`. Policy drift is allowed, but
 malformed metadata, duplicates, and raw/aggregate mismatches are not. See
 [workflow reuse](../../../.github/workflows/README.md#reusing-an-approved-pr-full-sweep).
 
+An eval identity covers the model, runner, framework, precision, suite,
+speculative method, sequence lengths, topology, concurrency, and the
+deployment's `image`, `kv_offloading`, and `kv_offload_backend`. Evals that
+differ only by image or KV offloading are distinct results; rerun
+deduplication never removes one in favour of the other. Metadata written
+before these deployment fields existed omits them and keeps its earlier
+identity, so older runs still validate and reuse.
+
 ## How?
 
 `run_eval` in `benchmarks/benchmark_lib.sh` dispatches to the selected eval
@@ -579,6 +587,9 @@ cat ./evals/agg_eval_all.json | jq '[.[] | select(.hw == "B200")]'
 | `n_eff` | Number of samples evaluated |
 | `task` | Eval task name (e.g., `gsm8k`) |
 | `eval_suite` | Explicit suite identity used for collection and artifact reuse |
+| `image` | Serving image of the evaluated deployment |
+| `kv_offloading` | KV offloading mode (`none` or `dram`; empty for fixed-sequence jobs, which do not offload) |
+| `kv_offload_backend` | KV offload backend metadata (`name`, optional `version`), `null` without offloading |
 | `infrastructure_success` | `false` when setup, transport, timeout, sample-count, or score validation failed |
 | `integration_error` | Structured infrastructure failure type and message, otherwise `null` |
 

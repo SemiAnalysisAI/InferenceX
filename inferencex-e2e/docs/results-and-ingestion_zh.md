@@ -142,6 +142,12 @@ DP attention 的单节点评测记录为 `false`。修复写入器不会修复�
 已有数据库记录：应先核实原始任务配置和服务端日志，再更正元数据、重新生成
 聚合结果并重新摄取受影响的数据。
 
+写入器还会记录部署的 `image`、`kv_offloading` 和 `kv_offload_backend`
+（分别来自 `IMAGE`、`KV_OFFLOADING` 和 `KV_OFFLOAD_BACKEND_METADATA`），
+收集器会把它们复制到聚合记录中。这些字段属于评测身份，用于重跑去重、复用
+校验和 Klaud 覆盖检查，因此仅镜像或 KV offloading 不同的两个部署的评测都会
+保留。缺少这些字段的元数据保持原有的旧版身份。
+
 [`infx/results/collect_eval_results.py`](../infx/results/collect_eval_results.py) 执行以下规则：
 
 1. 评测集是包含 `meta_env.json` 的根目录或一级子目录。

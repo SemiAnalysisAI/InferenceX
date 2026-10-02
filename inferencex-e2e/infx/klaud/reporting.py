@@ -708,7 +708,7 @@ def publish_final(
     session: Session, run: dict, evidence: tuple[dict, list[dict], list[dict]]
 ) -> None:
     """Normal finish and recovery publish the same artifact-derived final report."""
-    from infx.results.eval_artifacts import eval_key
+    from infx.results.eval_artifacts import eval_config_key
 
     from .validation import benchmark_entries, expected_evals
 
@@ -736,7 +736,8 @@ def publish_final(
         )
     evaluations = [
         Evaluation(
-            key=identity(eval_key(row)),
+            # Like Point.key, comparable across image bumps.
+            key=identity(eval_config_key(row)),
             suite=row.get("eval_suite") or "gsm8k",
             label=f"c{row['conc']}",
             metric=row.get("score_name") or "em_strict",
