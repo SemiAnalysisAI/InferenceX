@@ -126,13 +126,17 @@ def container_problems(
     """Containers of one variant that would not run the images the launcher stages for it.
 
     Workers run the point's image (directly or through a cluster alias), except a TileRT prefill
-    role, which runs ``PREFILL_IMAGE``. A TileRT frontend and client run one of those two images.
+    role, which must name ``PREFILL_IMAGE``. A TileRT frontend and client run one of those images.
     Other frontends may pin an image of their own, but a benchmark client that names another tag
     of the point's image is stale.
     """
     resolved = {image, pyxis_spelling(image), *aliases}
+    fields = container_fields(config)
     problems = []
-    for field, value in container_fields(config):
+    if prefill is not None and all(field != "roles.prefill.container" for field, _ in fields):
+        # srtctl runs a role without its own container on model.container.
+        problems.append(f"roles.prefill.container is not set, so prefill would not run {prefill}")
+    for field, value in fields:
         if value is None:
             if field == "model.container":
                 problems.append(f"{field} is not set")

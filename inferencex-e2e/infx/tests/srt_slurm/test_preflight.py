@@ -255,6 +255,18 @@ def test_tilert_roles_follow_the_decode_image_and_prefill_image(
     assert sorted(problem.split(": ", 1)[1].split(" ", 1)[0] for problem in problems) == stale
 
 
+@pytest.mark.parametrize("roles", [{"prefill": {}, "decode": {"container": "dec:1"}},
+                                   {"decode": {"container": "dec:1"}}], ids=["no-container", "no-role"])  # fmt: skip
+def test_tilert_prefill_role_must_name_its_prefill_image(tmp_path, roles):
+    write_yaml(tmp_path, f"{MULTI}/t/recipe.yaml",
+               {"name": "t", "model": {"path": "hf:t/m", "container": "dec:1", "precision": "fp8"}, "roles": roles})  # fmt: skip
+    point = multi_node_point("CONFIG_FILE=recipes/t/recipe.yaml", "PREFILL_IMAGE=pre:1",
+                             image="dec:1", framework="tilert")  # fmt: skip
+    assert list(check_matrix([point], tmp_path, load_inventory(INVENTORY))) == [
+        "CONFIG_FILE=recipes/t/recipe.yaml: roles.prefill.container is not set, so prefill would not run pre:1"
+    ]
+
+
 def test_tilert_point_without_prefill_image_is_reported(tmp_path):
     point = multi_node_point(
         tilert_recipe(tmp_path, "dec:1", "pre:1"), image="dec:1", framework="tilert"
