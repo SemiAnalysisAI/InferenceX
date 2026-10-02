@@ -9211,3 +9211,16 @@
     - "Add --attention-config '{\"indexer_kv_dtype\":\"mxfp4\",\"indexer_sparse_logits\":true}' and --block-size 128 to enable the vllm-project/vllm#58671 ROCm paged MXFP4 sparse-logits indexer, replacing the dense fp8 indexer path. A live A/B test (TP2 c16, matched 900s window, vllm-project/vllm#58208 reverted via vllm-project/vllm#59125 so the dense fallback doesn't crash) measured +14.7/+14.9% p50/p90 interactivity and -9.5/-10.8% p50/p90 e2e latency over the dense path, with throughput/GPU unchanged."
     - "Drop c128 from both TP2 and TP4. Neither c128 point was on the Pareto frontier in #3555's run 36528242520: TP2 c64 dominated both (P90 E2EL 58 s against 185 s and 85 s, at 111k against 85k and 79k total tok/s/GPU)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3571
+
+- config-keys:
+    - glm5.2-fp4-gb300-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh GLM-5.2 NVFP4 GB300 Dynamo-SGLang AgentX with lmsysorg/sglang:nightly-dev-20261002-67eab570 (bundled Dynamo 1.6.0.dev20261001) and one schema-2 recipe per benchmark point: aggregate TP8 at concurrency 1, 2 and 4; disaggregate 1P2D c48, 1P4D c45 and 1P6D c45 (DEP4 prefill / TP4 decode); and 2P1D c192 (DEP8 prefill / DEP16 decode)."
+    - "Aggregate points use EAGLE MTP 5-1-6 (5 steps, topk 1, 6 draft tokens). Disaggregate points use MTP 2-1-3 on both prefill and decode. The srt-slurm connector selects the committed GLM-5.2 MTP golden AL for each draft length; no recipe sets a synthetic acceptance length."
+    - "Run from the nightly's bundled Dynamo. Use FlashInfer CuteDSL for disaggregate prefill MoE/FP4 GEMM and for the DEP16 decode (DeepEP low-latency, NVFP4 dispatch). Set aggregate max-running-requests and cuda-graph-max-bs-decode to twice each point's concurrency. Use mem-fraction-static 0.75 on disaggregate prefills and a 1000000-second scheduler watchdog on all serving roles. Use the HiCache kernel I/O backend for the c192 prefill and direct I/O elsewhere."
+    - "Drop settings that are no-ops or SGLang defaults in this image: SGLANG_ENABLE_THINKING and SGLANG_REASONING_EFFORT (aliases removed upstream), SGLANG_ENABLE_UNIFIED_RADIX_TREE (unified radix tree is the default), SGLANG_HICACHE_DEBUG_LOG/SAMPLE_RATE (unread), SGLANG_MOE_NVFP4_DISPATCH on roles without an all-to-all backend, --kv-cache-dtype fp8_e4m3 and --dsa-prefill/decode-backend trtllm (DSA defaults on SM10x), and on TP roles --moe-runner-backend flashinfer_trtllm, --disable-shared-experts-fusion and --enable-flashinfer-allreduce-fusion (automatic). Replace the removed SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK=1 with SGLANG_ENABLE_TP_MEMORY_INBALANCE_CHECK=0."
+    - "No draft precision change: the embedded GLM-5.2 EAGLE MTP head runs at the precision shipped by the checkpoint, and no draft dtype or quantization override is set."
+  pr-link: TBD

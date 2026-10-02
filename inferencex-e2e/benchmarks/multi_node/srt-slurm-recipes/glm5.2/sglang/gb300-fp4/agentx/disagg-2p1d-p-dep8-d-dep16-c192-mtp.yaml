@@ -6,7 +6,7 @@ model:
   precision: fp4
 identity:
   container:
-    image: lmsysorg/sglang:nightly-dev-20260914-4358a161
+    image: lmsysorg/sglang:nightly-dev-20261002-67eab570
 resources:
   gpu_type: gb300
   gpus_per_node: 4
@@ -44,12 +44,7 @@ roles:
       NCCL_CUMEM_ENABLE: '1'
       SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
       SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
-      SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
-      SGLANG_ENABLE_THINKING: '1'
-      SGLANG_ENABLE_UNIFIED_RADIX_TREE: '1'
-      SGLANG_HICACHE_DEBUG_LOG: '1'
-      SGLANG_HICACHE_DEBUG_SAMPLE_RATE: '16384'
-      SGLANG_REASONING_EFFORT: max
+      SGLANG_ENABLE_TP_MEMORY_INBALANCE_CHECK: '0'
       PIP_BREAK_SYSTEM_PACKAGES: '1'
       UCX_TLS: ib,cuda_copy,cuda_ipc,sm,self
       NVSHMEM_REMOTE_TRANSPORT: none
@@ -60,7 +55,6 @@ roles:
       trust-remote-code: true
       watchdog-timeout: 1000000
       quantization: modelopt_fp4
-      kv-cache-dtype: fp8_e4m3
       disaggregation-mode: prefill
       disaggregation-transfer-backend: nixl
       tensor-parallel-size: 8
@@ -75,8 +69,6 @@ roles:
       max-running-requests: 16
       cuda-graph-max-bs-prefill: 16
       disable-cuda-graph: true
-      dsa-prefill-backend: trtllm
-      dsa-decode-backend: trtllm
       moe-runner-backend: flashinfer_cutedsl
       fp4-gemm-backend: flashinfer_cutedsl
       enable-flashinfer-allreduce-fusion: true
@@ -112,12 +104,10 @@ roles:
       NCCL_CUMEM_ENABLE: '1'
       SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
       SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
-      SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
+      SGLANG_ENABLE_TP_MEMORY_INBALANCE_CHECK: '0'
       SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK: '512'
       SGLANG_MOE_NVFP4_DISPATCH: '1'
-      SGLANG_ENABLE_THINKING: '1'
       SGLANG_CLIP_MAX_NEW_TOKENS_ESTIMATION: '8'
-      SGLANG_REASONING_EFFORT: max
       PIP_BREAK_SYSTEM_PACKAGES: '1'
       UCX_TLS: ib,cuda_copy,cuda_ipc,sm,self
       NVSHMEM_REMOTE_TRANSPORT: none
@@ -128,7 +118,6 @@ roles:
       trust-remote-code: true
       watchdog-timeout: 1000000
       quantization: modelopt_fp4
-      kv-cache-dtype: fp8_e4m3
       disaggregation-mode: decode
       disaggregation-transfer-backend: nixl
       disable-radix-cache: true
@@ -146,8 +135,6 @@ roles:
       cuda-graph-max-bs-decode: 144
       chunked-prefill-size: 64
       context-length: 1048576
-      dsa-prefill-backend: trtllm
-      dsa-decode-backend: trtllm
       moe-runner-backend: flashinfer_cutedsl
       fp4-gemm-backend: flashinfer_cutedsl
       skip-tokenizer-init: true

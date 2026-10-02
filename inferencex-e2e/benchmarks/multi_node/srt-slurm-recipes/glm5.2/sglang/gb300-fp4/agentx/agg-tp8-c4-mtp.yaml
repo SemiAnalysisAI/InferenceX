@@ -6,7 +6,7 @@ model:
   precision: fp4
 identity:
   container:
-    image: lmsysorg/sglang:nightly-dev-20260914-4358a161
+    image: lmsysorg/sglang:nightly-dev-20261002-67eab570
 resources:
   gpu_type: gb300
   gpus_per_node: 4
@@ -35,13 +35,7 @@ roles:
       MC_TE_METRIC: 'true'
       NCCL_CUMEM_ENABLE: '1'
       SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
-      SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
-      SGLANG_ENABLE_THINKING: '1'
-      SGLANG_REASONING_EFFORT: max
-      SGLANG_ENABLE_UNIFIED_RADIX_TREE: '1'
-      SGLANG_HICACHE_DEBUG_LOG: '1'
-      SGLANG_HICACHE_DEBUG_SAMPLE_RATE: '16384'
-      SGLANG_MOE_NVFP4_DISPATCH: '1'
+      SGLANG_ENABLE_TP_MEMORY_INBALANCE_CHECK: '0'
       SGLANG_CLIP_MAX_NEW_TOKENS_ESTIMATION: '8'
       PIP_BREAK_SYSTEM_PACKAGES: '1'
       SGLANG_DG_CACHE_DIR: /deepgemm_cache
@@ -56,7 +50,6 @@ roles:
       trust-remote-code: true
       watchdog-timeout: 1000000
       quantization: modelopt_fp4
-      kv-cache-dtype: fp8_e4m3
       tensor-parallel-size: 8
       data-parallel-size: 1
       expert-parallel-size: 1
@@ -68,15 +61,10 @@ roles:
       max-prefill-tokens: 8192
       context-length: 1048576
       speculative-algorithm: EAGLE
-      speculative-num-steps: 4
+      speculative-num-steps: 5
       speculative-eagle-topk: 1
-      speculative-num-draft-tokens: 5
-      dsa-prefill-backend: trtllm
-      dsa-decode-backend: trtllm
-      moe-runner-backend: flashinfer_trtllm
+      speculative-num-draft-tokens: 6
       fp4-gemm-backend: flashinfer_trtllm
-      disable-shared-experts-fusion: true
-      enable-flashinfer-allreduce-fusion: true
       weight-loader-prefetch-checkpoints: true
       model-loader-extra-config: '{"enable_multithread_load": true}'
       mem-fraction-static: 0.8
