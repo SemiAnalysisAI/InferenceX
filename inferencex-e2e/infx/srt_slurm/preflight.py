@@ -90,6 +90,11 @@ def docker_spelling(image: str) -> str:
     return f"{host}/{path}" if separator else image
 
 
+def is_image(value: Any) -> bool:
+    """Whether ``value`` can name a container image: a string that is not blank."""
+    return isinstance(value, str) and bool(value.strip())
+
+
 def repository(image: str) -> str:
     """``image`` without its tag or digest, in ``registry/path`` spelling."""
     head, _, last = docker_spelling(image).partition("@")[0].rpartition("/")
@@ -133,17 +138,24 @@ def container_problems(
     resolved = {image, pyxis_spelling(image), *aliases}
     fields = container_fields(config)
     problems = []
-    if prefill is not None and all(field != "roles.prefill.container" for field, _ in fields):
-        # srtctl runs a role without its own container on model.container.
-        problems.append(f"roles.prefill.container is not set, so prefill would not run {prefill}")
+    if prefill is not None:
+        declared = dict(fields).get("roles.prefill.container")
+        if not is_image(declared):
+            # srtctl runs a role without its own container on model.container.
+            problems.append(
+                f"roles.prefill.container is not set, so prefill would not run {prefill}"
+            )
+        elif declared != prefill:
+            problems.append(f"roles.prefill.container {declared!r} is not PREFILL_IMAGE {prefill}")
     for field, value in fields:
-        if value is None:
-            if field == "model.container":
+        worker = field == "model.container" or field.startswith("roles.")
+        if field == "roles.prefill.container" and prefill is not None:
+            continue
+        if not is_image(value):
+            # An unset frontend or client image falls back to the worker image.
+            if worker:
                 problems.append(f"{field} is not set")
-        elif field == "roles.prefill.container" and prefill is not None:
-            if value != prefill:
-                problems.append(f"{field} {value!r} is not PREFILL_IMAGE {prefill}")
-        elif field == "model.container" or field.startswith("roles."):
+        elif worker:
             if value not in resolved:
                 known = ", ".join(sorted(aliases)) or "none"
                 problems.append(
@@ -189,6 +201,14 @@ def point_settings(point: Mapping[str, Any]) -> dict[str, str]:
     return settings
 
 
+def recipe_references(point: Mapping[str, Any]) -> list[str]:
+    """The ``srt-recipe``, ``CONFIG_FILE`` and ``EVAL_CONFIG_FILE`` references a point names."""
+    if "prefill" not in point:
+        return [str(point["srt-recipe"])] if point.get("srt-recipe") else []
+    settings = point_settings(point)
+    return [settings[name] for name in RECIPE_SETTINGS if settings.get(name)]
+
+
 def container_aliases(inventory: RunnerInventory, runner: str) -> frozenset[str]:
     """Aliases the srt-slurm config maps to the job image on every cluster ``runner`` reaches."""
     if runner.startswith(CLUSTER_LABEL_PREFIX):
@@ -213,8 +233,8 @@ def check_multi_node(point: Mapping[str, Any], root: Path, inventory: RunnerInve
     settings = point_settings(point)
     prefill = None
     if point.get("framework") == "tilert":
-        prefill = settings.get("PREFILL_IMAGE") or None
-        if prefill is None:
+        prefill = settings.get("PREFILL_IMAGE")
+        if not is_image(prefill):
             return ["TileRT needs a PREFILL_IMAGE setting for its prefill role"]
     problems = []
     if not settings.get("CONFIG_FILE") and not (
@@ -320,6 +340,15 @@ def main() -> None:
             for label in points:
                 print(f"    - {label}", file=sys.stderr)
         sys.exit(1)
+    checked = [
+        point for point in matrix_points(matrix) if "prefill" in point or point.get("srt-recipe")
+    ]
+    references = {reference for point in checked for reference in recipe_references(point)}
+    print(
+        f"srt-slurm recipe preflight passed {len(checked)} point(s) "
+        f"across {len(references)} recipe reference(s)",
+        file=sys.stderr,
+    )
     sys.stdout.write(raw)
 
 

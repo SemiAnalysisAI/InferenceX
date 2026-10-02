@@ -104,6 +104,10 @@ def test_cli_echoes_a_consistent_matrix_and_rejects_a_one_sided_image_update(tmp
     good = {"single_node": {"agentic": [single_node_point(recipe, "img:2")]}}
     passed = run_cli(tmp_path, inventory, good)
     assert (passed.returncode, passed.stdout) == (0, json.dumps(good))
+    assert (
+        passed.stderr
+        == "srt-slurm recipe preflight passed 1 point(s) across 1 recipe reference(s)\n"
+    )
 
     throughput = single_node_point(recipe, "img:3")
     failed = run_cli(
@@ -257,7 +261,10 @@ def test_tilert_roles_follow_the_decode_image_and_prefill_image(
 
 
 @pytest.mark.parametrize("roles", [{"prefill": {}, "decode": {"container": "dec:1"}},
-                                   {"decode": {"container": "dec:1"}}], ids=["no-container", "no-role"])  # fmt: skip
+                                   {"decode": {"container": "dec:1"}},
+                                   {"prefill": {"container": None}, "decode": {"container": "dec:1"}},
+                                   {"prefill": {"container": "  "}, "decode": {"container": "dec:1"}}],
+                         ids=["no-container", "no-role", "null-container", "blank-container"])  # fmt: skip
 def test_tilert_prefill_role_must_name_its_prefill_image(tmp_path, roles):
     write_yaml(tmp_path, f"{MULTI}/t/recipe.yaml",
                {"name": "t", "model": {"path": "hf:t/m", "container": "dec:1", "precision": "fp8"}, "roles": roles})  # fmt: skip
@@ -268,12 +275,22 @@ def test_tilert_prefill_role_must_name_its_prefill_image(tmp_path, roles):
     ]
 
 
-def test_tilert_point_without_prefill_image_is_reported(tmp_path):
+@pytest.mark.parametrize("settings", [[], ["PREFILL_IMAGE=  "]], ids=["absent", "blank"])
+def test_tilert_point_without_prefill_image_is_reported(tmp_path, settings):
     point = multi_node_point(
-        tilert_recipe(tmp_path, "dec:1", "pre:1"), image="dec:1", framework="tilert"
+        tilert_recipe(tmp_path, "  ", "  "), *settings, image="dec:1", framework="tilert"
     )
     assert list(check_matrix([point], tmp_path, load_inventory(INVENTORY))) == [
         "TileRT needs a PREFILL_IMAGE setting for its prefill role"
+    ]
+
+
+def test_worker_role_that_declares_no_image_is_reported(tmp_path):
+    write_yaml(tmp_path, f"{MULTI}/r.yaml", {"name": "r", "roles": {"decode": {"container": None}},
+               "model": {"path": "hf:t/m", "container": "img:1", "precision": "fp8"}})  # fmt: skip
+    point = multi_node_point("CONFIG_FILE=recipes/r.yaml")
+    assert list(check_matrix([point], tmp_path, load_inventory(INVENTORY))) == [
+        "CONFIG_FILE=recipes/r.yaml: roles.decode.container is not set"
     ]
 
 
