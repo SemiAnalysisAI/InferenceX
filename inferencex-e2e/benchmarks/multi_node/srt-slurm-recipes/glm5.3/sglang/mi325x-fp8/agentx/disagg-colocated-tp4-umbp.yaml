@@ -101,7 +101,7 @@ base:
         reasoning-parser: glm45
         context-length: 1048576
         chunked-prefill-size: 8192
-        mem-fraction-static: 0.92
+        mem-fraction-static: 0.93
         max-running-requests: 4
         cuda-graph-max-bs-decode: 4
         disaggregation-transfer-backend: mori
