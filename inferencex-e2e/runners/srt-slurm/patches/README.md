@@ -6,6 +6,4 @@ The srt driver ([`infx/launch/drivers/srt/checkout.py`](../../../infx/launch/dri
 
 Each patch is a temporary fix for an open upstream PR. When the PR merges and the submodule pin includes it, delete the patch and its row.
 
-| Patch | Upstream PR | Fix |
-|-------|-------------|-----|
-| `548-atom-served-model-name.patch` | [NVIDIA/srt-slurm#548](https://github.com/NVIDIA/srt-slurm/pull/548) | ATOM serves evals the role's `served-model-name` instead of the literal `--model` path, so AToMesh accepts eval requests |
+No patches are currently required by the pinned revision.
