@@ -30,7 +30,7 @@ State buckets:
 - **RUNNING.** No checks have failed. At least one is `QUEUED` / `IN_PROGRESS` / `PENDING`.
 - **READY.** No checks have failed or remain pending, and at least one `Run Sweep` check is `SUCCESS`.
 - **NO_SUCCESS.** The sweep ran but never produced a `SUCCESS` (e.g. all matrix jobs got SKIPPED).
-- **NO_SWEEP.** No `Run Sweep` check exists for this head SHA at all. This usually means the sweep never triggered because the PR is missing a label such as `full-sweep-enabled` or `non-canary-full-sweep-enabled`.
+- **NO_SWEEP.** No `Run Sweep` check exists for this head SHA at all. `run-sweep.yml` triggers on pushes and label changes (not on PR open), only for PRs whose diff touches `inferencex-e2e/perf-changelog.yaml`, and GitHub skips it while the PR has merge conflicts. So this usually means the PR was opened without a primary sweep label (`full-sweep-fail-fast`, `full-sweep-enabled`, or `non-canary-full-sweep-enabled`) and has had no push or label change since, its diff does not touch the changelog, or it has merge conflicts.
 
 ```bash
 : > /tmp/klaud_pr_status.tsv

@@ -1739,7 +1739,6 @@
     - "Add --gpu-memory-utilization 0.9 to server launch"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1133
 
-
 - config-keys:
     - dsv4-fp8-h200-vllm
   description:
@@ -6100,7 +6099,6 @@
     - "Add GB200 DeepSeek-V4-Pro FP4 Dynamo-vLLM AgentX mirroring the GB300 PR #2571 MTP tuning, with every GB300 4-GPU worker sized to 8 GPUs on GB200."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2636
 
-
 - config-keys:
     - qwen3.5-fp8-h200-sglang-agentic-hicache-mtp
   scenario-type:
@@ -6491,7 +6489,6 @@
     - "Replace the TP2/EP2 arm with TP2/EP1 so the 2-GPU point matches qwen3.5-fp4-b200-sglang-agentic-mtp."
     - "Add HiCache host-DRAM KV tier arms at TP4 concurrency 40, 48, 56, and 64 and TP2 concurrency 20, 24, 28, and 32, using hicache ratio 1.5 with write_through, direct io, and page_first_direct layout."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2693
-
 
 - config-keys:
     - kimik2.6-fp4-b200-dynamo-vllm

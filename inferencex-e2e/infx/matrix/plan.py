@@ -16,6 +16,7 @@ from infx.config import MASTER_CONFIGS, RUNNER_CONFIG, git_path_at_ref
 
 from .generate import (
     EvalMode,
+    drop_app_colliding_evals,
     freeze_config_value,
     generate_config_matrix,
     seq_len_to_str,
@@ -481,6 +482,12 @@ def build_plan(
             )
             final_results[node_type][scenario].append(result)
 
+        # Entries are selected independently; the app still keeps one eval per identity.
+        all_eval_results = [
+            result
+            for result in drop_app_colliding_evals(all_eval_results)
+            if result.get("run-eval")
+        ]
         # Fixed-sequence and AgentX eval jobs have different workflow inputs.
         for result in all_eval_results:
             prefix = "multinode_" if result.get("prefill") is not None else ""
