@@ -154,6 +154,7 @@ override_tp8_c4:
       args:
         max-running-requests: 8
         cuda-graph-max-bs-decode: 8
+        disaggregation-decode-enable-radix-cache: true
   benchmark:
     env:
       CONC: "4"
