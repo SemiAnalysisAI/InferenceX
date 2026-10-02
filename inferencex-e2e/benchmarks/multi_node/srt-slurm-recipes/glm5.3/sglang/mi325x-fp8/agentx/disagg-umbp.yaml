@@ -61,7 +61,7 @@ base:
       gpus: 8
       env: &worker_env
         HF_HOME: /hf_hub_cache
-        HF_HUB_CACHE: /hf_hub_cache/hub
+        HF_HUB_CACHE: /hf_hub_cache
         PYTHONNOUSERSITE: "1"
         PYTHONUNBUFFERED: "1"
         GLOO_SOCKET_IFNAME: enp193s0f0np0
@@ -137,7 +137,7 @@ base:
       RESULT_DIR: /infmax-workspace/LOGS/agentic
       AGENTIC_OUTPUT_DIR: /infmax-workspace
       HF_HOME: /hf_hub_cache
-      HF_HUB_CACHE: /hf_hub_cache/hub
+      HF_HUB_CACHE: /hf_hub_cache
       AIPERF_DATASET_MMAP_CACHE_DIR: /aiperf_mmap_cache
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
       WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126

@@ -48,6 +48,8 @@ base:
         enable-metrics: true
         enable-cache-report: true
       env:
+        HF_HOME: /hf_hub_cache
+        HF_HUB_CACHE: /hf_hub_cache
         PYTHONNOUSERSITE: '1'
         SGLANG_TIMEOUT_KEEP_ALIVE: '900'
         SGLANG_DSA_FUSE_TOPK: 'false'
