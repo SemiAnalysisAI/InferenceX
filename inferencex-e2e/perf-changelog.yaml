@@ -9659,3 +9659,18 @@
     - "Budget DSpark six verification plus four extra drafting slots per request: input3200/scheduled1920 for DP320 and3840/2304 for TP4 batch384. Restore token endpoint registration on TP4."
     - "为 DSpark 每请求六个验证及四个额外草稿槽位配置预算：DP320为3200/1920，TP4 batch384为3840/2304；恢复 TP4 token 端点注册。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607
+
+- config-keys:
+  - dsv41flash-fp4-b200-vllm-sharded-smoke
+  - dsv41flash-fp4-b200-vllm-sharded-c1536
+  - dsv41flash-fp4-b200-vllm-sharded-c2560
+  - dsv41flash-fp4-b300-vllm-sharded-smoke
+  - dsv41flash-fp4-b300-vllm-sharded-c1536
+  - dsv41flash-fp4-b300-vllm-sharded-c2560
+  description:
+  - Use independent per-DP stream processes and independent metric timing; matched
+    B200/B300 no-profile smoke and1536/2560 cohorts.
+  - "\u72EC\u7ACB\u9010 DP \u6D41\u8BFB\u53D6\u8FDB\u7A0B\u4E0E\u6307\u6807\u8BA1\u65F6\
+    \uFF1BB200/B300 \u5BF9\u9F50\u4E14\u4E0D\u542F\u7528 profile \u7684 smoke \u53CA\
+    1536/2560 cohort\u3002"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3607

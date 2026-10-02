@@ -352,3 +352,8 @@ Failure follow-up: B200 global2560 uses4096 outputs after a negative trimmed ove
 
 
 Corrected native DSpark budgeting: five drafts require six scheduled verification tokens plus four additional input slots per request. DP320 therefore uses input3200/scheduled1920; TP4 batch384 uses input3840/scheduled2304. Prior2048/2304 input budgets were insufficient even though they covered verification alone. TP4 requires `enable-scale-out: true` to register the native token endpoint independently of DP size.
+
+
+## Independent measurement collection
+
+Sharded recipes launch one stream-reader process per DP rank and a separate metrics process with request start/end timestamps. The parent pre-encodes all shards, pauses natively, waits for all response headers, then resumes. Raw events retain original request order. Smoke32 uses8192/1024; full1536/2560 cases use131072/4096 with matched B200/B300 budgets of10 input and6 scheduled slots/request. Profiling is disabled. Full results remain held pending fixed-window progress and independent metric review; source timing differences persist.

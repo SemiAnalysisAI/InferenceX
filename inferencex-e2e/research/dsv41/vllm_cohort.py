@@ -210,6 +210,24 @@ async def wave(
     settle_seconds,
     timeout_seconds,
 ):
+    if os.environ.get("VLLM_COHORT_SHARDED_CLIENT") == "1":
+        from research.dsv41.sharded_client import sharded_wave
+
+        if profile_steps or not barrier:
+            raise ValueError(
+                "Sharded measurements require admission and exclude profiling"
+            )
+        return await sharded_wave(
+            session,
+            base,
+            prompts,
+            output_length,
+            output=output,
+            dp_size=dp_size,
+            label=label,
+            settle_seconds=settle_seconds,
+            timeout_seconds=timeout_seconds,
+        )
     records, tasks = await admit_wave(
         session,
         base,
