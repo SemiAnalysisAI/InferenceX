@@ -143,14 +143,6 @@ DP-attention eval. Fixing the writer does not repair those artifacts or existing
 database rows: verify the original job configuration and server logs before
 correcting metadata, regenerating aggregates, and re-ingesting affected results.
 
-The writer also records the deployment's `image`, `kv_offloading`, and
-`kv_offload_backend` (from `IMAGE`, `KV_OFFLOADING`, and
-`KV_OFFLOAD_BACKEND_METADATA`), and the collector copies them into aggregate
-rows. They are part of the eval identity used by rerun deduplication, reuse
-validation, and Klaud coverage, so evals of two deployments that differ only by
-image or KV offloading are both kept. Metadata without these fields keeps its
-earlier legacy identity.
-
 [`infx/results/collect_eval_results.py`](../infx/results/collect_eval_results.py) applies these rules:
 
 1. An eval set is a root or immediate child directory containing `meta_env.json`.

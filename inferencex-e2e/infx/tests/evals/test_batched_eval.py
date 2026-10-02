@@ -60,7 +60,6 @@ export FRAMEWORK=dynamo-sglang
 export PRECISION=fp8
 export SPEC_DECODING=none
 export IS_MULTINODE=true
-export IMAGE=test-image:tag
 export ISL=8192
 export OSL=1024
 export PREFILL_TP=4

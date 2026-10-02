@@ -14,7 +14,6 @@ from infx.results.artifacts import (
     as_bool,
     as_int,
     duplicate_identity_errors,
-    freeze_identity_value,
     load_json,
     validate_identity_set,
 )
@@ -33,10 +32,6 @@ def normalized_runner(value: Any) -> str:
 
 
 LEGACY_EVAL_SUITE = "<legacy-eval-suite>"
-# Eval metadata written before the deployment fields existed omits them.
-LEGACY_EVAL_IMAGE = "<legacy-eval-image>"
-LEGACY_EVAL_KV_OFFLOADING = "<legacy-eval-kv-offloading>"
-DEPLOYMENT_FIELDS = ("image", "kv_offloading", "kv_offload_backend")
 
 
 def invalid_eval_suite(row: dict[str, Any]) -> bool:
@@ -45,18 +40,8 @@ def invalid_eval_suite(row: dict[str, Any]) -> bool:
     return "eval_suite" in row and (not isinstance(suite, str) or not suite)
 
 
-def _kv_offloading_identity(row: dict[str, Any]) -> Any:
-    """Return the KV offloading mode and backend identity of one eval row."""
-    if "kv_offloading" not in row:
-        return LEGACY_EVAL_KV_OFFLOADING
-    mode = row.get("kv_offloading") or "none"
-    if mode == "none":
-        return (mode, "")
-    return (mode, freeze_identity_value(row.get("kv_offload_backend") or ""))
-
-
-def eval_config_key(row: dict[str, Any]) -> tuple[Any, ...]:
-    """Build an eval identity, excluding the image, from one aggregate row."""
+def eval_key(row: dict[str, Any]) -> tuple[Any, ...]:
+    """Build an eval identity from one aggregate row."""
     if as_bool(row.get("is_multinode", False)):
         return (
             "multi",
@@ -66,7 +51,6 @@ def eval_config_key(row: dict[str, Any]) -> tuple[Any, ...]:
             row.get("precision"),
             row.get("eval_suite", LEGACY_EVAL_SUITE),
             row.get("spec_decoding", "none"),
-            _kv_offloading_identity(row),
             as_int(row.get("isl", 8192), 8192),
             as_int(row.get("osl", 1024), 1024),
             as_int(row.get("prefill_tp")),
@@ -93,7 +77,6 @@ def eval_config_key(row: dict[str, Any]) -> tuple[Any, ...]:
         row.get("precision"),
         row.get("eval_suite", LEGACY_EVAL_SUITE),
         row.get("spec_decoding", "none"),
-        _kv_offloading_identity(row),
         as_int(row.get("isl", 8192), 8192),
         as_int(row.get("osl", 1024), 1024),
         as_int(row.get("tp")),
@@ -104,24 +87,6 @@ def eval_config_key(row: dict[str, Any]) -> tuple[Any, ...]:
         as_bool(row.get("dp_attention", False)),
         as_int(row.get("conc")),
     )
-
-
-def eval_key(row: dict[str, Any]) -> tuple[Any, ...]:
-    """Build an eval identity from one aggregate row."""
-    return (*eval_config_key(row), row.get("image", LEGACY_EVAL_IMAGE))
-
-
-def expected_eval_key(row: dict[str, Any], observed: set[tuple[Any, ...]]) -> tuple[Any, ...]:
-    """Return a planned eval identity in the form its artifact records.
-
-    Artifacts written before the deployment fields existed match the legacy
-    identity; current artifacts, and missing ones, use the full identity.
-    """
-    key = eval_key(row)
-    if key in observed:
-        return key
-    legacy = eval_key({k: v for k, v in row.items() if k not in DEPLOYMENT_FIELDS})
-    return legacy if legacy in observed else key
 
 
 def eval_result_key(row: dict[str, Any]) -> tuple[Any, ...]:

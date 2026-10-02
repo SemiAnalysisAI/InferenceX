@@ -176,9 +176,8 @@ def check_matrix(matrix: dict, canonical: dict, head: str, family: str) -> None:
         raise VerificationError("Final matrix does not match canonical default evals")
 
 
-def expected_eval_rows(matrix: dict) -> list[dict]:
-    """Return one eval identity row per planned eval concurrency."""
-    expected = []
+def expected_evals(matrix: dict) -> set[tuple]:
+    expected = set()
     for bucket in (
         "evals",
         "agentic_evals",
@@ -193,7 +192,6 @@ def expected_eval_rows(matrix: dict) -> list[dict]:
                 hw=entry["runner"],
                 model_prefix=entry["model-prefix"],
                 eval_suite=entry.get("eval-suite") or "gsm8k",
-                kv_offloading=entry.get("kv-offloading", "none"),
                 isl=entry.get("isl", 0),
                 osl=entry.get("osl", 0),
                 dp_attention=entry.get("dp-attn", False),
@@ -209,12 +207,8 @@ def expected_eval_rows(matrix: dict) -> list[dict]:
                 if multi and entry.get("eval-all-concs")
                 else [entry["eval-conc"] if multi else entry["conc"]]
             )
-            expected.extend({**row, "conc": conc} for conc in concs)
+            expected.update(eval_artifacts.eval_key({**row, "conc": conc}) for conc in concs)
     return expected
-
-
-def expected_evals(matrix: dict) -> set[tuple]:
-    return {eval_artifacts.eval_key(row) for row in expected_eval_rows(matrix)}
 
 
 def check_coverage(
@@ -243,11 +237,9 @@ def check_coverage(
     eval_artifacts.dedupe_reran_evals(directory)
     eval_rows, eval_errors = eval_artifacts.inspect_eval_artifacts(directory)
     errors += eval_errors
-    observed = {row[:-1] for row in eval_rows}
-    expected = {
-        eval_artifacts.expected_eval_key(row, observed) for row in expected_eval_rows(matrix)
-    }
-    errors += artifacts.validate_identity_set("eval", expected, observed)
+    errors += artifacts.validate_identity_set(
+        "eval", expected_evals(matrix), {row[:-1] for row in eval_rows}
+    )
     if errors:
         # Only a fixed failure code escapes: no raw artifact data in public diagnostics.
         raise VerificationError("Full-sweep result coverage or consistency failed")

@@ -2275,7 +2275,7 @@ bridge_disagg_eval_metadata() {
 }
 
 _write_lm_eval_meta_json() {
-    check_env_vars IS_MULTINODE IMAGE
+    check_env_vars IS_MULTINODE
     local meta_json="$1"
     local batch_metadata="${2:-}"
     local metadata_conc="${3:-${CONC:-1}}"
@@ -2337,14 +2337,6 @@ _write_lm_eval_meta_json() {
     fi
     eval_suite="${eval_suite:-gsm8k}"
 
-    # The deployment's image and KV offloading are part of the eval identity.
-    # Fixed-sequence jobs pass an empty KV_OFFLOADING (no offloading).
-    local kv_offload_backend_json="null"
-    if [ -n "${KV_OFFLOADING}" ] && [ "${KV_OFFLOADING}" != "none" ]; then
-        check_env_vars KV_OFFLOAD_BACKEND_METADATA
-        kv_offload_backend_json="${KV_OFFLOAD_BACKEND_METADATA}"
-    fi
-
     cat > "${meta_json}" <<META
 {
   "is_multinode": ${is_multinode_json},
@@ -2352,9 +2344,6 @@ _write_lm_eval_meta_json() {
   "precision": "${prec:-unknown}",
   "spec_decoding": "${SPEC_DECODING:-}",
   "eval_suite": "${eval_suite}",
-  "image": "${IMAGE}",
-  "kv_offloading": "${KV_OFFLOADING}",
-  "kv_offload_backend": ${kv_offload_backend_json},
   "recipe_fingerprint": "${RECIPE_FINGERPRINT:-}",
   "tp": ${TP:-1},
   "pp": ${PP_SIZE:-1},

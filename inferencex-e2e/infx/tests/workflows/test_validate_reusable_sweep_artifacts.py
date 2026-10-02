@@ -449,8 +449,7 @@ def test_eval_inspection_keeps_valid_rows_and_reports_bad_metadata(
 
     assert rows == [(
         "single", "h100-dgxc-slurm", "gptoss", "vllm", "fp4",
-        "<legacy-eval-suite>", "none", "<legacy-eval-kv-offloading>",
-        8192, 1024, 2, 1, 1, 1, 1, False, 32, "<legacy-eval-image>", "gsm8k",
+        "<legacy-eval-suite>", "none", 8192, 1024, 2, 1, 1, 1, 1, False, 32, "gsm8k",
     )]
     assert errors == [f"raw eval artifact 'eval_invalid' {error}"]
 
@@ -468,21 +467,8 @@ def test_collection_tolerates_decoder_failure_but_reuse_does_not(tmp_path: Path)
         inspect_eval_artifacts(tmp_path)
 
 
-FIXED_SEQUENCE_DEPLOYMENT = {
-    "image": "fixture:latest", "kv_offloading": "", "kv_offload_backend": None,
-}
-
-
-@pytest.mark.parametrize("failed_rerun,deployment,covered", [
-    pytest.param(False, {}, True, id="legacy-metadata"),
-    pytest.param(True, {}, False, id="legacy-failed-rerun"),
-    pytest.param(False, FIXED_SEQUENCE_DEPLOYMENT, True, id="current-metadata"),
-    pytest.param(False, {**FIXED_SEQUENCE_DEPLOYMENT, "image": "other:latest"}, False,
-                 id="other-image"),
-])
-def test_klaud_coverage_validates_the_rerun_it_retains(
-    tmp_path: Path, failed_rerun: bool, deployment: dict, covered: bool,
-) -> None:
+@pytest.mark.parametrize("failed_rerun", [False, True])
+def test_klaud_coverage_validates_the_rerun_it_retains(tmp_path: Path, failed_rerun: bool) -> None:
     from infx.klaud.github import VerificationError
     from infx.klaud.validation import check_coverage
 
@@ -510,25 +496,24 @@ def test_klaud_coverage_validates_the_rerun_it_retains(
     for name, day in [("old", "01"), ("new", "02")]:
         artifact = tmp_path / f"eval_{name}"
         artifact.mkdir()
-        meta = {**single_eval_meta(32, eval_suite="gsm8k"), **deployment}
-        (artifact / "meta_env.json").write_text(json.dumps(meta))
+        (artifact / "meta_env.json").write_text(json.dumps(single_eval_meta(32, eval_suite="gsm8k")))
         result = raw_eval_result(score=-1 if failed_rerun and name == "new" else 0.9)
         filename = f"results_2026-01-{day}T00-00-00.json"
         (artifact / filename).write_text(json.dumps(result))
         aggregates.append({
-            **single_eval_result(32, eval_suite="gsm8k"), **deployment,
-            "source": f"eval_{name}/{filename}",
+            **single_eval_result(32, eval_suite="gsm8k"), "source": f"eval_{name}/{filename}",
         })
     write_eval_aggregate(tmp_path, aggregates)
 
     args = (tmp_path, manifest, {"head_sha": "head", "id": 42, "run_attempt": 2},
             "configs/nvidia-master.yaml:fixture", matrix)
-    if covered:
-        check_coverage(*args)
-    else:
+    if failed_rerun:
         with pytest.raises(VerificationError, match="Full-sweep result coverage or consistency failed"):
             check_coverage(*args)
-    assert (tmp_path / "eval_old").is_dir() is failed_rerun
+        assert (tmp_path / "eval_old").is_dir()
+    else:
+        check_coverage(*args)
+        assert not (tmp_path / "eval_old").exists()
     retained = json.loads((tmp_path / "eval_results_all/agg_eval_all.json").read_text())
     assert [row["source"] for row in retained] == (
         ["eval_old/results_2026-01-01T00-00-00.json", "eval_new/results_2026-01-02T00-00-00.json"]
@@ -1143,47 +1128,6 @@ def test_dedupe_keeps_latest_legacy_rerun(tmp_path: Path) -> None:
     for superseded in (old, mid, empty):
         assert not (tmp_path / superseded).exists()
     assert any("kept 1 of 3" in message for message in messages)
-
-
-NO_KV_OFFLOAD = {"image": "vllm:v1", "kv_offloading": "none", "kv_offload_backend": None}
-DRAM_OFFLOAD = {**NO_KV_OFFLOAD, "kv_offloading": "dram"}
-
-
-@pytest.mark.parametrize("first,second,kept", [
-    pytest.param(NO_KV_OFFLOAD, {**NO_KV_OFFLOAD, "image": "vllm:v2"}, 2, id="image"),
-    pytest.param(NO_KV_OFFLOAD, {**DRAM_OFFLOAD, "kv_offload_backend": {"name": "vllm-simple"}},
-                 2, id="kv-offloading"),
-    pytest.param({**DRAM_OFFLOAD, "kv_offload_backend": {"name": "lmcache"}},
-                 {**DRAM_OFFLOAD, "kv_offload_backend": {"name": "vllm-simple"}},
-                 2, id="kv-offload-backend"),
-    pytest.param(NO_KV_OFFLOAD, NO_KV_OFFLOAD, 1, id="same-deployment-rerun"),
-])
-def test_dedupe_keeps_evals_of_distinct_deployments(
-    tmp_path: Path, first: dict, second: dict, kept: int,
-) -> None:
-    # MiniMax M3 on b200-nscale evaluates the same topology with and without
-    # DRAM KV offloading; image bumps also evaluate beside the old image.
-    from infx.results.collect_eval_results import collect_eval_rows
-
-    names = ("eval_minimaxm3_b200-nscale_c15_1", "eval_minimaxm3_b200-nscale_c15_2")
-    stamps = ("2026-09-01T00-00-00", "2026-09-02T00-00-00")
-    for name, deployment, stamp in zip(names, (first, second), stamps, strict=True):
-        artifact = tmp_path / name
-        artifact.mkdir()
-        meta = {
-            **single_eval_meta(15, runner="b200-nscale"), "eval_suite": "minimax_m3_full",
-            **deployment,
-        }
-        (artifact / "meta_env.json").write_text(json.dumps(meta))
-        (artifact / f"results_{stamp}.json").write_text(json.dumps(raw_eval_result()))
-    write_eval_aggregate(tmp_path, collect_eval_rows(tmp_path))
-
-    dedupe_reran_evals(tmp_path)
-
-    assert validate_eval_artifacts(tmp_path) == []
-    assert [name for name in names if (tmp_path / name).is_dir()] == list(names[-kept:])
-    rows = json.loads((tmp_path / "eval_results_all/agg_eval_all.json").read_text())
-    assert len(rows) == kept
 
 
 def test_dedupe_leaves_ambiguous_artifacts_for_validation(tmp_path: Path) -> None:

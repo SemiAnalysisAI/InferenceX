@@ -291,10 +291,8 @@ def build_row(meta: dict[str, Any], m: dict[str, Any]) -> dict[str, Any]:
         "integration_error": m.get("integration_error"),
     }
 
-    # Copy identity fields only when recorded, so legacy metadata stays legacy.
-    for field in ("eval_suite", "image", "kv_offloading", "kv_offload_backend"):
-        if field in meta:
-            row[field] = meta[field]
+    if "eval_suite" in meta:
+        row["eval_suite"] = meta["eval_suite"]
 
     primary = _primary_metric(m)
     row["score"] = m[primary] if primary is not None else None

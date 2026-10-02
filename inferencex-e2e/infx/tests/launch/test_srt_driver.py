@@ -501,10 +501,7 @@ def test_a_missing_input_is_named_before_any_setup(harness, shape, overrides, mi
 
 
 def test_post_eval_is_handed_the_workload_contract_and_no_other_secret(harness):
-    handed = {
-        "SWEBENCH_NEW_KNOB": "7", "AIPERF_NEW": "1", "MODAL_TOKEN_ID": "modal-id",
-        "KV_OFFLOADING": "dram", "KV_OFFLOAD_BACKEND_METADATA": '{"name": "vllm-simple"}',
-    }  # fmt: skip
+    handed = {"SWEBENCH_NEW_KNOB": "7", "AIPERF_NEW": "1", "MODAL_TOKEN_ID": "modal-id"}
     withheld = {
         "HF_TOKEN": "hf_fixture", "GITHUB_TOKEN": "ghs_fixture", "PORT": "8888",
         "EVAL_EMPTY": "", "EVAL_NOT-A-NAME": "x", "SLURM_JOB_ID": "99",
@@ -514,7 +511,7 @@ def test_post_eval_is_handed_the_workload_contract_and_no_other_secret(harness):
     [call] = srtctl_calls(harness.logs)
     [names] = [json.loads(arg.split("=", 1)[1]) for arg in call["argv"]
                if arg.startswith("post_eval.passthrough_env=")]  # fmt: skip
-    assert {*handed, "IMAGE"} <= set(names)
+    assert handed.keys() <= set(names)
     assert not {*withheld, "PATH", "HF_HUB_CACHE"} & set(names)
 
 
