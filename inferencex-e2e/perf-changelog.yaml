@@ -9213,7 +9213,8 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3571
 
 - config-keys:
+    - glm5.3-fp8-mi300x-sglang-agentic
     - glm5.3-fp8-mi300x-sglang-disagg-agentic-umbp
   description:
     - "Add GLM-5.3 FP8 SGLang AgentX on MI300X with native MoRI P/D transfer and UMBP external-linker offloading."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3657

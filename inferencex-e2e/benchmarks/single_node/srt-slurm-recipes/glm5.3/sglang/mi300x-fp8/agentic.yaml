@@ -1,0 +1,66 @@
+# GPU-resident GLM-5.3 reference for the MoRI/UMBP P/D comparison.
+base:
+  schema: 2
+  name: glm5.3-fp8-mi300x-sglang-agentic
+  model:
+    path: hf:zai-org/GLM-5.3
+    container: lmsysorg/sglang-rocm:v0.5.21-rocm724-mi30x-20261001
+    precision: fp8
+  resources:
+    gpu_type: mi300x
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  health_check:
+    interval_seconds: 5
+    max_attempts: 720
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        served-model-name: zai-org/GLM-5.3
+        trust-remote-code: true
+        tensor-parallel-size: 8
+        expert-parallel-size: 1
+        dsa-prefill-backend: tilelang
+        dsa-decode-backend: tilelang
+        dsa-topk-backend: torch
+        kv-cache-dtype: bfloat16
+        page-size: 64
+        tool-call-parser: glm47
+        reasoning-parser: glm45
+        context-length: 1048576
+        chunked-prefill-size: 131072
+        mem-fraction-static: 0.85
+        watchdog-timeout: 3600
+        enable-metrics: true
+        enable-cache-report: true
+      env:
+        PYTHONNOUSERSITE: "1"
+        SGLANG_TIMEOUT_KEEP_ALIVE: "1800"
+        SGLANG_DSA_FUSE_TOPK: "false"
+        SGLANG_OPT_USE_TOPK_V2: "false"
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
+    env:
+      WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
+
+override_tp8_c1:
+  roles:
+    agg:
+      args:
+        max-running-requests: 2
+        cuda-graph-max-bs: 2
+  benchmark:
+    env:
+      CONC: "1"
