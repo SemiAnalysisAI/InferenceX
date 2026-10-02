@@ -64,7 +64,6 @@ NATIVE_SRT_LANES: dict[str, tuple[Match, ...]] = {
         Match(any_of("dsv4", "kimik3", "glm5.2"), any_of("fp4"), any_of("dynamo-vllm")),
         Match(any_of("dsv4"), any_of("fp4"), any_of("dynamo-sglang"), specs=any_of("none", "mtp")),
         Match(any_of("glm5.2"), any_of("fp4"), any_of("dynamo-sglang"), specs=any_of("mtp")),
-        Match(any_of("glm5.1"), any_of("fp8"), any_of("tilert"), specs=any_of("mtp")),
     ),
 }
 
@@ -120,26 +119,15 @@ def salloc_time_limit(cluster_id: str, request: LaunchRequest) -> int | None:
     return request.salloc_time_limit
 
 
-TILERT_ENV: dict[str, Mapping[str, str]] = {
-    "b200-nscale": {
-        "UCX_NET_DEVICES": ",".join(f"mlx5_{index}:1" for index in range(8)),
-        "UCX_MEMTYPE_CACHE": "n",
-        "UCX_MEMTYPE_REG_WHOLE": "n",
-    },
-}
-
-
 def runtime_env(
     cluster: Cluster, request: LaunchRequest, *settings: Mapping[str, str]
 ) -> dict[str, str]:
     """The launch environment with the cluster's runtime settings applied over it.
 
-    In increasing precedence: TILERT_ENV (TileRT points only), the cluster's ``env``, then
-    each of ``settings``. They all beat the runner host's values, but never a name the
-    point's additional-settings set.
+    In increasing precedence: the cluster's ``env``, then each of ``settings``. They all
+    beat the runner host's values, but never a name the point's additional-settings set.
     """
-    tilert = TILERT_ENV.get(cluster.id, {}) if request.framework == "tilert" else {}
-    merged = {k: v for source in (tilert, cluster.env, *settings) for k, v in source.items()}
+    merged = {k: v for source in (cluster.env, *settings) for k, v in source.items()}
     chosen = point_settings(request)
     return {**request.env, **{k: v for k, v in merged.items() if k not in chosen}}
 
@@ -164,7 +152,6 @@ def table_problems(clusters: Mapping[str, Cluster], only: str | None = None) -> 
         "NATIVE_SRT_LANES": NATIVE_SRT_LANES,
         "BATCH_WRAPPED_LANES": BATCH_WRAPPED_LANES,
         "SALLOC_TIME_BUMPS": SALLOC_TIME_BUMPS,
-        "TILERT_ENV": TILERT_ENV,
     }
     return [
         f"{name}[{key!r}]: no such cluster"
