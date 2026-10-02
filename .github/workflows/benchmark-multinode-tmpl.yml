@@ -284,6 +284,8 @@ jobs:
         with:
           ref: ${{ github.workflow_sha }}
           path: .result-tooling
+          # Only inferencex-e2e/ is read from this checkout.
+          sparse-checkout: inferencex-e2e
           persist-credentials: false
 
       - name: Set up uv
