@@ -9292,3 +9292,13 @@
     - "Update the B200 DeepSeek-V4.1-Flash vLLM AgentX image from nightly ddd6fbca to nightly-dev-x86_64-cu130-ac9126e58aa7 and enable FlashInfer autotuning."
     - "Run TP4 at concurrency 1-128 and replace TP2 with DEP2 (TP1 x DP2 + EP2, DeepGEMM MegaMoE) at concurrency 8-32 and DEP4 (TP1 x DP4 + EP4, MegaMoE) at concurrency 64-128, both behind a consistent-hash vLLM Router. All points set gpu-memory-utilization 0.97."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3686
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Move to lmsysorg/sglang-rocm:v0.5.21-rocm720-mi35x-20261002."
+    - "Switch from TP4/EP4 at concurrency 1-32 to TP2/EP1 at concurrency 1, 2, 4, 8, 16, 32 and 64, with host Engram tables (per_rank layout), shared-experts fusion and AITER FP8 GEMMs. C1-C4 keep breakable prefill graphs; from C8 decoder SWA bounded replay is on and prefill graphs are disabled. The prefill chunk is 16384 tokens through C32 and 4096 at C64; the PDI is 16 through C16 and 4 from C32."
+    - "Throughput keeps the committed thinking-on golden AL 3.51 selected by the srt connector; evals use real verification."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
