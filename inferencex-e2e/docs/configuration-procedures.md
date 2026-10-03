@@ -373,17 +373,23 @@ Application startup with KV 45.2 GiB at 0.92 under
 KV once CUDA graphs are counted. Tip 5ab41690 c8 then soft-OOMed at util 0.92
 during warmup — CUDACachingAllocator failed a ~3.03 GiB alloc with ~1.16 GiB
 free — yielding empty streams and ProfileAborted at 2/11 > 10%; keep 0.92 only
-on c1–c4). Cap `max-num-seqs` at 1×CONC for CONC 32–56 and at 48 for CONC 70
-(tip 031de17bf c56 with A2A/Q/KV all direct and util 0.85 packed GPU KV to
+on c1–c4). Cap `max-num-seqs` at 1×CONC for CONC 16 and CONC 32–48, and at 48
+for CONC 56 and CONC 70 (tip 031de17bf c56 with A2A/Q/KV all direct and util 0.85 packed GPU KV to
 ~99.7% under 2× admission, then hung workers through the 1800s
 `sample_tokens` RPC timeout with no Watchdog / ALLGATHER / ALLTOALL / CUDA OOM;
 ingest `nccl_error:16` was init-only `ibv_query_port_speed` WARN. Tip 861a1512
 c32 repeated the same kill under `max-num-seqs=64`: GPU KV pinned ~99–100%,
 then hung at 0 tok/s with shm_broadcast starvation from 21:03 through the
-1800s `sample_tokens` timeout → EngineDead / ProfileAborted; keep 2× only
-through CONC 24. Tip 1d937c73e c70 still starved under 1×=`70`: Running≈0 /
+1800s `sample_tokens` timeout → EngineDead / ProfileAborted; keep 2× on CONC
+8 and CONC 24. Tip ebc4eb499 c16 under 2×=`32` packed GPU KV to ~99% during
+warmup (Running: 3, Waiting: 7, Deferred: 7) then hung PyNCCL
+`_ALLGATHER_BASE` 600s (`last started work: -1`) → DistBackendError /
+EngineDead / ProfileAborted with 176 warmup dropped / 0 kept; drop c16 to
+1×=`16`. Tip 1d937c73e c70 still starved under 1×=`70`: Running≈0 /
 Waiting≈66 / Deferred≈50–67 / KV≈86–91% for ~30m then the same 1800s
-`sample_tokens` timeout; drop c70 to `max-num-seqs=48`).
+`sample_tokens` timeout; drop c70 to `max-num-seqs=48`. Tip fd61acb0 c56
+under 1×=`56` packed GPU KV to 98.2% then hung the same `_ALLGATHER_BASE`
+watchdog; drop c56 to `max-num-seqs=48`).
 
 The B200 entry uses `vllm/vllm-openai:nightly-dev-x86_64-cu130-ac9126e58aa7` with FlashInfer
 autotuning. TP4 covers concurrency 1–128. DEP2 (TP1 x DP2 + EP2, DeepGEMM MegaMoE) covers 8–32 and

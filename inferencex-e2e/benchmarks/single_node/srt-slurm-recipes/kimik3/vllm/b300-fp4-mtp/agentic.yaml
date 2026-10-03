@@ -147,8 +147,14 @@ base:
       KV_OFFLOADING: dram
       TOTAL_CPU_DRAM_GB: '2249'
 
-# One variant per point. Admission is 2x CONC through CONC 24; CONC 32+ use 1x
-# CONC. Tip 031de17bf c56 (Slurm 6848) with A2A/Q/KV all direct, util 0.85, and
+# One variant per point. Admission is 2x CONC through CONC 8 and CONC 24; CONC
+# 16 and CONC 32–48 use 1x CONC; c56 and c70 cap at 48. Tip ebc4eb499 c16
+# (run 37134266476, Slurm 7062) under 2x=32 packed GPU KV to ~98–99.7% during
+# AgentX warmup (Running: 3, Waiting: 7, Deferred: 7 at 17:44:47) then hung
+# PyNCCL _ALLGATHER_BASE 600s (SeqNum=89905, last started work: -1, PG ID 3)
+# → DistBackendError / VllmWorker-7 died / EngineDead / ProfileAborted
+# (176 warmup dropped / 0 kept). Cap c16 at 1x=16. Tip 031de17bf c56
+# (Slurm 6848) with A2A/Q/KV all direct, util 0.85, and
 # max-num-seqs=112 packed GPU KV to ~99.7% (Running: 1, Waiting: 12, Deferred:
 # 12) then hung workers for the full VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS=1800 —
 # shm_broadcast starvation from 15:28, then TimeoutError: RPC call to
@@ -228,9 +234,11 @@ override_c16:
   roles:
     agg:
       args:
-        max-num-seqs: 32
+        # Tip ebc4eb499 c16 (Slurm 7062) under 2x=32 packed GPU KV ~99% in
+        # warmup then hung PyNCCL _ALLGATHER_BASE 600s (last started work: -1).
+        max-num-seqs: 16
         gpu-memory-utilization: 0.85
-        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,256,512,1024,2048,4096,8192]}'
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,128,256,512,1024,2048,4096,8192]}'
         speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":3,"attention_backend":"TOKENSPEED_MLA","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
   benchmark:
     env:

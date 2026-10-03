@@ -349,17 +349,23 @@ TRANSFER_FAIL（c2/c32）；加入该变量之前的 tip 注册正常。此路�
 `prepare_moe` 申请约 2.89 GiB 时仅剩约 2.3 GiB 空闲而 OOM；vLLM 在计入 CUDA
 graph 后建议约 36.78 GiB KV。tip 5ab41690 的 c8 在 util 0.92 的 warmup 中软
 OOM——CUDACachingAllocator 申请约 3.03 GiB 时仅剩约 1.16 GiB——导致空流与
-ProfileAborted（2/11 > 10%）；仅 c1–c4 保留 0.92）。CONC 32–56 将
-`max-num-seqs` 限制为 1×CONC，CONC 70 限制为 48（tip 031de17bf 的 c56 在
+ProfileAborted（2/11 > 10%）；仅 c1–c4 保留 0.92）。CONC 16 与 CONC 32–48 将
+`max-num-seqs` 限制为 1×CONC，CONC 56 与 CONC 70 限制为 48（tip 031de17bf 的 c56 在
 A2A/Q/KV 均已 direct 且 util 0.85 时，2× 准入把 GPU KV 堆到约 99.7%，随后
 worker 挂满 1800 秒 `sample_tokens` RPC 超时，无 Watchdog / ALLGATHER /
 ALLTOALL / CUDA OOM；ingest 的 `nccl_error:16` 仅为初始化期
 `ibv_query_port_speed` WARN。tip 861a1512 的 c32 在 `max-num-seqs=64` 下重现
 同一杀伤：GPU KV 钉在约 99–100%，随后以 0 tok/s 挂起，自 21:03 起
 shm_broadcast 饥饿直至满 1800 秒 `sample_tokens` 超时 → EngineDead /
-ProfileAborted；仅 CONC 24 及以下保留 2×。tip 1d937c73e 的 c70 在 1×=`70`
+ProfileAborted；仅 CONC 8 与 CONC 24 保留 2×。tip ebc4eb499 的 c16 在 2×=`32`
+下 warmup 把 GPU KV 堆到约 99%（Running: 3，Waiting: 7，Deferred: 7），随后
+PyNCCL `_ALLGATHER_BASE` 挂起 600 秒（`last started work: -1`）→
+DistBackendError / EngineDead / ProfileAborted（176 warmup 丢弃 / 0 保留）；
+将 c16 降为 1×=`16`。tip 1d937c73e 的 c70 在 1×=`70`
 下仍饥饿：Running≈0 / Waiting≈66 / Deferred≈50–67 / KV≈86–91% 约 30 分钟后
-同样满 1800 秒 `sample_tokens` 超时；将 c70 降为 `max-num-seqs=48`）。
+同样满 1800 秒 `sample_tokens` 超时；将 c70 降为 `max-num-seqs=48`。tip
+fd61acb0 的 c56 在 1×=`56` 下把 GPU KV 堆到 98.2% 后同样挂起 `_ALLGATHER_BASE`
+watchdog；将 c56 降为 `max-num-seqs=48`）。
 
 
 仅运行 AgentX 的 `dsv41flash-fp4-<sku>-vllm-agentic-dspark` 配方使用
