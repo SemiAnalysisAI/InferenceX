@@ -289,9 +289,12 @@ override_c70:
   roles:
     agg:
       args:
-        max-num-seqs: 70
+        # Tip 1d937c73e c70 under 1x (70) still deferred-admission starved:
+        # Running≈0 / Waiting≈66 / Deferred≈50–67 / KV≈86–91% for ~30m then
+        # sample_tokens 1800s timeout. Cap below 1x to leave decode headroom.
+        max-num-seqs: 48
         gpu-memory-utilization: 0.85
-        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,128,256,512,1024,2048,4096,8192]}'
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,64,128,256,512,1024,2048,4096,8192]}'
   benchmark:
     env:
       CONC: '70'
