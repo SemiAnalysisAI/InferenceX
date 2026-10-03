@@ -3,7 +3,7 @@ base:
   name: dsr1-fp8-b300-sglang-mtp-8k1k
   model:
     path: hf:deepseek-ai/DeepSeek-R1-0528
-    container: lmsysorg/sglang:v0.5.15.post1-cu130
+    container: lmsysorg/sglang:v0.5.21-cu130
     precision: fp8
   resources:
     gpu_type: b300
@@ -25,7 +25,7 @@ base:
         served-model-name: deepseek-ai/DeepSeek-R1-0528
         tensor-parallel-size: 8
         data-parallel-size: 1
-        cuda-graph-max-bs: 512
+        cuda-graph-max-bs-decode: 512
         max-running-requests: 512
         mem-fraction-static: 0.82
         kv-cache-dtype: fp8_e4m3
