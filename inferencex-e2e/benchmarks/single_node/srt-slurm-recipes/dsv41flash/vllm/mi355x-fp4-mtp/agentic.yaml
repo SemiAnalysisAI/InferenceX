@@ -64,6 +64,11 @@ base:
         VLLM_ROCM_USE_AITER_MOE: '1'
         # Native DeepSeek-V4.1 a4w4 support from vllm-project/vllm#58819.
         VLLM_ROCM_USE_AITER_MOE_A4W4_DSV4: '1'
+        # INT4-quantized quick all-reduce, as in vllm-project/recipes#1061.
+        # Quick reduce only takes tensors at or above its built-in threshold,
+        # so prefill chunks and the larger DSpark decode steps use it while
+        # the smallest decode steps stay on custom all-reduce.
+        VLLM_ROCM_QUICK_REDUCE_QUANTIZATION: INT4
         AITER_TRITON_LOG_LEVEL: ERROR
         VLLM_ROCM_USE_AITER_TRITON_SPARSE_MLA: 'True'
         # DeepseekV41ForCausalLM is not torch-compiled upstream; breakable
