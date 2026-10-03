@@ -126,11 +126,17 @@ never started. This verifies prompt deterministic termination and cleanup, but
 does not turn the native filesystem tier into a bounded LRU cache. Combined-tier
 metrics remain ineligible for a capacity-matched comparison.
 
-The next adaptive NVMe-only point is c492, the midpoint between the completed
-c488 local mixed win and the c496 canonical-warmup feasibility failure. It uses
-the same MiniMax-M3 NVFP4 model, vLLM engine, TP4 layout, 4 TiB NVMe budget,
-AgentX corpus, canonical warmup, and 3,600-second profiling window. Treat its
-result as local evidence for the narrow c488-c496 boundary.
+The c492 NVMe-only midpoint then failed during canonical warmup before profiling.
+Its last progress sample returned 3,599 of 5,446 responses, sent 4,063, retained
+464 in flight, and reported zero request errors after 15,692.9 seconds. One root
+request then raised ClientOSError while writing its HTTP request body, which
+caused the warmup failure and prevented profiling. All 3,605 retained records
+are warmup; eight are InvalidInferenceResultError classifications and one is the
+terminal ClientOSError. The server log contains no EngineDead, CUDA OOM,
+traceback, or error signature. Treat c492 as a local warmup-feasibility failure,
+not a performance result. The next adaptive NVMe-only point is c490, the midpoint
+between completed c488 and failed c492, with the same model, engine, TP4 layout,
+4 TiB NVMe budget, AgentX corpus, canonical warmup, and 3,600-second profile.
 
 The combined tier uses a different connector and storage policy. The pinned FS
 tier has no bounded LRU capacity setting: the 2 TiB value is an abort guard, not an
@@ -155,7 +161,7 @@ Inspect recorded corpus identity, full commands and actual allocated KV capacity
 before declaring a pair matched.
 
 Start with a matched four-arm probe at concurrency 16. Then build full curves for
-all four arms. Initial curve points are 1, 4, 8, 16, 32, 64, 128, 256, 320, 384, 448, 480, 488, 492, 496, 512, 1,024,
+all four arms. Initial curve points are 1, 4, 8, 16, 32, 64, 128, 256, 320, 384, 448, 480, 488, 490, 492, 496, 512, 1,024,
 4,096, 8,192 and 16,384. Add intermediate positive integers near observed changes, and
 repeat both sides of a candidate crossover on different nodes.
 Keep the maximum at 16,384. Failure or insufficient completed samples is a

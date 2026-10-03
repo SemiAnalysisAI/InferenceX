@@ -4719,7 +4719,7 @@
       "repeat": 1,
       "attempt": 1,
       "head_sha": "3fc82e34a179739987f17d8f7061ff5cf600e712",
-      "status": "in_progress",
+      "status": "failure",
       "workflow_name": "offload-v1-nvme4tib-c492-r1-branchwf-20261002",
       "dispatched_at": "2026-10-02T22:08:55Z",
       "started_at": "2026-10-02T22:09:18Z",
@@ -4727,44 +4727,98 @@
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37070896182/job/111049895150",
       "runner": "b200-nscale-slurm_00",
       "performance_result": false,
-      "phase": "canonical warmup zero-idle cache-pressure replay",
+      "phase": "terminal canonical warmup failure; profiling never started",
       "dispatch_evidence": "Focused experiment tests passed 26/26 and matrix-generation tests passed 331/331. The exact generator preview resolved MiniMax-M3 NVFP4, vLLM, TP4, four GPUs, canonical AgentX c492, 3,600-second profiling, kv-offloading=nvme with the vllm-simple backend, zero host DRAM, and experiment=agentx-offload. Immediately before dispatch at 2026-10-02T22:08:42Z, a fresh cluster-wide inventory found zero queued or in-progress jobs carrying cluster:b200-nscale and no active-or-queued study workflow. The generated job carries cluster:b200-nscale and nodes:1 and was admitted to b200-nscale-slurm_00.",
       "node": "im-b200-c001",
       "allocation_id": "19458",
       "scratch": "/offload-scratch/inferencex-offload-37070896182-1-19458-acc416c18d00",
       "warmup_started_at": "2026-10-02T22:19:25Z",
-      "warmup_returned": 570,
+      "warmup_returned": 3599,
       "warmup_target": 5446,
-      "warmup_sent": 1320,
-      "warmup_in_flight": 750,
-      "warmup_errors": 0,
-      "warmup_elapsed_seconds": 2700.5,
-      "storage_evidence": "Slurm allocation 19458 landed on allowlisted im-b200-c001. offload_config.json records 13,256,173,211,648 free bytes before exact scratch creation on xfs /dev/md0 over eight NVMe devices, O_DIRECT=true, zero host DRAM, 4,398,046,511,104 NVMe bytes, and SimpleCPUOffloadConnector with disk backend, lazy offload, and page cache disabled. The exact task-owned scratch exists in the workload mount namespace."
+      "warmup_sent": 4063,
+      "warmup_in_flight": 464,
+      "warmup_errors": 1,
+      "warmup_elapsed_seconds": 15692.9,
+      "storage_evidence": "Preflight verified 13,256,173,211,648 free bytes, O_DIRECT, zero host DRAM, 4 TiB NVMe, and the expected SimpleCPUOffloadConnector disk backend on allowlisted im-b200-c001. offload_cleanup.json records 4,398,036,807,680 allocated bytes across four files and deleted=true for the exact scratch; an independent node check confirmed the path absent.",
+      "completed_at": "2026-10-03T02:41:50Z",
+      "failure_stage": "canonical warmup root-request ClientOSError before profiling",
+      "request_accounting": {
+        "records_total": 3605,
+        "records_profiled": 0,
+        "records_warmup_dropped": 3605,
+        "records_error_dropped": 9,
+        "error_categories": {
+          "InvalidInferenceResultError": 8,
+          "ClientOSError": 1
+        }
+      },
+      "runtime_evidence": "Canonical warmup reached a last progress sample of 3,599/5,446 returned, 4,063 sent, 464 in flight, and zero progress-counter errors after 15,692.9 seconds. A root request then raised ClientOSError while writing the HTTP request body, causing warmup failure and preventing profiling. All 3,605 retained records are warmup: eight InvalidInferenceResultError classifications and one terminal ClientOSError. The server log contains no EngineDead, CUDA OOM, traceback, or error signature. This is a local canonical-warmup feasibility failure and no performance result exists.",
+      "power_evidence": "power_validation.json is invalid only because profiling never started and profile artifacts are missing; no energy result exists.",
+      "artifacts": [
+        {
+          "id": 11261823430,
+          "name": "agentic_minimaxm3_tp4_conc492_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-dd3f64e3194389eef364",
+          "size_bytes": 2378357,
+          "sha256": "97ea85252a6387425ae443860bc913bbf059b07a78e0a3b246441eb480c57792"
+        },
+        {
+          "id": 11261803563,
+          "name": "bmk_agentic_minimaxm3_tp4_conc492_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-dd3f64e3194389eef364",
+          "size_bytes": 1340,
+          "sha256": "b9a1adaf17740002a162d8c8a38a9b11d4aeea434066e8e88d7bcf0fd5faab53"
+        },
+        {
+          "id": 11261753583,
+          "name": "gpu_metrics_minimaxm3_tp4_conc492_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-dd3f64e3194389eef364",
+          "size_bytes": 640007,
+          "sha256": "2060b71be94e67f99f296e6847cd97d84ae4db86009aa482209bacfcd4c43de1"
+        },
+        {
+          "id": 11261588888,
+          "name": "server_logs_minimaxm3_tp4_conc492_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-dd3f64e3194389eef364",
+          "size_bytes": 126714,
+          "sha256": "84417a30605b06cf5a9e683f5618c13915ed1f8e61bcb3c23793494118be6baf"
+        },
+        {
+          "id": 11261479175,
+          "name": "power_audit_minimaxm3_tp4_conc492_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-dd3f64e3194389eef364",
+          "size_bytes": 642024,
+          "sha256": "da181fee9da046914292ad5253bfe6835f30814506e018f5d9d11932dab3049b"
+        }
+      ],
+      "evidence_sha256": {
+        "benchmark.log": "18c7f2202745b5c63cce7a65c9195c6dc657854f9ca34cc1d532e80e912e2d50",
+        "profile_export.jsonl": "dc0028b116bc343697673f04c74dd86e0e3dabaa2abb7b2b47233aa0409ab555",
+        "server.log": "1d19386396355279facc1ab18403f68eea6d09d0a59c09366acb0405e8bc2103",
+        "offload-telemetry.jsonl": "2319153089963d91752798f622a03ec9aae62de85d304ab711642d2823306e3c",
+        "offload_config.json": "e539d2440a2f612219a4230f2d355a2d7c19ca59c38fcb8b0ec0d95cca22ee1b",
+        "offload_cleanup.json": "3e68800fb0ef5de64430addc3eba45a3696202b2682d4f9f14e7cc5e533af9aa",
+        "gpu_metrics.csv": "5b7ce151a34a922dbebb3959a27c02270368309e19536dbc630977b9bb918ed7",
+        "benchmark_command.txt": "31089ebddcf9a775d5a3e4bf4fd9adff382a5ffe38685be81e5f1a2869c3f49c",
+        "vllm_command.txt": "57315209588f7ca1faa12e74aeadb2cbe3aecebbfba50efbf21a3544cbb8d79e",
+        "power_validation.json": "057c4cd15d89bd5298a7ac6c295b9c97e72487755d145a072dfc3f79fb043066"
+      }
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894,36796500128,36879140816,37027095833",
-  "status": "4 TiB HBM+NVMe c492 run 37070896182 completed its primer wave and entered zero-idle cache-pressure replay; the latest sample returned 570/5,446 with zero errors.",
+  "status": "c492 is a local canonical-warmup feasibility failure after one root-request ClientOSError aborted warmup before profiling. Artifacts and hashes are recorded, and exact scratch cleanup is independently verified. c490 is prepared as the next midpoint between completed c488 and failed c492.",
   "last_capacity_check": {
-    "checked_at": "2026-10-02T22:08:42Z",
-    "active_study_run_ids": [
-      37070896182
-    ],
+    "checked_at": "2026-10-03T02:41:50Z",
+    "active_study_run_ids": [],
     "pending_study_run_ids": [],
     "dispatch_allowed": false,
-    "b200_priority_jobs_queued": 0,
-    "b200_priority_jobs_in_progress": 1,
-    "b200_active_or_queued_run_ids": [
-      37070896182
-    ],
+    "b200_priority_jobs_queued": null,
+    "b200_priority_jobs_in_progress": null,
+    "b200_active_or_queued_run_ids": [],
     "target_node": "im-b200-c001",
-    "target_node_state": "allocated to allowlisted node; O_DIRECT verified and canonical warmup active",
-    "observed_free_bytes": 13256173211648,
-    "reason": "c492 is the single active B200 study job in canonical warmup. Dispatch nothing else while it remains active."
+    "target_node_state": "c492 cleanup independently verified; refresh cluster inventory before c490 dispatch",
+    "observed_free_bytes": null,
+    "reason": "c492 is terminal and cleaned up. Validate c490 locally and refresh cluster-wide queue state before dispatch."
   },
   "next_dispatch": {
-    "arm": null,
-    "concurrency": null,
-    "requires": "Wait for c492 allocation, canonical warmup, 3,600-second profiling, artifact capture, exact scratch cleanup, and adaptive comparison before selecting another point or matched control."
+    "arm": "nvme",
+    "concurrency": 490,
+    "requires": "Validate c490 configs, synchronized docs, focused expectation, study metadata, and append-only perf-changelog entry, then refresh the cluster-wide B200 queue before dispatch."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-21T05:30:00Z",
