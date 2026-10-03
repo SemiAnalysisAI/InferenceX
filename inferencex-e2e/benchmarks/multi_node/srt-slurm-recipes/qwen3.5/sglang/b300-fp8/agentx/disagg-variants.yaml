@@ -7,14 +7,14 @@ schema: 2
 base:
   model:
     path: qwen3.5-fp8
-    container: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
+    container: lmsysorg/sglang:v0.5.21-cu130@sha256:b1259f3ea3275f66237c498ea388919729018bc9f01c3d638391e06e2cf3f469
     precision: fp8
   identity:
     model:
       repo: Qwen/Qwen3.5-397B-A17B-FP8
       revision: ea5b4f81096f3901c91dea97f81324302495781d
     container:
-      image: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
+      image: lmsysorg/sglang:v0.5.21-cu130@sha256:b1259f3ea3275f66237c498ea388919729018bc9f01c3d638391e06e2cf3f469
   dynamo:
     install: true
     source:
