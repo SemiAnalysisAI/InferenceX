@@ -236,7 +236,7 @@ jobs:
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
+          fetch-depth: 1
           ref: ${{ inputs.ref || github.sha }}
           clean: true
           submodules: true
@@ -247,6 +247,8 @@ jobs:
         with:
           ref: ${{ github.workflow_sha }}
           path: .result-tooling
+          # Only inferencex-e2e/ is read from this checkout.
+          sparse-checkout: inferencex-e2e
           persist-credentials: false
 
       - name: Set up uv
