@@ -5,7 +5,7 @@ base:
   name: dsv41flash-fp4-mi355x-sglang-agentic
   model:
     path: hf:deepseek-ai/DeepSeek-V4.1-Flash
-    container: lmsysorg/sglang-rocm:v0.5.21-rocm720-mi35x-20261002
+    container: lmsysorg/sglang-rocm:v0.5.21-rocm720-mi35x-20261003
     precision: fp4
   resources:
     gpu_type: mi355x
