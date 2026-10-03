@@ -249,6 +249,34 @@ def _merge_recipe(base: dict, override: dict) -> dict:
     return merged
 
 
+def recipe_auxiliary_node_count(recipe: dict) -> int:
+    """Count service pools and dedicated nodes, matching srtctl's placement policy."""
+    services = [service for service in recipe.get("services", []) if service.get("enabled", True)]
+    pool_nodes = sum(service.get("nodes") or 0 for service in services)
+    infra_dedicated = recipe.get("infra", {}).get("etcd_nats_dedicated_node", False)
+    discovery = [service for service in services if service.get("type") in ("etcd", "nats")]
+    if discovery:
+        placements = {
+            service.get("placement", {}).get("node") == "dedicated" for service in discovery
+        }
+        if len(placements) != 1:
+            raise ValueError("Recipe etcd and nats must agree on dedicated placement")
+        infra_dedicated = placements.pop()
+    dedicated_roles = int(infra_dedicated)
+    for section, legacy_key in (
+        ("frontend", "dedicated_node"),
+        ("benchmark", "client_dedicated_node"),
+    ):
+        settings = recipe.get(section, {})
+        dedicated_roles += int(
+            settings.get("placement", {}).get("node") == "dedicated"
+            or settings.get(legacy_key, False)
+        )
+    if dedicated_roles and recipe.get("benchmark", {}).get("colocate_with_frontend", True):
+        dedicated_roles = 1
+    return pool_nodes + dedicated_roles
+
+
 def recipe_node_count(prefill: dict, decode: dict) -> int | None:
     """Read the authoritative node count from a checked-in srt-slurm recipe."""
     config_files = {
@@ -296,9 +324,10 @@ def recipe_node_count(prefill: dict, decode: dict) -> int | None:
         for name, role in roles.items():
             if "nodes" not in role:
                 raise ValueError(f"Recipe role {name!r} must specify nodes: {recipe_path}")
-        return sum(
+        worker_nodes = sum(
             0 if role["nodes"] == "colocate" else int(role["nodes"]) for role in roles.values()
         )
+        return worker_nodes + recipe_auxiliary_node_count(recipe)
     raise ValueError(f"Recipe has no worker roles: {recipe_path}")
 
 
