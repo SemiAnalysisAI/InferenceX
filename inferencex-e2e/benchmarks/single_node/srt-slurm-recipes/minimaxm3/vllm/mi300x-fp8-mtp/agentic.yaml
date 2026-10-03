@@ -156,8 +156,9 @@ override_tp8_c16_lmcache:
       args:
         max-num-seqs: 32
         # The lmcache-mp preset (the node's lmcache-server on port 8750) plus the
-        # measured message queue timeout.
-        connector: '{"kv_connector":"LMCacheMPConnector","kv_connector_module_path":"lmcache.integration.vllm.lmcache_mp_connector","kv_role":"kv_both","kv_connector_extra_config":{"lmcache.mp.host":"tcp://localhost","lmcache.mp.port":8750,"lmcache.mp.mq_timeout":6000.0}}'
+        # measured message queue timeout. A KV load that fails once the server
+        # falls behind is recomputed rather than failing the request.
+        connector: '{"kv_connector":"LMCacheMPConnector","kv_connector_module_path":"lmcache.integration.vllm.lmcache_mp_connector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"lmcache.mp.host":"tcp://localhost","lmcache.mp.port":8750,"lmcache.mp.mq_timeout":6000.0}}'
   benchmark:
     env:
       CONC: '16'
