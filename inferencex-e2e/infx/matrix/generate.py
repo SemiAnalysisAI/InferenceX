@@ -277,20 +277,11 @@ def recipe_auxiliary_node_count(recipe: dict) -> int:
     return pool_nodes + dedicated_roles
 
 
-def recipe_node_count(prefill: dict, decode: dict) -> int | None:
+def recipe_node_count(srt_recipe: str | None) -> int | None:
     """Read the authoritative node count from a checked-in srt-slurm recipe."""
-    config_files = {
-        setting.split("=", 1)[1]
-        for worker in (prefill, decode)
-        for setting in (worker.get(Fields.ADDITIONAL_SETTINGS.value, []) or [])
-        if setting.startswith("CONFIG_FILE=")
-    }
-    if not config_files:
+    if not srt_recipe:
         return None
-    if len(config_files) != 1:
-        raise ValueError(f"Conflicting CONFIG_FILE settings: {sorted(config_files)}")
-
-    config_file, _, selector = config_files.pop().partition(":")
+    config_file, _, selector = srt_recipe.partition(":")
     repo_root = repository_root()
     recipe_root = repo_root / "benchmarks" / "multi_node" / "srt-slurm-recipes"
     if config_file.startswith("benchmarks/multi_node/srt-slurm-recipes/"):
@@ -358,9 +349,10 @@ def multinode_node_count(
     decode: dict,
     runner: str,
     runner_data: dict,
+    srt_recipe: str | None = None,
 ) -> int:
     """Return the total Slurm node request represented by a matrix row."""
-    recipe_count = recipe_node_count(prefill, decode)
+    recipe_count = recipe_node_count(srt_recipe)
     if recipe_count is not None:
         return recipe_count
     return worker_node_count(prefill, "prefill", runner, runner_data) + worker_node_count(
@@ -384,6 +376,7 @@ def add_multinode_node_count(
             entry[Fields.DECODE.value],
             entry[Fields.RUNNER.value],
             runner_data,
+            entry.get(Fields.SRT_RECIPE.value),
         )
     return entry
 
@@ -1068,8 +1061,9 @@ def _fixed_sequence_entries(
                         Fields.SPEC_DECODING.value: spec_decoding,
                     }
                 )
-                if benchmark.get(Fields.SRT_RECIPE.value) is not None:
-                    entry[Fields.SRT_RECIPE.value] = benchmark[Fields.SRT_RECIPE.value]
+            for field in (Fields.SRT_RECIPE, Fields.EVAL_SRT_RECIPE):
+                if benchmark.get(field.value) is not None:
+                    entry[field.value] = benchmark[field.value]
             entry.update(
                 {
                     Fields.EXP_NAME.value: f"{model_code}_{seq_len_to_str(isl, osl)}",
@@ -1183,13 +1177,14 @@ def _agentic_entries(
                     Fields.CONC.value: conc,
                 }
             )
-            if benchmark.get(Fields.SRT_RECIPE.value) is not None:
-                entry[Fields.SRT_RECIPE.value] = benchmark[Fields.SRT_RECIPE.value]
             exp_name = (
                 f"{model_code}_tp{tp}_conc{conc}_"
                 f"{agentic_kv_offload_suffix(kv_offloading, kv_offload_backend)}"
                 + (f"_spec-{spec_decoding}" if spec_decoding != "none" else "")
             )
+        for field in (Fields.SRT_RECIPE, Fields.EVAL_SRT_RECIPE):
+            if benchmark.get(field.value) is not None:
+                entry[field.value] = benchmark[field.value]
         entry.update(
             {
                 Fields.KV_OFFLOADING.value: kv_offloading,

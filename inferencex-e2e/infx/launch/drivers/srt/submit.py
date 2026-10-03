@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 from infx.launch import proc
 from infx.launch.backends.slurm import srtctl_job_name
 from infx.launch.context import LaunchError
+from infx.launch.drivers.srt.lanes import selected_recipe
 from infx.srt_slurm.single_node import submission_fields
 
 if TYPE_CHECKING:
@@ -67,7 +68,7 @@ def bind_point(run: SrtRun, checkout: Checkout, arguments: Path) -> int:
     """Bind the single-node recipe variant for this point; the binder writes ``arguments``."""
     prepare = [
         str(checkout.venv / "bin/python"), "-m", "infx.srt_slurm.single_node", "prepare",
-        f"{run.workspace}/{run.request.srt_recipe}", str(arguments),
+        f"{run.workspace}/{selected_recipe(run.request)}", str(arguments),
     ]  # fmt: skip
     return proc.run(prepare, env=run.env, cwd=checkout.root).returncode
 
@@ -146,11 +147,11 @@ class Submitted:
 
 
 def submit_lane(
-    run: SrtRun, submitted: Submitted, checkout: Checkout, config_file: str, arguments: list[str]
+    run: SrtRun, submitted: Submitted, checkout: Checkout, srt_recipe: str, arguments: list[str]
 ) -> int:
     """Submit a multi-node lane job, record it in ``submitted``, and return srtctl's exit code."""
     applied = apply(
-        run, checkout, config_file, [*arguments, "--json", "--yes"], stdout=submitted.manifest
+        run, checkout, srt_recipe, [*arguments, "--json", "--yes"], stdout=submitted.manifest
     )
     print(applied.stdout, end="", flush=True)
     if applied.returncode:
@@ -163,7 +164,7 @@ def submit_lane(
 def multinode_arguments(
     run: SrtRun,
     lane: SrtLane,
-    config_file: str,
+    srt_recipe: str,
     overrides: list[str],
     *,
     preflight: bool,
@@ -176,7 +177,7 @@ def multinode_arguments(
         "benchmark.stream_output=true",
         *overrides,
         "-f",
-        config_file,
+        srt_recipe,
     ]
     if not preflight:
         arguments.append("--no-preflight")

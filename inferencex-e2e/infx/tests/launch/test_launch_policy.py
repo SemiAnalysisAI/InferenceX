@@ -116,8 +116,8 @@ def test_nscale_eval_only_inspects_eval_recipe(tmp_path):
     _mirror(tmp_path, "dsv4/bench.yaml", "model: {}\n")
     env = dict(
         GITHUB_WORKSPACE=str(tmp_path), IS_AGENTIC="0", MODEL_PREFIX="dsv4", PRECISION="fp4",
-        FRAMEWORK="dynamo-vllm", CONFIG_FILE="recipes/dsv4/bench.yaml:zip",
-        EVAL_CONFIG_FILE="recipes/dsv4/eval.yaml",
+        FRAMEWORK="dynamo-vllm", SRT_RECIPE="recipes/dsv4/bench.yaml:zip",
+        EVAL_SRT_RECIPE="recipes/dsv4/eval.yaml",
     )
     assert resolve_power("b200-nscale", MULTI, _request(**env, EVAL_ONLY="true")).dcgm
     assert not resolve_power("b200-nscale", MULTI, _request(**env, EVAL_ONLY="false")).dcgm
@@ -125,7 +125,7 @@ def test_nscale_eval_only_inspects_eval_recipe(tmp_path):
 
 
 def test_upstream_only_recipe_stays_non_power(tmp_path):
-    request = _request(GITHUB_WORKSPACE=str(tmp_path), CONFIG_FILE="recipes/missing.yaml",
+    request = _request(GITHUB_WORKSPACE=str(tmp_path), SRT_RECIPE="recipes/missing.yaml",
                        IS_AGENTIC="0", FRAMEWORK="dynamo-trt")
     assert not resolve_power("gb300-nv", MULTI, request).dcgm
 

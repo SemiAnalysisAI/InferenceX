@@ -1,6 +1,6 @@
 # AgentX qwen3.5 sglang b300-fp8 recipes: shared settings in base, one
 # override per benchmark configuration. Select one with
-# CONFIG_FILE=recipes/qwen3.5/sglang/b300-fp8/agentx/disagg-variants.yaml:override_<name>.
+# srt-recipe: recipes/qwen3.5/sglang/b300-fp8/agentx/disagg-variants.yaml:override_<name>.
 
 schema: 2
 

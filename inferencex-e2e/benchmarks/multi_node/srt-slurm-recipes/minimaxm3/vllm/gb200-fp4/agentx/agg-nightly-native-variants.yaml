@@ -1,6 +1,6 @@
 # AgentX minimaxm3 vllm gb200-fp4 recipes: shared settings in base, one
 # override per benchmark configuration. Select one with
-# CONFIG_FILE=recipes/minimaxm3/vllm/gb200-fp4/agentx/agg-nightly-native-variants.yaml:override_<name>.
+# srt-recipe: recipes/minimaxm3/vllm/gb200-fp4/agentx/agg-nightly-native-variants.yaml:override_<name>.
 
 schema: 2
 

@@ -110,7 +110,7 @@ def lane_env(harness, cluster_id: str, recipe: str = LANE_RECIPE, **overrides: s
     mirror.write_text(recipe)
     env = {
         **harness.env, "RUNNER_NAME": overrides.pop("RUNNER_NAME", None) or runner_for(cluster_id),
-        "IS_MULTINODE": "true", "CONFIG_FILE": "recipes/test/lane.yaml", "IMAGE": "test:tag",
+        "IS_MULTINODE": "true", "SRT_RECIPE": "recipes/test/lane.yaml", "IMAGE": "test:tag",
         "CONC_LIST": "4", "SPEC_DECODING": "none", "IS_AGENTIC": "0", "ISL": "1024", "OSL": "1024",
         "FAKE_RESULTS": "fixed",
     }  # fmt: skip
@@ -164,6 +164,22 @@ def test_single_node_eval_requires_a_successful_eval(harness):
     assert result.returncode == 1
     assert "eval did not succeed" in result.stderr
     assert exit_file.read_text() == "0\n"
+
+
+@pytest.mark.parametrize(("eval_only", "selected"), [
+    ("false", "recipe.yaml:zip_override_conc[0]"),
+    ("true", "eval.yaml:base"),
+])
+def test_single_node_selects_eval_recipe_only_for_eval_only(harness, eval_only, selected):
+    env = single_node_env(
+        harness, "h200-cw", EVAL_ONLY=eval_only, EVAL_SRT_RECIPE="eval.yaml:base",
+        MAX_MODEL_LEN="1024",
+    )
+    (harness.workspace / "eval.yaml").write_text(yaml.safe_dump({"base": POINT_RECIPE}))
+    assert_ok(launch(env, harness.config, harness.workspace))
+    [call] = srtctl_calls(harness.logs)
+    argv = call["argv"]
+    assert argv[argv.index("--file") + 1] == f"{harness.workspace}/{selected}"
 
 
 def test_single_node_failed_allocation_fails_the_launch(harness):
@@ -413,24 +429,29 @@ def test_tilert_uses_upstream_submission_and_prepared_weights(harness):
     assert json.loads(point.read_text()) == {"conc": 4}
 
 
-def test_eval_only_runs_the_eval_recipe_with_real_verification(harness):
+@pytest.mark.parametrize("selector", ["", ":override_eval"])
+def test_eval_only_runs_the_eval_recipe_with_real_verification(harness, selector):
     mirror = harness.workspace / "benchmarks/multi_node/srt-slurm-recipes/test"
     (mirror / "trtllm").mkdir(parents=True)
     (mirror / "trtllm/forced.yaml").write_text(
         "roles:\n  decode:\n    env:\n      TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS: 2\n      KEEP: 1\n"
     )
-    (mirror / "eval.yaml").write_text(LANE_RECIPE)
+    recipe = (
+        yaml.safe_dump({"base": yaml.safe_load(LANE_RECIPE), "override_eval": {"name": "eval"}})
+        if selector else LANE_RECIPE
+    )
+    (mirror / "eval.yaml").write_text(recipe)
     env = lane_env(
         harness, "gb300-nv", MODEL_PREFIX="dsv4", PRECISION="fp4", FRAMEWORK="dynamo-trt",
         MODEL="deepseek-ai/DeepSeek-V4-Pro", IS_AGENTIC="1", SPEC_DECODING="mtp", ISL="0", OSL="0",
-        EVAL_ONLY="true", EVAL_CONFIG_FILE="recipes/test/eval.yaml", FAKE_RESULTS="eval",
+        EVAL_ONLY="true", EVAL_SRT_RECIPE=f"recipes/test/eval.yaml{selector}", FAKE_RESULTS="eval",
         EVAL_CONC="4 8",
     )  # fmt: skip
     assert_ok(launch(env, harness.config, harness.workspace))
 
     [call] = srtctl_calls(harness.logs)
     argv = call["argv"]
-    assert argv[argv.index("--file") + 1] == "recipes/test/eval.yaml"
+    assert argv[argv.index("--file") + 1] == f"recipes/test/eval.yaml{selector}"
     assert "frontend.placement.node=head" in argv
     checkout = Path(call["cwd"])
     assert (checkout / "recipes/test/trtllm/forced.yaml").read_text() == (
@@ -469,8 +490,8 @@ def test_a_setup_failure_without_a_bad_archive_is_not_retried(harness):
     ("h100-dgxc", dict(MODEL_PREFIX="dsr1", PRECISION="fp8", FRAMEWORK="dynamo-vllm"), "Unsupported framework"),
     ("b200-nscale", dict(MODEL_PREFIX="dsv4", PRECISION="fp4", FRAMEWORK="dynamo-trt"), "only dynamo-vllm"),
     ("gb300-nv", dict(MODEL_PREFIX="llama", PRECISION="fp8", FRAMEWORK="dynamo-sglang"), "stages no checkpoint"),
-    ("h200-dgxc", dict(MODEL_PREFIX="dsr1", PRECISION="fp8", FRAMEWORK="dynamo-sglang", CONFIG_FILE=""),
-     "CONFIG_FILE is not set"),
+    ("h200-dgxc", dict(MODEL_PREFIX="dsr1", PRECISION="fp8", FRAMEWORK="dynamo-sglang", SRT_RECIPE=""),
+     "SRT_RECIPE"),
 ])  # fmt: skip
 def test_unsupported_multinode_requests_fail_before_any_setup(harness, cluster_id, env, message):
     result = launch(lane_env(harness, cluster_id, MODEL="m", **env), harness.config, harness.workspace)
@@ -482,6 +503,7 @@ def test_unsupported_multinode_requests_fail_before_any_setup(harness, cluster_i
 @pytest.mark.parametrize(("shape", "overrides", "missing"), [
     ("single", dict(IS_AGENTIC="1", SPEC_DECODING="mtp", THINKING_MODE=""), "THINKING_MODE"),
     ("multi", dict(SPEC_DECODING=None), "SPEC_DECODING"),
+    ("multi", dict(SRT_RECIPE=None), "SRT_RECIPE"),
     ("batch", dict(SRT_RECIPE=None), "SRT_RECIPE"),
 ])  # fmt: skip
 def test_a_missing_input_is_named_before_any_setup(harness, shape, overrides, missing):
@@ -498,6 +520,15 @@ def test_a_missing_input_is_named_before_any_setup(harness, shape, overrides, mi
     assert result.returncode == 1
     assert missing in result.stderr
     assert lines(harness.logs, "git") == [] and lines(harness.logs, "sbatch") == []
+
+
+@pytest.mark.parametrize("legacy", ["CONFIG_FILE", "EVAL_CONFIG_FILE"])
+def test_obsolete_recipe_inputs_are_rejected_before_setup(harness, legacy):
+    env = single_node_env(harness, "h200-cw", **{legacy: "recipe.yaml"})
+    result = launch(env, harness.config, harness.workspace)
+    assert result.returncode == 1
+    assert f"{legacy} is no longer supported" in result.stderr
+    assert lines(harness.logs, "git") == []
 
 
 def test_post_eval_is_handed_the_workload_contract_and_no_other_secret(harness):

@@ -70,8 +70,8 @@ class LaunchRequest(BaseModel):
     spec_decoding: str | None = Field(None, alias="SPEC_DECODING")
     is_multinode: TrueFlag = Field(False, alias="IS_MULTINODE")
     is_agentic: OneFlag = Field(False, alias="IS_AGENTIC")
-    config_file: str | None = Field(None, alias="CONFIG_FILE")
-    eval_config_file: str | None = Field(None, alias="EVAL_CONFIG_FILE")
+    srt_recipe: str | None = Field(None, alias="SRT_RECIPE")
+    eval_srt_recipe: str | None = Field(None, alias="EVAL_SRT_RECIPE")
     bench_script_override: str | None = Field(None, alias="BENCH_SCRIPT_OVERRIDE")
     batch_reentry: OneFlag = Field(False, alias=BATCH_REENTRY_ENV)
     conc: int | None = Field(None, alias="CONC")
@@ -105,6 +105,7 @@ class SrtRequest(LaunchRequest):
 
     github_workspace: Path = Field(alias="GITHUB_WORKSPACE")
     image: str = Field(alias="IMAGE")
+    srt_recipe: str = Field(alias="SRT_RECIPE")
     framework: str = Field(alias="FRAMEWORK")
     model_prefix: str = Field(alias="MODEL_PREFIX")
     precision: str = Field(alias="PRECISION")
@@ -120,6 +121,14 @@ class SrtRequest(LaunchRequest):
     eval_conc: str | None = Field(None, alias="EVAL_CONC")
 
     @model_validator(mode="after")
+    def _recipe_inputs(self) -> Self:
+        """Reject obsolete selectors even when a supported selector was also supplied."""
+        for old, new in (("CONFIG_FILE", "SRT_RECIPE"), ("EVAL_CONFIG_FILE", "EVAL_SRT_RECIPE")):
+            if self.env.get(old):
+                raise ValueError(f"{old} is no longer supported; use {new}")
+        return self
+
+    @model_validator(mode="after")
     def _golden_curve_key(self) -> Self:
         """Speculative AgentX throughput runs select their golden curve by THINKING_MODE."""
         speculative = self.spec_decoding != "none"
@@ -131,7 +140,6 @@ class SrtRequest(LaunchRequest):
 class SingleNodeRequest(SrtRequest):
     """One native single-node srt-slurm point, bound to one recipe variant."""
 
-    srt_recipe: str = Field(alias="SRT_RECIPE")
     model: str = Field(alias="MODEL")
     tp: int = Field(alias="TP")
     pp_size: int = Field(alias="PP_SIZE")

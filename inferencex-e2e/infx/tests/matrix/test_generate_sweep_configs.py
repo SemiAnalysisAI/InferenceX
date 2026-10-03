@@ -74,7 +74,7 @@ def test_aggregated_worker_expands_to_legacy_matrix_pair():
             "pp": 2,
             "ep": 1,
             "dp-attn": False,
-            "additional-settings": ["CONFIG_FILE=recipes/aggregate.yaml"],
+            "additional-settings": ["CUSTOM_SETTING=value"],
         }
     }
 
@@ -88,7 +88,7 @@ def test_aggregated_worker_expands_to_legacy_matrix_pair():
         "pcp-size": 1,
         "ep": 1,
         "dp-attn": False,
-        "additional-settings": ["CONFIG_FILE=recipes/aggregate.yaml"],
+        "additional-settings": ["CUSTOM_SETTING=value"],
     }
     assert decode == {
         "num-worker": 0,
@@ -115,12 +115,11 @@ def test_multinode_node_count_reads_schema_two_roles(tmp_path, monkeypatch, role
     import infx.config
     (tmp_path / "configs").mkdir()
     monkeypatch.setattr(infx.config, "__file__", str(tmp_path / "infx/config.py"))
-    prefill = {"additional-settings": ["CONFIG_FILE=recipes/test.yaml"]}
     if expected is None:
         with pytest.raises(ValueError, match="role 'decode' must specify nodes"):
-            generate.recipe_node_count(prefill, {})
+            generate.recipe_node_count("recipes/test.yaml")
     else:
-        assert generate.recipe_node_count(prefill, {}) == expected
+        assert generate.recipe_node_count("recipes/test.yaml") == expected
 
 
 @pytest.mark.parametrize("selector, expected", [
@@ -143,8 +142,7 @@ def test_recipe_node_count_resolves_override_selectors(tmp_path, monkeypatch, se
     import infx.config
     (tmp_path / "configs").mkdir()
     monkeypatch.setattr(infx.config, "__file__", str(tmp_path / "infx/config.py"))
-    prefill = {"additional-settings": [f"CONFIG_FILE=recipes/variants.yaml:{selector}"]}
-    assert generate.recipe_node_count(prefill, {}) == expected
+    assert generate.recipe_node_count(f"recipes/variants.yaml:{selector}") == expected
 
 
 @pytest.mark.parametrize("auxiliary, expected", [
@@ -178,9 +176,7 @@ def test_recipe_node_count_includes_auxiliary_nodes(tmp_path, monkeypatch, auxil
     }))
     (tmp_path / "configs").mkdir()
     monkeypatch.setattr(infx.config, "__file__", str(tmp_path / "infx/config.py"))
-    prefill = {"additional-settings": ["CONFIG_FILE=recipes/test.yaml:override_auxiliary"]}
-
-    assert generate.recipe_node_count(prefill, {}) == expected
+    assert generate.recipe_node_count("recipes/test.yaml:override_auxiliary") == expected
 
 
 def test_multinode_node_count_uses_role_gpu_footprints(sample_runner_config):
@@ -251,12 +247,14 @@ def test_multinode_node_count_prefers_recipe_roles(
     )
     prefill = {
         "num-worker": 1, "tp": 8,
-        "additional-settings": [f"CONFIG_FILE={config_file}", "PREFILL_NODES=7"],
+        "additional-settings": ["PREFILL_NODES=7"],
     }
     decode = {"num-worker": 1, "tp": 8, "additional-settings": ["DECODE_NODES=9"]}
 
     # Recipe allocation wins over role overrides, even without an inventory.
-    assert multinode_node_count(prefill, decode, "unknown", {}) == expected_nodes
+    assert multinode_node_count(
+        prefill, decode, "unknown", {}, srt_recipe=config_file
+    ) == expected_nodes
 
 
 
@@ -273,6 +271,58 @@ def test_srt_recipe_selection_stays_with_its_scenario(
     assert rows
     assert {row.get("srt-recipe") for row in rows if row["isl"] == 1024} == {"pilot.yaml:base"}
     assert {row.get("srt-recipe") for row in rows if row["isl"] == 8192} == {None}
+
+@pytest.mark.parametrize("scenario", ["fixed-seq-len", "agentic-coding"])
+@pytest.mark.parametrize("topology", ["single", "aggregate", "disaggregate"])
+def test_recipe_fields_survive_generation_and_eval_selection(
+    tmp_path, monkeypatch, sample_runner_config, scenario, topology,
+):
+    import infx.config
+    from infx.matrix.generate import generate_config_matrix
+    from infx.matrix.validation import validate_master_config
+
+    (tmp_path / "configs").mkdir()
+    monkeypatch.setattr(infx.config, "__file__", str(tmp_path / "infx/config.py"))
+    recipe = tmp_path / "benchmarks/multi_node/srt-slurm-recipes/fixture.yaml"
+    recipe.parent.mkdir(parents=True)
+    recipe.write_text("schema: 2\nroles:\n  prefill: {nodes: 2}\n  decode: {nodes: 3}\n")
+    search = {
+        "srt-recipe": "recipes/fixture.yaml",
+        "eval-srt-recipe": "recipes/eval.yaml:override_accuracy",
+        "conc-list": [16, 32],
+    }
+    worker = {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False}
+    if topology == "single":
+        search["tp"] = 8
+    elif topology == "aggregate":
+        search.update({"worker": worker, "num-nodes": 4})
+    else:
+        search.update({"prefill": worker, "decode": worker.copy(), "kv-p2p-transfer": "nixl"})
+    if scenario == "agentic-coding":
+        search["kv-offloading"] = "none"
+        sequence = {"search-space": [search]}
+    else:
+        sequence = {"isl": 8192, "osl": 1024, "search-space": [search]}
+    master = validate_master_config({"fixture": {
+        "image": "fixture:latest", "model": "fixture/model", "model-prefix": "dsr1",
+        "precision": "fp4", "framework": "vllm", "runner": "cluster:b300-nv",
+        "multinode": topology != "single", "disagg": topology == "disaggregate",
+        "scenarios": {scenario: [sequence]},
+    }})
+
+    throughput = generate_config_matrix(["fixture"], master, sample_runner_config, eval_mode="none")
+    evals = generate_config_matrix(["fixture"], master, sample_runner_config, eval_mode="all")
+
+    assert throughput and evals
+    for row in [*throughput, *evals]:
+        assert row["srt-recipe"] == "recipes/fixture.yaml"
+        assert row["eval-srt-recipe"] == "recipes/eval.yaml:override_accuracy"
+        if topology != "single":
+            assert row["node-count"] == (4 if topology == "aggregate" else 5)
+            assert not row["prefill"].get("additional-settings")
+            assert not row["decode"].get("additional-settings")
+    assert all(row["run-eval"] for row in evals)
+
 
 @pytest.fixture
 def sample_single_node_config():

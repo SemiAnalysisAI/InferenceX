@@ -1,6 +1,6 @@
 # AgentX glm5.2 sglang gb200-fp4 recipes: shared settings in base, one
 # override per benchmark configuration. Select one with
-# CONFIG_FILE=recipes/glm5.2/sglang/gb200-fp4/agentx/agg-mtp-variants.yaml:override_<name>.
+# srt-recipe: recipes/glm5.2/sglang/gb200-fp4/agentx/agg-mtp-variants.yaml:override_<name>.
 
 schema: 2
 

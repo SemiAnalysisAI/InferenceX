@@ -1,6 +1,6 @@
 # AgentX qwen3.5 sglang gb300-fp4 recipes: shared settings in base, one
 # override per benchmark configuration. Select one with
-# CONFIG_FILE=recipes/qwen3.5/sglang/gb300-fp4/agentx/agg-pareto-variants.yaml:override_<name>.
+# srt-recipe: recipes/qwen3.5/sglang/gb300-fp4/agentx/agg-pareto-variants.yaml:override_<name>.
 
 schema: 2
 

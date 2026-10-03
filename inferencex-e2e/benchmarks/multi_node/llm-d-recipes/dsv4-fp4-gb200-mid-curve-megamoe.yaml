@@ -14,7 +14,7 @@
 #   with DP-attention + deep_gemm_mega_moe + EP weight filter. Decode engines
 #   additionally use FULL_DECODE_ONLY graphs.
 #
-# Selected via additional-settings: CONFIG_FILE=<this file>, GPUS_PER_NODE=4,
+# Selected via additional-settings: LLMD_RECIPE=<this file>, GPUS_PER_NODE=4,
 # plus the PREFILL_NODES/PREFILL_WORKERS/DECODE_NODES for the chosen topology.
 #
 #
