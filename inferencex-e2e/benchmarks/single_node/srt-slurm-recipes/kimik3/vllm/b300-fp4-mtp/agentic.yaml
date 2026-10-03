@@ -101,12 +101,14 @@ base:
         # Enable direct A2A (GB300 DCP8 / B200 stock). load_async must stay true.
         VLLM_USE_DIRECT_DCP_A2A: '1'
         VLLM_USE_DIRECT_DCP_Q_GATHER: '1'
-        # Tip bed9f1ce c40 (Slurm 6765): with KV_GATHER=0 the hang is PyNCCL
-        # kv_gather _ALLGATHER_BASE (dcp.py:1413; last started work: -1) after
-        # ~42m serve / GPU KV ~86-100%, Mooncake failed_keys=0. Re-enable direct
-        # KV gather (GB300 DCP8 / B200 Mooncake stock); tip 68cdcc58 confirmed
-        # "Using direct symmetric-memory DCP chunked-context KV gather".
-        VLLM_USE_DIRECT_DCP_KV_GATHER: '1'
+        # Tip bed9f1ce c40 hung in PyNCCL kv_gather _ALLGATHER_BASE when this
+        # was 0, so it was restored. Tip f7be12ed c56 (run 37086876838, Slurm
+        # 6989) with it on died in the direct kernel itself: "direct DCP
+        # kv-gather multimem timeout source=1 epoch=494017" then asm trap →
+        # CUDA unspecified launch failure (Mooncake memcpy -800 is the dead
+        # device, not the first boundary). Stock gate off selects
+        # all_gather_into_tensor. Keep A2A and Q gather on.
+        VLLM_USE_DIRECT_DCP_KV_GATHER: '0'
         VLLM_ENGINE_READY_TIMEOUT_S: '3600'
         VLLM_RPC_TIMEOUT: '600000'
         # Mooncake loads can block inside execute_model past the 300s default;
