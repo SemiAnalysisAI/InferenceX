@@ -1739,7 +1739,6 @@
     - "Add --gpu-memory-utilization 0.9 to server launch"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1133
 
-
 - config-keys:
     - dsv4-fp8-h200-vllm
   description:
@@ -6100,7 +6099,6 @@
     - "Add GB200 DeepSeek-V4-Pro FP4 Dynamo-vLLM AgentX mirroring the GB300 PR #2571 MTP tuning, with every GB300 4-GPU worker sized to 8 GPUs on GB200."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2636
 
-
 - config-keys:
     - qwen3.5-fp8-h200-sglang-agentic-hicache-mtp
   scenario-type:
@@ -6491,7 +6489,6 @@
     - "Replace the TP2/EP2 arm with TP2/EP1 so the 2-GPU point matches qwen3.5-fp4-b200-sglang-agentic-mtp."
     - "Add HiCache host-DRAM KV tier arms at TP4 concurrency 40, 48, 56, and 64 and TP2 concurrency 20, 24, 28, and 32, using hicache ratio 1.5 with write_through, direct io, and page_first_direct layout."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2693
-
 
 - config-keys:
     - kimik2.6-fp4-b200-dynamo-vllm
@@ -9445,3 +9442,11 @@
     - "Cap max-num-seqs at 48 for CONC 70 on B300 DSXE (keep A2A=1, Q_GATHER=1, KV_GATHER=1, load_async=true, max_load_batch_keys=1, CONC 8+ util 0.85, CONC 32-56 max-num-seqs 1x). Tip 1d937c73e fail-fast run 37071755348 agentic c70 (job 111074417068, Slurm 6950, gpu-11) had a real rail (Mooncake rail: ibp198s0f0 / Patched), Application startup complete, all three direct DCP gathers logged, Mooncake failed_keys=0. Under max-num-seqs=70 (1x) warmup packed Waiting≈63-70 / Deferred≈50-67 with Running≈0 and GPU KV ≈86-91% for ~30m, then hung with shm_broadcast starvation through VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS=1800 → TimeoutError: RPC call to sample_tokens timed out → EngineDead / ProfileAborted (771 warmup dropped / 0 kept; time_to_ready=None). No Watchdog / ALLGATHER / ALLTOALL / CUDA OOM; ingest nccl_error:16 was init-only ibv_query_port_speed WARN (false positive). Same deferred-admission family as tip 861a1512 c32 / 031de17bf c56; 1x insufficient at c70 so drop below 1x to 48. Keep no compact_group_io, no MC_MAX_MR_SIZE, cumem off."
     - "在 B300 DSXE 上将 CONC 70 的 max-num-seqs 限制为 48（保留 A2A=1、Q_GATHER=1、KV_GATHER=1、load_async=true、max_load_batch_keys=1、CONC 8+ util 0.85、CONC 32–56 max-num-seqs 1×）。tip 1d937c73e fail-fast 运行 37071755348 的 agentic c70（job 111074417068，Slurm 6950，gpu-11）已有真实 rail（Mooncake rail: ibp198s0f0 / Patched），Application startup 完成，三种 direct DCP gather 均已记录，Mooncake failed_keys=0。在 max-num-seqs=70（1×）下 warmup 将 Waiting≈63–70 / Deferred≈50–67 堆满且 Running≈0、GPU KV ≈86–91% 约 30 分钟，随后 shm_broadcast 饥饿直至满 VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS=1800 → TimeoutError: RPC call to sample_tokens timed out → EngineDead / ProfileAborted（丢弃 771 warmup / 保留 0；time_to_ready=None）。无 Watchdog / ALLGATHER / ALLTOALL / CUDA OOM；ingest 的 nccl_error:16 仅为初始化期 ibv_query_port_speed WARN（误报）。与 tip 861a1512 c32 / 031de17bf c56 同属 deferred 准入族；c70 上 1× 不足，降至 48。保留不启用 compact_group_io、不设 MC_MAX_MR_SIZE、关闭 cumem。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3088
+
+- config-keys:
+    - glm5.2-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the GLM-5.2 MXFP4 MI355X SGLang AgentX image from lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260924 to lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260930 (digest sha256:ac30a0fe98fb3f6e258d302280110f1be44c83edc54b914037db57c82cc20828). The image is built from SGLang commit d26ec4690d10d4c69890280b313d0409c8265feb, which contains the merge commit for sgl-project/sglang#38583."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3616
