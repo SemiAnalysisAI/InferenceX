@@ -267,7 +267,7 @@ All ten AgentX throughput points use DSpark K6 (target verification length 7)
 and the committed golden AL 3.77. C1/2/4/8/16 use TP8/EP1;
 C48/64/96/128/256 use TP8/DPA8/EP8 with native RCCL. Each point runs for
 3600 seconds. The C256 full GSM8K eval omits forced acceptance. Keep the
-pinned `rocm/atom-dev:nightly_202609291501` image and GPU-only KV. C1 through C16 use
+pinned `rocm/atom-dev:nightly_202609161445` image and GPU-only KV. C1 through C16 use
 BF16 KV, while C48 and above retain FP8 KV; all points use the FP4 index cache,
 8192-token checkpoints and DEP dense FULL graph ladder. Fixed q7 graphs are
 captured in each new server; confirm target and DSpark draft capture in
@@ -280,12 +280,8 @@ record model/source identity and requested settings. Successful startup,
 graph capture and requests require runtime log evidence.
 
 The pinned image is the official ATOM nightly
-`rocm/atom-dev:nightly_202609291501` (ATOM `0.1.7.dev46+g74fd942b0`, ROCm 7.2.4),
-which includes the merged
+`rocm/atom-dev:nightly_202609161445`, which includes the merged
 [ROCm/ATOM#2233](https://github.com/ROCm/ATOM/pull/2233) inference-mode fix.
-From this image ATOM stores the checkpoint's `ue8m0` FP8 block scales as E8M0
-on gfx950 by default ([ROCm/ATOM#2419](https://github.com/ROCm/ATOM/pull/2419));
-the powers-of-two scales are represented exactly.
 The recipe does not patch AITER source at runtime; TP communication
 fusion, DSpark K6 and graph capture use the implementation shipped in the image.
 
@@ -332,6 +328,68 @@ The GB300 DSpark recipe sets explicit capture sizes per point, described below.
 The H200 DSpark recipe uses the same minimum capture size and preserves the same workload settings.
 
 The B300 DSpark recipe sets explicit capture sizes per point, described below.
+
+Kimi-K3 on B300 selects one active Mellanox adapter by its sysfs driver, including
+DSXE `ibp*` names; EFA devices are excluded from this RDMA recipe. The embedded
+Mooncake ranks share that adapter. InfiniBand uses GID index 0 and RoCE retains
+index 3. If no compatible active adapter exists, or if the host mlx5 provider mount
+is missing, startup fails before serving. The recipe YAML may leave `device_name`
+empty; `kimik3-b300-mooncake.sh` patches a real rail into the store config and
+refuses to continue with an empty name (srt-slurm's earlier "Wrote
+mooncake_store_config" line is the pre-patch dump). On DSXE the container's
+libibverbs comes from the host through the enroot EFA hook, so
+`configs/runners.yaml` mounts the host library directory at `/host-usr-lib` and
+the setup script requires `RDMAV_DRIVERS` to load its mlx5 provider. Keep
+`max_load_batch_keys: 1` and `load_async: true` (tips 860c1ccf c48 /
+e51c58f5 c32 hung in DCP PYNCCL `_ALLGATHER_BASE` under ~98–100% GPU KV with
+async loads and clean Mooncake metrics; `last started work: -1`. Tip ea88d652
+canary c1 crashed with Mooncake `AssertionError: load_async must be True for
+better performance` when `load_async` was set false, so restore the required
+stock true), but do not enable `compact_group_io` on this DSXE single-rail path
+(it storm-failed ~25 MiB compact-group puts at c8). Keep
+`VLLM_USE_DIRECT_DCP_A2A=1`, and set both `VLLM_USE_DIRECT_DCP_Q_GATHER=0` and
+`VLLM_USE_DIRECT_DCP_KV_GATHER=0` (tip 68cdcc58 c24 hung in PyNCCL
+`ALLTOALL_BASE` inside `dcp_a2a_lse_reduce` with A2A off. Tip bed9f1ce c40
+hung in PyNCCL `kv_gather` `_ALLGATHER_BASE` when KV gather was off, which is
+why that gate was restored; tip f7be12ed c56, run 37086876838, then died on
+the direct KV kernel itself — `direct DCP kv-gather multimem timeout source=1
+epoch=494017` followed by an `asm trap` that is the CUDA unspecified launch
+failure — so KV gather is gated off again. Tip db6caecc c24, run 37109541419,
+then died on the direct Q kernel — `direct DCP q-gather multimem timeout
+source=7 epoch=1107073` → CUDA unspecified launch failure in
+`KVCacheStoreSendingThread` → EngineDead / ProfileAborted — so Q gather is
+gated off too. Tip 1f837c46 eval-only c8 previously hung ~8.5m after `dcp:0`
+then failed EP `ncclCommInitRank` with Q gather off; watch eval init on this
+gate. Mooncake GPU memcpy `-800` was the poisoned device, not the first
+boundary.).
+Do not set `MC_MAX_MR_SIZE` here: with 4GiB every rank hit
+`register_buffer failed ... -600` on the ~40 GiB KV region and stormed
+`AddressNotRegistered` TRANSFER_FAIL (c2/c32); pre-`MC_MAX_MR` tips registered
+cleanly. Keep `enable-cumem-allocator` off on this path. Keep
+`gpu-memory-utilization` at 0.85 for CONC 8+ (tip b70e4260a c48 reached
+Application startup with KV 45.2 GiB at 0.92 under
+`VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0`, then OOMed in flashinfer FP4 MoE
+`prepare_moe` allocating ~2.89 GiB with ~2.3 GiB free; vLLM suggested ~36.78 GiB
+KV once CUDA graphs are counted. Tip 5ab41690 c8 then soft-OOMed at util 0.92
+during warmup — CUDACachingAllocator failed a ~3.03 GiB alloc with ~1.16 GiB
+free — yielding empty streams and ProfileAborted at 2/11 > 10%; keep 0.92 only
+on c1–c4). Cap `max-num-seqs` at 1×CONC for CONC 16 and CONC 32–48, and at 48
+for CONC 56 and CONC 70 (tip 031de17bf c56 with A2A/Q/KV all direct and util 0.85 packed GPU KV to
+~99.7% under 2× admission, then hung workers through the 1800s
+`sample_tokens` RPC timeout with no Watchdog / ALLGATHER / ALLTOALL / CUDA OOM;
+ingest `nccl_error:16` was init-only `ibv_query_port_speed` WARN. Tip 861a1512
+c32 repeated the same kill under `max-num-seqs=64`: GPU KV pinned ~99–100%,
+then hung at 0 tok/s with shm_broadcast starvation from 21:03 through the
+1800s `sample_tokens` timeout → EngineDead / ProfileAborted; keep 2× on CONC
+8 and CONC 24. Tip ebc4eb499 c16 under 2×=`32` packed GPU KV to ~99% during
+warmup (Running: 3, Waiting: 7, Deferred: 7) then hung PyNCCL
+`_ALLGATHER_BASE` 600s (`last started work: -1`) → DistBackendError /
+EngineDead / ProfileAborted with 176 warmup dropped / 0 kept; drop c16 to
+1×=`16`. Tip 1d937c73e c70 still starved under 1×=`70`: Running≈0 /
+Waiting≈66 / Deferred≈50–67 / KV≈86–91% for ~30m then the same 1800s
+`sample_tokens` timeout; drop c70 to `max-num-seqs=48`. Tip fd61acb0 c56
+under 1×=`56` packed GPU KV to 98.2% then hung the same `_ALLGATHER_BASE`
+watchdog; drop c56 to `max-num-seqs=48`).
 
 The B200 entry uses `vllm/vllm-openai:nightly-dev-x86_64-cu130-ac9126e58aa7` with FlashInfer
 autotuning. TP4 covers concurrency 1–128. DEP2 (TP1 x DP2 + EP2, DeepGEMM MegaMoE) covers 8–32 and

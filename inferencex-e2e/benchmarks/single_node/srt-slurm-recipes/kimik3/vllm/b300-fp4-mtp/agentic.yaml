@@ -26,9 +26,12 @@ base:
     interval_seconds: 10
     max_attempts: 360
   # Embedded Mooncake: each TP rank contributes TOTAL_CPU_DRAM_GB / 8 GB. The
-  # setup script pins the client to the master's version and fills in the
-  # node's active RDMA rail. DSXE rails are InfiniBand without a netdev, so the
-  # transfer engine picks its own GID (a RoCE v2 index 3 does not exist).
+  # setup script pins the client, backports load-failure recovery, selects one
+  # active Mellanox rail by driver (ibp* or mlx5_*), sets MC_GID_INDEX from the
+  # link layer, requires the host mlx5 provider via RDMAV_DRIVERS at
+  # /host-usr-lib, and refuses an empty device_name. Master lease is 60s.
+  # device_name starts empty; kimik3-b300-mooncake.sh patches it before engines
+  # start (srt-slurm's "Wrote mooncake_store_config" line is the pre-patch dump).
   setup_script: kimik3-b300-mooncake.sh
   services:
     - name: mooncake-master
@@ -36,7 +39,7 @@ base:
       preamble: >-
         python3 -m pip install --break-system-packages --quiet --no-cache-dir --no-deps
         --force-reinstall mooncake-transfer-engine-cuda13==0.3.11.post1
-      args: ["--eviction_high_watermark_ratio=0.95", "--eviction_ratio=0.10"]
+      args: ["--eviction_high_watermark_ratio=0.95", "--eviction_ratio=0.10", "--default_kv_lease_ttl=60000"]
       options:
         store_config:
           mode: embedded
@@ -65,7 +68,10 @@ base:
         load-format: fastsafetensors
         moe-backend: auto
         no-enable-flashinfer-autotune: true
-        enable-cumem-allocator: true
+        # Keep cuMem/VMM off on this DSXE Mooncake path (LMCache-style caution for
+        # VMM buffers). The register_buffer -600 / AddressNotRegistered storm on
+        # tip 15820fd2e/1d9c54d was driven by MC_MAX_MR_SIZE=4GiB (removed below),
+        # not by cumem alone — pre-MC_MAX_MR tips registered with cumem on.
         enable-prefix-caching: true
         prefix-match-unit: 128
         kv-cache-dtype: fp8
@@ -73,17 +79,47 @@ base:
         attention-backend: TOKENSPEED_MLA
         attention-config: '{"mla_prefill_backend":"TRTLLM_RAGGED","use_prefill_query_quantization":true}'
         disable-uvicorn-access-log: true
-        kv-transfer-config: '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_offload":false}}'
+        # Do NOT enable compact_group_io on DSXE single-rail Mooncake: tip ee33eeba
+        # c8 (run 36838397438) enabled it and immediately stormed TRANSFER_FAIL on
+        # compact-group-io-v1 ~25MiB puts (7177 fails), then hung at 0 tok/s until
+        # the 1800s sample_tokens cap. Keep max_load_batch_keys=1 after tips
+        # 860c1ccf c48 / e51c58f5 c32 DCP PYNCCL _ALLGATHER_BASE hangs under
+        # ~98-100% GPU KV. Tip ea88d652 / sweep 36935627690 canary c1 crashed
+        # immediately with AssertionError "load_async must be True for better
+        # performance" in mooncake store worker get_finished when load_async was
+        # false — restore load_async=true (required by this vLLM Mooncake path).
+        kv-transfer-config: '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"max_load_batch_keys":1,"enable_offload":false}}'
       env:
         VLLM_ALLREDUCE_USE_FLASHINFER: '1'
         VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION: '1'
         VLLM_USE_V2_MODEL_RUNNER: '1'
-        # These default to auto; name them so the measured DCP a2a path runs.
+        # Tip 68cdcc58 c24 (Slurm 6814): with A2A=0 the hang was PyNCCL
+        # ALLTOALL_BASE in dcp_a2a_lse_reduce (dcp.py:765; last started work:
+        # -1) after ~43m serve. Enable direct A2A (GB300 DCP8 / B200 stock).
+        # load_async must stay true.
         VLLM_USE_DIRECT_DCP_A2A: '1'
-        VLLM_USE_DIRECT_DCP_Q_GATHER: '1'
-        VLLM_USE_DIRECT_DCP_KV_GATHER: '1'
+        # Tip 1f837c46 eval-only c8 hung ~8.5m after dcp:0 then failed EP
+        # PyNccl ncclCommInitRank with Q_GATHER=0, so Q was restored. Tip
+        # db6caecc c24 (run 37109541419, Slurm 7019) then died in the direct
+        # Q kernel itself: "direct DCP q-gather multimem timeout source=7
+        # epoch=1107073" → CUDA unspecified launch failure in
+        # KVCacheStoreSendingThread → EngineDead / ProfileAborted (105/1041).
+        # Mooncake failed_keys=0; GPU KV ~28–42%; not admission starvation.
+        # Stock gate off leaves the trapping multimem path. Keep A2A on.
+        VLLM_USE_DIRECT_DCP_Q_GATHER: '0'
+        # Tip bed9f1ce c40 hung in PyNCCL kv_gather _ALLGATHER_BASE when this
+        # was 0, so it was restored. Tip f7be12ed c56 (run 37086876838, Slurm
+        # 6989) with it on died in the direct kernel itself: "direct DCP
+        # kv-gather multimem timeout source=1 epoch=494017" then asm trap →
+        # CUDA unspecified launch failure (Mooncake memcpy -800 is the dead
+        # device, not the first boundary). Stock gate off selects
+        # all_gather_into_tensor. Keep A2A on; Q gather also gated off above.
+        VLLM_USE_DIRECT_DCP_KV_GATHER: '0'
         VLLM_ENGINE_READY_TIMEOUT_S: '3600'
         VLLM_RPC_TIMEOUT: '600000'
+        # Mooncake loads can block inside execute_model past the 300s default;
+        # c40 on run 36800796192 went silent ~279s then EngineDead at the cap.
+        VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: '1800'
         VLLM_PREFIX_CACHE_RETENTION_INTERVAL: '0'
         VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS: '0'
         PYTHONNOUSERSITE: '1'
@@ -95,6 +131,9 @@ base:
         MC_STORE_MEMCPY: '1'
         MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
         MC_SLICE_SIZE: '1048576'
+        # Do NOT set MC_MAX_MR_SIZE on DSXE: tip ee33eeba+ (4GiB) made every rank
+        # register_buffer fail (-600) on the ~40GiB KV region, then AddressNotRegistered
+        # TRANSFER_FAIL. Pre-MC_MAX_MR tips (c40/c48) registered cleanly without it.
         MC_WORKERS_PER_CTX: '4'
         WITH_NVIDIA_PEERMEM: '0'
         VLLM_MOONCAKE_LOAD_RECV_THREADS: '4'
@@ -108,11 +147,44 @@ base:
       KV_OFFLOADING: dram
       TOTAL_CPU_DRAM_GB: '2249'
 
-# One variant per point. Admission is 2x CONC; CONC 56 and 70 keep more memory
-# headroom. Graphs capture (1 + drafts) x 1..min(2x CONC, 128) tokens, then the
-# larger powers of two to 8192. Throughput runs switch DSpark to synthetic
-# rejection at the golden acceptance length; points above CONC 16 do not draft
-# and keep the matrix's mtp label.
+# One variant per point. Admission is 2x CONC through CONC 8 and CONC 24; CONC
+# 16 and CONC 32–48 use 1x CONC; c56 caps at 48; c70 caps at 32. Tip ebc4eb499
+# c16 (run 37134266476, Slurm 7062) under 2x=32 packed GPU KV to ~98–99.7%
+# during AgentX warmup (Running: 3, Waiting: 7, Deferred: 7 at 17:44:47) then
+# hung PyNCCL _ALLGATHER_BASE 600s (SeqNum=89905, last started work: -1, PG ID
+# 3) → DistBackendError / VllmWorker-7 died / EngineDead / ProfileAborted
+# (176 warmup dropped / 0 kept). Cap c16 at 1x=16. Tip 031de17bf c56
+# (Slurm 6848) with A2A/Q/KV all direct, util 0.85, and
+# max-num-seqs=112 packed GPU KV to ~99.7% (Running: 1, Waiting: 12, Deferred:
+# 12) then hung workers for the full VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS=1800 —
+# shm_broadcast starvation from 15:28, then TimeoutError: RPC call to
+# sample_tokens timed out (no Watchdog / ALLGATHER / ALLTOALL / CUDA OOM; ingest
+# nccl_error:16 was init-only ibv_query_port_speed WARN). Tip 861a1512 c32
+# (Slurm 6916) repeated the same kill under max-num-seqs=64 (2x): GPU KV pinned
+# ~99–100% for tens of minutes, then hung at 0 tok/s (Running: 23, Waiting: 11,
+# Deferred: 11) with shm_broadcast starvation from 21:03 through the 1800s
+# sample_tokens timeout → EngineDead / ProfileAborted (20 empty streams + 62
+# ClientConnectorError after shutdown; ingest nccl_error:16 again init-only).
+# Cap CONC 32+ admission so prefix+deferred loads cannot pin the pool before
+# decode. Tip fd61acb0 c56 (run 37118728189, Slurm 7040) still packed GPU KV
+# to 98.2% at 1x=56 (Running: 8, Waiting: 53, Deferred: 38) then hung PyNCCL
+# kv_gather _ALLGATHER_BASE (dcp.py:1413, last started work: -1) for 600s.
+# Cap c56 at 48. Tip c9ffe2b12 c70 (run 37143203751, Slurm 7087) under
+# max-num-seqs=48 still hung mid-profile in PyNCCL kv_gather _ALLGATHER_BASE
+# (SeqNum=353066, last started work: -1) after packing GPU KV to 99.6% earlier
+# in the same profile; cap c70 at 32. CONC 8+ use gpu-memory-utilization 0.85:
+# with VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0, tip b70e4260a c48 (Slurm
+# 6737) over-allocated GPU KV to 45.2 GiB (vLLM suggested 36.78 GiB once CUDA
+# graphs are counted) and OOMed in flashinfer FP4 MoE prepare_moe (~2.89 GiB
+# needed, ~2.3 GiB free) ~4m after Application startup. Tip 5ab41690 c8
+# (Slurm 6877) then soft-OOMed at util 0.92 during warmup (CUDACachingAllocator
+# ~3.03 GiB alloc with ~1.16 GiB free on ranks 1–7) → empty streamed responses →
+# InvalidInferenceResultError / ProfileAborted at 2/11 > 10% (engine stayed
+# up; ingest nccl_error:16 again init-only WARN). Keep 0.92 only on c1–c4.
+# Graphs capture every size up to max-num-seqs, then the larger powers of two
+# to 8192. Throughput runs switch DSpark to synthetic rejection at the golden
+# acceptance length; points above CONC 16 do not draft and keep the matrix's
+# mtp label.
 override_c1:
   roles:
     agg:
@@ -154,7 +226,7 @@ override_c8:
     agg:
       args:
         max-num-seqs: 16
-        gpu-memory-utilization: 0.92
+        gpu-memory-utilization: 0.85
         compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[8,16,24,32,40,48,56,64,72,80,88,96,104,112,120,128,256,512,1024,2048,4096,8192]}'
         speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":7,"attention_backend":"TOKENSPEED_MLA","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
   benchmark:
@@ -165,9 +237,11 @@ override_c16:
   roles:
     agg:
       args:
-        max-num-seqs: 32
-        gpu-memory-utilization: 0.92
-        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,256,512,1024,2048,4096,8192]}'
+        # Tip ebc4eb499 c16 (Slurm 7062) under 2x=32 packed GPU KV ~99% in
+        # warmup then hung PyNCCL _ALLGATHER_BASE 600s (last started work: -1).
+        max-num-seqs: 16
+        gpu-memory-utilization: 0.85
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,128,256,512,1024,2048,4096,8192]}'
         speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":3,"attention_backend":"TOKENSPEED_MLA","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
   benchmark:
     env:
@@ -178,7 +252,7 @@ override_c24:
     agg:
       args:
         max-num-seqs: 48
-        gpu-memory-utilization: 0.92
+        gpu-memory-utilization: 0.85
         compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,64,128,256,512,1024,2048,4096,8192]}'
   benchmark:
     env:
@@ -189,9 +263,9 @@ override_c32:
   roles:
     agg:
       args:
-        max-num-seqs: 64
-        gpu-memory-utilization: 0.92
-        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,128,256,512,1024,2048,4096,8192]}'
+        max-num-seqs: 32
+        gpu-memory-utilization: 0.85
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,64,128,256,512,1024,2048,4096,8192]}'
   benchmark:
     env:
       CONC: '32'
@@ -201,9 +275,9 @@ override_c40:
   roles:
     agg:
       args:
-        max-num-seqs: 80
-        gpu-memory-utilization: 0.92
-        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,128,256,512,1024,2048,4096,8192]}'
+        max-num-seqs: 40
+        gpu-memory-utilization: 0.85
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,64,128,256,512,1024,2048,4096,8192]}'
   benchmark:
     env:
       CONC: '40'
@@ -213,9 +287,9 @@ override_c48:
   roles:
     agg:
       args:
-        max-num-seqs: 96
-        gpu-memory-utilization: 0.92
-        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,128,256,512,1024,2048,4096,8192]}'
+        max-num-seqs: 48
+        gpu-memory-utilization: 0.85
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,64,128,256,512,1024,2048,4096,8192]}'
   benchmark:
     env:
       CONC: '48'
@@ -225,9 +299,12 @@ override_c56:
   roles:
     agg:
       args:
-        max-num-seqs: 112
-        gpu-memory-utilization: 0.9
-        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,128,256,512,1024,2048,4096,8192]}'
+        # Tip fd61acb0 c56 (Slurm 7040) under 1x (56) packed GPU KV to 98.2%
+        # (Running: 8, Waiting: 53, Deferred: 38) then hung kv_gather
+        # _ALLGATHER_BASE 600s (last started work: -1). Cap at 48.
+        max-num-seqs: 48
+        gpu-memory-utilization: 0.85
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,64,128,256,512,1024,2048,4096,8192]}'
   benchmark:
     env:
       CONC: '56'
@@ -237,9 +314,15 @@ override_c70:
   roles:
     agg:
       args:
-        max-num-seqs: 140
-        gpu-memory-utilization: 0.9
-        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,127,128,256,512,1024,2048,4096,8192]}'
+        # Tip 1d937c73e c70 under 1x (70) deferred-admission starved
+        # (Running≈0 / Waiting≈66 / Deferred≈50–67 / KV≈86–91% → sample_tokens
+        # 1800s). Cap to 48 left decode headroom but tip c9ffe2b12 c70 (run
+        # 37143203751, Slurm 7087) still hung mid-profile in PyNCCL kv_gather
+        # _ALLGATHER_BASE (dcp.py:1413, SeqNum=353066, last started work: -1)
+        # after earlier packing GPU KV to 99.6%. Cap further to 32.
+        max-num-seqs: 32
+        gpu-memory-utilization: 0.85
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,64,128,256,512,1024,2048,4096,8192]}'
   benchmark:
     env:
       CONC: '70'

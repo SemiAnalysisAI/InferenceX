@@ -247,7 +247,7 @@ DSpark Markov/confidence head、全部 66 个分片的 header 与 payload 边界
 全部十个 AgentX 性能点使用 DSpark K6（target 验证长度为 7）和已提交的
 golden AL 3.77。C1/2/4/8/16 使用 TP8/EP1；C48/64/96/128/256 使用
 TP8/DPA8/EP8 原生 RCCL。每个性能点运行 3600 秒。C256 全量 GSM8K 不传强制
-接受率参数。保留固定的 `rocm/atom-dev:nightly_202609291501` 镜像和 GPU KV；C1 至 C16
+接受率参数。保留固定的 `rocm/atom-dev:nightly_202609161445` 镜像和 GPU KV；C1 至 C16
 使用 BF16 KV，C48 及以上继续使用 FP8 KV，所有任务均使用 FP4 index cache、
 8192-token checkpoint 和 DEP dense FULL graph 阶梯。每个新服务进程重新捕获固定
 q7 图；必须从 `server.log` 确认 target 和 DSpark draft capture 完成。confidence
@@ -258,11 +258,8 @@ schedule 和 ragged verification 保持关闭。
 `runtime_manifest.json` 和 `server_command.txt` 保存模型/源码身份及请求的配置。
 成功启动、graph capture 和请求执行仍需运行时日志证明。
 
-固定镜像为官方 ATOM nightly `rocm/atom-dev:nightly_202609291501`（ATOM `0.1.7.dev46+g74fd942b0`，
-ROCm 7.2.4），已包含已合入的
+固定镜像为官方 ATOM nightly `rocm/atom-dev:nightly_202609161445`，已包含已合入的
 [ROCm/ATOM#2233](https://github.com/ROCm/ATOM/pull/2233) inference-mode 修复。
-自该镜像起，ATOM 在 gfx950 上默认以 E8M0 存储检查点的 `ue8m0` FP8 block scale
-（[ROCm/ATOM#2419](https://github.com/ROCm/ATOM/pull/2419)），2 的幂次 scale 可被精确表示。
 配方不再在运行时修改 AITER 源码；TP 通信融合、DSpark K6 和 graph capture
 直接使用镜像内实现。
 
@@ -312,6 +309,64 @@ TP4 覆盖并发 1–128；DEP2（TP1 x DP2 + EP2，DeepGEMM MegaMoE）覆盖 8�
 H200 的 DSpark 配方使用相同的最小捕获范围，并保持相同的工作负载配置。
 
 B300 的 DSpark 配方按测试点显式设置捕获尺寸，详见下文。
+
+B300 上的 Kimi-K3 按 sysfs 驱动选择一块活动的 Mellanox 网卡，包括 DSXE 的
+`ibp*` 命名；本 RDMA 配方排除 EFA。嵌入式 Mooncake 各 rank 共用该网卡。
+InfiniBand 使用 GID 索引 0，RoCE 保留索引 3。若没有可用的活动适配器，或缺少
+主机 mlx5 provider 挂载，则在服务启动前失败。配方 YAML 可将 `device_name` 留空；
+`kimik3-b300-mooncake.sh` 会在引擎启动前把真实 rail 写入 store config，并拒绝
+空名称（srt-slurm 较早的 `Wrote mooncake_store_config` 行是 patch 前的转储）。
+DSXE 上容器的 libibverbs 来自 enroot EFA hook 挂载的主机库，因此
+`configs/runners.yaml` 将主机库目录挂到 `/host-usr-lib`，setup 脚本通过
+`RDMAV_DRIVERS` 强制加载其 mlx5 provider。保留 `max_load_batch_keys: 1` 且
+`load_async: true`（tip 860c1ccf 的 c48 / tip e51c58f5 的 c32 在异步 load、
+Mooncake 指标干净时，于约 98–100% GPU KV 下挂起在 DCP PYNCCL
+`_ALLGATHER_BASE`，`last started work: -1`；tip ea88d652 的 canary c1 在
+`load_async: false` 时于 Mooncake `get_finished` 直接
+`AssertionError: load_async must be True for better performance`，故恢复必需的
+stock true），但不要在该 DSXE 单 rail 路径上启用
+`compact_group_io`（c8 上曾对约 25 MiB 的 compact-group put 产生大量失败）。
+保持 `VLLM_USE_DIRECT_DCP_A2A=1`，并将 `VLLM_USE_DIRECT_DCP_Q_GATHER` 与
+`VLLM_USE_DIRECT_DCP_KV_GATHER` 均设为 0（tip 68cdcc58 的 c24 在关闭 A2A 时于
+PyNCCL `ALLTOALL_BASE` / `dcp_a2a_lse_reduce` 挂起。tip bed9f1ce 的 c40 在关闭
+KV gather 时于 PyNCCL `kv_gather` `_ALLGATHER_BASE` 挂起，因此该开关曾被重新
+打开；tip f7be12ed 的 c56（运行 37086876838）随后死在 direct KV kernel
+本身——`direct DCP kv-gather multimem timeout source=1 epoch=494017`，接着
+`asm trap`，即 CUDA unspecified launch failure——故 KV gather 再次关闭。tip
+db6caecc 的 c24（运行 37109541419）随后死在 direct Q kernel——`direct DCP
+q-gather multimem timeout source=7 epoch=1107073` →
+`KVCacheStoreSendingThread` 中 CUDA unspecified launch failure → EngineDead /
+ProfileAborted——故 Q gather 一并关闭。tip 1f837c46 的 eval-only c8 曾在关闭 Q
+gather 后于 `dcp:0` 之后挂起约 8.5 分钟并导致 EP `ncclCommInitRank` 失败；此门
+禁下需关注 eval 初始化。Mooncake GPU memcpy `-800` 是设备已损坏后的后果，不是
+第一故障边界。）。
+不要在此设置 `MC_MAX_MR_SIZE`：设为 4GiB 时各 rank 对约 40 GiB KV 区域报
+`register_buffer failed ... -600`，并引发 `AddressNotRegistered`
+TRANSFER_FAIL（c2/c32）；加入该变量之前的 tip 注册正常。此路径保持关闭
+`enable-cumem-allocator`。CONC 8+ 将 `gpu-memory-utilization` 保持为 0.85
+（tip b70e4260a 的 c48 在 `VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0` 与 0.92
+下以 45.2 GiB KV 完成 Application startup，随后在 flashinfer FP4 MoE
+`prepare_moe` 申请约 2.89 GiB 时仅剩约 2.3 GiB 空闲而 OOM；vLLM 在计入 CUDA
+graph 后建议约 36.78 GiB KV。tip 5ab41690 的 c8 在 util 0.92 的 warmup 中软
+OOM——CUDACachingAllocator 申请约 3.03 GiB 时仅剩约 1.16 GiB——导致空流与
+ProfileAborted（2/11 > 10%）；仅 c1–c4 保留 0.92）。CONC 16 与 CONC 32–48 将
+`max-num-seqs` 限制为 1×CONC，CONC 56 与 CONC 70 限制为 48（tip 031de17bf 的 c56 在
+A2A/Q/KV 均已 direct 且 util 0.85 时，2× 准入把 GPU KV 堆到约 99.7%，随后
+worker 挂满 1800 秒 `sample_tokens` RPC 超时，无 Watchdog / ALLGATHER /
+ALLTOALL / CUDA OOM；ingest 的 `nccl_error:16` 仅为初始化期
+`ibv_query_port_speed` WARN。tip 861a1512 的 c32 在 `max-num-seqs=64` 下重现
+同一杀伤：GPU KV 钉在约 99–100%，随后以 0 tok/s 挂起，自 21:03 起
+shm_broadcast 饥饿直至满 1800 秒 `sample_tokens` 超时 → EngineDead /
+ProfileAborted；仅 CONC 8 与 CONC 24 保留 2×。tip ebc4eb499 的 c16 在 2×=`32`
+下 warmup 把 GPU KV 堆到约 99%（Running: 3，Waiting: 7，Deferred: 7），随后
+PyNCCL `_ALLGATHER_BASE` 挂起 600 秒（`last started work: -1`）→
+DistBackendError / EngineDead / ProfileAborted（176 warmup 丢弃 / 0 保留）；
+将 c16 降为 1×=`16`。tip 1d937c73e 的 c70 在 1×=`70`
+下仍饥饿：Running≈0 / Waiting≈66 / Deferred≈50–67 / KV≈86–91% 约 30 分钟后
+同样满 1800 秒 `sample_tokens` 超时；将 c70 降为 `max-num-seqs=48`。tip
+fd61acb0 的 c56 在 1×=`56` 下把 GPU KV 堆到 98.2% 后同样挂起 `_ALLGATHER_BASE`
+watchdog；将 c56 降为 `max-num-seqs=48`）。
+
 
 仅运行 AgentX 的 `dsv41flash-fp4-<sku>-vllm-agentic-dspark` 配方使用
 [`nvidia-master.yaml`](../configs/nvidia-master.yaml) 中按 SKU 固定的 `image`（最初为 `vllm/vllm-openai:deepseekv41-flash-0909`），在 Blackwell SKU 上采用 TP4、原生五 token DSpark、

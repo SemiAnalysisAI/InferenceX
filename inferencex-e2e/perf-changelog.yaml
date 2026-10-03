@@ -1739,7 +1739,6 @@
     - "Add --gpu-memory-utilization 0.9 to server launch"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1133
 
-
 - config-keys:
     - dsv4-fp8-h200-vllm
   description:
@@ -6100,7 +6099,6 @@
     - "Add GB200 DeepSeek-V4-Pro FP4 Dynamo-vLLM AgentX mirroring the GB300 PR #2571 MTP tuning, with every GB300 4-GPU worker sized to 8 GPUs on GB200."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2636
 
-
 - config-keys:
     - qwen3.5-fp8-h200-sglang-agentic-hicache-mtp
   scenario-type:
@@ -6491,7 +6489,6 @@
     - "Replace the TP2/EP2 arm with TP2/EP1 so the 2-GPU point matches qwen3.5-fp4-b200-sglang-agentic-mtp."
     - "Add HiCache host-DRAM KV tier arms at TP4 concurrency 40, 48, 56, and 64 and TP2 concurrency 20, 24, 28, and 32, using hicache ratio 1.5 with write_through, direct io, and page_first_direct layout."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2693
-
 
 - config-keys:
     - kimik2.6-fp4-b200-dynamo-vllm
@@ -9277,6 +9274,176 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3652
 
 - config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  description:
+    - "Discover active Mellanox RDMA devices by driver on DSXE, select the link-layer GID, and load the host mlx5 provider so Mooncake sees the rail"
+    - "Backport vLLM #55297 for request-local recompute after failed asynchronous Mooncake loads on B300; see docs/waiver/3088.md"
+    - "Raise the Mooncake master lease from the 5s default to 60s (--default_kv_lease_ttl=60000): at concurrency >= 32 gets took 10-30s at p90, so 60-75% of transferred keys were discarded as LEASE_EXPIRED and recomputed; 60s matches the client's own 60s transfer cap. vLLM's execute_model timeout stays at its 300s default"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3088
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Move select_mooncake_rdma_device above benchmark_lib.sh's --validation-only gate so kimik3-b300-mooncake.sh can resolve the helper (exit 127 / command not found previously cancelled the fail-fast canary)"
+    - "将 select_mooncake_rdma_device 移到 benchmark_lib.sh 的 --validation-only 门禁之上，使 kimik3-b300-mooncake.sh 能解析该辅助函数（此前 exit 127 / command not found 导致 fail-fast canary 取消）"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3088
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Restore VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS=1800 on the B300 Mooncake AgentX recipe. Tip fail-fast run 36800796192 killed agentic c40 after ~279s of engine silence (shm_broadcast 60s waits from 04:57:58-05:00:58 PT window, then EngineCore TimeoutError / EngineDeadError at 05:01:56) under the default 300s execute_model cap; AIPerf then ProfileAborted at 30/292 = 10.3% failed requests. Keep the existing 60s Mooncake master lease (--default_kv_lease_ttl=60000). Sibling Kimi Mooncake recipes already set this timeout."
+    - "将 B300 Mooncake AgentX 配方的 VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS 恢复为 1800。tip fail-fast 运行 36800796192 在默认 300 秒 execute_model 上限下，于约 279 秒引擎静默后杀死 agentic c40（shm_broadcast 60 秒等待，随后 EngineCore TimeoutError / EngineDeadError）；AIPerf 随即以 30/292 = 10.3% 失败请求触发 ProfileAborted。保留既有的 60 秒 Mooncake master 租约。同系列 Kimi Mooncake 配方已设置该超时。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3088
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Align B300 DCP8 Mooncake connector with proven GB300 DCP8 settings: compact_group_io + max_load_batch_keys=2 and MC_MAX_MR_SIZE=4GiB. Tip fail-fast run 36820538765 agentic c48 (job 110258065670, Slurm 6544) had a real rail (setup patched device_name to ibp198s0f0; srt-slurm Wrote line is pre-patch) then died with GPU memcpy fail / direct DCP kv-gather multimem timeout under high KV pressure. Also fail loud if the host mlx5 provider mount is missing or device_name would stay empty."
+    - "将 B300 DCP8 Mooncake 连接器与已验证的 GB300 DCP8 设置对齐：compact_group_io、max_load_batch_keys=2 以及 MC_MAX_MR_SIZE=4GiB。tip fail-fast 运行 36820538765 的 agentic c48（job 110258065670，Slurm 6544）已有真实 rail（setup 将 device_name 写成 ibp198s0f0；srt-slurm 的 Wrote 行为 patch 前转储），随后在高 KV 压力下因 GPU memcpy 失败 / direct DCP kv-gather multimem timeout 崩溃。主机 mlx5 provider 挂载缺失或 device_name 仍为空时改为明确失败。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3088
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Revert compact_group_io on B300 DSXE Mooncake (keep max_load_batch_keys=2) and set VLLM_USE_DIRECT_DCP_KV_GATHER=0. Tip ee33eeba fail-fast run 36838397438 agentic c8 patched device_name to ibp198s0f0 (GH Wrote line is pre-setup), then Compact Mooncake group I/O (~25MiB puts) stormed 7177 TRANSFER_FAIL / save_put_failed_keys up to 3782 and hung at 0 tok/s until the 1800s sample_tokens timeout. Prior tip c48 multimem/memcpy with KV_GATHER=1 motivates disabling direct KV gather."
+    - "撤销 B300 DSXE Mooncake 上的 compact_group_io（保留 max_load_batch_keys=2），并将 VLLM_USE_DIRECT_DCP_KV_GATHER 设为 0。tip ee33eeba fail-fast 运行 36838397438 的 agentic c8 已将 device_name 写成 ibp198s0f0（GH Wrote 行为 setup 前转储），随后 Compact Mooncake group I/O（约 25MiB put）触发 7177 次 TRANSFER_FAIL / save_put_failed_keys 最高 3782，并以 0 tok/s 挂起直至 1800 秒 sample_tokens 超时。此前 tip c48 在 KV_GATHER=1 下出现 multimem/memcpy，因此关闭 direct KV gather。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3088
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Drop enable-cumem-allocator on B300 DSXE Mooncake. Tip 15820fd2e fail-fast run 36852970338 agentic c2 (job 110367970533, Slurm 6595, gpu-04) patched device_name to ibp198s0f0 (GH Wrote line is pre-setup); every rank logged register_buffer failed for the ~39GiB KV region (-600), then AddressNotRegistered TRANSFER_FAIL on puts inside that span; after ~38m healthy serve the engine hung at 0 tok/s (Running: 2) until the 1800s sample_tokens timeout / EngineDead / ProfileAborted. nccl_error:16 was ibv_query_port_speed WARN only. Passing tip canary c1 had the same register_buffer -600 storm but survived via recompute. Same class as LMCache dropping cumem when VMM buffers cannot be registered/exported; keep max_load_batch_keys=2, no compact_group_io, KV_GATHER=0, MC_MAX_MR_SIZE=4GiB."
+    - "在 B300 DSXE Mooncake 上关闭 enable-cumem-allocator。tip 15820fd2e fail-fast 运行 36852970338 的 agentic c2（job 110367970533，Slurm 6595，gpu-04）已将 device_name 写成 ibp198s0f0（GH Wrote 行为 setup 前转储）；各 rank 均对约 39GiB KV 区域报 register_buffer failed（-600），随后该地址范围内的 put 触发 AddressNotRegistered TRANSFER_FAIL；约 38 分钟健康服务后引擎以 0 tok/s（Running: 2）挂起直至 1800 秒 sample_tokens 超时 / EngineDead / ProfileAborted。nccl_error:16 仅为 ibv_query_port_speed WARN。通过的 tip canary c1 有相同的 register_buffer -600 风暴，但靠 recompute 存活。与 LMCache 在 VMM 缓冲无法注册/导出时关闭 cumem 同类；保留 max_load_batch_keys=2、不启用 compact_group_io、KV_GATHER=0、MC_MAX_MR_SIZE=4GiB。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3088
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Remove MC_MAX_MR_SIZE from B300 DSXE Mooncake. Tip 1d9c54d fail-fast run 36870807626 agentic c32 (job 110437058728, Slurm 6614, gpu-01) had a real rail (Mooncake rail: ibp198s0f0 / Patched device_name; GH Wrote line is pre-setup) and cumem already off, but every rank still logged register_buffer failed for the ~43.7GiB KV region (-600) then ~128k AddressNotRegistered TRANSFER_FAIL; after ~40m of degraded serve an NCCL ALLGATHER watchdog (600s) killed VllmWorker-2 (worker_crash:8) → EngineDead / ProfileAborted. Pre-MC_MAX_MR tips (old c40/c48) had zero register_buffer -600; the 4GiB cap was added in ee33eeba GB300 alignment and is the verified driver. Keep no compact_group_io, max_load_batch_keys=2, KV_GATHER=0, cumem off."
+    - "从 B300 DSXE Mooncake 移除 MC_MAX_MR_SIZE。tip 1d9c54d fail-fast 运行 36870807626 的 agentic c32（job 110437058728，Slurm 6614，gpu-01）已有真实 rail（Mooncake rail: ibp198s0f0 / Patched；GH Wrote 行为 setup 前转储）且 cumem 已关，但各 rank 仍对约 43.7GiB KV 区域报 register_buffer failed（-600），随后约 12.8 万次 AddressNotRegistered TRANSFER_FAIL；约 40 分钟降级服务后 NCCL ALLGATHER watchdog（600 秒）杀死 VllmWorker-2（worker_crash:8）→ EngineDead / ProfileAborted。加入 MC_MAX_MR 之前的 tip（旧 c40/c48）无 register_buffer -600；该 4GiB 上限来自 ee33eeba 的 GB300 对齐，是已验证根因。保留不启用 compact_group_io、max_load_batch_keys=2、KV_GATHER=0、关闭 cumem。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3088
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Cut Mooncake max_load_batch_keys from 2 to 1 on B300 DSXE. Tip 860c1ccf fail-fast run 36894040300 agentic c48 (job 110510865864, Slurm 6639, gpu-03) had a real rail (Mooncake rail: ibp198s0f0 / Patched device_name; GH Wrote line is pre-setup), zero register_buffer -600 / AddressNotRegistered / TRANSFER_FAIL / multimem, and clean Mooncake load/save metrics (failed_keys=0) through ~35m of serve; then under GPU KV ~100% the engine hung at 0 tok/s (Running: 4, Waiting: 46) and NCCL _ALLGATHER_BASE on PG ID 3 timed out after 600s (last started work: -1) → VllmWorker-4 died (worker_crash:8) → EngineDead / ProfileAborted. Keep no compact_group_io, no MC_MAX_MR_SIZE, KV_GATHER=0, cumem off, load_async true."
+    - "将 B300 DSXE 上的 Mooncake max_load_batch_keys 从 2 降为 1。tip 860c1ccf fail-fast 运行 36894040300 的 agentic c48（job 110510865864，Slurm 6639，gpu-03）已有真实 rail（Mooncake rail: ibp198s0f0 / Patched；GH Wrote 行为 setup 前转储），无 register_buffer -600 / AddressNotRegistered / TRANSFER_FAIL / multimem，且 Mooncake load/save 指标干净（failed_keys=0）约 35 分钟；随后在 GPU KV ~100% 下引擎以 0 tok/s 挂起（Running: 4，Waiting: 46），PG ID 3 上的 NCCL _ALLGATHER_BASE 在 600 秒后超时（last started work: -1）→ VllmWorker-4 死亡（worker_crash:8）→ EngineDead / ProfileAborted。保留不启用 compact_group_io、不设 MC_MAX_MR_SIZE、KV_GATHER=0、关闭 cumem、load_async true。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3088
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Disable Mooncake load_async on B300 DSXE (keep max_load_batch_keys=1, lookup_async). Tip e51c58f5 fail-fast run 36915805279 agentic c32 (job 110582923073, Slurm 6677, gpu-07) had a real rail (Mooncake rail: ibp198s0f0 / Patched device_name; GH Wrote line is pre-setup), zero register_buffer -600 / AddressNotRegistered / TRANSFER_FAIL / multimem, and clean Mooncake metrics (failed_keys=0); under GPU KV ~98% the engine hung at 0 tok/s (Running: 10, Waiting: 23) and NCCL _ALLGATHER_BASE on PG ID 3 timed out after 600s (last started work: -1) → VllmWorker-1 died (worker_crash:8) → EngineDead / ProfileAborted. Same signature as tip 860c1ccf c48 with batch_keys=2; cutting batch_keys to 1 alone did not stop the hang. Keep no compact_group_io, no MC_MAX_MR_SIZE, KV_GATHER=0, cumem off."
+    - "在 B300 DSXE 上关闭 Mooncake load_async（保留 max_load_batch_keys=1、lookup_async）。tip e51c58f5 fail-fast 运行 36915805279 的 agentic c32（job 110582923073，Slurm 6677，gpu-07）已有真实 rail（Mooncake rail: ibp198s0f0 / Patched；GH Wrote 行为 setup 前转储），无 register_buffer -600 / AddressNotRegistered / TRANSFER_FAIL / multimem，且 Mooncake 指标干净（failed_keys=0）；在 GPU KV ~98% 下引擎以 0 tok/s 挂起（Running: 10，Waiting: 23），PG ID 3 上的 NCCL _ALLGATHER_BASE 在 600 秒后超时（last started work: -1）→ VllmWorker-1 死亡（worker_crash:8）→ EngineDead / ProfileAborted。与 tip 860c1ccf 的 c48（batch_keys=2）签名相同；仅将 batch_keys 降为 1 未能阻止挂起。保留不启用 compact_group_io、不设 MC_MAX_MR_SIZE、KV_GATHER=0、关闭 cumem。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3088
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Restore Mooncake load_async=true on B300 DSXE (keep max_load_batch_keys=1). Tip ea88d652 fail-fast run 36935627690 canary c1 (job 110615439146, Slurm 6679, gpu-00) reached health OK then aborted warmup: WorkerProc AssertionError in mooncake/store/worker.py get_finished — 'load_async must be True for better performance' — then EngineCore Internal Server Error / ProfileAborted. Ingest nccl_error:16 was init-only ibv_query_port_speed WARN (false positive), not runtime ALLGATHER. Tip 670fb9f0 disable load_async is incompatible with this vLLM Mooncake connector assert; restore stock true."
+    - "在 B300 DSXE 上恢复 Mooncake load_async=true（保留 max_load_batch_keys=1）。tip ea88d652 fail-fast 运行 36935627690 的 canary c1（job 110615439146，Slurm 6679，gpu-00）健康检查通过后 warmup 中止：WorkerProc 在 mooncake/store/worker.py get_finished 断言 AssertionError: load_async must be True for better performance，随后 EngineCore Internal Server Error / ProfileAborted。ingest 的 nccl_error:16 仅为初始化期 ibv_query_port_speed WARN（误报），非运行时 ALLGATHER。tip 670fb9f0 关闭 load_async 与该 vLLM Mooncake 连接器断言不兼容；恢复 stock true。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3088
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Set VLLM_USE_DIRECT_DCP_Q_GATHER=0 on B300 DSXE (keep load_async=true, max_load_batch_keys=1, KV_GATHER=0). After tip ea88d652b canary c1 AssertionError forced restoring load_async, tip d7176e6 would otherwise re-run the Q_GATHER=1 + KV_GATHER=0 mix that hung tips 860c1ccf c48 / e51c58f5 c32 in DCP PYNCCL _ALLGATHER_BASE under ~98-100% GPU KV (last started work: -1; Mooncake metrics clean). Align Q gather off with KV gather (MI355X-style). Keep no compact_group_io, no MC_MAX_MR_SIZE, cumem off."
+    - "在 B300 DSXE 上将 VLLM_USE_DIRECT_DCP_Q_GATHER 设为 0（保留 load_async=true、max_load_batch_keys=1、KV_GATHER=0）。tip ea88d652b canary c1 的 AssertionError 已强制恢复 load_async 后，tip d7176e6 否则会重跑 tip 860c1ccf c48 / e51c58f5 c32 在约 98–100% GPU KV 下挂起于 DCP PYNCCL _ALLGATHER_BASE 的 Q_GATHER=1 + KV_GATHER=0 混用路径（last started work: -1；Mooncake 指标干净）。将 Q gather 与 KV gather 一并关闭（对齐 MI355X）。保留不启用 compact_group_io、不设 MC_MAX_MR_SIZE、关闭 cumem。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3088
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Restore VLLM_USE_DIRECT_DCP_Q_GATHER=1 and set VLLM_USE_DIRECT_DCP_A2A=0 on B300 DSXE. Tip 1f837c46 fail-fast run 36937918258 eval-only c8 (job 110646326761, Slurm 6692, gpu-09) had a real rail (Mooncake rail: ibp198s0f0 / Patched) then hung ~8.5m after logging dcp:0 PYNCCL and failed WorkerProc init on EP group PyNcclCommunicator ncclCommInitRank with RuntimeError: NCCL error: remote process exited or there was a network error → Engine core initialization failed. Same tip canary c1 completed ep:0 in ~2s; Q_GATHER=0 is the new tip knob vs prior green evals. Keep load_async=true, max_load_batch_keys=1, KV_GATHER=0, no compact_group_io, no MC_MAX_MR_SIZE, cumem off. A2A=0 is the next probe for prior high-conc DCP PYNCCL _ALLGATHER_BASE hangs."
+    - "在 B300 DSXE 上恢复 VLLM_USE_DIRECT_DCP_Q_GATHER=1，并将 VLLM_USE_DIRECT_DCP_A2A 设为 0。tip 1f837c46 fail-fast 运行 36937918258 的 eval-only c8（job 110646326761，Slurm 6692，gpu-09）已有真实 rail（Mooncake rail: ibp198s0f0 / Patched），在记录 dcp:0 PYNCCL 后挂起约 8.5 分钟，随后 EP 组 PyNcclCommunicator ncclCommInitRank 报 RuntimeError: NCCL error: remote process exited or there was a network error → Engine core initialization failed。同 tip 的 canary c1 约 2 秒内完成 ep:0；相对此前全绿 eval，新 tip 旋钮为 Q_GATHER=0。保留 load_async=true、max_load_batch_keys=1、KV_GATHER=0、不启用 compact_group_io、不设 MC_MAX_MR_SIZE、关闭 cumem。A2A=0 作为此前高并发 DCP PYNCCL _ALLGATHER_BASE 挂起的下一探针。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3088
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Lower gpu-memory-utilization to 0.85 on B300 DSXE CONC 24+ (keep load_async=true, max_load_batch_keys=1, KV_GATHER=0, Q_GATHER=1, A2A=0, ESTIMATE_CUDAGRAPHS=0). Tip b70e4260a fail-fast run 36952119306 agentic c48 (job 110686724979, Slurm 6737, gpu-05) had a real rail (Mooncake rail: ibp198s0f0 / Patched device_name), Application startup complete, then ~4m into AgentX serve CUDA OOM in flashinfer FP4 MoE prepare_moe (tried 2.89 GiB, ~2.3 GiB free; GPU KV 45.2 GiB at util 0.92; vLLM suggested ~36.78 GiB once CUDA graphs counted) → EngineDead / ProfileAborted. Zero register_buffer -600 / TRANSFER_FAIL / ALLGATHER. GHA 'engine never ready' was wrapper noise after serve-time OOM. Keep no compact_group_io, no MC_MAX_MR_SIZE, cumem off."
+    - "将 B300 DSXE 上 CONC 24+ 的 gpu-memory-utilization 降至 0.85（保留 load_async=true、max_load_batch_keys=1、KV_GATHER=0、Q_GATHER=1、A2A=0、ESTIMATE_CUDAGRAPHS=0）。tip b70e4260a fail-fast 运行 36952119306 的 agentic c48（job 110686724979，Slurm 6737，gpu-05）已有真实 rail（Mooncake rail: ibp198s0f0 / Patched），Application startup 完成，随后 AgentX 服务约 4 分钟时在 flashinfer FP4 MoE prepare_moe 发生 CUDA OOM（申请 2.89 GiB，空闲约 2.3 GiB；util 0.92 下 GPU KV 45.2 GiB；计入 CUDA graph 后 vLLM 建议约 36.78 GiB）→ EngineDead / ProfileAborted。无 register_buffer -600 / TRANSFER_FAIL / ALLGATHER。GHA 的 engine never ready 为服务期 OOM 后的包装噪声。保留不启用 compact_group_io、不设 MC_MAX_MR_SIZE、关闭 cumem。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3088
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Re-enable VLLM_USE_DIRECT_DCP_KV_GATHER=1 on B300 DSXE (keep A2A=0, Q_GATHER=1, load_async=true, max_load_batch_keys=1, CONC 24+ util 0.85). Tip bed9f1ce fail-fast run 36963354550 agentic c40 (job 110720603462, Slurm 6765, gpu-13) had a real rail (Mooncake rail: ibp198s0f0 / Patched), Application startup complete, Mooncake failed_keys=0; after ~42m serve under GPU KV ~86-100% hung at 0 tok/s (Running: 29, Waiting: 10) then PG ID 3 NCCL _ALLGATHER_BASE in dcp.py kv_gather timed out 600s (last started work: -1) → VllmWorker-3 died (worker_crash:8) → EngineDead / ProfileAborted. Stack is the PyNCCL path forced by KV_GATHER=0; Q gather already logged direct symmetric-memory. Prior multimem/memcpy with KV_GATHER=1 was under util 0.92 before the 0.85 headroom cut. Keep no compact_group_io, no MC_MAX_MR_SIZE, cumem off."
+    - "在 B300 DSXE 上重新启用 VLLM_USE_DIRECT_DCP_KV_GATHER=1（保留 A2A=0、Q_GATHER=1、load_async=true、max_load_batch_keys=1、CONC 24+ util 0.85）。tip bed9f1ce fail-fast 运行 36963354550 的 agentic c40（job 110720603462，Slurm 6765，gpu-13）已有真实 rail（Mooncake rail: ibp198s0f0 / Patched），Application startup 完成，Mooncake failed_keys=0；约 42 分钟服务后在 GPU KV ~86–100% 下以 0 tok/s 挂起（Running: 29，Waiting: 10），随后 PG ID 3 上 dcp.py kv_gather 的 NCCL _ALLGATHER_BASE 超时 600 秒（last started work: -1）→ VllmWorker-3 死亡（worker_crash:8）→ EngineDead / ProfileAborted。堆栈为 KV_GATHER=0 强制的 PyNCCL 路径；Q gather 已记录使用 direct symmetric-memory。此前 KV_GATHER=1 的 multimem/memcpy 发生在 util 0.92、尚未降至 0.85 时。保留不启用 compact_group_io、不设 MC_MAX_MR_SIZE、关闭 cumem。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3088
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Enable VLLM_USE_DIRECT_DCP_A2A=1 on B300 DSXE (keep Q_GATHER=1, KV_GATHER=1, load_async=true, max_load_batch_keys=1, CONC 24+ util 0.85). Tip 68cdcc58 fail-fast run 36976589313 agentic c24 (job 110806435815, Slurm 6814, gpu-12) had a real rail (Mooncake rail: ibp198s0f0 / Patched), Application startup complete, and logged both direct Q gather and direct chunked-context KV gather; Mooncake failed_keys=0. After ~43m serve hung at 0 tok/s (Running: 23, Waiting: 0, GPU KV ~68%) then PG ID 3 NCCL ALLTOALL_BASE in dcp.py dcp_a2a_lse_reduce timed out 600s (last started work: -1) → worker_crash:8 → EngineDead / ProfileAborted. Distinct from tip bed9f1ce c40 kv_gather _ALLGATHER_BASE (fixed by KV_GATHER=1). A2A=0 forced the PyNCCL ALLTOALL LSE-reduce path; enable direct A2A to match GB300 DCP8 / B200 stock. Keep no compact_group_io, no MC_MAX_MR_SIZE, cumem off."
+    - "在 B300 DSXE 上启用 VLLM_USE_DIRECT_DCP_A2A=1（保留 Q_GATHER=1、KV_GATHER=1、load_async=true、max_load_batch_keys=1、CONC 24+ util 0.85）。tip 68cdcc58 fail-fast 运行 36976589313 的 agentic c24（job 110806435815，Slurm 6814，gpu-12）已有真实 rail（Mooncake rail: ibp198s0f0 / Patched），Application startup 完成，并已记录 direct Q gather 与 direct chunked-context KV gather；Mooncake failed_keys=0。约 43 分钟服务后以 0 tok/s 挂起（Running: 23，Waiting: 0，GPU KV ~68%），随后 PG ID 3 上 dcp.py dcp_a2a_lse_reduce 的 NCCL ALLTOALL_BASE 超时 600 秒（last started work: -1）→ worker_crash:8 → EngineDead / ProfileAborted。与 tip bed9f1ce c40 的 kv_gather _ALLGATHER_BASE（已由 KV_GATHER=1 修复）不同。A2A=0 强制走 PyNCCL ALLTOALL LSE-reduce 路径；启用 direct A2A 以对齐 GB300 DCP8 / B200 stock。保留不启用 compact_group_io、不设 MC_MAX_MR_SIZE、关闭 cumem。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3088
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Cap max-num-seqs at 1x CONC for CONC 48+ on B300 DSXE (keep A2A=1, Q_GATHER=1, KV_GATHER=1, load_async=true, max_load_batch_keys=1, CONC 24+ util 0.85). Tip 031de17bf fail-fast run 37010740215 agentic c56 (job 110882921963, Slurm 6848, gpu-12) had a real rail (Mooncake rail: ibp198s0f0 / Patched), Application startup complete, all three direct DCP gathers logged, Mooncake failed_keys=0. Measured warmup packed GPU KV to ~99.7% (Running: 1, Waiting: 12, Deferred: 12) then hung workers: shm_broadcast starvation from 15:28 for the full VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS=1800 → TimeoutError: RPC call to sample_tokens timed out → EngineDead / ProfileAborted. No Watchdog / ALLGATHER / ALLTOALL / CUDA OOM; ingest nccl_error:16 was init-only ibv_query_port_speed WARN (false positive). Distinct from tip b70e4260a c48 OOM (util 0.92), tip bed9f1ce c40 kv_gather ALLGATHER (KV_GATHER=0), and tip 68cdcc58 c24 ALLTOALL dcp_a2a_lse_reduce (A2A=0). With all three directs already on, high-conc 2x admission was the remaining lever that pinned KV before decode. Keep no compact_group_io, no MC_MAX_MR_SIZE, cumem off."
+    - "在 B300 DSXE 上将 CONC 48+ 的 max-num-seqs 限制为 1×CONC（保留 A2A=1、Q_GATHER=1、KV_GATHER=1、load_async=true、max_load_batch_keys=1、CONC 24+ util 0.85）。tip 031de17bf fail-fast 运行 37010740215 的 agentic c56（job 110882921963，Slurm 6848，gpu-12）已有真实 rail（Mooncake rail: ibp198s0f0 / Patched），Application startup 完成，三种 direct DCP gather 均已记录，Mooncake failed_keys=0。实测 warmup 将 GPU KV 堆到约 99.7%（Running: 1，Waiting: 12，Deferred: 12）后 worker 挂起：自 15:28 起 shm_broadcast 饥饿直至满 VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS=1800 → TimeoutError: RPC call to sample_tokens timed out → EngineDead / ProfileAborted。无 Watchdog / ALLGATHER / ALLTOALL / CUDA OOM；ingest 的 nccl_error:16 仅为初始化期 ibv_query_port_speed WARN（误报）。有别于 tip b70e4260a c48 OOM（util 0.92）、tip bed9f1ce c40 kv_gather ALLGATHER（KV_GATHER=0）、tip 68cdcc58 c24 ALLTOALL dcp_a2a_lse_reduce（A2A=0）。三种 direct 已全部开启时，高并发 2× 准入是仍会在 decode 前钉死 KV 的剩余杠杆。保留不启用 compact_group_io、不设 MC_MAX_MR_SIZE、关闭 cumem。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3088
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Extend gpu-memory-utilization 0.85 to CONC 8+ on B300 DSXE (keep A2A=1, Q_GATHER=1, KV_GATHER=1, load_async=true, max_load_batch_keys=1, CONC 48+ max-num-seqs 1x). Tip 5ab41690 fail-fast run 37033506119 agentic c8 (job 110957197772, Slurm 6877, gpu-04) had a real rail (Mooncake rail: ibp198s0f0 / Patched), Application startup complete, KV 38.89 GiB at util 0.92 under VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0; during warmup CUDACachingAllocator soft-OOMed on ranks 0-7 trying to allocate ~3.03 GiB with ~1.16 GiB free → empty streamed responses → InvalidInferenceResultError / ProfileAborted at 2/11 > 10% (engine stayed up; no Watchdog / ALLGATHER / ALLTOALL / hard EngineDead). Ingest nccl_error:16 was init-only ibv_query_port_speed WARN (false positive). Same soft-OOM family as tip b70e4260a c48 at util 0.92; keep 0.92 only on c1-c4. Keep no compact_group_io, no MC_MAX_MR_SIZE, cumem off."
+    - "将 B300 DSXE 上 gpu-memory-utilization 0.85 扩展到 CONC 8+（保留 A2A=1、Q_GATHER=1、KV_GATHER=1、load_async=true、max_load_batch_keys=1、CONC 48+ max-num-seqs 1×）。tip 5ab41690 fail-fast 运行 37033506119 的 agentic c8（job 110957197772，Slurm 6877，gpu-04）已有真实 rail（Mooncake rail: ibp198s0f0 / Patched），Application startup 完成，在 VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0 与 util 0.92 下 KV 为 38.89 GiB；warmup 中 ranks 0–7 的 CUDACachingAllocator 软 OOM（申请约 3.03 GiB，空闲约 1.16 GiB）→ 空流 → InvalidInferenceResultError / ProfileAborted（2/11 > 10%；引擎未死；无 Watchdog / ALLGATHER / ALLTOALL / 硬 EngineDead）。ingest 的 nccl_error:16 仅为初始化期 ibv_query_port_speed WARN（误报）。与 tip b70e4260a c48 在 util 0.92 下的软 OOM 同族；仅 c1–c4 保留 0.92。保留不启用 compact_group_io、不设 MC_MAX_MR_SIZE、关闭 cumem。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3088
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Cap max-num-seqs at 1x CONC for CONC 32+ on B300 DSXE (keep A2A=1, Q_GATHER=1, KV_GATHER=1, load_async=true, max_load_batch_keys=1, CONC 8+ util 0.85). Tip 861a1512 fail-fast run 37049360028 agentic c32 (job 111008983824, Slurm 6916, gpu-00) had a real rail (Mooncake rail: ibp198s0f0 / Patched), Application startup complete, all three direct DCP gathers logged, Mooncake failed_keys=0. Under max-num-seqs=64 (2x) GPU KV pinned ~99-100% for tens of minutes, then hung at 0 tok/s (Running: 23, Waiting: 11, Deferred: 11, GPU KV 71.8%) with shm_broadcast starvation from 21:03 for the full VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS=1800 → TimeoutError: RPC call to sample_tokens timed out → EngineDead / ProfileAborted (20 InvalidInferenceResultError empty streams + 62 ClientConnectorError after shutdown). No Watchdog / ALLGATHER / ALLTOALL / CUDA OOM; ingest nccl_error:16 was init-only ibv_query_port_speed WARN (false positive). Same admission-pin family as tip 031de17bf c56; extend 1x CONC from CONC 48+ down through c32/c40 and keep 2x only through CONC 24. Keep no compact_group_io, no MC_MAX_MR_SIZE, cumem off."
+    - "在 B300 DSXE 上将 CONC 32+ 的 max-num-seqs 限制为 1×CONC（保留 A2A=1、Q_GATHER=1、KV_GATHER=1、load_async=true、max_load_batch_keys=1、CONC 8+ util 0.85）。tip 861a1512 fail-fast 运行 37049360028 的 agentic c32（job 111008983824，Slurm 6916，gpu-00）已有真实 rail（Mooncake rail: ibp198s0f0 / Patched），Application startup 完成，三种 direct DCP gather 均已记录，Mooncake failed_keys=0。在 max-num-seqs=64（2×）下 GPU KV 钉在约 99–100% 数十分钟，随后以 0 tok/s 挂起（Running: 23，Waiting: 11，Deferred: 11，GPU KV 71.8%），自 21:03 起 shm_broadcast 饥饿直至满 VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS=1800 → TimeoutError: RPC call to sample_tokens timed out → EngineDead / ProfileAborted（关机后 20 个空流 InvalidInferenceResultError + 62 个 ClientConnectorError）。无 Watchdog / ALLGATHER / ALLTOALL / CUDA OOM；ingest 的 nccl_error:16 仅为初始化期 ibv_query_port_speed WARN（误报）。与 tip 031de17bf c56 同属准入钉死族；将 1×CONC 从 CONC 48+ 下扩到 c32/c40，仅 CONC 24 及以下保留 2×。保留不启用 compact_group_io、不设 MC_MAX_MR_SIZE、关闭 cumem。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3088
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Cap max-num-seqs at 48 for CONC 70 on B300 DSXE (keep A2A=1, Q_GATHER=1, KV_GATHER=1, load_async=true, max_load_batch_keys=1, CONC 8+ util 0.85, CONC 32-56 max-num-seqs 1x). Tip 1d937c73e fail-fast run 37071755348 agentic c70 (job 111074417068, Slurm 6950, gpu-11) had a real rail (Mooncake rail: ibp198s0f0 / Patched), Application startup complete, all three direct DCP gathers logged, Mooncake failed_keys=0. Under max-num-seqs=70 (1x) warmup packed Waiting≈63-70 / Deferred≈50-67 with Running≈0 and GPU KV ≈86-91% for ~30m, then hung with shm_broadcast starvation through VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS=1800 → TimeoutError: RPC call to sample_tokens timed out → EngineDead / ProfileAborted (771 warmup dropped / 0 kept; time_to_ready=None). No Watchdog / ALLGATHER / ALLTOALL / CUDA OOM; ingest nccl_error:16 was init-only ibv_query_port_speed WARN (false positive). Same deferred-admission family as tip 861a1512 c32 / 031de17bf c56; 1x insufficient at c70 so drop below 1x to 48. Keep no compact_group_io, no MC_MAX_MR_SIZE, cumem off."
+    - "在 B300 DSXE 上将 CONC 70 的 max-num-seqs 限制为 48（保留 A2A=1、Q_GATHER=1、KV_GATHER=1、load_async=true、max_load_batch_keys=1、CONC 8+ util 0.85、CONC 32–56 max-num-seqs 1×）。tip 1d937c73e fail-fast 运行 37071755348 的 agentic c70（job 111074417068，Slurm 6950，gpu-11）已有真实 rail（Mooncake rail: ibp198s0f0 / Patched），Application startup 完成，三种 direct DCP gather 均已记录，Mooncake failed_keys=0。在 max-num-seqs=70（1×）下 warmup 将 Waiting≈63–70 / Deferred≈50–67 堆满且 Running≈0、GPU KV ≈86–91% 约 30 分钟，随后 shm_broadcast 饥饿直至满 VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS=1800 → TimeoutError: RPC call to sample_tokens timed out → EngineDead / ProfileAborted（丢弃 771 warmup / 保留 0；time_to_ready=None）。无 Watchdog / ALLGATHER / ALLTOALL / CUDA OOM；ingest 的 nccl_error:16 仅为初始化期 ibv_query_port_speed WARN（误报）。与 tip 861a1512 c32 / 031de17bf c56 同属 deferred 准入族；c70 上 1× 不足，降至 48。保留不启用 compact_group_io、不设 MC_MAX_MR_SIZE、关闭 cumem。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3088
+
+- config-keys:
     - glm5.2-fp4-mi355x-sglang-agentic-mtp
   scenario-type:
     - agentic-coding
@@ -9292,3 +9459,43 @@
     - "Update the B200 DeepSeek-V4.1-Flash vLLM AgentX image from nightly ddd6fbca to nightly-dev-x86_64-cu130-ac9126e58aa7 and enable FlashInfer autotuning."
     - "Run TP4 at concurrency 1-128 and replace TP2 with DEP2 (TP1 x DP2 + EP2, DeepGEMM MegaMoE) at concurrency 8-32 and DEP4 (TP1 x DP4 + EP4, MegaMoE) at concurrency 64-128, both behind a consistent-hash vLLM Router. All points set gpu-memory-utilization 0.97."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3686
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Disable VLLM_USE_DIRECT_DCP_KV_GATHER on B300 DSXE (keep A2A=1, Q_GATHER=1, load_async=true, max_load_batch_keys=1, CONC 8+ util 0.85, CONC 32-56 max-num-seqs 1x, c70 max-num-seqs 48). Tip f7be12ed fail-fast run 37086876838 agentic c56 (job 111113692599, Slurm 6989, gpu-01) had a real rail (Mooncake rail: ibp198s0f0 / Patched device_name; the srt-slurm Wrote line is the pre-setup dump), Application startup complete, and profiling kept 1429 requests. At 07:39:41 the direct kernel logged direct DCP kv-gather multimem timeout source=1 epoch=494017 then trapped the device (dcp_direct_kv_gather.cu wait_for_epoch plus asm trap) which is the CUDA unspecified launch failure observed in KVCacheStoreSendingThread, then GPU memcpy failed src_dev=-1 dst_dev=2 size=884736 / TRANSFER_FAIL -800, VllmWorker-2 died, EngineDead / ProfileAborted (143/1429 = 10.007%). Mooncake failed_keys stayed 0 until that instant. Not deferred-admission starvation: the prior 10s window was 347 tok/s with Running: 9 and there was no sample_tokens timeout. Ingest nccl_error:16 was init-only ibv_query_port_speed WARN. Distinct from tip 1d937c73e c70 (Running about 0, 1800s sample_tokens, 0 kept). The stock gate leaves the trapping multimem kernel for all_gather_into_tensor. Keep no compact_group_io, no MC_MAX_MR_SIZE, cumem off."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3088
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Disable VLLM_USE_DIRECT_DCP_Q_GATHER on B300 DSXE (keep A2A=1, KV_GATHER=0, load_async=true, max_load_batch_keys=1, CONC 8+ util 0.85, CONC 32-56 max-num-seqs 1x, c70 max-num-seqs 48). Tip db6caecc fail-fast run 37109541419 agentic c24 (job 111177660118, Slurm 7019, gpu-17) had a real rail (Mooncake rail: ibp198s0f0 / Patched device_name; the srt-slurm Wrote line is the pre-setup dump), Application startup complete, and profiling kept 1041 requests (dropped 265 warmup). At 10:41:47 the direct kernel logged direct DCP q-gather multimem timeout source=7 epoch=1107073 then CUDA unspecified launch failure in KVCacheStoreSendingThread across ranks, EngineDead / ProfileAborted (105/1041 = 10.086%). Mooncake failed_keys stayed 0; prior 10s windows were healthy (Running ~17-25, GPU KV ~28-42%, generation hundreds of tok/s). Ingest nccl_error:16 was init-only ibv_query_port_speed WARN. Same multimem-trap family as tip f7be12ed c56 kv-gather (KV_GATHER already 0); not deferred-admission starvation. CAUTION: tip 1f837c46 / sweep 36937918258 previously tried Q_GATHER=0 and hung ~8.5m after dcp:0 on agentic-eval c8 at EP PyNcclCommunicator ncclCommInitRank (rail ibp198s0f0) — Q was restored and A2A briefly disabled then restored; watch eval init under this gate with A2A=1. Stock gate leaves the trapping q-gather multimem kernel. Keep no compact_group_io, no MC_MAX_MR_SIZE, cumem off."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3088
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Cap max-num-seqs at 48 for CONC 56 on B300 DSXE (keep A2A=1, KV_GATHER=0, Q_GATHER=0, load_async=true, max_load_batch_keys=1, CONC 8+ util 0.85, CONC 32-48 max-num-seqs 1x, c70 max-num-seqs 48). Tip fd61acb0 fail-fast run 37118728189 agentic c56 (job 111203259062, Slurm 7040, gpu-10) had a real rail, Application startup complete, Mooncake failed_keys=0, and warmup completed 619/619 with 0 errors. Profiling packed GPU KV to 98.2% (Running: 8, Waiting: 53, Deferred: 38) then hung at 0 tok/s at 15:08:49; first causal line is NCCL watchdog WorkNCCL SeqNum=342641 OpType=_ALLGATHER_BASE Timeout(ms)=600000 last started work: -1 in kv_gather (dcp.py:1413 all_gather_into_tensor) at 15:18:37 → DistBackendError / EngineDead / ProfileAborted (62/392 = 15.816%). Direct A2A remained on (dcp.py:1283). Not A2A multimem/ALLTOALL and not a direct-gather multimem trap. Same packed-KV PyNCCL kv_gather family as tip bed9f1ce c40 / 860c1ccf c48; do not re-enable KV/Q gather (multimem traps on f7be12ed/db6caecc). 1x=56 still insufficient at c56 so drop below 1x to 48 like c70. Keep no compact_group_io, no MC_MAX_MR_SIZE, cumem off."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3088
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Cap max-num-seqs at 1x CONC (16) for CONC 16 on B300 DSXE (keep A2A=1, KV_GATHER=0, Q_GATHER=0, load_async=true, max_load_batch_keys=1, CONC 8+ util 0.85, CONC 32-48 max-num-seqs 1x, c56/c70 max-num-seqs 48). Tip ebc4eb499 fail-fast run 37134266476 agentic c16 (job 111250499353, Slurm 7062, gpu-13) had a real rail, Application startup complete at 17:29:18Z, Mooncake failed_keys=0, and warmup returned 140/177 with 10 in flight from 17:44:47 at 0 tok/s while GPU KV stayed ~98-99.7% (Running: 3, Waiting: 7, Deferred: 7). First causal line is NCCL watchdog WorkNCCL SeqNum=89905 OpType=_ALLGATHER_BASE NumelIn=4755456 Timeout(ms)=600000 last started work: -1 on PG ID 3 Rank 3 at 17:54:46 → DistBackendError / VllmWorker-7 died / EngineDead / ProfileAborted (176 warmup dropped / 0 kept; profiling never started). Ingest nccl_error:16 was init-only ibv_query_port_speed WARN. Same packed-KV PyNCCL _ALLGATHER_BASE family as tip fd61acb0 c56; not a direct-gather multimem trap and not setup. 2x=32 at c16 is the remaining 2x cell besides c8/c24; drop c16 to 1x=16. Do not re-enable KV/Q gather, compact_group_io, or MC_MAX_MR_SIZE. Keep cumem off."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3088
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Cap max-num-seqs at 32 for CONC 70 on B300 DSXE (keep A2A=1, KV_GATHER=0, Q_GATHER=0, load_async=true, max_load_batch_keys=1, CONC 8+ util 0.85, CONC 16/32-48 max-num-seqs 1x, c56 max-num-seqs 48). Tip c9ffe2b12 fail-fast run 37143203751 agentic c70 (job 111276873706, Slurm 7087, gpu-15) had a real rail (Mooncake rail: ibp198s0f0 / Patched), Application startup complete, Mooncake failed_keys=0, warmup completed 772/774, and profiling kept 115 requests. During profile GPU KV packed to 99.6% (Running: 0, Waiting: 48, Deferred: 46 at 21:00:12); after recovery the first causal kill is NCCL watchdog WorkNCCL SeqNum=353066 OpType=_ALLGATHER_BASE Timeout(ms)=600000 last started work: -1 in kv_gather (dcp.py:1413 all_gather_into_tensor) at 21:17:09 (hang from ~21:07:09 with Running: 10, Waiting: 2, Deferred: 2, GPU KV 21.3%) → DistBackendError / worker_crash:8 / EngineDead / ProfileAborted (82/115 InvalidInferenceResultError). Ingest nccl_error:16 was init-only ibv_query_port_speed WARN. Same PyNCCL kv_gather family as tip fd61acb0 c56 / ebc4eb499 c16; not multimem trap, not sample_tokens deferred-admission starve (distinct from tip 1d937c73e c70 at max-num-seqs=70). Cap 48 still insufficient at c70 so drop to 32. Do not re-enable KV/Q gather, compact_group_io, or MC_MAX_MR_SIZE. Keep cumem off."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3088
