@@ -6,7 +6,7 @@ base:
   name: dsv4-fp4-b200-vllm-agentic
   model:
     path: hf:deepseek-ai/DeepSeek-V4-Pro-0813
-    container: vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-591bb95
+    container: vllm/vllm-openai:nightly-dev-x86_64-cu130-ac9126e58aa7@sha256:3d17635c5aa0340e2f2502c067ce4b587d8e7dc678195e90b71142490dc6d71c
     precision: fp4
   resources:
     gpu_type: b200
@@ -53,7 +53,6 @@ base:
         VLLM_PREFIX_CACHE_RETENTION_INTERVAL: '32768'
         VLLM_USE_V2_MODEL_RUNNER: '1'
         VLLM_USE_RUST_FRONTEND: '1'
-        VLLM_DSV4_MEGA_FP8_COMBINE: '1'
         VLLM_RPC_TIMEOUT: '600000'
         TORCH_CUDA_ARCH_LIST: '10.0'
         PYTHONNOUSERSITE: '1'
@@ -187,7 +186,7 @@ override_dep8_c32:
         data-parallel-size: 8
         enable-expert-parallel: true
         enable-ep-weight-filter: true
-        moe-backend: deep_gemm_amxf4_mega_moe
+        moe-backend: deep_gemm_mega_moe
         prefill-schedule-interval: 16
         long-prefill-token-threshold: 512
         kv-cache-memory-bytes: 37580963840
@@ -223,7 +222,7 @@ override_dep8_c64:
         data-parallel-size: 8
         enable-expert-parallel: true
         enable-ep-weight-filter: true
-        moe-backend: deep_gemm_amxf4_mega_moe
+        moe-backend: deep_gemm_mega_moe
         prefill-schedule-interval: 16
         long-prefill-token-threshold: 512
         kv-cache-memory-bytes: 37580963840
@@ -259,7 +258,7 @@ override_dep8_c96:
         data-parallel-size: 8
         enable-expert-parallel: true
         enable-ep-weight-filter: true
-        moe-backend: deep_gemm_amxf4_mega_moe
+        moe-backend: deep_gemm_mega_moe
         prefill-schedule-interval: 16
         long-prefill-token-threshold: 512
         kv-cache-memory-bytes: 37580963840
@@ -295,7 +294,7 @@ override_dep8_c128:
         data-parallel-size: 8
         enable-expert-parallel: true
         enable-ep-weight-filter: true
-        moe-backend: deep_gemm_amxf4_mega_moe
+        moe-backend: deep_gemm_mega_moe
         prefill-schedule-interval: 16
         long-prefill-token-threshold: 512
         kv-cache-memory-bytes: 37580963840
@@ -331,7 +330,7 @@ override_dep8_c160:
         data-parallel-size: 8
         enable-expert-parallel: true
         enable-ep-weight-filter: true
-        moe-backend: deep_gemm_amxf4_mega_moe
+        moe-backend: deep_gemm_mega_moe
         prefill-schedule-interval: 16
         long-prefill-token-threshold: 512
         kv-cache-memory-bytes: 36507222016
@@ -367,7 +366,7 @@ override_dep8_c192:
         data-parallel-size: 8
         enable-expert-parallel: true
         enable-ep-weight-filter: true
-        moe-backend: deep_gemm_amxf4_mega_moe
+        moe-backend: deep_gemm_mega_moe
         prefill-schedule-interval: 16
         long-prefill-token-threshold: 512
         kv-cache-memory-bytes: 36507222016
