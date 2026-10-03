@@ -1549,7 +1549,7 @@ glm5.3-fp8-mi355x-tilert-agentic:
 
 # SGLang ROCm 7.2 MI35X release image. TP2/EP1 with host Engram tables.
 dsv41flash-fp4-mi355x-sglang-agentic-dspark:
-  image: lmsysorg/sglang-rocm:v0.5.21-rocm720-mi35x-20261002
+  image: lmsysorg/sglang-rocm:v0.5.21-rocm720-mi35x-20261003
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:mi355x-amds
