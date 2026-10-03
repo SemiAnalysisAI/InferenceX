@@ -300,7 +300,7 @@ TP4 约 1.23 TB）全部来自节点 0 的 1.5 TB 内存。`runners/srt-slurm/ho
 
 ### DeepSeek-V4.1-Flash DSpark
 
-GB200 的 DSpark 配方将 CUDA graph 最小捕获范围设为 64 tokens，以覆盖 AgentX 子代理并发。这会将 c1/c2/c4 的上限从 8/16/32 提升至 64；c8 及以上保持原有大小。完整轨迹、AL 3.51 和 Engram UVA 配置保持不变；需通过 CI 验证低并发尾延迟改善。
+GB200 的 DSpark 配方按测试点显式设置捕获尺寸，详见下文。
 B200 的 DSpark 配方按测试点显式设置捕获尺寸，详见下文。
 GB300 的 DSpark 配方按测试点显式设置捕获尺寸，详见下文。
 
@@ -309,7 +309,7 @@ TP4 覆盖并发 1–128；DEP2（TP1 x DP2 + EP2，DeepGEMM MegaMoE）覆盖 8�
 64–128，两者均前置一致性哈希 vLLM Router。DEP2 每个 B200 rank 约有 150 GiB 权重，因此 batched tokens
 上限为 4096，CUDA graph 捕获上限为 576 tokens。所有 B200 测试点设置 `--gpu-memory-utilization 0.97`。
 所有测试点使用 `FULL_AND_PIECEWISE` CUDA graph，捕获尺寸为六 token 验证块的倍数。
-H200 的 DSpark 配方使用相同的最小捕获范围，并保持相同的工作负载配置。
+H200 的 DSpark 配方使用相同的 64 tokens 最小捕获范围，并保持相同的工作负载配置。
 
 B300 的 DSpark 配方按测试点显式设置捕获尺寸，详见下文。
 
@@ -326,6 +326,11 @@ B300 的 DSpark 配方按测试点显式设置捕获尺寸，详见下文。
 下创建 AgentX 运行目录。沿用集群的模型路径和持久化缓存。配方在计算节点探测服务端口，首选端口被占用时选择可用端口，
 服务、回放、指标和 eval 共用同一端点。所有配方都必须获得 GPU sweep 和 eval
 证据后才能视为已验证。
+
+GB200 条目使用 `vllm/vllm-openai:nightly-dev-arm64-cu130-ac9126e58aa7`，开启 FlashInfer autotune。
+TP4 覆盖并发 1、4、8 和 32；DEP2（TP1 x DP2 + EP2）覆盖 8–32，DEP4（TP1 x DP4 + EP4）覆盖 64–128，两者均使用
+DeepGEMM MegaMoE 和 adaptive verification，前置一致性哈希 vLLM Router。所有测试点使用 `FULL_AND_PIECEWISE`
+CUDA graph，捕获尺寸为六 token 验证块的倍数，并设置 `--gpu-memory-utilization 0.97`。
 
 B300 条目使用 `vllm/vllm-openai:nightly-dev-x86_64-cu130-ac9126e58aa7`，开启 FlashInfer autotune。
 TP4 覆盖并发 1–16；DEP2（TP1 x DP2 + EP2，DeepGEMM MegaMoE）覆盖 8–192，前置一致性哈希 vLLM
@@ -344,7 +349,7 @@ GB300 launcher 将引擎就绪等待时间设为 7200 秒。在[运行 345049691
 ### H200 上的 DeepSeek-V4.1-Flash DSpark
 
 `dsv41flash-fp4-h200-vllm-agentic-dspark` 是 DeepSeek-V4.1-Flash 配方的 H200 AgentX
-分支。它固定使用 `vllm/vllm-openai:nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3`（与 B200、GB200 相同），并与 Blackwell 分支共用纯文本服务
+分支。它固定使用 `vllm/vllm-openai:nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3`，并与 Blackwell 分支共用纯文本服务
 设置：`deepseek_v41` tokenizer 和解析器、1M 上下文、原生五 token DSpark（概率采样草稿）。吞吐测试使用[已提交的黄金 AL](../infx/golden_al_distribution/dsv41flash_dspark.yaml)：thinking 开启、五个草稿 token 对应 3.51，采用合成拒绝采样并关闭自适应验证。准确率 eval 保留真实块拒绝采样和自适应验证。
 
 该分支使用 **TP8**，而非上游的 TP4。上游在一个 GB200 NVL4 tray 上验证 TP4，并说明在
