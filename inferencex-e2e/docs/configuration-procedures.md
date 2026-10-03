@@ -347,16 +347,21 @@ canary c1 crashed with Mooncake `AssertionError: load_async must be True for
 better performance` when `load_async` was set false, so restore the required
 stock true), but do not enable `compact_group_io` on this DSXE single-rail path
 (it storm-failed ~25 MiB compact-group puts at c8). Keep
-`VLLM_USE_DIRECT_DCP_A2A=1` and `VLLM_USE_DIRECT_DCP_Q_GATHER=1`, and set
-`VLLM_USE_DIRECT_DCP_KV_GATHER=0` (tip 1f837c46 eval-only c8 hung ~8.5m after
-`dcp:0` then failed EP `ncclCommInitRank` with Q gather off; tip 68cdcc58 c24
-hung in PyNCCL `ALLTOALL_BASE` inside `dcp_a2a_lse_reduce` with A2A off. Tip
-bed9f1ce c40 hung in PyNCCL `kv_gather` `_ALLGATHER_BASE` when KV gather was
-off, which is why the gate was restored; tip f7be12ed c56, run 37086876838,
-then died on the direct kernel itself — `direct DCP kv-gather multimem timeout
-source=1 epoch=494017` followed by an `asm trap` that is the CUDA unspecified
-launch failure — so the stock gate is off again. Mooncake GPU memcpy `-800`
-was the poisoned device, not the first boundary.).
+`VLLM_USE_DIRECT_DCP_A2A=1`, and set both `VLLM_USE_DIRECT_DCP_Q_GATHER=0` and
+`VLLM_USE_DIRECT_DCP_KV_GATHER=0` (tip 68cdcc58 c24 hung in PyNCCL
+`ALLTOALL_BASE` inside `dcp_a2a_lse_reduce` with A2A off. Tip bed9f1ce c40
+hung in PyNCCL `kv_gather` `_ALLGATHER_BASE` when KV gather was off, which is
+why that gate was restored; tip f7be12ed c56, run 37086876838, then died on
+the direct KV kernel itself — `direct DCP kv-gather multimem timeout source=1
+epoch=494017` followed by an `asm trap` that is the CUDA unspecified launch
+failure — so KV gather is gated off again. Tip db6caecc c24, run 37109541419,
+then died on the direct Q kernel — `direct DCP q-gather multimem timeout
+source=7 epoch=1107073` → CUDA unspecified launch failure in
+`KVCacheStoreSendingThread` → EngineDead / ProfileAborted — so Q gather is
+gated off too. Tip 1f837c46 eval-only c8 previously hung ~8.5m after `dcp:0`
+then failed EP `ncclCommInitRank` with Q gather off; watch eval init on this
+gate. Mooncake GPU memcpy `-800` was the poisoned device, not the first
+boundary.).
 Do not set `MC_MAX_MR_SIZE` here: with 4GiB every rank hit
 `register_buffer failed ... -600` on the ~40 GiB KV region and stormed
 `AddressNotRegistered` TRANSFER_FAIL (c2/c32); pre-`MC_MAX_MR` tips registered
