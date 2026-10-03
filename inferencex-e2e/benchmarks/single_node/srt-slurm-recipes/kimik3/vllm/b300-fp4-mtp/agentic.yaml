@@ -93,21 +93,27 @@ base:
         VLLM_ALLREDUCE_USE_FLASHINFER: '1'
         VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION: '1'
         VLLM_USE_V2_MODEL_RUNNER: '1'
-        # Tip 1f837c46 eval-only c8 hung ~8.5m after dcp:0 then failed EP
-        # PyNccl ncclCommInitRank with Q_GATHER=0; keep Q gather on. Tip
-        # 68cdcc58 c24 (Slurm 6814): with A2A=0 the hang moved to PyNCCL
+        # Tip 68cdcc58 c24 (Slurm 6814): with A2A=0 the hang was PyNCCL
         # ALLTOALL_BASE in dcp_a2a_lse_reduce (dcp.py:765; last started work:
-        # -1) after ~43m serve — direct Q/KV gathers were already active.
-        # Enable direct A2A (GB300 DCP8 / B200 stock). load_async must stay true.
+        # -1) after ~43m serve. Enable direct A2A (GB300 DCP8 / B200 stock).
+        # load_async must stay true.
         VLLM_USE_DIRECT_DCP_A2A: '1'
-        VLLM_USE_DIRECT_DCP_Q_GATHER: '1'
+        # Tip 1f837c46 eval-only c8 hung ~8.5m after dcp:0 then failed EP
+        # PyNccl ncclCommInitRank with Q_GATHER=0, so Q was restored. Tip
+        # db6caecc c24 (run 37109541419, Slurm 7019) then died in the direct
+        # Q kernel itself: "direct DCP q-gather multimem timeout source=7
+        # epoch=1107073" → CUDA unspecified launch failure in
+        # KVCacheStoreSendingThread → EngineDead / ProfileAborted (105/1041).
+        # Mooncake failed_keys=0; GPU KV ~28–42%; not admission starvation.
+        # Stock gate off leaves the trapping multimem path. Keep A2A on.
+        VLLM_USE_DIRECT_DCP_Q_GATHER: '0'
         # Tip bed9f1ce c40 hung in PyNCCL kv_gather _ALLGATHER_BASE when this
         # was 0, so it was restored. Tip f7be12ed c56 (run 37086876838, Slurm
         # 6989) with it on died in the direct kernel itself: "direct DCP
         # kv-gather multimem timeout source=1 epoch=494017" then asm trap →
         # CUDA unspecified launch failure (Mooncake memcpy -800 is the dead
         # device, not the first boundary). Stock gate off selects
-        # all_gather_into_tensor. Keep A2A and Q gather on.
+        # all_gather_into_tensor. Keep A2A on; Q gather also gated off above.
         VLLM_USE_DIRECT_DCP_KV_GATHER: '0'
         VLLM_ENGINE_READY_TIMEOUT_S: '3600'
         VLLM_RPC_TIMEOUT: '600000'
