@@ -320,12 +320,16 @@ Mooncake 指标干净时，于约 98–100% GPU KV 下挂起在 DCP PYNCCL
 `AssertionError: load_async must be True for better performance`，故恢复必需的
 stock true），但不要在该 DSXE 单 rail 路径上启用
 `compact_group_io`（c8 上曾对约 25 MiB 的 compact-group put 产生大量失败）。
-保持 `VLLM_USE_DIRECT_DCP_A2A=1`、`VLLM_USE_DIRECT_DCP_Q_GATHER=1` 与
-`VLLM_USE_DIRECT_DCP_KV_GATHER=1`（tip 1f837c46 的 eval-only c8 在关闭 Q gather
-后于 `dcp:0` 之后挂起约 8.5 分钟，随后 EP `ncclCommInitRank` 失败；tip
-bed9f1ce 的 c40 在关闭 KV gather 时于 PyNCCL `kv_gather` `_ALLGATHER_BASE`
-挂起，`last started work: -1`；tip 68cdcc58 的 c24 在关闭 A2A 且 Q/KV direct
-gather 已生效时，于 PyNCCL `ALLTOALL_BASE` / `dcp_a2a_lse_reduce` 挂起）。
+保持 `VLLM_USE_DIRECT_DCP_A2A=1` 与 `VLLM_USE_DIRECT_DCP_Q_GATHER=1`，并将
+`VLLM_USE_DIRECT_DCP_KV_GATHER` 设为 0（tip 1f837c46 的 eval-only c8 在关闭 Q
+gather 后于 `dcp:0` 之后挂起约 8.5 分钟，随后 EP `ncclCommInitRank` 失败；tip
+68cdcc58 的 c24 在关闭 A2A 时于 PyNCCL `ALLTOALL_BASE` / `dcp_a2a_lse_reduce`
+挂起。tip bed9f1ce 的 c40 在关闭 KV gather 时于 PyNCCL `kv_gather`
+`_ALLGATHER_BASE` 挂起，因此该开关曾被重新打开；tip f7be12ed 的 c56（运行
+37086876838）随后死在 direct kernel 本身——`direct DCP kv-gather multimem
+timeout source=1 epoch=494017`，接着 `asm trap`，即 CUDA unspecified launch
+failure——故该 stock 开关再次关闭。Mooncake GPU memcpy `-800` 是设备已损坏后的
+后果，不是第一故障边界。）。
 不要在此设置 `MC_MAX_MR_SIZE`：设为 4GiB 时各 rank 对约 40 GiB KV 区域报
 `register_buffer failed ... -600`，并引发 `AddressNotRegistered`
 TRANSFER_FAIL（c2/c32）；加入该变量之前的 tip 注册正常。此路径保持关闭
