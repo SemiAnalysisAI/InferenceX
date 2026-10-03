@@ -9282,4 +9282,4 @@
     - "Repin MI355X DeepSeek-V4.1-Flash DSpark to vllm/vllm-openai-rocm:nightly-rocm100-0cbac6cd1305f710e12193596b27488397bcb205."
     - "Enable VLLM_ROCM_USE_AITER_MOE_A4W4_DSV4=1 for native CK a4w4 MXFP4 MoE execution (vllm-project/vllm#58819), including shared DSpark MoE layers (from #3666)."
     - "Enable VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4 (vllm-project/recipes#1061) so tensor-parallel all-reduces above the quick-reduce size threshold use the INT4 codec; prefill chunks and concurrency-64 DSpark decode steps clear it, smaller TP4 decode steps stay on custom all-reduce. The TP4 c64 GSM8K eval runs with both a4w4 and INT4 quick reduce active; all other settings are retained from #3571."
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3690
