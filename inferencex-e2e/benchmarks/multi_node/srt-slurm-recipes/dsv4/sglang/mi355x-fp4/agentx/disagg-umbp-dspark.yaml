@@ -183,6 +183,7 @@ base:
         SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "128"
         SGLANG_SIMULATE_ACC_METHOD: match-expected
         SGLANG_SIMULATE_ACC_TOKEN_MODE: real-draft-token
+        SGLANG_SIMULATE_ACC_GREEDY: "0"
       args:
         <<: *server
         disable-cuda-graph: false
