@@ -92,13 +92,13 @@ def finish_single_node(run: SrtRun, submitted: Submitted, fetched: Path) -> int:
     return rc
 
 
-def check_single_node(run: SrtRun, logs: Path, producer_sha: str) -> int:
-    """Validate native AgentX power, requested evals, and the benchmark result.
+def finalize_single_node_results(run: SrtRun, logs: Path, producer_sha: str) -> int:
+    """Write native AgentX power metrics, then validate evals and the benchmark result.
 
     srt-slurm treats a failed post-benchmark eval as non-fatal; InferenceX does not.
     """
     request = run.request
-    rc = 0
+    power_rc = 0
     if request.is_agentic and not request.eval_only:
         require(request, "INFERENCEX_RESULTS_PYTHON", "GPU_COUNT")
         argv = [
@@ -112,7 +112,7 @@ def check_single_node(run: SrtRun, logs: Path, producer_sha: str) -> int:
             "--audit-source", "results/power_validation.json",
             *(["--require-power"] if request.require_power else []),
         ]  # fmt: skip
-        rc = proc.run(argv, env=run.env, cwd=run.workspace).returncode
+        power_rc = proc.run(argv, env=run.env, cwd=run.workspace).returncode
     if request.run_eval or request.eval_only:
         exit_file = logs / "infx-eval-exit-code"
         if not exit_file.is_file() or exit_file.read_text().rstrip("\n") != "0":
@@ -123,7 +123,7 @@ def check_single_node(run: SrtRun, logs: Path, producer_sha: str) -> int:
         if not result.is_file() or result.stat().st_size == 0:
             print(f"ERROR: benchmark result {result} is missing or empty", file=sys.stderr)
             return 1
-    return rc
+    return power_rc
 
 
 def _stage_logs(run: SrtRun, logs: Path, power: PowerDecision) -> None:

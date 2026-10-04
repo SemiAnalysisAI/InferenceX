@@ -21,7 +21,7 @@ from infx.tests.results.power.test_aggregate_power_multinode import PRODUCER_SHA
 def test_single_node_collector_finalizes_native_agentx_power(
     tmp_path: Path, require_power: bool, profile: str, failure: str | None,
 ) -> None:
-    from infx.launch.drivers.srt.collect import check_single_node
+    from infx.launch.drivers.srt.collect import finalize_single_node_results
 
     pkg = build_package(tmp_path)
     result_dir = pkg.logs_root / "agentic"
@@ -63,7 +63,7 @@ def test_single_node_collector_finalizes_native_agentx_power(
                               result_filename="point", env=env)
     run = SimpleNamespace(request=request, env=env, workspace=tmp_path)
     producer_sha = "b" * 40 if failure == "producer_commit_mismatch" else PRODUCER_SHA
-    assert check_single_node(run, pkg.logs_root, producer_sha) == int(require_power and failure is not None)
+    assert finalize_single_node_results(run, pkg.logs_root, producer_sha) == int(require_power and failure is not None)
     aggregate = json.loads(aggregate_path.read_text())
     validation = json.loads((result_dir / "power_validation.json").read_text())
     assert aggregate["power_valid"] == int(failure is None)

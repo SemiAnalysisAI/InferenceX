@@ -116,7 +116,7 @@ def run_single_node(launch: Launch) -> int:
     if not request.eval_only:
         (logs / "power").mkdir(parents=True, exist_ok=True)
         (logs / "power/native-job-status.txt").write_text(f"{job.id}|{status.raw}\n")
-    rc = collect.check_single_node(run, logs, checkout.commit)
+    rc = collect.finalize_single_node_results(run, logs, checkout.commit)
     return rc or int(not status.succeeded)
 
 
