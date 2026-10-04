@@ -3277,7 +3277,7 @@ def test_require_power_forwards_from_agentic_scenario_arm(power_key, sample_runn
         }
     }
     before = expand_full_sweep(config, sample_runner_config)
-    assert [row["conc"] for row in before] == [1, 1, 4, 4]
+    assert [row["conc"] for row in before] == [1, 4]
     assert all("require-power" not in row for row in before)
     arm = config["agentic-power-probe"]["scenarios"]["agentic-coding"][0]
     arm[power_key] = True
