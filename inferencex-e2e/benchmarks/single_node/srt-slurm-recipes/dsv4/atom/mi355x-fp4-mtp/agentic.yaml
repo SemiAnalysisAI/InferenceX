@@ -6,7 +6,7 @@ base:
   name: dsv4-fp4-mi355x-atom-agentic
   model:
     path: hf:deepseek-ai/DeepSeek-V4-Pro-0813
-    container: rocm/atom-dev:nightly_202609291501
+    container: rocm/atom-dev:nightly_202610031557@sha256:f6940ab6ae0b8c3155fb95edc1a5f93cc2a898301e193afd007141c66fa0e61a
     precision: fp4
   resources:
     gpu_type: mi355x
