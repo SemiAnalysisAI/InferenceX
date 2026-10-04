@@ -1,0 +1,231 @@
+# DeepSeek-V4-Pro-0813 AgentX on MI355X with vLLM DSpark K6
+# (https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4-Pro?hardware=mi355x). Pure
+# TP8 through c64; the wide band runs DP attention (DEP8) behind the vLLM
+# Router. The KV cache is GPU-resident.
+base:
+  schema: 2
+  name: dsv4-fp4-mi355x-vllm-agentic
+  model:
+    path: hf:deepseek-ai/DeepSeek-V4-Pro-0813
+    container: vllm/vllm-openai-rocm:nightly-e9757321527ca1ecd514c07c1418dd2c53da3d19
+    precision: fp4
+  resources:
+    gpu_type: mi355x
+    gpus_per_node: 8
+  frontend:
+    type: vllm
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine:
+    type: vllm
+    connector: null
+  # 805 GiB checkpoint; cold loads can take the full engine ready timeout.
+  health_check:
+    interval_seconds: 10
+    max_attempts: 1080
+  # The nightly ROCm image lacks some runtime packages; see SETUP_PIP_PACKAGES.
+  setup_script: pip-runtime-deps.sh
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        served-model-name: deepseek-ai/DeepSeek-V4-Pro-0813
+        # The DSpark checkpoint revision the legacy preflight pinned.
+        revision: 72e1d3230f6c080a530b0a1d46f8eb4602340597
+        tokenizer-revision: 72e1d3230f6c080a530b0a1d46f8eb4602340597
+        trust-remote-code: true
+        async-scheduling: true
+        distributed-executor-backend: mp
+        kv-cache-dtype: fp8
+        max-num-batched-tokens: 8192
+        tensor-parallel-size: 8
+        data-parallel-size: 1
+        gpu-memory-utilization: 0.86
+        moe-backend: aiter
+        compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE"}'
+        # Six-token DSpark with probabilistic drafting. Throughput runs replace
+        # verification with the golden acceptance length.
+        speculative-config: '{"method": "dspark", "num_speculative_tokens": 6, "draft_sample_method": "probabilistic"}'
+        tokenizer-mode: deepseek_v4
+        tool-call-parser: deepseek_v4
+        reasoning-parser: deepseek_v4
+        enable-auto-tool-choice: true
+        enable-prefix-caching: true
+        no-disable-hybrid-kv-cache-manager: true
+      env:
+        SETUP_PIP_PACKAGES: Pillow fastapi uvicorn
+        VLLM_ENGINE_READY_TIMEOUT_S: '10800'
+        # Sparse SWA prefix-cache tail retention validated for this workload.
+        VLLM_PREFIX_CACHE_RETENTION_INTERVAL: '32768'
+        VLLM_USE_V2_MODEL_RUNNER: '1'
+        VLLM_ROCM_USE_AITER: '1'
+        VLLM_ROCM_QUICK_REDUCE_QUANTIZATION: INT4
+        VLLM_ROCM_USE_AITER_MOE: '1'
+        # Packed MXFP4 routed experts beside a full-width FP8 shared expert fail
+        # to load through the fused path.
+        VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS: '0'
+        # vLLM only clamps torch threads after weight loading.
+        OMP_NUM_THREADS: '1'
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
+    env:
+      MODEL: deepseek-ai/DeepSeek-V4-Pro-0813
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
+
+# One variant per point. Pure TP admits 2x CONC. DEP8 admits CONC per rank,
+# interleaves prefill every 8 steps with a 16k long-prefill threshold, and
+# routes each conversation to one rank: the Router hashes X-Session-ID, which
+# AIPerf aliases from its stable X-Correlation-ID.
+override_tp8_c1:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 2
+  benchmark:
+    env:
+      CONC: '1'
+
+override_tp8_c4:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 8
+  benchmark:
+    env:
+      CONC: '4'
+
+override_tp8_c8:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 16
+  benchmark:
+    env:
+      CONC: '8'
+
+override_tp8_c16:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 32
+  benchmark:
+    env:
+      CONC: '16'
+
+override_tp8_c32:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 64
+  benchmark:
+    env:
+      CONC: '32'
+
+override_tp8_c40:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 80
+  benchmark:
+    env:
+      CONC: '40'
+
+override_tp8_c48:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 96
+  benchmark:
+    env:
+      CONC: '48'
+
+override_tp8_c56:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 112
+  benchmark:
+    env:
+      CONC: '56'
+
+override_tp8_c64:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 128
+  benchmark:
+    env:
+      CONC: '64'
+
+override_dep8_c64:
+  frontend:
+    type: vllm-router
+    args:
+      policy: consistent_hash
+      request-timeout-secs: 14400
+      disable-retries: true
+    env:
+      SETUP_PIP_PACKAGES: 'vllm-router==0.1.14'
+  roles:
+    agg:
+      args:
+        tensor-parallel-size: 1
+        data-parallel-size: 8
+        prefill-schedule-interval: 8
+        long-prefill-token-threshold: 16384
+        max-num-seqs: 64
+  benchmark:
+    env:
+      CONC: '64'
+      AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: '1'
+
+override_dep8_c128:
+  frontend:
+    type: vllm-router
+    args:
+      policy: consistent_hash
+      request-timeout-secs: 14400
+      disable-retries: true
+    env:
+      SETUP_PIP_PACKAGES: 'vllm-router==0.1.14'
+  roles:
+    agg:
+      args:
+        tensor-parallel-size: 1
+        data-parallel-size: 8
+        prefill-schedule-interval: 8
+        long-prefill-token-threshold: 16384
+        max-num-seqs: 128
+  benchmark:
+    env:
+      CONC: '128'
+      AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: '1'
+
+override_dep8_c192:
+  frontend:
+    type: vllm-router
+    args:
+      policy: consistent_hash
+      request-timeout-secs: 14400
+      disable-retries: true
+    env:
+      SETUP_PIP_PACKAGES: 'vllm-router==0.1.14'
+  roles:
+    agg:
+      args:
+        tensor-parallel-size: 1
+        data-parallel-size: 8
+        prefill-schedule-interval: 8
+        long-prefill-token-threshold: 16384
+        max-num-seqs: 192
+  benchmark:
+    env:
+      CONC: '192'
+      AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: '1'

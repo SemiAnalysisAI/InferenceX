@@ -2,18 +2,18 @@
 description: Render an HTML dashboard of Claude/Klaud-Cold PR states (state + check breakdown per PR) and open it in the browser
 ---
 
-Render an HTML dashboard for every open PR in `SemiAnalysisAI/InferenceX` that was opened by Claude (either a `claude/*` branch OR a title containing `[Klaud Cold]`). Each row shows the PR's current state, a check-status breakdown, the title, and empty "Reason"/"Suggested fix" cells you can fill in afterward by reading failed-run logs.
+Render an HTML dashboard for every open PR in `SemiAnalysisAI/InferenceX` that was opened by Claude (either a `klaud/*`, `klaud-cold/*`, or legacy `klaude/*` branch OR a title containing `[Klaud Cold]`). Each row shows the PR's current state, a check-status breakdown, the title, and empty "Reason"/"Suggested fix" cells you can fill in afterward by reading failed-run logs.
 
 The dashboard lives at `/tmp/klaud_pr_status.html` and is opened with `open` (macOS) at the end.
 
-## Step 1 — list candidate PRs (`claude/*` OR title containing `[Klaud Cold]`)
+## Step 1 — list candidate PRs (`klaud/*` / `klaud-cold/*` / `klaude/*` OR title containing `[Klaud Cold]`)
 
 The title check uses `contains` (not `startswith`) so it picks up PRs whose titles embed `[Klaud Cold]` after a prefix like `[Handoff to @Oseltamivir Claude /loop]`. Handoff-style PRs from a /loop run still belong on the dashboard.
 
 ```bash
 gh pr list --repo SemiAnalysisAI/InferenceX --state open --limit 200 \
   --json number,title,headRefName,createdAt \
-  --jq '.[] | select((.headRefName | startswith("claude/")) or (.title | contains("[Klaud Cold]"))) | "\(.number)\t\(.headRefName)\t\(.createdAt)\t\(.title)"' \
+  --jq '.[] | select((.headRefName | test("^(klaud|klaud-cold|klaude)/")) or (.title | contains("[Klaud Cold]"))) | "\(.number)\t\(.headRefName)\t\(.createdAt)\t\(.title)"' \
   > /tmp/klaud_pr_candidates.tsv
 wc -l /tmp/klaud_pr_candidates.tsv
 ```
@@ -30,7 +30,7 @@ State buckets:
 - **RUNNING.** No checks have failed. At least one is `QUEUED` / `IN_PROGRESS` / `PENDING`.
 - **READY.** No checks have failed or remain pending, and at least one `Run Sweep` check is `SUCCESS`.
 - **NO_SUCCESS.** The sweep ran but never produced a `SUCCESS` (e.g. all matrix jobs got SKIPPED).
-- **NO_SWEEP.** No `Run Sweep` check exists for this head SHA at all. This usually means the sweep never triggered because the PR is missing a label such as `full-sweep-enabled` or `non-canary-full-sweep-enabled`.
+- **NO_SWEEP.** No `Run Sweep` check exists for this head SHA at all. `run-sweep.yml` triggers on pushes and label changes (not on PR open), only for PRs whose diff touches `inferencex-e2e/perf-changelog.yaml`, and GitHub skips it while the PR has merge conflicts. So this usually means the PR was opened without a primary sweep label (`full-sweep-fail-fast`, `full-sweep-enabled`, or `non-canary-full-sweep-enabled`) and has had no push or label change since, its diff does not touch the changelog, or it has merge conflicts.
 
 ```bash
 : > /tmp/klaud_pr_status.tsv
@@ -65,7 +65,7 @@ while IFS=$'\t' read -r pr branch created title; do
     | select(.workflowName == "Run Sweep")
     | state as $s
     | select($s == "QUEUED" or $s == "IN_PROGRESS")
-    | ((.name | capture("(?<p>b200|b300|h100|h200|mi300x|mi325x|mi355x)").p) // "unknown") as $pool
+    | ((.name | capture("(?<p>gb200|gb300|b200|b300|h100|h200|mi300x|mi325x|mi355x)").p) // "unknown") as $pool
     | "\($pr)\t\($pool)\t\($s)"
   ' >> /tmp/klaud_pr_jobs.tsv
 done < /tmp/klaud_pr_candidates.tsv
@@ -108,14 +108,16 @@ state_class = {
     "NO_SWEEP": "state-NOSWEEP", "NO_SUCCESS": "state-NOSWEEP",
 }
 
-# Active self-hosted runner counts per pool (from GHA registrations as of the
-# session this was last touched). If a pool isn't listed, falls back to 4 — a
-# conservative guess. To refresh:
+# Self-hosted runner counts per pool, derived from the runner-label map in
+# inferencex-e2e/configs/runners.yaml (run this from the repo root). If a pool isn't listed,
+# falls back to 4, a conservative guess. Online counts can be lower; to check:
 #   gh api --paginate repos/SemiAnalysisAI/InferenceX/actions/runners \
 #     --jq '.runners[] | select(.status == "online") | .labels[].name' \
-#     | grep -xE 'b200|b300|h200|h100|mi300x|mi325x|mi355x' | sort | uniq -c
-POOL_RUNNERS = {"b200": 12, "b300": 18, "h100": 19, "h200": 18,
-                "mi300x": 9, "mi325x": 9, "mi355x": 9}
+#     | grep -xE 'gb200|gb300|b200|b300|h200|h100|mi300x|mi325x|mi355x' | sort | uniq -c
+import yaml
+POOL_RUNNERS = {pool: len(names) for pool, names in
+                yaml.safe_load(Path("inferencex-e2e/configs/runners.yaml").read_text())["labels"].items()
+                if not pool.startswith("cluster:")}
 DEFAULT_POOL_RUNNERS = 4
 AVG_JOB_MIN = 7  # rough sweep-job median; eval+1k1k ~5min, 8k1k+agentic ~10-15min
 
@@ -221,7 +223,7 @@ out = ['<!doctype html>',
 '  .almost-section .eta { display:inline-block; min-width:56px; color:#3a3; font-weight:600; }',
 '</style></head><body>',
 '<h1>Claude / [Klaud Cold] PR status &mdash; InferenceX</h1>',
-f'<div class="meta">Generated {now}. Source: <code>gh pr view --json statusCheckRollup</code> for every <code>claude/*</code> or <code>[Klaud Cold]</code>-titled open PR. Diagnoses (if any) loaded from <code>/tmp/klaud_pr_diag.json</code>. <strong>ETA</strong> = pool-drain pessimistic estimate (<code>ceil(global_pool_pending / runners) × ~{AVG_JOB_MIN}m/job</code>); GHA dispatch isn\'t guaranteed FIFO and queue position isn\'t exposed (see <a href="https://docs.github.com/en/actions">docs.github.com/en/actions</a>) so this is an upper-bound ordering hint, not a SLA.</div>',
+f'<div class="meta">Generated {now}. Source: <code>gh pr view --json statusCheckRollup</code> for every <code>klaud/*</code>, <code>klaud-cold/*</code>, <code>klaude/*</code> or <code>[Klaud Cold]</code>-titled open PR. Diagnoses (if any) loaded from <code>/tmp/klaud_pr_diag.json</code>. <strong>ETA</strong> = pool-drain pessimistic estimate (<code>ceil(global_pool_pending / runners) × ~{AVG_JOB_MIN}m/job</code>); GHA dispatch isn\'t guaranteed FIFO and queue position isn\'t exposed (see <a href="https://docs.github.com/en/actions">docs.github.com/en/actions</a>) so this is an upper-bound ordering hint, not a SLA.</div>',
 f'<div class="meta">Global pending across all open Klaud/claude sweeps: <strong>{total_global_pending}</strong> jobs &mdash; per-pool: {html.escape(pool_pressure_summary) if pool_pressure_summary else "—"}</div>']
 
 pill_specs = [("READY", "ready"), ("RUNNING", "running"),
@@ -293,4 +295,4 @@ cat > /tmp/klaud_pr_diag.json <<'EOF'
 EOF
 ```
 
-See `KLAUD_DEBUG.md` for the canonical catalog of recurring failure modes to draw diagnoses from.
+See `inferencex-e2e/docs/KLAUD_DEBUG.md` for the canonical catalog of recurring failure modes to draw diagnoses from.

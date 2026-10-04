@@ -82,7 +82,7 @@ on: # zizmor: ignore[concurrency-limits]
                 type: boolean
                 default: false
             all-evals:
-                description: "Expand evaluation selection to every fixed-sequence configuration"
+                description: "Expand eval selection to every fixed-sequence config; eval-only with generate-cli-command, changelog mode keeps throughput unless evals-only"
                 required: false
                 type: boolean
                 default: false
@@ -96,11 +96,6 @@ on: # zizmor: ignore[concurrency-limits]
                 required: false
                 type: boolean
                 default: false
-            pr-labels-json:
-                description: "Labels from the source PR for priority scoring"
-                required: false
-                type: string
-                default: "[]"
     workflow_call:
         secrets:
           INFERENCEX_OFFICIAL_RO_HF_TOKEN:
@@ -184,7 +179,7 @@ on: # zizmor: ignore[concurrency-limits]
                 type: boolean
                 default: false
             all-evals:
-                description: "Expand evaluation selection to every fixed-sequence configuration"
+                description: "Expand eval selection to every fixed-sequence config; eval-only with generate-cli-command, changelog mode keeps throughput unless evals-only"
                 required: false
                 type: boolean
                 default: false
@@ -198,11 +193,9 @@ on: # zizmor: ignore[concurrency-limits]
                 required: false
                 type: boolean
                 default: false
-            pr-labels-json:
-                description: "Labels from the source PR for priority scoring"
-                required: false
-                type: string
-                default: "[]"
+
+env:
+  PYTHONPATH: ${{ github.workspace }}/inferencex-e2e
 
 jobs:
     get-jobs:
@@ -264,17 +257,22 @@ jobs:
             - id: get-jobs
               env:
                   GENERATE_COMMAND: ${{ inputs.generate-cli-command || github.event.inputs.generate-cli-command }}
-                  PR_LABELS: ${{ inputs.pr-labels-json || toJson(github.event.pull_request.labels.*.name) }}
                   CHANGELOG_BASE_REF: ${{ inputs.changelog-base-ref }}
                   CHANGELOG_HEAD_REF: ${{ inputs.changelog-head-ref }}
                   TRIM_CONC: ${{ inputs.trim-conc }}
                   ALL_EVALS: ${{ inputs.all-evals }}
                   EVALS_ONLY: ${{ inputs.evals-only }}
               run: |
+                  if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
+                  MEASURED_ROOT="$PWD"
                   PRIORITY_ROOT="${GITHUB_WORKSPACE}"
                   if [ -d "${GITHUB_WORKSPACE}/.ci-priority" ]; then
                     PRIORITY_ROOT="${GITHUB_WORKSPACE}/.ci-priority"
                   fi
+                  if [[ -f "$PRIORITY_ROOT/inferencex-e2e/configs/runners.yaml" ]]; then
+                    PRIORITY_ROOT="$PRIORITY_ROOT/inferencex-e2e"
+                  fi
+                  env PYTHONPATH="$PRIORITY_ROOT" python3 -P -m infx.workflows.require_launcher "$GITHUB_WORKSPACE"
                   if [ -n "$CHANGELOG_BASE_REF" ] || [ -n "$CHANGELOG_HEAD_REF" ]; then
                     if [ -z "$CHANGELOG_BASE_REF" ] || [ -z "$CHANGELOG_HEAD_REF" ]; then
                       echo "Both changelog-base-ref and changelog-head-ref are required" >&2
@@ -283,8 +281,8 @@ jobs:
                     CMD=(
                       env PYTHONPATH="$PRIORITY_ROOT"
                       uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml
-                      python -P -m infx.matrix.plan
-                      --changelog-file "${GITHUB_WORKSPACE}/perf-changelog.yaml"
+                      python -P -m infx.matrix.revision plan "$MEASURED_ROOT"
+                      --changelog-file "${MEASURED_ROOT}/perf-changelog.yaml"
                       --base-ref "$CHANGELOG_BASE_REF"
                       --head-ref "$CHANGELOG_HEAD_REF"
                     )
@@ -314,9 +312,9 @@ jobs:
                     if [ "$EVALS_ONLY" = "true" ]; then
                       GENERATE_ARGS+=(--evals-only)
                     fi
-                    CONFIG_JSON=$(uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
-                      python "${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py" \
-                      "${GENERATE_ARGS[@]}")
+                    CONFIG_JSON=$(env PYTHONPATH="$PRIORITY_ROOT" \
+                      uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
+                      python -P -m infx.matrix.revision generate "$MEASURED_ROOT" "${GENERATE_ARGS[@]}")
                   fi
                   CONFIG_JSON=$(printf '%s' "$CONFIG_JSON" | env PYTHONPATH="$PRIORITY_ROOT" \
                     uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
@@ -324,11 +322,10 @@ jobs:
                   score_matrix() {
                     local family="$1"
                     env PYTHONPATH="$PRIORITY_ROOT" uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml \
-                      python -P "${PRIORITY_ROOT}/utils/ci_priority.py" \
+                      python -P -m infx.workflows.ci_priority \
                       --policy "${PRIORITY_ROOT}/configs/ci-priority.yaml" \
                       --event-name "${GITHUB_EVENT_NAME}" \
-                      --queue-namespace "${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}:${family}" \
-                      --labels-json "$PR_LABELS"
+                      --queue-namespace "${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}:${family}"
                   }
                   AGENTIC=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if x.get('scenario-type') == 'agentic-coding' and 'prefill' not in x and not x.get('eval-only', False)]))" | score_matrix agentic)
                   AGENTIC_EVAL=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if x.get('scenario-type') == 'agentic-coding' and 'prefill' not in x and x.get('run-eval', False)]))" | score_matrix agentic-eval)
@@ -613,7 +610,7 @@ jobs:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
                   ref: ${{ needs.get-jobs.outputs.tooling-ref }}
-                  fetch-depth: 0
+                  fetch-depth: 1
                   persist-credentials: false
 
             - name: Download results artifacts
@@ -622,12 +619,27 @@ jobs:
                   path: ${{ env.RESULTS_DIR }}
                   pattern: results_*
 
+            - name: Select Python project
+              run: |
+                python_project="$GITHUB_WORKSPACE"
+                if [[ -f "$python_project/inferencex-e2e/pyproject.toml" ]]; then
+                  python_project="$python_project/inferencex-e2e"
+                fi
+                test -f "$python_project/pyproject.toml"
+                echo "INFERENCEX_PYTHON_PROJECT=$python_project" >> "$GITHUB_ENV"
+
             - name: Set up uv
               uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+              with:
+                  cache-dependency-glob: |
+                      pyproject.toml
+                      uv.lock
+                      inferencex-e2e/pyproject.toml
+                      inferencex-e2e/uv.lock
 
             - name: Calculate success rate
               run: >-
-                  uv run --locked --extra workflows
+                  uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked --extra workflows
                   python -m infx.workflows.calc_success_rate "$STATS_FILENAME"
 
             - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

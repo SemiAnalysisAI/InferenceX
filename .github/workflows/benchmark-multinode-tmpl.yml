@@ -34,12 +34,8 @@ on:
         description: "One-shot queue token generated for this job"
         required: true
         type: string
-      skip-queue-pr:
-        description: "Requested skip_queue PR number"
-        required: false
-        type: string
-        default: ''
       conc-list:
+        description: "JSON concurrency list; AgentX throughput requires exactly one value per server deployment"
         required: true
         type: string
       run-eval:
@@ -93,7 +89,7 @@ on:
         required: false
         default: fixed-seq-len
       conc:
-        description: "First concurrency for agentic-coding scenarios; CONC_LIST carries the full batch"
+        description: "AgentX throughput concurrency; must equal the sole value in conc-list"
         type: string
         required: false
         default: ""
@@ -118,6 +114,8 @@ on:
         type: string
 
 env:
+  PYTHONPATH: ${{ github.workspace }}/inferencex-e2e
+  INFERENCEX_E2E_ROOT: ${{ github.workspace }}
   PORT: '8888'
   INFMAX_CONTAINER_WORKSPACE: '/workspace'
   DSV41_MIN_CUDAGRAPH_CAPTURE_SIZE: '1'
@@ -205,39 +203,18 @@ jobs:
         vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
         (
           vars.NODE_SLOT_SCHEDULER_ENABLED == 'true' &&
-          (
-            inputs.skip-queue-pr != '' &&
-            format(
-              '["self-hosted",{0},{1},{2},{3},{4}]',
-              toJSON(inputs.runner),
-              toJSON(format('nodes:{0}', inputs.node-count)),
-              toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
-              toJSON(format('ci-attempt-{0}', github.run_attempt)),
-              toJSON(format('ci-skip-queue-pr-{0}', inputs.skip-queue-pr))
-            ) ||
-            format(
-              '["self-hosted",{0},{1},{2},{3}]',
-              toJSON(inputs.runner),
-              toJSON(format('nodes:{0}', inputs.node-count)),
-              toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
-              toJSON(format('ci-attempt-{0}', github.run_attempt))
-            )
+          format(
+            '["self-hosted",{0},{1},{2},{3}]',
+            toJSON(inputs.runner),
+            toJSON(format('nodes:{0}', inputs.node-count)),
+            toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
+            toJSON(format('ci-attempt-{0}', github.run_attempt))
           ) ||
-          (
-            inputs.skip-queue-pr != '' &&
-            format(
-              '["self-hosted",{0},{1},{2},{3}]',
-              toJSON(inputs.runner),
-              toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
-              toJSON(format('ci-attempt-{0}', github.run_attempt)),
-              toJSON(format('ci-skip-queue-pr-{0}', inputs.skip-queue-pr))
-            ) ||
-            format(
-              '["self-hosted",{0},{1},{2}]',
-              toJSON(inputs.runner),
-              toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
-              toJSON(format('ci-attempt-{0}', github.run_attempt))
-            )
+          format(
+            '["self-hosted",{0},{1},{2}]',
+            toJSON(inputs.runner),
+            toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
+            toJSON(format('ci-attempt-{0}', github.run_attempt))
           )
         ) ||
         format('[{0}]', toJSON(inputs.runner))
@@ -289,49 +266,72 @@ jobs:
               if ! git --git-dir="${gitdir}" rev-parse --verify 'HEAD^{commit}' >/dev/null 2>&1; then
                 rel="${gitdir##*/.git/modules/}"
                 echo "[git-repair] Removing corrupt submodule state: ${rel}"
-                rm -rf "${gitdir}" "${repo_dir:?}/${rel}"
+                rm -rf "${gitdir}" "${repo_dir:?}/${rel}" "${repo_dir:?}/inferencex-e2e/${rel}"
               fi
             done
           fi
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
+          fetch-depth: 1
           ref: ${{ inputs.ref || github.sha }}
           clean: true
           submodules: true
           persist-credentials: false
 
-      - name: Set up uv for result processing
-        if: ${{ !inputs.eval-only }}
+      - name: Checkout result tooling
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .result-tooling
+          # Only inferencex-e2e/ is read from this checkout.
+          sparse-checkout: inferencex-e2e
+          persist-credentials: false
+
+      - name: Set up uv
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           enable-cache: false
 
       - name: Prepare result-processing Python
-        if: ${{ !inputs.eval-only }}
+        env: &uv-setup-env
+          UV_CACHE_DIR: ${{ github.workspace }}/../.infx-uv-cache
+          UV_PYTHON_INSTALL_DIR: ${{ github.workspace }}/../.infx-uv-python
         run: |
-          uv python install --no-bin 3.12
+          uv python install --quiet --no-bin 3.12
           result_python=$(uv python find --system 3.12)
           "$result_python" --version
           echo "INFERENCEX_RESULTS_PYTHON=$result_python" >> "$GITHUB_ENV"
 
+      - name: Prepare launcher Python
+        env: *uv-setup-env
+        run: |
+          launch_venv="$RUNNER_TEMP/infx-launch-venv"
+          uv venv --quiet --python 3.12 "$launch_venv"
+          uv pip install --quiet --exclude-newer PT12H --python "$launch_venv/bin/python" \
+            -r "$GITHUB_WORKSPACE/.result-tooling/inferencex-e2e/pyproject.toml"
+          echo "INFERENCEX_LAUNCH_PYTHON=$launch_venv/bin/python" >> "$GITHUB_ENV"
+
+      - name: Launcher cleanup (pre-run)
+        env:
+          PYTHONPATH: ${{ github.workspace }}/.result-tooling/inferencex-e2e
+        run: &launcher-cleanup |
+          "$INFERENCEX_LAUNCH_PYTHON" -P -m infx.launch cleanup
+
       - name: Launch multi-node job script
         env:
+          VALIDATION_BENCHMARK_LIB: ${{ github.workspace }}/.result-tooling/inferencex-e2e/benchmarks/benchmark_lib.sh
           PREFILL_ADDITIONAL_SETTINGS: ${{ toJSON(fromJSON(inputs.config).prefill.additional-settings) }}
           DECODE_ADDITIONAL_SETTINGS: ${{ toJSON(fromJSON(inputs.config).decode.additional-settings) }}
           RUNNER_NAME: ${{ runner.name }}
           RUNNER_TYPE: ${{ inputs.runner }}
           RESULT_FILENAME_BASE: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_prefill-tp${{ env.PREFILL_TP }}-pp${{ env.PREFILL_PP_SIZE }}-dcp${{ env.PREFILL_DCP_SIZE }}-pcp${{ env.PREFILL_PCP_SIZE }}-ep${{ env.PREFILL_EP }}-dp${{ env.PREFILL_DP_ATTN }}-nw${{ env.PREFILL_NUM_WORKERS }}_decode-tp${{ env.DECODE_TP }}-pp${{ env.DECODE_PP_SIZE }}-dcp${{ env.DECODE_DCP_SIZE }}-pcp${{ env.DECODE_PCP_SIZE }}-ep${{ env.DECODE_EP }}-dp${{ env.DECODE_DP_ATTN }}-nw${{ env.DECODE_NUM_WORKERS }}_disagg-${{ env.DISAGG }}_spec-${{ env.SPEC_DECODING }}_conc${{ join(fromJson(inputs.conc-list), 'x') }}_${{ runner.name }}
         run: |
+          if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
+          export GITHUB_WORKSPACE="$PWD"
+          echo "INFERENCEX_E2E_ROOT=$PWD" >> "$GITHUB_ENV"
           set -x
-          if [[ -f utils/result_filename.py ]]; then
-            RESULT_FILENAME=$(python3 utils/result_filename.py)
-          else
-            # Older measured commits predate the helper; preserve safe identity.
-            RESULT_FILENAME=$(printf '%s\0' "$RESULT_FILENAME_BASE" "$RECIPE_FINGERPRINT" | sha256sum)
-            RESULT_FILENAME="${RESULT_FILENAME%% *}"
-          fi
+          RESULT_FILENAME=$(python3 -m infx.results.result_filename)
           export RESULT_FILENAME
           # Export RESULT_FILENAME early so it's available for artifact uploads even if cancelled
           echo "RESULT_FILENAME=${RESULT_FILENAME}" >> "$GITHUB_ENV"
@@ -339,17 +339,8 @@ jobs:
           eval_artifact_conc="$(python3 -c 'import hashlib,os; print(hashlib.sha256(os.environ["CONC_LIST"].encode()).hexdigest()[:12])')"
           echo "EVAL_ARTIFACT_CONC=${eval_artifact_conc}" >> "$GITHUB_ENV"
 
-          # Historical measured revisions own their configuration in the launchers.
-          if [[ -f benchmarks/runtime_settings.sh ]]; then
-            source benchmarks/runtime_settings.sh
-          fi
-          if [[ -f runners/runtime_settings.sh ]]; then
-            source runners/runtime_settings.sh
-          fi
-          # Historical measured revisions own their configuration in the launchers.
-          if [[ -f benchmarks/multi_node/runtime_settings.sh ]]; then
-            source benchmarks/multi_node/runtime_settings.sh
-          fi
+          source benchmarks/runtime_settings.sh
+          source benchmarks/multi_node/runtime_settings.sh
           # Assign data literally; recipe values must never become shell code.
           settings_json=$(jq -cen \
             --argjson prefill "$PREFILL_ADDITIONAL_SETTINGS" \
@@ -360,13 +351,25 @@ jobs:
           while IFS= read -r -d '' setting; do
             export "$setting"
           done < <(jq -j '.[] + "\u0000"' <<< "$settings_json")
+          # Each AgentX throughput point owns a fresh server deployment.
+          # Fixed-sequence and graded eval jobs retain their batching semantics.
+          if [[ "$IS_AGENTIC" == 1 && "$EVAL_ONLY" != true ]]; then
+            source "$VALIDATION_BENCHMARK_LIB" --validation-only
+            check_env_vars CONC CONC_LIST
+            validate_agentic_concurrency "$CONC"
+            validate_agentic_concurrency "$CONC_LIST"
+            if [[ "$CONC" != "$CONC_LIST" ]]; then
+              echo "ERROR: AgentX CONC must match the single CONC_LIST value" >&2
+              exit 1
+            fi
+          fi
           # Resolve the workflow's documented automatic eval-concurrency selection.
           if [[ -z "$EVAL_CONC" ]]; then
             EVAL_CONC=$(python3 -c 'import os; print(max(map(int, os.environ["CONC_LIST"].split())))')
           fi
           export EVAL_CONC
           export IS_MULTINODE=true
-          bash "./runners/launch_${RUNNER_NAME%%_*}.sh"
+          "$INFERENCEX_LAUNCH_PYTHON" -m infx.launch run
           if [ "${EVAL_ONLY}" = "true" ]; then
             echo "Eval-only mode: skipping benchmark result file check"
             # Verify eval produced results
@@ -407,8 +410,10 @@ jobs:
         if: ${{ always() && env.RESULT_FILENAME != '' && !inputs.eval-only && inputs.scenario-type != 'agentic-coding' }}
         env:
           RUNNER_TYPE: ${{ inputs.runner }}
+          PYTHONPATH: ${{ github.workspace }}/.result-tooling/inferencex-e2e
         run: |
-          source benchmarks/benchmark_lib.sh --validation-only
+          if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
+          source "$PYTHONPATH/benchmarks/benchmark_lib.sh" --validation-only
           check_env_vars INFERENCEX_RESULTS_PYTHON
           # Launcher stamp supplies the producer SHA unless the
           # power-producer-sha input is set as a manual override
@@ -416,54 +421,14 @@ jobs:
             export POWER_PRODUCER_SHA="$(cat power-producer-sha.txt)"
             echo "POWER_PRODUCER_SHA derived from launcher stamp: $POWER_PRODUCER_SHA"
           fi
-          # Older measured refs predate the batch CLI. Import failures in a
-          # present processor are errors, not a reason to downgrade validation.
-          has_batch=$("$INFERENCEX_RESULTS_PYTHON" - <<'PY'
-          import importlib
-          from pathlib import Path
-          if Path('infx/results/fixed_sequence.py').is_file():
-              module = importlib.import_module('infx.results.fixed_sequence')
-              print(int(hasattr(module, 'process_multinode_results')))
-          else:
-              print(0)
-          PY
-          )
-          if [ "$has_batch" = 1 ]; then
-            "$INFERENCEX_RESULTS_PYTHON" utils/process_result.py --all
-          else
-            batch_rc=0
-            observed=()
-            for result_file in "${RESULT_FILENAME}"_*.json; do
-              [ -f "$result_file" ] || continue
-              case "$result_file" in
-                *.pytorch.json|"${RESULT_FILENAME}_gpu_metrics_context.json"|"${RESULT_FILENAME}_gpu_metrics_identity.json") continue ;;
-              esac
-              if [[ "$result_file" =~ _(c|conc|concurrency_)([0-9]+)(_req_rate_[^_]+)?_gpus_([0-9]+)(_ctx_([0-9]+)_gen_([0-9]+))?\.json$ ]]; then
-                observed+=("${BASH_REMATCH[2]}")
-                gpus=${BASH_REMATCH[4]}
-                prefill_gpus=${BASH_REMATCH[6]:-$gpus}
-                decode_gpus=${BASH_REMATCH[7]:-0}
-                RESULT_FILENAME=${result_file%.json} IS_MULTINODE=true PREFILL_GPUS="$prefill_gpus" DECODE_GPUS="$decode_gpus" \
-                  "$INFERENCEX_RESULTS_PYTHON" utils/process_result.py || batch_rc=1
-              else
-                echo "Unrecognized result filename: $result_file" >&2
-                batch_rc=1
-              fi
-            done
-            read -r -a expected <<< "$CONC_LIST"
-            if [[ "$(printf '%s\n' "${observed[@]}" | sort -n)" != "$(printf '%s\n' "${expected[@]}" | sort -n)" ]]; then
-              echo 'Legacy result batch has missing, duplicate or unexpected concurrencies' >&2
-              batch_rc=1
-            fi
-            exit "$batch_rc"
-          fi
+          "$INFERENCEX_RESULTS_PYTHON" -P -m infx.results.fixed_sequence --all
 
       - name: Upload result
         if: ${{ success() && env.RESULT_FILENAME != '' && !inputs.eval-only && inputs.scenario-type != 'agentic-coding' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: bmk_${{ env.RESULT_FILENAME }}
-          path: agg_${{ env.RESULT_FILENAME }}_*.json
+          path: ${{ env.INFERENCEX_E2E_ROOT }}/agg_${{ env.RESULT_FILENAME }}_*.json
 
       - name: Upload power audit bundle
         if: ${{ always() && !inputs.eval-only }}
@@ -471,25 +436,27 @@ jobs:
         with:
           name: power_audit_${{ env.RESULT_FILENAME }}
           path: |
-            ${{ env.RESULT_FILENAME }}_*.json
-            agg_${{ env.RESULT_FILENAME }}_*.json
-            power_validation_${{ env.RESULT_FILENAME }}_*.json
-            LOGS/power/**
-            LOGS/native_power/**
-            result_processing_${{ env.RESULT_FILENAME }}.json
-            LOGS/*/results_*.json
-            LOGS/agentic/**/agentic_power_concurrency_*.json
-            LOGS/agentic/**/agentic_power_timezone_offset.txt
-            LOGS/agentic/**/power_validation.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/${{ env.RESULT_FILENAME }}_*.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/agg_${{ env.RESULT_FILENAME }}_*.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/power_validation_${{ env.RESULT_FILENAME }}_*.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/power/**
+            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/native_power/**
+            ${{ env.INFERENCEX_E2E_ROOT }}/result_processing_${{ env.RESULT_FILENAME }}.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/*/results_*.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/agentic/**/agentic_power_concurrency_*.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/agentic/**/agentic_power_timezone_offset.txt
+            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/agentic/**/power_validation.json
           if-no-files-found: ignore
 
       - name: Upload server logs
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: multinode_server_logs_${{ env.RESULT_FILENAME }}
+          name: multinode_server_logs_${{ env.RESULT_FILENAME }}${{ inputs.eval-only && format('_{0}_{1}', env.EVAL_FRAMEWORK, env.EVAL_SUITE) || '' }}
           # multinode launchers package server logs into this tarball.
-          path: multinode_server_logs.tar.gz
+          path: |
+            ${{ env.INFERENCEX_E2E_ROOT }}/multinode_server_logs.tar.gz
+            ${{ env.INFERENCEX_E2E_ROOT }}/srt-setup.log
           if-no-files-found: ignore
 
       - name: Upload agentic aggregated result
@@ -497,7 +464,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: bmk_agentic_${{ env.RESULT_FILENAME }}
-          path: ${{ env.RESULT_FILENAME }}_conc*.json
+          path: ${{ env.INFERENCEX_E2E_ROOT }}/${{ env.RESULT_FILENAME }}_conc*.json
 
       - name: Upload agentic raw results
         if: ${{ always() && inputs.scenario-type == 'agentic-coding' }}
@@ -505,9 +472,9 @@ jobs:
         with:
           name: agentic_${{ env.RESULT_FILENAME }}
           path: |
-            LOGS/agentic/**
-            !LOGS/agentic/**/aiperf_artifacts/inputs.json
-            !LOGS/agentic/**/aiperf_artifacts/profile_export_raw.jsonl
+            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/agentic/**
+            !${{ env.INFERENCEX_E2E_ROOT }}/LOGS/agentic/**/aiperf_artifacts/inputs.json
+            !${{ env.INFERENCEX_E2E_ROOT }}/LOGS/agentic/**/aiperf_artifacts/profile_export_raw.jsonl
           if-no-files-found: ignore
 
       - name: Upload eval results (if any)
@@ -516,30 +483,36 @@ jobs:
         with:
           name: eval_${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_p${{ env.PREFILL_NUM_WORKERS }}x${{ env.PREFILL_TP }}p${{ env.PREFILL_PP_SIZE }}c${{ env.PREFILL_DCP_SIZE }}k${{ env.PREFILL_PCP_SIZE }}e${{ env.PREFILL_EP }}d${{ env.PREFILL_DP_ATTN }}_d${{ env.DECODE_NUM_WORKERS }}x${{ env.DECODE_TP }}p${{ env.DECODE_PP_SIZE }}c${{ env.DECODE_DCP_SIZE }}k${{ env.DECODE_PCP_SIZE }}e${{ env.DECODE_EP }}d${{ env.DECODE_DP_ATTN }}_g${{ env.DISAGG }}_r${{ env.EVAL_ARTIFACT_RECIPE }}_c${{ env.EVAL_ARTIFACT_CONC }}_kv${{ env.KV_OFFLOADING }}-${{ env.KV_OFFLOAD_BACKEND }}_spec${{ env.SPEC_DECODING }}_${{ env.EVAL_FRAMEWORK }}_${{ env.EVAL_SUITE }}_${{ runner.name }}_${{ github.run_attempt }}
           path: |
-            meta_env.json
-            results*.json
-            *_report.json
-            *_results.jsonl
-            sample*.jsonl
-            agent_preds.json
-            predictions.jsonl
-            swebench_report_*.json
-            *_artifacts.tar.gz
-            *.traj*
+            ${{ env.INFERENCEX_E2E_ROOT }}/meta_env.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/results*.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/*_report.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/*_results.jsonl
+            ${{ env.INFERENCEX_E2E_ROOT }}/sample*.jsonl
+            ${{ env.INFERENCEX_E2E_ROOT }}/agent_preds.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/predictions.jsonl
+            ${{ env.INFERENCEX_E2E_ROOT }}/swebench_report_*.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/*_artifacts.tar.gz
+            ${{ env.INFERENCEX_E2E_ROOT }}/*.traj*
           if-no-files-found: ${{ inputs.eval-only && 'error' || 'ignore' }}
 
       - name: Verify eval scores
         if: ${{ (success() || failure()) && inputs.eval-only }}
+        env:
+          PYTHONPATH: ${{ github.workspace }}/.result-tooling/inferencex-e2e
         run: |
+          if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
+          source "$PYTHONPATH/benchmarks/benchmark_lib.sh" --validation-only
+          check_env_vars INFERENCEX_RESULTS_PYTHON
           expected_concs="${EVAL_CONC}"
           if [[ -z "${expected_concs}" ]]; then
             expected_concs="$(printf '%s\n' "${CONC_LIST}" | tr ' ' '\n' | sort -n | tail -1)"
           fi
-          python3 utils/evals/validate_scores.py --expected-concs "${expected_concs}"
+          "$INFERENCEX_RESULTS_PYTHON" -P -m infx.evals.validate_scores --expected-concs "${expected_concs}"
 
       - name: Cleanup eval outputs (post-upload)
         if: ${{ always() && (inputs.run-eval || inputs.eval-only) }}
         run: |
+          if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
           rm -f meta_env.json || true
           rm -f results*.json || true
           rm -f -- ./*_report.json || true
@@ -551,3 +524,9 @@ jobs:
       - name: Slurm cleanup (post-run)
         if: always()
         run: *slurm-cleanup
+
+      - name: Launcher cleanup (post-run)
+        if: ${{ always() && env.INFERENCEX_LAUNCH_PYTHON != '' }}
+        env:
+          PYTHONPATH: ${{ github.workspace }}/.result-tooling/inferencex-e2e
+        run: *launcher-cleanup

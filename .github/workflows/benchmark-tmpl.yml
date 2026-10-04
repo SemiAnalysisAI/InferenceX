@@ -29,11 +29,6 @@ on:
         description: "One-shot queue token generated for this job"
         required: true
         type: string
-      skip-queue-pr:
-        description: "Requested skip_queue PR number"
-        required: false
-        type: string
-        default: ''
       dp-attn:
         required: true
         type: boolean
@@ -95,6 +90,8 @@ on:
         type: string
         default: ""
 env:
+  PYTHONPATH: ${{ github.workspace }}/inferencex-e2e
+  INFERENCEX_E2E_ROOT: ${{ github.workspace }}
   PORT: '8888'
   INFMAX_CONTAINER_WORKSPACE: '/workspace'
   DSV41_MIN_CUDAGRAPH_CAPTURE_SIZE: '1'
@@ -110,6 +107,7 @@ env:
   HF_HUB_CACHE: '/mnt/hf_hub_cache/'
   EXP_NAME: ${{ fromJSON(inputs.config).exp-name }}
   RECIPE_FINGERPRINT: ${{ fromJSON(inputs.config).recipe-fingerprint || '' }}
+  SRT_RECIPE: ${{ fromJSON(inputs.config).srt-recipe || '' }}
   MODEL: ${{ fromJSON(inputs.config).model }}
   THINKING_MODE: thinking_on
   MODEL_PREFIX: ${{ fromJSON(inputs.config).model-prefix }}
@@ -166,39 +164,18 @@ jobs:
         vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
         (
           vars.NODE_SLOT_SCHEDULER_ENABLED == 'true' &&
-          (
-            inputs.skip-queue-pr != '' &&
-            format(
-              '["self-hosted",{0},{1},{2},{3},{4}]',
-              toJSON(inputs.runner),
-              '"nodes:1"',
-              toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
-              toJSON(format('ci-attempt-{0}', github.run_attempt)),
-              toJSON(format('ci-skip-queue-pr-{0}', inputs.skip-queue-pr))
-            ) ||
-            format(
-              '["self-hosted",{0},{1},{2},{3}]',
-              toJSON(inputs.runner),
-              '"nodes:1"',
-              toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
-              toJSON(format('ci-attempt-{0}', github.run_attempt))
-            )
+          format(
+            '["self-hosted",{0},{1},{2},{3}]',
+            toJSON(inputs.runner),
+            '"nodes:1"',
+            toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
+            toJSON(format('ci-attempt-{0}', github.run_attempt))
           ) ||
-          (
-            inputs.skip-queue-pr != '' &&
-            format(
-              '["self-hosted",{0},{1},{2},{3}]',
-              toJSON(inputs.runner),
-              toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
-              toJSON(format('ci-attempt-{0}', github.run_attempt)),
-              toJSON(format('ci-skip-queue-pr-{0}', inputs.skip-queue-pr))
-            ) ||
-            format(
-              '["self-hosted",{0},{1},{2}]',
-              toJSON(inputs.runner),
-              toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
-              toJSON(format('ci-attempt-{0}', github.run_attempt))
-            )
+          format(
+            '["self-hosted",{0},{1},{2}]',
+            toJSON(inputs.runner),
+            toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
+            toJSON(format('ci-attempt-{0}', github.run_attempt))
           )
         ) ||
         format('[{0}]', toJSON(inputs.runner))
@@ -219,26 +196,16 @@ jobs:
             sudo chown -R "$(id -u):$(id -g)" "$GITHUB_WORKSPACE"
           fi
 
-      - name: Resource cleanup (pre-run)
-        run: &resource-cleanup |
-          # Cleanup Docker resources
-          if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
-            echo "[Docker] Cleaning up resources ..."
-            docker ps -aq | xargs -r docker rm -f
-            docker network prune -f
-            while [ -n "$(docker ps -aq)" ]; do
-              docker ps -a
-              sleep 5
-            done
-          fi
-
-          # Cleanup SLURM resources
+      - name: Slurm cleanup (pre-run)
+        run: &slurm-cleanup |
           if command -v squeue >/dev/null 2>&1; then
-            echo "[Slurm] Cleaning up jobs with name: ${RUNNER_NAME} ..."
-            scancel --name="${RUNNER_NAME}" || true
-            while [ -n "$(squeue --name="${RUNNER_NAME}" --noheader --format='%i')" ]; do
-              squeue --name="${RUNNER_NAME}"
-              sleep 5
+            for job_name in "${RUNNER_NAME}" "inferencex-${RUNNER_NAME}"; do
+              echo "[Slurm] Cleaning up jobs with name: ${job_name} ..."
+              scancel --name="${job_name}" || true
+              while [ -n "$(squeue --name="${job_name}" --noheader --format='%i')" ]; do
+                squeue --name="${job_name}"
+                sleep 5
+              done
             done
           fi
 
@@ -262,32 +229,57 @@ jobs:
               if ! git --git-dir="${gitdir}" rev-parse --verify 'HEAD^{commit}' >/dev/null 2>&1; then
                 rel="${gitdir##*/.git/modules/}"
                 echo "[git-repair] Removing corrupt submodule state: ${rel}"
-                rm -rf "${gitdir}" "${repo_dir:?}/${rel}"
+                rm -rf "${gitdir}" "${repo_dir:?}/${rel}" "${repo_dir:?}/inferencex-e2e/${rel}"
               fi
             done
           fi
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
+          fetch-depth: 1
           ref: ${{ inputs.ref || github.sha }}
           clean: true
           submodules: true
           persist-credentials: false
 
-      - name: Set up uv for result processing
-        if: ${{ !inputs.eval-only }}
+      - name: Checkout result tooling
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .result-tooling
+          # Only inferencex-e2e/ is read from this checkout.
+          sparse-checkout: inferencex-e2e
+          persist-credentials: false
+
+      - name: Set up uv
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           enable-cache: false
 
       - name: Prepare result-processing Python
-        if: ${{ !inputs.eval-only }}
+        env: &uv-setup-env
+          UV_CACHE_DIR: ${{ github.workspace }}/../.infx-uv-cache
+          UV_PYTHON_INSTALL_DIR: ${{ github.workspace }}/../.infx-uv-python
         run: |
-          uv python install --no-bin 3.12
+          uv python install --quiet --no-bin 3.12
           result_python=$(uv python find --system 3.12)
           "$result_python" --version
           echo "INFERENCEX_RESULTS_PYTHON=$result_python" >> "$GITHUB_ENV"
+
+      - name: Prepare launcher Python
+        env: *uv-setup-env
+        run: |
+          launch_venv="$RUNNER_TEMP/infx-launch-venv"
+          uv venv --quiet --python 3.12 "$launch_venv"
+          uv pip install --quiet --exclude-newer PT12H --python "$launch_venv/bin/python" \
+            -r "$GITHUB_WORKSPACE/.result-tooling/inferencex-e2e/pyproject.toml"
+          echo "INFERENCEX_LAUNCH_PYTHON=$launch_venv/bin/python" >> "$GITHUB_ENV"
+
+      - name: Launcher cleanup (pre-run)
+        env:
+          PYTHONPATH: ${{ github.workspace }}/.result-tooling/inferencex-e2e
+        run: &launcher-cleanup |
+          "$INFERENCEX_LAUNCH_PYTHON" -P -m infx.launch cleanup
 
       - name: Launch job script
         env:
@@ -298,13 +290,10 @@ jobs:
           # We'll publish a single combined eval table in the collection job instead.
           GITHUB_STEP_SUMMARY: ''
         run: |
-          if [[ -f utils/result_filename.py ]]; then
-            RESULT_FILENAME=$(python3 utils/result_filename.py)
-          else
-            # Older measured commits predate the helper; preserve safe identity.
-            RESULT_FILENAME=$(printf '%s\0' "$RESULT_FILENAME_BASE" "$RECIPE_FINGERPRINT" | sha256sum)
-            RESULT_FILENAME="${RESULT_FILENAME%% *}"
-          fi
+          if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
+          export GITHUB_WORKSPACE="$PWD"
+          echo "INFERENCEX_E2E_ROOT=$PWD" >> "$GITHUB_ENV"
+          RESULT_FILENAME=$(python3 -m infx.results.result_filename)
           export RESULT_FILENAME
           export GPU_COUNT=$((TP * PP_SIZE * PCP_SIZE))
           echo "GPU_COUNT=${GPU_COUNT}" >> "$GITHUB_ENV"
@@ -312,14 +301,8 @@ jobs:
           # Export RESULT_FILENAME early so it's available for artifact uploads even if cancelled
           echo "RESULT_FILENAME=${RESULT_FILENAME}" >> "$GITHUB_ENV"
 
-          # Historical measured revisions own their configuration in the launchers.
-          if [[ -f benchmarks/runtime_settings.sh ]]; then
-            source benchmarks/runtime_settings.sh
-          fi
-          if [[ -f runners/runtime_settings.sh ]]; then
-            source runners/runtime_settings.sh
-          fi
-          bash "./runners/launch_${RUNNER_NAME%%_*}.sh"
+          source benchmarks/runtime_settings.sh
+          "$INFERENCEX_LAUNCH_PYTHON" -m infx.launch run
 
           if [ "${EVAL_ONLY}" = "true" ]; then
             echo "Eval-only mode: skipping benchmark result file check"
@@ -343,40 +326,48 @@ jobs:
               echo "Run failed: Benchmark result $RESULT_FILENAME.json not found." >&2
               exit 1
             fi
-
-            if [ "${SCENARIO_TYPE}" = "agentic-coding" ]; then
-              python3 -m utils.agentic.validation.validate_agentic_result \
-                results/aiperf_artifacts \
-                --failed-request-threshold "$AIPERF_FAILED_REQUEST_THRESHOLD"
-            fi
           fi
+
+      - name: Validate agentic result
+        if: ${{ !inputs.eval-only && inputs.scenario-type == 'agentic-coding' }}
+        env:
+          PYTHONPATH: ${{ github.workspace }}/.result-tooling/inferencex-e2e
+        run: |
+          if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
+          source "$PYTHONPATH/benchmarks/benchmark_lib.sh" --validation-only
+          check_env_vars INFERENCEX_RESULTS_PYTHON AIPERF_FAILED_REQUEST_THRESHOLD
+          "$INFERENCEX_RESULTS_PYTHON" -P -m infx.results.agentic.validate_agentic_result \
+            results/aiperf_artifacts \
+            --failed-request-threshold "$AIPERF_FAILED_REQUEST_THRESHOLD"
 
       - name: Process result
         if: ${{ always() && env.RESULT_FILENAME != '' && !inputs.eval-only && inputs.scenario-type != 'agentic-coding' }}
         env:
           RUNNER_TYPE: ${{ inputs.runner }}
+          PYTHONPATH: ${{ github.workspace }}/.result-tooling/inferencex-e2e
         run: |
-          source benchmarks/benchmark_lib.sh --validation-only
+          if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
+          source "$PYTHONPATH/benchmarks/benchmark_lib.sh" --validation-only
           check_env_vars INFERENCEX_RESULTS_PYTHON
           if [ ! -f "$RESULT_FILENAME.json" ]; then
             echo "no raw result to process: $RESULT_FILENAME.json" >&2
             exit 1
           fi
-          "$INFERENCEX_RESULTS_PYTHON" utils/process_result.py
+          "$INFERENCEX_RESULTS_PYTHON" -P -m infx.results.fixed_sequence
 
       - name: Upload result
         if: ${{ success() && env.RESULT_FILENAME != '' && !inputs.eval-only && inputs.scenario-type != 'agentic-coding' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: bmk_${{ env.RESULT_FILENAME }}
-          path: agg_${{ env.RESULT_FILENAME }}.json
+          path: ${{ env.INFERENCEX_E2E_ROOT }}/agg_${{ env.RESULT_FILENAME }}.json
 
       - name: Upload agentic aggregated result
         if: ${{ always() && inputs.scenario-type == 'agentic-coding' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: bmk_agentic_${{ env.RESULT_FILENAME }}
-          path: ${{ env.RESULT_FILENAME }}.json
+          path: ${{ env.INFERENCEX_E2E_ROOT }}/${{ env.RESULT_FILENAME }}.json
 
       - name: Upload agentic raw results
         if: ${{ always() && inputs.scenario-type == 'agentic-coding' }}
@@ -384,38 +375,42 @@ jobs:
         with:
           name: agentic_${{ env.RESULT_FILENAME }}
           path: |
-            results/**
-            !results/aiperf_artifacts/inputs.json
-            !results/aiperf_artifacts/profile_export_raw.jsonl
+            ${{ env.INFERENCEX_E2E_ROOT }}/results/**
+            !${{ env.INFERENCEX_E2E_ROOT }}/results/aiperf_artifacts/inputs.json
+            !${{ env.INFERENCEX_E2E_ROOT }}/results/aiperf_artifacts/profile_export_raw.jsonl
           if-no-files-found: ignore
 
       - name: Upload server logs
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: ${{ inputs.eval-only && 'eval_server_logs_' || 'server_logs_' }}${{ env.RESULT_FILENAME }}
+          name: ${{ inputs.eval-only && 'eval_server_logs_' || 'server_logs_' }}${{ env.RESULT_FILENAME }}${{ inputs.eval-only && format('_{0}_{1}', env.EVAL_FRAMEWORK, env.EVAL_SUITE) || '' }}
           # fixed-seq writes server.log at root; agentic writes logs under results/.
           path: |
-            server.log
-            results/*.log
-            results/*_config.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/server.log
+            ${{ env.INFERENCEX_E2E_ROOT }}/results/*.log
+            ${{ env.INFERENCEX_E2E_ROOT }}/results/*_config.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/srt-single-node-logs.tar.gz
+            ${{ env.INFERENCEX_E2E_ROOT }}/srt-single-node-submission.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/srt-slurm-sha.txt
+            ${{ env.INFERENCEX_E2E_ROOT }}/srt-setup.log
           if-no-files-found: ignore
 
       - name: Upload GPU metrics
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: ${{ inputs.eval-only && 'eval_gpu_metrics_' || 'gpu_metrics_' }}${{ env.RESULT_FILENAME }}
+          name: ${{ inputs.eval-only && 'eval_gpu_metrics_' || 'gpu_metrics_' }}${{ env.RESULT_FILENAME }}${{ inputs.eval-only && format('_{0}_{1}', env.EVAL_FRAMEWORK, env.EVAL_SUITE) || '' }}
           path: |
-            gpu_metrics.csv
-            gpu_metrics*_context.json
-            gpu_metrics_energy_start.csv
-            gpu_metrics_energy_end.csv
-            gpu_metrics_identity.json
-            gpu_metrics_identity.csv
-            results/gpu_metrics*.csv
-            results/gpu_metrics*_context.json
-            results/gpu_metrics_identity.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/gpu_metrics.csv
+            ${{ env.INFERENCEX_E2E_ROOT }}/gpu_metrics*_context.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/gpu_metrics_energy_start.csv
+            ${{ env.INFERENCEX_E2E_ROOT }}/gpu_metrics_energy_end.csv
+            ${{ env.INFERENCEX_E2E_ROOT }}/gpu_metrics_identity.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/gpu_metrics_identity.csv
+            ${{ env.INFERENCEX_E2E_ROOT }}/results/gpu_metrics*.csv
+            ${{ env.INFERENCEX_E2E_ROOT }}/results/gpu_metrics*_context.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/results/gpu_metrics_identity.json
           if-no-files-found: ignore
 
       - name: Upload power audit bundle
@@ -424,21 +419,21 @@ jobs:
         with:
           name: power_audit_${{ env.RESULT_FILENAME }}
           path: |
-            ${{ env.RESULT_FILENAME }}.json
-            agg_${{ env.RESULT_FILENAME }}.json
-            gpu_metrics.csv
-            gpu_metrics*_context.json
-            gpu_metrics_energy_start.csv
-            gpu_metrics_energy_end.csv
-            gpu_metrics_identity.json
-            gpu_metrics_identity.csv
-            power_validation_${{ env.RESULT_FILENAME }}.json
-            results/gpu_metrics*.csv
-            results/gpu_metrics*_context.json
-            results/gpu_metrics_identity.json
-            results/agentic_power_window.json
-            results/agentic_power_timezone_offset.txt
-            results/power_validation.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/${{ env.RESULT_FILENAME }}.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/agg_${{ env.RESULT_FILENAME }}.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/gpu_metrics.csv
+            ${{ env.INFERENCEX_E2E_ROOT }}/gpu_metrics*_context.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/gpu_metrics_energy_start.csv
+            ${{ env.INFERENCEX_E2E_ROOT }}/gpu_metrics_energy_end.csv
+            ${{ env.INFERENCEX_E2E_ROOT }}/gpu_metrics_identity.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/gpu_metrics_identity.csv
+            ${{ env.INFERENCEX_E2E_ROOT }}/power_validation_${{ env.RESULT_FILENAME }}.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/results/gpu_metrics*.csv
+            ${{ env.INFERENCEX_E2E_ROOT }}/results/gpu_metrics*_context.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/results/gpu_metrics_identity.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/results/agentic_power_window.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/results/agentic_power_timezone_offset.txt
+            ${{ env.INFERENCEX_E2E_ROOT }}/results/power_validation.json
           if-no-files-found: ignore
 
       - name: Upload eval results (if any)
@@ -447,25 +442,32 @@ jobs:
         with:
           name: eval_${{ env.RESULT_FILENAME }}_${{ env.EVAL_FRAMEWORK }}_${{ env.EVAL_SUITE }}_${{ github.run_attempt }}
           path: |
-            meta_env.json
-            results*.json
-            *_report.json
-            *_results.jsonl
-            *_artifacts.tar.gz
-            sample*.jsonl
-            agent_preds.json
-            predictions.jsonl
-            swebench_report_*.json
-            *.traj*
+            ${{ env.INFERENCEX_E2E_ROOT }}/meta_env.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/results*.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/*_report.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/*_results.jsonl
+            ${{ env.INFERENCEX_E2E_ROOT }}/*_artifacts.tar.gz
+            ${{ env.INFERENCEX_E2E_ROOT }}/sample*.jsonl
+            ${{ env.INFERENCEX_E2E_ROOT }}/agent_preds.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/predictions.jsonl
+            ${{ env.INFERENCEX_E2E_ROOT }}/swebench_report_*.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/*.traj*
           if-no-files-found: ${{ inputs.eval-only && 'error' || 'ignore' }}
 
       - name: Verify eval scores
         if: ${{ (success() || failure()) && inputs.eval-only }}
-        run: python3 utils/evals/validate_scores.py
+        env:
+          PYTHONPATH: ${{ github.workspace }}/.result-tooling/inferencex-e2e
+        run: |
+          if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
+          source "$PYTHONPATH/benchmarks/benchmark_lib.sh" --validation-only
+          check_env_vars INFERENCEX_RESULTS_PYTHON
+          "$INFERENCEX_RESULTS_PYTHON" -P -m infx.evals.validate_scores
 
       - name: Cleanup eval outputs (post-upload)
         if: ${{ always() && (env.RUN_EVAL == 'true' || inputs.eval-only) }}
         run: |
+          if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
           rm -f meta_env.json || true
           # Remove any eval results JSONs that were moved into workspace
           rm -f results*.json || true
@@ -478,10 +480,17 @@ jobs:
       - name: Repair root-owned artifacts (post-run)
         if: ${{ always() && inputs.runner == 'cluster:mi355x-amds' }}
         run: |
+          if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
           if [[ -d "$GITHUB_WORKSPACE" ]]; then
             sudo chown -R "$(id -u):$(id -g)" "$GITHUB_WORKSPACE"
           fi
 
-      - name: Resource cleanup (post-run)
+      - name: Slurm cleanup (post-run)
         if: always()
-        run: *resource-cleanup
+        run: *slurm-cleanup
+
+      - name: Launcher cleanup (post-run)
+        if: ${{ always() && env.INFERENCEX_LAUNCH_PYTHON != '' }}
+        env:
+          PYTHONPATH: ${{ github.workspace }}/.result-tooling/inferencex-e2e
+        run: *launcher-cleanup
