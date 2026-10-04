@@ -134,9 +134,16 @@ caused the warmup failure and prevented profiling. All 3,605 retained records
 are warmup; eight are InvalidInferenceResultError classifications and one is the
 terminal ClientOSError. The server log contains no EngineDead, CUDA OOM,
 traceback, or error signature. Treat c492 as a local warmup-feasibility failure,
-not a performance result. The next adaptive NVMe-only point is c490, the midpoint
-between completed c488 and failed c492, with the same model, engine, TP4 layout,
-4 TiB NVMe budget, AgentX corpus, canonical warmup, and 3,600-second profile.
+not a performance result. The c490 NVMe-only midpoint completed all 5,423 warmup
+requests after 24,686.31 seconds and retained 1,178 successful profiling responses,
+but the fixed Slurm allocation expired seven seconds before the nominal profiling
+send deadline. AIPerf finalized its raw request records and passed 100% latency
+coverage, while aggregate export was interrupted and strict power replay failed
+with `sampling_gap_exceeded`. Treat c490 as qualified near-complete request evidence
+and a local canonical-protocol feasibility failure under the current execution
+budget, not a complete performance result. The next adaptive NVMe-only point is
+c489, between completed c488 and infeasible c490, with the same model, engine, TP4
+layout, 4 TiB NVMe budget, AgentX corpus, canonical warmup, and 3,600-second profile.
 
 The combined tier uses a different connector and storage policy. The pinned FS
 tier has no bounded LRU capacity setting: the 2 TiB value is an abort guard, not an
@@ -161,7 +168,7 @@ Inspect recorded corpus identity, full commands and actual allocated KV capacity
 before declaring a pair matched.
 
 Start with a matched four-arm probe at concurrency 16. Then build full curves for
-all four arms. Initial curve points are 1, 4, 8, 16, 32, 64, 128, 256, 320, 384, 448, 480, 488, 490, 492, 496, 512, 1,024,
+all four arms. Initial curve points are 1, 4, 8, 16, 32, 64, 128, 256, 320, 384, 448, 480, 488, 489, 490, 492, 496, 512, 1,024,
 4,096, 8,192 and 16,384. Add intermediate positive integers near observed changes, and
 repeat both sides of a candidate crossover on different nodes.
 Keep the maximum at 16,384. Failure or insufficient completed samples is a
