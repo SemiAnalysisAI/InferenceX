@@ -5,7 +5,7 @@ base:
   name: minimaxm3-fp8-mi300x-vllm-agentic
   model:
     path: hf:MiniMaxAI/MiniMax-M3-MXFP8
-    container: vllm/vllm-openai-rocm:v0.30.0
+    container: vllm/vllm-openai-rocm:v0.31.0@sha256:749f6f3f944f12af49966ac523c1f8573e4b229594b541954bd5f879b4496b1f
     precision: fp8
   resources:
     gpu_type: mi300x
