@@ -9317,4 +9317,4 @@
     - agentic-coding
   description:
     - "Enable strict measured power (require-power) for the active Kimi-K3 MI355X AgentX configs. ATOM keeps concs [1, 4, 14, 16, 48, 56, 72]; vLLM keeps concs [1, 4, 8, 10, 12, 14, 44, 48, 70]. Images, topology, and runtime settings are unchanged."
-  pr-link: XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3715
