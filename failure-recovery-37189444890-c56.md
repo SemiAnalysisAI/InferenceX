@@ -51,4 +51,4 @@ Smallest supported knob only:
 
 ## New tip
 
-(filled after push)
+`39259bb2c629328c2fe10b49e0ba7b7a70d1357c` — `override_c56` `max-num-seqs` 48→32; gathers remain gated.
