@@ -1,0 +1,159 @@
+diff --git a/src/srtctl/core/slurm.py b/src/srtctl/core/slurm.py
+index 1aaa4665..89e16594 100644
+--- a/src/srtctl/core/slurm.py
++++ b/src/srtctl/core/slurm.py
+@@ -19,7 +19,7 @@ import subprocess
+ from collections.abc import Sequence
+ from pathlib import Path
+ 
+-from .ip_utils import get_node_ip
++from .ip_utils import get_local_ip, get_node_ip
+ 
+ logger = logging.getLogger(__name__)
+ 
+@@ -102,46 +102,75 @@ def get_slurm_het_nodelists() -> list[list[str]] | None:
+ # ============================================================================
+ 
+ 
++def _is_loopback_ip(ip: str) -> bool:
++    """True for IPv4 loopback, including Ubuntu's 127.0.1.1 hostname alias."""
++    return ip.startswith("127.")
++
++
++def _hostname_keys(hostname: str) -> set[str]:
++    """Short and FQDN spellings of a hostname, for local-node comparison."""
++    name = hostname.strip().lower()
++    if not name:
++        return set()
++    return {name, name.split(".", 1)[0]}
++
++
++def _is_local_hostname(hostname: str) -> bool:
++    """True when ``hostname`` names this process's node."""
++    local_names = (
++        socket.gethostname(),
++        socket.getfqdn(),
++        os.environ.get("SLURMD_NODENAME", ""),
++        os.environ.get("HOSTNAME", ""),
++    )
++    local_keys: set[str] = set()
++    for name in local_names:
++        local_keys |= _hostname_keys(name)
++    return bool(_hostname_keys(hostname) & local_keys)
++
++
+ def get_hostname_ip(hostname: str, network_interface: str | None = None) -> str:
+-    """Resolve hostname to routable IP address.
++    """Resolve hostname to a routable IP address.
+ 
+-    Uses multiple resolution strategies:
+-    1. If inside a SLURM job, use srun to get the real IP from the target node
+-    2. Fall back to socket.gethostbyname() (may return loopback on some systems)
++    Inside a SLURM job, query the target node with srun. If that fails and the
++    hostname is this node, use get_local_ip (ip route / hostname -I). DNS via
++    socket.gethostbyname is last and is ignored when it returns loopback:
++    Ubuntu /etc/hosts often maps the node's own name to 127.0.1.1, which peers
++    cannot use as a torch TCPStore address.
+ 
+     Args:
+         hostname: Node hostname to resolve
+         network_interface: Optional network interface to prefer
+ 
+     Returns:
+-        IP address as string
++        Routable IP address as string
++
++    Raises:
++        RuntimeError: If every strategy yields no address or only loopback
+     """
+-    # If we're inside a SLURM allocation, use srun-based resolution
+-    # This gets the actual routable IP from the target node
+     slurm_job_id = get_slurm_job_id()
+     if slurm_job_id:
+         ip = get_node_ip(hostname, slurm_job_id, network_interface)
+-        if ip:
++        if ip and not _is_loopback_ip(ip):
+             return ip
+         logger.warning(
+-            "srun-based IP resolution failed for %s, falling back to socket resolution",
++            "srun-based IP resolution failed for %s, trying local/socket fallbacks",
+             hostname,
+         )
+ 
+-    # Fallback to socket resolution
++    if _is_local_hostname(hostname):
++        ip = get_local_ip(network_interface)
++        if ip and not _is_loopback_ip(ip):
++            return ip
++
+     try:
+         ip = socket.gethostbyname(hostname)
+-        # Warn if we got a loopback address
+-        if ip.startswith("127."):
+-            logger.warning(
+-                "socket.gethostbyname returned loopback %s for %s - this may cause cross-node issues",
+-                ip,
+-                hostname,
+-            )
+-        return ip
+     except socket.gaierror:
+-        # Return hostname as-is (may be IP already)
+-        return hostname
++        ip = ""
++    if ip and not _is_loopback_ip(ip):
++        return ip
++
++    raise RuntimeError(f"Could not resolve a routable IP for {hostname}; refusing loopback")
+ 
+ 
+ def get_node_ips(
+diff --git a/tests/test_ip_utils.py b/tests/test_ip_utils.py
+index e3b73c78..a1853e61 100644
+--- a/tests/test_ip_utils.py
++++ b/tests/test_ip_utils.py
+@@ -7,7 +7,10 @@ import os
+ from pathlib import Path
+ from unittest.mock import patch
+ 
++import pytest
++
+ from srtctl.core.ip_utils import get_node_ip
++from srtctl.core.slurm import get_hostname_ip
+ 
+ 
+ def test_get_node_ip_ignores_srun_step_created_output(tmp_path, monkeypatch):
+@@ -58,3 +61,34 @@ def test_runtime_resolves_control_plane_ips_on_cluster_interface(tmp_path):
+     assert resolve.call_args_list[0].args == ("node-a", "fabric0")
+     assert resolve.call_args_list[1].args == ("node-b", "fabric0")
+     assert (runtime.head_node_ip, runtime.infra_node_ip) == ("10.0.0.1", "10.0.0.2")
++
++
++def test_get_hostname_ip_uses_local_ip_when_srun_fails_on_this_node(monkeypatch):
++    """After get_node_ip fails, a local hostname must use get_local_ip, not 127.0.1.1."""
++    monkeypatch.setattr("srtctl.core.slurm.get_slurm_job_id", lambda: "36486")
++    monkeypatch.setattr("srtctl.core.slurm.get_node_ip", lambda *args, **kwargs: None)
++    monkeypatch.setattr("srtctl.core.slurm.get_local_ip", lambda iface=None: "10.3.10.70")
++    monkeypatch.setattr("socket.gethostname", lambda: "im-gb300-r03-c014")
++    monkeypatch.setattr("socket.getfqdn", lambda: "im-gb300-r03-c014.gb300.internal")
++    monkeypatch.setattr("socket.gethostbyname", lambda host: "127.0.1.1")
++    monkeypatch.delenv("SLURMD_NODENAME", raising=False)
++    monkeypatch.delenv("HOSTNAME", raising=False)
++
++    ip = get_hostname_ip("im-gb300-r03-c014.gb300.internal", network_interface="")
++
++    assert ip == "10.3.10.70"
++
++
++def test_get_hostname_ip_refuses_loopback_when_srun_and_dns_fail(monkeypatch):
++    """A remote name that only resolves to 127.0.1.1 must fail, not become --master-addr."""
++    monkeypatch.setattr("srtctl.core.slurm.get_slurm_job_id", lambda: "36486")
++    monkeypatch.setattr("srtctl.core.slurm.get_node_ip", lambda *args, **kwargs: None)
++    monkeypatch.setattr("srtctl.core.slurm.get_local_ip", lambda iface=None: "10.3.10.70")
++    monkeypatch.setattr("socket.gethostname", lambda: "im-gb300-r03-c014")
++    monkeypatch.setattr("socket.getfqdn", lambda: "im-gb300-r03-c014.gb300.internal")
++    monkeypatch.setattr("socket.gethostbyname", lambda host: "127.0.1.1")
++    monkeypatch.delenv("SLURMD_NODENAME", raising=False)
++    monkeypatch.delenv("HOSTNAME", raising=False)
++
++    with pytest.raises(RuntimeError, match="refusing loopback"):
++        get_hostname_ip("im-gb300-r03-c015")
