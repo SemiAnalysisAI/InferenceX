@@ -28,6 +28,10 @@ roles:
     gpus: 8
     env:
       TILERT_ROLE: prefill
+      # The prefill image sets MOONCAKE_DISABLE_HIP_DMABUF=1, so Mooncake falls back to
+      # plain ibv_reg_mr on the 12.54 GB VRAM staging buffer and the ionic HCAs reject
+      # it with EINVAL. "0" re-enables the dmabuf registration path post2 used.
+      MOONCAKE_DISABLE_HIP_DMABUF: "0"
       VLLM_ROCM_USE_AITER: "1"
       VLLM_ROCM_USE_AITER_MOE: "1"
       VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS: "1"
