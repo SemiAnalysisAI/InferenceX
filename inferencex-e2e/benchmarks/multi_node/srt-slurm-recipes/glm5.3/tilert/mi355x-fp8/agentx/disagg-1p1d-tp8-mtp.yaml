@@ -45,6 +45,10 @@ roles:
       trust-remote-code: true
       return-tokens-as-token-ids: true
       gpu-memory-utilization: 0.85
+      # vLLM sizes KV to fill the 0.85 budget before TileRT allocates its 12.54 GiB
+      # staging buffer, and ATOM leaves the 5.3 GiB of CUDA graphs out of the profile,
+      # so the sampler warmup OOMs. 100 GiB is ~1.14M tokens at 93.9 KB/token.
+      kv-cache-memory: 107374182400
       kv-cache-dtype: bfloat16
       block-size: 64
       async-scheduling: true
