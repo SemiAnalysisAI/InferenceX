@@ -147,8 +147,8 @@ base:
       KV_OFFLOADING: dram
       TOTAL_CPU_DRAM_GB: '2249'
 
-# One variant per point. Admission is 2x CONC through CONC 8; CONC 16/24/32/48
-# use 1x CONC; c40 caps at 32; c56 caps at 48; c70 caps at 32. Tip ebc4eb499 c16 (run 37134266476,
+# One variant per point. Admission is 2x CONC through CONC 8; CONC 16/24/32
+# use 1x CONC; c40/c48/c70 cap at 32; c56 caps at 48. Tip ebc4eb499 c16 (run 37134266476,
 # Slurm 7062) under 2x=32 packed GPU KV to ~98–99.7% during AgentX warmup
 # (Running: 3, Waiting: 7, Deferred: 7 at 17:44:47) then hung PyNCCL
 # _ALLGATHER_BASE 600s (SeqNum=89905, last started work: -1, PG ID 3) →
@@ -162,6 +162,10 @@ base:
 # 11–34) then hung mid-profile in PyNCCL kv_gather _ALLGATHER_BASE
 # (dcp.py:1413, SeqNum=345118, last started work: -1) → DistBackendError /
 # worker_crash:8 / ProfileAborted (94/932 = 10.086%); cap c40 at 32. Tip
+# 767f0b3b2 c48 (run 37173109032, Slurm 7147) under 1x=48 packed GPU KV to
+# 100.0% then hung mid-profile in PyNCCL kv_gather _ALLGATHER_BASE
+# (dcp.py:1413, SeqNum=334427, last started work: -1) → DistBackendError /
+# worker_crash:8 / ProfileAborted (50/499 = 10.0%); cap c48 at 32. Tip
 # 031de17bf c56 (Slurm 6848) with A2A/Q/KV all direct,
 # util 0.85, and max-num-seqs=112 packed GPU KV to ~99.7% (Running: 1,
 # Waiting: 12, Deferred: 12) then hung workers for the full
@@ -302,9 +306,12 @@ override_c48:
   roles:
     agg:
       args:
-        max-num-seqs: 48
+        # Tip 767f0b3b2 c48 (Slurm 7147) under 1x=48 packed GPU KV to 100.0%
+        # then hung mid-profile in PyNCCL kv_gather _ALLGATHER_BASE 600s
+        # (dcp.py:1413, SeqNum=334427, last started work: -1). Cap at 32.
+        max-num-seqs: 32
         gpu-memory-utilization: 0.85
-        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,64,128,256,512,1024,2048,4096,8192]}'
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,64,128,256,512,1024,2048,4096,8192]}'
   benchmark:
     env:
       CONC: '48'
