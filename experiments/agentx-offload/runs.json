@@ -4892,27 +4892,50 @@
         "vllm_command.txt": "f5ca5b6979719cca177bbddbfd75a5eb90d9ec7460727813bcad842a2a8874af",
         "replayed_power_validation.json": "d38fa6bf087703cfb427a9ae25eacb725e25291120e328d3b094b06ccc1ba833"
       }
+    },
+    {
+      "run_id": 37236791824,
+      "url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37236791824",
+      "arm": "nvme",
+      "concurrency": 489,
+      "repeat": 1,
+      "attempt": 1,
+      "head_sha": "21a2ff6771475ac54be9e50d65fe0c245bc9f526",
+      "status": "in_progress",
+      "workflow_name": "offload-v1-nvme4tib-c489-r1-branchwf-20261004",
+      "dispatched_at": "2026-10-04T21:36:40Z",
+      "started_at": "2026-10-04T21:37:37Z",
+      "job_id": 111537431029,
+      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37236791824/job/111537431029",
+      "runner": "b200-nscale-slurm_00",
+      "performance_result": false,
+      "phase": "admitted to B200 runner; launch job script active before observed Slurm allocation",
+      "dispatch_evidence": "Focused experiment tests passed 26/26 and matrix-generation tests passed 331/331. The exact generator preview resolved MiniMax-M3 NVFP4, vLLM TP4, canonical AgentX c489, 3,600-second profiling, kv-offloading=nvme with vllm-simple, and zero host DRAM. A fresh cluster-wide inventory immediately before dispatch found zero queued or in-progress cluster:b200-nscale jobs and no active-or-queued study workflow. The generated job carries cluster:b200-nscale and nodes:1 and was admitted to b200-nscale-slurm_00."
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894,36796500128,36879140816,37027095833",
-  "status": "c490 completed canonical warmup and retained 1,178 near-complete profiling responses, but the fixed Slurm allocation expired seven seconds before the nominal profiling send deadline. Aggregate export and strict power validation did not complete, so c490 is a local canonical-protocol feasibility failure. c489 is prepared as the next midpoint between completed c488 and infeasible c490.",
+  "status": "Canonical 4 TiB HBM+NVMe c489 run 37236791824 is the single active B200 study workflow. It was dispatched from 21a2ff677 after an empty cluster-wide B200 inventory and admitted to b200-nscale-slurm_00; Slurm allocation has not yet been observed.",
   "last_capacity_check": {
-    "checked_at": "2026-10-04T01:27:13Z",
-    "active_study_run_ids": [],
+    "checked_at": "2026-10-04T21:36:40Z",
+    "active_study_run_ids": [
+      37236791824
+    ],
     "pending_study_run_ids": [],
     "dispatch_allowed": false,
-    "b200_priority_jobs_queued": null,
-    "b200_priority_jobs_in_progress": null,
-    "b200_active_or_queued_run_ids": [],
-    "target_node": "im-b200-c001",
-    "target_node_state": "c490 exact scratch independently confirmed absent; refresh cluster inventory before c489 dispatch",
+    "b200_priority_jobs_queued": 0,
+    "b200_priority_jobs_in_progress": 1,
+    "b200_active_or_queued_run_ids": [
+      37236791824
+    ],
+    "target_node": null,
+    "target_node_state": "runner admitted; Slurm allocation and compute-node placement not yet observed",
     "observed_free_bytes": null,
-    "reason": "c490 is terminal and exact scratch is absent. Validate and commit c489, then refresh the cluster-wide B200 queue before dispatch."
+    "reason": "c489 is the single active B200 study workflow. Dispatch nothing else while it remains active."
   },
   "next_dispatch": {
-    "arm": "nvme",
-    "concurrency": 489,
-    "requires": "Validate c489 configs, synchronized docs, focused expectation, study metadata, and append-only perf-changelog tail entry, then refresh the cluster-wide B200 queue before dispatch."
+    "arm": null,
+    "concurrency": null,
+    "requires": "Wait for c489 allocation, canonical warmup, 3,600-second profiling, artifact capture, exact scratch cleanup, and adaptive comparison before selecting another point or matched control."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-21T05:30:00Z",
