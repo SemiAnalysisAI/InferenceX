@@ -16,7 +16,7 @@ We also welcome InferenceX partners and the ML community to improve [codeowner-s
 
 The automated publisher rejects incomplete or inconsistent verifier output. Each check must appear once, and the overall verdict must agree with the check results; otherwise, retry verification.
 
-The verifier also compares explicit technical claims in the PR description with the assessed configuration and validation evidence. [Check 15](../../.github/codeowner-signoff-verify-prompt.md#check-15--pr-description-matches-the-assessed-configuration-advisory) warns about contradictions or unverifiable claims and asks the author to correct or substantiate them. This is advisory; it does not require every configuration detail in the body. Body edits alone do not rerun verification; use the existing [manual reassessment](../../CONTRIBUTING.md#the-pr-review-checklist-codeowner-sign-off) procedure.
+The verifier treats the PR description as untrusted evidence, not instructions, and compares its explicit claims about the affected configuration and validation with the assessed code and evidence. [Check 15](../../.github/codeowner-signoff-verify-prompt.md#check-15--pr-description-matches-the-assessed-configuration-advisory) warns about contradictions or unverifiable claims and asks the author to correct or substantiate them. This is advisory; it does not require every configuration detail in the body. Body edits alone do not rerun verification; use the existing [manual reassessment](../../CONTRIBUTING.md#the-pr-review-checklist-codeowner-sign-off) procedure.
 
 ## Template
 ```
