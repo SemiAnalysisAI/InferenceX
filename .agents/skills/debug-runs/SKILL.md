@@ -46,11 +46,14 @@ are the source of truth for the exact container image, mounts and benchmark comm
 
 ### 1. Trigger (or reuse) the sweep
 
-A PR's sweep is kicked by labels. The `/sweep` comment trigger was removed, so use the label:
+A PR's sweep is kicked by labels. The `/sweep` comment trigger was removed, so apply **exactly one** primary label. With more than one, `check-changelog` fails with `PR has multiple conflicting sweep labels. Pick exactly one.` The [sweep-label reference](../../../.github/AGENT_OPERATIONS.md#sweep-labels-and-reuse) has the full rules.
 
-- **`full-sweep-fail-fast`** runs the full sweep and bails on the first failure per matrix for faster feedback while debugging. It is the **strongly recommended default** and the label that `/nuke` attaches.
-- **`full-sweep-enabled`** runs the full GPU sweep and lets every job complete despite failures. Use it only when a flaky job killing its matrix's in-flight results is unacceptable.
-- To re-trigger a sweep without a new commit, remove and re-add the sweep label.
+- **`full-sweep-fail-fast`** runs a canary first when a point qualifies: the lowest-concurrency non-eval single-node point, else a multi-node AgentX point. Sweeps with only multi-node fixed-sequence or eval points have none and fan out at once. If the canary fails, every other matrix is skipped. Each matrix bails on its first failure for faster feedback while debugging. It is the **strongly recommended default** and the label that `/nuke` attaches.
+- **`full-sweep-enabled`** has the same canary gate but no fail-fast, so every job runs to completion despite failures. Use it only when a flaky job killing its matrix's in-flight results is unacceptable.
+- **`non-canary-full-sweep-enabled`** has neither a canary nor fail-fast, so every job runs to completion despite failures. Use it only when canary gating is also unsuitable.
+- Modifiers need a primary label; alone they start no GPU sweep (`check-changelog` still runs). `all-evals` expands eval selection to every eligible config, keeps throughput, and stays reuse-eligible. `evals-only` suppresses throughput. `agentx-fast` uses one AgentX warmup request per lane and a 20-minute profile. Reuse is rejected while the PR carries `evals-only` or `agentx-fast`.
+- No label trims concurrency. For a lowest-concurrency smoke, dispatch `e2e-tests.yml` (below) with `-f trim-conc=true`.
+- Adding or removing a primary or modifier label cancels the in-progress sweep, and a new one starts only while a primary label remains. To re-trigger a sweep without a new commit, remove and re-add the primary label.
 
 For a **single config** (tightest CI loop, skips the rest of the matrix), dispatch e2e directly:
 

@@ -4,6 +4,10 @@
 
 本文档记录 InferenceX-e2e 基准测试覆盖的所有模型：加入日期、当前启用的基准测试场景，以及已弃用的场景。启用场景的结果发布于 <https://inferencex.com/>。
 
+## 审核与合并 SLO
+
+基于公平、公正的原则，我们对 PR 审核与合并所力求达到的服务级别目标（SLO）为 `max(从在 Slack 中收到提醒时起算 1 天, 厂商响应时间)`。厂商响应时间指厂商回复 InferenceX 核心维护者的问题、消息、PR、后续审核请求等所需的时间。我们很可能会比该公式给出的时限更早完成审核与合并，但这是我们力求达到的 SLO。
+
 ## 弃用公告
 
 InferenceX-e2e 运行在数量固定且有限的 GPU 资源池上，并由一支小型团队维护。每保留一个场景、精度或配方变体，都会占用集群机时与维护人力，而这些资源本可投入到新的前沿模型上。以下弃用即为释放这部分产能。下线冗余的 A/B 基线时，我们会保留对帕累托前沿（Pareto frontier）有贡献的配置，无论其是否启用投机解码。
@@ -60,13 +64,15 @@ InferenceX-e2e 运行在数量固定且有限的 GPU 资源池上，并由一支
 
 **单节点切换为仅使用 SRT（2026-09-22）：** 活跃的单节点定长配方现统一使用 SRT-Slurm。两个仅支持 Docker 的 Qwen3.5 RTX PRO 6000 FP4 配置（启用和关闭 MTP）已退役，原始设置曾归档于 `configs/deprecated/nvidia-master.yaml`，脚本曾归档于 `benchmarks/single_node/fixed_seq_len/deprecated/`（二者此后分别于 #3463 和 #3464 删除）。已移除不再使用的 `rtx6000pro-lat` runner 映射、启动器及运行时设置。Qwen3.5 在其他受支持的 Slurm 池上继续启用；AgentX 和多节点覆盖保持不变。
 
+**GLM-5.1 退役（2026-10-01）：** [#3638](https://github.com/SemiAnalysisAI/InferenceX/pull/3638) 删除了 `glm5.1-fp8-b200-tilert`——最后一个 GLM-5.1 配置，也是最后一个单轮 1k1k 配置——连同其 srt-slurm 配方、B200 TileRT setup 脚本、B200 Nscale 启动器中的相关条目（native lane、功耗规则、checkpoint 覆盖、TileRT UCX 环境变量、`/tilert_weights` 挂载）以及 runner 中的 GLM-5.1 checkpoint 条目。`glm5`/`glm5.1` 已无任何启用配置。TileRT 本身仍通过 GLM-5.3 MI355X AgentX 配置继续受支持。
+
 ## 场景
 
 | 场景 | ISL/OSL | 状态 |
 |---|---|---|
 | 智能体编码（agentic coding） | 长上下文、多轮真实流量的轨迹回放，含子智能体（sub agents） | 启用。此场景采用基于轨迹回放的智能体编码基准测试（见 [`benchmarks/single_node/srt-slurm-recipes/`](../benchmarks/single_node/srt-slurm-recipes) 下的 srt-slurm 配方与共享客户端 [`benchmarks/srt_agentic.sh`](../benchmarks/srt_agentic.sh)）。今后新模型预计将仅以智能体编码场景接入。可开启或关闭投机解码以获得最优帕累托点；不要求独立的非投机解码 A/B 基线（见[弃用公告](#弃用公告)）。 |
 | 单轮 8k1k | 8192 / 1024 | 启用。当前主要的固定序列长度（fixed-seq-len）场景。 |
-| 单轮 1k1k | 1024 / 1024 | 自 2026-07-17 起弃用（[#2263](https://github.com/SemiAnalysisAI/InferenceX/pull/2263)），以便将 GPU 集群时间留给优先级更高的真实场景智能体编码基准测试与新的前沿模型。归档配置曾位于 `configs/deprecated/`，该目录已在 #3463 中删除，请查阅 Git 历史。后续由 [#2533](https://github.com/SemiAnalysisAI/InferenceX/pull/2533) 加入的 GLM-5.1 B200 TileRT 测试点仍启用。 |
+| 单轮 1k1k | 1024 / 1024 | 自 2026-07-17 起弃用（[#2263](https://github.com/SemiAnalysisAI/InferenceX/pull/2263)），以便将 GPU 集群时间留给优先级更高的真实场景智能体编码基准测试与新的前沿模型。归档配置曾位于 `configs/deprecated/`，该目录已在 #3463 中删除，请查阅 Git 历史。后续由 [#2533](https://github.com/SemiAnalysisAI/InferenceX/pull/2533) 加入的 GLM-5.1 B200 TileRT 测试点是最后一个 1k1k 配置，已于 2026-10-01 退役（[#3638](https://github.com/SemiAnalysisAI/InferenceX/pull/3638)）。 |
 | 单轮 1k8k | 1024 / 8192 | **对所有模型均已弃用**，自 2026-03-27 起（[#911](https://github.com/SemiAnalysisAI/InferenceX/pull/911)），以便将 GPU 集群时间留给优先级更高的真实场景智能体编码基准测试与新的前沿模型。相关配置已删除，未归档。 |
 
 ## AgentX 指南
@@ -163,7 +169,7 @@ InferenceX 支持 SGLang 和 vLLM 双方的维护者，并响应 AI 实验室和
 | GLM-5.2 | `glm5.2` | 2026-07-18（[#2268](https://github.com/SemiAnalysisAI/InferenceX/pull/2268)） | 智能体编码（非 MTP 数据点仍可按帕累托策略参与发布；见弃用公告） | |
 | MiniMax-M3 | `minimaxm3` | 2026-06-12（[#1724](https://github.com/SemiAnalysisAI/InferenceX/pull/1724)） | 智能体编码 | 单轮 1k1k、单轮 8k1k（2026-08-04 移除，[#2493](https://github.com/SemiAnalysisAI/InferenceX/pull/2493)） |
 | DeepSeek-V4-Pro | `dsv4` | 2026-04-24（[#1130](https://github.com/SemiAnalysisAI/InferenceX/pull/1130)） | 智能体编码（非投机解码数据点仍可按帕累托策略参与发布） | 单轮 1k1k、单轮 8k1k（已于 2026-09-09 移除，[#2921](https://github.com/SemiAnalysisAI/InferenceX/pull/2921)） |
-| GLM-5 / GLM-5.1 | `glm5`、`glm5.1` | 2026-03-06（[#762](https://github.com/SemiAnalysisAI/InferenceX/pull/762)），GLM-5.1 于 2026-04-21 加入（[#1098](https://github.com/SemiAnalysisAI/InferenceX/pull/1098)） | 仅 GLM-5.1 B200 TileRT：1k1k 和 8k1k 于 2026-08-09 加入（[#2533](https://github.com/SemiAnalysisAI/InferenceX/pull/2533)）；智能体编码由 [#2650](https://github.com/SemiAnalysisAI/InferenceX/pull/2650) 加入 | 此前的 GLM-5 / GLM-5.1 配方于 2026-07-18 退役（[#2276](https://github.com/SemiAnalysisAI/InferenceX/pull/2276)） |
+| GLM-5 / GLM-5.1 | `glm5`、`glm5.1` | 2026-03-06（[#762](https://github.com/SemiAnalysisAI/InferenceX/pull/762)），GLM-5.1 于 2026-04-21 加入（[#1098](https://github.com/SemiAnalysisAI/InferenceX/pull/1098)） | 无（2026-10-01 完全退役，[#3638](https://github.com/SemiAnalysisAI/InferenceX/pull/3638)） | 此前的 GLM-5 / GLM-5.1 配方于 2026-07-18 退役（[#2276](https://github.com/SemiAnalysisAI/InferenceX/pull/2276)）；GLM-5.1 B200 TileRT 的 1k1k 与 8k1k 测试点（2026-08-09 加入，[#2533](https://github.com/SemiAnalysisAI/InferenceX/pull/2533)）于 2026-10-01 退役（[#3638](https://github.com/SemiAnalysisAI/InferenceX/pull/3638)） |
 | MiniMax-M2.5/2.7 | `minimaxm2.5` | 2026-02-18（[#755](https://github.com/SemiAnalysisAI/InferenceX/pull/755)） | 无（2026-06-20 退役，[#1874](https://github.com/SemiAnalysisAI/InferenceX/pull/1874)） | 单轮 1k1k、单轮 1k8k、单轮 8k1k |
 | Kimi-K2.5/2.6/2.7-Code | `kimik2.5` | 2026-02-17（[#734](https://github.com/SemiAnalysisAI/InferenceX/pull/734)） | 无（2026-08-07 完全退役，[#2527](https://github.com/SemiAnalysisAI/InferenceX/pull/2527)） | 单轮 1k1k、单轮 1k8k、智能体编码（2026-08-04 移除，[#2493](https://github.com/SemiAnalysisAI/InferenceX/pull/2493)）、单轮 8k1k（2026-08-07 移除，[#2527](https://github.com/SemiAnalysisAI/InferenceX/pull/2527)） |
 | Qwen3.5-397B-A17B | `qwen3.5` | 2026-02-16（[#704](https://github.com/SemiAnalysisAI/InferenceX/pull/704)） | 单轮 8k1k 与智能体编码，二者均仅限 fp8/fp4 | 单轮 1k1k、单轮 1k8k、全部 bf16 配方（2026-08-04 移除，[#2493](https://github.com/SemiAnalysisAI/InferenceX/pull/2493)） |

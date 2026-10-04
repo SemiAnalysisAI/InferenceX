@@ -14,6 +14,7 @@ adjustments:
   multi-node: 0.25
   agentic: 0.1
   eval-only: 0.0
+  checklist-complete: 0.25
   precision:
     fp4: 0.1
   spec-decoding:
@@ -35,14 +36,5 @@ adjustments:
     qwen3.8next: 0.05
     dsr1: 0.05
 
-labels:
-  # inferencex-ci-tracker verifies the active actor with INFX_CI_SCHEDULER_PAT.
-  skip-queue:
-    name: skip_queue
-  checklist-complete:
-    names: [ci-checklist-complete]
-    adjustment: 0.25
-  patchwork:
-    names: [ci-patchwork, engine-patch]
-    score: 0.0
-    waived-by: [ci-patchwork-waived]
+# Jobs from PRs classified as patching upstream engine/runtime source run last.
+patchwork-score: 0.0

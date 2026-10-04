@@ -41,7 +41,7 @@ Tests runs suites under `infx/tests/`, `utils/`, `runners/`, `../collectivex/tes
 | Schema and matrix | A config key validates and emits the intended matrix fields | Runner availability, server startup, or performance |
 | Focused Python tests | Changed generator, changelog, result, eval, collection, or reuse contracts behave on covered inputs | Container, accelerator, network, or Slurm behavior |
 | Smoke run | One tightly filtered path allocates, starts a server, runs a workload, and emits artifacts | The complete concurrency/search space or merge eligibility |
-| Trimmed PR sweep | Each selected single-node group runs its lowest concurrency (manual `--trim-conc` dispatch) | Intermediate concurrency points required by a full sweep |
+| Manual trimmed run | Each selected single-node and multi-node deployment shape runs its lowest concurrency (`e2e-tests.yml` with `trim-conc: true`; in changelog-ref mode only throughput rows are trimmed, and evals keep their selected concurrency). No PR label trims concurrency | Intermediate concurrency points required by a full sweep |
 | Full sweep and eval | The selected untrimmed matrix and eval jobs execute on the reviewed commit | Correctness of evidence that was not inspected, or unrelated configurations |
 
 A green later layer does not erase missing earlier evidence. For example, a green collector can aggregate an empty set, so review must inspect the underlying executed jobs and artifacts.
@@ -136,8 +136,6 @@ uv run --locked \
   --seq-lens 8k1k
 ```
 
-Use `--seq-lens 1k1k` only when explicitly selecting the retained `glm5.1-fp8-b200-tilert` configuration; other 1k1k coverage is retired.
-
 Inspect the emitted values, not only the exit code or row count: config key, model, image, runner, scenario, concurrency, `max-model-len`, TP/PP/EP/DCP/PCP, prefill/decode workers, hardware, router, KV transfer, eval flags, `additional-settings`, and `spec-decoding`. The schema lives in [`validation.py`](../infx/matrix/validation.py), and the generator is [`generate.py`](../infx/matrix/generate.py).
 
 ### Focused suites by changed contract
@@ -188,16 +186,16 @@ A smoke run is not merge evidence: it intentionally omits configurations and con
 
 ### Trimmed and full sweeps
 
-- `full-sweep-fail-fast` is the recommended full-sweep label. It uses the sequential single-node canary and stops each matrix after that matrix's first failure while preserving completed results.
-- Use `non-canary-full-sweep-enabled` only when the canary is known to be flaky or unrepresentative. Use `full-sweep-enabled` instead of fail-fast only when every matrix job must continue despite a failure.
+- `full-sweep-fail-fast` is the recommended full-sweep label. Unless the sweep has only multi-node fixed-sequence or eval entries, it first runs a canary (the lowest-concurrency non-eval single-node entry, or a multi-node AgentX entry when no single-node entry qualifies). It then stops each matrix after that matrix's first failure while preserving completed results.
+- Use `non-canary-full-sweep-enabled` only when the canary is known to be flaky or unrepresentative. It also runs without fail-fast. Use `full-sweep-enabled` instead of fail-fast only when every matrix job must continue despite a failure.
 - Apply exactly one primary sweep label. Modifier-only or conflicting primary labels do not constitute a valid sweep.
 - A trimmed sweep (lowest concurrency only) can be run manually via `e2e-tests.yml` with the `trim-conc` input.
 
-The current meanings and eligibility rules are defined in the [sweep-label reference](../../.github/AGENT_OPERATIONS.md#sweep-labels-and-reuse) and implemented by [`run-sweep.yml`](../../.github/workflows/run-sweep.yml).
+The current meanings and eligibility rules are in [PR primary and modifier labels](ci-procedures.md#pr-primary-and-modifier-labels) and implemented by [`run-sweep.yml`](../../.github/workflows/run-sweep.yml).
 
 ### Eval
 
-Throughput and evals are separate jobs. The default sweep evaluates the selected 8k1k subset. `all-evals` expands eval selection, and `evals-only` suppresses throughput. Choose modifiers from the changed scope, but do not substitute an eval-only or preflight run for the required full sweep.
+Throughput and evals are separate jobs. The default sweep evaluates the selected 8k1k subset and the AgentX GSM8K subset. `all-evals` expands eval selection, and `evals-only` suppresses throughput. Choose modifiers from the changed scope, but do not substitute an eval-only or preflight run for the required full sweep.
 
 Eval completion is not just a green job. Preserve and inspect `meta_env.json`, the `results*.json` files, the score-validation output, the inference image, and the aggregated eval artifact. [`infx/evals/EVALS.md`](../infx/evals/EVALS.md) owns task and artifact behavior. [`validate_scores.py`](../infx/evals/validate_scores.py) rejects missing result files, below-threshold scores, and runs with no checked metrics. When expected concurrency metadata is available, it also rejects invalid/incomplete/failed batches. The single-node workflow invokes it without `--expected-concs`, so reviewers must verify `meta_env.json` independently for single-concurrency artifacts.
 

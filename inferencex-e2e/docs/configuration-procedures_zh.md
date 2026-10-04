@@ -178,14 +178,6 @@ STP（Single Token Prediction，单 Token 预测）是每次前向传播生成�
 6. 将 runner 加入 sweep 流量前，在[仓库 runner 设置页](https://github.com/SemiAnalysisAI/InferenceX/settings/actions/runners)确认每个 runner 都是 **Idle**。
 7. 从计算节点验证 launcher 对 `_work`、HF cache、预置权重和 squash 镜像的挂载。root 容器不得在共享 workspace 留下 root 所有的文件。
 
-## TileRT 固定序列长度配方
-
-保留的 GLM-5.1 B200 Nscale 1k1k 和 8k1k 配置使用 srt-slurm 配方，分别由 vLLM 执行 prefill、TileRT 执行 decode，并使用 TileRT router。Python launcher 准备两个镜像，将预先准备的共享 checkpoint 挂载到 `/model`，将转换后的 decode 权重挂载到 `/tilert_weights`；主机路径统一记录在 `configs/runners.yaml` 中。作业启动时不转换 checkpoint。
-
-两个配方均使用共享的自定义固定序列长度基准脚本，以流式 chat completions 发送 16 个请求并应用 chat template。8k1k 配方要求 srt-slurm 从两个 worker 节点采集 DCGM 功耗。eval-only 作业关闭吞吐测试的遥测，并使用共享 eval 分发器。
-
-C1 低于自动 eval 选择门槛，完整资格验证应同时使用 `all-evals` 和 `full-sweep-fail-fast`。TileRT 在 GLM-5.1 一般退役之后由 [#2533](https://github.com/SemiAnalysisAI/InferenceX/pull/2533) 加入；[MODELS_zh.md](MODELS_zh.md) 记录了保留范围。
-
 ## 注册 srt-slurm 配方
 
 映射来源：[`benchmarks/multi_node/srt-slurm-recipes/RECIPES.md`](../benchmarks/multi_node/srt-slurm-recipes/RECIPES.md)。检入的配方：[`benchmarks/multi_node/srt-slurm-recipes/`](../benchmarks/multi_node/srt-slurm-recipes)。
@@ -309,31 +301,41 @@ TP4 约 1.23 TB）全部来自节点 0 的 1.5 TB 内存。`runners/srt-slurm/ho
 ### DeepSeek-V4.1-Flash DSpark
 
 GB200 的 DSpark 配方将 CUDA graph 最小捕获范围设为 64 tokens，以覆盖 AgentX 子代理并发。这会将 c1/c2/c4 的上限从 8/16/32 提升至 64；c8 及以上保持原有大小。完整轨迹、AL 3.51 和 Engram UVA 配置保持不变；需通过 CI 验证低并发尾延迟改善。
-B200 的 DSpark 配方使用相同的最小捕获范围，并保持相同的工作负载配置。
-GB300 的 DSpark 配方使用相同的最小捕获范围，并保持相同的工作负载配置。
+B200 的 DSpark 配方按测试点显式设置捕获尺寸，详见下文。
+GB300 的 DSpark 配方按测试点显式设置捕获尺寸，详见下文。
+
+B200 条目使用 `vllm/vllm-openai:nightly-dev-x86_64-cu130-ac9126e58aa7`，开启 FlashInfer autotune。
+TP4 覆盖并发 1–128；DEP2（TP1 x DP2 + EP2，DeepGEMM MegaMoE）覆盖 8–32，DEP4（TP1 x DP4 + EP4，DeepGEMM MegaMoE）覆盖
+64–128，两者均前置一致性哈希 vLLM Router。DEP2 每个 B200 rank 约有 150 GiB 权重，因此 batched tokens
+上限为 4096，CUDA graph 捕获上限为 576 tokens。所有 B200 测试点设置 `--gpu-memory-utilization 0.97`。
+所有测试点使用 `FULL_AND_PIECEWISE` CUDA graph，捕获尺寸为六 token 验证块的倍数。
 H200 的 DSpark 配方使用相同的最小捕获范围，并保持相同的工作负载配置。
 
-B300 在 c1/c2/c4 使用相同的最小捕获范围。其 c1 CI 对比中，请求 ITL P90/P99 从 38.74/41.42 ms 降至 2.62/3.45 ms；c2/c4 仍需 CI 验证。
+B300 的 DSpark 配方按测试点显式设置捕获尺寸，详见下文。
 
 仅运行 AgentX 的 `dsv41flash-fp4-<sku>-vllm-agentic-dspark` 配方使用
-[`nvidia-master.yaml`](../configs/nvidia-master.yaml) 中按 SKU 固定的 `image`（最初为 `vllm/vllm-openai:deepseekv41-flash-0909`，B300 仍在使用），在 Blackwell SKU 上采用 TP4、原生五 token DSpark、
+[`nvidia-master.yaml`](../configs/nvidia-master.yaml) 中按 SKU 固定的 `image`（最初为 `vllm/vllm-openai:deepseekv41-flash-0909`），在 Blackwell SKU 上采用 TP4、原生五 token DSpark、
 概率采样草稿。吞吐测试使用[已提交的黄金 AL](../infx/golden_al_distribution/dsv41flash_dspark.yaml)：thinking 开启、五个草稿 token 对应 3.51，采用合成拒绝采样并关闭自适应验证。准确率 eval 保留真实块拒绝采样和自适应验证。
 `--engram-config '{"cpu_offload":true}'` 将 Engram 嵌入表放在固定页主机 DRAM
 中，通过 UVA 访问；`kv-offloading: none` 描述的是另行保留在 GPU 上的 KV cache。
 专家权重为 MXFP4，因此配方标记为 `precision: fp4`。
 
 各 GPU 入口共用纯文本服务行为，使用 `deepseek_v41` tokenizer 和解析器、1M 上下文，
-以及共享的 AgentX 轨迹回放、功耗、指标和 eval helper。TP4 的并发范围为 1–128。
+以及共享的 AgentX 轨迹回放、功耗、指标和 eval helper。除下文另有说明外，TP4 的并发范围为 1–128。
 共享脚本按六 token DSpark 验证块设置 CUDA graph capture。srt-slurm 单节点路径将检出挂载到 `/infmax-workspace`，避免在 `/workspace`
 下创建 AgentX 运行目录。沿用集群的模型路径和持久化缓存。配方在计算节点探测服务端口，首选端口被占用时选择可用端口，
 服务、回放、指标和 eval 共用同一端点。所有配方都必须获得 GPU sweep 和 eval
 证据后才能视为已验证。
 
-B300 条目还包含并发 2–128 的 TP2 变体。其专用脚本使用 `FULL_AND_PIECEWISE`
-CUDA graph，并显式设置最大为 2046 或 8190 tokens 的捕获尺寸集合。并发 1–4 以及
-TP2 并发 128 使用 `--max-num-batched-tokens 2048`，其余情况使用 8192；
-`--max-num-seqs` 固定为 256。TP2 并发 128 还设置
-`--gpu-memory-utilization 0.97`。其他 SKU 继续使用共享脚本。
+B300 条目使用 `vllm/vllm-openai:nightly-dev-x86_64-cu130-ac9126e58aa7`，开启 FlashInfer autotune。
+TP4 覆盖并发 1–16；DEP2（TP1 x DP2 + EP2，DeepGEMM MegaMoE）覆盖 8–192，前置一致性哈希 vLLM
+Router，并发 128 及以上改用 MegaAttention。所有测试点使用 `FULL_AND_PIECEWISE` CUDA graph，捕获尺寸为
+六 token 验证块的倍数。其他 SKU 继续使用共享脚本。
+
+GB300 条目使用 `vllm/vllm-openai:nightly-dev-arm64-cu130-ac9126e58aa7`，开启 FlashInfer autotune。
+TP4 覆盖并发 1–16；DEP2（TP1 x DP2 + EP2，DeepGEMM MegaMoE）覆盖 8–192，前置一致性哈希 vLLM
+Router，并发 128 及以上改用 MegaAttention。所有测试点使用 `FULL_AND_PIECEWISE` CUDA graph，捕获尺寸为
+六 token 验证块的倍数。
 
 GB300 launcher 将引擎就绪等待时间设为 7200 秒。在[运行 34504969146](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34504969146) 中，仅模型加载就耗时 18–23 分钟；Rust frontend 达到 3600 秒期限时，引擎仍在捕获 CUDA graph。此次仅延长启动等待时间，基准测试时长和解码设置保持不变。
 
@@ -559,8 +561,6 @@ uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with p
   --seq-lens 8k1k
 ```
 
-仅在明确选择保留的 `glm5.1-fp8-b200-tilert` 配置时使用 `--seq-lens 1k1k`；其他 1k1k 场景已退役。
-
 必须检查而非仅计数所生成的 `model`、`image`、`runner`、scenario、并发、`max-model-len`、TP/PP/EP/DCP/PCP、prefill/decode worker block、hardware、router、KV transfer、eval flag、`additional-settings` 和 `spec-decoding`。
 
 如果修改了 schema 或生成器行为，运行其聚焦测试：
@@ -608,7 +608,7 @@ python -m pytest infx/tests/matrix/ -v
 4. 绝不能 prepend、在中间按时间插入、排序、重新格式化，也不能对文件运行 formatter。
 5. 绝不能删除或标准化现有空白，包括空白分隔行上的尾随空格。CI 依赖历史字节。
 6. 如果文件与 `main` 冲突，恢复当前 `main` 版本，只重新追加本分支条目。不要手动合并已经重排的历史。
-7. 请求 sweep 前解析文件，并确认生成的 changelog 选择包含预期 key。
+7. 请求 sweep 前解析文件，并确认生成的 changelog 选择包含预期 key。请求时必须且只能添加一个主 sweep 标签，通常为 `full-sweep-fail-fast`（参见 [PR 主标签与修饰标签](ci-procedures_zh.md#pr-主标签与修饰标签)）。
 
 ## 停止条件
 
@@ -629,11 +629,11 @@ python -m pytest infx/tests/matrix/ -v
 
 ## MI355X 上的 DeepSeek-V4.1-Flash
 
-配方 `dsv41flash-fp4-mi355x-vllm-agentic-dspark` 将 [#2958](https://github.com/SemiAnalysisAI/InferenceX/pull/2958) 扩展至 MI355X AgentX：TP4 与 TP2、并发 1–128、原生五 token DSpark。吞吐测试使用[已提交的黄金 AL](../infx/golden_al_distribution/dsv41flash_dspark.yaml)：thinking 开启、五个草稿 token 对应 3.51，采用合成拒绝采样并关闭自适应验证。准确率 eval 保留真实块拒绝采样，但与 CUDA 分支不同，同样关闭自适应验证：它会在设备端裁剪验证请求，而 ROCm 的 `DeepseekV4IndexerBackend` 不支持该操作，启用后引擎拒绝启动（[运行 34651830283](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34651830283)）。FP4 表示 MXFP4 专家权重；检查点还包含 MXFP8 权重。
+配方 `dsv41flash-fp4-mi355x-vllm-agentic-dspark` 将 [#2958](https://github.com/SemiAnalysisAI/InferenceX/pull/2958) 扩展至 MI355X AgentX：TP4 与 TP2、并发 1–64、原生五 token DSpark。吞吐测试使用[已提交的黄金 AL](../infx/golden_al_distribution/dsv41flash_dspark.yaml)：thinking 开启、五个草稿 token 对应 3.51，采用合成拒绝采样并关闭自适应验证。准确率 eval 保留真实块拒绝采样，但与 CUDA 分支不同，同样关闭自适应验证：它会在设备端裁剪验证请求，而 ROCm 的 `DeepseekV4IndexerBackend` 不支持该操作，启用后引擎拒绝启动（[运行 34651830283](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34651830283)）。FP4 表示 MXFP4 专家权重；检查点还包含 MXFP8 权重。
 
-遵循已合并的[上游配方 #968](https://github.com/vllm-project/recipes/pull/968) 中的 AMD 设置：`VLLM_ROCM_USE_AITER=1`、`VLLM_ROCM_USE_AITER_MOE=1` 和 `--moe-backend aiter`。通用 AITER 选择器允许 vLLM 选择 CK a8w4 专家内核，与 DSV4-Pro MI355X 配方一致。配方通过 `WEKA_LOADER_OVERRIDE` 固定使用完整语料 `semianalysis_cc_traces_weka_062126`。KV 驻留 GPU。在 [vllm-project/vllm#57491](https://github.com/vllm-project/vllm/pull/57491) 将两处 `is_cuda()` 判断放宽为 `is_cuda_alike()` 之前，Engram 按上游 AMD 默认设置常驻 GPU。自该提交起，ROCm 会解析 `EngramConfig`，且 `cpu_offload` 经由 `VLLM_PLE_CPU_OFFLOAD` 默认开启，因此配方显式设置 `--engram-config`，而不依赖该默认值。TP=2 始终下放，因为此时表每 rank 需 94.4 GiB；TP=4 在并发 64 及以下保持常驻（此时 KV 池并非瓶颈），仅在并发 128 时下放。同样地，配方仅在并发高于 32 时调低 `--max-num-batched-tokens`：TP=2 c64 与 TP=4 c128 为 8192，TP=2 c128 为 4096，因为稀疏注意力 indexer 及其配套的每 rank 缓冲区按每个批量 token 约 4.4 MiB 增长。当该分块低于 API server 默认 1024 序列所需的六倍时，`--max-num-seqs` 会被限制为 CUDA graph 捕获的规模：DSpark 每序列验证 1+5 个 token，4096 对 1024 序列会使 engram 投影在 profiling 阶段崩溃。所有情况下的原则一致：只在确实出现 KV 不足的并发点上把设备内存让给 KV，保持低并发处已验证的设置不变。早于该合并的镜像在 ROCm 上仍会拒绝该选项。MI355X launcher 使用共享 HF 缓存，并将此模型的仓库挂载至 `/ix`，同时导出 `INFMAX_CONTAINER_WORKSPACE=/ix`，确保 AgentX 依赖与输出路径位于该挂载中。
+遵循已合并的[上游配方 #968](https://github.com/vllm-project/recipes/pull/968) 中的 AMD 设置：`VLLM_ROCM_USE_AITER=1`、`VLLM_ROCM_USE_AITER_MOE=1` 和 `--moe-backend aiter`。通用 AITER 选择器允许 vLLM 选择 CK a8w4 专家内核，与 DSV4-Pro MI355X 配方一致。配方通过 `WEKA_LOADER_OVERRIDE` 固定使用完整语料 `semianalysis_cc_traces_weka_062126`。KV 驻留 GPU。在 [vllm-project/vllm#57491](https://github.com/vllm-project/vllm/pull/57491) 将两处 `is_cuda()` 判断放宽为 `is_cuda_alike()` 之前，Engram 按上游 AMD 默认设置常驻 GPU。自该提交起，ROCm 会解析 `EngramConfig`，且 `cpu_offload` 经由 `VLLM_PLE_CPU_OFFLOAD` 默认开启，因此配方显式设置 `--engram-config`，而不依赖该默认值。TP=2 始终下放，因为此时表每 rank 需 94.4 GiB；TP=4 始终保持常驻，因为在并发 64 及以下 KV 池并非瓶颈。同样地，配方仅在并发高于 32 时调低 `--max-num-batched-tokens`：TP=2 c64 为 8192，因为稀疏注意力 indexer 及其配套的每 rank 缓冲区按每个批量 token 约 4.4 MiB 增长。当该分块低于 API server 默认 1024 序列所需的六倍时，`--max-num-seqs` 会被限制为 CUDA graph 捕获的规模：DSpark 每序列验证 1+5 个 token，4096 对 1024 序列会使 engram 投影在 profiling 阶段崩溃。所有情况下的原则一致：只在确实出现 KV 不足的并发点上把设备内存让给 KV，保持低并发处已验证的设置不变。早于该合并的镜像在 ROCm 上仍会拒绝该选项。MI355X launcher 使用共享 HF 缓存，并将此模型的仓库挂载至 `/ix`，同时导出 `INFMAX_CONTAINER_WORKSPACE=/ix`，确保 AgentX 依赖与输出路径位于该挂载中。
 
-**GPU 验证：** 配方使用 `vllm/vllm-openai-rocm:nightly-rocm100-29468dde8b515031dc6d4d9d06bf0a2fa0442098`，即首个包含 vllm#58510 的 ROCm 10.0 nightly，已在 [#3420](https://github.com/SemiAnalysisAI/InferenceX/pull/3420) 中重新扫描。[#3326](https://github.com/SemiAnalysisAI/InferenceX/pull/3326) 的 sweep 在 TP4 与 TP2、并发 1–128 下验证的是此前的 `nightly-rocm100-3df4ae153eb385e27b52f26c81f8edb9e20b9984`（摘要 `sha256:eccb72b7…`，发布于 2026-09-21），且是该镜像的唯一证据：[运行 34710937012](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34710937012) 覆盖的是已被取代的 `nightly-eed1f3d0c6043bd494424a22443ee198dd56f657` 上 TP4 并发 1–32 的吞吐测试与仅评测并发 32，其数据点不能沿用到本镜像。已合并的[上游配方 #1006](https://github.com/vllm-project/recipes/pull/1006) 记录了 MI355X 的 TP2 Engram 卸载与 `--no-swa-bounded-replay`，已合并的 [#968](https://github.com/vllm-project/recipes/pull/968) 则记录了最初的 AMD 设置与完整的 InferenceX 命令。后续运行时证据请遵循 [AgentX 流程](./eval-agentx-procedures_zh.md)；仅有本地矩阵生成和镜像元数据不能证明 GPU 验证完成。
+**GPU 验证：** 配方使用 `vllm/vllm-openai-rocm:nightly-rocm100-ac9126e58aa7bbab1856ba6593ba4d5003fea516`，该 ROCm 10.0 nightly 包含 vllm#58671（分页 MXFP4 稀疏 indexer）、vllm#58655（融合 mHC Triton seams）与 vllm#53492（Gluon sparse-MLA kernel）。[#3571](https://github.com/SemiAnalysisAI/InferenceX/pull/3571) 的[运行 36824408313](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/36824408313) 在 TP4 与 TP2、并发 1–64 下验证了该镜像，其中仅评测的 TP4 并发 64 数据点 GSM8K 为 strict 0.9712 / flexible 0.9704。此前的 sweep 验证的都是已被取代的镜像，其数据点不能沿用到本镜像：[#3420](https://github.com/SemiAnalysisAI/InferenceX/pull/3420) 重新扫描了 `nightly-rocm100-29468dde8b515031dc6d4d9d06bf0a2fa0442098`，[#3326](https://github.com/SemiAnalysisAI/InferenceX/pull/3326) 验证了 `nightly-rocm100-3df4ae153eb385e27b52f26c81f8edb9e20b9984`，[运行 34710937012](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34710937012) 覆盖的是 `nightly-eed1f3d0c6043bd494424a22443ee198dd56f657`。已合并的[上游配方 #1049](https://github.com/vllm-project/recipes/pull/1049) 记录了 MI355X 的 sparse-MLA Gluon kernel、MXFP4 稀疏 indexer 与 `--block-size 128`；已合并的 [#1006](https://github.com/vllm-project/recipes/pull/1006) 记录了 MI355X 的 TP2 Engram 卸载与 `--no-swa-bounded-replay`，已合并的 [#968](https://github.com/vllm-project/recipes/pull/968) 则记录了最初的 AMD 设置与完整的 InferenceX 命令。后续运行时证据请遵循 [AgentX 流程](./eval-agentx-procedures_zh.md)；仅有本地矩阵生成和镜像元数据不能证明 GPU 验证完成。
 
 ## MI300X 与 MI325X 上的 DeepSeek-V4.1-Flash
 

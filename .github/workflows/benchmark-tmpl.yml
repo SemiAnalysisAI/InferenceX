@@ -29,11 +29,6 @@ on:
         description: "One-shot queue token generated for this job"
         required: true
         type: string
-      skip-queue-pr:
-        description: "Requested skip_queue PR number"
-        required: false
-        type: string
-        default: ''
       dp-attn:
         required: true
         type: boolean
@@ -169,39 +164,18 @@ jobs:
         vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
         (
           vars.NODE_SLOT_SCHEDULER_ENABLED == 'true' &&
-          (
-            inputs.skip-queue-pr != '' &&
-            format(
-              '["self-hosted",{0},{1},{2},{3},{4}]',
-              toJSON(inputs.runner),
-              '"nodes:1"',
-              toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
-              toJSON(format('ci-attempt-{0}', github.run_attempt)),
-              toJSON(format('ci-skip-queue-pr-{0}', inputs.skip-queue-pr))
-            ) ||
-            format(
-              '["self-hosted",{0},{1},{2},{3}]',
-              toJSON(inputs.runner),
-              '"nodes:1"',
-              toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
-              toJSON(format('ci-attempt-{0}', github.run_attempt))
-            )
+          format(
+            '["self-hosted",{0},{1},{2},{3}]',
+            toJSON(inputs.runner),
+            '"nodes:1"',
+            toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
+            toJSON(format('ci-attempt-{0}', github.run_attempt))
           ) ||
-          (
-            inputs.skip-queue-pr != '' &&
-            format(
-              '["self-hosted",{0},{1},{2},{3}]',
-              toJSON(inputs.runner),
-              toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
-              toJSON(format('ci-attempt-{0}', github.run_attempt)),
-              toJSON(format('ci-skip-queue-pr-{0}', inputs.skip-queue-pr))
-            ) ||
-            format(
-              '["self-hosted",{0},{1},{2}]',
-              toJSON(inputs.runner),
-              toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
-              toJSON(format('ci-attempt-{0}', github.run_attempt))
-            )
+          format(
+            '["self-hosted",{0},{1},{2}]',
+            toJSON(inputs.runner),
+            toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
+            toJSON(format('ci-attempt-{0}', github.run_attempt))
           )
         ) ||
         format('[{0}]', toJSON(inputs.runner))
@@ -262,7 +236,7 @@ jobs:
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
+          fetch-depth: 1
           ref: ${{ inputs.ref || github.sha }}
           clean: true
           submodules: true
@@ -273,6 +247,8 @@ jobs:
         with:
           ref: ${{ github.workflow_sha }}
           path: .result-tooling
+          # Only inferencex-e2e/ is read from this checkout.
+          sparse-checkout: inferencex-e2e
           persist-credentials: false
 
       - name: Set up uv
@@ -408,7 +384,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: ${{ inputs.eval-only && 'eval_server_logs_' || 'server_logs_' }}${{ env.RESULT_FILENAME }}
+          name: ${{ inputs.eval-only && 'eval_server_logs_' || 'server_logs_' }}${{ env.RESULT_FILENAME }}${{ inputs.eval-only && format('_{0}_{1}', env.EVAL_FRAMEWORK, env.EVAL_SUITE) || '' }}
           # fixed-seq writes server.log at root; agentic writes logs under results/.
           path: |
             ${{ env.INFERENCEX_E2E_ROOT }}/server.log
@@ -424,7 +400,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: ${{ inputs.eval-only && 'eval_gpu_metrics_' || 'gpu_metrics_' }}${{ env.RESULT_FILENAME }}
+          name: ${{ inputs.eval-only && 'eval_gpu_metrics_' || 'gpu_metrics_' }}${{ env.RESULT_FILENAME }}${{ inputs.eval-only && format('_{0}_{1}', env.EVAL_FRAMEWORK, env.EVAL_SUITE) || '' }}
           path: |
             ${{ env.INFERENCEX_E2E_ROOT }}/gpu_metrics.csv
             ${{ env.INFERENCEX_E2E_ROOT }}/gpu_metrics*_context.json

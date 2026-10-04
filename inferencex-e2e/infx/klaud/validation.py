@@ -62,7 +62,7 @@ def canonical_matrix(repository: str, head: str, family: str) -> dict:
     )
     evals = [
         dict(row, **{"eval-only": True})
-        for row in mark_eval_entries(deepcopy(entries), include_agentic=True)
+        for row in mark_eval_entries(deepcopy(entries))
         if row.get("run-eval")
     ]
     return {
