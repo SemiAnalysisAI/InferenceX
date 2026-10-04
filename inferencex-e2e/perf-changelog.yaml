@@ -9316,4 +9316,4 @@
     - agentic-coding
   description:
     - "Enable strict measured power (require-power) for Qwen3.5 FP8 MI325X SGLang AgentX. Topology, image, and concurrency lists stay TP2/TEP2 [1, 4, 6], TP4 [1, 8, 16, 32, 40, 48], TEP4 [4, 16, 32, 40, 48], TP8 [1, 4, 8, 12, 16, 24, 32, 40, 48, 64, 80], TEP8 [4, 16, 24, 32, 40, 48, 64]."
-  pr-link: XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3717
