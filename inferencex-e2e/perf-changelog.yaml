@@ -9321,4 +9321,4 @@
     - "Set DYN_TRTLLM_PUBLISH_KV_EVENTS: false in the shared prefill and decode env. This is the variable cquil11/dynamo@2cbbdc86 reads for KV-event publication (DYN_PUBLISH_KV_EVENTS is not read), so KV events stay off explicitly, matching the frontend's no-kv-events: true."
     - "Set AIPERF_SCRAPE_WORKER_METRICS: true in the shared benchmark env. srt_agentic.sh, through the new benchmark_lib.sh resolve_srt_worker_server_metrics_urls, then points AIPerf at each prefill and decode leader's /metrics on its srt-slurm system port; srt-slurm does not inject these URLs while both publication flags are off. Recipes without the opt-in are unchanged."
     - "Set kv_cache_config.iteration_stats_interval: 40 on the shared prefill and decode bases, so all six GB300 disagg variants inherit it."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3714
