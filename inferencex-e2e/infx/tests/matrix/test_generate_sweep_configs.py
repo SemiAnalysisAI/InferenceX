@@ -3249,3 +3249,43 @@ def test_require_power_is_scoped_to_one_fixed_sequence(multinode, power_key, sam
     sequences[0][power_key] = True
     with pytest.raises(ValueError, match="only fixed-sequence 8192/1024"):
         expand_full_sweep(config, sample_runner_config)
+
+
+@pytest.mark.parametrize("power_key", ["require-power", "require_power"])
+def test_require_power_forwards_from_agentic_scenario_arm(power_key, sample_runner_config):
+    from infx.matrix.generate import expand_full_sweep, select_matrix_evals
+    from infx.matrix.validation import AgenticCodingConfig
+
+    config = {
+        "agentic-power-probe": {
+            "image": "img:probe",
+            "model": "probe/model",
+            "model-prefix": "dsr1",
+            "precision": "fp4",
+            "framework": "vllm",
+            "runner": "cluster:b300-nv",
+            "multinode": False,
+            "scenarios": {
+                "agentic-coding": [
+                    {
+                        "search-space": [
+                            {"tp": 8, "kv-offloading": "none", "conc-list": [1, 4]},
+                        ]
+                    }
+                ]
+            },
+        }
+    }
+    before = expand_full_sweep(config, sample_runner_config)
+    assert [row["conc"] for row in before] == [1, 1, 4, 4]
+    assert all("require-power" not in row for row in before)
+    arm = config["agentic-power-probe"]["scenarios"]["agentic-coding"][0]
+    arm[power_key] = True
+    AgenticCodingConfig.model_validate(arm)
+    after = expand_full_sweep(config, sample_runner_config)
+    assert len(before) == len(after)
+    for original, row in zip(before, after, strict=True):
+        assert row == {**original, "require-power": True}
+    evals = select_matrix_evals(copy.deepcopy(after), mode="subset")
+    assert evals
+    assert all("require-power" not in row for row in evals)
