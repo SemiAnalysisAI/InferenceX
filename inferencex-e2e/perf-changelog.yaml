@@ -9324,3 +9324,11 @@
   description:
     - "Extend Qwen3.5 H200 FP8 STP coverage to c1-c128 while retaining required power and existing MTP coverage."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3172
+
+- config-keys:
+    - qwen3.5-fp8-h200-sglang
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Add c1, c2, and c128 to the Qwen3.5 H200 FP8 STP zip_override_concurrency lists so they match the changelog-selected c1-c128 matrix (canary is c1)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3172
