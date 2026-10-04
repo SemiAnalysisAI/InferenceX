@@ -9309,3 +9309,11 @@
     - "Sizing of the new points follows the existing c192/c256 rule: admission is 2x CONC on both roles and decode captures graphs up to admission divided by dp-size, giving max-running-requests 768/1024 and cuda-graph-bs-decode 1-96/1-128."
     - "Bump the image from lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260923 to lmsysorg/sglang-rocm:v0.5.21-rocm724-mi35x-20261001, which carries the MegaMoE kernels, and update model.container to match. A master-config entry carries one image and search-space arms cannot override it, so every point in this entry moves onto the new image."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3664
+
+- config-keys:
+    - qwen3.5-fp8-mi355x-sglang
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Require validated GPU power on Qwen3.5 FP8 MI355X SGLang 8k1k (ISL 8192 / OSL 1024, TP4 EP1). Extend the concurrency ladder from 4-256 to 1-256 in amd-master.yaml and the matching srt-slurm zip_override. Leave the MTP arm unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3380
