@@ -2468,6 +2468,7 @@ def test_multinode_agentic_waits_only_for_eval_openai_endpoint(
 source "$BENCHMARK_LIB" --validation-only
 PORT=8765
 check_env_vars() { :; }
+resolve_srt_worker_server_metrics_urls() { :; }
 resolve_trace_source() { echo resolve >> "$EVENTS"; }
 AIPERF_PYTHON=python3
 install_agentic_deps() { echo deps >> "$EVENTS"; }
