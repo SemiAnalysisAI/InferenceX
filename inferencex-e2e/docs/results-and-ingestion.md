@@ -109,6 +109,22 @@ The PR changelog selects representative NVIDIA and AMD coverage, not an exhausti
 
 Processing and diagnostic power-audit uploads run after launcher or validation failure, retaining raw and aggregate JSON. Normal `bmk_*` upload requires successful benchmark and processing steps, so an incomplete batch or failed Slurm job does not publish diagnostic rows. The main-branch ingest trigger can still publish other successful configurations from a partially failed sweep; it does not establish complete fleet coverage. Downstream importers can use the retained outcome to reject explicitly failed benchmarks.
 
+### SRT single-node power artifacts
+
+The launcher enables native telemetry for single-node fixed-sequence and AgentX jobs.
+It retains `LOGS/power`, the result JSON referenced by each measurement window,
+the producer revision and exporter provenance in `power_audit_<RESULT_FILENAME>`.
+AgentX also retains `LOGS/agentic/agentic_power_concurrency_*.json` and its validation
+sidecar. Available diagnostics are staged even when the job fails; eval-only jobs
+do not enable power collection.
+
+Both NVIDIA DCGM and AMD device-metrics-exporter packages use the shared native
+validator, which checks the profile's metric and measurement boundary, producer,
+GPU count and result binding. AgentX validates single-node `num_gpus` against the
+launcher's expected count before adding power metrics and a bounded audit summary.
+Invalid measurements omit energy metrics; `REQUIRE_POWER=1` also fails the job.
+The historical CSV reader remains available for previously captured artifacts.
+
 ### SRT multinode window retention
 
 Power audit sidecars retain independently validated measurements in `selected_window`;

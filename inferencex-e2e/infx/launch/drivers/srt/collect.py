@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 
 from infx.bench.env import InputError
 from infx.bench.eval import meta as eval_meta
+from infx.launch import proc
 from infx.launch.artifacts import (
     ArtifactError,
     bundle_server_logs,
@@ -58,8 +59,22 @@ def finish_single_node(run: SrtRun, submitted: Submitted, fetched: Path) -> int:
     if not output.is_dir():
         return 0
     rc = 0
-    bundle_server_logs(output, run.workspace / SINGLE_NODE_LOGS)
     logs = output / "logs"
+    if not run.request.eval_only:
+        power_dir = logs / "power"
+        power_dir.mkdir(parents=True, exist_ok=True)
+        for name in (EXPORTER_PROVENANCE, "power-producer-sha.txt"):
+            try:
+                shutil.copyfile(run.workspace / name, power_dir / name)
+            except OSError as error:
+                print(f"ERROR: failed to stage {name}: {error}", file=sys.stderr)
+                rc = 1
+        try:
+            shutil.copytree(logs, run.workspace / "LOGS", symlinks=True, dirs_exist_ok=True)
+        except OSError as error:
+            print(f"ERROR: failed to stage native power artifacts: {error}", file=sys.stderr)
+            rc = 1
+    bundle_server_logs(output, run.workspace / SINGLE_NODE_LOGS)
     result = logs / f"{run.request.result_filename}.json"
     for artifact in [result, *sorted(logs.glob("gpu_metrics*"))]:
         if artifact.is_file():
@@ -77,12 +92,27 @@ def finish_single_node(run: SrtRun, submitted: Submitted, fetched: Path) -> int:
     return rc
 
 
-def check_single_node(run: SrtRun, logs: Path) -> int:
-    """Fail unless each requested eval succeeded and the benchmark result exists.
+def check_single_node(run: SrtRun, logs: Path, producer_sha: str) -> int:
+    """Validate native AgentX power, requested evals, and the benchmark result.
 
     srt-slurm treats a failed post-benchmark eval as non-fatal; InferenceX does not.
     """
     request = run.request
+    rc = 0
+    if request.is_agentic and not request.eval_only:
+        require(request, "INFERENCEX_RESULTS_PYTHON", "GPU_COUNT")
+        argv = [
+            request.inferencex_results_python, "-m", "infx.results.agentic.power_adapter",
+            "--result-dir", str(logs / "agentic"),
+            "--agg-result", str(logs / f"{request.result_filename}.json"),
+            "--power-dir", str(logs / "power"),
+            "--logs-root", str(logs),
+            "--expected-producer-sha", producer_sha,
+            "--expected-num-gpus", request.env["GPU_COUNT"],
+            "--audit-source", "results/power_validation.json",
+            *(["--require-power"] if request.require_power else []),
+        ]  # fmt: skip
+        rc = proc.run(argv, env=run.env, cwd=run.workspace).returncode
     if request.run_eval or request.eval_only:
         exit_file = logs / "infx-eval-exit-code"
         if not exit_file.is_file() or exit_file.read_text().rstrip("\n") != "0":
@@ -93,7 +123,7 @@ def check_single_node(run: SrtRun, logs: Path) -> int:
         if not result.is_file() or result.stat().st_size == 0:
             print(f"ERROR: benchmark result {result} is missing or empty", file=sys.stderr)
             return 1
-    return 0
+    return rc
 
 
 def _stage_logs(run: SrtRun, logs: Path, power: PowerDecision) -> None:

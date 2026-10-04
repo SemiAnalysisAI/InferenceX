@@ -1154,13 +1154,18 @@ def test_request_outcome_cannot_disagree_with_raw_counts(single_node_env_vars, s
         build_result(raw, single_node_env_vars)
 
 
+@pytest.mark.parametrize("profile,metric,scope", [
+    ("dcgm", "DCGM_FI_DEV_POWER_USAGE", "gpu_device_board_as_reported_by_dcgm"),
+    ("amd-device-metrics", "gpu_power_usage", "gpu_device_power_as_reported_by_amd_device_metrics_exporter"),
+])
 @pytest.mark.parametrize('multinode', [True, False])
 def test_native_aggregate_role_through_result_processor(
-    tmp_path, multinode_env_vars, single_node_env_vars, multinode,
+    tmp_path, multinode_env_vars, single_node_env_vars, multinode, profile, metric, scope,
 ):
     pkg = build_package(tmp_path, bench_extra=TestMultinodePower.BENCH_EXTRA)
     manifest_path = pkg.power_dir / 'manifest.json'
     manifest = json.loads(manifest_path.read_text())
+    manifest.update(power_profile=profile, source_metric=metric, power_scope=scope)
     for device in manifest['expected_devices']:
         for assignment in device['assignments']:
             assignment.update(worker_role='agg', het_group=None)
@@ -1181,6 +1186,14 @@ def test_native_aggregate_role_through_result_processor(
     assert aggregate['total_gpu_energy_j'] == 84_000
     assert aggregate['power_audit']['producer_sha'] == PRODUCER_SHA
     assert set(ROLE_METRIC_KEYS).isdisjoint(aggregate)
+
+    manifest['source_metric'] = 'wrong_sensor'
+    manifest_path.write_text(json.dumps(manifest))
+    result = run_script(tmp_path, env, json.loads(pkg.original_result.read_text()))
+    assert result.returncode == 1
+    invalid = json.loads((tmp_path / 'agg_benchmark_result.json').read_text())
+    assert invalid['power_valid'] == 0
+    assert 'avg_power_w' not in invalid
 
 
 @pytest.mark.parametrize('conc_token,rate_suffix', [

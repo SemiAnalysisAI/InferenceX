@@ -7,6 +7,7 @@ in-process, so the lane table it patches applies.
 import json
 import os
 import signal
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -100,6 +101,26 @@ def single_node_env(harness, cluster_id: str, **overrides: str) -> dict[str, str
     return {**harness.env, **POINT_ENV, "RUNNER_NAME": runner_for(cluster_id), **overrides}
 
 
+def prepare_amd_exporter(harness, cluster_id: str, env: dict[str, str]) -> str:
+    """Supply the small prepared archive required by an AMD launch."""
+    inventory = yaml.safe_load(harness.config.read_text())
+    inventory["clusters"][cluster_id]["slurm"]["srt-slurm"]["extra"][
+        "default_gpu_exporter"
+    ]["container_image"] = "example.test/amd@sha256:abc"
+    harness.config.write_text(yaml.safe_dump(inventory))
+    prepared = harness.workspace / "prepared exporter"
+    prepared.mkdir()
+    (prepared / "amd-exporter.sqsh").write_bytes(b"abc")
+    (prepared / "provenance.json").write_text(json.dumps({
+        "image": {"upstream_reported_registry_digest": "sha256:abc"},
+    }))
+    checksum = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+    (prepared / "SHA256SUMS").write_text(f"{checksum}  amd-exporter.sqsh\n")
+    env.update(AMD_DME_ARTIFACT_DIR=str(prepared), AMD_DME_SQSH_SHA256=checksum)
+    env["PATH"] += os.pathsep + str(Path(shutil.which("sha256sum")).parent)
+    return checksum
+
+
 def lane_env(harness, cluster_id: str, recipe: str = LANE_RECIPE, **overrides: str) -> dict[str, str]:
     """Environment of a multi-node point whose recipe lives in the workspace mirror.
 
@@ -151,6 +172,70 @@ def test_single_node_point_stages_workflow_artifacts(harness):
     applied = [line.split()[-1] for line in lines(harness.logs, "git") if line.split()[2:3] == ["apply"]]
     assert applied == [str(workspace / "runners/srt-slurm/patches/001-fixture.patch")]
     assert lines(harness.logs, "scancel") == []
+
+
+@pytest.mark.parametrize("require_power", ["0", "1"])
+@pytest.mark.parametrize("cluster_id,profile,port", [
+    ("h200-cw", "dcgm", 9401), ("mi355x-amds", "amd-device-metrics", 19500),
+    ("mi325x-amd", "amd-device-metrics", 19500),
+    ("mi300x-amd", "amd-device-metrics", 19500),
+])
+def test_single_node_native_power_is_bound_and_retained(harness, require_power, monkeypatch,
+                                                      cluster_id, profile, port):
+    import copy
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[3] / "utils/srt-slurm/src"))
+    from srtctl.core.overrides import apply_overrides_to_recipe, parse_overrides
+
+    env_file = harness.tmp / "github-env"
+    env = single_node_env(harness, cluster_id, REQUIRE_POWER=require_power,
+                          GITHUB_ENV=str(env_file))
+    if profile == "amd-device-metrics":
+        checksum = prepare_amd_exporter(harness, cluster_id, env)
+    assert_ok(launch(env, harness.config, harness.workspace))
+    workspace = harness.workspace
+    [call] = srtctl_calls(harness.logs)
+    argv = call["argv"]
+    actual = copy.deepcopy(POINT_RECIPE)
+    apply_overrides_to_recipe(actual, parse_overrides([
+        argv[i + 1] for i, arg in enumerate(argv) if arg == "--set"
+    ], []))
+    telemetry = actual["telemetry"]
+    assert telemetry["enabled"] is True
+    assert telemetry["required"] is (require_power == "1")
+    assert telemetry["storage_subdir"] == "power"
+    assert actual["benchmark"]["concurrencies"] == [2]
+    exporter = telemetry["dcgm_exporter"]
+    assert exporter["port"] == port
+    assert exporter.get("power_profile", "dcgm") == profile
+    if profile == "dcgm":
+        assert "noprof" in exporter["command"]
+    else:
+        assert srtslurm(workspace)["default_mounts"][
+            str(workspace / "runners/srt-slurm/exporters/amd-power.json")
+        ] == "/etc/metrics/config.json"
+        cached = Path(srtslurm(workspace)["containers"][exporter["container_image"]])
+        assert cached.is_absolute()
+        assert not any("example.test" in line for line in lines(harness.logs, "enroot"))
+        if cluster_id == "mi300x-amd":
+            assert not cached.exists()  # Only the allocated host may populate its cache.
+            command = srtslurm(workspace)["default_host_setup"]["commands"][0]
+            assert "AMD_DME_SOURCE=" in command
+            assert f"AMD_DME_DESTINATION={cached}" in command
+        else:
+            assert cached.read_bytes() == b"abc"
+        assert (workspace / "exporter-image.sha256").read_text() == f"{checksum}  {cached}\n"
+        assert json.loads((workspace / "power-exporter-source.json").read_text()) == {
+            "image": {"upstream_reported_registry_digest": "sha256:abc"},
+        }
+    assert exporter["container_image"] in srtslurm(workspace)["containers"]
+    assert (workspace / "LOGS/power/samples.csv").read_text() == "retained native samples\n"
+    assert (workspace / "LOGS/power/power-producer-sha.txt").read_text() == env["FAKE_SRT_COMMIT"] + "\n"
+    assert (workspace / "LOGS/power/native-job-status.txt").read_text() == "42|COMPLETED|0:0\n"
+    assert (workspace / "LOGS/point-identity.json").is_file()
+    assert dict(line.split("=", 1) for line in env_file.read_text().splitlines()) == {
+        "POWER_ARTIFACT_DIR": "LOGS/power", "POWER_RESULT_ROOT": "LOGS",
+        "POWER_PRODUCER_SHA": env["FAKE_SRT_COMMIT"],
+    }
 
 
 def test_single_node_eval_requires_a_successful_eval(harness):
@@ -335,6 +420,7 @@ def test_submission_failure_code_propagates_and_cancels_the_job(harness, shape):
     active = harness.tmp / "active"
     if shape == "single":
         env = single_node_env(harness, "mi355x-amds", FAKE_SRTCTL_RC="7", FAKE_ACTIVE=str(active))
+        prepare_amd_exporter(harness, "mi355x-amds", env)
     else:
         env = lane_env(harness, "b300-dsxe", MODEL_PREFIX="dsr1", PRECISION="fp4", FRAMEWORK="dynamo-trt",
                        MODEL="deepseek-r1-fp4", FAKE_SRTCTL_RC="7", FAKE_ACTIVE=str(active))  # fmt: skip
@@ -387,7 +473,11 @@ def test_b300_flash_agentx_reenters_inside_a_batch_allocation(harness):
     [submit] = lines(harness.logs, "sbatch")
     assert {"--nodes=1", "--ntasks=1", f"--chdir={harness.workspace}", "--time=10"} <= set(submit.split())
     assert (harness.logs / "batch-rc").read_text() == "0"
-    assert json.loads((harness.workspace / "point-identity.json").read_text()) == {"completed": 2}
+    aggregate = json.loads((harness.workspace / "point-identity.json").read_text())
+    assert aggregate["completed"] == 2
+    assert aggregate["power_valid"] == 0
+    assert "agentic_gpu_topology_invalid" in aggregate["power_invalid_reasons"]
+    assert aggregate["power_audit"]["source"] == "results/power_validation.json"
     assert len(srtctl_calls(harness.logs)) == 1
     assert "4242" in lines(harness.logs, "scancel")
     assert list(runner_temp.glob("srt-batch.*.sh")) == []

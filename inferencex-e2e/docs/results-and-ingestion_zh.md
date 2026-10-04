@@ -109,6 +109,20 @@ PR changelog 选择具有代表性的 NVIDIA 和 AMD 覆盖，并非所有受影
 
 启动器或验证失败后仍会运行处理和功耗诊断上传，并在审计工件中保留原始及聚合 JSON。正常 `bmk_*` 上传要求基准和处理步骤成功，因此不完整批次或 Slurm 失败不会发布诊断数据。主分支的入库触发器仍可发布部分失败 sweep 中其他成功配置的数据；这并不证明整个硬件范围已完成覆盖。下游导入器可利用保留的状态拒绝明确失败的基准结果。
 
+### SRT 单节点功耗产物
+
+launcher 为单节点固定序列和 AgentX 作业开启原生遥测，将 `LOGS/power`、
+测量窗口引用的结果 JSON、producer revision 和 exporter 来源保留在
+`power_audit_<RESULT_FILENAME>` 中。AgentX 还保留
+`LOGS/agentic/agentic_power_concurrency_*.json` 及其校验 sidecar。
+作业失败时也会暂存已有诊断产物；eval-only 作业不启用功耗采集。
+
+NVIDIA DCGM 与 AMD device-metrics-exporter 产物共用原生校验器，检查 profile
+对应的指标与测量边界、producer、GPU 数量及结果绑定。AgentX 先核对单节点
+`num_gpus` 与 launcher 的预期数量，再加入功耗指标和有界审计摘要。
+无效测量省略能耗指标；`REQUIRE_POWER=1` 还会使作业失败。
+历史 CSV 读取器仍可处理此前保存的产物。
+
 ### SRT 多节点窗口保留
 
 功耗审计文件在 `selected_window` 中保留独立验证后的测量；`package_integrity_valid`

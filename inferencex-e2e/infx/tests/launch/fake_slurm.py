@@ -115,6 +115,8 @@ logs.mkdir(parents=True, exist_ok=True)
 result = os.environ["RESULT_FILENAME"]
 mode = os.environ["FAKE_RESULTS"]
 if mode == "single":
+    (logs / "power").mkdir()
+    (logs / "power/samples.csv").write_text("retained native samples\n")
     (logs / f"{result}.json").write_text('{"completed": 2}')
     (logs / "gpu_metrics.csv").write_text("gpu,power\n0,300\n")
     (logs / "gpu_metrics_context.json").write_text('{"device_count": 4}')
@@ -255,6 +257,7 @@ def base_env(*, fakes: Path, logs: Path, workspace: Path, sandbox: Path) -> dict
         EVAL_ONLY="false",
         RUN_EVAL="false",
         REQUIRE_POWER="0",
+        INFERENCEX_RESULTS_PYTHON=sys.executable,
         RESULT_FILENAME="point-identity",
         GITHUB_RUN_ID="9001",
         GITHUB_RUN_ATTEMPT="1",

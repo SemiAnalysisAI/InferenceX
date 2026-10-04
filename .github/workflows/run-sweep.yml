@@ -374,6 +374,9 @@ jobs:
     canary-sweep:
         needs: canary-select
         if: ${{ needs.canary-select.outputs.canary-config != '' && needs.canary-select.outputs.canary-config != '[]' }}
+        permissions:
+            contents: read
+            actions: read # Download the pinned AMD exporter artifact.
         uses: $/.github/workflows/benchmark-tmpl.yml
         name: canary /
         strategy:
@@ -482,6 +485,9 @@ jobs:
               toJson(fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['1k1k']) != 'null' &&
               toJson(fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['1k1k']) != '[]'
             }}
+        permissions:
+            contents: read
+            actions: read # Download the pinned AMD exporter artifact.
         uses: $/.github/workflows/benchmark-tmpl.yml
         name: single-node 1k1k /
         strategy:
@@ -511,6 +517,9 @@ jobs:
               toJson(fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['8k1k']) != 'null' &&
               toJson(fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['8k1k']) != '[]'
             }}
+        permissions:
+            contents: read
+            actions: read # Download the pinned AMD exporter artifact.
         uses: $/.github/workflows/benchmark-tmpl.yml
         name: single-node 8k1k /
         strategy:
@@ -532,6 +541,9 @@ jobs:
               toJson(fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['agentic']) != 'null' &&
               toJson(fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['agentic']) != '[]'
             }}
+        permissions:
+            contents: read
+            actions: read # Download the pinned AMD exporter artifact.
         uses: $/.github/workflows/benchmark-tmpl.yml
         name: agentic /
         strategy:
@@ -597,6 +609,9 @@ jobs:
               toJson(fromJson(needs.setup.outputs.search-space-config).evals) != '[]' &&
               toJson(fromJson(needs.setup.outputs.search-space-config).evals) != 'null'
             }}
+        permissions:
+            contents: read
+            actions: read # Download the pinned AMD exporter artifact.
         uses: $/.github/workflows/benchmark-tmpl.yml
         name: eval /
         strategy:
@@ -631,6 +646,9 @@ jobs:
               toJson(fromJson(needs.setup.outputs.search-space-config).agentic_evals) != '[]' &&
               toJson(fromJson(needs.setup.outputs.search-space-config).agentic_evals) != 'null'
             }}
+        permissions:
+            contents: read
+            actions: read # Download the pinned AMD exporter artifact.
         uses: $/.github/workflows/benchmark-tmpl.yml
         name: agentic eval /
         strategy:

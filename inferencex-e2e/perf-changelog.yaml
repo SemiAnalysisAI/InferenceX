@@ -9218,3 +9218,10 @@
     - "Remove client-side GPU sampling from SRT fixed-sequence and AgentX benchmarks. Use native telemetry measurement windows and route single-node native power packages through the shared artifact consumer; retain the legacy CSV result reader."
     - "Requires native telemetry enablement, artifact retention and AgentX finalization in the launcher before rollout across affected single-node lanes."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3684
+
+- config-keys:
+    - "*"
+  description:
+    - "Enable native NVIDIA and AMD power collection for single-node throughput and AgentX jobs, retaining measurement windows, formal results and exporter provenance. Finalize AgentX metrics against the single-node GPU count; leave eval-only collection disabled and preserve required-power failure behavior."
+    - "Pin srt-slurm to 2a4c0f3d with the AMD exporter profile patch and stage the verified prepared AMD exporter on shared or allocated-node caches."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3684

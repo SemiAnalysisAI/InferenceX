@@ -803,6 +803,10 @@ clusters:
           /dev/dri: /dev/dri
         extra:
           visible_devices_env: ROCR_VISIBLE_DEVICES
+          default_gpu_exporter:
+            container_image: docker.io#amdpsdo/device-metrics-exporter@sha256:698a3da79b5e11223b4909804ddb47f93c71775cd9eca6db86b41a0a10a7894a
+            port: 19500
+            power_profile: amd-device-metrics
   # Barite shares its login and NFS with mi300x-amd, but not its GPU partition.
   mi325x-amd:
     gpus-per-node: 8
@@ -833,6 +837,10 @@ clusters:
           /dev/dri: /dev/dri
         extra:
           visible_devices_env: ROCR_VISIBLE_DEVICES
+          default_gpu_exporter:
+            container_image: docker.io#amdpsdo/device-metrics-exporter@sha256:698a3da79b5e11223b4909804ddb47f93c71775cd9eca6db86b41a0a10a7894a
+            port: 19500
+            power_profile: amd-device-metrics
           default_bash_preamble: |-
             export XDG_CACHE_HOME="/tmp/xdg-cache-$SLURM_JOB_ID"
             export TRITON_CACHE_DIR="/tmp/triton-cache-$SLURM_JOB_ID"
@@ -884,5 +892,8 @@ clusters:
           /it-share/hf_home: /it-share/hf_home
         extra:
           visible_devices_env: ROCR_VISIBLE_DEVICES
-          default_gpu_exporter: null
+          default_gpu_exporter:
+            container_image: docker.io#amdpsdo/device-metrics-exporter@sha256:698a3da79b5e11223b4909804ddb47f93c71775cd9eca6db86b41a0a10a7894a
+            port: 19500
+            power_profile: amd-device-metrics
           nginx_raise_ulimit: false

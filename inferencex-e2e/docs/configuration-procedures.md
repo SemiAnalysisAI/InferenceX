@@ -66,9 +66,26 @@ implicit DCGM exporter. Power recipes select the same CSV through
 `telemetry.dcgm_exporter.command`, so one exporter version and one counter file serve
 both paths. Tachometer reuses the power exporter when power telemetry owns it. Power,
 energy and GPU utilization remain available; profiling and vGPU license counters are
-omitted. This does not enable telemetry in opted-out recipes or qualify Tachometer
-metrics as validated PowerX results. The existing 1000 ms Tachometer / 100 ms
-power-exporter collection intervals and port 9401 are preserved.
+omitted. This does not enable telemetry in opted-out multinode recipes or qualify Tachometer
+metrics as validated PowerX results. Multinode recipes retain their existing collection
+intervals and port 9401.
+
+Single-node throughput and AgentX jobs enable native power telemetry in the launcher,
+using the cluster's `default_gpu_exporter` and the selected point's concurrency.
+Eval-only jobs disable it. `REQUIRE_POWER=1` makes invalid measurements fail the job;
+otherwise they retain an invalid verdict without energy metrics. Missing exporter
+configuration or image staging still fails preparation before a benchmark can start.
+
+AMD profiles use the prepared device-metrics-exporter artifact from
+[run 36985488002](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/36985488002).
+The workflow supplies `AMD_DME_ARTIFACT_DIR` and `AMD_DME_SQSH_SHA256`; staging checks
+the archive, configured image digest and squash checksum before using the image.
+Shared caches are populated on the runner. The MI300X host-setup hook copies the
+verified squash to its node-local cache before services start; the source must be
+visible at the same workspace path on allocated nodes. No registry import is used
+for this prepared image. `power-exporter-source.json` retains its provenance.
+The retained build fixes the image identity; it does not establish hardware sampling
+freshness or qualify power measurements.
 
 Keep model selection, cache preparation, and workload-dependent time limits in the
 srt driver's tables ([`lanes.py`](../infx/launch/drivers/srt/lanes.py),
