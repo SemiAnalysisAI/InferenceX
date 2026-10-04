@@ -9309,3 +9309,11 @@
     - "Sizing of the new points follows the existing c192/c256 rule: admission is 2x CONC on both roles and decode captures graphs up to admission divided by dp-size, giving max-running-requests 768/1024 and cuda-graph-bs-decode 1-96/1-128."
     - "Bump the image from lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260923 to lmsysorg/sglang-rocm:v0.5.21-rocm724-mi35x-20261001, which carries the MegaMoE kernels, and update model.container to match. A master-config entry carries one image and search-space arms cannot override it, so every point in this entry moves onto the new image."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3664
+
+- config-keys:
+    - qwen3.5-fp8-mi325x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Enable strict measured power (require-power) for Qwen3.5 FP8 MI325X SGLang AgentX. Topology, image, and concurrency lists stay TP2/TEP2 [1, 4, 6], TP4 [1, 8, 16, 32, 40, 48], TEP4 [4, 16, 32, 40, 48], TP8 [1, 4, 8, 12, 16, 24, 32, 40, 48, 64, 80], TEP8 [4, 16, 24, 32, 40, 48, 64]."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3717

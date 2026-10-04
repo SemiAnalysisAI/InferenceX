@@ -255,6 +255,7 @@ qwen3.5-fp8-mi325x-sglang-agentic-mtp:
   scenarios:
     agentic-coding:
     - dram-utilization: 0.80
+      require-power: true
       search-space:
       - { tp: 2, ep: 2, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 6], srt-recipe: benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/mi325x-fp8-mtp/agentic.yaml }
       - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 8, 16, 32, 40, 48], srt-recipe: benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/mi325x-fp8-mtp/agentic.yaml }
