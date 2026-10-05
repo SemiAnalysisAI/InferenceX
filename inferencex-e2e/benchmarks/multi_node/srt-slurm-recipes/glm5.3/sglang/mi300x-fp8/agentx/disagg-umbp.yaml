@@ -239,6 +239,30 @@ override_tp8_decode_radix_c8:
     env:
       CONC: "8"
 
+override_tp4_pp2_42_36_resident_c8:
+  services: []
+  roles:
+    prefill:
+      env: &pp2_resident_env
+        SGLANG_PP_LAYER_PARTITION: "42,36"
+        UMBP_STANDALONE_ADDRESS: ""
+      args: &pp2_resident_args
+        tensor-parallel-size: 4
+        pipeline-parallel-size: 2
+        expert-parallel-size: 1
+        chunked-prefill-size: 1024
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 16
+        enable-unified-cache-external-linker: false
+        unified-cache-external-linker-backend: null
+        hicache-storage-backend-extra-config: null
+    decode:
+      env: *pp2_resident_env
+      args: *pp2_resident_args
+  benchmark:
+    env:
+      CONC: "8"
+
 override_tp8_dep16_c8:
   frontend:
     args:
