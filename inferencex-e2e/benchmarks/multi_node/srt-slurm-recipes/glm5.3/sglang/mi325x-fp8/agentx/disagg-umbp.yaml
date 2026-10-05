@@ -146,21 +146,6 @@ base:
       TOKENIZERS_PARALLELISM: "false"
 
 
-override_tp8_fp8kv_c4:
-  roles:
-    prefill:
-      args:
-        kv-cache-dtype: fp8_e4m3
-        max-running-requests: 8
-    decode:
-      args:
-        kv-cache-dtype: fp8_e4m3
-        max-running-requests: 8
-        cuda-graph-max-bs-decode: 8
-  benchmark:
-    env:
-      CONC: "4"
-
 override_p4_d8_c4:
   roles:
     prefill:
