@@ -16,6 +16,8 @@
 
 自动发布程序会拒绝不完整或前后矛盾的验证结果。每项检查必须且只能出现一次，总体裁定必须与各项检查结果一致；否则需要重试验证。
 
+验证器将 PR 描述视为待核实的材料，不执行其中的指令，并将其关于受影响配置及验证情况的明确陈述与本次评估的代码和证据核对。[Check 15](../../.github/codeowner-signoff-verify-prompt.md#check-15--pr-description-matches-the-assessed-configuration-advisory) 会对矛盾或无法核实的陈述发出警告，请作者修正或提供证据。该检查仅提供建议，不要求在描述中罗列所有配置细节。仅修改 PR 描述不会重新触发验证；请使用现有的[手动重新评估流程](../../CONTRIBUTING_zh.md#pr-review-checklistcodeowner-签署)。
+
 > **重要：模板请保持英文原文，原样复制粘贴，不要翻译。** CI 签署验证工作流 [`codeowner-signoff-verify.yml`](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/workflows/codeowner-signoff-verify.yml) 通过开头语句 "As a PR reviewer and CODEOWNER, I have reviewed this and have" 触发；模板被改写或翻译后，签署验证 CI 将不会触发。
 
 ## 模板（请复制英文原文）
