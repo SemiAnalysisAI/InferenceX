@@ -1563,14 +1563,15 @@ dsv41flash-fp4-mi355x-sglang-agentic-dspark:
       search-space:
       - { tp: 4, ep: 4, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/sglang/mi355x-fp4-mtp/agentic.yaml }
 
-glm5.3-fp8-mi300x-sglang-agentic:
+glm5.3-fp8-mi300x-mori-sglang-agentic:
   image: lmsysorg/sglang-rocm:v0.5.21-rocm720-mi30x-20261005@sha256:a4d60e7ef7645aefb1c52a77dcb32970440454bc359a1baff03711fcd0501613
   model: zai-org/GLM-5.3
   model-prefix: glm5.3
   runner: cluster:mi300x-amd
   precision: fp8
-  framework: sglang
+  framework: mori-sglang
   multinode: false
+  disagg: false
   scenarios:
     agentic-coding:
     - search-space:
@@ -1579,37 +1580,21 @@ glm5.3-fp8-mi300x-sglang-agentic:
       search-space:
       - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: umbp-linker }, spec-decoding: none, conc-list: [8], srt-recipe: benchmarks/single_node/srt-slurm-recipes/glm5.3/sglang/mi300x-fp8/agentic.yaml }
 
-glm5.3-fp8-mi300x-sglang-disagg-agentic-umbp:
+glm5.3-fp8-mi300x-mori-sglang-disagg-agentic:
   image: lmsysorg/sglang-rocm:v0.5.21-rocm720-mi30x-20261005@sha256:a4d60e7ef7645aefb1c52a77dcb32970440454bc359a1baff03711fcd0501613
   model: zai-org/GLM-5.3
   model-prefix: glm5.3
   runner: cluster:mi300x-amd
   precision: fp8
-  framework: sglang-disagg
-  router: { name: sglang-router, version: "0.3.2" }
-  kv-p2p-transfer: mori
+  framework: mori-sglang
   multinode: true
   disagg: true
+  router: { name: sglang-router, version: "0.3.2" }
+  kv-p2p-transfer: mori
   scenarios:
     agentic-coding:
     - dram-utilization: 0.32
       search-space:
-      - spec-decoding: none
-        conc-list: [4]
-        kv-offloading: dram
-        kv-offload-backend: { name: umbp-linker }
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/glm5.3/sglang/mi300x-fp8/agentx/disagg-umbp.yaml:override_tp8_c4"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
       - spec-decoding: none
         conc-list: [8]
         kv-offloading: dram
@@ -1626,67 +1611,55 @@ glm5.3-fp8-mi300x-sglang-disagg-agentic-umbp:
           tp: 8
           ep: 1
           dp-attn: false
+
+glm5.3-fp8-mi325x-mori-sglang-agentic:
+  image: lmsysorg/sglang-rocm:v0.5.21-rocm720-mi30x-20261005@sha256:a4d60e7ef7645aefb1c52a77dcb32970440454bc359a1baff03711fcd0501613
+  model: zai-org/GLM-5.3
+  model-prefix: glm5.3
+  runner: cluster:mi325x-amd
+  precision: fp8
+  framework: mori-sglang
+  multinode: false
+  disagg: false
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - { tp: 8, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [2, 3, 4], srt-recipe: benchmarks/single_node/srt-slurm-recipes/glm5.3/sglang/mi325x-fp8-mtp/agentic-fp8kv.yaml }
+      - { tp: 4, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [3], srt-recipe: "benchmarks/single_node/srt-slurm-recipes/glm5.3/sglang/mi325x-fp8-mtp/agentic-fp8kv.yaml:override_tp4_c3" }
+      - { tp: 4, ep: 4, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [3], router: { name: sglang-router, version: "0.3.2" }, srt-recipe: "benchmarks/single_node/srt-slurm-recipes/glm5.3/sglang/mi325x-fp8-mori/agentic.yaml:override_tep4_mtp_c3" }
+      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none, spec-decoding: none, conc-list: [8], router: { name: sglang-router, version: "0.3.2" }, srt-recipe: "benchmarks/single_node/srt-slurm-recipes/glm5.3/sglang/mi325x-fp8-mori/agentic.yaml:override_dep4_stp_c8" }
+    - dram-utilization: 0.211
+      search-space:
+      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: umbp-linker }, spec-decoding: none, conc-list: [8, 16], srt-recipe: benchmarks/single_node/srt-slurm-recipes/glm5.3/sglang/mi325x-fp8/agentic.yaml }
+
+glm5.3-fp8-mi325x-mori-sglang-disagg-agentic:
+  image: lmsysorg/sglang-rocm:v0.5.21-rocm720-mi30x-20261005@sha256:a4d60e7ef7645aefb1c52a77dcb32970440454bc359a1baff03711fcd0501613
+  model: zai-org/GLM-5.3
+  model-prefix: glm5.3
+  runner: cluster:mi325x-amd
+  precision: fp8
+  framework: mori-sglang
+  multinode: true
+  disagg: true
+  router: { name: sglang-router, version: "0.3.2" }
+  kv-p2p-transfer: mori
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.422
+      search-space:
       - spec-decoding: none
-        conc-list: [16]
+        conc-list: [4]
         kv-offloading: dram
         kv-offload-backend: { name: umbp-linker }
         prefill:
           num-worker: 1
-          tp: 8
+          tp: 4
           ep: 1
           dp-attn: false
           additional-settings:
-          - "CONFIG_FILE=recipes/glm5.3/sglang/mi300x-fp8/agentx/disagg-umbp.yaml:override_tp8_c16"
+          - "CONFIG_FILE=recipes/glm5.3/sglang/mi325x-fp8/agentx/disagg-umbp.yaml:override_p4_d8_c4"
         decode:
           num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-      - spec-decoding: none
-        conc-list: [32]
-        kv-offloading: dram
-        kv-offload-backend: { name: umbp-linker }
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/glm5.3/sglang/mi300x-fp8/agentx/disagg-umbp.yaml:override_tp8_c32"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-      - spec-decoding: none
-        conc-list: [16]
-        kv-offloading: dram
-        kv-offload-backend: { name: umbp-linker }
-        prefill:
-          num-worker: 2
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/glm5.3/sglang/mi300x-fp8/agentx/disagg-umbp.yaml:override_2p1d_tp8_c16"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-      - spec-decoding: none
-        conc-list: [16]
-        kv-offloading: dram
-        kv-offload-backend: { name: umbp-linker }
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/glm5.3/sglang/mi300x-fp8/agentx/disagg-umbp.yaml:override_1p2d_tp8_c16"
-        decode:
-          num-worker: 2
           tp: 8
           ep: 1
           dp-attn: false

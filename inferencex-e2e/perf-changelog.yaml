@@ -9329,14 +9329,14 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3724
 
 - config-keys:
-    - glm53-mi325x-oct5-control
-    - glm53-mi325x-oct5-tep8
-    - glm53-mi325x-oct5-dep8
-    - glm53-mi325x-oct5-mtp-baseline
-    - glm53-mi325x-oct5-pd-baseline
+    - glm5.3-fp8-mi300x-mori-sglang-agentic
+    - glm5.3-fp8-mi300x-mori-sglang-disagg-agentic
+    - glm5.3-fp8-mi325x-mori-sglang-agentic
+    - glm5.3-fp8-mi325x-mori-sglang-disagg-agentic
   scenario-type:
     - agentic-coding
   description:
-    - "Prepare isolated MI325X native TP, TEP and DEP correctness gates plus matched aggregate-MTP and MORI P/D AgentX controls on the digest-pinned October 5 ROCm720 MI30X image. Diagnostic configuration selection is in configs/glm53-mi325x-search.yaml."
-    - "Reuse the native SRT Slurm MI325X multi-node lane and HF/RDMA mounts from the completed GLM5.3 campaign; preserve full context, native corpus and automatic speculative-acceptance selection."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3656
+    - "Add GLM-5.3 FP8 AgentX on MI300X and MI325X with native SRT Slurm recipes, digest-pinned October 5 ROCm720 SGLang, FP8 KV, and full 1M context."
+    - "Compare aggregate TP MTP and UMBP controls with MI325X MoRI TEP4/DEP4 representatives and non-speculative MoRI P/D. Use the existing automatic golden-acceptance selection for aggregate MTP, native verification for accuracy, and a fresh server for every concurrency."
+    - "Keep aggregate and disaggregated points in the canonical mori-sglang series with explicit topology metadata; report actual configured UMBP capacity and physical GPU counts. No engine patches or speculative P/D configurations."
+  pr-link: TBD

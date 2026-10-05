@@ -145,19 +145,6 @@ base:
       WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126
       TOKENIZERS_PARALLELISM: "false"
 
-override_tp8_c4:
-  roles:
-    prefill:
-      args:
-        max-running-requests: 8
-    decode:
-      args:
-        max-running-requests: 8
-        cuda-graph-max-bs-decode: 8
-  benchmark:
-    env:
-      CONC: "4"
-
 override_tp8_c8:
   roles:
     prefill:
@@ -170,59 +157,3 @@ override_tp8_c8:
   benchmark:
     env:
       CONC: "8"
-
-override_tp8_c16:
-  roles:
-    prefill:
-      args:
-        max-running-requests: 32
-    decode:
-      args:
-        max-running-requests: 32
-        cuda-graph-max-bs-decode: 32
-  benchmark:
-    env:
-      CONC: "16"
-
-override_tp8_c32:
-  roles:
-    prefill:
-      args:
-        max-running-requests: 64
-    decode:
-      args:
-        max-running-requests: 64
-        cuda-graph-max-bs-decode: 64
-  benchmark:
-    env:
-      CONC: "32"
-
-override_2p1d_tp8_c16:
-  roles:
-    prefill:
-      nodes: 2
-      workers: 2
-      args:
-        max-running-requests: 32
-    decode:
-      args:
-        max-running-requests: 32
-        cuda-graph-max-bs-decode: 32
-  benchmark:
-    env:
-      CONC: "16"
-
-override_1p2d_tp8_c16:
-  roles:
-    prefill:
-      args:
-        max-running-requests: 32
-    decode:
-      nodes: 2
-      workers: 2
-      args:
-        max-running-requests: 16
-        cuda-graph-max-bs-decode: 16
-  benchmark:
-    env:
-      CONC: "16"

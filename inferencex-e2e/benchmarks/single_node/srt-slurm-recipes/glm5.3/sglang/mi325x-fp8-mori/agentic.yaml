@@ -1,7 +1,7 @@
-# Diagnostic real-quality gates; no synthetic acceptance or runtime modifications.
+# Native MoRI aggregate representatives. DEP4 STP is retained as exploration.
 schema: 2
 base:
-  name: glm53-mi325x-native-ep-quality
+  name: glm5.3-fp8-mi325x-native-mori-agentic
   model:
     path: hf:zai-org/GLM-5.3
     container: lmsysorg/sglang-rocm:v0.5.21-rocm720-mi30x-20261005@sha256:a4d60e7ef7645aefb1c52a77dcb32970440454bc359a1baff03711fcd0501613
@@ -9,8 +9,6 @@ base:
   resources:
     gpu_type: mi325x
     gpus_per_node: 8
-  sbatch_directives:
-    exclude: quanta-ccs-aus-k10-10
   frontend:
     type: sglang-router
     enable_multiple_frontends: false
@@ -70,37 +68,46 @@ base:
       WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
       AIPERF_BENCHMARK_GRACE_PERIOD: '1800'
-
-override_control:
+override_tep4_mtp_c3:
   roles:
     agg:
+      gpus: 4
       args:
-        expert-parallel-size: 1
-
-override_tep8:
-  roles:
-    agg:
-      args:
-        expert-parallel-size: 8
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
         moe-a2a-backend: mori
         deepep-mode: normal
+        mem-fraction-static: 0.93
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 3
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 4
       env:
         SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: '1024'
-
-override_dep8:
+  benchmark:
+    env:
+      CONC: '3'
+override_dep4_stp_c8:
   frontend:
     args:
       dp-aware: true
   roles:
     agg:
+      gpus: 4
       args:
-        expert-parallel-size: 8
-        data-parallel-size: 8
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        data-parallel-size: 4
         enable-dp-attention: true
         enable-dp-lm-head: true
         moe-dense-tp-size: 1
         moe-a2a-backend: mori
         deepep-mode: normal
-        chunked-prefill-size: 8192
+        chunked-prefill-size: 4096
+        mem-fraction-static: 0.96
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
       env:
         SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: '1024'
