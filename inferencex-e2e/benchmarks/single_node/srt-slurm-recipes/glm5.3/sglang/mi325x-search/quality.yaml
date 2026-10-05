@@ -92,6 +92,25 @@ override_tep4:
       env:
         SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: '1024'
 
+override_tep4_mtp:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        moe-a2a-backend: mori
+        deepep-mode: normal
+        mem-fraction-static: 0.93
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 3
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 4
+      env:
+        SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: '1024'
+
 override_dep4:
   frontend:
     args:

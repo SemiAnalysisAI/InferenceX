@@ -140,6 +140,20 @@ glm53-mi325x-oct5-tep4:
       search-space:
       - {tp: 4, ep: 4, dp-attn: false, kv-offloading: none, spec-decoding: none, conc-list: [8], router: {name: sglang-router, version: '0.3.2'}, srt-recipe: 'benchmarks/single_node/srt-slurm-recipes/glm5.3/sglang/mi325x-search/quality.yaml:override_tep4'}
 
+glm53-mi325x-oct5-tep4-mtp:
+  image: *image
+  model: zai-org/GLM-5.3
+  model-prefix: glm5.3
+  runner: cluster:mi325x-amd
+  precision: fp8
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - {tp: 4, ep: 4, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [8], router: {name: sglang-router, version: '0.3.2'}, srt-recipe: 'benchmarks/single_node/srt-slurm-recipes/glm5.3/sglang/mi325x-search/quality.yaml:override_tep4_mtp'}
+
 glm53-mi325x-oct5-dep4:
   image: *image
   model: zai-org/GLM-5.3
