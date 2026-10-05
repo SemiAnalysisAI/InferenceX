@@ -581,7 +581,8 @@ def _relative_module_path(fqn):
     return fqn.strip(".").replace("..", ".")
 
 
-def _compiled_module_of(node):
+def _stack_modules(node):
+    """Module paths from the node's source FX nodes' nn_module_stack (absent on some vLLM paths)."""
     paths = []
     for snode in node.get_nodes():
         if snode.node is None:
@@ -590,6 +591,57 @@ def _compiled_module_of(node):
             stack = origin.meta.get("nn_module_stack")
             if stack:
                 paths.append(_relative_module_path(list(stack.values())[-1][0]).split("."))
+    return paths
+
+
+_PLACEHOLDER_MODULE = re.compile(r"^l_self_(?:modules_)?(.*?)_(?:parameters|buffers)_")
+_compile_inputs = threading.local()  # stack of Dynamo placeholder names, one list per compile_fx call
+
+
+def _weight_modules(node, graph):
+    """Module paths of the weights (graph inputs) the node reads.
+
+    Inductor's own placeholders (arg0_1, ...) keep the order of the graph
+    handed to compile_fx, whose Dynamo names spell the owning module
+    (l_self_modules_layers_modules_3_modules_mlp_..._parameters_weight_).
+    """
+    stack = getattr(_compile_inputs, "stack", None)
+    if not stack:
+        return []
+    placeholders = [n.name for n in graph.graph.find_nodes(op="placeholder")]
+    if len(placeholders) != len(stack[-1]):
+        return []
+    dynamo_name = dict(zip(placeholders, stack[-1]))
+    paths = []
+    for dep in node.read_writes.reads:
+        match = _PLACEHOLDER_MODULE.match(dynamo_name.get(dep.name, ""))
+        if match:
+            paths.append(match.group(1).split("_modules_"))
+    return paths
+
+
+def _patch_compile_fx(module):
+    orig = getattr(module, "compile_fx", None)
+    if orig is None or getattr(orig, "_infx_patched", False):
+        return
+
+    def compile_fx(model_, example_inputs_, *args, **kwargs):
+        graph = getattr(model_, "graph", None)
+        names = [n.name for n in graph.find_nodes(op="placeholder")] if graph is not None else []
+        stack = getattr(_compile_inputs, "stack", None)
+        if stack is None:
+            stack = _compile_inputs.stack = []
+        stack.append(names)
+        try:
+            return orig(model_, example_inputs_, *args, **kwargs)
+        finally:
+            stack.pop()
+
+    compile_fx._infx_patched = True
+    module.compile_fx = compile_fx
+
+
+def _common_module(paths):
     if not paths:
         return None
     common = paths[0]
@@ -618,16 +670,16 @@ def _patch_inductor_scheduler(module):
             if getattr(V.graph, "cpp_wrapper", False) or not isinstance(wrapper, PythonWrapperCodegen):
                 _note_once("compile", "module_line_skipped", type(wrapper).__name__)
                 return
-            path = _compiled_module_of(node)
+            stacked = _stack_modules(node)
+            source = "nn_module_stack" if stacked else "weights"
+            path = _common_module(stacked or _weight_modules(node, V.graph))
             if path is None:
-                origin = next((o for n in node.get_nodes() if n.node is not None
-                               for o in n.node.get_origins()), None)
-                keys = sorted(origin.meta) if origin is not None else []
-                _note_once("compile", "no_module_stack", f"{type(wrapper).__name__} meta={keys}")
-            elif getattr(wrapper, "_infx_module", None) != path:
+                # No module for this kernel: close the previous one rather than extend it.
+                path, source = "", "none"
+            if getattr(wrapper, "_infx_module", None) != path:
                 wrapper.writeline(f"__import__('sitecustomize')._infx_compiled_module({path!r})")
                 wrapper._infx_module = path
-                _note_once("compile", "module_line", type(wrapper).__name__)
+            _note_once("compile", "module_source", f"{type(wrapper).__name__}:{source}")
         except Exception:
             _write_error("inductor module line")
 
@@ -646,6 +698,8 @@ def _infx_compiled_module(path):
     if current is not None and current[0] == path:
         return
     _close_compiled_module()
+    if not path:  # a kernel with no known module
+        return
     root = getattr(_module_tls, "compiled_root", "model")
     name = _compiled_names.get((root, path))
     if name is None:
@@ -1114,6 +1168,7 @@ _HOOKS = {
     "vllm.profiler.wrapper": _patch_profiler_wrapper,
     "vllm.compilation.piecewise_backend": _patch_piecewise_backend,
     "torch._inductor.scheduler": _patch_inductor_scheduler,
+    "torch._inductor.compile_fx": _patch_compile_fx,
     "vllm.v1.worker.gpu_worker": _patch_gpu_worker,
     "vllm.v1.simple_kv_offload.copy_backend": _patch_copy_backend,
     **_LAUNCHER_HOOKS,
