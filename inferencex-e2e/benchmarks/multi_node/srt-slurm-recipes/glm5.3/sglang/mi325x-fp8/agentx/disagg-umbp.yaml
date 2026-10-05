@@ -212,6 +212,21 @@ override_colocated_p4_d4_resident_mtp_c4:
     env:
       CONC: "4"
 
+override_p8_d4_resident_mtp_c4:
+  services: []
+  roles:
+    prefill:
+      env:
+        UMBP_STANDALONE_ADDRESS: ""
+      args: *resident_mtp_args
+    decode:
+      nodes: 1
+      gpus: 4
+      args: *tp4_resident_mtp_args
+  benchmark:
+    env:
+      CONC: "4"
+
 override_colocated_tep4_tep4_resident_mtp_c4:
   services: []
   roles:
