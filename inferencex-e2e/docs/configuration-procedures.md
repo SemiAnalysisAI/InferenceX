@@ -110,12 +110,13 @@ and preserve resources used by other jobs.
 3. [Change a master config](#change-a-master-config)
 4. [Register and set up a runner](#register-and-set-up-a-runner)
 5. [Register an srt-slurm recipe](#register-an-srt-slurm-recipe)
-6. [Update an image](#update-an-image)
-7. [Add or change MTP](#add-or-change-mtp)
-8. [Validate](#validate)
-9. [Avoid schema and topology traps](#avoid-schema-and-topology-traps)
-10. [Append the changelog safely](#append-the-changelog-safely)
-11. [Stop conditions](#stop-conditions)
+6. [Register an llm-d recipe](#register-an-llm-d-recipe)
+7. [Update an image](#update-an-image)
+8. [Add or change MTP](#add-or-change-mtp)
+9. [Validate](#validate)
+10. [Avoid schema and topology traps](#avoid-schema-and-topology-traps)
+11. [Append the changelog safely](#append-the-changelog-safely)
+12. [Stop conditions](#stop-conditions)
 
 ## Prepare a worktree
 
@@ -166,7 +167,7 @@ Sources: [`configs/CONFIGS.md`](../configs/CONFIGS.md), [`validation.py`](../inf
    - launcher: routing, mounts, model paths, image startup, and cluster behavior.
    - external/checked-in recipe: framework-specific multi-node runtime.
 5. For topology changes, calculate GPUs before editing and compare with the target fleet.
-6. For srt-slurm, update recipe and master entry together.
+6. For srt-slurm, update recipe and master entry together. For llm-d, update the llm-d recipe/orchestration and master entry together.
 7. Append the trigger entry, generate only the affected key first, and inspect every emitted point.
 
 Fixed-sequence `8192/1024` scenarios may set `require-power: true` to opt into validated measured power. The matrix passes this flag to standard sweeps and manual E2E throughput jobs; eval-only and AgentX rows do not inherit it. Omit the field to preserve existing behavior. Enable it only alongside the corresponding runtime and result adapter, then qualify the complete selected scope.
@@ -209,6 +210,22 @@ Mapping source: [`benchmarks/multi_node/srt-slurm-recipes/RECIPES.md`](../benchm
 
 Do not ship one side alone. `srtctl` reads the recipe, while matrix generation reads the master config. Recipe-only changes can mislabel results. Master-only changes do not alter the deployed recipe.
 
+## Register an llm-d recipe
+
+Sources: [`benchmarks/llm-d/README.md`](../benchmarks/llm-d/README.md), [`benchmarks/multi_node/llm-d/README.md`](../benchmarks/multi_node/llm-d/README.md), and [`llm-d-recipes/`](../benchmarks/multi_node/llm-d-recipes).
+
+llm-d is not the srt-slurm path: InferenceX owns the Slurm allocation and starts one container per node.
+
+1. Copy the nearest YAML under [`benchmarks/multi_node/llm-d-recipes/`](../benchmarks/multi_node/llm-d-recipes) and set EPP plugins/scheduling, role-specific `extra-args`/`env`, and optional `slurm.time_limit`.
+2. Add/update the `llmd-vllm` master entry. Set `multinode: true`, `disagg: true`, router metadata, `kv-p2p-transfer`, prefill/decode worker topology, concurrency, and `CONFIG_FILE=<basename>.yaml` in `additional-settings`.
+3. Keep `PREFILL_NODES`, `DECODE_NODES`, `GPUS_PER_NODE`, and worker counts consistent with the allocation and with each role's DP/TP/EP layout.
+4. Confirm [`submit.sh`](../benchmarks/multi_node/llm-d/submit.sh) → [`job.slurm`](../benchmarks/multi_node/llm-d/job.slurm) → [`server.sh`](../benchmarks/multi_node/llm-d/server.sh) propagation and the selected wrapper/launcher route.
+5. Verify file discovery. The decode leader creates `/tmp/endpoints.yaml`. Prefill endpoints use vLLM port 8200, while decode endpoints use sidecar port 8000. Names must be unique, addresses must be literal IPv4, and ports must be strings in `1..65535`.
+6. Confirm EPP loads discovery before Envoy receives traffic and role labels select the proper prefill/decode backends.
+7. Generate the key, inspect topology and `additional-settings`, then append the changelog.
+
+A missing/unset `CONFIG_FILE` silently selects the image's `/etc/epp/config.yaml` fallback and removes recipe-specific vLLM flags. Treat that as a validation failure unless fallback is explicitly intended.
+
 ## Update an image
 
 Sources: [`AGENTS.md#non-negotiable-benchmark-invariants`](../../AGENTS.md#non-negotiable-benchmark-invariants), the matching master configs, runtime scripts, and checked-in recipes.
@@ -217,8 +234,9 @@ Sources: [`AGENTS.md#non-negotiable-benchmark-invariants`](../../AGENTS.md#non-n
 2. Find every affected config key, runtime script, Dockerfile, and checked-in recipe. Do not assume the master YAML is the only image reference.
 3. Update the master `image` and any required env vars, flags, package versions, or patches as one coherent change.
 4. For srt-slurm, update `model.container` and keep it identical to master `image`.
-5. Append a changelog entry selecting all affected keys (wildcards are allowed when intentional), including old/new versions and material runtime changes.
-6. Generate each affected family and verify no stale tag survives in its runtime path.
+5. For llm-d, distinguish the serving image selected by the master config from the build source in [`benchmarks/llm-d/Dockerfile`](../benchmarks/llm-d/Dockerfile). Update both only when the build contract changes.
+6. Append a changelog entry selecting all affected keys (wildcards are allowed when intentional), including old/new versions and material runtime changes.
+7. Generate each affected family and verify no stale tag survives in its runtime path.
 
 ## Add or change MTP
 
@@ -309,14 +327,21 @@ EAGLE3 K3, golden AL 2.78 and indexer CP are unchanged.
 ### DeepSeek-V4.1-Flash DSpark
 
 The GB200 DSpark recipe uses a minimum CUDA graph capture size of 64 tokens to cover concurrent AgentX subagents. This raises c1/c2/c4 from 8/16/32 to 64; c8 and above retain their existing sizes. The full trace, AL 3.51, and Engram UVA settings are preserved; low-concurrency tail latency improvements require CI confirmation.
-The B200 DSpark recipe uses the same minimum capture size and preserves the same workload settings.
-The GB300 DSpark recipe uses the same minimum capture size and preserves the same workload settings.
+The B200 DSpark recipe sets explicit capture sizes per point, described below.
+The GB300 DSpark recipe sets explicit capture sizes per point, described below.
 The H200 DSpark recipe uses the same minimum capture size and preserves the same workload settings.
 
-B300 uses the same minimum capture size at c1/c2/c4. Its c1 CI comparison reduced request ITL P90/P99 from 38.74/41.42 ms to 2.62/3.45 ms; c2/c4 require CI confirmation.
+The B300 DSpark recipe sets explicit capture sizes per point, described below.
+
+The B200 entry uses `vllm/vllm-openai:nightly-dev-x86_64-cu130-ac9126e58aa7` with FlashInfer
+autotuning. TP4 covers concurrency 1–128. DEP2 (TP1 x DP2 + EP2, DeepGEMM MegaMoE) covers 8–32 and
+DEP4 (TP1 x DP4 + EP4, MegaMoE) covers 64–128, both behind a consistent-hash vLLM Router. DEP2 keeps about
+150 GiB of weights per B200 rank, so it caps batched tokens at 4096 and graph capture at 576 tokens.
+All B200 points set `--gpu-memory-utilization 0.97`.
+All points use `FULL_AND_PIECEWISE` CUDA graphs sized in multiples of the six-token verification block.
 
 The AgentX-only `dsv41flash-fp4-<sku>-vllm-agentic-dspark` recipes use the per-SKU
-`image` pinned in [`nvidia-master.yaml`](../configs/nvidia-master.yaml) (originally `vllm/vllm-openai:deepseekv41-flash-0909`, which B300 still uses) at TP4 on Blackwell SKUs with native five-token DSpark,
+`image` pinned in [`nvidia-master.yaml`](../configs/nvidia-master.yaml) (originally `vllm/vllm-openai:deepseekv41-flash-0909`) at TP4 on Blackwell SKUs with native five-token DSpark,
 probabilistic drafting. Throughput uses the [committed golden AL](../infx/golden_al_distribution/dsv41flash_dspark.yaml) of 3.51 for thinking on and five draft tokens, with synthetic rejection sampling and adaptive verification disabled. Accuracy evals retain real block rejection and adaptive verification. `--engram-config '{"cpu_offload":true}'`
 stores Engram embedding tables in pinned host DRAM accessed through UVA;
 `kv-offloading: none` describes the separate, GPU-resident KV cache. MXFP4 expert
@@ -324,19 +349,23 @@ weights determine the recipe's `precision: fp4` label.
 
 The GPU-specific entry points share the text-only serving behavior, `deepseek_v41` tokenizer and
 parsers, 1M context, and the shared AgentX trace replay, power, metrics, and eval
-helpers. The TP4 concurrency range is 1–128. The shared script sizes graph capture
+helpers. Unless noted below, the TP4 concurrency range is 1–128. The shared script sizes graph capture
 for the six-token DSpark verification block. The srt-slurm single-node path mounts the checkout at `/infmax-workspace`, so
 AgentX runtime directories are not created under `/workspace`. Cluster model paths and persistent caches are reused.
 The recipe probes the serving port on the compute node and selects an available
 port if the preferred one is occupied. Serving, replay, metrics, and eval share
 that endpoint.
 
-The B300 entry also includes a TP2 variant at concurrency 2–128. Its dedicated
-script uses `FULL_AND_PIECEWISE` CUDA graphs with explicit capture-size sets ending
-at 2046 or 8190 tokens. It sets `--max-num-batched-tokens` to 2048 for concurrency
-1–4 and TP2 concurrency 128, and to 8192 otherwise; `--max-num-seqs` is 256. The
-TP2 concurrency-128 variant also sets `--gpu-memory-utilization 0.97`. Other SKUs
-continue to use the shared script.
+The B300 entry uses `vllm/vllm-openai:nightly-dev-x86_64-cu130-ac9126e58aa7` with FlashInfer
+autotuning. TP4 covers concurrency 1–16; DEP2 (TP1 x DP2 + EP2, DeepGEMM MegaMoE) covers 8–192
+behind a consistent-hash vLLM Router, switching to MegaAttention at 128 and above. All points use
+`FULL_AND_PIECEWISE` CUDA graphs sized in multiples of the six-token verification block.
+Other SKUs continue to use the shared script.
+
+The GB300 entry uses `vllm/vllm-openai:nightly-dev-arm64-cu130-ac9126e58aa7` with FlashInfer
+autotuning. TP4 covers concurrency 1–16; DEP2 (TP1 x DP2 + EP2, DeepGEMM MegaMoE) covers 8–192
+behind a consistent-hash vLLM Router, switching to MegaAttention at 128 and above. All points use
+`FULL_AND_PIECEWISE` CUDA graphs sized in multiples of the six-token verification block.
 
 The GB300 launcher allows 7200 seconds for engine readiness. In [run 34504969146](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34504969146), the Rust frontend exhausted its 3600-second deadline while the engine was still capturing graphs; model loading alone took 18–23 minutes. This extends startup time without changing the benchmark duration or decoding settings.
 
@@ -606,7 +635,7 @@ If schema or generator behavior changed, run its focused suite:
 python -m pytest infx/tests/matrix/ -v
 ```
 
-For srt-slurm, also run the upstream recipe checker/`srtctl` command documented for that recipe. Local matrix generation cannot prove the Slurm allocation or the deployed topology.
+For srt-slurm, also run the upstream recipe checker/`srtctl` command documented for that recipe. For llm-d, validate recipe YAML and exercise the allocation/discovery path on the intended Slurm fleet. Local matrix generation cannot prove endpoint discovery.
 
 ## Avoid schema and topology traps
 
@@ -657,6 +686,7 @@ Stop before dispatching GPU work or claiming the configuration complete when any
 - The registered runner is in no `cluster:<id>` label, a matrix resolves to a nonexistent script, or the runner is not **Idle**.
 - Calculated topology exceeds the fleet, DCP does not divide TP, heterogeneous hardware metadata is one-sided, or generated topology differs from the intended recipe.
 - An srt-slurm recipe and master entry disagree, `model.container != image`, or upstream recipe validation has not run.
+- An llm-d recipe is missing and would fall back unintentionally, allocation counts disagree, or endpoint discovery cannot satisfy literal-IPv4/unique-name/valid-port rules.
 - An MTP recipe lacks chat-template benchmarking, the speculative method/token count is unverified, or graph capture exceeds the backend limit.
 - The changelog change would modify historical bytes, is not at EOF, has a conflict, or still has `TBD` when the PR is otherwise ready for sweep.
 - YAML, Bash, strict schema, exact-key generation, cluster-record validation, launch tests, or recipe validation fails.
