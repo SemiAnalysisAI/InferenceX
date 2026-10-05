@@ -9327,7 +9327,6 @@
     - agentic-coding
   description:
     - "Replace the GB300 DeepSeek-V4 vLLM AgentX MTP submission with nine configurations tuned on DeepSeek-V4-Pro-0813: aggregate TP8 c1 and TP4 c1/c2/c4 (agg-variants.yaml), plus disaggregated 1p1d DEP4/DEP16 c128, 1p1d DEP8/DEP16 c384 and c512, 2p1d DEP8/DEP16 c1024, and 2p1d DEP8/DEP12 c1152 (disagg-mtp-variants.yaml). Drop the 1p1d DEP4/DEP8 c256 override and the standalone 1p4d DEP4/TP8 c4 recipe."
-    - "The c384 point (override_1p1d_dep8_dep16_c384) uses a DEP8 prefill with max-num-seqs 128 and max-num-batched-tokens 16384, and a DEP16 decode at 48 sequences per rank with CUDA graphs up to 336, adapted from the NVIDIA/srt-slurm rihuo/test-dspark recipe disagg-1p1d-dep8-dep16-c384-mtp.yaml."
     - "Switch the model to deepseek-ai/DeepSeek-V4-Pro-0813 and speculative decoding from MTP3 to DSpark K=6 with probabilistic draft sampling (spec-decoding: draft_model). Recipes keep real verification; the connector injects the dsv4-pro-0813-dspark golden AL for throughput runs."
     - "Bump the image to vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-20ebb28 and Dynamo to 1.6.0.dev20260923; use the mxfp4 indexer KV cache, KV router with fastokens, dedicated etcd/nats/frontend placement for disaggregated recipes, and per-configuration decode CUDA-graph sizes."
     - "Reduce the Mooncake store segment to 140 GB per rank (125 GB for c1152), so dram-utilization becomes 0.666667 and 0.595238."
