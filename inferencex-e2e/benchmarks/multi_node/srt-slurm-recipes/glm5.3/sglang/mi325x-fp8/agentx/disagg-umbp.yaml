@@ -246,6 +246,27 @@ override_colocated_tep4_tep4_resident_mtp_c4:
     env:
       CONC: "4"
 
+# Decode-only capacity bound: max8 requests *4 verification/draft-extend rows.
+# Keep the prefill capacity unchanged and let native MoRI allocate receive buffers.
+override_colocated_tep4_tep4_resident_mtp_cap32_c4:
+  services: []
+  roles:
+    prefill:
+      gpus: 4
+      env:
+        UMBP_STANDALONE_ADDRESS: ""
+        SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "1024"
+      args: *tep4_resident_mtp_args
+    decode:
+      nodes: colocate
+      gpus: 4
+      env:
+        SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "32"
+      args: *tep4_resident_mtp_args
+  benchmark:
+    env:
+      CONC: "4"
+
 override_p4_d8_c4:
   roles:
     prefill:
