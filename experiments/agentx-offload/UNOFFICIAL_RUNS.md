@@ -22,7 +22,7 @@ rows. `renderable` means the API returned at least one benchmark row; it does no
 run is scientifically valid. Consult [`runs.json`](./runs.json) for validity and study
 conclusions.
 
-Generated at: `2026-10-05T19:59:06.261571Z`
+Generated at: `2026-10-05T20:51:29.224911Z`
 
 ## URLs
 
@@ -36,9 +36,9 @@ Pure-NVMe API-renderable points (8 runs):
 
 ## Complete branch workflow list
 
-Branch workflows: **70**
+Branch workflows: **71**
 
-Individual GitHub jobs: **829**
+Individual GitHub jobs: **851**
 
 | Workflow run ID | Conclusion | Chart benchmarks | GitHub jobs | Workflow |
 | ---: | --- | ---: | ---: | --- |
@@ -111,4 +111,5 @@ Individual GitHub jobs: **829**
 | [37236791824](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37236791824) | failure | 0 | 12 | `e2e Test - offload-v1-nvme4tib-c489-r1-branchwf-20261004` |
 | [37269968186](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37269968186) | failure | 0 | 12 | `e2e Test - offload-v1-none-c489-r1-branchwf-20261005` |
 | [37366294117](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37366294117) | failure | 0 | 12 | `e2e Test - offload-v1-nvme4tib-c489-r2-extended-20261005` |
-| [37366720497](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37366720497) | none | 0 | 1 | `e2e Test - offload-v1-nvme4tib-c489-r2-extended-fullsha-20261005` |
+| [37366720497](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37366720497) | failure | 0 | 12 | `e2e Test - offload-v1-nvme4tib-c489-r2-extended-fullsha-20261005` |
+| [37372224015](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37372224015) | none | 0 | 11 | `e2e Test - offload-v1-nvme4tib-c489-r3-digest-extended-20261005` |

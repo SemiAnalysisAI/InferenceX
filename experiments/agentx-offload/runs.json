@@ -5146,10 +5146,10 @@
       "attempt": 2,
       "retry_of": 37366294117,
       "head_sha": "56fd9fb9f11ff53af2e78bf8f1795e47af0b967d",
-      "status": "queued",
+      "status": "failure",
       "workflow_name": "offload-v1-nvme4tib-c489-r2-extended-fullsha-20261005",
       "dispatched_at": "2026-10-05T19:57:22Z",
-      "phase": "B200 benchmark job failed; workflow finalization job queued",
+      "phase": "terminal image-import failure; no benchmark or scratch",
       "performance_result": false,
       "execution_budget": {
         "slurm_minutes": 510,
@@ -5165,33 +5165,48 @@
       "failure_stage": "container image import before benchmark launch",
       "runtime_evidence": "Slurm job 19524 allocated on allowlisted im-b200-c001. The 510-minute allocation was passed to salloc. Enroot import of the pinned nightly tag returned registry HTTP 404; the expected squash file did not exist, so Pyxis could not create the container. experiments/agentx-offload/run.sh never started, no preflight or canonical warmup ran, and no task-owned scratch was created. The benchmark job exited at 2026-10-05T20:28:42Z. The enclosing workflow still has calc-success-rate queued.",
       "job_log_sha256": "8467076f8a992656406cbc2462b4389cbd0d0dc17642466d17a7a08e7d9b89bf",
-      "artifacts": []
+      "artifacts": [],
+      "completed_at": "2026-10-05T20:49:11Z"
+    },
+    {
+      "run_id": 37372224015,
+      "url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37372224015",
+      "arm": "nvme",
+      "concurrency": 489,
+      "repeat": 3,
+      "attempt": 1,
+      "retry_of": 37366720497,
+      "head_sha": "1b1d7651bdf951c05224f39c016dba57d6f260a0",
+      "status": "queued",
+      "workflow_name": "offload-v1-nvme4tib-c489-r3-digest-extended-20261005",
+      "dispatched_at": "2026-10-05T20:50:30Z",
+      "phase": "cancellation requested during get-jobs; finalization queued",
+      "performance_result": false,
+      "failure_stage": "incorrect explicit input ref",
+      "runtime_evidence": "The workflow head is 1b1d7651bdf951c05224f39c016dba57d6f260a0, but the explicit input ref was mistyped. Cancellation was requested immediately; get-jobs is cancelled and no B200 job or task-owned scratch was created. Wait for full workflow termination before a corrected dispatch."
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894,36796500128,36879140816,37027095833",
-  "status": "Extended-budget c489 run 37366720497 failed before benchmark launch because the pinned Docker Hub tag returned HTTP 404 at Enroot import. Slurm job 19524 allocated on im-b200-c001, but run.sh and scratch creation never started. The exact recorded image manifest and AMD64 digests remain available; all four study arms are being repinned to the same image by digest. The enclosing workflow still has a queued finalization job, so no replacement run may dispatch yet.",
+  "status": "The removed image tag is repaired by the exact recorded manifest digest at head 1b1d7651bdf951c05224f39c016dba57d6f260a0. An immediate retry 37372224015 was cancelled during get-jobs because its explicit input ref was mistyped; no B200 job or scratch was created. Wait for full workflow termination before a corrected dispatch.",
   "last_capacity_check": {
-    "checked_at": "2026-10-05T19:57:11Z",
-    "active_study_run_ids": [
-      37366720497
+    "checked_at": "2026-10-05T20:50:16Z",
+    "active_study_run_ids": [],
+    "pending_study_run_ids": [
+      37372224015
     ],
-    "pending_study_run_ids": [],
     "dispatch_allowed": false,
     "b200_priority_jobs_queued": 0,
-    "b200_priority_jobs_in_progress": 1,
-    "b200_active_or_queued_run_ids": [
-      37362991430,
-      37366720497
-    ],
+    "b200_priority_jobs_in_progress": 0,
+    "b200_active_or_queued_run_ids": [],
     "target_node": "im-b200-c001",
-    "target_node_state": "allocation 19524 ended after image-import 404; no task-owned scratch was created",
+    "target_node_state": "no allocation from cancelled setup run",
     "observed_free_bytes": null,
-    "reason": "Study workflow 37366720497 still has queued calc-success-rate finalization; do not dispatch replacement until terminal and after fresh cluster inventory."
+    "reason": "Cancelled study workflow 37372224015 still has queued finalization jobs; dispatch nothing until terminal and refreshed inventory."
   },
   "next_dispatch": {
     "arm": "nvme",
     "concurrency": 489,
-    "requires": "After run 37366720497 is fully terminal, validate and push the same-image digest pin, refresh cluster-wide B200 labels, then retry only the extended-budget NVMe c489 arm."
+    "requires": "After 37372224015 is fully terminal, refresh cluster-wide B200 labels and dispatch digest-pinned c489 only with exact input ref 1b1d7651bdf951c05224f39c016dba57d6f260a0."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-21T05:30:00Z",
