@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import os
 import re
@@ -198,21 +199,24 @@ def mooncake_headroom_arguments(
     if headroom_gib <= 0:
         return []
     ranks = int(role_args.get("data-parallel-size", 1)) * int(role_args.get("tensor-parallel-size", 1))
-    overrides = []
-    for index, service in enumerate(recipe.get("services") or []):
+    services = copy.deepcopy(list(recipe.get("services") or []))
+    changed = False
+    for service in services:
         if not isinstance(service, Mapping) or service.get("type") != "mooncake-master":
             continue
-        size = ((service.get("options") or {}).get("store_config") or {}).get("global_segment_size")
-        match = re.fullmatch(r"(\d+(?:\.\d+)?)\s*([KMGT]?B)", str(size or ""), re.IGNORECASE)
+        store = (service.get("options") or {}).get("store_config") or {}
+        match = re.fullmatch(r"(\d+(?:\.\d+)?)\s*([KMGT]?B)", str(store.get("global_segment_size") or ""), re.IGNORECASE)
         if not match:
             continue
         scale = {"KB": 1 / 2**20, "MB": 1 / 2**10, "GB": 1, "TB": 2**10}[match.group(2).upper()]
         shrunk = float(match.group(1)) * scale - headroom_gib / ranks
         if shrunk <= 0:
             raise ValueError("INFX_PROFILE host_headroom_gib exceeds the recipe's Mooncake segment")
-        overrides += ["--set", f"services[{index}].options.store_config.global_segment_size="
-                               f"{json.dumps(f'{int(shrunk)}GB')}"]
-    return overrides
+        store["global_segment_size"] = f"{int(shrunk)}GB"
+        changed = True
+    # srtctl applies --set to base and every override_* section, so an indexed
+    # services[i] path fails on variants without services; replace the whole list.
+    return ["--set", f"services={json.dumps(services)}"] if changed else []
 
 
 def profiling_arguments(
