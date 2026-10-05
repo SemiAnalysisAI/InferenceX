@@ -5229,22 +5229,27 @@
       "status": "in_progress",
       "workflow_name": "offload-v1-nvme4tib-c489-r4-enroot3-extended-fullsha-20261005",
       "dispatched_at": "2026-10-05T21:44:47Z",
-      "phase": "B200 job admitted to b200-nscale-slurm_01; Slurm allocation pending",
+      "phase": "Slurm job 19535 pending for resources on requested im-b200-c001",
       "performance_result": false,
       "execution_budget": {
         "slurm_minutes": 510,
         "github_job_minutes": 530
       },
-      "dispatch_evidence": "Previous run 37374537927 was terminal. Fresh cluster-wide inventory at 2026-10-05T21:42:57Z found zero queued B200 jobs and one unrelated in-progress B200 job; study-branch inventory found no active-or-queued study workflow. The full current HEAD SHA was computed with git rev-parse HEAD and verified equal to origin/experiment/agentx-b200-offload before dispatch. The canonical image manifest is unchanged; the B200 launcher translates only the Enroot import URI to the Enroot 3.x colon-delimited digest selector. get-jobs succeeded. Generated job 111991985591 has cluster:b200-nscale and nodes:1 and entered b200-nscale-slurm_01 at 2026-10-05T21:45:38Z.",
+      "dispatch_evidence": "Previous run 37374537927 was terminal. Fresh cluster-wide inventory at 2026-10-05T21:42:57Z found zero queued B200 jobs and one unrelated in-progress B200 job; study-branch inventory found no active-or-queued study workflow. The full current HEAD SHA was computed with git rev-parse HEAD and verified equal to origin/experiment/agentx-b200-offload before dispatch. The canonical image manifest is unchanged; the B200 launcher translates only the Enroot import URI to the Enroot 3.x colon-delimited digest selector. get-jobs succeeded. Generated job 111991985591 has cluster:b200-nscale and nodes:1 and entered b200-nscale-slurm_01 at 2026-10-05T21:45:38Z. The runner submitted Slurm job 19535 with 08:30:00 limit and ReqNodeList=im-b200-c001; scontrol showed PENDING Resources, no allocation or scratch yet.",
       "get_jobs_id": 111991858086,
       "job_id": 111991985591,
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37377909064/job/111991985591",
       "runner": "b200-nscale-slurm_01",
-      "started_at": "2026-10-05T21:45:38Z"
+      "started_at": "2026-10-05T21:45:38Z",
+      "slurm_job_id": 19535,
+      "requested_node": "im-b200-c001",
+      "slurm_time_limit": "08:30:00",
+      "slurm_state": "PENDING",
+      "pending_reason": "Resources"
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894,36796500128,36879140816,37027095833",
-  "status": "Corrected Enroot-3-compatible extended-budget NVMe c489 retry 37377909064 is admitted to B200 runner b200-nscale-slurm_01. Slurm allocation and storage preflight remain unverified.",
+  "status": "Corrected Enroot-3-compatible NVMe c489 run 37377909064 is active; Slurm job 19535 is pending on im-b200-c001 for resources. No image import, storage preflight or warmup yet.",
   "last_capacity_check": {
     "checked_at": "2026-10-05T21:42:57Z",
     "active_study_run_ids": [
@@ -5259,9 +5264,9 @@
       37377909064
     ],
     "target_node": "im-b200-c001",
-    "target_node_state": "B200 runner admitted; Slurm allocation pending",
+    "target_node_state": "Slurm job 19535 PENDING Resources on requested im-b200-c001",
     "observed_free_bytes": null,
-    "reason": "Study B200 job 111991985591 is active; dispatch nothing else."
+    "reason": "Study job 19535 is pending within its active B200 workflow; dispatch nothing else."
   },
   "next_dispatch": {
     "arm": "none",
