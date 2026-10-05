@@ -9339,4 +9339,4 @@
     - "Add GLM-5.3 FP8 AgentX on MI300X and MI325X with native SRT Slurm recipes, digest-pinned October 5 ROCm720 SGLang, FP8 KV, and full 1M context."
     - "Compare aggregate TP MTP and UMBP controls with MI325X MoRI TEP4/DEP4 representatives and non-speculative MoRI P/D. Use the existing automatic golden-acceptance selection for aggregate MTP, native verification for accuracy, and a fresh server for every concurrency."
     - "Keep aggregate and disaggregated points in the canonical mori-sglang series with explicit topology metadata; report actual configured UMBP capacity and physical GPU counts. No engine patches or speculative P/D configurations."
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3734
