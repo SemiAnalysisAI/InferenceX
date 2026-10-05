@@ -200,3 +200,83 @@ Each duration is a separate frozen workload. Do not pool these durations or
 interpret their latency difference as a regression. One measured clip per role
 provides point estimates only; workload execution passed while regression
 remains uncalibrated and inconclusive.
+
+## Offline deployment-frontier replay
+
+`evaluator.mvp_deployment_frontier` selects retained, normalized dashboard
+observations for a local comparison; it does not collect new measurements or
+qualify an artifact. This is the backend counterpart of the video-only wrapper in
+[App #1193](https://github.com/SemiAnalysisAI/InferenceX-app/pull/1193), delivered
+with [Backend #2916](https://github.com/SemiAnalysisAI/InferenceX/pull/2916).
+The shared LLM/calculator Pareto implementation is unchanged.
+
+Pass a JSON object with `points`. Each point supplies `id`, finite numeric `x` and
+`y`, `hardwareKey`, canonical `cohortKey` (workload plus generation settings),
+canonical `deploymentKey` (including replicas, parallel layout, offload, batching
+and engine/runtime), and the producer's `queueingStatus` (`unqueued`, `queueing`,
+or `unknown`). Optional `hardwareHealth.status: "fail"` excludes a point even
+when dominated deployments are requested. Missing canonical cohorts remain
+isolated points. Unknown request capacity and missing axes cannot rank. Exact
+coordinate ties retain distinct measured identities; a repeated observation of
+one deployment does not create a connecting deployment line. No interpolation
+or extrapolation is performed.
+
+With `--quality-required`, the reader checks the source-bound `quality` assessment;
+an opaque `qualifiedQualityCohort` string cannot grant admission. The assessment
+must declare `scale: "ordinal_0_to_4"` and preserve all seven original rubric IDs:
+`prompt_adherence`, `visual_fidelity`, `temporal_consistency`, `motion_plausibility`,
+`audio_quality`, `audio_content`, and `av_sync`. Zero is a real score, not missing
+information. Legacy 1–5 scores or renamed dimensions are not silently converted.
+The registry remains `human.absolute_dimension_rating`, version `0.2.0-draft`.
+
+Every critical dimension must have a passing decision, complete target-clip
+coverage, identified evaluator, and a calibrated frozen rule with provenance.
+`--quality-metric` selects the displayed dimension (default `prompt_adherence`);
+`--quality-threshold` can only tighten that dimension's frozen threshold. Other
+dimensions still require their own frozen rules. The derived quality cohort includes
+all seven evaluator and calibration identities, not only the selected dimension.
+Different workload/generation or quality cohorts never dominate each other or share
+a connecting line. These checks validate recorded contract fields; they do not
+establish that human judgments or calibration are scientifically valid, or turn
+media integrity/fidelity into perceptual quality.
+
+```bash
+cd experimental/video-generation
+python -m evaluator.mvp_deployment_frontier normalized-observations.json \
+  --output frontier.json --x-better lower --y-better higher
+```
+
+The JSON output retains input identities, selected observations, each separate
+frontier and exclusion reasons. `--include-dominated` matches the chart's Optimal
+Only off state; `--quality-required` applies the qualification filter first.
+`tests/fixtures/deployment-frontier.json` contains shared synthetic direction/tie
+cases for the backend and App tests, never measured benchmark evidence.
+
+## Optional source-bound dashboard observations
+
+[`dashboard-observations.schema.json`](./dashboard-observations.schema.json)
+defines an additive `dashboard-observations.json` sidecar, independent of
+`result.json` version 1.0.0. Its root contains `schemaVersion: 1`, `sourceRunId`,
+`sourceSha`, and a nonempty `cells` map. Each known cell binds `runSha256` and
+`specSha256` to that cell's existing measured run and specification; optional
+`deployment`, `hardwareHealth`, and `quality` objects preserve unknowns as null.
+The sidecar's SHA256 must appear in both `SHA256SUMS` and
+`manifest.evidence["dashboard-observations.json"]`. Ingestion verifies the raw
+bytes, source run/commit, cell existence and run/spec hashes before exposing any
+of its fields. Schema validation alone cannot establish those relationships.
+
+Deployment fields distinguish observed `batchSize` from configured
+`maxBatchSize`, and retain Ring/CFG, individual offload flags, precision scope,
+engine and generation identity. A `hardwareHealth` record carries its status,
+reason and evidence; incomplete monitoring remains unknown. Quality stores
+the required `ordinal_0_to_4` scale and separate original rubric dimensions with
+contract/rubric/evaluator identities and hashes, sample coverage and a frozen
+calibration record. Nullable unjudged data is valid
+contract data, but cannot qualify a frontier. A syntactically valid `pass` is
+also insufficient without all seven calibrated protocol checks in the App and
+backend frontier reader.
+
+The existing exporter does not create this optional sidecar automatically.
+Original archives and source seals remain immutable. Explicit local curator
+enrichment can exercise these fields for a preview, but must be labelled as
+unsealed replay data; it is not equivalent to this sealed ingestion contract.

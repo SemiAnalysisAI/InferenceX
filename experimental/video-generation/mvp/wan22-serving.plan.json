@@ -1,0 +1,48 @@
+{
+  "plan_id": "wan22-t2v-a14b-serving-smoke-v1",
+  "model_id": "Wan-AI/Wan2.2-T2V-A14B-Diffusers",
+  "model_revision": "5be7df9619b54f4e2667b2755bc6a756675b5cd7",
+  "generation": {
+    "width": 832,
+    "height": 480,
+    "frame_count": 81,
+    "fps": 16,
+    "num_inference_steps": 40,
+    "guidance_scale": 4.0,
+    "guidance_scale_2": 3.0,
+    "flow_shift": 12.0,
+    "negative_prompt": ""
+  },
+  "cases": [
+    {
+      "case_id": "drum-taps",
+      "prompt": "A single continuous medium shot of a drummer tapping a snare drum three times in a rehearsal room. The drumsticks visibly contact the drumhead on each tap. The camera remains still. No subtitles or scene cuts.",
+      "seed": 11,
+      "requires_motion": true,
+      "requires_sound": false
+    },
+    {
+      "case_id": "pouring-water",
+      "prompt": "A single continuous close-up of a hand steadily pouring water from a clear glass jug into an empty drinking glass on a wooden table. The water level visibly rises. Daylight, a still camera, no subtitles or scene cuts.",
+      "seed": 23,
+      "requires_motion": true,
+      "requires_sound": false
+    },
+    {
+      "case_id": "bicycle-pass",
+      "prompt": "A single continuous wide shot of a cyclist riding from the left side of the frame to the right along a park path. The moving wheels remain visible. The camera stays still. No subtitles or scene cuts.",
+      "seed": 37,
+      "requires_motion": true,
+      "requires_sound": false
+    },
+    {
+      "case_id": "footsteps",
+      "prompt": "A single continuous low-angle shot of a person in ordinary shoes walking across a wooden floor from left to right. Each step visibly lands on the floor. The camera stays still. No subtitles or scene cuts.",
+      "seed": 53,
+      "requires_motion": true,
+      "requires_sound": false
+    }
+  ],
+  "repetitions": 1,
+  "warmup_runs": 1
+}
