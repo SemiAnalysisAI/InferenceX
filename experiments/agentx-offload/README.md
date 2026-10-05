@@ -160,6 +160,17 @@ aggregate result. Both are local canonical-protocol feasibility failures under t
 fixed workflow budget, so the integer boundary remains completed c488 versus
 infeasible c489 and is not specific to the NVMe tier.
 
+The follow-on c489 requalification changes only the single-node execution envelope.
+Canonical AgentX jobs receive a 510-minute Slurm allocation and a 530-minute outer
+GitHub job limit instead of 480 and 500 minutes. Both original c489 arms finalized
+their raw profiling records roughly 482–483 minutes after job start, so the extra
+30 Slurm minutes provide bounded headroom for aggregate export and exact cleanup;
+the outer limit remains 20 minutes longer than Slurm. Fixed-sequence single-node
+jobs retain their existing 480/500-minute limits. The model, precision, TP4 layout,
+corpus, warmup, cache configuration, connector, and 3,600-second profiling window
+remain unchanged. Results from this phase are a separate execution-budget
+qualification and must not be silently combined with the fixed-budget boundary.
+
 The combined tier uses a different connector and storage policy. The pinned FS
 tier has no bounded LRU capacity setting: the 2 TiB value is an abort guard, not an
 eviction quota. It was raised independently of the NVMe-only capacity after
