@@ -1,0 +1,83 @@
+--- a/python/sglang/srt/layers/engram.py
++++ b/python/sglang/srt/layers/engram.py
+@@ -548,6 +548,27 @@
+     )
+ 
+ 
++_HOST_REGISTER_MAPPED = 2  # cudaHostRegisterMapped == hipHostRegisterMapped
++
++
++def _registered_device_ptr(host_ptr: int) -> int:
++    """Device address of host memory registered with _HOST_REGISTER_MAPPED.
++
++    UVA makes it the host address on CUDA; HIP does not promise that, so ask
++    the runtime for the mapping kernels must use.
++    """
++    if not _is_hip:
++        return host_ptr
++    hip = ctypes.CDLL("libamdhip64.so")
++    device_ptr = ctypes.c_void_p()
++    err = hip.hipHostGetDevicePointer(
++        ctypes.byref(device_ptr), ctypes.c_void_p(host_ptr), ctypes.c_uint(0)
++    )
++    if err != 0 or not device_ptr.value:
++        raise RuntimeError(f"hipHostGetDevicePointer failed: {err}")
++    return device_ptr.value
++
++
+ class _HostTable:
+     """Host-memory backing for one engram table ('shared' or 'per_rank' layout).
+ 
+@@ -593,9 +614,16 @@
+             # Every rank holds the fd before rank 0 continues; the /proc path only
+             # resolves while rank 0 keeps its descriptor.
+             group.barrier()
+-        err = torch.cuda.cudart().cudaHostRegister(self.bytes.data_ptr(), nbytes, 0)
++        err = torch.cuda.cudart().cudaHostRegister(
++            self.bytes.data_ptr(), nbytes, _HOST_REGISTER_MAPPED
++        )
+         if int(err) != 0:
+             raise RuntimeError(f"cudaHostRegister({nbytes} bytes) failed: {err}")
++        self.device_ptr = _registered_device_ptr(self.bytes.data_ptr())
++
++    def device_address(self, view: torch.Tensor) -> int:
++        """Kernel-side address of a view into this table."""
++        return self.device_ptr + (view.data_ptr() - self.bytes.data_ptr())
+ 
+     def _open_shared_fd(self, nbytes: int, name: str) -> int:
+         owner = None
+@@ -723,6 +751,14 @@
+     def _shared(self) -> bool:
+         return self.host_table is not None and self.host_table.layout == "shared"
+ 
++    def _table_ptrs(self) -> tuple[int, int]:
++        if self.host_table is None:
++            return self.weight.data_ptr(), self.scale.data_ptr()
++        return (
++            self.host_table.device_address(self.weight),
++            self.host_table.device_address(self.scale),
++        )
++
+     def _load_rows(self, param: nn.Parameter, loaded_weight: torch.Tensor):
+         rows = slice(self.row_start, self.row_start + self.rows)
+         if self._shared:
+@@ -749,8 +785,7 @@
+                 return self._empty(indices)
+             out = self._empty(indices)
+             engram_gather(
+-                self.weight.data_ptr(),
+-                self.scale.data_ptr(),
++                *self._table_ptrs(),
+                 indices.reshape(-1),
+                 out.view(-1, self.dim),
+                 self.dim,
+@@ -809,8 +844,7 @@
+             return values.to(torch.bfloat16).masked_fill(~owned.unsqueeze(-1), 0)
+         out = self._empty(indices)
+         engram_gather(
+-            self.weight.data_ptr(),
+-            self.scale.data_ptr(),
++            *self._table_ptrs(),
+             indices.reshape(-1),
+             out.view(-1, self.dim),
+             self.dim,

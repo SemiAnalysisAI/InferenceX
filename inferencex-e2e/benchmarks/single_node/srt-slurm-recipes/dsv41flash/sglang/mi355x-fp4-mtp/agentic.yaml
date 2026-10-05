@@ -139,20 +139,19 @@ override_tp2_c8:
       CONC: '8'
 
 override_tp2_c16:
+  setup_script: dsv41flash-sglang-engram-device-ptr-probe.sh
   roles:
     agg:
       gpus: 2
       args:
         tensor-parallel-size: 2
-        mem-fraction-static: 0.92
+        mem-fraction-static: 0.80
         chunked-prefill-size: 16384
         prefill-decode-interval: 16
         swa-prefix-tails: 1024
         max-running-requests: 32
         enable-decoder-swa-bounded-replay: true
         cuda-graph-backend-prefill: disabled
-      env:
-        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '0'
   benchmark:
     env:
       CONC: '16'
@@ -176,20 +175,19 @@ override_tp2_c32:
       AGENTIC_WARMUP_GRACE_PERIOD: '3600'
 
 override_tp2_c64:
+  setup_script: dsv41flash-sglang-engram-device-ptr.sh
   roles:
     agg:
       gpus: 2
       args:
         tensor-parallel-size: 2
-        mem-fraction-static: 0.90
+        mem-fraction-static: 0.85
         chunked-prefill-size: 4096
         prefill-decode-interval: 4
-        swa-prefix-tails: 512
+        swa-prefix-tails: 4096
         max-running-requests: 64
         enable-decoder-swa-bounded-replay: true
         cuda-graph-backend-prefill: disabled
-      env:
-        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '0'
   benchmark:
     env:
       CONC: '64'
