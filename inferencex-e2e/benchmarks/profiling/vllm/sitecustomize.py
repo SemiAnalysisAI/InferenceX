@@ -24,6 +24,7 @@ import importlib.util
 import itertools
 import json
 import os
+import re
 import sys
 import threading
 import time
@@ -586,11 +587,114 @@ def _patch_piecewise_backend(module):
         if not _profiling():
             return orig_call(self, *args)
         index = getattr(self, "piecewise_compile_index", "?")
-        with torch.autograd.profiler.record_function(f"infx_piece#{index}"):
-            return orig_call(self, *args)
+        tag = str(getattr(getattr(self, "vllm_backend", None), "prefix", "") or "")
+        _module_tls.compiled_root = "draft" if any(
+            k in tag for k in ("eagle", "draft", "mtp", "spec", "dspark")) else "model"
+        try:
+            with torch.autograd.profiler.record_function(f"infx_piece#{index}"):
+                return orig_call(self, *args)
+        finally:
+            _close_compiled_module()
 
     cls.__call__ = __call__
     cls._infx_patched = True
+
+
+# --- module markers inside Inductor-compiled code -------------------------------
+# Compiled pieces never call module hooks. Inductor's wrapper (host code) gets one
+# line per scheduler node naming the deepest module that holds all of the node's
+# source FX nodes (their nn_module_stack); at run time that line opens an
+# infx_mod marker, closing the previous one. Host-only: kernels and fusion are
+# unchanged.
+
+_compiled_names = {}  # (root, relative path) -> registered qualified name
+
+
+def _relative_module_path(fqn):
+    """"L['self'].layers[3].self_attn" -> "layers.3.self_attn"."""
+    fqn = re.sub(r"^L\['self'\]\.?", "", fqn)
+    fqn = re.sub(r"_modules\['([^']+)'\]", r"\1", fqn)
+    fqn = re.sub(r"\[(\d+)\]", r".\1", fqn)
+    fqn = re.sub(r"\['([^']+)'\]", r".\1", fqn)
+    return fqn.strip(".").replace("..", ".")
+
+
+def _compiled_module_of(node):
+    paths = []
+    for snode in node.get_nodes():
+        if snode.node is None:
+            continue
+        for origin in snode.node.get_origins():
+            stack = origin.meta.get("nn_module_stack")
+            if stack:
+                paths.append(_relative_module_path(list(stack.values())[-1][0]).split("."))
+    if not paths:
+        return None
+    common = paths[0]
+    for parts in paths[1:]:
+        k = 0
+        while k < min(len(common), len(parts)) and common[k] == parts[k]:
+            k += 1
+        common = common[:k]
+    return ".".join(common)
+
+
+def _patch_inductor_scheduler(module):
+    from torch._inductor.codegen.wrapper import PythonWrapperCodegen
+    from torch._inductor.virtualized import V
+
+    cls = module.Scheduler
+    if getattr(cls, "_infx_patched", False) or not hasattr(cls, "enter_context"):
+        return
+    orig = cls.enter_context
+
+    def enter_context(self, node):
+        orig(self, node)
+        try:
+            wrapper = V.graph.wrapper_code
+            if getattr(V.graph, "cpp_wrapper", False) or type(wrapper) is not PythonWrapperCodegen:
+                return
+            path = _compiled_module_of(node)
+            if path is not None and getattr(wrapper, "_infx_module", None) != path:
+                wrapper.writeline(f"__import__('sitecustomize')._infx_compiled_module({path!r})")
+                wrapper._infx_module = path
+        except Exception:
+            _write_error("inductor module line")
+
+    cls.enter_context = enter_context
+    cls._infx_patched = True
+
+
+def _infx_compiled_module(path):
+    """Called from Inductor wrapper code: mark the following kernels as `path`'s."""
+    if not _profiling():
+        return
+    import torch
+
+    current = getattr(_module_tls, "compiled", None)
+    if current is not None and current[0] == path:
+        return
+    _close_compiled_module()
+    root = getattr(_module_tls, "compiled_root", "model")
+    name = _compiled_names.get((root, path))
+    if name is None:
+        suffix = f".{path}" if path else ""
+        matches = sorted((n for n in (_module_names.values() if _module_names is not None else ())
+                          if n.startswith(root + ".") and n.endswith(suffix)), key=len)
+        name = _compiled_names[(root, path)] = matches[0] if matches else f"{root}:{path}"
+    rf = torch.autograd.profiler.record_function(f"infx_mod#{name}#")
+    rf.__enter__()
+    _module_tls.compiled = (path, rf)
+
+
+def _close_compiled_module():
+    current = getattr(_module_tls, "compiled", None)
+    if current is not None:
+        _module_tls.compiled = None
+        try:
+            current[1].__exit__(None, None, None)
+        except Exception:
+            pass
 
 
 _current_step = None  # the scheduled step executing on this worker
@@ -1037,6 +1141,7 @@ _HOOKS = {
     "vllm.v1.cudagraph_dispatcher": _patch_cudagraph_dispatcher,
     "vllm.profiler.wrapper": _patch_profiler_wrapper,
     "vllm.compilation.piecewise_backend": _patch_piecewise_backend,
+    "torch._inductor.scheduler": _patch_inductor_scheduler,
     "vllm.v1.worker.gpu_worker": _patch_gpu_worker,
     "vllm.v1.simple_kv_offload.copy_backend": _patch_copy_backend,
     **_LAUNCHER_HOOKS,

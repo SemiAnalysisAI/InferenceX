@@ -270,6 +270,11 @@ def profiling_arguments(
         "PYTHONPATH": "/infmax-workspace/benchmarks/profiling/vllm",
         # A window's trace export blocks its worker; keep peers from timing out.
         "VLLM_RPC_TIMEOUT": "1800000",
+        # Compiled pieces get their module markers when Inductor generates their
+        # wrapper code, so compile from scratch rather than load cached wrappers.
+        "VLLM_DISABLE_COMPILE_CACHE": "1",
+        "TORCHINDUCTOR_FX_GRAPH_CACHE": "0",
+        "TORCHINDUCTOR_AUTOGRAD_CACHE": "0",
     }
     overrides = ["--set", f"roles.agg.args.profiler-config={json.dumps(profiler_config)}"]
     overrides += offload_headroom_arguments(role_args or {}, float(settings["host_headroom_gib"]))
