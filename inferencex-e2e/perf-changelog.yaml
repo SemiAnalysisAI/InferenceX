@@ -9327,4 +9327,4 @@
   description:
     - "Update the MiniMax-M3 H200 vLLM image and enable the FP8 MSA indexer cache."
     - "Use GPU-resident KV for concurrency 12 and add concurrency 14; remove the Mooncake DRAM-offload variant."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3736
