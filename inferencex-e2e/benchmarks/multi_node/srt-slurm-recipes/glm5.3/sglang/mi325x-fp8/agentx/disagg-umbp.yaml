@@ -403,19 +403,19 @@ override_colocated_tep4_tep4_cap8_c8:
     env:
       CONC: "8"
 
-override_colocated_tep4_dep4_c8:
+override_colocated_tep4_dep4_c8: &tep4_dep4_pd
   <<: *tep4_cap8_pd
   frontend:
     args:
       dp-aware: true
       decode-policy: cache_aware
   roles:
-    prefill:
+    prefill: &tep4_dep4_prefill
       gpus: 4
       env:
         SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "1024"
       args: *tep4_pd_args
-    decode:
+    decode: &tep4_dep4_decode
       nodes: colocate
       gpus: 4
       env:
@@ -430,6 +430,21 @@ override_colocated_tep4_dep4_c8:
   benchmark:
     env:
       CONC: "8"
+
+# Two independent TEP4 prefill workers share one native 513 GB host pool.
+# Decode occupies four GPUs on the second node: 12 active / 16 allocated.
+override_two_tep4_prefill_dep4_c8:
+  <<: *tep4_dep4_pd
+  sbatch_directives: {}
+  roles:
+    prefill:
+      <<: *tep4_dep4_prefill
+      nodes: 1
+      workers: 2
+    decode:
+      <<: *tep4_dep4_decode
+      nodes: 1
+      workers: 1
 
 # Diagnostic-only: attention DP2 is explicit here; dp-attn metadata means enabled,
 # not four replicas. Publication requires explicit attention-DP-size metadata.
