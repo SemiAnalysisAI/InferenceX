@@ -197,6 +197,21 @@ override_tp8_c32:
     env:
       CONC: "32"
 
+override_tp8_prefill32k_c8:
+  roles:
+    prefill:
+      args:
+        chunked-prefill-size: 32768
+        max-prefill-tokens: 32768
+        max-running-requests: 16
+    decode:
+      args:
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 16
+  benchmark:
+    env:
+      CONC: "8"
+
 override_tp8_prefill32k_c16:
   roles:
     prefill:
