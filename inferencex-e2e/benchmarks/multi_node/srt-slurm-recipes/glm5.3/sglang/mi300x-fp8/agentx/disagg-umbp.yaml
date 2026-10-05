@@ -225,6 +225,20 @@ override_tp8_decode_admission4_c16:
     env:
       CONC: "16"
 
+override_tp8_decode_radix_c8:
+  roles:
+    prefill:
+      args:
+        max-running-requests: 16
+    decode:
+      args:
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 16
+        disaggregation-decode-enable-radix-cache: true
+  benchmark:
+    env:
+      CONC: "8"
+
 override_tp8_dep16_c8:
   frontend:
     args:
