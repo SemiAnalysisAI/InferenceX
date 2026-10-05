@@ -125,8 +125,6 @@ base:
         hicache-storage-backend-extra-config: null
   sbatch_directives:
     mem: "0"
-    # This host refused the stock Pyxis user namespace before model startup.
-    exclude: quanta-ccs-aus-k10-10
   srun_options:
     container-writable: ""
     container-remap-root: ""
