@@ -55,7 +55,8 @@ SRT_LANES: dict[tuple[str, LaunchPath], SrtLane] = {
         mounts=_AGENTIC_CACHES,
     ),
     ("b200-nscale", LaunchPath.SRT_MULTI): SrtLane(
-        frameworks=_DYNAMO,
+        # [DNM] trt: native trtllm-serve workers behind SMG.
+        frameworks=any_of("dynamo-sglang", "dynamo-trt", "dynamo-vllm", "trt"),
         rejects=(
             (
                 Match(any_of("dsv4"), frameworks=any_of("dynamo-sglang", "dynamo-trt")),
