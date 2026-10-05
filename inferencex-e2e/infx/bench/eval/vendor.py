@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import gzip
 import os
+import shutil
 import sys
 import tarfile
 import tempfile
@@ -11,11 +12,10 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from infx.bench import env, proc
+from infx.bench import env, proc, uv
 from infx.bench.eval.context import EvalContext, EvalOutcome
 
 EVALS = proc.REPO_ROOT / "infx" / "evals"
-UV_REQUIREMENT = "uv==0.11.33"
 KIMI_VERIFIER_REPO = "https://github.com/MoonshotAI/Kimi-Vendor-Verifier.git"
 KIMI_VERIFIER_REF = "3dad65a760a8867cda72f6dd8848d876a4e851b4"
 KIMI_VERIFIER_ARCHIVE_SHA256 = "ede9ea300c72ccfde9d8975ea4b1b54e423c7625690f6631ab1e65a715821e01"
@@ -165,49 +165,44 @@ def _publish_failure(job: Job, message: str) -> None:
 
 
 def _provision(job: Job) -> str:
-    """Return the verifier interpreter, building a venv when the image python3 will not do."""
+    """Return the verifier interpreter, building a uv venv when the image python3 will not do."""
+    try:
+        installer = uv.find()
+    except env.BenchError as error:
+        raise _provision_failed(job, str(error)) from error
     minor, site_packages = job.provider.python_minor, job.provider.system_site_packages
-    new_enough = proc.call(["python3", "-c", _VERSION_CHECK, str(minor)], job.ctx.env) == 0
+    # uv reads a bare "python3" as any Python 3, so name the image's own interpreter.
+    python3 = shutil.which(job.python, path=job.ctx.env.get("PATH")) or job.python
+    new_enough = proc.call([python3, "-c", _VERSION_CHECK, str(minor)], job.ctx.env) == 0
     if new_enough and not site_packages:
-        return "python3"
+        return python3
     root = job.scratch / "python"
     venv = root / "venv"
     site = ["--system-site-packages"] if site_packages else []
-    if new_enough:
-        job.step(_PROVISION, ["python3", "-m", "venv", *site, str(venv)])
-    else:
-        prefix = root / "uv"
-        job.step(_PROVISION, [
-            "python3", "-m", "pip", "install", "-q", "--no-cache-dir", "--break-system-packages",
-            "--prefix", str(prefix), UV_REQUIREMENT,
-        ])  # fmt: skip
-        uv = _executable(job, prefix / "bin" / "uv")
-        uv_env = {
-            **job.ctx.env,
-            "UV_CACHE_DIR": str(root / "uv-cache"),
-            "UV_PYTHON_INSTALL_DIR": str(root / "python"),
-        }
-        job.step(
-            _PROVISION,
-            [uv, "venv", "--python", f"3.{minor}", "--seed", *site, str(venv)],
-            environ=uv_env,
-        )
-    return _executable(job, venv / "bin" / "python")
+    uv_env = {
+        **job.ctx.env,
+        "UV_CACHE_DIR": str(root / "uv-cache"),
+        "UV_PYTHON_INSTALL_DIR": str(root / "python"),
+    }
+    base = python3 if new_enough else f"3.{minor}"
+    job.step(_PROVISION, [installer, "venv", "--python", base, *site, str(venv)], environ=uv_env)
+    python = venv / "bin" / "python"
+    if not os.access(python, os.X_OK):
+        raise _provision_failed(job, f"{_PROVISION} did not create {python}")
+    return str(python)
 
 
-def _executable(job: Job, path: Path) -> str:
-    if not os.access(path, os.X_OK):
-        print(f"ERROR: {_PROVISION} did not create {path}", file=sys.stderr)
-        raise StepError(f"{job.spec.label} {_PROVISION} failed with exit code 1", 1)
-    return str(path)
+def _provision_failed(job: Job, detail: str) -> StepError:
+    print(f"ERROR: {detail}", file=sys.stderr)
+    return StepError(f"{job.spec.label} {_PROVISION} failed with exit code 1", 1)
 
 
 def _pip_target(job: Job, target: Path) -> list[str]:
     """Install the suite's pinned requirements into ``target``, outside the interpreter."""
-    return [
-        job.python, "-m", "pip", "install", "-q", "--no-cache-dir", "--target", str(target),
-        *job.spec.requirements,
-    ]  # fmt: skip
+    return uv.pip(
+        "install", "-q", "--no-cache", "--target", str(target), *job.spec.requirements,
+        python=job.python,
+    )  # fmt: skip
 
 
 def _prepare_kimi(job: Job) -> tuple[list[str], dict[str, str]]:
@@ -246,7 +241,7 @@ def _bfcl_project(job: Job) -> Path:
 def _prepare_bfcl(job: Job) -> tuple[list[str], dict[str, str]]:
     job.step("dependency installation", [
         job.python, str(EVALS / job.spec.adapter),
-        "--install-runtime", str(job.scratch / "bfcl-wheel"),
+        "--install-runtime", str(job.scratch / "bfcl-wheel"), "--uv", uv.find(),
     ], timeout_s=BFCL_INSTALL_TIMEOUT_S)  # fmt: skip
     project = _bfcl_project(job)
     project.mkdir()

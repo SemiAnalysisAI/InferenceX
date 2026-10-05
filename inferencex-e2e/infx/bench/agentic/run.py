@@ -29,9 +29,10 @@ REQUIRED = (
     "ENABLE_AGENTX_POWER",
     "REQUIRE_POWER",
     "KV_OFFLOADING",
-    "AIPERF_PYTHON_VERSION",
-    "AIPERF_FAILED_REQUEST_THRESHOLD",
 )
+# The finished profile's accepted error fraction; a recipe's live abort threshold
+# (AIPERF_LIVE_FAILED_REQUEST_THRESHOLD) does not move it.
+FAILED_REQUEST_THRESHOLD = "0.10"
 # Spellings the power switches have always accepted as enabled.
 TRUE_VALUES = frozenset({"1", "true", "TRUE", "yes", "YES"})
 # srt-slurm owns sampling for both single-node and multi-node jobs.
@@ -46,12 +47,10 @@ class Plan:
     result_dir: Path
     output_dir: Path
     result_filename: str
-    python_version: str
     chat_budget: tuple[int, int] | None
     """``(timeout, stabilization)`` seconds when an eval-only job waits for the chat route."""
     power: PowerMode
     require_power: bool
-    failed_request_threshold: str
     required_metric_prefix: str | None
 
     @classmethod
@@ -76,11 +75,9 @@ class Plan:
             result_dir=result_dir,
             output_dir=Path(env.get("AGENTIC_OUTPUT_DIR") or proc.REPO_ROOT).absolute(),
             result_filename=result_filename,
-            python_version=values["AIPERF_PYTHON_VERSION"],
             chat_budget=server.chat_route_budget(env) if eval_only else None,
             power=power,
             require_power=values["REQUIRE_POWER"] in TRUE_VALUES,
-            failed_request_threshold=values["AIPERF_FAILED_REQUEST_THRESHOLD"],
             required_metric_prefix=inputs.optional("AIPERF_REQUIRED_SERVER_METRIC_PREFIX", env),
         )
 
@@ -181,7 +178,7 @@ def _score(plan: Plan, python: str, env: Mapping[str, str], replay_rc: int) -> i
     audit = _power_audit(plan, replay_rc)
     power_rc = _power_adapter(plan, python, env, *audit) if audit else 0
     _results(python, env, "agentic.analyze_benchmark_distributions", artifacts, "-o", result_dir)
-    threshold = ["--failed-request-threshold", plan.failed_request_threshold]
+    threshold = ["--failed-request-threshold", FAILED_REQUEST_THRESHOLD]
     validation_rc = _results(python, env, "agentic.validate_agentic_result", artifacts, *threshold)
     for failed, message in (
         (replay_rc, f"agentic trace replay exited with code {replay_rc} after writing results"),
@@ -261,7 +258,7 @@ def main(argv: list[str]) -> int:
     runtime = Runtime.for_job(os.environ)
     if not runtime.active():
         print(f"Preparing the AIPerf runtime in {runtime.venv}", flush=True)
-        rc = bootstrap(runtime, plan.python_version, proc.REPO_ROOT / "utils" / "aiperf")
+        rc = bootstrap(runtime, proc.REPO_ROOT / "utils" / "aiperf")
         if rc:
             return rc
         # The venv interpreter needs the same safe sys.path as this one had.

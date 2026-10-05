@@ -441,17 +441,24 @@ def test_sigterm_while_streaming_cancels_the_job_and_exits_143(harness, shape):
         env = lane_env(harness, "b300-dsxe", MODEL_PREFIX="dsr1", PRECISION="fp4", FRAMEWORK="dynamo-trt",
                        MODEL="deepseek-r1-fp4", **extra)  # fmt: skip
     command = [sys.executable, "-m", "infx.launch", "--runner-config", str(harness.config), "run"]
-    process = subprocess.Popen(
-        command, cwd=harness.workspace, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
-    )
-    deadline = time.monotonic() + 120
-    while not tailing.exists():
-        assert process.poll() is None, process.communicate()
-        assert time.monotonic() < deadline, "the launcher never started streaming"
-        time.sleep(0.1)
-    process.send_signal(signal.SIGTERM)
-    stdout, stderr = process.communicate(timeout=60)
-    assert process.returncode == 143, stdout[-2000:] + stderr[-4000:]
+    output = harness.tmp / "launcher.log"
+    with output.open("w") as stream:
+        process = subprocess.Popen(
+            command,
+            cwd=harness.workspace,
+            env=env,
+            stdout=stream,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        deadline = time.monotonic() + 120
+        while not tailing.exists():
+            assert process.poll() is None, output.read_text()[-4000:]
+            assert time.monotonic() < deadline, "the launcher never started streaming"
+            time.sleep(0.1)
+        process.send_signal(signal.SIGTERM)
+        process.wait(timeout=60)
+    assert process.returncode == 143, output.read_text()[-4000:]
     assert lines(harness.logs, "scancel") == ["42"]
     staged = "srt-single-node-logs.tar.gz" if shape == "single" else "multinode_server_logs.tar.gz"
     assert (harness.workspace / staged).stat().st_size > 0

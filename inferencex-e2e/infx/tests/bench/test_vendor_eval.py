@@ -1,4 +1,4 @@
-"""``infx.bench.eval.vendor``: the real runner with stub interpreters and adapters."""
+"""``infx.bench.eval.vendor``: the real runner with stub interpreters, uv, and adapters."""
 
 from __future__ import annotations
 
@@ -13,7 +13,8 @@ from typing import Any
 
 import pytest
 
-from infx.bench.env import InputError
+from infx.bench import uv
+from infx.bench.env import BenchError, InputError
 from infx.bench.eval import FRAMEWORKS, vendor
 from infx.bench.eval.context import EvalContext, EvalOutcome
 from infx.tests.bench.stubs import executable
@@ -24,33 +25,20 @@ BASE_URL = "http://127.0.0.1:8888"
 PYTHON_STUB = r'''
 import json
 import os
-import shutil
 import sys
-from pathlib import Path
 
 argv = sys.argv[1:]
 with open(os.environ["STUB_LOG"], "a") as log:
     log.write(json.dumps({"python": sys.argv[0], "argv": argv}) + "\n")
 if argv[0] == "-c":
     sys.exit(int(os.environ["STUB_VERSION_RC"]))
-if argv[:2] == ["-m", "pip"]:
-    returncode = int(os.environ.get("STUB_PIP_RC", "0"))
-    if returncode == 0 and "--prefix" in argv:
-        uv = Path(argv[argv.index("--prefix") + 1], "bin", "uv")
-        uv.parent.mkdir(parents=True)
-        shutil.copy(os.environ["STUB_UV"], uv)
-    sys.exit(returncode)
-if argv[:2] == ["-m", "venv"]:
-    python = Path(argv[-1], "bin", "python")
-    python.parent.mkdir(parents=True)
-    shutil.copy(__file__, python)
-    sys.exit(0)
 env = dict(os.environ)
 if "STUB_SITE" in env:
     env["PYTHONPATH"] = os.pathsep.join(filter(None, [env["STUB_SITE"], env.get("PYTHONPATH")]))
 os.execve(sys.executable, [sys.executable, *argv], env)
 '''
 
+# `uv venv` copies the stub interpreter; STUB_UV_<COMMAND>_RC fails a command.
 UV_STUB = r'''
 import json
 import os
@@ -62,9 +50,12 @@ argv = sys.argv[1:]
 record = {"uv": argv, **{name: os.environ.get(name) for name in ("UV_CACHE_DIR", "UV_PYTHON_INSTALL_DIR")}}
 with open(os.environ["STUB_LOG"], "a") as log:
     log.write(json.dumps(record) + "\n")
-python = Path(argv[-1], "bin", "python")
-python.parent.mkdir(parents=True)
-shutil.copy(os.environ["STUB_PYTHON"], python)
+returncode = int(os.environ.get(f"STUB_UV_{argv[0].upper()}_RC", "0"))
+if argv[0] == "venv" and returncode == 0:
+    python = Path(argv[-1], "bin", "python")
+    python.parent.mkdir(parents=True)
+    shutil.copy(os.environ["STUB_PYTHON"], python)
+sys.exit(returncode)
 '''
 
 ADAPTER_STUB = r'''
@@ -114,8 +105,8 @@ PUBLISHES = {
     ],
     "bfcl_adapter.py": ["results_bfcl.json", "bfcl_report.json"],
 }
-# The image python3 is too old, and pip cannot install uv.
-PROVISIONING_FAILS = {"STUB_VERSION_RC": "1", "STUB_PIP_RC": "7"}
+# The image python3 is too old, and uv cannot build the venv.
+PROVISIONING_FAILS = {"STUB_VERSION_RC": "1", "STUB_UV_VENV_RC": "7"}
 
 
 def _flag(argv: list[str], flag: str) -> str:
@@ -133,13 +124,13 @@ class Stub:
         self.log = root / "calls.jsonl"
         self.results = root / "results"
         self.results.mkdir()
-        python = executable(bin_dir / "python3", f"#!{sys.executable}\n{PYTHON_STUB}")
-        uv = executable(root / "uv", f"#!{sys.executable}\n{UV_STUB}")
+        self.python3 = str(executable(bin_dir / "python3", f"#!{sys.executable}\n{PYTHON_STUB}"))
+        (root / "uv-bin").mkdir()
+        self.uv = executable(root / "uv-bin" / "uv", f"#!{sys.executable}\n{UV_STUB}")
         self.env = {
             "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
             "STUB_LOG": str(self.log),
-            "STUB_PYTHON": str(python),
-            "STUB_UV": str(uv),
+            "STUB_PYTHON": self.python3,
             "STUB_REAL_EVALS": str(REPO_ROOT / "infx" / "evals"),
             "STUB_VERSION_RC": "0",
         }
@@ -170,6 +161,9 @@ class Stub:
         n = len(argv_prefix)
         return [c for c in self.calls() if "python" in c and c["argv"][:n] == argv_prefix]
 
+    def uv_calls(self, command: str) -> list[dict[str, Any]]:
+        return [c for c in self.calls() if c.get("uv", [None])[0] == command]
+
     def result(self, pattern: str) -> dict[str, Any]:
         [path] = self.results.glob(pattern)
         return json.loads(path.read_text())
@@ -179,6 +173,7 @@ class Stub:
 def stub(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Stub:
     stub = Stub(tmp_path)
     monkeypatch.setattr(vendor, "EVALS", stub.evals)
+    monkeypatch.setenv("PATH", f"{stub.uv.parent}{os.pathsep}{os.environ['PATH']}")
     return stub
 
 
@@ -189,10 +184,10 @@ def test_kimi_runs_the_verified_checkout_with_an_isolated_runtime(stub: Stub) ->
 
     assert FRAMEWORKS["kimi-vendor"](ctx) == EvalOutcome(0, "kimi_tool_call_schema")
 
-    [pip] = stub.interpreter_calls(["-m", "pip"])
+    [pip] = stub.uv_calls("pip")
     [checkout] = stub.adapter_calls("_kimi_verifier_archive.py", "prepare")
     [run] = stub.adapter_calls("kimi_vendor_eval.py", "run")
-    runtime = _flag(pip["argv"], "--target")
+    runtime = _flag(pip["uv"], "--target")
     assert run["PYTHONPATH"] == os.pathsep.join([runtime, str(REPO_ROOT), "/image/site"])
     assert _flag(run["argv"], "--verifier-dir") == checkout["argv"][-1]
     assert _flag(run["argv"], "--base-url") == f"{BASE_URL}/v1"
@@ -200,7 +195,7 @@ def test_kimi_runs_the_verified_checkout_with_an_isolated_runtime(stub: Stub) ->
     assert _flag(run["argv"], "--output-dir") == str(stub.results)
     assert _flag(run["argv"], "--task-name") == "kimi_tool_call_schema"
     assert _flag(run["argv"], "--model-prefix") == "dsv4"
-    assert "sk-caller-key-4711" not in json.dumps([call["argv"] for call in stub.calls()])
+    assert "sk-caller-key-4711" not in json.dumps(stub.calls())
     assert not stub.adapter_calls("kimi_vendor_eval.py", "failure")
     assert not Path(checkout["argv"][-1]).exists()
 
@@ -216,44 +211,69 @@ def test_minimax_runs_stock_sources_with_pinned_dependencies(
 
     assert outcome == EvalOutcome(0, suite or "minimax_m3_smoke")
     [source] = stub.adapter_calls("minimax_m3_full_eval.py", "prepare")
-    [pip] = stub.interpreter_calls(["-m", "pip"])
+    [pip] = stub.uv_calls("pip")
     [run] = stub.adapter_calls(adapter, "run")
     assert run["argv"][0] == "run"
     assert _flag(run["argv"], "--source-dir") == _flag(source["argv"], "--source-dir")
-    assert _flag(run["argv"], "--dependency-dir") == _flag(pip["argv"], "--target")
-    assert _flag(run["argv"], "--python") == "python3"
+    assert _flag(run["argv"], "--dependency-dir") == _flag(pip["uv"], "--target")
+    # The stock verifier runs on the exact interpreter its dependencies were installed for.
+    assert _flag(run["argv"], "--python") == _flag(pip["uv"], "--python") == stub.python3
 
 
 def test_bfcl_runs_in_a_venv_that_sees_the_image_site_packages(stub: Stub) -> None:
     assert FRAMEWORKS["bfcl"](stub.context()) == EvalOutcome(0, "bfcl_smoke")
 
-    [venv] = stub.interpreter_calls(["-m", "venv"])
-    assert "--system-site-packages" in venv["argv"]
+    [venv] = stub.uv_calls("venv")
+    assert "--system-site-packages" in venv["uv"]
+    assert _flag(venv["uv"], "--python") == stub.python3
     adapter = str(stub.evals / "bfcl_adapter.py")
     interpreters = [call["python"] for call in stub.interpreter_calls([adapter])]
-    assert interpreters == [str(Path(venv["argv"][-1], "bin", "python"))] * 2
+    assert interpreters == [str(Path(venv["uv"][-1], "bin", "python"))] * 2
     [install] = stub.adapter_calls("bfcl_adapter.py", "prepare")
     [run] = stub.adapter_calls("bfcl_adapter.py", "run")
     assert install["argv"][0] == "--install-runtime"
+    assert _flag(install["argv"], "--uv") == str(stub.uv)
     assert _flag(run["argv"], "--suite") == "bfcl_smoke"
     assert not Path(_flag(run["argv"], "--bfcl-project-root")).exists()
-    assert not Path(venv["argv"][-1]).exists()
+    assert not Path(venv["uv"][-1]).exists()
     assert not (stub.results / vendor.BFCL_ARCHIVE).exists()
 
 
-def test_too_old_image_python_runs_the_adapter_in_a_pinned_uv_venv(stub: Stub) -> None:
-    outcome = FRAMEWORKS["kimi-vendor"](stub.context(STUB_VERSION_RC="1"))
+def test_too_old_image_python_runs_the_adapter_in_a_uv_venv(stub: Stub) -> None:
+    provider = replace(vendor.PROVIDERS["kimi-vendor"], python_minor=11)
+
+    outcome = vendor.run(provider, stub.context(STUB_VERSION_RC="1"))
 
     assert outcome.returncode == 0
-    [uv] = [call for call in stub.calls() if "uv" in call]
-    venv = Path(uv["uv"][-1])
-    assert "--system-site-packages" not in uv["uv"]
+    [uv_venv] = stub.uv_calls("venv")
+    [pip] = stub.uv_calls("pip")
+    venv = Path(uv_venv["uv"][-1])
+    # uv provides the provider's floor version, never the too-old image interpreter.
+    assert _flag(uv_venv["uv"], "--python") == "3.11"
+    assert "--system-site-packages" not in uv_venv["uv"]
     adapter = str(stub.evals / "kimi_vendor_eval.py")
     [run] = stub.interpreter_calls([adapter])
-    assert run["python"] == str(venv / "bin" / "python")
-    assert Path(uv["UV_CACHE_DIR"]).parent == venv.parent
-    assert Path(uv["UV_PYTHON_INSTALL_DIR"]).parent == venv.parent
+    assert run["python"] == _flag(pip["uv"], "--python") == str(venv / "bin" / "python")
+    assert Path(uv_venv["UV_CACHE_DIR"]).parent == venv.parent
+    assert Path(uv_venv["UV_PYTHON_INSTALL_DIR"]).parent == venv.parent
     assert not venv.parent.exists()
+
+
+def test_unavailable_uv_fails_the_python_runtime_preparation(
+    stub: Stub, monkeypatch: pytest.MonkeyPatch, capfd: pytest.CaptureFixture[str]
+) -> None:
+    def unavailable() -> str:
+        raise BenchError("uv installation did not create /scratch/uv")
+
+    monkeypatch.setattr(uv, "find", unavailable)
+
+    assert FRAMEWORKS["kimi-vendor"](stub.context()) == EvalOutcome(1, "kimi_tool_call_schema")
+
+    assert stub.result("results*.json")["integration_error"]["message"] == (
+        "Kimi Vendor Verifier Python runtime preparation failed with exit code 1"
+    )
+    assert "ERROR: uv installation did not create /scratch/uv" in capfd.readouterr().err
+    assert not stub.adapter_calls("kimi_vendor_eval.py", "run")
 
 
 @pytest.mark.parametrize(("framework", "suite", "inputs", "rc", "message"), [
@@ -265,7 +285,7 @@ def test_too_old_image_python_runs_the_adapter_in_a_pinned_uv_venv(stub: Stub) -
      "MiniMax M3 full Python runtime preparation failed with exit code 7"),
     ("bfcl", "bfcl_vllm_minimax_m3", PROVISIONING_FAILS, 7,
      "BFCL Python runtime preparation failed with exit code 7"),
-    ("kimi-vendor", "kimi_tool_call_schema_full", {"STUB_PIP_RC": "12"}, 12,
+    ("kimi-vendor", "kimi_tool_call_schema_full", {"STUB_UV_PIP_RC": "12"}, 12,
      "Kimi Vendor Verifier dependency installation failed with exit code 12"),
     ("bfcl", "bfcl_vllm_kimi", {"plan": {"bfcl_adapter.py prepare": {"rc": 6}}}, 6,
      "BFCL dependency installation failed with exit code 6"),
@@ -319,7 +339,7 @@ def test_a_failed_run_is_recorded_as_an_integration_error_unless_the_adapter_pub
 def test_unwritable_failure_result_is_reported_and_keeps_the_setup_code(
     stub: Stub, capfd: pytest.CaptureFixture[str]
 ) -> None:
-    ctx = stub.context(plan={"kimi_vendor_eval.py failure": {"rc": 5}}, STUB_PIP_RC="12")
+    ctx = stub.context(plan={"kimi_vendor_eval.py failure": {"rc": 5}}, STUB_UV_PIP_RC="12")
 
     assert FRAMEWORKS["kimi-vendor"](ctx).returncode == 12
 

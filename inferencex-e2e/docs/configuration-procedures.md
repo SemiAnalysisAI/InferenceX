@@ -388,7 +388,7 @@ not the 256k-capped `..._062126_256k` variant, because the model serves 1M conte
 recipe never names a corpus. `infx.bench.agentic.traces.resolve` picks the uncapped
 default only because its `dsv4` family prefix also matches `dsv41flash`. That is
 load-bearing and invisible at the call site.
-`test_default_corpus_follows_the_model_family_context` in
+`test_corpus_follows_the_model_family_context_unless_pinned` in
 [`infx/tests/bench/test_agentic_replay.py`](../infx/tests/bench/test_agentic_replay.py)
 covers `dsv41flash`, so narrowing the prefix fails that test instead of silently
 downgrading this recipe's traces.

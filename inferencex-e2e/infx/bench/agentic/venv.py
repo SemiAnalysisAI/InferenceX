@@ -11,23 +11,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import NoReturn
 
-from infx.bench import proc
+from infx.bench import proc, uv
+from infx.bench.env import BenchError
 
-UV_INSTALLER = "https://astral.sh/uv/install.sh"
-# AIPerf plus what the post-run AgentX processing and plots import.
-DEPENDENCIES = (
-    "numpy>=1.24",
-    "pandas>=2.0.0",
-    "aiohttp>=3.10",
-    "transformers>=4.46",
-    "xlsxwriter>=3.2.1",
-    "tqdm>=4.66",
-    "datasets>=4.7.0",
-    "tiktoken",
-    "huggingface_hub[cli]>=0.25.0",
-    "urllib3",
-    "requests",
-)
+# AIPerf dropped Python 3.10, which some ROCm images still ship; uv fetches a pinned build.
+PYTHON_VERSION = "3.11"
+# What the client needs beyond utils/aiperf's own dependencies.
+REQUIREMENTS = Path(__file__).with_name("requirements.txt")
 
 
 @dataclass(frozen=True)
@@ -73,50 +63,26 @@ class Runtime:
         os.execve(self.python, [str(self.python), *args], environ)  # noqa: S606
 
 
-def bootstrap(runtime: Runtime, python_version: str, aiperf_source: Path) -> int:
-    """Create ``runtime``'s venv from scratch; return a shell-style status."""
-    uv = _uv(runtime.root / "uv" / "bin")
-    if uv is None:
-        return 1
+def bootstrap(runtime: Runtime, aiperf_source: Path) -> int:
+    """Create ``runtime``'s venv from scratch; return ``uv venv``'s status, else 0."""
+    uv_exe = uv.find(runtime.root / "uv" / "bin")
     shutil.rmtree(runtime.venv, ignore_errors=True)
     cache = runtime.root / "uv-cache"
     cache.mkdir(parents=True, exist_ok=True)
     env = {**os.environ, "UV_CACHE_DIR": str(cache)}
-    # AIPerf dropped Python 3.10, which some ROCm images still ship; uv fetches a pinned build.
-    rc = proc.call([uv, "venv", "--python", python_version, str(runtime.venv)], env)
+    rc = proc.call([uv_exe, "venv", "--python", PYTHON_VERSION, str(runtime.venv)], env)
     if rc:
         return rc
-    install = [uv, "pip", "install", "--python", str(runtime.python), "-e", str(aiperf_source)]
-    retries = {"UV_HTTP_TIMEOUT": "120", "UV_HTTP_RETRIES": "3"}
-    if proc.call([*install, *DEPENDENCIES], {**env, **retries}):
-        print(
-            "ERROR: benchmark client dependency bootstrap failed; inspect network/package "
-            "resolution before recipe repairs",
-            file=sys.stderr,
+    install = [uv_exe, "pip", "install", "--python", str(runtime.python)]
+    install += ["-r", str(REQUIREMENTS), "-e", str(aiperf_source)]
+    if proc.call(install, {**env, "UV_HTTP_TIMEOUT": "120", "UV_HTTP_RETRIES": "3"}):
+        raise BenchError(
+            "benchmark client dependency bootstrap failed; inspect network/package "
+            "resolution before recipe repairs"
         )
-        return 1
     if not (_executable(runtime.aiperf) and _executable(runtime.hf)):
-        print(
-            f"ERROR: isolated AIPerf environment is incomplete at {runtime.venv}", file=sys.stderr
-        )
-        return 1
+        raise BenchError(f"isolated AIPerf environment is incomplete at {runtime.venv}")
     return 0
-
-
-def _uv(install_dir: Path) -> str | None:
-    """``uv`` from ``PATH``, else Astral's installer (rootless enroot cannot mutate dpkg)."""
-    found = shutil.which("uv")
-    if found:
-        return found
-    uv = install_dir / "uv"
-    if not _executable(uv):
-        install_dir.mkdir(parents=True, exist_ok=True)
-        env = {**os.environ, "UV_INSTALL_DIR": str(install_dir), "UV_NO_MODIFY_PATH": "1"}
-        proc.call(["sh", "-c", f"curl -LsSf {UV_INSTALLER} | sh"], env)
-    if not _executable(uv):
-        print(f"ERROR: uv installation did not create {uv}", file=sys.stderr)
-        return None
-    return str(uv)
 
 
 def _executable(path: Path) -> bool:

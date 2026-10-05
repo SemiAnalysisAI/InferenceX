@@ -10,7 +10,7 @@ import tempfile
 from collections.abc import Mapping
 from pathlib import Path
 
-from infx.bench import env, proc
+from infx.bench import env, proc, uv
 from infx.bench.eval.context import EvalContext, EvalOutcome
 
 REPOSITORY = "https://github.com/EleutherAI/lm-evaluation-harness"
@@ -25,23 +25,27 @@ CONTEXT_FIELDS = ("max_position_embeddings", "max_sequence_length", "seq_length"
 
 def install(environ: Mapping[str, str]) -> None:
     """Install lm-eval at ``REF`` into this interpreter; failures only warn, as images may ship it."""
-    pip = [sys.executable, "-m", "pip"]
-    flags = ["-q", "--no-cache-dir", "--break-system-packages"]
+    try:
+        uv.find()
+    except env.BenchError as error:
+        print(f"WARN: {error}", file=sys.stderr)
+        return
     # torchvision causes circular imports in ATOM; TRT-LLM/SGLang need it at module level.
     if "atom" in environ.get("IMAGE", ""):
-        _pip([*pip, "uninstall", "-y", "torchvision"], environ)
-    _pip([*pip, "install", *flags, "lm-eval[api]"], environ)
-    pinned = [*pip, "install", *flags, "--no-deps", "--force-reinstall"]
+        _pip(environ, "uninstall", "torchvision")
+    _pip(environ, "install", "lm-eval[api]")
+    pinned = ("install", "--no-deps", "--reinstall")
     git = shutil.which("git", path=environ.get("PATH"))
-    if git and _pip([*pinned, f"git+{REPOSITORY}.git@{REF}"], environ):
+    if git and _pip(environ, *pinned, f"git+{REPOSITORY}.git@{REF}"):
         return
-    _pip([*pinned, f"{REPOSITORY}/archive/{REF}.tar.gz"], environ)
+    _pip(environ, *pinned, f"{REPOSITORY}/archive/{REF}.tar.gz")
 
 
-def _pip(argv: list[str], environ: Mapping[str, str]) -> bool:
+def _pip(environ: Mapping[str, str], command: str, *args: str) -> bool:
+    argv = uv.pip(command, "-q", "--no-cache", "--break-system-packages", *args)
     rc = proc.call(argv, environ)
     if rc:
-        print(f"WARN: pip {' '.join(argv[3:])} failed with exit code {rc}", file=sys.stderr)
+        print(f"WARN: uv {' '.join(argv[1:])} failed with exit code {rc}", file=sys.stderr)
     return rc == 0
 
 

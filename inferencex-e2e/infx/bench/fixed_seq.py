@@ -12,11 +12,6 @@ from infx.bench import env, proc, server
 PYTHON = "python3"
 # Single-node srt frameworks and the client backend that speaks their completions API.
 SINGLE_NODE_BACKENDS = {"sglang": "vllm", "atom": "vllm", "trt": "openai"}
-SINGLE_NODE_DEPENDENCIES = (
-    "pip3", "install", "--break-system-packages", "sentencepiece", "datasets", "pandas",
-)  # fmt: skip
-# Multi-node sweeps render prompts serially and keep progress bars out of the job log.
-SWEEP_FLAGS = ("--random-num-workers", "1", "--disable-tqdm")
 
 
 @dataclass(frozen=True)
@@ -32,11 +27,9 @@ class Point:
     conc: int
     num_prompts: int
     result: Path
-    endpoint: str | None = None
     tokenizer: str | None = None
     use_chat_template: bool = False
     trust_remote_code: bool = False
-    extra: tuple[str, ...] = ()
 
 
 def client_argv(point: Point) -> list[str]:
@@ -60,15 +53,13 @@ def client_argv(point: Point) -> list[str]:
         "--result-dir", str(point.result.parent),
         "--result-filename", point.result.name,
     ]  # fmt: skip
-    if point.endpoint is not None:
-        argv += ["--endpoint", point.endpoint]
     if point.tokenizer is not None:
         argv += ["--tokenizer", point.tokenizer]
     if point.use_chat_template:
         argv.append("--use-chat-template")
     if point.trust_remote_code:
         argv.append("--trust-remote-code")
-    return [*argv, *point.extra]
+    return argv
 
 
 def served_model(base_url: str) -> str:
@@ -116,9 +107,6 @@ def srt_single(args: argparse.Namespace) -> int:
         return 0
     # Removing the local sampler must not silently turn measured points into unmeasured ones.
     env.require("SRT_MEASUREMENT_WINDOW_DIR")
-    rc = proc.call(SINGLE_NODE_DEPENDENCIES)
-    if rc:
-        return rc
     with proc.RelaySignals() as relay:
         rc = relay.run(client_argv(point))
         if rc:
@@ -152,7 +140,6 @@ def srt_sweep(args: argparse.Namespace) -> int:
                 base_url=base_url,
                 model=model,
                 backend="openai",
-                endpoint="/v1/completions",
                 tokenizer=tokenizer,
                 isl=isl,
                 osl=osl,
@@ -162,7 +149,6 @@ def srt_sweep(args: argparse.Namespace) -> int:
                 result=result_dir / name,
                 use_chat_template=True,
                 trust_remote_code=True,
-                extra=SWEEP_FLAGS,
             )
             rc = relay.run(client_argv(point))
             # Power lanes: tell srt-slurm which interval this concurrency's result measured.

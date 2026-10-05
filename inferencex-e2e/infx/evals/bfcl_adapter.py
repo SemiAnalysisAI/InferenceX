@@ -8,13 +8,14 @@ import inspect
 import json
 import math
 import os
+import re
 import subprocess
 import sys
 import urllib.parse
 import urllib.request
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from importlib.metadata import distribution
+from importlib.metadata import distribution, distributions
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Protocol
@@ -917,8 +918,8 @@ def run_evaluation(
     return True
 
 
-def install_runtime(download_dir: Path) -> None:
-    """Install the pinned BFCL wheel into this interpreter, refusing any other bytes."""
+def install_runtime(download_dir: Path, uv: str) -> None:
+    """Install the pinned BFCL wheel into this interpreter with ``uv``, refusing any other bytes."""
     download_dir.mkdir(parents=True, exist_ok=True)
     wheel_path = download_dir / BFCL_WHEEL_URL.rsplit("/", 1)[1]
     request = urllib.request.Request(
@@ -948,17 +949,14 @@ def install_runtime(download_dir: Path) -> None:
     except BaseException:
         wheel_path.unlink(missing_ok=True)
         raise
+    # uv ignores system site packages (astral-sh/uv#4466); excluding what this interpreter
+    # already has reuses the image's stack, so image versions win over BFCL's pins.
+    names = {re.sub(r"[-_.]+", "-", d.metadata.get("Name") or "").lower() for d in distributions()}
+    provided = download_dir / "provided-packages.txt"
+    provided.write_text("".join(f"{name}\n" for name in sorted(names - {"", BFCL_PACKAGE})))
+    install = [uv, "pip", "install", "-q", "--no-cache", "--python", sys.executable]
     subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "pip",
-            "install",
-            "-q",
-            "--no-cache-dir",
-            str(wheel_path),
-            *RUNTIME_REQUIREMENTS,
-        ],
+        [*install, "--excludes", str(provided), str(wheel_path), *RUNTIME_REQUIREMENTS],
         check=True,
     )
 
@@ -969,8 +967,9 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--install-runtime",
         type=Path,
         metavar="DOWNLOAD_DIR",
-        help="Install the verified pinned BFCL wheel into this interpreter, then exit.",
+        help="Install the verified pinned BFCL wheel into this interpreter with --uv, then exit.",
     )
+    parser.add_argument("--uv", help="uv executable that --install-runtime installs with")
     parser.add_argument("--base-url", type=_absolute_http_url)
     parser.add_argument("--api-key", type=_nonempty_string, default="EMPTY")
     parser.add_argument("--model", type=_nonempty_string)
@@ -991,6 +990,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         missing = [option for option, value in required.items() if value is None]
         if missing:
             parser.error(f"the following arguments are required: {', '.join(missing)}")
+    elif args.uv is None:
+        parser.error("--install-runtime requires --uv")
     args.num_threads = (
         SUITE_SPECS[args.suite].default_num_threads
         if args.num_threads is None
@@ -1003,7 +1004,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     if args.install_runtime is not None:
         try:
-            install_runtime(args.install_runtime)
+            install_runtime(args.install_runtime, args.uv)
         except (OSError, ValueError, subprocess.CalledProcessError) as error:
             print(f"ERROR: failed to install the pinned BFCL runtime: {error}", file=sys.stderr)
             return 1

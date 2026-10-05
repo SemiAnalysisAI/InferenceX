@@ -1,4 +1,4 @@
-"""Fixed-sequence lanes against a stub client, pip3, and a local frontend."""
+"""Fixed-sequence lanes against a stub client and a local frontend."""
 
 from __future__ import annotations
 
@@ -16,7 +16,6 @@ from infx.bench.__main__ import main as bench
 from infx.tests.bench.stubs import executable
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-FINAL_SAMPLE = "2026/07/23 12:00:11.000, 0, 500.00 W, 65, 1000, 1000, 90 %, 10 %"
 # Client flags every lane passes, whatever the point.
 POLICY = {
     "--dataset-name": "random",
@@ -51,7 +50,7 @@ result.write_text(json.dumps(
 
 @pytest.fixture
 def tools(tmp_path: Path) -> Path:
-    """PATH with a stub benchmark client behind python3, a recording pip3, and nvidia-smi."""
+    """PATH with a stub benchmark client behind python3."""
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     for tool in ("sh", "sleep", "dirname", "env"):
@@ -65,13 +64,6 @@ if [ "$1 $2" = "-m infx.bench_serving.benchmark_serving" ]; then
     exec {python} {client} "$@"
 fi
 exec {python} "$@"
-""",
-        "pip3": f"printf '%s\\n' \"$*\" >> {shlex.quote(str(tmp_path / 'pip3.log'))}\n",
-        "nvidia-smi": f"""
-case "$*" in
-    *" -l 1") printf 'timestamp, index, power.draw [W]\\n'; exec sleep 30 ;;
-    *noheader*) printf '%s\\n' {shlex.quote(FINAL_SAMPLE)} ;;
-esac
 """,
     }
     for name, body in stubs.items():
@@ -231,9 +223,6 @@ def test_single_node_shim_runs_one_point_with_native_power(
     assert window["concurrency"] == 4
     assert (window["benchmark_start_time_unix"], window["benchmark_end_time_unix"]) == (100, 160)
     assert window["status"] == "completed"
-    assert (tmp_path / "pip3.log").read_text() == (
-        "install --break-system-packages sentencepiece datasets pandas\n"
-    )
 
 
 @pytest.mark.parametrize(
@@ -241,7 +230,7 @@ def test_single_node_shim_runs_one_point_with_native_power(
     [
         ({"EVAL_ONLY": "true"}, 0, "EVAL_ONLY mode: skipping throughput benchmark\n"),
         ({"MODEL": None, "CONC": ""}, 1, "not set:\n  - MODEL\n  - CONC\n"),
-        ({"FRAMEWORK": "vllm"}, 1, "ERROR: unsupported fixed-sequence FRAMEWORK: vllm\n"),
+        ({"FRAMEWORK": "no-such-framework"}, 1, "ERROR: unsupported fixed-sequence FRAMEWORK: no-such-framework\n"),
         ({"USE_CHAT_TEMPLATE": "yes"}, 1, "ERROR: USE_CHAT_TEMPLATE must be true or false, got 'yes'\n"),
         ({"RESULT_DIR": "/nonexistent/logs"}, 1, "ERROR: RESULT_DIR must be an existing"),
         ({}, 1, "SRT_MEASUREMENT_WINDOW_DIR"),
@@ -257,7 +246,6 @@ def test_single_node_point_runs_nothing_when_eval_only_or_misconfigured(
     assert bench(["fixed-seq", "srt-single"]) == returncode
     assert reported in "".join(capsys.readouterr())
     assert client_runs(tmp_path) == []
-    assert not (tmp_path / "pip3.log").exists()
     assert list((tmp_path / "logs").iterdir()) == []
 
 
@@ -283,17 +271,14 @@ def test_multi_node_shim_writes_one_result_and_power_window_per_concurrency(
         **POLICY,
         "--model": "served/model-id",
         "--backend": "openai",
-        "--endpoint": "/v1/completions",
         "--base-url": url,
         "--tokenizer": "/model",
         "--random-input-len": "1024",
         "--random-output-len": "128",
         "--random-range-ratio": "0.8",
-        "--random-num-workers": "1",
         "--num-prompts": "40",
         "--max-concurrency": "4",
         "--num-warmups": "8",
-        "--disable-tqdm": True,
         "--use-chat-template": True,
         "--trust-remote-code": True,
         "--result-dir": str(point_dir),
