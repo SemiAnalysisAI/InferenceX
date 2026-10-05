@@ -115,6 +115,30 @@ override_dep4:
       env:
         SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: '1024'
 
+# Restore the short-quality-passed dense TP1 layout; tune only native KV budget.
+override_dep4_dense1:
+  frontend:
+    args:
+      dp-aware: true
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        data-parallel-size: 4
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        moe-dense-tp-size: 1
+        moe-a2a-backend: mori
+        deepep-mode: normal
+        chunked-prefill-size: 4096
+        mem-fraction-static: 0.96
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
+      env:
+        SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: '1024'
+
 override_tep8:
   roles:
     agg:
