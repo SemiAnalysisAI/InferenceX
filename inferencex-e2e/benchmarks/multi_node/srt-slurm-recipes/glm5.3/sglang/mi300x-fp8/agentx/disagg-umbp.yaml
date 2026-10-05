@@ -211,6 +211,50 @@ override_tp8_decode_mem95_c16:
     env:
       CONC: "16"
 
+override_tp8_decode_admission4_c16:
+  roles:
+    prefill:
+      args:
+        max-running-requests: 32
+    decode:
+      args:
+        max-running-requests: 4
+        cuda-graph-max-bs-decode: 4
+        disaggregation-decode-extra-slots: 0
+  benchmark:
+    env:
+      CONC: "16"
+
+override_tp8_dep16_c8:
+  frontend:
+    args:
+      dp-aware: true
+      decode-policy: cache_aware
+  roles:
+    prefill:
+      args:
+        max-running-requests: 16
+    decode:
+      nodes: 2
+      workers: 1
+      gpus: 16
+      args:
+        tensor-parallel-size: 16
+        expert-parallel-size: 16
+        attn-dp-size: 16
+        moe-dense-tp-size: 1
+        enable-dp-lm-head: true
+        moe-a2a-backend: mori
+        deepep-mode: normal
+        chunked-prefill-size: 16384
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 16
+      env:
+        SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "1024"
+  benchmark:
+    env:
+      CONC: "8"
+
 override_tp8_tep16_c8:
   roles:
     prefill:
