@@ -9410,3 +9410,11 @@
   description:
     - "Gate two native TEP4 prefill workers sharing one 513 GB UMBP pool on one node, with a dedicated DEP4 decoder on a second node. Preserve the qualified per-worker settings, full context, native DP-aware cache routing and genuine verification; account for twelve active and sixteen allocated GPUs."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3656
+
+- config-keys:
+    - glm53-mi325x-oct5-colocated-tep4-dep4-round-robin
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Compare native round-robin decode routing against cache-aware decode routing on the same colocated TEP4/DEP4 C8 shape. Keep prefill cache-aware routing, DP awareness, full context, P-only UMBP and all engine settings unchanged; stock decode ChunkCache does not share prefix pages."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3656

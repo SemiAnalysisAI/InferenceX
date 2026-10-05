@@ -431,6 +431,14 @@ override_colocated_tep4_dep4_c8: &tep4_dep4_pd
     env:
       CONC: "8"
 
+# Policy-only contrast: stock decode ChunkCache has no shared-prefix reuse.
+override_colocated_tep4_dep4_round_robin_c8:
+  <<: *tep4_dep4_pd
+  frontend:
+    args:
+      dp-aware: true
+      decode-policy: round_robin
+
 # Two independent TEP4 prefill workers share one native 513 GB host pool.
 # Decode occupies four GPUs on the second node: 12 active / 16 allocated.
 override_two_tep4_prefill_dep4_c8:
