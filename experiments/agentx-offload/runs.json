@@ -5007,13 +5007,13 @@
       "repeat": 1,
       "attempt": 1,
       "head_sha": "6d5e1baf8a2e58cf85de8d484edfddb18a7c107a",
-      "status": "in_progress",
+      "status": "failure",
       "workflow_name": "offload-v1-none-c489-r1-branchwf-20261005",
       "dispatched_at": "2026-10-05T05:56:02Z",
       "job_id": 111634726337,
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37269968186/job/111634726337",
       "performance_result": false,
-      "phase": "full 3,600-second profiling active",
+      "phase": "terminal after near-complete profile; fixed Slurm allocation interrupted aggregate export",
       "dispatch_evidence": "Focused experiment tests passed 26/26 and matrix-generation tests passed 331/331. The exact generator preview resolved MiniMax-M3 NVFP4, vLLM TP4, canonical AgentX c489, 3,600-second profiling, kv-offloading=none, and zero host DRAM. A fresh cluster-wide job-label inventory immediately before dispatch found zero queued or in-progress cluster:b200-nscale jobs and no active-or-queued study workflow. The generated job carries cluster:b200-nscale and nodes:1.",
       "started_at": "2026-10-05T05:56:52Z",
       "runner": "b200-nscale-slurm_00",
@@ -5027,39 +5027,111 @@
       "warmup_in_flight": 0,
       "warmup_errors": 0,
       "warmup_elapsed_seconds": 24750.81,
-      "storage_evidence": "Runtime offload_config.json verifies zero host DRAM, zero NVMe bytes, and no connector. Slurm allocation 19501 is active on im-b200-c001.",
+      "storage_evidence": "Runtime offload_config.json verifies zero host DRAM, zero NVMe bytes, and no connector. No offload_cleanup.json artifact was uploaded after the allocation time limit, but an independent node check confirmed the exact task-owned scratch path absent.",
       "warmup_cache_pressure_started_at": "2026-10-05T06:49:17Z",
       "warmup_budget_reached_at": "2026-10-05T12:29:18Z",
       "warmup_completed_at": "2026-10-05T12:58:38Z",
       "profiling_started_at": "2026-10-05T12:58:38Z",
       "profile_seconds": 3600,
-      "profiling_successful_responses_latest": 517,
-      "profiling_errors_latest": 0
+      "profiling_successful_responses_latest": 1076,
+      "profiling_errors_latest": 0,
+      "completed_at": "2026-10-05T14:00:15Z",
+      "failure_stage": "Slurm allocation time limit after profiling records finalized but before aggregate export",
+      "profiling_completed_at": "2026-10-05T13:59:18Z",
+      "profiling_cancelled_responses": 691,
+      "request_accounting": {
+        "records_total": 6488,
+        "records_profiled": 1076,
+        "records_warmup_dropped": 5412,
+        "records_error_dropped": 5,
+        "error_categories": {
+          "InvalidInferenceResultError": 5
+        }
+      },
+      "qualified_request_metrics": {
+        "num_requests_successful": 1076,
+        "duration_seconds": 3627.405191112,
+        "input_tokens": 116764556,
+        "output_tokens": 1056066,
+        "output_tokens_per_second_per_gpu": 72.78384577683872,
+        "total_tokens_per_second_per_gpu": 8120.172395455598,
+        "p90_e2e_latency_seconds": 3021.23310679,
+        "p90_ttft_seconds": 3000.3414714145,
+        "p90_interactivity_tokens_per_second_per_user": 8.162197665226293,
+        "p90_e2e_normalized_interactivity_tokens_per_second_per_user": 0.07690719966708308,
+        "avg_power_w_per_gpu": 902.121729,
+        "joules_per_successful_query": 12207.161394
+      },
+      "qualified_delta_nvme_vs_hbm_percent": {
+        "total_tokens_per_second_per_gpu": 4.53755766,
+        "output_tokens_per_second_per_gpu": 9.03051241,
+        "p90_interactivity_tokens_per_second_per_user": 2.51197463,
+        "p90_e2e_normalized_interactivity_tokens_per_second_per_user": 6.45297235,
+        "p90_ttft_seconds": -3.39231259,
+        "num_requests_successful": 6.97026022,
+        "avg_power_w_per_gpu": -0.6623472,
+        "joules_per_successful_query": -7.13522754
+      },
+      "runtime_evidence": "Canonical warmup completed all 5,412 requests with zero progress-counter errors after 24,750.81 seconds. Profiling completed its full 3,600-second send window, retained 1,076 successful responses, finalized all raw records, and passed 100% TTFT and inter-token coverage. The fixed Slurm allocation then interrupted aggregate export, so no benchmark result artifact exists. Five InvalidInferenceResultError classifications were confined to warmup; the server log contains no EngineDead, CUDA OOM, traceback, or error signature. Reconstructed request and power metrics are qualified near-complete evidence only.",
+      "power_evidence": "A strict UTC replay reconstructed the 3,640.004-second profiling lifecycle from benchmark.log and the uploaded raw request records. Four-GPU telemetry passed strict validation with 902.121729 W/GPU average power, 13,134,905.659493 J total energy, and 12,207.161394 J/successful query. The values remain qualified because aggregate benchmark export was interrupted.",
+      "artifacts": [
+        {
+          "id": 11350720274,
+          "name": "gpu_metrics_minimaxm3_tp4_conc489_kvnone_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-false_spec-mtp-55eaa7289c20def3a542",
+          "size_bytes": 1155266,
+          "sha256": "b6928afb80329a765daf5de76efa2bda2e89594662440ebd18bef08bb4f322b1"
+        },
+        {
+          "id": 11350570392,
+          "name": "agentic_minimaxm3_tp4_conc489_kvnone_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-false_spec-mtp-55eaa7289c20def3a542",
+          "size_bytes": 3794459,
+          "sha256": "b89922b1e97458241a79cee784bc8a8647dd810c9b990b336574491bb5edc6c1"
+        },
+        {
+          "id": 11350555390,
+          "name": "server_logs_minimaxm3_tp4_conc489_kvnone_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-false_spec-mtp-55eaa7289c20def3a542",
+          "size_bytes": 238338,
+          "sha256": "000461051bccbff5565526614fdb79f8a1a9fc55731562b2738f53a67793f76e"
+        },
+        {
+          "id": 11350515418,
+          "name": "power_audit_minimaxm3_tp4_conc489_kvnone_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-false_spec-mtp-55eaa7289c20def3a542",
+          "size_bytes": 1155448,
+          "sha256": "68f7c1f699c54beea1ee65b204ae5d62243b2140e52f7b866841822262188806"
+        }
+      ],
+      "evidence_sha256": {
+        "benchmark.log": "873dadb44a1531e23f03c07a6fe2a604d2d0040a8490900d027ecfea3f861bdc",
+        "profile_export.jsonl": "623a2e03dab52b70b9a76fefbf71d1fe686183c1fb7b6e09a3c545357e716e65",
+        "server.log": "46e6c204d94040e7268dda4d92a4735ebc7a4a0d5da6c272e84e233a248bb321",
+        "offload-telemetry.jsonl": "0875e81a2b5261b6d24db18ad01a64e947e4ff78ef4c80abcd0c19db32455775",
+        "offload_config.json": "526c118ee32d81ad749f7eb3b02da4f1ea1256824ba43e52a164f894fc961ff7",
+        "gpu_metrics.csv": "457bd32e114306c827c6c152fad3669875a8479480fba17d81e1e64103a25cff",
+        "benchmark_command.txt": "4f13bfbfe5394e677c73b754e9277ee1b35d045ae5e5562cc715acc1050e3ff9",
+        "vllm_command.txt": "f5c5aca54dbbc45ebb3b4aab39bbd34bd6e60e503249facf340e5248adb425c8",
+        "replayed_power_validation.json": "64d460e1071039cfd5bd966d806b08ec6b5477736803844f59ffba703f63decf"
+      }
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894,36796500128,36879140816,37027095833",
-  "status": "Matched HBM-only c489 run 37269968186 completed all 5,412 canonical warmup requests with zero cancellations and zero errors after 24,750.81 seconds. Its full 3,600-second profiling phase started at 2026-10-05T12:58:38Z on im-b200-c001.",
+  "status": "Matched c489 is complete as qualified near-complete local evidence: both NVMe run 37236791824 and HBM-only run 37269968186 completed canonical warmup and the full profiling send window, but the fixed Slurm allocation interrupted aggregate export in both arms. Neither is a complete performance result. Reconstructed matched metrics favor NVMe, while the integer protocol-feasibility boundary remains completed c488 versus infeasible c489.",
   "last_capacity_check": {
-    "checked_at": "2026-10-05T13:12:10Z",
-    "active_study_run_ids": [
-      37269968186
-    ],
+    "checked_at": "2026-10-05T14:10:10Z",
+    "active_study_run_ids": [],
     "pending_study_run_ids": [],
     "dispatch_allowed": false,
     "b200_priority_jobs_queued": 0,
-    "b200_priority_jobs_in_progress": 1,
-    "b200_active_or_queued_run_ids": [
-      37269968186
-    ],
+    "b200_priority_jobs_in_progress": 0,
+    "b200_active_or_queued_run_ids": [],
     "target_node": "im-b200-c001",
-    "target_node_state": "Slurm allocation 19501 active; full 3,600-second profiling healthy",
-    "observed_free_bytes": 4461040140288,
-    "reason": "Matched HBM-only c489 is the single active B200 study job in canonical warmup. Dispatch nothing else while it remains active."
+    "target_node_state": "Slurm allocation 19501 terminal; exact task-owned scratch independently absent",
+    "observed_free_bytes": null,
+    "reason": "Matched c489 analysis is complete and the current fixed-budget integer feasibility boundary is resolved. No further workflow is selected for dispatch."
   },
   "next_dispatch": {
     "arm": null,
     "concurrency": null,
-    "requires": "Wait for matched HBM-only c489 canonical warmup, 3,600-second profiling, artifact capture, exact scratch cleanup, and adaptive feasibility comparison."
+    "requires": "No immediate dispatch. Preserve completed c488 versus infeasible c489 as the fixed-budget boundary; any follow-on should explicitly change the workflow budget or protocol and be treated as a separate qualification question."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-21T05:30:00Z",

@@ -146,11 +146,19 @@ budget, not a complete performance result. The c489 NVMe-only point completed al
 send window, retaining 1,151 successful responses with 100% latency coverage.
 The fixed Slurm allocation then interrupted aggregate export. Strict four-GPU power
 replay passed, but the reconstructed request and energy metrics remain qualified
-near-complete evidence rather than a complete performance result. c489 is therefore
-another local canonical-protocol feasibility failure, and the integer boundary is
-now bracketed by completed c488 and infeasible c489. The next adaptive control is
-matched HBM-only c489, which tests whether protocol feasibility at the boundary is
-specific to the NVMe tier.
+near-complete evidence rather than a complete performance result. The matched
+HBM-only c489 arm likewise completed all 5,412 warmup requests after 24,750.81
+seconds and the full profiling send window, retained 1,076 successful responses,
+and passed 100% latency coverage before the fixed allocation interrupted aggregate
+export. Its strict power replay also passed. On the reconstructed matched cohorts,
+NVMe improved total throughput/GPU by 4.538%, output throughput/GPU by 9.031%, P90
+interactivity by 2.512%, P90 TTFT by 3.392%, completed responses by 6.970%, and
+energy/successful query by 7.135%; it also improved P90 E2E-normalized
+interactivity by 6.453% and reduced average power by 0.662%. These deltas are
+qualified local evidence only because neither c489 arm produced a complete
+aggregate result. Both are local canonical-protocol feasibility failures under the
+fixed workflow budget, so the integer boundary remains completed c488 versus
+infeasible c489 and is not specific to the NVMe tier.
 
 The combined tier uses a different connector and storage policy. The pinned FS
 tier has no bounded LRU capacity setting: the 2 TiB value is an abort guard, not an
