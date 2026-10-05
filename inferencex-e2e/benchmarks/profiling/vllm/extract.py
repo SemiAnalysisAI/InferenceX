@@ -297,6 +297,34 @@ def capture_launches(trace):
     return graphs
 
 
+def attach_node_kernels(profile_dir, rank, captured):
+    """Give each captured launch its HIP graph node's kernel name, where the patch listed the nodes.
+
+    Nodes are listed in creation order; a graph's list is used only when its
+    kernel/memcpy/memset sequence matches the captured launches one to one.
+    Returns (graphs named, graphs whose node list did not match).
+    """
+    pid = next((p for p, r in rank_of_pid(profile_dir).items() if r == rank), None)
+    path = os.path.join(profile_dir, "graphs", f"pid{pid}.jsonl")
+    if pid is None or not os.path.exists(path):
+        return 0, 0
+    named = mismatched = 0
+    with open(path) as f:
+        for line in f:
+            record = json.loads(line)
+            launches = captured.get(record.get("graph"))
+            if record.get("event") != "nodes" or launches is None or record.get("nodes") is None:
+                continue
+            nodes = record["nodes"]
+            if [kind for kind, _ in nodes] != [launch["kind"] for launch in launches]:
+                mismatched += 1
+                continue
+            for launch, (_, name) in zip(launches, nodes):
+                launch["node_kernel"] = name
+            named += 1
+    return named, mismatched
+
+
 def rank_of_pid(profile_dir):
     ranks = {}
     for path in glob.glob(os.path.join(profile_dir, "env", "*.json")):
@@ -596,6 +624,8 @@ def align_streams(trace, items, launches, families, beam=64):
         if (cap["kind"] == "kernel") != (activity_kind(e) == "kernel"):
             return -2
         key, family = cap["op"] or cap["launcher"], kernel_family(e["name"])
+        if cap.get("node_kernel"):  # the graph node's own kernel: decisive either way
+            return 4 if kernel_family(cap["node_kernel"]) == family else -4
         launcher = cap["launcher"] or ""
         if (family in families.get(key, ()) or family == key
                 or launcher.startswith("triton:") and launcher[len("triton:"):] in e["name"]):
@@ -792,7 +822,10 @@ def main():
         ranges = capture_ranges(path, needed)
         trace = Trace(path, overlapping(ranges)) if ranges else None
         captured = capture_launches(trace) if trace else {}  # identical on every rank
+        rank = os.path.basename(path).split(".")[0]
+        named, node_mismatch = attach_node_kernels(profile_dir, rank, captured)
         report["capture"] = {"path": os.path.relpath(path, profile_dir), "graphs": len(captured),
+                             "graphs_with_node_kernels": named, "node_list_mismatch": node_mismatch,
                              "graphs_replayed": len(needed),
                              "launches": sum(map(len, captured.values()))}
         del trace

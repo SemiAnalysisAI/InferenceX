@@ -136,6 +136,81 @@ def _forward_context_desc():
         return None
 
 
+class _HipGraphNodes:
+    """Kernel names of a captured HIP graph's nodes, in creation (= capture) order.
+
+    ROCm's tracer gives a replayed graph kernel no node id, so the extractor
+    pairs replays with capture launches by these names instead.
+    """
+
+    TYPES = {0: "kernel", 1: "memcpy", 2: "memset"}
+
+    def __init__(self):
+        import ctypes
+
+        class Dim3(ctypes.Structure):
+            _fields_ = [("x", ctypes.c_uint), ("y", ctypes.c_uint), ("z", ctypes.c_uint)]
+
+        class KernelNodeParams(ctypes.Structure):
+            _fields_ = [("blockDim", Dim3), ("extra", ctypes.c_void_p), ("func", ctypes.c_void_p),
+                        ("gridDim", Dim3), ("kernelParams", ctypes.c_void_p),
+                        ("sharedMemBytes", ctypes.c_uint)]
+
+        self.ctypes, self.params_type = ctypes, KernelNodeParams
+        hip = ctypes.CDLL("libamdhip64.so")
+        self.get_nodes = hip.hipGraphGetNodes
+        self.get_nodes.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.POINTER(ctypes.c_size_t)]
+        self.get_type = hip.hipGraphNodeGetType
+        self.get_type.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_int)]
+        self.get_params = hip.hipGraphKernelNodeGetParams
+        self.get_params.argtypes = [ctypes.c_void_p, ctypes.POINTER(KernelNodeParams)]
+        self.name_by_ptr = hip.hipKernelNameRefByPtr
+        self.name_by_ptr.argtypes, self.name_by_ptr.restype = [ctypes.c_void_p, ctypes.c_void_p], ctypes.c_char_p
+        self.name_of_function = hip.hipKernelNameRef
+        self.name_of_function.argtypes, self.name_of_function.restype = [ctypes.c_void_p], ctypes.c_char_p
+
+    def __call__(self, graph):
+        """[[kind, kernel name or None], ...] for the kernel, memcpy and memset nodes of `graph`."""
+        ct = self.ctypes
+        count = ct.c_size_t(0)
+        if self.get_nodes(graph, None, ct.byref(count)) != 0:
+            return None
+        nodes = (ct.c_void_p * count.value)()
+        if self.get_nodes(graph, nodes, ct.byref(count)) != 0:
+            return None
+        out = []
+        for node in nodes[:count.value]:
+            kind = ct.c_int(-1)
+            self.get_type(node, ct.byref(kind))
+            kind = self.TYPES.get(kind.value)
+            if kind is None:
+                continue
+            name = None
+            if kind == "kernel":
+                params = self.params_type()
+                if self.get_params(node, ct.byref(params)) == 0 and params.func:
+                    # A host stub for hipLaunchKernel; a hipFunction_t for module launches.
+                    raw = self.name_by_ptr(params.func, None) or self.name_of_function(params.func)
+                    name = raw.decode(errors="replace") if raw else None
+            out.append([kind, name])
+        return out
+
+
+def _hip_keep_graphs(cls):
+    """Keep each captured HIP graph (instantiated at first replay) so its nodes can be listed."""
+    import inspect
+
+    if "keep_graph" not in inspect.signature(cls.__new__).parameters or not hasattr(cls, "raw_cuda_graph"):
+        return None
+    orig_new = cls.__new__
+
+    def __new__(c, keep_graph=False, *args, **kwargs):
+        return orig_new(c, True, *args, **kwargs)
+
+    cls.__new__ = staticmethod(__new__)
+    return _HipGraphNodes()
+
+
 def _patch_cuda_graph(graphs_module):
     import torch
 
@@ -143,6 +218,12 @@ def _patch_cuda_graph(graphs_module):
     if getattr(cls, "_infx_patched", False):
         return
     orig_begin, orig_end, orig_replay = cls.capture_begin, cls.capture_end, cls.replay
+    node_names = None
+    if torch.version.hip:
+        try:
+            node_names = _hip_keep_graphs(cls)
+        except Exception:
+            _write_error("hip graph nodes")
 
     def capture_begin(self, *args, **kwargs):
         try:
@@ -178,6 +259,15 @@ def _patch_cuda_graph(graphs_module):
                 })
             except Exception:
                 _write_error("capture_end")
+            if node_names is not None:
+                try:
+                    _sink("graphs", f"pid{os.getpid()}").write({
+                        "graph": getattr(self, "_infx_id", None),
+                        "event": "nodes",
+                        "nodes": node_names(self.raw_cuda_graph()),
+                    })
+                except Exception:
+                    _write_error("graph nodes")
 
     def replay(self, *args, **kwargs):
         gid = getattr(self, "_infx_id", None)
