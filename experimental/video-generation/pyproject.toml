@@ -10,7 +10,7 @@ requires-python = ">=3.12"
 dependencies = ["av==16.1.0", "numpy==2.3.5"]
 
 [project.optional-dependencies]
-dev = ["pytest==8.4.2"]
+dev = ["pytest==8.4.2", "jsonschema>=4,<5", "rfc3339-validator==0.1.4"]
 
 [project.scripts]
 vgbench = "evaluator.cli:main"

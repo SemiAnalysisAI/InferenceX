@@ -1,0 +1,52 @@
+{
+  "description": "Synthetic dominance cases shared with InferenceX-app; not measured H3 evidence.",
+  "cases": [
+    {
+      "name": "lower-higher preserves ties and excludes dominated coordinates",
+      "xBetter": "lower",
+      "yBetter": "higher",
+      "points": [
+        { "id": "slow", "x": 400, "y": 9 },
+        { "id": "dominated", "x": 151, "y": 4.9 },
+        { "id": "fast", "x": 78, "y": 6.66 },
+        { "id": "tie", "x": 78, "y": 6.66 },
+        { "id": "same-x", "x": 78, "y": 6 },
+        { "id": "same-y", "x": 90, "y": 6.66 }
+      ],
+      "expected": ["fast", "tie", "slow"]
+    },
+    {
+      "name": "higher-higher trades speed for efficiency",
+      "xBetter": "higher",
+      "yBetter": "higher",
+      "points": [
+        { "id": "fast", "x": 2.46, "y": 6.66 },
+        { "id": "dominated", "x": 1.27, "y": 4.9 },
+        { "id": "efficient", "x": 1.2, "y": 7 }
+      ],
+      "expected": ["efficient", "fast"]
+    },
+    {
+      "name": "lower-lower trades latency for cost",
+      "xBetter": "lower",
+      "yBetter": "lower",
+      "points": [
+        { "id": "fast", "x": 78, "y": 0.15 },
+        { "id": "dominated", "x": 151, "y": 0.204 },
+        { "id": "cheap", "x": 300, "y": 0.1 }
+      ],
+      "expected": ["fast", "cheap"]
+    },
+    {
+      "name": "higher-lower trades capacity for energy",
+      "xBetter": "higher",
+      "yBetter": "lower",
+      "points": [
+        { "id": "fast", "x": 8, "y": 300 },
+        { "id": "dominated", "x": 6, "y": 400 },
+        { "id": "efficient", "x": 4, "y": 200 }
+      ],
+      "expected": ["efficient", "fast"]
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-"""Auditable serial and closed-loop serving client for an operator-managed H3 video endpoint.
+"""Auditable serial and closed-loop client for an operator-managed H3 or Wan endpoint.
 
 This module does not launch a server, download weights, verify server identity,
 or contact MiniMax's paid API. ``preview_plan`` is network-free; ``run_plan``
@@ -36,6 +36,7 @@ from .mvp_serving import settings as serving_settings, summarize as serving_summ
 
 
 MODEL_ID = "MiniMaxAI/MiniMax-H3"
+WAN_MODEL_ID = "Wan-AI/Wan2.2-T2V-A14B-Diffusers"
 RUNTIMES = {"sglang", "vllm-omni"}
 MAX_JSON_BYTES = 1024 * 1024
 MAX_MEDIA_BYTES = 512 * 1024 * 1024
@@ -92,25 +93,7 @@ def _text(value: Any, name: str, *, limit: int = 1000) -> None:
         raise ValueError(f"{name} must be a nonempty string of at most {limit} characters")
 
 
-def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
-    """Validate the supported frozen T2VA subset without making a request.
-
-    This is the execution safety contract; the broader study/registry schemas
-    remain separate. Unknown root metadata is preserved in the plan digest.
-    """
-    if not isinstance(plan, dict):
-        raise ValueError("plan must be an object")
-    try:
-        frozen = json.loads(canonical_json_bytes(plan))
-    except (TypeError, ValueError, OverflowError) as exc:
-        raise ValueError("plan must contain finite JSON values") from exc
-    for field in ("plan_id", "model_id", "model_revision"):
-        _text(frozen.get(field), field)
-    if frozen["model_id"] != MODEL_ID:
-        raise ValueError(f"this narrow MVP supports only {MODEL_ID}")
-    if not re.fullmatch(r"[a-fA-F0-9]{40}", frozen["model_revision"]):
-        raise ValueError("model_revision must be an immutable 40-character commit")
-    generation = frozen.get("generation")
+def _validate_h3_generation(generation: dict[str, Any]) -> None:
     if not isinstance(generation, dict):
         raise ValueError("generation must be an object with explicit controls")
     allowed_controls = {
@@ -142,6 +125,60 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
     if (any(generation[key] != value for key, value in audited_cell.items())
             or audited_frames.get(generation["duration_seconds"]) != generation["frame_count"]):
         raise ValueError("this MVP requires a 16:9, 1344x768 H3 cell: 4s/107 frames or 8s/192 frames")
+
+
+def _validate_wan_generation(generation: dict[str, Any]) -> None:
+    controls = {"width", "height", "frame_count", "fps", "num_inference_steps",
+                "guidance_scale", "guidance_scale_2", "flow_shift", "negative_prompt"}
+    if not isinstance(generation, dict) or set(generation) != controls:
+        raise ValueError("Wan requires explicit video-only generation controls; unsupported fields are rejected")
+    for field, maximum in (("width", 8192), ("height", 8192), ("frame_count", 10000),
+                           ("fps", 240), ("num_inference_steps", 1000)):
+        _positive(generation[field], f"generation.{field}", maximum=maximum, integer=True)
+    if generation["width"] % 16 or generation["height"] % 16:
+        raise ValueError("Wan width and height must be multiples of 16 to avoid runtime resizing")
+    if generation["frame_count"] < 5 or (generation["frame_count"] - 1) % 4:
+        raise ValueError("Wan frame_count must be 4n+1 with n >= 1 to avoid runtime rounding")
+    for field in ("guidance_scale", "guidance_scale_2", "flow_shift"):
+        _positive(generation[field], f"generation.{field}", maximum=1000)
+    if generation["guidance_scale"] <= 1:
+        raise ValueError("Wan guidance_scale must exceed 1 so both expert guidance scales are applied")
+    if generation["flow_shift"] != 12:
+        raise ValueError("The audited Wan runtime uses server flow_shift 12; per-request overrides are unsupported")
+    if not isinstance(generation["negative_prompt"], str) or len(generation["negative_prompt"]) > 32000:
+        raise ValueError("generation.negative_prompt must be an explicit string of at most 32000 characters")
+
+
+def _validate_runtime(plan: dict[str, Any], runtime: str) -> None:
+    if runtime not in RUNTIMES:
+        raise ValueError("runtime must be sglang or vllm-omni")
+    if plan["model_id"] == WAN_MODEL_ID and runtime != "sglang":
+        raise ValueError("Wan currently supports only the audited SGLang transport")
+
+
+def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
+    """Validate the supported frozen H3 T2VA or Wan T2V plan without requests.
+
+    This is the execution safety contract; the broader study/registry schemas
+    remain separate. Unknown root metadata is preserved in the plan digest.
+    """
+    if not isinstance(plan, dict):
+        raise ValueError("plan must be an object")
+    try:
+        frozen = json.loads(canonical_json_bytes(plan))
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError("plan must contain finite JSON values") from exc
+    for field in ("plan_id", "model_id", "model_revision"):
+        _text(frozen.get(field), field)
+    if frozen["model_id"] not in {MODEL_ID, WAN_MODEL_ID}:
+        raise ValueError(f"this MVP supports only {MODEL_ID} and {WAN_MODEL_ID}")
+    if not re.fullmatch(r"[a-fA-F0-9]{40}", frozen["model_revision"]):
+        raise ValueError("model_revision must be an immutable 40-character commit")
+    generation = frozen.get("generation")
+    if frozen["model_id"] == WAN_MODEL_ID:
+        _validate_wan_generation(generation)
+    else:
+        _validate_h3_generation(generation)
     cases = frozen.get("cases")
     if not isinstance(cases, list) or not cases:
         raise ValueError("cases must be a nonempty array")
@@ -162,6 +199,8 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
         for field in ("requires_motion", "requires_sound"):
             if not isinstance(case.get(field), bool):
                 raise ValueError(f"case.{field} must be an explicit boolean")
+    if frozen["model_id"] == WAN_MODEL_ID and any(case["requires_sound"] for case in cases):
+        raise ValueError("Wan is video-only; requires_sound must be false")
     _positive(frozen.get("repetitions"), "repetitions", maximum=MAX_SLOTS, integer=True)
     warmups = frozen.get("warmup_runs")
     if isinstance(warmups, bool) or not isinstance(warmups, int) or warmups < 0:
@@ -185,6 +224,11 @@ def _slots(plan: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _payload(plan: dict[str, Any], slot: dict[str, Any], runtime: str) -> dict[str, Any]:
     generation = plan["generation"]
+    if plan["model_id"] == WAN_MODEL_ID:
+        _validate_runtime(plan, runtime)
+        return {"model": plan["model_id"], "prompt": slot["prompt"], "seed": slot["seed"],
+                **{key: value for key, value in generation.items() if key != "frame_count"},
+                "num_frames": generation["frame_count"]}
     target = {
         "duration_seconds": generation["duration_seconds"],
         "aspect_ratio": generation["aspect_ratio"],
@@ -214,6 +258,7 @@ def preview_plan(plan: dict[str, Any], *, runtime: str = "sglang") -> dict[str, 
     if runtime not in RUNTIMES:
         raise ValueError("runtime must be sglang or vllm-omni")
     frozen = validate_plan(plan)
+    _validate_runtime(frozen, runtime)
     return {
         "evidence_kind": "request_preview_no_generation", "plan_id": frozen["plan_id"],
         "plan_sha256": _digest(frozen), "runtime": runtime,
@@ -500,8 +545,7 @@ def run_plan(
     """
     frozen = validate_plan(plan)
     serving = serving_settings(serving_concurrency, delivery_deadline_seconds)
-    if runtime not in RUNTIMES:
-        raise ValueError("runtime must be sglang or vllm-omni")
+    _validate_runtime(frozen, runtime)
     for field, value in (("runtime_revision", runtime_revision), ("hardware_label", hardware_label), ("model_revision", model_revision)):
         _text(value, field)
     if not re.fullmatch(r"[a-fA-F0-9]{40}", runtime_revision):
@@ -568,6 +612,14 @@ def run_plan(
             "deadline": "network watchdog plus cooperative media deadline; one native decoder call may overrun",
         },
     }
+    if frozen["model_id"] == WAN_MODEL_ID:
+        configuration["protocol_source"] = {
+            "repository": "https://github.com/sgl-project/sglang",
+            "revision": "71de97b264b04dcd514cf904003028aefe9775c8",
+            "files": ["python/sglang/multimodal_gen/runtime/entrypoints/openai/video_api.py",
+                      "python/sglang/multimodal_gen/configs/sample/wan.py"],
+        }
+        configuration["capabilities"] = {"audio_generation": "unsupported", "quality_qualification": "unsupported"}
     if serving:
         from . import mvp_serving
         configuration["serving"] = serving
@@ -578,11 +630,12 @@ def run_plan(
     _write_json(directory / "configuration.json", configuration, exclusive=True)
     slots = _slots(frozen)
     scheduled = len(frozen["cases"]) * frozen["repetitions"]
+    model_label = "Wan" if frozen["model_id"] == WAN_MODEL_ID else "H3"
     run: dict[str, Any] = {
-        "bundle_version": "0.1.0", "bundle_type": "mvp_run", "run_id": "h3-" + uuid.uuid4().hex,
+        "bundle_version": "0.1.0", "bundle_type": "mvp_run", "run_id": ("wan22-" if frozen["model_id"] == WAN_MODEL_ID else "h3-") + uuid.uuid4().hex,
         "plan_id": frozen["plan_id"], "plan_sha256": plan_sha256, "plan": frozen,
         "configuration": configuration, "evidence_kind": "operator_endpoint",
-        "evidence_caveat": "Operator-managed HTTP endpoint; the client alone cannot establish H3 execution. Model identity is operator-declared, not attested. Mock-server tests are not H3 evidence. Controlled GPU execution requires a separate verified supervisor receipt.",
+        "evidence_caveat": f"Operator-managed HTTP endpoint; the client alone cannot establish {model_label} execution. Model identity is operator-declared, not attested. Mock-server tests are not {model_label} evidence. Controlled GPU execution requires a separate verified supervisor receipt.",
         "started_at": _timestamp(), "finished_at": None, "status": "partial",
         "measurement": {"boundary": "submit_to_validated_media", "concurrency": 1,
                         "warmup_runs": frozen["warmup_runs"], "wall_seconds": 0.0},
@@ -611,7 +664,9 @@ def run_plan(
     def attempt(slot: dict, *, defer_validation: bool = False) -> dict:
         nonlocal abort_reason, interrupted
         expected = {**frozen["generation"], "requires_motion": slot["requires_motion"],
-                    "requires_sound": slot["requires_sound"], "audio_required": True}
+                    "requires_sound": slot["requires_sound"], "audio_required": frozen["model_id"] == MODEL_ID}
+        if frozen["model_id"] == WAN_MODEL_ID:
+            expected["audio_forbidden"] = True
         expected["duration_seconds"] = expected["frame_count"] / expected["fps"]
         record: dict[str, Any] = {
             **{key: slot[key] for key in ("slot_id", "case_id", "prompt", "seed", "repetition", "phase")},

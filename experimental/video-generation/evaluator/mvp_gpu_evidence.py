@@ -14,7 +14,7 @@ import stat
 from datetime import datetime
 from pathlib import Path
 
-from .mvp_runner import _slots, canonical_json_bytes
+from .mvp_runner import WAN_MODEL_ID, _slots, canonical_json_bytes
 
 
 def _finite(value, *, positive=False):
@@ -61,6 +61,9 @@ def verify_measurement_job(directory: Path, *, deadline: float, require_success:
     directory = Path(directory).resolve(strict=True)
     gpu._check_deadline(deadline)
     spec = gpu.validate_gpu_job(gpu._read(_file(directory, "spec.json")))
+    wan = spec["plan"]["model_id"] == WAN_MODEL_ID
+    if wan and not serving_smoke:
+        raise ValueError("Wan is supported only in controlled serving smoke; paired qualification is unavailable")
     receipt = gpu._read(_file(directory, "gpu-job.json"))
     bundle_type = "controlled_serving_smoke" if serving_smoke else "controlled_gpu_job"
     if serving_smoke and not spec.get("serving"):
@@ -69,7 +72,8 @@ def verify_measurement_job(directory: Path, *, deadline: float, require_success:
         raise ValueError("GPU job/spec identity is not verified")
     if receipt.get("job_id") != spec["job_id"] or receipt.get("plan_sha256") != gpu._digest(spec["plan"]):
         raise ValueError("GPU job workload identity mismatch")
-    if receipt.get("evidence_kind") != "controlled_h3_gpu" or receipt.get("status") != "complete" or receipt.get("measurement_status") != "complete" or receipt.get("failures"):
+    controlled_kind = "controlled_video_gpu" if wan else "controlled_h3_gpu"
+    if receipt.get("evidence_kind") != controlled_kind or receipt.get("status") != "complete" or receipt.get("measurement_status") != "complete" or receipt.get("failures"):
         raise ValueError("GPU job has incomplete, fixture, or failed supervision evidence")
     if receipt.get("cleanup_status") != "clean":
         raise ValueError("GPU job did not complete clean owned-resource teardown")
@@ -114,7 +118,8 @@ def verify_measurement_job(directory: Path, *, deadline: float, require_success:
         if gpu._hash(run_path, deadline) != role.get("run_sha256"):
             raise ValueError("role run bundle hash mismatch")
         run = gpu._read(run_path)
-        if run.get("bundle_type") != "mvp_run" or run.get("bundle_version") != "0.1.0" or run.get("evidence_kind") not in {"live_h3", "operator_endpoint"}:
+        live_kind = "live_video" if wan else "live_h3"
+        if run.get("bundle_type") != "mvp_run" or run.get("bundle_version") != "0.1.0" or run.get("evidence_kind") not in {live_kind, "operator_endpoint"}:
             raise ValueError("role contains fixture/imported or unsupported run evidence")
         if run.get("status") not in {"complete", "partial", "failed"} or _date(run.get("finished_at")) < _date(run.get("started_at")):
             raise ValueError("role run is not finalized")

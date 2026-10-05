@@ -2,6 +2,54 @@
 
 [English](README.md) | **中文**
 
+## Wan2.2 本地 runner 接入
+
+现有 client 和受控 `serving-smoke` 路径新增支持
+`Wan-AI/Wan2.2-T2V-A14B-Diffusers`。本阶段仅完成 CPU 验证；尚无实际模型运行、
+显存适配、性能或质量测量。
+
+[Wan plan](mvp/wan22-serving.plan.json) 固定 checkpoint
+`5be7df9619b54f4e2667b2755bc6a756675b5cd7`，四条纯视频提示词、一次独立 warmup，
+832×480、81 帧、16 FPS（5.0625 秒）、40 步、两阶段 guidance 4/3、flow shift 12，
+并显式使用空 negative prompt。这是新工作负载，不是与 H3 匹配的对照，也不是上游
+默认 negative prompt。协议按 SGLang `71de97b264b04dcd514cf904003028aefe9775c8`
+核对。该版本忽略请求级 Wan flow-shift 覆盖，因此仅接受 12；第一阶段 guidance 必须
+大于 1，运行时才会应用两个 expert 的 guidance 值。
+
+在 `experimental/video-generation` 下无 GPU、无服务地预览请求：
+
+```bash
+python -m evaluator.cli run mvp/wan22-serving.plan.json --runtime sglang
+```
+
+[GPU 模板](mvp/wan22-gpu-job.template.json) 保持未批准授权、未填写路径和空文件清单。
+另行授权实际运行前，需要绑定任务拥有的 SemiAnalysis 资源及兼容的已有 runtime，
+核实全部 checkpoint 文件，并设置实际预算。复用 site 配置，设置
+`mode: "serving-smoke"` 和 `concurrencies: [1]`。第一格为四条测量请求加一次 warmup；
+模板不能证明单卡显存足够。
+
+初始支持 NVIDIA、TP1、1/2/4/8 卡纯 Ulysses，显式设置 DiT/text-encoder/VAE
+offload，禁用 layerwise offload。launcher 关闭运行时 warmup、CFG 并行和 Ring，
+使用本次任务拥有的持久输出目录，确保轮询后的 `/v1/videos/{id}/content` 能下载 MP4。
+harness 单独记录 warmup。本阶段 Wan 拒绝 H3 专用启动参数/计时补丁、AMD、
+vLLM-Omni transport 和配对质量准入。policy 仅记录未校准身份，不含音频阈值。
+
+媒体验证要求分辨率、时间间隔、帧数符合计划，且无音频流。音频生成和质量准入为
+unsupported，不生成音频或 A/V 分数。Dashboard 缺失质量及质量/SLO goodput 仍为 null。
+超时后保留远端是否完成的未知状态并停止后续提交；该版本删除 job 不代表真正取消。
+
+现有手动 workflow 将 Wan 上传为 `video-serving-<run-id>-<attempt>`，内部使用
+`video_serving_smoke_matrix`，保留原 H3 名称兼容性。workflow 和输入名称中的 `h3`
+只是兼容入口；模型以已封存的 `manifest.workload_plan.model_id` 为准，包括生成前失败。
+可读取、哈希匹配且有效的 plan 可以保留 scheduled/零 attempted/not-started 数量，而
+不填造 GPU 身份；无效 plan 无法确定这些数量。Wan 不使用 H3 配对 `result.json` exporter。
+App 接受规范 Diffusers ID 与此前短显示 ID，并拒绝冲突的模型声明。
+
+CPU 检查覆盖编码 fixture 的 HTTP transport、纯视频完整解码、启动预览、失败封存及
+Dashboard 解析。真实 Wan 运行和 hosted CI 仍是独立验收步骤，fixture 不进入实测结果。
+
+## 既有 H3 路径
+
 此实验任务在 InferenceX CI 内使用 SemiAnalysis H200 资源运行现有 H3
 supervisor。首个目标是有时间上限的同版本冒烟测试：保留实际生成的 MP4，
 完整验证视频和音频，记录请求耗时，并验证清理结果。此任务不写入原生
@@ -171,7 +219,8 @@ XML，同时支持带或不带 `0x` 的 PCI 编号，不重新查询硬件。
 cd experimental/video-generation
 PYTHONPATH=../../inferencex-e2e uv run --no-project --python 3.12 \
   --with 'av==16.1.0' --with 'numpy==2.3.5' \
-  --with 'pytest>=8,<9' --with 'jsonschema>=4,<5' python -m pytest -q
+  --with 'pytest>=8,<9' --with 'jsonschema>=4,<5' \
+  --with 'rfc3339-validator==0.1.4' python -m pytest -q
 bash -n runtime-entry.example.sh
 ```
 

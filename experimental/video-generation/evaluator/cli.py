@@ -183,7 +183,7 @@ def _parser() -> argparse.ArgumentParser:
     gpu_report.add_argument("job", type=Path)
     gpu_report.add_argument("--output", required=True, type=Path, help="new report directory")
 
-    run = subparsers.add_parser("run", help="preview an H3 plan; --execute explicitly submits it")
+    run = subparsers.add_parser("run", help="preview an H3 or Wan plan; --execute explicitly submits it")
     run.add_argument("plan", type=Path)
     run.add_argument("--runtime", choices=("sglang", "vllm-omni"), default="sglang")
     run.add_argument("--execute", action="store_true", help="submit real requests to your H3 server")

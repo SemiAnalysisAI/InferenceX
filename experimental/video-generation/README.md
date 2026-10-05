@@ -2,6 +2,63 @@
 
 **English** | [中文](README_zh.md)
 
+## Wan2.2 local runner integration
+
+The client and supervised `serving-smoke` path also accept
+`Wan-AI/Wan2.2-T2V-A14B-Diffusers`. This increment has CPU acceptance only;
+model execution, hardware fit, performance and quality remain unmeasured.
+
+The [Wan plan](mvp/wan22-serving.plan.json) freezes checkpoint
+`5be7df9619b54f4e2667b2755bc6a756675b5cd7`, four video-only prompts, one warmup,
+832×480, 81 frames at 16 FPS (5.0625 seconds), 40 steps, high/low expert guidance
+4/3, flow shift 12, and an explicitly empty negative prompt. This is a new workload,
+not a matched H3 comparison or the upstream default negative prompt. The protocol
+was inspected at SGLang `71de97b264b04dcd514cf904003028aefe9775c8`. That runtime
+ignores per-request Wan flow-shift overrides, so only 12 is admitted; high-stage
+guidance must exceed 1 for the runtime to apply both expert guidance values.
+
+Preview requests without a server or GPU, from `experimental/video-generation`:
+
+```bash
+python -m evaluator.cli run mvp/wan22-serving.plan.json --runtime sglang
+```
+
+The [GPU template](mvp/wan22-gpu-job.template.json) retains unapproved authorization,
+unresolved paths and an empty file manifest. Before separately authorized execution,
+bind it to task-owned SemiAnalysis resources and the compatible prepared runtime,
+verify all checkpoint files, and set the actual budget. Reuse the site configuration
+with `mode: "serving-smoke"` and `concurrencies: [1]`. The first cell is four measured
+requests plus one warmup; the template does not establish one-GPU memory fit.
+
+Initial support is NVIDIA, TP1 and pure Ulysses over 1/2/4/8 GPUs, with explicit
+DiT/text-encoder/VAE offload booleans and layerwise offload disabled. The launcher
+disables runtime warmup, CFG parallelism and Ring, and uses a job-owned persistent
+output directory so the polled `/v1/videos/{id}/content` route can deliver the MP4.
+The harness records its own warmup. H3-only launch flags/timing patches, AMD,
+vLLM-Omni transport and paired quality qualification are rejected for Wan here.
+The policy records only an uncalibrated identity; it contains no audio thresholds.
+
+Media validation requires exact geometry, cadence, frame count and no audio stream.
+Audio generation and quality qualification are unsupported; no audio/A-V score is
+invented. Missing quality and quality/SLO goodput stay null in the dashboard.
+Timeouts retain unknown remote completion and stop further submissions; deleting a
+job in this pinned server does not prove cancellation.
+
+The existing manual workflow uploads Wan as `video-serving-<run-id>-<attempt>`
+with a `video_serving_smoke_matrix`; existing H3 names remain compatible. Workflow
+and input names retain `h3` for compatibility. Model identity comes from sealed
+`manifest.workload_plan.model_id`, including pre-generation failures. A readable,
+hash-matched valid plan can retain scheduled/zero-attempt/not-started counts without
+GPU identity; invalid plans cannot establish those counts. The paired H3
+`result.json` exporter is not used for Wan. The app accepts the canonical Diffusers
+ID and the earlier short display ID, and rejects conflicting model declarations.
+
+CPU checks cover HTTP transport with encoded fixtures, full video-only decoding,
+launch previews, failure seals and dashboard parsing. Real Wan execution and hosted
+CI remain separate acceptance steps. Fixtures are never included as measured results.
+
+## Existing H3 lane
+
 This experimental lane runs the existing H3 supervisor inside InferenceX CI on
 prepared SemiAnalysis NVIDIA resources. Its first target is a bounded same-build smoke:
 original generated MP4s, full video/audio validation, measured requests, and
@@ -222,7 +279,8 @@ Regression mode additionally requires the existing calibrated acceptance gate.
 cd experimental/video-generation
 PYTHONPATH=../../inferencex-e2e uv run --no-project --python 3.12 \
   --with 'av==16.1.0' --with 'numpy==2.3.5' \
-  --with 'pytest>=8,<9' --with 'jsonschema>=4,<5' python -m pytest -q
+  --with 'pytest>=8,<9' --with 'jsonschema>=4,<5' \
+  --with 'rfc3339-validator==0.1.4' python -m pytest -q
 bash -n runtime-entry.example.sh
 ```
 

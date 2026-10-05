@@ -58,7 +58,8 @@ jobs:
           check_env_vars PYTHONPATH
           uv run --no-project --python 3.12 \
           --with 'av==16.1.0' --with 'numpy==2.3.5' \
-          --with 'pytest>=8,<9' --with 'jsonschema>=4,<5' python -m pytest -q
+          --with 'pytest>=8,<9' --with 'jsonschema>=4,<5' \
+          --with 'rfc3339-validator==0.1.4' python -m pytest -q
       - name: Check entry shell syntax
         run: |
           bash -n experimental/video-generation/runtime-entry.example.sh

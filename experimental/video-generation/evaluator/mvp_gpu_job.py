@@ -1,4 +1,4 @@
-"""Bounded, locally supervised H3 GPU measurements on a trusted Linux runner.
+"""Bounded, locally supervised video GPU measurements on a trusted Linux runner.
 
 This is NOT a sandbox for untrusted runtime code. The operator must provision
 the source trees, environments, weights, and (for CI acceptance) a dedicated
@@ -35,7 +35,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .mvp_runner import canonical_json_bytes, preview_plan, validate_plan
+from .mvp_runner import WAN_MODEL_ID, canonical_json_bytes, preview_plan, validate_plan
 
 
 VERSION = "0.1.0"
@@ -224,8 +224,21 @@ def validate_gpu_job(spec: dict) -> dict:
         raise ValueError("model manifest contains no weight files")
     frozen["model"]["files"] = sorted(files, key=lambda item: item["path"])
     server = frozen["server"]
-    _keys(server, {"ulysses_degree", "tp_size", "encoder_parallel", "performance_mode"}, "server",
-          optional={"dit_cpu_offload", "layerwise_offload", "attention_backend"})
+    wan = frozen["plan"]["model_id"] == WAN_MODEL_ID
+    if wan:
+        _keys(server, {"ulysses_degree", "tp_size", "dit_cpu_offload", "dit_layerwise_offload", "text_encoder_cpu_offload", "vae_cpu_offload"}, "Wan server")
+        if not frozen.get("serving") or vendor != "nvidia" or frozen.get("server_timing"):
+            raise ValueError("Wan requires NVIDIA serving smoke without the H3 server timing hook")
+        for field in ("dit_cpu_offload", "text_encoder_cpu_offload", "vae_cpu_offload"):
+            if type(server[field]) is not bool:
+                raise ValueError(f"Wan server.{field} must be an explicit boolean")
+        if server["dit_layerwise_offload"] is not False:
+            raise ValueError("Wan server.dit_layerwise_offload must be explicitly false in this smoke path")
+        if len(devices) not in {1, 2, 4, 8} or server["tp_size"] != 1 or server["ulysses_degree"] != len(devices):
+            raise ValueError("Wan currently requires 1/2/4/8 GPUs with TP1 and one Ulysses group")
+    else:
+        _keys(server, {"ulysses_degree", "tp_size", "encoder_parallel", "performance_mode"}, "server",
+              optional={"dit_cpu_offload", "layerwise_offload", "attention_backend"})
     if vendor == "amd":
         if server.get("attention_backend") != "aiter" or server["tp_size"] != 1 or server["ulysses_degree"] != len(devices):
             raise ValueError("AMD H3 currently requires the documented AITER / pure Ulysses layout")
@@ -235,7 +248,7 @@ def validate_gpu_job(spec: dict) -> dict:
     _number(server["tp_size"], "server.tp_size", 1, len(devices), True)
     if len(devices) % server["ulysses_degree"] or len(devices) % server["tp_size"]:
         raise ValueError("server requires dividing Ulysses and tensor-parallel degrees")
-    if server["encoder_parallel"] not in {"auto", "fold", "replicate"} or server["performance_mode"] not in {"manual", "speed", "memory"}:
+    if not wan and (server["encoder_parallel"] not in {"auto", "fold", "replicate"} or server["performance_mode"] not in {"manual", "speed", "memory"}):
         raise ValueError("unsupported explicit encoder parallelism or performance mode")
     if "layerwise_offload" in server:
         # This is one documented lossless placement, not a general argument
@@ -268,8 +281,15 @@ def validate_gpu_job(spec: dict) -> dict:
         raise ValueError("telemetry plan exceeds 100000 samples")
     if frozen["plan"]["warmup_runs"] < 1:
         raise ValueError("controlled GPU measurements require a separately recorded warmup")
-    from .mvp_compare import _policy
-    frozen["policy"] = _policy(frozen["policy"])
+    if wan:
+        policy = frozen["policy"]
+        _keys(policy, {"policy_id", "calibration_status"}, "Wan policy")
+        if (not isinstance(policy["policy_id"], str) or not policy["policy_id"].strip()
+                or len(policy["policy_id"]) > 2000 or policy["calibration_status"] != "uncalibrated"):
+            raise ValueError("Wan policy requires a bounded identifier and uncalibrated status; no quality qualification is supported")
+    else:
+        from .mvp_compare import _policy
+        frozen["policy"] = _policy(frozen["policy"])
     if frozen.get("serving") and frozen["policy"]["calibration_status"] == "operator_calibrated":
         raise ValueError("serving load requires an uncalibrated policy; serial calibration cannot qualify concurrent delivery metrics")
     memory_gate = frozen["policy"].get("max_memory_increase_fraction")
@@ -278,7 +298,22 @@ def validate_gpu_job(spec: dict) -> dict:
     return frozen
 
 
-def _server_argv(spec: dict, role: str) -> list[str]:
+def _server_argv(spec: dict, role: str, *, output_path: str | None = None) -> list[str]:
+    if spec["plan"]["model_id"] == WAN_MODEL_ID:
+        if not output_path:
+            raise ValueError("Wan requires a job-owned server output path")
+        server = spec["server"]
+        return [spec[role]["python"], "-c", _LAUNCH, "serve", "--model-type", "diffusion",
+                "--model-path", spec["model"]["path"], "--model-id", spec["plan"]["model_id"],
+                "--revision", spec["model"]["revision"], "--num-gpus", str(len(spec["gpu_uuids"])),
+                "--ulysses-degree", str(server["ulysses_degree"]), "--tp-size", str(server["tp_size"]),
+                "--ring-degree", "1", "--enable-cfg-parallel", "false",
+                "--host", "127.0.0.1", "--port", str(spec["port"]), "--enable-torch-compile", "false",
+                "--dit-cpu-offload", str(server["dit_cpu_offload"]).lower(),
+                "--dit-layerwise-offload", "false",
+                "--text-encoder-cpu-offload", str(server["text_encoder_cpu_offload"]).lower(),
+                "--vae-cpu-offload", str(server["vae_cpu_offload"]).lower(),
+                "--warmup-mode", "off", "--output-path", output_path]
     args = [spec[role]["python"], "-c", _LAUNCH, "serve", "--model-type", "diffusion",
             "--model-path", spec["model"]["path"], "--model-id", spec["plan"]["model_id"],
             "--revision", spec["model"]["revision"], "--model-variant", "fl2va",
@@ -300,15 +335,17 @@ def _server_argv(spec: dict, role: str) -> list[str]:
 
 def preview_gpu_job(spec: dict) -> dict:
     frozen = validate_gpu_job(spec)
+    wan = frozen["plan"]["model_id"] == WAN_MODEL_ID
+    roles = ("baseline",) if wan else _ROLES
     return {
         "evidence_kind": "gpu_job_preview_no_execution", "spec_sha256": _digest(frozen),
         "job_id": frozen["job_id"], "gpu_uuids": frozen["gpu_uuids"],
         "authorization": frozen["authorization"], "authorization_verification": "operator assertion; not proof of model-license rights",
         "allocation": frozen["allocation"], "allocation_verification": "operator-declared prerequisite, not scheduler attestation",
-        "commands": {role: _server_argv(frozen, role) for role in _ROLES},
+        "commands": {role: _server_argv(frozen, role, output_path=f"<job-output>/supervisor/{role}/generated") for role in roles},
         "workload": preview_plan(frozen["plan"]), "limits": frozen["limits"],
-        "sequence": ["verify pinned files", "acquire UUID locks", "verify idle", "baseline startup/warmup/measure/cleanup", "candidate startup/warmup/measure/cleanup", "compare"],
-        "warnings": ["Trusted Linux runner and visible GPU-process PIDs are required.", "No GPU lock can enforce exclusive access against non-cooperating processes.", "No GPU work, model download, server startup, or CI acceptance occurs in preview."],
+        "sequence": ["verify pinned files", "acquire UUID locks", "verify idle", "baseline startup/warmup/measure/cleanup"] + ([] if wan else ["candidate startup/warmup/measure/cleanup", "compare"]),
+        "warnings": ["Trusted Linux runner and visible GPU-process PIDs are required.", "No GPU lock can enforce exclusive access against non-cooperating processes.", "No GPU work, model download, server startup, or CI acceptance occurs in preview."] + (["<job-output> is resolved under the new job directory at execution; Wan supports serving smoke only."] if wan else []),
     }
 
 
@@ -1121,9 +1158,10 @@ def _role(spec: dict, label: str, directory: Path, supervisor: _Supervisor, prob
         boot_started = time.monotonic()
         role["startup_timing_window"] = {"start_monotonic_seconds": boot_started, "start_utc": _now(),
                                         "end_monotonic_seconds": None}
-        owner = supervisor.spawn(_server_argv(spec, label), cwd=metadata, env=env,
+        launch_argv = _server_argv(spec, label, output_path=str((metadata / "generated").resolve()))
+        owner = supervisor.spawn(launch_argv, cwd=metadata, env=env,
                                  stdout=metadata / "runtime.stdout.log", stderr=metadata / "runtime.stderr.log", nonce=nonce)
-        role.update(status="starting", process_identity=owner.identity, launch_argv=_server_argv(spec, label), started_at=_now())
+        role.update(status="starting", process_identity=owner.identity, launch_argv=launch_argv, started_at=_now())
         _write(directory / "gpu-job.json", receipt)
         sampler = _Sampler(probe, owner, metadata / "telemetry.jsonl", spec["limits"]["telemetry_interval_seconds"],
                            initial_sample=snapshot)
@@ -1172,7 +1210,8 @@ def _role(spec: dict, label: str, directory: Path, supervisor: _Supervisor, prob
             run = _read(run_path)
             role["run_sha256"] = _hash(run_path)
             role["run_summary"] = run.get("summary")
-            if run.get("evidence_kind") not in {"operator_endpoint", "live_h3"} or run.get("plan_sha256") != _digest(spec["plan"]):
+            live_kind = "live_video" if spec["plan"]["model_id"] == WAN_MODEL_ID else "live_h3"
+            if run.get("evidence_kind") not in {"operator_endpoint", live_kind} or run.get("plan_sha256") != _digest(spec["plan"]):
                 raise RuntimeError("supervised client returned non-endpoint or wrong-plan evidence")
             role["run_status"] = run.get("status")
             finalized = bool(run.get("finished_at") and run.get("status") in {"complete", "partial", "failed"})
@@ -1308,7 +1347,7 @@ def _require_linux():
 
 
 def run_gpu_job(spec: dict, output_dir: Path, *, serving_smoke: bool = False) -> dict:
-    """Launch owned H3 sessions, or one serving smoke session; Linux-only.
+    """Launch owned H3 sessions, or one H3/Wan serving smoke session; Linux-only.
 
     Calling this function is execution authorization. CLI callers must put an
     explicit --execute barrier in front of it. No provisioning/download occurs.
@@ -1321,6 +1360,9 @@ def run_gpu_job(spec: dict, output_dir: Path, *, serving_smoke: bool = False) ->
     acceptance after compute was consumed.
     """
     spec = validate_gpu_job(spec)
+    wan = spec["plan"]["model_id"] == WAN_MODEL_ID
+    if wan and not serving_smoke:
+        raise ValueError("Wan is supported only in controlled serving smoke; paired qualification is unavailable")
     if serving_smoke and not spec.get("serving"):
         raise ValueError("single-runtime smoke requires an explicit serving load")
     approval = spec["authorization"]
@@ -1373,12 +1415,12 @@ def run_gpu_job(spec: dict, output_dir: Path, *, serving_smoke: bool = False) ->
                     for role in (("baseline",) if serving_smoke else _ROLES):
                         supervisor.check()
                         _role(spec, role, directory, supervisor, probe, receipt)
-                        receipt["evidence_kind"] = "controlled_h3_gpu"
+                        receipt["evidence_kind"] = "controlled_video_gpu" if wan else "controlled_h3_gpu"
                         _write(directory / "gpu-job.json", receipt)
                     # Model mutation during measurement invalidates the pinned identity.
                     if _model_manifest(spec, supervisor.deadline, supervisor.cancelled) != receipt["model_identity"]:
                         raise RuntimeError("staged model identity changed during measurement")
-                    receipt.update(measurement_status="complete", evidence_kind="controlled_h3_gpu", cleanup_status="clean")
+                    receipt.update(measurement_status="complete", evidence_kind="controlled_video_gpu" if wan else "controlled_h3_gpu", cleanup_status="clean")
                     _write(directory / "gpu-job.json", receipt)
                 finally:
                     if any(role.get("cleanup", {}).get("status") == "failed" for role in receipt["roles"].values()):

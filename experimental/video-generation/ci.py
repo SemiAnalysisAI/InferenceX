@@ -419,6 +419,9 @@ def prepared_spec(config: dict) -> dict:
     spec["gpu_uuids"] = [f"{prefix}00000000-0000-0000-0000-{i:012d}" for i in range(config["resources"]["gpus"])]
     from evaluator.mvp_gpu_job import validate_gpu_job
     spec = validate_gpu_job(spec)
+    from evaluator.mvp_runner import WAN_MODEL_ID
+    need(spec.get("plan", {}).get("model_id") != WAN_MODEL_ID or config["mode"] == "serving-smoke",
+         "Wan currently requires serving-smoke mode; paired quality qualification is unsupported")
     if config["mode"] == "serving-smoke":
         from evaluator.mvp_serving_smoke import validate_spec
         validate_spec(spec)
@@ -669,6 +672,68 @@ def inside(run_dir: Path) -> int:
     return result["exit_code"]
 
 
+def prepared_artifact_prefix(config: dict) -> str:
+    """Resolve the declared model without allocating or checking runtime capacity."""
+    from evaluator.mvp_runner import WAN_MODEL_ID, validate_plan
+
+    need(digest(config["spec"]["path"]) == config["spec"]["sha256"], "Prepared GPU specification changed")
+    plan = validate_plan(read(config["spec"]["path"])["plan"])
+    if plan["model_id"] == WAN_MODEL_ID:
+        need(config["mode"] == "serving-smoke", "Wan currently requires serving-smoke mode")
+        return "video-serving"
+    return "h3-video"
+
+
+def record_wan_preparation_failure(config: dict, output: Path, error: str) -> None:
+    """Retain declared Wan work after a pre-allocation failure, without execution claims."""
+    if (output / "manifest.json").exists() or prepared_artifact_prefix(config) != "video-serving":
+        return
+    from evaluator.mvp_runner import validate_plan
+    from evaluator.mvp_serving_smoke import validate_concurrencies
+
+    plan = validate_plan(read(config["spec"]["path"])["plan"])
+    concurrencies = validate_concurrencies(config.get("concurrencies", (1, 2, 4)))
+    count = len(plan["cases"]) * plan["repetitions"]
+    need(4 <= count <= 200, "serving matrix requires 4–200 measured requests per configuration")
+    run_id, attempt, sha = (os.environ.get(key, "") for key in ("GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "H3_SOURCE_SHA"))
+    need(run_id.isdigit() and attempt.isdigit() and re.fullmatch(r"[0-9a-f]{40}", sha), "CI identity required")
+    run_dir = Path(config["workspace"]["host"]) / "results" / config["task_id"] / f"github-{run_id}-{attempt}"
+    # launch creates this directory before allocation. Its absence is required
+    # before treating an exception as preparation-only; collection can fail later.
+    if run_dir.exists():
+        return
+    repository = os.environ.get("GITHUB_REPOSITORY", "")
+    need(repository == "SemiAnalysisAI/InferenceX", "Expected InferenceX CI repository")
+    timestamp = now()
+    completion = {"scheduled": count, "attempted": 0, "completed": 0, "valid": 0,
+                  "failed": count, "not_started": count, "unfinished": 0}
+    write(output / "serving-smoke.json", {
+        "schema_version": "1.0.0", "bundle_type": "video_serving_smoke_matrix", "status": "failed",
+        "plan": plan, "started_at": timestamp, "finished_at": timestamp,
+        "requests_per_configuration": count, "warmup_per_configuration": plan["warmup_runs"],
+        "scheduled": count * len(concurrencies), "ci_accepted": False, "release_qualified": False,
+        "error": error, "execution_started": False,
+        "cells": [{"concurrency": c, "status": "not_started", "verified": False,
+                   "completion": dict(completion)} for c in concurrencies],
+        "completion": {key: value * len(concurrencies) for key, value in completion.items()},
+    })
+    write(output / "ci.json", {
+        "schema_version": 1, "task_id": config["task_id"], "run_id": run_id, "run_attempt": attempt,
+        "source_sha": sha, "mode": "serving-smoke", "phase": "failed", "site": config.get("site", DEFAULT_SITE),
+        "exit_code": 2, "error": error, "execution_started": False, "ci_accepted": False,
+        "release_qualified": False,
+    })
+    write(output / "manifest.json", {
+        "schema_version": 1, "task_id": config["task_id"], "git_commit": sha,
+        "ci": {"repository": repository}, "run_id": run_id, "run_attempt": attempt,
+        "workload_plan": plan, "mode": "serving-smoke", "site": config.get("site", DEFAULT_SITE),
+        "exit_code": 2, "slurm_allocation": None, "execution_started": False,
+        "prepared_spec": config["spec"], "artifact_checksums": "SHA256SUMS",
+        "evidence": {name: digest(output / name) for name in ("ci.json", "serving-smoke.json")},
+    })
+    (output / "SHA256SUMS").write_text("".join(f"{value}  {name}\n" for name, value in inventory(output).items()))
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path)
@@ -683,10 +748,18 @@ def main() -> int:
         return inside(args.inside)
     need(args.config is not None and args.output is not None, "--config and --output required")
     args.output.mkdir(parents=True, exist_ok=False)
+    config = None
     try:
-        return launch(read(args.config), args.output)
+        config = validate_config(read(args.config))
+        return launch(config, args.output)
     except (Exception, KeyboardInterrupt) as error:
         write(args.output / "adapter-error.json", {"error": str(error), "exit_code": 2, "recorded_at": now(), "ci_accepted": False})
+        if config is not None:
+            try:
+                record_wan_preparation_failure(config, args.output, str(error))
+            except (OSError, ValueError, KeyError, TypeError):
+                # Invalid or unavailable declarations cannot establish a workload.
+                pass
         print(str(error), file=sys.stderr)
         return 2
 

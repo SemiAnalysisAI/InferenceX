@@ -13,7 +13,7 @@ from . import mvp_gpu_job as gpu
 from .mvp_gpu_evidence import verify_measurement_job
 from .mvp_report import _CSS, _number
 from .mvp_serving import settings
-from .mvp_runner import _summary
+from .mvp_runner import WAN_MODEL_ID, _summary
 
 CONCURRENCIES = (1, 2, 4)
 
@@ -35,6 +35,7 @@ def validate_spec(spec: dict) -> dict:
 
 
 def _report(root: Path, matrix: dict) -> None:
+    title = "Wan2.2 serving smoke" if matrix["plan"]["model_id"] == WAN_MODEL_ID else "H3 serving smoke"
     rows, media = [], []
     for cell in matrix["cells"]:
         summary = cell["completion"]
@@ -56,7 +57,7 @@ def _report(root: Path, matrix: dict) -> None:
     report.mkdir(exist_ok=True)
     (report / "index.html").write_text(
         '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
-        f'<title>H3 serving smoke</title><style>{_CSS}</style><main><h1>H3 serving smoke</h1>'
+        f'<title>{title}</title><style>{_CSS}</style><main><h1>{title}</h1>'
         f'<p>One hardware configuration; {matrix["requests_per_configuration"]} measured requests at each concurrency. Warmups are separate. '
         'Latency is submit → downloaded media for technically valid clips. Throughput is valid clips / delivery wall seconds. '
         'Percentiles from small samples are preliminary and do not establish sustainable capacity. Failed and unstarted requests remain counted.</p>'
@@ -76,7 +77,7 @@ def run_matrix(spec: dict, root: Path, *, concurrencies=CONCURRENCIES) -> dict:
     concurrencies = validate_concurrencies(concurrencies)
     count = len(spec["plan"]["cases"]) * spec["plan"]["repetitions"]
     deadline = time.monotonic() + spec["limits"]["job_seconds"]
-    matrix = {"schema_version": "1.0.0", "bundle_type": "h3_serving_smoke_matrix", "status": "running",
+    matrix = {"schema_version": "1.0.0", "bundle_type": "video_serving_smoke_matrix" if spec["plan"]["model_id"] == WAN_MODEL_ID else "h3_serving_smoke_matrix", "status": "running",
               "started_at": gpu._now(), "plan": spec["plan"], "runtime": spec["baseline"], "server": spec["server"], "gpu_uuids": spec["gpu_uuids"],
               "scheduled": count * len(concurrencies), "requests_per_configuration": count,
               "warmup_per_configuration": spec["plan"]["warmup_runs"],

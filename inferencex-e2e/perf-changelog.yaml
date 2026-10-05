@@ -9106,3 +9106,9 @@
   description:
     - "Point H3 workflows and staged power packaging at inferencex-e2e after the top-level project reorganization. Preserve the staged package infx/ layout, manual dispatch, media export, asynchronous completion, and AMD preparation paths; select no LLM jobs."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2916
+
+- config-keys: []
+  workflow-dispatch: h3-video.yml
+  description:
+    - "Add controlled video-only Wan serving and sealed failure artifacts, plus matching deployment frontier and quality sidecar projection. Preserve manual dispatch and H3 execution; select no ordinary LLM or eval jobs. GPU execution and quality qualification remain unverified."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2916

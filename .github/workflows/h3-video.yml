@@ -353,13 +353,14 @@ jobs:
           python3 - <<'PY'
           import json, os, sys
           sys.path.insert(0, 'experimental/video-generation')
-          from ci import DEFAULT_SITE, validate_config
+          from ci import DEFAULT_SITE, prepared_artifact_prefix, validate_config
           with open(os.environ['H3_SITE_CONFIG']) as stream:
               config = validate_config(json.load(stream))
           if config.get('site', DEFAULT_SITE)['cluster'] != os.environ['H3_CLUSTER']:
               raise ValueError('Prepared site does not match the selected CI hardware cluster')
           with open(os.environ['GITHUB_OUTPUT'], 'a') as stream:
               stream.write('mode=' + config['mode'] + '\n')
+              stream.write('artifact-prefix=' + prepared_artifact_prefix(config) + '\n')
           PY
           python3 experimental/video-generation/ci.py \
             --config "$H3_SITE_CONFIG" \
@@ -382,7 +383,7 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: ${{ inputs.recover-amd-rootfs && 'h3-amd-rootfs-recovery' || inputs.preflight-only && 'h3-site-preflight' || inputs.stage-amd-site && 'h3-amd-site-preparation' || inputs.stage-amd-model && 'h3-model-preparation' || inputs.prepare-amd-runtime && 'h3-amd-runtime-preparation' || inputs.inspect-amd-node && 'h3-amd-node-inventory' || inputs.source-run-ids != '' && !inputs.run-amd-serving && 'h3-hardware' || 'h3-video' }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name: ${{ inputs.recover-amd-rootfs && 'h3-amd-rootfs-recovery' || inputs.preflight-only && 'h3-site-preflight' || inputs.stage-amd-site && 'h3-amd-site-preparation' || inputs.stage-amd-model && 'h3-model-preparation' || inputs.prepare-amd-runtime && 'h3-amd-runtime-preparation' || inputs.inspect-amd-node && 'h3-amd-node-inventory' || inputs.source-run-ids != '' && !inputs.run-amd-serving && 'h3-hardware' || steps.execute.outputs.artifact-prefix || 'h3-video' }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/h3-video-${{ github.run_id }}-${{ github.run_attempt }}/
           if-no-files-found: error
           compression-level: 0

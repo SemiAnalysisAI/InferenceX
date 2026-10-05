@@ -74,9 +74,11 @@ def _validate_expected(expected: dict) -> None:
             raise ValueError(f"expected.{key} must be an integer")
         if key == "max_frozen_fraction" and value > 1:
             raise ValueError("expected.max_frozen_fraction must be <=1")
-    for key in {"audio_required", "requires_motion", "requires_sound"} & expected.keys():
+    for key in {"audio_required", "audio_forbidden", "requires_motion", "requires_sound"} & expected.keys():
         if not isinstance(expected[key], bool):
             raise ValueError(f"expected.{key} must be a boolean")
+    if expected.get("audio_forbidden") and (expected.get("audio_required") or expected.get("requires_sound")):
+        raise ValueError("audio cannot be both forbidden and required")
 
 
 def _audio_array(frame: Any, np: Any) -> Any:
@@ -403,6 +405,8 @@ def analyze_media(path: Path, expected: dict | None = None) -> dict:
     if "audio_required" in expected:
         required = bool(expected["audio_required"])
         checks.append(_check("audio.required", bool(audio.get("present")) if required else None, audio.get("present", False), required, "False means audio is optional, not prohibited."))
+    if expected.get("audio_forbidden"):
+        checks.append(_check("audio.absent", not audio.get("present"), audio.get("present", False), False, "The model contract is video-only; audio is unsupported."))
     if audio.get("present"):
         checks.append(_check("audio.samples", audio.get("sample_count", 0) > 0, audio.get("sample_count", 0), ">0", "An advertised audio stream must contain decoded samples."))
         timestamp_ok = audio["missing_timestamps"] == 0 and audio["nonincreasing_timestamps"] == 0
