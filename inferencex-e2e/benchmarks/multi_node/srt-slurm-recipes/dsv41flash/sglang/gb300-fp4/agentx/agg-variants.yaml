@@ -33,7 +33,7 @@ base:
   dynamo:
     install: true
     source:
-      wheel: "1.6.0.dev20260928"
+      wheel: "1.5.0.dev20260914"
   slurm:
     time_limit: "4:00:00"
   # Cold weight loads from the shared HF cache plus graph capture take 15-20 min.
@@ -43,10 +43,14 @@ base:
   resources:
     gpu_type: gb300
     gpus_per_node: 4
-  # Dynamo 1.6 uses the TCP request plane; etcd is the only discovery service needed.
+  # Dynamo 1.5 discovers workers through etcd and also needs NATS.
   services:
     - name: etcd
       type: etcd
+      placement:
+        node: infra
+    - name: nats
+      type: nats
       placement:
         node: infra
   frontend:

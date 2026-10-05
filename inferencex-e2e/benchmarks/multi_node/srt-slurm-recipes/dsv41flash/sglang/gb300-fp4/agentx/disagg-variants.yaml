@@ -38,7 +38,7 @@ base:
   dynamo:
     install: true
     source:
-      wheel: "1.6.0.dev20260928"
+      wheel: "1.5.0.dev20260914"
   slurm:
     # c96 AgentX runs take ~2.5 h including the 60 min profiling phase and the gate.
     time_limit: "6:00:00"
@@ -48,11 +48,15 @@ base:
   resources:
     gpu_type: gb300
     gpus_per_node: 4
-  # Dynamo 1.6 uses the TCP request plane; etcd is the only discovery service needed
-  # and runs with the frontend on the prefill node (two nodes total for 1P1D).
+  # Dynamo 1.5 discovers workers through etcd and also needs NATS; both run with the
+  # frontend on the prefill node (two nodes total for 1P1D).
   services:
     - name: etcd
       type: etcd
+      placement:
+        node: infra
+    - name: nats
+      type: nats
       placement:
         node: infra
   frontend:

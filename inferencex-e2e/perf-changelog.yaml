@@ -9316,11 +9316,11 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Add DeepSeek-V4.1-Flash FP4 AgentX on GB300 with the Dynamo frontend (KV router, session affinity) and SGLang nightly-dev-20260928-81f27fb3 / ai-dynamo 1.6.0.dev20260928, DSpark block size 5."
+    - "Add DeepSeek-V4.1-Flash FP4 AgentX on GB300 with the Dynamo frontend (KV router, session affinity) and SGLang nightly-dev-20260928-81f27fb3 / ai-dynamo 1.5.0.dev20260914, DSpark block size 5."
     - "Use the mounted shared Hugging Face cache for every SGLang server role."
     - "Aggregated arms: the two lowest-latency points of the curve, a pure TP4 (EP1) c1 point (the standalone recipe's TP4 c1 settings, static ragged verify and Engram in HBM, behind Dynamo; 6,215 tok/s/GPU @ 385.0 tok/s/user P90) and a TP2/EP2 c1 point with static ragged verify and Engram in host DRAM (12,501 @ 377.1, P90 TTFT 0.9 s); both passed their GSM8K gates."
     - "Disaggregated curve with Mooncake KV transfer and TP2/EP2 workers: 1P2D with a 1 s Dynamo session-affinity TTL at c16 (one decode worker per node; 19,280 tok/s/GPU @ 327.4 tok/s/user P90, P90 TTFT 0.7 s), c48 (59,740 @ 244.3, 1.4 s) and c64 (80,583 @ 207.6, 2.0 s); 1P1D at c96 (144,448 @ 132.2, 4.1 s) and, with the SGLang HiCache host-memory prefix-cache tier on the prefill worker, at c160 (172,192 @ 98.8, 21.7 s); 2P1D HiCache at c256 (174,562 @ 68.1, 18.9 s). Every point passed its GSM8K gate; at matched P90 interactivity the curve is 1.7-2.7x the published MI355X ATOM tokens/s/GPU."
-    - "新增 GB300 上 DeepSeek-V4.1-Flash FP4 AgentX 的 Dynamo 前端（KV 路由、会话亲和）+ SGLang nightly-dev-20260928-81f27fb3 / ai-dynamo 1.6.0.dev20260928 配方，DSpark block size 5。"
+    - "新增 GB300 上 DeepSeek-V4.1-Flash FP4 AgentX 的 Dynamo 前端（KV 路由、会话亲和）+ SGLang nightly-dev-20260928-81f27fb3 / ai-dynamo 1.5.0.dev20260914 配方，DSpark block size 5。"
     - "所有 SGLang server role 使用已挂载的共享 Hugging Face cache。"
     - "聚合分支：曲线上延迟最低的两个点——纯 TP4（EP1）c1（沿用单机配方的 TP4 c1 设置、static ragged verify 与 HBM 内 Engram，置于 Dynamo 之后；6,215 tok/s/GPU @ 385.0 tok/s/user P90）与采用 static ragged verify、Engram 置于主机内存的 TP2/EP2 c1（12,501 @ 377.1，P90 TTFT 0.9 s）；两者均通过 GSM8K 验证。"
     - "分离式曲线（Mooncake KV 传输，TP2/EP2 worker）：1P2D 配合 1 秒 Dynamo 会话亲和 TTL 的 c16（每节点一个 decode worker；19,280 tok/s/GPU @ 327.4 tok/s/user P90，P90 TTFT 0.7 s）、c48（59,740 @ 244.3，1.4 s）与 c64（80,583 @ 207.6，2.0 s）；1P1D 的 c96（144,448 @ 132.2，4.1 s）以及在 prefill worker 上启用 SGLang HiCache 主机内存前缀缓存层后的 c160（172,192 @ 98.8，21.7 s）；2P1D HiCache 的 c256（174,562 @ 68.1，18.9 s）。所有点均通过 GSM8K 验证；在相同 P90 交互性下，该曲线为已发布 MI355X ATOM tokens/s/GPU 的 1.7-2.7 倍。"
