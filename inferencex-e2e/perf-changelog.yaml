@@ -9369,3 +9369,12 @@
   description:
     - "Prepare a diagnostic-only colocated TEP4 prefill and TP4/EP4 attention-DP2 decode real-quality gate. Native attention/vocabulary sharding and static fraction 0.955 provide a measured-capacity hypothesis; require natural full-context pools and real outputs. The exact attention-DP2 setting remains in the recipe fingerprint; do not publish this point until explicit attention-DP-size metadata is supported."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3656
+
+- config-keys:
+    - glm53-mi325x-oct5-colocated-p4-d4
+    - glm53-mi325x-oct5-colocated-tep4-tep4
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Run the bounded colocated TP4 control and quality-passed TEP4 AgentX gate on a different healthy host after the first TP4 control encountered a standalone UMBP service segfault on k10-10. Only native Slurm placement excludes that host for this comparison; engine, cache, workload and service settings remain unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3656
