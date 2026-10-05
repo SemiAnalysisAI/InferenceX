@@ -4193,7 +4193,8 @@
         "offload-telemetry.jsonl": "ab3e91c17dcbfdcac5997c231b83790b7cc8987f9d75cf5d65f714f52dfc5d74",
         "offload_config.json": "788bc90d776bd6ac9b576dc2589ee122ed14a1cdf91ac6c147c4216022fa08c6",
         "gpu_metrics.csv": "182411ba7b331ff79465537fad2d66a8f615504f160cca8b93a42d8c71b396f8"
-      }
+      },
+      "posthoc_scratch_audit": "At 2026-10-05T22:12Z, the exact directory remained on the host /scratch mount of im-b200-c001 despite earlier cleanup/absence reports. owner.json matched this terminal study run and its Slurm job was no longer active. The exact directory was deleted and independently verified absent. Earlier absence evidence did not reflect the host /scratch state."
     },
     {
       "run_id": 36796500128,
@@ -4414,7 +4415,8 @@
         "gpu_metrics.csv": "9fe765f0a4c546086c0df8f5117dee4a8502f2916ef094762bd1fcc9a1ed2ec0",
         "benchmark_command.txt": "5b65a7911c7f75f4d1f60f4a60304e5683686474392878765526c4b6f3fb8bb7",
         "vllm_command.txt": "f5c5aca54dbbc45ebb3b4aab39bbd34bd6e60e503249facf340e5248adb425c8"
-      }
+      },
+      "posthoc_scratch_audit": "At 2026-10-05T22:12Z, the exact directory remained on the host /scratch mount of im-b200-c001 despite earlier cleanup/absence reports. owner.json matched this terminal study run and its Slurm job was no longer active. The exact directory was deleted and independently verified absent. Earlier absence evidence did not reflect the host /scratch state."
     },
     {
       "run_id": 36943237877,
@@ -4891,7 +4893,8 @@
         "benchmark_command.txt": "dc029e35c04d127c835c71caab2d3d825a93e1d45e93c0c4076f64c94a92d4f7",
         "vllm_command.txt": "f5ca5b6979719cca177bbddbfd75a5eb90d9ec7460727813bcad842a2a8874af",
         "replayed_power_validation.json": "d38fa6bf087703cfb427a9ae25eacb725e25291120e328d3b094b06ccc1ba833"
-      }
+      },
+      "posthoc_scratch_audit": "At 2026-10-05T22:12Z, the exact directory remained on the host /scratch mount of im-b200-c001 despite earlier cleanup/absence reports. owner.json matched this terminal study run and its Slurm job was no longer active. The exact directory was deleted and independently verified absent. Earlier absence evidence did not reflect the host /scratch state."
     },
     {
       "run_id": 37236791824,
@@ -4997,7 +5000,8 @@
         "benchmark_command.txt": "3788621dfdce2eb7ca2a82a6f8cb9596a628190300d55eb2ee65f5dbe5ee95f8",
         "vllm_command.txt": "ffede83dad1c5ae83bdcfb2f058add3d0ce0350fd60cb1bb914b02b0ef0cf120",
         "replayed_power_validation.json": "9337d41921e45ec555d2ab73f57ddcbded2f99e8c24fc80f03ac7153e4075fe9"
-      }
+      },
+      "posthoc_scratch_audit": "At 2026-10-05T22:12Z, the exact directory remained on the host /scratch mount of im-b200-c001 despite earlier cleanup/absence reports. owner.json matched this terminal study run and its Slurm job was no longer active. The exact directory was deleted and independently verified absent. Earlier absence evidence did not reflect the host /scratch state."
     },
     {
       "run_id": 37269968186,
@@ -5110,7 +5114,8 @@
         "benchmark_command.txt": "4f13bfbfe5394e677c73b754e9277ee1b35d045ae5e5562cc715acc1050e3ff9",
         "vllm_command.txt": "f5c5aca54dbbc45ebb3b4aab39bbd34bd6e60e503249facf340e5248adb425c8",
         "replayed_power_validation.json": "64d460e1071039cfd5bd966d806b08ec6b5477736803844f59ffba703f63decf"
-      }
+      },
+      "posthoc_scratch_audit": "At 2026-10-05T22:12Z, the exact directory remained on the host /scratch mount of im-b200-c001 despite earlier cleanup/absence reports. owner.json matched this terminal study run and its Slurm job was no longer active. The exact directory was deleted and independently verified absent. Earlier absence evidence did not reflect the host /scratch state."
     },
     {
       "run_id": 37366294117,
@@ -5226,10 +5231,10 @@
       "repeat": 4,
       "retry_of": 37374537927,
       "head_sha": "78c76713a0cc5a99c8a5a30b08a49e931016d6be",
-      "status": "in_progress",
+      "status": "failure",
       "workflow_name": "offload-v1-nvme4tib-c489-r4-enroot3-extended-fullsha-20261005",
       "dispatched_at": "2026-10-05T21:44:47Z",
-      "phase": "Slurm job 19535 pending for resources on requested im-b200-c001",
+      "phase": "terminal before benchmark; NVMe free-space preflight rejected node",
       "performance_result": false,
       "execution_budget": {
         "slurm_minutes": 510,
@@ -5245,33 +5250,41 @@
       "requested_node": "im-b200-c001",
       "slurm_time_limit": "08:30:00",
       "slurm_state": "PENDING",
-      "pending_reason": "Resources"
+      "pending_reason": "Resources",
+      "completed_at": "2026-10-05T22:09:21Z",
+      "node": "im-b200-c001",
+      "failure_stage": "runtime.py prepare storage proof",
+      "failure_class": "insufficient node-local NVMe capacity",
+      "scratch_created": false,
+      "job_log_sha256": "dfd0c2f3cef0ad6bf2ebc13d5702cb630fc0ad8f174598e7e563b005ccdfba3f",
+      "diagnostic_artifact": {
+        "id": 11373971481,
+        "name": "agentic_minimaxm3_tp4_conc489_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-b98f8af6e9e9c699de79",
+        "zip_sha256": "c80128fdb89cfed98424de2b5dbd957068d853ef347e3ca35c700e29b427184d",
+        "content": "offload-stale-cleanup-35583529913.json; already_absent=true"
+      },
+      "runtime_evidence": "Slurm 19535 allocated on im-b200-c001 with 510-minute limit. Enroot imported the same digest successfully and run.sh started. runtime.py prepare rejected free space before creating current-run scratch: /scratch had 4,483,058,126,848 free bytes versus required >4,535,485,464,576. No warmup/profile. Host inventory then found five exact terminal study-owned directories with matching owner.json; old Slurm IDs were not active. All five exact paths were deleted and independently absent; /scratch free space later rose to 17,677,224,632,320 bytes after an unrelated allocation also ended."
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894,36796500128,36879140816,37027095833",
-  "status": "Corrected Enroot-3-compatible NVMe c489 run 37377909064 is active; Slurm job 19535 is pending on im-b200-c001 for resources. No image import, storage preflight or warmup yet.",
+  "status": "Digest-pinned Enroot-compatible c489 run 37377909064 imported image successfully but failed node-local NVMe free-space preflight before scratch or benchmarking. Exact stale task-owned directories from five terminal runs were removed after owner and inactivity verification; free space now exceeds the 4 TiB plus reserve requirement. No performance result.",
   "last_capacity_check": {
-    "checked_at": "2026-10-05T21:42:57Z",
-    "active_study_run_ids": [
-      37377909064
-    ],
+    "checked_at": "2026-10-05T22:16:00Z",
+    "active_study_run_ids": [],
     "pending_study_run_ids": [],
     "dispatch_allowed": false,
     "b200_priority_jobs_queued": 0,
-    "b200_priority_jobs_in_progress": 2,
-    "b200_active_or_queued_run_ids": [
-      37374326869,
-      37377909064
-    ],
+    "b200_priority_jobs_in_progress": 0,
+    "b200_active_or_queued_run_ids": [],
     "target_node": "im-b200-c001",
-    "target_node_state": "Slurm job 19535 PENDING Resources on requested im-b200-c001",
-    "observed_free_bytes": null,
-    "reason": "Study job 19535 is pending within its active B200 workflow; dispatch nothing else."
+    "target_node_state": "im-b200-c001 host /scratch free 17,677,224,632,320 bytes after exact task-owned cleanup",
+    "observed_free_bytes": 17677224632320,
+    "reason": "Refresh cluster-wide GitHub job-label inventory immediately before any retry dispatch."
   },
   "next_dispatch": {
     "arm": "none",
     "concurrency": 489,
-    "requires": "Wait for NVMe run 37377909064 to finish. Capture artifacts and hashes, verify exact scratch cleanup, delete temporary downloads, then refresh cluster-wide B200 inventory before matched HBM-only c489."
+    "requires": "Refresh cluster-wide queued and in-progress B200 job-label inventory; dispatch one corrected extended-budget c489 NVMe retry only if zero queued B200 jobs and no active-or-queued study workflow. Verify image import, preflight and exact host /scratch cleanup."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-21T05:30:00Z",
@@ -5290,5 +5303,24 @@
       "last_observed_allocated_bytes": 0,
       "reason": "The allocation time limit killed the container step before offload_cleanup.json was written. The directory was empty at the final telemetry sample; delete only this exact task-owned directory through approved InferenceX infrastructure, then record proof and remove this entry."
     }
-  ]
+  ],
+  "storage_reconciliation": {
+    "checked_at": "2026-10-05T22:16:00Z",
+    "node": "im-b200-c001",
+    "trigger_run": 37377909064,
+    "preflight_free_bytes": 4483058126848,
+    "required_free_bytes": 4535485464576,
+    "deleted_exact_terminal_run_ids": [
+      36739077310,
+      36879140816,
+      37140167126,
+      37236791824,
+      37269968186
+    ],
+    "owner_receipts_verified": true,
+    "old_slurm_jobs_active": false,
+    "exact_paths_absent_after": true,
+    "free_bytes_after_unrelated_job_ended": 17677224632320,
+    "note": "Prior absence reports were contradicted by the host /scratch inventory. Current retry created no scratch. No unrelated scratch was deleted."
+  }
 }
