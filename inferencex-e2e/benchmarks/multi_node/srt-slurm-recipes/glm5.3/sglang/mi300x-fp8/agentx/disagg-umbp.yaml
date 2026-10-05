@@ -197,6 +197,20 @@ override_tp8_c32:
     env:
       CONC: "32"
 
+override_tp8_decode_mem95_c16:
+  roles:
+    prefill:
+      args:
+        max-running-requests: 32
+    decode:
+      args:
+        mem-fraction-static: 0.95
+        max-running-requests: 32
+        cuda-graph-max-bs-decode: 32
+  benchmark:
+    env:
+      CONC: "16"
+
 override_tp8_tep16_c8:
   roles:
     prefill:
