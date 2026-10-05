@@ -634,6 +634,14 @@ workflow 或授予运行权限。同一条目不能把 `workflow-dispatch` 与�
 选择、评估修饰符或 `append-only` 混用。其他独立的普通条目仍按原规则选择任务。
 历史字节保留和物理文件末尾追加规则同样适用。
 
+H3 视频 GPU 任务通过 `benchmarks/multi_node/srt-slurm-recipes/h3/` 下的
+srt-slurm services-only 配方启动，使用 `SRT_SERVICES_ONLY=true` 与
+`python -m infx.launch run`（`LaunchPath.SRT_SERVICES`）。A/B smoke 使用
+terminal generic service（`smoke-ab.yaml`）；serving smoke 使用 server service
+加上 `benchmark.type: custom`（`serving-client.yaml`）。在有意支持 services-only
+矩阵选择之前，不要把 H3 写入 LLM master config。AMD 的 inspect→serving
+同租约 campaign 仍把嵌套 `srun` step 挂到已有分配上；srt-slurm 无法复用该外层租约。
+
 ## 停止条件
 
 出现以下任何条件时，在派发 GPU 工作或宣称配置完成前停止。取得缺失事实或修复来源不一致；不要猜测。

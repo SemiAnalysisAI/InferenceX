@@ -75,23 +75,30 @@ selected devices' observed NVML indices, then verifies their ordered CUDA driver
 UUIDs before importing SGLang. An enumeration mismatch fails startup; ownership
 locks and telemetry continue to use the assigned UUIDs.
 
-The adapter recovers task-owned allocation receipts before allocating. Imported
-receipts must match task identity, Unix ownership, and the scheduler's exact
-allocation identity; ambiguous intent blocks another submission. The default H200 site
-is `main` / `sa-shared`. An explicit `site` records the cluster, partition, account,
-and expected GPU model. Currently admitted clusters are `h200-dgxc`, `h100-dgxc`,
-and `b200-nscale`; admission is implementation support, not a completed hardware run.
-`resources.allocated_gpus` records the full allocation separately from participating
-`resources.gpus`; set it to eight on whole-node H100. A paired allocation reserves eight GPUs;
-the example step selects four GPUs, 32 CPUs, and 1 TiB of host memory. The pinned
-four-rank loader exceeded 256 GiB during CPU weight staging; 1 TiB is a tested
-working allowance, not a measured minimum. Charge reserved capacity.
-`resources.minutes` is the total allocation cap, at most 240 minutes. The step
-reserves five minutes for outer cleanup, and the supervisor plus ten minutes
-must fit the allocation. For example: 90-minute allocation, 85-minute step,
-75-minute supervisor. Reused allocations need enough remaining time. Preserve
-the prepared rootfs; clean only owned processes/steps and release only allocations
-this execution owns.
+Fresh GPU execution submits through srt-slurm's services-only path
+(`SRT_SERVICES_ONLY=true` → `python -m infx.launch run`). A/B smoke uses the
+terminal service recipe
+`benchmarks/multi_node/srt-slurm-recipes/h3/sglang/h200/smoke-ab.yaml`.
+Serving smoke uses the matching SKU's `serving-client.yaml`, where a generic
+service starts the diffusion server and `benchmark.type: custom` runs
+`benchmarks/h3/run_client.sh`. Site JSON must set `runtime.container` to the
+prepared H3 squash or image; the entry/rootfs fields remain provenance for that
+prepared runtime.
+
+AMD one-lease inspect→serving continuation (`run_amd_serving_ci.py`) still
+attaches a nested `srun` step to the lease opened by inventory/inspect helpers.
+srt-slurm owns fresh jobs end-to-end and cannot reuse that outer allocation, so
+the nested path stays for that campaign only.
+
+The default H200 site is `main` / `sa-shared`. An explicit `site` records the
+cluster, partition, account, and expected GPU model. Currently admitted clusters
+are `h200-dgxc`, `h100-dgxc`, `b200-nscale`, and `mi355x-amds`; admission is
+implementation support, not a completed hardware run. `resources.allocated_gpus`
+records the full allocation separately from participating `resources.gpus`; set
+it to eight on whole-node H100. `resources.minutes` is the srt-slurm time-limit
+budget (at most 240 minutes). Media validation, A/B compare, telemetry, CPU
+reprocess, and AMD preparation remain H3-specific outside the LLM result
+collectors.
 
 ## Dispatch through InferenceX
 

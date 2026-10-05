@@ -11,7 +11,7 @@ import subprocess
 
 import ci
 from evaluator.mvp_gpu_job import source_file_manifest, validate_gpu_job
-from prepare_amd_runtime import CONTAINER, REVISION
+from prepare_amd_runtime import CONTAINER, IMAGE, REVISION
 from stage_model_ci import source_spec
 
 WORKSPACE = Path("/it-share/data/wenyao-minimax-h3/work")
@@ -115,7 +115,8 @@ def stage(spec: dict, output: Path, *, server_timing: bool = False, allocation_m
     config = {"schema_version": 1, "task_id": "h3-cross-hardware", "site": ci.AMD_SITE,
               "workspace": {"host": str(workspace), "container": "/work"},
               "runtime": {"entry": str(entry), "entry_sha256": ci.digest(entry), "rootfs": str(rootfs),
-                          "ready_marker": str(readiness), "python": probe["python"]},
+                          "ready_marker": str(readiness), "python": probe["python"],
+                          "container": str(IMAGE)},
               "spec": {"path": str(destination / "gpu-spec.json"), "sha256": ci.digest(destination / "gpu-spec.json")},
               "resources": {"gpus": 4, "allocated_gpus": 8, "cpus": 32, "memory_gb": 1024, "minutes": allocation_minutes},
               "allocation_receipts": [], "mode": "serving-smoke", "concurrencies": [1]}

@@ -81,6 +81,34 @@ def _mvp_command(arguments: argparse.Namespace) -> int:
                 return 1
             return 2
 
+        if arguments.command == "srt-gpu-job":
+            from .mvp_srt import run_srt_gpu_job
+
+            result = run_srt_gpu_job(_load_mvp_object(arguments.spec), arguments.output)
+            print(json.dumps(result, indent=2, sort_keys=True, allow_nan=False))
+            if result.get("status") == "complete" and result.get("measurement_status") == "complete":
+                return 0
+            if result.get("status") in {"failed", "aborted"} or result.get("cleanup_status") == "failed":
+                return 1
+            return 2
+
+        if arguments.command == "srt-serve":
+            from .mvp_srt import serve_role
+
+            return serve_role(_load_mvp_object(arguments.spec), arguments.role, arguments.port)
+
+        if arguments.command == "srt-client":
+            from .mvp_srt import run_srt_client
+
+            result = run_srt_client(
+                _load_mvp_object(arguments.spec), arguments.endpoint, arguments.output
+            )
+            print(json.dumps(result, indent=2, sort_keys=True, allow_nan=False))
+            summary = result.get("summary") or {}
+            if summary.get("valid") == summary.get("scheduled") and summary.get("scheduled"):
+                return 0
+            return 1
+
         if arguments.command == "gpu-report":
             from .mvp_gpu_report import write_gpu_report
 
@@ -182,6 +210,29 @@ def _parser() -> argparse.ArgumentParser:
     gpu_report = subparsers.add_parser("gpu-report", help="render recorded GPU job evidence, including incomplete runs")
     gpu_report.add_argument("job", type=Path)
     gpu_report.add_argument("--output", required=True, type=Path, help="new report directory")
+
+    srt_gpu = subparsers.add_parser(
+        "srt-gpu-job",
+        help="run the H3 supervisor inside an srt-slurm terminal service",
+    )
+    srt_gpu.add_argument("--spec", required=True, type=Path)
+    srt_gpu.add_argument("--output", required=True, type=Path)
+
+    srt_serve = subparsers.add_parser(
+        "srt-serve",
+        help="start one H3 diffusion server for an srt-slurm generic service",
+    )
+    srt_serve.add_argument("--spec", required=True, type=Path)
+    srt_serve.add_argument("--role", required=True, choices=("baseline", "candidate"))
+    srt_serve.add_argument("--port", required=True, type=int)
+
+    srt_client = subparsers.add_parser(
+        "srt-client",
+        help="run the H3 client as an srt-slurm custom benchmark",
+    )
+    srt_client.add_argument("--spec", required=True, type=Path)
+    srt_client.add_argument("--endpoint", required=True)
+    srt_client.add_argument("--output", required=True, type=Path)
 
     run = subparsers.add_parser("run", help="preview an H3 plan; --execute explicitly submits it")
     run.add_argument("plan", type=Path)

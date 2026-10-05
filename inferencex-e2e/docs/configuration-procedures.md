@@ -702,6 +702,15 @@ combine `workflow-dispatch` with config keys, scenario selection, eval modifiers
 or `append-only` in the same entry. Separate ordinary entries retain their normal
 selection behavior. Historical bytes and physical-tail append rules still apply.
 
+H3 video GPU jobs launch through srt-slurm services-only recipes under
+`benchmarks/multi_node/srt-slurm-recipes/h3/` with `SRT_SERVICES_ONLY=true` and
+`python -m infx.launch run` (`LaunchPath.SRT_SERVICES`). A/B smoke is a terminal
+generic service (`smoke-ab.yaml`); serving smoke uses a server service plus
+`benchmark.type: custom` (`serving-client.yaml`). Keep H3 out of LLM master
+configs until services-only matrix selection is intentional. The AMD
+inspect-to-serving one-lease campaign still attaches a nested `srun` step to an
+existing allocation; srt-slurm cannot reuse that outer lease.
+
 ## Stop conditions
 
 Stop before dispatching GPU work or claiming the configuration complete when any condition below holds. Obtain the missing fact or fix the source mismatch. Do not guess.

@@ -342,14 +342,18 @@ jobs:
           python3 experimental/video-generation/run_amd_serving_ci.py \
             --source-run-id "$H3_SOURCE_RUN_IDS" \
             --output "$RUNNER_TEMP/h3-video-$H3_RUN_ID-$H3_RUN_ATTEMPT"
-      - name: Execute configured H3 smoke
+      - name: Execute configured H3 smoke through srt-slurm
         id: execute
         if: ${{ inputs.source-run-ids == '' && !inputs.preflight-only && !inputs.stage-amd-model && !inputs.stage-amd-site && !inputs.inspect-amd-node && !inputs.prepare-amd-runtime && !inputs.recover-amd-rootfs && !inputs.run-amd-serving }}
+        env:
+          RUNNER_NAME: ${{ runner.name }}
+          PYTHONPATH: ${{ github.workspace }}/inferencex-e2e
         run: |
           set -eo pipefail
           source inferencex-e2e/benchmarks/benchmark_lib.sh --validation-only
           check_env_vars H3_SITE_CONFIG H3_CLUSTER RUNNER_TEMP H3_RUN_ID H3_RUN_ATTEMPT \
-            H3_REPOSITORY H3_SOURCE_SHA H3_WORKFLOW_REF H3_WORKFLOW_SHA H3_ACTOR H3_TRIGGERING_ACTOR GITHUB_OUTPUT
+            H3_REPOSITORY H3_SOURCE_SHA H3_WORKFLOW_REF H3_WORKFLOW_SHA H3_ACTOR H3_TRIGGERING_ACTOR \
+            GITHUB_OUTPUT RUNNER_NAME GITHUB_WORKSPACE PYTHONPATH
           python3 - <<'PY'
           import json, os, sys
           sys.path.insert(0, 'experimental/video-generation')
@@ -358,6 +362,8 @@ jobs:
               config = validate_config(json.load(stream))
           if config.get('site', DEFAULT_SITE)['cluster'] != os.environ['H3_CLUSTER']:
               raise ValueError('Prepared site does not match the selected CI hardware cluster')
+          if 'container' not in config['runtime'] or not str(config['runtime']['container']).strip():
+              raise ValueError('Prepared site must set runtime.container for the srt-slurm H3 image/squash')
           with open(os.environ['GITHUB_OUTPUT'], 'a') as stream:
               stream.write('mode=' + config['mode'] + '\n')
           PY

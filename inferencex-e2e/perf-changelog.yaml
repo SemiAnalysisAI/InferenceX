@@ -9422,3 +9422,9 @@
   description:
     - "Point H3 workflows and staged power packaging at inferencex-e2e after the top-level project reorganization. Preserve the staged package infx/ layout, manual dispatch, media export, asynchronous completion, and AMD preparation paths; select no LLM jobs."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2916
+
+- config-keys: []
+  workflow-dispatch: h3-video.yml
+  description:
+    - "Route fresh H3 video GPU smokes through srt-slurm services-only recipes (terminal generic service for A/B, custom benchmark client for serving). Keep AMD inspect-to-serving one-lease continuation on the nested srun path because srt-slurm cannot reuse that outer allocation. Select no LLM jobs."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2916

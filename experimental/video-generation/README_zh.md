@@ -61,17 +61,25 @@ launcher 当作进入脚本。
 实际 NVML 编号，并在导入 SGLang 前核对 CUDA 驱动返回的有序 UUID。
 设备枚举不一致时启动失败；归属锁和遥测仍使用分配的 UUID。
 
-adapter 在申请资源前恢复本任务的分配收据。导入的收据必须匹配任务标识、Unix
-所有者和调度器中的精确分配身份；提交结果不明确时禁止重复申请。默认 H200 站点是
-`main` / `sa-shared`，其他站点通过 `site` 明确记录，见下文。新建独占分配预留八张 GPU；示例 step 使用四张
-GPU、32 个 CPU 和 1 TiB 主机内存。固定版本的四 rank 加载器在 CPU 暂存权重时
-超过了 256 GiB；1 TiB 是实际运行验证过的额度，并非测得的最低需求。预算按预留容量计算。
+新的 GPU 任务通过 srt-slurm 的 services-only 路径提交
+（`SRT_SERVICES_ONLY=true` → `python -m infx.launch run`）。A/B smoke 使用
+终端服务配方
+`benchmarks/multi_node/srt-slurm-recipes/h3/sglang/h200/smoke-ab.yaml`。
+serving smoke 使用对应 SKU 的 `serving-client.yaml`：generic service 启动
+diffusion server，`benchmark.type: custom` 运行 `benchmarks/h3/run_client.sh`。
+站点 JSON 必须设置 `runtime.container` 为已准备的 H3 squash/镜像；entry/rootfs
+字段仍作为该运行时的 provenance。
 
-`resources.minutes` 是整个分配的时间上限，最多 240 分钟。step 为外层清理
-预留五分钟，supervisor 的上限加十分钟必须不超过分配上限。例如：分配
-90 分钟、step 85 分钟、supervisor 75 分钟。复用分配必须有足够剩余时间。
-保留准备好的 rootfs，仅清理属于本次任务的进程和 step，仅释放本次执行拥有的
-分配。
+AMD 的“同一租约内 inspect→serving 续跑”（`run_amd_serving_ci.py`）仍把嵌套
+`srun` step 挂到 inventory/inspect 打开的租约上。srt-slurm 端到端拥有新作业，
+无法复用该外层分配，因此该路径仅保留给这一 campaign。
+
+默认 H200 站点是 `main` / `sa-shared`，其他站点通过 `site` 明确记录，见下文。
+当前准入集群为 `h200-dgxc`、`h100-dgxc`、`b200-nscale` 与 `mi355x-amds`；
+准入表示实现支持，并不等于已完成硬件跑通。`resources.allocated_gpus` 记录完整
+分配规模，与参与测量的 `resources.gpus` 分开；整节点 H100 设为八张。
+`resources.minutes` 是 srt-slurm 时间上限预算（最多 240 分钟）。媒体校验、A/B
+比较、遥测、CPU 再处理与 AMD 准备仍属于 H3 专用逻辑，不走 LLM 结果收集器。
 
 ## 通过 InferenceX 调度
 

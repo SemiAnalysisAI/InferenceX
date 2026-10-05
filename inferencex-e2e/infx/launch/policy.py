@@ -56,6 +56,7 @@ class LaunchPath(StrEnum):
     SRT_MULTI = "srt-multi"
     SRT_NATIVE = "srt-native"
     SRT_BATCH = "srt-batch"
+    SRT_SERVICES = "srt-services"
     SCRIPT = "script"
     LLMD = "llmd"
 
@@ -76,6 +77,8 @@ BATCH_WRAPPED_LANES: dict[str, Match] = {
 
 
 def launch_path(cluster_id: str, request: LaunchRequest) -> LaunchPath:
+    if request.env.get("SRT_SERVICES_ONLY") == "true":
+        return LaunchPath.SRT_SERVICES
     if request.is_multinode:
         if request.framework == "llmd-vllm":
             return LaunchPath.LLMD

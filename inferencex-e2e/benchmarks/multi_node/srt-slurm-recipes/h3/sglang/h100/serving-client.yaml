@@ -1,0 +1,52 @@
+# H3 serving client against a recipe-managed diffusion server.
+#
+# This is the literal srt-slurm custom-benchmark shape: a GPU-owning service
+# starts the H3 server, readiness gates on its HTTP port, and benchmark.type
+# custom runs the H3 client. Use for single-server serving smoke. Paired A/B
+# supervisor jobs use smoke-ab.yaml (terminal service) because they own two
+# sequential server lifetimes in one allocation.
+schema: 2
+name: h3-videogen-serving-client-h100
+
+slurm:
+  time_limit: "02:30:00"
+
+model:
+  path: /work/model
+  container: h3-runtime
+  precision: bf16
+
+resources:
+  gpu_type: h100
+  gpus_per_node: 8
+
+frontend:
+  type: none
+
+services:
+  - name: h3-server
+    type: generic
+    nodes: 1
+    critical: true
+    start: before_workers
+    command:
+      - bash
+      - /infmax-workspace/benchmarks/h3/run_server.sh
+    env:
+      PYTHONUNBUFFERED: "1"
+      H3_SERVER_PORT: "30283"
+    readiness:
+      http:
+        port: 30283
+        path: /health
+      timeout_seconds: 900
+      interval_seconds: 5
+
+benchmark:
+  type: custom
+  command: bash /infmax-workspace/benchmarks/h3/run_client.sh
+  env:
+    PYTHONUNBUFFERED: "1"
+    H3_RESULT_DIR: /logs/h3
+    H3_SERVER_SERVICE: h3-server
+    H3_SERVER_PORT: "30283"

@@ -67,6 +67,7 @@ def test_seals_matched_workload_and_full_billed_allocation_without_gpu_calls(spe
     assert result["generation_executed"] is False
     assert config["resources"]["gpus"] == 4
     assert config["resources"]["allocated_gpus"] == 8
+    assert config["runtime"]["container"] == str(stage.IMAGE)
     assert config["concurrencies"] == [1]
     assert len(frozen["plan"]["cases"]) == 20
     assert frozen["plan"]["generation"]["duration_seconds"] == 8
