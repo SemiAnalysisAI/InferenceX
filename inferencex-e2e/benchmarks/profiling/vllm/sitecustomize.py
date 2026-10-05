@@ -203,12 +203,18 @@ def _hip_keep_graphs(cls):
 
     if "keep_graph" not in inspect.signature(cls.__new__).parameters or not hasattr(cls, "raw_cuda_graph"):
         return None
-    orig_new = cls.__new__
+    orig_new, base_init = cls.__new__, cls.__init__
 
     def __new__(c, keep_graph=False, *args, **kwargs):
         return orig_new(c, True, *args, **kwargs)
 
+    # The C++ graph is built by the pybind base's __init__, which Python calls
+    # with the caller's own keep_graph after __new__.
+    def __init__(self, keep_graph=False, *args, **kwargs):
+        base_init(self, True, *args, **kwargs)
+
     cls.__new__ = staticmethod(__new__)
+    cls.__init__ = __init__
     return _HipGraphNodes()
 
 
@@ -588,6 +594,7 @@ def _patch_piecewise_backend(module):
             return orig_call(self, *args)
         index = getattr(self, "piecewise_compile_index", "?")
         tag = str(getattr(getattr(self, "vllm_backend", None), "prefix", "") or "")
+        _note_once("compile", "piece_called", tag)
         _module_tls.compiled_root = "draft" if any(
             k in tag for k in ("eagle", "draft", "mtp", "spec", "dspark")) else "model"
         try:
@@ -608,6 +615,18 @@ def _patch_piecewise_backend(module):
 # unchanged.
 
 _compiled_names = {}  # (root, relative path) -> registered qualified name
+_notes = set()
+
+
+def _note_once(sink, event, detail):
+    """One record per (event, detail) in <sink>/pid<pid>.jsonl, to see which paths ran."""
+    if (sink, event, detail) in _notes:
+        return
+    _notes.add((sink, event, detail))
+    try:
+        _sink(sink, f"pid{os.getpid()}").write({"event": event, "detail": detail, "t_ns": time.time_ns()})
+    except Exception:
+        pass
 
 
 def _relative_module_path(fqn):
@@ -652,17 +671,23 @@ def _patch_inductor_scheduler(module):
         orig(self, node)
         try:
             wrapper = V.graph.wrapper_code
-            if getattr(V.graph, "cpp_wrapper", False) or type(wrapper) is not PythonWrapperCodegen:
+            # Subgraph wrappers are Python too; C++ wrappers (a subclass) are not.
+            if getattr(V.graph, "cpp_wrapper", False) or not isinstance(wrapper, PythonWrapperCodegen):
+                _note_once("compile", "module_line_skipped", type(wrapper).__name__)
                 return
             path = _compiled_module_of(node)
-            if path is not None and getattr(wrapper, "_infx_module", None) != path:
+            if path is None:
+                _note_once("compile", "no_module_stack", type(wrapper).__name__)
+            elif getattr(wrapper, "_infx_module", None) != path:
                 wrapper.writeline(f"__import__('sitecustomize')._infx_compiled_module({path!r})")
                 wrapper._infx_module = path
+                _note_once("compile", "module_line", type(wrapper).__name__)
         except Exception:
             _write_error("inductor module line")
 
     cls.enter_context = enter_context
     cls._infx_patched = True
+    _note_once("compile", "scheduler_hook_installed", module.__name__)
 
 
 def _infx_compiled_module(path):
