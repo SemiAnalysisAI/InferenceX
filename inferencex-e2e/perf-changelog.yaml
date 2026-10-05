@@ -9322,3 +9322,11 @@
     - "Prepare isolated MI325X native TP, TEP and DEP correctness gates plus matched aggregate-MTP and MORI P/D AgentX controls on the digest-pinned October 5 ROCm720 MI30X image. Diagnostic configuration selection is in configs/glm53-mi325x-search.yaml."
     - "Reuse the native SRT Slurm MI325X multi-node lane and HF/RDMA mounts from the completed GLM5.3 campaign; preserve full context, native corpus and automatic speculative-acceptance selection."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3656
+
+- config-keys:
+    - glm53-mi325x-oct5-pd-mtp-quality
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Prepare a stock October 5 symmetric resident-KV MTP P/D real-quality regression gate, with native MORI transfer and embedded draft precision. No UMBP, decode-radix flag, synthetic acceptance override or runtime patch is applied."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3656

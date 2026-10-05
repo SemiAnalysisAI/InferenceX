@@ -159,3 +159,25 @@ override_tp8_fp8kv_c4:
   benchmark:
     env:
       CONC: "4"
+
+override_tp8_resident_mtp_c4:
+  services: []
+  roles:
+    prefill:
+      env:
+        UMBP_STANDALONE_ADDRESS: ""
+      args: &resident_mtp_args
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
+        enable-unified-cache-external-linker: false
+        unified-cache-external-linker-backend: null
+        hicache-storage-backend-extra-config: null
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 3
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 4
+    decode:
+      args: *resident_mtp_args
+  benchmark:
+    env:
+      CONC: "4"
