@@ -597,6 +597,32 @@ glm53-mi325x-oct5-pd-baseline:
           ep: 1
           dp-attn: false
 
+glm53-mi325x-oct5-two-dep4-mtp:
+  image: *image
+  model: zai-org/GLM-5.3
+  model-prefix: glm5.3
+  runner: cluster:mi325x-amd
+  precision: fp8
+  framework: sglang
+  router: {name: sglang-router, version: '0.3.2'}
+  multinode: true
+  disagg: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.90
+      search-space:
+      - spec-decoding: mtp
+        num-nodes: 1
+        conc-list: [16]
+        kv-offloading: none
+        worker:
+          num-worker: 2
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - 'CONFIG_FILE=recipes/glm5.3/sglang/mi325x-search/agentx/agg-dep4-replicas.yaml:override_c16'
+
 glm53-mi325x-oct5-pd-mtp-quality:
   image: *image
   model: zai-org/GLM-5.3

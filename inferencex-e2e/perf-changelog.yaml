@@ -9394,3 +9394,11 @@
   description:
     - "Gate dedicated STP DEP4 decode with native static fraction 0.985 and dense TP1 behind colocated TEP4 prefill, P-only UMBP, native DP-aware cache routing and decoder dispatch capacity eight. Require actual full-context capacity and real quality; do not infer decoder-only workspace from aggregate prefill peaks."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3656
+
+- config-keys:
+    - glm53-mi325x-oct5-two-dep4-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Gate two independent native aggregate DEP4 MTP workers on one eight-GPU node with unchanged per-worker full-context memory and speculation settings. Use cache-aware DP-aware routing across eight logical attention endpoints, truthful eight-GPU accounting and genuine verification before any concurrency-sixteen proxy."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3656
