@@ -5276,20 +5276,27 @@
       "status": "in_progress",
       "workflow_name": "offload-v1-nvme4tib-c489-r5-enroot3-capacity-extended-fullsha-20261005",
       "dispatched_at": "2026-10-05T22:17:53Z",
-      "phase": "generated B200 job queued for runner",
+      "phase": "B200 runner admitted; Slurm job 19547 pending for resources on im-b200-c001",
       "performance_result": false,
       "execution_budget": {
         "slurm_minutes": 510,
         "github_job_minutes": 530
       },
-      "dispatch_evidence": "Run 37377909064 was terminal with no current-run scratch. Exact old task-owned directories were deleted after owner and inactivity verification; im-b200-c001 host /scratch free space reached 17,677,224,632,320 bytes. Fresh cluster-wide GitHub job-label inventory at 2026-10-05T22:17:36Z found zero queued B200 jobs, one unrelated B200 job in progress, and no active study workflow. Exact full SHA was computed from HEAD and verified equal to origin/experiment/agentx-b200-offload before dispatch. get-jobs succeeded and generated job 112004631962 carries cluster:b200-nscale and nodes:1; it was queued at 22:18:12Z.",
+      "dispatch_evidence": "Run 37377909064 was terminal with no current-run scratch. Exact old task-owned directories were deleted after owner and inactivity verification; im-b200-c001 host /scratch free space reached 17,677,224,632,320 bytes. Fresh cluster-wide GitHub job-label inventory at 2026-10-05T22:17:36Z found zero queued B200 jobs, one unrelated B200 job in progress, and no active study workflow. Exact full SHA was computed from HEAD and verified equal to origin/experiment/agentx-b200-offload before dispatch. get-jobs succeeded and generated job 112004631962 carries cluster:b200-nscale and nodes:1; it was queued at 22:18:12Z. Admitted to b200-nscale-slurm_01 at 22:18:26Z. Slurm job 19547 requests im-b200-c001 and 08:30:00; it is PENDING Resources, with no scratch yet.",
       "get_jobs_id": 112004524191,
       "job_id": 112004631962,
-      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37381547856/job/112004631962"
+      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37381547856/job/112004631962",
+      "runner": "b200-nscale-slurm_01",
+      "started_at": "2026-10-05T22:18:26Z",
+      "slurm_job_id": 19547,
+      "requested_node": "im-b200-c001",
+      "slurm_time_limit": "08:30:00",
+      "slurm_state": "PENDING",
+      "pending_reason": "Resources"
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894,36796500128,36879140816,37027095833",
-  "status": "Corrected c489 NVMe retry 37381547856 generated its required labeled B200 job and is queued for a runner. No Slurm allocation or scratch yet; dispatch nothing else.",
+  "status": "Capacity-requalified NVMe c489 retry 37381547856 is admitted to B200 runner; Slurm job 19547 is pending on im-b200-c001 for resources. Dispatch nothing else.",
   "last_capacity_check": {
     "checked_at": "2026-10-05T22:17:36Z",
     "active_study_run_ids": [
@@ -5297,16 +5304,16 @@
     ],
     "pending_study_run_ids": [],
     "dispatch_allowed": false,
-    "b200_priority_jobs_queued": 1,
-    "b200_priority_jobs_in_progress": 1,
+    "b200_priority_jobs_queued": 0,
+    "b200_priority_jobs_in_progress": 2,
     "b200_active_or_queued_run_ids": [
       37381100450,
       37381547856
     ],
     "target_node": "im-b200-c001",
-    "target_node_state": "Generated study B200 job queued for runner",
+    "target_node_state": "Slurm 19547 PENDING Resources on requested im-b200-c001",
     "observed_free_bytes": 17677224632320,
-    "reason": "One B200 job is queued: study job 112004631962. Dispatch nothing else."
+    "reason": "Study B200 job 112004631962 is active, awaiting compute-node allocation; dispatch nothing else."
   },
   "next_dispatch": {
     "arm": "none",
