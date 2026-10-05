@@ -271,7 +271,7 @@ override_tp8_decode_admission4_c16:
     env:
       CONC: "16"
 
-override_tp8_decode_radix_c8:
+override_tp8_decode_radix_c8: &tp8_decode_radix
   roles:
     prefill:
       args:
@@ -284,6 +284,12 @@ override_tp8_decode_radix_c8:
   benchmark:
     env:
       CONC: "8"
+
+override_tp8_decode_radix_c16:
+  <<: *tp8_decode_radix
+  benchmark:
+    env:
+      CONC: "16"
 
 override_tp4_pp2_42_36_resident_c8:
   services: []
