@@ -273,3 +273,31 @@ override_colocated_tep4_tep4_c4:
   benchmark:
     env:
       CONC: "4"
+
+# Diagnostic-only: attention DP2 is explicit here; dp-attn metadata means enabled,
+# not four replicas. Publication requires explicit attention-DP-size metadata.
+override_colocated_tep4_attndp2_ep4_c4:
+  frontend:
+    args:
+      dp-aware: true
+  roles:
+    prefill:
+      gpus: 4
+      env:
+        SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "1024"
+      args: *tep4_pd_args
+    decode:
+      nodes: colocate
+      gpus: 4
+      env:
+        SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "128"
+      args:
+        <<: *tep4_pd_args
+        data-parallel-size: 2
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        moe-dense-tp-size: 4
+        mem-fraction-static: 0.955
+  benchmark:
+    env:
+      CONC: "4"
