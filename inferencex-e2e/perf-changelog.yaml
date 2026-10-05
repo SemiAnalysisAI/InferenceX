@@ -9330,3 +9330,17 @@
   description:
     - "Prepare a stock October 5 symmetric resident-KV MTP P/D real-quality regression gate, with native MORI transfer and embedded draft precision. No UMBP, decode-radix flag, synthetic acceptance override or runtime patch is applied."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3656
+
+- config-keys:
+    - glm53-mi325x-oct5-tep4
+    - glm53-mi325x-oct5-dep4
+    - glm53-mi325x-oct5-p4-d8
+    - glm53-mi325x-oct5-p8-d4
+    - glm53-mi325x-oct5-colocated-p4-d4
+    - glm53-mi325x-oct5-p4-2d4
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Prepare isolated TP4/EP4 real-quality gates and native TP4/TP8 asymmetric, colocated and two-decoder MORI P/D search variants. All retain the full context and stock kernels; TP4 natural cache capacity and real quality remain runtime gates."
+    - "P-only UMBP remains 513 GB for each topology. Official active-GPU accounting is unchanged; search comparisons additionally record whole-allocation GPU cost."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3656

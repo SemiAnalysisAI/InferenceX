@@ -181,3 +181,70 @@ override_tp8_resident_mtp_c4:
   benchmark:
     env:
       CONC: "4"
+
+# TP4 roles retain the previously observed full-context memory geometry.
+# Each new image deployment must independently pass the natural-pool gate.
+override_p4_d8_c4:
+  roles:
+    prefill:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        chunked-prefill-size: 8192
+        mem-fraction-static: 0.93
+        max-running-requests: 8
+    decode:
+      args:
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
+  benchmark:
+    env:
+      CONC: "4"
+
+override_p8_d4_c4:
+  roles:
+    prefill:
+      args:
+        max-running-requests: 8
+    decode:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        chunked-prefill-size: 8192
+        mem-fraction-static: 0.93
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
+  benchmark:
+    env:
+      CONC: "4"
+
+override_colocated_p4_d4_c4:
+  roles:
+    prefill:
+      gpus: 4
+      args: &tp4_stp_args
+        tensor-parallel-size: 4
+        chunked-prefill-size: 8192
+        mem-fraction-static: 0.93
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
+    decode:
+      nodes: colocate
+      gpus: 4
+      args: *tp4_stp_args
+  benchmark:
+    env:
+      CONC: "4"
+
+override_p4_2d4_c4:
+  roles:
+    prefill:
+      gpus: 4
+      args: *tp4_stp_args
+    decode:
+      workers: 2
+      gpus: 4
+      args: *tp4_stp_args
+  benchmark:
+    env:
+      CONC: "4"
