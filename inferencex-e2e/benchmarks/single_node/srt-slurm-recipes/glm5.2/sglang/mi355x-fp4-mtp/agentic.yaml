@@ -46,7 +46,7 @@ base:
         # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
         SGLANG_TIMEOUT_KEEP_ALIVE: '900'
         # The DSA indexer uses the precompiled HIP Top-K op.
-        SGLANG_OPT_USE_TOPK_V2: 'false'
+        SGLANG_OPT_USE_TOPK_V2: 'true'
   benchmark:
     type: custom
     command: bash /infmax-workspace/benchmarks/srt_agentic.sh
