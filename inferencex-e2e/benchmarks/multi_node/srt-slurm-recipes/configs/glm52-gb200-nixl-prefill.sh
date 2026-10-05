@@ -2,7 +2,7 @@
 set -eo pipefail
 bash /configs/install-torchao.sh
 
-# Test the upstream UCX event fix with SGLang's original asynchronous progress.
+# Reject stale patched containers: this runtime requires original asynchronous progress.
 python3 - <<'PY'
 import hashlib
 from pathlib import Path
@@ -15,7 +15,7 @@ if actual != expected:
 print(f"GLM5.2 original NIXL progress configuration: {actual}")
 PY
 
-# Preserve the image's Torch/NumPy and install only the matching CUDA 13 backend.
+# Avoid dependency resolution replacing the image's Torch/NumPy.
 python3 -m pip install --no-deps --only-binary=:all: --require-hashes -r /dev/stdin <<'REQ'
 nixl==1.4.0 --hash=sha256:aad5065c46ead71c96f485785a2cb6ef782b5a32cc6450aa7eff1735012d16c2
 nixl-cu13==1.4.0 --hash=sha256:b9184de88d5919d1ec82b61b398c59396af31e1e34e6e023db4b5f01c6f07171
@@ -32,7 +32,7 @@ versions = {
 }
 if any(versions[name] != "1.4.0" for name in ("nixl", "nixl-cu13")):
     raise SystemExit(f"Unexpected NIXL installation: {versions}")
-print("GLM5.2 upstream NIXL candidate: " + json.dumps({
+print("GLM5.2 upstream NIXL runtime: " + json.dumps({
     "versions": versions,
     "python": platform.python_version(),
     "architecture": platform.machine(),

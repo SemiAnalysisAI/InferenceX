@@ -22,8 +22,8 @@ from infx.launch.drivers.srt import lanes, models
 from infx.launch.drivers.srt.lanes import LaneMount, SrtLane
 from infx.launch.drivers.srt.models import Override
 from infx.launch.drivers.srt.submit import multinode_arguments
-from infx.launch.request import SrtRequest
 from infx.launch.policy import LaunchPath, Match
+from infx.launch.request import SrtRequest
 from infx.tests.launch.fake_slurm import (
     base_env,
     install_fakes,
@@ -564,29 +564,21 @@ def test_multinode_eval_overrides_image_offline_mode_and_host_model_path(harness
     ]
 
 
-@pytest.mark.parametrize(("cluster_id", "framework", "config_file", "expected"), [
-    ("gb200-nv", "dynamo-sglang", "recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-mtp-variants.yaml:zip_override_mtp_agentx_frontier[0]", "glm52-gb200-nixl-prefill.sh"),
-    ("gb200-nv", "dynamo-sglang", "recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-dep8-mtp-variants.yaml:override_c45", "glm52-gb200-nixl-prefill.sh"),
-    ("gb200-nv", "dynamo-sglang", "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-mtp-variants.yaml:override_eval", "glm52-gb200-nixl-prefill.sh"),
-    ("gb200-nv", "dynamo-sglang", "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-dep8-mtp-variants.yaml", "glm52-gb200-nixl-prefill.sh"),
-    ("gb200-nv", "dynamo-sglang", "recipes/glm5.2/sglang/gb200-fp4/agentx/agg.yaml", "install-torchao.sh"),
-    ("gb200-nv", "dynamo-sglang", "recipes/glm5.2/sglang/gb200-fp4/agentx/agg-mtp-variants.yaml", "install-torchao.sh"),
-    ("gb200-nv", "dynamo-sglang", "recipes/kimik3/sglang/gb200-fp4/agentx/disagg.yaml", "install-torchao.sh"),
-    ("gb200-nv", "dynamo-sglang", "glm5.2/sglang/gb200-fp4/agentx/disagg-mtp-variants.yaml", "install-torchao.sh"),
-    ("gb300-nv", "dynamo-sglang", "recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-mtp-variants.yaml", None),
-    ("gb200-nv", "dynamo-vllm", "recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-mtp-variants.yaml", None),
+@pytest.mark.parametrize(("framework", "config_file", "expected"), [
+    ("dynamo-sglang", "recipes/model/disagg.yaml:override_c12[0]", "model-setup.sh"),
+    ("dynamo-sglang", "recipes/model/disagg.yaml", "model-setup.sh"),
+    ("dynamo-sglang", "recipes/model/other.yaml", "framework-setup.sh"),
+    ("dynamo-vllm", "recipes/model/disagg.yaml", None),
 ])  # fmt: skip
 @pytest.mark.parametrize("eval_only", ["false", "true"])
-def test_multinode_submission_scopes_glm52_ucx_setup(
-    cluster_id, framework, config_file, expected, eval_only
-):
+def test_multinode_submission_selects_recipe_setup(framework, config_file, expected, eval_only):
     point = SrtRequest.from_env(
         {
             "RUNNER_NAME": "runner_0",
             "GITHUB_WORKSPACE": "/ws",
             "IMAGE": "test:tag",
             "FRAMEWORK": framework,
-            "MODEL_PREFIX": "glm5.2",
+            "MODEL_PREFIX": "test-model",
             "PRECISION": "fp4",
             "SPEC_DECODING": "mtp",
             "RESULT_FILENAME": "point",
@@ -596,13 +588,11 @@ def test_multinode_submission_scopes_glm52_ucx_setup(
             "THINKING_MODE": "max",
         }
     )
-    run = SimpleNamespace(
-        request=point,
-        cluster=SimpleNamespace(id=cluster_id),
-        srt=SimpleNamespace(job_tag=None),
-        env=point.env,
+    run = SimpleNamespace(request=point, srt=SimpleNamespace(job_tag=None), env=point.env)
+    lane = SrtLane(
+        setup_scripts={"dynamo-sglang": "framework-setup.sh"},
+        recipe_setup_scripts={("dynamo-sglang", "recipes/model/disagg.yaml"): "model-setup.sh"},
     )
-    lane = lanes.srt_lane(cluster_id, LaunchPath.SRT_MULTI)
     argv = multinode_arguments(run, lane, config_file, [], preflight=False)
     if expected is None:
         assert "--setup-script" not in argv
