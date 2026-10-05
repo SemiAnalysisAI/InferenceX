@@ -300,6 +300,9 @@ when throughput and latency trade off, report both rather than invent one winner
 
 The app supports comma-separated workflow IDs:
 
+The complete refreshable branch inventory and canonical chart URLs are maintained in
+[`UNOFFICIAL_RUNS.md`](./UNOFFICIAL_RUNS.md).
+
 - Chart: `https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=ID1,ID2,ID3,ID4`
 - API: `https://inferencex.semianalysis.com/api/unofficial-run?runId=ID1,ID2,ID3,ID4`
 

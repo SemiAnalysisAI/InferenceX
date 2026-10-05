@@ -230,6 +230,9 @@ actionlint 1.7.12 尚不识别该语法。
 
 应用支持逗号分隔的 GitHub workflow run ID：
 
+可刷新的完整分支清单和规范图表 URL 维护在
+[`UNOFFICIAL_RUNS_zh.md`](./UNOFFICIAL_RUNS_zh.md) 中。
+
 - 图表：`https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=ID1,ID2,ID3,ID4`
 - API：`https://inferencex.semianalysis.com/api/unofficial-run?runId=ID1,ID2,ID3,ID4`
 
