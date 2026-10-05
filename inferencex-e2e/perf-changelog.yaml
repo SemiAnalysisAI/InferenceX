@@ -9402,3 +9402,11 @@
   description:
     - "Gate two independent native aggregate DEP4 MTP workers on one eight-GPU node with unchanged per-worker full-context memory and speculation settings. Use cache-aware DP-aware routing across eight logical attention endpoints, truthful eight-GPU accounting and genuine verification before any concurrency-sixteen proxy."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3656
+
+- config-keys:
+    - glm53-mi325x-oct5-tp8-dep16-quality
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Qualify native MI325X TP8 prefill with P-only 513 GB UMBP and two-node DEP16 decode, MoRI IO/EP, dispatch capacity sixteen and full 1M context. Use genuine verification and DP-aware cache routing before considering performance."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3734

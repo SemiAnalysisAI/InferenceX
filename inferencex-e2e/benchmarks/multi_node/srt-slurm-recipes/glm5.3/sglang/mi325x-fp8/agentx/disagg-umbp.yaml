@@ -458,3 +458,36 @@ override_colocated_tep4_attndp2_ep4_c4:
   benchmark:
     env:
       CONC: "4"
+
+override_tp8_dep16_quality:
+  slurm:
+    time_limit: "01:00:00"
+  frontend:
+    args:
+      dp-aware: true
+      prefill-policy: cache_aware
+      decode-policy: cache_aware
+  roles:
+    prefill:
+      args:
+        max-running-requests: 8
+    decode:
+      nodes: 2
+      workers: 1
+      gpus: 16
+      env:
+        SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "16"
+      args:
+        tensor-parallel-size: 16
+        expert-parallel-size: 16
+        attn-dp-size: 16
+        enable-dp-lm-head: true
+        moe-dense-tp-size: 1
+        moe-a2a-backend: mori
+        deepep-mode: normal
+        chunked-prefill-size: 16384
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 16
+  benchmark:
+    env:
+      CONC: "16"
