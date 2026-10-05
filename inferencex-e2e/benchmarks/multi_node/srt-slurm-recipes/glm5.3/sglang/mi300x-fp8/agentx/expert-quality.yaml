@@ -87,6 +87,17 @@ base:
 
 override_tep16: {}
 
+override_tep8_low_latency:
+  roles:
+    agg:
+      nodes: 1
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 8
+        moe-runner-backend: aiter
+        deepep-mode: low_latency
+
 override_dep16:
   frontend:
     args:
