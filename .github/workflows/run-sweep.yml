@@ -557,6 +557,7 @@ jobs:
         with:
             config: ${{ toJSON(matrix.config) }}
             klaud-run: *klaud-run
+            require-power: ${{ matrix.config['require-power'] == true && matrix.config['eval-only'] != true }}
             runner: ${{ matrix.config.runner }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
@@ -590,6 +591,7 @@ jobs:
         with:
             config: ${{ toJSON(matrix.config) }}
             klaud-run: *klaud-run
+            require-power: ${{ matrix.config['require-power'] == true && matrix.config['eval-only'] != true }}
             runner: ${{ matrix.config.runner }}
             node-count: ${{ matrix.config.node-count }}
             priority: ${{ matrix.config.priority }}
