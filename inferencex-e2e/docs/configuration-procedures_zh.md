@@ -84,18 +84,12 @@ NVIDIA 集群配置通过 `slurm.srt-slurm.extra.default_gpu_exporter`，让 Tac
 与 vGPU license counters。这不会开启多节点配方已关闭的采集，也不代表 Tachometer 指标已通过
 PowerX 严格校验。多节点配方保留现有采集间隔及 9401 端口。
 
-单节点吞吐量与 AgentX 作业由 launcher 开启原生功耗采集，使用集群的
-`default_gpu_exporter` 和当前点的并发数。eval-only 作业关闭采集。
-`REQUIRE_POWER=1` 使无效测量导致作业失败；否则保留无效状态并省略能耗指标。
-exporter 配置缺失或镜像暂存失败仍会在基准启动前终止准备。
+单节点吞吐量和 AgentX 作业由 launcher 启用原生功耗采集；eval-only 作业不采集。
+无效测量在 `REQUIRE_POWER=1` 时使作业失败，否则记录为无效并省略能耗指标。
+缺少 exporter 配置或无法准备镜像时，基准不会启动。
 
-AMD 配置使用 [run 36985488002](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/36985488002)
-中已准备的 device-metrics-exporter 产物。workflow 传入 `AMD_DME_ARTIFACT_DIR`
-和 `AMD_DME_SQSH_SHA256`；暂存时核对归档、配置中的镜像 digest 和 squash 校验和。
-共享缓存由 runner 写入。MI300X 的 host-setup hook 在服务启动前将已校验的 squash
-复制到节点本地缓存；源文件必须能从已分配节点上的相同 workspace 路径访问。
-此预备镜像不从 registry 导入，来源保存在 `power-exporter-source.json`。
-固定构建只确定镜像身份，不证明硬件上的采样新鲜度，也不代表功耗测量已验收。
+AMD 配置使用预先构建并校验的 exporter 镜像，其来源记录在
+`power-exporter-source.json`。镜像校验只确认来源与内容，功耗测量仍需在目标硬件上验证。
 
 ## 规程索引
 

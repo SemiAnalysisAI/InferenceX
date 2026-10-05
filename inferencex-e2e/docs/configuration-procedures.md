@@ -70,22 +70,15 @@ omitted. This does not enable telemetry in opted-out multinode recipes or qualif
 metrics as validated PowerX results. Multinode recipes retain their existing collection
 intervals and port 9401.
 
-Single-node throughput and AgentX jobs enable native power telemetry in the launcher,
-using the cluster's `default_gpu_exporter` and the selected point's concurrency.
-Eval-only jobs disable it. `REQUIRE_POWER=1` makes invalid measurements fail the job;
-otherwise they retain an invalid verdict without energy metrics. Missing exporter
-configuration or image staging still fails preparation before a benchmark can start.
+The launcher enables native power telemetry for single-node throughput and AgentX jobs.
+Eval-only jobs do not collect power. Invalid measurements fail the job when
+`REQUIRE_POWER=1`; otherwise the result records an invalid verdict and omits energy
+metrics. Missing exporter configuration or an image staging failure stops preparation
+before the benchmark starts.
 
-AMD profiles use the prepared device-metrics-exporter artifact from
-[run 36985488002](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/36985488002).
-The workflow supplies `AMD_DME_ARTIFACT_DIR` and `AMD_DME_SQSH_SHA256`; staging checks
-the archive, configured image digest and squash checksum before using the image.
-Shared caches are populated on the runner. The MI300X host-setup hook copies the
-verified squash to its node-local cache before services start; the source must be
-visible at the same workspace path on allocated nodes. No registry import is used
-for this prepared image. `power-exporter-source.json` retains its provenance.
-The retained build fixes the image identity; it does not establish hardware sampling
-freshness or qualify power measurements.
+AMD profiles use a prebuilt, verified exporter image. `power-exporter-source.json`
+records its provenance. Image verification establishes the source and contents, while
+power measurements still require validation on the target hardware.
 
 Keep model selection, cache preparation, and workload-dependent time limits in the
 srt driver's tables ([`lanes.py`](../infx/launch/drivers/srt/lanes.py),
