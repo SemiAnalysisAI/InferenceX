@@ -45,7 +45,7 @@ base:
         PYTHONNOUSERSITE: '1'
         # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
         SGLANG_TIMEOUT_KEEP_ALIVE: '900'
-        # The DSA indexer uses the precompiled HIP Top-K op.
+        # The DSA indexer uses the top-k v2 kernel.
         SGLANG_OPT_USE_TOPK_V2: 'true'
   benchmark:
     type: custom
