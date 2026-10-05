@@ -9331,4 +9331,4 @@
     - "Switch the model to deepseek-ai/DeepSeek-V4-Pro-0813 and speculative decoding from MTP3 to DSpark K=6 with probabilistic draft sampling (spec-decoding: draft_model). Recipes keep real verification; the connector injects the dsv4-pro-0813-dspark golden AL for throughput runs."
     - "Bump the image to vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-20ebb28 and Dynamo to 1.6.0.dev20260923; use the mxfp4 indexer KV cache, KV router with fastokens, dedicated etcd/nats/frontend placement for disaggregated recipes, and per-configuration decode CUDA-graph sizes."
     - "Reduce the Mooncake store segment to 140 GB per rank (125 GB for c1152), so dram-utilization becomes 0.666667 and 0.595238."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/PRNUM
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3738
