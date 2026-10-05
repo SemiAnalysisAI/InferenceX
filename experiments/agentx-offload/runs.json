@@ -5146,10 +5146,10 @@
       "attempt": 2,
       "retry_of": 37366294117,
       "head_sha": "56fd9fb9f11ff53af2e78bf8f1795e47af0b967d",
-      "status": "in_progress",
+      "status": "queued",
       "workflow_name": "offload-v1-nvme4tib-c489-r2-extended-fullsha-20261005",
       "dispatched_at": "2026-10-05T19:57:22Z",
-      "phase": "B200 priority job admitted; Slurm allocation pending verification",
+      "phase": "B200 benchmark job failed; workflow finalization job queued",
       "performance_result": false,
       "execution_budget": {
         "slurm_minutes": 510,
@@ -5159,11 +5159,17 @@
       "job_id": 111957378716,
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37366720497/job/111957378716",
       "runner": "b200-nscale-slurm_01",
-      "started_at": "2026-10-05T20:08:42Z"
+      "started_at": "2026-10-05T20:08:42Z",
+      "allocation_id": "19524",
+      "node": "im-b200-c001",
+      "failure_stage": "container image import before benchmark launch",
+      "runtime_evidence": "Slurm job 19524 allocated on allowlisted im-b200-c001. The 510-minute allocation was passed to salloc. Enroot import of the pinned nightly tag returned registry HTTP 404; the expected squash file did not exist, so Pyxis could not create the container. experiments/agentx-offload/run.sh never started, no preflight or canonical warmup ran, and no task-owned scratch was created. The benchmark job exited at 2026-10-05T20:28:42Z. The enclosing workflow still has calc-success-rate queued.",
+      "job_log_sha256": "8467076f8a992656406cbc2462b4389cbd0d0dc17642466d17a7a08e7d9b89bf",
+      "artifacts": []
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894,36796500128,36879140816,37027095833",
-  "status": "Extended-budget c489 NVMe requalification run 37366720497 generated the expected cluster:b200-nscale nodes:1 job and was admitted to runner b200-nscale-slurm_01. Slurm allocation, compute node, capacity preflight, and scratch creation remain unverified.",
+  "status": "Extended-budget c489 run 37366720497 failed before benchmark launch because the pinned Docker Hub tag returned HTTP 404 at Enroot import. Slurm job 19524 allocated on im-b200-c001, but run.sh and scratch creation never started. The exact recorded image manifest and AMD64 digests remain available; all four study arms are being repinned to the same image by digest. The enclosing workflow still has a queued finalization job, so no replacement run may dispatch yet.",
   "last_capacity_check": {
     "checked_at": "2026-10-05T19:57:11Z",
     "active_study_run_ids": [
@@ -5178,14 +5184,14 @@
       37366720497
     ],
     "target_node": "im-b200-c001",
-    "target_node_state": "runner admitted; Slurm allocation pending verification",
+    "target_node_state": "allocation 19524 ended after image-import 404; no task-owned scratch was created",
     "observed_free_bytes": null,
-    "reason": "NVMe c489 study job is active on b200-nscale-slurm_01; dispatch nothing else."
+    "reason": "Study workflow 37366720497 still has queued calc-success-rate finalization; do not dispatch replacement until terminal and after fresh cluster inventory."
   },
   "next_dispatch": {
-    "arm": "none",
+    "arm": "nvme",
     "concurrency": 489,
-    "requires": "Dispatch the matched HBM-only c489 extended-budget control only after NVMe run 37366720497 is terminal, artifacts and hashes are recorded, exact scratch cleanup is independently verified, temporary downloads are deleted, and a fresh cluster-wide B200 inventory passes."
+    "requires": "After run 37366720497 is fully terminal, validate and push the same-image digest pin, refresh cluster-wide B200 labels, then retry only the extended-budget NVMe c489 arm."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-21T05:30:00Z",

@@ -1,18 +1,19 @@
 {
-  "verified_at": "2026-09-18T12:58:00Z",
-  "image": "vllm/vllm-openai:nightly-dee37d89115db4c94a820a79a78a7828e141c910",
+  "verified_at": "2026-10-05T20:43:00Z",
+  "image": "vllm/vllm-openai@sha256:dea7fa047caa114167efccdeb42321b12d2c11da1add8728aa2662cb8d6b8cd5",
   "engine_commit": "dee37d89115db4c94a820a79a78a7828e141c910",
   "manifest_digest": "sha256:dea7fa047caa114167efccdeb42321b12d2c11da1add8728aa2662cb8d6b8cd5",
   "linux_amd64_digest": "sha256:b88541ab10490f6ee43d2e352edcfcb4b4e0e6b1fdd26ed427c89d73e3fa6a7b",
-  "registry_manifest_url": "https://registry-1.docker.io/v2/vllm/vllm-openai/manifests/nightly-dee37d89115db4c94a820a79a78a7828e141c910",
+  "registry_manifest_url": "https://registry-1.docker.io/v2/vllm/vllm-openai/manifests/sha256:dea7fa047caa114167efccdeb42321b12d2c11da1add8728aa2662cb8d6b8cd5",
   "original_main_image": "vllm/vllm-openai:nightly-1dc464d42681d22f38caf1fdc1eb632dc4421c45",
   "original_image_error": "Registry 404 on workflow 35154018672; the first replacement tag was subsequently removed and returned 404 on workflow 35344315025.",
   "worker_source_sha256": "b661576bea24fab851e9d72f1cf49caf6e9c01130a80bae900ed80612fd45d83",
   "worker_patch_applied": false,
   "worker_patch_idempotent": true,
-  "selection_reason": "Immutable 2026-09-18 Docker Hub nightly verified before dispatch. Its SimpleCPU worker natively contains heterogeneous per-layer region handling, so the compatibility patch safely no-ops; all arms use the same replacement.",
+  "selection_reason": "The 2026-09-18 nightly tag was removed and returned registry 404 on run 37366720497. Docker Hub still serves the exact recorded multi-platform manifest digest and its AMD64 digest, verified with docker manifest inspect on 2026-10-05. Pinning the existing digest restores the same engine image and avoids a new image-comparability change across arms.",
   "source_sha256": {
     "vllm/v1/simple_kv_offload/worker.py": "b661576bea24fab851e9d72f1cf49caf6e9c01130a80bae900ed80612fd45d83",
     "vllm/v1/kv_offload/tiering/spec.py": "264c7207fab9d52fd45b3132f7cfea9ac22683d6144d922d09f6a27bdf0128ad"
-  }
+  },
+  "tag_retirement_evidence": "Run 37366720497, Slurm allocation 19524 on im-b200-c001: enroot import of nightly-dee37d89115db4c94a820a79a78a7828e141c910 returned registry HTTP 404 before run.sh or scratch creation."
 }

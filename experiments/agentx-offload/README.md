@@ -183,8 +183,8 @@ native DRAM control before attributing it solely to storage hardware.
 
 ## Full canonical runs
 
-Use fresh main's `nvidia/MiniMax-M3-NVFP4` TP4 recipe with the immutable vLLM
-`nightly-dee37d89115db4c94a820a79a78a7828e141c910`, EAGLE3-GQA with the main recipe's
+Use fresh main's `nvidia/MiniMax-M3-NVFP4` TP4 recipe with the pinned vLLM
+manifest digest in [image-provenance.json](image-provenance.json), EAGLE3-GQA with the main recipe's
 synthetic acceptance length 2.78. All four arms reuse that exact recipe and its
 pinned AIPerf submodule. Keep ten extra warmups per lane, all mandatory snapshot
 primers, seed 42, recorded assistant replay, the same corpus, idle-gap policy and
@@ -201,10 +201,14 @@ Keep the maximum at 16,384. Failure or insufficient completed samples is a
 feasibility result, never a zero-throughput point. Canonical warmup that exceeds
 workflow execution limits needs an explicit new execution budget, not truncation.
 
-The original main image returned registry 404. All four arms therefore use the
-same published replacement above; [image-provenance.json](image-provenance.json)
-records its registry and AMD64 digests, exact engine commit, and compatibility
-checks. The canonical heterogeneous-layout patch applies cleanly and is idempotent
+The original main image returned registry 404. All four arms use the same
+replacement image; [image-provenance.json](image-provenance.json) records its
+registry and AMD64 digests, exact engine commit, and compatibility checks. Its
+2026-09-18 nightly tag also disappeared: run `37366720497` reached Slurm allocation
+but image import returned registry 404 before the benchmark or scratch creation.
+Both recorded digests still resolve, so the study now references the original
+multi-platform manifest by digest. The engine image is byte-identical to the
+previous tag reference. The canonical heterogeneous-layout patch applies cleanly and is idempotent
 against this source. No performance measurement completed on the unavailable image.
 The replacement image defaults the EAGLE3-GQA draft head to FA4 on Blackwell;
 runs `35401459251` and `35442679581` reached engine warmup but FA4 rejected a

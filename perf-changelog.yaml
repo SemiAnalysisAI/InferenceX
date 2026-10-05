@@ -8138,3 +8138,12 @@
     - "Requalify matched c489 under a branch-only extended execution envelope after both NVMe and HBM-only arms completed canonical warmup and the full 3,600-second profiling send window but the 480-minute Slurm allocation interrupted aggregate export. Single-node AgentX jobs now receive 510 Slurm minutes and a 530-minute outer GitHub limit; fixed-sequence jobs retain 480/500 minutes. The model, engine, TP4 layout, storage budgets, AgentX corpus, warmup policy, connector settings, and profiling window are unchanged. Treat this as a separate execution-budget qualification."
     - "在 NVMe 与 HBM-only 两组 c489 均完成规范 warmup 和完整 3,600 秒 profiling 发送窗口、但 480 分钟 Slurm allocation 在聚合结果导出期间中断后，使用分支内扩展执行时间重新进行匹配资格验证。单节点 AgentX 作业现使用 510 分钟 Slurm 时限和 530 分钟外层 GitHub 时限；固定序列作业仍使用 480/500 分钟。模型、引擎、TP4 布局、存储预算、AgentX 语料、warmup 策略、连接器设置及 profiling 窗口均保持不变。本阶段应作为独立的执行预算资格验证。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/tree/experiment/agentx-b200-offload
+
+- config-keys:
+    - minimaxm3-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Replace the removed Docker Hub nightly tag in all four branch-only MiniMax-M3 AgentX offload arms with its previously recorded multi-platform manifest digest. Run 37366720497 reached B200 Slurm allocation but image import returned registry 404 before benchmark launch or scratch creation. The exact recorded manifest and AMD64 digests still resolve in Docker Hub, so this changes the image reference while retaining the same engine bytes, TP4 layout, workload, cache settings, and extended 510/530-minute execution envelope."
+    - "四组分支内 MiniMax-M3 AgentX 卸载配置统一将已删除的 Docker Hub nightly 标签替换为此前记录的多平台 manifest digest。运行 37366720497 已取得 B200 Slurm allocation，但镜像导入返回 registry 404，benchmark 和 scratch 创建均未开始。此前记录的 manifest 与 AMD64 digest 在 Docker Hub 仍可解析，因此仅更换镜像引用，保留相同的引擎内容、TP4 布局、工作负载、缓存设置和扩展的 510/530 分钟执行时间范围。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/tree/experiment/agentx-b200-offload
