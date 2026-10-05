@@ -87,6 +87,18 @@ base:
 
 override_tep16: {}
 
+override_tp4_pp2:
+  roles:
+    agg:
+      nodes: 1
+      gpus: 8
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 1
+        pipeline-parallel-size: 2
+        moe-a2a-backend: none
+        deepep-mode: auto
+
 override_tep4_pp2:
   roles:
     agg:
