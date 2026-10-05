@@ -9334,4 +9334,4 @@
     - "聚合式配方在 benchmark 环境中设置 PP_SIZE 与 PCP_SIZE 为 1：AgentX 功耗路径现在会在请求回放前检查 TP、PP_SIZE 与 PCP_SIZE，而多节点聚合任务不会从工作流获得这两个变量。"
     - "prefill 角色与 decode 的 store 服务将 MC_TCP_BIND_ADDRESS 设为所在节点，使每个 store 传输引擎对外公布节点自身地址，而不是第一个活动网卡；部分 GB300 节点带有 BMC Redfish 网卡，其地址在每个节点上都是 10.0.1.2，其他节点无法访问。"
     - "所有分离式点的 prefill 与 decode 角色均不再启用 enable-w4a4-mxfp4-megamoe，保留 MegaMoE all-to-all 后端与 FP4 indexer。"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3722
