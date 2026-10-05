@@ -293,6 +293,8 @@ def build_row(meta: dict[str, Any], m: dict[str, Any]) -> dict[str, Any]:
 
     if "eval_suite" in meta:
         row["eval_suite"] = meta["eval_suite"]
+    if "disagg" in meta:
+        row["disagg"] = as_bool(meta["disagg"])
 
     primary = _primary_metric(m)
     row["score"] = m[primary] if primary is not None else None

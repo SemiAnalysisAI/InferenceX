@@ -136,6 +136,11 @@ DP attention 的单节点评测记录为 `false`。修复写入器不会修复�
 已有数据库记录：应先核实原始任务配置和服务端日志，再更正元数据、重新生成
 聚合结果并重新摄取受影响的数据。
 
+`mori-sglang` 标识服务软件栈；`disagg` 单独标识 prefill 和 decode 是否使用独立的
+worker。配方必须向评测客户端显式传入 `DISAGG`。写入器和收集器保留该标志；
+单节点聚合评测的 prefill/decode worker 数均为零，不会虚构两个角色。
+缺少该标志的旧版评测元数据保持原样。
+
 [`infx/results/collect_eval_results.py`](../infx/results/collect_eval_results.py) 执行以下规则：
 
 1. 评测集是包含 `meta_env.json` 的根目录或一级子目录。

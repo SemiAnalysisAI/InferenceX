@@ -44,7 +44,7 @@ def test_build_rows_uses_explicit_inputs_and_preserves_them(tmp_path: Path, monk
         "results": {"valid": {"acc": 0.75}, "invalid": {"acc": -0.1}},
         "configs": {"valid": {"metadata": {"model": "task-model"}}},
     }
-    meta = {"model": "metadata-model", "conc": "4"}
+    meta = {"model": "metadata-model", "conc": "4", "disagg": False}
     before = deepcopy((data, meta))
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("MODEL", "unrelated-process-model")
@@ -57,6 +57,7 @@ def test_build_rows_uses_explicit_inputs_and_preserves_them(tmp_path: Path, monk
     assert [row["model"] for row in rows] == ["task-model", "metadata-model"]
     assert [row["score"] for row in rows] == [0.75, None]
     assert [row["conc"] for row in rows] == [4, 4]
+    assert [row["disagg"] for row in rows] == [False, False]
     assert [row["source"] for row in rows] == ["artifact/results.json"] * 2
     assert rows[1]["integration_error"] == {
         "type": "InvalidPrimaryScore", "message": "invalid primary score: -0.1",

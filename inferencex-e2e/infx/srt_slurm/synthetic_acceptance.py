@@ -20,6 +20,7 @@ from infx.golden_al_distribution import GOLDEN_DIR, golden_length
 
 ENGINES = {
     "sglang": "sglang",
+    "mori-sglang": "sglang",
     "sglang-disagg": "sglang",
     "vllm-disagg": "vllm",
     "vllm": "vllm",

@@ -85,7 +85,7 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
     workload = benchmark["env"]
     engine_config = recipe["engine"]
     engine = engine_config["type"] if isinstance(engine_config, dict) else engine_config
-    if environment["FRAMEWORK"] not in {"sglang", "trt", "atom", "vllm"}:
+    if environment["FRAMEWORK"] not in {"sglang", "mori-sglang", "trt", "atom", "vllm"}:
         raise ValueError(f"Unsupported single-node framework: {environment['FRAMEWORK']!r}")
     spec = spec_parameters(role, engine)
     if spec and spec["method"] not in {"eagle", "eagle3", "nextn", "mtp", "dspark"}:
@@ -185,10 +185,10 @@ def runtime_arguments(config: str, environment: Mapping[str, str]) -> list[str]:
             raise ValueError("MAX_MODEL_LEN must be positive")
         context_keys = {
             "sglang": ("context-length",),
-            "trt": ("max_seq_len", "max_num_tokens"),
+            "trtllm": ("max_seq_len", "max_num_tokens"),
             "atom": ("max-model-len",),
             "vllm": ("max-model-len",),
-        }[environment["FRAMEWORK"]]
+        }[SINGLE_NODE_ENGINES[environment["FRAMEWORK"]]]
         for key in context_keys:
             overrides += ["--set", f"roles.agg.args.{key}={context}"]
     return [*overrides, "--set", 'benchmark.env.RESULT_DIR="/logs"']

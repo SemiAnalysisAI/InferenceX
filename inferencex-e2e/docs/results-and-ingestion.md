@@ -137,6 +137,12 @@ DP-attention eval. Fixing the writer does not repair those artifacts or existing
 database rows: verify the original job configuration and server logs before
 correcting metadata, regenerating aggregates, and re-ingesting affected results.
 
+`mori-sglang` identifies the serving stack; `disagg` separately identifies whether
+prefill and decode use separate workers. Recipes must supply `DISAGG` explicitly
+to the eval client. The writer and collector preserve that flag; single-node
+aggregate evals record zero prefill/decode workers rather than inventing two roles.
+Legacy eval metadata without this flag remains unchanged.
+
 [`infx/results/collect_eval_results.py`](../infx/results/collect_eval_results.py) applies these rules:
 
 1. An eval set is a root or immediate child directory containing `meta_env.json`.

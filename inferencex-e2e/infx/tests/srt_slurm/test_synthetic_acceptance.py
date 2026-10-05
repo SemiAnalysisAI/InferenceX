@@ -178,6 +178,16 @@ def test_kimi_curve_requires_an_explicit_supported_sampler(
             },
         ),
         (
+            "mori-sglang",
+            {"speculative-algorithm": "EAGLE", "speculative-num-steps": 3},
+            {},
+            {
+                "SGLANG_SIMULATE_ACC_LEN": "2.4",
+                "SGLANG_SIMULATE_ACC_METHOD": "match-expected",
+                "SGLANG_SIMULATE_ACC_TOKEN_MODE": "real-draft-token",
+            },
+        ),
+        (
             "dynamo-sglang",
             {"speculative-algorithm": "EAGLE", "speculative-num-steps": 3},
             {},
@@ -230,7 +240,9 @@ def test_engine_token_selection_and_environment(
     "environment",
     [{"EVAL_ONLY": "true"}, {"IS_AGENTIC": "0"}, {"SPEC_DECODING": "none"}],
 )
-@pytest.mark.parametrize("framework", ["vllm", "vllm-disagg", "sglang", "dynamo-sglang", "trt"])
+@pytest.mark.parametrize(
+    "framework", ["vllm", "vllm-disagg", "sglang", "mori-sglang", "dynamo-sglang", "trt"]
+)
 def test_real_runs_clear_synthetic_without_a_curve(
     tmp_path: Path, framework: str, environment: dict[str, str]
 ) -> None:
