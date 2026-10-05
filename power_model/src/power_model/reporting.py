@@ -103,7 +103,7 @@ def format_power_breakdown_per_chassis(estimate: PowerEstimate) -> str:
             f"IT AC power: {estimate.it_power_w:,.2f} W",
             f"PUE: {estimate.pue:g}",
             f"Facility overhead: {estimate.facility_overhead_w:,.2f} W",
-            f"Facility power: {estimate.facility_power_w:,.2f} W",
+            f"All in Utility Power: {estimate.facility_power_w:,.2f} W",
             f"AllInPower_per_gpu: {estimate.AllInPower_per_gpu:,.2f} W/GPU",
         )
     )

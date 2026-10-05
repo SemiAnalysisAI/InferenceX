@@ -81,7 +81,7 @@ def test_cli_bom_reports_one_chassis_with_nested_inventory_and_separate_cluster_
     assert "Cluster totals (2 chassis, 16 GPUs)" in output
     assert f"Shared external network AC power: {network_w} W" in output
     assert f"IT AC power: {it_total} W" in output
-    assert f"Facility power: {facility_total} W" in output
+    assert f"All in Utility Power: {facility_total} W" in output
     assert f"AllInPower_per_gpu: {per_gpu} W/GPU" in output
     assert f"Facility / GPU power ratio: {ratio}" in output
 
@@ -141,4 +141,4 @@ def test_mixed_system_report_normalizes_each_group_using_its_own_chassis_count()
     assert rows.count("│ ├─ GPUs 125.00 8 1,000.00") == 2
     assert "Cluster totals (5 chassis, 40 GPUs)" in output
     assert "IT AC power: 10,362.87 W" in output
-    assert "Facility power: 13,471.73 W" in output
+    assert "All in Utility Power: 13,471.73 W" in output
