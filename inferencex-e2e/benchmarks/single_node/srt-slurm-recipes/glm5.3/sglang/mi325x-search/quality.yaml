@@ -161,6 +161,35 @@ override_dep4_dense1:
       env:
         SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: '1024'
 
+# Aggregate-only MTP memory gate: full-context KV budget plus smaller native
+# prefill workspace. DP4 resolves global1024 to256 input rows per rank.
+override_dep4_dense1_mtp_smallchunk:
+  frontend:
+    args:
+      dp-aware: true
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        data-parallel-size: 4
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        moe-dense-tp-size: 1
+        moe-a2a-backend: mori
+        deepep-mode: normal
+        chunked-prefill-size: 1024
+        mem-fraction-static: 0.975
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 3
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 4
+      env:
+        SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: '256'
+
 override_tep8:
   roles:
     agg:
