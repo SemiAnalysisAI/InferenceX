@@ -248,3 +248,28 @@ override_p4_2d4_c4:
   benchmark:
     env:
       CONC: "4"
+
+override_colocated_tep4_tep4_c4:
+  roles:
+    prefill:
+      gpus: 4
+      env:
+        SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "1024"
+      args: &tep4_pd_args
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        moe-a2a-backend: mori
+        deepep-mode: normal
+        chunked-prefill-size: 1024
+        mem-fraction-static: 0.93
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
+    decode:
+      nodes: colocate
+      gpus: 4
+      env:
+        SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "128"
+      args: *tep4_pd_args
+  benchmark:
+    env:
+      CONC: "4"

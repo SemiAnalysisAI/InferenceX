@@ -9344,3 +9344,11 @@
     - "Prepare isolated TP4/EP4 real-quality gates and native TP4/TP8 asymmetric, colocated and two-decoder MORI P/D search variants. All retain the full context and stock kernels; TP4 natural cache capacity and real quality remain runtime gates."
     - "P-only UMBP remains 513 GB for each topology. Official active-GPU accounting is unchanged; search comparisons additionally record whole-allocation GPU cost."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3656
+
+- config-keys:
+    - glm53-mi325x-oct5-colocated-tep4-tep4
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Extend the native TP4/EP4 real-quality gate to colocated TEP4 prefill and TEP4 decode with MORI expert collectives, MORI KV transfer and P-only UMBP. Keep full context and validate the natural cache pools and real outputs before timing."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3656
