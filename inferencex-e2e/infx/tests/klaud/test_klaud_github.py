@@ -269,7 +269,11 @@ def test_select_continues_after_one_baseline_state_failure(tmp_path, monkeypatch
             image="example/image:1",
             goal=reporting.Prose(en="Check the baseline.", zh="检查基线。"),
             sources=["https://inferencex.semianalysis.com/api/v1/benchmarks"],
-            points=[],
+            points=[reporting.Point(
+                key="86af0baaaa14b22959c986efad41d740006a57e5603abf6e8cb28481929049c7",
+                label="8k/1k c2", conc=2, scenario="fixed-seq-len",
+                values=reporting.Values(), result="unavailable",
+            )],
         )
 
     (tmp_path / "producers.json").write_text("{}\n")
@@ -278,6 +282,9 @@ def test_select_continues_after_one_baseline_state_failure(tmp_path, monkeypatch
     monkeypatch.setenv("KLAUD_PR_REVIEW", json.dumps(review))
     monkeypatch.setattr(klaud, "fetch_capacity", lambda _policy: {"cluster-a"})
     monkeypatch.setattr(reporting, "resolve_baseline", resolve)
+    monkeypatch.setattr(validation, "canonical_matrix", lambda *_: {
+        "single_node": {"all": [{"conc": 2, "image": "example/image:1"}]}
+    })
     monkeypatch.setattr(claims, "claim_family", lambda *_args: True)
 
     klaud.select(tmp_path, 5)
@@ -595,17 +602,21 @@ def review_candidate(directory, monkeypatch, source):
     }]}))
 
 
-@pytest.mark.parametrize(("regenerated", "selected", "deferred"), [
-    (True, [CANDIDATE_ID], []),
-    (False, [], [CANDIDATE_ID]),
+@pytest.mark.parametrize(("regenerated", "complete", "selected", "deferred"), [
+    (True, True, [CANDIDATE_ID], []),
+    (True, False, [], [CANDIDATE_ID]),
+    (False, True, [], [CANDIDATE_ID]),
 ])  # fmt: skip
 def test_select_builds_baselines_from_regenerated_producers_without_starting_a_process(
-    tmp_path, monkeypatch, regenerated, selected, deferred
+    tmp_path, monkeypatch, regenerated, complete, selected, deferred
 ):
     _, head = commit_history(tmp_path, "inferencex-e2e")
     monkeypatch.chdir(tmp_path)
     base_family = validation.producer_matrix("example/project", head, FAMILY)
-    monkeypatch.setattr(validation, "canonical_matrix", lambda *_: base_family)
+    current_family = json.loads(json.dumps(base_family))
+    if not complete:
+        current_family["single_node"]["all"] = current_family["single_node"]["all"][:1]
+    monkeypatch.setattr(validation, "canonical_matrix", lambda *_: current_family)
     forbid_current_config_parsing(monkeypatch)
     directory = tmp_path / "klaud"
     review_candidate(directory, monkeypatch, publish(monkeypatch, head))
@@ -625,7 +636,7 @@ def test_select_builds_baselines_from_regenerated_producers_without_starting_a_p
 
     selection = json.loads((directory / "selection.json").read_text())
     assert (selection["candidates"], selection["baseline-deferred-candidates"]) == (selected, deferred)
-    if regenerated:
+    if selected:
         preflight = reporting.BaselinePreflight.model_validate_json(
             (directory / CANDIDATE_ID / "baseline-preflight.json").read_text()
         )
