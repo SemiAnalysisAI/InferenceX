@@ -7,7 +7,7 @@ base:
   name: dsv4-fp4-mi355x-vllm-agentic
   model:
     path: hf:deepseek-ai/DeepSeek-V4-Pro-0813
-    container: vllm/vllm-openai-rocm:nightly-e9757321527ca1ecd514c07c1418dd2c53da3d19
+    container: vllm/vllm-openai-rocm:v0.31.0
     precision: fp4
   resources:
     gpu_type: mi355x
