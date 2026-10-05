@@ -219,7 +219,7 @@ override_p8_d4_c4:
       CONC: "4"
 
 override_colocated_p4_d4_c4:
-  slurm:
+  sbatch_directives:
     exclude: quanta-ccs-aus-k10-10
   roles:
     prefill:
@@ -252,7 +252,7 @@ override_p4_2d4_c4:
       CONC: "4"
 
 override_colocated_tep4_tep4_c4:
-  slurm:
+  sbatch_directives:
     exclude: quanta-ccs-aus-k10-10
   roles:
     prefill:
