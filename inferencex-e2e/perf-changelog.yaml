@@ -9378,3 +9378,19 @@
   description:
     - "Run the bounded colocated TP4 control and quality-passed TEP4 AgentX gate on a different healthy host after the first TP4 control encountered a standalone UMBP service segfault on k10-10. Only native Slurm placement excludes that host for this comparison; engine, cache, workload and service settings remain unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3656
+
+- config-keys:
+    - glm53-mi325x-oct5-colocated-tep4-tep4-cap8-c8
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Measure one concurrency-eight proxy on the qualified colocated STP TEP4 MoRI P/D topology. Preserve decoder dispatch capacity eight, all engine and memory settings, full context and P-only UMBP; only global benchmark concurrency changes from four to eight."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3656
+
+- config-keys:
+    - glm53-mi325x-oct5-colocated-tep4-dep4
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Gate dedicated STP DEP4 decode with native static fraction 0.985 and dense TP1 behind colocated TEP4 prefill, P-only UMBP, native DP-aware cache routing and decoder dispatch capacity eight. Require actual full-context capacity and real quality; do not infer decoder-only workspace from aggregate prefill peaks."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3656

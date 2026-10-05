@@ -377,7 +377,7 @@ override_colocated_tep4_tep4_c4:
       CONC: "4"
 
 # One-factor decode dispatch-capacity diagnostic; no MTP or decode radix cache.
-override_colocated_tep4_tep4_cap8_c4:
+override_colocated_tep4_tep4_cap8_c4: &tep4_cap8_pd
   sbatch_directives:
     exclude: quanta-ccs-aus-k10-10
   roles:
@@ -396,6 +396,40 @@ override_colocated_tep4_tep4_cap8_c4:
   benchmark:
     env:
       CONC: "4"
+
+override_colocated_tep4_tep4_cap8_c8:
+  <<: *tep4_cap8_pd
+  benchmark:
+    env:
+      CONC: "8"
+
+override_colocated_tep4_dep4_c8:
+  <<: *tep4_cap8_pd
+  frontend:
+    args:
+      dp-aware: true
+      decode-policy: cache_aware
+  roles:
+    prefill:
+      gpus: 4
+      env:
+        SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "1024"
+      args: *tep4_pd_args
+    decode:
+      nodes: colocate
+      gpus: 4
+      env:
+        SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "8"
+      args:
+        <<: *tep4_pd_args
+        data-parallel-size: 4
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        moe-dense-tp-size: 1
+        mem-fraction-static: 0.985
+  benchmark:
+    env:
+      CONC: "8"
 
 # Diagnostic-only: attention DP2 is explicit here; dp-attn metadata means enabled,
 # not four replicas. Publication requires explicit attention-DP-size metadata.
