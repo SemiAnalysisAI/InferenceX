@@ -197,6 +197,29 @@ override_tp8_c32:
     env:
       CONC: "32"
 
+override_tp8_tep16_c8:
+  roles:
+    prefill:
+      args:
+        max-running-requests: 16
+    decode:
+      nodes: 2
+      workers: 1
+      gpus: 16
+      args:
+        tensor-parallel-size: 16
+        expert-parallel-size: 16
+        moe-a2a-backend: mori
+        deepep-mode: normal
+        chunked-prefill-size: 1024
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 16
+      env:
+        SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "1024"
+  benchmark:
+    env:
+      CONC: "8"
+
 override_2p1d_tp8_c16:
   roles:
     prefill:
