@@ -821,6 +821,7 @@ clusters:
       cpus-per-task: 384
       srun-args: [--container-remap-root, --container-writable]
       volumes:
+        hf-home: {path: /home/ext-cjquilici/inferencex-mi325x-amd/hf-home}
         hf-hub-cache: {path: /home/ext-cjquilici/inferencex-mi325x-amd/hf-hub-cache}
         aiperf-cache: {path: /home/ext-cjquilici/inferencex-mi325x-amd/aiperf-cache}
       squash:
@@ -836,6 +837,7 @@ clusters:
         mounts:
           /dev/kfd: /dev/kfd
           /dev/dri: /dev/dri
+          /dev/infiniband: /dev/infiniband
         extra:
           visible_devices_env: ROCR_VISIBLE_DEVICES
           default_bash_preamble: |-

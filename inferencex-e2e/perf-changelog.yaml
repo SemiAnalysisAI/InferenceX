@@ -9327,3 +9327,16 @@
   description:
     - "Enable SGLANG_OPT_USE_TOPK_V2 (false -> true) so the DSA indexer uses the top-k v2 kernel."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3724
+
+- config-keys:
+    - glm53-mi325x-oct5-control
+    - glm53-mi325x-oct5-tep8
+    - glm53-mi325x-oct5-dep8
+    - glm53-mi325x-oct5-mtp-baseline
+    - glm53-mi325x-oct5-pd-baseline
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Prepare isolated MI325X native TP, TEP and DEP correctness gates plus matched aggregate-MTP and MORI P/D AgentX controls on the digest-pinned October 5 ROCm720 MI30X image. Diagnostic configuration selection is in configs/glm53-mi325x-search.yaml."
+    - "Reuse the native SRT Slurm MI325X multi-node lane and HF/RDMA mounts from the completed GLM5.3 campaign; preserve full context, native corpus and automatic speculative-acceptance selection."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3656
