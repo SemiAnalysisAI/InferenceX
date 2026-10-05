@@ -9247,3 +9247,12 @@
     - "Keep the GLM-5.2 NextN/MTP draft at shipped precision and disable background UCX progress for GB200 disaggregated prefill to avoid the observed event-arm crash; images, topology, workload and golden acceptance are unchanged."
     - "使 GLM-5.2 NextN/MTP draft 保持原始发布精度，并关闭 GB200 分离式 prefill 的 UCX 后台进展以规避已观察到的 event-arm 崩溃；镜像、拓扑、工作负载和 golden acceptance 不变。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3401
+
+- config-keys:
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-disagg
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Validate NIXL 1.4.0 with the matching CUDA 13 wheel and restore unmodified SGLang UCX progress for GLM-5.2 GB200 disaggregated recipes."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3401

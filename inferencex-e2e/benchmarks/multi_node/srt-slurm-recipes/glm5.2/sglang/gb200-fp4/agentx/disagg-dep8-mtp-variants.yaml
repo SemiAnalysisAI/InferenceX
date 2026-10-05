@@ -28,6 +28,7 @@ base:
     enable_multiple_frontends: true
     env:
       PIP_BREAK_SYSTEM_PACKAGES: '1'
+      PIP_CONSTRAINT: /configs/glm52-gb200-nixl140-constraints.txt
     args:
       router-mode: kv
       router-session-affinity-ttl-secs: '3600'
@@ -64,6 +65,7 @@ base:
         SGLANG_HICACHE_DEBUG_SAMPLE_RATE: '16384'
         SGLANG_REASONING_EFFORT: max
         PIP_BREAK_SYSTEM_PACKAGES: '1'
+        PIP_CONSTRAINT: /configs/glm52-gb200-nixl140-constraints.txt
         UCX_TLS: cuda_copy,cuda_ipc,sm,self,tcp
         NVSHMEM_REMOTE_TRANSPORT: none
         SGLANG_DG_CACHE_DIR: /deepgemm_cache
@@ -129,6 +131,7 @@ base:
         SGLANG_CLIP_MAX_NEW_TOKENS_ESTIMATION: '8'
         SGLANG_REASONING_EFFORT: max
         PIP_BREAK_SYSTEM_PACKAGES: '1'
+        PIP_CONSTRAINT: /configs/glm52-gb200-nixl140-constraints.txt
         UCX_TLS: cuda_copy,cuda_ipc,sm,self,tcp
         NVSHMEM_REMOTE_TRANSPORT: none
         SGLANG_DG_CACHE_DIR: /deepgemm_cache

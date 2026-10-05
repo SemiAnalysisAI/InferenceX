@@ -2,36 +2,40 @@
 set -eo pipefail
 bash /configs/install-torchao.sh
 
-# Avoid the shared UCX worker's event-arm path in the unchanged GLM5.2 images.
-# This is a scoped workaround, not the UCX event fix: openucx/ucx#11499.
+# Test the upstream UCX event fix with SGLang's original asynchronous progress.
 python3 - <<'PY'
 import hashlib
 from pathlib import Path
 
 path = Path("/sgl-workspace/sglang/python/sglang/srt/disaggregation/nixl/conn.py")
-original = "28da79ad06baa8c1b725bc98983ca570f82a73b49439873831505ab7f1eef601"
-patched = "00f857bc02cd54a1e869e44cd54d04bfb0dc8b2ada5e62a780e30dc6a113cf66"
-source = path.read_text()
-digest = hashlib.sha256(source.encode()).hexdigest()
-if digest == patched:
-    print(f"GLM5.2 UCX prefill setup already applied: {digest}")
-    raise SystemExit(0)
-if digest != original:
-    raise SystemExit(f"Unexpected GLM5.2 NIXL conn.py: {digest}")
-source = source.replace(
-    '        num_threads = 8 if disaggregation_mode == DisaggregationMode.PREFILL else 0\n',
-    '        num_threads = 8 if disaggregation_mode == DisaggregationMode.PREFILL else 0\n'
-    '        synchronous_ucx = backend == "UCX" and disaggregation_mode == DisaggregationMode.PREFILL\n',
-).replace(
-    '            backends=[],\n',
-    '            backends=[],\n            enable_prog_thread=not synchronous_ucx,\n',
-).replace(
-    '        self.agent.create_backend(backend, backend_params)\n',
-    '        if synchronous_ucx:\n            backend_params["num_threads"] = "0"\n'
-    '        self.agent.create_backend(backend, backend_params)\n',
-)
-if hashlib.sha256(source.encode()).hexdigest() != patched:
-    raise SystemExit("Unexpected GLM5.2 NIXL patch output")
-path.write_text(source)
-print(f"GLM5.2 UCX prefill setup: {original} -> {patched}")
+expected = "28da79ad06baa8c1b725bc98983ca570f82a73b49439873831505ab7f1eef601"
+actual = hashlib.sha256(path.read_bytes()).hexdigest()
+if actual != expected:
+    raise SystemExit(f"Expected unmodified GLM5.2 NIXL conn.py: {actual}")
+print(f"GLM5.2 original NIXL progress configuration: {actual}")
+PY
+
+# Preserve the image's Torch/NumPy and install only the matching CUDA 13 backend.
+python3 -m pip install --no-deps --only-binary=:all: --require-hashes -r /dev/stdin <<'REQ'
+nixl==1.4.0 --hash=sha256:aad5065c46ead71c96f485785a2cb6ef782b5a32cc6450aa7eff1735012d16c2
+nixl-cu13==1.4.0 --hash=sha256:b9184de88d5919d1ec82b61b398c59396af31e1e34e6e023db4b5f01c6f07171
+REQ
+
+python3 - <<'PY'
+import importlib.metadata
+import json
+import platform
+
+versions = {
+    name: importlib.metadata.version(name)
+    for name in ("nixl", "nixl-cu13", "torch", "numpy")
+}
+if any(versions[name] != "1.4.0" for name in ("nixl", "nixl-cu13")):
+    raise SystemExit(f"Unexpected NIXL installation: {versions}")
+print("GLM5.2 upstream NIXL candidate: " + json.dumps({
+    "versions": versions,
+    "python": platform.python_version(),
+    "architecture": platform.machine(),
+    "sglang_conn_modified": False,
+}))
 PY
