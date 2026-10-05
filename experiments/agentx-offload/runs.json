@@ -5276,7 +5276,7 @@
       "status": "in_progress",
       "workflow_name": "offload-v1-nvme4tib-c489-r5-enroot3-capacity-extended-fullsha-20261005",
       "dispatched_at": "2026-10-05T22:17:53Z",
-      "phase": "Slurm allocated on im-b200-c001; image import and storage preflight passed; vLLM CUDA graph capture in progress",
+      "phase": "canonical warmup: primer wave in progress",
       "performance_result": false,
       "execution_budget": {
         "slurm_minutes": 510,
@@ -5300,11 +5300,21 @@
       "dram_bytes": 0,
       "nvme_bytes": 4398046511104,
       "connector": "SimpleCPUOffloadConnector with disk backend, lazy offload and page cache disabled",
-      "runtime_evidence": "Live offload_config.json on im-b200-c001 matches run 37381547856, Slurm 19547, 0 DRAM, 4,398,046,511,104 NVMe bytes, SimpleCPUOffloadConnector disk backend, O_DIRECT true, and 17,646,771,367,936 free bytes before exact scratch creation. Host /scratch owner.json matches the current run/job. Server log shows vLLM CUDA graph capture; canonical warmup has not yet been observed."
+      "runtime_evidence": "Live offload_config.json on im-b200-c001 matches run 37381547856, Slurm 19547, 0 DRAM, 4,398,046,511,104 NVMe bytes, SimpleCPUOffloadConnector disk backend, O_DIRECT true, and 17,646,771,367,936 free bytes before exact scratch creation. Host /scratch owner.json matches the current run/job. Server log shows vLLM CUDA graph capture; canonical warmup has not yet been observed. AIPerf canonical warmup started at 23:15:02Z with 5,412 target requests and 522 trajectory primers. Latest live sample returned 347, sent 522, in flight 175, errors 0 after 1,680.3 seconds; serving remains active.",
+      "warmup_started_at": "2026-10-05T23:15:02Z",
+      "warmup_target_requests": 5412,
+      "warmup_latest": {
+        "sample_at": "2026-10-05T23:43:02Z",
+        "returned": 347,
+        "sent": 522,
+        "in_flight": 175,
+        "errors": 0,
+        "elapsed_seconds": 1680.3
+      }
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894,36796500128,36879140816,37027095833",
-  "status": "Capacity-requalified NVMe c489 retry 37381547856 allocated on im-b200-c001. Pinned image imported and storage preflight passed with 17,646,771,367,936 free bytes and O_DIRECT; vLLM engine is starting.",
+  "status": "Extended-budget NVMe c489 run 37381547856 is in canonical warmup on im-b200-c001. Primer wave progress: 347/5,412 returned, 522 sent, 175 in flight, zero errors at 1,680.3 seconds.",
   "last_capacity_check": {
     "checked_at": "2026-10-05T22:17:36Z",
     "active_study_run_ids": [
