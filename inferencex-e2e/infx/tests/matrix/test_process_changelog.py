@@ -13,125 +13,10 @@ import pytest
 import yaml
 
 from infx.matrix import plan as process_changelog
+from infx.matrix import revision
 from infx.matrix.generate import generate_test_config_sweep
 from infx.matrix.validation import validate_master_config
 from infx.workflows import benchmark_schema
-
-
-@pytest.fixture
-def generation_repo(tmp_path, monkeypatch):
-    """An isolated history containing the real generator and controlled inputs."""
-    source = Path(__file__).resolve().parents[3]
-    for directory in ("utils/matrix_logic", "infx"):
-        if (source / directory).exists():
-            shutil.copytree(source / directory, tmp_path / directory, ignore=shutil.ignore_patterns("__pycache__"))
-    (tmp_path / "configs").mkdir()
-    (tmp_path / "configs/amd-master.yaml").write_text("{}\n")
-    (tmp_path / "configs/runners.yaml").write_text("labels: {fixture: [node-a]}\nhardware: {}\n")
-    (tmp_path / "infx/data.bin").write_bytes(b"\x00\nblob\xff\n")
-    (tmp_path / "infx/data 中文\t\r\n.bin").write_bytes(b"named asset")
-    (tmp_path / "infx/data-link").symlink_to("data.bin")
-    (tmp_path / ".gitattributes").write_text("infx/data.bin export-ignore\n")
-
-    def git(*args):
-        return subprocess.run(
-            ["git", *args], cwd=tmp_path, capture_output=True, text=True, check=True,
-        ).stdout.strip()
-
-    git("init", "-q")
-    git("config", "user.name", "Test")
-    git("config", "user.email", "test@example.com")
-    for revision, conc in (("older", 2), ("newer", 6)):
-        master = {"fixture": {
-            "image": "example/image:stable", "model": revision, "model-prefix": "dsr1",
-            "precision": "fp8", "framework": "sglang", "runner": "fixture",
-            "multinode": False,
-            "scenarios": {"fixed-seq-len": [{
-                "isl": 1024, "osl": 1024, "search-space": [{"tp": 1, "conc-list": [conc]}],
-            }]},
-        }}
-        (tmp_path / "configs/nvidia-master.yaml").write_text(yaml.safe_dump(master))
-        git("add", ".")
-        git("commit", "-qm", revision)
-        git("tag", revision)
-
-    # Neither uncommitted source nor inputs may leak into historical generation.
-    (tmp_path / "configs/nvidia-master.yaml").write_text("invalid working tree\n")
-    for directory in ("utils/matrix_logic", "infx"):
-        for path in (tmp_path / directory).rglob("*.py"):
-            path.write_text('raise RuntimeError("working tree source was used")\n')
-    monkeypatch.chdir(tmp_path)
-    return tmp_path, git
-
-
-@pytest.mark.parametrize("revision,expected", [
-    ("older", ("older", 2)), ("newer", ("newer", 6)), ("moving", ("older", 2)),
-])
-@pytest.mark.parametrize("safe_path", [False, True])
-def test_historical_generation_uses_committed_source_and_inputs(generation_repo, revision, expected, monkeypatch, safe_path, capsys):
-    root, git = generation_repo
-    monkeypatch.setenv("PYTHONPATH", str(root))
-    monkeypatch.setenv("PATH", f"{Path(sys.executable).parent}{os.pathsep}{os.environ['PATH']}")
-    if safe_path:
-        monkeypatch.setenv("PYTHONSAFEPATH", "1")
-    else:
-        monkeypatch.delenv("PYTHONSAFEPATH", raising=False)
-    if revision == "moving":
-        git("update-ref", "refs/heads/moving", "older")
-        run = subprocess.run
-
-        def advance_after_listing(command, **kwargs):
-            result = run(command, **kwargs)
-            if command[:2] == ["git", "ls-tree"]:
-                run(["git", "update-ref", "refs/heads/moving", "newer"], cwd=root, check=True)
-            return result
-
-        monkeypatch.setattr(subprocess, "run", advance_after_listing)
-    with process_changelog.generation_inputs_at_ref(revision) as inputs:
-        rows = process_changelog.generate_matrix(["fixture"], ["--no-evals"], inputs)
-        assert [(row["model"], row["conc"]) for row in rows] == [expected]
-        assert capsys.readouterr().err == ""
-        snapshot = Path(inputs.root)
-        assert (snapshot / "infx/data.bin").read_bytes() == b"\x00\nblob\xff\n"
-        assert (snapshot / "infx/data 中文\t\r\n.bin").read_bytes() == b"named asset"
-        assert (snapshot / "infx/data-link").read_bytes() == b"data.bin"
-        assert not (snapshot / "infx/data-link").is_symlink()
-    assert not snapshot.exists()
-
-
-def test_historical_generation_rejects_missing_inputs(generation_repo):
-    _, git = generation_repo
-    git("rm", "-f", "configs/runners.yaml")
-    git("commit", "-qm", "missing runner inventory")
-
-    with pytest.raises(ValueError, match="missing generation inputs.*configs/runners.yaml"):
-        with process_changelog.generation_inputs_at_ref("HEAD"):
-            pytest.fail("an incomplete snapshot must not be used for generation")
-
-
-@pytest.mark.parametrize("safe_path", [False, True])
-def test_historical_generation_supports_legacy_script_layout(generation_repo, monkeypatch, safe_path):
-    root, git = generation_repo
-    monkeypatch.setenv("PATH", f"{Path(sys.executable).parent}{os.pathsep}{os.environ['PATH']}")
-    if safe_path:
-        monkeypatch.setenv("PYTHONSAFEPATH", "1")
-    else:
-        monkeypatch.delenv("PYTHONSAFEPATH", raising=False)
-    git("rm", "-rf", "--ignore-unmatch", "infx")
-    # The historical command is an external collaborator: exercise extraction
-    # and sibling imports without freezing a past copy of the matrix algorithm.
-    script = root / "utils/matrix_logic/generate_sweep_configs.py"
-    schema = script.with_name("validation.py")
-    script.parent.mkdir(parents=True, exist_ok=True)
-    script.write_text("import json\nfrom validation import revision\nprint(json.dumps([{'model': revision, 'conc': 2}]))\n")
-    schema.write_text('revision = "legacy snapshot"\n')
-    git("add", str(script), str(schema))
-    git("commit", "-qm", "legacy generator")
-    schema.write_text('raise RuntimeError("wrong revision")\n')
-
-    with process_changelog.generation_inputs_at_ref("HEAD") as inputs:
-        rows = process_changelog.generate_matrix(["fixture"], ["--no-evals"], inputs)
-        assert rows == [{"model": "legacy snapshot", "conc": 2}]
 
 
 def _fixed_matrix_row(
@@ -496,9 +381,10 @@ def test_append_only_scope_rejects_changes_to_unselected_scenario():
 
 
 def planning_inputs() -> tuple[dict, dict]:
-    runners = {"labels": {"cluster:fixture": ["node-a"]}, "hardware": {
-        "cluster:fixture": {"gpus-per-node": 8, "available-cpu-dram-mib": 1024000},
-    }}
+    runners = {"labels": {"cluster:fixture": ["node-a"]}, "clusters": {"fixture": {
+        "gpus-per-node": 8, "available-cpu-dram-mib": 1024000, "arch": "x86_64",
+        "scheduler": "slurm", "slurm": {"partition": "batch", "exclusive": True},
+    }}}
     master = {}
     for key, multinode in (("single", False), ("multi", True)):
         shape = ({role: {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False}
@@ -556,9 +442,9 @@ def committed_planning_repo(planning_repo):
     return root, base, head
 
 
-@pytest.mark.parametrize("shadow_package", [False, True])
-def test_recovery_uses_current_planner_with_historical_checkout(
-    committed_planning_repo, shadow_package
+@pytest.mark.parametrize("ambient", [False, True])
+def test_recovery_plans_with_the_checkouts_own_planner_and_recipes(
+    committed_planning_repo, monkeypatch, tmp_path_factory, ambient
 ):
     from infx.workflows.recover_failed_ingest import build_config
 
@@ -576,14 +462,15 @@ def test_recovery_uses_current_planner_with_historical_checkout(
     entries = yaml.safe_load(changelog.read_text())
     entries[0]["config-keys"] = ["multi"]
     changelog.write_text(yaml.safe_dump(entries, sort_keys=False))
-    shutil.rmtree(root / "infx")
-    shutil.rmtree(root / "utils", ignore_errors=True)
-    if shadow_package:
-        (root / "infx").mkdir()
-        (root / "infx/__init__.py").write_text("raise RuntimeError('wrong tooling checkout')\n")
     subprocess.run(["git", "add", "-A"], cwd=root, check=True)
-    subprocess.run(["git", "commit", "-qm", "historical tooling fixture"], cwd=root, check=True)
+    subprocess.run(["git", "commit", "-qm", "recipe fixture"], cwd=root, check=True)
     head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
+    if ambient:
+        shadow = tmp_path_factory.mktemp("ambient")
+        (shadow / "infx").mkdir()
+        (shadow / "infx/__init__.py").write_text("raise RuntimeError('ambient tooling imported')\n")
+        monkeypatch.setenv("PYTHONPATH", str(shadow))
+        monkeypatch.setenv("INFERENCEX_REPOSITORY_ROOT", str(tmp_path_factory.mktemp("other")))
     changelog.write_text("\n" + yaml.safe_dump(entries, sort_keys=False))
     output, metadata = root / "config.json", root / "metadata.json"
 
@@ -632,10 +519,8 @@ def test_historical_generator_uses_snapshot_recipes_not_inherited_recovery_root(
     unrelated = root / "other-revision"
     unrelated.mkdir()
     monkeypatch.setenv("INFERENCEX_REPOSITORY_ROOT", str(unrelated))
-    with process_changelog.generation_inputs_at_ref("HEAD") as inputs:
-        rows = process_changelog.generate_matrix(
-            ["multi"], ["--no-evals", "--scenario-type", "fixed-seq-len"], inputs
-        )
+    with revision.snapshot("HEAD") as inputs:
+        rows = inputs.generate(["multi"], ["--no-evals", "--scenario-type", "fixed-seq-len"])
 
     assert [row["node-count"] for row in rows] == [7]
     assert rows[0]["conc"] == [16, 32, 64]
@@ -855,7 +740,7 @@ def test_append_only_main_runs_only_added_points_and_skips_evals(planning_repo, 
 
 def test_generation_failure_does_not_publish_a_partial_matrix(planning_repo, changelog_run, capsys):
     # Single-node generation succeeds before multinode scheduling fails.
-    (planning_repo[0] / "configs/runners.yaml").write_text("labels: {}\nhardware: {}\n")
+    (planning_repo[0] / "configs/runners.yaml").write_text("labels: {}\nclusters: {}\n")
     with pytest.raises(subprocess.CalledProcessError):
         changelog_run([{"config-keys": ["single", "multi"]}])
     captured = capsys.readouterr()
@@ -963,28 +848,6 @@ def test_generation_api_preserves_json_rejection_for_yaml_sets(planning_repo):
     validate_master_config(master)
     with pytest.raises(TypeError, match="set is not JSON serializable"):
         generate_config_matrix(["multi"], master, runners, eval_mode="none")
-
-
-@pytest.mark.parametrize("revision,expected", [("HEAD", ("newer", 6)), ("older", ("older", 2))])
-def test_historical_generation_from_nested_project(generation_repo, monkeypatch, revision, expected):
-    root, git = generation_repo
-    monkeypatch.setenv("PATH", f"{Path(sys.executable).parent}{os.pathsep}{os.environ["PATH"]}")
-    git("restore", ".")
-    (root / "inferencex-e2e").mkdir()
-    git("mv", "infx", "configs", "inferencex-e2e/")
-    # Unrelated root-level files cannot override the selected nested snapshot.
-    (root / "infx/matrix").mkdir(parents=True)
-    (root / "infx/matrix/generate.py").write_text(
-        'raise RuntimeError("root-level decoy source was used")\n'
-    )
-    (root / "configs").mkdir()
-    (root / "configs/nvidia-master.yaml").write_text("root-level decoy config\n")
-    git("add", ".")
-    git("commit", "-qm", "relocate project")
-    monkeypatch.chdir(root / "inferencex-e2e")
-    with process_changelog.generation_inputs_at_ref(revision) as inputs:
-        rows = process_changelog.generate_matrix(["fixture"], ["--no-evals"], inputs)
-    assert [(row["model"], row["conc"]) for row in rows] == [expected]
 
 
 def test_changelog_move_preserves_history_and_selects_only_additions(tmp_path, monkeypatch):

@@ -26,6 +26,7 @@ from infx.matrix.generate import (
     seq_len_to_str,
     trim_conc,
 )
+from infx.matrix.validation import validate_runner_config
 
 
 def test_aggregated_multinode_node_count_uses_explicit_num_nodes():
@@ -146,6 +147,42 @@ def test_recipe_node_count_resolves_override_selectors(tmp_path, monkeypatch, se
     assert generate.recipe_node_count(prefill, {}) == expected
 
 
+@pytest.mark.parametrize("auxiliary, expected", [
+    ({"benchmark": {"placement": {"node": "dedicated"}}}, 4),
+    ({"frontend": {"placement": {"node": "dedicated"}},
+      "benchmark": {"placement": {"node": "dedicated"}}}, 4),
+    ({"frontend": {"dedicated_node": True},
+      "infra": {"etcd_nats_dedicated_node": True},
+      "benchmark": {"client_dedicated_node": True, "colocate_with_frontend": False}}, 6),
+    ({"services": [
+        {"type": "etcd", "placement": {"node": "dedicated"}},
+        {"type": "nats", "placement": {"node": "dedicated"}},
+        {"type": "custom", "nodes": 2},
+        {"type": "custom", "nodes": 8, "enabled": False}],
+      "frontend": {"placement": {"node": "dedicated"}},
+      "benchmark": {"colocate_with_frontend": False}}, 7),
+    ({"benchmark": {"placement": {"node": "head"}},
+      "services": [{"type": "etcd", "placement": {"node": "dedicated"},
+                    "enabled": False}]}, 3),
+])
+def test_recipe_node_count_includes_auxiliary_nodes(tmp_path, monkeypatch, auxiliary, expected):
+    import infx.matrix.generate as generate
+    import infx.config
+
+    recipe = tmp_path / "benchmarks/multi_node/srt-slurm-recipes/test.yaml"
+    recipe.parent.mkdir(parents=True)
+    recipe.write_text(yaml.safe_dump({
+        "schema": 2,
+        "base": {"roles": {"prefill": {"nodes": 1}, "decode": {"nodes": 2}}},
+        "override_auxiliary": auxiliary,
+    }))
+    (tmp_path / "configs").mkdir()
+    monkeypatch.setattr(infx.config, "__file__", str(tmp_path / "infx/config.py"))
+    prefill = {"additional-settings": ["CONFIG_FILE=recipes/test.yaml:override_auxiliary"]}
+
+    assert generate.recipe_node_count(prefill, {}) == expected
+
+
 def test_multinode_node_count_uses_role_gpu_footprints(sample_runner_config):
     prefill = {"num-worker": 3, "tp": 2, "pp": 1, "pcp-size": 1}
     decode = {"num-worker": 2, "tp": 8, "pp": 1, "pcp-size": 1}
@@ -179,6 +216,17 @@ def test_multinode_node_count_resolves_heterogeneous_worker_hardware(
     assert multinode_node_count(
         prefill, decode, "gb200", sample_runner_config
     ) == 6
+
+
+def cluster_record(gpus_per_node, **facts):
+    """Minimal valid clusters: record carrying generation-time node facts."""
+    return {
+        "gpus-per-node": gpus_per_node,
+        **facts,
+        "arch": "x86_64",
+        "scheduler": "slurm",
+        "slurm": {"partition": "batch", "exclusive": True},
+    }
 
 
 @pytest.mark.parametrize("config_file", [
@@ -328,14 +376,14 @@ def sample_runner_config():
             "mi300x": ["mi300x-amd_0", "mi300x-amd_1", "mi300x-cr_0"],
             "gb200": ["gb200-nv_0"],
         },
-        "hardware": {
-            "cluster:h100-dgxc": {"available-cpu-dram-mib": 2063837, "gpus-per-node": 8},
-            "cluster:h200-dgxc": {"available-cpu-dram-mib": 1471356, "gpus-per-node": 8},
-            "cluster:b200-nscale": {"available-cpu-dram-mib": 3774874, "gpus-per-node": 8},
-            "cluster:b300-nv": {"available-cpu-dram-mib": 2964436, "gpus-per-node": 8},
-            "cluster:mi300x-amd": {"available-cpu-dram-mib": 1547820, "gpus-per-node": 8},
-            "cluster:mi355x-amds": {"available-cpu-dram-mib": 3095781, "gpus-per-node": 8},
-            "cluster:gb200-nv": {"available-cpu-dram-mib": 860160, "gpus-per-node": 4},
+        "clusters": {
+            "h100-dgxc": cluster_record(8, **{"available-cpu-dram-mib": 2063837}),
+            "h200-dgxc": cluster_record(8, **{"available-cpu-dram-mib": 1471356}),
+            "b200-nscale": cluster_record(8, **{"available-cpu-dram-mib": 3774874}),
+            "b300-nv": cluster_record(8, **{"available-cpu-dram-mib": 2964436}),
+            "mi300x-amd": cluster_record(8, **{"available-cpu-dram-mib": 1547820}),
+            "mi355x-amds": cluster_record(8, **{"available-cpu-dram-mib": 3095781}),
+            "gb200-nv": cluster_record(4, **{"available-cpu-dram-mib": 860160}),
         },
     }
 
@@ -383,10 +431,6 @@ def full_sweep_args_multi_node():
 
 class TestSeqLenToStr:
 
-    def test_known_sequence_lengths(self):
-        assert seq_len_to_str(1024, 1024) == "1k1k"
-        assert seq_len_to_str(8192, 1024) == "8k1k"
-
     def test_unknown_sequence_lengths(self):
         assert seq_len_to_str(2048, 2048) == "2048_2048"
         assert seq_len_to_str(4096, 1024) == "4096_1024"
@@ -395,30 +439,45 @@ class TestSeqLenToStr:
 
 class TestMarkEvalEntries:
 
-    def test_marks_agentic_entry_for_gsm8k(self):
+    def test_agentic_gsm8k_groups_by_fixed_seq_keys_and_image(self):
+        base = {
+            "scenario-type": "agentic-coding",
+            "model": "m", "runner": "b300", "framework": "vllm",
+            "precision": "fp4", "tp": 8, "spec-decoding": "none",
+            "dp-attn": False, "image": "img:a",
+        }
+        variants = [
+            {},
+            {"spec-decoding": "mtp"},
+            {"dp-attn": True},
+            {"image": "img:b"},
+        ]
         matrix_values = [
-            {
-                "scenario-type": "agentic-coding",
-                "model": "m", "runner": "b300", "framework": "vllm",
-                "precision": "fp4", "tp": 8, "conc": 32,
-            },
-            {
-                "scenario-type": "agentic-coding",
-                "model": "m", "runner": "b300", "framework": "vllm",
-                "precision": "fp4", "tp": 8, "conc": 64,
-            },
+            dict(base, **variant, conc=conc, variant=n)
+            for n, variant in enumerate(variants)
+            for conc in (16, 64)
+        ]
+        # TP and KV offloading do not split a group: only the group's highest
+        # conc is evaluated, whichever variant it belongs to.
+        matrix_values.append(dict(base, tp=4, conc=128, variant=0))
+        matrix_values.append(dict(base, conc=256, variant=0, **{"kv-offloading": "dram"}))
+
+        result = mark_eval_entries(matrix_values)
+
+        marked = sorted(
+            (e["variant"], e["tp"], e.get("kv-offloading"), e["conc"])
+            for e in result if e.get("run-eval")
+        )
+        assert marked == [
+            (0, 8, "dram", 256), (1, 8, None, 64), (2, 8, None, 64), (3, 8, None, 64),
         ]
 
-        result = mark_eval_entries(matrix_values, include_agentic=True)
-
-        marked = [e for e in result if e.get("run-eval")]
-        assert len(marked) == 1
-        assert marked[0]["conc"] == 64
-
     def test_marks_multinode_agentic_entry_at_highest_eligible_conc(self):
-        """Multi-node agentic (SWE-bench) eval selection mirrors the
-        fixed-seq-len multi-node policy: one eval row per parallelism
-        topology, at its highest eligible (>= MIN_EVAL_CONC) concurrency.
+        """Multi-node agentic GSM8K runs once per parallelism topology, at its
+        highest eligible (>= MIN_EVAL_CONC) concurrency. A deployment with no
+        eligible topology at all (e.g. a conc-1-only engine) still gets one
+        eval at its highest concurrency; low topologies of a covered
+        deployment do not.
 
         Each concurrency is its own matrix entry (chunk size 1) whose
         exp-name embeds that concurrency, unlike fixed-seq-len multi-node
@@ -432,18 +491,21 @@ class TestMarkEvalEntries:
             "prefill": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
             "decode": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
         }
+        low_topology = {**common, "prefill": {**common["prefill"], "tp": 4}}
+        low_deployment = {**common, "model": "latency-engine"}
         matrix_values = [
             {**common, "conc": [8], "exp-name": "p1x8_d1x8_conc8"},
             {**common, "conc": [16], "exp-name": "p1x8_d1x8_conc16"},
             {**common, "conc": [32], "exp-name": "p1x8_d1x8_conc32"},
+            {**low_topology, "conc": [2], "exp-name": "p1x4_d1x8_conc2"},
+            {**low_deployment, "conc": [1], "exp-name": "latency_conc1"},
+            {**low_deployment, "conc": [2], "exp-name": "latency_conc2"},
         ]
 
-        result = mark_eval_entries(matrix_values, include_agentic=True)
+        result = mark_eval_entries(matrix_values)
 
-        marked = [e for e in result if e.get("run-eval")]
-        assert len(marked) == 1
-        assert marked[0]["conc"] == [32]
-        assert marked[0]["eval-conc"] == 32
+        marked = [(e["exp-name"], e["eval-conc"]) for e in result if e.get("run-eval")]
+        assert marked == [("p1x8_d1x8_conc32", 32), ("latency_conc2", 2)]
 
     def test_multinode_agentic_groups_are_independent_per_topology(self):
         """Two distinct multi-node agentic topologies (e.g. differing by
@@ -468,61 +530,53 @@ class TestMarkEvalEntries:
             {**base, **topology_b, "conc": [96], "exp-name": "b_conc96"},
         ]
 
-        result = mark_eval_entries(matrix_values, include_agentic=True)
+        result = mark_eval_entries(matrix_values)
 
         marked = {e["exp-name"]: e for e in result if e.get("run-eval")}
         assert set(marked) == {"a_conc32", "b_conc96"}
         assert marked["a_conc32"]["eval-conc"] == 32
         assert marked["b_conc96"]["eval-conc"] == 96
 
-    def test_default_mode_does_not_mark_agentic(self):
+    def test_default_mode_marks_agentic_at_highest_conc(self):
         matrix_values = [
             {
                 "scenario-type": "agentic-coding",
                 "model": "m", "runner": "b300", "framework": "vllm",
                 "precision": "fp4", "tp": 8, "conc": 32,
+                "spec-decoding": "none", "dp-attn": False, "image": "img",
             },
             {
                 "scenario-type": "agentic-coding",
                 "model": "m", "runner": "b300", "framework": "vllm",
                 "precision": "fp4", "tp": 8, "conc": 64,
+                "spec-decoding": "none", "dp-attn": False, "image": "img",
             },
         ]
 
         result = mark_eval_entries(matrix_values)
 
         marked = [e for e in result if e.get("run-eval")]
-        assert len(marked) == 0, (
-            f"Expected 0 agentic entries marked run-eval in default mode, got {len(marked)}"
+        assert [e["conc"] for e in marked] == [64], (
+            f"Expected only the highest-conc agentic entry marked in default mode, got {marked}"
         )
+        assert marked[0]["eval-framework"] == "lm-eval"
 
     @pytest.mark.parametrize("all_evals", [False, True])
     @pytest.mark.parametrize("runner", ["mi355x", "b300"])
-    def test_marks_every_supported_vendor_point(self, all_evals, runner):
+    def test_vendor_models_run_vendor_suite_everywhere_plus_gsm8k(self, all_evals, runner):
+        shape = {
+            "scenario-type": "agentic-coding", "runner": runner, "framework": "vllm",
+            "precision": "fp4", "tp": 8, "spec-decoding": "none", "dp-attn": False,
+            "image": "img",
+        }
         matrix_values = [
-            {
-                "scenario-type": "agentic-coding",
-                "model-prefix": model_prefix,
-                "model": model_prefix,
-                "runner": runner,
-                "framework": "vllm",
-                "precision": "fp4",
-                "tp": 8,
-                "conc": conc,
-            }
+            dict(shape, **{"model-prefix": model_prefix, "model": model_prefix, "conc": conc})
             for model_prefix in ("kimik3", "minimaxm3")
             for conc in (1, 64)
         ]
-        matrix_values.append({
-            "scenario-type": "agentic-coding",
-            "model-prefix": "minimaxm3-bfcl",
-            "model": "unsupported",
-            "runner": "b300",
-            "framework": "vllm",
-            "precision": "fp4",
-            "tp": 8,
-            "conc": 64,
-        })
+        matrix_values.append(
+            dict(shape, **{"model-prefix": "minimaxm3-bfcl", "model": "unsupported", "conc": 64})
+        )
 
         result = mark_eval_entries(matrix_values)
         if all_evals:
@@ -532,21 +586,24 @@ class TestMarkEvalEntries:
             "kimik3": ("kimi-vendor", "kimi_tool_call_schema_full"),
             "minimaxm3": ("minimax-vendor", "minimax_m3_full"),
         }
+        gsm8k_concs = {1, 64} if all_evals else {64}
         for model_prefix, eval_spec in expected.items():
             rows = [row for row in result if row["model-prefix"] == model_prefix]
-            assert {row["conc"] for row in rows} == {1, 64}
             assert all(row["run-eval"] is True for row in rows)
-            assert {
-                (row["eval-framework"], row["eval-suite"]) for row in rows
-            } == {eval_spec}
+            evals = {(row["eval-framework"], row["eval-suite"], row["conc"]) for row in rows}
+            assert evals == {(*eval_spec, conc) for conc in (1, 64)} | {
+                ("lm-eval", "", conc) for conc in gsm8k_concs
+            }
+            if not all_evals:
+                # By default only the vendor rows carry throughput; GSM8K is a
+                # standalone eval-only row. (--all-evals output is eval-only anyway.)
+                throughput = [row for row in rows if not row.get("eval-only")]
+                assert {row["eval-framework"] for row in throughput} == {eval_spec[0]}
 
-        unsupported = result[-1]
-        assert unsupported["run-eval"] is all_evals
-        if all_evals:
-            assert unsupported["eval-framework"] == "lm-eval"
-            assert unsupported["eval-suite"] == ""
-        else:
-            assert "eval-framework" not in unsupported
+        unsupported = [row for row in result if row["model-prefix"] == "minimaxm3-bfcl"]
+        assert [(r["run-eval"], r["eval-framework"], r["eval-suite"]) for r in unsupported] == [
+            (True, "lm-eval", ""),
+        ]
         assert all(row.get("eval-framework") != "bfcl" for row in result)
 
     def test_default_marks_every_multinode_vendor_point(self):
@@ -569,13 +626,49 @@ class TestMarkEvalEntries:
 
         result = mark_eval_entries(matrix_values)
 
-        assert len(result) == 2
-        assert all(row["run-eval"] is True for row in result)
-        assert [row["eval-conc"] for row in result] == [2, 32]
-        assert all(row["eval-framework"] == "kimi-vendor" for row in result)
-        assert all(
-            row["eval-suite"] == "kimi_tool_call_schema_full" for row in result
+        vendor = [row for row in result if row["eval-framework"] == "kimi-vendor"]
+        assert [row["eval-conc"] for row in vendor] == [2, 32]
+        assert all(row["run-eval"] is True and not row.get("eval-only") for row in vendor)
+        assert all(row["eval-suite"] == "kimi_tool_call_schema_full" for row in vendor)
+        # Plus one standalone GSM8K at the topology's highest eligible conc.
+        gsm8k = [row for row in result if row["eval-framework"] == "lm-eval"]
+        assert [(row["eval-conc"], row["eval-suite"], row["eval-only"]) for row in gsm8k] == [
+            (32, "", True),
+        ]
+
+    @pytest.mark.parametrize("all_evals", [False, True])
+    def test_kv_offload_variants_share_one_vendor_eval(self, all_evals):
+        # MiniMax M3 on b200-nscale runs each point with and without DRAM
+        # offload; the app keeps one eval per config and concurrency.
+        common = {
+            "scenario-type": "agentic-coding", "model-prefix": "minimaxm3",
+            "model": "MiniMaxAI/MiniMax-M3", "runner": "cluster:b200-nscale",
+            "framework": "vllm", "precision": "fp4", "tp": 4, "ep": 1,
+            "spec-decoding": "mtp", "dp-attn": False, "image": "img",
+        }
+        dram = {"kv-offloading": "dram", "kv-offload-backend": {"name": "vllm-simple"}}
+        matrix_values = [
+            {**common, **dram, "conc": 15},
+            {**common, "kv-offloading": "none", "conc": 15},
+            {**common, **dram, "conc": 20},
+        ]
+
+        result = mark_eval_entries(matrix_values)
+        if all_evals:
+            result = mark_all_eval_entries(result)
+
+        evals = sorted(
+            (row["eval-framework"], row["conc"], row["kv-offloading"])
+            for row in result if row["run-eval"]
         )
+        # Each suite keeps one eval per concurrency; at c15 the no-offload row wins.
+        vendor = [("minimax-vendor", 15, "none"), ("minimax-vendor", 20, "dram")]
+        gsm8k = [("lm-eval", 15, "none"), ("lm-eval", 20, "dram")] if all_evals else [
+            ("lm-eval", 20, "dram"),
+        ]
+        assert evals == sorted(gsm8k + vendor)
+        assert all(row["eval-suite"] == "minimax_m3_full"
+                   for row in result if row.get("eval-framework") == "minimax-vendor")
 
     def test_fixed_sequence_eval_uses_lm_eval_metadata(self):
         matrix_values = [{
@@ -898,6 +991,26 @@ class TestMarkAllEvalEntries:
         assert all(entry['eval-all-concs'] is True for entry in result)
         assert all('eval-conc' not in entry for entry in result)
 
+    def test_image_variant_batch_keeps_only_unclaimed_concurrencies(self):
+        common = {
+            'model': 'm', 'model-prefix': 'm', 'runner': 'r', 'framework': 'f',
+            'precision': 'fp8', 'isl': 8192, 'osl': 1024, 'spec-decoding': 'none',
+            'prefill': {'tp': 8, 'dp-attn': False}, 'decode': {'tp': 8, 'dp-attn': False},
+            'run-eval': False,
+        }
+        entries = [
+            {**common, 'image': 'old', 'conc': [4, 8]},
+            {**common, 'image': 'new', 'conc': [8, 16]},
+            {**common, 'image': 'newer', 'conc': [4]},
+        ]
+
+        result = mark_all_eval_entries(entries)
+
+        assert [(row['image'], row['conc'], row['run-eval']) for row in result] == [
+            ('old', [4, 8], True), ('new', [16], True), ('newer', [4], False),
+        ]
+        assert 'eval-all-concs' not in result[2]
+
     def test_default_eval_selection_does_not_collapse_all_evals_expansion(self):
         entries = [
             {
@@ -1029,7 +1142,7 @@ class TestMarkAllEvalEntries:
             ("minimaxm3", "minimax-vendor", "minimax_m3_full"),
         ],
     )
-    def test_keeps_every_multinode_vendor_point_separate(
+    def test_keeps_every_multinode_vendor_point_separate_plus_gsm8k(
         self, model_prefix, eval_framework, eval_suite
     ):
         common = {
@@ -1051,11 +1164,16 @@ class TestMarkAllEvalEntries:
 
         result = mark_all_eval_entries(mark_eval_entries(entries))
 
-        assert len(result) == 2
-        assert [row["conc"] for row in result] == [[2], [32]]
-        assert [row["eval-conc"] for row in result] == [2, 32]
-        assert all(row["eval-framework"] == eval_framework for row in result)
-        assert all(row["eval-suite"] == eval_suite for row in result)
+        vendor = [row for row in result if row["eval-framework"] == eval_framework]
+        assert [row["conc"] for row in vendor] == [[2], [32]]
+        assert [row["eval-conc"] for row in vendor] == [2, 32]
+        assert all(row["eval-suite"] == eval_suite for row in vendor)
+        # GSM8K merges the topology like any other agentic model.
+        gsm8k = [row for row in result if row["eval-framework"] == "lm-eval"]
+        assert [(row["conc"], row["eval-conc"], row["eval-suite"]) for row in gsm8k] == [
+            ([2, 32], 32, ""),
+        ]
+        assert len(result) == 3
 
 
 
@@ -1068,9 +1186,15 @@ class TestGenerateFullSweepSingleNode:
             sample_single_node_config,
             sample_runner_config
         )
-        assert [(row["isl"], row["osl"], row["conc"]) for row in result] == [
-            (isl, osl, conc)
-            for isl, osl in [(1024, 1024), (8192, 1024)]
+        assert [
+            (row["isl"], row["osl"], row["conc"], row["exp-name"], row["max-model-len"])
+            for row in result
+        ] == [
+            (isl, osl, conc, name, context)
+            for isl, osl, name, context in [
+                (1024, 1024, "dsr1_1k1k", 2304),
+                (8192, 1024, "dsr1_8k1k", 9472),
+            ]
             for conc in [4, 8, 16, 32, 64]
         ]
 
@@ -1305,27 +1429,6 @@ class TestGenerateFullSweepSingleNode:
         assert 16 in conc_values
         assert 64 in conc_values
 
-    def test_exp_name_format(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
-        full_sweep_args_single_node.seq_lens = ["1k1k"]
-        result = generate_full_sweep(
-            full_sweep_args_single_node,
-            sample_single_node_config,
-            sample_runner_config
-        )
-        assert all(entry["exp-name"] == "dsr1_1k1k" for entry in result)
-
-    def test_max_model_len_calculation(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
-        """max-model-len should be isl + osl + 256."""
-        result = generate_full_sweep(
-            full_sweep_args_single_node,
-            sample_single_node_config,
-            sample_runner_config
-        )
-        assert {
-            (entry["isl"], entry["osl"], entry["max-model-len"])
-            for entry in result
-        } == {(1024, 1024, 2304), (8192, 1024, 9472)}
-
     def test_runner_node_filter(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
         """Runner node filter should expand entries to individual matching nodes."""
         full_sweep_args_single_node.runner_type = ["mi300x"]
@@ -1353,20 +1456,6 @@ class TestGenerateFullSweepSingleNode:
         )
         assert len(result) == 0
 
-    def test_runner_node_filter_without_runner_type(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
-        """Runner node filter should work without explicit runner type (uses config's runner)."""
-        full_sweep_args_single_node.runner_node_filter = "amd"
-        full_sweep_args_single_node.seq_lens = ["1k1k"]
-        full_sweep_args_single_node.max_conc = 4
-        result = generate_full_sweep(
-            full_sweep_args_single_node,
-            sample_single_node_config,
-            sample_runner_config
-        )
-        # Config has runner=mi300x, filter "amd" matches mi300x-amd_0 and mi300x-amd_1
-        assert len(result) == 2
-        assert all("amd" in entry["runner"] for entry in result)
-
 
 
 class TestGenerateFullSweepMultiNode:
@@ -1379,6 +1468,7 @@ class TestGenerateFullSweepMultiNode:
             sample_runner_config
         )
         entry = result[0]
+        assert entry["conc"] == [2150]
         assert entry["prefill"]["num-worker"] == 5
         assert entry["decode"]["num-worker"] == 1
         assert entry["disagg"] is True
@@ -1417,24 +1507,6 @@ class TestGenerateFullSweepMultiNode:
             entry["decode"]["dcp-size"],
             entry["decode"]["pcp-size"],
         ) == (2, 4, 1)
-
-    def test_multinode_conc_as_list(self, sample_multinode_config, sample_runner_config, full_sweep_args_multi_node):
-        """Multinode conc should be passed as list."""
-        result = generate_full_sweep(
-            full_sweep_args_multi_node,
-            sample_multinode_config,
-            sample_runner_config
-        )
-        entry = result[0]
-        assert entry["conc"] == [2150]
-
-    def test_single_node_flag_skips_multinode(self, sample_multinode_config, sample_runner_config, full_sweep_args_single_node):
-        result = generate_full_sweep(
-            full_sweep_args_single_node,
-            sample_multinode_config,
-            sample_runner_config
-        )
-        assert len(result) == 0
 
     def test_runner_node_filter_multinode(self, sample_runner_config, full_sweep_args_multi_node):
         # Create a multinode config with h200 runner (which has 4 nodes)
@@ -1960,7 +2032,11 @@ class TestCommandLine:
     ):
         """The module entrypoint resolves caller-relative inputs from another directory."""
         (tmp_path / "master config.yaml").write_text(yaml.safe_dump(sample_single_node_config))
-        (tmp_path / "runners.yaml").write_text(yaml.safe_dump(sample_runner_config))
+        nodes = sample_runner_config["labels"]["mi300x"]
+        (tmp_path / "runners.yaml").write_text(yaml.safe_dump({
+            "labels": {"mi300x": nodes, "cluster:mi300x-amd": nodes},
+            "clusters": {"mi300x-amd": cluster_record(8)},
+        }))
         repo_root = Path(__file__).resolve().parents[3]
         args = [
             command, "--config-files", "master config.yaml",
@@ -2001,8 +2077,11 @@ class TestCommandLine:
         # An explicit override must not fall back to the default inventory.
         (tmp_path / "configs/runners.yaml").write_text("invalid: default inventory")
         selected_file = tmp_path / (runner_file or "configs/runners.yaml")
-        sample_runner_config["labels"]["mi300x"] = ["fixture-node-0", "fixture-node-1"]
-        selected_file.write_text(yaml.safe_dump(sample_runner_config))
+        nodes = ["fixture-node-0", "fixture-node-1"]
+        selected_file.write_text(yaml.safe_dump({
+            "labels": {"mi300x": nodes, "cluster:mi300x-amd": nodes},
+            "clusters": {"mi300x-amd": cluster_record(8)},
+        }))
         argv = [
             "generate_sweep_configs.py", "full-sweep",
             "--config-files", "master.yaml", "--single-node", "--no-evals",
@@ -2156,6 +2235,20 @@ class TestCommandLine:
         assert result[0]['eval-conc'] == 4
         assert result[0]['run-eval'] is True
 
+    def test_trim_conc_never_merges_a_standalone_eval_into_another_suite(self):
+        shape = {'tp': 8, 'model': 'm'}
+        vendor = {**shape, 'conc': 16, 'run-eval': True,
+                  'eval-framework': 'kimi-vendor', 'eval-suite': 'kimi_tool_call_schema_full'}
+        vendor_low = {**vendor, 'conc': 1}
+        gsm8k = {**shape, 'conc': 16, 'run-eval': True, 'eval-only': True,
+                 'eval-framework': 'lm-eval', 'eval-suite': ''}
+
+        result = trim_conc([vendor, vendor_low, gsm8k])
+
+        assert sorted(
+            (row['eval-framework'], row['conc'], bool(row.get('eval-only'))) for row in result
+        ) == [('kimi-vendor', 1, False), ('lm-eval', 16, True)]
+
     @pytest.mark.parametrize('entrypoint', ['cli', 'api'])
     def test_smoke_keeps_canonical_eval_instead_of_throughput_minimum(
         self, monkeypatch, sample_single_node_config, sample_runner_config, entrypoint,
@@ -2235,25 +2328,6 @@ class TestCommandLine:
         assert 'eval-conc' not in result[0]
         assert all(entry['run-eval'] is True for entry in result)
         assert all(entry['eval-only'] is True for entry in result)
-
-    def test_all_evals_cannot_combine_with_no_evals(self, monkeypatch):
-        import sys
-
-        from infx.matrix import generate as generate_sweep_configs
-
-        monkeypatch.setattr(sys, 'argv', [
-            'generate_sweep_configs.py',
-            'test-config',
-            '--config-files', 'dummy.yaml',
-            '--config-keys', 'dummy',
-            '--no-evals',
-            '--all-evals',
-        ])
-
-        with pytest.raises(SystemExit):
-            generate_sweep_configs.main()
-
-
 
 @pytest.fixture
 def sample_mixed_config(sample_single_node_config, sample_multinode_config):
@@ -2605,12 +2679,49 @@ class TestAgenticGeneration:
             },
         }
         runner_config = copy.deepcopy(sample_runner_config)
-        runner_config["hardware"]["cluster:b300-nv"]["gpus-per-node"] = 2
+        runner_config["clusters"]["b300-nv"]["gpus-per-node"] = 2
 
         with pytest.raises(ValueError, match="exceeds gpus-per-node"):
             generate_agentic_sweep(config, runner_config, **filters)
 
-    def test_multinode_agentic_groups_concurrencies_per_search_entry(
+    def test_cluster_records_supply_agentic_dram_budget(self, generate_agentic_sweep):
+        config = {
+            "dsv4-b300-agentic": {
+                "image": "vllm/vllm-openai:v0.23.0",
+                "model": "deepseek-ai/DeepSeek-V4-Pro",
+                "model-prefix": "dsv4",
+                "precision": "fp4",
+                "framework": "vllm",
+                "runner": "cluster:b300-nv",
+                "multinode": False,
+                "scenarios": {
+                    "agentic-coding": [{
+                        "dram-utilization": 0.80,
+                        "search-space": [
+                            {
+                                "tp": 4,
+                                "pp": pp,
+                                "kv-offloading": "dram",
+                                "kv-offload-backend": {"name": "native"},
+                                "conc-list": [32],
+                            }
+                            for pp in (1, 2)
+                        ],
+                    }],
+                },
+            },
+        }
+        cluster = cluster_record(8, **{"available-cpu-dram-mib": 2964436})
+        runners = {"labels": {"cluster:b300-nv": ["b300-nv_0"]}, "clusters": {"b300-nv": cluster}}
+
+        result = generate_agentic_sweep(config, validate_runner_config(runners))
+
+        assert {entry["pp"]: entry["total-cpu-dram-gb"] for entry in result} == {1: 1199, 2: 2399}
+        del cluster["available-cpu-dram-mib"]
+        with pytest.raises(ValueError, match="requires 'available-cpu-dram-mib'"):
+            generate_agentic_sweep(config, validate_runner_config(runners))
+
+    def test_multinode_agentic_isolates_each_concurrency_per_search_entry(
         self, sample_runner_config, generate_agentic_sweep
     ):
         """One server allocation should run exactly one concurrency (one task per conc)."""

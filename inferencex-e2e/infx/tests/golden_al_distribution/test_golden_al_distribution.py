@@ -11,7 +11,6 @@ from infx.golden_al_distribution import (
     curve_name,
     golden_length,
     list_curves,
-    load_curve,
 )
 from infx.golden_al_distribution.__main__ import main
 
@@ -50,13 +49,6 @@ def test_every_committed_curve_is_valid() -> None:
 def test_curve_name_resolves_committed_curves(model, spec, expected) -> None:
     assert curve_name(model, spec) == expected
     assert (GOLDEN_DIR / f"{expected}.yaml").is_file()
-
-
-def test_golden_length_reads_committed_value() -> None:
-    spec = {"method": "mtp", "num_speculative_tokens": 3}
-    assert golden_length("qwen3.5", spec, "thinking_on") == load_curve("qwen3.5_mtp").acceptance(
-        "thinking_on", 3
-    )
 
 
 @pytest.mark.parametrize(

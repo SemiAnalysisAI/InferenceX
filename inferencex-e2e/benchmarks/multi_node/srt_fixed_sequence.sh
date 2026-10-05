@@ -21,15 +21,19 @@ esac
 
 repo_root="$(dirname "${BASH_SOURCE[0]}")/../.."
 # Request the name the workers registered; the workflow's MODEL is the HF id, which can differ.
-model=$(curl -sf "http://${SRT_FRONTEND_HOST}:${SRT_FRONTEND_PORT}/v1/models" |
-    python3 -c 'import json, sys; print(json.load(sys.stdin)["data"][0]["id"])')
+if [[ -n "${BENCHMARK_SERVED_MODEL_NAME:-}" ]]; then
+    model="$BENCHMARK_SERVED_MODEL_NAME"
+else
+    model=$(curl -sf "http://${SRT_FRONTEND_HOST}:${SRT_FRONTEND_PORT}/v1/models" |
+        python3 -c 'import json, sys; print(json.load(sys.stdin)["data"][0]["id"])')
+fi
 result_dir="/logs/sa-bench_isl_${ISL}_osl_${OSL}"
 mkdir -p "$result_dir"
 ctx=$((PREFILL_NUM_WORKERS * PREFILL_TP))
 gen=$((DECODE_NUM_WORKERS * DECODE_TP))
 for concurrency in $CONC_LIST; do
     result="results_concurrency_${concurrency}_gpus_$((ctx + gen))_ctx_${ctx}_gen_${gen}.json"
-    PYTHONPATH="$repo_root${PYTHONPATH:+:$PYTHONPATH}" python3 -P -m infx.bench_serving.benchmark_serving \
+    PYTHONSAFEPATH=1 PYTHONPATH="$repo_root${PYTHONPATH:+:$PYTHONPATH}" python3 -m infx.bench_serving.benchmark_serving \
         --backend "$CLIENT_BACKEND" \
         --base-url "http://${SRT_FRONTEND_HOST}:${SRT_FRONTEND_PORT}" \
         --endpoint "$endpoint" \
@@ -41,7 +45,7 @@ for concurrency in $CONC_LIST; do
         --random-range-ratio "${RANDOM_RANGE_RATIO:-0.8}" \
         --random-num-workers 1 \
         --num-warmups "$((concurrency * 2))" \
-        --num-prompts "$((concurrency * 10))" \
+        --num-prompts "${NUM_PROMPTS:-$((concurrency * 10))}" \
         --max-concurrency "$concurrency" \
         --request-rate inf \
         --ignore-eos \

@@ -19,6 +19,13 @@ check_env_vars() {
     fi
 }
 
+validate_agentic_concurrency() {
+    if [[ $# -ne 1 || ! "$1" =~ ^[1-9][0-9]*$ ]]; then
+        echo "ERROR: AgentX requires exactly one positive concurrency per server deployment; launch a fresh server for each concurrency." >&2
+        return 1
+    fi
+}
+
 # Report live members of explicitly owned process groups. Zombies cannot hold
 # output pipes open. Do not use leader liveness: a router can orphan its workers.
 _background_process_groups_alive() {
@@ -1996,11 +2003,26 @@ get_native_max_context_length() {
     if [ -n "${MODEL_PATH:-}" ] && [ -d "${MODEL_PATH}" ]; then
         model_path="${MODEL_PATH}"
     fi
-    python3 -c "
+    python3 - "$model_path" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+fields = ['max_position_embeddings', 'max_sequence_length', 'seq_length', 'n_positions']
+try:
+    config = json.loads((Path(sys.argv[1]) / 'config.json').read_text())
+    for field in fields:
+        value = config.get(field)
+        if type(value) is int and value > 0:
+            print(value)
+            sys.exit(0)
+except (OSError, ValueError, AttributeError):
+    pass
+
 try:
     from transformers import AutoConfig
-    config = AutoConfig.from_pretrained('${model_path}', trust_remote_code=True)
-    for attr in ['max_position_embeddings', 'max_sequence_length', 'seq_length', 'n_positions']:
+    config = AutoConfig.from_pretrained(sys.argv[1], trust_remote_code=True)
+    for attr in fields:
         if hasattr(config, attr):
             print(getattr(config, attr))
             break
@@ -2008,7 +2030,7 @@ try:
         print(0)
 except Exception:
     print(0)
-"
+PY
 }
 
 # Requested benchmark context capped at the model's native max. Sets
@@ -3235,19 +3257,17 @@ resolve_trace_source() {
 
 build_replay_cmd() {
     check_env_vars INFMAX_CONTAINER_WORKSPACE MODEL PORT CONC DURATION
+    validate_agentic_concurrency "$CONC" || return 1
     check_env_vars \
         AIPERF_FAILED_REQUEST_THRESHOLD AIPERF_LIVE_FAILED_REQUEST_THRESHOLD \
         AIPERF_TRACE_IDLE_GAP_CAP_SECONDS
     check_env_vars \
-        AGENTIC_WARMUP_GRACE_PERIOD AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES \
+        AGENTIC_WARMUP_GRACE_PERIOD \
         AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS AIPERF_EXPERIMENTAL_FAST \
         AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID AIPERF_UNSAFE_OVERRIDE \
         AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING AIPERF_WARMUP_REQUESTS_PER_LANE
-    # Recorded assistant responses drive prompt construction by default;
-    # AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES=1 threads the live response
-    # back into the session instead. The scenario plugin locks --cache-bust
-    # first_turn_prefix and a 10s whole-system idle cap; the 300s per-trajectory
-    # cap below is ours. See utils/aiperf/docs/tutorials/agentx-mvp.md.
+    # The agentx preset supplies shared replay and runtime defaults. Recipe-owned
+    # duration, warmup, failure threshold, and trace cap remain explicit below.
     local result_dir="$1"
     local duration="$DURATION"
     local warmup_requests_per_lane="${AIPERF_WARMUP_REQUESTS_PER_LANE}"
@@ -3258,20 +3278,9 @@ build_replay_cmd() {
         warmup_requests_per_lane=1
     fi
 
-    export AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES="${AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES}"
-    # Dataset configuration takes 4-5 min on fast /tmp (B300) but reached 14 min
-    # on H200 when 14 parallel jobs hit aiperf's default 900s Configure Profiling
-    # timeout; 1800s absorbs that without touching the measurement window.
-    export AIPERF_DATASET_CONFIGURATION_TIMEOUT=1800
-    # aiperf requires SERVICE_PROFILE_CONFIGURE_TIMEOUT >= DATASET_CONFIGURATION_TIMEOUT.
-    export AIPERF_SERVICE_PROFILE_CONFIGURE_TIMEOUT=1800
-    # Headless realtime metrics are opt-in on AIPerf main.
-    export AIPERF_UI_REALTIME_METRICS_ENABLED=true
-    REPLAY_CMD="$AIPERF_CLI profile --scenario inferencex-agentx-mvp"
+    REPLAY_CMD="$AIPERF_CLI profile --scenario agentx"
     REPLAY_CMD+=" --url ${AIPERF_SERVER_URL:-http://localhost:$PORT}"
     REPLAY_CMD+=" --endpoint /v1/chat/completions"
-    REPLAY_CMD+=" --endpoint-type chat"
-    REPLAY_CMD+=" --streaming"
     # SERVED_MODEL_NAME covers frontends that register the model under a wire
     # name (dynamo-trt serves "DeepSeek-V4-Pro" while $MODEL is the HF id);
     # a mismatch 404s at warmup.
@@ -3281,14 +3290,9 @@ build_replay_cmd() {
     REPLAY_CMD+=" --tokenizer $MODEL"
     REPLAY_CMD+=" --concurrency $CONC"
     REPLAY_CMD+=" --benchmark-duration $duration"
-    REPLAY_CMD+=" --stats-interval 30"
-    REPLAY_CMD+=" --random-seed 42"
     # Live abort threshold; recipes with correlated low-concurrency trajectories
     # may loosen it while AIPERF_FAILED_REQUEST_THRESHOLD stays the post-run gate.
     REPLAY_CMD+=" --failed-request-threshold $AIPERF_LIVE_FAILED_REQUEST_THRESHOLD"
-    # AIPerf clamps the start ratio so at least one profile turn follows warmup.
-    REPLAY_CMD+=" --trajectory-start-min-ratio 0.25"
-    REPLAY_CMD+=" --trajectory-start-max-ratio 0.75"
     # Extra one-token requests per lane after the t* snapshot primers; profiling
     # resumes from the resulting live state. Do not pass --burst-phase-starts:
     # the spread default preserves each lane's recorded phase-start offset.
@@ -3299,9 +3303,6 @@ build_replay_cmd() {
     # Maximum wait for warmup to drain, not a fixed sleep; saturation arms with a
     # larger in-flight set can raise AGENTIC_WARMUP_GRACE_PERIOD.
     REPLAY_CMD+=" --warmup-grace-period ${AGENTIC_WARMUP_GRACE_PERIOD}"
-    # Server usage fields for ISL/OSL instead of client-side tokenize; the
-    # per-record tokenization was pinning CPU on minimax-m2.5 at high concurrency.
-    REPLAY_CMD+=" --use-server-token-count"
     if [ -n "${AIPERF_EXTRA_INPUTS:-}" ]; then
         REPLAY_CMD+=" --extra-inputs $AIPERF_EXTRA_INPUTS"
     fi
@@ -3319,11 +3320,6 @@ build_replay_cmd() {
         # request; this is the router's inactivity lease, not an HTTP timeout.
         REPLAY_CMD+=" --dynamo-session-timeout-seconds ${AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS}"
     fi
-    # aiperf's GpuMetricTimeSeries freezes its schema on the first DCGM scrape
-    # and KeyErrors when an optional field (xid_errors, power_violation) first
-    # appears mid-run. The gpu_telemetry artifact is unused downstream; the
-    # Prometheus server-metrics path is unaffected.
-    REPLAY_CMD+=" --no-gpu-telemetry"
     # The dataset manager loads the tokenizer regardless of
     # --use-server-token-count, and Kimi checkpoints ship a custom tokenizer
     # that needs trust_remote_code. Benign for other models.
@@ -3334,13 +3330,6 @@ build_replay_cmd() {
     if [ -n "${MAX_MODEL_LEN:-}" ] && [ "$MAX_MODEL_LEN" != "0" ]; then
         REPLAY_CMD+=" --max-context-length $MAX_MODEL_LEN"
     fi
-    # Default is 100; the with-subagents corpus has 393 unique traces. The loader
-    # treats this as min(cap, available), see semianalysis_cc_traces_weka.py.
-    REPLAY_CMD+=" --num-dataset-entries 393"
-    # Per-second server-metrics slices feed the post-run plotter; matches
-    # kv-cache-tester's poll_interval=1.0 so metrics_plots.png is comparable.
-    # Without it aiperf emits only aggregates and the panels are flat lines.
-    REPLAY_CMD+=" --slice-duration 1.0"
     # Multi-node launchers pass every worker's Prometheus endpoint; AIPerf takes
     # several values after one --server-metrics flag and keeps endpoint_url per series.
     if [ -n "${AIPERF_SERVER_METRICS_URLS:-}" ]; then
@@ -3429,6 +3418,7 @@ run_agentic_replay_and_write_outputs() (
                     agentx_multinode_contract_missing=1
                 fi
             else
+                check_env_vars TP PP_SIZE PCP_SIZE
                 agentx_power_enabled=1
             fi
             ;;
@@ -3518,7 +3508,6 @@ run_agentic_replay_and_write_outputs() (
         if [ "$agentx_multinode_contract_missing" = "1" ]; then
             power_args+=(--multinode-contract-missing)
         else
-            check_env_vars TP PP_SIZE PCP_SIZE
             expected_num_gpus=$((TP * PP_SIZE * PCP_SIZE))
             power_args+=(--expected-num-gpus "$expected_num_gpus")
         fi

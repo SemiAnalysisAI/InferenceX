@@ -13,20 +13,37 @@ from throughput. Selection lives in `mark_eval_entries()` in
 - **Fixed-sequence, multi-node:** 8k1k only, with one job per parallelism
   topology at its highest eligible concurrency. Rows differing only by
   concurrency share a topology.
-- **Kimi K3 agentic:** every generated point automatically runs
+- **Agentic GSM8K (every model, including Kimi K3 and MiniMax M3):** selected
+  by default as a separate eval-only job at the highest concurrency of each
+  single-node group of model, runner, framework, precision, spec-decoding,
+  dp-attn and image (the 8k1k keys plus image). TP/EP and KV offloading do not
+  split groups. Multi-node rows use the highest eligible concurrency per
+  topology; a deployment with no topology at concurrency 16 or above gets one
+  eval at its highest concurrency. Throughput for every agentic point still
+  runs. Scores use the same GSM8K floors in `thresholds.yaml` as
+  fixed-sequence 8k1k evals.
+- **Kimi K3 agentic, in addition:** every generated point automatically runs
   `kimi-vendor` with `kimi_tool_call_schema_full` (204 schema cases in two
   stream modes, 408 checks). The two-check smoke requires an explicit override.
-- **MiniMax M3 agentic:** every generated point automatically runs
-  `minimax-vendor` with `minimax_m3_full` (102 provider cases). The one-case
-  smoke requires an explicit override.
-- **Other agentic models (GSM8K):** opt-in through `--evals-only` or
-  `--all-evals`, at the highest concurrency per deployment group.
+- **MiniMax M3 agentic, in addition:** every generated point automatically
+  runs `minimax-vendor` with `minimax_m3_full` (102 provider cases). The
+  one-case smoke requires an explicit override.
 - **BFCL:** explicit only. No automatic model mapping selects BFCL.
+
+Every mode, including each sweep's combined changelog entries, schedules at
+most one eval per InferenceX-app eval identity: model, runner, framework,
+precision, spec-decoding, disaggregation, per-role TP/EP/DP-attention/workers,
+eval suite, sequence lengths, and concurrency. The app stores one result per
+identity in a run, so rows that differ only by image, KV offloading, or recipe
+file would overwrite each other's result there, and InferenceX's rerun
+deduplication would delete one raw result. The first row without KV offloading
+keeps the eval; a batched multi-node eval keeps only its unclaimed
+concurrencies. Throughput coverage is unchanged.
 
 Generator eval modes:
 
-- Default: throughput plus the fixed-sequence subset and every automatically
-  selected Kimi K3 or MiniMax M3 vendor eval.
+- Default: throughput plus the fixed-sequence subset, the agentic GSM8K
+  subset, and every automatically selected Kimi K3 or MiniMax M3 vendor eval.
 - `--no-evals`: throughput only, including no automatic vendor evals.
 - `--evals-only`: selected evals only.
 - `--all-evals`: every eligible fixed-sequence and agentic eval. This is
@@ -34,12 +51,15 @@ Generator eval modes:
   topologies run all `conc-list` values sequentially on one engine.
 - `--trim-conc`: after eval selection, retain the minimum concurrency for each
   single-node or multi-node deployment shape and move that shape's selected eval
-  to the retained row. This is the deployment smoke mode, not a throughput sweep.
+  to the retained row. Standalone eval-only rows (the Kimi K3 and MiniMax M3
+  GSM8K evals) keep their own concurrency. This is the deployment smoke mode,
+  not a throughput sweep.
 
 Changelog entries use `evals-only: true` and `all-evals: true`. The `all-evals`
 setting implies eval-only there. On PRs, the same names are modifier labels:
 `all-evals` expands coverage without suppressing throughput, while `evals-only`
-suppresses it. Modifier runs cannot be reused.
+suppresses it. `all-evals` runs remain reusable, but `evals-only` and
+`agentx-fast` runs are not.
 
 Deduplication is scenario-aware: fixed-sequence coverage does not suppress
 agentic coverage, and `all-evals` wins over default eval coverage.
@@ -99,7 +119,8 @@ artifact paths; a smoke result does not establish full-suite quality.
 
 ### Artifact reuse
 
-Default full sweeps may reuse their eval subset. Source coverage is
+Full sweeps with default or `all-evals` eval selection may reuse their eval
+artifacts. Source coverage is
 authoritative. Raw `meta_env.json` identities must match `eval_results_all`,
 and batched evals use `completed_eval_concs`. Policy drift is allowed, but
 malformed metadata, duplicates, and raw/aggregate mismatches are not. See
@@ -515,28 +536,12 @@ precedence over the scenario default.
 For default lm-eval jobs in eval-only mode (`EVAL_ONLY=true`), the benchmark script computes `EVAL_MAX_MODEL_LEN` via `compute_eval_context_length`, starts the server with that context length, skips throughput, and runs lm-eval. Each framework wires that context differently (`--context-length` for SGLang, `--max_seq_len` for TRT-LLM).
 
 ### Multi-node
-Multi-node evals support two hardware paths:
-
-**MI355X (AMD)** — `benchmarks/multi_node/amd_utils/server_sglang.sh`
-- Skips throughput when `EVAL_ONLY=true`
-- Fixed-seq-len: runs lm-eval via `run_eval --framework lm-eval` against the router on port 30000
-- Agentic-coding (disaggregated, `IS_AGENTIC=1`): follows the same GSM8K/lm-eval path via
-  `run_eval --framework lm-eval`. Since there's no single "TP" for a disaggregated topology,
-  and the workflow spells a couple of metadata fields differently
-  (`PREFILL_DP_ATTN`/`DECODE_DP_ATTN`) than `append_lm_eval_summary` expects
-  (`PREFILL_DP_ATTENTION`/`DECODE_DP_ATTENTION`), the agentic branch bridges those before
-  calling `run_eval`; `append_lm_eval_summary` itself runs automatically inside `run_eval()`
-  (same `EVAL_ONLY=true && IS_AGENTIC` auto-staging as single-node), not as a separate call.
-- Concurrency uses workflow-provided `EVAL_CONC` when set, otherwise falls back to max of `BENCH_MAX_CONCURRENCY` (x-separated values)
-- Eval artifacts copied to `/run_logs/slurm_job-*/eval_results/`
-- `runners/launch_mi355x-amds.sh` skips benchmark result collection when `EVAL_ONLY=true` and uses `find` to locate eval results
-
-**NVIDIA Slurm multi-node (GB200, GB300, B200, B300, H100, H200)** runs through [srt-slurm](https://github.com/NVIDIA/srt-slurm) at the shared Git submodule revision at `utils/srt-slurm`. Native `post_eval.command` and `post_eval.passthrough_env` select the InferenceX eval dispatcher without modifying the upstream checkout.
+Multi-node evals on AMD and NVIDIA Slurm clusters run through [srt-slurm](https://github.com/NVIDIA/srt-slurm) at the shared Git submodule revision at `utils/srt-slurm`. Native `post_eval.command` and `post_eval.passthrough_env` select the InferenceX eval dispatcher without modifying the upstream checkout.
 - `do_sweep.py` skips the benchmark stage when `EVAL_ONLY=true`, runs `_run_post_eval()` directly
 - In eval-only mode, uses the full `wait_for_model()` health check (same as benchmark stage) since the benchmark health check was skipped
-- The registered srt-slurm `lm-eval` post-runner sources InferenceX's `benchmark_lib.sh` from the mounted workspace (`/infmax-workspace`). Kimi-selected launches patch that hook to use generic `run_eval` dispatch while preserving lm-eval as the default.
-- Eval artifacts written to `/logs/eval_results/` inside the container, collected by launch scripts
-- NVIDIA Slurm launch scripts always collect server logs for debugging but skip benchmark result collection when `EVAL_ONLY=true`
+- Native `post_eval.command` invokes `benchmarks/multi_node/srt_eval.sh` from the mounted InferenceX workspace (`/infmax-workspace`). It sources `benchmark_lib.sh` and calls `run_eval`, which selects the eval implementation from `EVAL_FRAMEWORK` without patching upstream runners.
+- Eval artifacts written to `/logs/eval_results/` inside the container, collected by `infx/launch/drivers/srt/collect.py` when `RUN_EVAL=true` or `EVAL_ONLY=true`
+- The srt driver always collects server logs for debugging but skips benchmark result collection when `EVAL_ONLY=true`
 - Env vars threaded: `RUN_EVAL`, `EVAL_ONLY`, `EVAL_FRAMEWORK`, `EVAL_SUITE`, `IS_MULTINODE`, `FRAMEWORK`, `PRECISION`, `MODEL_PREFIX`, `RUNNER_TYPE`, `RESULT_FILENAME`, `SPEC_DECODING`, `ISL`, `OSL`, `PREFILL_TP/EP/NUM_WORKERS/DP_ATTN`, `DECODE_TP/EP/NUM_WORKERS/DP_ATTN`, `MODEL_NAME`, `EVAL_CONC`
 
 For multi-node `all-evals`, `EVAL_CONC` is a space-separated list. When it contains multiple values, `run_eval` runs those concurrency points sequentially against the same live engine, stages each result with a `_concN` filename suffix, and records expected/completed/failed points in `meta_env.json`.

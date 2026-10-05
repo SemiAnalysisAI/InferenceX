@@ -16,6 +16,7 @@ import yaml
 
 from infx import github
 from infx.config import git_path_at_ref, git_repository_root, project_root
+from infx.matrix.revision import PLANNER, Revision
 
 from .validate_perf_changelog import (
     CANONICAL_PR_LINK,
@@ -27,6 +28,12 @@ from .validate_perf_changelog import (
 )
 
 DEFAULT_REPO = "SemiAnalysisAI/InferenceX"
+# Merge-time publication workflow; run-sweep.yml owned it before the cutover
+# and its historical push runs remain valid recovery targets.
+TARGET_WORKFLOW_PATHS = (
+    ".github/workflows/merge-ingest.yml",
+    ".github/workflows/run-sweep.yml",
+)
 RUN_URL = re.compile(
     r"^https://github\.com/(?P<repo>[^/]+/[^/]+)/actions/runs/"
     r"(?P<run_id>\d+)(?:/job/(?P<job_id>\d+))?/?(?:\?.*)?$"
@@ -161,12 +168,15 @@ def inspect_target(
         "event": "push",
         "status": "completed",
         "conclusion": "failure",
-        "path": ".github/workflows/run-sweep.yml",
         "head_branch": "main",
     }
     for field, expected in required.items():
         if run.get(field) != expected:
             raise RecoveryError(f"target run {field} is {run.get(field)!r}, expected {expected!r}")
+    if run.get("path") not in TARGET_WORKFLOW_PATHS:
+        raise RecoveryError(
+            f"target run path is {run.get('path')!r}, expected one of {TARGET_WORKFLOW_PATHS!r}"
+        )
 
     selected_job = select_failed_job(
         list_run_jobs(expected_repo, run_id),
@@ -410,30 +420,26 @@ def build_config(
         pr_number,
         changelog_path,
     )
-    result = run_command(
-        [
-            sys.executable,
-            "-P",
-            "-m",
-            "infx.matrix.plan",
-            "--changelog-file",
-            str(worktree / changelog_path),
-            "--base-ref",
-            base_ref,
-            "--head-ref",
-            fixed_sha,
-        ],
-        cwd=project_root(worktree),
-        env={
-            **os.environ,
-            "PYTHONPATH": str(Path(__file__).resolve().parents[2]),
-            "INFERENCEX_REPOSITORY_ROOT": str(worktree.resolve()),
-        },
-    )
+    revision = Revision(project_root(worktree))
+    try:
+        command, env = revision.invocation(
+            PLANNER,
+            [
+                "--changelog-file",
+                str(worktree / changelog_path),
+                "--base-ref",
+                base_ref,
+                "--head-ref",
+                fixed_sha,
+            ],
+        )
+    except ValueError as exc:
+        raise RecoveryError(str(exc)) from exc
+    result = run_command(command, cwd=revision.root, env=env)
     try:
         config = json.loads(result.stdout)
     except json.JSONDecodeError as exc:
-        raise RecoveryError(f"infx.matrix.plan returned invalid JSON: {exc}") from exc
+        raise RecoveryError(f"the merged revision's planner returned invalid JSON: {exc}") from exc
 
     expected_link = f"https://github.com/{DEFAULT_REPO}/pull/{pr_number}"
     metadata = config.get("changelog_metadata", {})

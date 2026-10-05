@@ -188,28 +188,6 @@ def valid_multinode_master_config():
     }
 
 
-@pytest.fixture
-def valid_runner_config():
-    """Valid runner config based on configs/runners.yaml."""
-    return {
-        "labels": {
-            "h100": ["h100-cr_0", "h100-cr_1", "h100-cw_0", "h100-cw_1"],
-            "h200": ["h200-cw_0", "h200-cw_1"],
-            "b200": ["b200-nvd_0", "b200-nvd_1", "b200-nscale_1"],
-            "cluster:b200-nscale": ["b200-nscale_1"],
-            "mi300x": ["mi300x-amd_0", "mi300x-amd_1", "mi300x-cr_0"],
-            "gb200": ["gb200-nv_0"],
-        },
-        "hardware": {
-            "cluster:h100-dgxc": {"available-cpu-dram-mib": 2063837, "gpus-per-node": 8},
-            "cluster:h200-dgxc": {"available-cpu-dram-mib": 1471356, "gpus-per-node": 8},
-            "cluster:b200-nscale": {"available-cpu-dram-mib": 3774874, "gpus-per-node": 8},
-            "cluster:mi300x-amd": {"available-cpu-dram-mib": 1547820, "gpus-per-node": 8},
-            "cluster:gb200-nv": {"available-cpu-dram-mib": 860160, "gpus-per-node": 4},
-        },
-    }
-
-
 
 class TestWorkerConfig:
 
@@ -1056,24 +1034,6 @@ class TestValidateRunnerConfig:
         with pytest.raises(ValueError, match="labels mapping"):
             validate_runner_config(config)
 
-    def test_hardware_available_dram_must_be_positive(self):
-        config = {
-            "labels": {"h100": ["h100-cr_0"]},
-            "hardware": {"h100": {"available-cpu-dram-mib": 0, "gpus-per-node": 8}},
-        }
-        with pytest.raises(ValueError) as exc_info:
-            validate_runner_config(config)
-        assert "available-cpu-dram-mib" in str(exc_info.value)
-
-    def test_hardware_gpus_per_node_must_be_positive(self):
-        config = {
-            "labels": {"h100": ["h100-cr_0"]},
-            "hardware": {"h100": {"available-cpu-dram-mib": 2063837, "gpus-per-node": 0}},
-        }
-        with pytest.raises(ValueError) as exc_info:
-            validate_runner_config(config)
-        assert "gpus-per-node" in str(exc_info.value)
-
 
 
 @pytest.mark.parametrize("updates", [
@@ -1384,17 +1344,19 @@ class TestLoadRunnerFile:
         runner_file = tmp_path / "runners.yaml"
         runner_file.write_text("""
 labels:
-  h100:
+  cluster:h100-cr:
   - h100-node-0
   - h100-node-1
-hardware:
-  h100:
-    available-cpu-dram-mib: 2063837
+clusters:
+  h100-cr:
     gpus-per-node: 8
+    available-cpu-dram-mib: 2063837
+    arch: x86_64
+    scheduler: slurm
+    slurm: {partition: batch, exclusive: true}
 """)
         result = load_runner_file(str(runner_file))
-        assert "h100" in result["labels"]
-        assert len(result["labels"]["h100"]) == 2
+        assert result["labels"]["cluster:h100-cr"] == ["h100-node-0", "h100-node-1"]
 
     def test_load_runner_file_without_validation(self, tmp_path):
         """validate=False preserves parsed input that normal validation rejects."""

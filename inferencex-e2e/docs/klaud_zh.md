@@ -57,7 +57,7 @@ Klaud Cold 调度 `e2e-tests.yml` 时显式设置布尔输入 `klaud-run: true`�
 
 ### 已发布基线与会话完成
 
-基线来自 **`https://inferencex.semianalysis.com` 的公开 dashboard API**。规划阶段先解析 OpenAPI 展示模型名，并在启动 agent 前预检完整测试点清单。候选使用 `candidate.json` 中这一精确值，将 `candidate.source.date` 传给 `workflow-info` 和 `benchmarks`，设置 `date` 和 `exact=true`，不使用计算器 `view`。规划阶段将已验证的 benchmark 测试点清单写入 `baseline-preflight.json`，并绑定候选 ID、基准 SHA、来源观测和展示模型。候选解析精确的新旧镜像目标后，`prepare-baseline` 核对这些绑定并复用同一清单，不再重复读取 benchmark API；标记 `baseline-preflight-required` 的所选候选在产物缺失或无效时停止；仅旧候选按原路径重建。候选仍须补充公开 eval／数据集证据，并冻结、发布最终基线。核实旧镜像以及完整的模型、硬件、框架、精度、推测解码和工作负载身份，再逐点匹配拓扑、并发量及数据集。记录 API 查询、发布日期和每个测试点的来源 `run_url`/SHA，区分逻辑曲线快照与实际数据来源。按需读取已发布 eval，所有尝试共用这份固定基线。缺失或不可比较的数据填写 `N/A` 并说明原因。绝不调度或重跑旧镜像基线。
+基线来自 **`https://inferencex.semianalysis.com` 的公开 dashboard API**。规划阶段先解析 OpenAPI 展示模型名，并在启动 agent 前预检完整测试点清单。候选使用 `candidate.json` 中这一精确值，将 `candidate.source.date` 传给 `workflow-info` 和 `benchmarks`，设置 `date` 和 `exact=true`，不使用计算器 `view`。规划阶段将已验证的 benchmark 测试点清单写入 `baseline-preflight.json`，并绑定候选 ID、基准 SHA、来源观测和展示模型。候选解析精确的新旧镜像目标后，`prepare-baseline` 核对这些绑定并复用同一清单，不再重复读取 benchmark API；产物缺失或无效时候选停止。候选仍须补充公开 eval／数据集证据，并冻结、发布最终基线。核实旧镜像以及完整的模型、硬件、框架、精度、推测解码和工作负载身份，再逐点匹配拓扑、并发量及数据集。记录 API 查询、发布日期和每个测试点的来源 `run_url`/SHA，区分逻辑曲线快照与实际数据来源。按需读取已发布 eval，所有尝试共用这份固定基线。缺失或不可比较的数据填写 `N/A` 并说明原因。绝不调度或重跑旧镜像基线。
 
 调度运行或创建草稿不代表任务完成。使用 `gh run watch --interval 60` 留在同一会话中等待，工具超时后继续等待，并检查作业级状态，因为 queued 工作流可能包含正在运行的作业。benchmark 矩阵失败后，eval 作业仍可能继续。定位首个服务端错误而非清理阶段症状；在原有范围、预算和容量规则内修复。工具调用被拒绝时改用允许的工具或命令，不得提前报告成功。先将所有尝试的最终结果写入 PR 尝试评论，再报告停止原因、修复次数、已确认的子运行结束状态和 PR URL。不得承诺稍后继续监控，也不得仅为结束会话而取消正常运行。
 
@@ -112,7 +112,7 @@ smoke benchmark 和代表性 eval 都通过后，在 changelog 物理末尾追�
 
 入口工作流每六小时运行一次（`0 */6 * * *`，UTC），并支持手动触发（`workflow_dispatch`）。每次调用最多选择五个候选并行运行。条件 `github.ref == 'refs/heads/main' && github.run_attempt == 1` 会跳过功能分支、tag 和重新运行。candidate 作业也跳过重跑；应重新调度 autosweep，先执行恢复。只有 candidate 暴露 `workflow_call`。两个 Klaud 工作流均不设置并发组：新调用可以与已有调用重叠，且不会取消已有运行。五个候选的上限按每次调用计算，因此多轮重叠时，活跃候选总数可以超过五个。开放 PR 检查和 agent 对精确分支的原子认领仍用于防止重复工作；审查只是快照，agent 必须在认领前再次检查。恢复先于选择执行，但不阻塞等待活动子运行。配置族认领和每会话恢复租约保护重叠调用，未解决配置族仍被排除。
 
-恢复和最终选择步骤使用 `AGENT_PAT` 执行已确认归属的清理及配置族认领；只读重叠检查 agent 不获得该凭据。planner 的 Python 准备和最终容量检查步骤使用 dashboard key；准备步骤还使用只读工作流 token。限轮数的 Claude PR 检查使用 `ANTHROPIC_API_KEY` 和具有 `pull-requests: read` 权限的只读工作流 token。它接收私有资格线索，但不接收 `AGENT_PAT` 或 dashboard key，也不执行 GitHub 写操作。candidate 获得用于分支/PR 写入及 e2e 调度/取消的 `AGENT_PAT`、用于 Klaud Cold 的 `ANTHROPIC_API_KEY`，以及覆盖 clusters 的限期 `status:read` `DASH_API_KEY`。Klaud Cold 不得发布凭据或私有 API 响应。共享 HTTP 读取器固定来源，同时限制压缩和解码后的 GET 响应大小，支持明确的 gzip/identity JSON 响应，并拒绝重定向或不支持的编码。非有限 JSON 数值（包括 `1e400` 这样的指数溢出）会在校验或哈希计算前被拒绝。不需要部署额外服务、数据库或新增 environment 配置。
+恢复和最终选择步骤使用 `AGENT_PAT` 执行已确认归属的清理及配置族认领；只读重叠检查 agent 不获得该凭据。在审查与选择之间，`regenerate-producers` 步骤在不含任何凭据的环境中运行基线产出修订版自身的生成器，并将数据行写入 `producers.json`；选择步骤只读取该文件，不运行其他修订版的代码。planner 的 Python 准备和最终容量检查步骤使用 dashboard key；准备步骤还使用只读工作流 token。限轮数的 Claude PR 检查使用 `ANTHROPIC_API_KEY` 和具有 `pull-requests: read` 权限的只读工作流 token。它接收私有资格线索，但不接收 `AGENT_PAT` 或 dashboard key，也不执行 GitHub 写操作。candidate 获得用于分支/PR 写入及 e2e 调度/取消的 `AGENT_PAT`、用于 Klaud Cold 的 `ANTHROPIC_API_KEY`，以及覆盖 clusters 的限期 `status:read` `DASH_API_KEY`。Klaud Cold 不得发布凭据或私有 API 响应。共享 HTTP 读取器固定来源，同时限制压缩和解码后的 GET 响应大小，支持明确的 gzip/identity JSON 响应，并拒绝重定向或不支持的编码。非有限 JSON 数值（包括 `1e400` 这样的指数溢出）会在校验或哈希计算前被拒绝。不需要部署额外服务、数据库或新增 environment 配置。
 
 所有外部 action 均固定完整提交 SHA；下表与当前工作流中的固定版本一致。内部调用使用 `./.github/workflows/klaud-candidate.yml` 解析调用者的精确提交，并显式传递三个必需 secret。
 

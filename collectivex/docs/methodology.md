@@ -121,14 +121,16 @@ case count.
 | GB200/GB300 | 2x4 MNNVL, scale-up | 4x4 MNNVL, scale-up |
 
 **A virtualized pool can make a scale-out row measure the hypervisor rather than the fabric.**
-h200-dgxc EP16 pays roughly three times the cross-node cost of b300 or h100 on identical topology
-and identical traffic, while its EP8 rows are correct. The deficit is confined to the hop. It
-sustains ~34 GB/s per node against a nominal 8x400G (~4.2 GB/s per GPU-NIC pair) where bare-metal
-h100 reaches wire rate. Reordering the NIC-PE mapping to pair each rank with its socket-local NIC
-changed nothing (478µs against a 480µs baseline), which rules the selector out and points at the
-GDR path being degraded wholesale inside the guest. The retired b200-dgxc pool showed the same
-shape. Treat EP16 rows from a virtualized pool as a lower bound on the hardware until the host's
-ACS/IOMMU configuration is confirmed.
+h200-dgxc EP16 on deepep-v2 paid three to eight times h100's cross-node cost while nccl-ep on the
+same nodes ran at h100 rates. ElasticBuffer registers its GIN window `NCCL_WIN_STRICT_ORDERING`,
+which strips PCIe relaxed ordering, and in h200's KVM guests strict-ordered GPU-NIC writes cap the
+hop near 10 GB/s per GPU. The DeepEP build patches the registration behind a switch that a pool
+opts into with `rdma_relaxed_ordering` in its `network` block. On h200-dgxc, bf16 decode at 512
+tokens per rank drops from 3088µs to 620µs per round trip and the oracle passes in bf16 and fp8.
+Upstream made the window strict on purpose (DeepEP #661/#674): with relaxed ordering a GIN signal
+can in principle overtake the data it announces. That race has not been reproduced, and a passing
+oracle does not rule it out. Those rows carry a `-relaxed-ordering` `kernel_generation` suffix and
+never pool with the strict series; every other pool keeps upstream's registration.
 
 Physical host count does not define scope. Both GB cells remain inside one 72-GPU MNNVL scale-up
 domain.

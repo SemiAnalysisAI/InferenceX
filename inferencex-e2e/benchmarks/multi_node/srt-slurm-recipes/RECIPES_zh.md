@@ -2,9 +2,9 @@
 
 [English](RECIPES.md) | **中文**
 
-InferenceX 负责维护本目录中的配置。所有 NVIDIA srt-slurm 启动器均调用 [`runners/slurm_utils.sh`](../../../runners/slurm_utils.sh) 中的 `setup_srt_slurm()`，为作业创建固定版本子模块的本地 Git 克隆，并将整个目录复制到 `recipes/`。共享函数将实际提交记录到 `srt-slurm-sha.txt`；功耗测试路径还会将其复制到 `power-producer-sha.txt`，供结果校验使用。
+InferenceX 负责维护本目录中的配置。每次 NVIDIA srt-slurm 启动时，srt 驱动（[`infx/launch/drivers/srt/checkout.py`](../../../infx/launch/drivers/srt/checkout.py)）都会为作业创建固定版本子模块的本地 Git 克隆，并将整个目录复制到 `recipes/`。它将实际提交记录到 `srt-slurm-sha.txt`；功耗测试路径还会将其复制到 `power-producer-sha.txt`，供结果校验使用。
 
-统一版本由 [`utils/srt-slurm`](../../../utils/srt-slurm) 的 Git 子模块指针指定，目前为 [v2.23.2](https://github.com/NVIDIA/srt-slurm/releases/tag/v2.23.2)（`8dace5f9596907a5075bf056251563b2e9563e7d`）。升级时更新该子模块指针，然后运行配置和集成检查。不要在启动器中新增按模型选择检出版本的分支。
+统一版本由 [`utils/srt-slurm`](../../../utils/srt-slurm) 的 Git 子模块指针指定，目前为 [v2.36.0](https://github.com/NVIDIA/srt-slurm/releases/tag/v2.36.0)（`7b5863a7837673d81403b076be219bbf18a7700f`）。升级时更新该子模块指针，然后运行配置和集成检查。不要在启动器中新增按模型选择检出版本的分支。
 
 InferenceX 要求 srt-slurm 2.0 或更新版本，且配置必须声明 `schema: 2`。不支持旧版配置结构；加入本目录前必须先完成迁移。
 
@@ -25,11 +25,11 @@ qwen3.5/trtllm/gb300-fp4/agentx/disagg-variants.yaml
 - 覆盖项集合使用 `*-variants.yaml` 命名。仅在各配置间存在差异的多节点 AgentX 配置，按主配置条目合并为一个集合，通常为 `agg-variants.yaml` 或 `disagg-variants.yaml`：`base` 保存共享设置，每个原配置成为一个具名 `override_<name>` 块，只包含其差异（使用普通覆盖项，而非 `zip_override_*`）。主配置通过 `CONFIG_FILE=recipes/<dir>/<bundle>.yaml:override_<name>` 选择其一。启动器以文本方式读取的配置（例如带顶层 `telemetry:` 的功耗配置）保持独立文件。即使内容相同，也保留独立扫描入口：配置路径参与评估分组。Qwen3.5 的 `*-stp-sweep.yaml` 和 `*-mtp-sweep.yaml` 保留了这一既有区别。
 - 移动文件时，同步更新当前及已弃用主配置中的 `CONFIG_FILE`、`EVAL_CONFIG_FILE`，以及启动器路径规则、工作流过滤器和本地文档。保留上游来源 URL，并保持历史性能变更日志不变。不为旧目录结构提供别名。
 
-共享运行时资源保留在模型目录旁的 `configs/` 中，不属于独立基准测试配置。`configs/dsv4-moe-load-balancer-configs/` 中的四个文件原样取自 NVIDIA/srt-slurm 提交 `deb1dfd9934398664f92d194169c183e009da83b`，保留了此前 DSV4 TRT 配置使用的 EPLB 初始专家分配；目前没有已提交的配置引用这些文件。`setup_srt_slurm()` 将这些文件复制到作业仓库的 `configs/` 目录，供配置中的绑定挂载使用。将配置文件放入本目录不会启用该配置；实际基准测试矩阵由主配置决定。
+共享运行时资源保留在模型目录旁的 `configs/` 中，不属于独立基准测试配置。`configs/dsv4-moe-load-balancer-configs/` 中的四个文件原样取自 NVIDIA/srt-slurm 提交 `deb1dfd9934398664f92d194169c183e009da83b`，保留了此前 DSV4 TRT 配置使用的 EPLB 初始专家分配；目前没有已提交的配置引用这些文件。srt driver（[`infx/launch/drivers/srt/checkout.py`](../../../infx/launch/drivers/srt/checkout.py)）将这些文件复制到作业仓库的 `configs/` 目录，供配置中的绑定挂载使用。将配置文件放入本目录不会启用该配置；实际基准测试矩阵由主配置决定。
 
-## TileRT 例外
+## TileRT
 
-当 `FRAMEWORK=tilert` 时，`setup_srt_slurm()` 直接从 SemiAnalysisAI/srt-slurm 分支仓库获取提交 `6bc3f306bdafa1edfb5dded2fcda8f1ccede1bde`，检出到作业目录。该版本为 [SemiAnalysisAI/srt-slurm#13](https://github.com/SemiAnalysisAI/srt-slurm/pull/13) 中支持 schema 2 的 TileRT 移植。这是唯一的备用检出路径；由于统一的 NVIDIA 版本尚未包含 TileRT 后端和路由器，该例外的固定提交在共享函数中指定。TileRT 使用与 NVIDIA 相同的 schema 2 配置结构和原生评估调度。TileRT 作业在准备阶段需要通过网络访问分支仓库。上游支持这些功能后，应删除此分支仓库例外。
+TileRT 使用固定版本的上游 srt-slurm 子模块。配置指定 `roles.prefill.engine: vllm`、`roles.decode.engine: tilert` 和 `frontend.type: tilert-router`。
 
 ## Schema 2 与主配置
 
@@ -58,7 +58,6 @@ qwen3.5/trtllm/gb300-fp4/agentx/disagg-variants.yaml
 srtctl migrate --verify -f benchmarks/multi_node/srt-slurm-recipes/dsr1/sglang
 srtctl migrate --in-place -f benchmarks/multi_node/srt-slurm-recipes/dsr1/sglang
 # 对其他模型/引擎目录重复执行。
-# 迁移 tilert/ 配置目录时，使用固定提交的 TileRT 分支仓库。
 python -m pytest infx/tests/matrix/ -q
 python -m infx.matrix.generate full-sweep \
   --config-files configs/nvidia-master.yaml \
@@ -69,7 +68,7 @@ python -m infx.matrix.generate full-sweep \
 
 本次迁移还修复了 `srtctl migrate` 无法自动处理的兼容性问题：
 
-- SGLang Model Gateway 配置使用 `frontend.type: sglang-router`；在 v2.23.2 中，`sglang` 表示不经过路由器的独立工作进程。
+- SGLang Model Gateway 配置使用 `frontend.type: sglang-router`；在 v2.36.0 中，`sglang` 表示不经过路由器的独立工作进程。
 - 对重复的 YAML 键，保留原 PyYAML 加载器实际采用的值。
 - DCGM 遥测使用 `collect_interval_ms: 1000`，替代 `provider` 和 `default_frequency`。采集器自动推导退出等待时间；原先显式设置的十秒不满足当前校验要求。保留原配置中服务发现进程的专用节点部署方式。固定的上游版本不支持在专用基础设施节点上启用遥测；该功耗兼容性问题仍待解决，不通过改变原有拓扑来绕过校验。H200 自定义配置声明默认并发数，提交前由启动器替换。
 - DeepSeek-V4 vLLM 基准测试使用受支持的 `custom_tokenizer` 加载器。删除已废弃的 `warmup_req_rate: inf` 字段；当前上游客户端的预热速率固定为每秒 250 个请求。
