@@ -274,6 +274,20 @@ glm53-mi325x-oct5-mtp-baseline:
       search-space:
       - {tp: 8, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [4], srt-recipe: 'benchmarks/single_node/srt-slurm-recipes/glm5.3/sglang/mi325x-fp8-mtp/agentic-fp8kv.yaml:override_tp8_c4'}
 
+glm53-mi325x-oct5-tp4-mtp-baseline:
+  image: *image
+  model: zai-org/GLM-5.3
+  model-prefix: glm5.3
+  runner: cluster:mi325x-amd
+  precision: fp8
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - {tp: 4, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [3], srt-recipe: 'benchmarks/single_node/srt-slurm-recipes/glm5.3/sglang/mi325x-fp8-mtp/agentic-fp8kv.yaml:override_tp4_c3'}
+
 glm53-mi325x-oct5-pd-baseline:
   image: *image
   model: zai-org/GLM-5.3
