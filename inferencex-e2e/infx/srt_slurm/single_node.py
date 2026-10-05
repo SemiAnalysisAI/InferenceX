@@ -219,6 +219,17 @@ def mooncake_headroom_arguments(
     return ["--set", f"services={json.dumps(services)}"] if changed else []
 
 
+def _recipe_env_int(recipe: Mapping[str, Any] | None, name: str) -> int:
+    """An integer the recipe's agg role (or the whole recipe) sets in its environment, else 0."""
+    for env in (((recipe or {}).get("roles") or {}).get("agg", {}).get("env") or {},
+                (recipe or {}).get("environment") or {}):
+        try:
+            return int(env[name])
+        except (KeyError, TypeError, ValueError):
+            continue
+    return 0
+
+
 def profiling_arguments(
     environment: Mapping[str, str],
     role_args: Mapping[str, Any] | None = None,
@@ -268,8 +279,12 @@ def profiling_arguments(
         "INFX_PROF_DIR": PROFILE_DIR,
         "INFX_PROF_CAPTURE_RANKS": settings["capture_ranks"],
         "PYTHONPATH": "/infmax-workspace/benchmarks/profiling/vllm",
-        # A window's trace export blocks its worker; keep peers from timing out.
+        # A window's trace export blocks its worker; keep peers from timing out
+        # (VLLM_RPC_TIMEOUT before vLLM 0.31, VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS from it).
         "VLLM_RPC_TIMEOUT": "1800000",
+        "VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS": str(max(1800, _recipe_env_int(recipe, "VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS"))),
+        # Uncached compiles (below) lengthen start-up past the 600 s default.
+        "VLLM_ENGINE_READY_TIMEOUT_S": str(max(3600, _recipe_env_int(recipe, "VLLM_ENGINE_READY_TIMEOUT_S"))),
         # Compiled pieces get their module markers when Inductor generates their
         # wrapper code, so compile from scratch rather than load cached wrappers.
         "VLLM_DISABLE_COMPILE_CACHE": "1",
