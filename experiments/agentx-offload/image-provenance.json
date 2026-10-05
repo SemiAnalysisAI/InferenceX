@@ -15,5 +15,6 @@
     "vllm/v1/simple_kv_offload/worker.py": "b661576bea24fab851e9d72f1cf49caf6e9c01130a80bae900ed80612fd45d83",
     "vllm/v1/kv_offload/tiering/spec.py": "264c7207fab9d52fd45b3132f7cfea9ac22683d6144d922d09f6a27bdf0128ad"
   },
-  "tag_retirement_evidence": "Run 37366720497, Slurm allocation 19524 on im-b200-c001: enroot import of nightly-dee37d89115db4c94a820a79a78a7828e141c910 returned registry HTTP 404 before run.sh or scratch creation."
+  "tag_retirement_evidence": "Run 37366720497, Slurm allocation 19524 on im-b200-c001: enroot import of nightly-dee37d89115db4c94a820a79a78a7828e141c910 returned registry HTTP 404 before run.sh or scratch creation.",
+  "enroot_digest_compatibility": "Run 37374537927, Slurm 19529 on im-b200-c001: installed Enroot treated docker://vllm/vllm-openai@sha256:... as username vllm/vllm-openai and Docker Hub returned 401. B200 launcher now maps only the import URI to docker://vllm/vllm-openai:sha256:...; Enroot 3.x accepts colon in its tag parser and uses it in the registry manifest URL. Canonical IMAGE and cache key remain unchanged."
 }

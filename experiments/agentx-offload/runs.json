@@ -5195,10 +5195,10 @@
       "attempt": 2,
       "retry_of": 37372224015,
       "head_sha": "d03ec558bf5a832cac78a0c7756ef2ecda668922",
-      "status": "in_progress",
+      "status": "finalizing",
       "workflow_name": "offload-v1-nvme4tib-c489-r3-digest-extended-fullsha-20261005",
       "dispatched_at": "2026-10-05T21:13:34Z",
-      "phase": "B200 runner admitted; checkout in progress; Slurm allocation pending",
+      "phase": "B200 job failed before run.sh during Enroot image import; workflow finalizers still queued",
       "performance_result": false,
       "execution_budget": {
         "slurm_minutes": 510,
@@ -5208,11 +5208,17 @@
       "job_id": 111979971880,
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37374537927/job/111979971880",
       "runner": "b200-nscale-slurm_00",
-      "started_at": "2026-10-05T21:14:34Z"
+      "started_at": "2026-10-05T21:14:34Z",
+      "slurm_job_id": 19529,
+      "node": "im-b200-c001",
+      "failure_stage": "Enroot import of digest reference",
+      "failure_class": "image startup infrastructure",
+      "runtime_evidence": "Slurm allocation 19529 on im-b200-c001 was granted with 510-minute limit. Enroot 3.x parsed docker://vllm/vllm-openai@sha256:... as user vllm/vllm-openai, prompted for a password, and Docker Hub auth returned HTTP 401. Pyxis then found no squash file. run.sh, storage preflight, warmup and profiling never started; no task-owned scratch was created.",
+      "job_log_sha256": "ef5d38a5d11dad489726a0029ad467e09988a8203208baeffd72bee88b48f1b9"
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894,36796500128,36879140816,37027095833",
-  "status": "Digest-pinned extended-budget c489 NVMe run 37374537927 passed matrix generation and entered B200 runner b200-nscale-slurm_00. Checkout is in progress; Slurm allocation and storage preflight remain unverified.",
+  "status": "Digest-pinned extended-budget NVMe c489 job 111979971880 failed at Enroot import before run.sh. Workflow finalizers remain queued. No benchmark result or scratch; do not dispatch until fully terminal and import compatibility is validated.",
   "last_capacity_check": {
     "checked_at": "2026-10-05T21:13:15Z",
     "active_study_run_ids": [
@@ -5226,14 +5232,14 @@
       37374537927
     ],
     "target_node": "im-b200-c001",
-    "target_node_state": "B200 runner admitted; Slurm allocation pending",
+    "target_node_state": "Slurm job 19529 terminated after Enroot import failure",
     "observed_free_bytes": null,
-    "reason": "Study B200 job 111979971880 is active; dispatch nothing else."
+    "reason": "Study workflow 37374537927 remains queued in finalization; dispatch nothing else."
   },
   "next_dispatch": {
     "arm": "none",
     "concurrency": 489,
-    "requires": "After NVMe run 37374537927 is terminal, capture artifacts and hashes, verify exact scratch cleanup, delete temporary downloads, and refresh cluster-wide B200 inventory before dispatching matched HBM-only c489."
+    "requires": "Wait for workflow 37374537927 to be fully terminal. Repair and validate digest import compatibility with installed Enroot, then refresh cluster-wide B200 inventory before any new study dispatch."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-21T05:30:00Z",

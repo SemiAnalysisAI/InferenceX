@@ -186,6 +186,8 @@ llm-d 不是 srt-slurm 路径：InferenceX 自己持有 Slurm allocation，并�
 6. 追加选择全部受影响 key 的 changelog 条目（有意覆盖多个 key 时可以使用通配符），并列出旧/新版本及实质运行时变更。
 7. 生成每个受影响的配置族，确认其运行时路径中没有残留旧 tag。
 
+B200 Nscale 单节点兼容启动器上安装的 Enroot 3.x 会把 Docker 的 `IMAGE@sha256:DIGEST` 形式误解析为 registry 用户名。对于按 digest 固定的镜像，启动器保留规范的 `IMAGE` 和 squash 缓存键，但向 `enroot import` 传入 `IMAGE:sha256:DIGEST`；Enroot 会将该后缀用作 registry manifest 选择器。调度前应验证 manifest digest 与平台，并确认计算节点的导入路径，而不只检查 Docker CLI 是否可以解析。
+
 ## 添加或修改 MTP
 
 来源：[`AGENTS.md#non-negotiable-benchmark-invariants`](../AGENTS.md#non-negotiable-benchmark-invariants)、[模型+硬件 playbook 的 MTP 附录](../.claude/commands/add-model-hardware.md#appendix--mtp--eagle3-spec-decoding-variant)和现有 [`*_mtp.sh` 同类项](../benchmarks/single_node/fixed_seq_len/)。

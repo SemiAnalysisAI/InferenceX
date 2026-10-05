@@ -8147,3 +8147,12 @@
     - "Replace the removed Docker Hub nightly tag in all four branch-only MiniMax-M3 AgentX offload arms with its previously recorded multi-platform manifest digest. Run 37366720497 reached B200 Slurm allocation but image import returned registry 404 before benchmark launch or scratch creation. The exact recorded manifest and AMD64 digests still resolve in Docker Hub, so this changes the image reference while retaining the same engine bytes, TP4 layout, workload, cache settings, and extended 510/530-minute execution envelope."
     - "四组分支内 MiniMax-M3 AgentX 卸载配置统一将已删除的 Docker Hub nightly 标签替换为此前记录的多平台 manifest digest。运行 37366720497 已取得 B200 Slurm allocation，但镜像导入返回 registry 404，benchmark 和 scratch 创建均未开始。此前记录的 manifest 与 AMD64 digest 在 Docker Hub 仍可解析，因此仅更换镜像引用，保留相同的引擎内容、TP4 布局、工作负载、缓存设置和扩展的 510/530 分钟执行时间范围。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/tree/experiment/agentx-b200-offload
+
+- config-keys:
+    - minimaxm3-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Make the B200 Nscale single-node Enroot import compatible with a digest-pinned image. Run 37374537927 reached Slurm allocation 19529 but Enroot interpreted the Docker @sha256 suffix as a username and Docker Hub returned 401 before benchmark startup. Preserve the canonical image digest and squash-cache identity; translate only the import URI to Enroot 3.x's colon-delimited manifest selector. Model, engine bytes, TP4, cache settings, workload and 510/530-minute execution envelope are unchanged."
+    - "让 B200 Nscale 单节点 Enroot 导入兼容按 digest 固定的镜像。运行 37374537927 已取得 Slurm allocation 19529，但 Enroot 将 Docker 的 @sha256 后缀当作用户名，Docker Hub 返回 401，benchmark 尚未启动。保留规范镜像 digest 与 squash 缓存标识，仅将导入 URI 转换为 Enroot 3.x 使用的冒号分隔 manifest 选择器。模型、引擎内容、TP4、缓存设置、工作负载与 510/530 分钟执行时间范围均不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/tree/experiment/agentx-b200-offload

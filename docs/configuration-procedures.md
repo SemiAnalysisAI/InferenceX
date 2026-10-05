@@ -188,6 +188,8 @@ Sources: [`AGENTS.md#non-negotiable-benchmark-invariants`](../AGENTS.md#non-nego
 6. Append a changelog entry selecting all affected keys (wildcards are allowed when intentional), including old/new versions and material runtime changes.
 7. Generate each affected family and verify no stale tag survives in its runtime path.
 
+On the B200 Nscale single-node compatibility launcher, the installed Enroot 3.x parser treats Docker’s `IMAGE@sha256:DIGEST` form as a registry username. For a digest-pinned image, the launcher preserves the canonical `IMAGE` and squash-cache key but passes `IMAGE:sha256:DIGEST` to `enroot import`; Enroot uses that suffix as the registry manifest selector. Verify the manifest digest and platform before dispatch, and confirm the compute-node import path, not just Docker CLI resolution.
+
 ## Add or change MTP
 
 Sources: [`AGENTS.md#non-negotiable-benchmark-invariants`](../AGENTS.md#non-negotiable-benchmark-invariants), [MTP appendix in the model+hardware playbook](../.claude/commands/add-model-hardware.md#appendix--mtp--eagle3-spec-decoding-variant), and current [`*_mtp.sh` siblings](../benchmarks/single_node/fixed_seq_len/).

@@ -443,6 +443,13 @@ else
         BENCH_SCRIPT="experiments/agentx-offload/run.sh"
     fi
     LOCK_FILE="${SQUASH_FILE}.lock"
+    ENROOT_IMAGE_REF="$IMAGE"
+    # Enroot 3.x accepts a manifest digest as a colon-delimited tag in its
+    # registry URL but parses Docker's @sha256 notation as a registry user.
+    # Preserve IMAGE and the squash cache key; change only the import URI.
+    if [[ "$IMAGE" == *@sha256:* ]]; then
+        ENROOT_IMAGE_REF="${IMAGE/@sha256:/:sha256:}"
+    fi
 
     # TODO(Cam): lmsysorg/sglang:deepseek-v4-blackwell installs sglang editable at
     # /workspace/sglang/python (prior sglang tags used /sgl-workspace/sglang), so
@@ -512,9 +519,9 @@ else
             echo 'Squash file already exists and is valid, skipping import'
         else
             rm -f \"$SQUASH_FILE\"
-            enroot import -o \"$SQUASH_FILE\" docker://$IMAGE
+            enroot import -o \"$SQUASH_FILE\" docker://$ENROOT_IMAGE_REF
         fi
-    "
+    " || { echo "Enroot image import failed: $IMAGE" >&2; exit 1; }
 
     if [[ "${INFERENCEX_EXPERIMENT-}" == "agentx-offload" ]]; then
         # Each workflow owns an exclusive allocation. The experiment creates and
