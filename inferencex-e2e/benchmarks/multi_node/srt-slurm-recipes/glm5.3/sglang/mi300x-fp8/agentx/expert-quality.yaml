@@ -152,13 +152,13 @@ override_dep16: &dep16
       dp-aware: true
   roles:
     agg:
-      args:
+      args: &dep16_args
         attn-dp-size: 16
         enable-dp-lm-head: true
         moe-dense-tp-size: 1
         chunked-prefill-size: 16384
 
-override_dep16_c16:
+override_dep16_c16: &dep16_c16
   <<: *dep16
   benchmark:
     env:
@@ -169,3 +169,11 @@ override_dep16_c16:
       HF_HUB_CACHE: /hf-cache/hub
       AIPERF_DATASET_MMAP_CACHE_DIR: /aiperf_mmap_cache
       TOKENIZERS_PARALLELISM: "false"
+
+override_dep16_mem80_c16:
+  <<: *dep16_c16
+  roles:
+    agg:
+      args:
+        <<: *dep16_args
+        mem-fraction-static: 0.80
