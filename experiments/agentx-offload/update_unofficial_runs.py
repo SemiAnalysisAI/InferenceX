@@ -153,7 +153,8 @@ Pure-NVMe API-renderable points ({len(inventory['pure_nvme_renderable_workflow_r
 
 ## Complete branch workflow list
 
-Branch workflows: **{len(inventory['workflow_runs'])}**  
+Branch workflows: **{len(inventory['workflow_runs'])}**
+
 Individual GitHub jobs: **{inventory['job_id_count']}**
 
 {markdown_table(inventory['workflow_runs'])}
@@ -200,7 +201,8 @@ python3 experiments/agentx-offload/update_unofficial_runs.py --write
 
 ## 完整分支工作流列表
 
-分支工作流：**{len(inventory['workflow_runs'])}**  
+分支工作流：**{len(inventory['workflow_runs'])}**
+
 GitHub 单独 job：**{inventory['job_id_count']}**
 
 {markdown_table(inventory['workflow_runs'], chinese=True)}
