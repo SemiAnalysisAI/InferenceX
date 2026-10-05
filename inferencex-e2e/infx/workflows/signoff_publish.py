@@ -40,11 +40,11 @@ def check_statuses(lines: list[str]) -> dict[int, str]:
             continue
         emoji, number, status = match.groups()
         check = int(number)
-        allowed = {"PASS", "N/A", "WARN"} if check in {4, 14} else {"PASS", "N/A", "FAIL"}
+        allowed = {"PASS", "N/A", "WARN"} if check in {4, 14, 15} else {"PASS", "N/A", "FAIL"}
         if check in statuses or status not in allowed or emoji != STATUS_EMOJI[status]:
             return {}
         statuses[check] = status
-    return statuses if statuses.keys() == set(range(15)) else {}
+    return statuses if statuses.keys() == set(range(16)) else {}
 
 
 def marker(signoff_key: str) -> str:
