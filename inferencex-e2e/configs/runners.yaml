@@ -786,6 +786,7 @@ clusters:
       srun-args: [--container-remap-root, --container-writable]
       volumes:
         hf-hub-cache: {path: /raid/inferencex/models/hub, visibility: node-local}
+        shared-hf-hub-cache: {path: /home/ext-cjquilici/inferencex-mi325x-amd/hf-hub-cache}
         aiperf-cache: {path: /raid/inferencex/aiperf-mmap-cache, visibility: node-local}
       squash:
         dir: /raid/inferencex/squash
@@ -802,6 +803,9 @@ clusters:
         mounts:
           /dev/kfd: /dev/kfd
           /dev/dri: /dev/dri
+          /dev/infiniband: /dev/infiniband
+          /raid/inferencex/models: /hf-cache
+          /raid/inferencex/aiperf-mmap-cache: /aiperf_mmap_cache
         extra:
           visible_devices_env: ROCR_VISIBLE_DEVICES
   # Barite shares its login and NFS with mi300x-amd, but not its GPU partition.

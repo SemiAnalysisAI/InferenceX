@@ -1,0 +1,198 @@
+# GLM-5.3 FP8: native SGLang P/D over MoRI, with prefill KV offloaded to UMBP.
+schema: 2
+base:
+  name: mi300x-glm53-agentx-mori-umbp
+  model:
+    path: hf:zai-org/GLM-5.3
+    container: lmsysorg/sglang-rocm:v0.5.21-rocm720-mi30x-20261005@sha256:a4d60e7ef7645aefb1c52a77dcb32970440454bc359a1baff03711fcd0501613
+    precision: fp8
+  identity:
+    model:
+      repo: zai-org/GLM-5.3
+    container:
+      image: lmsysorg/sglang-rocm:v0.5.21-rocm720-mi30x-20261005@sha256:a4d60e7ef7645aefb1c52a77dcb32970440454bc359a1baff03711fcd0501613
+  slurm:
+    time_limit: "12:00:00"
+  resources:
+    gpu_type: mi300x
+    gpus_per_node: 8
+  frontend:
+    type: sglang-router
+    enable_multiple_frontends: false
+    args:
+      prefill-policy: cache_aware
+      decode-policy: round_robin
+      health-check-timeout-secs: 600
+      health-check-interval-secs: 30
+      request-timeout-secs: 14400
+      disable-retries: true
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  services:
+    - name: umbp
+      type: generic
+      placement:
+        node: prefill
+      start: before_workers
+      critical: true
+      inherit_discovery_env: false
+      command:
+        - /sgl-workspace/mori/python/mori/umbp_standalone_server
+        - unix:///logs/umbp.sock
+      env:
+        UMBP_DRAM_CAPACITY: "519000000000"
+        UMBP_DRAM_USE_HUGEPAGES: "0"
+        UMBP_SSD_ENABLED: "0"
+        MORI_UMBP_LOG_LEVEL: info
+      preamble: |
+        export LD_LIBRARY_PATH="/sgl-workspace/mori/python/mori:${LD_LIBRARY_PATH}"
+      readiness:
+        log:
+          pattern: host memory registered for GPU access
+        timeout_seconds: 5400
+        interval_seconds: 1
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      env: &worker_env
+        HF_HOME: /hf-cache
+        HF_HUB_CACHE: /hf-cache/hub
+        PYTHONNOUSERSITE: "1"
+        PYTHONUNBUFFERED: "1"
+        GLOO_SOCKET_IFNAME: ens50f1np1
+        NCCL_SOCKET_IFNAME: ens50f1np1
+        MORI_SOCKET_IFNAME: ens50f1np1
+        MORI_IB_GID_INDEX: "3"
+        MORI_RDMA_TC: "104"
+        MORI_RDMA_SL: "3"
+        # Restore MoRI's native SQ backoff budget for long-context KV transfers.
+        MORI_IO_SQ_BACKOFF_TIMEOUT_US: "5000000"
+        MORI_IO_TC: "104"
+        MORI_IO_SL: "3"
+        NCCL_IB_TC: "104"
+        NCCL_IB_SL: "3"
+        NCCL_IB_GID_INDEX: "3"
+        MORI_SHMEM_MODE: ISOLATION
+        SGLANG_MORI_QP_PER_TRANSFER: "4"
+        SGLANG_MORI_NUM_WORKERS: "4"
+        SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "3600"
+        SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "14400"
+        SGLANG_HEALTH_CHECK_TIMEOUT: "600"
+        SGLANG_TIMEOUT_KEEP_ALIVE: "1800"
+        UMBP_STANDALONE_ADDRESS: unix:///logs/umbp.sock
+      args: &worker_args
+        served-model-name: zai-org/GLM-5.3
+        revision: aca966e4e02791568aa6a4ced368624b3d897f42
+        trust-remote-code: true
+        tensor-parallel-size: 8
+        expert-parallel-size: 1
+        dsa-prefill-backend: tilelang
+        dsa-decode-backend: tilelang
+        dsa-topk-backend: sgl-kernel
+        kv-cache-dtype: fp8_e4m3
+        page-size: 64
+        # AgentX synthetic replay carries no tool schema.
+        reasoning-parser: glm45
+        context-length: 1048576
+        chunked-prefill-size: 16384
+        mem-fraction-static: 0.85
+        max-running-requests: 2
+        cuda-graph-max-bs-decode: 2
+        disaggregation-transfer-backend: mori
+        disaggregation-ib-device: bnxt_re_bond0,bnxt_re_bond1,bnxt_re_bond2,bnxt_re_bond3,bnxt_re_bond4,bnxt_re_bond5,bnxt_re_bond6,bnxt_re_bond7
+        enable-unified-cache-external-linker: true
+        unified-cache-external-linker-backend: mori
+        hicache-storage-backend-extra-config: '{"standalone_startup_timeout_ms":120000}'
+        watchdog-timeout: 3600
+        enable-metrics: true
+        enable-cache-report: true
+    decode:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      env:
+        <<: *worker_env
+        UMBP_STANDALONE_ADDRESS: ""
+      args:
+        <<: *worker_args
+        enable-unified-cache-external-linker: false
+        unified-cache-external-linker-backend: null
+        hicache-storage-backend-extra-config: null
+  sbatch_directives:
+    mem: "0"
+  srun_options:
+    container-writable: ""
+    container-remap-root: ""
+  health_check:
+    max_attempts: 720
+    interval_seconds: 5
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
+    env:
+      RESULT_DIR: /infmax-workspace/LOGS/agentic
+      AGENTIC_OUTPUT_DIR: /infmax-workspace
+      HF_HOME: /hf-cache
+      HF_HUB_CACHE: /hf-cache/hub
+      AIPERF_DATASET_MMAP_CACHE_DIR: /aiperf_mmap_cache
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
+      AIPERF_BENCHMARK_GRACE_PERIOD: "1800"
+      WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126
+      TOKENIZERS_PARALLELISM: "false"
+
+override_tp8_c4:
+  roles:
+    prefill:
+      args:
+        max-running-requests: 8
+    decode:
+      args:
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
+  benchmark:
+    env:
+      CONC: "4"
+
+override_tp8_c8:
+  roles:
+    prefill:
+      args:
+        max-running-requests: 16
+    decode:
+      args:
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 16
+  benchmark:
+    env:
+      CONC: "8"
+
+override_tp8_c16:
+  roles:
+    prefill:
+      args:
+        max-running-requests: 32
+    decode:
+      args:
+        max-running-requests: 32
+        cuda-graph-max-bs-decode: 32
+  benchmark:
+    env:
+      CONC: "16"
+
+override_tp8_c32:
+  roles:
+    prefill:
+      args:
+        max-running-requests: 64
+    decode:
+      args:
+        max-running-requests: 64
+        cuda-graph-max-bs-decode: 64
+  benchmark:
+    env:
+      CONC: "32"
