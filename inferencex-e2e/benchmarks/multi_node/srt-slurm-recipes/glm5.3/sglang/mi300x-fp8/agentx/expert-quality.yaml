@@ -146,7 +146,7 @@ override_dep4_pp2:
         moe-dense-tp-size: 1
         chunked-prefill-size: 4096
 
-override_dep16:
+override_dep16: &dep16
   frontend:
     args:
       dp-aware: true
@@ -157,3 +157,9 @@ override_dep16:
         enable-dp-lm-head: true
         moe-dense-tp-size: 1
         chunked-prefill-size: 16384
+
+override_dep16_c16:
+  <<: *dep16
+  benchmark:
+    env:
+      CONC: "16"
