@@ -94,7 +94,7 @@ SRT_LANES: dict[tuple[str, LaunchPath], SrtLane] = {
         ),
     ),
     ("mi300x-amd", LaunchPath.SRT_MULTI): SrtLane(
-        frameworks=any_of("sglang-disagg"),
+        frameworks=any_of("sglang", "sglang-disagg"),
         mounts=(
             LaneMount(Match(model_glob="zai-org/GLM-5.3"), "shared-hf-hub-cache", "/hf-cache/hub"),
         ),

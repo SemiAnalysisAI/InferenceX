@@ -1,0 +1,100 @@
+# Native two-node EP16 quality gates, without speculation or cache offloading.
+schema: 2
+base:
+  name: mi300x-glm53-ep16-quality
+  model:
+    path: hf:zai-org/GLM-5.3
+    container: lmsysorg/sglang-rocm:v0.5.21-rocm720-mi30x-20261005@sha256:a4d60e7ef7645aefb1c52a77dcb32970440454bc359a1baff03711fcd0501613
+    precision: fp8
+  resources:
+    gpu_type: mi300x
+    gpus_per_node: 8
+  frontend:
+    type: sglang-router
+    enable_multiple_frontends: false
+    args:
+      policy: cache_aware
+      health-check-timeout-secs: 600
+      request-timeout-secs: 14400
+      disable-retries: true
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 2
+      workers: 1
+      gpus: 16
+      args:
+        served-model-name: zai-org/GLM-5.3
+        revision: aca966e4e02791568aa6a4ced368624b3d897f42
+        trust-remote-code: true
+        tensor-parallel-size: 16
+        expert-parallel-size: 16
+        moe-a2a-backend: mori
+        deepep-mode: normal
+        dsa-prefill-backend: tilelang
+        dsa-decode-backend: tilelang
+        dsa-topk-backend: sgl-kernel
+        kv-cache-dtype: fp8_e4m3
+        page-size: 64
+        reasoning-parser: glm45
+        context-length: 1048576
+        chunked-prefill-size: 1024
+        mem-fraction-static: 0.85
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 16
+        watchdog-timeout: 1800
+        enable-metrics: true
+        enable-cache-report: true
+      env:
+        HF_HOME: /hf-cache
+        HF_HUB_CACHE: /hf-cache/hub
+        PYTHONNOUSERSITE: "1"
+        PYTHONUNBUFFERED: "1"
+        GLOO_SOCKET_IFNAME: ens50f1np1
+        NCCL_SOCKET_IFNAME: ens50f1np1
+        MORI_SOCKET_IFNAME: ens50f1np1
+        MORI_IB_GID_INDEX: "3"
+        MORI_RDMA_TC: "104"
+        MORI_RDMA_SL: "3"
+        NCCL_IB_TC: "104"
+        NCCL_IB_SL: "3"
+        NCCL_IB_GID_INDEX: "3"
+        MORI_SHMEM_MODE: ISOLATION
+        SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "1024"
+        SGLANG_TIMEOUT_KEEP_ALIVE: "1800"
+  sbatch_directives:
+    mem: "0"
+  srun_options:
+    container-writable: ""
+    container-remap-root: ""
+  health_check:
+    max_attempts: 720
+    interval_seconds: 5
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
+    env:
+      MODEL: zai-org/GLM-5.3
+      CONC: "8"
+      KV_OFFLOADING: none
+      WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
+      AIPERF_BENCHMARK_GRACE_PERIOD: "1800"
+
+override_tep16: {}
+
+override_dep16:
+  frontend:
+    args:
+      dp-aware: true
+  roles:
+    agg:
+      args:
+        attn-dp-size: 16
+        enable-dp-lm-head: true
+        moe-dense-tp-size: 1
+        chunked-prefill-size: 16384
