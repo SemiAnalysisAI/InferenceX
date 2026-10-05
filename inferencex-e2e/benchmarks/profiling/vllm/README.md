@@ -140,13 +140,16 @@ node count differs from its captured launches as `count_mismatch`, and lists
 graph kernels whose op never launched that kernel eagerly.
 
 HIP graph replays carry no node id. Each replay stream runs its nodes in
-capture order, so capture order is an interleaving of the per-stream sequences;
-the extractor picks the interleaving whose launches most often meet a kernel
-family (name without template arguments) their op or launcher ran eagerly, ties
-to device start order. `report.json` counts the positions that had such
-evidence as `stream_order_evidence` of `stream_order_positions` (74% on MI355X
-DSV4 decode); positions without evidence follow device order. Graphs on more
-than two streams are left unjoined as `streams_unaligned`.
+capture order, so capture order is an interleaving of the per-stream sequences.
+A beam search over the streams' heads picks the interleaving that best matches
+each launch: a kernel family (name without template arguments) its op or
+launcher ran eagerly, its Inductor or Triton kernel, and a memset or memcpy only
+where one was captured; ties go to device start order. On MI355X DSV4 it finds
+the exact optimum on every two-stream graph and orders the three-stream decode
+graph with no kernel/copy mismatches (device order alone has 112).
+`report.json` counts the positions that had name evidence as
+`stream_order_evidence` of `stream_order_positions` (~70% on MI355X DSV4
+decode); positions without evidence follow device order.
 
 CPU KV offload (SimpleCPUOffloadConnector) copies blocks with
 `cuMemcpyBatchAsync` from the connector's copy thread. Kineto records neither

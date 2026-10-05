@@ -566,61 +566,64 @@ def kernel_family(name):
     return re.split(r"[<(]|_MT\d|_GROUP_|_BLOCK_|\.kd$", name.removeprefix("void "))[0]
 
 
-def align_streams(trace, items, launches, families):
+def activity_kind(event):
+    """kernel / memcpy / memset, counting HIP's blit kernels as the copies they are."""
+    if event["cat"] != "kernel":
+        return event["cat"].removeprefix("gpu_")
+    if event["name"].startswith("__amd_rocclr_fill"):
+        return "memset"
+    return "memcpy" if event["name"].startswith("__amd_rocclr_copy") else "kernel"
+
+
+def align_streams(trace, items, launches, families, beam=64):
     """Order a node-id-less graph replay's activities as its captured launches.
 
     Each stream keeps capture order, so capture order interleaves the
-    per-stream sequences. With two streams, pick the interleaving whose
-    launches most often meet a kernel family their op or launcher ran eagerly
-    (or their Triton kernel's name), ties to device start order. Returns the
-    ordered activities and the number of evidence-matched pairs, or None for
-    more than two streams.
+    per-stream sequences. A beam search over the streams' heads picks the
+    interleaving that best matches each launch: +2 when the activity's kernel
+    family is one its op or launcher ran eagerly, is its Inductor kernel or its
+    Triton kernel, -2 when a memset or memcpy meets a kernel launch or the
+    reverse; ties go to device start order. Returns the ordered activities and
+    the number of evidence-matched positions.
     """
     streams = collections.defaultdict(list)
     for i in sorted(items, key=lambda i: trace.events[i]["ts"]):
         streams[trace.events[i]["args"].get("stream")].append(i)
-    names = [[trace.events[i]["name"] for i in seq] for seq in streams.values()]
+    seqs = list(streams.values())
 
-    def score(p, name):
-        cap = launches[p]
-        if kernel_family(name) in families.get(cap["op"] or cap["launcher"], ()):
-            return 2
+    def score(p, i):
+        cap, e = launches[p], trace.events[i]
+        if (cap["kind"] == "kernel") != (activity_kind(e) == "kernel"):
+            return -2
+        key, family = cap["op"] or cap["launcher"], kernel_family(e["name"])
         launcher = cap["launcher"] or ""
-        return int(launcher.startswith("triton:") and launcher[len("triton:"):] in name)
+        if (family in families.get(key, ()) or family == key
+                or launcher.startswith("triton:") and launcher[len("triton:"):] in e["name"]):
+            return 2
+        return 0
 
-    if len(streams) == 1:
-        (seq,) = streams.values()
-        return seq, sum(score(p, n) > 0 for p, n in enumerate(names[0]))
-    if len(streams) > 2:
-        return None
-    (a, b), (na, nb) = streams.values(), names
-    # best[j] after row i: most evidence consuming a[:i] and b[:j]; took_b[i][j]: the last pick.
-    best = [0] * (len(b) + 1)
-    took_b = [bytearray(len(b) + 1) for _ in range(len(a) + 1)]
-    for j in range(1, len(b) + 1):
-        best[j] = best[j - 1] + score(j - 1, nb[j - 1])
-        took_b[0][j] = 1
-    for i in range(1, len(a) + 1):
-        prev, best = best, [0] * (len(b) + 1)
-        best[0] = prev[0] + score(i - 1, na[i - 1])
-        row, ta = took_b[i], trace.events[a[i - 1]]["ts"]
-        for j in range(1, len(b) + 1):
-            from_a = prev[j] + score(i + j - 1, na[i - 1])
-            from_b = best[j - 1] + score(i + j - 1, nb[j - 1])
-            if from_b > from_a or (from_b == from_a and trace.events[b[j - 1]]["ts"] > ta):
-                best[j], row[j] = from_b, 1
-            else:
-                best[j] = from_a
-    order, i, j = [], len(a), len(b)
-    while i or j:
-        if took_b[i][j]:
-            order.append(b[j - 1])
-            j -= 1
-        else:
-            order.append(a[i - 1])
-            i -= 1
-    order.reverse()
-    return order, sum(score(p, trace.events[k]["name"]) > 0 for p, k in enumerate(order))
+    # Each state: (score, -start-order penalty, heads, picks as a (stream, parent) chain).
+    states = [(0, 0, (0,) * len(seqs), None)]
+    for p in range(len(launches)):
+        best = {}
+        for total, penalty, heads, chain in states:
+            ready = sorted((trace.events[seqs[s][h]]["ts"], s) for s, h in enumerate(heads)
+                           if h < len(seqs[s]))
+            for rank, (_, s) in enumerate(ready):
+                nxt = heads[:s] + (heads[s] + 1,) + heads[s + 1:]
+                state = (total + score(p, seqs[s][heads[s]]), penalty - rank, nxt, (s, chain))
+                if nxt not in best or state[:2] > best[nxt][:2]:
+                    best[nxt] = state
+        states = sorted(best.values(), key=lambda st: st[:2], reverse=True)[:beam]
+    picks, chain = [], states[0][3]
+    while chain:
+        picks.append(chain[0])
+        chain = chain[1]
+    heads, order = [0] * len(seqs), []
+    for s in reversed(picks):
+        order.append(seqs[s][heads[s]])
+        heads[s] += 1
+    return order, sum(score(p, i) > 0 for p, i in enumerate(order))
 
 
 def extract_replay(trace, captured, rank, window, step_log, copies, clocks, routing, out_dir,
@@ -683,18 +686,13 @@ def extract_replay(trace, captured, rank, window, step_log, copies, clocks, rout
             shape = (gid, tuple(sorted((str(s), tuple(trace.events[i]["name"] for i in seq))
                                        for s, seq in streams.items())))
             if shape not in interleavings:
-                aligned = align_streams(trace, items, launches, pairs["families"])
-                interleavings[shape] = aligned and [trace.events[i]["args"].get("stream")
-                                                    for i in aligned[0]]
-                if aligned:
-                    graph_checks["stream_order_aligned"] += 1
-                    graph_checks["stream_order_evidence"] += aligned[1]
-                    graph_checks["stream_order_positions"] += len(items)
-            if interleavings[shape] is None:
-                join = "streams_unaligned"
-            else:
-                queues = {s: iter(seq) for s, seq in streams.items()}
-                items = [next(queues[s]) for s in interleavings[shape]]
+                order, evidence = align_streams(trace, items, launches, pairs["families"])
+                interleavings[shape] = [trace.events[i]["args"].get("stream") for i in order]
+                graph_checks["stream_order_aligned"] += 1
+                graph_checks["stream_order_evidence"] += evidence
+                graph_checks["stream_order_positions"] += len(items)
+            queues = {s: iter(seq) for s, seq in streams.items()}
+            items = [next(queues[s]) for s in interleavings[shape]]
         if join:
             graph_checks[join] += 1
             for pos, i in enumerate(items):
