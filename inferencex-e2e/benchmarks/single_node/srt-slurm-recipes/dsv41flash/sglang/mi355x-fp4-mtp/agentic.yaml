@@ -139,7 +139,7 @@ override_tp2_c8:
       CONC: '8'
 
 override_tp2_c16:
-  setup_script: dsv41flash-sglang-engram-device-ptr-probe.sh
+  setup_script: dsv41flash-sglang-engram-device-ptr.sh
   roles:
     agg:
       gpus: 2

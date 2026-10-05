@@ -11,4 +11,4 @@ else
     patch -p1 --forward < "$patch_file"
     echo "engram device-ptr patch: applied"
 fi
-grep -n "_registered_device_ptr\|nbytes, _HOST_REGISTER_MAPPED\|def device_address" "$target"
+grep -n "def _hip_runtime\|self.device_ptr = _registered_device_ptr\|self._host_table_ptrs = " "$target"
