@@ -1,0 +1,106 @@
+# Diagnostic real-quality gates; no synthetic acceptance or runtime modifications.
+schema: 2
+base:
+  name: glm53-mi325x-native-ep-quality
+  model:
+    path: hf:zai-org/GLM-5.3
+    container: lmsysorg/sglang-rocm:v0.5.21-rocm720-mi30x-20261005@sha256:a4d60e7ef7645aefb1c52a77dcb32970440454bc359a1baff03711fcd0501613
+    precision: fp8
+  resources:
+    gpu_type: mi325x
+    gpus_per_node: 8
+  sbatch_directives:
+    exclude: quanta-ccs-aus-k10-10
+  frontend:
+    type: sglang-router
+    enable_multiple_frontends: false
+    args:
+      policy: cache_aware
+      health-check-timeout-secs: 600
+      request-timeout-secs: 14400
+      disable-retries: true
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  health_check:
+    interval_seconds: 10
+    max_attempts: 540
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        served-model-name: zai-org/GLM-5.3
+        revision: aca966e4e02791568aa6a4ced368624b3d897f42
+        trust-remote-code: true
+        tensor-parallel-size: 8
+        expert-parallel-size: 1
+        dsa-prefill-backend: tilelang
+        dsa-decode-backend: tilelang
+        dsa-topk-backend: sgl-kernel
+        kv-cache-dtype: fp8_e4m3
+        page-size: 64
+        reasoning-parser: glm45
+        context-length: 1048576
+        chunked-prefill-size: 1024
+        mem-fraction-static: 0.85
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 16
+        watchdog-timeout: 1800
+        enable-metrics: true
+        enable-cache-report: true
+      env:
+        PYTHONNOUSERSITE: '1'
+        PYTHONUNBUFFERED: '1'
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        GLOO_SOCKET_IFNAME: enp193s0f0np0
+        NCCL_SOCKET_IFNAME: enp193s0f0np0
+        MORI_SOCKET_IFNAME: enp193s0f0np0
+        MORI_SHMEM_MODE: ISOLATION
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
+    env:
+      MODEL: zai-org/GLM-5.3
+      CONC: '8'
+      KV_OFFLOADING: none
+      WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+      AIPERF_BENCHMARK_GRACE_PERIOD: '1800'
+
+override_control:
+  roles:
+    agg:
+      args:
+        expert-parallel-size: 1
+
+override_tep8:
+  roles:
+    agg:
+      args:
+        expert-parallel-size: 8
+        moe-a2a-backend: mori
+        deepep-mode: normal
+      env:
+        SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: '1024'
+
+override_dep8:
+  frontend:
+    args:
+      dp-aware: true
+  roles:
+    agg:
+      args:
+        expert-parallel-size: 8
+        data-parallel-size: 8
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        moe-dense-tp-size: 1
+        moe-a2a-backend: mori
+        deepep-mode: normal
+        chunked-prefill-size: 8192
+      env:
+        SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: '1024'
