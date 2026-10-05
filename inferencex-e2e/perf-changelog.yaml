@@ -9410,3 +9410,11 @@
   description:
     - "Qualify native MI325X TP8 prefill with P-only 513 GB UMBP and two-node DEP16 decode, MoRI IO/EP, dispatch capacity sixteen and full 1M context. Use genuine verification and DP-aware cache routing before considering performance."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3734
+
+- config-keys:
+    - glm53-mi325x-oct5-tp8-dep16-agentic
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Measure one concurrency-sixteen AgentX proxy on the genuine-quality-qualified MI325X TP8 prefill and DEP16 decode configuration, retaining the exact native serving arguments."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3734

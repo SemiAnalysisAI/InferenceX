@@ -459,7 +459,7 @@ override_colocated_tep4_attndp2_ep4_c4:
     env:
       CONC: "4"
 
-override_tp8_dep16_quality:
+override_tp8_dep16_quality: &tp8_dep16_quality
   slurm:
     time_limit: "01:00:00"
   frontend:
@@ -491,3 +491,8 @@ override_tp8_dep16_quality:
   benchmark:
     env:
       CONC: "16"
+
+override_tp8_dep16_c16:
+  <<: *tp8_dep16_quality
+  slurm:
+    time_limit: "12:00:00"
