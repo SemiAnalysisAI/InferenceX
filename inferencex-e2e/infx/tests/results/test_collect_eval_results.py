@@ -44,7 +44,10 @@ def test_build_rows_uses_explicit_inputs_and_preserves_them(tmp_path: Path, monk
         "results": {"valid": {"acc": 0.75}, "invalid": {"acc": -0.1}},
         "configs": {"valid": {"metadata": {"model": "task-model"}}},
     }
-    meta = {"model": "metadata-model", "conc": "4", "disagg": False}
+    meta = {
+        "model": "metadata-model", "conc": "4", "disagg": False,
+        "tp": 8, "ep": 8,
+    }
     before = deepcopy((data, meta))
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("MODEL", "unrelated-process-model")
@@ -58,6 +61,7 @@ def test_build_rows_uses_explicit_inputs_and_preserves_them(tmp_path: Path, monk
     assert [row["score"] for row in rows] == [0.75, None]
     assert [row["conc"] for row in rows] == [4, 4]
     assert [row["disagg"] for row in rows] == [False, False]
+    assert [row["num_gpus"] for row in rows] == [8, 8]
     assert [row["source"] for row in rows] == ["artifact/results.json"] * 2
     assert rows[1]["integration_error"] == {
         "type": "InvalidPrimaryScore", "message": "invalid primary score: -0.1",
@@ -363,6 +367,7 @@ def test_collect_eval_rows_expands_batched_concurrencies(
     (artifact_dir / "meta_env.json").write_text(json.dumps({
         "is_multinode": True,
         "infmax_model_prefix": "gptoss",
+        "disagg": True,
         "hw": "gb200",
         "framework": "dynamo-sglang",
         "precision": "fp8",
@@ -370,6 +375,9 @@ def test_collect_eval_rows_expands_batched_concurrencies(
         "isl": 8192,
         "osl": 1024,
         "prefill_tp": 4,
+        "prefill_pp": 2,
+        "prefill_dcp_size": 2,
+        "prefill_pcp_size": 2,
         "prefill_ep": 1,
         "prefill_num_workers": 1,
         "decode_tp": 8,
@@ -395,6 +403,12 @@ def test_collect_eval_rows_expands_batched_concurrencies(
     assert [row["conc"] for row in rows] == [4, 16]
     assert [row["score"] for row in rows] == [0.90, 0.91]
     assert {row["eval_suite"] for row in rows} == {"gsm8k"}
+    assert [row["num_gpus"] for row in rows] == [32, 32]
+    assert [row["num_prefill_gpu"] for row in rows] == [16, 16]
+    assert [row["num_decode_gpu"] for row in rows] == [16, 16]
+    assert rows[0]["prefill_pp"] == 2
+    assert rows[0]["prefill_dcp_size"] == 2
+    assert rows[0]["prefill_pcp_size"] == 2
 
 
 def test_collect_eval_rows_ignores_failed_batch_points(

@@ -141,6 +141,8 @@ correcting metadata, regenerating aggregates, and re-ingesting affected results.
 prefill and decode use separate workers. Recipes must supply `DISAGG` explicitly
 to the eval client. The writer and collector preserve that flag; single-node
 aggregate evals record zero prefill/decode workers rather than inventing two roles.
+Physical GPU counts use TP × PP × PCP per worker, without multiplying EP or DCP.
+The collector retains those counts and the separate parallelism axes.
 Legacy eval metadata without this flag remains unchanged.
 
 [`infx/results/collect_eval_results.py`](../infx/results/collect_eval_results.py) applies these rules:

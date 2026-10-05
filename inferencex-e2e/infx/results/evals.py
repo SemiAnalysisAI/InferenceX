@@ -10,6 +10,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from .topology import Parallelism
+
 EVAL_RESULT_FORMAT = "inferencex-eval-v1"
 _CONC_SUFFIX_RE = re.compile(r"_conc(\d+)(?:_\d+)?\.json$")
 _TIMESTAMP_RE = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}(?:\.\d+)?")
@@ -234,6 +236,47 @@ def as_bool(x: Any, default: bool = False) -> bool:
     return str(x).lower() == "true"
 
 
+def eval_topology(meta: dict[str, Any]) -> dict[str, Any]:
+    """Physical topology for explicitly typed evals; leave legacy inference alone."""
+    if "disagg" not in meta:
+        return {}
+
+    def layout(prefix: str = "") -> Parallelism:
+        return Parallelism(
+            **{
+                name: as_int(meta.get(f"{prefix}{name}", meta.get(name, 1)), 1)
+                for name in ("tp", "pp", "dcp_size", "pcp_size", "ep")
+            }
+        )
+
+    disagg = as_bool(meta["disagg"])
+    result = {"disagg": disagg, **layout().fields()}
+    if disagg:
+        for role in ("prefill", "decode"):
+            prefix = f"{role}_"
+            parallelism = layout(prefix)
+            workers = as_int(meta.get(f"{prefix}num_workers", 1), 1)
+            result.update(parallelism.fields(prefix))
+            result[f"{prefix}num_workers"] = workers
+            result[f"num_{role}_gpu"] = parallelism.gpus_per_worker * workers
+        result["num_gpus"] = result["num_prefill_gpu"] + result["num_decode_gpu"]
+    else:
+        multinode = as_bool(meta.get("is_multinode"))
+        parallelism = layout("prefill_") if multinode else layout()
+        workers = as_int(meta.get("prefill_num_workers", 1), 1) if multinode else 1
+        result.update(parallelism.fields())
+        result["num_gpus"] = parallelism.gpus_per_worker * workers
+        for role in ("prefill", "decode"):
+            result.update(parallelism.fields(f"{role}_"))
+            result[f"{role}_num_workers"] = 0
+        if multinode:
+            result["prefill_num_workers"] = workers
+            result["num_prefill_gpu"] = result["num_gpus"]
+            result["num_decode_gpu"] = 0
+            result.update(parallelism.for_decode(0).fields("decode_"))
+    return result
+
+
 def build_row(meta: dict[str, Any], m: dict[str, Any]) -> dict[str, Any]:
     """Build a result row from metadata and extracted metrics."""
     is_multinode = as_bool(meta.get("is_multinode"), False)
@@ -293,8 +336,7 @@ def build_row(meta: dict[str, Any], m: dict[str, Any]) -> dict[str, Any]:
 
     if "eval_suite" in meta:
         row["eval_suite"] = meta["eval_suite"]
-    if "disagg" in meta:
-        row["disagg"] = as_bool(meta["disagg"])
+    row.update(eval_topology(meta))
 
     primary = _primary_metric(m)
     row["score"] = m[primary] if primary is not None else None
