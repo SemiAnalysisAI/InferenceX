@@ -3107,6 +3107,58 @@ AIPERF_CLI="${AIPERF_VENV}/bin/aiperf"
 AIPERF_HF_CLI="${AIPERF_VENV}/bin/hf"
 AIPERF_DEPS_READY=0
 
+# aiperf namespaces its mmap dataset cache key with AIPERF_VERSION
+# (utils/aiperf/src/aiperf/dataset/mmap_cache.py, _aiperf_version). Left unset,
+# the key has no source-code component, so a loader change that forgets to bump
+# MANIFEST_VERSION keeps replaying the previously decoded dataset from a warm
+# /aiperf_mmap_cache (agentx-harness deb5421c removed the load-time idle-gap
+# warp; clusters whose cache predates it kept serving the warped timeline under
+# the same key e33b683c...). Namespace the key by the pinned utils/aiperf
+# commit, resolved without git because rootless Enroot containers may not ship
+# it and the submodule's .git is a gitdir pointer file. When the gitdir is not
+# mounted, hash the dataset sources that produce the cached content instead.
+export_aiperf_version() {
+    if [ -n "${AIPERF_VERSION:-}" ]; then
+        return 0
+    fi
+    local gitdir="$AIPERF_DIR/.git" head ref sha=""
+    if [ -f "$gitdir" ]; then
+        gitdir="$(sed -n 's/^gitdir: //p' "$gitdir")"
+        case "$gitdir" in
+            /*) ;;
+            *) gitdir="$AIPERF_DIR/$gitdir" ;;
+        esac
+    fi
+    if [ -f "$gitdir/HEAD" ]; then
+        head="$(cat "$gitdir/HEAD")"
+        case "$head" in
+            ref:*)
+                ref="${head#ref: }"
+                if [ -f "$gitdir/$ref" ]; then
+                    sha="$(cat "$gitdir/$ref")"
+                elif [ -f "$gitdir/packed-refs" ]; then
+                    sha="$(awk -v r="$ref" '$2 == r { print $1; exit }' "$gitdir/packed-refs")"
+                fi
+                ;;
+            *) sha="$head" ;;
+        esac
+    fi
+    if [ -z "$sha" ] && command -v git >/dev/null 2>&1; then
+        sha="$(git -C "$AIPERF_DIR" rev-parse HEAD 2>/dev/null || true)"
+    fi
+    if [ -n "$sha" ]; then
+        export AIPERF_VERSION="${sha:0:12}"
+    elif [ -d "$AIPERF_DIR/src/aiperf/dataset" ] && command -v sha256sum >/dev/null 2>&1; then
+        sha="$(find "$AIPERF_DIR/src/aiperf/dataset" -type f -name '*.py' -print0 |
+            LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum | cut -c1-12)"
+        export AIPERF_VERSION="src-${sha}"
+    else
+        echo "WARNING: could not resolve the utils/aiperf revision; AIPERF_VERSION stays unset and the aiperf mmap cache key carries no source-code component" >&2
+        return 0
+    fi
+    echo "AIPERF_VERSION=${AIPERF_VERSION} (aiperf mmap dataset cache key namespace)"
+}
+
 agentic_pip_install() {
     local pip_install=(python3 -m pip install)
     if python3 -m pip install --help 2>/dev/null | grep -q -- "--break-system-packages"; then
@@ -3137,6 +3189,7 @@ ensure_agentic_uv() {
 
 install_agentic_deps() {
     check_env_vars AIPERF_PYTHON_VERSION INFMAX_CONTAINER_WORKSPACE
+    export_aiperf_version
     if [ "$AIPERF_DEPS_READY" = "1" ]; then
         return
     fi
