@@ -5264,27 +5264,54 @@
         "content": "offload-stale-cleanup-35583529913.json; already_absent=true"
       },
       "runtime_evidence": "Slurm 19535 allocated on im-b200-c001 with 510-minute limit. Enroot imported the same digest successfully and run.sh started. runtime.py prepare rejected free space before creating current-run scratch: /scratch had 4,483,058,126,848 free bytes versus required >4,535,485,464,576. No warmup/profile. Host inventory then found five exact terminal study-owned directories with matching owner.json; old Slurm IDs were not active. All five exact paths were deleted and independently absent; /scratch free space later rose to 17,677,224,632,320 bytes after an unrelated allocation also ended."
+    },
+    {
+      "run_id": 37381547856,
+      "url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37381547856",
+      "arm": "nvme",
+      "concurrency": 489,
+      "repeat": 5,
+      "retry_of": 37377909064,
+      "head_sha": "58e353d0fae68acee958c2b1e2a3ca8fb8ce6131",
+      "status": "in_progress",
+      "workflow_name": "offload-v1-nvme4tib-c489-r5-enroot3-capacity-extended-fullsha-20261005",
+      "dispatched_at": "2026-10-05T22:17:53Z",
+      "phase": "generated B200 job queued for runner",
+      "performance_result": false,
+      "execution_budget": {
+        "slurm_minutes": 510,
+        "github_job_minutes": 530
+      },
+      "dispatch_evidence": "Run 37377909064 was terminal with no current-run scratch. Exact old task-owned directories were deleted after owner and inactivity verification; im-b200-c001 host /scratch free space reached 17,677,224,632,320 bytes. Fresh cluster-wide GitHub job-label inventory at 2026-10-05T22:17:36Z found zero queued B200 jobs, one unrelated B200 job in progress, and no active study workflow. Exact full SHA was computed from HEAD and verified equal to origin/experiment/agentx-b200-offload before dispatch. get-jobs succeeded and generated job 112004631962 carries cluster:b200-nscale and nodes:1; it was queued at 22:18:12Z.",
+      "get_jobs_id": 112004524191,
+      "job_id": 112004631962,
+      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37381547856/job/112004631962"
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894,36796500128,36879140816,37027095833",
-  "status": "Digest-pinned Enroot-compatible c489 run 37377909064 imported image successfully but failed node-local NVMe free-space preflight before scratch or benchmarking. Exact stale task-owned directories from five terminal runs were removed after owner and inactivity verification; free space now exceeds the 4 TiB plus reserve requirement. No performance result.",
+  "status": "Corrected c489 NVMe retry 37381547856 generated its required labeled B200 job and is queued for a runner. No Slurm allocation or scratch yet; dispatch nothing else.",
   "last_capacity_check": {
-    "checked_at": "2026-10-05T22:16:00Z",
-    "active_study_run_ids": [],
+    "checked_at": "2026-10-05T22:17:36Z",
+    "active_study_run_ids": [
+      37381547856
+    ],
     "pending_study_run_ids": [],
     "dispatch_allowed": false,
-    "b200_priority_jobs_queued": 0,
-    "b200_priority_jobs_in_progress": 0,
-    "b200_active_or_queued_run_ids": [],
+    "b200_priority_jobs_queued": 1,
+    "b200_priority_jobs_in_progress": 1,
+    "b200_active_or_queued_run_ids": [
+      37381100450,
+      37381547856
+    ],
     "target_node": "im-b200-c001",
-    "target_node_state": "im-b200-c001 host /scratch free 17,677,224,632,320 bytes after exact task-owned cleanup",
+    "target_node_state": "Generated study B200 job queued for runner",
     "observed_free_bytes": 17677224632320,
-    "reason": "Refresh cluster-wide GitHub job-label inventory immediately before any retry dispatch."
+    "reason": "One B200 job is queued: study job 112004631962. Dispatch nothing else."
   },
   "next_dispatch": {
     "arm": "none",
     "concurrency": 489,
-    "requires": "Refresh cluster-wide queued and in-progress B200 job-label inventory; dispatch one corrected extended-budget c489 NVMe retry only if zero queued B200 jobs and no active-or-queued study workflow. Verify image import, preflight and exact host /scratch cleanup."
+    "requires": "Wait for NVMe run 37381547856 to finish, capture and hash artifacts, verify exact host /scratch cleanup, and refresh cluster-wide B200 inventory before matched HBM-only c489."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-21T05:30:00Z",
