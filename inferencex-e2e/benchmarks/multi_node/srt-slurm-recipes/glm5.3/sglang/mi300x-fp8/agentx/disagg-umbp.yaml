@@ -41,7 +41,7 @@ base:
       inherit_discovery_env: false
       command:
         - /sgl-workspace/mori/python/mori/umbp_standalone_server
-        - unix:///logs/umbp.sock
+        - unix:///logs/umbp-{node}.sock
       env:
         UMBP_DRAM_CAPACITY: "519000000000"
         UMBP_DRAM_USE_HUGEPAGES: "0"
@@ -84,7 +84,7 @@ base:
         SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "14400"
         SGLANG_HEALTH_CHECK_TIMEOUT: "600"
         SGLANG_TIMEOUT_KEEP_ALIVE: "1800"
-        UMBP_STANDALONE_ADDRESS: unix:///logs/umbp.sock
+        UMBP_STANDALONE_ADDRESS: unix:///logs/umbp-{node}.sock
       args: &worker_args
         served-model-name: zai-org/GLM-5.3
         revision: aca966e4e02791568aa6a4ced368624b3d897f42
@@ -196,3 +196,33 @@ override_tp8_c32:
   benchmark:
     env:
       CONC: "32"
+
+override_2p1d_tp8_c16:
+  roles:
+    prefill:
+      nodes: 2
+      workers: 2
+      args:
+        max-running-requests: 32
+    decode:
+      args:
+        max-running-requests: 32
+        cuda-graph-max-bs-decode: 32
+  benchmark:
+    env:
+      CONC: "16"
+
+override_1p2d_tp8_c16:
+  roles:
+    prefill:
+      args:
+        max-running-requests: 32
+    decode:
+      nodes: 2
+      workers: 2
+      args:
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 16
+  benchmark:
+    env:
+      CONC: "16"
