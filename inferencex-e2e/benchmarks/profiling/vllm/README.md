@@ -139,6 +139,15 @@ which carry that launch's full context. `report.json` counts a graph whose
 node count differs from its captured launches as `count_mismatch`, and lists
 graph kernels whose op never launched that kernel eagerly.
 
+HIP graph replays carry no node id. Each replay stream runs its nodes in
+capture order, so capture order is an interleaving of the per-stream sequences;
+the extractor picks the interleaving whose launches most often meet a kernel
+family (name without template arguments) their op or launcher ran eagerly, ties
+to device start order. `report.json` counts the positions that had such
+evidence as `stream_order_evidence` of `stream_order_positions` (74% on MI355X
+DSV4 decode); positions without evidence follow device order. Graphs on more
+than two streams are left unjoined as `streams_unaligned`.
+
 CPU KV offload (SimpleCPUOffloadConnector) copies blocks with
 `cuMemcpyBatchAsync` from the connector's copy thread. Kineto records neither
 that driver call nor `record_function` ranges on that thread, so those memcpys

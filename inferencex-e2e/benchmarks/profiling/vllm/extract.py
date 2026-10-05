@@ -13,6 +13,9 @@ id. A kernel replayed from CUDA graph n carries a ``graph node id``; ordered
 by node id, graph n's nodes pair with the launches recorded inside
 ``infx_graph_capture#n``, which carry the op, shapes and stack of the
 capture. Capture ordinals follow capture order, which every rank shares.
+HIP graph replays carry no node id: each stream runs its nodes in capture
+order, so the capture order is the interleaving of the per-stream sequences
+that best agrees with the kernel families each op launched eagerly.
 A CPU KV-offload memcpy has no CPU launch (a driver call Kineto does not
 record, from the connector's copy thread); per direction, the memcpys pair in
 order with the logged copies issued before them, least total issue lag first.
@@ -548,12 +551,85 @@ def match_copies(trace, orphans, copies, offset_us):
     return matched
 
 
+def kernel_family(name):
+    """A kernel name without template arguments, tile suffixes or C++ mangling."""
+    if name.startswith("_Z"):
+        i, parts = (3 if name.startswith("_ZN") else 2), []
+        while i < len(name) and name[i].isdigit():
+            j = i
+            while j < len(name) and name[j].isdigit():
+                j += 1
+            parts.append(name[j:j + int(name[i:j])])
+            i = j + int(name[i:j])
+        if parts:
+            return "::".join(parts)
+    return re.split(r"[<(]|_MT\d|_GROUP_|_BLOCK_|\.kd$", name.removeprefix("void "))[0]
+
+
+def align_streams(trace, items, launches, families):
+    """Order a node-id-less graph replay's activities as its captured launches.
+
+    Each stream keeps capture order, so capture order interleaves the
+    per-stream sequences. With two streams, pick the interleaving whose
+    launches most often meet a kernel family their op or launcher ran eagerly
+    (or their Triton kernel's name), ties to device start order. Returns the
+    ordered activities and the number of evidence-matched pairs, or None for
+    more than two streams.
+    """
+    streams = collections.defaultdict(list)
+    for i in sorted(items, key=lambda i: trace.events[i]["ts"]):
+        streams[trace.events[i]["args"].get("stream")].append(i)
+    names = [[trace.events[i]["name"] for i in seq] for seq in streams.values()]
+
+    def score(p, name):
+        cap = launches[p]
+        if kernel_family(name) in families.get(cap["op"] or cap["launcher"], ()):
+            return 2
+        launcher = cap["launcher"] or ""
+        return int(launcher.startswith("triton:") and launcher[len("triton:"):] in name)
+
+    if len(streams) == 1:
+        (seq,) = streams.values()
+        return seq, sum(score(p, n) > 0 for p, n in enumerate(names[0]))
+    if len(streams) > 2:
+        return None
+    (a, b), (na, nb) = streams.values(), names
+    # best[j] after row i: most evidence consuming a[:i] and b[:j]; took_b[i][j]: the last pick.
+    best = [0] * (len(b) + 1)
+    took_b = [bytearray(len(b) + 1) for _ in range(len(a) + 1)]
+    for j in range(1, len(b) + 1):
+        best[j] = best[j - 1] + score(j - 1, nb[j - 1])
+        took_b[0][j] = 1
+    for i in range(1, len(a) + 1):
+        prev, best = best, [0] * (len(b) + 1)
+        best[0] = prev[0] + score(i - 1, na[i - 1])
+        row, ta = took_b[i], trace.events[a[i - 1]]["ts"]
+        for j in range(1, len(b) + 1):
+            from_a = prev[j] + score(i + j - 1, na[i - 1])
+            from_b = best[j - 1] + score(i + j - 1, nb[j - 1])
+            if from_b > from_a or (from_b == from_a and trace.events[b[j - 1]]["ts"] > ta):
+                best[j], row[j] = from_b, 1
+            else:
+                best[j] = from_a
+    order, i, j = [], len(a), len(b)
+    while i or j:
+        if took_b[i][j]:
+            order.append(b[j - 1])
+            j -= 1
+        else:
+            order.append(a[i - 1])
+            i -= 1
+    order.reverse()
+    return order, sum(score(p, trace.events[k]["name"]) > 0 for p, k in enumerate(order))
+
+
 def extract_replay(trace, captured, rank, window, step_log, copies, clocks, routing, out_dir,
                    pairs):
     """Attribute every device activity of one replay trace; write one file per step.
 
     Returns the trace's report entry and its index entries. `pairs` accumulates
-    (op, kernel) pairs by source for the cross-trace kernel-name check.
+    (op, kernel) pairs by source for the cross-trace kernel-name check, and
+    under "families" the kernel families each op or launcher ran eagerly.
     """
     rows = []
     graph_replays = collections.defaultdict(list)  # (graph, launch) -> device indices
@@ -566,11 +642,12 @@ def extract_replay(trace, captured, rank, window, step_log, copies, clocks, rout
             orphans.append(i)
             continue
         ctx = trace.context(launch)
-        if "graph node id" in args and "Graph" in trace.events[launch]["name"]:
+        if "Graph" in trace.events[launch]["name"]:
             graph_replays[(ctx["marks"].get("graph_replay"), launch)].append(i)
             continue
         rows.append({"source": "eager", "device_index": i, **ctx})
         pairs["eager"][(ctx["op"], e["name"])] += 1
+        pairs["families"][ctx["op"] or ctx["launcher"]].add(kernel_family(e["name"]))
 
     offset_us = unix_to_trace_us(trace, step_log)
     offload = match_copies(trace, orphans, copies, offset_us)
@@ -592,15 +669,37 @@ def extract_replay(trace, captured, rank, window, step_log, copies, clocks, rout
         })
 
     graph_checks = collections.Counter()
+    interleavings = {}  # (graph, per-stream kernel names) -> stream of each capture position
     for (gid, launch), items in graph_replays.items():
         replay_ctx = trace.context(launch)
-        items.sort(key=lambda i: trace.events[i]["args"]["graph node id"] & NODE_ID_MASK)
         launches = captured.get(gid) if gid is not None else None
-        if launches is None or len(launches) != len(items):
-            graph_checks["count_mismatch"] += 1
+        join = "count_mismatch" if launches is None or len(launches) != len(items) else None
+        if join is None and all("graph node id" in trace.events[i]["args"] for i in items):
+            items.sort(key=lambda i: trace.events[i]["args"]["graph node id"] & NODE_ID_MASK)
+        elif join is None:
+            streams = collections.defaultdict(list)
+            for i in sorted(items, key=lambda i: trace.events[i]["ts"]):
+                streams[trace.events[i]["args"].get("stream")].append(i)
+            shape = (gid, tuple(sorted((str(s), tuple(trace.events[i]["name"] for i in seq))
+                                       for s, seq in streams.items())))
+            if shape not in interleavings:
+                aligned = align_streams(trace, items, launches, pairs["families"])
+                interleavings[shape] = aligned and [trace.events[i]["args"].get("stream")
+                                                    for i in aligned[0]]
+                if aligned:
+                    graph_checks["stream_order_aligned"] += 1
+                    graph_checks["stream_order_evidence"] += aligned[1]
+                    graph_checks["stream_order_positions"] += len(items)
+            if interleavings[shape] is None:
+                join = "streams_unaligned"
+            else:
+                queues = {s: iter(seq) for s, seq in streams.items()}
+                items = [next(queues[s]) for s in interleavings[shape]]
+        if join:
+            graph_checks[join] += 1
             for pos, i in enumerate(items):
                 rows.append({"source": "graph", "graph": gid, "node_pos": pos, "device_index": i,
-                             "marks": replay_ctx["marks"], "capture_join": "count_mismatch"})
+                             "marks": replay_ctx["marks"], "capture_join": join})
             continue
         graph_checks["joined"] += 1
         for pos, (i, cap) in enumerate(zip(items, launches)):
@@ -683,7 +782,8 @@ def main():
     profile_dir, out_dir = sys.argv[1], sys.argv[2]
     os.makedirs(out_dir, exist_ok=True)
     report = {"traces": []}
-    pairs = {"eager": collections.Counter(), "graph": collections.Counter()}
+    pairs = {"eager": collections.Counter(), "graph": collections.Counter(),
+             "families": collections.defaultdict(set)}
     traces = sorted(glob.glob(os.path.join(profile_dir, "torch", "**", "*.pt.trace.json*"),
                               recursive=True), key=trace_time)
     captured = {}
