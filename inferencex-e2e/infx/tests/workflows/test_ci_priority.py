@@ -25,7 +25,7 @@ def policy():
             "checklist-complete": 1.5,
             "precision": {"fp4": 3},
             "spec-decoding": {"mtp": 4},
-            "framework-prefix": {"vllm": 5, "sglang": 6},
+            "framework-prefix": {"vllm": 5, "sglang": 6, "mori-sglang": 6},
             "model-prefix": {"dsv4": 8, "dsr1": 9, "qwen3.5": 11},
         },
         "patchwork-score": -5,
@@ -114,14 +114,15 @@ def test_patchwork_override_precedes_other_adjustments(policy):
     ) == Decimal("-5.000")
 
 
-def test_priority_criteria_require_matching_job_fields(policy):
-    criteria = frozenset({"multi-node", "agentic", "fp4", "mtp", "vllm", "dsr1"})
+@pytest.mark.parametrize("framework,expected", [("vllm", "34.000"), ("mori-sglang", "35.000")])
+def test_priority_criteria_require_matching_job_fields(policy, framework, expected):
+    criteria = frozenset({"multi-node", "agentic", "fp4", "mtp", framework, "dsr1"})
     equivalent_entry = {
         "prefill": {},
         "scenario-type": "agentic-coding",
         "precision": "fp4",
         "spec-decoding": "mtp",
-        "framework": "vllm",
+        "framework": framework,
         "model-prefix": "dsr1",
     }
     entry = dict(equivalent_entry)
@@ -130,7 +131,7 @@ def test_priority_criteria_require_matching_job_fields(policy):
         entry,
         policy,
         PriorityContext(criteria=criteria),
-    ) == Decimal("34.000")
+    ) == Decimal(expected)
     unrelated_entry = {"runner": "h100", "framework": "trt"}
     assert calculate_priority(
         unrelated_entry,

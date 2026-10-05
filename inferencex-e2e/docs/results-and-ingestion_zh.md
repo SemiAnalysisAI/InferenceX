@@ -137,7 +137,9 @@ DP attention 的单节点评测记录为 `false`。修复写入器不会修复�
 聚合结果并重新摄取受影响的数据。
 
 `mori-sglang` 标识服务软件栈；`disagg` 单独标识 prefill 和 decode 是否使用独立的
-worker。配方必须向评测客户端显式传入 `DISAGG`。写入器和收集器保留该标志；
+worker。MI300X 和 MI325X 的单节点及多节点 SRT 启动路径均支持该框架。
+Sweep 分类器和调度器赋予其与 SGLang 相同的框架优先级。
+配方必须向评测客户端显式传入 `DISAGG`。写入器和收集器保留该标志；
 单节点聚合评测的 prefill/decode worker 数均为零，不会虚构两个角色。
 每个 worker 的物理 GPU 数按 TP × PP × PCP 计算，不乘以 EP 或 DCP。
 收集器保留这些数量以及各并行维度。

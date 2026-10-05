@@ -138,7 +138,9 @@ database rows: verify the original job configuration and server logs before
 correcting metadata, regenerating aggregates, and re-ingesting affected results.
 
 `mori-sglang` identifies the serving stack; `disagg` separately identifies whether
-prefill and decode use separate workers. Recipes must supply `DISAGG` explicitly
+prefill and decode use separate workers. MI300X and MI325X accept this framework
+in both single-node and multi-node SRT launches. The sweep classifier and scheduler
+give it the same framework priority as SGLang. Recipes must supply `DISAGG` explicitly
 to the eval client. The writer and collector preserve that flag; single-node
 aggregate evals record zero prefill/decode workers rather than inventing two roles.
 Physical GPU counts use TP × PP × PCP per worker, without multiplying EP or DCP.

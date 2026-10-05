@@ -131,9 +131,12 @@ def assert_ok(result: subprocess.CompletedProcess[str]) -> None:
     assert result.returncode == 0, result.stdout[-4000:] + result.stderr[-8000:]
 
 
-def test_single_node_point_stages_workflow_artifacts(harness):
+@pytest.mark.parametrize("cluster_id,framework", [
+    ("h200-cw", "sglang"), ("mi300x-amd", "mori-sglang"), ("mi325x-amd", "mori-sglang"),
+])
+def test_single_node_point_stages_workflow_artifacts(harness, cluster_id, framework):
     workspace = harness.workspace
-    env = single_node_env(harness, "h200-cw")
+    env = single_node_env(harness, cluster_id, FRAMEWORK=framework)
     assert_ok(launch(env, harness.config, workspace))
 
     assert json.loads((workspace / "point-identity.json").read_text()) == {"completed": 2}
@@ -149,6 +152,21 @@ def test_single_node_point_stages_workflow_artifacts(harness):
     applied = [line.split()[-1] for line in lines(harness.logs, "git") if line.split()[2:3] == ["apply"]]
     assert applied == [str(workspace / "runners/srt-slurm/patches/001-fixture.patch")]
     assert lines(harness.logs, "scancel") == []
+
+
+@pytest.mark.parametrize("cluster_id", ["mi300x-amd", "mi325x-amd"])
+@pytest.mark.parametrize("framework", ["sglang-disagg", "mori-sglang"])
+def test_amd_multinode_framework_submits_and_collects(harness, cluster_id, framework):
+    env = lane_env(
+        harness, cluster_id, LANE_RECIPE.replace('path: "alias"', 'path: "hf:zai-org/GLM-5.3"'),
+        MODEL_PREFIX="glm5.3", MODEL="zai-org/GLM-5.3", PRECISION="fp8",
+        FRAMEWORK=framework, IS_AGENTIC="1", ISL="0", OSL="0", FAKE_RESULTS="agentic",
+    )
+    assert_ok(launch(env, harness.config, harness.workspace))
+    assert json.loads((harness.workspace / "point-identity_conc4.json").read_text()) == {"conc": 4}
+    [call] = srtctl_calls(harness.logs)
+    assert call["argv"][call["argv"].index("--file") + 1] == "recipes/test/lane.yaml"
+    assert (harness.workspace / "multinode_server_logs.tar.gz").is_file()
 
 
 def test_single_node_eval_requires_a_successful_eval(harness):
