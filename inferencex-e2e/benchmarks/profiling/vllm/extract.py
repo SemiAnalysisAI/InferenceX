@@ -40,7 +40,7 @@ import struct
 import sys
 import zipfile
 
-MARK = re.compile(r"^infx_(step|dummy|graph_replay|graph_capture|piece)#(\d+)$")
+MARK = re.compile(r"^infx_(step|dummy|graph_replay|graph_capture|piece|stream)#(\d+)$")
 MODULE_MARK = "infx_mod#"
 LAUNCHER_MARK = "infx_py#"
 DEVICE_CATS = {"kernel", "gpu_memcpy", "gpu_memset"}
@@ -295,34 +295,6 @@ def capture_launches(trace):
             ctx["kind"] = launch_kind(trace.events[i]["name"])
             graphs[gid].append(ctx)
     return graphs
-
-
-def attach_node_kernels(profile_dir, rank, captured):
-    """Give each captured launch its HIP graph node's kernel name, where the patch listed the nodes.
-
-    Nodes are listed in creation order; a graph's list is used only when its
-    kernel/memcpy/memset sequence matches the captured launches one to one.
-    Returns (graphs named, graphs whose node list did not match).
-    """
-    pid = next((p for p, r in rank_of_pid(profile_dir).items() if r == rank), None)
-    path = os.path.join(profile_dir, "graphs", f"pid{pid}.jsonl")
-    if pid is None or not os.path.exists(path):
-        return 0, 0
-    named = mismatched = 0
-    with open(path) as f:
-        for line in f:
-            record = json.loads(line)
-            launches = captured.get(record.get("graph"))
-            if record.get("event") != "nodes" or launches is None or record.get("nodes") is None:
-                continue
-            nodes = record["nodes"]
-            if [kind for kind, _ in nodes] != [launch["kind"] for launch in launches]:
-                mismatched += 1
-                continue
-            for launch, (_, name) in zip(launches, nodes):
-                launch["node_kernel"] = name
-            named += 1
-    return named, mismatched
 
 
 def rank_of_pid(profile_dir):
@@ -583,7 +555,8 @@ def kernel_family(name):
     """A kernel name without template arguments, tile suffixes or C++ mangling."""
     if name.startswith("_Z"):
         i, parts = (3 if name.startswith("_ZN") else 2), []
-        while i < len(name) and name[i].isdigit():
+        while i < len(name) and (name[i].isdigit() or name[i] == "L" and name[i + 1:i + 2].isdigit()):
+            i += name[i] == "L"  # internal linkage
             j = i
             while j < len(name) and name[j].isdigit():
                 j += 1
@@ -601,6 +574,36 @@ def activity_kind(event):
     if event["name"].startswith("__amd_rocclr_fill"):
         return "memset"
     return "memcpy" if event["name"].startswith("__amd_rocclr_copy") else "kernel"
+
+
+def join_by_stream_marks(trace, items, launches):
+    """Exact order for a node-id-less replay when the capture marked each launch's stream.
+
+    Capture launches group by their infx_stream mark (None: the capture
+    stream); each group pairs with the one replay stream whose activity count
+    and kernel/memcpy/memset sequence equal it, and joins in order. Returns
+    the activities in capture order, or None when the groups do not pair up
+    one to one.
+    """
+    groups = collections.defaultdict(list)
+    for p, launch in enumerate(launches):
+        groups[launch["marks"].get("stream")].append(p)
+    streams = collections.defaultdict(list)
+    for i in sorted(items, key=lambda i: trace.events[i]["ts"]):
+        streams[trace.events[i]["args"].get("stream")].append(i)
+    if len(groups) != len(streams):
+        return None
+    order, used = [None] * len(launches), set()
+    for positions in groups.values():
+        kinds = [launches[p]["kind"] for p in positions]
+        matches = [s for s, seq in streams.items() if s not in used and len(seq) == len(positions)
+                   and [activity_kind(trace.events[i]) for i in seq] == kinds]
+        if len(matches) != 1:
+            return None
+        used.add(matches[0])
+        for p, i in zip(positions, streams[matches[0]]):
+            order[p] = i
+    return order
 
 
 def align_streams(trace, items, launches, families, beam=64):
@@ -624,8 +627,6 @@ def align_streams(trace, items, launches, families, beam=64):
         if (cap["kind"] == "kernel") != (activity_kind(e) == "kernel"):
             return -2
         key, family = cap["op"] or cap["launcher"], kernel_family(e["name"])
-        if cap.get("node_kernel"):  # the graph node's own kernel: decisive either way
-            return 4 if kernel_family(cap["node_kernel"]) == family else -4
         launcher = cap["launcher"] or ""
         if (family in families.get(key, ()) or family == key
                 or launcher.startswith("triton:") and launcher[len("triton:"):] in e["name"]):
@@ -716,13 +717,17 @@ def extract_replay(trace, captured, rank, window, step_log, copies, clocks, rout
             shape = (gid, tuple(sorted((str(s), tuple(trace.events[i]["name"] for i in seq))
                                        for s, seq in streams.items())))
             if shape not in interleavings:
-                order, evidence = align_streams(trace, items, launches, pairs["families"])
-                interleavings[shape] = [trace.events[i]["args"].get("stream") for i in order]
-                graph_checks["stream_order_aligned"] += 1
-                graph_checks["stream_order_evidence"] += evidence
-                graph_checks["stream_order_positions"] += len(items)
+                order, exact = join_by_stream_marks(trace, items, launches), True
+                if order is None:
+                    order, evidence = align_streams(trace, items, launches, pairs["families"])
+                    exact = False
+                    graph_checks["stream_order_aligned"] += 1
+                    graph_checks["stream_order_evidence"] += evidence
+                    graph_checks["stream_order_positions"] += len(items)
+                interleavings[shape] = ([trace.events[i]["args"].get("stream") for i in order], exact)
             queues = {s: iter(seq) for s, seq in streams.items()}
-            items = [next(queues[s]) for s in interleavings[shape]]
+            items = [next(queues[s]) for s in interleavings[shape][0]]
+            graph_checks["joined_by_stream_marks" if interleavings[shape][1] else "joined_by_alignment"] += 1
         if join:
             graph_checks[join] += 1
             for pos, i in enumerate(items):
@@ -822,10 +827,7 @@ def main():
         ranges = capture_ranges(path, needed)
         trace = Trace(path, overlapping(ranges)) if ranges else None
         captured = capture_launches(trace) if trace else {}  # identical on every rank
-        rank = os.path.basename(path).split(".")[0]
-        named, node_mismatch = attach_node_kernels(profile_dir, rank, captured)
         report["capture"] = {"path": os.path.relpath(path, profile_dir), "graphs": len(captured),
-                             "graphs_with_node_kernels": named, "node_list_mismatch": node_mismatch,
                              "graphs_replayed": len(needed),
                              "launches": sum(map(len, captured.values()))}
         del trace
