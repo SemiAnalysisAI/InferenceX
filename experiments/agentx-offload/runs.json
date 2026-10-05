@@ -5195,34 +5195,40 @@
       "attempt": 2,
       "retry_of": 37372224015,
       "head_sha": "d03ec558bf5a832cac78a0c7756ef2ecda668922",
-      "status": "queued",
+      "status": "in_progress",
       "workflow_name": "offload-v1-nvme4tib-c489-r3-digest-extended-fullsha-20261005",
       "dispatched_at": "2026-10-05T21:13:34Z",
-      "phase": "get-jobs queued; B200 job not generated yet",
+      "phase": "B200 runner admitted; checkout in progress; Slurm allocation pending",
       "performance_result": false,
       "execution_budget": {
         "slurm_minutes": 510,
         "github_job_minutes": 530
       },
-      "dispatch_evidence": "The prior cancelled run 37372224015 was terminal. A fresh cluster-wide inventory at 2026-10-05T21:13:15Z found zero queued or in-progress B200 jobs and no active-or-queued study workflow. The exact current commit SHA was obtained with git rev-parse HEAD and verified equal to origin/experiment/agentx-b200-offload before dispatch. All four study arms reference the original image by its verified manifest digest."
+      "dispatch_evidence": "The prior cancelled run 37372224015 was terminal. A fresh cluster-wide inventory at 2026-10-05T21:13:15Z found zero queued or in-progress B200 jobs and no active-or-queued study workflow. The exact current commit SHA was obtained with git rev-parse HEAD and verified equal to origin/experiment/agentx-b200-offload before dispatch. All four study arms reference the original image by its verified manifest digest. get-jobs succeeded; the generated agentic job carries cluster:b200-nscale and nodes:1 and was admitted to b200-nscale-slurm_00 at 2026-10-05T21:14:34Z.",
+      "job_id": 111979971880,
+      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37374537927/job/111979971880",
+      "runner": "b200-nscale-slurm_00",
+      "started_at": "2026-10-05T21:14:34Z"
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894,36796500128,36879140816,37027095833",
-  "status": "Digest-pinned extended-budget c489 NVMe retry 37374537927 is queued at get-jobs from exact head d03ec558bf5a832cac78a0c7756ef2ecda668922. Its prior mistaken-ref run 37372224015 was cancelled before any B200 allocation. No B200 job or scratch exists yet for the new run.",
+  "status": "Digest-pinned extended-budget c489 NVMe run 37374537927 passed matrix generation and entered B200 runner b200-nscale-slurm_00. Checkout is in progress; Slurm allocation and storage preflight remain unverified.",
   "last_capacity_check": {
     "checked_at": "2026-10-05T21:13:15Z",
-    "active_study_run_ids": [],
-    "pending_study_run_ids": [
+    "active_study_run_ids": [
       37374537927
     ],
+    "pending_study_run_ids": [],
     "dispatch_allowed": false,
     "b200_priority_jobs_queued": 0,
-    "b200_priority_jobs_in_progress": 0,
-    "b200_active_or_queued_run_ids": [],
+    "b200_priority_jobs_in_progress": 1,
+    "b200_active_or_queued_run_ids": [
+      37374537927
+    ],
     "target_node": "im-b200-c001",
-    "target_node_state": "awaiting matrix generation and B200 admission",
+    "target_node_state": "B200 runner admitted; Slurm allocation pending",
     "observed_free_bytes": null,
-    "reason": "Digest-pinned c489 NVMe workflow 37374537927 is queued; dispatch nothing else while it remains active or queued."
+    "reason": "Study B200 job 111979971880 is active; dispatch nothing else."
   },
   "next_dispatch": {
     "arm": "none",
