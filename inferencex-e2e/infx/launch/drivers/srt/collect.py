@@ -77,6 +77,28 @@ def finish_single_node(run: SrtRun, submitted: Submitted, fetched: Path) -> int:
     return rc
 
 
+def stage_services_results(run: SrtRun, logs: Path) -> int:
+    """Copy services-only artifacts (``logs/h3``) into the workspace result directory."""
+    if not logs.is_dir():
+        print(f"ERROR: srt-slurm logs directory missing: {logs}", file=sys.stderr)
+        return 1
+    source = logs / "h3"
+    if not source.is_dir():
+        print(f"ERROR: services workload produced no {source} directory", file=sys.stderr)
+        return 1
+    destination = run.workspace / run.request.result_filename
+    try:
+        _copy_tree_into(source, destination)
+    except OSError as error:
+        print(f"ERROR: failed to stage services results: {error}", file=sys.stderr)
+        return 1
+    try:
+        _copy_tree_into(logs, run.workspace / "LOGS")
+    except OSError as error:
+        print(f"WARNING: could not copy {logs} to LOGS: {error}", file=sys.stderr)
+    return 0
+
+
 def check_single_node(run: SrtRun, logs: Path) -> int:
     """Fail unless each requested eval succeeded and the benchmark result exists.
 

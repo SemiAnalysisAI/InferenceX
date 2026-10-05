@@ -610,6 +610,38 @@ python -m pytest infx/tests/matrix/ -v
 6. 如果文件与 `main` 冲突，恢复当前 `main` 版本，只重新追加本分支条目。不要手动合并已经重排的历史。
 7. 请求 sweep 前解析文件，并确认生成的 changelog 选择包含预期 key。请求时必须且只能添加一个主 sweep 标签，通常为 `full-sweep-fail-fast`（参见 [PR 主标签与修饰标签](ci-procedures_zh.md#pr-主标签与修饰标签)）。
 
+### 单独手动派发的工作负载
+
+对于使用独立手动 workflow 的工作负载，用空的 `config-keys` 列表和
+`workflow-dispatch` 文件名记录变更：
+
+```yaml
+- config-keys: []
+  workflow-dispatch: h3-video.yml
+  description:
+    - "Update the H3 serving measurement harness"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/<number>
+```
+
+规划器会验证 `.github/workflows/<name>` 存在且声明了 `workflow_dispatch`。
+请在目标基准 checkout 的根目录运行规划器：当前 workflow 和默认配置路径均从
+该工作目录读取，即使 `infx` 安装为 wheel，或代码从另一个 tooling checkout 加载，
+也遵循此规则。这与规划器现有的当前输入契约一致；`head-ref` 不用于选择历史
+workflow 文件。
+
+这些条目保留在 changelog 元数据中，不选择 LLM 基准或评估任务，也不会派发
+workflow 或授予运行权限。同一条目不能把 `workflow-dispatch` 与配置 key、场景
+选择、评估修饰符或 `append-only` 混用。其他独立的普通条目仍按原规则选择任务。
+历史字节保留和物理文件末尾追加规则同样适用。
+
+H3 视频 GPU 任务通过 `benchmarks/multi_node/srt-slurm-recipes/h3/` 下的
+srt-slurm services-only 配方启动，使用 `SRT_SERVICES_ONLY=true` 与
+`python -m infx.launch run`（`LaunchPath.SRT_SERVICES`）。A/B smoke 使用
+terminal generic service（`smoke-ab.yaml`）；serving smoke 使用 server service
+加上 `benchmark.type: custom`（`serving-client.yaml`）。在有意支持 services-only
+矩阵选择之前，不要把 H3 写入 LLM master config。AMD 的 inspect→serving
+同租约 campaign 仍把嵌套 `srun` step 挂到已有分配上；srt-slurm 无法复用该外层租约。
+
 ## 停止条件
 
 出现以下任何条件时，在派发 GPU 工作或宣称配置完成前停止。取得缺失事实或修复来源不一致；不要猜测。

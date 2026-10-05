@@ -1,0 +1,47 @@
+# H3 A/B smoke on one H200 node via srt-slurm's services-only path.
+#
+# H3 owns server lifecycle (baseline then candidate diffusion serve) and needs
+# GPUs for that supervisor. Literal benchmark.type=custom runs on the head
+# without GPUs (Miles client shape), so the GPU-owning workload is a terminal
+# generic service — the same non-engine extension family as custom benchmarks.
+# Client-only custom-benchmark recipes belong beside this file when the server
+# is recipe-managed separately.
+#
+# model.container must be the prepared H3 runtime image or staged squash alias.
+# Mount the persistent workspace and frozen weights through the launcher env
+# (H3_EXTRA_MOUNTS) rather than hard-coding site paths here.
+schema: 2
+name: h3-videogen-smoke-ab
+
+slurm:
+  time_limit: "04:00:00"
+
+model:
+  path: /work/model
+  container: h3-runtime
+  precision: bf16
+
+resources:
+  gpu_type: h200
+  gpus_per_node: 8
+
+frontend:
+  type: none
+
+services:
+  - name: h3
+    type: generic
+    nodes: 1
+    terminal: true
+    critical: true
+    command:
+      - bash
+      - /infmax-workspace/benchmarks/h3/run_gpu_job.sh
+    env:
+      PYTHONUNBUFFERED: "1"
+      H3_RESULT_DIR: /logs/h3
+    readiness:
+      log:
+        pattern: "H3_SRT_WORKLOAD_STARTED"
+      timeout_seconds: 120
+      interval_seconds: 2

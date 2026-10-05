@@ -1036,6 +1036,29 @@ class TestValidateRunnerConfig:
 
 
 
+@pytest.mark.parametrize("updates", [
+    {},
+    {"workflow-dispatch": "../manual.yml"},
+    {"workflow-dispatch": "/tmp/manual.yml"},
+    {"workflow-dispatch": "https://example.com/manual.yml"},
+    {"workflow-dispatch": "manual.yml", "config-keys": ["test-config"]},
+    {"workflow-dispatch": "manual.yml", "evals-only": True},
+    {"workflow-dispatch": "manual.yml", "all-evals": True},
+    {"workflow-dispatch": "manual.yml", "no-evals": True},
+    {"workflow-dispatch": "manual.yml", "append-only": True},
+    {"workflow-dispatch": "manual.yml", "eval-min-prefill-ep": 1},
+    {"workflow-dispatch": "manual.yml", "scenario-type": ["fixed-seq-len"]},
+])
+def test_manual_changelog_rejects_invalid_selection(updates):
+    with pytest.raises(ValueError):
+        ChangelogEntry.model_validate({
+            "config-keys": [],
+            "description": ["Record a separate manual workload"],
+            "pr-link": "https://github.com/SemiAnalysisAI/InferenceX/pull/1",
+            **updates,
+        })
+
+
 class TestChangelogEntry:
 
     @pytest.mark.parametrize("scenario_type", [[], ["unsupported"]])

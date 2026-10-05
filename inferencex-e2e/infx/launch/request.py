@@ -160,6 +160,17 @@ class ScriptRequest(LaunchRequest):
     salloc_time_limit: int = Field(alias="SALLOC_TIME_LIMIT")
 
 
+class ServicesRequest(SrtRequest):
+    """A services-only / non-LLM srt-slurm recipe (``SRT_SERVICES_ONLY=true``).
+
+    Used for workloads such as H3 videogen that declare ``frontend.type: none`` and
+    own GPUs through ``services[].nodes`` (terminal service or custom-benchmark client).
+    """
+
+    config_file: str = Field(alias="CONFIG_FILE")
+    salloc_time_limit: int = Field(alias="SALLOC_TIME_LIMIT")
+
+
 class LlmdRequest(SrtRequest):
     """An llm-d vLLM multinode job submitted through benchmarks/multi_node/llm-d."""
 

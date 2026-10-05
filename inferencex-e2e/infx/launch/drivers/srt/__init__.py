@@ -30,7 +30,13 @@ from infx.launch.drivers.srt.checkout import (
 )
 from infx.launch.drivers.srt.recipe import eval_overrides, prepare_recipe
 from infx.launch.drivers.srt.run import SrtRun, require, slurm_backend
-from infx.launch.request import BATCH_REENTRY_ENV, RequestError, SingleNodeRequest, SrtRequest
+from infx.launch.request import (
+    BATCH_REENTRY_ENV,
+    RequestError,
+    ServicesRequest,
+    SingleNodeRequest,
+    SrtRequest,
+)
 
 if TYPE_CHECKING:
     from infx.clusters import Cluster
@@ -115,6 +121,92 @@ def run_batch(launch: Launch) -> int:
     except BackendError:
         return 1
     return 0 if backend.state(job).succeeded else 1
+
+
+def _extra_mounts(env: Mapping[str, str]) -> list[tuple[str, str]]:
+    """Parse ``H3_EXTRA_MOUNTS`` / ``SRT_EXTRA_MOUNTS`` as comma-separated host:container pairs."""
+    raw = env.get("H3_EXTRA_MOUNTS") or env.get("SRT_EXTRA_MOUNTS") or ""
+    mounts: list[tuple[str, str]] = []
+    for item in filter(None, raw.split(",")):
+        host, sep, target = item.partition(":")
+        if not sep or not host or not target:
+            raise RequestError(f"invalid extra mount {item!r}; expected host:container")
+        mounts.append((host, target))
+    return mounts
+
+
+def run_services(launch: Launch) -> int:
+    """Services-only srt-slurm recipe: no LLM binder, lane, or AgentX collector.
+
+    Submits ``CONFIG_FILE`` through ``srtctl apply`` after staging the checkout and
+    cluster ``srtslurm.yaml``. Framework values outside the LLM engine map pass
+    through synthetic acceptance unchanged. Artifacts under ``/logs/h3`` are copied
+    into the workspace as ``<RESULT_FILENAME>/``.
+    """
+    request = ServicesRequest.from_env(launch.request.env)
+    if request.env.get("SRT_SERVICES_ONLY") != "true":
+        raise RequestError("SRT_SERVICES_ONLY=true is required for the services-only launch path")
+    run = SrtRun.create(launch, request)
+    minutes = request.salloc_time_limit
+    hours, mins = divmod(minutes, 60)
+    time_limit = f"{hours:02d}:{mins:02d}:00"
+    root = Path(tempfile.mkdtemp(prefix="srt-services.", dir=run.workspace))
+    checkout = prepare_checkout(run, root / "checkout", power=False)
+    install_srtctl(run, checkout)
+    container = run.backend.stage_image(request.image).reference
+    config.create_volume_mounts(run)
+    mounts = _extra_mounts(request.env)
+    for host, _target in mounts:
+        Path(host).mkdir(parents=True, exist_ok=True)
+    job_config = config.SrtJob(
+        srtctl_root=checkout.root,
+        workspace=run.workspace,
+        time_limit=time_limit,
+        image=request.image,
+        container=container,
+        nginx=config.NGINX_IMAGE if run.srt.nginx_aliases else None,
+        mounts=mounts,
+        account=run.account,
+    )
+    config.write(checkout.root / "srtslurm.yaml", config.render(run.cluster, job_config))
+    if rc := run_setup(run, checkout):
+        return rc
+    # Stage the recipe into the checkout mirror the same way multi-node lanes do.
+    config_file = request.config_file
+    prepare_recipe(
+        checkout.root,
+        config_file,
+        srtctl_job_name(request.runner_name),
+        run.srt.dist_timeout_s,
+        None,
+    )
+    infmax = compute_workspace(run, checkout, shared=False)
+    run.env["INFMAX_WORKSPACE"] = str(infmax)
+    run.env["INFMAX_CONTAINER_WORKSPACE"] = "/infmax-workspace"
+    arguments = ["--json", "--yes", "-f", config_file]
+    if not run.srt.preflight:
+        arguments.append("--no-preflight")
+    manifest = run.workspace / "srt-services-submission.json"
+    submitted = submit.Submitted(manifest=manifest)
+    run.life.callback(submitted.cancel, run.backend)
+    applied = submit.apply(run, checkout, config_file, arguments, stdout=submitted.manifest)
+    print(applied.stdout, end="", flush=True)
+    if applied.returncode:
+        return applied.returncode
+    job = submitted.read_manifest(run.backend)
+    print(f"Extracted JOB_ID: {job.id}", flush=True)
+    try:
+        run.backend.stream_logs(job)
+    except BackendError:
+        return 1
+    fetched = root / "fetched-outputs"
+    output = run.backend.fetch_outputs(job, fetched)
+    from infx.launch.artifacts import bundle_server_logs
+
+    bundle_server_logs(output, run.workspace / "srt-services-logs.tar.gz")
+    if not run.backend.state(job).succeeded:
+        return 1
+    return collect.stage_services_results(run, output / "logs")
 
 
 def run_multinode(launch: Launch) -> int:

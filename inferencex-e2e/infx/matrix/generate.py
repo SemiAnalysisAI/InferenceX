@@ -328,7 +328,11 @@ def recipe_node_count(prefill: dict, decode: dict) -> int | None:
             0 if role["nodes"] == "colocate" else int(role["nodes"]) for role in roles.values()
         )
         return worker_nodes + recipe_auxiliary_node_count(recipe)
-    raise ValueError(f"Recipe has no worker roles: {recipe_path}")
+    # Services-only recipes (frontend.type: none, services[].nodes) have no engine roles.
+    auxiliary = recipe_auxiliary_node_count(recipe)
+    if auxiliary:
+        return auxiliary
+    raise ValueError(f"Recipe has no worker roles or service pools: {recipe_path}")
 
 
 def worker_node_count(

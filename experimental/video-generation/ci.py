@@ -1,0 +1,899 @@
+#!/usr/bin/env python3
+"""InferenceX adapter that launches prepared H3 workloads through srt-slurm.
+
+GPU jobs submit an srt-slurm services-only recipe via ``python -m infx.launch``.
+srt-slurm owns allocation, container lifecycle, logs and teardown. This module
+keeps site admission, frozen-spec checks, package staging, media/result collect,
+and CPU-side helpers that srt-slurm does not cover.
+"""
+from __future__ import annotations
+
+import argparse
+from contextlib import contextmanager
+from datetime import datetime, timezone
+import fcntl
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import shutil
+import signal
+import subprocess
+import sys
+import time
+import uuid
+from typing import Any, Iterator
+
+from evaluator.mvp_gpu_job import cuda_devices
+
+PARTITION = "main"
+ACCOUNT = "sa-shared"
+DEFAULT_SITE = {"cluster": "h200-dgxc", "partition": PARTITION, "account": ACCOUNT, "gpu_model": "H200"}
+NVIDIA_CLUSTERS = {"h100-dgxc": "H100", "h200-dgxc": "H200", "b200-nscale": "B200"}
+AMD_SITE = {"cluster": "mi355x-amds", "partition": "compute", "account": "cameronamd@semianalysis.com", "gpu_model": "MI355X"}
+NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,79}")
+SHA = re.compile(r"[0-9a-f]{64}")
+IDENTITY = ("JobId", "JobName", "Comment", "WorkDir", "Account", "Partition", "UserId")
+CACHE_PATHS = ("gpu/supervisor/baseline/cache", "gpu/supervisor/candidate/cache", "gpu/supervisor/compare-cache")
+CACHE_PATHS += tuple(f"gpu/c{concurrency}/supervisor/baseline/cache" for concurrency in (1, 2, 4))
+TERMINAL = {"COMPLETED", "CANCELLED", "FAILED", "TIMEOUT", "NODE_FAIL", "OUT_OF_MEMORY", "PREEMPTED", "BOOT_FAIL", "DEADLINE"}
+
+
+def need(condition: bool, message: str) -> None:
+    if not condition:
+        raise ValueError(message)
+
+
+def now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def read(path: Path | str) -> Any:
+    return json.loads(Path(path).read_text())
+
+
+def write(path: Path | str, value: Any) -> None:
+    path = Path(path)
+    temp = path.with_name(path.name + ".tmp")
+    temp.write_text(json.dumps(value, indent=2, allow_nan=False) + "\n")
+    temp.replace(path)
+
+
+def digest(path: Path | str) -> str:
+    value = hashlib.sha256()
+    with Path(path).open("rb") as stream:
+        for chunk in iter(lambda: stream.read(4 * 1024 * 1024), b""):
+            value.update(chunk)
+    return value.hexdigest()
+
+
+def absolute(value: str) -> Path:
+    need(isinstance(value, str) and re.fullmatch(r"/[A-Za-z0-9_./-]+", value)
+         and ".." not in Path(value).parts and value != "/" and str(Path(value)) == value,
+         "Expected a normalized absolute cluster path without whitespace")
+    return Path(value)
+
+
+def mapped(config: dict, host: Path) -> Path:
+    return Path(config["workspace"]["container"]) / Path(host).relative_to(config["workspace"]["host"])
+
+
+def host_path(config: dict, container_path: str) -> Path:
+    path = absolute(container_path)
+    mount = Path(config["workspace"]["container"])
+    if path.is_relative_to(mount):
+        return Path(config["workspace"]["host"]) / path.relative_to(mount)
+    return Path(config["runtime"]["rootfs"]) / path.relative_to("/")
+
+
+def validate_config(config: dict) -> dict:
+    required = {"schema_version", "task_id", "workspace", "runtime", "spec", "resources", "allocation_receipts", "mode"}
+    need(required <= set(config) <= required | {"site", "concurrencies"}, "Unknown or missing site configuration fields")
+    site = config.get("site", DEFAULT_SITE)
+    need(isinstance(site, dict) and set(site) == set(DEFAULT_SITE), "Invalid site fields")
+    need(site == AMD_SITE or (site["cluster"] in NVIDIA_CLUSTERS and site["gpu_model"] == NVIDIA_CLUSTERS[site["cluster"]]), "Unsupported cluster or GPU model")
+    need(site == AMD_SITE or all(isinstance(site[key], str) and NAME.fullmatch(site[key]) for key in ("account", "partition")), "Explicit scheduler account and partition required")
+    need(config["schema_version"] == 1 and NAME.fullmatch(config["task_id"]), "Invalid schema_version/task_id")
+    need(config["mode"] in {"smoke", "regression", "serving-smoke"}, "mode must be smoke, regression or serving-smoke")
+    if "concurrencies" in config:
+        need(config["mode"] == "serving-smoke", "Concurrency selection requires serving-smoke")
+        from evaluator.mvp_serving_smoke import validate_concurrencies
+        validate_concurrencies(config["concurrencies"])
+    need(site["cluster"] == "h200-dgxc" or config["mode"] == "serving-smoke", "Cross-hardware sites currently require serving-smoke; paired export remains H200-only")
+    need(set(config["workspace"]) == {"host", "container"}, "Invalid workspace mapping")
+    for value in config["workspace"].values():
+        path = absolute(value)
+        need(not path.is_relative_to("/workspace"), "Use the declared persistent mount, not /workspace")
+    runtime = config["runtime"]
+    need(
+        set(runtime) == {"entry", "entry_sha256", "rootfs", "ready_marker", "python", "container"},
+        "Invalid runtime contract",
+    )
+    for key in ("entry", "rootfs", "ready_marker", "python"):
+        absolute(runtime[key])
+    need(isinstance(runtime["container"], str) and runtime["container"].strip(), "runtime.container image/squash required")
+    need(SHA.fullmatch(runtime["entry_sha256"]), "Runtime entry SHA256 required")
+    need(set(config["spec"]) == {"path", "sha256"} and SHA.fullmatch(config["spec"]["sha256"]), "Pinned prepared spec required")
+    absolute(config["spec"]["path"])
+    resources = config["resources"]
+    required_resources = {"gpus", "cpus", "memory_gb", "minutes"}
+    need(required_resources <= set(resources) <= required_resources | {"allocated_gpus"}, "Invalid resource request")
+    for key, low, high in (("gpus", 1, 8), ("cpus", 1, 128), ("memory_gb", 1, 1400), ("minutes", 10, 240)):
+        need(type(resources[key]) is int and low <= resources[key] <= high, "Resource outside bounded GPU budget: " + key)
+    reserved = allocation_gpus(config)
+    need(type(reserved) is int and resources["gpus"] <= reserved <= 8, "Allocated GPU budget must cover participating GPUs")
+    need(site != AMD_SITE or reserved == 8, "AMD requires a full eight-GPU allocation before selecting participating HIP devices")
+    need(config["mode"] == "serving-smoke" or reserved == 8, "Paired measurements require a full eight-GPU allocation")
+    need(isinstance(config["allocation_receipts"], list), "allocation_receipts must be a list")
+    for path in config["allocation_receipts"]:
+        absolute(path)
+    return config
+
+
+def allocation_gpus(config: dict) -> int:
+    return config["resources"].get("allocated_gpus", config["resources"]["gpus"] if config["mode"] == "serving-smoke" else 8)
+
+
+def environment() -> dict[str, str]:
+    # Slurm defaults inherited from the runner must not change this request.
+    # The payload receives an explicit environment allowlist at the srun edge.
+    env = {key: value for key, value in os.environ.items()
+           if not key.startswith(("SLURM_", "SBATCH_", "SALLOC_", "SRUN_", "SQUEUE_", "SCANCEL_"))}
+    env.update(TZ="UTC", LC_ALL="C", PYTHONDONTWRITEBYTECODE="1")
+    return env
+
+
+def command(argv: list[str], timeout: float = 30) -> str:
+    return subprocess.run(argv, text=True, capture_output=True, check=True,
+                          timeout=timeout, env=environment()).stdout
+
+
+def fields(raw: str) -> dict[str, str]:
+    return dict(re.findall(r"(?:^|\s)([A-Za-z][A-Za-z0-9_/:]*)=(\S+)", raw))
+
+
+def job_record(job_id: str) -> dict[str, str]:
+    need(re.fullmatch(r"[0-9]+", str(job_id)), "Invalid Slurm job ID")
+    return fields(command(["scontrol", "show", "job", "-o", str(job_id)]))
+
+
+def verify_identity(receipt: dict, record: dict, task_id: str) -> None:
+    need(receipt.get("task_id") == task_id, "Allocation belongs to another task")
+    expected = receipt["identity"]
+    need(set(expected) == set(IDENTITY), "Incomplete allocation ownership receipt")
+    need(all(record.get(key) == expected[key] for key in IDENTITY), "Slurm allocation identity differs from receipt")
+    site = receipt.get("site", DEFAULT_SITE)
+    need(record["Account"] == site["account"] and record["Partition"] == site["partition"], "Allocation differs from its receipted scheduler pool")
+    need(re.fullmatch(r"[^()]+\(" + str(os.getuid()) + r"\)", record["UserId"]), "Allocation Unix owner differs")
+
+
+def allocated_gpu_count(record: dict) -> int | None:
+    tres = dict(item.split("=", 1) for item in record.get("AllocTRES", "").split(",") if "=" in item)
+    if "gres/gpu" in tres:
+        return int(tres["gres/gpu"])
+    # This AMD site omits GPU AllocTRES. The granted full-node job still records
+    # TresPerNode; a subsequent eight-GPU step and physical UUID inventory are
+    # required before generation. Missing partial allocations remain unknown.
+    if (record.get("Partition") == AMD_SITE["partition"] and record.get("Account") == AMD_SITE["account"]
+            and record.get("OverSubscribe") == "NO" and record.get("NumNodes") == "1"
+            and record.get("TresPerNode") == "gres/gpu:8"):
+        return 8
+    return None
+
+
+def capacity(record: dict, resources: dict, timestamp: datetime | None = None) -> str | None:
+    need(record.get("NumNodes") == "1" and NAME.fullmatch(record.get("NodeList", "")), "Reuse requires one explicit node")
+    tres = dict(item.split("=", 1) for item in record["AllocTRES"].split(","))
+    memory = re.fullmatch(r"([0-9]+(?:\.[0-9]+)?)([KMGT]?)", tres.get("mem", ""))
+    need(memory is not None, "Unrecognized allocated memory")
+    memory_gb = float(memory[1]) * {"K": 1 / 1048576, "M": 1 / 1024, "": 1 / 1024, "G": 1, "T": 1024}[memory[2]]
+    end = datetime.fromisoformat(record["EndTime"]).replace(tzinfo=timezone.utc)
+    remaining = (end - (timestamp or datetime.now(timezone.utc))).total_seconds()
+    if remaining < resources["minutes"] * 60 - 300 + 30:
+        return "insufficient remaining allocation time"
+    if (allocated_gpu_count(record) or 0) < resources["gpus"] or int(record["NumCPUs"]) < resources["cpus"] or memory_gb < resources["memory_gb"]:
+        return "insufficient allocated GPU/CPU/memory capacity"
+    return None
+
+
+def recover(config: dict, result_root: Path, *, node: str | None = None) -> dict:
+    paths = set(result_root.glob("*/allocation.json")) | {Path(p) for p in config["allocation_receipts"]}
+    # A crash between intent and acknowledgment must be reconciled, not retried.
+    for intent in result_root.glob("*/allocation-intent.json"):
+        need(intent.with_name("allocation.json").exists(), f"Unresolved allocation intent: {intent}; reconcile Slurm before another submission")
+    active = set(command(["squeue", "--all", "--noheader", "--user=" + str(os.getuid()), "--format=%i"]).split())
+    reasons = []
+    waiting = []
+    for path in sorted(paths):
+        receipt = read(path)
+        need(receipt.get("task_id") == config["task_id"], "Saved allocation receipt belongs to another task")
+        identity = receipt["identity"]
+        need(set(identity) == set(IDENTITY), "Incomplete allocation ownership receipt")
+        job = identity["JobId"]
+        need(re.fullmatch(r"[0-9]+", job), "Invalid saved job ID")
+        if job not in active:
+            reasons.append({"receipt": str(path), "job_id": job, "reason": "inactive in successful scheduler snapshot"})
+            continue
+        record = job_record(job)
+        verify_identity(receipt, record, config["task_id"])
+        if receipt.get("site", DEFAULT_SITE) != config.get("site", DEFAULT_SITE):
+            reasons.append({"job_id": job, "reason": "allocation belongs to a different hardware site"})
+            continue
+        state = record["JobState"]
+        if state in TERMINAL:
+            reasons.append({"job_id": job, "reason": state})
+            continue
+        if state != "RUNNING":
+            waiting.append({"job_id": job, "state": state})
+            continue
+        if node is not None and record["NodeList"] != node:
+            reasons.append({"job_id": job, "reason": "allocation is on a different physical node"})
+            continue
+        reason = capacity(record, config["resources"])
+        if reason:
+            reasons.append({"job_id": job, "reason": reason})
+            continue
+        steps = command(["squeue", "--steps", "--noheader", "--jobs=" + job, "--format=%i|%N"])
+        return {"action": "reuse", "receipt": receipt, "record": record, "active_steps": steps, "reasons": reasons}
+    if waiting:
+        return {"action": "wait", "jobs": waiting, "reasons": reasons}
+    return {"action": "allocate", "reasons": reasons or [{"reason": "no saved allocations for this task"}]}
+
+
+def allocate(config: dict, run_dir: Path, *, node: str | None = None) -> dict:
+    need(node is None or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.-]{0,252}", node), "Invalid target node")
+    nonce = uuid.uuid4().hex
+    job_name = os.environ.get("RUNNER_NAME", "h3-" + config["task_id"])
+    need(NAME.fullmatch(job_name), "Invalid runner/job name")
+    comment = "h3:" + nonce
+    request = config["resources"]
+    site = config.get("site", DEFAULT_SITE)
+    intent = {"task_id": config["task_id"], "job_name": job_name, "comment": comment,
+              "work_dir": str(run_dir), "user_id": os.getuid(), "created_at": now()}
+    write(run_dir / "allocation-intent.json", intent)
+    reserved = allocation_gpus(config)
+    placement = ["--gres=gpu:" + str(reserved)]
+    if reserved == 8:
+        placement.insert(0, "--exclusive")
+    argv = ["salloc", "--no-shell", "--no-bell", "--partition=" + site["partition"], "--account=" + site["account"],
+            "--nodes=1", "--ntasks=1", *placement,
+            "--cpus-per-task=" + str(request["cpus"]), "--mem=" + str(request["memory_gb"]) + "G",
+            "--time=" + str(request["minutes"]), "--immediate=30",
+            "--job-name=" + job_name, "--comment=" + comment, "--chdir=" + str(run_dir)]
+    if node is not None:
+        argv.append("--nodelist=" + node)
+    write(run_dir / "allocation-command.json", argv)
+    # With --no-shell, Slurm records the caller's cwd rather than --chdir.
+    result = subprocess.run(argv, text=True, capture_output=True, timeout=45, env=environment(), cwd=run_dir)
+    (run_dir / "salloc.log").write_text(result.stdout + result.stderr)
+    granted = re.findall(r"Granted job allocation ([0-9]+)", result.stdout + result.stderr)
+    need(len(set(granted)) == 1, "No unambiguous Slurm acknowledgment; allocation intent retained for reconciliation")
+    job = granted[0]
+    # Save the expected identity before querying, so a lost query can be recovered.
+    user = command(["id", "-un"]).strip()
+    receipt = {"task_id": config["task_id"], "created_at": now(), "site": site, "identity": {
+        "JobId": job, "JobName": job_name, "Comment": comment, "WorkDir": str(run_dir),
+        "Account": site["account"], "Partition": site["partition"], "UserId": f"{user}({os.getuid()})"}}
+    write(run_dir / "allocation.json", receipt)
+    need(result.returncode == 0, "Slurm returned a failure after granting an allocation; reconcile receipt")
+    return receipt
+
+
+def stop_allocation(receipt: dict, task_id: str) -> dict:
+    record = job_record(receipt["identity"]["JobId"])
+    verify_identity(receipt, record, task_id)
+    if record["JobState"] not in TERMINAL:
+        command(["scancel", receipt["identity"]["JobId"]])
+    # scancel success is a request, not a terminal-state observation.
+    deadline = time.monotonic() + 90
+    while time.monotonic() < deadline:
+        active = command(["squeue", "--noheader", "--jobs=" + receipt["identity"]["JobId"], "--format=%T"]).strip()
+        if not active or all(state in TERMINAL for state in active.split()):
+            return {"status": "released", "job_id": receipt["identity"]["JobId"]}
+        time.sleep(1)
+    raise RuntimeError("Owned allocation has not reached terminal state after cancellation")
+
+
+def drain_step(receipt: dict, task_id: str, run_dir: Path) -> dict:
+    binding_path = run_dir / "binding.json"
+    if not binding_path.exists():
+        return {"status": "not_observed", "reason": "payload did not write a step binding"}
+    binding = read(binding_path)
+    job, step = receipt["identity"]["JobId"], binding["step_id"]
+    need(binding["job_id"] == job and re.fullmatch(r"[0-9]+", step), "Step binding differs from owned allocation")
+    step_id = job + "." + step
+    def active():
+        return step_id in command(["squeue", "--steps", "--noheader", "--jobs=" + job, "--format=%i"]).split()
+    if active():
+        verify_identity(receipt, job_record(job), task_id)
+        # This exact step is ours; the parent of an attachment is never canceled.
+        command(["scancel", step_id])
+        for _ in range(15):
+            if not active():
+                break
+            time.sleep(1)
+        else:
+            raise RuntimeError("Owned Slurm step remains active; preserve evidence and reconcile")
+    return {"status": "ended", "step_id": step_id}
+
+
+def inventory(root: Path, exclude: tuple[str, ...] = ()) -> dict[str, str]:
+    files = {}
+    for directory, dirs, names in os.walk(root, followlinks=False):
+        parent = Path(directory)
+        dirs[:] = [name for name in dirs if name != "__pycache__" and (parent / name).relative_to(root).as_posix() not in exclude]
+        need(not any((parent / name).is_symlink() for name in dirs), "Directory symlink in evidence or staged source")
+        for name in sorted(names):
+            path = parent / name
+            if name == "SHA256SUMS" or path.relative_to(root).as_posix() in exclude:
+                continue
+            need(not path.is_symlink() and path.is_file(), "Nonregular file in evidence or staged source: " + str(path))
+            files[path.relative_to(root).as_posix()] = digest(path)
+    return dict(sorted(files.items()))
+
+
+def collect(run_dir: Path, output: Path) -> None:
+    files = inventory(run_dir, CACHE_PATHS)
+    sums = "".join(f"{value}  {path}\n" for path, value in files.items())
+    (run_dir / "SHA256SUMS").write_text(sums)
+    output.mkdir(parents=True, exist_ok=True)
+    for name in files:
+        target = output / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(run_dir / name, target)
+    (output / "SHA256SUMS").write_text(sums)
+    need(inventory(output) == files, "Artifact collection hash mismatch")
+
+
+def stage_package(source: Path, destination: Path) -> dict[str, str]:
+    selected = {p.relative_to(source).as_posix(): p for p in [*source.glob("*.py"), *(source / "evaluator").glob("*.py"),
+                *(source / "runtime-patches").glob("*.patch")]}
+    # Read power modules from the e2e project; keep staged keys as infx/... so the
+    # retained runtime package layout and imports stay unchanged.
+    e2e_root = source.parents[1] / "inferencex-e2e"
+    shared_power = [e2e_root / "infx" / "__init__.py",
+                    e2e_root / "infx" / "results" / "__init__.py",
+                    *(e2e_root / "infx" / "results" / "power").glob("*.py")]
+    for path in shared_power:
+        if path.is_file():
+            selected[path.relative_to(e2e_root).as_posix()] = path
+    expected = {name: digest(path) for name, path in selected.items()}
+    if destination.exists():
+        need(inventory(destination) == expected, "Staged source differs from this GitHub commit")
+    else:
+        destination.mkdir(parents=True)
+        for name, path in selected.items():
+            target = destination / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(path, target)
+    return expected
+
+
+def step_argv(config: dict, receipt: dict, record: dict, run_dir: Path, package: Path) -> list[str]:
+    request = config["resources"]
+    gpu_flags = ["--gres=gpu:8"] if config.get("site") == AMD_SITE else [
+        "--gpus-per-task=" + str(request["gpus"]), "--gpu-bind=verbose,per_task:" + str(request["gpus"])]
+    return ["srun", "--jobid=" + receipt["identity"]["JobId"], "--nodelist=" + record["NodeList"],
+            "--exclusive", "--exact", "--nodes=1", "--ntasks=1", "--immediate=30", "--kill-on-bad-exit=1",
+            "--cpus-per-task=" + str(request["cpus"]), "--cpu-bind=verbose,cores",
+            *gpu_flags,
+            "--mem=" + str(request["memory_gb"]) + "G", "--time=" + str(request["minutes"] - 5),
+            "--chdir=" + str(run_dir), "--export=PATH,PYTHONDONTWRITEBYTECODE,TZ,LC_ALL",
+            "python3", str(package / "ci.py"), "--enter", str(run_dir)]
+
+
+def run_step(argv: list[str], log: Path, seconds: float) -> int:
+    process = None
+    def cancelled(signum, frame):
+        raise InterruptedError("CI canceled the owned Slurm step")
+    old = {sig: signal.signal(sig, cancelled) for sig in (signal.SIGINT, signal.SIGTERM)}
+    try:
+        with log.open("w") as stream:
+            process = subprocess.Popen(argv, stdout=stream, stderr=subprocess.STDOUT, env=environment(), start_new_session=True)
+            return process.wait(timeout=seconds)
+    finally:
+        for sig, handler in old.items():
+            signal.signal(sig, handler)
+        if process is not None and process.poll() is None:
+            os.killpg(process.pid, signal.SIGTERM)
+            try:
+                process.wait(timeout=120)
+            except subprocess.TimeoutExpired:
+                os.killpg(process.pid, signal.SIGKILL)
+                process.wait(timeout=10)
+
+
+@contextmanager
+def task_lock(path: Path) -> Iterator[None]:
+    with path.open("a") as handle:
+        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        yield
+
+
+def prepared_spec(config: dict) -> dict:
+    runtime = config["runtime"]
+    need(Path(runtime["rootfs"]).is_dir() and Path(runtime["ready_marker"]).is_file(), "Existing persistent runtime or readiness record missing; no allocation requested")
+    need(digest(runtime["entry"]) == runtime["entry_sha256"], "Persistent entry script changed")
+    need(digest(config["spec"]["path"]) == config["spec"]["sha256"], "Prepared GPU specification changed")
+    spec = read(config["spec"]["path"])
+    # Slurm assigns physical devices later. Validate the rest without a GPU call.
+    amd = config.get("site") == AMD_SITE
+    need(spec.get("gpu_vendor", "nvidia") == ("amd" if amd else "nvidia"), "Prepared GPU vendor differs from the admitted site")
+    prefix = "" if amd else "GPU-"
+    spec["gpu_uuids"] = [f"{prefix}00000000-0000-0000-0000-{i:012d}" for i in range(config["resources"]["gpus"])]
+    from evaluator.mvp_gpu_job import validate_gpu_job
+    spec = validate_gpu_job(spec)
+    if config["mode"] == "serving-smoke":
+        from evaluator.mvp_serving_smoke import validate_spec
+        validate_spec(spec)
+    need(spec["authorization"]["compute_approved"] and spec["authorization"]["model_license_reviewed"]
+         and spec["authorization"]["approval_reference"].strip(), "Prepared spec must record compute and model approval")
+    need(spec["limits"]["job_seconds"] + 600 <= config["resources"]["minutes"] * 60,
+         "Allocation must leave ten minutes beyond supervisor budget for step entry/report/cleanup")
+    # Cheap inventory checks happen before salloc; full pinned source/weight
+    # hashing remains in the existing supervisor immediately before execution.
+    for role in ("baseline", "candidate"):
+        source = host_path(config, spec[role]["source"])
+        need(source.is_dir(), "Prepared runtime source missing: " + role)
+        if spec.get("server_timing"):
+            from evaluator.mvp_runtime_timing import validate_source
+            validate_source(source)
+    model = host_path(config, spec["model"]["path"])
+    for item in spec["model"]["files"]:
+        path = model / item["path"]
+        need(path.is_file() and path.stat().st_size == item["size_bytes"],
+             "Prepared model file missing or wrong size; stage weights before allocating: " + item["path"])
+    return spec
+
+
+H3_RECIPE_SKUS = {
+    "h200-dgxc": "h200",
+    "h100-dgxc": "h100",
+    "b200-nscale": "b200",
+    "mi355x-amds": "mi355x",
+}
+
+
+def h3_recipe(config: dict) -> str:
+    """Checked-in srt-slurm recipe path for this site and mode."""
+    site = config.get("site", DEFAULT_SITE)
+    sku = H3_RECIPE_SKUS.get(site["cluster"])
+    need(sku is not None, f"No srt-slurm H3 recipe SKU for cluster {site['cluster']}")
+    if config["mode"] in ("smoke", "regression"):
+        return f"recipes/h3/sglang/{sku}/smoke-ab.yaml"
+    need(config["mode"] == "serving-smoke", f"Unsupported H3 mode for srt-slurm: {config['mode']}")
+    return f"recipes/h3/sglang/{sku}/serving-client.yaml"
+
+
+def srt_launch_env(config: dict, package: Path, spec_path: Path) -> dict[str, str]:
+    """Environment for ``python -m infx.launch run`` on the services-only H3 path."""
+    site = config.get("site", DEFAULT_SITE)
+    workspace = Path(config["workspace"]["host"])
+    mounts = [
+        f"{workspace}:{config['workspace']['container']}",
+        f"{package}:/h3-package",
+    ]
+    result_name = (
+        f"h3-{config['task_id']}-{os.environ['GITHUB_RUN_ID']}-{os.environ['GITHUB_RUN_ATTEMPT']}"
+    )
+    env = {
+        **os.environ,
+        "SRT_SERVICES_ONLY": "true",
+        "CONFIG_FILE": h3_recipe(config),
+        "IMAGE": config["runtime"]["container"],
+        "FRAMEWORK": "h3",
+        "MODEL_PREFIX": "h3",
+        "PRECISION": "bf16",
+        "SPEC_DECODING": "none",
+        "IS_AGENTIC": "0",
+        "IS_MULTINODE": "false",
+        "RUN_EVAL": "false",
+        "EVAL_ONLY": "false",
+        "RESULT_FILENAME": result_name,
+        "SALLOC_TIME_LIMIT": str(config["resources"]["minutes"]),
+        "H3_EXTRA_MOUNTS": ",".join(mounts),
+        "H3_SPEC_PATH": str(mapped(config, spec_path)),
+        "H3_PACKAGE_ROOT": "/h3-package",
+        "H3_RESULT_DIR": "/logs/h3",
+        "H3_SERVER_ROLE": "baseline",
+        "H3_CLUSTER": site["cluster"],
+    }
+    if config["mode"] == "serving-smoke":
+        env["H3_SERVER_PORT"] = str(read(spec_path).get("port", 30283))
+    return env
+
+
+def _ci_state(config: dict, run_dir: Path, *, launch_path: str, recipe: str | None) -> dict:
+    run_id = os.environ["GITHUB_RUN_ID"]
+    attempt = os.environ["GITHUB_RUN_ATTEMPT"]
+    reserved_gpus = allocation_gpus(config)
+    state = {
+        "schema_version": 1, "task_id": config["task_id"], "run_id": run_id, "run_attempt": attempt,
+        "source_sha": os.environ["H3_SOURCE_SHA"], "started_at": now(), "phase": "preparing",
+        "mode": config["mode"], "site": config.get("site", DEFAULT_SITE),
+        "ci_accepted": False, "release_qualified": False,
+        "persistent_output": str(run_dir), "excluded_cache_paths": list(CACHE_PATHS),
+        "launch_path": launch_path,
+        "ci": {
+            "repository": os.environ.get("GITHUB_REPOSITORY"),
+            "workflow_ref": os.environ.get("GITHUB_WORKFLOW_REF"),
+            "workflow_sha": os.environ.get("GITHUB_WORKFLOW_SHA"),
+            "actor": os.environ.get("GITHUB_ACTOR"),
+            "triggering_actor": os.environ.get("GITHUB_TRIGGERING_ACTOR"),
+            "run_url": (
+                f"{os.environ.get('GITHUB_SERVER_URL', 'https://github.com')}/"
+                f"{os.environ.get('GITHUB_REPOSITORY', '')}/actions/runs/{run_id}"
+            ),
+        },
+        "resources": {
+            "requested": config["resources"],
+            "new_allocation_gpus": reserved_gpus,
+            "new_allocation_gpu_hours_cap": reserved_gpus * config["resources"]["minutes"] / 60,
+        },
+    }
+    if recipe is not None:
+        state["recipe"] = recipe
+    return state
+
+
+def _launch_srt(config: dict, output: Path) -> int:
+    """Fresh GPU smoke/serving through srt-slurm services-only recipes."""
+    need(os.environ.get("RUNNER_NAME"), "RUNNER_NAME required for srt-slurm launch")
+    need(os.environ.get("GITHUB_WORKSPACE"), "GITHUB_WORKSPACE required for srt-slurm launch")
+    source = Path(__file__).resolve().parent
+    sha = os.environ["H3_SOURCE_SHA"]
+    need(command(["git", "-C", str(source), "rev-parse", "HEAD"]).strip() == sha, "Checkout differs from admitted source SHA")
+    need(not command(["git", "-C", str(source), "status", "--porcelain"]).strip(), "Harness checkout must be clean and committed")
+    spec = prepared_spec(config)
+    workspace = Path(config["workspace"]["host"])
+    need(workspace.is_dir(), "Persistent workspace missing")
+    results = workspace / "results" / config["task_id"]
+    control = workspace / "campaigns" / config["task_id"] / "control"
+    results.mkdir(parents=True, exist_ok=True)
+    control.mkdir(parents=True, exist_ok=True)
+    run_dir = results / f"github-{os.environ['GITHUB_RUN_ID']}-{os.environ['GITHUB_RUN_ATTEMPT']}"
+    recipe = h3_recipe(config)
+    state = _ci_state(config, run_dir, launch_path="srt-services", recipe=recipe)
+    with task_lock(control / "ci.lock"):
+        run_dir.mkdir(exist_ok=False)
+        write(run_dir / "ci.json", state)
+        code = 2
+        try:
+            shutil.copyfile(config["runtime"]["entry"], run_dir / "runtime-entry.sh")
+            shutil.copyfile(config["runtime"]["ready_marker"], run_dir / "runtime-readiness.record")
+            package = workspace / "campaigns" / config["task_id"] / "packages" / sha
+            package_files = stage_package(source, package)
+            spec_path = run_dir / "gpu" / "spec.json"
+            spec_path.parent.mkdir(parents=True, exist_ok=True)
+            write(spec_path, spec)
+            write(run_dir / "context.json", {
+                "config": config, "spec": spec, "source_sha": sha,
+                "package_files": package_files,
+                "run_id": f"github-{os.environ['GITHUB_RUN_ID']}-{os.environ['GITHUB_RUN_ATTEMPT']}",
+                "launch_path": "srt-services", "recipe": recipe,
+            })
+            launch_env = srt_launch_env(config, package, spec_path)
+            write(run_dir / "srt-launch-env.json", {
+                key: launch_env[key] for key in sorted(launch_env)
+                if key.startswith(("SRT_", "H3_", "CONFIG_", "IMAGE", "FRAMEWORK", "MODEL_",
+                                   "PRECISION", "SPEC_", "IS_", "RUN_", "EVAL_", "RESULT_", "SALLOC_"))
+            })
+            state.update(phase="starting")
+            write(run_dir / "ci.json", state)
+            e2e = Path(os.environ["GITHUB_WORKSPACE"])
+            if (e2e / "inferencex-e2e").is_dir():
+                e2e = e2e / "inferencex-e2e"
+            code = subprocess.run(
+                [sys.executable, "-m", "infx.launch", "run"],
+                cwd=e2e,
+                env={**launch_env, "PYTHONPATH": str(e2e)},
+                check=False,
+            ).returncode
+            result_root = Path(os.environ["GITHUB_WORKSPACE"]) / launch_env["RESULT_FILENAME"]
+            if result_root.is_dir():
+                for item in result_root.iterdir():
+                    target = run_dir / "gpu" / item.name
+                    if item.is_dir():
+                        shutil.copytree(item, target, dirs_exist_ok=True)
+                    else:
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(item, target)
+            state.update(phase="complete" if code == 0 else "failed", exit_code=code)
+        except (Exception, KeyboardInterrupt) as error:
+            state.update(phase="failed", error=str(error), exit_code=2)
+            code = 2
+        finally:
+            state.update(finished_at=now(), exit_code=code)
+            write(run_dir / "ci.json", state)
+            links = (
+                "ci.json", "runtime-entry.sh", "runtime-readiness.record", "context.json",
+                "srt-launch-env.json", "gpu/spec.json", "gpu/gpu-job.json",
+                "gpu/baseline/run.json", "gpu/candidate/run.json", "gpu/comparison.json",
+                "report/index.html",
+            )
+            if config["mode"] == "serving-smoke":
+                links += ("serving-smoke.json",)
+            write(run_dir / "manifest.json", {
+                "schema_version": 1, "task_id": config["task_id"], "git_commit": sha,
+                "ci": state["ci"], "run_id": os.environ["GITHUB_RUN_ID"],
+                "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+                "launch_path": "srt-services", "recipe": recipe,
+                "runtime": config["runtime"], "prepared_spec": config["spec"],
+                "workload_plan": spec.get("plan"), "mode": config["mode"],
+                "site": config.get("site", DEFAULT_SITE), "resources": state["resources"],
+                "exit_code": code,
+                "evidence": {path: digest(run_dir / path) for path in links if (run_dir / path).is_file()},
+                "artifact_checksums": "SHA256SUMS", "excluded_persistent_caches": list(CACHE_PATHS),
+            })
+            collect(run_dir, output)
+    return code
+
+
+def _launch_nested(config: dict, output: Path, *, required_allocation: str) -> int:
+    """Reuse one already-owned Slurm lease (AMD inspect → serving continuation).
+
+    srt-slurm owns fresh jobs end-to-end and cannot attach to a lease opened by
+    ``inspect_amd_node`` / inventory helpers, so this path keeps the nested
+    ``srun`` step against the reviewed Enroot entry.
+    """
+    source = Path(__file__).resolve().parent
+    sha = os.environ["H3_SOURCE_SHA"]
+    need(command(["git", "-C", str(source), "rev-parse", "HEAD"]).strip() == sha, "Checkout differs from admitted source SHA")
+    need(not command(["git", "-C", str(source), "status", "--porcelain"]).strip(), "Harness checkout must be clean and committed")
+    spec = prepared_spec(config)
+    workspace = Path(config["workspace"]["host"])
+    need(workspace.is_dir(), "Persistent workspace missing")
+    results = workspace / "results" / config["task_id"]
+    control = workspace / "campaigns" / config["task_id"] / "control"
+    results.mkdir(parents=True, exist_ok=True)
+    control.mkdir(parents=True, exist_ok=True)
+    run_dir = results / f"github-{os.environ['GITHUB_RUN_ID']}-{os.environ['GITHUB_RUN_ATTEMPT']}"
+    reserved_gpus = allocation_gpus(config)
+    state = _ci_state(config, run_dir, launch_path="nested-slurm", recipe=None)
+    with task_lock(control / "ci.lock"):
+        run_dir.mkdir(exist_ok=False)
+        write(run_dir / "ci.json", state)
+        receipt = None
+        reused = False
+        code = 2
+        try:
+            shutil.copyfile(config["runtime"]["entry"], run_dir / "runtime-entry.sh")
+            shutil.copyfile(config["runtime"]["ready_marker"], run_dir / "runtime-readiness.record")
+            package = workspace / "campaigns" / config["task_id"] / "packages" / sha
+            package_files = stage_package(source, package)
+            decision = recover(config, results)
+            write(run_dir / "recovery.json", decision)
+            need(
+                decision["action"] == "reuse" and decision["receipt"]["identity"]["JobId"] == required_allocation,
+                "Serving continuation must reuse its original allocation; no replacement requested",
+            )
+            receipt, reused = decision["receipt"], True
+            write(run_dir / "allocation.json", receipt)
+            record = job_record(receipt["identity"]["JobId"])
+            verify_identity(receipt, record, config["task_id"])
+            need(record["JobState"] == "RUNNING", "Owned allocation is not RUNNING")
+            need(capacity(record, config["resources"]) is None, "Allocation cannot serve bounded step")
+            if config["mode"] == "serving-smoke":
+                need(allocated_gpu_count(record) == reserved_gpus, "Serving allocation GPU count exceeds the declared budget")
+            need(digest(config["runtime"]["entry"]) == config["runtime"]["entry_sha256"], "Entry changed after preflight")
+            state.update(phase="starting", allocation_reused=reused, allocation=receipt, slurm_job=record)
+            write(run_dir / "ci.json", state)
+            active_steps = command(["squeue", "--steps", "--noheader", "--jobs=" + record["JobId"], "--format=%i|%N"])
+            write(run_dir / "context.json", {
+                "config": config, "spec": spec, "allocation": receipt,
+                "node": record["NodeList"], "active_steps": active_steps, "source_sha": sha,
+                "exclusive_node": record.get("OverSubscribe") == "NO" and allocated_gpu_count(record) == 8,
+                "package_files": package_files,
+                "run_id": f"github-{os.environ['GITHUB_RUN_ID']}-{os.environ['GITHUB_RUN_ATTEMPT']}",
+                "launch_path": "nested-slurm",
+            })
+            argv = step_argv(config, receipt, record, run_dir, package)
+            write(run_dir / "step-command.json", argv)
+            code = run_step(argv, run_dir / "srun.log", config["resources"]["minutes"] * 60 - 300 + 60)
+            inside = read(run_dir / "step-result.json")
+            need(code == inside["exit_code"], "Slurm exit and workload receipt differ")
+            state.update(phase="complete" if code == 0 else "failed", **inside)
+        except (Exception, KeyboardInterrupt) as error:
+            state.update(phase="failed", error=str(error), exit_code=2)
+            code = 2
+        finally:
+            if receipt is None and (run_dir / "allocation.json").is_file():
+                receipt = read(run_dir / "allocation.json")
+            try:
+                if receipt is not None:
+                    state["step_cleanup"] = drain_step(receipt, config["task_id"], run_dir)
+            except Exception as error:
+                state.update(phase="failed", step_cleanup_error=str(error), ci_accepted=False)
+                code = 2
+            try:
+                if receipt is not None and not reused:
+                    state["allocation_cleanup"] = stop_allocation(receipt, config["task_id"])
+                elif reused:
+                    state["allocation_cleanup"] = {
+                        "status": "retained",
+                        "reason": "attached step does not own the parent allocation",
+                    }
+            except Exception as error:
+                state.update(phase="failed", cleanup_error=str(error), ci_accepted=False)
+                code = 2
+            state.update(finished_at=now(), exit_code=code)
+            write(run_dir / "ci.json", state)
+            links = (
+                "ci.json", "runtime-entry.sh", "runtime-readiness.record", "allocation.json",
+                "recovery.json", "binding.json", "context.json", "step-result.json",
+                "gpu/spec.json", "gpu/gpu-job.json", "gpu/baseline/run.json",
+                "gpu/candidate/run.json", "gpu/comparison.json", "report/index.html",
+            )
+            if config["mode"] == "serving-smoke":
+                links += ("serving-smoke.json",)
+                links += tuple(
+                    f"gpu/c{concurrency}/{path}"
+                    for concurrency in (1, 2, 4)
+                    for path in ("spec.json", "gpu-job.json", "baseline/run.json", "power.json")
+                )
+            write(run_dir / "manifest.json", {
+                "schema_version": 1, "task_id": config["task_id"], "git_commit": sha,
+                "ci": state["ci"], "run_id": os.environ["GITHUB_RUN_ID"],
+                "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+                "launch_path": "nested-slurm", "slurm_allocation": receipt,
+                "runtime": config["runtime"], "prepared_spec": config["spec"],
+                "workload_plan": spec.get("plan"), "mode": config["mode"],
+                "site": config.get("site", DEFAULT_SITE), "resources": state["resources"],
+                "exit_code": code,
+                "evidence": {path: digest(run_dir / path) for path in links if (run_dir / path).is_file()},
+                "artifact_checksums": "SHA256SUMS", "excluded_persistent_caches": list(CACHE_PATHS),
+            })
+            collect(run_dir, output)
+    return code
+
+
+def launch(config: dict, output: Path, *, required_allocation: str | None = None) -> int:
+    config = validate_config(config)
+    run_id = os.environ.get("GITHUB_RUN_ID", "")
+    attempt = os.environ.get("GITHUB_RUN_ATTEMPT", "")
+    sha = os.environ.get("H3_SOURCE_SHA", "")
+    need(re.fullmatch(r"[0-9]+", run_id) and re.fullmatch(r"[0-9]+", attempt), "GitHub run ID and attempt required")
+    need(re.fullmatch(r"[0-9a-f]{40}", sha), "Exact H3_SOURCE_SHA required")
+    if required_allocation is not None:
+        return _launch_nested(config, output, required_allocation=required_allocation)
+    return _launch_srt(config, output)
+
+
+def enter(run_dir: Path) -> None:
+    """First command in the allocated step: retain identity before Enroot/CUDA."""
+    context = read(run_dir / "context.json")
+    config = validate_config(context["config"])
+    job, step = os.environ.get("SLURM_JOB_ID"), os.environ.get("SLURM_STEP_ID", "")
+    need(job == context["allocation"]["identity"]["JobId"] and re.fullmatch(r"[0-9]+", step)
+         and os.environ.get("SLURMD_NODENAME") == context["node"], "Wrong Slurm step assignment")
+    write(run_dir / "binding.json", {"job_id": job, "step_id": step, "node": context["node"],
+          "cpu_affinity": sorted(os.sched_getaffinity(0)), "observed_at": now(), "phase": "entering_runtime"})
+    need(digest(config["runtime"]["entry"]) == config["runtime"]["entry_sha256"], "Entry changed on compute node")
+    env = {**os.environ, "H3_EXPECTED_GPU_MODEL": config.get("site", DEFAULT_SITE)["gpu_model"]}
+    if config.get("site") == AMD_SITE:
+        from inspect_amd_node import step_gpu_indices
+        from evaluator.mvp_amd_gpu import inventory as amd_inventory, smi, observe_system_monitor
+        need(step_gpu_indices(os.environ.get("SLURM_STEP_GPUS", "")) == set(range(8)), "AMD requires all eight GPUs bound to this step")
+        observed = amd_inventory(smi("list", 10))
+        need(len(observed) == 8, "AMD allocated physical inventory is incomplete")
+        write(run_dir / "amd-allocated-devices.json", list(observed.values()))
+        monitor_path = run_dir / "amd-system-monitor.json"
+        write(monitor_path, observe_system_monitor(10))
+        env.update(H3_AMD_ALLOCATION_UUIDS=",".join(observed),
+                   H3_AMD_MONITOR_RECEIPT=str(mapped(config, monitor_path)),
+                   ROCR_VISIBLE_DEVICES=",".join(str(i) for i in range(config["resources"]["gpus"])))
+    argv = ["/bin/bash", config["runtime"]["entry"], config["runtime"]["python"],
+            str(mapped(config, Path(__file__).parent) / "ci.py"), "--inside", str(mapped(config, run_dir))]
+    os.execve(argv[0], argv, env)
+
+
+def workload_complete(verified: dict) -> bool:
+    runs, comparison = verified["runs"], verified["comparison"]
+    return (all(run["summary"]["valid"] == run["summary"]["scheduled"] > 0 for run in runs.values())
+            and bool(comparison["slots"])
+            and all(slot[role]["status"] == "succeeded" and (slot[role].get("media") or {}).get("valid") is True
+                    and not slot[role].get("analysis_error")
+                    for slot in comparison["slots"] for role in ("baseline", "candidate"))
+            and all(check["status"] == "pass" for check in comparison["checks"]
+                    if check["name"] in {"baseline.warmup", "candidate.warmup"}))
+
+
+def smoke_exit(verified: dict, receipt: dict, mode: str) -> int:
+    if mode == "regression":
+        if receipt.get("regression_status") == "fail":
+            return 1
+        return 0 if receipt.get("ci_accepted") is True else 2
+    # Raw verification establishes identity, timing and cleanup. A smoke tests
+    # execution and fresh media validity independently of regression thresholds.
+    return 0 if workload_complete(verified) else 1
+
+
+def inside(run_dir: Path) -> int:
+    context = read(run_dir / "context.json")
+    config = validate_config(context["config"])
+    expected = context["allocation"]["identity"]["JobId"]
+    step = os.environ.get("SLURM_STEP_ID", "")
+    result = {"exit_code": 2, "measurement_status": "incomplete", "regression_status": "inconclusive", "ci_accepted": False, "release_qualified": False}
+    try:
+        need(os.environ.get("SLURM_JOB_ID") == expected and re.fullmatch(r"[0-9]+", step)
+             and os.environ.get("SLURMD_NODENAME") == context["node"]
+             and os.environ.get("SLURM_PROCID") == "0" and os.environ.get("SLURM_NTASKS") == "1",
+             "Payload is not the exact single-node Slurm task")
+        need(inventory(Path(__file__).parent) == context["package_files"], "Staged harness bytes changed")
+        if config.get("site") == AMD_SITE:
+            from evaluator.mvp_amd_gpu import hip_devices
+            devices = hip_devices()
+            allocated = os.environ.get("H3_AMD_ALLOCATION_UUIDS", "").split(",")
+            physical = read(run_dir / "amd-allocated-devices.json")
+            need(len(set(allocated)) == 8 and set(allocated) == {row["uuid"] for row in physical}
+                 and set(devices) <= set(allocated), "HIP devices differ from the full Slurm-owned AMD inventory")
+        else:
+            devices = cuda_devices()
+            assigned = os.environ.get("H3_ASSIGNED_GPU_UUIDS", "").split(",")
+            need(set(devices) == set(assigned), "CUDA-visible UUIDs differ from the Slurm global GPU assignment")
+        cpus = sorted(os.sched_getaffinity(0))
+        binding = read(run_dir / "binding.json")
+        need(binding["job_id"] == expected and binding["step_id"] == step and binding["cpu_affinity"] == cpus,
+             "Container changed its assigned step identity or CPU binding")
+        need(len(devices) == config["resources"]["gpus"] and len(set(devices)) == len(devices), "Slurm step CUDA device count/UUIDs differ")
+        need(len(cpus) >= config["resources"]["cpus"], "Bound step CPU set is too small")
+        write(run_dir / "binding.json", {"job_id": expected, "step_id": step, "node": context["node"],
+              "gpu_uuids": devices, "cpu_affinity": cpus,
+              "slurm": {key: os.environ.get(key) for key in ("CUDA_VISIBLE_DEVICES", "H3_ORIGINAL_CUDA_VISIBLE_DEVICES", "ROCR_VISIBLE_DEVICES", "HIP_VISIBLE_DEVICES", "H3_AMD_ALLOCATION_UUIDS", "SLURM_JOB_GPUS", "SLURM_STEP_GPUS", "SLURM_CPU_BIND", "SLURM_CPUS_PER_TASK")}, "observed_at": now()})
+        spec = context["spec"]
+        spec["gpu_uuids"], spec["job_id"] = devices, context["run_id"]
+        active = [line for line in context["active_steps"].splitlines() if not re.match(r"[0-9]+\.(batch|extern)\|", line)]
+        spec["allocation"] = {"mode": "dedicated_ci" if not active and context["exclusive_node"] else "cooperative_shared", "label": f"Slurm {expected}.{step} on {context['node']}"}
+        if config["mode"] == "serving-smoke":
+            from evaluator.mvp_serving_smoke import run_matrix
+            matrix = run_matrix(spec, run_dir, concurrencies=config.get("concurrencies", (1, 2, 4)))
+            complete = matrix["status"] == "complete"
+            result.update(exit_code=0 if complete else 1, smoke_completed=complete,
+                          measurement_status="complete" if complete else "incomplete",
+                          serving_summary="serving-smoke.json")
+        else:
+            from evaluator.mvp_gpu_job import run_gpu_job
+            from evaluator.mvp_gpu_evidence import verify_measurement_job
+            receipt = run_gpu_job(spec, run_dir / "gpu")
+            result.update({key: receipt[key] for key in ("measurement_status", "regression_status", "ci_accepted", "release_qualified")})
+            verified = verify_measurement_job(run_dir / "gpu", deadline=time.monotonic() + 120)
+            result["exit_code"] = smoke_exit(verified, receipt, config["mode"])
+            result["smoke_completed"] = workload_complete(verified)
+    except (Exception, KeyboardInterrupt) as error:
+        result.update(exit_code=2, error=str(error), smoke_completed=False, ci_accepted=False)
+    finally:
+        if (run_dir / "gpu" / "gpu-job.json").is_file():
+            try:
+                from evaluator.mvp_gpu_report import write_gpu_report
+                write_gpu_report(run_dir / "gpu", run_dir / "report")
+            except Exception as error:
+                result.update(exit_code=2, report_error=str(error), ci_accepted=False)
+        write(run_dir / "step-result.json", result)
+    return result["exit_code"]
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--config", type=Path)
+    parser.add_argument("--output", type=Path)
+    parser.add_argument("--inside", type=Path, help=argparse.SUPPRESS)
+    parser.add_argument("--enter", type=Path, help=argparse.SUPPRESS)
+    args = parser.parse_args()
+    if args.enter:
+        enter(args.enter)
+        return 2
+    if args.inside:
+        return inside(args.inside)
+    need(args.config is not None and args.output is not None, "--config and --output required")
+    args.output.mkdir(parents=True, exist_ok=False)
+    try:
+        return launch(read(args.config), args.output)
+    except (Exception, KeyboardInterrupt) as error:
+        write(args.output / "adapter-error.json", {"error": str(error), "exit_code": 2, "recorded_at": now(), "ci_accepted": False})
+        print(str(error), file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

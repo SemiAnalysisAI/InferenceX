@@ -994,7 +994,13 @@ class ChangelogEntry(BaseModel):
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
-    config_keys: list[str] = Field(alias="config-keys", min_length=1)
+    config_keys: list[str] = Field(alias="config-keys")
+    workflow_dispatch: str | None = Field(
+        alias="workflow-dispatch",
+        default=None,
+        pattern=r"^[a-z0-9][a-z0-9_-]*\.ya?ml$",
+        description="Manual workflow basename; records a change without selecting LLM jobs.",
+    )
     description: list[str] = Field(min_length=1)
     pr_link: str = Field(alias="pr-link")
     evals_only: bool = Field(alias="evals-only", default=False)
@@ -1025,8 +1031,22 @@ class ChangelogEntry(BaseModel):
     )
 
     @model_validator(mode="after")
-    def validate_append_only_mode(self) -> Self:
-        """Append-only entries are throughput deltas, never eval-only requests."""
+    def validate_execution_mode(self) -> Self:
+        """Select either LLM configs or a separately dispatched workflow."""
+        if self.workflow_dispatch is not None:
+            if self.config_keys or (
+                self.evals_only
+                or self.all_evals
+                or self.no_evals
+                or self.append_only
+                or self.eval_min_prefill_ep is not None
+                or self.scenario_type is not None
+            ):
+                raise ValueError(
+                    "workflow-dispatch requires empty config-keys and no LLM modifiers"
+                )
+        elif not self.config_keys:
+            raise ValueError("config-keys must be nonempty without workflow-dispatch")
         if self.no_evals and (
             self.evals_only or self.all_evals or self.eval_min_prefill_ep is not None
         ):

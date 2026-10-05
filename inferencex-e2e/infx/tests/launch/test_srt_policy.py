@@ -42,7 +42,9 @@ def cluster(tmp_path, single_node_models: str = "staged") -> Cluster:
             "shared-hf-hub-cache": {"path": str(tmp_path / "shared-hub")},
         }, "srt-slurm": {"network-interface": "", "single-node-models": single_node_models}},
     }  # fmt: skip
-    return load_inventory({"labels": {"cluster:c": ["c_0"]}, "clusters": {"c": record}}).clusters["c"]
+    return load_inventory({"labels": {"cluster:c": ["c_0"]}, "clusters": {"c": record}}).clusters[
+        "c"
+    ]
 
 
 MULTI = dict(IS_MULTINODE="true", CONFIG_FILE="recipes/x.yaml")
@@ -63,6 +65,7 @@ SINGLE = dict(IS_MULTINODE="false")
     ("gb200-nv", dict(SINGLE, MODEL_PREFIX="dsv41flash", FRAMEWORK="sglang", IS_AGENTIC="1"), LaunchPath.SRT_SINGLE),
     ("b300-dsxe", dict(SINGLE, BENCH_SCRIPT_OVERRIDE="benchmarks/single_node/speedbench/x.sh"), LaunchPath.SCRIPT),
     ("b300-dsxe", dict(MULTI, FRAMEWORK="dynamo-trt", BENCH_SCRIPT_OVERRIDE="x.sh"), LaunchPath.SRT_MULTI),
+    ("h200-dgxc", dict(SRT_SERVICES_ONLY="true", CONFIG_FILE="recipes/h3/sglang/h200/smoke-ab.yaml"), LaunchPath.SRT_SERVICES),
 ])  # fmt: skip
 def test_each_cluster_routes_requests_to_its_launch_path(cluster_id, env, path):
     assert launch_path(cluster_id, request(**env)) is path
@@ -86,13 +89,19 @@ OVERRIDES = (
     (dict(MODEL="org/M", FRAMEWORK="trt"), "nvme/m", True, "served-m"),
     (dict(MODEL="org/Unstaged"), None, None, None),
 ])  # fmt: skip
-def test_models_resolve_by_basename_with_overrides(tmp_path, monkeypatch, env, path, node_local, served):
+def test_models_resolve_by_basename_with_overrides(
+    tmp_path, monkeypatch, env, path, node_local, served
+):
     monkeypatch.setitem(models.OVERRIDES, "c", OVERRIDES)
     c, point = cluster(tmp_path), request(**env)
     found = checkpoint(c, point)
-    assert (found and (host_path(c, found), found.node_local)) == (path and (tmp_path / path, node_local))
+    assert (found and (host_path(c, found), found.node_local)) == (
+        path and (tmp_path / path, node_local)
+    )
     assert job_env(c, point, served_path(c, point, found)).get("SERVED_MODEL_NAME") == served
-    assert single_node_model_path(c, point) == (str(tmp_path / path) if path else f"hf:{env['MODEL']}")
+    assert single_node_model_path(c, point) == (
+        str(tmp_path / path) if path else f"hf:{env['MODEL']}"
+    )
     assert single_node_model_path(cluster(tmp_path, "hub"), point) == f"hf:{env['MODEL']}"
 
 
@@ -110,7 +119,9 @@ def test_a_points_own_model_path_is_what_its_job_serves(tmp_path, monkeypatch):
     c = cluster(tmp_path)
     host = request(MODEL="org/M", MODEL_PATH="/host/m")
     assert served_path(c, host, checkpoint(c, host)) == str(tmp_path / "nvme/m")
-    point = request(MODEL="org/M", MODEL_PATH="/point/m", PREFILL_ADDITIONAL_SETTINGS='["MODEL_PATH=/point/m"]')
+    point = request(
+        MODEL="org/M", MODEL_PATH="/point/m", PREFILL_ADDITIONAL_SETTINGS='["MODEL_PATH=/point/m"]'
+    )
     monkeypatch.setitem(models.OVERRIDES, "c", (Override(Match(), require_config=True),))
     served = served_path(c, point, checkpoint(c, point))
     assert served == "/point/m"
@@ -131,7 +142,9 @@ zip_override_y:
     ("model: {path: /abs/m}\n", "org/Unstaged", {}),
     ("model: {path: alias-a}\n", "org/Unstaged", LaunchError),
 ])  # fmt: skip
-def test_every_recipe_alias_maps_to_the_checkpoint_and_literals_pass_through(tmp_path, recipe, model, paths):
+def test_every_recipe_alias_maps_to_the_checkpoint_and_literals_pass_through(
+    tmp_path, recipe, model, paths
+):
     mirror = tmp_path / "ws/benchmarks/multi_node/srt-slurm-recipes/r.yaml"
     mirror.parent.mkdir(parents=True)
     mirror.write_text(recipe)
@@ -139,9 +152,13 @@ def test_every_recipe_alias_maps_to_the_checkpoint_and_literals_pass_through(tmp
     point = request(MODEL=model, GITHUB_WORKSPACE=str(tmp_path / "ws"))
     if paths is LaunchError:
         with pytest.raises(LaunchError, match="stages no checkpoint"):
-            model_paths(c, point, "recipes/r.yaml:override_x", served_path(c, point, checkpoint(c, point)))
+            model_paths(
+                c, point, "recipes/r.yaml:override_x", served_path(c, point, checkpoint(c, point))
+            )
         return
-    resolved = model_paths(c, point, "recipes/r.yaml:override_x", served_path(c, point, checkpoint(c, point)))
+    resolved = model_paths(
+        c, point, "recipes/r.yaml:override_x", served_path(c, point, checkpoint(c, point))
+    )
     assert resolved == {alias: str(tmp_path / path) for alias, path in paths.items()}
 
 
@@ -160,7 +177,9 @@ def test_matching_single_node_points_read_the_shared_hub_cache(tmp_path, monkeyp
 
 
 BUMP = TimeBump(Match(agentic=True), min_conc=64, minutes=1440)
-LANE = SrtLane(time_limit="4:00:00", long_time_limit="8:00:00", long_time=Match(any_of("dsv4"), agentic=True))
+LANE = SrtLane(
+    time_limit="4:00:00", long_time_limit="8:00:00", long_time=Match(any_of("dsv4"), agentic=True)
+)
 BUMPED = dict(IS_AGENTIC="1", CONC="64")
 LONG = dict(MODEL_PREFIX="dsv4", IS_AGENTIC="1")
 
