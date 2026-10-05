@@ -4998,27 +4998,48 @@
         "vllm_command.txt": "ffede83dad1c5ae83bdcfb2f058add3d0ce0350fd60cb1bb914b02b0ef0cf120",
         "replayed_power_validation.json": "9337d41921e45ec555d2ab73f57ddcbded2f99e8c24fc80f03ac7153e4075fe9"
       }
+    },
+    {
+      "run_id": 37269968186,
+      "url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37269968186",
+      "arm": "none",
+      "concurrency": 489,
+      "repeat": 1,
+      "attempt": 1,
+      "head_sha": "6d5e1baf8a2e58cf85de8d484edfddb18a7c107a",
+      "status": "queued",
+      "workflow_name": "offload-v1-none-c489-r1-branchwf-20261005",
+      "dispatched_at": "2026-10-05T05:56:02Z",
+      "job_id": 111634726337,
+      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37269968186/job/111634726337",
+      "performance_result": false,
+      "phase": "queued for B200 runner admission",
+      "dispatch_evidence": "Focused experiment tests passed 26/26 and matrix-generation tests passed 331/331. The exact generator preview resolved MiniMax-M3 NVFP4, vLLM TP4, canonical AgentX c489, 3,600-second profiling, kv-offloading=none, and zero host DRAM. A fresh cluster-wide job-label inventory immediately before dispatch found zero queued or in-progress cluster:b200-nscale jobs and no active-or-queued study workflow. The generated job carries cluster:b200-nscale and nodes:1."
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894,36796500128,36879140816,37027095833",
-  "status": "c489 completed canonical warmup and the full 3,600-second profiling send window, but the fixed Slurm allocation interrupted aggregate export. Raw request records and strict power replay are qualified evidence only, so c489 is a local canonical-protocol feasibility failure. The adjacent c488/c489 boundary is now resolved at integer concurrency; matched HBM-only c489 is the next control.",
+  "status": "Matched HBM-only c489 run 37269968186 is queued after c489 NVMe established the adjacent c488/c489 canonical-protocol feasibility boundary. It is the single queued B200 job and the only active-or-queued study workflow.",
   "last_capacity_check": {
-    "checked_at": "2026-10-05T05:41:40Z",
+    "checked_at": "2026-10-05T05:56:14Z",
     "active_study_run_ids": [],
-    "pending_study_run_ids": [],
+    "pending_study_run_ids": [
+      37269968186
+    ],
     "dispatch_allowed": false,
-    "b200_priority_jobs_queued": null,
-    "b200_priority_jobs_in_progress": null,
-    "b200_active_or_queued_run_ids": [],
-    "target_node": "im-b200-c001",
-    "target_node_state": "c489 exact scratch independently confirmed absent; refresh cluster inventory before matched HBM-only c489 dispatch",
+    "b200_priority_jobs_queued": 1,
+    "b200_priority_jobs_in_progress": 0,
+    "b200_active_or_queued_run_ids": [
+      37269968186
+    ],
+    "target_node": null,
+    "target_node_state": "matched HBM-only c489 queued for B200 runner admission",
     "observed_free_bytes": null,
-    "reason": "c489 is terminal and exact scratch is absent. Commit and push evidence, then refresh the cluster-wide B200 queue before matched HBM-only c489 dispatch."
+    "reason": "Matched HBM-only c489 is the single queued B200 job. Dispatch nothing else while it remains active or queued."
   },
   "next_dispatch": {
-    "arm": "none",
-    "concurrency": 489,
-    "requires": "Commit and push c489 evidence, then refresh the cluster-wide B200 queue. Dispatch only with zero queued cluster:b200-nscale jobs and no active-or-queued study workflow."
+    "arm": null,
+    "concurrency": null,
+    "requires": "Wait for matched HBM-only c489 admission, canonical warmup, 3,600-second profiling, artifact capture, exact scratch cleanup, and adaptive feasibility comparison."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-21T05:30:00Z",
