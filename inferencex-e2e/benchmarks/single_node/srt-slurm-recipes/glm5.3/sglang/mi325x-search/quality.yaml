@@ -110,6 +110,9 @@ override_tep4_mtp:
         speculative-num-draft-tokens: 4
       env:
         SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: '1024'
+  benchmark:
+    env:
+      CONC: '3'
 
 override_dep4:
   frontend:
