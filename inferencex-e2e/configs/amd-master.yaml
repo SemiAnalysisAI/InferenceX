@@ -1818,6 +1818,22 @@ glm5.3-fp8-mi300x-sglang-disagg-tp8-dep16:
           tp: 16
           ep: 16
           dp-attn: true
+      - spec-decoding: none
+        conc-list: [16]
+        kv-offloading: dram
+        kv-offload-backend: { name: umbp-linker }
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/glm5.3/sglang/mi300x-fp8/agentx/disagg-umbp.yaml:override_tp8_dep16_c16"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
 
 glm5.3-fp8-mi300x-sglang-disagg-decode-mem95:
   image: lmsysorg/sglang-rocm:v0.5.21-rocm720-mi30x-20261005@sha256:a4d60e7ef7645aefb1c52a77dcb32970440454bc359a1baff03711fcd0501613

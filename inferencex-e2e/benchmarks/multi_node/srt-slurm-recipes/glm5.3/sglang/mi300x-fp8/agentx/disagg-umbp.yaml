@@ -263,7 +263,7 @@ override_tp4_pp2_42_36_resident_c8:
     env:
       CONC: "8"
 
-override_tp8_dep16_c8:
+override_tp8_dep16_c8: &tp8_dep16
   frontend:
     args:
       dp-aware: true
@@ -292,6 +292,12 @@ override_tp8_dep16_c8:
   benchmark:
     env:
       CONC: "8"
+
+override_tp8_dep16_c16:
+  <<: *tp8_dep16
+  benchmark:
+    env:
+      CONC: "16"
 
 override_tp8_tep16_c8:
   roles:
