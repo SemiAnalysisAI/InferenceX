@@ -104,10 +104,10 @@ on:
         required: false
         default: false
       total-cpu-dram-gb:
-        description: "Total CPU DRAM in GB for KV offloading"
+        description: "Configured CPU DRAM offload capacity per server node in GB"
         required: false
         type: string
-        default: '600'
+        default: '0'
       ref:
         description: "Git ref (branch/sha) to checkout"
         required: false

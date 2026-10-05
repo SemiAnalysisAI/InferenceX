@@ -484,6 +484,7 @@ jobs:
             conc: ${{ matrix.config.conc[0] }}
             duration: ${{ inputs.agentx-fast && '1200' || (inputs.duration-override != '' && inputs.duration-override || matrix.config.duration) }}
             agentx-fast: ${{ inputs.agentx-fast }}
+            total-cpu-dram-gb: ${{ matrix.config['total-cpu-dram-gb'] }}
             run-eval: false
             require-power: ${{ inputs.require-power }}
             power-producer-sha: ${{ inputs.power-producer-sha }}
@@ -513,6 +514,7 @@ jobs:
             conc-list: ${{ format('[{0}]', matrix.config['eval-conc']) }}
             conc: ${{ matrix.config['eval-conc'] }}
             duration: ${{ inputs.duration-override != '' && inputs.duration-override || matrix.config.duration }}
+            total-cpu-dram-gb: ${{ matrix.config['total-cpu-dram-gb'] }}
             run-eval: true
             eval-only: true
             eval-conc: ${{ matrix.config['eval-conc'] }}
