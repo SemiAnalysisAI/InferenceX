@@ -87,6 +87,16 @@ base:
 
 override_tep16: {}
 
+override_tep4_pp2:
+  roles:
+    agg:
+      nodes: 1
+      gpus: 8
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        pipeline-parallel-size: 2
+
 override_tep8_low_latency:
   roles:
     agg:
@@ -97,6 +107,23 @@ override_tep8_low_latency:
         expert-parallel-size: 8
         moe-runner-backend: aiter
         deepep-mode: low_latency
+
+override_dep4_pp2:
+  frontend:
+    args:
+      dp-aware: true
+  roles:
+    agg:
+      nodes: 1
+      gpus: 8
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        pipeline-parallel-size: 2
+        attn-dp-size: 4
+        enable-dp-lm-head: true
+        moe-dense-tp-size: 1
+        chunked-prefill-size: 4096
 
 override_dep16:
   frontend:

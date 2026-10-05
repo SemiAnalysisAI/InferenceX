@@ -1723,6 +1723,44 @@ glm5.3-fp8-mi300x-sglang-disagg-tp8-tep16:
           ep: 16
           dp-attn: false
 
+glm5.3-fp8-mi300x-sglang-ep4-pp2-quality:
+  image: lmsysorg/sglang-rocm:v0.5.21-rocm720-mi30x-20261005@sha256:a4d60e7ef7645aefb1c52a77dcb32970440454bc359a1baff03711fcd0501613
+  model: zai-org/GLM-5.3
+  model-prefix: glm5.3
+  runner: cluster:mi300x-amd
+  precision: fp8
+  framework: sglang
+  router: { name: sglang-router, version: "0.3.2" }
+  multinode: true
+  disagg: false
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - spec-decoding: none
+        conc-list: [8]
+        kv-offloading: none
+        num-nodes: 1
+        worker:
+          num-worker: 1
+          tp: 4
+          pp: 2
+          ep: 4
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/glm5.3/sglang/mi300x-fp8/agentx/expert-quality.yaml:override_tep4_pp2"
+      - spec-decoding: none
+        conc-list: [8]
+        kv-offloading: none
+        num-nodes: 1
+        worker:
+          num-worker: 1
+          tp: 4
+          pp: 2
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/glm5.3/sglang/mi300x-fp8/agentx/expert-quality.yaml:override_dep4_pp2"
+
 glm5.3-fp8-mi300x-sglang-ep8-ll-quality:
   image: lmsysorg/sglang-rocm:v0.5.21-rocm720-mi30x-20261005@sha256:a4d60e7ef7645aefb1c52a77dcb32970440454bc359a1baff03711fcd0501613
   model: zai-org/GLM-5.3
