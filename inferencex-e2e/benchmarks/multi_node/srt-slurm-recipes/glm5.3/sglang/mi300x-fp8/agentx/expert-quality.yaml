@@ -163,3 +163,9 @@ override_dep16_c16:
   benchmark:
     env:
       CONC: "16"
+      RESULT_DIR: /infmax-workspace/LOGS/agentic
+      AGENTIC_OUTPUT_DIR: /infmax-workspace
+      HF_HOME: /hf-cache
+      HF_HUB_CACHE: /hf-cache/hub
+      AIPERF_DATASET_MMAP_CACHE_DIR: /aiperf_mmap_cache
+      TOKENIZERS_PARALLELISM: "false"
