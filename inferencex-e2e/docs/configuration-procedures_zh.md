@@ -301,8 +301,14 @@ TP4 约 1.23 TB）全部来自节点 0 的 1.5 TB 内存。`runners/srt-slurm/ho
 ### DeepSeek-V4.1-Flash DSpark
 
 GB200 的 DSpark 配方将 CUDA graph 最小捕获范围设为 64 tokens，以覆盖 AgentX 子代理并发。这会将 c1/c2/c4 的上限从 8/16/32 提升至 64；c8 及以上保持原有大小。完整轨迹、AL 3.51 和 Engram UVA 配置保持不变；需通过 CI 验证低并发尾延迟改善。
-B200 的 DSpark 配方使用相同的最小捕获范围，并保持相同的工作负载配置。
+B200 的 DSpark 配方按测试点显式设置捕获尺寸，详见下文。
 GB300 的 DSpark 配方按测试点显式设置捕获尺寸，详见下文。
+
+B200 条目使用 `vllm/vllm-openai:nightly-dev-x86_64-cu130-ac9126e58aa7`，开启 FlashInfer autotune。
+TP4 覆盖并发 1–128；DEP2（TP1 x DP2 + EP2，DeepGEMM MegaMoE）覆盖 8–32，DEP4（TP1 x DP4 + EP4，DeepGEMM MegaMoE）覆盖
+64–128，两者均前置一致性哈希 vLLM Router。DEP2 每个 B200 rank 约有 150 GiB 权重，因此 batched tokens
+上限为 4096，CUDA graph 捕获上限为 576 tokens。所有 B200 测试点设置 `--gpu-memory-utilization 0.97`。
+所有测试点使用 `FULL_AND_PIECEWISE` CUDA graph，捕获尺寸为六 token 验证块的倍数。
 H200 的 DSpark 配方使用相同的最小捕获范围，并保持相同的工作负载配置。
 
 B300 的 DSpark 配方按测试点显式设置捕获尺寸，详见下文。
