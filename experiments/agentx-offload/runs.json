@@ -5013,16 +5013,27 @@
       "job_id": 111634726337,
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37269968186/job/111634726337",
       "performance_result": false,
-      "phase": "runner admitted; launch job script active",
+      "phase": "canonical warmup active",
       "dispatch_evidence": "Focused experiment tests passed 26/26 and matrix-generation tests passed 331/331. The exact generator preview resolved MiniMax-M3 NVFP4, vLLM TP4, canonical AgentX c489, 3,600-second profiling, kv-offloading=none, and zero host DRAM. A fresh cluster-wide job-label inventory immediately before dispatch found zero queued or in-progress cluster:b200-nscale jobs and no active-or-queued study workflow. The generated job carries cluster:b200-nscale and nodes:1.",
       "started_at": "2026-10-05T05:56:52Z",
-      "runner": "b200-nscale-slurm_00"
+      "runner": "b200-nscale-slurm_00",
+      "node": "im-b200-c001",
+      "allocation_id": "19501",
+      "scratch": "/offload-scratch/inferencex-offload-37269968186-1-19501-ebc77392a090",
+      "warmup_started_at": "2026-10-05T06:06:07Z",
+      "warmup_returned": 104,
+      "warmup_target": 5412,
+      "warmup_sent": 522,
+      "warmup_in_flight": 418,
+      "warmup_errors": 0,
+      "warmup_elapsed_seconds": 480.1,
+      "storage_evidence": "Runtime offload_config.json verifies zero host DRAM, zero NVMe bytes, and no connector. Slurm allocation 19501 is active on im-b200-c001."
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894,36796500128,36879140816,37027095833",
-  "status": "Matched HBM-only c489 run 37269968186 is active on b200-nscale-slurm_00 after c489 NVMe established the adjacent c488/c489 canonical-protocol feasibility boundary. Slurm allocation and compute-node placement are pending.",
+  "status": "Matched HBM-only c489 run 37269968186 is in canonical warmup on im-b200-c001 as Slurm allocation 19501. The latest recorded sample returned 104/5,412, sent 522, retained 418 in flight, and had zero errors after 480.1 seconds.",
   "last_capacity_check": {
-    "checked_at": "2026-10-05T05:56:52Z",
+    "checked_at": "2026-10-05T06:14:07Z",
     "active_study_run_ids": [
       37269968186
     ],
@@ -5033,15 +5044,15 @@
     "b200_active_or_queued_run_ids": [
       37269968186
     ],
-    "target_node": null,
-    "target_node_state": "runner admitted; launch job script active; Slurm placement pending",
-    "observed_free_bytes": null,
-    "reason": "Matched HBM-only c489 is the single active B200 study job. Dispatch nothing else while it remains active."
+    "target_node": "im-b200-c001",
+    "target_node_state": "Slurm allocation 19501 active; canonical warmup healthy",
+    "observed_free_bytes": 4461040140288,
+    "reason": "Matched HBM-only c489 is the single active B200 study job in canonical warmup. Dispatch nothing else while it remains active."
   },
   "next_dispatch": {
     "arm": null,
     "concurrency": null,
-    "requires": "Wait for matched HBM-only c489 admission, canonical warmup, 3,600-second profiling, artifact capture, exact scratch cleanup, and adaptive feasibility comparison."
+    "requires": "Wait for matched HBM-only c489 canonical warmup, 3,600-second profiling, artifact capture, exact scratch cleanup, and adaptive feasibility comparison."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-21T05:30:00Z",
