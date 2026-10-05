@@ -3,7 +3,7 @@ schema: 2
 name: qwen35-b200-fp8-agentx-disagg-1p1d-p-tp4-d-tp4-hicache-c24-mtp
 model:
   path: qwen3.5-fp8
-  container: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
+  container: lmsysorg/sglang:nightly-dev-cu13-20261005-f70e8c68@sha256:f08b3c7f14bdf2581ea776829a4a2d714825b385c189c0ae53590704676918ff
   precision: fp8
 engine: sglang
 dynamo:
