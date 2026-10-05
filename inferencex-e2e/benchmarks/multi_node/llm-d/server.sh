@@ -569,8 +569,7 @@ PY
         )
     fi
 
-    # Signal job.slurm (outside the container, where scancel exists) to release
-    # the allocation; without it workers wait until TIME_LIMIT.
+    # job.slurm stops the srun step once this marker exists.
     touch "$BENCHMARK_LOGS_DIR/.bench_done.$SLURM_JOB_ID"
 else
     # Workers (prefill leader, prefill/decode workers): keep vLLM alive.
