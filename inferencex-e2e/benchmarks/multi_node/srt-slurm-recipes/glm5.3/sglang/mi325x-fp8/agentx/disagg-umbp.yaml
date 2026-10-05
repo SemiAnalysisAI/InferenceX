@@ -431,6 +431,27 @@ override_colocated_tep4_dep4_c8: &tep4_dep4_pd
     env:
       CONC: "8"
 
+# Equal-cost one-wide-prefill versus two-TEP4-prefill quality comparison.
+override_tp8_prefill_dep4_c8:
+  frontend:
+    args:
+      dp-aware: true
+      decode-policy: cache_aware
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        max-running-requests: 8
+    decode:
+      <<: *tep4_dep4_decode
+      nodes: 1
+      workers: 1
+  benchmark:
+    env:
+      CONC: "8"
+
 # Policy-only contrast: stock decode ChunkCache has no shared-prefix reuse.
 override_colocated_tep4_dep4_round_robin_c8:
   <<: *tep4_dep4_pd

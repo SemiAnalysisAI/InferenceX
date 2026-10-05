@@ -9418,3 +9418,11 @@
   description:
     - "Compare native round-robin decode routing against cache-aware decode routing on the same colocated TEP4/DEP4 C8 shape. Keep prefill cache-aware routing, DP awareness, full context, P-only UMBP and all engine settings unchanged; stock decode ChunkCache does not share prefix pages."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3656
+
+- config-keys:
+    - glm53-mi325x-oct5-tp8-prefill-dep4
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Gate one qualified native TP8 prefill worker with the qualified DEP4 decoder, preserving full context, P-only 513 GB UMBP and cache-aware DP routing. This twelve-active/sixteen-allocated-GPU topology supplies an equal-cost comparison to two TEP4 prefill workers; timing remains conditional on real quality and current proxy evidence."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3656
