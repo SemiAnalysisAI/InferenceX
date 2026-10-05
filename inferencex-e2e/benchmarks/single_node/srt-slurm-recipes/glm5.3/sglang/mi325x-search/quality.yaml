@@ -105,11 +105,11 @@ override_dep4:
         data-parallel-size: 4
         enable-dp-attention: true
         enable-dp-lm-head: true
-        moe-dense-tp-size: 1
+        moe-dense-tp-size: 4
         moe-a2a-backend: mori
         deepep-mode: normal
         chunked-prefill-size: 4096
-        mem-fraction-static: 0.93
+        mem-fraction-static: 0.955
         max-running-requests: 8
         cuda-graph-max-bs-decode: 8
       env:

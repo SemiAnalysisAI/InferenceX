@@ -9352,3 +9352,12 @@
   description:
     - "Extend the native TP4/EP4 real-quality gate to colocated TEP4 prefill and TEP4 decode with MORI expert collectives, MORI KV transfer and P-only UMBP. Keep full context and validate the natural cache pools and real outputs before timing."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3656
+
+- config-keys:
+    - glm53-mi325x-oct5-dep4
+    - glm53-mi325x-oct5-colocated-tep4-tep4
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Size native EP4 cache budgets from the measured aggregate pools and role-specific MLA/indexer bytes per token: aggregate DEP4 uses dense TP4 and static fraction 0.955; colocated TEP4 P/D uses 0.94 because disaggregation disables index-cache elision. Preserve the full 1,048,576-token context and require actual capacity and quality gates before timing."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3656

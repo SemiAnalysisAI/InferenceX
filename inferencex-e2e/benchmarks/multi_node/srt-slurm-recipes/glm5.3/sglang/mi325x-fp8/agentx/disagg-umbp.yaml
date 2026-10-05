@@ -261,7 +261,7 @@ override_colocated_tep4_tep4_c4:
         moe-a2a-backend: mori
         deepep-mode: normal
         chunked-prefill-size: 1024
-        mem-fraction-static: 0.93
+        mem-fraction-static: 0.94
         max-running-requests: 8
         cuda-graph-max-bs-decode: 8
     decode:
