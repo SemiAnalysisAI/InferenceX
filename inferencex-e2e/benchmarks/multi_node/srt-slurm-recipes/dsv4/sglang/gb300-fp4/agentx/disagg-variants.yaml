@@ -171,6 +171,8 @@ base:
         moe-dense-tp-size: 1
         moe-a2a-backend: megamoe
         enable-deepseek-v4-fp4-indexer: true
+        # W4A4 is prefill-only: the prefill DSpark worker runs the target forward and
+        # writes the draft KV from target hidden states, but never the draft MoE.
         enable-w4a4-mxfp4-megamoe: true
         disaggregation-transfer-backend: mooncake
         disaggregation-mode: prefill
@@ -242,7 +244,10 @@ base:
         moe-dense-tp-size: 1
         moe-a2a-backend: megamoe
         enable-deepseek-v4-fp4-indexer: true
-        enable-w4a4-mxfp4-megamoe: true
+        # No W4A4 here: the MegaMoE MMA type is global and the DSpark draft shares the
+        # MegaMoE backend, so W4A4 would lower the draft MoE's activations below the
+        # image default (fp8xfp4). The FP4 indexer stays on: the draft has no indexer,
+        # and the indexer cache layout must match between prefill and decode.
         disaggregation-transfer-backend: mooncake
         disaggregation-mode: decode
         load-balance-method: total_tokens
