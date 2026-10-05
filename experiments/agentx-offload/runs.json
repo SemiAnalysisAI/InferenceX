@@ -5177,36 +5177,57 @@
       "attempt": 1,
       "retry_of": 37366720497,
       "head_sha": "1b1d7651bdf951c05224f39c016dba57d6f260a0",
-      "status": "queued",
+      "status": "cancelled",
       "workflow_name": "offload-v1-nvme4tib-c489-r3-digest-extended-20261005",
       "dispatched_at": "2026-10-05T20:50:30Z",
-      "phase": "cancellation requested during get-jobs; finalization queued",
+      "phase": "cancelled during get-jobs; no B200 allocation or scratch",
       "performance_result": false,
       "failure_stage": "incorrect explicit input ref",
-      "runtime_evidence": "The workflow head is 1b1d7651bdf951c05224f39c016dba57d6f260a0, but the explicit input ref was mistyped. Cancellation was requested immediately; get-jobs is cancelled and no B200 job or task-owned scratch was created. Wait for full workflow termination before a corrected dispatch."
+      "runtime_evidence": "The workflow head is 1b1d7651bdf951c05224f39c016dba57d6f260a0, but the explicit input ref was mistyped. Cancellation was requested immediately; get-jobs is cancelled and no B200 job or task-owned scratch was created. Wait for full workflow termination before a corrected dispatch.",
+      "completed_at": "2026-10-05T21:05:45Z"
+    },
+    {
+      "run_id": 37374537927,
+      "url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37374537927",
+      "arm": "nvme",
+      "concurrency": 489,
+      "repeat": 3,
+      "attempt": 2,
+      "retry_of": 37372224015,
+      "head_sha": "d03ec558bf5a832cac78a0c7756ef2ecda668922",
+      "status": "queued",
+      "workflow_name": "offload-v1-nvme4tib-c489-r3-digest-extended-fullsha-20261005",
+      "dispatched_at": "2026-10-05T21:13:34Z",
+      "phase": "get-jobs queued; B200 job not generated yet",
+      "performance_result": false,
+      "execution_budget": {
+        "slurm_minutes": 510,
+        "github_job_minutes": 530
+      },
+      "dispatch_evidence": "The prior cancelled run 37372224015 was terminal. A fresh cluster-wide inventory at 2026-10-05T21:13:15Z found zero queued or in-progress B200 jobs and no active-or-queued study workflow. The exact current commit SHA was obtained with git rev-parse HEAD and verified equal to origin/experiment/agentx-b200-offload before dispatch. All four study arms reference the original image by its verified manifest digest."
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894,36796500128,36879140816,37027095833",
-  "status": "The removed image tag is repaired by the exact recorded manifest digest at head 1b1d7651bdf951c05224f39c016dba57d6f260a0. An immediate retry 37372224015 was cancelled during get-jobs because its explicit input ref was mistyped; no B200 job or scratch was created. Wait for full workflow termination before a corrected dispatch.",
+  "status": "Digest-pinned extended-budget c489 NVMe retry 37374537927 is queued at get-jobs from exact head d03ec558bf5a832cac78a0c7756ef2ecda668922. Its prior mistaken-ref run 37372224015 was cancelled before any B200 allocation. No B200 job or scratch exists yet for the new run.",
   "last_capacity_check": {
-    "checked_at": "2026-10-05T20:50:16Z",
+    "checked_at": "2026-10-05T21:13:15Z",
     "active_study_run_ids": [],
     "pending_study_run_ids": [
-      37372224015
+      37374537927
     ],
     "dispatch_allowed": false,
     "b200_priority_jobs_queued": 0,
     "b200_priority_jobs_in_progress": 0,
     "b200_active_or_queued_run_ids": [],
     "target_node": "im-b200-c001",
-    "target_node_state": "no allocation from cancelled setup run",
+    "target_node_state": "awaiting matrix generation and B200 admission",
     "observed_free_bytes": null,
-    "reason": "Cancelled study workflow 37372224015 still has queued finalization jobs; dispatch nothing until terminal and refreshed inventory."
+    "reason": "Digest-pinned c489 NVMe workflow 37374537927 is queued; dispatch nothing else while it remains active or queued."
   },
   "next_dispatch": {
-    "arm": "nvme",
+    "arm": "none",
     "concurrency": 489,
-    "requires": "After 37372224015 is fully terminal, refresh cluster-wide B200 labels and dispatch digest-pinned c489 only with exact input ref 1b1d7651bdf951c05224f39c016dba57d6f260a0."
+    "requires": "After NVMe run 37374537927 is terminal, capture artifacts and hashes, verify exact scratch cleanup, delete temporary downloads, and refresh cluster-wide B200 inventory before dispatching matched HBM-only c489."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-21T05:30:00Z",

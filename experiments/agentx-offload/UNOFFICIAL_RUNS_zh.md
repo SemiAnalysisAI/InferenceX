@@ -21,7 +21,7 @@ python3 experiments/agentx-offload/update_unofficial_runs.py --write
 `renderable` 只表示 API 至少返回一条 benchmark 记录，不代表该运行在科学上有效。
 有效性和研究结论应以 [`runs.json`](./runs.json) 为准。
 
-生成时间：`2026-10-05T20:51:29.224911Z`
+生成时间：`2026-10-05T21:14:21.905913Z`
 
 ## URL
 
@@ -37,9 +37,9 @@ python3 experiments/agentx-offload/update_unofficial_runs.py --write
 
 ## 完整分支工作流列表
 
-分支工作流：**71**
+分支工作流：**72**
 
-GitHub 单独 job：**851**
+GitHub 单独 job：**853**
 
 | Workflow run ID | 结论 | 图表 benchmark 数 | GitHub job 数 | 工作流 |
 | ---: | --- | ---: | ---: | --- |
@@ -113,4 +113,5 @@ GitHub 单独 job：**851**
 | [37269968186](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37269968186) | failure | 0 | 12 | `e2e Test - offload-v1-none-c489-r1-branchwf-20261005` |
 | [37366294117](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37366294117) | failure | 0 | 12 | `e2e Test - offload-v1-nvme4tib-c489-r2-extended-20261005` |
 | [37366720497](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37366720497) | failure | 0 | 12 | `e2e Test - offload-v1-nvme4tib-c489-r2-extended-fullsha-20261005` |
-| [37372224015](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37372224015) | none | 0 | 11 | `e2e Test - offload-v1-nvme4tib-c489-r3-digest-extended-20261005` |
+| [37372224015](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37372224015) | cancelled | 0 | 12 | `e2e Test - offload-v1-nvme4tib-c489-r3-digest-extended-20261005` |
+| [37374537927](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37374537927) | none | 0 | 1 | `e2e Test - offload-v1-nvme4tib-c489-r3-digest-extended-fullsha-20261005` |

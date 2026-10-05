@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-10-05T20:51:29.224911Z",
+  "generated_at": "2026-10-05T21:14:21.905913Z",
   "repo": "SemiAnalysisAI/InferenceX",
   "branch": "experiment/agentx-b200-offload",
   "workflow_run_ids": [
@@ -74,9 +74,10 @@
     37269968186,
     37366294117,
     37366720497,
-    37372224015
+    37372224015,
+    37374537927
   ],
-  "job_id_count": 851,
+  "job_id_count": 853,
   "renderable_workflow_run_ids": [
     35444664736,
     35449533638,
@@ -3260,10 +3261,10 @@
       "workflow_run_id": 37372224015,
       "workflow_name": "e2e Test - offload-v1-nvme4tib-c489-r3-digest-extended-20261005",
       "display_title": "e2e Test - offload-v1-nvme4tib-c489-r3-digest-extended-20261005",
-      "status": "queued",
-      "conclusion": null,
+      "status": "completed",
+      "conclusion": "cancelled",
       "created_at": "2026-10-05T20:50:30Z",
-      "updated_at": "2026-10-05T20:50:40Z",
+      "updated_at": "2026-10-05T21:05:45Z",
       "html_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37372224015",
       "job_ids": [
         111971949807,
@@ -3276,7 +3277,28 @@
         111971997045,
         111971997098,
         111971997145,
-        111971997292
+        111971997292,
+        111977042985
+      ],
+      "artifact_ids": [],
+      "artifact_names": [],
+      "unofficial_api_status": 404,
+      "benchmark_count": 0,
+      "evaluation_count": 0,
+      "renderable": false,
+      "pure_nvme": true
+    },
+    {
+      "workflow_run_id": 37374537927,
+      "workflow_name": "e2e Test - offload-v1-nvme4tib-c489-r3-digest-extended-fullsha-20261005",
+      "display_title": "e2e Test - offload-v1-nvme4tib-c489-r3-digest-extended-fullsha-20261005",
+      "status": "queued",
+      "conclusion": null,
+      "created_at": "2026-10-05T21:13:34Z",
+      "updated_at": "2026-10-05T21:13:34Z",
+      "html_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37374537927",
+      "job_ids": [
+        111979685637
       ],
       "artifact_ids": [],
       "artifact_names": [],
