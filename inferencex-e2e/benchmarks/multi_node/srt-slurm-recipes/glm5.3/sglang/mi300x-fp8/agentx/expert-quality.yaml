@@ -92,12 +92,21 @@ override_tp4_pp2:
     agg:
       nodes: 1
       gpus: 8
-      args:
+      args: &tp4_pp2_args
         tensor-parallel-size: 4
         expert-parallel-size: 1
         pipeline-parallel-size: 2
         moe-a2a-backend: none
         deepep-mode: auto
+
+override_tp4_pp2_42_36:
+  roles:
+    agg:
+      nodes: 1
+      gpus: 8
+      args: *tp4_pp2_args
+      env:
+        SGLANG_PP_LAYER_PARTITION: "42,36"
 
 override_tep4_pp2:
   roles:
