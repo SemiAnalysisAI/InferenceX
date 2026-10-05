@@ -9319,3 +9319,11 @@
     - "Add GB300 Qwen3.5-397B-A17B-FP8 AgentX recipes: four disaggregated TP1xPP4 MTP prefill / DEP4 MTP decode points and five aggregate TP4/TP8 MTP points."
     - "New recipes and matrix entries only; existing Qwen3.5 GB300 entries are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3231
+
+- config-keys:
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Set MC_ENABLE_DEST_DEVICE_AFFINITY=1 in both GB300 Kimi-K3 aggregated Mooncake recipes (agg-dcp8-dspark4-mooncake.yaml and agg-dcp8-dspark7-maxseq2-mooncake.yaml), matching every other Mooncake recipe, including the GB300 Kimi-K3 disaggregated recipes. Mooncake then selects the RDMA NIC local to the destination GPU. Also add a comment noting that Kubernetes deployments need numa-bind. Images, arguments and grids are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3683
