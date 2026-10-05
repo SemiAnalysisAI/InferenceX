@@ -226,3 +226,27 @@ override_1p2d_tp8_c16:
   benchmark:
     env:
       CONC: "16"
+
+override_tp8_mtp_resident_c1:
+  services: []
+  roles:
+    prefill:
+      env:
+        UMBP_STANDALONE_ADDRESS: ""
+      args:
+        enable-unified-cache-external-linker: false
+        unified-cache-external-linker-backend: null
+        hicache-storage-backend-extra-config: null
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 3
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 4
+    decode:
+      args:
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 3
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 4
+  benchmark:
+    env:
+      CONC: "1"
