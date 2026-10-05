@@ -790,14 +790,21 @@ def _wrap_launcher(fn, label):
 
 
 def _patch_launcher_module(module):
-    """Mark every public Python function a launcher module defines."""
+    """Mark every public Python function a launcher module defines, and its classes' public methods."""
     import types
 
-    for name, obj in list(vars(module).items()):
-        if (isinstance(obj, types.FunctionType) and obj.__module__ == module.__name__
+    def launchable(name, obj):
+        return (isinstance(obj, types.FunctionType) and obj.__module__ == module.__name__
                 and not name.startswith(_WRAP_SKIP_PREFIXES)
-                and not getattr(obj, "_infx_launcher", False)):
+                and not getattr(obj, "_infx_launcher", False))
+
+    for name, obj in list(vars(module).items()):
+        if launchable(name, obj):
             setattr(module, name, _wrap_launcher(obj, f"{module.__name__}.{name}"))
+        elif isinstance(obj, type) and obj.__module__ == module.__name__ and not name.startswith("_"):
+            for attr, method in list(vars(obj).items()):
+                if launchable(attr, method):
+                    setattr(obj, attr, _wrap_launcher(method, f"{module.__name__}.{name}.{attr}"))
 
 
 def _patch_launcher_calls(module, attr, label_of):
@@ -848,6 +855,17 @@ _LAUNCHER_HOOKS = {
     "cutlass.cutlass_dsl.tvm_ffi_provider": lambda m: _patch_launcher_calls(
         m, "__call__", _named_label("cute")),
 }
+# Packages whose Python functions launch native kernels outside torch ops
+# (vendored kernel libraries, FlashInfer's JIT modules): every module under them.
+_LAUNCHER_PACKAGES = ("vllm.third_party", "flashinfer")
+
+
+def _hook_for(name):
+    if name in _HOOKS:
+        return _HOOKS[name]
+    if any(name == p or name.startswith(p + ".") for p in _LAUNCHER_PACKAGES):
+        return _patch_launcher_module
+    return None
 
 
 def _patch_gpu_worker(module):
@@ -937,7 +955,8 @@ _HOOKS = {
 
 class _PostImportFinder(importlib.abc.MetaPathFinder):
     def find_spec(self, name, path, target=None):
-        if name not in _HOOKS:
+        hook = _hook_for(name)
+        if hook is None:
             return None
         for finder in sys.meta_path:
             if finder is self:
@@ -953,10 +972,10 @@ class _PostImportFinder(importlib.abc.MetaPathFinder):
         loader = spec.loader
         exec_module = loader.exec_module
 
-        def exec_and_patch(module, _exec=exec_module, _name=name):
+        def exec_and_patch(module, _exec=exec_module, _name=name, _hook=hook):
             _exec(module)
             try:
-                _HOOKS[_name](module)
+                _hook(module)
             except Exception:
                 _write_error(f"patch {_name}")
 
@@ -965,8 +984,9 @@ class _PostImportFinder(importlib.abc.MetaPathFinder):
 
 
 if _DIR:
-    for _name, _hook in _HOOKS.items():
-        if _name in sys.modules:
+    for _name in list(sys.modules):
+        _hook = _hook_for(_name)
+        if _hook is not None:
             try:
                 _hook(sys.modules[_name])
             except Exception:
