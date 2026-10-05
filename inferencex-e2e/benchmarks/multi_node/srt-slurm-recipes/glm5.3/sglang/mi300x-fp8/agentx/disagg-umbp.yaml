@@ -231,9 +231,9 @@ override_tp8_mtp_resident_c1:
   services: []
   roles:
     prefill:
-      env:
+      env: &mtp_resident_prefill_env
         UMBP_STANDALONE_ADDRESS: ""
-      args:
+      args: &mtp_resident_prefill_args
         enable-unified-cache-external-linker: false
         unified-cache-external-linker-backend: null
         hicache-storage-backend-extra-config: null
@@ -242,7 +242,7 @@ override_tp8_mtp_resident_c1:
         speculative-eagle-topk: 1
         speculative-num-draft-tokens: 4
     decode:
-      args:
+      args: &mtp_resident_decode_args
         speculative-algorithm: EAGLE
         speculative-num-steps: 3
         speculative-eagle-topk: 1
@@ -250,3 +250,37 @@ override_tp8_mtp_resident_c1:
   benchmark:
     env:
       CONC: "1"
+
+override_tp8_mtp_resident_c4:
+  services: []
+  roles:
+    prefill:
+      env: *mtp_resident_prefill_env
+      args:
+        <<: *mtp_resident_prefill_args
+        max-running-requests: 8
+    decode:
+      args:
+        <<: *mtp_resident_decode_args
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
+  benchmark:
+    env:
+      CONC: "4"
+
+override_tp8_mtp_resident_c8:
+  services: []
+  roles:
+    prefill:
+      env: *mtp_resident_prefill_env
+      args:
+        <<: *mtp_resident_prefill_args
+        max-running-requests: 16
+    decode:
+      args:
+        <<: *mtp_resident_decode_args
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 16
+  benchmark:
+    env:
+      CONC: "8"
