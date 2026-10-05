@@ -130,15 +130,14 @@ esac
     assert json.loads((tmp_path / "gpu_metrics_identity.json").read_text()) == {"gpu_data": []}
 
 
-@pytest.mark.parametrize("with_gpu", [True, False])
-def test_monitor_returns_the_workload_status(tmp_path, monkeypatch, with_gpu):
-    stubs = {"nvidia_smi": nvidia_smi(f"{NVIDIA_HEADER}\n")} if with_gpu else {}
-    monkeypatch.setenv("PATH", str(tool_dir(tmp_path, **stubs)))
+def test_without_a_gpu_tool_the_workload_runs_unmonitored_and_keeps_its_status(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv("PATH", str(tool_dir(tmp_path)))
     output = tmp_path / "gpu_metrics.csv"
 
     assert gpu_monitor.run(output, 1, ["sh", "-c", "exit 7"]) == 7
-    # Without a GPU tool the workload runs unmonitored.
-    assert output.exists() == with_gpu
+    assert not output.exists()
 
 
 RUN_MONITOR = (

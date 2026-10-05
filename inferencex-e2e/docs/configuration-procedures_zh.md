@@ -336,7 +336,7 @@ MI355X 分支保持一致。Hopper 没有 FP4 tensor core，因此这些权重�
 `infx.bench.agentic.traces.resolve` 选中未截断的默认值，仅仅是因为其 `dsv4` 模型族前缀同时匹配了
 `dsv41flash`。这一依赖在调用处并不可见却至关重要。
 [`infx/tests/bench/test_agentic_replay.py`](../infx/tests/bench/test_agentic_replay.py) 中的
-`test_default_corpus_follows_the_model_family_context` 覆盖了 `dsv41flash`，因此收窄该前缀会使
+`test_corpus_follows_the_model_family_context_unless_pinned` 覆盖了 `dsv41flash`，因此收窄该前缀会使
 该测试失败，而不会静默降级本配方的轨迹。
 
 **H100 分支单独实现。** H100 不在上游硬件表中，且瓶颈不在权重。在 1M 上下文下，稀疏

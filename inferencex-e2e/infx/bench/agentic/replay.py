@@ -15,19 +15,14 @@ REQUIRED = (
     "FRAMEWORK",
     "CONC",
     "DURATION",
-    "AIPERF_LIVE_FAILED_REQUEST_THRESHOLD",
-    "AIPERF_TRACE_IDLE_GAP_CAP_SECONDS",
-    "AGENTIC_WARMUP_GRACE_PERIOD",
     "AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS",
     "AIPERF_EXPERIMENTAL_FAST",
     "AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID",
-    "AIPERF_UNSAFE_OVERRIDE",
     "AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING",
-    "AIPERF_WARMUP_REQUESTS_PER_LANE",
 )
 
-# The scenario rejects shorter profiles unless --unsafe-override marks the run
-# submission_valid=false.
+# The scenario rejects shorter profiles; smoke runs below it pass --unsafe-override, which
+# marks them submission_valid=false.
 MIN_SCENARIO_DURATION_S = 900
 FAST_DURATION_S = 1200
 FAST_WARMUP_REQUESTS_PER_LANE = "1"
@@ -44,10 +39,10 @@ class ReplayConfig:
     """Hugging Face id; a wire name is not necessarily a valid repo id."""
     concurrency: int
     duration: int
-    warmup_requests_per_lane: str
-    live_failed_request_threshold: str
-    trace_idle_gap_cap_seconds: str
-    warmup_grace_period: str
+    # None keeps the agentx scenario's default.
+    warmup_requests_per_lane: str | None
+    live_failed_request_threshold: str | None
+    warmup_grace_period: str | None
     extra_inputs: tuple[str, ...]
     dynamo_session_timeout: str | None
     """Set only when Dynamo conversation-aware routing applies."""
@@ -65,7 +60,7 @@ class ReplayConfig:
         """Validate the replay inputs in ``env``; artifacts go below ``result_dir``."""
         values = inputs.require(*REQUIRED, env=env)
         duration = inputs.parse_positive_int("DURATION", values["DURATION"])
-        warmup = values["AIPERF_WARMUP_REQUESTS_PER_LANE"]
+        warmup = None
         if values["AIPERF_EXPERIMENTAL_FAST"] == "1":
             duration, warmup = FAST_DURATION_S, FAST_WARMUP_REQUESTS_PER_LANE
         # Dynamo routes later turns to their prefix's prefill worker via nvext.session_control;
@@ -89,9 +84,12 @@ class ReplayConfig:
             concurrency=inputs.parse_positive_int("CONC", values["CONC"]),
             duration=duration,
             warmup_requests_per_lane=warmup,
-            live_failed_request_threshold=values["AIPERF_LIVE_FAILED_REQUEST_THRESHOLD"],
-            trace_idle_gap_cap_seconds=values["AIPERF_TRACE_IDLE_GAP_CAP_SECONDS"],
-            warmup_grace_period=values["AGENTIC_WARMUP_GRACE_PERIOD"],
+            # Recipes with correlated low-concurrency trajectories loosen the live abort.
+            live_failed_request_threshold=inputs.optional(
+                "AIPERF_LIVE_FAILED_REQUEST_THRESHOLD", env
+            ),
+            # Saturation arms with a larger in-flight set need longer to drain warmup.
+            warmup_grace_period=inputs.optional("AGENTIC_WARMUP_GRACE_PERIOD", env),
             # One ``key:value`` pair per word, as AIPerf's multi-value flag takes them.
             extra_inputs=tuple(extra_inputs.split()),
             dynamo_session_timeout=(
@@ -104,9 +102,7 @@ class ReplayConfig:
             ),
             server_metrics_urls=_server_metrics_urls(env),
             artifact_dir=result_dir / "aiperf_artifacts",
-            unsafe_override=(
-                duration < MIN_SCENARIO_DURATION_S or values["AIPERF_UNSAFE_OVERRIDE"] == "true"
-            ),
+            unsafe_override=duration < MIN_SCENARIO_DURATION_S,
             loader=loader,
             dataset=dataset,
             # Recipes whose legacy launch rendered prompts client-side keep doing so.
@@ -153,22 +149,18 @@ def _server_metrics_urls(env: Mapping[str, str]) -> tuple[str, ...]:
 
 def replay_argv(cfg: ReplayConfig, cli: str | Path) -> list[str]:
     """The ``aiperf profile`` argv for ``cfg``; ``cli`` is the ``aiperf`` executable."""
-    # The agentx scenario owns endpoint type, streaming, seeds, start ratios, server token
-    # counts, telemetry, dataset size, and server-metric slices.
-    argv = [str(cli), "profile", "--scenario", "agentx"]
-    argv += ["--url", cfg.url, "--endpoint", "/v1/chat/completions"]
+    # The agentx scenario owns the endpoint, streaming, seed, start ratios, warmup and failure
+    # defaults, trace idle cap, token counts, telemetry, dataset size, and metric slices.
+    argv = [str(cli), "profile", "--scenario", "agentx", "--url", cfg.url]
     argv += ["--model", cfg.model, "--tokenizer", cfg.tokenizer]
-    argv += ["--concurrency", str(cfg.concurrency)]
-    argv += ["--benchmark-duration", str(cfg.duration)]
-    # Live abort threshold; AIPERF_FAILED_REQUEST_THRESHOLD stays the post-run gate.
-    argv += ["--failed-request-threshold", cfg.live_failed_request_threshold]
-    # One-token advances per lane after the t* snapshot primers. The default spread keeps
-    # each lane's recorded phase-start offset, so no --burst-phase-starts.
-    argv += ["--warmup-requests-per-lane", cfg.warmup_requests_per_lane]
-    # Caps end-to-start idle time per trajectory tree without reordering requests.
-    argv += ["--trace-idle-gap-cap-seconds", cfg.trace_idle_gap_cap_seconds]
-    # The maximum wait for warmup to drain, not a fixed sleep.
-    argv += ["--warmup-grace-period", cfg.warmup_grace_period]
+    argv += ["--concurrency", str(cfg.concurrency), "--benchmark-duration", str(cfg.duration)]
+    if cfg.live_failed_request_threshold is not None:
+        # Live abort only; run.FAILED_REQUEST_THRESHOLD gates the finished profile.
+        argv += ["--failed-request-threshold", cfg.live_failed_request_threshold]
+    if cfg.warmup_requests_per_lane is not None:
+        argv += ["--warmup-requests-per-lane", cfg.warmup_requests_per_lane]
+    if cfg.warmup_grace_period is not None:
+        argv += ["--warmup-grace-period", cfg.warmup_grace_period]
     if cfg.extra_inputs:
         argv += ["--extra-inputs", *cfg.extra_inputs]
     if cfg.dynamo_session_timeout is not None:

@@ -1,4 +1,4 @@
-"""The ``eval`` command and its srt-slurm shims against a fake OpenAI server, pip, and lm-eval."""
+"""The ``eval`` command and its srt-slurm shims against a fake OpenAI server, uv, and lm-eval."""
 
 import json
 import os
@@ -10,7 +10,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from infx.bench.env import InputError
+from infx.bench import uv
+from infx.bench.env import BenchError, InputError
 from infx.bench.eval import FRAMEWORKS, evaluate, lm_eval
 from infx.bench.eval.context import EvalOutcome
 from infx.evals.validate_scores import validate_batch_manifest
@@ -19,13 +20,6 @@ from infx.tests.bench.stubs import executable
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
 STUBS = {
-    "pip/__init__.py": "",
-    "pip/__main__.py": """
-import json, os, sys
-with open(os.environ["STUB_PIP_TRACE"], "a") as trace:
-    trace.write(json.dumps(sys.argv[1:]) + "\\n")
-sys.exit(1 if os.environ.get("STUB_PIP_FAIL", "\\0") in " ".join(sys.argv[1:]) else 0)
-""",
     "lm_eval/__init__.py": "",
     "lm_eval/models/__init__.py": "",
     "lm_eval/models/openai_completions.py": "class LocalChatCompletion:\n    pass\n",
@@ -69,11 +63,28 @@ done
 exec "{sys.executable}" "$@"
 """
 
+# The container's uv: records each call and fails those naming STUB_UV_FAIL.
+UV = f"""#!{sys.executable}
+import json, os, sys
+with open(os.environ["STUB_UV_TRACE"], "a") as trace:
+    trace.write(json.dumps(sys.argv[1:]) + "\\n")
+sys.exit(1 if os.environ.get("STUB_UV_FAIL", "\\0") in " ".join(sys.argv[1:]) else 0)
+"""
+
 MULTI_NODE = {
     "IS_MULTINODE": "true", "EVAL_MAX_MODEL_LEN": "4096",
     "PREFILL_TP": "4", "PREFILL_EP": "1", "PREFILL_DP_ATTN": "false",
     "DECODE_TP": "8", "DECODE_EP": "1", "DECODE_DP_ATTN": "false", "DECODE_NUM_WORKERS": "2",
 }  # fmt: skip
+
+
+@pytest.fixture(autouse=True)
+def recording_uv(tmp_path, monkeypatch):
+    """Put the recording uv first on PATH, so no test installs into this interpreter."""
+    bin_dir = tmp_path / "uv-bin"
+    bin_dir.mkdir()
+    executable(bin_dir / "uv", UV)
+    monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
 
 
 @pytest.fixture
@@ -104,7 +115,7 @@ def base_env(tmp_path):
         "HOME": str(tmp_path),
         "PYTHONPATH": str(stubs),
         "HF_HUB_OFFLINE": "1",
-        "STUB_PIP_TRACE": str(tmp_path / "pip.jsonl"),
+        "STUB_UV_TRACE": str(tmp_path / "uv.jsonl"),
         "STUB_LM_EVAL_TRACE": str(tmp_path / "lm_eval.jsonl"),
         "OPENAI_API_KEY": "EMPTY",
         "EVAL_ONLY": "false",
@@ -183,6 +194,7 @@ def test_single_node_shim_stages_the_eval_in_the_checkout_and_records_its_status
     assert staged == ["meta_env.json", "results_stub.json", "samples_gsm8k_stub.jsonl"]
     assert json.loads((checkout / "results_stub.json").read_text()) == {"answer": "42"}
     assert openai.requests == [("POST", "/v1/chat/completions")]
+    assert [uv_step(argv) for argv in trace(tmp_path / "uv.jsonl")][:1] == ["install lm-eval[api]"]
     [run] = trace(tmp_path / "lm_eval.jsonl")
     assert run["tasks_found"] and run["patched"]
     # MAX_MODEL_LEN 10240 is capped at the checkpoint's 8192; 4096 of it stays for the prompt.
@@ -305,8 +317,8 @@ def test_the_environment_framework_overrides_the_command_line(
 
 @pytest.mark.parametrize(("endpoint", "concurrency", "inputs", "message"), [
     ("http://127.0.0.1:9", "2", {"EVAL_FRAMEWORK": "kimi-vendor", "EVAL_SUITE": 'kimi"suite'}, "EVAL_SUITE may contain only"),
-    ("http://127.0.0.1:9", "2", {"EVAL_SUITE": "gpqa_diamond"}, "only supported with bfcl, kimi-vendor, minimax-vendor"),
-    ("http://127.0.0.1:9", "2", {"EVAL_FRAMEWORK": "swebench"}, "unknown eval framework 'swebench'"),
+    ("http://127.0.0.1:9", "2", {"EVAL_SUITE": "gpqa_diamond"}, "EVAL_SUITE is only supported with"),
+    ("http://127.0.0.1:9", "2", {"EVAL_FRAMEWORK": "no-such-eval"}, "unknown eval framework 'no-such-eval'"),
     ("http://127.0.0.1:9", "1 4", {"EVAL_FRAMEWORK": "kimi-vendor"}, "batched eval concurrency is only supported for lm-eval"),
     ("http://127.0.0.1:9", "4 0", {}, "--concurrency must be a positive integer"),
     ("http://127.0.0.1:9", " ", {}, "--concurrency must name at least one concurrency"),
@@ -388,19 +400,22 @@ def test_request_budget_is_the_benchmark_context_capped_at_the_checkpoint(
     assert lm_eval.max_output_tokens(context) == max_tokens
 
 
-def pip_step(argv: list[str]) -> str:
-    """Name one recorded pip invocation of the lm-eval install."""
-    if argv[:3] == ["uninstall", "-y", "torchvision"]:
-        return "uninstall"
-    if argv[-1] == "lm-eval[api]":
-        return "release"
-    return "git" if argv[-1].startswith("git+") else "archive"
+def uv_step(argv: list[str]) -> str:
+    """Name one recorded ``uv`` call of the lm-eval install into this interpreter."""
+    assert argv[0] == "pip" and argv[-2:] == ["--python", sys.executable]
+    assert "--break-system-packages" in argv
+    spec = argv[-3]
+    if argv[1] == "uninstall":
+        return f"uninstall {spec}"
+    if {"--no-deps", "--reinstall"} <= set(argv):
+        return "git pin" if spec.startswith("git+") else "archive pin"
+    return f"install {spec}"
 
 
 @pytest.mark.parametrize(("image", "git", "failing", "expected"), [
-    ("rocm/atom:latest", True, "git+", ["uninstall", "release", "git", "archive"]),
-    ("lmsysorg/sglang:latest", True, None, ["release", "git"]),
-    ("lmsysorg/sglang:latest", False, None, ["release", "archive"]),
+    ("rocm/atom:latest", True, "git+", ["uninstall torchvision", "install lm-eval[api]", "git pin", "archive pin"]),
+    ("lmsysorg/sglang:latest", True, None, ["install lm-eval[api]", "git pin"]),
+    ("lmsysorg/sglang:latest", False, None, ["install lm-eval[api]", "archive pin"]),
 ])  # fmt: skip
 def test_lm_eval_install_drops_torchvision_on_atom_and_falls_back_to_the_archive(
     base_env, tmp_path, image, git, failing, expected
@@ -411,8 +426,19 @@ def test_lm_eval_install_drops_torchvision_on_atom_and_falls_back_to_the_archive
         executable(bin_dir / "git", "#!/bin/sh\n")
     env = {**base_env, "PATH": str(bin_dir), "IMAGE": image}
     if failing:
-        env["STUB_PIP_FAIL"] = failing
+        env["STUB_UV_FAIL"] = failing
 
     lm_eval.install(env)
 
-    assert [pip_step(argv) for argv in trace(tmp_path / "pip.jsonl")] == expected
+    assert [uv_step(argv) for argv in trace(tmp_path / "uv.jsonl")] == expected
+
+
+def test_lm_eval_install_only_warns_when_uv_is_unavailable(base_env, monkeypatch, capfd):
+    def unavailable() -> str:
+        raise BenchError("uv installation did not create /scratch/uv")
+
+    monkeypatch.setattr(uv, "find", unavailable)
+
+    lm_eval.install(base_env)
+
+    assert "WARN: uv installation did not create /scratch/uv" in capfd.readouterr().err

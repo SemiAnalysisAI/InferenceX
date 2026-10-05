@@ -110,7 +110,7 @@ python3 -m infx.evals.validate_scores --model-prefix "$MODEL_PREFIX" \
   --meta-env "$EVAL_DIR/meta_env.json" --results-glob "$EVAL_DIR/results*.json"
 ```
 
-Run these with Python 3.10 or newer, normally inside the serving container, because lm-eval pip-installs its pinned harness into that `python3`. The command copies the allow-listed artifacts into `--stage-to` and writes `meta_env.json` there. It takes the concurrency from `--concurrency`, which lm-eval receives as `num_concurrent` in `--model_args`. `EVAL_CONCURRENT_REQUESTS` is no longer read. The exact invocation is in [`infx.bench.eval.lm_eval.run`](../infx/bench/eval/lm_eval.py#L117-L146).
+Run these with Python 3.10 or newer, normally inside the serving container, because lm-eval installs its pinned harness into that `python3` with `uv pip`. The command copies the allow-listed artifacts into `--stage-to` and writes `meta_env.json` there. It takes the concurrency from `--concurrency`, which lm-eval receives as `num_concurrent` in `--model_args`. `EVAL_CONCURRENT_REQUESTS` is no longer read. The exact invocation is in [`infx.bench.eval.lm_eval.run`](../infx/bench/eval/lm_eval.py#L121-L150).
 
 ## 3. `EVAL_ONLY` is a launcher contract
 
@@ -122,7 +122,7 @@ Set `EVAL_ONLY=true` **before server launch**. It is not merely a switch inside 
 4. `python3 -m infx.bench eval` sizes each lm-eval request from `EVAL_MAX_MODEL_LEN`, else from `MAX_MODEL_LEN` capped at the model's native maximum.
 5. The same command stages the artifacts and writes `meta_env.json`, whether the eval passed or failed.
 
-Relevant implementation: [server context](../infx/srt_slurm/single_node.py#L183-L194), [request budget](../infx/bench/eval/lm_eval.py#L73-L94), [eval dispatch and failure policy](../infx/bench/eval/__init__.py#L74-L173), and [workflow inputs](../../.github/workflows/benchmark-tmpl.yml#L36-L53).
+Relevant implementation: [server context](../infx/srt_slurm/single_node.py#L183-L194), [request budget](../infx/bench/eval/lm_eval.py#L77-L98), [eval dispatch and failure policy](../infx/bench/eval/__init__.py#L74-L173), and [workflow inputs](../../.github/workflows/benchmark-tmpl.yml#L36-L53).
 
 Native multi-node post-eval reads the mounted checkpoint at `/model` and enables dataset downloads in the eval process, without changing worker environments. Context lookup reads numeric limits from local `config.json` before falling back to Transformers; an explicit `EVAL_MAX_MODEL_LEN` still takes precedence.
 
@@ -201,13 +201,13 @@ Retain `meta_env.json`, `results*.json`, and `sample*.jsonl`. The aggregate is a
 
 ## 7. Run AgentX: fast feedback versus canonical evidence
 
-`python3 -m infx.bench agentic` builds its own client runtime ([`infx/bench/agentic/venv.py`](../infx/bench/agentic/venv.py)). It declares the AgentX client dependencies directly alongside the editable `utils/aiperf` install and installs them into a fresh venv under `AIPERF_RUNTIME_DIR` (default `<tmp>/inferencex-agentic-<SLURM_JOB_ID or PID>`) with the caller-supplied `AIPERF_PYTHON_VERSION`. It then re-runs itself under that venv's Python. Recipes reach it through [`benchmarks/srt_agentic.sh`](../benchmarks/srt_agentic.sh).
+`python3 -m infx.bench agentic` builds its own client runtime with uv ([`infx/bench/agentic/venv.py`](../infx/bench/agentic/venv.py)). It creates a fresh Python 3.11 venv under `AIPERF_RUNTIME_DIR` (default `<tmp>/inferencex-agentic-<SLURM_JOB_ID or PID>`) and installs the editable `utils/aiperf` with its declared dependencies, plus the client requirements AIPerf does not declare ([`requirements.txt`](../infx/bench/agentic/requirements.txt)). It then re-runs itself under that venv's Python. Recipes reach it through [`benchmarks/srt_agentic.sh`](../benchmarks/srt_agentic.sh).
 
-AgentX is AIPerf `agentx` trace replay, not a fixed-token synthetic benchmark. The checked-in default uses ten additional warmup requests per trajectory lane and the recipe's configured profile duration. `agentx-fast` forces one warmup request per lane and a 1,200-second profile. It affects single- and multi-node AgentX throughput only. Fixed-sequence throughput and evals remain canonical. Fast runs are not eligible for artifact reuse ([workflow policy](../../.github/workflows/README.md#agentx-fast-mode), [fast replay settings](../infx/bench/agentic/replay.py#L69-L70)).
+AgentX is AIPerf `agentx` trace replay, not a fixed-token synthetic benchmark. The `agentx` scenario owns the replay defaults: ten additional warmup requests per trajectory lane, a 1,800-second warmup drain limit, a 0.10 live failure threshold, and a 300-second trace idle cap. A recipe may raise the drain limit with `AGENTIC_WARMUP_GRACE_PERIOD` or loosen the live abort with `AIPERF_LIVE_FAILED_REQUEST_THRESHOLD`; the finished profile still fails validation above a 0.10 error rate ([post-run gate](../infx/bench/agentic/run.py#L36-L38)). The profile runs for the configured duration. `agentx-fast` forces one warmup request per lane and a 1,200-second profile. It affects single- and multi-node AgentX throughput only. Fixed-sequence throughput and evals remain canonical. Fast runs are not eligible for artifact reuse ([workflow policy](../../.github/workflows/README.md#agentx-fast-mode), [fast replay settings](../infx/bench/agentic/replay.py#L64-L65)).
 
 Every AgentX throughput concurrency runs against a fresh server deployment. The matrix creates a separate job per point. `infx.launch` rejects a multi-node AgentX throughput job whose `CONC_LIST` is not exactly its one positive `CONC`, and the replay client rejects a `CONC_LIST` that differs from `CONC`. AgentX does not flush caches or reuse a running server for another point. Warmup and profiling for the same point share the deployment. This does not change fixed-sequence sweeps or graded-eval batching.
 
-For multi-node srt-slurm jobs, the benchmark client may run on a different host from the frontend. The replay targets `http://$SRT_FRONTEND_HOST:$SRT_FRONTEND_PORT` whenever `SRT_FRONTEND_HOST` is set, otherwise an explicit `AIPERF_SERVER_URL`, and falls back to `http://localhost:$PORT` only when neither is available ([`_server_url`](../infx/bench/agentic/replay.py#L119-L126)).
+For multi-node srt-slurm jobs, the benchmark client may run on a different host from the frontend. The replay targets `http://$SRT_FRONTEND_HOST:$SRT_FRONTEND_PORT` whenever `SRT_FRONTEND_HOST` is set, otherwise an explicit `AIPERF_SERVER_URL`, and falls back to `http://localhost:$PORT` only when neither is available ([`_server_url`](../infx/bench/agentic/replay.py#L115-L122)).
 
 Keep non-index engine or router wheels reproducible and immutable: check in the source patch and builder beside the launcher, verify the upstream wheel's digest before patching, assign an explicit local version, and install the published artifact through an exact URL with a SHA256 fragment. A local backport must not use an unreleased upstream version number.
 
@@ -229,11 +229,11 @@ gh workflow run e2e-tests.yml --repo SemiAnalysisAI/InferenceX --ref "$REF" \
   -f agentx-fast=true
 ```
 
-Treat fast results as bring-up evidence, never as a replacement for the canonical candidate. A duration below 900 seconds or `AIPERF_UNSAFE_OVERRIDE=true` adds AIPerf's `--unsafe-override` and flags the submission invalid. Use it only for smoke diagnosis ([source](../infx/bench/agentic/replay.py#L107-L109)). After a fast run is healthy, run the exact candidate canonically before claiming benchmark success.
+Treat fast results as bring-up evidence, never as a replacement for the canonical candidate. A duration below 900 seconds adds AIPerf's `--unsafe-override` and flags the submission invalid. Use it only for smoke diagnosis ([source](../infx/bench/agentic/replay.py#L105)). After a fast run is healthy, run the exact candidate canonically before claiming benchmark success.
 
 ## 8. Preserve trace and run provenance
 
-AgentX defaults to recorded assistant-response replay. Live server outputs are measured but discarded when constructing later turns. The selected trace corpus is model-family dependent unless `WEKA_LOADER_OVERRIDE` pins it. The resolver logs both loader and Hugging Face dataset ([trace resolution](../infx/bench/agentic/traces.py#L23-L28), [replay semantics](../infx/bench/agentic/replay.py#L154-L193)). Replays keep the model's native context. The client ignores `MAX_MODEL_LEN`, and only an explicit `AIPERF_MAX_CONTEXT_LENGTH` adds AIPerf's `--max-context-length`.
+AgentX defaults to recorded assistant-response replay. Live server outputs are measured but discarded when constructing later turns. The selected trace corpus is model-family dependent unless `WEKA_LOADER_OVERRIDE` pins `semianalysis_cc_traces_weka_062126` or `semianalysis_cc_traces_weka_062126_256k`. The resolver logs both loader and Hugging Face dataset ([trace resolution](../infx/bench/agentic/traces.py#L20-L25), [replay semantics](../infx/bench/agentic/replay.py#L150-L185)). Replays keep the model's native context. The client ignores `MAX_MODEL_LEN`, and only an explicit `AIPERF_MAX_CONTEXT_LENGTH` adds AIPerf's `--max-context-length`.
 
 Capture orchestration provenance immediately:
 
@@ -265,7 +265,7 @@ For each concurrency retain:
 - server/frontend logs and every metrics endpoint represented.
 - run URL/ID, attempt, head SHA, recipe/config identity, image, topology, fast flag, and any override.
 
-The runner writes the command before replay and validates raw results after aggregation ([execution path](../infx/bench/agentic/run.py#L138-L222)). Aggregation preserves dataset provenance and hardware/model/topology fields ([aggregate construction](../infx/results/agentic/__init__.py)). Raw workflow uploads intentionally omit very large `inputs.json` and `profile_export_raw.jsonl`. If those are required for an investigation, preserve them from the live allocation before cleanup ([single-node artifact contract](../../.github/workflows/benchmark-tmpl.yml#L382-L391), [multi-node contract](../../.github/workflows/benchmark-multinode-tmpl.yml#L466-L475)).
+The runner writes the command before replay and validates raw results after aggregation ([execution path](../infx/bench/agentic/run.py#L135-L218)). Aggregation preserves dataset provenance and hardware/model/topology fields ([aggregate construction](../infx/results/agentic/__init__.py)). Raw workflow uploads intentionally omit very large `inputs.json` and `profile_export_raw.jsonl`. If those are required for an investigation, preserve them from the live allocation before cleanup ([single-node artifact contract](../../.github/workflows/benchmark-tmpl.yml#L382-L391), [multi-node contract](../../.github/workflows/benchmark-multinode-tmpl.yml#L466-L475)).
 
 ## 9. Debug long AgentX runs from live evidence
 
@@ -314,7 +314,7 @@ curl -fsS '<METRICS_URL>' | \
   rg -i 'request|queue|cache|token|prefill|decode|error|fail'
 ```
 
-Track trends over repeated samples: running/waiting requests, KV usage, prefix hits, input/output token rates, completed/cancelled/errored requests, frontend routing balance, and disaggregated KV transfer. AIPerf records endpoint identity for every server series ([metrics wiring](../infx/bench/agentic/replay.py#L129-L151)). When `AIPERF_SERVER_METRICS_URLS` is unset and `SRTCTL_FRONTEND_TYPE` is not `dynamo`, the replay scrapes each worker's `/metrics` from `SRT_AGG_ENDPOINTS`, or from `SRT_PREFILL_ENDPOINTS` plus `SRT_DECODE_ENDPOINTS`.
+Track trends over repeated samples: running/waiting requests, KV usage, prefix hits, input/output token rates, completed/cancelled/errored requests, frontend routing balance, and disaggregated KV transfer. AIPerf records endpoint identity for every server series ([metrics wiring](../infx/bench/agentic/replay.py#L125-L147)). When `AIPERF_SERVER_METRICS_URLS` is unset and `SRTCTL_FRONTEND_TYPE` is not `dynamo`, the replay scrapes each worker's `/metrics` from `SRT_AGG_ENDPOINTS`, or from `SRT_PREFILL_ENDPOINTS` plus `SRT_DECODE_ENDPOINTS`.
 
 Use phase markers, not total Slurm age:
 

@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pytest
 
+from infx.bench.agentic import traces
 from infx.bench.agentic.run import Plan, execute
 from infx.bench.agentic.venv import Runtime
 from infx.bench.env import BenchError, InputError
@@ -34,23 +35,16 @@ POINT = {
     "PCP_SIZE": "2",
     "KV_OFFLOADING": "none",
     "PRECISION": "fp4",
-    "AIPERF_PYTHON_VERSION": "3.11",
-    "AIPERF_FAILED_REQUEST_THRESHOLD": "0.10",
     "MODEL": "test/model",
     "MODEL_PREFIX": "test",
     "FRAMEWORK": "vllm",
     "CONC": "8",
     "DURATION": "3600",
     "PORT": "8000",
-    "AIPERF_LIVE_FAILED_REQUEST_THRESHOLD": "0.10",
-    "AIPERF_TRACE_IDLE_GAP_CAP_SECONDS": "300",
-    "AGENTIC_WARMUP_GRACE_PERIOD": "1800",
     "AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS": "3600",
     "AIPERF_EXPERIMENTAL_FAST": "0",
     "AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID": "false",
-    "AIPERF_UNSAFE_OVERRIDE": "false",
     "AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING": "1",
-    "AIPERF_WARMUP_REQUESTS_PER_LANE": "10",
 }
 # The runtime's python: each result step logs itself and exits with its *_RC.
 FAKE_PYTHON = r"""#!/bin/bash
@@ -135,8 +129,8 @@ def _events(tmp_path: Path) -> list[str]:
     ("overrides", "message"),
     [
         (
-            {"RESULT_FILENAME": None, "AIPERF_WARMUP_REQUESTS_PER_LANE": None},
-            "  - RESULT_FILENAME\n  - AIPERF_WARMUP_REQUESTS_PER_LANE",
+            {"RESULT_FILENAME": None, "AIPERF_EXPERIMENTAL_FAST": None},
+            "  - RESULT_FILENAME\n  - AIPERF_EXPERIMENTAL_FAST",
         ),
         ({"KV_OFFLOAD_BACKEND": "lmcache"}, "KV_OFFLOAD_BACKEND must be empty"),
         ({"KV_OFFLOADING": "dram", "TOTAL_CPU_DRAM_GB": "2400"}, "KV_OFFLOAD_BACKEND is required"),
@@ -298,10 +292,7 @@ def test_required_server_metrics_gate_an_otherwise_clean_point(tmp_path, csv, pr
         assert _run(tmp_path, AIPERF_REQUIRED_SERVER_METRIC_PREFIX=prefix) == 0
 
 
-@pytest.mark.parametrize(
-    ("sent", "expected_rc"), [(signal.SIGINT, 130), (signal.SIGTERM, 143), (signal.SIGHUP, 129)]
-)
-def test_signal_during_the_replay_skips_scoring_and_exits_128_plus_n(tmp_path, sent, expected_rc):
+def test_signal_during_the_replay_skips_scoring_and_exits_128_plus_n(tmp_path):
     runtime = _runtime(tmp_path)
     env = _point(tmp_path, ENABLE_AGENTX_POWER="1", REPLAY_SECONDS="60", PYTHONPATH=str(REPO_ROOT))
     driver = subprocess.Popen(
@@ -317,15 +308,16 @@ def test_signal_during_the_replay_skips_scoring_and_exits_128_plus_n(tmp_path, s
         while "replay" not in _events(tmp_path):
             assert time.monotonic() < deadline, "the replay did not start"
             time.sleep(0.01)
-        # The whole job gets the signal, like a terminal interrupt or scancel.
-        os.killpg(driver.pid, sent)
+        # The whole job gets the signal, like a terminal interrupt. SIGTERM and SIGHUP take the
+        # same deferral; test_gpu_monitor's relay cases send those two.
+        os.killpg(driver.pid, signal.SIGINT)
         _, stderr = driver.communicate(timeout=10)
     finally:
         with contextlib.suppress(ProcessLookupError):
             os.killpg(driver.pid, signal.SIGKILL)
         driver.communicate()
 
-    assert driver.returncode == expected_rc, stderr
+    assert driver.returncode == 130, stderr
     # The signal may reach the monitor's sampler first, so its final sample is optional.
     assert [e for e in _events(tmp_path) if e != "gpu-final-sample"] == ["gpu-identity", "replay"]
 
@@ -414,7 +406,8 @@ def test_srt_shim_builds_the_runtime_waits_for_the_server_and_writes_the_point(
 
     assert result.returncode == 0, result.stderr
     assert _events(tmp_path) == [
-        "hf download --repo-type dataset semianalysisai/cc-traces-weka-062126-256k",
+        # MODEL_PREFIX=test is no 1M-context family, so the point replays the capped corpus.
+        f"hf download --repo-type dataset {traces.LOADERS[traces.CAPPED]}",
         "GET /v1/models",
         "GET /v1/chat/completions",
         "replay",

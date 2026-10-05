@@ -147,8 +147,8 @@ PYTHONSAFEPATH=1 PYTHONPATH="$PWD${PYTHONPATH:+:$PYTHONPATH}" python3 -m infx.be
 The command requires `MODEL` and the `true`/`false` flags `EVAL_ONLY` and
 `IS_MULTINODE`. `MODEL_NAME` is the served name sent in requests and defaults to
 `MODEL`. The framework is `EVAL_FRAMEWORK`, else `--framework`, else `lm-eval`.
-lm-eval also requires `OPENAI_API_KEY` (the workflows set `EMPTY`) and pip-installs
-its pinned harness into the running `python3`. Each run writes into a fresh temporary
+lm-eval also requires `OPENAI_API_KEY` (the workflows set `EMPTY`) and installs its
+pinned harness into the running `python3` with `uv pip`. Each run writes into a fresh temporary
 directory, then copies the allow-listed artifacts into `--stage-to` and writes
 `meta_env.json` there, also when the eval fails. `EVAL_CONCURRENT_REQUESTS` and
 `EVAL_RESULT_DIR` are no longer read.
@@ -215,10 +215,10 @@ Walle cases. InferenceX does not install the verifier package or reimplement
 its request, streaming, or validation logic.
 
 System Python 3.12 or newer is preferred and used directly. On older images,
-the runner uses the existing system `pip` to install pinned `uv==0.11.33` under
-a temporary prefix, then provisions an isolated Python 3.12 virtual environment.
-The selected interpreter installs the minimal pinned verifier runtime
-(`httpx[http2]`, `openai`, `jsonschema`, and `pytest`) into a separate
+the runner provisions an isolated Python 3.12 virtual environment with `uv`
+(from `PATH`, else Astral's standalone installer). `uv pip install --target`
+installs the minimal pinned verifier runtime (`httpx[http2]`, `openai`,
+`jsonschema`, and `pytest`) for the selected interpreter into a separate
 temporary package directory, then runs upstream
 `tests/tool_call_json_schema/test_tool_call_json_schema.py` with:
 
@@ -410,11 +410,12 @@ but uses a fixed four-case V4 partial evaluation:
 | `parallel` | `parallel_1` | `bfcl_parallel` |
 | `irrelevance` | `irrelevance_0` | `bfcl_irrelevance` |
 
-The verified wheel and its undeclared `soundfile==0.13.1` import dependency are
-installed into a temporary Python 3.10-or-newer virtual environment with system
-site packages enabled so the image's existing Torch/Transformers stack can be
-reused; it never mutates the global Python environment. The temporary
-environment and BFCL project root are removed after
+`uv` installs the verified wheel and its undeclared `soundfile==0.13.1` import
+dependency into a temporary Python 3.10-or-newer virtual environment with system
+site packages enabled, excluding every package the image already provides so the
+image's existing Torch/Transformers stack is reused; it never mutates the global
+Python environment. Those image versions win over BFCL's own pins, such as `numpy==1.26.4`.
+The temporary environment and BFCL project root are removed after
 the run. Once package installation finishes, evaluation is local-only: BFCL
 skips its server setup and uses only the already-running local API root,
 typically `http://127.0.0.1:$PORT/v1`. The OpenAI SDK appends
@@ -536,7 +537,7 @@ Key eval modules in `infx/bench/eval/`:
 |--------|-------------|
 | `__init__.py` (`evaluate`) | The `eval` command. Selects the framework, checks `EVAL_SUITE`, waits for the chat route before vendor evals in eval-only jobs, batches lm-eval concurrencies, stages artifacts, writes `meta_env.json`, and sets the exit code |
 | `lm_eval.py` | lm-eval framework. `install` installs the pinned harness commit, `context_length` and `native_context_length` size each request, and `run` drives `local-chat-completions` with the sitecustomize patch |
-| `vendor.py` | One generic `run` for the Kimi, MiniMax, and BFCL entries in `PROVIDERS`. `_provision` chooses the verifier interpreter (the image `python3` when new enough, otherwise a venv built with pinned `uv`, and always a system-site-packages venv for BFCL). The `_prepare_kimi`, `_prepare_minimax`, and `_prepare_bfcl` hooks install the pinned runtimes, and failed steps get integration-error results |
+| `vendor.py` | One generic `run` for the Kimi, MiniMax, and BFCL entries in `PROVIDERS`. `_provision` finds `uv` and chooses the verifier interpreter (the image `python3` when new enough, otherwise a `uv` venv, and always a system-site-packages `uv` venv for BFCL). The `_prepare_kimi`, `_prepare_minimax`, and `_prepare_bfcl` hooks install the pinned runtimes with `uv pip`, and failed steps get integration-error results |
 | `meta.py` | `build` and `write` produce `meta_env.json`. `_disaggregated` maps the multi-node `PREFILL_*`/`DECODE_*` topology, and `refresh` serves the host-side srt collector |
 | `stage.py` | `copy` applies the artifact allow-list and the `_conc<N>` suffixes |
 | `context.py` | `EvalContext` and `EvalOutcome`, the contract each framework's `run(ctx)` implements |
@@ -651,8 +652,8 @@ attempt cannot replace a newer failed retry.
 2. Add a `Provider` entry, with its `Suite` specs and `prepare` hook, to `PROVIDERS`
    in `infx/bench/eval/vendor.py`. `infx.bench.eval.FRAMEWORKS` registers it with
    the eval command. Keep suite-specific request and report policy in the adapter.
-3. Install dependencies in a provider-specific isolated runtime from the `prepare`
-   hook.
+3. Install dependencies with `uv pip` (`infx.bench.uv`) in a provider-specific isolated
+   runtime from the `prepare` hook.
 4. Emit `result_format: inferencex-eval-v1`, name the native report so it matches the
    staging allow-list in `infx/bench/eval/stage.py` and the workflow upload paths,
    set `EVAL_SUITE`, and add a threshold.

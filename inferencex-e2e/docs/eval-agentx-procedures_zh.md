@@ -107,7 +107,7 @@ python3 -m infx.evals.validate_scores --model-prefix "$MODEL_PREFIX" \
   --meta-env "$EVAL_DIR/meta_env.json" --results-glob "$EVAL_DIR/results*.json"
 ```
 
-请使用 Python 3.10 或更高版本运行这些命令，通常在服务容器内执行，因为 lm-eval 会通过 pip 把固定版本的 harness 安装到该 `python3` 中。该命令会把允许列表中的产物复制到 `--stage-to`，并在该目录写入 `meta_env.json`。并发取自 `--concurrency`，lm-eval 通过 `--model_args` 中的 `num_concurrent` 接收该值。命令不再读取 `EVAL_CONCURRENT_REQUESTS`。准确调用见 [`infx.bench.eval.lm_eval.run`](../infx/bench/eval/lm_eval.py#L117-L146)。
+请使用 Python 3.10 或更高版本运行这些命令，通常在服务容器内执行，因为 lm-eval 会通过 `uv pip` 把固定版本的 harness 安装到该 `python3` 中。该命令会把允许列表中的产物复制到 `--stage-to`，并在该目录写入 `meta_env.json`。并发取自 `--concurrency`，lm-eval 通过 `--model_args` 中的 `num_concurrent` 接收该值。命令不再读取 `EVAL_CONCURRENT_REQUESTS`。准确调用见 [`infx.bench.eval.lm_eval.run`](../infx/bench/eval/lm_eval.py#L121-L150)。
 
 ## 3. `EVAL_ONLY` 是 launcher 约定
 
@@ -119,7 +119,7 @@ python3 -m infx.evals.validate_scores --model-prefix "$MODEL_PREFIX" \
 4. `python3 -m infx.bench eval` 按 `EVAL_MAX_MODEL_LEN` 确定每个 lm-eval 请求的预算。未设置时使用 `MAX_MODEL_LEN`，并以模型原生上限为界。
 5. 同一命令会暂存产物并写入 `meta_env.json`，无论评估成功还是失败。
 
-相关实现：[服务上下文](../infx/srt_slurm/single_node.py#L183-L194)、[请求预算](../infx/bench/eval/lm_eval.py#L73-L94)、[评估分派与失败策略](../infx/bench/eval/__init__.py#L74-L173) 和[工作流输入](../../.github/workflows/benchmark-tmpl.yml#L36-L53)。
+相关实现：[服务上下文](../infx/srt_slurm/single_node.py#L183-L194)、[请求预算](../infx/bench/eval/lm_eval.py#L77-L98)、[评估分派与失败策略](../infx/bench/eval/__init__.py#L74-L173) 和[工作流输入](../../.github/workflows/benchmark-tmpl.yml#L36-L53)。
 
 原生多节点 post-eval 从 `/model` 读取挂载的检查点，并仅在评估进程中启用数据集下载，不改变工作进程环境。上下文查询先读取本地 `config.json` 中的数值上限，再回退到 Transformers；显式设置的 `EVAL_MAX_MODEL_LEN` 仍优先。
 
@@ -198,13 +198,13 @@ gh run download "$RUN_ID" --repo SemiAnalysisAI/InferenceX \
 
 ## 7. 运行 AgentX：快速反馈与 canonical 证据
 
-`python3 -m infx.bench agentic` 会自行构建客户端运行时（[`infx/bench/agentic/venv.py`](../infx/bench/agentic/venv.py)）。它在安装可编辑模式的 `utils/aiperf` 时直接声明 AgentX client 所需的依赖，并使用调用方提供的 `AIPERF_PYTHON_VERSION` 将它们安装到 `AIPERF_RUNTIME_DIR` 下新建的 venv 中（默认 `<tmp>/inferencex-agentic-<SLURM_JOB_ID 或 PID>`）。随后它会在该 venv 的 Python 下重新运行自身。Recipe 通过 [`benchmarks/srt_agentic.sh`](../benchmarks/srt_agentic.sh) 调用它。
+`python3 -m infx.bench agentic` 会用 uv 自行构建客户端运行时（[`infx/bench/agentic/venv.py`](../infx/bench/agentic/venv.py)）。它在 `AIPERF_RUNTIME_DIR` 下新建 Python 3.11 venv（默认 `<tmp>/inferencex-agentic-<SLURM_JOB_ID 或 PID>`），以可编辑模式安装 `utils/aiperf` 及其声明的依赖，并安装 AIPerf 未声明的 client 依赖（[`requirements.txt`](../infx/bench/agentic/requirements.txt)）。随后它会在该 venv 的 Python 下重新运行自身。Recipe 通过 [`benchmarks/srt_agentic.sh`](../benchmarks/srt_agentic.sh) 调用它。
 
-AgentX 是 AIPerf `agentx` trace replay，不是固定 token 的合成 benchmark。仓库默认设置对每条 trajectory lane 额外执行十个 warmup 请求，并使用 recipe 配置的 profile 时长。`agentx-fast` 强制每条 lane 只运行一个 warmup 请求，并将 profile 设为 1,200 秒。它只影响单节点和多节点 AgentX 吞吐量；定长序列吞吐量与 eval 保持 canonical。Fast 运行不符合 artifact reuse 条件（[工作流策略](../../.github/workflows/README.md#agentx-fast-mode)、[fast replay 设置](../infx/bench/agentic/replay.py#L69-L70)）。
+AgentX 是 AIPerf `agentx` trace replay，不是固定 token 的合成 benchmark。`agentx` scenario 负责 replay 默认值：每条 trajectory lane 额外执行十个 warmup 请求、warmup 排空上限为 1,800 秒、实时失败阈值为 0.10、trace 空闲上限为 300 秒。Recipe 可以用 `AGENTIC_WARMUP_GRACE_PERIOD` 提高排空上限，或用 `AIPERF_LIVE_FAILED_REQUEST_THRESHOLD` 放宽实时中止阈值；完成后的 profile 错误率超过 0.10 时仍会校验失败（[运行后校验](../infx/bench/agentic/run.py#L36-L38)）。Profile 使用配置的时长。`agentx-fast` 强制每条 lane 只运行一个 warmup 请求，并将 profile 设为 1,200 秒。它只影响单节点和多节点 AgentX 吞吐量；定长序列吞吐量与 eval 保持 canonical。Fast 运行不符合 artifact reuse 条件（[工作流策略](../../.github/workflows/README.md#agentx-fast-mode)、[fast replay 设置](../infx/bench/agentic/replay.py#L64-L65)）。
 
 每个 AgentX 吞吐量并发点都必须使用新启动的服务。矩阵为每个点生成独立作业。`infx.launch` 会拒绝 `CONC_LIST` 不恰好等于其唯一正整数 `CONC` 的多节点 AgentX 吞吐量作业，replay client 也会拒绝与 `CONC` 不同的 `CONC_LIST`。AgentX 不清空缓存，也不复用正在运行的服务来测试另一个并发点。同一测试点的预热和正式测量共用服务。此规则不改变定长序列 sweep 或评分 eval 的批量执行行为。
 
-对于多节点 srt-slurm 作业，benchmark client 与 frontend 可能运行在不同主机上。只要设置了 `SRT_FRONTEND_HOST`，replay 就以 `http://$SRT_FRONTEND_HOST:$SRT_FRONTEND_PORT` 为目标，否则使用显式提供的 `AIPERF_SERVER_URL`，两者都没有时才回退到 `http://localhost:$PORT`（[`_server_url`](../infx/bench/agentic/replay.py#L119-L126)）。
+对于多节点 srt-slurm 作业，benchmark client 与 frontend 可能运行在不同主机上。只要设置了 `SRT_FRONTEND_HOST`，replay 就以 `http://$SRT_FRONTEND_HOST:$SRT_FRONTEND_PORT` 为目标，否则使用显式提供的 `AIPERF_SERVER_URL`，两者都没有时才回退到 `http://localhost:$PORT`（[`_server_url`](../infx/bench/agentic/replay.py#L115-L122)）。
 
 对于未发布到 package index 的 engine 或 router wheel，必须保证构建可复现且 artifact 不可变：在 launcher 旁签入源码 patch 与构建器，打 patch 前校验上游 wheel 的 digest，分配明确的 local version，并通过带 SHA256 fragment 的精确 URL 安装已发布 artifact。本地 backport 不得冒用尚未发布的上游版本号。
 
@@ -226,11 +226,11 @@ gh workflow run e2e-tests.yml --repo SemiAnalysisAI/InferenceX --ref "$REF" \
   -f agentx-fast=true
 ```
 
-Fast 结果只能作为 bring-up 证据，绝不能替代 canonical candidate。小于 900 秒的 duration 或 `AIPERF_UNSAFE_OVERRIDE=true` 会添加 AIPerf 的 `--unsafe-override` 并将 submission 标记为无效；只能用于 smoke 诊断（[源码](../infx/bench/agentic/replay.py#L107-L109)）。Fast 运行健康后，必须对完全相同的 candidate 进行 canonical 运行，才能宣称 benchmark 成功。
+Fast 结果只能作为 bring-up 证据，绝不能替代 canonical candidate。小于 900 秒的 duration 会添加 AIPerf 的 `--unsafe-override` 并将 submission 标记为无效；只能用于 smoke 诊断（[源码](../infx/bench/agentic/replay.py#L105)）。Fast 运行健康后，必须对完全相同的 candidate 进行 canonical 运行，才能宣称 benchmark 成功。
 
 ## 8. 保留 trace 与运行 provenance
 
-AgentX 默认 replay 已记录的 assistant response。实时服务输出会被测量，但构造后续 turn 时会丢弃。除非用 `WEKA_LOADER_OVERRIDE` 固定，否则所选 trace corpus 依赖模型 family；resolver 会同时记录 loader 与 Hugging Face dataset（[trace 解析](../infx/bench/agentic/traces.py#L23-L28)、[replay 语义](../infx/bench/agentic/replay.py#L154-L193)）。Replay 保留模型的原生上下文。客户端忽略 `MAX_MODEL_LEN`，只有显式设置的 `AIPERF_MAX_CONTEXT_LENGTH` 才会添加 AIPerf 的 `--max-context-length`。
+AgentX 默认 replay 已记录的 assistant response。实时服务输出会被测量，但构造后续 turn 时会丢弃。除非用 `WEKA_LOADER_OVERRIDE` 固定为 `semianalysis_cc_traces_weka_062126` 或 `semianalysis_cc_traces_weka_062126_256k`，否则所选 trace corpus 依赖模型 family；resolver 会同时记录 loader 与 Hugging Face dataset（[trace 解析](../infx/bench/agentic/traces.py#L20-L25)、[replay 语义](../infx/bench/agentic/replay.py#L150-L185)）。Replay 保留模型的原生上下文。客户端忽略 `MAX_MODEL_LEN`，只有显式设置的 `AIPERF_MAX_CONTEXT_LENGTH` 才会添加 AIPerf 的 `--max-context-length`。
 
 立即记录 orchestration provenance：
 
@@ -262,7 +262,7 @@ gh run download "$RUN_ID" --repo SemiAnalysisAI/InferenceX \
 - server/frontend 日志以及所代表的每个 metrics endpoint；
 - run URL/ID、attempt、head SHA、recipe/config 标识、image、topology、fast 标志和所有 override。
 
-Runner 会在 replay 前写入命令，并在聚合后校验原始结果（[执行路径](../infx/bench/agentic/run.py#L138-L222)）。聚合会保留 dataset provenance 以及硬件/模型/拓扑字段（[aggregate 构造](../infx/results/agentic/__init__.py)）。工作流的 raw upload 会有意排除体积很大的 `inputs.json` 和 `profile_export_raw.jsonl`；如果调查需要这些文件，应在清理前从实时 allocation 保存（[单节点 artifact 约定](../../.github/workflows/benchmark-tmpl.yml#L382-L391)、[多节点约定](../../.github/workflows/benchmark-multinode-tmpl.yml#L466-L475)）。
+Runner 会在 replay 前写入命令，并在聚合后校验原始结果（[执行路径](../infx/bench/agentic/run.py#L135-L218)）。聚合会保留 dataset provenance 以及硬件/模型/拓扑字段（[aggregate 构造](../infx/results/agentic/__init__.py)）。工作流的 raw upload 会有意排除体积很大的 `inputs.json` 和 `profile_export_raw.jsonl`；如果调查需要这些文件，应在清理前从实时 allocation 保存（[单节点 artifact 约定](../../.github/workflows/benchmark-tmpl.yml#L382-L391)、[多节点约定](../../.github/workflows/benchmark-multinode-tmpl.yml#L466-L475)）。
 
 ## 9. 用实时证据调试长时间 AgentX 运行
 
@@ -311,7 +311,7 @@ curl -fsS '<METRICS_URL>' | \
   rg -i 'request|queue|cache|token|prefill|decode|error|fail'
 ```
 
-通过重复 sample 跟踪趋势：running/waiting request、KV usage、prefix hit、input/output token rate、completed/cancelled/errored request、frontend routing balance，以及 disaggregated KV transfer。AIPerf 会为每条 server series 记录 endpoint identity（[metrics 接线](../infx/bench/agentic/replay.py#L129-L151)）。未设置 `AIPERF_SERVER_METRICS_URLS` 且 `SRTCTL_FRONTEND_TYPE` 不是 `dynamo` 时，replay 会从 `SRT_AGG_ENDPOINTS`，或从 `SRT_PREFILL_ENDPOINTS` 加 `SRT_DECODE_ENDPOINTS`，抓取每个 worker 的 `/metrics`。
+通过重复 sample 跟踪趋势：running/waiting request、KV usage、prefix hit、input/output token rate、completed/cancelled/errored request、frontend routing balance，以及 disaggregated KV transfer。AIPerf 会为每条 server series 记录 endpoint identity（[metrics 接线](../infx/bench/agentic/replay.py#L125-L147)）。未设置 `AIPERF_SERVER_METRICS_URLS` 且 `SRTCTL_FRONTEND_TYPE` 不是 `dynamo` 时，replay 会从 `SRT_AGG_ENDPOINTS`，或从 `SRT_PREFILL_ENDPOINTS` 加 `SRT_DECODE_ENDPOINTS`，抓取每个 worker 的 `/metrics`。
 
 应使用 phase marker，而不是 Slurm 总运行时间：
 

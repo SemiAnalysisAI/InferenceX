@@ -7,26 +7,21 @@ from pathlib import Path
 
 import pytest
 
+from infx.bench.agentic import traces
 from infx.bench.agentic.replay import ReplayConfig, replay_argv
-from infx.bench.agentic.traces import resolve
 from infx.bench.env import InputError
 
 BASE_ENV = {
     "MODEL": "deepseek-ai/DeepSeek-V4-Pro",
-    "MODEL_PREFIX": "dsv4",
+    "MODEL_PREFIX": "test",
     "FRAMEWORK": "vllm",
     "CONC": "8",
     "DURATION": "3600",
     "PORT": "8000",
-    "AIPERF_LIVE_FAILED_REQUEST_THRESHOLD": "0.10",
-    "AIPERF_TRACE_IDLE_GAP_CAP_SECONDS": "300",
-    "AGENTIC_WARMUP_GRACE_PERIOD": "1800",
     "AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS": "3600",
     "AIPERF_EXPERIMENTAL_FAST": "0",
     "AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID": "false",
-    "AIPERF_UNSAFE_OVERRIDE": "false",
     "AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING": "1",
-    "AIPERF_WARMUP_REQUESTS_PER_LANE": "10",
 }
 
 
@@ -35,22 +30,18 @@ def _argv(**overrides: str | None) -> list[str]:
     return replay_argv(ReplayConfig.from_env(env, Path("/results")), "/venv/bin/aiperf")
 
 
-def _value(argv: list[str], flag: str) -> str:
-    return argv[argv.index(flag) + 1]
+def _value(argv: list[str], flag: str) -> str | None:
+    return argv[argv.index(flag) + 1] if flag in argv else None
 
 
-def test_default_point_replays_the_uncapped_corpus_with_the_fixed_policy():
+def test_default_point_leaves_the_replay_policy_to_the_scenario():
     # A workflow MAX_MODEL_LEN is not the server's limit, so it never caps the replay.
     assert _argv(MAX_MODEL_LEN="131072") == [
-        "/venv/bin/aiperf", "profile", "--scenario", "agentx",
-        "--url", "http://localhost:8000", "--endpoint", "/v1/chat/completions",
+        "/venv/bin/aiperf", "profile", "--scenario", "agentx", "--url", "http://localhost:8000",
         "--model", "deepseek-ai/DeepSeek-V4-Pro", "--tokenizer", "deepseek-ai/DeepSeek-V4-Pro",
-        "--concurrency", "8", "--benchmark-duration", "3600",
-        "--failed-request-threshold", "0.10",
-        "--warmup-requests-per-lane", "10", "--trace-idle-gap-cap-seconds", "300",
-        "--warmup-grace-period", "1800", "--tokenizer-trust-remote-code",
+        "--concurrency", "8", "--benchmark-duration", "3600", "--tokenizer-trust-remote-code",
         "--output-artifact-dir", "/results/aiperf_artifacts",
-        "--public-dataset", "semianalysis_cc_traces_weka_062126",
+        "--public-dataset", traces.CAPPED,
     ]  # fmt: skip
 
 
@@ -58,32 +49,29 @@ def test_opt_in_inputs_add_their_flags_in_place():
     argv = _argv(
         SERVED_MODEL_NAME="DeepSeek-V4-Pro",
         FRAMEWORK="dynamo-vllm",
+        AIPERF_LIVE_FAILED_REQUEST_THRESHOLD="0.25",
+        AGENTIC_WARMUP_GRACE_PERIOD="3600",
         AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS="14400",
         AIPERF_EXTRA_INPUTS="temperature:0.7 top_p:0.9",
         AIPERF_MAX_CONTEXT_LENGTH="262144",
         AIPERF_SERVER_METRICS_URLS="http://a:1/metrics,http://b:2/metrics,",
-        AIPERF_UNSAFE_OVERRIDE="true",
-        WEKA_LOADER_OVERRIDE="semianalysis_cc_traces_weka_with_subagents_256k",
+        WEKA_LOADER_OVERRIDE=traces.UNCAPPED,
         AIPERF_APPLY_CHAT_TEMPLATE="true",
         AIPERF_BENCHMARK_GRACE_PERIOD="1800",
     )
 
     assert argv == [
-        "/venv/bin/aiperf", "profile", "--scenario", "agentx",
-        "--url", "http://localhost:8000", "--endpoint", "/v1/chat/completions",
+        "/venv/bin/aiperf", "profile", "--scenario", "agentx", "--url", "http://localhost:8000",
         "--model", "DeepSeek-V4-Pro", "--tokenizer", "deepseek-ai/DeepSeek-V4-Pro",
         "--concurrency", "8", "--benchmark-duration", "3600",
-        "--failed-request-threshold", "0.10",
-        "--warmup-requests-per-lane", "10", "--trace-idle-gap-cap-seconds", "300",
-        "--warmup-grace-period", "1800",
+        "--failed-request-threshold", "0.25", "--warmup-grace-period", "3600",
         "--extra-inputs", "temperature:0.7", "top_p:0.9",
         "--use-dynamo-conv-aware-routing", "--dynamo-session-timeout-seconds", "14400",
         "--tokenizer-trust-remote-code",
         "--max-context-length", "262144",
         "--server-metrics", "http://a:1/metrics", "http://b:2/metrics",
         "--output-artifact-dir", "/results/aiperf_artifacts",
-        "--unsafe-override",
-        "--public-dataset", "semianalysis_cc_traces_weka_with_subagents_256k",
+        "--public-dataset", traces.UNCAPPED,
         "--apply-chat-template", "--benchmark-grace-period", "1800",
     ]  # fmt: skip
 
@@ -91,8 +79,8 @@ def test_opt_in_inputs_add_their_flags_in_place():
 @pytest.mark.parametrize(
     ("overrides", "duration", "warmup", "unsafe"),
     [
-        ({"DURATION": "899"}, "899", "10", True),
-        ({"DURATION": "900"}, "900", "10", False),
+        ({"DURATION": "899"}, "899", None, True),
+        ({"DURATION": "900"}, "900", None, False),
         # agentx-fast's 20-minute profile meets the scenario minimum the caller's 300 s misses.
         ({"AIPERF_EXPERIMENTAL_FAST": "1", "DURATION": "300"}, "1200", "1", False),
     ],
@@ -166,8 +154,8 @@ def test_replay_targets_the_srt_frontend_then_the_explicit_url(overrides, url):
         ({"AIPERF_SERVER_METRICS_URLS": "http://a/metrics, http://b/metrics"}, "non-empty URLs"),
         ({"AIPERF_SERVER_METRICS_URLS": ","}, "non-empty URLs"),
         (
-            {"WEKA_LOADER_OVERRIDE": "semianalysis_cc_traces_weka_060226"},
-            "unknown WEKA_LOADER_OVERRIDE='semianalysis_cc_traces_weka_060226'",
+            {"WEKA_LOADER_OVERRIDE": "no_such_loader"},
+            "unknown WEKA_LOADER_OVERRIDE='no_such_loader'",
         ),
     ],
 )
@@ -177,20 +165,18 @@ def test_malformed_replay_inputs_are_rejected(overrides, message):
 
 
 @pytest.mark.parametrize(
-    ("prefix", "loader", "dataset"),
+    ("prefix", "override", "loader"),
     [
-        # dsv4 matches by prefix, so DeepSeek-V4-Flash replays the uncapped 1M corpus.
-        (
-            "dsv41flash",
-            "semianalysis_cc_traces_weka_062126",
-            "semianalysisai/cc-traces-weka-062126",
-        ),
-        (
-            "glm5.1",
-            "semianalysis_cc_traces_weka_062126_256k",
-            "semianalysisai/cc-traces-weka-062126-256k",
-        ),
+        # Families match by prefix, so a variant of a 1M-context family replays its corpus.
+        ("big41flash", None, traces.UNCAPPED),
+        ("other", None, traces.CAPPED),
+        # A pin beats the family default, and the pre-download follows the pinned corpus.
+        ("other", traces.UNCAPPED, traces.UNCAPPED),
     ],
 )
-def test_default_corpus_follows_the_model_family_context(prefix, loader, dataset):
-    assert resolve(prefix, None) == (loader, dataset)
+def test_corpus_follows_the_model_family_context_unless_pinned(
+    monkeypatch, prefix, override, loader
+):
+    monkeypatch.setattr(traces, "UNCAPPED_FAMILIES", ("big4",))
+
+    assert traces.resolve(prefix, override) == (loader, traces.LOADERS[loader])
