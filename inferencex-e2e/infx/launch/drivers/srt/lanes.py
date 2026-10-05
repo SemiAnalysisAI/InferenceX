@@ -80,6 +80,7 @@ SRT_LANES: dict[tuple[str, LaunchPath], SrtLane] = {
         shared_run_root=(
             Match(any_of("minimaxm3", "kimik3", "qwen3.5", "glm5.2")),
             Match(any_of("dsv4"), frameworks=any_of("dynamo-vllm")),
+            Match(any_of("dsv4"), frameworks=any_of("dynamo-sglang"), agentic=True),
         ),
     ),
     ("gb300-nv", LaunchPath.SRT_MULTI): SrtLane(
