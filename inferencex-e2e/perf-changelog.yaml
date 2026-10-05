@@ -9319,3 +9319,12 @@
     - "Add GB300 Qwen3.5-397B-A17B-FP8 AgentX recipes: four disaggregated TP1xPP4 MTP prefill / DEP4 MTP decode points and five aggregate TP4/TP8 MTP points."
     - "New recipes and matrix entries only; existing Qwen3.5 GB300 entries are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3231
+
+- config-keys:
+    - minimaxm3-fp8-h200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the MiniMax-M3 H200 vLLM image and enable the FP8 MSA indexer cache."
+    - "Use GPU-resident KV for concurrency 12 and add concurrency 14; remove the Mooncake DRAM-offload variant."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
