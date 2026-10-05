@@ -184,6 +184,34 @@ override_tp8_resident_mtp_c4:
 
 # TP4 roles retain the previously observed full-context memory geometry.
 # Each new image deployment must independently pass the natural-pool gate.
+override_colocated_p4_d4_resident_mtp_c4:
+  services: []
+  roles:
+    prefill:
+      gpus: 4
+      env:
+        UMBP_STANDALONE_ADDRESS: ""
+      args: &tp4_resident_mtp_args
+        tensor-parallel-size: 4
+        chunked-prefill-size: 8192
+        mem-fraction-static: 0.95
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
+        enable-unified-cache-external-linker: false
+        unified-cache-external-linker-backend: null
+        hicache-storage-backend-extra-config: null
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 3
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 4
+    decode:
+      nodes: colocate
+      gpus: 4
+      args: *tp4_resident_mtp_args
+  benchmark:
+    env:
+      CONC: "4"
+
 override_p4_d8_c4:
   roles:
     prefill:
