@@ -141,9 +141,16 @@ send deadline. AIPerf finalized its raw request records and passed 100% latency
 coverage, while aggregate export was interrupted and strict power replay failed
 with `sampling_gap_exceeded`. Treat c490 as qualified near-complete request evidence
 and a local canonical-protocol feasibility failure under the current execution
-budget, not a complete performance result. The next adaptive NVMe-only point is
-c489, between completed c488 and infeasible c490, with the same model, engine, TP4
-layout, 4 TiB NVMe budget, AgentX corpus, canonical warmup, and 3,600-second profile.
+budget, not a complete performance result. The c489 NVMe-only point completed all
+5,412 warmup requests after 24,710.93 seconds and the full 3,600-second profiling
+send window, retaining 1,151 successful responses with 100% latency coverage.
+The fixed Slurm allocation then interrupted aggregate export. Strict four-GPU power
+replay passed, but the reconstructed request and energy metrics remain qualified
+near-complete evidence rather than a complete performance result. c489 is therefore
+another local canonical-protocol feasibility failure, and the integer boundary is
+now bracketed by completed c488 and infeasible c489. The next adaptive control is
+matched HBM-only c489, which tests whether protocol feasibility at the boundary is
+specific to the NVMe tier.
 
 The combined tier uses a different connector and storage policy. The pinned FS
 tier has no bounded LRU capacity setting: the 2 TiB value is an abort guard, not an
