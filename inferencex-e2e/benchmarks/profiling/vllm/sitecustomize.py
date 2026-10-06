@@ -384,9 +384,10 @@ def _step_record(scheduler_output):
 
 # --- module markers ---------------------------------------------------------
 # Replay windows run without Python stacks (their export stalls the engine), so
-# eager modules mark themselves: infx_mod#<qualified name>. Global module hooks
-# are only safe where Dynamo never traces (compilation mode NONE); compiled
-# pieces mark themselves through the piecewise backend instead.
+# eager modules mark themselves: infx_mod#<qualified name>. The global hooks
+# return at once while Dynamo traces, so code it compiles is unchanged (those
+# kernels are named by Inductor's wrapper lines instead); they mark every
+# module that runs eagerly, in any compilation mode.
 
 _module_names = None  # weakref.WeakKeyDictionary once a runner registers its models
 _module_hooks = []
@@ -409,11 +410,7 @@ def _register_module_names(runner):
         for name, mod in root.named_modules(prefix=prefix):
             names.setdefault(mod, name)
     _module_names = names
-    try:
-        mode = runner.vllm_config.compilation_config.mode
-        _module_hooks_allowed = int(mode) == 0
-    except Exception:
-        _module_hooks_allowed = False
+    _module_hooks_allowed = True
 
 
 def _tensor_signature(args):
@@ -435,6 +432,8 @@ def _tensor_signature(args):
 
 
 def _module_pre_hook(module, args):
+    if _compiling():
+        return
     try:
         import torch
 
@@ -452,6 +451,8 @@ def _module_pre_hook(module, args):
 
 
 def _module_post_hook(module, args, output):
+    if _compiling():
+        return
     stack = getattr(_module_tls, "stack", None)
     while stack:
         mod, rf = stack.pop()
