@@ -498,16 +498,19 @@ def kernel_clocks(track, offset_us, ts_us, dur_us):
 
 COPY_LAUNCHER = "vllm.v1.simple_kv_offload.copy_backend.DmaCopyBackend.launch_copy"
 COPY_MAX_LAG_US = 60e6
+COPY_MAX_SPLIT = 8  # memcpys one logged copy may arrive as
 
 
 def match_copies(trace, orphans, copies, offset_us):
     """device index -> logged copy for orphan memcpys, per direction.
 
-    Each logged copy is one memcpy on that direction's stream, executed in
-    issue order after its issue. Of the order-preserving pairings with every
-    copy issued before its memcpy starts (and equal bytes), take the one with
-    least total issue-to-start lag: copies logged before the window whose
-    memcpys ran before it, and copies still queued at its end, stay unpaired.
+    Each logged copy is one memcpy on that direction's stream, or a run of
+    consecutive ones whose bytes add up to it (the backend splits large
+    copies: a 4.6 GB load arrived as 3.2 GB + 1.5 GB), executed in issue order
+    after its issue. Of the order-preserving pairings with every copy issued
+    before its first memcpy starts, take the one with least total
+    issue-to-start lag: copies logged before the window whose memcpys ran
+    before it, and copies still queued at its end, stay unpaired.
     """
     matched = {}
     if offset_us is None:
@@ -525,28 +528,36 @@ def match_copies(trace, orphans, copies, offset_us):
         if not n or not m:
             continue
         inf = float("inf")
+        sizes = [trace.events[i].get("args", {}).get("bytes") for i in memcpys]
         cost = [[0.0] * (m + 1)] + [[inf] * (m + 1) for _ in range(n)]
-        take = [[False] * (m + 1) for _ in range(n + 1)]
+        take = [[0] * (m + 1) for _ in range(n + 1)]  # memcpys the copy j covers, ending at a
         for a in range(1, n + 1):
-            e = trace.events[memcpys[a - 1]]
-            nbytes = e.get("args", {}).get("bytes")
             for j in range(1, m + 1):
                 cost[a][j] = cost[a][j - 1]
                 c = logged[j - 1]
-                lag = e["ts"] - (c["t_ns"] / 1e3 + offset_us)
-                if lag < 0 or (nbytes is not None and c.get("bytes") is not None
-                               and nbytes != c["bytes"]):
-                    continue
-                if cost[a - 1][j - 1] + lag < cost[a][j]:
-                    cost[a][j] = cost[a - 1][j - 1] + lag
-                    take[a][j] = True
+                for k in range(1, min(a, COPY_MAX_SPLIT) + 1):
+                    first = trace.events[memcpys[a - k]]
+                    lag = first["ts"] - (c["t_ns"] / 1e3 + offset_us)
+                    if lag < 0:
+                        break
+                    part = sizes[a - k:a]
+                    if k > 1 and (c.get("bytes") is None or None in part):
+                        break
+                    if c.get("bytes") is not None and None not in part and sum(part) != c["bytes"]:
+                        if sum(part) > c["bytes"]:
+                            break
+                        continue
+                    if cost[a - k][j - 1] + lag < cost[a][j]:
+                        cost[a][j] = cost[a - k][j - 1] + lag
+                        take[a][j] = k
         if cost[n][m] == inf:
             continue  # more memcpys than pairable copies: leave them unattributed
         a, j = n, m
         while a:
             if take[a][j]:
-                matched[memcpys[a - 1]] = logged[j - 1]
-                a -= 1
+                for i in memcpys[a - take[a][j]:a]:
+                    matched[i] = logged[j - 1]
+                a -= take[a][j]
             j -= 1
     return matched
 
