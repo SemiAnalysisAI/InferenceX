@@ -106,6 +106,7 @@ roles:
     env: *common_environment
     args:
       <<: *common_config
+      tensor-parallel-size: 8
       mem-fraction-static: 0.85
       prefill-round-robin-balance: true
 

@@ -9247,3 +9247,11 @@
     - "Enable native AMD GPU power collection for the MI355X Qwen3.5 FP8 4P+8D two-node recipe. Inherit the cluster exporter mapping, scrape once per second, and retain only the four prefill and eight decode GPUs in power samples."
     - "Pin NVIDIA/srt-slurm#572's generic exporter mapping, replace the old AMD profile patch with a participant filter, and retain image provenance and required-power validation. Hardware acceptance is pending."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3684
+
+- config-keys:
+    - qwen3.5-fp8-mi355x-sglang-disagg
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Set decode tensor parallelism to eight in the MI355X Qwen3.5 FP8 two-node recipe; it previously inherited the four-GPU prefill setting despite reserving eight decode GPUs."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3684

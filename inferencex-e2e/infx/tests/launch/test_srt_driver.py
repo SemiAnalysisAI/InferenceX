@@ -744,3 +744,22 @@ def test_multinode_eval_overrides_image_offline_mode_and_host_model_path(harness
         "http://worker:8000",
         str(harness.workspace),
     ]
+
+
+def test_amd_qwen_decode_uses_every_declared_participant(monkeypatch):
+    root = Path(__file__).resolve().parents[3]
+    monkeypatch.syspath_prepend(str(root / "utils/srt-slurm/src"))
+    from srtctl.core.config import resolve_config_with_defaults
+    from srtctl.core.schema import SrtConfig
+
+    recipe = (
+        root / "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/mi355x-fp8/8k1k"
+        / "disagg-1p1d-p-tp4-d-tp8.yaml"
+    )
+    inventory = yaml.safe_load((root / "configs/runners.yaml").read_text())
+    defaults = inventory["clusters"]["mi355x-amds"]["slurm"]["srt-slurm"]["extra"]
+    document = yaml.safe_load(recipe.read_text())
+    document["benchmark"]["concurrencies"] = [8]
+    config = SrtConfig.Schema().load(resolve_config_with_defaults(document, defaults))
+    for role, expected in [("prefill", 4), ("decode", 8)]:
+        assert config.backend.get_config_for_mode(role)["tensor-parallel-size"] == expected
