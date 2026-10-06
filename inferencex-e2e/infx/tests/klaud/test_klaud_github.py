@@ -374,7 +374,21 @@ def test_baseline_normalizes_enroot_image_and_rejects_unverified_provenance(
         "ep": 1,
         "recipe-fingerprint": "fingerprint",
     }
-    current = {"single_node": {"all": [{**entry, "conc": [1]}]}}
+    # The current generator routes by cluster and records the recipe path; the producer did
+    # not. The same public point must still freeze once, under the current key.
+    current = {
+        "single_node": {
+            "all": [
+                {
+                    **entry,
+                    "conc": [1],
+                    "runner": "cluster:h200-a",
+                    "srt-recipe": "recipes/h200.yaml",
+                    "recipe-fingerprint": "current-fingerprint",
+                }
+            ]
+        }
+    }
     historical_matrix = {"single_node": {"all": [entry]}}
     public_row = {
         "model": "Model",
