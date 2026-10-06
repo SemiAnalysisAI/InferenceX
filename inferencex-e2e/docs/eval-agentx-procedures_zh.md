@@ -106,6 +106,9 @@ python3 -m infx.evals.validate_scores --model-prefix "$MODEL_PREFIX"
 
 `run_lm_eval` 通过 `--model_args` 中的 `num_concurrent` 传递并发；它刻意采用环境变量，而不是 `run_eval` CLI 选项。准确调用见 [`run_lm_eval()`](../benchmarks/benchmark_lib.sh#L2044-L2128)。
 
+安装 lm-eval 依赖时，`huggingface-hub` 限定为 `>=1.5,<2`，以兼容镜像中的
+`transformers` 版本。
+
 ## 3. `EVAL_ONLY` 是 launcher 约定
 
 必须在**启动服务前**设置 `EVAL_ONLY=true`。它不仅是 `run_eval` 内部的开关：

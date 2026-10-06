@@ -1131,7 +1131,7 @@ _install_lm_eval_deps() {
     if [[ "${IMAGE:-}" == *atom* ]]; then
         python3 -m pip uninstall -y torchvision 2>/dev/null || true
     fi
-    python3 -m pip install -q --no-cache-dir --break-system-packages "lm-eval[api]" || true
+    python3 -m pip install -q --no-cache-dir --break-system-packages "lm-eval[api]" "huggingface-hub>=1.5,<2" || true
     local lm_eval_ref="b315ef3b05176acc9732bb7fdec116abe1ecc476"
     if command -v git >/dev/null 2>&1; then
         if ! python3 -m pip install -q --no-cache-dir --no-deps --force-reinstall --break-system-packages \

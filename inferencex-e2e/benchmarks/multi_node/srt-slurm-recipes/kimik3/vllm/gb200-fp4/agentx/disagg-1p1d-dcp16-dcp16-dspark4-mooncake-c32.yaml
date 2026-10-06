@@ -2,7 +2,7 @@
 # TP16/DCP16 decode role (4 nodes), 32 GPUs, DSpark depth 4 (draft_sample_method probabilistic; the launcher
 # selects the golden acceptance), Mooncake DRAM tier at 128 GB per rank. Per-concurrency knobs: max-num-seqs at
 # 2x concurrency on both roles, decode cudagraph capture at max-num-seqs x (K+1) tokens, decode
-# gpu-memory-utilization 0.92 while the capture size is at or under 320 tokens and 0.90 above it.
+# gpu-memory-utilization 0.90 to leave room for decode CUDA graph allocations.
 schema: 2
 name: "kimi-k3-vllm-disagg-gb200-1p1d-dcp16-dcp16-dspark4-mooncake-c32-agentic"
 
@@ -142,7 +142,7 @@ roles:
       load-format: "safetensors"
       safetensors-load-strategy: "lazy"
       kv-cache-dtype: "fp8"
-      gpu-memory-utilization: 0.92
+      gpu-memory-utilization: 0.90
       max-num-seqs: 64
       tensor-parallel-size: 16
       decode-context-parallel-size: 16

@@ -109,6 +109,9 @@ python3 -m infx.evals.validate_scores --model-prefix "$MODEL_PREFIX"
 
 `run_lm_eval` passes concurrency through `num_concurrent` in `--model_args`. It is deliberately an environment variable, not a `run_eval` CLI option. The exact invocation is in [`run_lm_eval()`](../benchmarks/benchmark_lib.sh#L2044-L2128).
 
+The lm-eval dependency install constrains `huggingface-hub` to `>=1.5,<2` for
+compatibility with the serving image's `transformers` version.
+
 ## 3. `EVAL_ONLY` is a launcher contract
 
 Set `EVAL_ONLY=true` **before server launch**. It is not merely a switch inside `run_eval`:
