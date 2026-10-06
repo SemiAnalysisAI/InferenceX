@@ -9329,6 +9329,15 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3724
 
 - config-keys:
+    - "*"
+  description:
+    - "Update the shared srt-slurm pin from v2.39.1 to v2.43.4, including staged Dynamo wheel dependency resolution."
+    - "Migrate five GLM-5.2 H200 AgentX recipes and the DeepSeek-V4 MI355X AgentX override bundle to schema 2; rely on automatic golden acceptance injection for the GLM-5.2 recipes."
+    - "Use schema 2 benchmark client placement in eleven Kimi-K3 GB200 and GB300 AgentX recipes."
+    - "Place discovery services on the existing infra node in three H200 AgentX recipes with required telemetry."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3755
+
+- config-keys:
     - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2
   scenario-type:
     - agentic-coding

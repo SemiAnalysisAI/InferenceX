@@ -69,7 +69,7 @@ jobs:
           PYTHONPATH: .:inferencex-e2e
         run: |
           set -eo pipefail
-          source inferencex-e2e/benchmarks/benchmark_lib.sh --validation-only
+          source inferencex-e2e/benchmarks/check_env.sh
           check_env_vars OPERATORX_POOL OPERATORX_BACKENDS OPERATORX_TESTLISTS OPERATORX_WORLD_SIZES OPERATORX_CHUNK_SIZE GITHUB_RUN_ID GITHUB_RUN_ATTEMPT GITHUB_SHA GITHUB_OUTPUT
           python3 -m operatorx.ci plan \
             --platform-config operatorx/platforms.json \
@@ -141,7 +141,7 @@ jobs:
           OPERATORX_POOL: ${{ matrix.pool }}
         run: |
           set -eo pipefail
-          source inferencex-e2e/benchmarks/benchmark_lib.sh --validation-only
+          source inferencex-e2e/benchmarks/check_env.sh
           check_env_vars RUNNER_TEMP OPERATORX_RECOVERY_RUN OPERATORX_POOL OPERATORX_CLEANUP_SECONDS
           python3 -m operatorx.ci recover --artifacts operatorx-recovery \
             --run-id "$OPERATORX_RECOVERY_RUN" --pool "$OPERATORX_POOL" \
@@ -150,7 +150,7 @@ jobs:
       - name: Run one Slurm allocation
         run: |
           set -eo pipefail
-          source inferencex-e2e/benchmarks/benchmark_lib.sh --validation-only
+          source inferencex-e2e/benchmarks/check_env.sh
           check_env_vars RUNNER_TEMP OPERATORX_SHARD OPERATORX_OUTPUT OPERATORX_CLEANUP_SECONDS GITHUB_RUN_ID GITHUB_RUN_ATTEMPT GITHUB_SHA RUNNER_NAME
           python3 -m operatorx.ci execute \
             --platform-config operatorx/platforms.json \
@@ -163,7 +163,7 @@ jobs:
         if: always()
         run: |
           set -eo pipefail
-          source inferencex-e2e/benchmarks/benchmark_lib.sh --validation-only
+          source inferencex-e2e/benchmarks/check_env.sh
           check_env_vars OPERATORX_OUTPUT OPERATORX_CLEANUP_SECONDS
           python3 -m operatorx.ci finalize --output "$OPERATORX_OUTPUT" \
             --cleanup-seconds "$OPERATORX_CLEANUP_SECONDS"
@@ -171,7 +171,7 @@ jobs:
         if: failure()
         run: |
           set -eo pipefail
-          source inferencex-e2e/benchmarks/benchmark_lib.sh --validation-only
+          source inferencex-e2e/benchmarks/check_env.sh
           check_env_vars OPERATORX_OUTPUT
           if [ -d "$OPERATORX_OUTPUT" ]; then
             timeout 15 sinfo --Node --noheader --format='%N|%P|%t' \
@@ -210,7 +210,7 @@ jobs:
           PYTHONPATH: .:inferencex-e2e
         run: |
           set -eo pipefail
-          source inferencex-e2e/benchmarks/benchmark_lib.sh --validation-only
+          source inferencex-e2e/benchmarks/check_env.sh
           check_env_vars GITHUB_STEP_SUMMARY
           python3 -m operatorx.ci summarize \
             --manifest operatorx-control/operatorx-manifest.json \

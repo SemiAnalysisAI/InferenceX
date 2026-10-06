@@ -11,7 +11,7 @@ import os
 import subprocess
 import urllib.parse
 from collections.abc import Callable, Mapping, Sequence
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +19,9 @@ if __package__:
     from .minimax_m3_full_eval import UPSTREAM_REF, verify_source_tree
 else:
     from minimax_m3_full_eval import UPSTREAM_REF, verify_source_tree
+
+# The failure path runs under the serving image's python3, which may be 3.10.
+UTC = timezone.utc  # noqa: UP017
 
 TASK_NAME = "minimax_m3_smoke"
 NATIVE_REPORT_FILENAME = "minimax_vendor_report.json"

@@ -51,7 +51,7 @@ base:
     env:
       MODEL: Qwen/Qwen3.8-Flash-Next-FP8
       # 256k-capped with-subagents corpus, within this model's context.
-      WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_with_subagents_256k
+      WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126_256k
 
 # One variant per point: admission is 2x CONC and the graph batch is CONC.
 override_c1:
