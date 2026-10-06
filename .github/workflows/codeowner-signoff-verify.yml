@@ -142,30 +142,40 @@ jobs:
             {"fastMode": true}
 
           # Bash is limited to the read-only commands the verifier prompt uses.
+          # /proc is denied so file tools cannot read credentials from process environments.
           claude_args: |
             --model 'claude-opus-5-5'
             --mcp-config '{"mcpServers": {"fetch": {"command": "npx", "args": ["-y", "@anthropic-ai/mcp-server-fetch@latest"]}}}'
             --allowedTools "Read,Write,Glob,Grep,WebFetch,mcp__github_ci__*,mcp__fetch__*,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh api:*),Bash(gh run view:*),Bash(gh run list:*),Bash(gh run download:*),Bash(git log:*),Bash(git show:*),Bash(uv run --project inferencex-e2e --locked python -m infx.workflows.pareto_coverage:*)"
+            --disallowedTools "Read(//proc/**),Write(//proc/**)"
           prompt: |
             Read the file /tmp/codeowner-signoff-verify-prompt.md and follow the
             instructions in it exactly — it is your complete task specification,
             already rendered with this run's PR number, head SHA, and sign-off
             metadata.
 
+      # The publisher reads the verdict only when verification succeeded, so success
+      # here guarantees an uploaded verdict artifact for the publish job.
       - name: Record verification outcome
         id: outcome
         if: always() && steps.resolve.outputs.proceed == 'true'
         env:
-          SUCCEEDED: ${{ steps.claude.outcome == 'success' }}
-        run: echo "succeeded=$SUCCEEDED" >> "$GITHUB_OUTPUT"
+          CLAUDE_SUCCEEDED: ${{ steps.claude.outcome == 'success' }}
+          VERDICT_PATH: /tmp/codeowner-signoff-verdict.md
+        run: |
+          succeeded=false
+          if [[ "$CLAUDE_SUCCEEDED" == true && -f "$VERDICT_PATH" ]]; then
+            succeeded=true
+          fi
+          echo "succeeded=$succeeded" >> "$GITHUB_OUTPUT"
 
       - name: Upload verdict
-        if: always() && steps.resolve.outputs.proceed == 'true'
+        if: always() && steps.outcome.outputs.succeeded == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: codeowner-signoff-verdict
           path: /tmp/codeowner-signoff-verdict.md
-          if-no-files-found: ignore
+          if-no-files-found: error
           retention-days: 7
 
   publish:
@@ -205,9 +215,9 @@ jobs:
             inferencex-e2e/pyproject.toml
             inferencex-e2e/uv.lock
 
+      # Any download failure fails this job rather than posting a false rejection.
       - name: Download verdict
-        # A missing verdict is reported by the publisher as a failed verification.
-        continue-on-error: true
+        if: needs.verify.outputs.verification-succeeded == 'true'
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: codeowner-signoff-verdict
