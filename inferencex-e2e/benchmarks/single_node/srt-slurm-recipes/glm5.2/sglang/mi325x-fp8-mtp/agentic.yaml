@@ -5,7 +5,7 @@ base:
   name: glm5.2-fp8-mi325x-sglang-agentic
   model:
     path: hf:zai-org/GLM-5.2-FP8
-    container: lmsysorg/sglang:v0.5.19-rocm720-mi30x
+    container: lmsysorg/sglang:v0.5.21-rocm720-mi30x@sha256:0534eb382626ef55ace8be24f7d81cc6eb7451acac8a5727848397a5e9309d91
     precision: fp8
   resources:
     gpu_type: mi325x
@@ -71,12 +71,14 @@ base:
       AIPERF_BENCHMARK_GRACE_PERIOD: '1800'
 
 # One variant per point. Admission and the decode graph batch are 2x CONC.
+# SGLang v0.5.20 retired --cuda-graph-max-bs (sgl-project/sglang#38375); the
+# decode-phase flag is the same setting.
 override_tp8_c1:
   roles:
     agg:
       args:
         max-running-requests: 2
-        cuda-graph-max-bs: 2
+        cuda-graph-max-bs-decode: 2
   benchmark:
     env:
       CONC: '1'
@@ -86,7 +88,7 @@ override_tp8_c2:
     agg:
       args:
         max-running-requests: 4
-        cuda-graph-max-bs: 4
+        cuda-graph-max-bs-decode: 4
   benchmark:
     env:
       CONC: '2'
@@ -96,7 +98,7 @@ override_tp8_c3:
     agg:
       args:
         max-running-requests: 6
-        cuda-graph-max-bs: 6
+        cuda-graph-max-bs-decode: 6
   benchmark:
     env:
       CONC: '3'
@@ -106,7 +108,7 @@ override_tp8_c4:
     agg:
       args:
         max-running-requests: 8
-        cuda-graph-max-bs: 8
+        cuda-graph-max-bs-decode: 8
   benchmark:
     env:
       CONC: '4'
@@ -116,7 +118,7 @@ override_tp8_c5:
     agg:
       args:
         max-running-requests: 10
-        cuda-graph-max-bs: 10
+        cuda-graph-max-bs-decode: 10
   benchmark:
     env:
       CONC: '5'
@@ -126,7 +128,7 @@ override_tp8_c6:
     agg:
       args:
         max-running-requests: 12
-        cuda-graph-max-bs: 12
+        cuda-graph-max-bs-decode: 12
   benchmark:
     env:
       CONC: '6'
@@ -136,7 +138,7 @@ override_tp8_c8:
     agg:
       args:
         max-running-requests: 16
-        cuda-graph-max-bs: 16
+        cuda-graph-max-bs-decode: 16
   benchmark:
     env:
       CONC: '8'
