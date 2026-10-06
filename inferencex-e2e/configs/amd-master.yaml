@@ -739,9 +739,9 @@ kimik3-fp4-mi355x-vllm-agentic-mtp:
 
       #- { tp: 8, ep: 1, dcp-size: 1, kv-offloading: none, conc-list: [1], spec-decoding: mtp, srt-recipe: benchmarks/single_node/srt-slurm-recipes/kimik3/vllm/mi355x-fp4-mtp/agentic.yaml }
       #- { tp: 8, ep: 1, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [10], spec-decoding: mtp, srt-recipe: benchmarks/single_node/srt-slurm-recipes/kimik3/vllm/mi355x-fp4-mtp/agentic.yaml }
-      #- { tp: 8, ep: 1, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [48], spec-decoding: mtp, srt-recipe: benchmarks/single_node/srt-slurm-recipes/kimik3/vllm/mi355x-fp4-mtp/agentic.yaml }
+      - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [48], spec-decoding: mtp, srt-recipe: benchmarks/single_node/srt-slurm-recipes/kimik3/vllm/mi355x-fp4-mtp/agentic.yaml }
 
-      - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: none, conc-list: [1], spec-decoding: mtp, srt-recipe: benchmarks/single_node/srt-slurm-recipes/kimik3/vllm/mi355x-fp4-mtp/agentic.yaml }
+      #- { tp: 8, ep: 1, dcp-size: 8, kv-offloading: none, conc-list: [1], spec-decoding: mtp, srt-recipe: benchmarks/single_node/srt-slurm-recipes/kimik3/vllm/mi355x-fp4-mtp/agentic.yaml }
 
 minimaxm3-fp4-mi355x-atom-agentic-mtp:
   image: rocm/atom-dev:nightly_202609281543
