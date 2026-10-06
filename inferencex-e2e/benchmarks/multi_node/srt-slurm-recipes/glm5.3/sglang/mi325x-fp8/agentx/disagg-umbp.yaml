@@ -610,3 +610,42 @@ override_two_tep4_dep16_cap4_batch4_warmup7200_c64:
     env:
       CONC: "64"
       AGENTIC_WARMUP_GRACE_PERIOD: "7200"
+
+# Genuine-only gate: two qualified TEP4 prefill workers share one 513 GB pool.
+# The second node runs one pure TP8 decoder without expert all-to-all.
+override_two_tep4_tp8_long_quality_c8:
+  slurm:
+    time_limit: "01:00:00"
+  environment:
+    EVAL_INCLUDE_PATH: /infmax-workspace/infx/evals/diagnostics
+    EVAL_TASKS_DIR: gsm8k_16shot
+  frontend:
+    args:
+      prefill-policy: cache_aware
+      decode-policy: round_robin
+  services:
+    - <<: *umbp_service
+      command:
+        - /sgl-workspace/mori/python/mori/umbp_standalone_server
+        - unix:///logs/umbp-{node}.sock
+  roles:
+    prefill:
+      nodes: 1
+      workers: 2
+      gpus: 4
+      env:
+        SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "1024"
+        UMBP_STANDALONE_ADDRESS: unix:///logs/umbp-{node}.sock
+      args: *tep4_pd_args
+    decode:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 1
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 16
+  benchmark:
+    env:
+      CONC: "8"
