@@ -3,6 +3,7 @@ run-name: e2e Test - ${{ inputs.test-name || inputs.generate-cli-command || gith
 
 permissions:
     contents: read
+    actions: read # Reusable benchmarks download the pinned exporter artifact.
 
 # Independent GPU dispatches queue through the priority scheduler; newer runs must not cancel them.
 on: # zizmor: ignore[concurrency-limits]

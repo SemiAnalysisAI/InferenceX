@@ -14,6 +14,16 @@ import yaml
 ROOT = Path(__file__).resolve().parents[3]
 
 
+@pytest.mark.parametrize("workflow", ["e2e-tests.yml", "run-sweep.yml"])
+def test_reusable_benchmarks_receive_artifact_read_permission(workflow):
+    config = yaml.safe_load((ROOT.parent / ".github" / "workflows" / workflow).read_text())
+    for name, job in config["jobs"].items():
+        if not job.get("uses", "").endswith(("benchmark-tmpl.yml", "benchmark-multinode-tmpl.yml")):
+            continue
+        permissions = job.get("permissions", config["permissions"])
+        assert permissions.get("actions") == "read", name
+
+
 @pytest.fixture(scope="module")
 def validation_python(tmp_path_factory):
     root = tmp_path_factory.mktemp("validation-python")
