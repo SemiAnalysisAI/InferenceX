@@ -9451,3 +9451,11 @@
   description:
     - "Qualify live sparse decode TopK V2 with native sixteen-shot GSM prompts above the stock dense-attention threshold. Preserve the short gate's exact engine, router, full-context and memory settings; only select the longer native evaluation task."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3734
+
+- config-keys:
+    - glm53-mi325x-oct5-colocated-tep4-dep4-prefill-topkv2-long-quality
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Gate prefill-only native TopK V2 with a private JIT cache and genuine sixteen-shot GSM32 on the qualified colocated TEP4/DEP4 batch-four server. Preserve stock decode selection, full context, routing, MoRI and P-only UMBP; no performance expansion."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3734
