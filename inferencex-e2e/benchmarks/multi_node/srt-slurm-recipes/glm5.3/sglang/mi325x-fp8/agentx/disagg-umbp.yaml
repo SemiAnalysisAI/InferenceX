@@ -32,7 +32,8 @@ base:
       enabled: false
   engine: sglang
   services:
-    - name: umbp
+    - &umbp_service
+      name: umbp
       type: generic
       placement:
         node: prefill
@@ -42,7 +43,7 @@ base:
       command:
         - /sgl-workspace/mori/python/mori/umbp_standalone_server
         - unix:///logs/umbp.sock
-      env:
+      env: &umbp_service_env
         UMBP_DRAM_CAPACITY: "513000000000"
         UMBP_DRAM_USE_HUGEPAGES: "0"
         UMBP_SSD_ENABLED: "0"
@@ -496,3 +497,13 @@ override_tp8_dep16_c16:
   <<: *tp8_dep16_quality
   slurm:
     time_limit: "12:00:00"
+
+override_tp8_dep16_dram1026_c16:
+  <<: *tp8_dep16_quality
+  slurm:
+    time_limit: "12:00:00"
+  services:
+    - <<: *umbp_service
+      env:
+        <<: *umbp_service_env
+        UMBP_DRAM_CAPACITY: "1026000000000"
