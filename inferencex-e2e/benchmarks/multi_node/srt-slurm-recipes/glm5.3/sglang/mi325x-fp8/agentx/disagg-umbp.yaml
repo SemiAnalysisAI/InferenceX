@@ -602,7 +602,7 @@ override_two_tep4_dep16_cap4_batch4_quality_c64: &two_tep4_dep16_cap4_batch4
       args: *tep4_pd_args
 
 # Matched C64 profile with the same native warmup bound as the one-P control.
-override_two_tep4_dep16_cap4_batch4_warmup7200_c64:
+override_two_tep4_dep16_cap4_batch4_warmup7200_c64: &two_tep4_dep16_warmup7200
   <<: *two_tep4_dep16_cap4_batch4
   slurm:
     time_limit: "12:00:00"
@@ -610,3 +610,15 @@ override_two_tep4_dep16_cap4_batch4_warmup7200_c64:
     env:
       CONC: "64"
       AGENTIC_WARMUP_GRACE_PERIOD: "7200"
+
+# Matched shared-host-capacity contrast; keep both prefill workers unchanged.
+override_two_tep4_dep16_cap4_batch4_host1026_c64:
+  <<: *two_tep4_dep16_warmup7200
+  services:
+    - <<: *umbp_service
+      command:
+        - /sgl-workspace/mori/python/mori/umbp_standalone_server
+        - unix:///logs/umbp-{node}.sock
+      env:
+        <<: *umbp_service_env
+        UMBP_DRAM_CAPACITY: "1026000000000"
