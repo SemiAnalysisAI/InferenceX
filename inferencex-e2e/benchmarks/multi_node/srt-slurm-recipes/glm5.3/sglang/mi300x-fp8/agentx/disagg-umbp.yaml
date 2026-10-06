@@ -185,13 +185,18 @@ override_tp8_triton_decode_c8: &tp8_triton_decode
     env:
       CONC: "8"
 
-override_tp8_triton_decode_quality_c4:
+override_tp8_triton_decode_quality_c4: &tp8_triton_quality
   <<: *tp8_triton_decode
   slurm:
     time_limit: "01:00:00"
   benchmark:
     env:
       CONC: "4"
+
+override_tp8_triton_decode_gsm16shot_c4:
+  <<: *tp8_triton_quality
+  environment:
+    EVAL_TASKS_DIR: /infmax-workspace/infx/evals/diagnostics/gsm8k_16shot.yaml
 
 override_tp8_prefill1k_c8:
   roles:
