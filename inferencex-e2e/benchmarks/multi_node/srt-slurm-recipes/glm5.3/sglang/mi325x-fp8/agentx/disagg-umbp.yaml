@@ -497,6 +497,7 @@ override_two_tep4_prefill_dep4_c8:
 # Genuine-only packed topology: two independent EP4 groups per role.
 override_two_tep4_two_dep4_batch4_quality_c32:
   <<: *tep4_dep4_rr_batch4
+  sbatch_directives: {}
   slurm:
     time_limit: "01:00:00"
   roles:
