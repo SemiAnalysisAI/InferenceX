@@ -312,7 +312,10 @@ jobs:
 
       - name: Prepare pinned PR459 diagnostic model
         if: ${{ fromJSON(inputs.config).model-prefix == 'qwen3' && inputs.runner == 'cluster:h100-dsxe' }}
-        env: *uv-setup-env
+        env:
+          UV_CACHE_DIR: ${{ github.workspace }}/../.infx-uv-cache
+          UV_PYTHON_INSTALL_DIR: ${{ github.workspace }}/../.infx-uv-python
+          HF_XET_CACHE: ${{ github.workspace }}/../.infx-hf-xet
         run: |
           uv run --no-project --python 3.12 --with huggingface-hub python - <<'PY'
           import json
