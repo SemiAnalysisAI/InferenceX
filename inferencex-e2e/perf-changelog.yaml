@@ -9325,3 +9325,11 @@
   description:
     - "Set the native distributed UMBP peer control-plane socket budget to 120 seconds for genuine-only model qualification, matching the successful full-size all-GPU remote-range diagnostic. Preserve engines, cache capacities, routing, request path, and diagnostic ranged-call logging."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3734
+
+- config-keys:
+    - glm5.3-fp8-mi300x-sglang-disagg-2p-dep16
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Use each physical prefill hostname as the native distributed UMBP worker address while retaining upstream per-rank identity suffixes, preventing duplicate loopback identities during genuine-only integration qualification. Preserve all model, transport, capacity and evaluation settings."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3734

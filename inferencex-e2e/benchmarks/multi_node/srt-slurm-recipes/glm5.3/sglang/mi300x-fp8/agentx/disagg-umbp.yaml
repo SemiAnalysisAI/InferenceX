@@ -509,8 +509,8 @@ override_2p_tp8_dep16_c16: &two_prefill_dep16
     args:
       dp-aware: true
       decode-policy: cache_aware
-  roles:
-    prefill:
+  roles: &two_prefill_dep16_roles
+    prefill: &two_prefill_dep16_prefill
       nodes: 2
       workers: 2
       args:
@@ -540,6 +540,12 @@ override_2p_tp8_dep16_c16: &two_prefill_dep16
 override_2p_tp8_dep16_distributed_quality:
   <<: *two_prefill_dep16
   name: mi300x-glm53-two-prefill-dep16-distributed-quality
+  roles:
+    <<: *two_prefill_dep16_roles
+    prefill:
+      <<: *two_prefill_dep16_prefill
+      env:
+        UMBP_NODE_ADDRESS: "{node}"
   slurm:
     time_limit: "01:30:00"
   services:
