@@ -537,7 +537,7 @@ override_2p_tp8_dep16_c16: &two_prefill_dep16
       CONC: "16"
 
 # Genuine-only distributed-cache qualification; not a performance selector.
-override_2p_tp8_dep16_distributed_quality:
+override_2p_tp8_dep16_distributed_quality: &distributed_quality
   <<: *two_prefill_dep16
   name: mi300x-glm53-two-prefill-dep16-distributed-quality
   model:
@@ -554,7 +554,8 @@ override_2p_tp8_dep16_distributed_quality:
   slurm:
     time_limit: "02:00:00"
   services:
-    - name: umbp_master
+    - &distributed_master
+      name: umbp_master
       type: generic
       placement:
         node: head
@@ -574,7 +575,8 @@ override_2p_tp8_dep16_distributed_quality:
         tcp:
           port: 15558
         timeout_seconds: 300
-    - name: umbp
+    - &distributed_peer
+      name: umbp
       type: generic
       placement:
         node: prefill
@@ -584,7 +586,7 @@ override_2p_tp8_dep16_distributed_quality:
       command:
         - /sgl-workspace/mori/python/mori/umbp_standalone_server
         - unix:///logs/umbp-{node}.sock
-      env:
+      env: &distributed_peer_env
         UMBP_MASTER_ADDRESS: "{head_ip}:15558"
         UMBP_NODE_ADDRESS: "{node_ip}"
         UMBP_NODE_ID: "model-peer-{node}"
@@ -615,6 +617,19 @@ override_2p_tp8_dep16_distributed_quality:
           pattern: "\\[StandaloneServer\\] running on .* backend=configured"
         timeout_seconds: 1800
         interval_seconds: 1
+
+# Prepared performance contrast; genuine qualification is a separate selector.
+override_2p_tp8_dep16_distributed_oct6_c16:
+  <<: *distributed_quality
+  name: mi300x-glm53-two-prefill-dep16-distributed-oct6-c16
+  slurm:
+    time_limit: "12:00:00"
+  services:
+    - *distributed_master
+    - <<: *distributed_peer
+      env:
+        <<: *distributed_peer_env
+        UMBP_RANGED_CALL_DEBUG: "0"
 
 override_1p2d_tp8_c16:
   roles:

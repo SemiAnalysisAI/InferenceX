@@ -9341,3 +9341,11 @@
   description:
     - "Prepare genuine-only distributed UMBP qualification on the immutable October 6 ROCm 7.2 image, with 1800-second peer readiness and a two-hour allocation covering sequential cold imports and full-region registration. Retain corrected physical-node identities, CP120s, cache capacities, model settings and evaluation request budgets."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3734
+
+- config-keys:
+    - glm5.3-fp8-mi300x-sglang-disagg-2p-dep16
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Prepare an isolated October 6 distributed UMBP AgentX C16 diagnostic from the genuine-qualified server, disabling qualification-only ranged-call debug logging and restoring the twelve-hour allocation limit. Preserve both prefill workers, full-context DEP16 decode, cache-aware routing, physical identities and two 519 GB peer pools."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3734
