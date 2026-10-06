@@ -12,14 +12,12 @@ base:
     type: sglang
     enable_multiple_frontends: false
   observability:
-    enabled: false
+    enabled: true
     tachometer:
-      enabled: false
+      enabled: true
   engine: sglang
   telemetry:
-    enabled: true
-    required: true
-    startup_timeout_seconds: 180
+    enabled: false
   roles:
     agg:
       nodes: 1
@@ -48,7 +46,6 @@ base:
         ROCM_QUICK_REDUCE_QUANTIZATION: INT8
   benchmark:
     type: custom
-    concurrencies: [4]
     command: bash /infmax-workspace/benchmarks/single_node/srt_fixed_sequence.sh
     env:
       MODEL: amd/Qwen3.5-397B-A17B-MXFP4-AttnFP8-V2

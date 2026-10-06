@@ -12,14 +12,12 @@ base:
     type: sglang
     enable_multiple_frontends: false
   observability:
-    enabled: false
+    enabled: true
     tachometer:
-      enabled: false
+      enabled: true
   engine: sglang
   telemetry:
-    enabled: true
-    required: true
-    startup_timeout_seconds: 180
+    enabled: false
   roles:
     agg:
       nodes: 1
@@ -52,7 +50,6 @@ base:
         PYTHONNOUSERSITE: '1'
   benchmark:
     type: custom
-    concurrencies: [4]
     command: bash /infmax-workspace/benchmarks/single_node/srt_fixed_sequence.sh
     env:
       MODEL: nvidia/Qwen3.5-397B-A17B-NVFP4-V2

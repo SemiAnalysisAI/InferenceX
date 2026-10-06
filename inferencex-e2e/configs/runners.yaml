@@ -817,6 +817,8 @@ clusters:
                 scope: gpu_device_power_as_reported_by_amd_device_metrics_exporter
               gpu_util:
                 metric: gpu_gfx_activity
+              temperature:
+                metric: gpu_junction_temperature
   # Barite shares its login and NFS with mi300x-amd, but not its GPU partition.
   mi325x-amd:
     gpus-per-node: 8
@@ -860,6 +862,8 @@ clusters:
                 scope: gpu_device_power_as_reported_by_amd_device_metrics_exporter
               gpu_util:
                 metric: gpu_gfx_activity
+              temperature:
+                metric: gpu_junction_temperature
           default_bash_preamble: |-
             export XDG_CACHE_HOME="/tmp/xdg-cache-$SLURM_JOB_ID"
             export TRITON_CACHE_DIR="/tmp/triton-cache-$SLURM_JOB_ID"
@@ -924,4 +928,6 @@ clusters:
                 scope: gpu_device_power_as_reported_by_amd_device_metrics_exporter
               gpu_util:
                 metric: gpu_gfx_activity
+              temperature:
+                metric: gpu_junction_temperature
           nginx_raise_ulimit: false
