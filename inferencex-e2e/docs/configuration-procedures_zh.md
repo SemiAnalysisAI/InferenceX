@@ -266,12 +266,12 @@ ROCm 7.2.4），已包含已合入的
 配方不再在运行时修改 AITER 源码；TP 通信融合、DSpark K6 和 graph capture
 直接使用镜像内实现。
 
-### MiniMax-M3 ATOM FlyDSL paged decode 与 LMCache DRAM 层
+### MiniMax-M3 ATOM FlyDSL paged decode、mono decode 与 LMCache DRAM 层
 
 `minimaxm3-fp4-mi355x-atom-agentic-mtp` 按照
 [ROCm/ATOM#2366](https://github.com/ROCm/ATOM/pull/2366) 和
 [上游配方](https://github.com/ROCm/ATOM/blob/1423fceb08fbe88b2e35c77b320b3073b310a63f/recipes/MiniMax-M3-Agentic-InferenceX.md)，
-使用 `rocm/atom-dev:nightly_202609281543`，启用 `ATOM_PA_FLYDSL=1` 和
+使用 `rocm/atom-dev:nightly_202610061452`，启用 `ATOM_PA_FLYDSL=1` 和
 `ATOM_PA_FLYDSL_PLAN=1`。FlyDSL 处理支持的 paged-decode shape，work planner
 按实际上下文长度均衡 dense decode 工作量；不支持的 shape 仍回退至 Gluon。
 从 `server.log` 核对实际路由，以及 work plan 是否在图捕获时创建。
@@ -295,8 +295,15 @@ TP4 约 1.23 TB）全部来自节点 0 的 1.5 TB 内存。`runners/srt-slurm/ho
 内存时需要回收 page cache，各 rank 完成时间相差数分钟，ATOM 启动时 300 秒的屏障会超时
 （[run 36454319395](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/36454319395)）。
 
-移除 TP4 C32；GPU 常驻 KV 的 TP4 C1-C28、TP2 C1-C2 点位、EAGLE3 K3、golden AL 2.78
-和 indexer CP 保持不变。
+ATOM 的 MiniMax-M3 mono decode（[ROCm/ATOM#2419](https://github.com/ROCm/ATOM/pull/2419)，
+[ROCm/ATOM#2479](https://github.com/ROCm/ATOM/pull/2479) 迁移到共用 mono 框架）默认开启，覆盖所有
+TP4 点位，包括不再设置 `ATOM_MONO_ENABLE=0` 的 indexer CP 点位 C15-C28，以及 LMCache
+点位 C40/C48。mono 每步最多处理 16 个 token，即 EAGLE3 K3 下的 4 个请求，因此覆盖
+C1、C2、C4 的全部 decode，以及更高并发下的小 batch decode 步。ATOM 只为 TP4 构建 mono，
+TP2 会在日志中打印 `MiniMax-M3 mono decode off`，TP2 点位走非融合路径。在 `server.log` 中核对 mono 路由。
+
+GPU 常驻 KV 的点位为 TP4 C1-C28 和 TP2 C1、C2、C4；EAGLE3 K3、golden AL 2.78 和 indexer CP
+保持不变。
 
 ### DeepSeek-V4.1-Flash DSpark
 

@@ -289,10 +289,10 @@ the powers-of-two scales are represented exactly.
 The recipe does not patch AITER source at runtime; TP communication
 fusion, DSpark K6 and graph capture use the implementation shipped in the image.
 
-### MiniMax-M3 ATOM FlyDSL paged decode and LMCache DRAM tier
+### MiniMax-M3 ATOM FlyDSL paged decode, mono decode and LMCache DRAM tier
 
 `minimaxm3-fp4-mi355x-atom-agentic-mtp` uses
-`rocm/atom-dev:nightly_202609281543` with `ATOM_PA_FLYDSL=1` and
+`rocm/atom-dev:nightly_202610061452` with `ATOM_PA_FLYDSL=1` and
 `ATOM_PA_FLYDSL_PLAN=1`, following [ROCm/ATOM#2366](https://github.com/ROCm/ATOM/pull/2366)
 and the [upstream recipe](https://github.com/ROCm/ATOM/blob/1423fceb08fbe88b2e35c77b320b3073b310a63f/recipes/MiniMax-M3-Agentic-InferenceX.md).
 FlyDSL handles supported paged-decode shapes; its work planner balances dense
@@ -321,8 +321,18 @@ a `KV_OFFLOADING=dram` job so these pages are free. Without it, pinning reclaims
 page cache, ranks finish minutes apart and ATOM's 300 s startup barrier times out
 ([run 36454319395](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/36454319395)).
 
-TP4 C32 is dropped; the GPU-resident TP4 C1-C28 and TP2 C1-C2 points,
-EAGLE3 K3, golden AL 2.78 and indexer CP are unchanged.
+ATOM's MiniMax-M3 mono decode ([ROCm/ATOM#2419](https://github.com/ROCm/ATOM/pull/2419),
+moved onto the shared mono framework in [ROCm/ATOM#2479](https://github.com/ROCm/ATOM/pull/2479))
+is on by default at every TP4 point, including the indexer-CP points C15-C28,
+which no longer set `ATOM_MONO_ENABLE=0`, and the LMCache points C40/C48. It serves
+decode steps of up to 16 tokens, which is four requests with EAGLE3 K3, so it
+covers all of C1, C2 and C4 and the small-batch steps at higher concurrency.
+ATOM builds mono for TP4 only and logs `MiniMax-M3 mono decode off` at TP2; the
+TP2 points run the unfused path.
+Verify the mono route in `server.log`.
+
+The GPU-resident points are TP4 C1-C28 and TP2 C1, C2 and C4. EAGLE3 K3,
+golden AL 2.78 and indexer CP are unchanged.
 
 ### DeepSeek-V4.1-Flash DSpark
 
