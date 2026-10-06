@@ -510,7 +510,8 @@ override_colocated_tep4_dep4_prefill_topkv2_long_quality_c16:
     time_limit: "01:00:00"
   sbatch_directives: {}
   environment:
-    EVAL_TASKS_DIR: /infmax-workspace/infx/evals/diagnostics/gsm8k_16shot.yaml
+    EVAL_INCLUDE_PATH: /infmax-workspace/infx/evals/diagnostics
+    EVAL_TASKS_DIR: gsm8k_16shot
   roles:
     prefill:
       <<: *tep4_dep4_prefill
