@@ -144,23 +144,25 @@ class DeepEPV2Backend(LegacyBufferLL, EPBackend):
         # Normal decode runs ElasticBuffer as vLLM's graphed deepep_v2 decode does
         # (do_cpu_sync=False, valid prefix read on device); prefill keeps the exact-size sync.
         self._normal_cpu_sync = self.mode == "normal" and args.phase != "decode"
-        # DIAGNOSTIC A/B ONLY. `CX_PREFILL_CPU_SYNC=off` opts normal-mode prefill onto the
-        # decode path's no-host-sync dispatch, to measure what the exact-size host round-trip
-        # inside the timed dispatch window actually costs. Forces eager timing, because
-        # `cuda_graph_supported` keys off the same flag and would otherwise swap the timing
-        # regime at the same time and confound the comparison.
+        # DIAGNOSTIC. `CX_PREFILL_CPU_SYNC=off` puts normal-mode prefill on exactly the
+        # shape vLLM's graphed decode uses: no exact-size host sync, pow2 receive capacity,
+        # and -- because `cuda_graph_supported` keys off the same flag -- CUDA graph replay.
         #
-        # Read the two arms carefully: `_dispatch_capacity` also changes with the flag, so
-        # only the TOP rung is a single-variable pair. At T = max(ladder) the no-sync pow2
-        # capacity equals `max_tokens`, so the arms differ in the sync alone; at every lower
-        # rung the no-sync arm additionally declares a smaller receive capacity.
-        self._force_eager = False
+        # It deliberately moves BOTH together. The default prefill path pays an exact-size
+        # host round-trip inside the timed dispatch window AND cannot be captured, and the
+        # two are the same fact, not two independent knobs. Measuring them apart answers a
+        # question nobody ships; measuring them together answers "what does the optimized
+        # path cost", which is the one that bears on a published comparison. `COLLX_CUDA_GRAPH=0`
+        # still forces eager on top of this if the sync alone is ever wanted.
+        #
+        # `_dispatch_capacity` also changes with the flag (max_tokens -> pow2 of the batch),
+        # though every prefill rung is already a power of two, so the realized capacity moves
+        # only at rungs below max(ladder).
         prefill_sync = os.environ.get("CX_PREFILL_CPU_SYNC", "on")
         if prefill_sync not in ("on", "off"):
             raise ValueError(f"CX_PREFILL_CPU_SYNC must be 'on' or 'off', got {prefill_sync!r}")
         if prefill_sync == "off" and self.mode == "normal" and args.phase == "prefill":
             self._normal_cpu_sync = False
-            self._force_eager = True
         if self.mode == "normal" and not self._normal_cpu_sync:
             self.kernel_generation = "v2-elastic-buffer-nosync"
         if (os.environ.get("EP_WIN_RELAXED_ORDERING") == "1" and self.mode == "normal"
@@ -172,8 +174,6 @@ class DeepEPV2Backend(LegacyBufferLL, EPBackend):
     @property
     def cuda_graph_supported(self) -> bool:
         if self.mode == "normal":
-            if getattr(self, "_force_eager", False):
-                return False  # CX_PREFILL_CPU_SYNC=off keeps the A/B's timing regime fixed
             return not getattr(self, "_normal_cpu_sync", True)
         return super().cuda_graph_supported
 

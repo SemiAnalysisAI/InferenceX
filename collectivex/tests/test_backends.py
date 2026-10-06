@@ -602,11 +602,11 @@ class GraphReplayDefaults(unittest.TestCase):
             self.assertTrue(backend._normal_cpu_sync)
             self.assertEqual(backend.kernel_generation, "v2-elastic-buffer")
 
-        # "off" drops the sync, renames the series, and stays eager so the arm differs from
-        # its baseline in the sync alone rather than also swapping eager for graph replay.
+        # "off" drops the sync, renames the series, AND becomes graph-capturable -- the
+        # point is to reach the shape vLLM's graphed decode ships, not to isolate the sync.
         thrown = prefill({"CX_PREFILL_CPU_SYNC": "off"})
         self.assertFalse(thrown._normal_cpu_sync)
-        self.assertFalse(thrown.cuda_graph_supported)
+        self.assertTrue(thrown.cuda_graph_supported)
         self.assertEqual(thrown.kernel_generation, "v2-elastic-buffer-nosync")
 
         # Decode is untouched: it is already no-sync, and must keep its graph replay.
