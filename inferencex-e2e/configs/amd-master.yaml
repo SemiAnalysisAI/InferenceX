@@ -1624,10 +1624,10 @@ glm5.3-fp8-mi325x-mori-sglang-agentic:
   scenarios:
     agentic-coding:
     - search-space:
-      - { tp: 8, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [2, 3, 4], srt-recipe: benchmarks/single_node/srt-slurm-recipes/glm5.3/sglang/mi325x-fp8-mtp/agentic-fp8kv.yaml }
-      - { tp: 4, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [3], srt-recipe: "benchmarks/single_node/srt-slurm-recipes/glm5.3/sglang/mi325x-fp8-mtp/agentic-fp8kv.yaml:override_tp4_c3" }
-      - { tp: 4, ep: 4, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [3], router: { name: sglang-router, version: "0.3.2" }, srt-recipe: "benchmarks/single_node/srt-slurm-recipes/glm5.3/sglang/mi325x-fp8-mori/agentic.yaml:override_tep4_mtp_c3" }
-      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none, spec-decoding: none, conc-list: [8], router: { name: sglang-router, version: "0.3.2" }, srt-recipe: "benchmarks/single_node/srt-slurm-recipes/glm5.3/sglang/mi325x-fp8-mori/agentic.yaml:override_dep4_stp_c8" }
+      - { tp: 8, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [2, 3, 4], srt-recipe: benchmarks/single_node/srt-slurm-recipes/glm5.3/sglang/mi325x-fp8/agentic.yaml }
+      - { tp: 4, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [3], srt-recipe: "benchmarks/single_node/srt-slurm-recipes/glm5.3/sglang/mi325x-fp8/agentic.yaml:override_tp4_c3" }
+      - { tp: 4, ep: 4, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [3], router: { name: sglang-router, version: "0.3.2" }, srt-recipe: "benchmarks/single_node/srt-slurm-recipes/glm5.3/sglang/mi325x-fp8/agentic.yaml:override_tep4_mtp_c3" }
+      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none, spec-decoding: none, conc-list: [8], router: { name: sglang-router, version: "0.3.2" }, srt-recipe: "benchmarks/single_node/srt-slurm-recipes/glm5.3/sglang/mi325x-fp8/agentic.yaml:override_dep4_stp_c8" }
     - dram-utilization: 0.211
       search-space:
       - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: umbp-linker }, spec-decoding: none, conc-list: [8, 16], srt-recipe: benchmarks/single_node/srt-slurm-recipes/glm5.3/sglang/mi325x-fp8/agentic.yaml }

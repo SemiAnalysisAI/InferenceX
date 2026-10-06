@@ -1,8 +1,7 @@
-# Native STP with FP8 KV and UMBP DRAM offloading on MI325X.
-# Preserve the qualified October 1 geometry; only the stock image is refreshed.
+# GLM-5.3 FP8 aggregate controls: resident MTP, MoRI TEP/DEP, and native UMBP.
 base:
   schema: 2
-  name: glm5.3-fp8-mi325x-sglang-agentic-stp
+  name: glm5.3-fp8-mi325x-sglang-agentic
   model:
     path: hf:zai-org/GLM-5.3
     container: lmsysorg/sglang-rocm:v0.5.21-rocm720-mi30x-20261005@sha256:a4d60e7ef7645aefb1c52a77dcb32970440454bc359a1baff03711fcd0501613
@@ -36,7 +35,6 @@ base:
         dsa-decode-backend: tilelang
         dsa-topk-backend: sgl-kernel
         kv-cache-dtype: fp8_e4m3
-        page-size: 64
         reasoning-parser: glm45
         context-length: 1048576
         chunked-prefill-size: 16384
@@ -53,9 +51,123 @@ base:
     env:
       MODEL: zai-org/GLM-5.3
       WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126
-      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
       AIPERF_BENCHMARK_GRACE_PERIOD: '1800'
+
+# Resident MTP uses the repository's automatic golden-acceptance selection.
+override_tp8_c2:
+  roles:
+    agg:
+      args: &mtp_args
+        max-running-requests: 4
+        cuda-graph-max-bs-decode: 4
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 3
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 4
+  benchmark:
+    env: &resident_benchmark_env
+      CONC: '2'
+      KV_OFFLOADING: none
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+
+override_tp8_c3:
+  roles:
+    agg:
+      args: *mtp_args
+  benchmark:
+    env:
+      <<: *resident_benchmark_env
+      CONC: '3'
+
+override_tp8_c4:
+  roles:
+    agg:
+      args: *mtp_args
+  benchmark:
+    env:
+      <<: *resident_benchmark_env
+      CONC: '4'
+
+override_tp4_c3:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        <<: *mtp_args
+        tensor-parallel-size: 4
+        chunked-prefill-size: 8192
+        mem-fraction-static: 0.92
+        max-running-requests: 6
+        cuda-graph-max-bs-decode: 6
+  benchmark:
+    env:
+      <<: *resident_benchmark_env
+      CONC: '3'
+
+override_tep4_mtp_c3:
+  frontend:
+    type: sglang-router
+    args: &mori_router_args
+      policy: cache_aware
+      health-check-timeout-secs: 600
+      request-timeout-secs: 14400
+      disable-retries: true
+  roles:
+    agg:
+      gpus: 4
+      args:
+        <<: *mtp_args
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        moe-a2a-backend: mori
+        deepep-mode: normal
+        page-size: 64
+        chunked-prefill-size: 1024
+        mem-fraction-static: 0.93
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
+      env: &mori_env
+        PYTHONUNBUFFERED: '1'
+        GLOO_SOCKET_IFNAME: enp193s0f0np0
+        NCCL_SOCKET_IFNAME: enp193s0f0np0
+        MORI_SOCKET_IFNAME: enp193s0f0np0
+        MORI_SHMEM_MODE: ISOLATION
+        SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: '1024'
+  benchmark:
+    env:
+      CONC: '3'
+      KV_OFFLOADING: none
+
+# Retained as an exploratory attention-DP representative, not a frontier claim.
+override_dep4_stp_c8:
+  frontend:
+    type: sglang-router
+    args:
+      <<: *mori_router_args
+      dp-aware: true
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        data-parallel-size: 4
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        moe-dense-tp-size: 1
+        moe-a2a-backend: mori
+        deepep-mode: normal
+        page-size: 64
+        chunked-prefill-size: 4096
+        mem-fraction-static: 0.96
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
+      env: *mori_env
+  benchmark:
+    env:
+      CONC: '8'
+      KV_OFFLOADING: none
 
 override_tp8_umbp_fp8kv_c8:
   services: &umbp_services
@@ -84,6 +196,7 @@ override_tp8_umbp_fp8kv_c8:
   roles:
     agg:
       args:
+        page-size: 64
         chunked-prefill-size: 131072
         max-running-requests: 16
         cuda-graph-max-bs-decode: 16
@@ -97,6 +210,7 @@ override_tp8_umbp_fp8kv_c8:
       CONC: '8'
       KV_OFFLOADING: dram
       TOTAL_CPU_DRAM_GB: '513'
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
 
 override_tp8_umbp_fp8kv_c16:
   services: *umbp_services
@@ -104,6 +218,7 @@ override_tp8_umbp_fp8kv_c16:
     agg:
       args:
         kv-cache-dtype: fp8_e4m3
+        page-size: 64
         chunked-prefill-size: 32768
         max-running-requests: 32
         cuda-graph-max-bs-decode: 32
@@ -117,3 +232,4 @@ override_tp8_umbp_fp8kv_c16:
       CONC: '16'
       KV_OFFLOADING: dram
       TOTAL_CPU_DRAM_GB: '513'
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
