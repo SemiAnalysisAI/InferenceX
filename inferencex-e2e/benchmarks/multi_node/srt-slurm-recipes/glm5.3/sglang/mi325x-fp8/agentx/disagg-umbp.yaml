@@ -612,7 +612,7 @@ override_two_tep4_dep16_cap4_batch4_warmup7200_c64: &two_tep4_dep16_warmup7200
       AGENTIC_WARMUP_GRACE_PERIOD: "7200"
 
 # Matched shared-host-capacity contrast; keep both prefill workers unchanged.
-override_two_tep4_dep16_cap4_batch4_host1026_c64:
+override_two_tep4_dep16_cap4_batch4_host1026_c64: &two_tep4_dep16_host1026
   <<: *two_tep4_dep16_warmup7200
   services:
     - <<: *umbp_service
@@ -622,3 +622,11 @@ override_two_tep4_dep16_cap4_batch4_host1026_c64:
       env:
         <<: *umbp_service_env
         UMBP_DRAM_CAPACITY: "1026000000000"
+
+# Lower client concurrency without changing the qualified serving deployment.
+override_two_tep4_dep16_cap4_batch4_host1026_c32:
+  <<: *two_tep4_dep16_host1026
+  benchmark:
+    env:
+      CONC: "32"
+      AGENTIC_WARMUP_GRACE_PERIOD: "7200"
