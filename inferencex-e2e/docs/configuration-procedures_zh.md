@@ -91,6 +91,16 @@ PowerX 严格校验。多节点配方保留现有采集间隔及 9401 端口。
 AMD 配置使用预先构建并校验的 exporter 镜像，其来源记录在
 `power-exporter-source.json`。镜像校验只确认来源与内容，功耗测量仍需在目标硬件上验证。
 
+Qwen3.5 FP8 MI355X 4P+8D 多节点配方启用 GPU 遥测并继承集群 exporter。
+集群通过 srt-slurm 的 `default_gpu_exporter.power` 配置映射
+`gpu_power_usage`、`gpu_id` 和 `serial_number`；配方不重复镜像或指标配置。
+显式配置仅采集 CPU 功耗的配方不会继承 GPU exporter。作业本地 srt-slurm
+补丁仅将四张 prefill 和八张 decode GPU 写入功耗样本。两个 benchmark workflow 均在提交 Slurm 作业前下载同一份 CPU 预制产物，
+校验 checksum 和镜像 digest，仅新增共享缓存或复用相同内容；缓存内容冲突时保留原文件
+并终止部署。功耗审计保留 `power-exporter-source.json`。多节点硬件验收仍待完成。
+限定时长的 `e2e-tests.yml` 诊断可设置 `diagnostic-time-limit=00:45:00`，
+单节点或多节点 Slurm 作业采用此时限，原始配方及正常集群时限不变。
+
 ## 规程索引
 
 1. [准备 worktree](#准备-worktree)

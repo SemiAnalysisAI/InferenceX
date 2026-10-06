@@ -1,0 +1,90 @@
+diff --git a/src/srtctl/core/power/session.py b/src/srtctl/core/power/session.py
+index e76e306e..57eb72b2 100644
+--- a/src/srtctl/core/power/session.py
++++ b/src/srtctl/core/power/session.py
+@@ -420,6 +420,7 @@ class PowerTelemetrySession:
+                 sm_active=reading.sm_active,
+             )
+             for reading in (scrape.readings if scrape is not None else ())
++            if (endpoint.hostname, reading.gpu_index) in self._expected_device_keys
+         ]
+         return _EndpointResult(
+             hostname=endpoint.hostname,
+diff --git a/tests/test_power_collector.py b/tests/test_power_collector.py
+index d8bd5f88..85f9eced 100644
+--- a/tests/test_power_collector.py
++++ b/tests/test_power_collector.py
+@@ -795,7 +795,7 @@ class TestFailurePaths:
+ 
+         assert Reason.EXPORTER_EXITED not in outcome.reason_codes
+ 
+-    def test_unexpected_device_invalidates_publication(self, tmp_path, exporters):
++    def test_unused_exporter_device_is_excluded_from_samples(self, tmp_path, exporters):
+         a = exporters(_body("a", count=GPUS_PER_NODE + 1))
+         b = exporters(_body("b"))
+         session = _session(tmp_path, _endpoints(("node-a", a.url), ("node-b", b.url)))
+@@ -804,7 +804,12 @@ class TestFailurePaths:
+         session.collect_once()
+         outcome = session.stop_and_finalize()
+ 
+-        assert Reason.UNEXPECTED_DEVICE in outcome.reason_codes
++        rows, reasons = read_samples(session.samples_path)
++        assert reasons == ()
++        assert sorted((row.hostname, row.gpu_index) for row in rows) == sorted(
++            (node, index) for node in ("node-a", "node-b") for index in range(GPUS_PER_NODE)
++        )
++        assert Reason.UNEXPECTED_DEVICE not in outcome.reason_codes
+         assert outcome.publication_valid is False
+ 
+ 
+diff --git a/tests/test_power_mapping.py b/tests/test_power_mapping.py
+index 54444681..0a9f73d0 100644
+--- a/tests/test_power_mapping.py
++++ b/tests/test_power_mapping.py
+@@ -273,6 +273,46 @@ class TestSessionWithAmdExporter:
+         report = validate_power_artifacts(power_dir=session.power_dir, result_root=tmp_path / "logs")
+         assert "source_metric is not a non-empty string" in report.failures
+ 
++    def test_two_node_4p8d_persists_only_twelve_participants(self, tmp_path):
++        settings = PowerSessionSettings(
++            power_dir=tmp_path / "logs" / "power",
++            log_dir=tmp_path / "logs",
++            job_id="12345",
++            run_name="recipe_12345",
++            sample_interval_seconds=0.05,
++            startup_timeout_seconds=2.0,
++            request_timeout_seconds=0.5,
++            collector_join_timeout_seconds=5.0,
++            required=True,
++            exporter_port=5000,
++            exporter_image=AMD_IMAGE,
++            exporter_command="/home/amd/tools/entrypoint.sh",
++            mapping=AMD,
++        )
++        session = PowerTelemetrySession(
++            settings=settings,
++            expected_devices=build_expected_devices(
++                [_worker(node="prefill", gpus=range(4)), _worker(node="decode", gpus=range(8))]
++            ),
++            expected_windows=[ExpectedWindow("sa-bench", 4)],
++            nodes=["prefill", "decode"],
++            endpoints=[
++                PowerEndpoint("prefill", "http://prefill:5000/metrics"),
++                PowerEndpoint("decode", "http://decode:5000/metrics"),
++            ],
++        )
++        session.initialize()
++        with patch("srtctl.core.power.session.requests.get", return_value=_FakeResponse(_amd_body(count=8))):
++            session.collect_once()
++
++        rows, reasons = read_samples(session.samples_path)
++        assert reasons == ()
++        expected = [
++            *(("prefill", index) for index in range(4)),
++            *(("decode", index) for index in range(8)),
++        ]
++        assert sorted((row.hostname, row.gpu_index) for row in rows) == sorted(expected)
++
+ 
+ def _srt_config(exporter: TelemetryExporterConfig) -> SrtConfig:
+     return SrtConfig(

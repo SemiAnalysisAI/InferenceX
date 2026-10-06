@@ -9238,3 +9238,12 @@
     - "Enable native NVIDIA and AMD power collection for single-node throughput and AgentX jobs, retaining measurement windows, formal results and exporter provenance. Finalize AgentX metrics against the single-node GPU count; leave eval-only collection disabled and preserve required-power failure behavior."
     - "Pin srt-slurm to 2a4c0f3d with the AMD exporter profile patch and stage the verified prepared AMD exporter on shared or allocated-node caches."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3684
+
+- config-keys:
+    - qwen3.5-fp8-mi355x-sglang-disagg
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Enable native AMD GPU power collection for the MI355X Qwen3.5 FP8 4P+8D two-node recipe. Inherit the cluster exporter mapping, scrape once per second, and retain only the four prefill and eight decode GPUs in power samples."
+    - "Pin NVIDIA/srt-slurm#572's generic exporter mapping, replace the old AMD profile patch with a participant filter, and retain image provenance and required-power validation. Hardware acceptance is pending."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3684

@@ -29,6 +29,7 @@ on:
 
 permissions:
   contents: read
+  actions: read # Reusable benchmarks download the pinned exporter preparation artifact.
 
 env:
   PYTHONPATH: ${{ github.workspace }}/inferencex-e2e

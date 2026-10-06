@@ -113,6 +113,21 @@ containers, bypass failed checks, or hide runtime bugs with retries and ad hoc
 workarounds; fix the owning component instead. Limit host changes to allocated nodes
 and preserve resources used by other jobs.
 
+The Qwen3.5 FP8 MI355X 4P+8D multi-node recipe enables GPU telemetry and
+inherits the cluster's exporter. The cluster maps `gpu_power_usage`, `gpu_id`,
+and `serial_number` through srt-slurm's `default_gpu_exporter.power` field;
+the recipe does not duplicate its image or metric mapping. A recipe with an
+explicit CPU-only collector does not inherit the GPU exporter. The job-local
+srt-slurm patch keeps only the four prefill and eight decode GPUs in power samples.
+Both benchmark workflows download the same CPU preparation artifact before Slurm
+submission, verify its checksum and image digest, and publish a new shared-cache entry
+or reuse identical bytes. Conflicting cache files are preserved and fail staging.
+The power audit retains `power-exporter-source.json`. Multi-node hardware acceptance
+remains pending.
+For a bounded `e2e-tests.yml` diagnostic, set `diagnostic-time-limit=00:45:00`;
+the single-node or multi-node Slurm job receives that limit without changing the
+source recipe or normal cluster limit.
+
 ## Procedure index
 
 1. [Prepare a worktree](#prepare-a-worktree)

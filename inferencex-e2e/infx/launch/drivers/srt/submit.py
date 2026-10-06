@@ -177,6 +177,8 @@ def multinode_arguments(
         "-f",
         config_file,
     ]
+    if time_limit := request.env.get("SRT_DIAGNOSTIC_TIME_LIMIT"):
+        arguments += ["--set", f"slurm.time_limit={json.dumps(time_limit)}"]
     if not preflight:
         arguments.append("--no-preflight")
     if run.srt.job_tag is not None:

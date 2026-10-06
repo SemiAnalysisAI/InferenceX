@@ -73,6 +73,11 @@ on:
         type: string
         required: false
         default: ''
+      diagnostic-time-limit:
+        description: "Optional Slurm time limit for a bounded diagnostic (HH:MM:SS)"
+        type: string
+        required: false
+        default: ''
       # Agentic-coding inputs. Fixed-seq-len jobs leave these empty.
       scenario-type:
         description: "Scenario type (fixed-seq-len or agentic-coding)"
@@ -181,6 +186,7 @@ env:
 
 permissions:
   contents: read
+  actions: read # Download the exact CPU-prepared exporter artifact.
 
 jobs:
   benchmark:
@@ -302,8 +308,22 @@ jobs:
         run: &launcher-cleanup |
           "$INFERENCEX_LAUNCH_PYTHON" -P -m infx.launch cleanup
 
+      # Squash from amd-exporter-image.yml run 37397249986, matching the pinned GHCR digest.
+      - name: Download prepared AMD exporter
+        if: ${{ inputs.runner == 'cluster:mi355x-amds' && !inputs.eval-only }}
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: 11383786689
+          run-id: 37397249986
+          github-token: ${{ github.token }}
+          path: ${{ github.workspace }}/inferencex-e2e/.prepared-amd-exporter
+          merge-multiple: true
+
       - name: Launch multi-node job script
         env:
+          AMD_DME_ARTIFACT_DIR: ${{ github.workspace }}/inferencex-e2e/.prepared-amd-exporter
+          AMD_DME_SQSH_SHA256: f40fe9425586622e6da02d434f4eaee5e1f8c0b555c6d323aec1323a214e1c1a
+          SRT_DIAGNOSTIC_TIME_LIMIT: ${{ inputs.diagnostic-time-limit }}
           PREFILL_ADDITIONAL_SETTINGS: ${{ toJSON(fromJSON(inputs.config).prefill.additional-settings) }}
           DECODE_ADDITIONAL_SETTINGS: ${{ toJSON(fromJSON(inputs.config).decode.additional-settings) }}
           RUNNER_NAME: ${{ runner.name }}
@@ -411,6 +431,7 @@ jobs:
             ${{ env.INFERENCEX_E2E_ROOT }}/agg_${{ env.RESULT_FILENAME }}_*.json
             ${{ env.INFERENCEX_E2E_ROOT }}/power_validation_${{ env.RESULT_FILENAME }}_*.json
             ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/power/**
+            ${{ env.INFERENCEX_E2E_ROOT }}/power-exporter-source.json
             ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/native_power/**
             ${{ env.INFERENCEX_E2E_ROOT }}/result_processing_${{ env.RESULT_FILENAME }}.json
             ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/*/results_*.json

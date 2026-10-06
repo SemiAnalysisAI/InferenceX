@@ -175,13 +175,13 @@ def test_single_node_point_stages_workflow_artifacts(harness):
 
 
 @pytest.mark.parametrize("require_power", ["0", "1"])
-@pytest.mark.parametrize("cluster_id,profile,port", [
-    ("h200-cw", "dcgm", 9401), ("mi355x-amds", "amd-device-metrics", 19500),
-    ("mi325x-amd", "amd-device-metrics", 19500),
-    ("mi300x-amd", "amd-device-metrics", 19500),
+@pytest.mark.parametrize("cluster_id,metric,port", [
+    ("h200-cw", "DCGM_FI_DEV_POWER_USAGE", 9401), ("mi355x-amds", "gpu_power_usage", 19500),
+    ("mi325x-amd", "gpu_power_usage", 19500),
+    ("mi300x-amd", "gpu_power_usage", 19500),
 ])
 def test_single_node_native_power_is_bound_and_retained(harness, require_power, monkeypatch,
-                                                      cluster_id, profile, port):
+                                                      cluster_id, metric, port):
     import copy
     monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[3] / "utils/srt-slurm/src"))
     from srtctl.core.overrides import apply_overrides_to_recipe, parse_overrides
@@ -189,10 +189,14 @@ def test_single_node_native_power_is_bound_and_retained(harness, require_power, 
     env_file = harness.tmp / "github-env"
     env = single_node_env(harness, cluster_id, REQUIRE_POWER=require_power,
                           GITHUB_ENV=str(env_file))
-    if profile == "amd-device-metrics":
+    if cluster_id == "mi355x-amds":
+        env["SRT_DIAGNOSTIC_TIME_LIMIT"] = "00:45:00"
+    if metric == "gpu_power_usage":
         checksum = prepare_amd_exporter(harness, cluster_id, env)
     assert_ok(launch(env, harness.config, harness.workspace))
     workspace = harness.workspace
+    if cluster_id == "mi355x-amds":
+        assert srtslurm(workspace)["default_time_limit"] == "00:45:00"
     [call] = srtctl_calls(harness.logs)
     argv = call["argv"]
     actual = copy.deepcopy(POINT_RECIPE)
@@ -206,10 +210,12 @@ def test_single_node_native_power_is_bound_and_retained(harness, require_power, 
     assert actual["benchmark"]["concurrencies"] == [2]
     exporter = telemetry["dcgm_exporter"]
     assert exporter["port"] == port
-    assert exporter.get("power_profile", "dcgm") == profile
-    if profile == "dcgm":
+    assert exporter.get("power", {}).get("metric", "DCGM_FI_DEV_POWER_USAGE") == metric
+    if metric == "DCGM_FI_DEV_POWER_USAGE":
         assert "noprof" in exporter["command"]
     else:
+        assert "AMD_GPU_GET_CACHE_TTL=0s" in exporter["command"]
+        assert exporter["power"]["index_label"] == "gpu_id"
         assert srtslurm(workspace)["default_mounts"][
             str(workspace / "runners/srt-slurm/exporters/amd-power.json")
         ] == "/etc/metrics/config.json"
@@ -380,6 +386,10 @@ def test_multinode_lane_stages_workflow_artifacts(harness, monkeypatch, cluster_
 def test_power_lane_stages_provenance_and_validates_each_concurrency(
     harness, model_prefix, precision, framework, model, require_power, lane
 ):
+    inventory = yaml.safe_load(harness.config.read_text())
+    extra = inventory["clusters"]["h200-dgxc"]["slurm"]["srt-slurm"]["extra"]
+    extra["default_gpu_exporter"]["container_image"] = "example.test/dcgm:fixture"
+    harness.config.write_text(yaml.safe_dump(inventory))
     adapter = harness.tmp / "results-python"
     adapter.write_text(
         "#!/bin/bash\nprintf '%s\\n' \"$*\" >> \"$FAKE_LOG_DIR/adapter.log\"\n"
@@ -398,6 +408,7 @@ def test_power_lane_stages_provenance_and_validates_each_concurrency(
     assert (workspace / "power-producer-sha.txt").read_text() == commit + "\n"
     [checkout] = workspace.glob("srt-slurm-9001-*")
     exporter = srtslurm(checkout)["containers"]["dcgm-exporter"]
+    assert Path(exporter).read_text() == "squash docker://example.test#dcgm:fixture\n"
     provenance = (workspace / "exporter-image.sha256").read_text()
     assert provenance.endswith(f"  {exporter}\n")
     assert (workspace / "LOGS/power/exporter-image.sha256").read_text() == provenance
@@ -414,6 +425,67 @@ def test_power_lane_stages_provenance_and_validates_each_concurrency(
         status = (workspace / "LOGS/power/native-job-status.txt").read_text()
         assert status == "42|COMPLETED|0:0\n"
 
+
+def test_amd_multinode_power_uses_cluster_image_and_preserves_audit(harness, monkeypatch):
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[3] / "utils/srt-slurm/src"))
+    from srtctl.core.config import resolve_config_with_defaults
+    from srtctl.core.overrides import apply_overrides_to_recipe, parse_overrides
+
+    telemetry = """slurm:
+  time_limit: "08:00:00"
+telemetry:
+  enabled: true
+  required: true
+"""
+    env = lane_env(
+        harness,
+        "mi355x-amds",
+        "schema: 2\n" + LANE_RECIPE + telemetry,
+        MODEL_PREFIX="qwen3.5",
+        PRECISION="fp8",
+        FRAMEWORK="sglang-disagg",
+        MODEL="Qwen/Qwen3.5-397B-A17B-FP8",
+        CONC_LIST="8",
+        REQUIRE_POWER="1",
+        SRT_DIAGNOSTIC_TIME_LIMIT="00:45:00",
+    )
+    prepare_amd_exporter(harness, "mi355x-amds", env)
+    recipe = "recipes/qwen3.5/sglang/mi355x-fp8/8k1k/disagg-1p1d-p-tp4-d-tp8.yaml"
+    mirror = harness.workspace / "benchmarks/multi_node/srt-slurm-recipes"
+    destination = mirror / recipe.removeprefix("recipes/")
+    destination.parent.mkdir(parents=True)
+    (mirror / "test/lane.yaml").rename(destination)
+    env["CONFIG_FILE"] = recipe
+    assert_ok(launch(env, harness.config, harness.workspace))
+
+    [checkout] = harness.workspace.glob("srt-slurm-9001-*")
+    config = srtslurm(checkout)
+    staged = yaml.safe_load((checkout / recipe).read_text())
+    assert staged["slurm"]["time_limit"] == "08:00:00"
+    resolved = resolve_config_with_defaults(staged, config)
+    [call] = srtctl_calls(harness.logs)
+    argv = call["argv"]
+    apply_overrides_to_recipe(resolved, parse_overrides([
+        argv[i + 1] for i, arg in enumerate(argv) if arg == "--set"
+    ], []))
+    assert resolved["slurm"]["time_limit"] == "00:45:00"
+    exporter = resolved["telemetry"]["dcgm_exporter"]
+    assert exporter["power"]["metric"] == "gpu_power_usage"
+    assert exporter["power"]["scope"] == "gpu_device_power_as_reported_by_amd_device_metrics_exporter"
+    assert "AMD_GPU_GET_CACHE_TTL=0s" in exporter["command"]
+    assert exporter["port"] == 19500
+    squash = Path(exporter["container_image"])
+    assert squash.read_bytes() == b"abc"
+    assert (
+        config["default_mounts"][
+            str(harness.workspace / "runners/srt-slurm/exporters/amd-power.json")
+        ]
+        == "/etc/metrics/config.json"
+    )
+    assert staged["benchmark"]["concurrencies"] == [8]
+    audit = harness.workspace / "LOGS/power"
+    assert (audit / "power-producer-sha.txt").read_text() == env["FAKE_SRT_COMMIT"] + "\n"
+    assert (audit / "exporter-image.sha256").read_text().endswith(f"  {squash}\n")
 
 @pytest.mark.parametrize("shape", ["single", "multi"])
 def test_submission_failure_code_propagates_and_cancels_the_job(harness, shape):

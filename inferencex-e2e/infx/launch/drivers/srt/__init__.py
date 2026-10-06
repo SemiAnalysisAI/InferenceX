@@ -7,7 +7,6 @@ driver also uses the Slurm backend's own operations.
 
 from __future__ import annotations
 
-import json
 import os
 import shlex
 import sys
@@ -46,6 +45,7 @@ def run_single_node(launch: Launch) -> int:
     run = SrtRun.create(launch, request, staged)
     hf_cache = models.single_node_hf_cache(run.cluster, request)
     time_limit = lanes.srt_time_limit(run.cluster.id, request, None, run.srt)
+    time_limit = request.env.get("SRT_DIAGNOSTIC_TIME_LIMIT") or time_limit
     root = Path(tempfile.mkdtemp(prefix="srt-single.", dir=run.workspace))
     checkout = prepare_checkout(run, root / "checkout", power=not request.eval_only)
     install_srtctl(run, checkout)
@@ -64,8 +64,7 @@ def run_single_node(launch: Launch) -> int:
             raise power.PowerPolicyError("single-node power requires a cluster GPU exporter")
         image, reference, exporter_setup_env = config.stage_gpu_exporter(run, single_node=True)
         containers[image] = reference
-        for key, value in exporter.items():
-            runtime_args += ["--set", f"telemetry.dcgm_exporter.{key}={json.dumps(value)}"]
+        runtime_args += config.exporter_overrides(exporter)
         runtime_args += [
             "--set",
             "telemetry.enabled=true",

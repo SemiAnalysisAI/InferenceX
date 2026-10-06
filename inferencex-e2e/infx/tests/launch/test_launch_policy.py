@@ -32,9 +32,13 @@ def _request(**env):
 GB200_GLM = "recipes/glm5.2/sglang/gb200-fp4/agentx/agg.yaml"
 KIMI_GB200 = "recipes/kimik3/vllm/gb200-fp4/agentx/k.yaml"
 KIMI_GB300 = "recipes/kimik3/vllm/gb300-fp4/agentx/deep/k.yaml"
+AMD_QWEN = "recipes/qwen3.5/sglang/mi355x-fp8/8k1k/disagg-1p1d-p-tp4-d-tp8.yaml"
 OTHER = "recipes/other.yaml"
 
 CASES = [
+    ("mi355x-amds", MULTI, "0", "qwen3.5", "fp8", "sglang-disagg", AMD_QWEN, DCGM),
+    ("mi355x-amds", MULTI, "1", "qwen3.5", "fp8", "sglang-disagg", AMD_QWEN, ERR),
+    ("mi355x-amds", MULTI, "0", "qwen3.5", "fp8", "sglang-disagg", OTHER, ERR),
     ("gb200-nv", MULTI, "1", "glm5.2", "fp4", "dynamo-sglang", GB200_GLM, AGENTX),
     ("gb200-nv", MULTI, "1", "glm5.2", "fp4", "dynamo-sglang", OTHER, ERR),
     ("gb200-nv", MULTI, "1", "kimik3", "fp4", "dynamo-vllm", KIMI_GB200, AGENTX),
@@ -95,6 +99,9 @@ def test_gb200_reports_agentic_misses_distinctly():
         ("telemetry:\n  dcgm_exporter:\nbenchmark:\n  enabled: true\n", False),
         ("benchmark:\n  dcgm_exporter:\n  enabled: true\n", False),
         ("telemetry:\n  dcgm_exporter:\n    enabled: true\n", False),
+        ("telemetry:\n  enabled: true\n  cpu_power: {}\n", False),
+        ("telemetry:\n  enabled: true\n  dcgm_exporter: {}\n  cpu_power: {}\n", True),
+        ("telemetry:\n  enabled: true\n", True),
         ("telemetry: [unclosed\n  enabled: true\n", False),
     ],
 )

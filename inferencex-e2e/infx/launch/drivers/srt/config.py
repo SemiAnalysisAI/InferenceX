@@ -33,6 +33,32 @@ if TYPE_CHECKING:
 NGINX_IMAGE = "nginx:1.27.4"
 EXPORTER_PROVENANCE = "exporter-image.sha256"
 HEALTH_CHECK = {"max_attempts": HEALTH_ATTEMPTS, "interval_seconds": 10}
+AMD_DME_POWER_SCOPE = "gpu_device_power_as_reported_by_amd_device_metrics_exporter"
+
+
+def uses_amd_device_metrics(exporter: Mapping[str, Any]) -> bool:
+    power = exporter.get("power")
+    return (
+        isinstance(power, Mapping)
+        and power.get("metric") == "gpu_power_usage"
+        and power.get("scope") == AMD_DME_POWER_SCOPE
+    )
+
+
+def exporter_overrides(exporter: Mapping[str, Any]) -> list[str]:
+    """Set exporter leaf fields; srtctl treats mapping-valued --set arguments as strings."""
+    arguments: list[str] = []
+
+    def add(path: str, value: Any) -> None:
+        if isinstance(value, Mapping):
+            for key, child in value.items():
+                add(f"{path}.{key}", child)
+        else:
+            arguments.extend(["--set", f"telemetry.dcgm_exporter.{path}={json.dumps(value)}"])
+
+    for key, value in exporter.items():
+        add(key, value)
+    return arguments
 
 
 @dataclass(frozen=True)
@@ -157,7 +183,7 @@ def render(cluster: Cluster, job: SrtJob) -> dict[str, Any]:
         raise LaunchError(f"cluster {cluster.id!r} srt-slurm.extra sets rendered keys {shadowed}")
     config.update(srt.extra)
     exporter = config.get("default_gpu_exporter")
-    if exporter and exporter.get("power_profile") == "amd-device-metrics":
+    if isinstance(exporter, dict) and uses_amd_device_metrics(exporter):
         config.setdefault("default_mounts", {})[
             str(job.workspace / "runners/srt-slurm/exporters/amd-power.json")
         ] = "/etc/metrics/config.json"
@@ -178,7 +204,7 @@ def stage_gpu_exporter(
         raise LaunchError("native power requires a cluster GPU exporter")
     image = exporter["container_image"]
     setup_env: dict[str, str] = {}
-    if exporter.get("power_profile") == "amd-device-metrics":
+    if uses_amd_device_metrics(exporter):
         require(run.request, "AMD_DME_ARTIFACT_DIR", "AMD_DME_SQSH_SHA256")
         squash = run.backend.settings.squash
         if squash is None:

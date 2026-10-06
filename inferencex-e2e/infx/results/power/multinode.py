@@ -288,18 +288,34 @@ def _parse_expected_windows(manifest: dict) -> list[ExpectedWindow]:
 def _check_wire_contract(manifest: dict) -> list[str]:
     """Mirror srt-slurm's manifest wire/lifecycle checks (verdict excluded)."""
     failures: list[str] = []
-    profile = manifest.get("power_profile", "dcgm")
-    if not isinstance(profile, str) or profile not in POWER_PROFILES:
+    profile = manifest.get("power_profile")
+    if profile is not None and (not isinstance(profile, str) or profile not in POWER_PROFILES):
         failures.append(f"unknown power_profile: {profile!r}")
-        expected_metric, expected_scope = POWER_METRIC, POWER_SCOPE
-    else:
+    if isinstance(profile, str) and profile in POWER_PROFILES:
         expected_metric, expected_scope = POWER_PROFILES[profile]
+        for key, expected in (("source_metric", expected_metric), ("power_scope", expected_scope)):
+            if manifest.get(key) != expected:
+                failures.append(f"{key} is {manifest.get(key)!r}, expected {expected!r}")
+    else:
+        source_metric = manifest.get("source_metric")
+        power_scope = manifest.get("power_scope")
+        failures.extend(
+            f"{key} is not a non-empty string"
+            for key in ("source_metric", "power_scope")
+            if not isinstance(manifest.get(key), str) or not manifest[key]
+        )
+        if (
+            isinstance(source_metric, str)
+            and source_metric
+            and isinstance(power_scope, str)
+            and power_scope
+            and (source_metric, power_scope) not in POWER_PROFILES.values()
+        ):
+            failures.append("unsupported source_metric and power_scope pair")
     for key, expected in (
         ("schema_version", SCHEMA_VERSION),
         ("producer", PRODUCER),
-        ("source_metric", expected_metric),
         ("unit", POWER_UNIT),
-        ("power_scope", expected_scope),
         ("timestamp_source", CLOCK_SOURCE),
     ):
         if manifest.get(key) != expected:

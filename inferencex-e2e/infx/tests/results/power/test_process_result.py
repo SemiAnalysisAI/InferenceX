@@ -1155,6 +1155,7 @@ def test_request_outcome_cannot_disagree_with_raw_counts(single_node_env_vars, s
 
 
 @pytest.mark.parametrize("profile,metric,scope", [
+    (None, "gpu_power_usage", "gpu_device_power_as_reported_by_amd_device_metrics_exporter"),
     ("dcgm", "DCGM_FI_DEV_POWER_USAGE", "gpu_device_board_as_reported_by_dcgm"),
     ("amd-device-metrics", "gpu_power_usage", "gpu_device_power_as_reported_by_amd_device_metrics_exporter"),
 ])
@@ -1165,7 +1166,11 @@ def test_native_aggregate_role_through_result_processor(
     pkg = build_package(tmp_path, bench_extra=TestMultinodePower.BENCH_EXTRA)
     manifest_path = pkg.power_dir / 'manifest.json'
     manifest = json.loads(manifest_path.read_text())
-    manifest.update(power_profile=profile, source_metric=metric, power_scope=scope)
+    manifest.update(source_metric=metric, power_scope=scope)
+    if profile is None:
+        manifest.pop('power_profile', None)
+    else:
+        manifest['power_profile'] = profile
     for device in manifest['expected_devices']:
         for assignment in device['assignments']:
             assignment.update(worker_role='agg', het_group=None)

@@ -4,10 +4,10 @@ As shown in the [CODEOWNERS](../../../../.github/CODEOWNERS) file, InferenceX co
 
 The srt driver ([`infx/launch/drivers/srt/checkout.py`](../../../infx/launch/drivers/srt/checkout.py)) applies every `*.patch` here to the job's srt-slurm clone after checking out the pinned submodule.
 
-Each patch is a temporary fix for an open upstream PR. When the PR merges and the submodule pin includes it, delete the patch and its row.
+Each patch is a temporary local delta. Delete it when the submodule pin includes the same behavior.
 
-| Patch | Upstream PR | Fix |
+| Patch | Base API | Local delta |
 |-------|-------------|-----|
-| `amd-native-power-profile.patch` | [AMD producer source](https://github.com/edwingao28/srt-slurm/commit/fa9a497cd1c1ad0253dac161926376ae973dd022) (upstream PR pending) | Select AMD device-metrics-exporter metrics and retain only participating GPUs. |
+| `572-participating-gpus.patch` | [NVIDIA/srt-slurm#572](https://github.com/NVIDIA/srt-slurm/pull/572) | Persist only worker-assigned GPUs from a node-wide exporter scrape. |
 
-The pin includes [NVIDIA/srt-slurm#548](https://github.com/NVIDIA/srt-slurm/pull/548), so its former patch is removed. The AMD patch contains the production changes from the linked source, applied to upstream `2a4c0f3d`. Its upstream PR remains required before merge.
+The pin includes the generic exporter mapping in the open upstream #572 head. The participant filter remains local until the pinned upstream commit includes it.

@@ -70,6 +70,11 @@ on:
         required: false
         type: boolean
         default: false
+      diagnostic-time-limit:
+        description: "Optional Slurm time limit for a bounded diagnostic (HH:MM:SS)"
+        required: false
+        type: string
+        default: ""
       agentx-fast:
         description: "Use one warmup request per AgentX lane and a 20-minute profile"
         required: false
@@ -266,12 +271,13 @@ jobs:
         run: &launcher-cleanup |
           "$INFERENCEX_LAUNCH_PYTHON" -P -m infx.launch cleanup
 
+      # Squash from amd-exporter-image.yml run 37397249986, matching the pinned GHCR digest.
       - name: Download prepared AMD exporter
         if: ${{ !inputs.eval-only && fromJSON(inputs.config).srt-recipe && (startsWith(runner.name, 'mi300x-amd_') || startsWith(runner.name, 'mi325x-amd_') || startsWith(runner.name, 'mi355x-amds_')) }}
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          artifact-ids: 11217112734
-          run-id: 36985488002
+          artifact-ids: 11383786689
+          run-id: 37397249986
           github-token: ${{ github.token }}
           path: ${{ github.workspace }}/inferencex-e2e/.prepared-amd-exporter
           merge-multiple: true
@@ -279,7 +285,8 @@ jobs:
       - name: Launch job script
         env:
           AMD_DME_ARTIFACT_DIR: ${{ github.workspace }}/inferencex-e2e/.prepared-amd-exporter
-          AMD_DME_SQSH_SHA256: 0f2cbb4e2c41c1506db74c6653ea09ec5e7d42236d9532e2bc38fb9e0be5879e
+          AMD_DME_SQSH_SHA256: f40fe9425586622e6da02d434f4eaee5e1f8c0b555c6d323aec1323a214e1c1a
+          SRT_DIAGNOSTIC_TIME_LIMIT: ${{ inputs.diagnostic-time-limit }}
           RUNNER_NAME: ${{ runner.name }}
           RUNNER_TYPE: ${{ inputs.runner }}
           RESULT_FILENAME_BASE: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_tp${{ env.TP }}-pp${{ env.PP_SIZE }}-dcp${{ env.DCP_SIZE }}-pcp${{ env.PCP_SIZE }}-ep${{ env.EP_SIZE }}-dpa${{ env.DP_ATTENTION }}_disagg-${{ env.DISAGG }}_spec-${{ env.SPEC_DECODING }}_conc${{ env.CONC }}_${{ runner.name }}

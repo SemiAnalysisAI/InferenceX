@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 
 
 def recipe_enables_dcgm_power(text: str) -> bool:
-    """Whether the recipe's top-level ``telemetry`` is ``enabled: true`` with a ``dcgm_exporter``."""
+    """Whether enabled telemetry selects an explicit or cluster-inherited GPU exporter."""
     try:
         recipe = yaml.safe_load(text)
     except yaml.YAMLError:
@@ -29,8 +29,11 @@ def recipe_enables_dcgm_power(text: str) -> bool:
     telemetry = recipe.get("telemetry") if isinstance(recipe, dict) else None
     return (
         isinstance(telemetry, dict)
-        and "dcgm_exporter" in telemetry
         and telemetry.get("enabled") is True
+        and (
+            "dcgm_exporter" in telemetry
+            or not any(key in telemetry for key in ("cpu_power_exporter", "cpu_power"))
+        )
     )
 
 
@@ -59,6 +62,16 @@ class PowerLane:
 
 
 POWER_LANES: dict[tuple[str, LaunchPath], PowerLane] = {
+    ("mi355x-amds", LaunchPath.SRT_MULTI): PowerLane(
+        rules=(
+            PowerRule(
+                Match(any_of("qwen3.5"), any_of("fp8"), any_of("sglang-disagg"), agentic=False),
+                agentx=False,
+                recipe_glob="recipes/qwen3.5/sglang/mi355x-fp8/8k1k/disagg-1p1d-p-tp4-d-tp8.yaml",
+            ),
+        ),
+        error="MI355X GPU power requires the Qwen3.5 FP8 4P+8D fixed-sequence recipe",
+    ),
     ("gb200-nv", LaunchPath.SRT_MULTI): PowerLane(
         rules=(
             PowerRule(

@@ -332,6 +332,7 @@ qwen3.5-fp8-mi355x-sglang-disagg:
     fixed-seq-len:
     - isl: 8192
       osl: 1024
+      require-power: true
       search-space:
       # The srt-slurm recipe owns the complete c8-c128 sweep in one Slurm
       # allocation so model initialization is paid once instead of per point.

@@ -1,5 +1,5 @@
 # Production-scale MI355X port of the existing Qwen3.5 FP8 1P1D recipe.
-# Each role owns one full 8-GPU node; the native SGLang Router provides the
+# Prefill uses four GPUs and decode uses eight on separate nodes; SGLang Router provides the
 # request plane and AMD MoRI moves KV directly between the P/D workers.
 
 schema: 2
@@ -22,9 +22,9 @@ identity:
 slurm:
   time_limit: "08:00:00"
 
-# This topology owns every GPU on each MI355X node. Give SGLang the complete
-# 128-core cpuset as well: its ROCm image enables per-GPU CPU affinity, which
-# maps the eight TP ranks across the full dual-socket CPU topology.
+# Give both roles the complete 128-core cpuset: the ROCm image maps GPU ranks
+# across the dual-socket CPU topology. Power collection counts only the four
+# prefill GPUs and eight decode GPUs selected by the roles below.
 sbatch_directives:
   cpus-per-task: "128"
   mem: "0"
@@ -39,6 +39,12 @@ frontend:
     policy: round_robin
     prefill-policy: round_robin
     decode-policy: round_robin
+
+telemetry:
+  enabled: true
+  required: true
+  collect_interval_ms: 1000
+  startup_timeout_seconds: 180
 
 engine: sglang
 roles:

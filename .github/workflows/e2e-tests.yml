@@ -41,6 +41,11 @@ on: # zizmor: ignore[concurrency-limits]
                 required: false
                 type: string
                 default: ""
+            diagnostic-time-limit:
+                description: "Optional Slurm time limit for a bounded native SRT diagnostic (HH:MM:SS)"
+                required: false
+                type: string
+                default: ""
             agentx-fast:
                 description: "AgentX fast feedback: one warmup request per lane and a 20-minute profile."
                 required: false
@@ -126,6 +131,11 @@ on: # zizmor: ignore[concurrency-limits]
                 default: false
             power-producer-sha:
                 description: "Expected srt-slurm producer git commit for power validation"
+                required: false
+                type: string
+                default: ""
+            diagnostic-time-limit:
+                description: "Optional Slurm time limit for a bounded native SRT diagnostic (HH:MM:SS)"
                 required: false
                 type: string
                 default: ""
@@ -335,6 +345,9 @@ jobs:
     test-sweep-multi-node:
         needs: get-jobs
         if: ${{ needs.get-jobs.outputs.multi-node-config != '' && needs.get-jobs.outputs.multi-node-config != '[]' }}
+        permissions:
+            contents: read
+            actions: read # Download the pinned AMD exporter artifact.
         uses: $/.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node /
         strategy:
@@ -354,6 +367,7 @@ jobs:
             run-eval: false
             require-power: ${{ inputs.require-power || (matrix.config['require-power'] == true && matrix.config['eval-only'] != true) }}
             power-producer-sha: ${{ inputs.power-producer-sha }}
+            diagnostic-time-limit: ${{ inputs.diagnostic-time-limit }}
             ref: ${{ needs.get-jobs.outputs.benchmark-ref }}
 
     test-sweep-multi-node-evals:
@@ -523,6 +537,7 @@ jobs:
             dp-attn: ${{ matrix.config.dp-attn }}
             run-eval: false
             require-power: ${{ inputs.require-power || (matrix.config['require-power'] == true && matrix.config['eval-only'] != true) }}
+            diagnostic-time-limit: ${{ inputs.diagnostic-time-limit }}
             ref: ${{ needs.get-jobs.outputs.benchmark-ref }}
 
     test-sweep-evals:

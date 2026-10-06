@@ -73,7 +73,12 @@ def stage_exporter(
     subprocess.run(["sha256sum", "--check", "SHA256SUMS"], cwd=artifact, check=True)
     source = artifact / "amd-exporter.sqsh"
     provenance = json.loads((artifact / "provenance.json").read_text())
-    if not image.endswith("@" + provenance["image"]["upstream_reported_registry_digest"]):
+    prepared_image = provenance["image"]
+    if "reference" in prepared_image:
+        matches_image = image.replace("#", "/", 1) == prepared_image["reference"]
+    else:
+        matches_image = image.endswith("@" + prepared_image["upstream_reported_registry_digest"])
+    if not matches_image:
         raise ValueError("Prepared exporter does not match the configured image digest")
     if file_sha256(source) != expected_sha256:
         raise ValueError("Prepared exporter does not match the caller's pinned squash checksum")
