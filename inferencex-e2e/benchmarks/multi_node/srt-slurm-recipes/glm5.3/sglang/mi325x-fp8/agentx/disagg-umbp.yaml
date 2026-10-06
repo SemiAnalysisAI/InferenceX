@@ -188,3 +188,31 @@ override_colocated_tep4_tep4_cap8_c4:
   benchmark:
     env:
       CONC: "4"
+
+override_colocated_tep4_dep4_round_robin_batch4_c8:
+  frontend:
+    args:
+      dp-aware: true
+  roles:
+    prefill:
+      gpus: 4
+      env:
+        SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "1024"
+      args: *tep4_args
+    decode:
+      nodes: colocate
+      gpus: 4
+      env:
+        SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "8"
+      args:
+        <<: *tep4_args
+        data-parallel-size: 4
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        moe-dense-tp-size: 1
+        mem-fraction-static: 0.985
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 16
+  benchmark:
+    env:
+      CONC: "8"
