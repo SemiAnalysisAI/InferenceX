@@ -496,6 +496,25 @@ override_colocated_tep4_dep4_radix_quality_c16:
     env:
       CONC: "16"
 
+# Genuine gate for radix with the native local batch-four admission geometry.
+override_colocated_tep4_dep4_radix_batch4_quality_c16:
+  <<: *tep4_dep4_radix
+  slurm:
+    time_limit: "01:00:00"
+  sbatch_directives: {}
+  roles:
+    prefill: *tep4_dep4_prefill
+    decode:
+      <<: *tep4_dep4_decode
+      args:
+        <<: *dep4_pd_args
+        disaggregation-decode-enable-radix-cache: true
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 16
+  benchmark:
+    env:
+      CONC: "16"
+
 # Two independent TEP4 prefill workers share one native 513 GB host pool.
 # Decode occupies four GPUs on the second node: 12 active / 16 allocated.
 override_two_tep4_prefill_dep4_c8:
