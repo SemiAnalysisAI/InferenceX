@@ -110,7 +110,12 @@ def srt_single(args: argparse.Namespace) -> int:
     if eval_only:
         print("EVAL_ONLY mode: skipping throughput benchmark", flush=True)
         return 0
-    return _run_client(point)
+    rc = _run_client(point)
+    # DNM power validation: record srt-slurm's measurement window for this point.
+    if rc == 0 and env.optional("SRT_MEASUREMENT_WINDOW_DIR"):
+        with proc.RelaySignals() as relay:
+            rc = relay.run([PYTHON, "-m", "infx.results.power.window", str(point.result), str(conc)])
+    return rc
 
 
 def srt_sweep(args: argparse.Namespace) -> int:

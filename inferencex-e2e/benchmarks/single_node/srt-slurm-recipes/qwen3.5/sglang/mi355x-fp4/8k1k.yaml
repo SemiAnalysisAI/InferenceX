@@ -14,8 +14,10 @@ base:
   observability:
     enabled: false
     tachometer:
-      enabled: false
+      enabled: true
   engine: sglang
+  telemetry:
+    enabled: false
   roles:
     agg:
       nodes: 1

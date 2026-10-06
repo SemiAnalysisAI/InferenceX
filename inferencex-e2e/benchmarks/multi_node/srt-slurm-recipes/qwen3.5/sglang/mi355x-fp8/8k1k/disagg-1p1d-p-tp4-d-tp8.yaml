@@ -44,7 +44,7 @@ engine: sglang
 roles:
   prefill:
     nodes: 1
-    workers: 1
+    workers: 2
     gpus: 4
     env: &common_environment
       HF_HOME: "/hf_hub_cache"
@@ -112,8 +112,14 @@ health_check:
   max_attempts: 720
   interval_seconds: 5
 
+telemetry:
+  enabled: true
+  required: true
+  startup_timeout_seconds: 180
+
 benchmark:
   type: custom
+  concurrencies: [8]
   command: bash /infmax-workspace/benchmarks/multi_node/srt_fixed_sequence.sh
   env:
     ISL: '8192'
