@@ -91,16 +91,20 @@ base:
       WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
 
-# One variant per point (c128 excluded for both TP2 and TP4). Engram tables
-# move to pinned host memory at TP2, where resident tables leave too little
-# KV. Graph capture covers 2x CONC x (1 + 5 drafts). From c32 up the prefill
-# chunk is capped at 8192: a chunk scheduled alongside a decode step stalls
-# every decoding sequence for the length of that chunk, so the cap bounds the
-# stall rather than buying KV room, and it stays above 1024 x 6 slots, so the
-# scheduler is never capped at the captured shape. c1 through c16 keep 16384.
-# Chunked-prefill steps are 0 of 596 engine steps at c1 and 5 of 1183 at c16,
-# against 38 of 111 at c64, so below c32 the cap only splits one prefill into
-# more chunks and costs TTFT without a decode tail to protect.
+# One variant per point, concurrency 1 through 192 on both TP arms. Engram
+# tables move to pinned host memory at TP2 always and at TP4 from c128, where
+# resident tables leave too little KV. Graph capture covers 2x CONC x (1 + 5
+# drafts), which is what the benchmark admits.
+#
+# The prefill chunk follows two separate rules. From c32 through c64 it is
+# capped at 8192 for decode latency: a chunk scheduled alongside a decode step
+# stalls every decoding sequence for the length of that chunk, so the cap
+# bounds the stall. c1 through c16 keep 16384, where chunked-prefill steps are
+# 0 of 596 engine steps at c1 and 5 of 1183 at c16, against 38 of 111 at c64,
+# so the cap would only split one prefill into more chunks and cost TTFT with
+# no decode tail to protect. At c128 and c192 the chunk instead buys KV room,
+# staying at 8192 on TP4 and dropping to 4096 on TP2. Only those TP2 points
+# fall below 1024 x 6 token slots, so only they set max-num-seqs explicitly.
 override_tp4_c1:
   roles:
     agg:
@@ -192,6 +196,35 @@ override_tp4_c64:
     env:
       CONC: '64'
 
+# c128 and c192 offload the Engram tables even at TP=4: resident leaves
+# 116K KV tokens per concurrent request at c128, below the 122K at which
+# TP=2 c64 collapsed. Offloaded, c128 measured 388K.
+override_tp4_c128:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        engram-config: '{"cpu_offload":true}'
+        max-cudagraph-capture-size: 2048
+        max-num-batched-tokens: 8192
+  benchmark:
+    env:
+      CONC: '128'
+
+override_tp4_c192:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        engram-config: '{"cpu_offload":true}'
+        max-cudagraph-capture-size: 2304
+        max-num-batched-tokens: 8192
+  benchmark:
+    env:
+      CONC: '192'
+
 override_tp2_c1:
   roles:
     agg:
@@ -282,3 +315,35 @@ override_tp2_c64:
   benchmark:
     env:
       CONC: '64'
+
+# TP=2 buys KV room at c128 and c192 with a 4096 chunk, which measured 260K KV
+# tokens per concurrent request at c128 against 23.6K at the upstream 16384.
+# 4096 is below 1024 x 6 slots, so max-num-seqs drops to the 2x CONC the
+# benchmark actually admits.
+override_tp2_c128:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        engram-config: '{"cpu_offload":true}'
+        max-cudagraph-capture-size: 2048
+        max-num-batched-tokens: 4096
+        max-num-seqs: 256
+  benchmark:
+    env:
+      CONC: '128'
+
+override_tp2_c192:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        engram-config: '{"cpu_offload":true}'
+        max-cudagraph-capture-size: 2304
+        max-num-batched-tokens: 4096
+        max-num-seqs: 384
+  benchmark:
+    env:
+      CONC: '192'
