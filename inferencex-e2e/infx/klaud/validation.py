@@ -258,10 +258,7 @@ def select_artifacts(inventory: list[dict], run: dict, attempt: dict) -> list[di
         wanted = (
             name in ("klaud-sweep-manifest", "results_bmk")
             or name.startswith("bmk_agentic_")
-            or (
-                name.startswith("eval_")
-                and not name.startswith(("eval_server_logs_", "eval_gpu_metrics_"))
-            )
+            or (name.startswith("eval_") and not name.startswith("eval_server_logs_"))
         )
         if not wanted:
             continue
@@ -291,7 +288,7 @@ def select_artifacts(inventory: list[dict], run: dict, attempt: dict) -> list[di
                 if any(
                     a["name"].startswith(prefix)
                     and a["name"] != name
-                    and not a["name"].startswith(("eval_server_logs_", "eval_gpu_metrics_"))
+                    and not a["name"].startswith("eval_server_logs_")
                     and utc(a["created_at"]) >= utc(attempt["run_started_at"])
                     for a in inventory
                 ):

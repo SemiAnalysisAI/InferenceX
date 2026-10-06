@@ -9319,3 +9319,11 @@
     - "Add GB300 Qwen3.5-397B-A17B-FP8 AgentX recipes: four disaggregated TP1xPP4 MTP prefill / DEP4 MTP decode points and five aggregate TP4/TP8 MTP points."
     - "New recipes and matrix entries only; existing Qwen3.5 GB300 entries are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3231
+
+- config-keys:
+    - glm5.2-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Enable SGLANG_OPT_USE_TOPK_V2 (false -> true) so the DSA indexer uses the top-k v2 kernel."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3724
