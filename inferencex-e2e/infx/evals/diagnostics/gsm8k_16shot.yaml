@@ -1,0 +1,3 @@
+include: ../gsm8k.yaml
+task: gsm8k_16shot
+num_fewshot: 16

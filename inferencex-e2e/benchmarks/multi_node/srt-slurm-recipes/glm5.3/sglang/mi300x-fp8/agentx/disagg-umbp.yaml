@@ -479,6 +479,30 @@ override_tp8_tp16_c8:
     env:
       CONC: "8"
 
+override_tp8_tp16_triton_gsm16shot_c8:
+  slurm:
+    time_limit: "01:00:00"
+  environment:
+    EVAL_INCLUDE_PATH: /infmax-workspace/infx/evals/diagnostics
+    EVAL_TASKS_DIR: gsm8k_16shot
+  roles:
+    prefill:
+      args:
+        max-running-requests: 16
+    decode:
+      nodes: 2
+      workers: 1
+      gpus: 16
+      args:
+        tensor-parallel-size: 16
+        chunked-prefill-size: 1024
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 16
+        dsa-decode-backend: triton
+  benchmark:
+    env:
+      CONC: "8"
+
 override_2p1d_tp8_c16:
   roles:
     prefill:
