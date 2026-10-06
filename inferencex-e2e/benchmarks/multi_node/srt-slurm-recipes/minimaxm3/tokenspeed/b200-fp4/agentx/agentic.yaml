@@ -134,7 +134,8 @@ override_smg_disagg_c8:
 
 # Parallel layouts. MiniMax-M3 is a MoE: DEP is attention DP over every GPU of the worker
 # with expert parallelism (data-parallel-size N, enable-expert-parallel), TEP is tensor
-# parallelism with expert parallelism (tensor-parallel-size N, enable-expert-parallel).
+# parallelism with expert parallelism (tensor-parallel-size N, enable-expert-parallel). TokenSpeed caps
+# MiniMax-M3 at TP4: it has four index heads and does not replicate them.
 override_dynamo_dep8_c8:
   name: minimaxm3-b200-tokenspeed-dynamo-agg-dep8-c8
   dynamo: &dynamo_install
@@ -183,20 +184,20 @@ override_smg_dep8_c8:
       env: *env
       args: *dep8
 
-override_dynamo_tep8_c8:
-  name: minimaxm3-b200-tokenspeed-dynamo-agg-tep8-c8
+override_dynamo_tep4_c8:
+  name: minimaxm3-b200-tokenspeed-dynamo-agg-tep4-c8
   dynamo: *dynamo_install
   frontend: *dynamo_frontend
   roles:
     agg:
       nodes: 1
       workers: 1
-      gpus: 8
+      gpus: 4
       env: *env
-      args: &tep8
+      args: &tep4
         served-model-name: nvidia/MiniMax-M3-NVFP4
         trust-remote-code: true
-        tensor-parallel-size: 8
+        tensor-parallel-size: 4
         enable-expert-parallel: true
         max-model-len: 262144
         max-num-seqs: 16
@@ -211,17 +212,17 @@ override_dynamo_tep8_c8:
         block-size: 128
         disaggregation-ib-device: mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_10,mlx5_11
 
-override_smg_tep8_c8:
-  name: minimaxm3-b200-tokenspeed-smg-agg-tep8-c8
+override_smg_tep4_c8:
+  name: minimaxm3-b200-tokenspeed-smg-agg-tep4-c8
   dynamo: *no_dynamo
   frontend: *smg_frontend
   roles:
     agg:
       nodes: 1
       workers: 1
-      gpus: 8
+      gpus: 4
       env: *env
-      args: *tep8
+      args: *tep4
 
 # One DEP16 worker across two nodes.
 override_dynamo_dep16_c8:
@@ -266,36 +267,36 @@ override_smg_dep16_c8:
 
 # Prefill and decode on separate nodes, KV over Mooncake RDMA between them. Dynamo
 # disaggregates only attention-DP-1 workers (dynamo.tokenspeed's
-# validate_disagg_compatibility), so its decode is TEP8; behind SMG decode is DEP8.
-override_dynamo_disagg_tep8_tep8_c8:
-  name: minimaxm3-b200-tokenspeed-dynamo-disagg-tep8-tep8-c8
+# validate_disagg_compatibility), so its decode is TEP4; behind SMG decode is DEP8.
+override_dynamo_disagg_tep4_tep4_c8:
+  name: minimaxm3-b200-tokenspeed-dynamo-disagg-tep4-tep4-c8
   dynamo: *dynamo_install
   frontend: *dynamo_frontend
   roles:
     prefill:
       nodes: 1
       workers: 1
-      gpus: 8
+      gpus: 4
       env: *env
-      args: *tep8
+      args: *tep4
     decode:
       nodes: 1
       workers: 1
-      gpus: 8
+      gpus: 4
       env: *env
-      args: *tep8
+      args: *tep4
 
-override_smg_disagg_tep8_dep8_c8:
-  name: minimaxm3-b200-tokenspeed-smg-disagg-tep8-dep8-c8
+override_smg_disagg_tep4_dep8_c8:
+  name: minimaxm3-b200-tokenspeed-smg-disagg-tep4-dep8-c8
   dynamo: *no_dynamo
   frontend: *smg_frontend
   roles:
     prefill:
       nodes: 1
       workers: 1
-      gpus: 8
+      gpus: 4
       env: *env
-      args: *tep8
+      args: *tep4
     decode:
       nodes: 1
       workers: 1
