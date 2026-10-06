@@ -1,0 +1,140 @@
+name: MoRI RDMA Registration Preflight
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  PYTHONPATH: ${{ github.workspace }}/inferencex-e2e
+
+jobs:
+  score:
+    runs-on: ubuntu-latest
+    outputs:
+      priority: ${{ steps.priority.outputs.priority }}
+      queue-token: ${{ steps.priority.outputs.queue-token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: {persist-credentials: false}
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - id: priority
+        run: |
+          cd inferencex-e2e
+          scored=$(printf '%s' '[{"runner":"cluster:mi355x-amds","framework":"sglang-disagg","model-prefix":"qwen3.5","precision":"fp8"}]' |
+            uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml \
+              python -P -m infx.workflows.ci_priority \
+              --policy configs/ci-priority.yaml \
+              --event-name "$GITHUB_EVENT_NAME" \
+              --queue-namespace "${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}:mori-rdma")
+          echo "priority=$(jq -r '.[0].priority' <<<"$scored")" >> "$GITHUB_OUTPUT"
+          echo "queue-token=$(jq -r '.[0]["queue-token"]' <<<"$scored")" >> "$GITHUB_OUTPUT"
+
+  probe:
+    needs: score
+    runs-on: >-
+      ${{ fromJSON(
+        vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
+        (
+          vars.NODE_SLOT_SCHEDULER_ENABLED == 'true' &&
+          format(
+            '["self-hosted","cluster:mi355x-amds","nodes:1",{0},{1}]',
+            toJSON(format('ci-job-{0}-{1}', needs.score.outputs.priority, needs.score.outputs.queue-token)),
+            toJSON(format('ci-attempt-{0}', github.run_attempt))
+          ) ||
+          format(
+            '["self-hosted","cluster:mi355x-amds","nodes:1",{0},{1}]',
+            toJSON(format('ci-job-{0}-{1}', needs.score.outputs.priority, needs.score.outputs.queue-token)),
+            toJSON(format('ci-attempt-{0}', github.run_attempt))
+          )
+        ) ||
+        '["cluster:mi355x-amds"]'
+      ) }}
+    timeout-minutes: 25
+    env:
+      PYTHONPATH: ${{ github.workspace }}/inferencex-e2e
+      MODEL: Qwen/Qwen3.5-397B-A17B-FP8
+      IMAGE: lmsysorg/sglang@sha256:54ac680bad1832b8acd469533ae66f608b525cec3449bbd5f3d0238351e9b965
+      GPU_COUNT: '2'
+      SALLOC_TIME_LIMIT: '10'
+      ENROOT_IMPORT_TIME_LIMIT: '4'
+      BENCH_SCRIPT_OVERRIDE: benchmarks/diagnostics/mori_rdma_registration.sh
+      MORI_RDMA_DEVICES: rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7
+      MORI_SHMEM_MODE: ISOLATION
+      MORI_RDMA_TC: '104'
+      MORI_IO_TC: '104'
+      MORI_IO_QP_MAX_SEND_WR: '16384'
+      MORI_IO_QP_MAX_CQE: '32768'
+      MORI_IO_QP_MAX_SGE: '2'
+      MORI_IO_SQ_BACKOFF_TIMEOUT_US: '50000'
+      SGLANG_MORI_QP_PER_TRANSFER: '4'
+      SGLANG_MORI_NUM_WORKERS: '4'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with: {enable-cache: false}
+      - name: Prepare Python launcher
+        env:
+          UV_CACHE_DIR: ${{ github.workspace }}/../.infx-uv-cache
+          UV_PYTHON_INSTALL_DIR: ${{ github.workspace }}/../.infx-uv-python
+        run: |
+          launch_venv="$RUNNER_TEMP/infx-launch-venv"
+          uv venv --quiet --python 3.12 "$launch_venv"
+          uv pip install --quiet --exclude-newer PT12H --python "$launch_venv/bin/python" \
+            -r "$GITHUB_WORKSPACE/inferencex-e2e/pyproject.toml"
+          echo "INFERENCEX_LAUNCH_PYTHON=$launch_venv/bin/python" >> "$GITHUB_ENV"
+      - name: Record old job and image cache before allocation
+        env:
+          RUNNER_NAME: ${{ runner.name }}
+        run: |
+          cd inferencex-e2e
+          sacct -j 47614 --format JobID,State,Elapsed,NodeList -P
+          if [ -n "$(squeue -h -j 47614 -o '%i %T %N')" ]; then
+            echo "Old job 47614 is still active; refusing another allocation" >&2
+            exit 1
+          fi
+          printf 'ENROOT_DATA_PATH=%s\n' "$ENROOT_DATA_PATH"
+          if command -v enroot >/dev/null 2>&1; then enroot list; fi
+          "$INFERENCEX_LAUNCH_PYTHON" - <<'PY'
+          import os
+          import subprocess
+          from infx.clusters import resolve_cluster
+          from infx.clusters.slurm import slurm_settings
+          from infx.launch.backends.slurm.squash import is_valid_squash, squash_path
+
+          cluster = resolve_cluster(os.environ["RUNNER_NAME"])
+          policy = slurm_settings(cluster).squash.policy()
+          original_tag = "lmsysorg/sglang:v0.5.16-rocm720-mi35x"
+          immutable = os.environ["IMAGE"]
+          tag_path = squash_path(original_tag, policy)
+          tag_valid = is_valid_squash(tag_path)
+          selected = original_tag if tag_valid else immutable
+          path = squash_path(selected, policy)
+          valid = is_valid_squash(path)
+          print(f"Original-tag squash path={tag_path} valid={tag_valid}", flush=True)
+          print(f"Selected image={selected} squash path={path} valid={valid}", flush=True)
+          if valid:
+              digest = subprocess.run(["timeout", "120s", "sha256sum", str(path)], capture_output=True, text=True)
+              print(f"SGLang squash hash exit={digest.returncode} stdout={digest.stdout.strip()} stderr={digest.stderr.strip()}", flush=True)
+          else:
+              print("No compatible shared squash: launcher must stage the immutable digest before the GPU allocation.", flush=True)
+          with open(os.environ["GITHUB_ENV"], "a") as env_file:
+              env_file.write(f"IMAGE={selected}\n")
+          PY
+      - name: Run bounded no-model RDMA probe
+        env:
+          RUNNER_NAME: ${{ runner.name }}
+        run: |
+          cd inferencex-e2e
+          export GITHUB_WORKSPACE="$PWD"
+          "$INFERENCEX_LAUNCH_PYTHON" -m infx.launch run
+      - name: Upload original probe output
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mori-rdma-preflight-${{ github.run_id }}-${{ github.run_attempt }}
+          path: inferencex-e2e/speedbench_results/
+          if-no-files-found: warn

@@ -47,6 +47,11 @@ on: # zizmor: ignore[concurrency-limits]
                 required: false
                 type: string
                 default: ""
+            mori-rdma-preflight:
+                description: "Run the bounded no-model MoRI RDMA registration diagnostic"
+                required: false
+                type: boolean
+                default: false
             agentx-fast:
                 description: "AgentX fast feedback: one warmup request per lane and a 20-minute profile."
                 required: false
@@ -140,6 +145,11 @@ on: # zizmor: ignore[concurrency-limits]
                 required: false
                 type: string
                 default: ""
+            mori-rdma-preflight:
+                description: "Run the bounded no-model MoRI RDMA registration diagnostic"
+                required: false
+                type: boolean
+                default: false
             agentx-fast:
                 description: "AgentX fast feedback: one warmup request per lane and a 20-minute profile."
                 required: false
@@ -195,8 +205,13 @@ env:
   PYTHONPATH: ${{ github.workspace }}/inferencex-e2e
 
 jobs:
+    mori-rdma-preflight:
+        if: ${{ inputs.mori-rdma-preflight }}
+        uses: $/.github/workflows/mori-rdma-preflight.yml
+
     get-jobs:
         name: get-jobs
+        if: ${{ !inputs.mori-rdma-preflight }}
         runs-on: ubuntu-latest
         outputs:
             benchmark-ref: ${{ steps.checkout-ref.outputs.commit || steps.checkout-default.outputs.commit }}
