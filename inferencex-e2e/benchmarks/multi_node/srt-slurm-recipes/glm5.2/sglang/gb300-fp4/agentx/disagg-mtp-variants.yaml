@@ -87,6 +87,7 @@ base:
         speculative-num-steps: 1
         speculative-eagle-topk: 1
         speculative-num-draft-tokens: 2
+        watchdog-timeout: 1800
         enable-metrics: true
         enable-cache-report: true
     decode:
@@ -106,7 +107,7 @@ base:
         SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
         SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK: '512'
         SGLANG_MOE_NVFP4_DISPATCH: '1'
-        SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '1'
+        SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '0'
         SGLANG_ENABLE_THINKING: '1'
         SGLANG_CLIP_MAX_NEW_TOKENS_ESTIMATION: '8'
         SGLANG_REASONING_EFFORT: max
@@ -147,6 +148,7 @@ base:
         model-loader-extra-config: '{"enable_multithread_load": true}'
         mem-fraction-static: 0.9
         disaggregation-decode-extra-slots: 0
+        watchdog-timeout: 1800
         enable-metrics: true
         enable-cache-report: true
   health_check:

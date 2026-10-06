@@ -18,6 +18,7 @@ Paths and shell commands in these guides are relative to `inferencex-e2e/` unles
 | [`agent-guide.md`](agent-guide.md) / [`agent-guide_zh.md`](agent-guide_zh.md) | Agent onboarding, safe start, invariants, and verification |
 | [`procedures.md`](procedures.md) / [`procedures_zh.md`](procedures_zh.md) | Routing from a recurring task to one focused operational checklist |
 | [`architecture.md`](architecture.md) / [`architecture_zh.md`](architecture_zh.md) | Config-to-result flow, ownership boundaries, artifacts, and InferenceX-app handoff |
+| [`power_model` README](../../power_model/README.md) | Installation, CLI usage, supported systems, and power-model assumptions |
 | [`configuration-procedures.md`](configuration-procedures.md) / [`configuration-procedures_zh.md`](configuration-procedures_zh.md) | Config, runner, image, recipe, llm-d, srt-slurm, and MTP changes |
 | [`ci-procedures.md`](ci-procedures.md) / [`ci-procedures_zh.md`](ci-procedures_zh.md) | Matrix generation, validation, dispatch, PR sweeps, reuse, staging, and artifact downloads |
 | [`eval-agentx-procedures.md`](eval-agentx-procedures.md) / [`eval-agentx-procedures_zh.md`](eval-agentx-procedures_zh.md) | Eval and AgentX selection, execution, scoring, evidence, and live-run diagnosis |
