@@ -1,10 +1,10 @@
-# GLM-5.3 FP8 aggregate controls: resident MTP, MoRI TEP/DEP, and native UMBP.
+# GLM-5.3 FP8 aggregate controls: resident MTP, MoRI TEP, and native UMBP.
 base:
   schema: 2
   name: glm5.3-fp8-mi325x-sglang-agentic
   model:
     path: hf:zai-org/GLM-5.3
-    container: lmsysorg/sglang-rocm:v0.5.21-rocm720-mi30x-20261005@sha256:a4d60e7ef7645aefb1c52a77dcb32970440454bc359a1baff03711fcd0501613
+    container: lmsysorg/sglang-rocm:v0.5.21-rocm720-mi30x-20261006@sha256:f7430d43c728da94f001ca51d5d2e0d754c85a3a8d54a3b68bf7aa2e12e6ff6a
     precision: fp8
   resources:
     gpu_type: mi325x
@@ -146,36 +146,6 @@ override_tep4_mtp_c3:
   benchmark:
     env:
       CONC: '3'
-      KV_OFFLOADING: none
-
-# Retained as an exploratory attention-DP representative, not a frontier claim.
-override_dep4_stp_c8:
-  frontend:
-    type: sglang-router
-    args:
-      <<: *mori_router_args
-      dp-aware: true
-  roles:
-    agg:
-      gpus: 4
-      args:
-        tensor-parallel-size: 4
-        expert-parallel-size: 4
-        data-parallel-size: 4
-        enable-dp-attention: true
-        enable-dp-lm-head: true
-        moe-dense-tp-size: 1
-        moe-a2a-backend: mori
-        deepep-mode: normal
-        page-size: 64
-        chunked-prefill-size: 4096
-        mem-fraction-static: 0.96
-        max-running-requests: 8
-        cuda-graph-max-bs-decode: 8
-      env: *mori_env
-  benchmark:
-    env:
-      CONC: '8'
       KV_OFFLOADING: none
 
 override_tp8_umbp_fp8kv_c8:
