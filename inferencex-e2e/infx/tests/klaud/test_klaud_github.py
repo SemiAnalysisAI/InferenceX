@@ -680,6 +680,207 @@ def test_select_defers_a_baseline_the_current_family_no_longer_generates(tmp_pat
     assert not (directory / CANDIDATE_ID).exists()
 
 
+PRODUCER = "b" * 40
+DEPRECATED_1K1K = (
+    "Deprecated since 2026-07-17 ([#2263](https://github.com/example/project/pull/2263)),"
+    " to save cluster time."
+)
+
+
+def models_md(status=DEPRECATED_1K1K, deprecated="Single-turn 1k1k"):
+    """MODELS.md with the 1k/1k ``status`` and dsr1's ``deprecated`` scenarios."""
+    return (
+        "## Scenarios\n\n| Scenario | ISL/OSL | Status |\n|---|---|---|\n"
+        "| Single-turn 8k1k | 8192 / 1024 | Active. |\n"
+        f"| Single-turn 1k1k | 1024 / 1024 | {status} |\n\n"
+        "## Model support matrix\n\n"
+        "| Model architecture class | Prefix | Date added | Active scenarios | Deprecated scenarios |\n"
+        "|---|---|---|---|---|\n"
+        f"| DeepSeek-R1-0528 | `dsr1` | 2025-08-13 | Single-turn 8k1k | {deprecated} |\n"
+    )
+
+
+def dsr1_point(isl, conc):
+    """One generated TP8 recipe of the dsr1 family at ISL ``isl`` and concurrencies ``conc``."""
+    return {
+        "image": "example/image:stable", "model": "example/model", "model-prefix": "dsr1",
+        "precision": "fp8", "framework": "sglang", "runner": "fixture", "isl": isl, "osl": 1024,
+        "tp": 8, "ep": 1, "dp-attn": False, "spec-decoding": "none", "disagg": False,
+        "conc": conc, "recipe-fingerprint": f"fingerprint-{isl}",
+    }
+
+
+def serve_dsr1_baseline(monkeypatch, current, markdown):
+    """Publish 1k/1k and 8k/1k c1 from PRODUCER on 2026-05-22 for a base family of ``current``
+    rows and base ``markdown`` MODELS.md; return the producer families and the source."""
+    published = [
+        {
+            "model": "dsr1", "hardware": "fixture", "framework": "sglang", "precision": "fp8",
+            "spec_method": "none", "disagg": False, "is_multinode": False,
+            "benchmark_type": "single_turn", "isl": isl, "osl": 1024, "offload_mode": "off",
+            "conc": 1, "image": "example/image:stable", "prefill_tp": 8, "prefill_ep": 1,
+            "prefill_dp_attention": False, "prefill_num_workers": 0, "decode_tp": 8,
+            "decode_ep": 1, "decode_dp_attention": False, "decode_num_workers": 0,
+            "recipe_fingerprint": f"fingerprint-{isl}",
+            "run_url": "https://github.com/example/project/actions/runs/42",
+            "tput_per_gpu": 10.0, "output_tput_per_gpu": 8.0, "mean_ttft": 0.1,
+            "mean_tpot": 0.02, "errors": 0,
+        }
+        for isl in (1024, 8192)
+    ]
+    feeds = {
+        "benchmarks": published,
+        "workflow-info": {
+            "runs": [{"github_run_id": "42", "run_attempt": 1}],
+            "runConfigs": [{"github_run_id": "42", "head_sha": PRODUCER}],
+            "changelogs": [{"workflow_run_id": "42", "config_keys": [KEY]}],
+        },
+    }
+    monkeypatch.setattr(api, "fetch", lambda resource, **_: Feed(
+        url=f"https://inferencex.semianalysis.com/api/v1/{resource}",
+        retrieved_at="2026-09-20T00:00:00Z", sha256="0" * 64, payload=feeds[resource],
+    ))
+    monkeypatch.setattr(validation, "canonical_matrix", lambda *_: {"single_node": {"all": current}})
+    monkeypatch.setattr(github, "read", lambda *_: {"tree": [{"path": "inferencex-e2e"}]})
+    files = {"inferencex-e2e/docs/MODELS.md": markdown.encode()}
+    monkeypatch.setattr(github, "file_at", lambda _repo, _head, path: files[path])
+    producer = {"single_node": {"all": [dsr1_point(1024, [1]), dsr1_point(8192, [1])]}}
+    source = {
+        "date": "2026-05-22", "image": "example/image:stable", "model": "dsr1", "hardware": "fixture",
+        "framework": "sglang", "precision": "fp8", "spec_method": "none", "disagg": False,
+    }
+    return {PRODUCER: producer}, source
+
+
+@pytest.mark.parametrize(("markdown", "current", "retired"), [
+    # MODELS.md deprecated the 1k/1k workload the family dropped after the baseline.
+    pytest.param(models_md(), [dsr1_point(8192, [1])], True, id="deprecated-after-baseline"),
+    # A deprecation dated on the baseline day does not follow the published point.
+    pytest.param(
+        models_md(DEPRECATED_1K1K.replace("2026-07-17", "2026-05-22")), [dsr1_point(8192, [1])],
+        False, id="deprecated-on-baseline-day",
+    ),
+    # Absence from the current family alone is not a retirement.
+    pytest.param(models_md("Active."), [dsr1_point(8192, [1])], False, id="only-absent"),
+    # The model's support row does not deprecate the scenario.
+    pytest.param(models_md(deprecated=""), [dsr1_point(8192, [1])], False, id="model-not-listed"),
+    # The family still runs 1k/1k, so the dropped 1k/1k point was not retired with it.
+    pytest.param(
+        models_md(), [dsr1_point(1024, [2]), dsr1_point(8192, [1])], False,
+        id="workload-still-run",
+    ),
+])  # fmt: skip
+def test_select_exempts_only_points_models_md_retired_after_the_baseline(
+    tmp_path, monkeypatch, markdown, current, retired
+):
+    producers, source = serve_dsr1_baseline(monkeypatch, current, markdown)
+    directory = tmp_path / "klaud"
+    review_candidate(directory, monkeypatch, source)
+    (directory / "producers.json").write_text(json.dumps({FAMILY: producers}))
+    monkeypatch.setattr(klaud, "fetch_capacity", lambda _policy: {"cluster-a"})
+    monkeypatch.setattr(claims, "claim_family", lambda *_args: True)
+
+    klaud.select(directory, 5)
+
+    selection = json.loads((directory / "selection.json").read_text())
+    if not retired:
+        assert selection["candidates"] == []
+        assert selection["baseline-mismatch-candidates"] == [
+            {"id": CANDIDATE_ID, "reason": "baseline-point-mismatch", "missing-points": 1}
+        ]
+        return
+    assert (selection["candidates"], selection["baseline-mismatch-candidates"]) == ([CANDIDATE_ID], [])
+    baseline = reporting.BaselinePreflight.model_validate_json(
+        (directory / CANDIDATE_ID / "baseline-preflight.json").read_text()
+    ).baseline
+    # The retired point stays in the frozen roster with its published result and evidence.
+    assert [(point.label.split(" c")[0], point.result) for point in baseline.points] == [
+        ("1024/1024", "passed"), ("8192/1024", "passed"),
+    ]
+    assert [
+        (retirement.scenario, retirement.date, retirement.pr_link, retirement.points)
+        for retirement in baseline.retirements
+    ] == [(
+        "Single-turn 1k1k", "2026-07-17", "https://github.com/example/project/pull/2263",
+        [baseline.points[0].key],
+    )]
+
+
+def test_final_coverage_exempts_retired_points_and_reports_their_evidence(monkeypatch):
+    current = [dsr1_point(8192, [1])]
+    producers, source = serve_dsr1_baseline(monkeypatch, current, models_md())
+    baseline = reporting.resolve_baseline(
+        "example/project",
+        OwnedCandidate(id=CANDIDATE_ID, family=FAMILY, base="a" * 40),
+        {"source": source},
+        "DeepSeek-R1",
+        reporting.Prose(en="Update the image.", zh="更新镜像。"),
+        producers,
+    )
+    retired, kept = baseline.points
+
+    reporting.check_baseline_coverage({"single_node": {"all": current}}, baseline)
+    # Every point no retirement names is still required, whatever else the sweep covers.
+    with pytest.raises(github.VerificationError, match="omits or changes frozen baseline points"):
+        reporting.check_baseline_coverage(
+            {"single_node": {"all": [dsr1_point(8192, [2])]}}, baseline
+        )
+
+    final = reporting.Attempt(
+        kind="final", number=0, head="c" * 40, image="example/image:next", run_id=7,
+        run_attempt=1, status="passed",
+        change=reporting.Prose(en="Validate the family.", zh="验证配置族。"),
+        next=reporting.Prose(en="Mark ready.", zh="标记就绪。"),
+        benchmarks_expected=1, benchmarks_passed=1, evals_expected=0, evals_passed=0,
+        points=[kept.model_copy(update={"run_id": 7, "head": "c" * 40})],
+    )
+    # The body and the final report, which never measures it, both name the retired point
+    # with its scenario, date and PR.
+    for text in (
+        reporting.render_body(baseline),
+        reporting.render_attempt(final, baseline, "example/project"),
+    ):
+        [note] = [
+            line for line in text.splitlines()
+            if line.startswith("**Note:**") and f"1k/1k c1 TP8 EP1 {retired.key[:6]}" in line
+        ]
+        assert all(evidence in note for evidence in (
+            "Single-turn 1k1k", "2026-07-17", "(https://github.com/example/project/pull/2263)",
+        ))
+
+
+def test_baseline_rejects_retirements_it_cannot_justify():
+    points = [
+        reporting.Point(
+            key=key * 64, label=f"8k/1k c{conc}", conc=conc, scenario="fixed-seq-len",
+            values=reporting.Values(), result="passed",
+        )
+        for key, conc in (("a", 1), ("b", 2))
+    ]
+
+    def baseline(**changes):
+        retirement = {
+            "scenario": "Single-turn 1k1k", "date": "2026-07-17",
+            "pr_link": "https://github.com/example/project/pull/2263", "points": ["a" * 64],
+        }
+        return reporting.Baseline(
+            family=FAMILY, date="2026-05-22", image="example/image:1",
+            goal=reporting.Prose(en="Update the image.", zh="更新镜像。"), sources=[],
+            points=points, retirements=[reporting.Retirement(**{**retirement, **changes})],
+        )
+
+    assert baseline().retirements[0].points == ["a" * 64]
+    for changes, error in (
+        ({"date": "2026-05-22"}, "after the baseline date"),
+        ({"points": ["c" * 64]}, "distinct frozen baseline points"),
+        ({"points": ["a" * 64, "a" * 64]}, "distinct frozen baseline points"),
+        ({"points": ["a" * 64, "b" * 64]}, "not retired"),
+        ({"pr_link": "https://example.com/pull/2263"}, "pr_link"),
+    ):
+        with pytest.raises(ValueError, match=error):
+            baseline(**changes)
+
+
 def test_producer_outside_the_local_clone_is_fetched_from_its_repository(tmp_path, monkeypatch):
     remote = tmp_path / "remote"
     remote.mkdir()

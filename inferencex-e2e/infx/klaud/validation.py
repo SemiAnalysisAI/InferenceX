@@ -33,6 +33,12 @@ def benchmark_points(entries: list[dict]) -> set[tuple]:
     }
 
 
+def project_prefix(repository: str, head: str) -> str:
+    """The end-to-end project directory at ``head``: ``inferencex-e2e/`` or the root."""
+    tree = github.read(repository, f"git/trees/{head}")
+    return "inferencex-e2e/" if "inferencex-e2e" in {item["path"] for item in tree["tree"]} else ""
+
+
 def canonical_matrix(repository: str, head: str, family: str) -> dict:
     """Generate the unfiltered family from exact-head YAML using trusted local code.
 
@@ -47,11 +53,7 @@ def canonical_matrix(repository: str, head: str, family: str) -> dict:
 
     OwnedCandidate(id="0" * 16 + "-" + "0" * 16, family=family, base=head)
     source, key = family.split(":", 1)
-    prefix = ""
-    tree = github.read(repository, f"git/trees/{head}")
-    paths = {item["path"] for item in tree["tree"]}
-    if "inferencex-e2e" in paths:
-        prefix = "inferencex-e2e/"
+    prefix = project_prefix(repository, head)
     master = yaml.safe_load(github.file_at(repository, head, prefix + source))
     runners = yaml.safe_load(github.file_at(repository, head, prefix + "configs/runners.yaml"))
     # Only the selected family is relevant; retired sibling schemas may have changed.

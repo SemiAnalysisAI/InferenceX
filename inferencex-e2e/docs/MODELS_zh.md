@@ -184,5 +184,6 @@ InferenceX 支持 SGLang 和 vLLM 双方的维护者，并响应 AI 实验室和
 - 「前缀」列为 `configs/*-master.yaml` 中的规范 `model-prefix`，同时用于 `full-sweep` 子命令的 `--model-prefix` 筛选参数，例如 `python -m infx.matrix.generate full-sweep --config-files configs/nvidia-master.yaml --model-prefix dsr1`。
 - 「退役」指该模型已无任何启用场景。退役模型的配置直接从主配置中删除；原 `configs/deprecated/` 归档目录已在 #3463 中删除，历史设置保留在 Git 历史与 `perf-changelog.yaml` 中。
 - 弃用某一精度（如 Qwen3.5 bf16）或 A/B 对照中的某一分支（如非 MTP），只是收窄该模型的配方覆盖范围，并不等于模型退役；只要仍有一个场景在运行，该模型即继续列为启用状态。
+- Klaud Cold 冻结镜像更新基线时会读取英文版 [`MODELS.md`](MODELS.md) 的场景表和模型支持矩阵。配置族已不再运行的已发布单轮测试点，仅当其 ISL/OSL 所在行以 `Deprecated since YYYY-MM-DD ([#N](PR link))` 开头、日期晚于基线日期，且该模型所在行将此场景列为已弃用时，才免于重新测量。编辑这些行时请保留该写法；详见 [Klaud Cold 报告](klaud-reporting_zh.md)。
 - `dsr1` 最初以 DeepSeek-V3 workflow 模板的形式随仓库首次导入，2025-08-13 切换为 DeepSeek-R1 基准测试（2025-08-20 将 `dsv3` 重命名为 `dsr1`）。
 - 新增模型时，请按[添加模型 + 硬件配方](configuration-procedures_zh.md#添加模型--硬件配方)流程操作，并在同一 PR 中同时更新本文件与 [`MODELS.md`](MODELS.md) 的表格。
