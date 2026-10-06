@@ -32,7 +32,7 @@ on: # zizmor: ignore[concurrency-limits]
                 type: string
                 default: ""
             require-power:
-                description: "Fail benchmark jobs when GPU power is invalid"
+                description: "Fail multi-node benchmark jobs when GPU power is invalid"
                 required: false
                 type: boolean
                 default: false
@@ -120,7 +120,7 @@ on: # zizmor: ignore[concurrency-limits]
                 type: string
                 default: ""
             require-power:
-                description: "Fail benchmark jobs when GPU power is invalid"
+                description: "Fail multi-node benchmark jobs when GPU power is invalid"
                 required: false
                 type: boolean
                 default: false
@@ -407,7 +407,6 @@ jobs:
             duration: ${{ inputs.agentx-fast && '1200' || (inputs.duration-override != '' && inputs.duration-override || matrix.config.duration) }}
             agentx-fast: ${{ inputs.agentx-fast }}
             run-eval: false
-            require-power: ${{ inputs.require-power }}
             scenario-type: agentic-coding
             ref: ${{ needs.get-jobs.outputs.benchmark-ref }}
 
@@ -522,7 +521,6 @@ jobs:
             queue-token: ${{ matrix.config['queue-token'] }}
             dp-attn: ${{ matrix.config.dp-attn }}
             run-eval: false
-            require-power: ${{ inputs.require-power || (matrix.config['require-power'] == true && matrix.config['eval-only'] != true) }}
             ref: ${{ needs.get-jobs.outputs.benchmark-ref }}
 
     test-sweep-evals:
@@ -588,7 +586,7 @@ jobs:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
                   ref: ${{ needs.get-jobs.outputs.tooling-ref }}
-                  fetch-depth: 0
+                  fetch-depth: 1
                   persist-credentials: false
 
             - name: Download results artifacts

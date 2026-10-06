@@ -10,4 +10,4 @@ Each patch is a temporary fix for an open upstream PR. When the PR merges and th
 |-------|-------------|-----|
 | `amd-native-power-profile.patch` | [AMD producer source](https://github.com/edwingao28/srt-slurm/commit/fa9a497cd1c1ad0253dac161926376ae973dd022) (upstream PR pending) | Select AMD device-metrics-exporter metrics and retain only participating GPUs. |
 
-The pin includes [NVIDIA/srt-slurm#548](https://github.com/NVIDIA/srt-slurm/pull/548), so its former patch is removed. The AMD patch contains the production changes from the linked source, applied to upstream `2a4c0f3d`. Its upstream PR remains required before merge.
+The pin includes [NVIDIA/srt-slurm#548](https://github.com/NVIDIA/srt-slurm/pull/548), so its former patch is removed. The AMD patch contains the production changes from the linked source, rebased onto upstream `848f72d4`. Its upstream PR remains required before merge.

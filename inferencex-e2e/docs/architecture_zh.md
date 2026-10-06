@@ -61,8 +61,7 @@
 
 | 权威来源 | 职责 |
 | --- | --- |
-| [`.github/workflows/ingest-results.yml`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/main/.github/workflows/ingest-results.yml) | 接收 `ingest-results`，准备工件、执行迁移、摄取、验证并使缓存失效 |
-| [`.github/workflows/ingest-agentic-results.yml`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/main/.github/workflows/ingest-agentic-results.yml) | 面向包含大量 blob 的 AgentX 工件的独立长超时摄取路径 |
+| [`.github/workflows/ingest-results.yml`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/main/.github/workflows/ingest-results.yml) | 接收 `ingest-results` 和 `ingest-agentic-results`，准备工件、执行迁移、摄取、验证并使缓存失效。智能体摄取使用更大的运行器和更长的超时时间 |
 | [`packages/db/src/prepare-ci-artifacts.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/main/packages/db/src/prepare-ci-artifacts.ts) | 选择并下载源运行工件，包括复用扫描元数据 |
 | [`packages/db/src/ingest-ci-run.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/main/packages/db/src/ingest-ci-run.ts) | 编排工作流运行、基准测试、评测、样本、追踪、统计、可用性和变更日志的摄取 |
 | [`packages/db/src/etl/benchmark-mapper.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/main/packages/db/src/etl/benchmark-mapper.ts) | 将基准测试工件行映射为面向数据库的规范形态 |
@@ -246,7 +245,7 @@ srt-slurm 配方和 [`benchmarks/`](../benchmarks) 下的脚本负责实际的�
 
 ### 复用与扩展结果处理
 
-[`infx.results.fixed_sequence.build_result`](../infx/results/fixed_sequence.py) 接收已加载的基准测试映射和显式传入的环境变量映射，返回聚合结果字典，不读取进程环境，也不执行文件 I/O。库调用方无需提供 `RESULT_FILENAME`。现有 CLI 会验证环境变量、读取原始工件、调用构建函数、写入聚合结果，并按照原有的尽力处理或 `REQUIRE_POWER` 策略执行功耗聚合。
+[`infx.results.fixed_sequence.build_result`](../infx/results/fixed_sequence.py) 接收已加载的基准测试映射和显式传入的环境变量映射，返回聚合结果字典，不读取进程环境，也不执行文件 I/O。库调用方无需提供 `RESULT_FILENAME`。现有 CLI 会验证环境变量、读取原始工件、调用构建函数、写入聚合结果，并对多节点结果按照原有的尽力处理或 `REQUIRE_POWER` 策略执行功耗聚合。
 
 ```python
 from infx.results.fixed_sequence import build_result
@@ -273,7 +272,7 @@ result = build_result(records, profile, server_metrics, runtime_env,
 - [`Parallelism`](../infx/results/topology.py) 共享 GPU 数量计算、并行度结果字段，以及没有独立解码 GPU 时的字段规范化。固定序列结果继续使用显式分配的 GPU 数量，AgentX 则根据 worker 拓扑推导数量。各调用方保留自己的环境默认值、验证顺序、错误处理和吞吐量分母。
 - [`with_power_metrics`](../infx/results/power/__init__.py) 返回替换了指定指标族的副本，移除旧的有效性原因，并验证、舍入新指标。调用方提供指标键和模式版本，再自行写入工件及验证附属文件。其他指标族因此可以直接复用该转换，无需修改其实现。
 
-功耗遥测处理引擎也位于 [`infx.results.power`](../infx/results/power)：`single_node.run` 读取 GPU 监控 CSV，`multinode.run` 验证 srt-slurm 工件包。两者通过 `common.py` 共享基准窗口解析、单设备能量积分、聚合结果替换及审计序列化，同时保留各自的遥测校验和失败策略。固定序列及 AgentX 适配器直接导入这些引擎；新结果格式可以将其基准窗口和 token 计数提供给匹配的引擎。
+功耗遥测处理引擎也位于 [`infx.results.power`](../infx/results/power)：`multinode.run` 验证 srt-slurm 工件包。其基准窗口解析、单设备能量积分、聚合结果替换及审计序列化位于 `common.py`。固定序列及 AgentX 适配器直接导入该引擎；新结果格式可以将其基准窗口和 token 计数提供给它。原生 srt-slurm 遥测也覆盖单节点吞吐量和 AgentX 任务。
 
 SRT 固定序列与 AgentX 客户端使用 srt-slurm 原生功耗采样，不再启动本地 NVIDIA/AMD SMI 采样器。单节点固定序列吞吐测试开始前必须提供 `SRT_MEASUREMENT_WINDOW_DIR`，成功后从基准结果写入已完成的测量窗口。AgentX 不再按节点数量选择采样方式，而是标记原生窗口；缺少契约时，按现有 best-effort/`REQUIRE_POWER` 策略记录无效功耗。启动器必须启用原生遥测、保留功耗工件包及采集器版本，并在采集结束后完成 AgentX 功耗处理。固定序列处理通过 `POWER_ARTIFACT_DIR` 选择该工件包，单节点作业也适用。`single_node.run` 继续用于读取保留的历史 CSV 工件。
 
@@ -297,7 +296,7 @@ rows = build_rows(raw_eval, metadata, source="eval_job/results.json")
 
 智能体吞吐量作业采用不同的契约。它们使用 [`infx/results/agentic/validate_agentic_result.py`](../infx/results/agentic/validate_agentic_result.py) 验证 AIPerf 输出，上传聚合的 `bmk_agentic_<suffix>` 工件，并上传包含追踪重放材料的原始 `agentic_<suffix>` 同级工件。InferenceX-app 通过它们共享的后缀对这些同级工件进行配对。智能体仅评测作业改为遵循评测输出契约，不要求吞吐量结果。
 
-服务器日志和 GPU 指标是诊断辅助工件。它们通过 `always()` 上传，因此失败的运行仍可供调查。它们的存在不会将失败的基准测试转变为有效结果。srt 驱动的 [`collect.py`](../infx/launch/drivers/srt/collect.py) 通过调度器后端获取作业输出，并在清理输出前暂存多节点日志树和 `multinode_server_logs.tar.gz`。
+服务器日志是诊断辅助工件。它们通过 `always()` 上传，因此失败的运行仍可供调查。它们的存在不会将失败的基准测试转变为有效结果。srt 驱动的 [`collect.py`](../infx/launch/drivers/srt/collect.py) 通过调度器后端获取作业输出，并在清理输出前暂存多节点日志树和 `multinode_server_logs.tar.gz`。
 
 ## 阶段 6：工件收集与交接
 
@@ -312,7 +311,7 @@ rows = build_rows(raw_eval, metadata, source="eval_job/results.json")
 对于符合条件的 `main` 推送，[`merge-ingest.yml`](../../.github/workflows/merge-ingest.yml) 的 `ingest` 作业会验证已合并 PR 的复用授权，并向 `SemiAnalysisAI/InferenceX-app` 发送且仅发送一次 GitHub `repository_dispatch`。没有有效授权时，该作业会失败，不发送任何分派。`run-sweep.yml` 从不分派摄取。
 
 - 不含智能体条目的变更日志增量使用 `event_type: ingest-results`。
-- 包含智能体条目的增量使用 `event_type: ingest-agentic-results` 并携带 `database-target: production`，由具有更长超时时间的独立工作流处理。
+- 包含智能体条目的增量使用 `event_type: ingest-agentic-results` 并携带 `database-target: production`，由同一个工作流在更大的运行器上以更长的超时时间处理。
 - 负载携带 `source-run-id` 和 `merge-run-id`。源运行始终是提供工件的被复用 PR `run-sweep.yml` 运行，Merge Ingest 运行则提供当前变更日志上下文。
 
 成功上传基准测试工件并不等同于成功摄取。仓库分派、工件准备、ETL、数据库验证和缓存失效都属于后续边界。

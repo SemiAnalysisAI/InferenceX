@@ -158,8 +158,6 @@ def test_single_node_point_stages_workflow_artifacts(harness):
     assert_ok(launch(env, harness.config, workspace))
 
     assert json.loads((workspace / "point-identity.json").read_text()) == {"completed": 2}
-    assert (workspace / "gpu_metrics.csv").read_text() == "gpu,power\n0,300\n"
-    assert json.loads((workspace / "gpu_metrics_context.json").read_text()) == {"device_count": 4}
     assert (workspace / "srt-single-node-logs.tar.gz").stat().st_size > 0
     assert (workspace / "srt-slurm-sha.txt").read_text() == harness.env["FAKE_SRT_COMMIT"] + "\n"
     [call] = srtctl_calls(harness.logs)

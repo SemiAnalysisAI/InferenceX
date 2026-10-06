@@ -200,7 +200,7 @@ gh run download "$RUN_ID" --repo SemiAnalysisAI/InferenceX \
 
 `python3 -m infx.bench agentic` 会用 uv 自行构建客户端运行时（[`infx/bench/agentic/venv.py`](../infx/bench/agentic/venv.py)）。它在 `AIPERF_RUNTIME_DIR` 下新建 Python 3.11 venv（默认 `<tmp>/inferencex-agentic-<SLURM_JOB_ID 或 PID>`），以可编辑模式安装 `utils/aiperf` 及其声明的依赖，并安装 AIPerf 未声明的 client 依赖（[`requirements.txt`](../infx/bench/agentic/requirements.txt)）。随后它会在该 venv 的 Python 下重新运行自身。Recipe 通过 [`benchmarks/srt_agentic.sh`](../benchmarks/srt_agentic.sh) 调用它。
 
-AgentX 是 AIPerf `agentx` trace replay，不是固定 token 的合成 benchmark。`agentx` scenario 负责 replay 默认值：每条 trajectory lane 额外执行十个 warmup 请求、warmup 排空上限为 1,800 秒、实时失败阈值为 0.10、trace 空闲上限为 300 秒。Recipe 可以用 `AGENTIC_WARMUP_GRACE_PERIOD` 提高排空上限，或用 `AIPERF_LIVE_FAILED_REQUEST_THRESHOLD` 放宽实时中止阈值；完成后的 profile 错误率超过 0.10 时仍会校验失败（[运行后校验](../infx/bench/agentic/run.py#L36-L38)）。Profile 使用配置的时长。`agentx-fast` 强制每条 lane 只运行一个 warmup 请求，并将 profile 设为 1,200 秒。它只影响单节点和多节点 AgentX 吞吐量；定长序列吞吐量与 eval 保持 canonical。Fast 运行不符合 artifact reuse 条件（[工作流策略](../../.github/workflows/README.md#agentx-fast-mode)、[fast replay 设置](../infx/bench/agentic/replay.py#L64-L65)）。
+AgentX 是 AIPerf `agentx` trace replay，不是固定 token 的合成 benchmark。`agentx` scenario 负责 replay 默认值：每条 trajectory lane 额外执行十个 warmup 请求、warmup 排空上限为 1,800 秒、实时失败阈值为 0.10、trace 空闲上限为 300 秒。Recipe 可以用 `AGENTIC_WARMUP_GRACE_PERIOD` 提高排空上限，或用 `AIPERF_LIVE_FAILED_REQUEST_THRESHOLD` 放宽实时中止阈值；完成后的 profile 错误率超过 0.10 时仍会校验失败（[运行后校验](../infx/bench/agentic/run.py#L33-L35)）。Profile 使用配置的时长。`agentx-fast` 强制每条 lane 只运行一个 warmup 请求，并将 profile 设为 1,200 秒。它只影响单节点和多节点 AgentX 吞吐量；定长序列吞吐量与 eval 保持 canonical。Fast 运行不符合 artifact reuse 条件（[工作流策略](../../.github/workflows/README.md#agentx-fast-mode)、[fast replay 设置](../infx/bench/agentic/replay.py#L64-L65)）。
 
 每个 AgentX 吞吐量并发点都必须使用新启动的服务。矩阵为每个点生成独立作业。`infx.launch` 会拒绝 `CONC_LIST` 不恰好等于其唯一正整数 `CONC` 的多节点 AgentX 吞吐量作业，replay client 也会拒绝与 `CONC` 不同的 `CONC_LIST`。AgentX 不清空缓存，也不复用正在运行的服务来测试另一个并发点。同一测试点的预热和正式测量共用服务。此规则不改变定长序列 sweep 或评分 eval 的批量执行行为。
 
@@ -250,8 +250,6 @@ gh run download "$RUN_ID" --repo SemiAnalysisAI/InferenceX \
   --pattern 'agentic_*' --dir ./agentx/raw
 gh run download "$RUN_ID" --repo SemiAnalysisAI/InferenceX \
   --pattern '*server_logs_*' --dir ./agentx/server-logs
-gh run download "$RUN_ID" --repo SemiAnalysisAI/InferenceX \
-  --pattern 'gpu_metrics_*' --dir ./agentx/gpu
 ```
 
 每个并发点都应保留：

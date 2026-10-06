@@ -33,6 +33,7 @@ POINT = {
     "TP": "3",
     "PP_SIZE": "2",
     "PCP_SIZE": "2",
+    "IS_AGENTIC": "1",
     "KV_OFFLOADING": "none",
     "PRECISION": "fp4",
     "MODEL": "test/model",
@@ -144,11 +145,20 @@ def _events(tmp_path: Path) -> list[str]:
             "TOTAL_CPU_DRAM_GB must be a positive integer",
         ),
         ({"KV_OFFLOADING": "cpu"}, "unsupported KV_OFFLOADING value 'cpu'"),
+        ({"KV_OFFLOADING": None}, "  - KV_OFFLOADING"),
+        (
+            {"IS_AGENTIC": None, "SCENARIO_TYPE": "agentic-coding", "KV_OFFLOADING": None},
+            "  - KV_OFFLOADING",
+        ),
         ({"CONC_LIST": "4 8"}, "CONC_LIST='4 8' must equal CONC='8'"),
         ({"CONC_LIST": ""}, "CONC_LIST='' must equal CONC='8'"),
         ({"CONC": "4 8", "CONC_LIST": "4 8"}, "CONC must be a positive integer"),
         ({"IS_MULTINODE": "1"}, "IS_MULTINODE must be true or false"),
         ({"EVAL_ONLY": "true"}, "  - EVAL_ENDPOINT_READY_TIMEOUT_SECONDS"),
+        (
+            {"IS_MULTINODE": "true", "ENABLE_AGENTX_POWER": None, "REQUIRE_POWER": None},
+            "  - ENABLE_AGENTX_POWER\n  - REQUIRE_POWER",
+        ),
     ],
 )
 def test_points_that_cannot_be_measured_fail_before_setup(tmp_path, overrides, message):
@@ -156,7 +166,17 @@ def test_points_that_cannot_be_measured_fail_before_setup(tmp_path, overrides, m
         Plan.from_env(_point(tmp_path, **overrides))
 
 
-WINDOW = {"IS_MULTINODE": "true", "ENABLE_AGENTX_POWER": "1", "SRT_MEASUREMENT_WINDOW_DIR": "/w"}
+def test_standalone_srt_slurm_point_needs_no_kv_offload_declaration(tmp_path):
+    # srt-slurm's benchmarks/agentx.sh sets neither IS_AGENTIC nor KV_OFFLOADING.
+    plan = Plan.from_env(_point(tmp_path, IS_AGENTIC=None, KV_OFFLOADING=None))
+    assert plan.result_filename == "agentx"
+
+
+WINDOW = {
+    "IS_MULTINODE": "true", "ENABLE_AGENTX_POWER": "1", "REQUIRE_POWER": "0",
+    "SRT_MEASUREMENT_WINDOW_DIR": "/w",
+}
+MISSING = {"IS_MULTINODE": "true", "ENABLE_AGENTX_POWER": "1", "REQUIRE_POWER": "1"}
 MARK = "adapter --result-dir {results}/conc_8 --concurrency 8 --write-multinode-window"
 OFFSET = "agentic_power_timezone_offset.txt"
 REPLAYED = {"benchmark.log", "benchmark_command.txt"}
@@ -276,8 +296,7 @@ def test_every_step_runs_and_the_first_failure_in_precedence_wins(
 
     assert rc == expected
     assert [event.split()[0] for event in _events(tmp_path)] == [
-        "replay", "aggregate", "adapter", "analyze",
-        "validate",
+        "replay", "aggregate", "adapter", "analyze", "validate",
     ]  # fmt: skip
 
 

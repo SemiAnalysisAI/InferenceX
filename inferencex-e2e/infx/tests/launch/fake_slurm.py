@@ -118,8 +118,6 @@ if mode == "single":
     (logs / "power").mkdir()
     (logs / "power/samples.csv").write_text("retained native samples\n")
     (logs / f"{result}.json").write_text('{"completed": 2}')
-    (logs / "gpu_metrics.csv").write_text("gpu,power\n0,300\n")
-    (logs / "gpu_metrics_context.json").write_text('{"device_count": 4}')
 elif mode == "fixed":
     point = logs / "sweep_isl_1024_osl_1024"
     point.mkdir()
@@ -253,7 +251,6 @@ def base_env(*, fakes: Path, logs: Path, workspace: Path, sandbox: Path) -> dict
         SALLOC_TIME_LIMIT="10",
         HF_HUB_CACHE="/hf",
         THINKING_MODE="thinking_on",
-        GPU_MONITOR_INTERVAL="3",
         EVAL_ONLY="false",
         RUN_EVAL="false",
         REQUIRE_POWER="0",

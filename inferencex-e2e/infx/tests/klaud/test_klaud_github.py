@@ -278,6 +278,7 @@ def test_select_continues_after_one_baseline_state_failure(tmp_path, monkeypatch
     monkeypatch.setenv("KLAUD_PR_REVIEW", json.dumps(review))
     monkeypatch.setattr(klaud, "fetch_capacity", lambda _policy: {"cluster-a"})
     monkeypatch.setattr(reporting, "resolve_baseline", resolve)
+    monkeypatch.setattr(validation, "canonical_matrix", lambda *_: {"single_node": {"all": []}})
     monkeypatch.setattr(claims, "claim_family", lambda *_args: True)
 
     klaud.select(tmp_path, 5)
@@ -374,7 +375,21 @@ def test_baseline_normalizes_enroot_image_and_rejects_unverified_provenance(
         "ep": 1,
         "recipe-fingerprint": "fingerprint",
     }
-    current = {"single_node": {"all": [{**entry, "conc": [1]}]}}
+    # The current generator routes by cluster and records the recipe path; the producer did
+    # not. The same public point must still freeze once, under the current key.
+    current = {
+        "single_node": {
+            "all": [
+                {
+                    **entry,
+                    "conc": [1],
+                    "runner": "cluster:h200-a",
+                    "srt-recipe": "recipes/h200.yaml",
+                    "recipe-fingerprint": "current-fingerprint",
+                }
+            ]
+        }
+    }
     historical_matrix = {"single_node": {"all": [entry]}}
     public_row = {
         "model": "Model",
@@ -633,6 +648,36 @@ def test_select_builds_baselines_from_regenerated_producers_without_starting_a_p
             (point.conc, point.result, point.head, point.values.total_tps_gpu)
             for point in preflight.baseline.points
         ] == [(2, "passed", head, 10.0), (6, "passed", head, 30.0)]
+
+
+def test_select_defers_a_baseline_the_current_family_no_longer_generates(tmp_path, monkeypatch):
+    _, head = commit_history(tmp_path, "inferencex-e2e")
+    monkeypatch.chdir(tmp_path)
+    producer_family = validation.producer_matrix("example/project", head, FAMILY)
+    # The published baseline has c2 and c6; the current family dropped c6.
+    shrunk = {"single_node": {"all": [
+        row for row in producer_family["single_node"]["all"] if row["conc"] == 2
+    ]}}  # fmt: skip
+    monkeypatch.setattr(validation, "canonical_matrix", lambda *_: shrunk)
+    directory = tmp_path / "klaud"
+    review_candidate(directory, monkeypatch, publish(monkeypatch, head))
+    klaud.regenerate_producers(directory)
+
+    def no_claim(*_args):
+        raise AssertionError("a deferred candidate must not be claimed")
+
+    monkeypatch.setattr(klaud, "fetch_capacity", lambda _policy: {"cluster-a"})
+    monkeypatch.setattr(claims, "claim_family", no_claim)
+
+    klaud.select(directory, 5)
+
+    selection = json.loads((directory / "selection.json").read_text())
+    assert selection["candidates"] == []
+    assert selection["baseline-deferred-candidates"] == [CANDIDATE_ID]
+    assert selection["baseline-mismatch-candidates"] == [
+        {"id": CANDIDATE_ID, "reason": "baseline-point-mismatch", "missing-points": 1}
+    ]
+    assert not (directory / CANDIDATE_ID).exists()
 
 
 def test_producer_outside_the_local_clone_is_fetched_from_its_repository(tmp_path, monkeypatch):

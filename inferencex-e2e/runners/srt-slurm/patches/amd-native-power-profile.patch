@@ -1,5 +1,5 @@
 diff --git a/src/srtctl/cli/mixins/telemetry_stage.py b/src/srtctl/cli/mixins/telemetry_stage.py
-index 65d44de4..9ccb1155 100644
+index 65d44de..9ccb115 100644
 --- a/src/srtctl/cli/mixins/telemetry_stage.py
 +++ b/src/srtctl/cli/mixins/telemetry_stage.py
 @@ -19,6 +19,7 @@ from srtctl.core.git_state import head_commit
@@ -11,9 +11,9 @@ index 65d44de4..9ccb1155 100644
  from srtctl.core.power.topology import build_expected_devices
  from srtctl.core.processes import ManagedProcess, ProcessRegistry
 @@ -34,9 +35,9 @@ if TYPE_CHECKING:
- 
+
  logger = logging.getLogger(__name__)
- 
+
 -# Power telemetry's template: 100ms NVML sampling is its purpose (dense power
 -# curves inside sa-bench measurement windows). Never used for tachometer.
 -DCGM_EXPORTER_COMMAND_TEMPLATE = "dcgm-exporter --collect-interval=100 --address :{port}"
@@ -22,10 +22,10 @@ index 65d44de4..9ccb1155 100644
 +__all__ = ["DCGM_EXPORTER_COMMAND_TEMPLATE", "TelemetryStageMixin", "read_producer_commit", "resolve_exporter_command"]
  # Time tachometer gets after SIGTERM to compact its in-memory arrow rows to parquet.
  TACHOMETER_STEP_NAME = "tachometer"
- 
+
 @@ -169,7 +170,11 @@ class TelemetryStageMixin:
          return managed
- 
+
      def start_power_telemetry(self, registry: ProcessRegistry) -> PowerTelemetrySession | None:
 -        """Start DCGM power telemetry when it is enabled.
 +        """Start GPU power telemetry when it is enabled.
@@ -33,19 +33,19 @@ index 65d44de4..9ccb1155 100644
 +        The exporter block's ``power_profile`` row (DCGM by default) supplies
 +        the default launch command and tells the collector which metric and
 +        labels to read; nothing here depends on the GPU vendor.
- 
+
          Every provider-originated startup failure becomes session state once the
          session exists, so the orchestrator can still finalize artifacts and
 @@ -183,9 +188,10 @@ class TelemetryStageMixin:
          if exporter_config is None:
              return None
- 
+
 +        profile = get_power_profile(exporter_config.power_profile)
          worker_nodes = self._telemetry_nodes()
          power_dir = self.runtime.log_dir / telemetry.storage_subdir
 -        command = resolve_exporter_command(exporter_config, DCGM_EXPORTER_COMMAND_TEMPLATE)
 +        command = resolve_exporter_command(exporter_config, profile.default_command_template)
- 
+
          session = PowerTelemetrySession(
              settings=PowerSessionSettings(
 @@ -203,6 +209,7 @@ class TelemetryStageMixin:
@@ -62,7 +62,7 @@ index 65d44de4..9ccb1155 100644
          session.initialize()
 -        logger.info("Starting DCGM power telemetry (artifacts under %s)", power_dir)
 +        logger.info("Starting GPU power telemetry (profile %s, artifacts under %s)", profile.name, power_dir)
- 
+
          def own(process: ManagedProcess) -> None:
              registry.add_process(process)
 @@ -227,13 +234,13 @@ class TelemetryStageMixin:
@@ -80,11 +80,11 @@ index 65d44de4..9ccb1155 100644
 +            logger.exception("GPU power exporter launch failed")
              session.record_reason(Reason.EXPORTER_LAUNCH_FAILED)
              return session
- 
+
 @@ -589,20 +596,25 @@ class TelemetryStageMixin:
                      )
          return targets
- 
+
 -    def _power_dcgm_targets(self) -> list[ServiceMetricsTarget]:
 -        """DCGM targets when power telemetry runs its own exporter (no implied dcgm-exporter service)."""
 +    def _power_exporter_targets(self) -> list[ServiceMetricsTarget]:
@@ -120,9 +120,9 @@ index 65d44de4..9ccb1155 100644
 +                service_targets=[*self._service_metrics_targets(), *self._power_exporter_targets()],
              )
          )
- 
+
 diff --git a/src/srtctl/cli/submit.py b/src/srtctl/cli/submit.py
-index 3ef9d5ea..c39855c7 100755
+index 66b451f..4a9f2f4 100755
 --- a/src/srtctl/cli/submit.py
 +++ b/src/srtctl/cli/submit.py
 @@ -58,6 +58,7 @@ from srtctl.core.git_state import (
@@ -133,22 +133,22 @@ index 3ef9d5ea..c39855c7 100755
  from srtctl.core.runtime import Nodes
  from srtctl.core.schema import SrtConfig, installs_dynamo
  from srtctl.core.status import create_job_record
-@@ -736,6 +737,7 @@ def show_config_details(config: SrtConfig) -> None:
+@@ -744,6 +745,7 @@ def show_config_details(config: SrtConfig) -> None:
              details.add_row("telemetry", "artifacts", f"<log_dir>/{config.telemetry.storage_subdir}")
              if exporter is not None:
                  details.add_row("telemetry", "dcgm_exporter", f"{exporter.container_image} (port {exporter.port})")
 +                details.add_row("telemetry", "power_profile", get_power_profile(exporter.power_profile).name)
- 
+
              cpu_exporter = config.telemetry.cpu_power_exporter
              if cpu_exporter is not None:
 diff --git a/src/srtctl/core/config.py b/src/srtctl/core/config.py
-index 5ab5e7d8..13a652b2 100755
+index 5ab5e7d..13a652b 100755
 --- a/src/srtctl/core/config.py
 +++ b/src/srtctl/core/config.py
 @@ -288,6 +288,22 @@ def resolve_config_with_defaults(user_config: dict[str, Any], cluster_config: di
          tachometer = config.setdefault("observability", {}).setdefault("tachometer", {})
          tachometer.setdefault("default_gpu_exporter", copy.deepcopy(cluster_config["default_gpu_exporter"]))
- 
+
 +    # The same cluster exporter serves GPU power telemetry: a recipe that enables
 +    # telemetry without naming any collector inherits it (image, port, command and
 +    # power_profile), so one recipe measures power on NVIDIA and AMD clusters alike.
@@ -169,12 +169,12 @@ index 5ab5e7d8..13a652b2 100755
      # frontend.container_image / nginx_container, benchmark.container_image,
      # exporter images, mooncake_kv_store.container, services, ...).
 diff --git a/src/srtctl/core/power/__init__.py b/src/srtctl/core/power/__init__.py
-index 5f12a0d9..ef68d46a 100644
+index 5f12a0d..ef68d46 100644
 --- a/src/srtctl/core/power/__init__.py
 +++ b/src/srtctl/core/power/__init__.py
 @@ -4,8 +4,11 @@
  """Raw multinode GPU power artifacts for the ``dcgm-power`` telemetry provider.
- 
+
  The provider records watts per allocated GPU, optional utilization when the
 -exporter reports it (``DCGM_FI_DEV_GPU_UTIL``, ``DCGM_FI_PROF_SM_ACTIVE``), the
 -srt-slurm topology needed to map devices to ``prefill``/``decode``/``agg``, and
@@ -189,7 +189,7 @@ index 5f12a0d9..ef68d46a 100644
 +artifact contract.
  """
 diff --git a/src/srtctl/core/power/manifest.py b/src/srtctl/core/power/manifest.py
-index 1a1adce5..7e2becda 100644
+index 1a1adce..7e2becd 100644
 --- a/src/srtctl/core/power/manifest.py
 +++ b/src/srtctl/core/power/manifest.py
 @@ -11,15 +11,13 @@ from typing import Any
@@ -208,11 +208,11 @@ index 1a1adce5..7e2becda 100644
 +from srtctl.core.power.profile import DEFAULT_POWER_PROFILE, PowerMetricProfile
  from srtctl.core.power.samples import ObservedDevice
  from srtctl.core.power.topology import ExpectedDevice
- 
+
 @@ -36,6 +34,9 @@ TERMINAL_STATUSES = (STATUS_COMPLETE, STATUS_INCOMPLETE, STATUS_FAILED)
  class DcgmExporterIdentity:
      """Exactly which exporter image produced the samples.
- 
+
 +    Serialized under the historical ``dcgm_exporter`` manifest key for every
 +    profile; the profile itself is recorded separately as ``power_profile``.
 +
@@ -246,13 +246,13 @@ index 1a1adce5..7e2becda 100644
              "timestamp_source": CLOCK_SOURCE,
              "job_id": self.job_id,
 diff --git a/src/srtctl/core/power/parser.py b/src/srtctl/core/power/parser.py
-index 1009e969..e1235558 100644
+index 1009e96..e123555 100644
 --- a/src/srtctl/core/power/parser.py
 +++ b/src/srtctl/core/power/parser.py
 @@ -1,14 +1,15 @@
  # SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  # SPDX-License-Identifier: Apache-2.0
- 
+
 -"""Strict DCGM exporter power parsing.
 -
 -``DCGM_FI_DEV_POWER_USAGE`` is mandatory and decides which GPUs produce a
@@ -271,25 +271,25 @@ index 1009e969..e1235558 100644
 +knows which allocated node it polled. Samples carrying one of the profile's
 +instance labels (MIG instances, partitions) are unsupported and dropped.
  """
- 
+
  from __future__ import annotations
 @@ -18,10 +19,8 @@ from dataclasses import dataclass
- 
+
  from prometheus_client.parser import text_string_to_metric_families
- 
+
 -from srtctl.core.power.contract import POWER_METRIC, UTILIZATION_METRICS, Reason, dedupe
 -
 -_MIG_LABELS = ("GPU_I_ID", "GPU_I_PROFILE")
 -_UTILIZATION_BY_METRIC = {metric.metric: metric for metric in UTILIZATION_METRICS}
 +from srtctl.core.power.contract import Reason, dedupe
 +from srtctl.core.power.profile import DEFAULT_POWER_PROFILE, PowerMetricProfile
- 
- 
+
+
  @dataclass(frozen=True)
 @@ -43,7 +42,7 @@ class ParsedScrape:
      reason_codes: tuple[str, ...] = ()
- 
- 
+
+
 -def parse_power_scrape(text: str) -> ParsedScrape:
 +def parse_power_scrape(text: str, profile: PowerMetricProfile = DEFAULT_POWER_PROFILE) -> ParsedScrape:
      """Parse one exporter ``/metrics`` body into publishable power readings."""
@@ -305,7 +305,7 @@ index 1009e969..e1235558 100644
 -    duplicated_utilization: dict[str, set[int]] = {metric.column: set() for metric in UTILIZATION_METRICS}
 +    utilization: dict[str, dict[int, float]] = {metric.column: {} for metric in profile.utilization_metrics}
 +    duplicated_utilization: dict[str, set[int]] = {metric.column: set() for metric in profile.utilization_metrics}
- 
+
      for family in families:
          for sample in family.samples:
 -            if sample.name == POWER_METRIC:
@@ -325,7 +325,7 @@ index 1009e969..e1235558 100644
                  duplicated_utilization[spec.column],
 +                profile,
              )
- 
+
      if duplicated_power:
 @@ -105,17 +106,18 @@ def _collect_power(
      by_index: dict[int, tuple[str, float]],
@@ -337,13 +337,13 @@ index 1009e969..e1235558 100644
 +    if any(labels.get(label) for label in profile.instance_labels):
          reasons.append(Reason.MIG_INSTANCE_UNSUPPORTED)
          return
- 
+
 -    gpu_index = _parse_index(labels.get("gpu"))
 +    gpu_index = _parse_index(labels.get(profile.gpu_index_label))
      if gpu_index is None:
          reasons.append(Reason.GPU_INDEX_MISSING)
          return
- 
+
 -    gpu_uuid = (labels.get("UUID") or "").strip()
 +    gpu_uuid = (labels.get(profile.gpu_identity_label) or "").strip()
      if not gpu_uuid:
@@ -366,7 +366,7 @@ index 1009e969..e1235558 100644
      if not math.isfinite(value) or value < 0 or value > max_value:
 diff --git a/src/srtctl/core/power/profile.py b/src/srtctl/core/power/profile.py
 new file mode 100644
-index 00000000..55123aa6
+index 0000000..55123aa
 --- /dev/null
 +++ b/src/srtctl/core/power/profile.py
 @@ -0,0 +1,127 @@
@@ -498,7 +498,7 @@ index 00000000..55123aa6
 +        known = ", ".join(sorted(POWER_PROFILES))
 +        raise ValueError(f"unknown power_profile {name!r}; known profiles: {known}") from None
 diff --git a/src/srtctl/core/power/session.py b/src/srtctl/core/power/session.py
-index 631aff48..17bf3ab8 100644
+index 631aff4..17bf3ab 100644
 --- a/src/srtctl/core/power/session.py
 +++ b/src/srtctl/core/power/session.py
 @@ -47,6 +47,7 @@ from srtctl.core.power.manifest import (
@@ -515,7 +515,7 @@ index 631aff48..17bf3ab8 100644
      log_dir: Path | None = None
 +    # Which metric and labels the exporter's ``/metrics`` body carries the watts in.
 +    profile: PowerMetricProfile = DEFAULT_POWER_PROFILE
- 
+
      @property
      def result_root(self) -> Path:
 @@ -155,6 +158,7 @@ class PowerTelemetrySession:
@@ -529,7 +529,7 @@ index 631aff48..17bf3ab8 100644
 @@ -402,7 +406,7 @@ class PowerTelemetrySession:
          settled_monotonic = time.monotonic()
          settled_unix = time.time()
- 
+
 -        scrape = parse_power_scrape(body) if body is not None else None
 +        scrape = parse_power_scrape(body, self._settings.profile) if body is not None else None
          timestamp_unix = (started_unix + settled_unix) / 2
@@ -545,7 +545,7 @@ index 631aff48..17bf3ab8 100644
              hostname=endpoint.hostname,
 @@ -458,7 +463,7 @@ class PowerTelemetrySession:
              return any(not process.is_running for process in self._exporters)
- 
+
      def _check_exporters(self) -> None:
 -        """A DCGM exporter exit during collection invalidates the run."""
 +        """An exporter exit during collection invalidates the run."""
@@ -553,7 +553,7 @@ index 631aff48..17bf3ab8 100644
              return
          if self._any_exporter_exited():
 diff --git a/src/srtctl/core/power/validate_artifacts.py b/src/srtctl/core/power/validate_artifacts.py
-index 4f82f6ca..a41312cb 100644
+index 4f82f6c..a41312c 100644
 --- a/src/srtctl/core/power/validate_artifacts.py
 +++ b/src/srtctl/core/power/validate_artifacts.py
 @@ -27,8 +27,6 @@ from srtctl.core.power.contract import (
@@ -576,7 +576,7 @@ index 4f82f6ca..a41312cb 100644
 @@ -266,13 +265,20 @@ def _check_wire_contract(manifest: dict[str, Any]) -> list[str]:
      if not isinstance(schema_version, int) or isinstance(schema_version, bool) or schema_version != SCHEMA_VERSION:
          failures.append(f"schema_version is {schema_version!r}, expected {SCHEMA_VERSION!r}")
- 
+
 -    for key, expected in (
 +    # Manifests written before profiles existed carry no ``power_profile`` and are DCGM.
 +    profile_name = manifest.get("power_profile", "dcgm")
@@ -597,15 +597,15 @@ index 4f82f6ca..a41312cb 100644
 +    for key, expected in expectations:
          if manifest.get(key) != expected:
              failures.append(f"{key} is {manifest.get(key)!r}, expected {expected!r}")
- 
+
 diff --git a/src/srtctl/core/schema.py b/src/srtctl/core/schema.py
-index 5a564b68..8d134283 100755
+index 86e394f..820bd5c 100755
 --- a/src/srtctl/core/schema.py
 +++ b/src/srtctl/core/schema.py
-@@ -52,8 +52,9 @@ from srtctl.core.formatting import (
+@@ -54,8 +54,9 @@ from srtctl.core.formatting import (
      FormattablePathField,
  )
- 
+
 -# Leaf module (stdlib-only imports), so this cannot cycle back into schema.
 +# Leaf modules (stdlib and prometheus-free imports), so these cannot cycle back into schema.
  from srtctl.core.power.contract import CONTAINER_LOG_DIR
@@ -613,19 +613,16 @@ index 5a564b68..8d134283 100755
  from srtctl.core.roles import COLOCATE, PER_ROLE_ENGINE_KEYS, ROLE_NAMES, ROLE_TO_MODE
  from srtctl.core.source import DynamoSourceConfig, is_commit_sha
  from srtctl.ports import DYNAMO_SIDECAR_GRPC_PORT
-@@ -1415,6 +1416,11 @@ class TelemetryExporterConfig:
-     port: int
+@@ -1542,6 +1543,8 @@ class TelemetryExporterConfig:
      command: str | None = None
+     # Host executable to run without a container; relative paths resolve against the srtctl checkout.
      binary: str | None = None
-+    # GPU power telemetry only: which ``srtctl.core.power.profile`` row describes
-+    # this exporter's power metric and device labels (``dcgm`` when unset;
-+    # ``amd-device-metrics`` for rocm/device-metrics-exporter). Also supplies the
-+    # default ``command``.
++    # GPU power metric and device-label profile for this exporter.
 +    power_profile: str | None = None
- 
+
      Schema: ClassVar[type[Schema]] = Schema
- 
-@@ -3213,6 +3219,11 @@ class SrtConfig:
+
+@@ -3392,6 +3395,11 @@ class SrtConfig:
              raise ValidationError("telemetry.dcgm_exporter.container_image must be non-empty")
          if not 1 <= exporter.port <= 65535:
              raise ValidationError("telemetry.dcgm_exporter.port must be in 1..65535")
@@ -634,6 +631,34 @@ index 5a564b68..8d134283 100755
 +            raise ValidationError(
 +                f"telemetry.dcgm_exporter.power_profile={exporter.power_profile!r} is unknown; known profiles: {known}"
 +            )
- 
+
          for name in ("startup_timeout_seconds",):
              if not _is_finite_positive(getattr(telemetry, name)):
+diff --git a/tests/test_power_collector.py b/tests/test_power_collector.py
+index d8bd5f8..64ad049 100644
+--- a/tests/test_power_collector.py
++++ b/tests/test_power_collector.py
+@@ -795,7 +795,7 @@ class TestFailurePaths:
+
+         assert Reason.EXPORTER_EXITED not in outcome.reason_codes
+
+-    def test_unexpected_device_invalidates_publication(self, tmp_path, exporters):
++    def test_unallocated_device_is_omitted_from_samples(self, tmp_path, exporters):
+         a = exporters(_body("a", count=GPUS_PER_NODE + 1))
+         b = exporters(_body("b"))
+         session = _session(tmp_path, _endpoints(("node-a", a.url), ("node-b", b.url)))
+@@ -804,8 +804,12 @@ class TestFailurePaths:
+         session.collect_once()
+         outcome = session.stop_and_finalize()
+
+-        assert Reason.UNEXPECTED_DEVICE in outcome.reason_codes
+-        assert outcome.publication_valid is False
++        rows, reasons = read_samples(session.samples_path)
++        assert reasons == ()
++        assert {(row.hostname, row.gpu_index) for row in rows} == {
++            (node, index) for node in ("node-a", "node-b") for index in range(GPUS_PER_NODE)
++        }
++        assert Reason.UNEXPECTED_DEVICE not in outcome.reason_codes
+
+
+ class TestPublication:

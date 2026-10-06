@@ -26,10 +26,8 @@ REQUIRED = (
     "EVAL_ONLY",
     "IS_MULTINODE",
     "PRECISION",
-    "ENABLE_AGENTX_POWER",
-    "REQUIRE_POWER",
-    "KV_OFFLOADING",
 )
+POWER_SWITCHES = ("ENABLE_AGENTX_POWER", "REQUIRE_POWER")
 # The finished profile's accepted error fraction; a recipe's live abort threshold
 # (AIPERF_LIVE_FAILED_REQUEST_THRESHOLD) does not move it.
 FAILED_REQUEST_THRESHOLD = "0.10"
@@ -58,6 +56,8 @@ class Plan:
         """Validate every input before any setup, so a bad point fails in seconds."""
         values = inputs.require(*REQUIRED, *REPLAY_REQUIRED, env=env)
         multinode = inputs.flag("IS_MULTINODE", env)
+        matrix_point = env.get("IS_AGENTIC") == "1" or env.get("SCENARIO_TYPE") == "agentic-coding"
+        switches = inputs.require(*POWER_SWITCHES, env=env) if multinode or matrix_point else {}
         result_dir = Path(values["RESULT_DIR"]).absolute()
         result_filename = values["RESULT_FILENAME"]
         if multinode or env.get("CONC_LIST"):
@@ -67,17 +67,18 @@ class Plan:
             result_filename += f"_conc{values['CONC']}"
         replay = ReplayConfig.from_env(env, result_dir)
         _require_single_point(env, values["CONC"])
-        _validate_kv_offload(env)
+        # Matrix launches declare kv-offloading; srt-slurm's standalone agentx.sh does not.
+        if matrix_point:
+            _validate_kv_offload(env)
         eval_only = inputs.flag("EVAL_ONLY", env)
-        power = _power_mode(values["ENABLE_AGENTX_POWER"], env)
         return cls(
             replay=replay,
             result_dir=result_dir,
             output_dir=Path(env.get("AGENTIC_OUTPUT_DIR") or proc.REPO_ROOT).absolute(),
             result_filename=result_filename,
             chat_budget=server.chat_route_budget(env) if eval_only else None,
-            power=power,
-            require_power=values["REQUIRE_POWER"] in TRUE_VALUES,
+            power=_power_mode(switches, env),
+            require_power=switches.get("REQUIRE_POWER") in TRUE_VALUES,
             required_metric_prefix=inputs.optional("AIPERF_REQUIRED_SERVER_METRIC_PREFIX", env),
         )
 
@@ -95,7 +96,7 @@ def _require_single_point(env: Mapping[str, str], conc: str) -> None:
 
 def _validate_kv_offload(env: Mapping[str, str]) -> None:
     """The served KV-offload configuration, as the matrix ``kv-offloading`` field allows."""
-    mode = env["KV_OFFLOADING"]
+    mode = inputs.require("KV_OFFLOADING", env=env)["KV_OFFLOADING"]
     backend = env.get("KV_OFFLOAD_BACKEND")
     if mode == "none":
         if backend:
@@ -110,9 +111,10 @@ def _validate_kv_offload(env: Mapping[str, str]) -> None:
         )
 
 
-def _power_mode(enabled: str, env: Mapping[str, str]) -> PowerMode:
-    if enabled not in TRUE_VALUES:
+def _power_mode(switches: Mapping[str, str], env: Mapping[str, str]) -> PowerMode:
+    if switches.get("ENABLE_AGENTX_POWER") not in TRUE_VALUES:
         return "off"
+    # srt-slurm exports the window directory for measured single- and multi-node points.
     return "window" if env.get("SRT_MEASUREMENT_WINDOW_DIR") else "missing"
 
 

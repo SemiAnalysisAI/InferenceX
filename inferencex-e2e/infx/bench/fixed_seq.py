@@ -62,6 +62,11 @@ def client_argv(point: Point) -> list[str]:
     return argv
 
 
+def _run_client(point: Point) -> int:
+    with proc.RelaySignals() as relay:
+        return relay.run(client_argv(point))
+
+
 def served_model(base_url: str) -> str:
     """The first model id the frontend lists."""
     listing = server.http_json(f"{base_url}/v1/models")
@@ -160,6 +165,24 @@ def srt_sweep(args: argparse.Namespace) -> int:
     return 0
 
 
+def explicit_point(args: argparse.Namespace) -> int:
+    """One point described entirely by flags."""
+    return _run_client(
+        Point(
+            base_url=args.base_url,
+            model=args.model,
+            backend=args.backend,
+            tokenizer=args.tokenizer,
+            isl=env.parse_positive_int("--isl", args.isl),
+            osl=env.parse_positive_int("--osl", args.osl),
+            random_range_ratio=args.random_range_ratio,
+            conc=env.parse_positive_int("--conc", args.conc),
+            num_prompts=env.parse_positive_int("--num-prompts", args.num_prompts),
+            result=args.result,
+        )
+    )
+
+
 def main(argv: list[str]) -> int:
     """Run the ``fixed-seq`` command."""
     parser = argparse.ArgumentParser(prog="python3 -m infx.bench fixed-seq")
@@ -172,6 +195,19 @@ def main(argv: list[str]) -> int:
     sweep = modes.add_parser("srt-sweep", help="every CONC_LIST point of a multi-node job (env)")
     sweep.add_argument("--logs-dir", type=Path, required=True, help="srt-slurm's log mount")
     sweep.set_defaults(run=srt_sweep)
+
+    point = modes.add_parser("point", help="one point from flags")
+    point.add_argument("--base-url", required=True)
+    point.add_argument("--model", required=True, help="served model name")
+    point.add_argument("--backend", required=True, help="benchmark_serving backend")
+    point.add_argument("--tokenizer", required=True, help="tokenizer name or path")
+    point.add_argument("--isl", required=True, help="input sequence length")
+    point.add_argument("--osl", required=True, help="output sequence length")
+    point.add_argument("--random-range-ratio", required=True)
+    point.add_argument("--conc", required=True, help="max concurrency")
+    point.add_argument("--num-prompts", required=True)
+    point.add_argument("--result", type=Path, required=True, help="result JSON path")
+    point.set_defaults(run=explicit_point)
 
     args = parser.parse_args(argv)
     return args.run(args)

@@ -175,3 +175,17 @@ class ScriptRequest(LaunchRequest):
     model: str = Field(alias="MODEL")
     gpu_count: int = Field(alias="GPU_COUNT")
     salloc_time_limit: int = Field(alias="SALLOC_TIME_LIMIT")
+
+
+class LlmdRequest(SrtRequest):
+    """An llm-d vLLM multinode job submitted through benchmarks/multi_node/llm-d."""
+
+    model: str = Field(alias="MODEL")
+    disagg: TrueFlag = Field(alias="DISAGG")
+    prefill_nodes: int = Field(alias="PREFILL_NODES")
+    decode_nodes: int = Field(alias="DECODE_NODES")
+    prefill_num_workers: int = Field(1, alias="PREFILL_NUM_WORKERS")
+    decode_num_workers: int = Field(1, alias="DECODE_NUM_WORKERS")
+    isl: int = Field(alias="ISL")
+    osl: int = Field(alias="OSL")
+    random_range_ratio: str = Field(alias="RANDOM_RANGE_RATIO")

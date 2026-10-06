@@ -157,7 +157,7 @@ STP（Single Token Prediction，单 Token 预测）是每次前向传播生成�
 6. srt-slurm 必须同时更新配方和主条目。
 7. 追加触发条目，先只生成受影响的 key，并检查每个生成点。
 
-固定序列 `8192/1024` 场景可设置 `require-power: true`，要求经过验证的实测功耗。矩阵将此标记传递给标准 sweep 和手动 E2E 吞吐作业；eval-only 和 AgentX 行不继承该标记。省略此字段可保留现有行为。仅在对应 runtime 和结果适配器同时交付时启用，然后验证完整选定范围。
+多节点固定序列 `8192/1024` 场景可设置 `require-power: true`，要求经过验证的实测功耗。矩阵将此标记传递给标准 sweep 和手动 E2E 吞吐作业；eval-only 和 AgentX 行不继承该标记。单节点场景不接受此字段，因为单节点任务不采集功耗。省略此字段可保留现有行为。仅在对应 runtime 和结果适配器同时交付时启用，然后验证完整选定范围。
 
 ## 注册并设置 runner
 
@@ -289,31 +289,41 @@ TP4 约 1.23 TB）全部来自节点 0 的 1.5 TB 内存。`runners/srt-slurm/ho
 ### DeepSeek-V4.1-Flash DSpark
 
 GB200 的 DSpark 配方将 CUDA graph 最小捕获范围设为 64 tokens，以覆盖 AgentX 子代理并发。这会将 c1/c2/c4 的上限从 8/16/32 提升至 64；c8 及以上保持原有大小。完整轨迹、AL 3.51 和 Engram UVA 配置保持不变；需通过 CI 验证低并发尾延迟改善。
-B200 的 DSpark 配方使用相同的最小捕获范围，并保持相同的工作负载配置。
-GB300 的 DSpark 配方使用相同的最小捕获范围，并保持相同的工作负载配置。
+B200 的 DSpark 配方按测试点显式设置捕获尺寸，详见下文。
+GB300 的 DSpark 配方按测试点显式设置捕获尺寸，详见下文。
+
+B200 条目使用 `vllm/vllm-openai:nightly-dev-x86_64-cu130-ac9126e58aa7`，开启 FlashInfer autotune。
+TP4 覆盖并发 1–128；DEP2（TP1 x DP2 + EP2，DeepGEMM MegaMoE）覆盖 8–32，DEP4（TP1 x DP4 + EP4，DeepGEMM MegaMoE）覆盖
+64–128，两者均前置一致性哈希 vLLM Router。DEP2 每个 B200 rank 约有 150 GiB 权重，因此 batched tokens
+上限为 4096，CUDA graph 捕获上限为 576 tokens。所有 B200 测试点设置 `--gpu-memory-utilization 0.97`。
+所有测试点使用 `FULL_AND_PIECEWISE` CUDA graph，捕获尺寸为六 token 验证块的倍数。
 H200 的 DSpark 配方使用相同的最小捕获范围，并保持相同的工作负载配置。
 
-B300 在 c1/c2/c4 使用相同的最小捕获范围。其 c1 CI 对比中，请求 ITL P90/P99 从 38.74/41.42 ms 降至 2.62/3.45 ms；c2/c4 仍需 CI 验证。
+B300 的 DSpark 配方按测试点显式设置捕获尺寸，详见下文。
 
 仅运行 AgentX 的 `dsv41flash-fp4-<sku>-vllm-agentic-dspark` 配方使用
-[`nvidia-master.yaml`](../configs/nvidia-master.yaml) 中按 SKU 固定的 `image`（最初为 `vllm/vllm-openai:deepseekv41-flash-0909`，B300 仍在使用），在 Blackwell SKU 上采用 TP4、原生五 token DSpark、
+[`nvidia-master.yaml`](../configs/nvidia-master.yaml) 中按 SKU 固定的 `image`（最初为 `vllm/vllm-openai:deepseekv41-flash-0909`），在 Blackwell SKU 上采用 TP4、原生五 token DSpark、
 概率采样草稿。吞吐测试使用[已提交的黄金 AL](../infx/golden_al_distribution/dsv41flash_dspark.yaml)：thinking 开启、五个草稿 token 对应 3.51，采用合成拒绝采样并关闭自适应验证。准确率 eval 保留真实块拒绝采样和自适应验证。
 `--engram-config '{"cpu_offload":true}'` 将 Engram 嵌入表放在固定页主机 DRAM
 中，通过 UVA 访问；`kv-offloading: none` 描述的是另行保留在 GPU 上的 KV cache。
 专家权重为 MXFP4，因此配方标记为 `precision: fp4`。
 
 各 GPU 入口共用纯文本服务行为，使用 `deepseek_v41` tokenizer 和解析器、1M 上下文，
-以及共享的 AgentX 轨迹回放、功耗、指标和 eval helper。TP4 的并发范围为 1–128。
+以及共享的 AgentX 轨迹回放、功耗、指标和 eval helper。除下文另有说明外，TP4 的并发范围为 1–128。
 共享脚本按六 token DSpark 验证块设置 CUDA graph capture。srt-slurm 单节点路径将检出挂载到 `/infmax-workspace`，避免在 `/workspace`
 下创建 AgentX 运行目录。沿用集群的模型路径和持久化缓存。配方在计算节点探测服务端口，首选端口被占用时选择可用端口，
 服务、回放、指标和 eval 共用同一端点。所有配方都必须获得 GPU sweep 和 eval
 证据后才能视为已验证。
 
-B300 条目还包含并发 2–128 的 TP2 变体。其专用脚本使用 `FULL_AND_PIECEWISE`
-CUDA graph，并显式设置最大为 2046 或 8190 tokens 的捕获尺寸集合。并发 1–4 以及
-TP2 并发 128 使用 `--max-num-batched-tokens 2048`，其余情况使用 8192；
-`--max-num-seqs` 固定为 256。TP2 并发 128 还设置
-`--gpu-memory-utilization 0.97`。其他 SKU 继续使用共享脚本。
+B300 条目使用 `vllm/vllm-openai:nightly-dev-x86_64-cu130-ac9126e58aa7`，开启 FlashInfer autotune。
+TP4 覆盖并发 1–16；DEP2（TP1 x DP2 + EP2，DeepGEMM MegaMoE）覆盖 8–192，前置一致性哈希 vLLM
+Router，并发 128 及以上改用 MegaAttention。所有测试点使用 `FULL_AND_PIECEWISE` CUDA graph，捕获尺寸为
+六 token 验证块的倍数。其他 SKU 继续使用共享脚本。
+
+GB300 条目使用 `vllm/vllm-openai:nightly-dev-arm64-cu130-ac9126e58aa7`，开启 FlashInfer autotune。
+TP4 覆盖并发 1–16；DEP2（TP1 x DP2 + EP2，DeepGEMM MegaMoE）覆盖 8–192，前置一致性哈希 vLLM
+Router，并发 128 及以上改用 MegaAttention。所有测试点使用 `FULL_AND_PIECEWISE` CUDA graph，捕获尺寸为
+六 token 验证块的倍数。
 
 GB300 launcher 将引擎就绪等待时间设为 7200 秒。在[运行 34504969146](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34504969146) 中，仅模型加载就耗时 18–23 分钟；Rust frontend 达到 3600 秒期限时，引擎仍在捕获 CUDA graph。此次仅延长启动等待时间，基准测试时长和解码设置保持不变。
 

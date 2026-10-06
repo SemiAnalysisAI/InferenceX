@@ -144,7 +144,8 @@ def _escaping_member() -> tarfile.TarInfo:
         ),
         (_archive(extra=_escaping_member()), None, "unsafe archive member path"),
     ],
-    ids=["sha256-mismatch", "missing-required-file", "unsafe-member-path"],
+    # Gzip headers embed the write time; byte-derived IDs would differ between xdist workers.
+    ids=["sha256-mismatch", "missing-required-file", "escaping-member"],
 )
 def test_rejected_archive_extracts_nothing(
     tmp_path: Path,
