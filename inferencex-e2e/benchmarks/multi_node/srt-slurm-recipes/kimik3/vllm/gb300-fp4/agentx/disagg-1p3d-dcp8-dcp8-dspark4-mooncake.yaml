@@ -187,7 +187,6 @@ telemetry:
 
 benchmark:
   type: custom
-  client_placement: head
   concurrencies: [32, 48]
   command: bash /infmax-workspace/benchmarks/srt_agentic.sh
   env:
@@ -203,3 +202,5 @@ benchmark:
     AIPERF_DATASET_MMAP_CACHE_DIR: "/aiperf_mmap_cache"
     HF_HUB_CACHE: "/hf_hub_cache"
     WEKA_LOADER_OVERRIDE: "semianalysis_cc_traces_weka_062126"
+  placement:
+    node: head

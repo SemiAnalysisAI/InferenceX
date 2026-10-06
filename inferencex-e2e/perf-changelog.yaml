@@ -9333,4 +9333,5 @@
   description:
     - "Update the shared srt-slurm pin from v2.39.1 to v2.43.4, including staged Dynamo wheel dependency resolution."
     - "Migrate five GLM-5.2 H200 AgentX recipes and the DeepSeek-V4 MI355X AgentX override bundle to schema 2; rely on automatic golden acceptance injection for the GLM-5.2 recipes."
+    - "Migrate eleven Kimi-K3 vLLM GB200/GB300 AgentX recipes from benchmark.client_placement to benchmark.placement.node for the new pin."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3755
