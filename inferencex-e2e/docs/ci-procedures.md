@@ -583,6 +583,10 @@ Stop and escalate when the source run, merge run, artifact coverage, changelog m
 
 The former `kimik3-fp4-h200-vllm-agentic` key is split into `-latency`, `-balanced`, and `-simple` keys. Together they preserve all 35 original points (10/12/13), recipe fingerprints, and dashboard series. Each key selects one complete recipe and its default evals; power rollout follows that recipe's `telemetry.enabled` setting. Use `kimik3-fp4-h200-vllm-agentic-*` to select all three. A partial recipe run does not qualify the other keys.
 
+## H100 temperature diagnostic
+
+The `pr459-h100-clock` temperature diagnostic copies its pinned Qwen3-0.6B snapshot into a self-contained model directory before allocation. Mounting only a Hugging Face cache snapshot at `/model` leaves its relative blob links outside the mount. The preparation step checks the model config and retains the original snapshot links in its receipt.
+
 ## OperatorX microbenchmarks
 
 The manual OperatorX workflow supports H100, H200, B200, B300, GB200, GB300,

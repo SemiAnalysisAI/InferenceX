@@ -561,6 +561,10 @@ jq -r 'to_entries[] | [.key, .value.n_success, .value.total] | @tsv' \
 
 原 `kimik3-fp4-h200-vllm-agentic` key 拆为 `-latency`、`-balanced` 和 `-simple` 三个 key，合计保留原来的全部 35 个点（10/12/13）、配方指纹及图表序列。每个 key 选择一份完整配方及其默认评估；功耗启用范围由该配方的 `telemetry.enabled` 决定。使用 `kimik3-fp4-h200-vllm-agentic-*` 可选择三份配方。局部配方运行不能证明其他 key 已通过资格验证。
 
+## H100 温度诊断
+
+`pr459-h100-clock` 温度诊断在申请资源前，将固定版本的 Qwen3-0.6B 快照复制成独立模型目录。仅把 Hugging Face 缓存快照挂到 `/model`，会使指向 blob 的相对链接落在挂载范围之外。准备步骤会校验模型配置，并在回执中保留原始快照链接。
+
 ## OperatorX 微基准
 
 OperatorX 手动工作流支持 H100、H200、B200、B300、GB200、GB300、MI300X、MI325X

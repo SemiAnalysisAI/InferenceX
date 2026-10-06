@@ -9288,3 +9288,9 @@
   description:
     - "Collect native GPU temperature with the pinned SRT producer and accept v3 sample artifacts in the H100 diagnostic."
   pr-link: XXX
+
+- config-keys:
+    - pr459-h100-clock
+  description:
+    - "Materialize the pinned diagnostic model before mounting it into the H100 serving container."
+  pr-link: XXX

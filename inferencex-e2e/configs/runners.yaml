@@ -385,7 +385,7 @@ clusters:
       entries:
         Qwen3-0.6B:
           root: pr459-models
-          dir: models--Qwen--Qwen3-0.6B/snapshots/c1899de289a04d12100db370d81485cdf75e47ca
+          dir: diagnostics/Qwen3-0.6B/c1899de289a04d12100db370d81485cdf75e47ca
     scheduler: slurm
     slurm:
       partition: batch_1
