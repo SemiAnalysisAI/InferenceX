@@ -1019,17 +1019,32 @@ def _wrap_launcher(fn, label):
     return launcher
 
 
-def _patch_launcher_module(module):
-    """Mark every public Python function a launcher module defines, and its classes' public methods."""
+def _patch_launcher_module(module, private=False):
+    """Mark every public Python function a launcher module defines, and its classes' public methods.
+
+    With `private`, single-underscore functions too: vendored kernel packages
+    keep their real launchers private (MiniMax-M3's indexer calls
+    vllm.third_party.fmha_sm100.api._fmha_sm100 directly).
+    """
     import types
 
     def launchable(name, obj):
+        skipped = name.startswith("__") or (
+            name.startswith(_WRAP_SKIP_PREFIXES) and not (private and name.startswith("_")))
         return (isinstance(obj, types.FunctionType) and obj.__module__ == module.__name__
-                and not name.startswith(_WRAP_SKIP_PREFIXES)
-                and not getattr(obj, "_infx_launcher", False))
+                and not skipped and not getattr(obj, "_infx_launcher", False))
+
+    package_dir = os.path.dirname(getattr(module, "__file__", None) or "") if private else ""
+
+    def extension_function(name, obj):
+        """A builtin from a compiled extension inside this package (fmha_sm100's build_k2q_csr)."""
+        owner = getattr(obj, "__self__", None)
+        path = getattr(owner, "__file__", None) or ""
+        return (package_dir and isinstance(obj, types.BuiltinFunctionType) and not name.startswith("__")
+                and os.path.dirname(path).startswith(package_dir))
 
     for name, obj in list(vars(module).items()):
-        if launchable(name, obj):
+        if launchable(name, obj) or extension_function(name, obj):
             setattr(module, name, _wrap_launcher(obj, f"{module.__name__}.{name}"))
         elif isinstance(obj, type) and obj.__module__ == module.__name__ and not name.startswith("_"):
             for attr, method in list(vars(obj).items()):
@@ -1094,7 +1109,7 @@ def _hook_for(name):
     if name in _HOOKS:
         return _HOOKS[name]
     if any(name == p or name.startswith(p + ".") for p in _LAUNCHER_PACKAGES):
-        return _patch_launcher_module
+        return lambda m: _patch_launcher_module(m, private=True)
     return None
 
 
