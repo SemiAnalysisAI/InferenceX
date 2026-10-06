@@ -66,8 +66,14 @@ base:
       env:
         VLLM_ROCM_USE_AITER: '1'
         VLLM_ROCM_USE_AITER_MOE: '1'
-        # Native DeepSeek-V4.1 a4w4 support from vllm-project/vllm#58819.
-        VLLM_ROCM_USE_AITER_MOE_A4W4_DSV4: '1'
+        # a4w4 (VLLM_ROCM_USE_AITER_MOE_A4W4_DSV4=1, vllm-project/vllm#58819)
+        # is held back. At TP=2 the MoE intermediate shard is 2304 / 2 = 1152,
+        # which is 128- but not 256-aligned, so vLLM pads nothing and AITER
+        # keeps its inline-sort MXFP4 path; that path addresses the padded
+        # scale stride and memory-faults during graph capture. TP=4 only
+        # escapes because its 576 -> 640 padding makes AITER reject the same
+        # path. Tracked in vllm-project/vllm#60273; the experts run a8w4
+        # through the generic AITER selector until a fix lands.
         # INT4-quantized quick all-reduce, as in vllm-project/recipes#1061.
         # Quick reduce only takes tensors at or above its built-in threshold,
         # so prefill chunks and the larger DSpark decode steps use it while
