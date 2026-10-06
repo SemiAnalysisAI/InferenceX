@@ -467,7 +467,7 @@ rm -rf -- "$tmp"
 
 ## 必需功耗数据的发布契约
 
-普通单节点 AgentX 矩阵行默认要求实测功耗，除非场景显式关闭；多节点和 P/D 场景仍通过 `require-power: true` 显式启用。元数据任务等待这些基准任务完成，下载证据，并使用 `python3 -m infx.results.power.publication` 生成[版本 2 黄金契约](fixtures/powerx-manifest-v2/README.md)。每个声明的 recipe/concurrency 必须对应一个有效聚合结果，并包含精确测量窗口、物理节点/GPU 身份、正的单设备能耗，以及带 SHA-256 哈希的保留工件。AMD 物理身份来自 `amd-smi list --json`，与静态设备元数据分别保存。
+普通单节点 AgentX 矩阵行默认要求实测功耗，除非场景显式关闭；多节点和 P/D 场景仍通过 `require-power: true` 显式启用。元数据任务等待这些基准任务完成，下载证据，并使用 `python3 -m infx.results.power.publication` 生成版本 2 发布清单。每个声明的 recipe/concurrency 必须对应一个有效聚合结果，并包含精确测量窗口、物理节点/GPU 身份、正的单设备能耗，以及带 SHA-256 哈希的保留工件。AMD 物理身份来自 `amd-smi list --json`，与静态设备元数据分别保存。
 
 证据缺失或无效时，元数据任务在派发摄取之前失败。两个派发路径都要求元数据任务成功，并独立传递 `require-power`，防止清单丢失后静默退回可选功耗摄取。即使后续聚合或遥测处理也失败，基准失败仍保留原始退出码。复用的测量保留来源 run/attempt/SHA；消费者必须验证来源运行的清单，不能把合并运行的清单当作测量证据。
 

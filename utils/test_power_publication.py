@@ -11,7 +11,7 @@ import yaml
 from infx.results.power.publication import build_manifest
 
 REPO = Path(__file__).resolve().parents[1]
-GOLDEN = REPO / "docs/fixtures/powerx-manifest-v2/artifacts"
+GOLDEN = Path(__file__).resolve().parent / "fixtures/powerx-manifest-v2"
 
 
 @pytest.fixture
