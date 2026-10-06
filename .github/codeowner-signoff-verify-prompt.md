@@ -112,11 +112,11 @@ NOT need to list `run-sweep.yml` runs or parse reuse logs.
 For the commit that passed Check 1, confirm the eval numbers are real and meet the bar,
 not merely that the job is green:
 - Take the run id behind the passing `eval /` / `collect-evals` check-run (from its
-  `details_url`) and download its eval results:
+  `details_url`) and download its eval results, then list the JSON files with the
+  Glob tool (`evals/**/*.json`):
   ```bash
   gh run download <RUN_ID> --repo ${REPO} -p 'eval_results_*' -D ./evals || \
   gh run download <RUN_ID> --repo ${REPO} -p 'eval_*' -D ./evals
-  find ./evals -name '*.json' | head
   ```
 - Read the aggregated eval JSON / the run's "Eval Summary" step summary and confirm
   accuracy is present and meets the expected bar for the model, and that the run used

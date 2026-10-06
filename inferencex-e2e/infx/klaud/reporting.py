@@ -949,6 +949,21 @@ def resolve_baseline(
         for entry in entries.values()
     ):
         raise VerificationError("Baseline source image no longer matches the selected base")
+    # Routing and generator metadata (runner labels, recipe paths, fingerprints) can change
+    # after a producer ran. Key a historical point by the current point with the same public
+    # identity, so the frozen roster names points the current generator can reproduce.
+    current = {key: public_point(entry) for key, entry in entries.items()}
+
+    def current_key(entry: dict) -> str | None:
+        key = point_key(entry)
+        if key in current:
+            return key
+        wanted = public_point(entry)
+        keys = [key for key, point in current.items() if point == wanted]
+        if len(keys) > 1:
+            raise VerificationError("Public baseline recipe identity is ambiguous or mismatched")
+        return keys[0] if keys else None
+
     historical: dict[str, list[dict]] = {}
     published: dict[str, Point] = {}
     unverified: list[dict] = []
@@ -982,8 +997,7 @@ def resolve_baseline(
             raise VerificationError("Legacy baseline producer does not select the candidate family")
         if len(matches) != 1:
             raise VerificationError("Public baseline recipe identity is ambiguous or mismatched")
-        entry = matches[0]
-        key = point_key(entry)
+        key = current_key(matches[0]) or point_key(matches[0])
         if key in published:
             raise VerificationError("Duplicate public baseline point")
         # Retain all original points, even if a current family or API response is smaller.
@@ -991,7 +1005,9 @@ def resolve_baseline(
             (point_key(point), point)
             for point in historical[head]
             if normalized_image(point["image"]) == normalized_image(old_image)
+            and current_key(point) is None
         )
+        entry = entries[key]
         published[key] = Point(
             key=key,
             label=point_label(entry),
