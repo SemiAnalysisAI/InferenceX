@@ -171,6 +171,28 @@ override_tp8_c8:
     env:
       CONC: "8"
 
+override_tp8_triton_decode_c8: &tp8_triton_decode
+  roles:
+    prefill:
+      args:
+        max-running-requests: 16
+    decode:
+      args:
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 16
+        dsa-decode-backend: triton
+  benchmark:
+    env:
+      CONC: "8"
+
+override_tp8_triton_decode_quality_c4:
+  <<: *tp8_triton_decode
+  slurm:
+    time_limit: "01:00:00"
+  benchmark:
+    env:
+      CONC: "4"
+
 override_tp8_prefill1k_c8:
   roles:
     prefill:
