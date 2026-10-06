@@ -68,7 +68,8 @@ clock steps on NVML's ~100 ms grid:
 
 - `profile_<result>`: `infx-profile.tar`, the full record.
   - `torch/`: vLLM's per-rank traces, one per window.
-  - `capture/`: the CUDA graph capture trace (full Python stacks).
+  - `capture/`: the CUDA graph capture trace, with module and launcher markers
+    (no Python stacks: over every captured size their export outlasts start-up).
   - `steps/<rank>.jsonl`: every step's batch composition on that rank.
   - `copies/<rank>.jsonl`: every CPU KV-offload block copy the rank queued
     (direction, blocks, bytes, step, vLLM callers).

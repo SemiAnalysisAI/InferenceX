@@ -894,7 +894,10 @@ def _patch_model_runner(module, v1=False):
             prof = profile(
                 activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
                 record_shapes=True,
-                with_stack=True,
+                # Module and launcher markers carry the context. Python stacks
+                # over every captured size made the export outlast engine start-up
+                # (B200 DSV4.1-Flash TP4 c128: 243 graphs, no export in 1 h 50 min).
+                with_stack=False,
             )
             prof.__enter__()
             _enable_module_markers()
