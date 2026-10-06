@@ -344,8 +344,9 @@ GB300 launcher 将引擎就绪等待时间设为 7200 秒。在[运行 345049691
 ### ATOM 上的 DeepSeek-V4.1-Flash DSpark
 
 `dsv41flash-fp4-mi355x-atom-agentic-dspark` 按照
-[ATOM 上游配方](https://github.com/ROCm/ATOM/blob/08735170a79fc6f70b8f0f8aa4fed630f4961516/recipes/DeepSeek-V4.1-Flash-Agentic.md)
-使用 `rocm/atom-dev:nightly_202610061452`（ATOM `0.1.7.dev58+g08735170a`，ROCm 7.2.4）。
+[ATOM 上游配方](https://github.com/ROCm/ATOM/blob/97359d6df46c59736468168b7be8bc50b482a1a9/recipes/DeepSeek-V4.1-Flash-Agentic.md)
+使用 `rocm/atom-dev:nightly_202610061600`（ATOM `0.1.7.dev59+g97359d6df`，ROCm 7.2.4），其 AITER 已包含
+[ROCm/aiter#6174](https://github.com/ROCm/aiter/pull/6174) 的 DeepSeek-V4.1-Flash TP4 bf16 GEMM 调优配置。
 所有点均选择原生 srt-slurm 配方
 `benchmarks/single_node/srt-slurm-recipes/dsv41flash/atom/mi355x-fp4-mtp/agentic.yaml`；
 [#3387](https://github.com/SemiAnalysisAI/InferenceX/pull/3387) 的旧脚本
