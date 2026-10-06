@@ -5,7 +5,7 @@ base:
   name: dsv41flash-fp4-mi355x-sglang-agentic
   model:
     path: hf:deepseek-ai/DeepSeek-V4.1-Flash
-    container: lmsysorg/sglang-rocm:v0.5.21-rocm720-mi35x-20261003
+    container: lmsysorg/sglang-rocm:v0.5.21-rocm720-mi35x-20261006
     precision: fp4
   resources:
     gpu_type: mi355x
@@ -33,7 +33,8 @@ base:
         enforce-shared-experts-fusion: true
         fp8-gemm-backend: aiter
         cuda-graph-max-bs-decode: 64
-        cuda-graph-backend-prefill: breakable
+        enable-decoder-swa-bounded-replay: true
+        cuda-graph-backend-prefill: disabled
         reasoning-parser: auto
         tool-call-parser: auto
         # Draft passes under long-context load outlast the 1800 s default watchdog.
@@ -68,14 +69,7 @@ base:
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
 
-# One variant per point. Running requests are min(2 * CONC, 64) for subagent
-# fan-out within the decode graph batch, and SWA prefix tails are
-# 64 * CONC within [128, 4096]. The static pool grows for KV from C16 (0.80)
-# and again at C64 (0.85). From C32 the scheduler interleaves 4 decode steps
-# per prefill instead of 16, and C64 shrinks the prefill chunk to 4096 tokens.
-# From C8 the layers after the last kv_source layer prefill only the SWA window
-# tail (decoder SWA bounded replay). Their per-request tail slice does not fit a
-# captured prefill shape, so SGLang rejects it with any prefill graph backend.
+# One variant per point; the saturation point gets a longer warmup drain.
 override_tp2_c1:
   roles:
     agg:
@@ -132,8 +126,6 @@ override_tp2_c8:
         prefill-decode-interval: 16
         swa-prefix-tails: 512
         max-running-requests: 16
-        enable-decoder-swa-bounded-replay: true
-        cuda-graph-backend-prefill: disabled
   benchmark:
     env:
       CONC: '8'
@@ -149,8 +141,6 @@ override_tp2_c16:
         prefill-decode-interval: 16
         swa-prefix-tails: 1024
         max-running-requests: 32
-        enable-decoder-swa-bounded-replay: true
-        cuda-graph-backend-prefill: disabled
   benchmark:
     env:
       CONC: '16'
@@ -166,8 +156,6 @@ override_tp2_c32:
         prefill-decode-interval: 4
         swa-prefix-tails: 2048
         max-running-requests: 64
-        enable-decoder-swa-bounded-replay: true
-        cuda-graph-backend-prefill: disabled
   benchmark:
     env:
       CONC: '32'
@@ -184,9 +172,82 @@ override_tp2_c64:
         prefill-decode-interval: 4
         swa-prefix-tails: 4096
         max-running-requests: 64
-        enable-decoder-swa-bounded-replay: true
-        cuda-graph-backend-prefill: disabled
   benchmark:
     env:
       CONC: '64'
       AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+
+override_tp4_c1:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        mem-fraction-static: 0.70
+        chunked-prefill-size: 16384
+        prefill-decode-interval: 16
+        swa-prefix-tails: 128
+        max-running-requests: 2
+  benchmark:
+    env:
+      CONC: '1'
+
+override_tp4_c2:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        mem-fraction-static: 0.70
+        chunked-prefill-size: 16384
+        prefill-decode-interval: 16
+        swa-prefix-tails: 128
+        max-running-requests: 4
+  benchmark:
+    env:
+      CONC: '2'
+
+override_tp4_c4:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        mem-fraction-static: 0.70
+        chunked-prefill-size: 16384
+        prefill-decode-interval: 16
+        swa-prefix-tails: 256
+        max-running-requests: 8
+  benchmark:
+    env:
+      CONC: '4'
+
+override_tp4_c8:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        mem-fraction-static: 0.70
+        chunked-prefill-size: 16384
+        prefill-decode-interval: 16
+        swa-prefix-tails: 512
+        max-running-requests: 16
+  benchmark:
+    env:
+      CONC: '8'
+
+override_tp4_c16:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        mem-fraction-static: 0.70
+        chunked-prefill-size: 16384
+        prefill-decode-interval: 16
+        swa-prefix-tails: 1024
+        max-running-requests: 32
+  benchmark:
+    env:
+      CONC: '16'
