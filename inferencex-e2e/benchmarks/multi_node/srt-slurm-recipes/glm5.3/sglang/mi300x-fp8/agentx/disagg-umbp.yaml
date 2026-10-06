@@ -185,6 +185,24 @@ override_tp8_prefill1k_c8:
     env:
       CONC: "8"
 
+override_tp8_prefill128k_mem80_quality_c8:
+  slurm:
+    time_limit: "01:00:00"
+  roles:
+    prefill:
+      args:
+        chunked-prefill-size: 131072
+        max-prefill-tokens: 131072
+        mem-fraction-static: 0.80
+        max-running-requests: 16
+    decode:
+      args:
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 16
+  benchmark:
+    env:
+      CONC: "8"
+
 override_tp8_decode_topkv2_c4: &decode_topkv2
   slurm:
     time_limit: "01:00:00"
