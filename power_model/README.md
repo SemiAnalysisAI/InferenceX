@@ -32,10 +32,3 @@ python -m power_model --gpu-level-power-per-gpu=400 --system=h100 \
 | `--systems` | Advanced model quantity of the selected chassis or rack; default 1 |
 | `--power-breakdown-per-chassis` | Advanced model nested BoM for one chassis or rack, followed by cluster totals |
 | `--help` | List options, systems, and models |
-
-| System | Additional aliases | Cooling/PUE |
-| --- | --- | --- |
-| `hopper` | `h100`, `h200` | Air / 1.3 |
-| `mi300`, `mi325`, `mi355`, `b200`, `b300` | — | Air / 1.3 |
-| `gb200-nvl72` | `gb200` | DLC / 1.1 |
-| `gb300-nvl72` | `gb300` | DLC / 1.1 |
