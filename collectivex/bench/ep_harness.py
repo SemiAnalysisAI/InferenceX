@@ -744,6 +744,10 @@ class Sweep:
                 "combine_reduction": backend.combine_reduction,
                 "library_version": backend.library_version,
                 "stage_excluded_from_roundtrip": bool(backend.stage_excluded_from_roundtrip),
+                # What the adapter actually asked the library for (SM budget, overlap
+                # reservation, ...). Always present so the schema is stable; `{}` means
+                # every knob sat at its upstream default.
+                "tuning": dict(backend.tuning or {}),
                 "chained_period": True,
                 "cuda_graph_replay": self.graph,
                 "cuda_graph_supported": bool(backend.cuda_graph_supported),

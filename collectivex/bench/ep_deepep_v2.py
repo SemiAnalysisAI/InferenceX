@@ -101,6 +101,19 @@ def _require_runtime() -> None:
         raise RuntimeError("invalid DeepEP V2 runtime: deep_ep.ElasticBuffer is absent")
 
 
+def _env_switch(name, default="on"):
+    """Read an on/off diagnostic switch, failing closed on anything else.
+
+    A blank workflow input sets the variable to "", which is not "unset", so a plain
+    `os.environ.get(name, "on")` would silently read "" and fall through every comparison.
+    Raising here turns that into a loud import-time failure instead of a quiet wrong series.
+    """
+    value = os.environ.get(name) or default
+    if value not in ("on", "off"):
+        raise ValueError(f"{name} must be 'on' or 'off', got {value!r}")
+    return value == "on"
+
+
 class DeepEPV2Backend(LegacyBufferLL, EPBackend):
     name = "deepep-v2"
     maturity = "production"  # vLLM --all2all-backend deepep_v2; SGLang --moe-a2a-backend deepep
@@ -163,11 +176,48 @@ class DeepEPV2Backend(LegacyBufferLL, EPBackend):
             raise ValueError(f"CX_PREFILL_CPU_SYNC must be 'on' or 'off', got {prefill_sync!r}")
         if prefill_sync == "off" and self.mode == "normal" and args.phase == "prefill":
             self._normal_cpu_sync = False
+        # DIAGNOSTIC. Three ElasticBuffer knobs CollectiveX otherwise leaves at upstream's
+        # defaults. Unset reproduces the published configuration exactly; each one thrown
+        # appends its own discriminator below, because the durable store keys its series on
+        # kernel_generation and a tuned row must never pool with an untuned one.
+        #
+        #   CX_EP_NUM_SMS          a positive int replaces get_theoretical_num_sms(). num_qps
+        #                          is derived from it, and the JIT cache directory already
+        #                          keys on both, so each value compiles into its own cache
+        #                          rather than silently reusing another budget's kernels.
+        #   CX_EP_OVERLAP_COMPUTE  'off' clears prefer_overlap_with_compute, which exists to
+        #                          leave SMs for a concurrent compute stream. A transport-only
+        #                          benchmark has no such stream, so this is a measurement
+        #                          question as much as a tuning one: 'on' is what a serving
+        #                          stack runs, 'off' is what the collective reaches alone.
+        #                          Say which one a published number came from.
+        #   CX_EP_HANDLE_COPY      'off' clears do_handle_copy, dropping the handle clone from
+        #                          inside the timed dispatch window.
+        #
+        # All three are normal-mode only: the low-latency path builds a different buffer and
+        # takes none of these arguments, so throwing them there would be a silent no-op.
+        raw_sms = os.environ.get("CX_EP_NUM_SMS") or "0"
+        try:
+            self._num_sms_override = int(raw_sms)
+        except ValueError:
+            raise ValueError(f"CX_EP_NUM_SMS must be an integer, got {raw_sms!r}") from None
+        if self._num_sms_override < 0:
+            raise ValueError(f"CX_EP_NUM_SMS must be >= 0, got {self._num_sms_override}")
+        self._overlap_with_compute = _env_switch("CX_EP_OVERLAP_COMPUTE")
+        self._handle_copy = _env_switch("CX_EP_HANDLE_COPY")
         if self.mode == "normal" and not self._normal_cpu_sync:
             self.kernel_generation = "v2-elastic-buffer-nosync"
         if (os.environ.get("EP_WIN_RELAXED_ORDERING") == "1" and self.mode == "normal"
                 and world_size > int(args.scale_up_domain)):
             self.kernel_generation += "-relaxed-ordering"  # its own series; see methodology.md
+        if self.mode == "normal":
+            # Fixed order, so the same configuration always produces the same string.
+            if self._num_sms_override:
+                self.kernel_generation += f"-sm{self._num_sms_override}"
+            if not self._overlap_with_compute:
+                self.kernel_generation += "-nooverlap"
+            if not self._handle_copy:
+                self.kernel_generation += "-nohandlecopy"
         if self.mode == "low-latency":
             self._enable_ll("legacy-buffer-ll")  # the legacy Buffer IBGDA decode kernels
 
@@ -222,7 +272,7 @@ class DeepEPV2Backend(LegacyBufferLL, EPBackend):
             deterministic=False,
             allow_hybrid_mode=allow_hybrid_mode,
             allow_multiple_reduction=True,
-            prefer_overlap_with_compute=True,
+            prefer_overlap_with_compute=self._overlap_with_compute,
             num_gpu_timeout_secs=100,
             explicitly_destroy=True,
             # 0 is upstream's use-the-default sentinel; only hybrid (GIN) mode
@@ -232,13 +282,23 @@ class DeepEPV2Backend(LegacyBufferLL, EPBackend):
             ),
         )
         tuning_num_experts = int(args.experts)
-        self.num_sms = int(
+        theoretical_sms = int(
             self.buffer.get_theoretical_num_sms(tuning_num_experts, args.topk)
         )
+        self.num_sms = self._num_sms_override or theoretical_sms
         self.num_qps = int(self.buffer.get_theoretical_num_qps(self.num_sms))
         realized = {
             "num_sms": self.num_sms,
             "allocated_qps": int(self.buffer.num_allocated_qps),
+        }
+        # Published in the artifact: the baseline a sweep moved away from has to be on the
+        # row, or a later reader cannot tell an override from upstream's own answer.
+        self.tuning = {
+            "num_sms": self.num_sms,
+            "num_sms_theoretical": theoretical_sms,
+            "num_qps": self.num_qps,
+            "prefer_overlap_with_compute": self._overlap_with_compute,
+            "do_handle_copy": self._handle_copy,
         }
         jit_cache_directory = _jit_cache_directory(
             args,
@@ -314,7 +374,7 @@ class DeepEPV2Backend(LegacyBufferLL, EPBackend):
             num_sms=self.num_sms,
             num_qps=self.num_qps,
             async_with_compute_stream=False,
-            do_handle_copy=True,
+            do_handle_copy=self._handle_copy,
             do_cpu_sync=self._normal_cpu_sync,
             do_expand=False,
         )

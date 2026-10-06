@@ -126,6 +126,11 @@ class EPBackend(abc.ABC):
     combine_reduction = "domain-fp32"
     kernel_generation: "str | None" = None
     library_version: "str | None" = None
+    # Realized library tuning, published alongside kernel_generation. Empty on an adapter
+    # that pins everything to upstream defaults; a knob that is NOT default must also appear
+    # in kernel_generation, because the durable store keys its series on that string and a
+    # tuned row must never pool with an untuned one.
+    tuning: "dict | None" = None
     mode: "str | None" = None
     # Handle contract, not an attribute of this class: every adapter's stage() sets
     # handle.combine_input to the tensor its combine() reads. The value need not be a torch

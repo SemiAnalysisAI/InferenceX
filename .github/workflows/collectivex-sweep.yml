@@ -45,6 +45,20 @@ on:
         type: choice
         default: 'on'
         options: ['on', 'off']
+      ep_num_sms:
+        description: "DIAGNOSTIC ONLY. Overrides DeepEP V2 normal-mode num_sms (and the num_qps derived from it). Blank or 0 keeps upstream's get_theoretical_num_sms. Its own kernel_generation series."
+        type: string
+        default: ''
+      ep_overlap_compute:
+        description: "DIAGNOSTIC ONLY. 'off' clears prefer_overlap_with_compute, which reserves SMs for a compute stream a transport-only benchmark does not have. Its own kernel_generation series."
+        type: choice
+        default: 'on'
+        options: ['on', 'off']
+      ep_handle_copy:
+        description: "DIAGNOSTIC ONLY. 'off' clears do_handle_copy, dropping the handle clone from inside the timed dispatch window. Its own kernel_generation series."
+        type: choice
+        default: 'on'
+        options: ['on', 'off']
       fp8_consume:
         description: "DIAGNOSTIC ONLY. 'dequant' puts the FP8 dequant back inside the chain, so staging is no longer hoisted; changes what is measured. Use native for the production model."
         type: choice
@@ -177,6 +191,12 @@ jobs:
       # Diagnostic hatch, "on" on every normal run; defaulted here for the same fail-closed
       # reason as CX_FP8_CONSUME above (a blank input is not "unset").
       CX_PREFILL_CPU_SYNC: ${{ inputs.prefill_cpu_sync || 'on' }}
+      # Normal-mode tuning hatches; all three default to upstream's behaviour, and the
+      # adapter fails closed on anything that is neither "on" nor "off" (a blank input is
+      # not "unset", so the default has to be supplied here as well as in the adapter).
+      CX_EP_NUM_SMS: ${{ inputs.ep_num_sms || '0' }}
+      CX_EP_OVERLAP_COMPUTE: ${{ inputs.ep_overlap_compute || 'on' }}
+      CX_EP_HANDLE_COPY: ${{ inputs.ep_handle_copy || 'on' }}
       # The squash cache is content-keyed, so updates normally ride the digest;
       # this is the manual override for a moved tag with an unresolvable digest.
       COLLX_IMAGE_REFRESH: ${{ inputs.refresh_image && '1' || '0' }}

@@ -617,6 +617,57 @@ class GraphReplayDefaults(unittest.TestCase):
         with self.assertRaises(ValueError):
             prefill({"CX_PREFILL_CPU_SYNC": "false"})
 
+    def test_normal_tuning_hatches_default_off_and_each_names_its_own_series(self):
+        """The three ElasticBuffer knobs must be inert unset, and any non-default value must
+        reach kernel_generation -- the durable store keys its series on that string, so a
+        tuned row that kept the untuned name would pool with the published numbers."""
+        module = _import_stubbed("ep_deepep_v2", deep_ep=_deep_ep("ElasticBuffer", "Buffer"))
+
+        def build(env, mode="normal", phase="prefill"):
+            with mock.patch.dict(os.environ, env, clear=True):
+                return module.DeepEPV2Backend(
+                    args(mode=mode, phase=phase), 0, 8, 0, "cpu"
+                )
+
+        # Unset, and blank (what an untouched workflow input actually sends), are the
+        # published configuration: upstream defaults and the unsuffixed series name.
+        for env in ({}, {"CX_EP_NUM_SMS": "", "CX_EP_OVERLAP_COMPUTE": "", "CX_EP_HANDLE_COPY": ""}):
+            backend = build(env)
+            self.assertEqual(backend._num_sms_override, 0)
+            self.assertTrue(backend._overlap_with_compute)
+            self.assertTrue(backend._handle_copy)
+            self.assertEqual(backend.kernel_generation, "v2-elastic-buffer")
+
+        # Each knob names itself, and they compose in a fixed order.
+        self.assertEqual(
+            build({"CX_EP_NUM_SMS": "32"}).kernel_generation, "v2-elastic-buffer-sm32")
+        self.assertEqual(
+            build({"CX_EP_OVERLAP_COMPUTE": "off"}).kernel_generation,
+            "v2-elastic-buffer-nooverlap")
+        self.assertEqual(
+            build({"CX_EP_HANDLE_COPY": "off"}).kernel_generation,
+            "v2-elastic-buffer-nohandlecopy")
+        self.assertEqual(
+            build({"CX_EP_NUM_SMS": "24", "CX_EP_OVERLAP_COMPUTE": "off",
+                   "CX_EP_HANDLE_COPY": "off"}).kernel_generation,
+            "v2-elastic-buffer-sm24-nooverlap-nohandlecopy")
+
+        # They stack on the no-sync hatch rather than replacing its name.
+        self.assertEqual(
+            build({"CX_PREFILL_CPU_SYNC": "off", "CX_EP_NUM_SMS": "48"}).kernel_generation,
+            "v2-elastic-buffer-nosync-sm48")
+
+        # Low-latency takes none of these arguments, so it must not claim them in its name.
+        self.assertEqual(
+            build({"CX_EP_NUM_SMS": "48", "CX_EP_HANDLE_COPY": "off"},
+                  mode="low-latency", phase="decode").kernel_generation,
+            "legacy-buffer-ll")
+
+        for bad in ({"CX_EP_NUM_SMS": "half"}, {"CX_EP_NUM_SMS": "-4"},
+                    {"CX_EP_OVERLAP_COMPUTE": "false"}, {"CX_EP_HANDLE_COPY": "0"}):
+            with self.assertRaises(ValueError):
+                build(bad)
+
     def test_uccl_graphs_intranode_low_latency_except_b200_fp8(self):
         cls = _import_stubbed("ep_uccl", deep_ep=_deep_ep("Buffer", "Config")).UCCLEPBackend
         with mock.patch.dict(os.environ, {}, clear=True):
