@@ -395,6 +395,36 @@ override_tp8_dep16_cap16_batch2_rr_c32:
     env:
       CONC: "32"
 
+override_tp8_ep16_adp4_quality_c16:
+  frontend:
+    args:
+      dp-aware: true
+      decode-policy: round_robin
+  roles:
+    prefill:
+      args:
+        max-running-requests: 16
+    decode:
+      nodes: 2
+      workers: 1
+      gpus: 16
+      args:
+        tensor-parallel-size: 16
+        expert-parallel-size: 16
+        attn-dp-size: 4
+        moe-dense-tp-size: 1
+        enable-dp-lm-head: true
+        moe-a2a-backend: mori
+        deepep-mode: normal
+        chunked-prefill-size: 16384
+        max-running-requests: 32
+        cuda-graph-max-bs-decode: 32
+      env:
+        SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "16"
+  benchmark:
+    env:
+      CONC: "16"
+
 override_dep16_dep16_c16:
   frontend:
     args:
