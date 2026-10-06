@@ -281,7 +281,7 @@ TP2 C20/C25/C30 与 TP4 C40/C48 点位启用 LMCache 进程内 CPU 层。
 中的 `*_lmcache` 变体在 `extra-kv-connectors` 下列出
 `{kv_connector: lmcache_offload, kv_role: offload}`，srtctl 将其渲染为
 `--kv-transfer-config '{"kv_connector":"lmcache_offload","kv_role":"offload"}'`
-（`runners/srt-slurm/patches/507-lmcache-server-atom-sglang.patch`），CPU 层由
+（[NVIDIA/srt-slurm#507](https://github.com/NVIDIA/srt-slurm/pull/507)，srt-slurm v2.36.0 起内置），CPU 层由
 `LMCACHE_*` 环境变量配置。每个变体声明 `KV_OFFLOADING: dram` 和矩阵的
 `TOTAL_CPU_DRAM_GB`，并将 `LMCACHE_MAX_LOCAL_CPU_SIZE` 设为
 `TOTAL_CPU_DRAM_GB / TP`（每 rank 257 GB）。`PYTHONHASHSEED=0` 必须设置：否则各

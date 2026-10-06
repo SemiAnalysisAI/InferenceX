@@ -1,7 +1,7 @@
 # MiniMax-M3 MXFP4 AgentX on MI355X with ATOM EAGLE3 (GQA draft, three tokens)
 # at TP2 and TP4, with GPU-resident KV or an in-process LMCache DRAM tier.
 # The DRAM variants add ATOM's lmcache_offload connector through
-# extra-kv-connectors (runners/srt-slurm/patches/507-lmcache-server-atom-sglang.patch).
+# srtctl's extra-kv-connectors (NVIDIA/srt-slurm#507, in srt-slurm since v2.36.0).
 base:
   schema: 2
   name: minimaxm3-fp4-mi355x-atom-agentic

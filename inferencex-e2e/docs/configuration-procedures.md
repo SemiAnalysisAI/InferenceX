@@ -305,7 +305,7 @@ The `*_lmcache` variants in
 list `{kv_connector: lmcache_offload, kv_role: offload}` under
 `extra-kv-connectors`, which srtctl renders as
 `--kv-transfer-config '{"kv_connector":"lmcache_offload","kv_role":"offload"}'`
-(`runners/srt-slurm/patches/507-lmcache-server-atom-sglang.patch`). The
+([NVIDIA/srt-slurm#507](https://github.com/NVIDIA/srt-slurm/pull/507), in srt-slurm since v2.36.0). The
 `LMCACHE_*` environment variables configure the tier. Each variant declares
 `KV_OFFLOADING: dram` and the matrix `TOTAL_CPU_DRAM_GB`, and sizes
 `LMCACHE_MAX_LOCAL_CPU_SIZE` at `TOTAL_CPU_DRAM_GB / TP` (257 GB per rank).
