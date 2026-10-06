@@ -480,7 +480,7 @@ override_colocated_tep4_dep4_round_robin_batch4_quality_c16:
       CONC: "16"
 
 # Genuine decode-only native TopK V2 gate; prefill keeps its stock top-k path.
-override_colocated_tep4_dep4_topkv2_quality_c16:
+override_colocated_tep4_dep4_topkv2_quality_c16: &tep4_dep4_topkv2_quality
   <<: *tep4_dep4_rr_batch4
   slurm:
     time_limit: "01:00:00"
@@ -496,6 +496,15 @@ override_colocated_tep4_dep4_topkv2_quality_c16:
   benchmark:
     env:
       CONC: "16"
+
+# Matched C8 fast proxy after genuine decode-only TopK V2 qualification.
+override_colocated_tep4_dep4_topkv2_c8:
+  <<: *tep4_dep4_topkv2_quality
+  slurm:
+    time_limit: "12:00:00"
+  benchmark:
+    env:
+      CONC: "8"
 
 # Two independent TEP4 prefill workers share one native 513 GB host pool.
 # Decode occupies four GPUs on the second node: 12 active / 16 allocated.

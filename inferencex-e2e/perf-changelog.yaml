@@ -9443,3 +9443,11 @@
   description:
     - "Gate native decode-only TopK V2 with a container-local JIT cache on the qualified colocated TEP4/DEP4 batch-four server. Preserve prefill, full context, memory budgets, MoRI dispatch, P-only UMBP and cache-aware-prefill/round-robin-decode routing; require genuine GSM32 before any performance decision."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3734
+
+- config-keys:
+    - glm53-mi325x-oct5-colocated-tep4-dep4-topkv2-c8
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Measure the genuine-qualified decode-only TopK V2 server at concurrency eight, retaining its full-context pools, native MoRI transport, P-only UMBP and unchanged worker and router settings."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3734
