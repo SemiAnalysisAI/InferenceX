@@ -11,6 +11,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from infx.bench import env
+from infx.results.topology import eval_topology
 
 BATCH_KEYS = ("eval_concs", "completed_eval_concs", "failed_eval_concs")
 """The manifest of a batched eval, next to ``conc`` (its first concurrency)."""
@@ -79,7 +80,7 @@ def build(
     if parsed is not None:
         precision = precision or parsed.group(1)
         framework = framework or parsed.group(2)
-    return {
+    document = {
         "is_multinode": multinode,
         "framework": framework or "unknown",
         "precision": precision or "unknown",
@@ -114,6 +115,10 @@ def build(
         "isl": values.get("ISL") or "0",
         "osl": values.get("OSL") or "0",
     }
+    if env.optional("DISAGG", values) is not None:
+        document["disagg"] = env.flag("DISAGG", values)
+        document.update(eval_topology(document))
+    return document
 
 
 def write(path: Path, document: Mapping[str, object]) -> None:

@@ -210,6 +210,7 @@ def single_node_model_path(cluster: Cluster, request: LaunchRequest) -> str:
 
 
 SHARED_HF_CACHE_LANES: dict[str, tuple[Match, ...]] = {
+    "mi300x-amd": (Match(model_glob="zai-org/GLM-5.3"),),
     "mi355x-amds": (
         Match(agentic=True, model_glob="MiniMaxAI/MiniMax-M3*"),
         Match(agentic=True, model_glob="amd/MiniMax-M3*"),

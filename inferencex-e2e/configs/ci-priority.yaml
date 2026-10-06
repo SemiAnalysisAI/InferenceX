@@ -23,6 +23,7 @@ adjustments:
     eagle3: 0.1
   framework-prefix:
     sglang: 1.5
+    mori-sglang: 1.5
     vllm: 1.5
     dynamo-sglang: 1.5
     dynamo-vllm: 1.5

@@ -93,12 +93,28 @@ SRT_LANES: dict[tuple[str, LaunchPath], SrtLane] = {
             any_of("dsv4"), frameworks=any_of("dynamo-sglang", "dynamo-trt"), agentic=True
         ),
     ),
+    ("mi300x-amd", LaunchPath.SRT_MULTI): SrtLane(
+        frameworks=any_of("sglang-disagg", "mori-sglang"),
+        mounts=(
+            LaneMount(Match(model_glob="zai-org/GLM-5.3"), "shared-hf-hub-cache", "/hf-cache/hub"),
+        ),
+        time_limit="12:00:00",
+    ),
     ("h100-dgxc", LaunchPath.SRT_MULTI): SrtLane(frameworks=any_of("dynamo-sglang", "dynamo-trt")),
     ("h200-dgxc", LaunchPath.SRT_MULTI): SrtLane(
         frameworks=any_of("dynamo-sglang", "dynamo-trt", "vllm"),
         time_limit="4:00:00",
         long_time_limit="8:00:00",
         long_time=Match(any_of("dsv4"), frameworks=any_of("dynamo-sglang"), agentic=True),
+    ),
+    ("mi325x-amd", LaunchPath.SRT_MULTI): SrtLane(
+        frameworks=any_of("sglang", "sglang-disagg", "mori-sglang"),
+        mounts=(
+            LaneMount(_AGENTIC, "aiperf-cache", "/aiperf_mmap_cache", world_writable=True),
+            LaneMount(_AGENTIC, "hf-home", "/hf_hub_cache", world_writable=True),
+            LaneMount(_AGENTIC, "hf-hub-cache", "/hf_hub_cache/hub", world_writable=True),
+        ),
+        time_limit="12:00:00",
     ),
     ("mi355x-amds", LaunchPath.SRT_MULTI): SrtLane(
         mounts=(

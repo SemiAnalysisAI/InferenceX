@@ -245,7 +245,7 @@ jobs:
                       --effort low
                       --max-turns 8
                       --allowedTools "Read,Glob,Grep,Bash(git diff:*)"
-                      --json-schema '{"type":"object","properties":{"criteria":{"type":"array","items":{"type":"string","enum":["multi-node","agentic","eval-only","fp4","mtp","eagle","eagle3","sglang","vllm","dynamo-sglang","dynamo-vllm","kimik3","dsv4","minimaxm3","qwen3.5","dsr1","checklist-complete","patchwork"]},"uniqueItems":true},"reason":{"type":"string"}},"required":["criteria","reason"]}'
+                      --json-schema '{"type":"object","properties":{"criteria":{"type":"array","items":{"type":"string","enum":["multi-node","agentic","eval-only","fp4","mtp","eagle","eagle3","sglang","mori-sglang","vllm","dynamo-sglang","dynamo-vllm","kimik3","dsv4","minimaxm3","qwen3.5","dsr1","checklist-complete","patchwork"]},"uniqueItems":true},"reason":{"type":"string"}},"required":["criteria","reason"]}'
                   prompt: |
                       Inspect this pull request's diff against its base branch.
 
@@ -256,7 +256,7 @@ jobs:
                       - eval-only: evaluation without throughput measurement
                       - fp4: FP4 precision
                       - mtp, eagle, eagle3: speculative decoding method
-                      - sglang, vllm, dynamo-vllm: runtime framework
+                      - sglang, mori-sglang, vllm, dynamo-sglang, dynamo-vllm: runtime framework family; use mori-sglang for canonical MoRI entries
                       - model criterion: matching configured model family
                       - checklist-complete: PR checklist is satisfied
                       - patchwork: modified upstream engine or runtime source

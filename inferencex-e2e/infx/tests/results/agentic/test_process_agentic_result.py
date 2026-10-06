@@ -954,7 +954,8 @@ def test_processor_reads_gpu_kv_cache_capacity_from_server_log(tmp_path: Path):
     _assert_stable_server_metrics_schema(agg)
 
 
-def test_processor_emits_sglang_kv_pool_from_server_log(tmp_path: Path):
+@pytest.mark.parametrize("framework", ["sglang", "sglang-disagg", "mori-sglang"])
+def test_processor_emits_sglang_kv_pool_from_server_log(tmp_path: Path, framework: str):
     result_dir = _write_fixture(tmp_path)
     (result_dir / "server.log").write_text(
         "\n".join(
@@ -969,7 +970,7 @@ def test_processor_emits_sglang_kv_pool_from_server_log(tmp_path: Path):
     agg = _run_processor(
         result_dir,
         tmp_path / "out",
-        env_overrides={"FRAMEWORK": "sglang"},
+        env_overrides={"FRAMEWORK": framework},
     )
 
     assert agg["server_metrics"]["kv_cache"]["gpu_total_tokens"] == 18_411_520

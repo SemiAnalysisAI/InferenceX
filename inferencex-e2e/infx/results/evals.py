@@ -10,6 +10,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from .topology import as_bool as as_bool, as_int as as_int, eval_topology as eval_topology
+
 EVAL_RESULT_FORMAT = "inferencex-eval-v1"
 _CONC_SUFFIX_RE = re.compile(r"_conc(\d+)(?:_\d+)?\.json$")
 _TIMESTAMP_RE = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}(?:\.\d+)?")
@@ -217,23 +219,6 @@ def extract_metrics(data: dict[str, Any], *, source: str) -> list[dict[str, Any]
     return extracted
 
 
-def as_int(x: Any, default: int = 0) -> int:
-    """Convert a metadata field to int with a fallback."""
-    try:
-        return int(x)
-    except Exception:  # noqa: BLE001
-        return default
-
-
-def as_bool(x: Any, default: bool = False) -> bool:
-    """Parse a metadata boolean stored as bool/string/int."""
-    if isinstance(x, bool):
-        return x
-    if x is None:
-        return default
-    return str(x).lower() == "true"
-
-
 def build_row(meta: dict[str, Any], m: dict[str, Any]) -> dict[str, Any]:
     """Build a result row from metadata and extracted metrics."""
     is_multinode = as_bool(meta.get("is_multinode"), False)
@@ -293,6 +278,7 @@ def build_row(meta: dict[str, Any], m: dict[str, Any]) -> dict[str, Any]:
 
     if "eval_suite" in meta:
         row["eval_suite"] = meta["eval_suite"]
+    row.update(eval_topology(meta))
 
     primary = _primary_metric(m)
     row["score"] = m[primary] if primary is not None else None
