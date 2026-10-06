@@ -545,3 +545,22 @@ override_2p_tp8_dep16_batch2_rr_c32:
       workers: 2
       env:
         UMBP_STANDALONE_ADDRESS: unix:///logs/umbp-{node}.sock
+
+# Matched C32 control: one prefill worker, unchanged per-worker engines and routing.
+override_tp8_dep16_batch2_rr_c32:
+  <<: *tp8_dep16_batch2_rr
+  slurm:
+    time_limit: "12:00:00"
+  services:
+    - <<: *umbp_service
+      command:
+        - /sgl-workspace/mori/python/mori/umbp_standalone_server
+        - unix:///logs/umbp-{node}.sock
+  roles:
+    <<: *tp8_dep16_batch2_roles
+    prefill:
+      <<: *tp8_dep16_prefill
+      nodes: 1
+      workers: 1
+      env:
+        UMBP_STANDALONE_ADDRESS: unix:///logs/umbp-{node}.sock

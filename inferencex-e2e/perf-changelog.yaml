@@ -9426,3 +9426,11 @@
   description:
     - "Compare 1026 GB against 513 GB of native P-only UMBP capacity at concurrency sixteen, preserving the qualified TP8 prefill and DEP16 decode serving configuration."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3734
+
+- config-keys:
+    - glm53-mi325x-oct5-tp8-dep16-batch2-rr-agentic
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Measure a matched single-prefill concurrency-thirty-two AgentX proxy against two TP8 prefill workers, preserving the genuine-qualified DEP16 batch-two round-robin decoder and native per-worker serving settings."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3734
