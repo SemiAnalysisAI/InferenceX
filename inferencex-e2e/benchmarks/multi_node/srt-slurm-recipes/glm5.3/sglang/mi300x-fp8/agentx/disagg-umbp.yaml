@@ -540,6 +540,23 @@ override_tp16_tp8_c4:
     env:
       CONC: "4"
 
+override_tp16_tp8_c8:
+  roles:
+    prefill:
+      nodes: 2
+      workers: 1
+      gpus: 16
+      args:
+        tensor-parallel-size: 16
+        max-running-requests: 16
+    decode:
+      args:
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 16
+  benchmark:
+    env:
+      CONC: "8"
+
 override_2p1d_tp8_c16:
   roles:
     prefill:
