@@ -208,6 +208,26 @@ override_tp8_decode_topkv2_gsm16shot_c4:
   environment:
     EVAL_TASKS_DIR: /infmax-workspace/infx/evals/diagnostics/gsm8k_16shot.yaml
 
+override_tp8_prefill_topkv2_gsm16shot_c4:
+  slurm:
+    time_limit: "01:00:00"
+  environment:
+    EVAL_TASKS_DIR: /infmax-workspace/infx/evals/diagnostics/gsm8k_16shot.yaml
+  roles:
+    prefill:
+      env:
+        SGLANG_OPT_USE_TOPK_V2: "true"
+        SGLANG_JIT_CACHE_DIR: /tmp/sglang-jit-prefill-topkv2
+      args:
+        max-running-requests: 16
+    decode:
+      args:
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 16
+  benchmark:
+    env:
+      CONC: "4"
+
 override_tp8_decode_aiter_c8:
   roles:
     prefill:
