@@ -1034,14 +1034,26 @@ def _patch_launcher_module(module, private=False):
         return (isinstance(obj, types.FunctionType) and obj.__module__ == module.__name__
                 and not skipped and not getattr(obj, "_infx_launcher", False))
 
-    package_dir = os.path.dirname(getattr(module, "__file__", None) or "") if private else ""
+    package = next((p for p in _LAUNCHER_PACKAGES if module.__name__ == p or module.__name__.startswith(p + ".")),
+                   None) if private else None
+    root = os.path.dirname(getattr(sys.modules.get(package), "__file__", None) or "") if package else ""
 
     def extension_function(name, obj):
-        """A builtin from a compiled extension inside this package (fmha_sm100's build_k2q_csr)."""
-        owner = getattr(obj, "__self__", None)
-        path = getattr(owner, "__file__", None) or ""
-        return (package_dir and isinstance(obj, types.BuiltinFunctionType) and not name.startswith("__")
-                and os.path.dirname(path).startswith(package_dir))
+        """Code of the package defined outside its module namespace.
+
+        fmha_sm100 puts its sources on sys.path, so build_k2q_csr comes from a
+        top-level sparse_index_utils module re-exported into
+        vllm.third_party.fmha_sm100.sparse; DeepGEMM's kernels are pybind
+        builtins of vllm.third_party.deep_gemm._C.
+        """
+        if not root or name.startswith("__"):
+            return False
+        if isinstance(obj, types.FunctionType):
+            return obj.__module__ != module.__name__ and obj.__code__.co_filename.startswith(root + os.sep)
+        owner_file = getattr(getattr(obj, "__self__", None), "__file__", None) or ""
+        return isinstance(obj, types.BuiltinFunctionType) and (
+            (getattr(obj, "__module__", None) or "").startswith(package + ".")
+            or owner_file.startswith(root + os.sep))
 
     for name, obj in list(vars(module).items()):
         if launchable(name, obj) or extension_function(name, obj):
