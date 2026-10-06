@@ -224,7 +224,8 @@ override_smg_tep4_c8:
       env: *env
       args: *tep4
 
-# One DEP16 worker across two nodes.
+# One DEP16 worker across two nodes. At 0.9 its attention-DP ranks ran out of memory under
+# load (sparse_topk_select init, cublasCreate), so it leaves more headroom.
 override_dynamo_dep16_c8:
   name: minimaxm3-b200-tokenspeed-dynamo-agg-dep16-c8
   dynamo: *dynamo_install
@@ -244,7 +245,7 @@ override_dynamo_dep16_c8:
         max-num-seqs: 16
         max-prefill-tokens: 8192
         chunked-prefill-size: 8192
-        gpu-memory-utilization: 0.9
+        gpu-memory-utilization: 0.8
         disable-cuda-graph-padding: true
         attention-backend: trtllm
         kv-cache-dtype: fp8
