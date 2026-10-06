@@ -79,7 +79,7 @@ CODEOWNER 自动验证目前仅供审阅参考。工作流会核验新提交及�
 - 签署可以以普通会话评论、review 总结或行内 review 评论的形式发布。这三种方式都会触发验证。
 - 请在 PR 处于打开且非草稿状态时提交新清单。编辑该清单会再次触发验证；推送、重新打开或退出草稿状态不会触发验证。如果合并冲突期间遗漏了 Review 事件，请在解决冲突后手动分发工作流来重试。
 - 启动 Claude 要求触发者为具有合格仓库写权限的人类用户。
-- 请在 "Additional detail section" 中填写清单要求的链接（验证/评测工作流运行、对应的 [vLLM recipe](https://github.com/vllm-project/recipes) / [SGLang cookbook](https://github.com/sgl-project/sgl-docs/tree/main/cookbook) PR，以及任何例外理由）。新的 SGLang cookbook PR 应提交到活跃的 `sgl-project/sgl-docs` 仓库；`sgl-project/sgl-cookbook` 已归档。
+- 请在 "Additional detail section" 中填写清单要求的链接（验证/评测工作流运行、对应的 [vLLM recipe](https://github.com/vllm-project/recipes) / [SGLang cookbook](https://github.com/sgl-project/sglang/tree/main/docs/cookbook) PR，以及任何例外理由）。新的 SGLang cookbook PR 应提交到 `sgl-project/sglang` 的 `docs/cookbook/` 下，该目录是已发布网站的来源。`sgl-project/sgl-docs` 中的 cookbook 副本并非当前部署来源；`sgl-project/sgl-cookbook` 已归档。
 
 签署发布后，CI 会独立复核审阅清单中的各项声明，包括 CODEOWNER 身份、PR 内 commit 上的全绿 sweep 与 evals、所链接的 recipe、复用命令、是否使用最新清单模板、上游 [vLLM](https://hub.docker.com/u/vllm)/[SGLang](https://hub.docker.com/u/lmsysorg) 镜像、没有更改模型架构的基准测试 hack、投机解码是否使用 chat template，以及 draft 模型和 draft head 的权重与精度是否保持不变。CI 会为该签署资源创建一条裁定评论，并注明实际评估的 SHA。编辑同一清单时只更新与其关联的裁定。替代清单或新增清单会获得独立裁定；与旧签署关联的裁定保持不变。未通过的条目直接显示；已通过和不适用（N/A）的条目统一放入折叠区域。勾选项不会被无条件信任，请只勾选你确实核实过的条目。
 
