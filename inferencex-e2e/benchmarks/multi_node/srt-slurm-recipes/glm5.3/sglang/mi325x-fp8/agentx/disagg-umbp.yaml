@@ -469,7 +469,7 @@ override_tp8_dep16_quality: &tp8_dep16_quality
       prefill-policy: cache_aware
       decode-policy: cache_aware
   roles: &tp8_dep16_roles
-    prefill:
+    prefill: &tp8_dep16_prefill
       args:
         max-running-requests: 8
     decode: &tp8_dep16_decode
@@ -508,14 +508,14 @@ override_tp8_dep16_dram1026_c16:
         <<: *umbp_service_env
         UMBP_DRAM_CAPACITY: "1026000000000"
 
-override_tp8_dep16_batch2_rr_quality:
+override_tp8_dep16_batch2_rr_quality: &tp8_dep16_batch2_rr
   <<: *tp8_dep16_quality
   frontend:
     args:
       dp-aware: true
       prefill-policy: cache_aware
       decode-policy: round_robin
-  roles:
+  roles: &tp8_dep16_batch2_roles
     <<: *tp8_dep16_roles
     decode:
       <<: *tp8_dep16_decode
@@ -526,3 +526,15 @@ override_tp8_dep16_batch2_rr_quality:
   benchmark:
     env:
       CONC: "32"
+
+# Held until the genuine graph-two gate and current proxy comparisons complete.
+override_2p_tp8_dep16_batch2_rr_c32:
+  <<: *tp8_dep16_batch2_rr
+  slurm:
+    time_limit: "12:00:00"
+  roles:
+    <<: *tp8_dep16_batch2_roles
+    prefill:
+      <<: *tp8_dep16_prefill
+      nodes: 2
+      workers: 2
