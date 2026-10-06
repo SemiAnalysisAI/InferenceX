@@ -5276,7 +5276,7 @@
       "status": "in_progress",
       "workflow_name": "offload-v1-nvme4tib-c489-r5-enroot3-capacity-extended-fullsha-20261005",
       "dispatched_at": "2026-10-05T22:17:53Z",
-      "phase": "canonical warmup: zero-idle cache-pressure replay",
+      "phase": "canonical warmup: request budget reached; draining in-flight requests",
       "performance_result": false,
       "execution_budget": {
         "slurm_minutes": 510,
@@ -5300,22 +5300,23 @@
       "dram_bytes": 0,
       "nvme_bytes": 4398046511104,
       "connector": "SimpleCPUOffloadConnector with disk backend, lazy offload and page cache disabled",
-      "runtime_evidence": "Live offload_config.json on im-b200-c001 matches run 37381547856, Slurm 19547, 0 DRAM, 4,398,046,511,104 NVMe bytes, SimpleCPUOffloadConnector disk backend, O_DIRECT true, and 17,646,771,367,936 free bytes before exact scratch creation. Host /scratch owner.json matches the current run/job. AIPerf canonical warmup started at 23:15:02Z with 5,412 target requests and 522 trajectory primers. Primer wave completed; zero-idle cache-pressure replay began at 23:58:12Z. Latest live sample returned 809, sent 1,498, in flight 689, errors 0 after 3,450.6 seconds; serving remains active.",
+      "runtime_evidence": "Live offload_config.json on im-b200-c001 matches run 37381547856, Slurm 19547, 0 DRAM, 4,398,046,511,104 NVMe bytes, SimpleCPUOffloadConnector disk backend, O_DIRECT true, and 17,646,771,367,936 free bytes before exact scratch creation. Host /scratch owner.json matches the current run/job. AIPerf canonical warmup started at 23:15:02Z with 5,412 target requests and 522 trajectory primers. Primer wave completed; zero-idle cache-pressure replay began at 23:58:12Z. All 5,412 requests had been sent by 05:36:36Z. Latest live sample returned 5,140, with 272 in flight and zero errors after 23,254.3 seconds; warmup is draining.",
       "warmup_started_at": "2026-10-05T23:15:02Z",
       "warmup_target_requests": 5412,
       "warmup_latest": {
-        "sample_at": "2026-10-06T00:12:32Z",
-        "returned": 809,
-        "sent": 1498,
-        "in_flight": 689,
+        "sample_at": "2026-10-06T05:42:36Z",
+        "returned": 5140,
+        "sent": 5412,
+        "in_flight": 272,
         "errors": 0,
-        "elapsed_seconds": 3450.6
+        "elapsed_seconds": 23254.3
       },
-      "warmup_replay_started_at": "2026-10-05T23:58:12Z"
+      "warmup_replay_started_at": "2026-10-05T23:58:12Z",
+      "warmup_request_budget_reached_by": "2026-10-06T05:36:36Z"
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894,36796500128,36879140816,37027095833",
-  "status": "Extended-budget NVMe c489 run 37381547856 is in zero-idle cache-pressure replay on im-b200-c001. Latest progress: 809/5,412 returned, 1,498 sent, 689 in flight, zero errors at 3,450.6 seconds.",
+  "status": "Extended-budget NVMe c489 run 37381547856 has sent all 5,412 warmup requests and is draining: 5,140 returned, 272 in flight, zero errors at 23,254.3 seconds.",
   "last_capacity_check": {
     "checked_at": "2026-10-05T22:17:36Z",
     "active_study_run_ids": [
