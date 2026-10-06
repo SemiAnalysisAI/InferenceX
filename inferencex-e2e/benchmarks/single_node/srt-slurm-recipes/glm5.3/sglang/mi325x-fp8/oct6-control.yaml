@@ -1,0 +1,68 @@
+# Image-only repeat of the accepted TP8 MTP C4 aggregate control.
+base:
+  schema: 2
+  name: glm5.3-fp8-mi325x-sglang-oct6-control
+  model:
+    path: hf:zai-org/GLM-5.3
+    container: lmsysorg/sglang-rocm:v0.5.21-rocm720-mi30x-20261006@sha256:f7430d43c728da94f001ca51d5d2e0d754c85a3a8d54a3b68bf7aa2e12e6ff6a
+    precision: fp8
+  resources:
+    gpu_type: mi325x
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  health_check:
+    interval_seconds: 10
+    max_attempts: 540
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        served-model-name: zai-org/GLM-5.3
+        revision: aca966e4e02791568aa6a4ced368624b3d897f42
+        trust-remote-code: true
+        tensor-parallel-size: 8
+        expert-parallel-size: 1
+        dsa-prefill-backend: tilelang
+        dsa-decode-backend: tilelang
+        dsa-topk-backend: sgl-kernel
+        kv-cache-dtype: fp8_e4m3
+        reasoning-parser: glm45
+        context-length: 1048576
+        chunked-prefill-size: 16384
+        mem-fraction-static: 0.85
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 3
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 4
+        watchdog-timeout: 1800
+        enable-metrics: true
+        enable-cache-report: true
+        max-running-requests: 4
+        cuda-graph-max-bs-decode: 4
+      env:
+        PYTHONNOUSERSITE: '1'
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
+    env:
+      MODEL: zai-org/GLM-5.3
+      WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+      AIPERF_BENCHMARK_GRACE_PERIOD: '1800'
+
+override_tp8_c4:
+  benchmark:
+    env:
+      CONC: '4'
+      KV_OFFLOADING: none

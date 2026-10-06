@@ -1,0 +1,18 @@
+glm53-mi325x-oct6-tp8-mtp-control:
+  image: lmsysorg/sglang-rocm:v0.5.21-rocm720-mi30x-20261006@sha256:f7430d43c728da94f001ca51d5d2e0d754c85a3a8d54a3b68bf7aa2e12e6ff6a
+  model: zai-org/GLM-5.3
+  model-prefix: glm5.3
+  runner: cluster:mi325x-amd
+  precision: fp8
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - tp: 8
+        ep: 1
+        dp-attn: false
+        spec-decoding: mtp
+        conc-list: [4]
+        kv-offloading: none
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/glm5.3/sglang/mi325x-fp8/oct6-control.yaml:override_tp8_c4
