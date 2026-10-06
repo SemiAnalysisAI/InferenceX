@@ -568,10 +568,14 @@ override_tp8_dep16_batch2_rr_c32: &tp8_dep16_single_rr
 # Genuine graph-four gate; preserve the complete single-prefill C32 server otherwise.
 override_tp8_dep16_batch4_rr_quality_c64:
   <<: *tp8_dep16_single_rr
+  slurm:
+    time_limit: "01:00:00"
   roles:
     <<: *tp8_dep16_single_rr_roles
     decode:
       <<: *tp8_dep16_decode
+      env:
+        SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "4"
       args:
         <<: *tp8_dep16_decode_args
         max-running-requests: 64
