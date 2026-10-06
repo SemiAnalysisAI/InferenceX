@@ -5581,7 +5581,7 @@
       "status": "in_progress",
       "workflow_name": "offload-v1-none-c489-r3-extended-power-20261006",
       "dispatched_at": "2026-10-06T15:49:16Z",
-      "phase": "admitted to B200 runner; Slurm allocation pending verification",
+      "phase": "canonical warmup: primer in progress",
       "performance_result": false,
       "execution_budget": {
         "slurm_minutes": 510,
@@ -5593,11 +5593,30 @@
       "job_id": 112362809866,
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37490705589/job/112362809866",
       "runner": "b200-nscale-slurm_00",
-      "started_at": "2026-10-06T15:50:39Z"
+      "started_at": "2026-10-06T15:50:39Z",
+      "slurm_job_id": 19647,
+      "slurm_state": "RUNNING",
+      "slurm_time_limit": "08:30:00",
+      "node": "im-b200-c001",
+      "scratch": "/offload-scratch/inferencex-offload-37490705589-1-19647-4751162a19ee",
+      "dram_bytes": 0,
+      "nvme_bytes": 0,
+      "connector": null,
+      "warmup_started_at": "2026-10-06T16:00:40Z",
+      "warmup_target_requests": 5412,
+      "warmup_latest": {
+        "sample_at": "2026-10-06T16:13:10Z",
+        "returned": 175,
+        "sent": 522,
+        "in_flight": 347,
+        "errors": 0,
+        "elapsed_seconds": 750.1
+      },
+      "runtime_evidence": "Slurm job 19647 allocated at 15:51:58Z on im-b200-c001 with 08:30:00 limit. Runtime offload_config.json verifies zero DRAM, zero NVMe and no connector; exact host /scratch owner.json matches this study/run/attempt/job. Canonical warmup began at approximately 16:00:40Z; latest sample at 16:13:10Z returned 175/5,412, sent 522, kept 347 in flight, with zero errors."
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894,36796500128,36879140816,37027095833",
-  "status": "Matched HBM c489 energy repeat 37490705589 admitted to B200 runner; Slurm allocation pending verification. Existing c489 throughput/latency comparison favors NVMe, but matched energy remains unavailable.",
+  "status": "HBM-only c489 energy repeat 37490705589 is allocated on im-b200-c001 and running canonical warmup; matched c489 energy remains unavailable until strict power validation.",
   "last_capacity_check": {
     "checked_at": "2026-10-06T15:48:45Z",
     "active_study_run_ids": [
