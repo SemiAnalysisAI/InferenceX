@@ -468,17 +468,17 @@ override_tp8_dep16_quality: &tp8_dep16_quality
       dp-aware: true
       prefill-policy: cache_aware
       decode-policy: cache_aware
-  roles:
+  roles: &tp8_dep16_roles
     prefill:
       args:
         max-running-requests: 8
-    decode:
+    decode: &tp8_dep16_decode
       nodes: 2
       workers: 1
       gpus: 16
       env:
         SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "16"
-      args:
+      args: &tp8_dep16_decode_args
         tensor-parallel-size: 16
         expert-parallel-size: 16
         attn-dp-size: 16
@@ -507,3 +507,22 @@ override_tp8_dep16_dram1026_c16:
       env:
         <<: *umbp_service_env
         UMBP_DRAM_CAPACITY: "1026000000000"
+
+override_tp8_dep16_batch2_rr_quality:
+  <<: *tp8_dep16_quality
+  frontend:
+    args:
+      dp-aware: true
+      prefill-policy: cache_aware
+      decode-policy: round_robin
+  roles:
+    <<: *tp8_dep16_roles
+    decode:
+      <<: *tp8_dep16_decode
+      args:
+        <<: *tp8_dep16_decode_args
+        max-running-requests: 32
+        cuda-graph-max-bs-decode: 32
+  benchmark:
+    env:
+      CONC: "32"
