@@ -80,6 +80,15 @@ override_tp8_c3:
       <<: *resident_benchmark_env
       CONC: '3'
 
+override_tp8_c1:
+  roles:
+    agg:
+      args: *mtp_args
+  benchmark:
+    env:
+      <<: *resident_benchmark_env
+      CONC: '1'
+
 override_tp8_c4:
   roles:
     agg:

@@ -1575,10 +1575,10 @@ glm5.3-fp8-mi300x-mori-sglang-agentic:
   scenarios:
     agentic-coding:
     - search-space:
-      - { tp: 8, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [2, 3, 4], srt-recipe: benchmarks/single_node/srt-slurm-recipes/glm5.3/sglang/mi300x-fp8/agentic.yaml }
+      - { tp: 8, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 3, 4], srt-recipe: benchmarks/single_node/srt-slurm-recipes/glm5.3/sglang/mi300x-fp8/agentic.yaml }
     - dram-utilization: 0.32
       search-space:
-      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: umbp-linker }, spec-decoding: none, conc-list: [8], srt-recipe: benchmarks/single_node/srt-slurm-recipes/glm5.3/sglang/mi300x-fp8/agentic.yaml }
+      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: umbp-linker }, spec-decoding: none, conc-list: [8, 16], srt-recipe: benchmarks/single_node/srt-slurm-recipes/glm5.3/sglang/mi300x-fp8/agentic.yaml }
 
 glm5.3-fp8-mi300x-mori-sglang-disagg-agentic:
   image: lmsysorg/sglang-rocm:v0.5.21-rocm720-mi30x-20261005@sha256:a4d60e7ef7645aefb1c52a77dcb32970440454bc359a1baff03711fcd0501613
@@ -1624,7 +1624,7 @@ glm5.3-fp8-mi325x-mori-sglang-agentic:
   scenarios:
     agentic-coding:
     - search-space:
-      - { tp: 8, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [2, 3, 4], srt-recipe: benchmarks/single_node/srt-slurm-recipes/glm5.3/sglang/mi325x-fp8/agentic.yaml }
+      - { tp: 8, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 3, 4], srt-recipe: benchmarks/single_node/srt-slurm-recipes/glm5.3/sglang/mi325x-fp8/agentic.yaml }
       - { tp: 4, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [3], srt-recipe: "benchmarks/single_node/srt-slurm-recipes/glm5.3/sglang/mi325x-fp8/agentic.yaml:override_tp4_c3" }
       - { tp: 4, ep: 4, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [3], router: { name: sglang-router, version: "0.3.2" }, srt-recipe: "benchmarks/single_node/srt-slurm-recipes/glm5.3/sglang/mi325x-fp8/agentic.yaml:override_tep4_mtp_c3" }
       - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none, spec-decoding: none, conc-list: [8], router: { name: sglang-router, version: "0.3.2" }, srt-recipe: "benchmarks/single_node/srt-slurm-recipes/glm5.3/sglang/mi325x-fp8/agentic.yaml:override_dep4_stp_c8" }

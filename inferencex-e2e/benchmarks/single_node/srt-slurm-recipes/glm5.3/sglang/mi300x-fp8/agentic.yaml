@@ -61,19 +61,19 @@ zip_override_tp8_mtp_concurrency:
   roles:
     agg:
       args:
-        max-running-requests: [4, 6, 8]
-        cuda-graph-max-bs-decode: [4, 8, 8]
+        max-running-requests: [4, 4, 6, 8]
+        cuda-graph-max-bs-decode: [4, 4, 8, 8]
         speculative-algorithm: EAGLE
         speculative-num-steps: 3
         speculative-eagle-topk: 1
         speculative-num-draft-tokens: 4
   benchmark:
     env:
-      CONC: ["2", "3", "4"]
+      CONC: ["1", "2", "3", "4"]
       KV_OFFLOADING: none
 
 override_tp8_umbp_c8:
-  services:
+  services: &umbp_services
     - name: umbp
       type: generic
       placement:
@@ -96,7 +96,7 @@ override_tp8_umbp_c8:
           pattern: host memory registered for GPU access
         timeout_seconds: 5400
         interval_seconds: 1
-  roles:
+  roles: &umbp_roles
     agg:
       args:
         max-running-requests: 16
@@ -109,5 +109,14 @@ override_tp8_umbp_c8:
   benchmark:
     env:
       CONC: "8"
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: "519"
+
+override_tp8_umbp_c16:
+  services: *umbp_services
+  roles: *umbp_roles
+  benchmark:
+    env:
+      CONC: "16"
       KV_OFFLOADING: dram
       TOTAL_CPU_DRAM_GB: "519"
