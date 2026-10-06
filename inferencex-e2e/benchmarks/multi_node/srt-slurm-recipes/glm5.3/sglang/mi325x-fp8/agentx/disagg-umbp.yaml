@@ -680,7 +680,8 @@ override_two_tep4_dep16_host1026_pageable_quality_c16:
   container_mounts:
     /home/ext-cjquilici/glm53-disagg-search-20261005/umbp_pageable_local_gpu_ranges-ad54af032a89820b.py: /diagnostics/umbp_pageable_local_gpu_ranges.py
   services:
-    - <<: *umbp_service
+    - &pageable_umbp_service
+      <<: *umbp_service
       command:
         - /sgl-workspace/mori/python/mori/umbp_standalone_server
         - unix:///logs/umbp-{node}.sock
@@ -726,3 +727,9 @@ override_two_tep4_dep16_host1026_pageable_quality_c16:
     env:
       CONC: "16"
       AGENTIC_WARMUP_GRACE_PERIOD: "7200"
+
+# Fresh long-trace run without qualification helpers or prewarming.
+override_two_tep4_dep16_host1026_pageable_c32:
+  <<: *two_tep4_dep16_mem937
+  services:
+    - *pageable_umbp_service
