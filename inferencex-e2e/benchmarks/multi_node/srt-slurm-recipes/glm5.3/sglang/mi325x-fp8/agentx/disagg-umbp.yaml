@@ -636,14 +636,14 @@ override_two_tep4_dep16_host1026_prefill_chunk2048_quality_c16: &two_tep4_dep16_
   <<: *two_tep4_dep16_host1026
   slurm:
     time_limit: "01:00:00"
-  roles:
+  roles: &two_tep4_dep16_chunk2048_roles
     <<: *two_tep4_dep16_roles
-    prefill:
+    prefill: &two_tep4_dep16_chunk2048_prefill
       <<: *two_tep4_dep16_prefill
       env:
         SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "2048"
         UMBP_STANDALONE_ADDRESS: unix:///logs/umbp-{node}.sock
-      args:
+      args: &two_tep4_dep16_chunk2048_args
         <<: *tep4_pd_args
         chunked-prefill-size: 2048
   benchmark:
@@ -652,7 +652,7 @@ override_two_tep4_dep16_host1026_prefill_chunk2048_quality_c16: &two_tep4_dep16_
       AGENTIC_WARMUP_GRACE_PERIOD: "7200"
 
 # Matched C32 profile of the qualified larger prefill chunk.
-override_two_tep4_dep16_host1026_prefill_chunk2048_c32:
+override_two_tep4_dep16_host1026_prefill_chunk2048_c32: &two_tep4_dep16_chunk2048_c32
   <<: *two_tep4_dep16_chunk2048
   slurm:
     time_limit: "12:00:00"
@@ -660,3 +660,14 @@ override_two_tep4_dep16_host1026_prefill_chunk2048_c32:
     env:
       CONC: "32"
       AGENTIC_WARMUP_GRACE_PERIOD: "7200"
+
+# Reserve additional native prefill workspace while retaining the full context.
+override_two_tep4_dep16_host1026_prefill_chunk2048_mem937_c32:
+  <<: *two_tep4_dep16_chunk2048_c32
+  roles:
+    <<: *two_tep4_dep16_chunk2048_roles
+    prefill:
+      <<: *two_tep4_dep16_chunk2048_prefill
+      args:
+        <<: *two_tep4_dep16_chunk2048_args
+        mem-fraction-static: 0.937
