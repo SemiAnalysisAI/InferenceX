@@ -48,7 +48,7 @@
 | [`infx/launch/`](../infx/launch) | `python -m infx.launch run`：根据运行器名称解析集群、选择启动路径（驱动）、工作负载策略、信号安全的清理以及工件暂存 |
 | [`infx/clusters/`](../infx/clusters)、[`infx/launch/backends/`](../infx/launch/backends) | 类型化集群记录（每个调度器一个设置模型），以及运行容器、跟踪作业的调度器后端（目前为使用 Pyxis squash 镜像的 Slurm） |
 | [`runners/srt-slurm/`](../runners/srt-slurm) | srt-slurm 主机设置 hook 和临时上游补丁 |
-| [`benchmarks/benchmark_lib.sh`](../benchmarks/benchmark_lib.sh) | 共享的服务器就绪检查、基准测试客户端、评测、AgentX 重放和输出行为 |
+| [`infx/bench/`](../infx/bench) | 在容器内运行的 `python3 -m infx.bench` 命令（`wait`、`fixed-seq`、`agentic`、`eval`），负责服务器就绪检查、基准测试客户端、AgentX 重放和评估 |
 | [`benchmarks/`](../benchmarks) | 特定于框架和拓扑的服务器与客户端命令 |
 | [`infx/github.py`](../infx/github.py) | 工作流操作共用的 GitHub REST、分页和评论表态基础操作 |
 | [`infx/workflows/`](../infx/workflows) | 复用命令解析、授权查找、源 Run 验证及表态反馈；现有复用 CLI 保持兼容 |
@@ -85,7 +85,7 @@ flowchart LR
   E --> F[run-sweep.yml 扇出]
   F --> G[可复用基准测试工作流]
   G --> H[infx.launch 驱动]
-  H --> I[基准测试脚本和 benchmark_lib]
+  H --> I[配方或脚本与 infx.bench 命令]
   I --> J[基准测试、评测、日志、指标、追踪]
   J --> K[单作业 GitHub 工件]
   K --> L[运行级聚合工件]
@@ -232,7 +232,7 @@ flowchart LR
 - 将工作流环境传入运行时容器或分配环境；
 - 跟踪作业日志、核验分配的最终状态并暂存结果。
 
-[`benchmarks/`](../benchmarks) 下的基准测试脚本负责实际的引擎和客户端命令。大多数脚本会引入 [`benchmarks/benchmark_lib.sh`](../benchmarks/benchmark_lib.sh)，后者集中处理服务器就绪检查、服务基准测试客户端、GPU 监控、lm-eval、SWE-bench、AgentX 重放和稳定输出辅助函数。
+srt-slurm 配方和 [`benchmarks/`](../benchmarks) 下的脚本负责实际的引擎命令。各通道共用的客户端逻辑以 `python3 -m infx.bench <command>` 的形式在服务容器内运行，代码位于 [`infx/bench/`](../infx/bench)。其命令包括 `wait`（服务器就绪检查）、`fixed-seq`（服务基准测试客户端）、`agentic`（AgentX 重放）和 `eval`（lm-eval 与厂商评估运行器）。这些命令只依赖标准库并兼容 Python 3.10，从环境变量或命令行参数读取输入，并写出收集器读取的产物文件名。配方通过薄封装脚本调用它们，例如 [`benchmarks/srt_agentic.sh`](../benchmarks/srt_agentic.sh)，以及 `benchmarks/single_node/` 和 `benchmarks/multi_node/` 下的 `srt_fixed_sequence.sh` 与 `srt_eval.sh`。Bash 调用方使用 [`benchmarks/check_env.sh`](../benchmarks/check_env.sh) 中的 `check_env_vars` 校验必需输入。
 
 这一边界是有意设计的：主配置保持可移植且便于审查，启动机制保存在集群记录中（见[下文](#启动机制保存在集群记录中)），框架标志保持靠近基准测试方案，以便针对相应引擎进行测试。收到 `SIGINT`、`SIGTERM` 或 `SIGHUP` 时，启动器会先运行已注册的清理（例如取消分配），再以 128 加信号编号退出；第一个非零的工作负载退出码优先于清理失败。
 
@@ -246,7 +246,7 @@ flowchart LR
 
 ### 复用与扩展结果处理
 
-[`infx.results.fixed_sequence.build_result`](../infx/results/fixed_sequence.py) 接收已加载的基准测试映射和显式传入的环境变量映射，返回聚合结果字典，不读取进程环境，也不执行文件 I/O。库调用方无需提供 `RESULT_FILENAME`。现有 CLI 会验证环境变量、读取原始工件、调用构建函数、写入聚合结果，并按照原有的尽力处理或 `REQUIRE_POWER` 策略执行功耗聚合。
+[`infx.results.fixed_sequence.build_result`](../infx/results/fixed_sequence.py) 接收已加载的基准测试映射和显式传入的环境变量映射，返回聚合结果字典，不读取进程环境，也不执行文件 I/O。库调用方无需提供 `RESULT_FILENAME`。现有 CLI 会验证环境变量、读取原始工件、调用构建函数、写入聚合结果，并对多节点结果按照原有的尽力处理或 `REQUIRE_POWER` 策略执行功耗聚合。
 
 ```python
 from infx.results.fixed_sequence import build_result
@@ -273,15 +273,15 @@ result = build_result(records, profile, server_metrics, runtime_env,
 - [`Parallelism`](../infx/results/topology.py) 共享 GPU 数量计算、并行度结果字段，以及没有独立解码 GPU 时的字段规范化。固定序列结果继续使用显式分配的 GPU 数量，AgentX 则根据 worker 拓扑推导数量。各调用方保留自己的环境默认值、验证顺序、错误处理和吞吐量分母。
 - [`with_power_metrics`](../infx/results/power/__init__.py) 返回替换了指定指标族的副本，移除旧的有效性原因，并验证、舍入新指标。调用方提供指标键和模式版本，再自行写入工件及验证附属文件。其他指标族因此可以直接复用该转换，无需修改其实现。
 
-功耗遥测处理引擎也位于 [`infx.results.power`](../infx/results/power)：`single_node.run` 读取 GPU 监控 CSV，`multinode.run` 验证 srt-slurm 工件包。两者通过 `common.py` 共享基准窗口解析、单设备能量积分、聚合结果替换及审计序列化，同时保留各自的遥测校验和失败策略。固定序列及 AgentX 适配器直接导入这些引擎；新结果格式可以将其基准窗口和 token 计数提供给匹配的引擎。
+功耗遥测处理引擎也位于 [`infx.results.power`](../infx/results/power)：`multinode.run` 验证 srt-slurm 工件包。其基准窗口解析、单设备能量积分、聚合结果替换及审计序列化位于 `common.py`。固定序列及 AgentX 适配器直接导入该引擎；新结果格式可以将其基准窗口和 token 计数提供给它。在 srt-slurm 遥测覆盖单节点任务之前，单节点结果不包含功耗。
 
-`infx` 包无需安装步骤或新增运行时依赖。从 `inferencex-e2e/` 运行 `python -m infx.results.power.single_node` 和 `python -m infx.results.power.multinode` 来调用引擎。
+`infx` 包无需安装步骤或新增运行时依赖。从 `inferencex-e2e/` 运行 `python -m infx.results.power.multinode` 来调用引擎。
 
 构建函数测试应使用独立计算预期结果的小样例和只读输入。修改现有适配器时，还应与旧实现比较 CLI 退出状态、诊断信息和生成工件，覆盖无效输入以及严格模式和尽力处理模式下的功耗失败。
 
 ### 评测与 AgentX 输出
 
-对于仅评测作业，不要求吞吐量输出。工作流改为要求至少存在一个 `results*.json`。对于标记为运行评测的作业，上传内容可能包含 `meta_env.json`、`results*.json`、`sample*.jsonl`、SWE-bench 预测和报告以及轨迹文件。[`infx/evals/validate_scores.py`](../infx/evals/validate_scores.py) 会检查生成的评测分数。
+对于仅评测作业，不要求吞吐量输出。工作流改为要求至少存在一个 `results*.json`。对于标记为运行评测的作业，上传内容可能包含 `meta_env.json`、`results*.json`、`sample*.jsonl`，以及厂商评估的原生报告、详细结果和归档。[`infx/evals/validate_scores.py`](../infx/evals/validate_scores.py) 会检查生成的评测分数。
 
 [`infx.results.evals`](../infx/results/evals.py) 提供 `extract_metrics`，用于解析已加载的评测 JSON，并提供 `build_rows`，用于构建收集器输出。两者均接收显式输入，不执行文件 I/O，也不修改输入。构建函数应用元数据默认值和主分数优先级，并将失败评测保留为诊断行。CLI 负责文件查找、并发数资格筛选、报告输出和工件写入。
 
@@ -295,7 +295,7 @@ rows = build_rows(raw_eval, metadata, source="eval_job/results.json")
 
 智能体吞吐量作业采用不同的契约。它们使用 [`infx/results/agentic/validate_agentic_result.py`](../infx/results/agentic/validate_agentic_result.py) 验证 AIPerf 输出，上传聚合的 `bmk_agentic_<suffix>` 工件，并上传包含追踪重放材料的原始 `agentic_<suffix>` 同级工件。InferenceX-app 通过它们共享的后缀对这些同级工件进行配对。智能体仅评测作业改为遵循评测输出契约，不要求吞吐量结果。
 
-服务器日志和 GPU 指标是诊断辅助工件。它们通过 `always()` 上传，因此失败的运行仍可供调查。它们的存在不会将失败的基准测试转变为有效结果。srt 驱动的 [`collect.py`](../infx/launch/drivers/srt/collect.py) 通过调度器后端获取作业输出，并在清理输出前暂存多节点日志树和 `multinode_server_logs.tar.gz`。
+服务器日志是诊断辅助工件。它们通过 `always()` 上传，因此失败的运行仍可供调查。它们的存在不会将失败的基准测试转变为有效结果。srt 驱动的 [`collect.py`](../infx/launch/drivers/srt/collect.py) 通过调度器后端获取作业输出，并在清理输出前暂存多节点日志树和 `multinode_server_logs.tar.gz`。
 
 ## 阶段 6：工件收集与交接
 
