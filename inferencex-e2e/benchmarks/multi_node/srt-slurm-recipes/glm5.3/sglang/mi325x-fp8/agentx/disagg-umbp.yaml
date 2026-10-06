@@ -565,11 +565,11 @@ override_tp8_dep16_batch2_rr_c32: &tp8_dep16_single_rr
       env:
         UMBP_STANDALONE_ADDRESS: unix:///logs/umbp-{node}.sock
 
-# Genuine graph-four gate; preserve the complete single-prefill C32 server otherwise.
+# Graph-four cap4 comparison; preserve the qualified server unchanged.
 override_tp8_dep16_batch4_rr_quality_c64:
   <<: *tp8_dep16_single_rr
   slurm:
-    time_limit: "01:00:00"
+    time_limit: "12:00:00"
   roles:
     <<: *tp8_dep16_single_rr_roles
     decode:
