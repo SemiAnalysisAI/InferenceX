@@ -9460,3 +9460,11 @@
   description:
     - "Measure the genuine-qualified native radix batch-four decoder at concurrency sixteen with unchanged worker and cache-aware router settings. This saturation comparison retains full context, dispatch capacity eight and P-only UMBP."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3734
+
+- config-keys:
+    - glm53-mi325x-oct5-colocated-tep4-dep4-radix-batch4-c8
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Measure concurrency eight on the unchanged qualified native radix batch-four decoder, retaining cache-aware routing, full context, dispatch capacity eight and P-only UMBP."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3734
