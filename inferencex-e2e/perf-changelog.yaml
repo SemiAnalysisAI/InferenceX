@@ -9426,3 +9426,12 @@
   description:
     - "Gate one qualified native TP8 prefill worker with the qualified DEP4 decoder, preserving full context, P-only 513 GB UMBP and cache-aware DP routing. This twelve-active/sixteen-allocated-GPU topology supplies an equal-cost comparison to two TEP4 prefill workers; timing remains conditional on real quality and current proxy evidence."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3656
+
+- config-keys:
+    - glm53-mi325x-oct5-colocated-tep4-dep4-round-robin-batch4
+    - glm53-mi325x-oct5-colocated-tep4-dep4-round-robin-batch4-quality
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Gate native DEP4 decoder running and graph limits sixteen behind the qualified colocated TEP4 prefill and round-robin decoder router. Preserve dispatch capacity eight, full context, static memory budget and P-only UMBP, including the stock coupled extra-slot default. Genuine GSM32 at concurrency sixteen must exercise the new local graph bucket before a matched concurrency-eight proxy."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3656

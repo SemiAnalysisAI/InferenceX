@@ -420,7 +420,7 @@ override_colocated_tep4_dep4_c8: &tep4_dep4_pd
       gpus: 4
       env:
         SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "8"
-      args:
+      args: &dep4_pd_args
         <<: *tep4_pd_args
         data-parallel-size: 4
         enable-dp-attention: true
@@ -453,12 +453,31 @@ override_tp8_prefill_dep4_c8:
       CONC: "8"
 
 # Policy-only contrast: stock decode ChunkCache has no shared-prefix reuse.
-override_colocated_tep4_dep4_round_robin_c8:
+override_colocated_tep4_dep4_round_robin_c8: &tep4_dep4_rr
   <<: *tep4_dep4_pd
   frontend:
     args:
       dp-aware: true
       decode-policy: round_robin
+
+# Native local decode batch four; leave coupled extra slots at their stock default.
+override_colocated_tep4_dep4_round_robin_batch4_c8: &tep4_dep4_rr_batch4
+  <<: *tep4_dep4_rr
+  roles:
+    prefill: *tep4_dep4_prefill
+    decode:
+      <<: *tep4_dep4_decode
+      args:
+        <<: *dep4_pd_args
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 16
+
+# Genuine GSM32 uses C16 only to exercise the new per-lane graph bucket.
+override_colocated_tep4_dep4_round_robin_batch4_quality_c16:
+  <<: *tep4_dep4_rr_batch4
+  benchmark:
+    env:
+      CONC: "16"
 
 # Two independent TEP4 prefill workers share one native 513 GB host pool.
 # Decode occupies four GPUs on the second node: 12 active / 16 allocated.
