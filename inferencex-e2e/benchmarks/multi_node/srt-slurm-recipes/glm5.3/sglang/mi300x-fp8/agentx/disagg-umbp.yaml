@@ -215,7 +215,7 @@ override_tp8_prefill_topkv2_gsm16shot_c4:
   environment:
     EVAL_INCLUDE_PATH: /infmax-workspace/infx/evals/diagnostics
     EVAL_TASKS_DIR: gsm8k_16shot
-  roles:
+  roles: &prefill_topkv2_roles
     prefill:
       env:
         SGLANG_OPT_USE_TOPK_V2: "true"
@@ -229,6 +229,20 @@ override_tp8_prefill_topkv2_gsm16shot_c4:
   benchmark:
     env:
       CONC: "4"
+
+override_tp8_decode_topkv2_perf_c8:
+  <<: *decode_topkv2
+  slurm:
+    time_limit: "12:00:00"
+  benchmark:
+    env:
+      CONC: "8"
+
+override_tp8_prefill_topkv2_perf_c8:
+  roles: *prefill_topkv2_roles
+  benchmark:
+    env:
+      CONC: "8"
 
 override_tp8_decode_aiter_c8:
   roles:
