@@ -9336,3 +9336,14 @@
     - "Use schema 2 benchmark client placement in eleven Kimi-K3 GB200 and GB300 AgentX recipes."
     - "Place discovery services on the existing infra node in three H200 AgentX recipes with required telemetry."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3755
+
+- config-keys:
+    - glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the GLM-5.2 NVFP4 GB300 TensorRT-LLM AgentX image from 1.3.0rc26.dev202609040000 to 1.3.0rc28.dev202609210001 on all six points."
+    - "Switch NIXL KV transfer to the C++ transfer-agent bounce buffer (max_average_descriptor_size 4MB, min_descriptor_count 1) and lower kv_cache_bounce_size_mb from 5120 to 1024."
+    - "Move Dynamo on all six points to the ai-dynamo 1.6.0.dev20261004 wheel."
+    - "Use srt-slurm v2.43.4 and remove the redundant served-model-name patch."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3707
