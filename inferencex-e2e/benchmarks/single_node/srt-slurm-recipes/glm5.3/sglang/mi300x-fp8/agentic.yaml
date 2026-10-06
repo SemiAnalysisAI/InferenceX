@@ -89,6 +89,23 @@ override_tp8_mtp_oct6_c4:
       CONC: "4"
       KV_OFFLOADING: none
 
+override_tp8_mtp_oct6_c1:
+  model:
+    container: lmsysorg/sglang-rocm:v0.5.21-rocm720-mi30x-20261006@sha256:f7430d43c728da94f001ca51d5d2e0d754c85a3a8d54a3b68bf7aa2e12e6ff6a
+  roles:
+    agg:
+      args:
+        max-running-requests: 2
+        cuda-graph-max-bs-decode: 2
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 3
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 4
+  benchmark:
+    env:
+      CONC: "1"
+      KV_OFFLOADING: none
+
 override_tp8_umbp_c8:
   services:
     - name: umbp

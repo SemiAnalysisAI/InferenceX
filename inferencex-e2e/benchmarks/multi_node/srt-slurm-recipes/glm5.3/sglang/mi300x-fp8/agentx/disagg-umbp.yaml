@@ -224,6 +224,14 @@ override_tp8_prefill128k_mem80_oct6_perf_c4:
     env:
       CONC: "4"
 
+override_tp8_prefill128k_mem80_oct6_perf_c1:
+  <<: *prefill128k_mem80_oct6
+  slurm:
+    time_limit: "12:00:00"
+  benchmark:
+    env:
+      CONC: "1"
+
 override_tp8_decode_topkv2_c4: &decode_topkv2
   slurm:
     time_limit: "01:00:00"
