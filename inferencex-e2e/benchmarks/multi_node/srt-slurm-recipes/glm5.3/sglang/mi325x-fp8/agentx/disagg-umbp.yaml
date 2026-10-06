@@ -662,7 +662,7 @@ override_two_tep4_dep16_host1026_prefill_chunk2048_c32: &two_tep4_dep16_chunk204
       AGENTIC_WARMUP_GRACE_PERIOD: "7200"
 
 # Reserve additional native prefill workspace while retaining the full context.
-override_two_tep4_dep16_host1026_prefill_chunk2048_mem937_c32:
+override_two_tep4_dep16_host1026_prefill_chunk2048_mem937_c32: &two_tep4_dep16_mem937
   <<: *two_tep4_dep16_chunk2048_c32
   roles:
     <<: *two_tep4_dep16_chunk2048_roles
@@ -671,3 +671,27 @@ override_two_tep4_dep16_host1026_prefill_chunk2048_mem937_c32:
       args:
         <<: *two_tep4_dep16_chunk2048_args
         mem-fraction-static: 0.937
+
+# Qualify native pageable host copies without changing model or cache capacity.
+override_two_tep4_dep16_host1026_pageable_quality_c16:
+  <<: *two_tep4_dep16_mem937
+  slurm:
+    time_limit: "01:00:00"
+  services:
+    - <<: *umbp_service
+      command:
+        - /sgl-workspace/mori/python/mori/umbp_standalone_server
+        - unix:///logs/umbp-{node}.sock
+      env:
+        <<: *umbp_service_env
+        UMBP_DRAM_CAPACITY: "1026000000000"
+        UMBP_DRAM_HOST_REGISTER: "0"
+      readiness:
+        log:
+          pattern: '\[StandaloneServer\] listening grpc='
+        timeout_seconds: 5400
+        interval_seconds: 1
+  benchmark:
+    env:
+      CONC: "16"
+      AGENTIC_WARMUP_GRACE_PERIOD: "7200"
