@@ -9443,3 +9443,11 @@
   description:
     - "Gate the paired native decoder low-latency and SDMA transport mode on the qualified DEP4 batch-four server. Preserve full context, dispatch capacity, memory budgets, routing, prefill-only 513 GB UMBP and all other engine flags; require genuine GSM32, actual graph-four lane coverage and native transport evidence before considering performance."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3734
+
+- config-keys:
+    - glm53-mi325x-oct5-colocated-tep4-dep4-sdma-c8
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Measure the genuine-qualified native DEP4 low-latency SDMA server at AgentX concurrency eight. Preserve all worker, routing, capacity and prefill-only 513 GB UMBP settings from the passing GSM32 gate; compare complete native request spans against the normal transport control."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3734
