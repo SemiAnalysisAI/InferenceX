@@ -9435,3 +9435,11 @@
   description:
     - "Gate native DEP4 decoder running and graph limits sixteen behind the qualified colocated TEP4 prefill and round-robin decoder router. Preserve dispatch capacity eight, full context, static memory budget and P-only UMBP, including the stock coupled extra-slot default. Genuine GSM32 at concurrency sixteen must exercise the new local graph bucket before a matched concurrency-eight proxy."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3656
+
+- config-keys:
+    - glm53-mi325x-oct5-two-tep4-two-dep4-batch4-quality
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Prepare genuine GSM64 at concurrency thirty-two for two TEP4 prefill workers sharing one 513 GB host pool and two independent DEP4 batch-four decoders, packed on two nodes. Preserve qualified normal-transport worker settings and cache-aware prefill with round-robin DP-aware decode routing; require actual full-context capacity, endpoint discovery and coherent outputs before performance."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3734

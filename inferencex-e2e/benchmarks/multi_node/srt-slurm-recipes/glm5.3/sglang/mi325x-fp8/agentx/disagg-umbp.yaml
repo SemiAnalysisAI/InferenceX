@@ -494,6 +494,28 @@ override_two_tep4_prefill_dep4_c8:
       nodes: 1
       workers: 1
 
+# Genuine-only packed topology: two independent EP4 groups per role.
+override_two_tep4_two_dep4_batch4_quality_c32:
+  <<: *tep4_dep4_rr_batch4
+  slurm:
+    time_limit: "01:00:00"
+  roles:
+    prefill:
+      <<: *tep4_dep4_prefill
+      nodes: 1
+      workers: 2
+    decode:
+      <<: *tep4_dep4_decode
+      nodes: 1
+      workers: 2
+      args:
+        <<: *dep4_pd_args
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 16
+  benchmark:
+    env:
+      CONC: "32"
+
 # Diagnostic-only: attention DP2 is explicit here; dp-attn metadata means enabled,
 # not four replicas. Publication requires explicit attention-DP-size metadata.
 override_colocated_tep4_attndp2_ep4_c4:
