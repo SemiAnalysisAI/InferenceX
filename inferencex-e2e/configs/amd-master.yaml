@@ -1508,13 +1508,14 @@ dsv41flash-fp4-mi355x-vllm-agentic-dspark:
     agentic-coding:
     - dram-utilization: 0.60
       search-space:
-      # The prefill chunk is a uniform 8192 across every point, bounding the
-      # decode stall a chunk causes when it shares an engine step with a decode
-      # batch. The recipe otherwise changes the memory split only where a point
-      # ran short of KV. c128 is excluded for both TP=2 and TP=4. Every point is
-      # measured here rather than combined from the earlier run: the image move
-      # leaves concurrency 1-32 measured only on the superseded nightly-eed1f3d0
-      # pin, and the chunk change invalidates the 16384 points.
+      # The prefill chunk is capped at 8192 from c32 up, bounding the decode
+      # stall a chunk causes when it shares an engine step with a decode batch;
+      # c1-c16 keep 16384, where such mixed steps are too rare to pay for the
+      # longer prefill. The recipe otherwise changes the memory split only where
+      # a point ran short of KV. c128 is excluded for both TP=2 and TP=4. Every
+      # point is measured here rather than combined from the earlier run: the
+      # image move leaves concurrency 1-32 measured only on the superseded
+      # nightly-eed1f3d0 pin, and the chunk change invalidates c32 and c64.
       - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/mi355x-fp4-mtp/agentic.yaml }
       - { tp: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/mi355x-fp4-mtp/agentic.yaml }
 
