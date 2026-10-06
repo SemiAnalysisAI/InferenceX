@@ -9459,3 +9459,11 @@
   description:
     - "Gate prefill-only native TopK V2 with a private JIT cache and genuine sixteen-shot GSM32 on the qualified colocated TEP4/DEP4 batch-four server. Preserve stock decode selection, full context, routing, MoRI and P-only UMBP; no performance expansion."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3734
+
+- config-keys:
+    - glm53-mi325x-oct5-colocated-tep4-dep4-prefill-topkv2-c8
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Measure native prefill-only TopK V2 at concurrency eight after genuine long-prompt qualification, preserving the batch-four decoder, full context, routing, MoRI and P-only UMBP."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3734
