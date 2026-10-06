@@ -9451,3 +9451,11 @@
   description:
     - "Compare native packed TEP4 prefill with pure TP8 decode against the TP8 MTP aggregate control on the October 6 image, retaining full context and official AgentX warmup and profiling."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3734
+
+- config-keys:
+    - glm53-mi325x-oct6-dep4-sdma-multistream-quality
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Qualify native decoder multistream execution on the October 6 image with the existing colocated TEP4 prefill and DEP4 AsyncLL/SDMA topology, retaining full context, dispatch capacity, memory budgets and genuine long-prompt evaluation."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3734

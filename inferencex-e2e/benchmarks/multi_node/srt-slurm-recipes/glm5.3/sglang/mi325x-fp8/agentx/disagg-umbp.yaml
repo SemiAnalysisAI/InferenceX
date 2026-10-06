@@ -694,3 +694,45 @@ override_two_tep4_tp8_oct6_official_c8:
   benchmark:
     env:
       CONC: "8"
+
+# Genuine-only native multistream contrast of the qualified AsyncLL/SDMA decoder.
+override_colocated_tep4_dep4_sdma_multistream_oct6_long_quality_c16:
+  name: mi325x-glm53-dep4-sdma-multistream-oct6-long-quality
+  model: *two_tep4_tp8_oct6_model
+  identity: *two_tep4_tp8_oct6_identity
+  slurm:
+    time_limit: "01:00:00"
+  environment:
+    EVAL_INCLUDE_PATH: /infmax-workspace/infx/evals/diagnostics
+    EVAL_TASKS_DIR: gsm8k_16shot
+  frontend:
+    args:
+      dp-aware: true
+      prefill-policy: cache_aware
+      decode-policy: round_robin
+  roles:
+    prefill:
+      gpus: 4
+      env:
+        SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "1024"
+      args: *tep4_pd_args
+    decode:
+      nodes: colocate
+      gpus: 4
+      env:
+        SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "8"
+        MORI_ENABLE_SDMA: "1"
+        SGLANG_ROCM_USE_MULTI_STREAM: "1"
+      args:
+        <<: *tep4_pd_args
+        data-parallel-size: 4
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        moe-dense-tp-size: 1
+        mem-fraction-static: 0.985
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 16
+        deepep-mode: low_latency
+  benchmark:
+    env:
+      CONC: "16"
