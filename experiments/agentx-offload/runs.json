@@ -5581,7 +5581,7 @@
       "status": "in_progress",
       "workflow_name": "offload-v1-none-c489-r3-extended-power-20261006",
       "dispatched_at": "2026-10-06T15:49:16Z",
-      "phase": "canonical warmup: request budget reached, draining",
+      "phase": "profiling: full 3,600-second phase in progress",
       "performance_result": false,
       "execution_budget": {
         "slurm_minutes": 510,
@@ -5605,20 +5605,27 @@
       "warmup_started_at": "2026-10-06T16:00:40Z",
       "warmup_target_requests": 5412,
       "warmup_latest": {
-        "sample_at": "2026-10-06T22:42:15Z",
-        "returned": 5288,
+        "sample_at": "2026-10-06T22:53:34Z",
+        "returned": 5412,
         "sent": 5412,
-        "in_flight": 124,
+        "in_flight": 0,
         "errors": 0,
-        "elapsed_seconds": 24095.3
+        "elapsed_seconds": 24774.57
       },
-      "runtime_evidence": "Slurm job 19647 runs on im-b200-c001 with 08:30:00 limit. Runtime config verifies zero DRAM, zero NVMe and no connector; exact host /scratch owner.json matches run/job. Canonical warmup started 16:00:40Z; the 522-request primer completed and zero-idle replay began 16:43:55Z. All 5,412 warmup requests were sent by 22:24:14Z. Latest sample at 22:42:15Z returned 5,288, retained 124 in flight, zero errors. Drain remains active; profiling has not started.",
+      "runtime_evidence": "Slurm job 19647 runs on im-b200-c001 with 08:30:00 limit. Runtime config verifies zero DRAM, zero NVMe and no connector; exact host /scratch owner.json matches run/job. Canonical warmup completed all 5,412 requests with zero cancellations and zero errors after 24,774.57 seconds at 22:53:34Z. Full 3,600-second profiling phase started immediately at 22:53:35Z; aggregate export pending.",
       "warmup_replay_started_at": "2026-10-06T16:43:55Z",
-      "warmup_request_budget_reached_by": "2026-10-06T22:24:14Z"
+      "warmup_request_budget_reached_by": "2026-10-06T22:24:14Z",
+      "warmup_completed_at": "2026-10-06T22:53:34Z",
+      "warmup_duration_seconds": 24774.57,
+      "warmup_completed_requests": 5412,
+      "warmup_cancelled_requests": 0,
+      "warmup_errors": 0,
+      "profiling_started_at": "2026-10-06T22:53:35Z",
+      "profiling_duration_target_seconds": 3600
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894,36796500128,36879140816,37027095833",
-  "status": "HBM-only c489 energy repeat 37490705589 sent all 5,412 warmup requests with zero errors and is draining outstanding requests; profiling not yet started.",
+  "status": "HBM-only c489 energy repeat 37490705589 completed canonical warmup 5,412/5,412 without errors and entered full profiling at 22:53:35Z.",
   "last_capacity_check": {
     "checked_at": "2026-10-06T15:48:45Z",
     "active_study_run_ids": [
