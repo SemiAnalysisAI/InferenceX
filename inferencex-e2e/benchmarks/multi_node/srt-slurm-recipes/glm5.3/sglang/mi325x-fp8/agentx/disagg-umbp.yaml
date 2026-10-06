@@ -147,24 +147,10 @@ base:
       TOKENIZERS_PARALLELISM: "false"
 
 
-override_p4_d8_c4:
-  roles:
-    prefill:
-      gpus: 4
-      args:
-        tensor-parallel-size: 4
-        chunked-prefill-size: 8192
-        mem-fraction-static: 0.93
-        max-running-requests: 8
-    decode:
-      args:
-        max-running-requests: 8
-        cuda-graph-max-bs-decode: 8
-  benchmark:
-    env:
-      CONC: "4"
-
-override_colocated_tep4_tep4_cap8_c4:
+override_colocated_tep4_dep4_round_robin_batch4_c8:
+  frontend:
+    args:
+      dp-aware: true
   roles:
     prefill:
       gpus: 4
@@ -179,27 +165,6 @@ override_colocated_tep4_tep4_cap8_c4:
         mem-fraction-static: 0.94
         max-running-requests: 8
         cuda-graph-max-bs-decode: 8
-    decode:
-      nodes: colocate
-      gpus: 4
-      env:
-        # STP max8 requests, one row each; native EP4 receive capacity is32.
-        SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "8"
-      args: *tep4_args
-  benchmark:
-    env:
-      CONC: "4"
-
-override_colocated_tep4_dep4_round_robin_batch4_c8:
-  frontend:
-    args:
-      dp-aware: true
-  roles:
-    prefill:
-      gpus: 4
-      env:
-        SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "1024"
-      args: *tep4_args
     decode:
       nodes: colocate
       gpus: 4
@@ -243,8 +208,6 @@ override_two_tep4_tp8_c8: &two_tep4_tp8
 
 override_two_tep4_tp8_c4:
   <<: *two_tep4_tp8
-  slurm:
-    time_limit: "02:00:00"
   benchmark:
     env:
       CONC: "4"
