@@ -9435,3 +9435,11 @@
   description:
     - "Gate native DEP4 decoder running and graph limits sixteen behind the qualified colocated TEP4 prefill and round-robin decoder router. Preserve dispatch capacity eight, full context, static memory budget and P-only UMBP, including the stock coupled extra-slot default. Genuine GSM32 at concurrency sixteen must exercise the new local graph bucket before a matched concurrency-eight proxy."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3656
+
+- config-keys:
+    - glm53-mi325x-oct5-colocated-tep4-dep4-sdma-quality
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Gate the paired native decoder low-latency and SDMA transport mode on the qualified DEP4 batch-four server. Preserve full context, dispatch capacity, memory budgets, routing, prefill-only 513 GB UMBP and all other engine flags; require genuine GSM32, actual graph-four lane coverage and native transport evidence before considering performance."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3734
