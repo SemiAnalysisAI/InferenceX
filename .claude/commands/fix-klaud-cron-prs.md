@@ -2,23 +2,25 @@
 description: Triage failing Claude-authored PRs by reading sweep logs, debugging failures, and pushing a candidate fix per PR
 ---
 
-For each open Claude-authored PR (`claude/*` branch) whose full-sweep validation produced at least one **FAILED** check, fetch the failing run's logs, diagnose the root cause, and push a candidate fix to the PR's branch.
+For each open Claude-authored PR (`klaud/*`, `klaud-cold/*`, or legacy `klaude/*` branch) whose full-sweep validation produced at least one **FAILED** check, fetch the failing run's logs, diagnose the root cause, and push a candidate fix to the PR's branch.
 
 This command modifies remote PR branches. **Pause for user confirmation** after listing the candidate PRs and again before pushing each fix.
 
-## Step 1 — find failing `claude/*` PRs whose sweep actually ran
+## Step 1 — find failing Klaud PRs whose sweep actually ran
 
 A PR qualifies only if:
-- `headRefName` starts with `claude/`
-- At least one `Run Sweep` check has conclusion `SUCCESS` **or** `FAILURE` (i.e. the sweep was enabled and produced real results, rather than all checks being skipped)
+- `headRefName` starts with `klaud/`, `klaud-cold/`, or `klaude/`
+- At least one `Run Sweep` check has conclusion `SUCCESS` **or** `FAILURE` (rather than all checks being skipped). This alone does not prove a sweep label: `check-changelog` runs, and normally succeeds, on every push.
 - At least one check has conclusion `FAILURE`, `CANCELLED`, or `TIMED_OUT`
+
+Also confirm each candidate has exactly one primary sweep label (`full-sweep-fail-fast`, `full-sweep-enabled`, or `non-canary-full-sweep-enabled`), e.g. with `gh pr view <PR> --repo SemiAnalysisAI/InferenceX --json labels --jq '.labels[].name'`. Without one, a pushed fix starts no GPU sweep. With more than one, `check-changelog` fails (see 2c). A Klaud-Cold PR's sweep labels must be exactly `full-sweep-fail-fast` (or `full-sweep-enabled` for a documented infrastructure exception), with no modifiers, or Klaud validation fails.
 
 `gh pr list --json statusCheckRollup` truncates rollups, so enumerate candidates first, then re-query each PR individually.
 
 ```bash
 gh pr list --repo SemiAnalysisAI/InferenceX --state open --limit 200 \
   --json number,title,headRefName \
-  --jq '.[] | select(.headRefName | startswith("claude/")) | "\(.number)\t\(.headRefName)\t\(.title)"' \
+  --jq '.[] | select(.headRefName | test("^(klaud|klaud-cold|klaude)/")) | "\(.number)\t\(.headRefName)\t\(.title)"' \
   > /tmp/claude_pr_candidates.tsv
 
 : > /tmp/claude_prs_failing.tsv
@@ -79,13 +81,14 @@ If the log file is very large (>2000 lines), grep it for the actual error signat
 
 ### 2c. Diagnose
 
-Inspect the PR diff (`git -C "$WT" diff origin/main...HEAD`) and the failing-log excerpts together. Most `claude/issue-1154-*` PRs are image-bump PRs that touch a `*.yaml` recipe. Failures are usually:
+Inspect the PR diff (`git -C "$WT" diff origin/main...HEAD`) and the failing-log excerpts together. Most failing Klaud PRs are image-bump PRs (e.g. `klaud/<basekey>-<TAG>` from `/nuke`) that touch a `*.yaml` recipe. Failures are usually:
 
 - Image tag typo / unavailable tag → fix the image reference.
 - Engine arg incompatibility with new image version → add/remove the affected flag in the recipe.
 - New required env var or container path → patch the recipe.
 - Resource ask too high for the runner → drop concurrency or tp.
 - Flaky infra (network, runner pickup) → not a code fix. Flag and skip.
+- `check-changelog` fails with `PR has multiple conflicting sweep labels. Pick exactly one.` → not a code fix. After user confirmation, remove each extra primary label with `gh api -X DELETE repos/SemiAnalysisAI/InferenceX/issues/<PR>/labels/<name>` so exactly one remains; on a Klaud-Cold PR, keep `full-sweep-fail-fast` (or the documented `full-sweep-enabled` exception) and also remove any modifiers. Removing the last extra label starts the sweep, so push nothing.
 
 State the suspected root cause in one or two sentences before proposing any edit.
 

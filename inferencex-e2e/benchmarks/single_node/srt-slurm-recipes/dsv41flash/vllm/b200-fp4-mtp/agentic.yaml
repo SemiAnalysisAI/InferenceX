@@ -1,0 +1,145 @@
+# DeepSeek-V4.1-Flash AgentX on B200 with vLLM native DSpark
+# (https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4.1-Flash). Engram weights use
+# UVA DRAM; the KV cache is GPU-resident.
+base:
+  schema: 2
+  name: dsv41flash-fp4-b200-vllm-agentic
+  model:
+    path: hf:deepseek-ai/DeepSeek-V4.1-Flash
+    container: vllm/vllm-openai:nightly-dev-x86_64-cu130-ac9126e58aa7
+    precision: fp4
+  resources:
+    gpu_type: b200
+    gpus_per_node: 8
+  frontend:
+    type: vllm
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine:
+    type: vllm
+    connector: null
+  # The engine may take the full VLLM_ENGINE_READY_TIMEOUT_S to become ready.
+  health_check:
+    interval_seconds: 10
+    max_attempts: 720
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      args:
+        served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
+        language-model-only: true
+        tokenizer-mode: deepseek_v41
+        tool-call-parser: deepseek_v41
+        enable-auto-tool-choice: true
+        reasoning-parser: deepseek_v41
+        engram-config: '{"cpu_offload":true}'
+        kernel-config: '{"enable_flashinfer_autotune":true}'
+        attention-config: '{"backend":"FLASHINFER_MLA_SPARSE_DSV41","indexer_kv_dtype":"mxfp4","indexer_sparse_logits":true}'
+        kv-cache-dtype: fp8
+        # Five-token DSpark with probabilistic drafting. Throughput runs replace
+        # block rejection with the golden acceptance length.
+        speculative-config: '{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block","enable_adaptive_verification":false}'
+        max-model-len: 1048576
+        # Piecewise graph capture sizes are multiples of the six-token DSpark
+        # verification block, denser for small batches.
+        compilation-config: '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092,6144,8190]}'
+        max-cudagraph-capture-size: 8190
+        max-num-batched-tokens: 8192
+        gpu-memory-utilization: 0.97
+        disable-uvicorn-access-log: true
+      env:
+        VLLM_USE_V2_MODEL_RUNNER: '1'
+        VLLM_USE_RUST_FRONTEND: '1'
+        PYTHONUNBUFFERED: '1'
+        VLLM_ENGINE_READY_TIMEOUT_S: '7200'
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
+    env:
+      MODEL: deepseek-ai/DeepSeek-V4.1-Flash
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
+
+# Native zip expansion creates one variant per concurrency.
+
+# TP4 covers concurrency 1-128 with FlashInfer attention and THP Engram tables.
+zip_override_tp4:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        engram-config: '{"cpu_offload":true,"use_thp":true}'
+        max-num-seqs: [8, 8, 16, 32, 64, 128, 256]
+        compilation-config:
+          - '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092]}'
+          - '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092]}'
+          - '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092,6144,8190]}'
+          - '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092,6144,8190],"decoder_replay_cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2048,2304,2560,2816,3072,3328,3584,3840,4096]}'
+          - '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092,6144,8190],"decoder_replay_cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2048,2304,2560,2816,3072,3328,3584,3840,4096]}'
+          - '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092,6144,8190],"decoder_replay_cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2048,2304,2560,2816,3072,3328,3584,3840,4096]}'
+          - '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092,6144,8190],"decoder_replay_cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2048,2304,2560,2816,3072,3328,3584,3840,4096]}'
+        max-cudagraph-capture-size: [4092, 4092, 8190, 8190, 8190, 8190, 8190]
+        max-num-batched-tokens: [4096, 4096, 8192, 8192, 8192, 8192, 8192]
+  benchmark:
+    env:
+      CONC: ['1', '4', '8', '16', '32', '64', '128']
+
+# DEP2: TP1 x DP2 + EP2 with MegaMoE behind a consistent-hash router. Each
+# B200 rank holds ~150 GiB of weights, so batched tokens stay at 4096 and
+# graph capture stops at 576 tokens.
+zip_override_dep2:
+  frontend:
+    type: vllm-router
+    args:
+      policy: consistent_hash
+      prometheus-host: 127.0.0.1
+      prometheus-port: 18000
+      request-timeout-secs: 14400
+      disable-retries: true
+  setup_script: vllm-router-0.1.14.sh
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 1
+        data-parallel-size: 2
+        enable-expert-parallel: true
+        kernel-config: '{"enable_flashinfer_autotune":true,"moe_backend":"deep_gemm_mega_moe"}'
+        engram-config: '{"cpu_offload":true,"embedding_across_dp":true}'
+        max-num-seqs: [16, 16, 32]
+        compilation-config: '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576]}'
+        max-cudagraph-capture-size: 576
+        max-num-batched-tokens: 4096
+  benchmark:
+    env:
+      CONC: ['8', '16', '32']
+
+# DEP4: TP1 x DP4 + EP4 with MegaMoE behind a consistent-hash router.
+zip_override_dep4:
+  frontend:
+    type: vllm-router
+    args:
+      policy: consistent_hash
+      prometheus-host: 127.0.0.1
+      prometheus-port: 18000
+      request-timeout-secs: 14400
+      disable-retries: true
+  setup_script: vllm-router-0.1.14.sh
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 1
+        data-parallel-size: 4
+        enable-expert-parallel: true
+        kernel-config: '{"enable_flashinfer_autotune":true,"moe_backend":"deep_gemm_mega_moe"}'
+        engram-config: '{"cpu_offload":true,"embedding_across_dp":true}'
+        max-num-seqs: [64, 128]
+        compilation-config: '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092,6144,8190],"decoder_replay_cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2048,2304,2560,2816,3072,3328,3584,3840,4096]}'
+  benchmark:
+    env:
+      CONC: ['64', '128']

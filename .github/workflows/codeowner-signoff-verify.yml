@@ -52,14 +52,29 @@ jobs:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
 
+      - name: Select Python project
+        run: |
+          python_project="$GITHUB_WORKSPACE"
+          if [[ -f "$python_project/inferencex-e2e/pyproject.toml" ]]; then
+            python_project="$python_project/inferencex-e2e"
+          fi
+          test -f "$python_project/pyproject.toml"
+          echo "INFERENCEX_PYTHON_PROJECT=$python_project" >> "$GITHUB_ENV"
+
       - name: Set up uv
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+            inferencex-e2e/pyproject.toml
+            inferencex-e2e/uv.lock
 
       - name: Check changed-file ownership
         id: scope
         env:
           GH_TOKEN: ${{ github.token }}
-        run: uv run --locked --extra workflows python -m infx.workflows.signoff_scope
+        run: uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked --extra workflows python -m infx.workflows.signoff_scope
 
       - name: Resolve PR state and sign-off metadata
         id: resolve
@@ -67,7 +82,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           SCOPED_HEAD_SHA: ${{ steps.scope.outputs.head-sha }}
-        run: uv run --locked --extra workflows python -m infx.workflows.signoff_resolve
+        run: uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked --extra workflows python -m infx.workflows.signoff_resolve
 
       - name: Render verifier prompt
         if: steps.resolve.outputs.proceed == 'true'
@@ -138,4 +153,4 @@ jobs:
           SIGNOFF_KEY: ${{ steps.resolve.outputs.signoff-key }}
           VERIFICATION_SUCCEEDED: ${{ steps.claude.outcome == 'success' }}
           VERDICT_PATH: /tmp/codeowner-signoff-verdict.md
-        run: uv run --locked --extra workflows python -m infx.workflows.signoff_publish
+        run: uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked --extra workflows python -m infx.workflows.signoff_publish

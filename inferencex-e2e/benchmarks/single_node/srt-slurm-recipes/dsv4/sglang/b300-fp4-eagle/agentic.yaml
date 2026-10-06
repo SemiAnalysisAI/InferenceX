@@ -1,0 +1,335 @@
+# DeepSeek-V4-Pro AgentX on B300 with SGLang EAGLE (3 steps, 4 draft tokens).
+# TP4 and TP8 run the flashinfer MXFP4 MoE with GPU-resident KV; DEP8
+# (attention DP + Mega-MoE + FP4 indexer) runs behind the SGLang router with a
+# HiCache DRAM tier.
+base:
+  schema: 2
+  name: dsv4-fp4-b300-sglang-agentic-eagle
+  model:
+    path: hf:deepseek-ai/DeepSeek-V4-Pro
+    container: lmsysorg/sglang:dev-cu13-nightly-09242@sha256:c47bbe7448050608b4e08669c742df4835a45a95bf6b19f2c4e51a7f6609e9d5
+    precision: fp4
+  resources:
+    gpu_type: b300
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        served-model-name: deepseek-ai/DeepSeek-V4-Pro
+        trust-remote-code: true
+        tensor-parallel-size: 8
+        moe-runner-backend: flashinfer_mxfp4
+        disable-flashinfer-autotune: true
+        mem-fraction-static: 0.88
+        swa-full-tokens-ratio: 0.1
+        allow-auto-truncate: true
+        chunked-prefill-size: 8192
+        tool-call-parser: deepseekv4
+        reasoning-parser: deepseek-v4
+        chat-template: /infmax-workspace/benchmarks/single_node/chat_templates/deepseek_v4_thinking.jinja
+        watchdog-timeout: 1800
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 3
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 4
+        attention-backend: dsv4
+        page-size: 256
+        disable-shared-experts-fusion: true
+        enable-metrics: true
+        enable-cache-report: true
+      env:
+        SGLANG_ENABLE_UNIFIED_RADIX_TREE: '1'
+        SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: '1'
+        PYTHONNOUSERSITE: '1'
+        TORCH_CUDA_ARCH_LIST: '10.0'
+        # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        SGLANG_JIT_DEEPGEMM_FAST_WARMUP: '1'
+        SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: '1'
+        SGLANG_OPT_USE_JIT_NORM: '1'
+        SGLANG_OPT_USE_JIT_INDEXER_METADATA: '1'
+        SGLANG_OPT_USE_TOPK_V2: '1'
+        SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2: '1'
+        # Triton compiles with the image's CUDA ptxas.
+        TRITON_PTXAS_PATH: /usr/local/cuda/bin/ptxas
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
+    env:
+      MODEL: deepseek-ai/DeepSeek-V4-Pro
+      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+
+# One variant per point. TP4/TP8: admission is 2x CONC and the decode graph
+# batch 4x CONC, capped at 64.
+override_tp4_c1:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-running-requests: 2
+        cuda-graph-max-bs-decode: 4
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: none
+
+override_tp4_c2:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-running-requests: 4
+        cuda-graph-max-bs-decode: 8
+  benchmark:
+    env:
+      CONC: '2'
+      KV_OFFLOADING: none
+
+override_tp4_c4:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 16
+  benchmark:
+    env:
+      CONC: '4'
+      KV_OFFLOADING: none
+
+override_tp4_c8:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 32
+  benchmark:
+    env:
+      CONC: '8'
+      KV_OFFLOADING: none
+
+override_tp4_c16:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-running-requests: 32
+        cuda-graph-max-bs-decode: 64
+  benchmark:
+    env:
+      CONC: '16'
+      KV_OFFLOADING: none
+
+override_tp4_c32:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-running-requests: 64
+        cuda-graph-max-bs-decode: 64
+  benchmark:
+    env:
+      CONC: '32'
+      KV_OFFLOADING: none
+
+override_tp8_c1:
+  roles:
+    agg:
+      args:
+        max-running-requests: 2
+        cuda-graph-max-bs-decode: 4
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: none
+
+override_tp8_c2:
+  roles:
+    agg:
+      args:
+        max-running-requests: 4
+        cuda-graph-max-bs-decode: 8
+  benchmark:
+    env:
+      CONC: '2'
+      KV_OFFLOADING: none
+
+override_tp8_c4:
+  roles:
+    agg:
+      args:
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 16
+  benchmark:
+    env:
+      CONC: '4'
+      KV_OFFLOADING: none
+
+override_tp8_c8:
+  roles:
+    agg:
+      args:
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 32
+  benchmark:
+    env:
+      CONC: '8'
+      KV_OFFLOADING: none
+
+override_tp8_c16:
+  roles:
+    agg:
+      args:
+        max-running-requests: 32
+        cuda-graph-max-bs-decode: 64
+  benchmark:
+    env:
+      CONC: '16'
+      KV_OFFLOADING: none
+
+override_tp8_c32:
+  roles:
+    agg:
+      args:
+        max-running-requests: 64
+        cuda-graph-max-bs-decode: 64
+  benchmark:
+    env:
+      CONC: '32'
+      KV_OFFLOADING: none
+
+# DEP8 replaces the TP8 MoE path: the router keeps each session on the DP rank
+# holding its radix prefix, the global prefill chunk is 8192 per rank, decode
+# graphs cover the padded speculative batch across ranks, and AIPerf owns the
+# warmup. DEP8 mixes prefill into decode batches, schedules shortest prefill
+# first, coordinates speculative prefill across DP ranks, and keeps the router
+# circuit breaker off. HiCache capacity is a host/device ratio of 2.
+override_dep8_c64:
+  frontend: &dep8_frontend
+    type: sglang-router
+    args:
+      policy: consistent_hashing
+      request-id-headers: x-correlation-id
+      dp-aware: true
+      connect-timeout-secs: 900
+      request-timeout-secs: 14400
+      disable-health-check: true
+      disable-circuit-breaker: true
+      # A transient router-to-engine send failure would otherwise abort the run.
+      retry-max-retries: 8
+      retry-initial-backoff-ms: 500
+      retry-max-backoff-ms: 10000
+      retry-backoff-multiplier: 2
+  roles:
+    agg:
+      args:
+        <<: &dep8_args
+          moe-runner-backend: null
+          data-parallel-size: 8
+          tokenizer-worker-num: 8
+          enable-prefill-delayer: true
+          prefill-decode-interval: 32
+          enable-dp-attention: true
+          enable-dp-attention-local-control-broadcast: true
+          incremental-streaming-output: true
+          stream-interval: 20
+          expert-parallel-size: 8
+          moe-a2a-backend: megamoe
+          enable-w4a4-mxfp4-megamoe: true
+          enable-deepseek-v4-fp4-indexer: true
+          enable-mixed-chunk: true
+          schedule-policy: shortest-prefill-first
+          mem-fraction-static: 0.84
+          chunked-prefill-size: 65536
+          cuda-graph-max-bs-decode: 544
+          swa-full-tokens-ratio: 0.075
+          enable-hierarchical-cache: true
+          hicache-ratio: 2
+          hicache-write-policy: write_back
+          hicache-io-backend: direct
+          hicache-mem-layout: page_first_direct
+          skip-server-warmup: true
+        max-running-requests: 128
+      env: &dep8_env
+        SGLANG_ENABLE_DP_SPEC_PREFILL_COORDINATION: '1'
+        # Covers the 8192-token per-rank prefill budget.
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '8320'
+  benchmark:
+    env:
+      <<: &dep8_client
+        AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
+        KV_OFFLOADING: dram
+        TOTAL_CPU_DRAM_GB: '2849'
+      CONC: '64'
+
+override_dep8_c128:
+  frontend: *dep8_frontend
+  roles:
+    agg:
+      args:
+        <<: *dep8_args
+        max-running-requests: 256
+      env: *dep8_env
+  benchmark:
+    env:
+      <<: *dep8_client
+      CONC: '128'
+
+override_dep8_c256:
+  frontend: *dep8_frontend
+  roles:
+    agg:
+      args:
+        <<: *dep8_args
+        max-running-requests: 512
+      env: *dep8_env
+  benchmark:
+    env:
+      <<: *dep8_client
+      CONC: '256'
+
+override_dep8_c384:
+  frontend: *dep8_frontend
+  roles:
+    agg:
+      args:
+        <<: *dep8_args
+        max-running-requests: 768
+      env: *dep8_env
+  benchmark:
+    env:
+      <<: *dep8_client
+      CONC: '384'
+
+override_dep8_c512:
+  frontend: *dep8_frontend
+  roles:
+    agg:
+      args:
+        <<: *dep8_args
+        max-running-requests: 1024
+      env: *dep8_env
+  benchmark:
+    env:
+      <<: *dep8_client
+      CONC: '512'

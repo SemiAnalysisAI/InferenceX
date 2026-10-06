@@ -31,8 +31,23 @@ jobs:
           path: eval_results/
           pattern: ${{ inputs.result-prefix && format('eval_{0}_*', inputs.result-prefix) || 'eval_*' }}
 
+      - name: Select Python project
+        run: |
+          python_project="$GITHUB_WORKSPACE"
+          if [[ -f "$python_project/inferencex-e2e/pyproject.toml" ]]; then
+            python_project="$python_project/inferencex-e2e"
+          fi
+          test -f "$python_project/pyproject.toml"
+          echo "INFERENCEX_PYTHON_PROJECT=$python_project" >> "$GITHUB_ENV"
+
       - name: Set up uv
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+            inferencex-e2e/pyproject.toml
+            inferencex-e2e/uv.lock
 
       - name: Summarize evals
         env:
@@ -40,7 +55,7 @@ jobs:
         run: |
           echo "## Eval Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          uv run --locked --extra results \
+          uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked --extra results \
             python -m infx.results.collect_eval_results eval_results/ "${RESULT_PREFIX}" >> $GITHUB_STEP_SUMMARY
 
       - name: Upload aggregated evals

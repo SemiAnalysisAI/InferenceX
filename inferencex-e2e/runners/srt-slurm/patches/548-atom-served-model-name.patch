@@ -1,0 +1,54 @@
+diff --git a/src/srtctl/backends/atom.py b/src/srtctl/backends/atom.py
+index 8aeea3a0..60659222 100644
+--- a/src/srtctl/backends/atom.py
++++ b/src/srtctl/backends/atom.py
+@@ -82,6 +82,13 @@ class AtomProtocol:
+         return {}
+ 
+     def get_served_model_name(self, default: str) -> str:
++        """The name ATOM serves: a role's ``served-model-name``, else its literal ``--model``."""
++        if self.atom_config:
++            for cfg in [self.atom_config.prefill, self.atom_config.aggregated, self.atom_config.decode]:
++                if cfg:
++                    name = cfg.get("served-model-name") or cfg.get("served_model_name")
++                    if name:
++                        return name
+         return default
+ 
+     @property
+diff --git a/src/srtctl/core/schema.py b/src/srtctl/core/schema.py
+index 16edddaf..915fcbc5 100755
+--- a/src/srtctl/core/schema.py
++++ b/src/srtctl/core/schema.py
+@@ -3369,9 +3369,9 @@ class SrtConfig:
+             role = get_frontend(self.frontend.type).model_name_role or role
+         backend = self.backend_for_role(role)
+         if isinstance(backend, AtomProtocol):
+-            # ATOM advertises the literal --model argument; unlike SGLang/vLLM,
+-            # it has no separate served-model-name alias. Match the worker's
+-            # HF ID or container-visible path, including node-local staging.
++            # Without served-model-name, ATOM advertises the literal --model
++            # argument: the worker's HF ID or container-visible path, including
++            # node-local staging.
+             model_path = os.path.expandvars(self.model.path)
+             if model_path.startswith("hf:"):
+                 default = model_path[3:]
+diff --git a/tests/test_atom_atomesh.py b/tests/test_atom_atomesh.py
+index 7f4d017f..7f68cd39 100644
+--- a/tests/test_atom_atomesh.py
++++ b/tests/test_atom_atomesh.py
+@@ -133,6 +133,14 @@ def test_atom_served_name_matches_worker_model_argument(tmp_path: Path, layout:
+     assert config.served_model_name == expected
+ 
+ 
++def test_atom_served_name_follows_served_model_name() -> None:
++    """A role's served-model-name is the name ATOM and AToMesh serve, so evals must send it."""
++    data = _config()
++    for role in ("prefill", "decode"):
++        data["roles"][role].setdefault("args", {})["served-model-name"] = "qwen3-served"
++    assert _load(data).served_model_name == "qwen3-served"
++
++
+ def test_atom_builds_native_aggregate_command() -> None:
+     """Recipe flags keep ATOM's mixed hyphen/underscore spelling and follow the managed arguments."""
+     backend = AtomProtocol(
