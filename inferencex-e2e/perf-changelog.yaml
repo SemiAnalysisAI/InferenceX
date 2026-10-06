@@ -9319,3 +9319,13 @@
     - "Add GB300 Qwen3.5-397B-A17B-FP8 AgentX recipes: four disaggregated TP1xPP4 MTP prefill / DEP4 MTP decode points and five aggregate TP4/TP8 MTP points."
     - "New recipes and matrix entries only; existing Qwen3.5 GB300 entries are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3231
+
+- config-keys:
+    - dsv41flash-fp4-b200-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the DeepSeek-V4.1-Flash FP4 B200 SGLang AgentX image to nightly-dev-cu13-20261004-295a53c9, pinned by multiarch digest."
+    - "Refresh the aggregated curve with TP4/EP4 points at concurrency 1, 4, 8, 16, 24 and 32, plus TP4/EP4/DP4 points at concurrency 48 and 128 behind sglang-router."
+    - "Apply the point-specific prefill chunking, scheduling, admission, memory and SWA prefix-tail settings from the single-node recipe."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX

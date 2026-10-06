@@ -487,37 +487,32 @@ The nightly candidate uses `nightly-dev-cu13-20260922-582389ce`, native MXFP4 Ma
 `dsv41flash-fp4-<sku>-sglang-agentic-dspark` are the SGLang counterparts of the vLLM
 arms, one PR per SKU across h100, h200, b200, b300, gb200, gb300 and mi355x. They follow the
 [SGLang cookbook](https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1),
-which has no released SGLang version for this model yet. B200, B300 and H100 pin the CUDA 13 nightly
+which has no released SGLang version for this model yet. B200 pins the CUDA 13 nightly
+`lmsysorg/sglang:nightly-dev-cu13-20261004-295a53c9` by digest; B300 and H100 pin
 `lmsysorg/sglang:nightly-dev-cu13-20260922-582389ce` by digest; GB300 pins `lmsysorg/sglang:dev-cu13-nightly-0924` by digest; GB200 and H200 use
 `lmsysorg/sglang:nightly-dev-cu13-20260923-06008c17` (GB200 by digest), and MI355X pins
 `lmsysorg/sglang:dev-dsv41-mi35x` by digest. Each master entry's `image` is authoritative.
 
-B200 uses shipped-default DSpark across TP4/EP4 C1–128 and TP2/EP2 C1–8.
+B200 uses shipped-default DSpark across TP4/EP4 C1/4/8/16/24/32 and TP4/EP4 with DP attention
+(DP4, behind `sglang-router`) at C48/C128.
 Engram stays in host DRAM with `SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank`.
 Shared host tables had zero huge-page backing in
 [run 35626514270](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35626514270);
 per-rank anonymous shards request huge pages without changing host sysctls.
 Verify the actual backing percentage in each rank's startup log.
 
-| B200 topology | Static memory fraction | Prefill chunk | SWA prefix tails |
-| --- | ---: | ---: | --- |
-| TP4/EP4, C1–128 | 0.80 | 4096 | `max(128, min(4096, 64 * CONC))` |
-| TP2/EP2, C1–8 | 0.92 | 2048 | `128 * CONC` |
+| B200 topology | Static memory fraction | Prefill chunk | SWA prefix tails | Decode rounds between prefill chunks |
+| --- | ---: | ---: | --- | --- |
+| TP4/EP4, C1–32 | 0.76 | 8192 | `max(128, 32 * CONC)` | 16 at C1, 192 at C4/C8 (`lpm` at C1–8), 96 at C16, 48 at C24, 32 at C32 |
+| DP4, C48/C128 | 0.76 | 32768 (8192 per rank) | 2048 per rank | 64 at C48, 16 at C128 |
 
-Both use 16 decode rounds between prefill chunks and cap running requests at
-`min(2 * CONC, 64)`. Chunked-prefix caching retains SWA tails separately from full
+TP4 caps running requests at `min(2 * CONC, 64)`; DP4 admits 256. Chunked-prefix caching retains SWA tails separately from full
 KV, so low full-cache occupancy does not prove that reusable SWA capacity is
 available. The concurrency-scaled tail budget shares the fixed static pool with
 full KV. Validate actual cache sizes, transient memory, cache reuse, and the
 throughput/interactivity frontier in the canonical sweep.
 
-TP2 loads about 147.76 GiB of target and draft weights per GPU. The recipe
-verifies the pinned stock loader's hash and enables PyTorch expandable allocator
-segments without applying an engine patch. The September 22 nightly completed
-startup and all 1,319 GSM8K examples at C8 (97.65% strict accuracy) in an isolated
-Slurm diagnostic. Its post-eval packaging was recovered separately after a missing
-wrapper variable; this is not a green official workflow. The full latest-image
-sweep remains required. Draft precision remains upstream default.
+The full latest-image sweep remains required. Draft precision remains upstream default.
 Image staging ([`infx/launch/backends/slurm/squash.py`](../infx/launch/backends/slurm/squash.py)) converts pinned Docker
 digests to Enroot's `registry#repository:digest` syntax on every cluster. It retries
 transient import errors and fails the launch if the squash still does not validate.

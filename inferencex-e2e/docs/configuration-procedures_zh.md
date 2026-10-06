@@ -437,32 +437,28 @@ nightly 候选配方使用 `nightly-dev-cu13-20260922-582389ce`、原生 MXFP4 M
 `dsv41flash-fp4-<sku>-sglang-agentic-dspark` 是 vLLM 配方在 h100、h200、b200、b300、gb200、gb300
 与 mi355x 上的 SGLang 对应版本（每个 SKU 一个 PR），遵循
 [SGLang cookbook](https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1)。
-该模型尚无正式发布的 SGLang 版本。B200、B300 与 H100 通过 digest 固定 CUDA 13 nightly 镜像
+该模型尚无正式发布的 SGLang 版本。B200 通过 digest 固定 CUDA 13 nightly 镜像
+`lmsysorg/sglang:nightly-dev-cu13-20261004-295a53c9`；B300 与 H100 通过 digest 固定
 `lmsysorg/sglang:nightly-dev-cu13-20260922-582389ce`；GB300 通过 digest 固定 `lmsysorg/sglang:dev-cu13-nightly-0924`；GB200 与 H200 使用
 `lmsysorg/sglang:nightly-dev-cu13-20260923-06008c17`（GB200 通过 digest 固定），MI355X 通过 digest 固定
 `lmsysorg/sglang:dev-dsv41-mi35x`。以各主配置条目的 `image` 为准。
 
-B200 在 TP4/EP4 C1–128 与 TP2/EP2 C1–8 全部使用上游默认 DSpark。
+B200 在 TP4/EP4 C1/4/8/16/24/32 与启用 DP attention 的 TP4/EP4（DP4，经 `sglang-router`）C48/C128 全部使用上游默认 DSpark。
 Engram 保留在主机 DRAM，设置 `SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank`。
 [run 35626514270](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35626514270)
 中共享主机表的大页覆盖率为零；每个 rank 的匿名分片无需修改主机 sysctl 即可申请大页。
 必须从每个 rank 的启动日志核实实际大页比例。
 
-| B200 拓扑 | 静态显存比例 | Prefill chunk | SWA 前缀尾部数 |
-| --- | ---: | ---: | --- |
-| TP4/EP4，C1–128 | 0.80 | 4096 | `max(128, min(4096, 64 * CONC))` |
-| TP2/EP2，C1–8 | 0.92 | 2048 | `128 * CONC` |
+| B200 拓扑 | 静态显存比例 | Prefill chunk | SWA 前缀尾部数 | prefill chunk 之间的 decode 轮数 |
+| --- | ---: | ---: | --- | --- |
+| TP4/EP4，C1–32 | 0.76 | 8192 | `max(128, 32 * CONC)` | C1 为 16，C4/C8 为 192（C1–8 使用 `lpm`），C16 为 96，C24 为 48，C32 为 32 |
+| DP4，C48/C128 | 0.76 | 32768（每 rank 8192） | 每 rank 2048 | C48 为 64，C128 为 16 |
 
-两者均在 prefill chunk 之间执行 16 轮 decode，并将运行请求上限设为
-`min(2 * CONC, 64)`。分块前缀缓存将 SWA 尾部与完整 KV 分开保留，因此完整缓存
+TP4 将运行请求上限设为 `min(2 * CONC, 64)`；DP4 为 256。分块前缀缓存将 SWA 尾部与完整 KV 分开保留，因此完整缓存
 占用率低并不证明有足够的可复用 SWA 容量。随并发调整的尾部预算与完整 KV 共享
 固定静态内存池。正式扫描需验证实际缓存大小、临时内存、缓存复用率以及吞吐与交互性能前沿。
 
-TP2 每 GPU 加载约 147.76 GiB 的目标和草稿权重。配方校验固定原始加载器的哈希，
-启用 PyTorch 可扩展分配段，不应用引擎补丁。9 月 22 日 nightly 在独立 Slurm 诊断中
-成功启动，并在 C8 完成全部 1,319 道 GSM8K，严格准确率为 97.65%。评测后的打包因
-诊断脚本缺少环境变量而失败，之后单独恢复；这不等于官方工作流全绿。仍需完成最新镜像
-的完整 sweep。草稿精度保留上游默认值。
+仍需完成最新镜像的完整 sweep。草稿精度保留上游默认值。
 镜像暂存（[`infx/launch/backends/slurm/squash.py`](../infx/launch/backends/slurm/squash.py)）在所有集群上将固定 Docker digest
 转为 Enroot 的 `registry#repository:digest` 格式；遇到暂时性导入错误会重试，squash 仍无法校验通过时启动失败。
 
