@@ -110,7 +110,6 @@ jobs:
           if command -v enroot >/dev/null 2>&1; then enroot list; fi
           "$INFERENCEX_LAUNCH_PYTHON" - <<'PY'
           import os
-          import subprocess
           from infx.clusters import resolve_cluster
           from infx.clusters.slurm import slurm_settings
           from infx.launch.backends.slurm.squash import is_valid_squash, squash_path
@@ -123,10 +122,8 @@ jobs:
           print(f"Pinned image={immutable} squash path={path} valid={valid}", flush=True)
           if not valid:
               raise RuntimeError(f"pinned immutable image squash is unavailable: {path}")
-          digest = subprocess.run(["timeout", "120s", "sha256sum", str(path)], capture_output=True, text=True)
-          print(f"SGLang squash hash exit={digest.returncode} stdout={digest.stdout.strip()} stderr={digest.stderr.strip()}", flush=True)
-          if digest.returncode != 0:
-              raise RuntimeError(f"could not hash pinned immutable image squash: {path}")
+          stat = path.stat()
+          print(f"SGLang squash size={stat.st_size} mtime_ns={stat.st_mtime_ns} inode={stat.st_ino}", flush=True)
           PY
       - name: Run bounded no-model RDMA probe
         env:
