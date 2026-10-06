@@ -632,6 +632,7 @@ def _patch_compile_fx(module):
         if stack is None:
             stack = _compile_inputs.stack = []
         stack.append(names)
+        _note_once("compile", "compile_fx_called", f"{len(names)} placeholders, e.g. {names[:3]}")
         try:
             return orig(model_, example_inputs_, *args, **kwargs)
         finally:
@@ -676,6 +677,12 @@ def _patch_inductor_scheduler(module):
             if path is None:
                 # No module for this kernel: close the previous one rather than extend it.
                 path, source = "", "none"
+                stack = getattr(_compile_inputs, "stack", None) or []
+                placeholders = [n.name for n in V.graph.graph.find_nodes(op="placeholder")]
+                _note_once("compile", "weights_unmatched", (
+                    f"compile_fx depth {len(stack)}, stashed {len(stack[-1]) if stack else None} "
+                    f"vs placeholders {len(placeholders)}; reads {[d.name for d in node.read_writes.reads][:4]}; "
+                    f"stashed e.g. {stack[-1][:2] if stack else None}"))
             if getattr(wrapper, "_infx_module", None) != path:
                 wrapper.writeline(f"__import__('sitecustomize')._infx_compiled_module({path!r})")
                 wrapper._infx_module = path
