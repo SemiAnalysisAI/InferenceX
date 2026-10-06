@@ -5273,11 +5273,11 @@
       "repeat": 5,
       "retry_of": 37377909064,
       "head_sha": "58e353d0fae68acee958c2b1e2a3ca8fb8ce6131",
-      "status": "in_progress",
+      "status": "cancelled",
       "workflow_name": "offload-v1-nvme4tib-c489-r5-enroot3-capacity-extended-fullsha-20261005",
       "dispatched_at": "2026-10-05T22:17:53Z",
-      "phase": "profiling: full 3,600-second phase in progress",
-      "performance_result": false,
+      "phase": "terminal: full profile and aggregate export complete; workflow cancelled post-export",
+      "performance_result": true,
       "execution_budget": {
         "slurm_minutes": 510,
         "github_job_minutes": 530
@@ -5291,8 +5291,7 @@
       "slurm_job_id": 19547,
       "requested_node": "im-b200-c001",
       "slurm_time_limit": "08:30:00",
-      "slurm_state": "RUNNING",
-      "pending_reason": "Resources",
+      "slurm_state": "CANCELLED",
       "node": "im-b200-c001",
       "scratch": "/offload-scratch/inferencex-offload-37381547856-1-19547-f1953b6929fe",
       "storage_free_bytes_preflight": 17646771367936,
@@ -5300,16 +5299,16 @@
       "dram_bytes": 0,
       "nvme_bytes": 4398046511104,
       "connector": "SimpleCPUOffloadConnector with disk backend, lazy offload and page cache disabled",
-      "runtime_evidence": "Live offload_config.json and host /scratch owner.json match NVMe c489 run 37381547856, Slurm 19547 on im-b200-c001, with zero DRAM, 4,398,046,511,104 NVMe bytes, O_DIRECT and the expected disk connector. Canonical warmup completed all 5,412 requests with zero cancellations and zero errors after 24,634.95 seconds at 06:05:37Z. The 3,600-second profiling phase started immediately. Latest realtime profile snapshot at 06:12:59Z retained 378 successful responses, zero errors; aggregate export remains pending.",
+      "runtime_evidence": "Canonical warmup completed all 5,412 requests with zero cancellations and zero errors after 24,634.95 seconds. Full 3,600-second profiling send window completed; phase finalized after 3,640 seconds with 1,172 completed, 680 cancelled at grace timeout and one ClientOSError. AIPerf reported 100% TTFT and inter-token latency coverage, exported aggregate and raw records. Aggregate retained 1,171 successful profiling requests and classified seven InvalidInferenceResultError plus one ClientOSError. No EngineDead, CUDA OOM, traceback, or ENOSPC signature in server log. Slurm job 19547 cancelled at 07:08:56Z and GitHub launch step was cancelled after exports; four artifacts uploaded, with no offload_cleanup.json in the raw artifact. Exact host /scratch directory was independently verified absent after Slurm termination. Workflow cancellation is separate from the complete benchmark result.",
       "warmup_started_at": "2026-10-05T23:15:02Z",
       "warmup_target_requests": 5412,
       "warmup_latest": {
-        "sample_at": "2026-10-06T05:42:36Z",
-        "returned": 5140,
+        "sample_at": "2026-10-06T06:05:37Z",
+        "returned": 5412,
         "sent": 5412,
-        "in_flight": 272,
+        "in_flight": 0,
         "errors": 0,
-        "elapsed_seconds": 23254.3
+        "elapsed_seconds": 24634.95
       },
       "warmup_replay_started_at": "2026-10-05T23:58:12Z",
       "warmup_request_budget_reached_by": "2026-10-06T05:36:36Z",
@@ -5319,11 +5318,107 @@
       "warmup_cancelled_requests": 0,
       "warmup_errors": 0,
       "profiling_started_at": "2026-10-06T06:05:37Z",
-      "profiling_duration_target_seconds": 3600
+      "profiling_duration_target_seconds": 3600,
+      "completed_at": "2026-10-06T07:10:41Z",
+      "failure_stage": "Slurm allocation cancellation after full profile and aggregate export; GitHub launch step cancelled",
+      "slurm_end_time": "2026-10-06T07:08:56Z",
+      "profiling_completed_at": "2026-10-06T07:06:17Z",
+      "profile_seconds": 3640.0,
+      "profile_latency_coverage_percent": 100.0,
+      "artifacts": [
+        {
+          "id": 11395716305,
+          "name": "gpu_metrics_minimaxm3_tp4_conc489_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-b98f8af6e9e9c699de79",
+          "size_bytes": 1159854,
+          "sha256": "eccfe1fcbcefcad7559a2cee30ba04dc7aee56441ab299482bf8c1ee1d6d29a2"
+        },
+        {
+          "id": 11395691335,
+          "name": "power_audit_minimaxm3_tp4_conc489_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-b98f8af6e9e9c699de79",
+          "size_bytes": 1162134,
+          "sha256": "bf0a3b7c6e9652b27487e99c78a8fa005b5fb071d4fc953b966e4d0eb412b39b"
+        },
+        {
+          "id": 11395666443,
+          "name": "server_logs_minimaxm3_tp4_conc489_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-b98f8af6e9e9c699de79",
+          "size_bytes": 238670,
+          "sha256": "ebd88d54bddff346ccff9e6488fb7a2947304a054ba41f201d6561b00a606e15"
+        },
+        {
+          "id": 11395611525,
+          "name": "agentic_minimaxm3_tp4_conc489_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-b98f8af6e9e9c699de79",
+          "size_bytes": 36430921,
+          "sha256": "ed3601dc096e137297e0d0aad09044294347e9d6c0fed9174816485c466301d7"
+        }
+      ],
+      "cleanup_evidence": {
+        "host_path": "/scratch/inferencex-offload-37381547856-1-19547-f1953b6929fe",
+        "slurm_job_terminal": "CANCELLED at 2026-10-06T07:08:56Z",
+        "host_path_independently_absent": true,
+        "offload_cleanup_receipt_uploaded": false,
+        "note": "Exact host /scratch path absent in independent compute-node check; raw artifact did not contain offload_cleanup.json."
+      },
+      "performance": {
+        "num_requests_total": 6584,
+        "num_requests_successful": 1171,
+        "num_requests_warmup_dropped": 5412,
+        "num_requests_error_dropped": 8,
+        "request_error_categories": {
+          "InvalidInferenceResultError": 7,
+          "ClientOSError": 1
+        },
+        "duration_seconds": 3622.71224,
+        "output_tokens_per_second": 345.14251,
+        "output_tokens_per_second_per_gpu": 86.28563,
+        "input_tokens_per_second": 33966.42792,
+        "total_tokens_per_second": 34311.57043,
+        "total_tokens_per_second_per_gpu": 8577.89261,
+        "p90_e2e_latency_seconds": 2939.03242,
+        "p90_ttft_seconds": 2909.86088,
+        "p90_tpot_seconds": 0.11269,
+        "p90_interactivity_tokens_per_second_per_user": 8.87365,
+        "p90_e2e_normalized_interactivity_tokens_per_second_per_user": 0.07624,
+        "mean_e2e_latency_seconds": 1219.66108,
+        "avg_power_w_per_gpu": 954.059646,
+        "joules_per_successful_query": 11862.614472
+      },
+      "cache_evidence": {
+        "gpu_cache_hit_rate": 0.011,
+        "external_cache_hit_rate": 0.0158,
+        "overall_cache_hit_rate": 0.0268,
+        "theoretical_cache_hit_rate": 0.93722,
+        "gpu_cache_hit_prompt_tokens": 12059264,
+        "external_cache_hit_prompt_tokens": 17317248,
+        "computed_prompt_tokens": 1066848041,
+        "prompt_tokens_total": 1096224553,
+        "generation_tokens_total": 1394096,
+        "gpu_cache_usage_pct": 1
+      },
+      "power_evidence": {
+        "strict_utc_replay_valid": true,
+        "invalid_reasons": [],
+        "expected_gpu_count": 4,
+        "observed_gpu_count": 4,
+        "max_sample_gap_seconds": 1.002000093460083,
+        "profile_window_start_unix": 1791266737.358163,
+        "profile_window_end_unix": 1791270377.361595,
+        "validation_sha256": "e6d6ea6cef685c201892d820cc115da4d2931af38a385dc64b8eccbdb267c12a",
+        "note": "Replayed from uploaded AIPerf raw, captured UTC offset, GPU telemetry and exported aggregate because post-export workflow cancellation skipped the in-run power validation output."
+      },
+      "delta_vs_c488_nvme_percent": {
+        "total_tokens_per_second_per_gpu": 0.43094,
+        "output_tokens_per_second_per_gpu": 5.49071,
+        "p90_interactivity_tokens_per_second_per_user": -0.33896,
+        "p90_ttft_seconds": 0.20075,
+        "p90_e2e_normalized_interactivity_tokens_per_second_per_user": -5.51493,
+        "num_requests_successful": 0.25685,
+        "avg_power_w_per_gpu": 6.47036,
+        "joules_per_successful_query": 6.19757
+      }
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894,36796500128,36879140816,37027095833",
-  "status": "Extended-budget NVMe c489 run 37381547856 completed all 5,412 canonical warmup requests with zero errors and entered the 3,600-second profiling phase at 06:05:37Z. No aggregate result yet.",
+  "status": "Extended-budget NVMe c489 run 37381547856 completed canonical warmup and the full profile. Aggregate export and strict UTC power replay are valid; 1,171 successful profiling responses. GitHub workflow cancelled only after exports. Exact host scratch independently absent. Matched extended-budget HBM c489 control awaits fresh cluster-wide queue guard.",
   "last_capacity_check": {
     "checked_at": "2026-10-05T22:17:36Z",
     "active_study_run_ids": [
