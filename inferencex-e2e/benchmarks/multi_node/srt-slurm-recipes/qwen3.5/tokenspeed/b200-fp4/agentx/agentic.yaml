@@ -40,6 +40,9 @@ base:
   - name: mooncake-master
     type: mooncake-master
     preamble: bash /configs/tokenspeed-0.1.0.post20260930.sh
+    # TokenSpeed stops the scheduler when Mooncake rejects a put for lack of space, and
+    # the master evicts only above its high watermark (0.9): evict earlier and more.
+    args: ["--eviction_high_watermark_ratio=0.7", "--eviction_ratio=0.2"]
     readiness:
       port: 8700
       timeout_seconds: 1800
@@ -87,7 +90,7 @@ override_dynamo_offload_c8:
         HF_HUB_OFFLINE: '1'
         TRANSFORMERS_OFFLINE: '1'
         TQDM_DISABLE: '1'
-        MOONCAKE_GLOBAL_SEGMENT_SIZE: 64gb
+        MOONCAKE_GLOBAL_SEGMENT_SIZE: 256gb
         MOONCAKE_PROTOCOL: tcp
       args: &args
         served-model-name: nvidia/Qwen3.5-397B-A17B-NVFP4
