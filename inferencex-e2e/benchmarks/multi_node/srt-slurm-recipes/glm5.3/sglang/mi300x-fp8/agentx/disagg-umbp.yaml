@@ -4,13 +4,13 @@ base:
   name: mi300x-glm53-agentx-mori-umbp
   model:
     path: hf:zai-org/GLM-5.3
-    container: lmsysorg/sglang-rocm:v0.5.21-rocm720-mi30x-20261005@sha256:a4d60e7ef7645aefb1c52a77dcb32970440454bc359a1baff03711fcd0501613
+    container: lmsysorg/sglang-rocm:v0.5.21-rocm720-mi30x-20261006@sha256:f7430d43c728da94f001ca51d5d2e0d754c85a3a8d54a3b68bf7aa2e12e6ff6a
     precision: fp8
   identity:
     model:
       repo: zai-org/GLM-5.3
     container:
-      image: lmsysorg/sglang-rocm:v0.5.21-rocm720-mi30x-20261005@sha256:a4d60e7ef7645aefb1c52a77dcb32970440454bc359a1baff03711fcd0501613
+      image: lmsysorg/sglang-rocm:v0.5.21-rocm720-mi30x-20261006@sha256:f7430d43c728da94f001ca51d5d2e0d754c85a3a8d54a3b68bf7aa2e12e6ff6a
   slurm:
     time_limit: "12:00:00"
   resources:
@@ -145,15 +145,24 @@ base:
       WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126
       TOKENIZERS_PARALLELISM: "false"
 
-override_tp8_c8:
+override_tp8_prefill128k_c4: &prefill128k
   roles:
     prefill:
       args:
+        chunked-prefill-size: 131072
+        max-prefill-tokens: 131072
+        mem-fraction-static: 0.80
         max-running-requests: 16
     decode:
       args:
         max-running-requests: 16
         cuda-graph-max-bs-decode: 16
+  benchmark:
+    env:
+      CONC: "4"
+
+override_tp8_prefill128k_c8:
+  <<: *prefill128k
   benchmark:
     env:
       CONC: "8"
