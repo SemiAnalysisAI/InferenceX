@@ -9443,3 +9443,11 @@
   description:
     - "Gate partial attention DP2 by changing only the qualified colocated decoder data-parallel size from four to two. Preserve dense TP1, native memory fraction, dispatch capacity, global admission and graph limits, routing, full context and prefill-only 513 GB UMBP; require genuine GSM32, both attention lanes and actual local graph-eight execution."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3734
+
+- config-keys:
+    - glm53-mi325x-oct5-colocated-tep4-attndp2-round-robin-c8
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Measure the genuine-qualified partial attention DP2 decoder at concurrency eight with unchanged full-context pools, native memory fraction, dispatch capacity, admission, graphs, routing and prefill-only 513 GB UMBP. Treat native long-context warmup as a separate memory viability gate; no context clamp or runtime workaround."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3734
