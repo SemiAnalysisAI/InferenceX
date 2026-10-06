@@ -1,0 +1,349 @@
+{
+  "official_image_config_digest": "sha256:aa151c70573fd5d3f94538c73adac6b235f052bb7dc9a8681ad2bfd0a8417929",
+  "official_archive_sha256": "0ba397bc31abc1c538e24f8d7264fb421cc5fb8dd59b2e1c493a8efec404c2ba",
+  "recovery": {
+    "repository": "SemiAnalysisAI/InferenceX",
+    "run_id": 36985488002,
+    "artifact_id": 11217112734,
+    "artifact_name": "amd-dme-nightly-squash",
+    "squash_sha256": "0f2cbb4e2c41c1506db74c6653ea09ec5e7d42236d9532e2bc38fb9e0be5879e"
+  },
+  "config": {
+    "Env": [
+      "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/home/amd/bin/:/opt/rocm/bin/:/opt/nic/bin:/opt/nic/sbin",
+      "container=oci",
+      "LD_LIBRARY_PATH=/home/amd/lib:/opt/rocm/lib:/opt/rocm-10.1.0rc3/lib/rocm_sysdeps/lib:",
+      "GPUAGENT_EVENTS_DISABLE=1",
+      "AMD_METRICS_EXPORTER_ENABLE_CPER=1"
+    ],
+    "Entrypoint": [
+      "/home/amd/tools/entrypoint.sh"
+    ],
+    "WorkingDir": "/",
+    "Labels": {
+      "HOURLY_TAG": "",
+      "OS": "registry.access.redhat.com/ubi9/ubi-minimal:9.8",
+      "ROCM_COMMIT": "",
+      "ROCM_VERSION": "10.1.0rc3",
+      "architecture": "x86_64",
+      "build-date": "2026-09-30T07:43:22Z",
+      "com.redhat.component": "ubi9-minimal-container",
+      "com.redhat.license_terms": "https://www.redhat.com/en/about/red-hat-end-user-license-agreements#UBI",
+      "cpe": "cpe:/a:redhat:enterprise_linux:9::appstream",
+      "description": "AMD Device Metrics Exporter enables Prometheus-format metrics collection for AMD GPUs in HPC and AI environments. It provides detailed telemetry including temperature, utilization, memory usage, and power consumption.",
+      "distribution-scope": "public",
+      "io.buildah.version": "1.44.0",
+      "io.k8s.description": "The Universal Base Image Minimal is a stripped down image that uses microdnf as a package manager. This base image is freely redistributable, but Red Hat only supports Red Hat technologies through subscriptions for Red Hat products. This image is maintained by Red Hat and updated regularly.",
+      "io.k8s.display-name": "Red Hat Universal Base Image 9 Minimal",
+      "io.openshift.expose-services": "",
+      "io.openshift.tags": "minimal rhel9",
+      "maintainer": "praveenkumar.shanmugam@amd.com,nitish.bhat@amd.com,yan.sun3@amd.com,shrey.ajmera@amd.com",
+      "name": "amd-device-metrics-exporter",
+      "org.opencontainers.image.created": "2026-09-30T07:43:22Z",
+      "org.opencontainers.image.revision": "f354e3d450169972cb1f8df64acae506d96d4c49",
+      "release": "v1.5.4",
+      "summary": "AMD Device Metrics Exporter enables out-of-the-box metrics collection for AMD GPUs on Kubernetes.",
+      "url": "https://catalog.redhat.com/en/search?searchType=containers",
+      "vcs-ref": "f354e3d450169972cb1f8df64acae506d96d4c49",
+      "vcs-type": "git",
+      "vendor": "Advanced Micro Devices, Inc.",
+      "version": "v1.5.4"
+    }
+  },
+  "files": {
+    "home/amd/bin/amdgpuhealth": {
+      "type": "file",
+      "sha256": "793f66e2c3f9dc86105dddbf4d22140dfcad7c1eb2693694cd93f455d5d63744",
+      "mode": 493
+    },
+    "home/amd/bin/gpuagent": {
+      "type": "file",
+      "sha256": "8c2b013b98a29448804cac534d62d0c96a45d564669aa7d5ee2435d7b1784cc0",
+      "mode": 493
+    },
+    "home/amd/bin/gpuctl": {
+      "type": "file",
+      "sha256": "b4df351009b557233241fe0dd0cd4c671014a628a8e27e1110ab8c3509178f4c",
+      "mode": 493
+    },
+    "home/amd/bin/metrics-exporter-ts.sh": {
+      "type": "file",
+      "sha256": "81dd25273d8b457224f3c62bf3bdfb5da5ba8f8f27e09ef807919dc2930653cd",
+      "mode": 493
+    },
+    "home/amd/bin/metricsclient": {
+      "type": "file",
+      "sha256": "f2d6168da03e938ac72fbcc59a4e07d0705c5eac34ba516fb2f97b513432009b",
+      "mode": 493
+    },
+    "home/amd/bin/rocpctl": {
+      "type": "file",
+      "sha256": "cb86c07456f8d54e91b12ecba704a60aeb5ccf81c46c314668f8ba2934d840c2",
+      "mode": 493
+    },
+    "home/amd/bin/server": {
+      "type": "file",
+      "sha256": "ffafbaffb534c44b2d352dfc5604a0daf1c396b7a149b0a7a4f18762732b5f36",
+      "mode": 493
+    },
+    "home/amd/lib/libamd_smi.so": {
+      "type": "symlink",
+      "target": "libamd_smi.so.27"
+    },
+    "home/amd/lib/libamd_smi.so.27": {
+      "type": "file",
+      "sha256": "77859323dce97cda578e9d2e332fded749622a52dadb804c7ace09de23e8f329",
+      "mode": 493
+    },
+    "home/amd/lib/librocm_sysdeps_drm.so.2": {
+      "type": "file",
+      "sha256": "cf203bcf5f42df87c5e292b254ea6cd801c3612027c04e5f29bfc71607877775",
+      "mode": 493
+    },
+    "home/amd/lib/librocm_sysdeps_drm_amdgpu.so.1": {
+      "type": "file",
+      "sha256": "5485dbf004f79fe2ca51a11ff89625299a8602bb46ebc4f2a25471e81825faf5",
+      "mode": 493
+    },
+    "home/amd/lib/librocm_sysdeps_mnl.so.0": {
+      "type": "file",
+      "sha256": "d73ed5e00af232ae518ff738218d3795f7b66c60208c2b11f78183f27f373175",
+      "mode": 493
+    },
+    "home/amd/lib/librocm_sysdeps_nl_3.so.200": {
+      "type": "file",
+      "sha256": "f83b147afcb0b69336ac0cea582766168b11c0187857198d588fdd10c1f9bac8",
+      "mode": 493
+    },
+    "home/amd/lib/librocm_sysdeps_nl_genl_3.so.200": {
+      "type": "file",
+      "sha256": "ab2dc13a18577ce7d313088ab90d5dcf945ac3f49a061a65381799b4a64fc0c0",
+      "mode": 493
+    },
+    "home/amd/tools/entrypoint.sh": {
+      "type": "file",
+      "sha256": "70e04a4ba3c46e36b341db851683ca5597ab2806802e1cf81b0c0fd47361a0fe",
+      "mode": 493
+    },
+    "opt/rocm": {
+      "type": "symlink",
+      "target": "/etc/alternatives/rocm"
+    },
+    "opt/rocm-10.1.0rc3/lib/libamd_smi.so": {
+      "type": "symlink",
+      "target": "libamd_smi.so.27"
+    },
+    "opt/rocm-10.1.0rc3/lib/libamd_smi.so.27": {
+      "type": "symlink",
+      "target": "libamd_smi.so.27.1.0"
+    },
+    "opt/rocm-10.1.0rc3/lib/libamd_smi.so.27.1.0": {
+      "type": "file",
+      "sha256": "77859323dce97cda578e9d2e332fded749622a52dadb804c7ace09de23e8f329",
+      "mode": 493
+    },
+    "opt/rocm-10.1.0rc3/lib/librocpclient.so": {
+      "type": "file",
+      "sha256": "a020125a4477056cb64552986eee95a3c7d162b91a3d1eb67ee92d2f00b38c89",
+      "mode": 493
+    },
+    "opt/rocm-10.1.0rc3/lib/rocm_sysdeps/lib/librocm_sysdeps_asm.so.1": {
+      "type": "file",
+      "sha256": "747121912a67621171749399ca510a62d0b4b2ee9044ebd24c9dd31c8e5e0371",
+      "mode": 493
+    },
+    "opt/rocm-10.1.0rc3/lib/rocm_sysdeps/lib/librocm_sysdeps_blkid.so.1": {
+      "type": "file",
+      "sha256": "b08a7263000676fb1d31d81a9581707bd836ef1ac756bf2228c92ef91548d083",
+      "mode": 493
+    },
+    "opt/rocm-10.1.0rc3/lib/rocm_sysdeps/lib/librocm_sysdeps_bz2.so": {
+      "type": "file",
+      "sha256": "fe4102b002321cea17405cf9c6aa04cf46e726bea5666c40ac8639684314de02",
+      "mode": 493
+    },
+    "opt/rocm-10.1.0rc3/lib/rocm_sysdeps/lib/librocm_sysdeps_cap.so.2": {
+      "type": "file",
+      "sha256": "988916874bd84ecd9e4755160a193073b5336242e387fb0e40257b83edc678dc",
+      "mode": 493
+    },
+    "opt/rocm-10.1.0rc3/lib/rocm_sysdeps/lib/librocm_sysdeps_drm.so.2": {
+      "type": "file",
+      "sha256": "cf203bcf5f42df87c5e292b254ea6cd801c3612027c04e5f29bfc71607877775",
+      "mode": 493
+    },
+    "opt/rocm-10.1.0rc3/lib/rocm_sysdeps/lib/librocm_sysdeps_drm_amdgpu.so.1": {
+      "type": "file",
+      "sha256": "6e6ac3431944eba947506faf56386c02934893543121246e5cc96ea2ea8d2b6a",
+      "mode": 493
+    },
+    "opt/rocm-10.1.0rc3/lib/rocm_sysdeps/lib/librocm_sysdeps_dw.so.1": {
+      "type": "file",
+      "sha256": "c15ba3964365ad35ed1b072347163e8dcd8e8d3b0c19646537126f629275b9fd",
+      "mode": 493
+    },
+    "opt/rocm-10.1.0rc3/lib/rocm_sysdeps/lib/librocm_sysdeps_elf.so.1": {
+      "type": "file",
+      "sha256": "cc7c1d8faa3f067072c6496cdaba16ed792d94130c41b2b0d5f01bc6367631f5",
+      "mode": 493
+    },
+    "opt/rocm-10.1.0rc3/lib/rocm_sysdeps/lib/librocm_sysdeps_expat.so.1": {
+      "type": "file",
+      "sha256": "b85cdd6fe2004ea5e7a1eea1c4c4522e606ecaaedfbc22d6c9f09a2b77bd91a3",
+      "mode": 493
+    },
+    "opt/rocm-10.1.0rc3/lib/rocm_sysdeps/lib/librocm_sysdeps_formw.so.6": {
+      "type": "file",
+      "sha256": "eb0ca92e4ca0d46b69366c736ba40ee409e8f64a9249e591999a873c5838e8fd",
+      "mode": 493
+    },
+    "opt/rocm-10.1.0rc3/lib/rocm_sysdeps/lib/librocm_sysdeps_gallium_drv_video.so": {
+      "type": "file",
+      "sha256": "c36a5a5049f6bd1a6bb4180cedb8b5f0c3f2f0d8720b783704254398882309a7",
+      "mode": 493
+    },
+    "opt/rocm-10.1.0rc3/lib/rocm_sysdeps/lib/librocm_sysdeps_gmp.so.10": {
+      "type": "file",
+      "sha256": "f009167d6003de15b5a4bfb9c670433d1da1df1ea8d67ea41c55875386fa8d01",
+      "mode": 493
+    },
+    "opt/rocm-10.1.0rc3/lib/rocm_sysdeps/lib/librocm_sysdeps_hwloc.so.5": {
+      "type": "file",
+      "sha256": "52d240623482edb7b23cf9bb28888839575e331be228c7b8e22a9640e220fe81",
+      "mode": 493
+    },
+    "opt/rocm-10.1.0rc3/lib/rocm_sysdeps/lib/librocm_sysdeps_liblzma.so.5": {
+      "type": "symlink",
+      "target": "librocm_sysdeps_liblzma.so.5.8.1"
+    },
+    "opt/rocm-10.1.0rc3/lib/rocm_sysdeps/lib/librocm_sysdeps_liblzma.so.5.8.1": {
+      "type": "file",
+      "sha256": "15402b36e2fdb0762e0b6590c3470fccec5e80cc8010c84ac4835573d592c02d",
+      "mode": 493
+    },
+    "opt/rocm-10.1.0rc3/lib/rocm_sysdeps/lib/librocm_sysdeps_menuw.so.6": {
+      "type": "file",
+      "sha256": "f1052d214a022a4d2ff2068a08995b63f2a06df54f581cea6aafa7b1a11ff54d",
+      "mode": 493
+    },
+    "opt/rocm-10.1.0rc3/lib/rocm_sysdeps/lib/librocm_sysdeps_mnl.so.0": {
+      "type": "file",
+      "sha256": "d73ed5e00af232ae518ff738218d3795f7b66c60208c2b11f78183f27f373175",
+      "mode": 493
+    },
+    "opt/rocm-10.1.0rc3/lib/rocm_sysdeps/lib/librocm_sysdeps_mount.so.1": {
+      "type": "file",
+      "sha256": "0f06b3b8383061360f68805f0e6aeca6a209301c233fcb29caec13c96f326987",
+      "mode": 493
+    },
+    "opt/rocm-10.1.0rc3/lib/rocm_sysdeps/lib/librocm_sysdeps_mpfr.so.6": {
+      "type": "file",
+      "sha256": "7c8fb735972b878ddce57964f52a716bf72886f364c103f2df953e95495650a0",
+      "mode": 493
+    },
+    "opt/rocm-10.1.0rc3/lib/rocm_sysdeps/lib/librocm_sysdeps_ncursesw.so.6": {
+      "type": "file",
+      "sha256": "1c1396486d718fc64695f40194d989832b06ec9ab25747649ff4b0b313c941fe",
+      "mode": 493
+    },
+    "opt/rocm-10.1.0rc3/lib/rocm_sysdeps/lib/librocm_sysdeps_nl_3.so.200": {
+      "type": "file",
+      "sha256": "f83b147afcb0b69336ac0cea582766168b11c0187857198d588fdd10c1f9bac8",
+      "mode": 493
+    },
+    "opt/rocm-10.1.0rc3/lib/rocm_sysdeps/lib/librocm_sysdeps_nl_genl_3.so.200": {
+      "type": "file",
+      "sha256": "ab2dc13a18577ce7d313088ab90d5dcf945ac3f49a061a65381799b4a64fc0c0",
+      "mode": 493
+    },
+    "opt/rocm-10.1.0rc3/lib/rocm_sysdeps/lib/librocm_sysdeps_nl_idiag_3.so.200": {
+      "type": "file",
+      "sha256": "62b8b23b149b061e2a95117710eef354ff95de185452ce05af6aaf8b29ee60ad",
+      "mode": 493
+    },
+    "opt/rocm-10.1.0rc3/lib/rocm_sysdeps/lib/librocm_sysdeps_nl_nf_3.so.200": {
+      "type": "file",
+      "sha256": "f21015e3a6894857cd5d4dfa27d6de52bbfadb4247aac2edc0114c1f8af7da25",
+      "mode": 493
+    },
+    "opt/rocm-10.1.0rc3/lib/rocm_sysdeps/lib/librocm_sysdeps_nl_route_3.so.200": {
+      "type": "file",
+      "sha256": "3709ce228b7a82bcb3a4b93a54ce26c2b6fa38b6f0b49c849d5caea02c8ca7bc",
+      "mode": 493
+    },
+    "opt/rocm-10.1.0rc3/lib/rocm_sysdeps/lib/librocm_sysdeps_nl_xfrm_3.so.200": {
+      "type": "file",
+      "sha256": "d892573aaf11ce964c86a548345a61b9c32218711b7b4c3aac07d245a56bbc7f",
+      "mode": 493
+    },
+    "opt/rocm-10.1.0rc3/lib/rocm_sysdeps/lib/librocm_sysdeps_numa.so.1": {
+      "type": "file",
+      "sha256": "333b980e3f706f7196c73a33967c7979e9fd47b6d5f5f51ed3990142ef4142cb",
+      "mode": 493
+    },
+    "opt/rocm-10.1.0rc3/lib/rocm_sysdeps/lib/librocm_sysdeps_panelw.so.6": {
+      "type": "file",
+      "sha256": "470e0b21fd509b0e48edb8631045a85c760e00d272607497fb9b2cade058b34e",
+      "mode": 493
+    },
+    "opt/rocm-10.1.0rc3/lib/rocm_sysdeps/lib/librocm_sysdeps_pciaccess.so.0": {
+      "type": "file",
+      "sha256": "e344afed823a3b2d0f149c218ed5ee2545d637ae9e03e5a5e4e9d54e2bdb9410",
+      "mode": 493
+    },
+    "opt/rocm-10.1.0rc3/lib/rocm_sysdeps/lib/librocm_sysdeps_psx.so.2": {
+      "type": "file",
+      "sha256": "045c9fcb71a9bf6b781033118f842870aca75201b52e991365e1b38f2ba709a6",
+      "mode": 493
+    },
+    "opt/rocm-10.1.0rc3/lib/rocm_sysdeps/lib/librocm_sysdeps_sqlite3.so": {
+      "type": "file",
+      "sha256": "44234a62c1ca345fd1a7886b4eeb82b6396ff7737967446c1627d4154c69a69a",
+      "mode": 493
+    },
+    "opt/rocm-10.1.0rc3/lib/rocm_sysdeps/lib/librocm_sysdeps_va-drm.so": {
+      "type": "symlink",
+      "target": "librocm_sysdeps_va-drm.so.2"
+    },
+    "opt/rocm-10.1.0rc3/lib/rocm_sysdeps/lib/librocm_sysdeps_va-drm.so.2": {
+      "type": "symlink",
+      "target": "librocm_sysdeps_va-drm.so.2.2200.0"
+    },
+    "opt/rocm-10.1.0rc3/lib/rocm_sysdeps/lib/librocm_sysdeps_va-drm.so.2.2200.0": {
+      "type": "file",
+      "sha256": "f787d8dfdd09b1bdd2d33f4e5a6f53402edf789c5a2d2bb70e759e284c702257",
+      "mode": 493
+    },
+    "opt/rocm-10.1.0rc3/lib/rocm_sysdeps/lib/librocm_sysdeps_va.so": {
+      "type": "symlink",
+      "target": "librocm_sysdeps_va.so.2"
+    },
+    "opt/rocm-10.1.0rc3/lib/rocm_sysdeps/lib/librocm_sysdeps_va.so.2": {
+      "type": "symlink",
+      "target": "librocm_sysdeps_va.so.2.2200.0"
+    },
+    "opt/rocm-10.1.0rc3/lib/rocm_sysdeps/lib/librocm_sysdeps_va.so.2.2200.0": {
+      "type": "file",
+      "sha256": "dc4e1cac5d99b98af82638538c004dc770d7a2a14363e6eff32d552107fc2702",
+      "mode": 493
+    },
+    "opt/rocm-10.1.0rc3/lib/rocm_sysdeps/lib/librocm_sysdeps_z.so.1": {
+      "type": "symlink",
+      "target": "librocm_sysdeps_z.so.1.3.2"
+    },
+    "opt/rocm-10.1.0rc3/lib/rocm_sysdeps/lib/librocm_sysdeps_z.so.1.3.2": {
+      "type": "file",
+      "sha256": "27361c0c552d2afd5ecf9079f356309ed827e9a27d35f2fc68c7b5e6b5c83199",
+      "mode": 493
+    },
+    "opt/rocm-10.1.0rc3/lib/rocm_sysdeps/lib/librocm_sysdeps_zstd.so.1": {
+      "type": "symlink",
+      "target": "librocm_sysdeps_zstd.so.1.5.7"
+    },
+    "opt/rocm-10.1.0rc3/lib/rocm_sysdeps/lib/librocm_sysdeps_zstd.so.1.5.7": {
+      "type": "file",
+      "sha256": "5fc4ab0e6899318ece9bea43d3d397d20053418a5e40cb6bc86efe19a801c75e",
+      "mode": 493
+    }
+  }
+}

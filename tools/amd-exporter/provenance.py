@@ -37,7 +37,7 @@ receipt = {
         "name": os.environ["ARCHIVE_NAME"],
         "sha256": os.environ["ARCHIVE_SHA256"],
     },
-    "base_image_config_digest": os.environ["BASE_CONFIG_ID"],
+    "base_recovery": json.loads((output / "base-recovery.json").read_text()),
     "image": {
         "loaded_tag": os.environ["IMAGE_REF"],
         "config_digest": image["Id"],
