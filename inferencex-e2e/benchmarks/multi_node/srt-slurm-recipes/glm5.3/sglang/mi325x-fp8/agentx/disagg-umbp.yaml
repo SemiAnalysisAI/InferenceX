@@ -619,16 +619,16 @@ override_two_tep4_tp8_long_quality_c8:
   environment:
     EVAL_INCLUDE_PATH: /infmax-workspace/infx/evals/diagnostics
     EVAL_TASKS_DIR: gsm8k_16shot
-  frontend:
+  frontend: &two_tep4_tp8_frontend
     args:
       prefill-policy: cache_aware
       decode-policy: round_robin
-  services:
+  services: &two_tep4_tp8_services
     - <<: *umbp_service
       command:
         - /sgl-workspace/mori/python/mori/umbp_standalone_server
         - unix:///logs/umbp-{node}.sock
-  roles:
+  roles: &two_tep4_tp8_roles
     prefill:
       nodes: 1
       workers: 2
@@ -646,6 +646,17 @@ override_two_tep4_tp8_long_quality_c8:
         expert-parallel-size: 1
         max-running-requests: 16
         cuda-graph-max-bs-decode: 16
+  benchmark:
+    env:
+      CONC: "8"
+
+# Fresh AgentX deployment; identical serving geometry to the long genuine gate.
+override_two_tep4_tp8_perf_c8:
+  slurm:
+    time_limit: "12:00:00"
+  frontend: *two_tep4_tp8_frontend
+  services: *two_tep4_tp8_services
+  roles: *two_tep4_tp8_roles
   benchmark:
     env:
       CONC: "8"
