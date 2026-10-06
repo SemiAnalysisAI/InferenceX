@@ -9442,3 +9442,12 @@
   description:
     - "Gate native DEP16 local graph-four decoding by raising only global running and graph limits from thirty-two to sixty-four on the measured single-prefill server. Preserve full context, native dispatch capacity, memory fraction, routing and prefill-only 513 GB UMBP; require genuine GSM64 and actual graph-four execution on all sixteen attention lanes."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3734
+
+- config-keys:
+    - glm53-mi325x-oct6-two-tep4-tp8-official
+    - glm53-mi325x-oct6-tp8-mtp-official
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Compare native packed TEP4 prefill with pure TP8 decode against the TP8 MTP aggregate control on the October 6 image, retaining full context and official AgentX warmup and profiling."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3734

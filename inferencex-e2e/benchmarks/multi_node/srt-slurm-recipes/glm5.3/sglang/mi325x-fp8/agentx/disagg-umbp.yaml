@@ -660,3 +660,37 @@ override_two_tep4_tp8_perf_c8:
   benchmark:
     env:
       CONC: "8"
+
+# Oct6 image-only requalification of the completed 1790 serving configuration.
+override_two_tep4_tp8_oct6_long_quality_c8:
+  name: mi325x-glm53-two-tep4-tp8-oct6-long-quality
+  model: &two_tep4_tp8_oct6_model
+    container: lmsysorg/sglang-rocm:v0.5.21-rocm720-mi30x-20261006@sha256:f7430d43c728da94f001ca51d5d2e0d754c85a3a8d54a3b68bf7aa2e12e6ff6a
+  identity: &two_tep4_tp8_oct6_identity
+    container:
+      image: lmsysorg/sglang-rocm:v0.5.21-rocm720-mi30x-20261006@sha256:f7430d43c728da94f001ca51d5d2e0d754c85a3a8d54a3b68bf7aa2e12e6ff6a
+  slurm:
+    time_limit: "01:00:00"
+  environment:
+    EVAL_INCLUDE_PATH: /infmax-workspace/infx/evals/diagnostics
+    EVAL_TASKS_DIR: gsm8k_16shot
+  frontend: *two_tep4_tp8_frontend
+  services: *two_tep4_tp8_services
+  roles: *two_tep4_tp8_roles
+  benchmark:
+    env:
+      CONC: "8"
+
+# Official warmup and duration come from the standard non-fast workflow caller.
+override_two_tep4_tp8_oct6_official_c8:
+  name: mi325x-glm53-two-tep4-tp8-oct6-official
+  model: *two_tep4_tp8_oct6_model
+  identity: *two_tep4_tp8_oct6_identity
+  slurm:
+    time_limit: "12:00:00"
+  frontend: *two_tep4_tp8_frontend
+  services: *two_tep4_tp8_services
+  roles: *two_tep4_tp8_roles
+  benchmark:
+    env:
+      CONC: "8"
