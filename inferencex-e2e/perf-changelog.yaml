@@ -9327,3 +9327,13 @@
   description:
     - "Enable SGLANG_OPT_USE_TOPK_V2 (false -> true) so the DSA indexer uses the top-k v2 kernel."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3724
+
+- config-keys:
+    - qwen3.5-fp4-gb300-dynamo-trt-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Enable metrics and KV-event publication for the six Qwen3.5 GB300 FP4 TRT-LLM AgentX variants, with Dynamo source revision 563d3d06650d4c3573148b073d5a2df32acb3054 and OMP_NUM_THREADS=1 for both worker roles."
+    - "Set iter_perf_stats_interval and kv_cache_config.iteration_stats_interval to 20 for prefill and decode, and use non-overlap scheduling for the multi-rank attention-DP roles."
+    - "Update the TRT-LLM image, recipe container identity, and native KV-offload version from 1.3.0rc24 to 1.4.0rc0.dev202610040000."
+  pr-link: XXX
