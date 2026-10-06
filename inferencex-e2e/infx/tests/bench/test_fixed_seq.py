@@ -5,8 +5,10 @@ from __future__ import annotations
 import json
 import shlex
 import shutil
+import signal
 import subprocess
 import sys
+import time
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -25,11 +27,20 @@ POLICY = {
     "--percentile-metrics": "ttft,tpot,itl,e2el",
 }
 
-# Records each client run and writes the result file the real client would.
+# Records each client run and writes the result file the real client would. With
+# FAKE_CLIENT_TRAP set, it waits for SIGTERM or SIGHUP, records the signal, and exits 0.
 FAKE_CLIENT = """
-import json, os, sys
+import json, os, signal, sys, time
 from pathlib import Path
 
+def finish(signum, _frame):
+    Path(os.environ["FAKE_CLIENT_TRAP"]).write_text(signal.Signals(signum).name)
+    sys.exit(0)
+
+trap = os.environ.get("FAKE_CLIENT_TRAP")
+if trap:
+    signal.signal(signal.SIGTERM, finish)
+    signal.signal(signal.SIGHUP, finish)
 argv = sys.argv[1:]
 value = lambda flag: argv[argv.index(flag) + 1]
 result = Path(value("--result-dir")) / value("--result-filename")
@@ -40,6 +51,8 @@ record = {
 }
 with open(os.environ["FAKE_CLIENT_LOG"], "a") as log:
     log.write(json.dumps(record) + "\\n")
+while trap:
+    time.sleep(0.05)
 if value("--max-concurrency") == os.environ.get("FAKE_CLIENT_FAIL_CONC"):
     sys.exit(3)
 result.write_text(json.dumps(
@@ -156,6 +169,25 @@ def frontend(*models: str):
         if path == "/v1/models"
         else (404, {})
     )
+
+
+# What benchmarks/multi_node/llm-d/server.sh passes for one concurrency.
+POINT_FLAGS = {
+    "--base-url": "http://0.0.0.0:8080",
+    "--model": "deepseek-ai/DeepSeek-V4-Pro",
+    "--backend": "openai",
+    "--tokenizer": "/models",
+    "--isl": "8192",
+    "--osl": "1024",
+    "--random-range-ratio": "0.8",
+    "--conc": "1",
+    "--num-prompts": "16",
+}
+
+
+def point_argv(result: Path) -> list[str]:
+    flags = {**POINT_FLAGS, "--result": str(result)}
+    return ["fixed-seq", "point", *(token for pair in flags.items() for token in pair)]
 
 
 @pytest.mark.parametrize("client_failed", [True, False])
@@ -325,3 +357,56 @@ def test_sweep_without_a_served_model_runs_nothing(
     assert capsys.readouterr().err == f"ERROR: {url}/v1/models lists no served model\n"
     assert client_runs(tmp_path) == []
     assert not (tmp_path / "logs").exists()
+
+
+def test_point_runs_the_callers_flags_under_the_shared_policy(tmp_path, tools, monkeypatch):
+    use_env(monkeypatch, {"PATH": str(tools), "FAKE_CLIENT_LOG": str(tmp_path / "client.log")})
+    result = tmp_path / "results" / "stem_c1_gpus_16_ctx_8_gen_8.json"
+    result.parent.mkdir()
+
+    assert bench(point_argv(result)) == 0
+    [run] = client_runs(tmp_path)
+    assert options(run["argv"]) == {
+        **POLICY,
+        "--model": "deepseek-ai/DeepSeek-V4-Pro",
+        "--backend": "openai",
+        "--base-url": "http://0.0.0.0:8080",
+        "--tokenizer": "/models",
+        "--random-input-len": "8192",
+        "--random-output-len": "1024",
+        "--random-range-ratio": "0.8",
+        "--num-prompts": "16",
+        "--max-concurrency": "1",
+        "--num-warmups": "2",
+        "--result-dir": str(result.parent),
+        "--result-filename": result.name,
+    }
+    assert result.is_file()
+
+
+@pytest.mark.parametrize(
+    ("sent", "rc"), [(signal.SIGTERM, 143), (signal.SIGHUP, 129)], ids=["TERM", "HUP"]
+)
+def test_point_relays_a_signal_and_an_interrupted_run_never_passes(tmp_path, tools, sent, rc):
+    trapped = tmp_path / "trapped"
+    process = subprocess.Popen(
+        [sys.executable, "-m", "infx.bench", *point_argv(tmp_path / "result.json")],
+        env={
+            "PATH": str(tools), "PYTHONPATH": str(REPO_ROOT), "PYTHONDONTWRITEBYTECODE": "1",
+            "FAKE_CLIENT_LOG": str(tmp_path / "client.log"), "FAKE_CLIENT_TRAP": str(trapped),
+        },
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+    )  # fmt: skip
+    try:
+        deadline = time.monotonic() + 10
+        while not client_runs(tmp_path):
+            assert time.monotonic() < deadline, "the client did not start"
+            time.sleep(0.02)
+        process.send_signal(sent)
+        _, stderr = process.communicate(timeout=30)
+    finally:
+        process.kill()
+
+    # The client exited 0 on the relayed signal, but an interrupted run never passes.
+    assert process.returncode == rc, stderr
+    assert trapped.read_text() == sent.name

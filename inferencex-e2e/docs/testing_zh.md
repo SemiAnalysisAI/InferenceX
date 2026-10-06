@@ -162,7 +162,7 @@ python3 -m infx.workflows.validate_perf_changelog \
 
 其契约实现在 [`validate_perf_changelog.py`](../infx/workflows/validate_perf_changelog.py) 中。该检查会验证生成矩阵并拒绝禁止的内容变更，但其差异读取器可能看不到仅空白的历史删除。应把精确字节差异检查作为独立证据门禁；不要改写或规范化 `perf-changelog.yaml` 历史字节。
 
-本地矩阵不能证明 Slurm 分配或实际部署的 srt-slurm 拓扑。多节点配方变更仍然需要上游配方检查器，并在目标集群上实际执行；详见[配置验证](configuration-procedures_zh.md#验证)。
+本地矩阵不能证明 Slurm 分配或 llm-d 端点发现。多节点配方变更仍然需要上游配方检查器，并在目标集群上实际执行；详见[配置验证](configuration-procedures.md#validate)。
 
 ### 并行运行完整本地测试套件
 

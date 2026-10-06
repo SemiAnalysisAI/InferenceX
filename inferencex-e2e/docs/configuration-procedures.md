@@ -120,12 +120,13 @@ and preserve resources used by other jobs.
 3. [Change a master config](#change-a-master-config)
 4. [Register and set up a runner](#register-and-set-up-a-runner)
 5. [Register an srt-slurm recipe](#register-an-srt-slurm-recipe)
-6. [Update an image](#update-an-image)
-7. [Add or change MTP](#add-or-change-mtp)
-8. [Validate](#validate)
-9. [Avoid schema and topology traps](#avoid-schema-and-topology-traps)
-10. [Append the changelog safely](#append-the-changelog-safely)
-11. [Stop conditions](#stop-conditions)
+6. [Register an llm-d recipe](#register-an-llm-d-recipe)
+7. [Update an image](#update-an-image)
+8. [Add or change MTP](#add-or-change-mtp)
+9. [Validate](#validate)
+10. [Avoid schema and topology traps](#avoid-schema-and-topology-traps)
+11. [Append the changelog safely](#append-the-changelog-safely)
+12. [Stop conditions](#stop-conditions)
 
 ## Prepare a worktree
 
@@ -176,7 +177,7 @@ Sources: [`configs/CONFIGS.md`](../configs/CONFIGS.md), [`validation.py`](../inf
    - launcher: routing, mounts, model paths, image startup, and cluster behavior.
    - external/checked-in recipe: framework-specific multi-node runtime.
 5. For topology changes, calculate GPUs before editing and compare with the target fleet.
-6. For srt-slurm, update recipe and master entry together.
+6. For srt-slurm, update recipe and master entry together. For llm-d, update the llm-d recipe/orchestration and master entry together.
 7. Append the trigger entry, generate only the affected key first, and inspect every emitted point.
 
 Multi-node fixed-sequence `8192/1024` scenarios may set `require-power: true` to opt into validated measured power. The matrix passes this flag to standard sweeps and manual E2E throughput jobs; eval-only and AgentX rows do not inherit it. Single-node scenarios reject the field because no single-node lane collects power. Omit the field to preserve existing behavior. Enable it only alongside the corresponding runtime and result adapter, then qualify the complete selected scope.
@@ -219,6 +220,22 @@ Mapping source: [`benchmarks/multi_node/srt-slurm-recipes/RECIPES.md`](../benchm
 
 Do not ship one side alone. `srtctl` reads the recipe, while matrix generation reads the master config. Recipe-only changes can mislabel results. Master-only changes do not alter the deployed recipe.
 
+## Register an llm-d recipe
+
+Sources: [`benchmarks/llm-d/README.md`](../benchmarks/llm-d/README.md), [`benchmarks/multi_node/llm-d/README.md`](../benchmarks/multi_node/llm-d/README.md), and [`llm-d-recipes/`](../benchmarks/multi_node/llm-d-recipes).
+
+llm-d is not the srt-slurm path: InferenceX owns the Slurm allocation and starts one container per node.
+
+1. Copy the nearest YAML under [`benchmarks/multi_node/llm-d-recipes/`](../benchmarks/multi_node/llm-d-recipes) and set EPP plugins/scheduling, role-specific `extra-args`/`env`, and optional `slurm.time_limit`.
+2. Add/update the `llmd-vllm` master entry. Set `multinode: true`, `disagg: true`, router metadata, `kv-p2p-transfer`, prefill/decode worker topology, concurrency, and `CONFIG_FILE=<basename>.yaml` in `additional-settings`.
+3. Keep `PREFILL_NODES`, `DECODE_NODES`, `GPUS_PER_NODE`, and worker counts consistent with the allocation and with each role's DP/TP/EP layout.
+4. Confirm [`submit.sh`](../benchmarks/multi_node/llm-d/submit.sh) → [`job.slurm`](../benchmarks/multi_node/llm-d/job.slurm) → [`server.sh`](../benchmarks/multi_node/llm-d/server.sh) propagation and the selected wrapper/launcher route.
+5. Verify file discovery. The decode leader creates `/tmp/endpoints.yaml`. Prefill endpoints use vLLM port 8200, while decode endpoints use sidecar port 8000. Names must be unique, addresses must be literal IPv4, and ports must be strings in `1..65535`.
+6. Confirm EPP loads discovery before Envoy receives traffic and role labels select the proper prefill/decode backends.
+7. Generate the key, inspect topology and `additional-settings`, then append the changelog.
+
+A missing/unset `CONFIG_FILE` silently selects the image's `/etc/epp/config.yaml` fallback and removes recipe-specific vLLM flags. Treat that as a validation failure unless fallback is explicitly intended.
+
 ## Update an image
 
 Sources: [`AGENTS.md#non-negotiable-benchmark-invariants`](../../AGENTS.md#non-negotiable-benchmark-invariants), the matching master configs, runtime scripts, and checked-in recipes.
@@ -227,8 +244,9 @@ Sources: [`AGENTS.md#non-negotiable-benchmark-invariants`](../../AGENTS.md#non-n
 2. Find every affected config key, runtime script, Dockerfile, and checked-in recipe. Do not assume the master YAML is the only image reference.
 3. Update the master `image` and any required env vars, flags, package versions, or patches as one coherent change.
 4. For srt-slurm, update `model.container` and keep it identical to master `image`.
-5. Append a changelog entry selecting all affected keys (wildcards are allowed when intentional), including old/new versions and material runtime changes.
-6. Generate each affected family and verify no stale tag survives in its runtime path.
+5. For llm-d, distinguish the serving image selected by the master config from the build source in [`benchmarks/llm-d/Dockerfile`](../benchmarks/llm-d/Dockerfile). Update both only when the build contract changes.
+6. Append a changelog entry selecting all affected keys (wildcards are allowed when intentional), including old/new versions and material runtime changes.
+7. Generate each affected family and verify no stale tag survives in its runtime path.
 
 ## Add or change MTP
 
@@ -630,7 +648,7 @@ If schema or generator behavior changed, run its focused suite:
 python -m pytest infx/tests/matrix/ -v
 ```
 
-For srt-slurm, also run the upstream recipe checker/`srtctl` command documented for that recipe. Local matrix generation cannot prove the Slurm allocation or the deployed topology.
+For srt-slurm, also run the upstream recipe checker/`srtctl` command documented for that recipe. For llm-d, validate recipe YAML and exercise the allocation/discovery path on the intended Slurm fleet. Local matrix generation cannot prove endpoint discovery.
 
 ## Avoid schema and topology traps
 
@@ -681,6 +699,7 @@ Stop before dispatching GPU work or claiming the configuration complete when any
 - The registered runner is in no `cluster:<id>` label, a matrix resolves to a nonexistent script, or the runner is not **Idle**.
 - Calculated topology exceeds the fleet, DCP does not divide TP, heterogeneous hardware metadata is one-sided, or generated topology differs from the intended recipe.
 - An srt-slurm recipe and master entry disagree, `model.container != image`, or upstream recipe validation has not run.
+- An llm-d recipe is missing and would fall back unintentionally, allocation counts disagree, or endpoint discovery cannot satisfy literal-IPv4/unique-name/valid-port rules.
 - An MTP recipe lacks chat-template benchmarking, the speculative method/token count is unverified, or graph capture exceeds the backend limit.
 - The changelog change would modify historical bytes, is not at EOF, has a conflict, or still has `TBD` when the PR is otherwise ready for sweep.
 - YAML, Bash, strict schema, exact-key generation, cluster-record validation, launch tests, or recipe validation fails.
