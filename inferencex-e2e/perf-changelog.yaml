@@ -9349,3 +9349,12 @@
   description:
     - "Prepare an isolated October 6 distributed UMBP AgentX C16 diagnostic from the genuine-qualified server, disabling qualification-only ranged-call debug logging and restoring the twelve-hour allocation limit. Preserve both prefill workers, full-context DEP16 decode, cache-aware routing, physical identities and two 519 GB peer pools."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3734
+
+- config-keys:
+    - glm5.3-fp8-mi300x-sglang-disagg-2p-dep16
+    - glm5.3-fp8-mi300x-sglang-disagg-2p-dep16-embedded-oct6
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Align the diagnostic distributed-cache master with its October 6 image and C16 selector, and prepare a matched independent embedded-cache control. Both use identical two-prefill and DEP16 engines, cache-aware routing, 32 GPUs and two 519 GB host pools; only native cache services differ."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3734

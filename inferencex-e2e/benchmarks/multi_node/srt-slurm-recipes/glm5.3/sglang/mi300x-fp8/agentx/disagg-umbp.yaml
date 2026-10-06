@@ -631,6 +631,22 @@ override_2p_tp8_dep16_distributed_oct6_c16:
         <<: *distributed_peer_env
         UMBP_RANGED_CALL_DEBUG: "0"
 
+# Matched image/engine control using the original independent embedded pools.
+override_2p_tp8_dep16_embedded_oct6_c16:
+  <<: *two_prefill_dep16
+  name: mi300x-glm53-two-prefill-dep16-embedded-oct6-c16
+  model:
+    container: lmsysorg/sglang-rocm:v0.5.21-rocm720-mi30x-20261006@sha256:f7430d43c728da94f001ca51d5d2e0d754c85a3a8d54a3b68bf7aa2e12e6ff6a
+  identity:
+    container:
+      image: lmsysorg/sglang-rocm:v0.5.21-rocm720-mi30x-20261006@sha256:f7430d43c728da94f001ca51d5d2e0d754c85a3a8d54a3b68bf7aa2e12e6ff6a
+  roles:
+    <<: *two_prefill_dep16_roles
+    prefill:
+      <<: *two_prefill_dep16_prefill
+      env:
+        UMBP_NODE_ADDRESS: "{node}"
+
 override_1p2d_tp8_c16:
   roles:
     prefill:
