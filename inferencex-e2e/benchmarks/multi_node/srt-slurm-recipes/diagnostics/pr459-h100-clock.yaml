@@ -60,7 +60,6 @@ observability:
 telemetry:
   enabled: true
   required: true
-  clock_sync_check: true
   collect_interval_ms: 1000
   startup_timeout_seconds: 120
   dcgm_exporter:
@@ -76,6 +75,7 @@ environment:
 host_setup:
   commands:
     - hostname
+    - 'test "$(timedatectl show -p NTPSynchronized --value)" = yes'
     - 'printf "SLURM_JOB_GPUS=%s SLURM_STEP_GPUS=%s CUDA_VISIBLE_DEVICES=%s\n" "${SLURM_JOB_GPUS:-}" "${SLURM_STEP_GPUS:-}" "${CUDA_VISIBLE_DEVICES:-}"'
     - nvidia-smi --query-gpu=index,uuid,name --format=csv,noheader
     - 'test "${SLURM_STEP_GPUS:-${SLURM_JOB_GPUS:-}}" = 0'

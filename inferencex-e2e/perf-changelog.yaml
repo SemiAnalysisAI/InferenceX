@@ -9282,3 +9282,9 @@
     - "Add a two-host H100 PR459 diagnostic with required clock and GPU power validation, Qwen3-0.6B, and 40 requests at concurrency 4; no production result publication."
     - "添加双主机 H100 PR459 诊断：强制时钟与 GPU 功耗校验，使用 Qwen3-0.6B，以并发 4 执行 40 个请求；不发布生产结果。"
   pr-link: XXX
+
+- config-keys:
+    - pr459-h100-clock
+  description:
+    - "Collect native GPU temperature with the pinned SRT producer and accept v3 sample artifacts in the H100 diagnostic."
+  pr-link: XXX

@@ -1,1 +1,2 @@
 DCGM_FI_DEV_POWER_USAGE, gauge, GPU power usage in watts.
+DCGM_FI_DEV_GPU_TEMP, gauge, GPU temperature in Celsius.

@@ -436,7 +436,7 @@ jobs:
               raise SystemExit(f"Expected one diagnostic runtime, found {len(candidates)}")
           runtime = candidates[0]
           source = subprocess.check_output(["git", "-C", str(runtime.parents[2]), "rev-parse", "HEAD"], text=True).strip()
-          if source != "1cdf4fbc86ed72053fc7e7ac326b3bb4e0a7cc75":
+          if source != "b2b7dc8ce336de6a9e249615dfab6ff91716e0df":
               raise SystemExit(f"Unexpected SRT source: {source}")
           receipt = {"source_commit": source, "run_id": os.environ["GITHUB_RUN_ID"], "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"], "app_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()}
           with Path("pr459-offline-validation.txt").open("w") as log:
