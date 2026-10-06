@@ -185,7 +185,7 @@ override_tp8_prefill1k_c8:
     env:
       CONC: "8"
 
-override_tp8_decode_topkv2_c4:
+override_tp8_decode_topkv2_c4: &decode_topkv2
   slurm:
     time_limit: "01:00:00"
   roles:
@@ -202,6 +202,11 @@ override_tp8_decode_topkv2_c4:
   benchmark:
     env:
       CONC: "4"
+
+override_tp8_decode_topkv2_gsm16shot_c4:
+  <<: *decode_topkv2
+  environment:
+    EVAL_TASKS_DIR: /infmax-workspace/infx/evals/diagnostics/gsm8k_16shot.yaml
 
 override_tp8_decode_aiter_c8:
   roles:
