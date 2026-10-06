@@ -1046,6 +1046,11 @@ def _patch_launcher_module(module, private=False):
     for name, obj in list(vars(module).items()):
         if launchable(name, obj) or extension_function(name, obj):
             setattr(module, name, _wrap_launcher(obj, f"{module.__name__}.{name}"))
+        elif (private and callable(obj) and not isinstance(obj, (type, types.ModuleType))
+              and not name.startswith("__") and not getattr(obj, "_infx_launcher", False)):
+            kind = type(obj)
+            _note_once("launchers", "unwrapped", f"{module.__name__}.{name}: {kind.__module__}.{kind.__qualname__}"
+                       f" from {getattr(obj, '__module__', None)}")
         elif isinstance(obj, type) and obj.__module__ == module.__name__ and not name.startswith("_"):
             for attr, method in list(vars(obj).items()):
                 if launchable(attr, method):
