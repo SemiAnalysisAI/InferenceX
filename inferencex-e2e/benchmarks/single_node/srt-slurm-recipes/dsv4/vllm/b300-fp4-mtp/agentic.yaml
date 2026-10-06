@@ -74,6 +74,8 @@ zip_override_tp:
       gpus: [8, 8, 8, 8, 8, 4]
       args:
         tensor-parallel-size: [8, 8, 8, 8, 8, 4]
+        # TP4 gets a CPU-constrained half node, where vLLM cannot auto-detect NUMA nodes.
+        numa-bind: [true, true, true, true, true, false]
         data-parallel-size: 1
         disable-custom-all-reduce: true
         gpu-memory-utilization: 0.95
