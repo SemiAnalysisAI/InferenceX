@@ -1,0 +1,122 @@
+# [DNM] AgentX Qwen3.5-397B-A17B NVFP4 on one B200 node with TokenSpeed KV cache offload
+# (engine: tokenspeed, SemiAnalysisAI/srt-slurm#37): one TP4 worker whose KV cache spills
+# to a host-memory KVStore (L2, --kvstore-size GB per rank) and from there to Mooncake
+# Store (L3, --kvstore-storage-backend mooncake). The mooncake-master service starts the
+# master on the infra node and srtctl points every worker at it through MOONCAKE_*.
+#   override_dynamo_offload_c8  Dynamo frontend, dynamo.tokenspeed worker
+#   override_smg_offload_c8     SMG, TokenSpeed gRPC engine
+# MiniMax-M3 runs with --disable-kvstore (TokenSpeed's recipe), so the offload variants
+# serve Qwen3.5, whose hybrid cache the KVStore offloads (TokenSpeed #162).
+# Engine flags follow TokenSpeed's Qwen3.5-397B NVFP4 CI:
+# https://github.com/lightseekorg/tokenspeed/blob/22251686ff26a2b2f495263b348db80980b8ac9e/test/ci/perf/qwen3.5-397b-a17b-nvfp4-evalscope-agentic-b200-8gpu.yaml
+
+schema: 2
+
+base:
+  model:
+    path: qwen3.5-fp4
+    container: lightseekorg/tokenspeed-runner:cu130-torch-2.14.0-flashinfer-0.7.0
+    precision: fp4
+  slurm:
+    time_limit: '2:00:00'
+  health_check:
+    max_attempts: 720
+    interval_seconds: 5
+  resources:
+    gpu_type: b200
+    gpus_per_node: 8
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  setup_script: tokenspeed-0.1.0.post20260930.sh
+  environment:
+    NVIDIA_VISIBLE_DEVICES: all
+    NVIDIA_DRIVER_CAPABILITIES: compute,utility
+  engine: tokenspeed
+  # mooncake_master comes with TokenSpeed (tokenspeed-mooncake), which the setup script
+  # installs; services do not run the setup script, so the master runs it first.
+  services:
+  - name: mooncake-master
+    type: mooncake-master
+    preamble: bash /configs/tokenspeed-0.1.0.post20260930.sh
+    readiness:
+      port: 8700
+      timeout_seconds: 1800
+  sbatch_directives:
+    mem: '0'
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
+    env:
+      INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
+      RESULT_DIR: /logs/agentic
+      PORT: '8000'
+      IS_MULTINODE: 'true'
+      AIPERF_DATASET_MMAP_CACHE_DIR: /aiperf_mmap_cache
+      HF_HUB_CACHE: /hf_hub_cache
+      WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126_256k
+      MAX_MODEL_LEN: '262144'
+      AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES: '0'
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
+      AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
+      SERVED_MODEL_NAME: nvidia/Qwen3.5-397B-A17B-NVFP4
+      MODEL: nvidia/Qwen3.5-397B-A17B-NVFP4
+      MODEL_PREFIX: qwen3.5
+      PRECISION: fp4
+      KV_OFFLOADING: dram
+      OPENAI_API_KEY: EMPTY
+      CONC: '8'
+
+override_dynamo_offload_c8:
+  name: qwen35-b200-tokenspeed-dynamo-agg-tp4-offload-c8
+  dynamo:
+    install: true
+    source:
+      pypi: "1.6.0.dev20260922"
+  frontend:
+    type: dynamo
+    enable_multiple_frontends: false
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      env: &env
+        PYTHONUNBUFFERED: '1'
+        HF_HUB_OFFLINE: '1'
+        TRANSFORMERS_OFFLINE: '1'
+        TQDM_DISABLE: '1'
+        MOONCAKE_GLOBAL_SEGMENT_SIZE: 64gb
+        MOONCAKE_PROTOCOL: tcp
+      args: &args
+        served-model-name: nvidia/Qwen3.5-397B-A17B-NVFP4
+        trust-remote-code: true
+        tensor-parallel-size: 4
+        max-model-len: 262144
+        max-num-seqs: 16
+        chunked-prefill-size: 8192
+        gpu-memory-utilization: 0.85
+        disable-cuda-graph-padding: true
+        mamba-ssm-dtype: float32
+        attention-backend: trtllm
+        moe-backend: flashinfer_trtllm
+        quantization: nvfp4
+        kv-cache-dtype: fp8
+        kvstore-size: 64
+        kvstore-storage-backend: mooncake
+
+override_smg_offload_c8:
+  name: qwen35-b200-tokenspeed-smg-agg-tp4-offload-c8
+  dynamo:
+    install: false
+  frontend:
+    type: smg
+    enable_multiple_frontends: false
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      env: *env
+      args: *args

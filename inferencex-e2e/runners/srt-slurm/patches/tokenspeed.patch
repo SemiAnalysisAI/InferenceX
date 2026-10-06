@@ -479,10 +479,10 @@ index adc202fc..18010359 100644
  @dataclass
 diff --git a/src/srtctl/backends/tokenspeed.py b/src/srtctl/backends/tokenspeed.py
 new file mode 100644
-index 00000000..17ffa6e8
+index 00000000..a766c37d
 --- /dev/null
 +++ b/src/srtctl/backends/tokenspeed.py
-@@ -0,0 +1,253 @@
+@@ -0,0 +1,252 @@
 +# SPDX-FileCopyrightText: Copyright (c) 2026 SemiAnalysis LLC. All rights reserved.
 +# SPDX-License-Identifier: Apache-2.0
 +
@@ -503,7 +503,7 @@ index 00000000..17ffa6e8
 +from marshmallow import Schema
 +from marshmallow_dataclass import dataclass
 +
-+from srtctl.backends.sglang import _config_to_cli_args
++from srtctl.backends.sglang import MooncakeKVStoreConfig, SGLangProtocol, _config_to_cli_args
 +from srtctl.ports import DIST_INIT_PORTS, DYN_SYSTEM_PORT_BASE, TOKENSPEED_PORTS
 +
 +if TYPE_CHECKING:
@@ -557,8 +557,14 @@ index 00000000..17ffa6e8
 +    decode_environment: dict[str, str] = field(default_factory=dict)
 +    aggregated_environment: dict[str, str] = field(default_factory=dict)
 +    tokenspeed_config: TokenSpeedServerConfig | None = None
++    # Set by a `mooncake-master` service. TokenSpeed's Mooncake Store L3 cache
++    # (`kvstore-storage-backend: mooncake`) reads the master from the MOONCAKE_* environment.
++    mooncake_kv_store: MooncakeKVStoreConfig | None = None
 +
 +    Schema: ClassVar[builtins.type[Schema]] = Schema
++
++    # The same MOONCAKE_* variables SGLang's Mooncake store client reads.
++    get_mooncake_worker_env = SGLangProtocol.get_mooncake_worker_env
 +
 +    def get_srun_config(self) -> SrunConfig:
 +        from srtctl.backends.base import SrunConfig
@@ -603,15 +609,8 @@ index 00000000..17ffa6e8
 +        return default
 +
 +    @property
-+    def mooncake_kv_store(self) -> None:
-+        return None
-+
-+    @property
 +    def failover(self) -> None:
 +        return None
-+
-+    def get_mooncake_worker_env(self, infra_node_ip: str, local_hostname: str) -> dict[str, str]:
-+        return {}
 +
 +    def get_failover_environment(self, process: Process, job_id: str) -> dict[str, str]:
 +        return {}

@@ -130,3 +130,175 @@ override_smg_disagg_c8:
       gpus: 4
       env: *env
       args: *args
+
+
+# Parallel layouts. MiniMax-M3 is a MoE: DEP is attention DP over every GPU of the worker
+# with expert parallelism (data-parallel-size N, enable-expert-parallel), TEP is tensor
+# parallelism with expert parallelism (tensor-parallel-size N, enable-expert-parallel).
+override_dynamo_dep8_c8:
+  name: minimaxm3-b200-tokenspeed-dynamo-agg-dep8-c8
+  dynamo: &dynamo_install
+    install: true
+    source:
+      pypi: "1.6.0.dev20260922"
+  frontend: &dynamo_frontend
+    type: dynamo
+    enable_multiple_frontends: false
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      env: *env
+      args: &dep8
+        served-model-name: nvidia/MiniMax-M3-NVFP4
+        trust-remote-code: true
+        data-parallel-size: 8
+        enable-expert-parallel: true
+        max-model-len: 262144
+        max-num-seqs: 16
+        max-prefill-tokens: 8192
+        chunked-prefill-size: 8192
+        gpu-memory-utilization: 0.9
+        disable-cuda-graph-padding: true
+        attention-backend: trtllm
+        kv-cache-dtype: fp8
+        moe-backend: flashinfer_trtllm
+        disable-kvstore: true
+        block-size: 128
+        disaggregation-ib-device: mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_10,mlx5_11
+
+override_smg_dep8_c8:
+  name: minimaxm3-b200-tokenspeed-smg-agg-dep8-c8
+  dynamo: &no_dynamo
+    install: false
+  frontend: &smg_frontend
+    type: smg
+    enable_multiple_frontends: false
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      env: *env
+      args: *dep8
+
+override_dynamo_tep8_c8:
+  name: minimaxm3-b200-tokenspeed-dynamo-agg-tep8-c8
+  dynamo: *dynamo_install
+  frontend: *dynamo_frontend
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      env: *env
+      args: &tep8
+        served-model-name: nvidia/MiniMax-M3-NVFP4
+        trust-remote-code: true
+        tensor-parallel-size: 8
+        enable-expert-parallel: true
+        max-model-len: 262144
+        max-num-seqs: 16
+        max-prefill-tokens: 8192
+        chunked-prefill-size: 8192
+        gpu-memory-utilization: 0.9
+        disable-cuda-graph-padding: true
+        attention-backend: trtllm
+        kv-cache-dtype: fp8
+        moe-backend: flashinfer_trtllm
+        disable-kvstore: true
+        block-size: 128
+        disaggregation-ib-device: mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_10,mlx5_11
+
+override_smg_tep8_c8:
+  name: minimaxm3-b200-tokenspeed-smg-agg-tep8-c8
+  dynamo: *no_dynamo
+  frontend: *smg_frontend
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      env: *env
+      args: *tep8
+
+# One DEP16 worker across two nodes.
+override_dynamo_dep16_c8:
+  name: minimaxm3-b200-tokenspeed-dynamo-agg-dep16-c8
+  dynamo: *dynamo_install
+  frontend: *dynamo_frontend
+  roles:
+    agg:
+      nodes: 2
+      workers: 1
+      gpus: 16
+      env: *env
+      args: &dep16
+        served-model-name: nvidia/MiniMax-M3-NVFP4
+        trust-remote-code: true
+        data-parallel-size: 16
+        enable-expert-parallel: true
+        max-model-len: 262144
+        max-num-seqs: 16
+        max-prefill-tokens: 8192
+        chunked-prefill-size: 8192
+        gpu-memory-utilization: 0.9
+        disable-cuda-graph-padding: true
+        attention-backend: trtllm
+        kv-cache-dtype: fp8
+        moe-backend: flashinfer_trtllm
+        disable-kvstore: true
+        block-size: 128
+        disaggregation-ib-device: mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_10,mlx5_11
+
+override_smg_dep16_c8:
+  name: minimaxm3-b200-tokenspeed-smg-agg-dep16-c8
+  dynamo: *no_dynamo
+  frontend: *smg_frontend
+  roles:
+    agg:
+      nodes: 2
+      workers: 1
+      gpus: 16
+      env: *env
+      args: *dep16
+
+# Prefill and decode on separate nodes, KV over Mooncake RDMA between them. Dynamo
+# disaggregates only attention-DP-1 workers (dynamo.tokenspeed's
+# validate_disagg_compatibility), so its decode is TEP8; behind SMG decode is DEP8.
+override_dynamo_disagg_tep8_tep8_c8:
+  name: minimaxm3-b200-tokenspeed-dynamo-disagg-tep8-tep8-c8
+  dynamo: *dynamo_install
+  frontend: *dynamo_frontend
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      env: *env
+      args: *tep8
+    decode:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      env: *env
+      args: *tep8
+
+override_smg_disagg_tep8_dep8_c8:
+  name: minimaxm3-b200-tokenspeed-smg-disagg-tep8-dep8-c8
+  dynamo: *no_dynamo
+  frontend: *smg_frontend
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      env: *env
+      args: *tep8
+    decode:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      env: *env
+      args: *dep8
