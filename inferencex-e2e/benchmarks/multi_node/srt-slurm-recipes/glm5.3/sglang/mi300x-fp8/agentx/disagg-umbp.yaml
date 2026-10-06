@@ -171,6 +171,20 @@ override_tp8_c8:
     env:
       CONC: "8"
 
+override_tp8_decode_aiter_c8:
+  roles:
+    prefill:
+      args:
+        max-running-requests: 16
+    decode:
+      args:
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 16
+        dsa-decode-backend: aiter
+  benchmark:
+    env:
+      CONC: "8"
+
 override_tp8_c16:
   roles:
     prefill:
