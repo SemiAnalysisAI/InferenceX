@@ -196,7 +196,8 @@ override_tp8_triton_decode_quality_c4: &tp8_triton_quality
 override_tp8_triton_decode_gsm16shot_c4:
   <<: *tp8_triton_quality
   environment:
-    EVAL_TASKS_DIR: /infmax-workspace/infx/evals/diagnostics/gsm8k_16shot.yaml
+    EVAL_INCLUDE_PATH: /infmax-workspace/infx/evals/diagnostics
+    EVAL_TASKS_DIR: gsm8k_16shot
 
 override_tp8_prefill1k_c8:
   roles:
