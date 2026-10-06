@@ -32,7 +32,8 @@ base:
       enabled: false
   engine: sglang
   services:
-    - name: umbp
+    - &umbp_service
+      name: umbp
       type: generic
       placement:
         node: prefill
@@ -216,3 +217,34 @@ override_colocated_tep4_dep4_round_robin_batch4_c8:
   benchmark:
     env:
       CONC: "8"
+
+# Two TEP4 prefill workers share one physical 513 GB pool; TP8 decode is separate.
+override_two_tep4_tp8_c8: &two_tep4_tp8
+  services:
+    - <<: *umbp_service
+      command:
+        - /sgl-workspace/mori/python/mori/umbp_standalone_server
+        - unix:///logs/umbp-{node}.sock
+  roles:
+    prefill:
+      workers: 2
+      gpus: 4
+      env:
+        SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "1024"
+        UMBP_STANDALONE_ADDRESS: unix:///logs/umbp-{node}.sock
+      args: *tep4_args
+    decode:
+      args:
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 16
+  benchmark:
+    env:
+      CONC: "8"
+
+override_two_tep4_tp8_c4:
+  <<: *two_tep4_tp8
+  slurm:
+    time_limit: "02:00:00"
+  benchmark:
+    env:
+      CONC: "4"
