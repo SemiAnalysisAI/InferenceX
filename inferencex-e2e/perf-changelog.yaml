@@ -9452,3 +9452,11 @@
   description:
     - "Qualify the native decode radix cache with global running and graph limits sixteen, retaining cache-aware routing, full context, dispatch capacity eight and P-only UMBP. Genuine GSM32 exercises the combined local batch-four geometry before any saturation comparison."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3734
+
+- config-keys:
+    - glm53-mi325x-oct5-colocated-tep4-dep4-radix-batch4-c16
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Measure the genuine-qualified native radix batch-four decoder at concurrency sixteen with unchanged worker and cache-aware router settings. This saturation comparison retains full context, dispatch capacity eight and P-only UMBP."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3734
