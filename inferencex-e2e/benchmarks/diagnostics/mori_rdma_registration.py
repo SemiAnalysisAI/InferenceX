@@ -20,7 +20,7 @@ FAILED_REGION_BYTES = 5_306_354_176
 CONTROL_REGION_BYTES = 64 * 1024 * 1024
 EXPECTED_SGLANG_SHA = "fdebc938f7f4d16fe6b9f55dcd9a767cf0899ea1"
 EXPECTED_MORI_SHA = "f7e6ac6863c53821bc7afb91a578cc6ce38fcad0"
-ROUND_DEADLINE_S = 165
+ROUND_DEADLINE_S = 90
 TRANSFER_BYTES = 4096
 
 
@@ -224,13 +224,35 @@ def run_round(size: int) -> dict[str, object]:
 def main() -> int:
     output = Path("speedbench_results/mori-rdma-preflight.json")
     output.parent.mkdir(parents=True, exist_ok=True)
+    inherited_memlock = resource.getrlimit(resource.RLIMIT_MEMLOCK)
+    emit(
+        "memlock_inherited",
+        soft_hard_bytes=inherited_memlock,
+        proc_self_limits=Path("/proc/self/limits").read_text(),
+    )
     results = []
-    for size in (CONTROL_REGION_BYTES, FAILED_REGION_BYTES):
-        result = run_round(size)
-        results.append(result)
-        output.write_text(json.dumps({"rounds": results}, indent=2) + "\n")
-        if result["status"] != "success":
-            return 1
+    for arm in ("inherited", "raised"):
+        if arm == "raised":
+            resource.setrlimit(
+                resource.RLIMIT_MEMLOCK, (inherited_memlock[1], inherited_memlock[1])
+            )
+            emit(
+                "memlock_raised",
+                soft_hard_bytes=resource.getrlimit(resource.RLIMIT_MEMLOCK),
+                proc_self_limits=Path("/proc/self/limits").read_text(),
+            )
+        for size in (CONTROL_REGION_BYTES, FAILED_REGION_BYTES):
+            result = run_round(size)
+            result["arm"] = arm
+            result["parent_memlock_soft_hard_bytes"] = resource.getrlimit(
+                resource.RLIMIT_MEMLOCK
+            )
+            results.append(result)
+            output.write_text(json.dumps({"rounds": results}, indent=2) + "\n")
+            if size == CONTROL_REGION_BYTES and result["status"] != "success":
+                return 1
+            if arm == "raised" and result["status"] != "success":
+                return 1
     return 0
 
 
