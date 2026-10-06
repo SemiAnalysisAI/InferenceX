@@ -114,6 +114,8 @@ smoke benchmark 和代表性 eval 都通过后，在 changelog 物理末尾追�
 
 恢复和最终选择步骤使用 `AGENT_PAT` 执行已确认归属的清理及配置族认领；只读重叠检查 agent 不获得该凭据。在审查与选择之间，`regenerate-producers` 步骤在不含任何凭据的环境中运行基线产出修订版自身的生成器，并将数据行写入 `producers.json`；选择步骤只读取该文件，不运行其他修订版的代码。planner 的 Python 准备和最终容量检查步骤使用 dashboard key；准备步骤还使用只读工作流 token。限轮数的 Claude PR 检查使用 `ANTHROPIC_API_KEY` 和具有 `pull-requests: read` 权限的只读工作流 token。它接收私有资格线索，但不接收 `AGENT_PAT` 或 dashboard key，也不执行 GitHub 写操作。candidate 获得用于分支/PR 写入及 e2e 调度/取消的 `AGENT_PAT`、用于 Klaud Cold 的 `ANTHROPIC_API_KEY`，以及覆盖 clusters 的限期 `status:read` `DASH_API_KEY`。Klaud Cold 不得发布凭据或私有 API 响应。共享 HTTP 读取器固定来源，同时限制压缩和解码后的 GET 响应大小，支持明确的 gzip/identity JSON 响应，并拒绝重定向或不支持的编码。非有限 JSON 数值（包括 `1e400` 这样的指数溢出）会在校验或哈希计算前被拒绝。不需要部署额外服务、数据库或新增 environment 配置。
 
+重叠检查在独立的 `review` 作业中运行，与持有凭据的 `recover` 和 `select` 作业分离。它可用的 gh/git 命令仅限 `gh pr list/view/diff`、`gh api --method GET`、`git status` 和 `git ls-tree`；`git show`、`git diff` 和 `git log` 可通过 `--output` 写入任意文件，因此不在允许列表中。`select` 作业重新 checkout 恢复阶段的提交，只读取数据：planner 生成的 `candidates.json` 和 `open-prs.json`（在 agent 启动前作为短期 `klaud-review-input` 产物上传）、检查的结构化输出与结果状态，以及执行日志最终结果的脱敏子集。检查 agent 在其工作区、runner 临时目录或工具缓存中写入的任何内容都不会进入持有 `AGENT_PAT` 的步骤。
+
 所有外部 action 均固定完整提交 SHA；下表与当前工作流中的固定版本一致。内部调用使用 `./.github/workflows/klaud-candidate.yml` 解析调用者的精确提交，并显式传递三个必需 secret。
 
 | Action | 版本 | 提交 |
