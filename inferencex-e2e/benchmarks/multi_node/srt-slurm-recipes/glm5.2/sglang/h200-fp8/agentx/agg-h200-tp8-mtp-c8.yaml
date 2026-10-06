@@ -1,3 +1,4 @@
+schema: 2
 name: agg-h200-tp8-mtp-c8
 
 # Aggregated TP8 GLM-5.2 AgentX topology on one 8-GPU H200 node. MTP uses the
@@ -27,14 +28,17 @@ dynamo:
 resources:
   gpu_type: h200
   gpus_per_node: 8
-  gpus_per_agg: 8
-  agg_nodes: 1
-  agg_workers: 1
-
-infra:
-  etcd_nats_dedicated_node: false
-  nats_max_payload_mb: 64
-
+services:
+  - name: etcd
+    type: etcd
+    placement:
+      node: infra
+  - name: nats
+    type: nats
+    placement:
+      node: infra
+    options:
+      max_payload_mb: 64
 frontend:
   type: dynamo
   nginx_session_affinity: true
@@ -49,10 +53,30 @@ frontend:
     active-prefill-tokens-threshold: None
     active-prefill-tokens-threshold-frac: None
 
-backend:
-  type: sglang
-  sglang_config:
-    aggregated:
+engine: sglang
+roles:
+  agg:
+    nodes: 1
+    workers: 1
+
+    gpus: 8
+    env:
+      HF_HOME: /hf_hub_cache
+      HF_HUB_CACHE: /hf_hub_cache
+      PIP_BREAK_SYSTEM_PACKAGES: "1"
+      PYTHONUNBUFFERED: "1"
+      SGLANG_OPT_USE_TOPK_V2: "1"
+      SGLANG_TIMEOUT_KEEP_ALIVE: "900"
+      SGLANG_ENABLE_THINKING: "1"
+      SGLANG_REASONING_EFFORT: max
+      SGLANG_ENABLE_UNIFIED_RADIX_TREE: "1"
+      SGLANG_HICACHE_DEBUG_LOG: "1"
+      SGLANG_HICACHE_DEBUG_SAMPLE_RATE: "16384"
+      SGLANG_SIMULATE_ACC_LEN: "2.99"
+      SGLANG_SIMULATE_ACC_METHOD: match-expected
+      SGLANG_SIMULATE_ACC_TOKEN_MODE: real-draft-token
+
+    args:
       served-model-name: zai-org/GLM-5.2-FP8
       trust-remote-code: true
       tool-call-parser: glm47
@@ -83,22 +107,6 @@ backend:
       stream-interval: 60
       enable-metrics: true
       enable-cache-report: true
-  aggregated_environment:
-    HF_HOME: /hf_hub_cache
-    HF_HUB_CACHE: /hf_hub_cache
-    PIP_BREAK_SYSTEM_PACKAGES: "1"
-    PYTHONUNBUFFERED: "1"
-    SGLANG_OPT_USE_TOPK_V2: "1"
-    SGLANG_TIMEOUT_KEEP_ALIVE: "900"
-    SGLANG_ENABLE_THINKING: "1"
-    SGLANG_REASONING_EFFORT: max
-    SGLANG_ENABLE_UNIFIED_RADIX_TREE: "1"
-    SGLANG_HICACHE_DEBUG_LOG: "1"
-    SGLANG_HICACHE_DEBUG_SAMPLE_RATE: "16384"
-    SGLANG_SIMULATE_ACC_LEN: "2.99"
-    SGLANG_SIMULATE_ACC_METHOD: match-expected
-    SGLANG_SIMULATE_ACC_TOKEN_MODE: real-draft-token
-
 health_check:
   max_attempts: 1440
   interval_seconds: 10
@@ -118,7 +126,6 @@ telemetry:
 
 benchmark:
   type: custom
-  use_chat_template: true
   command: bash /infmax-workspace/benchmarks/srt_agentic.sh
   env:
     INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
