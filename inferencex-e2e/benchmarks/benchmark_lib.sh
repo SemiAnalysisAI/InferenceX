@@ -2419,6 +2419,46 @@ build_replay_cmd() {
     REPLAY_CMD+=" $TRACE_SOURCE_FLAG"
 }
 
+write_agentic_result_json() {
+    check_env_vars INFMAX_CONTAINER_WORKSPACE
+    # Writes $AGENTIC_OUTPUT_DIR/$RESULT_FILENAME.json; the workflow checks that
+    # file exists, and the caller separately rejects high error rates.
+    local result_dir="$1"
+    (
+        cd "$INFMAX_CONTAINER_WORKSPACE"
+        RESULT_DIR="$result_dir" AGENTIC_OUTPUT_DIR="${AGENTIC_OUTPUT_DIR:-$INFMAX_CONTAINER_WORKSPACE}" \
+            "$AIPERF_PYTHON" -m infx.results.agentic.process_agentic_result
+    )
+}
+
+validate_required_agentic_server_metrics() {
+    local result_dir="$1"
+    local required_prefix="${AIPERF_REQUIRED_SERVER_METRIC_PREFIX:-}"
+    local metrics_dir="$result_dir/aiperf_artifacts"
+    local metrics_json="$metrics_dir/server_metrics_export.json"
+    local metrics_csv="$metrics_dir/server_metrics_export.csv"
+
+    # Opt-in: recipes that require trace charts set a metric prefix (for example
+    # `sglang:`) and fail loudly instead of publishing a partial trace artifact.
+    if [ -z "$required_prefix" ]; then
+        return 0
+    fi
+
+    if [ ! -s "$metrics_json" ] || [ ! -s "$metrics_csv" ]; then
+        echo "ERROR: required AIPerf server metrics artifacts are missing or empty in $metrics_dir" >&2
+        return 1
+    fi
+
+    # The JSON can be multi-GiB, so scan for the key instead of parsing; metric
+    # names are object keys, so a hit proves backend engine metrics were captured.
+    if ! grep -F -m 1 -q "\"${required_prefix}" "$metrics_json"; then
+        echo "ERROR: $metrics_json contains no metric with required prefix '$required_prefix'" >&2
+        return 1
+    fi
+
+    echo "Validated required AIPerf server metrics prefix '$required_prefix'"
+}
+
 run_agentic_replay_and_write_outputs() (
     check_env_vars IS_MULTINODE
     local result_dir="$1"
