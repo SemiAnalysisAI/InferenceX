@@ -152,9 +152,13 @@ upstream documentation, without needing InferenceX benchmark infrastructure.
 - (a) LINK PRESENT: The sign-off's "Additional detail section" MUST contain a link to
   the corresponding merged recipe PR in
   `https://github.com/vllm-project/recipes` or
-  `https://github.com/sgl-project/sglang` (cookbook under `docs/cookbook`), or the
+  `https://github.com/sgl-project/sgl-docs` (cookbook under `cookbook/`), or the
   published recipe page (`https://recipes.vllm.ai/` or
   `https://docs.sglang.io/cookbook/...`). If no such link is present, FAIL.
+  New SGLang cookbook PRs belong in the active `sgl-project/sgl-docs` repository,
+  not the archived `sgl-project/sgl-cookbook` repository. For legacy merged PR
+  links, require a current published cookbook page covering the configuration;
+  a historical merge alone does not establish current coverage.
 - (b) UPSTREAM CHANGE MERGED: For a linked GitHub PR, query the upstream repository
   directly (for example, `gh pr view <URL> --json state,mergedAt,url`) and require
   `state: MERGED` with a non-null `mergedAt`. An open PR, draft PR, closed-unmerged
