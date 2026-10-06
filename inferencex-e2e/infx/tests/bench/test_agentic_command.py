@@ -28,6 +28,7 @@ POINT = {
     "RESULT_FILENAME": "agentx",
     "EVAL_ONLY": "false",
     "IS_MULTINODE": "false",
+    "IS_AGENTIC": "1",
     "KV_OFFLOADING": "none",
     "PRECISION": "fp4",
     "MODEL": "test/model",
@@ -119,6 +120,11 @@ def _events(tmp_path: Path) -> list[str]:
             "TOTAL_CPU_DRAM_GB must be a positive integer",
         ),
         ({"KV_OFFLOADING": "cpu"}, "unsupported KV_OFFLOADING value 'cpu'"),
+        ({"KV_OFFLOADING": None}, "  - KV_OFFLOADING"),
+        (
+            {"IS_AGENTIC": None, "SCENARIO_TYPE": "agentic-coding", "KV_OFFLOADING": None},
+            "  - KV_OFFLOADING",
+        ),
         ({"CONC_LIST": "4 8"}, "CONC_LIST='4 8' must equal CONC='8'"),
         ({"CONC_LIST": ""}, "CONC_LIST='' must equal CONC='8'"),
         ({"CONC": "4 8", "CONC_LIST": "4 8"}, "CONC must be a positive integer"),
@@ -130,6 +136,12 @@ def _events(tmp_path: Path) -> list[str]:
 def test_points_that_cannot_be_measured_fail_before_setup(tmp_path, overrides, message):
     with pytest.raises(InputError, match=re.escape(message)):
         Plan.from_env(_point(tmp_path, **overrides))
+
+
+def test_standalone_srt_slurm_point_needs_no_kv_offload_declaration(tmp_path):
+    # srt-slurm's benchmarks/agentx.sh sets neither IS_AGENTIC nor KV_OFFLOADING.
+    plan = Plan.from_env(_point(tmp_path, IS_AGENTIC=None, KV_OFFLOADING=None))
+    assert plan.result_filename == "agentx"
 
 
 WINDOW = {

@@ -26,7 +26,6 @@ REQUIRED = (
     "EVAL_ONLY",
     "IS_MULTINODE",
     "PRECISION",
-    "KV_OFFLOADING",
 )
 # Only srt-slurm's multi-node telemetry measures AgentX power; single-node points publish none.
 POWER_SWITCHES = ("ENABLE_AGENTX_POWER", "REQUIRE_POWER")
@@ -70,7 +69,9 @@ class Plan:
             result_filename += f"_conc{values['CONC']}"
         replay = ReplayConfig.from_env(env, result_dir)
         _require_single_point(env, values["CONC"])
-        _validate_kv_offload(env)
+        # Matrix launches declare kv-offloading; srt-slurm's standalone agentx.sh does not.
+        if env.get("IS_AGENTIC") == "1" or env.get("SCENARIO_TYPE") == "agentic-coding":
+            _validate_kv_offload(env)
         eval_only = inputs.flag("EVAL_ONLY", env)
         return cls(
             replay=replay,
@@ -97,7 +98,7 @@ def _require_single_point(env: Mapping[str, str], conc: str) -> None:
 
 def _validate_kv_offload(env: Mapping[str, str]) -> None:
     """The served KV-offload configuration, as the matrix ``kv-offloading`` field allows."""
-    mode = env["KV_OFFLOADING"]
+    mode = inputs.require("KV_OFFLOADING", env=env)["KV_OFFLOADING"]
     backend = env.get("KV_OFFLOAD_BACKEND")
     if mode == "none":
         if backend:
