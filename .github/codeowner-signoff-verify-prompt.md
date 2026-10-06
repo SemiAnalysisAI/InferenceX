@@ -585,6 +585,12 @@ Pinned app references at
   percentiles or scenarios. Respect the app's hardware/framework/precision series,
   run/date selection and fixed-sequence speculative-method separation. AgentX can
   mix topology, speculative methods and KV offload within one curve.
+- A curve is one app series: model, scenario, `getHardwareKey` (base GPU +
+  framework; AgentX adds no spec suffix), precision, run/date and percentile.
+  Config keys, images, recipes and agg-vs-disagg topology that map to the same
+  series are ONE curve: put all their points in one input and count the combined
+  frontier. Do not split a series by config key or image; a point dominated by
+  another config's point is dominated. Report per-point config/image as evidence.
 - Inspect the pinned app sources linked above plus the live app revision
   used by the evidence. Its E2EL direction is `upper_right`, despite the helper's
   geometric name: x asc, y desc on ties, retain increasing y and equal-y plateaus
@@ -594,11 +600,11 @@ Pinned app references at
 - Count the entire resulting curve. For `append-only: true`, existing same-image
   points may count only when their unchanged recipes and reusable source artifacts
   are verified under Check 12; new points alone need not number five. Do not pool
-  incompatible images, historical runs, or unrelated series to reach five.
+  historical runs, other dates, or other app series to reach five.
 - Reproduce the calculation using trusted
   `inferencex-e2e/infx/workflows/pareto_coverage.py` from this workflow checkout:
   `uv run --project inferencex-e2e --locked python -m infx.workflows.pareto_coverage < /tmp/pareto-curves.json`.
-  Input is a JSON array of `{ "key": "<model/scenario/hwKey/precision/run/percentile/image>",
+  Input is a JSON array of `{ "key": "<model/scenario/hwKey/precision/run/percentile>",
   "points": [{ "x": 1.0, "y": 100.0 }] }`. Create inputs from inspected data, not
   numbers asserted in the PR. Include every affected curve, including empty ones.
   The helper counts points; it does NOT validate provenance, grouping or omitted
