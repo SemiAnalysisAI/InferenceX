@@ -9317,3 +9317,11 @@
   description:
     - "Prepare genuine-only qualification of native distributed UMBP behind two unchanged TP8 prefill workers and DEP16 decode, retaining two 519 GB peer pools and the existing cache-aware router. No serving source or request-path changes."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3734
+
+- config-keys:
+    - glm5.3-fp8-mi300x-sglang-disagg-2p-dep16
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Set the native distributed UMBP peer control-plane socket budget to 120 seconds for genuine-only model qualification, matching the successful full-size all-GPU remote-range diagnostic. Preserve engines, cache capacities, routing, request path, and diagnostic ranged-call logging."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3734

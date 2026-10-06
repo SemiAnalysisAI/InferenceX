@@ -596,6 +596,7 @@ override_2p_tp8_dep16_distributed_quality:
         MORI_IO_SL: "3"
         MORI_IO_TC: "104"
         MORI_IO_SQ_BACKOFF_TIMEOUT_US: "5000000"
+        MORI_IO_CP_TIMEOUT_MS: "120000"
       preamble: |
         export LD_LIBRARY_PATH="/sgl-workspace/mori/python/mori:${LD_LIBRARY_PATH}"
       readiness:
