@@ -5427,7 +5427,7 @@
       "status": "in_progress",
       "workflow_name": "offload-v1-none-c489-r2-extended-fullsha-20261006",
       "dispatched_at": "2026-10-06T07:20:01Z",
-      "phase": "canonical warmup: request budget reached, draining with one ClientOSError",
+      "phase": "profiling: full 3,600-second phase in progress",
       "performance_result": false,
       "execution_budget": {
         "slurm_minutes": 510,
@@ -5450,26 +5450,33 @@
       "warmup_started_at": "2026-10-06T07:29:51Z",
       "warmup_target_requests": 5412,
       "warmup_latest": {
-        "sample_at": "2026-10-06T14:12:31Z",
-        "returned": 5282,
+        "sample_at": "2026-10-06T14:24:18Z",
+        "returned": 5412,
         "sent": 5412,
-        "in_flight": 130,
+        "in_flight": 0,
         "errors": 1,
-        "elapsed_seconds": 24160.0
+        "elapsed_seconds": 24866.97
       },
-      "runtime_evidence": "Slurm job 19630 runs on im-b200-c002 with 08:30:00 limit. Live offload_config.json verifies zero DRAM, zero NVMe, connector null; exact host scratch owner.json matches run and job. Canonical warmup started at 07:29:51Z and zero-idle cache-pressure replay began 08:13:13Z. One ClientOSError occurred at 13:48:20Z while writing an HTTP request body. All 5,412 warmup requests had been sent by 13:55:01Z. Latest sample returned 5,282, with 130 in flight and one error after 24,160.0 seconds. Warmup drain remains active; profiling has not started, and the terminal effect of the error is not yet known.",
+      "runtime_evidence": "Slurm job 19630 runs on im-b200-c002 with 08:30:00 limit. Live offload_config.json verifies zero DRAM, zero NVMe and no connector; exact host /scratch owner.json matches run and job. Canonical warmup completed all 5,412 requests with zero cancellations and one ClientOSError after 24,866.97 seconds at 14:24:18Z. The full 3,600-second profiling phase started immediately despite the warmup error. Latest realtime profile snapshot at 14:42:58Z retained 598 successful responses and zero profiling errors; aggregate export remains pending.",
       "warmup_replay_started_at": "2026-10-06T08:13:13Z",
       "warmup_request_budget_reached_by": "2026-10-06T13:55:01Z",
       "warmup_error_evidence": {
         "category": "ClientOSError",
         "observed_at": "2026-10-06T13:48:20Z",
         "message": "Can not write request body for http://localhost:8888/v1/chat/completions",
-        "terminal_effect": "unknown while warmup drain remains active"
-      }
+        "terminal_effect": "Warmup completed all 5,412 requests with zero cancellations; profiling started despite this one ClientOSError."
+      },
+      "warmup_completed_at": "2026-10-06T14:24:18Z",
+      "warmup_duration_seconds": 24866.97,
+      "warmup_completed_requests": 5412,
+      "warmup_cancelled_requests": 0,
+      "warmup_errors": 1,
+      "profiling_started_at": "2026-10-06T14:24:18Z",
+      "profiling_duration_target_seconds": 3600
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894,36796500128,36879140816,37027095833",
-  "status": "Matched HBM-only extended-budget c489 control 37428997901 sent all 5,412 warmup requests and is draining with 5,282 returned and one ClientOSError. Profiling has not started; validity is pending.",
+  "status": "Matched extended-budget HBM-only c489 run 37428997901 completed all 5,412 warmup requests with one ClientOSError and zero cancellations, then entered the full 3,600-second profiling phase at 14:24:18Z. No aggregate result yet.",
   "last_capacity_check": {
     "checked_at": "2026-10-06T07:19:59Z",
     "active_study_run_ids": [
