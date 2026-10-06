@@ -9435,3 +9435,11 @@
   description:
     - "Gate native DEP4 decoder running and graph limits sixteen behind the qualified colocated TEP4 prefill and round-robin decoder router. Preserve dispatch capacity eight, full context, static memory budget and P-only UMBP, including the stock coupled extra-slot default. Genuine GSM32 at concurrency sixteen must exercise the new local graph bucket before a matched concurrency-eight proxy."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3656
+
+- config-keys:
+    - glm53-mi325x-oct5-colocated-tep4-attndp2-round-robin-quality
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Gate partial attention DP2 by changing only the qualified colocated decoder data-parallel size from four to two. Preserve dense TP1, native memory fraction, dispatch capacity, global admission and graph limits, routing, full context and prefill-only 513 GB UMBP; require genuine GSM32, both attention lanes and actual local graph-eight execution."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3734
