@@ -5581,18 +5581,23 @@
       "status": "in_progress",
       "workflow_name": "offload-v1-none-c489-r3-extended-power-20261006",
       "dispatched_at": "2026-10-06T15:49:16Z",
-      "phase": "get-jobs in progress; no generated B200 job yet",
+      "phase": "admitted to B200 runner; Slurm allocation pending verification",
       "performance_result": false,
       "execution_budget": {
         "slurm_minutes": 510,
         "github_job_minutes": 530
       },
       "get_jobs_id": 112362383056,
-      "dispatch_evidence": "Previous HBM c489 workflow 37428997901 fully terminal after aggregate export; strict power invalid due 10.791-second telemetry gap, five artifacts and hashes recorded, exact host /scratch independently absent with deleted=true cleanup receipt, and temporary downloads deleted. Fresh cluster-wide queued and in-progress GitHub job-label inventory at 2026-10-06T15:48:45Z found zero queued B200 jobs, zero in-progress B200 jobs and no active study workflow. Exact generator preview resolved MiniMax-M3 NVFP4, vLLM TP4, c489, zero DRAM, zero NVMe, canonical 3,600-second AgentX experiment. Exact full 40-character HEAD matched origin/experiment/agentx-b200-offload and was passed as workflow input ref. GitHub run head matches input. get-jobs is in progress; no generated B200 job yet."
+      "dispatch_evidence": "Previous HBM c489 workflow 37428997901 fully terminal after aggregate export; strict power invalid due 10.791-second telemetry gap, five artifacts and hashes recorded, exact host /scratch independently absent with deleted=true cleanup receipt, and temporary downloads deleted. Fresh cluster-wide queued and in-progress GitHub job-label inventory at 2026-10-06T15:48:45Z found zero queued B200 jobs, zero in-progress B200 jobs and no active study workflow. Exact generator preview resolved MiniMax-M3 NVFP4, vLLM TP4, c489, zero DRAM, zero NVMe, canonical 3,600-second AgentX experiment. Exact full 40-character HEAD matched origin/experiment/agentx-b200-offload and was passed as workflow input ref. GitHub run head matches input. get-jobs is in progress; no generated B200 job yet. get-jobs completed successfully; generated B200 job 112362809866 carries cluster:b200-nscale and nodes:1 and was admitted to b200-nscale-slurm_00 at 15:50:39Z. Slurm allocation and compute-node placement are not yet verified.",
+      "get_jobs_status": "success",
+      "job_id": 112362809866,
+      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37490705589/job/112362809866",
+      "runner": "b200-nscale-slurm_00",
+      "started_at": "2026-10-06T15:50:39Z"
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894,36796500128,36879140816,37027095833",
-  "status": "Extended-budget c489 HBM/NVMe throughput and latency comparison complete, but HBM energy invalid from 10.791-second GPU sampling gap. One HBM-only c489 repeat was dispatched to qualify matched energy.",
+  "status": "Matched HBM c489 energy repeat 37490705589 admitted to B200 runner; Slurm allocation pending verification. Existing c489 throughput/latency comparison favors NVMe, but matched energy remains unavailable.",
   "last_capacity_check": {
     "checked_at": "2026-10-06T15:48:45Z",
     "active_study_run_ids": [
