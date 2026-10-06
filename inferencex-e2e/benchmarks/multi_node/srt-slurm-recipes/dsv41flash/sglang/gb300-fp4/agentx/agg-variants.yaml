@@ -6,15 +6,15 @@
 # draft (block size 5); the Dynamo frontend routes with the KV-aware router and
 # session affinity. The aggregated arms are the two lowest-latency points of the
 # curve; everything from c16 to c256 comes from the disaggregated recipes in
-# disagg-variants.yaml. Measured on GB300 NVL72 (tokens/s/GPU @ P90 interactivity,
-# P90 TTFT; both GSM8K gates passed):
-#   override_tp4_c1 :  6,215 @ 385.0 tok/s/user, 1.2 s  (4 GPUs; GSM8K 0.9735)
-#   override_tp2_c1 : 12,501 @ 377.1 tok/s/user, 0.9 s  (2 GPUs; GSM8K 0.9735)
-# The aggregated c64 cells (prefill-decode-interval 8: 159,510 @ 62.7; interval 16:
-# 153,542 @ 83.3) were measured as well but are dominated by the disaggregated
-# HiCache cells and are not shipped. The two c1 arms are the highest-interactivity
-# points of the curve (above the
-# published MI355X ATOM curve's last vertex at 336.7 tok/s/user); at c1 the AgentX
+# disagg-variants.yaml. Measured on GB300 NVL72 in the PR sweep (tokens/s/GPU @ P90
+# interactivity, P90 TTFT):
+#   override_tp4_c1 :  5,983 @ 376.5 tok/s/user, 1.6 s  (4 GPUs)
+#   override_tp2_c1 : 11,733 @ 363.8 tok/s/user, 1.5 s  (2 GPUs)
+# The two c1 arms are the highest-interactivity points of the curve (above the
+# published MI355X ATOM curve's last vertex at 336.7 tok/s/user). Earlier tuning
+# runs (not re-measured in the PR sweep) found the aggregated c64 cells
+# (prefill-decode-interval 8: 159,510 @ 62.7; interval 16: 153,542 @ 83.3) dominated
+# by the disaggregated HiCache cells, so they are not shipped; and at c1 the AgentX
 # client replays the trace's idle gaps, so a single lane is client-bound and a second
 # user on the same worker only lowers the P90 (TP2 c2: 12,538 @ 306.8). The harness
 # applies the golden acceptance length (3.51 at K=5) itself.
@@ -154,9 +154,9 @@ override_tp4_c1:
       AGENTIC_WARMUP_GRACE_PERIOD: "1800"
 
 # Two-GPU c1 arm: the base TP2/EP2 worker with the Engram tables in host DRAM, static
-# ragged verify, 4096-token prefill chunks and admission 2x CONC: 12,501 tokens/s/GPU
-# @ 377.1 tok/s/user, P90 TTFT 0.90 s - twice the tokens/s/GPU of the TP4 c1 arm at a
-# 2% lower P90 interactivity.
+# ragged verify, 4096-token prefill chunks and admission 2x CONC: 11,733 tokens/s/GPU
+# @ 363.8 tok/s/user, P90 TTFT 1.51 s - twice the tokens/s/GPU of the TP4 c1 arm at a
+# 3% lower P90 interactivity.
 override_tp2_c1:
   name: agg-gb300-tp2ep2-c1
   roles:
