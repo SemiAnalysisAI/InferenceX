@@ -540,6 +540,11 @@ override_2p_tp8_dep16_c16: &two_prefill_dep16
 override_2p_tp8_dep16_distributed_quality:
   <<: *two_prefill_dep16
   name: mi300x-glm53-two-prefill-dep16-distributed-quality
+  model:
+    container: lmsysorg/sglang-rocm:v0.5.21-rocm720-mi30x-20261006@sha256:f7430d43c728da94f001ca51d5d2e0d754c85a3a8d54a3b68bf7aa2e12e6ff6a
+  identity:
+    container:
+      image: lmsysorg/sglang-rocm:v0.5.21-rocm720-mi30x-20261006@sha256:f7430d43c728da94f001ca51d5d2e0d754c85a3a8d54a3b68bf7aa2e12e6ff6a
   roles:
     <<: *two_prefill_dep16_roles
     prefill:
@@ -547,7 +552,7 @@ override_2p_tp8_dep16_distributed_quality:
       env:
         UMBP_NODE_ADDRESS: "{node}"
   slurm:
-    time_limit: "01:30:00"
+    time_limit: "02:00:00"
   services:
     - name: umbp_master
       type: generic
@@ -608,7 +613,7 @@ override_2p_tp8_dep16_distributed_quality:
       readiness:
         log:
           pattern: "\\[StandaloneServer\\] running on .* backend=configured"
-        timeout_seconds: 900
+        timeout_seconds: 1800
         interval_seconds: 1
 
 override_1p2d_tp8_c16:
