@@ -743,7 +743,7 @@ override_colocated_tep4_dep4_sdma_multistream_oct6_c8:
   model: *two_tep4_tp8_oct6_model
   identity: *two_tep4_tp8_oct6_identity
   slurm:
-    time_limit: "12:00:00"
+    time_limit: "02:00:00"
   frontend: *dep4_sdma_multistream_frontend
   roles: *dep4_sdma_multistream_roles
   benchmark:
