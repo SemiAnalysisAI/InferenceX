@@ -185,6 +185,24 @@ override_tp8_prefill1k_c8:
     env:
       CONC: "8"
 
+override_tp8_decode_topkv2_c4:
+  slurm:
+    time_limit: "01:00:00"
+  roles:
+    prefill:
+      args:
+        max-running-requests: 16
+    decode:
+      env:
+        SGLANG_OPT_USE_TOPK_V2: "true"
+        SGLANG_JIT_CACHE_DIR: /tmp/sglang-jit-topkv2
+      args:
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 16
+  benchmark:
+    env:
+      CONC: "4"
+
 override_tp8_decode_aiter_c8:
   roles:
     prefill:
