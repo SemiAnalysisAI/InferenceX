@@ -9321,6 +9321,14 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3231
 
 - config-keys:
+    - glm5.2-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Enable SGLANG_OPT_USE_TOPK_V2 (false -> true) so the DSA indexer uses the top-k v2 kernel."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3724
+
+- config-keys:
     - qwen3.5-fp8-h100-sglang
     - qwen3.5-fp8-h100-sglang-mtp
   description:
