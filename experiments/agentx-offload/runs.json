@@ -5415,32 +5415,51 @@
         "avg_power_w_per_gpu": 6.47036,
         "joules_per_successful_query": 6.19757
       }
+    },
+    {
+      "run_id": 37428997901,
+      "url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37428997901",
+      "arm": "none",
+      "concurrency": 489,
+      "repeat": 2,
+      "retry_of": 37269968186,
+      "head_sha": "d9a67caafb0ceb404b34bf7a55db427adf1d7fb1",
+      "status": "queued",
+      "workflow_name": "offload-v1-none-c489-r2-extended-fullsha-20261006",
+      "dispatched_at": "2026-10-06T07:20:01Z",
+      "phase": "get-jobs in progress; B200 job not yet generated",
+      "performance_result": false,
+      "execution_budget": {
+        "slurm_minutes": 510,
+        "github_job_minutes": 530
+      },
+      "get_jobs_id": 112155185402,
+      "dispatch_evidence": "Extended-budget NVMe c489 workflow 37381547856 was fully terminal and its exact host /scratch was independently absent. Fresh cluster-wide queued and in-progress GitHub job-label inventory at 2026-10-06T07:19:59Z found zero queued B200 jobs, two unrelated B200 jobs in progress, and no active-or-queued study workflow. Exact full 40-character HEAD d9a67caafb0ceb404b34bf7a55db427adf1d7fb1 matched origin/experiment/agentx-b200-offload and was passed as the explicit workflow input ref. Exact generator preview resolved MiniMax-M3 NVFP4, vLLM TP4, c489, zero DRAM, zero NVMe, 3,600-second profiling and AgentX experiment. GitHub run head matches the full input ref. get-jobs is in progress; no generated B200 job yet."
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894,36796500128,36879140816,37027095833",
-  "status": "Extended-budget NVMe c489 run 37381547856 completed canonical warmup and the full profile. Aggregate export and strict UTC power replay are valid; 1,171 successful profiling responses. GitHub workflow cancelled only after exports. Exact host scratch independently absent. Matched extended-budget HBM c489 control awaits fresh cluster-wide queue guard.",
+  "status": "Extended-budget NVMe c489 run 37381547856 yielded a complete profile and strict valid power replay despite post-export workflow cancellation. Matched HBM-only c489 extended-budget control 37428997901 was dispatched from exact head d9a67caaf after a fresh zero-queued B200 guard and is in get-jobs.",
   "last_capacity_check": {
-    "checked_at": "2026-10-05T22:17:36Z",
+    "checked_at": "2026-10-06T07:19:59Z",
     "active_study_run_ids": [
-      37381547856
+      37428997901
     ],
-    "pending_study_run_ids": [],
+    "pending_study_run_ids": [
+      37428997901
+    ],
     "dispatch_allowed": false,
     "b200_priority_jobs_queued": 0,
     "b200_priority_jobs_in_progress": 2,
     "b200_active_or_queued_run_ids": [
-      37381100450,
-      37381547856
+      37428721692,
+      37420473448
     ],
-    "target_node": "im-b200-c001",
-    "target_node_state": "Slurm 19547 RUNNING on im-b200-c001; preflight passed",
-    "observed_free_bytes": 17646771367936,
-    "reason": "Study NVMe workflow is active; dispatch nothing else."
+    "reason": "Matched HBM-only c489 workflow has been dispatched; no further study job while it is active or queued."
   },
   "next_dispatch": {
     "arm": "none",
     "concurrency": 489,
-    "requires": "Wait for NVMe run 37381547856 to finish, capture and hash artifacts, verify exact host /scratch cleanup, and refresh cluster-wide B200 inventory before matched HBM-only c489."
+    "requires": "Wait for matched HBM-only extended-budget c489 run 37428997901 to finish, validate artifacts and power, verify exact host scratch cleanup, then compare c489 arms and choose next action."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-21T05:30:00Z",
