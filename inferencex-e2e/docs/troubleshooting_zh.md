@@ -24,7 +24,7 @@
 ## 事实来源
 
 - [`KLAUD_DEBUG.md`](KLAUD_DEBUG.md) 记录反复出现的 Klaud-Cold/镜像升级事故及其已观测特征。它是事故知识，不替代当前工作流或评审政策。
-- [`run-sweep.yml`](../../.github/workflows/run-sweep.yml)、[`benchmark-tmpl.yml`](../../.github/workflows/benchmark-tmpl.yml) 和 [`benchmarks/benchmark_lib.sh`](../benchmarks/benchmark_lib.sh) 定义编排、制品上传、服务器就绪、基准测试和评测行为。
+- [`run-sweep.yml`](../../.github/workflows/run-sweep.yml)、[`benchmark-tmpl.yml`](../../.github/workflows/benchmark-tmpl.yml) 以及 [`infx/bench/`](../infx/bench) 中在容器内运行的 `python3 -m infx.bench` 命令，共同定义编排、产物上传、就绪等待、基准测试和评估行为。
 - [`validate_perf_changelog.py`](../infx/workflows/validate_perf_changelog.py)、[`generate.py`](../infx/matrix/generate.py) 和 [`validation.py`](../infx/matrix/validation.py) 分别负责 changelog、矩阵和模式失败。
 - [`utils/runner_setup/RUNNER_SETUP.md`](../utils/runner_setup/RUNNER_SETUP.md) 与 [`runners/`](../runners) 负责预置和启动器路由。[`CONTRIBUTING.md`](../../CONTRIBUTING.md#amd-cluster-never-leave-root-owned-files-in-runner-workspaces) 负责 AMD 工作区安全规则。
 - [`infx/evals/EVALS.md`](../infx/evals/EVALS.md)、[`validate_scores.py`](../infx/evals/validate_scores.py) 和 [`collect_eval_results.py`](../infx/results/collect_eval_results.py) 分别负责评测执行、验证和收集。
@@ -93,9 +93,7 @@ Setup 阶段的删除错误通常意味着陈旧分支或改变空白的合并�
 
 ## 服务器
 
-[`wait_for_server_ready`](../benchmarks/benchmark_lib.sh) 会区分“服务器在日志出现前死亡”“服务器在健康前死亡”和进程存活但 `/health` 尚未通过。保留服务器日志和 PID 状态；仅有工作流最终超时不能构成诊断。
-
-就绪后，共享 helper 会记录服务器及已识别的持久 engine worker。Benchmark、AgentX 和 eval 客户端通过 `infx.bench_serving.server_watch` 监控：进程消失、成为 zombie 或 PID 被复用时，仅停止所属客户端进程组。健康但缓慢的工作没有新增时限。使用其他就绪路径的 recipe 需要显式监控服务器；wrapper 存活不能单独证明 worker 健康。
+在 srt-slurm 配方中，服务器由 srt-slurm 启动并等待其健康，因此应先阅读其 sweep 日志和 worker 日志。SPEED-Bench 采集脚本自行启动服务器，并使用 `python3 -m infx.bench wait --url <health URL> --pid <server PID> --log <server log>` 等待（[`wait_ready`](../infx/bench/server.py#L61-L79)）。它在轮询时持续输出服务器日志，服务器退出时以 `process <PID> died before <URL> became ready` 失败，否则一直等到该 URL 返回低于 400 的状态码。时间预算由调度器负责。保留服务器日志和 PID 状态；仅有工作流最终超时不能构成诊断。
 
 客户端依赖安装使用 uv 有限次 HTTP 重试和 120 秒读取超时，并保留下载缓存。网络或下载失败属于基础设施证据，不应据此更改 engine 参数。H100 srt-slurm 将请求镜像解析到其独立 squash 路径并检查已暂存的模型/镜像资源；B300 在分配到的计算节点上检查节点本地模型配置，再启动容器。资源缺失属于就绪性阻塞，不能替换为旧镜像或其他权重。
 
@@ -105,7 +103,7 @@ Setup 阶段的删除错误通常意味着陈旧分支或改变空白的合并�
 - **权重/KV/CUDA graph OOM：**记录空闲显存、配置利用率、每 rank 并发、graph 限制和启动失败位置。只应用与匹配案例一致的设置；之后同时确认服务器启动和工作负载完成。
 - **内核/架构断言或非法地址：**保留完整堆栈和 GPU 架构。优先使用已修复/固定的上游镜像或受支持后端，而不是未经评审的本地引擎补丁。
 - **地址被占用：**终止进程前确认占用者及其集群所有者。不要杀死未经验证的 PID 或无关服务。
-- **健康服务器在基准测试中死亡：**[`run_benchmark_serving`](../benchmarks/benchmark_lib.sh) 会监控服务器 PID。同时保留客户端与服务器日志，并按服务器的第一个错误分类，而不是按客户端后续连接错误分类。
+- **健康服务器在基准测试中死亡：**基准测试和评估客户端不监控服务器 PID。同时保留客户端与服务器日志，并按服务器的第一个错误分类，而不是按客户端后续连接错误分类。
 
 如果拟议 workaround 会改变模型语义、减少模型 FLOPs、修补服务栈，或没有精确源代码 guard，请停止。当前 [PR 清单](PR_REVIEW_CHECKLIST.md) 禁止推理引擎补丁，除非满足规定的豁免流程。
 

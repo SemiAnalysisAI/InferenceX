@@ -40,7 +40,7 @@ Paths and shell commands in these guides are relative to `inferencex-e2e/` unles
 | [`.github/AGENT_OPERATIONS.md`](../../.github/AGENT_OPERATIONS.md) | Translation terms, sweep labels, dispatch, eval selection, power, metrics, and artifacts |
 | [`configs/CONFIGS.md`](../configs/CONFIGS.md) | Master-config schema, search spaces, runners, and topology fields |
 | [`.github/workflows/README.md`](../../.github/workflows/README.md) | Generator examples, workflow operation, and reuse policy |
-| [`infx/evals/EVALS.md`](../infx/evals/EVALS.md) | Eval task, execution, collection, validation, and SWE-bench contracts |
+| [`infx/evals/EVALS.md`](../infx/evals/EVALS.md) | Eval task, execution, collection, and validation contracts |
 | [`benchmarks/multi_node/srt-slurm-recipes/RECIPES.md`](../benchmarks/multi_node/srt-slurm-recipes/RECIPES.md) | Disaggregated recipe registration and master-config coupling |
 | [`utils/runner_setup/RUNNER_SETUP.md`](../utils/runner_setup/RUNNER_SETUP.md) | Runner provisioning and setup |
 | [`MODELS.md`](MODELS.md) | Supported models, hardware coverage, and naming |

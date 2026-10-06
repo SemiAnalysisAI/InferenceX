@@ -86,7 +86,7 @@ Existing detailed references remain in place during migration. A new page should
 
 - Add an architecture page with the config-to-result data flow.
 - Add a configuration page that joins schema, generator, changelog, and validation steps.
-- Add a benchmark-development page covering shared Bash helpers, environment propagation, single-node and multi-node paths, and MTP chat-template requirements.
+- Add a benchmark-development page covering the shared `infx.bench` container commands, environment propagation, single-node and multi-node paths, and MTP chat-template requirements.
 - Add diagrams only where they clarify ownership or transitions.
 
 ### Phase 3, operations and recovery

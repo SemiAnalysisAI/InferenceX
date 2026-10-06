@@ -154,7 +154,7 @@ Use AgentX phase markers, not total Slurm runtime:
 
 ```bash
 grep -E \
-  "Phase warmup progress|WARMUP cache pressure|Phase warmup complete|Phase profiling started|Phase profiling complete|replay_rc=" \
+  "Phase warmup progress|WARMUP cache pressure|Phase warmup complete|Phase profiling started|Phase profiling complete|process_agentic_result" \
   "<LOG_DIR>/benchmark.out"
 date -u
 ```

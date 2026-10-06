@@ -30,8 +30,8 @@ eval modifier，这些组合都会被拒绝。这类运行提供吞吐量证据�
 | 仅吞吐量 | `--no-evals` | 不生成 eval 作业 |
 | 仅选定的 eval 子集 | `--evals-only` | 作业带有 `RUN_EVAL=true`、`EVAL_ONLY=true` |
 | 仅运行所有符合条件的 eval | `--all-evals` | 等价于 `--evals-only --all-evals`；包含全部定长序列 8k/1k 行，以及单节点和多节点 agentic GSM8K 行 |
-| 在一个 recipe 中先跑吞吐量再跑 eval | `RUN_EVAL=true`、`EVAL_ONLY=false` | 启动服务，运行吞吐量，然后执行 `run_eval` |
-| 对新启动的服务仅运行 eval | `RUN_EVAL=true`、`EVAL_ONLY=true` | launcher 扩大 eval context，跳过吞吐量并运行 eval |
+| 在一个 recipe 中先跑吞吐量再跑 eval | `RUN_EVAL=true`、`EVAL_ONLY=false` | 启动服务，运行吞吐量，然后执行 `python3 -m infx.bench eval` |
+| 对新启动的服务仅运行 eval | `RUN_EVAL=true`、`EVAL_ONLY=true` | 启动器应用仅评估模式的服务设置，跳过吞吐量并运行评估 |
 
 PR 上的 `all-evals` 标签则通过 [`infx.matrix.plan`](../infx/matrix/plan.py) 生成矩阵，会扩大 eval 选择范围并保留吞吐量作业。
 
@@ -67,7 +67,7 @@ uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with p
   --config-files configs/nvidia-master.yaml | jq .
 ```
 
-正确的 AgentX eval 行包含 `"scenario-type": "agentic-coding"`、`"run-eval": true` 和 `"eval-only": true`。工作流会在 [`.github/workflows/e2e-tests.yml`](../../.github/workflows/e2e-tests.yml#L351-L358) 中将生成的行拆分到吞吐量、定长序列 eval 和 agentic eval 作业。
+正确的 AgentX eval 行包含 `"scenario-type": "agentic-coding"`、`"run-eval": true` 和 `"eval-only": true`。工作流会在 [`.github/workflows/e2e-tests.yml`](../../.github/workflows/e2e-tests.yml#L328-L335) 中将生成的行拆分到吞吐量、定长序列 eval 和 agentic eval 作业。
 
 ## 2. 添加评分 eval
 
@@ -80,71 +80,75 @@ uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with p
 对已经健康的 OpenAI-compatible 服务执行：
 
 ```bash
-source benchmarks/benchmark_lib.sh
 export MODEL='<HF_MODEL_ID>'
 export MODEL_NAME='<SERVED_MODEL_NAME>'
 export MODEL_PREFIX='<MODEL_PREFIX>'
 export PORT='<PORT>'
+export EVAL_ONLY=false IS_MULTINODE=false OPENAI_API_KEY=EMPTY
 export EVAL_TASKS_DIR='infx/evals/<task>.yaml'
-export EVAL_CONCURRENT_REQUESTS='16'
 export EVAL_LIMIT='10'
-run_eval --framework lm-eval --port "$PORT"
-append_lm_eval_summary
+EVAL_DIR="$(mktemp -d /tmp/eval_out-XXXXXX)"
+PYTHONSAFEPATH=1 PYTHONPATH="$PWD${PYTHONPATH:+:$PYTHONPATH}" python3 -m infx.bench eval \
+  --endpoint "http://localhost:$PORT" --concurrency 16 --stage-to "$EVAL_DIR"
 python3 -m infx.evals.validate_scores \
   --model-prefix "$MODEL_PREFIX" \
-  --results-glob 'results*.json'
+  --meta-env "$EVAL_DIR/meta_env.json" \
+  --results-glob "$EVAL_DIR/results*.json"
 ```
 
 完整 eval 需要取消 limit，并在干净且配置正确的服务上重复执行：
 
 ```bash
 unset EVAL_LIMIT
-run_eval --framework lm-eval --port "$PORT"
-append_lm_eval_summary
-python3 -m infx.evals.validate_scores --model-prefix "$MODEL_PREFIX"
+EVAL_DIR="$(mktemp -d /tmp/eval_out-XXXXXX)"
+PYTHONSAFEPATH=1 PYTHONPATH="$PWD${PYTHONPATH:+:$PYTHONPATH}" python3 -m infx.bench eval \
+  --endpoint "http://localhost:$PORT" --concurrency 16 --stage-to "$EVAL_DIR"
+python3 -m infx.evals.validate_scores --model-prefix "$MODEL_PREFIX" \
+  --meta-env "$EVAL_DIR/meta_env.json" --results-glob "$EVAL_DIR/results*.json"
 ```
 
-`run_lm_eval` 通过 `--model_args` 中的 `num_concurrent` 传递并发；它刻意采用环境变量，而不是 `run_eval` CLI 选项。准确调用见 [`run_lm_eval()`](../benchmarks/benchmark_lib.sh#L2044-L2128)。
+请使用 Python 3.10 或更高版本运行这些命令，通常在服务容器内执行，因为 lm-eval 会通过 `uv pip` 把固定版本的 harness 安装到该 `python3` 中。该命令会把允许列表中的产物复制到 `--stage-to`，并在该目录写入 `meta_env.json`。并发取自 `--concurrency`，lm-eval 通过 `--model_args` 中的 `num_concurrent` 接收该值。命令不再读取 `EVAL_CONCURRENT_REQUESTS`。准确调用见 [`infx.bench.eval.lm_eval.run`](../infx/bench/eval/lm_eval.py#L121-L150)。
 
 ## 3. `EVAL_ONLY` 是 launcher 约定
 
-必须在**启动服务前**设置 `EVAL_ONLY=true`。它不仅是 `run_eval` 内部的开关：
+必须在**启动服务前**设置 `EVAL_ONLY=true`。它不仅是评估命令内部的开关：
 
-1. `compute_eval_context_length`/`setup_eval_context` 选择请求的 eval context，并以模型原生上限为界。
-2. launcher 将其连接到服务参数（`--context-length`、`--max-model-len` 或 framework 对应参数）。
-3. 仍会运行健康检查。
-4. 吞吐量路径立即返回或被跳过。
-5. 运行 `run_eval` 和 artifact staging。
+1. 对单节点定长序列作业，srt binder 会把服务上下文设为矩阵中的 `MAX_MODEL_LEN`（`isl + osl + 256`），SGLang 使用 `context-length`，TRT-LLM 使用 `max_seq_len` 和 `max_num_tokens`，vLLM 与 ATOM 使用 `max-model-len`。AgentX 测试点和多节点作业保留配方自身的上下文，多节点作业还可选择用于真实验证的 `EVAL_CONFIG_FILE`。
+2. 仍会运行健康检查。在仅评估作业中，厂商评估框架还会在 `EVAL_ENDPOINT_READY_TIMEOUT_SECONDS` 内等待服务模型出现在 OpenAI chat 路由上。
+3. 跳过吞吐量测试。
+4. `python3 -m infx.bench eval` 按 `EVAL_MAX_MODEL_LEN` 确定每个 lm-eval 请求的预算。未设置时使用 `MAX_MODEL_LEN`，并以模型原生上限为界。
+5. 同一命令会暂存产物并写入 `meta_env.json`，无论评估成功还是失败。
+
+相关实现：[服务上下文](../infx/srt_slurm/single_node.py#L183-L194)、[请求预算](../infx/bench/eval/lm_eval.py#L77-L98)、[评估分派与失败策略](../infx/bench/eval/__init__.py#L74-L173) 和[工作流输入](../../.github/workflows/benchmark-tmpl.yml#L36-L53)。
 
 原生多节点 post-eval 从 `/model` 读取挂载的检查点，并仅在评估进程中启用数据集下载，不改变工作进程环境。上下文查询先读取本地 `config.json` 中的数值上限，再回退到 Transformers；显式设置的 `EVAL_MAX_MODEL_LEN` 仍优先。
 
-相关实现：[context 设置](../benchmarks/benchmark_lib.sh#L2016-L2042)、[eval 分派与失败策略](../benchmarks/benchmark_lib.sh#L2893-L3073) 和[工作流输入](../../.github/workflows/benchmark-tmpl.yml#L40-L57)。
-
-不要在吞吐量规格的服务已经运行后才切换 `EVAL_ONLY`，并假定 context 会随之变化。应通过 recipe 重启。Eval-only 模式会在暂存已有 artifact 后返回 eval 失败；在工作流中，上传步骤使用 `always()`，并位于分数校验前，因此失败证据仍会保留（[单节点上传与 gate](../../.github/workflows/benchmark-tmpl.yml#L467-L494)、[多节点上传与 gate](../../.github/workflows/benchmark-multinode-tmpl.yml#L487-L518)）。
+不要在吞吐量规格的服务已经运行后才切换 `EVAL_ONLY`，并假定 context 会随之变化。应通过 recipe 重启。Eval-only 模式会在暂存已有 artifact 后返回 eval 失败；在工作流中，上传步骤使用 `always()`，并位于分数校验前，因此失败证据仍会保留（[单节点上传与 gate](../../.github/workflows/benchmark-tmpl.yml#L449-L472)、[多节点上传与 gate](../../.github/workflows/benchmark-multinode-tmpl.yml#L477-L503)）。
 
 ## 4. 批量 eval 并发
 
-空格分隔的 `EVAL_CONCURRENT_REQUESTS` 会让多个并发点在**同一个存活的 engine 上依次执行**，而不是同时运行多个 harness。每个并发点内部，harness 最多发出该并发数的请求。
+空格分隔的 `--concurrency` 值会让多个并发点在**同一个存活的 engine 上依次执行**。多节点作业以这种方式传入 `EVAL_CONC`。它不会同时运行多个 harness。每个并发点内部，harness 最多发出该并发数的请求。
 
 ```bash
-source benchmarks/benchmark_lib.sh
 export MODEL='<HF_MODEL_ID>' MODEL_NAME='<SERVED_MODEL_NAME>' MODEL_PREFIX='<MODEL_PREFIX>'
 export PORT='<PORT>' EVAL_TASKS_DIR='infx/evals/gsm8k.yaml'
-export EVAL_CONCURRENT_REQUESTS='16 32 64'
-run_eval --framework lm-eval --port "$PORT"
-append_lm_eval_summary
-python3 -m infx.evals.validate_scores --expected-concs '16 32 64'
+export EVAL_ONLY=false IS_MULTINODE=false OPENAI_API_KEY=EMPTY
+EVAL_DIR="$(mktemp -d /tmp/eval_out-XXXXXX)"
+PYTHONSAFEPATH=1 PYTHONPATH="$PWD${PYTHONPATH:+:$PYTHONPATH}" python3 -m infx.bench eval \
+  --endpoint "http://localhost:$PORT" --concurrency '16 32 64' --stage-to "$EVAL_DIR"
+python3 -m infx.evals.validate_scores --expected-concs '16 32 64' \
+  --meta-env "$EVAL_DIR/meta_env.json" --results-glob "$EVAL_DIR/results*.json"
 ```
 
 批量 runner 会为每个点创建新的临时输出目录，用 `_conc<N>` 后缀暂存文件，并向 `meta_env.json` 写入以下数组：
 
 - `eval_concs`：请求的点；
-- `completed_eval_concs`：eval 与 staging 均成功的点；
-- `failed_eval_concs`：eval 或 staging 失败的点。
+- `completed_eval_concs`：评估成功且至少暂存了一个产物的点；
+- `failed_eval_concs`：评估或其暂存失败，或未暂存任何产物的点。
 
-失败点会延迟报错，使所有已尝试点的 artifact 都能上传；随后 post-upload validator 会使作业失败。批量模式只接受正整数，且仅支持 `lm-eval`。参见 [`run_eval` batching](../benchmarks/benchmark_lib.sh#L2980-L3031)、[artifact 后缀处理](../benchmarks/benchmark_lib.sh#L2130-L2188) 和[manifest 校验](../infx/evals/validate_scores.py#L119-L216)。
+失败点会延迟报错，使所有已尝试点的 artifact 都能上传；随后 post-upload validator 会使作业失败。批量模式只接受正整数，且仅支持 `lm-eval`。参见[批量执行](../infx/bench/eval/__init__.py#L176-L211)、[产物后缀处理](../infx/bench/eval/stage.py#L20-L43) 和[manifest 校验](../infx/evals/validate_scores.py#L119-L216)。
 
-对于多节点 `all-evals`，工作流通过连接拓扑的并发列表构造 `EVAL_CONC`（[分派](../../.github/workflows/e2e-tests.yml#L417-L419)）。如果缺少某点的 `_conc<N>` 结果或 completed manifest 条目，绝不能比较该点。
+对于多节点 `all-evals`，工作流通过连接拓扑的并发列表构造 `EVAL_CONC`（[分派](../../.github/workflows/e2e-tests.yml#L390-L392)）。如果缺少某点的 `_conc<N>` 结果或 completed manifest 条目，绝不能比较该点。
 
 ## 5. 校验分数，而不只是检查文件存在
 
@@ -190,17 +194,17 @@ gh run download "$RUN_ID" --repo SemiAnalysisAI/InferenceX \
   --pattern 'eval_*' --dir ./evals/raw
 ```
 
-保留 `meta_env.json`、`results*.json` 和 `sample*.jsonl`。Agentic SWE-bench 在单节点模板中还会上传 `agent_preds.json`、`predictions.jsonl`、`swebench_report_*.json` 和 trajectory 文件。Aggregate 是导航工具，不能替代原始样本与 batch 完整性证据。
+保留 `meta_env.json`、`results*.json` 和 `sample*.jsonl`。Aggregate 是导航工具，不能替代原始样本与 batch 完整性证据。
 
 ## 7. 运行 AgentX：快速反馈与 canonical 证据
 
-[`install_agentic_deps()`](../benchmarks/benchmark_lib.sh) 在安装可编辑模式的 `utils/aiperf` 时直接声明 AgentX client 所需的依赖，并使用调用方提供的 `AIPERF_PYTHON_VERSION` 将它们安装到隔离的 `AIPERF_RUNTIME_DIR` 环境中。
+`python3 -m infx.bench agentic` 会用 uv 自行构建客户端运行时（[`infx/bench/agentic/venv.py`](../infx/bench/agentic/venv.py)）。它在 `AIPERF_RUNTIME_DIR` 下新建 Python 3.11 venv（默认 `<tmp>/inferencex-agentic-<SLURM_JOB_ID 或 PID>`），以可编辑模式安装 `utils/aiperf` 及其声明的依赖，并安装 AIPerf 未声明的 client 依赖（[`requirements.txt`](../infx/bench/agentic/requirements.txt)）。随后它会在该 venv 的 Python 下重新运行自身。Recipe 通过 [`benchmarks/srt_agentic.sh`](../benchmarks/srt_agentic.sh) 调用它。
 
-AgentX 是 AIPerf `agentx` trace replay，不是固定 token 的合成 benchmark。仓库默认设置对每条 trajectory lane 额外执行十个 warmup 请求，并使用 recipe 配置的 profile 时长。`agentx-fast` 强制每条 lane 只运行一个 warmup 请求，并将 profile 设为 1,200 秒。它只影响单节点和多节点 AgentX 吞吐量；定长序列吞吐量与 eval 保持 canonical。Fast 运行不符合 artifact reuse 条件（[工作流策略](../../.github/workflows/README.md#agentx-fast-mode)、[fast replay 设置](../benchmarks/benchmark_lib.sh#L3255-L3259)）。
+AgentX 是 AIPerf `agentx` trace replay，不是固定 token 的合成 benchmark。`agentx` scenario 负责 replay 默认值：每条 trajectory lane 额外执行十个 warmup 请求、warmup 排空上限为 1,800 秒、实时失败阈值为 0.10、trace 空闲上限为 300 秒。Recipe 可以用 `AGENTIC_WARMUP_GRACE_PERIOD` 提高排空上限，或用 `AIPERF_LIVE_FAILED_REQUEST_THRESHOLD` 放宽实时中止阈值；完成后的 profile 错误率超过 0.10 时仍会校验失败（[运行后校验](../infx/bench/agentic/run.py#L33-L35)）。Profile 使用配置的时长。`agentx-fast` 强制每条 lane 只运行一个 warmup 请求，并将 profile 设为 1,200 秒。它只影响单节点和多节点 AgentX 吞吐量；定长序列吞吐量与 eval 保持 canonical。Fast 运行不符合 artifact reuse 条件（[工作流策略](../../.github/workflows/README.md#agentx-fast-mode)、[fast replay 设置](../infx/bench/agentic/replay.py#L64-L65)）。
 
-每个 AgentX 吞吐量并发点都必须使用新启动的服务。矩阵为每个点生成独立作业，replay client 会拒绝多个并发值。AgentX 不清空缓存，也不复用正在运行的服务来测试另一个并发点。同一测试点的预热和正式测量共用服务。此规则不改变定长序列 sweep 或评分 eval 的批量执行行为。
+每个 AgentX 吞吐量并发点都必须使用新启动的服务。矩阵为每个点生成独立作业。`infx.launch` 会拒绝 `CONC_LIST` 不恰好等于其唯一正整数 `CONC` 的多节点 AgentX 吞吐量作业，replay client 也会拒绝与 `CONC` 不同的 `CONC_LIST`。AgentX 不清空缓存，也不复用正在运行的服务来测试另一个并发点。同一测试点的预热和正式测量共用服务。此规则不改变定长序列 sweep 或评分 eval 的批量执行行为。
 
-对于多节点 srt-slurm 作业，benchmark client 与 frontend 可能运行在不同主机上。`srt_agentic.sh` 会优先使用显式提供的 `AIPERF_SERVER_URL`；否则从 `SRT_FRONTEND_HOST` 和 `SRT_FRONTEND_PORT` 推导地址；仅在没有远端 endpoint 时回退到 `localhost:$PORT`。
+对于多节点 srt-slurm 作业，benchmark client 与 frontend 可能运行在不同主机上。只要设置了 `SRT_FRONTEND_HOST`，replay 就以 `http://$SRT_FRONTEND_HOST:$SRT_FRONTEND_PORT` 为目标，否则使用显式提供的 `AIPERF_SERVER_URL`，两者都没有时才回退到 `http://localhost:$PORT`（[`_server_url`](../infx/bench/agentic/replay.py#L115-L122)）。
 
 对于未发布到 package index 的 engine 或 router wheel，必须保证构建可复现且 artifact 不可变：在 launcher 旁签入源码 patch 与构建器，打 patch 前校验上游 wheel 的 digest，分配明确的 local version，并通过带 SHA256 fragment 的精确 URL 安装已发布 artifact。本地 backport 不得冒用尚未发布的上游版本号。
 
@@ -222,24 +226,11 @@ gh workflow run e2e-tests.yml --repo SemiAnalysisAI/InferenceX --ref "$REF" \
   -f agentx-fast=true
 ```
 
-目标 AgentX SWE-bench smoke eval（前十个 instance，真实 agentic generation）：
-
-```bash
-gh workflow run e2e-tests.yml --repo SemiAnalysisAI/InferenceX --ref "$REF" \
-  -f generate-cli-command='test-config --config-keys qwen3.5-fp8-b200-sglang-agentic --conc 1 --evals-only --config-files configs/nvidia-master.yaml' \
-  -f test-name='swebench-smoke-qwen35-c1' \
-  -f eval-framework=swebench \
-  -f eval-limit='10' \
-  -f swebench-gen-mode='agentic'
-```
-
-要得到可发布的 SWE-bench 分数，省略 `eval-limit`；不要使用 `single-shot`，它只是诊断逃生选项。SWE-bench generation/scoring 控制项以及完整 split 的 `0.50` 阈值在实现旁的 [`infx/evals/EVALS.md`](../infx/evals/EVALS.md#swe-bench-lite---framework-swebench) 中说明。
-
-Fast 结果只能作为 bring-up 证据，绝不能替代 canonical candidate。小于 900 秒的 duration 或 `AIPERF_UNSAFE_OVERRIDE=true` 会添加 AIPerf 的 `--unsafe-override` 并将 submission 标记为无效；只能用于 smoke 诊断（[源码](../benchmarks/benchmark_lib.sh#L3362-L3364)）。Fast 运行健康后，必须对完全相同的 candidate 进行 canonical 运行，才能宣称 benchmark 成功。
+Fast 结果只能作为 bring-up 证据，绝不能替代 canonical candidate。小于 900 秒的 duration 会添加 AIPerf 的 `--unsafe-override` 并将 submission 标记为无效；只能用于 smoke 诊断（[源码](../infx/bench/agentic/replay.py#L105)）。Fast 运行健康后，必须对完全相同的 candidate 进行 canonical 运行，才能宣称 benchmark 成功。
 
 ## 8. 保留 trace 与运行 provenance
 
-AgentX 默认 replay 已记录的 assistant response。实时服务输出会被测量，但构造后续 turn 时会丢弃。除非用 `WEKA_LOADER_OVERRIDE` 固定，否则所选 trace corpus 依赖模型 family；resolver 会同时记录 loader 与 Hugging Face dataset（[trace 解析](../benchmarks/benchmark_lib.sh#L3165-L3234)、[replay 语义](../benchmarks/benchmark_lib.sh#L3236-L3366)）。
+AgentX 默认 replay 已记录的 assistant response。实时服务输出会被测量，但构造后续 turn 时会丢弃。除非用 `WEKA_LOADER_OVERRIDE` 固定为 `semianalysis_cc_traces_weka_062126` 或 `semianalysis_cc_traces_weka_062126_256k`，否则所选 trace corpus 依赖模型 family；resolver 会同时记录 loader 与 Hugging Face dataset（[trace 解析](../infx/bench/agentic/traces.py#L20-L25)、[replay 语义](../infx/bench/agentic/replay.py#L150-L185)）。Replay 保留模型的原生上下文。客户端忽略 `MAX_MODEL_LEN`，只有显式设置的 `AIPERF_MAX_CONTEXT_LENGTH` 才会添加 AIPerf 的 `--max-context-length`。
 
 立即记录 orchestration provenance：
 
@@ -259,8 +250,6 @@ gh run download "$RUN_ID" --repo SemiAnalysisAI/InferenceX \
   --pattern 'agentic_*' --dir ./agentx/raw
 gh run download "$RUN_ID" --repo SemiAnalysisAI/InferenceX \
   --pattern '*server_logs_*' --dir ./agentx/server-logs
-gh run download "$RUN_ID" --repo SemiAnalysisAI/InferenceX \
-  --pattern 'gpu_metrics_*' --dir ./agentx/gpu
 ```
 
 每个并发点都应保留：
@@ -271,7 +260,7 @@ gh run download "$RUN_ID" --repo SemiAnalysisAI/InferenceX \
 - server/frontend 日志以及所代表的每个 metrics endpoint；
 - run URL/ID、attempt、head SHA、recipe/config 标识、image、topology、fast 标志和所有 override。
 
-Runner 会在 replay 前写入命令，并在聚合后校验原始结果（[执行路径](../benchmarks/benchmark_lib.sh#L3412-L3566)）。聚合会保留 dataset provenance 以及硬件/模型/拓扑字段（[aggregate 构造](../infx/results/agentic/__init__.py)）。工作流的 raw upload 会有意排除体积很大的 `inputs.json` 和 `profile_export_raw.jsonl`；如果调查需要这些文件，应在清理前从实时 allocation 保存（[单节点 artifact 约定](../../.github/workflows/benchmark-tmpl.yml#L400-L409)、[多节点约定](../../.github/workflows/benchmark-multinode-tmpl.yml#L476-L485)）。
+Runner 会在 replay 前写入命令，并在聚合后校验原始结果（[执行路径](../infx/bench/agentic/run.py#L122-L197)）。聚合会保留 dataset provenance 以及硬件/模型/拓扑字段（[aggregate 构造](../infx/results/agentic/__init__.py)）。工作流的 raw upload 会有意排除体积很大的 `inputs.json` 和 `profile_export_raw.jsonl`；如果调查需要这些文件，应在清理前从实时 allocation 保存（[单节点 artifact 约定](../../.github/workflows/benchmark-tmpl.yml#L382-L391)、[多节点约定](../../.github/workflows/benchmark-multinode-tmpl.yml#L466-L475)）。
 
 ## 9. 用实时证据调试长时间 AgentX 运行
 
@@ -320,12 +309,12 @@ curl -fsS '<METRICS_URL>' | \
   rg -i 'request|queue|cache|token|prefill|decode|error|fail'
 ```
 
-通过重复 sample 跟踪趋势：running/waiting request、KV usage、prefix hit、input/output token rate、completed/cancelled/errored request、frontend routing balance，以及 disaggregated KV transfer。AIPerf 会为每条 server series 记录 endpoint identity（[metrics 接线](../benchmarks/benchmark_lib.sh#L3344-L3359)）。
+通过重复 sample 跟踪趋势：running/waiting request、KV usage、prefix hit、input/output token rate、completed/cancelled/errored request、frontend routing balance，以及 disaggregated KV transfer。AIPerf 会为每条 server series 记录 endpoint identity（[metrics 接线](../infx/bench/agentic/replay.py#L125-L147)）。未设置 `AIPERF_SERVER_METRICS_URLS` 且 `SRTCTL_FRONTEND_TYPE` 不是 `dynamo` 时，replay 会从 `SRT_AGG_ENDPOINTS`，或从 `SRT_PREFILL_ENDPOINTS` 加 `SRT_DECODE_ENDPOINTS`，抓取每个 worker 的 `/metrics`。
 
 应使用 phase marker，而不是 Slurm 总运行时间：
 
 ```bash
-grep -E 'Phase warmup progress|WARMUP cache pressure|Phase warmup complete|Phase profiling started|Phase profiling complete|replay_rc=' \
+grep -E 'Phase warmup progress|WARMUP cache pressure|Phase warmup complete|Phase profiling started|Phase profiling complete|process_agentic_result' \
   "<LOG_DIR>/benchmark.out"
 date -u
 ```

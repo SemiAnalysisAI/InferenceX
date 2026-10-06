@@ -152,7 +152,7 @@ STP（Single Token Prediction，单 Token 预测）是每次前向传播生成�
 6. srt-slurm 必须同时更新配方和主条目；llm-d 必须同时更新 llm-d 配方/编排和主条目。
 7. 追加触发条目，先只生成受影响的 key，并检查每个生成点。
 
-固定序列 `8192/1024` 场景可设置 `require-power: true`，要求经过验证的实测功耗。矩阵将此标记传递给标准 sweep 和手动 E2E 吞吐作业；eval-only 和 AgentX 行不继承该标记。省略此字段可保留现有行为。仅在对应 runtime 和结果适配器同时交付时启用，然后验证完整选定范围。
+多节点固定序列 `8192/1024` 场景可设置 `require-power: true`，要求经过验证的实测功耗。矩阵将此标记传递给标准 sweep 和手动 E2E 吞吐作业；eval-only 和 AgentX 行不继承该标记。单节点场景不接受此字段，因为单节点任务不采集功耗。省略此字段可保留现有行为。仅在对应 runtime 和结果适配器同时交付时启用，然后验证完整选定范围。
 
 ## 注册并设置 runner
 
@@ -226,7 +226,7 @@ llm-d 不是 srt-slurm 路径：InferenceX 自己持有 Slurm allocation，并�
 
 1. 确认使用原生 MTP 模块还是外部 draft。使用 draft 时，从模型/上游配方验证精确模型 ID、方法（例如 `eagle3`）和建议 speculative token 数。
 2. 复制相同模型和 backend 的可工作同类项。保留其 speculative config、attention backend、token 数、模型补丁和依赖设置。
-3. 每个投机解码的定长配方变体都必须设置 `benchmark.env.USE_CHAT_TEMPLATE: "true"`；`select_recipe` 会拒绝缺少该设置的投机解码变体，[`srt_fixed_sequence.sh`](../benchmarks/single_node/srt_fixed_sequence.sh) 会将其转换为传给 `run_benchmark_serving` 的 `--use-chat-template`。原始 prompt 会静默降低 acceptance。
+3. 每个投机解码的定长配方变体都必须设置 `benchmark.env.USE_CHAT_TEMPLATE: "true"`；`select_recipe` 会拒绝缺少该设置的投机解码变体，[`srt_fixed_sequence.sh`](../benchmarks/single_node/srt_fixed_sequence.sh) 运行 `python3 -m infx.bench fixed-seq srt-single`，后者将其转换为基准测试客户端的 `--use-chat-template`。原始 prompt 会静默降低 acceptance。
 4. graph capture 至少按 `CONC * (1 + NUM_SPEC_TOKENS)` 确定规模，采用同类项的取整方式，并限制在框架上限内（当前 vLLM playbook 上限为 2048）。
 5. 保留 backend 差异：不要把 CUDA 专用 drafter attention pin 或补丁复制到 ROCm 配方。
 6. 在相应搜索空间条目设置 `spec-decoding: mtp`，并将其 `srt-recipe:` 指向 `-mtp` 配方；`select_recipe` 会据此校验配方的 speculative 配置。若使用 schema 支持的 draft-model 模式，要有意设置匹配的生成值；不要根据文件名推断。
@@ -360,10 +360,12 @@ MI355X 分支保持一致。Hopper 没有 FP4 tensor core，因此这些权重�
 35.9 GiB。
 
 轨迹语料：该分支回放未截断的 `semianalysis_cc_traces_weka_062126` 语料，而不是 256k
-截断的 `..._062126_256k` 变体，因为该模型服务 1M 上下文。配方本身并未指定语料 ——
-`resolve_trace_source` 选中未截断的默认值，仅仅是因为其 `dsv4*` 分支同时匹配了
-`dsv41flash` 前缀。这一依赖在调用处并不可见却至关重要，且目前没有测试固定它（原
-`runners/test_dsv41flash_h200.py` 已在 #3141 中删除）；收窄该分支会静默地降级本配方的轨迹。
+截断的 `..._062126_256k` 变体，因为该模型服务 1M 上下文。配方本身并未指定语料。
+`infx.bench.agentic.traces.resolve` 选中未截断的默认值，仅仅是因为其 `dsv4` 模型族前缀同时匹配了
+`dsv41flash`。这一依赖在调用处并不可见却至关重要。
+[`infx/tests/bench/test_agentic_replay.py`](../infx/tests/bench/test_agentic_replay.py) 中的
+`test_corpus_follows_the_model_family_context_unless_pinned` 覆盖了 `dsv41flash`，因此收窄该前缀会使
+该测试失败，而不会静默降级本配方的轨迹。
 
 **H100 分支单独实现。** H100 不在上游硬件表中，且瓶颈不在权重。在 1M 上下文下，稀疏
 注意力 indexer 会在 `fp8_fp4_paged_mqa_logits` 中分配一个
@@ -637,9 +639,9 @@ python -m pytest infx/tests/matrix/ -v
 
 下文 A/B 所测量的是延迟这条规则：与 decode 批次调度进同一个引擎步的 prefill 分块，会让所有正在解码的序列停顿该分块的时长，因此停顿时间随分块大小增长。也正因如此，它只在存在这类混合步时才有收益，而混合步的多少取决于并发——TP2 臂的 Torch profile 显示，c1 下 596 个引擎步中有 0 个分块 prefill 步，c16 下 1183 个中有 5 个，而 c64 下 111 个中有 38 个。一次对所有数据点加 cap 的 14 点 A/B（[运行 37375212446](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37375212446) 对 16384 基线[运行 37080504692](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37080504692)）量化了这一分界：TP2 c32 的 ITL p90 从 13.19 降至 11.29 ms，TP4 c64 从 19.76 降至 14.26 ms；而并发 1–16 没有任何交互性收益，且 TTFT 反复恶化（TP4 c4 的 p90 从 364 升至 471 ms，TP2 c4 从 505 升至 600 ms）。显存是把该上限留在阶梯顶端的第二个理由，因为稀疏注意力 indexer 及其配套的每 rank 缓冲区按每个批量 token 约 4.4 MiB 增长。将分块降至低于 API server 默认 1024 序列所需的六倍时，`--max-num-seqs` 也必须随之下调：DSpark 每序列验证 1+5 个 token，4096 对 1024 序列会使 engram 投影在 profiling 阶段崩溃；上文的 TP=2 c128 与 c192 是唯一处于该区间的数据点。Engram 的放置遵循同一原则：只在确实出现 KV 不足的并发点上把设备内存让给 KV。早于该合并的镜像在 ROCm 上仍会拒绝该选项。MI355X launcher 使用共享 HF 缓存，并将此模型的仓库挂载至 `/ix`，同时导出 `INFMAX_CONTAINER_WORKSPACE=/ix`，确保 AgentX 依赖与输出路径位于该挂载中。
 
-当前候选配方固定使用 `vllm/vllm-openai-rocm:nightly-rocm100-21d93d0d8c0e9627900020382bfce4730e61cab7`（2026-10-06 发布的 ROCm 10.0 nightly），并同时启用 a4w4 与 INT4 quick reduce。该镜像比 `nightly-rocm100-0cbac6cd1305f710e12193596b27488397bcb205` 领先 151 个提交，新增了 [vllm#56720](https://github.com/vllm-project/vllm/pull/56720)（压缩 K cache 的一次性反量化与按 gather 规模划分的 grid）、[vllm#57947](https://github.com/vllm-project/vllm/pull/57947)（AMD 路径接入融合 QSA 预 indexer）、[vllm#58560](https://github.com/vllm-project/vllm/pull/58560)（compressor ring 不再落入 null block）与 [vllm#59794](https://github.com/vllm-project/vllm/pull/59794)（AITER 0.1.24.post1，提供 a4w4 与 quick-reduce kernel）。该镜像与开关组合仍需通过 GPU sweep 和准确率评测；下述证据对应此前的 a8w4、未量化集合通信的基线。
+当前候选配方固定使用 `vllm/vllm-openai-rocm:nightly-rocm100-21d93d0d8c0e9627900020382bfce4730e61cab7`（2026-10-06 发布的 ROCm 10.0 nightly），并同时启用 INT4 quick reduce，a4w4 暂不启用。该镜像比 `nightly-rocm100-0cbac6cd1305f710e12193596b27488397bcb205` 领先 151 个提交，新增了 [vllm#56720](https://github.com/vllm-project/vllm/pull/56720)（压缩 K cache 的一次性反量化与按 gather 规模划分的 grid）、[vllm#57947](https://github.com/vllm-project/vllm/pull/57947)（AMD 路径接入融合 QSA 预 indexer）、[vllm#58560](https://github.com/vllm-project/vllm/pull/58560)（compressor ring 不再落入 null block）与 [vllm#59794](https://github.com/vllm-project/vllm/pull/59794)（AITER 0.1.24.post1，提供 quick-reduce kernel）。该镜像与开关组合仍需通过 GPU sweep 和准确率评测；下述证据对应此前的 a8w4、未量化集合通信的基线。
 
-这两个开关都会改变数值，因此只有在 GSM8K 评测运行期间二者都生效，评测结果才算有效。AgentX 评测是独立的 eval-only 作业，服务端由同一配方启动，上述角色 `env` 原样生效，只有 `CONC`、`RUN_EVAL`、`EVAL_ONLY` 和扩展后的上下文会被覆盖，评测客户端按该数据点的并发发压。a4w4 开关自带强制校验：当模型类型不属于 `deepseek_v41`/`deepseek_v41_text`，或 AITER 构建尚不支持 `fused_moe(quant_dtype_a=...)` 时，vLLM 会在启动阶段报错；因此在该镜像上能正常就绪的服务端必然已解析 `use_mxfp4_w4a4_dsv4`，并按配套的 SEPARATED MXFP4 shuffle 加载专家权重。quick reduce 则由张量大小而非开关决定：在默认的 `VLLM_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16=1` 下，BF16 输入按 FP16 阈值表判定，TP4 自 2 MiB、TP2 自 1 MiB 起启用 INT4。隐藏维度为 5120，单个 BF16 token 在一次 all-reduce 中占 10 KiB，对应阈值分别为 205 与 103 个 token。8192–16384 token 的 prefill 分块始终超过阈值；该配置只会生成一行 GSM8K 评测（TP4、并发 64），其 decode 步为 64 路序列 ×（1+5）个 DSpark 位置，即 384 个 token、3.75 MiB，同样超过阈值，因此评测在两个阶段都会走 INT4 集合通信；TP4 下并发不超过 32 的小 decode 步则回落到 custom all-reduce。请从评测作业的引擎日志确认两者：`Using [...] all-reduce backends (in dispatch order)` 一行中 `QUICK_REDUCE` 必须排在 `AITER_CUSTOM`/`CUSTOM` 之前，且启动环境中两个变量均已设置。
+quick reduce 会改变数值，因此只有在 GSM8K 评测运行期间它生效，评测结果才算有效。AgentX 评测是独立的 eval-only 作业，服务端由同一配方启动，上述角色 `env` 原样生效，只有 `CONC`、`RUN_EVAL`、`EVAL_ONLY` 和扩展后的上下文会被覆盖，评测客户端按该数据点的并发发压。quick reduce 则由张量大小而非开关决定：在默认的 `VLLM_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16=1` 下，BF16 输入按 FP16 阈值表判定，TP4 自 2 MiB、TP2 自 1 MiB 起启用 INT4。隐藏维度为 5120，单个 BF16 token 在一次 all-reduce 中占 10 KiB，对应阈值分别为 205 与 103 个 token。8192–16384 token 的 prefill 分块始终超过阈值；该配置只会生成一行 GSM8K 评测（TP4、并发 64），其 decode 步为 64 路序列 ×（1+5）个 DSpark 位置，即 384 个 token、3.75 MiB，同样超过阈值，因此评测在两个阶段都会走 INT4 集合通信；TP4 下并发不超过 32 的小 decode 步则回落到 custom all-reduce。请从评测作业的引擎日志确认两者：`Using [...] all-reduce backends (in dispatch order)` 一行中 `QUICK_REDUCE` 必须排在 `AITER_CUSTOM`/`CUSTOM` 之前，且启动环境中两个变量均已设置。
 
 **GPU 验证：** 配方使用 `vllm/vllm-openai-rocm:nightly-rocm100-ac9126e58aa7bbab1856ba6593ba4d5003fea516`，该 ROCm 10.0 nightly 包含 vllm#58671（分页 MXFP4 稀疏 indexer）、vllm#58655（融合 mHC Triton seams）与 vllm#53492（Gluon sparse-MLA kernel）。[#3571](https://github.com/SemiAnalysisAI/InferenceX/pull/3571) 的[运行 36824408313](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/36824408313) 在 TP4 与 TP2、并发 1–64 下验证了该镜像，其中仅评测的 TP4 并发 64 数据点 GSM8K 为 strict 0.9712 / flexible 0.9704。此前的 sweep 验证的都是已被取代的镜像，其数据点不能沿用到本镜像：[#3420](https://github.com/SemiAnalysisAI/InferenceX/pull/3420) 重新扫描了 `nightly-rocm100-29468dde8b515031dc6d4d9d06bf0a2fa0442098`，[#3326](https://github.com/SemiAnalysisAI/InferenceX/pull/3326) 验证了 `nightly-rocm100-3df4ae153eb385e27b52f26c81f8edb9e20b9984`，[运行 34710937012](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34710937012) 覆盖的是 `nightly-eed1f3d0c6043bd494424a22443ee198dd56f657`。已合并的[上游配方 #1049](https://github.com/vllm-project/recipes/pull/1049) 记录了 MI355X 的 sparse-MLA Gluon kernel、MXFP4 稀疏 indexer 与 `--block-size 128`；已合并的 [#1006](https://github.com/vllm-project/recipes/pull/1006) 记录了 MI355X 的 TP2 Engram 卸载与 `--no-swa-bounded-replay`，已合并的 [#968](https://github.com/vllm-project/recipes/pull/968) 则记录了最初的 AMD 设置与完整的 InferenceX 命令。后续运行时证据请遵循 [AgentX 流程](./eval-agentx-procedures_zh.md)；仅有本地矩阵生成和镜像元数据不能证明 GPU 验证完成。
 
