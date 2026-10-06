@@ -61,8 +61,7 @@
 
 | 权威来源 | 职责 |
 | --- | --- |
-| [`.github/workflows/ingest-results.yml`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/main/.github/workflows/ingest-results.yml) | 接收 `ingest-results`，准备工件、执行迁移、摄取、验证并使缓存失效 |
-| [`.github/workflows/ingest-agentic-results.yml`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/main/.github/workflows/ingest-agentic-results.yml) | 面向包含大量 blob 的 AgentX 工件的独立长超时摄取路径 |
+| [`.github/workflows/ingest-results.yml`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/main/.github/workflows/ingest-results.yml) | 接收 `ingest-results` 和 `ingest-agentic-results`，准备工件、执行迁移、摄取、验证并使缓存失效。智能体摄取使用更大的运行器和更长的超时时间 |
 | [`packages/db/src/prepare-ci-artifacts.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/main/packages/db/src/prepare-ci-artifacts.ts) | 选择并下载源运行工件，包括复用扫描元数据 |
 | [`packages/db/src/ingest-ci-run.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/main/packages/db/src/ingest-ci-run.ts) | 编排工作流运行、基准测试、评测、样本、追踪、统计、可用性和变更日志的摄取 |
 | [`packages/db/src/etl/benchmark-mapper.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/main/packages/db/src/etl/benchmark-mapper.ts) | 将基准测试工件行映射为面向数据库的规范形态 |
@@ -310,7 +309,7 @@ rows = build_rows(raw_eval, metadata, source="eval_job/results.json")
 对于符合条件的 `main` 推送，[`merge-ingest.yml`](../../.github/workflows/merge-ingest.yml) 的 `ingest` 作业会验证已合并 PR 的复用授权，并向 `SemiAnalysisAI/InferenceX-app` 发送且仅发送一次 GitHub `repository_dispatch`。没有有效授权时，该作业会失败，不发送任何分派。`run-sweep.yml` 从不分派摄取。
 
 - 不含智能体条目的变更日志增量使用 `event_type: ingest-results`。
-- 包含智能体条目的增量使用 `event_type: ingest-agentic-results` 并携带 `database-target: production`，由具有更长超时时间的独立工作流处理。
+- 包含智能体条目的增量使用 `event_type: ingest-agentic-results` 并携带 `database-target: production`，由同一个工作流在更大的运行器上以更长的超时时间处理。
 - 负载携带 `source-run-id` 和 `merge-run-id`。源运行始终是提供工件的被复用 PR `run-sweep.yml` 运行，Merge Ingest 运行则提供当前变更日志上下文。
 
 成功上传基准测试工件并不等同于成功摄取。仓库分派、工件准备、ETL、数据库验证和缓存失效都属于后续边界。

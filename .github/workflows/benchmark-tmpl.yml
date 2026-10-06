@@ -334,23 +334,115 @@ jobs:
           "$INFERENCEX_RESULTS_PYTHON" -P -m infx.results.fixed_sequence
 
       - name: Upload result
+        id: upload-result
         if: ${{ success() && env.RESULT_FILENAME != '' && !inputs.eval-only && inputs.scenario-type != 'agentic-coding' }}
+        continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: bmk_${{ env.RESULT_FILENAME }}
           path: ${{ env.INFERENCEX_E2E_ROOT }}/agg_${{ env.RESULT_FILENAME }}.json
 
+      - name: Wait before retrying upload result
+        if: ${{ always() && steps.upload-result.outcome == 'failure' }}
+        run: sleep 10
+
+      - name: Retry upload result (attempt 2)
+        id: retry-upload-result
+        if: ${{ always() && steps.upload-result.outcome == 'failure' }}
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          overwrite: true
+          name: bmk_${{ env.RESULT_FILENAME }}
+          path: ${{ env.INFERENCEX_E2E_ROOT }}/agg_${{ env.RESULT_FILENAME }}.json
+
+      - name: Wait before final result upload attempt
+        if: ${{ always() && steps.retry-upload-result.outcome == 'failure' }}
+        run: sleep 30
+
+      - name: Retry upload result (attempt 3)
+        if: ${{ always() && steps.retry-upload-result.outcome == 'failure' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          overwrite: true
+          name: bmk_${{ env.RESULT_FILENAME }}
+          path: ${{ env.INFERENCEX_E2E_ROOT }}/agg_${{ env.RESULT_FILENAME }}.json
+
       - name: Upload agentic aggregated result
+        id: upload-agentic-aggregated
         if: ${{ always() && inputs.scenario-type == 'agentic-coding' }}
+        continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: bmk_agentic_${{ env.RESULT_FILENAME }}
           path: ${{ env.INFERENCEX_E2E_ROOT }}/${{ env.RESULT_FILENAME }}.json
 
-      - name: Upload agentic raw results
-        if: ${{ always() && inputs.scenario-type == 'agentic-coding' }}
+      - name: Wait before retrying upload agentic aggregated result
+        if: ${{ always() && steps.upload-agentic-aggregated.outcome == 'failure' }}
+        run: sleep 10
+
+      - name: Retry upload agentic aggregated result (attempt 2)
+        id: retry-upload-agentic-aggregated
+        if: ${{ always() && steps.upload-agentic-aggregated.outcome == 'failure' }}
+        continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
+          overwrite: true
+          name: bmk_agentic_${{ env.RESULT_FILENAME }}
+          path: ${{ env.INFERENCEX_E2E_ROOT }}/${{ env.RESULT_FILENAME }}.json
+
+      - name: Wait before final agentic aggregated result
+        if: ${{ always() && steps.retry-upload-agentic-aggregated.outcome == 'failure' }}
+        run: sleep 30
+
+      - name: Retry upload agentic aggregated result (attempt 3)
+        if: ${{ always() && steps.retry-upload-agentic-aggregated.outcome == 'failure' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          overwrite: true
+          name: bmk_agentic_${{ env.RESULT_FILENAME }}
+          path: ${{ env.INFERENCEX_E2E_ROOT }}/${{ env.RESULT_FILENAME }}.json
+
+      - name: Upload agentic raw results
+        id: upload-agentic-raw
+        if: ${{ always() && inputs.scenario-type == 'agentic-coding' }}
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: agentic_${{ env.RESULT_FILENAME }}
+          path: |
+            ${{ env.INFERENCEX_E2E_ROOT }}/results/**
+            !${{ env.INFERENCEX_E2E_ROOT }}/results/aiperf_artifacts/inputs.json
+            !${{ env.INFERENCEX_E2E_ROOT }}/results/aiperf_artifacts/profile_export_raw.jsonl
+          if-no-files-found: ignore
+
+      - name: Wait before retrying upload agentic raw results
+        if: ${{ always() && steps.upload-agentic-raw.outcome == 'failure' }}
+        run: sleep 10
+
+      - name: Retry upload agentic raw results (attempt 2)
+        id: retry-upload-agentic-raw
+        if: ${{ always() && steps.upload-agentic-raw.outcome == 'failure' }}
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          overwrite: true
+          name: agentic_${{ env.RESULT_FILENAME }}
+          path: |
+            ${{ env.INFERENCEX_E2E_ROOT }}/results/**
+            !${{ env.INFERENCEX_E2E_ROOT }}/results/aiperf_artifacts/inputs.json
+            !${{ env.INFERENCEX_E2E_ROOT }}/results/aiperf_artifacts/profile_export_raw.jsonl
+          if-no-files-found: ignore
+
+      - name: Wait before final agentic raw results
+        if: ${{ always() && steps.retry-upload-agentic-raw.outcome == 'failure' }}
+        run: sleep 30
+
+      - name: Retry upload agentic raw results (attempt 3)
+        if: ${{ always() && steps.retry-upload-agentic-raw.outcome == 'failure' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          overwrite: true
           name: agentic_${{ env.RESULT_FILENAME }}
           path: |
             ${{ env.INFERENCEX_E2E_ROOT }}/results/**
@@ -375,7 +467,9 @@ jobs:
           if-no-files-found: ignore
 
       - name: Upload eval results (if any)
+        id: upload-eval
         if: ${{ always() && (env.RUN_EVAL == 'true' || inputs.eval-only) }}
+        continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: eval_${{ env.RESULT_FILENAME }}_${{ env.EVAL_FRAMEWORK }}_${{ env.EVAL_SUITE }}_${{ github.run_attempt }}
@@ -386,6 +480,54 @@ jobs:
             ${{ env.INFERENCEX_E2E_ROOT }}/*_results.jsonl
             ${{ env.INFERENCEX_E2E_ROOT }}/*_artifacts.tar.gz
             ${{ env.INFERENCEX_E2E_ROOT }}/sample*.jsonl
+          if-no-files-found: ${{ inputs.eval-only && 'error' || 'ignore' }}
+
+      - name: Wait before retrying upload eval results (if any)
+        if: ${{ always() && steps.upload-eval.outcome == 'failure' }}
+        run: sleep 10
+
+      - name: Retry upload eval results (attempt 2)
+        id: retry-upload-eval
+        if: ${{ always() && steps.upload-eval.outcome == 'failure' }}
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          overwrite: true
+          name: eval_${{ env.RESULT_FILENAME }}_${{ env.EVAL_FRAMEWORK }}_${{ env.EVAL_SUITE }}_${{ github.run_attempt }}
+          path: |
+            ${{ env.INFERENCEX_E2E_ROOT }}/meta_env.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/results*.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/*_report.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/*_results.jsonl
+            ${{ env.INFERENCEX_E2E_ROOT }}/*_artifacts.tar.gz
+            ${{ env.INFERENCEX_E2E_ROOT }}/sample*.jsonl
+            ${{ env.INFERENCEX_E2E_ROOT }}/agent_preds.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/predictions.jsonl
+            ${{ env.INFERENCEX_E2E_ROOT }}/swebench_report_*.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/*.traj*
+          if-no-files-found: ${{ inputs.eval-only && 'error' || 'ignore' }}
+
+      - name: Wait before final eval upload attempt
+        if: ${{ always() && steps.retry-upload-eval.outcome == 'failure' }}
+        run: sleep 30
+
+      - name: Retry upload eval results (attempt 3)
+        if: ${{ always() && steps.retry-upload-eval.outcome == 'failure' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          overwrite: true
+          name: eval_${{ env.RESULT_FILENAME }}_${{ env.EVAL_FRAMEWORK }}_${{ env.EVAL_SUITE }}_${{ github.run_attempt }}
+          path: |
+            ${{ env.INFERENCEX_E2E_ROOT }}/meta_env.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/results*.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/*_report.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/*_results.jsonl
+            ${{ env.INFERENCEX_E2E_ROOT }}/*_artifacts.tar.gz
+            ${{ env.INFERENCEX_E2E_ROOT }}/sample*.jsonl
+            ${{ env.INFERENCEX_E2E_ROOT }}/agent_preds.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/predictions.jsonl
+            ${{ env.INFERENCEX_E2E_ROOT }}/swebench_report_*.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/*.traj*
           if-no-files-found: ${{ inputs.eval-only && 'error' || 'ignore' }}
 
       - name: Verify eval scores
