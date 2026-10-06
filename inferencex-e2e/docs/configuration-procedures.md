@@ -382,7 +382,7 @@ ROCm 7.2.4). Every point selects the native srt-slurm recipe
 `benchmarks/single_node/srt-slurm-recipes/dsv41flash/atom/mi355x-fp4-mtp/agentic.yaml`;
 the legacy `dsv41flash_fp4_mi355x_atom_mtp.sh` launch from
 [#3387](https://github.com/SemiAnalysisAI/InferenceX/pull/3387) was removed in #3461 / #3463.
-TP2 covers concurrency `[1, 2, 8, 16, 32, 64, 128]`; TP4 covers `[32]`,
+TP2 covers concurrency `[1, 2, 4, 5, 6, 8, 16, 32, 64, 128]`; TP4 covers `[1, 4, 5, 6, 8, 32]`,
 without expert parallelism or KV offload. Every point uses BF16 KV, FP4 index cache,
 128 maximum sequences, 16K batched-token/prefill chunks, prefix caching with block
 size 16, 8K state checkpoints, compilation level 3 and FULL graphs, and every point

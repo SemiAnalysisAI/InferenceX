@@ -84,6 +84,30 @@ override_tp2_c2:
     env:
       CONC: '2'
 
+override_tp2_c4:
+  roles:
+    agg:
+      gpus: 2
+  benchmark:
+    env:
+      CONC: '4'
+
+override_tp2_c5:
+  roles:
+    agg:
+      gpus: 2
+  benchmark:
+    env:
+      CONC: '5'
+
+override_tp2_c6:
+  roles:
+    agg:
+      gpus: 2
+  benchmark:
+    env:
+      CONC: '6'
+
 override_tp2_c8:
   roles:
     agg:
@@ -127,6 +151,46 @@ override_tp2_c128:
   benchmark:
     env:
       CONC: '128'
+
+override_tp4_c1:
+  roles:
+    agg:
+      gpus: 4
+  benchmark:
+    env:
+      CONC: '1'
+
+override_tp4_c4:
+  roles:
+    agg:
+      gpus: 4
+  benchmark:
+    env:
+      CONC: '4'
+
+override_tp4_c5:
+  roles:
+    agg:
+      gpus: 4
+  benchmark:
+    env:
+      CONC: '5'
+
+override_tp4_c6:
+  roles:
+    agg:
+      gpus: 4
+  benchmark:
+    env:
+      CONC: '6'
+
+override_tp4_c8:
+  roles:
+    agg:
+      gpus: 4
+  benchmark:
+    env:
+      CONC: '8'
 
 override_tp4_c32:
   roles:
