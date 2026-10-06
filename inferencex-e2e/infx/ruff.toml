@@ -1,4 +1,6 @@
 target-version = "py312"
+# Container-side clients run under serving-image python3 (3.10 on ATOM/ROCm).
+per-file-target-version = { "bench/**" = "py310" }
 line-length = 100
 # Tests follow the repository test style, not the package ruleset.
 extend-exclude = ["tests"]

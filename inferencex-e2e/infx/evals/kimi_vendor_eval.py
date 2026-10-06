@@ -9,9 +9,12 @@ import re
 import subprocess
 import sys
 from collections.abc import Mapping, Sequence
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+# The integration-error path runs under the serving image's python3, which may be 3.10.
+UTC = timezone.utc  # noqa: UP017
 
 TASK_NAME = "kimi_tool_call_schema"
 FULL_TASK_NAME = "kimi_tool_call_schema_full"

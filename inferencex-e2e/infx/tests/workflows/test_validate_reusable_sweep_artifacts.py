@@ -424,7 +424,6 @@ def test_eval_validation_accepts_legacy_results_alongside_debug_artifacts(
         physical_runner="h100-dgxc-slurm_01",
     )
     (tmp_path / "eval_server_logs_fixture").mkdir()
-    (tmp_path / "eval_gpu_metrics_fixture").mkdir()
 
     assert validate_eval_artifacts(tmp_path) == []
 
