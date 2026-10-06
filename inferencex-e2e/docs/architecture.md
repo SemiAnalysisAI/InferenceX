@@ -61,8 +61,7 @@ These are cross-repository links because InferenceX-app owns the database and pr
 
 | Source of truth | Responsibility |
 | --- | --- |
-| [`.github/workflows/ingest-results.yml`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/main/.github/workflows/ingest-results.yml) | Receives `ingest-results`, prepares artifacts, migrates, ingests, verifies, and invalidates cache |
-| [`.github/workflows/ingest-agentic-results.yml`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/main/.github/workflows/ingest-agentic-results.yml) | Separate long-timeout ingest path for blob-heavy AgentX artifacts |
+| [`.github/workflows/ingest-results.yml`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/main/.github/workflows/ingest-results.yml) | Receives `ingest-results` and `ingest-agentic-results`, prepares artifacts, migrates, ingests, verifies, and invalidates cache. Agentic ingests get a larger runner and a longer timeout |
 | [`packages/db/src/prepare-ci-artifacts.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/main/packages/db/src/prepare-ci-artifacts.ts) | Selects and downloads source-run artifacts, including reused-sweep metadata |
 | [`packages/db/src/ingest-ci-run.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/main/packages/db/src/ingest-ci-run.ts) | Orchestrates workflow-run, benchmark, eval, sample, trace, stats, availability, and changelog ingestion |
 | [`packages/db/src/etl/benchmark-mapper.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/main/packages/db/src/etl/benchmark-mapper.ts) | Maps benchmark artifact rows to the database-facing canonical shape |
@@ -310,7 +309,7 @@ Artifact names are part of the cross-repository interface. InferenceX-app's `ing
 On a qualifying push to `main`, the `ingest` job of [`merge-ingest.yml`](../../.github/workflows/merge-ingest.yml) validates the merged PR's reuse authorization and sends exactly one GitHub `repository_dispatch` to `SemiAnalysisAI/InferenceX-app`. Without valid authorization it fails and sends nothing. `run-sweep.yml` never dispatches ingest.
 
 - Changelog deltas without agentic entries use `event_type: ingest-results`.
-- Deltas with agentic entries use `event_type: ingest-agentic-results` with `database-target: production`, handled by a separate workflow with a longer timeout.
+- Deltas with agentic entries use `event_type: ingest-agentic-results` with `database-target: production`, handled by the same workflow on a larger runner with a longer timeout.
 - The payload carries `source-run-id` and `merge-run-id`. The source is always the reused PR `run-sweep.yml` run that supplies artifacts, while the Merge Ingest run supplies current changelog context.
 
 A successful benchmark artifact upload is not the same as a successful ingest. The repository dispatch, artifact preparation, ETL, database verification, and cache invalidation are later boundaries.
