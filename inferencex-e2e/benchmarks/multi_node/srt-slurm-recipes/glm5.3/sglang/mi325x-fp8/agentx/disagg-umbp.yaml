@@ -495,7 +495,7 @@ override_two_tep4_prefill_dep4_c8:
       workers: 1
 
 # Genuine-only packed topology: two independent EP4 groups per role.
-override_two_tep4_two_dep4_batch4_quality_c32:
+override_two_tep4_two_dep4_batch4_quality_c32: &two_tep4_two_dep4_batch4
   <<: *tep4_dep4_rr_batch4
   sbatch_directives: {}
   slurm:
@@ -516,6 +516,14 @@ override_two_tep4_two_dep4_batch4_quality_c32:
   benchmark:
     env:
       CONC: "32"
+
+override_two_tep4_two_dep4_batch4_c16:
+  <<: *two_tep4_two_dep4_batch4
+  slurm:
+    time_limit: "12:00:00"
+  benchmark:
+    env:
+      CONC: "16"
 
 # Diagnostic-only: attention DP2 is explicit here; dp-attn metadata means enabled,
 # not four replicas. Publication requires explicit attention-DP-size metadata.

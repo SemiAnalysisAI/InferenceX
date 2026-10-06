@@ -503,6 +503,29 @@ glm53-mi325x-oct5-two-tep4-two-dep4-batch4-quality:
           ep: 4
           dp-attn: true
 
+glm53-mi325x-oct5-two-tep4-two-dep4-batch4-c16:
+  <<: *colocated_tep4_dep4_rr
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.422
+      search-space:
+      - spec-decoding: none
+        conc-list: [16]
+        kv-offloading: dram
+        kv-offload-backend: {name: umbp-linker}
+        prefill:
+          num-worker: 2
+          tp: 4
+          ep: 4
+          dp-attn: false
+          additional-settings:
+          - 'CONFIG_FILE=recipes/glm5.3/sglang/mi325x-fp8/agentx/disagg-umbp.yaml:override_two_tep4_two_dep4_batch4_c16'
+        decode:
+          num-worker: 2
+          tp: 4
+          ep: 4
+          dp-attn: true
+
 glm53-mi325x-oct5-tp8-prefill-dep4:
   <<: *colocated_tep4_dep4
   scenarios:
