@@ -611,8 +611,8 @@ def regenerate_producers(directory: Path) -> None:
 
 
 def select(directory: Path, max_candidates: int, execution_file: Path | None = None) -> None:
-    from . import claims
-    from .reporting import BaselinePreflight, Prose, resolve_baseline
+    from . import claims, validation
+    from .reporting import BaselinePreflight, Prose, missing_baseline_points, resolve_baseline
 
     contexts = json.loads((directory / "candidates.json").read_text())
     producers = json.loads((directory / PRODUCERS).read_text())
@@ -627,6 +627,7 @@ def select(directory: Path, max_candidates: int, execution_file: Path | None = N
             deferred = "capacity-unavailable"
     capacity_deferred = []
     baseline_deferred = []
+    baseline_mismatches = []
     preflights = {}
     families = {decision.family for decision in review.decisions if decision.decision != "proceed"}
     for candidate in contexts:
@@ -658,12 +659,31 @@ def select(directory: Path, max_candidates: int, execution_file: Path | None = N
                 source_identity=identity(candidate["source"]),
                 baseline=baseline,
             )
+            # The final sweep must reproduce every frozen point; an agent cannot fix a roster
+            # that the current family no longer generates.
+            missing = missing_baseline_points(
+                validation.canonical_matrix(
+                    os.environ["GITHUB_REPOSITORY"], owned.base, owned.family
+                ),
+                baseline,
+            )
         except VerificationError:
             baseline_deferred.append(candidate["id"])
             families.add(decision.family)
             continue
         except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError, ReadError):
             baseline_deferred.append(candidate["id"])
+            families.add(decision.family)
+            continue
+        if missing:
+            baseline_deferred.append(candidate["id"])
+            baseline_mismatches.append(
+                {
+                    "id": candidate["id"],
+                    "reason": "baseline-point-mismatch",
+                    "missing-points": len(missing),
+                }
+            )
             families.add(decision.family)
             continue
         if not claims.claim_family(
@@ -706,6 +726,7 @@ def select(directory: Path, max_candidates: int, execution_file: Path | None = N
                 "deferred-reason": deferred,
                 "capacity-deferred-candidates": capacity_deferred,
                 "baseline-deferred-candidates": baseline_deferred,
+                "baseline-mismatch-candidates": baseline_mismatches,
                 **review.model_dump(by_alias=True),
             },
             indent=2,
@@ -726,6 +747,11 @@ def select(directory: Path, max_candidates: int, execution_file: Path | None = N
         )
     if baseline_deferred:
         summary += f" {len(baseline_deferred)} candidates lacked a verifiable full baseline."
+    if baseline_mismatches:
+        summary += (
+            f" {len(baseline_mismatches)} of them have frozen baseline points"
+            " the current family no longer generates."
+        )
     if filename := os.environ.get("GITHUB_STEP_SUMMARY"):
         with open(filename, "a") as output:
             output.write(
