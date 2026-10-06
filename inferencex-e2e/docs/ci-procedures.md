@@ -522,7 +522,7 @@ Do not assume every run has every artifact. Important contracts are:
 | `run-stats` | `run_stats.json` | Hardware success counts across all attempts |
 | `changelog-metadata` | `changelog_metadata.json` | Search-space metadata from sweep setup |
 | `bmk_agentic_*` | Per-job JSON | Raw AgentX result upload used by agentic ingestion/staging |
-| `server_logs_*`, `multinode_server_logs_*`, `gpu_metrics_*`, `agentic_*` | Logs, metrics, or diagnostic payloads | `always()`/diagnostic uploads. Names vary by template and mode |
+| `server_logs_*`, `multinode_server_logs_*`, `agentic_*` | Logs, metrics, or diagnostic payloads | `always()`/diagnostic uploads. Names vary by template and mode |
 
 ### Parse bounded fields
 

@@ -500,7 +500,7 @@ gh run download "$RUN_ID" --repo "$REPO" -n changelog-metadata -D "$OUT/changelo
 | `run-stats` | `run_stats.json` | 跨所有 Attempt 的硬件成功计数 |
 | `changelog-metadata` | `changelog_metadata.json` | 扫描 Setup 的 Search-space Metadata |
 | `bmk_agentic_*` | 单 Job JSON | Agentic 入库/预发布使用的原始 AgentX Result Upload |
-| `server_logs_*`、`multinode_server_logs_*`、`gpu_metrics_*`、`agentic_*` | Log、Metric 或诊断 Payload | `always()`/诊断上传；名称随 Template 与模式变化 |
+| `server_logs_*`、`multinode_server_logs_*`、`agentic_*` | Log、Metric 或诊断 Payload | `always()`/诊断上传；名称随 Template 与模式变化 |
 
 ### 解析有限字段
 

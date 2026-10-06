@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 
-# SRT owns the server lifecycle; retain the existing InferenceX client and sampler.
+# SRT owns the server lifecycle; retain the existing InferenceX client.
 set -eo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/../benchmark_lib.sh" --validation-only
 check_env_vars MODEL CONC ISL OSL RANDOM_RANGE_RATIO RESULT_FILENAME RESULT_DIR \
-    SRT_FRONTEND_HOST SRT_FRONTEND_PORT RUN_EVAL EVAL_ONLY GPU_MONITOR_INTERVAL USE_CHAT_TEMPLATE FRAMEWORK
+    SRT_FRONTEND_HOST SRT_FRONTEND_PORT RUN_EVAL EVAL_ONLY USE_CHAT_TEMPLATE FRAMEWORK
 for name in RUN_EVAL EVAL_ONLY; do
     if [[ "${!name}" != true && "${!name}" != false ]]; then
         echo "ERROR: $name must be true or false" >&2
@@ -16,7 +16,6 @@ case "$FRAMEWORK" in
     trt) CLIENT_BACKEND=openai ;;
     *) echo "ERROR: unsupported fixed-sequence FRAMEWORK: $FRAMEWORK" >&2; exit 1 ;;
 esac
-SRT_MONITOR_INTERVAL="$GPU_MONITOR_INTERVAL"
 CLIENT_ARGS=()
 for argument in "$@"; do
     case "$argument" in
@@ -30,7 +29,7 @@ case "$USE_CHAT_TEMPLATE" in
     *) echo "ERROR: USE_CHAT_TEMPLATE must be true or false" >&2; exit 1 ;;
 esac
 
-for name in CONC ISL OSL SRT_FRONTEND_PORT GPU_MONITOR_INTERVAL; do
+for name in CONC ISL OSL SRT_FRONTEND_PORT; do
     if [[ ! "${!name}" =~ ^[1-9][0-9]*$ ]]; then
         echo "ERROR: $name must be a positive integer" >&2
         exit 1
@@ -45,9 +44,6 @@ fi
 source "$(dirname "${BASH_SOURCE[0]}")/../benchmark_lib.sh"
 cd "$INFERENCEX_REPO_ROOT"
 pip3 install --break-system-packages sentencepiece datasets pandas
-
-start_gpu_monitor --output "$RESULT_DIR/gpu_metrics.csv" --interval "$SRT_MONITOR_INTERVAL"
-trap 'rc=$?; stop_gpu_monitor; exit "$rc"' EXIT
 
 run_benchmark_serving \
     --model "$MODEL" \

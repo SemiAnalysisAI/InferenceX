@@ -9319,3 +9319,11 @@
     - "Add GB300 Qwen3.5-397B-A17B-FP8 AgentX recipes: four disaggregated TP1xPP4 MTP prefill / DEP4 MTP decode points and five aggregate TP4/TP8 MTP points."
     - "New recipes and matrix entries only; existing Qwen3.5 GB300 entries are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3231
+
+- config-keys:
+    - qwen3.5-fp8-h100-sglang
+    - qwen3.5-fp8-h100-sglang-mtp
+  description:
+    - "Remove InferenceX-owned GPU power sampling (start_gpu_monitor, single-node and native power adapters); only srt-slurm DCGM telemetry on multi-node lanes reports power."
+    - "Drop require-power from these single-node entries; single-node and AMD results publish no power until srt-slurm native telemetry covers them."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3675

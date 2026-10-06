@@ -61,13 +61,12 @@ def finish_single_node(run: SrtRun, submitted: Submitted, fetched: Path) -> int:
     bundle_server_logs(output, run.workspace / SINGLE_NODE_LOGS)
     logs = output / "logs"
     result = logs / f"{run.request.result_filename}.json"
-    for artifact in [result, *sorted(logs.glob("gpu_metrics*"))]:
-        if artifact.is_file():
-            try:
-                copy_to_workspace(artifact, run.workspace / artifact.name)
-            except ArtifactError as error:
-                print(f"ERROR: {error}", file=sys.stderr)
-                rc = 1
+    if result.is_file():
+        try:
+            copy_to_workspace(result, run.workspace / result.name)
+        except ArtifactError as error:
+            print(f"ERROR: {error}", file=sys.stderr)
+            rc = 1
     if (logs / "agentic").is_dir():
         try:
             _copy_tree_into(logs / "agentic", run.workspace / "results")

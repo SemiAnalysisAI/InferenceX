@@ -144,7 +144,6 @@ class SingleNodeRequest(SrtRequest):
     isl: int = Field(alias="ISL")
     osl: int = Field(alias="OSL")
     random_range_ratio: str = Field(alias="RANDOM_RANGE_RATIO")
-    gpu_monitor_interval: str = Field(alias="GPU_MONITOR_INTERVAL")
     hf_hub_cache: str = Field(alias="HF_HUB_CACHE")
     salloc_time_limit: int = Field(alias="SALLOC_TIME_LIMIT")
 

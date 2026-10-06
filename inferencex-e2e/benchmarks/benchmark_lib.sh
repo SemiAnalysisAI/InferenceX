@@ -83,148 +83,6 @@ if [[ "$_benchmark_caller" == */agentic/* ||
 fi
 unset _benchmark_caller
 
-# GPU monitoring helpers
-
-GPU_MONITOR_PID=""
-GPU_MONITOR_VENDOR=""
-GPU_MONITOR_INTERVAL=1
-GPU_METRICS_CSV="${GPU_METRICS_CSV:-gpu_metrics.csv}"
-NVIDIA_GPU_MONITOR_QUERY="timestamp,index,power.draw,temperature.gpu,clocks.current.sm,clocks.current.memory,utilization.gpu,utilization.memory"
-export GPU_METRICS_CSV
-
-# Keep one AMD CSV header and forward each complete row immediately. Some awk
-# implementations buffer pipe input even with fflush(), losing the final ticks
-# when the monitor stops.
-_filter_amd_smi_metrics() {
-    local line header_seen=false
-    while IFS= read -r line; do
-        if [[ "$line" == timestamp,* ]]; then
-            if [[ "$header_seen" == true ]]; then
-                continue
-            fi
-            header_seen=true
-        fi
-        if [[ "$header_seen" == true ]]; then
-            printf '%s\n' "$line"
-        fi
-    done
-}
-
-# Background nvidia-smi/amd-smi sampler writing CSV.
-# Usage: start_gpu_monitor [--output /path/to/output.csv] [--interval 1]
-start_gpu_monitor() {
-    local output="$GPU_METRICS_CSV"
-    local interval=1
-
-    while [[ $# -gt 0 ]]; do
-        case $1 in
-            --output)   output="$2"; shift 2 ;;
-            --interval) interval="$2"; shift 2 ;;
-            *)          shift ;;
-        esac
-    done
-
-    GPU_METRICS_CSV="$output"
-    GPU_MONITOR_INTERVAL="$interval"
-    export GPU_METRICS_CSV
-
-    if command -v nvidia-smi &>/dev/null; then
-        GPU_MONITOR_VENDOR="nvidia"
-        if ! nvidia-smi --query-gpu=index,uuid,pci.bus_id,name,driver_version \
-            --format=csv > "${output%.csv}_identity.csv" 2>/dev/null; then
-            rm -f "${output%.csv}_identity.csv"
-            echo "[GPU Monitor] Warning: NVIDIA identity sidecar failed" >&2
-        fi
-        nvidia-smi --query-gpu="$NVIDIA_GPU_MONITOR_QUERY" \
-            --format=csv -l "$interval" > "$output" 2>/dev/null &
-        GPU_MONITOR_PID=$!
-        echo "[GPU Monitor] Started NVIDIA (PID=$GPU_MONITOR_PID, interval=${interval}s, output=$output)"
-    elif command -v amd-smi &>/dev/null; then
-        GPU_MONITOR_VENDOR="amd"
-        # amd-smi is Python and block-buffers stdout; without PYTHONUNBUFFERED the
-        # trailing ticks were lost at kill (measured on MI355X).
-        PYTHONUNBUFFERED=1 amd-smi metric -p -c -t -u -w "$interval" --csv 2>/dev/null \
-            | _filter_amd_smi_metrics > "$output" &
-        GPU_MONITOR_PID=$!
-        # Hardware energy-accumulator + identity snapshots; the end-side twin in
-        # stop_gpu_monitor lets auditors cross-check the integrated energy
-        # against the accumulator delta.
-        _write_amd_smi_sidecar "${output%.csv}_energy_start.csv" metric -E --csv
-        _write_amd_smi_sidecar "${output%.csv}_identity.json" static --json
-        echo "[GPU Monitor] Started AMD (PID=$GPU_MONITOR_PID, interval=${interval}s, output=$output)"
-    else
-        GPU_MONITOR_VENDOR=""
-        echo "[GPU Monitor] No GPU monitoring tool found (nvidia-smi or amd-smi), skipping"
-        return 0
-    fi
-}
-
-stop_gpu_monitor() {
-    if [[ -n "$GPU_MONITOR_PID" ]] && kill -0 "$GPU_MONITOR_PID" 2>/dev/null; then
-        # The stream must cover one sample past benchmark_end_time_unix for
-        # boundary interpolation. NVIDIA appends a one-shot sample below; amd-smi
-        # one-shot CSV has no timestamp column, so the AMD watch stream must emit
-        # final ticks before the kill. Two extra intervals because amd-smi stamps
-        # integer seconds: a tick in the same second as the window end still
-        # fails bracketing (MI355X: end=...153.325 vs last sample ...153.0).
-        if [[ "$GPU_MONITOR_VENDOR" == "amd" ]]; then
-            sleep $(( ${GPU_MONITOR_INTERVAL} + 2 ))
-        fi
-        kill "$GPU_MONITOR_PID" 2>/dev/null
-        wait "$GPU_MONITOR_PID" 2>/dev/null || true
-        case "$GPU_MONITOR_VENDOR" in
-            nvidia)
-                if _repair_truncated_gpu_metrics_tail; then
-                    nvidia-smi --query-gpu="$NVIDIA_GPU_MONITOR_QUERY" \
-                        --format=csv,noheader >> "$GPU_METRICS_CSV" 2>/dev/null ||
-                        echo "[GPU Monitor] Warning: final NVIDIA sample failed" >&2
-                fi
-                ;;
-            amd)
-                _repair_truncated_gpu_metrics_tail || true
-                _write_amd_smi_sidecar "${GPU_METRICS_CSV%.csv}_energy_end.csv" metric -E --csv
-                ;;
-        esac
-        echo "[GPU Monitor] Stopped (PID=$GPU_MONITOR_PID)"
-        if [[ -f "$GPU_METRICS_CSV" ]]; then
-            local lines
-            lines=$(wc -l < "$GPU_METRICS_CSV")
-            echo "[GPU Monitor] Collected $lines rows -> $GPU_METRICS_CSV"
-        fi
-    fi
-    GPU_MONITOR_PID=""
-    GPU_MONITOR_VENDOR=""
-}
-
-# Drop a partial trailing row left behind when the monitor dies mid-write.
-# Returns non-zero when a truncated row was detected but could not be removed.
-_repair_truncated_gpu_metrics_tail() {
-    local repaired_metrics="${GPU_METRICS_CSV}.repair.$$"
-    if [[ -s "$GPU_METRICS_CSV" ]] &&
-        ! tail -c 1 "$GPU_METRICS_CSV" | grep -q '^$'; then
-        if sed '$d' "$GPU_METRICS_CSV" > "$repaired_metrics" &&
-            mv "$repaired_metrics" "$GPU_METRICS_CSV"; then
-            echo "[GPU Monitor] Dropped truncated trailing sample"
-        else
-            rm -f "$repaired_metrics"
-            echo "[GPU Monitor] Warning: could not repair truncated trailing sample" >&2
-            return 1
-        fi
-    fi
-    return 0
-}
-
-# Write one best-effort amd-smi snapshot; remove the file rather than keep a
-# partial one when the invocation fails.
-_write_amd_smi_sidecar() {
-    local out="$1"
-    shift
-    if ! amd-smi "$@" > "$out" 2>/dev/null; then
-        rm -f "$out"
-        echo "[GPU Monitor] Warning: amd-smi $1 sidecar failed" >&2
-    fi
-}
-
 # shellcheck source=runners/srt-slurm/hooks/common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/../runners/srt-slurm/hooks/common.sh" || return 1
 
@@ -2562,37 +2420,28 @@ build_replay_cmd() {
 }
 
 run_agentic_replay_and_write_outputs() (
-    check_env_vars ENABLE_AGENTX_POWER IS_MULTINODE REQUIRE_POWER
+    check_env_vars IS_MULTINODE
     local result_dir="$1"
     local replay_rc
     local validation_rc
     local power_rc=0
-    local agentx_power_enabled=0
     local agentx_multinode_power_enabled=0
     local agentx_multinode_contract_missing=0
-    local agentx_monitor_stopped=1
 
-    case "${ENABLE_AGENTX_POWER}" in
-        1|true|TRUE|yes|YES)
-            if [ "${IS_MULTINODE}" = "true" ]; then
+    # Only multinode srt-slurm telemetry measures AgentX power; single-node
+    # replays publish none.
+    if [ "${IS_MULTINODE}" = "true" ]; then
+        check_env_vars ENABLE_AGENTX_POWER REQUIRE_POWER
+        case "${ENABLE_AGENTX_POWER}" in
+            1|true|TRUE|yes|YES)
                 if [ -n "${SRT_MEASUREMENT_WINDOW_DIR:-}" ]; then
                     agentx_multinode_power_enabled=1
                 else
                     agentx_multinode_contract_missing=1
                 fi
-            else
-                check_env_vars TP PP_SIZE PCP_SIZE
-                agentx_power_enabled=1
-            fi
-            ;;
-    esac
-
-    _stop_agentx_power_monitor() {
-        if [ "$agentx_monitor_stopped" = "0" ]; then
-            agentx_monitor_stopped=1
-            stop_gpu_monitor
-        fi
-    }
+                ;;
+        esac
+    fi
 
     _write_agentx_multinode_window() {
         local state="$1"
@@ -2611,13 +2460,10 @@ run_agentic_replay_and_write_outputs() (
         )
     }
 
-    if [ "$agentx_power_enabled" = "1" ] || [ "$agentx_multinode_power_enabled" = "1" ]; then
-        # AIPerf exports naive local datetimes and SMI the same host wall clock;
-        # the adapter needs the offset to normalize the profiling window.
-        date +%z > "$result_dir/agentic_power_timezone_offset.txt"
-    fi
-
     if [ "$agentx_multinode_power_enabled" = "1" ]; then
+        # AIPerf exports naive local datetimes; the adapter needs the offset to
+        # convert the profiling window to Unix time.
+        date +%z > "$result_dir/agentic_power_timezone_offset.txt"
         set +e
         _write_agentx_multinode_window running
         power_rc=$?
@@ -2626,16 +2472,6 @@ run_agentic_replay_and_write_outputs() (
             echo "ERROR: failed to publish the AgentX formal running power window" >&2
             return "$power_rc"
         fi
-    fi
-
-    if [ "$agentx_power_enabled" = "1" ]; then
-        start_gpu_monitor --output "$result_dir/gpu_metrics.csv"
-        agentx_monitor_stopped=0
-        # This function runs in a subshell, so these traps cannot clobber
-        # launcher-owned ones; the stopped flag keeps cleanup idempotent.
-        trap '_stop_agentx_power_monitor' EXIT
-        trap '_stop_agentx_power_monitor; exit 130' INT
-        trap '_stop_agentx_power_monitor; exit 143' TERM
     fi
 
     echo "$REPLAY_CMD" > "$result_dir/benchmark_command.txt"
@@ -2647,11 +2483,6 @@ run_agentic_replay_and_write_outputs() (
     set +x
     set -e
 
-    if [ "$agentx_power_enabled" = "1" ]; then
-        _stop_agentx_power_monitor
-        trap - EXIT INT TERM
-    fi
-
     write_agentic_result_json "$result_dir"
 
     if [ "$agentx_multinode_power_enabled" = "1" ] && [ "$replay_rc" -eq 0 ]; then
@@ -2661,19 +2492,13 @@ run_agentic_replay_and_write_outputs() (
         set -e
     fi
 
-    if [ "$agentx_power_enabled" = "1" ] || [ "$agentx_multinode_contract_missing" = "1" ]; then
-        local expected_num_gpus
+    if [ "$agentx_multinode_contract_missing" = "1" ]; then
         local -a power_args
         power_args=(
             --result-dir "$result_dir"
             --agg-result "${AGENTIC_OUTPUT_DIR:-$INFMAX_CONTAINER_WORKSPACE}/$RESULT_FILENAME.json"
+            --multinode-contract-missing
         )
-        if [ "$agentx_multinode_contract_missing" = "1" ]; then
-            power_args+=(--multinode-contract-missing)
-        else
-            expected_num_gpus=$((TP * PP_SIZE * PCP_SIZE))
-            power_args+=(--expected-num-gpus "$expected_num_gpus")
-        fi
         case "${REQUIRE_POWER}" in
             1|true|TRUE|yes|YES) power_args+=(--require-power) ;;
         esac

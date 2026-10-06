@@ -246,8 +246,6 @@ gh run download "$RUN_ID" --repo SemiAnalysisAI/InferenceX \
   --pattern 'agentic_*' --dir ./agentx/raw
 gh run download "$RUN_ID" --repo SemiAnalysisAI/InferenceX \
   --pattern '*server_logs_*' --dir ./agentx/server-logs
-gh run download "$RUN_ID" --repo SemiAnalysisAI/InferenceX \
-  --pattern 'gpu_metrics_*' --dir ./agentx/gpu
 ```
 
 每个并发点都应保留：

@@ -5,10 +5,8 @@ from __future__ import annotations
 import json
 import os
 import re
-import signal
 import subprocess
 import sys
-import time
 from pathlib import Path
 
 import pytest
@@ -34,11 +32,6 @@ def _run_lifecycle(
     formal_window_dir = str(tmp_path / "power/windows") if formal_multinode_power else ""
     script = f"""
 source {str(BENCHMARK_LIB)!r}
-start_gpu_monitor() {{
-    printf 'monitor-start:%s\n' "$*" >> {str(event_log)!r}
-    printf 'timestamp,index,power.draw [W]\n' > "$2"
-}}
-stop_gpu_monitor() {{ printf 'monitor-stop\n' >> {str(event_log)!r}; }}
 fake_replay() {{
     printf 'replay\n' >> {str(event_log)!r}
     return {replay_rc}
@@ -75,9 +68,6 @@ INFMAX_CONTAINER_WORKSPACE={str(tmp_path)!r}
 AGENTIC_OUTPUT_DIR={str(tmp_path)!r}
 RESULT_FILENAME=agg_agentx
 AIPERF_FAILED_REQUEST_THRESHOLD=0
-TP=3
-PP_SIZE=2
-PCP_SIZE=2
 IS_MULTINODE={'true' if is_multinode else 'false'}
 ENABLE_AGENTX_POWER={'1' if enable_power else '0'}
 REQUIRE_POWER={'1' if require_power else '0'}
@@ -106,64 +96,32 @@ def _events(tmp_path: Path) -> list[str]:
     return (tmp_path / "events.log").read_text().splitlines()
 
 
-@pytest.mark.parametrize(
-    ("replay_rc", "expected_rc"),
-    [(0, 0), (7, 7)],
-)
-def test_single_node_monitor_wraps_replay_and_stops_once(
-    tmp_path: Path, replay_rc: int, expected_rc: int
+@pytest.mark.parametrize("missing_power_env", [None, "REQUIRE_POWER"])
+def test_single_node_replay_publishes_no_power_even_when_enabled(
+    tmp_path: Path, missing_power_env: str | None
 ):
-    result = _run_lifecycle(tmp_path, replay_rc=replay_rc)
-
-    assert result.returncode == expected_rc, result.stderr
-    events = _events(tmp_path)
-    assert events.count("monitor-stop") == 1
-    assert events.index("monitor-start:--output " + str(tmp_path / "results/gpu_metrics.csv")) < events.index(
-        "replay"
-    )
-    assert events.index("replay") < events.index("monitor-stop")
-    assert events.index("monitor-stop") < events.index("aggregate")
-    assert (tmp_path / "results/gpu_metrics.csv").is_file()
-    captured_offset = (tmp_path / "results/agentic_power_timezone_offset.txt").read_text().strip()
-    assert re.fullmatch(r"[+-]\d{4}", captured_offset)
-    assert events[-1] == "parent-exit"
-
-
-def test_single_node_invokes_adapter_with_gpu_shape_and_strict_mode(tmp_path: Path):
-    result = _run_lifecycle(tmp_path, require_power=True)
+    result = _run_lifecycle(tmp_path, require_power=True, missing_power_env=missing_power_env)
 
     assert result.returncode == 0, result.stderr
-    adapter_event = next(event for event in _events(tmp_path) if event.startswith("adapter:"))
-    assert "--result-dir " + str(tmp_path / "results") in adapter_event
-    assert "--agg-result " + str(tmp_path / "agg_agentx.json") in adapter_event
-    assert "--expected-num-gpus 12" in adapter_event
-    assert "--require-power" in adapter_event
+    events = _events(tmp_path)
+    assert "replay" in events
+    assert not any(event.startswith("adapter:") for event in events)
+    assert json.loads((tmp_path / "agg_agentx.json").read_text()) == {}
+    assert not (tmp_path / "results/agentic_power_timezone_offset.txt").exists()
+    assert not (tmp_path / "results/power_validation.json").exists()
 
 
-@pytest.mark.parametrize("missing_power_env", ["TP", "PP_SIZE", "PCP_SIZE"])
-@pytest.mark.parametrize("require_power", [False, True])
-def test_missing_power_shape_fails_before_monitor_or_replay(
-    tmp_path: Path, missing_power_env: str, require_power: bool
-):
-    result = _run_lifecycle(
-        tmp_path, missing_power_env=missing_power_env, require_power=require_power
-    )
-
-    assert result.returncode == 1
-    assert f"  - {missing_power_env}" in result.stdout
-    assert _events(tmp_path) == ["parent-exit"]
-
-
-def test_explicit_opt_out_skips_power(tmp_path: Path):
+def test_multinode_explicit_opt_out_skips_power(tmp_path: Path):
     result = _run_lifecycle(
         tmp_path,
+        is_multinode=True,
         enable_power=False,
-        missing_power_env="PP_SIZE",
+        formal_multinode_power=True,
     )
 
     assert result.returncode == 0, result.stderr
     events = _events(tmp_path)
-    assert not any(event.startswith("monitor-") for event in events)
+    assert "replay" in events
     assert not any(event.startswith("adapter:") for event in events)
 
 
@@ -180,7 +138,6 @@ def test_multinode_missing_contract_records_invalid_power_and_enforces_strict_mo
 
     assert result.returncode == int(require_power), result.stderr
     events = _events(tmp_path)
-    assert not any(event.startswith("monitor-") for event in events)
     adapter_event = next(event for event in events if event.startswith("adapter:"))
     assert events.index("aggregate") < events.index(adapter_event)
     aggregate = json.loads((tmp_path / "agg_agentx.json").read_text())
@@ -191,51 +148,7 @@ def test_multinode_missing_contract_records_invalid_power_and_enforces_strict_mo
     assert validation["reasons"] == ["multinode_power_contract_missing"]
 
 
-@pytest.mark.parametrize("identity_fails", [False, True])
-def test_nvidia_monitor_preserves_identity_without_requiring_it(
-    tmp_path: Path, identity_fails: bool
-):
-    metrics_path = tmp_path / "gpu_metrics.csv"
-    script = f"""
-source {str(BENCHMARK_LIB)!r}
-nvidia-smi() {{
-    case "$*" in
-        --query-gpu=index,uuid,pci.bus_id,name,driver_version*)
-            printf 'index, uuid, pci.bus_id, name, driver_version\\n'
-            if [ {'1' if identity_fails else '0'} = 1 ]; then return 1; fi
-            printf '0, GPU-device-a, 00000000:01:00.0, NVIDIA Test GPU, 590.00\\n'
-            ;;
-        *)
-            printf '2026/09/09 00:00:00.000, 0, 200 W, 40, 1500, 1200, 80, 30\\n'
-            if [[ "$*" == *" -l "* ]]; then exec sleep 30; fi
-            ;;
-    esac
-}}
-set -e
-start_gpu_monitor --output {str(metrics_path)!r}
-stop_gpu_monitor
-"""
-    result = subprocess.run(
-        ["bash", "-c", script],
-        env={**os.environ, "PATH": "/usr/bin:/bin"},
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=5,
-    )
-
-    assert result.returncode == 0, result.stderr
-    identity_path = tmp_path / "gpu_metrics_identity.csv"
-    if identity_fails:
-        assert not identity_path.exists()
-        assert "NVIDIA identity sidecar failed" in result.stderr
-    else:
-        assert "0, GPU-device-a, 00000000:01:00.0, NVIDIA Test GPU, 590.00" in identity_path.read_text()
-    assert "Started NVIDIA" in result.stdout
-    assert "Stopped" in result.stdout
-
-
-def test_multinode_formal_window_wraps_replay_without_local_monitor(tmp_path: Path):
+def test_multinode_formal_window_wraps_replay(tmp_path: Path):
     result = _run_lifecycle(
         tmp_path,
         is_multinode=True,
@@ -245,7 +158,6 @@ def test_multinode_formal_window_wraps_replay_without_local_monitor(tmp_path: Pa
 
     assert result.returncode == 0, result.stderr
     events = _events(tmp_path)
-    assert not any(event.startswith("monitor-") for event in events)
     adapters = [event for event in events if event.startswith("adapter:")]
     assert len(adapters) == 2
     assert "--write-multinode-window running" in adapters[0]
@@ -271,77 +183,3 @@ def test_multinode_formal_window_is_left_running_when_replay_is_interrupted(tmp_
     adapters = [event for event in _events(tmp_path) if event.startswith("adapter:")]
     assert len(adapters) == 1
     assert "--write-multinode-window running" in adapters[0]
-
-
-@pytest.mark.parametrize(
-    ("sent_signal", "expected_rc"),
-    [(signal.SIGINT, 130), (signal.SIGTERM, 143)],
-)
-def test_signal_stops_monitor_once_without_replacing_parent_trap(
-    tmp_path: Path, sent_signal: signal.Signals, expected_rc: int
-):
-    result_dir = tmp_path / "results"
-    result_dir.mkdir()
-    event_log = tmp_path / "events.log"
-    script = f"""
-source {str(BENCHMARK_LIB)!r}
-start_gpu_monitor() {{
-    printf 'monitor-pid:%s\n' "${{BASHPID:-$$}}" >> {str(event_log)!r}
-}}
-stop_gpu_monitor() {{ printf 'monitor-stop\n' >> {str(event_log)!r}; }}
-fake_replay() {{
-    exec {sys.executable!r} -c '
-import signal, sys, time
-signal.signal(signal.SIGINT, signal.SIG_DFL)
-signal.signal(signal.SIGTERM, signal.SIG_DFL)
-print("replay-ready", file=open(sys.argv[1], "a"), flush=True)
-time.sleep(30)
-' {str(event_log)!r}
-}}
-trap 'printf "parent-exit\\n" >> {str(event_log)!r}' EXIT
-trap 'printf "parent-int\\n" >> {str(event_log)!r}; exit 130' INT
-trap 'printf "parent-term\\n" >> {str(event_log)!r}; exit 143' TERM
-REPLAY_CMD=fake_replay
-ENABLE_AGENTX_POWER=1
-REQUIRE_POWER=0
-IS_MULTINODE=false
-TP=1
-PP_SIZE=1
-PCP_SIZE=1
-run_agentic_replay_and_write_outputs {str(result_dir)!r}
-"""
-    proc = subprocess.Popen(
-        ["bash", "-c", script],
-        env={**os.environ, "PATH": "/usr/bin:/bin"},
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        start_new_session=True,
-    )
-    try:
-        # The monitor starts before the production signal traps are installed.
-        # Publish readiness from the execed process after restoring signal handling;
-        # a shell marker before exec races with the group SIGINT.
-        deadline = time.monotonic() + 5
-        while time.monotonic() < deadline:
-            if event_log.exists() and "replay-ready" in event_log.read_text().splitlines():
-                break
-            time.sleep(0.01)
-        else:
-            pytest.fail("replay did not start")
-
-        os.killpg(proc.pid, sent_signal)
-        _, stderr = proc.communicate(timeout=5)
-    finally:
-        try:
-            os.killpg(proc.pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
-        proc.communicate()
-
-    assert proc.returncode == expected_rc, stderr
-    events = _events(tmp_path)
-    assert events.count("monitor-stop") == 1
-    expected_parent_event = "parent-int" if sent_signal == signal.SIGINT else "parent-term"
-    assert expected_parent_event in events
-    assert events[-1] == "parent-exit"

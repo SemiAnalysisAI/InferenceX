@@ -65,11 +65,6 @@ on:
         required: false
         type: string
         default: '3600'
-      require-power:
-        description: "Fail result processing when GPU power is invalid"
-        required: false
-        type: boolean
-        default: false
       agentx-fast:
         description: "Use one warmup request per AgentX lane and a 20-minute profile"
         required: false
@@ -89,8 +84,6 @@ env:
   MODEL_DOWNLOAD_LOCK_TIMEOUT: '21600'
   ENROOT_IMPORT_TIME_LIMIT: '120'
   SALLOC_TIME_LIMIT: '480'
-  GPU_MONITOR_INTERVAL: '1'
-  GPU_METRICS_CSV: 'gpu_metrics.csv'
   KEEP_LOGS: '0'
   IS_MULTINODE: 'false'
   RANDOM_RANGE_RATIO: 0.8
@@ -132,7 +125,6 @@ env:
   KV_P2P_TRANSFER: ${{ fromJSON(inputs.config).kv-p2p-transfer || '' }}
   TOTAL_CPU_DRAM_GB: ${{ inputs.scenario-type != 'agentic-coding' && '0' || fromJSON(inputs.config).total-cpu-dram-gb }}
   DURATION: ${{ inputs.duration }}
-  REQUIRE_POWER: ${{ inputs.require-power && '1' || '0' }}
   AIPERF_EXPERIMENTAL_FAST: ${{ inputs.agentx-fast && '1' || '0' }}
   EVAL_LIMIT: ${{ inputs.eval-limit }}
   AIPERF_FAILED_REQUEST_THRESHOLD: '0.10'
@@ -380,46 +372,6 @@ jobs:
             ${{ env.INFERENCEX_E2E_ROOT }}/srt-single-node-submission.json
             ${{ env.INFERENCEX_E2E_ROOT }}/srt-slurm-sha.txt
             ${{ env.INFERENCEX_E2E_ROOT }}/srt-setup.log
-          if-no-files-found: ignore
-
-      - name: Upload GPU metrics
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: ${{ inputs.eval-only && 'eval_gpu_metrics_' || 'gpu_metrics_' }}${{ env.RESULT_FILENAME }}${{ inputs.eval-only && format('_{0}_{1}', env.EVAL_FRAMEWORK, env.EVAL_SUITE) || '' }}
-          path: |
-            ${{ env.INFERENCEX_E2E_ROOT }}/gpu_metrics.csv
-            ${{ env.INFERENCEX_E2E_ROOT }}/gpu_metrics*_context.json
-            ${{ env.INFERENCEX_E2E_ROOT }}/gpu_metrics_energy_start.csv
-            ${{ env.INFERENCEX_E2E_ROOT }}/gpu_metrics_energy_end.csv
-            ${{ env.INFERENCEX_E2E_ROOT }}/gpu_metrics_identity.json
-            ${{ env.INFERENCEX_E2E_ROOT }}/gpu_metrics_identity.csv
-            ${{ env.INFERENCEX_E2E_ROOT }}/results/gpu_metrics*.csv
-            ${{ env.INFERENCEX_E2E_ROOT }}/results/gpu_metrics*_context.json
-            ${{ env.INFERENCEX_E2E_ROOT }}/results/gpu_metrics_identity.json
-          if-no-files-found: ignore
-
-      - name: Upload power audit bundle
-        if: ${{ always() && !inputs.eval-only }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: power_audit_${{ env.RESULT_FILENAME }}
-          path: |
-            ${{ env.INFERENCEX_E2E_ROOT }}/${{ env.RESULT_FILENAME }}.json
-            ${{ env.INFERENCEX_E2E_ROOT }}/agg_${{ env.RESULT_FILENAME }}.json
-            ${{ env.INFERENCEX_E2E_ROOT }}/gpu_metrics.csv
-            ${{ env.INFERENCEX_E2E_ROOT }}/gpu_metrics*_context.json
-            ${{ env.INFERENCEX_E2E_ROOT }}/gpu_metrics_energy_start.csv
-            ${{ env.INFERENCEX_E2E_ROOT }}/gpu_metrics_energy_end.csv
-            ${{ env.INFERENCEX_E2E_ROOT }}/gpu_metrics_identity.json
-            ${{ env.INFERENCEX_E2E_ROOT }}/gpu_metrics_identity.csv
-            ${{ env.INFERENCEX_E2E_ROOT }}/power_validation_${{ env.RESULT_FILENAME }}.json
-            ${{ env.INFERENCEX_E2E_ROOT }}/results/gpu_metrics*.csv
-            ${{ env.INFERENCEX_E2E_ROOT }}/results/gpu_metrics*_context.json
-            ${{ env.INFERENCEX_E2E_ROOT }}/results/gpu_metrics_identity.json
-            ${{ env.INFERENCEX_E2E_ROOT }}/results/agentic_power_window.json
-            ${{ env.INFERENCEX_E2E_ROOT }}/results/agentic_power_timezone_offset.txt
-            ${{ env.INFERENCEX_E2E_ROOT }}/results/power_validation.json
           if-no-files-found: ignore
 
       - name: Upload eval results (if any)

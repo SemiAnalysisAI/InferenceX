@@ -232,7 +232,7 @@ Depending on the driver, the launcher may:
 - pass the workflow environment into the runtime container or allocation.
 - stream the job log, verify the allocation's terminal state, and stage results.
 
-Benchmark scripts under [`benchmarks/`](../benchmarks) own the actual engine and client commands. Most source [`benchmarks/benchmark_lib.sh`](../benchmarks/benchmark_lib.sh), which centralizes server readiness, the serving benchmark client, GPU monitoring, lm-eval, SWE-bench, AgentX replay, and stable output helpers.
+Benchmark scripts under [`benchmarks/`](../benchmarks) own the actual engine and client commands. Most source [`benchmarks/benchmark_lib.sh`](../benchmarks/benchmark_lib.sh), which centralizes server readiness, the serving benchmark client, lm-eval, SWE-bench, AgentX replay, and stable output helpers.
 
 The boundary is intentional: a master config stays portable and reviewable, launch mechanics stay in cluster records (see [below](#launch-mechanics-stay-in-cluster-records)), and framework flags stay close to the benchmark recipe, where they can be tested against that engine. On `SIGINT`, `SIGTERM` or `SIGHUP` the launcher runs its registered cleanups, such as cancelling the allocation, and exits with 128 plus the signal number. The first nonzero workload exit code wins over cleanup failures.
 
@@ -246,7 +246,7 @@ For fixed-sequence throughput jobs, the workflow requires `<RESULT_FILENAME>.jso
 
 ### Reusing and extending result processing
 
-[`infx.results.fixed_sequence.build_result`](../infx/results/fixed_sequence.py) accepts a loaded benchmark mapping and an explicit environment mapping. It returns the aggregate dictionary without reading process environment or performing file I/O. Library callers do not need `RESULT_FILENAME`. The existing CLI validates its environment, reads the raw artifact, calls the builder, writes the aggregate, and runs power aggregation with the existing best-effort or `REQUIRE_POWER` policy.
+[`infx.results.fixed_sequence.build_result`](../infx/results/fixed_sequence.py) accepts a loaded benchmark mapping and an explicit environment mapping. It returns the aggregate dictionary without reading process environment or performing file I/O. Library callers do not need `RESULT_FILENAME`. The existing CLI validates its environment, reads the raw artifact, calls the builder, writes the aggregate, and, for multinode results, runs power aggregation with the existing best-effort or `REQUIRE_POWER` policy.
 
 ```python
 from infx.results.fixed_sequence import build_result
@@ -273,9 +273,9 @@ The current processing paths share these helpers:
 - [`Parallelism`](../infx/results/topology.py) shares GPU-count calculation, parallelism result fields, and normalization when there are no separate decode GPUs. Fixed-sequence results retain explicit allocation counts; AgentX derives counts from its workers. Each caller retains its environment defaults, validation order, errors, and throughput denominators.
 - [`with_power_metrics`](../infx/results/power/__init__.py) returns a copy with the supplied metric family replaced, removes stale validity reasons, and validates and rounds new metrics. Callers supply metric keys and schema version, then own artifact writes and validation sidecars. This allows another metric family to reuse the transformation without changing its implementation.
 
-Power telemetry engines also live in [`infx.results.power`](../infx/results/power): `single_node.run` consumes GPU-monitor CSVs, while `multinode.run` validates srt-slurm artifact packages. They share benchmark-window parsing, per-device integration, aggregate replacement, and audit serialization through `common.py`, while retaining their own telemetry validation and failure policies. Fixed-sequence and AgentX adapters import these engines directly; new result formats can supply their benchmark window and token counts to the matching engine.
+The power telemetry engine also lives in [`infx.results.power`](../infx/results/power): `multinode.run` validates srt-slurm artifact packages. Its benchmark-window parsing, per-device integration, aggregate replacement, and audit serialization live in `common.py`. Fixed-sequence and AgentX adapters import the engine directly; new result formats can supply their benchmark window and token counts to it. Single-node results carry no power until srt-slurm telemetry covers those lanes.
 
-The `infx` package runs with no installation step or new runtime dependency. Run the engines with `python -m infx.results.power.single_node` and `python -m infx.results.power.multinode` from `inferencex-e2e/`.
+The `infx` package runs with no installation step or new runtime dependency. Run the engine with `python -m infx.results.power.multinode` from `inferencex-e2e/`.
 
 Test builders with small, independently worked examples and read-only inputs. For changes to an existing adapter, also compare CLI status, diagnostics, and generated artifacts with the previous implementation, including invalid inputs and strict/best-effort power failures.
 
@@ -295,7 +295,7 @@ The collector and reusable-artifact validator share format recognition, concurre
 
 Agentic throughput jobs have a different contract. They validate AIPerf output with [`infx/results/agentic/validate_agentic_result.py`](../infx/results/agentic/validate_agentic_result.py), upload an aggregate `bmk_agentic_<suffix>` artifact, and upload the raw `agentic_<suffix>` sibling containing trace-replay material. InferenceX-app pairs those siblings by their shared suffix. Agentic eval-only jobs follow the eval output contract instead and do not require a throughput result.
 
-Server logs and GPU metrics are diagnostic side artifacts. They are uploaded with `always()` so a failed run can still be investigated. Their presence does not turn a failed benchmark into a valid result. The srt driver's [`collect.py`](../infx/launch/drivers/srt/collect.py) fetches job outputs through the scheduler backend and stages the multi-node log tree and `multinode_server_logs.tar.gz` before cleaning up the outputs.
+Server logs are diagnostic side artifacts. They are uploaded with `always()` so a failed run can still be investigated. Their presence does not turn a failed benchmark into a valid result. The srt driver's [`collect.py`](../infx/launch/drivers/srt/collect.py) fetches job outputs through the scheduler backend and stages the multi-node log tree and `multinode_server_logs.tar.gz` before cleaning up the outputs.
 
 ## Stage 6: artifact collection and handoff
 

@@ -170,7 +170,7 @@ Sources: [`configs/CONFIGS.md`](../configs/CONFIGS.md), [`validation.py`](../inf
 6. For srt-slurm, update recipe and master entry together. For llm-d, update the llm-d recipe/orchestration and master entry together.
 7. Append the trigger entry, generate only the affected key first, and inspect every emitted point.
 
-Fixed-sequence `8192/1024` scenarios may set `require-power: true` to opt into validated measured power. The matrix passes this flag to standard sweeps and manual E2E throughput jobs; eval-only and AgentX rows do not inherit it. Omit the field to preserve existing behavior. Enable it only alongside the corresponding runtime and result adapter, then qualify the complete selected scope.
+Multi-node fixed-sequence `8192/1024` scenarios may set `require-power: true` to opt into validated measured power. The matrix passes this flag to standard sweeps and manual E2E throughput jobs; eval-only and AgentX rows do not inherit it. Single-node scenarios reject the field because no single-node lane collects power. Omit the field to preserve existing behavior. Enable it only alongside the corresponding runtime and result adapter, then qualify the complete selected scope.
 
 ## Register and set up a runner
 

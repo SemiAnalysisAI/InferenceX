@@ -113,8 +113,6 @@ env:
   MODEL_DOWNLOAD_LOCK_TIMEOUT: '21600'
   ENROOT_IMPORT_TIME_LIMIT: '120'
   SALLOC_TIME_LIMIT: '480'
-  GPU_MONITOR_INTERVAL: '1'
-  GPU_METRICS_CSV: 'gpu_metrics.csv'
   KEEP_LOGS: '0'
   IS_MULTINODE: 'true'
   RANDOM_RANGE_RATIO: 0.8
@@ -426,7 +424,6 @@ jobs:
             ${{ env.INFERENCEX_E2E_ROOT }}/agg_${{ env.RESULT_FILENAME }}_*.json
             ${{ env.INFERENCEX_E2E_ROOT }}/power_validation_${{ env.RESULT_FILENAME }}_*.json
             ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/power/**
-            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/native_power/**
             ${{ env.INFERENCEX_E2E_ROOT }}/result_processing_${{ env.RESULT_FILENAME }}.json
             ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/*/results_*.json
             ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/agentic/**/agentic_power_concurrency_*.json

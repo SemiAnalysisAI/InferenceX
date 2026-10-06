@@ -107,8 +107,6 @@ cleanup_server() {
 }
 trap 'cleanup_server' EXIT
 
-start_gpu_monitor
-
 declare -A AL_RESULT
 
 run_cell() {
@@ -197,8 +195,6 @@ for mode in $THINKING_MODES; do
         run_cell "$mode" "$mtp"
     done
 done
-
-stop_gpu_monitor
 
 emit_mode_block() {
     local mode="$1"
