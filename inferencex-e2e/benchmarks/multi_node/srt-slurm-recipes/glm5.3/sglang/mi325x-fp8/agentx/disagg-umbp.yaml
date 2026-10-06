@@ -694,3 +694,20 @@ override_two_tep4_tp8_oct6_official_c8:
   benchmark:
     env:
       CONC: "8"
+
+# Scheduling ablation only: distribute prefill requests without prefix affinity.
+override_two_tep4_tp8_oct6_prefill_rr_c8:
+  name: mi325x-glm53-two-tep4-tp8-oct6-prefill-rr
+  model: *two_tep4_tp8_oct6_model
+  identity: *two_tep4_tp8_oct6_identity
+  slurm:
+    time_limit: "02:00:00"
+  frontend:
+    args:
+      prefill-policy: round_robin
+      decode-policy: round_robin
+  services: *two_tep4_tp8_services
+  roles: *two_tep4_tp8_roles
+  benchmark:
+    env:
+      CONC: "8"
