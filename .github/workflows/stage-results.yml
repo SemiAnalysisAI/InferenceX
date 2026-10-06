@@ -17,7 +17,8 @@ jobs:
     name: Authorize and dispatch staging
     if: >-
       github.event.issue.pull_request &&
-      startsWith(github.event.comment.body, '/stage-results')
+      (startsWith(github.event.comment.body, '/stage-results') ||
+       startsWith(github.event.comment.body, '/use'))
     runs-on: ubuntu-latest
     permissions:
       actions: read # Validate the source workflow run and its artifacts
@@ -31,16 +32,32 @@ jobs:
           ref: ${{ github.sha }}
           persist-credentials: false
 
+      - name: Select Python project
+        run: |
+          python_project="$GITHUB_WORKSPACE"
+          if [[ -f "$python_project/inferencex-e2e/pyproject.toml" ]]; then
+            python_project="$python_project/inferencex-e2e"
+          fi
+          test -f "$python_project/pyproject.toml"
+          echo "INFERENCEX_PYTHON_PROJECT=$python_project" >> "$GITHUB_ENV"
+
       - name: Set up uv
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+            inferencex-e2e/pyproject.toml
+            inferencex-e2e/uv.lock
 
       - name: Authorize request and resolve source run
         id: request
         env:
           GH_TOKEN: ${{ github.token }}
-        run: uv run --locked python -m infx.workflows.stage_results
+        run: uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked python -m infx.workflows.stage_results
 
       - name: Acknowledge staging request
+        if: steps.request.outputs.run-id != ''
         id: acknowledge
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
@@ -60,6 +77,7 @@ jobs:
             core.setOutput('comment-id', String(comment.data.id));
 
       - name: Dispatch InferenceX-app staging workflow
+        if: steps.request.outputs.run-id != ''
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           RUN_ID: ${{ steps.request.outputs.run-id }}

@@ -2,7 +2,7 @@
 
 <div align="center">
 
-**English** | [中文](./CONTRIBUTING_zh.md)
+**English** | [中文](CONTRIBUTING_zh.md)
 
 </div>
 
@@ -12,12 +12,19 @@ Thanks for contributing! PRs are welcome. This page covers the review process ev
 
 Every PR description must include an **AI model disclosure** section. Name the exact model/version used to prepare the PR and each model's role, including delegated agents. Tool names such as Claude Code, Cursor, or Perplexity Computer alone are insufficient. Use the identifier exposed by the runtime; never guess an unavailable identifier. If the runtime does not expose the exact model, explicitly state that it could not be verified. Human-only PRs must state `No AI used`. Update the disclosure when later edits use another model.
 
-1. Open your PR and get it through PR validation. Add the `full-sweep-fail-fast` label (strongly recommended because a broken change wastes one job per matrix rather than the whole fan-out). Use `full-sweep-enabled` only if you need jobs to keep running past a failure. Let the benchmark sweep run and get a green full sweep, including evals, on a commit in your PR.
+1. Open your PR and get it through PR validation. `run-sweep.yml` sweeps run only for same-repository PRs that change `inferencex-e2e/perf-changelog.yaml` (the matrix comes from the appended entries) and carry exactly one primary label; more than one fails validation. See [PR primary and modifier labels](inferencex-e2e/docs/ci-procedures.md#pr-primary-and-modifier-labels).
+   - `full-sweep-fail-fast` (strongly recommended): canary gate plus fail-fast, which stops each matrix at its first failure.
+   - `full-sweep-enabled`: the same canary gate without fail-fast; use it only if you need jobs to keep running past a failure.
+   - `non-canary-full-sweep-enabled`: no canary and no fail-fast.
+
+   The canary is the lowest-concurrency eligible benchmark entry; if it fails, every other matrix is skipped. That shared canary, not fail-fast, keeps a broken change from wasting the whole fan-out. A sweep with only multi-node fixed-sequence or eval entries has no canary, so every matrix fans out at once and fail-fast is the only guard. The `all-evals`, `evals-only`, and `agentx-fast` modifiers start no GPU sweep without a primary label (`check-changelog` still runs), and `/use` is rejected while the PR carries `evals-only` or `agentx-fast`. Let the benchmark sweep run and get a green full sweep, including evals, on a commit in your PR.
+
+   **Fork PRs:** External contributors cannot apply labels, and `run-sweep.yml` runs no jobs for fork PRs, not even changelog validation. Once the PR is open, ready for review, and free of merge conflicts, a maintainer with write access applies any modifiers and then one primary label. That approves only the current head SHA: `trusted-external-sweep.yml` dispatches `e2e-tests.yml` for it, with no canary for any label and fail-fast only for `full-sweep-fail-fast`. After each push, the maintainer must remove and re-add the primary label to approve the new head.
 2. For changes owned by a non-admin CODEOWNER other than `@SemiAnalysisAI/core`, ask one eligible [CODEOWNER](.github/CODEOWNERS) to review and post the **PR Review Checklist** sign-off (see below) in their approval comment.
 3. Ping a core maintainer on Slack for final approval, after obtaining the checklist sign-off when required.
 4. An authorized maintainer posts `/use <run_id>` (see below) and the PR is merged via the reuse path.
 
-**Performance changelog requirement:** Every change that can affect benchmark performance and every recipe addition or modification **MUST** append a new entry to the physical end of `perf-changelog.yaml`. Historical entries **MUST NOT** be edited.
+**Performance changelog requirement:** Every change that can affect benchmark performance and every recipe addition or modification **MUST** append a new entry to the physical end of `inferencex-e2e/perf-changelog.yaml`. Historical entries **MUST NOT** be edited.
 
 ## Draft-model precision
 
@@ -103,7 +110,7 @@ For speculative-decoding changes, the CODEOWNER's additional detail section must
 identify the draft checkpoint/revision (or embedded head), the precision it ships in,
 how the pinned upstream image handles it by default, and its effective serving
 precision, so the reviewer can confirm the last two match. If this cannot be
-verified, the criterion is not satisfied. See the [review checklist](docs/PR_REVIEW_CHECKLIST.md) and
+verified, the criterion is not satisfied. See the [review checklist](inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md) and
 [verifier Check 13](.github/codeowner-signoff-verify-prompt.md#check-13--draft-runs-as-shipped).
 
 This follows the same principle as
@@ -120,13 +127,13 @@ Automated CODEOWNER verification is advisory for now. The workflow checks submit
 
 Sign-off is required only when a changed file has a CODEOWNER other than a repository admin or `@SemiAnalysisAI/core`. Ownership comes from the current tip of the PR target branch, resolved once and pinned to the same SHA for CODEOWNERS validation and content reads, using the last matching rule; renames check both old and new paths. The PR head and its potentially stale recorded base SHA do not supply ownership rules. A matching core owner does not exempt another owner on the same file. Individual admins must have both repository `permission: admin` and `role_name: admin`; other teams and email owners require sign-off. Missing ownership data or failed permission lookups cannot grant an exemption. Changes without a qualifying owner skip verification.
 
-One eligible CODEOWNER reviewer fills in the latest [PR_REVIEW_CHECKLIST.md](docs/PR_REVIEW_CHECKLIST.md) template in their approval comment.
+One eligible CODEOWNER reviewer fills in the latest [PR_REVIEW_CHECKLIST.md](inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md) template in their approval comment.
 
 **Only one eligible CODEOWNER reviewer needs to post the checklist for each PR.** Check for an existing checklist before posting; additional reviewers do not need to post their own copies. For corrections or missing evidence, the original reviewer must **edit their existing checklist comment** instead of adding a new one. Create a replacement only if the original comment was deleted.
 
 A friendly reminder. Please follow the latest checklist template **correctly**:
 
-- Always copy the template from the **current** [docs/PR_REVIEW_CHECKLIST.md](docs/PR_REVIEW_CHECKLIST.md) on `main`. The checklist evolves, and a sign-off made from a stale copy will be flagged as missing items.
+- Always copy the template from the **current** [inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md](inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md) on `main`. The checklist evolves, and a sign-off made from a stale copy will be flagged as missing items.
 - Keep the template's opening phrase intact:
 
   > As a PR reviewer and CODEOWNER, I have reviewed this and have:
@@ -143,15 +150,15 @@ The verdict records only the commit actually assessed; it does not carry approva
 
 ## Reusing your PR's green sweep at merge with `/use`
 
-A full benchmark sweep is expensive GPU time, and the runners are shared by every open PR. Without reuse, an approved PR's sweep would run **twice**, once for PR validation and again on `main` after merge. The reuse path avoids that:
+A full benchmark sweep is expensive GPU time, and the runners are shared by every open PR, so an approved PR's sweep runs only once, for PR validation. `main` never reruns it after merge; the reuse path publishes that PR sweep instead:
 
 - After your PR has an eligible green full sweep, an authorized maintainer (`OWNER`/`MEMBER`/`COLLABORATOR`) comments `/use <run_id>` on the PR to select that run. Keep the command and run ID on the same line.
 - `/reuse-sweep-run <run_id>` remains supported with identical behavior. Bare `/reuse-sweep-run` selects automatically; bare `/use` is rejected.
-- The merge-to-`main` run then validates and ingests the PR sweep's artifacts instead of re-running the whole sweep on `main`.
-- **This reduces CI queue time for everyone.** Each reused merge frees hours of GPU runner time for other PRs, so please prefer the reuse path over merging without it. A green sweep alone is not enough. The reuse command must be on record (the sign-off verification checks for it), otherwise `main` silently re-runs the full sweep.
-- Reuse does not require retaining a sweep label. The bot reacts to the command with 👍 when accepted or 👎 when rejected, with details in the Actions run summary; source artifacts are revalidated at merge.
+- The merge-to-`main` run then validates and ingests the PR sweep's artifacts; `main` never re-runs the sweep itself.
+- **Reuse is mandatory.** A green sweep alone is not enough. The reuse command must be on record (the sign-off verification checks for it), otherwise the `main` run fails and the PR's results are never ingested.
+- Reuse does not require retaining a primary label, but it is rejected while the PR carries `evals-only` or `agentx-fast`, and `merge_with_reuse` refuses a PR with more than one primary label. The bot reacts to the command with 👍 when accepted or 👎 when rejected, with details in the Actions run summary; source artifacts are revalidated at merge.
 - A missing authorized reuse command produces a Check 4 **WARN**, not a rejection. The warning stays visible in the sign-off verdict; posting an authorized command is still required to reuse artifacts.
-- `utils/merge_with_reuse.sh <pr-number>` is the supported merge path. It posts the command, syncs the branch with `main`, waits for checks, and squash-merges. See the [workflows README](.github/workflows/README.md#reusing-an-approved-pr-full-sweep) for eligibility details.
+- From the repository root, `uv run --project inferencex-e2e --extra workflows python -m infx.workflows.merge_with_reuse <pr-number>` is the supported merge path. It posts the command, syncs the branch with `main`, waits for checks, and squash-merges. See the [workflows README](.github/workflows/README.md#reusing-an-approved-pr-full-sweep) for eligibility details.
 
 ## Adding points to the latest curve with `append-only`
 
@@ -174,8 +181,9 @@ image and belong to an existing dashboard visual series. Each generated recipe c
 a deterministic fingerprint so two distinct recipes at the same concurrency remain
 distinct database points without splitting the visual curve. Removing or modifying an
 existing point, or changing shared logic that can affect one, is rejected. Append-only
-entries cannot be mixed with regular entries or eval-selection modifiers in the same
-sweep. The matrix validator enforces the additive generated-matrix invariant; the human
+entries cannot set the `all-evals`, `evals-only`, or `eval-min-prefill-ep` entry fields,
+share a sweep with regular entries, or run with the `all-evals`/`evals-only` modifiers.
+The matrix validator enforces the additive generated-matrix invariant; the human
 and AI reviewers must inspect the complete diff and verify behavioral isolation. The
 mechanical comparison renders each config revision with its own generator, validation
 code, and runner metadata. Launcher and benchmark-script changes still rely on
