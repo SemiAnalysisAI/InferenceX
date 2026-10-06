@@ -677,6 +677,8 @@ override_two_tep4_dep16_host1026_pageable_quality_c16:
   <<: *two_tep4_dep16_mem937
   slurm:
     time_limit: "01:00:00"
+  container_mounts:
+    /home/ext-cjquilici/glm53-disagg-search-20261005/umbp_pageable_local_gpu_ranges-ad54af032a89820b.py: /diagnostics/umbp_pageable_local_gpu_ranges.py
   services:
     - <<: *umbp_service
       command:
@@ -690,6 +692,35 @@ override_two_tep4_dep16_host1026_pageable_quality_c16:
         log:
           pattern: '\[StandaloneServer\] listening grpc='
         timeout_seconds: 5400
+        interval_seconds: 1
+    - name: pageable_gpu_ranges
+      type: generic
+      placement:
+        node: prefill
+      start: before_workers
+      critical: false
+      terminal: false
+      inherit_discovery_env: false
+      command:
+        - python3
+        - -u
+        - /diagnostics/umbp_pageable_local_gpu_ranges.py
+        - --rank
+        - "0"
+        - --address
+        - unix:///logs/umbp-{node}.sock
+      env:
+        PYTHONUNBUFFERED: "1"
+        PYTHONNOUSERSITE: "1"
+        PYTHONOPTIMIZE: "0"
+        OMP_NUM_THREADS: "1"
+        MKL_NUM_THREADS: "1"
+      preamble: |
+        export LD_LIBRARY_PATH="/sgl-workspace/mori/python/mori:${LD_LIBRARY_PATH}"
+      readiness:
+        log:
+          pattern: '"event": "node_qualification_pass"'
+        timeout_seconds: 1200
         interval_seconds: 1
   benchmark:
     env:
