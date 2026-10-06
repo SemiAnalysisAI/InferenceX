@@ -1,0 +1,141 @@
+name: AMD exporter image
+
+on:
+  push:
+    branches: [chore/powerx-amd-exporter-image]
+    paths: [.github/workflows/amd-exporter-image.yml, tools/amd-exporter/**]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: amd-exporter-image-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  image:
+    name: Build and publish the AMD power exporter on CPU
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: read # Download the pinned upstream build artifact.
+      packages: write # Publish the verified image to the repository-linked GHCR package.
+    timeout-minutes: 30
+    env:
+      SOURCE_SHA: 9d0eb8c88af99f1dbe2914d803382092671456d9
+      PATCH_SHA256: 66dbfab64d2ba4d04b762612fa1b3cbf6a54e5422c1c9e88eb02523eea2e0261
+      GPU_AGENT_SHA: bcae57f9b395363f3340ad0b7393659b7df13f37
+      ARCHIVE_NAME: device-metrics-exporter-v1.5.4-10.2.0a20261001.tar.gz
+      ARCHIVE_SHA256: 0ba397bc31abc1c538e24f8d7264fb421cc5fb8dd59b2e1c493a8efec404c2ba
+      BASE_IMAGE: rocm/device-metrics-exporter:10.2.0a20261001
+      BASE_CONFIG_ID: sha256:aa151c70573fd5d3f94538c73adac6b235f052bb7dc9a8681ad2bfd0a8417929
+      IMAGE_REF: ghcr.io/semianalysisai/amd-device-metrics-exporter:powerx-9d0eb8c-cache-${{ github.sha }}
+      ENROOT_PACKAGE: enroot_4.2.0-1_amd64.deb
+      ENROOT_PACKAGE_SHA256: 50bfcf8336bfe1a5d19481081d7800ae80300a27795595757f7d20957e079a62
+    steps:
+      - name: Checkout build recipe
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Checkout exact upstream source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ROCm/device-metrics-exporter
+          ref: 9d0eb8c88af99f1dbe2914d803382092671456d9
+          path: exporter-source
+          persist-credentials: false
+      - name: Install matching Go toolchain
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: 1.25.13
+          cache: false
+      - name: Download exact official runtime image
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          repository: ROCm/device-metrics-exporter
+          run-id: 36867107435
+          name: build-dme-10.2.0a20261001
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/amd-exporter-image
+      - name: Apply cache patch and test the exporter
+        run: |
+          set -eo pipefail
+          source inferencex-e2e/benchmarks/benchmark_lib.sh --validation-only
+          check_env_vars SOURCE_SHA PATCH_SHA256 GPU_AGENT_SHA GITHUB_WORKSPACE
+          printf '%s  %s\n' "$PATCH_SHA256" tools/amd-exporter/cache.patch | sha256sum --check -
+          test "$(git -C exporter-source rev-parse HEAD)" = "$SOURCE_SHA"
+          git -C exporter-source apply "$GITHUB_WORKSPACE/tools/amd-exporter/cache.patch"
+          python3 -m unittest discover -s tools/amd-exporter -p 'test_*.py' -v
+          cd exporter-source
+          go test -race ./pkg/amdgpu/gpuagent -run 'Test(ParseGPUGetCacheTTL|GPUGetCache|DefaultGPUGet)' -count=1
+          go test ./pkg/exporter/utils
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -C cmd/exporter -trimpath \
+            -ldflags "-X main.Version=1.5.4-powerx-cache -X main.GitCommit=$SOURCE_SHA+patch.$PATCH_SHA256 -X main.ROCmCommit=unknown" \
+            -o "$GITHUB_WORKSPACE/tools/amd-exporter/amd-metrics-exporter"
+      - name: Build and check the image without GPU allocation
+        env:
+          IMAGE_DIR: ${{ runner.temp }}/amd-exporter-image
+          OUTPUT_DIR: ${{ runner.temp }}/amd-exporter-output
+        run: |
+          set -eo pipefail
+          source inferencex-e2e/benchmarks/benchmark_lib.sh --validation-only
+          check_env_vars IMAGE_DIR OUTPUT_DIR ARCHIVE_NAME ARCHIVE_SHA256 BASE_IMAGE BASE_CONFIG_ID IMAGE_REF \
+            SOURCE_SHA PATCH_SHA256 GITHUB_REPOSITORY GITHUB_SHA
+          printf '%s  %s\n' "$ARCHIVE_SHA256" "$IMAGE_DIR/$ARCHIVE_NAME" | sha256sum --check -
+          docker image load --input "$IMAGE_DIR/$ARCHIVE_NAME"
+          test "$(docker image inspect "$BASE_IMAGE" --format '{{.Id}}')" = "$BASE_CONFIG_ID"
+          docker build --pull=false --build-arg "BASE_IMAGE=$BASE_IMAGE" \
+            --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --label "io.semianalysis.exporter.upstream=$SOURCE_SHA" \
+            --label "io.semianalysis.exporter.patch-sha256=$PATCH_SHA256" \
+            --tag "$IMAGE_REF" tools/amd-exporter
+          mkdir -p "$OUTPUT_DIR"
+          docker run --rm --entrypoint /home/amd/bin/server "$IMAGE_REF" --version | tee "$OUTPUT_DIR/version.txt"
+          if docker run --rm -e AMD_GPU_GET_CACHE_TTL=invalid --entrypoint /home/amd/bin/server "$IMAGE_REF" > "$OUTPUT_DIR/invalid-ttl.log" 2>&1; then
+            echo 'Invalid cache TTL unexpectedly started the exporter' >&2
+            exit 1
+          fi
+          grep -F 'invalid GPUGet cache configuration:' "$OUTPUT_DIR/invalid-ttl.log"
+          python3 tools/amd-exporter/verify-image.py "$BASE_IMAGE" "$IMAGE_REF"
+      - name: Publish immutable image
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OUTPUT_DIR: ${{ runner.temp }}/amd-exporter-output
+        run: |
+          set -eo pipefail
+          source inferencex-e2e/benchmarks/benchmark_lib.sh --validation-only
+          check_env_vars GHCR_TOKEN GITHUB_ACTOR IMAGE_REF OUTPUT_DIR
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          docker push "$IMAGE_REF"
+          docker image inspect "$IMAGE_REF" > "$OUTPUT_DIR/image-inspect.json"
+      - name: Prepare runner squash and provenance
+        env:
+          IMAGE_DIR: ${{ runner.temp }}/amd-exporter-image
+          OUTPUT_DIR: ${{ runner.temp }}/amd-exporter-output
+        run: |
+          set -eo pipefail
+          source inferencex-e2e/benchmarks/benchmark_lib.sh --validation-only
+          check_env_vars IMAGE_DIR OUTPUT_DIR IMAGE_REF ENROOT_PACKAGE ENROOT_PACKAGE_SHA256 SOURCE_SHA \
+            PATCH_SHA256 GPU_AGENT_SHA ARCHIVE_NAME ARCHIVE_SHA256 BASE_CONFIG_ID GITHUB_REPOSITORY \
+            GITHUB_RUN_ID GITHUB_RUN_ATTEMPT GITHUB_SHA
+          curl --fail --location --output "$IMAGE_DIR/$ENROOT_PACKAGE" \
+            "https://github.com/NVIDIA/enroot/releases/download/v4.2.0/$ENROOT_PACKAGE"
+          printf '%s  %s\n' "$ENROOT_PACKAGE_SHA256" "$IMAGE_DIR/$ENROOT_PACKAGE" | sha256sum --check -
+          sudo apt-get update
+          sudo apt-get install --yes "$IMAGE_DIR/$ENROOT_PACKAGE"
+          enroot import --output "$OUTPUT_DIR/amd-exporter.sqsh" "dockerd://$IMAGE_REF"
+          unsquashfs -s "$OUTPUT_DIR/amd-exporter.sqsh"
+          cp tools/amd-exporter/cache.patch "$OUTPUT_DIR/cache.patch"
+          cp tools/amd-exporter/amd-metrics-exporter "$OUTPUT_DIR/amd-metrics-exporter"
+          python3 tools/amd-exporter/provenance.py "$OUTPUT_DIR"
+          cd "$OUTPUT_DIR"
+          sha256sum amd-exporter.sqsh amd-metrics-exporter cache.patch > SHA256SUMS
+      - name: Upload image evidence and runner squash
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: amd-dme-cache-squash
+          path: ${{ runner.temp }}/amd-exporter-output/
+          if-no-files-found: error
+          compression-level: 0
