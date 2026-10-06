@@ -1,5 +1,7 @@
 # DeepSeek-V4-Pro-0813 (DSpark) FP4 GB200, aggregated TP8, 2 nodes.
+
 # DSpark speculative decoding: 5 tokens. No Mooncake (two-node TP8).
+
 apiVersion: llm-d.ai/v1alpha1
 kind: EndpointPickerConfig
 

@@ -1,22 +1,21 @@
 # llmd-vllm multi-node SLURM scaffolding
 
-This directory holds the SLURM-side orchestration for the `llmd-vllm`
-benchmark framework. It mirrors the AMD `sglang-disagg` pattern under
-`benchmarks/multi_node/amd_utils/` (NOT the Dynamo / srt-slurm pattern):
-InferenceX itself owns the SLURM job, no vendor multi-node tool involved.
+This directory holds standalone SLURM-side orchestration for the `llmd-vllm`
+benchmark framework. InferenceX itself owns the SLURM job, with no vendor
+multi-node tool involved. This scaffolding is separate from the active
+srt-slurm launch path.
 
 | File | Role |
 |---|---|
 | `submit.sh` | sbatch wrapper. Validates env, exports tuning vars, returns `JOB_ID`. May read `slurm.time_limit` from the recipe to override `TIME_LIMIT`. |
 | `job.slurm` | sbatch entrypoint. Allocates `PREFILL_NODES + DECODE_NODES` nodes, derives per-node IPs, runs one Docker container per node via `srun`, threads role assignment env into each. |
-| `server.sh` | Per-node entry. Reads `NODE_RANK = SLURM_PROCID`, picks role, starts vLLM (with the wide-EP / DeepEP / NIXL flag set from the llm-d wide-EP-lws guide), starts the pd-sidecar on each leader, and on the decode leader additionally writes `endpoints.yaml`, starts EPP + Envoy, runs `benchmark_serving.py`, and `scancel`s the job. |
+| `server.sh` | Per-node entry. Reads `NODE_RANK = SLURM_PROCID`, picks role, starts vLLM (with the wide-EP / DeepEP / NIXL flag set from the llm-d wide-EP-lws guide), starts the pd-sidecar on each leader, and on the decode leader additionally writes `endpoints.yaml`, starts EPP + Envoy, runs `benchmark_serving.py`, and signals `job.slurm` to end the job. |
 
 ## Topology
 
 For an `xP` prefill nodes / `yD` decode nodes run, total nodes = `xP + yD`.
 There is **no dedicated coordinator node**. The decode leader doubles as
-the coordinator (EPP + Envoy + bench), exactly like the AMD path's
-"decode rank 0" coordinator role.
+the coordinator (EPP + Envoy + bench).
 
 | Rank | Role |
 |---|---|

@@ -11,11 +11,6 @@ concurrency:
           github.event.label.name != 'all-evals' &&
           github.event.label.name != 'evals-only' &&
           github.event.label.name != 'agentx-fast' &&
-          github.event.label.name != 'skip_queue' &&
-          github.event.label.name != 'ci-patchwork' &&
-          github.event.label.name != 'engine-patch' &&
-          github.event.label.name != 'ci-patchwork-waived' &&
-          github.event.label.name != 'ci-checklist-complete' &&
           github.run_id ||
           'active'
         }}
@@ -54,12 +49,7 @@ jobs:
               github.event.label.name == 'full-sweep-fail-fast' ||
               github.event.label.name == 'all-evals' ||
               github.event.label.name == 'evals-only' ||
-              github.event.label.name == 'agentx-fast' ||
-              github.event.label.name == 'skip_queue' ||
-              github.event.label.name == 'ci-patchwork' ||
-              github.event.label.name == 'engine-patch' ||
-              github.event.label.name == 'ci-patchwork-waived' ||
-              github.event.label.name == 'ci-checklist-complete'
+              github.event.label.name == 'agentx-fast'
             )
         outputs:
             skip-pr-sweep: ${{ steps.sweep_policy.outputs.skip-pr-sweep }}
@@ -199,12 +189,7 @@ jobs:
               github.event.label.name == 'full-sweep-fail-fast' ||
               github.event.label.name == 'all-evals' ||
               github.event.label.name == 'evals-only' ||
-              github.event.label.name == 'agentx-fast' ||
-              github.event.label.name == 'skip_queue' ||
-              github.event.label.name == 'ci-patchwork' ||
-              github.event.label.name == 'engine-patch' ||
-              github.event.label.name == 'ci-patchwork-waived' ||
-              github.event.label.name == 'ci-checklist-complete'
+              github.event.label.name == 'agentx-fast'
             )
         outputs:
             tooling-ref: ${{ steps.tooling.outputs.result }}
@@ -300,8 +285,6 @@ jobs:
             - id: setup
               env:
                   PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-                  PR_NUMBER: ${{ github.event.pull_request.number }}
-                  PR_LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
                   PRIORITY_CRITERIA: ${{ steps.priority-criteria.outputs.criteria || '' }}
                   ALL_EVALS: ${{ contains(github.event.pull_request.labels.*.name, 'all-evals') }}
                   EVALS_ONLY: ${{ contains(github.event.pull_request.labels.*.name, 'evals-only') }}
@@ -329,8 +312,6 @@ jobs:
                     python -m infx.workflows.ci_priority \
                     --event-name "${GITHUB_EVENT_NAME}" \
                     --queue-namespace "${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}" \
-                    --labels-json "$PR_LABELS" \
-                    --pr-number "${PR_NUMBER}" \
                     --criteria-json "$PRIORITY_CRITERIA")
 
                   echo "search-space-config=$CONFIG_JSON" >> "$GITHUB_OUTPUT"
@@ -411,7 +392,6 @@ jobs:
             runner: ${{ matrix.config.runner }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
-            skip-queue-pr: ${{ matrix.config['skip-queue-pr'] || '' }}
             dp-attn: ${{ matrix.config.dp-attn }}
             run-eval: false
             scenario-type: ${{ matrix.config['scenario-type'] || 'fixed-seq-len' }}
@@ -438,7 +418,6 @@ jobs:
             node-count: ${{ matrix.config.node-count }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
-            skip-queue-pr: ${{ matrix.config['skip-queue-pr'] || '' }}
             conc-list: ${{ toJson(matrix.config.conc) }}
             conc: ${{ matrix.config.conc[0] }}
             total-cpu-dram-gb: ${{ matrix.config['total-cpu-dram-gb'] }}
@@ -474,7 +453,6 @@ jobs:
             node-count: ${{ matrix.config.node-count }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
-            skip-queue-pr: ${{ matrix.config['skip-queue-pr'] || '' }}
             require-power: ${{ matrix.config['require-power'] == true && matrix.config['eval-only'] != true }}
             conc-list: ${{ toJson(matrix.config.conc) }}
             run-eval: false
@@ -529,7 +507,6 @@ jobs:
             runner: ${{ matrix.config.runner }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
-            skip-queue-pr: ${{ matrix.config['skip-queue-pr'] || '' }}
             dp-attn: ${{ matrix.config.dp-attn }}
             run-eval: ${{ matrix.config.run-eval }}
 
@@ -583,7 +560,6 @@ jobs:
             runner: ${{ matrix.config.runner }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
-            skip-queue-pr: ${{ matrix.config['skip-queue-pr'] || '' }}
             dp-attn: ${{ matrix.config.dp-attn }}
             duration: ${{ matrix.config.duration }}
             run-eval: false
@@ -618,7 +594,6 @@ jobs:
             node-count: ${{ matrix.config.node-count }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
-            skip-queue-pr: ${{ matrix.config['skip-queue-pr'] || '' }}
             conc-list: ${{ toJson(matrix.config.conc) }}
             conc: ${{ matrix.config.conc[0] }}
             total-cpu-dram-gb: ${{ matrix.config['total-cpu-dram-gb'] }}
@@ -654,7 +629,6 @@ jobs:
             runner: ${{ matrix.config.runner }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
-            skip-queue-pr: ${{ matrix.config['skip-queue-pr'] || '' }}
             dp-attn: ${{ matrix.config.dp-attn }}
             eval-framework: ${{ matrix.config['eval-framework'] || 'lm-eval' }}
             eval-suite: ${{ matrix.config['eval-suite'] || '' }}
@@ -691,7 +665,6 @@ jobs:
             runner: ${{ matrix.config.runner }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
-            skip-queue-pr: ${{ matrix.config['skip-queue-pr'] || '' }}
             dp-attn: ${{ matrix.config.dp-attn }}
             duration: ${{ matrix.config.duration }}
             eval-framework: ${{ matrix.config['eval-framework'] || 'lm-eval' }}
@@ -728,7 +701,6 @@ jobs:
             node-count: ${{ matrix.config.node-count }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
-            skip-queue-pr: ${{ matrix.config['skip-queue-pr'] || '' }}
             conc-list: ${{ toJson(matrix.config.conc) }}
             eval-framework: ${{ matrix.config['eval-framework'] || 'lm-eval' }}
             eval-suite: ${{ matrix.config['eval-suite'] || '' }}
@@ -770,7 +742,6 @@ jobs:
             node-count: ${{ matrix.config.node-count }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
-            skip-queue-pr: ${{ matrix.config['skip-queue-pr'] || '' }}
             conc-list: ${{ format('[{0}]', matrix.config['eval-conc']) }}
             conc: ${{ matrix.config['eval-conc'] }}
             total-cpu-dram-gb: ${{ matrix.config['total-cpu-dram-gb'] }}

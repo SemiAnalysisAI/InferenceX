@@ -9,8 +9,27 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
+@pytest.fixture
+def replay_env() -> dict[str, str]:
+    """Explicit caller inputs for the shared replay command builder."""
+    return {
+        "AIPERF_FAILED_REQUEST_THRESHOLD": "0.10",
+        "AIPERF_LIVE_FAILED_REQUEST_THRESHOLD": "0.10",
+        "AIPERF_TRACE_IDLE_GAP_CAP_SECONDS": "300",
+        "AGENTIC_WARMUP_GRACE_PERIOD": "1800",
+        "AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS": "3600",
+        "AIPERF_EXPERIMENTAL_FAST": "0",
+        "AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID": "false",
+        "AIPERF_UNSAFE_OVERRIDE": "false",
+        "AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING": "0",
+        "AIPERF_WARMUP_REQUESTS_PER_LANE": "10",
+    }
+
+
 @pytest.mark.parametrize("metrics_body", ["vllm:num_requests_running 0\n", "envoy_http_requests_total 0\n"])
-def test_llmd_agentic_adapter_uses_discovered_worker_metrics(tmp_path: Path, metrics_body: str) -> None:
+def test_llmd_agentic_adapter_uses_discovered_worker_metrics(
+    tmp_path: Path, metrics_body: str, replay_env: dict[str, str]
+) -> None:
     """Check endpoint selection, preflight failure, and the real AIPerf CLI builder."""
     client = tmp_path / "benchmarks/srt_agentic.sh"
     client.parent.mkdir(parents=True)
@@ -51,7 +70,7 @@ PY
          "labels": {"llm-d.ai/role": "combined"}},
     ]}))
     requests = tmp_path / "metrics-requests.txt"
-    env = dict(os.environ, INFMAX_CONTAINER_WORKSPACE=str(tmp_path),
+    env = dict(os.environ, **replay_env, INFMAX_CONTAINER_WORKSPACE=str(tmp_path),
                REAL_BENCHMARK_LIB=str(REPO_ROOT / "benchmarks/benchmark_lib.sh"),
                PATH=str(bin_dir) + os.pathsep + os.environ["PATH"],
                METRICS_BODY=metrics_body, METRICS_REQUESTS=str(requests),
@@ -66,7 +85,7 @@ PY
         assert result.returncode != 0
         assert "no vLLM metrics exposed" in result.stderr
         return
-    assert result.returncode == 0, result.stderr
+    assert result.returncode == 0, result.stdout + result.stderr
     recorded = json.loads(result.stdout.splitlines()[-1])
     expected_urls = [
         "http://10.0.0.1:8200/metrics",
@@ -81,7 +100,7 @@ PY
 
 
 def test_llmd_agentic_adapter_maps_decode_sidecar_ports_to_vllm_metrics(
-    tmp_path: Path,
+    tmp_path: Path, replay_env: dict[str, str]
 ) -> None:
     """Disagg decode endpoints list sidecar ports; metrics scrape vLLM DP ranks."""
     client = tmp_path / "benchmarks/srt_agentic.sh"
@@ -125,7 +144,7 @@ PY
          "labels": {"llm-d.ai/role": "decode"}},
     ]}))
     requests = tmp_path / "metrics-requests.txt"
-    env = dict(os.environ, INFMAX_CONTAINER_WORKSPACE=str(tmp_path),
+    env = dict(os.environ, **replay_env, INFMAX_CONTAINER_WORKSPACE=str(tmp_path),
                REAL_BENCHMARK_LIB=str(REPO_ROOT / "benchmarks/benchmark_lib.sh"),
                PATH=str(bin_dir) + os.pathsep + os.environ["PATH"],
                METRICS_BODY="vllm:num_requests_running 0\n", METRICS_REQUESTS=str(requests),
@@ -136,7 +155,7 @@ PY
                BENCH_MAX_CONCURRENCY="64", DECODE_NODES="2")
     result = subprocess.run(["bash", str(REPO_ROOT / "benchmarks/multi_node/llm-d/agentic.sh")],
                             env=env, text=True, capture_output=True)
-    assert result.returncode == 0, result.stderr
+    assert result.returncode == 0, result.stdout + result.stderr
     recorded = json.loads(result.stdout.splitlines()[-1])
     expected_urls = [
         "http://10.0.0.10:8200/metrics",

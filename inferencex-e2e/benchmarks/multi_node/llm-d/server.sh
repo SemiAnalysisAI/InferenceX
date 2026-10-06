@@ -359,10 +359,6 @@ fi
 if [[ ( "$ROLE" == "decode" && "$LWS_WORKER_INDEX" -eq 0 ) || \
       ( "$IS_AGGREGATED" -eq 1 && "$ROLE" == "prefill" && "$NODE_RANK" -eq 0 ) ]]; then
 
-    # Release the allocation whenever the coordinator exits.
-    BENCH_DONE_MARKER="$BENCHMARK_LOGS_DIR/.bench_done.$SLURM_JOB_ID"
-    trap 'touch "$BENCH_DONE_MARKER" 2>/dev/null || true' EXIT
-
     # DEP registers every node; pure TP registers only each engine's API leader.
     export LLMD_ENDPOINTS_FILE=/tmp/endpoints.yaml
     python3 - <<PY
@@ -662,8 +658,7 @@ PY
         )
     fi
 
-    # Signal job.slurm (outside the container, where scancel exists) to release
-    # the allocation; without it workers wait until TIME_LIMIT.
+    # job.slurm stops the srun step once this marker exists.
     touch "$BENCHMARK_LOGS_DIR/.bench_done.$SLURM_JOB_ID"
 else
     # Workers (prefill leader, prefill/decode workers): keep vLLM alive.

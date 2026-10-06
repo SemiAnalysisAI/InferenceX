@@ -92,7 +92,12 @@ def resolve_run(
     )
 
 
-def request(repo: str, event: dict[str, Any], token: str) -> dict[str, str]:
+def use_command(body: str) -> re.Match[str] | None:
+    """Match a ``/use <run-id>`` reuse request that should also stage its run."""
+    return re.fullmatch(rf"/use[{COMMAND_SPACE}]+([0-9]+)", body.strip(COMMAND_SPACE))
+
+
+def request(repo: str, event: dict[str, Any], token: str) -> dict[str, str] | None:
     pr_number = event["issue"]["number"]
     actor = event["comment"]["user"]["login"]
 
@@ -102,10 +107,16 @@ def request(repo: str, event: dict[str, Any], token: str) -> dict[str, str]:
         )
         raise RuntimeError(reason)
 
-    command = re.fullmatch(
-        rf"/stage-results(?:[{COMMAND_SPACE}]+([0-9]+))?",
-        event["comment"]["body"].strip(COMMAND_SPACE),
-    )
+    body = event["comment"]["body"]
+    if body.strip(COMMAND_SPACE).startswith("/use"):
+        # /use is owned by the reuse workflow; only well-formed requests also stage.
+        command = use_command(body)
+        if not command:
+            return None
+    else:
+        command = re.fullmatch(
+            rf"/stage-results(?:[{COMMAND_SPACE}]+([0-9]+))?", body.strip(COMMAND_SPACE)
+        )
     if not command:
         reject(
             "Unsupported /stage-results syntax",
@@ -133,7 +144,7 @@ def request(repo: str, event: dict[str, Any], token: str) -> dict[str, str]:
     if not labels.intersection(FULL_SWEEP_LABELS):
         reject(
             "PR does not have a full-sweep label",
-            f"@{actor} `/stage-results` requires a completed run from a PR using one of: "
+            f"@{actor} staging requires a completed run from a PR using one of: "
             + ", ".join(f"`{label}`" for label in FULL_SWEEP_LABELS)
             + ".",
         )
@@ -151,6 +162,9 @@ def request(repo: str, event: dict[str, Any], token: str) -> dict[str, str]:
 def main() -> None:
     event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text(encoding="utf-8"))
     outputs = request(os.environ["GITHUB_REPOSITORY"], event, os.environ["GH_TOKEN"])
+    if outputs is None:
+        print("Comment is not a staging request; skipping.")
+        return
     with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as handle:
         handle.writelines(f"{key}={value}\n" for key, value in outputs.items())
 

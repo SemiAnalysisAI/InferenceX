@@ -10,7 +10,7 @@ import sys
 
 import yaml
 
-from infx.golden_al_distribution import golden_length
+from infx.golden_al_distribution import GOLDEN_DIR, golden_length
 
 
 def validate_agentic_offload(recipe: dict, env: dict) -> None:
@@ -25,7 +25,7 @@ def validate_agentic_offload(recipe: dict, env: dict) -> None:
         raise ValueError("Mooncake recipe requires KV_OFFLOAD_BACKEND=mooncake")
 
 
-def role_assignments(recipe: dict, role: str, env: dict) -> str:
+def role_assignments(recipe: dict, role: str, env: dict, *, golden_dir: Path = GOLDEN_DIR) -> str:
     validate_agentic_offload(recipe, env)
     section = recipe.get(role) or {}
     extra = (section.get("extra-args") or "").strip()
@@ -33,6 +33,8 @@ def role_assignments(recipe: dict, role: str, env: dict) -> str:
         match = re.search(r"--speculative-config\s+", extra)
         if match:
             config, length = json.JSONDecoder().raw_decode(extra[match.end():])
+            if not isinstance(config, dict):
+                raise ValueError("speculative-config must be a JSON object")
             if config.get("method") == "dspark":
                 if env.get("SPEC_DECODING") != "mtp":
                     raise ValueError("DSpark requires SPEC_DECODING=mtp in the master YAML")
@@ -60,7 +62,7 @@ def role_assignments(recipe: dict, role: str, env: dict) -> str:
                     if not model_prefix:
                         raise ValueError("Missing MODEL_PREFIX for DSpark golden AL lookup")
                     k = config["num_speculative_tokens"]
-                    al = golden_length(model_prefix, config, thinking)
+                    al = golden_length(model_prefix, config, thinking, golden_dir)
                     config.update(
                         rejection_sample_method="synthetic",
                         synthetic_acceptance_length=al,

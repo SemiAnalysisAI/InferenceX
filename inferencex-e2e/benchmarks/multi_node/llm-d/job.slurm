@@ -69,25 +69,27 @@ export DOCKER_CONT_NAME
 DOCKER_MOUNT_PATH="/workspace"
 export INFMAX_CONTAINER_WORKSPACE="$DOCKER_MOUNT_PATH"
 
-cleanup() {
-    echo "[${SLURM_JOB_ID}] cleanup on $(hostname)"
-    [[ -n "${WATCHER_PID}" ]] && kill "$WATCHER_PID" 2>/dev/null || true
-}
-trap cleanup INT TERM HUP EXIT
-
-# Coordinator-done watcher. server.sh on the decode coordinator writes
-# this marker after the bench finishes; we then scancel the allocation
-# from outside the container (the image has no SLURM client tools).
-# Without this, workers `wait` on local vLLM forever and the job runs
-# to TIME_LIMIT.
+# Stop the step and exit 0 once the coordinator is done, so the job ends COMPLETED, not CANCELLED.
 BENCH_DONE_MARKER="$BENCHMARK_LOGS_DIR/.bench_done.$SLURM_JOB_ID"
 rm -f "$BENCH_DONE_MARKER"
-(
-    while [[ ! -f "$BENCH_DONE_MARKER" ]]; do sleep 5; done
-    echo "[${SLURM_JOB_ID}] coordinator finished; scancel'ing job"
-    scancel "$SLURM_JOB_ID" 2>/dev/null || true
-) &
-WATCHER_PID=$!
+
+run_until_bench_done() {
+    "$@" &
+    local step=$! rc=0
+    while kill -0 "$step" 2>/dev/null; do
+        if [[ -f "$BENCH_DONE_MARKER" ]]; then
+            echo "[${SLURM_JOB_ID}] coordinator finished; stopping the srun step"
+            kill -TERM "$step" 2>/dev/null || true
+            break
+        fi
+        sleep 5
+    done
+    wait "$step" || rc=$?
+    [[ -f "$BENCH_DONE_MARKER" ]] && return 0
+    echo "[${SLURM_JOB_ID}] srun step exited rc=$rc before the coordinator finished" >&2
+    if [[ "$rc" -eq 0 ]]; then return 1; fi
+    return "$rc"
+}
 
 # Container engine: 'docker' (default) for clusters where the SLURM
 # user can talk to /var/run/docker.sock (e.g. h200-dgxc-slurm); 'pyxis'
@@ -129,7 +131,7 @@ AGENTIC_PYXIS_ENV=$(IFS=,; echo "${AGENTIC_ENV_NAMES[*]}")
 
 if [[ "$LLMD_CONTAINER_ENGINE" == "docker" ]]; then
     # One docker run per node, one task per node. server.sh dispatches by NODE_RANK.
-    srun \
+    run_until_bench_done srun \
         --kill-on-bad-exit=1 \
         --signal=TERM@30 \
         --unbuffered \
@@ -283,7 +285,7 @@ elif [[ "$LLMD_CONTAINER_ENGINE" == "pyxis" ]]; then
     # MODEL_DIR / BENCHMARK_LOGS_DIR / NODE_RANK are translated to their
     # in-container values inside bash -lc (host MODEL_DIR is the source
     # path of the bind mount, but server.sh expects /models inside).
-    srun \
+    run_until_bench_done srun \
         --kill-on-bad-exit=1 \
         --signal=TERM@30 \
         --unbuffered \
