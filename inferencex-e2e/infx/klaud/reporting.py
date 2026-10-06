@@ -839,11 +839,17 @@ def matrix_points(matrix: dict) -> list[dict]:
     ]
 
 
+def missing_baseline_points(matrix: dict, baseline: Baseline) -> list[Point]:
+    """Frozen baseline points that ``matrix`` cannot reproduce."""
+    current = {point_key(point) for point in matrix_points(matrix)}
+    return [point for point in baseline.points if point.key not in current]
+
+
 def check_baseline_coverage(matrix: dict, baseline: Baseline | None) -> None:
     """Current-family completeness cannot replace the frozen original point roster."""
     if baseline is None or not baseline.points:
         raise VerificationError("Missing frozen baseline point roster")
-    if {point.key for point in baseline.points} - {point_key(p) for p in matrix_points(matrix)}:
+    if missing_baseline_points(matrix, baseline):
         raise VerificationError("Final matrix omits or changes frozen baseline points")
 
 
