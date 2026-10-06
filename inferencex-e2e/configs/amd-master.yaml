@@ -41,7 +41,7 @@ dsr1-fp4-mi355x-sglang-mtp:
         srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsr1/sglang/mi355x-fp4-mtp/8k1k.yaml
 
 dsr1-fp4-mi355x-atom:
-  image: rocm/atom:rocm7.2.3_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom20260511
+  image: rocm/atom-dev:nightly_202609220547@sha256:5670943afe8296c9b903c3ee8d1f390483446cc0d50737e05652cee3c67e5342
   model: amd/DeepSeek-R1-0528-MXFP4-Preview
   model-prefix: dsr1
   runner: mi355x
