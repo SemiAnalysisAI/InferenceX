@@ -9459,3 +9459,11 @@
   description:
     - "Qualify native decoder multistream execution on the October 6 image with the existing colocated TEP4 prefill and DEP4 AsyncLL/SDMA topology, retaining full context, dispatch capacity, memory budgets and genuine long-prompt evaluation."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3734
+
+- config-keys:
+    - glm53-mi325x-oct6-dep4-sdma-multistream
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Measure the genuine-qualified October 6 DEP4 AsyncLL/SDMA multistream decoder at concurrency eight with unchanged full context, memory budgets, prefill cache and native AgentX workload."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3734

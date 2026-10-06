@@ -705,12 +705,12 @@ override_colocated_tep4_dep4_sdma_multistream_oct6_long_quality_c16:
   environment:
     EVAL_INCLUDE_PATH: /infmax-workspace/infx/evals/diagnostics
     EVAL_TASKS_DIR: gsm8k_16shot
-  frontend:
+  frontend: &dep4_sdma_multistream_frontend
     args:
       dp-aware: true
       prefill-policy: cache_aware
       decode-policy: round_robin
-  roles:
+  roles: &dep4_sdma_multistream_roles
     prefill:
       gpus: 4
       env:
@@ -736,3 +736,16 @@ override_colocated_tep4_dep4_sdma_multistream_oct6_long_quality_c16:
   benchmark:
     env:
       CONC: "16"
+
+# Fresh native AgentX C8 run of the genuine-qualified multistream server.
+override_colocated_tep4_dep4_sdma_multistream_oct6_c8:
+  name: mi325x-glm53-dep4-sdma-multistream-oct6-c8
+  model: *two_tep4_tp8_oct6_model
+  identity: *two_tep4_tp8_oct6_identity
+  slurm:
+    time_limit: "12:00:00"
+  frontend: *dep4_sdma_multistream_frontend
+  roles: *dep4_sdma_multistream_roles
+  benchmark:
+    env:
+      CONC: "8"
