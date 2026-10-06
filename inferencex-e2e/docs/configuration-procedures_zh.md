@@ -437,10 +437,19 @@ nightly 候选配方使用 `nightly-dev-cu13-20260922-582389ce`、原生 MXFP4 M
 `dsv41flash-fp4-<sku>-sglang-agentic-dspark` 是 vLLM 配方在 h100、h200、b200、b300、gb200、gb300
 与 mi355x 上的 SGLang 对应版本（每个 SKU 一个 PR），遵循
 [SGLang cookbook](https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1)。
-该模型尚无正式发布的 SGLang 版本。B200、B300 与 H100 通过 digest 固定 CUDA 13 nightly 镜像
-`lmsysorg/sglang:nightly-dev-cu13-20260922-582389ce`；GB300 通过 digest 固定 `lmsysorg/sglang:dev-cu13-nightly-0924`；GB200 与 H200 使用
+该模型尚无正式发布的 SGLang 版本。B200 与 H100 通过 digest 固定 CUDA 13 nightly 镜像
+`lmsysorg/sglang:nightly-dev-cu13-20260922-582389ce`；B300 通过 digest 固定
+`lmsysorg/sglang:nightly-dev-cu13-20261004-295a53c9`；GB300 通过 digest 固定 `lmsysorg/sglang:dev-cu13-nightly-0924`；GB200 与 H200 使用
 `lmsysorg/sglang:nightly-dev-cu13-20260923-06008c17`（GB200 通过 digest 固定），MI355X 通过 digest 固定
 `lmsysorg/sglang:dev-dsv41-mi35x`。以各主配置条目的 `image` 为准。
+
+B300 发布九个 AgentX 点：TP4/EP1 的 C1/C4、TP2/EP1 的
+C1/C4/C16/C24/C32/C48，以及聚合式 TP4/EP4/DP4 的 C192。TP 分支使用 16K
+prefill chunk、DeepSeek-V4 FP4 indexer，以及逐点设置的 prefill-decode 调度参数。
+
+B300 DP4 C192 点在一个聚合式 SGLang worker 内运行四个 TP4/EP4 数据并行 rank，
+并通过 `sglang-router` 0.3.2 使用缓存感知路由和 correlation ID 亲和性。所有 B300
+分支均使用检查点自带的 DSpark draft、block size 5 及其原始精度。
 
 B200 在 TP4/EP4 C1–128 与 TP2/EP2 C1–8 全部使用上游默认 DSpark。
 Engram 保留在主机 DRAM，设置 `SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank`。

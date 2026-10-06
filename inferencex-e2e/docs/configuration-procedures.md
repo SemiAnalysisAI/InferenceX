@@ -487,10 +487,21 @@ The nightly candidate uses `nightly-dev-cu13-20260922-582389ce`, native MXFP4 Ma
 `dsv41flash-fp4-<sku>-sglang-agentic-dspark` are the SGLang counterparts of the vLLM
 arms, one PR per SKU across h100, h200, b200, b300, gb200, gb300 and mi355x. They follow the
 [SGLang cookbook](https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1),
-which has no released SGLang version for this model yet. B200, B300 and H100 pin the CUDA 13 nightly
-`lmsysorg/sglang:nightly-dev-cu13-20260922-582389ce` by digest; GB300 pins `lmsysorg/sglang:dev-cu13-nightly-0924` by digest; GB200 and H200 use
+which has no released SGLang version for this model yet. B200 and H100 pin the CUDA 13 nightly
+`lmsysorg/sglang:nightly-dev-cu13-20260922-582389ce` by digest; B300 pins by digest
+`lmsysorg/sglang:nightly-dev-cu13-20261004-295a53c9`; GB300 pins `lmsysorg/sglang:dev-cu13-nightly-0924` by digest; GB200 and H200 use
 `lmsysorg/sglang:nightly-dev-cu13-20260923-06008c17` (GB200 by digest), and MI355X pins
 `lmsysorg/sglang:dev-dsv41-mi35x` by digest. Each master entry's `image` is authoritative.
+
+B300 publishes nine AgentX points: TP4/EP1 at C1/C4, TP2/EP1 at
+C1/C4/C16/C24/C32/C48, and aggregated TP4/EP4/DP4 at C192. The TP arms use 16K
+prefill chunks, the DeepSeek-V4 FP4 indexer, and point-specific prefill-decode
+scheduling.
+
+The B300 DP4 C192 point runs four internal TP4/EP4 data-parallel ranks in one
+aggregated SGLang worker behind `sglang-router` 0.3.2, with cache-aware routing
+and correlation-ID affinity. Every B300 arm uses the checkpoint's bundled DSpark
+draft with block size 5 and its shipped precision.
 
 B200 uses shipped-default DSpark across TP4/EP4 C1–128 and TP2/EP2 C1–8.
 Engram stays in host DRAM with `SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank`.
