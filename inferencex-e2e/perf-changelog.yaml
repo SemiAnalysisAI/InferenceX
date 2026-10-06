@@ -9337,3 +9337,11 @@
     - "Set iter_perf_stats_interval and kv_cache_config.iteration_stats_interval to 20 for prefill and decode, and use non-overlap scheduling for the multi-rank attention-DP roles."
     - "Update the TRT-LLM image, recipe container identity, and native KV-offload version from 1.3.0rc24 to 1.4.0rc0.dev202610040000."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3759
+
+- config-keys:
+    - qwen3.5-fp4-gb300-dynamo-trt-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Set CUDARC_CUDA_VERSION=13030 for the pinned Dynamo source build. Its cudarc 0.19.8 dependency rejects automatic detection of the TRT-LLM image's CUDA 13.4 toolkit; this selects the supported CUDA 13.3 API during the build."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3759

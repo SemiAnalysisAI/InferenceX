@@ -14,6 +14,9 @@ base:
     source:
       git: https://github.com/ai-dynamo/dynamo.git
       rev: 563d3d06650d4c3573148b073d5a2df32acb3054
+  environment:
+    # The pinned cudarc source build supports CUDA version selection through 13.3.
+    CUDARC_CUDA_VERSION: '13030'
   identity:
     model:
       repo: nvidia/Qwen3.5-397B-A17B-NVFP4-V2
