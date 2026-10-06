@@ -5427,7 +5427,7 @@
       "status": "in_progress",
       "workflow_name": "offload-v1-none-c489-r2-extended-fullsha-20261006",
       "dispatched_at": "2026-10-06T07:20:01Z",
-      "phase": "B200 runner admitted; Slurm allocation pending",
+      "phase": "canonical warmup: primer wave in progress",
       "performance_result": false,
       "execution_budget": {
         "slurm_minutes": 510,
@@ -5438,11 +5438,30 @@
       "job_id": 112155280008,
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37428997901/job/112155280008",
       "runner": "b200-nscale-slurm_01",
-      "started_at": "2026-10-06T07:20:42Z"
+      "started_at": "2026-10-06T07:20:42Z",
+      "slurm_job_id": 19630,
+      "slurm_state": "RUNNING",
+      "slurm_time_limit": "08:30:00",
+      "node": "im-b200-c002",
+      "scratch": "/offload-scratch/inferencex-offload-37428997901-1-19630-32b845813db8",
+      "dram_bytes": 0,
+      "nvme_bytes": 0,
+      "connector": null,
+      "warmup_started_at": "2026-10-06T07:29:51Z",
+      "warmup_target_requests": 5412,
+      "warmup_latest": {
+        "sample_at": "2026-10-06T07:43:21Z",
+        "returned": 188,
+        "sent": 522,
+        "in_flight": 334,
+        "errors": 0,
+        "elapsed_seconds": 810.2
+      },
+      "runtime_evidence": "Slurm job 19630 allocated with 08:30:00 time limit on im-b200-c002. Live offload_config.json matches run 37428997901, c489, MiniMax-M3 NVFP4 TP4, zero DRAM, zero NVMe and connector null. Host /scratch/inferencex-offload-37428997901-1-19630-32b845813db8/owner.json matches study, run, attempt and Slurm job. Canonical warmup began at 07:29:51Z for 5,412 requests; latest sample returned 188, sent 522, in flight 334, errors 0 after 810.2 seconds."
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894,36796500128,36879140816,37027095833",
-  "status": "Extended-budget NVMe c489 produced a complete aggregate and strict valid power replay despite post-export workflow cancellation. Matched HBM-only c489 control 37428997901 generated labeled B200 job 112155280008 and was admitted to runner b200-nscale-slurm_01; allocation is pending.",
+  "status": "Matched extended-budget HBM-only c489 control 37428997901 allocated as Slurm 19630 on im-b200-c002. Runtime verifies zero DRAM, zero NVMe and no connector; canonical warmup is active with zero errors.",
   "last_capacity_check": {
     "checked_at": "2026-10-06T07:19:59Z",
     "active_study_run_ids": [
