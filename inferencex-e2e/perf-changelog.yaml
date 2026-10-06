@@ -9435,3 +9435,12 @@
   description:
     - "Gate native DEP4 decoder running and graph limits sixteen behind the qualified colocated TEP4 prefill and round-robin decoder router. Preserve dispatch capacity eight, full context, static memory budget and P-only UMBP, including the stock coupled extra-slot default. Genuine GSM32 at concurrency sixteen must exercise the new local graph bucket before a matched concurrency-eight proxy."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3656
+
+- config-keys:
+    - glm53-mi325x-oct5-colocated-tep4-dep4-radix
+    - glm53-mi325x-oct5-colocated-tep4-dep4-radix-quality
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Gate the native experimental decoder radix cache on the qualified colocated TEP4-to-DEP4 topology with cache-aware routing for both roles. Preserve decoder running and graph limits eight, dispatch capacity eight, full context, static memory budget and P-only UMBP. Genuine GSM32 precedes one matched concurrency-eight proxy; do not combine this with the separate round-robin admission comparison."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3656
