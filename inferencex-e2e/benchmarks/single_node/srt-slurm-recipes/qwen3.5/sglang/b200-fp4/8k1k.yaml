@@ -12,7 +12,7 @@ base:
     type: sglang
     enable_multiple_frontends: false
   observability:
-    enabled: true
+    enabled: false
     tachometer:
       enabled: true
   engine: sglang
