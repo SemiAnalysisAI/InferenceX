@@ -479,6 +479,13 @@ override_colocated_tep4_dep4_round_robin_batch4_quality_c16:
     env:
       CONC: "16"
 
+# Offered-load comparison on the unchanged, genuine-qualified batch-four server.
+override_colocated_tep4_dep4_round_robin_batch4_c16:
+  <<: *tep4_dep4_rr_batch4
+  benchmark:
+    env:
+      CONC: "16"
+
 # Two independent TEP4 prefill workers share one native 513 GB host pool.
 # Decode occupies four GPUs on the second node: 12 active / 16 allocated.
 override_two_tep4_prefill_dep4_c8:
