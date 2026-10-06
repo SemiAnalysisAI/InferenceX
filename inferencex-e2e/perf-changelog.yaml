@@ -9468,3 +9468,11 @@
   description:
     - "Measure concurrency eight on the unchanged qualified native radix batch-four decoder, retaining cache-aware routing, full context, dispatch capacity eight and P-only UMBP."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3734
+
+- config-keys:
+    - glm53-mi325x-oct5-colocated-tep4-dep4-radix-balance2-c8
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Prepare a native cache-aware absolute balance threshold of two for the unchanged one-prefill, four-lane radix decoder at concurrency eight. Preserve relative threshold, worker settings, full context and P-only UMBP."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3734
