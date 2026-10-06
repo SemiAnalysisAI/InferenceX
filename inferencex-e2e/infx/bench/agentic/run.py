@@ -4,12 +4,10 @@ from __future__ import annotations
 
 import argparse
 import datetime
-import math
 import os
 import shlex
 import sys
 from collections.abc import Mapping
-from contextlib import nullcontext
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -21,7 +19,6 @@ from infx.bench.agentic.replay import (
     replay_argv,
 )
 from infx.bench.agentic.venv import Runtime, bootstrap
-from infx.bench.gpu_monitor import GpuMonitor
 
 REQUIRED = (
     "RESULT_DIR",
@@ -29,20 +26,19 @@ REQUIRED = (
     "EVAL_ONLY",
     "IS_MULTINODE",
     "PRECISION",
-    "ENABLE_AGENTX_POWER",
-    "REQUIRE_POWER",
     "KV_OFFLOADING",
 )
+# Only srt-slurm's multi-node telemetry measures AgentX power; single-node points publish none.
+POWER_SWITCHES = ("ENABLE_AGENTX_POWER", "REQUIRE_POWER")
 # The finished profile's accepted error fraction; a recipe's live abort threshold
 # (AIPERF_LIVE_FAILED_REQUEST_THRESHOLD) does not move it.
 FAILED_REQUEST_THRESHOLD = "0.10"
 # Spellings the power switches have always accepted as enabled.
 TRUE_VALUES = frozenset({"1", "true", "TRUE", "yes", "YES"})
-POWER_SAMPLE_INTERVAL_S = 1
 
-# monitor: sample local GPUs; window: mark srt-slurm's multi-node measurement window;
-# missing: a multi-node job without that window, recorded as invalid power.
-PowerMode = Literal["off", "monitor", "window", "missing"]
+# window: mark srt-slurm's multi-node measurement window; missing: a multi-node job
+# without that window, recorded as invalid power.
+PowerMode = Literal["off", "window", "missing"]
 
 
 @dataclass(frozen=True)
@@ -57,7 +53,6 @@ class Plan:
     """``(timeout, stabilization)`` seconds when an eval-only job waits for the chat route."""
     power: PowerMode
     require_power: bool
-    expected_num_gpus: int | None
     required_metric_prefix: str | None
 
     @classmethod
@@ -65,6 +60,7 @@ class Plan:
         """Validate every input before any setup, so a bad point fails in seconds."""
         values = inputs.require(*REQUIRED, *REPLAY_REQUIRED, env=env)
         multinode = inputs.flag("IS_MULTINODE", env)
+        switches = inputs.require(*POWER_SWITCHES, env=env) if multinode else {}
         result_dir = Path(values["RESULT_DIR"]).absolute()
         result_filename = values["RESULT_FILENAME"]
         if multinode or env.get("CONC_LIST"):
@@ -76,16 +72,14 @@ class Plan:
         _require_single_point(env, values["CONC"])
         _validate_kv_offload(env)
         eval_only = inputs.flag("EVAL_ONLY", env)
-        power = _power_mode(values["ENABLE_AGENTX_POWER"], multinode, env)
         return cls(
             replay=replay,
             result_dir=result_dir,
             output_dir=Path(env.get("AGENTIC_OUTPUT_DIR") or proc.REPO_ROOT).absolute(),
             result_filename=result_filename,
             chat_budget=server.chat_route_budget(env) if eval_only else None,
-            power=power,
-            require_power=values["REQUIRE_POWER"] in TRUE_VALUES,
-            expected_num_gpus=_expected_num_gpus(env) if power == "monitor" else None,
+            power=_power_mode(switches, env),
+            require_power=switches.get("REQUIRE_POWER") in TRUE_VALUES,
             required_metric_prefix=inputs.optional("AIPERF_REQUIRED_SERVER_METRIC_PREFIX", env),
         )
 
@@ -118,18 +112,11 @@ def _validate_kv_offload(env: Mapping[str, str]) -> None:
         )
 
 
-def _power_mode(enabled: str, multinode: bool, env: Mapping[str, str]) -> PowerMode:
-    if enabled not in TRUE_VALUES:
+def _power_mode(switches: Mapping[str, str], env: Mapping[str, str]) -> PowerMode:
+    if switches.get("ENABLE_AGENTX_POWER") not in TRUE_VALUES:
         return "off"
-    if not multinode:
-        return "monitor"
     # srt-slurm's telemetry measures multi-node points and exports the window directory.
     return "window" if env.get("SRT_MEASUREMENT_WINDOW_DIR") else "missing"
-
-
-def _expected_num_gpus(env: Mapping[str, str]) -> int:
-    values = inputs.require("TP", "PP_SIZE", "PCP_SIZE", env=env)
-    return math.prod(inputs.parse_positive_int(name, value) for name, value in values.items())
 
 
 def execute(plan: Plan, runtime: Runtime, environ: Mapping[str, str]) -> int:
@@ -157,13 +144,8 @@ def execute(plan: Plan, runtime: Runtime, environ: Mapping[str, str]) -> int:
         return rc
     argv = replay_argv(cfg, runtime.aiperf)
     (plan.result_dir / "benchmark_command.txt").write_text(f"{shlex.join(argv)}\n")
-    monitor = (
-        GpuMonitor(plan.result_dir / "gpu_metrics.csv", POWER_SAMPLE_INTERVAL_S)
-        if plan.power == "monitor"
-        else nullcontext()
-    )
     log = plan.result_dir / "benchmark.log"
-    with proc.DeferSignals() as signals, monitor:
+    with proc.DeferSignals() as signals:
         replay_rc = 0 if signals.received else proc.tee(argv, log, env)
     if signals.received:
         return 128 + signals.received
@@ -180,14 +162,13 @@ def _download_traces(cfg: ReplayConfig, runtime: Runtime, env: Mapping[str, str]
 
 
 def _open_power_window(plan: Plan, python: str, env: Mapping[str, str]) -> int:
-    """Record the replay clock's UTC offset; mark srt-slurm's multi-node window running."""
-    if plan.power in {"monitor", "window"}:
-        # AIPerf exports naive local datetimes and SMI the same wall clock; the power
-        # adapter needs the offset to normalize the profiling window.
-        now = datetime.datetime.now(datetime.timezone.utc).astimezone()
-        (plan.result_dir / "agentic_power_timezone_offset.txt").write_text(f"{now:%z}\n")
+    """Record the replay clock's UTC offset and mark srt-slurm's multi-node window running."""
     if plan.power != "window":
         return 0
+    # AIPerf exports naive local datetimes; the adapter needs the offset to convert the
+    # profiling window to Unix time.
+    now = datetime.datetime.now(datetime.timezone.utc).astimezone()
+    (plan.result_dir / "agentic_power_timezone_offset.txt").write_text(f"{now:%z}\n")
     rc = _power_adapter(plan, python, env, *_window(plan, "running"))
     if rc:
         print("ERROR: failed to publish the AgentX formal running power window", file=sys.stderr)
@@ -220,7 +201,6 @@ def _power_audit(plan: Plan, replay_rc: int) -> list[str] | None:
     """The power adapter's post-replay arguments; a failed replay leaves the window running."""
     aggregate = ["--agg-result", str(plan.output_dir / f"{plan.result_filename}.json")]
     return {
-        "monitor": [*aggregate, "--expected-num-gpus", str(plan.expected_num_gpus)],
         "window": _window(plan, "completed") if replay_rc == 0 else None,
         "missing": [*aggregate, "--multinode-contract-missing"],
     }.get(plan.power)

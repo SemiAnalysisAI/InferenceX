@@ -6,7 +6,7 @@ import argparse
 from dataclasses import dataclass
 from pathlib import Path
 
-from infx.bench import env, gpu_monitor, proc, server
+from infx.bench import env, proc, server
 
 # The client needs numpy and transformers, so it runs in a child, never in this process.
 PYTHON = "python3"
@@ -62,6 +62,11 @@ def client_argv(point: Point) -> list[str]:
     return argv
 
 
+def _run_client(point: Point) -> int:
+    with proc.RelaySignals() as relay:
+        return relay.run(client_argv(point))
+
+
 def served_model(base_url: str) -> str:
     """The first model id the frontend lists."""
     listing = server.http_json(f"{base_url}/v1/models")
@@ -74,11 +79,11 @@ def served_model(base_url: str) -> str:
 
 
 def srt_single(args: argparse.Namespace) -> int:
-    """One srt-slurm single-node point under the GPU monitor; srt-slurm owns the server."""
+    """One srt-slurm single-node point; srt-slurm owns the server."""
     values = env.require(
         "MODEL", "CONC", "ISL", "OSL", "RANDOM_RANGE_RATIO", "RESULT_FILENAME", "RESULT_DIR",
-        "SRT_FRONTEND_HOST", "SRT_FRONTEND_PORT", "RUN_EVAL", "EVAL_ONLY",
-        "GPU_MONITOR_INTERVAL", "USE_CHAT_TEMPLATE", "FRAMEWORK",
+        "SRT_FRONTEND_HOST", "SRT_FRONTEND_PORT", "RUN_EVAL", "EVAL_ONLY", "USE_CHAT_TEMPLATE",
+        "FRAMEWORK",
     )  # fmt: skip
     env.flag("RUN_EVAL")
     eval_only = env.flag("EVAL_ONLY")
@@ -100,13 +105,12 @@ def srt_single(args: argparse.Namespace) -> int:
         use_chat_template=env.flag("USE_CHAT_TEMPLATE"),
         trust_remote_code=args.trust_remote_code,
     )
-    interval = env.positive_int("GPU_MONITOR_INTERVAL")
     if not result_dir.is_dir():
         raise env.InputError("RESULT_DIR must be an existing runtime-provided directory")
     if eval_only:
         print("EVAL_ONLY mode: skipping throughput benchmark", flush=True)
         return 0
-    return gpu_monitor.run(result_dir / "gpu_metrics.csv", interval, client_argv(point))
+    return _run_client(point)
 
 
 def srt_sweep(args: argparse.Namespace) -> int:
@@ -155,6 +159,24 @@ def srt_sweep(args: argparse.Namespace) -> int:
     return 0
 
 
+def explicit_point(args: argparse.Namespace) -> int:
+    """One point described entirely by flags."""
+    return _run_client(
+        Point(
+            base_url=args.base_url,
+            model=args.model,
+            backend=args.backend,
+            tokenizer=args.tokenizer,
+            isl=env.parse_positive_int("--isl", args.isl),
+            osl=env.parse_positive_int("--osl", args.osl),
+            random_range_ratio=args.random_range_ratio,
+            conc=env.parse_positive_int("--conc", args.conc),
+            num_prompts=env.parse_positive_int("--num-prompts", args.num_prompts),
+            result=args.result,
+        )
+    )
+
+
 def main(argv: list[str]) -> int:
     """Run the ``fixed-seq`` command."""
     parser = argparse.ArgumentParser(prog="python3 -m infx.bench fixed-seq")
@@ -167,6 +189,19 @@ def main(argv: list[str]) -> int:
     sweep = modes.add_parser("srt-sweep", help="every CONC_LIST point of a multi-node job (env)")
     sweep.add_argument("--logs-dir", type=Path, required=True, help="srt-slurm's log mount")
     sweep.set_defaults(run=srt_sweep)
+
+    point = modes.add_parser("point", help="one point from flags")
+    point.add_argument("--base-url", required=True)
+    point.add_argument("--model", required=True, help="served model name")
+    point.add_argument("--backend", required=True, help="benchmark_serving backend")
+    point.add_argument("--tokenizer", required=True, help="tokenizer name or path")
+    point.add_argument("--isl", required=True, help="input sequence length")
+    point.add_argument("--osl", required=True, help="output sequence length")
+    point.add_argument("--random-range-ratio", required=True)
+    point.add_argument("--conc", required=True, help="max concurrency")
+    point.add_argument("--num-prompts", required=True)
+    point.add_argument("--result", type=Path, required=True, help="result JSON path")
+    point.set_defaults(run=explicit_point)
 
     args = parser.parse_args(argv)
     return args.run(args)

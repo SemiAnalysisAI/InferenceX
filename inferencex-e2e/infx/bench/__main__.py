@@ -21,7 +21,7 @@ def main(argv: list[str]) -> int:
     if not argv or argv[0] not in COMMANDS:
         print(f"usage: python3 -m infx.bench {{{','.join(COMMANDS)}}} [args]", file=sys.stderr)
         return 2
-    # Only this interpreter needs it; Python-script tools such as amd-smi break under it.
+    # Only this interpreter needs it; child scripts that import their siblings break under it.
     os.environ.pop("PYTHONSAFEPATH", None)
     command = importlib.import_module(COMMANDS[argv[0]])
     try:

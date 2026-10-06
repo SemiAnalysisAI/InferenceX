@@ -162,7 +162,7 @@ python3 -m infx.workflows.validate_perf_changelog \
 
 Its contract is implemented in [`validate_perf_changelog.py`](../infx/workflows/validate_perf_changelog.py). This check validates the generated matrix and rejects prohibited content changes, but whitespace-only historical deletions can be invisible to its diff reader. Inspect the exact byte diff as a separate evidence gate. Do not rewrite or normalize historical `perf-changelog.yaml` bytes.
 
-A local matrix cannot prove Slurm allocation or the deployed srt-slurm topology. Multi-node recipe changes still require the upstream recipe checker and an execution on the intended fleet, as described in [configuration validation](configuration-procedures.md#validate).
+A local matrix cannot prove Slurm allocation or llm-d endpoint discovery. Multi-node recipe changes still require the upstream recipe checker and an execution on the intended fleet, as described in [configuration validation](configuration-procedures.md#validate).
 
 ### Full local suite in parallel
 

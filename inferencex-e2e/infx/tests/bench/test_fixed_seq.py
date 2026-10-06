@@ -1,12 +1,14 @@
-"""Fixed-sequence lanes against a stub client, nvidia-smi, and a local frontend."""
+"""Fixed-sequence lanes against a stub client and a local frontend."""
 
 from __future__ import annotations
 
 import json
 import shlex
 import shutil
+import signal
 import subprocess
 import sys
+import time
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -16,7 +18,6 @@ from infx.bench.__main__ import main as bench
 from infx.tests.bench.stubs import executable
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-FINAL_SAMPLE = "2026/07/23 12:00:11.000, 0, 500.00 W, 65, 1000, 1000, 90 %, 10 %"
 # Client flags every lane passes, whatever the point.
 POLICY = {
     "--dataset-name": "random",
@@ -26,21 +27,28 @@ POLICY = {
     "--percentile-metrics": "ttft,tpot,itl,e2el",
 }
 
-# Records each client run and writes the result file the real client would.
+# Records each client run and writes the result file the real client would. With
+# FAKE_CLIENT_TRAP set, it runs until SIGTERM or SIGHUP, records the signal, and exits 0.
 FAKE_CLIENT = """
-import json, os, sys
+import json, os, signal, sys, time
 from pathlib import Path
 
+def finish(signum, _frame):
+    Path(os.environ["FAKE_CLIENT_TRAP"]).write_text(signal.Signals(signum).name)
+    sys.exit(0)
+
+trap = os.environ.get("FAKE_CLIENT_TRAP")
+if trap:
+    signal.signal(signal.SIGTERM, finish)
+    signal.signal(signal.SIGHUP, finish)
 argv = sys.argv[1:]
 value = lambda flag: argv[argv.index(flag) + 1]
 result = Path(value("--result-dir")) / value("--result-filename")
-record = {
-    "argv": argv,
-    "monitored": (result.parent / "gpu_metrics.csv").exists(),
-    "safe_path": os.environ.get("PYTHONSAFEPATH"),
-}
+record = {"argv": argv, "safe_path": os.environ.get("PYTHONSAFEPATH")}
 with open(os.environ["FAKE_CLIENT_LOG"], "a") as log:
     log.write(json.dumps(record) + "\\n")
+while trap:
+    time.sleep(0.05)
 if value("--max-concurrency") == os.environ.get("FAKE_CLIENT_FAIL_CONC"):
     sys.exit(3)
 result.write_text(json.dumps(
@@ -51,30 +59,20 @@ result.write_text(json.dumps(
 
 @pytest.fixture
 def tools(tmp_path: Path) -> Path:
-    """PATH with a stub benchmark client behind python3 and a stub nvidia-smi."""
+    """PATH with a stub benchmark client behind python3."""
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
-    for tool in ("sh", "sleep", "dirname", "env"):
+    for tool in ("sh", "dirname", "env"):
         (bin_dir / tool).symlink_to(shutil.which(tool))
     (tmp_path / "fake_client.py").write_text(FAKE_CLIENT)
     python, client = shlex.quote(sys.executable), shlex.quote(str(tmp_path / "fake_client.py"))
-    stubs = {
-        "python3": f"""
+    executable(bin_dir / "python3", f"""#!/bin/sh
 if [ "$1 $2" = "-m infx.bench_serving.benchmark_serving" ]; then
     shift 2
     exec {python} {client} "$@"
 fi
 exec {python} "$@"
-""",
-        "nvidia-smi": f"""
-case "$*" in
-    *" -l 1") printf 'timestamp, index, power.draw [W]\\n'; exec sleep 30 ;;
-    *noheader*) printf '%s\\n' {shlex.quote(FINAL_SAMPLE)} ;;
-esac
-""",
-    }
-    for name, body in stubs.items():
-        executable(bin_dir / name, f"#!/bin/sh\n{body}")
+""")
     return bin_dir
 
 
@@ -126,7 +124,6 @@ def single_node_env(tmp_path: Path, tools: Path, **overrides: str | None) -> dic
         "SRT_FRONTEND_PORT": "8000",
         "RUN_EVAL": "false",
         "EVAL_ONLY": "false",
-        "GPU_MONITOR_INTERVAL": "1",
         "USE_CHAT_TEMPLATE": "false",
         "FRAMEWORK": "sglang",
         **overrides,
@@ -165,6 +162,25 @@ def frontend(*models: str):
     )
 
 
+# What benchmarks/multi_node/llm-d/server.sh passes for one concurrency.
+POINT_FLAGS = {
+    "--base-url": "http://0.0.0.0:8080",
+    "--model": "deepseek-ai/DeepSeek-V4-Pro",
+    "--backend": "openai",
+    "--tokenizer": "/models",
+    "--isl": "8192",
+    "--osl": "1024",
+    "--random-range-ratio": "0.8",
+    "--conc": "1",
+    "--num-prompts": "16",
+}
+
+
+def point_argv(result: Path) -> list[str]:
+    flags = {**POINT_FLAGS, "--result": str(result)}
+    return ["fixed-seq", "point", *(token for pair in flags.items() for token in pair)]
+
+
 @pytest.mark.parametrize(
     ("framework", "chat_template", "args", "flags"),
     [
@@ -172,7 +188,7 @@ def frontend(*models: str):
         ("trt", "false", ["--trust-remote-code"], {"--backend": "openai", "--trust-remote-code": True}),
     ],
 )
-def test_single_node_shim_runs_one_point_under_the_monitor(
+def test_single_node_shim_runs_one_point_and_writes_only_its_result(
     tmp_path, tools, framework, chat_template, args, flags
 ):
     env = single_node_env(tmp_path, tools, FRAMEWORK=framework, USE_CHAT_TEMPLATE=chat_template)
@@ -196,12 +212,9 @@ def test_single_node_shim_runs_one_point_under_the_monitor(
         "--result-filename": "point_conc4.json",
         **flags,
     }
-    assert (logs / "point_conc4.json").is_file()
-    # The sampler was already writing when the client started and stopped after it.
-    assert run["monitored"]
+    assert [path.name for path in logs.iterdir()] == ["point_conc4.json"]
     # The shim sets PYTHONSAFEPATH for infx.bench only; Python-script tools break under it.
     assert run["safe_path"] is None
-    assert (logs / "gpu_metrics.csv").read_text().endswith(FINAL_SAMPLE + "\n")
 
 
 @pytest.mark.parametrize(
@@ -302,3 +315,56 @@ def test_sweep_without_a_served_model_runs_nothing(
     assert capsys.readouterr().err == f"ERROR: {url}/v1/models lists no served model\n"
     assert client_runs(tmp_path) == []
     assert not (tmp_path / "logs").exists()
+
+
+def test_point_runs_the_callers_flags_under_the_shared_policy(tmp_path, tools, monkeypatch):
+    use_env(monkeypatch, {"PATH": str(tools), "FAKE_CLIENT_LOG": str(tmp_path / "client.log")})
+    result = tmp_path / "results" / "stem_c1_gpus_16_ctx_8_gen_8.json"
+    result.parent.mkdir()
+
+    assert bench(point_argv(result)) == 0
+    [run] = client_runs(tmp_path)
+    assert options(run["argv"]) == {
+        **POLICY,
+        "--model": "deepseek-ai/DeepSeek-V4-Pro",
+        "--backend": "openai",
+        "--base-url": "http://0.0.0.0:8080",
+        "--tokenizer": "/models",
+        "--random-input-len": "8192",
+        "--random-output-len": "1024",
+        "--random-range-ratio": "0.8",
+        "--num-prompts": "16",
+        "--max-concurrency": "1",
+        "--num-warmups": "2",
+        "--result-dir": str(result.parent),
+        "--result-filename": result.name,
+    }
+    assert result.is_file()
+
+
+@pytest.mark.parametrize(
+    ("sent", "rc"), [(signal.SIGTERM, 143), (signal.SIGHUP, 129)], ids=["TERM", "HUP"]
+)
+def test_point_relays_a_signal_and_an_interrupted_run_never_passes(tmp_path, tools, sent, rc):
+    trapped = tmp_path / "trapped"
+    process = subprocess.Popen(
+        [sys.executable, "-m", "infx.bench", *point_argv(tmp_path / "result.json")],
+        env={
+            "PATH": str(tools), "PYTHONPATH": str(REPO_ROOT), "PYTHONDONTWRITEBYTECODE": "1",
+            "FAKE_CLIENT_LOG": str(tmp_path / "client.log"), "FAKE_CLIENT_TRAP": str(trapped),
+        },
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+    )  # fmt: skip
+    try:
+        deadline = time.monotonic() + 10
+        while not client_runs(tmp_path):
+            assert time.monotonic() < deadline, "the client did not start"
+            time.sleep(0.02)
+        process.send_signal(sent)
+        _, stderr = process.communicate(timeout=30)
+    finally:
+        process.kill()
+
+    # The client exited 0 on the relayed signal, but an interrupted run never passes.
+    assert process.returncode == rc, stderr
+    assert trapped.read_text() == sent.name

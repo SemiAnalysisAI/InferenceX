@@ -28,11 +28,6 @@ POINT = {
     "RESULT_FILENAME": "agentx",
     "EVAL_ONLY": "false",
     "IS_MULTINODE": "false",
-    "ENABLE_AGENTX_POWER": "0",
-    "REQUIRE_POWER": "0",
-    "TP": "3",
-    "PP_SIZE": "2",
-    "PCP_SIZE": "2",
     "KV_OFFLOADING": "none",
     "PRECISION": "fp4",
     "MODEL": "test/model",
@@ -65,15 +60,6 @@ sleep "${REPLAY_SECONDS:-0}"
 exit "${REPLAY_RC:-0}"
 """
 FAKE_HF = '#!/bin/sh\nexit "${HF_RC:-0}"\n'
-# The GPU monitor's identity and final-sample queries log themselves; its 1 s stream runs
-# until the monitor stops it.
-FAKE_NVIDIA_SMI = r"""#!/bin/sh
-case " $* " in
-    *" -l 1 "*) exec sleep 60 ;;
-    *noheader*) echo gpu-final-sample >> "$EVENTS" ;;
-    *) echo gpu-identity >> "$EVENTS" ;;
-esac
-"""
 DRIVER = """
 import os, sys
 from pathlib import Path
@@ -81,16 +67,6 @@ from infx.bench.agentic.run import Plan, execute
 from infx.bench.agentic.venv import Runtime
 sys.exit(execute(Plan.from_env(os.environ), Runtime(Path(sys.argv[1])), os.environ))
 """
-
-
-@pytest.fixture(autouse=True)
-def fake_gpu(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """The in-process GPU monitor finds ``nvidia-smi`` through this process's environment."""
-    tools = tmp_path / "gpu"
-    tools.mkdir()
-    executable(tools / "nvidia-smi", FAKE_NVIDIA_SMI)
-    monkeypatch.setenv("PATH", f"{tools}{os.pathsep}{os.environ['PATH']}")
-    monkeypatch.setenv("EVENTS", str(tmp_path / "events.log"))
 
 
 def _point(tmp_path: Path, **overrides: str | None) -> dict[str, str]:
@@ -148,10 +124,7 @@ def _events(tmp_path: Path) -> list[str]:
         ({"CONC": "4 8", "CONC_LIST": "4 8"}, "CONC must be a positive integer"),
         ({"IS_MULTINODE": "1"}, "IS_MULTINODE must be true or false"),
         ({"EVAL_ONLY": "true"}, "  - EVAL_ENDPOINT_READY_TIMEOUT_SECONDS"),
-        (
-            {"ENABLE_AGENTX_POWER": "1", "PP_SIZE": None, "PCP_SIZE": None},
-            "  - PP_SIZE\n  - PCP_SIZE",
-        ),
+        ({"IS_MULTINODE": "true"}, "  - ENABLE_AGENTX_POWER\n  - REQUIRE_POWER"),
     ],
 )
 def test_points_that_cannot_be_measured_fail_before_setup(tmp_path, overrides, message):
@@ -159,7 +132,11 @@ def test_points_that_cannot_be_measured_fail_before_setup(tmp_path, overrides, m
         Plan.from_env(_point(tmp_path, **overrides))
 
 
-WINDOW = {"IS_MULTINODE": "true", "ENABLE_AGENTX_POWER": "1", "SRT_MEASUREMENT_WINDOW_DIR": "/w"}
+WINDOW = {
+    "IS_MULTINODE": "true", "ENABLE_AGENTX_POWER": "1", "REQUIRE_POWER": "0",
+    "SRT_MEASUREMENT_WINDOW_DIR": "/w",
+}
+MISSING = {"IS_MULTINODE": "true", "ENABLE_AGENTX_POWER": "1", "REQUIRE_POWER": "1"}
 MARK = "adapter --result-dir {results}/conc_8 --concurrency 8 --write-multinode-window"
 OFFSET = "agentic_power_timezone_offset.txt"
 REPLAYED = {"benchmark.log", "benchmark_command.txt"}
@@ -169,11 +146,12 @@ REPLAYED = {"benchmark.log", "benchmark_command.txt"}
     ("overrides", "rc", "events", "files"),
     [
         pytest.param(
-            {},
+            # Only srt-slurm's multi-node telemetry measures power, whatever these say.
+            {"ENABLE_AGENTX_POWER": "1", "REQUIRE_POWER": "1"},
             0,
             ["replay", "aggregate agentx", "analyze", "validate"],
             REPLAYED,
-            id="power-off",
+            id="single-node-publishes-no-power",
         ),
         pytest.param(
             # Multi-node recipes that pin IS_MULTINODE=false still run under the multi-node
@@ -186,15 +164,11 @@ REPLAYED = {"benchmark.log", "benchmark_command.txt"}
             id="conc-list-point",
         ),
         pytest.param(
-            {"ENABLE_AGENTX_POWER": "1", "REQUIRE_POWER": "1"},
+            {**WINDOW, "ENABLE_AGENTX_POWER": "0"},
             0,
-            [
-                "gpu-identity", "replay", "gpu-final-sample", "aggregate agentx", "adapter --result-dir {results} --agg-result {out}/agentx.json"
-                " --expected-num-gpus 12 --require-power",
-                "analyze", "validate",
-            ],
-            {OFFSET, *REPLAYED, "gpu_metrics.csv", "gpu_metrics_identity.csv"},
-            id="single-node-monitor",
+            ["replay", "aggregate agentx_conc8", "analyze", "validate"],
+            {f"conc_8/{name}" for name in REPLAYED},
+            id="multi-node-opt-out",
         ),
         pytest.param(
             WINDOW,
@@ -219,11 +193,11 @@ REPLAYED = {"benchmark.log", "benchmark_command.txt"}
             id="unpublished-window-skips-the-replay",
         ),
         pytest.param(
-            {"IS_MULTINODE": "true", "ENABLE_AGENTX_POWER": "1"},
+            MISSING,
             0,
             [
                 "replay", "aggregate agentx_conc8", "adapter --result-dir {results}/conc_8 --agg-result {out}/agentx_conc8.json"
-                " --multinode-contract-missing",
+                " --multinode-contract-missing --require-power",
                 "analyze", "validate",
             ],
             {f"conc_8/{name}" for name in REPLAYED},
@@ -257,7 +231,7 @@ def test_every_step_runs_and_the_first_failure_in_precedence_wins(
 ):
     rc = _run(
         tmp_path,
-        ENABLE_AGENTX_POWER="1",
+        **MISSING,
         REPLAY_RC=replay,
         AGGREGATE_RC=aggregate,
         VALIDATE_RC=validate,
@@ -266,8 +240,7 @@ def test_every_step_runs_and_the_first_failure_in_precedence_wins(
 
     assert rc == expected
     assert [event.split()[0] for event in _events(tmp_path)] == [
-        "gpu-identity", "replay", "gpu-final-sample", "aggregate", "adapter", "analyze",
-        "validate",
+        "replay", "aggregate", "adapter", "analyze", "validate",
     ]  # fmt: skip
 
 
@@ -294,7 +267,7 @@ def test_required_server_metrics_gate_an_otherwise_clean_point(tmp_path, csv, pr
 
 def test_signal_during_the_replay_skips_scoring_and_exits_128_plus_n(tmp_path):
     runtime = _runtime(tmp_path)
-    env = _point(tmp_path, ENABLE_AGENTX_POWER="1", REPLAY_SECONDS="60", PYTHONPATH=str(REPO_ROOT))
+    env = _point(tmp_path, REPLAY_SECONDS="60", PYTHONPATH=str(REPO_ROOT))
     driver = subprocess.Popen(
         [sys.executable, "-c", DRIVER, str(runtime.root)],
         env=env,
@@ -308,8 +281,8 @@ def test_signal_during_the_replay_skips_scoring_and_exits_128_plus_n(tmp_path):
         while "replay" not in _events(tmp_path):
             assert time.monotonic() < deadline, "the replay did not start"
             time.sleep(0.01)
-        # The whole job gets the signal, like a terminal interrupt. SIGTERM and SIGHUP take the
-        # same deferral; test_gpu_monitor's relay cases send those two.
+        # The whole job gets the signal, like a terminal interrupt. SIGTERM and SIGHUP share the
+        # handler; test_fixed_seq's relay cases send those two.
         os.killpg(driver.pid, signal.SIGINT)
         _, stderr = driver.communicate(timeout=10)
     finally:
@@ -318,8 +291,7 @@ def test_signal_during_the_replay_skips_scoring_and_exits_128_plus_n(tmp_path):
         driver.communicate()
 
     assert driver.returncode == 130, stderr
-    # The signal may reach the monitor's sampler first, so its final sample is optional.
-    assert [e for e in _events(tmp_path) if e != "gpu-final-sample"] == ["gpu-identity", "replay"]
+    assert _events(tmp_path) == ["replay"]
 
 
 # The replay records its argv, writes one profiled request, and prints progress.

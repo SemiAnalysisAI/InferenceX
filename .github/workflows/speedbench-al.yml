@@ -83,14 +83,11 @@ env:
   DSV41_MIN_CUDAGRAPH_CAPTURE_SIZE: '1'
   MODEL_DOWNLOAD_LOCK_TIMEOUT: '21600'
   ENROOT_IMPORT_TIME_LIMIT: '120'
-  GPU_MONITOR_INTERVAL: '1'
-  GPU_METRICS_CSV: 'gpu_metrics.csv'
   KEEP_LOGS: '0'
   IS_MULTINODE: 'false'
   EVAL_ONLY: 'false'
   RUN_EVAL: 'false'
   IS_AGENTIC: '0'
-  REQUIRE_POWER: '0'
   SCENARIO_SUBDIR: fixed_seq_len/
   HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
   HF_HUB_CACHE: '/mnt/hf_hub_cache/'
@@ -215,7 +212,7 @@ jobs:
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
+          fetch-depth: 1
           ref: ${{ inputs.ref || github.sha }}
           clean: true
           submodules: true
@@ -225,7 +222,6 @@ jobs:
         run: |
           if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
           rm -f speedbench-reference-al.yaml || true
-          rm -f gpu_metrics.csv || true
           rm -rf speed_bench_data || true
 
       - name: Checkout launch tooling
@@ -233,6 +229,8 @@ jobs:
         with:
           ref: ${{ github.workflow_sha }}
           path: .launch-tooling
+          # Only inferencex-e2e/ is read from this checkout.
+          sparse-checkout: inferencex-e2e
           persist-credentials: false
 
       - name: Set up uv
