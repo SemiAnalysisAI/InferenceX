@@ -659,8 +659,8 @@ def select(directory: Path, max_candidates: int, execution_file: Path | None = N
                 source_identity=identity(candidate["source"]),
                 baseline=baseline,
             )
-            # The final sweep must reproduce every frozen point; an agent cannot fix a roster
-            # that the current family no longer generates.
+            # The final sweep must reproduce every unretired frozen point; an agent cannot fix a
+            # roster that the current family no longer generates.
             missing = missing_baseline_points(
                 validation.canonical_matrix(
                     os.environ["GITHUB_REPOSITORY"], owned.base, owned.family
@@ -917,7 +917,9 @@ def main() -> int:
                 head,
                 session.candidate.family,
             )
-            check_baseline_coverage(canonical, baseline_for(session, pull))
+            check_baseline_coverage(
+                session.repository, session.candidate, canonical, baseline_for(session, pull)
+            )
             return 0
         if args.command == "recover-current":
             from . import claims

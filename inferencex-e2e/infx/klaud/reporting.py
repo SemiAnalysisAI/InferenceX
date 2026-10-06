@@ -14,11 +14,18 @@ import re
 import zlib
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Literal, Self
+from typing import TYPE_CHECKING, Annotated, Any, Literal, Self
 
-from pydantic import AfterValidator, Field, field_validator, model_validator
+from pydantic import (
+    AfterValidator,
+    Field,
+    SerializerFunctionWrapHandler,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 
 from . import github
 from .github import VerificationError
@@ -88,10 +95,10 @@ class Evaluation(Contract):
 
 
 class Retirement(Contract):
-    """Frozen baseline points that a dated MODELS.md scenario deprecation retired.
+    """Frozen points of one workload that a dated MODELS.md scenario deprecation retired.
 
-    The planner records one per deprecation statement, with its scenario name, date and PR,
-    only for points the current family no longer generates.
+    The planner records the deprecation's scenario name, date and PR with the family's model
+    prefix and the workload's ISL/OSL, only for points the current family no longer generates.
     """
 
     scenario: str = Field(pattern=f"^{SCENARIO_NAME}$")
@@ -99,6 +106,9 @@ class Retirement(Contract):
     pr_link: str = Field(
         pattern=r"^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/pull/[1-9]\d*$"
     )
+    model_prefix: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+    isl: int = Field(gt=0)
+    osl: int = Field(gt=0)
     points: list[Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]] = Field(min_length=1)
 
 
@@ -135,11 +145,21 @@ class Baseline(Contract):
         retired = [key for retirement in self.retirements for key in retirement.points]
         if len(set(retired)) != len(retired) or not set(retired) <= {p.key for p in self.points}:
             raise ValueError("Retirements must name distinct frozen baseline points")
-        if any(retirement.date <= self.date for retirement in self.retirements):
+        if not set(retired) <= {p.key for p in self.points if p.scenario == "fixed-seq-len"}:
+            raise ValueError("Only fixed-seq-len points can be retired")
+        if any(day(retirement.date) <= day(self.date) for retirement in self.retirements):
             raise ValueError("Only a retirement after the baseline date can exempt a point")
         if self.points and len(retired) == len(self.points):
             raise ValueError("A baseline needs at least one point that is not retired")
         return self
+
+    @model_serializer(mode="wrap")
+    def compatible(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        # Records without retirements keep the earlier format, which older code still reads.
+        data = handler(self)
+        if not self.retirements:
+            data.pop("retirements", None)
+        return data
 
 
 class BaselinePreflight(Contract):
@@ -201,6 +221,13 @@ def unique_evals(rows: list[Evaluation]) -> None:
         raise ValueError("Duplicate comparison eval")
 
 
+def day(value: str) -> date:
+    """Parse a YYYY-MM-DD date, so timestamps or other spellings never compare as text."""
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+        raise ValueError("Dates must be YYYY-MM-DD")
+    return date.fromisoformat(value)
+
+
 def point_key(entry: dict) -> str:
     return identity(
         {
@@ -228,6 +255,12 @@ def point_label(entry: dict) -> str:
         shape = f"TP{entry['tp']} EP{entry.get('ep', 1)}"
     workload = f"{entry['isl']}/{entry['osl']}" if "isl" in entry else "AgentX"
     return f"{workload} c{entry['conc']} {shape} {point_key(entry)[:6]}"
+
+
+def label_workload(label: str) -> tuple[int, int] | None:
+    """The single-turn ISL/OSL that ``point_label`` writes first; None for an AgentX label."""
+    match = re.match(r"([1-9]\d*)/([1-9]\d*) c", label)
+    return (int(match[1]), int(match[2])) if match else None
 
 
 def values(row: dict) -> Values:
@@ -892,13 +925,27 @@ def missing_baseline_points(matrix: dict, baseline: Baseline) -> list[Point]:
     return [point for point in baseline.points if point.key not in covered]
 
 
-def check_baseline_coverage(matrix: dict, baseline: Baseline | None) -> None:
+def check_baseline_coverage(
+    repository: str, candidate: OwnedCandidate, matrix: dict, baseline: Baseline | None
+) -> None:
     """Current-family completeness cannot replace the frozen original point roster.
 
-    Only the points the frozen baseline records as retired after its date are exempt.
+    The agent can rewrite the recorded baseline, so its retirements exempt points only when
+    the planner's rule, re-run on the family and MODELS.md at the candidate base (never the PR
+    head), derives exactly the same retirements.
     """
+    from .validation import canonical_matrix
+
     if baseline is None or not baseline.points:
         raise VerificationError("Missing frozen baseline point roster")
+    family = canonical_matrix(repository, candidate.base, candidate.family)
+    current = {point_key(entry): public_point(entry) for entry in matrix_points(family)}
+    if baseline.retirements != retirements(
+        repository, candidate.base, baseline.date, baseline.points, current
+    ):
+        raise VerificationError(
+            "Recorded baseline retirements do not match MODELS.md at the candidate base"
+        )
     if missing_baseline_points(matrix, baseline):
         raise VerificationError("Final matrix omits or changes frozen baseline points")
 
@@ -992,7 +1039,10 @@ DEPRECATED_SINCE = re.compile(
 
 
 def markdown_table(markdown: str, header: tuple[str, ...]) -> list[dict[str, str]]:
-    """Rows of the one Markdown table headed exactly by ``header``; none if absent or repeated."""
+    """Rows of the one Markdown table headed exactly by ``header``.
+
+    None if the table is absent or repeated, or if any of its rows has another cell count.
+    """
 
     def cells(line: str) -> list[str] | None:
         line = line.strip()
@@ -1008,8 +1058,9 @@ def markdown_table(markdown: str, header: tuple[str, ...]) -> list[dict[str, str
     for line in lines[starts[0] + 2 :]:
         if (values := cells(line)) is None:
             break
-        if len(values) == len(header):
-            rows.append(dict(zip(header, values, strict=True)))
+        if len(values) != len(header):
+            return []
+        rows.append(dict(zip(header, values, strict=True)))
     return rows
 
 
@@ -1030,7 +1081,7 @@ def deprecated_workloads(
     only Scenarios row must start ``Deprecated since DATE ([#N](PR))``, or the bold
     ``Deprecated for all models`` form, linking a PR of ``repository``. The model's only
     support-matrix row must list that scenario as deprecated and not as active. Other
-    wording or any ambiguity retires nothing.
+    wording, a malformed table or any ambiguity retires nothing.
     """
     models = [
         row
@@ -1045,7 +1096,7 @@ def deprecated_workloads(
 
     rows: dict[tuple[int, int], list[dict[str, str]]] = {}
     for row in markdown_table(markdown, SCENARIO_COLUMNS):
-        if workload := re.fullmatch(r"([1-9]\d*) / ([1-9]\d*)", row["ISL/OSL"]):
+        if workload := re.fullmatch(r"([1-9]\d*)\s*/\s*([1-9]\d*)", row["ISL/OSL"]):
             rows.setdefault((int(workload[1]), int(workload[2])), []).append(row)
     deprecated = {}
     for workload, matches in rows.items():
@@ -1070,47 +1121,53 @@ def retirements(
     base: str,
     baseline_date: str,
     points: list[Point],
-    entries: Mapping[str, dict],
     current: Mapping[str, dict],
 ) -> list[Retirement]:
     """Group frozen points the family dropped under MODELS.md deprecations after the baseline.
 
-    ``entries`` holds every frozen point's generated settings and ``current`` the public
-    identity of each point the family generates at ``base``. A point is retired only when
-    its whole single-turn workload left the family and MODELS.md at ``base`` deprecated that
-    workload for its model after ``baseline_date``. Absence alone never retires a point.
+    ``current`` maps each point the family generates at ``base`` to its public identity. A
+    frozen fixed-seq-len point is retired only when no current single-turn point has the
+    ISL/OSL of its label and MODELS.md at ``base`` deprecated that workload for the family's
+    model after ``baseline_date``. Absence alone never retires a point. The planner and every
+    later check of the recorded baseline derive retirements from the same inputs here.
     """
     from .validation import project_prefix
 
-    workloads = {
+    active = {
         (point["isl"], point["osl"])
         for point in current.values()
         if point["benchmark_type"] == "single_turn"
     }
-    dropped = [
-        point
+    dropped = {
+        point.key: workload
         for point in points
         if point.key not in current
         and point.scenario == "fixed-seq-len"
-        and (entries[point.key]["isl"], entries[point.key]["osl"]) not in workloads
-    ]
+        and (workload := label_workload(point.label)) is not None
+        and workload not in active
+    }
     if not dropped:
         return []
+    [model] = {point["model"] for point in current.values()}  # A family key has one model.
     path = project_prefix(repository, base) + "docs/MODELS.md"
     markdown = github.file_at(repository, base, path).decode()
-    statements: dict[str, dict[tuple[int, int], tuple[str, str, str]]] = {}
-    retired: dict[tuple[str, str, str], list[str]] = {}
-    for point in dropped:
-        entry = entries[point.key]
-        prefix = entry["model-prefix"]
-        if prefix not in statements:
-            statements[prefix] = deprecated_workloads(markdown, repository, prefix)
-        evidence = statements[prefix].get((entry["isl"], entry["osl"]))
-        if evidence and evidence[1] > baseline_date:
-            retired.setdefault(evidence, []).append(point.key)
+    deprecated = deprecated_workloads(markdown, repository, model)
+    retired: dict[tuple[str, str, str, int, int], list[str]] = {}
+    for key, workload in dropped.items():
+        evidence = deprecated.get(workload)
+        if evidence and day(evidence[1]) > day(baseline_date):
+            retired.setdefault((*evidence, *workload), []).append(key)
     return [
-        Retirement(scenario=scenario, date=day, pr_link=link, points=keys)
-        for (scenario, day, link), keys in retired.items()
+        Retirement(
+            scenario=scenario,
+            date=when,
+            pr_link=link,
+            model_prefix=model,
+            isl=isl,
+            osl=osl,
+            points=keys,
+        )
+        for (scenario, when, link, isl, osl), keys in retired.items()
     ]
 
 
@@ -1241,7 +1298,7 @@ def resolve_baseline(
         sources=public.sources,
         points=points,
         retirements=retirements(
-            repository, candidate.base, context["source"]["date"], points, entries, current
+            repository, candidate.base, context["source"]["date"], points, current
         ),
     )
 
