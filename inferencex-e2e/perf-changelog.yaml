@@ -9434,3 +9434,11 @@
   description:
     - "Measure a matched single-prefill concurrency-thirty-two AgentX proxy against two TP8 prefill workers, preserving the genuine-qualified DEP16 batch-two round-robin decoder and native per-worker serving settings."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3734
+
+- config-keys:
+    - glm53-mi325x-oct5-tp8-dep16-batch4-rr-quality
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Gate native DEP16 local graph-four decoding by raising only global running and graph limits from thirty-two to sixty-four on the measured single-prefill server. Preserve full context, native dispatch capacity, memory fraction, routing and prefill-only 513 GB UMBP; require genuine GSM64 and actual graph-four execution on all sixteen attention lanes."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3734
