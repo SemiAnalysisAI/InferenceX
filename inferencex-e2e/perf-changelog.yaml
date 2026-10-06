@@ -9336,7 +9336,7 @@
     - "Use vllm/vllm-openai:nightly-ac9126e58aa7bbab1856ba6593ba4d5003fea516 for the GB200 aggregated TP8 PP2 DCP8 Kimi-K3 configuration."
     - "Configure DSpark depth 7 at concurrency 1, 4, 8 and 14, and depth 4 at concurrency 24, 32, 48 and 56; enable bfloat16 mamba SSM cache and keep Mooncake DRAM KV offload."
     - "Replace the prior concurrency 16, 72 and 96 recipes and update the concurrency 32 and 48 recipes to match the new search space."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3748
 
 - config-keys:
     - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-disagg
@@ -9345,4 +9345,4 @@
   description:
     - "Add GB200 Kimi-K3 FP4 Dynamo and vLLM AgentX disaggregated serving with one TP16 DCP16 prefill role and one TP16 DCP16 decode role."
     - "Use NIXL for prefill-to-decode KV transfer, Mooncake DRAM KV offload and DSpark depth 4 with probabilistic draft sampling. Add concurrency 16, 32 and 48 recipes."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3748
