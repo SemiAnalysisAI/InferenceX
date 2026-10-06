@@ -465,7 +465,7 @@ override_colocated_tep4_dep4_round_robin_batch4_c8: &tep4_dep4_rr_batch4
   <<: *tep4_dep4_rr
   roles:
     prefill: *tep4_dep4_prefill
-    decode:
+    decode: &dep4_pd_batch4
       <<: *tep4_dep4_decode
       args:
         <<: *dep4_pd_args
@@ -475,6 +475,24 @@ override_colocated_tep4_dep4_round_robin_batch4_c8: &tep4_dep4_rr_batch4
 # Genuine GSM32 uses C16 only to exercise the new per-lane graph bucket.
 override_colocated_tep4_dep4_round_robin_batch4_quality_c16:
   <<: *tep4_dep4_rr_batch4
+  benchmark:
+    env:
+      CONC: "16"
+
+# Genuine decode-only native TopK V2 gate; prefill keeps its stock top-k path.
+override_colocated_tep4_dep4_topkv2_quality_c16:
+  <<: *tep4_dep4_rr_batch4
+  slurm:
+    time_limit: "01:00:00"
+  sbatch_directives: {}
+  roles:
+    prefill: *tep4_dep4_prefill
+    decode:
+      <<: *dep4_pd_batch4
+      env:
+        SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "8"
+        SGLANG_OPT_USE_TOPK_V2: "true"
+        SGLANG_JIT_CACHE_DIR: /tmp/sglang-jit-topkv2
   benchmark:
     env:
       CONC: "16"

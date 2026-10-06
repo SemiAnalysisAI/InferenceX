@@ -9435,3 +9435,11 @@
   description:
     - "Gate native DEP4 decoder running and graph limits sixteen behind the qualified colocated TEP4 prefill and round-robin decoder router. Preserve dispatch capacity eight, full context, static memory budget and P-only UMBP, including the stock coupled extra-slot default. Genuine GSM32 at concurrency sixteen must exercise the new local graph bucket before a matched concurrency-eight proxy."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3656
+
+- config-keys:
+    - glm53-mi325x-oct5-colocated-tep4-dep4-topkv2-quality
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Gate native decode-only TopK V2 with a container-local JIT cache on the qualified colocated TEP4/DEP4 batch-four server. Preserve prefill, full context, memory budgets, MoRI dispatch, P-only UMBP and cache-aware-prefill/round-robin-decode routing; require genuine GSM32 before any performance decision."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3734
