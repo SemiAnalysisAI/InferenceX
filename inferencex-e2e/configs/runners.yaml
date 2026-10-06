@@ -804,6 +804,19 @@ clusters:
           /dev/dri: /dev/dri
         extra:
           visible_devices_env: ROCR_VISIBLE_DEVICES
+          default_gpu_exporter:
+            container_image: docker://rocm/device-metrics-exporter:v1.5.2
+            command: /home/amd/tools/entrypoint.sh
+            port: 19500
+            gpu_labels:
+              index: gpu_id
+              identity: serial_number
+            gpu_metrics:
+              power:
+                metric: gpu_power_usage
+                scope: gpu_device_power_as_reported_by_amd_device_metrics_exporter
+              gpu_util:
+                metric: gpu_gfx_activity
   # Barite shares its login and NFS with mi300x-amd, but not its GPU partition.
   mi325x-amd:
     gpus-per-node: 8
@@ -834,6 +847,19 @@ clusters:
           /dev/dri: /dev/dri
         extra:
           visible_devices_env: ROCR_VISIBLE_DEVICES
+          default_gpu_exporter:
+            container_image: docker://rocm/device-metrics-exporter:v1.5.2
+            command: /home/amd/tools/entrypoint.sh
+            port: 19500
+            gpu_labels:
+              index: gpu_id
+              identity: serial_number
+            gpu_metrics:
+              power:
+                metric: gpu_power_usage
+                scope: gpu_device_power_as_reported_by_amd_device_metrics_exporter
+              gpu_util:
+                metric: gpu_gfx_activity
           default_bash_preamble: |-
             export XDG_CACHE_HOME="/tmp/xdg-cache-$SLURM_JOB_ID"
             export TRITON_CACHE_DIR="/tmp/triton-cache-$SLURM_JOB_ID"
@@ -885,5 +911,17 @@ clusters:
           /it-share/hf_home: /it-share/hf_home
         extra:
           visible_devices_env: ROCR_VISIBLE_DEVICES
-          default_gpu_exporter: null
+          default_gpu_exporter:
+            container_image: docker://rocm/device-metrics-exporter:v1.5.2
+            command: /home/amd/tools/entrypoint.sh
+            port: 19500
+            gpu_labels:
+              index: gpu_id
+              identity: serial_number
+            gpu_metrics:
+              power:
+                metric: gpu_power_usage
+                scope: gpu_device_power_as_reported_by_amd_device_metrics_exporter
+              gpu_util:
+                metric: gpu_gfx_activity
           nginx_raise_ulimit: false

@@ -118,7 +118,13 @@ def render(cluster: Cluster, job: SrtJob) -> dict[str, Any]:
     volume_mounts = {
         str(volume_path(cluster, name)): target for name, target in srt.volume_mounts.items()
     }
-    mounts = _mounts({**volume_mounts, **srt.mounts}, job.mounts)
+    job_mounts = list(job.mounts)
+    exporter = srt.extra.get("default_gpu_exporter")
+    if isinstance(exporter, dict) and "gpu_labels" in exporter:
+        # DNM power validation: the AMD exporter listens on ServerPort from this file.
+        exporter_config = job.workspace / "runners/srt-slurm/exporters/amd-power.json"
+        job_mounts.append((str(exporter_config), "/etc/metrics/config.json"))
+    mounts = _mounts({**volume_mounts, **srt.mounts}, job_mounts)
     if mounts:
         config["default_mounts"] = mounts
     if srt.gpus_per_node_directive is not None:

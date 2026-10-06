@@ -62,3 +62,9 @@ run_benchmark_serving \
     --result-filename "$RESULT_FILENAME" \
     --result-dir "$RESULT_DIR" \
     "${CLIENT_ARGS[@]}"
+
+# Power validation: tell srt-slurm which interval this result measured.
+if [[ -n "${SRT_MEASUREMENT_WINDOW_DIR:-}" ]]; then
+    PYTHONPATH="$INFERENCEX_REPO_ROOT" python3 -m infx.results.power.window \
+        "$RESULT_DIR/$RESULT_FILENAME.json" "$CONC"
+fi
