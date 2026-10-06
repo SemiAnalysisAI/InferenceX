@@ -566,7 +566,7 @@ override_tp8_dep16_batch2_rr_c32: &tp8_dep16_single_rr
         UMBP_STANDALONE_ADDRESS: unix:///logs/umbp-{node}.sock
 
 # Genuine graph-four gate; preserve the complete single-prefill C32 server otherwise.
-override_tp8_dep16_batch4_rr_quality_c64:
+override_tp8_dep16_batch4_rr_quality_c64: &tp8_dep16_batch4_rr
   <<: *tp8_dep16_single_rr
   roles:
     <<: *tp8_dep16_single_rr_roles
@@ -579,3 +579,7 @@ override_tp8_dep16_batch4_rr_quality_c64:
   benchmark:
     env:
       CONC: "64"
+
+# Native AgentX caller switches from genuine evaluation to fast profiling.
+override_tp8_dep16_batch4_rr_c64:
+  <<: *tp8_dep16_batch4_rr
