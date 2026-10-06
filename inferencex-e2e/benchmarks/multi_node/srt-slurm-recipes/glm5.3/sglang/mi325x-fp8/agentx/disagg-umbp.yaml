@@ -589,9 +589,9 @@ override_two_tep4_dep16_cap4_batch4_quality_c64: &two_tep4_dep16_cap4_batch4
   <<: *tp8_dep16_cap4_batch4
   slurm:
     time_limit: "01:00:00"
-  roles:
+  roles: &two_tep4_dep16_roles
     <<: *tp8_dep16_cap4_batch4_roles
-    prefill:
+    prefill: &two_tep4_dep16_prefill
       <<: *tp8_dep16_prefill
       nodes: 1
       workers: 2
@@ -629,4 +629,24 @@ override_two_tep4_dep16_cap4_batch4_host1026_c32:
   benchmark:
     env:
       CONC: "32"
+      AGENTIC_WARMUP_GRACE_PERIOD: "7200"
+
+# Genuine qualification of a larger native prefill chunk and matching EP capacity.
+override_two_tep4_dep16_host1026_prefill_chunk2048_quality_c16:
+  <<: *two_tep4_dep16_host1026
+  slurm:
+    time_limit: "01:00:00"
+  roles:
+    <<: *two_tep4_dep16_roles
+    prefill:
+      <<: *two_tep4_dep16_prefill
+      env:
+        SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "2048"
+        UMBP_STANDALONE_ADDRESS: unix:///logs/umbp-{node}.sock
+      args:
+        <<: *tep4_pd_args
+        chunked-prefill-size: 2048
+  benchmark:
+    env:
+      CONC: "16"
       AGENTIC_WARMUP_GRACE_PERIOD: "7200"
