@@ -632,7 +632,7 @@ override_two_tep4_dep16_cap4_batch4_host1026_c32:
       AGENTIC_WARMUP_GRACE_PERIOD: "7200"
 
 # Genuine qualification of a larger native prefill chunk and matching EP capacity.
-override_two_tep4_dep16_host1026_prefill_chunk2048_quality_c16:
+override_two_tep4_dep16_host1026_prefill_chunk2048_quality_c16: &two_tep4_dep16_chunk2048
   <<: *two_tep4_dep16_host1026
   slurm:
     time_limit: "01:00:00"
@@ -649,4 +649,14 @@ override_two_tep4_dep16_host1026_prefill_chunk2048_quality_c16:
   benchmark:
     env:
       CONC: "16"
+      AGENTIC_WARMUP_GRACE_PERIOD: "7200"
+
+# Matched C32 profile of the qualified larger prefill chunk.
+override_two_tep4_dep16_host1026_prefill_chunk2048_c32:
+  <<: *two_tep4_dep16_chunk2048
+  slurm:
+    time_limit: "12:00:00"
+  benchmark:
+    env:
+      CONC: "32"
       AGENTIC_WARMUP_GRACE_PERIOD: "7200"
