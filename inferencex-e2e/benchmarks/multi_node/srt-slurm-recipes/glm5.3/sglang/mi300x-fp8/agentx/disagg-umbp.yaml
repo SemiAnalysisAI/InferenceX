@@ -504,7 +504,7 @@ override_2p1d_tp8_radix_c16:
     env:
       CONC: "16"
 
-override_2p_tp8_dep16_c16:
+override_2p_tp8_dep16_c16: &two_prefill_dep16
   frontend:
     args:
       dp-aware: true
@@ -535,6 +535,74 @@ override_2p_tp8_dep16_c16:
   benchmark:
     env:
       CONC: "16"
+
+# Genuine-only distributed-cache qualification; not a performance selector.
+override_2p_tp8_dep16_distributed_quality:
+  <<: *two_prefill_dep16
+  name: mi300x-glm53-two-prefill-dep16-distributed-quality
+  slurm:
+    time_limit: "01:30:00"
+  services:
+    - name: umbp_master
+      type: generic
+      placement:
+        node: head
+      start: before_workers
+      critical: true
+      inherit_discovery_env: false
+      command:
+        - /sgl-workspace/mori/python/mori/umbp_master
+        - "{head_ip}:15558"
+        - "19091"
+      env:
+        MORI_UMBP_LOG_LEVEL: info
+        UMBP_ROUTE_PUT_NODE_AFFINITY: local
+      preamble: |
+        export LD_LIBRARY_PATH="/sgl-workspace/mori/python/mori:${LD_LIBRARY_PATH}"
+      readiness:
+        tcp:
+          port: 15558
+        timeout_seconds: 300
+    - name: umbp
+      type: generic
+      placement:
+        node: prefill
+      start: before_workers
+      critical: true
+      inherit_discovery_env: false
+      command:
+        - /sgl-workspace/mori/python/mori/umbp_standalone_server
+        - unix:///logs/umbp-{node}.sock
+      env:
+        UMBP_MASTER_ADDRESS: "{head_ip}:15558"
+        UMBP_NODE_ADDRESS: "{node_ip}"
+        UMBP_NODE_ID: "model-peer-{node}"
+        UMBP_IO_ENGINE_HOST: "{node_ip}"
+        UMBP_IO_ENGINE_PORT: "15559"
+        UMBP_PEER_SERVICE_PORT: "15560"
+        UMBP_DRAM_CAPACITY: "519000000000"
+        UMBP_DRAM_USE_HUGEPAGES: "0"
+        UMBP_SSD_ENABLED: "0"
+        UMBP_DISTRIBUTED_MEDIUM: DRAM
+        UMBP_DISTRIBUTED_DRAM_PAGE_SIZE: "65536"
+        UMBP_DISTRIBUTED_RANGED_SCRATCH_BYTES: "268435456"
+        UMBP_DISTRIBUTED_CACHE_REMOTE_FETCHES: "false"
+        UMBP_DISTRIBUTED_RANGED_LOCALITY_PREFETCH: "false"
+        UMBP_RANGED_CALL_DEBUG: "1"
+        UMBP_RANGED_CALL_DEBUG_SAMPLE: "1"
+        MORI_UMBP_LOG_LEVEL: info
+        MORI_SOCKET_IFNAME: ens50f1np1
+        MORI_IB_GID_INDEX: "3"
+        MORI_IO_SL: "3"
+        MORI_IO_TC: "104"
+        MORI_IO_SQ_BACKOFF_TIMEOUT_US: "5000000"
+      preamble: |
+        export LD_LIBRARY_PATH="/sgl-workspace/mori/python/mori:${LD_LIBRARY_PATH}"
+      readiness:
+        log:
+          pattern: "\\[StandaloneServer\\] running on .* backend=configured"
+        timeout_seconds: 900
+        interval_seconds: 1
 
 override_1p2d_tp8_c16:
   roles:
