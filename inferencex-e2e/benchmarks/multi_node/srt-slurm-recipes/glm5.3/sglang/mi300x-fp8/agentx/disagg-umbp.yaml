@@ -572,7 +572,7 @@ override_tp16_tp8_c4:
     env:
       CONC: "4"
 
-override_tep16_tp8_c4:
+override_tep16_tp8_c4: &tep16_tp8
   roles:
     prefill:
       nodes: 2
@@ -594,6 +594,12 @@ override_tep16_tp8_c4:
   benchmark:
     env:
       CONC: "4"
+
+override_tep16_tp8_c8:
+  <<: *tep16_tp8
+  benchmark:
+    env:
+      CONC: "8"
 
 override_tp16_tp8_c8:
   roles:
