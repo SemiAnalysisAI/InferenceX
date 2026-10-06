@@ -585,7 +585,7 @@ override_tp8_dep16_batch4_rr_quality_c64: &tp8_dep16_cap4_batch4
       CONC: "64"
 
 # Two qualified TEP4 prefill groups share one host pool at the same 24-GPU cost.
-override_two_tep4_dep16_cap4_batch4_quality_c64:
+override_two_tep4_dep16_cap4_batch4_quality_c64: &two_tep4_dep16_cap4_batch4
   <<: *tp8_dep16_cap4_batch4
   slurm:
     time_limit: "01:00:00"
@@ -600,3 +600,13 @@ override_two_tep4_dep16_cap4_batch4_quality_c64:
         SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "1024"
         UMBP_STANDALONE_ADDRESS: unix:///logs/umbp-{node}.sock
       args: *tep4_pd_args
+
+# Matched C64 profile with the same native warmup bound as the one-P control.
+override_two_tep4_dep16_cap4_batch4_warmup7200_c64:
+  <<: *two_tep4_dep16_cap4_batch4
+  slurm:
+    time_limit: "12:00:00"
+  benchmark:
+    env:
+      CONC: "64"
+      AGENTIC_WARMUP_GRACE_PERIOD: "7200"
