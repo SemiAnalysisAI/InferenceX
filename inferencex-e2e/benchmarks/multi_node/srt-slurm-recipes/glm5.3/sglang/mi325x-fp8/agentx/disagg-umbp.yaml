@@ -566,7 +566,7 @@ override_tp8_dep16_batch2_rr_c32: &tp8_dep16_single_rr
         UMBP_STANDALONE_ADDRESS: unix:///logs/umbp-{node}.sock
 
 # Graph-four cap4 comparison; preserve the qualified server unchanged.
-override_tp8_dep16_batch4_rr_quality_c64:
+override_tp8_dep16_batch4_rr_quality_c64: &tp8_dep16_cap4_batch4
   <<: *tp8_dep16_single_rr
   slurm:
     time_limit: "12:00:00"
@@ -583,3 +583,11 @@ override_tp8_dep16_batch4_rr_quality_c64:
   benchmark:
     env:
       CONC: "64"
+
+# Allow the same native high-concurrency warmup to drain before profiling.
+override_tp8_dep16_cap4_batch4_warmup7200_c64:
+  <<: *tp8_dep16_cap4_batch4
+  benchmark:
+    env:
+      CONC: "64"
+      AGENTIC_WARMUP_GRACE_PERIOD: "7200"
