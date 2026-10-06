@@ -694,3 +694,17 @@ override_two_tep4_tp8_oct6_official_c8:
   benchmark:
     env:
       CONC: "8"
+
+# Lower-concurrency endpoint; preserve the qualified packed serving configuration.
+override_two_tep4_tp8_oct6_latency_c4:
+  name: mi325x-glm53-two-tep4-tp8-oct6-latency-c4
+  model: *two_tep4_tp8_oct6_model
+  identity: *two_tep4_tp8_oct6_identity
+  slurm:
+    time_limit: "02:00:00"
+  frontend: *two_tep4_tp8_frontend
+  services: *two_tep4_tp8_services
+  roles: *two_tep4_tp8_roles
+  benchmark:
+    env:
+      CONC: "4"

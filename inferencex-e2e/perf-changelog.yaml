@@ -9451,3 +9451,11 @@
   description:
     - "Compare native packed TEP4 prefill with pure TP8 decode against the TP8 MTP aggregate control on the October 6 image, retaining full context and official AgentX warmup and profiling."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3734
+
+- config-keys:
+    - glm53-mi325x-oct6-two-tep4-tp8-latency-c4
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Measure a C4 latency endpoint for the qualified October 6 packed TEP4 prefill and pure TP8 decode configuration, preserving full context, shared 513 GB UMBP, cache-aware prefill routing, and all serving arguments."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3734
