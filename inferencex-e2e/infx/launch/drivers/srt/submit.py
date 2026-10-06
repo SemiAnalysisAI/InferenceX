@@ -16,7 +16,6 @@ from typing import TYPE_CHECKING
 from infx.launch import proc
 from infx.launch.backends.slurm import srtctl_job_name
 from infx.launch.context import LaunchError
-from infx.launch.drivers.srt.lanes import setup_script
 from infx.srt_slurm.single_node import submission_fields
 
 if TYPE_CHECKING:
@@ -188,6 +187,6 @@ def multinode_arguments(
             "--tags",
             f"{run.srt.job_tag},{request.model_prefix},{request.precision},{workload},infmax-{stamp}",
         ]
-    if script := setup_script(lane, request, config_file):
-        arguments += ["--setup-script", script]
+    if setup_script := lane.setup_scripts.get(request.framework):
+        arguments += ["--setup-script", setup_script]
     return arguments

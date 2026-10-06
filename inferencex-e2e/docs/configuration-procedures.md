@@ -75,10 +75,6 @@ srt driver's tables ([`lanes.py`](../infx/launch/drivers/srt/lanes.py),
 [`models.py`](../infx/launch/drivers/srt/models.py),
 [`power.py`](../infx/launch/drivers/srt/power.py)), not in the cluster record.
 
-In-container dependency setup can override the framework default for an exact recipe
-through `SrtLane.recipe_setup_scripts`. The selector ignores the recipe override suffix
-when matching; other recipes retain the framework default.
-
 Put per-allocation host checks and setup in
 `runners/srt-slurm/hooks/<cluster>/setup.sh`, with cluster-specific helpers beside it.
 The directory name matches the cluster id. Register the script in the cluster's

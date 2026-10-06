@@ -85,9 +85,6 @@ NVIDIA 集群配置通过 `slurm.srt-slurm.extra.default_gpu_exporter`，让 Tac
 PowerX 严格校验。现有的 Tachometer 1000 ms / 功耗 exporter 100 ms 采集间隔及 9401 端口
 保持不变。
 
-容器内依赖安装可通过 `SrtLane.recipe_setup_scripts` 为指定配方覆盖框架默认脚本。
-匹配时忽略配方的 override 后缀；其他配方继续使用框架默认脚本。
-
 ## 规程索引
 
 1. [准备 worktree](#准备-worktree)

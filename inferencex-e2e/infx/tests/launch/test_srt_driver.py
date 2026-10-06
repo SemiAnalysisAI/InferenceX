@@ -21,9 +21,7 @@ from infx.launch.__main__ import main
 from infx.launch.drivers.srt import lanes, models
 from infx.launch.drivers.srt.lanes import LaneMount, SrtLane
 from infx.launch.drivers.srt.models import Override
-from infx.launch.drivers.srt.submit import multinode_arguments
 from infx.launch.policy import LaunchPath, Match
-from infx.launch.request import SrtRequest
 from infx.tests.launch.fake_slurm import (
     base_env,
     install_fakes,
@@ -575,41 +573,3 @@ def test_multinode_eval_overrides_image_offline_mode_and_host_model_path(harness
         "http://worker:8000",
         str(harness.workspace),
     ]
-
-
-@pytest.mark.parametrize(("framework", "config_file", "expected"), [
-    ("dynamo-sglang", "recipes/model/disagg.yaml:override_c12[0]", "model-setup.sh"),
-    ("dynamo-sglang", "recipes/model/disagg.yaml", "model-setup.sh"),
-    ("dynamo-sglang", "recipes/model/other.yaml", "framework-setup.sh"),
-    ("dynamo-vllm", "recipes/model/disagg.yaml", None),
-])  # fmt: skip
-@pytest.mark.parametrize("eval_only", ["false", "true"])
-def test_multinode_submission_selects_recipe_setup(framework, config_file, expected, eval_only):
-    point = SrtRequest.from_env(
-        {
-            "RUNNER_NAME": "runner_0",
-            "GITHUB_WORKSPACE": "/ws",
-            "IMAGE": "test:tag",
-            "FRAMEWORK": framework,
-            "MODEL_PREFIX": "test-model",
-            "PRECISION": "fp4",
-            "SPEC_DECODING": "mtp",
-            "RESULT_FILENAME": "point",
-            "IS_AGENTIC": "1",
-            "RUN_EVAL": eval_only,
-            "EVAL_ONLY": eval_only,
-            "THINKING_MODE": "max",
-        }
-    )
-    run = SimpleNamespace(request=point, srt=SimpleNamespace(job_tag=None), env=point.env)
-    lane = SrtLane(
-        setup_scripts={"dynamo-sglang": "framework-setup.sh"},
-        recipe_setup_scripts={("dynamo-sglang", "recipes/model/disagg.yaml"): "model-setup.sh"},
-    )
-    argv = multinode_arguments(run, lane, config_file, [], preflight=False)
-    if expected is None:
-        assert "--setup-script" not in argv
-    else:
-        assert argv.count("--setup-script") == 1
-        assert argv[argv.index("--setup-script") + 1] == expected
-    assert argv[argv.index("-f") + 1] == config_file
