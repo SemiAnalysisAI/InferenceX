@@ -208,13 +208,21 @@ override_tp8_prefill128k_mem80_perf_c8:
   slurm:
     time_limit: "12:00:00"
 
-override_tp8_prefill128k_mem80_oct6_quality_c8:
+override_tp8_prefill128k_mem80_oct6_quality_c8: &prefill128k_mem80_oct6
   <<: *prefill128k_mem80
   model:
     container: lmsysorg/sglang-rocm:v0.5.21-rocm720-mi30x-20261006@sha256:f7430d43c728da94f001ca51d5d2e0d754c85a3a8d54a3b68bf7aa2e12e6ff6a
   identity:
     container:
       image: lmsysorg/sglang-rocm:v0.5.21-rocm720-mi30x-20261006@sha256:f7430d43c728da94f001ca51d5d2e0d754c85a3a8d54a3b68bf7aa2e12e6ff6a
+
+override_tp8_prefill128k_mem80_oct6_perf_c4:
+  <<: *prefill128k_mem80_oct6
+  slurm:
+    time_limit: "12:00:00"
+  benchmark:
+    env:
+      CONC: "4"
 
 override_tp8_decode_topkv2_c4: &decode_topkv2
   slurm:
