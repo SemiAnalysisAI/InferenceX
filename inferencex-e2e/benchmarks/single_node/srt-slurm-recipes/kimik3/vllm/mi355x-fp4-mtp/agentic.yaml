@@ -104,6 +104,25 @@ override_tp8_c1:
       CONC: '1'
       KV_OFFLOADING: 'none'
 
+# c1 with dcp8: the KV read sharded across all 8 GPUs, still GPU-resident.
+override_tp8_c1_dcp8:
+  roles:
+    agg:
+      args:
+        decode-context-parallel-size: 8
+        dcp-comm-backend: a2a
+        max-num-seqs: 2
+        max-num-batched-tokens: 16384
+        compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":16,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[2,4,6,8,10,12,14,16]}'
+        speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":7,"method":"dspark","attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        quantization-config: '{"linear":"fp8_per_channel","ignore":["*kv_b_proj","*vision_tower*","*mm_projector*","*in_proj_qkvgfab","*f_b_proj","*fused_qkv_a_proj","*self_attn.g_proj","*.layers.0.mlp.down_proj"]}'
+      env:
+        VLLM_USE_BREAKABLE_CUDAGRAPH: '1'
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: 'none'
+
 override_tp8_c4:
   roles:
     agg:
