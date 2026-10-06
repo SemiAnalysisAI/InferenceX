@@ -1,13 +1,13 @@
 # DeepSeek-V4.1-Flash AgentX on MI355X with ATOM DSpark (five draft tokens),
 # following ROCm/ATOM recipes/DeepSeek-V4.1-Flash-Agentic.md at the image's
-# revision (922b3519628a002ae9dbdd4d30683e17d372ff00). TP2 and TP4, no expert
+# revision (08735170a79fc6f70b8f0f8aa4fed630f4961516). TP2 and TP4, no expert
 # parallelism; the KV cache is GPU-resident.
 base:
   schema: 2
   name: dsv41flash-fp4-mi355x-atom-agentic
   model:
     path: hf:deepseek-ai/DeepSeek-V4.1-Flash
-    container: rocm/atom-dev:nightly_202610011450
+    container: rocm/atom-dev:nightly_202610061452
     precision: fp4
   resources:
     gpu_type: mi355x
@@ -29,7 +29,7 @@ base:
         served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
         trust-remote-code: true
         kv_cache_dtype: bf16
-        index-cache-dtype: fp8
+        index-cache-dtype: fp4
         gpu-memory-utilization: 0.9
         max-num-seqs: 128
         max-num-batched-tokens: 16384

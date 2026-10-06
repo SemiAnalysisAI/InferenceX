@@ -376,14 +376,14 @@ Source: [upstream recipe](https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4.1-Flas
 ### DeepSeek-V4.1-Flash DSpark on ATOM
 
 `dsv41flash-fp4-mi355x-atom-agentic-dspark` follows the
-[ATOM upstream recipe](https://github.com/ROCm/ATOM/blob/922b3519628a002ae9dbdd4d30683e17d372ff00/recipes/DeepSeek-V4.1-Flash-Agentic.md)
-with `rocm/atom-dev:nightly_202610011450` (ATOM `0.1.7.dev51+g922b35196`,
+[ATOM upstream recipe](https://github.com/ROCm/ATOM/blob/08735170a79fc6f70b8f0f8aa4fed630f4961516/recipes/DeepSeek-V4.1-Flash-Agentic.md)
+with `rocm/atom-dev:nightly_202610061452` (ATOM `0.1.7.dev58+g08735170a`,
 ROCm 7.2.4). Every point selects the native srt-slurm recipe
 `benchmarks/single_node/srt-slurm-recipes/dsv41flash/atom/mi355x-fp4-mtp/agentic.yaml`;
 the legacy `dsv41flash_fp4_mi355x_atom_mtp.sh` launch from
 [#3387](https://github.com/SemiAnalysisAI/InferenceX/pull/3387) was removed in #3461 / #3463.
 TP2 covers concurrency `[1, 2, 8, 16, 32, 64, 128]`; TP4 covers `[32]`,
-without expert parallelism or KV offload. Every point uses BF16 KV, FP8 index cache,
+without expert parallelism or KV offload. Every point uses BF16 KV, FP4 index cache,
 128 maximum sequences, 16K batched-token/prefill chunks, prefix caching with block
 size 16, 8K state checkpoints, compilation level 3 and FULL graphs, and every point
 captures every size from 1 through 32 plus 48, 64 and 128. The recipe names only five-token DSpark with the checkpoint's

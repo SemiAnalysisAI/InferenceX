@@ -344,14 +344,14 @@ GB300 launcher 将引擎就绪等待时间设为 7200 秒。在[运行 345049691
 ### ATOM 上的 DeepSeek-V4.1-Flash DSpark
 
 `dsv41flash-fp4-mi355x-atom-agentic-dspark` 按照
-[ATOM 上游配方](https://github.com/ROCm/ATOM/blob/922b3519628a002ae9dbdd4d30683e17d372ff00/recipes/DeepSeek-V4.1-Flash-Agentic.md)
-使用 `rocm/atom-dev:nightly_202610011450`（ATOM `0.1.7.dev51+g922b35196`，ROCm 7.2.4）。
+[ATOM 上游配方](https://github.com/ROCm/ATOM/blob/08735170a79fc6f70b8f0f8aa4fed630f4961516/recipes/DeepSeek-V4.1-Flash-Agentic.md)
+使用 `rocm/atom-dev:nightly_202610061452`（ATOM `0.1.7.dev58+g08735170a`，ROCm 7.2.4）。
 所有点均选择原生 srt-slurm 配方
 `benchmarks/single_node/srt-slurm-recipes/dsv41flash/atom/mi355x-fp4-mtp/agentic.yaml`；
 [#3387](https://github.com/SemiAnalysisAI/InferenceX/pull/3387) 的旧脚本
 `dsv41flash_fp4_mi355x_atom_mtp.sh` 已在 #3461／#3463 中删除。
 TP2 覆盖并发 `[1, 2, 8, 16, 32, 64, 128]`，TP4 覆盖 `[32]`，不启用专家并行或
-KV 卸载。所有点均使用 BF16 KV、FP8 index cache、128 个最大序列、16K
+KV 卸载。所有点均使用 BF16 KV、FP4 index cache、128 个最大序列、16K
 批处理 token／prefill chunk、block size 16 的前缀缓存、8K 状态检查点、
 编译 level 3 和 FULL graphs，所有点均捕获 1 到 32 的全部尺寸以及 48、64、128。配方只声明使用检查点自带 draft 的 5-token DSpark；
 `infx/srt_slurm/synthetic_acceptance.py` 为 AgentX 吞吐测试添加
