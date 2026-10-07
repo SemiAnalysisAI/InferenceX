@@ -19,8 +19,6 @@ from infx.clusters.slurm import slurm_settings
 from infx.launch.context import LaunchError
 from infx.launch.drivers.srt.lanes import srt_time_limit
 from infx.launch.drivers.srt.recipe import HEALTH_ATTEMPTS
-from infx.launch.drivers.srt.run import require
-from infx.workflows.stage_amd_exporter import stage_exporter
 
 if TYPE_CHECKING:
     from infx.clusters import Cluster
@@ -32,6 +30,10 @@ if TYPE_CHECKING:
 
 NGINX_IMAGE = "nginx:1.27.4"
 EXPORTER_PROVENANCE = "exporter-image.sha256"
+# The AMD device-metrics-exporter, srt-slurm's only `kind: custom` GPU exporter here,
+# reads the fields it serves from this file inside its container.
+CUSTOM_EXPORTER_CONFIG = Path("runners/srt-slurm/exporters/amd-power.json")
+CUSTOM_EXPORTER_CONFIG_TARGET = "/etc/metrics/config.json"
 HEALTH_CHECK = {"max_attempts": HEALTH_ATTEMPTS, "interval_seconds": 10}
 
 
@@ -50,7 +52,6 @@ class SrtJob:
     mounts: Sequence[tuple[str, str]] = ()
     single_node: bool = False
     account: str | None = None
-    exporter_setup_env: Mapping[str, str] = field(default_factory=dict)
 
 
 def pyxis_spelling(image: str) -> str:
@@ -140,12 +141,9 @@ def render(cluster: Cluster, job: SrtJob) -> dict[str, Any]:
         directives["gres"] = gres
     if directives:
         config["default_sbatch_directives"] = directives
-    if job.exporter_setup_env and srt.host_setup is None:
-        raise LaunchError("node-local prepared exporter requires the cluster host-setup hook")
     if srt.host_setup is not None:
         setup = srt.host_setup
-        setup_env = {**setup.env, **job.exporter_setup_env}
-        words = [f"{name}={shlex.quote(value)}" for name, value in setup_env.items()]
+        words = [f"{name}={shlex.quote(value)}" for name, value in setup.env.items()]
         words += ["bash", shlex.quote(str(job.workspace / setup.script))]
         host_setup: dict[str, Any] = {"commands": [" ".join(words)]}
         if setup.timeout_s is not None:
@@ -157,10 +155,10 @@ def render(cluster: Cluster, job: SrtJob) -> dict[str, Any]:
         raise LaunchError(f"cluster {cluster.id!r} srt-slurm.extra sets rendered keys {shadowed}")
     config.update(srt.extra)
     exporter = config.get("default_gpu_exporter")
-    if exporter and exporter.get("power_profile") == "amd-device-metrics":
-        config.setdefault("default_mounts", {})[
-            str(job.workspace / "runners/srt-slurm/exporters/amd-power.json")
-        ] = "/etc/metrics/config.json"
+    if exporter and exporter.get("kind") == "custom":
+        config.setdefault("default_mounts", {})[str(job.workspace / CUSTOM_EXPORTER_CONFIG)] = (
+            CUSTOM_EXPORTER_CONFIG_TARGET
+        )
     return config
 
 
@@ -169,44 +167,15 @@ def write(path: Path, config: Mapping[str, Any]) -> None:
     path.write_text(yaml.safe_dump(dict(config), sort_keys=False))
 
 
-def stage_gpu_exporter(
-    run: SrtRun, *, single_node: bool = False
-) -> tuple[str, str, dict[str, str]]:
-    """Use the cluster's exporter; prepared AMD images never fall back to a registry."""
+def stage_gpu_exporter(run: SrtRun, *, single_node: bool = False) -> tuple[str, str]:
+    """Stage the cluster's GPU exporter image: its recipe name and the reference jobs start from."""
     exporter = run.srt.extra.get("default_gpu_exporter")
     if not isinstance(exporter, dict) or not exporter.get("container_image"):
         raise LaunchError("native power requires a cluster GPU exporter")
     image = exporter["container_image"]
-    setup_env: dict[str, str] = {}
-    if exporter.get("power_profile") == "amd-device-metrics":
-        require(run.request, "AMD_DME_ARTIFACT_DIR", "AMD_DME_SQSH_SHA256")
-        squash = run.backend.settings.squash
-        if squash is None:
-            raise LaunchError("prepared AMD exporter requires a cluster squash cache")
-        prepared = stage_exporter(
-            Path(run.request.env["AMD_DME_ARTIFACT_DIR"]),
-            image,
-            squash.helper_policy("dcgm-exporter"),
-            run.request.env["AMD_DME_SQSH_SHA256"],
-            run.workspace / "power-exporter-source.json",
-        )
-        reference = str(prepared.destination)
-        provenance = f"{prepared.sha256}  {reference}"
-        if prepared.node_local:
-            # Like the hook and benchmark scripts, the source must be visible at the
-            # same workspace path on allocated nodes. The hook fails if it is not.
-            setup_env = {
-                "AMD_DME_SOURCE": str(prepared.source),
-                "AMD_DME_DESTINATION": reference,
-                "AMD_DME_SHA256": prepared.sha256,
-                "AMD_DME_STAGE_SCRIPT": str(run.workspace / "infx/workflows/stage_amd_exporter.py"),
-            }
-    else:
-        staged = run.backend.stage_image(image, helper="dcgm-exporter", single_node=single_node)
-        reference = staged.reference
-        provenance = run.backend.image_provenance(staged)
-    (run.workspace / EXPORTER_PROVENANCE).write_text(f"{provenance}\n")
-    return image, reference, setup_env
+    staged = run.backend.stage_image(image, helper="dcgm-exporter", single_node=single_node)
+    (run.workspace / EXPORTER_PROVENANCE).write_text(f"{run.backend.image_provenance(staged)}\n")
+    return image, staged.reference
 
 
 def srun_options(settings: SlurmSettings) -> str | None:
@@ -265,12 +234,11 @@ def write_lane_config(
         else None
     )
     containers: dict[str, str] = {}
-    exporter_setup_env: dict[str, str] = {}
     if request.framework == "tilert":
         prefill_image = request.env["PREFILL_IMAGE"]
         containers[prefill_image] = backend.stage_image(prefill_image).reference
     if power.dcgm:
-        image, reference, exporter_setup_env = stage_gpu_exporter(run)
+        image, reference = stage_gpu_exporter(run)
         containers["dcgm-exporter"] = reference
         containers[image] = reference
     create_volume_mounts(run)
@@ -285,7 +253,6 @@ def write_lane_config(
         model_paths=model_paths,
         mounts=lane_mounts(run, lane),
         account=run.account,
-        exporter_setup_env=exporter_setup_env,
     )
     config_yaml = checkout.root / "srtslurm.yaml"
     write(config_yaml, render(run.cluster, job))

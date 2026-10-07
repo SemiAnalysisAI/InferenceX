@@ -386,9 +386,6 @@ jobs:
     test-sweep-agentic:
         needs: get-jobs
         if: ${{ needs.get-jobs.outputs.agentic-config != '' && needs.get-jobs.outputs.agentic-config != '[]' }}
-        permissions:
-            contents: read
-            actions: read # Download the pinned AMD exporter artifact.
         uses: $/.github/workflows/benchmark-tmpl.yml
         name: agentic /
         strategy:
@@ -413,9 +410,6 @@ jobs:
     test-sweep-agentic-evals:
         needs: get-jobs
         if: ${{ needs.get-jobs.outputs.agentic-eval-config != '' && needs.get-jobs.outputs.agentic-eval-config != '[]' }}
-        permissions:
-            contents: read
-            actions: read # Download the pinned AMD exporter artifact.
         uses: $/.github/workflows/benchmark-tmpl.yml
         name: agentic eval /
         strategy:
@@ -502,9 +496,6 @@ jobs:
     test-sweep-single-node:
         needs: get-jobs
         if: ${{ needs.get-jobs.outputs.single-node-config != '' && needs.get-jobs.outputs.single-node-config != '[]' }}
-        permissions:
-            contents: read
-            actions: read # Download the pinned AMD exporter artifact.
         uses: $/.github/workflows/benchmark-tmpl.yml
         name: single-node /
         strategy:
@@ -526,9 +517,6 @@ jobs:
     test-sweep-evals:
         needs: get-jobs
         if: ${{ needs.get-jobs.outputs.eval-config != '' && needs.get-jobs.outputs.eval-config != '[]' }}
-        permissions:
-            contents: read
-            actions: read # Download the pinned AMD exporter artifact.
         uses: $/.github/workflows/benchmark-tmpl.yml
         name: eval /
         strategy:

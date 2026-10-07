@@ -7,7 +7,6 @@ driver also uses the Slurm backend's own operations.
 
 from __future__ import annotations
 
-import json
 import os
 import shlex
 import sys
@@ -55,17 +54,12 @@ def run_single_node(launch: Launch) -> int:
         return rc
     selected, runtime_args = submit.bound_arguments(root / "arguments")
     containers = {}
-    exporter_setup_env = {}
     if request.eval_only:
         runtime_args += ["--set", "telemetry.enabled=false"]
     else:
-        exporter = run.srt.extra.get("default_gpu_exporter")
-        if not isinstance(exporter, dict) or not exporter.get("container_image"):
-            raise power.PowerPolicyError("single-node power requires a cluster GPU exporter")
-        image, reference, exporter_setup_env = config.stage_gpu_exporter(run, single_node=True)
+        # srtctl inherits the rendered default_gpu_exporter into telemetry.dcgm_exporter.
+        image, reference = config.stage_gpu_exporter(run, single_node=True)
         containers[image] = reference
-        for key, value in exporter.items():
-            runtime_args += ["--set", f"telemetry.dcgm_exporter.{key}={json.dumps(value)}"]
         runtime_args += [
             "--set",
             "telemetry.enabled=true",
@@ -90,7 +84,6 @@ def run_single_node(launch: Launch) -> int:
         mounts=[(str(hf_cache), request.hf_hub_cache)],
         single_node=True,
         account=run.account,
-        exporter_setup_env=exporter_setup_env,
     )
     config.create_volume_mounts(run)
     config.write(checkout.root / "srtslurm.yaml", config.render(run.cluster, job_config))
