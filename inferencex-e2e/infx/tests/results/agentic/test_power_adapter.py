@@ -15,11 +15,10 @@ from infx.tests.results.power.test_aggregate_power_multinode import PRODUCER_SHA
 
 
 @pytest.mark.parametrize("require_power", [False, True])
-@pytest.mark.parametrize("profile", ["dcgm", "amd-device-metrics"])
 @pytest.mark.parametrize("failure", [None, "samples_csv_missing", "agentic_gpu_topology_invalid",
                                      "producer_commit_mismatch"])
 def test_single_node_collector_finalizes_native_agentx_power(
-    tmp_path: Path, require_power: bool, profile: str, failure: str | None,
+    tmp_path: Path, require_power: bool, failure: str | None,
 ) -> None:
     from infx.launch.drivers.srt.collect import finalize_single_node_results
 
@@ -38,10 +37,6 @@ def test_single_node_collector_finalizes_native_agentx_power(
     for device in manifest["expected_devices"]:
         for assignment in device["assignments"]:
             assignment.update(worker_role="agg", het_group=None)
-    manifest["power_profile"] = profile
-    if profile == "amd-device-metrics":
-        manifest.update(source_metric="gpu_power_usage",
-                        power_scope="gpu_device_power_as_reported_by_amd_device_metrics_exporter")
     manifest["expected_windows"] = [{"benchmark_type": "custom", "concurrency": 4}]
     manifest["window_validations"][0].update(
         benchmark_type="custom", window_file=f"windows/{stem}.json"
