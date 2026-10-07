@@ -195,6 +195,25 @@ def test_benchmark_collector_publishes_valid_rows_and_quarantines_malformed_ones
     assert sorted(sources) == sorted(malformed)
 
 
+def test_collector_stamps_unversioned_rows_and_rejects_unknown_versions(tmp_path):
+    rows = {
+        "bmk_legacy/agg.json": without(fixed_row(), "result_schema_version"),
+        "bmk_agentic_future/point.json": agentx_row() | {"result_schema_version": 2},
+    }
+    for name, row in rows.items():
+        path = tmp_path / "results" / name
+        path.parent.mkdir(parents=True)
+        path.write_text(json.dumps(row))
+
+    result = run_module("infx.results.collect_results", "results", "bmk", cwd=tmp_path)
+
+    assert result.returncode == 1
+    assert json.loads((tmp_path / "agg_bmk.json").read_text()) == [fixed_row()]
+    assert rejection_summary(tmp_path / "rejected_rows.json") == {
+        ("bmk_agentic_future/point.json", "result_schema_version", "unsupported_version"),
+    }
+
+
 def write_eval_set(root, name, meta, results):
     directory = root / name
     directory.mkdir(parents=True)

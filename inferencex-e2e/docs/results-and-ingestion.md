@@ -74,6 +74,8 @@ The models describe what the producers emit, including these quirks:
 
 Producers stamp `result_schema_version: 1` on every row: `build_result` for fixed-sequence and AgentX, `build_row` for evals, and `calc_success_rate` for run stats. The constant lives in the stdlib-only `infx.results.schema` package because fixed-sequence processing runs on a bare runner interpreter and AgentX aggregation runs inside serving containers. Neither validates.
 
+Checkouts that predate the stamp, such as in-flight PR branches or e2e runs of an older `ref`, still emit unstamped rows. A collector validates such a row as version 1 and publishes it with the stamp when it passes. A row that carries any other version is quarantined as `unsupported_version`.
+
 The collectors validate: `collect_results`, `collect_eval_results`, and `calc_success_rate`. A row that breaks the contract is left out of the aggregate and written to `rejected_rows.json` with its source and validation errors. The collector prints one `::error::` annotation per rejected row to stderr and exits non-zero after writing the valid aggregate. The collect jobs still upload the aggregate and, when rows were rejected, `rejected_rows_<prefix>`, `rejected_rows_eval_<prefix>`, or `rejected_rows_run_stats`. The failed job keeps the sweep from default reuse. InferenceX-app also reads the per-config `bmk_*` and `eval_*` artifacts directly, so a rejected row stays out of the database only when the app applies the same contract.
 
 JSON Schemas for the four row models are committed in [`schemas/`](../schemas/), and a test fails when they drift from the models. After changing a model, regenerate them from this project directory:

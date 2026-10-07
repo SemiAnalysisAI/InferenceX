@@ -9,7 +9,10 @@ from typing import Any
 from pydantic import TypeAdapter, ValidationError
 from pydantic_core import ErrorDetails
 
+from . import RESULT_SCHEMA_VERSION
+
 REJECTED_ROWS = Path("rejected_rows.json")
+VERSION = "result_schema_version"
 
 
 def row_errors(schema: TypeAdapter[Any], row: object) -> list[ErrorDetails]:
@@ -20,6 +23,19 @@ def row_errors(schema: TypeAdapter[Any], row: object) -> list[ErrorDetails]:
     return []
 
 
+def _versioned(row: object) -> tuple[object, list[dict[str, Any]]]:
+    if not isinstance(row, dict):
+        return row, []
+    if VERSION not in row:
+        # Checkouts that predate the stamp still publish rows that satisfy version 1.
+        return {VERSION: RESULT_SCHEMA_VERSION, **row}, []
+    version = row[VERSION]
+    if type(version) is int and version != RESULT_SCHEMA_VERSION:
+        message = f"Unsupported result_schema_version {version}; expected {RESULT_SCHEMA_VERSION}"
+        return row, [{"type": "unsupported_version", "loc": [VERSION], "msg": message}]
+    return row, []
+
+
 def quarantine(
     rows: Iterable[tuple[str, object, TypeAdapter[Any]]],
 ) -> tuple[list[tuple[str, Any]], list[dict[str, Any]]]:
@@ -27,10 +43,12 @@ def quarantine(
     accepted: list[tuple[str, Any]] = []
     rejected: list[dict[str, Any]] = []
     for source, row, schema in rows:
-        if errors := row_errors(schema, row):
+        candidate, errors = _versioned(row)
+        errors = errors or row_errors(schema, candidate)
+        if errors:
             rejected.append({"source": source, "errors": errors, "row": row})
         else:
-            accepted.append((source, row))
+            accepted.append((source, candidate))
     return accepted, rejected
 
 
