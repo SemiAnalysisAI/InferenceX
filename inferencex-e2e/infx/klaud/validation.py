@@ -49,7 +49,11 @@ def canonical_matrix(repository: str, head: str, family: str) -> dict:
 
     from infx.matrix.generate import generate_test_config_sweep, mark_eval_entries
     from infx.matrix.plan import recipe_fingerprint
-    from infx.matrix.validation import validate_master_config, validate_runner_config
+    from infx.matrix.validation import (
+        srt_recipe_references,
+        validate_master_config,
+        validate_runner_config,
+    )
 
     OwnedCandidate(id="0" * 16 + "-" + "0" * 16, family=family, base=head)
     source, key = family.split(":", 1)
@@ -57,11 +61,20 @@ def canonical_matrix(repository: str, head: str, family: str) -> dict:
     master = yaml.safe_load(github.file_at(repository, head, prefix + source))
     runners = yaml.safe_load(github.file_at(repository, head, prefix + "configs/runners.yaml"))
     # Only the selected family is relevant; retired sibling schemas may have changed.
-    entries = generate_test_config_sweep(
-        SimpleNamespace(config_keys=[key]),
-        validate_master_config({key: master[key]}),
-        validate_runner_config(runners),
-    )
+    family_config = {key: master[key]}
+    with tempfile.TemporaryDirectory(prefix="klaud-recipes-") as temp:
+        # Recipes are head data too: resolve them from the candidate, not this checkout.
+        root = Path(temp)
+        for reference in srt_recipe_references(family_config)[key]:
+            path = reference.partition(":")[0]
+            (root / path).parent.mkdir(parents=True, exist_ok=True)
+            (root / path).write_bytes(github.file_at(repository, head, prefix + path))
+        entries = generate_test_config_sweep(
+            SimpleNamespace(config_keys=[key]),
+            validate_master_config(family_config, root),
+            validate_runner_config(runners),
+            root,
+        )
     evals = [
         dict(row, **{"eval-only": True})
         for row in mark_eval_entries(deepcopy(entries))

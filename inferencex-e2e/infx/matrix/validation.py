@@ -16,7 +16,6 @@ from pydantic import (
 )
 
 from infx.clusters import CLUSTER_LABEL_PREFIX, RunnerInventory
-from infx.config import repository_root
 
 DEFAULT_AGENTIC_DURATION_SECONDS = 3600
 SINGLE_NODE_RECIPES = "benchmarks/single_node/srt-slurm-recipes"
@@ -1059,10 +1058,17 @@ def _check_srt_recipe(root: Path, reference: str, recipes: dict[str, Any]) -> No
         raise ValueError(f"{reference}: {path} has no variant {selector}")
 
 
-def validate_master_config(master_configs: dict) -> dict:
-    """Validate master configs and the checked-in recipe variant each srt-recipe selects."""
-    root = repository_root()
-    recipes: dict[str, Any] = {}
+def config_root(config_files: list[str]) -> Path:
+    """The project directory whose ``configs/`` holds ``config_files``; recipes resolve under it."""
+    roots = {Path(config_file).resolve().parent.parent for config_file in config_files}
+    if len(roots) != 1:
+        raise ValueError(f"Master configs must share one project directory: {sorted(roots)}")
+    return roots.pop()
+
+
+def srt_recipe_references(master_configs: dict) -> dict[str, list[str]]:
+    """Each validated config's srt-recipe and eval-srt-recipe, relative to its project root."""
+    references = {}
     for key, entry in master_configs.items():
         model = (
             MultiNodeMasterConfigEntry
@@ -1071,13 +1077,26 @@ def validate_master_config(master_configs: dict) -> dict:
         )
         try:
             config = model(**entry)
-            for row in _master_search_space_entries(config):
-                for reference in (row.srt_recipe, getattr(row, "eval_srt_recipe", None)):
-                    if reference is not None:
-                        path = srt_recipe_path(config.multinode, config.srt_recipe_dir, reference)
-                        _check_srt_recipe(root, path, recipes)
-        except ValueError as e:
+        except ValidationError as e:
             raise ValueError(f"Master config entry '{key}' failed validation:\n{e}") from e
+        references[key] = [
+            srt_recipe_path(config.multinode, config.srt_recipe_dir, reference)
+            for row in _master_search_space_entries(config)
+            for reference in (row.srt_recipe, getattr(row, "eval_srt_recipe", None))
+            if reference is not None
+        ]
+    return references
+
+
+def validate_master_config(master_configs: dict, root: Path) -> dict:
+    """Validate master configs and the recipe variant each srt-recipe selects under ``root``."""
+    recipes: dict[str, Any] = {}
+    for key, references in srt_recipe_references(master_configs).items():
+        for reference in references:
+            try:
+                _check_srt_recipe(root, reference, recipes)
+            except ValueError as e:
+                raise ValueError(f"Master config entry '{key}' failed validation:\n{e}") from e
     return master_configs
 
 
@@ -1236,7 +1255,7 @@ def load_config_files(config_files: list[str], validate: bool = True) -> dict:
             raise ValueError(f"Input file '{config_file}' does not exist.") from e
 
     if validate:
-        validate_master_config(all_config_data)
+        validate_master_config(all_config_data, config_root(config_files))
 
     return all_config_data
 
