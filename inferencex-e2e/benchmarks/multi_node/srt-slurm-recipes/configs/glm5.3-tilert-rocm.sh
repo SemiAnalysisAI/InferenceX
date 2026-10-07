@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -eo pipefail
 
-source /infmax-workspace/benchmarks/benchmark_lib.sh --validation-only
+source /infmax-workspace/benchmarks/check_env.sh
 check_env_vars TILERT_VERSION TILERT_ROLE
 case "$TILERT_ROLE" in
     prefill|decode|router) ;;

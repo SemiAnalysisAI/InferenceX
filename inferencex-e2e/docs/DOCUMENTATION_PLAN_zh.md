@@ -53,14 +53,12 @@
 | `docs/index.md` | 本次变更完成 | 从哪里开始，当前任务应看哪份指南？ |
 | `docs/procedures.md` | 本次变更完成 | 所有配置、CI、Runner、评估、恢复、AgentX 与文档日常操作的统一清单在哪里？ |
 | `docs/agent-guide.md` | 本次变更完成 | 编辑或验证变更前，Agent 必须知道什么？ |
-| `docs/configuration-procedures.md` | 本次变更完成 | 如何修改基准配置、Runner、镜像、Recipe 与 MTP，同时保持端到端契约？ |
 | `docs/ci-procedures.md` | 本次变更完成 | 如何生成、派发、监控、重跑、暂存、复用并检查一次扫描？ |
 | `docs/eval-agentx-procedures.md` | 本次变更完成 | 如何运行并校验评估或 AgentX，同时保留证据与溯源？ |
 | `docs/recovery-results-procedures.md` | 本次变更完成 | 如何处理结果、验证 App 入库、恢复故障并保护 Runner Workspace？ |
 | `docs/documentation-procedures.md` | 本次变更完成 | 如何新增、索引、审阅与维护双语文档？ |
 | `docs/architecture.md` | 本次变更完成 | 配置如何变成基准测试结果并发布为一行数据？ |
-| `docs/configuration.md` | 计划中 | 如何修改配置而不破坏 Schema、拓扑与变更日志契约？ |
-| `docs/benchmark-development.md` | 计划中 | 基准测试脚本、共享 Bash 工具、启动器与运行时环境变量如何协作？ |
+| `docs/benchmark-development.md` | 计划中 | 基准测试脚本、共享辅助工具、启动器与运行时环境变量如何协作？ |
 | `docs/agentx.md` | 计划中 | AgentX 当前状态、Trace 契约、执行路径与发布边界是什么？ |
 | `docs/workflows-and-sweeps.md` | 计划中 | 如何生成、派发、监控、复用并收集一次扫描？ |
 | `docs/evals.md` | 计划中 | 评估如何选择、运行、打分、校验与收集？ |
@@ -86,7 +84,7 @@
 
 - 添加介绍配置到结果数据流的架构页面。
 - 添加把 Schema、生成器、变更日志与校验步骤串起来的配置页面。
-- 添加基准测试开发页面，说明共享 Bash 工具、环境变量传递、单节点与多节点路径，以及 MTP 的聊天模板要求。
+- 添加基准测试开发页面，说明共享的 `infx.bench` 容器内命令、环境变量传递、单节点与多节点路径，以及 MTP 的聊天模板要求。
 - 只在能够澄清所有权或状态转换时使用图示。
 
 ### 第三阶段，运维与恢复

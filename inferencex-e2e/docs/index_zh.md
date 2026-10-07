@@ -18,7 +18,6 @@
 | [`agent-guide.md`](agent-guide.md) / [`agent-guide_zh.md`](agent-guide_zh.md) | Agent 入门、安全开始、关键约束与验证 |
 | [`procedures.md`](procedures.md) / [`procedures_zh.md`](procedures_zh.md) | 从常见任务路由到一份聚焦运维清单 |
 | [`architecture.md`](architecture.md) / [`architecture_zh.md`](architecture_zh.md) | 配置到结果的流程、所有权边界、产物与 InferenceX-app 交接 |
-| [`configuration-procedures.md`](configuration-procedures.md) / [`configuration-procedures_zh.md`](configuration-procedures_zh.md) | 配置、Runner、镜像、Recipe、llm-d、srt-slurm 与 MTP 变更 |
 | [`ci-procedures.md`](ci-procedures.md) / [`ci-procedures_zh.md`](ci-procedures_zh.md) | 矩阵生成、校验、派发、PR 扫描、复用、暂存与产物下载 |
 | [`eval-agentx-procedures.md`](eval-agentx-procedures.md) / [`eval-agentx-procedures_zh.md`](eval-agentx-procedures_zh.md) | Eval 与 AgentX 选择、执行、打分、证据与实时运行诊断 |
 | [`agentx-standalone.md`](agentx-standalone.md) / [`agentx-standalone_zh.md`](agentx-standalone_zh.md) | 安装锁定版本的 AgentX 客户端，对已有服务回放轨迹，无需 CI 或 Slurm |
@@ -39,7 +38,7 @@
 | [`.github/AGENT_OPERATIONS.md`](../../.github/AGENT_OPERATIONS.md) | 翻译术语、扫描标签、派发、Eval 选择、功耗、指标与产物 |
 | [`configs/CONFIGS.md`](../configs/CONFIGS.md) | 主配置 Schema、搜索空间、Runner 与拓扑字段 |
 | [`.github/workflows/README.md`](../../.github/workflows/README.md) | 生成器示例、Workflow 操作与复用政策 |
-| [`infx/evals/EVALS.md`](../infx/evals/EVALS.md) | Eval 任务、执行、收集、校验与 SWE-bench 契约 |
+| [`infx/evals/EVALS.md`](../infx/evals/EVALS.md) | Eval 任务、执行、收集与校验契约 |
 | [`benchmarks/multi_node/srt-slurm-recipes/RECIPES.md`](../benchmarks/multi_node/srt-slurm-recipes/RECIPES.md) | 分离式 Recipe 注册与主配置耦合 |
 | [`utils/runner_setup/RUNNER_SETUP.md`](../utils/runner_setup/RUNNER_SETUP.md) | Runner 部署与初始化 |
 | [`MODELS_zh.md`](MODELS_zh.md) | 支持的模型、硬件覆盖与命名 |

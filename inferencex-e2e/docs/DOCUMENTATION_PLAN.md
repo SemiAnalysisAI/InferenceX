@@ -53,13 +53,11 @@ Pages should answer one question each and link to exact implementation sources.
 | `docs/index.md` | Done in this change | Where do I start, and which guide owns my task? |
 | `docs/procedures.md` | Done in this change | Where is the canonical checklist for every recurring configuration, CI, runner, eval, recovery, AgentX, and documentation operation? |
 | `docs/agent-guide.md` | Done in this change | What must an agent know before editing or verifying a change? |
-| `docs/configuration-procedures.md` | Done in this change | How do I change benchmark configurations, runners, images, recipes, and MTP without breaking the end-to-end contract? |
 | `docs/ci-procedures.md` | Done in this change | How do I generate, dispatch, monitor, rerun, stage, reuse, and inspect a sweep? |
 | `docs/eval-agentx-procedures.md` | Done in this change | How do I run and validate evals or AgentX while preserving evidence and provenance? |
 | `docs/recovery-results-procedures.md` | Done in this change | How do I process results, verify app ingest, recover failures, and protect runner workspaces? |
 | `docs/documentation-procedures.md` | Done in this change | How do I add, index, review, and maintain bilingual documentation? |
 | `docs/architecture.md` | Done in this change | How does a config become a benchmark result and a published row? |
-| `docs/configuration.md` | Planned | How do I add or change a config without breaking schema, topology, or changelog contracts? |
 | `docs/benchmark-development.md` | Planned | How do benchmark scripts, shared helpers, launchers, and runtime env vars fit together? |
 | `docs/agentx.md` | Planned | What is the current AgentX status, trace contract, execution path, and publication boundary? |
 | `docs/workflows-and-sweeps.md` | Planned | How do I generate, dispatch, monitor, reuse, and collect a sweep? |
@@ -86,7 +84,7 @@ Existing detailed references remain in place during migration. A new page should
 
 - Add an architecture page with the config-to-result data flow.
 - Add a configuration page that joins schema, generator, changelog, and validation steps.
-- Add a benchmark-development page covering shared Bash helpers, environment propagation, single-node and multi-node paths, and MTP chat-template requirements.
+- Add a benchmark-development page covering the shared `infx.bench` container commands, environment propagation, single-node and multi-node paths, and MTP chat-template requirements.
 - Add diagrams only where they clarify ownership or transitions.
 
 ### Phase 3, operations and recovery
