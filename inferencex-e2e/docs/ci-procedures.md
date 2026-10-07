@@ -295,7 +295,7 @@ Watch the first canary or matrix failure, then classify it before rerunning:
 - **Policy/gate failure:** conflicting labels, invalid changelog, missing authorization, merge conflict, or ineligible artifacts. Correct the gate. GPU reruns will not fix it.
 - **Superseded run:** a later commit or recognized label change cancelled it through workflow concurrency. Monitor the replacement run rather than reviving stale evidence.
 
-The [`Claude Code` workflow](../../.github/workflows/claude.yml) has separate review and coding jobs. Review keeps its existing `ready_for_review` and authorized `@pr-claude` triggers, read-only repository contents, and PR feedback permissions; the coding job handles `@claude` and `@Klaud-Cold` with its existing write permissions. Review requests serialize per PR without cancelling active reviews; coding requests remain independent. Both jobs use the pinned official action to install its supported Claude Code CLI. An installation or startup failure means the review did not run; it is not a review finding or a successful review. Check the action installation logs before retrying.
+The [`Claude Code` workflow](../../.github/workflows/claude.yml) has separate review and coding jobs. Review keeps its existing `ready_for_review` and authorized `@pr-claude` triggers, read-only repository contents, and PR feedback permissions; the coding job handles `@claude` and `@Klaud-Cold` with its existing write permissions. The coding job starts only when the comment or issue author's `author_association` is `OWNER`, `MEMBER`, or `COLLABORATOR`, and it accepts no bot actors (`allowed_bots: ''`), so App bots such as `github-actions[bot]` or `claude[bot]` cannot start it even when their comments mention `@claude` or `@Klaud-Cold`. Review requests serialize per PR without cancelling active reviews; coding requests remain independent. Both jobs use the pinned official action to install its supported Claude Code CLI. An installation or startup failure means the review did not run; it is not a review finding or a successful review. Check the action installation logs before retrying.
 
 ### Rerun safely
 
@@ -522,7 +522,7 @@ Do not assume every run has every artifact. Important contracts are:
 | `run-stats` | `run_stats.json` | Hardware success counts across all attempts |
 | `changelog-metadata` | `changelog_metadata.json` | Search-space metadata from sweep setup |
 | `bmk_agentic_*` | Per-job JSON | Raw AgentX result upload used by agentic ingestion/staging |
-| `server_logs_*`, `multinode_server_logs_*`, `gpu_metrics_*`, `agentic_*` | Logs, metrics, or diagnostic payloads | `always()`/diagnostic uploads. Names vary by template and mode |
+| `server_logs_*`, `multinode_server_logs_*`, `agentic_*` | Logs, metrics, or diagnostic payloads | `always()`/diagnostic uploads. Names vary by template and mode |
 
 ### Parse bounded fields
 

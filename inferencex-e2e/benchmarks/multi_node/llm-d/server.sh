@@ -16,11 +16,13 @@
 
 set -eo pipefail
 
-source /workspace/benchmarks/benchmark_lib.sh
+source /workspace/benchmarks/check_env.sh
+# Root in this container must not leave __pycache__ in the /workspace mount.
+export PYTHONDONTWRITEBYTECODE=1
 
 check_env_vars \
     NODE_RANK PREFILL_NODES DECODE_NODES GPUS_PER_NODE PREFILL_WORKERS \
-    DECODE_WORKERS EVAL_ONLY RUN_EVAL ALL_IPS
+    DECODE_WORKERS EVAL_ONLY RUN_EVAL MODEL_DIR MODEL_NAME ALL_IPS
 IS_AGGREGATED=$(( DECODE_NODES == 0 ))
 VLLM_PORT=8200
 SIDECAR_PORT=8000
@@ -29,9 +31,14 @@ EPP_GRPC_PORT=9002
 EPP_HEALTH_PORT=9003
 EPP_METRICS_PORT=9090
 
-# Weights live at MODEL_DIR (/models, bind-mounted by job.slurm). MODEL_NAME is
-# the served-model-name, not a filesystem path.
-MODEL="${MODEL_DIR}"
+# Weights live at MODEL_DIR (/models, bind-mounted by job.slurm); the eval reads them as MODEL.
+# MODEL_NAME is the served-model-name, not a filesystem path.
+export MODEL="${MODEL_DIR}"
+
+# Container-side benchmark commands run from the /workspace checkout.
+infx_bench() {
+    PYTHONSAFEPATH=1 PYTHONPATH="/workspace${PYTHONPATH:+:$PYTHONPATH}" python3 -m infx.bench "$@"
+}
 
 # ----------------------------------------------------------------
 # Host IP + default interface
@@ -321,7 +328,7 @@ VLLM_PID=$!
 if [[ "$IS_HEADLESS_FOLLOWER" -eq 1 ]]; then
     echo "vLLM headless TP follower on rank $NODE_RANK (worker_index=$LWS_WORKER_INDEX): no local api-server, skipping health wait"
 else
-    wait_for_server_ready --port "$HEALTH_PORT" --server-log "$VLLM_LOG" --server-pid "$VLLM_PID"
+    infx_bench wait --url "http://0.0.0.0:$HEALTH_PORT/health" --pid "$VLLM_PID" --log "$VLLM_LOG"
     echo "vLLM ready on rank $NODE_RANK ($ROLE worker_index=$LWS_WORKER_INDEX, health port $HEALTH_PORT)"
 fi
 
@@ -348,7 +355,8 @@ if [[ "$ROLE" == "decode" && ( "$ROLE_ENABLE_EP" == "true" || "$LWS_WORKER_INDEX
     echo "Starting pd-sidecar (decode node_rank=$NODE_RANK worker_index=$LWS_WORKER_INDEX): ${SIDECAR_FLAGS[*]}"
     pd-sidecar "${SIDECAR_FLAGS[@]}" > "$SIDECAR_LOG" 2>&1 &
     SIDECAR_PID=$!
-    wait_for_server_ready --port "$SIDECAR_HEALTH_PORT" --server-log "$SIDECAR_LOG" --server-pid "$SIDECAR_PID"
+    infx_bench wait --url "http://0.0.0.0:$SIDECAR_HEALTH_PORT/health" --pid "$SIDECAR_PID" \
+        --log "$SIDECAR_LOG"
     echo "pd-sidecar ready on $HOST_IP:$SIDECAR_HEALTH_PORT"
 fi
 
@@ -588,7 +596,7 @@ PY
         # Benchmark sweep. BENCH_MAX_CONCURRENCY is 'x'-delimited from submit.sh (e.g. "1024x512").
         IFS='x' read -r -a CONCURRENCIES <<< "$BENCH_MAX_CONCURRENCY"
         # GPU counts are embedded in the result filename as _gpus_/_ctx_/_gen_ so the CI
-        # "Process result" step can parse them (same convention as amd_utils/bench.sh).
+        # "Process result" step can parse them.
         # ctx = prefill GPUs, gen = decode GPUs.
         _bench_prefill_gpus=$(( PREFILL_NODES * GPUS_PER_NODE ))
         _bench_decode_gpus=$(( DECODE_NODES * GPUS_PER_NODE ))
@@ -596,37 +604,21 @@ PY
         for max_concurrency in "${CONCURRENCIES[@]}"; do
             num_prompts=$(( max_concurrency * BENCH_NUM_PROMPTS_MULTIPLIER ))
             [[ "$num_prompts" -lt 16 ]] && num_prompts=16
-            # Bench against Envoy (EPP routes to decode; the sidecar pulls from
-            # prefill via NIXL). --bench-serving-dir = the /workspace repo bind-mount;
-            # --tokenizer = /models (served-model-name is not a valid HF repo id).
-            # DSV4-Pro needs trust-remote-code + tokenizer-mode deepseek_v4 (the older
-            # transformers wheel does not register it) + chat template / --dsv4 to
-            # match the dynamo-vllm bench prompt formatting.
-            bench_extra_args=()
-            if [[ "${MODEL_NAME,,}" == *"deepseek-v4"* ]]; then
-                bench_extra_args+=(
-                    --trust-remote-code
-                    --tokenizer-mode deepseek_v4
-                    --use-chat-template
-                    --dsv4
-                )
-            fi
+            # Bench against Envoy (EPP routes to decode; the sidecar pulls from prefill via
+            # NIXL). The tokenizer is the checkpoint: served-model-name is not an HF repo id.
             # Non-fatal: a failed or timed-out conc point must not abort the sweep or (under
             # set -e) skip the allocation release below.
-            run_benchmark_serving \
-                --bench-serving-dir /workspace \
-                --tokenizer /models \
+            infx_bench fixed-seq point \
+                --base-url "http://0.0.0.0:$ENVOY_PORT" \
                 --model "$MODEL_NAME" \
-                --port "$ENVOY_PORT" \
                 --backend openai \
-                --input-len "$BENCH_INPUT_LEN" \
-                --output-len "$BENCH_OUTPUT_LEN" \
+                --tokenizer "$MODEL" \
+                --isl "$BENCH_INPUT_LEN" \
+                --osl "$BENCH_OUTPUT_LEN" \
                 --random-range-ratio "$BENCH_RANDOM_RANGE_RATIO" \
+                --conc "$max_concurrency" \
                 --num-prompts "$num_prompts" \
-                --max-concurrency "$max_concurrency" \
-                --result-filename "${RESULT_FILENAME}_c${max_concurrency}_gpus_${_bench_total_gpus}_ctx_${_bench_prefill_gpus}_gen_${_bench_decode_gpus}" \
-                --result-dir "$BENCHMARK_LOGS_DIR/" \
-                "${bench_extra_args[@]}" \
+                --result "$BENCHMARK_LOGS_DIR/${RESULT_FILENAME}_c${max_concurrency}_gpus_${_bench_total_gpus}_ctx_${_bench_prefill_gpus}_gen_${_bench_decode_gpus}.json" \
                 || echo "WARNING: benchmark conc=$max_concurrency failed/timed out (rc=$?)"
         done
     fi
@@ -644,18 +636,13 @@ PY
         # fails ("eval metadata concurrency does not match workflow request")
         # even when accuracy passes.
         if [[ -n "${EVAL_CONC:-}" ]]; then
-            export EVAL_CONCURRENT_REQUESTS="${EVAL_CONC}"
+            EVAL_CONCURRENT_REQUESTS="$EVAL_CONC"
         else
-            export EVAL_CONCURRENT_REQUESTS=$(printf '%s' "$BENCH_MAX_CONCURRENCY" | tr 'x' '\n' | sort -n | tail -1)
+            EVAL_CONCURRENT_REQUESTS=$(printf '%s' "$BENCH_MAX_CONCURRENCY" | tr 'x' '\n' | sort -n | tail -1)
         fi
-        export CONC="${EVAL_CONCURRENT_REQUESTS}"
-        # Run from /workspace (the repo bind-mount) so results*.json land where
-        # the host-side workflow checks look; the subshell keeps the cd local.
-        (
-            cd /workspace
-            run_eval --port "$ENVOY_PORT"
-            append_lm_eval_summary
-        )
+        # /workspace is the runner checkout, where the workflow looks for results*.json.
+        infx_bench eval --endpoint "http://127.0.0.1:$ENVOY_PORT" \
+            --concurrency "$EVAL_CONCURRENT_REQUESTS" --stage-to /workspace
     fi
 
     # job.slurm stops the srun step once this marker exists.

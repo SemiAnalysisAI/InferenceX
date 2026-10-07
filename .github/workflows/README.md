@@ -207,10 +207,12 @@ Public-fork `pull_request` workflows receive no repository secrets, and every
 fans out onto GPU runners. A maintainer with `write`, `maintain`, or `admin`
 permission can add any modifier labels first, then apply one primary sweep
 label to approve the PR's exact current head SHA. The PR must be open and
-non-draft, and dispatch is refused until GitHub reports `merge_commit_sha`;
-resolve conflicts first. `trusted-external-sweep.yml` then dispatches
-`e2e-tests.yml` from `main` and pins both the approved head and GitHub's merge
-SHA. `e2e-tests.yml` plans the changelog matrix itself and runs it with the
+non-draft. Dispatch waits briefly for GitHub to settle mergeability, then is
+refused unless the PR is mergeable and GitHub's test merge commit has the
+approved head as its second parent; resolve conflicts or re-add the label if
+GitHub is still recomputing it. `trusted-external-sweep.yml` then dispatches
+`e2e-tests.yml` from `main` and pins both the approved head and that verified
+merge SHA. `e2e-tests.yml` plans the changelog matrix itself and runs it with the
 trusted workflow's secrets.
 
 The approval is revision-specific. A later push is not trusted automatically.

@@ -4,7 +4,7 @@
 
 InferenceX 负责维护本目录中的配置。每次 NVIDIA srt-slurm 启动时，srt 驱动（[`infx/launch/drivers/srt/checkout.py`](../../../infx/launch/drivers/srt/checkout.py)）都会为作业创建固定版本子模块的本地 Git 克隆，并将整个目录复制到 `recipes/`。它将实际提交记录到 `srt-slurm-sha.txt`；功耗测试路径还会将其复制到 `power-producer-sha.txt`，供结果校验使用。
 
-统一版本由 [`utils/srt-slurm`](../../../utils/srt-slurm) 的 Git 子模块指针指定，目前为 [v2.36.0](https://github.com/NVIDIA/srt-slurm/releases/tag/v2.36.0)（`7b5863a7837673d81403b076be219bbf18a7700f`）。升级时更新该子模块指针，然后运行配置和集成检查。不要在启动器中新增按模型选择检出版本的分支。
+统一版本由 [`utils/srt-slurm`](../../../utils/srt-slurm) 的 Git 子模块指针指定，目前为 [v2.43.4](https://github.com/NVIDIA/srt-slurm/releases/tag/v2.43.4)（`848f72d45b05af0fc082a9d1df49a8b4e7e61507`）。升级时更新该子模块指针，然后运行配置和集成检查。不要在启动器中新增按模型选择检出版本的分支。
 
 InferenceX 要求 srt-slurm 2.0 或更新版本，且配置必须声明 `schema: 2`。不支持旧版配置结构；加入本目录前必须先完成迁移。
 
@@ -54,8 +54,6 @@ TileRT 使用固定版本的上游 srt-slurm 子模块。配置指定 `roles.pre
 在隔离环境中安装统一版本，然后使用其 CLI：
 
 ```bash
-# 重写前先验证每个受支持的配置目录。
-srtctl migrate --verify -f benchmarks/multi_node/srt-slurm-recipes/dsr1/sglang
 srtctl migrate --in-place -f benchmarks/multi_node/srt-slurm-recipes/dsr1/sglang
 # 对其他模型/引擎目录重复执行。
 python -m pytest infx/tests/matrix/ -q
@@ -64,7 +62,7 @@ python -m infx.matrix.generate full-sweep \
   --framework dynamo-sglang dynamo-trt dynamo-vllm --multi-node
 ```
 
-使用启动器指定的确切提交验证配置，包括全部覆盖变体。仅调整路径时，应按路径映射比较变更前后的生成矩阵；其他字段（包括评估选择和节点数）必须完全一致。本地配置校验通过不能替代完整硬件扫描和准确性评估。
+使用启动器指定的确切提交验证配置，包括全部覆盖变体。当前迁移 CLI 已不提供 `--verify`；迁移后对每个选中的配置运行 `srtctl dry-run`，必要时通过 `--set` 提供启动器注入的值，例如 `benchmark.concurrencies`。仅调整路径时，应按路径映射比较变更前后的生成矩阵；其他字段（包括评估选择和节点数）必须完全一致。本地配置校验通过不能替代完整硬件扫描和准确性评估。
 
 本次迁移还修复了 `srtctl migrate` 无法自动处理的兼容性问题：
 
