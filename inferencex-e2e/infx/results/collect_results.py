@@ -2,20 +2,26 @@ import json
 import sys
 from pathlib import Path
 
+from infx.results.schema.models import benchmark_row
+from infx.results.schema.quarantine import quarantine, report
 
-def main() -> None:
+
+def main() -> int:
     results_dir = Path(sys.argv[1])
     exp_name = sys.argv[2]
 
-    agg_results = []
+    candidates = []
     for result_path in results_dir.rglob("*.json"):
         with open(result_path) as f:
             result = json.load(f)
-        agg_results.append(result)
+        source = str(result_path.relative_to(results_dir))
+        candidates.append((source, result, benchmark_row(result)))
+    accepted, rejected = quarantine(candidates)
 
     with open(f"agg_{exp_name}.json", "w") as f:
-        json.dump(agg_results, f, indent=2)
+        json.dump([result for _, result in accepted], f, indent=2)
+    return report(rejected)
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

@@ -1,0 +1,561 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "FixedSequenceRow",
+  "$defs": {
+    "BenchmarkOutcome": {
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "enum": [
+            "passed",
+            "failed"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "requested": {
+          "exclusiveMinimum": 0,
+          "title": "Requested",
+          "type": "integer"
+        },
+        "completed": {
+          "minimum": 0,
+          "title": "Completed",
+          "type": "integer"
+        },
+        "failed": {
+          "minimum": 0,
+          "title": "Failed",
+          "type": "integer"
+        },
+        "max_failure_rate": {
+          "title": "Max Failure Rate",
+          "type": "number"
+        }
+      },
+      "required": [
+        "status",
+        "requested",
+        "completed",
+        "failed",
+        "max_failure_rate"
+      ],
+      "title": "BenchmarkOutcome",
+      "type": "object"
+    },
+    "ComponentMetadata": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "version": {
+          "minLength": 1,
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ],
+      "title": "ComponentMetadata",
+      "type": "object"
+    },
+    "FixedSequenceMultinodeRow": {
+      "additionalProperties": false,
+      "description": "Fixed-sequence point; decode TP/EP are 0 when the deployment has no decode GPUs.",
+      "patternProperties": {
+        "^(?:(?:mean|median|std|p[0-9]+(?:\\.[0-9]+)?)_(?:ttft|tpot|itl|e2el|intvty)|avg_power_w|p75_power_w|p75_total_gpu_power_w|p90_power_w|p90_total_gpu_power_w|avg_total_gpu_power_w|total_gpu_energy_j|joules_per_successful_query|joules_per_input_token|joules_per_output_token|joules_per_total_token|prefill_gpu_energy_j|decode_gpu_energy_j|prefill_avg_power_w|decode_avg_power_w|prefill_joules_per_input_token|decode_joules_per_output_token)$": {
+          "type": "number"
+        }
+      },
+      "properties": {
+        "result_schema_version": {
+          "const": 1,
+          "maximum": 1,
+          "minimum": 1,
+          "title": "Result Schema Version",
+          "type": "integer"
+        },
+        "hw": {
+          "minLength": 1,
+          "title": "Hw",
+          "type": "string"
+        },
+        "conc": {
+          "exclusiveMinimum": 0,
+          "title": "Conc",
+          "type": "integer"
+        },
+        "image": {
+          "minLength": 1,
+          "title": "Image",
+          "type": "string"
+        },
+        "model": {
+          "minLength": 1,
+          "title": "Model",
+          "type": "string"
+        },
+        "infmax_model_prefix": {
+          "minLength": 1,
+          "title": "Infmax Model Prefix",
+          "type": "string"
+        },
+        "framework": {
+          "minLength": 1,
+          "title": "Framework",
+          "type": "string"
+        },
+        "precision": {
+          "minLength": 1,
+          "title": "Precision",
+          "type": "string"
+        },
+        "spec_decoding": {
+          "minLength": 1,
+          "title": "Spec Decoding",
+          "type": "string"
+        },
+        "disagg": {
+          "title": "Disagg",
+          "type": "boolean"
+        },
+        "recipe_fingerprint": {
+          "description": "Empty when the dispatched config has none.",
+          "pattern": "^(?:[0-9a-f]{64})?$",
+          "title": "Recipe Fingerprint",
+          "type": "string"
+        },
+        "isl": {
+          "exclusiveMinimum": 0,
+          "title": "Isl",
+          "type": "integer"
+        },
+        "osl": {
+          "exclusiveMinimum": 0,
+          "title": "Osl",
+          "type": "integer"
+        },
+        "benchmark_outcome": {
+          "$ref": "#/$defs/BenchmarkOutcome",
+          "default": null
+        },
+        "router": {
+          "$ref": "#/$defs/ComponentMetadata",
+          "default": null
+        },
+        "kv_p2p_transfer": {
+          "default": null,
+          "minLength": 1,
+          "title": "Kv P2P Transfer",
+          "type": "string"
+        },
+        "tput_per_gpu": {
+          "title": "Tput Per Gpu",
+          "type": "number"
+        },
+        "output_tput_per_gpu": {
+          "title": "Output Tput Per Gpu",
+          "type": "number"
+        },
+        "input_tput_per_gpu": {
+          "title": "Input Tput Per Gpu",
+          "type": "number"
+        },
+        "power_metric_schema_version": {
+          "const": 2,
+          "default": null,
+          "maximum": 2,
+          "minimum": 2,
+          "title": "Power Metric Schema Version",
+          "type": "integer"
+        },
+        "power_valid": {
+          "default": null,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Power Valid",
+          "type": "integer"
+        },
+        "power_invalid_reasons": {
+          "default": null,
+          "items": {
+            "type": "string"
+          },
+          "title": "Power Invalid Reasons",
+          "type": "array"
+        },
+        "power_audit": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "default": null,
+          "title": "Power Audit",
+          "type": "object"
+        },
+        "is_multinode": {
+          "const": true,
+          "title": "Is Multinode",
+          "type": "boolean"
+        },
+        "prefill_tp": {
+          "exclusiveMinimum": 0,
+          "title": "Prefill Tp",
+          "type": "integer"
+        },
+        "prefill_pp": {
+          "exclusiveMinimum": 0,
+          "title": "Prefill Pp",
+          "type": "integer"
+        },
+        "prefill_dcp_size": {
+          "exclusiveMinimum": 0,
+          "title": "Prefill Dcp Size",
+          "type": "integer"
+        },
+        "prefill_pcp_size": {
+          "exclusiveMinimum": 0,
+          "title": "Prefill Pcp Size",
+          "type": "integer"
+        },
+        "prefill_ep": {
+          "exclusiveMinimum": 0,
+          "title": "Prefill Ep",
+          "type": "integer"
+        },
+        "prefill_dp_attention": {
+          "description": "Workflow flag copied as a string, not a JSON boolean.",
+          "enum": [
+            "true",
+            "false"
+          ],
+          "title": "Prefill Dp Attention",
+          "type": "string"
+        },
+        "prefill_num_workers": {
+          "minimum": 0,
+          "title": "Prefill Num Workers",
+          "type": "integer"
+        },
+        "decode_tp": {
+          "minimum": 0,
+          "title": "Decode Tp",
+          "type": "integer"
+        },
+        "decode_pp": {
+          "exclusiveMinimum": 0,
+          "title": "Decode Pp",
+          "type": "integer"
+        },
+        "decode_dcp_size": {
+          "exclusiveMinimum": 0,
+          "title": "Decode Dcp Size",
+          "type": "integer"
+        },
+        "decode_pcp_size": {
+          "exclusiveMinimum": 0,
+          "title": "Decode Pcp Size",
+          "type": "integer"
+        },
+        "decode_ep": {
+          "minimum": 0,
+          "title": "Decode Ep",
+          "type": "integer"
+        },
+        "decode_dp_attention": {
+          "description": "Workflow flag copied as a string, not a JSON boolean.",
+          "enum": [
+            "true",
+            "false"
+          ],
+          "title": "Decode Dp Attention",
+          "type": "string"
+        },
+        "decode_num_workers": {
+          "minimum": 0,
+          "title": "Decode Num Workers",
+          "type": "integer"
+        },
+        "num_prefill_gpu": {
+          "exclusiveMinimum": 0,
+          "title": "Num Prefill Gpu",
+          "type": "integer"
+        },
+        "num_decode_gpu": {
+          "minimum": 0,
+          "title": "Num Decode Gpu",
+          "type": "integer"
+        },
+        "num_aggregate_gpu": {
+          "default": null,
+          "exclusiveMinimum": 0,
+          "title": "Num Aggregate Gpu",
+          "type": "integer"
+        },
+        "prefill_hw": {
+          "default": null,
+          "minLength": 1,
+          "title": "Prefill Hw",
+          "type": "string"
+        },
+        "decode_hw": {
+          "default": null,
+          "minLength": 1,
+          "title": "Decode Hw",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result_schema_version",
+        "hw",
+        "conc",
+        "image",
+        "model",
+        "infmax_model_prefix",
+        "framework",
+        "precision",
+        "spec_decoding",
+        "disagg",
+        "recipe_fingerprint",
+        "isl",
+        "osl",
+        "tput_per_gpu",
+        "output_tput_per_gpu",
+        "input_tput_per_gpu",
+        "is_multinode",
+        "prefill_tp",
+        "prefill_pp",
+        "prefill_dcp_size",
+        "prefill_pcp_size",
+        "prefill_ep",
+        "prefill_dp_attention",
+        "prefill_num_workers",
+        "decode_tp",
+        "decode_pp",
+        "decode_dcp_size",
+        "decode_pcp_size",
+        "decode_ep",
+        "decode_dp_attention",
+        "decode_num_workers",
+        "num_prefill_gpu",
+        "num_decode_gpu"
+      ],
+      "title": "FixedSequenceMultinodeRow",
+      "type": "object"
+    },
+    "FixedSequenceSingleNodeRow": {
+      "additionalProperties": false,
+      "description": "Fixed-sequence point served by one single-node deployment.",
+      "patternProperties": {
+        "^(?:(?:mean|median|std|p[0-9]+(?:\\.[0-9]+)?)_(?:ttft|tpot|itl|e2el|intvty)|avg_power_w|p75_power_w|p75_total_gpu_power_w|p90_power_w|p90_total_gpu_power_w|avg_total_gpu_power_w|total_gpu_energy_j|joules_per_successful_query|joules_per_input_token|joules_per_output_token|joules_per_total_token|prefill_gpu_energy_j|decode_gpu_energy_j|prefill_avg_power_w|decode_avg_power_w|prefill_joules_per_input_token|decode_joules_per_output_token)$": {
+          "type": "number"
+        }
+      },
+      "properties": {
+        "result_schema_version": {
+          "const": 1,
+          "maximum": 1,
+          "minimum": 1,
+          "title": "Result Schema Version",
+          "type": "integer"
+        },
+        "hw": {
+          "minLength": 1,
+          "title": "Hw",
+          "type": "string"
+        },
+        "conc": {
+          "exclusiveMinimum": 0,
+          "title": "Conc",
+          "type": "integer"
+        },
+        "image": {
+          "minLength": 1,
+          "title": "Image",
+          "type": "string"
+        },
+        "model": {
+          "minLength": 1,
+          "title": "Model",
+          "type": "string"
+        },
+        "infmax_model_prefix": {
+          "minLength": 1,
+          "title": "Infmax Model Prefix",
+          "type": "string"
+        },
+        "framework": {
+          "minLength": 1,
+          "title": "Framework",
+          "type": "string"
+        },
+        "precision": {
+          "minLength": 1,
+          "title": "Precision",
+          "type": "string"
+        },
+        "spec_decoding": {
+          "minLength": 1,
+          "title": "Spec Decoding",
+          "type": "string"
+        },
+        "disagg": {
+          "title": "Disagg",
+          "type": "boolean"
+        },
+        "recipe_fingerprint": {
+          "description": "Empty when the dispatched config has none.",
+          "pattern": "^(?:[0-9a-f]{64})?$",
+          "title": "Recipe Fingerprint",
+          "type": "string"
+        },
+        "isl": {
+          "exclusiveMinimum": 0,
+          "title": "Isl",
+          "type": "integer"
+        },
+        "osl": {
+          "exclusiveMinimum": 0,
+          "title": "Osl",
+          "type": "integer"
+        },
+        "benchmark_outcome": {
+          "$ref": "#/$defs/BenchmarkOutcome",
+          "default": null
+        },
+        "router": {
+          "$ref": "#/$defs/ComponentMetadata",
+          "default": null
+        },
+        "kv_p2p_transfer": {
+          "default": null,
+          "minLength": 1,
+          "title": "Kv P2P Transfer",
+          "type": "string"
+        },
+        "tput_per_gpu": {
+          "title": "Tput Per Gpu",
+          "type": "number"
+        },
+        "output_tput_per_gpu": {
+          "title": "Output Tput Per Gpu",
+          "type": "number"
+        },
+        "input_tput_per_gpu": {
+          "title": "Input Tput Per Gpu",
+          "type": "number"
+        },
+        "power_metric_schema_version": {
+          "const": 2,
+          "default": null,
+          "maximum": 2,
+          "minimum": 2,
+          "title": "Power Metric Schema Version",
+          "type": "integer"
+        },
+        "power_valid": {
+          "default": null,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Power Valid",
+          "type": "integer"
+        },
+        "power_invalid_reasons": {
+          "default": null,
+          "items": {
+            "type": "string"
+          },
+          "title": "Power Invalid Reasons",
+          "type": "array"
+        },
+        "power_audit": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "default": null,
+          "title": "Power Audit",
+          "type": "object"
+        },
+        "is_multinode": {
+          "const": false,
+          "title": "Is Multinode",
+          "type": "boolean"
+        },
+        "tp": {
+          "exclusiveMinimum": 0,
+          "title": "Tp",
+          "type": "integer"
+        },
+        "pp": {
+          "exclusiveMinimum": 0,
+          "title": "Pp",
+          "type": "integer"
+        },
+        "dcp_size": {
+          "exclusiveMinimum": 0,
+          "title": "Dcp Size",
+          "type": "integer"
+        },
+        "pcp_size": {
+          "exclusiveMinimum": 0,
+          "title": "Pcp Size",
+          "type": "integer"
+        },
+        "ep": {
+          "exclusiveMinimum": 0,
+          "title": "Ep",
+          "type": "integer"
+        },
+        "dp_attention": {
+          "description": "Workflow flag copied as a string, not a JSON boolean.",
+          "enum": [
+            "true",
+            "false"
+          ],
+          "title": "Dp Attention",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result_schema_version",
+        "hw",
+        "conc",
+        "image",
+        "model",
+        "infmax_model_prefix",
+        "framework",
+        "precision",
+        "spec_decoding",
+        "disagg",
+        "recipe_fingerprint",
+        "isl",
+        "osl",
+        "tput_per_gpu",
+        "output_tput_per_gpu",
+        "input_tput_per_gpu",
+        "is_multinode",
+        "tp",
+        "pp",
+        "dcp_size",
+        "pcp_size",
+        "ep",
+        "dp_attention"
+      ],
+      "title": "FixedSequenceSingleNodeRow",
+      "type": "object"
+    },
+    "JsonValue": {}
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/FixedSequenceSingleNodeRow"
+    },
+    {
+      "$ref": "#/$defs/FixedSequenceMultinodeRow"
+    }
+  ]
+}

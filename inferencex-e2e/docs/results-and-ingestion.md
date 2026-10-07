@@ -14,6 +14,7 @@ Use this page to identify benchmark artifacts, inspect their contracts, and deci
 | --- | --- |
 | [`benchmark-tmpl.yml`](../../.github/workflows/benchmark-tmpl.yml), [`benchmark-multinode-tmpl.yml`](../../.github/workflows/benchmark-multinode-tmpl.yml) | Per-config names, files, and upload rules for throughput, eval, and AgentX artifacts |
 | [`infx/results/fixed_sequence.py`](../infx/results/fixed_sequence.py) | Fixed-sequence throughput aggregate schema and derived per-GPU metrics |
+| [`infx/results/schema/`](../infx/results/schema/models.py), [`schemas/`](../schemas/) | Published row contract, `result_schema_version`, collector quarantine, and generated JSON Schemas |
 | [`infx/results/collect_results.py`](../infx/results/collect_results.py), [`collect-results.yml`](../../.github/workflows/collect-results.yml) | Recursive benchmark collection into `agg_<prefix>.json` and `results_<prefix>` |
 | [`infx/results/collect_eval_results.py`](../infx/results/collect_eval_results.py), [`collect-evals.yml`](../../.github/workflows/collect-evals.yml) | Eval discovery, metric extraction, batched-concurrency selection, and `eval_results_<prefix>` |
 | [`infx/results/evals.py`](../infx/results/evals.py), [`eval_artifacts.py`](../infx/results/eval_artifacts.py) | Shared eval reading, result selection, reuse consistency checks, and rerun deduplication for collection and Klaud |
@@ -29,16 +30,17 @@ Use this page to identify benchmark artifacts, inspect their contracts, and deci
 ## Index
 
 1. [Identity at each layer](#identity-at-each-layer)
-2. [Throughput artifacts](#throughput-artifacts)
-3. [Eval artifacts](#eval-artifacts)
-4. [AgentX artifacts](#agentx-artifacts)
-5. [App handoff and reused runs](#app-handoff-and-reused-runs)
-6. [Ingestion stages](#ingestion-stages)
-7. [Dedupe and failed-row behavior](#dedupe-and-failed-row-behavior)
-8. [Provenance invariants](#provenance-invariants)
-9. [Published results API](#published-results-api)
-10. [Safe inspection](#safe-inspection)
-11. [Verification and stop conditions](#verification-and-stop-conditions)
+2. [Result row contract](#result-row-contract)
+3. [Throughput artifacts](#throughput-artifacts)
+4. [Eval artifacts](#eval-artifacts)
+5. [AgentX artifacts](#agentx-artifacts)
+6. [App handoff and reused runs](#app-handoff-and-reused-runs)
+7. [Ingestion stages](#ingestion-stages)
+8. [Dedupe and failed-row behavior](#dedupe-and-failed-row-behavior)
+9. [Provenance invariants](#provenance-invariants)
+10. [Published results API](#published-results-api)
+11. [Safe inspection](#safe-inspection)
+12. [Verification and stop conditions](#verification-and-stop-conditions)
 
 ## Identity at each layer
 
@@ -57,6 +59,31 @@ Do not use one identifier as a substitute for another.
 
 The distinction matters because every official ingest reuses a PR sweep. Artifact bytes come from the PR sweep while changelog metadata and the ingest trigger come from the later Merge Ingest run on `main`. The stored benchmark row still belongs to the source run and source attempt.
 
+## Result row contract
+
+[`infx/results/schema/models.py`](../infx/results/schema/models.py) defines Pydantic models for every published aggregate row: fixed-sequence and AgentX rows in `results_<prefix>` (only AgentX rows carry `scenario_type`), eval rows in `eval_results_<prefix>`, and the per-hardware entries of `run-stats`. Identity and topology fields are strictly typed; strings, integers, and booleans are never coerced.
+
+Other numeric fields must match a metric family. Fixed-sequence rows accept latency and interactivity statistics (`mean_`, `median_`, `std_`, or `p<N>_` followed by `ttft`, `tpot`, `itl`, `e2el`, or `intvty`) and the power keys of [`infx.results.power`](../infx/results/power/__init__.py). AgentX rows nest their request and server metrics and accept only the power keys at top level. Every number, including nested AgentX metrics, must be finite.
+
+The models describe what the producers emit, including these quirks:
+
+- `dp_attention`, `prefill_dp_attention`, and `decode_dp_attention` are the strings `"true"` and `"false"` on throughput and AgentX rows.
+- Multinode AgentX `tp` adds prefill and decode TP, and `ep` is the larger role's EP. Multinode rows without decode GPUs report `decode_tp` and `decode_ep` as `0`.
+- `recipe_fingerprint` is empty when the dispatched config has none.
+- Eval rows upper-case `hw`, use `0` for an absent `isl` or `osl`, keep `build_row` defaults such as `"unknown"`, write `prefill=<flag>,decode=<flag>` when the roles' DP-attention settings differ, and may carry lm-eval's `"N/A"` standard errors.
+
+Producers stamp `result_schema_version: 1` on every row: `build_result` for fixed-sequence and AgentX, `build_row` for evals, and `calc_success_rate` for run stats. The constant lives in the stdlib-only `infx.results.schema` package because fixed-sequence processing runs on a bare runner interpreter and AgentX aggregation runs inside serving containers. Neither validates.
+
+The collectors validate: `collect_results`, `collect_eval_results`, and `calc_success_rate`. A row that breaks the contract is left out of the aggregate and written to `rejected_rows.json` with its source and validation errors. The collector prints one `::error::` annotation per rejected row to stderr and exits non-zero after writing the valid aggregate. The collect jobs still upload the aggregate and, when rows were rejected, `rejected_rows_<prefix>`, `rejected_rows_eval_<prefix>`, or `rejected_rows_run_stats`. The failed job keeps the sweep from default reuse. InferenceX-app also reads the per-config `bmk_*` and `eval_*` artifacts directly, so a rejected row stays out of the database only when the app applies the same contract.
+
+JSON Schemas for the four row models are committed in [`schemas/`](../schemas/), and a test fails when they drift from the models. After changing a model, regenerate them from this project directory:
+
+```bash
+uv run python -m infx.results.schema export schemas
+```
+
+InferenceX-app does not read `result_schema_version` yet. Until its benchmark mapper treats the key as non-metric, ingest stores it as an unexpected numeric metric and logs a warning.
+
 ## Throughput artifacts
 
 ### Producer and collector
@@ -70,7 +97,7 @@ file:     agg_<RESULT_FILENAME>.json
 
 The multinode template encodes prefill and decode topology, worker counts, mode, concurrency, and runner in its base name. It can place several `agg_<RESULT_FILENAME>_*.json` files in one `bmk_<RESULT_FILENAME>` artifact.
 
-[`collect-results.yml`](../../.github/workflows/collect-results.yml) normally receives `result-prefix: bmk`. It downloads `bmk_*`, and [`infx/results/collect_results.py`](../infx/results/collect_results.py) recursively loads every JSON file into one array. The handoff identity is then:
+[`collect-results.yml`](../../.github/workflows/collect-results.yml) normally receives `result-prefix: bmk`. It downloads `bmk_*`, and [`infx/results/collect_results.py`](../infx/results/collect_results.py) recursively loads every JSON file and writes the rows that satisfy the [result row contract](#result-row-contract) into one array. The handoff identity is then:
 
 ```text
 artifact: results_bmk
@@ -78,7 +105,7 @@ file:     agg_bmk.json
 shape:    array of benchmark row objects
 ```
 
-The collector does not validate rows, sort them, or deduplicate them. A successful JSON parse is its only content check. Treat `results_bmk` as a transport aggregate, not as proof that every row is usable.
+The collector does not sort or deduplicate rows. Its contract check covers shape and types, not measurement quality; treat `results_bmk` as a transport aggregate, not as proof that every row is usable.
 
 ### Throughput row schema
 
@@ -164,7 +191,7 @@ shape:    array of one row per config, concurrency, and task
 
 The app also reads every unaggregated `eval_*` directory. `meta_env.json` supplies config identity, while `results_*.json` supplies `lm_eval_version`, tasks, raw numeric metrics, and effective sample count. It normalizes strict and flexible exact-match names. Sample files are attached to the resolved eval row by task. This dual path is intentional. Aggregate rows serve summary ingestion, while per-config files retain sample details.
 
-A collector parse failure is skipped by `load_json`. It is not represented as a failed eval row. Missing `meta_env.json`, no recognized lm-eval result, an empty `results` object, or a concurrency absent from `completed_eval_concs` means no aggregate row is emitted.
+A collector parse failure is skipped by `load_json`. It is not represented as a failed eval row. Missing `meta_env.json`, no recognized lm-eval result, an empty `results` object, or a concurrency absent from `completed_eval_concs` means no aggregate row is emitted. A built row that breaks the [result row contract](#result-row-contract) is quarantined instead.
 
 ## AgentX artifacts
 
@@ -300,7 +327,7 @@ Dedupe exists at several boundaries. Check the boundary before diagnosing a dupl
 | --- | --- |
 | Artifact preparation in CI | Newest unexpired upload per exact artifact name. Reuse replaces only changelog metadata with the merge-run copy. |
 | Direct app download mode | [`dedupeArtifactsByLogicalName`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/lib/github-artifacts.ts) strips a trailing runner-pool and attempt token and keeps the newest logical artifact. This prevents a retry artifact from overwriting good metrics. |
-| Benchmark collection | `infx.results.collect_results` appends every parsed JSON. It has no row-level dedupe. |
+| Benchmark collection | `infx.results.collect_results` appends every parsed JSON that satisfies the result row contract. It has no row-level dedupe. |
 | Benchmark database write | `ON CONFLICT` on the benchmark natural key updates metrics, image, power workers, and related fields. Server-derived `kv_cache_pool_tokens` is preserved when a fresh artifact lacks it. |
 | Eval database write | Aggregate and per-config rows with fully populated matching dimensions conflict on the eval natural key. The later write refreshes metrics and returns the same row ID for sample attachment. If any nullable key dimension is null, PostgreSQL's current ordinary unique constraint does not deduplicate the rows. |
 | Eval samples | Conflict on `(eval_result_id, doc_id)` prevents duplicate documents. |
@@ -312,6 +339,7 @@ Failed data is handled separately from dedupe:
 - AgentX aggregation drops warmup and error request records from metric computation but retains counts and categories in `request_accounting`.
 - Unknown models or hardware, missing fixed-sequence ISL/OSL/concurrency, bad JSON, point overrides, and database errors are tracked as skips. They do not become placeholder rows.
 - Eval collector parse failures and missing recognized result files simply emit no row. App-side malformed per-config files produce warnings or tracked skips.
+- Collectors quarantine rows that break the [result row contract](#result-row-contract) in `rejected_rows.json` and fail after publishing the valid aggregate. The per-config artifacts still contain those rows.
 - A partial ingest is safe to rerun because database writes are idempotent. It is not safe to ignore new skip counts, conflicting dataset provenance, missing raw AgentX siblings, or failed database verification.
 
 ## Provenance invariants
@@ -448,6 +476,7 @@ A handoff is verified only when all applicable checks pass.
 - The intended `github_run_id` and `run_attempt` are explicit.
 - `results_bmk` contains a JSON array when throughput or AgentX points are expected.
 - `eval_results_all` contains a JSON array when aggregate evals are expected, and the matching per-config `eval_*` bundles still exist when sample details matter.
+- No `rejected_rows_*` artifact exists. Its rows are missing from the aggregates but still present in per-config artifacts.
 - Every expected AgentX aggregate has its `agentic_<suffix>` raw sibling. Server logs are present when server-derived metrics are required.
 - Fixed-sequence rows have positive `isl`, `osl`, and `conc`. AgentX rows have an agentic scenario, positive concurrency, request counts, and expected offload and dataset metadata.
 - The source/merge dry-run selects source measurements and the merge changelog exactly as intended.
