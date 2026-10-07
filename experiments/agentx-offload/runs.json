@@ -5863,15 +5863,16 @@
       "warmup_started_at": "2026-10-07T09:57:56Z",
       "warmup_target_requests": 5401,
       "warmup_latest": {
-        "sample_at": "2026-10-07T10:42:27Z",
-        "returned": 546,
-        "sent": 1287,
-        "in_flight": 741,
+        "sample_at": "2026-10-07T16:42:31Z",
+        "returned": 5329,
+        "sent": 5401,
+        "in_flight": 72,
         "errors": 0,
-        "elapsed_seconds": 2670.5
+        "elapsed_seconds": 24274.3
       },
-      "runtime_evidence": "Slurm 19765 allocated at 09:48:44Z on allowlisted im-b200-c001 with 08:30:00 limit. Runtime config verified pre-scratch free 23,023,379,644,416 bytes (>2,336,462,209,024 required), O_DIRECT, zero DRAM, 2,199,023,255,552 NVMe bytes, SimpleCPUOffloadConnector disk backend, lazy offload, page cache disabled. Exact host /scratch owner.json matches run 37602969372, attempt 1, Slurm 19765. Canonical warmup began 09:57:56Z; latest sample at 10:12:57Z returned 212/5,401, sent 521, retained 309 in flight, zero errors after 900.2s. The 521-request primer completed and zero-idle cache-pressure replay began at 10:41:09Z. Latest sample at 10:42:27Z returned 546/5,401, sent 1,287, retained 741 in flight, zero errors after 2,670.5 seconds.",
-      "warmup_replay_started_at": "2026-10-07T10:41:09Z"
+      "runtime_evidence": "Slurm 19765 allocated at 09:48:44Z on allowlisted im-b200-c001 with 08:30:00 limit. Runtime config verified pre-scratch free 23,023,379,644,416 bytes (>2,336,462,209,024 required), O_DIRECT, zero DRAM, 2,199,023,255,552 NVMe bytes, SimpleCPUOffloadConnector disk backend, lazy offload, page cache disabled. Exact host /scratch owner.json matches run 37602969372, attempt 1, Slurm 19765. Canonical warmup began 09:57:56Z; latest sample at 10:12:57Z returned 212/5,401, sent 521, retained 309 in flight, zero errors after 900.2s. The 521-request primer completed and zero-idle cache-pressure replay began at 10:41:09Z. Latest sample at 10:42:27Z returned 546/5,401, sent 1,287, retained 741 in flight, zero errors after 2,670.5 seconds. All 5,401 warmup requests were sent by 16:37:01Z; at 16:42:31Z 5,329 had returned, 72 remained in flight, zero errors. Warmup drain remains active; profiling has not started.",
+      "warmup_replay_started_at": "2026-10-07T10:41:09Z",
+      "warmup_all_sent_by": "2026-10-07T16:37:01Z"
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35456989669,35469801850,35476053573,35497846918,35524019140,35524083518,35542179539,35542182560,35542185178,35542190411,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894,36796500128,37027095833,37428997901,37490705589",
