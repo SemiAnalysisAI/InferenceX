@@ -1,6 +1,5 @@
 # AgentX minimaxm3 trtllm gb200-fp4 recipes: shared settings in base, one
-# override per benchmark configuration. Select one with
-# CONFIG_FILE=recipes/minimaxm3/trtllm/gb200-fp4/agentx/agg-variants.yaml:override_<name>.
+# override per benchmark configuration.
 
 schema: 2
 
