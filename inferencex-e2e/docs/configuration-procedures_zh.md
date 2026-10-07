@@ -611,6 +611,7 @@ python -m pytest infx/tests/matrix/ -v
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/<number>
 ```
 
+   每个 PR 只对应一个 block。按惯例，带有 perf changelog 条目的 PR 表示该变更会影响推理性能，或需要重新运行以收集最新结果。将该 PR 需要重跑的所有 config key 列在这个 block 的 `config-keys` 下。如果变更在 review 过程中演进（例如先用打补丁的镜像，后来换成上游镜像），请更新该 PR 已有的 block 来描述最终变更，不要再追加第二个引用相同 key 或同一 PR 的 block。
 3. PR 创建前，模型+硬件 playbook 允许 `pr-link: TBD`；创建 PR 后立即替换为真实 URL。
 4. 绝不能 prepend、在中间按时间插入、排序、重新格式化，也不能对文件运行 formatter。
 5. 绝不能删除或标准化现有空白，包括空白分隔行上的尾随空格。CI 依赖历史字节。

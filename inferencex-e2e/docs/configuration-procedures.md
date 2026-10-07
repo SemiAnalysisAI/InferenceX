@@ -679,6 +679,7 @@ Sources: [`AGENTS.md#non-negotiable-benchmark-invariants`](../../AGENTS.md#non-n
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/<number>
 ```
 
+   Each PR gets exactly one block. A PR with a perf changelog entry, by convention, is a change that affects inference performance or otherwise requires a rerun to collect up-to-date results. List every config key the PR needs rerun under that block's `config-keys`. If the change evolves during review (for example, a patched image is later replaced by an upstream image), update the PR's existing block to describe the final change instead of appending a second block that references the same keys or PR.
 3. Before the PR exists, the model+hardware playbook permits `pr-link: TBD`. Replace it with the real URL immediately after creating the PR.
 4. Never prepend, insert chronologically, sort, reformat, or run a formatter over the file.
 5. Never delete or normalize existing whitespace, including trailing spaces on blank separators. CI depends on historical bytes.
