@@ -326,10 +326,10 @@ EAGLE3 K3, golden AL 2.78 and indexer CP are unchanged.
 
 ### DeepSeek-V4.1-Flash DSpark
 
-The GB200 DSpark recipe uses a minimum CUDA graph capture size of 64 tokens to cover concurrent AgentX subagents. This raises c1/c2/c4 from 8/16/32 to 64; c8 and above retain their existing sizes. The full trace, AL 3.51, and Engram UVA settings are preserved; low-concurrency tail latency improvements require CI confirmation.
+The GB200 DSpark recipe sets explicit capture sizes per point, described below.
 The B200 DSpark recipe sets explicit capture sizes per point, described below.
 The GB300 DSpark recipe sets explicit capture sizes per point, described below.
-The H200 DSpark recipe uses the same minimum capture size and preserves the same workload settings.
+The H200 DSpark recipe uses the same 64-token minimum capture size and preserves the same workload settings.
 
 The B300 DSpark recipe sets explicit capture sizes per point, described below.
 
@@ -356,6 +356,12 @@ The recipe probes the serving port on the compute node and selects an available
 port if the preferred one is occupied. Serving, replay, metrics, and eval share
 that endpoint.
 
+The GB200 entry uses `vllm/vllm-openai:nightly-dev-arm64-cu130-ac9126e58aa7` with FlashInfer
+autotuning. TP4 covers concurrency 1, 4, 8 and 32; DEP2 (TP1 x DP2 + EP2) covers 8–32 and DEP4
+(TP1 x DP4 + EP4) covers 64–128, both with DeepGEMM MegaMoE and adaptive verification behind a
+consistent-hash vLLM Router. All points use `FULL_AND_PIECEWISE` CUDA graphs sized in multiples of
+the six-token verification block and `--gpu-memory-utilization 0.97`.
+
 The B300 entry uses `vllm/vllm-openai:nightly-dev-x86_64-cu130-ac9126e58aa7` with FlashInfer
 autotuning. TP4 covers concurrency 1–16; DEP2 (TP1 x DP2 + EP2, DeepGEMM MegaMoE) covers 8–192
 behind a consistent-hash vLLM Router, switching to MegaAttention at 128 and above. All points use
@@ -376,7 +382,7 @@ Source: [upstream recipe](https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4.1-Flas
 ### DeepSeek-V4.1-Flash DSpark on H200
 
 `dsv41flash-fp4-h200-vllm-agentic-dspark` is the H200 AgentX arm of the
-DeepSeek-V4.1-Flash recipe. It pins `vllm/vllm-openai:nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3` (shared with B200 and GB200) and shares the
+DeepSeek-V4.1-Flash recipe. It pins `vllm/vllm-openai:nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3` and shares the
 text-only serving settings with the Blackwell arms: `deepseek_v41` tokenizer and parsers,
 1M context, native five-token DSpark with probabilistic drafting. Throughput uses the [committed golden AL](../infx/golden_al_distribution/dsv41flash_dspark.yaml) of 3.51 for thinking on and five draft tokens, with synthetic rejection sampling and adaptive verification disabled. Accuracy evals retain real block rejection and adaptive verification.
 
