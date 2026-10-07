@@ -23,7 +23,9 @@ from infx.launch.drivers.srt import lanes, models
 from infx.launch.drivers.srt.lanes import LaneMount, SrtLane
 from infx.launch.drivers.srt.models import Override
 from infx.launch.policy import LaunchPath, Match
+from infx.srt_slurm.synthetic_acceptance import selected_recipes
 from infx.tests.launch.fake_slurm import (
+    ROOT,
     base_env,
     install_fakes,
     launch,
@@ -33,6 +35,13 @@ from infx.tests.launch.fake_slurm import (
     sandbox_runner_config,
     srtctl_calls,
 )
+
+sys.path.insert(0, str(ROOT / "utils/srt-slurm/src"))
+from srtctl.core.config import resolve_config_with_defaults  # noqa: E402
+from srtctl.core.overrides import apply_overrides_to_recipe, parse_overrides  # noqa: E402
+from srtctl.core.schema import ClusterConfig  # noqa: E402
+
+QWEN35_RECIPE = ROOT / "benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/mi355x-fp8/8k1k.yaml"
 
 POINT_RECIPE = {
     "engine": "sglang",
@@ -101,24 +110,18 @@ def single_node_env(harness, cluster_id: str, **overrides: str) -> dict[str, str
     return {**harness.env, **POINT_ENV, "RUNNER_NAME": runner_for(cluster_id), **overrides}
 
 
-def prepare_amd_exporter(harness, cluster_id: str, env: dict[str, str]) -> str:
-    """Supply the small prepared archive required by an AMD launch."""
-    inventory = yaml.safe_load(harness.config.read_text())
-    inventory["clusters"][cluster_id]["slurm"]["srt-slurm"]["extra"][
-        "default_gpu_exporter"
-    ]["container_image"] = "example.test/amd@sha256:abc"
-    harness.config.write_text(yaml.safe_dump(inventory))
-    prepared = harness.workspace / "prepared exporter"
-    prepared.mkdir()
-    (prepared / "amd-exporter.sqsh").write_bytes(b"abc")
-    (prepared / "provenance.json").write_text(json.dumps({
-        "image": {"upstream_reported_registry_digest": "sha256:abc"},
-    }))
-    checksum = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
-    (prepared / "SHA256SUMS").write_text(f"{checksum}  amd-exporter.sqsh\n")
-    env.update(AMD_DME_ARTIFACT_DIR=str(prepared), AMD_DME_SQSH_SHA256=checksum)
-    env["PATH"] += os.pathsep + str(Path(shutil.which("sha256sum")).parent)
-    return checksum
+def qwen35_env(harness, cluster_id: str, **overrides: str) -> dict[str, str]:
+    """Environment of the Qwen3.5 FP8 8k1k concurrency-4 point on the repository's MI355X recipe."""
+    shutil.copyfile(QWEN35_RECIPE, harness.workspace / "recipe.yaml")
+    recipe = yaml.safe_load(QWEN35_RECIPE.read_text())["base"]
+    role, workload = recipe["roles"]["agg"], recipe["benchmark"]["env"]
+    point = {
+        "MODEL": recipe["model"]["path"].removeprefix("hf:"), "IMAGE": recipe["model"]["container"],
+        "PRECISION": recipe["model"]["precision"], "MODEL_PREFIX": "qwen3.5",
+        "TP": str(role["args"]["tensor-parallel-size"]), "GPU_COUNT": str(role["gpus"]), "CONC": "4",
+        "ISL": workload["ISL"], "OSL": workload["OSL"], "RANDOM_RANGE_RATIO": workload["RANDOM_RANGE_RATIO"],
+    }  # fmt: skip
+    return {**harness.env, **POINT_ENV, **point, "RUNNER_NAME": runner_for(cluster_id), **overrides}
 
 
 def lane_env(harness, cluster_id: str, recipe: str = LANE_RECIPE, **overrides: str) -> dict[str, str]:
@@ -173,59 +176,39 @@ def test_single_node_point_stages_workflow_artifacts(harness):
 
 
 @pytest.mark.parametrize("require_power", ["0", "1"])
-@pytest.mark.parametrize("cluster_id,profile,port", [
-    ("h200-cw", "dcgm", 9401), ("mi355x-amds", "amd-device-metrics", 19500),
-    ("mi325x-amd", "amd-device-metrics", 19500),
-    ("mi300x-amd", "amd-device-metrics", 19500),
-])
-def test_single_node_native_power_is_bound_and_retained(harness, require_power, monkeypatch,
-                                                      cluster_id, profile, port):
-    import copy
-    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[3] / "utils/srt-slurm/src"))
-    from srtctl.core.overrides import apply_overrides_to_recipe, parse_overrides
-
+@pytest.mark.parametrize(("cluster_id", "kind", "port"), [
+    ("mi355x-amds", "custom", 19500), ("mi325x-amd", "custom", 19500),
+    ("mi300x-amd", "custom", 19500), ("h200-cw", "dcgm", 9401),
+])  # fmt: skip
+def test_single_node_native_power_is_bound_and_retained(harness, require_power, cluster_id, kind, port):
     env_file = harness.tmp / "github-env"
-    env = single_node_env(harness, cluster_id, REQUIRE_POWER=require_power,
-                          GITHUB_ENV=str(env_file))
-    if profile == "amd-device-metrics":
-        checksum = prepare_amd_exporter(harness, cluster_id, env)
+    env = qwen35_env(harness, cluster_id, REQUIRE_POWER=require_power, GITHUB_ENV=str(env_file))
     assert_ok(launch(env, harness.config, harness.workspace))
+
     workspace = harness.workspace
     [call] = srtctl_calls(harness.logs)
     argv = call["argv"]
-    actual = copy.deepcopy(POINT_RECIPE)
-    apply_overrides_to_recipe(actual, parse_overrides([
-        argv[i + 1] for i, arg in enumerate(argv) if arg == "--set"
-    ], []))
-    telemetry = actual["telemetry"]
+    assert argv[argv.index("--file") + 1] == f"{workspace}/recipe.yaml:zip_override_concurrency[0]"
+    rendered = srtslurm(workspace)
+    ClusterConfig.Schema().load(rendered)  # what the pinned srtctl reads as srtslurm.yaml
+    [(_, variant)] = selected_recipes(yaml.safe_load(QWEN35_RECIPE.read_text()), "zip_override_concurrency[0]")
+    sets = [argv[i + 1] for i, arg in enumerate(argv) if arg == "--set"]
+    apply_overrides_to_recipe(variant, parse_overrides(sets, []))
+    resolved = resolve_config_with_defaults(variant, rendered)
+    telemetry = resolved["telemetry"]
     assert telemetry["enabled"] is True
     assert telemetry["required"] is (require_power == "1")
     assert telemetry["storage_subdir"] == "power"
-    assert actual["benchmark"]["concurrencies"] == [2]
-    exporter = telemetry["dcgm_exporter"]
-    assert exporter["port"] == port
-    assert exporter.get("power_profile", "dcgm") == profile
-    if profile == "dcgm":
-        assert "noprof" in exporter["command"]
-    else:
-        assert srtslurm(workspace)["default_mounts"][
-            str(workspace / "runners/srt-slurm/exporters/amd-power.json")
-        ] == "/etc/metrics/config.json"
-        cached = Path(srtslurm(workspace)["containers"][exporter["container_image"]])
-        assert cached.is_absolute()
-        assert not any("example.test" in line for line in lines(harness.logs, "enroot"))
-        if cluster_id == "mi300x-amd":
-            assert not cached.exists()  # Only the allocated host may populate its cache.
-            command = srtslurm(workspace)["default_host_setup"]["commands"][0]
-            assert "AMD_DME_SOURCE=" in command
-            assert f"AMD_DME_DESTINATION={cached}" in command
-        else:
-            assert cached.read_bytes() == b"abc"
-        assert (workspace / "exporter-image.sha256").read_text() == f"{checksum}  {cached}\n"
-        assert json.loads((workspace / "power-exporter-source.json").read_text()) == {
-            "image": {"upstream_reported_registry_digest": "sha256:abc"},
-        }
-    assert exporter["container_image"] in srtslurm(workspace)["containers"]
+    assert resolved["benchmark"]["concurrencies"] == [4]
+    # The job measures with the cluster's exporter, started from the image the launcher staged.
+    cluster_exporter = rendered["default_gpu_exporter"]
+    staged = rendered["containers"][cluster_exporter["container_image"]]
+    assert telemetry["dcgm_exporter"] == {**cluster_exporter, "container_image": staged}
+    assert (cluster_exporter.get("kind", "dcgm"), cluster_exporter["port"]) == (kind, port)
+    exporter_config = rendered["default_mounts"].get(str(workspace / "runners/srt-slurm/exporters/amd-power.json"))
+    assert (exporter_config == "/etc/metrics/config.json") is (kind == "custom")
+    assert "AMD_DME" not in yaml.safe_dump(rendered) + " ".join(argv)
+    assert (workspace / "exporter-image.sha256").read_text().rstrip("\n").endswith(staged)
     assert (workspace / "LOGS/power/samples.csv").read_text() == "retained native samples\n"
     assert (workspace / "LOGS/power/power-producer-sha.txt").read_text() == env["FAKE_SRT_COMMIT"] + "\n"
     assert (workspace / "LOGS/power/native-job-status.txt").read_text() == "42|COMPLETED|0:0\n"
@@ -418,7 +401,6 @@ def test_submission_failure_code_propagates_and_cancels_the_job(harness, shape):
     active = harness.tmp / "active"
     if shape == "single":
         env = single_node_env(harness, "mi355x-amds", FAKE_SRTCTL_RC="7", FAKE_ACTIVE=str(active))
-        prepare_amd_exporter(harness, "mi355x-amds", env)
     else:
         env = lane_env(harness, "b300-dsxe", MODEL_PREFIX="dsr1", PRECISION="fp4", FRAMEWORK="dynamo-trt",
                        MODEL="deepseek-r1-fp4", FAKE_SRTCTL_RC="7", FAKE_ACTIVE=str(active))  # fmt: skip
