@@ -9391,3 +9391,17 @@
     - "Update the GB200 DeepSeek-V4.1-Flash vLLM AgentX image from nightly cd10ed6f to nightly-dev-arm64-cu130-ac9126e58aa7 and enable FlashInfer autotuning."
     - "Run TP4 at concurrency 1, 4, 8 and 32 and replace TP2 with DEP2 (TP1 x DP2 + EP2) at concurrency 8-32 and DEP4 (TP1 x DP4 + EP4) at concurrency 64-128, both with DeepGEMM MegaMoE and adaptive verification behind a consistent-hash vLLM Router. All points set gpu-memory-utilization 0.97."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3692
+
+- config-keys:
+    - dsv4-fp4-gb200-dynamo-sglang-agentic-agg
+    - dsv4-fp4-gb200-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Move the GB200 DeepSeek-V4-Pro AgentX disaggregated recipes from hierarchical cache to the Mooncake unified-cache external linker with group semantics, as #3187 did for GB300. MoE settings are unchanged: the recipes keep MegaMoE without W4A4 MXFP4."
+    - "Decode nodes lend host DRAM to the store through srt-slurm mooncake-store services: four 180GB standalone stores per decode node, gated on their readiness ports with a 600-second timeout. Prefill keeps a 140GB segment per rank. GB200 nodes have the same host memory as GB300 nodes, so the sizes carry over."
+    - "The prefill role and the decode stores name their RDMA devices (MOONCAKE_DEVICE=mlx5_0..3, as the GB200 vLLM Mooncake recipes do) and set MC_TCP_BIND_ADDRESS to their node, so each store transfer engine advertises the node address instead of the first active interface."
+    - "The benchmark client runs on the dedicated etcd/nats node, because prefill nodes now also hold Mooncake segments, and Tachometer's per-node exporters are off for this throughput ladder."
+    - "The aggregate TP8 c1/c4 recipes are unchanged and stay on hierarchical cache; their config key is listed so this sweep covers the whole GB200 Pareto ladder, including the low-latency points."
+    - "Measured at concurrency 128 (1P DEP8 / 1D DEP16) against the current recipe with the same image, srt-slurm and golden acceptance length: 26,566 vs 23,763 total tok/s/GPU (+11.8%) at the same P90 TPOT (7.31 vs 7.22 ms), with TTFT p50 3.27 vs 4.95 s."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3701
