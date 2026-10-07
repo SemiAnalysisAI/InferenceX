@@ -284,7 +284,7 @@ gh api "/repos/SemiAnalysisAI/InferenceX/actions/runs/$RUN_ID" \
 - **策略/Gate 失败：** 标签冲突、Changelog 无效、缺少授权、合并冲突或产物不合格。修正 Gate；重跑 GPU 无法解决。
 - **已被取代的 Run：** 后续 Commit 或被识别的标签变更通过 Workflow Concurrency 将其取消。应监控替代 Run，不要复活过期证据。
 
-[`Claude Code` 工作流](../../.github/workflows/claude.yml) 包含审阅和编码两个独立任务。审阅任务保留原有的 `ready_for_review` 及授权 `@pr-claude` 触发条件，只读访问仓库内容，并具有发布 PR 反馈的权限；编码任务使用原有写权限处理 `@claude` 和 `@Klaud-Cold` 请求。同一 PR 的审阅请求串行执行，不取消正在运行的审阅；编码请求仍独立运行。两个任务均通过固定到提交 SHA 的官方 action 安装其支持的 Claude Code CLI。安装或启动失败表示审阅没有执行，既不是代码审阅发现的问题，也不代表审阅通过。重试前应先检查 action 的安装日志。
+[`Claude Code` 工作流](../../.github/workflows/claude.yml) 包含审阅和编码两个独立任务。审阅任务保留原有的 `ready_for_review` 及授权 `@pr-claude` 触发条件，只读访问仓库内容，并具有发布 PR 反馈的权限；编码任务使用原有写权限处理 `@claude` 和 `@Klaud-Cold` 请求。只有评论或 Issue 作者的 `author_association` 为 `OWNER`、`MEMBER` 或 `COLLABORATOR` 时，编码任务才会启动；它不接受任何机器人触发者（`allowed_bots: ''`），因此即使 `github-actions[bot]`、`claude[bot]` 等 App 机器人的评论提及 `@claude` 或 `@Klaud-Cold`，也无法启动该任务。同一 PR 的审阅请求串行执行，不取消正在运行的审阅；编码请求仍独立运行。两个任务均通过固定到提交 SHA 的官方 action 安装其支持的 Claude Code CLI。安装或启动失败表示审阅没有执行，既不是代码审阅发现的问题，也不代表审阅通过。重试前应先检查 action 的安装日志。
 
 ### 安全重跑
 
@@ -500,7 +500,7 @@ gh run download "$RUN_ID" --repo "$REPO" -n changelog-metadata -D "$OUT/changelo
 | `run-stats` | `run_stats.json` | 跨所有 Attempt 的硬件成功计数 |
 | `changelog-metadata` | `changelog_metadata.json` | 扫描 Setup 的 Search-space Metadata |
 | `bmk_agentic_*` | 单 Job JSON | Agentic 入库/预发布使用的原始 AgentX Result Upload |
-| `server_logs_*`、`multinode_server_logs_*`、`gpu_metrics_*`、`agentic_*` | Log、Metric 或诊断 Payload | `always()`/诊断上传；名称随 Template 与模式变化 |
+| `server_logs_*`、`multinode_server_logs_*`、`agentic_*` | Log、Metric 或诊断 Payload | `always()`/诊断上传；名称随 Template 与模式变化 |
 
 ### 解析有限字段
 

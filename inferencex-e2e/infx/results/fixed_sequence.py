@@ -210,20 +210,17 @@ def build_result(benchmark: Mapping[str, Any], env: Mapping[str, str]) -> dict[s
 
 def record_power_internal_error(
     *,
-    csv_path: Path,
+    telemetry_source: Path,
     bench_result: Path,
     agg_result: Path,
     validation_result: Path,
-    expected_num_gpus: int,
+    expected_gpu_count: int,
     error: Exception,
 ) -> None:
     """Preserve an auditable invalid result when aggregation fails unexpectedly."""
     reasons = ["aggregation_internal_error"]
     try:
-        from .power.single_node import (
-            _write_json_atomic,
-            invalid_validation_payload,
-        )
+        from .power.common import _write_json_atomic, invalid_validation_payload
 
         agg_data = json.loads(agg_result.read_text(encoding="utf-8"))
         agg_data = with_power_metrics(
@@ -236,9 +233,9 @@ def record_power_internal_error(
         _write_json_atomic(agg_result, agg_data)
 
         validation_data = invalid_validation_payload(
-            csv_path=csv_path,
+            telemetry_source=telemetry_source,
             bench_result=bench_result,
-            expected_num_gpus=expected_num_gpus,
+            expected_gpu_count=expected_gpu_count,
             reasons=reasons,
         )
         validation_data["internal_error"] = {
@@ -263,80 +260,36 @@ def aggregate_power_result(
     bench_path: Path,
     agg_path: Path,
 ) -> int:
-    """Enrich a written fixed-sequence result, preserving best-effort failures."""
+    """Enrich a written multinode result, preserving best-effort failures."""
     require_power = env.get("REQUIRE_POWER", "").lower() in {"1", "true", "yes"}
     validation_path = Path(f"power_validation_{env['RESULT_FILENAME']}.json")
-    is_multinode = env.get("IS_MULTINODE", "false").lower() == "true"
-    if is_multinode:
-        source = Path(env.get("POWER_ARTIFACT_DIR", "LOGS/power"))
-        prefill_gpus = int(env["PREFILL_GPUS"])
-        decode_gpus = int(env["DECODE_GPUS"])
-        aggregate_gpus = int(env.get("AGGREGATE_GPUS", "0"))
-        expected_num_gpus = prefill_gpus + decode_gpus + aggregate_gpus
-    else:
-        candidates = [
-            env.get("GPU_METRICS_CSV"),
-            "gpu_metrics.csv",
-            "/workspace/gpu_metrics.csv",
-        ]
-        source = next(
-            (Path(p) for p in candidates if p and Path(p).is_file()),
-            Path(next(p for p in candidates if p)),
-        )
-        expected_num_gpus = (
-            int(env["TP"]) * int(env.get("PP_SIZE", "1")) * int(env.get("PCP_SIZE", "1"))
-        )
+    source = Path(env.get("POWER_ARTIFACT_DIR", "LOGS/power"))
+    prefill_gpus = int(env["PREFILL_GPUS"])
+    decode_gpus = int(env["DECODE_GPUS"])
+    aggregate_gpus = int(env.get("AGGREGATE_GPUS", "0"))
     try:
-        if is_multinode:
-            native_dir = Path(env.get("POWERX_NATIVE_DIR", "LOGS/native_power"))
-            if env.get("POWERX_NATIVE_DIR") or native_dir.is_dir():
-                if source.is_dir() and source != native_dir:
-                    raise ValueError("Both native and SRT power packages are present")
-                source = native_dir
-                from .power.native_multinode import run
-
-                return run(
-                    native_dir,
-                    bench_path,
-                    agg_path,
-                    expected_prefill_gpus=prefill_gpus,
-                    expected_decode_gpus=decode_gpus,
-                    expected_aggregate_gpus=aggregate_gpus,
-                    validation_result=validation_path,
-                    require_power=require_power,
-                )
-            from .power.multinode import run
-
-            return run(
-                source,
-                bench_path,
-                agg_path,
-                prefill_gpus=prefill_gpus,
-                decode_gpus=decode_gpus,
-                aggregate_gpus=aggregate_gpus,
-                expected_producer_sha=env.get("POWER_PRODUCER_SHA") or None,
-                logs_root=Path(env.get("POWER_RESULT_ROOT", "LOGS")),
-                validation_result=validation_path,
-                require_power=require_power,
-            )
-        from .power.single_node import run
+        from .power.multinode import run
 
         return run(
-            csv_path=source,
-            bench_result=bench_path,
-            agg_result=agg_path,
-            expected_num_gpus=expected_num_gpus,
+            source,
+            bench_path,
+            agg_path,
+            prefill_gpus=prefill_gpus,
+            decode_gpus=decode_gpus,
+            aggregate_gpus=aggregate_gpus,
+            expected_producer_sha=env.get("POWER_PRODUCER_SHA") or None,
+            logs_root=Path(env.get("POWER_RESULT_ROOT", "LOGS")),
             validation_result=validation_path,
             require_power=require_power,
         )
     except Exception as exc:  # noqa: BLE001 — preserve ordinary benchmark behavior
         print(f"[process_result] power aggregation failed: {exc}", file=sys.stderr)
         record_power_internal_error(
-            csv_path=source,
+            telemetry_source=source,
             bench_result=bench_path,
             agg_result=agg_path,
             validation_result=validation_path,
-            expected_num_gpus=expected_num_gpus,
+            expected_gpu_count=prefill_gpus + decode_gpus + aggregate_gpus,
             error=exc,
         )
         return int(require_power)
@@ -352,20 +305,25 @@ def process_result(env: Mapping[str, str]) -> int:
     agg_path = Path(f"agg_{result_filename}.json")
     with open(agg_path, "w") as f:
         json.dump(data, f, indent=2)
-    status = aggregate_power_result(env, bench_path, agg_path)
-    validation_path = Path(f"power_validation_{result_filename}.json")
-    from .power.audit import audit_summary
+    status = 0
+    # Only multinode srt-slurm runs carry a power package; single-node results
+    # publish no power fields or verdict.
+    if data["is_multinode"]:
+        status = aggregate_power_result(env, bench_path, agg_path)
+        validation_path = Path(f"power_validation_{result_filename}.json")
+        from .power.audit import audit_summary
 
-    result = json.loads(agg_path.read_text())
-    try:
-        validation = json.loads(validation_path.read_text())
-        result.update(audit_summary(validation, validation_path.name))
-    except (OSError, ValueError, TypeError) as exc:
-        print(f"[process_result] audit summary unavailable: {exc}", file=sys.stderr)
-        result["power_invalid_reasons"] = ["validation_artifact_unavailable"]
-        # A required run must preserve its audit as well as numeric metrics.
-        status = max(status, int(env.get("REQUIRE_POWER", "").lower() in {"1", "true", "yes"}))
-    agg_path.write_text(json.dumps(result, indent=2))
+        result = json.loads(agg_path.read_text())
+        try:
+            validation = json.loads(validation_path.read_text())
+            result.update(audit_summary(validation, validation_path.name))
+        except (OSError, ValueError, TypeError) as exc:
+            print(f"[process_result] audit summary unavailable: {exc}", file=sys.stderr)
+            result["power_invalid_reasons"] = ["validation_artifact_unavailable"]
+            # A required run must preserve its audit as well as numeric metrics.
+            if env.get("REQUIRE_POWER", "").lower() in {"1", "true", "yes"}:
+                status = 1
+        agg_path.write_text(json.dumps(result, indent=2))
     with open(agg_path) as f:
         print(json.dumps(json.load(f), indent=2))
     return max(status, int(data.get("benchmark_outcome", {}).get("status") == "failed"))
@@ -381,10 +339,7 @@ def process_multinode_results(env: Mapping[str, str]) -> int:
     observed: set[int] = set()
     status = 0
     for path in sorted(Path().glob(f"{env['RESULT_FILENAME']}_*.json")):
-        if path.name.endswith(".pytorch.json") or path.name in {
-            f"{env['RESULT_FILENAME']}_gpu_metrics_context.json",
-            f"{env['RESULT_FILENAME']}_gpu_metrics_identity.json",
-        }:
+        if path.name.endswith(".pytorch.json"):
             ignored_sidecars.append(path.name)
             continue
         point: dict[str, Any] = {"source": path.name}

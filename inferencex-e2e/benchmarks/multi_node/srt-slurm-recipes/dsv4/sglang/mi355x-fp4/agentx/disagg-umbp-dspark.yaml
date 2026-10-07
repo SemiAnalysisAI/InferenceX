@@ -2,6 +2,7 @@
 # with DSpark. Every arm offloads prefill KV to UMBP as a direct external store
 # for the unified radix tree (no host cache tier), backed by a 1.5 TB
 # hugepage DRAM tier on the prefill node.
+schema: 2
 base:
   name: mi355x-dsv4-pro-0813-agentx-umbp
   model:
