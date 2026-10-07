@@ -5815,10 +5815,34 @@
           "sha256": "6fa993bec4d6059131655b7f3b97c660d6e61aa446d24c41219905d360e3996b"
         }
       ]
+    },
+    {
+      "run_id": 37602969372,
+      "url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37602969372",
+      "arm": "nvme",
+      "concurrency": 488,
+      "repeat": 2,
+      "retry_of": 37552057241,
+      "head_sha": "96fa89582edd708933c33cf20d171e5c09d7fcd2",
+      "status": "in_progress",
+      "workflow_name": "offload-v1-nvme2tib-c488-r2-capacity-20261007",
+      "dispatched_at": "2026-10-07T09:47:01Z",
+      "phase": "get-jobs in progress; B200 job not generated yet",
+      "performance_result": false,
+      "energy_result": false,
+      "nvme_bytes_per_node": 2199023255552,
+      "capacity_cohort": "2 TiB bounded SimpleCPU disk cache; exact same-config retry after GitHub cancellation of r1",
+      "execution_budget": {
+        "slurm_minutes": 510,
+        "github_job_minutes": 530
+      },
+      "get_jobs_id": 112731565235,
+      "dispatch_evidence": "First 2 TiB c488 run 37552057241 terminal cancelled during warmup drain, benchmark invalid; four ZIP hashes recorded at 96fa89582, exact owner-matched host scratch deleted and absent, temporary ZIP downloads deleted. Cancellation initiator unconfirmed. Fresh cluster-wide queued/in-progress job-label inventory at 2026-10-07T09:46:42Z found zero queued or in-progress B200 jobs and no active study workflow. Same exact generator config and 510/530-minute envelope. Full 40-character HEAD matched origin branch and GitHub workflow head and was supplied as input ref. get-jobs started 09:47:06Z; no generated B200 job or scratch yet.",
+      "scratch": null
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35456989669,35469801850,35476053573,35497846918,35524019140,35524083518,35542179539,35542182560,35542185178,35542190411,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894,36796500128,37027095833,37428997901,37490705589",
-  "status": "c488 2 TiB capacity probe cancelled during warmup drain; no performance or energy result. Exact scratch cleaned and four artifact ZIPs hashed. Cause of GitHub cancellation remains unconfirmed.",
+  "status": "c488 2 TiB NVMe capacity-control retry dispatched after prior GitHub cancellation; get-jobs in progress.",
   "last_capacity_check": {
     "checked_at": "2026-10-06T15:48:45Z",
     "active_study_run_ids": [],
@@ -5830,10 +5854,9 @@
     "reason": "HBM c489 repeat terminal; refresh live cluster-wide inventory before another dispatch."
   },
   "next_dispatch": {
-    "arm": "nvme",
-    "concurrency": 488,
-    "nvme_bytes_per_node": 2199023255552,
-    "requires": "Before retry, inspect cancellation provenance if available, verify run 37552057241 fully terminal and exact scratch absent, refresh cluster-wide queued/in-progress B200 job-label inventory. Dispatch exactly one same-config 2 TiB c488 retry only when zero queued B200 jobs and no active-or-queued study workflow. Record exact full input/workflow head and keep 510/530-minute envelope."
+    "arm": null,
+    "concurrency": null,
+    "requires": "Do not dispatch while 2 TiB NVMe c488 retry 37602969372 is active or queued. On generated job verify cluster:b200-nscale and nodes:1. On allocation require im-b200-c001, >2,336,462,209,024 free bytes and O_DIRECT before scratch creation. Continue canonical warmup and full profile; on terminal hash artifacts, classify benchmark validity separately, verify exact host scratch cleanup, delete temporary downloads."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-21T05:30:00Z",
