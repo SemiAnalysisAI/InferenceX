@@ -70,8 +70,6 @@ class LaunchRequest(BaseModel):
     spec_decoding: str | None = Field(None, alias="SPEC_DECODING")
     is_multinode: TrueFlag = Field(False, alias="IS_MULTINODE")
     is_agentic: OneFlag = Field(False, alias="IS_AGENTIC")
-    config_file: str | None = Field(None, alias="CONFIG_FILE")
-    eval_config_file: str | None = Field(None, alias="EVAL_CONFIG_FILE")
     bench_script_override: str | None = Field(None, alias="BENCH_SCRIPT_OVERRIDE")
     batch_reentry: OneFlag = Field(False, alias=BATCH_REENTRY_ENV)
     conc: int | None = Field(None, alias="CONC")
@@ -121,7 +119,7 @@ class LaunchRequest(BaseModel):
 
 
 class SrtRequest(LaunchRequest):
-    """What every srt-slurm submission reads; a multi-node srt-slurm job needs exactly this."""
+    """What every srt-slurm submission reads."""
 
     github_workspace: Path = Field(alias="GITHUB_WORKSPACE")
     image: str = Field(alias="IMAGE")
@@ -144,6 +142,13 @@ class SrtRequest(LaunchRequest):
         if self.is_agentic and speculative and not self.eval_only and not self.thinking_mode:
             raise ValueError("THINKING_MODE is required for speculative AgentX throughput runs")
         return self
+
+
+class MultiNodeRequest(SrtRequest):
+    """One multi-node srt-slurm job; eval-only runs may swap in a real-verification recipe."""
+
+    srt_recipe: str = Field(alias="SRT_RECIPE")
+    eval_srt_recipe: str | None = Field(None, alias="EVAL_SRT_RECIPE")
 
 
 class SingleNodeRequest(SrtRequest):

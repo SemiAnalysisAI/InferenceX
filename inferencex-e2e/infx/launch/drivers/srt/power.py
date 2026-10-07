@@ -13,11 +13,13 @@ from typing import TYPE_CHECKING
 import yaml
 
 from infx.launch.context import LaunchError
-from infx.launch.drivers.srt.recipe import recipe_mirror_path, recipe_relpath
+from infx.launch.drivers.srt.recipe import RECIPES_MIRROR, recipe_mirror_path, recipe_relpath
 from infx.launch.policy import LaunchPath, Match, any_of
 
 if TYPE_CHECKING:
-    from infx.launch.request import LaunchRequest
+    from infx.launch.request import LaunchRequest, MultiNodeRequest
+
+MIRROR = f"{RECIPES_MIRROR.as_posix()}/"
 
 
 def recipe_enables_dcgm_power(text: str) -> bool:
@@ -64,12 +66,12 @@ POWER_LANES: dict[tuple[str, LaunchPath], PowerLane] = {
             PowerRule(
                 Match(any_of("glm5.2"), any_of("fp4"), any_of("dynamo-sglang"), agentic=True),
                 agentx=True,
-                recipe_glob="recipes/glm5.2/sglang/gb200-fp4/agentx/agg.yaml",
+                recipe_glob=f"{MIRROR}glm5.2/sglang/gb200-fp4/agentx/agg.yaml",
             ),
             PowerRule(
                 Match(any_of("kimik3"), any_of("fp4"), any_of("dynamo-vllm"), agentic=True),
                 agentx=True,
-                recipe_glob="recipes/kimik3/vllm/gb200-fp4/agentx/*",
+                recipe_glob=f"{MIRROR}kimik3/vllm/gb200-fp4/agentx/*",
             ),
             PowerRule(Match(frameworks=any_of("dynamo-sglang"), agentic=False), agentx=False),
         ),
@@ -81,7 +83,7 @@ POWER_LANES: dict[tuple[str, LaunchPath], PowerLane] = {
             PowerRule(
                 Match(any_of("kimik3"), any_of("fp4"), any_of("dynamo-vllm"), agentic=True),
                 agentx=True,
-                recipe_glob="recipes/kimik3/vllm/*/agentx/*",
+                recipe_glob=f"{MIRROR}kimik3/vllm/*/agentx/*",
             ),
             PowerRule(Match(frameworks=any_of("dynamo-sglang")), agentx=False),
         ),
@@ -167,7 +169,7 @@ NO_POWER = PowerDecision(dcgm=False, agentx=False)
 def decide_power(
     cluster_id: str, path: LaunchPath, *, dcgm: bool, request: LaunchRequest, recipe: str
 ) -> PowerDecision:
-    """Apply the lane's rules to the inspected ``recipe`` (``recipes/...``) when it enables dcgm.
+    """Apply the lane's rules to the inspected ``recipe`` path when it enables dcgm.
 
     Raises ``PowerPolicyError`` for a combination the lane does not allow.
     """
@@ -183,21 +185,19 @@ def decide_power(
     raise PowerPolicyError(message)
 
 
-def resolve_power(cluster_id: str, path: LaunchPath, request: LaunchRequest) -> PowerDecision:
-    """Detect dcgm in the workspace mirror of the recipe the lane inspects, and decide.
+def resolve_power(cluster_id: str, path: LaunchPath, request: MultiNodeRequest) -> PowerDecision:
+    """Detect dcgm in the workspace copy of the recipe the lane inspects, and decide.
 
-    A recipe only upstream (no mirror) stays non-power.
+    A recipe missing from the workspace stays non-power.
     """
     lane = POWER_LANES.get((cluster_id, path))
     if lane is None:
         return NO_POWER
-    config_file = request.config_file
-    if lane.eval_recipe_when_eval_only and request.eval_only and request.eval_config_file:
-        config_file = request.eval_config_file
-    if not config_file:
-        return NO_POWER
-    mirror = recipe_mirror_path(request.workspace, config_file)
+    srt_recipe = request.srt_recipe
+    if lane.eval_recipe_when_eval_only and request.eval_only and request.eval_srt_recipe:
+        srt_recipe = request.eval_srt_recipe
+    mirror = recipe_mirror_path(request.workspace, srt_recipe)
     dcgm = mirror.is_file() and recipe_enables_dcgm_power(mirror.read_text())
     return decide_power(
-        cluster_id, path, dcgm=dcgm, request=request, recipe=recipe_relpath(config_file)
+        cluster_id, path, dcgm=dcgm, request=request, recipe=recipe_relpath(srt_recipe)
     )

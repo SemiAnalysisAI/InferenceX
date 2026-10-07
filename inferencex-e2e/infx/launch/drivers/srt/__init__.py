@@ -28,9 +28,14 @@ from infx.launch.drivers.srt.checkout import (
     prepare_checkout,
     run_setup,
 )
-from infx.launch.drivers.srt.recipe import eval_overrides, prepare_recipe
+from infx.launch.drivers.srt.recipe import eval_overrides, prepare_recipe, staged_recipe
 from infx.launch.drivers.srt.run import SrtRun, require, slurm_backend
-from infx.launch.request import BATCH_REENTRY_ENV, RequestError, SingleNodeRequest, SrtRequest
+from infx.launch.request import (
+    BATCH_REENTRY_ENV,
+    MultiNodeRequest,
+    RequestError,
+    SingleNodeRequest,
+)
 
 if TYPE_CHECKING:
     from infx.clusters import Cluster
@@ -120,13 +125,14 @@ def run_batch(launch: Launch) -> int:
 def run_multinode(launch: Launch) -> int:
     """One job on the cluster's lane for the launch path: prepare, submit, follow, collect."""
     lane = lanes.srt_lane(launch.cluster.id, launch.path)
-    request = SrtRequest.from_env(launch.request.env)
+    request = MultiNodeRequest.from_env(launch.request.env)
     lanes.check_request(lane, request)
-    config_file = lanes.config_file(request)
+    srt_recipe = lanes.srt_recipe(request)
+    staged = staged_recipe(srt_recipe)
     decision = power.resolve_power(launch.cluster.id, launch.path, request)
     model = models.checkpoint(launch.cluster, request)
     served = models.served_path(launch.cluster, request, model)
-    model_paths = models.model_paths(launch.cluster, request, config_file, served)
+    model_paths = models.model_paths(launch.cluster, request, srt_recipe, served)
     run = SrtRun.create(launch, request, models.job_env(launch.cluster, request, served))
     preflight = run.srt.preflight and not (model_paths and model and model.node_local)
     if request.framework == "tilert":
@@ -147,12 +153,12 @@ def run_multinode(launch: Launch) -> int:
 
     conc_list = request.env.get("CONC_LIST", "") if decision.dcgm else None
     job_name = srtctl_job_name(request.runner_name)
-    prepare_recipe(checkout.root, config_file, job_name, run.srt.dist_timeout_s, conc_list)
-    arguments = submit.multinode_arguments(run, lane, config_file, overrides, preflight=preflight)
+    prepare_recipe(checkout.root, staged, job_name, run.srt.dist_timeout_s, conc_list)
+    arguments = submit.multinode_arguments(run, lane, staged, overrides, preflight=preflight)
     manifest = run.workspace / submit.MULTINODE_SUBMISSION
     submitted = submit.Submitted(manifest=manifest)
     run.life.callback(submitted.cancel, run.backend)
-    if rc := submit.submit_lane(run, submitted, checkout, config_file, arguments):
+    if rc := submit.submit_lane(run, submitted, checkout, staged, arguments):
         return rc
     return collect.collect(run, lane, checkout, submitted.adopted(), decision, infmax)
 

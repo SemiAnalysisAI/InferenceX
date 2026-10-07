@@ -212,7 +212,7 @@ The first cleanup step, before checkout, cancels the runner's Slurm jobs with pl
 
 | Driver | Runs |
 | --- | --- |
-| [`drivers/srt/`](../infx/launch/drivers/srt) | Single-node and multi-node srt-slurm recipes (`SRT_RECIPE`, `CONFIG_FILE`), including the cluster-maintained B200 Nscale lanes. Slurm only |
+| [`drivers/srt/`](../infx/launch/drivers/srt) | Single-node and multi-node srt-slurm recipes (`SRT_RECIPE`, plus `EVAL_SRT_RECIPE` for multi-node eval-only runs), including the cluster-maintained B200 Nscale lanes. Slurm only |
 | [`drivers/script.py`](../infx/launch/drivers/script.py) | Single-node runs with an explicit `BENCH_SCRIPT_OVERRIDE`, such as SPEED-Bench collectors: one container through the backend interface, on any backend. The only driver clusters on other schedulers run |
 
 Depending on the driver, the launcher may:

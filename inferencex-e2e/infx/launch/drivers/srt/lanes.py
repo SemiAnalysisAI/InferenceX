@@ -12,7 +12,7 @@ from infx.launch.request import RequestError
 
 if TYPE_CHECKING:
     from infx.clusters.slurm import SrtSlurmSettings
-    from infx.launch.request import LaunchRequest, SrtRequest
+    from infx.launch.request import LaunchRequest, MultiNodeRequest, SrtRequest
 
 
 @dataclass(frozen=True)
@@ -134,21 +134,15 @@ def check_request(lane: SrtLane, request: SrtRequest) -> None:
             raise LaunchError(f"{message} (FRAMEWORK={framework})")
 
 
-def config_file(request: SrtRequest) -> str:
-    """CONFIG_FILE, or on an eval-only run its real-verification EVAL_CONFIG_FILE."""
-    if request.eval_only and request.eval_config_file:
+def srt_recipe(request: MultiNodeRequest) -> str:
+    """SRT_RECIPE, or on an eval-only run its real-verification EVAL_SRT_RECIPE."""
+    if request.eval_only and request.eval_srt_recipe:
         print(
-            f"EVAL_ONLY=true: selecting real-verification recipe {request.eval_config_file}",
+            f"EVAL_ONLY=true: selecting real-verification recipe {request.eval_srt_recipe}",
             flush=True,
         )
-        return request.eval_config_file
-    if not request.config_file:
-        raise LaunchError(
-            "CONFIG_FILE is not set. The srt-slurm path requires a CONFIG_FILE in additional-settings "
-            f"(MODEL_PREFIX={request.model_prefix} PRECISION={request.precision} "
-            f"FRAMEWORK={request.framework})"
-        )
-    return request.config_file
+        return request.eval_srt_recipe
+    return request.srt_recipe
 
 
 def srt_time_limit(

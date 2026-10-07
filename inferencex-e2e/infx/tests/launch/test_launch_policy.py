@@ -19,7 +19,7 @@ from infx.launch.drivers.srt.power import (
 )
 from infx.launch.lifecycle import Lifecycle
 from infx.launch.policy import LaunchPath, Match, salloc_time_limit
-from infx.launch.request import LaunchRequest
+from infx.launch.request import LaunchRequest, MultiNodeRequest
 
 DCGM, AGENTX, ADAPTER, ERR = "dcgm", "agentx", "adapter", "error"
 MULTI, NATIVE = LaunchPath.SRT_MULTI, LaunchPath.SRT_NATIVE
@@ -29,10 +29,11 @@ def _request(**env):
     return LaunchRequest.from_env({"RUNNER_NAME": "r_0", **env})
 
 
-GB200_GLM = "recipes/glm5.2/sglang/gb200-fp4/agentx/agg.yaml"
-KIMI_GB200 = "recipes/kimik3/vllm/gb200-fp4/agentx/k.yaml"
-KIMI_GB300 = "recipes/kimik3/vllm/gb300-fp4/agentx/deep/k.yaml"
-OTHER = "recipes/other.yaml"
+MIRROR = "benchmarks/multi_node/srt-slurm-recipes"
+GB200_GLM = f"{MIRROR}/glm5.2/sglang/gb200-fp4/agentx/agg.yaml"
+KIMI_GB200 = f"{MIRROR}/kimik3/vllm/gb200-fp4/agentx/k.yaml"
+KIMI_GB300 = f"{MIRROR}/kimik3/vllm/gb300-fp4/agentx/deep/k.yaml"
+OTHER = f"{MIRROR}/other.yaml"
 
 CASES = [
     ("gb200-nv", MULTI, "1", "glm5.2", "fp4", "dynamo-sglang", GB200_GLM, AGENTX),
@@ -111,22 +112,30 @@ def _mirror(tmp_path, rel, text):
 POWER_RECIPE = "telemetry:\n  dcgm_exporter:\n  enabled: true\n"
 
 
+def _multinode(**env):
+    return MultiNodeRequest.from_env({
+        "RUNNER_NAME": "r_0", "IMAGE": "i", "SPEC_DECODING": "none", "RESULT_FILENAME": "r",
+        "RUN_EVAL": "false", **env,
+    })
+
+
 def test_nscale_eval_only_inspects_eval_recipe(tmp_path):
     _mirror(tmp_path, "dsv4/eval.yaml", POWER_RECIPE)
     _mirror(tmp_path, "dsv4/bench.yaml", "model: {}\n")
     env = dict(
         GITHUB_WORKSPACE=str(tmp_path), IS_AGENTIC="0", MODEL_PREFIX="dsv4", PRECISION="fp4",
-        FRAMEWORK="dynamo-vllm", CONFIG_FILE="recipes/dsv4/bench.yaml:zip",
-        EVAL_CONFIG_FILE="recipes/dsv4/eval.yaml",
+        FRAMEWORK="dynamo-vllm", SRT_RECIPE=f"{MIRROR}/dsv4/bench.yaml:zip",
+        EVAL_SRT_RECIPE=f"{MIRROR}/dsv4/eval.yaml",
     )
-    assert resolve_power("b200-nscale", MULTI, _request(**env, EVAL_ONLY="true")).dcgm
-    assert not resolve_power("b200-nscale", MULTI, _request(**env, EVAL_ONLY="false")).dcgm
-    assert not resolve_power("b300-dsxe", MULTI, _request(**env, EVAL_ONLY="true")).dcgm
+    assert resolve_power("b200-nscale", MULTI, _multinode(**env, EVAL_ONLY="true")).dcgm
+    assert not resolve_power("b200-nscale", MULTI, _multinode(**env, EVAL_ONLY="false")).dcgm
+    assert not resolve_power("b300-dsxe", MULTI, _multinode(**env, EVAL_ONLY="true")).dcgm
 
 
-def test_upstream_only_recipe_stays_non_power(tmp_path):
-    request = _request(GITHUB_WORKSPACE=str(tmp_path), CONFIG_FILE="recipes/missing.yaml",
-                       IS_AGENTIC="0", FRAMEWORK="dynamo-trt")
+def test_recipe_missing_from_the_workspace_stays_non_power(tmp_path):
+    request = _multinode(GITHUB_WORKSPACE=str(tmp_path), SRT_RECIPE=f"{MIRROR}/missing.yaml",
+                         IS_AGENTIC="0", FRAMEWORK="dynamo-trt", MODEL_PREFIX="m",
+                         PRECISION="fp8", EVAL_ONLY="false")
     assert not resolve_power("gb300-nv", MULTI, request).dcgm
 
 

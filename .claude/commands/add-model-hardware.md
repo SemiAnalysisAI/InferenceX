@@ -75,7 +75,8 @@ This research directly feeds Step 2 (recipe args/env) and Step 3 (search space).
 1. `inferencex-e2e/benchmarks/single_node/srt-slurm-recipes/<model-prefix>/<engine>/<sku>-<precision>[-mtp]/8k1k.yaml`
    (an `agentic.yaml` beside it for AgentX)
 2. an entry in either master config, **`inferencex-e2e/configs/nvidia-master.yaml`** (b*/h*/gb* SKUs) or
-   **`inferencex-e2e/configs/amd-master.yaml`** (mi* SKUs), with `srt-recipe:` on every search-space row
+   **`inferencex-e2e/configs/amd-master.yaml`** (mi* SKUs), with `srt-recipe-dir:` (the directory above,
+   relative to `srt-slurm-recipes/`) on the entry and `srt-recipe:` (the file name) on every search-space row
 3. a `inferencex-e2e/perf-changelog.yaml` entry (this diff vs main is what selects the sweep)
 
 ## Step 1 — branch + find the sibling to copy

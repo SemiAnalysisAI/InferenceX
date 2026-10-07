@@ -45,8 +45,9 @@ def cluster(tmp_path, single_node_models: str = "staged") -> Cluster:
     return load_inventory({"labels": {"cluster:c": ["c_0"]}, "clusters": {"c": record}}).clusters["c"]
 
 
-MULTI = dict(IS_MULTINODE="true", CONFIG_FILE="recipes/x.yaml")
+MULTI = dict(IS_MULTINODE="true")
 SINGLE = dict(IS_MULTINODE="false")
+MIRROR = "benchmarks/multi_node/srt-slurm-recipes"
 
 
 @pytest.mark.parametrize(("cluster_id", "env", "path"), [
@@ -139,16 +140,16 @@ def test_every_recipe_alias_maps_to_the_checkpoint_and_literals_pass_through(tmp
     point = request(MODEL=model, GITHUB_WORKSPACE=str(tmp_path / "ws"))
     if paths is LaunchError:
         with pytest.raises(LaunchError, match="stages no checkpoint"):
-            model_paths(c, point, "recipes/r.yaml:override_x", served_path(c, point, checkpoint(c, point)))
+            model_paths(c, point, f"{MIRROR}/r.yaml:override_x", served_path(c, point, checkpoint(c, point)))
         return
-    resolved = model_paths(c, point, "recipes/r.yaml:override_x", served_path(c, point, checkpoint(c, point)))
+    resolved = model_paths(c, point, f"{MIRROR}/r.yaml:override_x", served_path(c, point, checkpoint(c, point)))
     assert resolved == {alias: str(tmp_path / path) for alias, path in paths.items()}
 
 
 def test_missing_recipe_fails_before_model_resolution(tmp_path):
     c, point = cluster(tmp_path), request(MODEL="org/M", GITHUB_WORKSPACE=str(tmp_path))
     with pytest.raises(LaunchError, match="not in the recipe mirror"):
-        model_paths(c, point, "recipes/missing.yaml", "/m")
+        model_paths(c, point, f"{MIRROR}/missing.yaml", "/m")
 
 
 def test_matching_single_node_points_read_the_shared_hub_cache(tmp_path, monkeypatch):

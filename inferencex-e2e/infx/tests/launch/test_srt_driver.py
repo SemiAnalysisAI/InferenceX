@@ -77,6 +77,7 @@ benchmark:
   concurrencies: [4]
 """
 POWER_TELEMETRY = "telemetry:\n  dcgm_exporter:\n    image: dcgm\n  enabled: true\n"
+MIRROR = "benchmarks/multi_node/srt-slurm-recipes"
 
 
 @pytest.fixture
@@ -110,7 +111,7 @@ def lane_env(harness, cluster_id: str, recipe: str = LANE_RECIPE, **overrides: s
     mirror.write_text(recipe)
     env = {
         **harness.env, "RUNNER_NAME": overrides.pop("RUNNER_NAME", None) or runner_for(cluster_id),
-        "IS_MULTINODE": "true", "CONFIG_FILE": "recipes/test/lane.yaml", "IMAGE": "test:tag",
+        "IS_MULTINODE": "true", "SRT_RECIPE": f"{MIRROR}/test/lane.yaml", "IMAGE": "test:tag",
         "CONC_LIST": "4", "SPEC_DECODING": "none", "IS_AGENTIC": "0", "ISL": "1024", "OSL": "1024",
         "FAKE_RESULTS": "fixed",
     }  # fmt: skip
@@ -427,7 +428,7 @@ def test_eval_only_runs_the_eval_recipe_with_real_verification(harness):
     env = lane_env(
         harness, "gb300-nv", MODEL_PREFIX="dsv4", PRECISION="fp4", FRAMEWORK="dynamo-trt",
         MODEL="deepseek-ai/DeepSeek-V4-Pro", IS_AGENTIC="1", SPEC_DECODING="mtp", ISL="0", OSL="0",
-        EVAL_ONLY="true", EVAL_CONFIG_FILE="recipes/test/eval.yaml", FAKE_RESULTS="eval",
+        EVAL_ONLY="true", EVAL_SRT_RECIPE=f"{MIRROR}/test/eval.yaml", FAKE_RESULTS="eval",
         EVAL_CONC="4 8", RECIPE_FINGERPRINT="recipe-fixture", FAKE_EVAL_META=json.dumps(staged),
     )  # fmt: skip
     assert_ok(launch(env, harness.config, harness.workspace))
@@ -456,6 +457,28 @@ def test_eval_only_runs_the_eval_recipe_with_real_verification(harness):
     assert list(workspace.glob("point-identity_*.json")) == []
 
 
+def test_srtctl_runs_the_bundle_variant_staged_from_srt_recipe(harness):
+    bundle = "base:\n" + "".join(f"  {line}\n" for line in LANE_RECIPE.splitlines())
+    env = lane_env(
+        harness, "h200-dgxc", bundle + "override_x:\n  benchmark:\n    concurrencies: [8]\n",
+        MODEL_PREFIX="dsr1", PRECISION="fp8", FRAMEWORK="dynamo-sglang",
+        MODEL="deepseek-ai/DeepSeek-R1-0528", SRT_RECIPE=f"{MIRROR}/test/lane.yaml:override_x",
+    )  # fmt: skip
+    assert_ok(launch(env, harness.config, harness.workspace))
+    [call] = srtctl_calls(harness.logs)
+    argv = call["argv"]
+    # The same path:selector the CONFIG_FILE=recipes/... setting used to hand srtctl.
+    assert argv[argv.index("--file") + 1] == "recipes/test/lane.yaml:override_x"
+
+
+def test_srt_recipe_outside_the_recipe_mirror_fails_before_any_setup(harness):
+    env = lane_env(harness, "h200-dgxc", MODEL_PREFIX="dsr1", PRECISION="fp8",
+                   FRAMEWORK="dynamo-sglang", MODEL="m", SRT_RECIPE="recipes/test/lane.yaml")  # fmt: skip
+    result = launch(env, harness.config, harness.workspace)
+    assert result.returncode == 1
+    assert "recipes/test/lane.yaml is not under benchmarks/multi_node/srt-slurm-recipes" in result.stderr
+    assert lines(harness.logs, "git") == []
+
 def test_setup_retries_only_after_discarding_a_truncated_archive(harness):
     env = lane_env(
         harness, "h200-dgxc", MODEL_PREFIX="dsr1", PRECISION="fp8", FRAMEWORK="dynamo-sglang",
@@ -482,8 +505,6 @@ def test_a_setup_failure_without_a_bad_archive_is_not_retried(harness):
     ("h100-dgxc", dict(MODEL_PREFIX="dsr1", PRECISION="fp8", FRAMEWORK="dynamo-vllm"), "Unsupported framework"),
     ("b200-nscale", dict(MODEL_PREFIX="dsv4", PRECISION="fp4", FRAMEWORK="dynamo-trt"), "only dynamo-vllm"),
     ("gb300-nv", dict(MODEL_PREFIX="llama", PRECISION="fp8", FRAMEWORK="dynamo-sglang"), "stages no checkpoint"),
-    ("h200-dgxc", dict(MODEL_PREFIX="dsr1", PRECISION="fp8", FRAMEWORK="dynamo-sglang", CONFIG_FILE=""),
-     "CONFIG_FILE is not set"),
 ])  # fmt: skip
 def test_unsupported_multinode_requests_fail_before_any_setup(harness, cluster_id, env, message):
     result = launch(lane_env(harness, cluster_id, MODEL="m", **env), harness.config, harness.workspace)
@@ -495,6 +516,7 @@ def test_unsupported_multinode_requests_fail_before_any_setup(harness, cluster_i
 @pytest.mark.parametrize(("shape", "overrides", "missing"), [
     ("single", dict(IS_AGENTIC="1", SPEC_DECODING="mtp", THINKING_MODE=""), "THINKING_MODE"),
     ("multi", dict(SPEC_DECODING=None), "SPEC_DECODING"),
+    ("multi", dict(SRT_RECIPE=None), "SRT_RECIPE"),
     ("batch", dict(SRT_RECIPE=None), "SRT_RECIPE"),
 ])  # fmt: skip
 def test_a_missing_input_is_named_before_any_setup(harness, shape, overrides, missing):

@@ -27,14 +27,21 @@ _MAX_ATTEMPTS = re.compile(r"(\bmax_attempts:\s*)(\d+)")
 FORCED_ACCEPTANCE_MARKER = "TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS"
 
 
-def recipe_relpath(config_file: str) -> str:
-    """The recipe path of ``CONFIG_FILE``, without its ``:<override>`` selector."""
-    return config_file.split(":", 1)[0]
+def recipe_relpath(srt_recipe: str) -> str:
+    """``srt_recipe`` without its ``:<selector>``."""
+    return srt_recipe.split(":", 1)[0]
 
 
-def recipe_mirror_path(workspace: Path, config_file: str) -> Path:
-    """The workspace mirror of ``CONFIG_FILE``'s recipe."""
-    return workspace / RECIPES_MIRROR / recipe_relpath(config_file).removeprefix("recipes/")
+def recipe_mirror_path(workspace: Path, srt_recipe: str) -> Path:
+    return workspace / recipe_relpath(srt_recipe)
+
+
+def staged_recipe(srt_recipe: str) -> str:
+    """The srtctl file argument: the recipe's copy in the checkout's ``recipes/``, selector kept."""
+    relative = srt_recipe.removeprefix(f"{RECIPES_MIRROR.as_posix()}/")
+    if relative == srt_recipe:
+        raise LaunchError(f"{srt_recipe} is not under {RECIPES_MIRROR}")
+    return f"recipes/{relative}"
 
 
 def rename_job(text: str, name: str) -> str:
@@ -74,15 +81,15 @@ def add_dist_timeout(text: str, seconds: int) -> str:
 
 def prepare_recipe(
     checkout: Path,
-    config_file: str,
+    staged: str,
     job_name: str,
     dist_timeout_s: int | None,
     conc_list: str | None,
 ) -> None:
-    """Edit the checkout's staged copy of ``config_file`` for this job."""
-    config_path = checkout / recipe_relpath(config_file)
+    """Edit the checkout's staged copy of the recipe for this job."""
+    config_path = checkout / recipe_relpath(staged)
     if not config_path.is_file():
-        raise LaunchError(f"CONFIG_FILE does not exist after srt-slurm setup: {config_path}")
+        raise LaunchError(f"{staged} does not exist after srt-slurm setup: {config_path}")
     text = raise_health_attempts(rename_job(config_path.read_text(), job_name))
     if dist_timeout_s is not None:
         text = add_dist_timeout(text, dist_timeout_s)
