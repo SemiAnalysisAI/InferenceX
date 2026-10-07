@@ -4,7 +4,7 @@
 
 InferenceX owns the recipes in this directory. For every NVIDIA srt-slurm launch, the srt driver ([`infx/launch/drivers/srt/checkout.py`](../../../infx/launch/drivers/srt/checkout.py)) makes a job-local Git clone of the pinned submodule and copies this entire tree into `recipes/`. It records the actual revision in `srt-slurm-sha.txt`; power lanes copy that revision into `power-producer-sha.txt` for result validation.
 
-The shared version is the Git submodule pointer at [`utils/srt-slurm`](../../../utils/srt-slurm), currently [v2.36.0](https://github.com/NVIDIA/srt-slurm/releases/tag/v2.36.0) (`7b5863a7837673d81403b076be219bbf18a7700f`). Update that submodule pointer when upgrading, then run the recipe and integration checks. Do not add model-specific checkout branches to launchers.
+The shared version is the Git submodule pointer at [`utils/srt-slurm`](../../../utils/srt-slurm), currently [v2.43.4](https://github.com/NVIDIA/srt-slurm/releases/tag/v2.43.4) (`848f72d45b05af0fc082a9d1df49a8b4e7e61507`). Update that submodule pointer when upgrading, then run the recipe and integration checks. Do not add model-specific checkout branches to launchers.
 
 InferenceX requires srt-slurm 2.0 or newer and `schema: 2` recipes. Legacy recipe layouts are unsupported; migrate them before adding them to this tree.
 
@@ -54,8 +54,6 @@ All referenced recipes must be checked in: srt-slurm 2 ships curated examples in
 Install the shared pin in an isolated environment, then use its CLI:
 
 ```bash
-# Verify each supported recipe directory before rewriting it.
-srtctl migrate --verify -f benchmarks/multi_node/srt-slurm-recipes/dsr1/sglang
 srtctl migrate --in-place -f benchmarks/multi_node/srt-slurm-recipes/dsr1/sglang
 # Repeat for the other model/engine directories.
 python -m pytest infx/tests/matrix/ -q
@@ -64,7 +62,7 @@ python -m infx.matrix.generate full-sweep \
   --framework dynamo-sglang dynamo-trt dynamo-vllm --multi-node
 ```
 
-Validate recipes with the exact launcher pin, including all override variants. For a path-only reorganization, compare generated matrices before and after with the path mapping applied; all other fields, including eval selection and node counts, must match. A passing local schema check does not replace the full hardware sweep and evals.
+Validate recipes with the exact launcher pin, including all override variants. The current migration CLI has no `--verify`; use `srtctl dry-run` for each selected recipe after migration, supplying launcher-provided values such as `benchmark.concurrencies` through `--set` when needed. For a path-only reorganization, compare generated matrices before and after with the path mapping applied; all other fields, including eval selection and node counts, must match. A passing local schema check does not replace the full hardware sweep and evals.
 
 The initial migration also resolves compatibility issues that `srtctl migrate` cannot fix itself:
 

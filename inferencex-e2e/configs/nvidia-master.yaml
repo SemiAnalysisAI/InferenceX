@@ -5548,7 +5548,7 @@ minimaxm3-fp8-h100-vllm-agentic-mtp:
       - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [6, 8], srt-recipe: benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/h100-fp8-mtp/agentic.yaml }
 
 minimaxm3-fp8-h200-vllm-agentic-mtp:
-  image: vllm/vllm-openai:nightly-ddd6fbca148a867aad1fcab7ec72f582b9977db4
+  image: vllm/vllm-openai:nightly-1a001d584244bd21829a5e5bd4a376ea141c0ce3
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: cluster:h200-dgxc
@@ -5557,11 +5557,10 @@ minimaxm3-fp8-h200-vllm-agentic-mtp:
   multinode: false
   scenarios:
     agentic-coding:
-    # Keep the resident c1-c10 points and the Mooncake DRAM-offload c12 point.
+    # Use the FP8 MSA indexer cache for all H200 concurrency variants.
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 6, 8, 10], srt-recipe: benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/h200-fp8-mtp/agentic.yaml }
-      - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [12], srt-recipe: benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/h200-fp8-mtp/agentic.yaml }
+      - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 6, 8, 10, 12, 14], srt-recipe: benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/h200-fp8-mtp/agentic.yaml }
 
 qwen3.5-fp4-b200-sglang-agentic-mtp:
   image: lmsysorg/sglang:v0.5.16-cu130
