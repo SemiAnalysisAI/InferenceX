@@ -112,22 +112,26 @@ Processing and, for multinode jobs, diagnostic power-audit uploads run after lau
 ### SRT single-node power artifacts
 
 The launcher enables native telemetry for single-node fixed-sequence and AgentX jobs.
-It retains `LOGS/power`, the result JSON referenced by each measurement window,
-the producer revision and exporter provenance in `power_audit_<RESULT_FILENAME>`.
+It retains `LOGS/power` (`samples.csv`, `manifest.json`, `windows/`), the result JSON
+referenced by each measurement window, the producer revision and exporter provenance
+in `power_audit_<RESULT_FILENAME>`.
 AgentX also retains `LOGS/agentic/agentic_power_concurrency_*.json` and its validation
 sidecar. Available diagnostics are staged even when the job fails; eval-only jobs
 do not enable power collection.
 
-Both NVIDIA DCGM and AMD device-metrics-exporter packages use the shared native
-validator, which checks the profile's metric and measurement boundary, producer,
-GPU count and result binding. AgentX validates single-node `num_gpus` against the
-launcher's expected count before adding power metrics and a bounded audit summary.
-Invalid measurements omit energy metrics; `REQUIRE_POWER=1` also fails the job.
-The historical CSV reader remains available for previously captured artifacts.
+NVIDIA DCGM and AMD device-metrics-exporter packages share one validator. It reads
+the vendor-neutral manifest fields the pinned producer writes (`source_metric`,
+`power_scope`, `temperature_metric`, the `dcgm_exporter` identity and
+`producer_git_commit`) instead of a vendor profile, then checks the measurement
+boundary, producer pin, GPU count and result binding. AgentX validates single-node
+`num_gpus` against the launcher's expected count before adding power metrics and a
+bounded audit summary. Invalid measurements omit energy metrics; `REQUIRE_POWER=1`
+also fails the job. The historical CSV reader remains available for previously
+captured artifacts.
 
 ### SRT multinode window retention
 
-SRT samples CSV versions 1, 2 and 3 are accepted. Version 3 adds optional `temperature_c` in Celsius; temperature is retained in the uploaded artifact for the app and does not enter the GPU-energy calculation. Missing values stay empty. Malformed temperature cells invalidate the package under the existing strict artifact checks. Deploy this reader before a producer that emits version 3.
+SRT samples CSV versions 1, 2 and 3 are accepted for single-node and multinode packages alike. The pinned producer (srt-slurm `641a07f2`, NVIDIA/srt-slurm#572) writes version 3 with the header `schema_version,timestamp_unix,scrape_seq,hostname,gpu_index,gpu_uuid,power_w,gpu_util_pct,sm_active,temperature_c`; versions 1 and 2 from retained runs remain readable. `temperature_c` is optional Celsius from the exporter's temperature metric (`DCGM_FI_DEV_GPU_TEMP` on NVIDIA, `gpu_junction_temperature` on AMD); temperature is retained in the uploaded artifact for the app and does not enter the GPU-energy calculation. Missing values stay empty. Malformed temperature cells invalidate the package under the existing strict artifact checks.
 
 Power audit sidecars retain independently validated measurements in `selected_window`;
 `package_integrity_valid` records shared evidence checks and `window_validations` records
@@ -202,16 +206,16 @@ The aggregate artifact matches the `bmk_*` collection pattern and therefore also
 
 Server logs are separate `server_logs_<RESULT_FILENAME>` artifacts. The app uses the fully stripped suffix fallback so AgentX rows can find a server log even though the log artifact has no `agentic_` prefix.
 
-AgentX power applies only to replays with `IS_MULTINODE=true`. Single-node
-replays, including aggregated srt-slurm recipes that set `IS_MULTINODE: false`,
-publish no power fields or verdict, whatever `ENABLE_AGENTX_POWER` says.
-Multinode runs retain the deployment telemetry under `LOGS/power/` and
-per-concurrency window/validation files under `LOGS/agentic/` in their
-`power_audit_<RESULT_FILENAME>` artifact. Available audits and AgentX aggregates
-upload even when a benchmark fails. Missing files do not establish power support: a
-multinode recipe also needs `telemetry` enabled so the pinned srt-slurm exports
-`SRT_MEASUREMENT_WINDOW_DIR` to its custom benchmark command; InferenceX derives
-the result root and concurrency from that directory and the replay itself.
+AgentX power applies to multinode replays and to single-node replays, for which
+the launcher enables native telemetry and sets `ENABLE_AGENTX_POWER`. Both retain
+the deployment telemetry under `LOGS/power/` and per-concurrency window/validation
+files under `LOGS/agentic/` in their `power_audit_<RESULT_FILENAME>` artifact.
+Available audits and AgentX aggregates upload even when a benchmark fails. Missing
+files do not establish power support: the job also needs `telemetry` enabled so the
+pinned srt-slurm exports `SRT_MEASUREMENT_WINDOW_DIR` to its custom benchmark
+command. Multinode recipes opt in themselves; the launcher opts single-node jobs in.
+InferenceX derives the result root and concurrency from that directory and the
+replay itself.
 When that measurement-window contract is absent, the aggregate records
 `power_valid: 0` and the audit names `multinode_power_contract_missing`;
 `REQUIRE_POWER=1` also fails the job after preserving available results.
