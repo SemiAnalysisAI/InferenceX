@@ -153,7 +153,7 @@ class _FakeResponse:
         return None
 
 
-def _produce_package(tmp_path: Path, exporter_name: str) -> Path:
+def _produce_package(tmp_path: Path, exporter_name: str, *, clock_sync_failures: tuple[str, ...] = ()) -> Path:
     """Run the pinned producer end to end and return the job log directory."""
     exporter, command, scrape, _ = EXPORTERS[exporter_name]
     logs = tmp_path / "LOGS"
@@ -193,6 +193,7 @@ def _produce_package(tmp_path: Path, exporter_name: str) -> Path:
             endpoints=[PowerEndpoint("node-a", f"http://node-a:{exporter.port}/metrics")],
         )
         session.initialize()
+        session.record_clock_sync_failures(clock_sync_failures)
         with patch("srtctl.core.power.session.requests.get", return_value=_FakeResponse(scrape())):
             for second in range(SCRAPES):
                 clock.now = T0 + second
@@ -202,9 +203,13 @@ def _produce_package(tmp_path: Path, exporter_name: str) -> Path:
         write_window(result, CONCURRENCY, session.windows_dir)
         clock.now = T0 + SCRAPES
         outcome = session.stop_and_finalize()
-    assert outcome.publication_valid, outcome.reason_codes
     report = validate_power_artifacts(power_dir=logs / "power", result_root=logs)
-    assert report.ok, report.failures
+    if clock_sync_failures:
+        assert not outcome.publication_valid and "clock_sync_unverified" in outcome.reason_codes
+        assert not report.ok and "stored publication_valid is false" in report.failures
+    else:
+        assert outcome.publication_valid, outcome.reason_codes
+        assert report.ok, report.failures
     return logs
 
 
@@ -313,3 +318,17 @@ def test_single_node_result_processor_publishes_the_amd_package(tmp_path, monkey
     assert agg["power_audit"]["producer_sha"] == PRODUCER_SHA
     assert agg["power_audit"]["expected_gpu_count"] == len(GPUS)
     assert agg["power_audit"]["observed_gpu_count"] == len(GPUS)
+
+
+def test_clock_sync_refusal_is_named_not_a_verdict_mismatch(tmp_path):
+    # h200-dgxc, 2026-10-07: the producer kept collecting but marked the package
+    # unpublishable because worker-11 could not prove NTP synchronisation.
+    logs = _produce_package(tmp_path, "dcgm", clock_sync_failures=("worker-11",))
+    code, agg, sidecar = _consume(logs)
+    assert code == 1
+    assert sidecar["power_valid"] is False
+    assert "producer_verdict_mismatch" not in sidecar["reasons"]
+    assert "package_recompute_invalid" in sidecar["reasons"]
+    assert any(failure.startswith("clock_sync_unverified: worker-11") for failure in sidecar["failures"])
+    assert agg["power_valid"] == 0
+    assert "avg_power_w" not in agg

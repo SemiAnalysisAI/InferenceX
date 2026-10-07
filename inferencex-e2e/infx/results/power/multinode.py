@@ -886,6 +886,21 @@ def _check_stored_evidence(
         if len(set(keys)) != len(keys):
             failures.append(f"{label} contains duplicate keys")
 
+    # The producer's pre-server NTP probe is runtime-only, but the hosts it
+    # flagged are persisted; an unverified clock stays unpublishable offline.
+    # Packages from before the probe existed carry no field and never ran it.
+    clock_sync_failures = manifest.get("clock_sync_failures", [])
+    if not isinstance(clock_sync_failures, list) or not all(
+        isinstance(node, str) for node in clock_sync_failures
+    ):
+        failures.append("clock_sync_failures is not a list of strings")
+    elif clock_sync_failures:
+        failures.append(
+            "clock_sync_unverified: "
+            + ", ".join(clock_sync_failures)
+            + " did not prove NTP synchronisation"
+        )
+
     return failures
 
 
