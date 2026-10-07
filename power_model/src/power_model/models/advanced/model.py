@@ -9,7 +9,7 @@ from power_model.models.advanced.systems.base import GPUSystem, SystemGroup
 from power_model.models.advanced.systems.catalog import get_system_class
 
 
-class AdvancedAllInPowerModel(PowerModel):
+class OSSAllinPowerModel(PowerModel):
     cluster: Cluster
 
     @classmethod

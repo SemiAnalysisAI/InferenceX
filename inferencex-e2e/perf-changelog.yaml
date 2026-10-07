@@ -9329,6 +9329,36 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3724
 
 - config-keys:
+    - "*"
+  description:
+    - "Update the shared srt-slurm pin from v2.39.1 to v2.43.4, including staged Dynamo wheel dependency resolution."
+    - "Migrate five GLM-5.2 H200 AgentX recipes and the DeepSeek-V4 MI355X AgentX override bundle to schema 2; rely on automatic golden acceptance injection for the GLM-5.2 recipes."
+    - "Use schema 2 benchmark client placement in eleven Kimi-K3 GB200 and GB300 AgentX recipes."
+    - "Place discovery services on the existing infra node in three H200 AgentX recipes with required telemetry."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3755
+
+- config-keys:
+    - minimaxm3-fp8-h200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the MiniMax-M3 H200 vLLM image and enable the FP8 MSA indexer cache."
+    - "Use GPU-resident KV for concurrency 12 and add concurrency 14; remove the Mooncake DRAM-offload variant."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3736
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Move to lmsysorg/sglang-rocm:v0.5.21-rocm720-mi35x-20261006."
+    - "Switch from TP4/EP4 at concurrency 1-32 to TP2/EP1 at concurrency 1, 2, 4, 8, 16, 32 and 64, with host Engram tables (per_rank layout), shared-experts fusion and AITER FP8 GEMMs. The prefill chunk is 16384 tokens through C32 and 4096 at C64; the PDI is 16 through C16 and 4 from C32."
+    - "Add TP2's sibling band at TP4/EP1, concurrency 1, 2, 4, 8 and 16, on the same recipe."
+    - "Run decoder SWA bounded replay with prefill graphs disabled on every point."
+    - "Throughput keeps the committed thinking-on golden AL 3.51 selected by the srt connector; evals use real verification."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3696
+
+- config-keys:
     - dsv41flash-fp4-mi355x-atom-agentic-dspark
   scenario-type:
     - agentic-coding

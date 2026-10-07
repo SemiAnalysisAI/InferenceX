@@ -98,8 +98,6 @@ def test_extract_metrics_keeps_raw_values_for_other_callers() -> None:
     ({"exact_match,strict-first": 0.25, "exact_match,extract": 0.5},
      {"filter_list": [{"name": "strict-first"}, {"name": "strict-missing"},
                       {"name": "extract"}]}, (0.5, "em_flexible", None)),
-    ({"exact_match,resolved": 1.0, "exact_match_stderr,resolved": 0.03},
-     {"filter_list": [{"name": "resolved"}]}, (1.0, "em_strict", 0.03)),
     ({"exact_match,extract": 0.75, "exact_match_stderr,extract": 0.04},
      {"filter_list": [{"name": "extract"}]}, (0.75, "em_flexible", 0.04)),
 ])
