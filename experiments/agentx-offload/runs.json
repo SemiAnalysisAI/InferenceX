@@ -5729,7 +5729,7 @@
       "status": "in_progress",
       "workflow_name": "offload-v1-nvme2tib-c488-r1-capacity-20261007",
       "dispatched_at": "2026-10-07T00:27:28Z",
-      "phase": "B200 runner admitted; Slurm allocation and storage preflight pending",
+      "phase": "Slurm 19716 pending Resources on allowlisted im-b200-c001; no allocation, scratch, or warmup",
       "performance_result": false,
       "energy_result": false,
       "nvme_bytes_per_node": 2199023255552,
@@ -5745,7 +5745,12 @@
       "job_id": 112569707766,
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37552057241/job/112569707766",
       "runner": "b200-nscale-slurm_02",
-      "started_at": "2026-10-07T00:28:25Z"
+      "started_at": "2026-10-07T00:28:25Z",
+      "slurm_job_id": 19716,
+      "slurm_state": "PENDING Resources",
+      "slurm_time_limit": "08:30:00",
+      "requested_node": "im-b200-c001",
+      "runtime_evidence": "scontrol show job 19716: PENDING Resources, ReqNodeList=im-b200-c001, TimeLimit=08:30:00, no NodeList allocation. No storage preflight or task-owned scratch yet."
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35456989669,35469801850,35476053573,35497846918,35524019140,35524083518,35542179539,35542182560,35542185178,35542190411,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894,36796500128,37027095833,37428997901,37490705589",
