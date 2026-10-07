@@ -9338,6 +9338,15 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3755
 
 - config-keys:
+    - minimaxm3-fp8-h200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the MiniMax-M3 H200 vLLM image and enable the FP8 MSA indexer cache."
+    - "Use GPU-resident KV for concurrency 12 and add concurrency 14; remove the Mooncake DRAM-offload variant."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3736
+
+- config-keys:
     - dsv41flash-fp4-mi355x-sglang-agentic-dspark
   scenario-type:
     - agentic-coding
