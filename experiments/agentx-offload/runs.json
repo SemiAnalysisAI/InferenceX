@@ -6031,7 +6031,7 @@
       "status": "in_progress",
       "workflow_name": "offload-v1-nvme2tib-c488-r3-capacity-20261007",
       "dispatched_at": "2026-10-07T18:22:21Z",
-      "phase": "generated B200 job admitted; Slurm allocation and node not yet verified",
+      "phase": "canonical warmup primer, zero errors",
       "performance_result": false,
       "energy_result": false,
       "nvme_bytes_per_node": 2199023255552,
@@ -6046,7 +6046,35 @@
       "job_id": 112946461606,
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37666309639/job/112946461606",
       "runner": "b200-nscale-slurm_00",
-      "started_at": "2026-10-07T18:23:09Z"
+      "started_at": "2026-10-07T18:23:09Z",
+      "slurm_job_id": 19773,
+      "slurm_state": "RUNNING",
+      "slurm_started_at": "2026-10-07T18:23:51Z",
+      "slurm_time_limit": "08:30:00",
+      "node": "im-b200-c001",
+      "scratch": "/offload-scratch/inferencex-offload-37666309639-1-19773-9babf991ed44",
+      "host_scratch": "/scratch/inferencex-offload-37666309639-1-19773-9babf991ed44",
+      "dram_bytes": 0,
+      "nvme_bytes": 2199023255552,
+      "connector": {
+        "name": "SimpleCPUOffloadConnector",
+        "backend": "disk",
+        "lazy_offload": true,
+        "use_page_cache": false
+      },
+      "storage_free_bytes_pre_scratch": 23023379783680,
+      "o_direct_verified": true,
+      "warmup_started_at": "2026-10-07T18:32:43Z",
+      "warmup_target_requests": 5401,
+      "warmup_latest": {
+        "sample_at": "2026-10-07T18:42:13Z",
+        "returned": 133,
+        "sent": 521,
+        "in_flight": 388,
+        "errors": 0,
+        "elapsed_seconds": 570.1
+      },
+      "runtime_evidence": "Slurm 19773 allocated at 18:23:51Z on allowlisted im-b200-c001 with 08:30:00 limit. Live offload_config.json verifies 23,023,379,783,680 free bytes before scratch creation (>2,336,462,209,024 threshold), O_DIRECT, zero DRAM, 2,199,023,255,552 NVMe bytes, SimpleCPUOffloadConnector disk backend with lazy offload and page cache disabled. Exact host /scratch owner.json matches run 37666309639, attempt 1, Slurm 19773. Canonical warmup began 18:32:43Z; latest sample 18:42:13Z returned 133/5,401, sent 521, retained 388 in flight, zero errors after 570.1s."
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35456989669,35469801850,35476053573,35497846918,35524019140,35524083518,35542179539,35542182560,35542185178,35542190411,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894,36796500128,37027095833,37428997901,37490705589,37602969372",
