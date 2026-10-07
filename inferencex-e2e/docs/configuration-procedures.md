@@ -376,10 +376,13 @@ Source: [upstream recipe](https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4.1-Flas
 ### DeepSeek-V4.1-Flash DSpark on ATOM
 
 `dsv41flash-fp4-mi355x-atom-agentic-dspark` follows the
-[ATOM upstream recipe](https://github.com/ROCm/ATOM/blob/97359d6df46c59736468168b7be8bc50b482a1a9/recipes/DeepSeek-V4.1-Flash-Agentic.md)
-with `rocm/atom-dev:nightly_202610061600` (ATOM `0.1.7.dev59+g97359d6df`,
+[ATOM upstream recipe](https://github.com/ROCm/ATOM/blob/7fc0926c698e3f19df9dca23091e399851d3d0ec/recipes/DeepSeek-V4.1-Flash-Agentic.md)
+with `rocm/atom-dev:nightly_202610070333` (ATOM `0.1.7.dev60+g7fc0926c6`,
 ROCm 7.2.4), whose AITER carries the DeepSeek-V4.1-Flash TP4 bf16 GEMM tuning
-from [ROCm/aiter#6174](https://github.com/ROCm/aiter/pull/6174). Every point selects the native srt-slurm recipe
+from [ROCm/aiter#6174](https://github.com/ROCm/aiter/pull/6174). The image needs
+[ROCm/ATOM#2483](https://github.com/ROCm/ATOM/pull/2483): with Triton 3.7 the
+earlier mono step fence could spin for ever, and the server hung in warmup on
+the DSpark draft's first mono step (`nightly_202610061452` and `nightly_202610061600`). Every point selects the native srt-slurm recipe
 `benchmarks/single_node/srt-slurm-recipes/dsv41flash/atom/mi355x-fp4-mtp/agentic.yaml`;
 the legacy `dsv41flash_fp4_mi355x_atom_mtp.sh` launch from
 [#3387](https://github.com/SemiAnalysisAI/InferenceX/pull/3387) was removed in #3461 / #3463.
