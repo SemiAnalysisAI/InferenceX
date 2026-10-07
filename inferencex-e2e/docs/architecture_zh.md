@@ -274,9 +274,9 @@ result = build_result(records, profile, server_metrics, runtime_env,
 
 功耗遥测处理引擎也位于 [`infx.results.power`](../infx/results/power)：`multinode.run` 验证 srt-slurm 工件包。其基准窗口解析、单设备能量积分、聚合结果替换及审计序列化位于 `common.py`。固定序列及 AgentX 适配器直接导入该引擎；新结果格式可以将其基准窗口和 token 计数提供给它。原生 srt-slurm 遥测也覆盖单节点吞吐量和 AgentX 任务。
 
-SRT 固定序列与 AgentX 客户端使用 srt-slurm 原生功耗采样，不再启动本地 NVIDIA/AMD SMI 采样器。单节点固定序列吞吐测试开始前必须提供 `SRT_MEASUREMENT_WINDOW_DIR`，成功后从基准结果写入已完成的测量窗口。AgentX 不再按节点数量选择采样方式，而是标记原生窗口；缺少契约时，按现有 best-effort/`REQUIRE_POWER` 策略记录无效功耗。启动器必须启用原生遥测、保留功耗工件包及采集器版本，并在采集结束后完成 AgentX 功耗处理。固定序列处理通过 `POWER_ARTIFACT_DIR` 选择该工件包，单节点作业也适用。`single_node.run` 继续用于读取保留的历史 CSV 工件。
+SRT 固定序列与 AgentX 客户端使用 srt-slurm 原生功耗采样，不再启动本地 NVIDIA/AMD SMI 采样器。单节点固定序列吞吐测试开始前必须提供 `SRT_MEASUREMENT_WINDOW_DIR`，成功后从基准结果写入已完成的测量窗口。AgentX 不再按节点数量选择采样方式，而是标记原生窗口；缺少契约时，按现有 best-effort/`REQUIRE_POWER` 策略记录无效功耗。启动器必须启用原生遥测、保留功耗工件包及采集器版本，并在采集结束后完成 AgentX 功耗处理。固定序列处理通过 `POWER_ARTIFACT_DIR` 选择该工件包，单节点作业也适用。
 
-`infx` 包无需安装步骤或新增运行时依赖。从 `inferencex-e2e/` 运行 `python -m infx.results.power.single_node` 和 `python -m infx.results.power.multinode` 来调用引擎。
+`infx` 包无需安装步骤或新增运行时依赖。从 `inferencex-e2e/` 运行 `python -m infx.results.power.multinode` 来调用引擎。
 
 构建函数测试应使用独立计算预期结果的小样例和只读输入。修改现有适配器时，还应与旧实现比较 CLI 退出状态、诊断信息和生成工件，覆盖无效输入以及严格模式和尽力处理模式下的功耗失败。
 
