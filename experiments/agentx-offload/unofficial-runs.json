@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-10-05T21:14:21.905913Z",
+  "generated_at": "2026-10-07T00:22:48.944121Z",
   "repo": "SemiAnalysisAI/InferenceX",
   "branch": "experiment/agentx-b200-offload",
   "workflow_run_ids": [
@@ -75,9 +75,13 @@
     37366294117,
     37366720497,
     37372224015,
-    37374537927
+    37374537927,
+    37377909064,
+    37381547856,
+    37428997901,
+    37490705589
   ],
-  "job_id_count": 853,
+  "job_id_count": 912,
   "renderable_workflow_run_ids": [
     35444664736,
     35449533638,
@@ -106,7 +110,9 @@
     35934408414,
     35972536894,
     36796500128,
-    37027095833
+    37027095833,
+    37428997901,
+    37490705589
   ],
   "pure_nvme_renderable_workflow_run_ids": [
     35444664736,
@@ -118,7 +124,7 @@
     35934408414,
     36796500128
   ],
-  "all_renderable_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35456989669,35469801850,35476053573,35497846918,35524019140,35524083518,35542179539,35542182560,35542185178,35542190411,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894,36796500128,37027095833",
+  "all_renderable_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35456989669,35469801850,35476053573,35497846918,35524019140,35524083518,35542179539,35542182560,35542185178,35542190411,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894,36796500128,37027095833,37428997901,37490705589",
   "pure_nvme_renderable_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35524019140,35565538871,35646317491,35727274307,35832083322,35934408414,36796500128",
   "workflow_runs": [
     {
@@ -3292,13 +3298,24 @@
       "workflow_run_id": 37374537927,
       "workflow_name": "e2e Test - offload-v1-nvme4tib-c489-r3-digest-extended-fullsha-20261005",
       "display_title": "e2e Test - offload-v1-nvme4tib-c489-r3-digest-extended-fullsha-20261005",
-      "status": "queued",
-      "conclusion": null,
+      "status": "completed",
+      "conclusion": "failure",
       "created_at": "2026-10-05T21:13:34Z",
-      "updated_at": "2026-10-05T21:13:34Z",
+      "updated_at": "2026-10-05T21:26:59Z",
       "html_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37374537927",
       "job_ids": [
-        111979685637
+        111979685637,
+        111979971880,
+        111979973010,
+        111979973272,
+        111979973275,
+        111979973344,
+        111979973414,
+        111979973437,
+        111979973715,
+        111979973917,
+        111980649886,
+        111984407197
       ],
       "artifact_ids": [],
       "artifact_names": [],
@@ -3307,6 +3324,168 @@
       "evaluation_count": 0,
       "renderable": false,
       "pure_nvme": true
+    },
+    {
+      "workflow_run_id": 37377909064,
+      "workflow_name": "e2e Test - offload-v1-nvme4tib-c489-r4-enroot3-extended-fullsha-20261005",
+      "display_title": "e2e Test - offload-v1-nvme4tib-c489-r4-enroot3-extended-fullsha-20261005",
+      "status": "completed",
+      "conclusion": "failure",
+      "created_at": "2026-10-05T21:44:47Z",
+      "updated_at": "2026-10-05T22:09:21Z",
+      "html_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37377909064",
+      "job_ids": [
+        111991858086,
+        111991985591,
+        111991986153,
+        111991986637,
+        111991986704,
+        111991987035,
+        111991987129,
+        111991987237,
+        111991987580,
+        111991988182,
+        112001141859,
+        112001242526
+      ],
+      "artifact_ids": [
+        11373971481
+      ],
+      "artifact_names": [
+        "agentic_minimaxm3_tp4_conc489_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-b98f8af6e9e9c699de79"
+      ],
+      "unofficial_api_status": 404,
+      "benchmark_count": 0,
+      "evaluation_count": 0,
+      "renderable": false,
+      "pure_nvme": true
+    },
+    {
+      "workflow_run_id": 37381547856,
+      "workflow_name": "e2e Test - offload-v1-nvme4tib-c489-r5-enroot3-capacity-extended-fullsha-20261005",
+      "display_title": "e2e Test - offload-v1-nvme4tib-c489-r5-enroot3-capacity-extended-fullsha-20261005",
+      "status": "completed",
+      "conclusion": "cancelled",
+      "created_at": "2026-10-05T22:17:53Z",
+      "updated_at": "2026-10-06T07:10:41Z",
+      "html_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37381547856",
+      "job_ids": [
+        112004524191,
+        112004631962,
+        112004633034,
+        112004633603,
+        112004633651,
+        112004633791,
+        112004633836,
+        112004634011,
+        112004634085,
+        112004634379,
+        112151787188,
+        112151864410
+      ],
+      "artifact_ids": [
+        11395716305,
+        11395691335,
+        11395666443,
+        11395611525
+      ],
+      "artifact_names": [
+        "gpu_metrics_minimaxm3_tp4_conc489_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-b98f8af6e9e9c699de79",
+        "power_audit_minimaxm3_tp4_conc489_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-b98f8af6e9e9c699de79",
+        "server_logs_minimaxm3_tp4_conc489_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-b98f8af6e9e9c699de79",
+        "agentic_minimaxm3_tp4_conc489_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-b98f8af6e9e9c699de79"
+      ],
+      "unofficial_api_status": 404,
+      "benchmark_count": 0,
+      "evaluation_count": 0,
+      "renderable": false,
+      "pure_nvme": true
+    },
+    {
+      "workflow_run_id": 37428997901,
+      "workflow_name": "e2e Test - offload-v1-none-c489-r2-extended-fullsha-20261006",
+      "display_title": "e2e Test - offload-v1-none-c489-r2-extended-fullsha-20261006",
+      "status": "completed",
+      "conclusion": "failure",
+      "created_at": "2026-10-06T07:20:01Z",
+      "updated_at": "2026-10-06T15:29:03Z",
+      "html_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37428997901",
+      "job_ids": [
+        112155185402,
+        112155280008,
+        112155280547,
+        112155280943,
+        112155281092,
+        112155281200,
+        112155281321,
+        112155281479,
+        112155281651,
+        112155281710,
+        112352325506,
+        112352423815
+      ],
+      "artifact_ids": [
+        11424620116,
+        11424600167,
+        11424595227,
+        11423174709,
+        11423079964
+      ],
+      "artifact_names": [
+        "agentic_minimaxm3_tp4_conc489_kvnone_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-false_spec-mtp-82e0db16df91879c484b",
+        "server_logs_minimaxm3_tp4_conc489_kvnone_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-false_spec-mtp-82e0db16df91879c484b",
+        "gpu_metrics_minimaxm3_tp4_conc489_kvnone_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-false_spec-mtp-82e0db16df91879c484b",
+        "bmk_agentic_minimaxm3_tp4_conc489_kvnone_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-false_spec-mtp-82e0db16df91879c484b",
+        "power_audit_minimaxm3_tp4_conc489_kvnone_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-false_spec-mtp-82e0db16df91879c484b"
+      ],
+      "unofficial_api_status": 200,
+      "benchmark_count": 1,
+      "evaluation_count": 0,
+      "renderable": true,
+      "pure_nvme": false
+    },
+    {
+      "workflow_run_id": 37490705589,
+      "workflow_name": "e2e Test - offload-v1-none-c489-r3-extended-power-20261006",
+      "display_title": "e2e Test - offload-v1-none-c489-r3-extended-power-20261006",
+      "status": "completed",
+      "conclusion": "failure",
+      "created_at": "2026-10-06T15:49:16Z",
+      "updated_at": "2026-10-06T23:58:09Z",
+      "html_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37490705589",
+      "job_ids": [
+        112362383056,
+        112362809866,
+        112362811083,
+        112362811224,
+        112362811617,
+        112362811699,
+        112362812022,
+        112362812104,
+        112362812159,
+        112362813071,
+        112560976583,
+        112561044872
+      ],
+      "artifact_ids": [
+        11452262099,
+        11452072299,
+        11451469378,
+        11451374603,
+        11451324606
+      ],
+      "artifact_names": [
+        "bmk_agentic_minimaxm3_tp4_conc489_kvnone_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-false_spec-mtp-55eaa7289c20def3a542",
+        "server_logs_minimaxm3_tp4_conc489_kvnone_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-false_spec-mtp-55eaa7289c20def3a542",
+        "gpu_metrics_minimaxm3_tp4_conc489_kvnone_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-false_spec-mtp-55eaa7289c20def3a542",
+        "agentic_minimaxm3_tp4_conc489_kvnone_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-false_spec-mtp-55eaa7289c20def3a542",
+        "power_audit_minimaxm3_tp4_conc489_kvnone_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-false_spec-mtp-55eaa7289c20def3a542"
+      ],
+      "unofficial_api_status": 200,
+      "benchmark_count": 1,
+      "evaluation_count": 0,
+      "renderable": true,
+      "pure_nvme": false
     }
   ]
 }

@@ -5,7 +5,7 @@
   "tp": 4,
   "hbm_bytes_per_gpu": 85899345920,
   "dram_bytes_per_node": 739000000000,
-  "nvme_bytes_per_node": 4398046511104,
+  "nvme_bytes_per_node": 2199023255552,
   "max_concurrent_nvme_bearing_runs": 1,
   "nvme_node_allowlist": [
     "im-b200-c001"

@@ -17,7 +17,7 @@ refine it; do not manufacture a smooth curve or call an isolated noisy win a thr
 | --- | --- | --- | --- | --- |
 | `none` | 80 GiB/GPU | 0 | 0 | HBM prefix cache |
 | `dram` | 80 GiB/GPU | 739 GB/node | 0 | SimpleCPU, lazy |
-| `nvme` | 80 GiB/GPU | No resident KV cache; transfer buffers remain | 4 TiB/node | SimpleCPU disk, lazy, direct I/O |
+| `nvme` | 80 GiB/GPU | No resident KV cache; transfer buffers remain | 2 TiB/node (current capacity probe) | SimpleCPU disk, lazy, direct I/O |
 | `dram-nvme` | 80 GiB/GPU | 739 GB/node | 2 TiB stop guard | Native tiered CPU + filesystem |
 
 The host budget is the actual fresh-main generator output at `dram-utilization:
@@ -26,13 +26,14 @@ starting. HBM is pinned to 80 GiB per GPU (320 GiB total) so different connector
 allocation layouts cannot silently change the common budget. All thresholds are
 conditional on these budgets; this is not a universal concurrency threshold.
 
-The NVMe-only arm now uses a 4 TiB bounded capacity so a single run can exercise
-more of the local array. Runs produced with the earlier 1 TiB budget remain
-separately identifiable in the ledger and are not treated as capacity-matched
-repeats of the 4 TiB arm. The connector preallocates its configured disk files,
-so requested concurrency does not determine disk footprint: admission requires
-4,398,046,511,104 bytes plus the 128 GiB reserve. Start the expanded-capacity
-series at c256, which completed the full canonical run with 61.680% external
+The completed expanded-capacity NVMe-only cohort used a 4 TiB bounded cache.
+The next adaptive control halves only this bounded SimpleCPU disk capacity to
+2 TiB at c488, where the 4 TiB NVMe and HBM-only arms both completed canonical
+profiling. Earlier 1 TiB, 4 TiB, and new 2 TiB runs remain distinct in the
+ledger; a cross-capacity difference is local evidence, not a matched repeat.
+The connector preallocates its configured disk files, so concurrency does not
+determine disk footprint: admission now requires 2,199,023,255,552 bytes plus
+the 128 GiB reserve (2,336,462,209,024 bytes total). The completed 4 TiB series started at c256, which completed the full canonical run with 61.680% external
 cache hits. The c384 midpoint also completed, but external hits fell to 5.299%,
 total throughput per GPU fell 46.716%, and P90 end-to-end latency rose 162.274%
 relative to c256. The c512 probe completed 5,676 of 5,677 canonical warmup
@@ -171,6 +172,22 @@ corpus, warmup, cache configuration, connector, and 3,600-second profiling windo
 remain unchanged. Results from this phase are a separate execution-budget
 qualification and must not be silently combined with the fixed-budget boundary.
 
+The extended-budget c489 pair completed canonical warmup, the full profiling send
+window, aggregate export, and 100% latency coverage. NVMe run `37381547856`
+retained 1,171 successful responses. The first HBM run `37428997901` retained
+1,088, but a 10.791-second GPU telemetry gap invalidated its energy metric. The
+HBM repeat `37490705589` retained 1,111 responses and passed strict four-GPU
+UTC power validation (maximum sample gap 1.005 seconds). Relative to this repeat,
+the 4 TiB NVMe arm improved total throughput/GPU 4.021%, output throughput/GPU
+16.967%, P90 interactivity 8.403%, P90 TTFT 1.453%, completed responses
+5.401%, and energy/successful query 0.638%. Average power rose 4.728%, while
+P90 E2E-normalized interactivity rose 0.501%. The energy advantage is narrow
+local evidence, not a replicated win. The NVMe workflow was cancelled after
+export, and the HBM repeat workflow failed in downstream collectors because
+their tooling-ref checkout lacked `infx`; both benchmark results and power
+validations were complete before those workflow conclusions. Exact host scratch
+was independently absent for both runs.
+
 The combined tier uses a different connector and storage policy. The pinned FS
 tier has no bounded LRU capacity setting: the 2 TiB value is an abort guard, not an
 eviction quota. It was raised independently of the NVMe-only capacity after
@@ -258,7 +275,7 @@ internally. The standard job requests `nodes:1`.
 Run at most one NVMe-bearing workflow (`nvme` or `dram-nvme`) at a time. The
 previous NVMe-bearing workflow must be terminal and its exact task-owned scratch
 must have verified `deleted=true` before the next one is dispatched. Require the
-declared 4 TiB budget plus the 128 GiB reserve at preflight. Do not dispatch while
+declared 2 TiB budget plus the 128 GiB reserve at preflight for the capacity probe. Do not dispatch while
 an earlier task-owned scratch remains unresolved, and do not repeatedly target a
 known-full node unchanged. This single-run rule is independent of the cluster-wide
 one-pending-job ceiling above. The workflow currently pins NVMe-bearing allocations

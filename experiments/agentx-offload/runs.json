@@ -5720,7 +5720,7 @@
       }
     }
   ],
-  "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894,36796500128,36879140816,37027095833",
+  "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35456989669,35469801850,35476053573,35497846918,35524019140,35524083518,35542179539,35542182560,35542185178,35542190411,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894,36796500128,37027095833,37428997901,37490705589",
   "status": "Extended-budget c489 HBM/NVMe matched result complete: NVMe improves total tok/s/GPU 4.021%, output 16.967%, P90 interactivity 8.403%, P90 TTFT 1.453%, completions 5.401% and energy/query 0.638%; average power is 4.728% higher. E2E-normalized interactivity is 0.501% higher. Energy margin is narrow local evidence, not a replicated win. Workflow failure was downstream collector missing infx after benchmark artifacts and power validation were complete.",
   "last_capacity_check": {
     "checked_at": "2026-10-06T15:48:45Z",
@@ -5733,9 +5733,10 @@
     "reason": "HBM c489 repeat terminal; refresh live cluster-wide inventory before another dispatch."
   },
   "next_dispatch": {
-    "arm": null,
-    "concurrency": null,
-    "requires": "Choose a cache-capacity control around c488-c489 rather than repeating the matched 4 TiB pair unchanged; first review current capacity evidence and workflow collector ref failure, then validate any proposed config locally and refresh cluster-wide queue inventory before dispatch."
+    "arm": "nvme",
+    "concurrency": 488,
+    "nvme_bytes_per_node": 2199023255552,
+    "requires": "Capacity control: verify current HEAD is pushed and exact c488 preview resolves 2 TiB runtime budget; require zero queued B200 jobs cluster-wide, no active study workflow, and no unresolved task-owned scratch. On im-b200-c001 require >2,336,462,209,024 free bytes and O_DIRECT before scratch creation. This is a new 2 TiB cohort, not a capacity-matched repeat of 4 TiB controls."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-21T05:30:00Z",

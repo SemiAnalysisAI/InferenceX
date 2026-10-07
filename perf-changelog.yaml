@@ -8156,3 +8156,12 @@
     - "Make the B200 Nscale single-node Enroot import compatible with a digest-pinned image. Run 37374537927 reached Slurm allocation 19529 but Enroot interpreted the Docker @sha256 suffix as a username and Docker Hub returned 401 before benchmark startup. Preserve the canonical image digest and squash-cache identity; translate only the import URI to Enroot 3.x's colon-delimited manifest selector. Model, engine bytes, TP4, cache settings, workload and 510/530-minute execution envelope are unchanged."
     - "让 B200 Nscale 单节点 Enroot 导入兼容按 digest 固定的镜像。运行 37374537927 已取得 Slurm allocation 19529，但 Enroot 将 Docker 的 @sha256 后缀当作用户名，Docker Hub 返回 401，benchmark 尚未启动。保留规范镜像 digest 与 squash 缓存标识，仅将导入 URI 转换为 Enroot 3.x 使用的冒号分隔 manifest 选择器。模型、引擎内容、TP4、缓存设置、工作负载与 510/530 分钟执行时间范围均不变。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/tree/experiment/agentx-b200-offload
+
+- config-keys:
+    - minimaxm3-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Probe the AgentX cache-capacity boundary at c488 by reducing only the branch-only NVMe SimpleCPU disk budget from 4 TiB to 2 TiB. Keep the model image digest, B200 TP4 topology, 80 GiB/GPU HBM budget, AgentX corpus, canonical warmup, connector implementation and 3,600-second profile unchanged. Treat the earlier 4 TiB NVMe and HBM-only c488 results as local controls, not capacity-matched repeats. Require 2 TiB plus 128 GiB free before task-owned scratch creation and retain the one-NVMe-workflow guard."
+    - "在 c488 探测 AgentX 缓存容量边界，仅把此实验分支的 NVMe SimpleCPU disk 预算从 4 TiB 降至 2 TiB。模型镜像 digest、B200 TP4 拓扑、每 GPU 80 GiB HBM 预算、AgentX 语料、规范 warmup、连接器实现及 3,600 秒 profiling 均保持不变。此前 4 TiB NVMe 与 HBM-only c488 结果只能作为局部对照，不能当作容量匹配的重复测量。创建任务专属 scratch 前要求 2 TiB 容量另加 128 GiB 空闲空间，并保留同一时刻仅运行一个 NVMe 工作流的限制。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/tree/experiment/agentx-b200-offload
