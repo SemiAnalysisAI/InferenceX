@@ -161,7 +161,7 @@ def test_llmd_agentic_topologies_use_0813_checkpoint(
     model_path.mkdir(parents=True)
     (model_path / "config.json").write_text("{}\n")
     root = Path(__file__).resolve().parents[3]
-    for filename in ("benchmarks/multi_node/llm-d/submit.sh", "benchmarks/benchmark_lib.sh"):
+    for filename in ("benchmarks/multi_node/llm-d/submit.sh", "benchmarks/check_env.sh"):
         shutil.copy2(root / filename, workspace / filename)
     sbatch = Path(env["PATH"].split(":")[0]) / "sbatch"
     sbatch.write_text("""#!/bin/bash

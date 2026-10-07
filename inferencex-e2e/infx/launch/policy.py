@@ -167,7 +167,7 @@ def table_problems(clusters: Mapping[str, Cluster], only: str | None = None) -> 
         "BATCH_WRAPPED_LANES": BATCH_WRAPPED_LANES,
         "SALLOC_TIME_BUMPS": SALLOC_TIME_BUMPS,
     }
-    return [
+    problems = [
         f"{name}[{key!r}]: no such cluster"
         for name, table in tables.items()
         for key in keys(table)
