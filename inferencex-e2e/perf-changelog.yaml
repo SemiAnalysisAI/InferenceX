@@ -9367,15 +9367,5 @@
     - agentic-coding
   description:
     - "Keep the GLM-5.2 NextN/MTP draft at shipped precision on GB200."
-    - "Pin NIXL and its CUDA 13 backend to 1.4.0 for the two disaggregated recipes, preserving SGLang's original asynchronous UCX progress."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3401
-
-- config-keys:
-    - glm5.2-fp4-gb200-dynamo-sglang-agentic-disagg
-    - glm5.2-fp4-gb200-dynamo-sglang-agentic-mtp
-  scenario-type:
-    - agentic-coding
-  description:
-    - "Use the digest-pinned upstream SGLang v0.5.18 CUDA 13 image for GLM-5.2 GB200 disaggregated serving."
-    - "Remove the startup NIXL upgrade, constraints file and recipe-specific setup selection; the image includes NIXL 1.4.0."
+    - "Use the digest-pinned upstream SGLang v0.5.18 CUDA 13 image with NIXL 1.4.0 for the two disaggregated recipes."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3401
