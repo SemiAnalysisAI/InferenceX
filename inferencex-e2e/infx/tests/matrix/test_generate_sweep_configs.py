@@ -37,7 +37,7 @@ def test_aggregated_multinode_node_count_uses_explicit_num_nodes():
         "decode": {},
     }
 
-    add_multinode_node_count(entry, {}, num_nodes=3)
+    add_multinode_node_count(entry, {}, num_nodes=3, root=None)
 
     assert entry["node-count"] == 3
 
@@ -51,7 +51,7 @@ def test_disaggregated_multinode_node_count_rejects_num_nodes():
     }
 
     with pytest.raises(ValueError, match="num-nodes.*disaggregated"):
-        add_multinode_node_count(entry, {}, num_nodes=3)
+        add_multinode_node_count(entry, {}, num_nodes=3, root=None)
 
 
 def test_disaggregated_multinode_node_count_requires_hardware_inventory():
@@ -63,7 +63,7 @@ def test_disaggregated_multinode_node_count_requires_hardware_inventory():
     }
 
     with pytest.raises(ValueError, match="Cannot resolve gpus-per-node"):
-        add_multinode_node_count(entry, {}, num_nodes=None)
+        add_multinode_node_count(entry, {}, num_nodes=None, root=None)
 
 
 def test_aggregated_worker_expands_to_legacy_matrix_pair():
@@ -102,9 +102,8 @@ def test_aggregated_worker_expands_to_legacy_matrix_pair():
 
 
 @pytest.fixture
-def multinode_recipe(tmp_path, monkeypatch):
-    """Write a multi-node recipe under a scratch repository root; return its matrix path."""
-    monkeypatch.setenv("INFERENCEX_REPOSITORY_ROOT", str(tmp_path))
+def multinode_recipe(tmp_path):
+    """Write a multi-node recipe under the scratch project ``tmp_path``; return its matrix path."""
 
     def write(recipe: dict, name: str = "test.yaml") -> str:
         path = tmp_path / "benchmarks/multi_node/srt-slurm-recipes" / name
@@ -121,14 +120,14 @@ def multinode_recipe(tmp_path, monkeypatch):
     ({"prefill": {"nodes": 2}, "decode": {"nodes": "colocate"}}, 2),
     ({"prefill": {"nodes": 2}, "decode": {"workers": 1}}, None),
 ])
-def test_multinode_node_count_reads_schema_two_roles(multinode_recipe, roles, expected):
+def test_multinode_node_count_reads_schema_two_roles(tmp_path, multinode_recipe, roles, expected):
     import infx.matrix.generate as generate
     srt_recipe = multinode_recipe({"schema": 2, "roles": roles})
     if expected is None:
         with pytest.raises(ValueError, match="role 'decode' must specify nodes"):
-            generate.recipe_node_count(srt_recipe)
+            generate.recipe_node_count(tmp_path, srt_recipe)
     else:
-        assert generate.recipe_node_count(srt_recipe) == expected
+        assert generate.recipe_node_count(tmp_path, srt_recipe) == expected
 
 
 @pytest.mark.parametrize("selector, expected", [
@@ -137,7 +136,7 @@ def test_multinode_node_count_reads_schema_two_roles(multinode_recipe, roles, ex
     ("override_colocated", 2),
     ("zip_override_sweep[0]", None),
 ])
-def test_recipe_node_count_resolves_override_selectors(multinode_recipe, selector, expected):
+def test_recipe_node_count_resolves_override_selectors(tmp_path, multinode_recipe, selector, expected):
     srt_recipe = multinode_recipe({
         "schema": 2,
         "base": {"roles": {"prefill": {"nodes": 1}, "decode": {"nodes": 2}}},
@@ -146,7 +145,7 @@ def test_recipe_node_count_resolves_override_selectors(multinode_recipe, selecto
         "zip_override_sweep": {"roles": {"decode": {"nodes": [1, 2]}}},
     }, "variants.yaml")
     import infx.matrix.generate as generate
-    assert generate.recipe_node_count(f"{srt_recipe}:{selector}") == expected
+    assert generate.recipe_node_count(tmp_path, f"{srt_recipe}:{selector}") == expected
 
 
 @pytest.mark.parametrize("auxiliary, expected", [
@@ -167,7 +166,7 @@ def test_recipe_node_count_resolves_override_selectors(multinode_recipe, selecto
       "services": [{"type": "etcd", "placement": {"node": "dedicated"},
                     "enabled": False}]}, 3),
 ])
-def test_recipe_node_count_includes_auxiliary_nodes(multinode_recipe, auxiliary, expected):
+def test_recipe_node_count_includes_auxiliary_nodes(tmp_path, multinode_recipe, auxiliary, expected):
     import infx.matrix.generate as generate
 
     srt_recipe = multinode_recipe({
@@ -176,7 +175,7 @@ def test_recipe_node_count_includes_auxiliary_nodes(multinode_recipe, auxiliary,
         "override_auxiliary": auxiliary,
     })
 
-    assert generate.recipe_node_count(f"{srt_recipe}:override_auxiliary") == expected
+    assert generate.recipe_node_count(tmp_path, f"{srt_recipe}:override_auxiliary") == expected
 
 
 def test_multinode_node_count_uses_role_gpu_footprints(sample_runner_config):
@@ -184,7 +183,7 @@ def test_multinode_node_count_uses_role_gpu_footprints(sample_runner_config):
     decode = {"num-worker": 2, "tp": 8, "pp": 1, "pcp-size": 1}
 
     assert multinode_node_count(
-        prefill, decode, "cluster:b300-nv", sample_runner_config, None
+        prefill, decode, "cluster:b300-nv", sample_runner_config, None, None
     ) == 3
 
 
@@ -200,7 +199,7 @@ def test_multinode_node_count_honors_explicit_role_node_settings():
         "additional-settings": ["DECODE_NODES=1"],
     }
 
-    assert multinode_node_count(prefill, decode, "unknown", {}, None) == 3
+    assert multinode_node_count(prefill, decode, "unknown", {}, None, None) == 3
 
 
 def test_multinode_node_count_resolves_heterogeneous_worker_hardware(
@@ -210,7 +209,7 @@ def test_multinode_node_count_resolves_heterogeneous_worker_hardware(
     decode = {"hardware": "h100", "num-worker": 1, "tp": 8}
 
     assert multinode_node_count(
-        prefill, decode, "gb200", sample_runner_config, None
+        prefill, decode, "gb200", sample_runner_config, None, None
     ) == 6
 
 
@@ -229,17 +228,17 @@ def cluster_record(gpus_per_node, **facts):
     ({"agg": {"nodes": 3}}, 3),
     ({"prefill": {"nodes": 2}, "decode": {"nodes": 3}}, 5),
 ])
-def test_multinode_node_count_prefers_recipe_roles(multinode_recipe, roles, expected_nodes):
+def test_multinode_node_count_prefers_recipe_roles(tmp_path, multinode_recipe, roles, expected_nodes):
     srt_recipe = multinode_recipe({"schema": 2, "roles": roles})
     prefill = {"num-worker": 1, "tp": 8, "additional-settings": ["PREFILL_NODES=7"]}
     decode = {"num-worker": 1, "tp": 8, "additional-settings": ["DECODE_NODES=9"]}
 
     # Recipe allocation wins over role overrides, even without an inventory.
-    assert multinode_node_count(prefill, decode, "unknown", {}, srt_recipe) == expected_nodes
+    assert multinode_node_count(prefill, decode, "unknown", {}, srt_recipe, tmp_path) == expected_nodes
 
 
 def test_multinode_rows_resolve_recipes_and_count_nodes_from_them(
-    multinode_recipe, sample_multinode_config, sample_runner_config,
+    tmp_path, multinode_recipe, sample_multinode_config, sample_runner_config,
 ):
     multinode_recipe({
         "schema": 2,
@@ -253,7 +252,8 @@ def test_multinode_rows_resolve_recipes_and_count_nodes_from_them(
     })
 
     [row] = generate_test_config_sweep(
-        argparse.Namespace(config_keys=[key]), sample_multinode_config, sample_runner_config
+        argparse.Namespace(config_keys=[key]), sample_multinode_config, sample_runner_config,
+        root=tmp_path,
     )
 
     root = "benchmarks/multi_node/srt-slurm-recipes/dsr1"
@@ -2050,7 +2050,8 @@ class TestCommandLine:
     ):
         """The module entrypoint resolves caller-relative inputs from another directory."""
         name_fixture_recipe(sample_single_node_config, tmp_path)
-        (tmp_path / "master config.yaml").write_text(yaml.safe_dump(sample_single_node_config))
+        (tmp_path / "configs").mkdir()
+        (tmp_path / "configs/master config.yaml").write_text(yaml.safe_dump(sample_single_node_config))
         nodes = sample_runner_config["labels"]["mi300x"]
         (tmp_path / "runners.yaml").write_text(yaml.safe_dump({
             "labels": {"mi300x": nodes, "cluster:mi300x-amd": nodes},
@@ -2058,7 +2059,7 @@ class TestCommandLine:
         }))
         repo_root = Path(__file__).resolve().parents[3]
         args = [
-            command, "--config-files", "master config.yaml",
+            command, "--config-files", "configs/master config.yaml",
             "--runner-config", "runners.yaml", "--seq-lens", "1k1k", "--no-evals",
         ]
         if command == "test-config":
@@ -2068,7 +2069,7 @@ class TestCommandLine:
 
         result = subprocess.run(
             [sys.executable, "-m", "infx.matrix.generate", *args], cwd=tmp_path,
-            env={**os.environ, "PYTHONPATH": str(repo_root), "INFERENCEX_REPOSITORY_ROOT": str(tmp_path)},
+            env={**os.environ, "PYTHONPATH": str(repo_root)},
             capture_output=True, text=True, check=False,
         )
 
@@ -2091,10 +2092,9 @@ class TestCommandLine:
         sample_runner_config, runner_file,
     ):
         monkeypatch.chdir(tmp_path)
-        monkeypatch.setenv("INFERENCEX_REPOSITORY_ROOT", str(tmp_path))
         name_fixture_recipe(sample_single_node_config, tmp_path)
-        (tmp_path / "master.yaml").write_text(yaml.safe_dump(sample_single_node_config))
         (tmp_path / "configs").mkdir()
+        (tmp_path / "configs/master.yaml").write_text(yaml.safe_dump(sample_single_node_config))
         # An explicit override must not fall back to the default inventory.
         (tmp_path / "configs/runners.yaml").write_text("invalid: default inventory")
         selected_file = tmp_path / (runner_file or "configs/runners.yaml")
@@ -2105,7 +2105,7 @@ class TestCommandLine:
         }))
         argv = [
             "generate_sweep_configs.py", "full-sweep",
-            "--config-files", "master.yaml", "--single-node", "--no-evals",
+            "--config-files", "configs/master.yaml", "--single-node", "--no-evals",
             "--runner-node-filter", "fixture-node", "--seq-lens", "1k1k",
             "--max-conc", "4",
         ]
@@ -2118,6 +2118,42 @@ class TestCommandLine:
         assert [(row["runner"], row["conc"]) for row in result] == [
             ("fixture-node-0", 4), ("fixture-node-1", 4),
         ]
+
+    def test_recipes_resolve_under_the_loaded_config_project(
+        self, tmp_path, sample_multinode_config, sample_runner_config,
+    ):
+        """A recipe that exists only beside the loaded configs validates and sizes the job."""
+        project = tmp_path / "project"
+        recipe = project / "benchmarks/multi_node/srt-slurm-recipes/only-here/recipe.yaml"
+        recipe.parent.mkdir(parents=True)
+        recipe.write_text(yaml.safe_dump(
+            {"schema": 2, "roles": {"prefill": {"nodes": 2}, "decode": {"nodes": 1}}}
+        ))
+        key, config = next(iter(sample_multinode_config.items()))
+        config["srt-recipe-dir"] = "only-here"
+        config["scenarios"]["fixed-seq-len"][0]["search-space"][0]["srt-recipe"] = "recipe.yaml"
+        (project / "configs").mkdir()
+        (project / "configs/master.yaml").write_text(yaml.safe_dump(sample_multinode_config))
+        (project / "configs/runners.yaml").write_text(yaml.safe_dump({
+            "labels": {"gb200": ["gb200-nv_0"], "cluster:gb200-nv": ["gb200-nv_0"]},
+            "clusters": {"gb200-nv": cluster_record(4)},
+        }))
+        elsewhere = tmp_path / "elsewhere"
+        elsewhere.mkdir()
+
+        result = subprocess.run(
+            [sys.executable, "-m", "infx.matrix.generate", "test-config", "--config-keys", key,
+             "--config-files", str(project / "configs/master.yaml"),
+             "--runner-config", str(project / "configs/runners.yaml"), "--no-evals"],
+            cwd=elsewhere, capture_output=True, text=True, check=False,
+            env={**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[3])},
+        )  # fmt: skip
+
+        assert result.returncode == 0, result.stderr
+        [row] = json.loads(result.stdout)
+        assert (row["srt-recipe"], row["node-count"]) == (
+            "benchmarks/multi_node/srt-slurm-recipes/only-here/recipe.yaml", 3,
+        )
 
     def test_all_evals_cli_marks_every_fixed_sequence_entry(
         self,
@@ -3276,4 +3312,4 @@ def test_single_node_fixed_sequence_rejects_require_power(sample_single_node_con
     entry = next(iter(sample_single_node_config.values()))
     entry["scenarios"]["fixed-seq-len"][-1]["require-power"] = True
     with pytest.raises(ValueError, match="require-power"):
-        validate_master_config(sample_single_node_config)
+        validate_master_config(sample_single_node_config, Path())

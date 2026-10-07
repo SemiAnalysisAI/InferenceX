@@ -70,7 +70,7 @@ def live_families(root: Path) -> dict[tuple, set[str]]:
             family = f"{path.relative_to(root).as_posix()}:{key}"
             try:
                 entries = generate_test_config_sweep(
-                    SimpleNamespace(config_keys=[key]), configs, runners
+                    SimpleNamespace(config_keys=[key]), configs, runners, root
                 )
             except ValueError:
                 # One unrenderable family must not hide unrelated working recipes.

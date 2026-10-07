@@ -69,14 +69,16 @@ def test_installed_tools_use_callers_repository(tmp_path, run_installed, layout)
     result = run_installed(
         "-c",
         """
-import json
+import json, sys
+from pathlib import Path
 from infx.matrix.generate import recipe_node_count
 from infx.workflows.calc_success_rate import load_hardware_labels
 print(json.dumps({
-    "nodes": recipe_node_count("benchmarks/multi_node/srt-slurm-recipes/fixture.yaml"),
+    "nodes": recipe_node_count(Path(sys.argv[1]), "benchmarks/multi_node/srt-slurm-recipes/fixture.yaml"),
     "hardware": load_hardware_labels(),
 }))
 """,
+        str(project),
     )
 
     assert result.returncode == 0, result.stderr
