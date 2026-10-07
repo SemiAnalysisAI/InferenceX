@@ -97,7 +97,8 @@ def single_node_env(harness, cluster_id: str, **overrides: str) -> dict[str, str
     """Environment of a fixed-sequence single-node point with its recipe in the workspace."""
     recipe = {"base": POINT_RECIPE, "zip_override_conc": {"benchmark": {"env": {"CONC": ["2", "4"]}}}}
     (harness.workspace / "recipe.yaml").write_text(yaml.safe_dump(recipe))
-    return {**harness.env, **POINT_ENV, "RUNNER_NAME": runner_for(cluster_id), **overrides}
+    runner = overrides.pop("RUNNER_NAME", None) or runner_for(cluster_id)
+    return {**harness.env, **POINT_ENV, "RUNNER_NAME": runner, **overrides}
 
 
 def lane_env(harness, cluster_id: str, recipe: str = LANE_RECIPE, **overrides: str) -> dict[str, str]:
@@ -169,6 +170,30 @@ def test_single_node_failed_allocation_fails_the_launch(harness):
     result = launch(env, harness.config, harness.workspace)
     assert result.returncode == 1
     assert (harness.workspace / "point-identity.json").is_file()
+
+
+@pytest.mark.parametrize(("dram", "exclusive", "step", "job"), [
+    (8000, True, {"mem": "4000M"}, {"mem": "8000M"}),
+    (8000, False, {"mem": "4000M"}, {"mem": "4000M"}),
+    (None, True, {}, {}),
+])  # fmt: skip
+def test_single_node_steps_get_their_gpus_share_of_node_dram(harness, dram, exclusive, step, job):
+    slurm = {
+        "partition": "p", "exclusive": True, "srun-args": ["--container-remap-root"],
+        "volumes": {"hf-hub-cache": {"path": str(harness.tmp / "hf")}},
+        "srt-slurm": {"network-interface": "", "single-node-exclusive": exclusive},
+    }  # fmt: skip
+    cluster = {"gpus-per-node": 8, "arch": "x86_64", "scheduler": "slurm", "slurm": slurm}
+    if dram is not None:
+        cluster["available-cpu-dram-mib"] = dram
+    config = harness.tmp / "dram-runners.yaml"
+    config.write_text(yaml.safe_dump({"labels": {"cluster:lab": ["lab_00"]}, "clusters": {"lab": cluster}}))
+    env = single_node_env(harness, "lab", RUNNER_NAME="lab_00", GPU_COUNT="4")
+    assert_ok(launch(env, config, harness.workspace))
+
+    [call] = srtctl_calls(harness.logs)
+    assert json.loads(call["env"]["SRT_SRUN_OPTIONS"]) == {"container-remap-root": "", **step}
+    assert srtslurm(harness.workspace).get("default_sbatch_directives", {}) == job
 
 
 LABS = {

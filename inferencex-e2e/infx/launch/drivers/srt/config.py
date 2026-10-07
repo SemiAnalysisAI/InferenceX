@@ -49,6 +49,7 @@ class SrtJob:
     mounts: Sequence[tuple[str, str]] = ()
     single_node: bool = False
     account: str | None = None
+    mem_mib: int | None = None
 
 
 def pyxis_spelling(image: str) -> str:
@@ -134,6 +135,8 @@ def render(cluster: Cluster, job: SrtJob) -> dict[str, Any]:
     if settings.exclude:
         directives["exclude"] = ",".join(settings.exclude)
     directives.update(settings.cpu_directives())
+    if job.mem_mib is not None:
+        directives["mem"] = f"{job.mem_mib}M"
     if srt.gpus_per_node_directive is False and (gres := settings.gres_for(cluster.gpus_per_node)):
         directives["gres"] = gres
     if directives:
@@ -159,15 +162,22 @@ def write(path: Path, config: Mapping[str, Any]) -> None:
     path.write_text(yaml.safe_dump(dict(config), sort_keys=False))
 
 
-def srun_options(settings: SlurmSettings) -> str | None:
-    """SRT_SRUN_OPTIONS for the single-node binder: ``slurm.srun-args`` as a JSON mapping."""
-    if not settings.srun_args:
+def gpu_share_mib(cluster: Cluster, gpus: int) -> int | None:
+    """``gpus``' share of the node's ``available-cpu-dram-mib``; None where unmeasured."""
+    if cluster.available_cpu_dram_mib is None:
         return None
+    return cluster.available_cpu_dram_mib * gpus // cluster.gpus_per_node
+
+
+def srun_options(settings: SlurmSettings, mem_mib: int | None) -> str | None:
+    """SRT_SRUN_OPTIONS for the single-node binder: ``slurm.srun-args`` and the step mem cap."""
     options = {}
     for arg in settings.srun_args:
         name, _, value = arg.removeprefix("--").partition("=")
         options[name] = value
-    return json.dumps(options)
+    if mem_mib is not None:
+        options["mem"] = f"{mem_mib}M"
+    return json.dumps(options) if options else None
 
 
 def _create_dir(path: Path, *, world_writable: bool = False) -> None:
