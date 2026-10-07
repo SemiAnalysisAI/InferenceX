@@ -32,10 +32,10 @@ index 716b46a0..25ea9ba1 100644
  Use `engine: atom` with `frontend.type: atomesh` to launch native
 diff --git a/docs/tokenspeed.md b/docs/tokenspeed.md
 new file mode 100644
-index 00000000..74ab7112
+index 00000000..1b5975d4
 --- /dev/null
 +++ b/docs/tokenspeed.md
-@@ -0,0 +1,122 @@
+@@ -0,0 +1,171 @@
 +# TokenSpeed
 +
 +Use `engine: tokenspeed` with `frontend.type: dynamo` or `frontend.type: smg`.
@@ -113,6 +113,49 @@ index 00000000..74ab7112
 +`--node-rank` and `--dist-init-addr` instead of relying on TokenSpeed's
 +[Slurm step detection](https://github.com/lightseekorg/tokenspeed/blob/22251686ff26a2b2f495263b348db80980b8ac9e/docs/serving/parallelism.md#under-a-launcher).
 +
++## Parallelism
++
++Parallelism is in the role's args and needs nothing else from srtctl. Attention DP with
++expert parallelism (DEP) is `data-parallel-size: <gpus>` with `enable-expert-parallel: true`;
++tensor parallelism with expert parallelism (TEP) is `tensor-parallel-size: <gpus>` with
++`enable-expert-parallel: true`. A worker that spans nodes sizes these over all of its GPUs:
++srtctl passes its node count and rank, and TokenSpeed runs `world size / nnodes` ranks
++on each node
++([parallelism.md](https://github.com/lightseekorg/tokenspeed/blob/22251686ff26a2b2f495263b348db80980b8ac9e/docs/serving/parallelism.md#multi-node)).
++Behind Dynamo, prefill and decode workers need attention DP 1 (see below); behind SMG a
++decode worker can be DEP.
++
++## KV cache offload
++
++Unless a role sets `disable-kvstore`, every TokenSpeed rank keeps evicted KV blocks in a
++pinned host-memory KVStore (L2). Each rank allocates its own: `kvstore-size` sets it in GB,
++otherwise it is `kvstore-ratio` (default 2.0) times the rank's GPU KV pool, so size it to
++the node's memory.
++
++`kvstore-storage-backend: mooncake` adds Mooncake Store under it as L3
++([server.md](https://github.com/lightseekorg/tokenspeed/blob/22251686ff26a2b2f495263b348db80980b8ac9e/docs/configuration/server.md#host-l2-and-mooncake-store-l3)).
++Declare a `mooncake-master` service: srtctl starts the master on the infra node and sets
++`MOONCAKE_MASTER`, `MOONCAKE_TE_META_DATA_SERVER` and `MOONCAKE_LOCAL_HOSTNAME` on every
++worker, which TokenSpeed's Mooncake client reads
++([`mooncake.py`](https://github.com/lightseekorg/tokenspeed/blob/22251686ff26a2b2f495263b348db80980b8ac9e/python/tokenspeed/runtime/cache/l3/mooncake.py#L94-L140)).
++Set `MOONCAKE_GLOBAL_SEGMENT_SIZE`, `MOONCAKE_PROTOCOL` or `MOONCAKE_DEVICE` in the role's
++env. A TokenSpeed rank stops when Mooncake rejects a write for lack of space, so size the
++segments for the workload and let the master evict before it fills (the service's `args`,
++for example `--eviction_high_watermark_ratio=0.7`). The service runs `mooncake_master` from
++TokenSpeed's `tokenspeed-mooncake` dependency in the model image; give it a `preamble` that
++installs TokenSpeed when the image gets it from `setup_script`, which services do not run.
++
++```yaml
++services:
++  - name: mooncake-master
++    type: mooncake-master
++roles:
++  agg:
++    args:
++      kvstore-size: 64
++      kvstore-storage-backend: mooncake
++```
++
 +## Prefill/decode
 +
 +TokenSpeed moves the KV cache with Mooncake. A prefill worker advertises its
@@ -151,6 +194,12 @@ index 00000000..74ab7112
 +([`servicer.py`](https://github.com/smg-project/smg/blob/3be823a700fabaff3add8a390cf78f163479d686/grpc_servicer/smg_grpc_servicer/tokenspeed/servicer.py#L1031-L1071)).
 +The prefill engine serves that bootstrap port
 +([`async_llm.py`](https://github.com/lightseekorg/tokenspeed/blob/22251686ff26a2b2f495263b348db80980b8ac9e/python/tokenspeed/runtime/engine/async_llm.py#L245-L253)).
++srtctl sets `TOKENSPEED_SKIP_GRPC_WARMUP=1` on prefill and decode workers: the engine's
++startup warmup is a generate without a bootstrap room
++([`server.py`](https://github.com/smg-project/smg/blob/3be823a700fabaff3add8a390cf78f163479d686/grpc_servicer/smg_grpc_servicer/tokenspeed/server.py#L211-L282)),
++which a prefill engine cannot finish without a decode peer and an attention-DP decode engine
++fails to place on a DP rank
++([`data_parallel_controller.py`](https://github.com/lightseekorg/tokenspeed/blob/22251686ff26a2b2f495263b348db80980b8ac9e/python/tokenspeed/runtime/engine/data_parallel_controller.py#L425-L430)).
 +
 +In gRPC mode SMG tokenizes and applies the chat template itself; pass
 +`tool-call-parser` / `reasoning-parser` in `frontend.args` when the model needs them.
