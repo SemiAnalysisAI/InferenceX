@@ -9347,3 +9347,11 @@
     - "Move Dynamo on all six points to the ai-dynamo 1.6.0.dev20261004 wheel."
     - "Use srt-slurm v2.43.4 and remove the redundant served-model-name patch."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3707
+
+- config-keys:
+    - glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Pin Dynamo to ee07d6b64f9ebd2cc9bf1972be29ac7d65a4f714 to select routed node addresses for metadata and transport advertisement."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3707
