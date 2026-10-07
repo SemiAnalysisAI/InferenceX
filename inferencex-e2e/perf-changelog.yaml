@@ -9353,5 +9353,5 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Pin Dynamo to ee07d6b64f9ebd2cc9bf1972be29ac7d65a4f714 to select routed node addresses for metadata and transport advertisement."
+    - "Move Dynamo on all six points to the ai-dynamo 1.6.0.dev20261007 wheel, which includes ai-dynamo/dynamo#15628 (routed node address selection for metadata and transport advertisement)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3707
