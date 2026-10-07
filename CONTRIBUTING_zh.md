@@ -20,14 +20,9 @@
 
 ## PR 审阅流程
 
-1. 打开你的 PR 并通过 PR 验证。只有修改了 `inferencex-e2e/perf-changelog.yaml`（矩阵来自新追加的条目）且恰好带有一个主标签的同仓库 PR 才会运行 `run-sweep.yml` sweep；带有多个主标签会导致验证失败。详见 [PR 主标签与修饰标签](inferencex-e2e/docs/ci-procedures_zh.md#pr-主标签与修饰标签)。
-   - `full-sweep-fail-fast`（强烈推荐）：canary 门控加 fail-fast，每个矩阵在首次失败时停止。
-   - `full-sweep-enabled`：同样的 canary 门控，但不启用 fail-fast；仅当需要任务在失败后继续运行时才使用。
-   - `non-canary-full-sweep-enabled`：不运行 canary，也不启用 fail-fast。
+1. 打开你的 PR 并通过 PR 验证。只有修改了 `inferencex-e2e/perf-changelog.yaml`（矩阵来自新追加的条目）且恰好带有一个主标签（通常为 `full-sweep-fail-fast`）的同仓库 PR 才会运行 `run-sweep.yml` sweep。标签、修饰标签、canary、fail-fast 以及由维护者批准的 fork 路径详见 [PR 主标签与修饰标签](inferencex-e2e/docs/ci-procedures_zh.md#pr-主标签与修饰标签)。让基准测试 sweep 运行，并在 PR 的某个 commit 上获得全绿的完整 sweep，包括 evals。
 
-   Canary 是最低并发的合格基准测试条目；它失败时，其余所有矩阵都会被跳过。防止有问题的变更浪费整个扇出的是这个共用的 canary，而不是 fail-fast。只含多节点固定序列条目或 eval 条目的 sweep 没有 canary，所有矩阵会同时扇出，只能靠 fail-fast 减少浪费。修饰标签 `all-evals`、`evals-only` 和 `agentx-fast` 在没有主标签时不会启动 GPU sweep（仍会运行 `check-changelog`）；PR 带有 `evals-only` 或 `agentx-fast` 时，`/use` 会被拒绝。让基准测试 sweep 运行，并在 PR 的某个 commit 上获得全绿的完整 sweep，包括 evals。
-
-   **Fork PR：** 外部贡献者无法自行添加标签，`run-sweep.yml` 也不会为 fork PR 运行任何任务，连变更日志验证也不会运行。PR 处于打开、非草稿且无合并冲突的状态后，由具有写权限的维护者先添加所需的修饰标签，再添加一个主标签。这只会批准当前的 head SHA：`trusted-external-sweep.yml` 会为该 SHA 调度 `e2e-tests.yml`，任何主标签都不运行 canary，只有 `full-sweep-fail-fast` 会启用 fail-fast。每次推送后，维护者都必须移除并重新添加主标签，以批准新的 head。
+   **Fork PR：** 外部贡献者无法自行添加标签。PR 处于打开、非草稿且无合并冲突的状态后，由维护者添加标签，这只会批准当前的 head SHA。每次推送后，维护者都必须移除并重新添加主标签。
 2. 若修改的文件归属于仓库管理员及 `@SemiAnalysisAI/core` 之外的 CODEOWNER，请联系一位有资格的 [CODEOWNER](.github/CODEOWNERS) 审阅，并在批准评论中填写 **PR Review Checklist** 签署（见下文）。
 3. 在 Slack 上联系核心维护者进行最终批准；若要求清单签署，请先完成签署。
 4. 由授权维护者发布 `/use <run_id>`（见下文），然后通过 reuse 路径合并 PR。

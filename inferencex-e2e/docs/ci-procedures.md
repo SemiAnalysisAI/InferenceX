@@ -224,18 +224,6 @@ RUN_ID=$(gh run list \
 
 Do not continue if `RUN_ID` is empty. Run metadata describes the dispatch workflow ref, which may not equal input `ref`. Verify the unique title, generator command, and checkout ref in `get-jobs` before interpreting GPU results.
 
-## Kimi-K3 AgentX power backfills
-
-The Kimi-K3 B200, GB200 and GB300 multi-node recipes enable required DCGM telemetry and run the custom AgentX client on the serving head. Their launchers select the immutable AgentX power runtime, stamp its commit, wait for Slurm completion and telemetry drain, then validate each requested concurrency before staging results. The shared result collector preserves failed native jobs and stages available power diagnostics before returning a failure. H200 routing and AMD measurement-tail fixes are separate changes pending their own integration and validation. Required telemetry configuration alone does not establish hardware qualification.
-
-GB300 Kimi-K3 aggregate and disaggregated recipes use exporter port `19401` because the node system service occupies `9401`. The shared telemetry stage forwards this port to both prefill and decode Slurm groups. The retained two-node exporter lifecycle evidence covers port ownership and cleanup; it does not replace disaggregated request, power-window, or eval qualification.
-
-For a missing-power backfill, generate only the missing recipe/concurrency combinations, set `require-power: true`, and leave `agentx-fast: false` and the duration override empty. The normal AgentX profile is one hour. Verify a first missing point on each newly enabled runtime/cluster before scheduling its remaining points. A rendered recipe or an online GitHub runner does not establish live collector readiness or Slurm capacity. Preserve the existing validated points, and keep new performance and power values paired with their own run; never attach a new run's energy to an older performance row. Manual `e2e-tests.yml` artifacts still require the normal reviewed ingestion path before they appear in the dashboard.
-
-Single-node matrix rows still reject `require-power`. A manual `e2e-tests.yml` dispatch passes its `require-power` input to the single-node throughput and AgentX jobs, which then require valid native power from the cluster's `default_gpu_exporter`; without it they record an invalid verdict and keep running.
-
-B200 Kimi recipes use DCP8 with Mooncake offload disabled. The master config records `dcp-size: 8` and `kv-offloading: none` to match those commands; this metadata correction does not enable offload.
-
 ## PR primary and modifier labels
 
 Sweep labels authorize GPU work for same-repository PRs whether draft or ready. Draft status controls review readiness, not sweep eligibility; fork PRs retain their trusted-dispatch path. Adding a sweep label or pushing with one present can start a sweep. Marking ready does not dispatch or repeat one. To start an already-labeled draft that has no run, remove and reapply its sweep label.
@@ -257,6 +245,8 @@ Optional modifiers do not replace a primary label:
 | `all-evals` | Expand eval selection to every eligible eval. Throughput still runs. Combine with `evals-only` for all evals only | Yes, if the run otherwise satisfies full-sweep reuse rules |
 | `evals-only` | Suppress throughput and run only the selected eval entries. Combine with `all-evals` for all evals only | No |
 | `agentx-fast` | For AgentX throughput lanes, use one additional warmup request after mandatory primers and a 20-minute profile. Fixed-sequence and eval settings stay canonical | No |
+
+Modifiers alone start no GPU sweep, although `check-changelog` still runs. `all-evals` and `evals-only` fail `check-changelog` when the changelog additions include `append-only: true` or `no-evals: true` entries.
 
 Every primary label runs the full concurrency sweep, and no label trims concurrency. For a lowest-concurrency smoke, [dispatch `e2e-tests.yml` manually](#manual-end-to-end-dispatch) with `trim-conc: true`.
 
@@ -583,7 +573,6 @@ A merge is not complete operationally until the `main` publication path and down
 
 Stop and escalate when the source run, merge run, artifact coverage, changelog metadata, or downstream event is ambiguous. Never substitute a convenient run ID or claim publication from an Actions dispatch alone.
 
-The former `kimik3-fp4-h200-vllm-agentic` key is split into `-latency`, `-balanced`, and `-simple` keys. Together they preserve all 35 original points (10/12/13), recipe fingerprints, and dashboard series. Each key selects one complete recipe and its default evals; power rollout follows that recipe's `telemetry.enabled` setting. Use `kimik3-fp4-h200-vllm-agentic-*` to select all three. A partial recipe run does not qualify the other keys.
 
 ## OperatorX microbenchmarks
 
@@ -594,4 +583,3 @@ use one GPU per measurement. AMD attention supports both torch and AITER.
 See [OperatorX GitHub Actions](../../operatorx/CI.md) for dispatch,
 coverage, artifacts, cancellation, and validation.
 
-For H200 DeepSeek-V4.1 Flash SGLang AgentX performance at concurrency 64 or above, the launch policy (`SALLOC_TIME_BUMPS` in `infx/launch/policy.py`) allows a 1440-minute Slurm allocation and the reusable workflow allows 1470 minutes. This accommodates normal warmup and the unchanged 3600-second profile; lower concurrencies and eval-only jobs retain the standard deadlines. Run `35775895782` exhausted the previous eight-hour allocation during progressing, error-free warmup. A failed-only retry retains the original workflow deadline, so deadline changes require a new workflow run.

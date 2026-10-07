@@ -250,4 +250,6 @@ schema; unknown keys fail.
   which the driver mounts at `/etc/metrics/config.json`. Until NVIDIA/srt-slurm#573 merges,
   [`573-participating-gpus.patch`](../runners/srt-slurm/patches/README.md) keeps
   worker-node sample rows to the GPUs the job uses; without it a TP4 job on an eight-GPU
-  node records `unexpected_device`.
+  node records `unexpected_device`. Single-node matrix rows still reject `require-power`; a
+  manual `e2e-tests.yml` dispatch passes its `require-power` input to the single-node
+  throughput and AgentX jobs.
