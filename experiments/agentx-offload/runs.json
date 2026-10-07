@@ -6020,24 +6020,51 @@
       "storage_evidence": "offload_cleanup.json records deleted=true for exact owned scratch after 2,199,016,112,128 logical bytes across four files. Slurm 19765 is terminal (CANCELLED after benchmark), and independent read-only check on im-b200-c001 confirmed exact host /scratch/inferencex-offload-37602969372-1-19765-32bda031df96 absent.",
       "artifact_evidence": "All five GitHub artifact ZIPs downloaded, ZIP integrity verified, SHA-256 recorded. Temporary downloads are deleted after this evidence is committed and pushed.",
       "strict_utc_replay_valid": true
+    },
+    {
+      "run_id": 37666309639,
+      "url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37666309639",
+      "arm": "nvme",
+      "concurrency": 488,
+      "repeat": 3,
+      "head_sha": "928880f8e2a7463283d0e0e8595678ea1f2f3b5d",
+      "status": "in_progress",
+      "workflow_name": "offload-v1-nvme2tib-c488-r3-capacity-20261007",
+      "dispatched_at": "2026-10-07T18:22:21Z",
+      "phase": "generated B200 job admitted; Slurm allocation and node not yet verified",
+      "performance_result": false,
+      "energy_result": false,
+      "nvme_bytes_per_node": 2199023255552,
+      "capacity_cohort": "2 TiB bounded SimpleCPU disk cache; exact-config replicate of valid r2 to test small cross-capacity differences",
+      "execution_budget": {
+        "slurm_minutes": 510,
+        "github_job_minutes": 530
+      },
+      "get_jobs_id": 112946329866,
+      "dispatch_evidence": "After valid 2 TiB c488 r2 and strict independent UTC power replay were documented at 928880f8e, a fresh cluster-wide queued/in-progress job-label inventory at 2026-10-07T18:21:58Z found zero B200 jobs and no active-or-queued study workflow. Repeating unchanged c488/2 TiB protocol tests whether the observed 1.906% total-throughput and 3.406% energy-per-query differences against the single 4 TiB c488 run are stable. Full 40-character HEAD equaled remote and workflow head and was supplied as input ref. Generated B200 job and scratch have not yet been observed. get-jobs completed successfully; generated B200 job 112946461606 carries cluster:b200-nscale and nodes:1, admitted to b200-nscale-slurm_00 at 18:23:09Z. Slurm allocation, node and scratch are not yet verified.",
+      "get_jobs_status": "success",
+      "job_id": 112946461606,
+      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37666309639/job/112946461606",
+      "runner": "b200-nscale-slurm_00",
+      "started_at": "2026-10-07T18:23:09Z"
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35456989669,35469801850,35476053573,35497846918,35524019140,35524083518,35542179539,35542182560,35542185178,35542190411,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894,36796500128,37027095833,37428997901,37490705589,37602969372",
-  "status": "2 TiB c488 capacity-control retry completed full valid benchmark and strict power; workflow failed only in downstream collectors. Cross-capacity comparison is local evidence.",
+  "status": "Valid 2 TiB c488 capacity result documented; exact-config 2 TiB c488 replication dispatched with get-jobs in progress.",
   "last_capacity_check": {
-    "checked_at": "2026-10-06T15:48:45Z",
+    "checked_at": "2026-10-07T18:21:58Z",
     "active_study_run_ids": [],
     "pending_study_run_ids": [],
-    "dispatch_allowed": false,
+    "dispatch_allowed": true,
     "b200_priority_jobs_queued": 0,
     "b200_priority_jobs_in_progress": 0,
     "b200_active_or_queued_run_ids": [],
-    "reason": "HBM c489 repeat terminal; refresh live cluster-wide inventory before another dispatch."
+    "reason": "Fresh cluster-wide queued/in-progress job-label inventory before exact-config 2 TiB c488 replication."
   },
   "next_dispatch": {
     "arm": null,
     "concurrency": null,
-    "requires": "Do not dispatch while 2 TiB NVMe c488 retry 37602969372 is active or queued. On generated job verify cluster:b200-nscale and nodes:1. On allocation require im-b200-c001, >2,336,462,209,024 free bytes and O_DIRECT before scratch creation. Continue canonical warmup and full profile; on terminal hash artifacts, classify benchmark validity separately, verify exact host scratch cleanup, delete temporary downloads."
+    "requires": "Do not dispatch while 2 TiB NVMe c488 replication 37666309639 is active or queued. Verify generated job cluster:b200-nscale and nodes:1, and on allocation im-b200-c001, >2,336,462,209,024 free bytes, O_DIRECT, exact task-owned scratch. Then canonical warmup, full profile, strict power validation, artifacts, exact host cleanup and temporary download deletion."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-21T05:30:00Z",

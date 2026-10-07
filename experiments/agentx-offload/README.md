@@ -53,6 +53,9 @@ host check found the exact scratch absent. Against the earlier 4 TiB c488 cohort
 These are cross-capacity, single-run local differences, not a replicated capacity
 effect; the 2 TiB run also had 0.865% external cache hits versus 1.443% at 4 TiB.
 
+An exact-config 2 TiB c488 replication (`37666309639`) was dispatched after a
+fresh zero-queued B200 inventory to test whether these small differences persist.
+
 The connector preallocates its configured disk files, so concurrency does not
 determine disk footprint: admission now requires 2,199,023,255,552 bytes plus
 the 128 GiB reserve (2,336,462,209,024 bytes total). The completed 4 TiB series started at c256, which completed the full canonical run with 61.680% external

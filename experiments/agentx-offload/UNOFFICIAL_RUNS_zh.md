@@ -18,10 +18,11 @@ python3 experiments/agentx-offload/update_unofficial_runs.py --write
 
 刷新脚本会查询 `experiment/agentx-b200-offload` 上的全部工作流，记录其 job 和产物，
 并调用公开的 unofficial-run API 判断当前是否返回 benchmark 记录。
-`renderable` 只表示 API 至少返回一条 benchmark 记录，不代表该运行在科学上有效。
+`renderable` 表示 API 返回过至少一条 benchmark 记录；若 API 暂时出错，则保留此前已验证的
+结果。它不代表该运行在科学上有效。API 不可用时，新运行标为 `unknown`。
 有效性和研究结论应以 [`runs.json`](./runs.json) 为准。
 
-生成时间：`2026-10-07T18:17:42.593693Z`
+生成时间：`2026-10-07T18:26:56.109182Z`
 
 ## URL
 
@@ -37,9 +38,9 @@ python3 experiments/agentx-offload/update_unofficial_runs.py --write
 
 ## 完整分支工作流列表
 
-分支工作流：**78**
+分支工作流：**79**
 
-GitHub 单独 job：**936**
+GitHub 单独 job：**946**
 
 | Workflow run ID | 结论 | 图表 benchmark 数 | GitHub job 数 | 工作流 |
 | ---: | --- | ---: | ---: | --- |
@@ -121,3 +122,4 @@ GitHub 单独 job：**936**
 | [37490705589](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37490705589) | failure | 1 | 12 | `e2e Test - offload-v1-none-c489-r3-extended-power-20261006` |
 | [37552057241](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37552057241) | cancelled | 0 | 12 | `e2e Test - offload-v1-nvme2tib-c488-r1-capacity-20261007` |
 | [37602969372](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37602969372) | failure | 1 | 12 | `e2e Test - offload-v1-nvme2tib-c488-r2-capacity-20261007` |
+| [37666309639](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37666309639) | none | 0 | 10 | `e2e Test - offload-v1-nvme2tib-c488-r3-capacity-20261007` |

@@ -46,7 +46,7 @@ def list_branch_runs(repo: str, branch: str) -> list[dict[str, Any]]:
         page += 1
 
 
-def unofficial_counts(run_id: int) -> tuple[int, int, int]:
+def unofficial_counts(run_id: int) -> tuple[int, int | None, int | None]:
     url = f"{UNOFFICIAL_API}?runId={run_id}"
     try:
         with urllib.request.urlopen(url, timeout=45) as response:
@@ -59,14 +59,26 @@ def unofficial_counts(run_id: int) -> tuple[int, int, int]:
     except urllib.error.HTTPError as error:
         if error.code == 404:
             return 404, 0, 0
+        if error.code in {500, 502, 503, 504}:
+            return error.code, None, None
         raise
 
 
-def inspect_run(repo: str, run: dict[str, Any]) -> dict[str, Any]:
+def inspect_run(
+    repo: str, run: dict[str, Any], cached: dict[str, Any] | None = None
+) -> dict[str, Any]:
     run_id = int(run["id"])
     jobs = gh_api(repo, f"actions/runs/{run_id}/jobs", {"per_page": 100})["jobs"]
     artifacts = gh_api(repo, f"actions/runs/{run_id}/artifacts", {"per_page": 100})["artifacts"]
     api_status, benchmark_count, evaluation_count = unofficial_counts(run_id)
+    if benchmark_count is None:
+        benchmark_count = cached.get("benchmark_count") if cached else None
+        evaluation_count = cached.get("evaluation_count") if cached else None
+        renderable = bool(cached and cached.get("renderable"))
+        renderability_source = "cached" if cached else "unverified"
+    else:
+        renderable = benchmark_count > 0
+        renderability_source = "live"
     title = str(run.get("display_title") or "")
     pure_nvme = "-nvme" in title and "-dram-nvme" not in title
     return {
@@ -84,7 +96,8 @@ def inspect_run(repo: str, run: dict[str, Any]) -> dict[str, Any]:
         "unofficial_api_status": api_status,
         "benchmark_count": benchmark_count,
         "evaluation_count": evaluation_count,
-        "renderable": benchmark_count > 0,
+        "renderable": renderable,
+        "renderability_source": renderability_source,
         "pure_nvme": pure_nvme,
     }
 
@@ -109,7 +122,8 @@ def markdown_table(runs: list[dict[str, Any]], *, chinese: bool = False) -> str:
         title = str(run["display_title"]).replace("|", "\\|")
         lines.append(
             f"| [{run_id}]({run['html_url']}) | {run['conclusion'] or 'none'} | "
-            f"{run['benchmark_count']} | {len(run['job_ids'])} | `{title}` |"
+            f"{run['benchmark_count'] if run['benchmark_count'] is not None else 'unknown'} | "
+            f"{len(run['job_ids'])} | `{title}` |"
         )
     return "\n".join(lines)
 
@@ -135,9 +149,10 @@ python3 experiments/agentx-offload/update_unofficial_runs.py --write
 
 The refresh queries every workflow on `{inventory['branch']}`, inventories its jobs and
 artifacts, and asks the public unofficial-run API whether it currently returns benchmark
-rows. `renderable` means the API returned at least one benchmark row; it does not mean the
-run is scientifically valid. Consult [`runs.json`](./runs.json) for validity and study
-conclusions.
+rows. `renderable` means the API returned at least one benchmark row, or a prior
+verified result was retained during a temporary API error; it does not mean the run
+is scientifically valid. New runs with an unavailable API are marked `unknown`.
+Consult [`runs.json`](./runs.json) for validity and study conclusions.
 
 Generated at: `{inventory['generated_at']}`
 
@@ -182,7 +197,8 @@ python3 experiments/agentx-offload/update_unofficial_runs.py --write
 
 刷新脚本会查询 `{inventory['branch']}` 上的全部工作流，记录其 job 和产物，
 并调用公开的 unofficial-run API 判断当前是否返回 benchmark 记录。
-`renderable` 只表示 API 至少返回一条 benchmark 记录，不代表该运行在科学上有效。
+`renderable` 表示 API 返回过至少一条 benchmark 记录；若 API 暂时出错，则保留此前已验证的
+结果。它不代表该运行在科学上有效。API 不可用时，新运行标为 `unknown`。
 有效性和研究结论应以 [`runs.json`](./runs.json) 为准。
 
 生成时间：`{inventory['generated_at']}`
@@ -218,8 +234,23 @@ def main() -> None:
     args = parser.parse_args()
 
     branch_runs = list_branch_runs(args.repo, args.branch)
+    base = Path(__file__).resolve().parent
+    cached_path = base / "unofficial-runs.json"
+    cached_runs = (
+        json.loads(cached_path.read_text(encoding="utf-8")).get("workflow_runs", [])
+        if cached_path.is_file()
+        else []
+    )
+    cached_by_id = {int(run["workflow_run_id"]): run for run in cached_runs}
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as executor:
-        runs = list(executor.map(lambda run: inspect_run(args.repo, run), branch_runs))
+        runs = list(
+            executor.map(
+                lambda run: inspect_run(
+                    args.repo, run, cached_by_id.get(int(run["id"]))
+                ),
+                branch_runs,
+            )
+        )
     runs.sort(key=lambda run: run["workflow_run_id"])
 
     renderable_ids = [run["workflow_run_id"] for run in runs if run["renderable"]]

@@ -18,11 +18,12 @@ python3 experiments/agentx-offload/update_unofficial_runs.py --write
 
 The refresh queries every workflow on `experiment/agentx-b200-offload`, inventories its jobs and
 artifacts, and asks the public unofficial-run API whether it currently returns benchmark
-rows. `renderable` means the API returned at least one benchmark row; it does not mean the
-run is scientifically valid. Consult [`runs.json`](./runs.json) for validity and study
-conclusions.
+rows. `renderable` means the API returned at least one benchmark row, or a prior
+verified result was retained during a temporary API error; it does not mean the run
+is scientifically valid. New runs with an unavailable API are marked `unknown`.
+Consult [`runs.json`](./runs.json) for validity and study conclusions.
 
-Generated at: `2026-10-07T18:17:42.593693Z`
+Generated at: `2026-10-07T18:26:56.109182Z`
 
 ## URLs
 
@@ -36,9 +37,9 @@ Pure-NVMe API-renderable points (9 runs):
 
 ## Complete branch workflow list
 
-Branch workflows: **78**
+Branch workflows: **79**
 
-Individual GitHub jobs: **936**
+Individual GitHub jobs: **946**
 
 | Workflow run ID | Conclusion | Chart benchmarks | GitHub jobs | Workflow |
 | ---: | --- | ---: | ---: | --- |
@@ -120,3 +121,4 @@ Individual GitHub jobs: **936**
 | [37490705589](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37490705589) | failure | 1 | 12 | `e2e Test - offload-v1-none-c489-r3-extended-power-20261006` |
 | [37552057241](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37552057241) | cancelled | 0 | 12 | `e2e Test - offload-v1-nvme2tib-c488-r1-capacity-20261007` |
 | [37602969372](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37602969372) | failure | 1 | 12 | `e2e Test - offload-v1-nvme2tib-c488-r2-capacity-20261007` |
+| [37666309639](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37666309639) | none | 0 | 10 | `e2e Test - offload-v1-nvme2tib-c488-r3-capacity-20261007` |
