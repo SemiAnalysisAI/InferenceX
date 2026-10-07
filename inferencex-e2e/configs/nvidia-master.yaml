@@ -5050,7 +5050,7 @@ qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg-pareto:
           - "CONFIG_FILE=recipes/qwen3.5/sglang/gb300-fp4/agentx/agg-pareto-variants.yaml:override_tp8_c7_b1"
 
 qwen3.5-fp8-gb300-dynamo-sglang-agentic-pp-pareto:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260913-fa663e72
+  image: lmsysorg/sglang:nightly-dev-cu13-20261007-f1065423@sha256:2253b491bf3fd47bc292ddaf232216831f4cfeee2e7e7bbc6a026ce02fb4dd36
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: cluster:gb300-nv
