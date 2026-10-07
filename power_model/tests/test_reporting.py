@@ -4,7 +4,7 @@ from power_fixtures import constant_efficiency_psu, controlled_fan_policy
 
 from power_model import CoolingProfile
 from power_model.cli import main
-from power_model.models.advanced import AdvancedAllInPowerModel, Cluster, SystemGroup
+from power_model.models.advanced import Cluster, OSSAllinPowerModel, SystemGroup
 from power_model.models.advanced.systems import HopperHGXSystemChassis, MI300HGXSystemChassis
 from power_model.reporting import format_power_breakdown_per_chassis
 
@@ -112,7 +112,7 @@ def test_cli_b300_bom_nests_active_nics_on_board_and_uses_offloading_component_p
 
 
 def test_mixed_system_report_normalizes_each_group_using_its_own_chassis_count():
-    model = AdvancedAllInPowerModel(
+    model = OSSAllinPowerModel(
         cooling=CoolingProfile(mode="air"),
         cluster=Cluster(
             systems=(

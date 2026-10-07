@@ -57,7 +57,7 @@ def _format_table(rows: list[tuple[str, str, str, str]]) -> str:
 def format_power_breakdown_per_chassis(estimate: PowerEstimate) -> str:
     """Normalize each system group's existing tree to one chassis; keep cluster totals separate."""
     if estimate.scope != "cluster":
-        raise ValueError("--power-breakdown-per-chassis requires the advanced model")
+        raise ValueError("--power-breakdown-per-chassis requires the oss model")
     systems, networking = estimate.components
     units = {dict(system.details).get("system_unit", "chassis") for system in systems.children}
     unit = next(iter(units)) if len(units) == 1 else "system"
