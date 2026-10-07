@@ -106,9 +106,10 @@ override_dynamo_offload_c8:
         moe-backend: flashinfer_trtllm
         quantization: nvfp4
         kv-cache-dtype: fp8
-        # Cap the GPU KV pool at one full-length context, so that sessions evict each
-        # other's prefixes and returning turns load them back from the host tiers.
-        max-total-tokens: 262144
+        # Cap the GPU KV pool at four full-length contexts (it would hold ~12.8M tokens),
+        # so that sessions evict each other's prefixes and returning turns load them back
+        # from the host tiers. At one context (262144) a long prefill stalled.
+        max-total-tokens: 1048576
         kvstore-size: 64
         kvstore-storage-backend: mooncake
 
