@@ -66,16 +66,7 @@ from .common import (
 
 SCHEMA_VERSION = 1
 PRODUCER = "srt-slurm.dcgm-power"
-POWER_METRIC = "DCGM_FI_DEV_POWER_USAGE"
 POWER_UNIT = "W"
-POWER_SCOPE = "gpu_device_board_as_reported_by_dcgm"
-POWER_PROFILES = {
-    "dcgm": (POWER_METRIC, POWER_SCOPE),
-    "amd-device-metrics": (
-        "gpu_power_usage",
-        "gpu_device_power_as_reported_by_amd_device_metrics_exporter",
-    ),
-}
 CLOCK_SOURCE = "head_node_unix_clock"
 
 MANIFEST_FILENAME = "manifest.json"
@@ -99,6 +90,9 @@ SAMPLES_HEADER_V3 = (*SAMPLES_HEADER_V2, "temperature_c")
 # Fixed by the producer contract (srt-slurm contract.MAX_SAMPLE_GAP_SECONDS),
 # NOT a multiple of the configured sample interval.
 MAX_SAMPLE_GAP_SECONDS = 3.0
+# Fixed by the producer contract (srt-slurm contract.MAX_TEMPERATURE_C); exporter
+# blank and error sentinels sit far above it.
+MAX_TEMPERATURE_C = 200.0
 
 WORKER_ROLES = ("prefill", "decode", "agg")
 
@@ -289,22 +283,20 @@ def _parse_expected_windows(manifest: dict) -> list[ExpectedWindow]:
 def _check_wire_contract(manifest: dict) -> list[str]:
     """Mirror srt-slurm's manifest wire/lifecycle checks (verdict excluded)."""
     failures: list[str] = []
-    profile = manifest.get("power_profile", "dcgm")
-    if not isinstance(profile, str) or profile not in POWER_PROFILES:
-        failures.append(f"unknown power_profile: {profile!r}")
-        expected_metric, expected_scope = POWER_METRIC, POWER_SCOPE
-    else:
-        expected_metric, expected_scope = POWER_PROFILES[profile]
     for key, expected in (
         ("schema_version", SCHEMA_VERSION),
         ("producer", PRODUCER),
-        ("source_metric", expected_metric),
         ("unit", POWER_UNIT),
-        ("power_scope", expected_scope),
         ("timestamp_source", CLOCK_SOURCE),
     ):
         if manifest.get(key) != expected:
             failures.append(f"{key} is {manifest.get(key)!r}, expected {expected!r}")
+    # The exporter block chooses the metric, so any recorded metric and scope are
+    # valid; the producer pin, not a vendor table, guards the energy contract.
+    for key in ("source_metric", "power_scope"):
+        value = manifest.get(key)
+        if not (isinstance(value, str) and value):
+            failures.append(f"{key} is not a non-empty string")
 
     status = manifest.get("status")
     if status != STATUS_COMPLETE:
@@ -372,7 +364,7 @@ def _parse_sample_row(raw: list[str], expected_version: int) -> SampleRow | None
                         return None
         if expected_version == 3 and raw[9]:
             temperature = float(raw[9])
-            if not math.isfinite(temperature) or not -273.15 <= temperature < 0x7FFFFFF0:
+            if not math.isfinite(temperature) or not -273.15 <= temperature <= MAX_TEMPERATURE_C:
                 return None
     except ValueError:
         return None
