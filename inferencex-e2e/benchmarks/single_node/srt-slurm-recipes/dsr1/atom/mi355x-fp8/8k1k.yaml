@@ -3,7 +3,7 @@ base:
   name: dsr1-fp8-mi355x-atom-8k1k
   model:
     path: hf:deepseek-ai/DeepSeek-R1-0528
-    container: rocm/atom:rocm7.2.3_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom20260511
+    container: rocm/atom-dev:atom0.1.5-aiter0.1.16@sha256:e6b760c6b17203386f205d6d06abbeebdf09b274123d07772b63d1844491fd7c
     precision: fp8
   resources:
     gpu_type: mi355x
