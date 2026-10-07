@@ -91,9 +91,9 @@ The fixed-sequence transformer requires runner, framework, precision, speculativ
 | Multinode topology | `prefill_tp`, `prefill_pp`, `prefill_dcp_size`, `prefill_pcp_size`, `prefill_ep`, `prefill_dp_attention`, `prefill_num_workers`, matching `decode_*` fields, `num_prefill_gpu`, `num_decode_gpu`, and optional `prefill_hw`/`decode_hw` |
 | Primary derived metrics | `tput_per_gpu`, `input_tput_per_gpu`, `output_tput_per_gpu` |
 | Latency and interactivity | Each benchmark input key ending in `ms` is converted from milliseconds to seconds with `_ms` removed. Keys containing `tpot` also produce an `intvty` reciprocal. |
-| Optional runtime metadata | `router` as exactly `{name, version}`, `kv_p2p_transfer`, and, for multinode results, measured power from the srt-slurm telemetry package |
+| Optional runtime metadata | `router` as exactly `{name, version}`, `kv_p2p_transfer`, and measured power from a retained srt-slurm telemetry package |
 
-Single-node GPU count is `tp * pp * pcp_size`. DCP does not multiply the physical GPU count. Multinode per-GPU denominators use the declared prefill and decode GPU counts. Invalid or missing required metadata fails transformation. Only multinode results are power-aggregated; single-node results carry no power fields or verdict. Power aggregation is best effort by default; `REQUIRE_POWER=1` fails the job after preserving available results and audits when power validation fails.
+Single-node GPU count is `tp * pp * pcp_size`. DCP does not multiply the physical GPU count. Multinode per-GPU denominators use the declared prefill and decode GPU counts. Invalid or missing required metadata fails transformation. Single-node results with a retained native power package and multinode results are power-aggregated. Power aggregation is best effort by default; `REQUIRE_POWER=1` fails the job after preserving available results and audits when power validation fails.
 
 InferenceX-app treats routing fields as columns or config dimensions and stores numeric measurements in `benchmark_results.metrics` JSONB. The mapper supports v1 shared topology, v2 split prefill/decode topology, and nested v3 AgentX metrics. Unknown numeric metrics are retained and warned about, which permits schema growth without silently losing numeric data.
 
@@ -108,6 +108,22 @@ For multinode fixed-sequence jobs, `python -m infx.results.fixed_sequence --all`
 The PR changelog selects representative NVIDIA and AMD coverage, not an exhaustive list of affected recipes; shared processing changes apply to every fixed-sequence recipe.
 
 Processing and, for multinode jobs, diagnostic power-audit uploads run after launcher or validation failure, retaining raw and aggregate JSON. Normal `bmk_*` upload requires successful benchmark and processing steps, so an incomplete batch or failed Slurm job does not publish diagnostic rows. The main-branch ingest trigger can still publish other successful configurations from a partially failed sweep; it does not establish complete fleet coverage. Downstream importers can use the retained outcome to reject explicitly failed benchmarks.
+
+### SRT single-node power artifacts
+
+The launcher enables native telemetry for single-node fixed-sequence and AgentX jobs.
+It retains `LOGS/power`, the result JSON referenced by each measurement window,
+the producer revision and exporter provenance in `power_audit_<RESULT_FILENAME>`.
+AgentX also retains `LOGS/agentic/agentic_power_concurrency_*.json` and its validation
+sidecar. Available diagnostics are staged even when the job fails; eval-only jobs
+do not enable power collection.
+
+Both NVIDIA DCGM and AMD device-metrics-exporter packages use the shared native
+validator, which checks the profile's metric and measurement boundary, producer,
+GPU count and result binding. AgentX validates single-node `num_gpus` against the
+launcher's expected count before adding power metrics and a bounded audit summary.
+Invalid measurements omit energy metrics; `REQUIRE_POWER=1` also fails the job.
+The historical CSV reader remains available for previously captured artifacts.
 
 ### SRT multinode window retention
 

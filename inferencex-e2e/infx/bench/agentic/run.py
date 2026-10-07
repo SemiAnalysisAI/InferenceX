@@ -27,16 +27,13 @@ REQUIRED = (
     "IS_MULTINODE",
     "PRECISION",
 )
-# Only srt-slurm's multi-node telemetry measures AgentX power; single-node points publish none.
 POWER_SWITCHES = ("ENABLE_AGENTX_POWER", "REQUIRE_POWER")
 # The finished profile's accepted error fraction; a recipe's live abort threshold
 # (AIPERF_LIVE_FAILED_REQUEST_THRESHOLD) does not move it.
 FAILED_REQUEST_THRESHOLD = "0.10"
 # Spellings the power switches have always accepted as enabled.
 TRUE_VALUES = frozenset({"1", "true", "TRUE", "yes", "YES"})
-
-# window: mark srt-slurm's multi-node measurement window; missing: a multi-node job
-# without that window, recorded as invalid power.
+# srt-slurm owns sampling for both single-node and multi-node jobs.
 PowerMode = Literal["off", "window", "missing"]
 
 
@@ -59,7 +56,8 @@ class Plan:
         """Validate every input before any setup, so a bad point fails in seconds."""
         values = inputs.require(*REQUIRED, *REPLAY_REQUIRED, env=env)
         multinode = inputs.flag("IS_MULTINODE", env)
-        switches = inputs.require(*POWER_SWITCHES, env=env) if multinode else {}
+        matrix_point = env.get("IS_AGENTIC") == "1" or env.get("SCENARIO_TYPE") == "agentic-coding"
+        switches = inputs.require(*POWER_SWITCHES, env=env) if multinode or matrix_point else {}
         result_dir = Path(values["RESULT_DIR"]).absolute()
         result_filename = values["RESULT_FILENAME"]
         if multinode or env.get("CONC_LIST"):
@@ -70,7 +68,7 @@ class Plan:
         replay = ReplayConfig.from_env(env, result_dir)
         _require_single_point(env, values["CONC"])
         # Matrix launches declare kv-offloading; srt-slurm's standalone agentx.sh does not.
-        if env.get("IS_AGENTIC") == "1" or env.get("SCENARIO_TYPE") == "agentic-coding":
+        if matrix_point:
             _validate_kv_offload(env)
         eval_only = inputs.flag("EVAL_ONLY", env)
         return cls(
@@ -116,7 +114,7 @@ def _validate_kv_offload(env: Mapping[str, str]) -> None:
 def _power_mode(switches: Mapping[str, str], env: Mapping[str, str]) -> PowerMode:
     if switches.get("ENABLE_AGENTX_POWER") not in TRUE_VALUES:
         return "off"
-    # srt-slurm's telemetry measures multi-node points and exports the window directory.
+    # srt-slurm exports the window directory for measured single- and multi-node points.
     return "window" if env.get("SRT_MEASUREMENT_WINDOW_DIR") else "missing"
 
 
@@ -163,11 +161,10 @@ def _download_traces(cfg: ReplayConfig, runtime: Runtime, env: Mapping[str, str]
 
 
 def _open_power_window(plan: Plan, python: str, env: Mapping[str, str]) -> int:
-    """Record the replay clock's UTC offset and mark srt-slurm's multi-node window running."""
+    """Record the replay clock's UTC offset and open srt-slurm's measurement window."""
     if plan.power != "window":
         return 0
-    # AIPerf exports naive local datetimes; the adapter needs the offset to convert the
-    # profiling window to Unix time.
+    # AIPerf exports naive local datetimes; the adapter normalizes its profiling window.
     now = datetime.datetime.now(datetime.timezone.utc).astimezone()
     (plan.result_dir / "agentic_power_timezone_offset.txt").write_text(f"{now:%z}\n")
     rc = _power_adapter(plan, python, env, *_window(plan, "running"))

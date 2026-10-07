@@ -260,13 +260,14 @@ def aggregate_power_result(
     bench_path: Path,
     agg_path: Path,
 ) -> int:
-    """Enrich a written multinode result, preserving best-effort failures."""
+    """Enrich a written result from retained native telemetry."""
     require_power = env.get("REQUIRE_POWER", "").lower() in {"1", "true", "yes"}
     validation_path = Path(f"power_validation_{env['RESULT_FILENAME']}.json")
     source = Path(env.get("POWER_ARTIFACT_DIR", "LOGS/power"))
-    prefill_gpus = int(env["PREFILL_GPUS"])
-    decode_gpus = int(env["DECODE_GPUS"])
-    aggregate_gpus = int(env.get("AGGREGATE_GPUS", "0"))
+    is_multinode = env.get("IS_MULTINODE", "false").lower() == "true"
+    prefill_gpus = int(env["PREFILL_GPUS"]) if is_multinode else 0
+    decode_gpus = int(env["DECODE_GPUS"]) if is_multinode else 0
+    aggregate_gpus = int(env.get("AGGREGATE_GPUS", "0")) if is_multinode else int(env["GPU_COUNT"])
     try:
         from .power.multinode import run
 
@@ -306,9 +307,7 @@ def process_result(env: Mapping[str, str]) -> int:
     with open(agg_path, "w") as f:
         json.dump(data, f, indent=2)
     status = 0
-    # Only multinode srt-slurm runs carry a power package; single-node results
-    # publish no power fields or verdict.
-    if data["is_multinode"]:
+    if data["is_multinode"] or env.get("POWER_ARTIFACT_DIR"):
         status = aggregate_power_result(env, bench_path, agg_path)
         validation_path = Path(f"power_validation_{result_filename}.json")
         from .power.audit import audit_summary

@@ -269,3 +269,15 @@ def test_runtime_container_options_remain_native_mapping(point):
     }
     with pytest.raises(ValueError, match='must map option names to string values'):
         runtime_arguments(f"{path}:base", {**env, 'SRT_SRUN_OPTIONS': '{"container-remap-root": true}'})
+
+
+@pytest.mark.parametrize("recipe_required,requested", [(True, "0"), (False, "1")])
+def test_binding_keeps_either_required_power_policy(point, recipe_required, requested):
+    path, recipe, env = point
+    recipe["telemetry"] = {"required": recipe_required}
+    path.write_text(yaml.safe_dump({"base": recipe}))
+    argv = runtime_arguments(f"{path}:base", {**env, "REQUIRE_POWER": requested})
+    actual = copy.deepcopy(recipe)
+    apply_overrides_to_recipe(actual, parse_overrides(argv[1::2], []))
+    assert actual["telemetry"]["required"] is True
+    assert actual["benchmark"]["concurrencies"] == [2]

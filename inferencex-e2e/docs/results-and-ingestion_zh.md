@@ -91,9 +91,9 @@ shape:    array of benchmark row objects
 | 多节点拓扑 | `prefill_tp`、`prefill_pp`、`prefill_dcp_size`、`prefill_pcp_size`、`prefill_ep`、`prefill_dp_attention`、`prefill_num_workers`，对应的 `decode_*` 字段，`num_prefill_gpu`、`num_decode_gpu`，以及可选的 `prefill_hw`/`decode_hw` |
 | 主要派生指标 | `tput_per_gpu`、`input_tput_per_gpu`、`output_tput_per_gpu` |
 | 延迟和交互性 | 基准输入中每个以 `ms` 结尾的键都会从毫秒换算为秒，并移除 `_ms`。包含 `tpot` 的键还会产生其倒数 `intvty`。 |
-| 可选运行时元数据 | 形式必须精确为 `{name, version}` 的 `router`、`kv_p2p_transfer`，以及多节点结果中由 srt-slurm 遥测包补入的实测功耗 |
+| 可选运行时元数据 | 形式必须精确为 `{name, version}` 的 `router`、`kv_p2p_transfer`，以及由保留的 srt-slurm 遥测包补入的实测功耗 |
 
-单节点 GPU 数为 `tp * pp * pcp_size`。DCP 不会增加物理 GPU 数。多节点每 GPU 指标的分母使用声明的 prefill 和 decode GPU 数。无效或缺失的必需元数据会使转换失败。只有多节点结果执行功耗聚合；单节点结果不含功耗字段或结论。功耗聚合默认尽力而为；当设置 `REQUIRE_POWER=1` 时，功耗验证失败会在保留已有结果和审计后使任务失败。
+单节点 GPU 数为 `tp * pp * pcp_size`。DCP 不会增加物理 GPU 数。多节点每 GPU 指标的分母使用声明的 prefill 和 decode GPU 数。无效或缺失的必需元数据会使转换失败。带有保留的原生功耗包的单节点结果及多节点结果都会执行功耗聚合。功耗聚合默认尽力而为；当设置 `REQUIRE_POWER=1` 时，功耗验证失败会在保留已有结果和审计后使任务失败。
 
 InferenceX-app 将路由字段作为列或配置维度，并把数值测量存入 `benchmark_results.metrics` JSONB。映射器支持共享拓扑的 v1、拆分 prefill/decode 拓扑的 v2，以及嵌套 AgentX 指标的 v3。未知数值指标会被保留并产生警告，因此架构可以扩展，同时不会无提示地丢失数值数据。
 
@@ -108,6 +108,20 @@ InferenceX-app 将路由字段作为列或配置维度，并把数值测量存�
 PR changelog 选择具有代表性的 NVIDIA 和 AMD 覆盖，并非所有受影响配置的完整列表；共享处理逻辑的变更适用于所有固定序列配置。
 
 启动器或验证失败后仍会运行处理步骤以及多节点任务的功耗诊断上传，并在审计工件中保留原始及聚合 JSON。正常 `bmk_*` 上传要求基准和处理步骤成功，因此不完整批次或 Slurm 失败不会发布诊断数据。主分支的入库触发器仍可发布部分失败 sweep 中其他成功配置的数据；这并不证明整个硬件范围已完成覆盖。下游导入器可利用保留的状态拒绝明确失败的基准结果。
+
+### SRT 单节点功耗产物
+
+launcher 为单节点固定序列和 AgentX 作业开启原生遥测，将 `LOGS/power`、
+测量窗口引用的结果 JSON、producer revision 和 exporter 来源保留在
+`power_audit_<RESULT_FILENAME>` 中。AgentX 还保留
+`LOGS/agentic/agentic_power_concurrency_*.json` 及其校验 sidecar。
+作业失败时也会暂存已有诊断产物；eval-only 作业不启用功耗采集。
+
+NVIDIA DCGM 与 AMD device-metrics-exporter 产物共用原生校验器，检查 profile
+对应的指标与测量边界、producer、GPU 数量及结果绑定。AgentX 先核对单节点
+`num_gpus` 与 launcher 的预期数量，再加入功耗指标和有界审计摘要。
+无效测量省略能耗指标；`REQUIRE_POWER=1` 还会使作业失败。
+历史 CSV 读取器仍可处理此前保存的产物。
 
 ### SRT 多节点窗口保留
 

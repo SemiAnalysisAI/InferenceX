@@ -28,7 +28,7 @@ POLICY = {
 }
 
 # Records each client run and writes the result file the real client would. With
-# FAKE_CLIENT_TRAP set, it runs until SIGTERM or SIGHUP, records the signal, and exits 0.
+# FAKE_CLIENT_TRAP set, it waits for SIGTERM or SIGHUP, records the signal, and exits 0.
 FAKE_CLIENT = """
 import json, os, signal, sys, time
 from pathlib import Path
@@ -44,7 +44,11 @@ if trap:
 argv = sys.argv[1:]
 value = lambda flag: argv[argv.index(flag) + 1]
 result = Path(value("--result-dir")) / value("--result-filename")
-record = {"argv": argv, "safe_path": os.environ.get("PYTHONSAFEPATH")}
+record = {
+    "argv": argv,
+    "monitored": (result.parent / "gpu_metrics.csv").exists(),
+    "safe_path": os.environ.get("PYTHONSAFEPATH"),
+}
 with open(os.environ["FAKE_CLIENT_LOG"], "a") as log:
     log.write(json.dumps(record) + "\\n")
 while trap:
@@ -62,17 +66,21 @@ def tools(tmp_path: Path) -> Path:
     """PATH with a stub benchmark client behind python3."""
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
-    for tool in ("sh", "dirname", "env"):
+    for tool in ("sh", "sleep", "dirname", "env"):
         (bin_dir / tool).symlink_to(shutil.which(tool))
     (tmp_path / "fake_client.py").write_text(FAKE_CLIENT)
     python, client = shlex.quote(sys.executable), shlex.quote(str(tmp_path / "fake_client.py"))
-    executable(bin_dir / "python3", f"""#!/bin/sh
+    stubs = {
+        "python3": f"""
 if [ "$1 $2" = "-m infx.bench_serving.benchmark_serving" ]; then
     shift 2
     exec {python} {client} "$@"
 fi
 exec {python} "$@"
-""")
+""",
+    }
+    for name, body in stubs.items():
+        executable(bin_dir / name, f"#!/bin/sh\n{body}")
     return bin_dir
 
 
@@ -124,6 +132,7 @@ def single_node_env(tmp_path: Path, tools: Path, **overrides: str | None) -> dic
         "SRT_FRONTEND_PORT": "8000",
         "RUN_EVAL": "false",
         "EVAL_ONLY": "false",
+        "SRT_MEASUREMENT_WINDOW_DIR": None,
         "USE_CHAT_TEMPLATE": "false",
         "FRAMEWORK": "sglang",
         **overrides,
@@ -181,6 +190,25 @@ def point_argv(result: Path) -> list[str]:
     return ["fixed-seq", "point", *(token for pair in flags.items() for token in pair)]
 
 
+@pytest.mark.parametrize("client_failed", [True, False])
+def test_single_node_does_not_report_success_without_a_completed_window(
+    tmp_path, tools, client_failed,
+):
+    windows = tmp_path / "logs" / "power" / "windows"
+    if client_failed:
+        windows.mkdir(parents=True)
+    env = single_node_env(
+        tmp_path, tools, SRT_MEASUREMENT_WINDOW_DIR=str(windows),
+        FAKE_CLIENT_FAIL_CONC="4" if client_failed else "",
+    )
+
+    result = run_shim("single_node/srt_fixed_sequence.sh", env)
+
+    assert result.returncode == (3 if client_failed else 1)
+    assert len(client_runs(tmp_path)) == 1
+    assert not (windows / "point_conc4.json").exists()
+
+
 @pytest.mark.parametrize(
     ("framework", "chat_template", "args", "flags"),
     [
@@ -188,10 +216,15 @@ def point_argv(result: Path) -> list[str]:
         ("trt", "false", ["--trust-remote-code"], {"--backend": "openai", "--trust-remote-code": True}),
     ],
 )
-def test_single_node_shim_runs_one_point_and_writes_only_its_result(
+def test_single_node_shim_runs_one_point_with_native_power(
     tmp_path, tools, framework, chat_template, args, flags
 ):
-    env = single_node_env(tmp_path, tools, FRAMEWORK=framework, USE_CHAT_TEMPLATE=chat_template)
+    windows = tmp_path / "logs" / "power" / "windows"
+    windows.mkdir(parents=True)
+    env = single_node_env(
+        tmp_path, tools, FRAMEWORK=framework, USE_CHAT_TEMPLATE=chat_template,
+        SRT_MEASUREMENT_WINDOW_DIR=str(windows),
+    )
 
     result = run_shim("single_node/srt_fixed_sequence.sh", env, *args)
 
@@ -212,9 +245,16 @@ def test_single_node_shim_runs_one_point_and_writes_only_its_result(
         "--result-filename": "point_conc4.json",
         **flags,
     }
-    assert [path.name for path in logs.iterdir()] == ["point_conc4.json"]
+    assert (logs / "point_conc4.json").is_file()
+    assert not run["monitored"]
     # The shim sets PYTHONSAFEPATH for infx.bench only; Python-script tools break under it.
     assert run["safe_path"] is None
+    assert not (logs / "gpu_metrics.csv").exists()
+    window = json.loads((windows / "point_conc4.json").read_text())
+    assert window["result_path"] == "point_conc4.json"
+    assert window["concurrency"] == 4
+    assert (window["benchmark_start_time_unix"], window["benchmark_end_time_unix"]) == (100, 160)
+    assert window["status"] == "completed"
 
 
 @pytest.mark.parametrize(
@@ -225,8 +265,10 @@ def test_single_node_shim_runs_one_point_and_writes_only_its_result(
         ({"FRAMEWORK": "no-such-framework"}, 1, "ERROR: unsupported fixed-sequence FRAMEWORK: no-such-framework\n"),
         ({"USE_CHAT_TEMPLATE": "yes"}, 1, "ERROR: USE_CHAT_TEMPLATE must be true or false, got 'yes'\n"),
         ({"RESULT_DIR": "/nonexistent/logs"}, 1, "ERROR: RESULT_DIR must be an existing"),
+        ({}, 1, "SRT_MEASUREMENT_WINDOW_DIR"),
     ],
-    ids=["eval-only", "missing", "unsupported-framework", "malformed-flag", "no-result-dir"],
+    ids=["eval-only", "missing", "unsupported-framework", "malformed-flag", "no-result-dir",
+         "missing-native-power"],
 )
 def test_single_node_point_runs_nothing_when_eval_only_or_misconfigured(
     tmp_path, tools, monkeypatch, capsys, overrides, returncode, reported

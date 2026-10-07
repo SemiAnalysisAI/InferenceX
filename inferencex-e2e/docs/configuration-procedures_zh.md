@@ -81,9 +81,15 @@ NVIDIA 集群配置通过 `slurm.srt-slurm.extra.default_gpu_exporter`，让 Tac
 `/configs/dcgm-counters-noprof.csv`。功耗配方通过 `telemetry.dcgm_exporter.command`
 选择同一份 CSV，因此两条路径共用同一 exporter 版本和同一 counters 文件。当功耗采集
 已启动 exporter 时，Tachometer 复用该实例。保留功耗、能耗和 GPU 利用率，省略 profiling
-与 vGPU license counters。这不会开启配方已关闭的采集，也不代表 Tachometer 指标已通过
-PowerX 严格校验。现有的 Tachometer 1000 ms / 功耗 exporter 100 ms 采集间隔及 9401 端口
-保持不变。
+与 vGPU license counters。这不会开启多节点配方已关闭的采集，也不代表 Tachometer 指标已通过
+PowerX 严格校验。多节点配方保留现有采集间隔及 9401 端口。
+
+单节点吞吐量和 AgentX 作业由 launcher 启用原生功耗采集；eval-only 作业不采集。
+无效测量在 `REQUIRE_POWER=1` 时使作业失败，否则记录为无效并省略能耗指标。
+缺少 exporter 配置或无法准备镜像时，基准不会启动。
+
+AMD 配置使用预先构建并校验的 exporter 镜像，其来源记录在
+`power-exporter-source.json`。镜像校验只确认来源与内容，功耗测量仍需在目标硬件上验证。
 
 ## 规程索引
 

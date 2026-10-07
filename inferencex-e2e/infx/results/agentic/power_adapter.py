@@ -20,6 +20,7 @@ from infx.results.power import (
     POWER_METRIC_SCHEMA_VERSION,
     with_power_metrics,
 )
+from infx.results.power.audit import audit_summary
 from infx.results.power.common import _write_json_atomic
 from infx.results.power.multinode import WINDOWS_DIRNAME, run as run_multinode_power
 
@@ -333,8 +334,10 @@ def run_multinode_agentic_power(
     logs_root: Path,
     expected_producer_sha: str,
     require_power: bool = False,
+    expected_num_gpus: int | None = None,
+    audit_source: str | None = None,
 ) -> int:
-    """Join one AgentX aggregate to the finalized central multinode package."""
+    """Join one AgentX aggregate to the finalized native power package."""
     validation_result = result_dir / "power_validation.json"
     reasons: list[str] = []
     try:
@@ -350,7 +353,16 @@ def run_multinode_agentic_power(
     prefill_gpus = _gpu_count(aggregate.get("num_prefill_gpu"))
     decode_gpus = _gpu_count(aggregate.get("num_decode_gpu"))
     disagg = aggregate.get("disagg")
-    if (
+    if expected_num_gpus is not None:
+        if (
+            _gpu_count(expected_num_gpus) in (None, 0)
+            or aggregate.get("is_multinode") is not False
+            or disagg is not False
+            or _gpu_count(aggregate.get("num_gpus")) != expected_num_gpus
+        ):
+            reasons.append("agentic_gpu_topology_invalid")
+        prefill_gpus, decode_gpus = expected_num_gpus, 0
+    elif (
         not isinstance(disagg, bool)
         or prefill_gpus is None
         or decode_gpus is None
@@ -379,32 +391,44 @@ def run_multinode_agentic_power(
                 f"[agentx_power] Failed to record multinode adapter failure: {exc}",
                 file=sys.stderr,
             )
-        return _fail_multinode_adapter(
+        status = _fail_multinode_adapter(
             "Multinode AgentX power adaptation failed: " + ", ".join(reasons),
             require_power=require_power,
         )
-
-    assert prefill_gpus is not None  # noqa: S101
-    assert decode_gpus is not None  # noqa: S101
-    assert isinstance(disagg, bool)  # noqa: S101
-    assert bench_result is not None  # noqa: S101
-    aggregate_gpus = 0
-    if not disagg:
-        aggregate_gpus = prefill_gpus + decode_gpus
-        prefill_gpus = 0
-        decode_gpus = 0
-    return run_multinode_power(
-        power_dir=power_dir,
-        bench_result=bench_result,
-        agg_result=agg_result,
-        prefill_gpus=prefill_gpus,
-        decode_gpus=decode_gpus,
-        aggregate_gpus=aggregate_gpus,
-        expected_producer_sha=expected_producer_sha,
-        logs_root=logs_root,
-        validation_result=validation_result,
-        require_power=require_power,
-    )
+    else:
+        assert prefill_gpus is not None  # noqa: S101
+        assert decode_gpus is not None  # noqa: S101
+        assert isinstance(disagg, bool)  # noqa: S101
+        assert bench_result is not None  # noqa: S101
+        aggregate_gpus = 0
+        if not disagg:
+            aggregate_gpus = prefill_gpus + decode_gpus
+            prefill_gpus = 0
+            decode_gpus = 0
+        status = run_multinode_power(
+            power_dir=power_dir,
+            bench_result=bench_result,
+            agg_result=agg_result,
+            prefill_gpus=prefill_gpus,
+            decode_gpus=decode_gpus,
+            aggregate_gpus=aggregate_gpus,
+            expected_producer_sha=expected_producer_sha,
+            logs_root=logs_root,
+            validation_result=validation_result,
+            require_power=require_power,
+        )
+    if audit_source is not None:
+        try:
+            result = json.loads(agg_result.read_text())
+            validation = json.loads(validation_result.read_text())
+            if not isinstance(result, dict) or not isinstance(validation, dict):
+                raise ValueError("AgentX aggregate and validation must be JSON objects")
+            result.update(audit_summary(validation, audit_source))
+            _write_json_atomic(agg_result, result)
+        except (OSError, ValueError, TypeError) as exc:
+            print(f"[agentx_power] Audit summary unavailable: {exc}", file=sys.stderr)
+            status = max(status, int(require_power))
+    return status
 
 
 def main() -> int:
@@ -417,6 +441,8 @@ def main() -> int:
     parser.add_argument("--power-dir", type=Path)
     parser.add_argument("--logs-root", type=Path)
     parser.add_argument("--expected-producer-sha")
+    parser.add_argument("--expected-num-gpus", type=int)
+    parser.add_argument("--audit-source")
     parser.add_argument(
         "--require-power",
         action="store_true",
@@ -475,6 +501,8 @@ def main() -> int:
         logs_root=args.logs_root,
         expected_producer_sha=args.expected_producer_sha,
         require_power=args.require_power,
+        expected_num_gpus=args.expected_num_gpus,
+        audit_source=args.audit_source,
     )
 
 

@@ -134,6 +134,7 @@ env:
 
 permissions:
   contents: read
+  actions: read # Download the pinned AMD exporter artifact.
 
 jobs:
   benchmark:
@@ -259,8 +260,20 @@ jobs:
         run: &launcher-cleanup |
           "$INFERENCEX_LAUNCH_PYTHON" -P -m infx.launch cleanup
 
+      - name: Download prepared AMD exporter
+        if: ${{ !inputs.eval-only && fromJSON(inputs.config).srt-recipe && (startsWith(runner.name, 'mi300x-amd_') || startsWith(runner.name, 'mi325x-amd_') || startsWith(runner.name, 'mi355x-amds_')) }}
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: 11217112734
+          run-id: 36985488002
+          github-token: ${{ github.token }}
+          path: ${{ github.workspace }}/inferencex-e2e/.prepared-amd-exporter
+          merge-multiple: true
+
       - name: Launch job script
         env:
+          AMD_DME_ARTIFACT_DIR: ${{ github.workspace }}/inferencex-e2e/.prepared-amd-exporter
+          AMD_DME_SQSH_SHA256: 0f2cbb4e2c41c1506db74c6653ea09ec5e7d42236d9532e2bc38fb9e0be5879e
           RUNNER_NAME: ${{ runner.name }}
           RUNNER_TYPE: ${{ inputs.runner }}
           RESULT_FILENAME_BASE: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_tp${{ env.TP }}-pp${{ env.PP_SIZE }}-dcp${{ env.DCP_SIZE }}-pcp${{ env.PCP_SIZE }}-ep${{ env.EP_SIZE }}-dpa${{ env.DP_ATTENTION }}_disagg-${{ env.DISAGG }}_spec-${{ env.SPEC_DECODING }}_conc${{ env.CONC }}_${{ runner.name }}
@@ -464,6 +477,36 @@ jobs:
             ${{ env.INFERENCEX_E2E_ROOT }}/srt-single-node-submission.json
             ${{ env.INFERENCEX_E2E_ROOT }}/srt-slurm-sha.txt
             ${{ env.INFERENCEX_E2E_ROOT }}/srt-setup.log
+          if-no-files-found: ignore
+
+      - name: Upload power audit bundle
+        if: ${{ always() && !inputs.eval-only }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: power_audit_${{ env.RESULT_FILENAME }}
+          path: |
+            ${{ env.INFERENCEX_E2E_ROOT }}/${{ env.RESULT_FILENAME }}.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/agg_${{ env.RESULT_FILENAME }}.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/gpu_metrics.csv
+            ${{ env.INFERENCEX_E2E_ROOT }}/gpu_metrics*_context.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/gpu_metrics_energy_start.csv
+            ${{ env.INFERENCEX_E2E_ROOT }}/gpu_metrics_energy_end.csv
+            ${{ env.INFERENCEX_E2E_ROOT }}/gpu_metrics_identity.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/gpu_metrics_identity.csv
+            ${{ env.INFERENCEX_E2E_ROOT }}/power_validation_${{ env.RESULT_FILENAME }}.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/results/gpu_metrics*.csv
+            ${{ env.INFERENCEX_E2E_ROOT }}/results/gpu_metrics*_context.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/results/gpu_metrics_identity.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/results/agentic_power_window.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/results/agentic_power_timezone_offset.txt
+            ${{ env.INFERENCEX_E2E_ROOT }}/results/power_validation.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/power/**
+            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/agentic/**/agentic_power_concurrency_*.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/agentic/**/power_validation.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/${{ env.RESULT_FILENAME }}.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/power-producer-sha.txt
+            ${{ env.INFERENCEX_E2E_ROOT }}/exporter-image.sha256
+            ${{ env.INFERENCEX_E2E_ROOT }}/power-exporter-source.json
           if-no-files-found: ignore
 
       - name: Upload eval results (if any)

@@ -66,9 +66,19 @@ implicit DCGM exporter. Power recipes select the same CSV through
 `telemetry.dcgm_exporter.command`, so one exporter version and one counter file serve
 both paths. Tachometer reuses the power exporter when power telemetry owns it. Power,
 energy and GPU utilization remain available; profiling and vGPU license counters are
-omitted. This does not enable telemetry in opted-out recipes or qualify Tachometer
-metrics as validated PowerX results. The existing 1000 ms Tachometer / 100 ms
-power-exporter collection intervals and port 9401 are preserved.
+omitted. This does not enable telemetry in opted-out multinode recipes or qualify Tachometer
+metrics as validated PowerX results. Multinode recipes retain their existing collection
+intervals and port 9401.
+
+The launcher enables native power telemetry for single-node throughput and AgentX jobs.
+Eval-only jobs do not collect power. Invalid measurements fail the job when
+`REQUIRE_POWER=1`; otherwise the result records an invalid verdict and omits energy
+metrics. Missing exporter configuration or an image staging failure stops preparation
+before the benchmark starts.
+
+AMD profiles use a prebuilt, verified exporter image. `power-exporter-source.json`
+records its provenance. Image verification establishes the source and contents, while
+power measurements still require validation on the target hardware.
 
 Keep model selection, cache preparation, and workload-dependent time limits in the
 srt driver's tables ([`lanes.py`](../infx/launch/drivers/srt/lanes.py),
