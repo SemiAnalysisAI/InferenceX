@@ -1,6 +1,5 @@
 # AgentX qwen3.5 trtllm gb300-fp4 recipes: shared settings in base, one
-# override per benchmark configuration. Select one with
-# CONFIG_FILE=recipes/qwen3.5/trtllm/gb300-fp4/agentx/disagg-variants.yaml:override_<name>.
+# override per benchmark configuration.
 
 schema: 2
 
