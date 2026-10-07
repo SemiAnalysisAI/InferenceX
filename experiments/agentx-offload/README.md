@@ -31,6 +31,14 @@ The next adaptive control halves only this bounded SimpleCPU disk capacity to
 2 TiB at c488, where the 4 TiB NVMe and HBM-only arms both completed canonical
 profiling. Earlier 1 TiB, 4 TiB, and new 2 TiB runs remain distinct in the
 ledger; a cross-capacity difference is local evidence, not a matched repeat.
+The first 2 TiB c488 capacity probe (`37552057241`) passed storage preflight and
+sent all 5,401 canonical warmup requests, but GitHub cancelled the job during
+warmup drain before profiling. The last archived sample had 5,351 completed,
+50 in flight, and zero request errors. Four artifact ZIPs were hashed and the
+exact host scratch was removed after its owner receipt and inactive Slurm job
+were verified. It provides no throughput, latency, completion, or energy result;
+the cancellation initiator has not been established.
+
 The connector preallocates its configured disk files, so concurrency does not
 determine disk footprint: admission now requires 2,199,023,255,552 bytes plus
 the 128 GiB reserve (2,336,462,209,024 bytes total). The completed 4 TiB series started at c256, which completed the full canonical run with 61.680% external

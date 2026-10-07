@@ -5726,10 +5726,10 @@
       "concurrency": 488,
       "repeat": 1,
       "head_sha": "c2b602ab76e81f14e565d976d9025a5b8adaa36a",
-      "status": "in_progress",
+      "status": "cancelled",
       "workflow_name": "offload-v1-nvme2tib-c488-r1-capacity-20261007",
       "dispatched_at": "2026-10-07T00:27:28Z",
-      "phase": "canonical warmup drain after all 5,401 requests sent, zero errors",
+      "phase": "terminal: GitHub cancelled during canonical warmup drain before profiling",
       "performance_result": false,
       "energy_result": false,
       "nvme_bytes_per_node": 2199023255552,
@@ -5747,10 +5747,10 @@
       "runner": "b200-nscale-slurm_02",
       "started_at": "2026-10-07T00:28:25Z",
       "slurm_job_id": 19716,
-      "slurm_state": "RUNNING",
+      "slurm_state": "CANCELLED",
       "slurm_time_limit": "08:30:00",
       "requested_node": "im-b200-c001",
-      "runtime_evidence": "Slurm 19716 allocated at 02:23:53Z on allowlisted im-b200-c001 with 08:30:00 limit. Runtime offload_config.json from exact run verified 23,022,421,168,128 free bytes before scratch creation (>2,336,462,209,024 threshold), O_DIRECT, zero host DRAM, 2,199,023,255,552 NVMe bytes, SimpleCPUOffloadConnector disk backend, lazy offload, page cache disabled. Exact host /scratch owner.json matches run 37552057241, attempt 1, Slurm 19716. Canonical warmup began at 02:32:32Z; latest snapshot 158/5,401 returned, 521 sent, 363 in flight, zero errors after 690.1s. The 521-request primer completed and zero-idle cache-pressure replay began at 03:15:38Z. Latest sample at 03:42:32Z returned 1,005/5,401, sent 1,671, retained 666 in flight, zero errors after 4,200.8 seconds. All 5,401 warmup requests were sent by 08:52:44Z. Latest drain sample at 09:12:06Z returned 5,284, retained 117 in flight, zero errors after 23,974.6s; profiling not yet started.",
+      "runtime_evidence": "Slurm 19716 allocated at 02:23:53Z on allowlisted im-b200-c001 with 08:30:00 limit. Runtime offload_config.json from exact run verified 23,022,421,168,128 free bytes before scratch creation (>2,336,462,209,024 threshold), O_DIRECT, zero host DRAM, 2,199,023,255,552 NVMe bytes, SimpleCPUOffloadConnector disk backend, lazy offload, page cache disabled. Exact host /scratch owner.json matches run 37552057241, attempt 1, Slurm 19716. Canonical warmup began at 02:32:32Z; latest snapshot 158/5,401 returned, 521 sent, 363 in flight, zero errors after 690.1s. The 521-request primer completed and zero-idle cache-pressure replay began at 03:15:38Z. Latest sample at 03:42:32Z returned 1,005/5,401, sent 1,671, retained 666 in flight, zero errors after 4,200.8 seconds. All 5,401 warmup requests were sent by 08:52:44Z. Latest drain sample at 09:12:06Z returned 5,284, retained 117 in flight, zero errors after 23,974.6s; profiling not yet started. GitHub cancelled the benchmark job at 09:18:59Z during warmup drain, with 5,351/5,401 completed, 50 in flight and zero request errors at last archived log sample. Slurm 19716 cancelled at 09:19:10Z, before time limit. Four artifact ZIPs captured and SHA-256 hashed; no profiling or aggregate, so no performance or energy result. Exact host scratch owner receipt matched, Slurm inactive, only that exact directory deleted and verified absent. Cancellation initiator not established.",
       "slurm_started_at": "2026-10-07T02:23:53Z",
       "node": "im-b200-c001",
       "host_scratch": "/scratch/inferencex-offload-37552057241-1-19716-4a5863443595",
@@ -5767,19 +5767,58 @@
       "warmup_started_at": "2026-10-07T02:32:32Z",
       "warmup_target_requests": 5401,
       "warmup_latest": {
-        "sample_at": "2026-10-07T09:12:06Z",
-        "returned": 5284,
+        "sample_at": "2026-10-07T09:18:06Z",
+        "returned": 5351,
         "sent": 5401,
-        "in_flight": 117,
+        "in_flight": 50,
         "errors": 0,
-        "elapsed_seconds": 23974.6
+        "elapsed_seconds": 24334.7
       },
       "warmup_replay_started_at": "2026-10-07T03:15:38Z",
-      "warmup_request_budget_reached_by": "2026-10-07T08:52:44Z"
+      "warmup_request_budget_reached_by": "2026-10-07T08:52:44Z",
+      "completed_at": "2026-10-07T09:21:56Z",
+      "slurm_end_time": "2026-10-07T09:19:10Z",
+      "warmup_completed": false,
+      "profiling_started": false,
+      "failure_stage": "GitHub job operation cancelled at 09:18:59Z while canonical warmup was draining; cancellation initiator unknown. Slurm 19716 cancelled before 510-minute limit. No profiling or aggregate export. Downstream collectors failed because tooling-ref lacked infx.",
+      "scratch_cleanup": {
+        "exact_host_path": "/scratch/inferencex-offload-37552057241-1-19716-4a5863443595",
+        "owner_receipt_matched": true,
+        "slurm_inactive": true,
+        "deleted": true,
+        "independently_absent": true,
+        "offload_cleanup_artifact_uploaded": false
+      },
+      "artifacts": [
+        {
+          "id": 11472370928,
+          "name": "server_logs",
+          "size_bytes": 164569,
+          "sha256": "b1ffa32229b96321a7cf93a8bab3f8917a5f10bc9d929ca154e36d65aefc7b46"
+        },
+        {
+          "id": 11472341214,
+          "name": "agentic",
+          "size_bytes": 2966864,
+          "sha256": "2d5c27696f97af535fcd7a0107da7fc2c136c3aae53163ae0c4a46fb80e2a09f"
+        },
+        {
+          "id": 11472193450,
+          "name": "power_audit",
+          "size_bytes": 993498,
+          "sha256": "8150769c7b50df454d39b7a4fcf1c0d30be2aeae5e101c0b7a7d4d8f1b470b4b"
+        },
+        {
+          "id": 11471549781,
+          "name": "gpu_metrics",
+          "size_bytes": 993316,
+          "sha256": "6fa993bec4d6059131655b7f3b97c660d6e61aa446d24c41219905d360e3996b"
+        }
+      ]
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35456989669,35469801850,35476053573,35497846918,35524019140,35524083518,35542179539,35542182560,35542185178,35542190411,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894,36796500128,37027095833,37428997901,37490705589",
-  "status": "2 TiB NVMe c488 capacity-control workflow dispatched; get-jobs in progress. Completed c489 matched energy result remains local evidence.",
+  "status": "c488 2 TiB capacity probe cancelled during warmup drain; no performance or energy result. Exact scratch cleaned and four artifact ZIPs hashed. Cause of GitHub cancellation remains unconfirmed.",
   "last_capacity_check": {
     "checked_at": "2026-10-06T15:48:45Z",
     "active_study_run_ids": [],
@@ -5791,9 +5830,10 @@
     "reason": "HBM c489 repeat terminal; refresh live cluster-wide inventory before another dispatch."
   },
   "next_dispatch": {
-    "arm": null,
-    "concurrency": null,
-    "requires": "Do not dispatch while 2 TiB NVMe c488 run 37552057241 is active or queued. Verify generated B200 job carries cluster:b200-nscale and nodes:1; on allocation require allowlisted im-b200-c001, >2,336,462,209,024 free bytes and O_DIRECT before task-owned scratch creation. On terminal classify benchmark validity separately, hash artifacts, verify exact HOST scratch cleanup and delete temporary downloads before adaptive next action."
+    "arm": "nvme",
+    "concurrency": 488,
+    "nvme_bytes_per_node": 2199023255552,
+    "requires": "Before retry, inspect cancellation provenance if available, verify run 37552057241 fully terminal and exact scratch absent, refresh cluster-wide queued/in-progress B200 job-label inventory. Dispatch exactly one same-config 2 TiB c488 retry only when zero queued B200 jobs and no active-or-queued study workflow. Record exact full input/workflow head and keep 510/530-minute envelope."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-21T05:30:00Z",
