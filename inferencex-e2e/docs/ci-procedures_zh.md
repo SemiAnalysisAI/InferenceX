@@ -221,6 +221,8 @@ GB300 Kimi-K3 聚合与分离部署 recipe 使用 exporter 端口 `19401`，因�
 
 补测缺失功耗时，只生成缺失的配方与并发组合，设置 `require-power: true`，保持 `agentx-fast: false`，并留空时长覆盖。标准 AgentX Profile 为一小时。对新启用的运行时或集群，先验证一个缺失点，再调度其余点。配方渲染通过或 GitHub Runner 在线并不能证明实时采集已就绪，也不能证明 Slurm 有空闲资源。保留现有有效点，新性能与功耗必须来自同一次运行；不得把新运行的能耗附加到旧性能点上。手动 `e2e-tests.yml` 产物仍须经过正常审查和入库流程，才会显示在 Dashboard 中。
 
+单节点矩阵行仍不接受 `require-power`。手动调度 `e2e-tests.yml` 时，`require-power` 输入会传给单节点吞吐和 AgentX 作业，这些作业随后要求集群 `default_gpu_exporter` 提供有效的原生功耗数据；未启用时仅记录无效判定并继续运行。
+
 B200 Kimi 配方采用 DCP8，且关闭 Mooncake Offload。Master Config 记录 `dcp-size: 8` 和 `kv-offloading: none` 以匹配实际命令；这项元数据修正不会启用 Offload。
 
 ## PR 主标签与修饰标签

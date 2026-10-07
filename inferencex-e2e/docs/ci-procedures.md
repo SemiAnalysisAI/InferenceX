@@ -232,6 +232,8 @@ GB300 Kimi-K3 aggregate and disaggregated recipes use exporter port `19401` beca
 
 For a missing-power backfill, generate only the missing recipe/concurrency combinations, set `require-power: true`, and leave `agentx-fast: false` and the duration override empty. The normal AgentX profile is one hour. Verify a first missing point on each newly enabled runtime/cluster before scheduling its remaining points. A rendered recipe or an online GitHub runner does not establish live collector readiness or Slurm capacity. Preserve the existing validated points, and keep new performance and power values paired with their own run; never attach a new run's energy to an older performance row. Manual `e2e-tests.yml` artifacts still require the normal reviewed ingestion path before they appear in the dashboard.
 
+Single-node matrix rows still reject `require-power`. A manual `e2e-tests.yml` dispatch passes its `require-power` input to the single-node throughput and AgentX jobs, which then require valid native power from the cluster's `default_gpu_exporter`; without it they record an invalid verdict and keep running.
+
 B200 Kimi recipes use DCP8 with Mooncake offload disabled. The master config records `dcp-size: 8` and `kv-offloading: none` to match those commands; this metadata correction does not enable offload.
 
 ## PR primary and modifier labels
