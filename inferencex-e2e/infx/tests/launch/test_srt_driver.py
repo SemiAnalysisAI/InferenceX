@@ -74,6 +74,8 @@ health_check:
   interval_seconds: 5
 benchmark:
   type: sa-bench
+  isl: 32
+  osl: 16
   concurrencies: [4]
 """
 POWER_TELEMETRY = "telemetry:\n  dcgm_exporter:\n    image: dcgm\n  enabled: true\n"
@@ -123,9 +125,6 @@ def srtslurm(root: Path) -> dict:
     return yaml.safe_load(path.read_text())
 
 
-WORKDIR = 'srun_options.container-workdir="/infmax-workspace"'
-
-
 def assert_ok(result: subprocess.CompletedProcess[str]) -> None:
     """Fail with the launcher's output when it did not exit 0."""
     assert result.returncode == 0, result.stdout[-4000:] + result.stderr[-8000:]
@@ -141,8 +140,17 @@ def test_single_node_point_stages_workflow_artifacts(harness):
     assert (workspace / "srt-slurm-sha.txt").read_text() == harness.env["FAKE_SRT_COMMIT"] + "\n"
     [call] = srtctl_calls(harness.logs)
     argv = call["argv"]
-    assert argv[argv.index("--file") + 1] == f"{workspace}/recipe.yaml:zip_override_conc[0]"
-    assert {"--json", "--yes", "--output", WORKDIR} <= set(argv)
+    bound = call["recipe"]
+    assert bound["model"] == {"path": "hf:test/model", "container": "test:tag", "precision": "fp8"}
+    assert bound["benchmark"]["env"]["CONC"] == "2"
+    assert bound["benchmark"]["env"]["ISL"] == "256"
+    assert bound["benchmark"]["env"]["OSL"] == "64"
+    assert bound["roles"]["agg"]["args"] == {
+        "tensor-parallel-size": 4, "data-parallel-size": 1, "max-running-requests": 32,
+        "served-model-name": "test/model",
+    }
+    assert {"--json", "--yes", "--output"} <= set(argv)
+    assert bound["srun_options"]["container-workdir"] == "/infmax-workspace"
     assert (call["env"]["INFMAX_WORKSPACE"], call["env"]["VIRTUAL_ENV"]) == (str(workspace), None)
     assert call["env"]["RUNNER_NAME"] == f"inferencex-{env['RUNNER_NAME']}"
     assert "/hf" in srtslurm(workspace)["default_mounts"].values()
@@ -232,6 +240,8 @@ def test_multinode_lane_stages_workflow_artifacts(harness, monkeypatch, cluster_
     monkeypatch.setitem(models.OVERRIDES, "lab-a", (Override(Match(), served_name="served-model"),))
     env = lane_env(harness, cluster_id, RUNNER_NAME=f"{cluster_id}_00", MODEL_PREFIX="dsr1",
                    PRECISION="fp8", MODEL="org/Model", **lab["env"])  # fmt: skip
+    if env["IS_AGENTIC"] == "0":
+        env.update(CONC="", CONC_LIST="4 8")
     runner, tmp, workspace = env["RUNNER_NAME"], harness.tmp, harness.workspace
     assert launch_here(monkeypatch, env, lab_config(tmp), workspace) == 0
 
@@ -255,8 +265,14 @@ def test_multinode_lane_stages_workflow_artifacts(harness, monkeypatch, cluster_
         assert checkout.parent == workspace.resolve()
         assert checkout.name.startswith("srt-slurm-9001-1-") and len(checkout.name) == len("srt-slurm-9001-1-") + 12
     assert ("--no-preflight" in argv) is not lab["preflight"]
-    assert argv[argv.index("--file") + 1] == "recipes/test/lane.yaml"
-    assert {"--json", "--yes", "benchmark.stream_output=true", WORKDIR} <= set(argv)
+    bound = call["recipe"]
+    assert bound["model"] == {"path": "hf:org/Model", "container": "test:tag", "precision": "fp8"}
+    assert bound["benchmark"]["concurrencies"] == ([4, 8] if env["IS_AGENTIC"] == "0" else [4])
+    if env["IS_AGENTIC"] == "0":
+        assert (bound["benchmark"]["isl"], bound["benchmark"]["osl"]) == (1024, 1024)
+    assert bound["benchmark"]["stream_output"] is True
+    assert {"--json", "--yes"} <= set(argv)
+    assert bound["srun_options"]["container-workdir"] == "/infmax-workspace"
     if lab["tag"] is None:
         assert "--tags" not in argv
     else:
@@ -267,13 +283,15 @@ def test_multinode_lane_stages_workflow_artifacts(harness, monkeypatch, cluster_
         assert argv[argv.index("--setup-script") + 1] == lab["setup_script"]
     assert call["env"]["SERVED_MODEL_NAME"] == lab["served"]
 
-    staged = yaml.safe_load((checkout / "recipes/test/lane.yaml").read_text())
-    assert staged["name"] == call["env"]["RUNNER_NAME"] == f"inferencex-{runner}"
+    assert bound["name"] == call["env"]["RUNNER_NAME"] == f"inferencex-{runner}"
     dist = {"dist-timeout": 1800} if lab["dist_timeout"] else {}
-    assert staged["roles"]["prefill"]["args"] == {"tensor-parallel-size": 8, "watchdog-timeout": 600, **dist}
+    assert bound["roles"]["prefill"]["args"] == {"tensor-parallel-size": 8, "watchdog-timeout": 600, **dist}
+    assert bound["health_check"] == {"max_attempts": 720, "interval_seconds": 5}
 
     config = srtslurm(checkout)
-    assert config["model_paths"] == {"alias": str(tmp / lab["model"])}
+    assert config["model_paths"] == {
+        "alias": str(tmp / lab["model"]), "hf:org/Model": str(tmp / lab["model"]),
+    }
     assert config["default_time_limit"] == lab["time"]
     assert set(lab["mounts"]) <= set(config.get("default_mounts", {}).values())
     imported = [line.split()[-1] for line in lines(harness.logs, "enroot")]
@@ -400,7 +418,8 @@ def test_tilert_uses_upstream_submission_and_prepared_weights(harness):
 
     assert any(" apply " in f" {line} " for line in lines(harness.logs, "git"))
     [call] = srtctl_calls(harness.logs)
-    assert {"--json", "benchmark.stream_output=true"} <= set(call["argv"])
+    assert "--json" in call["argv"]
+    assert call["recipe"]["benchmark"]["stream_output"] is True
     assert "--no-preflight" not in call["argv"]
     config = srtslurm(Path(call["cwd"]))
     assert config["default_health_check"]["max_attempts"] > 0
@@ -417,7 +436,9 @@ def test_eval_only_runs_the_eval_recipe_with_real_verification(harness):
     (mirror / "trtllm/forced.yaml").write_text(
         "roles:\n  decode:\n    env:\n      TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS: 2\n      KEEP: 1\n"
     )
-    (mirror / "eval.yaml").write_text(LANE_RECIPE)
+    eval_recipe = yaml.safe_load(LANE_RECIPE)
+    eval_recipe["roles"]["decode"]["args"]["max-num-seqs"] = 11
+    (mirror / "eval.yaml").write_text(yaml.safe_dump(eval_recipe))
     # What the in-container eval staged: its own batch record, but not every workflow input.
     staged = {
         "eval_suite": "kimi_tool_call_schema", "recipe_fingerprint": "", "conc": 4,
@@ -433,9 +454,10 @@ def test_eval_only_runs_the_eval_recipe_with_real_verification(harness):
     assert_ok(launch(env, harness.config, harness.workspace))
 
     [call] = srtctl_calls(harness.logs)
-    argv = call["argv"]
-    assert argv[argv.index("--file") + 1] == "recipes/test/eval.yaml"
-    assert "frontend.placement.node=head" in argv
+    bound = call["recipe"]
+    assert bound["roles"]["decode"]["args"]["max-num-seqs"] == 11
+    assert bound["frontend"]["placement"]["node"] == "head"
+    assert bound["health_check"] == {"max_attempts": 720, "interval_seconds": 5}
     checkout = Path(call["cwd"])
     assert (checkout / "recipes/test/trtllm/forced.yaml").read_text() == (
         "roles:\n  decode:\n    env:\n      KEEP: 1\n"
@@ -522,8 +544,7 @@ def test_post_eval_is_handed_the_workload_contract_and_no_other_secret(harness):
     env = single_node_env(harness, "h200-cw", **handed, **withheld)
     assert_ok(launch(env, harness.config, harness.workspace))
     [call] = srtctl_calls(harness.logs)
-    [names] = [json.loads(arg.split("=", 1)[1]) for arg in call["argv"]
-               if arg.startswith("post_eval.passthrough_env=")]  # fmt: skip
+    names = call["recipe"]["post_eval"]["passthrough_env"]
     assert handed.keys() <= set(names)
     assert not {*withheld, "PATH", "HF_HUB_CACHE"} & set(names)
 
@@ -539,8 +560,7 @@ def test_multinode_eval_overrides_image_offline_mode_and_host_model_path(harness
     )
     assert_ok(launch(env, harness.config, harness.workspace))
     [call] = srtctl_calls(harness.logs)
-    [command] = [json.loads(arg.split("=", 1)[1]) for arg in call["argv"]
-                 if arg.startswith("post_eval.command=")]  # fmt: skip
+    command = call["recipe"]["post_eval"]["command"]
     # Stand in for the external evaluator and inspect the environment it receives.
     script = harness.workspace / "benchmarks/multi_node/srt_eval.sh"
     script.write_text(

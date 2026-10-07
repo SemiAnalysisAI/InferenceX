@@ -1,0 +1,13 @@
+model:
+  path: hf:${MODEL}
+  container: ${IMAGE}
+  precision: ${PRECISION}
+benchmark:
+  type: custom
+  concurrencies: ${CONCURRENCIES}
+  command: bash /infmax-workspace/benchmarks/multi_node/srt_fixed_sequence.sh
+  env:
+    MODEL: ${MODEL}
+    ISL: ${ISL}
+    OSL: ${OSL}
+    CONC_LIST: ${CONC_LIST}

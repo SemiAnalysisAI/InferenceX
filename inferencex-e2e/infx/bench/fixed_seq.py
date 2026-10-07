@@ -81,8 +81,8 @@ def served_model(base_url: str) -> str:
 def srt_single(args: argparse.Namespace) -> int:
     """One srt-slurm single-node point; srt-slurm owns the server."""
     values = env.require(
-        "MODEL", "CONC", "ISL", "OSL", "RANDOM_RANGE_RATIO", "RESULT_FILENAME", "RESULT_DIR",
-        "SRT_FRONTEND_HOST", "SRT_FRONTEND_PORT", "RUN_EVAL", "EVAL_ONLY", "USE_CHAT_TEMPLATE",
+        "MODEL", "CONC", "ISL", "OSL", "RESULT_FILENAME", "RESULT_DIR",
+        "SRT_FRONTEND_HOST", "SRT_FRONTEND_PORT", "RUN_EVAL", "EVAL_ONLY",
         "FRAMEWORK",
     )  # fmt: skip
     env.flag("RUN_EVAL")
@@ -98,11 +98,11 @@ def srt_single(args: argparse.Namespace) -> int:
         backend=backend,
         isl=env.positive_int("ISL"),
         osl=env.positive_int("OSL"),
-        random_range_ratio=values["RANDOM_RANGE_RATIO"],
+        random_range_ratio="0.8",
         conc=conc,
         num_prompts=10 * conc,
         result=result_dir / f"{values['RESULT_FILENAME']}.json",
-        use_chat_template=env.flag("USE_CHAT_TEMPLATE"),
+        use_chat_template=True,
         trust_remote_code=args.trust_remote_code,
     )
     if not result_dir.is_dir():
@@ -116,7 +116,7 @@ def srt_single(args: argparse.Namespace) -> int:
 def srt_sweep(args: argparse.Namespace) -> int:
     """Every ``CONC_LIST`` point of an srt-slurm multi-node job; srt-slurm owns the servers."""
     values = env.require(
-        "ISL", "OSL", "RANDOM_RANGE_RATIO", "SRT_FRONTEND_HOST", "SRT_FRONTEND_PORT",
+        "ISL", "OSL", "SRT_FRONTEND_HOST", "SRT_FRONTEND_PORT",
         "CONC_LIST", "PREFILL_NUM_WORKERS", "PREFILL_TP", "DECODE_NUM_WORKERS", "DECODE_TP",
     )  # fmt: skip
     isl = env.positive_int("ISL")
@@ -142,7 +142,7 @@ def srt_sweep(args: argparse.Namespace) -> int:
                 tokenizer=tokenizer,
                 isl=isl,
                 osl=osl,
-                random_range_ratio=values["RANDOM_RANGE_RATIO"],
+                random_range_ratio="0.8",
                 conc=conc,
                 num_prompts=10 * conc,
                 result=result_dir / name,

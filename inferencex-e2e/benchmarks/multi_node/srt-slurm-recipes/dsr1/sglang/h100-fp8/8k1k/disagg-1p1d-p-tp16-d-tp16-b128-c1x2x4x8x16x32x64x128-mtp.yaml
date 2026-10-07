@@ -1,11 +1,6 @@
 schema: 2
 name: "h100-fp8-1p1d-max-tp-mtp"
 
-model:
-  path: "dsr1-fp8"
-  container: "lmsysorg/sglang:v0.5.8-cu130"
-  precision: "fp8"
-
 resources:
   gpu_type: "h100"
   gpus_per_node: 8
@@ -117,14 +112,8 @@ roles:
       speculative-num-draft-tokens: 3
 
 benchmark:
-  type: custom
-  command: bash /infmax-workspace/benchmarks/multi_node/srt_fixed_sequence.sh
   env:
     TOKENIZER: /model
-    ISL: '8192'
-    OSL: '1024'
-
-# Container setup plus loading the weights over NFS outlasts the 30-minute default.
 health_check:
   max_attempts: 360
   interval_seconds: 10

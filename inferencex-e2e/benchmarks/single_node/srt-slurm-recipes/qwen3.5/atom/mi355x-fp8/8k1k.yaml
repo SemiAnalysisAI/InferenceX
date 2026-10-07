@@ -1,10 +1,6 @@
 base:
   schema: 2
   name: qwen3.5-fp8-mi355x-atom-8k1k
-  model:
-    path: hf:Qwen/Qwen3.5-397B-A17B-FP8
-    container: rocm/atom:rocm7.2.3_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom20260511
-    precision: fp8
   resources:
     gpu_type: mi355x
     gpus_per_node: 8
@@ -30,14 +26,7 @@ base:
       env:
         OMP_NUM_THREADS: '1'
   benchmark:
-    type: custom
     command: bash /infmax-workspace/benchmarks/single_node/srt_fixed_sequence.sh --trust-remote-code
-    env:
-      MODEL: Qwen/Qwen3.5-397B-A17B-FP8
-      ISL: '8192'
-      OSL: '1024'
-      RANDOM_RANGE_RATIO: '0.8'
-      USE_CHAT_TEMPLATE: 'false'
 zip_override_tp2_ep1:
   benchmark:
     env:

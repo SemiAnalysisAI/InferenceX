@@ -68,8 +68,7 @@ def test_native_binding_submits_one_point_and_keeps_server_settings(point):
 
 
 @pytest.mark.parametrize("field,value,message", [
-    ("TP", "2", "tensor-parallel-size"), ("IMAGE", "other:tag", "image"),
-    ("ISL", "128", "ISL"), ("RUN_EVAL", "yes", "RUN_EVAL"),
+    ("TP", "2", "tensor-parallel-size"), ("RUN_EVAL", "yes", "RUN_EVAL"),
     ("PP_SIZE", "2", "PP_SIZE"), ("RESULT_FILENAME", "", "Missing runtime input"),
     ("EP_SIZE", "2", "expert-parallel-size"), ("SPEC_DECODING", "mtp", "SPEC_DECODING"),
 ])
@@ -92,6 +91,37 @@ def test_native_variants_select_only_the_matching_matrix_point(point):
         select_recipe(str(path), {**env, "CONC": "8"})
 
 
+def test_prepare_materializes_master_values_after_selecting_tuned_variant(point, monkeypatch):
+    from infx.srt_slurm.single_node import main
+
+    path, recipe, env = point
+    recipe["model"] = {"path": "hf:test/model", "precision": "fp4"}
+    for key in ("MODEL", "ISL", "OSL"):
+        del recipe["benchmark"]["env"][key]
+    recipe["roles"]["agg"]["args"]["served-model-name"] = "test/model"
+    path.write_text(yaml.safe_dump({"base": recipe, "zip_override_conc": {
+        "roles": {"agg": {"args": {"cuda-graph-max-bs": [2, 4]}}},
+        "benchmark": {"env": {"CONC": ["2", "4"]}},
+    }}))
+    env = {**env, "IMAGE": "new:tag", "MODEL": "org/new", "ISL": "128", "OSL": "32", "CONC": "4"}
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+    output = path.parent / "arguments"
+    monkeypatch.setattr(sys, "argv", ["single_node", "prepare", str(path), str(output)])
+    main()
+    config, *arguments = output.read_bytes().decode().split("\0")[:-1]
+    commands = plan_commands(config, "sglang", arguments, env, bound_dir=path.parent / "bound")
+    effective = yaml.safe_load(Path(commands[0][-1]).read_text())
+    assert effective["model"] == {"path": "hf:org/new", "container": "new:tag", "precision": "fp8"}
+    assert effective["roles"]["agg"]["args"]["cuda-graph-max-bs"] == 4
+    assert effective["roles"]["agg"]["args"]["served-model-name"] == "org/new"
+    assert {key: effective["benchmark"]["env"][key] for key in ("MODEL", "ISL", "OSL", "CONC")} == {
+        "MODEL": "org/new", "ISL": "128", "OSL": "32", "CONC": "4",
+    }
+    assert effective["benchmark"]["env"]["RESULT_FILENAME"] == "point-identity"
+    assert "base" in yaml.safe_load(path.read_text())
+
+
 def test_ambiguous_native_variants_are_rejected(point):
     path, recipe, env = point
     path.write_text(yaml.safe_dump({"base": recipe, "override_first": {}, "override_second": {}}))
@@ -106,7 +136,7 @@ def test_mtp_binding_uses_real_verification_and_preserves_expert_parallelism(poi
         "speculative-num-steps": 2, "speculative-num-draft-tokens": 3,
     })
     recipe["roles"]["agg"]["env"] = {"SGLANG_SIMULATE_ACC_LEN": "2.5"}
-    recipe["benchmark"]["env"]["USE_CHAT_TEMPLATE"] = "true"
+    recipe["benchmark"]["env"].pop("USE_CHAT_TEMPLATE", None)
     path.write_text(yaml.safe_dump({"base": recipe}))
     env = {**env, "EP_SIZE": "4", "SPEC_DECODING": "mtp"}
     argv = runtime_arguments(f"{path}:base", env)
@@ -115,10 +145,6 @@ def test_mtp_binding_uses_real_verification_and_preserves_expert_parallelism(poi
         "srtctl", "apply", "--json", *argv, "--file", f"{path}:base",
         "--unset", "roles.agg.env.SGLANG_SIMULATE_ACC_LEN",
     ]]
-    recipe["benchmark"]["env"]["USE_CHAT_TEMPLATE"] = "false"
-    path.write_text(yaml.safe_dump({"base": recipe}))
-    with pytest.raises(ValueError, match="USE_CHAT_TEMPLATE"):
-        runtime_arguments(f"{path}:base", env)
 
 
 def test_concurrency_selector_keeps_graph_capture_coupled_to_client(point):
@@ -181,7 +207,7 @@ def test_trt_binding_keeps_engine_options_and_sets_eval_token_budget(point):
         "cuda_graph_config": {"batch_sizes": [1, 2, 4]},
     }
     recipe["roles"]["agg"]["env"] = {"TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS": "3"}
-    recipe["benchmark"]["env"]["USE_CHAT_TEMPLATE"] = "true"
+    recipe["benchmark"]["env"].pop("USE_CHAT_TEMPLATE", None)
     path.write_text(yaml.safe_dump({"base": recipe}))
     env = {**env, "FRAMEWORK": "trt", "EP_SIZE": "4", "DP_ATTENTION": "true",
            "SPEC_DECODING": "mtp", "EVAL_ONLY": "true", "MAX_MODEL_LEN": "1024"}
@@ -209,7 +235,7 @@ def test_atom_binding_uses_allocation_tp_and_native_mtp_arguments(point):
         "method": "mtp", "num-speculative-tokens": 3, "kv_cache_dtype": "fp8",
         "enable-expert-parallel": True, "enable-dp-attention": True,
     }
-    recipe["benchmark"]["env"]["USE_CHAT_TEMPLATE"] = "true"
+    recipe["benchmark"]["env"].pop("USE_CHAT_TEMPLATE", None)
     path.write_text(yaml.safe_dump({"base": recipe}))
     env = {**env, "FRAMEWORK": "atom", "EP_SIZE": "4", "DP_ATTENTION": "true",
            "SPEC_DECODING": "mtp", "EVAL_ONLY": "true", "MAX_MODEL_LEN": "2048"}

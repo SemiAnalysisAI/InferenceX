@@ -1,10 +1,6 @@
 base:
   schema: 2
   name: qwen3.5-fp4-b200-trt-8k1k
-  model:
-    path: hf:nvidia/Qwen3.5-397B-A17B-NVFP4
-    container: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc18
-    precision: fp4
   resources:
     gpu_type: b200
     gpus_per_node: 8
@@ -17,7 +13,6 @@ base:
       enabled: false
   engine:
     type: trtllm
-    served_model_name: nvidia/Qwen3.5-397B-A17B-NVFP4
   roles:
     agg:
       nodes: 1
@@ -48,15 +43,6 @@ base:
         max_num_tokens: 32768
         pipeline_parallel_size: 1
         return_perf_metrics: false
-  benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/single_node/srt_fixed_sequence.sh
-    env:
-      MODEL: nvidia/Qwen3.5-397B-A17B-NVFP4
-      ISL: '8192'
-      OSL: '1024'
-      RANDOM_RANGE_RATIO: '0.8'
-      USE_CHAT_TEMPLATE: 'false'
 zip_override_tp2_ep1:
   roles:
     agg:

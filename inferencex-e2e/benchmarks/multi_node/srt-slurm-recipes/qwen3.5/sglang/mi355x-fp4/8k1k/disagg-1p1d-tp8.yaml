@@ -4,16 +4,9 @@
 schema: 2
 name: "mi355x-sglang-qwen3.5-mxfp4-disagg-1p1d-tp8-fixed-seq"
 
-model:
-  path: "hf:amd/Qwen3.5-397B-A17B-MXFP4"
-  container: "lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260809"
-  precision: "fp4"
-
 identity:
-  model:
-    repo: "amd/Qwen3.5-397B-A17B-MXFP4"
-  container:
-    image: "lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260809"
+  model: {}
+  container: {}
   frameworks:
     sglang: "0.5.17.dev20260809+g7120f3ee13"
     sglang-router: "0.3.2"
@@ -68,7 +61,6 @@ roles:
       SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "3600"
       SGLANG_HEALTH_CHECK_TIMEOUT: "600"
     args: &common_config
-      served-model-name: "amd/Qwen3.5-397B-A17B-MXFP4"
       tensor-parallel-size: 8
       disaggregation-transfer-backend: mori
       disaggregation-ib-device: "rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7"
@@ -107,11 +99,7 @@ health_check:
   interval_seconds: 5
 
 benchmark:
-  type: custom
-  command: bash /infmax-workspace/benchmarks/multi_node/srt_fixed_sequence.sh
   env:
-    ISL: '8192'
-    OSL: '1024'
     HF_HOME: /hf_hub_cache
     HF_HUB_CACHE: /hf_hub_cache/hub
     HUGGINGFACE_HUB_CACHE: /hf_hub_cache/hub
