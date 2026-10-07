@@ -8,7 +8,7 @@
 
 [`klaud-plan.yml`](../../.github/workflows/klaud-plan.yml) 先收尾有记录的中断会话，再用 Python 准备候选，经只读 Claude 检查排除重叠 PR 后调用 [`klaud-candidate.yml`](../../.github/workflows/klaud-candidate.yml)。每个候选仍由一个自主 Klaud Cold 会话负责修改、诊断和修复。`finish` 命令验证结果或执行清理，并发布完成记录；只读 Stop hook 和诊断步骤对照 GitHub 验证该记录。恢复工作放在下一次现有 autosweep 中，不增加第二个 agent 或工作流。
 
-PR 检查使用 `claude-opus-5`（Opus 5），关闭 fast mode（`fastMode: false`），最多运行 500 轮，为有界候选批次解析重复工作、目标集群及公开基线模型名。候选执行使用 `claude-fable-5-1`（Fable 5.1），关闭 fast mode，并负责上游镜像调查。Agent 的显示名称为 **Klaud Cold**；工作流文件名、CLI、产物、分支及运行时环境变量统一使用 `klaud` / `KLAUD`。旧拼写的候选分支仍会阻止重复选择。调度前须配置 `DASH_API_KEY`；工作流仍将其传给现有的 `KLAUD_DASHBOARD_API_KEY` 运行时变量。
+PR 检查为有界候选批次解析重复工作、目标集群及公开基线模型名。候选执行负责上游镜像调查。模型与轮数上限在 `klaud-plan.yml` 和 `klaud-candidate.yml` 中设置。Agent 的显示名称为 **Klaud Cold**；工作流文件名、CLI、产物、分支及运行时环境变量统一使用 `klaud` / `KLAUD`。旧拼写的候选分支仍会阻止重复选择。调度前须配置 `DASH_API_KEY`；工作流仍将其传给现有的 `KLAUD_DASHBOARD_API_KEY` 运行时变量。
 
 ## 候选选择
 
@@ -116,21 +116,13 @@ smoke benchmark 和代表性 eval 都通过后，在 changelog 物理末尾追�
 
 重叠检查在独立的 `review` 作业中运行，与持有凭据的 `recover` 和 `select` 作业分离。它可用的 gh/git 命令仅限 `gh pr list/view/diff`、`gh api --method GET`、`git status` 和 `git ls-tree`；`git show`、`git diff` 和 `git log` 可通过 `--output` 写入任意文件，因此不在允许列表中。`select` 作业重新 checkout 恢复阶段的提交，只读取数据：planner 生成的 `candidates.json` 和 `open-prs.json`（在 agent 启动前作为短期 `klaud-review-input` 产物上传）、检查的结构化输出与结果状态，以及执行日志最终结果的脱敏子集。检查 agent 在其工作区、runner 临时目录或工具缓存中写入的任何内容都不会进入持有 `AGENT_PAT` 的步骤。
 
-所有外部 action 均固定完整提交 SHA；下表与当前工作流中的固定版本一致。内部调用使用 `./.github/workflows/klaud-candidate.yml` 解析调用者的精确提交，并显式传递三个必需 secret。
+所有外部 action 均在工作流 YAML 中固定完整提交 SHA。内部调用使用 `./.github/workflows/klaud-candidate.yml` 解析调用者的精确提交，并显式传递三个必需 secret。
 
-| Action | 版本 | 提交 |
-| --- | --- | --- |
-| `anthropics/claude-code-action` | `v1.0.218` | [`0d0e0876d3ea`](https://github.com/anthropics/claude-code-action/commit/0d0e0876d3eaa933f45dc692f7a4312c83caf36f) |
-| `actions/checkout` | `v7.0.1` | [`3d3c42e5aac5`](https://github.com/actions/checkout/commit/3d3c42e5aac5ba805825da76410c181273ba90b1) |
-| `actions/upload-artifact` | `v7.0.1` | [`043fb46d1a93`](https://github.com/actions/upload-artifact/commit/043fb46d1a93c77aae656e7c1c64a875d1fc6a0a) |
-| `actions/download-artifact` | `v8.0.1` | [`3e5f45b2cfb9`](https://github.com/actions/download-artifact/commit/3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c) |
-| `astral-sh/setup-uv` | `v10.0.1` | [`20cfd1bf945f`](https://github.com/astral-sh/setup-uv/commit/20cfd1bf945f4377ade1205e4dbc17946fc9a30d) |
 
 ## 本地验证
 
 ```bash
 uv run --no-project --exclude-newer PT12H --python 3.12 --with "pydantic>=2.10,<3" python -m infx.klaud --help
-uvx --exclude-newer PT12H zizmor@latest --offline --no-config --no-ignores .github/workflows/klaud-plan.yml .github/workflows/klaud-candidate.yml
 ```
 
 CLI 和工作流检查不能证明 GPU 实际可运行。Klaud Cold 使用现有 InferenceX 校验和 e2e 工作流验证候选修改。本地验证不调用真实模型、不调度 benchmark、不创建 PR、不部署。

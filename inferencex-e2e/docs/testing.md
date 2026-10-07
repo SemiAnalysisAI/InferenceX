@@ -47,16 +47,10 @@ A green later layer does not erase missing earlier evidence. For example, a gree
 
 ## Test quality
 
-Tests protect behavior, not coverage numbers. During review, ask what plausible bug each test would catch and whether it exercises the implementation that ships.
+The mandatory test rules (forbidden test types, what a kept test looks like, and the four review questions) live in [`AGENTS.md`](../../AGENTS.md#test-quality). Two additions apply here:
 
-- Prefer a small input with a hand-worked expected result, including relevant boundary, malformed-input, or failure cases. Do not copy the implementation's calculation or call the same helper to produce the expected result.
-- Do not snapshot the current recipe count, model/hardware inventory, image pin, enum definition, or source text. Adding a valid recipe or refactoring equivalent code should not force unrelated assertion changes.
 - Preserve genuine contracts: numerical results, rejected invalid inputs, stable artifact formats, and agreement between independently consumed configurations. Assert only the parts of the contract the consumer needs.
-- Mock external services or processes when necessary, but run the actual behavior under test. A copied parser, filter, or fake implementation cannot detect a regression in the real one.
 - Control clocks and long waits in timing tests. Synchronize on observable readiness, keep process termination and artifact writes real when testing those contracts, and bound waits and cleanup so regressions cannot strand test workers.
-- Delete redundant tests without replacement. Extend existing fixtures only when there is a meaningful gap; do not build a new test framework to preserve a test count.
-
-See [Randy Coulman's Tautological Tests](https://randycoulman.com/blog/2016/12/20/tautological-tests/) for the distinction between independent expectations and assertions that merely repeat the implementation.
 
 ## Local checks
 
