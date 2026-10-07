@@ -50,7 +50,11 @@ def _copy_tree_into(source: Path, destination: Path) -> None:
 
 
 def finish_single_node(run: SrtRun, submitted: Submitted, fetched: Path) -> int:
-    """Exit cleanup of a single-node point: cancel a live job, then stage its artifacts."""
+    """Exit cleanup of a single-node point: cancel a live job, then stage its artifacts.
+
+    A power package that cannot be copied fails the point only when valid power was
+    required; otherwise the result stands and the package is reported incomplete.
+    """
     job = submitted.recover(run.backend)
     if job is None:
         return 0
@@ -60,28 +64,12 @@ def finish_single_node(run: SrtRun, submitted: Submitted, fetched: Path) -> int:
         return 0
     rc = 0
     logs = output / "logs"
-    if not run.request.eval_only:
-        power_dir = logs / "power"
-        power_dir.mkdir(parents=True, exist_ok=True)
-        for name in (EXPORTER_PROVENANCE, "power-producer-sha.txt"):
-            try:
-                shutil.copyfile(run.workspace / name, power_dir / name)
-            except OSError as error:
-                print(f"ERROR: failed to stage {name}: {error}", file=sys.stderr)
-                rc = 1
-        try:
-            shutil.copytree(logs, run.workspace / "LOGS", symlinks=True, dirs_exist_ok=True)
-        except OSError as error:
-            print(f"ERROR: failed to stage native power artifacts: {error}", file=sys.stderr)
-            rc = 1
+    power_rc = 0 if run.request.eval_only else _stage_power_package(run, logs)
     bundle_server_logs(output, run.workspace / SINGLE_NODE_LOGS)
-    stem = run.request.result_filename
-    for name in (f"{stem}.json", f"power_validation_{stem}.json"):
-        artifact = logs / name
-        if not artifact.is_file():
-            continue
+    result = logs / f"{run.request.result_filename}.json"
+    if result.is_file():
         try:
-            copy_to_workspace(artifact, run.workspace / name)
+            copy_to_workspace(result, run.workspace / result.name)
         except ArtifactError as error:
             print(f"ERROR: {error}", file=sys.stderr)
             rc = 1
@@ -91,7 +79,30 @@ def finish_single_node(run: SrtRun, submitted: Submitted, fetched: Path) -> int:
         except OSError as error:
             print(f"ERROR: failed to stage AgentX artifacts: {error}", file=sys.stderr)
             rc = 1
-    return rc
+    return rc or power_rc
+
+
+def _stage_power_package(run: SrtRun, logs: Path) -> int:
+    """Copy the native power package and its sidecar next to the result; 1 when power was required and a copy failed."""
+    level = "ERROR" if run.request.require_power else "WARNING"
+    failed = False
+    power_dir = logs / "power"
+    try:
+        power_dir.mkdir(parents=True, exist_ok=True)
+        for name in (EXPORTER_PROVENANCE, "power-producer-sha.txt"):
+            shutil.copyfile(run.workspace / name, power_dir / name)
+        shutil.copytree(logs, run.workspace / "LOGS", symlinks=True, dirs_exist_ok=True)
+    except OSError as error:
+        print(f"{level}: failed to stage the native power package: {error}", file=sys.stderr)
+        failed = True
+    sidecar = logs / f"power_validation_{run.request.result_filename}.json"
+    if sidecar.is_file():
+        try:
+            copy_to_workspace(sidecar, run.workspace / sidecar.name)
+        except ArtifactError as error:
+            print(f"{level}: {error}", file=sys.stderr)
+            failed = True
+    return int(failed and run.request.require_power)
 
 
 def finalize_single_node_results(run: SrtRun, logs: Path, producer_sha: str) -> int:
