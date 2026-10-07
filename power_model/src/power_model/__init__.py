@@ -3,12 +3,12 @@
 
 from power_model.base import OperatingState, PowerEstimate, PowerModel, Provenance, WorkloadState
 from power_model.cooling import CoolingProfile
-from power_model.models.basic_example import BasicExamplePowerModel
 from power_model.models.catalog import create_power_model
+from power_model.models.example import ExamplePowerModel
 
 __all__ = [
-    "BasicExamplePowerModel",
     "CoolingProfile",
+    "ExamplePowerModel",
     "OperatingState",
     "PowerEstimate",
     "PowerModel",

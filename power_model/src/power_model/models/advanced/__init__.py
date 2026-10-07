@@ -2,7 +2,7 @@
 """Advanced cluster and equipment power modeling."""
 
 from power_model.models.advanced.cluster import Cluster
-from power_model.models.advanced.model import AdvancedAllInPowerModel
+from power_model.models.advanced.model import OSSAllinPowerModel
 from power_model.models.advanced.networking import (
     Generic512TEthernetSwitch,
     NetworkGroup,
@@ -13,10 +13,10 @@ from power_model.models.advanced.networking import (
 from power_model.models.advanced.systems.base import SystemGroup
 
 __all__ = [
-    "AdvancedAllInPowerModel",
     "Cluster",
     "Generic512TEthernetSwitch",
     "NetworkGroup",
+    "OSSAllinPowerModel",
     "QM9700NDRInfiniBandSwitch",
     "QM9790NDRInfiniBandSwitch",
     "ScaleOutNetworkingGear",

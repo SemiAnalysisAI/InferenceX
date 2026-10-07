@@ -65,7 +65,7 @@ def test_cli_hopper_workloads_select_cpu_and_memory_power_with_air_cooling(
 ):
     main(hgx_args() + flags)
     result = json.loads(capsys.readouterr().out)
-    assert result["model_name"] == "AdvancedAllInPowerModel"
+    assert result["model_name"] == "OSSAllinPowerModel"
     assert result["cpu_offload"] is offload
     assert result["cooling_mode"] == "air"
     assert result["pue"] == 1.3
@@ -297,17 +297,15 @@ def test_cli_nvl72_reports_rack_power(capsys, system_name, system_class, workloa
 @pytest.mark.parametrize(
     "system, expected, ratio", [("hopper", 1950, 1.95), ("gb300-nvl72", 1650, 1.65)]
 )
-def test_cli_basic_example_formula_uses_the_selected_system_cooling(
-    capsys, system, expected, ratio
-):
-    main(["--model=basic-example", "--gpu_level_power_per_gpu=1000", f"--system={system}"])
+def test_cli_example_formula_uses_the_selected_system_cooling(capsys, system, expected, ratio):
+    main(["--model=example", "--gpu_level_power_per_gpu=1000", f"--system={system}"])
     result = json.loads(capsys.readouterr().out)
-    assert result["model_name"] == "BasicExamplePowerModel"
+    assert result["model_name"] == "ExamplePowerModel"
     assert result["AllInPower_per_gpu"] == pytest.approx(expected)
     assert result["facility_to_gpu_power_ratio"] == pytest.approx(ratio)
     assert result["cpu_offload"] is False
     assert result["scope"] == "per_gpu_reference"
-    model_result = create_power_model(model="basic-example", system=system).estimate_breakdown(1000)
+    model_result = create_power_model(model="example", system=system).estimate_breakdown(1000)
     assert "facility_to_gpu_power_ratio" not in model_result.model_dump()
 
 
@@ -330,7 +328,7 @@ def test_cli_accepts_full_class_names_and_the_hyphenated_gpu_flag(capsys):
         [
             "--gpu-level-power-per-gpu=125",
             *hgx_args("HopperHGXSystemChassis")[1:],
-            "--model=AdvancedAllInPowerModel",
+            "--model=OSSAllinPowerModel",
         ]
     )
     result = json.loads(capsys.readouterr().out)
@@ -346,8 +344,8 @@ def test_cli_help_lists_models_and_systems(capsys):
     assert "GB200NVL72RackScaleSystem" in help_text
     assert "GB300NVL72RackScaleSystem" in help_text
     assert "Models:" in help_text
-    assert "AdvancedAllInPowerModel" in help_text
-    assert "BasicExamplePowerModel" in help_text
+    assert "OSSAllinPowerModel" in help_text
+    assert "ExamplePowerModel" in help_text
     assert "Systems:" in help_text
     assert "HopperHGXSystemChassis (H100 / H200)" in help_text
     assert "--power-breakdown-per-chassis" in help_text
@@ -370,25 +368,25 @@ def test_cli_help_lists_models_and_systems(capsys):
         (hgx_args() + ["--network-power-w=0"], "unrecognized arguments: --network-power-w=0"),
         (
             [
-                "--model=basic-example",
+                "--model=example",
                 "--gpu_level_power_per_gpu=400",
                 "--system=h100",
                 "--power-breakdown-per-chassis",
             ],
-            "--power-breakdown-per-chassis requires the advanced model",
+            "--power-breakdown-per-chassis requires the oss model",
         ),
         (
             [
-                "--model=basic-example",
+                "--model=example",
                 "--gpu_level_power_per_gpu=125",
                 "--system=hopper",
                 "--workload=agentic-cpu-offloading",
             ],
-            "CPU offloading requires AdvancedAllInPowerModel",
+            "CPU offloading requires OSSAllinPowerModel",
         ),
         (
             [
-                "--model=basic-example",
+                "--model=example",
                 "--gpu_level_power_per_gpu=125",
                 "--system=hopper",
                 "--cooling=air",
