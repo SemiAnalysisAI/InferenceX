@@ -9396,4 +9396,4 @@
     - "*"
   description:
     - "Update the shared srt-slurm pin from v2.43.4 to v2.46.0, including configurable GPU power exporters, flexible telemetry client placement, and the SMG router."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/0
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3792
