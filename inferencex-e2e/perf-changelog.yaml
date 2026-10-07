@@ -9398,4 +9398,4 @@
     - agentic-coding
   description:
     - "Update B300 MiniMax-M3 to latest vLLM nightly with CUTLASS MSA decode."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3801
