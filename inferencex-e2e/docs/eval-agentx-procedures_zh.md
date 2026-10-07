@@ -43,7 +43,7 @@ Kimi K3 在 AMD 和 NVIDIA 的单节点及多节点 recipe 上自动运行 `kimi
 
 Kimi 厂商完整套件不再设置适配器层面的整进程超时。原生验证器的请求超时、引擎就绪等待上限，以及工作流和调度器的资源分配时限仍然生效。冒烟评估保留 900 秒超时；直接调用 Python 适配器时，可通过正数 `--timeout-seconds` 参数为任一套件显式设置超时。
 
-在 PR 上，应将一个主要 sweep label（通常为 `full-sweep-fail-fast`）与 eval modifier 组合使用。`all-evals` 在不抑制吞吐量的情况下扩大覆盖范围；`evals-only` 会抑制吞吐量；两者一起使用时只运行所有符合条件的 eval。带有 `evals-only` 的运行不可复用，而常规 full sweep 和 `all-evals` full sweep 可以复用。添加或移除 modifier 会重启当前 sweep（[label 策略](../../.github/workflows/README.md#pr-eval-modifiers)）。
+在 PR 上，应将一个主要 sweep label（通常为 `full-sweep-fail-fast`）与 eval modifier 组合使用。`all-evals` 在不抑制吞吐量的情况下扩大覆盖范围；`evals-only` 会抑制吞吐量；两者一起使用时只运行所有符合条件的 eval。带有 `evals-only` 的运行不可复用，而常规 full sweep 和 `all-evals` full sweep 可以复用。添加或移除 modifier 会重启当前 sweep（[label 策略](ci-procedures_zh.md#pr-主标签与修饰标签)）。
 
 ```bash
 # Selected eval subset only
@@ -203,7 +203,7 @@ gh run download "$RUN_ID" --repo SemiAnalysisAI/InferenceX \
 
 `python3 -m infx.bench agentic` 会用 uv 自行构建客户端运行时（[`infx/bench/agentic/venv.py`](../infx/bench/agentic/venv.py)）。它在 `AIPERF_RUNTIME_DIR` 下新建 Python 3.11 venv（默认 `<tmp>/inferencex-agentic-<SLURM_JOB_ID 或 PID>`），以可编辑模式安装 `utils/aiperf` 及其声明的依赖，并安装 AIPerf 未声明的 client 依赖（[`requirements.txt`](../infx/bench/agentic/requirements.txt)）。随后它会在该 venv 的 Python 下重新运行自身。Recipe 通过 [`benchmarks/srt_agentic.sh`](../benchmarks/srt_agentic.sh) 调用它。
 
-AgentX 是 AIPerf `agentx` trace replay，不是固定 token 的合成 benchmark。`agentx` scenario 负责 replay 默认值：每条 trajectory lane 额外执行十个 warmup 请求、warmup 排空上限为 1,800 秒、实时失败阈值为 0.10、trace 空闲上限为 300 秒。Recipe 可以用 `AGENTIC_WARMUP_GRACE_PERIOD` 提高排空上限，或用 `AIPERF_LIVE_FAILED_REQUEST_THRESHOLD` 放宽实时中止阈值；完成后的 profile 错误率超过 0.10 时仍会校验失败（[运行后校验](../infx/bench/agentic/run.py#L33-L35)）。Profile 使用配置的时长。`agentx-fast` 强制每条 lane 只运行一个 warmup 请求，并将 profile 设为 1,200 秒。它只影响单节点和多节点 AgentX 吞吐量；定长序列吞吐量与 eval 保持 canonical。Fast 运行不符合 artifact reuse 条件（[工作流策略](../../.github/workflows/README.md#agentx-fast-mode)、[fast replay 设置](../infx/bench/agentic/replay.py#L64-L65)）。
+AgentX 是 AIPerf `agentx` trace replay，不是固定 token 的合成 benchmark。`agentx` scenario 负责 replay 默认值：每条 trajectory lane 额外执行十个 warmup 请求、warmup 排空上限为 1,800 秒、实时失败阈值为 0.10、trace 空闲上限为 300 秒。Recipe 可以用 `AGENTIC_WARMUP_GRACE_PERIOD` 提高排空上限，或用 `AIPERF_LIVE_FAILED_REQUEST_THRESHOLD` 放宽实时中止阈值；完成后的 profile 错误率超过 0.10 时仍会校验失败（[运行后校验](../infx/bench/agentic/run.py#L33-L35)）。Profile 使用配置的时长。`agentx-fast` 强制每条 lane 只运行一个 warmup 请求，并将 profile 设为 1,200 秒。它只影响单节点和多节点 AgentX 吞吐量；定长序列吞吐量与 eval 保持 canonical。Fast 运行不符合 artifact reuse 条件（[工作流策略](ci-procedures_zh.md#pr-主标签与修饰标签)、[fast replay 设置](../infx/bench/agentic/replay.py#L64-L65)）。
 
 每个 AgentX 吞吐量并发点都必须使用新启动的服务。矩阵为每个点生成独立作业。`infx.launch` 会拒绝 `CONC_LIST` 不恰好等于其唯一正整数 `CONC` 的多节点 AgentX 吞吐量作业，replay client 也会拒绝与 `CONC` 不同的 `CONC_LIST`。AgentX 不清空缓存，也不复用正在运行的服务来测试另一个并发点。同一测试点的预热和正式测量共用服务。此规则不改变定长序列 sweep 或评分 eval 的批量执行行为。
 

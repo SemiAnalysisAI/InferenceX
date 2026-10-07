@@ -8,7 +8,7 @@
 
 [`klaud-plan.yml`](../../.github/workflows/klaud-plan.yml) reconciles recorded interrupted sessions, prepares candidates with Python, uses a read-only Claude review to exclude overlapping PRs, then calls [`klaud-candidate.yml`](../../.github/workflows/klaud-candidate.yml). One autonomous Klaud Cold session owns each candidate’s edits, diagnosis and repairs. The `finish` command verifies validation or performs cleanup and posts its completion receipt; the read-only Stop hook and diagnostics verify that receipt against GitHub. Recovery uses the next existing autosweep, with no second agent or additional workflow.
 
-The PR review uses `claude-opus-5` (Opus 5), `fastMode: false`, and up to 500 turns to resolve overlaps, target clusters and public baseline model names for a bounded candidate batch. Candidate execution uses `claude-fable-5-1` (Fable 5.1) with fast mode disabled and owns upstream image research. The agent's display name is **Klaud Cold**; workflow filenames, CLI, artifacts, branches and runtime environment variables use `klaud` / `KLAUD`. Existing candidate branches with the previous spelling still block duplicate selection. Configure `DASH_API_KEY` before dispatching; workflows pass it to the existing `KLAUD_DASHBOARD_API_KEY` runtime variable.
+The PR review resolves overlaps, target clusters and public baseline model names for a bounded candidate batch. Candidate execution owns upstream image research. Models and turn limits are set in `klaud-plan.yml` and `klaud-candidate.yml`. The agent's display name is **Klaud Cold**; workflow filenames, CLI, artifacts, branches and runtime environment variables use `klaud` / `KLAUD`. Existing candidate branches with the previous spelling still block duplicate selection. Configure `DASH_API_KEY` before dispatching; workflows pass it to the existing `KLAUD_DASHBOARD_API_KEY` runtime variable.
 
 ## Selection
 
@@ -116,21 +116,13 @@ The recovery and final selection steps receive `AGENT_PAT` for verified ownershi
 
 The overlap review runs in its own `review` job, separate from the credentialed `recover` and `select` jobs. Its only gh/git permissions are `gh pr list/view/diff`, `gh api --method GET`, `git status` and `git ls-tree`; `git show`, `git diff` and `git log` are excluded because `--output` lets them write arbitrary files. The `select` job does a fresh checkout of the recovery commit and consumes only data: the planner's `candidates.json` and `open-prs.json` (uploaded as the short-lived `klaud-review-input` artifact before the agent starts), the review's structured output and outcome, and a sanitized subset of the execution log's final result. Nothing the review agent writes to its workspace, runner temp directory or tool caches reaches a step holding `AGENT_PAT`.
 
-All external actions use full commit SHAs; the table reflects the current workflow pins. The internal call uses `./.github/workflows/klaud-candidate.yml` to resolve the caller’s exact commit, with the three required secrets explicitly forwarded.
+All external actions are pinned to full commit SHAs in the workflow YAML. The internal call uses `./.github/workflows/klaud-candidate.yml` to resolve the caller’s exact commit, with the three required secrets explicitly forwarded.
 
-| Action | Version | Commit |
-| --- | --- | --- |
-| `anthropics/claude-code-action` | `v1.0.218` | [`0d0e0876d3ea`](https://github.com/anthropics/claude-code-action/commit/0d0e0876d3eaa933f45dc692f7a4312c83caf36f) |
-| `actions/checkout` | `v7.0.1` | [`3d3c42e5aac5`](https://github.com/actions/checkout/commit/3d3c42e5aac5ba805825da76410c181273ba90b1) |
-| `actions/upload-artifact` | `v7.0.1` | [`043fb46d1a93`](https://github.com/actions/upload-artifact/commit/043fb46d1a93c77aae656e7c1c64a875d1fc6a0a) |
-| `actions/download-artifact` | `v8.0.1` | [`3e5f45b2cfb9`](https://github.com/actions/download-artifact/commit/3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c) |
-| `astral-sh/setup-uv` | `v10.0.1` | [`20cfd1bf945f`](https://github.com/astral-sh/setup-uv/commit/20cfd1bf945f4377ade1205e4dbc17946fc9a30d) |
 
 ## Local verification
 
 ```bash
 uv run --no-project --exclude-newer PT12H --python 3.12 --with "pydantic>=2.10,<3" python -m infx.klaud --help
-uvx --exclude-newer PT12H zizmor@latest --offline --no-config --no-ignores .github/workflows/klaud-plan.yml .github/workflows/klaud-candidate.yml
 ```
 
 CLI and workflow checks do not establish GPU workingness. Klaud Cold uses the existing InferenceX validation and e2e workflows for its candidate changes. No live model, benchmark, PR creation or deployment is part of local verification.
