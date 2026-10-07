@@ -479,10 +479,10 @@ index adc202fc..18010359 100644
  @dataclass
 diff --git a/src/srtctl/backends/tokenspeed.py b/src/srtctl/backends/tokenspeed.py
 new file mode 100644
-index 00000000..a766c37d
+index 00000000..3795cdf3
 --- /dev/null
 +++ b/src/srtctl/backends/tokenspeed.py
-@@ -0,0 +1,252 @@
+@@ -0,0 +1,259 @@
 +# SPDX-FileCopyrightText: Copyright (c) 2026 SemiAnalysis LLC. All rights reserved.
 +# SPDX-License-Identifier: Apache-2.0
 +
@@ -593,7 +593,14 @@ index 00000000..a766c37d
 +        )
 +
 +    def get_process_environment(self, process: Process) -> dict[str, str]:
-+        return {}
++        """Skip the gRPC engine's startup warmup on prefill and decode workers.
++
++        The warmup is a generate without a KV bootstrap room, which a prefill/decode
++        engine cannot serve: prefill waits for a decode peer that never comes, and an
++        attention-DP decode engine fails dispatching it by room. ``dynamo.tokenspeed``
++        does not read the variable.
++        """
++        return {} if process.endpoint_mode == "agg" else {"TOKENSPEED_SKIP_GRPC_WARMUP": "1"}
 +
 +    def is_grpc_mode(self, mode: str) -> bool:
 +        """A direct TokenSpeed worker is always the gRPC engine (``smg_grpc_servicer.tokenspeed``)."""
