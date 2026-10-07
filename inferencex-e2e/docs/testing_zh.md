@@ -22,7 +22,6 @@
 ## 事实来源
 
 - [`.github/AGENT_OPERATIONS.md`](../../.github/AGENT_OPERATIONS.md#sweep-labels-and-reuse) 定义扫描标签与修饰标签；其[派发章节](../../.github/AGENT_OPERATIONS.md#workflow-dispatch-and-monitoring)定义手动运行与产物检查。
-- [`docs/configuration-procedures.md`](configuration-procedures.md#validate) 是聚焦配置验证的操作流程。
 - [`.github/workflows/README.md`](../../.github/workflows/README.md) 记录矩阵生成、`e2e-tests.yml`、PR 扫描和复用。
 - [`run-sweep.yml`](../../.github/workflows/run-sweep.yml) 是可执行的 PR 扫描门禁，[`merge-ingest.yml`](../../.github/workflows/merge-ingest.yml) 是推送到 `main` 时的复用与入库门禁；[`e2e-tests.yml`](../../.github/workflows/e2e-tests.yml) 是手动分发的端到端路径。
 - [`docs/PR_REVIEW_CHECKLIST.md`](PR_REVIEW_CHECKLIST.md) 是合并评审标准。[验证器提示词](../../.github/codeowner-signoff-verify-prompt.md#check-1--a-passing-sweep--evals-ran-on-a-commit-in-this-pr) 说明如何独立核验扫描和评测证据。
@@ -162,7 +161,7 @@ python3 -m infx.workflows.validate_perf_changelog \
 
 其契约实现在 [`validate_perf_changelog.py`](../infx/workflows/validate_perf_changelog.py) 中。该检查会验证生成矩阵并拒绝禁止的内容变更，但其差异读取器可能看不到仅空白的历史删除。应把精确字节差异检查作为独立证据门禁；不要改写或规范化 `perf-changelog.yaml` 历史字节。
 
-本地矩阵不能证明 Slurm 分配或 llm-d 端点发现。多节点配方变更仍然需要上游配方检查器，并在目标集群上实际执行；详见[配置验证](configuration-procedures.md#validate)。
+本地矩阵不能证明 Slurm 分配或 llm-d 端点发现。多节点配方变更仍然需要上游配方检查器，并在目标集群上实际执行。
 
 ### 并行运行完整本地测试套件
 

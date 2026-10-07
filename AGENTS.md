@@ -74,7 +74,7 @@ check_env_vars IS_MULTINODE MODEL_NAME PRECISION
 - Hooks are only for checks and setup required by that cluster's hosts or fabric. Keep them small, workload-independent, and safe to run repeatedly. Prefer native srt-slurm configuration whenever it can express the requirement.
 - Do not put benchmark execution, model selection, engine flags, concurrency tuning, evaluation, result collection, or job orchestration in hooks. Those belong in recipes, benchmark scripts, or the existing orchestration layer.
 - Do not use hooks to patch engines or containers, bypass failed checks, or hide runtime bugs behind retries and ad hoc workarounds. Fix problems in the component that owns them.
-- Pass settings explicitly from the cluster record (`srt-slurm.host-setup.env`). Scope mutations to the allocated nodes, preserve other jobs' resources, and register teardown for temporary state that needs restoring. See [cluster profiles](inferencex-e2e/docs/configuration-procedures.md#cluster-profiles).
+- Pass settings explicitly from the cluster record (`srt-slurm.host-setup.env`). Scope mutations to the allocated nodes, preserve other jobs' resources, and register teardown for temporary state that needs restoring.
 
 ## SRT Slurm synthetic acceptance
 
