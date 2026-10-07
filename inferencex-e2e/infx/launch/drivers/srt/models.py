@@ -175,13 +175,13 @@ def recipe_aliases(recipe: Path) -> set[str]:
 def model_paths(
     cluster: Cluster,
     request: LaunchRequest,
-    config_file: str,
+    srt_recipe: str,
     served: str | None,
 ) -> dict[str, str]:
     """srtslurm.yaml ``model_paths``: each recipe alias mapped to ``served``."""
-    recipe = recipe_mirror_path(request.workspace, config_file)
+    recipe = recipe_mirror_path(request.workspace, srt_recipe)
     if not recipe.is_file():
-        raise LaunchError(f"CONFIG_FILE {config_file} is not in the recipe mirror: {recipe}")
+        raise LaunchError(f"{srt_recipe} is not in the recipe mirror: {recipe}")
     aliases = recipe_aliases(recipe)
     if aliases and served is None:
         raise LaunchError(

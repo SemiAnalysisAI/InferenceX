@@ -145,11 +145,11 @@ class Submitted:
 
 
 def submit_lane(
-    run: SrtRun, submitted: Submitted, checkout: Checkout, config_file: str, arguments: list[str]
+    run: SrtRun, submitted: Submitted, checkout: Checkout, recipe: str, arguments: list[str]
 ) -> int:
     """Submit a multi-node lane job, record it in ``submitted``, and return srtctl's exit code."""
     applied = apply(
-        run, checkout, config_file, [*arguments, "--json", "--yes"], stdout=submitted.manifest
+        run, checkout, recipe, [*arguments, "--json", "--yes"], stdout=submitted.manifest
     )
     print(applied.stdout, end="", flush=True)
     if applied.returncode:
@@ -162,7 +162,7 @@ def submit_lane(
 def multinode_arguments(
     run: SrtRun,
     lane: SrtLane,
-    config_file: str,
+    recipe: str,
     overrides: list[str],
     *,
     preflight: bool,
@@ -175,7 +175,7 @@ def multinode_arguments(
         "benchmark.stream_output=true",
         *overrides,
         "-f",
-        config_file,
+        recipe,
     ]
     if not preflight:
         arguments.append("--no-preflight")
