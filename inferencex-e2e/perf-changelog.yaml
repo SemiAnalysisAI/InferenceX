@@ -9396,4 +9396,4 @@
   description:
     - "Pin srt-slurm to merged NVIDIA/srt-slurm#572 (641a07f2) and configure the AMD device-metrics-exporter on mi300x-amd, mi325x-amd and mi355x-amds through its kind: custom schema (gpu_id/serial_number labels; gpu_power_usage, gpu_gfx_activity and gpu_junction_temperature metrics) with the public ghcr.io#semianalysisai/amd-device-metrics-exporter image by digest. Drop the AMD power-profile patch and the prepared-exporter staging step."
     - "Carry NVIDIA/srt-slurm#573 as a local patch so worker-node exporters report only the job's GPUs; accept #572 manifests without power_profile and samples v3 with temperature_c in the single-node and multinode power_audit consumers. Hardware qualification pending."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/0
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3781
