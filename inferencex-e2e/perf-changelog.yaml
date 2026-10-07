@@ -9391,3 +9391,11 @@
     - "Update the GB200 DeepSeek-V4.1-Flash vLLM AgentX image from nightly cd10ed6f to nightly-dev-arm64-cu130-ac9126e58aa7 and enable FlashInfer autotuning."
     - "Run TP4 at concurrency 1, 4, 8 and 32 and replace TP2 with DEP2 (TP1 x DP2 + EP2) at concurrency 8-32 and DEP4 (TP1 x DP4 + EP4) at concurrency 64-128, both with DeepGEMM MegaMoE and adaptive verification behind a consistent-hash vLLM Router. All points set gpu-memory-utilization 0.97."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3692
+
+- config-keys:
+    - minimaxm3-fp4-b300-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update B300 MiniMax-M3 to latest vLLM nightly with CUTLASS MSA decode."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
