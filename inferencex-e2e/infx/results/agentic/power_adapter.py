@@ -336,9 +336,10 @@ def run_multinode_agentic_power(
     require_power: bool = False,
     expected_num_gpus: int | None = None,
     audit_source: str | None = None,
+    validation_result: Path | None = None,
 ) -> int:
     """Join one AgentX aggregate to the finalized native power package."""
-    validation_result = result_dir / "power_validation.json"
+    validation_result = validation_result or result_dir / "power_validation.json"
     reasons: list[str] = []
     try:
         aggregate = json.loads(agg_result.read_text(encoding="utf-8"))
@@ -443,6 +444,7 @@ def main() -> int:
     parser.add_argument("--expected-producer-sha")
     parser.add_argument("--expected-num-gpus", type=int)
     parser.add_argument("--audit-source")
+    parser.add_argument("--validation-result", type=Path)
     parser.add_argument(
         "--require-power",
         action="store_true",
@@ -503,6 +505,7 @@ def main() -> int:
         require_power=args.require_power,
         expected_num_gpus=args.expected_num_gpus,
         audit_source=args.audit_source,
+        validation_result=args.validation_result,
     )
 
 

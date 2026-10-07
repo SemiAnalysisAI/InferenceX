@@ -75,10 +75,13 @@ def finish_single_node(run: SrtRun, submitted: Submitted, fetched: Path) -> int:
             print(f"ERROR: failed to stage native power artifacts: {error}", file=sys.stderr)
             rc = 1
     bundle_server_logs(output, run.workspace / SINGLE_NODE_LOGS)
-    result = logs / f"{run.request.result_filename}.json"
-    if result.is_file():
+    stem = run.request.result_filename
+    for name in (f"{stem}.json", f"power_validation_{stem}.json"):
+        artifact = logs / name
+        if not artifact.is_file():
+            continue
         try:
-            copy_to_workspace(result, run.workspace / result.name)
+            copy_to_workspace(artifact, run.workspace / name)
         except ArtifactError as error:
             print(f"ERROR: {error}", file=sys.stderr)
             rc = 1
@@ -94,12 +97,16 @@ def finish_single_node(run: SrtRun, submitted: Submitted, fetched: Path) -> int:
 def finalize_single_node_results(run: SrtRun, logs: Path, producer_sha: str) -> int:
     """Write native AgentX power metrics, then validate evals and the benchmark result.
 
+    A single-node point publishes the fixed-sequence bundle shape: the validation
+    sidecar sits beside the result, named after it, and the audit names that file.
+
     srt-slurm treats a failed post-benchmark eval as non-fatal; InferenceX does not.
     """
     request = run.request
     power_rc = 0
     if request.is_agentic and not request.eval_only:
         require(request, "INFERENCEX_RESULTS_PYTHON", "GPU_COUNT")
+        sidecar = f"power_validation_{request.result_filename}.json"
         argv = [
             request.inferencex_results_python, "-m", "infx.results.agentic.power_adapter",
             "--result-dir", str(logs / "agentic"),
@@ -108,7 +115,8 @@ def finalize_single_node_results(run: SrtRun, logs: Path, producer_sha: str) -> 
             "--logs-root", str(logs),
             "--expected-producer-sha", producer_sha,
             "--expected-num-gpus", request.env["GPU_COUNT"],
-            "--audit-source", "results/power_validation.json",
+            "--validation-result", str(logs / sidecar),
+            "--audit-source", sidecar,
             *(["--require-power"] if request.require_power else []),
         ]  # fmt: skip
         power_rc = proc.run(argv, env=run.env, cwd=run.workspace).returncode

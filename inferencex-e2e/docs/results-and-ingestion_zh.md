@@ -101,7 +101,7 @@ InferenceX-app 将路由字段作为列或配置维度，并把数值测量存�
 
 服务客户端在保存原始结果前写入 `benchmark_outcome`，保留现有的 5% 最大请求失败率，以及请求总数、完成数和失败数。处理器检查该记录并复制到聚合结果中；即使遥测有效，请求失败率超限仍返回失败。零成功请求会保留诊断聚合结果，但不会生成不存在的延迟倒数。请求计数无效时，失败诊断状态保留原始 `requested`/`completed` 值和 `error`，不生成无依据的失败数或失败率；客户端先保存原始 JSON 再退出，处理器仍拒绝该结果。没有状态元数据的历史结果仍可区分；功耗有效不能证明基准成功或答案质量。
 
-`power_invalid_reasons` 和 `power_audit` 在数值指标旁携带有界摘要，包括可用的测量窗口、预期与观测 GPU 数、采样诊断、观测设备标识和生产者版本。`source` 指向保留的 `power_validation_*.json` 工件名称。设备标识保留采集器原有语义。
+`power_invalid_reasons` 和 `power_audit` 在数值指标旁携带有界摘要，包括可用的测量窗口、预期与观测 GPU 数、采样诊断、观测设备标识和生产者版本。`source` 指向保留的 `power_validation_*.json` 工件名称。单节点 AgentX 测试点采用同一形态：适配器在结果文件旁写入 `power_validation_<RESULT_FILENAME>.json`，审计摘要指向该文件，因此其 `power_audit_*` 产物与固定序列测试点一致；多节点 AgentX 仍为每个并发点保留 `LOGS/agentic/conc_<N>/power_validation.json`。设备标识保留采集器原有语义。
 
 对于多节点固定序列任务，`python -m infx.results.fixed_sequence --all` 先处理所有已有结果，再返回失败。它接受 `_c<N>_gpus_...`、`_conc<N>_gpus_...` 和 AMD 的 `_concurrency_<N>_req_rate_<R>_gpus_...` 文件名，也支持 `inf` 请求速率。它将结果并发度与 `CONC_LIST` 比较，拒绝重复或矛盾的点身份，并将遗漏和错误记录到 `result_processing_<RESULT_FILENAME>.json`。共享工作池通过 `AGGREGATE_GPUS` 及零值角色 GPU 数进行遥测验证；独立的 prefill/decode 能耗保持缺失。当 `DISAGG=true` 的配置组中某个点没有 decode worker 时，聚合行会有意设置 `disagg: false` 并记录 `num_aggregate_gpu`；文件名、工件名和工作流输入仍保留配置组身份。下游应按聚合行的拓扑解释测量结果。
 

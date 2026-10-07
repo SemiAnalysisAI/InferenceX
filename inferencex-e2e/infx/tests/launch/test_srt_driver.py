@@ -464,7 +464,10 @@ def test_b300_flash_agentx_reenters_inside_a_batch_allocation(harness):
     assert aggregate["completed"] == 2
     assert aggregate["power_valid"] == 0
     assert "agentic_gpu_topology_invalid" in aggregate["power_invalid_reasons"]
-    assert aggregate["power_audit"]["source"] == "results/power_validation.json"
+    assert aggregate["power_audit"]["source"] == "power_validation_point-identity.json"
+    sidecar = json.loads((harness.workspace / "power_validation_point-identity.json").read_text())
+    assert sidecar["power_valid"] is False
+    assert "agentic_gpu_topology_invalid" in sidecar["reasons"]
     assert len(srtctl_calls(harness.logs)) == 1
     assert "4242" in lines(harness.logs, "scancel")
     assert list(runner_temp.glob("srt-batch.*.sh")) == []

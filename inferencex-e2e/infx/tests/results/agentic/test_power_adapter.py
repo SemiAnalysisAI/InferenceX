@@ -60,9 +60,12 @@ def test_single_node_collector_finalizes_native_agentx_power(
     producer_sha = "b" * 40 if failure == "producer_commit_mismatch" else PRODUCER_SHA
     assert finalize_single_node_results(run, pkg.logs_root, producer_sha) == int(require_power and failure is not None)
     aggregate = json.loads(aggregate_path.read_text())
-    validation = json.loads((result_dir / "power_validation.json").read_text())
+    # Same bundle shape as a fixed-sequence point: the sidecar sits beside the result,
+    # named after it, and the audit names that file; no flat AgentX sidecar remains.
+    validation = json.loads((pkg.logs_root / "power_validation_point.json").read_text())
+    assert not (result_dir / "power_validation.json").exists()
     assert aggregate["power_valid"] == int(failure is None)
-    assert aggregate["power_audit"]["source"] == "results/power_validation.json"
+    assert aggregate["power_audit"]["source"] == "power_validation_point.json"
     if failure is None:
         assert aggregate["total_gpu_energy_j"] == 84_000
         assert aggregate["avg_power_w"] == 350
