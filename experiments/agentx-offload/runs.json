@@ -5827,7 +5827,7 @@
       "status": "in_progress",
       "workflow_name": "offload-v1-nvme2tib-c488-r2-capacity-20261007",
       "dispatched_at": "2026-10-07T09:47:01Z",
-      "phase": "get-jobs in progress; B200 job not generated yet",
+      "phase": "B200 runner admitted; Slurm allocation and storage preflight pending",
       "performance_result": false,
       "energy_result": false,
       "nvme_bytes_per_node": 2199023255552,
@@ -5837,8 +5837,13 @@
         "github_job_minutes": 530
       },
       "get_jobs_id": 112731565235,
-      "dispatch_evidence": "First 2 TiB c488 run 37552057241 terminal cancelled during warmup drain, benchmark invalid; four ZIP hashes recorded at 96fa89582, exact owner-matched host scratch deleted and absent, temporary ZIP downloads deleted. Cancellation initiator unconfirmed. Fresh cluster-wide queued/in-progress job-label inventory at 2026-10-07T09:46:42Z found zero queued or in-progress B200 jobs and no active study workflow. Same exact generator config and 510/530-minute envelope. Full 40-character HEAD matched origin branch and GitHub workflow head and was supplied as input ref. get-jobs started 09:47:06Z; no generated B200 job or scratch yet.",
-      "scratch": null
+      "dispatch_evidence": "First 2 TiB c488 run 37552057241 terminal cancelled during warmup drain, benchmark invalid; four ZIP hashes recorded at 96fa89582, exact owner-matched host scratch deleted and absent, temporary ZIP downloads deleted. Cancellation initiator unconfirmed. Fresh cluster-wide queued/in-progress job-label inventory at 2026-10-07T09:46:42Z found zero queued or in-progress B200 jobs and no active study workflow. Same exact generator config and 510/530-minute envelope. Full 40-character HEAD matched origin branch and GitHub workflow head and was supplied as input ref. get-jobs started 09:47:06Z; no generated B200 job or scratch yet. get-jobs completed successfully; generated B200 job 112731687372 carries cluster:b200-nscale and nodes:1 and was admitted to b200-nscale-slurm_00 at 09:47:37Z. Slurm allocation and scratch not yet verified.",
+      "scratch": null,
+      "get_jobs_status": "success",
+      "job_id": 112731687372,
+      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37602969372/job/112731687372",
+      "runner": "b200-nscale-slurm_00",
+      "started_at": "2026-10-07T09:47:37Z"
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35456989669,35469801850,35476053573,35497846918,35524019140,35524083518,35542179539,35542182560,35542185178,35542190411,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894,36796500128,37027095833,37428997901,37490705589",
