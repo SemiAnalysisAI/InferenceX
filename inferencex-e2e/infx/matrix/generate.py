@@ -18,6 +18,7 @@ from .validation import (
     Fields,
     load_config_files,
     load_runner_file,
+    srt_recipe_path,
     validate_agentic_matrix_entry,
     validate_matrix_entry,
 )
@@ -277,41 +278,18 @@ def recipe_auxiliary_node_count(recipe: dict) -> int:
     return pool_nodes + dedicated_roles
 
 
-def recipe_node_count(prefill: dict, decode: dict) -> int | None:
-    """Read the authoritative node count from a checked-in srt-slurm recipe."""
-    config_files = {
-        setting.split("=", 1)[1]
-        for worker in (prefill, decode)
-        for setting in (worker.get(Fields.ADDITIONAL_SETTINGS.value, []) or [])
-        if setting.startswith("CONFIG_FILE=")
-    }
-    if not config_files:
-        return None
-    if len(config_files) != 1:
-        raise ValueError(f"Conflicting CONFIG_FILE settings: {sorted(config_files)}")
-
-    config_file, _, selector = config_files.pop().partition(":")
-    repo_root = repository_root()
-    recipe_root = repo_root / "benchmarks" / "multi_node" / "srt-slurm-recipes"
-    if config_file.startswith("benchmarks/multi_node/srt-slurm-recipes/"):
-        recipe_path = repo_root / config_file
-    else:
-        recipe_path = recipe_root / config_file.removeprefix("recipes/")
-    if not recipe_path.exists():
-        # Some srt-slurm recipes live only in the runtime image. Their master
-        # config topology remains the best available scheduling estimate.
-        return None
-
+def recipe_node_count(srt_recipe: str) -> int | None:
+    """Read the authoritative node count from the row's checked-in srt-slurm recipe."""
+    path, _, selector = srt_recipe.partition(":")
+    recipe_path = repository_root() / path
     recipe = yaml.safe_load(recipe_path.read_text())
     if "base" in recipe:
-        # srtctl merges a named variant over base (null deletes a key) and
-        # carries a top-level schema into it. Zip groups and non-schema-2
-        # variant files have no authoritative count here; the selected master
-        # topology supplies the estimate.
-        if not (selector == "base" or (selector.startswith("override_") and selector in recipe)):
+        # srtctl merges the variant over base (null deletes a key). Zip groups,
+        # whole bundles and non-schema-2 variants leave the estimate to the topology.
+        if not (selector == "base" or selector.startswith("override_")):
             return None
         schema = recipe.get("schema")
-        recipe = _merge_recipe(recipe["base"], recipe.get(selector) or {})
+        recipe = _merge_recipe(recipe["base"], recipe[selector] or {})
         recipe.setdefault("schema", schema)
         if recipe.get("schema") != 2:
             return None
@@ -319,8 +297,7 @@ def recipe_node_count(prefill: dict, decode: dict) -> int | None:
         raise ValueError(f"srt-slurm recipes must declare schema: 2: {recipe_path}")
     roles = recipe.get("roles")
     if roles:
-        # Schema 2 groups node allocations by role. A colocated decode role
-        # shares prefill nodes and does not reserve another allocation.
+        # A colocated decode role shares prefill nodes.
         for name, role in roles.items():
             if "nodes" not in role:
                 raise ValueError(f"Recipe role {name!r} must specify nodes: {recipe_path}")
@@ -358,9 +335,10 @@ def multinode_node_count(
     decode: dict,
     runner: str,
     runner_data: dict,
+    srt_recipe: str | None,
 ) -> int:
     """Return the total Slurm node request represented by a matrix row."""
-    recipe_count = recipe_node_count(prefill, decode)
+    recipe_count = recipe_node_count(srt_recipe) if srt_recipe is not None else None
     if recipe_count is not None:
         return recipe_count
     return worker_node_count(prefill, "prefill", runner, runner_data) + worker_node_count(
@@ -384,6 +362,7 @@ def add_multinode_node_count(
             entry[Fields.DECODE.value],
             entry[Fields.RUNNER.value],
             runner_data,
+            entry.get(Fields.SRT_RECIPE.value),
         )
     return entry
 
@@ -557,6 +536,19 @@ def component_metadata(benchmark: dict, config: dict) -> dict:
         if value is not None:
             metadata[field.value] = value
     return metadata
+
+
+def srt_recipe_fields(config: dict, benchmark: dict) -> dict:
+    """The row's srt-recipe and eval-srt-recipe, relative to the project root."""
+    return {
+        field.value: srt_recipe_path(
+            config.get(Fields.MULTINODE.value, False),
+            config[Fields.SRT_RECIPE_DIR.value],
+            benchmark[field.value],
+        )
+        for field in (Fields.SRT_RECIPE, Fields.EVAL_SRT_RECIPE)
+        if benchmark.get(field.value) is not None
+    }
 
 
 def _multinode_parallelism_key(entry: dict) -> tuple:
@@ -1068,8 +1060,7 @@ def _fixed_sequence_entries(
                         Fields.SPEC_DECODING.value: spec_decoding,
                     }
                 )
-                if benchmark.get(Fields.SRT_RECIPE.value) is not None:
-                    entry[Fields.SRT_RECIPE.value] = benchmark[Fields.SRT_RECIPE.value]
+            entry.update(srt_recipe_fields(config, benchmark))
             entry.update(
                 {
                     Fields.EXP_NAME.value: f"{model_code}_{seq_len_to_str(isl, osl)}",
@@ -1169,6 +1160,7 @@ def _agentic_entries(
                     Fields.CONC.value: conc,
                 }
             )
+            entry.update(srt_recipe_fields(config, benchmark))
             exp_name = multinode_agentic_exp_name(model_code, prefill, decode, conc, offload_suffix)
         else:
             entry.update(
@@ -1183,8 +1175,7 @@ def _agentic_entries(
                     Fields.CONC.value: conc,
                 }
             )
-            if benchmark.get(Fields.SRT_RECIPE.value) is not None:
-                entry[Fields.SRT_RECIPE.value] = benchmark[Fields.SRT_RECIPE.value]
+            entry.update(srt_recipe_fields(config, benchmark))
             exp_name = (
                 f"{model_code}_tp{tp}_conc{conc}_"
                 f"{agentic_kv_offload_suffix(kv_offloading, kv_offload_backend)}"

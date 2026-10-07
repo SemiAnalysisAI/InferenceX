@@ -1,9 +1,12 @@
 import pprint
+import re
 from enum import Enum
-from typing import Any, Literal, Self
+from pathlib import Path, PurePosixPath
+from typing import Annotated, Any, Literal, Self
 
 import yaml
 from pydantic import (
+    AfterValidator,
     BaseModel,
     ConfigDict,
     Field,
@@ -13,8 +16,14 @@ from pydantic import (
 )
 
 from infx.clusters import CLUSTER_LABEL_PREFIX, RunnerInventory
+from infx.config import repository_root
 
 DEFAULT_AGENTIC_DURATION_SECONDS = 3600
+SINGLE_NODE_RECIPES = "benchmarks/single_node/srt-slurm-recipes"
+MULTI_NODE_RECIPES = "benchmarks/multi_node/srt-slurm-recipes"
+# llm-d jobs read CONFIG_FILE (benchmarks/multi_node/llm-d-recipes) instead of srt-recipe.
+LLMD_FRAMEWORK = "llmd-vllm"
+RECIPE_SELECTOR = re.compile(r"base|override_[\w-]+|zip_override_[\w-]+\[\d+\]")
 
 """
     The below class defines the field names expected to be present in the JSON entries
@@ -46,6 +55,8 @@ class Fields(Enum):
     # Search-space/benchmark fields
     TP = "tp"
     SRT_RECIPE = "srt-recipe"
+    SRT_RECIPE_DIR = "srt-recipe-dir"
+    EVAL_SRT_RECIPE = "eval-srt-recipe"
     PP = "pp"
     DCP_SIZE = "dcp-size"
     PCP_SIZE = "pcp-size"
@@ -265,6 +276,10 @@ class MultiNodeMatrixEntry(BaseModel):
     framework: str
     spec_decoding: Literal["mtp", "draft_model", "none"] = Field(alias=Fields.SPEC_DECODING.value)
     runner: str
+    srt_recipe: str | None = Field(default=None, alias=Fields.SRT_RECIPE.value, min_length=1)
+    eval_srt_recipe: str | None = Field(
+        default=None, alias=Fields.EVAL_SRT_RECIPE.value, min_length=1
+    )
     node_count: int = Field(alias=Fields.NODE_COUNT.value, gt=0, strict=True)
     isl: int
     osl: int
@@ -366,6 +381,10 @@ class MultiNodeAgenticMatrixEntry(BaseModel):
     framework: str
     spec_decoding: Literal["mtp", "draft_model", "none"] = Field(alias=Fields.SPEC_DECODING.value)
     runner: str
+    srt_recipe: str | None = Field(default=None, alias=Fields.SRT_RECIPE.value, min_length=1)
+    eval_srt_recipe: str | None = Field(
+        default=None, alias=Fields.EVAL_SRT_RECIPE.value, min_length=1
+    )
     node_count: int = Field(alias=Fields.NODE_COUNT.value, gt=0, strict=True)
     prefill: WorkerConfig
     decode: WorkerConfig
@@ -530,13 +549,41 @@ def _validate_kv_offload_fields(self: Any) -> Any:
     return self
 
 
+def _recipe_path(value: str) -> str:
+    path = PurePosixPath(value)
+    if (
+        not path.parts
+        or path.is_absolute()
+        or ".." in path.parts
+        or ":" in value
+        or path.as_posix() != value
+    ):
+        raise ValueError(f"{value!r} must be a normalized relative path")
+    return value
+
+
+def _recipe_reference(value: str) -> str:
+    path, separator, selector = value.partition(":")
+    _recipe_path(path)
+    if separator and not RECIPE_SELECTOR.fullmatch(selector):
+        raise ValueError(
+            f"{value!r} must select base, override_<name> or zip_override_<name>[<index>]"
+        )
+    return value
+
+
+RecipeDir = Annotated[str, AfterValidator(_recipe_path)]
+# <file under srt-recipe-dir>[:<selector>]
+RecipeReference = Annotated[str, AfterValidator(_recipe_reference)]
+
+
 class SingleNodeSearchSpaceEntry(BaseModel):
     """Single node search space configuration."""
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     tp: int
-    srt_recipe: str | None = Field(default=None, alias=Fields.SRT_RECIPE.value, min_length=1)
+    srt_recipe: RecipeReference | None = Field(default=None, alias=Fields.SRT_RECIPE.value)
     pp: int = Field(default=1, gt=0, strict=True)
     dcp_size: int = Field(default=1, alias=Fields.DCP_SIZE.value, gt=0, strict=True)
     pcp_size: int = Field(default=1, alias=Fields.PCP_SIZE.value, gt=0, strict=True)
@@ -570,6 +617,10 @@ class MultiNodeSearchSpaceEntry(BaseModel):
     worker: AggregateWorkerConfig | None = None
     prefill: WorkerConfig | None = None
     decode: WorkerConfig | None = None
+    srt_recipe: RecipeReference | None = Field(default=None, alias=Fields.SRT_RECIPE.value)
+    eval_srt_recipe: RecipeReference | None = Field(
+        default=None, alias=Fields.EVAL_SRT_RECIPE.value
+    )
     num_nodes: int | None = Field(default=None, alias=Fields.NUM_NODES.value, gt=0, strict=True)
     router: ComponentMetadata | None = None
     kv_p2p_transfer: str | None = Field(
@@ -627,7 +678,10 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     tp: int | None = None
-    srt_recipe: str | None = Field(default=None, alias=Fields.SRT_RECIPE.value, min_length=1)
+    srt_recipe: RecipeReference | None = Field(default=None, alias=Fields.SRT_RECIPE.value)
+    eval_srt_recipe: RecipeReference | None = Field(
+        default=None, alias=Fields.EVAL_SRT_RECIPE.value
+    )
     pp: int = Field(default=1, gt=0, strict=True)
     dcp_size: int = Field(default=1, alias=Fields.DCP_SIZE.value, gt=0, strict=True)
     pcp_size: int = Field(default=1, alias=Fields.PCP_SIZE.value, gt=0, strict=True)
@@ -872,6 +926,36 @@ def _validate_multinode_entry_scope(self: BaseModel) -> BaseModel:
     return self
 
 
+_RECIPE_SETTINGS = {"CONFIG_FILE": Fields.SRT_RECIPE, "EVAL_CONFIG_FILE": Fields.EVAL_SRT_RECIPE}
+
+
+def _validate_srt_recipes(self: Any) -> Any:
+    """Every srt-slurm row names its recipe; llm-d rows keep CONFIG_FILE."""
+    entries = _master_search_space_entries(self)
+    if self.multinode and self.framework == LLMD_FRAMEWORK:
+        if self.srt_recipe_dir is not None or any(
+            entry.srt_recipe or entry.eval_srt_recipe for entry in entries
+        ):
+            raise ValueError(f"{LLMD_FRAMEWORK} selects recipes with CONFIG_FILE, not srt-recipe")
+        return self
+    if self.srt_recipe_dir is None:
+        raise ValueError(f"srt-slurm configs require {Fields.SRT_RECIPE_DIR.value}")
+    for entry in entries:
+        if entry.srt_recipe is None:
+            raise ValueError(f"Every search-space entry requires {Fields.SRT_RECIPE.value}")
+        if not self.multinode and getattr(entry, "eval_srt_recipe", None) is not None:
+            raise ValueError(f"{Fields.EVAL_SRT_RECIPE.value} is only valid for multinode configs")
+        workers = (getattr(entry, role, None) for role in ("worker", "prefill", "decode"))
+        for worker in filter(None, workers):
+            for setting in worker.additional_settings or []:
+                name = setting.partition("=")[0]
+                if name in _RECIPE_SETTINGS:
+                    raise ValueError(
+                        f"{name} is not an additional-setting; use {_RECIPE_SETTINGS[name].value}"
+                    )
+    return self
+
+
 class SingleNodeMasterConfigEntry(BaseModel):
     """Top-level single node master configuration entry."""
 
@@ -886,6 +970,7 @@ class SingleNodeMasterConfigEntry(BaseModel):
     multinode: Literal[False]
     disagg: Literal[False] = Field(default=False)
     router: ComponentMetadata | None = None
+    srt_recipe_dir: RecipeDir = Field(alias=Fields.SRT_RECIPE_DIR.value)
     scenarios: SingleNodeScenarios
 
     @model_validator(mode="after")
@@ -900,6 +985,10 @@ class SingleNodeMasterConfigEntry(BaseModel):
     @model_validator(mode="after")
     def validate_multinode_entry_scope(self) -> Self:
         return _validate_multinode_entry_scope(self)
+
+    @model_validator(mode="after")
+    def validate_srt_recipes(self) -> Self:
+        return _validate_srt_recipes(self)
 
 
 class MultiNodeMasterConfigEntry(BaseModel):
@@ -919,6 +1008,7 @@ class MultiNodeMasterConfigEntry(BaseModel):
     kv_p2p_transfer: str | None = Field(
         default=None, alias=Fields.KV_P2P_TRANSFER.value, min_length=1
     )
+    srt_recipe_dir: RecipeDir | None = Field(default=None, alias=Fields.SRT_RECIPE_DIR.value)
     scenarios: MultiNodeScenarios
 
     @model_validator(mode="after")
@@ -934,18 +1024,59 @@ class MultiNodeMasterConfigEntry(BaseModel):
     def validate_multinode_entry_scope(self) -> Self:
         return _validate_multinode_entry_scope(self)
 
+    @model_validator(mode="after")
+    def validate_srt_recipes(self) -> Self:
+        return _validate_srt_recipes(self)
 
-def validate_master_config(master_configs: dict) -> list[dict]:
-    """Validate input master configuration structure."""
+
+def srt_recipe_path(multinode: bool, directory: str, reference: str) -> str:
+    """A row's recipe reference relative to the project root, selector kept."""
+    return f"{MULTI_NODE_RECIPES if multinode else SINGLE_NODE_RECIPES}/{directory}/{reference}"
+
+
+def _zip_length(group: Any) -> int:
+    # srtctl broadcasts length-1 lists, so the longest list is the variant count.
+    if isinstance(group, list):
+        return len(group)
+    if isinstance(group, dict):
+        return max(map(_zip_length, group.values()), default=0)
+    return 0
+
+
+def _check_srt_recipe(root: Path, reference: str, recipes: dict[str, Any]) -> None:
+    path, _, selector = reference.partition(":")
+    if path not in recipes:
+        if not (root / path).is_file():
+            raise ValueError(f"{reference} does not exist")
+        recipes[path] = yaml.safe_load((root / path).read_text())
+    recipe = recipes[path]
+    if not selector:
+        return
+    if not isinstance(recipe, dict) or "base" not in recipe:
+        raise ValueError(f"{reference}: only an override bundle with a base takes a selector")
+    group, _, index = selector.removesuffix("]").partition("[")
+    if group not in recipe or (index and int(index) >= _zip_length(recipe[group])):
+        raise ValueError(f"{reference}: {path} has no variant {selector}")
+
+
+def validate_master_config(master_configs: dict) -> dict:
+    """Validate master configs and the checked-in recipe variant each srt-recipe selects."""
+    root = repository_root()
+    recipes: dict[str, Any] = {}
     for key, entry in master_configs.items():
-        is_multinode = entry.get("multinode", False)
-
+        model = (
+            MultiNodeMasterConfigEntry
+            if entry.get("multinode", False)
+            else SingleNodeMasterConfigEntry
+        )
         try:
-            if is_multinode:
-                MultiNodeMasterConfigEntry(**entry)
-            else:
-                SingleNodeMasterConfigEntry(**entry)
-        except ValidationError as e:
+            config = model(**entry)
+            for row in _master_search_space_entries(config):
+                for reference in (row.srt_recipe, getattr(row, "eval_srt_recipe", None)):
+                    if reference is not None:
+                        path = srt_recipe_path(config.multinode, config.srt_recipe_dir, reference)
+                        _check_srt_recipe(root, path, recipes)
+        except ValueError as e:
             raise ValueError(f"Master config entry '{key}' failed validation:\n{e}") from e
     return master_configs
 

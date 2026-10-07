@@ -73,7 +73,7 @@ import json
 from infx.matrix.generate import recipe_node_count
 from infx.workflows.calc_success_rate import load_hardware_labels
 print(json.dumps({
-    "nodes": recipe_node_count({"additional-settings": ["CONFIG_FILE=recipes/fixture.yaml"]}, {}),
+    "nodes": recipe_node_count("benchmarks/multi_node/srt-slurm-recipes/fixture.yaml"),
     "hardware": load_hardware_labels(),
 }))
 """,

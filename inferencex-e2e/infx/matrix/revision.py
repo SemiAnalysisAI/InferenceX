@@ -44,6 +44,7 @@ SNAPSHOT_PATHS = (
     "infx",
     "utils/matrix_logic",
     *CONFIG_DIRS,
+    "benchmarks/single_node/srt-slurm-recipes",
     "benchmarks/multi_node/srt-slurm-recipes",
 )
 INHERITED_ENV = ("PATH", "HOME", "LANG", "TMPDIR")
