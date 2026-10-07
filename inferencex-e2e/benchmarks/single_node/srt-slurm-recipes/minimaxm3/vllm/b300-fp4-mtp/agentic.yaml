@@ -5,7 +5,7 @@ base:
   name: minimaxm3-fp4-b300-vllm-agentic
   model:
     path: hf:nvidia/MiniMax-M3-NVFP4
-    container: vllm/vllm-openai:nightly-af7f9488c2210d67e1033ecdc845b087ee7fe92b
+    container: vllm/vllm-openai:nightly-43b4aaea3e40e20ef53ce2bfecfa1b72060bf2b5
     precision: fp4
   resources:
     gpu_type: b300
@@ -40,7 +40,7 @@ base:
         tool-call-parser: minimax_m3
         enable-auto-tool-choice: true
         default-chat-template-kwargs: '{"thinking_mode":"enabled"}'
-        attention-config: '{"backend":"FLASHINFER","use_trtllm_attention":true,"indexer_kv_dtype":"fp8"}'
+        attention-config: '{"backend":"FLASHINFER","use_trtllm_attention":true,"indexer_kv_dtype":"fp8","minimax_m3_msa_decode_backend":"cutlass"}'
         kv-cache-dtype: fp8
         max-num-batched-tokens: 16384
         stream-interval: 20

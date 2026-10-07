@@ -5684,7 +5684,7 @@ qwen3.5-fp4-gb200-dynamo-sglang-agentic-mtp:
           additional-settings:
           - "CONFIG_FILE=recipes/qwen3.5/sglang/gb200-fp4/agentx/agg-variants.yaml:override_tp2ep2_hicache_cap48"
 minimaxm3-fp4-b300-vllm-agentic-mtp:
-  image: vllm/vllm-openai:nightly-af7f9488c2210d67e1033ecdc845b087ee7fe92b
+  image: vllm/vllm-openai:nightly-43b4aaea3e40e20ef53ce2bfecfa1b72060bf2b5
   model: nvidia/MiniMax-M3-NVFP4
   model-prefix: minimaxm3
   runner: cluster:b300-dsxe
