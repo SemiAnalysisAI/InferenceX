@@ -24,7 +24,7 @@ Classify a failure by the first layer that did not establish its contract. Prese
 ## Sources of truth
 
 - [`KLAUD_DEBUG.md`](KLAUD_DEBUG.md) records recurring Klaud-Cold/image-bump incidents and their observed signatures. It is incident knowledge, not a substitute for current workflow or review policy.
-- [`run-sweep.yml`](../../.github/workflows/run-sweep.yml), [`benchmark-tmpl.yml`](../../.github/workflows/benchmark-tmpl.yml), and [`benchmarks/benchmark_lib.sh`](../benchmarks/benchmark_lib.sh) define orchestration, artifact upload, server readiness, benchmark, and eval behavior.
+- [`run-sweep.yml`](../../.github/workflows/run-sweep.yml), [`benchmark-tmpl.yml`](../../.github/workflows/benchmark-tmpl.yml), and the container-side `python3 -m infx.bench` commands in [`infx/bench/`](../infx/bench) define orchestration, artifact upload, readiness waits, benchmark, and eval behavior.
 - [`validate_perf_changelog.py`](../infx/workflows/validate_perf_changelog.py), [`generate.py`](../infx/matrix/generate.py), and [`validation.py`](../infx/matrix/validation.py) own changelog, matrix, and schema failures.
 - [`utils/runner_setup/RUNNER_SETUP.md`](../utils/runner_setup/RUNNER_SETUP.md) and [`runners/`](../runners) own provisioning and launcher routing. [`CONTRIBUTING.md`](../../CONTRIBUTING.md#amd-cluster-never-leave-root-owned-files-in-runner-workspaces) owns AMD workspace safety.
 - [`infx/evals/EVALS.md`](../infx/evals/EVALS.md), [`validate_scores.py`](../infx/evals/validate_scores.py), and [`collect_eval_results.py`](../infx/results/collect_eval_results.py) own eval execution, validation, and collection.
@@ -93,9 +93,7 @@ For recovery, follow [`.claude/commands/clean-amd-mi355-runner-root-files.md`](.
 
 ## Server
 
-[`wait_for_server_ready`](../benchmarks/benchmark_lib.sh) distinguishes “server died before log,” “server died before healthy,” and a live process whose `/health` endpoint has not passed. Preserve the server log and PID status. The workflow's final timeout alone is not a diagnosis.
-
-After readiness, the shared helper snapshots the server and recognized persistent engine workers. Benchmark, AgentX and eval clients use `infx.bench_serving.server_watch`: a missing process, zombie or reused PID stops only the owned client process group. Healthy slow work has no new time cutoff. Recipes using a different readiness path need explicit server monitoring; a live wrapper alone is insufficient proof that its workers are alive.
+On srt-slurm recipes, srt-slurm starts the servers and waits for them to become healthy, so read its sweep log and worker logs first. The SPEED-Bench collectors start their own server and wait with `python3 -m infx.bench wait --url <health URL> --pid <server PID> --log <server log>` ([`wait_ready`](../infx/bench/server.py#L61-L79)). It streams the server log while it polls, fails with `process <PID> died before <URL> became ready` once the server exits, and otherwise waits until the URL answers below 400. The scheduler owns the time budget. Preserve the server log and PID status. The workflow's final timeout alone is not a diagnosis.
 
 Client dependency setup uses uv's bounded HTTP retries and a 120-second read timeout, retaining its download cache. A network/download failure is infrastructure evidence, not a reason to change engine flags. H100 srt-slurm resolves the requested image to its own squash path and checks staged model/image assets; B300 checks node-local staged model configuration on the allocated compute node before launching its container. Missing assets are readiness blockers, never grounds to substitute an old image or different weights.
 
@@ -105,7 +103,7 @@ Use the earliest specific signature:
 - **Weight/KV/CUDA-graph OOM:** capture free memory, configured utilization, per-rank concurrency, graph limits, and where startup failed. Apply only the setting supported by the matching known case. Confirm startup and workload afterward.
 - **Kernel/architecture assertion or illegal address:** preserve the complete stack and GPU architecture. Prefer a fixed/pinned upstream image or supported backend over an unreviewed local engine patch.
 - **Address in use:** identify the owning process and cluster owner before terminating it. Do not kill an unverified PID or unrelated service.
-- **Healthy server dies during benchmark:** [`run_benchmark_serving`](../benchmarks/benchmark_lib.sh) monitors the server PID. Preserve both client and server logs and classify the server's first error, not the client's downstream connection failure.
+- **Healthy server dies during benchmark:** benchmark and eval clients do not watch the server PID. Preserve both client and server logs and classify the server's first error, not the client's downstream connection failure.
 
 Stop if the proposed workaround changes model semantics, reduces model FLOPs, patches the serving stack, or lacks an exact-source guard. The current [PR checklist](PR_REVIEW_CHECKLIST.md) prohibits inference-engine patches unless the documented waiver path is satisfied.
 
