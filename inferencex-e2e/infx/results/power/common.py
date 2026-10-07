@@ -227,6 +227,27 @@ def benchmark_window_payload(
     }
 
 
+def invalid_validation_payload(
+    *,
+    telemetry_source: Path,
+    bench_result: Path,
+    expected_gpu_count: int,
+    reasons: list[str],
+) -> dict:
+    """Build an auditable invalid sidecar when no validator could produce one."""
+    return {
+        "schema_version": 1,
+        "power_valid": False,
+        "reasons": reasons,
+        "telemetry_source": str(telemetry_source),
+        "benchmark_result": str(bench_result),
+        "benchmark_window": None,
+        "expected_gpu_count": expected_gpu_count,
+        "observed_gpu_count": 0,
+        "metrics": {},
+    }
+
+
 def audit_metrics(metrics: Mapping[str, float | None]) -> dict[str, float]:
     """Keep finite sidecar metrics at audit precision, independent of display units."""
     return {

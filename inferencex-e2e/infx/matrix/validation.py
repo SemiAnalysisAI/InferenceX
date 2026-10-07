@@ -172,7 +172,6 @@ class SingleNodeMatrixEntry(BaseModel):
     runner: str
     isl: int
     osl: int
-    require_power: bool = Field(default=False, alias=Fields.REQUIRE_POWER.value, strict=True)
     tp: int
     pp: int = Field(gt=0, strict=True)
     dcp_size: int = Field(alias=Fields.DCP_SIZE.value, gt=0, strict=True)
@@ -608,7 +607,6 @@ class SingleNodeSeqLenConfig(BaseModel):
 
     isl: int
     osl: int
-    require_power: bool = Field(default=False, alias=Fields.REQUIRE_POWER.value, strict=True)
     search_space: list[SingleNodeSearchSpaceEntry] = Field(alias=Fields.SEARCH_SPACE.value)
 
 
