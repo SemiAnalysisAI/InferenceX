@@ -22,7 +22,6 @@ Use the narrowest check that can falsify the change, then widen only when the ch
 ## Sources of truth
 
 - [`.github/AGENT_OPERATIONS.md`](../../.github/AGENT_OPERATIONS.md#sweep-labels-and-reuse) defines sweep labels and modifiers. Its [dispatch section](../../.github/AGENT_OPERATIONS.md#workflow-dispatch-and-monitoring) defines manual runs and artifact inspection.
-- [`docs/configuration-procedures.md`](configuration-procedures.md#validate) is the focused configuration validation procedure.
 - [`.github/workflows/README.md`](../../.github/workflows/README.md) documents matrix generation, `e2e-tests.yml`, PR sweeps, and reuse.
 - [`run-sweep.yml`](../../.github/workflows/run-sweep.yml) is the executable PR sweep gate, and [`merge-ingest.yml`](../../.github/workflows/merge-ingest.yml) is the push-to-`main` reuse and ingest gate. [`e2e-tests.yml`](../../.github/workflows/e2e-tests.yml) is the manually dispatched end-to-end path.
 - [`docs/PR_REVIEW_CHECKLIST.md`](PR_REVIEW_CHECKLIST.md) is the merge-review standard. [The verifier prompt](../../.github/codeowner-signoff-verify-prompt.md#check-1--a-passing-sweep--evals-ran-on-a-commit-in-this-pr) states how sweep and eval evidence is independently checked.
@@ -162,7 +161,7 @@ python3 -m infx.workflows.validate_perf_changelog \
 
 Its contract is implemented in [`validate_perf_changelog.py`](../infx/workflows/validate_perf_changelog.py). This check validates the generated matrix and rejects prohibited content changes, but whitespace-only historical deletions can be invisible to its diff reader. Inspect the exact byte diff as a separate evidence gate. Do not rewrite or normalize historical `perf-changelog.yaml` bytes.
 
-A local matrix cannot prove Slurm allocation or llm-d endpoint discovery. Multi-node recipe changes still require the upstream recipe checker and an execution on the intended fleet, as described in [configuration validation](configuration-procedures.md#validate).
+A local matrix cannot prove Slurm allocation or llm-d endpoint discovery. Multi-node recipe changes still require the upstream recipe checker and an execution on the intended fleet.
 
 ### Full local suite in parallel
 

@@ -14,11 +14,11 @@ The repository source, workflow YAML, launcher scripts, and result collectors ar
 
 | Task | Open first | Then inspect |
 | --- | --- | --- |
-| Add a model or GPU benchmark | [Configuration procedures](configuration-procedures.md#add-a-model--hardware-recipe) | closest benchmark script, launcher, master YAML, changelog |
-| Modify an existing config | [Configuration procedures](configuration-procedures.md#change-a-master-config) | `CONFIGS.md`, validation schema, generator, runtime consumer |
-| Add a runner | [Configuration procedures](configuration-procedures.md#register-and-set-up-a-runner) | runner setup, `configs/runners.yaml`, launcher |
-| Change srt-slurm or llm-d | [Configuration procedures](configuration-procedures.md#register-an-srt-slurm-recipe) | Recipe YAML, master config, `srtctl` mapping, launcher |
-| Change MTP | [Configuration procedures](configuration-procedures.md#add-or-change-mtp) | MTP sibling, draft model, chat-template path |
+| Add a model or GPU benchmark | [Config reference](../configs/CONFIGS.md) | closest benchmark script, launcher, master YAML, changelog |
+| Modify an existing config | [Config reference](../configs/CONFIGS.md) | validation schema, generator, runtime consumer |
+| Add a runner | [Runner setup](../utils/runner_setup/RUNNER_SETUP.md) | `configs/runners.yaml`, launcher |
+| Change srt-slurm or llm-d | [Recipe reference](../benchmarks/multi_node/srt-slurm-recipes/RECIPES.md) | Recipe YAML, master config, `srtctl` mapping, launcher |
+| Change MTP | [Draft-model precision](../../CONTRIBUTING.md#draft-model-precision) | MTP sibling, draft model, chat-template path |
 | Validate a matrix | [CI procedures](ci-procedures.md#local-matrix-generation) | generator CLI and Pydantic validation |
 | Dispatch or monitor a run | [CI procedures](ci-procedures.md#manual-end-to-end-dispatch) | `e2e-tests.yml`, run logs, artifacts |
 | Prepare a PR sweep | [CI procedures](ci-procedures.md#pr-primary-and-modifier-labels) | `run-sweep.yml`, labels, changelog delta |
