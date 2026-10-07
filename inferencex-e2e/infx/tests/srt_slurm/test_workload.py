@@ -9,7 +9,7 @@ from infx.srt_slurm.workload import bind_workload
 
 def runtime(**changes):
     return {
-        "IMAGE": "registry/server:new", "MODEL": "org/new-model", "IS_AGENTIC": "0",
+        "IMAGE": "registry/server:new", "MODEL": "org/new-model", "IS_AGENTIC": "0", "PRECISION": "fp8",
         "ISL": "1024", "OSL": "128", "CONC_LIST": "4 8", "IS_MULTINODE": "true",
         **changes,
     }
@@ -17,7 +17,7 @@ def runtime(**changes):
 
 def test_native_binding_replaces_workload_and_keeps_tuning_and_distinct_images():
     recipe = {
-        "model": {"path": "hf:org/old-model", "container": "old-image", "precision": "fp8"},
+        "model": {"path": "hf:org/old-model", "container": "old-image", "precision": "fp4"},
         "identity": {"model": {"repo": "org/old-model"}, "container": {"image": "old-image"}},
         "roles": {
             "prefill": {"container": "special-prefill", "args": {"tensor-parallel-size": 8}},
@@ -62,7 +62,7 @@ def test_removed_workload_fields_are_populated_for_single_node_custom_client():
     bound = bind_workload(
         {"benchmark": {"type": "custom"}}, runtime(CONC_LIST="8", IS_MULTINODE="false")
     )
-    assert bound["model"] == {"path": "hf:org/new-model", "container": "registry/server:new"}
+    assert bound["model"] == {"path": "hf:org/new-model", "container": "registry/server:new", "precision": "fp8"}
     assert bound["benchmark"] == {"type": "custom", "env": {
         "MODEL": "org/new-model", "ISL": "1024", "OSL": "128", "CONC": "8",
     }}

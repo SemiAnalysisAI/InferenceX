@@ -213,8 +213,6 @@ def generate_recipes(
     with _project(project):
         for key in expand_config_keys(config_keys, master):
             config = master[key]
-            if config["framework"] == "tilert":
-                raise ValueError("infx generate does not support the TileRT fork")
             if config["scenarios"].get("agentic-coding"):
                 raise ValueError("infx generate currently supports fixed-sequence scenarios only")
             points = generate_config_matrix([key], master, runners, eval_mode="none")

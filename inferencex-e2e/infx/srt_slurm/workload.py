@@ -92,6 +92,7 @@ def bind_workload(recipe: dict[str, Any], environment: Mapping[str, str]) -> dic
     _replace_model_references(bound, previous, model)
     model_config.update({"path": f"hf:{model}", "container": image})
     if agentic == "0":
+        model_config["precision"] = _required(environment, "PRECISION")
         engine = bound.get("engine")
         engine_type = engine.get("type") if isinstance(engine, dict) else engine
         if engine_type in {"sglang", "vllm"}:

@@ -125,9 +125,6 @@ def srtslurm(root: Path) -> dict:
     return yaml.safe_load(path.read_text())
 
 
-WORKDIR = 'srun_options.container-workdir="/infmax-workspace"'
-
-
 def assert_ok(result: subprocess.CompletedProcess[str]) -> None:
     """Fail with the launcher's output when it did not exit 0."""
     assert result.returncode == 0, result.stdout[-4000:] + result.stderr[-8000:]
@@ -421,7 +418,8 @@ def test_tilert_uses_upstream_submission_and_prepared_weights(harness):
 
     assert any(" apply " in f" {line} " for line in lines(harness.logs, "git"))
     [call] = srtctl_calls(harness.logs)
-    assert {"--json", "benchmark.stream_output=true"} <= set(call["argv"])
+    assert "--json" in call["argv"]
+    assert call["recipe"]["benchmark"]["stream_output"] is True
     assert "--no-preflight" not in call["argv"]
     config = srtslurm(Path(call["cwd"]))
     assert config["default_health_check"]["max_attempts"] > 0

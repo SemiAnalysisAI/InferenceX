@@ -191,7 +191,7 @@ def model_paths(
     if served is None:
         return {}
     paths = dict.fromkeys(sorted(aliases), served)
-    if not fork and request.model:
+    if request.model:
         paths[f"hf:{request.model}"] = served
     return paths
 

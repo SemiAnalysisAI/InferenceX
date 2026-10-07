@@ -128,7 +128,7 @@ def test_upstream_schema_failure_writes_no_partial_outputs(project, capsys):
     assert not (root / "output").exists()
 
 
-@pytest.mark.parametrize("mode,message", [("legacy", "legacy"), ("tilert", "TileRT"), ("unknown", "not found")])
+@pytest.mark.parametrize("mode,message", [("legacy", "legacy"), ("tilert", "Unsupported single-node framework"), ("unknown", "not found")])
 def test_unsupported_or_missing_selection_is_an_actionable_error(project, mode, message, capsys):
     root, master, _ = project
     if mode == "legacy":

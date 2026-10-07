@@ -95,7 +95,7 @@ def test_prepare_materializes_master_values_after_selecting_tuned_variant(point,
     from infx.srt_slurm.single_node import main
 
     path, recipe, env = point
-    recipe["model"] = {"path": "hf:test/model", "precision": "fp8"}
+    recipe["model"] = {"path": "hf:test/model", "precision": "fp4"}
     for key in ("MODEL", "ISL", "OSL"):
         del recipe["benchmark"]["env"][key]
     recipe["roles"]["agg"]["args"]["served-model-name"] = "test/model"

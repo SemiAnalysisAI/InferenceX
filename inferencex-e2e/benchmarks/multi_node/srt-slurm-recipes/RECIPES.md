@@ -62,13 +62,59 @@ and concurrency; engine tuning and deliberate overrides stay in the fragments.
 The fixed-sequence scripts centrally enable chat templates and use random-range ratio
 `0.8`. `infx generate` writes complete native recipes and a manifest to an empty output
 directory only; generated recipes are not checked in. See
-[runtime workload binding](../../../docs/configuration-procedures.md#runtime-workload-binding)
+[runtime workload binding](#runtime-workload-binding)
 for the command and generator scope.
 
 For aggregate recipes use `roles.agg`; `roles.decode.nodes: colocate` shares prefill
 nodes and contributes no additional worker nodes to scheduling.
 
 All referenced recipes must be checked in: srt-slurm 2 ships curated examples instead of the historical `recipes/` archive. The initial migration restores 204 previously external recipes and two still-referenced AgentX recipes from InferenceX history. Master-config paths follow the layout above; existing override selectors are preserved.
+
+## Runtime workload binding
+
+Active native fixed-sequence recipes stay at their existing paths under
+`benchmarks/single_node/srt-slurm-recipes/` and
+`benchmarks/multi_node/srt-slurm-recipes/`. They contain only recipe-specific settings
+in the native YAML structure. Shared fields live in the flat
+[`fixed-sequence-single.yaml`](../../../configs/srt-recipes/fixed-sequence-single.yaml) and
+[`fixed-sequence-multi.yaml`](../../../configs/srt-recipes/fixed-sequence-multi.yaml) blocks.
+InferenceX selects the block from `IS_AGENTIC=0` and `IS_MULTINODE`; fragments need no
+include or template syntax, registry, or separate tuning file.
+
+Runtime and `infx generate` use `infx.srt_slurm.common.load_recipe` to merge the common
+block with the fragment. Mappings merge recursively and fragment lists replace common
+lists; for variant bundles, the loader applies the common block under `base`. It selects
+the tuned variant before binding the master values, preserving concurrency selectors
+zipped with CUDA graph or batch settings.
+
+| Master/runtime value | Bound recipe fields |
+|---|---|
+| `image` / `IMAGE` | `model.container`, plus existing `identity.container.image` |
+| `model` / `MODEL` | `model.path`, existing `identity.model.repo`, and custom-client `benchmark.env.MODEL` |
+| `precision` / `PRECISION` | Fixed-sequence `model.precision` |
+| `isl`, `osl` / `ISL`, `OSL` | Built-in `benchmark.isl` / `benchmark.osl`, or custom-client `benchmark.env.ISL` / `OSL` |
+| Selected concurrency / `CONC`, `CONC_LIST` | `benchmark.concurrencies` where consumed, and the custom client's concurrency environment |
+
+Model loading retains cluster mapping and staging; image provenance retains the original
+reference when execution uses a cache. Keep engine quantization, parallelism, tuning,
+independent role/helper images, deliberate model aliases, tokenizer overrides, and draft
+models explicit in the fragment. The `python3 -m infx.bench fixed-seq` SRT clients centrally enable
+chat templates for every run and set random-range ratio to `0.8`; recipes do not repeat
+or toggle those settings.
+
+From `inferencex-e2e/`, generate complete native YAML for each selected matrix point:
+
+```bash
+uv run --extra recipes infx generate \
+  --config-key qwen3.5-fp8-b300-sglang --output-dir /tmp/infx-recipes
+```
+
+The output directory must be empty. It receives a manifest and complete native recipes
+for inspection and validation with the pinned upstream version. Generated recipes are
+untracked outputs; do not commit them or pass partial fragments directly to `srtctl`.
+The generator supports native fixed-sequence single-node and multi-node paths and
+explicitly rejects AgentX and script workloads. Existing AgentX runtime binding
+remains available.
 
 ## Migration and validation
 

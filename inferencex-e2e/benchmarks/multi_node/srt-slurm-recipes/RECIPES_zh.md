@@ -60,12 +60,52 @@ TileRT 使用固定版本的上游 srt-slurm 子模块。配置指定 `roles.pre
 固定序列脚本统一启用 chat template，使用 `0.8` 的 random-range ratio。
 `infx generate` 仅向空输出目录写入完整原生配方和 manifest；生成配方不纳入版本
 控制。命令及生成器范围详见
-[运行时工作负载绑定](../../../docs/configuration-procedures_zh.md#运行时工作负载绑定)。
+[运行时工作负载绑定](#运行时工作负载绑定)。
 
 聚合式配置使用 `roles.agg`；`roles.decode.nodes: colocate` 表示解码角色与预填充
 角色共享节点，不增加调度所需的工作节点数。
 
 所有被引用的配置都必须纳入版本控制：srt-slurm 2 提供精选示例，不再携带历史 `recipes/` 目录。本次迁移补齐了 204 个此前依赖外部仓库的配置，并从 InferenceX 历史记录恢复了两个仍被引用的 AgentX 配置。主配置路径遵循上述目录结构，原有覆盖项选择器保持不变。
+
+## 运行时工作负载绑定
+
+所有活跃的原生固定序列长度配方仍保留在原有的
+`benchmarks/single_node/srt-slurm-recipes/` 和
+`benchmarks/multi_node/srt-slurm-recipes/` 路径下，只以原生 YAML 结构保存配方特有
+设置。共享字段放在扁平的
+[`fixed-sequence-single.yaml`](../../../configs/srt-recipes/fixed-sequence-single.yaml) 和
+[`fixed-sequence-multi.yaml`](../../../configs/srt-recipes/fixed-sequence-multi.yaml) 块中。
+InferenceX 根据 `IS_AGENTIC=0` 和 `IS_MULTINODE` 自动选择共享块；配方片段无需
+include、模板语法、注册表或单独的调优文件。
+
+运行时与 `infx generate` 均通过 `infx.srt_slurm.common.load_recipe` 合并共享块和
+配方片段。映射递归合并，片段中的列表替换共享列表；对于变体集合，加载器将共享块
+应用到 `base` 下。先选择调优变体，再绑定主配置值，保留与 CUDA graph 或批处理设置
+配套的并发 zip 选择器。
+
+| 主配置/运行时值 | 绑定的配方字段 |
+|---|---|
+| `image` / `IMAGE` | `model.container`，以及已有的 `identity.container.image` |
+| `model` / `MODEL` | `model.path`、已有的 `identity.model.repo`，以及自定义客户端的 `benchmark.env.MODEL` |
+| `precision` / `PRECISION` | 固定序列配方的 `model.precision` |
+| `isl`、`osl` / `ISL`、`OSL` | 内置客户端的 `benchmark.isl` / `benchmark.osl`，或自定义客户端的 `benchmark.env.ISL` / `OSL` |
+| 所选并发数 / `CONC`、`CONC_LIST` | 使用该字段时的 `benchmark.concurrencies`，以及自定义客户端的并发环境变量 |
+
+模型加载保留集群映射与预先准备机制；执行时使用镜像缓存，溯源仍保留原始引用。
+引擎量化、并行方式、调优、独立的角色/辅助服务镜像、有意设置的模型别名、tokenizer
+覆盖项和 draft model 仍在片段中显式声明。`python3 -m infx.bench fixed-seq` 的 SRT 客户端统一为所有运行启用 chat
+template，并将 random-range ratio 设为 `0.8`；配方不再重复或切换这些设置。
+
+在 `inferencex-e2e/` 下为所选矩阵点生成完整原生 YAML：
+
+```bash
+uv run --extra recipes infx generate \
+  --config-key qwen3.5-fp8-b300-sglang --output-dir /tmp/infx-recipes
+```
+
+输出目录必须为空，将收到 manifest 和完整原生配方，供检查并使用固定上游版本验证。
+生成配方属于不纳入版本控制的输出，不要提交，也不要将不完整片段直接传给 `srtctl`。
+生成器支持原生固定序列长度的单节点和多节点路径，明确拒绝 AgentX 和脚本工作负载。现有 AgentX 运行时绑定仍然可用。
 
 ## 迁移与验证
 

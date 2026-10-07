@@ -117,14 +117,14 @@ def single_node_env(tmp_path: Path, tools: Path, **overrides: str | None) -> dic
         "CONC": "4",
         "ISL": "1024",
         "OSL": "128",
-        "RANDOM_RANGE_RATIO": "0.8",
+        "RANDOM_RANGE_RATIO": None,
         "RESULT_FILENAME": "point_conc4",
         "RESULT_DIR": str(tmp_path / "logs"),
         "SRT_FRONTEND_HOST": "10.0.0.7",
         "SRT_FRONTEND_PORT": "8000",
         "RUN_EVAL": "false",
         "EVAL_ONLY": "false",
-        "USE_CHAT_TEMPLATE": "false",
+        "USE_CHAT_TEMPLATE": None,
         "FRAMEWORK": "sglang",
         **overrides,
     }
@@ -139,7 +139,8 @@ def sweep_env(
         "FAKE_CLIENT_LOG": str(tmp_path / "client.log"),
         "ISL": "1024",
         "OSL": "128",
-        "RANDOM_RANGE_RATIO": "0.8",
+        "RANDOM_RANGE_RATIO": None,
+        "USE_CHAT_TEMPLATE": None,
         "SRT_FRONTEND_HOST": "127.0.0.1",
         "SRT_FRONTEND_PORT": str(urlsplit(url).port),
         "CONC_LIST": "4 16",
@@ -182,16 +183,21 @@ def point_argv(result: Path) -> list[str]:
 
 
 @pytest.mark.parametrize(
-    ("framework", "chat_template", "args", "flags"),
+    ("framework", "args", "flags"),
     [
-        ("sglang", "true", [], {"--backend": "vllm", "--use-chat-template": True}),
-        ("trt", "false", ["--trust-remote-code"], {"--backend": "openai", "--trust-remote-code": True}),
+        ("sglang", [], {"--backend": "vllm"}),
+        ("trt", ["--trust-remote-code"], {"--backend": "openai", "--trust-remote-code": True}),
     ],
 )
+@pytest.mark.parametrize(
+    "settings",
+    [{}, {"USE_CHAT_TEMPLATE": "false", "RANDOM_RANGE_RATIO": "0.2"}],
+    ids=["omitted-policy-env", "stale-policy-env"],
+)
 def test_single_node_shim_runs_one_point_and_writes_only_its_result(
-    tmp_path, tools, framework, chat_template, args, flags
+    tmp_path, tools, framework, args, flags, settings
 ):
-    env = single_node_env(tmp_path, tools, FRAMEWORK=framework, USE_CHAT_TEMPLATE=chat_template)
+    env = single_node_env(tmp_path, tools, FRAMEWORK=framework, **settings)
 
     result = run_shim("single_node/srt_fixed_sequence.sh", env, *args)
 
@@ -205,6 +211,7 @@ def test_single_node_shim_runs_one_point_and_writes_only_its_result(
         "--random-input-len": "1024",
         "--random-output-len": "128",
         "--random-range-ratio": "0.8",
+        "--use-chat-template": True,
         "--num-prompts": "40",
         "--max-concurrency": "4",
         "--num-warmups": "8",
@@ -223,7 +230,7 @@ def test_single_node_shim_runs_one_point_and_writes_only_its_result(
         ({"EVAL_ONLY": "true"}, 0, "EVAL_ONLY mode: skipping throughput benchmark\n"),
         ({"MODEL": None, "CONC": ""}, 1, "not set:\n  - MODEL\n  - CONC\n"),
         ({"FRAMEWORK": "no-such-framework"}, 1, "ERROR: unsupported fixed-sequence FRAMEWORK: no-such-framework\n"),
-        ({"USE_CHAT_TEMPLATE": "yes"}, 1, "ERROR: USE_CHAT_TEMPLATE must be true or false, got 'yes'\n"),
+        ({"RUN_EVAL": "yes"}, 1, "ERROR: RUN_EVAL must be true or false, got 'yes'\n"),
         ({"RESULT_DIR": "/nonexistent/logs"}, 1, "ERROR: RESULT_DIR must be an existing"),
     ],
     ids=["eval-only", "missing", "unsupported-framework", "malformed-flag", "no-result-dir"],
@@ -239,13 +246,25 @@ def test_single_node_point_runs_nothing_when_eval_only_or_misconfigured(
     assert list((tmp_path / "logs").iterdir()) == []
 
 
+@pytest.mark.parametrize(
+    "settings",
+    [{}, {"USE_CHAT_TEMPLATE": "false", "RANDOM_RANGE_RATIO": "0.2"}],
+    ids=["omitted-policy-env", "stale-policy-env"],
+)
 def test_multi_node_shim_writes_one_result_and_power_window_per_concurrency(
-    tmp_path, tools, http_server
+    tmp_path, tools, http_server, settings
 ):
     url = http_server(frontend("served/model-id"))
     windows = tmp_path / "logs" / "power" / "windows"
     windows.mkdir(parents=True)
-    env = sweep_env(tmp_path, tools, url, TOKENIZER="/model", SRT_MEASUREMENT_WINDOW_DIR=str(windows))
+    env = sweep_env(
+        tmp_path,
+        tools,
+        url,
+        TOKENIZER="/model",
+        SRT_MEASUREMENT_WINDOW_DIR=str(windows),
+        **settings,
+    )
 
     # A later --logs-dir overrides the shim's /logs.
     result = run_shim("multi_node/srt_fixed_sequence.sh", env, "--logs-dir", str(tmp_path / "logs"))

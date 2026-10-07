@@ -134,8 +134,7 @@ def run_multinode(launch: Launch) -> int:
     shared = any(match(request) for match in lane.shared_run_root)
 
     checkout = prepare_checkout(run, checkout_dir(run, shared=shared), power=decision.dcgm)
-    if not checkout.fork:
-        compose_recipe(run.workspace, checkout.root, config_file, run.env)
+    compose_recipe(run.workspace, checkout.root, config_file, run.env)
     overrides = eval_overrides(checkout.root / "recipes", lane, request)
     system_python = (
         "/usr/bin/python3" if shared and os.access("/usr/bin/python3", os.X_OK) else None
