@@ -192,9 +192,8 @@ def valid_multinode_master_config():
 
 
 @pytest.fixture
-def recipe_root(tmp_path, monkeypatch):
-    """Repository root holding the fixture configs' recipes."""
-    monkeypatch.setenv("INFERENCEX_REPOSITORY_ROOT", str(tmp_path))
+def recipe_root(tmp_path):
+    """Project root holding the fixture configs' recipes."""
     for node in ("single_node", "multi_node"):
         recipes = tmp_path / f"benchmarks/{node}/srt-slurm-recipes/fixture"
         recipes.mkdir(parents=True)
@@ -1010,7 +1009,7 @@ class TestValidateMasterConfig:
         del valid_single_node_master_config["model"]
         configs = {"broken-config": valid_single_node_master_config}
         with pytest.raises(ValueError) as exc_info:
-            validate_master_config(configs)
+            validate_master_config(configs, Path())
         assert "broken-config" in str(exc_info.value)
         assert "failed validation" in str(exc_info.value)
 
@@ -1029,7 +1028,7 @@ class TestValidateMasterConfig:
         else:
             del config["scenarios"]["fixed-seq-len"][0]["search-space"][0][missing]
         with pytest.raises(ValueError, match=error):
-            validate_master_config({"fixture": config})
+            validate_master_config({"fixture": config}, Path())
 
     @pytest.mark.parametrize(("setting", "replacement"), [
         ("CONFIG_FILE=recipes/fixture/recipe.yaml", "use srt-recipe"),
@@ -1050,7 +1049,7 @@ class TestValidateMasterConfig:
         row = config["scenarios"]["fixed-seq-len"][0]["search-space"][0]
         del row["srt-recipe"]
         row["prefill"]["additional-settings"].append("CONFIG_FILE=llmd.yaml")
-        assert validate_master_config({"llmd": config}) == {"llmd": config}
+        assert validate_master_config({"llmd": config}, Path()) == {"llmd": config}
         row["srt-recipe"] = "recipe.yaml"
         with pytest.raises(ValidationError, match="llmd-vllm selects recipes with CONFIG_FILE"):
             MultiNodeMasterConfigEntry(**config)
@@ -1091,10 +1090,10 @@ class TestValidateMasterConfig:
         row[field] = reference
         configs = {"fixture": valid_multinode_master_config}
         if error is None:
-            assert validate_master_config(configs) is configs
+            assert validate_master_config(configs, recipe_root) is configs
             return
         with pytest.raises(ValueError, match=error):
-            validate_master_config(configs)
+            validate_master_config(configs, recipe_root)
 
 
 
@@ -1337,9 +1336,10 @@ class TestMultiNodeAgenticMatrixEntry:
 
 class TestLoadConfigFiles:
 
-    def test_load_single_file_with_validation(self, recipe_root, tmp_path, valid_single_node_master_config):
-        config_file = tmp_path / "config.yaml"
-        import yaml
+    def test_load_single_file_with_validation(self, recipe_root, valid_single_node_master_config):
+        # Recipes resolve under the project that holds configs/, not the tooling checkout.
+        config_file = recipe_root / "configs/config.yaml"
+        config_file.parent.mkdir()
         config_file.write_text(yaml.dump({"test-config": valid_single_node_master_config}))
         result = load_config_files([str(config_file)])
         assert "test-config" in result

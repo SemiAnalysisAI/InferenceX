@@ -539,13 +539,13 @@ def write_fixture_recipe(root: Path) -> None:
 
 
 @pytest.mark.parametrize("prefix", ["", "inferencex-e2e/"])
-def test_canonical_family_matrix_reads_revision_layout(tmp_path, monkeypatch, family_configs, prefix):
+def test_canonical_family_matrix_reads_revision_layout(monkeypatch, family_configs, prefix):
     master, runners = family_configs
-    write_fixture_recipe(tmp_path)
-    monkeypatch.setenv("INFERENCEX_REPOSITORY_ROOT", str(tmp_path))
+    # The candidate's recipe exists only at the candidate head, not in this checkout.
     files = {
         prefix + "configs/nvidia-master.yaml": yaml.safe_dump(master),
         prefix + "configs/runners.yaml": yaml.safe_dump(runners),
+        prefix + "benchmarks/single_node/srt-slurm-recipes/fixture/recipe.yaml": b"{}\n",
     }
     monkeypatch.setattr(
         github, "read",
@@ -1152,7 +1152,6 @@ def test_live_families_preserve_public_identity_after_move(
     (configs / "nvidia-master.yaml").write_text(yaml.safe_dump(master))
     (configs / "runners.yaml").write_text(yaml.safe_dump(runners))
     write_fixture_recipe(project)
-    monkeypatch.setenv("INFERENCEX_REPOSITORY_ROOT", str(tmp_path))
 
     families = klaud.live_families(tmp_path if from_repository_root else project)
 
@@ -1169,7 +1168,6 @@ def test_historical_families_ignore_leftover_nested_results(tmp_path, monkeypatc
     (configs / "nvidia-master.yaml").write_text(yaml.safe_dump(master))
     (configs / "runners.yaml").write_text(yaml.safe_dump(runners))
     write_fixture_recipe(tmp_path)
-    monkeypatch.setenv("INFERENCEX_REPOSITORY_ROOT", str(tmp_path))
 
     def git(*args):
         return subprocess.check_output(
