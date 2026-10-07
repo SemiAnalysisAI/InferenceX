@@ -5718,10 +5718,33 @@
         "avg_power_w_per_gpu": 4.72773,
         "joules_per_successful_query": -0.63834
       }
+    },
+    {
+      "run_id": 37552057241,
+      "url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37552057241",
+      "arm": "nvme",
+      "concurrency": 488,
+      "repeat": 1,
+      "head_sha": "c2b602ab76e81f14e565d976d9025a5b8adaa36a",
+      "status": "in_progress",
+      "workflow_name": "offload-v1-nvme2tib-c488-r1-capacity-20261007",
+      "dispatched_at": "2026-10-07T00:27:28Z",
+      "phase": "get-jobs in progress; B200 job not generated yet",
+      "performance_result": false,
+      "energy_result": false,
+      "nvme_bytes_per_node": 2199023255552,
+      "capacity_cohort": "2 TiB bounded SimpleCPU disk cache; new capacity control, distinct from completed 4 TiB c488",
+      "execution_budget": {
+        "slurm_minutes": 510,
+        "github_job_minutes": 530
+      },
+      "get_jobs_id": 112569623845,
+      "dispatch_evidence": "Focused runtime tests passed 26/26; exact generator preview resolved MiniMax-M3 NVFP4, vLLM TP4, c488, vllm-simple NVMe, canonical 3600-second AgentX profile. At 2026-10-07T00:27:16Z fresh cluster-wide inventory found zero queued B200 jobs, four unrelated in-progress B200 jobs and no active study workflow. Exact 40-character HEAD matched pushed origin branch and GitHub workflow head and was supplied as input ref. get-jobs started at 00:27:34Z; no B200 job or scratch yet.",
+      "scratch": null
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35456989669,35469801850,35476053573,35497846918,35524019140,35524083518,35542179539,35542182560,35542185178,35542190411,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894,36796500128,37027095833,37428997901,37490705589",
-  "status": "Extended-budget c489 HBM/NVMe matched result complete: NVMe improves total tok/s/GPU 4.021%, output 16.967%, P90 interactivity 8.403%, P90 TTFT 1.453%, completions 5.401% and energy/query 0.638%; average power is 4.728% higher. E2E-normalized interactivity is 0.501% higher. Energy margin is narrow local evidence, not a replicated win. Workflow failure was downstream collector missing infx after benchmark artifacts and power validation were complete.",
+  "status": "2 TiB NVMe c488 capacity-control workflow dispatched; get-jobs in progress. Completed c489 matched energy result remains local evidence.",
   "last_capacity_check": {
     "checked_at": "2026-10-06T15:48:45Z",
     "active_study_run_ids": [],
@@ -5733,10 +5756,9 @@
     "reason": "HBM c489 repeat terminal; refresh live cluster-wide inventory before another dispatch."
   },
   "next_dispatch": {
-    "arm": "nvme",
-    "concurrency": 488,
-    "nvme_bytes_per_node": 2199023255552,
-    "requires": "Capacity control: verify current HEAD is pushed and exact c488 preview resolves 2 TiB runtime budget; require zero queued B200 jobs cluster-wide, no active study workflow, and no unresolved task-owned scratch. On im-b200-c001 require >2,336,462,209,024 free bytes and O_DIRECT before scratch creation. This is a new 2 TiB cohort, not a capacity-matched repeat of 4 TiB controls."
+    "arm": null,
+    "concurrency": null,
+    "requires": "Do not dispatch while 2 TiB NVMe c488 run 37552057241 is active or queued. Verify generated B200 job carries cluster:b200-nscale and nodes:1; on allocation require allowlisted im-b200-c001, >2,336,462,209,024 free bytes and O_DIRECT before task-owned scratch creation. On terminal classify benchmark validity separately, hash artifacts, verify exact HOST scratch cleanup and delete temporary downloads before adaptive next action."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-21T05:30:00Z",
