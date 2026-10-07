@@ -111,21 +111,23 @@ PR changelog 选择具有代表性的 NVIDIA 和 AMD 覆盖，并非所有受影
 
 ### SRT 单节点功耗产物
 
-launcher 为单节点固定序列和 AgentX 作业开启原生遥测，将 `LOGS/power`、
-测量窗口引用的结果 JSON、producer revision 和 exporter 来源保留在
+launcher 为单节点固定序列和 AgentX 作业开启原生遥测，将 `LOGS/power`（`samples.csv`、
+`manifest.json`、`windows/`）、测量窗口引用的结果 JSON、producer revision 和 exporter 来源保留在
 `power_audit_<RESULT_FILENAME>` 中。AgentX 还保留
 `LOGS/agentic/agentic_power_concurrency_*.json` 及其校验 sidecar。
 作业失败时也会暂存已有诊断产物；eval-only 作业不启用功耗采集。
 
-NVIDIA DCGM 与 AMD device-metrics-exporter 产物共用原生校验器，检查 profile
-对应的指标与测量边界、producer、GPU 数量及结果绑定。AgentX 先核对单节点
+NVIDIA DCGM 与 AMD device-metrics-exporter 产物共用同一个校验器。它读取固定版本 producer
+写入的、与厂商无关的 manifest 字段（`source_metric`、`power_scope`、`temperature_metric`、
+`dcgm_exporter` 身份和 `producer_git_commit`），而不是厂商 profile，再检查测量边界、producer
+版本锁定、GPU 数量及结果绑定。AgentX 先核对单节点
 `num_gpus` 与 launcher 的预期数量，再加入功耗指标和有界审计摘要。
 无效测量省略能耗指标；`REQUIRE_POWER=1` 还会使作业失败。
 历史 CSV 读取器仍可处理此前保存的产物。
 
 ### SRT 多节点窗口保留
 
-SRT samples CSV 支持版本 1、2 和 3。版本 3 新增可选的 `temperature_c`（摄氏度）；温度保留在上传产物中供应用读取，不参与 GPU 能量计算。缺失值保持为空。格式错误的温度单元格会按现有严格产物校验规则使该包无效。应先部署此读取器，再升级到输出版本 3 的采集器。
+SRT samples CSV 支持版本 1、2 和 3，单节点与多节点产物均适用。固定版本的 producer（srt-slurm `641a07f2`，NVIDIA/srt-slurm#572）写出版本 3，表头为 `schema_version,timestamp_unix,scrape_seq,hostname,gpu_index,gpu_uuid,power_w,gpu_util_pct,sm_active,temperature_c`；此前运行保留的版本 1 和 2 仍可读取。`temperature_c` 是来自 exporter 温度指标（NVIDIA 为 `DCGM_FI_DEV_GPU_TEMP`，AMD 为 `gpu_junction_temperature`）的可选摄氏度数值；温度保留在上传产物中供应用读取，不参与 GPU 能量计算。缺失值保持为空。格式错误的温度单元格会按现有严格产物校验规则使该包无效。
 
 功耗审计文件在 `selected_window` 中保留独立验证后的测量；`package_integrity_valid`
 记录共享证据检查，`window_validations` 记录逐窗口结论。保留测量仍要求证据可信、
@@ -199,13 +201,13 @@ raw tree:           results/**, excluding inputs.json and profile_export_raw.jso
 
 服务器日志是单独的 `server_logs_<RESULT_FILENAME>` 工件。应用会使用完全移除前缀后的后缀作为回退，从而让 AgentX 记录找到不含 `agentic_` 前缀的日志工件。
 
-只有 `IS_MULTINODE=true` 的回放才采集 AgentX 功耗。单节点回放（包括设置
-`IS_MULTINODE: false` 的聚合式 srt-slurm 配方）无论 `ENABLE_AGENTX_POWER` 如何设置，
-都不发布功耗字段或结论。多节点运行在 `power_audit_<RESULT_FILENAME>` 工件中保留
+AgentX 功耗既适用于多节点回放，也适用于单节点回放；单节点作业由 launcher 启用原生遥测并设置
+`ENABLE_AGENTX_POWER`。两者都在 `power_audit_<RESULT_FILENAME>` 工件中保留
 `LOGS/power/` 下的部署遥测，以及 `LOGS/agentic/` 下各并发的窗口和校验文件。
 即使基准测试失败，已有的审计文件和 AgentX 聚合结果仍会上传。
-文件缺失不代表路径支持功耗采集：多节点配方还需启用 `telemetry`，让固定版本的 srt-slurm
-向自定义基准命令导出 `SRT_MEASUREMENT_WINDOW_DIR`；InferenceX 据此目录和回放本身推导结果根目录与并发数。
+文件缺失不代表路径支持功耗采集：作业还需启用 `telemetry`，让固定版本的 srt-slurm
+向自定义基准命令导出 `SRT_MEASUREMENT_WINDOW_DIR`。多节点配方自行开启，单节点作业由 launcher 开启。
+InferenceX 据此目录和回放本身推导结果根目录与并发数。
 缺少测量窗口接口时，聚合结果记录 `power_valid: 0`，审计原因标记为
 `multinode_power_contract_missing`；设置 `REQUIRE_POWER=1` 还会在保留已有结果后使任务失败。
 

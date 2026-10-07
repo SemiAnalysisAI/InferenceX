@@ -51,7 +51,7 @@ srt-slurm 只在 Slurm 上运行，因此该配置属于 Slurm 子记录。原�
 
 srt 驱动（[`infx/launch/drivers/srt/`](../infx/launch/drivers/srt)）在 `make setup` 之前（`config.py`）
 根据该记录和作业取值生成作业本地的 `srtslurm.yaml`。作业取值包括已暂存的镜像、解析后的模型路径、
-缓存挂载、时间上限，以及功耗作业所需的 DCGM exporter 镜像。取值以 YAML 数据写入，
+缓存挂载、时间上限，以及功耗作业所需的 GPU exporter 镜像。取值以 YAML 数据写入，
 绝不替换进 shell 或 YAML 文本，`extra` 也不能覆盖类型化的键。
 
 模型选择、缓存准备以及依赖工作负载的时间上限保留在 srt 驱动的表中
@@ -86,10 +86,25 @@ PowerX 严格校验。多节点配方保留现有采集间隔及 9401 端口。
 
 单节点吞吐量和 AgentX 作业由 launcher 启用原生功耗采集；eval-only 作业不采集。
 无效测量在 `REQUIRE_POWER=1` 时使作业失败，否则记录为无效并省略能耗指标。
-缺少 exporter 配置或无法准备镜像时，基准不会启动。
+集群记录缺少 `default_gpu_exporter` 配置块时，基准不会启动。
 
-AMD 配置使用预先构建并校验的 exporter 镜像，其来源记录在
-`power-exporter-source.json`。镜像校验只确认来源与内容，功耗测量仍需在目标硬件上验证。
+AMD 配置使用 NVIDIA/srt-slurm#572 引入的上游
+[`kind: custom` exporter schema](https://github.com/NVIDIA/srt-slurm/blob/641a07f2d465847fe51d8d8db275366651d9ebef/docs/power-telemetry.md#gpu-exporter-labels-and-metrics)
+描述 AMD device-metrics-exporter：`gpu_labels` 指定 GPU 索引与身份标签（`gpu_id`、`serial_number`），
+`gpu_metrics` 指定功耗、利用率和温度指标（`gpu_power_usage` 及其记录的 `scope`、`gpu_gfx_activity`、
+`gpu_junction_temperature`）。srt-slurm 会拒绝未知的 exporter 键，因此旧的 `power_profile` 键已移除。
+镜像为公开的
+`ghcr.io#semianalysisai/amd-device-metrics-exporter@sha256:db82192b0a7387bb4b2238fc2f5d0e2267ada14d996cc26061d881f1645b9bdc`，
+即 AMD nightly `build-dme-10.2.0a20261001`（含 AMD 的 255 W 功耗读数修复）加上我们的 cache-TTL 补丁，
+以 `env AMD_GPU_GET_CACHE_TTL=0s /home/amd/tools/entrypoint.sh` 启动，端口 `19500`。
+该镜像与其他容器镜像一样，按 digest 通过 [`configs/runners.yaml`](../configs/runners.yaml) 中集群的
+`squash` 设置解析，不再下载 artifact，也不再使用预置的 squash 文件。exporter 读取
+[`runners/srt-slurm/exporters/amd-power.json`](../runners/srt-slurm/exporters/amd-power.json)，
+驱动将其挂载到 `/etc/metrics/config.json`，其中列出 `GPU_POWER_USAGE`、`GPU_GFX_ACTIVITY` 和
+`GPU_JUNCTION_TEMPERATURE`。唯一的本地 srt-slurm 补丁 `573-participating-gpus.patch`
+（位于 [`runners/srt-slurm/patches/`](../runners/srt-slurm/patches/README.md)）在 NVIDIA/srt-slurm#573
+合并前，把 worker 节点的采样行限制在作业实际使用的 GPU 上；没有它，8 卡节点上的 TP4 作业会记录
+`unexpected_device`。功耗测量仍需在目标硬件上验证。
 
 ## 规程索引
 

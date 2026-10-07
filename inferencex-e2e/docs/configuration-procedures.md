@@ -56,7 +56,7 @@ host setup, and literal `extra` keys) stay separate from workload recipes.
 
 Before `make setup`, the srt driver ([`infx/launch/drivers/srt/`](../infx/launch/drivers/srt))
 renders the job-local `srtslurm.yaml` (`config.py`) from that record plus job values:
-staged images, resolved model paths, cache mounts, the time limit, and the DCGM
+staged images, resolved model paths, cache mounts, the time limit, and the GPU
 exporter image for power jobs. Values are written as YAML data, never substituted into
 shell or YAML text, and `extra` cannot shadow a typed key.
 
@@ -73,12 +73,30 @@ intervals and port 9401.
 The launcher enables native power telemetry for single-node throughput and AgentX jobs.
 Eval-only jobs do not collect power. Invalid measurements fail the job when
 `REQUIRE_POWER=1`; otherwise the result records an invalid verdict and omits energy
-metrics. Missing exporter configuration or an image staging failure stops preparation
+metrics. A cluster record without a `default_gpu_exporter` block stops preparation
 before the benchmark starts.
 
-AMD profiles use a prebuilt, verified exporter image. `power-exporter-source.json`
-records its provenance. Image verification establishes the source and contents, while
-power measurements still require validation on the target hardware.
+AMD profiles describe AMD's device-metrics-exporter with the upstream
+[`kind: custom` exporter schema](https://github.com/NVIDIA/srt-slurm/blob/641a07f2d465847fe51d8d8db275366651d9ebef/docs/power-telemetry.md#gpu-exporter-labels-and-metrics)
+from NVIDIA/srt-slurm#572. `gpu_labels` names the index and identity labels (`gpu_id`,
+`serial_number`). `gpu_metrics` names the power, utilization and temperature metrics
+(`gpu_power_usage` with its recorded `scope`, `gpu_gfx_activity`,
+`gpu_junction_temperature`). srt-slurm rejects unknown exporter keys, so the former
+`power_profile` key is gone. The image is the public
+`ghcr.io#semianalysisai/amd-device-metrics-exporter@sha256:db82192b0a7387bb4b2238fc2f5d0e2267ada14d996cc26061d881f1645b9bdc`,
+AMD nightly `build-dme-10.2.0a20261001` with AMD's 255 W power-reading fix plus our
+cache-TTL patch, started with `env AMD_GPU_GET_CACHE_TTL=0s /home/amd/tools/entrypoint.sh`
+on port `19500`. It is resolved by digest through the cluster's `squash` settings in
+[`configs/runners.yaml`](../configs/runners.yaml) like every other container image; no
+artifact download or prepared squash file is involved. The exporter reads
+[`runners/srt-slurm/exporters/amd-power.json`](../runners/srt-slurm/exporters/amd-power.json),
+which the driver mounts at `/etc/metrics/config.json` and which lists
+`GPU_POWER_USAGE`, `GPU_GFX_ACTIVITY` and `GPU_JUNCTION_TEMPERATURE`. The only local
+srt-slurm patch, `573-participating-gpus.patch` in
+[`runners/srt-slurm/patches/`](../runners/srt-slurm/patches/README.md), keeps
+worker-node sample rows to the GPUs the job uses until NVIDIA/srt-slurm#573 merges.
+Without it a TP4 job on an eight-GPU node records `unexpected_device`. Power
+measurements still require validation on the target hardware.
 
 Keep model selection, cache preparation, and workload-dependent time limits in the
 srt driver's tables ([`lanes.py`](../infx/launch/drivers/srt/lanes.py),
