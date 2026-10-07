@@ -35,9 +35,12 @@ EPP_METRICS_PORT=9090
 # MODEL_NAME is the served-model-name, not a filesystem path.
 export MODEL="${MODEL_DIR}"
 
+# inferencex-e2e root inside the container (job.slurm bind-mount).
+_INFX_ROOT="${INFMAX_CONTAINER_WORKSPACE:-/workspace}"
+
 # Container-side benchmark commands run from the /workspace checkout.
 infx_bench() {
-    PYTHONSAFEPATH=1 PYTHONPATH="/workspace${PYTHONPATH:+:$PYTHONPATH}" python3 -m infx.bench "$@"
+    PYTHONSAFEPATH=1 PYTHONPATH="${_INFX_ROOT}${PYTHONPATH:+:$PYTHONPATH}" python3 -m infx.bench "$@"
 }
 
 # ----------------------------------------------------------------
@@ -185,8 +188,8 @@ if [[ -n "${CONFIG_FILE}" ]]; then
         echo "Loading $ROLE recipe from $RECIPE_PATH"
         # Keep command substitution separate from eval so renderer failures
         # (missing golden AL or incorrect offload metadata) stop server startup.
-        ROLE_ASSIGNMENTS=$(PYTHONPATH="$INFERENCEX_REPO_ROOT${PYTHONPATH:+:$PYTHONPATH}" \
-            python3 /workspace/benchmarks/multi_node/llm-d/recipe.py \
+        ROLE_ASSIGNMENTS=$(PYTHONPATH="${_INFX_ROOT}${PYTHONPATH:+:$PYTHONPATH}" \
+            python3 "${_INFX_ROOT}/benchmarks/multi_node/llm-d/recipe.py" \
             "$RECIPE_PATH" --role "$ROLE")
         eval "$ROLE_ASSIGNMENTS"
     else
@@ -205,8 +208,8 @@ echo "Resolved $ROLE TP_SIZE=$TP_SIZE ROLE_ENABLE_EP=$ROLE_ENABLE_EP"
 # Embedded stores contribute per-rank DRAM to one job-local Mooncake master.
 MOONCAKE_CONFIG_PATH=""
 if [[ -n "${CONFIG_FILE}" && -f "/etc/llmd-recipes/${CONFIG_FILE}" ]]; then
-    _MC_JSON=$(PYTHONPATH="$INFERENCEX_REPO_ROOT${PYTHONPATH:+:$PYTHONPATH}" \
-        python3 /workspace/benchmarks/multi_node/llm-d/recipe.py \
+    _MC_JSON=$(PYTHONPATH="${_INFX_ROOT}${PYTHONPATH:+:$PYTHONPATH}" \
+        python3 "${_INFX_ROOT}/benchmarks/multi_node/llm-d/recipe.py" \
         "/etc/llmd-recipes/${CONFIG_FILE}" --mooncake)
     if [[ -n "$_MC_JSON" ]]; then
         echo "$_MC_JSON" > /tmp/mooncake_config.json
