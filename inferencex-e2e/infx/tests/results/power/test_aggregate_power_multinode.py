@@ -728,7 +728,7 @@ class TestManifestGates:
 
 
 @pytest.mark.parametrize("utilization", [("", ""), ("75.5", "0.9")])
-@pytest.mark.parametrize("temperature", [None, "", "0", "65.5"])
+@pytest.mark.parametrize("temperature", [None, "", "0", "65.5", "200"])
 def test_optional_samples_preserve_energy(tmp_path, utilization, temperature):
     """Optional utilization and temperature columns preserve board energy."""
     pkg = build_package(tmp_path)
@@ -765,7 +765,7 @@ def test_v2_samples_reject_mixed_versions_and_invalid_utilization(tmp_path, row)
     assert reasons == ("samples_csv_malformed",)
 
 
-@pytest.mark.parametrize("temperature", ["nan", "inf", "bad", "-300", "9223372036854775794"])
+@pytest.mark.parametrize("temperature", ["nan", "inf", "bad", "-300", "200.5", "9223372036854775794"])
 def test_v3_samples_reject_invalid_temperature(tmp_path, temperature):
     path = tmp_path / "samples.csv"
     path.write_text(

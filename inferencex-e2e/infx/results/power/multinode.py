@@ -90,6 +90,9 @@ SAMPLES_HEADER_V3 = (*SAMPLES_HEADER_V2, "temperature_c")
 # Fixed by the producer contract (srt-slurm contract.MAX_SAMPLE_GAP_SECONDS),
 # NOT a multiple of the configured sample interval.
 MAX_SAMPLE_GAP_SECONDS = 3.0
+# Fixed by the producer contract (srt-slurm contract.MAX_TEMPERATURE_C); exporter
+# blank and error sentinels sit far above it.
+MAX_TEMPERATURE_C = 200.0
 
 WORKER_ROLES = ("prefill", "decode", "agg")
 
@@ -361,7 +364,7 @@ def _parse_sample_row(raw: list[str], expected_version: int) -> SampleRow | None
                         return None
         if expected_version == 3 and raw[9]:
             temperature = float(raw[9])
-            if not math.isfinite(temperature) or not -273.15 <= temperature < 0x7FFFFFF0:
+            if not math.isfinite(temperature) or not -273.15 <= temperature <= MAX_TEMPERATURE_C:
                 return None
     except ValueError:
         return None
