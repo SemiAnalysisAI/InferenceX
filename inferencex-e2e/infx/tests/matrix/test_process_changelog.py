@@ -266,8 +266,7 @@ def test_append_only_delta_rejects_removed_existing_point():
         raise AssertionError("removing an existing point should reject append-only mode")
 
 
-def test_append_only_scope_allows_additive_top_level_restructuring(tmp_path, monkeypatch):
-    monkeypatch.setenv("INFERENCEX_REPOSITORY_ROOT", str(tmp_path))
+def test_append_only_scope_allows_additive_top_level_restructuring(tmp_path):
     recipe = tmp_path / "benchmarks/single_node/srt-slurm-recipes/fixture/recipe.yaml"
     recipe.parent.mkdir(parents=True)
     recipe.write_text("{}\n")
@@ -307,8 +306,8 @@ def test_append_only_scope_allows_additive_top_level_restructuring(tmp_path, mon
         {"tp": 8, "conc-list": [12, 16], "router": router_b, "srt-recipe": "recipe.yaml"}
     )
 
-    validate_master_config(base)
-    validate_master_config(head)
+    validate_master_config(base, tmp_path)
+    validate_master_config(head, tmp_path)
     args = SimpleNamespace(
         config_keys=["test-config"],
         seq_lens=None,
@@ -429,7 +428,6 @@ def planning_repo(tmp_path, monkeypatch):
         recipe = tmp_path / f"benchmarks/{node}/srt-slurm-recipes/fixture/recipe.yaml"
         recipe.parent.mkdir(parents=True)
         recipe.write_text("schema: 2\nroles:\n  prefill: {nodes: 1}\n  decode: {nodes: 1}\n")
-    monkeypatch.setenv("INFERENCEX_REPOSITORY_ROOT", str(tmp_path))
     monkeypatch.chdir(tmp_path)
     return tmp_path, master, runners
 
@@ -750,16 +748,16 @@ def test_generation_api_preserves_inputs_and_returns_independent_nested_rows(pla
     import copy
     from infx.matrix.generate import generate_config_matrix
 
-    _, master, runners = planning_repo
+    root, master, runners = planning_repo
     master["multi"]["router"] = {"name": "fixture-router", "version": "1.0"}
     original = copy.deepcopy((master, runners))
-    rows = generate_config_matrix(["multi"], master, runners, eval_mode="all")
+    rows = generate_config_matrix(["multi"], master, runners, eval_mode="all", root=root)
     assert [(r["conc"], r.get("eval-conc")) for r in rows] == [([16, 32, 64], None), ([16, 32], 32)]
     rows[0]["router"]["name"] = "mutated"
     rows[0]["prefill"]["tp"] = 999
     rows[0]["conc"].append(999)
     assert (master, runners) == original
-    repeated = generate_config_matrix(["multi"], master, runners, eval_mode="none")
+    repeated = generate_config_matrix(["multi"], master, runners, eval_mode="none", root=root)
     assert repeated[0]["prefill"]["tp"] == 8
     assert repeated[0]["conc"] == [16, 32, 64]
 
@@ -796,14 +794,14 @@ def test_plan_rejects_empty_changelog_before_reading_inputs():
 
 def test_generation_api_preserves_json_rejection_for_yaml_sets(planning_repo):
     from infx.matrix.generate import generate_config_matrix
-    _, master, runners = planning_repo
+    root, master, runners = planning_repo
     # Pydantic accepts this YAML set as a list, but validation returns the raw
     # config. The generator CLI has always rejected it at JSON serialization.
     worker = master["multi"]["scenarios"]["fixed-seq-len"][0]["search-space"][0]["prefill"]
     worker["additional-settings"] = {"A=1"}
-    validate_master_config(master)
+    validate_master_config(master, root)
     with pytest.raises(TypeError, match="set is not JSON serializable"):
-        generate_config_matrix(["multi"], master, runners, eval_mode="none")
+        generate_config_matrix(["multi"], master, runners, eval_mode="none", root=root)
 
 
 def test_changelog_move_preserves_history_and_selects_only_additions(tmp_path, monkeypatch):
