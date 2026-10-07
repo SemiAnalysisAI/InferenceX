@@ -271,7 +271,7 @@ ROCm 7.2.4），已包含已合入的
 `minimaxm3-fp4-mi355x-atom-agentic-mtp` 按照
 [ROCm/ATOM#2366](https://github.com/ROCm/ATOM/pull/2366) 和
 [上游配方](https://github.com/ROCm/ATOM/blob/1423fceb08fbe88b2e35c77b320b3073b310a63f/recipes/MiniMax-M3-Agentic-InferenceX.md)，
-使用 `rocm/atom-dev:nightly_202610061452`，启用 `ATOM_PA_FLYDSL=1` 和
+使用 `rocm/atom-dev:nightly_202610070333`，启用 `ATOM_PA_FLYDSL=1` 和
 `ATOM_PA_FLYDSL_PLAN=1`。FlyDSL 处理支持的 paged-decode shape，work planner
 按实际上下文长度均衡 dense decode 工作量；不支持的 shape 仍回退至 Gluon。
 从 `server.log` 核对实际路由，以及 work plan 是否在图捕获时创建。
@@ -296,7 +296,8 @@ TP4 约 1.23 TB）全部来自节点 0 的 1.5 TB 内存。`runners/srt-slurm/ho
 （[run 36454319395](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/36454319395)）。
 
 ATOM 的 MiniMax-M3 mono decode（[ROCm/ATOM#2419](https://github.com/ROCm/ATOM/pull/2419)，
-[ROCm/ATOM#2479](https://github.com/ROCm/ATOM/pull/2479) 迁移到共用 mono 框架）默认开启，覆盖所有
+[ROCm/ATOM#2479](https://github.com/ROCm/ATOM/pull/2479) 迁移到共用 mono 框架，
+[ROCm/ATOM#2483](https://github.com/ROCm/ATOM/pull/2483) 以 FlyDSL 重写 step fence）默认开启，覆盖所有
 TP4 点位，包括不再设置 `ATOM_MONO_ENABLE=0` 的 indexer CP 点位 C15-C28，以及 LMCache
 点位 C40/C48。mono 每步最多处理 16 个 token，即 EAGLE3 K3 下的 4 个请求，因此覆盖
 C1、C2、C4 的全部 decode，以及更高并发下的小 batch decode 步。ATOM 只为 TP4 构建 mono，
