@@ -13,12 +13,14 @@ from __future__ import annotations
 import hashlib
 import shutil
 import subprocess
+import sys
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, override
 
+from infx.bench.proc import echo
 from infx.clusters.slurm import HelperImage, SquashPolicy, slurm_settings
 from infx.launch import proc
 from infx.launch.backends.base import (
@@ -136,7 +138,7 @@ class SlurmBackend(Backend):
         rendered = spec.srun_args()
         extra = ["--mpi=none", *(arg for arg in self.settings.srun_args if arg not in rendered)]
         argv = cli.srun_argv(allocation, container.command, container=spec, extra=extra)
-        proc.echo(argv)
+        echo(argv)
         step = subprocess.Popen(argv)
         self.life.callback(_stop, step)
         return SlurmJob(allocation.id, outputs=container.workspace, step=step)
@@ -185,7 +187,11 @@ class SlurmBackend(Backend):
         while wait_s and cli.is_active(job):
             remaining = deadline - time.monotonic()
             if remaining <= 0:
-                print(f"WARNING: job {job.id} still present after {wait_s:.0f}s", flush=True)
+                print(
+                    f"WARNING: job {job.id} still present after {wait_s:.0f}s",
+                    file=sys.stderr,
+                    flush=True,
+                )
                 return
             print(
                 f"Waiting for job {job.id} to leave the queue ({remaining:.0f}s left)", flush=True

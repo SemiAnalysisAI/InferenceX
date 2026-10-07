@@ -13,6 +13,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from infx.bench.proc import echo
 from infx.launch import proc
 from infx.launch.backends.base import BackendError, Job, JobState, JobStatus
 
@@ -259,7 +260,7 @@ def stream_log(job: Job, path: Path, *, wait_s: float = 5.0) -> None:
     sentinel = subprocess.Popen(["sleep", "2147483647"])
     print(f"Tailing {path}", file=sys.stderr, flush=True)
     tail_argv = ["tail", "-F", "-s", "2", "-n+1", str(path), f"--pid={sentinel.pid}"]
-    proc.echo(tail_argv)
+    echo(tail_argv)
     tail = subprocess.Popen(tail_argv, stderr=subprocess.DEVNULL)
     try:
         while queue_state(job, echo_command=False) is not None:

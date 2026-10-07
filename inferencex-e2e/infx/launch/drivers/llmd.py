@@ -8,7 +8,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-from infx.launch import artifacts, policy, proc
+from infx.bench.proc import echo
+from infx.launch import artifacts, policy
 from infx.launch.backends.base import BackendError
 from infx.launch.backends.slurm import cli
 from infx.launch.context import Launch, LaunchError
@@ -99,7 +100,7 @@ def run(launch: Launch) -> int:
         "inf",
         request.random_range_ratio,
     ]
-    proc.echo(argv, env)
+    echo(argv, env)
     submitted = subprocess.run(
         argv,
         stdout=subprocess.PIPE,

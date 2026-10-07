@@ -11,6 +11,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+from infx.bench.proc import echo
 from infx.config import repository_root
 from infx.launch import proc
 from infx.launch.context import LaunchError
@@ -146,7 +147,7 @@ def install_srtctl(run: SrtRun, checkout: Checkout, *, python: str | None = None
 
 
 def _run_logged(argv: list[str], log: Path, *, env: dict[str, str], cwd: Path) -> int:
-    proc.echo(argv, env)
+    echo(argv, env)
     with log.open("a") as handle:
         return subprocess.run(
             argv, env=env, cwd=cwd, stdout=handle, stderr=subprocess.STDOUT, check=False

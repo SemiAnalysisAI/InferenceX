@@ -13,6 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from infx.bench.proc import echo
 from infx.launch import proc
 from infx.launch.backends.slurm import srtctl_job_name
 from infx.launch.context import LaunchError
@@ -97,7 +98,7 @@ def apply(
         "--set", 'srun_options.container-workdir="/infmax-workspace"', *arguments,
     ]  # fmt: skip
     env = {**run.env, "RUNNER_NAME": srtctl_job_name(run.request.runner_name)}
-    proc.echo(argv, env)
+    echo(argv, env)
     with stdout.open("w") as handle:
         rc = subprocess.run(argv, env=env, cwd=checkout.root, stdout=handle, check=False).returncode
     return subprocess.CompletedProcess(argv, rc, stdout.read_text(errors="replace"), "")
