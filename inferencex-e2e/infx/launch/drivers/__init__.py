@@ -57,6 +57,7 @@ def run(cluster: Cluster, request: LaunchRequest, life: Lifecycle) -> int:
     """
     check_tables({cluster.id: cluster}, only=cluster.id)
     path = launch_path(cluster.id, request)
+    life.event.set(launch_path=path.value)
     route = ROUTES[path]
     if route.scheduler not in (None, cluster.scheduler):
         runnable = sorted(p for p, r in ROUTES.items() if r.scheduler in (None, cluster.scheduler))

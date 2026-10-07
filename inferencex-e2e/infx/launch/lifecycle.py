@@ -1,4 +1,4 @@
-"""A launch's cleanups, signal handling and exit code."""
+"""A launch's cleanups, signal handling, exit code and job record."""
 
 from __future__ import annotations
 
@@ -10,6 +10,8 @@ from contextlib import ExitStack
 from types import FrameType, TracebackType
 from typing import Any, Self
 
+from infx.launch.event import JobEventBuilder
+
 _SIGNALS = (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
 
 
@@ -20,14 +22,15 @@ class _Interrupted(BaseException):
 
 
 class Lifecycle:
-    """Runs a launch's cleanups LIFO on every exit path and owns its exit code.
+    """Runs a launch's cleanups LIFO on every exit path and owns its exit code and ``event``.
 
     The first nonzero recorded code wins; a failed cleanup turns 0 into 1 and never raises.
     A signal during the body runs the cleanups, then raises ``SystemExit(128 + signum)``.
     Signals arriving during the cleanups are held off until they finish, then dropped.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, event: JobEventBuilder | None = None) -> None:
+        self.event = event if event is not None else JobEventBuilder()
         self._stack = ExitStack()
         self._rc = 0
         self._cleanup_failed = False
@@ -49,17 +52,18 @@ class Lifecycle:
         """Register a cleanup; one that raises or returns a nonzero int fails the launch."""
 
         def run() -> None:
+            name = getattr(fn, "__name__", fn)
             try:
                 result = fn(*args, **kwargs)
-            except Exception:  # noqa: BLE001 - every cleanup must get its turn
+            except Exception as error:  # noqa: BLE001 - every cleanup must get its turn
                 traceback.print_exc()
+                self.event.error(error, stage="cleanup", report=False)
                 self._cleanup_failed = True
                 return
             if isinstance(result, int) and not isinstance(result, bool) and result:
-                print(
-                    f"WARNING: cleanup {getattr(fn, '__name__', fn)!s} returned {result}",
-                    file=sys.stderr,
-                )
+                message = f"cleanup {name!s} returned {result}"
+                print(f"WARNING: {message}", file=sys.stderr)
+                self.event.fail("CleanupFailed", message, stage="cleanup", report=False)
                 self._cleanup_failed = True
 
         self._stack.callback(run)
@@ -89,10 +93,14 @@ class Lifecycle:
             self._signum = exc.signum
         elif isinstance(exc, SystemExit):
             code = exc.code
-            self.record(code if isinstance(code, int) else (0 if code is None else 1))
+            code = code if isinstance(code, int) else (0 if code is None else 1)
+            self.record(code)
+            self.event.exited(code)
         elif exc is not None:
+            self.event.error(exc, report=False)
             self.record(1)
         if self._signum:
+            self.event.interrupted(self._signum)
             print(f"Received signal {self._signum}; running cleanups", file=sys.stderr)
         try:
             self._stack.close()

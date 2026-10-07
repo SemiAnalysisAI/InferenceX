@@ -45,6 +45,7 @@ def _stage_agentic(logs_dir: Path, workspace: Path) -> None:
 
 def run(launch: Launch) -> int:
     """Submit the llm-d Slurm job, follow its log, and stage benchmark artifacts."""
+    event = launch.life.event
     backend = slurm_backend(launch)
     request = LlmdRequest.from_env(launch.request.env)
     if backend.settings.squash is None:
@@ -61,7 +62,8 @@ def run(launch: Launch) -> int:
     if not checkpoint.node_local and not (model_path / "config.json").is_file():
         raise LaunchError(f"model checkpoint is unavailable: {model_path / 'config.json'}")
 
-    squash = backend.prepare_image(request.image)
+    with event.stage("prepare"):
+        squash = backend.prepare_image(request.image)
     logs_dir = request.workspace / "benchmark_logs"
     logs_dir.mkdir(parents=True, exist_ok=True)
 
@@ -100,26 +102,25 @@ def run(launch: Launch) -> int:
         "inf",
         request.random_range_ratio,
     ]
-    echo(argv, env)
-    submitted = subprocess.run(
-        argv,
-        stdout=subprocess.PIPE,
-        stderr=sys.stderr,
-        text=True,
-        env=env,
-        cwd=request.workspace / LLMD_DIR,
-        check=False,
-    )
-    job_id = submitted.stdout.strip()
-    if submitted.returncode != 0 or not job_id:
-        print("ERROR: llm-d submit.sh failed before returning a Slurm job id", file=sys.stderr)
-        return 1
-    if not (job_id.isascii() and job_id.isdigit()):
-        print(
-            f"ERROR: llm-d submit.sh printed {job_id!r} instead of a Slurm job id",
-            file=sys.stderr,
+    with event.stage("submit"):
+        echo(argv, env)
+        submitted = subprocess.run(
+            argv,
+            stdout=subprocess.PIPE,
+            stderr=sys.stderr,
+            text=True,
+            env=env,
+            cwd=request.workspace / LLMD_DIR,
+            check=False,
         )
-        return 1
+        job_id = submitted.stdout.strip()
+        if submitted.returncode != 0 or not job_id:
+            event.fail("SubmitFailed", "llm-d submit.sh failed before returning a Slurm job id")
+            return 1
+        if not (job_id.isascii() and job_id.isdigit()):
+            message = f"llm-d submit.sh printed {job_id!r} instead of a Slurm job id"
+            event.fail("SubmitFailed", message)
+            return 1
 
     log_file = logs_dir / f"slurm_job-{job_id}.out"
     job = backend.attach(job_id, log=log_file, outputs=logs_dir)
@@ -138,22 +139,23 @@ def run(launch: Launch) -> int:
     status = backend.state(job)
     rc = 0 if status.succeeded else 1
 
-    for result_file in sorted(logs_dir.glob(f"{request.result_filename}*.json")):
-        try:
-            artifacts.copy_to_workspace(result_file, request.workspace / result_file.name)
-        except artifacts.ArtifactError as error:
-            print(f"ERROR: {error}", file=sys.stderr)
-            rc = 1
+    with event.stage("collect"):
+        for result_file in sorted(logs_dir.glob(f"{request.result_filename}*.json")):
+            try:
+                artifacts.copy_to_workspace(result_file, request.workspace / result_file.name)
+            except artifacts.ArtifactError as error:
+                event.error(error)
+                rc = 1
 
-    if request.is_agentic and not request.eval_only:
-        _stage_agentic(logs_dir, request.workspace)
+        if request.is_agentic and not request.eval_only:
+            _stage_agentic(logs_dir, request.workspace)
 
-    if request.run_eval:
-        eval_dir = _find_eval_dir(logs_dir) or logs_dir / "eval_results"
-        try:
-            artifacts.copy_eval_artifacts(eval_dir, request.workspace)
-        except artifacts.ArtifactError as error:
-            print(f"ERROR: {error}", file=sys.stderr)
-            rc = 1
+        if request.run_eval:
+            eval_dir = _find_eval_dir(logs_dir) or logs_dir / "eval_results"
+            try:
+                artifacts.copy_eval_artifacts(eval_dir, request.workspace)
+            except artifacts.ArtifactError as error:
+                event.error(error)
+                rc = 1
 
     return rc

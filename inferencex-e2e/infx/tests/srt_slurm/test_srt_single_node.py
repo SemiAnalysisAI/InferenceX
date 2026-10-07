@@ -9,7 +9,7 @@ import pytest
 import yaml
 
 from infx.srt_slurm.single_node import runtime_arguments, select_recipe, submission_fields
-from infx.srt_slurm.synthetic_acceptance import plan_commands, selected_recipes
+from infx.srt_slurm.synthetic_acceptance import Planned, plan_commands, selected_recipes
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "utils/srt-slurm/src"))
@@ -64,7 +64,9 @@ def test_native_binding_submits_one_point_and_keeps_server_settings(point):
         "tensor-parallel-size": 4, "data-parallel-size": 1, "max-running-requests": 32,
     }
     commands = plan_commands(f"{path}:base", "sglang", ["--json", "--yes", *argv], env)
-    assert commands == [["srtctl", "apply", "--json", "--yes", *argv, "--file", f"{path}:base"]]
+    assert commands == [
+        Planned(["srtctl", "apply", "--json", "--yes", *argv, "--file", f"{path}:base"], None)
+    ]
 
 
 @pytest.mark.parametrize("field,value,message", [
@@ -85,9 +87,9 @@ def test_native_variants_select_only_the_matching_matrix_point(point):
     assert config == f"{path}:zip_override_conc[1]"
     assert recipe["benchmark"]["env"]["CONC"] == "4"
     argv = runtime_arguments(config, {**env, "CONC": "4"})
-    assert plan_commands(config, "sglang", ["--json", *argv], env) == [[
+    assert plan_commands(config, "sglang", ["--json", *argv], env) == [Planned([
         "srtctl", "apply", "--json", *argv, "--file", f"{path}:zip_override_conc[1]",
-    ]]
+    ], None)]
     with pytest.raises(ValueError, match="exactly one"):
         select_recipe(str(path), {**env, "CONC": "8"})
 
@@ -111,10 +113,10 @@ def test_mtp_binding_uses_real_verification_and_preserves_expert_parallelism(poi
     env = {**env, "EP_SIZE": "4", "SPEC_DECODING": "mtp"}
     argv = runtime_arguments(f"{path}:base", env)
     commands = plan_commands(f"{path}:base", "sglang", ["--json", *argv], env)
-    assert commands == [[
+    assert commands == [Planned([
         "srtctl", "apply", "--json", *argv, "--file", f"{path}:base",
         "--unset", "roles.agg.env.SGLANG_SIMULATE_ACC_LEN",
-    ]]
+    ], None)]
     recipe["benchmark"]["env"]["USE_CHAT_TEMPLATE"] = "false"
     path.write_text(yaml.safe_dump({"base": recipe}))
     with pytest.raises(ValueError, match="USE_CHAT_TEMPLATE"):
@@ -194,10 +196,10 @@ def test_trt_binding_keeps_engine_options_and_sets_eval_token_budget(point):
         "speculative_config": {"decoding_type": "MTP", "num_nextn_predict_layers": 3},
         "cuda_graph_config": {"batch_sizes": [1, 2, 4]},
     }
-    assert plan_commands(f"{path}:base", "trt", ["--json", *argv], env) == [[
+    assert plan_commands(f"{path}:base", "trt", ["--json", *argv], env) == [Planned([
         "srtctl", "apply", "--json", *argv, "--file", f"{path}:base",
         "--unset", "roles.agg.env.TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS",
-    ]]
+    ], None)]
     with pytest.raises(ValueError, match="moe_expert_parallel_size"):
         runtime_arguments(f"{path}:base", {**env, "EP_SIZE": "1"})
 
@@ -220,9 +222,9 @@ def test_atom_binding_uses_allocation_tp_and_native_mtp_arguments(point):
         "method": "mtp", "num-speculative-tokens": 3, "kv_cache_dtype": "fp8",
         "enable-expert-parallel": True, "enable-dp-attention": True, "max-model-len": 2048,
     }
-    assert plan_commands(f"{path}:base", "atom", ["--json", *argv], env) == [[
+    assert plan_commands(f"{path}:base", "atom", ["--json", *argv], env) == [Planned([
         "srtctl", "apply", "--json", *argv, "--file", f"{path}:base",
-    ]]
+    ], None)]
     for changes, error in [
         ({"EP_SIZE": "2"}, "expert parallelism"),
         ({"EP_SIZE": "1"}, "enable-expert-parallel"),

@@ -177,6 +177,8 @@ def _discard_corrupt_archives(configs: Path) -> bool:
 def run_setup(run: SrtRun, checkout: Checkout) -> int:
     """Run ``make setup`` in the checkout, logging to SETUP_LOG; return its exit code."""
     log = run.workspace / SETUP_LOG
+    event = run.life.event
+    event.evidence(log)
     for attempt in range(1, SETUP_ATTEMPTS + 1):
         print(f"Setting up srt-slurm, attempt {attempt} (details: {SETUP_LOG})", flush=True)
         argv = ["make", "setup", f"ARCH={run.cluster.arch}"]
@@ -186,10 +188,11 @@ def run_setup(run: SrtRun, checkout: Checkout) -> int:
             return 0
         sys.stderr.write(log.read_text(errors="replace"))
         if not _discard_corrupt_archives(checkout.root / "configs"):
+            event.fail("SetupFailed", f"make setup exited {rc}")
             return rc
         if attempt < SETUP_ATTEMPTS:
             time.sleep(attempt * 5)
-    print(f"ERROR: srt-slurm setup failed after {SETUP_ATTEMPTS} attempts", file=sys.stderr)
+    event.fail("SetupFailed", f"srt-slurm setup failed after {SETUP_ATTEMPTS} attempts")
     return 1
 
 
