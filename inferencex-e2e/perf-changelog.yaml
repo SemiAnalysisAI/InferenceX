@@ -9338,7 +9338,6 @@
     - "Decode nodes lend host DRAM to the store through srt-slurm mooncake-store services: four 180GB standalone stores per decode node, gated on their readiness ports with a 600-second timeout. Prefill keeps a 140GB segment per rank. GB200 nodes have the same host memory as GB300 nodes, so the sizes carry over."
     - "The prefill role and the decode stores name their RDMA devices (MOONCAKE_DEVICE=mlx5_0..3, as the GB200 vLLM Mooncake recipes do) and set MC_TCP_BIND_ADDRESS to their node, so each store transfer engine advertises the node address instead of the first active interface."
     - "The benchmark client runs on the dedicated etcd/nats node, because prefill nodes now also hold Mooncake segments, and Tachometer's per-node exporters are off for this throughput ladder."
-    - "The DEP16 prefill workers (c256, c768, c1024, c1280) run 8k-token chunks per DP rank instead of 4k (chunked-prefill-size 65536 to 131072) with prefill mem-fraction-static lowered from 0.85 to 0.80; at 0.85 the 8k chunks run out of GPU memory."
     - "The aggregate TP8 c1/c4 recipes are unchanged and stay on hierarchical cache; their config key is listed so this sweep covers the whole GB200 Pareto ladder, including the low-latency points."
     - "Measured at concurrency 128 (1P DEP8 / 1D DEP16) against the current recipe with the same image, srt-slurm and golden acceptance length: 26,566 vs 23,763 total tok/s/GPU (+11.8%) at the same P90 TPOT (7.31 vs 7.22 ms), with TTFT p50 3.27 vs 4.95 s."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3701
