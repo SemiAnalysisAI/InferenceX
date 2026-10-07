@@ -24,6 +24,7 @@ test = [
     "matplotlib>=3,<4",
     "numpy>=2,<3",
     "packaging>=26,<27",
+    "prometheus-client>=0.20,<1",
     "pytest>=9,<10",
     "pytest-xdist>=3,<4",
     "requests>=2.31,<3",
