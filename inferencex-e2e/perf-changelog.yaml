@@ -9364,6 +9364,6 @@
     - agentic-coding
   description:
     - "Bump to lmsysorg/sglang-rocm:v0.5.21-rocm720-mi35x-20261007."
-    - "Run prefill context parallelism on the TP-only arms at conc 4, 16, 32 and 48."
+    - "Run prefill context parallelism on the TP-only arms at conc 16, 32 and 48; conc 1 and 4 keep BCG."
     - "Enable SGLANG_OPT_FP8_WO_A_FUSED_INVROPE."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3778
