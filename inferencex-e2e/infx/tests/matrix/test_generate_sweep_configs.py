@@ -74,7 +74,7 @@ def test_aggregated_worker_expands_to_legacy_matrix_pair():
             "pp": 2,
             "ep": 1,
             "dp-attn": False,
-            "additional-settings": ["CONFIG_FILE=recipes/aggregate.yaml"],
+            "additional-settings": ["PREFILL_IMAGE=prefill:tag"],
         }
     }
 
@@ -88,7 +88,7 @@ def test_aggregated_worker_expands_to_legacy_matrix_pair():
         "pcp-size": 1,
         "ep": 1,
         "dp-attn": False,
-        "additional-settings": ["CONFIG_FILE=recipes/aggregate.yaml"],
+        "additional-settings": ["PREFILL_IMAGE=prefill:tag"],
     }
     assert decode == {
         "num-worker": 0,
@@ -101,26 +101,34 @@ def test_aggregated_worker_expands_to_legacy_matrix_pair():
     }
 
 
+@pytest.fixture
+def multinode_recipe(tmp_path, monkeypatch):
+    """Write a multi-node recipe under a scratch repository root; return its matrix path."""
+    monkeypatch.setenv("INFERENCEX_REPOSITORY_ROOT", str(tmp_path))
+
+    def write(recipe: dict, name: str = "test.yaml") -> str:
+        path = tmp_path / "benchmarks/multi_node/srt-slurm-recipes" / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(yaml.safe_dump(recipe))
+        return f"benchmarks/multi_node/srt-slurm-recipes/{name}"
+
+    return write
+
+
 @pytest.mark.parametrize("roles, expected", [
     ({"agg": {"nodes": 3, "workers": 6}}, 3),
     ({"prefill": {"nodes": 2}, "decode": {"nodes": 4}}, 6),
     ({"prefill": {"nodes": 2}, "decode": {"nodes": "colocate"}}, 2),
     ({"prefill": {"nodes": 2}, "decode": {"workers": 1}}, None),
 ])
-def test_multinode_node_count_reads_schema_two_roles(tmp_path, monkeypatch, roles, expected):
-    recipe = tmp_path / "benchmarks/multi_node/srt-slurm-recipes/test.yaml"
-    recipe.parent.mkdir(parents=True)
-    recipe.write_text(yaml.safe_dump({"schema": 2, "roles": roles}))
+def test_multinode_node_count_reads_schema_two_roles(multinode_recipe, roles, expected):
     import infx.matrix.generate as generate
-    import infx.config
-    (tmp_path / "configs").mkdir()
-    monkeypatch.setattr(infx.config, "__file__", str(tmp_path / "infx/config.py"))
-    prefill = {"additional-settings": ["CONFIG_FILE=recipes/test.yaml"]}
+    srt_recipe = multinode_recipe({"schema": 2, "roles": roles})
     if expected is None:
         with pytest.raises(ValueError, match="role 'decode' must specify nodes"):
-            generate.recipe_node_count(prefill, {})
+            generate.recipe_node_count(srt_recipe)
     else:
-        assert generate.recipe_node_count(prefill, {}) == expected
+        assert generate.recipe_node_count(srt_recipe) == expected
 
 
 @pytest.mark.parametrize("selector, expected", [
@@ -129,22 +137,16 @@ def test_multinode_node_count_reads_schema_two_roles(tmp_path, monkeypatch, role
     ("override_colocated", 2),
     ("zip_override_sweep[0]", None),
 ])
-def test_recipe_node_count_resolves_override_selectors(tmp_path, monkeypatch, selector, expected):
-    recipe = tmp_path / "benchmarks/multi_node/srt-slurm-recipes/variants.yaml"
-    recipe.parent.mkdir(parents=True)
-    recipe.write_text(yaml.safe_dump({
+def test_recipe_node_count_resolves_override_selectors(multinode_recipe, selector, expected):
+    srt_recipe = multinode_recipe({
         "schema": 2,
         "base": {"roles": {"prefill": {"nodes": 1}, "decode": {"nodes": 2}}},
         "override_wide": {"roles": {"decode": {"nodes": 4}}},
         "override_colocated": {"roles": {"prefill": {"nodes": 2}, "decode": {"nodes": "colocate"}}},
         "zip_override_sweep": {"roles": {"decode": {"nodes": [1, 2]}}},
-    }))
+    }, "variants.yaml")
     import infx.matrix.generate as generate
-    import infx.config
-    (tmp_path / "configs").mkdir()
-    monkeypatch.setattr(infx.config, "__file__", str(tmp_path / "infx/config.py"))
-    prefill = {"additional-settings": [f"CONFIG_FILE=recipes/variants.yaml:{selector}"]}
-    assert generate.recipe_node_count(prefill, {}) == expected
+    assert generate.recipe_node_count(f"{srt_recipe}:{selector}") == expected
 
 
 @pytest.mark.parametrize("auxiliary, expected", [
@@ -165,22 +167,16 @@ def test_recipe_node_count_resolves_override_selectors(tmp_path, monkeypatch, se
       "services": [{"type": "etcd", "placement": {"node": "dedicated"},
                     "enabled": False}]}, 3),
 ])
-def test_recipe_node_count_includes_auxiliary_nodes(tmp_path, monkeypatch, auxiliary, expected):
+def test_recipe_node_count_includes_auxiliary_nodes(multinode_recipe, auxiliary, expected):
     import infx.matrix.generate as generate
-    import infx.config
 
-    recipe = tmp_path / "benchmarks/multi_node/srt-slurm-recipes/test.yaml"
-    recipe.parent.mkdir(parents=True)
-    recipe.write_text(yaml.safe_dump({
+    srt_recipe = multinode_recipe({
         "schema": 2,
         "base": {"roles": {"prefill": {"nodes": 1}, "decode": {"nodes": 2}}},
         "override_auxiliary": auxiliary,
-    }))
-    (tmp_path / "configs").mkdir()
-    monkeypatch.setattr(infx.config, "__file__", str(tmp_path / "infx/config.py"))
-    prefill = {"additional-settings": ["CONFIG_FILE=recipes/test.yaml:override_auxiliary"]}
+    })
 
-    assert generate.recipe_node_count(prefill, {}) == expected
+    assert generate.recipe_node_count(f"{srt_recipe}:override_auxiliary") == expected
 
 
 def test_multinode_node_count_uses_role_gpu_footprints(sample_runner_config):
@@ -188,7 +184,7 @@ def test_multinode_node_count_uses_role_gpu_footprints(sample_runner_config):
     decode = {"num-worker": 2, "tp": 8, "pp": 1, "pcp-size": 1}
 
     assert multinode_node_count(
-        prefill, decode, "cluster:b300-nv", sample_runner_config
+        prefill, decode, "cluster:b300-nv", sample_runner_config, None
     ) == 3
 
 
@@ -204,7 +200,7 @@ def test_multinode_node_count_honors_explicit_role_node_settings():
         "additional-settings": ["DECODE_NODES=1"],
     }
 
-    assert multinode_node_count(prefill, decode, "unknown", {}) == 3
+    assert multinode_node_count(prefill, decode, "unknown", {}, None) == 3
 
 
 def test_multinode_node_count_resolves_heterogeneous_worker_hardware(
@@ -214,7 +210,7 @@ def test_multinode_node_count_resolves_heterogeneous_worker_hardware(
     decode = {"hardware": "h100", "num-worker": 1, "tp": 8}
 
     assert multinode_node_count(
-        prefill, decode, "gb200", sample_runner_config
+        prefill, decode, "gb200", sample_runner_config, None
     ) == 6
 
 
@@ -229,36 +225,41 @@ def cluster_record(gpus_per_node, **facts):
     }
 
 
-@pytest.mark.parametrize("config_file", [
-    "recipes/test.yaml",
-    "benchmarks/multi_node/srt-slurm-recipes/test.yaml",
-])
 @pytest.mark.parametrize(("roles", "expected_nodes"), [
     ({"agg": {"nodes": 3}}, 3),
     ({"prefill": {"nodes": 2}, "decode": {"nodes": 3}}, 5),
 ])
-def test_multinode_node_count_prefers_recipe_roles(
-    tmp_path, monkeypatch, config_file, roles, expected_nodes,
-):
-    recipe = tmp_path / "benchmarks/multi_node/srt-slurm-recipes/test.yaml"
-    recipe.parent.mkdir(parents=True)
-    recipe.write_text(yaml.safe_dump({"schema": 2, "roles": roles}))
-    import infx.config
-    (tmp_path / "configs").mkdir()
-    monkeypatch.setattr(
-        infx.config, "__file__",
-        str(tmp_path / "infx/config.py"),
-    )
-    prefill = {
-        "num-worker": 1, "tp": 8,
-        "additional-settings": [f"CONFIG_FILE={config_file}", "PREFILL_NODES=7"],
-    }
+def test_multinode_node_count_prefers_recipe_roles(multinode_recipe, roles, expected_nodes):
+    srt_recipe = multinode_recipe({"schema": 2, "roles": roles})
+    prefill = {"num-worker": 1, "tp": 8, "additional-settings": ["PREFILL_NODES=7"]}
     decode = {"num-worker": 1, "tp": 8, "additional-settings": ["DECODE_NODES=9"]}
 
     # Recipe allocation wins over role overrides, even without an inventory.
-    assert multinode_node_count(prefill, decode, "unknown", {}) == expected_nodes
+    assert multinode_node_count(prefill, decode, "unknown", {}, srt_recipe) == expected_nodes
 
 
+def test_multinode_rows_resolve_recipes_and_count_nodes_from_them(
+    multinode_recipe, sample_multinode_config, sample_runner_config,
+):
+    multinode_recipe({
+        "schema": 2,
+        "base": {"roles": {"prefill": {"nodes": 2}, "decode": {"nodes": 1}}},
+        "override_wide": {"roles": {"decode": {"nodes": 3}}},
+    }, "dsr1/bundle.yaml")
+    key, config = next(iter(sample_multinode_config.items()))
+    config["srt-recipe-dir"] = "dsr1"
+    config["scenarios"]["fixed-seq-len"][0]["search-space"][0].update({
+        "srt-recipe": "bundle.yaml:override_wide", "eval-srt-recipe": "bundle.yaml:base",
+    })
+
+    [row] = generate_test_config_sweep(
+        argparse.Namespace(config_keys=[key]), sample_multinode_config, sample_runner_config
+    )
+
+    root = "benchmarks/multi_node/srt-slurm-recipes/dsr1"
+    assert (row["srt-recipe"], row["eval-srt-recipe"], row["node-count"]) == (
+        f"{root}/bundle.yaml:override_wide", f"{root}/bundle.yaml:base", 5,
+    )
 
 
 @pytest.mark.parametrize("command", ["full-sweep", "test-config"])
@@ -266,13 +267,30 @@ def test_srt_recipe_selection_stays_with_its_scenario(
     sample_single_node_config, sample_runner_config, full_sweep_args_both, command,
 ):
     key, config = next(iter(sample_single_node_config.items()))
+    config["srt-recipe-dir"] = "dsr1/sglang/mi300x-fp8"
     config["scenarios"]["fixed-seq-len"][0]["search-space"][0]["srt-recipe"] = "pilot.yaml:base"
     vars(full_sweep_args_both).update(config_keys=[key], no_evals=True)
     generate = generate_full_sweep if command == "full-sweep" else generate_test_config_sweep
     rows = generate(full_sweep_args_both, sample_single_node_config, sample_runner_config)
     assert rows
-    assert {row.get("srt-recipe") for row in rows if row["isl"] == 1024} == {"pilot.yaml:base"}
+    assert {row.get("srt-recipe") for row in rows if row["isl"] == 1024} == {
+        "benchmarks/single_node/srt-slurm-recipes/dsr1/sglang/mi300x-fp8/pilot.yaml:base"
+    }
     assert {row.get("srt-recipe") for row in rows if row["isl"] == 8192} == {None}
+
+
+def name_fixture_recipe(config: dict, root: Path) -> None:
+    """Point every single-node row of ``config`` at one recipe written under ``root``."""
+    recipe = root / "benchmarks/single_node/srt-slurm-recipes/fixture/recipe.yaml"
+    recipe.parent.mkdir(parents=True, exist_ok=True)
+    recipe.write_text("{}\n")
+    for entry in config.values():
+        entry["srt-recipe-dir"] = "fixture"
+        for scenario in entry["scenarios"].values():
+            for sequence in scenario:
+                for row in sequence["search-space"]:
+                    row["srt-recipe"] = "recipe.yaml"
+
 
 @pytest.fixture
 def sample_single_node_config():
@@ -2031,6 +2049,7 @@ class TestCommandLine:
         command, invalid,
     ):
         """The module entrypoint resolves caller-relative inputs from another directory."""
+        name_fixture_recipe(sample_single_node_config, tmp_path)
         (tmp_path / "master config.yaml").write_text(yaml.safe_dump(sample_single_node_config))
         nodes = sample_runner_config["labels"]["mi300x"]
         (tmp_path / "runners.yaml").write_text(yaml.safe_dump({
@@ -2049,7 +2068,7 @@ class TestCommandLine:
 
         result = subprocess.run(
             [sys.executable, "-m", "infx.matrix.generate", *args], cwd=tmp_path,
-            env={**os.environ, "PYTHONPATH": str(repo_root)},
+            env={**os.environ, "PYTHONPATH": str(repo_root), "INFERENCEX_REPOSITORY_ROOT": str(tmp_path)},
             capture_output=True, text=True, check=False,
         )
 
@@ -2072,6 +2091,8 @@ class TestCommandLine:
         sample_runner_config, runner_file,
     ):
         monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("INFERENCEX_REPOSITORY_ROOT", str(tmp_path))
+        name_fixture_recipe(sample_single_node_config, tmp_path)
         (tmp_path / "master.yaml").write_text(yaml.safe_dump(sample_single_node_config))
         (tmp_path / "configs").mkdir()
         # An explicit override must not fall back to the default inventory.

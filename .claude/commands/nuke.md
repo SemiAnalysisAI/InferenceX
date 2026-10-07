@@ -113,18 +113,22 @@ recipe each master search-space row names in `srt-recipe:`, and
 # Usage: edit_recipe_container.py <master_yaml> <new_image> <key1> [key2 ...]
 import os, re, sys
 f, new_image, keys = sys.argv[1], sys.argv[2], sys.argv[3:]
-# srt-recipe paths are relative to inferencex-e2e/, the parent of configs/
-root = os.path.dirname(os.path.dirname(os.path.abspath(f)))
+# srt-recipe names a file under the key's srt-recipe-dir, below this root
+root = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(f))), "benchmarks/single_node/srt-slurm-recipes")
 master = open(f).read().split('\n')
 recipes = set()
 for key in keys:
     kre = re.compile(r'^' + re.escape(key) + r':\s*$')
     start = next((i for i,l in enumerate(master) if kre.match(l)), None)
     if start is None: sys.exit(f"ERROR: key not found: {key}")
+    directory, names = None, set()
     for j in range(start+1, len(master)):
         if re.match(r'^[A-Za-z0-9._-]+:\s*$', master[j]): break  # next top-level key
-        recipes.update(re.findall(r'srt-recipe:\s*([^\s,}]+)', master[j]))
-if not recipes: sys.exit(f"ERROR: no srt-recipe for keys {keys}")
+        d = re.match(r'^\s+srt-recipe-dir:\s*(\S+)\s*$', master[j])
+        if d: directory = d.group(1)
+        names.update(re.findall(r'(?<![\w-])srt-recipe:\s*([^\s,}:]+)', master[j]))
+    if directory is None or not names: sys.exit(f"ERROR: no srt-recipe-dir/srt-recipe for key {key}")
+    recipes.update(os.path.join(directory, n) for n in names)
 for r in sorted(os.path.join(root, x) for x in recipes):
     lines = open(r).read().split('\n')
     in_model, hit = False, False
@@ -139,9 +143,8 @@ for r in sorted(os.path.join(root, x) for x in recipes):
     open(r, 'w').write('\n'.join(lines))
 ```
 
-If `grep -rn '<recipe path>' inferencex-e2e/configs/*-master.yaml` shows a recipe is also
-referenced by a key outside this family, stop and ask the user: bumping it would
-break that other key's `model.container == image` check.
+If another key's `srt-recipe-dir` plus `srt-recipe` resolves to the same recipe file, stop and ask the user:
+bumping it would break that other key's `model.container == image` check.
 
 For each family, run strictly sequentially because git checkouts can't be parallel:
 
