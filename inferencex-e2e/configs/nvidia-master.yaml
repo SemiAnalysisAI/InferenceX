@@ -6604,7 +6604,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-mooncake-dcp16-agg:
           - "CONFIG_FILE=recipes/kimik3/vllm/gb200-fp4/agentx/agg-dcp16-nospec-mooncake.yaml"
 
 dsv4-fp4-gb300-dynamo-trt-agentx:
-  image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc24
+  image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc29@sha256:124da3f10b73afbf4242f5c68fb04b48736c61fbe662e715202371fd7f046f43
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:gb300-nv
