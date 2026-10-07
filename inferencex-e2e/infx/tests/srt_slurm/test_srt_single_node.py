@@ -281,3 +281,23 @@ def test_binding_keeps_either_required_power_policy(point, recipe_required, requ
     apply_overrides_to_recipe(actual, parse_overrides(argv[1::2], []))
     assert actual["telemetry"]["required"] is True
     assert actual["benchmark"]["concurrencies"] == [2]
+
+
+@pytest.mark.parametrize(
+    "recipe_required,requested,expected",
+    [(False, None, "0"), (False, "1", "1"), (True, None, "1")],
+)
+def test_agentic_binding_derives_require_power_from_either_policy(point, recipe_required, requested, expected):
+    path, recipe, env = point
+    recipe["telemetry"] = {"required": recipe_required}
+    recipe["benchmark"]["command"] = "bash /infmax-workspace/benchmarks/srt_agentic.sh"
+    path.write_text(yaml.safe_dump({"base": recipe}))
+    agentic_env = {**env, "IS_AGENTIC": "1", "DURATION": "20"}
+    if requested is not None:
+        agentic_env["REQUIRE_POWER"] = requested
+    argv = runtime_arguments(f"{path}:base", agentic_env)
+    actual = copy.deepcopy(recipe)
+    apply_overrides_to_recipe(actual, parse_overrides(argv[1::2], []))
+    assert actual["benchmark"]["env"]["REQUIRE_POWER"] == expected
+    assert actual["benchmark"]["env"]["ENABLE_AGENTX_POWER"] == "1"
+    assert actual["telemetry"]["required"] is (expected == "1")

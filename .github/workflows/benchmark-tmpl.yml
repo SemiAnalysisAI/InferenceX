@@ -75,6 +75,11 @@ on:
         required: false
         type: string
         default: ""
+      require-power:
+        description: "Fail result processing when GPU power telemetry is invalid"
+        type: boolean
+        required: false
+        default: false
 env:
   PYTHONPATH: ${{ github.workspace }}/inferencex-e2e
   INFERENCEX_E2E_ROOT: ${{ github.workspace }}
@@ -86,6 +91,7 @@ env:
   SALLOC_TIME_LIMIT: '480'
   KEEP_LOGS: '0'
   IS_MULTINODE: 'false'
+  REQUIRE_POWER: ${{ inputs.require-power && '1' || '0' }}
   RANDOM_RANGE_RATIO: 0.8
   HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
   HF_HUB_CACHE: '/mnt/hf_hub_cache/'
