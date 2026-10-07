@@ -9393,41 +9393,9 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3692
 
 - config-keys:
-    - qwen3.5-fp8-h100-sglang-agentic
-    - qwen3.5-fp8-h100-sglang-agentic-mtp
-    - qwen3.5-fp8-h200-sglang-agentic-mtp
-    - qwen3.5-fp8-h200-sglang-agentic-hicache-mtp
-    - qwen3.8next-fp8-h200-sglang-agentic-mtp
-  scenario-type:
-    - agentic-coding
-  description:
-    - "Replace benchmarks/benchmark_lib.sh with the infx.bench package; client policy, AIPerf argv, and eval behavior are unchanged apart from the documented fixes."
-    - "Pin WEKA_LOADER_OVERRIDE to semianalysis_cc_traces_weka_062126_256k instead of the retired _with_subagents_256k alias; AIPerf maps both to the same corpus."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3610
-
-- config-keys:
     - "*"
   description:
-    - "Remove client-side GPU sampling from SRT fixed-sequence and AgentX benchmarks. Use native telemetry measurement windows and route single-node native power packages through the shared artifact consumer; retain the legacy CSV result reader."
-    - "Requires native telemetry enablement, artifact retention and AgentX finalization in the launcher before rollout across affected single-node lanes."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3684
-
-- config-keys:
-    - "*"
-  description:
-    - "Enable native NVIDIA and AMD power collection for single-node throughput and AgentX jobs, retaining measurement windows, formal results and exporter provenance. Finalize AgentX metrics against the single-node GPU count; leave eval-only collection disabled and preserve required-power failure behavior."
-    - "Use the current srt-slurm pin with the AMD exporter profile patch and stage the verified prepared AMD exporter on shared or allocated-node caches."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3684
-
-- config-keys:
-    - "*"
-  description:
-    - "Accept native SRT power samples v3 with optional GPU temperature while preserving v1/v2 replay and existing energy validation. Temperature remains in raw telemetry for ingestion and display."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3685
-
-- config-keys:
-    - "*"
-  description:
-    - "Configure the AMD device-metrics-exporter on mi300x-amd, mi325x-amd and mi355x-amds through srt-slurm's kind: custom exporter schema (NVIDIA/srt-slurm#572, included in the v2.46.0 pin; gpu_id/serial_number labels; gpu_power_usage, gpu_gfx_activity and gpu_junction_temperature metrics) with the public ghcr.io#semianalysisai/amd-device-metrics-exporter image by digest. Drop the AMD power-profile patch and the prepared-exporter staging step."
-    - "Carry NVIDIA/srt-slurm#573 as a local patch so worker-node exporters report only the job's GPUs; accept #572 manifests without power_profile and samples v3 with temperature_c in the single-node and multinode power_audit consumers. Hardware qualification pending."
+    - "Enable native srt-slurm power collection for single-node fixed-sequence and AgentX jobs (eval-only stays disabled), replacing client-side GPU sampling with srt-slurm measurement windows; single-node AgentX points publish power_validation_<RESULT_FILENAME>.json beside the result, and require-power reaches single-node jobs."
+    - "Configure the AMD device-metrics-exporter on mi300x-amd, mi325x-amd and mi355x-amds through srt-slurm's kind: custom exporter schema (NVIDIA/srt-slurm#572, included in the v2.46.0 pin; gpu_id/serial_number labels; gpu_power_usage, gpu_gfx_activity and gpu_junction_temperature metrics) with the public ghcr.io#semianalysisai/amd-device-metrics-exporter image by digest; drop the AMD power-profile patch and the prepared-exporter staging step."
+    - "Carry NVIDIA/srt-slurm#573 as a local patch so worker-node exporters report only the job's GPUs; accept #572 manifests and samples v3 with temperature_c in the single-node and multinode power_audit consumers, and keep packages whose producer recorded clock_sync_failures unpublishable."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3781
