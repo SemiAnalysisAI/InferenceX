@@ -28,7 +28,7 @@ def load_config(path: str) -> dict:
         except json.JSONDecodeError:
             raise ValueError(
                 f"PyYAML is not installed and {path} is not JSON; "
-                "install it with 'pip install pyyaml'"
+                "install it with 'uv pip install pyyaml'"
             ) from None
     else:
         try:

@@ -26,9 +26,9 @@ python -m power_model --gpu-level-power-per-gpu=400 --system=h100 \
 | --- | --- |
 | `--gpu-level-power-per-gpu` | Required actual GPU electrical watts per GPU; underscore spelling also accepted |
 | `--system` | Required system from the table below |
-| `--model` | `advanced` (default) or `basic-example` |
+| `--model` | `oss` (default) or `example` |
 | `--workload` | `fixed-seq-len` (default), `agentic`, or `agentic-cpu-offloading` |
 | `--scale-out-enabled` | Activate NICs and external switches; alias `--using-scale-out`; default off |
-| `--systems` | Advanced model quantity of the selected chassis or rack; default 1 |
-| `--power-breakdown-per-chassis` | Advanced model nested BoM for one chassis or rack, followed by cluster totals |
+| `--systems` | OSS model quantity of the selected chassis or rack; default 1 |
+| `--power-breakdown-per-chassis` | OSS model nested BoM for one chassis or rack, followed by cluster totals |
 | `--help` | List options, systems, and models |
