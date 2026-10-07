@@ -8832,7 +8832,7 @@ dsv4-fp4-b200-dynamo-sglang-agentic-agg:
           - "CONFIG_FILE=recipes/dsv4/sglang/b200-fp4/agentx/agg-variants.yaml:override_c8"
 
 dsv4-fp4-b200-dynamo-sglang-agentic-disagg:
-  image: lmsysorg/sglang:nightly-dev-20260916-c9a8fba9
+  image: lmsysorg/sglang:nightly-dev-20261007-f1065423@sha256:2253b491bf3fd47bc292ddaf232216831f4cfeee2e7e7bbc6a026ce02fb4dd36
   model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
   runner: cluster:b200-nscale
