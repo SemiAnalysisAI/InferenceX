@@ -6,16 +6,17 @@ import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from decimal import Decimal
+from pathlib import Path
 from typing import Any, Literal
 
 import yaml
 
 from infx.clusters import CLUSTER_LABEL_PREFIX
-from infx.config import repository_root
 
 from .validation import (
     DEFAULT_AGENTIC_DURATION_SECONDS,
     Fields,
+    config_root,
     load_config_files,
     load_runner_file,
     srt_recipe_path,
@@ -278,10 +279,10 @@ def recipe_auxiliary_node_count(recipe: dict) -> int:
     return pool_nodes + dedicated_roles
 
 
-def recipe_node_count(srt_recipe: str) -> int | None:
+def recipe_node_count(root: Path, srt_recipe: str) -> int | None:
     """Read the authoritative node count from the row's checked-in srt-slurm recipe."""
     path, _, selector = srt_recipe.partition(":")
-    recipe_path = repository_root() / path
+    recipe_path = root / path
     recipe = yaml.safe_load(recipe_path.read_text())
     if "base" in recipe:
         # srtctl merges the variant over base (null deletes a key). Zip groups,
@@ -336,9 +337,12 @@ def multinode_node_count(
     runner: str,
     runner_data: dict,
     srt_recipe: str | None,
+    root: Path | None,
 ) -> int:
     """Return the total Slurm node request represented by a matrix row."""
-    recipe_count = recipe_node_count(srt_recipe) if srt_recipe is not None else None
+    if srt_recipe is not None and root is None:
+        raise ValueError(f"Reading {srt_recipe} needs the master config's project root")
+    recipe_count = recipe_node_count(root, srt_recipe) if srt_recipe is not None else None
     if recipe_count is not None:
         return recipe_count
     return worker_node_count(prefill, "prefill", runner, runner_data) + worker_node_count(
@@ -350,6 +354,7 @@ def add_multinode_node_count(
     entry: dict,
     runner_data: dict,
     num_nodes: int | None,
+    root: Path | None,
 ) -> dict:
     """Annotate a multi-node row with its scheduling node count."""
     if not entry[Fields.DISAGG.value] and num_nodes is not None:
@@ -363,6 +368,7 @@ def add_multinode_node_count(
             entry[Fields.RUNNER.value],
             runner_data,
             entry.get(Fields.SRT_RECIPE.value),
+            root,
         )
     return entry
 
@@ -999,6 +1005,7 @@ def _fixed_sequence_entries(
     conc_values: list[int],
     runners: list[str],
     runner_data: dict,
+    root: Path | None,
 ) -> list[dict]:
     """Build fixed-sequence rows after the command has selected runners and points.
 
@@ -1070,7 +1077,9 @@ def _fixed_sequence_entries(
             )
             entry.update(component_metadata(benchmark, config))
             if is_multinode:
-                add_multinode_node_count(entry, runner_data, benchmark.get(Fields.NUM_NODES.value))
+                add_multinode_node_count(
+                    entry, runner_data, benchmark.get(Fields.NUM_NODES.value), root
+                )
             entries.append(validate_matrix_entry(entry, is_multinode))
     return entries
 
@@ -1086,6 +1095,7 @@ def _agentic_entries(
     min_conc: int | None = None,
     max_conc: int | None = None,
     conc_filter: list[int] | None = None,
+    root: Path | None = None,
 ) -> list[dict]:
     """Expand one AgentX deployment for either generator command.
 
@@ -1196,7 +1206,9 @@ def _agentic_entries(
             entry[Fields.KV_OFFLOAD_BACKEND.value] = kv_offload_backend
         entry.update(component_metadata(benchmark, config))
         if is_multinode:
-            add_multinode_node_count(entry, runner_data, benchmark.get(Fields.NUM_NODES.value))
+            add_multinode_node_count(
+                entry, runner_data, benchmark.get(Fields.NUM_NODES.value), root
+            )
         entries.append(validate_agentic_matrix_entry(entry))
     return entries
 
@@ -1225,6 +1237,7 @@ def generate_full_sweep(
     args: argparse.Namespace,
     all_config_data: dict,
     runner_data: dict,
+    root: Path | None = None,
 ) -> list[dict]:
     """Compatibility adapter for callers passing the full-sweep CLI namespace."""
     return expand_full_sweep(
@@ -1246,6 +1259,7 @@ def generate_full_sweep(
             max_tp=args.max_tp,
             max_ep=args.max_ep,
         ),
+        root=root,
     )
 
 
@@ -1254,6 +1268,7 @@ def expand_full_sweep(
     runner_data: dict,
     *,
     options: FullSweepOptions = FullSweepOptions(),
+    root: Path | None = None,
 ) -> list[dict]:
     """Expand validated configs in declaration order, before eval selection."""
     if options.step_size <= 1:
@@ -1290,6 +1305,7 @@ def expand_full_sweep(
         scenario_types=options.scenario_types,
         runner_node_filter=options.runner_node_filter,
         full_sweep=options,
+        root=root,
     )
 
 
@@ -1370,6 +1386,7 @@ def generate_test_config_sweep(
     args: argparse.Namespace,
     all_config_data: dict,
     runner_data: dict | None = None,
+    root: Path | None = None,
 ) -> list[dict]:
     """Compatibility API for selected-key expansion without eval selection."""
     return _expand_selected_configs(
@@ -1380,6 +1397,7 @@ def generate_test_config_sweep(
         seq_lens=getattr(args, "seq_lens", None),
         scenario_types=getattr(args, "scenario_type", None),
         concurrencies=getattr(args, "conc", None),
+        root=root,
     )
 
 
@@ -1392,6 +1410,7 @@ def _expand_selected_configs(
     seq_lens: list[str] | None = None,
     scenario_types: tuple[str, ...] | list[str] | None = None,
     concurrencies: list[int] | None = None,
+    root: Path | None = None,
 ) -> list[dict]:
     resolved_keys = expand_config_keys(config_keys, all_config_data.keys())
     return _expand_configs(
@@ -1401,6 +1420,7 @@ def _expand_selected_configs(
         seq_lens=seq_lens,
         scenario_types=scenario_types,
         concurrencies=concurrencies,
+        root=root,
     )
 
 
@@ -1414,6 +1434,7 @@ def _expand_configs(
     scenario_types: tuple[str, ...] | list[str] | None = None,
     concurrencies: list[int] | None = None,
     full_sweep: FullSweepOptions | None = None,
+    root: Path | None = None,
 ) -> list[dict]:
     """Traverse configs and scenarios once for both generation commands.
 
@@ -1480,7 +1501,7 @@ def _expand_configs(
                     continue
                 rows.extend(
                     _fixed_sequence_entries(
-                        config, benchmark, sequence, values, runners, runner_data
+                        config, benchmark, sequence, values, runners, runner_data, root
                     )
                 )
 
@@ -1504,6 +1525,7 @@ def _expand_configs(
                         min_conc=full_sweep.min_conc if full_sweep is not None else None,
                         max_conc=full_sweep.max_conc if full_sweep is not None else None,
                         conc_filter=concurrencies,
+                        root=root,
                     )
                 )
     return rows
@@ -1611,18 +1633,20 @@ def generate_config_matrix(
     *,
     scenario_types: tuple[str, ...] | list[str] | None = None,
     eval_mode: EvalMode = "default",
+    root: Path | None = None,
 ) -> list[dict]:
     """Build selected configs and evals without a generator subprocess.
 
-    Every call builds independent rows. The caller loads master/runner inputs;
-    node-count resolution still reads checked-in recipes. Default,
-    throughput-only, subset-only, all-eval, and smoke modes use the same policy as the CLI.
+    Every call builds independent rows. Multi-node node counts read recipes under
+    ``root``. Default, throughput-only, subset-only, all-eval, and smoke modes use
+    the same policy as the CLI.
     """
     rows = _expand_selected_configs(
         config_keys,
         master_config,
         runner_data,
         scenario_types=scenario_types,
+        root=root,
     )
     rows = select_matrix_evals(rows, mode=eval_mode)
     # Retain the former JSON boundary: values and nested objects cannot leak
@@ -1830,11 +1854,12 @@ def main() -> list[dict]:
 
     all_config_data = load_config_files(args.config_files)
     runner_data = load_runner_file(args.runner_config)
+    root = config_root(args.config_files)
 
     if args.command == "full-sweep":
-        matrix_values = generate_full_sweep(args, all_config_data, runner_data)
+        matrix_values = generate_full_sweep(args, all_config_data, runner_data, root)
     elif args.command == "test-config":
-        matrix_values = generate_test_config_sweep(args, all_config_data, runner_data)
+        matrix_values = generate_test_config_sweep(args, all_config_data, runner_data, root)
     else:
         parser.error(f"Unknown command: {args.command}")
 
