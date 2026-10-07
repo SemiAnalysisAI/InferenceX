@@ -407,11 +407,16 @@ def test_build_recovery_config_from_current_and_historical_projects(
     master = {"fixture": {
         "image": "example/image:stable", "model": "example/model", "model-prefix": "dsr1",
         "precision": "fp8", "framework": "sglang", "runner": "fixture", "multinode": False,
+        "srt-recipe-dir": "fixture",
         "scenarios": {"fixed-seq-len": [{
-            "isl": 8192, "osl": 1024, "search-space": [{"tp": 1, "conc-list": [2]}],
+            "isl": 8192, "osl": 1024,
+            "search-space": [{"tp": 1, "conc-list": [2], "srt-recipe": "recipe.yaml"}],
         }]},
     }}
     (configs / "nvidia-master.yaml").write_text(yaml.safe_dump(master))
+    recipe = project / "benchmarks/single_node/srt-slurm-recipes/fixture/recipe.yaml"
+    recipe.parent.mkdir(parents=True)
+    recipe.write_text("{}\n")
     base_bytes = block("fixture", "https://github.com/SemiAnalysisAI/InferenceX/pull/1")
     (project / "perf-changelog.yaml").write_bytes(base_bytes)
     git("add", ".")
@@ -420,7 +425,7 @@ def test_build_recovery_config_from_current_and_historical_projects(
     if head_layout != base_layout:
         project = repo / head_layout
         project.mkdir()
-        git("mv", "configs", "infx", "perf-changelog.yaml", head_layout + "/")
+        git("mv", "configs", "infx", "benchmarks", "perf-changelog.yaml", head_layout + "/")
     (project / "perf-changelog.yaml").write_bytes(
         base_bytes + b"\n" + block("fixture", "https://github.com/SemiAnalysisAI/InferenceX/pull/42")
     )
