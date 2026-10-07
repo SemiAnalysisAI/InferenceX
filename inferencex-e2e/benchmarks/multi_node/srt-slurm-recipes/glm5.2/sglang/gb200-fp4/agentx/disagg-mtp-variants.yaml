@@ -3,17 +3,17 @@ base:
   name: gb200-fp4-glm5.2-agentx
   model:
     path: glm-5.2-fp4
-    container: dynamo-sglang
+    container: lmsysorg/sglang:v0.5.18-cu130@sha256:db37df8aded8fa169f7264404f3c893672f8046609a4a43d15bedcb4f63d692a
     precision: fp4
   identity:
     model:
       repo: nvidia/GLM-5.2-NVFP4
       revision: aec724e8c7b8ee9db3b48c01c320f63f9cdaf8aa
     container:
-      image: lmsysorg/sglang:v0.5.17-cu130
+      image: lmsysorg/sglang:v0.5.18-cu130@sha256:db37df8aded8fa169f7264404f3c893672f8046609a4a43d15bedcb4f63d692a
     frameworks:
       dynamo: 71eb001e17fa73c742f0afe1a6ed96836cb135fd
-      sglang: 0.5.17
+      sglang: 0.5.18
   resources:
     gpu_type: gb200
     gpus_per_node: 4
@@ -130,7 +130,7 @@ base:
         SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
         SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK: '512'
         SGLANG_MOE_NVFP4_DISPATCH: '1'
-        SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '1'
+        SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '0'
         SGLANG_ENABLE_THINKING: '1'
         SGLANG_CLIP_MAX_NEW_TOKENS_ESTIMATION: '8'
         SGLANG_REASONING_EFFORT: max

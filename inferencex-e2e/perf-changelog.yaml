@@ -9370,3 +9370,15 @@
     - "Run decoder SWA bounded replay with prefill graphs disabled on every point."
     - "Throughput keeps the committed thinking-on golden AL 3.51 selected by the srt connector; evals use real verification."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3696
+
+- config-keys:
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-disagg
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-mtp
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-mtp-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Keep the GLM-5.2 NextN/MTP draft at shipped precision on GB200."
+    - "Use the digest-pinned upstream SGLang v0.5.18 CUDA 13 image with NIXL 1.4.0 for the two disaggregated recipes."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3401
