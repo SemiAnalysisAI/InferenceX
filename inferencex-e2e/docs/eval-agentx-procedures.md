@@ -116,7 +116,7 @@ Run these with Python 3.10 or newer, normally inside the serving container, beca
 
 Set `EVAL_ONLY=true` **before server launch**. It is not merely a switch inside the eval command:
 
-1. For a single-node fixed-sequence job, the srt binder sets the server context to the matrix `MAX_MODEL_LEN` (`isl + osl + 256`) through `context-length` for SGLang, `max_seq_len` and `max_num_tokens` for TRT-LLM, or `max-model-len` for vLLM and ATOM. AgentX points and multi-node jobs keep their recipe's own context, and multi-node jobs can select a real-verification `EVAL_CONFIG_FILE`.
+1. For a single-node fixed-sequence job, the srt binder sets the server context to the matrix `MAX_MODEL_LEN` (`isl + osl + 256`) through `context-length` for SGLang, `max_seq_len` and `max_num_tokens` for TRT-LLM, or `max-model-len` for vLLM and ATOM. AgentX points and multi-node jobs keep their recipe's own context, and multi-node jobs can select a real-verification `eval-srt-recipe`.
 2. The health check still runs. In eval-only jobs, vendor frameworks also wait for the served model on the OpenAI chat route, within `EVAL_ENDPOINT_READY_TIMEOUT_SECONDS`.
 3. Throughput is skipped.
 4. `python3 -m infx.bench eval` sizes each lm-eval request from `EVAL_MAX_MODEL_LEN`, else from `MAX_MODEL_LEN` capped at the model's native maximum.
