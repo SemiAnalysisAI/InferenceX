@@ -15,6 +15,8 @@ entry-name:
   # Optional defaults for every search-space entry in this config.
   router: { name: string, version: string }
   kv-p2p-transfer: string
+  # Recipe directory under benchmarks/<single|multi>_node/srt-slurm-recipes/.
+  srt-recipe-dir: string
   scenarios:
     fixed-seq-len:
     - isl: int
@@ -142,7 +144,8 @@ jobs to 3600 seconds. Reusable workflow callers may override the `duration`
 input.
 
 Notes:
-- The fields above are the common ones, not the full schema. The Pydantic models in [`infx/matrix/validation.py`](../infx/matrix/validation.py) are the authoritative contract; they also accept fields such as `spec-decoding`, `srt-recipe`, `num-nodes`, and `require-power`, and they reject any field they do not define, which fails matrix generation.
+- The fields above are the common ones, not the full schema. The Pydantic models in [`infx/matrix/validation.py`](../infx/matrix/validation.py) are the authoritative contract; they also accept fields such as `spec-decoding`, `num-nodes`, and `require-power`, and they reject any field they do not define, which fails matrix generation.
+- Every srt-slurm entry sets `srt-recipe-dir`, and every search-space entry sets `srt-recipe: <file>[:<selector>]` relative to it, where the selector is `base`, `override_<name>`, or `zip_override_<name>[<index>]`. Multinode entries may add `eval-srt-recipe` for eval-only real verification. Validation rejects a missing file or variant, and `CONFIG_FILE`/`EVAL_CONFIG_FILE` in `additional-settings`; only `llmd-vllm` entries still select their recipe with `CONFIG_FILE`. The generated row carries the path from `inferencex-e2e/`.
 - Setting the fields above only guarantees that their values are passed as environment variables to benchmark scripts. Single-node jobs receive `PP_SIZE`, `DCP_SIZE`, and `PCP_SIZE`. Multinode jobs receive `PREFILL_PP_SIZE`, `PREFILL_DCP_SIZE`, `PREFILL_PCP_SIZE`, `DECODE_PP_SIZE`, `DECODE_DCP_SIZE`, and `DECODE_PCP_SIZE`. Actually using those variables is an implementation detail of the benchmark Bash script.
 
 ## Runners
