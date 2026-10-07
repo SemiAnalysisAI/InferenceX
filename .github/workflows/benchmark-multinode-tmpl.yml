@@ -143,6 +143,8 @@ env:
   EVAL_SUITE: ${{ inputs.eval-suite }}
   EVAL_CONC: ${{ inputs.eval-conc }}
   EVAL_LIMIT: ${{ inputs.eval-limit }}
+  # Throwaway KV A/B: budget evals against the recipe's 16384 server context.
+  EVAL_MAX_MODEL_LEN: "16384"
   REQUIRE_POWER: ${{ inputs.require-power && '1' || '0' }}
   POWER_PRODUCER_SHA: ${{ inputs.power-producer-sha }}
   # Agentic-coding env. Fixed-seq-len jobs leave these empty.
