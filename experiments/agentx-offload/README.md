@@ -39,6 +39,20 @@ exact host scratch was removed after its owner receipt and inactive Slurm job
 were verified. It provides no throughput, latency, completion, or energy result;
 the cancellation initiator has not been established.
 
+The exact same-config 2 TiB retry (`37602969372`) completed all 5,401 warmup
+requests without error and the full 3,600-second profile. It retained 1,131
+successful responses with 100% TTFT/inter-token metric coverage; strict four-GPU
+power validation and independent `TZ=UTC` replay passed at 897.251 W/GPU
+and 11,550.828 J/successful query.
+The benchmark job succeeded, while the enclosing workflow failed in downstream
+collectors whose tooling checkout lacked `infx`. All five artifact ZIPs were
+validated and hashed; `offload_cleanup.json` records deletion and an independent
+host check found the exact scratch absent. Against the earlier 4 TiB c488 cohort,
+2 TiB was 1.906% lower in total tok/s/GPU, 4.850% lower in output tok/s/GPU,
+8.020% lower in P90 interactivity, and 3.406% higher in J/successful query.
+These are cross-capacity, single-run local differences, not a replicated capacity
+effect; the 2 TiB run also had 0.865% external cache hits versus 1.443% at 4 TiB.
+
 The connector preallocates its configured disk files, so concurrency does not
 determine disk footprint: admission now requires 2,199,023,255,552 bytes plus
 the 128 GiB reserve (2,336,462,209,024 bytes total). The completed 4 TiB series started at c256, which completed the full canonical run with 61.680% external
