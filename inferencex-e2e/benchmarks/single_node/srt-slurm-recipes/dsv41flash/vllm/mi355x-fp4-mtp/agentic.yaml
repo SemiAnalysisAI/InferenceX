@@ -6,10 +6,14 @@ base:
   name: dsv41flash-fp4-mi355x-vllm-agentic
   model:
     path: hf:deepseek-ai/DeepSeek-V4.1-Flash
-    # Repinned to a nightly build that includes vllm-project/vllm#58671
-    # (paged MXFP4 sparse indexer), #58655 (mHC fused Triton seams) and
-    # #53492 (sparse MLA Gluon kernel).
-    container: vllm/vllm-openai-rocm:nightly-rocm100-ac9126e58aa7bbab1856ba6593ba4d5003fea516
+    # Repinned to the current ROCm 10.0 nightly, which adds
+    # vllm-project/vllm#56720 (one-pass dequantize and a gather-sized grid for
+    # the compressed K cache), #57947 (fused QSA pre-indexer on the AMD path),
+    # #58560 (compressor ring kept out of the null block) and #59794
+    # (AITER 0.1.24.post1, which supplies the a4w4 and quick-reduce kernels)
+    # on top of #58671 (paged MXFP4 sparse indexer), #58655 (mHC fused Triton
+    # seams) and #53492 (sparse MLA Gluon kernel).
+    container: vllm/vllm-openai-rocm:nightly-rocm100-21d93d0d8c0e9627900020382bfce4730e61cab7
     precision: fp4
   resources:
     gpu_type: mi355x
@@ -39,7 +43,7 @@ base:
         tool-call-parser: deepseek_v41
         enable-auto-tool-choice: true
         reasoning-parser: deepseek_v41
-        # The plain name lets the CK a8w4 MoE kernel win vLLM's priority list;
+        # The plain name selects CK MoE; the environment below enables a4w4.
         # aiter_triton_mxfp4_bf16 would force the W4A16 Triton kernel.
         moe-backend: aiter
         gpu-memory-utilization: 0.9
@@ -62,6 +66,28 @@ base:
       env:
         VLLM_ROCM_USE_AITER: '1'
         VLLM_ROCM_USE_AITER_MOE: '1'
+        # a4w4 (VLLM_ROCM_USE_AITER_MOE_A4W4_DSV4=1, vllm-project/vllm#58819)
+        # is held back. At TP=2 the MoE intermediate shard is 2304 / 2 = 1152,
+        # which is 128- but not 256-aligned, so vLLM pads nothing and AITER
+        # keeps its inline-sort MXFP4 path; that path addresses the padded
+        # scale stride and memory-faults during graph capture. TP=4 only
+        # escapes because its 576 -> 640 padding makes AITER reject the same
+        # path. Tracked in vllm-project/vllm#60273; the experts run a8w4
+        # through the generic AITER selector until a fix lands.
+        # INT4-quantized quick all-reduce, as in vllm-project/recipes#1061.
+        # Quick reduce only takes tensors at or above its built-in threshold,
+        # so prefill chunks and the larger DSpark decode steps use it while
+        # the smallest decode steps stay on custom all-reduce.
+        VLLM_ROCM_QUICK_REDUCE_QUANTIZATION: INT4
+        # Run the MoE shared expert on its own stream for every decode step on
+        # this ladder. Upstream caps the overlap at 256 tokens, which predates
+        # speculative decoding: five DSpark drafts make a decode step
+        # CONC x 6 tokens, so c64 submits 384 and the overlap never engages.
+        # 1024 covers the whole ladder and matches the ATOM default. It stays
+        # below the prefill chunk on purpose: memory profiling is one dummy run
+        # at max-num-batched-tokens, so a threshold above the chunk would make
+        # profiling overlap and shrink the KV pool.
+        VLLM_SHARED_EXPERTS_STREAM_TOKEN_THRESHOLD: '1024'
         AITER_TRITON_LOG_LEVEL: ERROR
         VLLM_ROCM_USE_AITER_TRITON_SPARSE_MLA: 'True'
         # DeepseekV41ForCausalLM is not torch-compiled upstream; breakable
@@ -80,11 +106,25 @@ base:
       WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
 
-# One variant per point (c128 excluded for both TP2 and TP4). Engram tables
-# move to pinned host memory at TP2, where resident tables leave too little
-# KV. Graph capture covers 2x CONC x (1 + 5 drafts). The prefill chunk shrinks
-# at TP2 from c64 to buy KV room, and where it drops below 1024 x 6 slots the
-# scheduler is capped at the captured shape.
+# One variant per point, concurrency 1 through 64 on both TP arms. Engram
+# tables move to pinned host memory at TP2, where resident tables leave too
+# little KV. Graph capture covers 2x CONC x (1 + 5 drafts), which is what the
+# benchmark admits. The prefill chunk is the upstream 16384 on every point,
+# and every point stays at or above 1024 x 6 token slots, so none needs an
+# explicit max-num-seqs.
+#
+# TP2 c64 used to cap the chunk at 8192 to buy KV room. That room was being
+# taken by a profiling bug, not by the chunk: the mxfp4 indexer reserves its
+# decode logits workspace as (rows, max-model-len), and with no ambient config
+# during the profiling run it fell back to using the batched-token count as
+# the row count, so at this recipe's 1M context the reservation scaled with
+# the chunk. vllm#58014 restores the config, bounding rows by
+# max-num-seqs x (1 + 5 drafts), which is far below either chunk. The pinned
+# image carries that fix, so the chunk no longer moves the KV budget.
+#
+# c128 and c192 are excluded. SemiAnalysisAI/InferenceX#3735 is this recipe
+# with one further change, an 8192 cap from c32 up for decode tail latency;
+# its A/B predates vllm#58014, so it is being re-measured on this image.
 override_tp4_c1:
   roles:
     agg:
@@ -176,6 +216,7 @@ override_tp4_c64:
     env:
       CONC: '64'
 
+
 override_tp2_c1:
   roles:
     agg:
@@ -262,7 +303,8 @@ override_tp2_c64:
         tensor-parallel-size: 2
         engram-config: '{"cpu_offload":true}'
         max-cudagraph-capture-size: 1024
-        max-num-batched-tokens: 8192
+        max-num-batched-tokens: 16384
   benchmark:
     env:
       CONC: '64'
+
