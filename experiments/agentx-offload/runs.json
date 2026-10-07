@@ -5729,7 +5729,7 @@
       "status": "in_progress",
       "workflow_name": "offload-v1-nvme2tib-c488-r1-capacity-20261007",
       "dispatched_at": "2026-10-07T00:27:28Z",
-      "phase": "canonical zero-idle cache-pressure replay, zero errors",
+      "phase": "canonical warmup drain after all 5,401 requests sent, zero errors",
       "performance_result": false,
       "energy_result": false,
       "nvme_bytes_per_node": 2199023255552,
@@ -5750,7 +5750,7 @@
       "slurm_state": "RUNNING",
       "slurm_time_limit": "08:30:00",
       "requested_node": "im-b200-c001",
-      "runtime_evidence": "Slurm 19716 allocated at 02:23:53Z on allowlisted im-b200-c001 with 08:30:00 limit. Runtime offload_config.json from exact run verified 23,022,421,168,128 free bytes before scratch creation (>2,336,462,209,024 threshold), O_DIRECT, zero host DRAM, 2,199,023,255,552 NVMe bytes, SimpleCPUOffloadConnector disk backend, lazy offload, page cache disabled. Exact host /scratch owner.json matches run 37552057241, attempt 1, Slurm 19716. Canonical warmup began at 02:32:32Z; latest snapshot 158/5,401 returned, 521 sent, 363 in flight, zero errors after 690.1s. The 521-request primer completed and zero-idle cache-pressure replay began at 03:15:38Z. Latest sample at 03:42:32Z returned 1,005/5,401, sent 1,671, retained 666 in flight, zero errors after 4,200.8 seconds.",
+      "runtime_evidence": "Slurm 19716 allocated at 02:23:53Z on allowlisted im-b200-c001 with 08:30:00 limit. Runtime offload_config.json from exact run verified 23,022,421,168,128 free bytes before scratch creation (>2,336,462,209,024 threshold), O_DIRECT, zero host DRAM, 2,199,023,255,552 NVMe bytes, SimpleCPUOffloadConnector disk backend, lazy offload, page cache disabled. Exact host /scratch owner.json matches run 37552057241, attempt 1, Slurm 19716. Canonical warmup began at 02:32:32Z; latest snapshot 158/5,401 returned, 521 sent, 363 in flight, zero errors after 690.1s. The 521-request primer completed and zero-idle cache-pressure replay began at 03:15:38Z. Latest sample at 03:42:32Z returned 1,005/5,401, sent 1,671, retained 666 in flight, zero errors after 4,200.8 seconds. All 5,401 warmup requests were sent by 08:52:44Z. Latest drain sample at 09:12:06Z returned 5,284, retained 117 in flight, zero errors after 23,974.6s; profiling not yet started.",
       "slurm_started_at": "2026-10-07T02:23:53Z",
       "node": "im-b200-c001",
       "host_scratch": "/scratch/inferencex-offload-37552057241-1-19716-4a5863443595",
@@ -5767,14 +5767,15 @@
       "warmup_started_at": "2026-10-07T02:32:32Z",
       "warmup_target_requests": 5401,
       "warmup_latest": {
-        "sample_at": "2026-10-07T03:42:32Z",
-        "returned": 1005,
-        "sent": 1671,
-        "in_flight": 666,
+        "sample_at": "2026-10-07T09:12:06Z",
+        "returned": 5284,
+        "sent": 5401,
+        "in_flight": 117,
         "errors": 0,
-        "elapsed_seconds": 4200.8
+        "elapsed_seconds": 23974.6
       },
-      "warmup_replay_started_at": "2026-10-07T03:15:38Z"
+      "warmup_replay_started_at": "2026-10-07T03:15:38Z",
+      "warmup_request_budget_reached_by": "2026-10-07T08:52:44Z"
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35456989669,35469801850,35476053573,35497846918,35524019140,35524083518,35542179539,35542182560,35542185178,35542190411,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894,36796500128,37027095833,37428997901,37490705589",
