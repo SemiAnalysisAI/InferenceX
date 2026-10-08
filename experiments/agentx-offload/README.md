@@ -53,8 +53,21 @@ host check found the exact scratch absent. Against the earlier 4 TiB c488 cohort
 These are cross-capacity, single-run local differences, not a replicated capacity
 effect; the 2 TiB run also had 0.865% external cache hits versus 1.443% at 4 TiB.
 
-An exact-config 2 TiB c488 replication (`37666309639`) was dispatched after a
-fresh zero-queued B200 inventory to test whether these small differences persist.
+The exact-config 2 TiB c488 replication (`37666309639`) completed all 5,401
+warmup requests without error and the full 3,600-second profile. It retained
+1,142 successful responses with 100% TTFT/inter-token coverage. Strict four-GPU
+power validation and an independent `TZ=UTC` replay passed at 897.360 W/GPU
+and 11,440.964 J/successful query. Its benchmark job succeeded; downstream
+collectors again failed because the tooling checkout lacked `infx`. Five artifact
+ZIPs were checked and hashed; `offload_cleanup.json` records deletion and an
+independent host check found the exact scratch absent. Against the single 4 TiB
+c488 run, this 2 TiB replicate was 1.428% lower in total tok/s/GPU, 4.317%
+lower in output tok/s/GPU, 3.551% lower in P90 interactivity, and 2.423% higher
+in J/successful query. The two valid 2 TiB runs averaged 8,398.727 total
+tok/s/GPU and 11,495.896 J/successful query, respectively 1.667% below and
+2.915% above the single 4 TiB run. This repeated direction is local evidence;
+the 4 TiB cohort still needs a repeat to estimate run variation before any
+capacity effect can be claimed.
 
 The connector preallocates its configured disk files, so concurrency does not
 determine disk footprint: admission now requires 2,199,023,255,552 bytes plus

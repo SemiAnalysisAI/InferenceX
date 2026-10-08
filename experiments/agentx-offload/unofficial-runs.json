@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-10-07T18:26:56.109182Z",
+  "generated_at": "2026-10-08T02:47:07.348059Z",
   "repo": "SemiAnalysisAI/InferenceX",
   "branch": "experiment/agentx-b200-offload",
   "workflow_run_ids": [
@@ -84,7 +84,7 @@
     37602969372,
     37666309639
   ],
-  "job_id_count": 946,
+  "job_id_count": 948,
   "renderable_workflow_run_ids": [
     35444664736,
     35449533638,
@@ -116,7 +116,8 @@
     37027095833,
     37428997901,
     37490705589,
-    37602969372
+    37602969372,
+    37666309639
   ],
   "pure_nvme_renderable_workflow_run_ids": [
     35444664736,
@@ -127,10 +128,11 @@
     35832083322,
     35934408414,
     36796500128,
-    37602969372
+    37602969372,
+    37666309639
   ],
-  "all_renderable_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35456989669,35469801850,35476053573,35497846918,35524019140,35524083518,35542179539,35542182560,35542185178,35542190411,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894,36796500128,37027095833,37428997901,37490705589,37602969372",
-  "pure_nvme_renderable_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35524019140,35565538871,35646317491,35727274307,35832083322,35934408414,36796500128,37602969372",
+  "all_renderable_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35456989669,35469801850,35476053573,35497846918,35524019140,35524083518,35542179539,35542182560,35542185178,35542190411,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894,36796500128,37027095833,37428997901,37490705589,37602969372,37666309639",
+  "pure_nvme_renderable_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35524019140,35565538871,35646317491,35727274307,35832083322,35934408414,36796500128,37602969372,37666309639",
   "workflow_runs": [
     {
       "workflow_run_id": 35150085918,
@@ -3658,10 +3660,10 @@
       "workflow_run_id": 37666309639,
       "workflow_name": "e2e Test - offload-v1-nvme2tib-c488-r3-capacity-20261007",
       "display_title": "e2e Test - offload-v1-nvme2tib-c488-r3-capacity-20261007",
-      "status": "in_progress",
-      "conclusion": null,
+      "status": "completed",
+      "conclusion": "failure",
       "created_at": "2026-10-07T18:22:21Z",
-      "updated_at": "2026-10-07T18:23:10Z",
+      "updated_at": "2026-10-08T02:28:10Z",
       "html_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37666309639",
       "job_ids": [
         112946329866,
@@ -3673,14 +3675,28 @@
         112946463624,
         112946464237,
         112946464351,
-        112946465176
+        112946465176,
+        113118773039,
+        113118824663
       ],
-      "artifact_ids": [],
-      "artifact_names": [],
-      "unofficial_api_status": 404,
-      "benchmark_count": 0,
+      "artifact_ids": [
+        11525095030,
+        11524905749,
+        11524591574,
+        11524069500,
+        11524064632
+      ],
+      "artifact_names": [
+        "gpu_metrics_minimaxm3_tp4_conc488_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-362d1dbeebcccde8a4f7",
+        "agentic_minimaxm3_tp4_conc488_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-362d1dbeebcccde8a4f7",
+        "bmk_agentic_minimaxm3_tp4_conc488_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-362d1dbeebcccde8a4f7",
+        "power_audit_minimaxm3_tp4_conc488_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-362d1dbeebcccde8a4f7",
+        "server_logs_minimaxm3_tp4_conc488_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-362d1dbeebcccde8a4f7"
+      ],
+      "unofficial_api_status": 200,
+      "benchmark_count": 1,
       "evaluation_count": 0,
-      "renderable": false,
+      "renderable": true,
       "renderability_source": "live",
       "pure_nvme": true
     }

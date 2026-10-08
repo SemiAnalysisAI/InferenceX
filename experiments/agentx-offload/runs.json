@@ -6028,12 +6028,12 @@
       "concurrency": 488,
       "repeat": 3,
       "head_sha": "928880f8e2a7463283d0e0e8595678ea1f2f3b5d",
-      "status": "in_progress",
+      "status": "failure",
       "workflow_name": "offload-v1-nvme2tib-c488-r3-capacity-20261007",
       "dispatched_at": "2026-10-07T18:22:21Z",
-      "phase": "full 3,600-second profiling; zero errors so far",
-      "performance_result": false,
-      "energy_result": false,
+      "phase": "terminal: full benchmark and strict power valid; downstream collectors failed",
+      "performance_result": true,
+      "energy_result": true,
       "nvme_bytes_per_node": 2199023255552,
       "capacity_cohort": "2 TiB bounded SimpleCPU disk cache; exact-config replicate of valid r2 to test small cross-capacity differences",
       "execution_budget": {
@@ -6048,7 +6048,7 @@
       "runner": "b200-nscale-slurm_00",
       "started_at": "2026-10-07T18:23:09Z",
       "slurm_job_id": 19773,
-      "slurm_state": "RUNNING",
+      "slurm_state": "CANCELLED after benchmark job success",
       "slurm_started_at": "2026-10-07T18:23:51Z",
       "slurm_time_limit": "08:30:00",
       "node": "im-b200-c001",
@@ -6074,7 +6074,7 @@
         "errors": 0,
         "elapsed_seconds": 23974.5
       },
-      "runtime_evidence": "Slurm 19773 allocated at 18:23:51Z on allowlisted im-b200-c001 with 08:30:00 limit. Live offload_config.json verifies 23,023,379,783,680 free bytes before scratch creation (>2,336,462,209,024 threshold), O_DIRECT, zero DRAM, 2,199,023,255,552 NVMe bytes, SimpleCPUOffloadConnector disk backend with lazy offload and page cache disabled. Exact host /scratch owner.json matches run 37666309639, attempt 1, Slurm 19773. Canonical warmup began 18:32:43Z; latest sample 18:42:13Z returned 133/5,401, sent 521, retained 388 in flight, zero errors after 570.1s. The 521-request primer completed and zero-idle cache-pressure replay began at 19:15:50Z. Latest sample 19:42:14Z returned 994/5,401, sent 1,656, retained 662 in flight, zero errors after 4,170.8s. All 5,401 warmup requests were sent by 00:53:39Z; latest drain sample at 01:12:18Z returned 5,273, retained 128 in flight, zero errors after 23,974.5s. Profiling has not started. Canonical warmup completed all 5,401 requests with zero cancellations and errors after 24,651.79s at 01:23:35Z. Full 3,600-second profiling began immediately; realtime snapshot at 01:41:52Z retained 630 successes and zero errors. Aggregate export pending.",
+      "runtime_evidence": "Slurm 19773 allocated at 18:23:51Z on allowlisted im-b200-c001 with 08:30:00 limit. Live offload_config.json verifies 23,023,379,783,680 free bytes before scratch creation (>2,336,462,209,024 threshold), O_DIRECT, zero DRAM, 2,199,023,255,552 NVMe bytes, SimpleCPUOffloadConnector disk backend with lazy offload and page cache disabled. Exact host /scratch owner.json matches run 37666309639, attempt 1, Slurm 19773. Canonical warmup began 18:32:43Z; latest sample 18:42:13Z returned 133/5,401, sent 521, retained 388 in flight, zero errors after 570.1s. The 521-request primer completed and zero-idle cache-pressure replay began at 19:15:50Z. Latest sample 19:42:14Z returned 994/5,401, sent 1,656, retained 662 in flight, zero errors after 4,170.8s. All 5,401 warmup requests were sent by 00:53:39Z; latest drain sample at 01:12:18Z returned 5,273, retained 128 in flight, zero errors after 23,974.5s. Profiling has not started. Canonical warmup completed all 5,401 requests with zero cancellations and errors after 24,651.79s at 01:23:35Z. Full 3,600-second profiling began immediately; realtime snapshot at 01:41:52Z retained 630 successes and zero errors. Aggregate export pending. Full profile/export completed: 1,142 successes, eight InvalidInferenceResultError classifications, 3,629.73552s benchmark duration, 100% TTFT/inter-token coverage, was_cancelled=false, no AIPerf error summary. Benchmark job succeeded; enclosing workflow failed only in downstream collectors missing infx.",
       "warmup_replay_started_at": "2026-10-07T19:15:50Z",
       "warmup_all_sent_at": "2026-10-08T00:53:39Z",
       "warmup_completed_at": "2026-10-08T01:23:35Z",
@@ -6086,16 +6086,155 @@
       },
       "profiling_started_at": "2026-10-08T01:23:35Z",
       "profiling_target_seconds": 3600,
-      "profiling_latest": {
+      "workflow_conclusion": "failure",
+      "benchmark_job_conclusion": "success",
+      "completed_at": "2026-10-08T02:28:09Z",
+      "failure_stage": "downstream collect-results and calc-success-rate missing infx module on tooling checkout",
+      "warmup_completed_requests": 5401,
+      "warmup_cancelled_requests": 0,
+      "warmup_errors": 0,
+      "warmup_elapsed_seconds": 24651.79,
+      "profiling_live_latest": {
         "sample_at": "2026-10-08T01:41:52Z",
         "successful_responses": 630,
         "errors": 0,
         "elapsed_seconds": 1096
+      },
+      "performance": {
+        "num_requests_total": 6543,
+        "num_requests_successful": 1142,
+        "num_requests_warmup_dropped": 5401,
+        "num_requests_error_dropped": 8,
+        "request_error_categories": {
+          "InvalidInferenceResultError": 8
+        },
+        "duration_seconds": 3629.73552,
+        "output_tokens_per_second": 313.05477,
+        "output_tokens_per_second_per_gpu": 78.26369,
+        "input_tokens_per_second": 33363.43612,
+        "total_tokens_per_second": 33676.49089,
+        "total_tokens_per_second_per_gpu": 8419.12272,
+        "p90_e2e_latency_seconds": 2959.01562,
+        "p90_ttft_seconds": 2922.72756,
+        "p90_tpot_seconds": 0.11645,
+        "p90_interactivity_tokens_per_second_per_user": 8.58762,
+        "p90_e2e_normalized_interactivity_tokens_per_second_per_user": 0.08025,
+        "mean_e2e_latency_seconds": 1219.32071,
+        "avg_power_w_per_gpu": 897.359816,
+        "joules_per_successful_query": 11440.964182
+      },
+      "power_validation": {
+        "power_valid": true,
+        "integration_method": "per_device_trapezoidal_with_linear_boundary_interpolation",
+        "power_percentile_method": "time_weighted_synchronized_total_piecewise_linear",
+        "expected_gpu_count": 4,
+        "observed_gpu_count": 4,
+        "per_gpu_max_sample_gap_s": {
+          "0": 1.00600004196167,
+          "1": 1.00600004196167,
+          "2": 1.00600004196167,
+          "3": 1.00600004196167
+        },
+        "metrics": {
+          "avg_power_w": 897.359816,
+          "p75_power_w": 963.33682,
+          "p75_total_gpu_power_w": 3853.34728,
+          "p90_power_w": 967.572557,
+          "p90_total_gpu_power_w": 3870.290229,
+          "avg_total_gpu_power_w": 3589.439264,
+          "total_gpu_energy_j": 13065581.095917,
+          "joules_per_successful_query": 11440.964182,
+          "joules_per_input_token": 0.10789,
+          "joules_per_output_token": 11.498295,
+          "joules_per_total_token": 0.106887
+        }
+      },
+      "cache_evidence": {
+        "gpu_cache_hit_rate": 0.01103,
+        "external_cache_hit_rate": 0.0096,
+        "overall_cache_hit_rate": 0.02063,
+        "theoretical_cache_hit_rate": 0.94049,
+        "gpu_cache_hit_prompt_tokens": 12034944,
+        "external_cache_hit_prompt_tokens": 10483072,
+        "computed_prompt_tokens": 1068945519,
+        "prompt_tokens_total": 1091463535,
+        "generation_tokens_total": 1299141,
+        "gpu_cache_usage_pct": 1
+      },
+      "artifacts": [
+        {
+          "id": 11525095030,
+          "name": "gpu_metrics_minimaxm3_tp4_conc488_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-362d1dbeebcccde8a4f7",
+          "size_bytes": 1161049,
+          "sha256": "d62f3c33f2446c1539447edae1025d5e48ba25c3f3a11c94afdc710bd1c9b78f"
+        },
+        {
+          "id": 11524905749,
+          "name": "agentic_minimaxm3_tp4_conc488_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-362d1dbeebcccde8a4f7",
+          "size_bytes": 36883552,
+          "sha256": "693eea4f5bd27e74c50395bddc7052ac2f4cb447655779e4f535ac28d5a34983"
+        },
+        {
+          "id": 11524591574,
+          "name": "bmk_agentic_minimaxm3_tp4_conc488_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-362d1dbeebcccde8a4f7",
+          "size_bytes": 2272,
+          "sha256": "6a9c526f5d41b7fdc27976dfb957aa91a881ee925109b2bbbdfc00f2ee0b1ada"
+        },
+        {
+          "id": 11524069500,
+          "name": "power_audit_minimaxm3_tp4_conc488_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-362d1dbeebcccde8a4f7",
+          "size_bytes": 1164650,
+          "sha256": "09e6c9858c82e5dfbf94afcda9aa49057e27f0a7476c6c7a998cf67fd5cda008"
+        },
+        {
+          "id": 11524064632,
+          "name": "server_logs_minimaxm3_tp4_conc488_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-362d1dbeebcccde8a4f7",
+          "size_bytes": 246834,
+          "sha256": "91a993809c6534f1e913d1127b2ce3f26dda188f721c826e4ccbf62fe57ab42e"
+        }
+      ],
+      "evidence_sha256": {
+        "benchmark.log": "3a162cfef922e4e915989154c44988832b08b3115bfe58b62bc8ae6b32b0107d",
+        "aiperf_artifacts/profile_export.jsonl": "1a40bfe03e64fd7bcb292ef55d5f3d9834ef9cc0a709b3756b601f447d016d71",
+        "aiperf_artifacts/profile_export_aiperf.json": "c40962e778d9c2169b9355c825328f4193bb2eb64a9386aeb53c35bf86870921",
+        "aiperf_artifacts/server_metrics_export.json": "ec929653a6c50234de94a253d7b95f9aeb50907fa619aae7079805f2aa215196",
+        "server.log": "206734d584944d24f7e4a1e70ae5ab05b973529d4b3547c2a8404baf90d2872b",
+        "offload-telemetry.jsonl": "f2c65607976f00edc213a245a6bc00223b4a16c1e80f8a11a9bf379265a978f0",
+        "offload_config.json": "18c4017f68b66e4ff3579044a64d75489cf83742cfdec62f6f0ee4c6b49480da",
+        "gpu_metrics.csv": "e26a066bb211a26049a2055fed91f327a2a38d46299c596c8eefc5580ce499e8",
+        "offload_cleanup.json": "2220aa89a51666acac269905c1a8d2d51dca013fdf8d2131fa88ac7444f81bbb",
+        "power_validation.json": "23569f85abb4749e1ff48943ab7ec4cfb45cb2229c6e0b8bb120a36f8e6b0410"
+      },
+      "power_evidence": "Uploaded strict power_validation.json passed with four GPUs; maximum sample gap 1.006 seconds. Average 897.359816 W/GPU and 11440.964182 J/successful query. Independent repository adapter replay with TZ=UTC against uploaded raw trace and timezone offset passed --require-power; validation window and all metrics exactly matched uploaded receipt.",
+      "storage_evidence": "offload_cleanup.json records deleted=true for exact owned scratch after 2,199,016,112,128 logical bytes across four files. Slurm 19773 is terminal (CANCELLED after benchmark), and independent read-only check on im-b200-c001 confirmed exact host /scratch/inferencex-offload-37666309639-1-19773-9babf991ed44 absent.",
+      "artifact_evidence": "All five GitHub artifact ZIPs downloaded, ZIP integrity verified, SHA-256 recorded. Temporary downloads are deleted after this evidence is committed and pushed.",
+      "strict_utc_replay_valid": true,
+      "delta_vs_4tib_c488_percent": {
+        "num_requests_successful": -2.22603,
+        "total_tokens_per_second_per_gpu": -1.42795,
+        "output_tokens_per_second_per_gpu": -4.31672,
+        "p90_interactivity_tokens_per_second_per_user": -3.55139,
+        "p90_e2e_normalized_interactivity_tokens_per_second_per_user": -0.5453,
+        "p90_ttft_seconds": 0.64381,
+        "p90_e2e_latency_seconds": 0.55815,
+        "avg_power_w_per_gpu": 0.14282,
+        "joules_per_successful_query": 2.42283
+      },
+      "delta_vs_2tib_c488_r2_percent": {
+        "num_requests_successful": 0.97259,
+        "total_tokens_per_second_per_gpu": 0.48687,
+        "output_tokens_per_second_per_gpu": 0.56041,
+        "p90_interactivity_tokens_per_second_per_user": 4.8584,
+        "p90_e2e_normalized_interactivity_tokens_per_second_per_user": 6.65869,
+        "p90_ttft_seconds": 0.70834,
+        "p90_e2e_latency_seconds": 0.94258,
+        "avg_power_w_per_gpu": 0.0121,
+        "joules_per_successful_query": -0.95114
       }
     }
   ],
-  "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35456989669,35469801850,35476053573,35497846918,35524019140,35524083518,35542179539,35542182560,35542185178,35542190411,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894,36796500128,37027095833,37428997901,37490705589,37602969372",
-  "status": "Valid 2 TiB c488 capacity result documented; exact-config 2 TiB c488 replication profiling.",
+  "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35456989669,35469801850,35476053573,35497846918,35524019140,35524083518,35542179539,35542182560,35542185178,35542190411,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894,36796500128,37027095833,37428997901,37490705589,37602969372,37666309639",
+  "status": "Two valid 2 TiB c488 capacity results documented; compare with single 4 TiB c488 as local cross-capacity evidence before next adaptive control.",
   "last_capacity_check": {
     "checked_at": "2026-10-07T18:21:58Z",
     "active_study_run_ids": [],

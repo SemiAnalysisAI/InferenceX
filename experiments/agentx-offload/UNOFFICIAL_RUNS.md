@@ -23,23 +23,23 @@ verified result was retained during a temporary API error; it does not mean the 
 is scientifically valid. New runs with an unavailable API are marked `unknown`.
 Consult [`runs.json`](./runs.json) for validity and study conclusions.
 
-Generated at: `2026-10-07T18:26:56.109182Z`
+Generated at: `2026-10-08T02:47:07.348059Z`
 
 ## URLs
 
-All API-renderable benchmark points (31 runs):
+All API-renderable benchmark points (32 runs):
 
-<https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35456989669,35469801850,35476053573,35497846918,35524019140,35524083518,35542179539,35542182560,35542185178,35542190411,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894,36796500128,37027095833,37428997901,37490705589,37602969372>
+<https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35456989669,35469801850,35476053573,35497846918,35524019140,35524083518,35542179539,35542182560,35542185178,35542190411,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894,36796500128,37027095833,37428997901,37490705589,37602969372,37666309639>
 
-Pure-NVMe API-renderable points (9 runs):
+Pure-NVMe API-renderable points (10 runs):
 
-<https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35524019140,35565538871,35646317491,35727274307,35832083322,35934408414,36796500128,37602969372>
+<https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35524019140,35565538871,35646317491,35727274307,35832083322,35934408414,36796500128,37602969372,37666309639>
 
 ## Complete branch workflow list
 
 Branch workflows: **79**
 
-Individual GitHub jobs: **946**
+Individual GitHub jobs: **948**
 
 | Workflow run ID | Conclusion | Chart benchmarks | GitHub jobs | Workflow |
 | ---: | --- | ---: | ---: | --- |
@@ -121,4 +121,4 @@ Individual GitHub jobs: **946**
 | [37490705589](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37490705589) | failure | 1 | 12 | `e2e Test - offload-v1-none-c489-r3-extended-power-20261006` |
 | [37552057241](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37552057241) | cancelled | 0 | 12 | `e2e Test - offload-v1-nvme2tib-c488-r1-capacity-20261007` |
 | [37602969372](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37602969372) | failure | 1 | 12 | `e2e Test - offload-v1-nvme2tib-c488-r2-capacity-20261007` |
-| [37666309639](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37666309639) | none | 0 | 10 | `e2e Test - offload-v1-nvme2tib-c488-r3-capacity-20261007` |
+| [37666309639](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37666309639) | failure | 1 | 12 | `e2e Test - offload-v1-nvme2tib-c488-r3-capacity-20261007` |
