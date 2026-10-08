@@ -102,10 +102,6 @@ roles:
       num_postprocess_workers: 4
       allreduce_strategy: MNNVL
 
-benchmark:
-  env:
-    TOKENIZER: /model
-
 frontend:
   type: "dynamo"
   nginx_container: "nginx-sqsh"

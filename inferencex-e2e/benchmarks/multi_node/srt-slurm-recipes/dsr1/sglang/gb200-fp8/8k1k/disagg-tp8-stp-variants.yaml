@@ -103,10 +103,6 @@ base:
         disaggregation-bootstrap-port: 30001
         disaggregation-transfer-backend: nixl
 
-  benchmark:
-    env:
-      TOKENIZER: /model
-
 zip_override_lowlat:
   resources: {}
   name:

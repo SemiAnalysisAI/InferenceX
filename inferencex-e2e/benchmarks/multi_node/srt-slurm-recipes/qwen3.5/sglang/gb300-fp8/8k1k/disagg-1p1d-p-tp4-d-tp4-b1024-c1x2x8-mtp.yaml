@@ -130,10 +130,6 @@ roles:
       stream-interval: 50
       disaggregation-mode: "decode"
 
-benchmark:
-  env:
-    TOKENIZER: /model
-
 telemetry:
   enabled: true
   collect_interval_ms: 1000

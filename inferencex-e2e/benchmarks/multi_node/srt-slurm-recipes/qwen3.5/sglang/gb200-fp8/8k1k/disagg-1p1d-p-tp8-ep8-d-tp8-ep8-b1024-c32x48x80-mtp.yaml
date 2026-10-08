@@ -142,10 +142,6 @@ roles:
       disaggregation-mode: "decode"
       disaggregation-transfer-backend: "mooncake"
 
-benchmark:
-  env:
-    TOKENIZER: /model
-
 telemetry:
   enabled: true
   collect_interval_ms: 1000

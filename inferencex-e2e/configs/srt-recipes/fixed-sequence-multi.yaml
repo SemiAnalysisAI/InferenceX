@@ -1,3 +1,5 @@
 benchmark:
   type: custom
   command: bash /infmax-workspace/benchmarks/multi_node/srt_fixed_sequence.sh
+  env:
+    TOKENIZER: /model

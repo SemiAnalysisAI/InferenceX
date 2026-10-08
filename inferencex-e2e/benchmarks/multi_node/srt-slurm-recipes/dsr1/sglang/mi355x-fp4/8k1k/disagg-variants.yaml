@@ -151,7 +151,6 @@ base:
     interval_seconds: 5
   benchmark:
     env:
-      TOKENIZER: /model
       HF_HOME: /hf_hub_cache
       HF_HUB_CACHE: /hf_hub_cache/hub
       HUGGINGFACE_HUB_CACHE: /hf_hub_cache/hub

@@ -105,10 +105,6 @@ roles:
       tensor_parallel_size: 8
 
 
-benchmark:
-  env:
-    TOKENIZER: /model
-
 frontend:
   type: "dynamo"
 

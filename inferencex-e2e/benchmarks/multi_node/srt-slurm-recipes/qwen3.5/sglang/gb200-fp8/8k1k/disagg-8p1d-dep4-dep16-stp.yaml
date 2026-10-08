@@ -153,7 +153,3 @@ roles:
 
       decode-log-interval: 1
       stream-interval: 50
-
-benchmark:
-  env:
-    TOKENIZER: /model

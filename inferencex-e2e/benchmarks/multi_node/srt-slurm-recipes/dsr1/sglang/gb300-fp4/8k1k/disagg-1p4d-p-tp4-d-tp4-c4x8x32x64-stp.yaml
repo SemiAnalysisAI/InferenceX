@@ -110,7 +110,3 @@ roles:
       enable-dp-attention: false
       fp4-gemm-backend: "flashinfer_trtllm"
       disaggregation-transfer-backend: nixl
-
-benchmark:
-  env:
-    TOKENIZER: /model

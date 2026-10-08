@@ -112,10 +112,6 @@ roles:
         decoding_type: MTP
         num_nextn_predict_layers: 3
 
-benchmark:
-  env:
-    TOKENIZER: /model
-
 frontend:
   type: "dynamo"
   enable_multiple_frontends: false

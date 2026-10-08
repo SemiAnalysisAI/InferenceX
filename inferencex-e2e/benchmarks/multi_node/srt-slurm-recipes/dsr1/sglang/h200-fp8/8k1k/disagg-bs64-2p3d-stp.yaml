@@ -104,10 +104,6 @@ roles:
       max-running-requests: 128
       cuda-graph-max-bs: 128
 
-benchmark:
-  env:
-    TOKENIZER: /model
-
 # benchmark:
 #   type: "gpqa"
 #   num_examples: 198
