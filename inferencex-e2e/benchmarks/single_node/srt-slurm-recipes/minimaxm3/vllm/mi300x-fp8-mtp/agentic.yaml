@@ -162,4 +162,4 @@ override_tp8_c16_lmcache:
     env:
       CONC: '16'
       KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '1284'
+      TOTAL_CPU_DRAM_GB: '1280'

@@ -120,9 +120,9 @@ override_tp8_c5:
       CONC: '5'
       KV_OFFLOADING: none
 
-# DRAM points offload KV to an embedded Mooncake store. Per rank: the host budget
-# (1607 GB = 1497 GiB) less the 414 GiB checkpoint page cache, over TP8, less the
-# 26 GiB CPU weight offload and the 4 GiB local buffer = 105 GB.
+# DRAM points offload KV to an embedded Mooncake store, 105 GB per rank: the
+# 902 GB budget over TP8. The master leaves the 414 GiB checkpoint page cache, the
+# 26 GiB CPU weight offload and the 4 GiB local buffer per GPU outside the budget.
 override_tp8_c6_dram:
   # The worker's Mooncake client and the master run the same pinned release.
   setup_script: vllm-mooncake-0.3.11.sh
@@ -164,7 +164,7 @@ override_tp8_c6_dram:
     env:
       CONC: '6'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1607'
+      TOTAL_CPU_DRAM_GB: '902'
 
 override_tp8_c8_dram:
   # The worker's Mooncake client and the master run the same pinned release.
@@ -207,4 +207,4 @@ override_tp8_c8_dram:
     env:
       CONC: '8'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1607'
+      TOTAL_CPU_DRAM_GB: '902'

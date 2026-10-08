@@ -5542,7 +5542,8 @@ minimaxm3-fp8-h100-vllm-agentic-mtp:
   scenarios:
     agentic-coding:
     # The fast sweep places the resident HBM cliff between c5 and c6.
-    - dram-utilization: 0.80
+    # Sizes the 105 GiB Mooncake segment per GPU; weights and page cache use the rest.
+    - dram-utilization: 0.449
       search-space:
       - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 3, 4, 5], srt-recipe: benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/h100-fp8-mtp/agentic.yaml }
       - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [6, 8], srt-recipe: benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/h100-fp8-mtp/agentic.yaml }
@@ -5792,7 +5793,8 @@ minimaxm3-fp4-b300-trtllm-agentic-mtp:
   multinode: false
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.8
+    # TP2/TP4 host caches take the 3 TB policy share per GPU.
+    - dram-utilization: 1.0
       search-space:
       - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: native }, conc-list: [20, 25, 30], srt-recipe: benchmarks/single_node/srt-slurm-recipes/minimaxm3/trtllm/b300-fp4-mtp/agentic.yaml }
       - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: native }, conc-list: [5, 10, 15, 20, 25, 30], srt-recipe: benchmarks/single_node/srt-slurm-recipes/minimaxm3/trtllm/b300-fp4-mtp/agentic.yaml }
