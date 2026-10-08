@@ -864,6 +864,14 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+recipes = [
+    { name = "jinja2" },
+    { name = "marshmallow" },
+    { name = "marshmallow-dataclass" },
+    { name = "requests" },
+    { name = "rich" },
+    { name = "ruamel-yaml" },
+]
 results = [
     { name = "psycopg2-binary" },
     { name = "tabulate" },
@@ -897,13 +905,19 @@ test = [
 requires-dist = [
     { name = "codeowners", marker = "extra == 'workflows'", specifier = ">=0.9,<0.10" },
     { name = "gitpython", marker = "extra == 'workflows'", specifier = ">=3.1,<4" },
+    { name = "jinja2", marker = "extra == 'recipes'", specifier = ">=3.1,<4" },
+    { name = "marshmallow", marker = "extra == 'recipes'", specifier = ">=3.20,<5" },
+    { name = "marshmallow-dataclass", marker = "extra == 'recipes'", specifier = ">=8.6,<9" },
     { name = "psycopg2-binary", marker = "extra == 'results'", specifier = ">=2,<3" },
     { name = "pydantic", specifier = ">=2.10,<3" },
     { name = "pygithub", marker = "extra == 'workflows'", specifier = ">=2.6,<3" },
     { name = "pyyaml", specifier = ">=6,<7" },
+    { name = "requests", marker = "extra == 'recipes'", specifier = ">=2.31,<3" },
+    { name = "rich", marker = "extra == 'recipes'", specifier = ">=13,<16" },
+    { name = "ruamel-yaml", marker = "extra == 'recipes'", specifier = ">=0.18,<0.20" },
     { name = "tabulate", marker = "extra == 'results'", specifier = ">=0.10,<0.11" },
 ]
-provides-extras = ["workflows", "results"]
+provides-extras = ["recipes", "workflows", "results"]
 
 [package.metadata.requires-dev]
 test = [
