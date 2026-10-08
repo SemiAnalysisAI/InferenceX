@@ -177,11 +177,10 @@ def test_selected_partition_overrides_inherited_and_point_environment(tmp_path):
     ({"max_attempts": 2160, "interval_seconds": 5}, {"max_attempts": 2160, "interval_seconds": 5}),
 ])  # fmt: skip
 def test_multinode_jobs_wait_at_least_the_health_floor_for_their_server(tmp_path, health, effective):
-    recipe = tmp_path / "recipes/r.yaml"
-    recipe.parent.mkdir()
+    recipe = tmp_path / "recipe.yaml"
     recipe.write_text(yaml.safe_dump({"schema": 2, "name": "r", **({"health_check": health} if health else {})}))
 
-    prepare_recipe(tmp_path, "recipes/r.yaml", "job", None)
+    prepare_recipe(recipe, "job", None)
 
     resolved = resolve_config_with_defaults(yaml.safe_load(recipe.read_text()), render(cluster(), job()))
     assert resolved["health_check"] == effective
